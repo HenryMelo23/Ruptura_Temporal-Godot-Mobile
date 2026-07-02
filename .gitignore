@@ -1,0 +1,26 @@
+# Godot/editor caches
+.godot/
+.codex/
+*.import
+
+# Generated Android/export artifacts
+android/
+builds/
+toolchain/
+*.apk
+*.idsig
+
+# Local QA logs and temporary migration scripts
+*.log
+patch_*.py
+fix_*.py
+
+# Python/editor noise from the desktop reference project
+__pycache__/
+*.py[cod]
+.vscode/
+.qa_tmp_home/
+
+# Nested repository metadata from the copied desktop reference
+Game Base/**/.git/
+Game Base/**/SIGMon/
