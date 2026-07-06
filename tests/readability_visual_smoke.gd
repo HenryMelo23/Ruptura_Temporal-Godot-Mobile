@@ -21,6 +21,7 @@ func _run() -> void:
 	assert(is_equal_approx(game.interface_text_scale, 1.25))
 	assert(game._readable_text_size(12) == 15)
 	assert(game._gameplay_preferences_rects(Vector2(1280, 720)).has("interface_text"))
+	game.interface_text_scale = 1.6
 
 	game.mode = "settings_gameplay"
 	await process_frame
@@ -33,6 +34,13 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_save_view("readability_manifest_1280x720.png")
+
+	game.manifest_select_stage = game.MANIFEST_STAGE_AURA
+	game.selected_aura = 6
+	game.aura_scroll_pos = 6.0
+	await process_frame
+	await process_frame
+	_save_view("readability_spectrum_1280x720.png")
 
 	game._start_game()
 	game.score = 2400

@@ -51,6 +51,19 @@ func _run() -> void:
 	assert(game.boss_transition_waves.size() == game.BOSS_STAGE_WAVE_COUNT)
 	assert(game.boss_transition_waves.all(func(item): return String(item.get("kind", "")) == "dupla_abertura"))
 
+	game.enemies.clear()
+	game.enemy_bullets.clear()
+	game._spawn_enemy(game.ENEMY_COMMON, Vector2(220, 220))
+	game._spawn_enemy(game.ENEMY_STALKER, Vector2(320, 260))
+	game.enemy_bullets.append({"pos": Vector2(300, 300), "life": 1.0})
+	game.boss_active = false
+	game.boss_ready = true
+	game.boss_dead = false
+	game.boss_call_timer = -1.0
+	game._start_boss_call()
+	assert(game.enemies.is_empty())
+	assert(game.enemy_bullets.is_empty())
+
 	print("BOSS_WAVE_SMOKE_OK waves=%d speed=%.0f safe_opening=%.1fdeg" % [
 		game.boss_transition_waves.size(),
 		game.BOSS_STAGE_WAVE_SPEED,

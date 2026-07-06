@@ -54,8 +54,8 @@ func _run() -> void:
 	var larapio: Dictionary = game.enemies[0]
 	larapio["steal_cd"] = 0.0
 	game._update_larapio(larapio, 0.1)
-	_expect(game.score == 900, "larapio_score_not_stolen")
-	_expect(int(larapio.get("stolen", 0)) == 100, "larapio_stolen_wrong")
+	_expect(game.score == 600, "larapio_score_not_stolen")
+	_expect(int(larapio.get("stolen", 0)) == 400, "larapio_stolen_wrong")
 	_expect(game.player_stun_timer >= game.LARAPIO_STUN_TIME, "larapio_stun_missing")
 	_expect(game.larapio_coin_drops.size() > 0, "larapio_coin_trail_missing")
 
@@ -65,6 +65,20 @@ func _run() -> void:
 	var before_score = game.score
 	game._update_larapio_coin_drops(0.02)
 	_expect(game.score > before_score, "larapio_loot_not_collected")
+
+	game.enemies.clear()
+	game._spawn_enemy(game.ENEMY_LARAPIO, Vector2(40, 40))
+	var corner_larapio: Dictionary = game.enemies[0]
+	corner_larapio["larapio_corner_time"] = game.LARAPIO_CORNER_TRAP_TIME - 0.05
+	corner_larapio["direct_steal"] = false
+	corner_larapio["stolen"] = 0
+	game.player_pos = Vector2(500, 500)
+	game._update_larapio(corner_larapio, 0.10)
+	_expect(float(corner_larapio.get("larapio_escape_timer", 0.0)) > 0.0, "larapio_corner_escape_not_triggered")
+	var old_corner_pos: Vector2 = corner_larapio["pos"]
+	game._move_enemy(corner_larapio, 0.35)
+	var new_corner_pos: Vector2 = corner_larapio["pos"]
+	_expect(new_corner_pos.x > old_corner_pos.x and new_corner_pos.y > old_corner_pos.y, "larapio_did_not_leave_corner")
 
 	print("PAUSE_CRONOMANTE_LARAPIO_SMOKE_OK fade=true rewind_feedback=true larapio_steal_loot=true")
 	quit(0)

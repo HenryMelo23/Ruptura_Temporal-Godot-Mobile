@@ -26,6 +26,14 @@ func _run() -> void:
 
 	game._return_from_deck()
 	assert(game.mode == "shop")
+	game.shop_selected = 0
+	game.shop_select_pulse_timer = 0.0
+	game._touch_shop_card(1)
+	assert(game.shop_selected == 1)
+	var first_pulse = game.shop_select_pulse_timer
+	game._touch_shop_card(1)
+	assert(game.shop_selected == 1)
+	assert(game.shop_select_pulse_timer > first_pulse)
 
 	game._open_deck("paused")
 	game.ui_input_block_until_msec = 0

@@ -1,0 +1,86 @@
+extends SceneTree
+
+var game: Node
+
+
+func _check(condition: bool, message: String) -> void:
+	if not condition:
+		push_error(message)
+		quit(1)
+
+
+func _initialize() -> void:
+	game = load("res://scenes/Main.tscn").instantiate()
+	root.add_child(game)
+	call_deferred("_run")
+
+
+func _collectable_larapio_loot_total() -> int:
+	var total := 0
+	for coin in game.larapio_coin_drops:
+		if bool(coin.get("collectable", false)):
+			total += int(coin.get("value", 0))
+	return total
+
+
+func _run() -> void:
+	game._start_game()
+
+	game.score = 1000
+	game.score_total = 1000
+	game._spawn_enemy(game.ENEMY_LARAPIO, game.player_pos + Vector2(42, 0))
+	var larapio: Dictionary = game.enemies.back()
+	game._larapio_steal(larapio, game.LARAPIO_STEAL_RATIO)
+	_check(game.score == 400, "Larapio did not steal 60 percent of current score")
+	_check(int(larapio.get("stolen", 0)) == 600, "Larapio stolen stash mismatch")
+	game.larapio_coin_drops.clear()
+	game._kill_enemy(larapio)
+	_check(_collectable_larapio_loot_total() == 630, "Larapio should return 90 percent plus 15 percent bonus of stolen points")
+
+	game.cards_bought.clear()
+	game.luck = 0.03
+	game.cards_bought["Sorte"] = 10
+	_check(abs(game._chance_carta_rara() - 0.13175) < 0.0001, "Sorte rare chance should make 10 cards equal the old 5-card curve")
+
+	game.enemy_bullets.clear()
+	game.enemy_far_damage = 0.0
+	game.player_hp_max = 1000.0
+	game.player_pos = Vector2(760, 450)
+	game.arauto = {"active": true, "pos": Vector2(480, 450), "hp": 1000.0, "max_hp": 1000.0, "facing": 1.0}
+	game._fire_arauto_shot(false)
+	_check(int(game.enemy_bullets.back().get("damage", 0)) == 78, "Arauto projectile damage was not increased by 50 percent")
+	game.enemy_bullets.clear()
+	game.player_hp = 1000
+	game.enemies.clear()
+	game.arauto["gaze_target"] = game.player_pos
+	game._resolve_arauto_gaze(false)
+	_check(game.player_hp == 790, "Arauto gaze damage was not increased by 50 percent")
+
+	game._start_game()
+	game.score_total = 0
+	game.enemies_killed = 0
+	game._advance_to_phase(2)
+	_check(is_equal_approx(game.boss_hp_max, 5200.0), "Boss 2 base HP was not reduced")
+	game.current_phase = 2
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp_max = 1000.0
+	game.boss_hp = 1000.0
+	game._damage_boss(100.0, "smoke")
+	_check(abs(game.boss_hp - 945.5) < 0.05, "Boss 2 armor was not softened")
+
+	game._start_game()
+	game.score_total = 0
+	game.enemies_killed = 0
+	game._advance_to_phase(3)
+	_check(is_equal_approx(game.boss_hp_max, 10100.0), "Boss 3 base HP was not reduced")
+	game.current_phase = 3
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp_max = 1000.0
+	game.boss_hp = 1000.0
+	game._damage_boss(100.0, "smoke")
+	_check(abs(game.boss_hp - 944.5) < 0.05, "Boss 3 armor was not softened")
+
+	print("BALANCE_TUNING_2026_07_05_SMOKE_OK larapio=60/105 sorte10=old5 arauto=1.5x boss2_3=softer")
+	quit(0)

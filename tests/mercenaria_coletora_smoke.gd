@@ -52,19 +52,19 @@ func _run() -> void:
 	_check(game.combo_kills == 0 and game.mercenary_bonus_points == 0, "taking damage did not break Mercenaria contract")
 
 	game._apply_card(_card("Coletora"))
-	_check(is_equal_approx(game.execute_threshold, 0.058), "first Coletora card should activate 5.8 percent execution")
+	_check(is_equal_approx(game.execute_threshold, 0.065), "first Coletora card should activate 6.5 percent execution")
 	var target = _spawn_static_enemy(1000.0)
-	target["hp"] = 59.0
+	target["hp"] = 66.0
 	game._damage_enemy(target, 2.0, "eletrica")
 	_check(float(target["hp"]) <= 0.0, "Coletora did not execute a common enemy below threshold")
-	_check(is_equal_approx(game._boss_execute_threshold(), 0.0116), "boss execution should use 20 percent of common threshold")
+	_check(is_equal_approx(game._boss_execute_threshold(), 0.023), "boss execution should include the collector boss bonus")
 	game.current_phase = 2
 	game.boss_active = true
 	game.boss_dead = false
 	game.boss_hp_max = 10000.0
-	game.boss_hp = 115.0
+	game.boss_hp = 225.0
 	game._damage_boss(1.0, "eletrica")
 	_check(game.boss_dead, "Coletora did not execute boss inside its reduced threshold")
 
-	print("MERCENARIA_COLETORA_SMOKE_OK persistent_contract=true reset_on_damage=true common=5.8 boss=1.16")
+	print("MERCENARIA_COLETORA_SMOKE_OK persistent_contract=true reset_on_damage=true common=6.5 boss=2.3")
 	quit(0)

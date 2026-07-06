@@ -36,7 +36,11 @@ func _run() -> void:
 	game._update_environment_weather(0.25)
 	assert(game.raindrops.size() > 0 or game.rain_splashes.size() > 0)
 
+	game.time_alive = 624.0
+	game.elapsed_unpaused = 624.0
 	game._advance_to_phase(2)
+	assert(is_equal_approx(game.time_alive, 624.0))
+	assert(is_equal_approx(game.elapsed_unpaused, 624.0))
 	assert(game.boss1_rain_active)
 	assert(game.weather_kind == "snow")
 	assert(game.puddles.is_empty())

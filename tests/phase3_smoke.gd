@@ -52,8 +52,23 @@ func _run() -> void:
 	game._start_boss3_rain()
 	game._update_boss3_attacks(0.70)
 	assert(game.enemy_bullets.size() >= 3)
-	game._start_boss3_charge()
-	assert(game.boss_attacks.any(func(a): return a.get("kind") == "rat_charge"))
+	game.boss_attacks.clear()
+	game.boss3_ritual_timer = 0.0
+	game.boss3_consume_uid = -1
+	game.boss3_miasma_timer = 0.0
+	game.boss_pos = game.WORLD_SIZE * 0.5
+	game.player_pos = game.boss_pos + Vector2(130, 0)
+	game.player_hp_max = 1000
+	game.player_hp = 1000
+	game._start_boss3_faith_test()
+	assert(game.boss3_faith_test_pulses_left == 15)
+	game._update_boss3_faith_test(0.30)
+	assert(game.boss_attacks.any(func(a): return a.get("kind") == "faith_pulse"))
+	game._update_boss3_attacks(0.25)
+	assert(game.boss3_faith_link_timer > 0.0)
+	assert(game.controls_inverted_timer > 0.0)
+	assert(game.player_hp == 750)
+	assert(not game.boss_attacks.any(func(a): return a.get("kind") == "rat_charge"))
 
 	game.current_phase = 2
 	game.boss_dead = false
@@ -66,7 +81,7 @@ func _run() -> void:
 	game.boss_active = true
 	game.boss_hp = 1.0
 	game._damage_boss(999999.0, "eletrica")
-	assert(game.mode == "victory")
+	assert(int(game.phase_fragment.get("next_phase", 0)) == 4)
 
 	print("PHASE3_SMOKE_OK enemies=%d cheeses=%d projectiles=%d faith=%d" % [game.enemies.size(), game.phase3_cheeses.size(), game.enemy_bullets.size(), int(game.boss3_faith)])
 	quit(0)

@@ -23,7 +23,11 @@ func _run() -> void:
 	game._spawn_enemy(game.ENEMY_GUARDIAO, Vector2(1180, 300))
 	game._add_phase3_miasma(Vector2(560, 400), 86.0, 3.5, 0.015)
 	game._spawn_boss3_cheese(Vector2(950, 610), true, 38.0, 12.0, false)
-	game.boss_attacks.append({"kind": "rat_charge", "age": 0.2, "duration": 1.55, "warn": 0.70, "dir": Vector2(-1, 0), "hit": false})
+	game.boss3_is_moving = true
+	game._spawn_phase3_projectile(Vector2(610, 430), Vector2(1, 0.15), 32.0, "rat_shot", 0.62)
+	game._spawn_phase3_projectile(Vector2(920, 350), Vector2(-1, 0.20), 42.0, "rat_spit", 1.48)
+	game._spawn_phase3_projectile(Vector2(1080, 520), Vector2(-1, -0.10), 42.0, "rat_flask", 1.75)
+	game.boss_attacks.append({"kind": "faith_pulse", "age": 0.2, "duration": 2.35, "pos": Vector2(860, 420), "dir": Vector2(-1, 0.18).normalized(), "speed": 520.0, "radius": 50.0, "hit": false})
 	game.queue_redraw()
 	await process_frame
 	await process_frame

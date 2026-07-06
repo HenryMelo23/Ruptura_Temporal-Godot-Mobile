@@ -27,6 +27,15 @@ func _run() -> void:
 	game._update_game(0.2)
 	_check(game.mode == "shop_countdown", "automatic shop did not start at the configured three-minute cadence")
 	_check(game.forced_shop_timer > 0.0, "automatic shop countdown was not initialized")
+	game.score = game.card_cost
+	game.forced_shop_timer = 0.04
+	game._update_shop_countdown(0.05)
+	_check(game.mode == "shop_opening", "shop countdown did not enter Geovana upgrade opening animation")
+	_check(game.shop_opening_timer > 0.0, "shop opening animation timer was not initialized")
+	game.queue_redraw()
+	await process_frame
+	game._update_shop_opening(game.SHOP_OPENING_ANIM_TIME + 0.02)
+	_check(game.mode == "shop", "shop did not open after Geovana upgrade animation")
 
 	var common_card: Dictionary = game.CARDS[0]
 	var rare_card: Dictionary = game.CARDS[4]
@@ -35,5 +44,5 @@ func _run() -> void:
 	_check(game._card_rarity_color(common_card).is_equal_approx(game.CARD_RARITY_COMMON_COLOR), "common card color is not white")
 	_check(game._card_rarity_color(rare_card).is_equal_approx(game.CARD_RARITY_RARE_COLOR), "rare card color is not golden yellow")
 
-	print("SHOP_SCHEDULE_RARITY_SMOKE_OK cadence=180 phase_persistent=true common=white rare=gold")
+	print("SHOP_SCHEDULE_RARITY_SMOKE_OK cadence=180 phase_persistent=true opening_anim=true common=white rare=gold")
 	quit(0)

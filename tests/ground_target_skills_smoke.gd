@@ -45,6 +45,27 @@ func _run() -> void:
 	var prism_target = Vector2(720.0, 310.0)
 	game._use_skill(prism_target)
 	_check(Vector2(game.prisms.back()["pos"]).distance_to(prism_target) < 0.1, "prismatic Q ignored its ground target")
+	game.bullets.clear()
+	game.bullets.append({
+		"pos": prism_target,
+		"dir": Vector2.RIGHT,
+		"speed": 0.0,
+		"life": 1.0,
+		"max_life": 1.0,
+		"age": 0.0,
+		"phase": 0.0,
+		"trail_cd": 99.0,
+		"damage": 100.0,
+		"kind": "prismatica",
+		"color": Color(0.32, 1.0, 0.96),
+		"pierce": true,
+		"hits": {},
+		"refracted": false,
+		"ricochets": 3,
+		"durability": 100.0
+	})
+	game._update_bullets(0.0)
+	_check(game.bullets.size() == 5, "prismatic prism did not split into 5 beams")
 
 	game.manifestation_key = "gravitante"
 	game.last_secondary_time = -100.0
