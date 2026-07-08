@@ -254,6 +254,12 @@ const LARAPIO_THROW_INTERVAL := 4.0
 const LARAPIO_AGGRESSIVE_AFTER := 120.0
 const LARAPIO_AGGRESSIVE_THROW_INTERVAL := 3.0
 const LARAPIO_AGGRESSIVE_STONE_SPEED_MULT := 1.25
+const LARAPIO_DESPERATE_AFTER := 90.0
+const LARAPIO_DESPERATE_HP_RATIO := 0.38
+const LARAPIO_DESPERATE_THROW_INTERVAL := 2.0
+const LARAPIO_DESPERATE_STONE_SPEED_MULT := 1.25
+const LARAPIO_DESPERATE_STONE_DAMAGE_MULT := 1.45
+const LARAPIO_DESPERATE_KEEP_DISTANCE := 720.0
 const LARAPIO_COIN_DROP_LIFE := 2.4
 const LARAPIO_COIN_DROP_INTERVAL := 0.16
 const LARAPIO_CORNER_MARGIN := 118.0
@@ -344,6 +350,19 @@ const PYRO_WALL_TILE_SIZE := 32.0
 const PYRO_WALL_DURATION := 15.0
 const PYRO_WALL_SHOT_INTERVAL := 5.0
 const PYRO_WALL_BURN_INTERVAL := 0.65
+const CARTO_COORD_MAX := 3
+const CARTO_COORD_LIFE := 10.0
+const CARTO_ROUTE_ACTIVE_TIME := 4.6
+const CARTO_ROUTE_WIDTH := 30.0
+const CARTO_BOSS_DISPLACEMENT_REQUIRED := 3
+const MNESIC_MEMORY_MAX := 3
+const MNESIC_REENACT_RADIUS := 380.0
+const MNESIC_TRICK_TIME := 2.1
+const RESONANT_BEAT_INTERVAL := 0.58
+const RESONANT_PERFECT_WINDOW := 0.125
+const RESONANT_NOISE_LIMIT := 3
+const CONTRACT_TRAP_LIFE := 5.2
+const CONTRACT_MAX_INFRACTIONS := 3
 
 const MANIFESTATIONS := [
 	{
@@ -401,6 +420,38 @@ const MANIFESTATIONS := [
 		"icon": "manifestacao_ancorada.png",
 		"color": Color(0.30, 0.88, 1.0),
 		"accent": Color(1.0, 0.78, 0.26)
+	},
+	{
+		"key": "cartografica",
+		"name": "Cartografica",
+		"desc": "Marca coordenadas no mapa, cria rotas de Ruptura e ataca por angulos impossiveis.",
+		"icon": "manifestacao_cartografica.png",
+		"color": Color(0.15, 0.95, 0.78),
+		"accent": Color(1.0, 0.82, 0.26)
+	},
+	{
+		"key": "mnesica",
+		"name": "Mnesica",
+		"desc": "Registra lembrancas dos inimigos e transforma acoes recentes em punicao.",
+		"icon": "manifestacao_mnesica.png",
+		"color": Color(0.78, 0.52, 1.0),
+		"accent": Color(1.0, 0.56, 0.86)
+	},
+	{
+		"key": "ressonante",
+		"name": "Ressonante",
+		"desc": "Luta no ritmo da Ruptura, acumulando notas perfeitas e detonando acordes.",
+		"icon": "manifestacao_ressonante.png",
+		"color": Color(1.0, 0.74, 0.20),
+		"accent": Color(0.38, 0.92, 1.0)
+	},
+	{
+		"key": "contratual",
+		"name": "Contratual",
+		"desc": "Impoe clausulas aos inimigos e executa sentencas quando eles quebram as regras.",
+		"icon": "manifestacao_contratual.png",
+		"color": Color(1.0, 0.54, 0.22),
+		"accent": Color(0.96, 0.96, 0.86)
 	}
 ]
 
@@ -447,6 +498,34 @@ var cheat_edit: LineEdit = null
 var webhook_edit: LineEdit = null
 var webhook_error: String = ""
 var run_report_request: HTTPRequest = null
+
+# Multiplayer Networking
+var is_multiplayer: bool = false
+var is_host: bool = false
+var udp_broadcaster: PacketPeerUDP = null
+var udp_listener: PacketPeerUDP = null
+var lan_host_ip: String = ""
+var multiplayer_peer: ENetMultiplayerPeer = null
+var net_player_ready: bool = false
+var local_player_ready: bool = false
+
+# Multiplayer Remote Player State (Phantom Player)
+var net_player_pos = Vector2(-1000, -1000)
+var net_player_hp = 100.0
+var net_player_hp_max = 100.0
+var net_player_dead = false
+var net_player_manifestation = 0
+var net_player_secondary_manifestation = 0
+var net_player_target_angle = 0.0
+var net_player_attack_timer = 0.0
+var net_player_color = Color.WHITE
+var net_player_name = "Player 2"
+var net_player_last_dash_time = 0.0
+var net_player_dash_start = Vector2()
+var net_player_dash_end = Vector2()
+var net_player_is_dashing = false
+var net_player_frame_idx = 0
+var net_player_flip_h = false
 var run_report_webhook_url: String = ""
 var run_report_status: String = ""
 var run_report_sent: bool = false
@@ -694,6 +773,11 @@ var shop_auto_enabled: bool = true
 var shop_auto_interval: float = 180.0
 var auto_target_priority: String = "nearest"
 var haptics_enabled: bool = true
+var is_gamepad_active: bool = false
+var gamepad_bindings: Dictionary = {"attack": JOY_BUTTON_X, "skill": JOY_BUTTON_Y, "secondary": JOY_BUTTON_B, "dash": JOY_BUTTON_A, "pause": JOY_BUTTON_START}
+var gamepad_mapping_action: String = ""
+var menu_analog_cooldown: float = 0.0
+var trigger_states: Dictionary = { JOY_AXIS_TRIGGER_LEFT: false, JOY_AXIS_TRIGGER_RIGHT: false }
 var edit_layout_selected: String = ""
 var edit_layout_touch_index: int = -1
 var settings_selected = 0
@@ -826,6 +910,24 @@ var seed_links = []
 var parasite_spit_zones = []
 var return_bullets = []
 var manifestation_secondaries = []
+var cartographic_coords = []
+var cartographic_route_timer = 0.0
+var cartographic_boss_displacement = 0
+var mnesic_trick_timer = 0.0
+var mnesic_trick_origin = Vector2.ZERO
+var mnesic_boss_vulnerability = 0.0
+var resonant_perfect_streak = 0
+var resonant_noise = 0
+var resonant_next_perfect = false
+var resonant_speed_timer = 0.0
+var resonant_sinfonia_buff_timer = 0.0
+var resonant_note_index = 0
+var boss_resonant_notes = {}
+var boss_contract_clause = ""
+var boss_contract_infractions = 0
+var boss_contract_vulnerability = 0.0
+var contractual_notifications = []
+var contractual_penalty_timer = 0.0
 var last_facing = Vector2.RIGHT
 var lacerante_combo = 0
 var lacerante_combo_visual = 0
@@ -909,7 +1011,7 @@ func _ready() -> void:
 	_update_webhook_input_visibility()
 	set_process(true)
 
-	_play_music("Menu.mp3")
+	_play_menu_music_random()
 
 
 func _setup_nickname_input() -> void:
@@ -1461,6 +1563,14 @@ func _load_config() -> void:
 				elif k == "show_fps_counter": show_fps_counter = v == "true"
 				elif k == "retornante_unlocked": retornante_unlocked = v == "true"
 				elif k == "qa_data_unlocked": qa_data_unlocked = v == "true"
+				elif k == "gamepad_bindings" and coords.size() == 5:
+					gamepad_bindings = {
+						"attack": int(coords[0]),
+						"skill": int(coords[1]),
+						"secondary": int(coords[2]),
+						"dash": int(coords[3]),
+						"pause": int(coords[4])
+					}
 
 				elif k == "vol_master": vol_master = float(v)
 
@@ -1522,6 +1632,7 @@ func _save_config() -> void:
 		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
 		file.store_string("retornante_unlocked=" + ("true" if retornante_unlocked else "false") + "\n")
 		file.store_string("qa_data_unlocked=" + ("true" if qa_data_unlocked else "false") + "\n")
+		file.store_string("gamepad_bindings=" + str(gamepad_bindings["attack"]) + "," + str(gamepad_bindings["skill"]) + "," + str(gamepad_bindings["secondary"]) + "," + str(gamepad_bindings["dash"]) + "," + str(gamepad_bindings["pause"]) + "\n")
 
 		file.store_string("vol_master=" + str(vol_master) + "\n")
 
@@ -1621,7 +1732,7 @@ func _load_textures() -> void:
 	textures["boss2_wave"] = _safe_load(base + "Onda_Boss2.png")
 	textures["coin"] = _safe_load(base + "moeda.png")
 	for item in MANIFESTATIONS:
-		textures["manifestation_" + item["key"]] = _safe_load(base + item["icon"])
+		textures["manifestation_" + item["key"]] = _safe_load_manifestation_icon(String(item["icon"]), base)
 	for aura in AURAS:
 		textures["aura_" + aura["key"]] = _safe_load(base + aura["icon"])
 	for card in CARDS:
@@ -1640,6 +1751,13 @@ func _safe_load(path: String) -> Texture2D:
 			return ImageTexture.create_from_image(image)
 	return null
 
+
+func _safe_load_manifestation_icon(file_name: String, sprite_base: String) -> Texture2D:
+	var root_texture := _safe_load("res://" + file_name)
+	if root_texture:
+		return root_texture
+	return _safe_load(sprite_base + file_name)
+
 func _load_audio_streams() -> void:
 	var path = "res://Game Base/Ruptura_Temporal-APOLO2.0/Sounds/"
 	var files = ["Agudos-leve.mp3", "Boss1.mp3", "Boss2.mp3", "Boss3.mp3", "Boss3_andando.mp3", "Brinquedo.mp3", "Disparo_Geo.wav", "Esgoto.mp3", "Estalo.mp3", "Fase2_Boss.mp3", "Fase3_Boss.mp3", "fases.mp3", "Fase_boas.mp3", "Flauta.mp3", "Frasco.mp3", "frog.mp3", "Game_Over.mp3", "Geo_andando.mp3", "Hit_Boss1.mp3", "hit_person.mp3", "Inimigo1_hit.wav", "Inimigo3_hit.mp3", "Menu.mp3", "Neve.wav", "piano.mp3", "Portal.mp3", "Praia.wav", "Queijo.mp3", "Tema_Neve.mp3", "Tema_Praia.mp3", "Tema_Ratos.mp3"]
@@ -1649,7 +1767,9 @@ func _load_audio_streams() -> void:
 			audio_streams[f] = stream
 	var root_music = {
 		"Menu.mp3": "res://Menu.mp3",
-		"Fase2.mp3": "res://Fase2.mp3",
+		"Menu1-2.mp3": "res://Menu1-2.mp3",
+		"Menu1-3.mp3": "res://Menu1-3.mp3",
+		"Menu1-4.mp3": "res://Menu1-4.mp3",
 		"Boss1-1.mp3": "res://Boss1-1.mp3"
 	}
 	for name in root_music:
@@ -1658,10 +1778,20 @@ func _load_audio_streams() -> void:
 			audio_streams[name] = stream
 	var phase1_tracks = {
 		"Fase1.mp3": "res://Fase1.mp3",
-		"Fase1-2.mp3": "res://Fase1-2.mp3"
+		"Fase1-2.mp3": "res://Fase1-2.mp3",
+		"Fase1-4.mp3": "res://Fase1-4.mp3"
 	}
 	for name in phase1_tracks:
 		var stream = _safe_load_audio(phase1_tracks[name], false)
+		if stream:
+			audio_streams[name] = stream
+	var phase2_tracks = {
+		"Fase2.mp3": "res://Fase2.mp3",
+		"Fase2-3.mp3": "res://Fase2-3.mp3",
+		"Fase2-4.mp3": "res://Fase2-4.mp3"
+	}
+	for name in phase2_tracks:
+		var stream = _safe_load_audio(phase2_tracks[name], false)
 		if stream:
 			audio_streams[name] = stream
 	var phase3_tracks = {
@@ -1854,9 +1984,20 @@ func _play_sfx(name: String, pitch_variance := 0.0, volume_scale := 1.0, pitch_c
 
 
 func _is_shot_audio(name: String) -> bool:
-	if name.begins_with("atk_"):
+	if name.begins_with("atk_") or name.begins_with("skill_") or name.begins_with("ult_"):
 		return true
-	return name in ["eletrica_travel", "retornante_wave", "retornante_reverse", "gravitante_orbit_loop"]
+	# Sons de inimigos recebendo dano ou morrendo vao para Efeitos (false)
+	if name.begins_with("Inimigo") or name.begins_with("Hit_Boss") or name == "Larapio-Dead.mp3":
+		return false
+	# Sons de impactos de habilidades/projeteis (ex: prismatica_glass_hit) vao para Disparos
+	if name.ends_with("_hit"):
+		return true
+	var specific = [
+		"eletrica_travel", "retornante_wave", "retornante_reverse", 
+		"gravitante_orbit_loop", "prismatica_shatter", "Disparo.MP3", 
+		"Frasco.mp3"
+	]
+	return name in specific
 
 
 func _sfx_channel_volume(name: String) -> float:
@@ -1886,6 +2027,14 @@ func _play_projectile_hit_sfx(kind: String) -> void:
 			_play_sfx("eletrica_hit", 0.040, 1.12, 1.0)
 		"gravitante":
 			_play_sfx("gravitante_attach", 0.030, 1.00, 0.86)
+		"cartografica":
+			_play_sfx("skill_cartografica", 0.030, 0.82, 1.10)
+		"mnesica":
+			_play_sfx("skill_mnesica", 0.030, 0.78, 0.94)
+		"ressonante":
+			_play_sfx("skill_ressonante", 0.025, 0.82, 1.18)
+		"contratual":
+			_play_sfx("skill_contratual", 0.025, 0.82, 0.88)
 
 
 func _play_projectile_end_sfx(kind: String) -> void:
@@ -1919,6 +2068,10 @@ func _play_music(name: String) -> void:
 		music_player.stream_paused = false
 		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
 		music_player.play()
+		music_pause_fade_mode = "in"
+		music_pause_fade_timer = 0.0
+		music_pause_resume_volume = max(0.001, _music_target_volume())
+		_set_music_linear_volume(0.001)
 	else:
 		music_player.stop()
 
@@ -1957,13 +2110,24 @@ func _begin_pause_music_fade_in() -> void:
 
 
 func _update_music_pause_fade(delta: float) -> void:
+	if music_player != null and music_player.playing and music_player.stream != null:
+		if music_pause_fade_mode == "":
+			var length = music_player.stream.get_length()
+			if length > 0.0:
+				var pos = music_player.get_playback_position()
+				if length - pos <= 2.5:
+					music_pause_fade_mode = "auto_out"
+					music_pause_fade_timer = 0.0
+					music_pause_resume_volume = max(0.001, _music_target_volume())
+
 	if music_player == null or music_pause_fade_mode == "":
 		return
 	music_pause_fade_timer += delta
-	var progress = clamp(music_pause_fade_timer / MUSIC_PAUSE_FADE_TIME, 0.0, 1.0)
-	if music_pause_fade_mode == "out":
+	var max_time = 2.5 if music_pause_fade_mode == "auto_out" else MUSIC_PAUSE_FADE_TIME
+	var progress = clamp(music_pause_fade_timer / max_time, 0.0, 1.0)
+	if music_pause_fade_mode == "out" or music_pause_fade_mode == "auto_out":
 		_set_music_linear_volume(lerp(music_pause_resume_volume, 0.001, progress))
-		if progress >= 1.0:
+		if progress >= 1.0 and music_pause_fade_mode == "out":
 			music_player.stream_paused = true
 			music_paused_by_pause = true
 			music_pause_fade_mode = ""
@@ -1982,29 +2146,74 @@ func _play_phase_music() -> void:
 	elif current_phase == 3:
 		_play_phase3_music_random()
 	elif current_phase == 2:
-		_play_music("Fase2.mp3")
+		_play_phase2_music_random()
 	else:
 		_play_phase1_music_random()
 
 
 func _on_music_finished() -> void:
-	if current_music == "Fase1.mp3" or current_music == "Fase1-2.mp3":
+	if current_music.begins_with("Menu"):
+		_play_menu_music_random()
+		return
+	if current_music in ["Fase1.mp3", "Fase1-2.mp3", "Fase1-4.mp3"]:
 		_play_phase1_music_random()
 		return
-	if current_music == "Fase3-1.mp3" or current_music == "Fase3-2.mp3":
+	if current_music in ["Fase2.mp3", "Fase2-3.mp3", "Fase2-4.mp3"]:
+		_play_phase2_music_random()
+		return
+	if current_music in ["Fase3-1.mp3", "Fase3-2.mp3"]:
 		_play_phase3_music_random()
 		return
 	if current_music != "" and music_player != null and music_player.stream != null:
 		music_player.play()
 
 
+func _play_menu_music_random() -> void:
+	var available = []
+	for track in ["Menu.mp3", "Menu1-2.mp3", "Menu1-3.mp3", "Menu1-4.mp3"]:
+		if audio_streams.has(track):
+			available.append(track)
+	if available.is_empty():
+		return
+	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
+	if chosen == current_music and music_player != null:
+		music_player.stream = audio_streams[chosen]
+		music_player.stream_paused = false
+		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
+		music_player.play()
+		music_pause_fade_mode = "in"
+		music_pause_fade_timer = 0.0
+		music_pause_resume_volume = max(0.001, _music_target_volume())
+		_set_music_linear_volume(0.001)
+		return
+	_play_music(chosen)
+
+
 func _play_phase1_music_random() -> void:
 	var available = []
-	for track in ["Fase1.mp3", "Fase1-2.mp3"]:
+	for track in ["Fase1.mp3", "Fase1-2.mp3", "Fase1-4.mp3"]:
 		if audio_streams.has(track):
 			available.append(track)
 	if available.is_empty():
 		_play_music("fases.mp3")
+		return
+	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
+	if chosen == current_music and music_player != null:
+		music_player.stream = audio_streams[chosen]
+		music_player.stream_paused = false
+		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
+		music_player.play()
+		return
+	_play_music(chosen)
+
+
+func _play_phase2_music_random() -> void:
+	var available = []
+	for track in ["Fase2.mp3", "Fase2-3.mp3", "Fase2-4.mp3"]:
+		if audio_streams.has(track):
+			available.append(track)
+	if available.is_empty():
+		_play_music("Fase2.mp3")
 		return
 	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
 	if chosen == current_music and music_player != null:
@@ -2042,7 +2251,8 @@ func _go_to_menu() -> void:
 	shop_opening_forced = false
 	_block_ui_input()
 	_update_audio_volumes()
-	_play_music("Menu.mp3")
+	if not current_music.begins_with("Menu") or music_player == null or not music_player.playing:
+		_play_menu_music_random()
 
 func _update_audio_volumes() -> void:
 	if music_pause_fade_mode != "" or music_paused_by_pause:
@@ -2304,6 +2514,7 @@ func _start_game() -> void:
 	parasite_spit_zones.clear()
 	return_bullets.clear()
 	manifestation_secondaries.clear()
+	_reset_advanced_manifestation_state()
 	_reset_arauto_state(true)
 	_reset_boss2_state()
 	_reset_phase3_state()
@@ -2314,6 +2525,8 @@ func _start_game() -> void:
 
 func _advance_to_phase(phase: int) -> void:
 	var rain_should_become_snow = phase == 2 and boss1_rain_active and weather_kind == "rain"
+	var carried_enemy_hp: float = max(float(enemy_base_hp), ENEMY_BASE_HP)
+	var carried_enemy_speed: float = max(float(enemy_speed_base), ENEMY_BASE_SPEED)
 	current_phase = phase
 	pending_phase = 0
 	mode = "game"
@@ -2389,6 +2602,7 @@ func _advance_to_phase(phase: int) -> void:
 	parasite_spit_zones.clear()
 	return_bullets.clear()
 	manifestation_secondaries.clear()
+	_reset_advanced_manifestation_state()
 	_reset_arauto_state(true)
 	_reset_phase3_state()
 	_reset_phase4_state()
@@ -2399,9 +2613,9 @@ func _advance_to_phase(phase: int) -> void:
 	elif phase != 2:
 		_clear_environment_weather()
 	if current_phase == 4:
-		enemy_base_hp = ENEMY_BASE_HP * 3.25
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.18
-		boss_hp_max = 14500.0 + score_total * 0.28 + enemies_killed * 24.0
+		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 3.25)
+		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.18)
+		boss_hp_max = _boss_hp_for_phase(4)
 		boss_hp = boss_hp_max
 		boss_name = "NEXO DA RUPTURA"
 		boss_title_color = Color(1.0, 0.76, 0.18)
@@ -2409,9 +2623,9 @@ func _advance_to_phase(phase: int) -> void:
 		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
 		_add_text("FASE 4: CORACAO DO NEXO", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
 	elif current_phase == 3:
-		enemy_base_hp = ENEMY_BASE_HP * 2.45
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.12
-		boss_hp_max = 10100.0 + score_total * 0.20 + enemies_killed * 17.0
+		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 2.45)
+		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.12)
+		boss_hp_max = _boss_hp_for_phase(3)
 		boss_hp = boss_hp_max
 		boss_name = "PAI-RATO"
 		boss_title_color = Color(0.72, 0.92, 0.24)
@@ -2419,9 +2633,9 @@ func _advance_to_phase(phase: int) -> void:
 		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
 		_add_text("FASE 3: CATEDRAL DO ESGOTO", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
 	elif current_phase == 2:
-		enemy_base_hp = ENEMY_BASE_HP * 1.85
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.08
-		boss_hp_max = 5200.0 + score_total * 0.13 + enemies_killed * 10.0
+		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 1.85)
+		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.08)
+		boss_hp_max = _boss_hp_for_phase(2)
 		boss_hp = boss_hp_max
 		boss_name = "SENTINELA GLACIAL"
 		boss_title_color = Color(0.50, 0.86, 1.0)
@@ -2436,6 +2650,17 @@ func _advance_to_phase(phase: int) -> void:
 		boss_hp = boss_hp_max
 		boss_name = "CARANGUEJO COSMICO GIGANTE"
 		boss_title_color = Color(1.0, 0.52, 0.16)
+
+
+func _boss_hp_for_phase(phase: int) -> float:
+	match phase:
+		4:
+			return 18800.0 + score_total * 0.34 + enemies_killed * 30.0
+		3:
+			return 12800.0 + score_total * 0.25 + enemies_killed * 22.0
+		2:
+			return 6600.0 + score_total * 0.17 + enemies_killed * 14.0
+	return BOSS_BASE_HP + score_total * 0.12 + enemies_killed * 9.0
 
 
 func _reset_phase3_state() -> void:
@@ -2560,6 +2785,25 @@ func _reset_arauto_state(reset_spawn_flag := false) -> void:
 
 
 func _process(delta: float) -> void:
+	_poll_udp()
+	is_gamepad_active = Input.get_connected_joypads().size() > 0
+	if menu_analog_cooldown > 0.0:
+		menu_analog_cooldown -= delta
+	if is_gamepad_active and mode != "game" and mode != "paused" and menu_analog_cooldown <= 0.0:
+		var menu_y = Input.get_joy_axis(0, JOY_AXIS_LEFT_Y)
+		var menu_x = Input.get_joy_axis(0, JOY_AXIS_LEFT_X)
+		if menu_y < -0.5:
+			_simulate_key_press(KEY_UP)
+			menu_analog_cooldown = 0.25
+		elif menu_y > 0.5:
+			_simulate_key_press(KEY_DOWN)
+			menu_analog_cooldown = 0.25
+		elif menu_x < -0.5:
+			_simulate_key_press(KEY_LEFT)
+			menu_analog_cooldown = 0.25
+		elif menu_x > 0.5:
+			_simulate_key_press(KEY_RIGHT)
+			menu_analog_cooldown = 0.25
 	_update_orientation(delta)
 	_update_music_pause_fade(delta)
 	_update_rain_audio_fade(delta)
@@ -2619,6 +2863,7 @@ func _update_orientation(delta: float) -> void:
 
 
 func _update_game(delta: float) -> void:
+	_sync_multiplayer_state()
 	if not boss1_rewind_sequence.is_empty():
 		_update_boss1_rewind_sequence(delta)
 		return
@@ -2646,6 +2891,7 @@ func _update_game(delta: float) -> void:
 	lacerante_coagulum_pulse = max(0.0, lacerante_coagulum_pulse - delta)
 	_update_lacerante_tp_state(delta)
 	_update_teleport_effects(delta)
+	_update_advanced_manifestation_state(delta)
 	_update_aura(delta)
 	_update_boss2_environment(delta)
 	_update_phase2_fire_walls(delta)
@@ -2915,6 +3161,12 @@ func _read_move() -> Vector2:
 		move.y += 1
 	if move_touch_index != -1 and touch_move.length() > 0.05:
 		move = touch_move
+	if is_gamepad_active:
+		var joy_x = Input.get_joy_axis(0, JOY_AXIS_LEFT_X)
+		var joy_y = Input.get_joy_axis(0, JOY_AXIS_LEFT_Y)
+		var joy_vec = Vector2(joy_x, joy_y)
+		if joy_vec.length() > 0.15:
+			move = joy_vec
 	if controls_inverted_timer > 0.0:
 		move = -move
 	var vector_rotation := _phase4_vector_rotation()
@@ -2954,6 +3206,34 @@ func _try_attack() -> void:
 			_play_manifestation_attack_sfx("ancorada")
 			_place_anchor()
 			_fire_projectile("ancorada", player_damage * _anchor_bonus(), BULLET_SPEED * 0.95, 1.2, false)
+		"cartografica":
+			_play_manifestation_attack_sfx("cartografica")
+			var before_carto = bullets.size()
+			_fire_projectile("cartografica", player_damage * 0.72, BULLET_SPEED * 1.05, 1.15, false)
+			if bullets.size() > before_carto and cartographic_coords.size() >= 2:
+				var entry := Vector2(cartographic_coords[0].get("pos", player_pos))
+				var exit := Vector2(cartographic_coords[1].get("pos", player_pos))
+				bullets[-1]["pos"] = exit
+				bullets[-1]["damage"] = float(bullets[-1]["damage"]) * 1.18
+				bullets[-1]["carto_redirected"] = true
+				slashes.append({"a": entry, "b": exit, "life": 0.20, "max": 0.20, "color": Color(0.38, 1.0, 0.82), "width": 14.0})
+		"mnesica":
+			_play_manifestation_attack_sfx("mnesica")
+			_fire_projectile("mnesica", player_damage * 0.58, BULLET_SPEED * 0.96, 1.25, false)
+		"ressonante":
+			var perfect := _resonant_is_perfect()
+			_play_manifestation_attack_sfx("ressonante")
+			var before_resonant = bullets.size()
+			_fire_projectile("ressonante", player_damage * (0.72 if perfect else 0.54), BULLET_SPEED * (1.08 if perfect else 0.95), 1.18, false)
+			if bullets.size() > before_resonant:
+				bullets[-1]["resonant_perfect"] = perfect
+				bullets[-1]["resonant_note"] = _resonant_note_name()
+			_record_resonant_attack(perfect)
+			if perfect:
+				_add_text("NOTA PERFEITA", player_pos + Vector2(0, -88), Color(1.0, 0.82, 0.26), 0.55, 18)
+		"contratual":
+			_play_manifestation_attack_sfx("contratual")
+			_fire_projectile("contratual", player_damage * 0.46, BULLET_SPEED * 0.98, 1.22, false)
 		_:
 			eletrica_shot_counter += 1
 			var charged = eletrica_shot_counter % 4 == 0
@@ -3145,6 +3425,12 @@ func _place_anchor() -> void:
 
 
 func _aim_direction() -> Vector2:
+	if is_gamepad_active:
+		var rx = Input.get_joy_axis(0, JOY_AXIS_RIGHT_X)
+		var ry = Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y)
+		var r_vec = Vector2(rx, ry)
+		if r_vec.length() > 0.15:
+			return r_vec.normalized()
 	if lacerante_preparing and lacerante_prepare_dir.length() > 0.05:
 		return lacerante_prepare_dir.normalized()
 	if attack_dragging and attack_drag_direction.length() > 0.05:
@@ -3347,6 +3633,14 @@ func _auto_attack_range() -> float:
 			return BULLET_SPEED * 0.82 * 1.4
 		"ancorada":
 			return BULLET_SPEED * 0.95 * 1.2
+		"cartografica":
+			return BULLET_SPEED * 1.05 * 1.15
+		"mnesica":
+			return BULLET_SPEED * 0.96 * 1.25
+		"ressonante":
+			return BULLET_SPEED * 1.08 * 1.18
+		"contratual":
+			return BULLET_SPEED * 0.98 * 1.22
 	return BULLET_SPEED * 1.2
 
 
@@ -3413,6 +3707,14 @@ func _use_skill(target_world = null) -> void:
 			else:
 				_activate_retornante_memory(chosen)
 				_add_text("MEMORIA INSTAVEL", Vector2(chosen.get("pos", player_pos)) + Vector2(0, -52), Color(1.0, 0.44, 0.80), 1.2, 24)
+		"cartografica":
+			_activate_cartographic_routes()
+		"mnesica":
+			_trigger_mnesic_reenactment()
+		"ressonante":
+			_trigger_resonant_silence()
+		"contratual":
+			_execute_contracts()
 		_:
 			shockwaves.append({"pos": player_pos, "radius": 0.0, "max": 250.0, "life": 0.45, "damage": player_damage * 1.05, "hit": {}})
 	_spawn_radial_particles(player_pos, _manifestation_color(), 22)
@@ -3538,7 +3840,7 @@ func _boss_trapped_by_gravitante() -> bool:
 
 
 func _player_invulnerable() -> bool:
-	var tp_invulnerable := tp_effects.any(func(effect): return String(effect.get("kind", "")) in ["lacerante", "eletrica"] and float(effect.get("life", 0.0)) > 0.0)
+	var tp_invulnerable := tp_effects.any(func(effect): return (String(effect.get("kind", "")) in ["lacerante", "eletrica"] or (String(effect.get("kind", "")) == "ressonante" and bool(effect.get("perfect", false)))) and float(effect.get("life", 0.0)) > 0.0)
 	return trembo_invulnerability > 0.0 or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable
 
 
@@ -3587,6 +3889,32 @@ func _use_secondary_skill(target_world = null) -> void:
 		"ancorada":
 			last_secondary_time = time_alive
 			_spawn_secondary_ancorada(target_world)
+		"cartografica":
+			last_secondary_time = time_alive
+			manifestation_secondaries.append({"kind": "cartografica", "life": 6.0, "max": 6.0, "tick": 0.0})
+			_activate_cartographic_routes()
+			_add_text("MAPA RASGADO", player_pos + Vector2(0, -112), Color(0.40, 1.0, 0.82), 1.2, 24)
+		"mnesica":
+			last_secondary_time = time_alive
+			manifestation_secondaries.append({"kind": "mnesica", "life": 5.0, "max": 5.0, "tick": 0.0})
+			_trigger_mnesic_reenactment()
+			_add_text("ARQUIVO VIVO", player_pos + Vector2(0, -112), Color(0.88, 0.60, 1.0), 1.2, 24)
+		"ressonante":
+			last_secondary_time = time_alive
+			resonant_next_perfect = true
+			resonant_speed_timer = 5.0
+			manifestation_secondaries.append({"kind": "ressonante", "life": 5.2, "max": 5.2, "tick": 0.0})
+			_add_text("CRESCENDO", player_pos + Vector2(0, -112), Color(1.0, 0.80, 0.28), 1.2, 24)
+		"contratual":
+			last_secondary_time = time_alive
+			manifestation_secondaries.append({"kind": "contratual", "life": 5.0, "max": 5.0, "tick": 0.0})
+			for enemy in enemies:
+				if Vector2(enemy["pos"]).distance_to(player_pos) <= 420.0:
+					_apply_contract_clause(enemy)
+			if boss_active and boss_hp > 0.0:
+				boss_contract_clause = "agressao"
+				boss_contract_infractions = min(CONTRACT_MAX_INFRACTIONS, boss_contract_infractions + 1)
+			_add_text("AUDIENCIA FINAL", player_pos + Vector2(0, -112), Color(1.0, 0.58, 0.24), 1.2, 24)
 		_:
 			_add_text("2A HABILIDADE EM PREPARO", player_pos + Vector2(0, -110), Color(1.0, 0.82, 0.32), 0.9, 18)
 
@@ -3963,6 +4291,16 @@ func _ground_target_world(screen_pos: Vector2, viewport: Vector2, secondary: boo
 func _execute_teleport(target_world: Vector2) -> void:
 	_apply_aura_events(AuraSystem.on_dash(aura_state))
 	var origin: Vector2 = player_pos
+	if manifestation_key == "cartografica" and not cartographic_coords.is_empty():
+		var best_pos := target_world
+		var best_d := INF
+		for coord in cartographic_coords:
+			var coord_pos := Vector2(coord.get("pos", target_world))
+			var d := coord_pos.distance_squared_to(target_world)
+			if d < best_d:
+				best_d = d
+				best_pos = coord_pos
+		target_world = best_pos
 	player_pos = target_world.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
 	var dash_color: Color = _manifestation_color()
 	slashes.append({"a": origin, "b": player_pos, "life": 0.32, "max": 0.32, "color": dash_color, "width": 38.0})
@@ -3996,6 +4334,34 @@ func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2)
 		"eletrica":
 			tp_effects.append({"kind": "eletrica", "life": TP_ELECTRIC_DURATION, "max": TP_ELECTRIC_DURATION, "a": origin, "b": destination, "tick": 0.0})
 			_add_text("FORMA ELETRICA", destination + Vector2(0, -92), Color(0.28, 0.94, 1.0), 1.0, 20)
+		"cartografica":
+			if cartographic_coords.is_empty():
+				_add_cartographic_coord(destination)
+			tp_effects.append({"kind": "cartografica", "life": 0.55, "max": 0.55, "a": origin, "b": destination})
+			_add_text("PASSO CARTOGRAFICO", destination + Vector2(0, -92), Color(0.38, 1.0, 0.82), 0.9, 18)
+		"mnesica":
+			mnesic_trick_timer = MNESIC_TRICK_TIME
+			mnesic_trick_origin = origin
+			for enemy in enemies:
+				if Vector2(enemy["pos"]).distance_to(origin) <= 340.0:
+					enemy["mnesic_tricked"] = MNESIC_TRICK_TIME
+			tp_effects.append({"kind": "mnesica", "life": MNESIC_TRICK_TIME, "max": MNESIC_TRICK_TIME, "a": origin, "b": destination})
+			_add_text("APAGAO MNEMICO", destination + Vector2(0, -92), Color(0.86, 0.58, 1.0), 0.9, 18)
+		"ressonante":
+			var perfect := _resonant_is_perfect()
+			if perfect:
+				resonant_next_perfect = true
+				resonant_speed_timer = 2.6
+				last_attack_time -= 0.16
+				tp_effects.append({"kind": "ressonante", "life": 0.85, "max": 0.85, "a": origin, "b": destination, "perfect": true})
+				_add_text("CONTRATEMPO PERFEITO", destination + Vector2(0, -92), Color(1.0, 0.78, 0.24), 0.9, 18)
+			else:
+				tp_effects.append({"kind": "ressonante", "life": 0.35, "max": 0.35, "a": origin, "b": destination, "perfect": false})
+			_record_resonant_attack(perfect)
+		"contratual":
+			contractual_notifications.append({"pos": origin, "life": CONTRACT_TRAP_LIFE, "max": CONTRACT_TRAP_LIFE, "phase": rng.randf_range(0.0, TAU)})
+			tp_effects.append({"kind": "contratual", "life": 0.55, "max": 0.55, "a": origin, "b": destination})
+			_add_text("NOTIFICACAO", origin + Vector2(0, -78), Color(1.0, 0.58, 0.24), 0.9, 18)
 		_:
 			_finish_teleport_effect_cooldown()
 
@@ -4039,6 +4405,384 @@ func _finish_teleport_effect_cooldown() -> void:
 	tp_cooldown_override = -1.0
 	retornante_tp_window = 0.0
 	retornante_tp_origin = Vector2.ZERO
+
+
+func _reset_advanced_manifestation_state() -> void:
+	cartographic_coords.clear()
+	cartographic_route_timer = 0.0
+	cartographic_boss_displacement = 0
+	mnesic_trick_timer = 0.0
+	mnesic_trick_origin = Vector2.ZERO
+	mnesic_boss_vulnerability = 0.0
+	resonant_perfect_streak = 0
+	resonant_noise = 0
+	resonant_next_perfect = false
+	resonant_speed_timer = 0.0
+	resonant_note_index = 0
+	boss_resonant_notes.clear()
+	boss_contract_clause = ""
+	boss_contract_infractions = 0
+	boss_contract_vulnerability = 0.0
+	contractual_notifications.clear()
+	contractual_penalty_timer = 0.0
+
+
+func _update_advanced_manifestation_state(delta: float) -> void:
+	cartographic_route_timer = max(0.0, cartographic_route_timer - delta)
+	mnesic_trick_timer = max(0.0, mnesic_trick_timer - delta)
+	mnesic_boss_vulnerability = max(0.0, mnesic_boss_vulnerability - delta)
+	boss_contract_vulnerability = max(0.0, boss_contract_vulnerability - delta)
+	resonant_speed_timer = max(0.0, resonant_speed_timer - delta)
+	resonant_sinfonia_buff_timer = max(0.0, resonant_sinfonia_buff_timer - delta)
+	contractual_penalty_timer = max(0.0, contractual_penalty_timer - delta)
+	var kept_coords = []
+	for coord in cartographic_coords:
+		if String(coord.get("kind", "fixed")) == "enemy":
+			var enemy = _enemy_by_uid(int(coord.get("uid", -1)))
+			if enemy and float(enemy.get("hp", 0.0)) > 0.0:
+				coord["pos"] = Vector2(enemy["pos"])
+				coord["life"] = max(0.0, float(coord.get("life", 0.0)) - delta)
+				kept_coords.append(coord)
+		else:
+			coord["life"] = max(0.0, float(coord.get("life", 0.0)) - delta)
+			if float(coord["life"]) > 0.0:
+				kept_coords.append(coord)
+	cartographic_coords = kept_coords
+	_update_contractual_notifications(delta)
+	if cartographic_route_timer > 0.0:
+		_apply_cartographic_route_pressure(delta)
+
+
+func _add_cartographic_coord(pos: Vector2, uid := -1) -> void:
+	var coord = {
+		"pos": pos.clamp(Vector2(60, 70), WORLD_SIZE - Vector2(60, 70)),
+		"life": CARTO_COORD_LIFE,
+		"max": CARTO_COORD_LIFE,
+		"phase": rng.randf_range(0.0, TAU),
+		"kind": "enemy" if uid >= 0 else "fixed",
+		"uid": uid
+	}
+	if uid >= 0:
+		for existing in cartographic_coords:
+			if int(existing.get("uid", -2)) == uid:
+				existing.merge(coord, true)
+				return
+	cartographic_coords.append(coord)
+	while cartographic_coords.size() > CARTO_COORD_MAX:
+		cartographic_coords.pop_front()
+
+
+func _cartographic_coord_points() -> Array:
+	var points = []
+	for coord in cartographic_coords:
+		points.append(Vector2(coord.get("pos", player_pos)))
+	return points
+
+
+func _activate_cartographic_routes() -> void:
+	if cartographic_coords.size() < 2:
+		_add_text("MARQUE 2 COORDENADAS", player_pos + Vector2(0, -92), Color(0.65, 1.0, 0.84), 0.9, 18)
+		return
+	cartographic_route_timer = CARTO_ROUTE_ACTIVE_TIME
+	_apply_cartographic_route_pressure(0.18)
+	_add_text("DOBRA CARTOGRAFICA", player_pos + Vector2(0, -102), Color(0.40, 1.0, 0.82), 1.1, 24)
+	_spawn_radial_particles(player_pos, Color(0.24, 1.0, 0.78), 20)
+
+
+func _apply_cartographic_route_pressure(delta: float) -> void:
+	var points = _cartographic_coord_points()
+	if points.size() < 2:
+		return
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var enemy_pos = Vector2(enemy["pos"])
+		var close_to_route = false
+		for i in range(points.size()):
+			var a: Vector2 = points[i]
+			var b: Vector2 = points[(i + 1) % points.size()]
+			if points.size() == 2 and i > 0:
+				break
+			if _distance_to_segment(enemy_pos, a, b) <= CARTO_ROUTE_WIDTH + _enemy_radius(enemy) * 0.35:
+				close_to_route = true
+				break
+		var inside_triangle = points.size() >= 3 and _point_in_triangle(enemy_pos, points[0], points[1], points[2])
+		if close_to_route or inside_triangle:
+			enemy["carto_confuse"] = max(float(enemy.get("carto_confuse", 0.0)), 0.75)
+			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.06)
+			if inside_triangle:
+				_damage_enemy(enemy, max(1.0, player_damage * 0.20 + float(enemy.get("max_hp", 1.0)) * 0.006) * max(delta, 0.10), "cartografica", false)
+	if boss_active and boss_hp > 0.0:
+		for i in range(points.size()):
+			var a: Vector2 = points[i]
+			var b: Vector2 = points[(i + 1) % points.size()]
+			if points.size() == 2 and i > 0:
+				break
+			if _distance_to_segment(boss_pos, a, b) <= 92.0:
+				cartographic_boss_displacement += 1
+				_add_text("DESLOCAMENTO", boss_pos + Vector2(0, -104), Color(0.45, 1.0, 0.82), 0.55, 15)
+				break
+
+
+func _point_in_triangle(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> bool:
+	var d1 = _triangle_sign(p, a, b)
+	var d2 = _triangle_sign(p, b, c)
+	var d3 = _triangle_sign(p, c, a)
+	var has_neg = d1 < 0.0 or d2 < 0.0 or d3 < 0.0
+	var has_pos = d1 > 0.0 or d2 > 0.0 or d3 > 0.0
+	return not (has_neg and has_pos)
+
+
+func _triangle_sign(p1: Vector2, p2: Vector2, p3: Vector2) -> float:
+	return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y)
+
+
+func _maybe_cartographic_redirect(bullet: Dictionary) -> void:
+	if cartographic_coords.size() < 2 or bool(bullet.get("carto_redirected", false)):
+		return
+	var kind := String(bullet.get("kind", ""))
+	if kind == "cartografica":
+		return
+	for i in range(cartographic_coords.size()):
+		var coord = cartographic_coords[i]
+		var coord_pos := Vector2(coord.get("pos", player_pos))
+		if Vector2(bullet.get("pos", player_pos)).distance_to(coord_pos) > 24.0:
+			continue
+		var exit_coord = cartographic_coords[(i + 1) % cartographic_coords.size()]
+		var exit_pos := Vector2(exit_coord.get("pos", coord_pos))
+		bullet["pos"] = exit_pos + Vector2(bullet.get("dir", Vector2.RIGHT)).normalized() * 18.0
+		bullet["damage"] = float(bullet.get("damage", 1.0)) * 1.24
+		bullet["carto_redirected"] = true
+		slashes.append({"a": coord_pos, "b": exit_pos, "life": 0.22, "max": 0.22, "color": Color(0.38, 1.0, 0.82), "width": 18.0})
+		break
+
+
+func _register_mnesic_memory(enemy: Dictionary, hit_damage: float) -> void:
+	var memories: Array = enemy.get("mnesic_memories", [])
+	var memory_type := "perseguicao"
+	if time_alive - float(enemy.get("last_damage_time", -99.0)) < 0.75:
+		memory_type = "dor"
+	elif float(enemy.get("shoot_cd", 9.0)) < 0.45 or float(enemy.get("prepare", 0.0)) > 0.0:
+		memory_type = "ataque"
+	memories.append({"type": memory_type, "damage": hit_damage, "pos": Vector2(enemy["pos"]), "player_pos": player_pos, "time": time_alive})
+	while memories.size() > MNESIC_MEMORY_MAX:
+		memories.pop_front()
+	enemy["mnesic_memories"] = memories
+	if memories.size() >= MNESIC_MEMORY_MAX:
+		enemy["mnesic_dejavu"] = max(float(enemy.get("mnesic_dejavu", 0.0)), 2.4)
+
+
+func _trigger_mnesic_reenactment() -> void:
+	var activated := 0
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0 or Vector2(enemy["pos"]).distance_to(player_pos) > MNESIC_REENACT_RADIUS:
+			continue
+		var memories: Array = enemy.get("mnesic_memories", [])
+		if memories.is_empty():
+			continue
+		activated += memories.size()
+		for memory in memories:
+			match String(memory.get("type", "")):
+				"dor":
+					_damage_enemy(enemy, max(player_damage * 0.28, float(memory.get("damage", player_damage)) * 0.46), "mnesica", false)
+				"ataque":
+					enemy["shoot_cd"] = max(float(enemy.get("shoot_cd", 0.0)), 1.1)
+					enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.22)
+					slashes.append({"a": Vector2(enemy["pos"]), "b": Vector2(memory.get("player_pos", player_pos)), "life": 0.30, "max": 0.30, "color": Color(0.84, 0.58, 1.0), "width": 16.0})
+				_:
+					enemy["mnesic_replay"] = max(float(enemy.get("mnesic_replay", 0.0)), 1.0)
+					shockwaves.append({"pos": Vector2(memory.get("pos", enemy["pos"])), "radius": 0.0, "max": 110.0, "life": 0.34, "damage": player_damage * 0.18, "hit": {}, "visual_only": true})
+		if memories.size() >= MNESIC_MEMORY_MAX:
+			enemy["mnesic_vulnerable"] = max(float(enemy.get("mnesic_vulnerable", 0.0)), 2.6)
+		enemy["mnesic_memories"] = []
+	if boss_active and boss_hp > 0.0:
+		mnesic_boss_vulnerability = max(mnesic_boss_vulnerability, 2.4 + min(2.0, float(activated) * 0.18))
+		if activated > 0:
+			_damage_boss(player_damage * (0.35 + min(1.0, float(activated) * 0.07)), "mnesica")
+	_add_text("REVIVENCIA x%d" % activated, player_pos + Vector2(0, -96), Color(0.86, 0.58, 1.0), 1.0, 22)
+
+
+func _resonant_beat_offset() -> float:
+	var beat = fposmod(time_alive, RESONANT_BEAT_INTERVAL)
+	return min(beat, RESONANT_BEAT_INTERVAL - beat)
+
+
+func _resonant_is_perfect() -> bool:
+	return resonant_next_perfect or resonant_sinfonia_buff_timer > 0.0 or _resonant_beat_offset() <= RESONANT_PERFECT_WINDOW
+
+
+func _resonant_note_name() -> String:
+	var notes = ["grave", "aguda", "quebrada"]
+	var note = notes[resonant_note_index % notes.size()]
+	resonant_note_index += 1
+	return note
+
+
+func _record_resonant_attack(perfect: bool) -> void:
+	if perfect:
+		resonant_perfect_streak += 1
+		resonant_noise = max(0, resonant_noise - 1)
+		_spawn_music_notes(player_pos, rng.randi_range(2, 3))
+	else:
+		resonant_noise += 1
+		if resonant_noise >= RESONANT_NOISE_LIMIT:
+			resonant_perfect_streak = max(0, resonant_perfect_streak - 2)
+			resonant_noise = 0
+	resonant_next_perfect = false
+
+
+func _apply_resonant_note(enemy: Dictionary, note: String, perfect: bool) -> void:
+	if not perfect:
+		return
+	var notes: Array = enemy.get("resonant_notes", [])
+	if not notes.has(note):
+		notes.append(note)
+	enemy["resonant_notes"] = notes
+	enemy["resonant_flash"] = 0.45
+	if notes.size() >= 3:
+		_trigger_resonant_chord(Vector2(enemy["pos"]), 1.0 + resonant_perfect_streak * 0.06)
+		enemy["resonant_notes"] = []
+
+
+func _trigger_resonant_chord(center: Vector2, power: float) -> void:
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		if Vector2(enemy["pos"]).distance_to(center) <= 130.0:
+			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.20)
+			_damage_enemy(enemy, player_damage * 0.42 * power, "ressonante", false)
+	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= 165.0:
+		_damage_boss(player_damage * 0.36 * power, "ressonante")
+	shockwaves.append({"pos": center, "radius": 0.0, "max": 142.0, "life": 0.38, "damage": 0.0, "hit": {}, "visual_only": true})
+	_spawn_radial_particles(center, Color(1.0, 0.76, 0.20), 18)
+
+
+func _trigger_resonant_silence() -> void:
+	var detonated := 0
+	var power: float = 0.72 + float(resonant_perfect_streak) * 0.08
+	if resonant_noise >= RESONANT_NOISE_LIMIT - 1:
+		power *= 0.70
+	for enemy in enemies:
+		var notes: Array = enemy.get("resonant_notes", [])
+		if notes.is_empty():
+			continue
+		detonated += notes.size()
+		enemy["shoot_cd"] = max(float(enemy.get("shoot_cd", 0.0)), 1.0 + min(1.0, notes.size() * 0.22))
+		enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.18 + notes.size() * 0.08)
+		_damage_enemy(enemy, player_damage * power * notes.size(), "ressonante", false)
+		enemy["resonant_notes"] = []
+		_spawn_music_notes(Vector2(enemy["pos"]), notes.size() * 2)
+	if boss_active and boss_hp > 0.0:
+		_damage_boss(player_damage * (0.52 + resonant_perfect_streak * 0.045), "ressonante")
+		_spawn_music_notes(boss_pos, boss_resonant_notes.size() * 2)
+		boss_resonant_notes.clear()
+		mnesic_boss_vulnerability = max(mnesic_boss_vulnerability, 1.2)
+	_add_text("SINFONIA DO SILENCIO", player_pos + Vector2(0, -96), Color(1.0, 0.78, 0.24), 1.0, 22)
+	_spawn_radial_particles(player_pos, Color(1.0, 0.78, 0.24), 24)
+	shockwaves.append({
+		"pos": player_pos,
+		"radius": 10.0,
+		"max": 650.0,
+		"life": 1.2,
+		"max_life": 1.2,
+		"damage": player_damage * power * 1.5,
+		"hit": {},
+		"kind": "sinfonia_silencio"
+	})
+	resonant_sinfonia_buff_timer = 3.0
+
+
+func _apply_contract_clause(enemy: Dictionary) -> void:
+	var clause := "aproximacao"
+	if float(enemy.get("shoot_cd", 9.0)) < 0.55 or float(enemy.get("prepare", 0.0)) > 0.0:
+		clause = "agressao"
+	elif Vector2(enemy["pos"]).distance_to(player_pos) > 300.0:
+		clause = "fuga"
+	enemy["contract_clause"] = clause
+	enemy["contract_infractions"] = min(CONTRACT_MAX_INFRACTIONS, int(enemy.get("contract_infractions", 0)))
+	enemy["contract_origin_dist"] = Vector2(enemy["pos"]).distance_to(player_pos)
+	enemy["contract_time"] = 5.5
+	enemy["contract_check_cd"] = 0.35
+	enemy["contract_flash"] = 0.45
+
+
+func _update_contract_clause(enemy: Dictionary, delta: float) -> void:
+	if not enemy.has("contract_clause"):
+		return
+	enemy["contract_time"] = max(0.0, float(enemy.get("contract_time", 0.0)) - delta)
+	enemy["contract_flash"] = max(0.0, float(enemy.get("contract_flash", 0.0)) - delta)
+	enemy["contract_check_cd"] = max(0.0, float(enemy.get("contract_check_cd", 0.0)) - delta)
+	if float(enemy["contract_time"]) <= 0.0:
+		enemy.erase("contract_clause")
+		return
+	if float(enemy["contract_check_cd"]) > 0.0:
+		return
+	enemy["contract_check_cd"] = 0.42
+	var broken := false
+	match String(enemy.get("contract_clause", "")):
+		"agressao":
+			broken = float(enemy.get("shoot_cd", 9.0)) < 0.36 or float(enemy.get("prepare", 0.0)) > 0.0
+		"fuga":
+			broken = Vector2(enemy["pos"]).distance_to(player_pos) > float(enemy.get("contract_origin_dist", 240.0)) + 120.0
+		_:
+			broken = Vector2(enemy["pos"]).distance_to(player_pos) <= 115.0
+	if broken:
+		enemy["contract_infractions"] = min(CONTRACT_MAX_INFRACTIONS, int(enemy.get("contract_infractions", 0)) + 1)
+		enemy["contract_flash"] = 0.60
+		enemy["contract_time"] = max(float(enemy["contract_time"]), 3.5)
+
+
+func _execute_contracts() -> void:
+	var executed := 0
+	var empty_contracts := 0
+	for enemy in enemies:
+		if not enemy.has("contract_clause") or float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		executed += 1
+		var infractions = int(enemy.get("contract_infractions", 0))
+		if infractions <= 0:
+			empty_contracts += 1
+		var mult = [0.42, 0.92, 1.55, 2.35][clampi(infractions, 0, 3)]
+		if infractions >= 2:
+			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.28)
+			enemy["contract_vulnerable"] = max(float(enemy.get("contract_vulnerable", 0.0)), 2.0)
+		if infractions >= 3:
+			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.75)
+		_damage_enemy(enemy, player_damage * mult + float(enemy.get("max_hp", 1.0)) * 0.01 * infractions, "contratual", false)
+		enemy.erase("contract_clause")
+	if boss_active and boss_hp > 0.0 and boss_contract_clause != "":
+		var boss_mult = [0.30, 0.78, 1.25, 1.95][clampi(boss_contract_infractions, 0, 3)]
+		_damage_boss(player_damage * boss_mult + boss_hp_max * 0.0025 * boss_contract_infractions, "contratual")
+		if boss_contract_infractions >= 3:
+			boss_contract_vulnerability = max(boss_contract_vulnerability, 3.0)
+		boss_contract_clause = ""
+		boss_contract_infractions = 0
+	if empty_contracts >= 3:
+		contractual_penalty_timer = 2.5
+		_add_text("MULTA DE RUPTURA", player_pos + Vector2(0, -120), Color(1.0, 0.36, 0.18), 0.9, 18)
+	_add_text("EXECUCAO x%d" % executed, player_pos + Vector2(0, -96), Color(1.0, 0.58, 0.24), 1.0, 22)
+
+
+func _update_contractual_notifications(delta: float) -> void:
+	var kept = []
+	for trap in contractual_notifications:
+		trap["life"] = float(trap.get("life", 0.0)) - delta
+		trap["phase"] = float(trap.get("phase", 0.0)) + delta * 4.0
+		var consumed := false
+		for enemy in enemies:
+			if float(enemy.get("hp", 0.0)) <= 0.0:
+				continue
+			if Vector2(enemy["pos"]).distance_to(Vector2(trap.get("pos", player_pos))) <= 58.0:
+				if enemy.has("contract_clause"):
+					enemy["contract_infractions"] = min(CONTRACT_MAX_INFRACTIONS, int(enemy.get("contract_infractions", 0)) + 1)
+				else:
+					_apply_contract_clause(enemy)
+				enemy["contract_flash"] = 0.70
+				consumed = true
+				break
+		if not consumed and float(trap["life"]) > 0.0:
+			kept.append(trap)
+	contractual_notifications = kept
 
 
 func _spawn_tp_parasite_eggs(origin: Vector2) -> void:
@@ -4819,6 +5563,7 @@ func _update_enemies(delta: float) -> void:
 		enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
 		enemy["hit_cd"] = max(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
 		enemy["stun"] = max(0.0, float(enemy.get("stun", 0.0)) - delta)
+		enemy["resonant_stun_notes"] = max(0.0, float(enemy.get("resonant_stun_notes", 0.0)) - delta)
 		_update_enemy_dots(enemy, delta)
 		if float(enemy.get("hp", 0.0)) <= 0.0:
 			dead.append(enemy)
@@ -5040,6 +5785,7 @@ func _move_enemy(enemy: Dictionary, delta: float) -> void:
 		var to_player = (player_pos - Vector2(enemy["pos"])).normalized()
 		var dist = Vector2(enemy["pos"]).distance_to(player_pos)
 		var has_loot = int(enemy.get("stolen", 0)) > 0
+		var desperate = _larapio_desperate(enemy)
 		var patrol_target := Vector2(enemy.get("larapio_patrol_target", _random_larapio_patrol_target()))
 		var patrol_dir := (patrol_target - Vector2(enemy["pos"])).normalized()
 		var edge_push := _larapio_edge_push(Vector2(enemy["pos"]))
@@ -5047,6 +5793,11 @@ func _move_enemy(enemy: Dictionary, delta: float) -> void:
 			dir = to_player
 		elif float(enemy.get("larapio_escape_timer", 0.0)) > 0.0 and patrol_dir.length() > 0.05:
 			dir = patrol_dir
+		elif desperate:
+			if dist < LARAPIO_DESPERATE_KEEP_DISTANCE:
+				dir = (-to_player + to_player.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.55).normalized()
+			else:
+				dir = (to_player.orthogonal() * float(enemy.get("strafe", 1.0)) + patrol_dir * 0.20).normalized()
 		elif has_loot or enemy["hp"] < enemy["max_hp"] * 0.5:
 			dir = -to_player
 		elif bool(enemy.get("alerted", false)) and dist < 430.0:
@@ -5056,7 +5807,7 @@ func _move_enemy(enemy: Dictionary, delta: float) -> void:
 		else:
 			dir = (to_player + to_player.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.24).normalized()
 		if patrol_dir.length() > 0.05 and not (bool(enemy.get("direct_steal", false)) and player_stun_timer > 0.0):
-			var patrol_weight := 0.34 if not has_loot else 0.48
+			var patrol_weight := 0.16 if desperate else (0.34 if not has_loot else 0.48)
 			dir = (dir * (1.0 - patrol_weight) + patrol_dir * patrol_weight).normalized()
 		if edge_push.length() > 0.05:
 			var trap_time: float = clamp(float(enemy.get("larapio_corner_time", 0.0)) / LARAPIO_CORNER_TRAP_TIME, 0.0, 1.0)
@@ -5083,6 +5834,8 @@ func _move_enemy(enemy: Dictionary, delta: float) -> void:
 	if enemy["type"] == ENEMY_LARAPIO:
 		if bool(enemy.get("direct_steal", false)) and player_stun_timer > 0.0:
 			speed_mult *= 1.55
+		if _larapio_desperate(enemy):
+			speed_mult *= 1.22
 		if int(enemy.get("stolen", 0)) > 0:
 			speed_mult *= 1.35
 		if float(enemy.get("happy_timer", 0.0)) > 0.0:
@@ -5148,6 +5901,24 @@ func _update_enemy_dots(enemy: Dictionary, delta: float) -> void:
 		enemy["bleed_timer"] = max(0.0, float(enemy.get("bleed_timer", 0.0)) - delta)
 		if float(enemy["bleed_timer"]) > 0.0 and int(Time.get_ticks_msec() / 350) % 2 == 0:
 			enemy["hp"] = float(enemy["hp"]) - int(enemy.get("laceracao", 0)) * 0.18
+	enemy["carto_confuse"] = max(0.0, float(enemy.get("carto_confuse", 0.0)) - delta)
+	enemy["carto_mobile_coord"] = max(0.0, float(enemy.get("carto_mobile_coord", 0.0)) - delta)
+	if float(enemy.get("carto_confuse", 0.0)) > 0.0:
+		var wobble = Vector2.from_angle(time_alive * 5.1 + float(enemy.get("uid", 0)) * 0.013)
+		enemy["pos"] = (Vector2(enemy["pos"]) + wobble * float(enemy.get("speed", enemy_speed_base)) * delta * 0.48).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		enemy["shoot_cd"] = max(float(enemy.get("shoot_cd", 0.0)), 0.30)
+	enemy["mnesic_tricked"] = max(0.0, float(enemy.get("mnesic_tricked", 0.0)) - delta)
+	enemy["mnesic_dejavu"] = max(0.0, float(enemy.get("mnesic_dejavu", 0.0)) - delta)
+	enemy["mnesic_vulnerable"] = max(0.0, float(enemy.get("mnesic_vulnerable", 0.0)) - delta)
+	enemy["mnesic_replay"] = max(0.0, float(enemy.get("mnesic_replay", 0.0)) - delta)
+	if float(enemy.get("mnesic_replay", 0.0)) > 0.0:
+		var replay_dir = (Vector2(enemy.get("pos", player_pos)) - player_pos).normalized()
+		if replay_dir.length() <= 0.05:
+			replay_dir = Vector2.from_angle(float(enemy.get("uid", 0)) * 0.01)
+		enemy["pos"] = (Vector2(enemy["pos"]) + replay_dir * float(enemy.get("speed", enemy_speed_base)) * delta * 0.42).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+	enemy["resonant_flash"] = max(0.0, float(enemy.get("resonant_flash", 0.0)) - delta)
+	enemy["contract_vulnerable"] = max(0.0, float(enemy.get("contract_vulnerable", 0.0)) - delta)
+	_update_contract_clause(enemy, delta)
 
 
 func _update_curater(enemy: Dictionary, delta: float) -> void:
@@ -5226,6 +5997,11 @@ func _update_larapio(enemy: Dictionary, delta: float) -> void:
 	_update_larapio_navigation(enemy, delta)
 	var has_loot = int(enemy.get("stolen", 0)) > 0
 	var aggressive = time_alive - float(enemy.get("spawned_at", time_alive)) >= LARAPIO_AGGRESSIVE_AFTER
+	var desperate = _larapio_desperate(enemy)
+	if desperate:
+		enemy["alerted"] = true
+		enemy["portal"] = 0.0
+		enemy["portal_pause"] = 0.0
 	_update_larapio_laughs(enemy, delta, has_loot)
 	enemy["happy_timer"] = max(0.0, float(enemy.get("happy_timer", 0.0)) - delta)
 	if player_stun_timer <= 0.0:
@@ -5254,9 +6030,18 @@ func _update_larapio(enemy: Dictionary, delta: float) -> void:
 	else:
 		enemy["portal"] = 0.0
 
-	if float(enemy.get("throw_cd", 0.0)) <= 0.0 and (bool(enemy.get("alerted", false)) or has_loot) and dist <= 560.0:
-		enemy["throw_cd"] = LARAPIO_AGGRESSIVE_THROW_INTERVAL if aggressive else LARAPIO_THROW_INTERVAL
+	var throw_range := 780.0 if desperate else 560.0
+	if float(enemy.get("throw_cd", 0.0)) <= 0.0 and (bool(enemy.get("alerted", false)) or has_loot or desperate) and dist <= throw_range:
+		enemy["throw_cd"] = LARAPIO_DESPERATE_THROW_INTERVAL if desperate else (LARAPIO_AGGRESSIVE_THROW_INTERVAL if aggressive else LARAPIO_THROW_INTERVAL)
 		_throw_larapio_projectile(enemy)
+
+
+func _larapio_desperate(enemy: Dictionary) -> bool:
+	if int(enemy.get("stolen", 0)) > 0:
+		return false
+	if time_alive - float(enemy.get("spawned_at", time_alive)) < LARAPIO_DESPERATE_AFTER:
+		return false
+	return float(enemy.get("hp", 0.0)) <= float(enemy.get("max_hp", 1.0)) * LARAPIO_DESPERATE_HP_RATIO
 
 
 func _update_larapio_laughs(enemy: Dictionary, delta: float, has_loot: bool) -> void:
@@ -5387,18 +6172,21 @@ func _throw_larapio_projectile(enemy: Dictionary) -> void:
 		dir = Vector2.LEFT
 	var has_loot = int(enemy.get("stolen", 0)) > 0
 	var aggressive = time_alive - float(enemy.get("spawned_at", time_alive)) >= LARAPIO_AGGRESSIVE_AFTER
+	var desperate = _larapio_desperate(enemy)
+	var stone_damage_mult := LARAPIO_DESPERATE_STONE_DAMAGE_MULT if desperate and not has_loot else 1.0
+	var stone_speed_mult := LARAPIO_DESPERATE_STONE_SPEED_MULT if desperate and not has_loot else (LARAPIO_AGGRESSIVE_STONE_SPEED_MULT if aggressive and not has_loot else 1.0)
 	enemy_bullets.append({
 		"pos": Vector2(enemy["pos"]) + Vector2(0, -10),
 		"spawn_pos": Vector2(enemy["pos"]) + Vector2(0, -10),
 		"dir": dir,
 		"life": 3.4,
-		"damage": max(1.0, player_hp_max * 0.015),
+		"damage": max(1.0, player_hp_max * 0.015 + enemy_far_damage * 0.35) * stone_damage_mult,
 		"phase": 0.0,
 		"type": "larapio_coin" if has_loot else "larapio_stone",
-		"speed_mult": 1.36 * (LARAPIO_AGGRESSIVE_STONE_SPEED_MULT if aggressive and not has_loot else 1.0),
+		"speed_mult": 1.36 * stone_speed_mult,
 		"owner_uid": int(enemy.get("uid", -1))
 	})
-	_add_text("PEDRA!" if aggressive and not has_loot else "TIN!", Vector2(enemy["pos"]) + Vector2(0, -72), Color(1.0, 0.52, 0.18) if aggressive else Color(1.0, 0.82, 0.24), 0.45, 14)
+	_add_text("PEDRA PESADA!" if desperate and not has_loot else ("PEDRA!" if aggressive and not has_loot else "TIN!"), Vector2(enemy["pos"]) + Vector2(0, -72), Color(1.0, 0.36, 0.12) if desperate else (Color(1.0, 0.52, 0.18) if aggressive else Color(1.0, 0.82, 0.24)), 0.45, 14)
 
 
 func _spawn_larapio_coin_drop(pos: Vector2, value: int, collectable: bool) -> void:
@@ -5551,6 +6339,7 @@ func _update_bullets(delta: float) -> void:
 		if float(bullet["trail_cd"]) <= 0.0:
 			bullet["trail_cd"] = 0.028 if String(bullet.get("kind", "")) == "eletrica_charged" else 0.040
 			_emit_projectile_trail(bullet)
+		_maybe_cartographic_redirect(bullet)
 
 		# Prismatica Wall Ricochet
 		if bullet["kind"] == "prismatica":
@@ -5611,6 +6400,9 @@ func _update_bullets(delta: float) -> void:
 					break
 
 		if float(bullet["life"]) <= 0.0:
+			if String(bullet.get("kind", "")) == "cartografica" and not bool(bullet.get("coord_spawned", false)):
+				_add_cartographic_coord(Vector2(bullet.get("pos", player_pos)))
+				bullet["coord_spawned"] = true
 			_play_projectile_end_sfx_once(bullet)
 			continue
 		if current_phase == 4 and _damage_phase4_planet_at(Vector2(bullet["pos"]), float(bullet["damage"]), 56.0):
@@ -5664,6 +6456,14 @@ func _update_bullets(delta: float) -> void:
 					})
 				if bullet["kind"] == "parasitica":
 					arauto["parasite_mark_time"] = PARASITE_MARK_DURATION
+				if bullet["kind"] == "cartografica":
+					_add_cartographic_coord(Vector2(arauto["pos"]))
+				if bullet["kind"] == "mnesica":
+					arauto["stun"] = max(float(arauto.get("stun", 0.0)), 0.18)
+				if bullet["kind"] == "ressonante" and bool(bullet.get("resonant_perfect", false)):
+					_damage_arauto(player_damage * 0.22, "ressonante", false)
+				if bullet["kind"] == "contratual":
+					arauto["stun"] = max(float(arauto.get("stun", 0.0)), 0.20)
 				if bullet["kind"] == "prismatica" and not bool(bullet.get("refracted", false)):
 					var arauto_hits = int(bullet.get("enemy_hits_count", 0)) + 1
 					bullet["enemy_hits_count"] = arauto_hits
@@ -5703,6 +6503,20 @@ func _update_bullets(delta: float) -> void:
 				if bullet["kind"] == "eletrica_charged":
 					shockwaves.append({"pos": boss_pos, "radius": 18.0, "max": 132.0, "life": 0.28, "damage": float(bullet["damage"]) * 0.42, "hit": {}})
 					_spawn_radial_particles(boss_pos, Color(0.46, 1.0, 1.0), 10)
+				if bullet["kind"] == "cartografica":
+					_add_cartographic_coord(boss_pos)
+					cartographic_boss_displacement += 1
+				if bullet["kind"] == "mnesica":
+					mnesic_boss_vulnerability = max(mnesic_boss_vulnerability, 1.4)
+				if bullet["kind"] == "ressonante" and bool(bullet.get("resonant_perfect", false)):
+					var note := String(bullet.get("resonant_note", "grave"))
+					boss_resonant_notes[note] = true
+					if boss_resonant_notes.size() >= 3:
+						_trigger_resonant_chord(boss_pos, 1.15)
+						boss_resonant_notes.clear()
+				if bullet["kind"] == "contratual":
+					boss_contract_clause = "agressao"
+					boss_contract_infractions = min(CONTRACT_MAX_INFRACTIONS, boss_contract_infractions + 1)
 
 				if bullet["kind"] == "prismatica" and not bool(bullet.get("refracted", false)):
 					var e_hits = int(bullet.get("enemy_hits_count", 0)) + 1
@@ -5728,6 +6542,15 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void:
 	var aura_hit := AuraSystem.on_enemy_hit(aura_state, enemy, bullet, damage)
 	damage = float(aura_hit.get("damage", damage))
 	_apply_aura_events(aura_hit.get("events", []))
+	if float(enemy.get("mnesic_tricked", 0.0)) > 0.0:
+		damage *= 1.22
+		enemy["mnesic_tricked"] = 0.0
+	if float(enemy.get("mnesic_vulnerable", 0.0)) > 0.0:
+		damage *= 1.18
+	if float(enemy.get("contract_vulnerable", 0.0)) > 0.0:
+		damage *= 1.16
+	if String(bullet.get("kind", "")) == "cartografica" and bool(bullet.get("carto_redirected", false)):
+		damage *= 1.22
 	_damage_enemy(enemy, damage, bullet["kind"])
 
 	_spawn_custom_collision(bullet["pos"], bullet["kind"])
@@ -5752,6 +6575,22 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void:
 			"damage": player_damage * 0.18,
 			"sfx_cd": 0.0
 		})
+	if bullet["kind"] == "cartografica":
+		_add_cartographic_coord(Vector2(enemy["pos"]), int(enemy["uid"]))
+		enemy["carto_mobile_coord"] = 4.2
+	if bullet["kind"] == "mnesica":
+		_register_mnesic_memory(enemy, damage)
+	if bullet["kind"] == "ressonante":
+		var perfect := bool(bullet.get("resonant_perfect", false))
+		_apply_resonant_note(enemy, String(bullet.get("resonant_note", "grave")), perfect)
+		if perfect:
+			if float(enemy.get("hp", 0.0)) <= 0.0:
+				_spawn_music_notes(Vector2(enemy["pos"]), 8)
+			else:
+				enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.8)
+				enemy["resonant_stun_notes"] = 0.8
+	if bullet["kind"] == "contratual":
+		_apply_contract_clause(enemy)
 	if bullet["kind"] == "eletrica_charged":
 		shockwaves.append({"pos": enemy["pos"], "radius": 18.0, "max": 128.0, "life": 0.28, "damage": damage * 0.52, "hit": {str(enemy["uid"]): true}})
 		_spawn_radial_particles(enemy["pos"], Color(0.46, 1.0, 1.0), 10)
@@ -5990,6 +6829,8 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 				amount *= 1.12
 	var hp_before := float(enemy["hp"])
 	enemy["hp"] = float(enemy["hp"]) - max(1.0, amount)
+	enemy["last_damage_time"] = time_alive
+	enemy["last_damage_amount"] = max(1.0, amount)
 	if execute_threshold > 0.0 and float(enemy["hp"]) > 0.0 and float(enemy["hp"]) / float(enemy["max_hp"]) <= execute_threshold:
 		enemy["hp"] = 0.0
 		collector_hud_pulse = 0.85
@@ -6065,9 +6906,11 @@ func _damage_boss(amount: float, source: String) -> void:
 		_play_sfx("Hit_Boss1.mp3", 0.06, 0.30)
 	var armor = BOSS_ARMOR + (time_alive / 60.0) * 0.0016 + enemies_killed * 0.00006 + cards_bought.get("Coletora", 0) * 0.004
 	if current_phase == 2:
-		armor -= 0.025
+		armor += 0.015
 	elif current_phase == 3:
-		armor -= 0.035
+		armor += 0.045
+	elif current_phase == 4:
+		armor += 0.075
 	if source == "veneno":
 		armor += 0.10
 	if source == "parasite_feast":
@@ -6075,6 +6918,13 @@ func _damage_boss(amount: float, source: String) -> void:
 	else:
 		armor = clamp(armor, 0.12, 0.84)
 	var final = max(1.0, amount * (1.0 - armor))
+	if mnesic_boss_vulnerability > 0.0 and source != "parasite_feast":
+		final *= 1.16
+	if boss_contract_vulnerability > 0.0 and source != "parasite_feast":
+		final *= 1.14
+	if cartographic_boss_displacement >= CARTO_BOSS_DISPLACEMENT_REQUIRED and source != "cartografica":
+		final *= 1.28
+		cartographic_boss_displacement = 0
 	if current_phase == 2 and _boss2_shield_active() and source != "parasite_feast":
 		_add_text("IMUNE", boss_pos + Vector2(rng.randf_range(-24, 24), -96), Color(0.72, 0.96, 1.0), 0.55, 18)
 		return
@@ -6904,13 +7754,13 @@ func _update_shockwaves(delta: float) -> void:
 				continue
 			if enemy["pos"].distance_to(wave["pos"]) <= float(wave["radius"]):
 				wave["hit"][uid] = true
-				_damage_enemy(enemy, float(wave["damage"]), "eletrica")
+				_damage_enemy(enemy, float(wave["damage"]), String(wave.get("kind", "eletrica")))
 		if boss_active and boss_pos.distance_to(wave["pos"]) <= float(wave["radius"]):
-			_damage_boss(float(wave["damage"]) * 0.38, "eletrica")
+			_damage_boss(float(wave["damage"]) * 0.38, String(wave.get("kind", "eletrica")))
 		if _arauto_active() and Vector2(arauto["pos"]).distance_to(Vector2(wave["pos"])) <= float(wave["radius"]):
 			if not Dictionary(wave["hit"]).has("arauto"):
 				wave["hit"]["arauto"] = true
-				_damage_arauto(float(wave["damage"]) * 0.38, "eletrica", false)
+				_damage_arauto(float(wave["damage"]) * 0.38, String(wave.get("kind", "eletrica")), false)
 	shockwaves = shockwaves.filter(func(w): return float(w["life"]) > 0.0)
 
 
@@ -6935,12 +7785,62 @@ func _update_manifestation_secondaries(delta: float) -> void:
 				_update_secondary_gravitante(secondary, delta)
 			"ancorada":
 				_update_secondary_ancorada(secondary, delta)
+			"cartografica":
+				_update_secondary_cartografica(secondary, delta)
+			"mnesica":
+				_update_secondary_mnesica(secondary, delta)
+			"ressonante":
+				_update_secondary_ressonante(secondary, delta)
+				if rng.randf() < delta * 15.0:
+					_spawn_music_notes(player_pos, 1)
+			"contratual":
+				_update_secondary_contratual(secondary, delta)
 		if was_active and float(secondary.get("life", 0.0)) <= 0.0:
 			if kind == "eletrica":
 				_finish_toggle_secondary(secondary, "ANEL ENCERRADO", Color(0.52, 0.88, 1.0))
 			elif kind == "prismatica":
 				_finish_toggle_secondary(secondary, "COROA ENCERRADA", Color(0.64, 1.0, 0.96), false)
 	manifestation_secondaries = manifestation_secondaries.filter(func(s): return float(s.get("life", 0.0)) > 0.0)
+
+
+func _update_secondary_cartografica(secondary: Dictionary, delta: float) -> void:
+	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
+	if float(secondary["tick"]) > 0.0:
+		return
+	secondary["tick"] = 0.45
+	cartographic_route_timer = max(cartographic_route_timer, 0.60)
+	_apply_cartographic_route_pressure(0.45)
+
+
+func _update_secondary_mnesica(secondary: Dictionary, delta: float) -> void:
+	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
+	if float(secondary["tick"]) > 0.0:
+		return
+	secondary["tick"] = 0.75
+	for enemy in enemies:
+		if Vector2(enemy["pos"]).distance_to(player_pos) <= 360.0:
+			_register_mnesic_memory(enemy, player_damage * 0.18)
+
+
+func _update_secondary_ressonante(secondary: Dictionary, delta: float) -> void:
+	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
+	if float(secondary["tick"]) > 0.0:
+		return
+	secondary["tick"] = RESONANT_BEAT_INTERVAL
+	_trigger_resonant_chord(player_pos, 0.55 + resonant_perfect_streak * 0.04)
+
+
+func _update_secondary_contratual(secondary: Dictionary, delta: float) -> void:
+	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
+	if float(secondary["tick"]) > 0.0:
+		return
+	secondary["tick"] = 0.85
+	for enemy in enemies:
+		if Vector2(enemy["pos"]).distance_to(player_pos) <= 360.0:
+			if enemy.has("contract_clause"):
+				enemy["contract_infractions"] = min(CONTRACT_MAX_INFRACTIONS, int(enemy.get("contract_infractions", 0)) + 1)
+			else:
+				_apply_contract_clause(enemy)
 
 
 func _update_secondary_eletrica(secondary: Dictionary, delta: float) -> void:
@@ -9932,19 +10832,19 @@ func _update_boss_call(delta: float) -> void:
 		else:
 			_play_music("Fase3_Boss.mp3" if current_phase == 3 else ("Fase2_Boss.mp3" if current_phase == 2 else "Boss1-1.mp3"))
 		if current_phase == 4:
-			boss_hp_max = max(boss_hp_max, 14500.0 + score_total * 0.28 + enemies_killed * 24.0)
+			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(4))
 			boss_name = "NEXO DA RUPTURA"
 			boss_title_color = Color(1.0, 0.76, 0.18)
 		elif current_phase == 3:
-			boss_hp_max = max(boss_hp_max, 11200.0 + score_total * 0.24 + enemies_killed * 20.0)
+			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(3))
 			boss_name = "PAI-RATO"
 			boss_title_color = Color(0.72, 0.92, 0.24)
 		elif current_phase == 2:
-			boss_hp_max = max(boss_hp_max, 5800.0 + score_total * 0.16 + enemies_killed * 12.0)
+			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(2))
 			boss_name = "SENTINELA GLACIAL"
 			boss_title_color = Color(0.50, 0.86, 1.0)
 		else:
-			boss_hp_max = max(boss_hp_max, BOSS_BASE_HP + score_total * 0.12 + enemies_killed * 9.0)
+			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(1))
 			boss_name = "CARANGUEJO COSMICO GIGANTE"
 			boss_title_color = Color(1.0, 0.52, 0.16)
 		boss_hp = boss_hp_max
@@ -10539,6 +11439,9 @@ func _update_effects(delta: float) -> void:
 			if kind == "trail":
 				var trail_vel: Vector2 = effect["vel"]
 				effect["vel"] = trail_vel * max(0.0, 1.0 - delta * 6.0)
+			elif kind == "music_note":
+				effect["phase"] = float(effect.get("phase", 0.0)) + delta * 3.0
+				effect["pos"].x += sin(float(effect["phase"])) * 15.0 * delta
 	for slash in slashes:
 		slash["life"] = float(slash["life"]) - delta
 		if String(slash.get("kind", "")) == "lacerante_spin":
@@ -10597,6 +11500,25 @@ func _spawn_radial_particles(pos: Vector2, color: Color, count: int) -> void:
 	if not gfx_particles: return
 	for i in range(count):
 		effects.append({"text": "", "pos": pos, "life": rng.randf_range(0.25, 0.55), "max": 0.55, "color": color, "size": rng.randi_range(3, 7), "vel": Vector2.from_angle(rng.randf_range(0, TAU)) * rng.randf_range(40, 120)})
+
+
+func _spawn_music_notes(pos: Vector2, count: int) -> void:
+	if not gfx_particles: return
+	var notes = ["♪", "♫", "♬", "♩"]
+	for i in range(count):
+		var note = notes[rng.randi() % notes.size()]
+		var color = Color(1.0, 0.8 + rng.randf_range(-0.1, 0.2), 0.2 + rng.randf_range(0, 0.3))
+		effects.append({
+			"text": note,
+			"pos": pos + Vector2(rng.randf_range(-15, 15), rng.randf_range(-15, 15)),
+			"life": rng.randf_range(0.8, 1.2),
+			"max": 1.2,
+			"color": color,
+			"size": rng.randi_range(16, 24),
+			"vel": Vector2(rng.randf_range(-15, 15), rng.randf_range(-40, -20)),
+			"kind": "music_note",
+			"phase": rng.randf_range(0, TAU)
+		})
 
 
 func _spawn_secondary_drain_sparks(pos: Vector2) -> void:
@@ -10683,6 +11605,14 @@ func _projectile_palette(kind: String) -> Dictionary:
 			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.50, 0.78, 1.0, 0.92), "trail": Color(0.74, 0.54, 1.0, 0.34), "size": 9.0, "trail_size": 9.0}
 		"ancorada":
 			return {"core": Color(1.0, 1.0, 1.0), "glow": Color(0.26, 0.96, 1.0, 0.90), "trail": Color(1.0, 0.78, 0.24, 0.38), "size": 8.0, "trail_size": 6.0}
+		"cartografica":
+			return {"core": Color(0.94, 1.0, 0.80), "glow": Color(0.30, 1.0, 0.78, 0.92), "trail": Color(1.0, 0.78, 0.24, 0.42), "size": 7.0, "trail_size": 6.0}
+		"mnesica":
+			return {"core": Color(1.0, 0.88, 1.0), "glow": Color(0.80, 0.50, 1.0, 0.90), "trail": Color(1.0, 0.42, 0.88, 0.38), "size": 7.0, "trail_size": 7.0}
+		"ressonante":
+			return {"core": Color(1.0, 0.96, 0.72), "glow": Color(1.0, 0.72, 0.18, 0.92), "trail": Color(0.34, 0.92, 1.0, 0.40), "size": 8.0, "trail_size": 7.0}
+		"contratual":
+			return {"core": Color(1.0, 0.96, 0.82), "glow": Color(1.0, 0.52, 0.20, 0.92), "trail": Color(1.0, 0.86, 0.42, 0.36), "size": 8.0, "trail_size": 6.0}
 		"petro":
 			return {"core": Color(0.82, 1.0, 1.0), "glow": Color(0.16, 0.92, 1.0, 0.88), "trail": Color(0.72, 1.0, 1.0, 0.38), "size": 6.0, "trail_size": 5.0}
 	return {"core": Color.WHITE, "glow": Color(0.72, 0.92, 1.0, 0.9), "trail": Color(0.72, 0.92, 1.0, 0.35), "size": 7.0, "trail_size": 6.0}
@@ -10740,6 +11670,8 @@ func _draw() -> void:
 			_draw_menu(viewport)
 		"settings":
 			_draw_settings(viewport)
+		"settings_gamepad":
+			_draw_gamepad_settings(viewport)
 		"settings_gameplay":
 			_draw_gameplay_settings(viewport)
 		"settings_audio":
@@ -10748,6 +11680,12 @@ func _draw() -> void:
 			_draw_graphics_settings(viewport)
 		"settings_data":
 			_draw_data_settings(viewport)
+		"multiplayer_menu":
+			_draw_multiplayer_menu(viewport)
+		"lobby_host":
+			_draw_lobby_host(viewport)
+		"lobby_client":
+			_draw_lobby_client(viewport)
 		"edit_layout":
 			_draw_edit_layout(viewport)
 		"catalog":
@@ -10786,8 +11724,24 @@ func _draw() -> void:
 			_draw_end_overlay(viewport, "BOSS VENCIDO", Color(1.0, 0.82, 0.22))
 		_:
 			_draw_game(viewport)
+	if manifestation_key == "ressonante" and mode in ["game", "shop_countdown", "shop_opening", "boss_call", "pause_countdown"]:
+		_draw_resonant_meter(viewport)
 	if show_fps_counter:
 		_draw_fps_counter(viewport)
+
+
+func _draw_resonant_meter(viewport: Vector2) -> void:
+	var rect := Rect2(viewport.x * 0.5 - 96.0, viewport.y - 52.0, 192.0, 18.0)
+	draw_rect(rect.grow(4.0), Color(0.0, 0.0, 0.0, 0.46), true)
+	draw_rect(rect.grow(4.0), Color(1.0, 0.72, 0.20, 0.36), false, 1.4)
+	for i in range(4):
+		var x = rect.position.x + rect.size.x * (float(i) / 3.0)
+		draw_line(Vector2(x, rect.position.y - 2.0), Vector2(x, rect.end.y + 2.0), Color(1.0, 0.86, 0.38, 0.62), 1.4)
+	var progress = fposmod(time_alive, RESONANT_BEAT_INTERVAL * 4.0) / (RESONANT_BEAT_INTERVAL * 4.0)
+	var p = Vector2(rect.position.x + rect.size.x * progress, rect.get_center().y)
+	var perfect_alpha = 0.95 if _resonant_is_perfect() else 0.42
+	draw_circle(p, 8.0, Color(1.0, 0.82, 0.22, perfect_alpha))
+	_draw_centered("CRESCENDO %d" % resonant_perfect_streak, rect.get_center() + Vector2(0, -12), 11, Color(1.0, 0.90, 0.62, 0.86))
 
 
 func _draw_fps_counter(viewport: Vector2) -> void:
@@ -10872,10 +11826,11 @@ func _draw_menu(viewport: Vector2) -> void:
 	else:
 		_draw_entity_fit(geo_tex, avatar_rect.get_center() + Vector2(0, avatar_rect.size.y * 0.08), Vector2(avatar_rect.size.x * 0.58, avatar_rect.size.y * 0.82), Color.WHITE, true)
 
-	_draw_hub_button(menu_buttons["start"], "INICIAR", "selecao de manifestacao", accent, menu_selected == 0, true)
-	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "bestiario e cartas", Color(0.36, 0.84, 1.0), menu_selected == 1, false)
-	_draw_hub_button(menu_buttons["settings"], "CONFIG", "controles e jogo", Color(1.0, 0.74, 0.22), menu_selected == 2, false)
-	_draw_hub_button(menu_buttons["exit"], "SAIR", "", Color(1.0, 0.26, 0.36), menu_selected == 3, false)
+	_draw_hub_button(menu_buttons["start"], "SOLO RUN", "selecao de manifestacao", accent, menu_selected == 0, true)
+	_draw_hub_button(menu_buttons["multiplayer"], "LAN CO-OP", "jogar com um amigo na mesma rede", Color(1.0, 0.44, 0.88), menu_selected == 1, false)
+	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "bestiario e cartas", Color(0.36, 0.84, 1.0), menu_selected == 2, false)
+	_draw_hub_button(menu_buttons["settings"], "CONFIG", "controles e jogo", Color(1.0, 0.74, 0.22), menu_selected == 3, false)
+	_draw_hub_button(menu_buttons["exit"], "SAIR", "", Color(1.0, 0.26, 0.36), menu_selected == 4, false)
 
 	_draw_hub_manifest_card(manifest_rect)
 	var status = "LOJA: AUTOMATICA" if shop_auto_enabled else "LOJA: MANUAL"
@@ -10955,17 +11910,57 @@ func _draw_settings(viewport: Vector2) -> void:
 	var portrait = _is_portrait(viewport)
 	_draw_glitch_title("CONFIGURACOES", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(1.0, 0.74, 0.22))
 	settings_buttons = _settings_rects(viewport)
-	_draw_settings_card(settings_buttons["controls"], "CONTROLES", "reposicionar botoes, tamanho e HUD", Color(0.0, 1.0, 0.82), settings_selected == 0)
-	_draw_settings_card(settings_buttons["gameplay"], "JOGABILIDADE", "analogico fixo/dinamico e preferencias", Color(0.36, 0.84, 1.0), settings_selected == 1)
-	_draw_settings_card(settings_buttons["audio"], "SOM", "mixagem mobile e volume", Color(1.0, 0.42, 0.78), settings_selected == 2)
-	_draw_settings_card(settings_buttons["graphics"], "GRAFICOS", "sombras, particulas e tremor", Color(0.6, 0.8, 1.0), settings_selected == 3)
+	_draw_settings_card(settings_buttons["controls"], "CONTROLES EM TELA", "reposicionar botoes, tamanho e HUD", Color(0.0, 1.0, 0.82), settings_selected == 0)
+	_draw_settings_card(settings_buttons["gamepad"], "GAMEPAD", "mapear botoes do controle", Color(0.12, 0.98, 0.52), settings_selected == 1)
+	_draw_settings_card(settings_buttons["gameplay"], "JOGABILIDADE", "analogico fixo/dinamico e preferencias", Color(0.36, 0.84, 1.0), settings_selected == 2)
+	_draw_settings_card(settings_buttons["audio"], "SOM", "mixagem mobile e volume", Color(1.0, 0.42, 0.78), settings_selected == 3)
+	_draw_settings_card(settings_buttons["graphics"], "GRAFICOS", "sombras, particulas e tremor", Color(0.6, 0.8, 1.0), settings_selected == 4)
 	if qa_data_unlocked and settings_buttons.has("data"):
-		_draw_settings_card(settings_buttons["data"], "DADOS QA", "webhook e relatorio de balanceamento", Color(0.74, 1.0, 0.36), settings_selected == 4)
+		_draw_settings_card(settings_buttons["data"], "DADOS QA", "webhook e relatorio de balanceamento", Color(0.74, 1.0, 0.36), settings_selected == 5)
 	var back_subtitle = "retomar partida" if settings_previous_mode == "paused" else "retornar ao hub"
 	_draw_settings_card(settings_buttons["back"], "VOLTAR", back_subtitle, Color(1.0, 0.26, 0.36), settings_selected == _settings_back_index())
 	var info_rect = Rect2(viewport.x * 0.10, viewport.y - (86 if portrait else 70), viewport.x * 0.80, 42)
 	_draw_hub_chip(info_rect, "CONFIGURACOES SALVAS AUTOMATICAMENTE", Color(0.72, 0.92, 1.0), false)
 
+
+func _format_binding_name(val) -> String:
+	var s = str(val)
+	if s == "AXIS_4": return "GATILHO L2"
+	if s == "AXIS_5": return "GATILHO R2"
+	if s.begins_with("AXIS_"): return "EIXO " + s.replace("AXIS_", "")
+	if int(s) == -1: return "N/A"
+	return "BOTAO " + s
+
+func _draw_gamepad_settings(viewport: Vector2) -> void:
+	_draw_holo_background(viewport, null, Color(0.12, 0.98, 0.52))
+	var portrait = _is_portrait(viewport)
+	_draw_glitch_title("GAMEPAD", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.12, 0.98, 0.52))
+	settings_buttons = _gamepad_settings_rects(viewport)
+	_draw_gameplay_preference(settings_buttons["attack"], "DISPARO / ATK", "Ataque basico", "Pressione..." if gamepad_mapping_action == "attack" else _format_binding_name(gamepad_bindings.get("attack", -1)), Color(1.0, 0.24, 0.26), settings_selected == 0)
+	_draw_gameplay_preference(settings_buttons["skill"], "HABILIDADE (Q)", "Habilidade principal", "Pressione..." if gamepad_mapping_action == "skill" else _format_binding_name(gamepad_bindings.get("skill", -1)), Color(0.72, 0.22, 1.0), settings_selected == 1)
+	_draw_gameplay_preference(settings_buttons["secondary"], "SECUNDARIA (E)", "Efeito passivo/ativo", "Pressione..." if gamepad_mapping_action == "secondary" else _format_binding_name(gamepad_bindings.get("secondary", -1)), Color(1.0, 0.72, 0.22), settings_selected == 2)
+	_draw_gameplay_preference(settings_buttons["dash"], "DASH / TP", "Movimento de esquiva", "Pressione..." if gamepad_mapping_action == "dash" else _format_binding_name(gamepad_bindings.get("dash", -1)), Color(0.20, 0.85, 1.0), settings_selected == 3)
+	_draw_gameplay_preference(settings_buttons["lacerante_empower"], "REFORCO (+)", "Lacerante apenas", "Pressione..." if gamepad_mapping_action == "lacerante_empower" else _format_binding_name(gamepad_bindings.get("lacerante_empower", -1)), Color(0.92, 0.03, 0.12), settings_selected == 4)
+	_draw_gameplay_preference(settings_buttons["pause"], "PAUSAR / MENU", "Abrir o menu", "Pressione..." if gamepad_mapping_action == "pause" else _format_binding_name(gamepad_bindings.get("pause", -1)), Color(0.8, 0.8, 0.8), settings_selected == 5)
+	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), settings_selected == 6)
+
+func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
+	var portrait = _is_portrait(viewport)
+	var margin = viewport.x * (0.08 if portrait else 0.18)
+	var w = viewport.x - margin * 2.0
+	if not portrait: w = min(720.0, viewport.x * 0.58); margin = viewport.x * 0.5 - w * 0.5
+	var h = clamp(viewport.y * (0.075 if portrait else 0.10), 40.0, 68.0)
+	var y = viewport.y * (0.15 if portrait else 0.16)
+	var gap = 10.0
+	return {
+		"attack": Rect2(margin, y, w, h),
+		"skill": Rect2(margin, y + (h + gap), w, h),
+		"secondary": Rect2(margin, y + (h + gap) * 2.0, w, h),
+		"dash": Rect2(margin, y + (h + gap) * 3.0, w, h),
+		"lacerante_empower": Rect2(margin, y + (h + gap) * 4.0, w, h),
+		"pause": Rect2(margin, y + (h + gap) * 5.0, w, h),
+		"back": Rect2(margin, y + (h + gap) * 6.0, w, h)
+	}
 
 func _draw_gameplay_settings(viewport: Vector2) -> void:
 	_draw_holo_background(viewport, null, Color(0.36, 0.84, 1.0))
@@ -10973,37 +11968,37 @@ func _draw_gameplay_settings(viewport: Vector2) -> void:
 	_draw_glitch_title("JOGABILIDADE", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.36, 0.84, 1.0))
 	settings_buttons = _gameplay_preferences_rects(viewport)
 	var analog_accent = Color(0.0, 1.0, 0.82) if analog_fixed else Color(1.0, 0.74, 0.22)
-	_draw_gameplay_preference(settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if analog_fixed else "DINAMICO", analog_accent)
+	_draw_gameplay_preference(settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if analog_fixed else "DINAMICO", analog_accent, settings_selected == 0)
 	var shop_accent = Color(0.0, 1.0, 0.82) if shop_auto_enabled else Color(1.0, 0.68, 0.24)
-	_draw_gameplay_preference(settings_buttons["shop_mode"], "ABERTURA DA LOJA", "Automatica usa contagem; manual usa botao no HUD.", "AUTOMATICA" if shop_auto_enabled else "MANUAL", shop_accent)
+	_draw_gameplay_preference(settings_buttons["shop_mode"], "ABERTURA DA LOJA", "Automatica usa contagem; manual usa botao no HUD.", "AUTOMATICA" if shop_auto_enabled else "MANUAL", shop_accent, settings_selected == 1)
 	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["shop_mode"]), shop_auto_enabled, shop_accent)
 	var interval_panel: Rect2 = settings_buttons["shop_interval"]
 	var interval_value = "%d MIN" % int(shop_auto_interval / 60.0) if shop_auto_enabled else "DESATIVADO"
-	_draw_gameplay_preference(interval_panel, "INTERVALO DA LOJA", "Tempo entre aberturas automaticas.", interval_value, Color(0.44, 0.82, 1.0) if shop_auto_enabled else Color(0.48, 0.52, 0.58))
+	_draw_gameplay_preference(interval_panel, "INTERVALO DA LOJA", "Tempo entre aberturas automaticas.", interval_value, Color(0.44, 0.82, 1.0) if shop_auto_enabled else Color(0.48, 0.52, 0.58), settings_selected == 2)
 	if shop_auto_enabled:
 		_draw_small_rect_button(_shop_interval_minus_rect(interval_panel), "-", Color(0.04, 0.10, 0.14), Color(0.44, 0.82, 1.0))
 		_draw_small_rect_button(_shop_interval_plus_rect(interval_panel), "+", Color(0.04, 0.10, 0.14), Color(0.44, 0.82, 1.0))
-	_draw_gameplay_preference(settings_buttons["target_priority"], "PRIORIDADE DO DISPARO", "Define o alvo escolhido pela mira automatica.", _target_priority_label(), Color(1.0, 0.48, 0.74))
+	_draw_gameplay_preference(settings_buttons["target_priority"], "PRIORIDADE DO DISPARO", "Define o alvo escolhido pela mira automatica.", _target_priority_label(), Color(1.0, 0.48, 0.74), settings_selected == 3)
 	var damage_panel = settings_buttons["damage_text"]
-	_draw_gameplay_preference(damage_panel, "TEXTO DE DANO", "Tamanho dos numeros exibidos nos inimigos.", "%d%%" % int(round(damage_text_scale * 100.0)), Color(1.0, 0.50, 0.28))
+	_draw_gameplay_preference(damage_panel, "TEXTO DE DANO", "Tamanho dos numeros exibidos nos inimigos.", "%d%%" % int(round(damage_text_scale * 100.0)), Color(1.0, 0.50, 0.28), settings_selected == 4)
 	_draw_small_rect_button(_damage_text_minus_rect(damage_panel), "-", Color(0.20, 0.10, 0.08), Color(1.0, 0.50, 0.28))
 	_draw_small_rect_button(_damage_text_plus_rect(damage_panel), "+", Color(0.20, 0.10, 0.08), Color(1.0, 0.50, 0.28))
 	var interface_panel = settings_buttons["interface_text"]
-	_draw_gameplay_preference(interface_panel, "FONTES DA LOJA / MANIFESTACOES", "Tamanho dos textos informativos dessas telas.", "%d%%" % int(round(interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0))
+	_draw_gameplay_preference(interface_panel, "FONTES DA LOJA / MANIFESTACOES", "Tamanho dos textos informativos dessas telas.", "%d%%" % int(round(interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), settings_selected == 5)
 	_draw_small_rect_button(_interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.10, 0.16), Color(0.62, 0.88, 1.0))
 	_draw_small_rect_button(_interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.10, 0.16), Color(0.62, 0.88, 1.0))
 	var fps_accent = Color(0.0, 1.0, 0.82) if show_fps_counter else Color(0.48, 0.52, 0.58)
-	_draw_gameplay_preference(settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if show_fps_counter else "OFF", fps_accent)
+	_draw_gameplay_preference(settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if show_fps_counter else "OFF", fps_accent, settings_selected == 6)
 	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["fps"]), show_fps_counter, fps_accent)
 	var cheat_value = "QA ATIVO" if qa_data_unlocked else ("RETORNANTE OK" if retornante_unlocked else (gameplay_cheat_text if gameplay_cheat_text != "" else "TOQUE E DIGITE"))
 	var cheat_accent = Color(0.74, 1.0, 0.36) if qa_data_unlocked else (Color(0.86, 0.48, 1.0) if retornante_unlocked else Color(0.64, 0.44, 1.0))
 	if gameplay_cheat_focused:
 		cheat_value = "DIGITANDO..."
-	_draw_gameplay_preference(settings_buttons["retornante_cheat"], "CHEAT SECRETO", "Campo reservado para codigos de QA e dev.", cheat_value, cheat_accent)
+	_draw_gameplay_preference(settings_buttons["retornante_cheat"], "CHEAT SECRETO", "Campo reservado para codigos de QA e dev.", cheat_value, cheat_accent, settings_selected == 7)
 	var haptics_accent = Color(0.0, 1.0, 0.82) if haptics_enabled else Color(0.48, 0.52, 0.58)
-	_draw_gameplay_preference(settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if haptics_enabled else "OFF", haptics_accent)
+	_draw_gameplay_preference(settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if haptics_enabled else "OFF", haptics_accent, settings_selected == 8)
 	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["haptics"]), haptics_enabled, haptics_accent)
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), false)
+	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == 9)
 	if gameplay_cheat_focused:
 		_draw_cheat_popup(viewport)
 
@@ -11025,8 +12020,8 @@ func _draw_cheat_popup(viewport: Vector2) -> void:
 	_draw_big_button(settings_buttons["cheat_cancel"], "CANCELAR", Color(0.13, 0.04, 0.06, 0.94), Color(1.0, 0.26, 0.36))
 
 
-func _draw_gameplay_preference(rect: Rect2, title: String, subtitle: String, value: String, accent: Color) -> void:
-	_draw_holo_panel(rect, accent, false, 0.60)
+func _draw_gameplay_preference(rect: Rect2, title: String, subtitle: String, value: String, accent: Color, selected: bool = false) -> void:
+	_draw_holo_panel(rect, accent, selected, 0.60)
 	var value_rect = _gameplay_value_rect(rect)
 	var text_width = max(120.0, value_rect.position.x - rect.position.x - 84.0)
 	draw_string(font, rect.position + Vector2(18, 28), title, HORIZONTAL_ALIGNMENT_LEFT, text_width, 17, Color.WHITE)
@@ -11042,7 +12037,7 @@ func _draw_audio_settings(viewport: Vector2) -> void:
 	_draw_glitch_title("SOM", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(1.0, 0.42, 0.78))
 	settings_buttons = _gameplay_settings_rects(viewport)
 	var panel = settings_buttons["analog"]
-	_draw_holo_panel(panel, Color(1.0, 0.42, 0.78), true, 0.62)
+	_draw_holo_panel(panel, Color(1.0, 0.42, 0.78), false, 0.62)
 	var titles = ["MASTER", "MUSICA", "EFEITOS", "DISPAROS"]
 	var vols = [vol_master, vol_music, vol_sfx, vol_shots]
 	for i in range(4):
@@ -11050,10 +12045,12 @@ func _draw_audio_settings(viewport: Vector2) -> void:
 		var y_off = bar_rect.position.y
 		draw_string(font, Vector2(panel.position.x + 20, y_off + 20), titles[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 		draw_rect(bar_rect, Color(1, 1, 1, 0.1), true)
+		if settings_selected == i:
+			draw_rect(Rect2(bar_rect.position.x - 42, bar_rect.position.y - 8, bar_rect.size.x + 84, bar_rect.size.y + 16), Color(1.0, 0.42, 0.78, 0.3), true)
 		draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * vols[i], bar_rect.size.y)), Color(1.0, 0.42, 0.78), true)
 		_draw_small_rect_button(Rect2(bar_rect.position.x - 38, y_off - 4, 34, 34), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 		_draw_small_rect_button(Rect2(bar_rect.end.x + 4, y_off - 4, 34, 34), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), false)
+	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == 4)
 
 
 func _audio_slider_rect(panel: Rect2, index: int) -> Rect2:
@@ -11082,9 +12079,9 @@ func _draw_data_settings(viewport: Vector2) -> void:
 	settings_buttons["data_save"] = Rect2(panel.position.x + 40.0, panel.end.y - 78.0, 170.0, 52.0)
 	settings_buttons["data_clear"] = Rect2(panel.position.x + 228.0, panel.end.y - 78.0, 170.0, 52.0)
 	settings_buttons["data_back"] = Rect2(panel.end.x - 210.0, panel.end.y - 78.0, 170.0, 52.0)
-	_draw_big_button(settings_buttons["data_save"], "SALVAR", Color(0.05, 0.15, 0.06, 0.92), Color(0.74, 1.0, 0.36))
-	_draw_big_button(settings_buttons["data_clear"], "LIMPAR", Color(0.15, 0.10, 0.04, 0.92), Color(1.0, 0.68, 0.24))
-	_draw_big_button(settings_buttons["data_back"], "VOLTAR", Color(0.13, 0.04, 0.06, 0.92), Color(1.0, 0.26, 0.36))
+	_draw_big_button(settings_buttons["data_save"], "SALVAR", Color(0.05, 0.15, 0.06, 0.92), Color(0.74, 1.0, 0.36), settings_selected == 0)
+	_draw_big_button(settings_buttons["data_clear"], "LIMPAR", Color(0.15, 0.10, 0.04, 0.92), Color(1.0, 0.68, 0.24), settings_selected == 1)
+	_draw_big_button(settings_buttons["data_back"], "VOLTAR", Color(0.13, 0.04, 0.06, 0.92), Color(1.0, 0.26, 0.36), settings_selected == 2)
 
 
 func _draw_settings_card(rect: Rect2, title: String, subtitle: String, accent: Color, selected: bool) -> void:
@@ -11102,7 +12099,7 @@ func _settings_rects(viewport: Vector2) -> Dictionary:
 	var portrait = _is_portrait(viewport)
 	var margin = viewport.x * (0.08 if portrait else 0.12)
 	var w = viewport.x - margin * 2.0
-	var total_items := 6 if qa_data_unlocked else 5
+	var total_items := 7 if qa_data_unlocked else 6
 	var h = clamp(viewport.y * (0.082 if qa_data_unlocked else (0.095 if portrait else 0.12)), 50.0, 78.0)
 	var y = viewport.y * (0.18 if portrait else 0.20)
 	var gap = 10.0 if qa_data_unlocked else 14.0
@@ -11111,22 +12108,23 @@ func _settings_rects(viewport: Vector2) -> Dictionary:
 		margin = viewport.x * 0.5 - w * 0.5
 	var rects = {
 		"controls": Rect2(margin, y, w, h),
-		"gameplay": Rect2(margin, y + (h + gap), w, h),
-		"audio": Rect2(margin, y + (h + gap) * 2.0, w, h),
-		"graphics": Rect2(margin, y + (h + gap) * 3.0, w, h),
+		"gamepad": Rect2(margin, y + (h + gap), w, h),
+		"gameplay": Rect2(margin, y + (h + gap) * 2.0, w, h),
+		"audio": Rect2(margin, y + (h + gap) * 3.0, w, h),
+		"graphics": Rect2(margin, y + (h + gap) * 4.0, w, h),
 		"back": Rect2(margin, y + (h + gap) * float(total_items - 1), w, h)
 	}
 	if qa_data_unlocked:
-		rects["data"] = Rect2(margin, y + (h + gap) * 4.0, w, h)
+		rects["data"] = Rect2(margin, y + (h + gap) * 5.0, w, h)
 	return rects
 
 
 func _settings_back_index() -> int:
-	return 5 if qa_data_unlocked else 4
+	return 6 if qa_data_unlocked else 5
 
 
 func _settings_option_count() -> int:
-	return 6 if qa_data_unlocked else 5
+	return 7 if qa_data_unlocked else 6
 
 
 func _data_settings_panel_rect(viewport: Vector2) -> Rect2:
@@ -11423,12 +12421,15 @@ func _menu_rects(viewport: Vector2) -> Dictionary:
 		var margin = viewport.x * 0.08
 		var start_y = viewport.y * 0.43
 		var start_h = clamp(viewport.y * 0.105, 72.0, 96.0)
-		var utility_y = start_y + start_h + 12.0
+		var multi_y = start_y + start_h + 12.0
+		var multi_h = clamp(viewport.y * 0.085, 54.0, 68.0)
+		var utility_y = multi_y + multi_h + 12.0
 		var utility_h = clamp(viewport.y * 0.085, 54.0, 68.0)
 		var gap = 12.0
 		var half_w = (viewport.x - margin * 2.0 - gap) * 0.5
 		return {
 			"start": Rect2(margin, start_y, viewport.x - margin * 2.0, start_h),
+			"multiplayer": Rect2(margin, multi_y, viewport.x - margin * 2.0, multi_h),
 			"catalog": Rect2(margin, utility_y, half_w, utility_h),
 			"settings": Rect2(margin + half_w + gap, utility_y, half_w, utility_h),
 			"exit": Rect2(viewport.x - margin - 118.0, viewport.y - 62.0, 118.0, 42.0)
@@ -11441,11 +12442,11 @@ func _menu_rects(viewport: Vector2) -> Dictionary:
 	var gap = 14.0
 	return {
 		"start": Rect2(x, start_y, w, start_h),
-		"catalog": Rect2(x, start_y + start_h + 14.0, (w - gap) * 0.5, small_h),
-		"settings": Rect2(x + (w - gap) * 0.5 + gap, start_y + start_h + 14.0, (w - gap) * 0.5, small_h),
+		"multiplayer": Rect2(x, start_y + start_h + 14.0, w, small_h),
+		"catalog": Rect2(x, start_y + start_h + small_h + 28.0, (w - gap) * 0.5, small_h),
+		"settings": Rect2(x + (w - gap) * 0.5 + gap, start_y + start_h + small_h + 28.0, (w - gap) * 0.5, small_h),
 		"exit": Rect2(x, viewport.y - 74.0, min(170.0, w * 0.40), 46.0)
 	}
-
 
 
 func _draw_catalog(viewport: Vector2) -> void:
@@ -12246,6 +13247,7 @@ func _draw_game(viewport: Vector2) -> void:
 		draw_polyline(points, Color(0.27, 0.96, 1.0, 0.82), 3.0)
 		draw_circle(p, size * 0.45, Color(1.0, 0.45, 0.72, 0.22 + pulse * 0.15))
 		draw_arc(p, size * 0.45, 0, TAU, 32, Color(1.0, 0.45, 0.72, 0.82), 1.5)
+	_draw_advanced_manifestation_world(camera)
 	_draw_teleport_effects(camera)
 	for link in seed_links:
 		var enemy = _enemy_by_uid(int(link.get("uid", -1)))
@@ -12270,7 +13272,15 @@ func _draw_game(viewport: Vector2) -> void:
 			c.a = 0.22 + alpha * 0.55
 			draw_line(slash["a"] - camera, slash["b"] - camera, c, float(slash["width"]) * alpha)
 	for wave in shockwaves:
-		draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(0.2, 1.0, 1.0, 0.6), 4)
+		var w_kind = String(wave.get("kind", ""))
+		var w_max = float(wave.get("max_life", 1.0))
+		var w_life = float(wave.get("life", 0.0))
+		var w_alpha = clamp(w_life / max(0.01, w_max), 0.0, 1.0)
+		if w_kind == "sinfonia_silencio":
+			draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(1.0, 0.84, 0.2, w_alpha * 0.8), 6)
+			draw_arc(wave["pos"] - camera, max(0.0, float(wave["radius"]) - 10.0), 0, TAU, 60, Color(1.0, 0.6, 0.1, w_alpha * 0.4), 2)
+		else:
+			draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(0.2, 1.0, 1.0, 0.6), 4)
 	_draw_manifestation_secondaries(camera)
 	_draw_parasite_spit_zones(camera)
 	_draw_boss2_environment(camera)
@@ -12318,6 +13328,7 @@ func _draw_game(viewport: Vector2) -> void:
 		_draw_phase_fragment(camera)
 	_draw_companions(camera)
 	_draw_player(camera)
+	_draw_phantom_player(camera)
 	_draw_effects(camera)
 	if boss1_rain_active:
 		_draw_weather_precipitation(camera)
@@ -12561,6 +13572,10 @@ func _draw_enemies(camera: Vector2) -> void:
 			_draw_phase4_enemy_identity(enemy, draw_pos, size)
 		if int(enemy.get("laceracao", 0)) > 0:
 			_draw_centered("x%d" % int(enemy["laceracao"]), pos + Vector2(28, -36), 14, Color(1.0, 0.2, 0.25))
+		if float(enemy.get("resonant_stun_notes", 0.0)) > 0.0:
+			var note_time = time_alive * 8.0
+			var note_text = "♫" if int(note_time) % 2 == 0 else "♪"
+			_draw_centered(note_text, draw_pos + Vector2(0, -66.0 + sin(note_time) * 6.0), 24, Color(1.0, 0.74, 0.20, 0.9))
 
 
 func _draw_phase4_enemy_identity(enemy: Dictionary, pos: Vector2, size: Vector2) -> void:
@@ -13024,6 +14039,82 @@ func _draw_parasite_larva_drop(pos: Vector2, scale: float, alpha: float) -> void
 	draw_circle(pos + Vector2(0, -1.0), 1.0 * scale, Color(1.0, 0.80, 0.20, alpha))
 
 
+func _draw_advanced_manifestation_world(camera: Vector2) -> void:
+	_draw_cartographic_marks(camera)
+	_draw_contractual_notifications(camera)
+	_draw_resonant_world_marks(camera)
+	_draw_mnesic_marks(camera)
+
+
+func _draw_cartographic_marks(camera: Vector2) -> void:
+	var points = _cartographic_coord_points()
+	if points.size() >= 2:
+		for i in range(points.size()):
+			if points.size() == 2 and i > 0:
+				break
+			var a: Vector2 = points[i] - camera
+			var b: Vector2 = points[(i + 1) % points.size()] - camera
+			var alpha = 0.24 + (0.38 if cartographic_route_timer > 0.0 else 0.0)
+			draw_line(a, b, Color(0.12, 1.0, 0.74, alpha * 0.34), CARTO_ROUTE_WIDTH, true)
+			draw_line(a, b, Color(0.78, 1.0, 0.42, alpha), 2.4, true)
+	if points.size() >= 3:
+		var poly = PackedVector2Array([points[0] - camera, points[1] - camera, points[2] - camera])
+		draw_polygon(poly, PackedColorArray([Color(0.10, 1.0, 0.70, 0.055 if cartographic_route_timer <= 0.0 else 0.11)]))
+	for coord in cartographic_coords:
+		var p := Vector2(coord.get("pos", player_pos)) - camera
+		var life_ratio = clamp(float(coord.get("life", 0.0)) / max(0.01, float(coord.get("max", CARTO_COORD_LIFE))), 0.0, 1.0)
+		var phase = float(coord.get("phase", 0.0)) + time_alive * 2.0
+		draw_circle(p, 26.0, Color(0.08, 1.0, 0.72, 0.09 * life_ratio))
+		draw_arc(p, 29.0 + sin(phase) * 2.0, phase, phase + TAU * 0.72, 48, Color(0.34, 1.0, 0.82, 0.86 * life_ratio), 2.0)
+		draw_line(p + Vector2(-18, 0), p + Vector2(18, 0), Color(1.0, 0.82, 0.24, 0.58 * life_ratio), 1.4)
+		draw_line(p + Vector2(0, -18), p + Vector2(0, 18), Color(1.0, 0.82, 0.24, 0.58 * life_ratio), 1.4)
+
+
+func _draw_mnesic_marks(camera: Vector2) -> void:
+	for enemy in enemies:
+		var memories: Array = enemy.get("mnesic_memories", [])
+		var dejavu = float(enemy.get("mnesic_dejavu", 0.0))
+		if memories.is_empty() and dejavu <= 0.0 and float(enemy.get("mnesic_tricked", 0.0)) <= 0.0:
+			continue
+		var p := Vector2(enemy["pos"]) - camera
+		var alpha = 0.30 + min(0.45, memories.size() * 0.12)
+		draw_arc(p, 38.0, -time_alive * 1.2, TAU - time_alive * 1.2, 48, Color(0.86, 0.58, 1.0, alpha), 2.0)
+		for i in range(memories.size()):
+			draw_circle(p + Vector2.from_angle(time_alive * 1.6 + i * TAU / 3.0) * 27.0, 4.0, Color(1.0, 0.72, 1.0, 0.80))
+
+
+func _draw_resonant_world_marks(camera: Vector2) -> void:
+	for enemy in enemies:
+		var notes: Array = enemy.get("resonant_notes", [])
+		if notes.is_empty() and float(enemy.get("resonant_flash", 0.0)) <= 0.0:
+			continue
+		var p := Vector2(enemy["pos"]) - camera
+		for i in range(max(1, notes.size())):
+			var angle = time_alive * 2.4 + i * TAU / 3.0
+			draw_circle(p + Vector2.from_angle(angle) * 31.0, 4.5, Color(1.0, 0.80, 0.24, 0.75))
+		draw_arc(p, 42.0, time_alive * 1.7, time_alive * 1.7 + TAU * 0.55, 40, Color(0.36, 0.92, 1.0, 0.48), 2.0)
+
+
+func _draw_contractual_notifications(camera: Vector2) -> void:
+	for trap in contractual_notifications:
+		var p := Vector2(trap.get("pos", player_pos)) - camera
+		var alpha = clamp(float(trap.get("life", 0.0)) / max(0.01, float(trap.get("max", CONTRACT_TRAP_LIFE))), 0.0, 1.0)
+		var phase = float(trap.get("phase", 0.0))
+		draw_circle(p, 48.0, Color(1.0, 0.54, 0.18, 0.08 * alpha))
+		for i in range(4):
+			var a = phase + time_alive * 1.4 + i * PI * 0.5
+			var corner = p + Vector2.from_angle(a) * 38.0
+			draw_line(corner - Vector2.from_angle(a) * 14.0, corner + Vector2.from_angle(a + PI * 0.5) * 10.0, Color(1.0, 0.82, 0.38, 0.70 * alpha), 2.0)
+	for enemy in enemies:
+		if not enemy.has("contract_clause"):
+			continue
+		var p := Vector2(enemy["pos"]) - camera
+		var infractions = int(enemy.get("contract_infractions", 0))
+		var alpha = 0.46 + 0.16 * infractions + float(enemy.get("contract_flash", 0.0)) * 0.34
+		draw_arc(p, 43.0, -PI * 0.5, PI * 1.5, 52, Color(1.0, 0.56, 0.18, alpha), 2.2)
+		_draw_centered("C%d" % infractions, p + Vector2(0, -46), 11, Color(1.0, 0.88, 0.56, 0.92))
+
+
 func _draw_manifestation_secondaries(camera: Vector2) -> void:
 	for secondary in manifestation_secondaries:
 		match String(secondary.get("kind", "")):
@@ -13041,6 +14132,39 @@ func _draw_manifestation_secondaries(camera: Vector2) -> void:
 				_draw_secondary_gravitante(secondary, camera)
 			"ancorada":
 				_draw_secondary_ancorada(secondary, camera)
+			"cartografica", "mnesica", "ressonante", "contratual":
+				_draw_secondary_advanced(secondary, camera)
+
+
+func _draw_secondary_advanced(secondary: Dictionary, camera: Vector2) -> void:
+	var kind := String(secondary.get("kind", ""))
+	var alpha: float = clamp(float(secondary.get("life", 0.0)) / max(0.01, float(secondary.get("max", 1.0))), 0.0, 1.0)
+	var color := _damage_color(kind)
+	var center: Vector2 = player_pos - camera
+	match kind:
+		"cartografica":
+			draw_arc(center, 210.0 + sin(time_alive * 4.0) * 5.0, time_alive, time_alive + TAU * 0.82, 84, Color(color.r, color.g, color.b, 0.36 * alpha), 3.0)
+		"mnesica":
+			draw_circle(center, MNESIC_REENACT_RADIUS * 0.55, Color(color.r, color.g, color.b, 0.035 * alpha))
+			draw_arc(center, MNESIC_REENACT_RADIUS * 0.55, -time_alive * 0.7, TAU - time_alive * 0.7, 88, Color(color.r, color.g, color.b, 0.30 * alpha), 2.0)
+		"ressonante":
+			var r = 110.0 + sin(time_alive * 8.0) * 8.0
+			draw_arc(center, r, 0, TAU, 64, Color(color.r, color.g, color.b, 0.48 * alpha), 3.0)
+			# Equalizer bars
+			for i in range(24):
+				var angle = i * TAU / 24.0
+				var bar_len = 10.0 + sin(time_alive * 12.0 + i) * 15.0
+				var p1 = center + Vector2.from_angle(angle) * r
+				var p2 = center + Vector2.from_angle(angle) * (r + bar_len)
+				draw_line(p1, p2, Color(1.0, 0.8, 0.3, 0.6 * alpha), 4.0)
+			# Laser beams
+			for i in range(3):
+				var laser_angle = time_alive * 1.5 + i * TAU / 3.0
+				draw_line(center, center + Vector2.from_angle(laser_angle) * 800.0, Color(1.0, 0.9, 0.5, 0.15 * alpha), 25.0)
+				draw_line(center, center + Vector2.from_angle(laser_angle) * 800.0, Color(1.0, 1.0, 1.0, 0.25 * alpha), 6.0)
+		"contratual":
+			draw_arc(center, 180.0, -PI * 0.5, PI * 1.5, 72, Color(color.r, color.g, color.b, 0.40 * alpha), 2.2)
+			draw_line(center + Vector2(-90, -72), center + Vector2(90, -72), Color(1.0, 0.86, 0.48, 0.38 * alpha), 2.0)
 
 
 func _draw_secondary_eletrica(secondary: Dictionary, camera: Vector2) -> void:
@@ -15450,44 +16574,46 @@ func _draw_effects(camera: Vector2) -> void:
 
 func _draw_hud(viewport: Vector2) -> void:
 	var portrait = _is_portrait(viewport)
-	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
-	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
+	var sm = 1.25 if is_gamepad_active and not portrait else 1.0
+	var left_w = (236.0 * sm) if not portrait else min(236.0, viewport.x * 0.46)
+	var left_h = 76.0 * sm
+	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, left_h))
 	_draw_combat_panel(left_rect, Color(0.0, 1.0, 0.82), 0.58)
-	draw_string(font, left_rect.position + Vector2(16, 30), "VIDA %d/%d" % [player_hp, player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color.WHITE)
-	_draw_hud_bar(left_rect.position + Vector2(16, 43), left_rect.size.x - 32.0, 8.0, float(player_hp) / float(player_hp_max), Color(0.20, 1.0, 0.42))
+	draw_string(font, left_rect.position + Vector2(16 * sm, 30 * sm), "VIDA %d/%d" % [player_hp, player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), Color.WHITE)
+	_draw_hud_bar(left_rect.position + Vector2(16 * sm, 43 * sm), left_rect.size.x - 32.0 * sm, 8.0 * sm, float(player_hp) / float(player_hp_max), Color(0.20, 1.0, 0.42))
 	var minutes = int(time_alive) / 60
 	var seconds = int(time_alive) % 60
 	var manifest_color = _manifestation_color()
-	draw_string(font, left_rect.position + Vector2(16, 66), "%02d:%02d" % [minutes, seconds], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.36, 0.96, 1.0))
-	draw_string(font, left_rect.position + Vector2(78, 66), MANIFESTATIONS[selected_manifestation]["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, manifest_color)
+	draw_string(font, left_rect.position + Vector2(16 * sm, 66 * sm), "%02d:%02d" % [minutes, seconds], HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * sm), Color(0.36, 0.96, 1.0))
+	draw_string(font, left_rect.position + Vector2(78 * sm, 66 * sm), MANIFESTATIONS[selected_manifestation]["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * sm), manifest_color)
 
-	var right_w = 220.0 if not portrait else min(220.0, viewport.x * 0.44)
-	var right_rect = Rect2(_right_panel_pos(viewport), Vector2(right_w, 76))
+	var right_w = (220.0 * sm) if not portrait else min(220.0, viewport.x * 0.44)
+	var right_rect = Rect2(_right_panel_pos(viewport), Vector2(right_w, left_h))
 	_draw_combat_panel(right_rect, Color(1.0, 0.82, 0.20), 0.54)
-	draw_string(font, right_rect.position + Vector2(16, 30), "PONTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.72, 0.86, 0.92))
-	draw_string(font, right_rect.position + Vector2(84, 30), str(score), HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color.WHITE)
-	draw_string(font, right_rect.position + Vector2(16, 60), "CARTAS %d" % _affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.86, 0.26))
-	draw_string(font, right_rect.position + Vector2(112, 60), "CUSTO %d" % card_cost, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.86, 0.26))
+	draw_string(font, right_rect.position + Vector2(16 * sm, 30 * sm), "PONTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * sm), Color(0.72, 0.86, 0.92))
+	draw_string(font, right_rect.position + Vector2(84 * sm, 30 * sm), str(score), HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), Color.WHITE)
+	draw_string(font, right_rect.position + Vector2(16 * sm, 60 * sm), "CARTAS %d" % _affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * sm), Color(1.0, 0.86, 0.26))
+	draw_string(font, right_rect.position + Vector2(112 * sm, 60 * sm), "CUSTO %d" % card_cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * sm), Color(1.0, 0.86, 0.26))
 	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar():
-		var boss_rect = Rect2(_boss_panel_pos(viewport), Vector2(380, 30))
+		var boss_rect = Rect2(_boss_panel_pos(viewport), Vector2(380 * sm, 30 * sm))
 		_draw_combat_panel(boss_rect, Color(1.0, 0.16, 0.30), 0.62)
-		_draw_hud_bar(boss_rect.position + Vector2(14, 11), boss_rect.size.x - 28.0, 8.0, boss_hp / boss_hp_max, Color(1.0, 0.16, 0.28))
+		_draw_hud_bar(boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, 8.0 * sm, boss_hp / boss_hp_max, Color(1.0, 0.16, 0.28))
 		if _boss_execute_threshold() > 0.0:
-			_draw_collector_threshold(boss_rect.position + Vector2(14, 11), boss_rect.size.x - 28.0, _boss_execute_threshold(), boss_hp / boss_hp_max, 8.0)
+			_draw_collector_threshold(boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, _boss_execute_threshold(), boss_hp / boss_hp_max, 8.0 * sm)
 		if current_phase == 1 and boss_hp / max(1.0, boss_hp_max) < BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown > 0.0:
 			var chrono_text = "CRONO %.0fs" % ceil(boss1_rewind_cooldown)
-			draw_string(font, boss_rect.position + Vector2(boss_rect.size.x - 94.0, 28.0), chrono_text, HORIZONTAL_ALIGNMENT_LEFT, 82.0, 11, Color(0.48, 0.94, 1.0, 0.92))
+			draw_string(font, boss_rect.position + Vector2(boss_rect.size.x - 94.0 * sm, 28.0 * sm), chrono_text, HORIZONTAL_ALIGNMENT_LEFT, 82.0 * sm, int(11 * sm), Color(0.48, 0.94, 1.0, 0.92))
 		if current_phase == 3:
-			var faith_rect = Rect2(boss_rect.position + Vector2(64, 34), Vector2(252, 24))
+			var faith_rect = Rect2(boss_rect.position + Vector2(64 * sm, 34 * sm), Vector2(252 * sm, 24 * sm))
 			_draw_combat_panel(faith_rect, Color(0.62, 0.94, 0.18), 0.48)
-			_draw_hud_bar(faith_rect.position + Vector2(54, 8), 184.0, 7.0, boss3_faith / 100.0, Color(0.66, 1.0, 0.22))
-			draw_string(font, faith_rect.position + Vector2(8, 17), "FE %d" % int(boss3_faith), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.86, 1.0, 0.58))
+			_draw_hud_bar(faith_rect.position + Vector2(54 * sm, 8 * sm), 184.0 * sm, 7.0 * sm, boss3_faith / 100.0, Color(0.66, 1.0, 0.22))
+			draw_string(font, faith_rect.position + Vector2(8 * sm, 17 * sm), "FE %d" % int(boss3_faith), HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * sm), Color(0.86, 1.0, 0.58))
 			if boss3_ritual_timer > 0.0:
-				_draw_centered("RITUAL %.1fs  %d/2" % [boss3_ritual_timer, boss3_ritual_destroyed], Vector2(viewport.x * 0.5, 112), 20, Color(1.0, 0.42, 0.18))
+				_draw_centered("RITUAL %.1fs  %d/2" % [boss3_ritual_timer, boss3_ritual_destroyed], Vector2(viewport.x * 0.5, 112 * sm), int(20 * sm), Color(1.0, 0.42, 0.18))
 	if event_alert_timer > 0.0:
 		var c = event_alert_color
 		c.a = min(1.0, event_alert_timer)
-		_draw_centered(event_alert_text, Vector2(viewport.x * 0.5, 92), 24, c)
+		_draw_centered(event_alert_text, Vector2(viewport.x * 0.5, 92 * sm), int(24 * sm), c)
 	_draw_card_mechanic_huds(viewport, left_rect)
 	_draw_aura_hud(viewport, left_rect)
 	_draw_lacerante_coagulum_hud(viewport)
@@ -15687,14 +16813,53 @@ func _draw_ground_target_preview(viewport: Vector2, camera: Vector2) -> void:
 	draw_line(target + Vector2(0.0, -14.0), target + Vector2(0.0, 14.0), Color.WHITE, 2.0)
 
 
+func _draw_desktop_combat_hud(viewport: Vector2) -> void:
+	var icons = []
+	var icon_size = 56.0
+	var spacing = 16.0
+	
+	var active_eletrica_secondary = _active_eletrica_secondary()
+	var toggle_ultimate_active = (manifestation_key == "prismatica" and time_alive - last_secondary_time < SECONDARY_PRISMATICA_DURATION) or (manifestation_key == "eletrica" and active_eletrica_secondary)
+	var dash_label := "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_cooldown_pending else "DASH")
+	var dash_color = Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.20, 0.85, 1.0, 0.72)
+	
+	icons.append({ "label": "ATK", "color": Color(1.0, 0.24, 0.26, 0.70), "cd_elapsed": 100.0, "cd_max": 1.0 })
+	icons.append({ "label": "Q", "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown() })
+	icons.append({ "label": "X" if toggle_ultimate_active else "E", "color": Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), "cd_elapsed": time_alive - last_secondary_time, "cd_max": SECONDARY_SKILL_COOLDOWN })
+	icons.append({ "label": dash_label, "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": player_dash_cooldown })
+	if manifestation_key == "lacerante":
+		icons.append({ "label": "R" if lacerante_empowered_ready else "+", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN })
+	
+	var total_w = icons.size() * icon_size + (icons.size() - 1) * spacing
+	var start_x = viewport.x * 0.5 - total_w * 0.5
+	var start_y = viewport.y - icon_size - 48.0
+	
+	for i in range(icons.size()):
+		var ic = icons[i]
+		var rect = Rect2(start_x + i * (icon_size + spacing), start_y, icon_size, icon_size)
+		draw_rect(rect, Color(0.02, 0.03, 0.04, 0.86), true)
+		draw_rect(rect, Color(ic.color.r, ic.color.g, ic.color.b, 0.12), true)
+		draw_rect(rect, ic.color, false, 2.0)
+		_draw_centered(ic.label, rect.get_center() + Vector2(0, 5), 18, Color.WHITE)
+		if ic.cd_elapsed < ic.cd_max:
+			var ratio = clamp(ic.cd_elapsed / max(0.01, ic.cd_max), 0.0, 1.0)
+			var h = icon_size * (1.0 - ratio)
+			draw_rect(Rect2(rect.position.x, rect.end.y - h, icon_size, h), Color(0.0, 0.0, 0.0, 0.65), true)
+			_draw_centered("%.1f" % (ic.cd_max - ic.cd_elapsed), rect.get_center() + Vector2(0, 5), 15, Color.WHITE)
+
+
 func _draw_touch_controls(viewport: Vector2) -> void:
+	if is_gamepad_active:
+		_draw_desktop_combat_hud(viewport)
 	var joy = _active_joy_center(viewport)
 	var joy_r = 76.0 * _joy_scale()
-	_draw_virtual_stick(joy, joy_r)
+	if not is_gamepad_active:
+		_draw_virtual_stick(joy, joy_r)
 
 	var atk_c = buttons["attack"].position + buttons["attack"].size * 0.5
 	var atk_r = 54.0 * _attack_scale()
-	_draw_button(atk_c, atk_r, "ATK", Color(1.0, 0.24, 0.26, 0.70))
+	if not is_gamepad_active:
+		_draw_button(atk_c, atk_r, "ATK", Color(1.0, 0.24, 0.26, 0.70))
 	if attack_holding and not attack_dragging:
 		var hold_ratio = clamp(attack_hold_timer / ATTACK_LOCK_HOLD_TIME, 0.0, 1.0)
 		draw_arc(atk_c, atk_r + 7.0, -PI * 0.5, -PI * 0.5 + TAU * hold_ratio, 48, Color(1.0, 0.86, 0.24, 0.96), 4.0)
@@ -15703,7 +16868,8 @@ func _draw_touch_controls(viewport: Vector2) -> void:
 
 	var skill_c = buttons["skill"].position + buttons["skill"].size * 0.5
 	var skill_r = 46.0 * _skill_scale()
-	_draw_button(skill_c, skill_r, "Q", Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70))
+	if not is_gamepad_active:
+		_draw_button(skill_c, skill_r, "Q", Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70))
 	var secondary_c = buttons["secondary"].position + buttons["secondary"].size * 0.5
 	var secondary_r = 43.0 * _secondary_scale()
 	var active_eletrica_secondary = _active_eletrica_secondary()
@@ -15714,7 +16880,8 @@ func _draw_touch_controls(viewport: Vector2) -> void:
 		var outer_alpha = 0.28 + cancel_pulse * (0.24 if cancel_danger else 0.14)
 		draw_circle(secondary_c, secondary_r + 9.0 + cancel_pulse * 5.0, Color(1.0, 0.0, 0.05, outer_alpha))
 		draw_circle(secondary_c, secondary_r * 0.96, Color(0.40, 0.0, 0.02, 0.92))
-	_draw_button(secondary_c, secondary_r, "X" if toggle_ultimate_active else "E", Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72))
+	if not is_gamepad_active:
+		_draw_button(secondary_c, secondary_r, "X" if toggle_ultimate_active else "E", Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72))
 	if toggle_ultimate_active:
 		draw_arc(secondary_c, secondary_r + 7.0 + cancel_pulse * 4.0, 0.0, TAU, 54, Color(1.0, 0.10, 0.13, 1.0), 4.0)
 		if cancel_danger:
@@ -15725,7 +16892,8 @@ func _draw_touch_controls(viewport: Vector2) -> void:
 	var dash_c = buttons["dash"].position + buttons["dash"].size * 0.5
 	var dash_r = 46.0 * _dash_scale()
 	var dash_label := "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_cooldown_pending else "TP")
-	_draw_button(dash_c, dash_r, dash_label, Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.20, 0.85, 1.0, 0.72))
+	if not is_gamepad_active:
+		_draw_button(dash_c, dash_r, dash_label, Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.20, 0.85, 1.0, 0.72))
 	if manifestation_key == "lacerante":
 		var charge_center: Vector2 = dash_c + Vector2(dash_r * 0.66, -dash_r * 0.68)
 		draw_circle(charge_center, 14.0, Color(0.16, 0.0, 0.025, 0.96))
@@ -15741,8 +16909,9 @@ func _draw_touch_controls(viewport: Vector2) -> void:
 		var armed_pulse = 0.5 + sin(time_alive * 10.0) * 0.5
 		if lacerante_empowered_ready:
 			draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(1.0, 0.02, 0.10, 0.18 + armed_pulse * 0.18))
-		_draw_button(empower_c, empower_r, "R" if lacerante_empowered_ready else "+", Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68))
-		_draw_centered("REFORCO", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.72, 0.74, 0.92))
+		if not is_gamepad_active:
+			_draw_button(empower_c, empower_r, "R" if lacerante_empowered_ready else "+", Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68))
+			_draw_centered("REFORCO", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.72, 0.74, 0.92))
 		if not lacerante_empowered_ready:
 			_draw_cooldown_overlay(empower_c, empower_r, time_alive - last_lacerante_empower_time, LACERANTE_EMPOWER_COOLDOWN)
 
@@ -16600,8 +17769,8 @@ func _draw_shop_opening_upgrade(viewport: Vector2) -> void:
 		draw_circle(player_screen, 60.0 + bloom * 140.0, Color(1.0, 1.0, 1.0, 0.24 * (1.0 - bloom)))
 
 
-func _draw_big_button(rect: Rect2, label: String, bg: Color, border: Color) -> void:
-	_draw_holo_panel(rect, border, false, max(0.56, bg.a))
+func _draw_big_button(rect: Rect2, label: String, bg: Color, border: Color, selected: bool = false) -> void:
+	_draw_holo_panel(rect, border, selected, max(0.56, bg.a))
 	draw_rect(rect.grow(-9), Color(bg.r, bg.g, bg.b, 0.42), true)
 
 	# Determinar tamanho de fonte dinÃ¢mico para caber perfeitamente no botÃ£o
@@ -17165,6 +18334,42 @@ func _update_button_layout(viewport: Vector2) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	var viewport = get_viewport_rect().size
 	_update_button_layout(viewport)
+	if event is InputEventJoypadButton:
+		if mode != "game" and mode != "paused":
+			if event.pressed:
+				if event.button_index == JOY_BUTTON_DPAD_UP:
+					_simulate_key_press(KEY_UP)
+				elif event.button_index == JOY_BUTTON_DPAD_DOWN:
+					_simulate_key_press(KEY_DOWN)
+				elif event.button_index == JOY_BUTTON_DPAD_LEFT:
+					_simulate_key_press(KEY_LEFT)
+				elif event.button_index == JOY_BUTTON_DPAD_RIGHT:
+					_simulate_key_press(KEY_RIGHT)
+				elif event.button_index == JOY_BUTTON_A:
+					_simulate_key_press(KEY_ENTER)
+				elif event.button_index == JOY_BUTTON_B:
+					_simulate_key_press(KEY_ESCAPE)
+		if event.pressed:
+			if gamepad_mapping_action != "":
+				gamepad_bindings[gamepad_mapping_action] = str(event.button_index)
+				gamepad_mapping_action = ""
+				_save_config()
+				return
+			_handle_gamepad_virtual_button(str(event.button_index), true, viewport)
+		else:
+			_handle_gamepad_virtual_button(str(event.button_index), false, viewport)
+	elif event is InputEventJoypadMotion:
+		if event.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT]:
+			var pressed = event.axis_value > 0.5
+			var axis_id = "AXIS_" + str(event.axis)
+			if pressed != trigger_states[event.axis]:
+				trigger_states[event.axis] = pressed
+				if gamepad_mapping_action != "" and pressed:
+					gamepad_bindings[gamepad_mapping_action] = axis_id
+					gamepad_mapping_action = ""
+					_save_config()
+					return
+				_handle_gamepad_virtual_button(axis_id, pressed, viewport)
 	if not boss1_rewind_sequence.is_empty():
 		return
 	if _boss3_miasma_qte_active():
@@ -17525,19 +18730,23 @@ func _return_from_settings() -> void:
 
 
 func _activate_settings_option(index: int, viewport: Vector2) -> void:
+	settings_selected = 0
 	match index:
 		0:
 			_open_edit_layout(viewport)
 		1:
-			mode = "settings_gameplay"
+			mode = "settings_gamepad"
 			_block_ui_input()
 		2:
-			mode = "settings_audio"
+			mode = "settings_gameplay"
 			_block_ui_input()
 		3:
-			mode = "settings_graphics"
+			mode = "settings_audio"
 			_block_ui_input()
 		4:
+			mode = "settings_graphics"
+			_block_ui_input()
+		5:
 			if qa_data_unlocked:
 				mode = "settings_data"
 				webhook_error = ""
@@ -17553,22 +18762,46 @@ func _handle_settings_touch(pos: Vector2, viewport: Vector2) -> void:
 	if settings_buttons["controls"].has_point(pos):
 		settings_selected = 0
 		_activate_settings_option(0, viewport)
-	elif settings_buttons["gameplay"].has_point(pos):
+	elif settings_buttons.has("gamepad") and settings_buttons["gamepad"].has_point(pos):
 		settings_selected = 1
 		_activate_settings_option(1, viewport)
-	elif settings_buttons["audio"].has_point(pos):
+	elif settings_buttons["gameplay"].has_point(pos):
 		settings_selected = 2
 		_activate_settings_option(2, viewport)
-	elif settings_buttons["graphics"].has_point(pos):
+	elif settings_buttons["audio"].has_point(pos):
 		settings_selected = 3
 		_activate_settings_option(3, viewport)
-	elif qa_data_unlocked and settings_buttons.has("data") and settings_buttons["data"].has_point(pos):
+	elif settings_buttons["graphics"].has_point(pos):
 		settings_selected = 4
 		_activate_settings_option(4, viewport)
+	elif qa_data_unlocked and settings_buttons.has("data") and settings_buttons["data"].has_point(pos):
+		settings_selected = 5
+		_activate_settings_option(5, viewport)
 	elif settings_buttons["back"].has_point(pos):
 		settings_selected = _settings_back_index()
 		_activate_settings_option(settings_selected, viewport)
 
+
+func _handle_gamepad_settings_touch(pos: Vector2, viewport: Vector2) -> void:
+	if gamepad_mapping_action != "":
+		return
+	settings_buttons = _gamepad_settings_rects(viewport)
+	if settings_buttons["attack"].has_point(pos):
+		gamepad_mapping_action = "attack"
+	elif settings_buttons["skill"].has_point(pos):
+		gamepad_mapping_action = "skill"
+	elif settings_buttons["secondary"].has_point(pos):
+		gamepad_mapping_action = "secondary"
+	elif settings_buttons["dash"].has_point(pos):
+		gamepad_mapping_action = "dash"
+	elif settings_buttons["lacerante_empower"].has_point(pos):
+		gamepad_mapping_action = "lacerante_empower"
+	elif settings_buttons["pause"].has_point(pos):
+		gamepad_mapping_action = "pause"
+	elif settings_buttons["back"].has_point(pos):
+		gamepad_mapping_action = ""
+		mode = "settings"
+		_block_ui_input()
 
 func _handle_gameplay_settings_touch(pos: Vector2, viewport: Vector2) -> void:
 	settings_buttons = _gameplay_preferences_rects(viewport)
@@ -17882,6 +19115,39 @@ func _handle_mouse_press(pos: Vector2, viewport: Vector2) -> void:
 	_handle_press(pos, viewport)
 
 
+func _simulate_key_press(keycode: int) -> void:
+	var ev = InputEventKey.new()
+	ev.keycode = keycode
+	ev.pressed = true
+	_handle_key(ev)
+
+func _handle_gamepad_virtual_button(btn_id: String, pressed: bool, viewport: Vector2) -> void:
+	if mode != "game":
+		return
+	if pressed:
+		if btn_id == str(gamepad_bindings.get("attack", -1)):
+			_handle_touch_press(-3, buttons["attack"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("skill", -1)):
+			_handle_touch_press(-4, buttons["skill"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("secondary", -1)):
+			_handle_touch_press(-5, buttons["secondary"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("dash", -1)):
+			_handle_touch_press(-6, buttons["dash"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("pause", -1)) and buttons.has("pause"):
+			_handle_touch_press(-7, buttons["pause"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("lacerante_empower", -1)) and buttons.has("lacerante_empower"):
+			_handle_touch_press(-8, buttons["lacerante_empower"].get_center(), viewport)
+	else:
+		if btn_id == str(gamepad_bindings.get("attack", -1)):
+			_handle_touch_release(-3, buttons["attack"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("skill", -1)):
+			_handle_touch_release(-4, buttons["skill"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("secondary", -1)):
+			_handle_touch_release(-5, buttons["secondary"].get_center(), viewport)
+		elif btn_id == str(gamepad_bindings.get("dash", -1)):
+			_handle_touch_release(-6, buttons["dash"].get_center(), viewport)
+
+
 func _handle_key(event: InputEventKey) -> void:
 	if mode == "nick_setup":
 		if event.keycode in [KEY_ENTER, KEY_SPACE]:
@@ -17889,22 +19155,24 @@ func _handle_key(event: InputEventKey) -> void:
 		return
 	if mode == "menu":
 		if event.keycode == KEY_UP or event.keycode == KEY_W:
-			menu_selected = (menu_selected - 1 + 4) % 4
+			menu_selected = (menu_selected - 1 + 5) % 5
 		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			menu_selected = (menu_selected + 1) % 4
+			menu_selected = (menu_selected + 1) % 5
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			match menu_selected:
 				0:
 					_open_manifest_select()
 				1:
+					mode = "multiplayer_menu"
+				2:
 					catalog_tab = 0
 					catalog_selected = 0
 					catalog_detail_open = false
 					mode = "catalog"
-				2:
+				3:
 					mode = "settings"
 					settings_selected = 0
-				3:
+				4:
 					get_tree().quit()
 	elif mode == "settings":
 		if event.keycode == KEY_ESCAPE:
@@ -17915,6 +19183,21 @@ func _handle_key(event: InputEventKey) -> void:
 			settings_selected = (settings_selected + 1) % _settings_option_count()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			_activate_settings_option(settings_selected, get_viewport_rect().size)
+	elif mode == "settings_gamepad":
+		if event.keycode == KEY_ESCAPE:
+			gamepad_mapping_action = ""
+			mode = "settings"
+		elif event.keycode == KEY_UP or event.keycode == KEY_W:
+			settings_selected = (settings_selected - 1 + 7) % 7
+		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
+			settings_selected = (settings_selected + 1) % 7
+		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			if settings_selected == 6:
+				gamepad_mapping_action = ""
+				mode = "settings"
+			else:
+				var actions = ["attack", "skill", "secondary", "dash", "lacerante_empower", "pause"]
+				gamepad_mapping_action = actions[settings_selected]
 	elif mode == "settings_gameplay":
 		if gameplay_cheat_focused:
 			if event.keycode == KEY_ESCAPE:
@@ -17932,22 +19215,100 @@ func _handle_key(event: InputEventKey) -> void:
 		elif event.keycode == KEY_ESCAPE:
 			_save_config()
 			mode = "settings"
+		elif event.keycode == KEY_UP or event.keycode == KEY_W:
+			settings_selected = (settings_selected - 1 + 10) % 10
+		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
+			settings_selected = (settings_selected + 1) % 10
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			analog_fixed = not analog_fixed
+			match settings_selected:
+				0: analog_fixed = not analog_fixed
+				1: shop_auto_enabled = not shop_auto_enabled
+				3: _cycle_target_priority()
+				6: show_fps_counter = not show_fps_counter
+				7: _open_gameplay_cheat_popup()
+				8: haptics_enabled = not haptics_enabled
+				9:
+					_save_config()
+					mode = "settings"
+			_save_config()
+		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
+			match settings_selected:
+				2: shop_auto_interval = max(60.0, shop_auto_interval - 60.0)
+				4: damage_text_scale = max(0.5, damage_text_scale - 0.25)
+				5: interface_text_scale = max(0.5, interface_text_scale - 0.25)
+			_save_config()
+		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
+			match settings_selected:
+				2: shop_auto_interval = min(600.0, shop_auto_interval + 60.0)
+				4: damage_text_scale = min(2.0, damage_text_scale + 0.25)
+				5: interface_text_scale = min(2.0, interface_text_scale + 0.25)
 			_save_config()
 	elif mode == "settings_audio":
-		if event.keycode in [KEY_ESCAPE, KEY_ENTER, KEY_SPACE]:
-			mode = "settings"
-	elif mode == "settings_graphics":
-		if event.keycode in [KEY_ESCAPE, KEY_ENTER, KEY_SPACE]:
+		if event.keycode == KEY_ESCAPE:
 			_save_config()
 			mode = "settings"
+		elif event.keycode == KEY_UP or event.keycode == KEY_W:
+			settings_selected = (settings_selected - 1 + 5) % 5
+		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
+			settings_selected = (settings_selected + 1) % 5
+		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
+			match settings_selected:
+				0: vol_master = max(0.0, vol_master - 0.1); _update_audio_buses()
+				1: vol_music = max(0.0, vol_music - 0.1); _update_audio_buses()
+				2: vol_sfx = max(0.0, vol_sfx - 0.1); _update_audio_buses()
+				3: vol_shots = max(0.0, vol_shots - 0.1); _update_audio_buses()
+			_save_config()
+		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
+			match settings_selected:
+				0: vol_master = min(1.0, vol_master + 0.1); _update_audio_buses()
+				1: vol_music = min(1.0, vol_music + 0.1); _update_audio_buses()
+				2: vol_sfx = min(1.0, vol_sfx + 0.1); _update_audio_buses()
+				3: vol_shots = min(1.0, vol_shots + 0.1); _update_audio_buses()
+			_save_config()
+		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			if settings_selected == 4:
+				_save_config()
+				mode = "settings"
+	elif mode == "settings_graphics":
+		if event.keycode == KEY_ESCAPE:
+			_save_config()
+			mode = "settings"
+		elif event.keycode == KEY_UP or event.keycode == KEY_W:
+			settings_selected = (settings_selected - 1 + 4) % 4
+		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
+			settings_selected = (settings_selected + 1) % 4
+		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			match settings_selected:
+				0: gfx_particles = not gfx_particles; _apply_graphics_settings()
+				1: gfx_shadows = not gfx_shadows; _apply_graphics_settings()
+				2: gfx_screen_shake = not gfx_screen_shake; _apply_graphics_settings()
+				3:
+					_save_config()
+					mode = "settings"
 	elif mode == "settings_data":
 		if event.keycode == KEY_ESCAPE:
 			mode = "settings"
 			_update_webhook_input_visibility()
-		elif event.keycode == KEY_ENTER:
-			_save_webhook_from_input()
+		elif event.keycode == KEY_UP or event.keycode == KEY_W:
+			settings_selected = (settings_selected - 1 + 3) % 3
+		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
+			settings_selected = (settings_selected + 1) % 3
+		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+			if webhook_edit != null and webhook_edit.has_focus():
+				_save_webhook_from_input()
+			else:
+				match settings_selected:
+					0: _save_webhook_from_input()
+					1: _clear_webhook_input()
+					2:
+						mode = "settings"
+						_update_webhook_input_visibility()
+	elif mode == "multiplayer_menu":
+		if event.keycode == KEY_ESCAPE:
+			_go_to_menu()
+	elif mode in ["lobby_host", "lobby_client"]:
+		if event.keycode == KEY_ESCAPE:
+			_leave_multiplayer()
 	elif mode == "catalog":
 		if event.keycode == KEY_ESCAPE:
 			if catalog_detail_open:
@@ -18026,7 +19387,7 @@ func _handle_key(event: InputEventKey) -> void:
 
 
 func _handle_press(pos: Vector2, viewport: Vector2) -> void:
-	if _ui_input_blocked() and (mode == "menu" or mode == "settings" or mode == "settings_gameplay" or mode == "settings_audio" or mode == "settings_graphics" or mode == "settings_data" or mode == "catalog" or mode == "manifest" or mode == "paused" or mode == "pause_deck"):
+	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "paused", "pause_deck", "multiplayer_menu", "lobby_host", "lobby_client"]):
 		return
 	if mode == "nick_setup":
 		if buttons.get("nick_confirm", Rect2()).has_point(pos):
@@ -18040,25 +19401,32 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void:
 			menu_selected = 0
 			_open_manifest_select()
 			_block_ui_input()
-		elif rects["catalog"].has_point(pos):
+		elif rects.has("multiplayer") and rects["multiplayer"].has_point(pos):
 			menu_selected = 1
+			mode = "multiplayer_menu"
+			_block_ui_input()
+		elif rects["catalog"].has_point(pos):
+			menu_selected = 2
 			catalog_tab = 0
 			catalog_selected = 0
 			catalog_detail_open = false
 			mode = "catalog"
 			_block_ui_input()
 		elif rects["settings"].has_point(pos):
-			menu_selected = 2
+			menu_selected = 3
 			settings_selected = 0
 			settings_previous_mode = "menu"
 			mode = "settings"
 			_block_ui_input()
 		elif rects["exit"].has_point(pos):
-			menu_selected = 3
+			menu_selected = 4
 			get_tree().quit()
 		return
 	if mode == "settings":
 		_handle_settings_touch(pos, viewport)
+		return
+	if mode == "settings_gamepad":
+		_handle_gamepad_settings_touch(pos, viewport)
 		return
 	if mode == "settings_gameplay":
 		_handle_gameplay_settings_touch(pos, viewport)
@@ -18074,6 +19442,15 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void:
 		return
 	if mode == "catalog":
 		_handle_catalog_touch(pos, viewport)
+		return
+	if mode == "multiplayer_menu":
+		_handle_multiplayer_menu_touch(pos, viewport)
+		return
+	if mode == "lobby_host":
+		_handle_lobby_host_touch(pos, viewport)
+		return
+	if mode == "lobby_client":
+		_handle_lobby_client_touch(pos, viewport)
 		return
 	if mode == "manifest":
 		_handle_manifest_touch(pos, viewport)
@@ -18642,6 +20019,14 @@ func _manifestation_base_damage() -> float:
 			return PLAYER_BASE_DAMAGE * 0.78
 		"gravitante":
 			return PLAYER_BASE_DAMAGE * 0.82
+		"cartografica":
+			return PLAYER_BASE_DAMAGE * 0.88
+		"mnesica":
+			return PLAYER_BASE_DAMAGE * 0.74
+		"ressonante":
+			return PLAYER_BASE_DAMAGE * 0.82
+		"contratual":
+			return PLAYER_BASE_DAMAGE * 0.76
 	return PLAYER_BASE_DAMAGE
 
 
@@ -18655,6 +20040,14 @@ func _manifestation_attack_interval() -> float:
 			return 0.62
 		"gravitante":
 			return 0.74
+		"cartografica":
+			return 0.66
+		"mnesica":
+			return 0.58
+		"ressonante":
+			return 0.50
+		"contratual":
+			return 0.60
 	return PLAYER_BASE_ATTACK_INTERVAL
 
 
@@ -18664,6 +20057,12 @@ func _current_attack_interval() -> float:
 		interval /= 1.0 + float(lacerante_coagula) * LACERANTE_COAGULUM_ATTACK_SPEED_RATE
 	if manifestation_key == "ancorada":
 		interval *= 1.0 - _secondary_ancorada_charge_at_player() * 0.22
+	if manifestation_key == "ressonante":
+		interval *= max(0.76, 1.0 - resonant_perfect_streak * 0.018)
+		if resonant_speed_timer > 0.0:
+			interval *= 0.88
+	if contractual_penalty_timer > 0.0:
+		interval *= 1.22
 	return max(0.14, interval * AuraSystem.attack_interval_multiplier(aura_state))
 
 
@@ -18687,6 +20086,14 @@ func _skill_cooldown() -> float:
 			return PLAYER_BASE_SKILL_COOLDOWN + 0.8
 		"ancorada":
 			return PLAYER_BASE_SKILL_COOLDOWN + 0.2
+		"cartografica":
+			return PLAYER_BASE_SKILL_COOLDOWN + 0.45
+		"mnesica":
+			return PLAYER_BASE_SKILL_COOLDOWN + 0.25
+		"ressonante":
+			return max(2.4, PLAYER_BASE_SKILL_COOLDOWN - min(1.5, resonant_perfect_streak * 0.08))
+		"contratual":
+			return PLAYER_BASE_SKILL_COOLDOWN + 0.55
 	return PLAYER_BASE_SKILL_COOLDOWN
 
 
@@ -18709,6 +20116,14 @@ func _damage_color(source: String) -> Color:
 			return Color(0.55, 0.82, 1.0)
 		"prismatica":
 			return Color(0.44, 1.0, 0.96)
+		"cartografica":
+			return Color(0.40, 1.0, 0.82)
+		"mnesica":
+			return Color(0.88, 0.62, 1.0)
+		"ressonante":
+			return Color(1.0, 0.80, 0.24)
+		"contratual":
+			return Color(1.0, 0.58, 0.24)
 	return _manifestation_color()
 
 
@@ -19063,6 +20478,42 @@ func _manifestation_details(key: String) -> Dictionary:
 				"traco": "E - Dominio Fixo: cria uma area fixa. Dentro dela, sua cadencia melhora e projeteis inimigos ficam mais lentos.",
 				"risco": "Perde forca se voce for obrigada a fugir o tempo todo ou sair do territorio preparado."
 			}
+		"cartografica":
+			return {
+				"funcao": "Controle espacial e preparo. Marca ate 3 coordenadas, cria rotas e um triangulo de Ruptura para confundir hordas.",
+				"disparo": "ATK - Ponto de Rota: agulha cartografica. Ao expirar cria coordenada no chao; ao acertar inimigo cria coordenada movel.",
+				"habilidade": "Q - Dobra Cartografica",
+				"desc_hab": "Ativa rotas por alguns segundos. Inimigos que cruzam ficam com Erro de Localizacao; dentro do triangulo tomam dano leve continuo.",
+				"traco": "E - Mapa Rasgado: intensifica as rotas. Disparos que cruzam coordenadas podem sair por outra rota com dano bonus.",
+				"risco": "TP: Passo Cartografico vai para a coordenada mais proxima da direcao escolhida; sem coordenadas, cria uma no destino. Chefes acumulam Deslocamento e sofrem bonus no proximo golpe."
+			}
+		"mnesica":
+			return {
+				"funcao": "Punicao de padroes. Registra lembrancas de dor, ataque ou perseguicao e transforma a memoria do inimigo contra ele.",
+				"disparo": "ATK - Estilhaco de Lembranca: dano baixo que grava ate 3 lembrancas no alvo. Com 3, ativa Deja-vu.",
+				"habilidade": "Q - Revivencia",
+				"desc_hab": "Detona lembrancas proximas. Dor repete dano, ataque atrasa e erra alvo, perseguicao forca trajetoria instavel.",
+				"traco": "E - Arquivo Vivo: por alguns segundos, ataques proximos gravam memorias rapidamente para preparar uma punicao maior.",
+				"risco": "TP: Apagao Mnemico faz inimigos mirarem a posicao antiga e o proximo golpe contra enganados causa mais dano. Chefes abrem janela curta de vulnerabilidade."
+			}
+		"ressonante":
+			return {
+				"funcao": "Manifestacao de timing. Um compasso visual de 4 batidas recompensa ataques no ritmo certo.",
+				"disparo": "ATK - Nota Curta: fora do tempo causa dano normal; no tempo perfeito causa mais dano e aplica Grave, Aguda ou Quebrada.",
+				"habilidade": "Q - Silencio Absoluto",
+				"desc_hab": "Detona notas aplicadas, atrasa ataques inimigos e usa sua sequencia perfeita para aumentar o efeito.",
+				"traco": "E - Crescendo: garante proxima Nota Perfeita, gera acordes ao redor e melhora o ritmo ofensivo por poucos segundos.",
+				"risco": "TP: Contratempo. Se usado na janela perfeita, ganha invulnerabilidade maior, velocidade curta e proxima nota garantida."
+			}
+		"contratual":
+			return {
+				"funcao": "Regras e sentencas. Marca inimigos com clausulas e pune quem quebra agressao, aproximacao ou fuga.",
+				"disparo": "ATK - Selo de Clausula: aplica regra conforme comportamento do alvo. O dano direto e baixo, mas prepara a execucao.",
+				"habilidade": "Q - Execucao de Contrato",
+				"desc_hab": "Executa contratos ativos. Mais infracoes aumentam dano, postura quebrada, stun curto e vulnerabilidade.",
+				"traco": "E - Audiencia Final: aplica contratos em area e acelera infracoes por alguns segundos.",
+				"risco": "TP: Notificacao Judicial deixa uma armadilha na origem. Usar Q em muitos contratos sem infracao ativa Multa de Ruptura e atrasa ataques."
+			}
 	return {
 		"funcao": "Forma em leitura.",
 		"disparo": "Sinal incompleto.",
@@ -19409,7 +20860,7 @@ func _draw_graphics_settings(viewport: Vector2) -> void:
 	_draw_glitch_title("GRAFICOS", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.6, 0.8, 1.0))
 	settings_buttons = _gameplay_settings_rects(viewport)
 	var panel = settings_buttons["analog"]
-	_draw_holo_panel(panel, Color(0.6, 0.8, 1.0), true, 0.62)
+	_draw_holo_panel(panel, Color(0.6, 0.8, 1.0), false, 0.62)
 	var titles = ["PARTICULAS", "SOMBRAS", "TREMOR DE TELA"]
 	var flags = [gfx_particles, gfx_shadows, gfx_screen_shake]
 	var y_start = panel.position.y + 40
@@ -19418,10 +20869,12 @@ func _draw_graphics_settings(viewport: Vector2) -> void:
 		draw_string(font, Vector2(panel.position.x + 20, y_off + 24), titles[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 		var toggle = Rect2(panel.end.x - 120, y_off - 4, 100, 36)
 		var t_color = Color(0.6, 0.8, 1.0) if flags[i] else Color(0.5, 0.5, 0.5)
+		if settings_selected == i:
+			draw_rect(Rect2(panel.position.x + 10, y_off - 10, panel.size.x - 20, 50), Color(0.6, 0.8, 1.0, 0.2), true)
 		draw_rect(toggle, Color(t_color.r, t_color.g, t_color.b, 0.2), true)
 		draw_rect(toggle, t_color, false, 2)
 		_draw_centered("ON" if flags[i] else "OFF", toggle.get_center() + Vector2(0, 6), 16, Color.WHITE)
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), false)
+	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == 3)
 
 func _handle_graphics_settings_touch(pos: Vector2, viewport: Vector2) -> void:
 	settings_buttons = _gameplay_settings_rects(viewport)
@@ -19486,3 +20939,245 @@ func _boss_call_pos(viewport: Vector2) -> Vector2:
 
 func _manual_shop_pos(viewport: Vector2) -> Vector2:
 	return Vector2(viewport.x * 0.5 + 62.0, 58.0)
+
+# ==========================================
+# MULTIPLAYER SYSTEM
+# ==========================================
+
+func _host_multiplayer_game() -> void:
+	is_multiplayer = true
+	is_host = true
+	mode = "lobby_host"
+	multiplayer_peer = ENetMultiplayerPeer.new()
+	var err = multiplayer_peer.create_server(4422)
+	if err == OK:
+		multiplayer.multiplayer_peer = multiplayer_peer
+		if not multiplayer.peer_connected.is_connected(_on_peer_connected):
+			multiplayer.peer_connected.connect(_on_peer_connected)
+		if not multiplayer.peer_disconnected.is_connected(_on_peer_disconnected):
+			multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+		_start_udp_broadcast()
+	else:
+		mode = "multiplayer_menu"
+
+func _join_multiplayer_game() -> void:
+	is_multiplayer = true
+	is_host = false
+	mode = "lobby_client"
+	_start_udp_listener()
+
+func _connect_to_lan_host(ip: String) -> void:
+	multiplayer_peer = ENetMultiplayerPeer.new()
+	var err = multiplayer_peer.create_client(ip, 4422)
+	if err == OK:
+		multiplayer.multiplayer_peer = multiplayer_peer
+		if not multiplayer.connected_to_server.is_connected(_on_connected_to_server):
+			multiplayer.connected_to_server.connect(_on_connected_to_server)
+		if not multiplayer.server_disconnected.is_connected(_on_server_disconnected):
+			multiplayer.server_disconnected.connect(_on_server_disconnected)
+	else:
+		mode = "multiplayer_menu"
+
+func _start_udp_broadcast() -> void:
+	udp_broadcaster = PacketPeerUDP.new()
+	udp_broadcaster.set_broadcast_enabled(true)
+	udp_broadcaster.set_dest_address("255.255.255.255", 4423)
+
+func _start_udp_listener() -> void:
+	udp_listener = PacketPeerUDP.new()
+	udp_listener.bind(4423)
+
+func _poll_udp() -> void:
+	if is_host and udp_broadcaster != null and mode == "lobby_host":
+		var packet = ("RUPTURA_HOST:" + player_nickname).to_utf8_buffer()
+		udp_broadcaster.put_packet(packet)
+	elif not is_host and udp_listener != null and mode == "lobby_client" and lan_host_ip == "":
+		if udp_listener.get_available_packet_count() > 0:
+			var packet_str = udp_listener.get_packet().get_string_from_utf8()
+			if packet_str.begins_with("RUPTURA_HOST:"):
+				lan_host_ip = udp_listener.get_packet_ip()
+				net_player_name = packet_str.split(":")[1]
+				_connect_to_lan_host(lan_host_ip)
+
+func _on_peer_connected(id: int) -> void:
+	print("Player connected: ", id)
+
+func _on_peer_disconnected(id: int) -> void:
+	print("Player disconnected: ", id)
+	_leave_multiplayer()
+
+func _on_connected_to_server() -> void:
+	print("Connected to host")
+	rpc_id(1, "_register_client_info", player_nickname)
+
+func _on_server_disconnected() -> void:
+	print("Host disconnected")
+	_leave_multiplayer()
+
+func _leave_multiplayer() -> void:
+	is_multiplayer = false
+	is_host = false
+	lan_host_ip = ""
+	net_player_ready = false
+	local_player_ready = false
+	mode = "multiplayer_menu"
+	if multiplayer_peer != null:
+		multiplayer_peer.close()
+		multiplayer_peer = null
+		multiplayer.multiplayer_peer = null
+	if udp_broadcaster != null:
+		udp_broadcaster.close()
+		udp_broadcaster = null
+	if udp_listener != null:
+		udp_listener.close()
+		udp_listener = null
+
+@rpc("any_peer", "reliable")
+func _register_client_info(nick: String) -> void:
+	if multiplayer.get_remote_sender_id() != 1:
+		net_player_name = nick
+		rpc_id(multiplayer.get_remote_sender_id(), "_register_host_info", player_nickname)
+
+@rpc("any_peer", "reliable")
+func _register_host_info(nick: String) -> void:
+	net_player_name = nick
+
+@rpc("any_peer", "reliable")
+func _toggle_ready(ready: bool) -> void:
+	net_player_ready = ready
+
+@rpc("authority", "reliable")
+func _start_multiplayer_game() -> void:
+	mode = "game"
+	_start_game()
+
+
+func _draw_multiplayer_menu(viewport: Vector2) -> void:
+	_draw_holo_background(viewport, null, Color(1.0, 0.44, 0.88))
+	_draw_glitch_title("MULTIPLAYER LAN", Vector2(viewport.x * 0.5, 64), 34, Color(1.0, 0.44, 0.88))
+	
+	var panel = Rect2(viewport.x * 0.5 - 180, viewport.y * 0.5 - 120, 360, 240)
+	_draw_holo_panel(panel, Color(1.0, 0.44, 0.88), true, 0.6)
+	
+	buttons["mp_host"] = Rect2(panel.position.x + 20, panel.position.y + 40, panel.size.x - 40, 50)
+	buttons["mp_client"] = Rect2(panel.position.x + 20, panel.position.y + 110, panel.size.x - 40, 50)
+	buttons["mp_back"] = Rect2(panel.position.x + 20, panel.position.y + 180, panel.size.x - 40, 40)
+	
+	_draw_big_button(buttons["mp_host"], "CRIAR SALA (HOST)", Color(0.1, 0.05, 0.1, 0.9), Color(1.0, 0.44, 0.88))
+	_draw_big_button(buttons["mp_client"], "ENTRAR (CLIENT)", Color(0.05, 0.1, 0.1, 0.9), Color(0.0, 1.0, 0.82))
+	_draw_big_button(buttons["mp_back"], "VOLTAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 0.2, 0.2))
+
+func _draw_lobby_host(viewport: Vector2) -> void:
+	_draw_holo_background(viewport, null, Color(1.0, 0.44, 0.88))
+	_draw_glitch_title("SALA LAN - HOST", Vector2(viewport.x * 0.5, 64), 34, Color(1.0, 0.44, 0.88))
+	
+	var panel = Rect2(viewport.x * 0.5 - 200, viewport.y * 0.5 - 120, 400, 240)
+	_draw_holo_panel(panel, Color(1.0, 0.44, 0.88), true, 0.6)
+	
+	var status = "AGUARDANDO JOGADOR..." if net_player_name == "Player 2" else ("JOGADOR: " + net_player_name)
+	_draw_centered(status, panel.position + Vector2(200, 50), 18, Color.WHITE)
+	
+	if net_player_name != "Player 2":
+		var ready_color = Color(0.0, 1.0, 0.82) if net_player_ready else Color(1.0, 0.2, 0.2)
+		var ready_text = "PRONTO" if net_player_ready else "NAO PRONTO"
+		_draw_centered(ready_text, panel.position + Vector2(200, 90), 16, ready_color)
+		
+	buttons["lobby_start"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
+	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 200, 320, 40)
+	
+	var can_start = net_player_name != "Player 2" and net_player_ready
+	var start_color = Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5)
+	_draw_big_button(buttons["lobby_start"], "INICIAR JOGO", Color(0.1, 0.1, 0.1, 0.9), start_color)
+	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 0.2, 0.2))
+
+func _draw_lobby_client(viewport: Vector2) -> void:
+	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
+	_draw_glitch_title("SALA LAN - CLIENT", Vector2(viewport.x * 0.5, 64), 34, Color(0.0, 1.0, 0.82))
+	
+	var panel = Rect2(viewport.x * 0.5 - 200, viewport.y * 0.5 - 120, 400, 240)
+	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.6)
+	
+	var status = "PROCURANDO HOST NA REDE..." if lan_host_ip == "" else ("CONECTADO A: " + net_player_name)
+	_draw_centered(status, panel.position + Vector2(200, 50), 18, Color.WHITE)
+	
+	buttons["lobby_ready"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
+	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 200, 320, 40)
+	
+	var ready_bg = Color(0.05, 0.2, 0.1, 0.9) if local_player_ready else Color(0.1, 0.1, 0.1, 0.9)
+	var ready_border = Color(0.0, 1.0, 0.82) if lan_host_ip != "" else Color(0.5, 0.5, 0.5)
+	var ready_text = "ESTOU PRONTO!" if local_player_ready else "MARCAR COMO PRONTO"
+	
+	_draw_big_button(buttons["lobby_ready"], ready_text, ready_bg, ready_border)
+	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 0.2, 0.2))
+
+ 
+
+func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void:
+	if buttons.get("mp_host", Rect2()).has_point(pos):
+		_host_multiplayer_game()
+	elif buttons.get("mp_client", Rect2()).has_point(pos):
+		_join_multiplayer_game()
+	elif buttons.get("mp_back", Rect2()).has_point(pos):
+		_go_to_menu()
+
+func _handle_lobby_host_touch(pos: Vector2, viewport: Vector2) -> void:
+	if buttons.get("lobby_start", Rect2()).has_point(pos):
+		if net_player_name != "Player 2" and net_player_ready:
+			_start_multiplayer_game()
+	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
+		_leave_multiplayer()
+
+func _handle_lobby_client_touch(pos: Vector2, viewport: Vector2) -> void:
+	if buttons.get("lobby_ready", Rect2()).has_point(pos):
+		if lan_host_ip != "":
+			local_player_ready = not local_player_ready
+			rpc_id(1, "_toggle_ready", local_player_ready)
+	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
+		_leave_multiplayer()
+
+
+func _draw_phantom_player(camera: Vector2) -> void:
+	if not is_multiplayer or net_player_dead: return
+	var p = net_player_pos - camera
+	var size = Vector2(40, 40)
+	var rect = Rect2(p - size * 0.5, size)
+	
+	_draw_centered(net_player_name, p + Vector2(0, -35), 12, Color(1.0, 0.44, 0.88))
+	
+	if net_player_is_dashing:
+		var trail_rect = Rect2(net_player_dash_start - camera - size*0.5, size)
+		_draw_entity_fit(textures["player_idle"][0], trail_rect.get_center(), size, Color(1.0, 0.44, 0.88, 0.4), net_player_flip_h)
+	
+	var frame_idx = net_player_frame_idx % textures["player_idle"].size()
+	var tex = textures["player_idle"][frame_idx]
+	_draw_entity_fit(tex, rect.get_center(), size, Color(1.0, 0.44, 0.88, 0.8), net_player_flip_h)
+
+
+func _sync_multiplayer_state() -> void:
+	if not is_multiplayer or multiplayer_peer == null: return
+	if net_player_ready or is_host:
+		var frame_idx = int(Time.get_ticks_msec() / 170) % max(1, textures.get("player_idle", []).size())
+		rpc("_update_phantom_state", player_pos, player_hp, player_hp_max, false, selected_manifestation, selected_aura, last_dash_time, Vector2.ZERO, Vector2.ZERO, false, frame_idx, false)
+
+@rpc("any_peer", "unreliable")
+func _update_phantom_state(pos: Vector2, p_hp: float, p_hp_max: float, dead: bool, manifest: int, sec_manifest: int, dash_time: float, dash_start: Vector2, dash_end: Vector2, is_dashing: bool, frame: int, flip_h: bool) -> void:
+	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	net_player_pos = pos
+	net_player_hp = p_hp
+	net_player_hp_max = p_hp_max
+	net_player_dead = dead
+	net_player_manifestation = manifest
+	net_player_secondary_manifestation = sec_manifest
+	net_player_last_dash_time = dash_time
+	net_player_dash_start = dash_start
+	net_player_dash_end = dash_end
+	net_player_is_dashing = is_dashing
+	net_player_frame_idx = frame
+	net_player_flip_h = flip_h
+
+
+func _cycle_target_priority() -> void: pass
+func _update_audio_buses() -> void: pass
+func _apply_graphics_settings() -> void: pass
+func _clear_webhook_input() -> void: pass
+

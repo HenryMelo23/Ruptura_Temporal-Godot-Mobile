@@ -37,6 +37,20 @@ func _run() -> void:
 	game._kill_enemy(larapio)
 	_check(_collectable_larapio_loot_total() == 630, "Larapio should return 90 percent plus 15 percent bonus of stolen points")
 
+	game.enemy_bullets.clear()
+	game.score = 0
+	game.enemy_far_damage = 20.0
+	game._spawn_enemy(game.ENEMY_LARAPIO, game.player_pos + Vector2(700, 0))
+	var desperate_larapio: Dictionary = game.enemies.back()
+	desperate_larapio["spawned_at"] = game.time_alive - game.LARAPIO_DESPERATE_AFTER - 1.0
+	desperate_larapio["hp"] = float(desperate_larapio["max_hp"]) * 0.25
+	desperate_larapio["throw_cd"] = 0.0
+	game._update_larapio(desperate_larapio, 0.02)
+	_check(is_equal_approx(float(desperate_larapio.get("throw_cd", 0.0)), game.LARAPIO_DESPERATE_THROW_INTERVAL), "desperate Larapio should throw every 2 seconds")
+	var desperate_stone: Dictionary = game.enemy_bullets.back()
+	_check(float(desperate_stone.get("speed_mult", 0.0)) >= 1.36 * game.LARAPIO_DESPERATE_STONE_SPEED_MULT, "desperate Larapio stone speed was not boosted")
+	_check(float(desperate_stone.get("damage", 0.0)) > game.player_hp_max * 0.015, "desperate Larapio stone damage was not boosted")
+
 	game.cards_bought.clear()
 	game.luck = 0.03
 	game.cards_bought["Sorte"] = 10
@@ -57,30 +71,49 @@ func _run() -> void:
 	_check(game.player_hp == 790, "Arauto gaze damage was not increased by 50 percent")
 
 	game._start_game()
+	game.enemy_base_hp = 92.0
+	game.enemy_speed_base = 166.0
 	game.score_total = 0
 	game.enemies_killed = 0
 	game._advance_to_phase(2)
-	_check(is_equal_approx(game.boss_hp_max, 5200.0), "Boss 2 base HP was not reduced")
+	_check(is_equal_approx(game.enemy_base_hp, 92.0), "phase 2 reset enemy HP scaling instead of carrying phase 1 growth")
+	_check(is_equal_approx(game.enemy_speed_base, 166.0), "phase 2 reset enemy speed scaling instead of carrying phase 1 growth")
+	var pyro = game.enemies.filter(func(enemy): return String(enemy.get("type", "")) == game.ENEMY_PYRO_PENGUIN)[0]
+	_check(float(pyro.get("max_hp", 0.0)) > game.ENEMY_BASE_HP * 1.85 * 1.85, "pyro penguin did not inherit carried enemy scaling")
+	_check(is_equal_approx(game.boss_hp_max, 6600.0), "Boss 2 base HP was not increased")
 	game.current_phase = 2
 	game.boss_active = true
 	game.boss_dead = false
 	game.boss_hp_max = 1000.0
 	game.boss_hp = 1000.0
 	game._damage_boss(100.0, "smoke")
-	_check(abs(game.boss_hp - 945.5) < 0.05, "Boss 2 armor was not softened")
+	_check(abs(game.boss_hp - 949.5) < 0.05, "Boss 2 armor was not increased progressively")
 
 	game._start_game()
 	game.score_total = 0
 	game.enemies_killed = 0
 	game._advance_to_phase(3)
-	_check(is_equal_approx(game.boss_hp_max, 10100.0), "Boss 3 base HP was not reduced")
+	_check(is_equal_approx(game.boss_hp_max, 12800.0), "Boss 3 base HP was not increased progressively")
 	game.current_phase = 3
 	game.boss_active = true
 	game.boss_dead = false
 	game.boss_hp_max = 1000.0
 	game.boss_hp = 1000.0
 	game._damage_boss(100.0, "smoke")
-	_check(abs(game.boss_hp - 944.5) < 0.05, "Boss 3 armor was not softened")
+	_check(abs(game.boss_hp - 952.5) < 0.05, "Boss 3 armor was not increased progressively")
 
-	print("BALANCE_TUNING_2026_07_05_SMOKE_OK larapio=60/105 sorte10=old5 arauto=1.5x boss2_3=softer")
+	game._start_game()
+	game.score_total = 0
+	game.enemies_killed = 0
+	game._advance_to_phase(4)
+	_check(is_equal_approx(game.boss_hp_max, 18800.0), "Boss 4 base HP was not increased progressively")
+	game.current_phase = 4
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp_max = 1000.0
+	game.boss_hp = 1000.0
+	game._damage_boss(100.0, "smoke")
+	_check(abs(game.boss_hp - 955.5) < 0.05, "Boss 4 armor was not increased progressively")
+
+	print("BALANCE_TUNING_2026_07_05_SMOKE_OK larapio=60/105 desperate=true sorte10=old5 arauto=1.5x phase_scaling=true bosses=progressive")
 	quit(0)
