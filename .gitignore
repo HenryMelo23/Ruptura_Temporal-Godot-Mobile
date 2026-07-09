@@ -25,3 +25,15 @@ __pycache__/
 # Nested repository metadata from the copied desktop reference
 Game Base/**/.git/
 Game Base/**/SIGMon/
+
+# Ferramentas Android Locais
+.tools/
+.env
+
+# Ferramentas IA e Agents
+.agents/
+
+# Scripts de Build Locais
+build_apk.ps1
+setup_android_env.ps1
+build_apk.bat
