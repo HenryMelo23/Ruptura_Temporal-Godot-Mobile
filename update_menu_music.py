@@ -11,7 +11,7 @@ target_root = """\tvar root_music = {
 replacement_root = """\tvar root_music = {
 \t\t"Menu.mp3": "res://Menu.mp3",
 \t\t"Menu1-2.mp3": "res://Menu1-2.mp3",
-\t\t"Menu1-3.mp3": "res://Menu1-3.mp3",
+\t\t"Menu1-3.MP3": "res://Menu1-3.MP3",
 \t\t"Menu1-4.mp3": "res://Menu1-4.mp3",
 \t\t"Boss1-1.mp3": "res://Boss1-1.mp3"
 \t}"""
@@ -22,7 +22,7 @@ content = content.replace(target_root, replacement_root)
 target_play_m = "func _play_phase1_music_random() -> void:"
 replacement_play_m = """func _play_menu_music_random() -> void:
 \tvar available = []
-\tfor track in ["Menu.mp3", "Menu1-2.mp3", "Menu1-3.mp3", "Menu1-4.mp3"]:
+\tfor track in ["Menu.mp3", "Menu1-2.mp3", "Menu1-3.MP3", "Menu1-4.mp3"]:
 \t\tif audio_streams.has(track):
 \t\t\tavailable.append(track)
 \tif available.is_empty():

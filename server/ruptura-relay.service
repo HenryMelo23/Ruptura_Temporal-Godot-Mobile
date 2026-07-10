@@ -1,0 +1,22 @@
+[Unit]
+Description=Ruptura Temporal online relay manager
+After=network.target
+
+[Service]
+Type=simple
+User=ruptura
+Group=ruptura
+WorkingDirectory=/opt/ruptura/Ruptura_Temporal-Godot-Mobile/server
+Environment=PORT=8080
+Environment=ROOM_HOST=72.61.217.238
+Environment=ROOM_PORT_START=4522
+Environment=ROOM_PORT_END=4599
+Environment=GODOT_SILENCE_ROOT_WARNING=1
+Environment=GODOT_BIN=/opt/godot/Godot_v4.7-stable_linux.x86_64
+Environment=PROJECT_PATH=/opt/ruptura/Ruptura_Temporal-Godot-Mobile
+ExecStart=/usr/bin/node relay_manager.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

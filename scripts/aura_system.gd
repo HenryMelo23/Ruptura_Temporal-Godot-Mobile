@@ -117,7 +117,6 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 					events.append({"type": "echo_shot", "pos": echo["pos"], "dir": echo["dir"], "kind": echo.get("kind", "aura_insana"), "damage_mult": 0.12 + level * 0.05})
 			state["insane_queue"] = queue.filter(func(e): return float(e["delay"]) > 0.0)
 			if int(state["insane_echoes"]) <= 0 and queue.size() > 0 and Array(state["insane_queue"]).is_empty():
-				state["insane_ready"] = maxf(15.0, 20.0 - level)
 				state["insane_dash_penalty"] = true
 		"Voraz":
 			_update_voracious(state, delta, context, events)
@@ -168,12 +167,14 @@ static func on_attack(state: Dictionary, projectile: Dictionary) -> Array:
 	state["last_attack"] = 0.0
 	match String(state.get("name", "")):
 		"Insana":
-			if float(state["insane_ready"]) <= 0.0 and int(state["insane_echoes"]) <= 0:
+			var queue: Array = state.get("insane_queue", [])
+			if float(state["insane_ready"]) <= 0.0 and int(state["insane_echoes"]) <= 0 and queue.is_empty():
 				state["insane_echoes"] = int(state.get("insane_next_echoes", INSANE_ECHO_BASE))
 				state["insane_next_echoes"] = INSANE_ECHO_BASE
+				state["insane_ready"] = maxf(15.0, 20.0 - int(state.get("level", 0)))
 			if int(state["insane_echoes"]) > 0:
 				state["insane_echoes"] = int(state["insane_echoes"]) - 1
-				var queue: Array = state["insane_queue"]
+				queue = state["insane_queue"]
 				queue.append({"pos": projectile.get("pos", Vector2.ZERO), "dir": projectile.get("dir", Vector2.RIGHT), "kind": projectile.get("kind", "aura_insana"), "delay": INSANE_ECHO_DELAY})
 				state["insane_queue"] = queue
 		"Voraz":
