@@ -14,6 +14,8 @@ toolchain/
 *.log
 patch_*.py
 fix_*.py
+scratch_*.gd
+scratch_*.gd.uid
 discord_webhook.local.cfg
 
 # Python/editor noise from the desktop reference project
@@ -34,6 +36,4 @@ Game Base/**/SIGMon/
 .agents/
 
 # Scripts de Build Locais
-build_apk.ps1
 setup_android_env.ps1
-build_apk.bat

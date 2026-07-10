@@ -67,6 +67,13 @@ func _run() -> void:
 	game._update_bullets(0.0)
 	_check(game.bullets.size() == 5, "prismatic prism did not split into 5 beams")
 
+	game.attack_dragging = true
+	game.attack_drag_direction = Vector2.UP
+	var dash_dest: Vector2 = game._teleport_destination_from_drag(game._dash_center(viewport), viewport)
+	_check(dash_dest.y < game.player_pos.y - 250.0, "tap/held TP without button drag ignored the aim direction")
+	game.attack_dragging = false
+	game.attack_drag_direction = Vector2.ZERO
+
 	game.manifestation_key = "gravitante"
 	game.last_secondary_time = -100.0
 	game.effects.clear()
@@ -81,5 +88,5 @@ func _run() -> void:
 	game._use_secondary_skill(anchor_target)
 	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(anchor_target) < 0.1, "anchored ultimate ignored its ground target")
 
-	print("GROUND_TARGET_SKILLS_SMOKE_OK parasitic_q=true prismatic_q=true gravitante_e=true ancorada_e=true cancel=true")
+	print("GROUND_TARGET_SKILLS_SMOKE_OK parasitic_q=true prismatic_q=true tp_aim=true gravitante_e=true ancorada_e=true cancel=true")
 	quit(0)

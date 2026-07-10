@@ -65,7 +65,18 @@ func _run() -> void:
 	game.elapsed_unpaused += 0.2
 	game.player_pos = Vector2(320, 260)
 	game.boss1_rewind_history.append(game._capture_boss1_rewind_snapshot())
+	game.dash_touch_index = 12
+	game.teleport_dragging = true
+	game.teleport_drag_screen = Vector2(1100, 620)
+	game.skill_touch_index = 13
+	game.secondary_touch_index = 14
+	game.attack_drag_touch_index = 15
+	game.attack_dragging = true
+	game.attack_holding = true
 	game._start_boss1_rewind_sequence()
+	_expect(not game.teleport_dragging and game.dash_touch_index == -1, "rewind_left_tp_aim_stuck")
+	_expect(game.skill_touch_index == -1 and game.secondary_touch_index == -1, "rewind_left_ability_aim_stuck")
+	_expect(not game.attack_dragging and not game.attack_holding, "rewind_left_attack_aim_stuck")
 	game._update_boss1_rewind_sequence(game.BOSS1_CLOCK_TRAVEL_TIME + game.BOSS1_CLOCK_TURN_TIME * 0.5)
 	_expect(game.player_pos.distance_to(Vector2(320, 260)) > 1.0, "rewind_not_moving_during_clock")
 	_expect(not game.boss1_rewind_sequence.is_empty(), "rewind_finished_too_early")
@@ -90,5 +101,5 @@ func _run() -> void:
 	var end_buttons: Dictionary = game._game_over_button_layout(viewport)
 	_expect(end_buttons.has("end_retry") and end_buttons.has("end_menu") and end_buttons.has("end_exit"), "game_over_buttons_missing")
 
-	print("COMBAT_GAMEOVER_ADJUSTMENTS_OK prism_durability=true target_range=true rewind_clock=true boiling_bubbles=true gameover_buttons=true")
+	print("COMBAT_GAMEOVER_ADJUSTMENTS_OK prism_durability=true target_range=true rewind_clock=true rewind_clears_aim=true boiling_bubbles=true gameover_buttons=true")
 	quit(0)

@@ -15,6 +15,14 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 
+func _advance_effects(seconds: float, step := 0.05) -> void:
+	var elapsed := 0.0
+	while elapsed < seconds:
+		var dt = min(step, seconds - elapsed)
+		game._update_effects(dt)
+		elapsed += dt
+
+
 func _run() -> void:
 	game.selected_manifestation = 1
 	game._start_game()
@@ -54,6 +62,38 @@ func _run() -> void:
 	game.last_skill_time = -999.0
 	game._use_skill()
 	_check(game.slashes.any(func(s): return String(s.get("kind", "")) == "lacerante_spin"), "Q did not create the rotating blade visual")
+
+	game.enemies.clear()
+	game.slashes.clear()
+	game.effects.clear()
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp_max = 10000.0
+	game.boss_hp = game.boss_hp_max
+	game.boss_pos = game.player_pos + Vector2(92.0, 0.0)
+	game.player_damage = 100.0
+	game.lacerante_coagula = 0
+	game.last_skill_time = -999.0
+	game._use_skill()
+	_advance_effects(game.LACERANTE_Q_DURATION + 0.08)
+	var q_boss_damage: float = game.boss_hp_max - game.boss_hp
+	_check(q_boss_damage > 250.0 and q_boss_damage <= 500.0, "Lacerante Q boss damage is not normalized: %.2f" % q_boss_damage)
+
+	game.slashes.clear()
+	game.effects.clear()
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp_max = 10000.0
+	game.boss_hp = game.boss_hp_max
+	game.lacerante_coagula = 1000
+	game.last_skill_time = -999.0
+	game._use_skill()
+	_advance_effects(game.LACERANTE_Q_DURATION + 0.08)
+	var q_boss_coagula_damage: float = game.boss_hp_max - game.boss_hp
+	_check(q_boss_coagula_damage <= game.boss_hp_max * game.LACERANTE_Q_BOSS_TOTAL_HP_CAP + 1.0, "Lacerante Q coagulum scaling bypassed the boss damage cap: %.2f" % q_boss_coagula_damage)
+	game.boss_active = false
+	game.boss_dead = true
+	game.lacerante_coagula = 0
 
 	game.enemies.clear()
 	game.score = 0

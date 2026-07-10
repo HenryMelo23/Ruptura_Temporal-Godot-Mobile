@@ -118,6 +118,9 @@ const LACERANTE_Q_ROTATIONS := 5.0
 const LACERANTE_Q_ROTATIONS_PER_10_COAGULA := 1.0
 const LACERANTE_Q_HEAL_LOST_HP_PER_HIT := 0.0025
 const LACERANTE_Q_DAMAGE_PER_HIT_RATE := 0.005
+const LACERANTE_Q_BOSS_DAMAGE_MULT := 0.70
+const LACERANTE_Q_BOSS_TOTAL_DAMAGE_MULT := 4.50
+const LACERANTE_Q_BOSS_TOTAL_HP_CAP := 0.075
 const LACERANTE_DAMAGE_TAKEN_MULT := 0.78
 const LACERANTE_TP_CHAIN_WINDOW := 0.80
 const LACERANTE_TP_CHAIN_COOLDOWN := 2.0
@@ -794,7 +797,16 @@ var shop_auto_interval: float = 180.0
 var auto_target_priority: String = "nearest"
 var haptics_enabled: bool = true
 var is_gamepad_active: bool = false
-var gamepad_bindings: Dictionary = {"attack": JOY_BUTTON_X, "skill": JOY_BUTTON_Y, "secondary": JOY_BUTTON_B, "dash": JOY_BUTTON_A, "pause": JOY_BUTTON_START}
+var gamepad_bindings: Dictionary = {
+	"attack": JOY_BUTTON_X,
+	"skill": JOY_BUTTON_Y,
+	"secondary": JOY_BUTTON_B,
+	"dash": JOY_BUTTON_A,
+	"lacerante_empower": JOY_BUTTON_LEFT_SHOULDER,
+	"pause": JOY_BUTTON_START,
+	"shop": JOY_BUTTON_RIGHT_SHOULDER,
+	"boss": JOY_BUTTON_BACK
+}
 var gamepad_mapping_action: String = ""
 var menu_analog_cooldown: float = 0.0
 var trigger_states: Dictionary = { JOY_AXIS_TRIGGER_LEFT: false, JOY_AXIS_TRIGGER_RIGHT: false }
@@ -1598,14 +1610,8 @@ func _load_config() -> void:
 				elif k == "show_fps_counter": show_fps_counter = v == "true"
 				elif k == "retornante_unlocked": retornante_unlocked = v == "true"
 				elif k == "qa_data_unlocked": qa_data_unlocked = v == "true"
-				elif k == "gamepad_bindings" and coords.size() == 5:
-					gamepad_bindings = {
-						"attack": int(coords[0]),
-						"skill": int(coords[1]),
-						"secondary": int(coords[2]),
-						"dash": int(coords[3]),
-						"pause": int(coords[4])
-					}
+				elif k == "gamepad_bindings":
+					_load_gamepad_bindings(coords)
 
 				elif k == "vol_master": vol_master = float(v)
 
@@ -1667,7 +1673,7 @@ func _save_config() -> void:
 		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
 		file.store_string("retornante_unlocked=" + ("true" if retornante_unlocked else "false") + "\n")
 		file.store_string("qa_data_unlocked=" + ("true" if qa_data_unlocked else "false") + "\n")
-		file.store_string("gamepad_bindings=" + str(gamepad_bindings["attack"]) + "," + str(gamepad_bindings["skill"]) + "," + str(gamepad_bindings["secondary"]) + "," + str(gamepad_bindings["dash"]) + "," + str(gamepad_bindings["pause"]) + "\n")
+		file.store_string("gamepad_bindings=" + _serialize_gamepad_bindings() + "\n")
 
 		file.store_string("vol_master=" + str(vol_master) + "\n")
 
@@ -1692,6 +1698,25 @@ func _save_config() -> void:
 		file.store_string("gfx_screen_shake=" + ("true" if gfx_screen_shake else "false") + "\n")
 		file.store_string("damage_text_scale=" + str(damage_text_scale) + "\n")
 		file.close()
+
+
+func _load_gamepad_bindings(coords: PackedStringArray) -> void:
+	var actions = _gamepad_action_order()
+	for i in range(min(coords.size(), actions.size())):
+		var raw = String(coords[i]).strip_edges()
+		if raw == "":
+			continue
+		gamepad_bindings[actions[i]] = raw if raw.begins_with("AXIS_") else int(raw)
+	for action in actions:
+		if not gamepad_bindings.has(action):
+			gamepad_bindings[action] = -1
+
+
+func _serialize_gamepad_bindings() -> String:
+	var values: Array = []
+	for action in _gamepad_action_order():
+		values.append(str(gamepad_bindings.get(action, -1)))
+	return ",".join(values)
 
 
 func _load_textures() -> void:
@@ -2145,24 +2170,16 @@ func _begin_pause_music_fade_in() -> void:
 
 
 func _update_music_pause_fade(delta: float) -> void:
-	if music_player != null and music_player.playing and music_player.stream != null:
-		if music_pause_fade_mode == "":
-			var length = music_player.stream.get_length()
-			if length > 0.0:
-				var pos = music_player.get_playback_position()
-				if length - pos <= 2.5:
-					music_pause_fade_mode = "auto_out"
-					music_pause_fade_timer = 0.0
-					music_pause_resume_volume = max(0.001, _music_target_volume())
-
+	if music_player != null and not music_player.playing and music_player.stream != null and not music_paused_by_pause and current_music != "":
+		_on_music_finished()
 	if music_player == null or music_pause_fade_mode == "":
 		return
 	music_pause_fade_timer += delta
-	var max_time = 2.5 if music_pause_fade_mode == "auto_out" else MUSIC_PAUSE_FADE_TIME
+	var max_time = MUSIC_PAUSE_FADE_TIME
 	var progress = clamp(music_pause_fade_timer / max_time, 0.0, 1.0)
-	if music_pause_fade_mode == "out" or music_pause_fade_mode == "auto_out":
+	if music_pause_fade_mode == "out":
 		_set_music_linear_volume(lerp(music_pause_resume_volume, 0.001, progress))
-		if progress >= 1.0 and music_pause_fade_mode == "out":
+		if progress >= 1.0:
 			music_player.stream_paused = true
 			music_paused_by_pause = true
 			music_pause_fade_mode = ""
@@ -2203,6 +2220,23 @@ func _on_music_finished() -> void:
 		music_player.play()
 
 
+func _replay_current_music(name: String, fade_in := false) -> void:
+	if music_player == null or not audio_streams.has(name):
+		return
+	music_player.stream = audio_streams[name]
+	music_player.stream_paused = false
+	music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
+	music_player.play()
+	music_paused_by_pause = false
+	if fade_in:
+		music_pause_fade_mode = "in"
+		music_pause_fade_timer = 0.0
+		music_pause_resume_volume = max(0.001, _music_target_volume())
+		_set_music_linear_volume(0.001)
+	else:
+		music_pause_fade_mode = ""
+
+
 func _play_menu_music_random() -> void:
 	var available = []
 	for track in ["Menu.mp3", "Menu1-2.mp3", "Menu1-3.mp3", "Menu1-4.mp3"]:
@@ -2212,14 +2246,7 @@ func _play_menu_music_random() -> void:
 		return
 	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
 	if chosen == current_music and music_player != null:
-		music_player.stream = audio_streams[chosen]
-		music_player.stream_paused = false
-		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
-		music_player.play()
-		music_pause_fade_mode = "in"
-		music_pause_fade_timer = 0.0
-		music_pause_resume_volume = max(0.001, _music_target_volume())
-		_set_music_linear_volume(0.001)
+		_replay_current_music(chosen, true)
 		return
 	_play_music(chosen)
 
@@ -2234,10 +2261,7 @@ func _play_phase1_music_random() -> void:
 		return
 	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
 	if chosen == current_music and music_player != null:
-		music_player.stream = audio_streams[chosen]
-		music_player.stream_paused = false
-		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
-		music_player.play()
+		_replay_current_music(chosen)
 		return
 	_play_music(chosen)
 
@@ -2252,10 +2276,7 @@ func _play_phase2_music_random() -> void:
 		return
 	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
 	if chosen == current_music and music_player != null:
-		music_player.stream = audio_streams[chosen]
-		music_player.stream_paused = false
-		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
-		music_player.play()
+		_replay_current_music(chosen)
 		return
 	_play_music(chosen)
 
@@ -2270,10 +2291,7 @@ func _play_phase3_music_random() -> void:
 		return
 	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
 	if chosen == current_music and music_player != null:
-		music_player.stream = audio_streams[chosen]
-		music_player.stream_paused = false
-		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
-		music_player.play()
+		_replay_current_music(chosen)
 		return
 	_play_music(chosen)
 
@@ -2830,6 +2848,82 @@ func _reset_boss1_rewind_state() -> void:
 	boss1_rewind_clock_tick = -1
 
 
+func _cancel_combat_aim_state(clear_movement := false) -> void:
+	attack_touch_index = -1
+	attack_drag_touch_index = -1
+	skill_touch_index = -1
+	secondary_touch_index = -1
+	dash_touch_index = -1
+	attack_holding = false
+	attack_dragging = false
+	attack_hold_timer = 0.0
+	attack_lock_selecting = false
+	attack_lock_candidate_kind = ""
+	attack_lock_candidate_uid = -1
+	attack_drag_direction = Vector2.ZERO
+	teleport_dragging = false
+	teleport_drag_screen = Vector2.ZERO
+	teleport_drag_origin = Vector2.ZERO
+	skill_touch_pos = Vector2.ZERO
+	secondary_touch_pos = Vector2.ZERO
+	if clear_movement:
+		pointer_down = false
+		active_screen_touches.clear()
+		move_touch_index = -1
+		touch_move = Vector2.ZERO
+
+
+func _gamepad_action_order() -> Array:
+	return ["attack", "skill", "secondary", "dash", "lacerante_empower", "pause", "shop", "boss"]
+
+
+func _gamepad_action_title(action: String) -> String:
+	match action:
+		"attack": return "DISPARO / ATK"
+		"skill": return "HABILIDADE"
+		"secondary": return "SECUNDARIA"
+		"dash": return "DASH / TP"
+		"lacerante_empower": return "REFORCO (+)"
+		"pause": return "PAUSAR / MENU"
+		"shop": return "CHAMAR LOJA"
+		"boss": return "CHAMAR BOSS"
+	return action.to_upper()
+
+
+func _gamepad_action_subtitle(action: String) -> String:
+	match action:
+		"attack": return "Ataque basico"
+		"skill": return "Habilidade principal"
+		"secondary": return "Efeito passivo/ativo"
+		"dash": return "Movimento de esquiva"
+		"lacerante_empower": return "Lacerante apenas"
+		"pause": return "Abrir, navegar e sair do pause"
+		"shop": return "Abre a loja manual"
+		"boss": return "Inicia chamado do boss"
+	return ""
+
+
+func _gamepad_action_color(action: String) -> Color:
+	match action:
+		"attack": return Color(1.0, 0.24, 0.26)
+		"skill": return Color(0.72, 0.22, 1.0)
+		"secondary": return Color(1.0, 0.72, 0.22)
+		"dash": return Color(0.20, 0.85, 1.0)
+		"lacerante_empower": return Color(0.92, 0.03, 0.12)
+		"pause": return Color(0.8, 0.8, 0.8)
+		"shop": return Color(0.0, 1.0, 0.82)
+		"boss": return Color(1.0, 0.52, 0.16)
+	return Color.WHITE
+
+
+func _gamepad_navigation_mode() -> bool:
+	return mode != "game" and mode != "shop_countdown" and mode != "boss_call" and mode != "pause_countdown" and mode != "shop_opening"
+
+
+func _combat_controls_active() -> bool:
+	return mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown"
+
+
 func _reset_arauto_state(reset_spawn_flag := false) -> void:
 	arauto.clear()
 	arauto_rays.clear()
@@ -2844,7 +2938,7 @@ func _process(delta: float) -> void:
 	is_gamepad_active = Input.get_connected_joypads().size() > 0
 	if menu_analog_cooldown > 0.0:
 		menu_analog_cooldown -= delta
-	if is_gamepad_active and mode != "game" and mode != "paused" and menu_analog_cooldown <= 0.0:
+	if is_gamepad_active and _gamepad_navigation_mode() and menu_analog_cooldown <= 0.0:
 		var menu_y = Input.get_joy_axis(0, JOY_AXIS_LEFT_Y)
 		var menu_x = Input.get_joy_axis(0, JOY_AXIS_LEFT_X)
 		if menu_y < -0.5:
@@ -3243,6 +3337,13 @@ func _read_move() -> Vector2:
 	return move.normalized() if move.length() > 1.0 else move
 
 
+func _right_aim_vector() -> Vector2:
+	if not is_gamepad_active:
+		return Vector2.ZERO
+	var r_vec = Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
+	return r_vec.normalized() if r_vec.length() > 0.15 else Vector2.ZERO
+
+
 func _try_attack() -> void:
 	if _secondary_player_locked():
 		return
@@ -3493,12 +3594,9 @@ func _place_anchor() -> void:
 
 
 func _aim_direction() -> Vector2:
-	if is_gamepad_active:
-		var rx = Input.get_joy_axis(0, JOY_AXIS_RIGHT_X)
-		var ry = Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y)
-		var r_vec = Vector2(rx, ry)
-		if r_vec.length() > 0.15:
-			return r_vec.normalized()
+	var right_aim := _right_aim_vector()
+	if right_aim.length() > 0.05:
+		return right_aim
 	if lacerante_preparing and lacerante_prepare_dir.length() > 0.05:
 		return lacerante_prepare_dir.normalized()
 	if attack_dragging and attack_drag_direction.length() > 0.05:
@@ -3749,7 +3847,8 @@ func _use_skill(target_world = null) -> void:
 				"width": 86.0,
 				"stage": 99,
 				"kind": "lacerante_spin",
-				"processed_rotations": 0
+				"processed_rotations": 0,
+				"boss_damage_done": 0.0
 			})
 			_add_text("CIRCULO LACERANTE", player_pos + Vector2(0, -90), Color(1.0, 0.20, 0.28), 1.1, 24)
 		"parasitica":
@@ -4314,8 +4413,10 @@ func _teleport_destination_from_drag(screen_pos: Vector2, viewport: Vector2) -> 
 	var drag = screen_pos - _dash_center(viewport)
 	var dir = drag.normalized()
 	if drag.length() <= 8.0:
-		dir = last_facing.normalized()
+		dir = _aim_direction()
 	var strength = clamp(drag.length() / 64.0, 0.46, 1.0)
+	if drag.length() <= 8.0:
+		strength = 1.0
 	return player_pos + dir * PLAYER_DASH_DISTANCE * strength
 
 
@@ -6104,15 +6205,15 @@ func _add_bullet(b: Dictionary) -> void:
 @rpc("any_peer", "unreliable")
 func _spawn_remote_bullet(data: Dictionary) -> void:
 	if not is_multiplayer: return
-	var sender = multiplayer.get_remote_sender_id()
-	if sender != multiplayer.get_unique_id():
+	var sender = _mp_sender_id()
+	if sender != _mp_unique_id():
 		remote_bullets.append(data)
 
 @rpc("any_peer", "unreliable")
 func _rpc_destroy_remote_bullet(uid: String) -> void:
 	if not is_multiplayer: return
-	var sender = multiplayer.get_remote_sender_id()
-	if sender != multiplayer.get_unique_id():
+	var sender = _mp_sender_id()
+	if sender != _mp_unique_id():
 		for b in remote_bullets:
 			if b.get("uid", "") == uid:
 				b["life"] = 0.0
@@ -8710,17 +8811,7 @@ func _start_boss1_rewind_sequence() -> void:
 		"boss_heal": (boss_hp_max - boss_hp) * BOSS1_REWIND_BOSS_HEAL,
 		"player_final_hp": min(player_hp_max, player_hp + (player_hp_max - player_hp) * BOSS1_REWIND_PLAYER_HEAL)
 	}
-	pointer_down = false
-	active_screen_touches.clear()
-	move_touch_index = -1
-	attack_touch_index = -1
-	attack_drag_touch_index = -1
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	touch_move = Vector2.ZERO
-	attack_holding = false
-	attack_dragging = false
+	_cancel_combat_aim_state(true)
 	screen_shake_timer = 0.16
 	screen_shake_strength = 6.0
 	_vibrate(110, 0.35)
@@ -8883,13 +8974,7 @@ func _start_boss3_miasma(forced_variant := 0) -> void:
 		boss3_miasma_qte_overtime_timer = BOSS3_MIASMA_QTE_OVERTIME_TICK
 		boss3_miasma_qte_overtime_stage = 0
 		_stop_move_touch()
-		attack_drag_touch_index = -1
-		skill_touch_index = -1
-		secondary_touch_index = -1
-		dash_touch_index = -1
-		attack_holding = false
-		attack_dragging = false
-		teleport_dragging = false
+		_cancel_combat_aim_state()
 		if not boss3_miasma_tutorial_seen:
 			boss3_miasma_tutorial_seen = true
 			boss3_miasma_qte_tutorial = 3.2
@@ -11407,9 +11492,8 @@ func _finish_shop() -> void:
 	shop_purchase_anim_timer = 0.0
 	shop_purchase_pending_card = {}
 	shop_purchase_pending_can_continue = false
-	mode = "shop_return"
-	_update_audio_volumes()
-	shop_return_timer = SHOP_RETURN_TIME
+	mode = previous_mode if previous_mode != "" else "game"
+	shop_return_timer = 0.0
 	forced_shop_timer = -1.0
 	forced_shop_triggered = false
 	shop_opening_timer = 0.0
@@ -11418,6 +11502,8 @@ func _finish_shop() -> void:
 	shop_last_tap_msec = 0
 	shop_auto_elapsed = 0.0
 	next_forced_shop_time = shop_auto_interval if shop_auto_enabled else INF
+	_update_audio_volumes()
+	_block_ui_input()
 
 
 func _update_shop_return(delta: float) -> void:
@@ -11677,12 +11763,19 @@ func _update_lacerante_spin_hits(slash: Dictionary) -> void:
 	var completed: int = mini(rotations, int(floor(progress * float(rotations))) + 1)
 	var processed: int = int(slash.get("processed_rotations", 0))
 	while processed < completed:
-		_apply_lacerante_spin_hit(Vector2(slash.get("center", player_pos)), float(slash.get("radius", 128.0)))
+		_apply_lacerante_spin_hit(slash, Vector2(slash.get("center", player_pos)), float(slash.get("radius", 128.0)))
 		processed += 1
 	slash["processed_rotations"] = processed
 
 
-func _apply_lacerante_spin_hit(center: Vector2, radius: float) -> void:
+func _lacerante_q_boss_damage(raw_damage: float, slash: Dictionary) -> float:
+	var boss_damage_done: float = float(slash.get("boss_damage_done", 0.0))
+	var total_cap: float = min(boss_hp_max * LACERANTE_Q_BOSS_TOTAL_HP_CAP, player_damage * LACERANTE_Q_BOSS_TOTAL_DAMAGE_MULT * _lacerante_coagulum_damage_multiplier())
+	var remaining: float = max(0.0, total_cap - boss_damage_done)
+	return min(raw_damage, remaining)
+
+
+func _apply_lacerante_spin_hit(slash: Dictionary, center: Vector2, radius: float) -> void:
 	var targets = []
 	for enemy in enemies:
 		if float(enemy.get("hp", 0.0)) > 0.0 and Vector2(enemy["pos"]).distance_to(center) <= radius + _enemy_radius(enemy) + 18.0:
@@ -11696,7 +11789,12 @@ func _apply_lacerante_spin_hit(center: Vector2, radius: float) -> void:
 		var damage: float = (float(enemy.get("max_hp", 1.0)) * 0.05 + player_damage) * _lacerante_coagulum_damage_multiplier() * crowd_mult
 		_damage_enemy(enemy, _lacerante_damage_for_enemy(damage, enemy), "lacerante")
 	if boss_hit:
-		_damage_boss((boss_hp_max * 0.05 + player_damage) * _lacerante_coagulum_damage_multiplier() * _lacerante_boss_size_multiplier() * crowd_mult, "lacerante")
+		var raw_boss_damage: float = player_damage * LACERANTE_Q_BOSS_DAMAGE_MULT * _lacerante_coagulum_damage_multiplier() * _lacerante_boss_size_multiplier() * crowd_mult
+		var boss_damage: float = _lacerante_q_boss_damage(raw_boss_damage, slash)
+		if boss_damage > 0.0:
+			var before_hp: float = boss_hp
+			_damage_boss(boss_damage, "lacerante")
+			slash["boss_damage_done"] = float(slash.get("boss_damage_done", 0.0)) + max(0.0, before_hp - boss_hp)
 	if player_hp < player_hp_max:
 		var heal := int(round(float(player_hp_max - player_hp) * LACERANTE_Q_HEAL_LOST_HP_PER_HIT * float(hit_count)))
 		if heal > 0:
@@ -12150,36 +12248,52 @@ func _format_binding_name(val) -> String:
 	if int(s) == -1: return "N/A"
 	return "BOTAO " + s
 
+
+func _compact_binding_name(action: String) -> String:
+	var s = str(gamepad_bindings.get(action, -1))
+	if s == "AXIS_4": return "L2"
+	if s == "AXIS_5": return "R2"
+	if s.begins_with("AXIS_"): return "E" + s.replace("AXIS_", "")
+	if int(s) == JOY_BUTTON_A: return "A"
+	if int(s) == JOY_BUTTON_B: return "B"
+	if int(s) == JOY_BUTTON_X: return "X"
+	if int(s) == JOY_BUTTON_Y: return "Y"
+	if int(s) == JOY_BUTTON_LEFT_SHOULDER: return "LB"
+	if int(s) == JOY_BUTTON_RIGHT_SHOULDER: return "RB"
+	if int(s) == JOY_BUTTON_BACK: return "BACK"
+	if int(s) == JOY_BUTTON_START: return "START"
+	if int(s) == -1: return "--"
+	return "B" + s
+
+
 func _draw_gamepad_settings(viewport: Vector2) -> void:
 	_draw_holo_background(viewport, null, Color(0.12, 0.98, 0.52))
 	var portrait = _is_portrait(viewport)
 	_draw_glitch_title("GAMEPAD", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.12, 0.98, 0.52))
 	settings_buttons = _gamepad_settings_rects(viewport)
-	_draw_gameplay_preference(settings_buttons["attack"], "DISPARO / ATK", "Ataque basico", "Pressione..." if gamepad_mapping_action == "attack" else _format_binding_name(gamepad_bindings.get("attack", -1)), Color(1.0, 0.24, 0.26), settings_selected == 0)
-	_draw_gameplay_preference(settings_buttons["skill"], "HABILIDADE (Q)", "Habilidade principal", "Pressione..." if gamepad_mapping_action == "skill" else _format_binding_name(gamepad_bindings.get("skill", -1)), Color(0.72, 0.22, 1.0), settings_selected == 1)
-	_draw_gameplay_preference(settings_buttons["secondary"], "SECUNDARIA (E)", "Efeito passivo/ativo", "Pressione..." if gamepad_mapping_action == "secondary" else _format_binding_name(gamepad_bindings.get("secondary", -1)), Color(1.0, 0.72, 0.22), settings_selected == 2)
-	_draw_gameplay_preference(settings_buttons["dash"], "DASH / TP", "Movimento de esquiva", "Pressione..." if gamepad_mapping_action == "dash" else _format_binding_name(gamepad_bindings.get("dash", -1)), Color(0.20, 0.85, 1.0), settings_selected == 3)
-	_draw_gameplay_preference(settings_buttons["lacerante_empower"], "REFORCO (+)", "Lacerante apenas", "Pressione..." if gamepad_mapping_action == "lacerante_empower" else _format_binding_name(gamepad_bindings.get("lacerante_empower", -1)), Color(0.92, 0.03, 0.12), settings_selected == 4)
-	_draw_gameplay_preference(settings_buttons["pause"], "PAUSAR / MENU", "Abrir o menu", "Pressione..." if gamepad_mapping_action == "pause" else _format_binding_name(gamepad_bindings.get("pause", -1)), Color(0.8, 0.8, 0.8), settings_selected == 5)
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), settings_selected == 6)
+	var actions = _gamepad_action_order()
+	for i in range(actions.size()):
+		var action = actions[i]
+		var value = "Pressione..." if gamepad_mapping_action == action else _format_binding_name(gamepad_bindings.get(action, -1))
+		_draw_gameplay_preference(settings_buttons[action], _gamepad_action_title(action), _gamepad_action_subtitle(action), value, _gamepad_action_color(action), settings_selected == i)
+	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), settings_selected == actions.size())
 
 func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
 	var portrait = _is_portrait(viewport)
 	var margin = viewport.x * (0.08 if portrait else 0.18)
 	var w = viewport.x - margin * 2.0
 	if not portrait: w = min(720.0, viewport.x * 0.58); margin = viewport.x * 0.5 - w * 0.5
-	var h = clamp(viewport.y * (0.075 if portrait else 0.10), 40.0, 68.0)
+	var count = _gamepad_action_order().size() + 1
 	var y = viewport.y * (0.15 if portrait else 0.16)
 	var gap = 10.0
-	return {
-		"attack": Rect2(margin, y, w, h),
-		"skill": Rect2(margin, y + (h + gap), w, h),
-		"secondary": Rect2(margin, y + (h + gap) * 2.0, w, h),
-		"dash": Rect2(margin, y + (h + gap) * 3.0, w, h),
-		"lacerante_empower": Rect2(margin, y + (h + gap) * 4.0, w, h),
-		"pause": Rect2(margin, y + (h + gap) * 5.0, w, h),
-		"back": Rect2(margin, y + (h + gap) * 6.0, w, h)
-	}
+	var max_h = viewport.y - y - (76.0 if portrait else 48.0)
+	var h = clamp((max_h - gap * float(count - 1)) / float(count), 36.0, 58.0)
+	var rects = {}
+	var actions = _gamepad_action_order()
+	for i in range(actions.size()):
+		rects[actions[i]] = Rect2(margin, y + (h + gap) * float(i), w, h)
+	rects["back"] = Rect2(margin, y + (h + gap) * float(actions.size()), w, h)
+	return rects
 
 func _draw_gameplay_settings(viewport: Vector2) -> void:
 	_draw_holo_background(viewport, null, Color(0.36, 0.84, 1.0))
@@ -12948,7 +13062,7 @@ func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, sel
 	var subtitle = "AGUARDANDO PARCEIRO..." if is_remote else ("SUA ESCOLHA: " + title)
 	if is_ready: subtitle = "PRONTO!"
 	
-	var is_host_player = multiplayer.is_server()
+	var is_host_player = multiplayer.is_server() if multiplayer != null else is_host
 	var side_is_host = is_host_player if not is_remote else not is_host_player
 	var identity_str = "VOCE (" + ("HOST" if is_host_player else "CLIENT") + ")" if not is_remote else "PARCEIRO (" + ("HOST" if side_is_host else "CLIENT") + ")"
 	
@@ -17119,7 +17233,7 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void:
 	var dash_color = Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.20, 0.85, 1.0, 0.72)
 	
 	icons.append({ "label": "ATK", "color": Color(1.0, 0.24, 0.26, 0.70), "cd_elapsed": 100.0, "cd_max": 1.0 })
-	icons.append({ "label": "Q", "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown() })
+	icons.append({ "label": "SKILL", "bind": _compact_binding_name("skill"), "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown() })
 	icons.append({ "label": "X" if toggle_ultimate_active else "E", "color": Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), "cd_elapsed": time_alive - last_secondary_time, "cd_max": SECONDARY_SKILL_COOLDOWN })
 	icons.append({ "label": dash_label, "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": player_dash_cooldown })
 	if manifestation_key == "lacerante":
@@ -17135,6 +17249,8 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void:
 		draw_rect(rect, Color(0.02, 0.03, 0.04, 0.86), true)
 		draw_rect(rect, Color(ic.color.r, ic.color.g, ic.color.b, 0.12), true)
 		draw_rect(rect, ic.color, false, 2.0)
+		if ic.has("bind"):
+			_draw_centered(String(ic["bind"]), rect.get_center() + Vector2(0, -icon_size * 0.5 - 8.0), 11, Color(ic.color.r, ic.color.g, ic.color.b, 0.96))
 		_draw_centered(ic.label, rect.get_center() + Vector2(0, 5), 18, Color.WHITE)
 		if ic.cd_elapsed < ic.cd_max:
 			var ratio = clamp(ic.cd_elapsed / max(0.01, ic.cd_max), 0.0, 1.0)
@@ -18668,7 +18784,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var viewport = get_viewport_rect().size
 	_update_button_layout(viewport)
 	if event is InputEventJoypadButton:
-		if mode != "game" and mode != "paused":
+		if gamepad_mapping_action == "" and _gamepad_navigation_mode():
 			if event.pressed:
 				if event.button_index == JOY_BUTTON_DPAD_UP:
 					_simulate_key_press(KEY_UP)
@@ -18678,10 +18794,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					_simulate_key_press(KEY_LEFT)
 				elif event.button_index == JOY_BUTTON_DPAD_RIGHT:
 					_simulate_key_press(KEY_RIGHT)
-				elif event.button_index == JOY_BUTTON_A:
-					_simulate_key_press(KEY_ENTER)
-				elif event.button_index == JOY_BUTTON_B:
-					_simulate_key_press(KEY_ESCAPE)
 		if event.pressed:
 			if gamepad_mapping_action != "":
 				gamepad_bindings[gamepad_mapping_action] = str(event.button_index)
@@ -19123,19 +19235,11 @@ func _handle_gamepad_settings_touch(pos: Vector2, viewport: Vector2) -> void:
 	if gamepad_mapping_action != "":
 		return
 	settings_buttons = _gamepad_settings_rects(viewport)
-	if settings_buttons["attack"].has_point(pos):
-		gamepad_mapping_action = "attack"
-	elif settings_buttons["skill"].has_point(pos):
-		gamepad_mapping_action = "skill"
-	elif settings_buttons["secondary"].has_point(pos):
-		gamepad_mapping_action = "secondary"
-	elif settings_buttons["dash"].has_point(pos):
-		gamepad_mapping_action = "dash"
-	elif settings_buttons["lacerante_empower"].has_point(pos):
-		gamepad_mapping_action = "lacerante_empower"
-	elif settings_buttons["pause"].has_point(pos):
-		gamepad_mapping_action = "pause"
-	elif settings_buttons["back"].has_point(pos):
+	for action in _gamepad_action_order():
+		if settings_buttons.has(action) and settings_buttons[action].has_point(pos):
+			gamepad_mapping_action = action
+			return
+	if settings_buttons["back"].has_point(pos):
 		gamepad_mapping_action = ""
 		mode = "settings"
 		_block_ui_input()
@@ -19458,30 +19562,70 @@ func _simulate_key_press(keycode: int) -> void:
 	ev.pressed = true
 	_handle_key(ev)
 
-func _handle_gamepad_virtual_button(btn_id: String, pressed: bool, viewport: Vector2) -> void:
-	if mode != "game":
+func _gamepad_action_for_button(btn_id: String) -> String:
+	for action in _gamepad_action_order():
+		if btn_id == str(gamepad_bindings.get(action, -1)):
+			return action
+	return ""
+
+
+func _handle_gamepad_ui_action(action: String) -> void:
+	if mode == "paused":
+		if action == "pause" or action == "secondary":
+			_resume_from_pause()
+		elif action == "attack" or action == "dash" or action == "skill":
+			_simulate_key_press(KEY_ENTER)
 		return
+	if mode == "shop":
+		if _shop_purchase_animating():
+			return
+		if action == "pause" or action == "shop":
+			_finish_shop()
+		elif action == "attack" or action == "dash":
+			_buy_selected_card()
+		elif action == "skill":
+			_reroll_shop()
+		elif action == "secondary":
+			_open_deck("shop")
+		return
+	if action == "pause" or action == "secondary":
+		_simulate_key_press(KEY_ESCAPE)
+	elif action == "attack" or action == "dash" or action == "skill":
+		_simulate_key_press(KEY_ENTER)
+
+
+func _handle_gamepad_virtual_button(btn_id: String, pressed: bool, viewport: Vector2) -> void:
+	var action = _gamepad_action_for_button(btn_id)
+	if action == "":
+		return
+	var combat_active = _combat_controls_active()
 	if pressed:
-		if btn_id == str(gamepad_bindings.get("attack", -1)):
+		if combat_active and action == "attack" and buttons.has("attack"):
 			_handle_touch_press(-3, buttons["attack"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("skill", -1)):
+		elif combat_active and action == "skill" and buttons.has("skill"):
 			_handle_touch_press(-4, buttons["skill"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("secondary", -1)):
+		elif combat_active and action == "secondary" and buttons.has("secondary"):
 			_handle_touch_press(-5, buttons["secondary"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("dash", -1)):
+		elif combat_active and action == "dash" and buttons.has("dash"):
 			_handle_touch_press(-6, buttons["dash"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("pause", -1)) and buttons.has("pause"):
-			_handle_touch_press(-7, buttons["pause"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("lacerante_empower", -1)) and buttons.has("lacerante_empower"):
+		elif combat_active and action == "pause":
+			_start_pause_countdown()
+		elif combat_active and action == "shop":
+			_try_open_manual_shop()
+		elif combat_active and action == "boss":
+			_start_boss_call()
+		elif combat_active and action == "lacerante_empower" and buttons.has("lacerante_empower"):
 			_handle_touch_press(-8, buttons["lacerante_empower"].get_center(), viewport)
+		elif not combat_active:
+			_handle_gamepad_ui_action(action)
 	else:
-		if btn_id == str(gamepad_bindings.get("attack", -1)):
+		if action == "attack" and buttons.has("attack"):
 			_handle_touch_release(-3, buttons["attack"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("skill", -1)):
+		elif action == "skill" and buttons.has("skill"):
 			_handle_touch_release(-4, buttons["skill"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("secondary", -1)):
+		elif action == "secondary" and buttons.has("secondary"):
 			_handle_touch_release(-5, buttons["secondary"].get_center(), viewport)
-		elif btn_id == str(gamepad_bindings.get("dash", -1)):
+		elif action == "dash" and buttons.has("dash"):
 			_handle_touch_release(-6, buttons["dash"].get_center(), viewport)
 
 
@@ -19525,15 +19669,15 @@ func _handle_key(event: InputEventKey) -> void:
 			gamepad_mapping_action = ""
 			mode = "settings"
 		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			settings_selected = (settings_selected - 1 + 7) % 7
+			settings_selected = (settings_selected - 1 + _gamepad_action_order().size() + 1) % (_gamepad_action_order().size() + 1)
 		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			settings_selected = (settings_selected + 1) % 7
+			settings_selected = (settings_selected + 1) % (_gamepad_action_order().size() + 1)
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			if settings_selected == 6:
+			var actions = _gamepad_action_order()
+			if settings_selected == actions.size():
 				gamepad_mapping_action = ""
 				mode = "settings"
 			else:
-				var actions = ["attack", "skill", "secondary", "dash", "lacerante_empower", "pause"]
 				gamepad_mapping_action = actions[settings_selected]
 	elif mode == "settings_gameplay":
 		if gameplay_cheat_focused:
@@ -19751,14 +19895,16 @@ func _handle_key(event: InputEventKey) -> void:
 	elif mode == "shop":
 		if _shop_purchase_animating():
 			return
-		if event.keycode == KEY_RIGHT or event.keycode == KEY_D:
+		if event.keycode == KEY_RIGHT or event.keycode == KEY_D or event.keycode == KEY_DOWN or event.keycode == KEY_S:
 			_set_shop_selection(min(shop_cards.size() - 1, shop_selected + 1))
-		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
+		elif event.keycode == KEY_LEFT or event.keycode == KEY_A or event.keycode == KEY_UP or event.keycode == KEY_W:
 			_set_shop_selection(max(0, shop_selected - 1))
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			_buy_selected_card()
 		elif event.keycode == KEY_Q:
 			_reroll_shop()
+		elif event.keycode == KEY_E:
+			_open_deck("shop")
 		elif event.keycode == KEY_ESCAPE:
 			_finish_shop()
 	elif mode == "paused":
@@ -21529,11 +21675,26 @@ func _leave_multiplayer() -> void:
 		udp_listener.close()
 		udp_listener = null
 
+func _mp_sender_id() -> int:
+	return multiplayer.get_remote_sender_id() if multiplayer != null else 0
+
+func _mp_unique_id() -> int:
+	return multiplayer.get_unique_id() if multiplayer != null else 1
+
+func _mp_sender_is_self() -> bool:
+	var sender := _mp_sender_id()
+	return sender != 0 and sender == _mp_unique_id()
+
+func _mp_peer_ids() -> Array:
+	return multiplayer.get_peers() if multiplayer != null else []
+
 @rpc("any_peer", "reliable")
 func _register_client_info(nick: String) -> void:
-	if multiplayer.get_remote_sender_id() != 1:
+	var sender := _mp_sender_id()
+	if sender != 1:
 		net_player_name = nick
-		rpc_id(multiplayer.get_remote_sender_id(), "_register_host_info", player_nickname)
+		if sender != 0:
+			rpc_id(sender, "_register_host_info", player_nickname)
 
 @rpc("any_peer", "reliable")
 func _register_host_info(nick: String) -> void:
@@ -21545,7 +21706,7 @@ func _toggle_ready(ready: bool) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_add_score(amount: int) -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	score += amount
 	score_total += amount
 	run_points_earned += amount
@@ -21564,8 +21725,8 @@ func _start_multiplayer_manifest() -> void:
 @rpc("any_peer", "unreliable_ordered")
 func _rpc_sync_manifest_mp(stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool) -> void:
 	if not is_multiplayer or mode != "manifest_mp": return
-	var sender = multiplayer.get_remote_sender_id()
-	if sender != multiplayer.get_unique_id():
+	var sender = _mp_sender_id()
+	if sender != _mp_unique_id():
 		mp_remote_manifest_stage = stage
 		mp_remote_manifestation = manifestation
 		mp_remote_aura = aura
@@ -21586,10 +21747,10 @@ func _start_multiplayer_game() -> void:
 			var player_scene = preload("res://scenes/Player.tscn")
 			# Host spawn
 			var host_p = player_scene.instantiate()
-			host_p.name = str(multiplayer.get_unique_id())
+			host_p.name = str(_mp_unique_id())
 			container.add_child(host_p, true)
 			# Peers spawn
-			for peer_id in multiplayer.get_peers():
+			for peer_id in _mp_peer_ids():
 				var p = player_scene.instantiate()
 				p.name = str(peer_id)
 				container.add_child(p, true)
@@ -21727,7 +21888,7 @@ func _sync_multiplayer_state() -> void:
 	
 	var container = get_node_or_null("PlayersContainer")
 	if container:
-		var my_id = str(multiplayer.get_unique_id())
+		var my_id = str(_mp_unique_id())
 		var frame_idx = int(Time.get_ticks_msec() / 170) % max(1, textures.get("player_idle", []).size())
 		
 		for p in container.get_children():
@@ -21761,7 +21922,7 @@ func _sync_multiplayer_state() -> void:
 
 @rpc("any_peer", "unreliable")
 func _update_remote_entities(enemies_data: Array, boss_data: Dictionary, bullets_data: Array) -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	if is_multiplayer and not is_host:
 		enemies = enemies_data
 		boss_pos = boss_data.get("pos", boss_pos)
@@ -21771,7 +21932,7 @@ func _update_remote_entities(enemies_data: Array, boss_data: Dictionary, bullets
 
 @rpc("any_peer", "unreliable")
 func _update_remote_visuals(p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	net_slashes = p_slashes
 	net_prisms = p_prisms
 	net_anchors = p_anchors
@@ -21783,7 +21944,7 @@ func _update_remote_visuals(p_slashes: Array, p_prisms: Array, p_anchors: Array,
 
 @rpc("any_peer", "reliable")
 func _rpc_sync_pause(is_paused: bool) -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	if is_paused:
 		if mode == "game" or mode == "shop_countdown" or mode == "boss_call":
 			previous_mode = mode
@@ -21800,7 +21961,7 @@ func _rpc_sync_pause(is_paused: bool) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_trigger_shop(is_forced: bool) -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	if is_forced:
 		forced_shop_triggered = true
 		forced_shop_timer = FORCED_SHOP_WARNING
@@ -21811,20 +21972,20 @@ func _rpc_trigger_shop(is_forced: bool) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_request_shop() -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	if mode == "game":
 		mode = "shop_mp_requested"
 		shop_mp_request_timer = 5.0
 
 @rpc("any_peer", "reliable")
 func _rpc_accept_shop() -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	if mode == "shop_mp_waiting":
 		_start_shop_opening_animation(false)
 
 @rpc("any_peer", "reliable")
 func _rpc_shop_ready() -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	shop_mp_partner_ready = true
 	_check_shop_mp_exit()
 
@@ -21834,7 +21995,7 @@ func _check_shop_mp_exit() -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_player_died() -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	partner_is_dead = true
 	next_larapio_spawn_time = time_alive + 15.0
 	if is_dead:
@@ -21850,7 +22011,7 @@ func _handle_revive() -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_revive_player() -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	_handle_revive()
 
 func _cycle_target_priority() -> void: pass
@@ -21878,5 +22039,5 @@ func _client_hit_arauto(amount: float, source: String) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_client_take_damage(amount: int, source: String) -> void:
-	if multiplayer.get_remote_sender_id() == multiplayer.get_unique_id(): return
+	if _mp_sender_is_self(): return
 	_damage_player(amount, source)

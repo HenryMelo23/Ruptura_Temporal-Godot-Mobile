@@ -44,5 +44,12 @@ func _run() -> void:
 	game._return_from_deck()
 	assert(game.mode == "paused")
 
-	print("SHOP_DECK_UI_SMOKE_OK deck_from_shop=true drag=true return_modes=true")
+	game.previous_mode = "game"
+	game._open_shop(false)
+	assert(game.mode == "shop")
+	game._finish_shop()
+	assert(game.mode == "game")
+	assert(game.shop_return_timer == 0.0)
+
+	print("SHOP_DECK_UI_SMOKE_OK deck_from_shop=true drag=true return_modes=true no_black_return=true")
 	quit(0)
