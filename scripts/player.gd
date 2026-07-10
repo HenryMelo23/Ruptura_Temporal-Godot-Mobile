@@ -15,6 +15,6 @@ class_name NetPlayer
 @export var frame_idx: int = 0
 @export var flip_h: bool = false
 
-func _ready() -> void:
+func _enter_tree() -> void:
 	# O nome do nó deve ser o ID do peer correspondente (ex: "1" para host, "123456" para client)
 	set_multiplayer_authority(name.to_int())

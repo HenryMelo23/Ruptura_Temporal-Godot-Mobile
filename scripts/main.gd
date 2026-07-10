@@ -528,9 +528,6 @@ var run_report_request: HTTPRequest = null
 # Multiplayer Networking
 var is_multiplayer: bool = false
 var is_host: bool = false
-var udp_broadcaster: PacketPeerUDP = null
-var udp_listener: PacketPeerUDP = null
-var lan_host_ip: String = ""
 var multiplayer_peer: ENetMultiplayerPeer = null
 var net_player_ready: bool = false
 var local_player_ready: bool = false
@@ -549,9 +546,67 @@ var dedicated_ready_by_peer: Dictionary = {}
 var dedicated_names_by_peer: Dictionary = {}
 var dedicated_manifest_ready_by_peer: Dictionary = {}
 var dedicated_player_state_by_peer: Dictionary = {}
+var dedicated_room_owner_peer_id: int = 0
+var net_player_peer_id: int = 0
+var net_player_sync_last_ms: int = 0
+var net_world_sync_last_ms: int = 0
+var net_ping_last_sent_ms: int = 0
+var net_ping_ms: int = -1
+var net_remote_ping_ms: int = -1
+var net_player_snapshot_last_ms: int = 0
+var net_world_snapshot_last_ms: int = 0
+var net_world_jitter_ms: float = 0.0
+var net_enemy_bullet_next_uid: int = 1
+var net_ability_sequence: int = 0
+var net_projectile_sequence: int = 0
+var net_ability_seen: Dictionary = {}
+var net_ability_visuals: Array = []
+var dedicated_started_ms: int = 0
+var dedicated_room_shutdown_pending: bool = false
+var multiplayer_notice: String = ""
+const NET_PLAYER_SYNC_INTERVAL_MS := 33
+const NET_WORLD_SYNC_INTERVAL_MS := 50
+const NET_PING_INTERVAL_MS := 1000
+const NET_CHANNEL_COUNT := 4
+const NET_PLAYER_CHANNEL := 1
+const NET_WORLD_CHANNEL := 2
+const NET_TELEMETRY_CHANNEL := 3
+const NET_INTERPOLATION_SHARPNESS := 18.0
+const NET_EXTRAPOLATION_LIMIT := 0.10
+const NET_SNAP_DISTANCE := 360.0
+const NET_ENEMY_STRIDE := 19
+const NET_UID_CHUNK_MASK := 0xFFFF
+const NET_BULLET_STRIDE := 11
+const NET_OWNER_CONNECT_TIMEOUT_MS := 30000
+const NET_ABILITY_ATTACK := 0
+const NET_ABILITY_SKILL := 1
+const NET_ABILITY_SECONDARY := 2
+const NET_ABILITY_TELEPORT := 3
+const NET_ABILITY_SECONDARY_END := 4
+const NET_ABILITY_VISUAL_LIMIT := 48
+const NET_DAMAGE_ENEMY := 0
+const NET_DAMAGE_BOSS := 1
+const NET_DAMAGE_ARAUTO := 2
+const NET_ENEMY_TYPES := [
+	ENEMY_COMMON, ENEMY_ATIRADOR, ENEMY_KAMIKAZE, ENEMY_AGGLOMERATOR,
+	ENEMY_STALKER, ENEMY_PROJECTOR, ENEMY_CRYSTAL, ENEMY_CURATER,
+	ENEMY_LARAPIO, ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR,
+	ENEMY_DEVOTO, ENEMY_INCENSARIO, ENEMY_GUARDIAO, ENEMY_PYRO_PENGUIN,
+	ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_REFRACTOR,
+	ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO
+]
+const NET_BULLET_TYPES := [
+	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",
+	"frost_shard", "larapio_coin", "larapio_stone", "miasma_cheese_spit",
+	"nexus_refracted", "phase4_magic", "pyro_wall_seed", "rat_flask",
+	"rat_shot", "rat_spit", "reflected_player"
+]
 
 # Multiplayer Remote Player State (Phantom Player)
 var net_player_pos = Vector2(-1000, -1000)
+var net_player_render_pos = Vector2(-1000, -1000)
+var net_player_velocity = Vector2.ZERO
+var net_player_has_snapshot := false
 var net_player_last_pos = Vector2(-1000, -1000)
 var net_player_move = Vector2.ZERO
 var net_player_hp = 100.0
@@ -569,6 +624,10 @@ var net_player_dash_end = Vector2()
 var net_player_is_dashing = false
 var net_player_frame_idx = 0
 var net_player_flip_h = false
+var net_boss_target_pos = Vector2(1240, 410)
+var net_boss_velocity = Vector2.ZERO
+var net_boss_snapshot_last_ms: int = 0
+var net_boss_has_snapshot := false
 var run_report_webhook_url: String = ""
 var run_report_status: String = ""
 var run_report_sent: bool = false
@@ -1101,6 +1160,7 @@ func _ready() -> void:
 
 	# Configuração para Smoke Test Multiplayer via CLI
 	var args = OS.get_cmdline_args()
+	args.append_array(OS.get_cmdline_user_args())
 	if "--dedicated-server" in args:
 		dedicated_server_mode = true
 		dedicated_room_code = _cmd_arg_value(args, "--room-code=", "ROOM")
@@ -1108,11 +1168,11 @@ func _ready() -> void:
 		print("ONLINE ROOM: dedicated server %s on port %d" % [dedicated_room_code, dedicated_port])
 		call_deferred("_start_dedicated_room_server", dedicated_port)
 	elif "--server" in args:
-		print("SMOKE TEST: Iniciando como Host...")
-		call_deferred("_host_lan_multiplayer_game")
+		print("ONLINE TEST: criando sala online...")
+		call_deferred("_host_multiplayer_game")
 	elif "--client" in args:
-		print("SMOKE TEST: Iniciando como Client (Buscando LAN)...")
-		call_deferred("_join_lan_multiplayer_game")
+		print("ONLINE TEST: entrando em sala online...")
+		call_deferred("_join_multiplayer_game")
 
 func _cmd_arg_value(args: Array, prefix: String, fallback: String) -> String:
 	for arg in args:
@@ -2113,8 +2173,8 @@ func _is_shot_audio(name: String) -> bool:
 	if name.ends_with("_hit"):
 		return true
 	var specific = [
-		"eletrica_travel", "retornante_wave", "retornante_reverse", 
-		"gravitante_orbit_loop", "prismatica_shatter", "Disparo.MP3", 
+		"eletrica_travel", "retornante_wave", "retornante_reverse",
+		"gravitante_orbit_loop", "prismatica_shatter", "Disparo.MP3",
 		"Frasco.mp3"
 	]
 	return name in specific
@@ -2358,6 +2418,7 @@ func _play_phase3_music_random() -> void:
 
 func _go_to_menu() -> void:
 	mode = "menu"
+	multiplayer_notice = ""
 	manifest_preview_open = false
 	manifest_preview_consumed_touch_index = -999
 	shop_opening_timer = 0.0
@@ -2445,7 +2506,7 @@ func _start_game() -> void:
 	time_alive = 0.0
 	score = 0
 	score_total = 0
-	
+
 	is_dead = false
 	partner_is_dead = false
 	mode = "game"
@@ -2636,7 +2697,7 @@ func _start_game() -> void:
 	prisms.clear()
 	orbitals.clear()
 	seed_links.clear()
-	
+
 	net_slashes.clear()
 	net_prisms.clear()
 	net_anchors.clear()
@@ -2999,7 +3060,6 @@ func _reset_arauto_state(reset_spawn_flag := false) -> void:
 
 
 func _process(delta: float) -> void:
-	_poll_udp()
 	is_gamepad_active = Input.get_connected_joypads().size() > 0
 	if menu_analog_cooldown > 0.0:
 		menu_analog_cooldown -= delta
@@ -3021,12 +3081,11 @@ func _process(delta: float) -> void:
 	_update_orientation(delta)
 	_update_music_pause_fade(delta)
 	_update_rain_audio_fade(delta)
+	if dedicated_server_mode:
+		_update_dedicated_room_lifecycle()
 	if is_multiplayer:
-		var raw_move = (net_player_pos - net_player_last_pos) / max(delta, 0.001)
-		net_player_move = net_player_move.lerp(raw_move, 15.0 * delta)
-		if net_player_move.length() < 10.0:
-			net_player_move = Vector2.ZERO
-		net_player_last_pos = net_player_pos
+		_update_network_interpolation(delta)
+	_update_network_ability_visuals(delta)
 
 	if mode == "game":
 		_update_game(delta)
@@ -3048,34 +3107,78 @@ func _process(delta: float) -> void:
 		_update_pause_countdown(delta)
 	elif mode == "shop":
 		_update_shop(delta)
-	elif mode == "manifest":
-		if manifest_preview_open:
-			manifest_preview_time += delta
-		if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
-			manifest_transition_elapsed = minf(MANIFEST_SPECTRUM_TRANSITION_TIME, manifest_transition_elapsed + delta)
-			if manifest_transition_elapsed >= MANIFEST_SPECTRUM_TRANSITION_TIME:
-				manifest_select_stage = MANIFEST_STAGE_AURA
-				aura_scroll_pos = float(selected_aura)
-				_block_ui_input()
-		if not manifest_is_dragging:
-			var target = float(selected_aura if manifest_select_stage == MANIFEST_STAGE_AURA else selected_manifestation)
-			var count = AURAS.size() if manifest_select_stage == MANIFEST_STAGE_AURA else MANIFESTATIONS.size()
-			var scroll_value = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
-			var diff = target - scroll_value
-			var half_size = count / 2.0
-			if diff > half_size:
-				scroll_value += count
-			elif diff < -half_size:
-				scroll_value -= count
-			scroll_value = lerp(scroll_value, target, 12.0 * delta)
-			scroll_value = fposmod(scroll_value, float(count))
-			if manifest_select_stage == MANIFEST_STAGE_AURA:
-				aura_scroll_pos = scroll_value
-			else:
-				manifest_scroll_pos = scroll_value
+	elif mode == "manifest" or mode == "manifest_mp":
+		_update_manifest_selection_flow(delta)
 	elif mode == "game_over" or mode == "victory":
 		_update_effects(delta)
 	queue_redraw()
+
+
+func _update_network_interpolation(delta: float) -> void:
+	var now_ms := Time.get_ticks_msec()
+	if net_player_has_snapshot:
+		var player_age := minf(NET_EXTRAPOLATION_LIMIT, maxf(0.0, float(now_ms - net_player_snapshot_last_ms) / 1000.0))
+		var predicted_player: Vector2 = net_player_pos + net_player_velocity * player_age
+		var previous_render_pos: Vector2 = net_player_render_pos
+		net_player_render_pos = _smooth_network_position(net_player_render_pos, predicted_player, delta)
+		var raw_move: Vector2 = (net_player_render_pos - previous_render_pos) / maxf(delta, 0.001)
+		net_player_move = net_player_move.lerp(raw_move, clampf(15.0 * delta, 0.0, 1.0))
+		if net_player_move.length() < 10.0:
+			net_player_move = Vector2.ZERO
+		net_player_last_pos = net_player_render_pos
+
+	if not _is_world_replica():
+		return
+
+	for enemy in enemies:
+		var target := Vector2(enemy.get("_net_target_pos", enemy.get("pos", Vector2.ZERO)))
+		var velocity := Vector2(enemy.get("_net_velocity", Vector2.ZERO))
+		var snapshot_ms := int(enemy.get("_net_snapshot_ms", now_ms))
+		var age := minf(NET_EXTRAPOLATION_LIMIT, maxf(0.0, float(now_ms - snapshot_ms) / 1000.0))
+		enemy["pos"] = _smooth_network_position(Vector2(enemy.get("pos", target)), target + velocity * age, delta)
+
+	if net_boss_has_snapshot:
+		var boss_age := minf(NET_EXTRAPOLATION_LIMIT, maxf(0.0, float(now_ms - net_boss_snapshot_last_ms) / 1000.0))
+		boss_pos = _smooth_network_position(boss_pos, net_boss_target_pos + net_boss_velocity * boss_age, delta)
+
+	for bullet in enemy_bullets:
+		var target := Vector2(bullet.get("_net_target_pos", bullet.get("pos", Vector2.ZERO)))
+		var velocity := Vector2(bullet.get("_net_velocity", Vector2.ZERO))
+		var snapshot_ms := int(bullet.get("_net_snapshot_ms", now_ms))
+		var age := minf(NET_EXTRAPOLATION_LIMIT, maxf(0.0, float(now_ms - snapshot_ms) / 1000.0))
+		bullet["pos"] = _smooth_network_position(Vector2(bullet.get("pos", target)), target + velocity * age, delta)
+
+
+func _smooth_network_position(current: Vector2, target: Vector2, delta: float) -> Vector2:
+	if current.distance_squared_to(target) >= NET_SNAP_DISTANCE * NET_SNAP_DISTANCE:
+		return target
+	var weight := 1.0 - exp(-NET_INTERPOLATION_SHARPNESS * maxf(delta, 0.0))
+	return current.lerp(target, clampf(weight, 0.0, 1.0))
+
+
+func _update_network_ability_visuals(delta: float) -> void:
+	if net_ability_visuals.is_empty():
+		return
+	for visual in net_ability_visuals:
+		visual["life"] = float(visual.get("life", 0.0)) - delta
+	net_ability_visuals = net_ability_visuals.filter(func(visual): return float(visual.get("life", 0.0)) > 0.0)
+
+
+func _update_dedicated_room_lifecycle() -> void:
+	if dedicated_room_shutdown_pending or dedicated_room_owner_peer_id != 0:
+		return
+	if dedicated_started_ms > 0 and Time.get_ticks_msec() - dedicated_started_ms >= NET_OWNER_CONNECT_TIMEOUT_MS:
+		dedicated_room_shutdown_pending = true
+		call_deferred("_shutdown_dedicated_room")
+
+
+func _shutdown_dedicated_room() -> void:
+	await get_tree().create_timer(0.25).timeout
+	if multiplayer_peer != null:
+		multiplayer_peer.close()
+		multiplayer_peer = null
+		multiplayer.multiplayer_peer = null
+	get_tree().quit()
 
 
 func _update_orientation(delta: float) -> void:
@@ -3087,8 +3190,39 @@ func _update_orientation(delta: float) -> void:
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
 
 
+func _update_manifest_selection_flow(delta: float) -> void:
+	if manifest_preview_open:
+		manifest_preview_time += delta
+	if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
+		manifest_transition_elapsed = minf(MANIFEST_SPECTRUM_TRANSITION_TIME, manifest_transition_elapsed + delta)
+		if manifest_transition_elapsed >= MANIFEST_SPECTRUM_TRANSITION_TIME:
+			manifest_select_stage = MANIFEST_STAGE_AURA
+			aura_scroll_pos = float(selected_aura)
+			_block_ui_input()
+			if mode == "manifest_mp":
+				_sync_manifest_mp_selection()
+	if not manifest_is_dragging:
+		var target = float(selected_aura if manifest_select_stage == MANIFEST_STAGE_AURA else selected_manifestation)
+		var count = AURAS.size() if manifest_select_stage == MANIFEST_STAGE_AURA else MANIFESTATIONS.size()
+		var scroll_value = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
+		var diff = target - scroll_value
+		var half_size = count / 2.0
+		if diff > half_size:
+			scroll_value += count
+		elif diff < -half_size:
+			scroll_value -= count
+		scroll_value = lerp(scroll_value, target, 12.0 * delta)
+		scroll_value = fposmod(scroll_value, float(count))
+		if manifest_select_stage == MANIFEST_STAGE_AURA:
+			aura_scroll_pos = scroll_value
+		else:
+			manifest_scroll_pos = scroll_value
+
+
 func _update_game(delta: float) -> void:
 	_sync_multiplayer_state()
+	if dedicated_server_mode:
+		return
 	if not boss1_rewind_sequence.is_empty():
 		_update_boss1_rewind_sequence(delta)
 		return
@@ -3170,16 +3304,18 @@ func _update_game(delta: float) -> void:
 			_try_arm_lacerante_empower()
 		lacerante_empower_key_was_pressed = empower_key_pressed
 
-	if spawn_timer <= 0.0 and not boss_dead:
+	if _is_world_authority() and spawn_timer <= 0.0 and not boss_dead:
 		_spawn_wave()
 	_update_event_alerts(delta)
-	_update_agglomeration(delta)
-	_try_spawn_larapio()
-	_try_spawn_arauto()
+	if _is_world_authority():
+		_update_agglomeration(delta)
+		_try_spawn_larapio()
+		_try_spawn_arauto()
 
 	_update_phase_fragment(delta)
 
-	_update_arauto(delta)
+	if _is_world_authority():
+		_update_arauto(delta)
 	_update_bullets(delta)
 	_update_remote_bullets(delta)
 	_update_parasite_spit_zones(delta)
@@ -3197,7 +3333,7 @@ func _update_game(delta: float) -> void:
 	_update_manifestation_secondaries(delta)
 	_update_heal_orbs(delta)
 	_update_effects(delta)
-	if boss_active:
+	if _is_world_authority() and boss_active:
 		_update_boss(delta * AuraSystem.world_multiplier(aura_state))
 		_update_boss_poison(delta)
 	var active_lacerante = _active_lacerante_secondary()
@@ -3533,6 +3669,7 @@ func _fire_returning() -> void:
 		"last_state_sfx": "ida"
 	}
 	return_bullets.append(bullet)
+	_send_network_ability_visual(NET_ABILITY_ATTACK, player_pos, player_pos + dir * 280.0, 0.55)
 	_apply_aura_events(AuraSystem.on_attack(aura_state, bullet))
 	if retornante_memoria_pending:
 		retornante_memoria_pending = false
@@ -3621,6 +3758,7 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void:
 		"kind": "lacerante_blade",
 		"empowered": empowered
 	})
+	_send_network_ability_visual(NET_ABILITY_ATTACK, player_pos, points[points.size() - 1], 0.30, float(slash_stage))
 	_spawn_radial_particles(player_pos + attack_dir * 95.0, Color(1.0, 0.08, 0.14), 16 if empowered else 9)
 	var executed_pos = Vector2.ZERO
 	for enemy in enemies:
@@ -3895,6 +4033,8 @@ func _use_skill(target_world = null) -> void:
 		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
 		return
 	last_skill_time = time_alive
+	var visual_origin: Vector2 = player_pos
+	var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _aim_direction() * 220.0
 	_play_manifestation_skill_sfx(manifestation_key)
 	match manifestation_key:
 		"lacerante":
@@ -3949,6 +4089,7 @@ func _use_skill(target_world = null) -> void:
 			_execute_contracts()
 		_:
 			shockwaves.append({"pos": player_pos, "radius": 0.0, "max": 250.0, "life": 0.45, "damage": player_damage * 1.05, "hit": {}})
+	_send_network_ability_visual(NET_ABILITY_SKILL, visual_origin, visual_target, _network_skill_visual_duration())
 	_spawn_radial_particles(player_pos, _manifestation_color(), 22)
 	effects.append({"pos": player_pos, "text": "", "life": 0.25, "max": 0.25, "color": Color.WHITE, "size": 1, "skill_lock": true})
 
@@ -4080,14 +4221,39 @@ func _secondary_skill_cooldown() -> float:
 	return SECONDARY_SKILL_COOLDOWN
 
 
+func _network_skill_visual_duration() -> float:
+	match manifestation_key:
+		"lacerante": return LACERANTE_Q_DURATION
+		"parasitica": return 3.2
+		"prismatica": return 6.2
+		"gravitante", "ancorada": return 0.8
+		"cartografica", "mnesica", "ressonante", "contratual": return 1.2
+	return 0.75
+
+
+func _network_secondary_visual_duration() -> float:
+	match manifestation_key:
+		"lacerante": return SECONDARY_LACERANTE_DURATION
+		"prismatica": return SECONDARY_PRISMATICA_DURATION
+		"retornante": return SECONDARY_RETORNANTE_DURATION
+		"parasitica": return PARASITE_ULTIMATE_MAX_DURATION
+		"gravitante": return SECONDARY_GRAVITANTE_DURATION
+		"ancorada": return SECONDARY_ANCORADA_DURATION
+		"eletrica": return 8.0
+		"cartografica", "mnesica", "ressonante", "contratual": return 5.2
+	return 1.0
+
+
 func _use_secondary_skill(target_world = null) -> void:
 	var active_eletrica = _active_eletrica_secondary()
 	if manifestation_key == "eletrica" and not active_eletrica.is_empty():
 		_finish_toggle_secondary(active_eletrica, "ANEL CANCELADO", Color(0.52, 0.88, 1.0))
+		_send_network_ability_visual(NET_ABILITY_SECONDARY_END, player_pos, player_pos, 0.08)
 		return
 	var active_prismatica = _active_prismatica_secondary()
 	if manifestation_key == "prismatica" and not active_prismatica.is_empty():
 		_finish_toggle_secondary(active_prismatica, "COROA CANCELADA", Color(0.64, 1.0, 0.96), false)
+		_send_network_ability_visual(NET_ABILITY_SECONDARY_END, player_pos, player_pos, 0.08)
 		return
 	if _secondary_player_locked():
 		return
@@ -4096,6 +4262,9 @@ func _use_secondary_skill(target_world = null) -> void:
 		var remaining = cooldown - (time_alive - last_secondary_time)
 		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -110), Color(1.0, 0.84, 0.40), 0.55, 18)
 		return
+	var visual_origin: Vector2 = player_pos
+	var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
+	var ability_activated := true
 	_play_manifestation_ultimate_sfx(manifestation_key)
 	match manifestation_key:
 		"lacerante":
@@ -4114,6 +4283,7 @@ func _use_secondary_skill(target_world = null) -> void:
 				last_secondary_time = time_alive
 				_spawn_secondary_parasitica()
 			else:
+				ability_activated = false
 				_add_text("NENHUM ALVO COM LARVAS", player_pos + Vector2(0, -110), Color(0.72, 1.0, 0.42), 1.0, 19)
 		"gravitante":
 			last_secondary_time = time_alive
@@ -4148,7 +4318,12 @@ func _use_secondary_skill(target_world = null) -> void:
 				boss_contract_infractions = min(CONTRACT_MAX_INFRACTIONS, boss_contract_infractions + 1)
 			_add_text("AUDIENCIA FINAL", player_pos + Vector2(0, -112), Color(1.0, 0.58, 0.24), 1.2, 24)
 		_:
+			ability_activated = false
 			_add_text("2A HABILIDADE EM PREPARO", player_pos + Vector2(0, -110), Color(1.0, 0.82, 0.32), 0.9, 18)
+	if ability_activated:
+		if manifestation_key == "lacerante":
+			visual_target = player_pos
+		_send_network_ability_visual(NET_ABILITY_SECONDARY, visual_origin, visual_target, _network_secondary_visual_duration())
 
 
 func _finish_toggle_secondary(secondary: Dictionary, message: String, color: Color, start_cooldown := true) -> void:
@@ -4541,6 +4716,7 @@ func _execute_teleport(target_world: Vector2) -> void:
 	_spawn_radial_particles(origin, dash_color, 12)
 	_spawn_radial_particles(player_pos, dash_color, 18)
 	_start_manifestation_teleport_effect(origin, player_pos)
+	_send_network_ability_visual(NET_ABILITY_TELEPORT, origin, player_pos, 0.55)
 
 
 func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2) -> void:
@@ -4618,6 +4794,7 @@ func _return_retornante_teleport() -> void:
 	for effect in tp_effects:
 		if String(effect.get("kind", "")) == "retornante":
 			effect["life"] = 0.0
+	_send_network_ability_visual(NET_ABILITY_TELEPORT, current, player_pos, 0.55)
 	_add_text("RETORNO TEMPORAL", player_pos + Vector2(0, -84), Color(0.78, 0.64, 1.0), 0.8, 20)
 
 
@@ -5170,7 +5347,7 @@ func _update_tp_electric(effect: Dictionary, delta: float) -> void:
 
 
 func _spawn_wave() -> void:
-	if is_multiplayer and not is_host:
+	if not _is_world_authority():
 		return
 	spawn_timer = _enemy_spawn_interval()
 	if boss_active or _arauto_active():
@@ -5537,10 +5714,14 @@ func _resolve_arauto_gaze(phase2: bool) -> void:
 	arauto_rays.append({"a": origin, "b": finish, "life": 0.42, "max": 0.42, "blocked": false})
 
 
-func _damage_arauto(amount: float, source: String, show_text := true) -> void:
+func _damage_arauto(amount: float, source: String, show_text := true, apply_aura_multiplier := true) -> void:
 	if not _arauto_active():
 		return
-	if not source.begins_with("aura_"):
+	if is_multiplayer and not _is_world_authority():
+		amount = _outgoing_damage_amount(amount, source)
+		_send_client_damage_request(NET_DAMAGE_ARAUTO, "", amount, source, player_pos, show_text)
+		return
+	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	var echoes: int = _count_arauto_echoes()
 	var reduction: float = min(ARAUTO_MAX_DAMAGE_REDUCTION, float(echoes) * ARAUTO_ECHO_DAMAGE_REDUCTION)
@@ -5606,7 +5787,7 @@ func _update_arauto_card_drops(delta: float) -> void:
 
 
 func _spawn_enemy(kind: String, pos: Vector2) -> void:
-	if is_multiplayer and not is_host:
+	if not _is_world_authority():
 		return
 	if kind == ENEMY_PYRO_PENGUIN and _has_enemy_type(ENEMY_PYRO_PENGUIN):
 		return
@@ -5813,7 +5994,7 @@ func _spawn_point_on_edge() -> Vector2:
 
 
 func _update_enemies(delta: float) -> void:
-	if is_multiplayer and not is_host:
+	if not _is_world_authority():
 		return
 	var dead = []
 	var lacerante_storm = not _active_lacerante_secondary().is_empty()
@@ -5863,7 +6044,7 @@ func _update_enemies(delta: float) -> void:
 					_add_text("CONGELADO!", player_pos + Vector2(0, -40), Color(0.0, 0.88, 1.0), 1.5, 20)
 					_spawn_radial_particles(enemy["pos"], Color(0.6, 0.9, 1.0), 16)
 			else:
-				rpc("_rpc_client_take_damage", player_hp_max * 0.15, ENEMY_KAMIKAZE)
+				_send_remote_player_damage(int(player_hp_max * 0.15), ENEMY_KAMIKAZE)
 			enemy["hp"] = -1.0
 			continue
 
@@ -5873,7 +6054,7 @@ func _update_enemies(delta: float) -> void:
 				_damage_player(_enemy_damage(enemy), enemy["type"])
 			elif is_multiplayer and enemy["pos"].distance_to(net_player_pos) < 46.0:
 				enemy["hit_cd"] = 0.55
-				rpc("_rpc_client_take_damage", _enemy_damage(enemy), enemy["type"])
+				_send_remote_player_damage(_enemy_damage(enemy), enemy["type"])
 
 	for enemy in dead:
 		_kill_enemy(enemy)
@@ -6097,7 +6278,7 @@ func _phase1_boss_freezes_enemies() -> bool:
 
 func _move_enemy(enemy: Dictionary, delta: float) -> void:
 	var lacerante_secondary = _active_lacerante_secondary()
-	
+
 	var target_pos = _get_nearest_player_pos(enemy["pos"])
 	if String(aura_state.get("name", "")) == "Insana":
 		var best_echo_distance: float = INF
@@ -6328,32 +6509,76 @@ func _update_kamikaze(enemy: Dictionary, delta: float) -> void:
 
 func _add_bullet(b: Dictionary) -> void:
 	if not b.has("uid"):
-		b["uid"] = str(randi())
+		net_projectile_sequence += 1
+		b["uid"] = "%d:%d" % [_mp_unique_id(), net_projectile_sequence]
 	bullets.append(b)
-	if is_multiplayer:
-		# Envia para os outros, filtrando dados irrelevantes de hits para poupar banda
-		var net_b = b.duplicate()
-		net_b["hits"] = {}
-		rpc("_spawn_remote_bullet", net_b)
+	_send_remote_projectile_spawn(b)
 
-@rpc("any_peer", "unreliable")
-func _spawn_remote_bullet(data: Dictionary) -> void:
-	if not is_multiplayer: return
-	var sender = _mp_sender_id()
-	if sender != _mp_unique_id():
-		remote_bullets.append(data)
 
-@rpc("any_peer", "unreliable")
-func _rpc_destroy_remote_bullet(uid: String) -> void:
-	if not is_multiplayer: return
-	var sender = _mp_sender_id()
-	if sender != _mp_unique_id():
-		for b in remote_bullets:
-			if b.get("uid", "") == uid:
-				b["life"] = 0.0
-				var bullet_pos = Vector2(b["pos"])
-				_spawn_radial_particles(bullet_pos, b.get("color", Color(1,1,1)), 5)
-				break
+func _send_remote_projectile_spawn(bullet: Dictionary) -> void:
+	if not is_multiplayer or not online_connected or dedicated_server_mode or multiplayer_peer == null:
+		return
+	rpc_id(1, "_spawn_remote_bullet", _mp_unique_id(), String(bullet.get("uid", "")), Vector2(bullet.get("pos", player_pos)), Vector2(bullet.get("dir", Vector2.RIGHT)), float(bullet.get("speed", BULLET_SPEED)), float(bullet.get("life", 1.0)), String(bullet.get("kind", "")), bool(bullet.get("pierce", false)), Color(bullet.get("color", Color.WHITE)), float(bullet.get("phase", 0.0)), net_ping_ms)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _spawn_remote_bullet(source_peer_id: int, uid: String, pos: Vector2, direction: Vector2, speed: float, life: float, kind: String, pierce: bool, color: Color, phase: float, sender_ping_ms: int) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender == 0:
+			return
+		for peer_id in _mp_peer_ids():
+			if peer_id != sender:
+				rpc_id(peer_id, "_spawn_remote_bullet", sender, uid, pos, direction, speed, life, kind, pierce, color, phase, sender_ping_ms)
+		return
+	if source_peer_id == _mp_unique_id():
+		return
+	for existing in remote_bullets:
+		if int(existing.get("source", 0)) == source_peer_id and String(existing.get("uid", "")) == uid:
+			return
+	var estimated_latency := clampf(float(maxi(0, sender_ping_ms) + maxi(0, net_ping_ms)) * 0.0005, 0.0, 0.12)
+	var compensated_life := maxf(0.05, life - estimated_latency)
+	remote_bullets.append({
+		"source": source_peer_id,
+		"uid": uid,
+		"pos": pos + direction * speed * minf(estimated_latency, life),
+		"dir": direction,
+		"speed": speed,
+		"life": compensated_life,
+		"max_life": life,
+		"age": estimated_latency,
+		"phase": phase,
+		"trail_cd": 0.0,
+		"kind": kind,
+		"pierce": pierce,
+		"hits": {},
+		"color": color
+	})
+
+
+func _send_remote_projectile_destroy(bullet: Dictionary) -> void:
+	if not is_multiplayer or not online_connected or dedicated_server_mode or multiplayer_peer == null:
+		return
+	rpc_id(1, "_rpc_destroy_remote_bullet", _mp_unique_id(), String(bullet.get("uid", "")), Vector2(bullet.get("pos", player_pos)), Color(bullet.get("color", Color.WHITE)))
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_destroy_remote_bullet(source_peer_id: int, uid: String, impact_pos: Vector2, color: Color) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender == 0:
+			return
+		for peer_id in _mp_peer_ids():
+			if peer_id != sender:
+				rpc_id(peer_id, "_rpc_destroy_remote_bullet", sender, uid, impact_pos, color)
+		return
+	if source_peer_id == _mp_unique_id():
+		return
+	for bullet in remote_bullets:
+		if int(bullet.get("source", 0)) == source_peer_id and String(bullet.get("uid", "")) == uid:
+			bullet["life"] = 0.0
+			break
+	_spawn_radial_particles(impact_pos, color, 6)
 
 
 func _update_larapio(enemy: Dictionary, delta: float) -> void:
@@ -6605,7 +6830,7 @@ func _update_larapio_coin_drops(delta: float) -> void:
 				score += value
 				score_total += value
 				run_points_earned += value
-				if is_multiplayer and is_host:
+				if is_multiplayer and _is_world_authority():
 					rpc("_rpc_add_score", value)
 				_add_text("+%d PONTOS" % value, player_pos + Vector2(0, -64), Color(1.0, 0.86, 0.24), 0.7, 17)
 				_play_sfx("Moeda.mp3", 0.05, 0.42, 1.15)
@@ -6787,8 +7012,6 @@ func _update_bullets(delta: float) -> void:
 				if _try_reflect_shield_enemy_bullet(enemy, bullet):
 					bullet["life"] = 0.0
 					break
-				if is_multiplayer and not is_host:
-					rpc_id(1, "_client_hit_enemy", uid, float(bullet["damage"]), String(bullet.get("kind", "")))
 				_apply_bullet_effect(bullet, enemy)
 
 				if bullet["kind"] == "prismatica" and not bool(bullet.get("refracted", false)):
@@ -6812,10 +7035,7 @@ func _update_bullets(delta: float) -> void:
 			if not bullet["hits"].has("arauto"):
 				bullet["hits"]["arauto"] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
-				if is_multiplayer and not is_host:
-					rpc_id(1, "_client_hit_arauto", float(bullet["damage"]), String(bullet.get("kind", "atk")))
-				else:
-					_damage_arauto(float(bullet["damage"]), String(bullet.get("kind", "atk")))
+				_damage_arauto(float(bullet["damage"]), String(bullet.get("kind", "atk")))
 				if bullet["kind"] == "gravitante":
 					orbitals.append({
 						"target_kind": "arauto",
@@ -6858,10 +7078,7 @@ func _update_bullets(delta: float) -> void:
 			if not bullet["hits"].has("boss"):
 				bullet["hits"]["boss"] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
-				if is_multiplayer and not is_host:
-					rpc_id(1, "_client_hit_boss", float(bullet["damage"]), String(bullet.get("kind", "")))
-				else:
-					_damage_boss(float(bullet["damage"]), bullet["kind"])
+				_damage_boss(float(bullet["damage"]), bullet["kind"])
 				if bullet["kind"] == "gravitante":
 					orbitals.append({
 						"target_kind": "boss",
@@ -6915,8 +7132,8 @@ func _update_bullets(delta: float) -> void:
 	for b in bullets:
 		if float(b["life"]) > 0.0:
 			alive_bullets.append(b)
-		elif is_multiplayer:
-			rpc("_rpc_destroy_remote_bullet", b.get("uid", ""))
+		else:
+			_send_remote_projectile_destroy(b)
 	bullets = alive_bullets
 
 func _update_remote_bullets(delta: float) -> void:
@@ -6926,28 +7143,46 @@ func _update_remote_bullets(delta: float) -> void:
 		b["pos"] += b["dir"] * float(b["speed"]) * delta
 		b["life"] = float(b["life"]) - delta
 		_update_projectile_travel_sfx(b, delta)
-		
-		if float(b["life"]) > 0.0 and not bool(b.get("pierce", false)):
-			var bullet_pos = Vector2(b["pos"])
-			var hit_something = false
-			
+
+		if float(b["life"]) > 0.0:
+			var bullet_pos := Vector2(b["pos"])
 			for enemy in enemies:
-				if float(enemy.get("hp", 0.0)) <= 0.0: continue
-				if bullet_pos.distance_to(enemy["pos"]) < _enemy_radius(enemy):
-					hit_something = true
+				if float(enemy.get("hp", 0.0)) <= 0.0:
+					continue
+				if bullet_pos.distance_to(Vector2(enemy["pos"])) < _enemy_radius(enemy):
+					_apply_remote_projectile_visual_impact(b, "enemy:%s" % str(enemy.get("uid", "")), Vector2(enemy["pos"]))
 					break
-			
-			if not hit_something and _arauto_active() and bullet_pos.distance_to(Vector2(arauto["pos"])) < 58.0:
-				hit_something = true
-				
-			if not hit_something and boss_active and boss_hp > 0.0 and bullet_pos.distance_to(boss_pos) < _boss_hit_radius():
-				hit_something = true
-				
-			if hit_something:
-				b["life"] = 0.0
-				_spawn_radial_particles(bullet_pos, b.get("color", Color(1,1,1)), 5)
-				
+			if float(b["life"]) > 0.0 and _arauto_active() and bullet_pos.distance_to(Vector2(arauto["pos"])) < 58.0:
+				_apply_remote_projectile_visual_impact(b, "arauto", Vector2(arauto["pos"]))
+			if float(b["life"]) > 0.0 and boss_active and boss_hp > 0.0 and bullet_pos.distance_to(boss_pos) < _boss_hit_radius():
+				_apply_remote_projectile_visual_impact(b, "boss", boss_pos)
+
 	remote_bullets = remote_bullets.filter(func(b): return float(b["life"]) > 0.0)
+
+
+func _apply_remote_projectile_visual_impact(bullet: Dictionary, target_key: String, target_pos: Vector2) -> void:
+	var hits: Dictionary = bullet.get("hits", {})
+	if hits.has(target_key):
+		return
+	hits[target_key] = true
+	bullet["hits"] = hits
+	var bullet_pos := Vector2(bullet.get("pos", target_pos))
+	var color: Color = bullet.get("color", Color.WHITE)
+	_spawn_radial_particles(bullet_pos, color, 6)
+	var kind := String(bullet.get("kind", ""))
+	if kind == "prismatica" and not bool(bullet.get("refracted", false)):
+		var impact_count := int(bullet.get("enemy_hits_count", 0)) + 1
+		bullet["enemy_hits_count"] = impact_count
+		if impact_count < 2:
+			var normal := (bullet_pos - target_pos).normalized()
+			if normal.length() <= 0.01:
+				normal = -Vector2(bullet.get("dir", Vector2.RIGHT))
+			bullet["dir"] = Vector2(bullet.get("dir", Vector2.RIGHT)).bounce(normal)
+			bullet["life"] = float(bullet.get("max_life", bullet.get("life", 0.5)))
+		else:
+			bullet["life"] = 0.0
+	elif not bool(bullet.get("pierce", false)):
+		bullet["life"] = 0.0
 
 
 
@@ -7254,9 +7489,16 @@ func _update_return_bullets(delta: float) -> void:
 	)
 
 
-func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text := true) -> bool:
-	if not source.begins_with("aura_"):
+func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text := true, apply_aura_multiplier := true, attack_origin := Vector2.ZERO) -> bool:
+	if is_multiplayer and not _is_world_authority():
+		amount = _outgoing_damage_amount(amount, source)
+		_send_client_damage_request(NET_DAMAGE_ENEMY, str(enemy.get("uid", "")), amount, source, player_pos, show_text)
+		if show_text:
+			_add_text("-%d" % int(amount), Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), _damage_color(source), 0.35, _damage_text_size(16))
+		return false
+	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
+	var damage_origin: Vector2 = attack_origin if attack_origin != Vector2.ZERO else player_pos
 	if source == "aura_insana":
 		enemy["killed_by_echo"] = true
 	_play_enemy_hit_sfx(enemy, source)
@@ -7271,7 +7513,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 		elif enemy["type"] == ENEMY_CRYSTAL:
 			amount *= 0.66
 		elif enemy["type"] == ENEMY_GUARDIAO:
-			var incoming = (player_pos - Vector2(enemy["pos"])).normalized()
+			var incoming = (damage_origin - Vector2(enemy["pos"])).normalized()
 			var facing = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
 			var alignment = facing.dot(incoming)
 			if alignment > 0.55:
@@ -7279,7 +7521,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 			elif alignment < -0.45:
 				amount *= 1.12
 		elif enemy["type"] == ENEMY_SHIELD_REFLECTOR:
-			var alignment := _shield_front_alignment(enemy, player_pos - Vector2(enemy["pos"]))
+			var alignment := _shield_front_alignment(enemy, damage_origin - Vector2(enemy["pos"]))
 			if alignment > SHIELD_REFLECTOR_FRONT_DOT:
 				amount *= SHIELD_REFLECTOR_DAMAGE_REDUCTION
 				enemy["shield_flash"] = 0.24
@@ -7355,10 +7597,14 @@ func _enemy_hit_audio_profile(enemy: Dictionary, source: String) -> Dictionary:
 	}
 
 
-func _damage_boss(amount: float, source: String) -> void:
+func _damage_boss(amount: float, source: String, apply_aura_multiplier := true) -> void:
+	if is_multiplayer and not _is_world_authority():
+		amount = _outgoing_damage_amount(amount, source)
+		_send_client_damage_request(NET_DAMAGE_BOSS, "", amount, source, player_pos, true)
+		return
 	if current_phase == 1 and (not boss1_time_wave.is_empty() or not boss1_rewind_sequence.is_empty()):
 		return
-	if not source.begins_with("aura_"):
+	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	if source != "gravitante_orbital":
 		_play_sfx("Hit_Boss1.mp3", 0.06, 0.30)
@@ -7446,7 +7692,7 @@ func _damage_boss(amount: float, source: String) -> void:
 		var reward := int(round(float(common_reward_reference) * 2.5))
 		score += reward
 		score_total += reward
-		if is_multiplayer and is_host:
+		if is_multiplayer and _is_world_authority():
 			rpc("_rpc_add_score", reward)
 		run_points_earned += reward
 		_grant_boss_reward_cards(5)
@@ -7517,7 +7763,7 @@ func _kill_enemy(enemy: Dictionary) -> void:
 			_add_text("MERCENARIA +%d" % mercenary_bonus_points, kill_pos + Vector2(0, -96), Color(1.0, 0.62, 0.16), 0.9, 19)
 	score += gain
 	score_total += gain
-	if is_multiplayer and is_host:
+	if is_multiplayer and _is_world_authority():
 		rpc("_rpc_add_score", gain)
 	run_points_earned += gain
 	_add_text("+%d" % gain, kill_pos + Vector2(0, -64), Color(1.0, 0.85, 0.18), 0.8, 18)
@@ -7595,7 +7841,7 @@ func _card_drop_chance() -> float:
 
 
 func _update_enemy_bullets(delta: float) -> void:
-	if is_multiplayer and not is_host:
+	if not _is_world_authority():
 		return
 	for bullet in enemy_bullets:
 		var slow_mult = _secondary_ancorada_projectile_slow_at(Vector2(bullet["pos"]))
@@ -7617,7 +7863,8 @@ func _update_enemy_bullets(delta: float) -> void:
 			if float(bullet["trail_cd"]) <= 0.0:
 				bullet["trail_cd"] = 0.08
 				_spawn_boss2_slow_zone(Vector2(bullet["pos"]), rng.randf_range(14.0, 20.0), 1.25)
-		if bullet["pos"].distance_to(player_pos) < float(bullet.get("hit_radius", bullet.get("radius", 34.0))):
+		var bullet_hit_radius := float(bullet.get("hit_radius", bullet.get("radius", 34.0)))
+		if bullet["pos"].distance_to(player_pos) < bullet_hit_radius:
 			bullet_type = String(bullet.get("type", "projetador"))
 			var hit_was_blocked := _player_invulnerable()
 			_damage_player(int(bullet["damage"]), bullet_type)
@@ -7637,6 +7884,15 @@ func _update_enemy_bullets(delta: float) -> void:
 				_teleport_player_from_phase4_magic()
 			elif bullet_type == "larapio_coin" or bullet_type == "larapio_stone":
 				_apply_larapio_projectile_hit(bullet)
+			bullet["life"] = 0.0
+		elif is_multiplayer and net_player_peer_id != 0 and bullet["pos"].distance_to(net_player_pos) < bullet_hit_radius:
+			bullet_type = String(bullet.get("type", "projetador"))
+			_send_remote_player_damage(int(bullet["damage"]), bullet_type)
+			if bullet_type == "pyro_wall_seed":
+				_add_phase2_fire_wall_tile(Vector2(bullet["pos"]))
+			elif bullet_type == "rat_spit":
+				_add_phase3_miasma(Vector2(bullet["pos"]), 48.0, 1.9, 0.018)
+				bullet["exploded"] = true
 			bullet["life"] = 0.0
 		if float(bullet["life"]) <= 0.0 and String(bullet.get("type", "")) == "rat_spit" and not bool(bullet.get("exploded", false)):
 			_add_phase3_miasma(Vector2(bullet["pos"]), 48.0, 1.9, 0.018)
@@ -9649,7 +9905,7 @@ func _spawn_boss4_planet() -> void:
 
 
 func _update_boss(delta: float) -> void:
-	if is_multiplayer and not is_host:
+	if not _is_world_authority():
 		return
 	if boss_tp_stun_timer > 0.0:
 		boss_phase += delta * 2.0
@@ -11823,9 +12079,9 @@ func _try_open_manual_shop() -> void:
 func _start_forced_shop_countdown() -> void:
 	if not shop_auto_enabled:
 		return
-	if is_multiplayer and not is_host:
+	if is_multiplayer and not _is_world_authority():
 		return
-	if is_multiplayer and is_host:
+	if is_multiplayer and _is_world_authority():
 		rpc("_rpc_trigger_shop", true)
 	forced_shop_triggered = true
 	forced_shop_timer = FORCED_SHOP_WARNING
@@ -12248,10 +12504,10 @@ func _draw() -> void:
 			_draw_data_settings(viewport)
 		"multiplayer_menu":
 			_draw_multiplayer_menu(viewport)
-		"lobby_host":
-			_draw_lobby_host(viewport)
-		"lobby_client":
-			_draw_lobby_client(viewport)
+		"lobby_online_host":
+			_draw_lobby_online_host(viewport)
+		"lobby_online_client":
+			_draw_lobby_online_client(viewport)
 		"edit_layout":
 			_draw_edit_layout(viewport)
 		"catalog":
@@ -12398,7 +12654,7 @@ func _draw_menu(viewport: Vector2) -> void:
 		_draw_entity_fit(geo_tex, avatar_rect.get_center() + Vector2(0, avatar_rect.size.y * 0.08), Vector2(avatar_rect.size.x * 0.58, avatar_rect.size.y * 0.82), Color.WHITE, true)
 
 	_draw_hub_button(menu_buttons["start"], "SOLO RUN", "selecao de manifestacao", accent, menu_selected == 0, true)
-	_draw_hub_button(menu_buttons["multiplayer"], "LAN CO-OP", "jogar com um amigo na mesma rede", Color(1.0, 0.44, 0.88), menu_selected == 1, false)
+	_draw_hub_button(menu_buttons["multiplayer"], "ONLINE CO-OP", "host/client via tunel online", Color(1.0, 0.44, 0.88), menu_selected == 1, false)
 	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "bestiario e cartas", Color(0.36, 0.84, 1.0), menu_selected == 2, false)
 	_draw_hub_button(menu_buttons["settings"], "CONFIG", "controles e jogo", Color(1.0, 0.74, 0.22), menu_selected == 3, false)
 	_draw_hub_button(menu_buttons["exit"], "SAIR", "", Color(1.0, 0.26, 0.36), menu_selected == 4, false)
@@ -13294,32 +13550,33 @@ func _draw_manifest_mp(viewport: Vector2) -> void:
 	var margin = 20.0
 	# Draw dividing line
 	draw_line(Vector2(half_w, 0), Vector2(half_w, viewport.y), Color(0.0, 1.0, 0.82, 0.5), 2.0)
-	
-	_draw_manifest_mp_half(Rect2(margin, margin, half_w - margin * 2, viewport.y - margin * 2), manifest_select_stage, selected_manifestation, selected_aura, manifest_scroll_pos, false, mp_local_ready)
+
+	var local_scroll: float = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
+	_draw_manifest_mp_half(Rect2(margin, margin, half_w - margin * 2, viewport.y - margin * 2), manifest_select_stage, selected_manifestation, selected_aura, local_scroll, false, mp_local_ready)
 	_draw_manifest_mp_half(Rect2(half_w + margin, margin, half_w - margin * 2, viewport.y - margin * 2), mp_remote_manifest_stage, mp_remote_manifestation, mp_remote_aura, mp_remote_scroll, true, mp_remote_ready)
 
 func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, selected_aur: int, scroll: float, is_remote: bool, is_ready: bool) -> void:
 	var aura_view = stage == MANIFEST_STAGE_AURA
 	var active_items: Array = AURAS if aura_view else MANIFESTATIONS
 	var active_selected = selected_aur if aura_view else selected_manif
-	
+
 	var item: Dictionary = active_items[active_selected]
 	var color: Color = _manifest_select_item_color(item, aura_view)
 
 	var center_x = rect.position.x + rect.size.x * 0.5
 	var center_y = rect.position.y + rect.size.y * 0.35
-	var card_w = 110.0 
+	var card_w = 110.0
 	var card_h = 130.0
 	var spacing = 120.0
-	
+
 	var title = "ESPECTRO" if aura_view else "MANIFESTACOES"
 	var subtitle = "AGUARDANDO PARCEIRO..." if is_remote else ("SUA ESCOLHA: " + title)
 	if is_ready: subtitle = "PRONTO!"
-	
+
 	var is_host_player = multiplayer.is_server() if multiplayer != null else is_host
 	var side_is_host = is_host_player if not is_remote else not is_host_player
 	var identity_str = "VOCE (" + ("HOST" if is_host_player else "CLIENT") + ")" if not is_remote else "PARCEIRO (" + ("HOST" if side_is_host else "CLIENT") + ")"
-	
+
 	_draw_spectrum_title(title, Vector2(center_x, rect.position.y + 36), 24, color, 1.0)
 	_draw_centered(identity_str, Vector2(center_x, rect.position.y + 64), _readable_text_size(14), Color(1, 0.84, 0.0) if side_is_host else Color(0.3, 0.8, 1.0))
 	_draw_centered(subtitle, Vector2(center_x, rect.position.y + 84), _readable_text_size(11), color if is_ready else Color(0.72, 0.94, 1.0, 0.90))
@@ -13329,35 +13586,35 @@ func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, sel
 		var diff = float(i) - scroll
 		if diff > half_size: diff -= active_items.size()
 		elif diff < -half_size: diff += active_items.size()
-		
+
 		var abs_diff = abs(diff)
 		if abs_diff > 2.0: continue
-		
+
 		var scale = lerp(1.1, 0.7, min(abs_diff, 1.0))
 		var opacity = lerp(1.0, 0.3, min(abs_diff, 1.0))
-		
+
 		var pos_x = center_x + diff * spacing
 		var item_rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
-		
+
 		var card_item = active_items[i]
 		if not aura_view and not _manifestation_unlocked(i): continue
-		
+
 		var item_color = _manifest_select_item_color(card_item, aura_view)
 		_draw_holo_panel(item_rect, item_color, abs_diff < 0.5, opacity * 0.7)
-		
+
 		var icon: Texture2D = _manifest_select_item_texture(card_item, aura_view)
 		if icon:
 			_draw_texture_contain(icon, item_rect.grow(-15 * scale), Color(1, 1, 1, opacity))
-			
+
 	var details_rect = Rect2(rect.position.x, rect.position.y + rect.size.y * 0.65, rect.size.x, rect.size.y * 0.35)
 	_draw_holo_panel(details_rect, color, true, 0.42)
-	
+
 	var details = _aura_details(String(item["name"])) if aura_view else _manifestation_details(item["key"])
 	_draw_manifest_info_panel(details_rect, item, details, aura_view, color)
-	
+
 	if is_ready:
 		_draw_holo_panel(rect, Color(0, 1, 0), true, 0.1)
-		
+
 	if not is_remote:
 		var btn_ready_rect = Rect2(rect.position.x + rect.size.x * 0.25, rect.position.y + rect.size.y * 0.53, rect.size.x * 0.5, 46.0)
 		buttons["mp_manifest_ready"] = btn_ready_rect
@@ -13944,6 +14201,7 @@ func _draw_game(viewport: Vector2) -> void:
 		else:
 			draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(0.2, 1.0, 1.0, 0.6), 4)
 	_draw_manifestation_secondaries(camera)
+	_draw_network_ability_visuals(camera)
 	_draw_parasite_spit_zones(camera)
 	_draw_boss2_environment(camera)
 	_draw_phase3_environment(camera)
@@ -14818,6 +15076,85 @@ func _draw_manifestation_secondaries(camera: Vector2) -> void:
 				_draw_secondary_ancorada(secondary, camera)
 			"cartografica", "mnesica", "ressonante", "contratual":
 				_draw_secondary_advanced(secondary, camera)
+
+
+func _draw_network_ability_visuals(camera: Vector2) -> void:
+	for visual in net_ability_visuals:
+		var action := int(visual.get("action", NET_ABILITY_SKILL))
+		var manifestation := clampi(int(visual.get("manifestation", 0)), 0, MANIFESTATIONS.size() - 1)
+		var kind := String(MANIFESTATIONS[manifestation].get("key", "eletrica"))
+		var color: Color = MANIFESTATIONS[manifestation].get("color", Color.WHITE)
+		var origin := Vector2(visual.get("origin", net_player_render_pos)) - camera
+		var target := Vector2(visual.get("target", net_player_render_pos)) - camera
+		var maximum := maxf(0.01, float(visual.get("max", 1.0)))
+		var life := maxf(0.0, float(visual.get("life", 0.0)))
+		var progress := clampf(1.0 - life / maximum, 0.0, 1.0)
+		var fade := clampf(minf(progress * 5.0, life * 4.0), 0.0, 1.0)
+		match action:
+			NET_ABILITY_ATTACK:
+				var direction := (target - origin).normalized()
+				if direction.length() <= 0.01:
+					direction = Vector2.RIGHT
+				var reach := minf(origin.distance_to(target), 260.0)
+				var tip := origin + direction * reach * minf(1.0, progress * 3.0)
+				if kind == "lacerante":
+					var side := direction.orthogonal() * (24.0 + float(visual.get("extra", 0.0)) * 8.0)
+					var path := PackedVector2Array([origin - side, origin.lerp(tip, 0.55) + side, tip])
+					draw_polyline(path, Color(color.r, color.g, color.b, 0.30 * fade), 18.0, true)
+					draw_polyline(path, Color(1.0, 0.88, 0.88, 0.92 * fade), 3.0, true)
+				else:
+					var orb := origin.lerp(target, minf(1.0, progress * 2.0))
+					draw_circle(orb, 12.0, Color(color.r, color.g, color.b, 0.26 * fade))
+					draw_circle(orb, 5.0, Color(1.0, 1.0, 1.0, 0.92 * fade))
+			NET_ABILITY_SKILL:
+				match kind:
+					"lacerante":
+						var radius := 128.0
+						var head := progress * TAU * 3.0
+						draw_circle(origin, radius + 20.0, Color(0.24, 0.0, 0.03, 0.06 * fade))
+						draw_arc(origin, radius, head - 1.7, head, 34, Color(color.r, color.g, color.b, 0.94 * fade), 12.0)
+						draw_arc(origin, radius, 0.0, TAU, 64, Color(1.0, 0.20, 0.24, 0.22 * fade), 2.0)
+					"parasitica":
+						var spit := origin.lerp(target, minf(1.0, progress * 2.2))
+						draw_line(origin, spit, Color(color.r, color.g, color.b, 0.32 * fade), 8.0, true)
+						draw_circle(spit, 18.0, Color(color.r, color.g, color.b, 0.40 * fade))
+						draw_arc(target, PARASITE_SPIT_RADIUS, 0.0, TAU, 54, Color(color.r, color.g, color.b, 0.58 * fade), 3.0)
+					"prismatica":
+						var radius := 44.0 + sin(time_alive * 6.0) * 5.0
+						var diamond := PackedVector2Array([target + Vector2(0, -radius), target + Vector2(radius, 0), target + Vector2(0, radius), target + Vector2(-radius, 0), target + Vector2(0, -radius)])
+						draw_colored_polygon(PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3]]), Color(color.r, color.g, color.b, 0.12 * fade))
+						draw_polyline(diamond, Color(0.82, 1.0, 1.0, 0.84 * fade), 3.0, true)
+					_:
+						var skill_center := origin if kind in ["eletrica", "ancorada", "retornante", "cartografica", "mnesica", "ressonante", "contratual"] else target
+						var radius := lerpf(24.0, 170.0, minf(1.0, progress * 2.0))
+						draw_circle(skill_center, radius, Color(color.r, color.g, color.b, 0.055 * fade))
+						draw_arc(skill_center, radius, -time_alive * 1.8, TAU - time_alive * 1.8, 64, Color(color.r, color.g, color.b, 0.72 * fade), 4.0)
+			NET_ABILITY_SECONDARY:
+				var center := target if origin.distance_to(target) > 12.0 else origin
+				if int(visual.get("source", 0)) == net_player_peer_id and kind in ["eletrica", "prismatica", "retornante", "cartografica", "mnesica", "ressonante", "contratual"]:
+					center = net_player_render_pos - camera
+				var radius := 150.0 + sin(time_alive * 5.0) * 12.0
+				if kind == "gravitante" or kind == "ancorada":
+					radius = 250.0
+				elif kind == "eletrica":
+					radius = 205.0
+				draw_circle(center, radius, Color(color.r, color.g, color.b, 0.045 * fade))
+				draw_arc(center, radius, time_alive * 0.8, time_alive * 0.8 + TAU * 0.86, 84, Color(color.r, color.g, color.b, 0.68 * fade), 4.0)
+				draw_arc(center, radius * 0.62, -time_alive * 1.3, -time_alive * 1.3 + TAU * 0.72, 64, Color(1.0, 1.0, 1.0, 0.32 * fade), 2.0)
+				for ray in range(6):
+					var angle: float = time_alive * (0.65 if ray % 2 == 0 else -0.48) + float(ray) * TAU / 6.0
+					var a := center + Vector2.from_angle(angle) * radius * 0.28
+					var b := center + Vector2.from_angle(angle + sin(time_alive * 3.0 + ray) * 0.16) * radius
+					draw_line(a, b, Color(color.r, color.g, color.b, 0.30 * fade), 2.0, true)
+			NET_ABILITY_TELEPORT:
+				var direction := (target - origin).normalized()
+				var side := direction.orthogonal() if direction.length() > 0.01 else Vector2.UP
+				var middle := origin.lerp(target, 0.5) + side * sin(progress * PI) * 18.0
+				var path := PackedVector2Array([origin, middle, target])
+				draw_polyline(path, Color(color.r, color.g, color.b, 0.24 * fade), 28.0, true)
+				draw_polyline(path, Color(color.r, color.g, color.b, 0.88 * fade), 6.0, true)
+				draw_circle(origin, 28.0 * (1.0 - progress), Color(color.r, color.g, color.b, 0.36 * fade))
+				draw_circle(target, 18.0 + progress * 20.0, Color(color.r, color.g, color.b, 0.30 * fade))
 
 
 func _draw_secondary_advanced(secondary: Dictionary, camera: Vector2) -> void:
@@ -17349,6 +17686,13 @@ func _draw_hud(viewport: Vector2) -> void:
 		var c = event_alert_color
 		c.a = min(1.0, event_alert_timer)
 		_draw_centered(event_alert_text, Vector2(viewport.x * 0.5, 92 * sm), int(24 * sm), c)
+	if is_multiplayer and online_connected:
+		var ping_text := "PING %sms" % (str(net_ping_ms) if net_ping_ms >= 0 else "--")
+		if net_remote_ping_ms >= 0:
+			ping_text += "  PAR %dms" % net_remote_ping_ms
+		if _is_world_replica():
+			ping_text += "  JIT %.0fms" % net_world_jitter_ms
+		draw_string(font, Vector2(viewport.x * 0.5 - 118.0 * sm, 28.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
 	_draw_card_mechanic_huds(viewport, left_rect)
 	_draw_aura_hud(viewport, left_rect)
 	_draw_lacerante_coagulum_hud(viewport)
@@ -17552,23 +17896,23 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void:
 	var icons = []
 	var icon_size = 56.0
 	var spacing = 16.0
-	
+
 	var active_eletrica_secondary = _active_eletrica_secondary()
 	var toggle_ultimate_active = (manifestation_key == "prismatica" and time_alive - last_secondary_time < SECONDARY_PRISMATICA_DURATION) or (manifestation_key == "eletrica" and active_eletrica_secondary)
 	var dash_label := "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_cooldown_pending else "DASH")
 	var dash_color = Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.20, 0.85, 1.0, 0.72)
-	
+
 	icons.append({ "label": "ATK", "color": Color(1.0, 0.24, 0.26, 0.70), "cd_elapsed": 100.0, "cd_max": 1.0 })
 	icons.append({ "label": "SKILL", "bind": _compact_binding_name("skill"), "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown() })
 	icons.append({ "label": "X" if toggle_ultimate_active else "E", "color": Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), "cd_elapsed": time_alive - last_secondary_time, "cd_max": SECONDARY_SKILL_COOLDOWN })
 	icons.append({ "label": dash_label, "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": player_dash_cooldown })
 	if manifestation_key == "lacerante":
 		icons.append({ "label": "R" if lacerante_empowered_ready else "+", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN })
-	
+
 	var total_w = icons.size() * icon_size + (icons.size() - 1) * spacing
 	var start_x = viewport.x * 0.5 - total_w * 0.5
 	var start_y = viewport.y - icon_size - 48.0
-	
+
 	for i in range(icons.size()):
 		var ic = icons[i]
 		var rect = Rect2(start_x + i * (icon_size + spacing), start_y, icon_size, icon_size)
@@ -17807,7 +18151,7 @@ func _draw_cooldown_overlay(center: Vector2, radius: float, elapsed: float, cool
 func _draw_shop_mp_request(viewport: Vector2) -> void:
 	_draw_game(viewport)
 	_draw_holo_background(viewport, null, Color(0.0, 0.0, 0.0, 0.6))
-	
+
 	if mode == "shop_mp_waiting":
 		_draw_glitch_title("AGUARDANDO CONFIRMACAO...", Vector2(viewport.x * 0.5, viewport.y * 0.5 - 20), 24, Color(0.0, 1.0, 0.82))
 		_draw_centered("%.0fs" % ceil(shop_mp_request_timer), Vector2(viewport.x * 0.5, viewport.y * 0.5 + 30), 20, Color.WHITE)
@@ -17907,7 +18251,7 @@ func _draw_shop(viewport: Vector2) -> void:
 		# Close Button
 		var btn_sair_rect = Rect2(viewport.x * 0.75 - btn_w * 0.5, btn_y, btn_w, btn_h)
 		var can_exit = not (is_multiplayer and not shop_cards.is_empty() and score >= card_cost)
-		
+
 		if not can_exit:
 			_draw_small_rect_button(btn_sair_rect, "GASTE SEUS PONTOS", Color(0.15, 0.03, 0.05, 0.9), Color(0.5, 0.25, 0.28, 1.0))
 		elif shop_mp_ready_to_leave:
@@ -18075,7 +18419,7 @@ func _draw_shop(viewport: Vector2) -> void:
 	# Close Button
 	var btn_sair_rect = Rect2(viewport.x * 0.62 - btn_w * 0.5, btn_y, btn_w, btn_h)
 	var can_exit = not (is_multiplayer and not shop_cards.is_empty() and score >= card_cost)
-	
+
 	if not can_exit:
 		draw_rect(btn_sair_rect, Color(0.15, 0.03, 0.05, 0.9), true)
 		draw_rect(btn_sair_rect, Color(0.5, 0.25, 0.28, 1.0), false, 2)
@@ -20129,7 +20473,7 @@ func _handle_key(event: InputEventKey) -> void:
 			mode = "game"
 			rpc("_rpc_accept_shop")
 			_start_shop_opening_animation(false)
-	elif mode == "lobby_host":
+	elif mode == "lobby_online_host":
 		if event.keycode == KEY_ESCAPE:
 			_leave_multiplayer()
 		elif event.keycode == KEY_UP or event.keycode == KEY_W:
@@ -20137,12 +20481,14 @@ func _handle_key(event: InputEventKey) -> void:
 		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
 			lobby_host_selected = (lobby_host_selected + 1) % 2
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			if lobby_host_selected == 0 and net_player_name != "Player 2" and net_player_ready:
-				rpc("_start_multiplayer_manifest")
-				_start_multiplayer_manifest()
+			if lobby_host_selected == 0:
+				var client_ready = online_lobby_ready_count >= 1
+				var can_start = online_lobby_connected_count >= 2 and client_ready
+				if can_start:
+					rpc_id(1, "_host_request_start_game")
 			elif lobby_host_selected == 1:
 				_leave_multiplayer()
-	elif mode == "lobby_client":
+	elif mode == "lobby_online_client":
 		if event.keycode == KEY_ESCAPE:
 			_leave_multiplayer()
 		elif event.keycode == KEY_UP or event.keycode == KEY_W:
@@ -20150,7 +20496,7 @@ func _handle_key(event: InputEventKey) -> void:
 		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
 			lobby_client_selected = (lobby_client_selected + 1) % 2
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			if lobby_client_selected == 0 and (online_connected or lan_host_ip != ""):
+			if lobby_client_selected == 0 and online_connected:
 				local_player_ready = not local_player_ready
 				rpc_id(1, "_toggle_ready", local_player_ready)
 			elif lobby_client_selected == 1:
@@ -20184,40 +20530,48 @@ func _handle_key(event: InputEventKey) -> void:
 	elif mode == "manifest" or mode == "manifest_mp":
 		if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
 			return
+		if mode == "manifest_mp" and mp_local_ready:
+			return
 		if event.keycode == KEY_ESCAPE:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				_reset_manifest_selection_stage()
+				if mode == "manifest_mp":
+					_sync_manifest_mp_selection()
 			else:
 				_go_to_menu()
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				_set_selected_aura(selected_aura + 1, true)
 				aura_scroll_pos = float(selected_aura)
+				if mode == "manifest_mp":
+					_sync_manifest_mp_selection()
 				return
 			_set_selected_manifestation(selected_manifestation + 1, true)
 			manifest_scroll_pos = float(selected_manifestation)
+			if mode == "manifest_mp":
+				_sync_manifest_mp_selection()
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				_set_selected_aura(selected_aura - 1, true)
 				aura_scroll_pos = float(selected_aura)
+				if mode == "manifest_mp":
+					_sync_manifest_mp_selection()
 				return
 			_set_selected_manifestation(selected_manifestation - 1, true)
 			manifest_scroll_pos = float(selected_manifestation)
+			if mode == "manifest_mp":
+				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				if mode == "manifest_mp":
-					if not mp_local_ready:
-						mp_local_ready = true
-						rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, manifest_scroll_pos, mp_local_ready)
-						if is_host and mp_local_ready and mp_remote_ready:
-							rpc("_start_multiplayer_game")
-							_start_multiplayer_game()
+					_confirm_manifest_mp_selection()
 				else:
 					_start_game()
 			else:
-				_start_spectrum_reveal()
 				if mode == "manifest_mp":
-					rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, manifest_scroll_pos, mp_local_ready)
+					_confirm_manifest_mp_selection()
+				else:
+					_start_spectrum_reveal()
 	elif mode == "shop":
 		if _shop_purchase_animating():
 			return
@@ -20280,7 +20634,7 @@ func _handle_key(event: InputEventKey) -> void:
 
 
 func _handle_press(pos: Vector2, viewport: Vector2) -> void:
-	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "paused", "pause_deck", "multiplayer_menu", "lobby_host", "lobby_client"]):
+	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "paused", "pause_deck", "multiplayer_menu", "lobby_online_host", "lobby_online_client"]):
 		return
 	if mode == "nick_setup":
 		if buttons.get("nick_confirm", Rect2()).has_point(pos):
@@ -20339,11 +20693,11 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void:
 	if mode == "multiplayer_menu":
 		_handle_multiplayer_menu_touch(pos, viewport)
 		return
-	if mode == "lobby_host":
-		_handle_lobby_host_touch(pos, viewport)
+	if mode == "lobby_online_host":
+		_handle_lobby_online_host_touch(pos, viewport)
 		return
-	if mode == "lobby_client":
-		_handle_lobby_client_touch(pos, viewport)
+	if mode == "lobby_online_client":
+		_handle_lobby_online_client_touch(pos, viewport)
 		return
 	if mode == "manifest":
 		_handle_manifest_touch(pos, viewport)
@@ -20623,9 +20977,30 @@ func _finish_manifest_drag(pos: Vector2, viewport: Vector2) -> void:
 	manifest_drag_touch_index = -999
 	manifest_is_dragging = false
 	manifest_drag_moved = false
-	
+
 	if mode == "manifest_mp":
-		rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, manifest_scroll_pos, mp_local_ready)
+		_sync_manifest_mp_selection()
+
+
+func _sync_manifest_mp_selection() -> void:
+	if mode != "manifest_mp":
+		return
+	var scroll: float = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
+	rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, scroll, mp_local_ready)
+
+
+func _confirm_manifest_mp_selection() -> void:
+	if manifest_select_stage == MANIFEST_STAGE_TRANSITION or mp_local_ready:
+		return
+	if manifest_select_stage == MANIFEST_STAGE_AURA:
+		mp_local_ready = true
+		_sync_manifest_mp_selection()
+		if is_host and mp_local_ready and mp_remote_ready:
+			rpc("_start_multiplayer_game")
+			_start_multiplayer_game()
+	else:
+		_start_spectrum_reveal()
+		_sync_manifest_mp_selection()
 
 
 func _handle_manifest_preview_overlay_touch(pos: Vector2) -> bool:
@@ -20712,17 +21087,9 @@ func _handle_manifest_mp_touch(pos: Vector2, viewport: Vector2) -> void:
 		return
 	if mp_local_ready:
 		return
-		
+
 	if buttons.has("mp_manifest_ready") and buttons["mp_manifest_ready"].has_point(pos):
-		if manifest_select_stage == MANIFEST_STAGE_AURA:
-			mp_local_ready = true
-			rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, manifest_scroll_pos, mp_local_ready)
-			if is_host and mp_local_ready and mp_remote_ready:
-				rpc("_start_multiplayer_game")
-				_start_multiplayer_game()
-		else:
-			_start_spectrum_reveal()
-			rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, manifest_scroll_pos, mp_local_ready)
+		_confirm_manifest_mp_selection()
 		return
 
 	var rect = Rect2(20.0, 20.0, viewport.x * 0.5 - 40.0, viewport.y - 40.0)
@@ -20731,17 +21098,17 @@ func _handle_manifest_mp_touch(pos: Vector2, viewport: Vector2) -> void:
 	var card_w = 110.0
 	var card_h = 130.0
 	var spacing = 120.0
-	
+
 	var aura_view = manifest_select_stage == MANIFEST_STAGE_AURA
 	var active_items = AURAS if aura_view else MANIFESTATIONS
 	var active_scroll = aura_scroll_pos if aura_view else manifest_scroll_pos
-	
+
 	var half_size = active_items.size() / 2.0
 	for i in range(active_items.size()):
 		var diff = float(i) - active_scroll
 		if diff > half_size: diff -= active_items.size()
 		elif diff < -half_size: diff += active_items.size()
-		
+
 		var abs_diff = abs(diff)
 		if abs_diff > 2.0: continue
 		var scale = lerp(1.1, 0.7, min(abs_diff, 1.0))
@@ -20755,6 +21122,7 @@ func _handle_manifest_mp_touch(pos: Vector2, viewport: Vector2) -> void:
 				if _manifestation_unlocked(i):
 					_set_selected_manifestation(i, true)
 					manifest_scroll_pos = float(selected_manifestation)
+			_sync_manifest_mp_selection()
 			return
 
 func _open_deck(from_mode: String) -> void:
@@ -21923,36 +22291,15 @@ func _host_multiplayer_game() -> void:
 func _join_multiplayer_game() -> void:
 	_join_online_room()
 
-func _host_lan_multiplayer_game() -> void:
-	is_multiplayer = true
-	is_host = true
-	mode = "lobby_host"
-	multiplayer_peer = ENetMultiplayerPeer.new()
-	var err = multiplayer_peer.create_server(4422)
-	if err == OK:
-		multiplayer.multiplayer_peer = multiplayer_peer
-		if not multiplayer.peer_connected.is_connected(_on_peer_connected):
-			multiplayer.peer_connected.connect(_on_peer_connected)
-		if not multiplayer.peer_disconnected.is_connected(_on_peer_disconnected):
-			multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-		_start_udp_broadcast()
-	else:
-		mode = "multiplayer_menu"
-
-func _join_lan_multiplayer_game() -> void:
-	is_multiplayer = true
-	is_host = false
-	mode = "lobby_client"
-	_start_udp_listener()
-
 func _create_online_room() -> void:
 	if online_relay_request == null:
 		return
+	multiplayer_notice = ""
 	_reset_online_room_state()
 	is_multiplayer = true
 	is_host = false
 	online_room_owner = true
-	mode = "lobby_client"
+	mode = "lobby_online_host"
 	online_relay_action = "create"
 	online_status = "CRIANDO SALA ONLINE..."
 	var payload := {"name": player_nickname}
@@ -21969,10 +22316,11 @@ func _create_online_room() -> void:
 func _join_online_room() -> void:
 	if online_relay_request == null:
 		return
+	multiplayer_notice = ""
 	_reset_online_room_state()
 	is_multiplayer = true
 	is_host = false
-	mode = "lobby_client"
+	mode = "lobby_online_client"
 	online_relay_action = "join"
 	online_status = "BUSCANDO SALA ONLINE..."
 	var err := online_relay_request.request(ONLINE_RELAY_BASE_URL + "/rooms/available")
@@ -21981,6 +22329,8 @@ func _join_online_room() -> void:
 		mode = "multiplayer_menu"
 
 func _reset_online_room_state() -> void:
+	if online_relay_request != null:
+		online_relay_request.cancel_request()
 	online_relay_action = ""
 	online_room_code = ""
 	online_room_port = 0
@@ -21989,6 +22339,26 @@ func _reset_online_room_state() -> void:
 	online_room_owner = false
 	online_lobby_connected_count = 0
 	online_lobby_ready_count = 0
+	_reset_network_interpolation_state()
+
+func _reset_network_interpolation_state() -> void:
+	net_player_peer_id = 0
+	net_player_pos = Vector2(-1000, -1000)
+	net_player_render_pos = net_player_pos
+	net_player_last_pos = net_player_pos
+	net_player_velocity = Vector2.ZERO
+	net_player_has_snapshot = false
+	net_player_snapshot_last_ms = 0
+	net_world_snapshot_last_ms = 0
+	net_world_jitter_ms = 0.0
+	net_ability_sequence = 0
+	net_projectile_sequence = 0
+	net_ability_seen.clear()
+	net_ability_visuals.clear()
+	net_boss_target_pos = boss_pos
+	net_boss_velocity = Vector2.ZERO
+	net_boss_snapshot_last_ms = 0
+	net_boss_has_snapshot = false
 
 func _on_online_relay_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	var response_text := body.get_string_from_utf8()
@@ -22008,10 +22378,9 @@ func _on_online_relay_request_completed(result: int, response_code: int, _header
 	_connect_to_online_host(host, online_room_port)
 
 func _connect_to_online_host(ip: String, port: int) -> void:
-	lan_host_ip = ip
 	online_connected = false
 	multiplayer_peer = ENetMultiplayerPeer.new()
-	var err = multiplayer_peer.create_client(ip, port)
+	var err = multiplayer_peer.create_client(ip, port, NET_CHANNEL_COUNT)
 	if err == OK:
 		multiplayer.multiplayer_peer = multiplayer_peer
 		if not multiplayer.connected_to_server.is_connected(_on_connected_to_server):
@@ -22027,8 +22396,10 @@ func _start_dedicated_room_server(port: int) -> void:
 	is_host = true
 	dedicated_server_mode = true
 	mode = "dedicated_server"
+	dedicated_started_ms = Time.get_ticks_msec()
+	dedicated_room_shutdown_pending = false
 	multiplayer_peer = ENetMultiplayerPeer.new()
-	var err := multiplayer_peer.create_server(port)
+	var err := multiplayer_peer.create_server(port, 2, NET_CHANNEL_COUNT)
 	if err != OK:
 		push_error("Failed to start dedicated room server on port %d" % port)
 		get_tree().quit(1)
@@ -22039,39 +22410,6 @@ func _start_dedicated_room_server(port: int) -> void:
 	if not multiplayer.peer_disconnected.is_connected(_on_peer_disconnected):
 		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 
-func _connect_to_lan_host(ip: String) -> void:
-	multiplayer_peer = ENetMultiplayerPeer.new()
-	var err = multiplayer_peer.create_client(ip, 4422)
-	if err == OK:
-		multiplayer.multiplayer_peer = multiplayer_peer
-		if not multiplayer.connected_to_server.is_connected(_on_connected_to_server):
-			multiplayer.connected_to_server.connect(_on_connected_to_server)
-		if not multiplayer.server_disconnected.is_connected(_on_server_disconnected):
-			multiplayer.server_disconnected.connect(_on_server_disconnected)
-	else:
-		mode = "multiplayer_menu"
-
-func _start_udp_broadcast() -> void:
-	udp_broadcaster = PacketPeerUDP.new()
-	udp_broadcaster.set_broadcast_enabled(true)
-	udp_broadcaster.set_dest_address("255.255.255.255", 4423)
-
-func _start_udp_listener() -> void:
-	udp_listener = PacketPeerUDP.new()
-	udp_listener.bind(4423)
-
-func _poll_udp() -> void:
-	if is_host and udp_broadcaster != null and mode == "lobby_host":
-		var packet = ("RUPTURA_HOST:" + player_nickname).to_utf8_buffer()
-		udp_broadcaster.put_packet(packet)
-	elif not is_host and udp_listener != null and mode == "lobby_client" and lan_host_ip == "":
-		if udp_listener.get_available_packet_count() > 0:
-			var packet_str = udp_listener.get_packet().get_string_from_utf8()
-			if packet_str.begins_with("RUPTURA_HOST:"):
-				lan_host_ip = udp_listener.get_packet_ip()
-				net_player_name = packet_str.split(":")[1]
-				_connect_to_lan_host(lan_host_ip)
-
 func _on_peer_connected(id: int) -> void:
 	print("Player connected: ", id)
 	if dedicated_server_mode:
@@ -22081,10 +22419,20 @@ func _on_peer_connected(id: int) -> void:
 func _on_peer_disconnected(id: int) -> void:
 	print("Player disconnected: ", id)
 	if dedicated_server_mode:
+		var owner_left := id == dedicated_room_owner_peer_id
 		dedicated_ready_by_peer.erase(id)
 		dedicated_names_by_peer.erase(id)
 		dedicated_manifest_ready_by_peer.erase(id)
 		dedicated_player_state_by_peer.erase(id)
+		if owner_left:
+			dedicated_room_owner_peer_id = 0
+			dedicated_room_shutdown_pending = true
+			if multiplayer_peer != null:
+				multiplayer_peer.refuse_new_connections = true
+			for peer_id in _mp_peer_ids():
+				rpc_id(peer_id, "_rpc_room_closed", "O HOST SAIU. A SALA FOI ENCERRADA.")
+			call_deferred("_shutdown_dedicated_room")
+			return
 		if _mp_peer_ids().is_empty():
 			get_tree().quit()
 			return
@@ -22097,16 +22445,20 @@ func _on_connected_to_server() -> void:
 	online_connected = true
 	if online_room_code != "":
 		online_status = "CONECTADO: " + online_room_code
-	rpc_id(1, "_register_client_info", player_nickname)
+	rpc_id(1, "_register_client_info", player_nickname, online_room_owner)
 
 func _on_server_disconnected() -> void:
-	print("Host disconnected")
-	_leave_multiplayer()
+	print("Online room server disconnected")
+	var reason := multiplayer_notice
+	if reason == "":
+		reason = "SERVIDOR DA SALA DESCONECTADO." if online_room_owner else "O HOST SAIU. A SALA FOI ENCERRADA."
+	_leave_multiplayer(reason)
 
-func _leave_multiplayer() -> void:
+func _leave_multiplayer(reason: String = "") -> void:
+	if reason != "":
+		multiplayer_notice = reason
 	is_multiplayer = false
 	is_host = false
-	lan_host_ip = ""
 	net_player_ready = false
 	local_player_ready = false
 	_reset_online_room_state()
@@ -22119,12 +22471,10 @@ func _leave_multiplayer() -> void:
 		multiplayer_peer.close()
 		multiplayer_peer = null
 		multiplayer.multiplayer_peer = null
-	if udp_broadcaster != null:
-		udp_broadcaster.close()
-		udp_broadcaster = null
-	if udp_listener != null:
-		udp_listener.close()
-		udp_listener = null
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_room_closed(reason: String) -> void:
+	_leave_multiplayer(reason)
 
 func _mp_sender_id() -> int:
 	return multiplayer.get_remote_sender_id() if multiplayer != null else 0
@@ -22139,12 +22489,45 @@ func _mp_sender_is_self() -> bool:
 func _mp_peer_ids() -> Array:
 	return multiplayer.get_peers() if multiplayer != null else []
 
+func _is_world_authority() -> bool:
+	if not is_multiplayer:
+		return true
+	if dedicated_server_mode:
+		return false
+	return is_host or online_room_owner
+
+func _is_world_replica() -> bool:
+	return is_multiplayer and not dedicated_server_mode and not _is_world_authority()
+
+func _should_send_player_sync(now_ms: int) -> bool:
+	if now_ms - net_player_sync_last_ms < NET_PLAYER_SYNC_INTERVAL_MS:
+		return false
+	net_player_sync_last_ms = now_ms
+	return true
+
+func _should_send_world_sync(now_ms: int) -> bool:
+	if now_ms - net_world_sync_last_ms < NET_WORLD_SYNC_INTERVAL_MS:
+		return false
+	net_world_sync_last_ms = now_ms
+	return true
+
+func _send_remote_player_damage(amount: int, source: String) -> void:
+	if not is_multiplayer:
+		return
+	if online_connected and online_room_owner:
+		if net_player_peer_id != 0:
+			rpc_id(1, "_request_peer_damage", net_player_peer_id, amount, source)
+		return
+	rpc("_rpc_client_take_damage", amount, source)
+
 @rpc("any_peer", "reliable")
-func _register_client_info(nick: String) -> void:
+func _register_client_info(nick: String, is_owner: bool = false) -> void:
 	var sender := _mp_sender_id()
 	if dedicated_server_mode:
 		if sender != 0:
 			dedicated_names_by_peer[sender] = nick
+			if is_owner:
+				dedicated_room_owner_peer_id = sender
 			rpc_id(sender, "_register_host_info", "Sala " + dedicated_room_code)
 			_sync_dedicated_lobby_state()
 		return
@@ -22152,6 +22535,21 @@ func _register_client_info(nick: String) -> void:
 		net_player_name = nick
 		if sender != 0:
 			rpc_id(sender, "_register_host_info", player_nickname)
+
+@rpc("any_peer", "reliable")
+func _host_request_start_game() -> void:
+	if not dedicated_server_mode:
+		return
+	var sender := _mp_sender_id()
+	if sender == dedicated_room_owner_peer_id:
+		var client_ready = false
+		for peer_id in _mp_peer_ids():
+			if peer_id != dedicated_room_owner_peer_id:
+				if bool(dedicated_ready_by_peer.get(peer_id, false)):
+					client_ready = true
+		if _mp_peer_ids().size() >= 2 and client_ready:
+			rpc("_start_multiplayer_manifest")
+			_start_multiplayer_manifest()
 
 @rpc("any_peer", "reliable")
 func _register_host_info(nick: String) -> void:
@@ -22199,6 +22597,13 @@ func _online_lobby_state(room_code: String, connected: int, ready: int) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_add_score(amount: int) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _mp_peer_ids():
+				if peer_id != sender:
+					rpc_id(peer_id, "_rpc_add_score", amount)
+		return
 	if _mp_sender_is_self(): return
 	score += amount
 	score_total += amount
@@ -22213,6 +22618,10 @@ func _start_multiplayer_manifest() -> void:
 	mp_remote_manifestation = 0
 	mp_remote_aura = 0
 	mp_remote_scroll = 0.0
+	dedicated_manifest_ready_by_peer.clear()
+	if dedicated_server_mode:
+		for peer_id in _mp_peer_ids():
+			dedicated_manifest_ready_by_peer[peer_id] = false
 	_reset_manifest_selection_stage()
 
 @rpc("any_peer", "unreliable_ordered")
@@ -22221,7 +22630,10 @@ func _rpc_sync_manifest_mp(stage: String, manifestation: int, aura: int, scroll:
 	var sender = _mp_sender_id()
 	if dedicated_server_mode:
 		if sender != 0:
-			dedicated_manifest_ready_by_peer[sender] = is_ready
+			dedicated_manifest_ready_by_peer[sender] = is_ready and stage == MANIFEST_STAGE_AURA
+			for peer_id in _mp_peer_ids():
+				if peer_id != sender:
+					rpc_id(peer_id, "_rpc_sync_manifest_mp", stage, manifestation, aura, scroll, is_ready)
 			if is_ready and _dedicated_manifest_all_ready():
 				rpc("_start_multiplayer_game")
 				_start_multiplayer_game()
@@ -22232,7 +22644,7 @@ func _rpc_sync_manifest_mp(stage: String, manifestation: int, aura: int, scroll:
 		mp_remote_aura = aura
 		mp_remote_scroll = scroll
 		mp_remote_ready = is_ready
-		
+
 		if is_host and mp_local_ready and mp_remote_ready:
 			rpc("_start_multiplayer_game")
 			_start_multiplayer_game()
@@ -22250,14 +22662,13 @@ func _dedicated_manifest_all_ready() -> bool:
 func _start_multiplayer_game() -> void:
 	mode = "game"
 	_start_game()
-	if is_host:
+	if is_host and not dedicated_server_mode:
 		var container = get_node_or_null("PlayersContainer")
 		if container:
 			var player_scene = preload("res://scenes/Player.tscn")
-			if not dedicated_server_mode:
-				var host_p = player_scene.instantiate()
-				host_p.name = str(_mp_unique_id())
-				container.add_child(host_p, true)
+			var host_p = player_scene.instantiate()
+			host_p.name = str(_mp_unique_id())
+			container.add_child(host_p, true)
 			# Peers spawn
 			for peer_id in _mp_peer_ids():
 				var p = player_scene.instantiate()
@@ -22268,68 +22679,21 @@ func _start_multiplayer_game() -> void:
 func _draw_multiplayer_menu(viewport: Vector2) -> void:
 	_draw_holo_background(viewport, null, Color(1.0, 0.44, 0.88))
 	_draw_glitch_title("MULTIPLAYER ONLINE", Vector2(viewport.x * 0.5, 64), 34, Color(1.0, 0.44, 0.88))
-	
+
 	var panel = Rect2(viewport.x * 0.5 - 180, viewport.y * 0.5 - 120, 360, 240)
+	if multiplayer_notice != "":
+		var notice_rect := Rect2(panel.position.x, panel.position.y - 50.0, panel.size.x, 38.0)
+		_draw_holo_panel(notice_rect, Color(1.0, 0.24, 0.34), false, 0.78)
+		_draw_centered(multiplayer_notice, notice_rect.get_center() + Vector2(0, 5), 13, Color(1.0, 0.88, 0.90))
 	_draw_holo_panel(panel, Color(1.0, 0.44, 0.88), true, 0.6)
-	
+
 	buttons["mp_host"] = Rect2(panel.position.x + 20, panel.position.y + 40, panel.size.x - 40, 50)
 	buttons["mp_client"] = Rect2(panel.position.x + 20, panel.position.y + 110, panel.size.x - 40, 50)
 	buttons["mp_back"] = Rect2(panel.position.x + 20, panel.position.y + 180, panel.size.x - 40, 40)
-	
+
 	_draw_big_button(buttons["mp_host"], "CRIAR SALA ONLINE", Color(0.1, 0.05, 0.1, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and multiplayer_menu_selected == 0) else Color(1.0, 0.44, 0.88))
 	_draw_big_button(buttons["mp_client"], "ENTRAR ONLINE", Color(0.05, 0.1, 0.1, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and multiplayer_menu_selected == 1) else Color(0.0, 1.0, 0.82))
 	_draw_big_button(buttons["mp_back"], "VOLTAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and multiplayer_menu_selected == 2) else Color(1.0, 0.2, 0.2))
-
-func _draw_lobby_host(viewport: Vector2) -> void:
-	_draw_holo_background(viewport, null, Color(1.0, 0.44, 0.88))
-	_draw_glitch_title("SALA LAN - HOST", Vector2(viewport.x * 0.5, 64), 34, Color(1.0, 0.44, 0.88))
-	
-	var panel = Rect2(viewport.x * 0.5 - 200, viewport.y * 0.5 - 120, 400, 240)
-	_draw_holo_panel(panel, Color(1.0, 0.44, 0.88), true, 0.6)
-	
-	var status = "AGUARDANDO JOGADOR..." if net_player_name == "Player 2" else ("JOGADOR: " + net_player_name)
-	_draw_centered(status, panel.position + Vector2(200, 50), 18, Color.WHITE)
-	
-	if net_player_name != "Player 2":
-		var ready_color = Color(0.0, 1.0, 0.82) if net_player_ready else Color(1.0, 0.2, 0.2)
-		var ready_text = "PRONTO" if net_player_ready else "NAO PRONTO"
-		_draw_centered(ready_text, panel.position + Vector2(200, 90), 16, ready_color)
-		
-	buttons["lobby_start"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
-	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 200, 320, 40)
-	
-	var can_start = net_player_name != "Player 2" and net_player_ready
-	var start_color = Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 0) else (Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5))
-	_draw_big_button(buttons["lobby_start"], "INICIAR JOGO", Color(0.1, 0.1, 0.1, 0.9), start_color)
-	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 1) else Color(1.0, 0.2, 0.2))
-
-func _draw_lobby_client(viewport: Vector2) -> void:
-	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
-	_draw_glitch_title("SALA ONLINE", Vector2(viewport.x * 0.5, 64), 34, Color(0.0, 1.0, 0.82))
-	
-	var panel = Rect2(viewport.x * 0.5 - 200, viewport.y * 0.5 - 120, 400, 240)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.6)
-	
-	var status := online_status
-	if status == "":
-		status = "CONECTADO A: " + net_player_name if online_connected or lan_host_ip != "" else "BUSCANDO SALA ONLINE..."
-	_draw_centered(status, panel.position + Vector2(200, 50), 18, Color.WHITE)
-	if online_room_code != "":
-		_draw_centered("CODIGO: " + online_room_code, panel.position + Vector2(200, 84), 14, Color(0.0, 1.0, 0.82))
-	if online_lobby_connected_count > 0:
-		_draw_centered("%d/2 JOGADORES  %d/2 PRONTOS" % [online_lobby_connected_count, online_lobby_ready_count], panel.position + Vector2(200, 112), 14, Color.WHITE)
-	
-	buttons["lobby_ready"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
-	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 200, 320, 40)
-	
-	var ready_bg = Color(0.05, 0.2, 0.1, 0.9) if local_player_ready else Color(0.1, 0.1, 0.1, 0.9)
-	var ready_border = Color(0.0, 1.0, 0.82) if online_connected or lan_host_ip != "" else Color(0.5, 0.5, 0.5)
-	var ready_text = "ESTOU PRONTO!" if local_player_ready else "MARCAR COMO PRONTO"
-	
-	_draw_big_button(buttons["lobby_ready"], ready_text, ready_bg, ready_border)
-	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 0.2, 0.2))
-
- 
 
 func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void:
 	if buttons.get("mp_host", Rect2()).has_point(pos):
@@ -22338,23 +22702,6 @@ func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void:
 		_join_multiplayer_game()
 	elif buttons.get("mp_back", Rect2()).has_point(pos):
 		_go_to_menu()
-
-func _handle_lobby_host_touch(pos: Vector2, viewport: Vector2) -> void:
-	if buttons.get("lobby_start", Rect2()).has_point(pos):
-		if net_player_name != "Player 2" and net_player_ready:
-			rpc("_start_multiplayer_manifest")
-			_start_multiplayer_manifest()
-	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
-		_leave_multiplayer()
-
-func _handle_lobby_client_touch(pos: Vector2, viewport: Vector2) -> void:
-	if buttons.get("lobby_ready", Rect2()).has_point(pos):
-		if online_connected or lan_host_ip != "":
-			local_player_ready = not local_player_ready
-			rpc_id(1, "_toggle_ready", local_player_ready)
-	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
-		_leave_multiplayer()
-
 
 func _net_player_texture() -> Texture2D:
 	var move = net_player_move.normalized()
@@ -22368,23 +22715,23 @@ func _net_player_texture() -> Texture2D:
 
 func _draw_phantom_player(camera: Vector2) -> void:
 	if not is_multiplayer or net_player_dead: return
-	var p = net_player_pos - camera
+	var p = net_player_render_pos - camera
 	var size = PLAYER_DRAW_BOX_SIZE
 	var rect = Rect2(p - size * 0.5, size)
-	
+
 	_draw_centered(net_player_name, p + Vector2(0, -35), 12, Color(1.0, 0.44, 0.88))
-	
+
 	if net_player_is_dashing:
 		var trail_rect = Rect2(net_player_dash_start - camera - size*0.5, size)
 		_draw_entity_fit(textures.get("player_idle", [])[0], trail_rect.get_center(), size, Color(1.0, 0.44, 0.88, 0.4), net_player_flip_h)
-	
+
 	var tex = _net_player_texture()
-	
+
 	var rotation = 0.0
 	var move = net_player_move.normalized()
 	if move.y < -0.20 and abs(move.x) > 0.20:
 		rotation = deg_to_rad(15.0) if move.x > 0.0 else deg_to_rad(-15.0)
-	
+
 	if gfx_shadows and tex != null:
 		var s_rot = rotation + deg_to_rad(-10.0 if net_player_flip_h else 10.0)
 		var s_scale = Vector2(-1.0 if net_player_flip_h else 1.0, -0.35)
@@ -22394,7 +22741,7 @@ func _draw_phantom_player(camera: Vector2) -> void:
 		var pos = Vector2(-draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
 		draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	
+
 	_draw_entity_fit(tex, rect.get_center(), size, Color(1.0, 0.44, 0.88, 0.8), net_player_flip_h)
 
 
@@ -22402,39 +22749,23 @@ func _sync_multiplayer_state() -> void:
 	if not is_multiplayer or multiplayer_peer == null: return
 
 	if dedicated_server_mode:
-		for state in dedicated_player_state_by_peer.values():
-			net_player_pos = state.get("pos", net_player_pos)
-			net_player_hp = state.get("hp", net_player_hp)
-			net_player_hp_max = state.get("hp_max", net_player_hp_max)
-			break
-		var boss_data_dedicated = {
-			"pos": boss_pos,
-			"hp": boss_hp,
-			"dead": boss_dead
-		}
-		rpc("_update_remote_entities", enemies, boss_data_dedicated, enemy_bullets)
 		return
 
-	if online_connected and not is_host:
-		var local_frame_idx = int(Time.get_ticks_msec() / 170) % max(1, textures.get("player_idle", []).size())
-		var state := {
-			"pos": player_pos,
-			"hp": player_hp,
-			"hp_max": player_hp_max,
-			"dead": is_dead,
-			"manifestation": selected_manifestation,
-			"aura": selected_aura,
-			"frame_idx": local_frame_idx,
-			"flip_h": false
-		}
-		rpc_id(1, "_rpc_client_player_state", state, slashes, prisms, anchors, seed_links, effects)
-		return
-	
+	var now_ms := Time.get_ticks_msec()
+	_update_online_ping(now_ms)
+
+	if online_connected:
+		if _should_send_player_sync(now_ms):
+			var local_frame_idx = int(now_ms / 170) % max(1, textures.get("player_idle", []).size())
+			rpc_id(1, "_rpc_client_player_state_light", player_pos, int(player_hp), int(player_hp_max), is_dead, selected_manifestation, selected_aura, local_frame_idx, false, net_ping_ms)
+		if _is_world_replica():
+			return
+
 	var container = get_node_or_null("PlayersContainer")
 	if container:
 		var my_id = str(_mp_unique_id())
 		var frame_idx = int(Time.get_ticks_msec() / 170) % max(1, textures.get("player_idle", []).size())
-		
+
 		for p in container.get_children():
 			if p.name == my_id:
 				p.pos = player_pos
@@ -22453,18 +22784,82 @@ func _sync_multiplayer_state() -> void:
 				net_player_secondary_manifestation = p.sec_manifestation
 				net_player_frame_idx = p.frame_idx
 				net_player_flip_h = p.flip_h
-				
-	rpc("_update_remote_visuals", slashes, prisms, anchors, seed_links, effects)
-				
-	if is_host:
-		var boss_data = {
-			"pos": boss_pos,
-			"hp": boss_hp,
-			"dead": boss_dead
-		}
-		rpc("_update_remote_entities", enemies, boss_data, enemy_bullets)
 
-@rpc("any_peer", "unreliable")
+	if not online_connected:
+		rpc("_update_remote_visuals", slashes, prisms, anchors, seed_links, effects)
+
+	if _is_world_authority() and _should_send_world_sync(now_ms):
+		var boss_data := PackedFloat32Array([boss_pos.x, boss_pos.y, boss_hp, 1.0 if boss_dead else 0.0])
+		if online_connected:
+			rpc_id(1, "_update_remote_entities", _pack_net_enemies(), boss_data, _pack_net_enemy_bullets())
+		else:
+			rpc("_update_remote_entities", enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets)
+
+func _pack_net_enemies() -> PackedFloat32Array:
+	var packed := PackedFloat32Array()
+	packed.resize(enemies.size() * NET_ENEMY_STRIDE)
+	var offset := 0
+	for enemy in enemies:
+		var uid := int(enemy.get("uid", 0))
+		var pos := Vector2(enemy.get("pos", Vector2.ZERO))
+		var facing_value = enemy.get("facing_dir", Vector2.RIGHT)
+		var facing: Vector2 = facing_value if facing_value is Vector2 else Vector2(float(facing_value), 0.0)
+		var last_move := Vector2(enemy.get("last_move_dir", Vector2.ZERO))
+		packed[offset] = float(uid & NET_UID_CHUNK_MASK)
+		packed[offset + 1] = float((uid >> 16) & NET_UID_CHUNK_MASK)
+		packed[offset + 2] = float(maxi(0, NET_ENEMY_TYPES.find(String(enemy.get("type", ENEMY_COMMON)))))
+		packed[offset + 3] = pos.x
+		packed[offset + 4] = pos.y
+		packed[offset + 5] = float(enemy.get("hp", 0.0))
+		packed[offset + 6] = float(enemy.get("max_hp", enemy.get("hp", 1.0)))
+		packed[offset + 7] = float(enemy.get("phase", 0.0))
+		packed[offset + 8] = float(enemy.get("shield_flash", 0.0))
+		packed[offset + 9] = float(enemy.get("bit", 0))
+		packed[offset + 10] = facing.x
+		packed[offset + 11] = facing.y
+		packed[offset + 12] = last_move.x
+		packed[offset + 13] = last_move.y
+		packed[offset + 14] = 1.0 if bool(enemy.get("invisible", false)) else 0.0
+		packed[offset + 15] = float(enemy.get("alpha", 1.0))
+		packed[offset + 16] = float(enemy.get("seeds", 0))
+		packed[offset + 17] = float(enemy.get("parasite_mark_time", 0.0))
+		packed[offset + 18] = float(enemy.get("tesla_shock", 0.0))
+		offset += NET_ENEMY_STRIDE
+	return packed
+
+func _pack_net_enemy_bullets() -> PackedFloat32Array:
+	var packed := PackedFloat32Array()
+	packed.resize(enemy_bullets.size() * NET_BULLET_STRIDE)
+	var offset := 0
+	for bullet in enemy_bullets:
+		if not bullet.has("_net_uid"):
+			bullet["_net_uid"] = net_enemy_bullet_next_uid
+			net_enemy_bullet_next_uid += 1
+		var pos := Vector2(bullet.get("pos", Vector2.ZERO))
+		var direction := Vector2(bullet.get("dir", Vector2.ZERO))
+		packed[offset] = float(bullet.get("_net_uid", 0))
+		packed[offset + 1] = pos.x
+		packed[offset + 2] = pos.y
+		packed[offset + 3] = direction.x
+		packed[offset + 4] = direction.y
+		packed[offset + 5] = float(bullet.get("life", 0.0))
+		packed[offset + 6] = float(bullet.get("damage", 0.0))
+		packed[offset + 7] = float(maxi(0, NET_BULLET_TYPES.find(String(bullet.get("type", "")))))
+		packed[offset + 8] = float(bullet.get("radius", 0.0))
+		packed[offset + 9] = float(bullet.get("phase", 0.0))
+		packed[offset + 10] = float(bullet.get("speed_mult", 1.0))
+		offset += NET_BULLET_STRIDE
+	return packed
+
+func _update_online_ping(now_ms: int) -> void:
+	if not online_connected or dedicated_server_mode:
+		return
+	if now_ms - net_ping_last_sent_ms < NET_PING_INTERVAL_MS:
+		return
+	net_ping_last_sent_ms = now_ms
+	rpc_id(1, "_rpc_ping", now_ms)
+
+@rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _rpc_client_player_state(state: Dictionary, p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void:
 	if not dedicated_server_mode:
 		return
@@ -22474,11 +22869,32 @@ func _rpc_client_player_state(state: Dictionary, p_slashes: Array, p_prisms: Arr
 	dedicated_player_state_by_peer[sender] = state
 	rpc("_rpc_remote_player_state", sender, state, p_slashes, p_prisms, p_anchors, p_seed_links, p_effects)
 
-@rpc("authority", "unreliable")
+@rpc("any_peer", "call_remote", "unreliable_ordered", 1)
+func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, frame_idx: int, flip_h: bool, ping: int) -> void:
+	if not dedicated_server_mode:
+		return
+	var sender := _mp_sender_id()
+	if sender == 0:
+		return
+	var state := {
+		"pos": pos,
+		"hp": hp,
+		"hp_max": hp_max,
+		"dead": dead,
+		"manifestation": manifestation,
+		"aura": aura,
+		"frame_idx": frame_idx,
+		"flip_h": flip_h,
+		"ping": ping
+	}
+	dedicated_player_state_by_peer[sender] = state
+	rpc("_rpc_remote_player_state_light", sender, pos, hp, hp_max, dead, manifestation, aura, frame_idx, flip_h, ping)
+
+@rpc("authority", "call_remote", "unreliable_ordered", 1)
 func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void:
 	if peer_id == _mp_unique_id():
 		return
-	net_player_pos = state.get("pos", net_player_pos)
+	_accept_remote_player_position(peer_id, Vector2(state.get("pos", net_player_pos)))
 	net_player_hp = state.get("hp", net_player_hp)
 	net_player_hp_max = state.get("hp_max", net_player_hp_max)
 	net_player_dead = state.get("dead", net_player_dead)
@@ -22486,21 +22902,242 @@ func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array,
 	net_player_secondary_manifestation = state.get("aura", net_player_secondary_manifestation)
 	net_player_frame_idx = state.get("frame_idx", net_player_frame_idx)
 	net_player_flip_h = state.get("flip_h", net_player_flip_h)
+	net_remote_ping_ms = int(state.get("ping", net_remote_ping_ms))
 	net_slashes = p_slashes
 	net_prisms = p_prisms
 	net_anchors = p_anchors
 	net_seed_links = p_seed_links
 	net_effects = p_effects
 
-@rpc("any_peer", "unreliable")
-func _update_remote_entities(enemies_data: Array, boss_data: Dictionary, bullets_data: Array) -> void:
+@rpc("authority", "call_remote", "unreliable_ordered", 1)
+func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, frame_idx: int, flip_h: bool, ping: int) -> void:
+	if peer_id == _mp_unique_id():
+		return
+	_accept_remote_player_position(peer_id, pos)
+	net_player_hp = hp
+	net_player_hp_max = hp_max
+	net_player_dead = dead
+	net_player_manifestation = manifestation
+	net_player_secondary_manifestation = aura
+	net_player_frame_idx = frame_idx
+	net_player_flip_h = flip_h
+	net_remote_ping_ms = ping
+
+func _accept_remote_player_position(peer_id: int, pos: Vector2) -> void:
+	var now_ms := Time.get_ticks_msec()
+	if net_player_has_snapshot and net_player_peer_id == peer_id and net_player_snapshot_last_ms > 0:
+		var elapsed := maxf(0.001, float(now_ms - net_player_snapshot_last_ms) / 1000.0)
+		net_player_velocity = (pos - net_player_pos) / elapsed
+	else:
+		net_player_render_pos = pos
+		net_player_last_pos = pos
+		net_player_velocity = Vector2.ZERO
+	net_player_pos = pos
+	net_player_peer_id = peer_id
+	net_player_snapshot_last_ms = now_ms
+	net_player_has_snapshot = true
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered", 2)
+func _update_remote_entities(enemies_data, boss_data, bullets_data) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _mp_peer_ids():
+				if peer_id != sender:
+					rpc_id(peer_id, "_update_remote_entities", enemies_data, boss_data, bullets_data)
+		return
 	if _mp_sender_is_self(): return
-	if is_multiplayer and not is_host:
-		enemies = enemies_data
-		boss_pos = boss_data.get("pos", boss_pos)
-		boss_hp = boss_data.get("hp", boss_hp)
-		boss_dead = boss_data.get("dead", boss_dead)
-		enemy_bullets = bullets_data
+	if _is_world_replica():
+		_apply_remote_world_snapshot(enemies_data, boss_data, bullets_data)
+
+
+func _apply_remote_world_snapshot(enemies_data, boss_data, bullets_data) -> void:
+	var now_ms := Time.get_ticks_msec()
+	if net_world_snapshot_last_ms > 0:
+		var interval := float(now_ms - net_world_snapshot_last_ms)
+		net_world_jitter_ms = lerpf(net_world_jitter_ms, absf(interval - NET_WORLD_SYNC_INTERVAL_MS), 0.18)
+	net_world_snapshot_last_ms = now_ms
+	_apply_remote_enemy_snapshot(enemies_data, now_ms)
+	_apply_remote_boss_snapshot(boss_data, now_ms)
+	_apply_remote_bullet_snapshot(bullets_data, now_ms)
+
+
+func _apply_remote_enemy_snapshot(snapshot_data, now_ms: int) -> void:
+	var existing := {}
+	for enemy in enemies:
+		existing[int(enemy.get("uid", -1))] = enemy
+	var next_enemies: Array = []
+
+	if snapshot_data is PackedFloat32Array:
+		var packed: PackedFloat32Array = snapshot_data
+		for offset in range(0, packed.size() - NET_ENEMY_STRIDE + 1, NET_ENEMY_STRIDE):
+			var uid := int(packed[offset]) | (int(packed[offset + 1]) << 16)
+			var incoming_pos := Vector2(packed[offset + 3], packed[offset + 4])
+			var enemy: Dictionary = existing.get(uid, {})
+			_update_remote_entity_motion(enemy, incoming_pos, now_ms)
+			enemy["uid"] = uid
+			var type_index := clampi(int(packed[offset + 2]), 0, NET_ENEMY_TYPES.size() - 1)
+			enemy["type"] = NET_ENEMY_TYPES[type_index]
+			enemy["hp"] = packed[offset + 5]
+			enemy["max_hp"] = packed[offset + 6]
+			enemy["phase"] = packed[offset + 7]
+			enemy["shield_flash"] = packed[offset + 8]
+			enemy["bit"] = int(packed[offset + 9])
+			enemy["facing_dir"] = Vector2(packed[offset + 10], packed[offset + 11])
+			enemy["last_move_dir"] = Vector2(packed[offset + 12], packed[offset + 13])
+			enemy["invisible"] = packed[offset + 14] > 0.5
+			enemy["alpha"] = packed[offset + 15]
+			enemy["seeds"] = int(packed[offset + 16])
+			enemy["parasite_mark_time"] = packed[offset + 17]
+			enemy["tesla_shock"] = packed[offset + 18]
+			next_enemies.append(enemy)
+	else:
+		for item in snapshot_data:
+			if not item is Dictionary:
+				continue
+			var incoming: Dictionary = item
+			var uid := int(incoming.get("uid", -1))
+			var enemy: Dictionary = existing.get(uid, {})
+			_update_remote_entity_motion(enemy, Vector2(incoming.get("pos", Vector2.ZERO)), now_ms)
+			for key in incoming.keys():
+				if key != "pos":
+					enemy[key] = incoming[key]
+			next_enemies.append(enemy)
+	enemies = next_enemies
+
+
+func _update_remote_entity_motion(entity: Dictionary, incoming_pos: Vector2, now_ms: int) -> void:
+	if entity.is_empty():
+		entity["pos"] = incoming_pos
+		entity["_net_velocity"] = Vector2.ZERO
+	else:
+		var previous_target := Vector2(entity.get("_net_target_pos", entity.get("pos", incoming_pos)))
+		var previous_ms := int(entity.get("_net_snapshot_ms", now_ms))
+		var elapsed := maxf(0.001, float(now_ms - previous_ms) / 1000.0)
+		entity["_net_velocity"] = (incoming_pos - previous_target) / elapsed
+	entity["_net_target_pos"] = incoming_pos
+	entity["_net_snapshot_ms"] = now_ms
+
+
+func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void:
+	var incoming_pos: Vector2 = boss_pos
+	if snapshot_data is PackedFloat32Array:
+		var packed: PackedFloat32Array = snapshot_data
+		if packed.size() < 4:
+			return
+		incoming_pos = Vector2(packed[0], packed[1])
+		boss_hp = packed[2]
+		boss_dead = packed[3] > 0.5
+	elif snapshot_data is Dictionary:
+		incoming_pos = Vector2(snapshot_data.get("pos", boss_pos))
+		boss_hp = snapshot_data.get("hp", boss_hp)
+		boss_dead = snapshot_data.get("dead", boss_dead)
+	else:
+		return
+
+	if net_boss_has_snapshot and net_boss_snapshot_last_ms > 0:
+		var elapsed := maxf(0.001, float(now_ms - net_boss_snapshot_last_ms) / 1000.0)
+		net_boss_velocity = (incoming_pos - net_boss_target_pos) / elapsed
+	else:
+		boss_pos = incoming_pos
+		net_boss_velocity = Vector2.ZERO
+	net_boss_target_pos = incoming_pos
+	net_boss_snapshot_last_ms = now_ms
+	net_boss_has_snapshot = true
+
+
+func _apply_remote_bullet_snapshot(snapshot_data, now_ms: int) -> void:
+	if not snapshot_data is PackedFloat32Array:
+		enemy_bullets = snapshot_data
+		return
+	var existing := {}
+	for bullet in enemy_bullets:
+		existing[int(bullet.get("_net_uid", -1))] = bullet
+	var next_bullets: Array = []
+	var packed: PackedFloat32Array = snapshot_data
+	for offset in range(0, packed.size() - NET_BULLET_STRIDE + 1, NET_BULLET_STRIDE):
+		var uid := int(packed[offset])
+		var incoming_pos := Vector2(packed[offset + 1], packed[offset + 2])
+		var bullet: Dictionary = existing.get(uid, {})
+		_update_remote_entity_motion(bullet, incoming_pos, now_ms)
+		bullet["_net_uid"] = uid
+		bullet["dir"] = Vector2(packed[offset + 3], packed[offset + 4])
+		bullet["life"] = packed[offset + 5]
+		bullet["damage"] = packed[offset + 6]
+		var type_index := clampi(int(packed[offset + 7]), 0, NET_BULLET_TYPES.size() - 1)
+		bullet["type"] = NET_BULLET_TYPES[type_index]
+		bullet["radius"] = packed[offset + 8]
+		bullet["phase"] = packed[offset + 9]
+		bullet["speed_mult"] = packed[offset + 10]
+		next_bullets.append(bullet)
+	enemy_bullets = next_bullets
+
+
+@rpc("any_peer", "call_remote", "unreliable", 3)
+func _rpc_ping(sent_ms: int) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender != 0:
+			rpc_id(sender, "_rpc_pong", sent_ms)
+		return
+	var sender := _mp_sender_id()
+	if sender != 0:
+		rpc_id(sender, "_rpc_pong", sent_ms)
+
+@rpc("authority", "call_remote", "unreliable", 3)
+func _rpc_pong(sent_ms: int) -> void:
+	net_ping_ms = max(0, Time.get_ticks_msec() - sent_ms)
+
+
+func _send_network_ability_visual(action: int, origin: Vector2, target: Vector2, duration: float, extra: float = 0.0) -> void:
+	if not is_multiplayer or not online_connected or dedicated_server_mode or multiplayer_peer == null:
+		return
+	net_ability_sequence += 1
+	rpc_id(1, "_rpc_ability_visual", _mp_unique_id(), net_ability_sequence, action, selected_manifestation, origin, target, duration, extra, net_ping_ms)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_ability_visual(source_peer_id: int, sequence: int, action: int, manifestation: int, origin: Vector2, target: Vector2, duration: float, extra: float, sender_ping_ms: int) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender == 0:
+			return
+		for peer_id in _mp_peer_ids():
+			if peer_id != sender:
+				rpc_id(peer_id, "_rpc_ability_visual", sender, sequence, action, manifestation, origin, target, duration, extra, sender_ping_ms)
+		return
+	if source_peer_id == _mp_unique_id():
+		return
+	var last_sequence := int(net_ability_seen.get(source_peer_id, 0))
+	if sequence <= last_sequence:
+		return
+	net_ability_seen[source_peer_id] = sequence
+	if action == NET_ABILITY_SECONDARY_END:
+		for visual in net_ability_visuals:
+			if int(visual.get("source", 0)) == source_peer_id and int(visual.get("action", -1)) == NET_ABILITY_SECONDARY and int(visual.get("manifestation", -1)) == manifestation:
+				visual["life"] = 0.0
+		return
+	var estimated_latency := clampf(float(maxi(0, sender_ping_ms) + maxi(0, net_ping_ms)) * 0.0005, 0.0, 0.12)
+	var visual_duration := maxf(0.08, duration)
+	net_ability_visuals.append({
+		"source": source_peer_id,
+		"sequence": sequence,
+		"action": action,
+		"manifestation": clampi(manifestation, 0, MANIFESTATIONS.size() - 1),
+		"origin": origin,
+		"target": target,
+		"life": maxf(0.08, visual_duration - estimated_latency),
+		"max": visual_duration,
+		"extra": extra,
+		"latency": estimated_latency
+	})
+	while net_ability_visuals.size() > NET_ABILITY_VISUAL_LIMIT:
+		net_ability_visuals.pop_front()
+	if action == NET_ABILITY_TELEPORT and source_peer_id == net_player_peer_id:
+		net_player_render_pos = target
+		net_player_last_pos = target
+
 
 @rpc("any_peer", "unreliable")
 func _update_remote_visuals(p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void:
@@ -22516,6 +23153,13 @@ func _update_remote_visuals(p_slashes: Array, p_prisms: Array, p_anchors: Array,
 
 @rpc("any_peer", "reliable")
 func _rpc_sync_pause(is_paused: bool) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _mp_peer_ids():
+				if peer_id != sender:
+					rpc_id(peer_id, "_rpc_sync_pause", is_paused)
+		return
 	if _mp_sender_is_self(): return
 	if is_paused:
 		if mode == "game" or mode == "shop_countdown" or mode == "boss_call":
@@ -22533,6 +23177,13 @@ func _rpc_sync_pause(is_paused: bool) -> void:
 
 @rpc("any_peer", "reliable")
 func _rpc_trigger_shop(is_forced: bool) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _mp_peer_ids():
+				if peer_id != sender:
+					rpc_id(peer_id, "_rpc_trigger_shop", is_forced)
+		return
 	if _mp_sender_is_self(): return
 	if is_forced:
 		forced_shop_triggered = true
@@ -22591,25 +23242,137 @@ func _update_audio_buses() -> void: pass
 func _apply_graphics_settings() -> void: pass
 func _clear_webhook_input() -> void: pass
 
-@rpc("any_peer", "unreliable")
-func _client_hit_enemy(uid: String, amount: float, source: String) -> void:
-	if not is_host: return
-	for e in enemies:
-		if str(e.get("uid", "")) == uid:
-			_damage_enemy(e, amount, source)
-			break
+func _outgoing_damage_amount(amount: float, source: String) -> float:
+	if not source.begins_with("aura_"):
+		amount *= AuraSystem.damage_multiplier(aura_state)
+	return maxf(0.0, amount)
 
-@rpc("any_peer", "unreliable")
-func _client_hit_boss(amount: float, source: String) -> void:
-	if not is_host: return
-	_damage_boss(amount, source)
 
-@rpc("any_peer", "unreliable")
-func _client_hit_arauto(amount: float, source: String) -> void:
-	if not is_host: return
-	_damage_arauto(amount, source, true)
+func _send_client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool) -> void:
+	if multiplayer_peer == null or not is_multiplayer or _is_world_authority():
+		return
+	rpc_id(1, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool) -> void:
+	if dedicated_server_mode:
+		var sender := _mp_sender_id()
+		if dedicated_room_owner_peer_id != 0 and sender != 0 and sender != dedicated_room_owner_peer_id:
+			rpc_id(dedicated_room_owner_peer_id, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text)
+		return
+	if not _is_world_authority() or not is_finite(amount) or amount <= 0.0:
+		return
+	match target_kind:
+		NET_DAMAGE_ENEMY:
+			for enemy in enemies:
+				if str(enemy.get("uid", "")) == target_uid:
+					_damage_enemy(enemy, amount, source, show_text, false, attack_origin)
+					return
+		NET_DAMAGE_BOSS:
+			_damage_boss(amount, source, false)
+		NET_DAMAGE_ARAUTO:
+			_damage_arauto(amount, source, show_text, false)
+
+@rpc("any_peer", "reliable")
+func _request_peer_damage(peer_id: int, amount: int, source: String) -> void:
+	if not dedicated_server_mode:
+		return
+	if _mp_sender_id() != dedicated_room_owner_peer_id:
+		return
+	if not dedicated_player_state_by_peer.has(peer_id):
+		return
+	rpc_id(peer_id, "_rpc_client_take_damage", amount, source)
 
 @rpc("any_peer", "reliable")
 func _rpc_client_take_damage(amount: int, source: String) -> void:
 	if _mp_sender_is_self(): return
 	_damage_player(amount, source)
+
+func _draw_lobby_online_host(viewport: Vector2) -> void:
+	_draw_holo_background(viewport, null, Color(0.85, 0.3, 1.0))
+	_draw_glitch_title("SALA ONLINE - HOST", Vector2(viewport.x * 0.5, 64), 34, Color(0.85, 0.3, 1.0))
+
+	var panel = Rect2(viewport.x * 0.5 - 200, viewport.y * 0.5 - 120, 400, 240)
+	_draw_holo_panel(panel, Color(0.85, 0.3, 1.0), true, 0.6)
+
+	var status = online_status
+	if status == "":
+		if online_connected:
+			status = "CONECTADO AO SERVIDOR"
+		else:
+			status = "INICIANDO SERVIDOR..."
+
+	_draw_centered(status, panel.position + Vector2(200, 45), 18, Color.WHITE)
+
+	if online_room_code != "":
+		_draw_centered("CODIGO DA SALA: " + online_room_code, panel.position + Vector2(200, 75), 14, Color(0.85, 0.3, 1.0))
+
+	var client_ready = online_lobby_ready_count >= 1
+	var info_text = ""
+	if online_lobby_connected_count < 2:
+		info_text = "AGUARDANDO CLIENT CONECTAR (1/2 JOGADORES)"
+	else:
+		if client_ready:
+			info_text = "CLIENT CONECTADO E PRONTO! (2/2 JOGADORES)"
+		else:
+			info_text = "AGUARDANDO CLIENT FICAR PRONTO... (2/2 JOGADORES)"
+
+	_draw_centered(info_text, panel.position + Vector2(200, 105), 14, Color(0.0, 1.0, 0.82) if client_ready else Color(1.0, 0.8, 0.2))
+
+	buttons["lobby_start"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
+	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 200, 320, 40)
+
+	var can_start = online_lobby_connected_count >= 2 and client_ready
+	var start_color = Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 0) else (Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5))
+	_draw_big_button(buttons["lobby_start"], "INICIAR JOGO", Color(0.1, 0.1, 0.1, 0.9), start_color)
+	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 1) else Color(1.0, 0.2, 0.2))
+
+func _draw_lobby_online_client(viewport: Vector2) -> void:
+	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
+	_draw_glitch_title("SALA ONLINE - CLIENT", Vector2(viewport.x * 0.5, 64), 34, Color(0.0, 1.0, 0.82))
+
+	var panel = Rect2(viewport.x * 0.5 - 200, viewport.y * 0.5 - 120, 400, 240)
+	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.6)
+
+	var status = online_status
+	if status == "":
+		status = "CONECTADO" if online_connected else "BUSCANDO SALA..."
+	_draw_centered(status, panel.position + Vector2(200, 45), 18, Color.WHITE)
+
+	if online_room_code != "":
+		_draw_centered("CODIGO DA SALA: " + online_room_code, panel.position + Vector2(200, 75), 14, Color(0.0, 1.0, 0.82))
+
+	var info_text = ""
+	if online_lobby_connected_count < 2:
+		info_text = "AGUARDANDO CONEXAO (1/2 JOGADORES)"
+	else:
+		info_text = "SALA CHEIA (2/2 JOGADORES)"
+	_draw_centered(info_text, panel.position + Vector2(200, 105), 14, Color.WHITE)
+
+	buttons["lobby_ready"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
+	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 200, 320, 40)
+
+	var ready_bg = Color(0.05, 0.2, 0.1, 0.9) if local_player_ready else Color(0.1, 0.1, 0.1, 0.9)
+	var ready_border = Color(0.0, 1.0, 0.82) if online_connected else Color(0.5, 0.5, 0.5)
+	var ready_text = "ESTOU PRONTO!" if local_player_ready else "MARCAR COMO PRONTO"
+
+	_draw_big_button(buttons["lobby_ready"], ready_text, ready_bg, ready_border)
+	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 0.2, 0.2))
+
+func _handle_lobby_online_host_touch(pos: Vector2, viewport: Vector2) -> void:
+	if buttons.get("lobby_start", Rect2()).has_point(pos):
+		var client_ready = online_lobby_ready_count >= 1
+		var can_start = online_lobby_connected_count >= 2 and client_ready
+		if can_start:
+			rpc_id(1, "_host_request_start_game")
+	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
+		_leave_multiplayer()
+
+func _handle_lobby_online_client_touch(pos: Vector2, viewport: Vector2) -> void:
+	if buttons.get("lobby_ready", Rect2()).has_point(pos):
+		if online_connected:
+			local_player_ready = not local_player_ready
+			rpc_id(1, "_toggle_ready", local_player_ready)
+	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
+		_leave_multiplayer()

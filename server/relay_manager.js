@@ -162,15 +162,27 @@ function stopRoom(code, reason) {
 }
 
 function availableRoom() {
-  for (const room of rooms.values()) {
-    if (room.players < MAX_PLAYERS) {
-      room.players += 1;
-      room.lastSeen = Date.now();
-      scheduleRoomStop(room);
-      return room;
-    }
+  const candidates = Array.from(rooms.values())
+    .filter((room) => room.players < MAX_PLAYERS)
+    .sort((left, right) => right.createdAt - left.createdAt);
+  if (candidates.length === 0) {
+    return null;
   }
-  return null;
+  return reserveRoom(candidates[0]);
+}
+
+function reserveRoom(room) {
+  if (!room || room.players >= MAX_PLAYERS) {
+    return null;
+  }
+  room.players += 1;
+  room.lastSeen = Date.now();
+  scheduleRoomStop(room);
+  return room;
+}
+
+function roomByCode(code) {
+  return rooms.get(String(code || "").toUpperCase()) || null;
 }
 
 async function route(req, res) {
@@ -197,6 +209,28 @@ async function route(req, res) {
     const room = availableRoom();
     if (!room) {
       sendJson(res, 404, { error: "no available rooms" });
+      return;
+    }
+    sendJson(res, 200, roomPublic(room));
+    return;
+  }
+
+  const joinMatch = url.pathname.match(/^\/rooms\/([A-F0-9]{6})\/join$/);
+  if (req.method === "POST" && joinMatch) {
+    const room = reserveRoom(roomByCode(joinMatch[1]));
+    if (!room) {
+      sendJson(res, 404, { error: "room not available" });
+      return;
+    }
+    sendJson(res, 200, roomPublic(room));
+    return;
+  }
+
+  const getMatch = url.pathname.match(/^\/rooms\/([A-F0-9]{6})$/);
+  if (req.method === "GET" && getMatch) {
+    const room = roomByCode(getMatch[1]);
+    if (!room) {
+      sendJson(res, 404, { error: "room not found" });
       return;
     }
     sendJson(res, 200, roomPublic(room));
