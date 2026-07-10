@@ -540,11 +540,14 @@ var online_status: String = ""
 var online_room_owner: bool = false
 var online_lobby_connected_count: int = 0
 var online_lobby_ready_count: int = 0
+var online_lobby_ready_pending: bool = false
+var online_lobby_server_confirmed_ready: bool = false
 var dedicated_server_mode: bool = false
 var dedicated_room_code: String = ""
 var dedicated_ready_by_peer: Dictionary = {}
 var dedicated_names_by_peer: Dictionary = {}
 var dedicated_manifest_ready_by_peer: Dictionary = {}
+var dedicated_preload_ready_by_peer: Dictionary = {}
 var dedicated_player_state_by_peer: Dictionary = {}
 var dedicated_room_owner_peer_id: int = 0
 var net_player_peer_id: int = 0
@@ -553,6 +556,46 @@ var net_world_sync_last_ms: int = 0
 var net_ping_last_sent_ms: int = 0
 var net_ping_ms: int = -1
 var net_remote_ping_ms: int = -1
+var net_report_file: FileAccess = null
+var net_report_path: String = ""
+var net_report_started_ms: int = 0
+var net_report_last_flush_ms: int = 0
+var net_report_events: Array[String] = []
+var net_report_interval_bytes_in: int = 0
+var net_report_interval_bytes_out: int = 0
+var net_report_total_bytes_in: int = 0
+var net_report_total_bytes_out: int = 0
+var net_report_interval_packets_in: int = 0
+var net_report_interval_packets_out: int = 0
+var net_report_total_packets_in: int = 0
+var net_report_total_packets_out: int = 0
+var net_report_interval_world_in: int = 0
+var net_report_interval_world_out: int = 0
+var net_report_interval_player_in: int = 0
+var net_report_interval_player_out: int = 0
+var net_report_interval_control_in: int = 0
+var net_report_interval_control_out: int = 0
+var net_report_ping_min: int = 999999
+var net_report_ping_max: int = -1
+var net_report_ping_sum: int = 0
+var net_report_ping_count: int = 0
+var net_report_remote_ping_min: int = 999999
+var net_report_remote_ping_max: int = -1
+var net_report_remote_ping_sum: int = 0
+var net_report_remote_ping_count: int = 0
+var net_report_last_world_in_ms: int = 0
+var net_report_last_player_in_ms: int = 0
+var net_report_interval_world_gap_max_ms: int = 0
+var net_report_interval_player_gap_max_ms: int = 0
+var net_report_interval_world_drop_gaps: int = 0
+var net_report_interval_player_drop_gaps: int = 0
+var net_report_last_mode: String = ""
+var net_report_last_online_connected: bool = false
+var net_report_last_dead: bool = false
+var net_report_last_remote_dead: bool = false
+var net_report_last_connected_count: int = -1
+var net_report_last_ready_count: int = -1
+var net_report_last_role: String = ""
 var net_player_snapshot_last_ms: int = 0
 var net_world_snapshot_last_ms: int = 0
 var net_world_jitter_ms: float = 0.0
@@ -564,13 +607,24 @@ var net_ability_visuals: Array = []
 var dedicated_started_ms: int = 0
 var dedicated_room_shutdown_pending: bool = false
 var multiplayer_notice: String = ""
+var online_preload_started_ms: int = 0
+var online_preload_finished_ms: int = 0
+var online_preload_stage: String = ""
+var online_preload_progress: float = 0.0
+var online_preload_local_ready: bool = false
+var online_preload_remote_ready: bool = false
+var online_preload_remote_progress: float = 0.0
+var online_preload_remote_stage: String = ""
+var online_first_world_snapshot_received: bool = false
+var online_first_player_snapshot_received: bool = false
+var perf_ready_started_ms: int = 0
 const NET_PLAYER_SYNC_INTERVAL_MS := 33
 const NET_WORLD_SYNC_INTERVAL_MS := 50
 const NET_PING_INTERVAL_MS := 1000
 const NET_CHANNEL_COUNT := 4
 const NET_PLAYER_CHANNEL := 1
 const NET_WORLD_CHANNEL := 2
-const NET_TELEMETRY_CHANNEL := 3
+const NET_CONTROL_CHANNEL := 3
 const NET_INTERPOLATION_SHARPNESS := 18.0
 const NET_EXTRAPOLATION_LIMIT := 0.10
 const NET_SNAP_DISTANCE := 360.0
@@ -578,6 +632,10 @@ const NET_ENEMY_STRIDE := 19
 const NET_UID_CHUNK_MASK := 0xFFFF
 const NET_BULLET_STRIDE := 11
 const NET_OWNER_CONNECT_TIMEOUT_MS := 30000
+const NET_PRELOAD_TIMEOUT_MS := 20000
+const NET_MANIFEST_SYNC_INTERVAL_MS := 90
+const NET_REPORT_INTERVAL_MS := 30000
+const NET_REPORT_EVENT_LIMIT := 180
 const NET_ABILITY_ATTACK := 0
 const NET_ABILITY_SKILL := 1
 const NET_ABILITY_SECONDARY := 2
@@ -669,6 +727,8 @@ var mp_remote_manifest_stage = MANIFEST_STAGE_MANIFESTATION
 var mp_remote_manifestation = 0
 var mp_remote_aura = 0
 var mp_remote_scroll = 0.0
+var mp_manifest_sync_last_ms: int = 0
+var mp_manifest_sync_last_signature: String = ""
 var manifest_transition_elapsed = 0.0
 var manifest_transition_seed = 0
 var manifest_preview_open = false
@@ -1114,6 +1174,8 @@ var rain_splashes = []
 var snowflakes = []
 
 func _ready() -> void:
+	perf_ready_started_ms = Time.get_ticks_msec()
+	_net_report_start()
 	font = ThemeDB.fallback_font
 	rng.randomize()
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
@@ -1144,6 +1206,7 @@ func _ready() -> void:
 	_setup_cheat_input()
 	_setup_webhook_input()
 
+	_perf_mark("ready_nodes", perf_ready_started_ms)
 	_load_audio_streams()
 
 	_load_config()
@@ -1157,6 +1220,7 @@ func _ready() -> void:
 	set_process(true)
 
 	_play_menu_music_random()
+	_perf_mark("ready_total", perf_ready_started_ms)
 
 	# Configuração para Smoke Test Multiplayer via CLI
 	var args = OS.get_cmdline_args()
@@ -1174,12 +1238,284 @@ func _ready() -> void:
 		print("ONLINE TEST: entrando em sala online...")
 		call_deferred("_join_multiplayer_game")
 
+func _exit_tree() -> void:
+	_cleanup_runtime_resources()
+
+func _cleanup_runtime_resources() -> void:
+	_net_report_close()
+	if multiplayer_peer != null:
+		multiplayer_peer.close()
+		multiplayer_peer = null
+		if multiplayer != null:
+			multiplayer.multiplayer_peer = null
+	if online_relay_request != null:
+		online_relay_request.cancel_request()
+	if run_report_request != null:
+		run_report_request.cancel_request()
+	if music_player != null:
+		music_player.stop()
+		music_player.stream = null
+	if rain_audio_player != null:
+		rain_audio_player.stop()
+		rain_audio_player.stream = null
+	for player in sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
+	audio_streams.clear()
+	textures.clear()
+
 func _cmd_arg_value(args: Array, prefix: String, fallback: String) -> String:
 	for arg in args:
 		var text := str(arg)
 		if text.begins_with(prefix):
 			return text.substr(prefix.length())
 	return fallback
+
+func _perf_mark(label: String, started_ms: int) -> void:
+	print("PERF %s %dms" % [label, Time.get_ticks_msec() - started_ms])
+
+func _net_report_start() -> void:
+	if net_report_file != null:
+		return
+	var now_dict := Time.get_datetime_dict_from_system()
+	var stamp := "%04d%02d%02d_%02d%02d%02d" % [
+		int(now_dict.get("year", 0)), int(now_dict.get("month", 0)), int(now_dict.get("day", 0)),
+		int(now_dict.get("hour", 0)), int(now_dict.get("minute", 0)), int(now_dict.get("second", 0))
+	]
+	var base_dir := OS.get_executable_path().get_base_dir()
+	if base_dir == "" or OS.has_feature("editor"):
+		base_dir = ProjectSettings.globalize_path("res://")
+	net_report_path = base_dir.path_join("ruptura_online_report_%s_pid%d.log" % [stamp, OS.get_process_id()])
+	net_report_file = FileAccess.open(net_report_path, FileAccess.WRITE)
+	if net_report_file == null:
+		base_dir = OS.get_user_data_dir()
+		net_report_path = base_dir.path_join("ruptura_online_report_%s_pid%d.log" % [stamp, OS.get_process_id()])
+		net_report_file = FileAccess.open(net_report_path, FileAccess.WRITE)
+	if net_report_file == null:
+		push_warning("NET_REPORT: nao foi possivel abrir arquivo de relatorio")
+		return
+	net_report_started_ms = Time.get_ticks_msec()
+	net_report_last_flush_ms = net_report_started_ms
+	net_report_last_mode = mode
+	net_report_last_online_connected = online_connected
+	net_report_last_dead = is_dead
+	net_report_last_remote_dead = net_player_dead
+	net_report_last_connected_count = online_lobby_connected_count
+	net_report_last_ready_count = online_lobby_ready_count
+	net_report_last_role = _net_report_role()
+	net_report_file.store_line("RUPTURA TEMPORAL ONLINE REPORT")
+	net_report_file.store_line("created_at=%s" % Time.get_datetime_string_from_system(false, true))
+	net_report_file.store_line("file=%s" % net_report_path)
+	net_report_file.store_line("interval_ms=%d" % NET_REPORT_INTERVAL_MS)
+	net_report_file.store_line("bytes=estimativa de payload do jogo por RPC, nao contador bruto do driver ENet")
+	net_report_file.store_line("")
+	_net_report_event("session_start", "mode=%s role=%s exe_dir=%s" % [mode, _net_report_role(), base_dir])
+	net_report_file.flush()
+	print("NET_REPORT file=", net_report_path)
+
+func _net_report_close() -> void:
+	if net_report_file == null:
+		return
+	_net_report_event("session_end", "mode=%s role=%s" % [mode, _net_report_role()])
+	_net_report_flush(true)
+	net_report_file.close()
+	net_report_file = null
+
+func _net_report_role() -> String:
+	if dedicated_server_mode:
+		return "dedicated_server"
+	if online_room_owner:
+		return "host_online_owner"
+	if is_multiplayer and online_connected:
+		return "client_online"
+	if is_host:
+		return "host_lan"
+	if is_multiplayer:
+		return "client_lan"
+	return "solo_or_menu"
+
+func _net_report_event(kind: String, detail: String = "") -> void:
+	if net_report_started_ms <= 0:
+		return
+	var elapsed := float(Time.get_ticks_msec() - net_report_started_ms) / 1000.0
+	var line := "[%07.2fs] %s | mode=%s role=%s | %s" % [elapsed, kind, mode, _net_report_role(), detail]
+	net_report_events.append(line)
+	while net_report_events.size() > NET_REPORT_EVENT_LIMIT:
+		net_report_events.pop_front()
+
+func _net_report_count_in(category: String, bytes: int) -> void:
+	bytes = maxi(0, bytes)
+	net_report_interval_bytes_in += bytes
+	net_report_total_bytes_in += bytes
+	net_report_interval_packets_in += 1
+	net_report_total_packets_in += 1
+	match category:
+		"world":
+			net_report_interval_world_in += 1
+		"player":
+			net_report_interval_player_in += 1
+		"control":
+			net_report_interval_control_in += 1
+
+func _net_report_count_out(category: String, bytes: int) -> void:
+	bytes = maxi(0, bytes)
+	net_report_interval_bytes_out += bytes
+	net_report_total_bytes_out += bytes
+	net_report_interval_packets_out += 1
+	net_report_total_packets_out += 1
+	match category:
+		"world":
+			net_report_interval_world_out += 1
+		"player":
+			net_report_interval_player_out += 1
+		"control":
+			net_report_interval_control_out += 1
+
+func _net_report_sample_ping(ping: int, remote := false) -> void:
+	if ping < 0:
+		return
+	if remote:
+		net_report_remote_ping_min = mini(net_report_remote_ping_min, ping)
+		net_report_remote_ping_max = maxi(net_report_remote_ping_max, ping)
+		net_report_remote_ping_sum += ping
+		net_report_remote_ping_count += 1
+	else:
+		net_report_ping_min = mini(net_report_ping_min, ping)
+		net_report_ping_max = maxi(net_report_ping_max, ping)
+		net_report_ping_sum += ping
+		net_report_ping_count += 1
+
+func _net_report_note_world_snapshot() -> void:
+	var now_ms := Time.get_ticks_msec()
+	if net_report_last_world_in_ms > 0:
+		var gap := now_ms - net_report_last_world_in_ms
+		net_report_interval_world_gap_max_ms = maxi(net_report_interval_world_gap_max_ms, gap)
+		if gap > NET_WORLD_SYNC_INTERVAL_MS * 3:
+			net_report_interval_world_drop_gaps += 1
+			_net_report_event("world_snapshot_gap", "%dms sem snapshot do mundo" % gap)
+	net_report_last_world_in_ms = now_ms
+
+func _net_report_note_player_snapshot() -> void:
+	var now_ms := Time.get_ticks_msec()
+	if net_report_last_player_in_ms > 0:
+		var gap := now_ms - net_report_last_player_in_ms
+		net_report_interval_player_gap_max_ms = maxi(net_report_interval_player_gap_max_ms, gap)
+		if gap > NET_PLAYER_SYNC_INTERVAL_MS * 4:
+			net_report_interval_player_drop_gaps += 1
+			_net_report_event("player_snapshot_gap", "%dms sem snapshot do jogador remoto" % gap)
+	net_report_last_player_in_ms = now_ms
+
+func _net_report_reset_snapshot_gaps(reason: String) -> void:
+	net_report_last_world_in_ms = 0
+	net_report_last_player_in_ms = 0
+	net_report_interval_world_gap_max_ms = 0
+	net_report_interval_player_gap_max_ms = 0
+	net_report_interval_world_drop_gaps = 0
+	net_report_interval_player_drop_gaps = 0
+	_net_report_event("snapshot_gap_clock_reset", reason)
+
+func _net_report_tick(_delta: float) -> void:
+	if net_report_file == null:
+		return
+	_net_report_track_state_changes()
+	var now_ms := Time.get_ticks_msec()
+	if now_ms - net_report_last_flush_ms >= NET_REPORT_INTERVAL_MS:
+		_net_report_flush(false)
+
+func _net_report_track_state_changes() -> void:
+	var role := _net_report_role()
+	if role != net_report_last_role:
+		_net_report_event("role_change", "%s -> %s" % [net_report_last_role, role])
+		net_report_last_role = role
+	if mode != net_report_last_mode:
+		_net_report_event("mode_change", "%s -> %s" % [net_report_last_mode, mode])
+		net_report_last_mode = mode
+	if online_connected != net_report_last_online_connected:
+		_net_report_event("online_connected_change", "%s -> %s" % [str(net_report_last_online_connected), str(online_connected)])
+		net_report_last_online_connected = online_connected
+	if is_dead != net_report_last_dead:
+		_net_report_event("local_death_change", "%s hp=%d/%d" % [str(is_dead), int(player_hp), int(player_hp_max)])
+		net_report_last_dead = is_dead
+	if net_player_dead != net_report_last_remote_dead:
+		_net_report_event("remote_death_change", "%s hp=%d/%d" % [str(net_player_dead), int(net_player_hp), int(net_player_hp_max)])
+		net_report_last_remote_dead = net_player_dead
+	if online_lobby_connected_count != net_report_last_connected_count or online_lobby_ready_count != net_report_last_ready_count:
+		_net_report_event("lobby_state_change", "connected=%d ready=%d local_ready=%s pending=%s" % [online_lobby_connected_count, online_lobby_ready_count, str(local_player_ready), str(online_lobby_ready_pending)])
+		net_report_last_connected_count = online_lobby_connected_count
+		net_report_last_ready_count = online_lobby_ready_count
+
+func _net_report_flush(final_flush := false) -> void:
+	if net_report_file == null:
+		return
+	var now_ms := Time.get_ticks_msec()
+	var start_s := float(net_report_last_flush_ms - net_report_started_ms) / 1000.0
+	var end_s := float(now_ms - net_report_started_ms) / 1000.0
+	var duration_s := maxf(0.001, float(now_ms - net_report_last_flush_ms) / 1000.0)
+	var ping_avg := -1
+	if net_report_ping_count > 0:
+		ping_avg = int(round(float(net_report_ping_sum) / float(net_report_ping_count)))
+	var remote_ping_avg := -1
+	if net_report_remote_ping_count > 0:
+		remote_ping_avg = int(round(float(net_report_remote_ping_sum) / float(net_report_remote_ping_count)))
+	net_report_file.store_line("========== INTERVALO %.1fs - %.1fs%s ==========" % [start_s, end_s, " FINAL" if final_flush else ""])
+	net_report_file.store_line("estado: mode=%s role=%s online=%s room=%s peer_id=%d peers=%s" % [mode, _net_report_role(), str(online_connected), online_room_code, _mp_unique_id(), str(_mp_peer_ids())])
+	net_report_file.store_line("lobby: connected=%d ready=%d local_ready=%s pending=%s server_confirmed=%s" % [online_lobby_connected_count, online_lobby_ready_count, str(local_player_ready), str(online_lobby_ready_pending), str(online_lobby_server_confirmed_ready)])
+	net_report_file.store_line("jogo: phase=%d hp=%d/%d dead=%s remote_hp=%d/%d remote_dead=%s enemies=%d bullets=%d boss_active=%s boss_hp=%.1f" % [current_phase, int(player_hp), int(player_hp_max), str(is_dead), int(net_player_hp), int(net_player_hp_max), str(net_player_dead), enemies.size(), enemy_bullets.size(), str(boss_active), boss_hp])
+	net_report_file.store_line("ping_local_ms: last=%d min=%s avg=%s max=%s samples=%d" % [net_ping_ms, str(net_report_ping_min if net_report_ping_count > 0 else "--"), str(ping_avg if ping_avg >= 0 else "--"), str(net_report_ping_max if net_report_ping_count > 0 else "--"), net_report_ping_count])
+	net_report_file.store_line("ping_remoto_ms: last=%d min=%s avg=%s max=%s samples=%d" % [net_remote_ping_ms, str(net_report_remote_ping_min if net_report_remote_ping_count > 0 else "--"), str(remote_ping_avg if remote_ping_avg >= 0 else "--"), str(net_report_remote_ping_max if net_report_remote_ping_count > 0 else "--"), net_report_remote_ping_count])
+	net_report_file.store_line("bytes_estimados: in=%d (%.1f/s) out=%d (%.1f/s) total_in=%d total_out=%d" % [net_report_interval_bytes_in, float(net_report_interval_bytes_in) / duration_s, net_report_interval_bytes_out, float(net_report_interval_bytes_out) / duration_s, net_report_total_bytes_in, net_report_total_bytes_out])
+	net_report_file.store_line("pacotes_estimados: in=%d out=%d total_in=%d total_out=%d" % [net_report_interval_packets_in, net_report_interval_packets_out, net_report_total_packets_in, net_report_total_packets_out])
+	net_report_file.store_line("snapshots: world_in=%d world_out=%d player_in=%d player_out=%d control_in=%d control_out=%d" % [net_report_interval_world_in, net_report_interval_world_out, net_report_interval_player_in, net_report_interval_player_out, net_report_interval_control_in, net_report_interval_control_out])
+	net_report_file.store_line("quedas/gaps: world_gap_max_ms=%d world_gaps_criticos=%d player_gap_max_ms=%d player_gaps_criticos=%d jitter_world_ms=%.1f" % [net_report_interval_world_gap_max_ms, net_report_interval_world_drop_gaps, net_report_interval_player_gap_max_ms, net_report_interval_player_drop_gaps, net_world_jitter_ms])
+	net_report_file.store_line("eventos:")
+	if net_report_events.is_empty():
+		net_report_file.store_line("  nenhum evento no intervalo")
+	else:
+		for event in net_report_events:
+			net_report_file.store_line("  " + event)
+	net_report_file.store_line("")
+	net_report_file.flush()
+	net_report_last_flush_ms = now_ms
+	net_report_events.clear()
+	net_report_interval_bytes_in = 0
+	net_report_interval_bytes_out = 0
+	net_report_interval_packets_in = 0
+	net_report_interval_packets_out = 0
+	net_report_interval_world_in = 0
+	net_report_interval_world_out = 0
+	net_report_interval_player_in = 0
+	net_report_interval_player_out = 0
+	net_report_interval_control_in = 0
+	net_report_interval_control_out = 0
+	net_report_ping_min = 999999
+	net_report_ping_max = -1
+	net_report_ping_sum = 0
+	net_report_ping_count = 0
+	net_report_remote_ping_min = 999999
+	net_report_remote_ping_max = -1
+	net_report_remote_ping_sum = 0
+	net_report_remote_ping_count = 0
+	net_report_interval_world_gap_max_ms = 0
+	net_report_interval_player_gap_max_ms = 0
+	net_report_interval_world_drop_gaps = 0
+	net_report_interval_player_drop_gaps = 0
+
+func _net_report_estimate_packed_bytes(value) -> int:
+	if value is PackedFloat32Array:
+		return value.size() * 4
+	if value is PackedInt32Array:
+		return value.size() * 4
+	if value is PackedByteArray:
+		return value.size()
+	if value is Array:
+		return value.size() * 96
+	if value is Dictionary:
+		return max(64, value.size() * 40)
+	return 32
+
+func _net_report_estimate_world_bytes(enemies_data, boss_data, bullets_data) -> int:
+	return 32 + _net_report_estimate_packed_bytes(enemies_data) + _net_report_estimate_packed_bytes(boss_data) + _net_report_estimate_packed_bytes(bullets_data)
 
 func _setup_nickname_input() -> void:
 	nickname_edit = LineEdit.new()
@@ -1840,6 +2176,7 @@ func _serialize_gamepad_bindings() -> String:
 
 
 func _load_textures() -> void:
+	var perf_start_ms := Time.get_ticks_msec()
 	var base = "res://assets/sprites/"
 	textures["map_phase_1"] = _safe_load(base + "Fase1.png")
 	textures["map_phase_2"] = _safe_load(base + "Fase2.png")
@@ -1917,6 +2254,7 @@ func _load_textures() -> void:
 		textures["aura_" + aura["key"]] = _safe_load(base + aura["icon"])
 	for card in CARDS:
 		textures["card_" + card["name"]] = _safe_load(base + card["icon"])
+	_perf_mark("load_textures", perf_start_ms)
 
 
 func _safe_load(path: String) -> Texture2D:
@@ -1939,6 +2277,7 @@ func _safe_load_manifestation_icon(file_name: String, sprite_base: String) -> Te
 	return _safe_load(sprite_base + file_name)
 
 func _load_audio_streams() -> void:
+	var perf_start_ms := Time.get_ticks_msec()
 	var path = "res://Game Base/Ruptura_Temporal-APOLO2.0/Sounds/"
 	var files = ["Agudos-leve.mp3", "Boss1.mp3", "Boss2.mp3", "Boss3.mp3", "Boss3_andando.mp3", "Brinquedo.mp3", "Disparo_Geo.wav", "Esgoto.mp3", "Estalo.mp3", "Fase2_Boss.mp3", "Fase3_Boss.mp3", "fases.mp3", "Fase_boas.mp3", "Flauta.mp3", "Frasco.mp3", "frog.mp3", "Game_Over.mp3", "Geo_andando.mp3", "Hit_Boss1.mp3", "hit_person.mp3", "Inimigo1_hit.wav", "Inimigo3_hit.mp3", "Menu.mp3", "Neve.wav", "piano.mp3", "Portal.mp3", "Praia.wav", "Queijo.mp3", "Tema_Neve.mp3", "Tema_Praia.mp3", "Tema_Ratos.mp3"]
 	for f in files:
@@ -1996,6 +2335,7 @@ func _load_audio_streams() -> void:
 		if stream:
 			audio_streams[name] = stream
 	_load_procedural_sfx()
+	_perf_mark("load_audio_streams", perf_start_ms)
 
 
 func _load_procedural_sfx() -> void:
@@ -2502,6 +2842,7 @@ func _reset_card_counts() -> void:
 
 
 func _start_game() -> void:
+	var perf_start_ms := Time.get_ticks_msec()
 	game_time = 0.0
 	time_alive = 0.0
 	score = 0
@@ -2713,6 +3054,7 @@ func _start_game() -> void:
 	_reset_phase4_state()
 	_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
 	_add_text("%s // AUREA %s" % [MANIFESTATIONS[selected_manifestation]["name"], String(AURAS[selected_aura]["name"]).to_upper()], player_pos + Vector2(0, -80), _aura_color(), 2.0, 26)
+	_perf_mark("start_game_total", perf_start_ms)
 
 
 func _advance_to_phase(phase: int) -> void:
@@ -3060,6 +3402,7 @@ func _reset_arauto_state(reset_spawn_flag := false) -> void:
 
 
 func _process(delta: float) -> void:
+	_net_report_tick(delta)
 	is_gamepad_active = Input.get_connected_joypads().size() > 0
 	if menu_analog_cooldown > 0.0:
 		menu_analog_cooldown -= delta
@@ -3109,9 +3452,21 @@ func _process(delta: float) -> void:
 		_update_shop(delta)
 	elif mode == "manifest" or mode == "manifest_mp":
 		_update_manifest_selection_flow(delta)
+	elif mode == "multiplayer_preload":
+		_update_multiplayer_preload(delta)
+	elif mode == "multiplayer_syncing":
+		_update_effects(delta)
 	elif mode == "game_over" or mode == "victory":
 		_update_effects(delta)
 	queue_redraw()
+
+func _update_multiplayer_preload(_delta: float) -> void:
+	if online_preload_started_ms <= 0:
+		return
+	if online_preload_local_ready:
+		return
+	if Time.get_ticks_msec() - online_preload_started_ms > NET_PRELOAD_TIMEOUT_MS:
+		online_preload_stage = "PRELOAD DEMORANDO..."
 
 
 func _update_network_interpolation(delta: float) -> void:
@@ -3200,7 +3555,7 @@ func _update_manifest_selection_flow(delta: float) -> void:
 			aura_scroll_pos = float(selected_aura)
 			_block_ui_input()
 			if mode == "manifest_mp":
-				_sync_manifest_mp_selection()
+				_sync_manifest_mp_selection(true)
 	if not manifest_is_dragging:
 		var target = float(selected_aura if manifest_select_stage == MANIFEST_STAGE_AURA else selected_manifestation)
 		var count = AURAS.size() if manifest_select_stage == MANIFEST_STAGE_AURA else MANIFESTATIONS.size()
@@ -12508,6 +12863,11 @@ func _draw() -> void:
 			_draw_lobby_online_host(viewport)
 		"lobby_online_client":
 			_draw_lobby_online_client(viewport)
+		"multiplayer_preload":
+			_draw_multiplayer_preload(viewport)
+		"multiplayer_syncing":
+			_draw_game(viewport)
+			_draw_multiplayer_syncing(viewport)
 		"edit_layout":
 			_draw_edit_layout(viewport)
 		"catalog":
@@ -20485,6 +20845,8 @@ func _handle_key(event: InputEventKey) -> void:
 				var client_ready = online_lobby_ready_count >= 1
 				var can_start = online_lobby_connected_count >= 2 and client_ready
 				if can_start:
+					_net_report_count_out("control", 32)
+					_net_report_event("host_request_start_game_out_key", "connected=%d ready=%d" % [online_lobby_connected_count, online_lobby_ready_count])
 					rpc_id(1, "_host_request_start_game")
 			elif lobby_host_selected == 1:
 				_leave_multiplayer()
@@ -20497,7 +20859,12 @@ func _handle_key(event: InputEventKey) -> void:
 			lobby_client_selected = (lobby_client_selected + 1) % 2
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			if lobby_client_selected == 0 and online_connected:
+				if online_lobby_ready_pending:
+					return
 				local_player_ready = not local_player_ready
+				online_lobby_ready_pending = true
+				_net_report_count_out("control", 32)
+				_net_report_event("toggle_ready_out_key", "ready=%s" % str(local_player_ready))
 				rpc_id(1, "_toggle_ready", local_player_ready)
 			elif lobby_client_selected == 1:
 				_leave_multiplayer()
@@ -20634,7 +21001,7 @@ func _handle_key(event: InputEventKey) -> void:
 
 
 func _handle_press(pos: Vector2, viewport: Vector2) -> void:
-	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "paused", "pause_deck", "multiplayer_menu", "lobby_online_host", "lobby_online_client"]):
+	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "paused", "pause_deck", "multiplayer_menu", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "multiplayer_syncing"]):
 		return
 	if mode == "nick_setup":
 		if buttons.get("nick_confirm", Rect2()).has_point(pos):
@@ -20822,6 +21189,8 @@ func _reset_manifest_selection_stage() -> void:
 	manifest_is_dragging = false
 	manifest_drag_touch_index = -999
 	manifest_drag_moved = false
+	mp_manifest_sync_last_ms = 0
+	mp_manifest_sync_last_signature = ""
 
 
 func _start_spectrum_reveal() -> void:
@@ -20982,11 +21351,32 @@ func _finish_manifest_drag(pos: Vector2, viewport: Vector2) -> void:
 		_sync_manifest_mp_selection()
 
 
-func _sync_manifest_mp_selection() -> void:
+func _send_manifest_mp_rpc(rpc_name: String, stage: String, manifestation: int, aura: int, scroll: float, ready: bool) -> void:
+	_net_report_count_out("control", 80)
+	_net_report_event("manifest_rpc_out", "%s stage=%s manifestation=%d aura=%d ready=%s" % [rpc_name, stage, manifestation, aura, str(ready)])
+	if online_connected:
+		rpc_id(1, rpc_name, stage, manifestation, aura, scroll, ready)
+	else:
+		rpc(rpc_name, stage, manifestation, aura, scroll, ready)
+
+
+func _sync_manifest_mp_selection(force := false) -> void:
 	if mode != "manifest_mp":
 		return
 	var scroll: float = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
-	rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, scroll, mp_local_ready)
+	var is_ready := mp_local_ready and manifest_select_stage == MANIFEST_STAGE_AURA
+	if is_ready or force:
+		_send_manifest_mp_rpc("_rpc_confirm_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, scroll, is_ready)
+		return
+	var now_ms := Time.get_ticks_msec()
+	if now_ms - mp_manifest_sync_last_ms < NET_MANIFEST_SYNC_INTERVAL_MS:
+		return
+	var signature := "%s:%d:%d:%d" % [manifest_select_stage, selected_manifestation, selected_aura, int(round(scroll * 100.0))]
+	if signature == mp_manifest_sync_last_signature:
+		return
+	mp_manifest_sync_last_ms = now_ms
+	mp_manifest_sync_last_signature = signature
+	_send_manifest_mp_rpc("_rpc_sync_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, scroll, false)
 
 
 func _confirm_manifest_mp_selection() -> void:
@@ -20994,13 +21384,13 @@ func _confirm_manifest_mp_selection() -> void:
 		return
 	if manifest_select_stage == MANIFEST_STAGE_AURA:
 		mp_local_ready = true
-		_sync_manifest_mp_selection()
+		_sync_manifest_mp_selection(true)
 		if is_host and mp_local_ready and mp_remote_ready:
 			rpc("_start_multiplayer_game")
 			_start_multiplayer_game()
 	else:
 		_start_spectrum_reveal()
-		_sync_manifest_mp_selection()
+		_sync_manifest_mp_selection(true)
 
 
 func _handle_manifest_preview_overlay_touch(pos: Vector2) -> bool:
@@ -22294,6 +22684,7 @@ func _join_multiplayer_game() -> void:
 func _create_online_room() -> void:
 	if online_relay_request == null:
 		return
+	_net_report_event("create_online_room_request", "nickname=%s" % player_nickname)
 	multiplayer_notice = ""
 	_reset_online_room_state()
 	is_multiplayer = true
@@ -22316,6 +22707,7 @@ func _create_online_room() -> void:
 func _join_online_room() -> void:
 	if online_relay_request == null:
 		return
+	_net_report_event("join_online_room_request", "nickname=%s" % player_nickname)
 	multiplayer_notice = ""
 	_reset_online_room_state()
 	is_multiplayer = true
@@ -22339,7 +22731,22 @@ func _reset_online_room_state() -> void:
 	online_room_owner = false
 	online_lobby_connected_count = 0
 	online_lobby_ready_count = 0
+	online_lobby_ready_pending = false
+	online_lobby_server_confirmed_ready = false
+	_reset_online_preload_state()
 	_reset_network_interpolation_state()
+
+func _reset_online_preload_state() -> void:
+	online_preload_started_ms = 0
+	online_preload_finished_ms = 0
+	online_preload_stage = ""
+	online_preload_progress = 0.0
+	online_preload_local_ready = false
+	online_preload_remote_ready = false
+	online_preload_remote_progress = 0.0
+	online_preload_remote_stage = ""
+	online_first_world_snapshot_received = false
+	online_first_player_snapshot_received = false
 
 func _reset_network_interpolation_state() -> void:
 	net_player_peer_id = 0
@@ -22378,6 +22785,7 @@ func _on_online_relay_request_completed(result: int, response_code: int, _header
 	_connect_to_online_host(host, online_room_port)
 
 func _connect_to_online_host(ip: String, port: int) -> void:
+	_net_report_event("connect_to_online_host", "%s:%d" % [ip, port])
 	online_connected = false
 	multiplayer_peer = ENetMultiplayerPeer.new()
 	var err = multiplayer_peer.create_client(ip, port, NET_CHANNEL_COUNT)
@@ -22388,10 +22796,12 @@ func _connect_to_online_host(ip: String, port: int) -> void:
 		if not multiplayer.server_disconnected.is_connected(_on_server_disconnected):
 			multiplayer.server_disconnected.connect(_on_server_disconnected)
 	else:
+		_net_report_event("connect_to_online_host_failed", "err=%d" % err)
 		online_status = "FALHA AO CONECTAR"
 		mode = "multiplayer_menu"
 
 func _start_dedicated_room_server(port: int) -> void:
+	_net_report_event("dedicated_room_start", "port=%d room=%s" % [port, dedicated_room_code])
 	is_multiplayer = true
 	is_host = true
 	dedicated_server_mode = true
@@ -22412,17 +22822,20 @@ func _start_dedicated_room_server(port: int) -> void:
 
 func _on_peer_connected(id: int) -> void:
 	print("Player connected: ", id)
+	_net_report_event("peer_connected", "id=%d peers=%s" % [id, str(_mp_peer_ids())])
 	if dedicated_server_mode:
 		dedicated_ready_by_peer[id] = false
 		_sync_dedicated_lobby_state()
 
 func _on_peer_disconnected(id: int) -> void:
 	print("Player disconnected: ", id)
+	_net_report_event("peer_disconnected", "id=%d owner=%s" % [id, str(id == dedicated_room_owner_peer_id)])
 	if dedicated_server_mode:
 		var owner_left := id == dedicated_room_owner_peer_id
 		dedicated_ready_by_peer.erase(id)
 		dedicated_names_by_peer.erase(id)
 		dedicated_manifest_ready_by_peer.erase(id)
+		dedicated_preload_ready_by_peer.erase(id)
 		dedicated_player_state_by_peer.erase(id)
 		if owner_left:
 			dedicated_room_owner_peer_id = 0
@@ -22442,6 +22855,7 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	print("Connected to host")
+	_net_report_event("connected_to_room_server", "room=%s owner=%s" % [online_room_code, str(online_room_owner)])
 	online_connected = true
 	if online_room_code != "":
 		online_status = "CONECTADO: " + online_room_code
@@ -22449,12 +22863,15 @@ func _on_connected_to_server() -> void:
 
 func _on_server_disconnected() -> void:
 	print("Online room server disconnected")
+	_net_report_event("server_disconnected", "notice=%s" % multiplayer_notice)
 	var reason := multiplayer_notice
 	if reason == "":
 		reason = "SERVIDOR DA SALA DESCONECTADO." if online_room_owner else "O HOST SAIU. A SALA FOI ENCERRADA."
 	_leave_multiplayer(reason)
 
 func _leave_multiplayer(reason: String = "") -> void:
+	_net_report_event("leave_multiplayer", "reason=%s" % reason)
+	_net_report_reset_snapshot_gaps("leave_multiplayer")
 	if reason != "":
 		multiplayer_notice = reason
 	is_multiplayer = false
@@ -22465,6 +22882,7 @@ func _leave_multiplayer(reason: String = "") -> void:
 	dedicated_ready_by_peer.clear()
 	dedicated_names_by_peer.clear()
 	dedicated_manifest_ready_by_peer.clear()
+	dedicated_preload_ready_by_peer.clear()
 	dedicated_player_state_by_peer.clear()
 	mode = "multiplayer_menu"
 	if multiplayer_peer != null:
@@ -22520,8 +22938,10 @@ func _send_remote_player_damage(amount: int, source: String) -> void:
 		return
 	rpc("_rpc_client_take_damage", amount, source)
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _register_client_info(nick: String, is_owner: bool = false) -> void:
+	_net_report_count_in("control", 64)
+	_net_report_event("register_client_info_in", "nick=%s owner=%s sender=%d" % [nick, str(is_owner), _mp_sender_id()])
 	var sender := _mp_sender_id()
 	if dedicated_server_mode:
 		if sender != 0:
@@ -22536,8 +22956,10 @@ func _register_client_info(nick: String, is_owner: bool = false) -> void:
 		if sender != 0:
 			rpc_id(sender, "_register_host_info", player_nickname)
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _host_request_start_game() -> void:
+	_net_report_count_in("control", 32)
+	_net_report_event("host_request_start_game_in", "sender=%d owner=%d" % [_mp_sender_id(), dedicated_room_owner_peer_id])
 	if not dedicated_server_mode:
 		return
 	var sender := _mp_sender_id()
@@ -22548,23 +22970,31 @@ func _host_request_start_game() -> void:
 				if bool(dedicated_ready_by_peer.get(peer_id, false)):
 					client_ready = true
 		if _mp_peer_ids().size() >= 2 and client_ready:
-			rpc("_start_multiplayer_manifest")
-			_start_multiplayer_manifest()
+			_net_report_count_out("control", 48)
+			_net_report_event("start_multiplayer_preload_out", "reason=host_request")
+			rpc("_start_multiplayer_preload")
+			_start_multiplayer_preload()
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _register_host_info(nick: String) -> void:
+	_net_report_count_in("control", 48)
+	_net_report_event("register_host_info_in", "nick=%s" % nick)
 	net_player_name = nick
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _toggle_ready(ready: bool) -> void:
+	_net_report_count_in("control", 32)
+	_net_report_event("toggle_ready_in", "ready=%s sender=%d dedicated=%s" % [str(ready), _mp_sender_id(), str(dedicated_server_mode)])
 	if dedicated_server_mode:
 		var sender := _mp_sender_id()
 		if sender != 0:
 			dedicated_ready_by_peer[sender] = ready
 			_sync_dedicated_lobby_state()
-			if _dedicated_all_players_ready():
-				rpc("_start_multiplayer_manifest")
-				_start_multiplayer_manifest()
+			if _dedicated_clients_ready():
+				_net_report_count_out("control", 48)
+				_net_report_event("start_multiplayer_preload_out", "reason=clients_ready")
+				rpc("_start_multiplayer_preload")
+				_start_multiplayer_preload()
 		return
 	net_player_ready = ready
 
@@ -22574,8 +23004,13 @@ func _sync_dedicated_lobby_state() -> void:
 	var connected := _mp_peer_ids().size()
 	var ready := 0
 	for peer_id in _mp_peer_ids():
-		if bool(dedicated_ready_by_peer.get(peer_id, false)):
+		if peer_id != dedicated_room_owner_peer_id and bool(dedicated_ready_by_peer.get(peer_id, false)):
 			ready += 1
+	for peer_id in _mp_peer_ids():
+		var peer_ready := bool(dedicated_ready_by_peer.get(peer_id, false))
+		_net_report_count_out("control", 64)
+		rpc_id(peer_id, "_online_lobby_state_v2", dedicated_room_code, connected, ready, peer_ready)
+	_net_report_count_out("control", 64)
 	rpc("_online_lobby_state", dedicated_room_code, connected, ready)
 
 func _dedicated_all_players_ready() -> bool:
@@ -22587,12 +23022,41 @@ func _dedicated_all_players_ready() -> bool:
 			return false
 	return true
 
-@rpc("authority", "reliable")
+func _dedicated_clients_ready() -> bool:
+	var peers := _mp_peer_ids()
+	if peers.size() < 2 or dedicated_room_owner_peer_id == 0:
+		return false
+	var client_count := 0
+	for peer_id in peers:
+		if peer_id == dedicated_room_owner_peer_id:
+			continue
+		client_count += 1
+		if not bool(dedicated_ready_by_peer.get(peer_id, false)):
+			return false
+	return client_count > 0
+
+@rpc("authority", "call_remote", "reliable", 3)
 func _online_lobby_state(room_code: String, connected: int, ready: int) -> void:
+	_net_report_count_in("control", 64)
+	_net_report_event("online_lobby_state_in", "room=%s connected=%d ready=%d" % [room_code, connected, ready])
 	online_room_code = room_code
 	online_lobby_connected_count = connected
 	online_lobby_ready_count = ready
-	net_player_ready = ready >= 2
+	net_player_ready = ready >= 1
+	net_player_name = "%d/2 jogadores" % connected
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _online_lobby_state_v2(room_code: String, connected: int, ready: int, local_ready_confirmed: bool) -> void:
+	_net_report_count_in("control", 72)
+	_net_report_event("online_lobby_state_v2_in", "room=%s connected=%d ready=%d local_confirmed=%s" % [room_code, connected, ready, str(local_ready_confirmed)])
+	online_room_code = room_code
+	online_lobby_connected_count = connected
+	online_lobby_ready_count = ready
+	online_lobby_server_confirmed_ready = local_ready_confirmed
+	if not online_room_owner:
+		local_player_ready = local_ready_confirmed
+		online_lobby_ready_pending = false
+	net_player_ready = ready >= 1
 	net_player_name = "%d/2 jogadores" % connected
 
 @rpc("any_peer", "reliable")
@@ -22609,8 +23073,124 @@ func _rpc_add_score(amount: int) -> void:
 	score_total += amount
 	run_points_earned += amount
 
-@rpc("authority", "reliable")
+@rpc("authority", "call_remote", "reliable", 3)
+func _start_multiplayer_preload() -> void:
+	_net_report_count_in("control", 48)
+	_net_report_event("start_multiplayer_preload_in", "dedicated=%s" % str(dedicated_server_mode))
+	_reset_online_preload_state()
+	mode = "multiplayer_preload"
+	online_preload_started_ms = Time.get_ticks_msec()
+	online_preload_stage = "PREPARANDO RECURSOS"
+	online_preload_progress = 0.02
+	if dedicated_server_mode:
+		dedicated_preload_ready_by_peer.clear()
+		for peer_id in _mp_peer_ids():
+			dedicated_preload_ready_by_peer[peer_id] = false
+		return
+	call_deferred("_run_multiplayer_preload")
+
+func _run_multiplayer_preload() -> void:
+	var perf_start_ms := Time.get_ticks_msec()
+	online_preload_stage = "CENAS"
+	online_preload_progress = 0.16
+	var player_scene = load("res://scenes/Player.tscn")
+	if player_scene == null:
+		push_warning("PRELOAD: Player.tscn nao carregou")
+	await get_tree().process_frame
+	online_preload_stage = "TEXTURAS DA FASE 1"
+	online_preload_progress = 0.36
+	_prewarm_texture_keys(["map_phase_1", "player_idle", "player_right", "player_left", "player_up", "player_down", "enemy_common_phase_1", "enemy_right", "enemy_left", "boss", "boss_stage1", "coin"])
+	await get_tree().process_frame
+	online_preload_stage = "AUDIO ESSENCIAL"
+	online_preload_progress = 0.58
+	_prewarm_audio_keys(["Fase1.mp3", "Fase1-2.mp3", "Fase1-4.mp3", "Boss1-1.mp3", "Disparo.MP3", "Hit_Boss1.mp3", "hit_person.mp3"])
+	await get_tree().process_frame
+	online_preload_stage = "MANIFESTACOES"
+	online_preload_progress = 0.76
+	for item in MANIFESTATIONS:
+		_touch_texture(textures.get("manifestation_" + item["key"]))
+	for aura in AURAS:
+		_touch_texture(textures.get("aura_" + aura["key"]))
+	await get_tree().process_frame
+	online_preload_stage = "AGUARDANDO SINCRONIA"
+	online_preload_progress = 1.0
+	online_preload_local_ready = true
+	online_preload_finished_ms = Time.get_ticks_msec()
+	_perf_mark("online_preload_total", perf_start_ms)
+	if online_connected:
+		_net_report_count_out("control", 32)
+		_net_report_event("preload_ready_out", "load_ms=%d" % (online_preload_finished_ms - online_preload_started_ms))
+		rpc_id(1, "_rpc_preload_ready", online_preload_finished_ms - online_preload_started_ms)
+
+func _prewarm_texture_keys(keys: Array) -> void:
+	for key in keys:
+		var value = textures.get(key)
+		if value is Array:
+			for tex in value:
+				_touch_texture(tex)
+		else:
+			_touch_texture(value)
+
+func _touch_texture(tex) -> void:
+	if tex is Texture2D:
+		tex.get_width()
+		tex.get_height()
+
+func _prewarm_audio_keys(keys: Array) -> void:
+	for key in keys:
+		var stream = audio_streams.get(key)
+		if stream != null:
+			stream.get_length()
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_preload_ready(load_ms: int) -> void:
+	_net_report_count_in("control", 32)
+	_net_report_event("preload_ready_in", "sender=%d load_ms=%d" % [_mp_sender_id(), load_ms])
+	if not dedicated_server_mode:
+		return
+	var sender := _mp_sender_id()
+	if sender == 0:
+		return
+	dedicated_preload_ready_by_peer[sender] = true
+	for peer_id in _mp_peer_ids():
+		_net_report_count_out("control", 48)
+		rpc_id(peer_id, "_rpc_preload_state", _dedicated_preload_ready_count(), _mp_peer_ids().size(), load_ms)
+	if _dedicated_preload_all_ready():
+		_net_report_count_out("control", 48)
+		_net_report_event("start_multiplayer_manifest_out", "all_preload_ready")
+		rpc("_start_multiplayer_manifest")
+		_start_multiplayer_manifest()
+
+func _dedicated_preload_ready_count() -> int:
+	var ready := 0
+	for peer_id in _mp_peer_ids():
+		if bool(dedicated_preload_ready_by_peer.get(peer_id, false)):
+			ready += 1
+	return ready
+
+func _dedicated_preload_all_ready() -> bool:
+	var peers := _mp_peer_ids()
+	if peers.size() < 2:
+		return false
+	for peer_id in peers:
+		if not bool(dedicated_preload_ready_by_peer.get(peer_id, false)):
+			return false
+	return true
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_preload_state(ready_count: int, peer_count: int, last_load_ms: int) -> void:
+	_net_report_count_in("control", 48)
+	_net_report_event("preload_state_in", "ready=%d/%d last_load_ms=%d" % [ready_count, peer_count, last_load_ms])
+	online_preload_remote_ready = ready_count >= max(1, peer_count)
+	online_preload_remote_progress = float(ready_count) / max(1.0, float(peer_count))
+	online_preload_remote_stage = "%d/%d prontos" % [ready_count, peer_count]
+	if last_load_ms > 0:
+		print("PERF online_peer_preload %dms ready=%d/%d" % [last_load_ms, ready_count, peer_count])
+
+@rpc("authority", "call_remote", "reliable", 3)
 func _start_multiplayer_manifest() -> void:
+	_net_report_count_in("control", 48)
+	_net_report_event("start_multiplayer_manifest_in")
 	mode = "manifest_mp"
 	mp_local_ready = false
 	mp_remote_ready = false
@@ -22618,23 +23198,28 @@ func _start_multiplayer_manifest() -> void:
 	mp_remote_manifestation = 0
 	mp_remote_aura = 0
 	mp_remote_scroll = 0.0
+	mp_manifest_sync_last_ms = 0
+	mp_manifest_sync_last_signature = ""
 	dedicated_manifest_ready_by_peer.clear()
 	if dedicated_server_mode:
 		for peer_id in _mp_peer_ids():
 			dedicated_manifest_ready_by_peer[peer_id] = false
 	_reset_manifest_selection_stage()
 
-@rpc("any_peer", "unreliable_ordered")
-func _rpc_sync_manifest_mp(stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool) -> void:
+func _apply_manifest_mp_remote_state(sender: int, stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool, reliable_forward: bool) -> void:
 	if not is_multiplayer or mode != "manifest_mp": return
-	var sender = _mp_sender_id()
 	if dedicated_server_mode:
 		if sender != 0:
 			dedicated_manifest_ready_by_peer[sender] = is_ready and stage == MANIFEST_STAGE_AURA
 			for peer_id in _mp_peer_ids():
 				if peer_id != sender:
-					rpc_id(peer_id, "_rpc_sync_manifest_mp", stage, manifestation, aura, scroll, is_ready)
+					if reliable_forward:
+						rpc_id(peer_id, "_rpc_confirm_manifest_mp", stage, manifestation, aura, scroll, is_ready)
+					else:
+						rpc_id(peer_id, "_rpc_sync_manifest_mp", stage, manifestation, aura, scroll, is_ready)
 			if is_ready and _dedicated_manifest_all_ready():
+				_net_report_count_out("control", 48)
+				_net_report_event("start_multiplayer_game_out", "all_manifest_ready")
 				rpc("_start_multiplayer_game")
 				_start_multiplayer_game()
 		return
@@ -22646,8 +23231,22 @@ func _rpc_sync_manifest_mp(stage: String, manifestation: int, aura: int, scroll:
 		mp_remote_ready = is_ready
 
 		if is_host and mp_local_ready and mp_remote_ready:
+			_net_report_count_out("control", 48)
+			_net_report_event("start_multiplayer_game_out", "host_and_remote_ready")
 			rpc("_start_multiplayer_game")
 			_start_multiplayer_game()
+
+@rpc("any_peer", "call_remote", "unreliable_ordered", 3)
+func _rpc_sync_manifest_mp(stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool) -> void:
+	_net_report_count_in("control", 80)
+	_net_report_event("manifest_sync_in", "stage=%s manifestation=%d aura=%d ready=%s sender=%d" % [stage, manifestation, aura, str(is_ready), _mp_sender_id()])
+	_apply_manifest_mp_remote_state(_mp_sender_id(), stage, manifestation, aura, scroll, is_ready, false)
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_confirm_manifest_mp(stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool) -> void:
+	_net_report_count_in("control", 80)
+	_net_report_event("manifest_confirm_in", "stage=%s manifestation=%d aura=%d ready=%s sender=%d" % [stage, manifestation, aura, str(is_ready), _mp_sender_id()])
+	_apply_manifest_mp_remote_state(_mp_sender_id(), stage, manifestation, aura, scroll, is_ready, true)
 
 func _dedicated_manifest_all_ready() -> bool:
 	var peers := _mp_peer_ids()
@@ -22658,10 +23257,19 @@ func _dedicated_manifest_all_ready() -> bool:
 			return false
 	return true
 
-@rpc("authority", "reliable")
+@rpc("authority", "call_remote", "reliable", 3)
 func _start_multiplayer_game() -> void:
+	_net_report_count_in("control", 48)
+	_net_report_event("start_multiplayer_game_in", "mode_before=%s" % mode)
+	_net_report_reset_snapshot_gaps("start_multiplayer_game")
+	var perf_start_ms := Time.get_ticks_msec()
 	mode = "game"
 	_start_game()
+	if _is_world_replica():
+		mode = "multiplayer_syncing"
+		online_first_world_snapshot_received = false
+		online_first_player_snapshot_received = false
+	_perf_mark("start_multiplayer_game", perf_start_ms)
 	if is_host and not dedicated_server_mode:
 		var container = get_node_or_null("PlayersContainer")
 		if container:
@@ -22757,6 +23365,7 @@ func _sync_multiplayer_state() -> void:
 	if online_connected:
 		if _should_send_player_sync(now_ms):
 			var local_frame_idx = int(now_ms / 170) % max(1, textures.get("player_idle", []).size())
+			_net_report_count_out("player", 72)
 			rpc_id(1, "_rpc_client_player_state_light", player_pos, int(player_hp), int(player_hp_max), is_dead, selected_manifestation, selected_aura, local_frame_idx, false, net_ping_ms)
 		if _is_world_replica():
 			return
@@ -22791,8 +23400,12 @@ func _sync_multiplayer_state() -> void:
 	if _is_world_authority() and _should_send_world_sync(now_ms):
 		var boss_data := PackedFloat32Array([boss_pos.x, boss_pos.y, boss_hp, 1.0 if boss_dead else 0.0])
 		if online_connected:
-			rpc_id(1, "_update_remote_entities", _pack_net_enemies(), boss_data, _pack_net_enemy_bullets())
+			var enemies_packet := _pack_net_enemies()
+			var bullets_packet := _pack_net_enemy_bullets()
+			_net_report_count_out("world", _net_report_estimate_world_bytes(enemies_packet, boss_data, bullets_packet))
+			rpc_id(1, "_update_remote_entities", enemies_packet, boss_data, bullets_packet)
 		else:
+			_net_report_count_out("world", _net_report_estimate_world_bytes(enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets))
 			rpc("_update_remote_entities", enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets)
 
 func _pack_net_enemies() -> PackedFloat32Array:
@@ -22857,20 +23470,27 @@ func _update_online_ping(now_ms: int) -> void:
 	if now_ms - net_ping_last_sent_ms < NET_PING_INTERVAL_MS:
 		return
 	net_ping_last_sent_ms = now_ms
+	_net_report_count_out("control", 24)
 	rpc_id(1, "_rpc_ping", now_ms)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _rpc_client_player_state(state: Dictionary, p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void:
+	_net_report_count_in("player", _net_report_estimate_packed_bytes(state) + 96)
 	if not dedicated_server_mode:
 		return
 	var sender := _mp_sender_id()
 	if sender == 0:
 		return
 	dedicated_player_state_by_peer[sender] = state
-	rpc("_rpc_remote_player_state", sender, state, p_slashes, p_prisms, p_anchors, p_seed_links, p_effects)
+	var player_bytes := _net_report_estimate_packed_bytes(state) + 96
+	for peer_id in _mp_peer_ids():
+		if peer_id != sender:
+			_net_report_count_out("player", player_bytes)
+			rpc_id(peer_id, "_rpc_remote_player_state", sender, state, p_slashes, p_prisms, p_anchors, p_seed_links, p_effects)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, frame_idx: int, flip_h: bool, ping: int) -> void:
+	_net_report_count_in("player", 72)
 	if not dedicated_server_mode:
 		return
 	var sender := _mp_sender_id()
@@ -22888,10 +23508,14 @@ func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bo
 		"ping": ping
 	}
 	dedicated_player_state_by_peer[sender] = state
-	rpc("_rpc_remote_player_state_light", sender, pos, hp, hp_max, dead, manifestation, aura, frame_idx, flip_h, ping)
+	for peer_id in _mp_peer_ids():
+		if peer_id != sender:
+			_net_report_count_out("player", 72)
+			rpc_id(peer_id, "_rpc_remote_player_state_light", sender, pos, hp, hp_max, dead, manifestation, aura, frame_idx, flip_h, ping)
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)
 func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void:
+	_net_report_count_in("player", _net_report_estimate_packed_bytes(state) + 96)
 	if peer_id == _mp_unique_id():
 		return
 	_accept_remote_player_position(peer_id, Vector2(state.get("pos", net_player_pos)))
@@ -22903,6 +23527,7 @@ func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array,
 	net_player_frame_idx = state.get("frame_idx", net_player_frame_idx)
 	net_player_flip_h = state.get("flip_h", net_player_flip_h)
 	net_remote_ping_ms = int(state.get("ping", net_remote_ping_ms))
+	_net_report_sample_ping(net_remote_ping_ms, true)
 	net_slashes = p_slashes
 	net_prisms = p_prisms
 	net_anchors = p_anchors
@@ -22911,6 +23536,7 @@ func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array,
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)
 func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, frame_idx: int, flip_h: bool, ping: int) -> void:
+	_net_report_count_in("player", 72)
 	if peer_id == _mp_unique_id():
 		return
 	_accept_remote_player_position(peer_id, pos)
@@ -22922,9 +23548,14 @@ func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max:
 	net_player_frame_idx = frame_idx
 	net_player_flip_h = flip_h
 	net_remote_ping_ms = ping
+	_net_report_sample_ping(net_remote_ping_ms, true)
 
 func _accept_remote_player_position(peer_id: int, pos: Vector2) -> void:
 	var now_ms := Time.get_ticks_msec()
+	_net_report_note_player_snapshot()
+	if not online_first_player_snapshot_received:
+		online_first_player_snapshot_received = true
+		_perf_mark("first_player_snapshot", online_preload_started_ms if online_preload_started_ms > 0 else now_ms)
 	if net_player_has_snapshot and net_player_peer_id == peer_id and net_player_snapshot_last_ms > 0:
 		var elapsed := maxf(0.001, float(now_ms - net_player_snapshot_last_ms) / 1000.0)
 		net_player_velocity = (pos - net_player_pos) / elapsed
@@ -22940,11 +23571,14 @@ func _accept_remote_player_position(peer_id: int, pos: Vector2) -> void:
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 2)
 func _update_remote_entities(enemies_data, boss_data, bullets_data) -> void:
+	var world_bytes := _net_report_estimate_world_bytes(enemies_data, boss_data, bullets_data)
+	_net_report_count_in("world", world_bytes)
 	if dedicated_server_mode:
 		var sender := _mp_sender_id()
 		if sender == dedicated_room_owner_peer_id:
 			for peer_id in _mp_peer_ids():
 				if peer_id != sender:
+					_net_report_count_out("world", world_bytes)
 					rpc_id(peer_id, "_update_remote_entities", enemies_data, boss_data, bullets_data)
 		return
 	if _mp_sender_is_self(): return
@@ -22954,6 +23588,12 @@ func _update_remote_entities(enemies_data, boss_data, bullets_data) -> void:
 
 func _apply_remote_world_snapshot(enemies_data, boss_data, bullets_data) -> void:
 	var now_ms := Time.get_ticks_msec()
+	_net_report_note_world_snapshot()
+	if not online_first_world_snapshot_received:
+		online_first_world_snapshot_received = true
+		_perf_mark("first_world_snapshot", online_preload_started_ms if online_preload_started_ms > 0 else now_ms)
+		if mode == "multiplayer_syncing":
+			mode = "game"
 	if net_world_snapshot_last_ms > 0:
 		var interval := float(now_ms - net_world_snapshot_last_ms)
 		net_world_jitter_ms = lerpf(net_world_jitter_ms, absf(interval - NET_WORLD_SYNC_INTERVAL_MS), 0.18)
@@ -23076,35 +23716,43 @@ func _apply_remote_bullet_snapshot(snapshot_data, now_ms: int) -> void:
 
 @rpc("any_peer", "call_remote", "unreliable", 3)
 func _rpc_ping(sent_ms: int) -> void:
+	_net_report_count_in("control", 24)
 	if dedicated_server_mode:
 		var sender := _mp_sender_id()
 		if sender != 0:
+			_net_report_count_out("control", 24)
 			rpc_id(sender, "_rpc_pong", sent_ms)
 		return
 	var sender := _mp_sender_id()
 	if sender != 0:
+		_net_report_count_out("control", 24)
 		rpc_id(sender, "_rpc_pong", sent_ms)
 
 @rpc("authority", "call_remote", "unreliable", 3)
 func _rpc_pong(sent_ms: int) -> void:
+	_net_report_count_in("control", 24)
 	net_ping_ms = max(0, Time.get_ticks_msec() - sent_ms)
+	_net_report_sample_ping(net_ping_ms, false)
 
 
 func _send_network_ability_visual(action: int, origin: Vector2, target: Vector2, duration: float, extra: float = 0.0) -> void:
 	if not is_multiplayer or not online_connected or dedicated_server_mode or multiplayer_peer == null:
 		return
 	net_ability_sequence += 1
+	_net_report_count_out("control", 96)
 	rpc_id(1, "_rpc_ability_visual", _mp_unique_id(), net_ability_sequence, action, selected_manifestation, origin, target, duration, extra, net_ping_ms)
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_ability_visual(source_peer_id: int, sequence: int, action: int, manifestation: int, origin: Vector2, target: Vector2, duration: float, extra: float, sender_ping_ms: int) -> void:
+	_net_report_count_in("control", 96)
 	if dedicated_server_mode:
 		var sender := _mp_sender_id()
 		if sender == 0:
 			return
 		for peer_id in _mp_peer_ids():
 			if peer_id != sender:
+				_net_report_count_out("control", 96)
 				rpc_id(peer_id, "_rpc_ability_visual", sender, sequence, action, manifestation, origin, target, duration, extra, sender_ping_ms)
 		return
 	if source_peer_id == _mp_unique_id():
@@ -23151,7 +23799,7 @@ func _update_remote_visuals(p_slashes: Array, p_prisms: Array, p_anchors: Array,
 
 
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_sync_pause(is_paused: bool) -> void:
 	if dedicated_server_mode:
 		var sender := _mp_sender_id()
@@ -23175,7 +23823,7 @@ func _rpc_sync_pause(is_paused: bool) -> void:
 			_begin_pause_music_fade_in()
 			_block_ui_input()
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_trigger_shop(is_forced: bool) -> void:
 	if dedicated_server_mode:
 		var sender := _mp_sender_id()
@@ -23193,20 +23841,20 @@ func _rpc_trigger_shop(is_forced: bool) -> void:
 	else:
 		_start_shop_opening_animation(false)
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_request_shop() -> void:
 	if _mp_sender_is_self(): return
 	if mode == "game":
 		mode = "shop_mp_requested"
 		shop_mp_request_timer = 5.0
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_accept_shop() -> void:
 	if _mp_sender_is_self(): return
 	if mode == "shop_mp_waiting":
 		_start_shop_opening_animation(false)
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_shop_ready() -> void:
 	if _mp_sender_is_self(): return
 	shop_mp_partner_ready = true
@@ -23216,7 +23864,7 @@ func _check_shop_mp_exit() -> void:
 	if shop_mp_ready_to_leave and shop_mp_partner_ready:
 		_finish_shop()
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_player_died() -> void:
 	if _mp_sender_is_self(): return
 	partner_is_dead = true
@@ -23232,7 +23880,7 @@ func _handle_revive() -> void:
 	_spawn_radial_particles(player_pos, Color(0.2, 1.0, 0.5), 42)
 	mode = "game"
 
-@rpc("any_peer", "reliable")
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_revive_player() -> void:
 	if _mp_sender_is_self(): return
 	_handle_revive()
@@ -23355,16 +24003,46 @@ func _draw_lobby_online_client(viewport: Vector2) -> void:
 
 	var ready_bg = Color(0.05, 0.2, 0.1, 0.9) if local_player_ready else Color(0.1, 0.1, 0.1, 0.9)
 	var ready_border = Color(0.0, 1.0, 0.82) if online_connected else Color(0.5, 0.5, 0.5)
-	var ready_text = "ESTOU PRONTO!" if local_player_ready else "MARCAR COMO PRONTO"
+	var ready_text = "CONFIRMANDO..." if online_lobby_ready_pending else ("ESTOU PRONTO!" if local_player_ready else "MARCAR COMO PRONTO")
 
 	_draw_big_button(buttons["lobby_ready"], ready_text, ready_bg, ready_border)
 	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 0.2, 0.2))
+
+func _draw_multiplayer_preload(viewport: Vector2) -> void:
+	_draw_holo_background(viewport, null, Color(0.2, 0.82, 1.0))
+	_draw_glitch_title("PREPARANDO ONLINE", Vector2(viewport.x * 0.5, 64), 34, Color(0.2, 0.82, 1.0))
+	var panel := Rect2(viewport.x * 0.5 - 220, viewport.y * 0.5 - 112, 440, 224)
+	_draw_holo_panel(panel, Color(0.2, 0.82, 1.0), true, 0.66)
+	var stage := online_preload_stage if online_preload_stage != "" else "AGUARDANDO..."
+	_draw_centered(stage, panel.position + Vector2(220, 52), 18, Color.WHITE)
+	var bar := Rect2(panel.position.x + 38, panel.position.y + 88, panel.size.x - 76, 18)
+	draw_rect(bar, Color(0.02, 0.08, 0.12, 0.88), true)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(online_preload_progress, 0.0, 1.0), bar.size.y)), Color(0.2, 0.82, 1.0, 0.92), true)
+	draw_rect(bar, Color(0.78, 1.0, 1.0, 0.76), false, 2.0)
+	var local_text := "LOCAL PRONTO" if online_preload_local_ready else "CARREGANDO LOCAL"
+	var remote_text := online_preload_remote_stage if online_preload_remote_stage != "" else "AGUARDANDO PARES"
+	_draw_centered(local_text, panel.position + Vector2(220, 132), 14, Color(0.0, 1.0, 0.82) if online_preload_local_ready else Color(1.0, 0.82, 0.24))
+	_draw_centered(remote_text, panel.position + Vector2(220, 162), 14, Color(0.0, 1.0, 0.82) if online_preload_remote_ready else Color(0.72, 0.9, 1.0))
+	if online_preload_started_ms > 0:
+		var elapsed := float(Time.get_ticks_msec() - online_preload_started_ms) / 1000.0
+		_draw_centered("%.1fs" % elapsed, panel.position + Vector2(220, 194), 12, Color(0.74, 0.92, 1.0, 0.86))
+
+func _draw_multiplayer_syncing(viewport: Vector2) -> void:
+	var overlay := Rect2(Vector2.ZERO, viewport)
+	draw_rect(overlay, Color(0.0, 0.0, 0.0, 0.56), true)
+	var panel := Rect2(viewport.x * 0.5 - 210, viewport.y * 0.5 - 74, 420, 148)
+	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.78)
+	_draw_centered("SINCRONIZANDO MUNDO", panel.position + Vector2(210, 48), 22, Color.WHITE)
+	var state := "snapshot do mundo" if not online_first_world_snapshot_received else "jogador remoto"
+	_draw_centered("aguardando " + state, panel.position + Vector2(210, 88), 14, Color(0.72, 1.0, 0.92))
 
 func _handle_lobby_online_host_touch(pos: Vector2, viewport: Vector2) -> void:
 	if buttons.get("lobby_start", Rect2()).has_point(pos):
 		var client_ready = online_lobby_ready_count >= 1
 		var can_start = online_lobby_connected_count >= 2 and client_ready
 		if can_start:
+			_net_report_count_out("control", 32)
+			_net_report_event("host_request_start_game_out_touch", "connected=%d ready=%d" % [online_lobby_connected_count, online_lobby_ready_count])
 			rpc_id(1, "_host_request_start_game")
 	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
 		_leave_multiplayer()
@@ -23372,7 +24050,12 @@ func _handle_lobby_online_host_touch(pos: Vector2, viewport: Vector2) -> void:
 func _handle_lobby_online_client_touch(pos: Vector2, viewport: Vector2) -> void:
 	if buttons.get("lobby_ready", Rect2()).has_point(pos):
 		if online_connected:
+			if online_lobby_ready_pending:
+				return
 			local_player_ready = not local_player_ready
+			online_lobby_ready_pending = true
+			_net_report_count_out("control", 32)
+			_net_report_event("toggle_ready_out_touch", "ready=%s" % str(local_player_ready))
 			rpc_id(1, "_toggle_ready", local_player_ready)
 	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
 		_leave_multiplayer()

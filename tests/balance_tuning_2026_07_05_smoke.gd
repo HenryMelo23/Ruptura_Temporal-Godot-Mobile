@@ -22,7 +22,8 @@ func _finish_ok(message: String) -> void:
 		root.remove_child(game)
 		game.free()
 		game = null
-	await process_frame
+	for i in range(4):
+		await process_frame
 	quit(0)
 
 
