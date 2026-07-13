@@ -3,7 +3,7 @@ extends Node2D
 const AuraSystem = preload("res://scripts/aura_system.gd")
 
 const WORLD_SIZE := Vector2(1600, 900)
-const GAME_VERSION := "2.0.19"
+const GAME_VERSION := "2.0.20"
 const DESKTOP_STAGE_SIZE := Vector2(1088, 768)
 const PLAYER_START := Vector2(420, 500)
 const PLAYER_BASE_HP := 450
@@ -135,7 +135,8 @@ const LACERANTE_TP_INITIAL_COOLDOWN := 2.0
 const LACERANTE_TP_MAX_CHARGES := 2
 const TP_RETURN_WINDOW := 0.85
 const TP_RETURN_COOLDOWN := 1.2
-const TP_PRISM_DURATION := 3.0
+const TP_PRISM_DURATION := 10.0
+const TP_PRISM_DASH_COOLDOWN := 4.5
 const TP_PARASITE_DURATION := 1.35
 const TP_PARASITE_STUN := 1.8
 const TP_GRAVITY_RADIUS := 230.0
@@ -301,6 +302,12 @@ const LARAPIO_PATROL_MARGIN := 150.0
 const LARAPIO_PATROL_RETARGET_TIME := 2.4
 const LARAPIO_IDLE_LAUGH_INTERVAL := 7.0
 const LARAPIO_MONEY_LAUGH_INTERVAL := 5.0
+const LARAPIO_COOLDOWN_STEP_TIME := 180.0
+const LARAPIO_COOLDOWN_STEP_BONUS := 18.0
+const LARAPIO_COOLDOWN_MAX_BONUS := 150.0
+const LARAPIO_CARD_DROP_BASE := 4
+const LARAPIO_CARD_DROP_CLEAN := 5
+const LARAPIO_CARD_RARE_CHANCE := 0.30
 const VORAZ_BITE_RADIUS := 100.0
 const VORAZ_BOSS_BITE_RADIUS := 152.0
 const VORAZ_BITE_INTERVAL := 0.95
@@ -989,6 +996,8 @@ var shop_purchase_pending_card = {}
 var shop_purchase_pending_can_continue = false
 var shop_purchase_pending_price = 0
 var shop_reserved_card_id = ""
+var shop_recent_common_ids: Array = []
+var shop_endurance_discount = 0.0
 var fratura_cronal_cooldown = 0.0
 var fratura_cronal_armed = false
 var pulso_desestabilizador_cooldown = 0.0
@@ -1031,6 +1040,8 @@ var acorrentada_overcharge_ready = false
 var acorrentada_force_next_attack_3 = false
 var acorrentada_links = []
 var acorrentada_visuals = []
+var acorrentada_worn_chains = []
+var acorrentada_last_player_pos = PLAYER_START
 var acorrentada_boss_elos = 0
 var acorrentada_boss_elo_timer = 0.0
 var acorrentada_boss_crack_timer = 0.0
@@ -1094,6 +1105,8 @@ var event_alert_timer = 0.0
 var screen_shake_timer = 0.0
 var screen_shake_strength = 0.0
 var damage_flash_timer = 0.0
+var low_health_heartbeat_timer = 0.0
+var low_health_heartbeat_double = false
 var secondary_drain_flash_timer = 0.0
 var orientation_poll_timer = 0.0
 var last_manual_orientation = DisplayServer.SCREEN_SENSOR_LANDSCAPE
@@ -3187,6 +3200,30 @@ func _vibrate(duration_ms: int, amplitude := 0.5) -> void:
 	if haptics_enabled:
 		Input.vibrate_handheld(duration_ms, amplitude)
 
+
+func _update_low_health_heartbeat(delta: float) -> void:
+	if is_dead or player_hp_max <= 0:
+		low_health_heartbeat_timer = 0.0
+		low_health_heartbeat_double = false
+		return
+	var hp_ratio: float = float(player_hp) / max(1.0, float(player_hp_max))
+	if hp_ratio >= 0.25:
+		low_health_heartbeat_timer = 0.0
+		low_health_heartbeat_double = false
+		return
+	low_health_heartbeat_timer -= delta
+	if low_health_heartbeat_timer > 0.0:
+		return
+	var danger: float = clamp(1.0 - hp_ratio / 0.25, 0.0, 1.0)
+	var beat_gap: float = lerp(0.82, 0.46, danger)
+	if low_health_heartbeat_double:
+		_vibrate(28, 0.13 + danger * 0.05)
+		low_health_heartbeat_timer = beat_gap
+	else:
+		_vibrate(36, 0.16 + danger * 0.07)
+		low_health_heartbeat_timer = 0.16
+	low_health_heartbeat_double = not low_health_heartbeat_double
+
 func _reset_card_counts() -> void:
 	cards_bought.clear()
 	for card in CARDS:
@@ -3347,6 +3384,8 @@ func _start_game() -> void:
 	forced_shop_timer = -1.0
 	forced_shop_triggered = false
 	shop_auto_elapsed = 0.0
+	shop_endurance_discount = 0.0
+	shop_recent_common_ids.clear()
 	next_forced_shop_time = shop_auto_interval if shop_auto_enabled else INF
 	shop_opening_timer = 0.0
 	shop_opening_forced = false
@@ -3487,6 +3526,8 @@ func _advance_to_phase(phase: int) -> void:
 	boss_parasite_mark_time = 0.0
 	retornante_memoria_pending = false
 	damage_flash_timer = 0.0
+	low_health_heartbeat_timer = 0.0
+	low_health_heartbeat_double = false
 	secondary_drain_flash_timer = 0.0
 	screen_shake_timer = 0.0
 	screen_shake_strength = 0.0
@@ -4163,6 +4204,7 @@ func _update_game(delta: float) -> void:
 		next_forced_shop_time = max(0.0, shop_auto_interval - shop_auto_elapsed)
 	screen_shake_timer = max(0.0, screen_shake_timer - delta)
 	damage_flash_timer = max(0.0, damage_flash_timer - delta)
+	_update_low_health_heartbeat(delta)
 	secondary_drain_flash_timer = max(0.0, secondary_drain_flash_timer - delta)
 	controls_inverted_timer = max(0.0, controls_inverted_timer - delta)
 	shop_select_pulse_timer = max(0.0, shop_select_pulse_timer - delta)
@@ -4527,7 +4569,8 @@ func _try_attack() -> void:
 			var perfect := _resonant_is_perfect()
 			_play_manifestation_attack_sfx("ressonante")
 			var before_resonant = bullets.size()
-			_fire_projectile("ressonante", player_damage * (0.58 if perfect else 0.42), BULLET_SPEED * (1.08 if perfect else 0.95), 1.18, false)
+			var resonant_damage: float = player_damage * 0.58 * _resonant_combo_multiplier() if perfect else player_damage * 0.42
+			_fire_projectile("ressonante", resonant_damage, BULLET_SPEED * (1.08 if perfect else 0.95), 1.18, false)
 			if bullets.size() > before_resonant:
 				bullets[-1]["resonant_perfect"] = perfect
 				bullets[-1]["resonant_note"] = _resonant_note_name()
@@ -5691,6 +5734,7 @@ func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2)
 		"prismatica":
 			prisms.append({"pos": destination, "life": TP_PRISM_DURATION, "max_life": TP_PRISM_DURATION, "damage_tick": 0.2, "radius": 76.0, "tp_prism": true})
 			tp_effects.append({"kind": "prismatica", "life": TP_PRISM_DURATION, "max": TP_PRISM_DURATION})
+			tp_cooldown_override = TP_PRISM_DASH_COOLDOWN
 			_add_text("PRISMA DE PASSAGEM", destination + Vector2(0, -92), Color(0.38, 1.0, 0.96), 1.0, 20)
 		"retornante":
 			retornante_tp_origin = origin
@@ -5811,6 +5855,8 @@ func _reset_advanced_manifestation_state() -> void:
 	acorrentada_force_next_attack_3 = false
 	acorrentada_links.clear()
 	acorrentada_visuals.clear()
+	acorrentada_worn_chains.clear()
+	acorrentada_last_player_pos = player_pos
 	acorrentada_boss_elos = 0
 	acorrentada_boss_elo_timer = 0.0
 	acorrentada_boss_crack_timer = 0.0
@@ -6013,6 +6059,12 @@ func _acorrentada_attack_2(dir: Vector2) -> void:
 	var hit_count := 0
 	var center: Vector2 = player_pos + dir * (reach * 0.55)
 	acorrentada_visuals.append({"kind": "sweep", "pos": player_pos, "dir": dir, "life": 0.36, "max": 0.36, "radius": reach, "heavy": true})
+	for fan_index in range(3):
+		var fan_t := float(fan_index) / 2.0
+		var fan_dir := dir.rotated(lerpf(-0.58, 0.58, fan_t)).normalized()
+		var fan_start: Vector2 = player_pos + dir.orthogonal() * lerpf(-18.0, 18.0, fan_t) + Vector2(0, -12.0 + fan_index * 6.0)
+		var fan_end: Vector2 = player_pos + fan_dir * (reach * lerpf(0.70, 0.92, fan_t))
+		_acorrentada_add_chain_visual(fan_start, fan_end, "heavy" if fan_index == 1 else "light", 0.34 + fan_index * 0.025)
 	for enemy in enemies:
 		if float(enemy.get("hp", 0.0)) <= 0.0:
 			continue
@@ -6031,6 +6083,10 @@ func _acorrentada_attack_2(dir: Vector2) -> void:
 		_acorrentada_damage_target({"kind": "boss"}, player_damage * 0.42 * _acorrentada_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
 		_add_acorrentada_elo_boss(1)
 		_add_acorrentada_tension(3.0)
+	if _arauto_active() and _acorrentada_target_in_front(Vector2(arauto["pos"]), player_pos, dir, reach + 38.0, deg_to_rad(58.0)):
+		_acorrentada_damage_target({"kind": "arauto"}, player_damage * 0.62 * _acorrentada_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
+		_acorrentada_apply_elo_to_target({"kind": "arauto"}, 1)
+		_add_acorrentada_tension(5.0)
 
 
 func _acorrentada_attack_3(dir: Vector2) -> void:
@@ -6074,7 +6130,13 @@ func _best_acorrentada_line_target(origin: Vector2, dir: Vector2, reach: float, 
 	if boss_active and boss_hp > 0.0:
 		var boss_along := (boss_pos - origin).dot(dir.normalized())
 		if boss_along >= 0.0 and boss_along <= reach and _distance_to_segment(boss_pos, origin, origin + dir.normalized() * reach) <= width + _boss_hit_radius() * 0.45 and boss_along < best_dist:
+			best_dist = boss_along
 			best = {"kind": "boss", "uid": -1}
+	if _arauto_active():
+		var arauto_pos := Vector2(arauto["pos"])
+		var arauto_along := (arauto_pos - origin).dot(dir.normalized())
+		if arauto_along >= 0.0 and arauto_along <= reach and _distance_to_segment(arauto_pos, origin, origin + dir.normalized() * reach) <= width + 58.0 and arauto_along < best_dist:
+			best = {"kind": "arauto", "uid": -1}
 	return best
 
 
@@ -6084,7 +6146,7 @@ func _acorrentada_damage_target(target: Dictionary, amount: float, source: Strin
 			_damage_boss(amount, source, true, true, source_category, origin)
 			return boss_hp <= 0.0
 		"arauto":
-			_damage_arauto(amount, source, true)
+			_damage_arauto(amount, source, true, true, source_category, origin)
 			return false
 		_:
 			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
@@ -6100,6 +6162,11 @@ func _acorrentada_apply_elo_to_target(target: Dictionary, amount := 1) -> void:
 	match String(target.get("kind", "enemy")):
 		"boss":
 			_add_acorrentada_elo_boss(amount)
+		"arauto":
+			if _arauto_active():
+				var count := clampi(int(arauto.get("acorrentada_elo_count", 0)) + amount, 0, ACORRENTADA_MAX_ELOS)
+				arauto["acorrentada_elo_count"] = count
+				arauto["acorrentada_elo_timer"] = ACORRENTADA_ELO_TIME
 		"enemy":
 			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
 			if enemy:
@@ -6164,6 +6231,9 @@ func _cast_acorrentada_e(target_world = null) -> bool:
 	var boss_linked: bool = _acorrentada_target_linked({"kind": "boss"})
 	if boss_active and boss_hp > 0.0 and (acorrentada_boss_elos > 0 or boss_linked or boss_pos.distance_to(center) <= radius + 70.0):
 		targets.append({"kind": "boss", "uid": -1, "linked": boss_linked})
+	var arauto_linked: bool = _acorrentada_target_linked({"kind": "arauto"})
+	if _arauto_active() and (int(arauto.get("acorrentada_elo_count", 0)) > 0 or arauto_linked or Vector2(arauto["pos"]).distance_to(center) <= radius + 58.0):
+		targets.append({"kind": "arauto", "uid": -1, "linked": arauto_linked})
 	if targets.is_empty():
 		_add_text("SEM ELOS", player_pos + Vector2(0, -98), Color(0.74, 0.86, 0.92), 0.65, 17)
 		return false
@@ -6192,21 +6262,28 @@ func _resolve_acorrentada_sentence(secondary: Dictionary) -> void:
 		var target: Dictionary = raw_target
 		if not _acorrentada_target_alive(target):
 			continue
-		var is_boss := String(target.get("kind", "")) == "boss"
+		var target_kind := String(target.get("kind", ""))
+		var is_boss := target_kind == "boss"
+		var is_arauto := target_kind == "arauto"
 		var elos := _consume_acorrentada_boss_elos() if is_boss else 0
-		if not is_boss:
+		if is_arauto and _arauto_active():
+			elos = clampi(int(arauto.get("acorrentada_elo_count", 0)), 0, ACORRENTADA_MAX_ELOS)
+			arauto["acorrentada_elo_count"] = 0
+			arauto["acorrentada_elo_timer"] = 0.0
+		elif not is_boss:
 			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
 			if enemy:
 				elos = _consume_acorrentada_elos_enemy(enemy)
 				enemy["acorrentada_slow"] = max(float(enemy.get("acorrentada_slow", 0.0)), 1.4)
 				enemy["pos"] = Vector2(enemy["pos"]).lerp(center, 0.12 if _is_uncommon_enemy(enemy) else 0.22)
 		var linked := bool(target.get("linked", false))
-		var tension_mult: float = 1.0 + (acorrentada_tension / 100.0) * (0.225 if is_boss else 0.30)
-		var bonus_per_elo := 0.14 if is_boss else 0.22
-		var linked_bonus := 0.10 if is_boss else 0.15
+		var boss_like := is_boss or is_arauto
+		var tension_mult: float = 1.0 + (acorrentada_tension / 100.0) * (0.225 if boss_like else 0.30)
+		var bonus_per_elo := 0.14 if boss_like else 0.22
+		var linked_bonus := 0.10 if boss_like else 0.15
 		var damage: float = player_damage * (1.10 + float(elos) * bonus_per_elo + (linked_bonus if linked else 0.0)) * tension_mult * (1.20 if overcharged else 1.0)
 		_acorrentada_damage_target(target, damage, "acorrentada_e", "skill_e", player_pos)
-		_add_acorrentada_tension(10.0 if index == 0 else (6.0 if index == 1 else 3.0), 0.55 if is_boss else 1.0)
+		_add_acorrentada_tension(10.0 if index == 0 else (6.0 if index == 1 else 3.0), 0.55 if boss_like else 1.0)
 		if is_boss:
 			acorrentada_boss_crack_timer = max(acorrentada_boss_crack_timer, 4.0)
 		index += 1
@@ -6232,6 +6309,7 @@ func _acorrentada_target_linked(target: Dictionary) -> bool:
 
 
 func _update_acorrentada_state(delta: float) -> void:
+	_update_acorrentada_worn_chains(delta)
 	acorrentada_combo_reset_timer = max(0.0, acorrentada_combo_reset_timer - delta)
 	if acorrentada_combo_reset_timer <= 0.0 and acorrentada_combo_step != 1:
 		acorrentada_combo_step = 1
@@ -6243,6 +6321,10 @@ func _update_acorrentada_state(delta: float) -> void:
 	if acorrentada_boss_elo_timer <= 0.0:
 		acorrentada_boss_elos = 0
 	acorrentada_boss_crack_timer = max(0.0, acorrentada_boss_crack_timer - delta)
+	if _arauto_active() and float(arauto.get("acorrentada_elo_timer", 0.0)) > 0.0:
+		arauto["acorrentada_elo_timer"] = max(0.0, float(arauto.get("acorrentada_elo_timer", 0.0)) - delta)
+		if float(arauto["acorrentada_elo_timer"]) <= 0.0:
+			arauto["acorrentada_elo_count"] = 0
 	for enemy in enemies:
 		if float(enemy.get("acorrentada_elo_timer", 0.0)) > 0.0:
 			enemy["acorrentada_elo_timer"] = max(0.0, float(enemy.get("acorrentada_elo_timer", 0.0)) - delta)
@@ -6265,6 +6347,69 @@ func _update_acorrentada_state(delta: float) -> void:
 			_update_single_chain_physics(visual["physics_2"], a - side, b + side, delta)
 	acorrentada_visuals = acorrentada_visuals.filter(func(v): return float(v.get("life", 0.0)) > 0.0)
 	_update_acorrentada_links(delta)
+
+
+func _update_acorrentada_worn_chains(delta: float) -> void:
+	if manifestation_key != "acorrentada":
+		acorrentada_worn_chains.clear()
+		acorrentada_last_player_pos = player_pos
+		return
+	if delta <= 0.0:
+		return
+	var player_velocity: Vector2 = (player_pos - acorrentada_last_player_pos) / delta
+	acorrentada_last_player_pos = player_pos
+	if acorrentada_worn_chains.is_empty():
+		_init_acorrentada_worn_chains()
+	var moving := player_velocity.length() > 14.0
+	var drag_dir := (-player_velocity.normalized()) if moving else (-last_facing.normalized() if last_facing.length() > 0.05 else Vector2.LEFT)
+	var face := last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT
+	var side := face.orthogonal()
+	var drag_strength: float = clampf(player_velocity.length() / 260.0, 0.0, 1.0)
+	for chain_entry in acorrentada_worn_chains:
+		var index := int(chain_entry.get("index", 0))
+		var anchor: Vector2 = _acorrentada_body_anchor(index, face, side)
+		var target: Vector2 = _acorrentada_worn_chain_target(index, drag_dir, face, side, drag_strength)
+		var physics: Dictionary = chain_entry.get("physics", {})
+		if physics.is_empty():
+			physics = _init_chain_physics(anchor, target, String(chain_entry.get("weight", "light")))
+			chain_entry["physics"] = physics
+		_update_single_chain_physics(physics, anchor, target, delta)
+
+
+func _init_acorrentada_worn_chains() -> void:
+	acorrentada_worn_chains.clear()
+	var face := last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT
+	var side := face.orthogonal()
+	for i in range(4):
+		var a: Vector2 = _acorrentada_body_anchor(i, face, side)
+		var b: Vector2 = _acorrentada_worn_chain_target(i, -face, face, side, 0.0)
+		var weight := "light" if i % 2 == 0 else "heavy"
+		acorrentada_worn_chains.append({
+			"index": i,
+			"weight": weight,
+			"physics": _init_chain_physics(a, b, weight)
+		})
+
+
+func _acorrentada_body_anchor(index: int, face: Vector2, side: Vector2) -> Vector2:
+	var bob := sin(time_alive * 7.2 + float(index) * 1.3) * 2.2
+	match index:
+		0:
+			return player_pos - face * 7.0 - side * 18.0 + Vector2(0, -28.0 + bob)
+		1:
+			return player_pos - face * 6.0 + side * 19.0 + Vector2(0, -24.0 - bob * 0.7)
+		2:
+			return player_pos - face * 10.0 - side * 15.0 + Vector2(0, 4.0 + bob * 0.6)
+		_:
+			return player_pos - face * 9.0 + side * 16.0 + Vector2(0, 7.0 - bob * 0.5)
+
+
+func _acorrentada_worn_chain_target(index: int, drag_dir: Vector2, face: Vector2, side: Vector2, drag_strength: float) -> Vector2:
+	var sway := sin(time_alive * (3.6 + float(index) * 0.2) + float(index) * 1.7)
+	var length := 42.0 + drag_strength * 54.0 + float(index % 2) * 12.0
+	var side_offset := (-1.0 if index % 2 == 0 else 1.0) * (20.0 + sway * 8.0)
+	var vertical := 16.0 + sin(time_alive * 5.0 + float(index)) * 5.0
+	return player_pos + drag_dir * length + side * side_offset + face * sin(time_alive * 4.1 + float(index)) * 8.0 + Vector2(0, vertical)
 
 
 func _update_acorrentada_links(delta: float) -> void:
@@ -6603,6 +6748,10 @@ func _resonant_is_perfect() -> bool:
 	return resonant_next_perfect or resonant_sinfonia_buff_timer > 0.0 or _resonant_beat_offset() <= RESONANT_PERFECT_WINDOW
 
 
+func _resonant_combo_multiplier() -> float:
+	return 1.0 + float(resonant_perfect_streak) * 0.075
+
+
 func _resonant_note_name() -> String:
 	var notes = ["grave", "aguda", "quebrada"]
 	var note = notes[resonant_note_index % notes.size()]
@@ -6617,9 +6766,9 @@ func _record_resonant_attack(perfect: bool) -> void:
 		_spawn_music_notes(player_pos, rng.randi_range(2, 3))
 	else:
 		resonant_noise += 1
-		if resonant_noise >= RESONANT_NOISE_LIMIT:
-			resonant_perfect_streak = max(0, resonant_perfect_streak - 2)
-			resonant_noise = 0
+		resonant_perfect_streak = 0
+		resonant_noise = 0
+		_add_text("RITMO QUEBRADO", player_pos + Vector2(0, -86), Color(0.74, 0.80, 0.92), 0.52, 16)
 	resonant_next_perfect = false
 
 
@@ -7104,16 +7253,26 @@ func _has_enemy_type(kind: String) -> bool:
 	return false
 
 
+func _larapio_spawn_delay() -> float:
+	var steps: int = int(max(0.0, time_alive) / LARAPIO_COOLDOWN_STEP_TIME)
+	var bonus: float = min(LARAPIO_COOLDOWN_MAX_BONUS, float(steps) * LARAPIO_COOLDOWN_STEP_BONUS)
+	return LARAPIO_SPAWN_TIME + bonus
+
+
+func _schedule_next_larapio_spawn() -> void:
+	larapio_spawned = false
+	next_larapio_spawn_time = time_alive + _larapio_spawn_delay()
+
+
 func _try_spawn_larapio() -> void:
 	if current_phase != 1 or boss_active or boss_dead or _arauto_active():
 		return
 	if time_alive < next_larapio_spawn_time:
 		return
 	if _has_enemy_type(ENEMY_LARAPIO):
-		next_larapio_spawn_time = time_alive + 12.0
 		return
 	larapio_spawned = true
-	next_larapio_spawn_time = time_alive + LARAPIO_SPAWN_TIME
+	next_larapio_spawn_time = INF
 	_spawn_enemy(ENEMY_LARAPIO, _spawn_point_on_edge())
 	_add_text("LARAPIO CHEGANDO!", player_pos + Vector2(0, -120), Color(1.0, 0.72, 0.22), 2.2, 25)
 
@@ -7226,6 +7385,9 @@ func _update_arauto(delta: float) -> void:
 	arauto["stun"] = max(0.0, float(arauto.get("stun", 0.0)) - delta)
 	arauto["aura_null"] = max(0.0, float(arauto.get("aura_null", 0.0)) - delta)
 	arauto["aura_wound"] = max(0.0, float(arauto.get("aura_wound", 0.0)) - delta)
+	arauto["fragilidade_cronal"] = max(0.0, float(arauto.get("fragilidade_cronal", 0.0)) - delta)
+	if float(arauto["fragilidade_cronal"]) <= 0.0:
+		arauto["fragilidade_cronal_bonus"] = 0.0
 	arauto["entry_timer"] = max(0.0, float(arauto.get("entry_timer", 0.0)) - delta)
 	if float(arauto["entry_timer"]) > 0.0:
 		return
@@ -7353,23 +7515,44 @@ func _resolve_arauto_gaze(phase2: bool) -> void:
 	arauto_rays.append({"a": origin, "b": finish, "life": 0.42, "max": 0.42, "blocked": false})
 
 
-func _damage_arauto(amount: float, source: String, show_text := true, apply_aura_multiplier := true) -> void:
+func _damage_arauto(amount: float, source: String, show_text := true, apply_aura_multiplier := true, source_category := "", attack_origin := Vector2.ZERO) -> void:
 	if not _arauto_active():
 		return
+	var effective_source_category := source_category
+	if effective_source_category == "" and _damage_source_category(source) == "basic_attack":
+		effective_source_category = "manifestation_secondary"
 	if is_multiplayer and not _is_world_authority():
 		amount = _outgoing_damage_amount(amount, source)
 		_send_client_damage_request(NET_DAMAGE_ARAUTO, "", amount, source, player_pos, show_text)
 		return
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
+	amount *= _mandamento_damage_multiplier(effective_source_category)
+	var trigger_card_effects := _card_damage_can_trigger(source)
+	if trigger_card_effects:
+		_consume_fratura_cronal_on_arauto(source)
 	var echoes: int = _count_arauto_echoes()
 	var reduction: float = min(ARAUTO_MAX_DAMAGE_REDUCTION, float(echoes) * ARAUTO_ECHO_DAMAGE_REDUCTION)
 	var final: float = max(1.0, amount * (1.0 - reduction))
-	var hp_before := float(arauto["hp"])
+	final *= _fragilidade_arauto_multiplier(source)
+	final *= _pressao_cerco_arauto_multiplier(source)
+	var hp_before: float = float(arauto["hp"])
 	arauto["hp"] = max(0.0, hp_before - final)
+	var actual_damage: float = hp_before - max(0.0, float(arauto["hp"]))
+	var antimatter_should_trigger: bool = _antimatter_direct_trigger(source, effective_source_category)
+	if antimatter_should_trigger:
+		_trigger_antimatter_implosion(Vector2(arauto["pos"]))
+	else:
+		_register_antimatter_damage(actual_damage, source, effective_source_category)
+	if float(arauto["hp"]) <= 0.0:
+		_store_excess_damage(max(0.0, final - hp_before), source, effective_source_category)
+	elif actual_damage > 0.0:
+		_select_excess_discharge_target_boss(source, effective_source_category)
 	if show_text:
 		var color := Color(0.58, 0.92, 1.0) if echoes > 0 else _damage_color(source)
 		_add_text("-%d" % int(final), Vector2(arauto["pos"]) + Vector2(rng.randf_range(-28, 28), -82), color, 0.62, _damage_text_size(18))
+	if trigger_card_effects:
+		_consume_pulso_desestabilizador(Vector2(arauto["pos"]), source)
 	if float(arauto["hp"]) <= 0.0:
 		_finish_arauto()
 
@@ -7406,6 +7589,37 @@ func _spawn_arauto_card_rewards(pos: Vector2) -> void:
 			"pos": (pos + Vector2.from_angle(angle) * rng.randf_range(80.0, 132.0)).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80)),
 			"vel": Vector2.from_angle(angle) * rng.randf_range(42.0, 76.0),
 			"life": 18.0,
+			"age": 0.0,
+			"phase": rng.randf_range(0.0, TAU)
+		})
+
+
+func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void:
+	var rare_pool: Array = CARDS.filter(func(card): return _is_rare_card(card) and not _card_at_max(card))
+	var common_pool: Array = CARDS.filter(func(card): return _is_common_card(card) and not _card_at_max(card))
+	for i in range(count):
+		var card: Dictionary = {}
+		if rare_slots > 0 and not rare_pool.is_empty():
+			var rare_index := rng.randi_range(0, rare_pool.size() - 1)
+			card = rare_pool[rare_index]
+			rare_pool.remove_at(rare_index)
+			rare_slots -= 1
+		elif not common_pool.is_empty():
+			var common_index := rng.randi_range(0, common_pool.size() - 1)
+			card = common_pool[common_index]
+			common_pool.remove_at(common_index)
+		elif not rare_pool.is_empty():
+			var fallback_index := rng.randi_range(0, rare_pool.size() - 1)
+			card = rare_pool[fallback_index]
+			rare_pool.remove_at(fallback_index)
+		if card.is_empty():
+			return
+		var angle := TAU * float(i) / float(max(1, count)) + rng.randf_range(-0.34, 0.34)
+		arauto_card_drops.append({
+			"card": card,
+			"pos": (pos + Vector2.from_angle(angle) * rng.randf_range(84.0, 146.0)).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80)),
+			"vel": Vector2.from_angle(angle) * rng.randf_range(54.0, 92.0),
+			"life": 20.0,
 			"age": 0.0,
 			"phase": rng.randf_range(0.0, TAU)
 		})
@@ -8373,6 +8587,7 @@ func _update_larapio(enemy: Dictionary, delta: float) -> void:
 		if float(enemy["portal"]) >= LARAPIO_PORTAL_TIME:
 			_add_text("LARAPIO ESCAPOU COM %d" % int(enemy.get("stolen", 0)), enemy["pos"] + Vector2(0, -70), Color(0.82, 0.36, 1.0), 1.8, 24)
 			enemies.erase(enemy)
+			_schedule_next_larapio_spawn()
 			return
 	else:
 		enemy["portal"] = 0.0
@@ -9698,6 +9913,18 @@ func _kill_enemy(enemy: Dictionary) -> void:
 			_add_text("CURATER +%d" % heal, player_pos + Vector2(0, -78), Color(0.28, 1.0, 0.45), 1.0, 20)
 	if enemy["type"] == ENEMY_LARAPIO:
 		_play_sfx("Larapio-Dead.mp3", 0.025, 0.82, 1.0)
+		var clean_kill := int(enemy.get("stolen", 0)) <= 0
+		var drop_count := LARAPIO_CARD_DROP_CLEAN if clean_kill else LARAPIO_CARD_DROP_BASE
+		var rare_slots := 0
+		if rng.randf() < LARAPIO_CARD_RARE_CHANCE:
+			rare_slots += 1
+		if clean_kill and rng.randf() < LARAPIO_CARD_RARE_CHANCE:
+			rare_slots += 1
+		_spawn_random_card_drops(kill_pos, drop_count, rare_slots)
+		_schedule_next_larapio_spawn()
+		_add_text("%d CARTAS" % drop_count, kill_pos + Vector2(0, -132), Color(1.0, 0.86, 0.24), 1.25, 22)
+		if clean_kill:
+			_add_text("SEM ROUBO: DROP MELHOR", kill_pos + Vector2(0, -164), Color(0.58, 1.0, 0.82), 1.25, 18)
 		if is_multiplayer and (is_dead or partner_is_dead):
 			rpc("_rpc_revive_player")
 			_handle_revive()
@@ -9708,6 +9935,7 @@ func _kill_enemy(enemy: Dictionary) -> void:
 			if returned > 0:
 				_spawn_larapio_loot(kill_pos, returned)
 				_add_text("MOEDAS NO CHAO", kill_pos + Vector2(0, -88), Color(1.0, 0.78, 0.24), 1.0, 20)
+	_maybe_spawn_late_heal_orb(enemy, kill_pos)
 	if int(enemy.get("seeds", 0)) > 0:
 		var spreads = 0
 		for other in enemies:
@@ -9738,11 +9966,47 @@ func _kill_enemy(enemy: Dictionary) -> void:
 
 func _points_for_enemy(enemy: Dictionary) -> int:
 	var mult = clamp(1.35 + (time_alive / 60.0) * 0.14, 1.35, 4.4)
-	return max(int(enemy.get("points", 20)), int(round(float(enemy.get("points", 20)) * mult)))
+	var base_points := float(enemy.get("points", 20)) * _elite_point_multiplier(enemy)
+	return max(int(enemy.get("points", 20)), int(round(base_points * mult)))
+
+
+func _elite_point_multiplier(enemy: Dictionary) -> float:
+	match String(enemy.get("type", ENEMY_COMMON)):
+		ENEMY_AGGLOMERATOR:
+			return 1.55
+		ENEMY_CURATER:
+			return 1.38
+		ENEMY_CRYSTAL:
+			return 1.32
+		ENEMY_PROJECTOR:
+			return 1.26
+		ENEMY_STALKER:
+			return 1.18
+		ENEMY_LARAPIO:
+			return 1.45
+		ENEMY_KAMIKAZE, ENEMY_ATIRADOR:
+			return 1.12
+	if _is_uncommon_enemy(enemy):
+		return 1.22
+	return 1.0
 
 
 func _is_uncommon_enemy(enemy: Dictionary) -> bool:
 	return String(enemy.get("type", ENEMY_COMMON)) != ENEMY_COMMON
+
+
+func _maybe_spawn_late_heal_orb(enemy: Dictionary, pos: Vector2) -> void:
+	if time_alive < 600.0:
+		return
+	var late_progress: float = clamp((time_alive - 600.0) / 600.0, 0.0, 1.0)
+	var chance: float = 0.08 + late_progress * 0.10
+	var heal_fraction: float = 0.07
+	if _is_uncommon_enemy(enemy):
+		chance += 0.07
+		heal_fraction = 0.10
+	if rng.randf() <= chance:
+		_spawn_heal_orb(pos, heal_fraction)
+		_add_text("SUSTENTO", pos + Vector2(0, -104), Color(0.38, 1.0, 0.52), 0.75, 17)
 
 
 func _grant_boss_reward_cards(count: int) -> void:
@@ -10763,6 +11027,11 @@ func _update_secondary_prismatica(secondary: Dictionary, delta: float) -> void:
 	for enemy in enemies:
 		if float(enemy.get("hp", 0.0)) <= 0.0:
 			continue
+		var to_center := center - Vector2(enemy["pos"])
+		var dist := to_center.length()
+		if dist > 36.0 and dist <= SECONDARY_PRISMATICA_BEAM_RANGE + 145.0:
+			var pull_speed := 185.0 if _is_uncommon_enemy(enemy) else 285.0
+			enemy["pos"] = Vector2(enemy["pos"]).move_toward(center, pull_speed * delta)
 		var uid = str(enemy.get("uid", 0))
 		for dir in beam_dirs:
 			var a = center - dir * SECONDARY_PRISMATICA_BEAM_RANGE
@@ -14479,6 +14748,7 @@ func _update_shop(delta: float) -> void:
 func _open_shop(forced: bool) -> void:
 	if mode == "shop":
 		return
+	shop_endurance_discount = _shop_endurance_discount_from_elapsed(shop_auto_elapsed)
 	previous_mode = "game"
 	mode = "shop"
 	_update_audio_volumes()
@@ -14492,6 +14762,7 @@ func _open_shop(forced: bool) -> void:
 	_clear_shop_mp_request()
 	if _affordable_card_count() <= 0:
 		_add_text("Sem pontos para carta", player_pos + Vector2(0, -92), Color(1.0, 0.52, 0.24), 1.0, 22)
+		shop_endurance_discount = 0.0
 		_request_shop_exit_or_finish()
 		return
 	shop_cards = _roll_shop_cards()
@@ -14502,6 +14773,8 @@ func _open_shop(forced: bool) -> void:
 	shop_last_tap_msec = 0
 	if forced:
 		_add_text("Loja forcada", player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 1.4, 26)
+	if shop_endurance_discount > 0.0:
+		_add_text("RESISTENCIA: -%d%%" % int(round(shop_endurance_discount * 100.0)), player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
 
 
 func _roll_shop_cards() -> Array:
@@ -14536,9 +14809,7 @@ func _roll_shop_cards() -> Array:
 
 	# Fill remaining slots with commons
 	while picks.size() < 3 and pool_commons.size() > 0:
-		var idx = rng.randi_range(0, pool_commons.size() - 1)
-		picks.append(pool_commons[idx])
-		pool_commons.remove_at(idx)
+		picks.append(_shop_pop_weighted_common(pool_commons))
 
 	# Fallback to rares if not enough commons
 	while picks.size() < 3 and pool_rares.size() > 0:
@@ -14547,7 +14818,43 @@ func _roll_shop_cards() -> Array:
 		pool_rares.remove_at(idx)
 
 	picks.shuffle()
+	_register_shop_common_rolls(picks)
 	return picks
+
+
+func _shop_pop_weighted_common(pool_commons: Array) -> Dictionary:
+	if pool_commons.is_empty():
+		return {}
+	var total_weight := 0.0
+	var weights: Array = []
+	for card in pool_commons:
+		var card_id := _card_id(card)
+		var count := float(_card_count(card))
+		var weight := 1.0 / (1.0 + count * 0.64)
+		if count <= 0.0:
+			weight *= 1.85
+		if shop_recent_common_ids.has(card_id):
+			weight *= 0.35
+		weights.append(weight)
+		total_weight += weight
+	var roll: float = rng.randf() * max(0.001, total_weight)
+	for i in range(pool_commons.size()):
+		roll -= float(weights[i])
+		if roll <= 0.0:
+			var picked: Dictionary = pool_commons[i]
+			pool_commons.remove_at(i)
+			return picked
+	var fallback: Dictionary = pool_commons[pool_commons.size() - 1]
+	pool_commons.remove_at(pool_commons.size() - 1)
+	return fallback
+
+
+func _register_shop_common_rolls(picks: Array) -> void:
+	for card in picks:
+		if _is_common_card(card):
+			shop_recent_common_ids.append(_card_id(card))
+	while shop_recent_common_ids.size() > 9:
+		shop_recent_common_ids.pop_front()
 
 
 func _is_rare_card(card: Dictionary) -> bool:
@@ -14780,10 +15087,18 @@ func _shop_price_increment_after_purchase() -> int:
 
 func _card_discount_rate(card: Dictionary) -> float:
 	if not _is_common_card(card):
+		return shop_endurance_discount
+	var pacto_discount := 0.0
+	if _card_count(card) <= 0:
+		pacto_discount = min(0.20, _apply_carta_zero_to_common_value("pacto_possibilidades", "discount", _new_common_card_count("pacto_possibilidades") * 0.04))
+	return min(0.45, shop_endurance_discount + pacto_discount)
+
+
+func _shop_endurance_discount_from_elapsed(elapsed: float) -> float:
+	if elapsed < 180.0:
 		return 0.0
-	if _card_count(card) > 0:
-		return 0.0
-	return min(0.20, _apply_carta_zero_to_common_value("pacto_possibilidades", "discount", _new_common_card_count("pacto_possibilidades") * 0.04))
+	var steps := int(elapsed / 180.0)
+	return min(0.25, float(steps) * 0.06)
 
 
 func _effective_card_price(card: Dictionary, base_cost := -1) -> int:
@@ -15496,6 +15811,9 @@ func _trigger_antimatter_implosion(pos: Vector2, target_enemy: Dictionary = {}) 
 	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(pos) <= radius + _boss_hit_radius():
 		var boss_damage: float = player_damage * _antimatter_damage_scale() * 0.82 + boss_hp_max * (0.0012 + 0.00025 * _rare_sqrt_extra("coracao_antimateria"))
 		_damage_boss(boss_damage, RARE_SOURCE_ANTIMATTER, false, false, "rare_card", pos)
+	if _arauto_active() and Vector2(arauto.get("pos", pos)).distance_to(pos) <= radius + 70.0:
+		var arauto_damage: float = player_damage * _antimatter_damage_scale() * 0.78 + float(arauto.get("max_hp", 900.0)) * (0.0011 + 0.00022 * _rare_sqrt_extra("coracao_antimateria"))
+		_damage_arauto(arauto_damage, RARE_SOURCE_ANTIMATTER, false, false, "rare_card", pos)
 
 
 func _excess_conversion() -> float:
@@ -15613,6 +15931,18 @@ func _consume_fratura_cronal_on_boss(source: String) -> void:
 	_spawn_radial_particles(boss_pos, Color(0.74, 0.52, 1.0), 12)
 
 
+func _consume_fratura_cronal_on_arauto(source: String) -> void:
+	if not fratura_cronal_armed or _fratura_cronal_bonus() <= 0.0 or not _card_damage_can_trigger(source) or not _arauto_active():
+		return
+	fratura_cronal_armed = false
+	fratura_cronal_cooldown = FRATURA_CRONAL_COOLDOWN
+	arauto["fragilidade_cronal"] = FRATURA_CRONAL_DURATION
+	arauto["fragilidade_cronal_bonus"] = _fratura_cronal_bonus() * 0.55
+	var pos := Vector2(arauto.get("pos", player_pos))
+	_add_text("FRAGILIDADE", pos + Vector2(0, -118), Color(0.78, 0.62, 1.0), 0.8, 18)
+	_spawn_radial_particles(pos, Color(0.74, 0.52, 1.0), 12)
+
+
 func _fragilidade_enemy_multiplier(enemy: Dictionary, source: String) -> float:
 	if not _card_damage_can_receive_bonus(source):
 		return 1.0
@@ -15625,6 +15955,14 @@ func _fragilidade_boss_multiplier(source: String) -> float:
 	if not _card_damage_can_receive_bonus(source) or boss_fragilidade_cronal_timer <= 0.0:
 		return 1.0
 	return 1.0 + boss_fragilidade_cronal_bonus
+
+
+func _fragilidade_arauto_multiplier(source: String) -> float:
+	if not _card_damage_can_receive_bonus(source) or not _arauto_active():
+		return 1.0
+	if float(arauto.get("fragilidade_cronal", 0.0)) <= 0.0:
+		return 1.0
+	return 1.0 + float(arauto.get("fragilidade_cronal_bonus", 0.0))
 
 
 func _enemy_under_siege(enemy: Dictionary) -> bool:
@@ -15656,6 +15994,21 @@ func _boss_under_siege() -> bool:
 	return false
 
 
+func _arauto_under_siege() -> bool:
+	if _pressao_cerco_bonus() <= 0.0 or not _arauto_active():
+		return false
+	var pos := Vector2(arauto.get("pos", player_pos))
+	var neighbors := 0
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		if pos.distance_to(Vector2(enemy.get("pos", pos))) <= PRESSAO_CERCO_RADIUS:
+			neighbors += 1
+			if neighbors >= PRESSAO_CERCO_REQUIRED_NEIGHBORS:
+				return true
+	return false
+
+
 func _pressao_cerco_enemy_multiplier(enemy: Dictionary, source: String) -> float:
 	if not _card_damage_can_receive_bonus(source) or not _enemy_under_siege(enemy):
 		return 1.0
@@ -15664,6 +16017,12 @@ func _pressao_cerco_enemy_multiplier(enemy: Dictionary, source: String) -> float
 
 func _pressao_cerco_boss_multiplier(source: String) -> float:
 	if not _card_damage_can_receive_bonus(source) or not _boss_under_siege():
+		return 1.0
+	return 1.0 + _pressao_cerco_bonus()
+
+
+func _pressao_cerco_arauto_multiplier(source: String) -> float:
+	if not _card_damage_can_receive_bonus(source) or not _arauto_under_siege():
 		return 1.0
 	return 1.0 + _pressao_cerco_bonus()
 
@@ -16235,8 +16594,8 @@ func _finish_shop() -> void:
 	_clear_shop_mp_request()
 	shop_mp_ready_to_leave = false
 	shop_mp_partner_ready = false
-	mode = "shop_return"
-	shop_return_timer = SHOP_RETURN_TIME
+	mode = previous_mode if previous_mode != "" else "game"
+	shop_return_timer = 0.0
 	forced_shop_timer = -1.0
 	forced_shop_triggered = false
 	shop_opening_timer = 0.0
@@ -16244,6 +16603,7 @@ func _finish_shop() -> void:
 	shop_last_tap_index = -1
 	shop_last_tap_msec = 0
 	shop_auto_elapsed = 0.0
+	shop_endurance_discount = 0.0
 	next_forced_shop_time = shop_auto_interval if shop_auto_enabled else INF
 	_update_audio_volumes()
 	_block_ui_input()
@@ -16576,11 +16936,25 @@ func _add_text(text: String, pos: Vector2, color: Color, life: float, size: int)
 
 
 func _spawn_radial_particles(pos: Vector2, color: Color, count: int) -> void:
-
-	if not gfx_particles: return
-	if not gfx_particles: return
-	for i in range(count):
+	if not gfx_particles:
+		return
+	var total := _adaptive_particle_count(count)
+	for i in range(total):
 		effects.append({"text": "", "pos": pos, "life": rng.randf_range(0.25, 0.55), "max": 0.55, "color": color, "size": rng.randi_range(3, 7), "vel": Vector2.from_angle(rng.randf_range(0, TAU)) * rng.randf_range(40, 120)})
+
+
+func _adaptive_particle_count(count: int) -> int:
+	var enemy_count := enemies.size()
+	var factor := 1.0
+	if enemy_count >= 22:
+		factor = 0.34
+	elif enemy_count >= 16:
+		factor = 0.46
+	elif enemy_count >= 11:
+		factor = 0.62
+	elif enemy_count >= 7:
+		factor = 0.78
+	return clampi(int(ceil(float(count) * factor)), 2 if count > 0 else 0, count)
 
 
 func _spawn_music_notes(pos: Vector2, count: int) -> void:
@@ -16650,7 +17024,9 @@ func _enemy_shard_color(enemy: Dictionary) -> Color:
 
 
 func _spawn_enemy_desfragmentation(pos: Vector2, color: Color, count: int) -> void:
-	var total = int(clamp(count, 10, 28))
+	if not gfx_particles:
+		return
+	var total = int(clamp(_adaptive_particle_count(count), 6, 28))
 	for i in range(total):
 		var angle = rng.randf_range(0.0, TAU)
 		var speed = rng.randf_range(90.0, 250.0)
@@ -16832,14 +17208,24 @@ func _draw_resonant_meter(viewport: Vector2) -> void:
 	var rect := Rect2(viewport.x * 0.5 - 96.0, viewport.y - 52.0, 192.0, 18.0)
 	draw_rect(rect.grow(4.0), Color(0.0, 0.0, 0.0, 0.46), true)
 	draw_rect(rect.grow(4.0), Color(1.0, 0.72, 0.20, 0.36), false, 1.4)
-	for i in range(4):
-		var x = rect.position.x + rect.size.x * (float(i) / 3.0)
-		draw_line(Vector2(x, rect.position.y - 2.0), Vector2(x, rect.end.y + 2.0), Color(1.0, 0.86, 0.38, 0.62), 1.4)
-	var progress = fposmod(time_alive, RESONANT_BEAT_INTERVAL * 4.0) / (RESONANT_BEAT_INTERVAL * 4.0)
-	var p = Vector2(rect.position.x + rect.size.x * progress, rect.get_center().y)
-	var perfect_alpha = 0.95 if _resonant_is_perfect() else 0.42
-	draw_circle(p, 8.0, Color(1.0, 0.82, 0.22, perfect_alpha))
-	_draw_centered("CRESCENDO %d" % resonant_perfect_streak, rect.get_center() + Vector2(0, -12), 11, Color(1.0, 0.90, 0.62, 0.86))
+	var is_perfect: bool = _resonant_is_perfect()
+	var pulse: float = (0.5 + sin(Time.get_ticks_msec() * 0.018) * 0.5) if is_perfect else 0.0
+	var perfect_zone_w: float = max(9.0, rect.size.x * (RESONANT_PERFECT_WINDOW / (RESONANT_BEAT_INTERVAL * 4.0)) * 2.0)
+	for i in range(5):
+		var x: float = rect.position.x + rect.size.x * (float(i) / 4.0)
+		var zone := Rect2(x - perfect_zone_w * 0.5, rect.position.y - 3.0, perfect_zone_w, rect.size.y + 6.0)
+		draw_rect(zone, Color(1.0, 0.66, 0.12, 0.16 + pulse * 0.18), true)
+		draw_line(Vector2(x, rect.position.y - 6.0), Vector2(x, rect.end.y + 6.0), Color(1.0, 0.86, 0.38, 0.72), 1.6)
+	var progress: float = fposmod(time_alive, RESONANT_BEAT_INTERVAL * 4.0) / (RESONANT_BEAT_INTERVAL * 4.0)
+	var p := Vector2(rect.position.x + rect.size.x * progress, rect.get_center().y)
+	var perfect_alpha: float = 1.0 if is_perfect else 0.42
+	if is_perfect:
+		draw_rect(rect.grow(8.0 + pulse * 5.0), Color(1.0, 0.70, 0.14, 0.16 + pulse * 0.12), false, 2.0)
+	draw_circle(p, 8.0 + pulse * 4.0, Color(1.0, 0.82, 0.22, perfect_alpha))
+	var prompt := "ATIRE AGORA" if is_perfect else "ESPERE A BATIDA"
+	var prompt_color := Color(1.0, 0.92, 0.36, 1.0) if is_perfect else Color(0.84, 0.90, 1.0, 0.72)
+	_draw_centered(prompt, rect.get_center() + Vector2(0, -22), 13 if is_perfect else 11, prompt_color)
+	_draw_centered("COMBO %d  x%.2f" % [resonant_perfect_streak, _resonant_combo_multiplier()], rect.get_center() + Vector2(0, 22), 10, Color(1.0, 0.90, 0.62, 0.86))
 
 
 func _draw_fps_counter(viewport: Vector2) -> void:
@@ -18817,6 +19203,7 @@ func _draw_acorrentada_world(camera: Vector2) -> void:
 	if manifestation_key != "acorrentada" and acorrentada_links.is_empty() and acorrentada_visuals.is_empty():
 		return
 	var t: float = float(Time.get_ticks_msec()) * 0.001
+	_draw_acorrentada_worn_chains(camera, t)
 	for link in acorrentada_links:
 		var fade: float = clampf(float(link.get("life", 0.0)) / max(0.01, float(link.get("max", 1.0))), 0.0, 1.0)
 		match String(link.get("kind", "")):
@@ -18907,6 +19294,22 @@ func _draw_acorrentada_world(camera: Vector2) -> void:
 		draw_arc(boss_pos - camera, 108.0, -t * 1.2, TAU - t * 1.2, 64, Color(1.0, 0.22, 0.16, 0.48), 3.0)
 
 
+func _draw_acorrentada_worn_chains(camera: Vector2, t: float) -> void:
+	if manifestation_key != "acorrentada":
+		return
+	var base_fade: float = 0.44 + clampf(acorrentada_tension / 100.0, 0.0, 1.0) * 0.32
+	for entry in acorrentada_worn_chains:
+		if not entry.has("physics"):
+			continue
+		var index := int(entry.get("index", 0))
+		var warm := index % 2 == 1
+		var color := Color(0.92, 0.12, 0.10, base_fade) if warm else Color(0.18, 0.86, 1.0, base_fade)
+		var width := 6.2 if warm else 5.2
+		_draw_physical_chain(entry["physics"], camera, color, width, base_fade, not warm)
+		var pulse_center: Vector2 = player_pos - camera + Vector2.from_angle(t * (1.4 + index * 0.12) + float(index)) * (28.0 + index * 3.0)
+		draw_circle(pulse_center, 3.2 + sin(t * 8.0 + index) * 1.2, Color(color.r, color.g, color.b, 0.32 * base_fade))
+
+
 func _draw_acorrentada_chain(a: Vector2, b: Vector2, color: Color, width: float, fade: float, light := false) -> void:
 	var delta := b - a
 	var length := delta.length()
@@ -18916,7 +19319,7 @@ func _draw_acorrentada_chain(a: Vector2, b: Vector2, color: Color, width: float,
 	var normal := dir.orthogonal()
 	var spacing := 18.0 if light else 22.0
 	var count: int = max(2, int(length / spacing))
-	draw_line(a, b, Color(0.06, 0.05, 0.055, 0.56 * fade), width + 7.0, true)
+	_draw_acorrentada_chain_glow(PackedVector2Array([a, b]), color, width, fade)
 	for i in range(count + 1):
 		var k := float(i) / float(count)
 		var center: Vector2 = a.lerp(b, k) + normal * sin(k * TAU * 2.0 + time_alive * 8.0) * (2.0 if light else 4.0)
@@ -18926,7 +19329,27 @@ func _draw_acorrentada_chain(a: Vector2, b: Vector2, color: Color, width: float,
 		var p2: Vector2 = center + side
 		var p3: Vector2 = center + tangent
 		var p4: Vector2 = center - side
-		draw_polyline(PackedVector2Array([p1, p2, p3, p4, p1]), Color(color.r, color.g, color.b, color.a * fade), max(1.4, width * 0.25), true)
+		var link_color := _acorrentada_link_color(color, fade, i, light)
+		draw_polyline(PackedVector2Array([p1, p2, p3, p4, p1]), link_color, max(1.4, width * 0.24), true)
+		if i % 3 == 0:
+			draw_circle(center, max(1.1, width * 0.16), Color(1.0, 0.95, 0.76, 0.20 * fade))
+
+
+func _draw_acorrentada_chain_glow(path: PackedVector2Array, color: Color, width: float, fade: float) -> void:
+	if path.size() < 2:
+		return
+	draw_polyline(path, Color(color.r, color.g, color.b, 0.07 * fade), width + 14.0, true)
+	draw_polyline(path, Color(color.r, color.g, color.b, 0.12 * fade), width + 7.0, true)
+	draw_polyline(path, Color(1.0, 0.94, 0.78, 0.08 * fade), max(1.0, width * 0.36), true)
+
+
+func _acorrentada_link_color(color: Color, fade: float, index: int, light := false) -> Color:
+	var metal := 0.18 + 0.11 * sin(time_alive * 9.0 + float(index) * 0.7)
+	var hot := clampf(acorrentada_tension / 100.0, 0.0, 1.0)
+	var target := Color(1.0, 0.88, 0.58, color.a)
+	var mixed := color.lerp(target, metal + hot * (0.22 if light else 0.14))
+	mixed.a = color.a * fade * (0.88 + hot * 0.12)
+	return mixed
 
 
 func _init_chain_physics(a: Vector2, b: Vector2, kind := "heavy") -> Dictionary:
@@ -19052,7 +19475,7 @@ func _draw_physical_chain(chain: Dictionary, camera: Vector2, color: Color, widt
 	for i in range(num_nodes):
 		var p: Dictionary = points[i]
 		backing_points.append(Vector2(p.get("pos", Vector2.ZERO)) - camera)
-	draw_polyline(backing_points, Color(0.06, 0.05, 0.055, 0.56 * fade), width + 7.0, true)
+	_draw_acorrentada_chain_glow(backing_points, color, width, fade)
 	
 	for i in range(num_nodes - 1):
 		var p1: Vector2 = Vector2(points[i].get("pos", Vector2.ZERO)) - camera
@@ -19078,7 +19501,9 @@ func _draw_physical_chain(chain: Dictionary, camera: Vector2, color: Color, widt
 		var pt3: Vector2 = center + tangent
 		var pt4: Vector2 = center - side
 		
-		draw_polyline(PackedVector2Array([pt1, pt2, pt3, pt4, pt1]), Color(color.r, color.g, color.b, color.a * fade), max(1.4, width * 0.25), true)
+		draw_polyline(PackedVector2Array([pt1, pt2, pt3, pt4, pt1]), _acorrentada_link_color(color, fade, i, light), max(1.4, width * 0.24), true)
+		if i % 3 == 0:
+			draw_circle(center, max(1.0, width * 0.14), Color(1.0, 0.94, 0.72, 0.18 * fade))
 
 
 func _init_link_chain_physics(link: Dictionary) -> void:
@@ -23354,6 +23779,8 @@ func _draw_shop(viewport: Vector2) -> void:
 		_draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
 		_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 66), 30, Color(0.0, 1.0, 0.82))
 		var header_text = "Pontos %d  |  Custo %d  |  Rerolls %d" % [score, card_cost, shop_rerolls]
+		if shop_endurance_discount > 0.0:
+			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 		if purchase_animating:
 			header_text = "Carta confirmada  |  sincronizando deck"
 		_draw_centered(header_text, Vector2(viewport.x * 0.5, 108), _readable_text_size(17), Color(1.0, 0.85, 0.24))
@@ -23459,6 +23886,8 @@ func _draw_shop(viewport: Vector2) -> void:
 
 	# Draw score HUD inside header
 	var hud_text = "Pontos: %d  |  Custo: %d  |  Rerolls: %d" % [score, card_cost, shop_rerolls]
+	if shop_endurance_discount > 0.0:
+		hud_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 	if purchase_animating:
 		hud_text = "Carta confirmada  |  atualizando deck"
 	_draw_centered(hud_text, Vector2(viewport.x * 0.5, 84), _readable_text_size(16), Color(1.0, 0.85, 0.24))
@@ -27996,14 +28425,18 @@ func _mp_sender_id() -> int:
 	return multiplayer.get_remote_sender_id() if multiplayer != null else 0
 
 func _mp_unique_id() -> int:
-	return multiplayer.get_unique_id() if multiplayer != null else 1
+	if multiplayer == null or not multiplayer.has_multiplayer_peer():
+		return 1
+	return multiplayer.get_unique_id()
 
 func _mp_sender_is_self() -> bool:
 	var sender := _mp_sender_id()
 	return sender != 0 and sender == _mp_unique_id()
 
 func _mp_peer_ids() -> Array:
-	return multiplayer.get_peers() if multiplayer != null else []
+	if multiplayer == null or not multiplayer.has_multiplayer_peer():
+		return []
+	return multiplayer.get_peers()
 
 func _is_world_authority() -> bool:
 	if not is_multiplayer:
@@ -28186,21 +28619,27 @@ func _online_lobby_state(room_code: String, connected: int, ready: int) -> void:
 		online_local_ready_confirmed = local_player_ready and ready > 0
 
 @rpc("authority", "call_remote", "reliable", 3)
-func _online_lobby_state_v2(room_code: String, connected: int, ready: int, local_ready_confirmed: bool) -> void:
+func _online_lobby_state_v2(room_code: String, connected: int, ready: int, local_ready_confirmed: bool, remote_client_ready := false) -> void:
 	_net_report_count_in("control", 72)
-	_net_report_event("online_lobby_state_v2_in", "room=%s connected=%d ready=%d local_confirmed=%s" % [room_code, connected, ready, str(local_ready_confirmed)])
+	var confirmed_ready := bool(local_ready_confirmed)
+	if typeof(remote_client_ready) == TYPE_BOOL:
+		if online_room_owner:
+			online_lobby_client_ready = bool(remote_client_ready)
+		else:
+			confirmed_ready = bool(remote_client_ready)
+	_net_report_event("online_lobby_state_v2_in", "room=%s connected=%d ready=%d local_confirmed=%s remote_client=%s" % [room_code, connected, ready, str(confirmed_ready), str(remote_client_ready)])
 	online_room_code = room_code
 	online_lobby_connected_count = connected
 	online_lobby_ready_count = ready
-	online_lobby_server_confirmed_ready = local_ready_confirmed
+	online_lobby_server_confirmed_ready = confirmed_ready
 	if not online_room_owner:
-		local_player_ready = local_ready_confirmed
+		local_player_ready = confirmed_ready
 		online_lobby_ready_pending = false
 	net_player_ready = ready >= 1
 	online_lobby_owner_ready = online_room_owner and ready > 0
-	online_lobby_client_ready = (not online_room_owner and ready > 0) or (online_room_owner and ready > 0)
+	online_lobby_client_ready = online_lobby_client_ready or (not online_room_owner and ready > 0) or (online_room_owner and ready > 0)
 	if not online_room_owner:
-		online_local_ready_confirmed = local_ready_confirmed
+		online_local_ready_confirmed = confirmed_ready
 	net_player_name = "%d/2 jogadores" % connected
 
 
