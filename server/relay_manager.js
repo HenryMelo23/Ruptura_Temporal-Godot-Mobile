@@ -11,9 +11,12 @@ const ROOM_PORT_END = numberEnv("ROOM_PORT_END", 4599);
 const GODOT_BIN = process.env.GODOT_BIN || "/opt/godot/Godot_v4.7-stable_linux.x86_64";
 const PROJECT_PATH = process.env.PROJECT_PATH || "/opt/ruptura/Ruptura_Temporal-Godot-Mobile";
 const ROOM_IDLE_MS = numberEnv("ROOM_IDLE_MS", 15 * 60 * 1000);
+const WARM_STANDBY_ROOMS = numberEnv("WARM_STANDBY_ROOMS", 1);
+const WARM_STANDBY_REFILL_MS = numberEnv("WARM_STANDBY_REFILL_MS", 1500);
 const MAX_PLAYERS = 2;
 
 const rooms = new Map();
+let warmRefillTimer = null;
 
 function numberEnv(name, fallback) {
   const value = Number(process.env[name]);
@@ -83,7 +86,8 @@ function createCode() {
   return crypto.randomBytes(3).toString("hex").toUpperCase();
 }
 
-function startRoom(ownerName) {
+function startRoom(ownerName, options = {}) {
+  const standby = Boolean(options.standby);
   const port = allocatePort();
   if (!port) {
     throw new Error("no room ports available");
@@ -103,6 +107,9 @@ function startRoom(ownerName) {
     `--room-code=${code}`,
     `--port=${port}`
   ];
+  if (standby) {
+    args.push("--warm-standby");
+  }
   const child = spawn(GODOT_BIN, args, {
     cwd: PROJECT_PATH,
     stdio: ["ignore", "pipe", "pipe"]
@@ -111,12 +118,14 @@ function startRoom(ownerName) {
   const room = {
     code,
     port,
-    ownerName: ownerName || "host",
-    players: 1,
+    ownerName: standby ? "" : (ownerName || "host"),
+    players: standby ? 0 : 1,
+    standby,
     createdAt: Date.now(),
     lastSeen: Date.now(),
     child,
-    idleTimer: null
+    idleTimer: null,
+    stopping: false
   };
   rooms.set(code, room);
 
@@ -125,11 +134,16 @@ function startRoom(ownerName) {
   child.on("exit", (status, signal) => {
     clearTimeout(room.idleTimer);
     rooms.delete(code);
-    console.log(`room ${code} exited status=${status} signal=${signal}`);
+    console.log(`room ${code}${room.standby ? " standby" : ""} exited status=${status} signal=${signal}`);
+    if (room.standby && !room.stopping) {
+      scheduleWarmStandbyRefill();
+    }
   });
 
-  scheduleRoomStop(room);
-  console.log(`room ${code} started on ${ROOM_HOST}:${port}`);
+  if (!standby) {
+    scheduleRoomStop(room);
+  }
+  console.log(`room ${code}${standby ? " warmed" : " started"} on ${ROOM_HOST}:${port}`);
   return room;
 }
 
@@ -146,6 +160,7 @@ function stopRoom(code, reason) {
     return false;
   }
   console.log(`stopping room ${code}: ${reason}`);
+  room.stopping = true;
   clearTimeout(room.idleTimer);
   rooms.delete(code);
   let exited = false;
@@ -161,14 +176,72 @@ function stopRoom(code, reason) {
   return true;
 }
 
+function warmStandbyRooms() {
+  return Array.from(rooms.values()).filter((room) => room.standby && room.players === 0);
+}
+
+function activeRooms() {
+  return Array.from(rooms.values()).filter((room) => !room.standby);
+}
+
+function scheduleWarmStandbyRefill() {
+  if (WARM_STANDBY_ROOMS <= 0 || warmRefillTimer) {
+    return;
+  }
+  warmRefillTimer = setTimeout(() => {
+    warmRefillTimer = null;
+    ensureWarmStandby();
+  }, WARM_STANDBY_REFILL_MS);
+  warmRefillTimer.unref();
+}
+
+function ensureWarmStandby() {
+  if (WARM_STANDBY_ROOMS <= 0) {
+    return;
+  }
+  let missing = WARM_STANDBY_ROOMS - warmStandbyRooms().length;
+  while (missing > 0) {
+    try {
+      startRoom("", { standby: true });
+    } catch (error) {
+      console.error(`failed to warm standby room: ${error.message}`);
+      break;
+    }
+    missing -= 1;
+  }
+}
+
+function claimWarmStandby(ownerName) {
+  const room = warmStandbyRooms().sort((left, right) => left.createdAt - right.createdAt)[0];
+  if (!room) {
+    return null;
+  }
+  room.standby = false;
+  room.ownerName = ownerName || "host";
+  room.players = 1;
+  room.createdAt = Date.now();
+  room.lastSeen = Date.now();
+  scheduleRoomStop(room);
+  console.log(`room ${room.code} claimed from warm standby by ${room.ownerName}`);
+  scheduleWarmStandbyRefill();
+  return room;
+}
+
 function availableRoom() {
-  const candidates = Array.from(rooms.values())
+  const candidates = activeRooms()
     .filter((room) => room.players < MAX_PLAYERS)
     .sort((left, right) => right.createdAt - left.createdAt);
   if (candidates.length === 0) {
     return null;
   }
   return reserveRoom(candidates[0]);
+}
+
+function listAvailableRooms() {
+  return activeRooms()
+    .filter((room) => room.players < MAX_PLAYERS)
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .map(roomPublic);
 }
 
 function reserveRoom(room) {
@@ -194,14 +267,20 @@ async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (req.method === "GET" && url.pathname === "/health") {
-    sendJson(res, 200, { ok: true, rooms: rooms.size });
+    sendJson(res, 200, { ok: true, rooms: activeRooms().length, standby: warmStandbyRooms().length });
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/rooms") {
     const payload = await readJson(req);
-    const room = startRoom(String(payload.name || "host"));
+    const ownerName = String(payload.name || "host");
+    const room = claimWarmStandby(ownerName) || startRoom(ownerName);
     sendJson(res, 201, roomPublic(room));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/rooms") {
+    sendJson(res, 200, { rooms: listAvailableRooms() });
     return;
   }
 
@@ -241,6 +320,7 @@ async function route(req, res) {
   if (req.method === "DELETE" && deleteMatch) {
     const stopped = stopRoom(deleteMatch[1], "delete request");
     sendJson(res, stopped ? 200 : 404, { stopped });
+    scheduleWarmStandbyRefill();
     return;
   }
 
@@ -257,4 +337,5 @@ const server = http.createServer((req, res) => {
 server.listen(MANAGER_PORT, "0.0.0.0", () => {
   console.log(`ruptura relay manager listening on :${MANAGER_PORT}`);
   console.log(`rooms will advertise ${ROOM_HOST}:${ROOM_PORT_START}-${ROOM_PORT_END}`);
+  ensureWarmStandby();
 });

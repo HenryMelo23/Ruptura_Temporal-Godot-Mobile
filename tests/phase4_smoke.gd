@@ -89,7 +89,7 @@ func _run() -> void:
 	game.boss_dead = false
 	game.boss_hp = 1.0
 	game._damage_boss(999999.0, "eletrica")
-	assert(game.mode == "victory")
+	assert(int(game.phase_fragment.get("next_phase", 0)) == 5)
 
-	print("PHASE4_SMOKE_OK map=true enemies=true teleport=true planet=true vortex=true petro=true transition=true")
+	print("PHASE4_SMOKE_OK map=true enemies=true teleport=true planet=true vortex=true petro=true transition=true phase5_fragment=true")
 	quit(0)

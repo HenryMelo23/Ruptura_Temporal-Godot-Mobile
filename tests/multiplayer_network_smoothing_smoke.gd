@@ -42,12 +42,25 @@ func _run() -> void:
 		"speed_mult": 1.0
 	}]
 	host_game.boss_pos = Vector2(300, 280)
+	host_game.current_phase = 2
+	host_game.boss_active = true
+	host_game.boss_hp = 1000.0
+	host_game.boss_hp_max = 1400.0
+	host_game.boss_phase = 1.0
+	host_game.boss_attacks = [{"kind": "bubble", "age": 0.20, "duration": 1.0, "target": Vector2(340, 280)}]
+	host_game.phase4_enemy_hazards = [{"kind": "boss4_pulse", "pos": Vector2(360, 320), "age": 0.10, "life": 1.0, "max": 1.0, "radius": 180.0}]
 	client_game._apply_remote_world_snapshot(
 		host_game._pack_net_enemies(),
-		PackedFloat32Array([host_game.boss_pos.x, host_game.boss_pos.y, 1000.0, 0.0]),
-		host_game._pack_net_enemy_bullets()
+		host_game._pack_net_boss(),
+		host_game._pack_net_enemy_bullets(),
+		host_game._pack_net_boss_visuals()
 	)
 	_check(Vector2(client_game.enemies[0]["pos"]).is_equal_approx(Vector2(100, 200)), "initial enemy snapshot did not snap into place")
+	_check(client_game.boss_active, "boss active state was not synchronized to replica")
+	_check(client_game.current_phase == 2, "boss phase index was not synchronized to replica")
+	_check(is_equal_approx(client_game.boss_hp_max, 1400.0), "boss max HP was not synchronized to replica")
+	_check(client_game.boss_attacks.size() == 1 and String(client_game.boss_attacks[0].get("kind", "")) == "bubble", "boss attack visuals were not synchronized to replica")
+	_check(client_game.phase4_enemy_hazards.size() == 1, "boss/environment hazards were not synchronized to replica")
 
 	await create_timer(0.06).timeout
 	host_game.enemies[0]["pos"] = Vector2(220, 200)
@@ -55,8 +68,9 @@ func _run() -> void:
 	host_game.boss_pos = Vector2(420, 280)
 	client_game._apply_remote_world_snapshot(
 		host_game._pack_net_enemies(),
-		PackedFloat32Array([host_game.boss_pos.x, host_game.boss_pos.y, 1000.0, 0.0]),
-		host_game._pack_net_enemy_bullets()
+		host_game._pack_net_boss(),
+		host_game._pack_net_enemy_bullets(),
+		host_game._pack_net_boss_visuals()
 	)
 
 	_check(Vector2(client_game.enemies[0]["pos"]).x < 120.0, "enemy position jumped directly to the newest packet")
@@ -72,6 +86,9 @@ func _run() -> void:
 	_check(client_game.net_player_render_pos.x < 520.0, "remote player jumped directly to snapshot")
 	client_game._update_network_interpolation(1.0 / 60.0)
 	_check(client_game.net_player_render_pos.x > 500.0 and client_game.net_player_render_pos.x < 560.0, "remote player interpolation did not advance smoothly")
+	client_game._rpc_remote_player_state_light(42, Vector2(560, 300), 90, 100, false, 1, 2, client_game.NET_ANIM_FIRE, 1, true, 12)
+	_check(client_game.net_player_anim_state == client_game.NET_ANIM_FIRE, "remote animation state was not preserved")
+	_check(client_game.net_player_frame_idx == 1 and client_game.net_player_flip_h, "remote animation frame/facing was not preserved")
 
 	client_game.enemies = [{"uid": 9901, "type": client_game.ENEMY_COMMON, "pos": Vector2(820, 360), "hp": 100.0, "max_hp": 100.0, "phase": 0.0, "bit": 0, "last_move_dir": Vector2.ZERO}]
 	client_game.remote_bullets = [{
@@ -108,23 +125,36 @@ func _run() -> void:
 	}]
 	client_game._update_remote_bullets(0.01)
 	_check(not client_game.remote_bullets.is_empty() and int(client_game.remote_bullets[0].get("enemy_hits_count", 0)) == 1, "piercing remote projectile did not register its impact/ricochet")
+	client_game.remote_bullets = [{
+		"source": 42, "uid": "42:return", "pos": Vector2(560, 360), "dir": Vector2.RIGHT,
+		"speed": 300.0, "life": 6.0, "max_life": 6.0, "age": 0.0, "phase": 0.0,
+		"trail_cd": 0.0, "kind": "retornante", "motion_mode": "returning", "state": "ida",
+		"pierce": true, "hits": {}, "color": Color.MAGENTA
+	}]
+	client_game.net_player_render_pos = Vector2(560, 360)
+	client_game._update_remote_bullets(0.60)
+	_check(not client_game.remote_bullets.is_empty() and String(client_game.remote_bullets[0].get("state", "")) == "volta", "returning projectile did not reproduce ida/volta trajectory")
+	_check(not client_game.effects.is_empty(), "remote projectile did not emit its local visual trail")
 
 	client_game.net_player_peer_id = 42
 	client_game.net_player_render_pos = Vector2(560, 300)
-	client_game._rpc_ability_visual(42, 1, client_game.NET_ABILITY_SKILL, 1, Vector2(560, 300), Vector2(700, 300), 0.8, 0.0, 4)
-	client_game._rpc_ability_visual(42, 2, client_game.NET_ABILITY_SECONDARY, 0, Vector2(560, 300), Vector2(560, 300), 2.0, 0.0, 4)
-	client_game._rpc_ability_visual(42, 3, client_game.NET_ABILITY_TELEPORT, 2, Vector2(560, 300), Vector2(760, 300), 0.55, 0.0, 4)
+	client_game._rpc_ability_visual(42, 1, client_game.NET_ABILITY_SKILL, 1, Vector2(560, 300), Vector2(700, 300), 0.8, 0.0, {"seed": 11, "rotations": 3.0}, 4)
+	client_game._rpc_ability_visual(42, 2, client_game.NET_ABILITY_SECONDARY, 0, Vector2(560, 300), Vector2(560, 300), 2.0, 0.0, {"seed": 12, "center": Vector2(560, 300)}, 4)
+	client_game._rpc_ability_visual(42, 3, client_game.NET_ABILITY_TELEPORT, 2, Vector2(560, 300), Vector2(760, 300), 0.55, 0.0, {"seed": 13}, 4)
 	client_game.mode = "game"
 	client_game.queue_redraw()
 	await process_frame
 	await process_frame
 	_check(client_game.net_ability_visuals.size() == 3, "Q/E/TP remote visuals failed during rendered frames")
+	_check(bool(client_game.net_ability_visuals[1].get("network_replica", false)), "secondary visual did not use a local effect replica")
 
 	var payload_bytes := var_to_bytes([
 		host_game._pack_net_enemies(),
-		host_game._pack_net_enemy_bullets()
+		host_game._pack_net_boss(),
+		host_game._pack_net_enemy_bullets(),
+		host_game._pack_net_boss_visuals()
 	]).size()
-	_check(payload_bytes < 512, "compact one-entity snapshot exceeded expected budget")
+	_check(payload_bytes < 1600, "compact one-entity snapshot with boss visuals exceeded expected budget")
 	print("MULTIPLAYER_NETWORK_SMOOTHING_SMOKE_OK payload_bytes=%d enemy_step=%.2f" % [payload_bytes, enemy_after_one_frame - 100.0])
 
 	root.remove_child(host_game)

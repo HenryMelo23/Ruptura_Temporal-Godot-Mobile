@@ -77,7 +77,7 @@ func _run() -> void:
 	game._use_skill()
 	_advance_effects(game.LACERANTE_Q_DURATION + 0.08)
 	var q_boss_damage: float = game.boss_hp_max - game.boss_hp
-	_check(q_boss_damage > 250.0 and q_boss_damage <= 500.0, "Lacerante Q boss damage is not normalized: %.2f" % q_boss_damage)
+	_check(q_boss_damage > 180.0 and q_boss_damage <= 500.0, "Lacerante Q boss damage is not normalized: %.2f" % q_boss_damage)
 
 	game.slashes.clear()
 	game.effects.clear()

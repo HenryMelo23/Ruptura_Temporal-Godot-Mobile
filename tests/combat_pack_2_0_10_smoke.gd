@@ -50,6 +50,8 @@ func _run() -> void:
 	game.player_pos = Vector2(700, 300)
 	game._update_pyro_penguin(pyro, 0.01)
 	_check(game.enemy_bullets.any(func(b): return String(b.get("type", "")) == "pyro_wall_seed"), "pyro penguin did not fire")
+	_check(is_equal_approx(float(pyro["shoot_cd"]), game.PYRO_WALL_SHOT_INTERVAL), "pyro penguin cadence was not reset to the tuned interval")
+	_check(game.PYRO_WALL_SHOT_INTERVAL < 5.0 and game.PYRO_WALL_SHOT_INTERVAL >= 3.4, "pyro penguin cadence is outside the tuned pressure window")
 	game._update_enemy_bullets(0.20)
 	_check(not game.phase2_fire_walls.is_empty(), "pyro projectile did not create 32px wall tiles")
 	_check(is_equal_approx(float(game.phase2_fire_walls[0]["max"]), 15.0), "pyro wall does not last 15 seconds")

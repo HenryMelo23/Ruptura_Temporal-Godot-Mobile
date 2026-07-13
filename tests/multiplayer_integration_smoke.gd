@@ -172,8 +172,7 @@ func _run_client_loop() -> void:
 		if not marked_ready and game.online_connected and game.mode == "lobby_online_client":
 			print("[CLIENT] Connected. Marking ready...")
 			marked_ready = true
-			game.local_player_ready = true
-			game.rpc_id(1, "_toggle_ready", true)
+			game._set_lobby_ready(true)
 
 		# Manifestacao primeiro, espectro depois. So o espectro conta como pronto final.
 		if game.mode == "manifest_mp" and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION and not manifest_reveal_requested:

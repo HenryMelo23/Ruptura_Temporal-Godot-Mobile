@@ -61,6 +61,17 @@ func _run() -> void:
 	_check(game.online_room_code == "ABCDEF", "Codigo da sala deve ser atualizado")
 	_check(game.online_lobby_connected_count == 2, "Contagem de conexoes deve ser 2")
 	_check(game.online_lobby_ready_count == 1, "Contagem de prontos deve ser 1")
+	_check(game._online_client_ready(), "Fallback do lobby deve reconhecer client pronto pelo contador")
 	_check(game.online_room_owner == false, "O recebimento de online_lobby_state nao deve resetar online_room_owner")
+
+	game.local_player_ready = true
+	game.online_local_ready_confirmed = false
+	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
+	_check(game.online_lobby_client_ready == true, "Estado v2 deve marcar client pronto explicitamente")
+	_check(game.online_local_ready_confirmed == true, "Client deve receber confirmacao autoritativa do pronto")
+	game.online_room_owner = true
+	game.online_lobby_client_ready = false
+	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
+	_check(game._online_client_ready(), "Host deve reconhecer client pronto pelo estado v2")
 
 	await _finish_ok("ONLINE_LOBBY_SMOKE_OK - Host/Client states validated successfully")

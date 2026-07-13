@@ -55,6 +55,7 @@ static func create(aura: String, level := 1) -> Dictionary:
 		"voracious_cycles": 0,
 		"voracious_last_collect": 0.0,
 		"voracious_drain_tick": 0.0,
+		"voracious_boss_feed_cd": 0.0,
 		"voracious_drops": [],
 		"null_charge": 0.0,
 		"null_armed": false,
@@ -248,6 +249,25 @@ static func on_enemy_killed(state: Dictionary, enemy: Dictionary) -> Array:
 				events.append({"type": "skill_cooldown", "amount": 0.18 + level * 0.03})
 	return events
 
+
+static func on_boss_hit(state: Dictionary, boss_pos: Vector2, damage: float) -> Array:
+	if String(state.get("name", "")) != "Voraz" or damage <= 0.0:
+		return []
+	if float(state.get("voracious_boss_feed_cd", 0.0)) > 0.0:
+		return []
+	var level := int(state.get("level", 0))
+	var value := clampf(8.0 + sqrt(damage) * 0.32 + level * 0.8, 9.0, 18.0)
+	var drops: Array = state.get("voracious_drops", [])
+	drops.append({
+		"pos": boss_pos + Vector2.from_angle(randf_range(0.0, TAU)) * randf_range(18.0, 54.0),
+		"life": 5.0,
+		"value": value,
+		"boss_particle": true,
+	})
+	state["voracious_drops"] = drops
+	state["voracious_boss_feed_cd"] = maxf(0.16, 0.30 - level * 0.018)
+	return []
+
 static func on_player_hit(state: Dictionary, amount: float, hp: float, hp_max: float) -> Dictionary:
 	var result := {"blocked": false, "amount": amount, "heal": 0.0, "events": []}
 	match String(state.get("name", "")):
@@ -345,11 +365,16 @@ static func _update_voracious(state: Dictionary, delta: float, context: Dictiona
 	state["voracious_hunger"] = maxf(0.0, float(state["voracious_hunger"]))
 	state["voracious_last_collect"] = float(state["voracious_last_collect"]) + delta
 	state["voracious_drain_tick"] = maxf(0.0, float(state["voracious_drain_tick"]) - delta)
+	state["voracious_boss_feed_cd"] = maxf(0.0, float(state.get("voracious_boss_feed_cd", 0.0)) - delta)
 	var player_pos := Vector2(context.get("player_pos", Vector2.ZERO))
 	var kept: Array = []
 	for drop in Array(state["voracious_drops"]):
 		drop["life"] = float(drop["life"]) - delta
 		if float(drop["life"]) <= 0.0: continue
+		if bool(drop.get("boss_particle", false)):
+			var to_player := player_pos - Vector2(drop["pos"])
+			if to_player.length() > 0.01:
+				drop["pos"] = Vector2(drop["pos"]) + to_player.normalized() * minf(to_player.length(), (250.0 + to_player.length() * 0.55) * delta)
 		if player_pos.distance_to(Vector2(drop["pos"])) <= 68.0:
 			state["voracious_hunger"] = float(state["voracious_hunger"]) + float(drop["value"]) * pow(0.94, cycles)
 			state["voracious_last_collect"] = 0.0

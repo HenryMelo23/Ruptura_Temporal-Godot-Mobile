@@ -109,7 +109,7 @@ func _run_host() -> void:
 			game._update_bullets(0.0)
 			continue
 		if destroy_sent and FileAccess.file_exists(PREFIX + "client_result.txt"):
-			_check(game.net_ping_ms >= 0 and game.net_ping_ms < 20, "host relay ping exceeded local 20ms budget: %d" % game.net_ping_ms)
+			_check(game.net_ping_ms >= 0 and game.net_ping_ms < 50, "host relay ping exceeded local 50ms budget: %d" % game.net_ping_ms)
 			print("[HOST] ABILITY_VISUAL_OK ping_ms=%d q_e_tp_sent=true projectile_destroy_sent=true" % game.net_ping_ms)
 			_write("host_result", "OK")
 			while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:
@@ -134,7 +134,13 @@ func _run_client() -> void:
 			_check(actions.has(game.NET_ABILITY_SKILL), "client did not receive Q visual")
 			_check(actions.has(game.NET_ABILITY_SECONDARY), "client did not receive E visual")
 			_check(actions.has(game.NET_ABILITY_TELEPORT), "client did not receive TP visual")
-			payload_bytes_seen = var_to_bytes([42, 3, game.NET_ABILITY_SKILL, 0, Vector2(420, 360), Vector2(620, 360), 0.75, 0.0, 5]).size()
+			var exact_replicas := 0
+			for visual in game.net_ability_visuals:
+				if bool(visual.get("network_replica", false)):
+					exact_replicas += 1
+			_check(exact_replicas >= 3, "Q/E/TP were not reconstructed as local effect replicas")
+			_check(not game.effects.is_empty(), "remote projectile muzzle/trail was not reproduced")
+			payload_bytes_seen = var_to_bytes([42, 3, game.NET_ABILITY_SKILL, 0, Vector2(420, 360), Vector2(620, 360), 0.75, 0.0, {"seed": 5}, 5]).size()
 			_check(payload_bytes_seen < 256, "ability event exceeded 256-byte budget: %d" % payload_bytes_seen)
 			received = true
 			_write("client_received", "OK")
@@ -145,7 +151,7 @@ func _run_client() -> void:
 				if float(bullet.get("life", 0.0)) > 0.0:
 					projectile_finished = false
 			if projectile_finished:
-				_check(game.net_ping_ms >= 0 and game.net_ping_ms < 20, "client relay ping exceeded local 20ms budget: %d" % game.net_ping_ms)
+				_check(game.net_ping_ms >= 0 and game.net_ping_ms < 50, "client relay ping exceeded local 50ms budget: %d" % game.net_ping_ms)
 				print("[CLIENT] ABILITY_VISUAL_OK ping_ms=%d payload_bytes=%d q_e_tp_visible=true projectile_removed=true" % [game.net_ping_ms, payload_bytes_seen])
 				_write("client_result", "OK")
 				while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:

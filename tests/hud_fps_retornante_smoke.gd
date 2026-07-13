@@ -11,6 +11,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var previous_retornante: bool = game.retornante_unlocked
+	var previous_qa: bool = game.qa_data_unlocked
 	var previous_fps: bool = game.show_fps_counter
 	game.retornante_unlocked = false
 	var retornante_index := -1
@@ -19,6 +20,12 @@ func _run() -> void:
 			retornante_index = i
 			break
 	assert(retornante_index >= 0)
+	assert(not game._manifestation_unlocked(retornante_index))
+	game.retornante_unlocked = true
+	game._load_config()
+	assert(not game._manifestation_unlocked(retornante_index))
+	game.gameplay_cheat_text = "QA231021"
+	assert(game._try_unlock_retornante_cheat())
 	assert(not game._manifestation_unlocked(retornante_index))
 	game.gameplay_cheat_text = "Geovaninha"
 	assert(game._try_unlock_retornante_cheat())
@@ -38,6 +45,7 @@ func _run() -> void:
 	assert(game.hud_cards_panel_scale > cards_scale)
 	assert(game.hud_coagulum_scale > coagulum_scale)
 	game.retornante_unlocked = previous_retornante
+	game.qa_data_unlocked = previous_qa
 	game.show_fps_counter = previous_fps
 	game.hud_aura_panel_scale = aura_scale
 	game.hud_cards_panel_scale = cards_scale
