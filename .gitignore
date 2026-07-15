@@ -2,7 +2,7 @@
 .godot/
 .codex/
 *.import
-
+.agent_logs/
 # Generated Android/export artifacts
 android/
 builds/
