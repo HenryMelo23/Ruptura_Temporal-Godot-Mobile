@@ -21,13 +21,15 @@ func _run() -> void:
 	game._save_webhook_from_input()
 	assert(game.run_report_webhook_url.contains("/api/webhooks/123456789/"))
 	game._clear_run_report_webhook()
-	assert(game.run_report_webhook_url == "")
+	assert(game.run_report_webhook_url == game.DEFAULT_DISCORD_WEBHOOK_URL)
 
 	game.player_nickname = "GeoQA"
+	game.player_profile_id = "qa-profile-1"
 	game.selected_manifestation = 0
 	game.selected_aura = 0
 	game._start_game()
 	game.player_nickname = "GeoQA"
+	game.player_profile_id = "qa-profile-1"
 	game.player_damage = 48.0
 	game.run_start_damage = 32.0
 	game._track_enemy_damage({"type": game.ENEMY_STALKER}, 120.0)
@@ -45,10 +47,17 @@ func _run() -> void:
 	game.run_points_spent = 500
 	var payload: Dictionary = game._build_run_report_payload("Derrota")
 	assert(payload["player"] == "GeoQA")
+	assert(String(payload["profile_id"]) != "")
+	assert(payload.has("player_stats"))
+	assert(payload.has("enemy_scaling"))
+	assert(payload.has("network"))
+	assert(payload.has("settings"))
+	assert(int(payload["leaderboard_score"]) > 0)
 	assert(int(payload["kills"]) == 7)
 	assert(String(payload["enemy_damage_breakdown"]).contains("Espreitador: 150"))
 	assert(String(payload["boss_report"]).contains("Boss 2: tempo 00:15 | dano 444"))
 	assert(String(payload["cards"]).contains("Petro x2"))
+	assert(Array(payload["cards_detail"]).size() >= 2)
 	assert(int(payload["cards_total"]) == 3)
 	print("RUN_REPORT_NICKNAME_SMOKE_OK nick=true report=true discord_guard=true qa_gate=true")
 	quit()

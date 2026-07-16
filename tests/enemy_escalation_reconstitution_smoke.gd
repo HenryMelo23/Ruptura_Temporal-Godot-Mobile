@@ -22,12 +22,12 @@ func _run() -> void:
 	game.player_pos = Vector2(760, 420)
 
 	_check(is_equal_approx(game.PLAYER_DASH_DISTANCE, 350.0), "teleport distance was not increased by 20px")
-	_check(is_equal_approx(game.COUT_AS_SPAWN_TIME, 420.0), "rebobinador spawn was not delayed to 7 minutes")
-	_check(is_equal_approx(game.SHIELD_REFLECTOR_SPAWN_TIME, 600.0), "briguer shield spawn was not delayed to 10 minutes")
+	_check(is_equal_approx(game.COUT_AS_SPAWN_TIME, game.PHASE1_REVIVATOR_UNLOCK_TIME), "rebobinador spawn is not tied to the phase 1 revivator gate")
+	_check(is_equal_approx(game.SHIELD_REFLECTOR_SPAWN_TIME, game.PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME), "briguer shield spawn is not tied to the phase 1 shield/crystal gate")
 	game.catalog_tab = 1
 	var enemy_catalog: Array = game._catalog_items()
-	_check(enemy_catalog.any(func(item): return String(item.get("name", "")) == "Rebobinador" and String(item.get("desc", "")).find("7 minutos") >= 0), "enemy catalog does not explain rebobinador")
-	_check(enemy_catalog.any(func(item): return String(item.get("name", "")) == "Briguer Escudeiro" and String(item.get("desc", "")).find("10 minutos") >= 0), "enemy catalog does not explain briguer shield")
+	_check(enemy_catalog.any(func(item): return String(item.get("name", "")) == "Rebobinador" and String(item.get("desc", "")).find("15 minutos") >= 0), "enemy catalog does not explain rebobinador")
+	_check(enemy_catalog.any(func(item): return String(item.get("name", "")) == "Briguer Escudeiro" and String(item.get("desc", "")).find("9 minutos") >= 0), "enemy catalog does not explain briguer shield")
 
 	game.time_alive = game.ANOMALIA_ESPREITADOR_TIME
 	var early_stalker: Dictionary = game._stalker_profile()
@@ -66,7 +66,12 @@ func _run() -> void:
 	_check(game.enemies.has(victim), "enemy was not reconstituted inside orange aura")
 	_check(is_equal_approx(float(victim["hp"]), float(victim["max_hp"]) * game.COUT_AS_RECONSTITUTE_HP_RATIO), "reconstituted hp is not 25 percent")
 	_check(float(victim["speed"]) >= old_speed * game.COUT_AS_RECONSTITUTE_SPEED_MULT, "reconstituted enemy did not gain 90 percent speed")
-	_check(is_equal_approx(float(victim["reconstitute_time"]), 1.0) and float(caster["reconstitute_pulse"]) > 0.0, "reconstitution animation state was not set to one second")
+	_check(is_equal_approx(float(victim["reconstitute_time"]), game.COUT_AS_RECONSTITUTE_TIME) and float(caster["reconstitute_pulse"]) > 0.0, "reconstitution animation state was not set to 1.5 seconds")
+	_check(is_equal_approx(float(victim["reconstitute_immunity"]), game.COUT_AS_RECONSTITUTE_TIME + game.COUT_AS_RECONSTITUTE_IMMUNITY_TIME), "reconstitution immunity was not armed after animation")
+	var immune_hp := float(victim["hp"])
+	game._damage_enemy(victim, 999.0, "eletrica", false)
+	_check(is_equal_approx(float(victim["hp"]), immune_hp), "reconstituted enemy took damage during immunity")
+	victim["reconstitute_immunity"] = 0.0
 	_check(bool(victim.get("reconstituted_once", false)), "reconstitution did not mark the enemy as already revived")
 	victim["hp"] = 0.0
 	game._kill_enemy(victim)

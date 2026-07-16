@@ -78,10 +78,54 @@ function Update-AndroidPreset {
 		throw "Nao encontrei export_presets.cfg."
 	}
 
-	$content = Get-Content -LiteralPath $PresetFile -Raw
-	$content = [regex]::Replace($content, 'export_path="[^"]*"', 'export_path="' + $RelativeExportPath.Replace("\", "/") + '"', 1)
-	$content = [regex]::Replace($content, 'version/code=\d+', 'version/code=' + $VersionCode, 1)
-	$content = [regex]::Replace($content, 'version/name="[^"]*"', 'version/name="' + $VersionName + '"', 1)
+	$lines = Get-Content -LiteralPath $PresetFile
+	$inAndroidPreset = $false
+	$inAndroidOptions = $false
+	$updatedExportPath = $false
+	$updatedVersionCode = $false
+	$updatedVersionName = $false
+	$normalizedExportPath = $RelativeExportPath.Replace("\", "/")
+
+	for ($index = 0; $index -lt $lines.Count; $index++) {
+		$line = $lines[$index]
+		if ($line -eq "[preset.0]") {
+			$inAndroidPreset = $true
+			$inAndroidOptions = $false
+			continue
+		}
+		if ($line -eq "[preset.0.options]") {
+			$inAndroidPreset = $false
+			$inAndroidOptions = $true
+			continue
+		}
+		if ($line -match '^\[preset\.\d+(\.options)?\]$' -and $line -ne "[preset.0]" -and $line -ne "[preset.0.options]") {
+			$inAndroidPreset = $false
+			$inAndroidOptions = $false
+			continue
+		}
+
+		if ($inAndroidPreset -and $line -match '^export_path=') {
+			$lines[$index] = 'export_path="' + $normalizedExportPath + '"'
+			$updatedExportPath = $true
+			continue
+		}
+		if ($inAndroidOptions -and $line -match '^version/code=') {
+			$lines[$index] = 'version/code=' + $VersionCode
+			$updatedVersionCode = $true
+			continue
+		}
+		if ($inAndroidOptions -and $line -match '^version/name=') {
+			$lines[$index] = 'version/name="' + $VersionName + '"'
+			$updatedVersionName = $true
+			continue
+		}
+	}
+
+	if (-not ($updatedExportPath -and $updatedVersionCode -and $updatedVersionName)) {
+		throw "Nao consegui atualizar o preset Android em export_presets.cfg."
+	}
+
+	$content = ($lines -join [Environment]::NewLine) + [Environment]::NewLine
 	$utf8NoBom = New-Object System.Text.UTF8Encoding $False
 	[System.IO.File]::WriteAllText($PresetFile, $content, $utf8NoBom)
 }

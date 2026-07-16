@@ -1,0 +1,29 @@
+logLevel: info
+
+rtmp: yes
+rtmpAddress: :1935
+rtmpEncryption: "no"
+
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: "*"
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentDuration: 500ms
+hlsPartDuration: 100ms
+
+webrtc: yes
+webrtcAddress: :8889
+webrtcEncryption: no
+webrtcAllowOrigin: "*"
+webrtcLocalUDPAddress: :8189
+webrtcIPsFromInterfaces: yes
+webrtcAdditionalHosts:
+  - 72.61.217.238
+
+pathDefaults:
+  source: publisher
+
+paths:
+  all:
+    source: publisher

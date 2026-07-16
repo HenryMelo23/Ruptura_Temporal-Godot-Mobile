@@ -1,15 +1,16 @@
 extends SceneTree
 
 const PREVIEW_DIR := "res://assets/previews/manifestations"
-const FRAME_SIZE := Vector2i(480, 270)
-const FRAME_COUNT := 100
-const ATLAS_COLS := 10
-const ATLAS_ROWS := 10
-const FPS := 24.0
+const FRAME_SIZE := Vector2i(1280, 720)
+const FRAME_COUNT := 12
+const ATLAS_COLS := 4
+const ATLAS_ROWS := 3
+const FPS := 12.0
 const DT := 1.0 / FPS
-const WEBP_QUALITY := 0.56
+const WEBP_QUALITY := 0.50
 
 var game: Node
+var output_dir := PREVIEW_DIR
 
 
 func _check(condition: bool, message: String) -> void:
@@ -27,11 +28,13 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(PREVIEW_DIR))
 	var only_key := ""
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--key="):
 			only_key = argument.trim_prefix("--key=").strip_edges().to_lower()
+		elif argument.begins_with("--output-dir="):
+			output_dir = argument.trim_prefix("--output-dir=").strip_edges()
+	DirAccess.make_dir_recursive_absolute(_globalize_output_dir(output_dir))
 	var clip_count := 0
 	await process_frame
 	for i in range(game.MANIFESTATIONS.size()):
@@ -64,9 +67,21 @@ func _capture_clip(index: int, key: String, kind: String) -> void:
 			image.convert(Image.FORMAT_RGBA8)
 		var dst := Vector2i((frame % ATLAS_COLS) * FRAME_SIZE.x, int(frame / ATLAS_COLS) * FRAME_SIZE.y)
 		atlas.blit_rect(image, Rect2i(Vector2i.ZERO, FRAME_SIZE), dst)
-	var output := "%s/%s_%s.webp" % [PREVIEW_DIR, key, kind]
+	var output := _output_path(key, kind)
 	var err := atlas.save_webp(output, WEBP_QUALITY)
 	_check(err == OK, "failed to save preview atlas: " + output)
+
+
+func _globalize_output_dir(path: String) -> String:
+	path = path.replace("\\", "/")
+	if path.begins_with("res://") or path.begins_with("user://"):
+		return ProjectSettings.globalize_path(path)
+	return path
+
+
+func _output_path(key: String, kind: String) -> String:
+	var base := _globalize_output_dir(output_dir).replace("\\", "/")
+	return base.path_join("%s_%s.webp" % [key, kind])
 
 
 func _setup_clip(index: int, key: String, kind: String) -> void:
@@ -217,13 +232,13 @@ func _prepare_ultimate_clip(key: String) -> void:
 
 
 func _drive_clip_frame(key: String, kind: String, frame: int) -> void:
-	if kind == "atk" and frame % 18 == 0:
+	if kind == "atk" and frame % 6 == 0:
 		game.last_attack_time = -999.0
 		game._try_attack()
-	if kind == "skill" and frame == 46:
+	if kind == "skill" and frame == 6:
 		game.last_skill_time = -999.0
 		_prepare_skill_clip(key)
-	if kind == "ultimate" and key == "eletrica" and frame % 24 == 0:
+	if kind == "ultimate" and key == "eletrica" and frame % 8 == 0:
 		game.manifestation_secondaries.clear()
 		game.last_secondary_time = -999.0
 		game._use_secondary_skill(game.player_pos + Vector2(165, 0))

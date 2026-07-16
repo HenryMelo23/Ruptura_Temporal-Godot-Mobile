@@ -1,0 +1,12 @@
+description = "Implementa uma tarefa Godot de ponta a ponta, testa, corrige e só conclui após validação limpa."
+prompt = """
+Implemente a tarefa Godot abaixo diretamente no repositório:
+
+{{args}}
+
+Antes de editar, leia AGENTS.md, GEMINI.md e as skills Godot em .agents/skills/. Inspecione project.godot, cenas, scripts, sinais, recursos, autoloads, inputs, chamadores e testes relacionados.
+
+Não pare no planejamento. Faça a alteração completa, execute testes focados, rode o validador final do projeto, leia todo o terminal e corrija cada erro acionável. Repita o ciclo até a cena principal e as cenas afetadas testadas rodarem sem erros no terminal.
+
+Não declare sucesso sem informar os comandos realmente executados e seus resultados.
+"""

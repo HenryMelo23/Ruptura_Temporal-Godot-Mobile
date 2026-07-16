@@ -62,8 +62,9 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
         }
         pendingPublishUrl = publishUrl
         pendingWatchUrl = watchUrl
-        pendingWidth = width.coerceIn(320, 1280)
-        pendingHeight = height.coerceIn(180, 720)
+        val adjustedSize = adjustedVideoSize(width, height)
+        pendingWidth = adjustedSize.width
+        pendingHeight = adjustedSize.height
         pendingFps = fps.coerceIn(20, 30)
         pendingBitrate = bitrate.coerceIn(350_000, 4_000_000)
         status = "pedindo permissao"
@@ -215,6 +216,38 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
             return manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
         }
         return MediaProjectionUtils.createScreenCaptureIntent(hostActivity)
+    }
+
+    private fun adjustedVideoSize(requestedWidth: Int, requestedHeight: Int): Size {
+        val maxWidth = requestedWidth.coerceIn(320, 1280)
+        val maxHeight = requestedHeight.coerceIn(180, 720)
+        val hostActivity = activity ?: return Size(even(maxWidth), even(maxHeight))
+        val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            hostActivity.windowManager.currentWindowMetrics.bounds
+        } else {
+            @Suppress("DEPRECATION")
+            android.graphics.Rect().also {
+                val metrics = android.util.DisplayMetrics()
+                @Suppress("DEPRECATION")
+                hostActivity.windowManager.defaultDisplay.getRealMetrics(metrics)
+                it.set(0, 0, metrics.widthPixels, metrics.heightPixels)
+            }
+        }
+        val sourceWidth = bounds.width().coerceAtLeast(1)
+        val sourceHeight = bounds.height().coerceAtLeast(1)
+        val sourceAspect = sourceWidth.toFloat() / sourceHeight.toFloat()
+        val limitAspect = maxWidth.toFloat() / maxHeight.toFloat()
+        val target = if (sourceAspect >= limitAspect) {
+            Size(maxWidth, even((maxWidth / sourceAspect).toInt().coerceIn(180, maxHeight)))
+        } else {
+            Size(even((maxHeight * sourceAspect).toInt().coerceIn(320, maxWidth)), maxHeight)
+        }
+        Log.i(TAG, "Adjusted stream size ${target.width}x${target.height} for display ${sourceWidth}x${sourceHeight}")
+        return target
+    }
+
+    private fun even(value: Int): Int {
+        return if (value % 2 == 0) value else value + 1
     }
 
     private suspend fun waitForHlsMedia(watchUrl: String): Boolean = withContext(Dispatchers.IO) {

@@ -1,0 +1,11 @@
+description = "Valida o projeto Godot, corrige erros e repete até os caminhos testados rodarem limpos."
+prompt = """
+Leia AGENTS.md e .agents/skills/godot-test-repair/SKILL.md. Valide o projeto Godot atual de ponta a ponta.
+
+Use o script adequado em tools/ com validação profunda, execute os testes existentes e teste explicitamente as cenas ou fluxos afetados pelas alterações atuais. Leia os logs completos em .agent_logs/. Para cada erro acionável, encontre a causa, corrija e repita os testes.
+
+Só conclua quando a revisão final testada estiver sem erros de Godot no terminal. Não confunda código de saída zero com ausência de erros. Informe os comandos e resultados reais.
+
+Contexto adicional:
+{{args}}
+"""

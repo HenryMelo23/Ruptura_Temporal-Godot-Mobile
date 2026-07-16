@@ -3,7 +3,7 @@ extends Node2D
 const AuraSystem = preload("res://scripts/aura_system.gd")
 
 const WORLD_SIZE := Vector2(1600, 900)
-const GAME_VERSION := "2.0.25"
+const GAME_VERSION := "2.0.27"
 const DESKTOP_STAGE_SIZE := Vector2(1088, 768)
 const PLAYER_START := Vector2(420, 500)
 const PLAYER_BASE_HP := 450
@@ -35,16 +35,20 @@ const MANIFEST_STAGE_MANIFESTATION := "manifestation"
 const MANIFEST_STAGE_TRANSITION := "transition"
 const MANIFEST_STAGE_AURA := "aura"
 const MANIFEST_SPECTRUM_TRANSITION_TIME := 1.65
-const MANIFEST_PREVIEW_FRAME_COUNT := 100
-const MANIFEST_PREVIEW_ATLAS_COLS := 10
-const MANIFEST_PREVIEW_FPS := 24.0
+const MANIFEST_PREVIEW_FRAME_COUNT := 12
+const MANIFEST_PREVIEW_ATLAS_COLS := 4
+const MANIFEST_PREVIEW_FPS := 12.0
 const MANIFEST_PREVIEW_KINDS := ["atk", "skill", "ultimate"]
+const BOSS_REWARD_CARD_COUNT := 8
+const BOSS_REWARD_RARE_COUNT := 1
 const PLAYER_PROFILE_PATH := "user://player_profile.save"
 const DISCORD_WEBHOOK_CONFIG_PATHS := ["user://run_reporter.cfg", "res://discord_webhook.local.cfg"]
 const DEFAULT_DISCORD_WEBHOOK_URL := "https://discord.com/api/webhooks/1526689695688298518/gqeI6uzw0yC6LLAVe4v1PqICJIMHos1tgq9g288HQQ31Y2CaBNd_oc0NdZG3Tf-hY7IU"
 const INTERRUPTED_RUN_SAVE_PATH := "user://interrupted_run.save"
 const INTERRUPTED_RUN_AUTOSAVE_INTERVAL := 4.0
 const ONLINE_RELAY_BASE_URL := "http://72.61.217.238:8080"
+const RUN_LEADERBOARD_PATH := "/runs"
+const RUN_LEADERBOARD_VIEW_PATH := "/leaderboard"
 const ONLINE_RELAY_DEFAULT_HOST := "72.61.217.238"
 const QA_STREAM_PLUGIN_NAME := "RupturaStreamer"
 const QA_STREAM_WIDTH := 1280
@@ -96,19 +100,28 @@ const PHASE1_PROJECTOR_UNLOCK_TIME := 420.0
 const PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME := 540.0
 const PHASE1_CURATER_UNLOCK_TIME := 720.0
 const PHASE1_REVIVATOR_UNLOCK_TIME := 900.0
-const PHASE1_LIMIT_BREAK_TIME := 1020.0
-const PHASE1_LIMIT_KILLS_PER_EXTRA := 20
+const PHASE1_LIMIT_BREAK_TIME := 960.0
+const PHASE1_LIMIT_KILLS_PER_EXTRA := 30
 const ANOMALIA_ESPREITADOR_TIME := PHASE1_STALKER_UNLOCK_TIME
 const ANOMALIA_PROJETADOR_TIME := PHASE1_PROJECTOR_UNLOCK_TIME
 const ANOMALIA_CRISTALIZADOR_TIME := PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME
 const ANOMALIA_AGLOMERADOR_TIME := 330.0
 const ANOMALIA_CURATER_TIME := PHASE1_CURATER_UNLOCK_TIME
 const PHASE2_COMMON_ONLY_TIME := 240.0
-const PHASE2_KAMIKAZE_UNLOCK_TIME := 300.0
-const PHASE2_PYRO_UNLOCK_TIME := 480.0
+const PHASE2_KAMIKAZE_UNLOCK_TIME := 360.0
+const PHASE2_PYRO_UNLOCK_TIME := 600.0
 const PHASE2_COMMON_LIMIT := 6
 const PHASE2_KAMIKAZE_LIMIT := 2
 const PHASE2_PYRO_LIMIT := 1
+const PHASE3_COMMON_ONLY_TIME := 180.0
+const PHASE3_INCENSARIO_UNLOCK_TIME := 360.0
+const PHASE3_GUARDIAO_UNLOCK_TIME := 540.0
+const PHASE3_LIMIT_EARLY := 5
+const PHASE3_LIMIT_MID := 6
+const PHASE3_LIMIT_FULL := 7
+const PHASE4_ADAPT_TIME := 180.0
+const PHASE4_LIMIT_EARLY := 3
+const PHASE4_LIMIT_FULL := 4
 const ARAUTO_SPAWN_TIME := 480.0
 const ARAUTO_ENTRY_TIME := 2.5
 const ARAUTO_SIZE := Vector2(112, 132)
@@ -160,9 +173,10 @@ const SHOP_MP_REQUEST_TIME := 10.0
 const BOSS_MP_REQUEST_TIME := 10.0
 const ONLINE_READY_RESEND_INTERVAL_MS := 350
 const SECONDARY_SKILL_COOLDOWN := 75.0
-const SECONDARY_ELETRICA_DRAIN_DELAY := 120.0
-const SECONDARY_ELETRICA_DRAIN_INTERVAL := 0.5
-const SECONDARY_ELETRICA_DRAIN_RATE := 0.02
+const SECONDARY_ELETRICA_DRAIN_DELAY := 15.0
+const SECONDARY_ELETRICA_DRAIN_INTERVAL := 1.0
+const SECONDARY_ELETRICA_DRAIN_RATE := 0.01
+const SECONDARY_ELETRICA_DRAIN_TIER_SECONDS := 4.0
 const SECONDARY_ELETRICA_SHOCK_INTERVAL := 0.4
 const SECONDARY_ELETRICA_SHOCK_STUN := 0.2
 const SECONDARY_ELETRICA_SHOCK_MAX_HP_RATE := 0.005
@@ -506,7 +520,8 @@ const COUT_AS_SPAWN_TIME := PHASE1_REVIVATOR_UNLOCK_TIME
 const COUT_AS_AURA_RADIUS := 215.0
 const COUT_AS_RECONSTITUTE_HP_RATIO := 0.25
 const COUT_AS_RECONSTITUTE_SPEED_MULT := 1.90
-const COUT_AS_RECONSTITUTE_TIME := 1.0
+const COUT_AS_RECONSTITUTE_TIME := 1.5
+const COUT_AS_RECONSTITUTE_IMMUNITY_TIME := 1.0
 const COUT_AS_RAPID_INTERVAL := 0.46
 const COUT_AS_STACK_TIME := 2.4
 const COUT_AS_MAX_STACKS := 5
@@ -549,6 +564,7 @@ const ACORRENTADA_ATTACK_OUT_TIMES := [0.26, 0.32, 0.36]
 const ACORRENTADA_ATTACK_HOLD_TIME := 0.045
 const ACORRENTADA_ATTACK_RETURN_TIMES := [0.22, 0.25, 0.28]
 const ACORRENTADA_ATTACK_WINDUP_BACK_DISTANCES := [52.0, 72.0, 64.0]
+const ACORRENTADA_CHAINED_DAMAGE_BONUS := 0.16
 
 const MANIFESTATIONS := [
 	{
@@ -610,7 +626,7 @@ const MANIFESTATIONS := [
 	{
 		"key": "cartografica",
 		"name": "Cartografica",
-		"desc": "Marca coordenadas no mapa, cria rotas de Ruptura e ataca por angulos impossiveis.",
+		"desc": "Mapa de combate: ATK cria coordenadas, Q liga rotas perigosas e E rasga o mapa para tiros reposicionados.",
 		"icon": "manifestacao_cartografica.png",
 		"color": Color(0.15, 0.95, 0.78),
 		"accent": Color(1.0, 0.82, 0.26)
@@ -618,7 +634,7 @@ const MANIFESTATIONS := [
 	{
 		"key": "mnesica",
 		"name": "Mnesica",
-		"desc": "Registra lembrancas dos inimigos e transforma acoes recentes em punicao.",
+		"desc": "Memoria punitiva: ATK grava lembrancas, Q detona padroes e E acelera arquivos para punir grupos.",
 		"icon": "manifestacao_mnesica.png",
 		"color": Color(0.78, 0.52, 1.0),
 		"accent": Color(1.0, 0.56, 0.86)
@@ -626,7 +642,7 @@ const MANIFESTATIONS := [
 	{
 		"key": "ressonante",
 		"name": "Ressonante",
-		"desc": "Luta no ritmo da Ruptura, acumulando notas perfeitas e detonando acordes.",
+		"desc": "Ritmo e timing: ATK no compasso aplica notas, Q detona acordes e E garante janelas perfeitas.",
 		"icon": "manifestacao_ressonante.png",
 		"color": Color(1.0, 0.74, 0.20),
 		"accent": Color(0.38, 0.92, 1.0)
@@ -634,7 +650,7 @@ const MANIFESTATIONS := [
 	{
 		"key": "contratual",
 		"name": "Contratual",
-		"desc": "Impoe clausulas aos inimigos e executa sentencas quando eles quebram as regras.",
+		"desc": "Regras e sentencas: ATK aplica clausulas, Q executa infracoes e E transforma a arena em audiencia.",
 		"icon": "manifestacao_contratual.png",
 		"color": Color(1.0, 0.54, 0.22),
 		"accent": Color(0.96, 0.96, 0.86)
@@ -642,10 +658,18 @@ const MANIFESTATIONS := [
 	{
 		"key": "acorrentada",
 		"name": "Acorrentada",
-		"desc": "Prende inimigos, acumula Tensao e rompe Elos em um combo de tres golpes.",
+		"desc": "Correntes e Elos: ATK marca e rompe, Q prende alvos ligados e E puxa tudo para uma sentenca.",
 		"icon": "manifestacao_acorrentada.png",
 		"color": Color(0.88, 0.16, 0.18),
 		"accent": Color(0.16, 0.86, 1.0)
+	},
+	{
+		"key": "eclipsada",
+		"name": "Eclipsada",
+		"desc": "Luz e sombra: ATK alterna marcas, Q expande penumbra e E pune alvos presos no Eclipse.",
+		"icon": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/manifestacao-eclipsada.png",
+		"color": Color(0.58, 0.42, 1.0),
+		"accent": Color(1.0, 0.86, 0.32)
 	}
 ]
 
@@ -673,7 +697,8 @@ const MANIFEST_EVOLUTION_NAMES := {
 	"mnesica": ["Lembranca Ecoada", "Agulha de Engrama", "Recordacao Predatoria", "Elo de Memoria", "Surto Mnemonico", "Arquivo Convergente", "Selo de Trauma", "Campo Mnemonico", "Passo Esquecido"],
 	"ressonante": ["Oitava Ecoante", "Nota Perfurante", "Tom Perseguidor", "Acorde Ligado", "Pulso Percussivo", "Caixa de Ressonancia", "Selo de Compasso", "Campo Harmonico", "Passo Sincopado"],
 	"contratual": ["Clausula Duplicada", "Artigo Perfurante", "Mandado de Busca", "Elo Jurado", "Quebra de Termo", "Audiencia Forcada", "Selo de Sentenca", "Campo de Clausula", "Passo Notificado"],
-	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"]
+	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"],
+	"eclipsada": ["Umbra Ecoante", "Raio Penumbral", "Sombra Guiada", "Elo de Eclipse", "Pulso do Crepusculo", "Vortice de Penumbra", "Selo do Ocaso", "Campo Eclipsado", "Passo Sem Luz"]
 }
 
 const MANIFEST_EVOLUTION_PROFILES := {
@@ -688,7 +713,8 @@ const MANIFEST_EVOLUTION_PROFILES := {
 	"mnesica": {"eco": {"every": 3, "scale": 0.34, "spread": 0.16}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 330.0}, "elo": {"radius": 150.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 142.0, "force": 72.0, "damage": 0.13}, "vortice": {"every": 5, "radius": 164.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.88}, "campo": {"radius": 166.0, "duration": 3.8, "slow": 0.70, "damage": 0.06}, "passo": {"radius": 150.0, "force": 78.0, "damage": 0.12}},
 	"ressonante": {"eco": {"every": 4, "scale": 0.40, "spread": 0.28}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 320.0}, "elo": {"radius": 172.0, "slow": 0.74}, "pulso": {"every": 3, "radius": 164.0, "force": 94.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 174.0, "force": 84.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 188.0, "duration": 3.2, "slow": 0.72, "damage": 0.055}, "passo": {"radius": 160.0, "force": 90.0, "damage": 0.11}},
 	"contratual": {"eco": {"every": 4, "scale": 0.36, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 310.0}, "elo": {"radius": 156.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 138.0, "force": 76.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 160.0, "force": 78.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 172.0, "duration": 4.0, "slow": 0.66, "damage": 0.055}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.12}},
-	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.10}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}}
+	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.10}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}},
+	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.20}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.70}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}}
 }
 
 const CARDS := [
@@ -783,7 +809,7 @@ const CASULO_INTERNAL_COOLDOWN := 12.0
 const ANCORA_VITAL_LIFE := 4.0
 const ANCORA_VITAL_HEAL_DURATION := 3.0
 
-const CATALOG_TABS := ["Manifestacoes", "Inimigos", "Chefes", "Fracoes", "Aureas", "Cartas"]
+const CATALOG_TABS := ["Manifestacoes", "Inimigos", "Chefes", "Fracoes", "Espectros", "Cartas"]
 
 const AURAS := [
 	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."},
@@ -795,7 +821,12 @@ const AURAS := [
 	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."},
 	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."},
 	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."},
-	{"key": "sanguinaria", "name": "Sanguinaria", "icon": "aurea_sanguinaria.png", "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."}
+	{"key": "sanguinaria", "name": "Sanguinaria", "icon": "aurea_sanguinaria.png", "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
+	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."},
+	{"key": "peregrino", "name": "Peregrino", "icon": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."},
+	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."},
+	{"key": "avarento", "name": "Avarento", "icon": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Ao gastar, rompa o Cofre para ganhar velocidade e escudo."},
+	{"key": "oportunista", "name": "Oportunista", "icon": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-oportunista.png", "desc": "Ataque durante preparacao ou recuperacao inimiga para armar um Golpe de Oportunidade."}
 ]
 
 var mode = "menu"
@@ -805,12 +836,14 @@ var textures = {}
 var lazy_texture_paths: Dictionary = {}
 var current_lazy_map_key: String = ""
 var player_nickname: String = ""
+var player_profile_id: String = ""
 var nickname_error: String = ""
 var nickname_edit: LineEdit = null
 var cheat_edit: LineEdit = null
 var webhook_edit: LineEdit = null
 var webhook_error: String = ""
 var run_report_request: HTTPRequest = null
+var run_leaderboard_request: HTTPRequest = null
 var qa_stream_session_request: HTTPRequest = null
 var qa_stream_discord_request: HTTPRequest = null
 var qa_stream_stop_request: HTTPRequest = null
@@ -1082,6 +1115,7 @@ var manifest_preview_drag_touch_index = -999
 var manifest_preview_drag_start_x = 0.0
 var manifest_preview_drag_moved = false
 var manifest_preview_atlases: Dictionary = {}
+var manifest_details_open = false
 var preview_capture_mode = false
 var aura_scroll_pos = 0.0
 var aura_last_vibrated_index = 0
@@ -1144,6 +1178,7 @@ var card_cost = CARD_COST_BASE
 var cards_bought = {}
 var combo_kills = 0
 var enemies_killed = 0
+var phase1_limit_break_kills_start = -1
 var enemy_base_hp = ENEMY_BASE_HP
 var enemy_speed_base = ENEMY_BASE_SPEED
 var enemy_close_damage = 0.0
@@ -1442,6 +1477,7 @@ var arauto_spawned = false
 var arauto_rays = []
 var arauto_echo_breaks = []
 var arauto_card_drops = []
+var arauto_evolution_fragment: Dictionary = {}
 var shockwaves = []
 var effects = []
 var heal_orbs = []
@@ -1681,6 +1717,11 @@ func _ready() -> void:
 	add_child(run_report_request)
 	run_report_request.request_completed.connect(_on_run_report_request_completed)
 
+	run_leaderboard_request = HTTPRequest.new()
+	add_child(run_leaderboard_request)
+	run_leaderboard_request.timeout = 8.0
+	run_leaderboard_request.request_completed.connect(_on_run_leaderboard_request_completed)
+
 	qa_stream_session_request = HTTPRequest.new()
 	add_child(qa_stream_session_request)
 	qa_stream_session_request.request_completed.connect(_on_qa_stream_session_request_completed)
@@ -1767,6 +1808,8 @@ func _cleanup_runtime_resources() -> void:
 		online_relay_request.cancel_request()
 	if run_report_request != null:
 		run_report_request.cancel_request()
+	if run_leaderboard_request != null:
+		run_leaderboard_request.cancel_request()
 	_stop_qa_streaming("cleanup")
 	if qa_stream_session_request != null:
 		qa_stream_session_request.cancel_request()
@@ -2133,25 +2176,69 @@ func _setup_webhook_input() -> void:
 
 func _load_player_profile() -> void:
 	player_nickname = ""
+	player_profile_id = ""
 	if not FileAccess.file_exists(PLAYER_PROFILE_PATH):
+		_ensure_player_profile_id()
 		return
 	var file = FileAccess.open(PLAYER_PROFILE_PATH, FileAccess.READ)
 	if file == null:
+		_ensure_player_profile_id()
 		return
 	for line in file.get_as_text().split("\n"):
 		var parts = line.split("=", false, 1)
-		if parts.size() == 2 and parts[0].strip_edges() == "nickname":
-			player_nickname = _sanitize_player_nickname(parts[1])
-			break
+		if parts.size() != 2:
+			continue
+		var key := parts[0].strip_edges()
+		var value := parts[1].strip_edges()
+		if key == "nickname":
+			player_nickname = _sanitize_player_nickname(value)
+		elif key == "profile_id":
+			player_profile_id = _sanitize_profile_id(value)
 	file.close()
+	_ensure_player_profile_id()
 
 
 func _save_player_profile() -> void:
+	_ensure_player_profile_id()
 	var file = FileAccess.open(PLAYER_PROFILE_PATH, FileAccess.WRITE)
 	if file == null:
 		return
 	file.store_string("nickname=" + player_nickname + "\n")
+	file.store_string("profile_id=" + player_profile_id + "\n")
 	file.close()
+
+
+func _sanitize_profile_id(raw_text: String) -> String:
+	var clean := raw_text.strip_edges()
+	var allowed := ""
+	for i in range(clean.length()):
+		var ch := clean.substr(i, 1)
+		var code := ch.unicode_at(0)
+		var is_number := code >= 48 and code <= 57
+		var is_upper := code >= 65 and code <= 90
+		var is_lower := code >= 97 and code <= 122
+		var is_safe_symbol := ch in ["_", "-"]
+		if is_number or is_upper or is_lower or is_safe_symbol:
+			allowed += ch
+	return allowed.substr(0, 48)
+
+
+func _ensure_player_profile_id() -> void:
+	var device_profile := _device_profile_id()
+	if device_profile != "":
+		player_profile_id = device_profile
+		return
+	if _sanitize_profile_id(player_profile_id) == "":
+		player_profile_id = "install-%d-%d" % [int(Time.get_unix_time_from_system()), rng.randi()]
+
+
+func _device_profile_id() -> String:
+	if not OS.has_method("get_unique_id"):
+		return ""
+	var raw := String(OS.call("get_unique_id")).strip_edges()
+	if raw == "":
+		return ""
+	return "device-%d" % abs(raw.hash())
 
 
 func _sanitize_player_nickname(raw_text: String) -> String:
@@ -2495,10 +2582,39 @@ func _enemy_report_name(kind: String) -> String:
 func _cards_report_text() -> String:
 	var parts := []
 	for card in CARDS:
-		var count := int(cards_bought.get(card["name"], 0))
+		var count := _card_count(card)
 		if count > 0:
 			parts.append("%s x%d" % [String(card["name"]), count])
 	return "Nenhuma" if parts.is_empty() else ", ".join(parts)
+
+
+func _cards_report_rows() -> Array:
+	var rows := []
+	for card in CARDS:
+		var count := _card_count(card)
+		if count <= 0:
+			continue
+		rows.append({
+			"id": _card_id(card),
+			"name": String(card.get("name", "")),
+			"nick": String(card.get("nick", "")),
+			"rarity": _card_rarity_label(card),
+			"count": count,
+			"effect": _card_effect_snapshot(card, count),
+			"icon": String(card.get("icon", "")),
+			"frame_2": String(card.get("frame_2", ""))
+		})
+	return rows
+
+
+func _cards_detailed_report_text() -> String:
+	var rows := _cards_report_rows()
+	if rows.is_empty():
+		return "Nenhuma carta comprada."
+	var parts := []
+	for row in rows:
+		parts.append("%s x%d [%s] - %s" % [String(row["name"]), int(row["count"]), String(row["rarity"]), String(row["effect"])])
+	return "\n".join(parts)
 
 
 func _enemy_damage_report_text() -> String:
@@ -2511,6 +2627,14 @@ func _enemy_damage_report_text() -> String:
 	return "\n".join(parts)
 
 
+func _enemy_damage_report_rows() -> Array:
+	var rows := []
+	for key in run_damage_by_enemy.keys():
+		rows.append({"name": String(key), "damage": int(round(float(run_damage_by_enemy[key])))})
+	rows.sort_custom(func(a, b): return int(a["damage"]) > int(b["damage"]))
+	return rows
+
+
 func _boss_report_text() -> String:
 	var lines := []
 	for phase in range(1, 6):
@@ -2518,28 +2642,136 @@ func _boss_report_text() -> String:
 	return "\n".join(lines)
 
 
+func _boss_report_rows() -> Array:
+	var rows := []
+	for phase in range(1, 6):
+		rows.append({
+			"phase": phase,
+			"reached": bool(run_boss_reached.get(phase, false)),
+			"duration": _boss_duration_report(phase),
+			"damage": int(round(float(run_damage_to_boss_by_phase.get(phase, 0.0))))
+		})
+	return rows
+
+
+func _total_boss_damage_report() -> int:
+	var total := 0.0
+	for phase in range(1, 6):
+		total += float(run_damage_to_boss_by_phase.get(phase, 0.0))
+	return int(round(total))
+
+
+func _run_role_text() -> String:
+	if not is_multiplayer:
+		return "solo"
+	if is_host:
+		return "host"
+	return "client"
+
+
+func _run_balance_flags() -> Array:
+	var flags := []
+	if player_damage > max(1.0, run_start_damage) * 8.0:
+		flags.append("Dano final acima de 8x o dano inicial")
+	if _deck_total_cards() > 0 and enemies_killed <= 0:
+		flags.append("Cartas compradas sem abates registrados")
+	if run_points_spent > run_points_earned + 500:
+		flags.append("Gasto de pontos acima do ganho esperado")
+	if _total_boss_damage_report() > 0 and boss_active and not bool(run_boss_reached.get(current_phase, false)):
+		flags.append("Dano em boss sem timer de boss marcado")
+	if flags.is_empty():
+		flags.append("Sem anomalias obvias")
+	return flags
+
+
+func _run_leaderboard_score(result: String) -> int:
+	var score_value := int(round(time_alive * 2.0))
+	score_value += enemies_killed * 20
+	score_value += current_phase * 250
+	score_value += int(round(float(_total_boss_damage_report()) / 12.0))
+	score_value += _deck_total_cards() * 15
+	score_value += int(round(max(0.0, float(player_hp)) * 0.5))
+	if result == "Vitoria":
+		score_value += 1500
+	return maxi(0, score_value)
+
+
 func _build_run_report_payload(result: String) -> Dictionary:
 	var manifest_name: String = String(MANIFESTATIONS[selected_manifestation]["name"]) if selected_manifestation >= 0 and selected_manifestation < MANIFESTATIONS.size() else manifestation_key
 	var aura_name: String = String(AURAS[selected_aura]["name"]) if selected_aura >= 0 and selected_aura < AURAS.size() else String(aura_state.get("name", "N/A"))
+	_ensure_player_profile_id()
 	return {
 		"player": player_nickname,
+		"profile_id": player_profile_id,
+		"room": online_room_code if online_room_code != "" else "solo",
+		"version": GAME_VERSION,
+		"platform": OS.get_name(),
+		"role": _run_role_text(),
 		"date": _datetime_text(),
 		"started_at": run_started_at,
+		"started_unix": run_started_unix,
+		"ended_unix": int(Time.get_unix_time_from_system()),
 		"result": result,
 		"duration": _run_time_text(),
+		"duration_seconds": int(round(time_alive)),
 		"phase": current_phase,
 		"kills": enemies_killed,
 		"points_earned": run_points_earned,
 		"points_spent": run_points_spent,
+		"score_current": score,
+		"score_total": score_total,
 		"cards_total": _deck_total_cards(),
 		"cards": _cards_report_text(),
+		"cards_detail": _cards_report_rows(),
 		"manifestation": manifest_name,
+		"manifestation_key": manifestation_key,
 		"spectrum": aura_name,
+		"spectrum_key": String(aura_state.get("name", "")),
 		"base_damage_start": run_start_damage,
 		"base_damage_end": player_damage,
+		"player_stats": {
+			"hp": player_hp,
+			"hp_max": player_hp_max,
+			"speed": player_speed,
+			"attack_interval": player_attack_interval,
+			"dash_cooldown": player_dash_cooldown,
+			"defense": player_defense,
+			"crit_chance": player_crit_chance,
+			"lifesteal": player_lifesteal,
+			"luck": luck
+		},
+		"enemy_scaling": {
+			"limit": _enemy_limit(),
+			"base_hp": enemy_base_hp,
+			"base_speed": enemy_speed_base,
+			"close_damage": enemy_close_damage,
+			"far_damage": enemy_far_damage
+		},
 		"enemy_damage_total": run_damage_to_enemies,
 		"enemy_damage_breakdown": _enemy_damage_report_text(),
-		"boss_report": _boss_report_text()
+		"enemy_damage_detail": _enemy_damage_report_rows(),
+		"boss_damage_total": _total_boss_damage_report(),
+		"boss_report": _boss_report_text(),
+		"boss_detail": _boss_report_rows(),
+		"network": {
+			"ping_ms": net_ping_ms,
+			"remote_ping_ms": net_remote_ping_ms,
+			"bytes_in": net_report_total_bytes_in,
+			"bytes_out": net_report_total_bytes_out,
+			"packets_in": net_report_total_packets_in,
+			"packets_out": net_report_total_packets_out
+		},
+		"settings": {
+			"graphics_low_resource": gfx_low_resource,
+			"memory_saver": gfx_memory_saver,
+			"particles": gfx_particles,
+			"shadows": gfx_shadows,
+			"shop_auto": shop_auto_enabled,
+			"streaming_enabled": qa_streaming_enabled,
+			"streaming_quality": qa_streaming_quality_mode
+		},
+		"leaderboard_score": _run_leaderboard_score(result),
+		"balance_flags": _run_balance_flags()
 	}
 
 
@@ -2552,6 +2784,7 @@ func _finalize_run_report(result: String) -> void:
 		_finish_boss_timer(current_phase)
 	run_end_payload = _build_run_report_payload(result)
 	run_report_sent = true
+	_send_run_report_to_leaderboard(run_end_payload)
 	_send_run_report_to_discord(run_end_payload)
 
 
@@ -2563,25 +2796,77 @@ func _send_run_report_to_discord(payload: Dictionary) -> void:
 	if run_report_request == null:
 		run_report_status = "HTTP indisponivel"
 		return
+	var stats: Dictionary = payload.get("player_stats", {})
+	var scaling: Dictionary = payload.get("enemy_scaling", {})
+	var network: Dictionary = payload.get("network", {})
+	var settings: Dictionary = payload.get("settings", {})
+	var flags: Array = payload.get("balance_flags", [])
+	var ranking_url := ONLINE_RELAY_BASE_URL + RUN_LEADERBOARD_VIEW_PATH
+	var player_line := "%s\nperfil `%s` | sala `%s` | %s" % [
+		String(payload.get("player", "Jogador")),
+		String(payload.get("profile_id", "")),
+		String(payload.get("room", "solo")),
+		String(payload.get("role", "solo"))
+	]
+	var combat_line := "HP %.0f/%.0f | dano %.1f -> %.1f | vel %.1f | atk %.3fs\nDEF %.1f | crit %.1f%% | roubo %.2f%% | sorte %.2f%%" % [
+		float(stats.get("hp", 0.0)),
+		float(stats.get("hp_max", 0.0)),
+		float(payload.get("base_damage_start", 0.0)),
+		float(payload.get("base_damage_end", 0.0)),
+		float(stats.get("speed", 0.0)),
+		float(stats.get("attack_interval", 0.0)),
+		float(stats.get("defense", 0.0)),
+		float(stats.get("crit_chance", 0.0)) * 100.0,
+		float(stats.get("lifesteal", 0.0)) * 100.0,
+		float(stats.get("luck", 0.0)) * 100.0
+	]
+	var enemy_line := "limite %s | HP base %.1f | vel %.1f\ncontato %.1f | ranged %.1f" % [
+		str(scaling.get("limit", 0)),
+		float(scaling.get("base_hp", 0.0)),
+		float(scaling.get("base_speed", 0.0)),
+		float(scaling.get("close_damage", 0.0)),
+		float(scaling.get("far_damage", 0.0))
+	]
+	var network_line := "ping %sms | par %sms\nin %s/%s pkt | out %s/%s pkt" % [
+		str(network.get("ping_ms", -1)),
+		str(network.get("remote_ping_ms", -1)),
+		str(network.get("bytes_in", 0)),
+		str(network.get("packets_in", 0)),
+		str(network.get("bytes_out", 0)),
+		str(network.get("packets_out", 0))
+	]
+	var settings_line := "baixo=%s | memoria=%s | particulas=%s | sombras=%s\nshop auto=%s | stream=%s %s" % [
+		str(settings.get("graphics_low_resource", false)),
+		str(settings.get("memory_saver", false)),
+		str(settings.get("particles", true)),
+		str(settings.get("shadows", true)),
+		str(settings.get("shop_auto", false)),
+		str(settings.get("streaming_enabled", false)),
+		String(settings.get("streaming_quality", ""))
+	]
 	var fields := [
-		{"name": "Jogador", "value": String(payload["player"]), "inline": true},
-		{"name": "Resultado", "value": String(payload["result"]), "inline": true},
-		{"name": "Data", "value": String(payload["date"]), "inline": true},
-		{"name": "Tempo / fase", "value": "%s | fase %s" % [String(payload["duration"]), str(payload["phase"])], "inline": true},
-		{"name": "Abates", "value": str(payload["kills"]), "inline": true},
-		{"name": "Pontos", "value": "ganhos %s | gastos %s" % [str(payload["points_earned"]), str(payload["points_spent"])], "inline": true},
-		{"name": "Manifestacao / espectro", "value": "%s | %s" % [String(payload["manifestation"]), String(payload["spectrum"])], "inline": false},
-		{"name": "Dano base", "value": "inicio %.1f | fim %.1f" % [float(payload["base_damage_start"]), float(payload["base_damage_end"])], "inline": true},
-		{"name": "Dano em inimigos", "value": "total %d\n%s" % [int(round(float(payload["enemy_damage_total"]))), _limit_discord_field(String(payload["enemy_damage_breakdown"]))], "inline": false},
-		{"name": "Bosses", "value": _limit_discord_field(String(payload["boss_report"])), "inline": false},
-		{"name": "Cartas (%d)" % int(payload["cards_total"]), "value": _limit_discord_field(String(payload["cards"])), "inline": false}
+		{"name": "Jogador / perfil", "value": _limit_discord_field(player_line), "inline": false},
+		{"name": "Resultado", "value": "%s | score %s" % [String(payload["result"]), str(payload.get("leaderboard_score", 0))], "inline": true},
+		{"name": "Versao / data", "value": "v%s\n%s" % [String(payload.get("version", GAME_VERSION)), String(payload["date"])], "inline": true},
+		{"name": "Tempo / fase", "value": "%s | fase %s | %ss" % [String(payload["duration"]), str(payload["phase"]), str(payload.get("duration_seconds", 0))], "inline": true},
+		{"name": "Manifestacao / espectro", "value": "%s (`%s`)\n%s (`%s`)" % [String(payload["manifestation"]), String(payload.get("manifestation_key", "")), String(payload["spectrum"]), String(payload.get("spectrum_key", ""))], "inline": false},
+		{"name": "Combate final", "value": _limit_discord_field(combat_line), "inline": false},
+		{"name": "Pontos / abates", "value": "abates %s | score atual %s | total %s\nganhos %s | gastos %s" % [str(payload["kills"]), str(payload.get("score_current", 0)), str(payload.get("score_total", 0)), str(payload["points_earned"]), str(payload["points_spent"])], "inline": false},
+		{"name": "Escalonamento inimigo", "value": _limit_discord_field(enemy_line), "inline": true},
+		{"name": "Rede", "value": _limit_discord_field(network_line), "inline": true},
+		{"name": "Configuracoes", "value": _limit_discord_field(settings_line), "inline": true},
+		{"name": "Dano em inimigos", "value": _limit_discord_field("total %d\n%s" % [int(round(float(payload["enemy_damage_total"]))), String(payload["enemy_damage_breakdown"])]), "inline": false},
+		{"name": "Bosses", "value": _limit_discord_field("total %s\n%s" % [str(payload.get("boss_damage_total", 0)), String(payload["boss_report"])]), "inline": false},
+		{"name": "Deck detalhado (%d)" % int(payload["cards_total"]), "value": _limit_discord_field(_cards_detailed_report_text()), "inline": false},
+		{"name": "Sinais de balanceamento", "value": _limit_discord_field("\n".join(flags)), "inline": false},
+		{"name": "Ranking", "value": ranking_url, "inline": false}
 	]
 	var body := {
 		"username": "Ruptura Temporal QA",
-		"content": "Registro historico de run: **%s**" % String(payload["player"]),
+		"content": "Registro historico de run: **%s** | ranking: %s" % [String(payload["player"]), ranking_url],
 		"embeds": [{
-			"title": "Run finalizada - v%s" % GAME_VERSION,
-			"description": "Relatorio automatico para balanceamento.",
+			"title": "Run finalizada - v%s" % String(payload.get("version", GAME_VERSION)),
+			"description": "Ficha automatica detalhada para QA, balanceamento e deteccao de quebras.",
 			"color": 16757760 if String(payload["result"]) == "Vitoria" else 16724787,
 			"fields": fields
 		}]
@@ -2592,6 +2877,20 @@ func _send_run_report_to_discord(payload: Dictionary) -> void:
 	if err != OK:
 		run_report_in_flight = false
 		run_report_status = "Falha ao iniciar envio: %s" % error_string(err)
+
+
+func _send_run_report_to_leaderboard(payload: Dictionary) -> void:
+	if run_leaderboard_request == null:
+		return
+	var url := ONLINE_RELAY_BASE_URL + RUN_LEADERBOARD_PATH
+	var err := run_leaderboard_request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if err != OK:
+		print("Falha ao iniciar envio do ranking: ", error_string(err))
+
+
+func _on_run_leaderboard_request_completed(_result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	if response_code < 200 or response_code >= 300:
+		print("Falha ranking HTTP ", response_code)
 
 
 func _limit_discord_field(text: String) -> String:
@@ -2822,8 +3121,14 @@ func _qa_stream_target_size() -> Vector2i:
 	
 	if not is_inside_tree():
 		return max_size
-		
+
 	var vp_size: Vector2i = get_viewport().size
+	if _qa_stream_native_available():
+		var screen_size := DisplayServer.screen_get_size()
+		if screen_size.x > 0 and screen_size.y > 0:
+			vp_size = screen_size
+	else:
+		return max_size
 	var vp_width := float(vp_size.x)
 	var vp_height := float(vp_size.y)
 	if vp_width <= 0.0 or vp_height <= 0.0:
@@ -2884,7 +3189,11 @@ func _cycle_qa_stream_quality_mode(direction := 1) -> void:
 
 
 func _capture_qa_stream_frame() -> PackedByteArray:
-	var image := get_viewport().get_texture().get_image()
+	var viewport_texture := get_viewport().get_texture()
+	if viewport_texture == null:
+		qa_streaming_frame_content_type = "image/png"
+		return PackedByteArray()
+	var image := viewport_texture.get_image()
 	if image == null or image.is_empty():
 		qa_streaming_frame_content_type = "image/png"
 		return PackedByteArray()
@@ -3137,7 +3446,7 @@ func _interrupted_run_field_names() -> Array:
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player",
 		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "boss_tp_stun_timer", "boss_wave_slow_timer", "player_stun_timer", "player_silence_timer", "player_freeze_visual_timer", "player_freeze_visual_duration",
 		"boss1_rewind_cooldown", "boss1_rewind_history", "boss1_rewind_sample_timer", "boss1_rewind_sequence", "boss1_rewind_visual_projectiles", "boss1_rewind_vibration_timer", "boss1_rewind_clock_tick", "boss1_absorb_cooldown", "boss1_absorb_timer", "boss1_absorb_damage", "boss1_absorb_retaliate_timer", "boss1_absorb_bursts_fired", "boss1_time_wave",
-		"arauto", "arauto_spawned", "arauto_rays", "arauto_echo_breaks", "arauto_card_drops",
+		"arauto", "arauto_spawned", "arauto_rays", "arauto_echo_breaks", "arauto_card_drops", "arauto_evolution_fragment",
 		"boss2_ice_shards", "boss2_snow_zones", "boss2_frost_particles", "phase2_fire_walls", "phase2_fire_wall_hit_cd", "boss2_state", "boss2_action_timer", "boss2_target_position", "boss2_last_attack", "boss2_repeat_count", "boss2_facing_dir", "boss2_walk_speed", "boss2_anim_timer", "boss2_anim_frame", "boss2_breath_dir", "boss2_ultimate_cooldown", "boss2_ultimate_timer", "boss2_ultimate_center", "boss2_ultimate_orbit_angle", "boss2_ultimate_spit_timer", "boss2_ultimate_wind_timer", "boss2_ultimate_wind_active", "boss2_ultimate_wind_dir", "boss2_ultimate_hail_timer", "boss2_ultimate_fan_timer", "boss2_ultimate_blizzard_tick", "boss2_ultimate_blizzard_exposure", "boss2_ultimate_hit_gate", "boss2_ultimate_used",
 		"phase3_miasma_zones", "phase3_cheeses", "boss3_faith", "boss3_stage", "boss3_stun_timer", "boss3_rain_timer", "boss3_spit_timer", "boss3_tail_timer", "boss3_charge_timer", "boss3_cheese_timer", "boss3_dialogue_timer", "boss3_events", "boss3_consume_uid", "boss3_consume_timer", "boss3_ritual_timer", "boss3_ritual_destroyed", "boss3_is_moving", "boss3_miasma_cooldown", "boss3_miasma_timer", "boss3_miasma_variant", "boss3_miasma_clone_timer", "boss3_miasma_clone_positions", "boss3_miasma_spit_timer", "boss3_miasma_qte_required", "boss3_miasma_qte_taps", "boss3_miasma_qte_time_left", "boss3_miasma_qte_idle", "boss3_miasma_qte_tutorial", "boss3_miasma_qte_elapsed", "boss3_miasma_qte_lid_contacts", "boss3_miasma_qte_lids_touching", "boss3_miasma_qte_overtime_timer", "boss3_miasma_qte_overtime_stage", "boss3_miasma_tutorial_seen", "boss3_miasma_clouds", "boss3_faith_test_cooldown", "boss3_faith_test_active", "boss3_faith_test_pulses_left", "boss3_faith_test_pulse_timer", "boss3_faith_link_timer", "boss3_faith_link_damage_done",
 		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_stun_timer", "boss4_vulnerable_timer",
@@ -3415,7 +3724,8 @@ func _load_textures() -> void:
 	for item in MANIFESTATIONS:
 		textures["manifestation_" + item["key"]] = _safe_load_manifestation_icon(String(item["icon"]), base)
 	for aura in AURAS:
-		textures["aura_" + aura["key"]] = _safe_load(base + aura["icon"])
+		var aura_icon := String(aura["icon"])
+		textures["aura_" + aura["key"]] = _safe_load_sprite_icon(aura_icon, base)
 	for card in CARDS:
 		var card_key := "card_" + String(card["name"])
 		_register_texture(card_key, base + String(card["icon"]), _memory_saver_active())
@@ -3463,10 +3773,19 @@ func _safe_load(path: String) -> Texture2D:
 
 
 func _safe_load_manifestation_icon(file_name: String, sprite_base: String) -> Texture2D:
+	return _safe_load_sprite_icon(file_name, sprite_base)
+
+
+func _safe_load_sprite_icon(file_name: String, sprite_base: String) -> Texture2D:
+	if file_name.begins_with("res://"):
+		return _safe_load(file_name)
 	var root_texture := _safe_load("res://" + file_name)
 	if root_texture:
 		return root_texture
-	return _safe_load(sprite_base + file_name)
+	var sprite_texture := _safe_load(sprite_base + file_name)
+	if sprite_texture:
+		return sprite_texture
+	return _safe_load("res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/" + file_name)
 
 
 func _register_audio_stream(name: String, path: String, loop := false, music := false, lazy := false) -> void:
@@ -3792,23 +4111,7 @@ func _play_manifestation_ultimate_sfx(key: String) -> void:
 
 
 func _play_projectile_hit_sfx(kind: String) -> void:
-	match kind:
-		"prismatica":
-			_play_sfx("prismatica_shot", 0.025, 0.82, 1.0)
-		"parasitica":
-			_play_sfx("parasitica_wet_hit", 0.045, 1.05, 0.92)
-		"eletrica", "eletrica_charged":
-			_play_sfx("eletrica_hit", 0.040, 1.12, 1.0)
-		"gravitante":
-			_play_sfx("gravitante_attach", 0.030, 1.00, 0.86)
-		"cartografica":
-			_play_sfx("skill_cartografica", 0.030, 0.82, 1.10)
-		"mnesica":
-			_play_sfx("skill_mnesica", 0.030, 0.78, 0.94)
-		"ressonante":
-			_play_sfx("skill_ressonante", 0.025, 0.82, 1.18)
-		"contratual":
-			_play_sfx("skill_contratual", 0.025, 0.82, 0.88)
+	return
 
 
 func _play_projectile_end_sfx(kind: String) -> void:
@@ -4341,6 +4644,7 @@ func _start_game(clear_interrupted_save := true) -> void:
 	card_cost = CARD_COST_BASE
 	combo_kills = 0
 	enemies_killed = 0
+	phase1_limit_break_kills_start = -1
 	enemy_base_hp = ENEMY_BASE_HP * (2.0 if is_multiplayer else 1.0)
 	enemy_speed_base = ENEMY_BASE_SPEED
 	enemy_close_damage = 0.0
@@ -4614,7 +4918,7 @@ func _advance_to_phase(phase: int) -> void:
 		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
 		_add_text("FASE 5: MENTE DA UMBRA", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
 	elif current_phase == 4:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 3.25)
+		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 2.75)
 		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.18)
 		boss_hp_max = _boss_hp_for_phase(4)
 		boss_hp = boss_hp_max
@@ -4624,17 +4928,17 @@ func _advance_to_phase(phase: int) -> void:
 		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
 		_add_text("FASE 4: CORACAO DO NEXO", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
 	elif current_phase == 3:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 2.45)
+		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 2.05)
 		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.12)
 		boss_hp_max = _boss_hp_for_phase(3)
 		boss_hp = boss_hp_max
 		boss_name = "PAI-RATO"
 		boss_title_color = Color(0.72, 0.92, 0.24)
 		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
+		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
 		_add_text("FASE 3: CATEDRAL DO ESGOTO", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
 	elif current_phase == 2:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 1.85)
+		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 1.65)
 		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.08)
 		boss_hp_max = _boss_hp_for_phase(2)
 		boss_hp = boss_hp_max
@@ -4969,6 +5273,7 @@ func _reset_arauto_state(reset_spawn_flag := false) -> void:
 	arauto_rays.clear()
 	arauto_echo_breaks.clear()
 	arauto_card_drops.clear()
+	arauto_evolution_fragment.clear()
 	if reset_spawn_flag:
 		arauto_spawned = false
 
@@ -5650,6 +5955,7 @@ func _update_game(delta: float) -> void:
 	_update_phase4_environment(delta)
 	_update_larapio_coin_drops(delta)
 	_update_arauto_card_drops(delta)
+	_update_arauto_evolution_fragment(delta)
 	_update_orbitals(delta)
 	_update_trembo(delta)
 	_update_petrov(delta)
@@ -5689,6 +5995,10 @@ func _update_aura(delta: float) -> void:
 	_update_voracious_contact(delta)
 	_apply_aura_events(AuraSystem.update(aura_state, delta, {
 		"player_pos": player_pos,
+		"hp": player_hp,
+		"hp_max": player_hp_max,
+		"score": score,
+		"card_cost": card_cost,
 		"enemies": enemies,
 		"boss_active": boss_active and boss_hp > 0.0,
 		"boss_pos": boss_pos,
@@ -5789,6 +6099,14 @@ func _apply_aura_events(events: Array) -> void:
 					_add_text("+%d" % heal, player_pos + Vector2(0, -78), _aura_color(), 0.7, 18)
 			"player_damage":
 				_damage_player(max(1, int(player_hp_max * float(event.get("ratio", 0.0)))), String(event.get("source", "aura")))
+			"player_damage_flat":
+				_damage_player(max(1, int(event.get("amount", 1.0))), String(event.get("source", "aura")))
+			"heal_missing_ratio":
+				var heal_amount: float = (player_hp_max - player_hp) * float(event.get("ratio", 0.0))
+				if heal_amount > 0.0:
+					_heal_player(heal_amount, "aura", true)
+					if event.has("text"):
+						_add_text("%s +%d" % [String(event.get("text", "CURA")), int(heal_amount)], player_pos + Vector2(0, -78), _aura_color(), 0.7, 18)
 			"enemy_damage":
 				var target = _enemy_by_uid(int(event.get("uid", -1)))
 				if target != null: _damage_enemy(target, float(event.get("amount", 1.0)), String(event.get("source", "aura")), false)
@@ -5796,8 +6114,21 @@ func _apply_aura_events(events: Array) -> void:
 				_spawn_aura_echo_projectile(Vector2(event["pos"]), Vector2(event["dir"]), float(event["damage_mult"]), String(event.get("kind", "aura_insana")))
 			"skill_cooldown":
 				last_skill_time -= float(event.get("amount", 0.0))
+			"cooldown_recovery":
+				_apply_aura_cooldown_recovery(float(event.get("amount", 0.0)), float(event.get("max_ratio", 0.30)))
 			"dash_penalty":
 				last_dash_time += float(event.get("amount", 0.0))
+
+
+func _apply_aura_cooldown_recovery(amount: float, max_ratio: float) -> void:
+	if amount <= 0.0:
+		return
+	var q_remaining: float = max(0.0, _skill_cooldown() - (time_alive - last_skill_time))
+	var e_remaining: float = max(0.0, _secondary_skill_cooldown() - (time_alive - last_secondary_time))
+	if q_remaining >= e_remaining and q_remaining > 0.0:
+		last_skill_time -= minf(amount, minf(_skill_cooldown() * max_ratio, q_remaining))
+	elif e_remaining > 0.0:
+		last_secondary_time -= minf(amount, minf(_secondary_skill_cooldown() * max_ratio, e_remaining))
 
 
 func _spawn_aura_echo_projectile(pos: Vector2, direction: Vector2, damage_mult: float, original_kind := "aura_insana") -> void:
@@ -5967,6 +6298,7 @@ func _fire_projectile(kind: String, damage: float, speed: float, life: float, pi
 		"phase": rng.randf_range(0.0, TAU),
 		"trail_cd": 0.0,
 		"damage": final_damage,
+		"player_damage": player_damage,
 		"speed": speed,
 		"kind": kind,
 		"pierce": pierce,
@@ -5992,6 +6324,7 @@ func _fire_returning() -> void:
 		"source_category": "basic_attack",
 		"dir": dir,
 		"speed": BULLET_SPEED * 0.92,
+		"player_damage": player_damage,
 		"life": 6.0,
 		"kind": "retornante",
 		"pierce": true,
@@ -7102,7 +7435,6 @@ func _ground_target_world(screen_pos: Vector2, viewport: Vector2, secondary: boo
 
 
 func _execute_teleport(target_world: Vector2) -> void:
-	_apply_aura_events(AuraSystem.on_dash(aura_state))
 	var origin: Vector2 = player_pos
 	if manifestation_key == "cartografica" and not cartographic_coords.is_empty():
 		var best_pos := target_world
@@ -7114,6 +7446,7 @@ func _execute_teleport(target_world: Vector2) -> void:
 				best_d = d
 				best_pos = coord_pos
 		target_world = best_pos
+	_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": target_world, "player_pos": player_pos}))
 	player_pos = target_world.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
 	var dash_color: Color = _manifestation_color()
 	slashes.append({"a": origin, "b": player_pos, "life": 0.32, "max": 0.32, "color": dash_color, "width": 38.0})
@@ -8701,12 +9034,25 @@ func _choose_enemy_type() -> String:
 	if current_phase == 4:
 		return _choose_phase4_enemy_type()
 	if current_phase == 3:
+		var elapsed3 := _phase_elapsed_time()
+		if elapsed3 < PHASE3_COMMON_ONLY_TIME:
+			return ENEMY_COMMON
 		var r3 = rng.randf()
-		if r3 <= 0.06 and _enemy_type_count(ENEMY_GUARDIAO) < 2:
+		if elapsed3 < PHASE3_INCENSARIO_UNLOCK_TIME:
+			if r3 <= 0.16 and _enemy_type_count(ENEMY_DEVOTO) < 2:
+				return ENEMY_DEVOTO
+			return ENEMY_COMMON
+		if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME:
+			if r3 <= 0.08 and _enemy_type_count(ENEMY_INCENSARIO) < 1:
+				return ENEMY_INCENSARIO
+			if r3 <= 0.26 and _enemy_type_count(ENEMY_DEVOTO) < 3:
+				return ENEMY_DEVOTO
+			return ENEMY_COMMON
+		if r3 <= 0.04 and _enemy_type_count(ENEMY_GUARDIAO) < 1:
 			return ENEMY_GUARDIAO
-		if r3 <= 0.15 and _enemy_type_count(ENEMY_INCENSARIO) < 2:
+		if r3 <= 0.12 and _enemy_type_count(ENEMY_INCENSARIO) < 2:
 			return ENEMY_INCENSARIO
-		if r3 <= 0.33 and _enemy_type_count(ENEMY_DEVOTO) < 3:
+		if r3 <= 0.28 and _enemy_type_count(ENEMY_DEVOTO) < 3:
 			return ENEMY_DEVOTO
 		return ENEMY_COMMON
 	if current_phase == 2:
@@ -8764,6 +9110,7 @@ func _choose_phase2_enemy_type() -> String:
 
 
 func _choose_phase4_enemy_type() -> String:
+	var elapsed := _phase_elapsed_time()
 	var kinds := [
 		ENEMY_NEXUS_CARTOGRAPHER,
 		ENEMY_NEXUS_CHRONOPHAGE,
@@ -8771,6 +9118,12 @@ func _choose_phase4_enemy_type() -> String:
 		ENEMY_NEXUS_WEAVER,
 		ENEMY_NEXUS_ECHO
 	]
+	if current_phase == 4 and elapsed < PHASE4_ADAPT_TIME:
+		kinds = [
+			ENEMY_NEXUS_CARTOGRAPHER,
+			ENEMY_NEXUS_ECHO,
+			ENEMY_NEXUS_REFRACTOR
+		]
 	var available = kinds.filter(func(kind): return not _has_enemy_type(String(kind)))
 	var pool: Array = available if not available.is_empty() else kinds
 	return String(pool[rng.randi_range(0, pool.size() - 1)])
@@ -8780,9 +9133,14 @@ func _enemy_limit() -> int:
 	if current_phase == 5:
 		return 5
 	if current_phase == 4:
-		return 4
+		return PHASE4_LIMIT_EARLY if _phase_elapsed_time() < PHASE4_ADAPT_TIME else PHASE4_LIMIT_FULL
 	if current_phase == 3:
-		return 7
+		var elapsed3 := _phase_elapsed_time()
+		if elapsed3 < PHASE3_COMMON_ONLY_TIME:
+			return PHASE3_LIMIT_EARLY
+		if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME:
+			return PHASE3_LIMIT_MID
+		return PHASE3_LIMIT_FULL
 	if current_phase == 2:
 		var elapsed := _phase_elapsed_time()
 		if elapsed >= PHASE2_PYRO_UNLOCK_TIME:
@@ -8791,7 +9149,11 @@ func _enemy_limit() -> int:
 			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT
 		return PHASE2_COMMON_LIMIT
 	if time_alive >= PHASE1_LIMIT_BREAK_TIME:
-		return ENEMY_MAX_BASE + int(floor(float(enemies_killed) / float(PHASE1_LIMIT_KILLS_PER_EXTRA)))
+		if phase1_limit_break_kills_start < 0:
+			phase1_limit_break_kills_start = enemies_killed
+		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
+		return ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(PHASE1_LIMIT_KILLS_PER_EXTRA)))
+	phase1_limit_break_kills_start = -1
 	return ENEMY_MAX_BASE
 
 
@@ -8803,11 +9165,17 @@ func _enemy_spawn_interval() -> float:
 	if current_phase == 5:
 		return 1.10
 	if current_phase == 4:
-		return 1.20
+		return 1.42 if _phase_elapsed_time() < PHASE4_ADAPT_TIME else 1.24
 	var interval = ENEMY_SPAWN_INTERVAL
+	if current_phase == 3:
+		var elapsed3 := _phase_elapsed_time()
+		interval = 1.30 if elapsed3 < PHASE3_COMMON_ONLY_TIME else (1.16 if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME else 1.02)
+		if not _active_prismatica_secondary().is_empty():
+			interval *= 0.5
+		return interval
 	if current_phase == 2:
 		var elapsed := _phase_elapsed_time()
-		interval = 1.18 if elapsed < PHASE2_KAMIKAZE_UNLOCK_TIME else (1.02 if elapsed < PHASE2_PYRO_UNLOCK_TIME else 0.92)
+		interval = 1.32 if elapsed < PHASE2_KAMIKAZE_UNLOCK_TIME else (1.12 if elapsed < PHASE2_PYRO_UNLOCK_TIME else 0.98)
 		if not _active_prismatica_secondary().is_empty():
 			interval *= 0.5
 		return interval
@@ -9184,6 +9552,10 @@ func _damage_arauto(amount: float, source: String, show_text := true, apply_aura
 		return
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
+	if _is_direct_player_damage_source(source, effective_source_category):
+		var opportunity := AuraSystem.consume_opportunity_damage(aura_state, player_damage)
+		amount += float(opportunity.get("bonus", 0.0))
+		_apply_aura_events(opportunity.get("events", []))
 	amount *= _mandamento_damage_multiplier(effective_source_category)
 	var trigger_card_effects := _card_damage_can_trigger(source)
 	if trigger_card_effects:
@@ -9196,6 +9568,8 @@ func _damage_arauto(amount: float, source: String, show_text := true, apply_aura
 	var hp_before: float = float(arauto["hp"])
 	arauto["hp"] = max(0.0, hp_before - final)
 	var actual_damage: float = hp_before - max(0.0, float(arauto["hp"]))
+	if String(aura_state.get("name", "")) == "Crepuscular" and _is_direct_player_damage_source(source, effective_source_category):
+		AuraSystem.on_boss_hit(aura_state, Vector2(arauto["pos"]), actual_damage)
 	var antimatter_should_trigger: bool = _antimatter_direct_trigger(source, effective_source_category)
 	if antimatter_should_trigger:
 		_trigger_antimatter_implosion(Vector2(arauto["pos"]))
@@ -9228,14 +9602,23 @@ func _finish_arauto() -> void:
 	_spawn_radial_particles(pos, Color(0.72, 0.64, 1.0), 60)
 	shockwaves.append({"pos": pos, "radius": 22.0, "max": 520.0, "life": 0.85, "damage": 0.0, "hit": {}, "visual_only": true})
 	arauto.clear()
-	_open_manifest_evolution_choice(pos)
+	_spawn_arauto_evolution_fragment(pos)
+
+
+func _spawn_arauto_evolution_fragment(pos: Vector2) -> void:
+	arauto_evolution_fragment = {
+		"pos": pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80)),
+		"life": 0.0,
+		"pulse": rng.randf_range(0.0, TAU)
+	}
+	_add_text("FRAGMENTO DE EVOLUCAO", pos + Vector2(-120, -182), _manifestation_color(), 2.1, 22)
 
 
 func _spawn_arauto_card_rewards(pos: Vector2) -> void:
-	var pool: Array = CARDS.filter(func(card): return not _card_at_max(card))
+	var pool: Array = _available_card_drop_pool()
 	for i in range(ARAUTO_CARD_REWARD_COUNT):
 		if pool.is_empty():
-			pool = CARDS.filter(func(card): return not _card_at_max(card))
+			pool = _available_card_drop_pool()
 			if pool.is_empty():
 				return
 		var index := rng.randi_range(0, pool.size() - 1)
@@ -9253,7 +9636,7 @@ func _spawn_arauto_card_rewards(pos: Vector2) -> void:
 
 
 func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void:
-	var rare_pool: Array = CARDS.filter(func(card): return _is_rare_card(card) and not _card_at_max(card))
+	var rare_pool: Array = CARDS.filter(func(card): return _rare_cards_unlocked() and _is_rare_card(card) and not _card_at_max(card))
 	var common_pool: Array = CARDS.filter(func(card): return _is_common_card(card) and not _card_at_max(card))
 	for i in range(count):
 		var card: Dictionary = {}
@@ -9266,10 +9649,6 @@ func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void
 			var common_index := rng.randi_range(0, common_pool.size() - 1)
 			card = common_pool[common_index]
 			common_pool.remove_at(common_index)
-		elif not rare_pool.is_empty():
-			var fallback_index := rng.randi_range(0, rare_pool.size() - 1)
-			card = rare_pool[fallback_index]
-			rare_pool.remove_at(fallback_index)
 		if card.is_empty():
 			return
 		var angle := TAU * float(i) / float(max(1, count)) + rng.randf_range(-0.34, 0.34)
@@ -9297,6 +9676,22 @@ func _update_arauto_card_drops(delta: float) -> void:
 			_spawn_radial_particles(Vector2(drop["pos"]), card_color, 22)
 			_add_text("CARTA: %s" % String(card.get("nick", card.get("name", "???"))), player_pos + Vector2(-80, -88), card_color, 1.25, 20)
 	arauto_card_drops = arauto_card_drops.filter(func(drop): return float(drop.get("life", 0.0)) > 0.0)
+
+
+func _available_card_drop_pool() -> Array:
+	return CARDS.filter(func(card): return not _card_at_max(card) and (_is_common_card(card) or _rare_cards_unlocked()))
+
+
+func _update_arauto_evolution_fragment(delta: float) -> void:
+	if arauto_evolution_fragment.is_empty():
+		return
+	arauto_evolution_fragment["life"] = float(arauto_evolution_fragment.get("life", 0.0)) + delta
+	arauto_evolution_fragment["pulse"] = float(arauto_evolution_fragment.get("pulse", 0.0)) + delta * 4.4
+	if Vector2(arauto_evolution_fragment.get("pos", player_pos)).distance_to(player_pos) <= _neutral_pickup_radius(BOSS_FRAGMENT_PICKUP_RADIUS):
+		var pos := Vector2(arauto_evolution_fragment.get("pos", player_pos))
+		arauto_evolution_fragment.clear()
+		_spawn_radial_particles(pos, _manifestation_color(), 38)
+		_open_manifest_evolution_choice(pos)
 
 
 func _spawn_enemy(kind: String, pos: Vector2) -> void:
@@ -9454,6 +9849,7 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void:
 		"as_last_attack_seen": last_attack_time,
 		"as_player_pos_seen": player_pos,
 		"reconstitute_time": 0.0,
+		"reconstitute_immunity": 0.0,
 		"reconstituted_by": 0,
 		"reconstituted_once": false,
 		"shield_active": kind == ENEMY_SHIELD_REFLECTOR,
@@ -9543,6 +9939,7 @@ func _update_enemies(delta: float) -> void:
 		enemy["resonant_stun_notes"] = max(0.0, float(enemy.get("resonant_stun_notes", 0.0)) - delta)
 		enemy["shield_flash"] = max(0.0, float(enemy.get("shield_flash", 0.0)) - delta)
 		enemy["reconstitute_time"] = max(0.0, float(enemy.get("reconstitute_time", 0.0)) - delta)
+		enemy["reconstitute_immunity"] = max(0.0, float(enemy.get("reconstitute_immunity", 0.0)) - delta)
 		enemy["evolution_slow"] = max(0.0, float(enemy.get("evolution_slow", 0.0)) - delta)
 		if float(enemy["evolution_slow"]) <= 0.0:
 			enemy["evolution_slow_mult"] = 1.0
@@ -11247,8 +11644,16 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 		if show_text:
 			_add_text("-%d" % int(amount), Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), _damage_color(source), 0.35, _damage_text_size(16))
 		return false
+	if float(enemy.get("reconstitute_immunity", 0.0)) > 0.0:
+		if show_text and float(enemy.get("reconstitute_time", 0.0)) <= 0.0:
+			_add_text("IMUNE", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), Color(1.0, 0.64, 0.18), 0.35, _damage_text_size(14))
+		return false
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
+	if _is_direct_player_damage_source(source, effective_source_category):
+		var opportunity := AuraSystem.consume_opportunity_damage(aura_state, player_damage)
+		amount += float(opportunity.get("bonus", 0.0))
+		_apply_aura_events(opportunity.get("events", []))
 	var damage_origin: Vector2 = attack_origin if attack_origin != Vector2.ZERO else player_pos
 	amount *= _mandamento_damage_multiplier(effective_source_category)
 	var trigger_card_effects := _card_damage_can_trigger(source)
@@ -11284,6 +11689,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 				amount *= SHIELD_REFLECTOR_BACK_DAMAGE_MULT
 	amount *= _fragilidade_enemy_multiplier(enemy, source)
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
+	amount *= _acorrentada_chained_damage_multiplier(enemy)
 	var hp_before := float(enemy["hp"])
 	var incoming_damage: float = max(1.0, amount)
 	var antimatter_should_trigger: bool = _antimatter_direct_trigger(source, effective_source_category)
@@ -11316,6 +11722,13 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 	if trigger_card_effects:
 		_consume_pulso_desestabilizador(Vector2(enemy["pos"]), source)
 	return float(enemy["hp"]) <= 0.0
+
+
+func _acorrentada_chained_damage_multiplier(enemy: Dictionary) -> float:
+	var elos := _acorrentada_enemy_elos(enemy)
+	if elos <= 0:
+		return 1.0
+	return 1.0 + ACORRENTADA_CHAINED_DAMAGE_BONUS * float(elos)
 
 
 func _play_enemy_hit_sfx(enemy: Dictionary, source: String) -> void:
@@ -11417,6 +11830,10 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier := true, 
 		armor = 0.0
 	else:
 		armor = clamp(armor, 0.12, 0.84)
+	if _is_direct_player_damage_source(source, effective_source_category):
+		var opportunity := AuraSystem.consume_opportunity_damage(aura_state, player_damage)
+		amount += float(opportunity.get("bonus", 0.0))
+		_apply_aura_events(opportunity.get("events", []))
 	var final = max(1.0, amount * (1.0 - armor))
 	if mnesic_boss_vulnerability > 0.0 and source != "parasite_feast":
 		final *= 1.16
@@ -11461,6 +11878,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier := true, 
 	var boss_hp_before: float = boss_hp
 	var antimatter_should_trigger: bool = _antimatter_direct_trigger(source, effective_source_category)
 	boss_hp = max(0.0, boss_hp - final)
+	if String(aura_state.get("name", "")) == "Crepuscular" and _is_direct_player_damage_source(source, effective_source_category):
+		AuraSystem.on_boss_hit(aura_state, boss_pos, boss_hp_before - boss_hp)
 	if release_boss_feed and _voraz_boss_feed_allowed(boss_hp_before - boss_hp, source, effective_source_category):
 		AuraSystem.on_boss_hit(aura_state, boss_pos, boss_hp_before - boss_hp)
 	_track_boss_damage(boss_hp_before - boss_hp)
@@ -11526,9 +11945,9 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier := true, 
 		if is_multiplayer and _is_world_authority():
 			rpc("_rpc_add_score", reward)
 		run_points_earned += reward
-		_grant_boss_reward_cards(5)
+		var rewarded_cards := _grant_boss_reward_cards(BOSS_REWARD_CARD_COUNT, BOSS_REWARD_RARE_COUNT)
 		_add_text("BOSS DISSOLVIDO", boss_pos + Vector2(0, -100), Color(1.0, 0.78, 0.25), 3.0, 34)
-		_add_text("+5 CARTAS  +%d PONTOS" % reward, boss_pos + Vector2(0, -142), Color(1.0, 0.90, 0.34), 2.8, 23)
+		_add_text("+%d CARTAS  +%d PONTOS" % [rewarded_cards, reward], boss_pos + Vector2(0, -142), Color(1.0, 0.90, 0.34), 2.8, 23)
 		if current_phase == 1:
 			_spawn_phase_fragment(boss_pos, 2)
 		elif current_phase == 2:
@@ -11599,6 +12018,7 @@ func _try_reconstitute_enemy(enemy: Dictionary) -> bool:
 	enemy["speed"] = max(float(enemy.get("speed", enemy_speed_base)) * COUT_AS_RECONSTITUTE_SPEED_MULT, enemy_speed_base * 1.05)
 	enemy["damage"] = float(enemy.get("damage", enemy_close_damage + 10.0)) * 1.08
 	enemy["reconstitute_time"] = COUT_AS_RECONSTITUTE_TIME
+	enemy["reconstitute_immunity"] = COUT_AS_RECONSTITUTE_TIME + COUT_AS_RECONSTITUTE_IMMUNITY_TIME
 	enemy["reconstituted_by"] = int(caster.get("uid", 0))
 	enemy["reconstituted_once"] = true
 	enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.22)
@@ -11756,13 +12176,38 @@ func _maybe_spawn_late_heal_orb(enemy: Dictionary, pos: Vector2) -> void:
 		_add_text("SUSTENTO", pos + Vector2(0, -104), Color(0.38, 1.0, 0.52), 0.75, 17)
 
 
-func _grant_boss_reward_cards(count: int) -> void:
-	var available: Array = CARDS.filter(func(card): return not _card_at_max(card))
-	for i in range(min(count, available.size())):
-		var index := rng.randi_range(0, available.size() - 1)
-		var card: Dictionary = available[index]
-		available.remove_at(index)
+func _grant_boss_reward_cards(count: int, rare_slots := BOSS_REWARD_RARE_COUNT) -> int:
+	var picked := _pick_boss_reward_cards(count, rare_slots)
+	for card in picked:
 		_apply_card(card)
+	return picked.size()
+
+
+func _pick_boss_reward_cards(count: int, rare_slots := BOSS_REWARD_RARE_COUNT) -> Array:
+	var picked: Array = []
+	var rare_pool: Array = CARDS.filter(func(card): return _rare_cards_unlocked() and _is_rare_card(card) and not _card_at_max(card))
+	var common_pool: Array = CARDS.filter(func(card): return _is_common_card(card) and not _card_at_max(card))
+	var fallback_pool: Array = CARDS.filter(func(card): return not _card_at_max(card) and not (_is_rare_card(card) and not _rare_cards_unlocked()))
+	var remaining_rares := rare_slots
+	while remaining_rares > 0 and picked.size() < count and not rare_pool.is_empty():
+		var rare_index := rng.randi_range(0, rare_pool.size() - 1)
+		var card: Dictionary = rare_pool[rare_index]
+		rare_pool.remove_at(rare_index)
+		fallback_pool.erase(card)
+		picked.append(card)
+		remaining_rares -= 1
+	while picked.size() < count and not common_pool.is_empty():
+		var common_index := rng.randi_range(0, common_pool.size() - 1)
+		var card: Dictionary = common_pool[common_index]
+		common_pool.remove_at(common_index)
+		fallback_pool.erase(card)
+		picked.append(card)
+	while picked.size() < count and not fallback_pool.is_empty():
+		var index := rng.randi_range(0, fallback_pool.size() - 1)
+		var card: Dictionary = fallback_pool[index]
+		fallback_pool.remove_at(index)
+		picked.append(card)
+	return picked
 
 
 func _card_drop_chance() -> float:
@@ -12598,7 +13043,10 @@ func _update_secondary_eletrica(secondary: Dictionary, delta: float) -> void:
 	secondary["health_drain_timer"] = float(secondary.get("health_drain_timer", 0.0)) + drain_delta
 	while float(secondary["health_drain_timer"]) >= SECONDARY_ELETRICA_DRAIN_INTERVAL:
 		secondary["health_drain_timer"] = float(secondary["health_drain_timer"]) - SECONDARY_ELETRICA_DRAIN_INTERVAL
-		var drain_carry = float(secondary.get("health_drain_carry", 0.0)) + player_hp_max * SECONDARY_ELETRICA_DRAIN_RATE
+		var overcharge_time = max(0.0, active_time - SECONDARY_ELETRICA_DRAIN_DELAY)
+		var drain_tier = int(floor(overcharge_time / SECONDARY_ELETRICA_DRAIN_TIER_SECONDS))
+		var drain_rate = SECONDARY_ELETRICA_DRAIN_RATE * pow(2.0, float(drain_tier))
+		var drain_carry = float(secondary.get("health_drain_carry", 0.0)) + max(1.0, float(player_hp) * drain_rate)
 		var drain_damage = maxi(1, int(floor(drain_carry)))
 		secondary["health_drain_carry"] = max(0.0, drain_carry - float(drain_damage))
 		player_hp = max(0, player_hp - drain_damage)
@@ -12608,6 +13056,9 @@ func _update_secondary_eletrica(secondary: Dictionary, delta: float) -> void:
 		_vibrate(55, 0.20)
 		_spawn_secondary_drain_sparks(player_pos)
 		_add_text("-%d VIDA" % drain_damage, player_pos + Vector2(0, -82), Color(1.0, 0.18, 0.28), 0.65, 17)
+		if player_hp <= 0:
+			_handle_player_down()
+			return
 	var ring_radius := _secondary_eletrica_radius(active_time)
 	var shocked_targets = []
 	var has_target_in_radius = false
@@ -16564,6 +17015,7 @@ func _update_shop(delta: float) -> void:
 	shop_purchase_pending_card = {}
 	shop_purchase_pending_price = 0
 	run_points_spent += paid_price
+	_apply_aura_events(AuraSystem.on_points_spent(aura_state, paid_price, player_hp_max))
 	score -= paid_price
 	_apply_card(card)
 	card_cost += _shop_price_increment_after_purchase()
@@ -16615,12 +17067,14 @@ func _open_shop(forced: bool) -> void:
 func _roll_shop_cards() -> Array:
 	var pool_rares = []
 	var pool_commons = []
+	var rares_unlocked := _rare_cards_unlocked()
 
 	for card in CARDS:
 		if _card_at_max(card):
 			continue
 		if _is_rare_card(card):
-			pool_rares.append(card)
+			if rares_unlocked:
+				pool_rares.append(card)
 		else:
 			pool_commons.append(card)
 
@@ -16645,12 +17099,6 @@ func _roll_shop_cards() -> Array:
 	# Fill remaining slots with commons
 	while picks.size() < 3 and pool_commons.size() > 0:
 		picks.append(_shop_pop_weighted_common(pool_commons))
-
-	# Fallback to rares if not enough commons
-	while picks.size() < 3 and pool_rares.size() > 0:
-		var idx = rng.randi_range(0, pool_rares.size() - 1)
-		picks.append(pool_rares[idx])
-		pool_rares.remove_at(idx)
 
 	picks.shuffle()
 	_register_shop_common_rolls(picks)
@@ -16696,6 +17144,14 @@ func _register_shop_common_rolls(picks: Array) -> void:
 
 func _is_rare_card(card: Dictionary) -> bool:
 	return String(card.get("name", "")) in RARE_CARD_NAMES
+
+
+func _sorte_card_count() -> int:
+	return _card_count_by_id("Sorte")
+
+
+func _rare_cards_unlocked() -> bool:
+	return _sorte_card_count() > 0
 
 
 func _card_id(card: Dictionary) -> String:
@@ -16971,6 +17427,18 @@ func _heal_player(amount: float, source: String = "generic", feed_reserva: bool 
 	var applied: float = min(missing_before, amount)
 	if applied > 0.0:
 		player_hp = min(player_hp_max, player_hp + applied)
+	if not aura_state.is_empty() and source != "aura_adjust":
+		var aura_heal := AuraSystem.on_heal(aura_state, applied, overheal, player_hp, player_hp_max)
+		var extra_heal := float(aura_heal.get("extra_heal", 0.0))
+		if extra_heal > 0.0 and player_hp < player_hp_max:
+			var bonus: float = minf(float(player_hp_max - player_hp), extra_heal)
+			player_hp += bonus
+			applied += bonus
+		elif extra_heal < 0.0 and applied > 0.0:
+			var penalty: float = minf(applied, -extra_heal)
+			player_hp = max(0.0, player_hp - penalty)
+			applied = max(0.0, applied - penalty)
+		_apply_aura_events(aura_heal.get("events", []))
 	if feed_reserva and overheal > 0.0:
 		_register_overheal_for_reserva(overheal, source)
 	return applied
@@ -18506,12 +18974,14 @@ func _card_rarity_label(card: Dictionary) -> String:
 
 
 func _chance_carta_rara() -> float:
+	if not _rare_cards_unlocked():
+		return 0.0
 	var chance_rara_base = 0.025
 	var chance_rara_maxima = 0.14
 	var sorte_peso_raridade = 0.12
 	var sorte_bonus_raridade_por_carta = 0.0038
 
-	var qtd_sorte = cards_bought.get("Sorte", 0)
+	var qtd_sorte = _sorte_card_count()
 	var chance = chance_rara_base + luck * sorte_peso_raridade + qtd_sorte * sorte_bonus_raridade_por_carta
 	return clamp(chance, 0.0, chance_rara_maxima)
 
@@ -18681,6 +19151,134 @@ func _card_lore(card_name: String) -> String:
 		"Coração de Antimatéria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
 		"Cofre do Excesso": return "Nada se perde no excesso. O dano que sobraria e guardado para cobrar elites e chefes."
 	return ""
+
+
+func _card_effect_snapshot(card: Dictionary, count: int) -> String:
+	var card_id := _card_id(card)
+	var safe_count: int = max(0, count)
+	var zero: float = _carta_zero_multiplier()
+	match card_id:
+		"Speed Boost":
+			return "velocidade +%.1f%%" % ((pow(1.065, safe_count) - 1.0) * 100.0 * zero)
+		"Porcao":
+			return "cura %.0f%% da vida maxima; excesso vira %.0f%% de vida maxima" % [_apply_carta_zero_to_common_value("Porcao", "heal", 0.45) * 100.0, _apply_carta_zero_to_common_value("Porcao", "overflow_hp", 0.35) * 100.0]
+		"Disparo crescente":
+			return "auto attack +%.1f%% de dano sobre a base da manifestacao" % ((pow(1.10, safe_count) - 1.0) * 100.0 * zero)
+		"Tempestade":
+			return "+%d dano e +%.0f%% chance critica" % [int(round(5.0 * safe_count * zero)), 2.0 * safe_count * zero]
+		"Roubo de Vida":
+			return "%.2f%% de roubo por projetil" % (0.10 * safe_count * zero)
+		"Speed Atack":
+			return "intervalo de ataque reduzido em %.3fs" % (0.014 * safe_count * zero)
+		"Teleporte":
+			return "recarga do TP reduzida em %.2fs" % (0.30 * safe_count * zero)
+		"Defesa":
+			return "+%.1f resistencia, limitada a 50" % (3.5 * safe_count * zero)
+		"Sorte":
+			return "+%.2f%% sorte; raras %s" % [0.30 * safe_count * zero, "liberadas" if safe_count > 0 else "bloqueadas"]
+		"Poison":
+			return "veneno base %.2f%% + escala por compra" % ((0.05 + 0.009 * safe_count) * 100.0 if safe_count > 0 else 0.0)
+		"Coletora":
+			return "execucao em %.1f%% de vida ou menos" % (min(0.30, 0.05 + 0.015 * max(0, safe_count - 1)) * 100.0 if safe_count > 0 else 0.0)
+		"Mercenaria":
+			return "contrato ativo x%d; abates pagam bonus crescente" % safe_count
+		"Petro":
+			return "Petro ativo x%d; copias elevam evolucao, vida, defesa e dano" % safe_count
+		"Trembo":
+			return "%d carga(s) de reversao temporal" % min(2, safe_count)
+		"carta_zero":
+			return "cartas comuns multiplicadas em %.1f%%" % ((1.0 + 0.06 * sqrt(float(safe_count))) * 100.0 if safe_count > 0 else 100.0)
+		"necrocronismo":
+			return "aliados espectrais com poder %.0f%%" % (_necro_total_power() * 100.0 if safe_count > 0 else 0.0)
+		"coracao_antimateria":
+			return "carga de antimataria x%d; proximo acerto implode o alvo" % safe_count
+		"cofre_excesso":
+			return "cofre x%d armazena dano excedente para elite/boss" % safe_count
+	if safe_count <= 0:
+		return "efeito ainda inativo"
+	return "%s ativo x%d" % [String(card.get("desc", "Efeito ativo.")), safe_count]
+
+
+func _card_projection_lines(card: Dictionary) -> Array:
+	var owned := _card_count(card)
+	return [
+		"Sem comprar agora: %s" % _card_effect_snapshot(card, owned),
+		"Apos comprar: %s" % _card_effect_snapshot(card, owned + 1)
+	]
+
+
+func _catalog_item_kind(item: Dictionary) -> String:
+	if item.has("nick"):
+		return "card"
+	var key := String(item.get("key", ""))
+	if key != "":
+		for manifest in MANIFESTATIONS:
+			if String(manifest.get("key", "")) == key:
+				return "manifestation"
+		for aura in AURAS:
+			if String(aura.get("key", "")) == key:
+				return "spectrum"
+	return String(item.get("kind", ""))
+
+
+func _catalog_detail_description(item: Dictionary) -> String:
+	var kind := _catalog_item_kind(item)
+	if kind == "card":
+		var lines := [String(item.get("desc", ""))]
+		for line in _card_projection_lines(item):
+			lines.append(String(line))
+		return "\n".join(lines)
+	if kind == "manifestation":
+		var details := _manifestation_details(String(item.get("key", "")))
+		return "%s\n%s" % [String(details.get("funcao", item.get("desc", ""))), String(details.get("disparo", ""))]
+	if kind == "spectrum":
+		var details := _aura_details(String(item.get("name", "")))
+		return "%s\n%s" % [String(details.get("funcao", item.get("desc", ""))), String(details.get("disparo", ""))]
+	return String(item.get("desc", ""))
+
+
+func _catalog_detail_lore(item: Dictionary) -> String:
+	var kind := _catalog_item_kind(item)
+	if kind == "card":
+		return _card_lore(String(item.get("name", "")))
+	if kind == "manifestation":
+		var details := _manifestation_details(String(item.get("key", "")))
+		return "Identidade da Manifestacao: %s\nAssinatura: %s" % [String(item.get("desc", "Registro da Ruptura.")), String(details.get("traco", "Padrao ainda em leitura."))]
+	if kind == "spectrum":
+		var details := _aura_details(String(item.get("name", "")))
+		return "Espectro de combate: %s\nAssinatura: %s" % [String(item.get("desc", "Registro espectral.")), String(details.get("traco", "Padrao ainda em leitura."))]
+	return String(item.get("lore", "Registro estabilizado no banco de dados temporal da Geovana."))
+
+
+func _catalog_detail_mechanics(item: Dictionary) -> String:
+	var kind := _catalog_item_kind(item)
+	if kind == "card":
+		return "%s\nCategoria: %s.\nMarcadores: %s." % [
+			_card_effect_snapshot(item, max(1, _card_count(item))),
+			_card_category(String(item.get("name", ""))),
+			", ".join(_card_stat_chips(String(item.get("name", ""))))
+		]
+	if kind == "manifestation":
+		var details := _manifestation_details(String(item.get("key", "")))
+		var lines := [
+			String(details.get("habilidade", "Q")),
+			String(details.get("desc_hab", "")),
+			String(details.get("traco", "")),
+			"Risco: %s" % String(details.get("risco", ""))
+		]
+		if details.has("info_rows"):
+			for row in details["info_rows"]:
+				lines.append("%s: %s" % [String(row.get("label", "")), String(row.get("text", ""))])
+		return "\n".join(lines)
+	if kind == "spectrum":
+		var details := _aura_details(String(item.get("name", "")))
+		return "%s\n%s\n%s\nRisco: %s" % [
+			String(details.get("habilidade", "Habilidade")),
+			String(details.get("desc_hab", "")),
+			String(details.get("traco", "")),
+			String(details.get("risco", ""))
+		]
+	return String(item.get("mechanics", "Entrada monitorada durante a jornada."))
 
 
 func _apply_card(card: Dictionary) -> void:
@@ -20369,7 +20967,7 @@ func _catalog_tab_label(index: int) -> String:
 		3:
 			return "FRACOES"
 		4:
-			return "AUREAS"
+			return "ESPECTROS"
 		_:
 			return "CARTAS"
 
@@ -20392,17 +20990,17 @@ func _draw_catalog_detail(viewport: Vector2) -> void:
 		var y = image_rect.end.y + 24
 		_draw_centered(String(item["name"]).to_upper(), Vector2(panel.get_center().x, y), 24, Color.WHITE)
 		y += 28
-		_draw_wrapped(String(item["desc"]), Rect2(panel.position.x + 20, y, panel.size.x - 40, 48), 14, Color(0.78, 0.90, 0.95))
-		y += 58
+		_draw_wrapped(_catalog_detail_description(item), Rect2(panel.position.x + 20, y, panel.size.x - 40, 68), 14, Color(0.78, 0.90, 0.95))
+		y += 78
 		draw_line(Vector2(panel.position.x + 20, y), Vector2(panel.end.x - 20, y), Color(color.r, color.g, color.b, 0.38), 1)
 		y += 16
 		draw_string(font, Vector2(panel.position.x + 20, y), "HISTORIA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 		y += 18
-		_draw_wrapped(String(item.get("lore", "Registro estabilizado no banco de dados temporal da Geovana.")), Rect2(panel.position.x + 20, y, panel.size.x - 40, 54), 13, Color(0.70, 0.82, 0.88))
+		_draw_wrapped(_catalog_detail_lore(item), Rect2(panel.position.x + 20, y, panel.size.x - 40, 54), 13, Color(0.70, 0.82, 0.88))
 		y += 64
 		draw_string(font, Vector2(panel.position.x + 20, y), "MECANICAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 		y += 18
-		_draw_wrapped(String(item.get("mechanics", "Entrada monitorada durante a jornada.")), Rect2(panel.position.x + 20, y, panel.size.x - 40, 72), 13, Color(0.82, 0.90, 0.94))
+		_draw_wrapped(_catalog_detail_mechanics(item), Rect2(panel.position.x + 20, y, panel.size.x - 40, 72), 13, Color(0.82, 0.90, 0.94))
 	else:
 		var panel = Rect2(viewport.x * 0.06, 148, viewport.x * 0.88, viewport.y - 238)
 		_draw_holo_panel(panel, color, true, 0.78)
@@ -20428,19 +21026,19 @@ func _draw_catalog_detail(viewport: Vector2) -> void:
 		# Description
 		draw_string(font, Vector2(right_x, ry), "DESCRICAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 		ry += 18
-		_draw_wrapped(String(item["desc"]), Rect2(right_x, ry, right_w, 42), 14, Color(0.85, 0.92, 0.96))
-		ry += 52
+		_draw_wrapped(_catalog_detail_description(item), Rect2(right_x, ry, right_w, 62), 14, Color(0.85, 0.92, 0.96))
+		ry += 72
 
 		# Lore
 		draw_string(font, Vector2(right_x, ry), "HISTORIA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 		ry += 18
-		_draw_wrapped(String(item.get("lore", "Registro estabilizado no banco de dados temporal da Geovana.")), Rect2(right_x, ry, right_w, 54), 13, Color(0.70, 0.82, 0.88))
+		_draw_wrapped(_catalog_detail_lore(item), Rect2(right_x, ry, right_w, 54), 13, Color(0.70, 0.82, 0.88))
 		ry += 64
 
 		# Mechanics
 		draw_string(font, Vector2(right_x, ry), "MECANICAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 		ry += 18
-		_draw_wrapped(String(item.get("mechanics", "Entrada monitorada durante a jornada.")), Rect2(right_x, ry, right_w, 64), 13, Color(0.82, 0.90, 0.94))
+		_draw_wrapped(_catalog_detail_mechanics(item), Rect2(right_x, ry, right_w, 82), 13, Color(0.82, 0.90, 0.94))
 
 	_draw_big_button(Rect2(viewport.x * 0.5 - 120, viewport.y - 72, 240, 48), "VOLTAR AO INDICE", Color(0.08, 0.04, 0.10, 0.90), Color(1.0, 0.20, 0.78))
 
@@ -20472,8 +21070,8 @@ func _catalog_items() -> Array:
 				{"name": "Projetador", "desc": "Atira projeteis cinza/roxo enquanto tenta manter distancia.", "color": Color(0.65, 0.45, 1.0), "texture": "projector", "mechanics": "Para perto do alcance ideal e dispara em cadencia controlada."},
 				{"name": "Curater", "desc": "Cura aliados e deixa orbe de cura ao ser eliminado.", "color": Color(0.34, 1.0, 0.42), "texture": "curater", "mechanics": "Prioridade tatica alta: prolonga ondas inimigas."},
 				{"name": "Larapio", "desc": "Rouba pontos, fica mais resistente e foge pelo portal quando ferido.", "color": Color(0.74, 0.24, 1.0), "texture": "larapio", "mechanics": "Abaixo de 50% de vida abandona coleta e canaliza fuga."},
-				{"name": "Rebobinador", "desc": "Surge a partir de 7 minutos e cria uma zona laranja de retorno.", "color": Color(1.0, 0.58, 0.16), "texture": "cout_attack_speed", "mechanics": "Inimigos comuns mortos dentro da aura voltam uma unica vez com 25% de vida e muito mais velocidade. Rebobinadores nao revivem a propria especie."},
-				{"name": "Briguer Escudeiro", "desc": "Aparece apos 10 minutos com um escudo frontal oscilante.", "color": Color(0.42, 0.92, 1.0), "texture": "enemy_shield_reflector", "mechanics": "Com escudo, reduz e reflete dano vindo da frente. Sem escudo, fica mais rapido e bate mais forte por estar sem o peso da defesa."}
+				{"name": "Rebobinador", "desc": "Surge a partir de 15 minutos e cria uma zona laranja de retorno.", "color": Color(1.0, 0.58, 0.16), "texture": "cout_attack_speed", "mechanics": "Inimigos comuns mortos dentro da aura voltam uma unica vez com 25% de vida e muito mais velocidade. A reconstituicao leva 1,5s e concede 1s de imunidade apos terminar. Rebobinadores nao revivem a propria especie."},
+				{"name": "Briguer Escudeiro", "desc": "Aparece apos 9 minutos com um escudo frontal oscilante.", "color": Color(0.42, 0.92, 1.0), "texture": "enemy_shield_reflector", "mechanics": "Com escudo, reduz e reflete dano vindo da frente. Sem escudo, fica mais rapido e bate mais forte por estar sem o peso da defesa."}
 			]
 		2:
 			return [
@@ -20809,6 +21407,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 	var btn_start_rect: Rect2
 	var btn_back_rect: Rect2
 	var btn_preview_rect: Rect2
+	var btn_details_rect: Rect2
 
 	if portrait:
 		var py = viewport.y - 82
@@ -20816,19 +21415,25 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 		var ph = 52.0
 		btn_start_rect = Rect2(viewport.x * 0.08, py, pw, ph)
 		btn_back_rect = Rect2(viewport.x * 0.52, py, pw, ph)
-		btn_preview_rect = Rect2(viewport.x * 0.30, py - 54.0, viewport.x * 0.40, 40.0)
+		btn_preview_rect = Rect2(viewport.x * 0.08, py - 54.0, viewport.x * 0.40, 40.0)
+		btn_details_rect = Rect2(viewport.x * 0.52, py - 54.0, viewport.x * 0.40, 40.0)
 	else:
 		btn_start_rect = Rect2(viewport.x * 0.10, button_y, btn_w, btn_h)
 		btn_back_rect = Rect2(viewport.x * 0.10 + 220, button_y, btn_w, btn_h)
 		btn_preview_rect = Rect2(viewport.x * 0.10 + 440, button_y, 172.0, btn_h)
+		btn_details_rect = Rect2(viewport.x * 0.10 + 632.0, button_y, 172.0, btn_h)
 
 	# Armazenar rects globais de botÃµes para clique/toque
 	buttons["manifest_start"] = btn_start_rect
 	buttons["manifest_back"] = btn_back_rect
 	buttons.erase("manifest_preview")
+	buttons.erase("manifest_details")
 	buttons.erase("manifest_preview_popup")
+	buttons.erase("manifest_details_popup")
+	buttons.erase("manifest_details_close")
 	if not aura_view and manifest_select_stage == MANIFEST_STAGE_MANIFESTATION:
 		buttons["manifest_preview"] = btn_preview_rect
+		buttons["manifest_details"] = btn_details_rect
 
 	var start_label = "INICIAR" if aura_view else "REVELAR ESPECTRO"
 	var start_accent = aura_color if aura_view else Color(0.0, 1.0, 0.82)
@@ -20836,8 +21441,12 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 	_draw_big_button(btn_back_rect, "VOLTAR", Color(0.12, 0.04, 0.05, 0.88), Color(1.0, 0.28, 0.34))
 	if buttons.has("manifest_preview"):
 		_draw_big_button(btn_preview_rect, "PREVIEW", Color(0.04, 0.10, 0.16, 0.88), color)
+	if buttons.has("manifest_details"):
+		_draw_big_button(btn_details_rect, "DETALHES", Color(0.05, 0.08, 0.12, 0.88), color)
 	if manifest_preview_open:
 		_draw_manifest_preview_popup(viewport, MANIFESTATIONS[selected_manifestation])
+	if manifest_details_open:
+		_draw_manifest_details_popup(viewport, MANIFESTATIONS[selected_manifestation])
 
 
 func _draw_manifest_preview_popup(viewport: Vector2, item: Dictionary) -> void:
@@ -20882,6 +21491,46 @@ func _draw_manifest_preview_popup(viewport: Vector2, item: Dictionary) -> void:
 	_draw_centered("TOQUE NA JANELA PARA FECHAR", popup.position + Vector2(popup.size.x * 0.5, popup.size.y - 24.0), _readable_text_size(10), Color(0.86, 0.94, 1.0, 0.70))
 
 
+func _draw_manifest_details_popup(viewport: Vector2, item: Dictionary) -> void:
+	var portrait := _is_portrait(viewport)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.58), true)
+	var popup_size := Vector2(min(viewport.x * 0.90, 980.0), min(viewport.y * 0.88, 620.0))
+	if portrait:
+		popup_size = Vector2(viewport.x * 0.94, viewport.y * 0.88)
+	var popup := Rect2(viewport * 0.5 - popup_size * 0.5, popup_size)
+	buttons["manifest_details_popup"] = popup
+	var accent: Color = item.get("color", Color(0.0, 1.0, 0.82))
+	_draw_holo_panel(popup, accent, true, 0.90)
+	draw_rect(popup.grow(-10.0), Color(0.0, 0.0, 0.0, 0.30), true)
+
+	var close_rect := Rect2(popup.end - Vector2(58.0, popup.size.y - 16.0), Vector2(40.0, 32.0))
+	buttons["manifest_details_close"] = close_rect
+	_draw_holo_panel(close_rect, Color(1.0, 0.24, 0.32), false, 0.72)
+	_draw_centered("X", close_rect.get_center() + Vector2(0, 5), _readable_text_size(16), Color.WHITE)
+
+	_draw_centered("DETALHES // " + String(item["name"]).to_upper(), popup.position + Vector2(popup.size.x * 0.5, 30.0), _readable_text_size(20), accent)
+	_draw_wrapped(String(item.get("desc", "")), Rect2(popup.position + Vector2(34.0, 56.0), Vector2(popup.size.x - 68.0, 48.0)), _readable_text_size(13), Color(0.86, 0.95, 1.0, 0.90))
+
+	var details := _manifestation_details(String(item.get("key", "")))
+	var content := popup.grow(-32.0)
+	content.position.y += 102.0
+	content.size.y -= 138.0
+	var y := content.position.y
+	var fs := _readable_text_size(12 if portrait else 13)
+	var body := Color(0.82, 0.92, 0.96, 0.92)
+	y = _draw_section_flow("FUNCAO", accent, String(details.get("funcao", "")), body, y, content, fs)
+	y = _draw_section_flow("ATK", accent, String(details.get("disparo", "")), body, y, content, fs)
+	y = _draw_section_flow(String(details.get("habilidade", "Q")), accent, String(details.get("desc_hab", "")), body, y, content, fs)
+	y = _draw_section_flow("E / TRACO", accent, String(details.get("traco", "")), body, y, content, fs)
+	y = _draw_section_flow("RISCO / TP", accent, String(details.get("risco", "")), body, y, content, fs)
+	var rows: Array = details.get("info_rows", [])
+	for row in rows:
+		if y > content.end.y - 38.0:
+			break
+		y = _draw_section_flow(String(row.get("label", "INFO")), accent, String(row.get("text", "")), body, y, content, fs - 1)
+	_draw_centered("TOQUE FORA OU NO X PARA FECHAR", popup.position + Vector2(popup.size.x * 0.5, popup.size.y - 24.0), _readable_text_size(10), Color(0.86, 0.94, 1.0, 0.70))
+
+
 func _manifest_preview_tab_label(kind: String) -> String:
 	match kind:
 		"skill":
@@ -20923,6 +21572,8 @@ func _manifest_preview_atlas(key: String, kind: String) -> Texture2D:
 
 
 func _draw_manifest_preview_atlas(rect: Rect2, key: String, kind: String, t: float) -> bool:
+	if preview_capture_mode:
+		return false
 	var texture = _manifest_preview_atlas(key, kind)
 	if texture == null:
 		return false
@@ -21275,6 +21926,7 @@ func _draw_game(viewport: Vector2) -> void:
 		draw_arc(orb["pos"] - camera, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
 	_draw_larapio_coin_drops(camera)
 	_draw_arauto_card_drops(camera)
+	_draw_arauto_evolution_fragment(camera)
 	_draw_aura_world(camera)
 	_draw_remote_aura_world(camera)
 	_draw_devorador_world(camera)
@@ -22414,6 +23066,37 @@ func _draw_arauto_card_drops(camera: Vector2) -> void:
 		else:
 			draw_circle(rect.get_center(), 13.0, Color(accent.r, accent.g, accent.b, 0.78 * alpha))
 		_draw_centered("CARTA", p + Vector2(0, 42 + bob), 10, Color(0.88, 0.96, 1.0, 0.86 * alpha))
+
+
+func _draw_arauto_evolution_fragment(camera: Vector2) -> void:
+	if arauto_evolution_fragment.is_empty():
+		return
+	var pos := Vector2(arauto_evolution_fragment.get("pos", player_pos)) - camera
+	var pulse_t := float(arauto_evolution_fragment.get("pulse", 0.0))
+	var age := float(arauto_evolution_fragment.get("life", 0.0))
+	var pulse := 0.5 + 0.5 * sin(pulse_t)
+	var hover := sin(age * 2.3) * 7.0
+	pos.y += hover
+	var accent := _manifestation_color()
+	var outer_r := 34.0 + pulse * 9.0
+	draw_circle(pos, outer_r * 1.28, Color(0.06, 0.0, 0.12, 0.30))
+	draw_circle(pos, outer_r, Color(accent.r, accent.g, accent.b, 0.16 + pulse * 0.08))
+	draw_arc(pos, outer_r + 10.0, pulse_t, pulse_t + PI * 1.45, 64, Color(accent.r, accent.g, accent.b, 0.92), 3.0)
+	draw_arc(pos, outer_r * 0.72, -pulse_t * 0.8, -pulse_t * 0.8 + PI * 1.65, 56, Color(0.24, 0.94, 1.0, 0.82), 2.0)
+	for i in range(5):
+		var ang := pulse_t * 1.4 + float(i) * TAU / 5.0
+		var shard := pos + Vector2.from_angle(ang) * (outer_r + 9.0)
+		var sz := 6.0 + float(i % 2) * 2.0
+		var points := PackedVector2Array([
+			shard + Vector2(0, -sz),
+			shard + Vector2(sz * 0.58, 0),
+			shard + Vector2(0, sz),
+			shard + Vector2(-sz * 0.58, 0)
+		])
+		draw_polygon(points, PackedColorArray([Color(0.90, 0.96, 1.0, 0.86)]))
+		draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(accent.r, accent.g, accent.b, 0.78), 1.4, true)
+	draw_circle(pos, 13.0 + pulse * 3.0, Color(0.94, 0.90, 1.0, 0.95))
+	_draw_centered("EVOLUCAO", pos + Vector2(0, 58.0), 11, Color(0.90, 0.96, 1.0, 0.92))
 
 
 func _draw_arauto(camera: Vector2) -> void:
@@ -25892,6 +26575,11 @@ func _aura_hud_ratio() -> float:
 		"Abissal": return 1.0 if float(aura_state.get("abyss_tide", 0.0)) > 0.0 else clamp(float(aura_state.get("abyss_depth", 0.0)) / 100.0, 0.0, 1.0)
 		"Profetica": return clamp(float(aura_state.get("prophecy_time", 0.0)) / 6.4, 0.0, 1.0)
 		"Sanguinaria": return clamp(float(aura_state.get("blood_thirst", 0.0)) / 100.0, 0.0, 1.0)
+		"Crepuscular": return 1.0 if float(aura_state.get("crepuscular_eclipse", 0.0)) > 0.0 else clamp(float(aura_state.get("crepuscular_charge", 0.0)) / 100.0, 0.0, 1.0)
+		"Peregrino": return clamp(float(aura_state.get("peregrino_steps", 0)) / float(AuraSystem._peregrino_steps_required(aura_state)), 0.0, 1.0)
+		"Equilibrista": return 1.0 if float(aura_state.get("equilibrista_state", 0.0)) > 0.0 else clamp(float(aura_state.get("equilibrista_balance", 0.0)) / 100.0, 0.0, 1.0)
+		"Avarento": return clamp(float(aura_state.get("avarento_lastro", 0.0)) / 4.0, 0.0, 1.0)
+		"Oportunista": return 1.0 if bool(aura_state.get("oportunista_armed", false)) else clamp(float(aura_state.get("oportunista_charges", 0)) / float(AuraSystem._oportunista_required(aura_state)), 0.0, 1.0)
 	return 0.0
 
 
@@ -25914,6 +26602,24 @@ func _aura_status_text() -> String:
 		"Abissal": return "MARE NEGRA" if float(aura_state.get("abyss_tide", 0.0)) > 0.0 else "%d%%" % int(aura_state.get("abyss_depth", 0.0))
 		"Profetica": return "PRESSAGIO" if int(aura_state.get("prophecy_uid", -1)) >= 0 else "ORACULO"
 		"Sanguinaria": return "CARNIFICINA" if bool(aura_state.get("blood_burst", false)) else "SEDE %d" % int(aura_state.get("blood_thirst", 0.0))
+		"Crepuscular":
+			if float(aura_state.get("crepuscular_eclipse", 0.0)) > 0.0:
+				return "ECLIPSE %.1fs" % float(aura_state.get("crepuscular_eclipse", 0.0))
+			return "%s %d%%" % [String(aura_state.get("crepuscular_phase", "alvorada")).to_upper(), int(aura_state.get("crepuscular_charge", 0.0))]
+		"Peregrino":
+			if float(aura_state.get("peregrino_journey", 0.0)) > 0.0:
+				return "JORNADA %.1fs" % float(aura_state.get("peregrino_journey", 0.0))
+			return "%d/%d PASSOS" % [int(aura_state.get("peregrino_steps", 0)), AuraSystem._peregrino_steps_required(aura_state)]
+		"Equilibrista":
+			if float(aura_state.get("equilibrista_state", 0.0)) > 0.0:
+				return "EQUILIBRIO"
+			if float(aura_state.get("equilibrista_debt", 0.0)) > 0.0:
+				return "DIVIDA %d" % int(aura_state.get("equilibrista_debt", 0.0))
+			return "%d%%" % int(aura_state.get("equilibrista_balance", 0.0))
+		"Avarento":
+			return "COFRE" if float(aura_state.get("avarento_cofre", 0.0)) > 0.0 else "LASTRO %.1f" % float(aura_state.get("avarento_lastro", 0.0))
+		"Oportunista":
+			return "ARMADO" if bool(aura_state.get("oportunista_armed", false)) else "%d/%d ABERTURAS" % [int(aura_state.get("oportunista_charges", 0)), AuraSystem._oportunista_required(aura_state)]
 	return ""
 
 
@@ -26576,6 +27282,9 @@ func _draw_shop(viewport: Vector2) -> void:
 		# Direct stat chips
 		_draw_card_stat_chips(_card_stat_chips(String(sel_card["name"])), Vector2(sep_x + 24, panel_y + 56), (panel_x + panel_w - sep_x) - 48, Color(sel_card["color"]), _readable_text_size(13))
 
+		var projection_lines := _card_projection_lines(sel_card)
+		_draw_wrapped("\n".join(projection_lines), Rect2(sep_x + 24, panel_y + 98, (panel_x + panel_w - sep_x) - 196, 54), _readable_text_size(11), Color(0.84, 0.92, 0.96))
+
 		# Owned count
 		var owned_count = _card_count(sel_card)
 		var owned_text = "POSSUIDO NO DECK: %d" % owned_count
@@ -26701,7 +27410,7 @@ func _draw_pause_deck(viewport: Vector2) -> void:
 			_draw_card_surface(owned[i]["card"], rect, selected, alpha, int(owned[i]["count"]))
 
 		var selected_entry: Dictionary = owned[deck_selected]
-		var detail = Rect2(panel.position.x + 26.0, panel.end.y - 154.0, panel.size.x - 52.0, 84.0)
+		var detail = Rect2(panel.position.x + 26.0, panel.end.y - 190.0, panel.size.x - 52.0, 126.0)
 		_draw_card_detail_panel(selected_entry["card"], detail, int(selected_entry["count"]), true)
 
 	var back_rect = Rect2(panel.get_center().x - 112.0, panel.end.y - 50.0, 224.0, 36.0)
@@ -26894,8 +27603,10 @@ func _draw_card_detail_panel(card: Dictionary, rect: Rect2, owned_count := 0, co
 	_draw_card_stat_chips(_card_stat_chips(String(card["name"])), rect.position + Vector2(rect.size.x * 0.42, 17.0), rect.size.x * 0.54, color, 12)
 	var desc_y = 60.0 if compact else 72.0
 	var desc_rect = Rect2(rect.position + Vector2(18, desc_y), Vector2(rect.size.x - 36, max(24.0, rect.size.y - desc_y - 10.0)))
-	if not compact:
-		_draw_wrapped(String(card["desc"]), desc_rect, 13, Color(0.84, 0.88, 0.92))
+	var detail_lines := [String(card["desc"])]
+	for line in _card_projection_lines(card):
+		detail_lines.append(String(line))
+	_draw_wrapped("\n".join(detail_lines), desc_rect, 11 if compact else 13, Color(0.84, 0.88, 0.92))
 
 
 func _shop_round_button_radius(viewport: Vector2) -> float:
@@ -29123,6 +29834,7 @@ func _reset_manifest_selection_stage() -> void:
 	manifest_preview_open = false
 	manifest_preview_time = 0.0
 	manifest_preview_kind = "atk"
+	manifest_details_open = false
 	manifest_preview_consumed_touch_index = -999
 	manifest_preview_drag_touch_index = -999
 	manifest_preview_drag_moved = false
@@ -29140,6 +29852,7 @@ func _start_spectrum_reveal() -> void:
 	manifest_transition_elapsed = 0.0
 	manifest_transition_seed = Time.get_ticks_msec() + selected_manifestation * 131 + selected_aura * 313
 	manifest_preview_open = false
+	manifest_details_open = false
 	manifest_preview_consumed_touch_index = -999
 	manifest_preview_drag_touch_index = -999
 	manifest_preview_drag_moved = false
@@ -29240,6 +29953,10 @@ func _set_selected_aura(index: int, vibrate := true) -> void:
 
 
 func _start_manifest_drag(index: int, pos: Vector2, viewport: Vector2) -> void:
+	if manifest_details_open:
+		_handle_manifest_details_overlay_touch(pos)
+		manifest_preview_consumed_touch_index = index
+		return
 	if manifest_preview_open:
 		if _handle_manifest_preview_overlay_touch(pos):
 			manifest_preview_consumed_touch_index = index
@@ -29412,8 +30129,23 @@ func _handle_manifest_preview_overlay_touch(pos: Vector2) -> bool:
 	return false
 
 
+func _handle_manifest_details_overlay_touch(pos: Vector2) -> bool:
+	if buttons.has("manifest_details_close") and buttons["manifest_details_close"].has_point(pos):
+		manifest_details_open = false
+		_vibrate(22, 0.12)
+		return true
+	if buttons.has("manifest_details_popup") and buttons["manifest_details_popup"].has_point(pos):
+		return true
+	manifest_details_open = false
+	_vibrate(22, 0.12)
+	return true
+
+
 func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void:
 	if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
+		return
+	if manifest_details_open:
+		_handle_manifest_details_overlay_touch(pos)
 		return
 	if manifest_preview_open:
 		if _handle_manifest_preview_overlay_touch(pos):
@@ -29431,6 +30163,13 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void:
 		manifest_preview_kind = "atk"
 		_vibrate(42, 0.18)
 		_play_sfx("ui_manifest_switch", 0.01, 0.38, 1.12)
+		return
+	if buttons.has("manifest_details") and buttons["manifest_details"].has_point(pos):
+		manifest_details_open = true
+		manifest_preview_open = false
+		manifest_preview_time = 0.0
+		_vibrate(42, 0.18)
+		_play_sfx("ui_manifest_switch", 0.01, 0.34, 0.98)
 		return
 	if buttons.has("aura_prev") and buttons["aura_prev"].has_point(pos):
 		_set_selected_aura(selected_aura - 1, true)
@@ -29767,6 +30506,8 @@ func _manifestation_base_damage() -> float:
 			return PLAYER_BASE_DAMAGE * 0.76
 		"acorrentada":
 			return PLAYER_BASE_DAMAGE * 0.86
+		"eclipsada":
+			return PLAYER_BASE_DAMAGE * 0.84
 	return PLAYER_BASE_DAMAGE
 
 
@@ -29790,6 +30531,8 @@ func _manifestation_attack_interval() -> float:
 			return 0.60
 		"acorrentada":
 			return 0.76
+		"eclipsada":
+			return 0.58
 	return PLAYER_BASE_ATTACK_INTERVAL
 
 
@@ -30166,6 +30909,51 @@ func _aura_details(name: String) -> Dictionary:
 				"traco": "Foco constante e pico contra alvos resistentes.",
 				"risco": "Trocar muito de alvo derruba Feridas e Sede."
 			}
+		"Crepuscular":
+			return {
+				"funcao": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Se carregar a fase ate 100%, ativa Eclipse.",
+				"disparo": "Ocaso carrega com dano direto e abates; Alvorada carrega com cura real e tempo sem dano.",
+				"habilidade": "Eclipse",
+				"desc_hab": "Combina parte da defesa da Alvorada com parte do dano e cadencia do Ocaso.",
+				"traco": "Controle de transicao, leitura de risco e janela perfeita de teleporte.",
+				"risco": "Tomar dano reduz carga; usar TP fora da janela nao acelera o Eclipse."
+			}
+		"Peregrino":
+			return {
+				"funcao": "Explora setores diferentes da arena para iniciar Jornada e marcar um Refugio.",
+				"disparo": "Cada setor novo concede Passos; repetir os ultimos setores nao conta.",
+				"habilidade": "Jornada",
+				"desc_hab": "Aumenta velocidade, coleta e regeneracao por vida perdida ate voltar ao Refugio.",
+				"traco": "Mobilidade planejada, rotas e reposicionamento constante.",
+				"risco": "Ficar parado ou pingar entre os mesmos setores perde Passos."
+			}
+		"Equilibrista":
+			return {
+				"funcao": "Fica mais forte mantendo a vida entre 35% e 80%.",
+				"disparo": "Dentro da faixa, carrega Equilibrio; fora dela, a barra cai.",
+				"habilidade": "Equilibrio",
+				"desc_hab": "Concede dano e reducao de dano. Overheal acima de 80% vira escudo temporario.",
+				"traco": "Jogo fino de vida, risco controlado e sobrevivencia ativa.",
+				"risco": "Dano que cruza 35% vira Divida e pode matar se ignorada."
+			}
+		"Avarento":
+			return {
+				"funcao": "Pontos guardados viram Lastro: defesa e resistencia a impacto em troca de peso.",
+				"disparo": "Quanto mais pontos em relacao ao custo da loja, maior o Lastro.",
+				"habilidade": "Rompimento do Cofre",
+				"desc_hab": "Ao comprar carta, suspende o peso, concede velocidade e escudo.",
+				"traco": "Economia defensiva, timing de compra e explosao curta apos gastar.",
+				"risco": "Guardar muito pesa a movimentacao; fragmentos de TP nao dao pontos."
+			}
+		"Oportunista":
+			return {
+				"funcao": "Procura Aberturas durante preparacao, recuperacao, stun ou janela de ataque inimiga.",
+				"disparo": "Acertos diretos em Abertura carregam o proximo Golpe de Oportunidade.",
+				"habilidade": "Golpe de Oportunidade",
+				"desc_hab": "O proximo dano direto recebe bonus, atrasa o inimigo e recupera parte de Q ou E.",
+				"traco": "Precisao, leitura de telegraph e punicao de ataques inimigos.",
+				"risco": "Dano de cartas, areas persistentes e aliados nao carregam Aberturas."
+			}
 	return {
 		"funcao": "Estado espectral em leitura.",
 		"disparo": "Gatilho ainda instavel.",
@@ -30299,6 +31087,15 @@ func _manifestation_details(key: String) -> Dictionary:
 					{"label": "E", "text": "Raio de 420px, preparo curto e dano por Elo. Em boss aplica Rachadura para reforcar o proximo golpe 3."},
 					{"label": "TP", "text": "Troca de Elo deixa rastro de corrente por 1,2s, aplica 1 Elo por alvo e nao consome Sobretensao."}
 				]
+			}
+		"eclipsada":
+			return {
+				"funcao": "Pressao hibrida entre luz e sombra. Marca alvos e recompensa trocar posicionamento antes do golpe forte.",
+				"disparo": "ATK - Estilhaco Eclipsado: disparo medio que alterna brilho e penumbra, mantendo boa cadencia.",
+				"habilidade": "Q - Fenda Penumbral",
+				"desc_hab": "Abre uma fenda curta na direcao da mira, causando dano em linha e preparando alvos para efeitos de evolucao.",
+				"traco": "E - Coroa de Eclipse: cria uma zona de contraste ao redor da Geovana para punir inimigos proximos.",
+				"risco": "TP: deixa um rastro eclipsado entre origem e destino. Funciona melhor quando usado para atravessar a horda, nao para fugir em linha reta."
 			}
 	return {
 		"funcao": "Forma em leitura.",

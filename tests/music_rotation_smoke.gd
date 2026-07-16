@@ -24,9 +24,17 @@ func _run() -> void:
 	_check(game.audio_streams.has("Boss1-Music-3.mp3"), "missing boss1 playlist alternate")
 	_check(game.audio_streams.has("Boss2-Music-4.mp3"), "missing converted boss2 playlist track")
 	_check(game.audio_streams.has("Boss3-Music-1.mp3"), "missing boss3 playlist track")
+	for track in ["Fases1.mp3", "Fases2.mp3", "Fases3.mp3", "Fases4.mp3", "Fases5.mp3", "Fase4-4.mp3"]:
+		_check(game.audio_streams.has(track), "missing extra phase track: " + track)
 	for phase in range(1, 4):
 		for track in game._boss_music_tracks(phase):
 			_check(game.audio_streams.has(track), "missing boss playlist stream: " + String(track))
+	for phase in range(1, 6):
+		for track in game._shared_phase_music_tracks():
+			_check(track in game._phase_music_tracks(phase), "shared phase track not available in phase %d: %s" % [phase, track])
+	_check("Fase4-4.mp3" in game._phase_music_tracks(4), "Fase4-4 is not exclusive to phase 4 playlist")
+	_check(not ("Fase4-4.mp3" in game._phase_music_tracks(1)), "Fase4-4 leaked into phase 1")
+	_check(not ("Fase4-4.mp3" in game._phase_music_tracks(5)), "Fase4-4 leaked into phase 5")
 	_check(game.audio_streams.has("player_shot"), "missing player shot recording")
 	_check(game.audio_streams.has("atk_lacerante_1") and game.audio_streams.has("lacerante_kill"), "missing Lacerante recordings")
 	_check(game.audio_streams["player_shot"] is AudioStreamMP3, "player shot is not the root MP3 recording")
@@ -57,11 +65,11 @@ func _run() -> void:
 	var heard = {}
 	for iteration in range(12):
 		game._play_phase1_music_random()
-		_check(game.current_music in ["Fase1.mp3", "Fase1-2.mp3", "Fase1-4.mp3"], "unexpected phase1 track")
+		_check(game.current_music in game._phase_music_tracks(1), "unexpected phase1 track")
 		heard[game.current_music] = true
 		game._on_music_finished()
 		_check(game.music_player.playing, "music did not restart after finished")
-	_check(heard.has("Fase1.mp3") and heard.has("Fase1-2.mp3"), "phase1 rotation did not use the main alternates")
+	_check(heard.size() >= 2, "phase1 rotation did not vary with the expanded playlist")
 
 	game._play_music("Fase1.mp3")
 	game.music_pause_fade_mode = ""

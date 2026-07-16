@@ -1,7 +1,7 @@
 class_name AuraSystem
 extends RefCounted
 
-const AURA_NAMES := ["Racional", "Impulsiva", "Devota", "Vanguarda", "Insana", "Voraz", "Nula", "Abissal", "Profetica", "Sanguinaria"]
+const AURA_NAMES := ["Racional", "Impulsiva", "Devota", "Vanguarda", "Insana", "Voraz", "Nula", "Abissal", "Profetica", "Sanguinaria", "Crepuscular", "Peregrino", "Equilibrista", "Avarento", "Oportunista"]
 
 const COLORS := {
 	"Racional": Color(0.0, 0.71, 1.0),
@@ -14,6 +14,11 @@ const COLORS := {
 	"Abissal": Color(0.31, 0.31, 0.75),
 	"Profetica": Color(1.0, 0.92, 0.43),
 	"Sanguinaria": Color(1.0, 0.18, 0.25),
+	"Crepuscular": Color(0.98, 0.58, 1.0),
+	"Peregrino": Color(0.30, 0.92, 0.74),
+	"Equilibrista": Color(0.92, 0.88, 0.50),
+	"Avarento": Color(1.0, 0.72, 0.18),
+	"Oportunista": Color(1.0, 0.86, 0.24),
 }
 
 const RATIONAL_STILL_TIME := 4.5
@@ -26,6 +31,10 @@ const VORACIOUS_BASE_MAX := 100.0
 const INSANE_ECHO_DELAY := 1.0
 const INSANE_ECHO_BASE := 4
 const NULL_IDLE_TIME := 2.3
+const CREPUSCULAR_PHASE_TIME := 8.0
+const PEREGRINO_SECTOR_SIZE := 300.0
+const PEREGRINO_REFUGE_RADIUS := 85.0
+const OPPORTUNITY_ENEMY_COOLDOWN := 0.75
 
 static func create(aura: String, level := 1) -> Dictionary:
 	return {
@@ -73,7 +82,159 @@ static func create(aura: String, level := 1) -> Dictionary:
 		"blood_wounds": 0,
 		"blood_burst": false,
 		"blood_slow": 0.0,
+		"crepuscular_phase": "alvorada",
+		"crepuscular_phase_timer": CREPUSCULAR_PHASE_TIME,
+		"crepuscular_charge": 0.0,
+		"crepuscular_eclipse": 0.0,
+		"crepuscular_after_eclipse": "ocaso",
+		"crepuscular_no_damage": 0.0,
+		"peregrino_sector": Vector2i(999999, 999999),
+		"peregrino_recent": [],
+		"peregrino_steps": 0,
+		"peregrino_journey": 0.0,
+		"peregrino_refuge_pos": Vector2.ZERO,
+		"peregrino_refuge_active": false,
+		"peregrino_sequence_start": Vector2.ZERO,
+		"peregrino_idle": 0.0,
+		"peregrino_decay": 0.0,
+		"peregrino_trails": [],
+		"peregrino_trail_speed": 0.0,
+		"equilibrista_balance": 0.0,
+		"equilibrista_state": 0.0,
+		"equilibrista_debt": 0.0,
+		"equilibrista_debt_timer": 0.0,
+		"equilibrista_shield": 0.0,
+		"equilibrista_lock": 0.0,
+		"avarento_lastro": 0.0,
+		"avarento_cofre": 0.0,
+		"avarento_shield": 0.0,
+		"avarento_weight_suspension": 0.0,
+		"avarento_fragments": [],
+		"avarento_cache_score": -999999,
+		"avarento_cache_cost": -1,
+		"oportunista_charges": 0,
+		"oportunista_armed": false,
+		"oportunista_decay": 0.0,
+		"oportunista_enemy_cd": {},
 	}
+
+static func _rank(state: Dictionary) -> int:
+	return max(1, int(state.get("level", 1)))
+
+static func _is_direct_category(category: String) -> bool:
+	return category in ["basic_attack", "skill_q", "skill_e", "teleport", "manifestation_secondary"]
+
+static func _crepuscular_is_eclipse(state: Dictionary) -> bool:
+	return float(state.get("crepuscular_eclipse", 0.0)) > 0.0
+
+static func _crepuscular_phase_bonus_factor(state: Dictionary, phase_name: String) -> float:
+	if _crepuscular_is_eclipse(state):
+		return 0.65
+	return 1.0 if String(state.get("crepuscular_phase", "")) == phase_name else 0.0
+
+static func _crepuscular_defense_ratio(state: Dictionary) -> float:
+	return minf(0.35, 0.10 + 0.025 * _rank(state)) * _crepuscular_phase_bonus_factor(state, "alvorada")
+
+static func _crepuscular_damage_bonus(state: Dictionary) -> float:
+	return (0.10 + 0.035 * _rank(state)) * _crepuscular_phase_bonus_factor(state, "ocaso")
+
+static func _crepuscular_attack_reduction(state: Dictionary) -> float:
+	return minf(0.25, 0.04 + 0.02 * _rank(state)) * _crepuscular_phase_bonus_factor(state, "ocaso")
+
+static func _crepuscular_perfect_window(state: Dictionary) -> bool:
+	if _crepuscular_is_eclipse(state):
+		return false
+	var window := 0.70 + 0.08 * _rank(state)
+	return float(state.get("crepuscular_phase_timer", 0.0)) <= window
+
+static func _crepuscular_gain_charge(state: Dictionary, amount: float) -> void:
+	state["crepuscular_charge"] = clampf(float(state.get("crepuscular_charge", 0.0)) + amount, 0.0, 100.0)
+
+static func _crepuscular_activate_eclipse(state: Dictionary, next_phase: String) -> Array:
+	state["crepuscular_charge"] = 0.0
+	state["crepuscular_eclipse"] = 2.7 + 0.30 * _rank(state)
+	state["crepuscular_after_eclipse"] = next_phase
+	return [{"type": "text", "text": "ECLIPSE"}]
+
+static func _crepuscular_toggle_phase(state: Dictionary) -> void:
+	var next_phase := "ocaso" if String(state.get("crepuscular_phase", "alvorada")) == "alvorada" else "alvorada"
+	state["crepuscular_phase"] = next_phase
+	state["crepuscular_phase_timer"] = CREPUSCULAR_PHASE_TIME
+	state["crepuscular_no_damage"] = 0.0
+
+static func _peregrino_steps_required(state: Dictionary) -> int:
+	return max(3, 5 - int(floor(float(_rank(state) - 1) / 2.0)))
+
+static func _peregrino_sector_for(pos: Vector2) -> Vector2i:
+	return Vector2i(int(floor(pos.x / PEREGRINO_SECTOR_SIZE)), int(floor(pos.y / PEREGRINO_SECTOR_SIZE)))
+
+static func _peregrino_grant_step(state: Dictionary, sector: Vector2i, pos: Vector2, amount := 1) -> Array:
+	var events: Array = []
+	if float(state.get("peregrino_journey", 0.0)) > 0.0:
+		return events
+	var recent: Array = state.get("peregrino_recent", [])
+	if recent.has(sector):
+		return events
+	if int(state.get("peregrino_steps", 0)) <= 0:
+		state["peregrino_sequence_start"] = pos
+	state["peregrino_sector"] = sector
+	recent.append(sector)
+	while recent.size() > 3:
+		recent.pop_front()
+	state["peregrino_recent"] = recent
+	state["peregrino_steps"] = mini(_peregrino_steps_required(state), int(state.get("peregrino_steps", 0)) + amount)
+	state["peregrino_idle"] = 0.0
+	state["peregrino_decay"] = 0.0
+	if int(state["peregrino_steps"]) >= _peregrino_steps_required(state):
+		state["peregrino_steps"] = 0
+		state["peregrino_journey"] = 5.0 + 0.55 * _rank(state)
+		state["peregrino_refuge_pos"] = Vector2(state.get("peregrino_sequence_start", pos))
+		state["peregrino_refuge_active"] = true
+		events.append({"type": "text", "text": "JORNADA"})
+	return events
+
+static func _equilibrista_shield_cap(state: Dictionary, hp_max: float) -> float:
+	return (0.15 + 0.02 * _rank(state)) * hp_max
+
+static func _avarento_recalculate(state: Dictionary, score: int, card_cost: int) -> void:
+	if int(state.get("avarento_cache_score", -999999)) == score and int(state.get("avarento_cache_cost", -1)) == card_cost:
+		return
+	state["avarento_cache_score"] = score
+	state["avarento_cache_cost"] = card_cost
+	state["avarento_lastro"] = log(1.0 + float(max(0, score)) / max(1.0, float(max(1, card_cost)))) / log(2.0)
+
+static func _oportunista_required(state: Dictionary) -> int:
+	return max(2, 4 - int(floor(float(_rank(state) - 1) / 2.0)))
+
+static func _enemy_in_opening(enemy: Dictionary) -> bool:
+	if float(enemy.get("stun", 0.0)) > 0.0:
+		return true
+	if float(enemy.get("prepare", 0.0)) > 0.0 or float(enemy.get("nexus_casting", 0.0)) > 0.0:
+		return true
+	if bool(enemy.get("sprint_active", false)) or bool(enemy.get("alerted", false)):
+		return true
+	var shoot_cd := float(enemy.get("shoot_cd", 99.0))
+	var throw_cd := float(enemy.get("throw_cd", 99.0))
+	if shoot_cd <= 0.28 or throw_cd <= 0.28:
+		return true
+	return String(enemy.get("state", "")) in ["recovering", "preparing", "casting", "recoil"]
+
+static func _oportunista_register_opening(state: Dictionary, enemy: Dictionary, events: Array) -> void:
+	if String(state.get("name", "")) != "Oportunista" or bool(state.get("oportunista_armed", false)):
+		return
+	var uid := str(enemy.get("uid", "boss"))
+	var cds: Dictionary = state.get("oportunista_enemy_cd", {})
+	if float(cds.get(uid, 0.0)) > 0.0:
+		return
+	cds[uid] = OPPORTUNITY_ENEMY_COOLDOWN
+	state["oportunista_enemy_cd"] = cds
+	state["oportunista_charges"] = mini(_oportunista_required(state), int(state.get("oportunista_charges", 0)) + 1)
+	state["oportunista_decay"] = 0.0
+	events.append({"type": "text", "text": "ABERTURA"})
+	if int(state["oportunista_charges"]) >= _oportunista_required(state):
+		state["oportunista_charges"] = _oportunista_required(state)
+		state["oportunista_armed"] = true
+		events.append({"type": "text", "text": "OPORTUNIDADE ARMADA"})
 
 static func update(state: Dictionary, delta: float, context: Dictionary) -> Array:
 	var events: Array = []
@@ -86,6 +247,103 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 		state[key] = maxf(0.0, float(state.get(key, 0.0)) - delta)
 
 	match name:
+		"Crepuscular":
+			if float(state.get("crepuscular_eclipse", 0.0)) > 0.0:
+				var before := float(state["crepuscular_eclipse"])
+				state["crepuscular_eclipse"] = maxf(0.0, before - delta)
+				if before > 0.0 and float(state["crepuscular_eclipse"]) <= 0.0:
+					state["crepuscular_phase"] = String(state.get("crepuscular_after_eclipse", "alvorada"))
+					state["crepuscular_phase_timer"] = CREPUSCULAR_PHASE_TIME
+					state["crepuscular_no_damage"] = 0.0
+			else:
+				state["crepuscular_phase_timer"] = maxf(0.0, float(state.get("crepuscular_phase_timer", CREPUSCULAR_PHASE_TIME)) - delta)
+				if String(state.get("crepuscular_phase", "alvorada")) == "alvorada":
+					state["crepuscular_no_damage"] = float(state.get("crepuscular_no_damage", 0.0)) + delta
+					if float(state["crepuscular_no_damage"]) > 1.5:
+						_crepuscular_gain_charge(state, 8.0 * delta)
+				if float(state["crepuscular_phase_timer"]) <= 0.0:
+					var next_phase := "ocaso" if String(state.get("crepuscular_phase", "alvorada")) == "alvorada" else "alvorada"
+					if float(state.get("crepuscular_charge", 0.0)) >= 100.0:
+						events.append_array(_crepuscular_activate_eclipse(state, next_phase))
+					else:
+						_crepuscular_toggle_phase(state)
+		"Peregrino":
+			state["peregrino_trail_speed"] = maxf(0.0, float(state.get("peregrino_trail_speed", 0.0)) - delta)
+			var trails: Array = state.get("peregrino_trails", [])
+			for trail in trails:
+				trail["life"] = float(trail.get("life", 0.0)) - delta
+			state["peregrino_trails"] = trails.filter(func(t): return float(t.get("life", 0.0)) > 0.0)
+			var sector := _peregrino_sector_for(player_pos)
+			if sector != Vector2i(state.get("peregrino_sector", Vector2i(999999, 999999))):
+				events.append_array(_peregrino_grant_step(state, sector, player_pos, 1))
+			elif float(state.get("peregrino_journey", 0.0)) <= 0.0:
+				state["peregrino_idle"] = float(state.get("peregrino_idle", 0.0)) + delta
+				if float(state["peregrino_idle"]) >= 4.0:
+					state["peregrino_decay"] = float(state.get("peregrino_decay", 0.0)) + delta
+					if float(state["peregrino_decay"]) >= 2.0:
+						state["peregrino_decay"] = 0.0
+						state["peregrino_steps"] = maxi(0, int(state.get("peregrino_steps", 0)) - 1)
+			if float(state.get("peregrino_journey", 0.0)) > 0.0:
+				state["peregrino_journey"] = maxf(0.0, float(state["peregrino_journey"]) - delta)
+				events.append({"type": "heal_missing_ratio", "ratio": (0.0020 + 0.0005 * level) * delta})
+				if bool(state.get("peregrino_refuge_active", false)) and player_pos.distance_to(Vector2(state.get("peregrino_refuge_pos", player_pos))) <= PEREGRINO_REFUGE_RADIUS:
+					state["peregrino_journey"] = 0.0
+					state["peregrino_refuge_active"] = false
+					events.append({"type": "heal_missing_ratio", "ratio": 0.04 + 0.01 * level, "text": "REFUGIO"})
+				elif float(state["peregrino_journey"]) <= 0.0:
+					state["peregrino_refuge_active"] = false
+		"Equilibrista":
+			state["equilibrista_lock"] = maxf(0.0, float(state.get("equilibrista_lock", 0.0)) - delta)
+			var hp := float(context.get("hp", 0.0))
+			var hp_max := maxf(1.0, float(context.get("hp_max", 1.0)))
+			var hp_ratio := hp / hp_max
+			if float(state.get("equilibrista_state", 0.0)) > 0.0:
+				state["equilibrista_state"] = maxf(0.0, float(state["equilibrista_state"]) - delta)
+			elif float(state.get("equilibrista_lock", 0.0)) <= 0.0:
+				if hp_ratio >= 0.35 and hp_ratio <= 0.80:
+					state["equilibrista_balance"] = minf(100.0, float(state.get("equilibrista_balance", 0.0)) + (14.0 + 2.0 * level) * delta)
+				else:
+					state["equilibrista_balance"] = maxf(0.0, float(state.get("equilibrista_balance", 0.0)) - maxf(5.0, 13.0 - level) * delta)
+				if float(state["equilibrista_balance"]) >= 100.0:
+					state["equilibrista_balance"] = 0.0
+					state["equilibrista_state"] = 5.5 + 0.50 * level
+					events.append({"type": "text", "text": "EQUILIBRIO"})
+			if float(state.get("equilibrista_debt", 0.0)) > 0.0:
+				state["equilibrista_debt_timer"] = float(state.get("equilibrista_debt_timer", 0.0)) - delta
+				if float(state["equilibrista_debt_timer"]) <= 0.0:
+					var chunk: float = minf(float(state["equilibrista_debt"]), hp_max * 0.045)
+					state["equilibrista_debt"] = maxf(0.0, float(state["equilibrista_debt"]) - chunk)
+					state["equilibrista_debt_timer"] = 0.65
+					events.append({"type": "player_damage_flat", "amount": chunk, "source": "divida_equilibrista"})
+		"Avarento":
+			_avarento_recalculate(state, int(context.get("score", 0)), int(context.get("card_cost", 1)))
+			state["avarento_cofre"] = maxf(0.0, float(state.get("avarento_cofre", 0.0)) - delta)
+			state["avarento_weight_suspension"] = maxf(0.0, float(state.get("avarento_weight_suspension", 0.0)) - delta)
+			if float(state.get("avarento_cofre", 0.0)) <= 0.0:
+				state["avarento_shield"] = 0.0
+			var fragments: Array = state.get("avarento_fragments", [])
+			var kept_fragments: Array = []
+			for frag in fragments:
+				frag["life"] = float(frag.get("life", 0.0)) - delta
+				if float(frag["life"]) <= 0.0:
+					continue
+				if player_pos.distance_to(Vector2(frag.get("pos", player_pos))) <= 48.0:
+					state["avarento_shield"] = maxf(float(state.get("avarento_shield", 0.0)), maxf(6.0, float(context.get("hp_max", 100.0)) * 0.035))
+					state["avarento_weight_suspension"] = maxf(float(state.get("avarento_weight_suspension", 0.0)), 0.35)
+					events.append({"type": "text", "text": "LASTRO"})
+				else:
+					kept_fragments.append(frag)
+			state["avarento_fragments"] = kept_fragments
+		"Oportunista":
+			var cds: Dictionary = state.get("oportunista_enemy_cd", {})
+			for uid in cds.keys():
+				cds[uid] = maxf(0.0, float(cds[uid]) - delta)
+			state["oportunista_enemy_cd"] = cds
+			if not bool(state.get("oportunista_armed", false)):
+				state["oportunista_decay"] = float(state.get("oportunista_decay", 0.0)) + delta
+				if float(state["oportunista_decay"]) >= 12.0 and int(state.get("oportunista_charges", 0)) > 0:
+					state["oportunista_decay"] = 8.0
+					state["oportunista_charges"] = maxi(0, int(state["oportunista_charges"]) - 1)
 		"Racional":
 			var moved := player_pos.distance_to(Vector2(state.get("last_pos", player_pos)))
 			state["still"] = float(state.get("still", 0.0)) + delta if moved <= 1.25 else 0.0
@@ -190,8 +448,29 @@ static func on_attack(state: Dictionary, projectile: Dictionary) -> Array:
 
 static func on_enemy_hit(state: Dictionary, enemy: Dictionary, projectile: Dictionary, damage: float) -> Dictionary:
 	var result := {"damage": damage, "events": []}
-	var level := int(state.get("level", 0))
+	var level := _rank(state)
+	var category := String(projectile.get("source_category", "basic_attack"))
+	var direct_hit := _is_direct_category(category) and not String(projectile.get("kind", "")).begins_with("aura_")
 	match String(state.get("name", "")):
+		"Crepuscular":
+			if direct_hit and String(state.get("crepuscular_phase", "")) == "ocaso" and not _crepuscular_is_eclipse(state):
+				var base_damage := maxf(1.0, float(projectile.get("player_damage", damage)))
+				_crepuscular_gain_charge(state, clampf(damage / base_damage * 4.0, 1.0, 12.0))
+		"Oportunista":
+			if direct_hit:
+				var was_armed := bool(state.get("oportunista_armed", false))
+				if _enemy_in_opening(enemy):
+					_oportunista_register_opening(state, enemy, result["events"])
+				if was_armed:
+					result["damage"] = float(result["damage"]) + float(projectile.get("player_damage", damage)) * (0.50 + 0.12 * level)
+					state["oportunista_armed"] = false
+					state["oportunista_charges"] = 0
+					var delay := 0.28 + 0.08 * level
+					enemy["shoot_cd"] = float(enemy.get("shoot_cd", 0.0)) + delay
+					enemy["throw_cd"] = float(enemy.get("throw_cd", 0.0)) + delay
+					enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), delay * (0.5 if bool(enemy.get("elite", false)) else 1.0))
+					result["events"].append({"type": "cooldown_recovery", "amount": 0.50 + 0.15 * level, "max_ratio": 0.30})
+					result["events"].append({"type": "text", "text": "GOLPE DE OPORTUNIDADE"})
 		"Nula":
 			if bool(projectile.get("aura_null", false)):
 				enemy["aura_null"] = 4.2 + level * 0.35
@@ -214,8 +493,11 @@ static func on_enemy_hit(state: Dictionary, enemy: Dictionary, projectile: Dicti
 
 static func on_enemy_killed(state: Dictionary, enemy: Dictionary) -> Array:
 	var events: Array = []
-	var level := int(state.get("level", 0))
+	var level := _rank(state)
 	match String(state.get("name", "")):
+		"Crepuscular":
+			if String(state.get("crepuscular_phase", "")) == "ocaso" and not _crepuscular_is_eclipse(state):
+				_crepuscular_gain_charge(state, 15.0 if bool(enemy.get("elite", false)) or String(enemy.get("type", "")).find("boss") >= 0 else 8.0)
 		"Impulsiva":
 			state["impulsive_kills"] = int(state["impulsive_kills"]) + 1
 			while int(state["impulsive_kills"]) >= IMPULSIVE_KILLS:
@@ -251,26 +533,66 @@ static func on_enemy_killed(state: Dictionary, enemy: Dictionary) -> Array:
 
 
 static func on_boss_hit(state: Dictionary, boss_pos: Vector2, damage: float) -> Array:
-	if String(state.get("name", "")) != "Voraz" or damage <= 0.0:
+	if damage <= 0.0:
+		return []
+	if String(state.get("name", "")) == "Crepuscular" and String(state.get("crepuscular_phase", "")) == "ocaso" and not _crepuscular_is_eclipse(state):
+		_crepuscular_gain_charge(state, clampf(sqrt(damage) * 0.45, 2.0, 15.0))
+	if String(state.get("name", "")) != "Voraz":
 		return []
 	if float(state.get("voracious_boss_feed_cd", 0.0)) > 0.0:
 		return []
-	var level := int(state.get("level", 0))
-	var value := clampf(8.0 + sqrt(damage) * 0.32 + level * 0.8, 9.0, 18.0)
+	var level := _rank(state)
+	var value := clampf(3.2 + sqrt(damage) * 0.12 + level * 0.32, 4.0, 8.5)
 	var drops: Array = state.get("voracious_drops", [])
 	drops.append({
 		"pos": boss_pos + Vector2.from_angle(randf_range(0.0, TAU)) * randf_range(18.0, 54.0),
-		"life": 5.0,
+		"life": 4.2,
 		"value": value,
 		"boss_particle": true,
 	})
 	state["voracious_drops"] = drops
-	state["voracious_boss_feed_cd"] = maxf(0.16, 0.30 - level * 0.018)
+	state["voracious_boss_feed_cd"] = maxf(0.85, 1.45 - level * 0.06)
 	return []
 
 static func on_player_hit(state: Dictionary, amount: float, hp: float, hp_max: float) -> Dictionary:
 	var result := {"blocked": false, "amount": amount, "heal": 0.0, "events": []}
+	var level := _rank(state)
 	match String(state.get("name", "")):
+		"Crepuscular":
+			state["crepuscular_no_damage"] = 0.0
+			state["crepuscular_charge"] = maxf(0.0, float(state.get("crepuscular_charge", 0.0)) - 18.0)
+			var reduction := _crepuscular_defense_ratio(state)
+			if reduction > 0.0:
+				result["amount"] = amount * (1.0 - reduction)
+		"Equilibrista":
+			var shield := float(state.get("equilibrista_shield", 0.0))
+			if shield > 0.0:
+				var absorbed := minf(shield, amount)
+				state["equilibrista_shield"] = shield - absorbed
+				result["amount"] = maxf(0.0, amount - absorbed)
+				if absorbed > 0.0:
+					result["events"].append({"type": "text", "text": "ESCUDO %.0f" % absorbed})
+			var incoming := float(result.get("amount", amount))
+			var before_ratio := hp / maxf(1.0, hp_max)
+			var after_ratio := (hp - incoming) / maxf(1.0, hp_max)
+			if before_ratio > 0.35 and after_ratio < 0.35 and float(state.get("equilibrista_debt", 0.0)) <= 0.0:
+				var allowed := maxf(0.0, hp - hp_max * 0.35)
+				var debt := maxf(0.0, incoming - allowed)
+				result["amount"] = allowed
+				state["equilibrista_debt"] = debt
+				state["equilibrista_debt_timer"] = 0.65
+				state["equilibrista_lock"] = 1.0
+				result["events"].append({"type": "text", "text": "DIVIDA"})
+		"Avarento":
+			var av_shield := float(state.get("avarento_shield", 0.0))
+			if av_shield > 0.0:
+				var av_absorb := minf(av_shield, float(result.get("amount", amount)))
+				state["avarento_shield"] = av_shield - av_absorb
+				result["amount"] = maxf(0.0, float(result.get("amount", amount)) - av_absorb)
+			var lastro := float(state.get("avarento_lastro", 0.0))
+			var protection := minf(0.30, lastro * (0.025 + 0.010 * level))
+			if protection > 0.0:
+				result["amount"] = float(result.get("amount", amount)) * (1.0 - protection)
 		"Impulsiva":
 			if float(state["impulsive_active"]) > 0.0:
 				state["impulsive_panic"] = maxi(1, int(state["impulsive_rank"]))
@@ -297,9 +619,35 @@ static func on_player_hit(state: Dictionary, amount: float, hp: float, hp_max: f
 			state["vanguard_ring"] = 5.0
 	return result
 
-static func on_dash(state: Dictionary) -> Array:
+static func on_dash(state: Dictionary, context := {}) -> Array:
 	var events: Array = []
 	match String(state.get("name", "")):
+		"Crepuscular":
+			if _crepuscular_perfect_window(state) and float(state.get("crepuscular_charge", 0.0)) >= 70.0:
+				var next_phase := "ocaso" if String(state.get("crepuscular_phase", "alvorada")) == "alvorada" else "alvorada"
+				events.append_array(_crepuscular_activate_eclipse(state, next_phase))
+		"Peregrino":
+			var pos := Vector2(context.get("target_pos", context.get("player_pos", Vector2.ZERO)))
+			var sector := _peregrino_sector_for(pos)
+			events.append_array(_peregrino_grant_step(state, sector, pos, 2))
+			state["peregrino_trail_speed"] = 1.8 + 0.2 * _rank(state)
+			var trails: Array = state.get("peregrino_trails", [])
+			trails.append({"pos": pos, "life": state["peregrino_trail_speed"], "max": state["peregrino_trail_speed"]})
+			state["peregrino_trails"] = trails
+		"Avarento":
+			state["avarento_weight_suspension"] = maxf(float(state.get("avarento_weight_suspension", 0.0)), 1.5)
+			var origin := Vector2(context.get("origin_pos", context.get("player_pos", Vector2.ZERO)))
+			var fragments: Array = state.get("avarento_fragments", [])
+			for i in range(3):
+				fragments.append({"pos": origin + Vector2.from_angle(float(i) * TAU / 3.0) * 38.0, "life": 3.0})
+			state["avarento_fragments"] = fragments
+		"Oportunista":
+			if bool(context.get("escaped_telegraph", false)):
+				state["oportunista_charges"] = mini(_oportunista_required(state), int(state.get("oportunista_charges", 0)) + 2)
+				state["oportunista_decay"] = 0.0
+				if int(state["oportunista_charges"]) >= _oportunista_required(state):
+					state["oportunista_armed"] = true
+					events.append({"type": "text", "text": "OPORTUNIDADE ARMADA"})
 		"Racional":
 			if float(state["rational_cooldown"]) <= 0.0:
 				state["rational_dilation"] = RATIONAL_DILATION_TIME
@@ -317,6 +665,23 @@ static func speed_multiplier(state: Dictionary) -> float:
 		"Racional": return 1.35 if float(state["rational_dilation"]) > 0.0 else 1.0
 		"Impulsiva": return 1.2 * (1.0 + 0.15 * int(state["impulsive_rank"])) if float(state["impulsive_active"]) > 0.0 else 1.0
 		"Devota": return 0.90 if float(state["devoted_slow"]) > 0.0 else 1.0
+		"Crepuscular": return 1.0 + (0.08 + 0.02 * _rank(state)) if _crepuscular_is_eclipse(state) else 1.0
+		"Peregrino":
+			var mult := 1.0
+			if float(state.get("peregrino_journey", 0.0)) > 0.0:
+				mult += 0.08 + 0.025 * _rank(state)
+			if float(state.get("peregrino_trail_speed", 0.0)) > 0.0:
+				mult += 0.08
+			return mult
+		"Avarento":
+			var mult := 1.0
+			if float(state.get("avarento_cofre", 0.0)) > 0.0:
+				mult += 0.08 + 0.02 * _rank(state) + minf(0.12, float(state.get("avarento_lastro", 0.0)) * 0.025)
+			elif float(state.get("avarento_weight_suspension", 0.0)) <= 0.0:
+				var penalty := minf(0.15, float(state.get("avarento_lastro", 0.0)) * 0.022)
+				var penalty_mult := maxf(0.40, 1.0 - 0.10 * float(_rank(state) - 1))
+				mult -= penalty * penalty_mult
+			return maxf(0.72, mult)
 		"Abissal": return maxf(0.78, 1.0 - float(state["abyss_depth"]) * 0.0016 - (0.04 if float(state["abyss_tide"]) > 0.0 else 0.0))
 		"Sanguinaria": return 0.95 if float(state["blood_slow"]) > 0.0 else 1.0
 	return 1.0
@@ -325,11 +690,14 @@ static func damage_multiplier(state: Dictionary) -> float:
 	match String(state.get("name", "")):
 		"Impulsiva": return 1.3 * (1.0 + 0.15 * int(state["impulsive_rank"])) if float(state["impulsive_active"]) > 0.0 else 1.0
 		"Devota": return float(state["devoted_damage_mult"]) if float(state["devoted_damage"]) > 0.0 else 1.0
+		"Crepuscular": return 1.0 + _crepuscular_damage_bonus(state)
+		"Equilibrista": return 1.0 + (0.07 + 0.03 * _rank(state) if float(state.get("equilibrista_state", 0.0)) > 0.0 else 0.0)
 	return 1.0
 
 static func attack_interval_multiplier(state: Dictionary) -> float:
 	if String(state.get("name", "")) == "Racional" and float(state["rational_dilation"]) > 0.0: return 0.72
 	if String(state.get("name", "")) == "Voraz": return maxf(0.88, 1.0 - voracious_intensity(state) * (0.045 + int(state["level"]) * 0.003))
+	if String(state.get("name", "")) == "Crepuscular": return maxf(0.75, 1.0 - _crepuscular_attack_reduction(state))
 	return 1.0
 
 static func world_multiplier(state: Dictionary) -> float:
@@ -346,6 +714,61 @@ static func dash_cooldown_multiplier(state: Dictionary, burning_count := 0) -> f
 		"Abissal": value = 1.0 + float(state["abyss_depth"]) * 0.001 + (0.08 if float(state["abyss_tide"]) > 0.0 else 0.0)
 		"Profetica": value = 1.12 if float(state["prophecy_broken"]) > 0.0 else 1.0
 	return value
+
+static func on_heal(state: Dictionary, applied: float, overheal: float, hp: float, hp_max: float) -> Dictionary:
+	var result := {"extra_heal": 0.0, "events": []}
+	var level := _rank(state)
+	match String(state.get("name", "")):
+		"Crepuscular":
+			if String(state.get("crepuscular_phase", "")) == "alvorada" and not _crepuscular_is_eclipse(state) and applied > 0.0:
+				_crepuscular_gain_charge(state, clampf(applied / maxf(1.0, hp_max) * 150.0, 1.0, 10.0))
+				result["extra_heal"] = applied * (0.09 + 0.03 * level)
+			elif String(state.get("crepuscular_phase", "")) == "ocaso" and not _crepuscular_is_eclipse(state) and applied > 0.0:
+				result["extra_heal"] = -applied * 0.18
+		"Equilibrista":
+			if float(state.get("equilibrista_state", 0.0)) > 0.0 and overheal > 0.0:
+				var converted := overheal * (0.35 + 0.05 * level)
+				state["equilibrista_shield"] = minf(_equilibrista_shield_cap(state, hp_max), float(state.get("equilibrista_shield", 0.0)) + converted)
+	return result
+
+static func on_points_spent(state: Dictionary, amount: int, hp_max: float) -> Array:
+	var events: Array = []
+	if String(state.get("name", "")) != "Avarento" or amount <= 0:
+		return events
+	var level := _rank(state)
+	var lastro_before := maxf(1.0, float(state.get("avarento_lastro", 0.0)))
+	state["avarento_cofre"] = 3.5 + 0.40 * level
+	state["avarento_weight_suspension"] = maxf(float(state.get("avarento_weight_suspension", 0.0)), float(state["avarento_cofre"]))
+	state["avarento_shield"] = maxf(float(state.get("avarento_shield", 0.0)), hp_max * minf(0.30, (0.025 + 0.010 * level) * lastro_before))
+	events.append({"type": "text", "text": "COFRE ROMPIDO"})
+	return events
+
+static func on_direct_damage_dealt(state: Dictionary, target: Dictionary, damage: float, source_category: String, player_damage: float) -> Array:
+	var events: Array = []
+	if damage <= 0.0 or not _is_direct_category(source_category):
+		return events
+	match String(state.get("name", "")):
+		"Crepuscular":
+			if String(state.get("crepuscular_phase", "")) == "ocaso" and not _crepuscular_is_eclipse(state):
+				_crepuscular_gain_charge(state, clampf(damage / maxf(1.0, player_damage) * 4.0, 1.0, 12.0))
+		"Oportunista":
+			if _enemy_in_opening(target):
+				_oportunista_register_opening(state, target, events)
+	return events
+
+static func consume_opportunity_damage(state: Dictionary, player_damage: float) -> Dictionary:
+	if String(state.get("name", "")) != "Oportunista" or not bool(state.get("oportunista_armed", false)):
+		return {"bonus": 0.0, "events": []}
+	var level := _rank(state)
+	state["oportunista_armed"] = false
+	state["oportunista_charges"] = 0
+	return {
+		"bonus": player_damage * (0.50 + 0.12 * level),
+		"events": [
+			{"type": "cooldown_recovery", "amount": 0.50 + 0.15 * level, "max_ratio": 0.30},
+			{"type": "text", "text": "GOLPE DE OPORTUNIDADE"}
+		]
+	}
 
 static func hunger_max(state: Dictionary) -> float:
 	var cycles := int(state.get("voracious_cycles", 0))
@@ -374,7 +797,7 @@ static func _update_voracious(state: Dictionary, delta: float, context: Dictiona
 		if bool(drop.get("boss_particle", false)):
 			var to_player := player_pos - Vector2(drop["pos"])
 			if to_player.length() > 0.01:
-				drop["pos"] = Vector2(drop["pos"]) + to_player.normalized() * minf(to_player.length(), (250.0 + to_player.length() * 0.55) * delta)
+				drop["pos"] = Vector2(drop["pos"]) + to_player.normalized() * minf(to_player.length(), (115.0 + to_player.length() * 0.18) * delta)
 		if player_pos.distance_to(Vector2(drop["pos"])) <= 68.0:
 			state["voracious_hunger"] = float(state["voracious_hunger"]) + float(drop["value"]) * pow(0.94, cycles)
 			state["voracious_last_collect"] = 0.0

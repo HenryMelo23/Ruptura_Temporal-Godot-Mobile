@@ -35,6 +35,16 @@ func _run() -> void:
 	game.queue_redraw()
 	await process_frame
 	_check(game.buttons.has("manifest_preview"), "manifest preview button was not drawn")
+	_check(game.buttons.has("manifest_details"), "manifest details button was not drawn")
+	game._handle_manifest_touch(game.buttons["manifest_details"].get_center(), Vector2(1280, 720))
+	_check(game.manifest_details_open, "manifest details popup did not open")
+	game.queue_redraw()
+	await process_frame
+	_check(game.buttons.has("manifest_details_popup"), "manifest details popup rect was not stored")
+	game._handle_manifest_touch(game.buttons["manifest_details_popup"].get_center(), Vector2(1280, 720))
+	_check(game.manifest_details_open, "manifest details inner touch closed popup")
+	game._handle_manifest_touch(Vector2(24, 24), Vector2(1280, 720))
+	_check(not game.manifest_details_open, "manifest details outside touch did not close")
 	game._handle_manifest_touch(game.buttons["manifest_preview"].get_center(), Vector2(1280, 720))
 	_check(game.manifest_preview_open, "manifest preview popup did not open")
 	game.queue_redraw()
@@ -81,4 +91,14 @@ func _run() -> void:
 	_check(String(game.aura_state.get("name", "")) == String(game.AURAS[9]["name"]), "start game did not use selected spectrum aura")
 
 	print("MANIFEST_SPECTRUM_SELECT_SMOKE_OK stage=true transition=true aura_assets=true sfx=true preview=true")
+	game.mode = "menu"
+	game.visible = false
+	game.set_process(false)
+	game.set_physics_process(false)
+	game._cleanup_runtime_resources()
+	for i in range(4):
+		await process_frame
+	root.remove_child(game)
+	game.free()
+	game = null
 	quit(0)

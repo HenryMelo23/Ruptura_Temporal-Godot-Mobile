@@ -13,7 +13,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
-	_check(game.AURAS.size() == 10, "mobile aura selector does not expose all ten desktop auras")
+	_check(game.AURAS.size() == 15, "mobile aura selector does not expose all fifteen auras")
 	for index in range(game.AURAS.size()):
 		game.selected_aura = index
 		game._start_game()
@@ -58,5 +58,5 @@ func _run() -> void:
 	game.aura_state["voracious_cycles"] = 100
 	_check(game._voraz_bite_damage() <= 355.0, "Voraz long-run hunger scaling can still reach one-hit damage")
 
-	print("AURAS_MOBILE_INTEGRATION_SMOKE_OK selector=10 hud=true world=true damage=true")
+	print("AURAS_MOBILE_INTEGRATION_SMOKE_OK selector=15 hud=true world=true damage=true")
 	quit(0)

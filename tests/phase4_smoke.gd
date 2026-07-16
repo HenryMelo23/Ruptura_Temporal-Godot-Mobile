@@ -15,7 +15,7 @@ func _run() -> void:
 	assert(game.current_phase == 4)
 	assert(game._current_map_texture() != null)
 	assert(game.boss_name == "NEXO DA RUPTURA")
-	assert(game._enemy_limit() == 4)
+	assert(game._enemy_limit() == game.PHASE4_LIMIT_EARLY)
 	assert(game.enemies.size() == 2)
 	assert(game._enemy_texture(game.enemies[0]) != null)
 	var phase4_kinds = [game.ENEMY_NEXUS_CARTOGRAPHER, game.ENEMY_NEXUS_CHRONOPHAGE, game.ENEMY_NEXUS_REFRACTOR, game.ENEMY_NEXUS_WEAVER, game.ENEMY_NEXUS_ECHO]
@@ -92,4 +92,18 @@ func _run() -> void:
 	assert(int(game.phase_fragment.get("next_phase", 0)) == 5)
 
 	print("PHASE4_SMOKE_OK map=true enemies=true teleport=true planet=true vortex=true petro=true transition=true phase5_fragment=true")
+	game.mode = "menu"
+	game.enemies.clear()
+	game.enemy_bullets.clear()
+	game.visible = false
+	game.set_process(false)
+	game.set_physics_process(false)
+	game._cleanup_runtime_resources()
+	for i in range(4):
+		await process_frame
+	root.remove_child(game)
+	game.free()
+	game = null
+	await process_frame
+	await process_frame
 	quit(0)
