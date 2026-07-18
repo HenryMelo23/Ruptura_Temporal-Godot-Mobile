@@ -81,4 +81,12 @@ func _run() -> void:
 	assert(game.manifest_evolution_options.size() == 3)
 
 	print("ARAUTO_CONDUTOR_SMOKE_OK spawn=8min ecos=%d-%d reduction=80 gaze_block=true drops=4 collect=true fragment=true" % [game.ARAUTO_ECHO_MIN, game.ARAUTO_ECHO_MAX])
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(4):
+		await process_frame
 	quit(0)

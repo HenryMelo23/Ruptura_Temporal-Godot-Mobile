@@ -48,8 +48,18 @@ func _run() -> void:
 	game._open_shop(false)
 	assert(game.mode == "shop")
 	game._finish_shop()
+	assert(game.mode == "shop_return")
+	assert(is_equal_approx(game.shop_return_timer, game.SHOP_RETURN_TIME))
+	game._update_shop_return(game.SHOP_RETURN_TIME + 0.01)
 	assert(game.mode == "game")
-	assert(game.shop_return_timer == 0.0)
 
 	print("SHOP_DECK_UI_SMOKE_OK deck_from_shop=true drag=true return_modes=true no_black_return=true")
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(4):
+		await process_frame
 	quit(0)

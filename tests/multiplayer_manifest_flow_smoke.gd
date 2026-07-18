@@ -18,27 +18,15 @@ func _initialize() -> void:
 func _finish_ok(message: String) -> void:
 	print(message)
 	if is_instance_valid(game):
-		_cleanup_audio_resources()
+		game._cleanup_runtime_resources()
+		game.textures.clear()
+		game.audio_streams.clear()
 		root.remove_child(game)
 		game.free()
 		game = null
-	await process_frame
+	for i in range(4):
+		await process_frame
 	quit(0)
-
-
-func _cleanup_audio_resources() -> void:
-	if game.music_player != null:
-		game.music_player.stop()
-		game.music_player.stream = null
-	if game.rain_audio_player != null:
-		game.rain_audio_player.stop()
-		game.rain_audio_player.stream = null
-	for player in game.sfx_players:
-		if player != null:
-			player.stop()
-			player.stream = null
-	game.audio_streams.clear()
-	game.textures.clear()
 
 
 func _advance_manifest(seconds: float) -> void:
@@ -76,6 +64,10 @@ func _run() -> void:
 	game.mode = "manifest_mp"
 	game.mp_local_ready = false
 	game.mp_remote_ready = true
+	game.online_lobby_connected_count = 2
+	game.mp_manifest_state_by_peer = {
+		42: {"stage": game.MANIFEST_STAGE_AURA, "manifestation": 1, "aura": 2, "ready": true}
+	}
 	game.manifest_select_stage = game.MANIFEST_STAGE_AURA
 	game._confirm_manifest_mp_selection()
 	_check(game.mode == "game", "host did not start after both players confirmed spectrum")

@@ -48,19 +48,39 @@ func _run() -> void:
 	host_game.boss_hp_max = 1400.0
 	host_game.boss_phase = 1.0
 	host_game.boss_attacks = [{"kind": "bubble", "age": 0.20, "duration": 1.0, "target": Vector2(340, 280)}]
+	host_game.boss2_state = host_game.BOSS2_STATE_FLASH_FREEZE
+	host_game.boss2_anim_frame = 2
+	host_game.boss2_ice_shards = [{"pos": Vector2(310, 280), "vel": Vector2(40, -20), "life": 0.6, "max": 0.8, "size": 8.0, "phase": 0.2}]
+	host_game.boss2_snow_zones = [{"pos": Vector2(330, 300), "radius": 120.0, "life": 1.4, "max": 1.8, "phase": 0.4}]
+	host_game.boss2_ultimate_timer = 12.0
+	host_game.boss2_ultimate_center = Vector2(340, 300)
+	host_game.boss3_miasma_variant = 3
+	host_game.boss3_miasma_timer = 7.5
+	host_game.boss3_miasma_clouds = [{"pos": Vector2(370, 310), "dir": Vector2.LEFT, "life": 3.0, "max": 8.0, "radius": 42.0, "phase": 0.8, "hit": {}}]
+	host_game.boss3_faith_link_timer = 2.0
 	host_game.phase4_enemy_hazards = [{"kind": "boss4_pulse", "pos": Vector2(360, 320), "age": 0.10, "life": 1.0, "max": 1.0, "radius": 180.0}]
 	client_game._apply_remote_world_snapshot(
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),
-		host_game._pack_net_enemy_bullets(),
-		host_game._pack_net_boss_visuals()
+		host_game._pack_net_enemy_bullets()
 	)
+	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
 	_check(Vector2(client_game.enemies[0]["pos"]).is_equal_approx(Vector2(100, 200)), "initial enemy snapshot did not snap into place")
 	_check(client_game.boss_active, "boss active state was not synchronized to replica")
 	_check(client_game.current_phase == 2, "boss phase index was not synchronized to replica")
 	_check(is_equal_approx(client_game.boss_hp_max, 1400.0), "boss max HP was not synchronized to replica")
 	_check(client_game.boss_attacks.size() == 1 and String(client_game.boss_attacks[0].get("kind", "")) == "bubble", "boss attack visuals were not synchronized to replica")
+	_check(client_game.boss2_state == host_game.BOSS2_STATE_FLASH_FREEZE and client_game.boss2_anim_frame == 2, "boss2 animation state was not synchronized to replica")
+	_check(client_game.boss2_ice_shards.size() == 1 and client_game.boss2_snow_zones.size() == 1, "boss2 ice visuals were not synchronized to replica")
+	_check(is_equal_approx(client_game.boss2_ultimate_timer, 12.0) and client_game.boss2_ultimate_center == Vector2(340, 300), "boss2 ultimate visual state was not synchronized")
+	host_game.current_phase = 3
+	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
+	_check(client_game.boss3_miasma_variant == 3 and client_game.boss3_miasma_clouds.size() == 1, "boss3 miasma visuals were not synchronized to replica")
+	_check(is_equal_approx(client_game.boss3_faith_link_timer, 2.0), "boss3 faith link visual timer was not synchronized")
+	host_game.current_phase = 4
+	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
 	_check(client_game.phase4_enemy_hazards.size() == 1, "boss/environment hazards were not synchronized to replica")
+	host_game.current_phase = 2
 
 	await create_timer(0.06).timeout
 	host_game.enemies[0]["pos"] = Vector2(220, 200)
@@ -69,9 +89,9 @@ func _run() -> void:
 	client_game._apply_remote_world_snapshot(
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),
-		host_game._pack_net_enemy_bullets(),
-		host_game._pack_net_boss_visuals()
+		host_game._pack_net_enemy_bullets()
 	)
+	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
 
 	_check(Vector2(client_game.enemies[0]["pos"]).x < 120.0, "enemy position jumped directly to the newest packet")
 	_check(Vector2(client_game.enemy_bullets[0]["pos"]).x < 180.0, "bullet position jumped directly to the newest packet")
@@ -89,6 +109,11 @@ func _run() -> void:
 	client_game._rpc_remote_player_state_light(42, Vector2(560, 300), 90, 100, false, 1, 2, client_game.NET_ANIM_FIRE, 1, true, 12)
 	_check(client_game.net_player_anim_state == client_game.NET_ANIM_FIRE, "remote animation state was not preserved")
 	_check(client_game.net_player_frame_idx == 1 and client_game.net_player_flip_h, "remote animation frame/facing was not preserved")
+	_check(is_equal_approx(client_game.net_player_hp, 90.0) and is_equal_approx(client_game.net_player_hp_max, 100.0), "remote player health was not preserved for ally HUD")
+	_check(is_equal_approx(client_game._remote_player_health_ratio(client_game.net_players_by_peer[42]), 0.9), "ally health bar ratio did not match remote HP")
+	client_game._rpc_remote_player_state_light(42, Vector2(560, 300), 0, 100, true, 1, 2, client_game.NET_ANIM_DAMAGE, 0, false, 12)
+	_check(is_equal_approx(client_game._remote_player_health_ratio(client_game.net_players_by_peer[42]), 0.0), "dead ally health bar should be empty")
+	client_game._rpc_remote_player_state_light(42, Vector2(560, 300), 90, 100, false, 1, 2, client_game.NET_ANIM_FIRE, 1, true, 12)
 
 	client_game.enemies = [{"uid": 9901, "type": client_game.ENEMY_COMMON, "pos": Vector2(820, 360), "hp": 100.0, "max_hp": 100.0, "phase": 0.0, "bit": 0, "last_move_dir": Vector2.ZERO}]
 	client_game.remote_bullets = [{
@@ -148,17 +173,22 @@ func _run() -> void:
 	_check(client_game.net_ability_visuals.size() == 3, "Q/E/TP remote visuals failed during rendered frames")
 	_check(bool(client_game.net_ability_visuals[1].get("network_replica", false)), "secondary visual did not use a local effect replica")
 
-	var payload_bytes := var_to_bytes([
+	var core_payload_bytes := var_to_bytes([
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),
-		host_game._pack_net_enemy_bullets(),
-		host_game._pack_net_boss_visuals()
+		host_game._pack_net_enemy_bullets()
 	]).size()
-	_check(payload_bytes < 1600, "compact one-entity snapshot with boss visuals exceeded expected budget")
-	print("MULTIPLAYER_NETWORK_SMOOTHING_SMOKE_OK payload_bytes=%d enemy_step=%.2f" % [payload_bytes, enemy_after_one_frame - 100.0])
+	var visual_payload_bytes := var_to_bytes(host_game._pack_net_boss_visuals()).size()
+	_check(core_payload_bytes < 1200, "compact one-entity core snapshot exceeded expected budget")
+	_check(visual_payload_bytes < 1392, "boss visual snapshot exceeded ENet MTU budget")
+	print("MULTIPLAYER_NETWORK_SMOOTHING_SMOKE_OK core_bytes=%d visual_bytes=%d enemy_step=%.2f" % [core_payload_bytes, visual_payload_bytes, enemy_after_one_frame - 100.0])
 
-	root.remove_child(host_game)
-	root.remove_child(client_game)
-	host_game.free()
-	client_game.free()
+	for game in [host_game, client_game]:
+		game._cleanup_runtime_resources()
+		game.textures.clear()
+		game.audio_streams.clear()
+		root.remove_child(game)
+		game.free()
+	for i in range(4):
+		await process_frame
 	quit(0)

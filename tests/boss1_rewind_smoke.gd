@@ -117,4 +117,12 @@ func _run() -> void:
 	assert(not game.boss1_rewind_sequence.is_empty())
 
 	print("BOSS1_REWIND_SMOKE_OK recurring=true cooldown=45s rewind=10s return_hit=true boss_heal=%.2f player_hp=%d" % [expected_heal, expected_player_hp])
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(4):
+		await process_frame
 	quit(0)

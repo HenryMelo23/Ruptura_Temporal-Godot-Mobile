@@ -13,11 +13,11 @@ func _initialize() -> void:
 func _run(game: Node) -> void:
 	await process_frame
 	var expected := {
-		"crepuscular": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-eclipsa.png",
-		"peregrino": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-peregrina.png",
-		"equilibrista": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-equilibrista.png",
-		"avarento": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-avarenta.png",
-		"oportunista": "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea-oportunista.png",
+		"crepuscular": "res://assets/sprites/aurea-eclipsa.png",
+		"peregrino": "res://assets/sprites/aurea-peregrina.png",
+		"equilibrista": "res://assets/sprites/aurea-equilibrista.png",
+		"avarento": "res://assets/sprites/aurea-avarenta.png",
+		"oportunista": "res://assets/sprites/aurea-oportunista.png",
 	}
 	_check(game.AURAS.size() == 15, "selector count is not 15")
 	for aura in game.AURAS:
@@ -25,7 +25,9 @@ func _run(game: Node) -> void:
 		if expected.has(key):
 			var icon_path := String(aura.get("icon", ""))
 			_check(icon_path == expected[key], "wrong icon path for " + key)
-			_check(FileAccess.file_exists(ProjectSettings.globalize_path(icon_path)), "icon path does not resolve on disk: " + icon_path)
+			_check(FileAccess.file_exists(icon_path), "icon path does not resolve: " + icon_path)
+			_check(FileAccess.file_exists(icon_path + ".import"), "icon has no import metadata for Android export: " + icon_path)
+			_check(ResourceLoader.exists(icon_path), "icon is not visible to ResourceLoader: " + icon_path)
 			_check(game.textures.get("aura_" + key) != null, "aura texture did not load: " + key)
 			game.selected_aura = game.AURAS.find(aura)
 			game._start_game()

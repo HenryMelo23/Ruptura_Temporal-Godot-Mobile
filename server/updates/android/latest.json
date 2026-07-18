@@ -1,0 +1,19 @@
+{
+    "version":  "2.0.28e",
+    "version_code":  22805,
+    "filename":  "ruptura_temporal_mobile_2.0.28e.apk",
+    "sha256":  "636bac3bd47bd4ea67790c14da86a3426a8965b96c044b3a0c32e6f33c573634",
+    "size":  602114751,
+    "notes":  [
+                  "Corrigido o botao Pronto no lobby online.",
+                  "Corrigido o modo Telespectador e sua confirmacao no relay.",
+                  "Sincronizacao de lobby agora preserva o estado individual de cada jogador.",
+                  "Reenvio automatico de pronto e telespectador evita perda de confirmacao.",
+                  "Manifestacao e espectro continuam sincronizados ate todos confirmarem.",
+                  "Snapshots visuais do boss foram compactados para reduzir fragmentacao e atraso.",
+                  "Saida do host fecha a sala sem RPC tardia ou erro de canal.",
+                  "Relay e cliente 2.0.28e usam o mesmo contrato RPC."
+              ],
+    "mandatory":  false,
+    "published_at":  "2026-07-18T01:38:52.1131224Z"
+}

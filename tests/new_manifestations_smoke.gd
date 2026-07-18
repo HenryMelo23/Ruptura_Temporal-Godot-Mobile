@@ -34,6 +34,7 @@ func _set_manifestation(key: String) -> void:
 	game.tp_effects.clear()
 	game.tp_cooldown_pending = false
 	game.tp_cooldown_override = -1.0
+	game.tp_cooldown_release_time = -1.0
 	game.bullets.clear()
 	game.effects.clear()
 	game.slashes.clear()

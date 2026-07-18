@@ -15,6 +15,7 @@ const SPECTRUM_PROBE_DAMAGE := 10.0
 const SPECTRUM_PROBE_MULTIPLIER := 1.69
 const EXPECTED_DAMAGE_REQUESTS := 22
 const EXPECTED_TOTAL_DAMAGE := DAMAGE_PER_HIT * 21.0 + SPECTRUM_PROBE_DAMAGE * SPECTRUM_PROBE_MULTIPLIER
+const LOCAL_RELAY_PING_BUDGET_MS := 80
 
 var game: Node
 var role: String = ""
@@ -92,6 +93,7 @@ func _start_role() -> void:
 
 func _run_server_loop() -> void:
 	var total_time := 0.0
+	var results_seen := false
 	while true:
 		await process_frame
 		total_time += 0.016
@@ -100,10 +102,12 @@ func _run_server_loop() -> void:
 		if server_game_seen_at >= 0.0 and total_time - server_game_seen_at > 1.0:
 			_check(game.enemies.is_empty(), "dedicated server simulated enemies; server must relay only")
 			_check(game.enemy_bullets.is_empty(), "dedicated server simulated enemy bullets; server must relay only")
-		if _result_exists("host") and _result_exists("client"):
-			await _finish_ok("server relay stayed clean")
+		if not results_seen and _result_exists("host") and _result_exists("client"):
+			results_seen = true
+			print("[SERVER] GAMEPLAY_AUTHORITY_OK server relay stayed clean")
+		if results_seen and game.dedicated_room_shutdown_pending:
 			return
-		if total_time > 35.0:
+		if total_time > 15.0:
 			_check(false, "timeout waiting for host/client gameplay authority result")
 			return
 
@@ -113,7 +117,9 @@ func _run_host_loop() -> void:
 	while true:
 		await process_frame
 		total_time += 0.016
-		if total_time > 35.0:
+		if total_time > 15.0:
+			var timeout_enemy := _host_enemy_by_uid(enemy_uid)
+			print("[HOST] TIMEOUT enemy_hp=%.2f expected=%.2f remote_hp=%d peer=%d" % [float(timeout_enemy.get("hp", -1.0)), enemy_initial_hp - EXPECTED_TOTAL_DAMAGE, int(game.net_player_hp), game.net_player_peer_id])
 			_check(false, "timeout waiting for host gameplay authority checks")
 			return
 
@@ -176,6 +182,7 @@ func _run_host_loop() -> void:
 			if int(game.net_player_hp) < remote_hp_before_damage:
 				if game.net_ping_ms < 0:
 					continue
+				_check(game.net_ping_ms < LOCAL_RELAY_PING_BUDGET_MS, "host relay ping exceeded local %dms budget: %d" % [LOCAL_RELAY_PING_BUDGET_MS, game.net_ping_ms])
 				if not _result_exists("client"):
 					continue
 				await _finish_ok("host authority applied client hit and routed enemy damage to client only")
@@ -188,7 +195,7 @@ func _run_client_loop() -> void:
 	while true:
 		await process_frame
 		total_time += 0.016
-		if total_time > 35.0:
+		if total_time > 15.0:
 			_check(false, "timeout waiting for client gameplay authority checks")
 			return
 
@@ -225,10 +232,13 @@ func _run_client_loop() -> void:
 				"amount": DAMAGE_PER_HIT,
 				"source": "aura_vanguarda"
 			}])
+			var selected_aura_name := String(game.aura_state.get("name", ""))
+			game.aura_state["name"] = "Impulsiva"
 			game.aura_state["impulsive_active"] = 5.0
 			game.aura_state["impulsive_rank"] = 2
 			game._damage_enemy(enemy, SPECTRUM_PROBE_DAMAGE, "spectrum_multiplier_probe", false)
 			game.aura_state["impulsive_active"] = 0.0
+			game.aura_state["name"] = selected_aura_name
 			_check(float(enemy.get("hp", 0.0)) == local_hp_before, "client replica mutated enemy locally instead of sending hit to host")
 			print("[CLIENT] sent %d damage routes against authoritative high uid=%s" % [EXPECTED_DAMAGE_REQUESTS, HIGH_ENEMY_UID])
 			continue
@@ -241,6 +251,7 @@ func _run_client_loop() -> void:
 				continue
 			if game.net_ping_ms < 0:
 				continue
+			_check(game.net_ping_ms < LOCAL_RELAY_PING_BUDGET_MS, "client relay ping exceeded local %dms budget: %d" % [LOCAL_RELAY_PING_BUDGET_MS, game.net_ping_ms])
 			await _finish_ok("client skill hit was relayed and client-only damage arrived")
 			return
 
@@ -259,7 +270,7 @@ func _client_lobby_and_manifest_flow() -> void:
 		game.local_player_ready = true
 		game.rpc_id(1, "_toggle_ready", true)
 		return
-	_manifest_selection_flow(1, 1)
+	_manifest_selection_flow(2, 2)
 
 
 func _manifest_selection_flow(manifestation: int, aura: int) -> void:
@@ -297,17 +308,26 @@ func _finish_ok(message: String) -> void:
 	if file:
 		file.store_string("OK")
 		file.close()
+		file = null
+	# Let the owner close first so the test exercises the production room-shutdown
+	# path instead of destroying both ENet peers during the same relay frame.
+	if role == "client":
+		while not _result_exists("host"):
+			await process_frame
+		await create_timer(0.6).timeout
 	if is_instance_valid(game):
-		if game.multiplayer_peer != null:
-			game.multiplayer_peer.close()
-			game.multiplayer_peer = null
-			game.multiplayer.multiplayer_peer = null
-		await create_timer(0.1).timeout
+		game._leave_multiplayer()
+		for _frame in range(4):
+			await process_frame
+		game._cleanup_runtime_resources()
 		_cleanup_audio_resources()
+		for i in range(4):
+			await process_frame
 		root.remove_child(game)
 		game.free()
 		game = null
-	await create_timer(0.2).timeout
+	for i in range(4):
+		await process_frame
 	quit(0)
 
 

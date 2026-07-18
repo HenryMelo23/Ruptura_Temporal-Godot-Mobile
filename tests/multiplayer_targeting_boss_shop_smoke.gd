@@ -70,7 +70,8 @@ func _run() -> void:
 	game.boss_pos = Vector2(420, 360)
 	game.boss_attacks = [{"kind": "bubble", "age": 0.25, "duration": 1.0, "target": Vector2(480, 360)}]
 	game.phase4_enemy_hazards = [{"kind": "boss4_pulse", "pos": Vector2(450, 360), "age": 0.15, "life": 1.2, "max": 1.2, "radius": 180.0}]
-	replica._apply_remote_world_snapshot(game._pack_net_enemies(), game._pack_net_boss(), game._pack_net_enemy_bullets(), game._pack_net_boss_visuals())
+	replica._apply_remote_world_snapshot(game._pack_net_enemies(), game._pack_net_boss(), game._pack_net_enemy_bullets())
+	replica._apply_remote_boss_visual_snapshot(game._pack_net_boss_visuals())
 	_check(replica.boss_active and replica.current_phase == 4, "replica did not accept boss authoritative state")
 	_check(replica.boss_attacks.size() == 1, "replica did not receive boss attack visual state")
 	_check(replica.phase4_enemy_hazards.size() == 1, "replica did not receive boss hazard visual state")

@@ -31,8 +31,11 @@ func _run() -> void:
 	game._start_shop_mp_request_overlay(true)
 	assert(game._shop_mp_request_visible())
 	game._accept_shop_mp_request()
-	assert(game.mode == "shop_opening")
+	assert(game.mode == "game")
 	assert(not game.shop_mp_request_incoming)
+	assert(game.shop_mp_request_outgoing)
+	game._rpc_commit_shop()
+	assert(game.mode == "shop_opening")
 
 	game.mode = "game"
 	game.previous_mode = "game"
@@ -50,6 +53,8 @@ func _run() -> void:
 	assert(game.shop_mp_ready_to_leave)
 	assert(not game.shop_mp_partner_ready)
 
+	game.shop_mp_ready_count = 2
+	game.shop_mp_expected_count = 2
 	game.shop_mp_partner_ready = true
 	game._check_shop_mp_exit()
 	assert(game.mode == "shop_return")
@@ -63,4 +68,6 @@ func _run() -> void:
 	game._draw_player(Vector2.ZERO)
 
 	print("MULTIPLAYER_SHOP_FLOW_SMOKE_OK request_overlay=true synced_exit=true dead_draw_guard=true")
+	game.queue_free()
+	await process_frame
 	quit(0)

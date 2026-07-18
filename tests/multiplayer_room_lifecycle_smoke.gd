@@ -76,7 +76,7 @@ func _run_host() -> void:
 			_write("host_result", "OK")
 			game._leave_multiplayer()
 			await create_timer(0.3).timeout
-			quit(0)
+			await _finish()
 			return
 	_fail("host never reached connected lifecycle state")
 
@@ -87,7 +87,7 @@ func _run_client() -> void:
 		await process_frame
 		if game.mode == "multiplayer_menu" and game.multiplayer_notice == "O HOST SAIU. A SALA FOI ENCERRADA.":
 			_write("client_result", "OK")
-			quit(0)
+			await _finish()
 			return
 	_fail("client did not return to multiplayer menu with owner disconnect reason")
 
@@ -97,6 +97,29 @@ func _write(name: String, value: String) -> void:
 	if file:
 		file.store_string(value)
 		file.close()
+
+
+func _finish() -> void:
+	if is_instance_valid(game):
+		game._cleanup_runtime_resources()
+		if game.music_player != null:
+			game.music_player.stop()
+			game.music_player.stream = null
+		if game.rain_audio_player != null:
+			game.rain_audio_player.stop()
+			game.rain_audio_player.stream = null
+		for player in game.sfx_players:
+			if player != null:
+				player.stop()
+				player.stream = null
+		game.audio_streams.clear()
+		game.textures.clear()
+		root.remove_child(game)
+		game.free()
+		game = null
+	for _frame in range(8):
+		await process_frame
+	quit(0)
 
 
 func _fail(message: String) -> void:

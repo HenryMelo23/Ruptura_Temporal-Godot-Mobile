@@ -67,34 +67,20 @@ func _run() -> void:
 
 	game.player_hp = game.player_hp_max
 	game._start_boss3_miasma(3)
-	_check(game.boss3_miasma_qte_required >= 20 and game.boss3_miasma_qte_required <= 40, "QTE requirement is outside 20 to 40")
-	_check(game.boss3_miasma_qte_tutorial > 0.0, "first QTE did not show tutorial")
-	var protected_hp: int = game.player_hp
-	game._damage_player(999, "test")
-	_check(game.player_hp == protected_hp, "player was not invulnerable during QTE")
-	game._handle_boss3_miasma_qte_tap(Vector2(640, 360), Vector2(1280, 720))
-	_check(game.boss3_miasma_qte_taps == 1, "center tap was not counted")
-	game._update_boss3_miasma_qte(1.01)
-	_check(game.boss3_miasma_qte_taps == 1, "infinite-time QTE should not remove taps by inactivity")
-	game.player_hp = game.player_hp_max
-	for i in range(10):
-		game._update_boss3_miasma_qte(0.20)
-	_check(game.player_hp < game.player_hp_max, "closing eyelids did not damage after the first free touch")
-	var hp_after_lid_damage: int = game.player_hp
-	game._update_boss3_miasma_qte(8.5)
-	_check(game._boss3_miasma_active(), "QTE ended after old max time instead of staying infinite")
-	_check(game.player_hp < hp_after_lid_damage, "overtime faith drain did not apply after max time")
-	for i in range(game.boss3_miasma_qte_required):
-		game._handle_boss3_miasma_qte_tap(Vector2(640, 360), Vector2(1280, 720))
-	_check(not game._boss3_miasma_active(), "successful QTE did not end symptom")
-	_check(is_equal_approx(game.boss3_miasma_cooldown, game.BOSS3_MIASMA_COOLDOWN), "successful QTE did not start cooldown")
-
-	game._start_boss3_miasma(3)
-	_check(game.boss3_miasma_qte_tutorial <= 0.0, "tutorial repeated after first QTE")
-	game.player_hp = game.player_hp_max
-	game._update_boss3_miasma_qte(7.1)
-	_check(game._boss3_miasma_active(), "QTE should not fail automatically at seven seconds")
-	game._end_boss3_miasma(false)
+	_check(game.boss3_miasma_qte_required == 0, "cloud rework unexpectedly restored the removed QTE")
+	_check(game.boss3_miasma_clouds.size() == game.BOSS3_MIASMA_CLOUD_COUNT, "cloud symptom did not create the configured cloud count")
+	var cloud_before: Vector2 = Vector2(game.boss3_miasma_clouds[0]["pos"])
+	var cloud_speed: float = float(game.boss3_miasma_clouds[0].get("speed", 0.0))
+	_check(cloud_speed >= game.player_speed * game.BOSS3_MIASMA_CLOUD_SPEED_MULT, "cloud speed did not scale from player speed")
+	game._update_boss3_miasma_clouds(0.10)
+	_check(Vector2(game.boss3_miasma_clouds[0]["pos"]) != cloud_before, "cloud did not pursue its target")
+	game.boss3_miasma_clouds[0]["pos"] = game.player_pos
+	var hp_before_cloud: int = game.player_hp
+	game._update_boss3_miasma_clouds(0.01)
+	_check(game.player_hp < hp_before_cloud, "cloud contact did not damage the selected player")
+	game._end_boss3_miasma(true)
+	_check(not game._boss3_miasma_active(), "cloud symptom did not end")
+	_check(is_equal_approx(game.boss3_miasma_cooldown, game.BOSS3_MIASMA_COOLDOWN), "cloud symptom did not start cooldown")
 
 	game.boss3_miasma_cooldown = game.BOSS3_MIASMA_COOLDOWN
 	game._update_boss3_miasma(game.BOSS3_MIASMA_COOLDOWN - 1.0)
@@ -102,5 +88,13 @@ func _run() -> void:
 	game._update_boss3_miasma(1.1)
 	_check(game._boss3_miasma_active(), "ultimate did not return after 30-second cooldown")
 
-	print("BOSS3_MIASMA_SMOKE_OK duration=15 cooldown=%ds clones=true darkness=250 warning=800ms stun=900ms qte=infinite-link" % int(game.BOSS3_MIASMA_COOLDOWN))
+	print("BOSS3_MIASMA_SMOKE_OK duration=15 cooldown=%ds clones=true darkness=250 warning=800ms stun=900ms clouds=pursuit" % int(game.BOSS3_MIASMA_COOLDOWN))
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(4):
+		await process_frame
 	quit(0)

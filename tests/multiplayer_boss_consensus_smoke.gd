@@ -62,8 +62,13 @@ func _run() -> void:
 	_check(is_equal_approx(client_game.boss_hp, 900.0), "client boss HP did not mirror host snapshot")
 	_check(is_equal_approx(client_game.boss_hp_max, 1400.0), "client boss HP max did not mirror host snapshot")
 
-	root.remove_child(host_game)
-	root.remove_child(client_game)
-	host_game.free()
-	client_game.free()
+	for game in [host_game, client_game]:
+		game._cleanup_runtime_resources()
+		game.textures.clear()
+		game.audio_streams.clear()
+		root.remove_child(game)
+		game.free()
+	for i in range(4):
+		await process_frame
+	print("MULTIPLAYER_BOSS_CONSENSUS_SMOKE_OK agreement=true replica=true")
 	quit(0)

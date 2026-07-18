@@ -34,7 +34,7 @@ func _initialize() -> void:
 			port = int(arg.substr("--port=".length()))
 
 	if role == "":
-		push_error("Missing --role argument (server/host/client)")
+		push_error("Missing --role argument (server/host/client/client2)")
 		quit(1)
 		return
 
@@ -65,9 +65,9 @@ func _start_role() -> void:
 		game.mode = "lobby_online_host"
 		game._connect_to_online_host(host, port)
 		_run_host_loop()
-	elif role == "client":
+	elif role == "client" or role == "client2":
 		# Inicializar como client online
-		game.player_nickname = "ClientPlayer"
+		game.player_nickname = "ClientPlayer2" if role == "client2" else "ClientPlayer"
 		game.online_room_owner = false
 		game.mode = "lobby_online_client"
 		game._connect_to_online_host(host, port)
@@ -81,14 +81,28 @@ func _finish_ok(message: String) -> void:
 	if file:
 		file.store_string("OK")
 		file.close()
+		file = null
+	if role != "server":
+		var barrier_deadline := Time.get_ticks_msec() + 8000
+		while Time.get_ticks_msec() < barrier_deadline:
+			if FileAccess.file_exists("res://tests/host_result.txt") and FileAccess.file_exists("res://tests/client_result.txt") and FileAccess.file_exists("res://tests/client2_result.txt"):
+				break
+			await process_frame
+		var settle_frames := 12 if role == "client" else (30 if role == "client2" else 54)
+		for _frame in range(settle_frames):
+			await process_frame
 
 	if is_instance_valid(game):
+		game._cleanup_runtime_resources()
 		_cleanup_audio_resources()
+		for i in range(4):
+			await process_frame
 		root.remove_child(game)
 		game.free()
 		game = null
 	# Pequeno tempo para fechar sockets de rede limpamente
-	await create_timer(0.2).timeout
+	for i in range(6):
+		await process_frame
 	quit(0)
 
 
@@ -110,16 +124,24 @@ func _cleanup_audio_resources() -> void:
 # Loop para o Dedicated Server
 func _run_server_loop() -> void:
 	var total_time = 0.0
+	var game_announced := false
 	while true:
 		await process_frame
 		total_time += 0.016
-		if total_time > 15.0:
+		if total_time > 24.0:
 			_check(false, "Timeout waiting for integration test steps")
 			return
 		
 		# Validar que a partida foi iniciada pelo host
-		if game.mode == "game":
-			_finish_ok("Dedicated server successfully transitioned to game state")
+		if game.mode == "game" and not game_announced:
+			game_announced = true
+			print("[SERVER] SUCCESS: Dedicated server successfully transitioned to game state")
+			var result_file := FileAccess.open("res://tests/server_result.txt", FileAccess.WRITE)
+			if result_file:
+				result_file.store_string("OK")
+				result_file.close()
+				result_file = null
+		if game_announced and game.dedicated_room_shutdown_pending:
 			return
 
 
@@ -130,13 +152,13 @@ func _run_host_loop() -> void:
 	while true:
 		await process_frame
 		total_time += 0.016
-		if total_time > 15.0:
+		if total_time > 24.0:
 			_check(false, "Timeout waiting for game start")
 			return
 
 		# Simular clique do Host para iniciar quando o client estiver pronto
-		if not requested_start and game.online_lobby_connected_count == 2 and game.online_lobby_ready_count >= 1:
-			print("[HOST] Client is ready. Requesting start game...")
+		if not requested_start and game.online_lobby_connected_count == 3 and game.online_lobby_ready_count >= 2:
+			print("[HOST] Both clients are ready. Requesting start game...")
 			requested_start = true
 			game.rpc_id(1, "_host_request_start_game")
 
@@ -153,7 +175,10 @@ func _run_host_loop() -> void:
 			game._confirm_manifest_mp_selection()
 
 		if game.mode == "game":
-			_finish_ok("Host transitioned to game state successfully")
+			await create_timer(3.0).timeout
+			print("[HOST] FLOW ping=%dms world_jitter=%.2fms players=%d" % [game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size()])
+			_check(game.net_players_by_peer.size() == 2, "Host did not retain both remote player states")
+			await _finish_ok("Host transitioned to game state successfully")
 			return
 
 
@@ -164,7 +189,7 @@ func _run_client_loop() -> void:
 	while true:
 		await process_frame
 		total_time += 0.016
-		if total_time > 15.0:
+		if total_time > 24.0:
 			_check(false, "Timeout waiting for game start")
 			return
 
@@ -178,14 +203,20 @@ func _run_client_loop() -> void:
 		if game.mode == "manifest_mp" and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION and not manifest_reveal_requested:
 			print("[CLIENT] Manifest stage reached. Revealing spectrum...")
 			manifest_reveal_requested = true
-			game._set_selected_manifestation(1, false)
+			game._set_selected_manifestation(3 if role == "client2" else 2, false)
 			game._confirm_manifest_mp_selection()
 		elif game.mode == "manifest_mp" and game.manifest_select_stage == game.MANIFEST_STAGE_AURA and not spectrum_ready_sent:
 			print("[CLIENT] Spectrum stage reached. Marking ready...")
 			spectrum_ready_sent = true
-			game._set_selected_aura(1, false)
+			game._set_selected_aura(3 if role == "client2" else 2, false)
 			game._confirm_manifest_mp_selection()
 
 		if game.mode == "game":
-			_finish_ok("Client transitioned to game state successfully")
+			await create_timer(2.5).timeout
+			print("[%s] FLOW ping=%dms world_jitter=%.2fms players=%d first_world=%s" % [role.to_upper(), game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size(), str(game.online_first_world_snapshot_received)])
+			_check(game.online_first_world_snapshot_received, "%s did not receive a world snapshot" % role)
+			_check(game.net_players_by_peer.size() == 2, "%s did not retain both remote player states" % role)
+			_check(game.net_ping_ms >= 0 and game.net_ping_ms <= 100, "%s local smoke ping exceeded 100ms" % role)
+			_check(game.net_world_jitter_ms <= 15.0, "%s world snapshot jitter exceeded 15ms" % role)
+			await _finish_ok("Client transitioned to game state successfully")
 			return

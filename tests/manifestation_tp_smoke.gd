@@ -21,6 +21,7 @@ func _reset_tp(kind: String) -> void:
 	game.tp_effects.clear()
 	game.tp_cooldown_pending = false
 	game.tp_cooldown_override = -1.0
+	game.tp_cooldown_release_time = -1.0
 	game.retornante_tp_window = 0.0
 	game.player_pos = Vector2(500, 400)
 	game.enemies.clear()
@@ -64,13 +65,16 @@ func _run() -> void:
 	_check(game.player_hp > heal_after_first, "lacerante Q did not heal again on the next rotation")
 
 	_reset_tp("prismatica")
+	game.player_dash_cooldown = game.PLAYER_BASE_DASH_COOLDOWN
+	_check(is_equal_approx(game._current_dash_cooldown(), 4.0), "prismatic TP cooldown is not 4s")
 	game._execute_teleport(Vector2(720, 400))
 	_check(game.prisms.any(func(p): return bool(p.get("tp_prism", false)) and float(p.get("radius", 0.0)) >= 76.0), "prismatic TP did not create the large firing prism")
 	var prism_dash_stamp: float = game.last_dash_time
-	_advance_tp(2.9)
-	_check(game.tp_cooldown_pending and game.last_dash_time == prism_dash_stamp, "prismatic cooldown started before its effect ended")
+	_advance_tp(3.85)
+	_check(game.tp_cooldown_pending and game.last_dash_time == prism_dash_stamp, "prismatic TP released before 4s")
 	_advance_tp(0.2)
-	_check(not game.tp_cooldown_pending and game.last_dash_time > prism_dash_stamp, "prismatic cooldown did not start after its effect")
+	_check(not game.tp_cooldown_pending and game.last_dash_time == prism_dash_stamp, "prismatic TP did not release after 4s from activation")
+	_check(not game.tp_effects.is_empty(), "prismatic visual ended together with the direct cooldown")
 
 	_reset_tp("retornante")
 	var return_origin: Vector2 = game.player_pos
@@ -133,12 +137,19 @@ func _run() -> void:
 	_check(game.lacerante_tp_charges == 2, "lacerante charges did not refill after absolute cooldown")
 
 	_reset_tp("eletrica")
+	game.player_dash_cooldown = game.PLAYER_BASE_DASH_COOLDOWN
+	_check(is_equal_approx(game._current_dash_cooldown(), 4.0), "electric TP cooldown is not 4s")
 	var electric_enemy := _enemy(Vector2(610, 400), 10000.0)
 	game._execute_teleport(Vector2(720, 400))
 	_check(game._player_invulnerable(), "electric TP did not turn the player into invulnerable electricity")
+	var electric_dash_stamp: float = game.last_dash_time
 	var electric_before: float = electric_enemy["hp"]
 	_advance_tp(0.65, 0.05)
 	_check(float(electric_enemy["hp"]) <= electric_before - 100.0, "electric TP did not apply repeated 300ms ticks")
+	_advance_tp(3.2, 0.05)
+	_check(game.tp_cooldown_pending and game.last_dash_time == electric_dash_stamp, "electric TP released before 4s")
+	_advance_tp(0.25, 0.05)
+	_check(not game.tp_cooldown_pending and game.last_dash_time == electric_dash_stamp, "electric TP did not release after 4s from activation")
 
 	game.current_phase = 1
 	game.boss_active = true

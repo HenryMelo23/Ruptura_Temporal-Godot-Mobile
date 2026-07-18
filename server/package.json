@@ -5,6 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node relay_manager.js",
-    "check": "node --check relay_manager.js"
+    "check": "node --check relay_manager.js && node --check leaderboard_site.js",
+    "test:leaderboard": "node leaderboard_smoke.js",
+    "test:rooms": "node room_lifecycle_smoke.js"
   }
 }

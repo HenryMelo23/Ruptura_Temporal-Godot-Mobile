@@ -59,7 +59,7 @@ func _run_server() -> void:
 			_check(game.remote_bullets.is_empty(), "dedicated relay instantiated remote projectiles")
 			print("[SERVER] ABILITY_VISUAL_OK relay_only=true")
 			_write("server_result", "OK")
-			quit(0)
+			await _finish()
 			return
 	_fail("server timed out waiting for host/client ability results")
 
@@ -114,7 +114,7 @@ func _run_host() -> void:
 			_write("host_result", "OK")
 			while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:
 				await process_frame
-			quit(0)
+			await _finish()
 			return
 	_fail("host timed out sending ability/projectile sequence")
 
@@ -156,7 +156,7 @@ func _run_client() -> void:
 				_write("client_result", "OK")
 				while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:
 					await process_frame
-				quit(0)
+				await _finish()
 				return
 	_fail("client timed out waiting for Q/E/TP or projectile destroy")
 
@@ -172,6 +172,29 @@ func _write(name: String, value: String) -> void:
 	if file:
 		file.store_string(value)
 		file.close()
+
+
+func _finish() -> void:
+	if is_instance_valid(game):
+		game._cleanup_runtime_resources()
+		if game.music_player != null:
+			game.music_player.stop()
+			game.music_player.stream = null
+		if game.rain_audio_player != null:
+			game.rain_audio_player.stop()
+			game.rain_audio_player.stream = null
+		for player in game.sfx_players:
+			if player != null:
+				player.stop()
+				player.stream = null
+		game.audio_streams.clear()
+		game.textures.clear()
+		root.remove_child(game)
+		game.free()
+		game = null
+	for _frame in range(8):
+		await process_frame
+	quit(0)
 
 
 func _fail(message: String) -> void:

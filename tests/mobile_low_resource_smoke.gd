@@ -57,10 +57,12 @@ func _run() -> void:
 	_check(not game.gfx_particles, "memory saver should disable particles")
 	_check(not game.gfx_shadows, "memory saver should disable shadows")
 	_check(not game.gfx_screen_shake, "memory saver should disable screen shake")
-	_check(game.qa_streaming_enabled, "memory saver should keep unlocked QA streaming available")
+	_check(not game.qa_streaming_unlocked, "memory saver should keep removed QA streaming locked")
+	_check(not game.qa_streaming_enabled, "memory saver should keep removed QA streaming off")
 	game.qa_streaming_quality_mode = "180p"
-	_check(game._qa_stream_target_size() == Vector2i(320, 180), "streaming quality should be selected by the broadcaster")
-	_check(game._qa_stream_target_fps() == 30.0, "180p should keep the minimum accepted stream fps")
+	game._cycle_qa_stream_quality_mode(1)
+	_check(game.qa_streaming_quality_mode == "180p", "removed streaming quality selector should be inert")
+	_check(game._capture_qa_stream_frame().is_empty(), "removed streaming should not capture frames in memory saver")
 	_check(game.sfx_players.size() <= 5, "memory saver should shrink the sfx player pool")
 	for i in range(game.MEMORY_SAVER_EFFECT_CAP + 40):
 		game.effects.append({"text": "", "pos": Vector2.ZERO, "life": 1.0, "max": 1.0})

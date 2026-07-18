@@ -5,24 +5,29 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const { renderLeaderboardSite } = require("./leaderboard_site");
 
-const MANAGER_PORT = numberEnv("PORT", 8080);
+const MANAGER_PORT = numberEnv("PORT", 8090);
 const ROOM_HOST = process.env.ROOM_HOST || "72.61.217.238";
 const ROOM_PORT_START = numberEnv("ROOM_PORT_START", 4522);
 const ROOM_PORT_END = numberEnv("ROOM_PORT_END", 4599);
 const GODOT_BIN = process.env.GODOT_BIN || "/opt/godot/Godot_v4.7-stable_linux.x86_64";
 const PROJECT_PATH = process.env.PROJECT_PATH || "/opt/ruptura/Ruptura_Temporal-Godot-Mobile";
 const ROOM_IDLE_MS = numberEnv("ROOM_IDLE_MS", 15 * 60 * 1000);
+const ROOM_EVENT_LIMIT = numberEnv("ROOM_EVENT_LIMIT", 80);
 const WARM_STANDBY_ROOMS = numberEnv("WARM_STANDBY_ROOMS", 1, true);
 const WARM_STANDBY_REFILL_MS = numberEnv("WARM_STANDBY_REFILL_MS", 1500);
-const MAX_PLAYERS = 2;
+const ROOM_READY_TIMEOUT_MS = numberEnv("ROOM_READY_TIMEOUT_MS", 30 * 1000);
+const MAX_PLAYERS = 3;
+const STREAMING_ENABLED = process.env.STREAMING_ENABLED === "1";
 const STREAM_PUBLIC_HOST = process.env.STREAM_PUBLIC_HOST || ROOM_HOST;
 const STREAM_PUBLIC_SCHEME = process.env.STREAM_PUBLIC_SCHEME || "http";
 const STREAM_WEBRTC_PORT = numberEnv("STREAM_WEBRTC_PORT", 8889);
 const STREAM_HLS_PORT = numberEnv("STREAM_HLS_PORT", 8888);
 const STREAM_RTMP_PORT = numberEnv("STREAM_RTMP_PORT", 1935);
 const STREAM_RTMP_APP = process.env.STREAM_RTMP_APP || "live";
-const STREAM_MANAGER_PUBLIC_BASE_URL = process.env.STREAM_MANAGER_PUBLIC_BASE_URL || `http://${ROOM_HOST}:${MANAGER_PORT}`;
+const DEFAULT_MANAGER_PUBLIC_BASE_URL = "http://72.61.217.238:8090";
+const STREAM_MANAGER_PUBLIC_BASE_URL = publicManagerBaseUrl();
 const STREAM_TTL_MS = numberEnv("STREAM_TTL_MS", 4 * 60 * 60 * 1000);
 const STREAM_FRAME_MAX_BYTES = numberEnv("STREAM_FRAME_MAX_BYTES", 6_000_000);
 const STREAM_FRAME_BUFFER_MAX = numberEnv("STREAM_FRAME_BUFFER_MAX", 90);
@@ -30,6 +35,8 @@ const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 900);
 const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
+const ANDROID_UPDATE_ROOT = path.resolve(process.env.ANDROID_UPDATE_ROOT || path.join(__dirname, "updates", "android"));
+const ANDROID_UPDATE_MANIFEST = path.join(ANDROID_UPDATE_ROOT, "latest.json");
 
 const rooms = new Map();
 const streams = new Map();
@@ -38,6 +45,22 @@ let warmRefillTimer = null;
 function numberEnv(name, fallback, allowZero = false) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && (value > 0 || (allowZero && value === 0)) ? value : fallback;
+}
+
+function publicManagerBaseUrl() {
+  const configured = String(process.env.STREAM_MANAGER_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!configured) {
+    return DEFAULT_MANAGER_PUBLIC_BASE_URL;
+  }
+  if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(configured) && process.env.ALLOW_LOCAL_PUBLIC_BASE_URL !== "1") {
+    console.warn(`Ignoring local STREAM_MANAGER_PUBLIC_BASE_URL=${configured}; using ${DEFAULT_MANAGER_PUBLIC_BASE_URL}`);
+    return DEFAULT_MANAGER_PUBLIC_BASE_URL;
+  }
+  return configured;
+}
+
+function leaderboardRunUrl(run) {
+  return `${STREAM_MANAGER_PUBLIC_BASE_URL}/leaderboard/run/${encodeURIComponent(String(run && run.id || ""))}`;
 }
 
 function sendJson(res, status, payload) {
@@ -50,6 +73,118 @@ function sendJson(res, status, payload) {
     "Content-Length": Buffer.byteLength(body)
   });
   res.end(body);
+}
+
+function sendStreamingDisabled(res) {
+  sendJson(res, 410, {
+    ok: false,
+    error: "streaming disabled",
+    message: "Ruptura QA streaming was removed. Multiplayer, ranking, and APK updates remain active."
+  });
+}
+
+function readAndroidUpdateManifest() {
+  try {
+    const raw = fs.readFileSync(ANDROID_UPDATE_MANIFEST, "utf8").replace(/^\uFEFF/, "");
+    const parsed = JSON.parse(raw);
+    const filename = path.basename(String(parsed.filename || ""));
+    const versionCode = Math.max(0, Math.floor(Number(parsed.version_code) || 0));
+    const sha256 = String(parsed.sha256 || "").toLowerCase();
+    const apkPath = filename ? path.join(ANDROID_UPDATE_ROOT, filename) : "";
+    if (!filename.endsWith(".apk") || versionCode <= 0 || !/^[a-f0-9]{64}$/.test(sha256) || !apkPath || !fs.existsSync(apkPath)) {
+      return null;
+    }
+    const stat = fs.statSync(apkPath);
+    if (!stat.isFile()) {
+      return null;
+    }
+    return {
+      version: String(parsed.version || "").slice(0, 32),
+      versionCode,
+      filename,
+      sha256,
+      size: stat.size,
+      notes: Array.isArray(parsed.notes) ? parsed.notes.map((note) => String(note).slice(0, 240)).slice(0, 8) : [],
+      mandatory: Boolean(parsed.mandatory),
+      publishedAt: String(parsed.published_at || "").slice(0, 64),
+      apkPath
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function androidUpdatePublic(currentVersionCode = 0) {
+  const update = readAndroidUpdateManifest();
+  if (!update) {
+    return { ok: true, available: false, current_version_code: currentVersionCode };
+  }
+  return {
+    ok: true,
+    available: update.versionCode > currentVersionCode,
+    current_version_code: currentVersionCode,
+    version: update.version,
+    version_code: update.versionCode,
+    size: update.size,
+    sha256: update.sha256,
+    notes: update.notes,
+    mandatory: update.mandatory,
+    published_at: update.publishedAt,
+    apk_url: `${STREAM_MANAGER_PUBLIC_BASE_URL}/updates/android/download/${encodeURIComponent(update.filename)}`
+  };
+}
+
+function sendAndroidApk(req, res, filename) {
+  const update = readAndroidUpdateManifest();
+  const requested = path.basename(decodeURIComponent(filename || ""));
+  if (!update || requested !== update.filename) {
+    sendJson(res, 404, { error: "android update not found" });
+    return;
+  }
+  const total = update.size;
+  const range = String(req.headers.range || "");
+  let start = 0;
+  let end = total - 1;
+  let status = 200;
+  if (range) {
+    const match = range.match(/^bytes=(\d*)-(\d*)$/);
+    if (!match) {
+      res.writeHead(416, { "Content-Range": `bytes */${total}` });
+      res.end();
+      return;
+    }
+    if (match[1] === "" && match[2] !== "") {
+      const suffix = Math.max(1, Number(match[2]) || 0);
+      start = Math.max(0, total - suffix);
+    } else {
+      start = Math.max(0, Number(match[1]) || 0);
+      end = match[2] === "" ? end : Math.min(end, Number(match[2]) || 0);
+    }
+    if (start > end || start >= total) {
+      res.writeHead(416, { "Content-Range": `bytes */${total}` });
+      res.end();
+      return;
+    }
+    status = 206;
+  }
+  const headers = {
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Type": "application/vnd.android.package-archive",
+    "Content-Disposition": `attachment; filename="${update.filename.replace(/"/g, "")}"`,
+    "Content-Length": end - start + 1
+  };
+  if (status === 206) {
+    headers["Content-Range"] = `bytes ${start}-${end}/${total}`;
+  }
+  res.writeHead(status, headers);
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  const stream = fs.createReadStream(update.apkPath, { start, end });
+  stream.on("error", () => res.destroy());
+  stream.pipe(res);
 }
 
 function readJson(req, maxBytes = 16 * 1024) {
@@ -97,20 +232,52 @@ function readBinary(req, maxBytes = STREAM_FRAME_MAX_BYTES) {
 }
 
 function roomPublic(room) {
+  const expiresInMs = Math.max(0, room.lastSeen + ROOM_IDLE_MS - Date.now());
   return {
     code: room.code,
     host: ROOM_HOST,
     port: room.port,
     players: room.players,
     maxPlayers: MAX_PLAYERS,
-    createdAt: room.createdAt
+    createdAt: room.createdAt,
+    lastSeen: room.lastSeen,
+    expiresInMs,
+    heartbeatCount: room.heartbeatCount || 0
   };
+}
+
+function boundUdpPorts() {
+  const ports = new Set();
+  if (process.platform !== "linux") {
+    return ports;
+  }
+  for (const table of ["/proc/net/udp", "/proc/net/udp6"]) {
+    try {
+      const lines = fs.readFileSync(table, "utf8").split(/\r?\n/).slice(1);
+      for (const line of lines) {
+        const columns = line.trim().split(/\s+/);
+        const localAddress = columns[1] || "";
+        const separator = localAddress.lastIndexOf(":");
+        if (separator < 0) {
+          continue;
+        }
+        const port = Number.parseInt(localAddress.slice(separator + 1), 16);
+        if (Number.isInteger(port) && port > 0) {
+          ports.add(port);
+        }
+      }
+    } catch (_error) {
+      // Non-Linux development environments do not expose procfs.
+    }
+  }
+  return ports;
 }
 
 function allocatePort() {
   const used = new Set(Array.from(rooms.values()).map((room) => room.port));
+  const occupied = boundUdpPorts();
   for (let port = ROOM_PORT_START; port <= ROOM_PORT_END; port += 1) {
-    if (!used.has(port)) {
+    if (!used.has(port) && !occupied.has(port)) {
       return port;
     }
   }
@@ -119,6 +286,85 @@ function allocatePort() {
 
 function createCode() {
   return crypto.randomBytes(3).toString("hex").toUpperCase();
+}
+
+function roomIsReady(room) {
+  if (!room || room.stopping || !rooms.has(room.code)) {
+    return false;
+  }
+  room.ready = room.ready || boundUdpPorts().has(room.port);
+  return room.ready;
+}
+
+function waitForRoomReady(room, timeoutMs = ROOM_READY_TIMEOUT_MS) {
+  const startedAt = Date.now();
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (!rooms.has(room.code) || room.stopping || room.child.exitCode !== null) {
+        reject(new Error(`room ${room.code} exited before opening UDP port ${room.port}`));
+        return;
+      }
+      if (roomIsReady(room)) {
+        resolve(room);
+        return;
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        stopRoom(room.code, "startup timeout");
+        reject(new Error(`room ${room.code} did not open UDP port ${room.port} in time`));
+        return;
+      }
+      setTimeout(check, 100);
+    };
+    check();
+  });
+}
+
+function spawnRoomProcess(args) {
+  if (/\.js$/i.test(GODOT_BIN)) {
+    return spawn(process.execPath, [GODOT_BIN, ...args], {
+      cwd: PROJECT_PATH,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+  }
+  return spawn(GODOT_BIN, args, {
+    cwd: PROJECT_PATH,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+}
+
+function logRoomEvent(room, kind, detail = {}) {
+  if (!room) {
+    return;
+  }
+  const event = {
+    at: Date.now(),
+    kind,
+    ...detail
+  };
+  if (!Array.isArray(room.events)) {
+    room.events = [];
+  }
+  room.events.push(event);
+  while (room.events.length > ROOM_EVENT_LIMIT) {
+    room.events.shift();
+  }
+  const detailText = Object.entries(detail)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" ");
+  console.log(`room_event code=${room.code} kind=${kind}${detailText ? " " + detailText : ""}`);
+}
+
+function touchRoom(room, reason, detail = {}) {
+  if (!room || room.stopping || !rooms.has(room.code)) {
+    return;
+  }
+  room.lastSeen = Date.now();
+  scheduleRoomStop(room);
+  logRoomEvent(room, reason, {
+    players: room.players,
+    expiresInMs: roomPublic(room).expiresInMs,
+    ...detail
+  });
 }
 
 function createStreamId() {
@@ -499,10 +745,7 @@ function startRoom(ownerName, options = {}) {
   if (standby) {
     args.push("--warm-standby");
   }
-  const child = spawn(GODOT_BIN, args, {
-    cwd: PROJECT_PATH,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
+  const child = spawnRoomProcess(args);
 
   const room = {
     code,
@@ -514,11 +757,22 @@ function startRoom(ownerName, options = {}) {
     lastSeen: Date.now(),
     child,
     idleTimer: null,
-    stopping: false
+    stopping: false,
+    ready: false,
+    heartbeatCount: 0,
+    lastHeartbeatAt: 0,
+    events: []
   };
   rooms.set(code, room);
+  logRoomEvent(room, standby ? "standby_started" : "room_started", { owner: room.ownerName, port });
 
-  child.stdout.on("data", (chunk) => process.stdout.write(`[${code}] ${chunk}`));
+  child.stdout.on("data", (chunk) => {
+    const text = chunk.toString("utf8");
+    if (/ONLINE ROOM|ROOM .*READY|DEDICATED.*READY/i.test(text)) {
+      room.ready = true;
+    }
+    process.stdout.write(`[${code}] ${chunk}`);
+  });
   child.stderr.on("data", (chunk) => process.stderr.write(`[${code}] ${chunk}`));
   child.on("error", (error) => {
     clearTimeout(room.idleTimer);
@@ -531,7 +785,9 @@ function startRoom(ownerName, options = {}) {
   child.on("exit", (status, signal) => {
     clearTimeout(room.idleTimer);
     rooms.delete(code);
-    console.log(`room ${code}${room.standby ? " standby" : ""} exited status=${status} signal=${signal}`);
+    const uptimeMs = Date.now() - room.createdAt;
+    const idleForMs = Date.now() - room.lastSeen;
+    console.log(`room ${code}${room.standby ? " standby" : ""} exited status=${status} signal=${signal} uptimeMs=${uptimeMs} idleForMs=${idleForMs} stopping=${room.stopping}`);
     if (room.standby && !room.stopping) {
       scheduleWarmStandbyRefill();
     }
@@ -546,9 +802,10 @@ function startRoom(ownerName, options = {}) {
 
 function scheduleRoomStop(room) {
   clearTimeout(room.idleTimer);
+  const delayMs = Math.max(5000, room.lastSeen + ROOM_IDLE_MS - Date.now());
   room.idleTimer = setTimeout(() => {
     stopRoom(room.code, "idle timeout");
-  }, ROOM_IDLE_MS);
+  }, delayMs);
 }
 
 function stopRoom(code, reason) {
@@ -556,7 +813,10 @@ function stopRoom(code, reason) {
   if (!room) {
     return false;
   }
-  console.log(`stopping room ${code}: ${reason}`);
+  const uptimeMs = Date.now() - room.createdAt;
+  const idleForMs = Date.now() - room.lastSeen;
+  logRoomEvent(room, "stopping", { reason, uptimeMs, idleForMs, players: room.players });
+  console.log(`stopping room ${code}: ${reason} players=${room.players} uptimeMs=${uptimeMs} idleForMs=${idleForMs}`);
   room.stopping = true;
   clearTimeout(room.idleTimer);
   rooms.delete(code);
@@ -574,6 +834,10 @@ function stopRoom(code, reason) {
 }
 
 function warmStandbyRooms() {
+  return Array.from(rooms.values()).filter((room) => room.standby && room.players === 0 && roomIsReady(room));
+}
+
+function standbyRooms() {
   return Array.from(rooms.values()).filter((room) => room.standby && room.players === 0);
 }
 
@@ -596,7 +860,7 @@ function ensureWarmStandby() {
   if (WARM_STANDBY_ROOMS <= 0) {
     return;
   }
-  let missing = WARM_STANDBY_ROOMS - warmStandbyRooms().length;
+  let missing = WARM_STANDBY_ROOMS - standbyRooms().length;
   while (missing > 0) {
     try {
       startRoom("", { standby: true });
@@ -618,7 +882,10 @@ function claimWarmStandby(ownerName) {
   room.players = 1;
   room.createdAt = Date.now();
   room.lastSeen = Date.now();
+  room.heartbeatCount = 0;
+  room.lastHeartbeatAt = 0;
   scheduleRoomStop(room);
+  logRoomEvent(room, "standby_claimed", { owner: room.ownerName, port: room.port });
   console.log(`room ${room.code} claimed from warm standby by ${room.ownerName}`);
   scheduleWarmStandbyRefill();
   return room;
@@ -646,8 +913,7 @@ function reserveRoom(room) {
     return null;
   }
   room.players += 1;
-  room.lastSeen = Date.now();
-  scheduleRoomStop(room);
+  touchRoom(room, "player_joined", { players: room.players });
   return room;
 }
 
@@ -718,6 +984,51 @@ function normalizeCardRows(cards) {
     .slice(0, 80);
 }
 
+function normalizeDamageThreats(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => ({
+    kind: String(row.kind || row.source || "desconhecido").slice(0, 64),
+    name: String(row.name || row.kind || "Fonte desconhecida").slice(0, 80),
+    icon: String(row.icon || "").slice(0, 240),
+    phase: Math.max(1, Math.min(5, Math.floor(safeNumber(row.phase, 1)))),
+    damage: Math.max(0, Math.floor(safeNumber(row.damage))),
+    hits: Math.max(0, Math.floor(safeNumber(row.hits)))
+  })).filter((row) => row.damage > 0).slice(0, 80);
+}
+
+function normalizeDamageEvents(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => ({
+    x: Math.max(0, Math.min(1, safeNumber(row.x))),
+    y: Math.max(0, Math.min(1, safeNumber(row.y))),
+    amount: Math.max(0, Math.floor(safeNumber(row.amount))),
+    source: String(row.source || "desconhecido").slice(0, 64),
+    name: String(row.name || row.source || "Fonte desconhecida").slice(0, 80),
+    time: Math.max(0, safeNumber(row.time)),
+    phase: Math.max(1, Math.min(5, Math.floor(safeNumber(row.phase, 1))))
+  })).filter((row) => row.amount > 0).slice(0, 240);
+}
+
+function normalizeHeatmap(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const columns = Math.max(1, Math.min(64, Math.floor(safeNumber(source.columns, 16))));
+  const rows = Math.max(1, Math.min(36, Math.floor(safeNumber(source.rows, 9))));
+  const cells = Array.isArray(source.cells) ? source.cells.map((cell) => ({
+    phase: Math.max(1, Math.min(5, Math.floor(safeNumber(cell.phase, 1)))),
+    x: Math.max(0, Math.min(columns - 1, Math.floor(safeNumber(cell.x)))),
+    y: Math.max(0, Math.min(rows - 1, Math.floor(safeNumber(cell.y)))),
+    count: Math.max(0, Math.floor(safeNumber(cell.count)))
+  })).filter((cell) => cell.count > 0).slice(0, columns * rows * 5) : [];
+  return {
+    columns,
+    rows,
+    sampleInterval: Math.max(0.1, Math.min(10, safeNumber(source.sample_interval, 0.5))),
+    worldWidth: Math.max(1, Math.floor(safeNumber(source.world_width, 1600))),
+    worldHeight: Math.max(1, Math.floor(safeNumber(source.world_height, 900))),
+    cells
+  };
+}
+
 function normalizeRunPayload(payload) {
   const player = String(payload.player || "Jogador").trim().slice(0, 32) || "Jogador";
   const durationSeconds = Math.max(0, Math.floor(safeNumber(payload.duration_seconds)));
@@ -735,6 +1046,7 @@ function normalizeRunPayload(payload) {
     role: String(payload.role || "solo").slice(0, 16),
     result: String(payload.result || "").slice(0, 32),
     date: String(payload.date || new Date().toISOString()).slice(0, 48),
+    startedUnix: Math.max(0, Math.floor(safeNumber(payload.started_unix))),
     endedUnix,
     duration: String(payload.duration || "").slice(0, 16),
     durationSeconds,
@@ -747,6 +1059,10 @@ function normalizeRunPayload(payload) {
     pointsSpent: Math.max(0, Math.floor(safeNumber(payload.points_spent))),
     bossDamage,
     enemyDamage: Math.max(0, Math.floor(safeNumber(payload.enemy_damage_total))),
+    damageTaken: Math.max(0, Math.floor(safeNumber(payload.damage_taken_total))),
+    damageThreats: normalizeDamageThreats(payload.damage_taken_detail),
+    damageEvents: normalizeDamageEvents(payload.damage_events),
+    heatmap: normalizeHeatmap(payload.position_heatmap),
     manifestation: String(payload.manifestation || "").slice(0, 64),
     manifestationKey: String(payload.manifestation_key || "").slice(0, 48),
     spectrum: String(payload.spectrum || "").slice(0, 64),
@@ -799,16 +1115,58 @@ function leaderboardSnapshot() {
   const players = Array.from(bestByProfile.values())
     .sort((left, right) => safeNumber(right.score) - safeNumber(left.score))
     .slice(0, 30);
-  return { players, recent: store.runs.slice(0, 60), profiles: store.profiles };
+  return { players, recent: store.runs.slice(0, 60), runs: store.runs, profiles: store.profiles };
+}
+
+let cardCatalogIndex = null;
+
+function normalizedCatalogKey(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function loadCardCatalogIndex() {
+  if (cardCatalogIndex) return cardCatalogIndex;
+  cardCatalogIndex = new Map();
+  try {
+    const source = fs.readFileSync(path.join(PROJECT_PATH, "scripts", "main.gd"), "utf8");
+    for (const line of source.split(/\r?\n/)) {
+      if (!line.includes('"icon": "Deck/')) continue;
+      const icon = line.match(/"icon"\s*:\s*"([^"]+)"/);
+      const name = line.match(/"name"\s*:\s*"([^"]+)"/);
+      const id = line.match(/"id"\s*:\s*"([^"]+)"/);
+      const nick = line.match(/"nick"\s*:\s*"([^"]+)"/);
+      if (!icon) continue;
+      for (const value of [name && name[1], id && id[1], nick && nick[1]]) {
+        const key = normalizedCatalogKey(value);
+        if (key) cardCatalogIndex.set(key, icon[1]);
+      }
+    }
+  } catch (error) {
+    console.error(`failed to index card catalog: ${error.message}`);
+  }
+  return cardCatalogIndex;
+}
+
+function publicAssetUrl(rawPath) {
+  const raw = String(rawPath || "").replace(/\\/g, "/").replace(/^res:\/\//, "");
+  if (!raw || raw.includes("..")) return "";
+  const relative = raw.startsWith("assets/sprites/") ? raw : `assets/sprites/${raw.replace(/^assets\//, "")}`;
+  const absolute = path.resolve(PROJECT_PATH, relative);
+  const root = path.resolve(PROJECT_PATH, "assets", "sprites");
+  if (!absolute.startsWith(root) || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return "";
+  return `/assets/${relative.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 function cardAssetUrl(card) {
-  const raw = String(card.icon || "").replace(/\\/g, "/").replace(/^res:\/\//, "");
-  if (!raw || raw.includes("..")) {
-    return "";
+  const direct = publicAssetUrl(card.icon);
+  if (direct) return direct;
+  const catalog = loadCardCatalogIndex();
+  for (const value of [card.id, card.name, card.nick]) {
+    const catalogPath = catalog.get(normalizedCatalogKey(value));
+    const resolved = publicAssetUrl(catalogPath);
+    if (resolved) return resolved;
   }
-  const relative = raw.startsWith("assets/") ? raw : `assets/sprites/${raw}`;
-  return `/assets/${relative}`;
+  return "";
 }
 
 function leaderboardHtml() {
@@ -927,15 +1285,52 @@ async function route(req, res) {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
+  if (req.method === "GET" && url.pathname === "/favicon.ico") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=86400"
+    });
+    res.end();
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/health") {
-    sendJson(res, 200, { ok: true, rooms: activeRooms().length, standby: warmStandbyRooms().length, streams: streams.size, runs: leaderboardSnapshot().recent.length, protocols: ["rtmp-hls", "frame-mjpeg"] });
+    const readyStandby = warmStandbyRooms().length;
+    sendJson(res, 200, {
+      ok: true,
+      rooms: activeRooms().length,
+      standby: readyStandby,
+      standbyStarting: Math.max(0, standbyRooms().length - readyStandby),
+      streams: STREAMING_ENABLED ? streams.size : 0,
+      runs: leaderboardSnapshot().recent.length,
+      protocols: STREAMING_ENABLED ? ["rtmp-hls", "frame-mjpeg"] : [],
+      streaming: STREAMING_ENABLED
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/updates/android/latest") {
+    const currentVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("version_code")) || 0));
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, androidUpdatePublic(currentVersionCode));
+    return;
+  }
+
+  const androidApkMatch = url.pathname.match(/^\/updates\/android\/download\/([^/]+)$/);
+  if ((req.method === "GET" || req.method === "HEAD") && androidApkMatch) {
+    sendAndroidApk(req, res, androidApkMatch[1]);
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/runs") {
     const payload = await readJson(req, RUN_REPORT_MAX_BYTES);
     const run = recordRun(payload);
-    sendJson(res, 201, { ok: true, run, leaderboardUrl: `${STREAM_MANAGER_PUBLIC_BASE_URL}/leaderboard` });
+    sendJson(res, 201, {
+      ok: true,
+      run,
+      leaderboardUrl: `${STREAM_MANAGER_PUBLIC_BASE_URL}/leaderboard`,
+      runUrl: leaderboardRunUrl(run)
+    });
     return;
   }
 
@@ -944,8 +1339,13 @@ async function route(req, res) {
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/leaderboard") {
-    sendHtml(res, 200, leaderboardHtml());
+  if (req.method === "GET" && (url.pathname === "/leaderboard" || url.pathname.startsWith("/leaderboard/"))) {
+    sendHtml(res, 200, renderLeaderboardSite({
+      pathname: url.pathname,
+      snapshot: leaderboardSnapshot(),
+      cardAssetUrl,
+      publicAssetUrl
+    }));
     return;
   }
 
@@ -956,6 +1356,10 @@ async function route(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/streams") {
+    if (!STREAMING_ENABLED) {
+      sendStreamingDisabled(res);
+      return;
+    }
     const payload = await readJson(req);
     sendJson(res, 201, streamPublic(createStream(payload)));
     return;
@@ -963,6 +1367,10 @@ async function route(req, res) {
 
   const streamMatch = url.pathname.match(/^\/streams\/([a-zA-Z0-9_-]+)$/);
   if (req.method === "GET" && streamMatch) {
+    if (!STREAMING_ENABLED) {
+      sendStreamingDisabled(res);
+      return;
+    }
     const stream = streams.get(streamMatch[1]);
     if (!stream) {
       sendJson(res, 404, { error: "stream not found" });
@@ -977,6 +1385,10 @@ async function route(req, res) {
   }
 
   if (req.method === "DELETE" && streamMatch) {
+    if (!STREAMING_ENABLED) {
+      sendStreamingDisabled(res);
+      return;
+    }
     const stopped = closeStream(streamMatch[1]);
     sendJson(res, stopped ? 200 : 404, { stopped });
     return;
@@ -984,6 +1396,10 @@ async function route(req, res) {
 
   const streamFrameMatch = url.pathname.match(/^\/streams\/([a-zA-Z0-9_-]+)\/frame$/);
   if (streamFrameMatch) {
+    if (!STREAMING_ENABLED) {
+      sendStreamingDisabled(res);
+      return;
+    }
     const stream = streams.get(streamFrameMatch[1]);
     if (!stream) {
       sendJson(res, 404, { error: "stream not found" });
@@ -1008,6 +1424,10 @@ async function route(req, res) {
 
   const streamMjpegMatch = url.pathname.match(/^\/streams\/([a-zA-Z0-9_-]+)\/mjpeg$/);
   if (req.method === "GET" && streamMjpegMatch) {
+    if (!STREAMING_ENABLED) {
+      sendStreamingDisabled(res);
+      return;
+    }
     const stream = streams.get(streamMjpegMatch[1]);
     if (!stream) {
       sendJson(res, 404, { error: "stream not found" });
@@ -1021,6 +1441,7 @@ async function route(req, res) {
     const payload = await readJson(req);
     const ownerName = String(payload.name || "host");
     const room = claimWarmStandby(ownerName) || startRoom(ownerName);
+    await waitForRoomReady(room);
     sendJson(res, 201, roomPublic(room));
     return;
   }
@@ -1048,6 +1469,34 @@ async function route(req, res) {
       return;
     }
     sendJson(res, 200, roomPublic(room));
+    return;
+  }
+
+  const heartbeatMatch = url.pathname.match(/^\/rooms\/([A-F0-9]{6})\/heartbeat$/);
+  if (req.method === "POST" && heartbeatMatch) {
+    const room = roomByCode(heartbeatMatch[1]);
+    if (!room || room.standby || room.stopping) {
+      sendJson(res, 404, { error: "room not found" });
+      return;
+    }
+    let payload = {};
+    try {
+      payload = await readJson(req, 8 * 1024);
+    } catch (_error) {
+      payload = {};
+    }
+    room.heartbeatCount = (room.heartbeatCount || 0) + 1;
+    room.lastHeartbeatAt = Date.now();
+    const role = String(payload.role || "unknown").slice(0, 24);
+    const mode = String(payload.mode || "unknown").slice(0, 48);
+    const peerId = Number.isFinite(Number(payload.peer_id)) ? Number(payload.peer_id) : 0;
+    touchRoom(room, "heartbeat", {
+      count: room.heartbeatCount,
+      role,
+      mode,
+      peerId
+    });
+    sendJson(res, 200, { ok: true, room: roomPublic(room), expiresInMs: roomPublic(room).expiresInMs });
     return;
   }
 

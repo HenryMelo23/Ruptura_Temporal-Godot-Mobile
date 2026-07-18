@@ -2,12 +2,31 @@ extends SceneTree
 
 var game: Node
 
+const EXPECTED_MANIFEST_ICONS := {
+	"eclipsada": "res://assets/sprites/manifestacao-eclipsada.png"
+}
+
+const EXPECTED_SPECTRUM_ICONS := {
+	"crepuscular": "res://assets/sprites/aurea-eclipsa.png",
+	"peregrino": "res://assets/sprites/aurea-peregrina.png",
+	"equilibrista": "res://assets/sprites/aurea-equilibrista.png",
+	"avarento": "res://assets/sprites/aurea-avarenta.png",
+	"oportunista": "res://assets/sprites/aurea-oportunista.png"
+}
+
 
 func _check(condition: bool, message: String) -> void:
 	if condition:
 		return
 	push_error("CATALOG_MANIFEST_SPECTRUM_ICONS_FAIL " + message)
 	quit(1)
+
+
+func _check_icon_packable(icon_path: String, label: String) -> void:
+	_check(icon_path.begins_with("res://assets/sprites/"), "icon must live in exported sprite assets: " + label)
+	_check(FileAccess.file_exists(icon_path), "missing icon source file: " + label)
+	_check(FileAccess.file_exists(icon_path + ".import"), "missing icon import metadata for Android export: " + label)
+	_check(ResourceLoader.exists(icon_path), "icon is not visible to ResourceLoader: " + label)
 
 
 func _initialize() -> void:
@@ -25,6 +44,9 @@ func _run() -> void:
 	_check(manifest_items.size() == game.MANIFESTATIONS.size(), "catalog manifestation list is not synchronized")
 	for item in game.MANIFESTATIONS:
 		var key := String(item.get("key", ""))
+		if EXPECTED_MANIFEST_ICONS.has(key):
+			_check(String(item.get("icon", "")) == String(EXPECTED_MANIFEST_ICONS[key]), "wrong manifestation icon path: " + key)
+			_check_icon_packable(String(EXPECTED_MANIFEST_ICONS[key]), "manifestation " + key)
 		_check(game._manifest_select_item_texture(item, false) != null, "selector missing manifestation icon: " + key)
 		_check(game._catalog_item_texture(item) != null, "catalog missing manifestation icon: " + key)
 		var description := String(game._catalog_detail_description(item))
@@ -37,6 +59,9 @@ func _run() -> void:
 	_check(spectrum_items.size() == game.AURAS.size(), "catalog spectrum list is not synchronized")
 	for item in game.AURAS:
 		var key := String(item.get("key", ""))
+		if EXPECTED_SPECTRUM_ICONS.has(key):
+			_check(String(item.get("icon", "")) == String(EXPECTED_SPECTRUM_ICONS[key]), "wrong spectrum icon path: " + key)
+			_check_icon_packable(String(EXPECTED_SPECTRUM_ICONS[key]), "spectrum " + key)
 		_check(game._manifest_select_item_texture(item, true) != null, "selector missing spectrum icon: " + key)
 		_check(game._catalog_item_texture(item) != null, "catalog missing spectrum icon: " + key)
 		var description := String(game._catalog_detail_description(item))
