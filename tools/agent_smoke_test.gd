@@ -49,9 +49,13 @@ func _run_smoke_test() -> void:
     print("AGENT_SMOKE_TEST_OK scene=%s frames=%d" % [_scene_path, _frames])
     if instance.has_method("_cleanup_runtime_resources"):
         instance.call("_cleanup_runtime_resources")
+    if "textures" in instance:
+        instance.textures.clear()
+    if "audio_streams" in instance:
+        instance.audio_streams.clear()
     current_scene = null
     root.remove_child(instance)
-    instance.queue_free()
-    await process_frame
-    await process_frame
+    instance.free()
+    for _i in range(4):
+        await process_frame
     quit(0)

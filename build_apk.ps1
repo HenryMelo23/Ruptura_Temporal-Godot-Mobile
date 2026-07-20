@@ -72,7 +72,7 @@ function Get-VersionCode {
 		$suffixCode = [int][char]($suffix.ToLowerInvariant()) - [int][char]'a' + 1
 		return ($baseCode * 100) + $suffixCode
 	}
-	return $baseCode
+	return ($baseCode * 100)
 }
 
 function Update-AndroidPreset {

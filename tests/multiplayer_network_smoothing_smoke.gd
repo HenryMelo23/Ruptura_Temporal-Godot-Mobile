@@ -173,6 +173,21 @@ func _run() -> void:
 	_check(client_game.net_ability_visuals.size() == 3, "Q/E/TP remote visuals failed during rendered frames")
 	_check(bool(client_game.net_ability_visuals[1].get("network_replica", false)), "secondary visual did not use a local effect replica")
 
+	var prismatica_index := -1
+	for i in range(client_game.MANIFESTATIONS.size()):
+		if String(client_game.MANIFESTATIONS[i].get("key", "")) == "prismatica":
+			prismatica_index = i
+			break
+	_check(prismatica_index >= 0, "prismatica manifestation index was not found")
+	client_game._rpc_ability_visual(42, 4, client_game.NET_ABILITY_SECONDARY, prismatica_index, Vector2(560, 300), Vector2(560, 300), client_game.SECONDARY_PRISMATICA_DURATION, 0.0, {"seed": 77, "center": Vector2(560, 300), "final_frame": 1}, 4)
+	_check(client_game.net_ability_visuals.size() == 4, "prismatica remote ultimate visual was not created")
+	var prismatica_visual: Dictionary = client_game.net_ability_visuals[-1]
+	_check(String(prismatica_visual.get("kind", "")) == "prismatica", "prismatica ultimate did not initialize as local replica kind")
+	_check(int(prismatica_visual.get("final_frame", -1)) == 1, "prismatica final frame was not preserved from network payload")
+	client_game.net_player_render_pos = Vector2(620, 340)
+	client_game._update_network_ability_replica(prismatica_visual, 1.0 / 60.0)
+	_check(Vector2(prismatica_visual.get("center", Vector2.ZERO)).is_equal_approx(Vector2(620, 340)), "prismatica remote ultimate did not follow remote player position")
+
 	var core_payload_bytes := var_to_bytes([
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),

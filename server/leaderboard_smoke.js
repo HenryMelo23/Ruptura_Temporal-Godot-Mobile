@@ -11,10 +11,13 @@ const projectPath = path.resolve(__dirname, "..");
 const logDir = path.join(projectPath, ".agent_logs");
 const storePath = path.join(logDir, "leaderboard_smoke_runs.json");
 const updateRoot = path.join(logDir, "android_update_smoke");
+const windowsUpdateRoot = path.join(logDir, "windows_update_smoke");
 fs.mkdirSync(logDir, { recursive: true });
 if (fs.existsSync(storePath)) fs.rmSync(storePath, { force: true });
 fs.rmSync(updateRoot, { recursive: true, force: true });
+fs.rmSync(windowsUpdateRoot, { recursive: true, force: true });
 fs.mkdirSync(updateRoot, { recursive: true });
+fs.mkdirSync(windowsUpdateRoot, { recursive: true });
 const fakeApk = Buffer.from("RUPTURA_ANDROID_UPDATE_SMOKE");
 const fakeApkName = "ruptura_temporal_2.0.27_smoke.apk";
 fs.writeFileSync(path.join(updateRoot, fakeApkName), fakeApk);
@@ -24,6 +27,18 @@ fs.writeFileSync(path.join(updateRoot, "latest.json"), JSON.stringify({
   filename: fakeApkName,
   sha256: require("crypto").createHash("sha256").update(fakeApk).digest("hex"),
   notes: ["Atualizador smoke"],
+  mandatory: false,
+  published_at: "2026-07-16T12:00:00Z"
+}));
+const fakeExe = Buffer.from("RUPTURA_WINDOWS_UPDATE_SMOKE");
+const fakeExeName = "Ruptura_Temporal_2.0.27_smoke.exe";
+fs.writeFileSync(path.join(windowsUpdateRoot, fakeExeName), fakeExe);
+fs.writeFileSync(path.join(windowsUpdateRoot, "latest.json"), JSON.stringify({
+  version: "2.0.27",
+  version_code: 227,
+  filename: fakeExeName,
+  sha256: require("crypto").createHash("sha256").update(fakeExe).digest("hex"),
+  notes: ["Atualizador Windows smoke"],
   mandatory: false,
   published_at: "2026-07-16T12:00:00Z"
 }));
@@ -76,6 +91,7 @@ async function run() {
       PROJECT_PATH: projectPath,
       LEADERBOARD_PATH: storePath,
       ANDROID_UPDATE_ROOT: updateRoot,
+      WINDOWS_UPDATE_ROOT: windowsUpdateRoot,
       STREAM_MANAGER_PUBLIC_BASE_URL: `http://127.0.0.1:${port}`,
       ALLOW_LOCAL_PUBLIC_BASE_URL: "1"
     },
@@ -160,7 +176,24 @@ async function run() {
     });
     assert.strictEqual(ranged.status, 206, "APK range download was not honored");
     assert.strictEqual(ranged.body.length, 8, "APK range returned the wrong byte count");
-    console.log("LEADERBOARD_SMOKE_OK dashboard=true profile=true rankings=true run_heatmap=true sprites=true updater=true range=true port=18090");
+    const windowsUpdate = await request("GET", "/updates/windows/latest?version_code=226");
+    assert.strictEqual(windowsUpdate.status, 200, "windows update manifest endpoint failed");
+    const windowsPayload = JSON.parse(windowsUpdate.body.toString("utf8"));
+    assert.strictEqual(windowsPayload.available, true, "newer Windows version was not offered");
+    assert.strictEqual(windowsPayload.version_code, 227, "wrong Windows version code");
+    assert(windowsPayload.exe_url.endsWith(encodeURIComponent(fakeExeName)), "windows manifest did not expose exe_url");
+    const windowsRanged = await new Promise((resolve, reject) => {
+      const req = http.request({ hostname: "127.0.0.1", port, path: new URL(windowsPayload.exe_url).pathname, method: "GET", headers: { Range: "bytes=0-7" } }, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    assert.strictEqual(windowsRanged.status, 206, "EXE range download was not honored");
+    assert.strictEqual(windowsRanged.body.length, 8, "EXE range returned the wrong byte count");
+    console.log("LEADERBOARD_SMOKE_OK dashboard=true profile=true rankings=true run_heatmap=true sprites=true updater=true range=true windows_updater=true port=18090");
   } finally {
     child.kill("SIGTERM");
     await new Promise((resolve) => child.once("exit", resolve));

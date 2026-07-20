@@ -1,19 +1,16 @@
 {
-    "version":  "2.0.28e",
-    "version_code":  22805,
-    "filename":  "ruptura_temporal_mobile_2.0.28e.apk",
-    "sha256":  "636bac3bd47bd4ea67790c14da86a3426a8965b96c044b3a0c32e6f33c573634",
-    "size":  602114751,
+    "version":  "2.0.29b",
+    "version_code":  22902,
+    "filename":  "ruptura_temporal_mobile_2.0.29b.apk",
+    "sha256":  "25aa27834af06a8e941bc0489d39235181f7455835eb716767487d1679526b26",
+    "size":  607011380,
     "notes":  [
-                  "Corrigido o botao Pronto no lobby online.",
-                  "Corrigido o modo Telespectador e sua confirmacao no relay.",
-                  "Sincronizacao de lobby agora preserva o estado individual de cada jogador.",
-                  "Reenvio automatico de pronto e telespectador evita perda de confirmacao.",
-                  "Manifestacao e espectro continuam sincronizados ate todos confirmarem.",
-                  "Snapshots visuais do boss foram compactados para reduzir fragmentacao e atraso.",
-                  "Saida do host fecha a sala sem RPC tardia ou erro de canal.",
-                  "Relay e cliente 2.0.28e usam o mesmo contrato RPC."
+                  "Desktop hibrido com tela cheia por padrao e opcoes de janela.",
+                  "Teclas de desktop agora aceitam botoes extras do mouse e removem disparos nao vinculados.",
+                  "Corrigido bug da tecla E que ligava e desligava a ultimate da Eletrica no desktop.",
+                  "Atualizador agora suporta Android e Windows.",
+                  "Inclui melhorias recentes de fase 6, boss 6, catalogo, audio e manifestacoes."
               ],
-    "mandatory":  false,
-    "published_at":  "2026-07-18T01:38:52.1131224Z"
+    "mandatory":  true,
+    "published_at":  "2026-07-20T13:14:54.4189776Z"
 }

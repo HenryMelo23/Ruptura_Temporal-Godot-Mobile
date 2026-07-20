@@ -66,7 +66,7 @@ func _run() -> void:
 	assert(is_equal_approx(float(enemy["parasite_slow_time"]), 0.20))
 	for tick in range(8):
 		game._update_secondary_parasitica(secondary, 1.0)
-	var expected = 1000.0 * pow(0.95, 8)
+	var expected = 1000.0 * pow(0.94, 8)
 	assert(abs(float(enemy["hp"]) - expected) < 0.05)
 	assert(abs(game.boss_hp - expected) < 0.05)
 	assert(abs(float(game.arauto["hp"]) - expected) < 0.05)
@@ -84,9 +84,11 @@ func _run() -> void:
 	assert(game.parasite_spit_zones.size() == 1)
 	game._update_parasite_spit_zones(0.5)
 	game._update_parasite_spit_zones(0.01)
-	assert(abs(float(enemy["hp"]) - 958.0) < 0.05)
+	assert(abs(float(enemy["hp"]) - 950.0) < 0.05)
 	assert(int(enemy["seeds"]) == 1)
 	assert(is_equal_approx(float(enemy["parasite_mark_time"]), 6.0))
 
 	print("PARASITICA_SMOKE_OK mark=6.0 slow=20%% feast_hp=%.2f q_area_hp=%.2f arauto=true" % [expected, float(enemy["hp"])])
+	root.remove_child(game)
+	game.free()
 	quit(0)

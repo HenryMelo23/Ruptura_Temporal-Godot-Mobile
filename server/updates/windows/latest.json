@@ -1,0 +1,15 @@
+{
+    "version":  "2.0.29c",
+    "version_code":  22903,
+    "filename":  "Ruptura_Temporal_2.0.29c.exe",
+    "sha256":  "9a3440af9fdb7f8777210eab06487a912fe62dc0ab712d95e763057776db4c1d",
+    "size":  808531336,
+    "notes":  [
+                  "Bombastica agora solta apenas uma bomba por acionamento e toque seco coloca a bomba na Geovana.",
+                  "Desktop ganhou modos de mira: saida rapida no cursor, segurar para mirar ou confirmar com segundo toque.",
+                  "Botao direito cancela a mira pendente no modo de confirmacao.",
+                  "Teleporte no desktop pode mirar pelo cursor ou ir para o alvo mais proximo conforme a configuracao."
+              ],
+    "mandatory":  true,
+    "published_at":  "2026-07-20T17:09:02.1603920Z"
+}

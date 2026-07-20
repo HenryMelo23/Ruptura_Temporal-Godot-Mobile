@@ -62,22 +62,30 @@ func _run() -> void:
 	var rare_card: Dictionary = game._find_card_by_id("devorador_destinos")
 	game.shop_cards = [common_card.duplicate(true), rare_card.duplicate(true)]
 	game.shop_selected = 0
+	var cinzas_before: int = game._card_count_by_id(game.CARD_CINZAS_ID)
 	_check(game._burn_shop_card(0), "Cinzas could not burn a valid common card")
 	_check(game._is_empty_shop_slot(game.shop_cards[0]), "Cinzas did not leave an empty slot")
+	_check(game._card_count_by_id(game.CARD_CINZAS_ID) == cinzas_before - 1, "Cinzas was not consumed when burning")
 	_check(game.cinzas_burn_marks.size() == 1, "Cinzas did not create a mark")
 	_check(not game._can_burn_shop_card(rare_card), "Cinzas should not burn rare cards")
 	_check(game._cinzas_weight_multiplier(game.CARD_TREGUA_ID) > 1.0, "Cinzas did not increase future common weight")
-	game._update_burned_card_marks_after_shop([common_card])
+	var shops_before_decay: int = int(game.cinzas_burn_marks[0].get("shops_left", 0))
+	game._update_burned_card_marks_after_shop([])
+	_check(game.cinzas_burn_marks.size() == 1, "Cinzas mark decayed on the same shop it was burned")
+	_check(int(game.cinzas_burn_marks[0].get("shops_left", 0)) == shops_before_decay, "Cinzas consumed duration before the next shop")
+	var returned_cards := [common_card.duplicate(true)]
+	game._update_burned_card_marks_after_shop(returned_cards)
 	_check(game.cinzas_burn_marks.is_empty(), "Cinzas mark was not consumed when card reappeared")
+	_check(bool(returned_cards[0].get("cinzas_return_buff", false)), "Cinzas return did not add a one-time buff")
 
 	game.player_hp = 1000
 	game.reserva_pulso_stored = 0.0
 	game._heal_player(200.0, "porcao", true)
 	_check(game.reserva_pulso_stored > 0.0, "Reserva did not store valid overheal")
 	var stored_before: float = game.reserva_pulso_stored
-	game.player_hp = 300
+	game.player_hp = 430
 	game._update_reserva_pulso(1.0)
-	_check(game.player_hp > 300, "Reserva did not release under 35 percent HP")
+	_check(game.player_hp > 430, "Reserva did not release under 45 percent HP")
 	_check(game.reserva_pulso_stored < stored_before, "Reserva did not spend stored pulse")
 
 	game.casulo_hit_times.clear()

@@ -60,12 +60,19 @@ func _run() -> void:
 
 	game.cards_bought["escolha_adiada"] = 1
 	var speed := _find_card("Speed Boost")
-	game.shop_cards = [speed]
+	game.shop_cards = [speed.duplicate(true)]
+	game.card_cost = 500
 	game._reserve_shop_card(0)
-	assert(game.shop_reserved_card_id == "Speed Boost")
+	assert(game._card_count_by_id("escolha_adiada") == 0)
+	assert(game._shop_slot_locked(0))
+	assert(game._effective_card_price(game.shop_cards[0]) == 500)
+	game.card_cost = 900
 	game.shop_cards = game._roll_shop_cards()
-	assert(game.shop_reserved_card_id == "")
-	assert(_has_card(game.shop_cards, "Speed Boost"))
+	assert(game._shop_slot_locked(0))
+	assert(game._card_id(game.shop_cards[0]) == "Speed Boost")
+	assert(game._effective_card_price(game.shop_cards[0]) == 500)
+	game._reserve_shop_card(0)
+	assert(not game._shop_slot_locked(0))
 
 	game.card_cost = 500
 	game.cards_bought["pacto_possibilidades"] = 5

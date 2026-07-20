@@ -36,7 +36,9 @@ const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
 const ANDROID_UPDATE_ROOT = path.resolve(process.env.ANDROID_UPDATE_ROOT || path.join(__dirname, "updates", "android"));
+const WINDOWS_UPDATE_ROOT = path.resolve(process.env.WINDOWS_UPDATE_ROOT || path.join(__dirname, "updates", "windows"));
 const ANDROID_UPDATE_MANIFEST = path.join(ANDROID_UPDATE_ROOT, "latest.json");
+const WINDOWS_UPDATE_MANIFEST = path.join(WINDOWS_UPDATE_ROOT, "latest.json");
 
 const rooms = new Map();
 const streams = new Map();
@@ -83,18 +85,40 @@ function sendStreamingDisabled(res) {
   });
 }
 
-function readAndroidUpdateManifest() {
+function updateConfig(platform) {
+  if (platform === "windows") {
+    return {
+      platform: "windows",
+      root: WINDOWS_UPDATE_ROOT,
+      manifest: WINDOWS_UPDATE_MANIFEST,
+      extension: ".exe",
+      urlField: "exe_url",
+      downloadPath: "/updates/windows/download/"
+    };
+  }
+  return {
+    platform: "android",
+    root: ANDROID_UPDATE_ROOT,
+    manifest: ANDROID_UPDATE_MANIFEST,
+    extension: ".apk",
+    urlField: "apk_url",
+    downloadPath: "/updates/android/download/"
+  };
+}
+
+function readUpdateManifest(platform = "android") {
+  const config = updateConfig(platform);
   try {
-    const raw = fs.readFileSync(ANDROID_UPDATE_MANIFEST, "utf8").replace(/^\uFEFF/, "");
+    const raw = fs.readFileSync(config.manifest, "utf8").replace(/^\uFEFF/, "");
     const parsed = JSON.parse(raw);
     const filename = path.basename(String(parsed.filename || ""));
     const versionCode = Math.max(0, Math.floor(Number(parsed.version_code) || 0));
     const sha256 = String(parsed.sha256 || "").toLowerCase();
-    const apkPath = filename ? path.join(ANDROID_UPDATE_ROOT, filename) : "";
-    if (!filename.endsWith(".apk") || versionCode <= 0 || !/^[a-f0-9]{64}$/.test(sha256) || !apkPath || !fs.existsSync(apkPath)) {
+    const filePath = filename ? path.join(config.root, filename) : "";
+    if (!filename.endsWith(config.extension) || versionCode <= 0 || !/^[a-f0-9]{64}$/.test(sha256) || !filePath || !fs.existsSync(filePath)) {
       return null;
     }
-    const stat = fs.statSync(apkPath);
+    const stat = fs.statSync(filePath);
     if (!stat.isFile()) {
       return null;
     }
@@ -107,19 +131,24 @@ function readAndroidUpdateManifest() {
       notes: Array.isArray(parsed.notes) ? parsed.notes.map((note) => String(note).slice(0, 240)).slice(0, 8) : [],
       mandatory: Boolean(parsed.mandatory),
       publishedAt: String(parsed.published_at || "").slice(0, 64),
-      apkPath
+      filePath
     };
   } catch (_error) {
     return null;
   }
 }
 
-function androidUpdatePublic(currentVersionCode = 0) {
-  const update = readAndroidUpdateManifest();
+function readAndroidUpdateManifest() {
+  return readUpdateManifest("android");
+}
+
+function updatePublic(platform = "android", currentVersionCode = 0) {
+  const config = updateConfig(platform);
+  const update = readUpdateManifest(platform);
   if (!update) {
     return { ok: true, available: false, current_version_code: currentVersionCode };
   }
-  return {
+  const payload = {
     ok: true,
     available: update.versionCode > currentVersionCode,
     current_version_code: currentVersionCode,
@@ -130,15 +159,22 @@ function androidUpdatePublic(currentVersionCode = 0) {
     notes: update.notes,
     mandatory: update.mandatory,
     published_at: update.publishedAt,
-    apk_url: `${STREAM_MANAGER_PUBLIC_BASE_URL}/updates/android/download/${encodeURIComponent(update.filename)}`
+    filename: update.filename
   };
+  payload[config.urlField] = `${STREAM_MANAGER_PUBLIC_BASE_URL}${config.downloadPath}${encodeURIComponent(update.filename)}`;
+  payload.download_url = payload[config.urlField];
+  return payload;
 }
 
-function sendAndroidApk(req, res, filename) {
-  const update = readAndroidUpdateManifest();
+function androidUpdatePublic(currentVersionCode = 0) {
+  return updatePublic("android", currentVersionCode);
+}
+
+function sendUpdateFile(req, res, platform, filename) {
+  const update = readUpdateManifest(platform);
   const requested = path.basename(decodeURIComponent(filename || ""));
   if (!update || requested !== update.filename) {
-    sendJson(res, 404, { error: "android update not found" });
+    sendJson(res, 404, { error: `${platform} update not found` });
     return;
   }
   const total = update.size;
@@ -182,9 +218,13 @@ function sendAndroidApk(req, res, filename) {
     res.end();
     return;
   }
-  const stream = fs.createReadStream(update.apkPath, { start, end });
+  const stream = fs.createReadStream(update.filePath, { start, end });
   stream.on("error", () => res.destroy());
   stream.pipe(res);
+}
+
+function sendAndroidApk(req, res, filename) {
+  sendUpdateFile(req, res, "android", filename);
 }
 
 function readJson(req, maxBytes = 16 * 1024) {
@@ -1316,9 +1356,22 @@ async function route(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/updates/windows/latest") {
+    const currentVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("version_code")) || 0));
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, updatePublic("windows", currentVersionCode));
+    return;
+  }
+
   const androidApkMatch = url.pathname.match(/^\/updates\/android\/download\/([^/]+)$/);
   if ((req.method === "GET" || req.method === "HEAD") && androidApkMatch) {
     sendAndroidApk(req, res, androidApkMatch[1]);
+    return;
+  }
+
+  const windowsExeMatch = url.pathname.match(/^\/updates\/windows\/download\/([^/]+)$/);
+  if ((req.method === "GET" || req.method === "HEAD") && windowsExeMatch) {
+    sendUpdateFile(req, res, "windows", windowsExeMatch[1]);
     return;
   }
 

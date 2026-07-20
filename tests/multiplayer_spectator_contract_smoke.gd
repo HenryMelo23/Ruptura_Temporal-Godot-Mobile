@@ -87,7 +87,35 @@ func _run() -> void:
 	game._request_team_revive()
 	_check(not game.revive_request_outgoing, "spectator could request revive as a player")
 
-	print("MULTIPLAYER_SPECTATOR_CONTRACT_SMOKE_OK active_players_ignore_spectators=true solo_balance=true choices_skipped=true")
-	game.queue_free()
-	await process_frame
+	game.mode = "game"
+	game.is_dead = false
+	game.online_connected = true
+	game.online_local_spectator = true
+	game._update_button_layout(Vector2(1280, 720))
+	_check(not game._combat_controls_active(), "spectator still had combat controls active")
+	game._handle_touch_press(101, game.buttons["attack"].get_center(), Vector2(1280, 720))
+	game._handle_touch_release(101, game.buttons["attack"].get_center(), Vector2(1280, 720))
+	game._handle_touch_press(102, game.buttons["skill"].get_center(), Vector2(1280, 720))
+	game._handle_touch_drag(102, game.buttons["skill"].get_center() + Vector2(30, 0), Vector2(1280, 720))
+	game._handle_touch_release(102, game.buttons["skill"].get_center(), Vector2(1280, 720))
+	game._handle_touch_press(103, game.buttons["secondary"].get_center(), Vector2(1280, 720))
+	game._handle_touch_release(103, game.buttons["secondary"].get_center(), Vector2(1280, 720))
+	game._handle_mouse_press(game.buttons["dash"].get_center(), Vector2(1280, 720))
+	_check(game.bullets.is_empty() and game.prisms.is_empty() and game.manifestation_secondaries.is_empty(), "spectator touch/mouse created local combat entities")
+	_check(game.attack_touch_index == -1 and game.skill_touch_index == -1 and game.secondary_touch_index == -1 and game.dash_touch_index == -1, "spectator kept action touch indexes")
+	_check(not game.attack_holding and not game.attack_dragging and not game.teleport_dragging, "spectator kept an armed combat input state")
+	game.bullets = [{"pos": game.player_pos, "life": 1.0}]
+	game.prisms = [{"pos": game.player_pos, "life": 1.0, "max_life": 1.0}]
+	game.manifestation_secondaries = [{"kind": "prismatica", "life": 1.0, "max": 1.0}]
+	game._update_game(1.0 / 60.0)
+	_check(game.bullets.is_empty() and game.prisms.is_empty() and game.manifestation_secondaries.is_empty(), "spectator cleanup did not clear local combat leftovers")
+
+	print("MULTIPLAYER_SPECTATOR_CONTRACT_SMOKE_OK active_players_ignore_spectators=true solo_balance=true choices_skipped=true input_locked=true")
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	for i in range(4):
+		await process_frame
 	quit(0)

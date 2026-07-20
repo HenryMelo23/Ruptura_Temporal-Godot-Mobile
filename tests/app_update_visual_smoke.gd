@@ -19,7 +19,8 @@ func _initialize() -> void:
 
 func _run() -> void:
 	game.mode = "menu"
-	game._apply_app_update_manifest({
+	var update_url: String = game.ONLINE_RELAY_BASE_URL + game._app_update_download_prefix() + ("Ruptura_Temporal_9.9.99.exe" if game._app_update_platform() == "windows" else "ruptura_temporal_mobile_9.9.99.apk")
+	var payload := {
 		"available": true,
 		"version": "9.9.99",
 		"version_code": int(game.GAME_VERSION_CODE) + 1,
@@ -31,8 +32,10 @@ func _run() -> void:
 			"Ranking e fichas de partida atualizados."
 		],
 		"mandatory": false,
-		"apk_url": game.ONLINE_RELAY_BASE_URL + game.APP_UPDATE_DOWNLOAD_PREFIX + "ruptura_temporal_mobile_9.9.99.apk"
-	})
+		"filename": update_url.get_file()
+	}
+	payload[game._app_update_download_url_field()] = update_url
+	game._apply_app_update_manifest(payload)
 	var viewport := Vector2(1280, 720)
 	var panel: Rect2 = game._app_update_panel_rect(viewport)
 	var actions: Array[Rect2] = game._app_update_button_rects(viewport)
