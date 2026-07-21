@@ -615,6 +615,8 @@ const BOSS6_ABILITY_TAIL := "boss6_conductive_tail"
 const BOSS6_ABILITY_CARNAGE_TIDE := "boss6_carnage_tide"
 const BOSS6_ABILITY_REFLUX := "boss6_organic_reflux"
 const BOSS6_ABILITY_MIASMA_ULTIMATE := "boss6_miasma_spiral"
+const BOSS6_ABILITY_FOSSIL_ECHO := "boss6_fossil_echo"
+const BOSS6_ABILITY_NECRO_EROSION := "boss6_necro_erosion"
 const BOSS6_LEECH_MAX := 6
 const BOSS6_PUSTULE_MAX := 4
 const BOSS6_POOL_MAX := 12
@@ -685,7 +687,7 @@ const SANGUESSUGA_BLEED_HP_RATE := 0.004
 
 const BOSS3_ENTRY_TIME := 1.8
 const BOSS3_MIASMA_TICK := 0.65
-const BOSS3_CHEESE_INTERVAL := 9.5
+const BOSS3_CHEESE_INTERVAL := 18.0
 const BOSS3_MIASMA_DURATION := 15.0
 const BOSS3_MIASMA_COOLDOWN := 24.0
 const BOSS3_MIASMA_CLONE_SWAP := 1.5
@@ -1787,6 +1789,7 @@ var active_screen_touches: Dictionary = {}
 var ignore_mouse_until_msec: int = 0
 var ui_input_block_until_msec: int = 0
 var player_stun_timer = 0.0
+var player_control_immunity_timer = 0.0
 var player_silence_timer = 0.0
 var player_freeze_visual_timer = 0.0
 var player_freeze_visual_duration = 0.0
@@ -1860,6 +1863,9 @@ var ui_platform_override_unlocked: bool = false
 var desktop_window_mode: String = DESKTOP_WINDOW_FULLSCREEN
 var desktop_aim_mode: String = DESKTOP_AIM_QUICK
 var desktop_teleport_mode: String = DESKTOP_TELEPORT_CURSOR
+const DESKTOP_ATTACK_AIM_AUTO := "auto"
+const DESKTOP_ATTACK_AIM_CURSOR := "cursor"
+var desktop_attack_aim_mode: String = DESKTOP_ATTACK_AIM_AUTO
 var desktop_aim_action: String = ""
 var desktop_aim_event_binding: String = ""
 var desktop_aim_is_hold: bool = false
@@ -2030,6 +2036,15 @@ var boss6_miasma_slow_timer = 0.0
 var boss6_miasma_slow_stacks = 0
 var boss6_miasma_slow_tick = 0.0
 var boss6_carnage_slow_timer = 0.0
+var boss6_player_history = []
+var boss6_history_sample_timer = 0.0
+var boss6_fossil_echo = {}
+var boss6_fossil_echo_slow_timer = 0.0
+var boss6_necro_erosion_active = false
+var boss6_necro_erosion_radius = 9999.0
+var boss6_necro_erosion_timer = 0.0
+var boss6_necro_erosion_duration = 10.0
+var boss6_necro_erosion_damage_timer = 0.0
 var insane_echo_visuals = []
 var rational_trail_points = []
 var rational_trail_sample_timer = 0.0
@@ -2494,6 +2509,10 @@ func _sanitize_desktop_teleport_mode(value: String) -> String:
 	if normalized in [DESKTOP_TELEPORT_CURSOR, DESKTOP_AIM_HOLD, DESKTOP_AIM_CONFIRM, DESKTOP_TELEPORT_AUTO]:
 		return normalized
 	return DESKTOP_TELEPORT_CURSOR
+
+
+func _sanitize_desktop_attack_aim_mode(value: String) -> String:
+	return DESKTOP_ATTACK_AIM_CURSOR if value.strip_edges().to_lower() == DESKTOP_ATTACK_AIM_CURSOR else DESKTOP_ATTACK_AIM_AUTO
 
 
 func _prime_resource_mode_defaults() -> void:
@@ -4463,6 +4482,7 @@ func _load_config() -> void:
 				elif k == "desktop_window_mode": desktop_window_mode = _sanitize_desktop_window_mode(v)
 				elif k == "desktop_aim_mode": desktop_aim_mode = _sanitize_desktop_aim_mode(v)
 				elif k == "desktop_teleport_mode": desktop_teleport_mode = _sanitize_desktop_teleport_mode(v)
+				elif k == "desktop_attack_aim_mode": desktop_attack_aim_mode = _sanitize_desktop_attack_aim_mode(v)
 				elif k == "gamepad_bindings":
 					_load_gamepad_bindings(coords)
 				elif k == "keyboard_bindings":
@@ -4499,6 +4519,7 @@ func _load_config() -> void:
 	desktop_window_mode = _sanitize_desktop_window_mode(desktop_window_mode)
 	desktop_aim_mode = _sanitize_desktop_aim_mode(desktop_aim_mode)
 	desktop_teleport_mode = _sanitize_desktop_teleport_mode(desktop_teleport_mode)
+	desktop_attack_aim_mode = _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode)
 	forced_shop_enabled = shop_auto_enabled
 	if gfx_memory_saver:
 		gfx_low_resource = true
@@ -4555,6 +4576,7 @@ func _save_config() -> void:
 		file.store_string("desktop_window_mode=" + _sanitize_desktop_window_mode(desktop_window_mode) + "\n")
 		file.store_string("desktop_aim_mode=" + _sanitize_desktop_aim_mode(desktop_aim_mode) + "\n")
 		file.store_string("desktop_teleport_mode=" + _sanitize_desktop_teleport_mode(desktop_teleport_mode) + "\n")
+		file.store_string("desktop_attack_aim_mode=" + _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) + "\n")
 		file.store_string("gamepad_bindings=" + _serialize_gamepad_bindings() + "\n")
 		file.store_string("keyboard_bindings=" + _serialize_keyboard_bindings() + "\n")
 
@@ -4922,6 +4944,24 @@ func _event_matches_keyboard_action(event: InputEvent, action: String) -> bool:
 	if expected.begins_with(INPUT_BIND_MOUSE_PREFIX) and event is InputEventMouseButton:
 		var button := int(expected.trim_prefix(INPUT_BIND_MOUSE_PREFIX))
 		return button > 0 and event.button_index == button
+	return false
+
+
+func _is_escape_or_pause_key(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
+			return true
+	return _event_matches_keyboard_action(event, "pause")
+
+
+func _is_keyboard_binding_pressed(action: String) -> bool:
+	var bind_str := String(keyboard_bindings.get(action, INPUT_BIND_NONE))
+	if bind_str.begins_with(INPUT_BIND_KEY_PREFIX):
+		var key_code := int(bind_str.trim_prefix(INPUT_BIND_KEY_PREFIX))
+		return key_code > 0 and Input.is_key_pressed(key_code)
+	elif bind_str.begins_with(INPUT_BIND_MOUSE_PREFIX):
+		var button := int(bind_str.trim_prefix(INPUT_BIND_MOUSE_PREFIX))
+		return button > 0 and Input.is_mouse_button_pressed(button)
 	return false
 
 
@@ -6724,6 +6764,14 @@ func _reset_phase6_state() -> void:
 	boss6_miasma_slow_stacks = 0
 	boss6_miasma_slow_tick = 0.0
 	boss6_carnage_slow_timer = 0.0
+	boss6_player_history.clear()
+	boss6_history_sample_timer = 0.0
+	boss6_fossil_echo.clear()
+	boss6_fossil_echo_slow_timer = 0.0
+	boss6_necro_erosion_active = false
+	boss6_necro_erosion_radius = 9999.0
+	boss6_necro_erosion_timer = 0.0
+	boss6_necro_erosion_damage_timer = 0.0
 	sanguessuga_parasite_timer = 0.0
 	sanguessuga_bleed_tick_timer = 0.0
 	sanguessuga_parasite_visual_timer = 0.0
@@ -7358,6 +7406,7 @@ func _process(delta: float) -> void:
 	_update_interrupted_run_autosave(delta)
 	_update_app_update_check(delta)
 	_update_qa_streaming(delta)
+	_update_mouse_cursor_mode()
 	is_gamepad_active = Input.get_connected_joypads().size() > 0
 	if menu_analog_cooldown > 0.0:
 		menu_analog_cooldown -= delta
@@ -7653,6 +7702,7 @@ func _update_game(delta: float) -> void:
 
 	var player_locked = _secondary_player_locked()
 	player_stun_timer = max(0.0, player_stun_timer - delta)
+	player_control_immunity_timer = max(0.0, player_control_immunity_timer - delta)
 	player_freeze_visual_timer = max(0.0, player_freeze_visual_timer - delta)
 	player_silence_timer = max(0.0, player_silence_timer - delta)
 	boss_wave_slow_timer = max(0.0, boss_wave_slow_timer - delta)
@@ -7667,7 +7717,7 @@ func _update_game(delta: float) -> void:
 			var move = _read_move()
 			if move.length() > 0.05:
 				last_facing = move.normalized()
-				var desired_pos: Vector2 = player_pos + last_facing * player_speed * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
+				var desired_pos: Vector2 = player_pos + last_facing * player_speed * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
 				player_pos = _resolve_phase2_fire_wall_movement(player_pos, desired_pos)
 			_update_eletrica_recoil(delta)
 		player_pos = player_pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
@@ -7683,27 +7733,28 @@ func _update_game(delta: float) -> void:
 				attack_lock_candidate_uid = -1
 				_update_attack_lock_candidate(attack_touch_pos, get_viewport_rect().size)
 
-		if Input.is_key_pressed(KEY_SPACE) or attack_dragging:
+		if _is_keyboard_binding_pressed("attack") or attack_dragging:
 			_try_attack()
-		if Input.is_key_pressed(KEY_Q):
-			_use_skill()
-		var secondary_key_pressed = Input.is_key_pressed(KEY_E)
-		if secondary_key_pressed and not secondary_key_was_pressed:
-			_use_secondary_skill()
-		secondary_key_was_pressed = secondary_key_pressed
-		if Input.is_key_pressed(KEY_SHIFT):
-			_try_dash()
-		if Input.is_key_pressed(KEY_ESCAPE):
-			_start_pause_countdown()
-		if Input.is_key_pressed(KEY_R):
-			_start_boss_call()
-		var empower_key_pressed = Input.is_key_pressed(KEY_F)
-		if empower_key_pressed and not lacerante_empower_key_was_pressed:
-			if manifestation_key == "bombastica":
-				_trigger_bombastica_detonator(false)
-			else:
-				_try_arm_lacerante_empower()
-		lacerante_empower_key_was_pressed = empower_key_pressed
+		if not _uses_desktop_ui():
+			if _is_keyboard_binding_pressed("skill"):
+				_use_skill()
+			var secondary_key_pressed = _is_keyboard_binding_pressed("secondary")
+			if secondary_key_pressed and not secondary_key_was_pressed:
+				_use_secondary_skill()
+			secondary_key_was_pressed = secondary_key_pressed
+			if _is_keyboard_binding_pressed("dash"):
+				_try_dash()
+			if _is_keyboard_binding_pressed("pause"):
+				_start_pause_countdown()
+			if _is_keyboard_binding_pressed("boss"):
+				_start_boss_call()
+			var empower_key_pressed = _is_keyboard_binding_pressed("lacerante_empower")
+			if empower_key_pressed and not lacerante_empower_key_was_pressed:
+				if manifestation_key == "bombastica":
+					_trigger_bombastica_detonator(false)
+				else:
+					_try_arm_lacerante_empower()
+			lacerante_empower_key_was_pressed = empower_key_pressed
 
 	if _is_world_authority() and spawn_timer <= 0.0 and not boss_dead:
 		_spawn_wave()
@@ -8258,6 +8309,10 @@ func _aim_direction() -> Vector2:
 		return lacerante_prepare_dir.normalized()
 	if attack_dragging and attack_drag_direction.length() > 0.05:
 		return attack_drag_direction.normalized()
+	if _uses_desktop_ui() and _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) == DESKTOP_ATTACK_AIM_CURSOR:
+		var cursor_dir := (_desktop_aim_target_world() - player_pos).normalized()
+		if cursor_dir.length() > 0.05:
+			return cursor_dir
 	var target = _nearest_target()
 	if target != Vector2.ZERO:
 		return (target - player_pos).normalized()
@@ -8997,7 +9052,7 @@ func _use_secondary_skill(target_world = null) -> void:
 	match manifestation_key:
 		"lacerante":
 			last_secondary_time = time_alive
-			_spawn_secondary_lacerante()
+			_spawn_secondary_lacerante(target_world)
 		"eletrica":
 			_spawn_secondary_eletrica()
 		"prismatica":
@@ -9157,8 +9212,12 @@ func _update_parasite_spit_zones(delta: float) -> void:
 	parasite_spit_zones = parasite_spit_zones.filter(func(zone): return String(zone.get("state", "")) == "flying" or float(zone.get("life", 0.0)) > 0.0)
 
 
-func _spawn_secondary_lacerante() -> void:
-	var center = player_pos + _aim_direction() * 170.0
+func _spawn_secondary_lacerante(target_world = null) -> void:
+	var center: Vector2
+	if target_world is Vector2:
+		center = Vector2(target_world)
+	else:
+		center = player_pos + _aim_direction() * 170.0
 	center = center.clamp(Vector2(120, 120), WORLD_SIZE - Vector2(120, 120))
 	player_pos = center
 	manifestation_secondaries.append({
@@ -9323,6 +9382,9 @@ func _spawn_secondary_ancorada(target_world = null) -> void:
 
 
 func _try_dash() -> void:
+	if _is_player_calcified():
+		_add_text("CALCIFICADO", player_pos + Vector2(0, -60), Color(0.68, 0.68, 0.72), 0.5, 18)
+		return
 	if _secondary_player_locked():
 		return
 	if _player_silenced():
@@ -9351,6 +9413,9 @@ func _try_dash() -> void:
 
 
 func _try_dash_to_screen(screen_pos: Vector2, viewport: Vector2) -> void:
+	if _is_player_calcified():
+		_add_text("CALCIFICADO", player_pos + Vector2(0, -60), Color(0.68, 0.68, 0.72), 0.5, 18)
+		return
 	if _secondary_player_locked():
 		return
 	if _player_silenced():
@@ -9378,6 +9443,9 @@ func _try_dash_to_screen(screen_pos: Vector2, viewport: Vector2) -> void:
 
 
 func _try_dash_to_world(target_world: Vector2) -> void:
+	if _is_player_calcified():
+		_add_text("CALCIFICADO", player_pos + Vector2(0, -60), Color(0.68, 0.68, 0.72), 0.5, 18)
+		return
 	if _secondary_player_locked():
 		return
 	if _player_silenced():
@@ -9461,6 +9529,8 @@ func _teleport_destination_from_drag(screen_pos: Vector2, viewport: Vector2) -> 
 func _ground_target_profile(secondary: bool) -> Dictionary:
 	if secondary:
 		match manifestation_key:
+			"lacerante":
+				return {"range": 520.0, "radius": 220.0, "default": 170.0, "minimum": 60.0, "color": Color(1.0, 0.18, 0.28)}
 			"gravitante":
 				return {"range": 560.0, "radius": 330.0, "default": 0.0, "minimum": 90.0, "color": Color(0.46, 0.78, 1.0)}
 			"ancorada":
@@ -16202,6 +16272,8 @@ func _update_return_bullets(delta: float) -> void:
 
 
 func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text := true, apply_aura_multiplier := true, attack_origin := Vector2.ZERO, source_category := "") -> bool:
+	if _is_player_calcified():
+		amount *= 2.0
 	var effective_source_category := source_category
 	if effective_source_category == "" and not show_text and _damage_source_category(source) == "basic_attack":
 		effective_source_category = "manifestation_secondary"
@@ -16229,6 +16301,9 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 	if source == "aura_insana":
 		enemy["killed_by_echo"] = true
 	_play_enemy_hit_sfx(enemy, source)
+	if current_phase == 4:
+		var planet_origin: Vector2 = attack_origin if attack_origin != Vector2.ZERO else Vector2(enemy.get("pos", player_pos))
+		_damage_phase4_planet_at(planet_origin, amount, 130.0)
 	if source != "parasite_feast":
 		if enemy["type"] == ENEMY_LARAPIO:
 			amount *= 0.45
@@ -16368,6 +16443,8 @@ func _voraz_boss_feed_allowed(damage: float, source: String, source_category := 
 
 
 func _damage_boss(amount: float, source: String, apply_aura_multiplier := true, release_boss_feed := true, source_category := "", attack_origin := Vector2.ZERO) -> void:
+	if _is_player_calcified():
+		amount *= 2.0
 	var effective_source_category := source_category
 	if effective_source_category == "" and _damage_source_category(source) == "basic_attack":
 		effective_source_category = "manifestation_secondary"
@@ -16387,6 +16464,9 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier := true, 
 		amount *= _contractual_damage_multiplier()
 	amount *= _mandamento_damage_multiplier(effective_source_category)
 	var trigger_card_effects := _card_damage_can_trigger(source)
+	if current_phase == 4:
+		var planet_origin: Vector2 = attack_origin if attack_origin != Vector2.ZERO else boss_pos
+		_damage_phase4_planet_at(planet_origin, amount, 150.0)
 	if source != "gravitante_orbital":
 		_play_sfx("Hit_Boss1.mp3", 0.06, 0.30)
 	var armor = BOSS_ARMOR + (time_alive / 60.0) * 0.0016 + enemies_killed * 0.00006 + cards_bought.get("Coletora", 0) * 0.004
@@ -17125,12 +17205,15 @@ func _add_phase4_null_zone(pos: Vector2) -> void:
 
 
 func _damage_phase4_planet_at(pos: Vector2, amount: float, radius: float) -> bool:
+	if current_phase != 4:
+		return false
+	var hit := false
 	if _damage_boss4_anchor_at(pos, amount, radius + 18.0):
-		return true
+		hit = true
 	if _damage_boss4_prison_at(pos, amount, radius):
-		return true
+		hit = true
 	if _damage_boss4_clone_at(pos, amount, radius):
-		return true
+		hit = true
 	for planet in phase4_planets:
 		if bool(planet.get("destroyed", false)) or Vector2(planet["pos"]).distance_to(pos) > radius:
 			continue
@@ -17141,8 +17224,8 @@ func _damage_phase4_planet_at(pos: Vector2, amount: float, radius: float) -> boo
 			planet["life"] = 0.0
 			_spawn_radial_particles(Vector2(planet["pos"]), Color(0.86, 0.40, 1.0), 28)
 			_add_text("PLANETA ROMPIDO", Vector2(planet["pos"]) + Vector2(0, -82), Color(1.0, 0.82, 0.28), 0.9, 19)
-		return true
-	return false
+		hit = true
+	return hit
 
 
 func _damage_boss4_anchor_at(pos: Vector2, amount: float, radius: float) -> bool:
@@ -17231,8 +17314,12 @@ func _apply_phase2_projectile_freeze() -> void:
 func _freeze_player(duration: float, label := "CONGELADO!") -> void:
 	if _player_invulnerable():
 		return
+	if player_control_immunity_timer > 0.0:
+		_add_text("IMUNE!", player_pos + Vector2(0, -42), Color(0.7, 0.9, 1.0), 0.6, 18)
+		return
 	var freeze_time := maxf(PHASE2_FREEZE_VISUAL_MIN_TIME, duration)
 	player_stun_timer = max(player_stun_timer, _hostile_control_duration(freeze_time))
+	player_control_immunity_timer = player_stun_timer + 3.0
 	player_freeze_visual_duration = freeze_time
 	player_freeze_visual_timer = freeze_time
 	_add_text(label, player_pos + Vector2(0, -42), Color(0.0, 0.88, 1.0), 1.0, 20)
@@ -18562,6 +18649,8 @@ func _finish_boss1_rewind() -> void:
 	boss_attack_timer = max(1.4, boss_attack_timer)
 	_add_text("-10s  /  BOSS +40%  /  GEO +25%", boss_pos + Vector2(0, -120), Color(0.42, 0.94, 1.0), 1.8, 24)
 	_spawn_radial_particles(boss_pos, Color(0.30, 0.78, 1.0), 36)
+	if mode == "shop_countdown" and forced_shop_timer <= 0.0:
+		_start_shop_opening_animation(true)
 
 
 func _boss_entry_impact_feedback(mult := 1.0) -> void:
@@ -19636,6 +19725,8 @@ func _boss_target_entry(force_rotate: bool = false) -> Dictionary:
 
 
 func _boss_target_pos(force_rotate: bool = false, prediction: float = 0.0) -> Vector2:
+	if current_phase == 6 and not boss6_fossil_echo.is_empty() and boss6_fossil_echo.get("timer", 0.0) > 0.0:
+		return Vector2(boss6_fossil_echo.get("pos", player_pos))
 	var target := _boss_target_entry(force_rotate)
 	var result := Vector2(target.get("pos", player_pos))
 	if prediction <= 0.0:
@@ -19842,6 +19933,34 @@ func _update_boss6_timers(delta: float) -> void:
 		boss6_miasma_slow_stacks = 0
 		boss6_miasma_slow_tick = 0.0
 	boss6_carnage_slow_timer = maxf(0.0, boss6_carnage_slow_timer - delta)
+	
+	# Fossil Echo and Necro Erosion timer updates
+	if not boss6_fossil_echo.is_empty():
+		boss6_fossil_echo["timer"] = maxf(0.0, float(boss6_fossil_echo.get("timer", 0.0)) - delta)
+		if float(boss6_fossil_echo["timer"]) <= 0.0:
+			boss6_fossil_echo.clear()
+	boss6_fossil_echo_slow_timer = maxf(0.0, boss6_fossil_echo_slow_timer - delta)
+	
+	if boss6_necro_erosion_active:
+		boss6_necro_erosion_timer = maxf(0.0, boss6_necro_erosion_timer - delta)
+		if boss6_necro_erosion_timer <= 0.0:
+			boss6_necro_erosion_active = false
+	
+	# Player position history tracking for Fossil Echo
+	boss6_history_sample_timer -= delta
+	if boss6_history_sample_timer <= 0.0:
+		boss6_history_sample_timer = 0.15
+		boss6_player_history.append({"time": time_alive, "pos": player_pos})
+		if boss6_player_history.size() > 40:
+			boss6_player_history.pop_front()
+			
+	# Calcification continuous tick damage
+	if _is_player_calcified():
+		boss6_necro_erosion_damage_timer -= delta
+		if boss6_necro_erosion_damage_timer <= 0.0:
+			boss6_necro_erosion_damage_timer = 0.75
+			_damage_player(int(player_hp_max * 0.025 + 5), "boss6_necro_erosion_burn")
+			
 	for key in boss6_ability_cooldowns.keys():
 		boss6_ability_cooldowns[key] = maxf(0.0, float(boss6_ability_cooldowns[key]) - delta)
 	_update_boss6_miasma_ultimate(delta)
@@ -19859,7 +19978,7 @@ func _boss6_hp_pct() -> float:
 
 
 func _boss6_miasma_ultimate_active() -> bool:
-	return current_phase == 6 and boss_active and not boss_dead and boss6_miasma_ult_timer > 0.0
+	return false
 
 
 func _boss6_miasma_outer_radius() -> float:
@@ -19867,31 +19986,11 @@ func _boss6_miasma_outer_radius() -> float:
 
 
 func _boss6_point_in_miasma(point: Vector2) -> bool:
-	if not _boss6_miasma_ultimate_active():
-		return false
-	var center := WORLD_SIZE * 0.5
-	var offset := point - center
-	var distance := offset.length()
-	if distance < BOSS6_MIASMA_ULT_INNER_RADIUS or distance > _boss6_miasma_outer_radius():
-		return false
-	var angle := offset.angle()
-	for i in range(BOSS6_MIASMA_ULT_FRONT_COUNT):
-		var front: float = boss6_miasma_ult_angle + float(i) * TAU / float(BOSS6_MIASMA_ULT_FRONT_COUNT)
-		if absf(angle_difference(angle, front)) <= BOSS6_MIASMA_ULT_ARC:
-			return true
 	return false
 
 
 func _boss6_apply_miasma_slow(delta: float) -> void:
-	if not _local_player_targetable() or not _boss6_point_in_miasma(player_pos):
-		return
-	boss6_miasma_slow_tick = maxf(0.0, boss6_miasma_slow_tick - delta)
-	if boss6_miasma_slow_tick <= 0.0:
-		boss6_miasma_slow_tick = BOSS6_MIASMA_ULT_SLOW_TICK
-		boss6_miasma_slow_stacks = mini(BOSS6_MIASMA_ULT_SLOW_MAX_STACKS, boss6_miasma_slow_stacks + 1)
-		boss6_miasma_slow_timer = 1.25
-		if boss6_miasma_slow_stacks == 1 or boss6_miasma_slow_stacks % 2 == 0:
-			_add_text("NEVOA x%d" % boss6_miasma_slow_stacks, player_pos + Vector2(0, -62), Color(0.62, 1.0, 0.24), 0.65, 16)
+	return
 
 
 func _boss6_barrier_gap_center(index: int) -> float:
@@ -19916,52 +20015,75 @@ func _boss6_clear_ultimate_pustules() -> void:
 
 
 func _spawn_boss6_ultimate_pustules() -> void:
-	if not _is_world_authority():
+	return
+
+
+func _start_boss6_fossil_echo() -> void:
+	var echo_pos: Vector2 = player_pos
+	var target_time: float = time_alive - 4.0
+	var best_diff := INF
+	for entry in boss6_player_history:
+		var diff = abs(entry.get("time", 0.0) - target_time)
+		if diff < best_diff:
+			best_diff = diff
+			echo_pos = entry.get("pos", player_pos)
+	
+	boss6_fossil_echo = {
+		"pos": echo_pos,
+		"timer": 5.0,
+		"hp": 280.0,
+		"hp_max": 280.0
+	}
+	_add_boss_attack({"kind": BOSS6_ABILITY_FOSSIL_ECHO, "age": 0.0, "duration": 5.0})
+	_add_text("ECO FÓSSIL REVELADO", echo_pos + Vector2(0, -60), Color(0.72, 0.48, 1.0), 1.5, 22)
+	_play_sfx("Portal.mp3", 0.05, 0.58, 0.68)
+
+
+func _start_boss6_necro_erosion() -> void:
+	boss6_necro_erosion_active = true
+	boss6_necro_erosion_radius = 850.0
+	boss6_necro_erosion_timer = 10.0
+	boss6_necro_erosion_duration = 10.0
+	boss6_necro_erosion_damage_timer = 0.0
+	_add_boss_attack({"kind": BOSS6_ABILITY_NECRO_EROSION, "age": 0.0, "duration": 10.0})
+	_add_text("NECRO-EROSÃO INICIADA", boss_pos + Vector2(0, -140), Color(0.9, 0.15, 0.25), 1.6, 26)
+	_play_sfx("boss1_dash", 0.03, 0.5)
+
+
+func _damage_boss6_fossil_echo(amount: float) -> void:
+	if boss6_fossil_echo.is_empty() or boss6_fossil_echo.get("timer", 0.0) <= 0.0:
 		return
-	_boss6_clear_ultimate_pustules()
-	var center := WORLD_SIZE * 0.5
-	var base: float = boss6_miasma_ult_angle + PI * 0.5
-	for i in range(BOSS6_MIASMA_ULT_PUSTULE_COUNT):
-		var angle := base + float(i) * TAU / float(BOSS6_MIASMA_ULT_PUSTULE_COUNT) + rng.randf_range(-0.28, 0.28)
-		var radius := rng.randf_range(210.0, 360.0)
-		var pos := (center + Vector2.from_angle(angle) * radius).clamp(Vector2(70, 70), WORLD_SIZE - Vector2(70, 70))
-		_spawn_enemy(ENEMY_FOSSIL_PUSTULE, pos)
-		if enemies.is_empty():
-			continue
-		var pustule: Dictionary = enemies.back()
-		pustule["boss6_summoned"] = true
-		pustule["boss6_ult_pustule"] = true
-		pustule["pustule_mature_time"] = 5.5
-		pustule["points"] = 45
+	var current_hp = float(boss6_fossil_echo.get("hp", 280.0))
+	current_hp = maxf(0.0, current_hp - amount)
+	boss6_fossil_echo["hp"] = current_hp
+	_add_text("-%d (Eco)" % int(amount), Vector2(boss6_fossil_echo.get("pos", player_pos)) + Vector2(rng.randf_range(-15, 15), -35 + rng.randf_range(-10, 10)), Color(0.95, 0.25, 0.95), 1.0, 18)
+	_damage_player(int(amount), "boss6_fossil_echo_link")
+	boss6_fossil_echo_slow_timer = 2.5
+	if current_hp <= 0.0:
+		boss6_fossil_echo.clear()
+		_add_text("ECO DESTRUÍDO", player_pos + Vector2(0, -60), Color(1.0, 0.2, 0.2), 1.5, 20)
+
+
+func _is_player_calcified() -> bool:
+	if current_phase != 6:
+		return false
+	if not boss6_necro_erosion_active or boss6_necro_erosion_timer <= 0.0:
+		return false
+	return player_pos.distance_to(boss_pos) > boss6_necro_erosion_radius
+
+
+func _boss6_fossil_echo_slow_multiplier() -> float:
+	return 0.45 if boss6_fossil_echo_slow_timer > 0.0 else 1.0
 
 
 func _start_boss6_miasma_ultimate() -> void:
-	if _boss6_miasma_ultimate_active():
-		return
-	boss6_miasma_ult_timer = BOSS6_MIASMA_ULT_DURATION
-	boss6_miasma_ult_cooldown = BOSS6_MIASMA_ULT_COOLDOWN
-	boss6_miasma_ult_angle = (_boss_target_pos(true, 0.1) - WORLD_SIZE * 0.5).angle()
-	boss6_miasma_ult_pustule_timer = 0.0
-	boss6_miasma_slow_timer = 0.0
-	boss6_miasma_slow_stacks = 0
-	boss6_miasma_slow_tick = 0.0
-	_add_text("NEVOA DA MATRIARCA", boss_pos + Vector2(0, -168), Color(0.62, 1.0, 0.22), 1.4, 23)
-	shockwaves.append({"pos": WORLD_SIZE * 0.5, "radius": BOSS6_MIASMA_ULT_INNER_RADIUS, "max": _boss6_miasma_outer_radius(), "life": 1.0, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.48, 1.0, 0.20)})
-	_boss6_enter_recovery(1.1)
+	_boss6_enter_recovery(0.8)
 
 
 func _update_boss6_miasma_ultimate(delta: float) -> void:
-	if boss6_miasma_ult_timer <= 0.0:
-		return
-	boss6_miasma_ult_timer = maxf(0.0, boss6_miasma_ult_timer - delta)
-	boss6_miasma_ult_angle = fposmod(boss6_miasma_ult_angle + BOSS6_MIASMA_ULT_ROT_SPEED * delta, TAU)
-	_boss6_apply_miasma_slow(delta)
-	boss6_miasma_ult_pustule_timer -= delta
-	if boss6_miasma_ult_pustule_timer <= 0.0:
-		boss6_miasma_ult_pustule_timer = BOSS6_MIASMA_ULT_PUSTULE_INTERVAL
-		_spawn_boss6_ultimate_pustules()
-	if boss6_miasma_ult_timer <= 0.0:
-		_boss6_clear_ultimate_pustules()
+	boss6_miasma_ult_timer = 0.0
+	boss6_miasma_slow_timer = 0.0
+	boss6_miasma_slow_stacks = 0
 
 
 func _boss6_next_wait() -> float:
@@ -20074,11 +20196,11 @@ func _boss6_ability_defs() -> Array:
 		{"id": BOSS6_ABILITY_SWARM, "weight": 2.8, "cooldown": 13.0, "min_pct": 0.0, "max_pct": 1.0, "category": "MOVEMENT", "pressure": 0, "telegraph": 0.85},
 		{"id": BOSS6_ABILITY_CARAPACE, "weight": 2.4, "cooldown": 20.0, "min_pct": 0.30, "max_pct": 0.80, "category": "DEFENSE", "pressure": 1, "telegraph": 0.75},
 		{"id": BOSS6_ABILITY_ACID_BLOOM, "weight": 3.4, "cooldown": BOSS6_ACID_BLOOM_COOLDOWN, "min_pct": 0.0, "max_pct": BOSS6_ACID_BLOOM_UNLOCK_PCT, "category": "FIELD_CONTROL", "pressure": 3, "telegraph": 1.05},
-		{"id": BOSS6_ABILITY_CHASING_CRACK, "weight": 3.0, "cooldown": 12.0, "min_pct": 0.0, "max_pct": 0.70, "category": "FIELD_CONTROL", "pressure": 1, "telegraph": 0.82},
 		{"id": BOSS6_ABILITY_TAIL, "weight": 3.0, "cooldown": 12.0, "min_pct": 0.0, "max_pct": 0.60, "category": "FIELD_CONTROL", "pressure": 2, "telegraph": 0.86},
 		{"id": BOSS6_ABILITY_CARNAGE_TIDE, "weight": 3.2, "cooldown": BOSS6_CARNAGE_TIDE_COOLDOWN, "min_pct": 0.0, "max_pct": BOSS6_CARNAGE_TIDE_UNLOCK_PCT, "category": "FIELD_CONTROL", "pressure": 3, "telegraph": 0.95},
 		{"id": BOSS6_ABILITY_REFLUX, "weight": 2.7, "cooldown": 15.0, "min_pct": 0.0, "max_pct": 0.40, "category": "CONSUME", "pressure": -2, "telegraph": 1.0},
-		{"id": BOSS6_ABILITY_MIASMA_ULTIMATE, "weight": 4.8, "cooldown": BOSS6_MIASMA_ULT_COOLDOWN, "min_pct": 0.0, "max_pct": BOSS6_MIASMA_ULT_UNLOCK_PCT, "category": "ULTIMATE", "pressure": 0, "telegraph": 1.15}
+		{"id": BOSS6_ABILITY_FOSSIL_ECHO, "weight": 3.5, "cooldown": 14.0, "min_pct": 0.0, "max_pct": 1.0, "category": "DEBUFF", "pressure": 1, "telegraph": 0.8},
+		{"id": BOSS6_ABILITY_NECRO_EROSION, "weight": 3.0, "cooldown": 18.0, "min_pct": 0.0, "max_pct": 1.0, "category": "FIELD_CONTROL", "pressure": 2, "telegraph": 1.1}
 	]
 
 
@@ -20181,6 +20303,10 @@ func _boss6_execute_current_ability() -> void:
 			_start_boss6_organic_reflux()
 		BOSS6_ABILITY_MIASMA_ULTIMATE:
 			_start_boss6_miasma_ultimate()
+		BOSS6_ABILITY_FOSSIL_ECHO:
+			_start_boss6_fossil_echo()
+		BOSS6_ABILITY_NECRO_EROSION:
+			_start_boss6_necro_erosion()
 		_:
 			_boss6_enter_recovery(_boss6_recovery_time())
 
@@ -20509,6 +20635,10 @@ func _update_boss6_lodarian_pools(delta: float) -> void:
 			var remote_damage := maxi(1, int(net_player_hp_max * damage_rate + flat_damage))
 			if _local_player_targetable() and player_pos.distance_to(center) <= radius:
 				_damage_player(local_damage, source)
+			if not boss6_fossil_echo.is_empty() and boss6_fossil_echo.get("timer", 0.0) > 0.0:
+				var echo_pos: Vector2 = boss6_fossil_echo.get("pos", player_pos)
+				if echo_pos.distance_to(center) <= radius:
+					_damage_boss6_fossil_echo(local_damage)
 			_damage_remote_player_in_radius(center, radius, remote_damage, source, pool, "pool_tick")
 	boss6_lodarian_pools = boss6_lodarian_pools.filter(func(pool): return float(pool.get("life", 0.0)) > 0.0)
 
@@ -20742,7 +20872,7 @@ func _update_boss_phase3(delta: float) -> void:
 	boss3_cheese_timer -= delta
 	if boss3_stage >= 2 and boss3_cheese_timer <= 0.0 and not _boss3_has_true_cheese():
 		boss3_cheese_timer = BOSS3_CHEESE_INTERVAL
-		_spawn_boss3_cheese(_boss3_random_cheese_pos(), true, 34.0 + boss3_stage * 7.0, 10.5, false)
+		_spawn_boss3_cheese(_boss3_random_cheese_pos(), true, 18.0 + boss3_stage * 4.0, 10.5, false)
 		_spawn_enemy(ENEMY_DEVOTO, _spawn_point_around_player(440.0))
 	var phase3_target := _boss_target_pos(false, 0.14)
 	if boss3_stage >= 2 and boss3_tail_timer <= 0.0 and boss_pos.distance_to(phase3_target) <= 145.0 and boss_attacks.is_empty():
@@ -20767,12 +20897,11 @@ func _update_boss3_events(pct: float) -> void:
 		_add_text("O ESGOTO VAI REZAR COMIGO", boss_pos + Vector2(0, -122), Color(1.0, 0.38, 0.18), 2.5, 25)
 	if pct <= 0.85 and not boss3_events.has("cheese85"):
 		boss3_events["cheese85"] = true
-		_spawn_boss3_cheese(_boss3_random_cheese_pos(), true, 26.0, 11.0, false)
+		_spawn_boss3_cheese(_boss3_random_cheese_pos(), true, 16.0, 11.0, false)
 		_add_text("TRAGAM-ME O QUEIJO", boss_pos + Vector2(0, -120), Color(1.0, 0.88, 0.28), 1.8, 24)
 	if pct <= 0.60 and not boss3_events.has("cheese60"):
 		boss3_events["cheese60"] = true
-		_spawn_boss3_cheese(_boss3_random_cheese_pos(), true, 38.0, 12.0, false)
-		_spawn_boss3_cheese(_boss3_random_cheese_pos(), false, 30.0, 12.0, false)
+		_spawn_boss3_cheese(_boss3_random_cheese_pos(), true, 20.0, 12.0, false)
 		_spawn_enemy(ENEMY_DEVOTO, _spawn_point_around_player(420.0))
 		_spawn_enemy(ENEMY_DEVOTO, _spawn_point_around_player(500.0))
 	if pct <= 0.25 and not boss3_events.has("ritual"):
@@ -20994,7 +21123,7 @@ func _update_boss3_cheeses(delta: float) -> void:
 			boss3_consume_timer += delta
 			if boss3_consume_timer >= 1.0:
 				var missing = boss_hp_max - boss_hp
-				var heal_ratio = 0.25
+				var heal_ratio = 0.08
 				var heal = missing * heal_ratio
 				boss_hp = min(boss_hp_max, boss_hp + heal)
 				boss3_faith = min(100.0, boss3_faith + 20.0)
@@ -22698,6 +22827,10 @@ func _update_boss_call(delta: float) -> void:
 
 
 func _update_shop_countdown(delta: float) -> void:
+	if not boss1_rewind_sequence.is_empty() or not boss1_time_wave.is_empty():
+		_update_audio_volumes()
+		_update_game(delta)
+		return
 	forced_shop_timer -= delta
 	if forced_shop_timer <= 0.0:
 		_start_shop_opening_animation(true)
@@ -22708,6 +22841,8 @@ func _update_shop_countdown(delta: float) -> void:
 
 
 func _start_shop_opening_animation(forced: bool) -> void:
+	if not boss1_rewind_sequence.is_empty() or not boss1_time_wave.is_empty():
+		return
 	_clear_shop_mp_request()
 	forced_shop_timer = 0.0
 	shop_opening_timer = SHOP_OPENING_ANIM_TIME
@@ -23364,6 +23499,8 @@ func _support_log2_count(card_id: String) -> float:
 
 
 func _heal_player(amount: float, source: String = "generic", feed_reserva: bool = true) -> float:
+	if _is_player_calcified():
+		return 0.0
 	if amount <= 0.0 or is_dead:
 		return 0.0
 	var missing_before: float = max(0.0, float(player_hp_max - player_hp))
@@ -23608,14 +23745,14 @@ func _cinzas_weight_bonus() -> float:
 	var count := _support_card_count(CARD_CINZAS_ID)
 	if count <= 0:
 		return 0.0
-	return 0.55 + 0.18 * _support_sqrt_extra(CARD_CINZAS_ID)
+	return 1.50 + 0.50 * _support_sqrt_extra(CARD_CINZAS_ID)
 
 
 func _cinzas_duration_in_shops() -> int:
 	var count := _support_card_count(CARD_CINZAS_ID)
 	if count <= 0:
 		return 0
-	return 2 + int(_support_log2_count(CARD_CINZAS_ID))
+	return 3 + int(_support_log2_count(CARD_CINZAS_ID))
 
 
 func _cinzas_mark_index(card_id: String) -> int:
@@ -25517,7 +25654,7 @@ func _apply_pause_state(paused: bool) -> void:
 		_begin_pause_music_fade_out()
 	else:
 		if mode == "paused":
-			mode = previous_mode
+			mode = previous_mode if (previous_mode != "" and previous_mode != "paused") else "game"
 		forced_shop_timer = -1.0
 		_begin_pause_music_fade_in()
 	_block_ui_input()
@@ -26125,6 +26262,63 @@ func _draw() -> void:
 		_draw_qa_streaming_status(viewport)
 	if app_update_popup_visible:
 		_draw_app_update_popup(viewport)
+	if _should_draw_custom_mouse_cursor():
+		_draw_custom_mouse_cursor(viewport)
+
+
+func _should_show_os_mouse() -> bool:
+	if not _uses_desktop_ui():
+		return true
+	if mode in ["menu", "nick_setup", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "manifest", "manifest_mp", "shop", "paused", "pause_deck", "edit_layout", "game_over", "victory"]:
+		return true
+	if _shop_mp_request_visible() or _boss_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
+		return true
+	return false
+
+
+func _should_draw_custom_mouse_cursor() -> bool:
+	if not _uses_desktop_ui():
+		return false
+	if _should_show_os_mouse():
+		return false
+	if mode in ["game", "shop_countdown", "shop_opening", "boss_call", "pause_countdown", "shop_return"]:
+		if _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) == DESKTOP_ATTACK_AIM_CURSOR or desktop_aim_action != "":
+			return true
+	return false
+
+
+func _update_mouse_cursor_mode() -> void:
+	if not _uses_desktop_ui():
+		if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		return
+	var target_mode := Input.MOUSE_MODE_VISIBLE if _should_show_os_mouse() else Input.MOUSE_MODE_HIDDEN
+	if Input.mouse_mode != target_mode:
+		Input.mouse_mode = target_mode
+
+
+func _draw_custom_mouse_cursor(_viewport: Vector2) -> void:
+	var pos := get_viewport().get_mouse_position()
+	var red_accent := Color(1.0, 0.12, 0.18, 1.0)
+	var bright_center := Color(1.0, 0.92, 0.92, 1.0)
+	var outline_color := Color(0.0, 0.0, 0.0, 0.85)
+
+	draw_arc(pos, 14.0, 0.0, TAU, 32, outline_color, 2.5, true)
+	draw_arc(pos, 14.0, 0.0, TAU, 32, red_accent, 1.2, true)
+
+	var gap := 5.0
+	var tick_len := 10.0
+	var dirs := [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]
+
+	for d in dirs:
+		var p1 = pos + d * gap
+		var p2 = pos + d * (gap + tick_len)
+		draw_line(p1, p2, outline_color, 3.0, true)
+		draw_line(p1, p2, red_accent, 1.6, true)
+
+	draw_circle(pos, 3.5, outline_color)
+	draw_circle(pos, 2.2, red_accent)
+	draw_circle(pos, 1.0, bright_center)
 
 
 func _draw_manifest_evolution_choice(viewport: Vector2) -> void:
@@ -26602,6 +26796,8 @@ func _draw_gameplay_settings(viewport: Vector2) -> void:
 		_draw_gameplay_preference(settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", _desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), settings_selected == _gameplay_preference_index("desktop_aim"))
 	if _uses_desktop_ui() and settings_buttons.has("desktop_teleport"):
 		_draw_gameplay_preference(settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", "Cursor, alvo automatico ou confirmacao visual.", _desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), settings_selected == _gameplay_preference_index("desktop_teleport"))
+	if _uses_desktop_ui() and settings_buttons.has("desktop_attack_aim"):
+		_draw_gameplay_preference(settings_buttons["desktop_attack_aim"], "MIRA DO ATAQUE BASICO", "Alvo automatico ou direcao do cursor.", _desktop_attack_aim_mode_label(), Color(0.48, 0.88, 0.64), settings_selected == _gameplay_preference_index("desktop_attack_aim"))
 	var damage_panel = settings_buttons["damage_text"]
 	_draw_gameplay_preference(damage_panel, "TEXTO DE DANO", "Tamanho dos numeros exibidos nos inimigos.", "%d%%" % int(round(damage_text_scale * 100.0)), Color(1.0, 0.50, 0.28), settings_selected == _gameplay_preference_index("damage_text"))
 	_draw_small_rect_button(_damage_text_minus_rect(damage_panel), "-", Color(0.20, 0.10, 0.08), Color(1.0, 0.50, 0.28))
@@ -26824,6 +27020,7 @@ func _gameplay_preference_keys() -> Array:
 	if _uses_desktop_ui():
 		keys.insert(4, "desktop_aim")
 		keys.insert(5, "desktop_teleport")
+		keys.insert(6, "desktop_attack_aim")
 	if ui_platform_override_unlocked:
 		keys.append("ui_platform_profile")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
@@ -28373,6 +28570,7 @@ func _draw_game(viewport: Vector2) -> void:
 		draw_texture_rect(map_texture, _desktop_stage_draw_rect(camera), false)
 	else:
 		draw_rect(Rect2(-camera, WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
+	_draw_boss6_necro_erosion(camera)
 
 	if not _active_prismatica_secondary().is_empty():
 		var dr = Rect2(-camera, WORLD_SIZE)
@@ -28493,6 +28691,7 @@ func _draw_game(viewport: Vector2) -> void:
 		_draw_phase_fragment(camera)
 	if not online_local_spectator:
 		_draw_companions(camera)
+		_draw_boss6_fossil_echo(camera)
 		_draw_player(camera)
 	if current_phase == 6:
 		_draw_boss_world(camera)
@@ -32227,6 +32426,42 @@ func _draw_projectiles(camera: Vector2) -> void:
 		draw_arc(anchor - camera, orbit_radius, float(orbital["angle"]) - 0.7, float(orbital["angle"]) + 0.35, 18, Color(0.46, 0.78, 1.0, 0.42), 1.6)
 
 
+func _draw_boss6_fossil_echo(camera: Vector2) -> void:
+	if boss6_fossil_echo.is_empty() or float(boss6_fossil_echo.get("timer", 0.0)) <= 0.0:
+		return
+	var pos: Vector2 = boss6_fossil_echo.get("pos", player_pos)
+	var center: Vector2 = pos - camera
+	var tex = _player_texture()
+	var profile: Dictionary = _player_draw_profile()
+	var echo_modulate: Color = Color(0.72, 0.48, 1.0, 0.65 + sin(time_alive * 8.0) * 0.12)
+	var pulse: float = 0.5 + 0.5 * sin(time_alive * 12.0)
+	var hp_ratio: float = float(boss6_fossil_echo.get("hp", 280.0)) / float(boss6_fossil_echo.get("hp_max", 280.0))
+	draw_circle(center, 38.0 + pulse * 6.0, Color(0.72, 0.48, 1.0, 0.08))
+	draw_arc(center, 38.0 + pulse * 6.0, 0.0, TAU, 48, Color(0.85, 0.62, 1.0, 0.48), 2.2)
+	_draw_bar(center + Vector2(-30, -58), 60.0, hp_ratio, Color(0.72, 0.48, 1.0))
+	if tex != null:
+		var flip_h: bool = _should_flip_player_sprite()
+		if bool(profile.get("preserve_height", false)):
+			_draw_entity_by_height_rotated(tex, center + profile.get("offset", Vector2.ZERO), float(profile.get("height", PLAYER_DRAW_LACERAR_HEIGHT)), 0.0, echo_modulate, flip_h)
+		else:
+			_draw_entity_stretched_rotated(tex, center + profile.get("offset", Vector2.ZERO), profile.get("size", Vector2(64, 64)), 0.0, echo_modulate, flip_h)
+
+
+func _draw_boss6_necro_erosion(camera: Vector2) -> void:
+	if current_phase != 6 or not boss6_necro_erosion_active or boss6_necro_erosion_timer <= 0.0:
+		return
+	var center: Vector2 = boss_pos - camera
+	var radius: float = boss6_necro_erosion_radius
+	var color: Color = Color(0.9, 0.15, 0.25, 0.52 + 0.18 * sin(time_alive * 9.0))
+	draw_arc(center, radius, 0.0, TAU, 128, color, 4.0)
+	draw_arc(center, radius + 15.0, 0.0, TAU, 128, Color(color.r, color.g, color.b, 0.22), 8.0)
+	if _is_player_calcified():
+		var viewport_size: Vector2 = get_viewport_rect().size
+		var pulse: float = 0.5 + 0.5 * sin(time_alive * 12.0)
+		draw_rect(Rect2(Vector2.ZERO, viewport_size), Color(0.9, 0.15, 0.25, 0.08 + pulse * 0.06), false, 12.0)
+		_draw_centered("CALCIFICADO - SAIA DO NEVOEIRO", Vector2(viewport_size.x * 0.5, viewport_size.y * 0.35), 24, Color(0.9, 0.15, 0.25))
+
+
 func _draw_player(camera: Vector2) -> void:
 	if is_dead:
 		return
@@ -34433,43 +34668,76 @@ func _draw_ground_target_preview(viewport: Vector2, camera: Vector2) -> void:
 
 func _draw_desktop_combat_hud(viewport: Vector2) -> void:
 	var icons = []
-	var icon_size = 56.0
+	var icon_size = 60.0
 	var spacing = 16.0
 
 	var active_eletrica_secondary = _active_eletrica_secondary()
 	var toggle_ultimate_active = (manifestation_key == "prismatica" and time_alive - last_secondary_time < SECONDARY_PRISMATICA_DURATION) or (manifestation_key == "eletrica" and active_eletrica_secondary)
 	var tp_visual_active := tp_cooldown_pending and not tp_effects.is_empty()
-	var dash_label := "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "DASH")
+	var dash_label := "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
 	var dash_color = Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.20, 0.85, 1.0, 0.72)
 
-	icons.append({ "label": "ATK", "bind": _compact_key_binding_name("attack") if _uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.26, 0.70), "cd_elapsed": 100.0, "cd_max": 1.0 })
-	icons.append({ "label": "SKILL", "bind": _compact_key_binding_name("skill") if _uses_desktop_ui() else _compact_binding_name("skill"), "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown() })
-	icons.append({ "label": "X" if toggle_ultimate_active else "E", "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), "cd_elapsed": time_alive - last_secondary_time, "cd_max": SECONDARY_SKILL_COOLDOWN })
-	icons.append({ "label": dash_label, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown() })
+	var q_charges := 0
+	if manifestation_key == "bombastica":
+		q_charges = bombastica_bombs.size()
+
+	var tp_charges := 0
 	if manifestation_key == "lacerante":
-		icons.append({ "label": "R" if lacerante_empowered_ready else "+", "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN })
+		tp_charges = lacerante_tp_charges
+
+	var ult_label := "CANCELAR" if toggle_ultimate_active else "ULT"
+	var ult_sub := "CANCELAR" if toggle_ultimate_active else "ULTIMATE"
+
+	icons.append({ "label": "ATK", "sub": "Ataque", "charges": 0, "bind": _compact_key_binding_name("attack") if _uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.26, 0.85), "cd_elapsed": 100.0, "cd_max": 1.0 })
+	icons.append({ "label": "HAB1", "sub": "Hab 1", "charges": q_charges, "bind": _compact_key_binding_name("skill") if _uses_desktop_ui() else _compact_binding_name("skill"), "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.85), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown() })
+	icons.append({ "label": ult_label, "sub": ult_sub, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.85), "cd_elapsed": time_alive - last_secondary_time, "cd_max": SECONDARY_SKILL_COOLDOWN })
+	icons.append({ "label": dash_label, "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown() })
+	if manifestation_key == "lacerante":
+		icons.append({ "label": "REFORÇO" if lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN })
 	if manifestation_key == "bombastica":
 		var det_ready := 1.0 if bombastica_bombs.size() > 0 else 0.0
-		icons.append({ "label": "DET", "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0 })
+		icons.append({ "label": "DET", "sub": "Detonar", "charges": bombastica_bombs.size(), "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0 })
 
 	var total_w = icons.size() * icon_size + (icons.size() - 1) * spacing
 	var start_x = viewport.x * 0.5 - total_w * 0.5
-	var start_y = viewport.y - icon_size - 48.0
+	var start_y = viewport.y - icon_size - 44.0
 
 	for i in range(icons.size()):
 		var ic = icons[i]
 		var rect = Rect2(start_x + i * (icon_size + spacing), start_y, icon_size, icon_size)
-		draw_rect(rect, Color(0.02, 0.03, 0.04, 0.86), true)
-		draw_rect(rect, Color(ic.color.r, ic.color.g, ic.color.b, 0.12), true)
-		draw_rect(rect, ic.color, false, 2.0)
+		var main_color: Color = ic.color
+
+		draw_rect(rect, Color(0.03, 0.05, 0.09, 0.94), true)
+		draw_rect(rect.grow(-2.0), Color(main_color.r, main_color.g, main_color.b, 0.14), true)
+		draw_rect(rect, Color(main_color.r, main_color.g, main_color.b, 0.88), false, 2.0)
+		draw_line(rect.position + Vector2(2, 2), rect.position + Vector2(rect.size.x - 2, 2), Color(main_color.r, main_color.g, main_color.b, 0.98), 2.0)
+
 		if ic.has("bind") and String(ic["bind"]) != "":
-			_draw_centered(String(ic["bind"]), rect.get_center() + Vector2(0, -icon_size * 0.5 - 8.0), 11, Color(ic.color.r, ic.color.g, ic.color.b, 0.96))
-		_draw_centered(ic.label, rect.get_center() + Vector2(0, 5), 18, Color.WHITE)
+			var bind_str: String = String(ic["bind"])
+			var cap_w = max(26.0, bind_str.length() * 9.0 + 8.0)
+			var cap_rect = Rect2(rect.get_center().x - cap_w * 0.5, rect.position.y - 19.0, cap_w, 16.0)
+			draw_rect(cap_rect, Color(0.04, 0.06, 0.10, 0.96), true)
+			draw_rect(cap_rect, Color(main_color.r, main_color.g, main_color.b, 0.85), false, 1.2)
+			_draw_centered(bind_str, cap_rect.get_center() + Vector2(0, 1), 10, Color(1.0, 0.96, 0.84))
+
+		if ic.has("charges") and int(ic["charges"]) > 0:
+			var chg_val: int = int(ic["charges"])
+			var chg_str := "x%d" % chg_val
+			var badge_w = 26.0
+			var badge_rect = Rect2(rect.position.x + rect.size.x - badge_w * 0.6, rect.position.y - 6.0, badge_w, 16.0)
+			draw_rect(badge_rect, Color(0.08, 0.02, 0.04, 0.96), true)
+			draw_rect(badge_rect, Color(1.0, 0.78, 0.18, 0.95), false, 1.5)
+			_draw_centered(chg_str, badge_rect.get_center() + Vector2(0, 1), 11, Color(1.0, 0.94, 0.32))
+
+		_draw_centered(ic.label, rect.get_center() + Vector2(0, -1 if String(ic.sub) != "" else 4), 16, Color.WHITE)
+		if String(ic.sub) != "":
+			_draw_centered(ic.sub, rect.get_center() + Vector2(0, 14), 9, Color(main_color.r * 0.7 + 0.3, main_color.g * 0.7 + 0.3, main_color.b * 0.7 + 0.3, 0.92))
+
 		if ic.cd_elapsed < ic.cd_max:
 			var ratio = clamp(ic.cd_elapsed / max(0.01, ic.cd_max), 0.0, 1.0)
 			var h = icon_size * (1.0 - ratio)
-			draw_rect(Rect2(rect.position.x, rect.end.y - h, icon_size, h), Color(0.0, 0.0, 0.0, 0.65), true)
-			_draw_centered("%.1f" % (ic.cd_max - ic.cd_elapsed), rect.get_center() + Vector2(0, 5), 15, Color.WHITE)
+			draw_rect(Rect2(rect.position.x, rect.end.y - h, icon_size, h), Color(0.0, 0.0, 0.0, 0.72), true)
+			_draw_centered("%.1f" % (ic.cd_max - ic.cd_elapsed), rect.get_center() + Vector2(0, 4), 15, Color(1.0, 0.92, 0.40))
 
 
 func _draw_desktop_session_buttons(_viewport: Vector2) -> void:
@@ -34513,7 +34781,12 @@ func _draw_touch_controls(viewport: Vector2) -> void:
 	var skill_c = buttons["skill"].position + buttons["skill"].size * 0.5
 	var skill_r = 46.0 * _skill_scale()
 	if not is_gamepad_active:
-		_draw_button(skill_c, skill_r, "Q", Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70))
+		_draw_button(skill_c, skill_r, "HAB1", Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.70))
+	if manifestation_key == "bombastica" and bombastica_bombs.size() > 0:
+		var q_badge_center: Vector2 = skill_c + Vector2(skill_r * 0.66, -skill_r * 0.68)
+		draw_circle(q_badge_center, 14.0, Color(0.16, 0.0, 0.025, 0.96))
+		draw_arc(q_badge_center, 14.0, 0.0, TAU, 24, Color(1.0, 0.78, 0.18, 0.98), 2.0)
+		_draw_centered("x%d" % bombastica_bombs.size(), q_badge_center + Vector2(0, 1), 12, Color.WHITE)
 	var secondary_c = buttons["secondary"].position + buttons["secondary"].size * 0.5
 	var secondary_r = 43.0 * _secondary_scale()
 	var active_eletrica_secondary = _active_eletrica_secondary()
@@ -34525,7 +34798,7 @@ func _draw_touch_controls(viewport: Vector2) -> void:
 		draw_circle(secondary_c, secondary_r + 9.0 + cancel_pulse * 5.0, Color(1.0, 0.0, 0.05, outer_alpha))
 		draw_circle(secondary_c, secondary_r * 0.96, Color(0.40, 0.0, 0.02, 0.92))
 	if not is_gamepad_active:
-		_draw_button(secondary_c, secondary_r, "X" if toggle_ultimate_active else "E", Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72))
+		_draw_button(secondary_c, secondary_r, "CANCELAR" if toggle_ultimate_active else "ULT", Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72))
 	if toggle_ultimate_active:
 		draw_arc(secondary_c, secondary_r + 7.0 + cancel_pulse * 4.0, 0.0, TAU, 54, Color(1.0, 0.10, 0.13, 1.0), 4.0)
 		if cancel_danger:
@@ -34693,8 +34966,7 @@ func _draw_edit_layout(viewport: Vector2) -> void:
 	var skill_c = skill_rect.get_center()
 	draw_circle(skill_c, skill_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "skill" else Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.4))
 	draw_arc(skill_c, skill_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "skill" else _manifestation_color(), 3)
-	_draw_centered("Q", skill_c + Vector2(0, -6), 20, Color.WHITE)
-	_draw_centered("HAB", skill_c + Vector2(0, 13), 12, Color.WHITE)
+	_draw_centered("HAB1", skill_c, 18, Color.WHITE)
 	_draw_small_rect_button(Rect2(skill_c.x - 60, skill_c.y + skill_r + 10, 50, 40), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 	_draw_small_rect_button(Rect2(skill_c.x + 10, skill_c.y + skill_r + 10, 50, 40), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 
@@ -34875,6 +35147,9 @@ func _handle_boss_mp_overlay_press(pos: Vector2, viewport: Vector2) -> bool:
 
 
 func _draw_shop(viewport: Vector2) -> void:
+	for key in buttons.keys():
+		if String(key).begins_with("shop_burn_") or String(key).begins_with("shop_reserve_"):
+			buttons.erase(key)
 	# Draw holo background
 	_draw_holo_background(viewport, textures["cards_back"], Color(0.0, 1.0, 0.82))
 
@@ -36637,6 +36912,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		if _should_ignore_emulated_mouse():
 			return
+		if _should_draw_custom_mouse_cursor():
+			queue_redraw()
 		if mode == "edit_layout" and edit_layout_touch_index != -1:
 			_handle_edit_layout_drag(edit_layout_touch_index, event.position, viewport)
 		elif (mode == "manifest" or mode == "manifest_mp") and manifest_preview_consumed_touch_index == -2:
@@ -37058,6 +37335,10 @@ func _handle_gameplay_settings_touch(pos: Vector2, viewport: Vector2) -> void:
 	elif settings_buttons.has("desktop_teleport") and settings_buttons["desktop_teleport"].has_point(pos):
 		_close_gameplay_cheat_popup()
 		_cycle_desktop_teleport_mode()
+		_save_config()
+	elif settings_buttons.has("desktop_attack_aim") and settings_buttons["desktop_attack_aim"].has_point(pos):
+		_close_gameplay_cheat_popup()
+		_cycle_desktop_attack_aim_mode()
 		_save_config()
 	elif settings_buttons["damage_text"].has_point(pos):
 		_close_gameplay_cheat_popup()
@@ -37558,6 +37839,7 @@ func _handle_gamepad_virtual_button(btn_id: String, pressed: bool, viewport: Vec
 
 
 func _capture_keyboard_binding(event: InputEvent) -> void:
+	var new_bind := ""
 	if event is InputEventKey:
 		if event.keycode == KEY_ESCAPE:
 			keyboard_mapping_action = ""
@@ -37567,13 +37849,18 @@ func _capture_keyboard_binding(event: InputEvent) -> void:
 			keyboard_mapping_action = ""
 			_save_config()
 			return
-		keyboard_bindings[keyboard_mapping_action] = _key_input_binding(event.keycode if event.keycode > 0 else event.physical_keycode)
+		new_bind = _key_input_binding(event.keycode if event.keycode > 0 else event.physical_keycode)
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]:
 			return
-		keyboard_bindings[keyboard_mapping_action] = _mouse_input_binding(event.button_index)
+		new_bind = _mouse_input_binding(event.button_index)
 	else:
 		return
+	if new_bind != "":
+		for other_action in _keyboard_action_order():
+			if String(other_action) != keyboard_mapping_action and keyboard_bindings.get(String(other_action), INPUT_BIND_NONE) == new_bind:
+				keyboard_bindings[String(other_action)] = INPUT_BIND_NONE
+		keyboard_bindings[keyboard_mapping_action] = new_bind
 	keyboard_mapping_action = ""
 	_save_config()
 
@@ -37688,7 +37975,10 @@ func _execute_desktop_action(action: String) -> void:
 			else:
 				_try_dash_to_world(_desktop_dash_target())
 		"lacerante_empower":
-			_try_arm_lacerante_empower()
+			if manifestation_key == "bombastica":
+				_trigger_bombastica_detonator(false)
+			else:
+				_try_arm_lacerante_empower()
 		"pause":
 			_start_pause_countdown()
 		"shop":
@@ -37834,8 +38124,8 @@ func _handle_key(event: InputEventKey) -> void:
 			if menu_selected >= 0 and menu_selected < keys.size():
 				_activate_menu_option(String(keys[menu_selected]))
 	elif mode == "settings":
-		if event.keycode == KEY_ESCAPE:
-			_go_to_menu()
+		if _is_escape_or_pause_key(event):
+			_return_from_settings()
 		elif event.keycode == KEY_UP or event.keycode == KEY_W:
 			settings_selected = (settings_selected - 1 + _settings_option_count()) % _settings_option_count()
 		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
@@ -37910,6 +38200,7 @@ func _handle_key(event: InputEventKey) -> void:
 				"target_priority": _cycle_target_priority()
 				"desktop_aim": _cycle_desktop_aim_mode()
 				"desktop_teleport": _cycle_desktop_teleport_mode()
+				"desktop_attack_aim": _cycle_desktop_attack_aim_mode()
 				"fps": show_fps_counter = not show_fps_counter
 				"retornante_cheat": _open_gameplay_cheat_popup()
 				"haptics": haptics_enabled = not haptics_enabled
@@ -37933,6 +38224,7 @@ func _handle_key(event: InputEventKey) -> void:
 				"interface_text": interface_text_scale = max(0.5, interface_text_scale - 0.25)
 				"desktop_aim": _cycle_desktop_aim_mode(-1)
 				"desktop_teleport": _cycle_desktop_teleport_mode(-1)
+				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(-1)
 				"ui_platform_profile": _cycle_ui_platform_override(-1)
 				"qa_stream_quality": _cycle_qa_stream_quality_mode(-1)
 			_save_config()
@@ -37944,6 +38236,7 @@ func _handle_key(event: InputEventKey) -> void:
 				"interface_text": interface_text_scale = min(2.0, interface_text_scale + 0.25)
 				"desktop_aim": _cycle_desktop_aim_mode(1)
 				"desktop_teleport": _cycle_desktop_teleport_mode(1)
+				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(1)
 				"ui_platform_profile": _cycle_ui_platform_override(1)
 				"qa_stream_quality": _cycle_qa_stream_quality_mode(1)
 			_save_config()
@@ -38167,7 +38460,7 @@ func _handle_key(event: InputEventKey) -> void:
 			if _shop_can_exit():
 				_request_shop_exit_or_finish()
 	elif mode == "paused":
-		if event.keycode == KEY_ESCAPE:
+		if _is_escape_or_pause_key(event):
 			_resume_from_pause()
 		elif event.keycode == KEY_UP or event.keycode == KEY_W:
 			pause_selected = (pause_selected - 1 + 4) % 4
@@ -38184,7 +38477,7 @@ func _handle_key(event: InputEventKey) -> void:
 				mode = "settings"
 			elif pause_selected == 3:
 				_go_to_menu()
-	elif mode == "pause_deck" and event.keycode in [KEY_ESCAPE, KEY_ENTER, KEY_SPACE]:
+	elif mode == "pause_deck" and (_is_escape_or_pause_key(event) or event.keycode in [KEY_ENTER, KEY_SPACE]):
 		_return_from_deck()
 	elif mode == "pause_deck":
 		var owned = _owned_deck_cards()
@@ -39351,6 +39644,13 @@ func _desktop_aim_mode_label() -> String:
 		DESKTOP_AIM_CONFIRM:
 			return "CONFIRMAR"
 	return "SAIDA RAPIDA"
+
+
+func _desktop_attack_aim_mode_label() -> String:
+	match _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode):
+		DESKTOP_ATTACK_AIM_CURSOR:
+			return "MIRA NO CURSOR"
+	return "AUTOMATICO"
 
 
 func _desktop_teleport_mode_label() -> String:
@@ -43186,6 +43486,14 @@ func _cycle_desktop_teleport_mode(direction := 1) -> void:
 		current = 0
 	desktop_teleport_mode = String(modes[(current + direction + modes.size()) % modes.size()])
 	_clear_desktop_aim_state()
+
+
+func _cycle_desktop_attack_aim_mode(direction := 1) -> void:
+	var modes := [DESKTOP_ATTACK_AIM_AUTO, DESKTOP_ATTACK_AIM_CURSOR]
+	var current := modes.find(_sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode))
+	if current < 0:
+		current = 0
+	desktop_attack_aim_mode = String(modes[(current + direction + modes.size()) % modes.size()])
 
 
 func _update_audio_buses() -> void: pass

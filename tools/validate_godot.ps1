@@ -78,13 +78,14 @@ function Invoke-LoggedStep {
     Write-Host "`n==> $Name"
     Write-Host ("    {0} {1}" -f $Godot, ($Arguments -join ' '))
 
-    $oldPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    $output = @(& $Godot @Arguments 2>&1 | ForEach-Object { $_.ToString() })
-    $ErrorActionPreference = $oldPreference
-    $exitCode = $LASTEXITCODE
-    $output | Set-Content -LiteralPath $logPath -Encoding UTF8
-    $output | ForEach-Object { Write-Host $_ }
+    $cmdLine = "`"$Godot`" " + (($Arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' ') + " > `"$logPath`" 2>&1"
+    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$cmdLine`"" -NoNewWindow -PassThru -Wait
+    $exitCode = $proc.ExitCode
+    $output = @()
+    if (Test-Path -LiteralPath $logPath) {
+        $output = Get-Content -LiteralPath $logPath -Encoding UTF8
+        $output | ForEach-Object { Write-Host $_ }
+    }
 
     if ($exitCode -ne 0) {
         throw "$Name failed with exit code $exitCode. Log: $logPath"
