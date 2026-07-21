@@ -15,12 +15,12 @@ const SPECTRUM_PROBE_DAMAGE := 10.0
 const SPECTRUM_PROBE_MULTIPLIER := 1.69
 const EXPECTED_DAMAGE_REQUESTS := 22
 const EXPECTED_TOTAL_DAMAGE := DAMAGE_PER_HIT * 21.0 + SPECTRUM_PROBE_DAMAGE * SPECTRUM_PROBE_MULTIPLIER
-const LOCAL_RELAY_PING_BUDGET_MS := 80
 
 var game: Node
 var role: String = ""
 var host: String = "127.0.0.1"
 var port: int = 4591
+var ping_budget_ms: int = 30
 
 var manifest_reveal_requested := false
 var spectrum_ready_sent := false
@@ -61,6 +61,8 @@ func _initialize() -> void:
 			host = arg.substr("--host=".length())
 		elif arg.begins_with("--port="):
 			port = int(arg.substr("--port=".length()))
+		elif arg.begins_with("--ping-budget="):
+			ping_budget_ms = maxi(1, int(arg.substr("--ping-budget=".length())))
 
 	_check(role in ["server", "host", "client"], "missing or invalid --role")
 	game = load("res://scenes/Main.tscn").instantiate()
@@ -180,9 +182,8 @@ func _run_host_loop() -> void:
 		if remote_damage_sent:
 			_check(int(game.player_hp) == host_hp_before_remote_damage, "enemy damage aimed at client also changed host hp")
 			if int(game.net_player_hp) < remote_hp_before_damage:
-				if game.net_ping_ms < 0:
-					continue
-				_check(game.net_ping_ms < LOCAL_RELAY_PING_BUDGET_MS, "host relay ping exceeded local %dms budget: %d" % [LOCAL_RELAY_PING_BUDGET_MS, game.net_ping_ms])
+				await _wait_for_ping_budget(ping_budget_ms, 2.0)
+				_check(game.net_report_ping_min <= ping_budget_ms, "host relay ping exceeded local %dms budget: best=%d last=%d" % [ping_budget_ms, game.net_report_ping_min, game.net_ping_ms])
 				if not _result_exists("client"):
 					continue
 				await _finish_ok("host authority applied client hit and routed enemy damage to client only")
@@ -249,9 +250,8 @@ func _run_client_loop() -> void:
 				continue
 			if total_time - client_damage_seen_at < 0.60:
 				continue
-			if game.net_ping_ms < 0:
-				continue
-			_check(game.net_ping_ms < LOCAL_RELAY_PING_BUDGET_MS, "client relay ping exceeded local %dms budget: %d" % [LOCAL_RELAY_PING_BUDGET_MS, game.net_ping_ms])
+			await _wait_for_ping_budget(ping_budget_ms, 2.0)
+			_check(game.net_report_ping_min <= ping_budget_ms, "client relay ping exceeded local %dms budget: best=%d last=%d" % [ping_budget_ms, game.net_report_ping_min, game.net_ping_ms])
 			await _finish_ok("client skill hit was relayed and client-only damage arrived")
 			return
 
@@ -302,8 +302,19 @@ func _result_exists(result_role: String) -> bool:
 	return FileAccess.file_exists(RESULT_PREFIX + result_role + "_result.txt")
 
 
+func _wait_for_ping_budget(budget_ms: int, max_wait: float) -> void:
+	var started := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - started < int(max_wait * 1000.0):
+		if game.net_report_ping_min <= budget_ms:
+			return
+		if game.online_connected:
+			game._update_online_ping(Time.get_ticks_msec())
+		await process_frame
+
+
 func _finish_ok(message: String) -> void:
-	print("[%s] GAMEPLAY_AUTHORITY_OK %s" % [role.to_upper(), message])
+	var best_ping: int = int(game.net_report_ping_min) if game.net_report_ping_count > 0 else -1
+	print("[%s] GAMEPLAY_AUTHORITY_OK ping_ms=%d ping_min_ms=%d remote_ping_ms=%d %s" % [role.to_upper(), int(game.net_ping_ms), int(best_ping), int(game.net_remote_ping_ms), message])
 	var file := FileAccess.open(RESULT_PREFIX + role + "_result.txt", FileAccess.WRITE)
 	if file:
 		file.store_string("OK")

@@ -141,10 +141,10 @@ func _run() -> void:
 	game.is_dead = true
 	game.player_hp = 0
 	game.card_cost = 100
-	game.score = game._revive_cost()
+	game.score = 0
 	game.revive_request_cooldown = 0.0
 	game._request_team_revive()
-	_check(game.revive_request_outgoing and game.revive_request_timer > 0.0, "dead player could not request team revive")
+	_check(game.revive_request_outgoing and game.revive_request_timer > 0.0, "dead player could not request team revive without points")
 	game._rpc_reject_team_revive(game._mp_unique_id())
 	_check(game.revive_request_cooldown >= game.REVIVE_REQUEST_COOLDOWN - 0.01, "rejected revive request did not start cooldown")
 	game.is_dead = false
@@ -153,8 +153,18 @@ func _run() -> void:
 	game.revive_request_target_peer = 42
 	game.revive_request_cost = 120
 	game.score = 500
-	game._accept_team_revive_request()
+	game._accept_team_revive_request(game.REVIVE_PAY_POINTS)
 	_check(game.score == 380 and not game.revive_request_incoming, "accepting revive did not deduct team cost and clear request")
+	game.revive_request_incoming = true
+	game.revive_request_target_peer = 43
+	game.revive_request_cost = 240
+	game.score = 0
+	game.player_hp_max = 500
+	game.player_hp = 400
+	game._accept_team_revive_request(game.REVIVE_PAY_LIFE)
+	_check(game.score == 0 and is_equal_approx(game.player_hp, 200.0) and game.revive_heal_penalty_timer >= game.REVIVE_HEAL_PENALTY_DURATION - 0.01 and not game.revive_request_incoming, "life revive did not sacrifice hp, apply heal penalty and clear request")
+	var healed: float = game._heal_player(100.0, "revive_smoke", false)
+	_check(is_equal_approx(healed, 50.0) and is_equal_approx(game.player_hp, 250.0), "revive sacrifice did not reduce incoming healing by 50 percent")
 	game.is_dead = true
 	game.player_hp = 0
 	game._handle_revive(true)

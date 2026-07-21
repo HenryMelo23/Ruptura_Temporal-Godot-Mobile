@@ -167,6 +167,28 @@ func _run() -> void:
 	_check(game._lodario_target_pos(attracted_lodario).distance_to(game.player_pos) < 1.0, "Pheromone did not make Lodario target the player instead of the explosion")
 
 	game.enemies.clear()
+	game.enemy_bullets.clear()
+	game.player_pos = Vector2(760, 360)
+	game._spawn_enemy(game.ENEMY_FOSSIL_PUSTULE, Vector2(360, 360))
+	var shooting_pustule: Dictionary = game.enemies.back()
+	shooting_pustule["pustule_mature_time"] = 0.0
+	shooting_pustule["pustule_spit_cd"] = 0.0
+	game._update_enemies(0.02)
+	_check(game.enemy_bullets.size() == 1, "Fossil Pustule did not fire its slowing spit")
+	_check(String(game.enemy_bullets[0].get("type", "")) == "pustula_fossil_spit", "Fossil Pustule spit used the wrong bullet type")
+	_check(float(shooting_pustule.get("pustule_spit_cd", 0.0)) <= game.PUSTULE_SPIT_MAX_INTERVAL + 0.5, "Fossil Pustule close spit cooldown did not slow down")
+	game.pustule_spit_slow_timer = 0.0
+	game.pustule_spit_slow_grace_timer = 0.0
+	game._damage_player(1, "pustula_fossil_spit")
+	_check(game.pustule_spit_slow_timer > 0.0, "Fossil Pustule spit did not apply movement slow")
+	game._damage_player(1, "pustula_fossil_spit")
+	_check(game.pustule_spit_slow_timer <= game.PUSTULE_SPIT_SLOW_TIME, "Fossil Pustule spit slow stacked while active")
+	game.pustule_spit_slow_timer = 0.0
+	game.pustule_spit_slow_grace_timer = game.PUSTULE_SPIT_SLOW_GRACE
+	game._damage_player(1, "pustula_fossil_spit")
+	_check(game.pustule_spit_slow_timer <= 0.0, "Fossil Pustule spit ignored post-slow grace window")
+
+	game.enemies.clear()
 	game.phase_started_at = 0.0
 	game.time_alive = game.PHASE1_STALKER_UNLOCK_TIME - 0.1
 	_check(game._choose_phase6_enemy_type() == game.ENEMY_LODARIO, "phase 6-1 unlocked advanced enemies before the phase 1 stalker timing")
@@ -216,6 +238,17 @@ func _run() -> void:
 	game._damage_boss(100.0, "smoke", false, false)
 	_check(game.boss_hp < 1000.0, "Boss6 became invulnerable without the old worm shield")
 	var hp_after_plain_damage := float(game.boss_hp)
+	_check(game.BOSS6_PUSTULE_MAX == 7, "Boss6 pustule cap was not raised to seven")
+	game.enemies.clear()
+	for i in range(game.BOSS6_PUSTULE_MAX - 1):
+		game._spawn_boss6_pustule_at(Vector2(140 + i * 78, 180))
+	game._start_boss6_incubation_pustules()
+	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_INCUBATION, "Boss6 incubation did not start near pustule cap")
+	var incubation_spots: Array = game.boss_attacks[0].get("spots", [])
+	_check(incubation_spots.size() == 1, "Boss6 incubation ignored remaining pustule capacity")
+	game._update_boss_attacks(1.1)
+	_check(game._boss6_pustule_count() == game.BOSS6_PUSTULE_MAX, "Boss6 incubation did not fill to the new seven pustule cap")
+	game.boss_attacks.clear()
 	game._start_boss6_carapace()
 	_check(game.boss6_carapace_plates.size() == 3, "Boss6 carapace did not create three plates")
 	game._damage_boss(100.0, "smoke", false, false)
@@ -302,7 +335,7 @@ func _run() -> void:
 	_check(game._try_unlock_retornante_cheat(), "FASE6 cheat did not toggle off")
 	_check(not game.force_phase6_start, "FASE6 cheat did not disable forced start")
 
-	print("PHASE6_ENEMY_BEHAVIOUR_SMOKE_OK cheat=true lodario_hop=35 pheromone_hop=90 eel_cd=30 phase6_1=true pustule_pool=true boss6=true")
+	print("PHASE6_ENEMY_BEHAVIOUR_SMOKE_OK cheat=true lodario_hop=35 pheromone_hop=90 eel_cd=30 phase6_1=true pustule_pool=true pustule_spit=true boss6_pustules=7 boss6=true")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

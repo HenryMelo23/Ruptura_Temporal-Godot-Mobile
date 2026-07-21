@@ -42,8 +42,7 @@ func _run() -> void:
 	game.boss_hp = game.boss_hp_max
 	game.boss_pos = game.boss4_entry_target
 	game.phase4_planets.clear()
-	game.boss4_attack_timer = 0.0
-	game._update_boss_phase4(0.01)
+	game._spawn_boss4_planet()
 	assert(game.phase4_planets.size() == 1)
 	assert(game.phase4_planets[0]["hp"] == game.BOSS4_PLANET_HP)
 	var planet_pos: Vector2 = game.phase4_planets[0]["pos"]

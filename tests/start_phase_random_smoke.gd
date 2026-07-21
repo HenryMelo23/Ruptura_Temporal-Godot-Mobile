@@ -18,6 +18,7 @@ func _initialize() -> void:
 
 func _check_initial_phase_bias() -> void:
 	game.force_phase6_start = false
+	game.forced_initial_phase = 0
 	game._set_initial_phase_bias(6, 1.0, false)
 	game.rng.seed = 101
 	_check(int(game._pick_initial_phase()) == 6, "phase bias should force phase 6 at 100 percent")
@@ -54,11 +55,48 @@ func _check_phase_route_and_boss_hp() -> void:
 	_check(int(game._next_phase_after_boss(6)) == 3, "inserted phase 6 should transition to phase 3 without loop")
 
 
+func _check_forced_initial_phase_cheats() -> void:
+	var expected_names := {
+		1: "CARANGUEJO COSMICO GIGANTE",
+		2: "SENTINELA GLACIAL",
+		3: "PAI-RATO",
+		4: "NEXO DA RUPTURA",
+		5: "UMBRA",
+		6: "MATRIARCA DA CHAGA"
+	}
+	for phase in range(1, 7):
+		game.gameplay_cheat_text = "FASE%d" % phase
+		_check(game._try_unlock_retornante_cheat(), "FASE%d cheat was not accepted" % phase)
+		_check(int(game.forced_initial_phase) == phase, "FASE%d did not set forced initial phase" % phase)
+		_check(bool(game.force_phase6_start) == (phase == 6), "legacy phase6 flag mismatch for FASE%d" % phase)
+		game._start_game()
+		_check(int(game.current_phase) == phase, "FASE%d did not start on requested phase" % phase)
+		_check(String(game.boss_name) == String(expected_names[phase]), "FASE%d boss name mismatch" % phase)
+		_check(game.enemies.size() >= 1, "FASE%d did not spawn initial enemies" % phase)
+		_check(game._current_map_texture() != null, "FASE%d map texture missing" % phase)
+	game.gameplay_cheat_text = "FASE3"
+	_check(game._try_unlock_retornante_cheat(), "FASE3 cheat was not accepted before phase6 replace")
+	game.gameplay_cheat_text = "FASE6"
+	_check(game._try_unlock_retornante_cheat(), "FASE6 replace was not accepted")
+	_check(int(game.forced_initial_phase) == 6, "FASE6 should replace previous forced phase before toggle check")
+	game.gameplay_cheat_text = "FASE6"
+	_check(game._try_unlock_retornante_cheat(), "FASE6 second toggle was not accepted")
+	_check(int(game.forced_initial_phase) == 0, "FASE6 did not toggle itself off")
+	game.gameplay_cheat_text = "FASE3"
+	_check(game._try_unlock_retornante_cheat(), "FASE3 cheat was not accepted before auto reset")
+	game.gameplay_cheat_text = "FASEAUTO"
+	_check(game._try_unlock_retornante_cheat(), "FASEAUTO cheat was not accepted")
+	_check(int(game.forced_initial_phase) == 0, "FASEAUTO did not clear forced phase")
+	_check(not bool(game.force_phase6_start), "FASEAUTO did not clear legacy phase6 flag")
+
+
 func _run() -> void:
 	await process_frame
 	_check_initial_phase_bias()
 	_check_phase_route_and_boss_hp()
+	_check_forced_initial_phase_cheats()
 	game.force_phase6_start = false
+	game.forced_initial_phase = 0
 	game._set_initial_phase_bias(0, 0.0, false)
 	var seen_phase_1 := false
 	var seen_phase_6 := false
@@ -89,7 +127,7 @@ func _run() -> void:
 
 	_check(seen_phase_1, "phase 1 was not rolled")
 	_check(seen_phase_6, "phase 6 was not rolled")
-	print("START_PHASE_RANDOM_SMOKE_OK phases=[1,6]")
+	print("START_PHASE_RANDOM_SMOKE_OK phases=[1,6] forced=[1,2,3,4,5,6]")
 	game._set_initial_phase_bias(0, 0.0, true)
 	game._cleanup_runtime_resources()
 	game.textures.clear()

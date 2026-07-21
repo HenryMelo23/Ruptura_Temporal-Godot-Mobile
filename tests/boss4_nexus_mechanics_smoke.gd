@@ -64,11 +64,15 @@ func _run() -> void:
 	game.boss4_ultimate_used = false
 	game._start_boss4_ultimate()
 	assert(game.boss4_ultimate_active)
-	assert(game.boss4_rupture_anchors.size() == 4)
-	for i in range(3):
-		var anchor_pos: Vector2 = Vector2(game.boss4_rupture_anchors[i]["pos"])
-		assert(game._damage_phase4_planet_at(anchor_pos, game.BOSS4_ULTIMATE_ANCHOR_HP + 10.0, 80.0))
+	assert(game.boss4_rupture_anchors.is_empty())
+	assert(game.boss4_gravity_timer > 0.0)
+	assert(game.phase4_enemy_hazards.any(func(h): return String(h.get("kind", "")) == "boss4_gravity_well"))
+	game.boss4_ultimate_laser_timer = 0.0
 	game._update_boss4_ultimate(0.05)
+	assert(game.boss4_ultimate_active)
+	assert(game.phase4_enemy_hazards.filter(func(h): return String(h.get("kind", "")) == "boss4_gravity_laser").size() >= 7)
+	game.boss4_ultimate_timer = 0.01
+	game._update_boss4_ultimate(0.02)
 	assert(not game.boss4_ultimate_active)
 	assert(game.boss4_stun_timer > 0.0)
 	assert(game.boss4_vulnerable_timer > 0.0)
@@ -78,13 +82,72 @@ func _run() -> void:
 	game.boss4_ultimate_used = false
 	game.player_hp = 1000
 	game.boss_hp = game.boss_hp_max * 0.30
+	game.phase4_enemy_hazards.clear()
+	game._spawn_boss4_gravity_laser(Vector2(100, 360), Vector2.RIGHT, true)
+	game.player_pos = Vector2(620, 360)
+	game._update_phase4_enemy_hazards(game.BOSS4_GRAVITY_LASER_WARNING + 0.05)
+	assert(game.player_hp < 1000)
+
+	game.player_hp = 1000
 	game._start_boss4_ultimate()
 	game.boss4_ultimate_timer = 0.01
 	game._update_boss4_ultimate(0.02)
 	assert(not game.boss4_ultimate_active)
-	assert(game.player_hp < 1000)
-	assert(game.boss4_instability >= 99.0)
-	assert(game.phase4_null_zones.size() >= 4)
+	assert(game.player_hp == 1000)
+	assert(game.boss4_vulnerable_timer > 0.0)
 
-	print("BOSS4_NEXUS_MECHANICS_SMOKE_OK stages=true vampire=true prison=true clone=true ultimate_success=true ultimate_fail=true")
+	game.phase4_enemy_hazards.clear()
+	game.boss4_column_barrage_timer = 0.0
+	game.boss4_drag_wave_timer = 0.0
+	game.boss4_sonic_used = false
+	game.boss4_stun_timer = 0.0
+	game.boss4_ultimate_active = false
+	game.boss_hp = game.boss_hp_max * 0.79
+	game.player_hp = 1000
+	game.player_pos = Vector2(640, 360)
+	game._update_boss4_pattern_timers(0.05)
+	assert(not game.boss4_sonic_used)
+	game.boss_hp = game.boss_hp_max * 0.69
+	game._update_boss4_pattern_timers(0.05)
+	assert(game.boss4_sonic_used)
+	assert(game.phase4_enemy_hazards.any(func(h): return String(h.get("kind", "")) == "boss4_sonic_wave"))
+	assert(game.phase4_enemy_hazards.any(func(h): return String(h.get("kind", "")) == "boss4_column_barrage"))
+	assert(game.phase4_enemy_hazards.any(func(h): return String(h.get("kind", "")) == "boss4_drag_wave"))
+
+	game.phase4_enemy_hazards.clear()
+	game.player_hp = 1000
+	game.player_pos = Vector2(640, 360)
+	game._spawn_boss4_column_barrage()
+	assert(float(game.phase4_enemy_hazards[0].get("start_x", 0.0)) > game.player_pos.x)
+	game.phase4_enemy_hazards[0]["start_x"] = game.player_pos.x
+	game.phase4_enemy_hazards[0]["columns"] = 1
+	game._update_phase4_enemy_hazards(game.BOSS4_COLUMN_BARRAGE_WARNING + 0.05)
+	assert(game.player_hp < 1000)
+	assert(game.boss_wave_slow_timer >= game.BOSS4_COLUMN_BARRAGE_SLOW_TIME)
+	assert(game.phase4_enemy_hazards.any(func(h): return String(h.get("kind", "")) == "boss4_column_laser"))
+
+	game.phase4_enemy_hazards.clear()
+	game.player_pos = Vector2(620, 360)
+	var drag_start_x: float = game.player_pos.x
+	game._spawn_boss4_drag_wave()
+	game.phase4_enemy_hazards[0]["start_x"] = drag_start_x
+	game.phase4_enemy_hazards[0]["speed"] = 0.0
+	game._update_phase4_enemy_hazards(0.05)
+	assert(bool(game.phase4_enemy_hazards[0].get("hit", false)))
+	game._update_phase4_enemy_hazards(0.20)
+	assert(game.player_pos.x < drag_start_x)
+
+	game.phase4_enemy_hazards.clear()
+	game.player_hp = 1000
+	game.player_pos = Vector2(620, 360)
+	game._spawn_boss4_sonic_wave()
+	game.phase4_enemy_hazards[0]["a"] = Vector2(100, 360)
+	game.phase4_enemy_hazards[0]["b"] = Vector2(1100, 360)
+	game._update_phase4_enemy_hazards(game.BOSS4_SONIC_WARNING + 0.02)
+	assert(bool(game.phase4_enemy_hazards[0].get("grabbed", false)))
+	for i in range(28):
+		game._update_phase4_enemy_hazards(0.10)
+	assert(game.player_hp < 1000)
+
+	print("BOSS4_NEXUS_MECHANICS_SMOKE_OK stages=true vampire=true prison=true clone=true gravity_ultimate=true new_patterns=true")
 	quit(0)

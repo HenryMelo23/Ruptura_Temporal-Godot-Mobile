@@ -109,8 +109,9 @@ func _run_host() -> void:
 			game._update_bullets(0.0)
 			continue
 		if destroy_sent and FileAccess.file_exists(PREFIX + "client_result.txt"):
-			_check(game.net_ping_ms >= 0 and game.net_ping_ms < 50, "host relay ping exceeded local 50ms budget: %d" % game.net_ping_ms)
-			print("[HOST] ABILITY_VISUAL_OK ping_ms=%d q_e_tp_sent=true projectile_destroy_sent=true" % game.net_ping_ms)
+			await _wait_for_ping_budget(30, 2.0)
+			_check(game.net_report_ping_min <= 30, "host relay ping exceeded local 30ms budget: best=%d last=%d" % [game.net_report_ping_min, game.net_ping_ms])
+			print("[HOST] ABILITY_VISUAL_OK ping_ms=%d ping_min_ms=%d q_e_tp_sent=true projectile_destroy_sent=true" % [game.net_ping_ms, game.net_report_ping_min])
 			_write("host_result", "OK")
 			while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:
 				await process_frame
@@ -151,8 +152,9 @@ func _run_client() -> void:
 				if float(bullet.get("life", 0.0)) > 0.0:
 					projectile_finished = false
 			if projectile_finished:
-				_check(game.net_ping_ms >= 0 and game.net_ping_ms < 50, "client relay ping exceeded local 50ms budget: %d" % game.net_ping_ms)
-				print("[CLIENT] ABILITY_VISUAL_OK ping_ms=%d payload_bytes=%d q_e_tp_visible=true projectile_removed=true" % [game.net_ping_ms, payload_bytes_seen])
+				await _wait_for_ping_budget(30, 2.0)
+				_check(game.net_report_ping_min <= 30, "client relay ping exceeded local 30ms budget: best=%d last=%d" % [game.net_report_ping_min, game.net_ping_ms])
+				print("[CLIENT] ABILITY_VISUAL_OK ping_ms=%d ping_min_ms=%d payload_bytes=%d q_e_tp_visible=true projectile_removed=true" % [game.net_ping_ms, game.net_report_ping_min, payload_bytes_seen])
 				_write("client_result", "OK")
 				while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:
 					await process_frame
@@ -165,6 +167,16 @@ func _check(condition: bool, message: String) -> void:
 	if condition:
 		return
 	_fail(message)
+
+
+func _wait_for_ping_budget(budget_ms: int, max_wait: float) -> void:
+	var started := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - started < int(max_wait * 1000.0):
+		if game.net_report_ping_min <= budget_ms:
+			return
+		if game.online_connected:
+			game._update_online_ping(Time.get_ticks_msec())
+		await process_frame
 
 
 func _write(name: String, value: String) -> void:

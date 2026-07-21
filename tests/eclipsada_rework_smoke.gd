@@ -44,37 +44,76 @@ func _run() -> void:
 	game.last_secondary_time = -999.0
 	game.bullets.clear()
 	game.enemies.clear()
-	_spawn_enemy(Vector2(724, 420), 360.0, game.ENEMY_COMMON)
-	_spawn_enemy(Vector2(780, 420), 360.0, game.ENEMY_STALKER)
-	_spawn_enemy(Vector2(842, 420), 28.0, game.ENEMY_PROJECTOR)
+	_spawn_enemy(Vector2(880, 420), 360.0, game.ENEMY_COMMON)
 
-	var hp_before := float(game.enemies[0]["hp"])
-	var ranged_hp_before := float(game.enemies[1]["hp"])
+	_check(game.eclipsada_form == game.ECLIPSADA_FORM_LUA, "default form is not Lua")
 	game._try_attack()
-	_check(game.bullets.is_empty(), "eclipsada ATK spawned projectile")
-	_check(float(game.enemies[0]["hp"]) < hp_before, "first short slash did not damage nearby enemy")
-	_check(float(game.enemies[1]["hp"]) < ranged_hp_before, "ATK radius did not reach 80px target")
-	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "attack"), "ATK did not create slash VFX")
-	_check(game.eclipsada_attack_step == 1, "first slash did not advance combo")
-	_check(abs(game.eclipsada_next_attack_time - 10.3) < 0.02, "first slash interval is not 0.300s")
+	_check(game.bullets.size() == 1, "Lua ATK did not spawn one shuriken")
+	_check(String(game.bullets[0].get("kind", "")) == "eclipsada_lua", "Lua ATK projectile kind mismatch")
+	_check(bool(game.bullets[0].get("pierce", false)), "Lua shuriken should pierce")
+	_check(abs(float(game.bullets[0].get("fall_range", 0.0)) - 285.0) < 0.1, "shuriken fall range is not 285px")
+	for i in range(16):
+		game._update_bullets(0.035)
+		await process_frame
+		if game.bullets.is_empty():
+			break
+	_check(float(game.enemies[0].get("hp", 0.0)) < 360.0, "Lua shuriken did not damage enemy inside short range")
 
-	for hit in range(2, 5):
-		game.time_alive = game.eclipsada_next_attack_time
-		game._try_attack()
-		_check(game.eclipsada_attack_step == (0 if hit == 4 else hit), "combo step mismatch at hit %d" % hit)
-	_check(abs(game.eclipsada_next_attack_time - (game.time_alive + 1.2)) < 0.03, "fourth slash cooldown is not 1.2s")
+	game.bullets.clear()
+	game.enemies.clear()
+	game.last_attack_time = -999.0
+	game.eclipsada_next_attack_time = 0.0
+	game._try_attack()
+	for i in range(20):
+		game._update_bullets(0.035)
+		await process_frame
+		if game.bullets.is_empty():
+			break
+	_check(game.bullets.is_empty(), "shuriken did not expire after its short range")
+	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "shuriken_fall"), "range expiry did not create fall VFX")
 
+	_check(game._toggle_eclipsada_form(), "form toggle returned false")
+	_check(game.eclipsada_form == game.ECLIPSADA_FORM_SOL, "form did not toggle to Sol")
+	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "form_swap"), "form swap VFX missing")
+	game.bullets.clear()
+	game.enemies.clear()
+	_spawn_enemy(Vector2(880, 420), 360.0, game.ENEMY_COMMON)
+	game.last_attack_time = -999.0
+	game.eclipsada_next_attack_time = 0.0
+	game._try_attack()
+	_check(game.bullets.size() == 1, "Sol ATK did not spawn one shuriken")
+	_check(String(game.bullets[0].get("kind", "")) == "eclipsada_sol", "Sol ATK projectile kind mismatch")
+	_check(not bool(game.bullets[0].get("pierce", true)), "Sol shuriken should not pierce")
+	_check(bool(game.bullets[0].get("solar_splash", false)), "Sol shuriken did not carry splash flag")
+
+	game.last_skill_time = -999.0
+	game.bullets.clear()
+	game._use_skill(game.player_pos + Vector2.RIGHT * 180.0)
+	_check(game.bullets.size() == 3, "Sol Q did not fire a 3-shuriken fan")
+	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "q_sol"), "Sol Q VFX missing")
+	_check(game.eclipsada_stealth_timer <= 0.01, "Sol Q should not enable Lua stealth")
+
+	game.last_secondary_time = -999.0
+	game._use_secondary_skill(game.player_pos + Vector2.RIGHT * 180.0)
+	_check(game.manifestation_secondaries.any(func(sec): return String(sec.get("kind", "")) == "eclipsada_sol"), "Sol E did not create solar secondary")
+	for i in range(14):
+		game._update_eclipsada_state(0.12)
+		await process_frame
+	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "sol_pulse"), "Sol E did not pulse VFX")
+
+	_check(game._toggle_eclipsada_form(), "form toggle back returned false")
+	_check(game.eclipsada_form == game.ECLIPSADA_FORM_LUA, "form did not toggle back to Lua")
 	var pos_before: Vector2 = game.player_pos
 	game.last_skill_time = -999.0
+	game.bullets.clear()
+	game.effects.clear()
 	game._use_skill(game.player_pos + Vector2.RIGHT * 100.0)
-	_check(game.player_pos.distance_to(pos_before) >= 18.0, "Q did not dash about 20px")
-	_check(game.eclipsada_q_speed_timer > 5.8, "Q speed timer missing")
-	_check(abs(game._eclipsada_speed_multiplier() - 1.20) < 0.001, "Q speed bonus is not 20 percent")
-	_check(game.eclipsada_stealth_timer > 4.8, "Q stealth timer missing")
-	_check(game._eclipsada_stealth_overlay_alpha() > 0.0, "Q stealth did not enable blue overlay")
-	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "q_dash"), "Q did not create dash VFX")
-	_check(game.enemies.all(func(enemy): return float(enemy.get("eclipsada_weak_time", 0.0)) > 4.8), "Q did not create weak points")
-	_check(not game._local_player_targetable(), "stealthed eclipsada is still targetable by enemies")
+	_check(game.player_pos.distance_to(pos_before) >= 18.0, "Lua Q did not dash about 20px")
+	_check(game.eclipsada_q_speed_timer > 5.8, "Lua Q speed timer missing")
+	_check(game.eclipsada_stealth_timer > 4.8, "Lua Q stealth timer missing")
+	_check(game._eclipsada_stealth_overlay_alpha() > 0.0, "Lua Q stealth did not enable blue overlay")
+	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "q_dash"), "Lua Q did not create dash VFX")
+	_check(not game._local_player_targetable(), "stealthed Eclipsada is still targetable by enemies")
 
 	game.enemies.clear()
 	_spawn_enemy(Vector2(842, 420), 18.0, game.ENEMY_PROJECTOR)
@@ -84,34 +123,23 @@ func _run() -> void:
 	game.last_secondary_time = -999.0
 	game.player_pos = Vector2(700, 420)
 	game._use_secondary_skill(Vector2(842, 420))
-	_check(not game._active_eclipsada_secondary().is_empty(), "E did not start execution secondary")
-	_check(game._player_invulnerable(), "E execution is not invulnerable")
-	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "e_entry"), "E did not create entry VFX")
+	_check(not game._active_eclipsada_secondary().is_empty(), "Lua E did not start execution secondary")
+	_check(game._player_invulnerable(), "Lua E execution is not invulnerable")
 	for i in range(50):
 		game._update_eclipsada_state(0.08)
 		await process_frame
 		if game.enemies.size() < 3 or game._active_eclipsada_secondary().is_empty():
 			break
-	_check(game.enemies.size() < 3, "E did not execute and remove a low HP target")
-	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "e_cut"), "E did not create cut VFX")
-
-	if not game._active_eclipsada_secondary().is_empty():
-		game._use_secondary_skill(Vector2(game.enemies[0]["pos"]))
-		_check(game._active_eclipsada_secondary().is_empty(), "E did not cancel active chain")
-	game.last_secondary_time = -999.0
-	game._use_secondary_skill(Vector2(game.enemies[0]["pos"]))
-	_check(not game._active_eclipsada_secondary().is_empty(), "E did not restart for cancel test")
-	game._use_secondary_skill(Vector2(game.enemies[0]["pos"]))
-	_check(game._active_eclipsada_secondary().is_empty(), "E did not cancel on second press")
+	_check(game.enemies.size() < 3, "Lua E did not execute and remove a low HP target")
 
 	game.eclipsada_passive_timer = 0.0
 	var trait_enemy: Dictionary = game.enemies[0]
 	game._try_gain_eclipsada_trait(trait_enemy)
 	_check(game.eclipsada_trait_timer > 59.0, "passive did not copy trait")
 	_check(game.eclipsada_passive_timer > 79.0, "passive cooldown did not restart")
-	_check(game._manifestation_details("eclipsada").has("info_rows"), "catalog details missing rows")
+	_check(String(game._manifestation_details("eclipsada").get("disparo", "")).contains("Shuriken"), "catalog did not describe ranged ATK")
 
-	print("ECLIPSADA_REWORK_SMOKE_OK atk_combo=true q_stealth=true e_chain=true passive=true")
+	print("ECLIPSADA_REWORK_SMOKE_OK forms=true atk_shuriken=true q_variants=true e_variants=true passive=true")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
