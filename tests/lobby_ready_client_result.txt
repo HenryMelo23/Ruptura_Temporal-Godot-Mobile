@@ -1,0 +1,1 @@
+OK connected=2 active=2 spectators=0 ready=1 local_ready=true spectator=false

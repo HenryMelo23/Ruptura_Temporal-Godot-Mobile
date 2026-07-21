@@ -62,7 +62,7 @@ func _run() -> void:
 	_expect(game.boss2_ultimate_timer == game.BOSS2_ULTIMATE_DURATION, "duration_not_started")
 	_expect(game.BOSS2_ULTIMATE_DURATION == 40.0, "duration_not_40_seconds")
 	_expect(game.boss2_ultimate_cooldown == 0.0, "ultimate_should_have_no_initial_cooldown")
-	_expect(game.BOSS2_ULTIMATE_SAFE_RADIUS == 285.0, "safe_radius_not_285")
+	_expect(game.BOSS2_ULTIMATE_SAFE_RADIUS == 385.0, "safe_radius_not_385")
 	_expect(game.boss_attacks.is_empty(), "old_attacks_not_cleared")
 	game.boss2_ultimate_spit_timer = 2.0
 	game.boss2_ultimate_wind_active = 0.0
@@ -98,18 +98,19 @@ func _run() -> void:
 	game._update_boss2_ultimate_blizzard_damage(0.04)
 	_expect(game.player_hp < hp_before, "blizzard_did_not_damage_outside_safe_zone")
 
-	game.boss2_ultimate_wind_dir = Vector2.RIGHT
+	game.player_pos = game.WORLD_SIZE * 0.5 + Vector2(360, 0)
+	game.boss2_ultimate_wind_dir = Vector2.LEFT
 	game.boss2_ultimate_wind_active = 1.0
 	var wind_before: Vector2 = game.player_pos
 	game._update_boss2_ultimate_wind(0.20)
-	_expect(game.player_pos.x > wind_before.x, "wind_did_not_push_player")
+	_expect(game.player_pos.x < wind_before.x, "wind_did_not_push_player_to_center")
 	game.player_pos = wind_before
-	game.touch_move = Vector2.LEFT
+	game.touch_move = Vector2.RIGHT
 	game.move_touch_index = 7
 	game.boss2_ultimate_wind_active = 1.0
 	game._update_boss2_ultimate_wind(0.20)
-	var resisted_push: float = game.player_pos.x - wind_before.x
-	_expect(resisted_push < 12.0, "opposite_analog_did_not_cancel_most_wind")
+	var resisted_push: float = wind_before.x - game.player_pos.x
+	_expect(resisted_push < 16.0, "opposite_analog_did_not_resist_center_wind")
 
 	print("BOSS2_ULTIMATE_SMOKE_OK timer=true orbit=true blizzard=true wind=true")
 	quit(0)

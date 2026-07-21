@@ -57,17 +57,26 @@ func _run() -> void:
 	game._boss2_start_glacial_stomp()
 	_expect(String(game.boss_attacks[0].get("kind", "")) == "glacial_stomp", "stomp_attack_missing")
 	_expect(Array(game.boss_attacks[0].get("cracks", [])).size() >= 3, "stomp_cracks_missing")
+	_expect(float(game.boss_attacks[0].get("warn", 0.0)) >= 1.0, "stomp_warning_too_short")
 
 	game.boss_attacks.clear()
 	game.player_pos = game.boss_pos + Vector2(120, 0)
 	game._boss2_start_ice_prison()
 	_expect(String(game.boss_attacks[0].get("kind", "")) == "ice_prison", "prison_attack_missing")
 	_expect(Array(game.boss_attacks[0].get("crystals", [])).size() >= 3, "prison_crystals_missing")
+	_expect(float(game.boss_attacks[0].get("warn", 0.0)) >= 1.3, "prison_warning_too_short")
 
 	game.boss_attacks.clear()
 	game._boss2_start_double_blizzard()
 	_expect(game.boss_attacks.size() == 2, "double_blizzard_not_two_patterns")
 	_expect(game.boss_attacks.all(func(a): return String(a.get("kind", "")) == "blizzard"), "double_blizzard_wrong_kind")
 
-	print("BOSS2_STATE_MACHINE_SMOKE_OK reposition=true breath=true spin=true stomp=true prison=true double_blizzard=true")
+	game.boss_attacks.clear()
+	game._boss2_start_flash_freeze()
+	_expect(game.boss2_state == game.BOSS2_STATE_FLASH_FREEZE, "flash_freeze_state_missing")
+	_expect(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == "flash_freeze", "flash_freeze_attack_missing")
+	_expect(float(game.boss_attacks[0].get("warn", 0.0)) >= 1.4, "flash_freeze_warning_too_short")
+	_expect(game.BOSS2_ULTIMATE_WARNING_TIME >= 1.55, "ultimate_warning_too_short")
+
+	print("BOSS2_STATE_MACHINE_SMOKE_OK reposition=true breath=true spin=true stomp=true prison=true double_blizzard=true flash_freeze=true warnings_balanced=true")
 	quit(0)

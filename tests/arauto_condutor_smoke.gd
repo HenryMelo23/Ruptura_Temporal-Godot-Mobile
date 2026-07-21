@@ -66,11 +66,27 @@ func _run() -> void:
 	game._damage_arauto(99999.0, "eletrica", false)
 	assert(not game._arauto_active())
 	assert(game.arauto_card_drops.size() == game.ARAUTO_CARD_REWARD_COUNT)
+	assert(not game.arauto_evolution_fragment.is_empty())
+	assert(game.mode != "manifest_evolution")
 
 	var cards_before := _card_total()
 	game.player_pos = Vector2(game.arauto_card_drops[0]["pos"])
 	game._update_arauto_card_drops(0.05)
 	assert(_card_total() == cards_before + 1)
 
-	print("ARAUTO_CONDUTOR_SMOKE_OK spawn=8min ecos=%d-%d reduction=80 gaze_block=true drops=4 collect=true" % [game.ARAUTO_ECHO_MIN, game.ARAUTO_ECHO_MAX])
+	game.player_pos = Vector2(game.arauto_evolution_fragment["pos"])
+	game._update_arauto_evolution_fragment(0.05)
+	assert(game.arauto_evolution_fragment.is_empty())
+	assert(game.mode == "manifest_evolution")
+	assert(game.manifest_evolution_options.size() == 3)
+
+	print("ARAUTO_CONDUTOR_SMOKE_OK spawn=8min ecos=%d-%d reduction=80 gaze_block=true drops=4 collect=true fragment=true" % [game.ARAUTO_ECHO_MIN, game.ARAUTO_ECHO_MAX])
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(4):
+		await process_frame
 	quit(0)

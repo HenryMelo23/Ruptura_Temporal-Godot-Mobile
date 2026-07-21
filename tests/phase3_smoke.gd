@@ -10,10 +10,11 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	game._start_game()
 	game._advance_to_phase(3)
 	assert(game.current_phase == 3)
 	assert(game._current_map_texture() != null)
-	assert(game.current_music == "Fase3-1.mp3" or game.current_music == "Fase3-2.mp3" or game.current_music == "Esgoto.mp3")
+	assert(game.current_music == "Fase3-1.mp3" or game.current_music == "Fase3-2.mp3" or game.current_music == "Esgoto.mp3" or String(game.current_music).begins_with("Fases"))
 
 	game._spawn_enemy(game.ENEMY_DEVOTO, Vector2(300, 300))
 	game._spawn_enemy(game.ENEMY_INCENSARIO, Vector2(600, 300))
@@ -84,4 +85,18 @@ func _run() -> void:
 	assert(int(game.phase_fragment.get("next_phase", 0)) == 4)
 
 	print("PHASE3_SMOKE_OK enemies=%d cheeses=%d projectiles=%d faith=%d" % [game.enemies.size(), game.phase3_cheeses.size(), game.enemy_bullets.size(), int(game.boss3_faith)])
+	game.mode = "menu"
+	game.enemies.clear()
+	game.enemy_bullets.clear()
+	game.visible = false
+	game.set_process(false)
+	game.set_physics_process(false)
+	game._cleanup_runtime_resources()
+	for i in range(4):
+		await process_frame
+	root.remove_child(game)
+	game.free()
+	game = null
+	await process_frame
+	await process_frame
 	quit(0)

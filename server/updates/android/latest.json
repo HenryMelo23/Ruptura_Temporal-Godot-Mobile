@@ -1,0 +1,17 @@
+{
+    "version":  "2.0.30",
+    "version_code":  23000,
+    "filename":  "ruptura_temporal_mobile_2.0.30.apk",
+    "sha256":  "6c81dde768901a7753bcd58cb3231d39786943c1f21060f3b7df9c542fdea758",
+    "size":  607064988,
+    "notes":  [
+                  "Revive multiplayer agora permite escolher entre pagar pontos ou doar vida.",
+                  "Doar vida consome 50% da vida atual do aliado vivo e deixa curas 50% mais fracas por 1 minuto.",
+                  "A tela de revive explica o sacrificio e mostra o contador do enfraquecimento de cura.",
+                  "Jogador eliminado agora pode pedir revive mesmo sem pontos; a decisao fica com o aliado vivo.",
+                  "Bosses em multiplayer nao recebem mais multiplicador de vida; a dificuldade fica no comportamento e cooperacao.",
+                  "Correcoes de compatibilidade da versao 2.0.30 para Android e Windows."
+              ],
+    "mandatory":  false,
+    "published_at":  "2026-07-21T21:48:17.7708668Z"
+}

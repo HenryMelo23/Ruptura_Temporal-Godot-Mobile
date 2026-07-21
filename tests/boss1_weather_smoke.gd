@@ -24,6 +24,7 @@ func _run() -> void:
 	game._damage_boss(20.0, "eletrica")
 	assert(game.boss1_rain_active)
 	assert(game.weather_kind == "rain")
+	assert(game.rain_audio_player == null or game.rain_audio_player.playing)
 	assert(game.puddles.size() > 0)
 	for puddle in game.puddles:
 		assert(float(puddle["r"]) >= game.WEATHER_PUDDLE_MIN_SIZE)
@@ -45,6 +46,20 @@ func _run() -> void:
 	assert(game.weather_kind == "snow")
 	assert(game.puddles.is_empty())
 	assert(game.snowflakes.size() > 0)
+	assert(game.rain_audio_player == null or not game.rain_audio_player.playing)
+	assert(game.rain_audio_fade_mode == "")
+
+	game.current_phase = 1
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp = 280.0
+	game._start_boss1_rain()
+	assert(game.rain_audio_player == null or game.rain_audio_player.playing)
+	game._go_to_menu()
+	assert(not game.boss1_rain_active)
+	assert(game.weather_kind == "")
+	assert(game.rain_audio_player == null or not game.rain_audio_player.playing)
+	assert(game.rain_audio_fade_mode == "")
 
 	print("BOSS1_WEATHER_SMOKE_OK rain_threshold=30%% puddles=%d slow=10%% snowflakes=%d" % [game.WEATHER_MAX_PUDDLES, game.snowflakes.size()])
 	quit(0)

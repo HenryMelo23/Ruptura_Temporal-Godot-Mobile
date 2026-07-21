@@ -1,0 +1,107 @@
+# Godot Project Agent Rules
+
+## Mission
+
+Work as an autonomous Godot software engineer. Complete requested changes directly in the repository, preserve the existing design, and verify the real project before reporting completion.
+
+## Non-negotiable completion rule
+
+A code-changing task is not complete until the project has been tested after the final edit.
+
+Before delivering:
+
+1. Import and validate the Godot project from the command line.
+2. Parse the changed GDScript files and any directly affected scripts.
+3. Build the C# solution when the project uses C#.
+4. Run the project's existing automated tests, when present.
+5. Run the main scene and every directly affected scene or flow.
+6. Inspect the complete terminal output, not only the process exit code.
+7. Fix every actionable parse error, script error, missing resource, invalid node path, invalid call, failed assertion, and regression caused or exposed by the work.
+8. Repeat the test-and-repair cycle until the tested commands finish successfully and the terminal contains no Godot errors.
+
+Never claim that the project works when the verification was skipped, failed, timed out, or produced errors.
+
+## Required skills
+
+For any Godot implementation, debugging, scene, resource, gameplay, UI, animation, signal, physics, save system, shader, input, or architecture task, use the repository skill:
+
+- `.agents/skills/godot-engineer/SKILL.md`
+
+After any source, scene, resource, project setting, addon configuration, or test change, use:
+
+- `.agents/skills/godot-test-repair/SKILL.md`
+
+## Before editing
+
+Inspect before changing:
+
+- `project.godot`;
+- the main scene and affected scenes;
+- autoloads and global state;
+- input actions;
+- affected scripts and their callers;
+- connected signals;
+- inherited scenes and scripts;
+- resources, groups, node paths, and exported properties;
+- existing tests and project-specific validation commands;
+- Godot version and whether the project uses GDScript, C#, GDExtension, or addons.
+
+Search the repository before assuming a class, node, signal, input action, resource, method, or setting exists.
+
+## Implementation behavior
+
+- Make the smallest complete change that solves the request.
+- Follow the project's existing architecture and naming style.
+- Prefer typed GDScript when the surrounding code is typed.
+- Preserve scene inheritance and reusable resources.
+- Use signals for decoupled communication when consistent with the project.
+- Do not add autoloads, addons, dependencies, or project settings without a clear need.
+- Do not rewrite complete scenes or scripts when a targeted edit is sufficient.
+- Do not hide errors with broad exception handling, warning suppression, dummy fallbacks, or deleted functionality.
+- Do not leave placeholders, TODO-only solutions, disconnected signals, broken node paths, or unused exported properties.
+- Update all callers when changing public methods, signals, resources, or data formats.
+
+## Testing command
+
+On Windows, prefer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -Deep
+```
+
+On Linux or macOS, prefer:
+
+```bash
+bash ./tools/validate_godot.sh --deep
+```
+
+Use `-Scene "res://path/to/affected_scene.tscn"` on Windows or `--scene "res://path/to/affected_scene.tscn"` on Linux/macOS to smoke-test a specific affected scene.
+
+Run focused checks during implementation and the deep validator after the final edit. If the validator fails, inspect its logs in `.agent_logs/`, correct the cause, and run it again.
+
+## Test-and-repair loop
+
+Continue while an error is actionable:
+
+1. Reproduce the issue.
+2. Read the complete error and stack trace.
+3. Identify the actual cause.
+4. Apply a targeted correction.
+5. Re-run the smallest relevant test.
+6. Re-run final project validation.
+
+Do not stop after the first failed attempt. Do not ask the user to test something the agent can test with the available editor, terminal, or project tools.
+
+## Honest boundary
+
+A headless smoke test proves startup and the code paths exercised during that test; it does not prove every possible player interaction. For gameplay changes, create or run focused automated tests, test scenes, or reproducible debug flows that exercise the changed behavior. State exactly which paths were exercised.
+
+## Final report
+
+Keep the final response concise and include:
+
+- what changed;
+- files changed;
+- tests and commands executed;
+- whether the main scene and affected scenes ran without terminal errors;
+- any path that could not be exercised and the precise reason.

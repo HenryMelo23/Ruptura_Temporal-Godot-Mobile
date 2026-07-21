@@ -34,6 +34,7 @@ func _set_manifestation(key: String) -> void:
 	game.tp_effects.clear()
 	game.tp_cooldown_pending = false
 	game.tp_cooldown_override = -1.0
+	game.tp_cooldown_release_time = -1.0
 	game.bullets.clear()
 	game.effects.clear()
 	game.slashes.clear()
@@ -82,7 +83,23 @@ func _run() -> void:
 	game._use_skill()
 	_check(game.cartographic_route_timer > 0.0, "cartographic Q did not activate routes")
 	game._execute_teleport(Vector2(530, 360))
-	_check(game.player_pos.distance_to(Vector2(520, 360)) < 2.0, "cartographic TP did not snap to coordinate")
+	_check(game.player_pos.distance_to(Vector2(530, 360)) < 2.0, "cartographic TP did not respect aimed destination")
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_pos = Vector2(640, 360)
+	game.boss_hp = 1000.0
+	game.boss_hp_max = 1000.0
+	game.arauto = {"active": true, "hp": 900.0, "max_hp": 900.0, "pos": Vector2(640, 360), "aura_null": 0.0, "aura_wound": 0.0}
+	var boss_before_carto: float = game.boss_hp
+	var arauto_before_carto: float = float(game.arauto["hp"])
+	game._apply_cartographic_route_pressure(0.50)
+	_check(game.boss_hp < boss_before_carto, "cartographic route did not damage boss")
+	_check(float(game.arauto["hp"]) < arauto_before_carto, "cartographic route did not damage Arauto")
+	game.manifestation_secondaries.append({"kind": "cartografica", "life": 1.0, "max": 1.0, "tick": 0.0, "burst_index": 0})
+	game._update_secondary_cartografica(game.manifestation_secondaries[-1], 0.50)
+	_check(game.bullets.any(func(bullet): return String(bullet.get("kind", "")) == "cartografica" and bool(bullet.get("carto_barrage", false))), "cartographic E did not fire a barrage")
+	game.boss_active = false
+	game.arauto.clear()
 
 	_set_manifestation("mnesica")
 	var memory_enemy := _enemy(Vector2(710, 360))

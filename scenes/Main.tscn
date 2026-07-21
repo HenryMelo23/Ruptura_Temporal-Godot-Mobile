@@ -1,6 +1,12 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Node2D" unique_id=1380182289]
 script = ExtResource("1_main")
+
+[node name="PlayersContainer" type="Node2D" parent="." unique_id=455424382]
+
+[node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="." unique_id=458473989]
+_spawnable_scenes = PackedStringArray("res://scenes/Player.tscn")
+spawn_path = NodePath("../PlayersContainer")

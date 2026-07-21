@@ -15,6 +15,33 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 
+func _finish_ok(message: String) -> void:
+	print(message)
+	if is_instance_valid(game):
+		_cleanup_audio_resources()
+		root.remove_child(game)
+		game.free()
+		game = null
+	for i in range(4):
+		await process_frame
+	quit(0)
+
+
+func _cleanup_audio_resources() -> void:
+	if game.music_player != null:
+		game.music_player.stop()
+		game.music_player.stream = null
+	if game.rain_audio_player != null:
+		game.rain_audio_player.stop()
+		game.rain_audio_player.stream = null
+	for player in game.sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
+	game.audio_streams.clear()
+	game.textures.clear()
+
+
 func _collectable_larapio_loot_total() -> int:
 	var total := 0
 	for coin in game.larapio_coin_drops:
@@ -54,7 +81,7 @@ func _run() -> void:
 	game.cards_bought.clear()
 	game.luck = 0.03
 	game.cards_bought["Sorte"] = 10
-	_check(abs(game._chance_carta_rara() - 0.13175) < 0.0001, "Sorte rare chance should make 10 cards equal the old 5-card curve")
+	_check(abs(game._chance_carta_rara() - 0.0666) < 0.0001, "Sorte rare chance should follow the harder rarity curve")
 
 	game.enemy_bullets.clear()
 	game.enemy_far_damage = 0.0
@@ -115,5 +142,4 @@ func _run() -> void:
 	game._damage_boss(100.0, "smoke")
 	_check(abs(game.boss_hp - 955.5) < 0.05, "Boss 4 armor was not increased progressively")
 
-	print("BALANCE_TUNING_2026_07_05_SMOKE_OK larapio=60/105 desperate=true sorte10=old5 arauto=1.5x phase_scaling=true bosses=progressive")
-	quit(0)
+	await _finish_ok("BALANCE_TUNING_2026_07_05_SMOKE_OK larapio=60/105 desperate=true rarity_harder=true arauto=1.5x phase_scaling=true bosses=progressive")

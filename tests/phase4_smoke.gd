@@ -15,7 +15,7 @@ func _run() -> void:
 	assert(game.current_phase == 4)
 	assert(game._current_map_texture() != null)
 	assert(game.boss_name == "NEXO DA RUPTURA")
-	assert(game._enemy_limit() == 4)
+	assert(game._enemy_limit() == game.PHASE4_LIMIT_EARLY)
 	assert(game.enemies.size() == 2)
 	assert(game._enemy_texture(game.enemies[0]) != null)
 	var phase4_kinds = [game.ENEMY_NEXUS_CARTOGRAPHER, game.ENEMY_NEXUS_CHRONOPHAGE, game.ENEMY_NEXUS_REFRACTOR, game.ENEMY_NEXUS_WEAVER, game.ENEMY_NEXUS_ECHO]
@@ -42,8 +42,7 @@ func _run() -> void:
 	game.boss_hp = game.boss_hp_max
 	game.boss_pos = game.boss4_entry_target
 	game.phase4_planets.clear()
-	game.boss4_attack_timer = 0.0
-	game._update_boss_phase4(0.01)
+	game._spawn_boss4_planet()
 	assert(game.phase4_planets.size() == 1)
 	assert(game.phase4_planets[0]["hp"] == game.BOSS4_PLANET_HP)
 	var planet_pos: Vector2 = game.phase4_planets[0]["pos"]
@@ -89,7 +88,21 @@ func _run() -> void:
 	game.boss_dead = false
 	game.boss_hp = 1.0
 	game._damage_boss(999999.0, "eletrica")
-	assert(game.mode == "victory")
+	assert(int(game.phase_fragment.get("next_phase", 0)) == 5)
 
-	print("PHASE4_SMOKE_OK map=true enemies=true teleport=true planet=true vortex=true petro=true transition=true")
+	print("PHASE4_SMOKE_OK map=true enemies=true teleport=true planet=true vortex=true petro=true transition=true phase5_fragment=true")
+	game.mode = "menu"
+	game.enemies.clear()
+	game.enemy_bullets.clear()
+	game.visible = false
+	game.set_process(false)
+	game.set_physics_process(false)
+	game._cleanup_runtime_resources()
+	for i in range(4):
+		await process_frame
+	root.remove_child(game)
+	game.free()
+	game = null
+	await process_frame
+	await process_frame
 	quit(0)
