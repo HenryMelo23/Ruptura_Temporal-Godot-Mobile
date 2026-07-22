@@ -1,17 +1,16 @@
 {
-    "version":  "2.0.30",
-    "version_code":  23000,
-    "filename":  "ruptura_temporal_mobile_2.0.30.apk",
-    "sha256":  "6c81dde768901a7753bcd58cb3231d39786943c1f21060f3b7df9c542fdea758",
-    "size":  607064988,
+    "version":  "2.0.30c",
+    "version_code":  23003,
+    "filename":  "ruptura_temporal_mobile_2.0.30c.apk",
+    "sha256":  "55c83452a06305ebbbb96602ccf9ac0fe9f748869d8d9eadc13f827552478c76",
+    "size":  607090436,
     "notes":  [
-                  "Revive multiplayer agora permite escolher entre pagar pontos ou doar vida.",
-                  "Doar vida consome 50% da vida atual do aliado vivo e deixa curas 50% mais fracas por 1 minuto.",
-                  "A tela de revive explica o sacrificio e mostra o contador do enfraquecimento de cura.",
-                  "Jogador eliminado agora pode pedir revive mesmo sem pontos; a decisao fica com o aliado vivo.",
-                  "Bosses em multiplayer nao recebem mais multiplicador de vida; a dificuldade fica no comportamento e cooperacao.",
-                  "Correcoes de compatibilidade da versao 2.0.30 para Android e Windows."
+                  "Ranking seguro 2.0.30c: runs competitivas agora usam sessao assinada criada pelo servidor.",
+                  "Durante a partida o jogo envia checkpoints de fase, abates, pontos, cartas e dano; o servidor compara o final com o historico observado.",
+                  "Relatorios legados, adulterados ou com saltos impossiveis ficam apenas em auditoria e nao entram no ranking.",
+                  "Tentativas repetidas de envio manipulado podem bloquear temporariamente novos envios do mesmo IP.",
+                  "Atualizacao recomendada para todos os jogadores Android e Windows."
               ],
-    "mandatory":  false,
-    "published_at":  "2026-07-21T21:48:17.7708668Z"
+    "mandatory":  true,
+    "published_at":  "2026-07-22T02:52:20.8647132Z"
 }

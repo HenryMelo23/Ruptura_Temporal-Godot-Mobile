@@ -3,8 +3,8 @@ extends Node2D
 const AuraSystem = preload("res://scripts/aura_system.gd")
 
 const WORLD_SIZE := Vector2(1600, 900)
-const GAME_VERSION := "2.0.30"
-const GAME_VERSION_CODE := 23000
+const GAME_VERSION := "2.0.30c"
+const GAME_VERSION_CODE := 23003
 const MULTIPLAYER_MENU_ENABLED := true
 const UI_PLATFORM_AUTO := "auto"
 const UI_PLATFORM_ANDROID := "android"
@@ -74,7 +74,12 @@ const INPUT_BIND_NONE := ""
 const INPUT_BIND_KEY_PREFIX := "KEY:"
 const INPUT_BIND_MOUSE_PREFIX := "MOUSE:"
 const RUN_LEADERBOARD_PATH := "/runs"
+const RUN_LEADERBOARD_START_PATH := "/runs/start"
+const RUN_LEADERBOARD_CHECKPOINT_PATH := "/runs/checkpoint"
 const RUN_LEADERBOARD_VIEW_PATH := "/leaderboard"
+const RUN_REPORT_INTEGRITY_VERSION := 1
+const RUN_REPORT_INTEGRITY_SALT := "ruptura-temporal-run-integrity-v1-2.0.30c"
+const RUN_SECURITY_CHECKPOINT_INTERVAL := 20.0
 const RUN_TELEMETRY_SAMPLE_INTERVAL := 0.50
 const RUN_TELEMETRY_GRID := Vector2i(16, 9)
 const RUN_TELEMETRY_MAX_DAMAGE_EVENTS := 240
@@ -278,7 +283,7 @@ const LACERANTE_Q_BOSS_DAMAGE_MULT := 0.70
 const LACERANTE_Q_BOSS_TOTAL_DAMAGE_MULT := 4.50
 const LACERANTE_Q_BOSS_TOTAL_HP_CAP := 0.075
 const LACERANTE_DAMAGE_TAKEN_MULT := 0.78
-const LACERANTE_TP_CHAIN_WINDOW := 0.80
+const LACERANTE_TP_CHAIN_WINDOW := 2.50
 const LACERANTE_TP_CHAIN_COOLDOWN := 2.0
 const LACERANTE_TP_INITIAL_COOLDOWN := 2.0
 const LACERANTE_TP_MAX_CHARGES := 2
@@ -482,15 +487,24 @@ const LARAPIO_LOOT_RETURN_RATIO := 0.90
 const LARAPIO_LOOT_BONUS_RATIO := 0.15
 const LARAPIO_STUN_TIME := 1.4
 const LARAPIO_THROW_INTERVAL := 4.0
+const LARAPIO_DAMAGE_TAKEN_MULT := 0.34
 const LARAPIO_AGGRESSIVE_AFTER := 120.0
 const LARAPIO_AGGRESSIVE_THROW_INTERVAL := 3.0
 const LARAPIO_AGGRESSIVE_STONE_SPEED_MULT := 1.40
 const LARAPIO_DESPERATE_AFTER := 90.0
 const LARAPIO_DESPERATE_HP_RATIO := 0.38
-const LARAPIO_DESPERATE_THROW_INTERVAL := 2.0
+const LARAPIO_DESPERATE_THROW_INTERVAL := 1.35
 const LARAPIO_DESPERATE_STONE_SPEED_MULT := 1.45
 const LARAPIO_DESPERATE_STONE_DAMAGE_MULT := 1.45
 const LARAPIO_DESPERATE_KEEP_DISTANCE := 720.0
+const LARAPIO_IRRITATED_RADIUS := 280.0
+const LARAPIO_IRRITATED_COIN_INTERVAL := 2.55
+const LARAPIO_ULTIMATE_HP_RATIO := 0.70
+const LARAPIO_ULTIMATE_DURATION := 10.0
+const LARAPIO_ULTIMATE_COOLDOWN := 20.0
+const LARAPIO_ULTIMATE_PORTAL_COUNT := 4
+const LARAPIO_ULTIMATE_PORTAL_RADIUS := 48.0
+const LARAPIO_ULTIMATE_JUMP_INTERVAL := 1.10
 const LARAPIO_COIN_DROP_LIFE := 2.4
 const LARAPIO_COIN_DROP_INTERVAL := 0.16
 const LARAPIO_CORNER_MARGIN := 118.0
@@ -516,6 +530,10 @@ const ECLIPSADA_ATTACK_REACH := 20.0
 const ECLIPSADA_ATTACK_AREA_RADIUS := 80.0
 const ECLIPSADA_ATTACK_AREA_REACH := 80.0
 const ECLIPSADA_ATTACK_SLASH_RADIUS := 80.0
+const ECLIPSADA_LUA_BLADE_REACH := 180.0
+const ECLIPSADA_LUA_BLADE_WIDTH := 34.0
+const ECLIPSADA_LUA_BLADE_DAMAGE_MULT := 0.78
+const ECLIPSADA_LUA_BLADE_CRIT_MULT := 1.85
 const ECLIPSADA_FORM_LUA := "lua"
 const ECLIPSADA_FORM_SOL := "sol"
 const ECLIPSADA_SHURIKEN_RANGE := 280.0
@@ -534,6 +552,10 @@ const ECLIPSADA_Q_DASH_DISTANCE := 20.0
 const ECLIPSADA_Q_SPEED_MULT := 1.20
 const ECLIPSADA_Q_SPEED_TIME := 6.0
 const ECLIPSADA_Q_STEALTH_TIME := 5.0
+const ECLIPSADA_LUA_STEALTH_COOLDOWN := 10.0
+const ECLIPSADA_LUA_STEALTH_SAFE_TIME := 3.0
+const ECLIPSADA_LUA_STEALTH_DRAIN_BASE := 0.0005
+const ECLIPSADA_LUA_STEALTH_DRAIN_STEP := 0.0001
 const ECLIPSADA_Q_WEAKPOINT_TIME := 5.0
 const ECLIPSADA_WEAKPOINT_RADIUS := 18.0
 const ECLIPSADA_WEAKPOINT_DAMAGE_MULT := 1.75
@@ -543,6 +565,10 @@ const ECLIPSADA_E_BASE_CUTS := 6
 const ECLIPSADA_E_CUT_INTERVAL_BASE := 0.18
 const ECLIPSADA_E_DAMAGE_SCALE := 1.15
 const ECLIPSADA_E_MAX_TARGET_TIME := 2.35
+const ECLIPSADA_LUA_E_DURATION := 5.2
+const ECLIPSADA_LUA_E_RADIUS := 172.0
+const ECLIPSADA_LUA_E_TICK := 0.22
+const ECLIPSADA_LUA_E_MAX_TARGETS := 3
 const ECLIPSADA_E_COOLDOWN := 50.0
 const ECLIPSADA_PASSIVE_READY_TIME := 80.0
 const ECLIPSADA_TRAIT_DURATION := 60.0
@@ -820,7 +846,7 @@ const PHASE4_VECTOR_FIELD_RADIUS := 190.0
 const PHASE4_ECHO_WARNING := 1.35
 const PYRO_WALL_TILE_SIZE := 32.0
 const PYRO_WALL_DURATION := 15.0
-const PYRO_WALL_SHOT_INTERVAL := 3.6
+const PYRO_WALL_SHOT_INTERVAL := 5.6
 const PYRO_WALL_BURN_INTERVAL := 0.65
 const CARTO_COORD_MAX := 3
 const CARTO_COORD_LIFE := 12.0
@@ -1209,6 +1235,8 @@ var webhook_edit: LineEdit = null
 var webhook_error: String = ""
 var run_report_request: HTTPRequest = null
 var run_leaderboard_request: HTTPRequest = null
+var run_security_start_request: HTTPRequest = null
+var run_security_checkpoint_request: HTTPRequest = null
 var last_run_leaderboard_url: String = ""
 var app_update_check_request: HTTPRequest = null
 var app_update_download_request: HTTPRequest = null
@@ -1472,6 +1500,14 @@ var run_report_in_flight: bool = false
 var run_finalized_result: String = ""
 var run_started_at: String = ""
 var run_started_unix: int = 0
+var run_security_session_id: String = ""
+var run_security_session_token: String = ""
+var run_security_session_ready: bool = false
+var run_security_session_failed: bool = false
+var run_security_checkpoint_timer: float = 0.0
+var run_security_checkpoint_interval: float = RUN_SECURITY_CHECKPOINT_INTERVAL
+var run_security_checkpoint_count: int = 0
+var run_security_last_error: String = ""
 var run_start_damage: float = PLAYER_BASE_DAMAGE
 var run_damage_to_enemies: float = 0.0
 var run_damage_by_enemy: Dictionary = {}
@@ -1696,6 +1732,12 @@ var shop_reserved_card_id = ""
 var shop_locked_slots: Dictionary = {}
 var shop_recent_common_ids: Array = []
 var shop_endurance_discount = 0.0
+var shop_last_manual_open_time = -999.0
+var shop_recent_manual_open_count = 0
+var shop_purchases_this_visit = 0
+var shop_last_exit_had_purchase = false
+var shop_last_exit_time = -999.0
+var shop_abuse_penalty_count = 0
 var fratura_cronal_cooldown = 0.0
 var fratura_cronal_armed = false
 var pulso_desestabilizador_cooldown = 0.0
@@ -1760,6 +1802,13 @@ var eclipsada_attack_step = 0
 var eclipsada_next_attack_time = 0.0
 var eclipsada_q_speed_timer = 0.0
 var eclipsada_stealth_timer = 0.0
+var eclipsada_lua_stealth_active = false
+var eclipsada_lua_stealth_elapsed = 0.0
+var eclipsada_lua_stealth_damage_timer = 0.0
+var eclipsada_lua_last_skill_time = -999.0
+var eclipsada_sol_last_skill_time = -999.0
+var eclipsada_lua_last_secondary_time = -999.0
+var eclipsada_sol_last_secondary_time = -999.0
 var eclipsada_passive_timer = ECLIPSADA_PASSIVE_READY_TIME
 var eclipsada_trait_timer = 0.0
 var eclipsada_trait_key = ""
@@ -2381,6 +2430,16 @@ func _ready() -> void:
 	run_leaderboard_request.timeout = 8.0
 	run_leaderboard_request.request_completed.connect(_on_run_leaderboard_request_completed)
 
+	run_security_start_request = HTTPRequest.new()
+	add_child(run_security_start_request)
+	run_security_start_request.timeout = 8.0
+	run_security_start_request.request_completed.connect(_on_run_security_start_completed)
+
+	run_security_checkpoint_request = HTTPRequest.new()
+	add_child(run_security_checkpoint_request)
+	run_security_checkpoint_request.timeout = 8.0
+	run_security_checkpoint_request.request_completed.connect(_on_run_security_checkpoint_completed)
+
 	app_update_check_request = HTTPRequest.new()
 	app_update_check_request.timeout = 8.0
 	add_child(app_update_check_request)
@@ -2483,6 +2542,10 @@ func _cleanup_runtime_resources() -> void:
 		run_report_request.cancel_request()
 	if run_leaderboard_request != null:
 		run_leaderboard_request.cancel_request()
+	if run_security_start_request != null:
+		run_security_start_request.cancel_request()
+	if run_security_checkpoint_request != null:
+		run_security_checkpoint_request.cancel_request()
 	_stop_qa_streaming("cleanup")
 	if qa_stream_session_request != null:
 		qa_stream_session_request.cancel_request()
@@ -3244,6 +3307,14 @@ func _reset_run_report_stats() -> void:
 	run_end_payload.clear()
 	run_started_at = _datetime_text()
 	run_started_unix = int(Time.get_unix_time_from_system())
+	run_security_session_id = ""
+	run_security_session_token = ""
+	run_security_session_ready = false
+	run_security_session_failed = false
+	run_security_checkpoint_timer = 0.0
+	run_security_checkpoint_interval = RUN_SECURITY_CHECKPOINT_INTERVAL
+	run_security_checkpoint_count = 0
+	run_security_last_error = ""
 	run_start_damage = player_damage
 	run_damage_to_enemies = 0.0
 	run_damage_by_enemy.clear()
@@ -3595,13 +3666,19 @@ func _build_run_report_payload(result: String) -> Dictionary:
 	var manifest_name: String = String(MANIFESTATIONS[selected_manifestation]["name"]) if selected_manifestation >= 0 and selected_manifestation < MANIFESTATIONS.size() else manifestation_key
 	var aura_name: String = String(AURAS[selected_aura]["name"]) if selected_aura >= 0 and selected_aura < AURAS.size() else String(aura_state.get("name", "N/A"))
 	_ensure_player_profile_id()
-	return {
+	var payload := {
 		"player": player_nickname,
 		"profile_id": player_profile_id,
 		"room": online_room_code if online_room_code != "" else "solo",
 		"version": GAME_VERSION,
+		"version_code": GAME_VERSION_CODE,
 		"platform": OS.get_name(),
 		"role": _run_role_text(),
+		"run_session_id": run_security_session_id,
+		"run_session_token": run_security_session_token,
+		"run_session_checkpoints": run_security_checkpoint_count,
+		"run_session_ready": run_security_session_ready,
+		"run_session_last_error": run_security_last_error,
 		"date": _datetime_text(),
 		"started_at": run_started_at,
 		"started_unix": run_started_unix,
@@ -3678,6 +3755,56 @@ func _build_run_report_payload(result: String) -> Dictionary:
 		"leaderboard_score": _run_leaderboard_score(result),
 		"balance_flags": _run_balance_flags()
 	}
+	payload["integrity"] = {
+		"version": RUN_REPORT_INTEGRITY_VERSION,
+		"signature": _run_report_signature(payload)
+	}
+	return payload
+
+
+func _run_report_signature(payload: Dictionary) -> String:
+	var source := _run_report_signature_source(payload)
+	var hashing := HashingContext.new()
+	if hashing.start(HashingContext.HASH_SHA256) != OK:
+		return ""
+	hashing.update(source.to_utf8_buffer())
+	return hashing.finish().hex_encode().to_lower()
+
+
+func _run_report_signature_source(payload: Dictionary) -> String:
+	var fields := [
+		"player",
+		"profile_id",
+		"room",
+		"version",
+		"version_code",
+		"platform",
+		"role",
+		"result",
+		"started_unix",
+		"ended_unix",
+		"duration_seconds",
+		"phase",
+		"kills",
+		"points_earned",
+		"points_spent",
+		"score_current",
+		"score_total",
+		"cards_total",
+		"manifestation_key",
+		"spectrum_key",
+		"enemy_damage_total",
+		"damage_taken_total",
+		"boss_damage_total",
+		"leaderboard_score",
+		"run_session_id",
+		"run_session_checkpoints"
+	]
+	var parts: Array[String] = []
+	for field in fields:
+		parts.append("%s=%s" % [field, str(payload.get(field, ""))])
+	parts.append("salt=" + RUN_REPORT_INTEGRITY_SALT)
+	return "|".join(parts)
 
 
 func _finalize_run_report(result: String) -> void:
@@ -3702,6 +3829,127 @@ func _http_request_busy(request: HTTPRequest) -> bool:
 		return false
 	var status := request.get_http_client_status()
 	return status != HTTPClient.STATUS_DISCONNECTED
+
+
+func _run_security_base_payload() -> Dictionary:
+	_ensure_player_profile_id()
+	return {
+		"player": player_nickname,
+		"profile_id": player_profile_id,
+		"room": online_room_code if online_room_code != "" else "solo",
+		"version": GAME_VERSION,
+		"version_code": GAME_VERSION_CODE,
+		"platform": OS.get_name(),
+		"role": _run_role_text(),
+		"started_unix": run_started_unix
+	}
+
+
+func _run_security_checkpoint_payload() -> Dictionary:
+	var payload := _run_security_base_payload()
+	payload["session_id"] = run_security_session_id
+	payload["session_token"] = run_security_session_token
+	payload["duration_seconds"] = int(round(time_alive))
+	payload["phase"] = current_phase
+	payload["kills"] = enemies_killed
+	payload["points_earned"] = run_points_earned
+	payload["points_spent"] = run_points_spent
+	payload["score_current"] = score
+	payload["score_total"] = score_total
+	payload["cards_total"] = _deck_total_cards()
+	payload["boss_damage_total"] = _total_boss_damage_report()
+	payload["enemy_damage_total"] = run_damage_to_enemies
+	payload["base_damage_end"] = player_damage
+	payload["player_stats"] = {
+		"hp": player_hp,
+		"hp_max": player_hp_max,
+		"speed": player_speed,
+		"attack_interval": player_attack_interval,
+		"dash_cooldown": player_dash_cooldown,
+		"defense": player_defense,
+		"crit_chance": player_crit_chance,
+		"lifesteal": player_lifesteal,
+		"luck": luck
+	}
+	return payload
+
+
+func _start_run_security_session() -> void:
+	if run_security_start_request == null:
+		run_security_session_failed = true
+		run_security_last_error = "HTTP de sessao indisponivel"
+		return
+	if _http_request_busy(run_security_start_request):
+		return
+	var url := ONLINE_RELAY_BASE_URL + RUN_LEADERBOARD_START_PATH
+	var err := run_security_start_request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(_run_security_base_payload()))
+	if err != OK:
+		run_security_session_failed = true
+		run_security_last_error = "Falha ao abrir sessao: %s" % error_string(err)
+
+
+func _update_run_security_checkpoint(delta: float) -> void:
+	if mode != "game" or dedicated_server_mode or run_finalized_result != "":
+		return
+	if not run_security_session_ready or run_security_session_id == "" or run_security_session_token == "":
+		return
+	run_security_checkpoint_timer -= delta
+	if run_security_checkpoint_timer <= 0.0:
+		_send_run_security_checkpoint()
+
+
+func _send_run_security_checkpoint(force := false) -> void:
+	if not run_security_session_ready or run_security_session_id == "" or run_security_session_token == "":
+		return
+	if run_security_checkpoint_request == null or _http_request_busy(run_security_checkpoint_request):
+		return
+	if not force and time_alive < 3.0:
+		run_security_checkpoint_timer = min(run_security_checkpoint_interval, 3.0)
+		return
+	var url := ONLINE_RELAY_BASE_URL + RUN_LEADERBOARD_CHECKPOINT_PATH
+	var err := run_security_checkpoint_request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(_run_security_checkpoint_payload()))
+	if err == OK:
+		run_security_checkpoint_timer = run_security_checkpoint_interval
+	else:
+		run_security_last_error = "Falha checkpoint: %s" % error_string(err)
+		run_security_checkpoint_timer = min(run_security_checkpoint_interval, 10.0)
+
+
+func _on_run_security_start_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if response_code < 200 or response_code >= 300:
+		run_security_session_failed = true
+		run_security_last_error = "Sessao ranking HTTP %d" % response_code
+		return
+	var parsed = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		run_security_session_failed = true
+		run_security_last_error = "Sessao ranking invalida"
+		return
+	var data: Dictionary = parsed
+	run_security_session_id = String(data.get("session_id", ""))
+	run_security_session_token = String(data.get("session_token", ""))
+	run_security_checkpoint_interval = clampf(float(data.get("checkpoint_interval_seconds", RUN_SECURITY_CHECKPOINT_INTERVAL)), 8.0, 60.0)
+	run_security_session_ready = run_security_session_id != "" and run_security_session_token != ""
+	run_security_session_failed = not run_security_session_ready
+	run_security_last_error = "" if run_security_session_ready else "Sessao sem token"
+	run_security_checkpoint_timer = 0.0
+	if run_security_session_ready:
+		_send_run_security_checkpoint(true)
+
+
+func _on_run_security_checkpoint_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if response_code < 200 or response_code >= 300:
+		run_security_last_error = "Checkpoint HTTP %d" % response_code
+		return
+	var parsed = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) == TYPE_DICTIONARY:
+		var data: Dictionary = parsed
+		var reasons: Array = data.get("reasons", [])
+		if not reasons.is_empty():
+			run_security_last_error = ", ".join(reasons.map(func(reason): return String(reason)))
+		else:
+			run_security_last_error = ""
+	run_security_checkpoint_count += 1
 
 
 func _send_run_report_to_discord(payload: Dictionary) -> void:
@@ -4704,7 +4952,7 @@ func _interrupted_run_field_names() -> Array:
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer",
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_return_timer",
-		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_endurance_discount",
+		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count",
 		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries",
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing",
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player",
@@ -6210,6 +6458,7 @@ func _start_game(clear_interrupted_save := true) -> void:
 	player_damage = _manifestation_base_damage()
 	player_attack_interval = _manifestation_attack_interval()
 	_reset_run_report_stats()
+	_start_run_security_session()
 	_reset_card_proc_state()
 	player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 	player_defense = 0.0
@@ -6247,6 +6496,12 @@ func _start_game(clear_interrupted_save := true) -> void:
 	run_points_earned = 0
 	run_points_spent = 0
 	card_cost = CARD_COST_BASE
+	shop_last_manual_open_time = -999.0
+	shop_recent_manual_open_count = 0
+	shop_purchases_this_visit = 0
+	shop_last_exit_had_purchase = false
+	shop_last_exit_time = -999.0
+	shop_abuse_penalty_count = 0
 	combo_kills = 0
 	enemies_killed = 0
 	phase1_limit_break_kills_start = -1
@@ -7567,6 +7822,7 @@ func _process(delta: float) -> void:
 	_update_interrupted_run_autosave(delta)
 	_update_app_update_check(delta)
 	_update_qa_streaming(delta)
+	_update_run_security_checkpoint(delta)
 	_update_mouse_cursor_mode()
 	is_gamepad_active = Input.get_connected_joypads().size() > 0
 	if menu_analog_cooldown > 0.0:
@@ -8746,6 +9002,9 @@ func _use_skill(target_world = null) -> void:
 	if manifestation_key == "bombastica":
 		_try_cast_bombastica_q(target_world)
 		return
+	if manifestation_key == "eclipsada":
+		_try_use_eclipsada_q(target_world)
+		return
 	var cooldown = _skill_cooldown()
 	if time_alive - last_skill_time < cooldown:
 		var remaining = cooldown - (time_alive - last_skill_time)
@@ -9132,7 +9391,7 @@ func _eletrica_chain_entity_pos(uid: int, fallback := Vector2.ZERO) -> Vector2:
 
 
 func _secondary_player_locked() -> bool:
-	return not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or not _active_eclipsada_secondary().is_empty()
+	return not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty()
 
 
 func _boss_trapped_by_gravitante() -> bool:
@@ -9150,7 +9409,7 @@ func _boss_trapped_by_gravitante() -> bool:
 
 func _player_invulnerable() -> bool:
 	var tp_invulnerable := tp_effects.any(func(effect): return (String(effect.get("kind", "")) in ["lacerante", "eletrica"] or (String(effect.get("kind", "")) == "ressonante" and bool(effect.get("perfect", false)))) and float(effect.get("life", 0.0)) > 0.0)
-	return trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or not _active_eclipsada_secondary().is_empty() or tp_invulnerable
+	return trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable
 
 
 func _damage_source_is_boss_ultimate(source: String) -> bool:
@@ -9179,7 +9438,7 @@ func _show_silenced_feedback() -> void:
 
 func _secondary_skill_cooldown() -> float:
 	if manifestation_key == "eclipsada":
-		return ECLIPSADA_E_COOLDOWN
+		return _eclipsada_e_cooldown_for_form()
 	if manifestation_key == "cartografica":
 		return 50.0
 	if manifestation_key == "bombastica":
@@ -9222,6 +9481,9 @@ func _network_secondary_visual_duration() -> float:
 func _use_secondary_skill(target_world = null) -> void:
 	if _player_silenced():
 		_show_silenced_feedback()
+		return
+	if manifestation_key == "eclipsada":
+		_try_use_eclipsada_e(target_world)
 		return
 	var active_eletrica = _active_eletrica_secondary()
 	if manifestation_key == "eletrica" and not active_eletrica.is_empty():
@@ -9851,6 +10113,17 @@ func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2)
 			_add_text("NOTIFICACAO", origin + Vector2(0, -78), Color(1.0, 0.58, 0.24), 0.9, 18)
 		"acorrentada":
 			_start_tp_acorrentada(origin, destination)
+		"eclipsada":
+			if _eclipsada_is_sol():
+				tp_effects.append({"kind": "eclipsada_sol_tp", "life": 0.48, "max": 0.48, "a": origin, "b": destination, "color": Color(1.0, 0.66, 0.18)})
+				_eclipsada_damage_at(destination, 86.0, player_damage * 0.42, "eclipsada_sol_tp", "teleport")
+				shockwaves.append({"pos": destination, "radius": 10.0, "max": 92.0, "life": 0.26, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(1.0, 0.66, 0.18)})
+				_add_text("PASSO SOLAR", destination + Vector2(0, -92), Color(1.0, 0.66, 0.18), 0.85, 18)
+			else:
+				tp_effects.append({"kind": "eclipsada_lua_tp", "life": 0.58, "max": 0.58, "a": origin, "b": destination, "color": Color(0.58, 0.42, 1.0)})
+				_apply_eclipsada_weakpoints(2.2)
+				_add_text("PASSO LUNAR", destination + Vector2(0, -92), Color(0.68, 0.54, 1.0), 0.85, 18)
+			_start_direct_teleport_cooldown()
 		_:
 			_finish_teleport_effect_cooldown()
 
@@ -9957,6 +10230,13 @@ func _reset_advanced_manifestation_state() -> void:
 	eclipsada_next_attack_time = 0.0
 	eclipsada_q_speed_timer = 0.0
 	eclipsada_stealth_timer = 0.0
+	eclipsada_lua_stealth_active = false
+	eclipsada_lua_stealth_elapsed = 0.0
+	eclipsada_lua_stealth_damage_timer = 0.0
+	eclipsada_lua_last_skill_time = -999.0
+	eclipsada_sol_last_skill_time = -999.0
+	eclipsada_lua_last_secondary_time = -999.0
+	eclipsada_sol_last_secondary_time = -999.0
 	eclipsada_passive_timer = ECLIPSADA_PASSIVE_READY_TIME
 	eclipsada_trait_timer = 0.0
 	eclipsada_trait_key = ""
@@ -10335,6 +10615,23 @@ func _eclipsada_speed_multiplier() -> float:
 	return ECLIPSADA_Q_SPEED_MULT if manifestation_key == "eclipsada" and eclipsada_q_speed_timer > 0.0 else 1.0
 
 
+func _eclipsada_q_cooldown_for_form(form: String = "") -> float:
+	var current_form: String = eclipsada_form if form == "" else form
+	return ECLIPSADA_LUA_STEALTH_COOLDOWN if current_form == ECLIPSADA_FORM_LUA else 3.0
+
+
+func _eclipsada_e_cooldown_for_form(form: String = "") -> float:
+	var current_form: String = eclipsada_form if form == "" else form
+	return ECLIPSADA_E_COOLDOWN if current_form == ECLIPSADA_FORM_LUA else ECLIPSADA_E_COOLDOWN
+
+
+func _sync_eclipsada_visible_cooldowns() -> void:
+	if manifestation_key != "eclipsada":
+		return
+	last_skill_time = eclipsada_sol_last_skill_time if _eclipsada_is_sol() else eclipsada_lua_last_skill_time
+	last_secondary_time = eclipsada_sol_last_secondary_time if _eclipsada_is_sol() else eclipsada_lua_last_secondary_time
+
+
 func _eclipsada_is_sol() -> bool:
 	return eclipsada_form == ECLIPSADA_FORM_SOL
 
@@ -10353,7 +10650,10 @@ func _eclipsada_color() -> Color:
 func _toggle_eclipsada_form() -> bool:
 	if manifestation_key != "eclipsada":
 		return false
+	if not _eclipsada_is_sol() and eclipsada_lua_stealth_active:
+		_deactivate_eclipsada_lua_stealth("FURTIVIDADE ENCERRADA")
 	eclipsada_form = ECLIPSADA_FORM_LUA if _eclipsada_is_sol() else ECLIPSADA_FORM_SOL
+	_sync_eclipsada_visible_cooldowns()
 	var color := _eclipsada_color()
 	var label := "FORMA SOL" if _eclipsada_is_sol() else "FORMA LUA"
 	_push_eclipsada_vfx({
@@ -10370,7 +10670,33 @@ func _toggle_eclipsada_form() -> bool:
 
 
 func _eclipsada_is_stealthed() -> bool:
-	return manifestation_key == "eclipsada" and eclipsada_stealth_timer > 0.0
+	return manifestation_key == "eclipsada" and (eclipsada_lua_stealth_active or eclipsada_stealth_timer > 0.0)
+
+
+func _activate_eclipsada_lua_stealth() -> void:
+	eclipsada_lua_stealth_active = true
+	eclipsada_lua_stealth_elapsed = 0.0
+	eclipsada_lua_stealth_damage_timer = 0.0
+	eclipsada_stealth_timer = 0.0
+	_apply_eclipsada_weakpoints(ECLIPSADA_Q_WEAKPOINT_TIME)
+	var color := _eclipsada_color()
+	_push_eclipsada_vfx({"kind": "q_dash", "origin": player_pos - last_facing.normalized() * 18.0, "target": player_pos, "dir": last_facing.normalized(), "life": 0.48, "max": 0.48, "color": color, "stealth_toggle": true})
+	_spawn_radial_particles(player_pos, Color(0.85, 0.45, 1.0), 26)
+	_add_text("LUA OCULTA", player_pos + Vector2(-68, -92), color, 0.9, 19)
+
+
+func _deactivate_eclipsada_lua_stealth(message := "LUA REVELADA") -> void:
+	if not eclipsada_lua_stealth_active:
+		return
+	eclipsada_lua_stealth_active = false
+	eclipsada_lua_stealth_elapsed = 0.0
+	eclipsada_lua_stealth_damage_timer = 0.0
+	eclipsada_lua_last_skill_time = time_alive
+	_sync_eclipsada_visible_cooldowns()
+	var color := _eclipsada_color()
+	_push_eclipsada_vfx({"kind": "form_swap", "target": player_pos, "life": 0.42, "max": 0.42, "color": color, "form": ECLIPSADA_FORM_LUA})
+	_spawn_radial_particles(player_pos, color, 18)
+	_add_text(message, player_pos + Vector2(-72, -92), color, 0.75, 17)
 
 
 func _eclipsada_target_pos(target: Dictionary) -> Vector2:
@@ -10429,7 +10755,16 @@ func _try_gain_eclipsada_trait(enemy: Dictionary) -> void:
 
 func _update_eclipsada_state(delta: float) -> void:
 	eclipsada_q_speed_timer = max(0.0, eclipsada_q_speed_timer - delta)
-	eclipsada_stealth_timer = max(0.0, eclipsada_stealth_timer - delta)
+	if eclipsada_lua_stealth_active:
+		eclipsada_lua_stealth_elapsed += delta
+		eclipsada_lua_stealth_damage_timer += delta
+		while eclipsada_lua_stealth_elapsed > ECLIPSADA_LUA_STEALTH_SAFE_TIME and eclipsada_lua_stealth_damage_timer >= 1.0:
+			eclipsada_lua_stealth_damage_timer -= 1.0
+			var drain_step := int(floor((eclipsada_lua_stealth_elapsed - ECLIPSADA_LUA_STEALTH_SAFE_TIME) / 3.0))
+			var drain_ratio := ECLIPSADA_LUA_STEALTH_DRAIN_BASE + ECLIPSADA_LUA_STEALTH_DRAIN_STEP * float(maxi(0, drain_step))
+			_damage_player(maxi(1, int(ceil(player_hp_max * drain_ratio))), "eclipsada_lua_stealth")
+	else:
+		eclipsada_stealth_timer = max(0.0, eclipsada_stealth_timer - delta)
 	eclipsada_passive_timer = max(0.0, eclipsada_passive_timer - delta)
 	eclipsada_trait_timer = max(0.0, eclipsada_trait_timer - delta)
 	for enemy in enemies:
@@ -10443,6 +10778,8 @@ func _update_eclipsada_state(delta: float) -> void:
 			_update_eclipsada_secondary(secondary, delta)
 		elif String(secondary.get("kind", "")) == "eclipsada_sol" and float(secondary.get("life", 0.0)) > 0.0:
 			_update_eclipsada_sol_secondary(secondary, delta)
+		elif String(secondary.get("kind", "")) == "eclipsada_lua_eclipse" and float(secondary.get("life", 0.0)) > 0.0:
+			_update_eclipsada_lua_eclipse_secondary(secondary, delta)
 	for visual in eclipsada_vfx:
 		visual["life"] = maxf(0.0, float(visual.get("life", 0.0)) - delta)
 	eclipsada_vfx = eclipsada_vfx.filter(func(visual): return float(visual.get("life", 0.0)) > 0.0)
@@ -10464,8 +10801,12 @@ func _try_eclipsada_attack() -> void:
 	var interval := _current_attack_interval()
 	if time_alive < eclipsada_next_attack_time or time_alive - last_attack_time < interval:
 		return
-	_perform_eclipsada_attack(1)
-	eclipsada_attack_step = 0
+	if _eclipsada_is_sol():
+		_perform_eclipsada_attack(1)
+		eclipsada_attack_step = 0
+	else:
+		eclipsada_attack_step = (eclipsada_attack_step % 3) + 1
+		_perform_eclipsada_lua_blade_attack(eclipsada_attack_step)
 	last_attack_time = time_alive
 	eclipsada_next_attack_time = time_alive + interval
 
@@ -10526,6 +10867,60 @@ func _perform_eclipsada_attack(step: int) -> void:
 	_send_network_ability_visual(NET_ABILITY_ATTACK, player_pos, player_pos + dir * ECLIPSADA_SHURIKEN_RANGE, 0.34, 1.0 if sol else 0.0)
 
 
+func _perform_eclipsada_lua_blade_attack(step: int) -> void:
+	var dir := _aim_direction()
+	if dir.length() <= 0.05:
+		dir = last_facing.normalized()
+	if dir.length() <= 0.05:
+		dir = Vector2.RIGHT
+	var color: Color = _eclipsada_color()
+	var angle_offset: float = [-0.34, 0.34, 0.0][clampi(step - 1, 0, 2)]
+	var slash_dir: Vector2 = dir.rotated(angle_offset).normalized()
+	var crit: bool = step == 3
+	var crit_mult: float = ECLIPSADA_LUA_BLADE_CRIT_MULT + clampf(player_crit_chance, 0.0, 1.0) * 0.65 if crit else 1.0
+	var stealth_bonus: float = 1.0 + minf(0.28, eclipsada_lua_stealth_elapsed * 0.035) if eclipsada_lua_stealth_active else 1.0
+	var damage: float = player_damage * ECLIPSADA_LUA_BLADE_DAMAGE_MULT * crit_mult * stealth_bonus * _eclipsada_trait_value("damage", 1.0)
+	_play_manifestation_attack_sfx("eclipsada")
+	_apply_aura_events(AuraSystem.on_attack(aura_state, {"pos": player_pos, "dir": slash_dir, "kind": "eclipsada_lua_blade"}))
+	_eclipsada_damage_blade_line(player_pos, slash_dir, ECLIPSADA_LUA_BLADE_REACH, ECLIPSADA_LUA_BLADE_WIDTH + (14.0 if crit else 0.0), damage, "eclipsada_lua_blade", "basic_attack", crit)
+	_push_eclipsada_vfx({
+		"kind": "attack",
+		"origin": player_pos,
+		"center": player_pos + slash_dir * (ECLIPSADA_LUA_BLADE_REACH * 0.52),
+		"dir": slash_dir,
+		"radius": ECLIPSADA_LUA_BLADE_REACH,
+		"step": step,
+		"life": 0.30 if crit else 0.24,
+		"max": 0.30 if crit else 0.24,
+		"color": color,
+		"style": "lua_blades",
+		"crit": crit
+	})
+	_send_network_ability_visual(NET_ABILITY_ATTACK, player_pos, player_pos + slash_dir * ECLIPSADA_LUA_BLADE_REACH, 0.28, 0.0)
+
+
+func _eclipsada_damage_blade_line(origin: Vector2, dir: Vector2, reach: float, width: float, amount: float, source: String, source_category := "basic_attack", forced_crit := false) -> void:
+	if dir.length() <= 0.05:
+		return
+	var side: Vector2 = dir.orthogonal()
+	var hit_pos: Vector2 = origin + dir * reach
+	for lane in [-1.0, 1.0]:
+		var a: Vector2 = origin + dir * 24.0 + side * lane * 12.0
+		var b: Vector2 = origin + dir * reach + side * lane * 12.0
+		for enemy in enemies.duplicate():
+			if float(enemy.get("hp", 0.0)) <= 0.0:
+				continue
+			if _distance_to_segment(Vector2(enemy["pos"]), a, b) <= width + _enemy_radius(enemy) * 0.38:
+				var blade_damage := amount
+				if forced_crit:
+					_add_text("CRITICO", Vector2(enemy["pos"]) + Vector2(-36, -76), Color(0.95, 0.90, 1.0), 0.38, 14)
+				_eclipsada_damage_target({"kind": "enemy", "uid": int(enemy["uid"])}, blade_damage, source, source_category, hit_pos)
+		if boss_active and boss_hp > 0.0 and _distance_to_segment(boss_pos, a, b) <= width + _boss_hit_radius() * 0.40:
+			_eclipsada_damage_target({"kind": "boss"}, amount * 0.72, source, source_category, hit_pos)
+		if _arauto_active() and _distance_to_segment(Vector2(arauto["pos"]), a, b) <= width + 40.0:
+			_eclipsada_damage_target({"kind": "arauto"}, amount * 0.82, source, source_category, hit_pos)
+
+
 func _spawn_eclipsada_shuriken_fall(pos: Vector2, color: Color, kind: String) -> void:
 	if not kind.begins_with("eclipsada_"):
 		return
@@ -10554,6 +10949,10 @@ func _eclipsada_damage_at(center: Vector2, radius: float, amount: float, source:
 func _apply_eclipsada_solar_splash(center: Vector2, base_damage: float, source_category := "basic_attack") -> void:
 	var radius := ECLIPSADA_SOL_SPLASH_RADIUS + _eclipsada_trait_value("area", 0.0) * 0.45
 	_eclipsada_damage_at(center, radius, base_damage * 0.42, "eclipsada_sol_splash", source_category)
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) > 0.0 and Vector2(enemy["pos"]).distance_to(center) <= radius + _enemy_radius(enemy) * 0.35:
+			enemy["aura_burn"] = maxf(float(enemy.get("aura_burn", 0.0)), 2.4)
+			enemy["aura_burn_tick"] = min(float(enemy.get("aura_burn_tick", 0.0)), 0.12)
 	shockwaves.append({"pos": center, "radius": 8.0, "max": radius, "life": 0.24, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(1.0, 0.66, 0.18)})
 	_push_eclipsada_vfx({"kind": "sol_burst", "target": center, "radius": radius, "life": 0.38, "max": 0.38, "color": Color(1.0, 0.66, 0.18)})
 
@@ -10579,6 +10978,62 @@ func _eclipsada_damage_target(target: Dictionary, amount: float, source: String,
 	return false
 
 
+func _try_use_eclipsada_q(target_world = null) -> void:
+	var cooldown := _eclipsada_q_cooldown_for_form()
+	if _eclipsada_is_sol():
+		if time_alive - eclipsada_sol_last_skill_time < cooldown:
+			var remaining: float = cooldown - (time_alive - eclipsada_sol_last_skill_time)
+			_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
+			return
+		eclipsada_sol_last_skill_time = time_alive
+		_sync_eclipsada_visible_cooldowns()
+		var skill_power: float = _register_manual_skill_use("skill_q", cooldown)
+		var visual_origin: Vector2 = player_pos
+		var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _aim_direction() * ECLIPSADA_SOL_Q_RANGE
+		_play_manifestation_skill_sfx("eclipsada")
+		_cast_eclipsada_q_sol(target_world, skill_power)
+		_manifest_evolution_on_skill(visual_target)
+		_send_network_ability_visual(NET_ABILITY_SKILL, visual_origin, visual_target, _network_skill_visual_duration())
+		_spawn_radial_particles(player_pos, _manifestation_color(), 22)
+		effects.append({"pos": player_pos, "text": "", "life": 0.25, "max": 0.25, "color": Color.WHITE, "size": 1, "skill_lock": true})
+		return
+	if eclipsada_lua_stealth_active:
+		_deactivate_eclipsada_lua_stealth()
+		return
+	if time_alive - eclipsada_lua_last_skill_time < cooldown:
+		var remaining: float = cooldown - (time_alive - eclipsada_lua_last_skill_time)
+		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
+		return
+	_register_manual_skill_use("skill_q", cooldown)
+	_play_manifestation_skill_sfx("eclipsada")
+	_activate_eclipsada_lua_stealth()
+	_manifest_evolution_on_skill(player_pos)
+	_send_network_ability_visual(NET_ABILITY_SKILL, player_pos, player_pos, 0.48)
+
+
+func _try_use_eclipsada_e(target_world = null) -> void:
+	if _secondary_player_locked():
+		return
+	var cooldown := _eclipsada_e_cooldown_for_form()
+	var last_time: float = eclipsada_sol_last_secondary_time if _eclipsada_is_sol() else eclipsada_lua_last_secondary_time
+	if time_alive - last_time < cooldown:
+		var remaining: float = cooldown - (time_alive - last_time)
+		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -110), Color(1.0, 0.84, 0.40), 0.55, 18)
+		return
+	var visual_origin: Vector2 = player_pos
+	var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
+	_play_manifestation_ultimate_sfx("eclipsada")
+	if not _cast_eclipsada_e(target_world):
+		return
+	if _eclipsada_is_sol():
+		eclipsada_sol_last_secondary_time = time_alive
+	else:
+		eclipsada_lua_last_secondary_time = time_alive
+	_sync_eclipsada_visible_cooldowns()
+	_register_manual_skill_use("skill_e", cooldown)
+	_send_network_ability_visual(NET_ABILITY_SECONDARY, visual_origin, visual_target, _network_secondary_visual_duration())
+
+
 func _cast_eclipsada_q(target_world, skill_power: float) -> void:
 	if _eclipsada_is_sol():
 		_cast_eclipsada_q_sol(target_world, skill_power)
@@ -10586,56 +11041,11 @@ func _cast_eclipsada_q(target_world, skill_power: float) -> void:
 		_cast_eclipsada_q_lua(target_world, skill_power)
 
 
-func _cast_eclipsada_q_lua(target_world, skill_power: float) -> void:
-	var dir := _aim_direction()
-	if target_world is Vector2 and Vector2(target_world).distance_squared_to(player_pos) > 16.0:
-		dir = (Vector2(target_world) - player_pos).normalized()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	var origin: Vector2 = player_pos
-	player_pos = (player_pos + dir * ECLIPSADA_Q_DASH_DISTANCE).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
-	eclipsada_q_speed_timer = max(eclipsada_q_speed_timer, ECLIPSADA_Q_SPEED_TIME)
-	eclipsada_stealth_timer = max(eclipsada_stealth_timer, ECLIPSADA_Q_STEALTH_TIME)
-	_apply_eclipsada_weakpoints(ECLIPSADA_Q_WEAKPOINT_TIME)
-	var color: Color = _eclipsada_color()
-
-	var angles = [-0.35, -0.175, 0.0, 0.175, 0.35]
-	var shuriken_damage: float = player_damage * 0.80 * skill_power * _eclipsada_trait_value("damage", 1.0)
-	for angle_offset in angles:
-		var shuriken_dir := dir.rotated(angle_offset).normalized()
-		_add_bullet({
-			"pos": player_pos + shuriken_dir * 16.0,
-			"dir": shuriken_dir,
-			"speed": 640.0,
-			"life": 2.6,
-			"damage": shuriken_damage,
-			"kind": "shuriken_eclipsado",
-			"pierce": true,
-			"always_crit": true,
-			"color": Color(0.78, 0.42, 1.0),
-			"origin": player_pos,
-			"phase": rng.randf_range(0.0, TAU),
-			"trail_cd": 0.0,
-			"hits": {},
-			"source_category": "skill_q",
-			"range_limit": ECLIPSADA_SHURIKEN_RANGE,
-			"fall_range": ECLIPSADA_SHURIKEN_FALL_RANGE,
-			"travel": 16.0
-		})
-
-	_push_eclipsada_vfx({
-		"kind": "q_dash",
-		"origin": origin,
-		"target": player_pos,
-		"dir": dir,
-		"life": 0.55,
-		"max": 0.55,
-		"color": color
-	})
-	_spawn_radial_particles(player_pos, Color(0.85, 0.45, 1.0), 32)
-	_play_manifestation_attack_sfx("eclipsada")
-	_play_sfx("Dash_Skill.mp3", 0.14, 0.50)
-	_add_text("LUA: 5 SHURIKENS CRITICOS!", player_pos + Vector2(-120, -90), Color(0.88, 0.52, 1.0), 0.95, 18)
+func _cast_eclipsada_q_lua(_target_world, _skill_power: float) -> void:
+	if eclipsada_lua_stealth_active:
+		_deactivate_eclipsada_lua_stealth()
+	else:
+		_activate_eclipsada_lua_stealth()
 
 
 func _cast_eclipsada_q_sol(target_world, skill_power: float) -> void:
@@ -10714,59 +11124,32 @@ func _cast_eclipsada_e(target_world) -> bool:
 
 
 func _cast_eclipsada_e_lua(target_world) -> bool:
-	var target := _eclipsada_pick_e_target(target_world)
-	var origin_pos: Vector2 = player_pos
-	if target.is_empty():
-		var dest_pos: Vector2 = player_pos
-		var aim_dir := _aim_direction()
-		if target_world is Vector2 and Vector2(target_world).distance_to(player_pos) > 16.0:
-			dest_pos = Vector2(target_world)
-			if dest_pos.distance_to(player_pos) > 420.0:
-				dest_pos = player_pos + (dest_pos - player_pos).normalized() * 420.0
-		else:
-			if aim_dir.length() <= 0.05:
-				aim_dir = last_facing.normalized()
-			dest_pos = player_pos + aim_dir * 320.0
-		dest_pos = dest_pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
-		player_pos = dest_pos
-		eclipsada_stealth_timer = max(eclipsada_stealth_timer, 2.5)
-		eclipsada_q_speed_timer = max(eclipsada_q_speed_timer, 3.0)
-		_apply_eclipsada_weakpoints(6.0)
-
-		shockwaves.append({"pos": dest_pos, "radius": 24.0, "max": 180.0, "life": 0.35, "damage": player_damage * 1.8, "hit": {}})
-		_spawn_radial_particles(origin_pos, Color(0.68, 0.28, 1.0), 24)
-		_spawn_radial_particles(dest_pos, Color(0.85, 0.45, 1.0), 36)
-		_push_eclipsada_vfx({"kind": "e_entry", "origin": origin_pos, "target": dest_pos, "life": 0.50, "max": 0.50, "color": _eclipsada_color()})
-		_add_text("PASSO SOMBRIO!", dest_pos + Vector2(-80, -90), _eclipsada_color(), 0.95, 20)
-		_play_sfx("Dash_Skill.mp3", 0.15, 0.45)
-		return true
-
-	eclipsada_stealth_timer = max(eclipsada_stealth_timer, ECLIPSADA_E_MAX_TARGET_TIME)
-	var cuts := ECLIPSADA_E_BASE_CUTS + int(_eclipsada_trait_value("cuts", 0.0))
-	var attack_ratio := clampf(PLAYER_BASE_ATTACK_INTERVAL / maxf(0.14, _current_attack_interval()), 0.7, 2.8)
-	cuts += int(maxf(0.0, (attack_ratio - 1.0) * 4.0))
-	var target_pos := _eclipsada_target_pos(target)
-	var dir := (target_pos - player_pos).normalized()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	player_pos = (target_pos - dir * 28.0).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
+	var target_pos: Vector2 = player_pos
+	if target_world is Vector2 and Vector2(target_world).distance_to(player_pos) > 8.0:
+		target_pos = Vector2(target_world)
+		var delta: Vector2 = target_pos - player_pos
+		if delta.length() > ECLIPSADA_E_AIM_RANGE:
+			target_pos = player_pos + delta.normalized() * ECLIPSADA_E_AIM_RANGE
+	target_pos = target_pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
+	var color := _eclipsada_color()
 	manifestation_secondaries.append({
-		"kind": "eclipsada",
-		"life": ECLIPSADA_E_MAX_TARGET_TIME,
-		"max": ECLIPSADA_E_MAX_TARGET_TIME,
-		"target": target,
-		"cuts_left": cuts,
-		"max_cuts": cuts,
+		"kind": "eclipsada_lua_eclipse",
+		"life": ECLIPSADA_LUA_E_DURATION,
+		"max": ECLIPSADA_LUA_E_DURATION,
+		"center": target_pos,
+		"radius": ECLIPSADA_LUA_E_RADIUS + _eclipsada_trait_value("area", 0.0),
 		"cut_timer": 0.0,
-		"cut_interval": maxf(0.065, ECLIPSADA_E_CUT_INTERVAL_BASE / attack_ratio),
-		"chain_radius": ECLIPSADA_E_CHAIN_RADIUS + _eclipsada_trait_value("chain", 0.0),
-		"color": _eclipsada_color(),
-		"lock_player": true,
+		"cut_interval": ECLIPSADA_LUA_E_TICK,
+		"pulse": 0,
+		"color": color,
+		"lock_player": false,
 		"phase": rng.randf_range(0.0, TAU),
 		"last_pos": target_pos
 	})
-	_push_eclipsada_vfx({"kind": "e_entry", "origin": origin_pos, "target": target_pos, "life": 0.62, "max": 0.62, "color": _eclipsada_color()})
-	_add_text("EXECUCAO ECLIPSADA", target_pos + Vector2(-92, -82), _eclipsada_color(), 0.9, 18)
+	_apply_eclipsada_weakpoints(4.0)
+	_push_eclipsada_vfx({"kind": "e_entry", "origin": player_pos, "target": target_pos, "life": 0.50, "max": 0.50, "color": color})
+	_spawn_radial_particles(target_pos, color, 34)
+	_add_text("ECLIPSE LAMINAR", target_pos + Vector2(-92, -82), color, 0.9, 18)
 	return true
 
 
@@ -10888,6 +11271,38 @@ func _update_eclipsada_sol_secondary(secondary: Dictionary, delta: float) -> voi
 		"pulse": int(secondary.get("pulse", 0)),
 		"phase": float(secondary.get("phase", 0.0))
 	})
+
+
+func _update_eclipsada_lua_eclipse_secondary(secondary: Dictionary, delta: float) -> void:
+	secondary["life"] = max(0.0, float(secondary.get("life", 0.0)) - delta)
+	if float(secondary["life"]) <= 0.0:
+		_push_eclipsada_vfx({"kind": "e_exit", "target": Vector2(secondary.get("center", player_pos)), "life": 0.42, "max": 0.42, "color": secondary.get("color", _eclipsada_color())})
+		return
+	var center := Vector2(secondary.get("center", player_pos))
+	center = center.lerp(player_pos, 0.12)
+	secondary["center"] = center
+	secondary["last_pos"] = center
+	secondary["cut_timer"] = float(secondary.get("cut_timer", 0.0)) - delta
+	if float(secondary.get("cut_timer", 0.0)) > 0.0:
+		return
+	secondary["cut_timer"] = float(secondary.get("cut_interval", ECLIPSADA_LUA_E_TICK))
+	secondary["pulse"] = int(secondary.get("pulse", 0)) + 1
+	var radius := float(secondary.get("radius", ECLIPSADA_LUA_E_RADIUS))
+	var targets := _eclipsada_targets_near(center, radius, ECLIPSADA_LUA_E_MAX_TARGETS, true)
+	var pulse := int(secondary.get("pulse", 0))
+	var color: Color = secondary.get("color", _eclipsada_color())
+	for target in targets:
+		var target_pos := _eclipsada_target_pos(target)
+		var dir := (target_pos - center).normalized()
+		if dir.length() <= 0.05:
+			dir = Vector2.from_angle(float(secondary.get("phase", 0.0)) + float(pulse))
+		var crit := pulse % 3 == 0
+		var damage: float = player_damage * ECLIPSADA_E_DAMAGE_SCALE * (1.32 if crit else 0.72) * _eclipsada_trait_value("damage", 1.0)
+		_push_eclipsada_vfx({"kind": "e_cut", "target": target_pos, "dir": dir.rotated(rng.randf_range(-0.32, 0.32)), "cut_index": pulse, "life": 0.24, "max": 0.24, "color": color, "crit": crit})
+		_eclipsada_damage_target(target, damage, "eclipsada_lua_eclipse", "skill_e", target_pos)
+		if _eclipsada_trait_value("heal", 0.0) > 0.0 and crit:
+			_heal_player(int(player_hp_max * _eclipsada_trait_value("heal", 0.0) * 0.05), "eclipsada", true)
+	_push_eclipsada_vfx({"kind": "lua_eclipse_pulse", "target": center, "radius": radius, "life": 0.34, "max": 0.34, "color": color, "pulse": pulse, "phase": float(secondary.get("phase", 0.0))})
 
 
 func _eclipsada_pick_e_target(target_world) -> Dictionary:
@@ -13523,7 +13938,7 @@ func _update_aguilhao_charge(delta: float, phase2: bool) -> void:
 	var next := intended.clamp(Vector2(48, 58), WORLD_SIZE - Vector2(48, 58))
 	arauto["pos"] = next
 	arauto["state_timer"] = max(0.0, float(arauto.get("state_timer", 0.0)) - delta)
-	if not bool(arauto.get("charge_hit_local", false)) and _local_player_targetable() and _distance_to_segment(player_pos, pos, next) <= AGUILHAO_CHARGE_HIT_WIDTH:
+	if not bool(arauto.get("charge_hit_local", false)) and _local_player_damageable_by_contact() and _distance_to_segment(player_pos, pos, next) <= AGUILHAO_CHARGE_HIT_WIDTH:
 		arauto["charge_hit_local"] = true
 		var push := (player_pos - next).normalized()
 		if push.length() <= 0.05:
@@ -13612,7 +14027,7 @@ func _resolve_aguilhao_pulse(phase2: bool, stage: int) -> void:
 	var center := Vector2(arauto.get("pos", player_pos))
 	var radius := AGUILHAO_PULSE_RADIUS * (1.22 if phase2 and stage > 0 else 1.0)
 	var damage := int(player_hp_max * AGUILHAO_PULSE_DAMAGE_RATE + enemy_close_damage * 0.32)
-	if _local_player_targetable() and player_pos.distance_to(center) <= radius:
+	if _local_player_damageable_by_contact() and player_pos.distance_to(center) <= radius:
 		var dir := (player_pos - center).normalized()
 		if dir.length() <= 0.05:
 			dir = Vector2.RIGHT
@@ -14081,7 +14496,7 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void:
 			speed *= 0.45
 			points = 135
 		ENEMY_LARAPIO:
-			hp_mult = 0.8 * (1.0 + time_alive * 0.005 + enemies_killed * 0.002)
+			hp_mult = 1.15 * (1.0 + time_alive * 0.005 + enemies_killed * 0.002)
 			speed *= 1.25
 			damage *= 0.28
 			points = 120
@@ -14205,6 +14620,10 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void:
 		"larapio_escape_timer": 0.0,
 		"larapio_patrol_timer": rng.randf_range(0.4, 1.2),
 		"larapio_patrol_target": _random_larapio_patrol_target(),
+		"larapio_ult_timer": 0.0,
+		"larapio_ult_cd": rng.randf_range(2.0, 5.0),
+		"larapio_ult_jump_cd": rng.randf_range(0.3, 0.8),
+		"larapio_ult_portals": [],
 		"larapio_idle_laugh_cd": rng.randf_range(1.6, LARAPIO_IDLE_LAUGH_INTERVAL),
 		"larapio_money_laugh_cd": rng.randf_range(1.2, LARAPIO_MONEY_LAUGH_INTERVAL),
 		"larapio_laugh_gate": 0.0,
@@ -14413,7 +14832,7 @@ func _update_enemies(delta: float) -> void:
 			continue
 
 		if not lacerante_storm and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
-			if _local_player_targetable() and enemy["pos"].distance_to(player_pos) < 46.0:
+			if _local_player_damageable_by_contact() and enemy["pos"].distance_to(player_pos) < 46.0:
 				enemy["hit_cd"] = 0.55
 				_damage_player(_enemy_damage(enemy), enemy["type"])
 			else:
@@ -14429,6 +14848,10 @@ func _update_enemies(delta: float) -> void:
 
 func _local_player_targetable() -> bool:
 	return _local_counts_as_player() and player_hp > 0.0 and not is_dead and not _eclipsada_is_stealthed()
+
+
+func _local_player_damageable_by_contact() -> bool:
+	return _local_counts_as_player() and player_hp > 0.0 and not is_dead
 
 
 func _remote_player_targetable() -> bool:
@@ -15387,7 +15810,7 @@ func _sanguessuga_try_hit(enemy: Dictionary) -> void:
 		return
 	var center := Vector2(enemy["pos"])
 	var damage := maxi(1, int(round(float(player_hp_max) * 0.018 + 9.0)))
-	if _local_player_targetable() and center.distance_to(player_pos) <= 32.0:
+	if _local_player_damageable_by_contact() and center.distance_to(player_pos) <= 32.0:
 		enemy["leech_hit_done"] = true
 		_apply_sanguessuga_parasitism(damage)
 		_spawn_radial_particles(player_pos, Color(0.62, 1.0, 0.18), 10)
@@ -15787,10 +16210,12 @@ func _update_larapio(enemy: Dictionary, delta: float) -> void:
 	var has_loot = int(enemy.get("stolen", 0)) > 0
 	var aggressive = time_alive - float(enemy.get("spawned_at", time_alive)) >= LARAPIO_AGGRESSIVE_AFTER
 	var desperate = _larapio_desperate(enemy)
+	var hp_ratio := float(enemy.get("hp", 0.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0)))
 	if desperate:
 		enemy["alerted"] = true
 		enemy["portal"] = 0.0
 		enemy["portal_pause"] = 0.0
+	_update_larapio_ultimate(enemy, delta, hp_ratio, has_loot)
 	_update_larapio_laughs(enemy, delta, has_loot)
 	enemy["happy_timer"] = max(0.0, float(enemy.get("happy_timer", 0.0)) - delta)
 	if player_stun_timer <= 0.0:
@@ -15823,8 +16248,92 @@ func _update_larapio(enemy: Dictionary, delta: float) -> void:
 
 	var throw_range := 780.0 if desperate else 560.0
 	if float(enemy.get("throw_cd", 0.0)) <= 0.0 and (bool(enemy.get("alerted", false)) or has_loot or desperate) and dist <= throw_range:
-		enemy["throw_cd"] = LARAPIO_DESPERATE_THROW_INTERVAL if desperate else (LARAPIO_AGGRESSIVE_THROW_INTERVAL if aggressive else LARAPIO_THROW_INTERVAL)
+		enemy["throw_cd"] = _larapio_throw_interval(enemy, dist, has_loot, aggressive, desperate)
 		_throw_larapio_projectile(enemy)
+
+
+func _larapio_throw_interval(enemy: Dictionary, target_distance: float, has_loot: bool, aggressive: bool, desperate: bool) -> float:
+	if has_loot and target_distance <= LARAPIO_IRRITATED_RADIUS:
+		return minf(LARAPIO_THROW_INTERVAL, LARAPIO_IRRITATED_COIN_INTERVAL)
+	if desperate:
+		var hp_ratio := float(enemy.get("hp", 0.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0)))
+		return maxf(0.95, lerpf(0.95, LARAPIO_DESPERATE_THROW_INTERVAL, clampf(hp_ratio / LARAPIO_DESPERATE_HP_RATIO, 0.0, 1.0)))
+	if aggressive:
+		return LARAPIO_AGGRESSIVE_THROW_INTERVAL
+	return LARAPIO_THROW_INTERVAL
+
+
+func _update_larapio_ultimate(enemy: Dictionary, delta: float, hp_ratio: float, has_loot: bool) -> void:
+	enemy["larapio_ult_cd"] = maxf(0.0, float(enemy.get("larapio_ult_cd", LARAPIO_ULTIMATE_COOLDOWN)) - delta)
+	enemy["larapio_ult_timer"] = maxf(0.0, float(enemy.get("larapio_ult_timer", 0.0)) - delta)
+	if float(enemy["larapio_ult_timer"]) <= 0.0:
+		if not Array(enemy.get("larapio_ult_portals", [])).is_empty():
+			enemy["larapio_ult_portals"] = []
+		if hp_ratio <= LARAPIO_ULTIMATE_HP_RATIO and float(enemy["larapio_ult_cd"]) <= 0.0:
+			_start_larapio_ultimate(enemy)
+		return
+	enemy["larapio_ult_jump_cd"] = maxf(0.0, float(enemy.get("larapio_ult_jump_cd", 0.0)) - delta)
+	var target_pos := _get_enemy_target_pos(enemy)
+	var distance := Vector2(enemy.get("pos", target_pos)).distance_to(target_pos)
+	var should_jump := has_loot or distance < 420.0 or rng.randf() < 0.18
+	if should_jump and float(enemy["larapio_ult_jump_cd"]) <= 0.0:
+		enemy["larapio_ult_jump_cd"] = LARAPIO_ULTIMATE_JUMP_INTERVAL + rng.randf_range(-0.18, 0.22)
+		_larapio_jump_between_ultimate_portals(enemy, target_pos)
+
+
+func _start_larapio_ultimate(enemy: Dictionary) -> void:
+	var portals: Array = []
+	var min_distance_from_player := 170.0
+	for i in range(LARAPIO_ULTIMATE_PORTAL_COUNT):
+		var pos := Vector2(rng.randf_range(120.0, WORLD_SIZE.x - 120.0), rng.randf_range(110.0, WORLD_SIZE.y - 110.0))
+		for attempt in range(8):
+			if pos.distance_to(player_pos) >= min_distance_from_player:
+				break
+			pos = Vector2(rng.randf_range(120.0, WORLD_SIZE.x - 120.0), rng.randf_range(110.0, WORLD_SIZE.y - 110.0))
+		portals.append({"pos": pos, "phase": rng.randf_range(0.0, TAU)})
+		_spawn_radial_particles(pos, Color(0.78, 0.20, 1.0), 12)
+	enemy["larapio_ult_portals"] = portals
+	enemy["larapio_ult_timer"] = LARAPIO_ULTIMATE_DURATION
+	enemy["larapio_ult_cd"] = LARAPIO_ULTIMATE_COOLDOWN + LARAPIO_ULTIMATE_DURATION
+	enemy["larapio_ult_jump_cd"] = 0.35
+	enemy["portal_pause"] = maxf(float(enemy.get("portal_pause", 0.0)), 0.8)
+	enemy["alerted"] = true
+	_add_text("PORTAIS LADINOS!", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -88), Color(0.88, 0.34, 1.0), 1.1, 20)
+	_play_larapio_sfx(enemy, "Risada-Loop.mp3", 0.66, 1.10, true)
+
+
+func _larapio_jump_between_ultimate_portals(enemy: Dictionary, target_pos: Vector2) -> void:
+	var portals: Array = Array(enemy.get("larapio_ult_portals", []))
+	if portals.size() < 2:
+		return
+	var current_pos := Vector2(enemy.get("pos", target_pos))
+	var entry_index := 0
+	var entry_distance := INF
+	for i in range(portals.size()):
+		var p := Vector2(Dictionary(portals[i]).get("pos", current_pos))
+		var d := current_pos.distance_squared_to(p)
+		if d < entry_distance:
+			entry_distance = d
+			entry_index = i
+	var exit_index := entry_index
+	var best_score := -INF
+	for i in range(portals.size()):
+		if i == entry_index:
+			continue
+		var p := Vector2(Dictionary(portals[i]).get("pos", current_pos))
+		var score_value := p.distance_to(target_pos) + rng.randf_range(-40.0, 40.0)
+		if score_value > best_score:
+			best_score = score_value
+			exit_index = i
+	var entry_pos := Vector2(Dictionary(portals[entry_index]).get("pos", current_pos))
+	var exit_pos := Vector2(Dictionary(portals[exit_index]).get("pos", current_pos))
+	_spawn_radial_particles(entry_pos, Color(1.0, 0.72, 0.22), 16)
+	enemy["pos"] = exit_pos
+	enemy["larapio_patrol_target"] = _random_larapio_patrol_target()
+	enemy["larapio_patrol_timer"] = rng.randf_range(0.8, 1.6)
+	enemy["portal_pause"] = maxf(float(enemy.get("portal_pause", 0.0)), 0.65)
+	_spawn_radial_particles(exit_pos, Color(0.78, 0.20, 1.0), 20)
+	_add_text("FUI!", exit_pos + Vector2(0, -58), Color(1.0, 0.82, 0.22), 0.45, 14)
 
 
 func _larapio_desperate(enemy: Dictionary) -> bool:
@@ -16834,10 +17343,10 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 		_damage_phase4_planet_at(planet_origin, amount, 130.0)
 	if source != "parasite_feast":
 		if enemy["type"] == ENEMY_LARAPIO:
-			amount *= 0.45
+			amount *= LARAPIO_DAMAGE_TAKEN_MULT
 			enemy["portal_pause"] = LARAPIO_PORTAL_HIT_PAUSE
 			enemy["alerted"] = true
-			enemy["throw_cd"] = min(float(enemy.get("throw_cd", LARAPIO_THROW_INTERVAL)), LARAPIO_THROW_INTERVAL)
+			enemy["throw_cd"] = min(float(enemy.get("throw_cd", LARAPIO_THROW_INTERVAL)), LARAPIO_DESPERATE_THROW_INTERVAL if _larapio_desperate(enemy) else LARAPIO_THROW_INTERVAL)
 		elif enemy["type"] == ENEMY_CURATER:
 			amount *= 0.58
 		elif enemy["type"] == ENEMY_CRYSTAL:
@@ -20891,7 +21400,7 @@ func _boss6_point_in_miasma(point: Vector2) -> bool:
 
 
 func _boss6_apply_miasma_slow(delta: float) -> void:
-	if not _boss6_miasma_ultimate_active() or not _local_player_targetable():
+	if not _boss6_miasma_ultimate_active() or not _local_player_damageable_by_contact():
 		return
 	if not _boss6_point_in_miasma(player_pos):
 		boss6_miasma_slow_tick = 0.0
@@ -21610,7 +22119,7 @@ func _update_boss6_lodarian_pools(delta: float) -> void:
 				flat_damage = 5
 			var local_damage := maxi(1, int(player_hp_max * damage_rate + flat_damage))
 			var remote_damage := maxi(1, int(net_player_hp_max * damage_rate + flat_damage))
-			if _local_player_targetable() and player_pos.distance_to(center) <= radius:
+			if _local_player_damageable_by_contact() and player_pos.distance_to(center) <= radius:
 				_damage_player(local_damage, source)
 			if not boss6_fossil_echo.is_empty() and boss6_fossil_echo.get("timer", 0.0) > 0.0:
 				var echo_pos: Vector2 = boss6_fossil_echo.get("pos", player_pos)
@@ -21640,7 +22149,7 @@ func _update_boss6_rib_prison(delta: float) -> void:
 
 func _boss6_core_proximity_pulse() -> void:
 	var radius := 155.0
-	if _local_player_targetable() and player_pos.distance_to(boss_pos) <= radius:
+	if _local_player_damageable_by_contact() and player_pos.distance_to(boss_pos) <= radius:
 		_damage_player(maxi(1, int(player_hp_max * 0.018 + 8)), "boss6_exposed_heart_pulse")
 	_damage_remote_player_in_radius(boss_pos, radius, maxi(1, int(net_player_hp_max * 0.018 + 8)), "boss6_exposed_heart_pulse", boss6_cracked_heart, "core_pulse")
 	shockwaves.append({"pos": boss_pos, "radius": 28.0, "max": radius, "life": 0.52, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(1.0, 0.64, 0.20)})
@@ -23373,7 +23882,7 @@ func _update_boss_attacks(delta: float) -> void:
 					var bone_pos := _boss6_vertebral_scythe_pos(origin, bone, age, duration)
 					var phase_key := "return" if age / maxf(0.01, duration) >= 0.52 else "out"
 					var local_key := "hit_local_%s" % phase_key
-					if not bool(bone.get(local_key, false)) and _local_player_targetable() and player_pos.distance_to(bone_pos) <= 34.0:
+					if not bool(bone.get(local_key, false)) and _local_player_damageable_by_contact() and player_pos.distance_to(bone_pos) <= 34.0:
 						bone[local_key] = true
 						_damage_player(int(player_hp_max * 0.055 + enemy_far_damage * 0.55 + 18), "boss6_vertebral_scythe_" + phase_key)
 					_damage_remote_player_in_radius(bone_pos, 34.0, int(net_player_hp_max * 0.055 + enemy_far_damage * 0.55 + 18), "boss6_vertebral_scythe_" + phase_key, bone, "scythe_%s_%d" % [phase_key, bone_index])
@@ -23409,7 +23918,7 @@ func _update_boss_attacks(delta: float) -> void:
 				if float(attack["tick"]) <= 0.0:
 					attack["tick"] = BOSS6_CHASING_CRACK_TICK
 					var crack_damage := int(player_hp_max * 0.052 + 24 + enemy_close_damage * 0.22)
-					if _local_player_targetable() and _distance_to_segment(player_pos, old_pos, new_pos) <= BOSS6_CHASING_CRACK_RADIUS:
+					if _local_player_damageable_by_contact() and _distance_to_segment(player_pos, old_pos, new_pos) <= BOSS6_CHASING_CRACK_RADIUS:
 						_damage_player(crack_damage, "boss6_chasing_crack")
 					_damage_remote_player_on_segment(old_pos, new_pos, BOSS6_CHASING_CRACK_RADIUS, int(net_player_hp_max * 0.052 + 24 + enemy_close_damage * 0.22), "boss6_chasing_crack", attack, "crack_tick")
 			BOSS6_ABILITY_TAIL:
@@ -23422,7 +23931,7 @@ func _update_boss_attacks(delta: float) -> void:
 						var angle := float(channel.get("angle", 0.0))
 						var a: Vector2 = boss_pos
 						var b: Vector2 = boss_pos + Vector2.from_angle(angle) * 980.0
-						if _local_player_targetable() and _distance_to_segment(player_pos, a, b) <= 38.0:
+						if _local_player_damageable_by_contact() and _distance_to_segment(player_pos, a, b) <= 38.0:
 							channel["hit_local"] = true
 							_damage_player(int(player_hp_max * 0.050 + 26), "boss6_channel_pulse")
 						_damage_remote_player_on_segment(a, b, 38.0, int(net_player_hp_max * 0.050 + 26), "boss6_channel_pulse", channel, "tail_%d" % channel_index)
@@ -23446,7 +23955,7 @@ func _update_boss_attacks(delta: float) -> void:
 						drop_data["spawned"] = true
 						var carnage_pos := Vector2(drop_data.get("pos", player_pos))
 						_add_boss6_acid_pool(carnage_pos, BOSS6_CARNAGE_POOL_RADIUS, BOSS6_CARNAGE_POOL_DURATION, "carnage")
-						if _local_player_targetable() and player_pos.distance_to(carnage_pos) <= BOSS6_CARNAGE_POOL_RADIUS:
+						if _local_player_damageable_by_contact() and player_pos.distance_to(carnage_pos) <= BOSS6_CARNAGE_POOL_RADIUS:
 							_damage_player(maxi(1, int(player_hp_max * 0.018 + 8)), "boss6_carnage_slime")
 						_damage_remote_player_in_radius(carnage_pos, BOSS6_CARNAGE_POOL_RADIUS, maxi(1, int(net_player_hp_max * 0.018 + 8)), "boss6_carnage_slime", drop_data, "carnage_drop")
 					if not bool(drop_data.get("spawned", false)) or float(drop_data.get("fall", 0.0)) > -0.55:
@@ -23457,7 +23966,7 @@ func _update_boss_attacks(delta: float) -> void:
 					attack["released"] = true
 					_apply_boss6_reflux_consumption(Array(attack.get("objects", [])))
 					var radius := 235.0 + float(Array(attack.get("objects", [])).size()) * 18.0
-					if _local_player_targetable() and player_pos.distance_to(boss_pos) <= radius:
+					if _local_player_damageable_by_contact() and player_pos.distance_to(boss_pos) <= radius:
 						attack["hit_local"] = true
 						_damage_player(int(player_hp_max * 0.090 + 34), "boss6_reflux_wave")
 					_damage_remote_player_in_radius(boss_pos, radius, int(net_player_hp_max * 0.090 + 34), "boss6_reflux_wave", attack, "reflux_remote")
@@ -23466,7 +23975,7 @@ func _update_boss_attacks(delta: float) -> void:
 				var radius := lerpf(40.0, 660.0, clampf(age / maxf(0.01, float(attack.get("duration", 1.35))), 0.0, 1.0))
 				var opening := float(attack.get("opening", 0.0))
 				var open_size := float(attack.get("open_size", 0.78))
-				if not bool(attack.get("hit_local", false)) and _local_player_targetable() and player_pos.distance_to(Vector2(attack.get("origin", boss_pos))) <= radius and player_pos.distance_to(Vector2(attack.get("origin", boss_pos))) >= radius - 58.0:
+				if not bool(attack.get("hit_local", false)) and _local_player_damageable_by_contact() and player_pos.distance_to(Vector2(attack.get("origin", boss_pos))) <= radius and player_pos.distance_to(Vector2(attack.get("origin", boss_pos))) >= radius - 58.0:
 					var player_angle := (player_pos - Vector2(attack.get("origin", boss_pos))).angle()
 					var in_opening := absf(angle_difference(player_angle, opening)) <= open_size or absf(angle_difference(player_angle, opening + PI)) <= open_size
 					if not in_opening:
@@ -23994,6 +24503,7 @@ func _update_shop(delta: float) -> void:
 	var paid_price: int = shop_purchase_pending_price
 	shop_purchase_pending_card = {}
 	shop_purchase_pending_price = 0
+	shop_purchases_this_visit += 1
 	run_points_spent += paid_price
 	_apply_aura_events(AuraSystem.on_points_spent(aura_state, paid_price, player_hp_max))
 	score -= paid_price
@@ -24012,6 +24522,8 @@ func _update_shop(delta: float) -> void:
 func _open_shop(forced: bool) -> void:
 	if mode == "shop":
 		return
+	if not forced:
+		_track_manual_shop_opening()
 	shop_endurance_discount = _shop_endurance_discount_from_elapsed(shop_auto_elapsed)
 	previous_mode = "game"
 	mode = "shop"
@@ -24021,6 +24533,7 @@ func _open_shop(forced: bool) -> void:
 	shop_purchase_pending_card = {}
 	shop_purchase_pending_can_continue = false
 	shop_purchase_pending_price = 0
+	shop_purchases_this_visit = 0
 	shop_mp_ready_to_leave = false
 	shop_mp_partner_ready = false
 	_clear_shop_mp_request()
@@ -24034,6 +24547,32 @@ func _open_shop(forced: bool) -> void:
 		_add_text("Loja forcada", player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 1.4, 26)
 	if shop_endurance_discount > 0.0:
 		_add_text("RESISTENCIA: -%d%%" % int(round(shop_endurance_discount * 100.0)), player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
+
+
+func _track_manual_shop_opening() -> void:
+	var rapid: bool = time_alive - shop_last_manual_open_time <= 12.0
+	if rapid:
+		shop_recent_manual_open_count += 1
+	else:
+		shop_recent_manual_open_count = 1
+	shop_last_manual_open_time = time_alive
+	if shop_recent_manual_open_count > 2:
+		_apply_shop_abuse_penalty("abertura rapida")
+	if shop_last_exit_had_purchase and time_alive - shop_last_exit_time <= 35.0:
+		_apply_shop_abuse_penalty("reroll por saida")
+
+
+func _apply_shop_abuse_penalty(reason: String) -> void:
+	if score <= 0:
+		return
+	var penalty: int = min(score, max(CARD_COST_BASE, card_cost))
+	score = max(0, score - penalty)
+	run_points_spent += penalty
+	shop_abuse_penalty_count += 1
+	_add_text("TAXA DA LOJA -%d" % penalty, player_pos + Vector2(0, -116), Color(1.0, 0.38, 0.18), 1.35, 22)
+	if shop_abuse_penalty_count <= 2:
+		_add_text(reason.to_upper(), player_pos + Vector2(0, -146), Color(1.0, 0.78, 0.24), 1.2, 17)
+	_vibrate(95, 0.40)
 
 
 func _shop_locked_key(index: int) -> String:
@@ -26501,6 +27040,8 @@ func _close_shop() -> void:
 
 
 func _finish_shop() -> void:
+	shop_last_exit_had_purchase = shop_purchases_this_visit > 0
+	shop_last_exit_time = time_alive
 	shop_purchase_anim_timer = 0.0
 	shop_purchase_pending_card = {}
 	shop_purchase_pending_can_continue = false
@@ -26711,8 +27252,6 @@ func _damage_player(amount: int, source: String) -> void:
 		_add_text("IMORTAL", player_pos + Vector2(0, -86), Color(1.0, 0.74, 0.24), 0.35, 16)
 		return
 	if qa_streaming_permission_pending:
-		return
-	if manifestation_key == "eclipsada" and not _active_eclipsada_secondary().is_empty():
 		return
 	var boss_ultimate_damage := _damage_source_is_boss_ultimate(source)
 	if not boss_ultimate_damage and _player_invulnerable():
@@ -29665,6 +30204,7 @@ func _draw_game(viewport: Vector2) -> void:
 	for orb in heal_orbs:
 		draw_circle(orb["pos"] - camera, 15, Color(0.25, 1.0, 0.42, 0.78))
 		draw_arc(orb["pos"] - camera, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
+	_draw_larapio_ultimate_portals(camera)
 	_draw_larapio_coin_drops(camera)
 	_draw_arauto_card_drops(camera)
 	_draw_arauto_evolution_fragment(camera)
@@ -30776,6 +31316,27 @@ func _draw_larapio_coin_drops(camera: Vector2) -> void:
 			draw_arc(pos, radius + 7.0 + shine * 2.0, 0, TAU, 24, Color(1.0, 0.82, 0.20, 0.36), 1.4)
 
 
+func _draw_larapio_ultimate_portals(camera: Vector2) -> void:
+	for enemy in enemies:
+		if String(enemy.get("type", "")) != ENEMY_LARAPIO:
+			continue
+		var timer := float(enemy.get("larapio_ult_timer", 0.0))
+		if timer <= 0.0:
+			continue
+		var portals: Array = Array(enemy.get("larapio_ult_portals", []))
+		var fade := clampf(timer / 1.2, 0.0, 1.0)
+		for i in range(portals.size()):
+			var portal: Dictionary = Dictionary(portals[i])
+			var p := Vector2(portal.get("pos", Vector2.ZERO)) - camera
+			var phase: float = float(portal.get("phase", 0.0)) + time_alive * (2.2 + float(i) * 0.08)
+			var pulse := 0.5 + 0.5 * sin(phase * 2.1)
+			draw_set_transform(p, -0.16 + sin(phase) * 0.035, Vector2(1.0, 0.36))
+			draw_circle(Vector2.ZERO, LARAPIO_ULTIMATE_PORTAL_RADIUS * (0.82 + pulse * 0.10), Color(0.12, 0.0, 0.24, 0.42 * fade))
+			draw_arc(Vector2.ZERO, LARAPIO_ULTIMATE_PORTAL_RADIUS, -phase, TAU - phase, 54, Color(0.76, 0.22, 1.0, 0.88 * fade), 3.0)
+			draw_arc(Vector2.ZERO, LARAPIO_ULTIMATE_PORTAL_RADIUS * 0.58, phase * 1.35, phase * 1.35 + PI * 1.45, 38, Color(1.0, 0.76, 0.24, 0.64 * fade), 2.0)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
 func _draw_arauto_card_drops(camera: Vector2) -> void:
 	for drop in arauto_card_drops:
 		var drop_id := String(drop.get("drop_id", ""))
@@ -31465,7 +32026,7 @@ func _draw_manifestation_secondaries(camera: Vector2) -> void:
 				_draw_secondary_ancorada(secondary, camera)
 			"acorrentada":
 				_draw_secondary_acorrentada(secondary, camera)
-			"eclipsada", "eclipsada_sol":
+			"eclipsada", "eclipsada_sol", "eclipsada_lua_eclipse":
 				_draw_secondary_eclipsada(secondary, camera)
 			"bombastica":
 				_draw_secondary_bombastica(secondary, camera)
@@ -31841,6 +32402,26 @@ func _draw_secondary_eclipsada(secondary: Dictionary, camera: Vector2) -> void:
 			var b := sol_pos + Vector2.from_angle(ray_angle + sin(time_alive * 4.0 + ray) * 0.04) * sol_radius * 0.92
 			draw_line(a, b, Color(1.0, 0.92, 0.46, 0.20 * sol_alpha), 2.0, true)
 		return
+	if String(secondary.get("kind", "")) == "eclipsada_lua_eclipse":
+		var lua_life := maxf(0.0, float(secondary.get("life", 0.0)))
+		var lua_max := maxf(0.01, float(secondary.get("max", ECLIPSADA_LUA_E_DURATION)))
+		var lua_alpha := clampf(lua_life / lua_max, 0.0, 1.0)
+		var lua_color: Color = secondary.get("color", _eclipsada_color())
+		var lua_pos := Vector2(secondary.get("center", player_pos)) - camera
+		var lua_radius := float(secondary.get("radius", ECLIPSADA_LUA_E_RADIUS))
+		var lua_phase: float = float(secondary.get("phase", 0.0)) + time_alive * 2.1
+		draw_circle(lua_pos, lua_radius, Color(0.01, 0.03, 0.12, 0.075 * lua_alpha))
+		draw_circle(lua_pos, lua_radius * 0.48, Color(0.12, 0.22, 0.52, 0.085 * lua_alpha))
+		for ring in range(4):
+			var radius := lua_radius * (0.34 + float(ring) * 0.18)
+			draw_arc(lua_pos, radius, lua_phase + float(ring) * 0.58, lua_phase + float(ring) * 0.58 + PI * 1.36, 58, Color(lua_color.r, lua_color.g, lua_color.b, (0.58 - ring * 0.07) * lua_alpha), 2.6)
+		for blade in range(6):
+			var angle := lua_phase * -0.55 + float(blade) * TAU / 6.0
+			var a := lua_pos + Vector2.from_angle(angle) * lua_radius * 0.18
+			var b := lua_pos + Vector2.from_angle(angle + sin(time_alive * 3.4 + blade) * 0.06) * lua_radius * 0.92
+			draw_line(a, b, Color(0.03, 0.05, 0.14, 0.56 * lua_alpha), 8.0, true)
+			draw_line(a, b, Color(lua_color.r, lua_color.g, lua_color.b, 0.42 * lua_alpha), 2.5, true)
+		return
 	var life := maxf(0.0, float(secondary.get("life", 0.0)))
 	var maximum := maxf(0.01, float(secondary.get("max", ECLIPSADA_E_MAX_TARGET_TIME)))
 	var alpha := clampf(life / maximum, 0.0, 1.0)
@@ -31876,7 +32457,7 @@ func _draw_eclipsada_vfx(camera: Vector2) -> void:
 				_draw_eclipsada_q_vfx(visual, camera)
 			"e_entry", "e_cut", "e_chain", "e_exit":
 				_draw_eclipsada_e_vfx(visual, camera)
-			"form_swap", "shuriken_fall", "sol_burst", "sol_pulse":
+			"form_swap", "shuriken_fall", "sol_burst", "sol_pulse", "lua_eclipse_pulse":
 				_draw_eclipsada_special_vfx(visual, camera)
 
 
@@ -31902,6 +32483,25 @@ func _draw_eclipsada_attack_vfx(visual: Dictionary, camera: Vector2) -> void:
 	var progress := _eclipsada_vfx_progress(visual)
 	var fade := _eclipsada_vfx_fade(visual)
 	var color: Color = visual.get("color", _eclipsada_color())
+	if String(visual.get("style", "")) == "lua_blades":
+		var origin: Vector2 = Vector2(visual.get("origin", player_pos)) - camera
+		var side: Vector2 = direction.orthogonal()
+		var crit: bool = bool(visual.get("crit", false))
+		var sweep: float = sin(progress * PI)
+		for lane in [-1.0, 1.0]:
+			var offset: Vector2 = side * lane * (13.0 + sweep * 5.0)
+			var start: Vector2 = origin + direction * 18.0 + offset
+			var finish: Vector2 = origin + direction * radius + offset + side * lane * 10.0 * sweep
+			var mid: Vector2 = start.lerp(finish, 0.52) + side * lane * (18.0 + 12.0 * sweep)
+			var trail := PackedVector2Array([start, mid, finish])
+			draw_polyline(trail, Color(0.0, 0.015, 0.08, 0.84 * fade), 22.0 if crit else 17.0, true)
+			draw_polyline(trail, Color(color.r, color.g, color.b, 0.32 * fade), 14.0 if crit else 10.0, true)
+			draw_polyline(trail, Color(color.r, color.g, color.b, 0.96 * fade), 5.0 if crit else 3.8, true)
+			draw_polyline(trail, Color(0.88, 0.97, 1.0, 0.95 * fade), 1.5, true)
+		if crit:
+			draw_arc(origin, radius * 0.72, direction.angle() - 0.62, direction.angle() + 0.62, 54, Color(0.82, 0.92, 1.0, 0.70 * fade), 4.0)
+			draw_circle(origin + direction * radius * 0.80, 18.0 + sweep * 18.0, Color(color.r, color.g, color.b, 0.18 * fade))
+		return
 	var swing_sign := -1.0 if step % 2 == 0 else 1.0
 	var head_angle := direction.angle() - swing_sign * 1.22 + swing_sign * 2.44 * ease(progress, 0.34)
 	var trail := PackedVector2Array()
@@ -32037,14 +32637,22 @@ func _draw_eclipsada_special_vfx(visual: Dictionary, camera: Vector2) -> void:
 			for ray in range(8):
 				var ray_angle: float = time_alive * 0.9 + float(ray) * TAU / 8.0
 				draw_line(target + Vector2.from_angle(ray_angle) * current * 0.18, target + Vector2.from_angle(ray_angle) * current, Color(1.0, 0.86, 0.32, 0.24 * fade), 1.8, true)
+		"lua_eclipse_pulse":
+			var radius := float(visual.get("radius", ECLIPSADA_LUA_E_RADIUS))
+			var current := radius * (0.50 + progress * 0.50)
+			draw_circle(target, current, Color(0.02, 0.04, 0.18, 0.055 * fade))
+			draw_arc(target, current, time_alive * 3.2, time_alive * 3.2 + PI * 1.64, 72, Color(color.r, color.g, color.b, 0.72 * fade), 3.4)
+			draw_arc(target, current * 0.72, -time_alive * 4.4, -time_alive * 4.4 + PI * 1.18, 58, Color(0.48, 0.82, 1.0, 0.46 * fade), 2.2)
 
 
 func _eclipsada_stealth_overlay_alpha() -> float:
 	if not _eclipsada_is_stealthed():
 		return 0.0
+	if eclipsada_lua_stealth_active:
+		var danger := clampf(maxf(0.0, eclipsada_lua_stealth_elapsed - ECLIPSADA_LUA_STEALTH_SAFE_TIME) / 9.0, 0.0, 1.0)
+		return 0.095 + danger * 0.045 + sin(time_alive * 3.6) * 0.008
 	var ratio := clampf(eclipsada_stealth_timer / ECLIPSADA_Q_STEALTH_TIME, 0.0, 1.0)
-	var execution_bonus := 0.035 if not _active_eclipsada_secondary().is_empty() else 0.0
-	return 0.085 + ratio * 0.055 + sin(time_alive * 3.6) * 0.008 + execution_bonus
+	return 0.085 + ratio * 0.055 + sin(time_alive * 3.6) * 0.008
 
 
 func _draw_eclipsada_stealth_overlay(viewport: Vector2, camera: Vector2) -> void:
@@ -32292,6 +32900,25 @@ func _draw_teleport_effects(camera: Vector2) -> void:
 				_draw_physical_chain(effect["physics"], camera, Color(0.18, 0.86, 1.0, 0.88 * fade), max(8.0, float(effect.get("width", 34.0)) * 0.20), fade, true)
 			else:
 				_draw_acorrentada_chain(Vector2(effect.get("a", player_pos)) - camera, Vector2(effect.get("b", player_pos)) - camera, Color(0.18, 0.86, 1.0, 0.88 * fade), max(8.0, float(effect.get("width", 34.0)) * 0.20), fade, true)
+		elif kind == "eclipsada_lua_tp" or kind == "eclipsada_sol_tp":
+			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
+			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
+			var color: Color = effect.get("color", _eclipsada_color())
+			var dir := (b - a).normalized()
+			if dir.length() <= 0.01:
+				dir = Vector2.RIGHT
+			var side := dir.orthogonal()
+			var progress := 1.0 - fade
+			if kind == "eclipsada_lua_tp":
+				var path := PackedVector2Array([a, a.lerp(b, 0.50) + side * sin(progress * PI) * 24.0, b])
+				draw_polyline(path, Color(0.0, 0.02, 0.11, 0.80 * fade), 28.0, true)
+				draw_polyline(path, Color(color.r, color.g, color.b, 0.82 * fade), 5.0, true)
+				draw_arc(b, 32.0 + progress * 18.0, time_alive * 5.0, time_alive * 5.0 + PI * 1.40, 42, Color(0.48, 0.84, 1.0, 0.72 * fade), 2.5)
+			else:
+				draw_line(a, b, Color(0.15, 0.05, 0.0, 0.56 * fade), 22.0, true)
+				draw_line(a, b, Color(color.r, color.g, color.b, 0.82 * fade), 4.5, true)
+				draw_circle(b, 30.0 + progress * 32.0, Color(color.r, color.g, color.b, 0.13 * fade))
+				draw_arc(b, 48.0 + progress * 22.0, -time_alive * 4.0, TAU - time_alive * 4.0, 58, Color(1.0, 0.90, 0.44, 0.75 * fade), 3.0)
 
 
 func _draw_secondary_acorrentada(secondary: Dictionary, camera: Vector2) -> void:
@@ -33897,7 +34524,7 @@ func _draw_boss3_miasma_overlay(viewport: Vector2, camera: Vector2) -> void:
 		draw_circle(center, radius, Color(0.64, 0.92, 0.10, 0.10 + pulse * 0.08))
 		draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * qte_progress, 64, Color(0.82, 1.0, 0.20, 0.96), 6.0, true)
 		draw_arc(center, radius + 9.0, 0.0, TAU, 64, Color(0.74, 0.90, 0.14, 0.34 + pulse * 0.28), 2.0, true)
-		_draw_centered("TOQUE", center + Vector2(0, 7), 18, Color(0.94, 1.0, 0.68))
+		_draw_centered("ESPACO" if _uses_desktop_ui() else "TOQUE", center + Vector2(0, 7), 18, Color(0.94, 1.0, 0.68))
 		_draw_centered("%d / %d" % [boss3_miasma_qte_taps, boss3_miasma_qte_required], center + Vector2(0, 88), 22, Color(0.88, 1.0, 0.34))
 		if boss3_miasma_qte_time_left > 0.0:
 			_draw_centered("%.1fs" % boss3_miasma_qte_time_left, center + Vector2(0, 116), 18, Color(1.0, 0.46, 0.20))
@@ -33905,7 +34532,7 @@ func _draw_boss3_miasma_overlay(viewport: Vector2, camera: Vector2) -> void:
 			var overtime: float = max(0.0, boss3_miasma_qte_elapsed - BOSS3_MIASMA_QTE_DURATION)
 			_draw_centered("FE CORROMPIDA +%.0fs" % overtime, center + Vector2(0, 116), 18, Color(0.74, 1.0, 0.16))
 		if boss3_miasma_qte_tutorial > 0.0:
-			_draw_centered("APERTE COMO SE SUA VIDA DEPENDESSE", center + Vector2(0, -112), 24, Color(1.0, 0.92, 0.30))
+			_draw_centered(("APERTE ESPACO PARA ABRIR OS OLHOS" if _uses_desktop_ui() else "APERTE COMO SE SUA VIDA DEPENDESSE"), center + Vector2(0, -112), 24, Color(1.0, 0.92, 0.30))
 	else:
 		_draw_centered("MIASMA DA VIDA  %.0fs" % ceil(boss3_miasma_timer), Vector2(viewport.x * 0.5, 116), 18, Color(0.82, 1.0, 0.30, 0.92))
 
@@ -36261,7 +36888,7 @@ func _draw_cooldown_overlay(center: Vector2, radius: float, elapsed: float, cool
 
 func _draw_shop_mp_request(viewport: Vector2) -> void:
 	var panel_w: float = min(440.0, viewport.x * 0.86)
-	var panel_h := 112.0 if shop_mp_request_incoming else 78.0
+	var panel_h := 122.0 if shop_mp_request_incoming else 78.0
 	var panel := Rect2(viewport.x * 0.5 - panel_w * 0.5, 26.0, panel_w, panel_h)
 	var accent := Color(0.0, 1.0, 0.82) if shop_mp_request_incoming else Color(1.0, 0.76, 0.25)
 	_draw_holo_panel(panel, accent, true, 0.86)
@@ -36270,12 +36897,12 @@ func _draw_shop_mp_request(viewport: Vector2) -> void:
 	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
 	var status := "aguardando confirmacao %ds" % remaining
 	if shop_mp_request_incoming:
-		status = "aceite para abrir juntos em %ds" % remaining
+		status = "clique ou enter/espaco em %ds" % remaining
 	_draw_centered(status.to_upper(), Vector2(panel.get_center().x, panel.position.y + 56.0), _readable_text_size(12), Color(0.92, 0.96, 1.0))
 	buttons.erase("shop_mp_accept")
 	if shop_mp_request_incoming:
 		buttons["shop_mp_accept"] = Rect2(panel.get_center().x - 94.0, panel.end.y - 42.0, 188.0, 32.0)
-		_draw_small_rect_button(buttons["shop_mp_accept"], "ACEITAR", Color(0.03, 0.18, 0.12, 0.92), Color(0.0, 1.0, 0.82))
+		_draw_small_rect_button(buttons["shop_mp_accept"], "ACEITAR  ENTER", Color(0.03, 0.18, 0.12, 0.92), Color(0.0, 1.0, 0.82))
 
 
 func _revive_request_visible() -> bool:
@@ -36343,7 +36970,7 @@ func _draw_shop_mp_waiting(viewport: Vector2) -> void:
 
 func _shop_mp_accept_rect(viewport: Vector2) -> Rect2:
 	var panel_w: float = min(440.0, viewport.x * 0.86)
-	var panel_h := 112.0
+	var panel_h := 122.0
 	var panel := Rect2(viewport.x * 0.5 - panel_w * 0.5, 26.0, panel_w, panel_h)
 	return Rect2(panel.get_center().x - 94.0, panel.end.y - 42.0, 188.0, 32.0)
 
@@ -36378,7 +37005,7 @@ func _handle_revive_overlay_press(pos: Vector2) -> bool:
 
 func _draw_boss_mp_request(viewport: Vector2) -> void:
 	var panel_w: float = min(460.0, viewport.x * 0.86)
-	var panel_h := 112.0 if boss_mp_request_incoming else 78.0
+	var panel_h := 122.0 if boss_mp_request_incoming else 78.0
 	var panel := Rect2(viewport.x * 0.5 - panel_w * 0.5, 146.0, panel_w, panel_h)
 	var accent := Color(1.0, 0.52, 0.16) if boss_mp_request_incoming else Color(1.0, 0.82, 0.24)
 	_draw_holo_panel(panel, accent, true, 0.86)
@@ -36387,17 +37014,17 @@ func _draw_boss_mp_request(viewport: Vector2) -> void:
 	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
 	var status := "aguardando confirmacao %ds" % remaining
 	if boss_mp_request_incoming:
-		status = "aceite para chamar juntos em %ds" % remaining
+		status = "clique ou enter/espaco em %ds" % remaining
 	_draw_centered(status.to_upper(), Vector2(panel.get_center().x, panel.position.y + 56.0), _readable_text_size(12), Color(0.98, 0.94, 0.86))
 	buttons.erase("boss_mp_accept")
 	if boss_mp_request_incoming:
 		buttons["boss_mp_accept"] = Rect2(panel.get_center().x - 94.0, panel.end.y - 42.0, 188.0, 32.0)
-		_draw_small_rect_button(buttons["boss_mp_accept"], "ACEITAR", Color(0.22, 0.09, 0.03, 0.92), Color(1.0, 0.52, 0.16))
+		_draw_small_rect_button(buttons["boss_mp_accept"], "ACEITAR  ENTER", Color(0.22, 0.09, 0.03, 0.92), Color(1.0, 0.52, 0.16))
 
 
 func _boss_mp_accept_rect(viewport: Vector2) -> Rect2:
 	var panel_w: float = min(460.0, viewport.x * 0.86)
-	var panel := Rect2(viewport.x * 0.5 - panel_w * 0.5, 146.0, panel_w, 112.0)
+	var panel := Rect2(viewport.x * 0.5 - panel_w * 0.5, 146.0, panel_w, 122.0)
 	return Rect2(panel.get_center().x - 94.0, panel.end.y - 42.0, 188.0, 32.0)
 
 
@@ -38068,6 +38695,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event is InputEventScreenTouch and event.pressed:
 			ignore_mouse_until_msec = Time.get_ticks_msec() + 300
 			_handle_boss3_miasma_qte_tap(event.position, viewport)
+		elif event is InputEventKey and event.pressed and not event.echo and _uses_desktop_ui() and event.keycode == KEY_SPACE:
+			_handle_boss3_miasma_qte_tap(viewport * 0.5, viewport)
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _should_ignore_emulated_mouse():
 			_handle_boss3_miasma_qte_tap(event.position, viewport)
 		return
@@ -38134,6 +38763,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton:
 		if event.pressed:
 			if _should_ignore_emulated_mouse():
+				return
+			if event.button_index == MOUSE_BUTTON_LEFT and _handle_desktop_request_overlay_press(event.position, viewport):
 				return
 			if _handle_desktop_combat_mouse(event, viewport):
 				return
@@ -38961,6 +39592,10 @@ func _handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 
 
 func _handle_mouse_press(pos: Vector2, viewport: Vector2) -> void:
+	if _handle_revive_overlay_press(pos):
+		return
+	if _handle_pause_mp_overlay_press(pos, viewport):
+		return
 	if _handle_shop_mp_overlay_press(pos, viewport):
 		return
 	if _handle_boss_mp_overlay_press(pos, viewport):
@@ -39364,24 +39999,46 @@ func _handle_desktop_combat_mouse(event: InputEventMouseButton, viewport: Vector
 	return false
 
 
+func _handle_multiplayer_request_key(event: InputEventKey) -> bool:
+	if not event.pressed or event.echo or not (event.keycode in [KEY_ENTER, KEY_SPACE]):
+		return false
+	if pause_mp_request_incoming and _pause_mp_request_visible():
+		_accept_pause_mp_request()
+		return true
+	if mode == "game" and shop_mp_request_incoming and _shop_mp_request_visible():
+		_accept_shop_mp_request()
+		return true
+	if mode == "game" and boss_mp_request_incoming and _boss_mp_request_visible():
+		_accept_boss_mp_request()
+		return true
+	return false
+
+
+func _handle_desktop_request_overlay_press(pos: Vector2, viewport: Vector2) -> bool:
+	if not _uses_desktop_ui():
+		return false
+	if _handle_revive_overlay_press(pos):
+		return true
+	if _handle_pause_mp_overlay_press(pos, viewport):
+		return true
+	if _handle_shop_mp_overlay_press(pos, viewport):
+		return true
+	if _handle_boss_mp_overlay_press(pos, viewport):
+		return true
+	return false
+
+
 func _handle_key(event: InputEventKey) -> void:
 	if keyboard_mapping_action != "" and mode == "settings_keys":
 		_capture_keyboard_binding(event)
+		return
+	if _handle_multiplayer_request_key(event):
 		return
 	if _handle_desktop_combat_key(event):
 		return
 	if mode == "nick_setup":
 		if event.keycode in [KEY_ENTER, KEY_SPACE]:
 			_submit_player_nickname()
-		return
-	if pause_mp_request_incoming and event.keycode in [KEY_ENTER, KEY_SPACE]:
-		_accept_pause_mp_request()
-		return
-	if mode == "game" and shop_mp_request_incoming and event.keycode in [KEY_ENTER, KEY_SPACE]:
-		_accept_shop_mp_request()
-		return
-	if mode == "game" and boss_mp_request_incoming and event.keycode in [KEY_ENTER, KEY_SPACE]:
-		_accept_boss_mp_request()
 		return
 	if _spectator_combat_mode():
 		_clear_spectator_local_combat_state()
@@ -40108,7 +40765,7 @@ func _try_unlock_retornante_cheat() -> bool:
 
 func _draw_pause_mp_request(viewport: Vector2) -> void:
 	var panel_w := minf(460.0, viewport.x * 0.86)
-	var panel_h := 116.0 if pause_mp_request_incoming else 82.0
+	var panel_h := 132.0 if pause_mp_request_incoming else 82.0
 	var panel := Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y - panel_h - 24.0, panel_w, panel_h)
 	var accent := Color(0.38, 0.84, 1.0) if pause_mp_target_paused else Color(0.34, 1.0, 0.58)
 	_draw_holo_panel(panel, accent, true, 0.88)
@@ -40118,14 +40775,25 @@ func _draw_pause_mp_request(viewport: Vector2) -> void:
 	_draw_centered("CONFIRMACOES %d/%d" % [pause_mp_vote_count, pause_mp_expected_count], Vector2(panel.get_center().x, panel.position.y + 56.0), 12, Color.WHITE)
 	buttons.erase("pause_mp_accept")
 	if pause_mp_request_incoming:
-		buttons["pause_mp_accept"] = Rect2(panel.get_center().x - 98.0, panel.end.y - 42.0, 196.0, 32.0)
-		_draw_small_rect_button(buttons["pause_mp_accept"], "CONCORDAR", Color(0.03, 0.14, 0.18, 0.94), accent)
+		_draw_centered("CLIQUE OU ENTER/ESPACO", Vector2(panel.get_center().x, panel.position.y + 78.0), 11, Color(0.88, 0.96, 1.0))
+		buttons["pause_mp_accept"] = _pause_mp_accept_rect(viewport)
+		_draw_small_rect_button(buttons["pause_mp_accept"], "CONCORDAR  ENTER", Color(0.03, 0.14, 0.18, 0.94), accent)
 
 
-func _handle_pause_mp_overlay_press(pos: Vector2) -> bool:
+func _pause_mp_accept_rect(viewport: Vector2) -> Rect2:
+	var panel_w := minf(460.0, viewport.x * 0.86)
+	var panel_h := 132.0
+	var panel := Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y - panel_h - 24.0, panel_w, panel_h)
+	return Rect2(panel.get_center().x - 98.0, panel.end.y - 42.0, 196.0, 32.0)
+
+
+func _handle_pause_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZERO) -> bool:
 	if not _pause_mp_request_visible() or not pause_mp_request_incoming:
 		return false
-	if buttons.get("pause_mp_accept", Rect2()).has_point(pos):
+	var accept_rect: Rect2 = buttons.get("pause_mp_accept", Rect2())
+	if accept_rect.size == Vector2.ZERO and viewport != Vector2.ZERO:
+		accept_rect = _pause_mp_accept_rect(viewport)
+	if accept_rect.has_point(pos):
 		_accept_pause_mp_request()
 		return true
 	return false
@@ -40853,7 +41521,7 @@ func _skill_cooldown() -> float:
 		"bombastica":
 			return BOMBASTICA_Q_RECHARGE
 		"eclipsada":
-			return 3.0
+			return _eclipsada_q_cooldown_for_form()
 	return PLAYER_BASE_SKILL_COOLDOWN
 
 
@@ -41412,21 +42080,21 @@ func _manifestation_details(key: String) -> Dictionary:
 			var trait_status := "Passiva pronta para copiar um traco no proximo abate." if eclipsada_passive_timer <= 0.0 else "Passiva recarrega em %.0fs." % eclipsada_passive_timer
 			if eclipsada_trait_timer > 0.0:
 				trait_status = "Traco ativo: %s por %.0fs. Cor e comportamento das habilidades mudam enquanto durar." % [eclipsada_trait_name, eclipsada_trait_timer]
-			var form_status := "Forma atual: SOL. Shurikens explodem, HAB1 dispara rajada solar e ULT cria uma coroa de dano em area." if _eclipsada_is_sol() else "Forma atual: LUA. Shurikens perfuram, HAB1 concede furtividade e pontos fracos, ULT executa alvos em cadeia."
+			var form_status := "Forma atual: SOL. Shurikens explodem, HAB1 dispara rajada solar e ULT cria uma coroa de dano em area." if _eclipsada_is_sol() else "Forma atual: LUA. ATK usa duas laminas de 180px, HAB1 liga/desliga furtividade com drenagem progressiva e ULT cria um eclipse de cortes proximos."
 			return {
 				"funcao": "Duelista hibrida de curto alcance. O botao REFORCO alterna entre Lua e Sol a qualquer momento, mudando ATK, HAB1 e ULT.",
-				"disparo": "ATK - Shuriken Eclipsado: alcance efetivo de 280px; aos 285px a lamina perde forca e cai. Lua perfura; Sol bate mais forte e explode em area curta.",
+				"disparo": "ATK - Lua usa duas laminas proximas em tres direcoes, com o terceiro corte sempre critico. Sol usa shuriken de 280px; aos 285px a lamina perde forca e cai.",
 				"habilidade": "Q - Lua Rasante / Estilhaco Solar",
-				"desc_hab": "Lua: avanca 20px, ganha +20% velocidade por 6s, fica invisivel por 5s e cria pontos fracos. Sol: dispara 3 shurikens solares em leque com explosao no impacto.",
-				"traco": "E - Execucao Lunar / Coroa Solar: Lua corta um alvo em sequencia e reseta se executar; Sol cria uma zona pulsante de cortes no ponto mirado.",
+				"desc_hab": "Lua: liga/desliga furtividade. Depois de 3s invisivel, perde vida a cada segundo e o custo aumenta a cada 3s. Sol: dispara 3 shurikens solares em leque com explosao no impacto.",
+				"traco": "E - Eclipse Laminar / Coroa Solar: Lua cria um campo movel de cortes ao redor da Geovana; Sol cria uma zona pulsante de cortes no ponto mirado.",
 				"risco": form_status + " " + trait_status,
 				"info_rows": [
 					{"label": "FORMA", "text": "REFORCO troca Lua/Sol sem recarga e cria um anel visual ao redor da Geovana."},
-					{"label": "ATK LUA", "text": "Shuriken curto, perfurante, 280px de alcance util e queda visual aos 285px."},
+					{"label": "ATK LUA", "text": "Duas laminas de 180px. O combo corta esquerda, direita e centro; o terceiro hit sempre crita e escala com critico."},
 					{"label": "ATK SOL", "text": "Shuriken curto mais forte, nao perfura, mas explode em raio pequeno no impacto."},
-					{"label": "Q", "text": "Lua foca furtividade/ponto fraco; Sol foca rajada direta e area curta."},
-					{"label": "E", "text": "Lua executa em cadeia com mira ate 150px; Sol coloca uma coroa pulsante ate 260px."},
-					{"label": "PASSIVA", "text": "A cada 80s, o proximo abate copia um traco do inimigo por 60s, mudando cor, area, dano, cadeia ou cortes."}
+					{"label": "Q", "text": "Lua e uma ativacao: invisivel ate desligar, com cooldown de 10s apos revelar. Sol foca rajada direta e area curta."},
+					{"label": "E", "text": "Lua invoca um eclipse que pulsa cortes em ate 3 alvos proximos; Sol coloca uma coroa pulsante ate 260px."},
+					{"label": "PASSIVA", "text": "Lua ganha dano nas laminas enquanto segue oculta. Sol deixa queimadura curta nas explosoes. A cada 80s, um abate ainda copia traco inimigo por 60s."}
 				]
 			}
 		"bombastica":

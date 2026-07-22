@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
@@ -10,10 +11,12 @@ const port = 18090;
 const projectPath = path.resolve(__dirname, "..");
 const logDir = path.join(projectPath, ".agent_logs");
 const storePath = path.join(logDir, "leaderboard_smoke_runs.json");
+const securityStorePath = path.join(logDir, "leaderboard_smoke_security.json");
 const updateRoot = path.join(logDir, "android_update_smoke");
 const windowsUpdateRoot = path.join(logDir, "windows_update_smoke");
 fs.mkdirSync(logDir, { recursive: true });
 if (fs.existsSync(storePath)) fs.rmSync(storePath, { force: true });
+if (fs.existsSync(securityStorePath)) fs.rmSync(securityStorePath, { force: true });
 fs.rmSync(updateRoot, { recursive: true, force: true });
 fs.rmSync(windowsUpdateRoot, { recursive: true, force: true });
 fs.mkdirSync(updateRoot, { recursive: true });
@@ -25,7 +28,7 @@ fs.writeFileSync(path.join(updateRoot, "latest.json"), JSON.stringify({
   version: "2.0.27",
   version_code: 227,
   filename: fakeApkName,
-  sha256: require("crypto").createHash("sha256").update(fakeApk).digest("hex"),
+  sha256: crypto.createHash("sha256").update(fakeApk).digest("hex"),
   notes: ["Atualizador smoke"],
   mandatory: false,
   published_at: "2026-07-16T12:00:00Z"
@@ -37,7 +40,7 @@ fs.writeFileSync(path.join(windowsUpdateRoot, "latest.json"), JSON.stringify({
   version: "2.0.27",
   version_code: 227,
   filename: fakeExeName,
-  sha256: require("crypto").createHash("sha256").update(fakeExe).digest("hex"),
+  sha256: crypto.createHash("sha256").update(fakeExe).digest("hex"),
   notes: ["Atualizador Windows smoke"],
   mandatory: false,
   published_at: "2026-07-16T12:00:00Z"
@@ -66,6 +69,39 @@ function assertCleanHtml(label, html) {
   assert(!/src="[^"]*undefined/i.test(html), `${label} contains undefined image`);
 }
 
+const RUN_REPORT_INTEGRITY_SALT = "ruptura-temporal-run-integrity-v1-2.0.30c";
+
+function runSignatureSource(payload) {
+  const fields = [
+    "player", "profile_id", "room", "version", "version_code", "platform", "role", "result",
+    "started_unix", "ended_unix", "duration_seconds", "phase", "kills", "points_earned",
+    "points_spent", "score_current", "score_total", "cards_total", "manifestation_key",
+    "spectrum_key", "enemy_damage_total", "damage_taken_total", "boss_damage_total",
+    "leaderboard_score", "run_session_id", "run_session_checkpoints"
+  ];
+  return `${fields.map((field) => `${field}=${String(payload[field] ?? "")}`).join("|")}|salt=${RUN_REPORT_INTEGRITY_SALT}`;
+}
+
+function signRun(payload) {
+  payload.integrity = {
+    version: 1,
+    signature: crypto.createHash("sha256").update(runSignatureSource(payload)).digest("hex")
+  };
+  return payload;
+}
+
+function computeSmokeScore(payload) {
+  const stats = payload.player_stats || {};
+  let score = Math.round(Number(payload.duration_seconds || 0) * 2);
+  score += Math.floor(Number(payload.kills || 0)) * 20;
+  score += Math.floor(Number(payload.phase || 0)) * 250;
+  score += Math.round(Number(payload.boss_damage_total || 0) / 12);
+  score += Math.floor(Number(payload.cards_total || 0)) * 15;
+  score += Math.round(Math.max(0, Number(stats.hp || 0)) * 0.5);
+  if (String(payload.result || "") === "Vitoria") score += 1500;
+  return Math.max(0, Math.floor(score));
+}
+
 async function waitForHealth() {
   let lastError = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -90,6 +126,7 @@ async function run() {
       WARM_STANDBY_ROOMS: "0",
       PROJECT_PATH: projectPath,
       LEADERBOARD_PATH: storePath,
+      RUN_SECURITY_PATH: securityStorePath,
       ANDROID_UPDATE_ROOT: updateRoot,
       WINDOWS_UPDATE_ROOT: windowsUpdateRoot,
       STREAM_MANAGER_PUBLIC_BASE_URL: `http://127.0.0.1:${port}`,
@@ -111,13 +148,15 @@ async function run() {
     const emptyHome = (await request("GET", "/leaderboard")).body.toString("utf8");
     assert(emptyHome.includes("CENTRAL DO OBSERVATORIO") && emptyHome.includes("NENHUMA EXPEDICAO SINCRONIZADA"), "empty dashboard state missing");
     assertCleanHtml("empty home", emptyHome);
+    const nowUnix = Math.floor(Date.now() / 1000);
     const payload = {
       player: "DashboardQA",
       profile_id: "dashboard-qa",
       version: "2.0.27",
       platform: "Windows",
       result: "Derrota",
-      ended_unix: 1784187000,
+      started_unix: nowUnix - 333,
+      ended_unix: nowUnix,
       duration_seconds: 333,
       phase: 3,
       kills: 118,
@@ -135,20 +174,112 @@ async function run() {
       boss_detail: [{ phase: 1, reached: true, duration: "00:20", damage: 4232 }]
     };
     const created = await request("POST", "/runs", payload);
-    assert.strictEqual(created.status, 201);
+    assert.strictEqual(created.status, 202, "legacy unsigned run should be stored only for audit");
     const createdPayload = JSON.parse(created.body.toString("utf8"));
     const stored = createdPayload.run;
+    assert.strictEqual(stored.rankEligible, false, "legacy unsigned run should not be competitive");
+    assert(stored.suspicionReasons.includes("legacy_unsigned_protocol_closed"), "legacy audit reason missing");
     assert.strictEqual(createdPayload.runUrl, `http://127.0.0.1:${port}/leaderboard/run/${stored.id}`, "run URL should point to the exact run");
+    const signedPayload = {
+      ...payload,
+      player: "SignedQA",
+      profile_id: "signed-qa",
+      version: "2.0.30c",
+      version_code: 23003,
+      room: "solo",
+      role: "solo",
+      started_unix: nowUnix - 333,
+      ended_unix: nowUnix,
+      score_current: 900,
+      score_total: 4200,
+      points_earned: 5200,
+      points_spent: 1600,
+      manifestation_key: "eletrica",
+      spectrum_key: "racional",
+      player_stats: { hp: 300 }
+    };
+    const sessionStart = await request("POST", "/runs/start", {
+      player: signedPayload.player,
+      profile_id: signedPayload.profile_id,
+      version: signedPayload.version,
+      version_code: signedPayload.version_code,
+      platform: signedPayload.platform,
+      role: signedPayload.role,
+      room: signedPayload.room,
+      started_unix: signedPayload.started_unix
+    });
+    assert.strictEqual(sessionStart.status, 201, "secure run session was not created");
+    const sessionData = JSON.parse(sessionStart.body.toString("utf8"));
+    assert(sessionData.session_id && sessionData.session_token, "secure session did not return credentials");
+    const checkpointBase = {
+      session_id: sessionData.session_id,
+      session_token: sessionData.session_token,
+      player: signedPayload.player,
+      profile_id: signedPayload.profile_id,
+      version: signedPayload.version,
+      version_code: signedPayload.version_code,
+      platform: signedPayload.platform,
+      role: signedPayload.role,
+      room: signedPayload.room,
+      started_unix: signedPayload.started_unix,
+      player_stats: signedPayload.player_stats
+    };
+    const checkpoint1 = await request("POST", "/runs/checkpoint", {
+      ...checkpointBase,
+      duration_seconds: 140,
+      phase: 2,
+      kills: 64,
+      points_earned: 2900,
+      points_spent: 900,
+      score_current: 480,
+      score_total: 1900,
+      cards_total: 1,
+      boss_damage_total: 1200,
+      enemy_damage_total: 6000,
+      base_damage_end: 34
+    });
+    assert.strictEqual(checkpoint1.status, 200, "first secure checkpoint was not accepted");
+    const checkpoint2 = await request("POST", "/runs/checkpoint", {
+      ...checkpointBase,
+      duration_seconds: 325,
+      phase: signedPayload.phase,
+      kills: signedPayload.kills,
+      points_earned: signedPayload.points_earned,
+      points_spent: signedPayload.points_spent,
+      score_current: signedPayload.score_current,
+      score_total: signedPayload.score_total,
+      cards_total: signedPayload.cards_total,
+      boss_damage_total: signedPayload.boss_damage_total,
+      enemy_damage_total: signedPayload.enemy_damage_total,
+      base_damage_end: signedPayload.base_damage_end
+    });
+    assert.strictEqual(checkpoint2.status, 200, "second secure checkpoint was not accepted");
+    signedPayload.run_session_id = sessionData.session_id;
+    signedPayload.run_session_token = sessionData.session_token;
+    signedPayload.run_session_checkpoints = 2;
+    signedPayload.leaderboard_score = computeSmokeScore(signedPayload);
+    signRun(signedPayload);
+    const signedCreated = await request("POST", "/runs", signedPayload);
+    assert.strictEqual(signedCreated.status, 201, "signed 2.0.30c session-backed run was not accepted");
+    const signedStored = JSON.parse(signedCreated.body.toString("utf8")).run;
+    assert.strictEqual(signedStored.rankEligible, true, "signed run should remain eligible");
+    assert(signedStored.serverScore > 0 && signedStored.score === signedStored.serverScore, "server score was not applied to signed run");
+    const tamperedPayload = { ...signedPayload, player: "CheatEngineQA", profile_id: "cheat-engine-qa", leaderboard_score: 99999999 };
+    const tamperedCreated = await request("POST", "/runs", tamperedPayload);
+    assert.strictEqual(tamperedCreated.status, 202, "tampered run should still be stored for audit");
+    const tamperedStored = JSON.parse(tamperedCreated.body.toString("utf8")).run;
+    assert.strictEqual(tamperedStored.rankEligible, false, "tampered run should not be ranking eligible");
+    assert(tamperedStored.suspicionReasons.includes("signature_mismatch") || tamperedStored.suspicionReasons.includes("reported_score_mismatch"), "tampered run did not explain suspicion");
     const home = (await request("GET", "/leaderboard")).body.toString("utf8");
-    const profile = (await request("GET", `/leaderboard/player/${encodeURIComponent(stored.profileKey)}`)).body.toString("utf8");
+    const profile = (await request("GET", `/leaderboard/player/${encodeURIComponent(signedStored.profileKey)}`)).body.toString("utf8");
     const rankings = (await request("GET", "/leaderboard/rankings")).body.toString("utf8");
-    const summary = (await request("GET", `/leaderboard/run/${stored.id}`)).body.toString("utf8");
+    const summary = (await request("GET", `/leaderboard/run/${signedStored.id}`)).body.toString("utf8");
     const missing = (await request("GET", "/leaderboard/linha-inexistente")).body.toString("utf8");
     assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Maior dano em boss") && home.includes("4.232"), "dashboard metrics missing");
     assert(home.includes("OPERADOR EM DESTAQUE") && home.includes("Expedicoes recentes") && home.includes("Buscar operador"), "dashboard observatory shell missing");
     assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Ancorada + Sanguinaria"), "player profile missing");
     assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Plano cartesiano") && rankings.includes("Maior progressao"), "ranking charts missing");
-    assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador") && summary.includes("16/07/2026"), "run summary telemetry or date missing");
+    assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador"), "run summary telemetry missing");
     assert(missing.includes("LINHA TEMPORAL NAO LOCALIZADA") && missing.includes("Voltar ao observatorio"), "not found page missing");
     for (const [label, html] of [["home", home], ["profile", profile], ["rankings", rankings], ["summary", summary], ["missing", missing]]) {
       assertCleanHtml(label, html);

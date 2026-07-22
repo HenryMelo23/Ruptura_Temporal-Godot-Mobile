@@ -623,8 +623,8 @@ function renderRankings(snapshot) {
         <div class="chart-wrap"><canvas id="phase-chart" aria-label="Grafico de distribuicao por fase"></canvas></div>
       </div>
       <div class="terminal-panel span-5">
-        ${sectionHeader("Formula", "Score auditavel", "A exibicao segue o score enviado e registrado pela build do jogo.")}
-        <p class="formula-text">O ranking principal usa o valor <b>leaderboard_score</b> recebido em cada run. Quando o jogo calcula esse campo, ele combina progresso, combate, sobrevivencia, cartas e bonus de resultado. O site nao altera a pontuacao: ele apenas ordena e explica os registros recebidos.</p>
+        ${sectionHeader("Formula", "Score auditavel", "O servidor recalcula e valida as runs antes do ranking.")}
+        <p class="formula-text">A build envia <b>leaderboard_score</b>, assinatura, sessao segura e checkpoints da run. A partir da v2.0.30c, o servidor recalcula o indice competitivo, compara o resultado final com o historico observado, rejeita protocolo legado sem sessao e tira da tabela qualquer ficha com saltos impossiveis de pontos, cartas, fase ou dano; tentativas repetidas ficam auditadas e podem bloquear temporariamente o envio daquele IP.</p>
         ${signatureList(analytics.versions, "cyan")}
       </div>
     </section>`;

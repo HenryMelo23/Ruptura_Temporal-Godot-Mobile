@@ -54,10 +54,21 @@ func _run() -> void:
 	var larapio: Dictionary = game.enemies[0]
 	larapio["steal_cd"] = 0.0
 	game._update_larapio(larapio, 0.1)
-	_expect(game.score == 600, "larapio_score_not_stolen")
-	_expect(int(larapio.get("stolen", 0)) == 400, "larapio_stolen_wrong")
+	_expect(game.score == 400, "larapio_score_not_stolen")
+	_expect(int(larapio.get("stolen", 0)) == 600, "larapio_stolen_wrong")
 	_expect(game.player_stun_timer >= game.LARAPIO_STUN_TIME, "larapio_stun_missing")
 	_expect(game.larapio_coin_drops.size() > 0, "larapio_coin_trail_missing")
+	larapio["hp"] = float(larapio["max_hp"]) * 0.55
+	larapio["larapio_ult_cd"] = 0.0
+	larapio["larapio_ult_timer"] = 0.0
+	game._update_larapio(larapio, 0.25)
+	_expect(float(larapio.get("larapio_ult_timer", 0.0)) > 0.0, "larapio_ultimate_not_started")
+	_expect(Array(larapio.get("larapio_ult_portals", [])).size() == game.LARAPIO_ULTIMATE_PORTAL_COUNT, "larapio_ultimate_portal_count_wrong")
+	var before_portal_pos: Vector2 = larapio["pos"]
+	larapio["larapio_ult_jump_cd"] = 0.0
+	game._update_larapio(larapio, 0.25)
+	_expect(Vector2(larapio["pos"]).distance_to(before_portal_pos) > 32.0, "larapio_ultimate_did_not_reposition")
+	_expect(game._larapio_throw_interval(larapio, game.LARAPIO_IRRITATED_RADIUS - 8.0, true, false, false) <= game.LARAPIO_IRRITATED_COIN_INTERVAL, "larapio_irritated_coin_interval_not_used")
 
 	game.larapio_coin_drops.clear()
 	game._spawn_larapio_loot(game.player_pos, 90)

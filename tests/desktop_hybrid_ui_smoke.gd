@@ -75,8 +75,41 @@ func _run() -> void:
 	game.mode = "game"
 	game.keyboard_bindings["pause"] = game._key_input_binding(KEY_ESCAPE)
 
+	game.is_multiplayer = true
+	game.mode = "game"
+	game.ui_platform_override = game.UI_PLATFORM_DESKTOP
+	game.keyboard_bindings["attack"] = game._mouse_input_binding(MOUSE_BUTTON_LEFT)
+	game.last_attack_time = -999.0
+	game.shop_mp_request_timer = 8.0
+	game.shop_mp_request_incoming = true
+	game.shop_mp_request_outgoing = false
+	var shop_bullets_before: int = game.bullets.size()
+	var shop_click := InputEventMouseButton.new()
+	shop_click.button_index = MOUSE_BUTTON_LEFT
+	shop_click.pressed = true
+	shop_click.position = game._shop_mp_accept_rect(viewport).get_center()
+	game._unhandled_input(shop_click)
+	_check(not game.shop_mp_request_incoming and game.shop_mp_request_outgoing, "desktop shop accept click did not accept request")
+	_check(game.bullets.size() == shop_bullets_before, "desktop shop accept click leaked into attack")
+
+	game.boss_mp_request_timer = 8.0
+	game.boss_mp_request_incoming = true
+	game.boss_mp_request_outgoing = false
+	_check(game._handle_desktop_request_overlay_press(game._boss_mp_accept_rect(viewport).get_center(), viewport), "desktop boss request click was not consumed")
+
+	game._start_pause_mp_request(true, true, 1, 2)
+	_check(game._handle_desktop_request_overlay_press(game._pause_mp_accept_rect(viewport).get_center(), viewport), "desktop pause request click was not consumed")
+	game._start_pause_mp_request(true, true, 1, 2)
+	_check(game._handle_multiplayer_request_key(_key_event(KEY_ENTER)), "desktop enter did not accept multiplayer request")
+	game._clear_pause_mp_request()
+	game._clear_shop_mp_request()
+	game._clear_boss_mp_request()
+	game.is_multiplayer = false
+	game.keyboard_bindings["attack"] = game._key_input_binding(KEY_SPACE)
+
 	game.mode = "game"
 	game.manifestation_key = "eletrica"
+	game.desktop_aim_mode = game.DESKTOP_AIM_QUICK
 	game.time_alive = 120.0
 	game.last_secondary_time = -999.0
 	game.manifestation_secondaries.clear()

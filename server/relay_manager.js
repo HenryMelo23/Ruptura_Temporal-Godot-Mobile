@@ -35,6 +35,22 @@ const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 900);
 const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
+const RUN_REPORT_INTEGRITY_VERSION = 1;
+const RUN_REPORT_INTEGRITY_MIN_VERSION_CODE = 23002;
+const RUN_REPORT_INTEGRITY_SALT = "ruptura-temporal-run-integrity-v1-2.0.30c";
+const RUN_REPORT_SESSION_MIN_VERSION_CODE = numberEnv("RUN_REPORT_SESSION_MIN_VERSION_CODE", 23003);
+const RUN_REPORT_COMPETITIVE_MIN_VERSION_CODE = numberEnv("RUN_REPORT_COMPETITIVE_MIN_VERSION_CODE", RUN_REPORT_SESSION_MIN_VERSION_CODE);
+const RUN_REPORT_MAX_CLOCK_SKEW_SECONDS = numberEnv("RUN_REPORT_MAX_CLOCK_SKEW_SECONDS", 10 * 60);
+const RUN_REPORT_MAX_AGE_SECONDS = numberEnv("RUN_REPORT_MAX_AGE_SECONDS", 36 * 60 * 60);
+const RUN_SECURITY_PATH = process.env.RUN_SECURITY_PATH || path.join(__dirname, "leaderboard_security.json");
+const RUN_SESSION_TTL_MS = numberEnv("RUN_SESSION_TTL_MS", 8 * 60 * 60 * 1000);
+const RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS = numberEnv("RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS", 20);
+const RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS = numberEnv("RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS", 95);
+const RUN_SECURITY_WINDOW_MS = numberEnv("RUN_SECURITY_WINDOW_MS", 10 * 60 * 1000);
+const RUN_SECURITY_MAX_REPORTS_PER_WINDOW = numberEnv("RUN_SECURITY_MAX_REPORTS_PER_WINDOW", 10);
+const RUN_SECURITY_BLOCK_THRESHOLD = numberEnv("RUN_SECURITY_BLOCK_THRESHOLD", 4);
+const RUN_SECURITY_BLOCK_MS = numberEnv("RUN_SECURITY_BLOCK_MS", 30 * 60 * 1000);
+const RUN_SECURITY_AUDIT_LIMIT = numberEnv("RUN_SECURITY_AUDIT_LIMIT", 500);
 const ANDROID_UPDATE_ROOT = path.resolve(process.env.ANDROID_UPDATE_ROOT || path.join(__dirname, "updates", "android"));
 const WINDOWS_UPDATE_ROOT = path.resolve(process.env.WINDOWS_UPDATE_ROOT || path.join(__dirname, "updates", "windows"));
 const ANDROID_UPDATE_MANIFEST = path.join(ANDROID_UPDATE_ROOT, "latest.json");
@@ -996,6 +1012,290 @@ function saveLeaderboardStore(store) {
   fs.writeFileSync(LEADERBOARD_PATH, JSON.stringify(store, null, 2));
 }
 
+function defaultSecurityStore() {
+  return { ips: {}, sessions: {}, audit: [] };
+}
+
+function loadSecurityStore() {
+  try {
+    if (!fs.existsSync(RUN_SECURITY_PATH)) {
+      return defaultSecurityStore();
+    }
+    const parsed = JSON.parse(fs.readFileSync(RUN_SECURITY_PATH, "utf8"));
+    return {
+      ips: parsed.ips && typeof parsed.ips === "object" ? parsed.ips : {},
+      sessions: parsed.sessions && typeof parsed.sessions === "object" ? parsed.sessions : {},
+      audit: Array.isArray(parsed.audit) ? parsed.audit : []
+    };
+  } catch (error) {
+    console.error(`failed to read ranking security store: ${error.message}`);
+    return defaultSecurityStore();
+  }
+}
+
+function cleanupSecurityStore(store, now = Date.now()) {
+  store.sessions = store.sessions && typeof store.sessions === "object" ? store.sessions : {};
+  for (const [id, session] of Object.entries(store.sessions)) {
+    const createdAt = Number(session && session.createdAt) || 0;
+    const endedAt = Number(session && session.endedAt) || 0;
+    if (!createdAt || now - createdAt > RUN_SESSION_TTL_MS || (endedAt && now - endedAt > RUN_SECURITY_WINDOW_MS)) {
+      delete store.sessions[id];
+    }
+  }
+}
+
+function saveSecurityStore(store) {
+  fs.mkdirSync(path.dirname(RUN_SECURITY_PATH), { recursive: true });
+  fs.writeFileSync(RUN_SECURITY_PATH, JSON.stringify(store, null, 2));
+}
+
+function clientIp(req) {
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const raw = forwarded || req.socket && req.socket.remoteAddress || "unknown";
+  return raw.replace(/^::ffff:/, "").slice(0, 64);
+}
+
+function securityIpState(store, ip) {
+  const key = String(ip || "unknown").slice(0, 64);
+  if (!store.ips[key] || typeof store.ips[key] !== "object") {
+    store.ips[key] = {
+      strikes: 0,
+      reports: [],
+      blockedUntil: 0,
+      lastReason: "",
+      lastSeen: 0
+    };
+  }
+  return store.ips[key];
+}
+
+function cleanSecurityWindow(state, now = Date.now()) {
+  state.reports = Array.isArray(state.reports) ? state.reports.filter((stamp) => now - Number(stamp) <= RUN_SECURITY_WINDOW_MS) : [];
+}
+
+function isSecurityBlocked(ip) {
+  const store = loadSecurityStore();
+  const state = securityIpState(store, ip);
+  const now = Date.now();
+  if (Number(state.blockedUntil) > now) {
+    return { blocked: true, retryAfterSeconds: Math.ceil((Number(state.blockedUntil) - now) / 1000) };
+  }
+  if (Number(state.blockedUntil) > 0) {
+    state.blockedUntil = 0;
+    saveSecurityStore(store);
+  }
+  return { blocked: false, retryAfterSeconds: 0 };
+}
+
+function registerRunReportAttempt(ip) {
+  const store = loadSecurityStore();
+  const state = securityIpState(store, ip);
+  const now = Date.now();
+  cleanSecurityWindow(state, now);
+  state.reports.push(now);
+  state.lastSeen = now;
+  let limited = false;
+  if (state.reports.length > RUN_SECURITY_MAX_REPORTS_PER_WINDOW) {
+    limited = true;
+    state.strikes = Math.max(Number(state.strikes) || 0, RUN_SECURITY_BLOCK_THRESHOLD);
+    state.lastReason = "run_report_rate_limit";
+    state.blockedUntil = Math.max(Number(state.blockedUntil) || 0, now + RUN_SECURITY_BLOCK_MS);
+  }
+  saveSecurityStore(store);
+  return { limited, retryAfterSeconds: limited ? Math.ceil((Number(state.blockedUntil) - now) / 1000) : 0 };
+}
+
+function recordSecurityStrike(ip, reasons, context = {}) {
+  const store = loadSecurityStore();
+  cleanupSecurityStore(store);
+  const state = securityIpState(store, ip);
+  const now = Date.now();
+  cleanSecurityWindow(state, now);
+  const reasonList = Array.isArray(reasons) && reasons.length ? reasons.map(String).slice(0, 16) : ["suspicious_run_report"];
+  const severity = reasonList.some((reason) => (
+    reason.includes("signature")
+    || reason.includes("protocol")
+    || reason.includes("clock")
+    || reason.includes("payload")
+    || reason.includes("rate")
+  )) ? 2 : 1;
+  state.strikes = Math.max(0, Math.floor(Number(state.strikes) || 0)) + severity;
+  state.lastSeen = now;
+  state.lastReason = reasonList.join(",");
+  if (state.strikes >= RUN_SECURITY_BLOCK_THRESHOLD) {
+    const multiplier = Math.min(6, Math.max(1, state.strikes - RUN_SECURITY_BLOCK_THRESHOLD + 1));
+    state.blockedUntil = Math.max(Number(state.blockedUntil) || 0, now + RUN_SECURITY_BLOCK_MS * multiplier);
+  }
+  store.audit.unshift({
+    at: new Date(now).toISOString(),
+    ip: String(ip || "unknown").slice(0, 64),
+    reasons: reasonList,
+    severity,
+    strikes: state.strikes,
+    blockedUntil: state.blockedUntil || 0,
+    player: String(context.player || "").slice(0, 32),
+    profileId: String(context.profileId || context.profile_id || "").slice(0, 64),
+    version: String(context.version || "").slice(0, 24),
+    versionCode: Math.max(0, Math.floor(safeNumber(context.versionCode || context.version_code))),
+    score: Math.max(0, Math.floor(safeNumber(context.score || context.leaderboard_score)))
+  });
+  store.audit = store.audit.slice(0, RUN_SECURITY_AUDIT_LIMIT);
+  saveSecurityStore(store);
+  console.warn(`ranking security strike ip=${ip} reasons=${reasonList.join(",")} strikes=${state.strikes}`);
+  return state;
+}
+
+function sessionTokenHash(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function normalizeSessionMetrics(payload) {
+  const stats = payload && payload.player_stats && typeof payload.player_stats === "object" ? payload.player_stats : {};
+  return {
+    duration: Math.max(0, Math.floor(safeNumber(payload && payload.duration_seconds))),
+    phase: Math.max(0, Math.floor(safeNumber(payload && payload.phase))),
+    kills: Math.max(0, Math.floor(safeNumber(payload && payload.kills))),
+    pointsEarned: Math.max(0, Math.floor(safeNumber(payload && payload.points_earned))),
+    pointsSpent: Math.max(0, Math.floor(safeNumber(payload && payload.points_spent))),
+    cardsTotal: Math.max(0, Math.floor(safeNumber(payload && payload.cards_total))),
+    bossDamage: Math.max(0, Math.floor(safeNumber(payload && payload.boss_damage_total))),
+    enemyDamage: Math.max(0, Math.floor(safeNumber(payload && payload.enemy_damage_total))),
+    damageTaken: Math.max(0, Math.floor(safeNumber(payload && payload.damage_taken_total))),
+    scoreCurrent: Math.max(0, Math.floor(safeNumber(payload && payload.score_current))),
+    scoreTotal: Math.max(0, Math.floor(safeNumber(payload && payload.score_total))),
+    hp: Math.max(0, safeNumber(stats.hp)),
+    hpMax: Math.max(0, safeNumber(stats.hp_max)),
+    damage: Math.max(0, safeNumber(payload && payload.base_damage_end))
+  };
+}
+
+function createRunSession(ip, payload) {
+  const store = loadSecurityStore();
+  const now = Date.now();
+  cleanupSecurityStore(store, now);
+  const versionCode = Math.max(0, Math.floor(safeNumber(payload.version_code)));
+  const sessionId = crypto.randomBytes(12).toString("hex");
+  const token = crypto.randomBytes(32).toString("hex");
+  const metrics = normalizeSessionMetrics(payload);
+  store.sessions[sessionId] = {
+    id: sessionId,
+    tokenHash: sessionTokenHash(token),
+    ip: String(ip || "unknown").slice(0, 64),
+    createdAt: now,
+    lastAt: now,
+    endedAt: 0,
+    player: String(payload.player || "Jogador").slice(0, 32),
+    profileId: String(payload.profile_id || "").slice(0, 64),
+    version: String(payload.version || "").slice(0, 24),
+    versionCode,
+    room: String(payload.room || "solo").slice(0, 32),
+    platform: String(payload.platform || "").slice(0, 32),
+    checkpoints: 0,
+    last: metrics,
+    max: metrics,
+    anomalies: []
+  };
+  saveSecurityStore(store);
+  return { sessionId, token, checkpointIntervalSeconds: RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS };
+}
+
+function validateSessionIdentity(session, ip, token, versionCode) {
+  const reasons = [];
+  if (!session || typeof session !== "object") {
+    reasons.push("session_not_found");
+    return reasons;
+  }
+  if (session.endedAt) reasons.push("session_already_closed");
+  if (Date.now() - (Number(session.createdAt) || 0) > RUN_SESSION_TTL_MS) reasons.push("session_expired");
+  if (session.ip && ip && session.ip !== ip) reasons.push("session_ip_mismatch");
+  if (session.tokenHash !== sessionTokenHash(token)) reasons.push("session_token_mismatch");
+  if (Math.max(0, Math.floor(safeNumber(session.versionCode))) !== Math.max(0, Math.floor(safeNumber(versionCode)))) reasons.push("session_version_mismatch");
+  return reasons;
+}
+
+function mergeSessionMetrics(session, nextMetrics) {
+  const previous = session.last || normalizeSessionMetrics({});
+  const anomalies = [];
+  const elapsed = Math.max(1, nextMetrics.duration - Math.max(0, Math.floor(safeNumber(previous.duration))));
+  if (nextMetrics.duration + 3 < safeNumber(previous.duration)) anomalies.push("checkpoint_duration_regressed");
+  if (nextMetrics.phase + 1 < safeNumber(previous.phase)) anomalies.push("checkpoint_phase_regressed");
+  if (nextMetrics.kills + 3 < safeNumber(previous.kills)) anomalies.push("checkpoint_kills_regressed");
+  if (nextMetrics.pointsEarned + 250 < safeNumber(previous.pointsEarned)) anomalies.push("checkpoint_points_regressed");
+  if (nextMetrics.cardsTotal + 1 < safeNumber(previous.cardsTotal)) anomalies.push("checkpoint_cards_regressed");
+  if (nextMetrics.kills - safeNumber(previous.kills) > elapsed * 18 + 140) anomalies.push("checkpoint_kills_jump");
+  if (nextMetrics.bossDamage - safeNumber(previous.bossDamage) > elapsed * 7000 + 180000) anomalies.push("checkpoint_boss_damage_jump");
+  if (nextMetrics.cardsTotal - safeNumber(previous.cardsTotal) > Math.max(6, Math.floor(elapsed / 4) + 4)) anomalies.push("checkpoint_cards_jump");
+  if (nextMetrics.pointsSpent > nextMetrics.pointsEarned + 2500) anomalies.push("checkpoint_points_spent_above_earned");
+  session.last = nextMetrics;
+  session.max = session.max || normalizeSessionMetrics({});
+  for (const key of Object.keys(nextMetrics)) {
+    session.max[key] = Math.max(safeNumber(session.max[key]), safeNumber(nextMetrics[key]));
+  }
+  if (anomalies.length) {
+    session.anomalies = Array.from(new Set([...(session.anomalies || []), ...anomalies])).slice(0, 24);
+  }
+  return anomalies;
+}
+
+function updateRunSession(ip, payload) {
+  const store = loadSecurityStore();
+  const now = Date.now();
+  cleanupSecurityStore(store, now);
+  const sessionId = String(payload.session_id || payload.run_session_id || "").trim();
+  const token = String(payload.session_token || payload.run_session_token || "").trim();
+  const session = store.sessions[sessionId];
+  const versionCode = Math.max(0, Math.floor(safeNumber(payload.version_code)));
+  const reasons = validateSessionIdentity(session, ip, token, versionCode);
+  if (reasons.length) {
+    saveSecurityStore(store);
+    return { ok: false, reasons, session: null };
+  }
+  const metrics = normalizeSessionMetrics(payload);
+  const anomalies = mergeSessionMetrics(session, metrics);
+  session.lastAt = now;
+  session.checkpoints = Math.max(0, Math.floor(safeNumber(session.checkpoints))) + 1;
+  saveSecurityStore(store);
+  return { ok: anomalies.length === 0, reasons: anomalies, session };
+}
+
+function evaluateRunSession(payload, ip, versionCode) {
+  if (versionCode < RUN_REPORT_SESSION_MIN_VERSION_CODE) {
+    return [];
+  }
+  const reasons = [];
+  const sessionId = String(payload.run_session_id || "").trim();
+  const token = String(payload.run_session_token || "").trim();
+  if (!sessionId || !token) {
+    return ["session_missing"];
+  }
+  const store = loadSecurityStore();
+  const now = Date.now();
+  cleanupSecurityStore(store, now);
+  const session = store.sessions[sessionId];
+  reasons.push(...validateSessionIdentity(session, ip, token, versionCode));
+  if (reasons.length || !session) {
+    saveSecurityStore(store);
+    return reasons;
+  }
+  const finalMetrics = normalizeSessionMetrics(payload);
+  const last = session.last || normalizeSessionMetrics({});
+  const max = session.max || last;
+  const sinceLastSeconds = Math.max(0, Math.floor((now - (Number(session.lastAt) || now)) / 1000));
+  if (Math.floor(safeNumber(session.checkpoints)) < 1 && finalMetrics.duration >= RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS * 2) reasons.push("session_checkpoint_missing");
+  if (sinceLastSeconds > RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS && finalMetrics.duration >= RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS) reasons.push("session_checkpoint_gap");
+  if (finalMetrics.duration + 10 < safeNumber(last.duration)) reasons.push("session_final_duration_regressed");
+  if (finalMetrics.phase > safeNumber(max.phase) + 1) reasons.push("session_phase_not_observed");
+  if (finalMetrics.kills > safeNumber(max.kills) + Math.max(80, sinceLastSeconds * 18 + 20)) reasons.push("session_kills_not_observed");
+  if (finalMetrics.cardsTotal > safeNumber(max.cardsTotal) + Math.max(4, Math.floor(sinceLastSeconds / 5) + 2)) reasons.push("session_cards_not_observed");
+  if (finalMetrics.pointsEarned > safeNumber(max.pointsEarned) + Math.max(1800, sinceLastSeconds * 400)) reasons.push("session_points_not_observed");
+  if (finalMetrics.bossDamage > safeNumber(max.bossDamage) + Math.max(140000, sinceLastSeconds * 7000)) reasons.push("session_boss_damage_not_observed");
+  if (Array.isArray(session.anomalies) && session.anomalies.length) reasons.push(...session.anomalies.slice(0, 8));
+  session.endedAt = now;
+  session.final = finalMetrics;
+  saveSecurityStore(store);
+  return Array.from(new Set(reasons));
+}
+
 function profileKeyForRun(run) {
   const profileId = String(run.profileId || "").trim();
   if (profileId) {
@@ -1069,12 +1369,108 @@ function normalizeHeatmap(value) {
   };
 }
 
-function normalizeRunPayload(payload) {
+function runReportSignatureSource(payload) {
+  const fields = [
+    "player",
+    "profile_id",
+    "room",
+    "version",
+    "version_code",
+    "platform",
+    "role",
+    "result",
+    "started_unix",
+    "ended_unix",
+    "duration_seconds",
+    "phase",
+    "kills",
+    "points_earned",
+    "points_spent",
+    "score_current",
+    "score_total",
+    "cards_total",
+    "manifestation_key",
+    "spectrum_key",
+    "enemy_damage_total",
+    "damage_taken_total",
+    "boss_damage_total",
+    "leaderboard_score",
+    "run_session_id",
+    "run_session_checkpoints"
+  ];
+  return `${fields.map((field) => `${field}=${String(payload[field] ?? "")}`).join("|")}|salt=${RUN_REPORT_INTEGRITY_SALT}`;
+}
+
+function runReportSignature(payload) {
+  return crypto.createHash("sha256").update(runReportSignatureSource(payload)).digest("hex");
+}
+
+function computeLeaderboardScore(payload) {
+  const stats = payload.player_stats && typeof payload.player_stats === "object" ? payload.player_stats : {};
+  let score = Math.round(safeNumber(payload.duration_seconds) * 2);
+  score += Math.floor(safeNumber(payload.kills)) * 20;
+  score += Math.floor(safeNumber(payload.phase)) * 250;
+  score += Math.round(safeNumber(payload.boss_damage_total) / 12);
+  score += Math.floor(safeNumber(payload.cards_total)) * 15;
+  score += Math.round(Math.max(0, safeNumber(stats.hp)) * 0.5);
+  if (String(payload.result || "") === "Vitoria") score += 1500;
+  return Math.max(0, Math.floor(score));
+}
+
+function evaluateRunIntegrity(payload, ip = "") {
+  const reasons = [];
+  const versionCode = Math.max(0, Math.floor(safeNumber(payload.version_code)));
+  const duration = Math.max(0, Math.floor(safeNumber(payload.duration_seconds)));
+  const startedUnix = Math.max(0, Math.floor(safeNumber(payload.started_unix)));
+  const endedUnix = Math.max(0, Math.floor(safeNumber(payload.ended_unix, Date.now() / 1000)));
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const kills = Math.max(0, Math.floor(safeNumber(payload.kills)));
+  const pointsEarned = Math.max(0, Math.floor(safeNumber(payload.points_earned)));
+  const pointsSpent = Math.max(0, Math.floor(safeNumber(payload.points_spent)));
+  const cardsTotal = Math.max(0, Math.floor(safeNumber(payload.cards_total)));
+  const bossDamage = Math.max(0, Math.floor(safeNumber(payload.boss_damage_total)));
+  const reportedScore = Math.max(0, Math.floor(safeNumber(payload.leaderboard_score, payload.score_total || payload.score_current)));
+  const expectedScore = computeLeaderboardScore(payload);
+  if (versionCode < RUN_REPORT_COMPETITIVE_MIN_VERSION_CODE) {
+    reasons.push("legacy_unsigned_protocol_closed");
+  }
+  if (versionCode >= RUN_REPORT_INTEGRITY_MIN_VERSION_CODE) {
+    const integrity = payload.integrity && typeof payload.integrity === "object" ? payload.integrity : {};
+    const signature = String(integrity.signature || "").toLowerCase();
+    if (Math.floor(safeNumber(integrity.version)) !== RUN_REPORT_INTEGRITY_VERSION) {
+      reasons.push("integrity_version_missing");
+    }
+    if (!/^[0-9a-f]{64}$/.test(signature) || signature !== runReportSignature(payload)) {
+      reasons.push("signature_mismatch");
+    }
+  }
+  if (duration < 3 || duration > 6 * 60 * 60) reasons.push("duration_out_of_range");
+  if (startedUnix > 0 && endedUnix > 0 && endedUnix + RUN_REPORT_MAX_CLOCK_SKEW_SECONDS < startedUnix) reasons.push("clock_inverted");
+  if (endedUnix > nowUnix + RUN_REPORT_MAX_CLOCK_SKEW_SECONDS) reasons.push("clock_future");
+  if (endedUnix > 0 && nowUnix - endedUnix > RUN_REPORT_MAX_AGE_SECONDS) reasons.push("clock_too_old");
+  if (startedUnix > 0 && endedUnix > 0 && duration > Math.max(0, endedUnix - startedUnix) + 5 * 60) reasons.push("duration_exceeds_wall_clock");
+  if (kills > duration * 16 + 240) reasons.push("kills_too_high_for_time");
+  if (bossDamage > duration * 5500 + 250000) reasons.push("boss_damage_too_high_for_time");
+  if (cardsTotal > Math.floor(pointsEarned / 100) + 18) reasons.push("cards_too_high_for_points");
+  if (pointsSpent > pointsEarned + 1500) reasons.push("points_spent_above_earned");
+  if (versionCode >= RUN_REPORT_INTEGRITY_MIN_VERSION_CODE && Math.abs(reportedScore - expectedScore) > 8) reasons.push("reported_score_mismatch");
+  reasons.push(...evaluateRunSession(payload, ip, versionCode));
+  return {
+    rankEligible: reasons.length === 0,
+    reasons,
+    reportedScore,
+    expectedScore,
+    versionCode
+  };
+}
+
+function normalizeRunPayload(payload, ip = "") {
   const player = String(payload.player || "Jogador").trim().slice(0, 32) || "Jogador";
   const durationSeconds = Math.max(0, Math.floor(safeNumber(payload.duration_seconds)));
   const bossDamage = Math.max(0, Math.floor(safeNumber(payload.boss_damage_total)));
   const kills = Math.max(0, Math.floor(safeNumber(payload.kills)));
-  const score = Math.max(0, Math.floor(safeNumber(payload.leaderboard_score, payload.score_total || payload.score_current)));
+  const integrity = evaluateRunIntegrity(payload, ip);
+  const score = integrity.rankEligible ? (integrity.versionCode >= RUN_REPORT_INTEGRITY_MIN_VERSION_CODE ? integrity.expectedScore : integrity.reportedScore) : 0;
   const endedUnix = Math.max(0, Math.floor(safeNumber(payload.ended_unix, Date.now() / 1000)));
   return {
     id: crypto.createHash("sha1").update(JSON.stringify(payload) + Date.now()).digest("hex").slice(0, 18),
@@ -1082,6 +1478,7 @@ function normalizeRunPayload(payload) {
     profileId: String(payload.profile_id || "").trim().slice(0, 64),
     room: String(payload.room || "solo").slice(0, 32),
     version: String(payload.version || "").slice(0, 24),
+    versionCode: integrity.versionCode,
     platform: String(payload.platform || "").slice(0, 32),
     role: String(payload.role || "solo").slice(0, 16),
     result: String(payload.result || "").slice(0, 32),
@@ -1093,6 +1490,11 @@ function normalizeRunPayload(payload) {
     phase: Math.max(0, Math.floor(safeNumber(payload.phase))),
     kills,
     score,
+    reportedScore: integrity.reportedScore,
+    serverScore: integrity.expectedScore,
+    rankEligible: integrity.rankEligible,
+    suspicious: !integrity.rankEligible,
+    suspicionReasons: integrity.reasons,
     scoreCurrent: Math.max(0, Math.floor(safeNumber(payload.score_current))),
     scoreTotal: Math.max(0, Math.floor(safeNumber(payload.score_total))),
     pointsEarned: Math.max(0, Math.floor(safeNumber(payload.points_earned))),
@@ -1112,15 +1514,16 @@ function normalizeRunPayload(payload) {
     playerStats: payload.player_stats && typeof payload.player_stats === "object" ? payload.player_stats : {},
     enemyScaling: payload.enemy_scaling && typeof payload.enemy_scaling === "object" ? payload.enemy_scaling : {},
     network: payload.network && typeof payload.network === "object" ? payload.network : {},
+    runSessionId: String(payload.run_session_id || "").slice(0, 64),
     settings: payload.settings && typeof payload.settings === "object" ? payload.settings : {},
     bossDetail: Array.isArray(payload.boss_detail) ? payload.boss_detail.slice(0, 8) : [],
     balanceFlags: Array.isArray(payload.balance_flags) ? payload.balance_flags.map(String).slice(0, 12) : []
   };
 }
 
-function recordRun(payload) {
+function recordRun(payload, ip = "") {
   const store = loadLeaderboardStore();
-  const run = normalizeRunPayload(payload);
+  const run = normalizeRunPayload(payload, ip);
   const profileKey = profileKeyForRun(run);
   const existingProfile = store.profiles[profileKey] || {};
   const canonicalPlayer = String(existingProfile.player || run.player || "Jogador").slice(0, 32);
@@ -1136,7 +1539,7 @@ function recordRun(payload) {
   };
   store.runs.unshift(run);
   store.runs = store.runs
-    .sort((left, right) => right.score - left.score || right.durationSeconds - left.durationSeconds || right.endedUnix - left.endedUnix)
+    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score) || safeNumber(right.durationSeconds) - safeNumber(left.durationSeconds) || safeNumber(right.endedUnix) - safeNumber(left.endedUnix))
     .slice(0, LEADERBOARD_MAX_RUNS);
   saveLeaderboardStore(store);
   return run;
@@ -1144,8 +1547,9 @@ function recordRun(payload) {
 
 function leaderboardSnapshot() {
   const store = loadLeaderboardStore();
+  const eligibleRuns = store.runs.filter((run) => run.rankEligible !== false);
   const bestByProfile = new Map();
-  for (const run of store.runs) {
+  for (const run of eligibleRuns) {
     const key = profileKeyForRun(run);
     const current = bestByProfile.get(key);
     if (!current || safeNumber(run.score) > safeNumber(current.score)) {
@@ -1155,7 +1559,7 @@ function leaderboardSnapshot() {
   const players = Array.from(bestByProfile.values())
     .sort((left, right) => safeNumber(right.score) - safeNumber(left.score))
     .slice(0, 30);
-  return { players, recent: store.runs.slice(0, 60), runs: store.runs, profiles: store.profiles };
+  return { players, recent: store.runs.slice(0, 60), runs: eligibleRuns, auditedRuns: store.runs, profiles: store.profiles };
 }
 
 let cardCatalogIndex = null;
@@ -1375,11 +1779,91 @@ async function route(req, res) {
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/runs") {
-    const payload = await readJson(req, RUN_REPORT_MAX_BYTES);
-    const run = recordRun(payload);
+  if (req.method === "POST" && url.pathname === "/runs/start") {
+    const ip = clientIp(req);
+    const blocked = isSecurityBlocked(ip);
+    if (blocked.blocked) {
+      res.setHeader("Retry-After", String(blocked.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "ranking temporarily locked", retry_after_seconds: blocked.retryAfterSeconds });
+      return;
+    }
+    let payload;
+    try {
+      payload = await readJson(req, 64 * 1024);
+    } catch (_error) {
+      recordSecurityStrike(ip, ["invalid_run_session_start"], { version: "unknown" });
+      sendJson(res, 400, { ok: false, error: "invalid run session start" });
+      return;
+    }
+    const session = createRunSession(ip, payload);
     sendJson(res, 201, {
       ok: true,
+      session_id: session.sessionId,
+      session_token: session.token,
+      checkpoint_interval_seconds: session.checkpointIntervalSeconds
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/runs/checkpoint") {
+    const ip = clientIp(req);
+    const blocked = isSecurityBlocked(ip);
+    if (blocked.blocked) {
+      res.setHeader("Retry-After", String(blocked.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "ranking temporarily locked", retry_after_seconds: blocked.retryAfterSeconds });
+      return;
+    }
+    let payload;
+    try {
+      payload = await readJson(req, 128 * 1024);
+    } catch (_error) {
+      recordSecurityStrike(ip, ["invalid_run_checkpoint"], { version: "unknown" });
+      sendJson(res, 400, { ok: false, error: "invalid run checkpoint" });
+      return;
+    }
+    const result = updateRunSession(ip, payload);
+    if (!result.ok && result.reasons.some((reason) => reason.includes("token") || reason.includes("session_not_found") || reason.includes("ip_mismatch"))) {
+      recordSecurityStrike(ip, result.reasons, payload);
+    }
+    sendJson(res, result.reasons.length ? 202 : 200, {
+      ok: result.reasons.length === 0,
+      accepted: true,
+      reasons: result.reasons,
+      checkpoint_interval_seconds: RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/runs") {
+    const ip = clientIp(req);
+    const blocked = isSecurityBlocked(ip);
+    if (blocked.blocked) {
+      res.setHeader("Retry-After", String(blocked.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "ranking temporarily locked", retry_after_seconds: blocked.retryAfterSeconds });
+      return;
+    }
+    const rate = registerRunReportAttempt(ip);
+    if (rate.limited) {
+      res.setHeader("Retry-After", String(rate.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "too many ranking reports", retry_after_seconds: rate.retryAfterSeconds });
+      return;
+    }
+    let payload;
+    try {
+      payload = await readJson(req, RUN_REPORT_MAX_BYTES);
+    } catch (error) {
+      recordSecurityStrike(ip, ["invalid_or_oversized_payload"], { version: "unknown" });
+      sendJson(res, 400, { ok: false, error: "invalid run report" });
+      return;
+    }
+    const run = recordRun(payload, ip);
+    if (run.suspicious) {
+      recordSecurityStrike(ip, run.suspicionReasons, run);
+    }
+    sendJson(res, run.suspicious ? 202 : 201, {
+      ok: true,
+      accepted: true,
+      rankEligible: run.rankEligible !== false,
       run,
       leaderboardUrl: `${STREAM_MANAGER_PUBLIC_BASE_URL}/leaderboard`,
       runUrl: leaderboardRunUrl(run)
