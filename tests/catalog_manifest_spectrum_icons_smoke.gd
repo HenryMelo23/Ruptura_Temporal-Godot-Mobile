@@ -3,7 +3,8 @@ extends SceneTree
 var game: Node
 
 const EXPECTED_MANIFEST_ICONS := {
-	"eclipsada": "res://assets/sprites/manifestacao-eclipsada.png"
+	"eclipsada": "res://assets/sprites/manifestacao-eclipsada.png",
+	"necronada": "res://assets/sprites/manifestacao-necronada.png"
 }
 
 const EXPECTED_SPECTRUM_ICONS := {

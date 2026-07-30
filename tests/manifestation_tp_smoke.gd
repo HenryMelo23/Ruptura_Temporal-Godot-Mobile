@@ -122,7 +122,7 @@ func _run() -> void:
 	var cut_enemy := _enemy(Vector2(610, 400), 50000.0)
 	game._execute_teleport(Vector2(720, 400))
 	game._consume_lacerante_tp_charge()
-	_check(game.lacerante_tp_charges == 1 and is_equal_approx(game.lacerante_tp_chain_timer, 0.8), "lacerante first TP did not expose one remaining charge for 800ms")
+	_check(game.lacerante_tp_charges == 1 and is_equal_approx(game.lacerante_tp_chain_timer, game.LACERANTE_TP_CHAIN_WINDOW), "lacerante first TP did not expose one remaining chain charge")
 	_check(game._player_invulnerable(), "lacerante TP did not grant immunity during its cuts")
 	var cut_hp_before: float = cut_enemy["hp"]
 	_advance_tp(0.4, 0.05)

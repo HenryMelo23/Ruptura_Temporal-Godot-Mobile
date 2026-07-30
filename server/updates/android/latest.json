@@ -1,16 +1,15 @@
 {
-    "version":  "2.0.30c",
-    "version_code":  23003,
-    "filename":  "ruptura_temporal_mobile_2.0.30c.apk",
-    "sha256":  "55c83452a06305ebbbb96602ccf9ac0fe9f748869d8d9eadc13f827552478c76",
-    "size":  607090436,
+    "version":  "2.0.30e",
+    "version_code":  23005,
+    "filename":  "ruptura_temporal_mobile_2.0.30e.apk",
+    "sha256":  "2a4f2596b2da914773576c13cf6eb9895c6bda750ae1b23171a6c4b4d8e73e73",
+    "size":  644869540,
     "notes":  [
-                  "Ranking seguro 2.0.30c: runs competitivas agora usam sessao assinada criada pelo servidor.",
-                  "Durante a partida o jogo envia checkpoints de fase, abates, pontos, cartas e dano; o servidor compara o final com o historico observado.",
-                  "Relatorios legados, adulterados ou com saltos impossiveis ficam apenas em auditoria e nao entram no ranking.",
-                  "Tentativas repetidas de envio manipulado podem bloquear temporariamente novos envios do mesmo IP.",
-                  "Atualizacao recomendada para todos os jogadores Android e Windows."
+                  "Atualizador Android e Windows revisado para substituir a instalacao existente.",
+                  "Limpeza automatica de instaladores antigos para liberar espaco no dispositivo.",
+                  "Pacote Android estabilizado para evitar copias paralelas em futuras atualizacoes.",
+                  "Ajustes de estabilidade no fluxo de atualizacao."
               ],
     "mandatory":  true,
-    "published_at":  "2026-07-22T02:52:20.8647132Z"
+    "published_at":  "2026-07-30T02:17:59.2810642Z"
 }

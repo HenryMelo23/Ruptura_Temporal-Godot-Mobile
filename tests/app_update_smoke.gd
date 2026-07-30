@@ -41,11 +41,33 @@ func _run() -> void:
 
 	var update_dir := ProjectSettings.globalize_path("user://updates")
 	DirAccess.make_dir_recursive_absolute(update_dir)
+	var stale_apk := "user://updates/ruptura_temporal_mobile_0.0.1.apk"
+	var stale_idsig := "user://updates/ruptura_temporal_mobile_0.0.1.apk.idsig"
+	var stale_file := FileAccess.open(stale_apk, FileAccess.WRITE)
+	_check(stale_file != null, "could not create stale APK fixture")
+	stale_file.store_string("OLD_APK")
+	stale_file.close()
+	stale_file = FileAccess.open(stale_idsig, FileAccess.WRITE)
+	_check(stale_file != null, "could not create stale IDSIG fixture")
+	stale_file.store_string("OLD_IDSIG")
+	stale_file.close()
+	_check(game._cleanup_stale_app_update_files() == 2, "stale update cleanup did not remove old APK/IDSIG")
+	_check(not FileAccess.file_exists(stale_apk), "old APK survived update cleanup")
+	_check(not FileAccess.file_exists(stale_idsig), "old IDSIG survived update cleanup")
+
 	var update_path := "user://updates/app_update_smoke.apk"
+	var other_path := "user://updates/another_old_update.apk"
 	var file := FileAccess.open(update_path, FileAccess.WRITE)
 	_check(file != null, "could not create the streamed update fixture")
 	file.store_buffer(UPDATE_BYTES.to_utf8_buffer())
 	file.close()
+	file = FileAccess.open(other_path, FileAccess.WRITE)
+	_check(file != null, "could not create the removable stale update fixture")
+	file.store_string("REMOVE_ME")
+	file.close()
+	_check(game._cleanup_stale_app_update_files(update_path) == 1, "cleanup with keep path removed the wrong number of files")
+	_check(FileAccess.file_exists(update_path), "cleanup removed the active update download")
+	_check(not FileAccess.file_exists(other_path), "cleanup kept a stale update beside the active download")
 	var verified: Dictionary = game._verify_app_update_file(update_path, UPDATE_BYTES.to_utf8_buffer().size(), UPDATE_SHA256)
 	_check(bool(verified.get("ok", false)), "valid streamed APK fixture failed SHA-256 verification")
 	var rejected: Dictionary = game._verify_app_update_file(update_path, UPDATE_BYTES.to_utf8_buffer().size(), "0".repeat(64))

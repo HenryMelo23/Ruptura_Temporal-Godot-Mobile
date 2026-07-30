@@ -51,6 +51,18 @@ const RUN_SECURITY_MAX_REPORTS_PER_WINDOW = numberEnv("RUN_SECURITY_MAX_REPORTS_
 const RUN_SECURITY_BLOCK_THRESHOLD = numberEnv("RUN_SECURITY_BLOCK_THRESHOLD", 4);
 const RUN_SECURITY_BLOCK_MS = numberEnv("RUN_SECURITY_BLOCK_MS", 30 * 60 * 1000);
 const RUN_SECURITY_AUDIT_LIMIT = numberEnv("RUN_SECURITY_AUDIT_LIMIT", 500);
+const RUN_AUDIT_BENIGN_REASONS = new Set([
+  "duration_exceeds_wall_clock",
+  "checkpoint_duration_regressed",
+  "checkpoint_phase_regressed",
+  "checkpoint_cards_jump",
+  "session_cards_not_observed",
+  "session_phase_not_observed",
+  "session_kills_not_observed",
+  "session_points_not_observed",
+  "session_boss_damage_not_observed",
+  "session_checkpoint_gap"
+]);
 const ANDROID_UPDATE_ROOT = path.resolve(process.env.ANDROID_UPDATE_ROOT || path.join(__dirname, "updates", "android"));
 const WINDOWS_UPDATE_ROOT = path.resolve(process.env.WINDOWS_UPDATE_ROOT || path.join(__dirname, "updates", "windows"));
 const ANDROID_UPDATE_MANIFEST = path.join(ANDROID_UPDATE_ROOT, "latest.json");
@@ -1217,14 +1229,13 @@ function mergeSessionMetrics(session, nextMetrics) {
   const previous = session.last || normalizeSessionMetrics({});
   const anomalies = [];
   const elapsed = Math.max(1, nextMetrics.duration - Math.max(0, Math.floor(safeNumber(previous.duration))));
-  if (nextMetrics.duration + 3 < safeNumber(previous.duration)) anomalies.push("checkpoint_duration_regressed");
-  if (nextMetrics.phase + 1 < safeNumber(previous.phase)) anomalies.push("checkpoint_phase_regressed");
+  if (nextMetrics.duration + 30 < safeNumber(previous.duration)) anomalies.push("checkpoint_duration_regressed");
   if (nextMetrics.kills + 3 < safeNumber(previous.kills)) anomalies.push("checkpoint_kills_regressed");
   if (nextMetrics.pointsEarned + 250 < safeNumber(previous.pointsEarned)) anomalies.push("checkpoint_points_regressed");
   if (nextMetrics.cardsTotal + 1 < safeNumber(previous.cardsTotal)) anomalies.push("checkpoint_cards_regressed");
   if (nextMetrics.kills - safeNumber(previous.kills) > elapsed * 18 + 140) anomalies.push("checkpoint_kills_jump");
   if (nextMetrics.bossDamage - safeNumber(previous.bossDamage) > elapsed * 7000 + 180000) anomalies.push("checkpoint_boss_damage_jump");
-  if (nextMetrics.cardsTotal - safeNumber(previous.cardsTotal) > Math.max(6, Math.floor(elapsed / 4) + 4)) anomalies.push("checkpoint_cards_jump");
+  if (nextMetrics.cardsTotal - safeNumber(previous.cardsTotal) > Math.max(32, Math.floor(elapsed / 2) + 18)) anomalies.push("checkpoint_cards_jump");
   if (nextMetrics.pointsSpent > nextMetrics.pointsEarned + 2500) anomalies.push("checkpoint_points_spent_above_earned");
   session.last = nextMetrics;
   session.max = session.max || normalizeSessionMetrics({});
@@ -1258,6 +1269,12 @@ function updateRunSession(ip, payload) {
   return { ok: anomalies.length === 0, reasons: anomalies, session };
 }
 
+function hardRunAuditReasons(reasons) {
+  return (Array.isArray(reasons) ? reasons : [])
+    .map(String)
+    .filter((reason) => reason && !RUN_AUDIT_BENIGN_REASONS.has(reason));
+}
+
 function evaluateRunSession(payload, ip, versionCode) {
   if (versionCode < RUN_REPORT_SESSION_MIN_VERSION_CODE) {
     return [];
@@ -1282,18 +1299,18 @@ function evaluateRunSession(payload, ip, versionCode) {
   const max = session.max || last;
   const sinceLastSeconds = Math.max(0, Math.floor((now - (Number(session.lastAt) || now)) / 1000));
   if (Math.floor(safeNumber(session.checkpoints)) < 1 && finalMetrics.duration >= RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS * 2) reasons.push("session_checkpoint_missing");
-  if (sinceLastSeconds > RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS && finalMetrics.duration >= RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS) reasons.push("session_checkpoint_gap");
+  if (sinceLastSeconds > RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS * 3 && finalMetrics.duration >= RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS) reasons.push("session_checkpoint_gap");
   if (finalMetrics.duration + 10 < safeNumber(last.duration)) reasons.push("session_final_duration_regressed");
-  if (finalMetrics.phase > safeNumber(max.phase) + 1) reasons.push("session_phase_not_observed");
+  if (finalMetrics.phase < 0 || finalMetrics.phase > 6) reasons.push("session_phase_out_of_range");
   if (finalMetrics.kills > safeNumber(max.kills) + Math.max(80, sinceLastSeconds * 18 + 20)) reasons.push("session_kills_not_observed");
-  if (finalMetrics.cardsTotal > safeNumber(max.cardsTotal) + Math.max(4, Math.floor(sinceLastSeconds / 5) + 2)) reasons.push("session_cards_not_observed");
+  if (finalMetrics.cardsTotal > safeNumber(max.cardsTotal) + Math.max(36, Math.floor(sinceLastSeconds / 2) + 18)) reasons.push("session_cards_not_observed");
   if (finalMetrics.pointsEarned > safeNumber(max.pointsEarned) + Math.max(1800, sinceLastSeconds * 400)) reasons.push("session_points_not_observed");
   if (finalMetrics.bossDamage > safeNumber(max.bossDamage) + Math.max(140000, sinceLastSeconds * 7000)) reasons.push("session_boss_damage_not_observed");
-  if (Array.isArray(session.anomalies) && session.anomalies.length) reasons.push(...session.anomalies.slice(0, 8));
+  if (Array.isArray(session.anomalies) && session.anomalies.length) reasons.push(...hardRunAuditReasons(session.anomalies).slice(0, 8));
   session.endedAt = now;
   session.final = finalMetrics;
   saveSecurityStore(store);
-  return Array.from(new Set(reasons));
+  return Array.from(new Set(hardRunAuditReasons(reasons)));
 }
 
 function profileKeyForRun(run) {
@@ -1417,6 +1434,18 @@ function computeLeaderboardScore(payload) {
   return Math.max(0, Math.floor(score));
 }
 
+function computeStoredRunScore(run) {
+  const stats = run && run.playerStats && typeof run.playerStats === "object" ? run.playerStats : {};
+  let score = Math.round(safeNumber(run && run.durationSeconds) * 2);
+  score += Math.floor(safeNumber(run && run.kills)) * 20;
+  score += Math.floor(safeNumber(run && run.phase)) * 250;
+  score += Math.round(safeNumber(run && run.bossDamage) / 12);
+  score += Math.floor(safeNumber(run && run.cardsTotal)) * 15;
+  score += Math.round(Math.max(0, safeNumber(stats.hp)) * 0.5);
+  if (String(run && run.result || "") === "Vitoria") score += 1500;
+  return Math.max(0, Math.floor(score));
+}
+
 function evaluateRunIntegrity(payload, ip = "") {
   const reasons = [];
   const versionCode = Math.max(0, Math.floor(safeNumber(payload.version_code)));
@@ -1431,6 +1460,7 @@ function evaluateRunIntegrity(payload, ip = "") {
   const bossDamage = Math.max(0, Math.floor(safeNumber(payload.boss_damage_total)));
   const reportedScore = Math.max(0, Math.floor(safeNumber(payload.leaderboard_score, payload.score_total || payload.score_current)));
   const expectedScore = computeLeaderboardScore(payload);
+  const hasSessionEvidence = versionCode >= RUN_REPORT_SESSION_MIN_VERSION_CODE && String(payload.run_session_id || "").trim() !== "";
   if (versionCode < RUN_REPORT_COMPETITIVE_MIN_VERSION_CODE) {
     reasons.push("legacy_unsigned_protocol_closed");
   }
@@ -1448,7 +1478,7 @@ function evaluateRunIntegrity(payload, ip = "") {
   if (startedUnix > 0 && endedUnix > 0 && endedUnix + RUN_REPORT_MAX_CLOCK_SKEW_SECONDS < startedUnix) reasons.push("clock_inverted");
   if (endedUnix > nowUnix + RUN_REPORT_MAX_CLOCK_SKEW_SECONDS) reasons.push("clock_future");
   if (endedUnix > 0 && nowUnix - endedUnix > RUN_REPORT_MAX_AGE_SECONDS) reasons.push("clock_too_old");
-  if (startedUnix > 0 && endedUnix > 0 && duration > Math.max(0, endedUnix - startedUnix) + 5 * 60) reasons.push("duration_exceeds_wall_clock");
+  if (!hasSessionEvidence && startedUnix > 0 && endedUnix > 0 && duration > Math.max(0, endedUnix - startedUnix) + 5 * 60) reasons.push("duration_exceeds_wall_clock");
   if (kills > duration * 16 + 240) reasons.push("kills_too_high_for_time");
   if (bossDamage > duration * 5500 + 250000) reasons.push("boss_damage_too_high_for_time");
   if (cardsTotal > Math.floor(pointsEarned / 100) + 18) reasons.push("cards_too_high_for_points");
@@ -1543,6 +1573,68 @@ function recordRun(payload, ip = "") {
     .slice(0, LEADERBOARD_MAX_RUNS);
   saveLeaderboardStore(store);
   return run;
+}
+
+function rebuildLeaderboardProfiles(store) {
+  const profiles = {};
+  for (const run of Array.isArray(store.runs) ? store.runs : []) {
+    const key = profileKeyForRun(run);
+    const existing = profiles[key] || {};
+    const canonicalPlayer = String(existing.player || run.player || "Jogador").slice(0, 32);
+    profiles[key] = {
+      player: canonicalPlayer,
+      profileId: String(run.profileId || existing.profileId || "").slice(0, 64),
+      firstSeen: Math.min(safeNumber(existing.firstSeen, run.endedUnix), safeNumber(run.endedUnix)),
+      lastSeen: Math.max(safeNumber(existing.lastSeen), safeNumber(run.endedUnix)),
+      bestScore: Math.max(safeNumber(existing.bestScore), run.rankEligible === false ? 0 : safeNumber(run.score)),
+      runs: Math.max(0, Math.floor(safeNumber(existing.runs))) + 1
+    };
+  }
+  store.profiles = profiles;
+}
+
+function canRepairBenignAuditedRun(run) {
+  if (!run || run.rankEligible !== false) return false;
+  if (Math.max(0, Math.floor(safeNumber(run.versionCode))) < RUN_REPORT_SESSION_MIN_VERSION_CODE) return false;
+  const reasons = Array.isArray(run.suspicionReasons) ? run.suspicionReasons.map(String) : [];
+  if (!reasons.length || hardRunAuditReasons(reasons).length) return false;
+  const duration = Math.max(0, Math.floor(safeNumber(run.durationSeconds)));
+  const kills = Math.max(0, Math.floor(safeNumber(run.kills)));
+  const cardsTotal = Math.max(0, Math.floor(safeNumber(run.cardsTotal)));
+  const pointsEarned = Math.max(0, Math.floor(safeNumber(run.pointsEarned)));
+  const pointsSpent = Math.max(0, Math.floor(safeNumber(run.pointsSpent)));
+  const bossDamage = Math.max(0, Math.floor(safeNumber(run.bossDamage)));
+  if (duration < 3 || duration > 6 * 60 * 60) return false;
+  if (kills > duration * 18 + 300) return false;
+  if (bossDamage > duration * 7000 + 300000) return false;
+  if (cardsTotal > Math.floor(pointsEarned / 80) + 80) return false;
+  if (pointsSpent > pointsEarned + Math.max(2500, Math.floor(pointsEarned * 0.25))) return false;
+  return true;
+}
+
+function repairBenignLeaderboardAudits() {
+  const store = loadLeaderboardStore();
+  let repaired = 0;
+  for (const run of Array.isArray(store.runs) ? store.runs : []) {
+    if (!canRepairBenignAuditedRun(run)) continue;
+    const repairedScore = safeNumber(run.serverScore, computeStoredRunScore(run)) || computeStoredRunScore(run);
+    run.score = Math.max(1, Math.floor(repairedScore));
+    run.serverScore = run.score;
+    run.rankEligible = true;
+    run.suspicious = false;
+    run.auditRepairedReasons = Array.isArray(run.suspicionReasons) ? run.suspicionReasons.map(String).slice(0, 12) : [];
+    run.suspicionReasons = [];
+    run.auditRepairedAt = new Date().toISOString();
+    repaired += 1;
+  }
+  if (repaired <= 0) return 0;
+  store.runs = store.runs
+    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score) || safeNumber(right.durationSeconds) - safeNumber(left.durationSeconds) || safeNumber(right.endedUnix) - safeNumber(left.endedUnix))
+    .slice(0, LEADERBOARD_MAX_RUNS);
+  rebuildLeaderboardProfiles(store);
+  saveLeaderboardStore(store);
+  console.log(`leaderboard audit repair restored ${repaired} benign 2.0.30c run(s)`);
+  return repaired;
 }
 
 function leaderboardSnapshot() {
@@ -2069,5 +2161,6 @@ const server = http.createServer((req, res) => {
 server.listen(MANAGER_PORT, "0.0.0.0", () => {
   console.log(`ruptura relay manager listening on :${MANAGER_PORT}`);
   console.log(`rooms will advertise ${ROOM_HOST}:${ROOM_PORT_START}-${ROOM_PORT_END}`);
+  repairBenignLeaderboardAudits();
   ensureWarmStandby();
 });

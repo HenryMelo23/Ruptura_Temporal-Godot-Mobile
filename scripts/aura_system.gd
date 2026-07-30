@@ -2,6 +2,7 @@ class_name AuraSystem
 extends RefCounted
 
 const AURA_NAMES := ["Racional", "Impulsiva", "Devota", "Vanguarda", "Insana", "Voraz", "Nula", "Abissal", "Profetica", "Sanguinaria", "Crepuscular", "Peregrino", "Equilibrista", "Avarento", "Oportunista"]
+const RUN_MAX_LEVEL := 10
 
 const COLORS := {
 	"Racional": Color(0.0, 0.71, 1.0),
@@ -39,7 +40,10 @@ const OPPORTUNITY_ENEMY_COOLDOWN := 0.75
 static func create(aura: String, level := 1) -> Dictionary:
 	return {
 		"name": aura if aura in AURA_NAMES else "Racional",
-		"level": clampi(level, 0, 5),
+		"level": clampi(level, 1, RUN_MAX_LEVEL),
+		"ascended": false,
+		"ascension_name": "",
+		"ascension_flash": 0.0,
 		"last_pos": Vector2.ZERO,
 		"still": 0.0,
 		"rational_dilation": 0.0,
@@ -119,7 +123,62 @@ static func create(aura: String, level := 1) -> Dictionary:
 	}
 
 static func _rank(state: Dictionary) -> int:
-	return max(1, int(state.get("level", 1)))
+	return clampi(int(state.get("level", 1)), 1, RUN_MAX_LEVEL)
+
+
+static func run_upgrade_cost(next_level: int) -> int:
+	var costs := {2: 5, 3: 9, 4: 15, 5: 24, 6: 38, 7: 58, 8: 86, 9: 124, 10: 180}
+	return int(costs.get(clampi(next_level, 2, RUN_MAX_LEVEL), 9999))
+
+
+static func ascension_title(aura_name: String) -> String:
+	match aura_name:
+		"Racional": return "Mente de Laplace"
+		"Devota": return "Voto Inquebravel"
+		"Voraz": return "Abismo Digestivo"
+		"Crepuscular": return "Eclipse Soberano"
+		"Peregrino": return "Caminho Inevitavel"
+		"Equilibrista": return "Prumo Absoluto"
+		"Avarento": return "Cofre Vivo"
+		"Oportunista": return "Brecha Final"
+	return "Ascensao Espectral"
+
+
+static func apply_run_upgrade(state: Dictionary, new_level: int) -> Array:
+	var previous := _rank(state)
+	state["level"] = clampi(new_level, 1, RUN_MAX_LEVEL)
+	var events: Array = []
+	if int(state["level"]) == 5 and previous < 5:
+		events.append({"type": "text", "text": "MARCO ESPECTRAL"})
+	if int(state["level"]) == 9 and previous < 9:
+		events.append({"type": "text", "text": "PRE-ASCENSAO"})
+	if int(state["level"]) >= RUN_MAX_LEVEL and not bool(state.get("ascended", false)):
+		events.append_array(ascend(state))
+	return events
+
+
+static func ascend(state: Dictionary) -> Array:
+	var aura_name := String(state.get("name", "Racional"))
+	state["ascended"] = true
+	state["ascension_name"] = ascension_title(aura_name)
+	state["ascension_flash"] = 3.8
+	match aura_name:
+		"Devota":
+			state["devoted_charges"] = max(int(state.get("devoted_charges", 0)), DEVOTED_CHARGES + 1)
+		"Voraz":
+			state["voracious_hunger"] = minf(hunger_max(state), float(state.get("voracious_hunger", 0.0)) + 35.0)
+		"Crepuscular":
+			state["crepuscular_charge"] = maxf(float(state.get("crepuscular_charge", 0.0)), 60.0)
+		"Peregrino":
+			state["peregrino_journey"] = maxf(float(state.get("peregrino_journey", 0.0)), 3.0)
+		"Equilibrista":
+			state["equilibrista_balance"] = maxf(float(state.get("equilibrista_balance", 0.0)), 50.0)
+		"Avarento":
+			state["avarento_cofre"] = maxf(float(state.get("avarento_cofre", 0.0)), 4.0)
+		"Oportunista":
+			state["oportunista_charges"] = _oportunista_required(state)
+			state["oportunista_armed"] = true
+	return [{"type": "ascension", "text": String(state["ascension_name"])}]
 
 static func _is_direct_category(category: String) -> bool:
 	return category in ["basic_attack", "skill_q", "skill_e", "teleport", "manifestation_secondary"]
@@ -243,6 +302,7 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 	var player_pos := Vector2(context.get("player_pos", Vector2.ZERO))
 	var enemies: Array = context.get("enemies", [])
 	state["last_attack"] = float(state.get("last_attack", 0.0)) + delta
+	state["ascension_flash"] = maxf(0.0, float(state.get("ascension_flash", 0.0)) - delta)
 	for key in ["rational_dilation", "rational_rebound", "rational_cooldown", "impulsive_active", "devoted_damage", "devoted_slow", "vanguard_ring", "insane_ready", "abyss_tide", "prophecy_next", "prophecy_time", "prophecy_broken", "blood_slow"]:
 		state[key] = maxf(0.0, float(state.get(key, 0.0)) - delta)
 
@@ -661,15 +721,16 @@ static func on_dash(state: Dictionary, context := {}) -> Array:
 	return events
 
 static func speed_multiplier(state: Dictionary) -> float:
+	var ascended := bool(state.get("ascended", false))
 	match String(state.get("name", "")):
-		"Racional": return 1.35 if float(state["rational_dilation"]) > 0.0 else 1.0
+		"Racional": return (1.45 if ascended else 1.35) if float(state["rational_dilation"]) > 0.0 else 1.0
 		"Impulsiva": return 1.2 * (1.0 + 0.15 * int(state["impulsive_rank"])) if float(state["impulsive_active"]) > 0.0 else 1.0
 		"Devota": return 0.90 if float(state["devoted_slow"]) > 0.0 else 1.0
-		"Crepuscular": return 1.0 + (0.08 + 0.02 * _rank(state)) if _crepuscular_is_eclipse(state) else 1.0
+		"Crepuscular": return 1.0 + (0.10 + 0.02 * _rank(state) if ascended else 0.08 + 0.02 * _rank(state)) if _crepuscular_is_eclipse(state) else 1.0
 		"Peregrino":
 			var mult := 1.0
 			if float(state.get("peregrino_journey", 0.0)) > 0.0:
-				mult += 0.08 + 0.025 * _rank(state)
+				mult += 0.08 + 0.025 * _rank(state) + (0.08 if ascended else 0.0)
 			if float(state.get("peregrino_trail_speed", 0.0)) > 0.0:
 				mult += 0.08
 			return mult
@@ -687,23 +748,26 @@ static func speed_multiplier(state: Dictionary) -> float:
 	return 1.0
 
 static func damage_multiplier(state: Dictionary) -> float:
+	var ascended := bool(state.get("ascended", false))
 	match String(state.get("name", "")):
 		"Impulsiva": return 1.3 * (1.0 + 0.15 * int(state["impulsive_rank"])) if float(state["impulsive_active"]) > 0.0 else 1.0
-		"Devota": return float(state["devoted_damage_mult"]) if float(state["devoted_damage"]) > 0.0 else 1.0
-		"Crepuscular": return 1.0 + _crepuscular_damage_bonus(state)
-		"Equilibrista": return 1.0 + (0.07 + 0.03 * _rank(state) if float(state.get("equilibrista_state", 0.0)) > 0.0 else 0.0)
+		"Devota": return (float(state["devoted_damage_mult"]) + (0.18 if ascended else 0.0)) if float(state["devoted_damage"]) > 0.0 else 1.0
+		"Voraz": return 1.0 + (voracious_intensity(state) * 0.12 if ascended else 0.0)
+		"Crepuscular": return 1.0 + _crepuscular_damage_bonus(state) + (0.08 if ascended and _crepuscular_is_eclipse(state) else 0.0)
+		"Equilibrista": return 1.0 + (0.10 + 0.03 * _rank(state) if ascended and float(state.get("equilibrista_state", 0.0)) > 0.0 else 0.07 + 0.03 * _rank(state) if float(state.get("equilibrista_state", 0.0)) > 0.0 else 0.0)
+		"Oportunista": return 1.08 if ascended and bool(state.get("oportunista_armed", false)) else 1.0
 	return 1.0
 
 static func attack_interval_multiplier(state: Dictionary) -> float:
-	if String(state.get("name", "")) == "Racional" and float(state["rational_dilation"]) > 0.0: return 0.72
-	if String(state.get("name", "")) == "Voraz": return maxf(0.88, 1.0 - voracious_intensity(state) * (0.045 + int(state["level"]) * 0.003))
+	if String(state.get("name", "")) == "Racional" and float(state["rational_dilation"]) > 0.0: return 0.66 if bool(state.get("ascended", false)) else 0.72
+	if String(state.get("name", "")) == "Voraz": return maxf(0.84 if bool(state.get("ascended", false)) else 0.88, 1.0 - voracious_intensity(state) * (0.045 + int(state["level"]) * 0.003))
 	if String(state.get("name", "")) == "Crepuscular": return maxf(0.75, 1.0 - _crepuscular_attack_reduction(state))
 	return 1.0
 
 static func world_multiplier(state: Dictionary) -> float:
 	if String(state.get("name", "")) != "Racional": return 1.0
-	if float(state["rational_dilation"]) > 0.0: return 0.42
-	if float(state["rational_rebound"]) > 0.0 and float(state["rational_dilation"]) <= 0.0: return 1.18
+	if float(state["rational_dilation"]) > 0.0: return 0.36 if bool(state.get("ascended", false)) else 0.42
+	if float(state["rational_rebound"]) > 0.0 and float(state["rational_dilation"]) <= 0.0: return 1.08 if bool(state.get("ascended", false)) else 1.18
 	return 1.0
 
 static func dash_cooldown_multiplier(state: Dictionary, burning_count := 0) -> float:

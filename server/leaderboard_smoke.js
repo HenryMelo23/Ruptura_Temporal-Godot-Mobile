@@ -264,6 +264,95 @@ async function run() {
     const signedStored = JSON.parse(signedCreated.body.toString("utf8")).run;
     assert.strictEqual(signedStored.rankEligible, true, "signed run should remain eligible");
     assert(signedStored.serverScore > 0 && signedStored.score === signedStored.serverScore, "server score was not applied to signed run");
+    const tolerantPayload = {
+      ...payload,
+      player: "ToleranceQA",
+      profile_id: "tolerance-qa",
+      version: "2.0.30c",
+      version_code: 23003,
+      room: "solo",
+      role: "solo",
+      started_unix: nowUnix - 40,
+      ended_unix: nowUnix,
+      duration_seconds: 1300,
+      phase: 1,
+      kills: 260,
+      score_current: 8600,
+      score_total: 28000,
+      points_earned: 28000,
+      points_spent: 18500,
+      cards_total: 34,
+      boss_damage_total: 36000,
+      enemy_damage_total: 88000,
+      damage_taken_total: 420,
+      manifestation_key: "prismatica",
+      spectrum_key: "racional",
+      player_stats: { hp: 410 }
+    };
+    const tolerantSessionStart = await request("POST", "/runs/start", {
+      player: tolerantPayload.player,
+      profile_id: tolerantPayload.profile_id,
+      version: tolerantPayload.version,
+      version_code: tolerantPayload.version_code,
+      platform: tolerantPayload.platform,
+      role: tolerantPayload.role,
+      room: tolerantPayload.room,
+      started_unix: tolerantPayload.started_unix
+    });
+    assert.strictEqual(tolerantSessionStart.status, 201, "tolerant session was not created");
+    const tolerantSession = JSON.parse(tolerantSessionStart.body.toString("utf8"));
+    const tolerantBase = {
+      session_id: tolerantSession.session_id,
+      session_token: tolerantSession.session_token,
+      player: tolerantPayload.player,
+      profile_id: tolerantPayload.profile_id,
+      version: tolerantPayload.version,
+      version_code: tolerantPayload.version_code,
+      platform: tolerantPayload.platform,
+      role: tolerantPayload.role,
+      room: tolerantPayload.room,
+      started_unix: tolerantPayload.started_unix,
+      player_stats: tolerantPayload.player_stats
+    };
+    const tolerantCheckpoint1 = await request("POST", "/runs/checkpoint", {
+      ...tolerantBase,
+      duration_seconds: 100,
+      phase: 6,
+      kills: 30,
+      points_earned: 5000,
+      points_spent: 900,
+      score_current: 4200,
+      score_total: 5000,
+      cards_total: 5,
+      boss_damage_total: 0,
+      enemy_damage_total: 14000,
+      base_damage_end: 35
+    });
+    assert.strictEqual(tolerantCheckpoint1.status, 200, "phase 6 checkpoint should be accepted");
+    const tolerantCheckpoint2 = await request("POST", "/runs/checkpoint", {
+      ...tolerantBase,
+      duration_seconds: 122,
+      phase: 1,
+      kills: 46,
+      points_earned: 15000,
+      points_spent: 5600,
+      score_current: 9400,
+      score_total: 15000,
+      cards_total: 30,
+      boss_damage_total: 1200,
+      enemy_damage_total: 22000,
+      base_damage_end: 52
+    });
+    assert.strictEqual(tolerantCheckpoint2.status, 200, "phase 6 to phase 1 and boss reward card jump should be accepted");
+    tolerantPayload.run_session_id = tolerantSession.session_id;
+    tolerantPayload.run_session_token = tolerantSession.session_token;
+    tolerantPayload.run_session_checkpoints = 2;
+    tolerantPayload.leaderboard_score = computeSmokeScore(tolerantPayload);
+    signRun(tolerantPayload);
+    const tolerantCreated = await request("POST", "/runs", tolerantPayload);
+    assert.strictEqual(tolerantCreated.status, 201, "session-backed run with short wall clock and legitimate jumps was blocked");
+    const tolerantStored = JSON.parse(tolerantCreated.body.toString("utf8")).run;
+    assert.strictEqual(tolerantStored.rankEligible, true, "tolerant run should be ranking eligible");
     const tamperedPayload = { ...signedPayload, player: "CheatEngineQA", profile_id: "cheat-engine-qa", leaderboard_score: 99999999 };
     const tamperedCreated = await request("POST", "/runs", tamperedPayload);
     assert.strictEqual(tamperedCreated.status, 202, "tampered run should still be stored for audit");
@@ -275,7 +364,7 @@ async function run() {
     const rankings = (await request("GET", "/leaderboard/rankings")).body.toString("utf8");
     const summary = (await request("GET", `/leaderboard/run/${signedStored.id}`)).body.toString("utf8");
     const missing = (await request("GET", "/leaderboard/linha-inexistente")).body.toString("utf8");
-    assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Maior dano em boss") && home.includes("4.232"), "dashboard metrics missing");
+    assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Maior dano em boss") && home.includes("36.000"), "dashboard metrics missing");
     assert(home.includes("OPERADOR EM DESTAQUE") && home.includes("Expedicoes recentes") && home.includes("Buscar operador"), "dashboard observatory shell missing");
     assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Ancorada + Sanguinaria"), "player profile missing");
     assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Plano cartesiano") && rankings.includes("Maior progressao"), "ranking charts missing");

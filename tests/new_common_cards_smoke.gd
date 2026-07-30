@@ -16,13 +16,6 @@ func _find_card(card_id: String) -> Dictionary:
 	return {}
 
 
-func _has_card(cards: Array, card_id: String) -> bool:
-	for card in cards:
-		if game._card_id(card) == card_id:
-			return true
-	return false
-
-
 func _approx(value: float, expected: float, tolerance := 0.001) -> bool:
 	return abs(value - expected) <= tolerance
 
@@ -30,21 +23,29 @@ func _approx(value: float, expected: float, tolerance := 0.001) -> bool:
 func _run() -> void:
 	game._start_game()
 
-	var expected := {
-		"escolha_adiada": 1,
-		"inercia_cronal": 5,
-		"leitura_instante": 4,
-		"margem_segura": 4,
-		"moeda_estavel": 6,
-		"orbita_coletora": 5,
-		"pacto_possibilidades": 5,
-		"solo_consolidado": 4
-	}
-	for card_id in expected.keys():
+	var expected_ids := [
+		"escolha_adiada",
+		"inercia_cronal",
+		"leitura_instante",
+		"margem_segura",
+		"moeda_estavel",
+		"orbita_coletora",
+		"pacto_possibilidades",
+		"solo_consolidado",
+		"rastro_de_retorno",
+		"municao_de_rebate",
+		"impulso_de_sobras",
+		"eco_de_impacto",
+		"zona_de_descompressao",
+		"folego_de_perseguicao",
+		"margem_de_erro",
+		"ressonancia_de_alternancia"
+	]
+	for card_id in expected_ids:
 		var card := _find_card(card_id)
 		assert(not card.is_empty())
 		assert(not game._is_rare_card(card))
-		assert(game._card_max_count(card) == int(expected[card_id]))
+		assert(game._card_max_count(card) >= 999999)
 		assert(game.cards_bought.has(card_id))
 		assert(game.textures.has("card_" + String(card["name"])))
 		assert(game.textures["card_" + String(card["name"])] != null)
@@ -54,9 +55,8 @@ func _run() -> void:
 	var margem := _find_card("margem_segura")
 	for i in range(8):
 		game._apply_card(margem)
-	assert(game.cards_bought["margem_segura"] == 4)
-	for roll in range(12):
-		assert(not _has_card(game._roll_shop_cards(), "margem_segura"))
+	assert(game.cards_bought["margem_segura"] == 8)
+	assert(not game._card_at_max(margem))
 
 	game.cards_bought["escolha_adiada"] = 1
 	var speed := _find_card("Speed Boost")
@@ -97,5 +97,27 @@ func _run() -> void:
 	assert(_approx(float(attack["warn"]), 1.28))
 	assert(_approx(float(attack["duration"]), 2.28))
 
-	print("NEW_COMMON_CARDS_SMOKE_OK cards=8 max=true reserve=true prices=true effects=true assets=true")
+	game.cards_bought["rastro_de_retorno"] = 3
+	assert(game._rastro_interval() < 12.0)
+	assert(game._rastro_duration() > 6.0)
+	game.cards_bought["municao_de_rebate"] = 5
+	assert(game._rebate_chance() > 0.0)
+	assert(game._rebate_search_radius() > 120.0)
+	game.cards_bought["margem_de_erro"] = 4
+	game.margem_window_timer = 1.0
+	var mitigated: float = game._apply_margem_de_erro_damage(100.0, "smoke")
+	assert(mitigated < 100.0)
+	assert(game.margem_debt > 0.0)
+	game.cards_bought["ressonancia_de_alternancia"] = 4
+	game._record_ressonancia_action("ATTACK")
+	game._record_ressonancia_action("Q", 8.0)
+	game._record_ressonancia_action("E", 40.0)
+	game._record_ressonancia_action("TELEPORT", 4.0)
+	assert(game.ressonancia_ready_timer > 0.0)
+
+	root.remove_child(game)
+	game.queue_free()
+	await process_frame
+	await process_frame
+	print("NEW_COMMON_CARDS_SMOKE_OK cards=16 unlimited=true reserve=true prices=true effects=true assets=true")
 	quit(0)

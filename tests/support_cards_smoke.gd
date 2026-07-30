@@ -68,15 +68,25 @@ func _run() -> void:
 	_check(game._card_count_by_id(game.CARD_CINZAS_ID) == cinzas_before - 1, "Cinzas was not consumed when burning")
 	_check(game.cinzas_burn_marks.size() == 1, "Cinzas did not create a mark")
 	_check(not game._can_burn_shop_card(rare_card), "Cinzas should not burn rare cards")
-	_check(game._cinzas_weight_multiplier(game.CARD_TREGUA_ID) > 1.0, "Cinzas did not increase future common weight")
-	var shops_before_decay: int = int(game.cinzas_burn_marks[0].get("shops_left", 0))
+	_check(is_equal_approx(game._cinzas_weight_multiplier(game.CARD_TREGUA_ID), 1.0), "Cinzas should not change future common weight")
 	game._update_burned_card_marks_after_shop([])
-	_check(game.cinzas_burn_marks.size() == 1, "Cinzas mark decayed on the same shop it was burned")
-	_check(int(game.cinzas_burn_marks[0].get("shops_left", 0)) == shops_before_decay, "Cinzas consumed duration before the next shop")
+	_check(game.cinzas_burn_marks.size() == 1, "Cinzas mark should persist through rerolls")
 	var returned_cards := [common_card.duplicate(true)]
 	game._update_burned_card_marks_after_shop(returned_cards)
-	_check(game.cinzas_burn_marks.is_empty(), "Cinzas mark was not consumed when card reappeared")
+	_check(game.cinzas_burn_marks.size() == 1, "Cinzas mark should not be consumed when card merely reappears")
 	_check(bool(returned_cards[0].get("cinzas_return_buff", false)), "Cinzas return did not add a one-time buff")
+	_check(int(returned_cards[0].get("cinzas_buff_stacks", 0)) == 1, "Cinzas first return stack should be one")
+	game._apply_card(game._find_card_by_id(game.CARD_CINZAS_ID))
+	game.shop_cards = [returned_cards[0].duplicate(true)]
+	_check(game._burn_shop_card(0), "Cinzas could not burn an already-buffed common card")
+	_check(game._cinzas_mark_stacks(game.CARD_TREGUA_ID) == 2, "Cinzas did not stack when burning a buffed return")
+	var stacked_return := [common_card.duplicate(true)]
+	game._update_burned_card_marks_after_shop(stacked_return)
+	_check(int(stacked_return[0].get("cinzas_buff_stacks", 0)) == 2, "Cinzas stacked return did not expose its buff count")
+	var hp_max_before_cinzas_return: int = game.player_hp_max
+	game._apply_card(stacked_return[0])
+	_check(game.cinzas_burn_marks.is_empty(), "Cinzas mark was not consumed when the buffed card was bought")
+	_check(game.player_hp_max > hp_max_before_cinzas_return, "Cinzas stacked return did not apply its one-time buff")
 
 	game.player_hp = 1000
 	game.reserva_pulso_stored = 0.0

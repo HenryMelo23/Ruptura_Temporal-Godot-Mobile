@@ -53,6 +53,11 @@ func _run() -> void:
 	var projection: Array = game._card_projection_lines(fratura)
 	_check(projection.size() == 2 and String(projection[0]).find("Sem comprar agora") >= 0 and String(projection[1]).find("Apos comprar") >= 0, "card projection lines were incomplete")
 	_check(game._catalog_detail_description(fratura).find("Sem comprar agora") >= 0, "catalog card detail did not include current state")
+	var damage_card: Dictionary = game._find_card_by_id("Disparo crescente")
+	_check(not damage_card.is_empty(), "damage card was not found")
+	game.cards_bought["Disparo crescente"] = 1
+	var damage_projection: Array = game._card_projection_lines(damage_card)
+	_check(String(damage_projection[0]).find("+10.0%") >= 0 and String(damage_projection[1]).find("+21.0%") >= 0, "stacking card projection did not show the real next total")
 
 	var eclipsada_index := -1
 	for i in range(game.MANIFESTATIONS.size()):

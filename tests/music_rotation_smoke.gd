@@ -24,7 +24,7 @@ func _run() -> void:
 	_check(game.audio_streams.has("Boss1-Music-3.mp3"), "missing boss1 playlist alternate")
 	_check(game.audio_streams.has("Boss2-Music-4.mp3"), "missing converted boss2 playlist track")
 	_check(game.audio_streams.has("Boss3-Music-1.mp3"), "missing boss3 playlist track")
-	for track in ["Fases1.mp3", "Fases2.mp3", "Fases3.mp3", "Fases4.mp3", "Fases5.mp3", "Fase4-4.mp3"]:
+	for track in ["Fases1.mp3", "Fases2.mp3", "Fases3.mp3", "Fases6.mp3", "Fases7.mp3", "Fases8.mp3", "Fases9.mp3", "Fases10.mp3", "Fase4-4.mp3", "Fase3-7.mp3"]:
 		_check(game.audio_streams.has(track), "missing extra phase track: " + track)
 	for phase in range(1, 4):
 		for track in game._boss_music_tracks(phase):
@@ -35,6 +35,9 @@ func _run() -> void:
 	_check("Fase4-4.mp3" in game._phase_music_tracks(4), "Fase4-4 is not exclusive to phase 4 playlist")
 	_check(not ("Fase4-4.mp3" in game._phase_music_tracks(1)), "Fase4-4 leaked into phase 1")
 	_check(not ("Fase4-4.mp3" in game._phase_music_tracks(5)), "Fase4-4 leaked into phase 5")
+	_check("Fase3-7.mp3" in game._phase_music_tracks(3), "Fase3-7 is not exclusive to phase 3 playlist")
+	_check(not ("Fase3-7.mp3" in game._phase_music_tracks(1)), "Fase3-7 leaked into phase 1")
+	_check(not ("Fase3-7.mp3" in game._phase_music_tracks(4)), "Fase3-7 leaked into phase 4")
 	_check(game.audio_streams.has("player_shot"), "missing player shot recording")
 	_check(game.audio_streams.has("atk_lacerante_1") and game.audio_streams.has("lacerante_kill"), "missing Lacerante recordings")
 	_check(game.audio_streams["player_shot"] is AudioStreamMP3, "player shot is not the root MP3 recording")

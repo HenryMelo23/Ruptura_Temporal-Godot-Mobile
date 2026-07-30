@@ -9,6 +9,7 @@
 !assets/sprites/aurea-peregrina.png.import
 !assets/sprites/manifestacao-eclipsada.png.import
 !assets/sprites/manifestacao_bombastica.png.import
+!assets/sprites/manifestacao-necronada.png.import
 !assets/sprites/Fase6.png.import
 .agent_logs/
 # Generated Android/export artifacts
@@ -58,6 +59,8 @@ fix_*.py
 scratch_*.gd
 scratch_*.gd.uid
 discord_webhook.local.cfg
+.leaderboard_admin.local.json
+.leaderboard_admin_backups/
 
 # Python/editor noise from the desktop reference project
 __pycache__/

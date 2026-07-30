@@ -45,4 +45,6 @@ func _run() -> void:
 	_check(game._card_rarity_color(rare_card).is_equal_approx(game.CARD_RARITY_RARE_COLOR), "rare card color is not golden yellow")
 
 	print("SHOP_SCHEDULE_RARITY_SMOKE_OK cadence=180 phase_persistent=true opening_anim=true common=white rare=gold")
+	game.queue_free()
+	await process_frame
 	quit(0)

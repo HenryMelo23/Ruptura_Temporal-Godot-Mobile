@@ -1,10 +1,11 @@
 extends Node2D
 
 const AuraSystem = preload("res://scripts/aura_system.gd")
+const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 
 const WORLD_SIZE := Vector2(1600, 900)
-const GAME_VERSION := "2.0.30c"
-const GAME_VERSION_CODE := 23003
+const GAME_VERSION := "2.0.30e"
+const GAME_VERSION_CODE := 23005
 const MULTIPLAYER_MENU_ENABLED := true
 const UI_PLATFORM_AUTO := "auto"
 const UI_PLATFORM_ANDROID := "android"
@@ -70,6 +71,8 @@ const APP_UPDATE_CHECK_DELAY := 1.0
 const APP_UPDATE_DOWNLOAD_TIMEOUT := 1800.0
 const APP_UPDATE_HASH_CHUNK_BYTES := 1024 * 1024
 const APP_UPDATE_PLUGIN_NAME := "RupturaStreamer"
+const APP_UPDATE_STORAGE_DIR := "user://updates"
+const APP_UPDATE_CACHED_EXTENSIONS := ["apk", "idsig", "exe", "tmp", "part"]
 const INPUT_BIND_NONE := ""
 const INPUT_BIND_KEY_PREFIX := "KEY:"
 const INPUT_BIND_MOUSE_PREFIX := "MOUSE:"
@@ -402,7 +405,7 @@ const PETRO_BASE_DAMAGE := 25.0
 const PETRO_ATTACK_INTERVAL := 1.0
 const PETRO_ATTACK_RANGE := 58.0
 const PETRO_MOVE_SPEED := 235.0
-const RARE_CARD_NAMES := ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "Coração de Antimatéria", "Cofre do Excesso"]
+const RARE_CARD_NAMES := ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso"]
 const CARD_RARITY_COMMON_COLOR := Color(0.96, 0.97, 1.0)
 const CARD_RARITY_RARE_COLOR := Color(1.0, 0.76, 0.12)
 const BOSS_ATTACK_BASE_COOLDOWN := 3.8
@@ -1124,12 +1127,12 @@ const CARDS := [
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.10, 0.72)},
 	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.40, 0.94, 1.0)},
-	{"id": "tregua_regenerativa", "name": "Trégua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
+	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
 	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima a carta comum selecionada, aumenta sua chance de voltar e faz o retorno vir com bonus unico.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
-	{"id": "passagem_intangivel", "name": "Passagem Intangível", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.90, 1.0)},
-	{"id": "ancora_vital", "name": "Âncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
+	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.90, 1.0)},
+	{"id": "ancora_vital", "name": "Ã‚ncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
 	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)},
 	{"id": "leitura_instante", "name": "Leitura do Instante", "nick": "Previsao Clara", "desc": "Aumenta a antecedencia visual de ataques inimigos e de chefes.", "icon": "Deck/carta-LeituraInstante1.png", "frame_2": "Deck/carta-LeituraInstante2.png", "color": Color(1.0, 0.84, 0.30)},
 	{"id": "margem_segura", "name": "Margem Segura", "nick": "Distancia Certa", "desc": "Inimigos comuns surgem mais longe do jogador.", "icon": "Deck/carta-MargenSegura1.png", "frame_2": "Deck/carta-MargenSegura2.png", "color": Color(0.26, 0.90, 0.96)},
@@ -1148,7 +1151,7 @@ const CARDS := [
 	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.70, 1.0)},
 	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.90, 0.96, 1.0)},
 	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "Inimigos derrotados retornam temporariamente como aliados.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
-	{"id": "coracao_antimateria", "name": "Coração de Antimatéria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
+	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
 	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)}
 ]
 
@@ -1212,7 +1215,7 @@ const AURAS := [
 	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."},
 	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."},
 	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."},
-	{"key": "sanguinaria", "name": "Sanguinaria", "icon": "aurea_sanguinaria.png", "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
+	{"key": "sanguinaria", "name": "Sanguinaria", "icon": "Aurea.png", "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
 	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."},
 	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."},
 	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://assets/sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."},
@@ -1224,6 +1227,12 @@ var mode = "menu"
 var previous_mode = "game"
 var font: Font
 var textures = {}
+var pixel_card_burn_shader: Shader = null
+var pixel_card_burn_palette: GradientTexture1D = null
+var pixel_card_burn_noise_cache: Dictionary = {}
+var pixel_card_burn_material_cache: Dictionary = {}
+var cinzas_burn_texture_nodes: Array[Control] = []
+var cinzas_burn_texture_index := 0
 var lazy_texture_paths: Dictionary = {}
 var current_lazy_map_key: String = ""
 var player_nickname: String = ""
@@ -2040,6 +2049,8 @@ var catalog_tab = 0
 var catalog_selected = 0
 var catalog_scroll_index = 0
 var catalog_detail_open = false
+var catalog_search_query := ""
+var catalog_filter_mode := "all"
 var eletrica_shot_counter = 0
 var shop_select_pulse_timer = 0.0
 var shop_select_pulse_index = -1
@@ -2450,6 +2461,7 @@ func _ready() -> void:
 	app_update_download_request.use_threads = true
 	add_child(app_update_download_request)
 	app_update_download_request.request_completed.connect(_on_app_update_download_completed)
+	_cleanup_stale_app_update_files()
 
 	if QA_STREAMING_FEATURE_ENABLED:
 		qa_stream_session_request = HTTPRequest.new()
@@ -2505,7 +2517,7 @@ func _ready() -> void:
 	_play_menu_music_random()
 	_perf_mark("ready_total", perf_ready_started_ms)
 
-	# Configuração para Smoke Test Multiplayer via CLI
+	# ConfiguraÃ§Ã£o para Smoke Test Multiplayer via CLI
 	if "--server" in args:
 		print("ONLINE TEST: criando sala online...")
 		call_deferred("_host_multiplayer_game")
@@ -4210,17 +4222,43 @@ func _app_update_filename() -> String:
 	return "ruptura_temporal_%s.%s" % [version, "exe" if _app_update_platform() == "windows" else "apk"]
 
 
+func _cleanup_stale_app_update_files(keep_path := "") -> int:
+	var updates_dir_absolute := ProjectSettings.globalize_path(APP_UPDATE_STORAGE_DIR)
+	if not DirAccess.dir_exists_absolute(updates_dir_absolute):
+		return 0
+	var keep_absolute := ProjectSettings.globalize_path(keep_path) if keep_path != "" else ""
+	var dir := DirAccess.open(APP_UPDATE_STORAGE_DIR)
+	if dir == null:
+		return 0
+	var removed := 0
+	dir.list_dir_begin()
+	var filename := dir.get_next()
+	while filename != "":
+		if not dir.current_is_dir():
+			var extension := filename.get_extension().to_lower()
+			if APP_UPDATE_CACHED_EXTENSIONS.has(extension):
+				var candidate := APP_UPDATE_STORAGE_DIR + "/" + filename
+				var candidate_absolute := ProjectSettings.globalize_path(candidate)
+				if candidate_absolute != keep_absolute and DirAccess.remove_absolute(candidate_absolute) == OK:
+					removed += 1
+		filename = dir.get_next()
+	dir.list_dir_end()
+	if removed > 0:
+		print("Atualizador: limpou %d instalador(es) antigo(s)." % removed)
+	return removed
+
+
 func _start_app_update_download() -> void:
 	if app_update_download_request == null or app_update_manifest.is_empty():
 		_set_app_update_error("Download indisponivel neste dispositivo.")
 		return
-	var updates_dir := "user://updates"
-	var absolute_dir := ProjectSettings.globalize_path(updates_dir)
+	var absolute_dir := ProjectSettings.globalize_path(APP_UPDATE_STORAGE_DIR)
 	var mkdir_err := DirAccess.make_dir_recursive_absolute(absolute_dir)
 	if mkdir_err != OK and mkdir_err != ERR_ALREADY_EXISTS:
 		_set_app_update_error("Nao foi possivel preparar a pasta da atualizacao.")
 		return
-	app_update_download_path = updates_dir + "/" + _app_update_filename()
+	_cleanup_stale_app_update_files()
+	app_update_download_path = APP_UPDATE_STORAGE_DIR + "/" + _app_update_filename()
 	var absolute_path := ProjectSettings.globalize_path(app_update_download_path)
 	if FileAccess.file_exists(app_update_download_path):
 		DirAccess.remove_absolute(absolute_path)
@@ -21467,7 +21505,7 @@ func _start_boss6_fossil_echo() -> void:
 		"hp_max": 280.0
 	}
 	_add_boss_attack({"kind": BOSS6_ABILITY_FOSSIL_ECHO, "age": 0.0, "duration": 5.0})
-	_add_text("ECO FÓSSIL REVELADO", echo_pos + Vector2(0, -60), Color(0.72, 0.48, 1.0), 1.5, 22)
+	_add_text("ECO FÃ“SSIL REVELADO", echo_pos + Vector2(0, -60), Color(0.72, 0.48, 1.0), 1.5, 22)
 	_play_sfx("Portal.mp3", 0.05, 0.58, 0.68)
 
 
@@ -21478,7 +21516,7 @@ func _start_boss6_necro_erosion() -> void:
 	boss6_necro_erosion_duration = 10.0
 	boss6_necro_erosion_damage_timer = 0.0
 	_add_boss_attack({"kind": BOSS6_ABILITY_NECRO_EROSION, "age": 0.0, "duration": 10.0})
-	_add_text("NECRO-EROSÃO INICIADA", boss_pos + Vector2(0, -140), Color(0.9, 0.15, 0.25), 1.6, 26)
+	_add_text("NECRO-EROSÃƒO INICIADA", boss_pos + Vector2(0, -140), Color(0.9, 0.15, 0.25), 1.6, 26)
 	_play_sfx("boss1_dash", 0.03, 0.5)
 
 
@@ -21493,7 +21531,7 @@ func _damage_boss6_fossil_echo(amount: float) -> void:
 	boss6_fossil_echo_slow_timer = 2.5
 	if current_hp <= 0.0:
 		boss6_fossil_echo.clear()
-		_add_text("ECO DESTRUÍDO", player_pos + Vector2(0, -60), Color(1.0, 0.2, 0.2), 1.5, 20)
+		_add_text("ECO DESTRUÃDO", player_pos + Vector2(0, -60), Color(1.0, 0.2, 0.2), 1.5, 20)
 
 
 func _is_player_calcified() -> bool:
@@ -25280,12 +25318,21 @@ func _cinzas_mark_index(card_id: String) -> int:
 	return -1
 
 
-func _cinzas_weight_multiplier(card_id: String) -> float:
+func _cinzas_weight_multiplier(_card_id_unused: String) -> float:
+	return 1.0
+
+
+func _cinzas_mark_stacks(card_id: String) -> int:
 	var mark_index := _cinzas_mark_index(card_id)
 	if mark_index < 0:
-		return 1.0
-	var mark: Dictionary = cinzas_burn_marks[mark_index]
-	return 1.0 + float(mark.get("weight_bonus", _cinzas_weight_bonus()))
+		return 0
+	return max(1, int(Dictionary(cinzas_burn_marks[mark_index]).get("stacks", 1)))
+
+
+func _clear_cinzas_mark(card_id: String) -> void:
+	var mark_index := _cinzas_mark_index(card_id)
+	if mark_index >= 0:
+		cinzas_burn_marks.remove_at(mark_index)
 
 
 func _can_burn_shop_card(card: Dictionary) -> bool:
@@ -25293,7 +25340,8 @@ func _can_burn_shop_card(card: Dictionary) -> bool:
 		return false
 	if not _is_common_card(card) or _card_at_max(card):
 		return false
-	return _cinzas_mark_index(_card_id(card)) < 0
+	var mark_index := _cinzas_mark_index(_card_id(card))
+	return mark_index < 0 or bool(card.get("cinzas_return_buff", false))
 
 
 func _burn_shop_card(index: int) -> bool:
@@ -25303,15 +25351,34 @@ func _burn_shop_card(index: int) -> bool:
 	if not _can_burn_shop_card(card):
 		return false
 	var max_marks := _cinzas_max_burned_cards()
-	var weight_bonus := _cinzas_weight_bonus()
 	if not _consume_card_count(CARD_CINZAS_ID):
 		return false
-	var mark := {"card_id": _card_id(card), "shops_left": max(1, _cinzas_duration_in_shops()), "created_at": time_alive, "skip_decay_once": true, "return_buff": true, "weight_bonus": weight_bonus}
-	if cinzas_burn_marks.size() >= _cinzas_max_burned_cards() and cinzas_burn_marks.size() > 0:
-		cinzas_burn_marks.pop_front()
-	if max_marks > 0 and cinzas_burn_marks.size() >= max_marks and cinzas_burn_marks.size() > 0:
-		cinzas_burn_marks.pop_front()
-	cinzas_burn_marks.append(mark)
+	var card_id := _card_id(card)
+	var mark_index := _cinzas_mark_index(card_id)
+	if mark_index >= 0:
+		var existing: Dictionary = cinzas_burn_marks[mark_index]
+		existing["stacks"] = max(1, int(existing.get("stacks", 1))) + 1
+		existing["shops_left"] = max(1, _cinzas_duration_in_shops())
+		existing["skip_decay_once"] = true
+		existing["return_buff"] = true
+		existing["weight_bonus"] = 0.0
+		cinzas_burn_marks[mark_index] = existing
+	else:
+		var mark := {
+			"card_id": card_id,
+			"shops_left": max(1, _cinzas_duration_in_shops()),
+			"created_at": time_alive,
+			"skip_decay_once": true,
+			"return_buff": true,
+			"weight_bonus": 0.0,
+			"stacks": 1,
+			"holes_seed": abs(("%s:%d" % [card_id, Time.get_ticks_msec()]).hash())
+		}
+		if cinzas_burn_marks.size() >= _cinzas_max_burned_cards() and cinzas_burn_marks.size() > 0:
+			cinzas_burn_marks.pop_front()
+		if max_marks > 0 and cinzas_burn_marks.size() >= max_marks and cinzas_burn_marks.size() > 0:
+			cinzas_burn_marks.pop_front()
+		cinzas_burn_marks.append(mark)
 	shop_cards[index] = _make_burned_shop_slot(card)
 	shop_selected = clamp(index, 0, max(0, shop_cards.size() - 1))
 	shop_select_pulse_index = shop_selected
@@ -25324,21 +25391,24 @@ func _burn_shop_card(index: int) -> bool:
 func _update_burned_card_marks_after_shop(picks: Array) -> void:
 	if cinzas_burn_marks.is_empty():
 		return
-	var picked_ids := {}
+	var visible_marked_ids := {}
 	for i in range(picks.size()):
 		var card: Dictionary = picks[i]
 		if _is_common_card(card):
-			picked_ids[_card_id(card)] = true
 			var mark_index := _cinzas_mark_index(_card_id(card))
 			if mark_index >= 0 and bool(cinzas_burn_marks[mark_index].get("return_buff", false)):
 				var buffed := card.duplicate(true)
 				buffed["cinzas_return_buff"] = true
-				buffed["desc"] = String(buffed.get("desc", "")) + "\nRetorno das Cinzas: esta compra vem com um bonus unico."
+				buffed["cinzas_buff_stacks"] = _cinzas_mark_stacks(_card_id(card))
+				buffed["cinzas_burn_seed"] = int(cinzas_burn_marks[mark_index].get("holes_seed", abs(_card_id(card).hash())))
+				buffed["desc"] = String(buffed.get("desc", "")) + "\nRetorno das Cinzas x%d: esta compra vem chamuscada com um bonus unico." % int(buffed["cinzas_buff_stacks"])
 				picks[i] = buffed
+				visible_marked_ids[_card_id(card)] = true
 	var kept: Array = []
 	for mark in cinzas_burn_marks:
 		var card_id := String(mark.get("card_id", ""))
-		if picked_ids.has(card_id):
+		if visible_marked_ids.has(card_id):
+			kept.append(mark)
 			continue
 		if bool(mark.get("skip_decay_once", false)):
 			mark["skip_decay_once"] = false
@@ -26713,12 +26783,12 @@ func _card_category(card_name: String) -> String:
 		"Mercenaria": return "COMBO E PONTUACAO"
 		"Devorador de Destinos": return "MARCA RARA E COLAPSO"
 		"Escolha Adiada": return "LOJA E RESERVA"
-		"Trégua Regenerativa": return "REGENERAÇÃO SEGURA"
+		"TrÃ©gua Regenerativa": return "REGENERAÃ‡ÃƒO SEGURA"
 		"Cinzas da Escolha": return "LOJA E PROBABILIDADE"
 		"Reserva de Pulso": return "OVERHEAL ARMAZENADO"
 		"Casulo Reativo": return "DEFESA CONTRA RAJADA"
-		"Passagem Intangível": return "FASE POS-TELEPORTE"
-		"Âncora Vital": return "RECUPERAÇÃO POS-DANO"
+		"Passagem IntangÃ­vel": return "FASE POS-TELEPORTE"
+		"Ã‚ncora Vital": return "RECUPERAÃ‡ÃƒO POS-DANO"
 		"Inercia Cronal": return "RESISTENCIA A CONTROLE"
 		"Leitura do Instante": return "ANTECIPACAO DE PERIGO"
 		"Margem Segura": return "SPAWN E POSICIONAMENTO"
@@ -26737,7 +26807,7 @@ func _card_category(card_name: String) -> String:
 		"Mandamento da Ruptura": return "LEI DE HABILIDADES"
 		"Carta Zero": return "ESCALA DE CARTAS COMUNS"
 		"Necrocronismo": return "COPIA ESPECTRAL"
-		"Coração de Antimatéria": return "CARGA DE IMPLOSAO"
+		"CoraÃ§Ã£o de AntimatÃ©ria": return "CARGA DE IMPLOSAO"
 		"Cofre do Excesso": return "OVERKILL ARMAZENADO"
 	return "MELHORIA"
 
@@ -26760,12 +26830,12 @@ func _card_lore(card_name: String) -> String:
 		"Mercenaria": return "Toda queda vira contrato. Todo contrato bem cumprido paga mais caro."
 		"Devorador de Destinos": return "O destino mais pesado vira ancora. Quando ele cai, os futuros proximos se partem e Geovana veste os restos."
 		"Escolha Adiada": return "Uma decisao recusada hoje fica presa ao mesmo preco ate Geovana aceitar pagar ou soltar a linha."
-		"Trégua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
+		"TrÃ©gua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
 		"Cinzas da Escolha": return "Uma carta sacrificada nao desaparece; ela deixa fuligem nas probabilidades futuras e volta com uma ultima fagulha."
 		"Reserva de Pulso": return "A cura que sobraria fica guardada como uma batida extra para o pior instante."
 		"Casulo Reativo": return "Depois de muitos impactos, a defesa fecha por instinto e ensina a rajada a esperar."
-		"Passagem Intangível": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
-		"Âncora Vital": return "A dor finca um selo no chao. Ficar perto dele puxa parte da vida perdida de volta."
+		"Passagem IntangÃ­vel": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
+		"Ã‚ncora Vital": return "A dor finca um selo no chao. Ficar perto dele puxa parte da vida perdida de volta."
 		"Inercia Cronal": return "Seu corpo aprende a nao obedecer a todo empurrao que o tempo tenta impor."
 		"Leitura do Instante": return "O perigo anuncia sua chegada alguns instantes antes de tocar o mundo."
 		"Margem Segura": return "A ruptura abre caminho, mas mantem os invasores um pouco mais distantes."
@@ -26784,7 +26854,7 @@ func _card_lore(card_name: String) -> String:
 		"Mandamento da Ruptura": return "A terceira ordem nao pede permissao: ela atravessa cooldown, impacto e risco por pura autoridade temporal."
 		"Carta Zero": return "A origem reescreve os numeros pequenos. Toda carta comum passa a lembrar que veio depois dela."
 		"Necrocronismo": return "A morte recente vira copia breve, fraca no corpo e agressiva na memoria."
-		"Coração de Antimatéria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
+		"CoraÃ§Ã£o de AntimatÃ©ria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
 		"Cofre do Excesso": return "Nada se perde no excesso. O dano que sobraria e guardado para cobrar elites e chefes."
 	return ""
 
@@ -26923,16 +26993,18 @@ func _catalog_detail_mechanics(item: Dictionary) -> String:
 
 func _apply_cinzas_return_bonus(card: Dictionary) -> void:
 	var card_id := _card_id(card)
+	var stacks: int = max(1, int(card.get("cinzas_buff_stacks", 1)))
 	match card_id:
 		"Speed Boost", "Teleporte":
-			player_speed += 12.0
+			player_speed += 12.0 + float(stacks - 1) * 4.0
 			_add_text("CINZAS: VELOCIDADE", player_pos + Vector2(0, -126), Color(1.0, 0.58, 0.28), 1.0, 18)
 		"Porcao", CARD_TREGUA_ID, CARD_RESERVA_ID, CARD_CASULO_ID, CARD_PASSAGEM_ID, CARD_ANCORA_ID, "Defesa":
-			player_hp_max += 20
-			_heal_player(20.0, "cinzas_bonus", false)
+			var bonus_hp := 20 + (stacks - 1) * 10
+			player_hp_max += bonus_hp
+			_heal_player(float(bonus_hp), "cinzas_bonus", false)
 			_add_text("CINZAS: VITALIDADE", player_pos + Vector2(0, -126), Color(1.0, 0.58, 0.28), 1.0, 18)
 		_:
-			player_damage += max(2.0, _manifestation_base_damage() * 0.06)
+			player_damage += max(2.0, _manifestation_base_damage() * (0.06 + float(stacks - 1) * 0.018))
 			_add_text("CINZAS: DANO", player_pos + Vector2(0, -126), Color(1.0, 0.58, 0.28), 1.0, 18)
 	common_card_effects.append({"kind": "cinzas", "pos": player_pos, "life": 0.90, "max": 0.90, "radius": 82.0, "color": Color(1.0, 0.58, 0.28)})
 
@@ -26954,7 +27026,7 @@ func _apply_card(card: Dictionary) -> void:
 				_register_overheal_for_reserva(float(overheal), "porcao")
 				player_hp_max += int(float(overheal) * _apply_carta_zero_to_common_value("Porcao", "overflow_hp", 0.35))
 			_heal_player(heal, "porcao", false)
-		"Trégua Regenerativa":
+		"TrÃ©gua Regenerativa":
 			tregua_regenerativa_pulse = 0.75
 		"Cinzas da Escolha":
 			common_card_effects.append({"kind": "cinzas", "pos": player_pos, "life": 0.70, "max": 0.70, "radius": 62.0, "color": Color(1.0, 0.58, 0.28)})
@@ -26962,9 +27034,9 @@ func _apply_card(card: Dictionary) -> void:
 			reserva_pulso_pulse = 0.85
 		"Casulo Reativo":
 			common_card_effects.append({"kind": "casulo", "pos": player_pos, "life": 0.70, "max": 0.70, "radius": 58.0, "color": Color(0.54, 1.0, 0.86)})
-		"Passagem Intangível":
+		"Passagem IntangÃ­vel":
 			common_card_effects.append({"kind": "passagem", "pos": player_pos, "life": 0.62, "max": 0.62, "radius": 52.0, "color": Color(0.72, 0.90, 1.0)})
-		"Âncora Vital":
+		"Ã‚ncora Vital":
 			common_card_effects.append({"kind": "ancora", "pos": player_pos, "life": 0.70, "max": 0.70, "radius": 58.0, "color": Color(0.34, 1.0, 0.66)})
 		"Disparo crescente":
 			_recalculate_common_card_stat_bonuses()
@@ -27024,13 +27096,14 @@ func _apply_card(card: Dictionary) -> void:
 		"Necrocronismo":
 			_recalculate_necro_spectral_power()
 			rare_card_effects.append({"kind": "necro_ready", "pos": player_pos, "life": 0.75, "max": 0.75, "radius": 76.0, "color": Color(0.68, 0.36, 1.0)})
-		"Coração de Antimatéria":
+		"CoraÃ§Ã£o de AntimatÃ©ria":
 			antimatter_charge = min(antimatter_charge, _antimatter_required_charge())
 			antimatter_flash = 0.75
 		"Cofre do Excesso":
 			excess_discharge_flash = 0.75
 	if bool(card.get("cinzas_return_buff", false)):
 		_apply_cinzas_return_bonus(card)
+		_clear_cinzas_mark(_card_id(card))
 	_add_text(name, player_pos + Vector2(0, -100), Color(card["color"]), 1.3, 25)
 	_sync_deck_network()
 
@@ -27528,7 +27601,7 @@ func _adaptive_particle_count(count: int) -> int:
 
 func _spawn_music_notes(pos: Vector2, count: int) -> void:
 	if not gfx_particles or not _particle_budget_available(): return
-	var notes = ["♪", "♫", "♬", "♩"]
+	var notes = ["â™ª", "â™«", "â™¬", "â™©"]
 	for i in range(_adaptive_particle_count(count)):
 		var note = notes[rng.randi() % notes.size()]
 		var color = Color(1.0, 0.8 + rng.randf_range(-0.1, 0.2), 0.2 + rng.randf_range(0, 0.3))
@@ -27696,13 +27769,96 @@ func _emit_projectile_trail(bullet: Dictionary) -> void:
 	})
 
 
+var phase_transition_overlay_node: ColorRect = null
+var phase_transition_title_label: Label = null
+var phase_transition_materials_cache: Dictionary = {}
+
+func _ensure_phase_transition_nodes() -> void:
+	if phase_transition_overlay_node == null or not is_instance_valid(phase_transition_overlay_node):
+		phase_transition_overlay_node = ColorRect.new()
+		phase_transition_overlay_node.name = "PhaseTransitionOverlay"
+		phase_transition_overlay_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		phase_transition_overlay_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(phase_transition_overlay_node)
+	if phase_transition_title_label == null or not is_instance_valid(phase_transition_title_label):
+		phase_transition_title_label = Label.new()
+		phase_transition_title_label.name = "PhaseTransitionTitleLabel"
+		phase_transition_title_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		phase_transition_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		phase_transition_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		phase_transition_title_label.add_theme_font_size_override("font_size", 34)
+		phase_transition_title_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.45))
+		phase_transition_overlay_node.add_child(phase_transition_title_label)
+
+
+func _reset_phase_transition_nodes() -> void:
+	if phase_transition_overlay_node and is_instance_valid(phase_transition_overlay_node):
+		phase_transition_overlay_node.visible = false
+
+
+func _get_phase_transition_material(shader_path: String) -> ShaderMaterial:
+	var mat: ShaderMaterial = phase_transition_materials_cache.get(shader_path, null)
+	if mat == null:
+		mat = ShaderMaterial.new()
+		if ResourceLoader.exists(shader_path):
+			mat.shader = load(shader_path) as Shader
+		phase_transition_materials_cache[shader_path] = mat
+	return mat
+
+
+func _draw_phase_transition(viewport: Vector2) -> void:
+	_draw_game(viewport)
+	_ensure_phase_transition_nodes()
+	phase_transition_overlay_node.visible = true
+	phase_transition_overlay_node.position = Vector2.ZERO
+	phase_transition_overlay_node.size = viewport
+
+	var target_phase: int = int(pending_phase if pending_phase > 0 else current_phase)
+	var total_time: float = maxf(0.1, PHASE_TRANSITION_TIME)
+	var t: float = 1.0 - clampf(phase_transition_timer / total_time, 0.0, 1.0)
+
+	var phase_names := {
+		1: "RUÃNAS CÃ“SMICAS",
+		2: "ÃRTICO IMPERIAL",
+		3: "CATEDRAL DOS VERMES",
+		4: "CHARCO DOS SAPOS",
+		5: "COLISÃƒO DE MUNDOS",
+		6: "ABISMO FINAL"
+	}
+	var phase_shaders := {
+		1: "res://shaders/transitions/star_dissolve.gdshader",
+		2: "res://shaders/transitions/blizzard_wipe.gdshader",
+		3: "res://shaders/transitions/slime_drip_melt.gdshader",
+		4: "res://shaders/transitions/black_hole_vortex.gdshader",
+		5: "res://shaders/transitions/energy_crack_shatter.gdshader",
+		6: "res://shaders/transitions/worm_devour.gdshader"
+	}
+
+	if t < 0.45:
+		phase_transition_title_label.visible = true
+		phase_transition_title_label.text = String(phase_names.get(target_phase, "FASE %d" % target_phase)).to_upper()
+		phase_transition_overlay_node.color = Color.BLACK
+		phase_transition_overlay_node.material = null
+	else:
+		phase_transition_title_label.visible = false
+		var progress := (t - 0.45) / 0.55
+		var shader_path: String = String(phase_shaders.get(target_phase, phase_shaders[1]))
+		var mat := _get_phase_transition_material(shader_path)
+		mat.set_shader_parameter("progress", progress)
+		phase_transition_overlay_node.material = mat
+
+
 func _draw() -> void:
 	var viewport = get_viewport_rect().size
+	if mode != "phase_transition":
+		_reset_phase_transition_nodes()
 	_update_button_layout(viewport)
 	_update_nickname_input_visibility()
 	_update_cheat_input_visibility()
 	_update_webhook_input_visibility()
 	match mode:
+		"phase_transition":
+			_draw_phase_transition(viewport)
 		"nick_setup":
 			_draw_nickname_setup(viewport)
 		"menu":
@@ -27971,7 +28127,7 @@ func _draw_menu(viewport: Vector2) -> void:
 	_draw_glitch_title("RUPTURA TEMPORAL", title_pos, title_size, accent)
 
 	var top_chip = Rect2(viewport.x * 0.5 - (170.0 if portrait else 210.0), title_pos.y + title_size * (0.50 if portrait else 0.58), 340.0 if portrait else 420.0, 30.0)
-	_draw_hub_chip(top_chip, "APOLO " + GAME_VERSION + " / HUB DE RUPTURA", accent, true)
+	_draw_hub_chip(top_chip, "RUPTURA " + GAME_VERSION + " / HUB TEMPORAL", accent, true)
 	if player_nickname != "":
 		var nick_chip = Rect2(top_chip.position.x, top_chip.end.y + 8.0, top_chip.size.x, 24.0)
 		_draw_hub_chip(nick_chip, "QA: " + player_nickname, Color(0.72, 0.92, 1.0), false)
@@ -28011,9 +28167,6 @@ func _draw_menu(viewport: Vector2) -> void:
 	_draw_hub_button(menu_buttons["settings"], "CONFIG", "controles e jogo", Color(1.0, 0.74, 0.22), menu_selected == _menu_index_for("settings"), false)
 	_draw_hub_button(menu_buttons["exit"], "SAIR", "", Color(1.0, 0.26, 0.36), menu_selected == _menu_index_for("exit"), false)
 
-	_draw_hub_manifest_card(manifest_rect)
-	var status = "LOJA: AUTOMATICA" if shop_auto_enabled else "LOJA: MANUAL"
-	_draw_hub_chip(status_rect, status, Color(0.72, 0.92, 1.0), false)
 	draw_string(font, Vector2(safe, viewport.y - safe * 0.55), "v" + GAME_VERSION, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.74, 0.92, 1.0, 0.78))
 
 
@@ -28704,7 +28857,7 @@ func _draw_holo_panel(rect: Rect2, border := Color(0.0, 1.0, 0.82), selected := 
 
 
 func _draw_section_flow(label: String, label_color: Color, text: String, text_color: Color, start_y: float, details_rect: Rect2, font_size: int) -> float:
-	# Desenhar o rÃ³tulo/categoria da seÃ§Ã£o com realce neon
+	# Desenhar o rÃƒÂ³tulo/categoria da seÃƒÂ§ÃƒÂ£o com realce neon
 	draw_string(font, Vector2(details_rect.position.x + 20, start_y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size + 1, label_color)
 
 	# O texto flui logo abaixo
@@ -28726,7 +28879,7 @@ func _draw_section_flow(label: String, label_color: Color, text: String, text_co
 		draw_string(font, Vector2(details_rect.position.x + 20, text_y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
 		text_y += font_size + 4
 
-	# Retorna o Y final mais o padding confortÃ¡vel para a prÃ³xima seÃ§Ã£o
+	# Retorna o Y final mais o padding confortÃƒÂ¡vel para a prÃƒÂ³xima seÃƒÂ§ÃƒÂ£o
 	return text_y + 12
 
 
@@ -29066,10 +29219,10 @@ func _catalog_detail_title(kind: String) -> String:
 
 func _catalog_enemy_items() -> Array:
 	return [
-		{"kind": "enemy", "name": "Comum", "summary": "O primeiro reflexo agressivo da Ruptura.", "desc": "Fragmento sem rosto que nasce onde a linha temporal rachou. Ele nao planeja: sente Geovana e avanca como se a existencia dela fosse um erro a corrigir.", "lore": "Os Comuns sao ecos baratos da primeira fissura. Quanto mais tempo passam soltos, mais o mapa parece aceitar que eles sempre estiveram ali.", "mechanics": "Funciona como pressao de base: aproxima, ocupa caminho e força Geovana a se mover antes que inimigos mais complexos transformem a arena.", "color": Color(0.8, 0.86, 0.95), "texture": "enemy_common_phase_1"},
-		{"kind": "enemy", "name": "Espreitador", "summary": "Um perseguidor que aprende o ritmo do medo.", "desc": "Ele nao corre o tempo todo. Observa pequenas fugas, encurta distancia e escolhe o momento de transformar perseguicao em bote.", "lore": "Chamado de sombra faminta pelos primeiros registros do APOLO, o Espreitador parece gostar de caçar quem acredita que ja ganhou distancia suficiente.", "mechanics": "Leitura de rota: pressiona flancos e fica mais perigoso quando a run amadurece, obrigando o jogador a alternar direcao e teleporte.", "color": Color(0.62, 0.86, 1.0), "texture": "stalker"},
+		{"kind": "enemy", "name": "Comum", "summary": "O primeiro reflexo agressivo da Ruptura.", "desc": "Fragmento sem rosto que nasce onde a linha temporal rachou. Ele nao planeja: sente Geovana e avanca como se a existencia dela fosse um erro a corrigir.", "lore": "Os Comuns sao ecos baratos da primeira fissura. Quanto mais tempo passam soltos, mais o mapa parece aceitar que eles sempre estiveram ali.", "mechanics": "Funciona como pressao de base: aproxima, ocupa caminho e forÃ§a Geovana a se mover antes que inimigos mais complexos transformem a arena.", "color": Color(0.8, 0.86, 0.95), "texture": "enemy_common_phase_1"},
+		{"kind": "enemy", "name": "Espreitador", "summary": "Um perseguidor que aprende o ritmo do medo.", "desc": "Ele nao corre o tempo todo. Observa pequenas fugas, encurta distancia e escolhe o momento de transformar perseguicao em bote.", "lore": "Chamado de sombra faminta pelos primeiros registros do Ruptura, o Espreitador parece gostar de caÃ§ar quem acredita que ja ganhou distancia suficiente.", "mechanics": "Leitura de rota: pressiona flancos e fica mais perigoso quando a run amadurece, obrigando o jogador a alternar direcao e teleporte.", "color": Color(0.62, 0.86, 1.0), "texture": "stalker"},
 		{"kind": "enemy", "name": "Projetador", "summary": "A Ruptura aprendeu a atacar de longe.", "desc": "Um corpo quebrado que prefere distancia. Ele parece fraco ate o primeiro projetil obrigar Geovana a dividir atencao entre fuga, mira e terreno.", "lore": "Projetadores sao nervos expostos do mapa. Eles disparam como se estivessem transmitindo a dor da fenda para tudo que se move.", "mechanics": "Cria linhas de perigo e pune caminhada reta. O valor dele esta em fazer o jogador reposicionar sem abandonar o controle da horda.", "color": Color(0.65, 0.45, 1.0), "texture": "projector"},
-		{"kind": "enemy", "name": "Aglomerador", "summary": "Massa viva que fragmenta a arena.", "desc": "Parece apenas grande, mas e um ninho ambulante. Quando cai, deixa para tras mais problemas do que levou consigo.", "lore": "O Aglomerador e uma colmeia de corpos temporais que nao aceitaram morrer separados. O APOLO registra seu surgimento como sinal de saturacao local.", "mechanics": "Serve como ancora de pressao: demora a sair do caminho e espalha novos corpos, mudando o formato da onda.", "color": Color(0.56, 0.56, 1.0), "texture": "agglomerator"},
+		{"kind": "enemy", "name": "Aglomerador", "summary": "Massa viva que fragmenta a arena.", "desc": "Parece apenas grande, mas e um ninho ambulante. Quando cai, deixa para tras mais problemas do que levou consigo.", "lore": "O Aglomerador e uma colmeia de corpos temporais que nao aceitaram morrer separados. Seu surgimento e sinal de saturacao local.", "mechanics": "Serve como ancora de pressao: demora a sair do caminho e espalha novos corpos, mudando o formato da onda.", "color": Color(0.56, 0.56, 1.0), "texture": "agglomerator"},
 		{"kind": "enemy", "name": "Cristalizado", "summary": "Uma casca que endureceu demais para desaparecer.", "desc": "O Cristalizado carrega placas de tempo condensado. Ele nao precisa ser rapido para ser perigoso: basta estar no lugar errado na hora certa.", "lore": "Sao restos de rupturas que tentaram congelar o proprio instante. Por isso brilham como pedra viva e parecem resistir ao esquecimento.", "mechanics": "Entra como obstaculo vivo: segura espaco, quebra rotas confortaveis e favorece habilidades que reposicionam ou atravessam alvo.", "color": Color(0.56, 1.0, 0.96), "texture": "crystal"},
 		{"kind": "enemy", "name": "Curater", "summary": "O suporte da horda.", "desc": "Nao existe para vencer sozinho. Existe para negar o progresso da Geovana, costurando a onda enquanto outros inimigos fazem o trabalho sujo.", "lore": "O Curater parece uma resposta defensiva da Ruptura: quando a Geovana aprende a limpar a tela, a fenda aprende a manter seus filhos de pe.", "mechanics": "Prioridade tatica alta. Enquanto ele respira, a horda dura mais e a rota de combate precisa considerar quem sustenta quem.", "color": Color(0.34, 1.0, 0.42), "texture": "curater"},
 		{"kind": "enemy", "name": "Larapio", "summary": "Um ladrao de pontos com rota de fuga.", "desc": "Ele nao quer lutar ate o fim. Quer entrar, roubar, provocar e escapar por um portal antes que a cobranca chegue.", "lore": "Dizem que o Larapio nasceu de recompensas perdidas entre linhas temporais. Toda moeda roubada parece uma piada pequena contra o jogador.", "mechanics": "Cria uma decisao de prioridade: perseguir para recuperar valor ou manter a rota segura contra a onda principal.", "color": Color(0.74, 0.24, 1.0), "texture": "larapio"},
@@ -29080,13 +29233,13 @@ func _catalog_enemy_items() -> Array:
 		{"kind": "enemy", "name": "Pinguim Incendiario", "summary": "Fogo em um mundo de gelo.", "desc": "Ele prova que a Ruptura nao respeita tema. No meio da nevasca, abre paredes de calor e transforma caminho seguro em decisao urgente.", "lore": "O Incendiario parece uma contradicao viva: um pinguim carregando a febre de outra fase dentro do peito.", "mechanics": "Controla espaco com paredes de fogo e deve ser lido como alterador de rota, nao apenas como mais um alvo na tela.", "color": Color(1.0, 0.46, 0.20), "texture": "enemy_common_phase_2_left"},
 		{"kind": "enemy", "name": "Devoto", "summary": "Fe corrompida em forma de perseguidor.", "desc": "Na terceira ruptura, alguns inimigos nao parecem nascer da fome, mas de uma ideia fixa: aproximar, insistir, converter pressao em erro.", "lore": "Os Devotos cercam o Pai-Rato como uma liturgia quebrada. Cada passo deles parece repetir uma prece que ninguem lembra por inteiro.", "mechanics": "Pressao corporal da fase 3. Funciona junto com venenos, rituais e projeteis para impedir que Geovana jogue parada.", "color": Color(0.74, 1.0, 0.46), "texture": "enemy_phase_3_left"},
 		{"kind": "enemy", "name": "Incensario", "summary": "A fumaca que decide por onde voce nao quer passar.", "desc": "Carrega um ritual pequeno demais para ser chefe e grande demais para ignorar. Onde ele atua, o mapa fica menos confiavel.", "lore": "O Incensario e uma memoria religiosa da fase 3, soprando miasma como se toda cura precisasse primeiro adoecer.", "mechanics": "Cria zonas e estados que tornam a movimentacao mais custosa. Bom jogador aprende a limpar ou contornar antes do cerco fechar.", "color": Color(0.68, 1.0, 0.28), "texture": "enemy_phase_3_right"},
-		{"kind": "enemy", "name": "Guardiao", "summary": "Protege o ritual, nao a si mesmo.", "desc": "Ele existe para atrasar a resposta do jogador. Enquanto Geovana gasta tempo abrindo caminho, a fase prepara outra camada de problema.", "lore": "Guardioes sao ossos da arena, levantados para impedir que a ordem do Pai-Rato seja interrompida cedo demais.", "mechanics": "Segura espaco e protege rotas de ameaça. Deve ser lido como peca de formacao, nao como alvo isolado.", "color": Color(0.94, 0.86, 0.54), "texture": "enemy_phase_3_left"},
+		{"kind": "enemy", "name": "Guardiao", "summary": "Protege o ritual, nao a si mesmo.", "desc": "Ele existe para atrasar a resposta do jogador. Enquanto Geovana gasta tempo abrindo caminho, a fase prepara outra camada de problema.", "lore": "Guardioes sao ossos da arena, levantados para impedir que a ordem do Pai-Rato seja interrompida cedo demais.", "mechanics": "Segura espaco e protege rotas de ameaÃ§a. Deve ser lido como peca de formacao, nao como alvo isolado.", "color": Color(0.94, 0.86, 0.54), "texture": "enemy_phase_3_left"},
 		{"kind": "enemy", "name": "Cartografo do Vazio", "summary": "Mapeia o erro antes dele acontecer.", "desc": "Na quarta fase, a arena pensa. O Cartografo marca rotas e transforma deslocamento previsivel em armadilha.", "lore": "Ele desenha mapas de lugares que ainda nao existem. Quando Geovana chega, o erro ja estava esperando.", "mechanics": "Punicao de trajetoria: pressiona o jogador a quebrar padroes e alternar caminhos.", "color": Color(0.26, 1.0, 0.82), "texture": "enemy_phase_4_left"},
 		{"kind": "enemy", "name": "Cronofago", "summary": "Uma fome especifica por segundos.", "desc": "Nao devora corpo primeiro; devora margem. Perto dele, cada atraso parece maior e cada decisao fica curta.", "lore": "O Cronofago e a parte da Ruptura que descobriu que tempo tambem pode sangrar.", "mechanics": "Atrapalha ritmo e janelas. Deve ser tratado como inimigo de cadencia e nao apenas de posicao.", "color": Color(0.86, 0.58, 1.0), "texture": "enemy_phase_4_right"},
 		{"kind": "enemy", "name": "Refrator Hostil", "summary": "Desvia intencao e devolve confusao.", "desc": "Parece estar no caminho, mas o perigo real e fazer o jogador mirar como sempre e receber uma resposta torta da arena.", "lore": "Refratores sao espelhos da quarta ruptura. Eles nao copiam imagem; copiam erro.", "mechanics": "Altera leitura de disparos e posicionamento. Recompensa jogador que observa antes de despejar habilidade.", "color": Color(0.60, 0.86, 1.0), "texture": "enemy_phase_4_left"},
 		{"kind": "enemy", "name": "Tecelao Vetorial", "summary": "Costura trajetorias invisiveis.", "desc": "Ele nao parece forte quando visto sozinho. O problema aparece quando o mapa inteiro comeca a obedecer linhas que voce nao escolheu.", "lore": "O Tecelao trata movimento como tecido. Cada rota repetida vira um fio facil de puxar.", "mechanics": "Manipula espaco e favorece combate consciente de rota. Jogar em linha reta contra ele e aceitar o desenho da fase.", "color": Color(1.0, 0.74, 0.30), "texture": "enemy_phase_4_right"},
-		{"kind": "enemy", "name": "Eco Entropico", "summary": "O resto de uma acao que nao terminou.", "desc": "Alguns inimigos morrem. O Eco parece continuar vindo de uma decisao antiga, repetindo um perigo que ja devia ter passado.", "lore": "Ecos Entropicos sao sobras de calculos falhos do APOLO e da Ruptura, presos no mesmo impulso ate alguem interromper.", "mechanics": "Cria repeticao e distracao visual/tatica; exige limpar prioridade antes que o campo acumule ruído.", "color": Color(1.0, 0.42, 0.86), "texture": "enemy_phase_4_left"},
-		{"kind": "enemy", "name": "Enguia do Miasma", "summary": "Uma febre que aprendeu a nadar na fenda.", "desc": "A Enguia do Miasma desliza como se o ar fosse lama. Ela nao ocupa muito espaco, mas deixa a leitura da arena mais venenosa e instavel.", "lore": "Registros do APOLO tratam a Enguia como um sintoma da sexta ruptura: um corpo fino carregando o odor vivo de algo que apodreceu fora do tempo.", "mechanics": "Inimigo de pressao movel da fase 6. Forca reposicionamento constante e prepara o terreno para ameacas mais pesadas da Matriarca.", "color": Color(0.58, 1.0, 0.78), "texture": "enemy_phase_6_enguia_miasma"},
+		{"kind": "enemy", "name": "Eco Entropico", "summary": "O resto de uma acao que nao terminou.", "desc": "Alguns inimigos morrem. O Eco parece continuar vindo de uma decisao antiga, repetindo um perigo que ja devia ter passado.", "lore": "Ecos Entropicos sao sobras de calculos falhos do Ruptura e da Ruptura, presos no mesmo impulso ate alguem interromper.", "mechanics": "Cria repeticao e distracao visual/tatica; exige limpar prioridade antes que o campo acumule ruÃ­do.", "color": Color(1.0, 0.42, 0.86), "texture": "enemy_phase_4_left"},
+		{"kind": "enemy", "name": "Enguia do Miasma", "summary": "Uma febre que aprendeu a nadar na fenda.", "desc": "A Enguia do Miasma desliza como se o ar fosse lama. Ela nao ocupa muito espaco, mas deixa a leitura da arena mais venenosa e instavel.", "lore": "Registros do Ruptura tratam a Enguia como um sintoma da sexta ruptura: um corpo fino carregando o odor vivo de algo que apodreceu fora do tempo.", "mechanics": "Inimigo de pressao movel da fase 6. Forca reposicionamento constante e prepara o terreno para ameacas mais pesadas da Matriarca.", "color": Color(0.58, 1.0, 0.78), "texture": "enemy_phase_6_enguia_miasma"},
 		{"kind": "enemy", "name": "Lodario", "summary": "O peso mole da Chaga.", "desc": "O Lodario se arrasta como lama com vontade propria. Onde ele passa, a fase parece ficar mais espessa e menos generosa com erro.", "lore": "Ele e uma mistura de sedimento, memoria e carne cansada. A Matriarca nao o comanda como soldado; ela o derrama pelo mapa.", "mechanics": "Funciona como corpo de bloqueio: mais resistente e lento, bom para fechar caminhos e tornar a fuga menos limpa.", "color": Color(0.86, 0.70, 0.46), "texture": "enemy_phase_6_lodario"},
 		{"kind": "enemy", "name": "Pustula Fossil", "summary": "Uma ferida antiga que ainda pulsa.", "desc": "A Pustula Fossil parece parada demais para ser urgente, ate a arena obrigar Geovana a encostar naquilo que devia ter sido enterrado.", "lore": "A sexta ruptura conserva suas dores como reliquias. Cada Pustula e um fragmento fossilizado da Chaga tentando voltar a ser carne.", "mechanics": "Inimigo pesado de area e prioridade. Deve ser lido como obstaculo vivo que aumenta o custo de limpar a fase sem planejamento.", "color": Color(1.0, 0.62, 0.32), "texture": "enemy_phase_6_pustula_fossil"},
 		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Primeiro cai, se enterra no mapa e espera Geovana cruzar perto demais para saltar em linha reta.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda, fica dormente por ate 20s, ativa perto do jogador e aplica parasitismo temporario com lentidao e sangramento leve, sem acumular varias sanguessugas ao mesmo tempo.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"}
@@ -29097,17 +29250,16 @@ func _catalog_boss_items() -> Array:
 	return [
 		{"kind": "boss", "name": "Caranguejo Cosmico", "summary": "A primeira muralha viva da Ruptura.", "desc": "Grande demais para parecer justo e antigo demais para parecer perdido. Ele testa se Geovana aprendeu a ler areas, janelas e reposicionamento.", "lore": "O primeiro chefe e a fenda usando um corpo simples para perguntar uma coisa cruel: voce sabe sair do lugar certo na hora certa?", "mechanics": "Alterna perseguicao, saltos, ondas e eventos de tempo. Em multiplayer, deve dividir atencao e criar pressao inteligente sem inflar vida.", "color": Color(1.0, 0.32, 0.18), "texture": "boss_stage1"},
 		{"kind": "boss", "name": "Nevasca", "summary": "O centro frio da segunda ruptura.", "desc": "A Nevasca nao quer apenas acertar Geovana. Quer controlar onde ela acredita que pode ficar.", "lore": "Nasceu quando o mapa congelado parou de ser cenario e virou vontade. Cada vento tenta empurrar o jogador para uma decisao ruim.", "mechanics": "Usa vento, gelo, zonas seguras e congelamento. O bom combate contra ela e leitura de arena, nao corrida cega.", "color": Color(0.62, 0.94, 1.0), "texture": "boss2"},
-		{"kind": "boss", "name": "Pai-Rato", "summary": "Ritual, miasma e provocacao.", "desc": "Ele mistura nojo, humor ruim e perigo real. Parece baguncado ate os rituais começarem a tomar partes da tela.", "lore": "O Pai-Rato comanda a terceira ruptura como um culto de sobreviventes deformados. Ele nao vence por honra; vence por insistencia.", "mechanics": "Trabalha com nuvens, clones, rituais e perseguicao. As habilidades existem para tirar conforto e forcar resposta ativa.", "color": Color(0.74, 1.0, 0.30), "texture": "boss3"},
-		{"kind": "boss", "name": "Nexo da Ruptura", "summary": "A arena pensando contra voce.", "desc": "Na quarta ruptura o chefe parece menos bicho e mais fenomeno. O Nexo transforma mapa, trajetoria e espaco em parte do combate.", "lore": "O Nexo e uma inteligencia de geometria quebrada. Ele nao odeia Geovana; apenas recalcula o mundo sem incluir a sobrevivencia dela.", "mechanics": "Invoca planetas, fendas, gravidade e ancoras. Vencer e entender quais objetos sustentam a ameaça.", "color": Color(1.0, 0.78, 0.26), "texture": "boss4"},
-		{"kind": "boss", "name": "UMBRA", "summary": "A mente inevitavel da quinta fase.", "desc": "UMBRA nao e so chefe. E uma leitura do jogador tentando aprender, responder e usar memoria contra habitos repetidos.", "lore": "O APOLO registra UMBRA com cautela incomum. Alguns arquivos sugerem que ela nao luta contra Geovana; ela conversa com o modo como Geovana joga.", "mechanics": "Alterna dimensoes, teletransportes, prisao, descarga e adaptacao. O encontro pune rotina e recompensa variação consciente.", "color": Color(0.56, 1.0, 0.68), "texture": "boss5"},
-		{"kind": "boss", "name": "Matriarca da Chaga", "summary": "A sexta ruptura em corpo aberto.", "desc": "A Matriarca nao e mais um boss que corre atras do jogador. Ela controla o mapa como um organismo parado, escolhendo quando fermentar o chao, rachar a arena e expor o proprio nucleo.", "lore": "O APOLO descreve a Matriarca como uma mae de sintomas: nada nela parece nascer inteiro, mas tudo que ela perde tenta voltar com fome.", "mechanics": "Chefe de estados da fase 6, com ataques escolhidos por peso, cooldown e pressao da arena. Muda leitura em 60% e 40% de vida, sofre eventos em 80/60/40/30/15%, cria carapaca quebravel, poças acidas dos borbulhantes, rachaduras verdes perseguidoras, foices vertebrais, cauda condutiva, mare de carnificina, nevoa giratoria e refluxo organico.", "color": Color(1.0, 0.64, 0.18), "texture": "boss6_form_1"}
+		{"kind": "boss", "name": "Pai-Rato", "summary": "Ritual, miasma e provocacao.", "desc": "Ele mistura nojo, humor ruim e perigo real. Parece baguncado ate os rituais comeÃ§arem a tomar partes da tela.", "lore": "O Pai-Rato comanda a terceira ruptura como um culto de sobreviventes deformados. Ele nao vence por honra; vence por insistencia.", "mechanics": "Trabalha com nuvens, clones, rituais e perseguicao. As habilidades existem para tirar conforto e forcar resposta ativa.", "color": Color(0.74, 1.0, 0.30), "texture": "boss3"},
+		{"kind": "boss", "name": "Nexo da Ruptura", "summary": "A arena pensando contra voce.", "desc": "Na quarta ruptura o chefe parece menos bicho e mais fenomeno. O Nexo transforma mapa, trajetoria e espaco em parte do combate.", "lore": "O Nexo e uma inteligencia de geometria quebrada. Ele nao odeia Geovana; apenas recalcula o mundo sem incluir a sobrevivencia dela.", "mechanics": "Invoca planetas, fendas, gravidade e ancoras. Vencer e entender quais objetos sustentam a ameaÃ§a.", "color": Color(1.0, 0.78, 0.26), "texture": "boss4"},
+		{"kind": "boss", "name": "UMBRA", "summary": "A mente inevitavel da quinta fase.", "desc": "UMBRA nao e so chefe. E uma leitura do jogador tentando aprender, responder e usar memoria contra habitos repetidos.", "lore": "Os arquivos registram UMBRA com cautela incomum. Alguns relatos sugerem que ela nao luta contra Geovana; ela conversa com o modo como Geovana joga.", "mechanics": "Alterna dimensoes, teletransportes, prisao, descarga e adaptacao. O encontro pune rotina e recompensa variaÃ§Ã£o consciente.", "color": Color(0.56, 1.0, 0.68), "texture": "boss5"},
+		{"kind": "boss", "name": "Matriarca da Chaga", "summary": "A sexta ruptura em corpo aberto.", "desc": "A Matriarca nao e mais um boss que corre atras do jogador. Ela controla o mapa como um organismo parado, escolhendo quando fermentar o chao, rachar a arena e expor o proprio nucleo.", "lore": "A Matriarca e uma mae de sintomas: nada nela parece nascer inteiro, mas tudo que ela perde tenta voltar com fome.", "mechanics": "Chefe de estados da fase 6, com ataques escolhidos por peso, cooldown e pressao da arena. Muda leitura em 60% e 40% de vida, sofre eventos em 80/60/40/30/15%, cria carapaca quebravel, poÃ§as acidas dos borbulhantes, rachaduras verdes perseguidoras, foices vertebrais, cauda condutiva, mare de carnificina, nevoa giratoria e refluxo organico.", "color": Color(1.0, 0.64, 0.18), "texture": "boss6_form_1"}
 	]
 
 
 func _catalog_fraction_items() -> Array:
 	return [
-		{"kind": "fraction", "name": "APOLO", "summary": "O protocolo que observa a Ruptura.", "desc": "APOLO organiza dados, menus, catalogos e alertas como se a sobrevivencia dependesse de nomear tudo antes que tudo mude.", "lore": "Foi criado para registrar anomalias, mas quanto mais registra, mais parece fazer parte delas.", "mechanics": "Representa a camada de leitura do jogo: escolhas, registros, telemetria, catalogo e preparacao antes da run.", "color": Color(0.0, 1.0, 0.82), "texture": "choice_bg"},
-		{"kind": "fraction", "name": "Ruptura", "summary": "A força que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece cartas e força Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
+		{"kind": "fraction", "name": "Ruptura", "summary": "A forÃ§a que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece cartas e forÃ§a Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
 		{"kind": "fraction", "name": "Geovana", "summary": "A pessoa no centro da anomalia.", "desc": "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar. Cada manifestacao e uma resposta emocional e mecanica.", "lore": "O catalogo evita chamar Geovana de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "mechanics": "O jogador escolhe Manifestacao, Espectro e cartas para transformar uma run em estilo proprio.", "color": Color(0.72, 0.92, 1.0), "texture": "player_idle"},
 		{"kind": "fraction", "name": "Arauto", "summary": "O mensageiro que interrompe a run.", "desc": "Ele aparece como aviso vivo: a Ruptura percebeu que Geovana esta crescendo e envia uma prova entre fase e chefe.", "lore": "O Arauto carrega fragmentos de evolucao. Mata-lo nao encerra uma ameaca; abre uma escolha.", "mechanics": "Entrega fragmento de evolucao de manifestacao. O jogador escolhe entre opcoes que mudam o comportamento da manifestacao.", "color": Color(0.78, 0.52, 1.0), "texture": "arauto"}
 	]
@@ -29202,20 +29354,31 @@ func _catalog_item_texture(item: Dictionary) -> Texture2D:
 	return null
 
 
+func _catalog_all_items_by_tab() -> Array:
+	var all_tabs: Array = []
+	for tab_index in range(CATALOG_TABS.size()):
+		all_tabs.append(CatalogRepository.entries_for_tab(tab_index, MANIFESTATIONS, AURAS, CARDS))
+	return all_tabs
+
+
 func _catalog_items() -> Array:
-	match catalog_tab:
-		0:
-			return MANIFESTATIONS
-		1:
-			return _catalog_enemy_items()
-		2:
-			return _catalog_boss_items()
-		3:
-			return _catalog_fraction_items()
-		4:
-			return AURAS
-		_:
-			return CARDS
+	var base_items := CatalogRepository.entries_for_tab(catalog_tab, MANIFESTATIONS, AURAS, CARDS)
+	return CatalogRepository.filter_entries(base_items, catalog_search_query, catalog_filter_mode)
+
+
+func _catalog_open_related(entry_id: String) -> bool:
+	for tab_index in range(CATALOG_TABS.size()):
+		var tab_items: Array = CatalogRepository.entries_for_tab(tab_index, MANIFESTATIONS, AURAS, CARDS)
+		for i in range(tab_items.size()):
+			var item: Dictionary = Dictionary(tab_items[i])
+			var id := String(item.get("id", item.get("key", item.get("name", ""))))
+			if id == entry_id:
+				catalog_tab = tab_index
+				catalog_selected = i
+				catalog_scroll_index = 0
+				catalog_detail_open = true
+				return true
+	return false
 
 
 func _manifest_transition_progress() -> float:
@@ -29420,11 +29583,11 @@ func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, sel
 
 
 func _draw_manifest_select(viewport: Vector2) -> void:
-	# Fundo hologrÃ¡fico Sci-Fi limpo
+	# Fundo hologrÃƒÂ¡fico Sci-Fi limpo
 	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
 	var portrait = _is_portrait(viewport)
 
-	# TÃ­tulo e subtÃ­tulo superiores (alinhados ao carrossel em landscape para evitar overlap com o painel)
+	# TÃƒÂ­tulo e subtÃƒÂ­tulo superiores (alinhados ao carrossel em landscape para evitar overlap com o painel)
 	var title_x = viewport.x * 0.5 if portrait else viewport.x * 0.28
 	var title_y = 74 if portrait else 64
 	var transition_t = _manifest_transition_progress()
@@ -29444,7 +29607,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 	var item: Dictionary = active_items[active_selected]
 	var color: Color = _manifest_select_item_color(item, aura_view)
 
-	# Layout de Carrossel DinÃ¢mico Animado
+	# Layout de Carrossel DinÃƒÂ¢mico Animado
 	var center_x = viewport.x * 0.5 if portrait else viewport.x * 0.28
 	var center_y = viewport.y * 0.29 if portrait else viewport.y * 0.405
 	var card_w = 136.0 if portrait else 154.0
@@ -29461,9 +29624,9 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 
 		var abs_diff = abs(diff)
 		if abs_diff > 2.2:
-			continue # Ignora os que estÃ£o muito distantes do centro visual
+			continue # Ignora os que estÃƒÂ£o muito distantes do centro visual
 
-		# InterpolaÃ§Ã£o suave de escala e opacidade para efeito 3D
+		# InterpolaÃƒÂ§ÃƒÂ£o suave de escala e opacidade para efeito 3D
 		var scale = 1.15
 		if abs_diff <= 1.0:
 			scale = lerp(1.15, 0.85, abs_diff)
@@ -29479,7 +29642,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 		var pos_x = center_x + diff * spacing
 		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
 
-		# Desenhar painel hologrÃ¡fico para cada carta
+		# Desenhar painel hologrÃƒÂ¡fico para cada carta
 		var card_item: Dictionary = active_items[i]
 		if not aura_view and not _manifestation_unlocked(i):
 			continue
@@ -29487,16 +29650,16 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 		_draw_holo_panel(rect, item_color, abs_diff < 0.5, opacity * 0.70)
 
 		if abs_diff < 0.5:
-			# PartÃ­culas energÃ©ticas mais intensas quando no centro
+			# PartÃƒÂ­culas energÃƒÂ©ticas mais intensas quando no centro
 			_draw_energy_particles(rect, item_color, int(24 * (1.0 - abs_diff)))
 
-		# Carregar Ã­cone da manifestaÃ§Ã£o
+		# Carregar ÃƒÂ­cone da manifestaÃƒÂ§ÃƒÂ£o
 		var icon: Texture2D = _manifest_select_item_texture(card_item, aura_view)
 		if icon:
 			var icon_color = Color(1, 1, 1, opacity)
 			_draw_texture_contain(icon, rect.grow(-26 * scale), icon_color)
 
-		# RÃ³tulo de nome do card
+		# RÃƒÂ³tulo de nome do card
 		var name_color = Color(1, 1, 1, opacity)
 		var label_y = rect.end.y - (18 * scale)
 		_draw_centered(String(card_item["name"]).to_upper(), Vector2(rect.get_center().x, label_y), _readable_text_size(int(16 * scale)), name_color)
@@ -29511,7 +29674,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 		var x = center_x - total_w * 0.5 + i * 18
 		draw_circle(Vector2(x, dots_y), 4 if i != active_selected else 7, color if i == active_selected else Color(0.38, 0.52, 0.62, 0.60 * (1.0 if i == active_selected else 0.5)))
 
-	# Painel de Detalhes HologrÃ¡ficos
+	# Painel de Detalhes HologrÃƒÂ¡ficos
 	var details_rect: Rect2
 	if portrait:
 		details_rect = Rect2(viewport.x * 0.06, viewport.y * 0.48, viewport.x * 0.88, viewport.y * 0.38)
@@ -29523,7 +29686,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 	details_rect.position += panel_shake
 	_draw_holo_panel(details_rect, color, true, 0.42)
 
-	# TÃ­tulo do painel de detalhes
+	# TÃƒÂ­tulo do painel de detalhes
 	var title_pos = details_rect.position + Vector2(20, 26)
 	draw_string(font, title_pos, item["name"].to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(22), color)
 	var detail_caption = "ESPECTRO DA AUREA // ESTADO ATIVO" if aura_view else "NOME DE CODIGO // SINAL ESTAVEL"
@@ -29533,7 +29696,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 	var line_y = title_pos.y + _readable_text_size(22) + 16
 	draw_line(Vector2(details_rect.position.x + 20, line_y), Vector2(details_rect.end.x - 20, line_y), Color(color.r, color.g, color.b, 0.26), 1)
 
-	# SeÃ§Ãµes detalhadas usando layout dinÃ¢mico de fluxo (evita qualquer tipo de overlap ou overflow)
+	# SeÃƒÂ§ÃƒÂµes detalhadas usando layout dinÃƒÂ¢mico de fluxo (evita qualquer tipo de overlap ou overflow)
 	var current_y = line_y + 14
 	var font_size = _readable_text_size(11 if portrait else 12)
 	var text_color = Color(0.80, 0.90, 0.95, 0.90)
@@ -29563,7 +29726,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 		_draw_centered("PROXIMO: REVELAR ESPECTRO", aura_rect.get_center() + Vector2(0, -6), _readable_text_size(14), aura_color)
 		_draw_wrapped("Depois da manifestacao, escolha a aurea que define o estado da Geovana.", Rect2(aura_rect.position + Vector2(16, 24), Vector2(aura_rect.size.x - 32, 18)), _readable_text_size(8), Color(0.84, 0.91, 0.94, 0.86))
 
-	# BotÃµes inferiores de aÃ§Ã£o
+	# BotÃƒÂµes inferiores de aÃƒÂ§ÃƒÂ£o
 	var detail_clean_rect = Rect2(details_rect.position - Vector2(8.0, 8.0), Vector2(details_rect.size.x + 16.0, viewport.y - details_rect.position.y - 78.0))
 	draw_rect(detail_clean_rect, Color(0.0, 0.0, 0.0, 1.0), true)
 	_draw_manifest_info_panel(details_rect, item, details, aura_view, color)
@@ -29590,7 +29753,7 @@ func _draw_manifest_select(viewport: Vector2) -> void:
 		btn_preview_rect = Rect2(viewport.x * 0.10 + 440, button_y, 172.0, btn_h)
 		btn_details_rect = Rect2(viewport.x * 0.10 + 632.0, button_y, 172.0, btn_h)
 
-	# Armazenar rects globais de botÃµes para clique/toque
+	# Armazenar rects globais de botÃƒÂµes para clique/toque
 	buttons["manifest_start"] = btn_start_rect
 	buttons["manifest_back"] = btn_back_rect
 	buttons.erase("manifest_preview")
@@ -31039,7 +31202,7 @@ func _draw_enemies(camera: Vector2) -> void:
 			_draw_eclipsada_weakpoint(enemy, camera)
 		if float(enemy.get("resonant_stun_notes", 0.0)) > 0.0:
 			var note_time = time_alive * 8.0
-			var note_text = "♫" if int(note_time) % 2 == 0 else "♪"
+			var note_text = "â™«" if int(note_time) % 2 == 0 else "â™ª"
 			_draw_centered(note_text, draw_pos + Vector2(0, -66.0 + sin(note_time) * 6.0), 24, Color(1.0, 0.74, 0.20, 0.9))
 
 
@@ -36562,7 +36725,7 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void:
 	icons.append({ "label": ult_label, "sub": ult_sub, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.85), "cd_elapsed": time_alive - last_secondary_time, "cd_max": SECONDARY_SKILL_COOLDOWN })
 	icons.append({ "label": dash_label, "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown() })
 	if manifestation_key == "lacerante":
-		icons.append({ "label": "REFORÇO" if lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN })
+		icons.append({ "label": "REFORÃ‡O" if lacerante_empowered_ready else "+", "sub": "ReforÃ§o", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN })
 	if manifestation_key == "eclipsada":
 		var form_color := _eclipsada_color()
 		icons.append({ "label": _eclipsada_form_label(), "sub": "Forma", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(form_color.r, form_color.g, form_color.b, 0.86), "cd_elapsed": 1.0, "cd_max": 1.0 })
@@ -37079,6 +37242,7 @@ func _draw_shop(viewport: Vector2) -> void:
 		for i in range(shop_cards.size()):
 			var card: Dictionary = shop_cards[i]
 			var rarity_color := _card_rarity_color(card)
+			var cinzas_buffed := bool(card.get("cinzas_return_buff", false))
 			var x = viewport.x * 0.5 - w * 0.5
 			var y = 164.0 + i * (h + 22.0)
 			var rect = Rect2(x, y, w, h)
@@ -37098,11 +37262,15 @@ func _draw_shop(viewport: Vector2) -> void:
 				card_alpha = 1.0 - rise * 0.76
 			var bg_color = Color(0.035, 0.045, 0.060)
 			bg_color = bg_color.lerp(card["color"], 0.14 if i == shop_selected else 0.05)
+			if cinzas_buffed:
+				bg_color = Color(0.030, 0.022, 0.018).lerp(card["color"], 0.05 if i == shop_selected else 0.02)
 			bg_color.a = 0.94 * card_alpha
 			draw_rect(rect, bg_color, true)
 			var border_color = rarity_color if i == shop_selected else Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.58)
+			if cinzas_buffed:
+				border_color = Color(0.10, 0.045, 0.020, 0.72)
 			border_color.a = max(0.16, card_alpha)
-			draw_rect(rect, border_color, false, 5 if i == shop_selected else 2)
+			draw_rect(rect, border_color, false, 2 if cinzas_buffed else (5 if i == shop_selected else 2))
 			if purchase_animating and i == purchase_index:
 				var glow = (0.35 + sin(Time.get_ticks_msec() * 0.01) * 0.15) * (1.0 - purchase_progress * 0.35)
 				for g in range(1, 4):
@@ -37111,7 +37279,8 @@ func _draw_shop(viewport: Vector2) -> void:
 			var icon: Texture2D = _card_texture(card)
 			if icon:
 				var icon_rect = Rect2(rect.position + Vector2(18, 18), Vector2(94, rect.size.y - 36))
-				_draw_texture_contain(icon, icon_rect, Color(1.0, 1.0, 1.0, card_alpha))
+				if not _draw_cinzas_shader_card(card, icon_rect, icon, card_alpha, false):
+					_draw_texture_contain(icon, icon_rect, Color(1.0, 1.0, 1.0, card_alpha))
 			_draw_centered(card["name"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 48), _readable_text_size(19), Color(1.0, 1.0, 1.0, card_alpha))
 			_draw_centered(_card_rarity_label(card), Vector2(rect.end.x - 52.0, rect.position.y + 24.0), _readable_text_size(10), Color(rarity_color.r, rarity_color.g, rarity_color.b, card_alpha))
 			var nick_color = Color(card["color"].r, card["color"].g, card["color"].b, card_alpha)
@@ -37202,6 +37371,7 @@ func _draw_shop(viewport: Vector2) -> void:
 	for i in range(shop_cards.size()):
 		var card: Dictionary = shop_cards[i]
 		var rarity_color := _card_rarity_color(card)
+		var cinzas_buffed := bool(card.get("cinzas_return_buff", false))
 
 		# Position and scale based on selection
 		var is_sel = (i == shop_selected)
@@ -37227,10 +37397,12 @@ func _draw_shop(viewport: Vector2) -> void:
 		# Draw card glassmorphic background
 		var bg_color = Color(0.04, 0.05, 0.07, 0.85 * alpha)
 		bg_color = bg_color.lerp(card["color"], 0.14 if is_sel else 0.05)
+		if cinzas_buffed:
+			bg_color = Color(0.028, 0.022, 0.018, 0.88 * alpha).lerp(card["color"], 0.045 if is_sel else 0.02)
 		draw_rect(rect, bg_color, true)
 
 		# Glow concentric if selected
-		if is_sel:
+		if is_sel and not cinzas_buffed:
 			var pulsar = (sin(Time.get_ticks_msec() * 0.005) + 1.0) * 0.5
 			for g in range(1, 5):
 				var glow_alpha = (1.0 - float(g)/5.0) * (0.3 + pulsar * 0.15)
@@ -37241,8 +37413,10 @@ func _draw_shop(viewport: Vector2) -> void:
 
 		# Card Border
 		var border_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, alpha if is_sel else 0.55 * alpha)
-		draw_rect(rect, border_color, false, 4 if is_sel else 2)
-		if is_sel:
+		if cinzas_buffed:
+			border_color = Color(0.10, 0.045, 0.020, 0.70 * alpha)
+		draw_rect(rect, border_color, false, 1 if cinzas_buffed else (4 if is_sel else 2))
+		if is_sel and not cinzas_buffed:
 			var scan_y = rect.position.y + 12.0 + fposmod(Time.get_ticks_msec() * 0.065, max(1.0, rect.size.y - 24.0))
 			draw_line(Vector2(rect.position.x + 10.0, scan_y), Vector2(rect.end.x - 10.0, scan_y), Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.72), 2.0)
 			var ribbon = Rect2(rect.position.x + 10.0, rect.position.y + 10.0, rect.size.x - 20.0, 25.0)
@@ -37254,7 +37428,8 @@ func _draw_shop(viewport: Vector2) -> void:
 		var icon: Texture2D = _card_texture(card)
 		if icon:
 			var icon_rect = Rect2(rect.position + Vector2(6, 6), rect.size - Vector2(12, 12))
-			_draw_texture_contain(icon, icon_rect, Color(1, 1, 1, alpha))
+			if not _draw_cinzas_shader_card(card, icon_rect, icon, alpha, true):
+				_draw_texture_contain(icon, icon_rect, Color(1, 1, 1, alpha))
 
 		# Small overlay for card title/nickname on the card itself
 		var text_color = Color(1.0, 1.0, 1.0, alpha)
@@ -37369,6 +37544,144 @@ func _draw_shop(viewport: Vector2) -> void:
 		draw_rect(btn_sair_rect, Color(1.0, 0.25, 0.28, 0.55 if purchase_animating else 1.0), false, 2)
 		_draw_centered("AGUARDE" if purchase_animating else "FECHAR LOJA", btn_sair_rect.get_center() + Vector2(0, 7), 15, Color(1.0, 1.0, 1.0, 0.75 if purchase_animating else 1.0))
 
+
+
+func _prepare_cinzas_burn_shader_nodes(count: int) -> void:
+	for i in range(count):
+		_ensure_cinzas_burn_shader_node(i)
+	_reset_cinzas_burn_shader_nodes()
+
+
+func _ensure_cinzas_burn_shader_node(index: int) -> Control:
+	while cinzas_burn_texture_nodes.size() <= index:
+		var holder := Control.new()
+		holder.name = "CinzasBurnCard%d" % cinzas_burn_texture_nodes.size()
+		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.clip_contents = true
+		holder.visible = false
+		holder.z_index = 40
+
+		var texture_rect := TextureRect.new()
+		texture_rect.name = "Texture"
+		texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		holder.add_child(texture_rect)
+
+		var title := Label.new()
+		title.name = "Title"
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		title.add_theme_color_override("font_color", Color.WHITE)
+		title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.82))
+		title.add_theme_constant_override("shadow_offset_x", 1)
+		title.add_theme_constant_override("shadow_offset_y", 1)
+		if font:
+			title.add_theme_font_override("font", font)
+		holder.add_child(title)
+
+		add_child(holder)
+		cinzas_burn_texture_nodes.append(holder)
+	return cinzas_burn_texture_nodes[index]
+
+
+func _reset_cinzas_burn_shader_nodes() -> void:
+	cinzas_burn_texture_index = 0
+	for holder in cinzas_burn_texture_nodes:
+		holder.visible = false
+
+
+func _pixel_card_burn_shader() -> Shader:
+	if pixel_card_burn_shader == null:
+		pixel_card_burn_shader = load("res://shaders/pixel_card_burn.gdshader") as Shader
+	return pixel_card_burn_shader
+
+
+func _pixel_card_burn_palette() -> GradientTexture1D:
+	if pixel_card_burn_palette != null:
+		return pixel_card_burn_palette
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.35, 0.70, 1.0])
+	gradient.colors = PackedColorArray([
+		Color(0.08, 0.02, 0.01),
+		Color(0.65, 0.12, 0.02),
+		Color(1.00, 0.50, 0.08),
+		Color(1.00, 0.90, 0.40)
+	])
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = gradient
+	ramp_tex.use_hdr = true
+	pixel_card_burn_palette = ramp_tex
+	return pixel_card_burn_palette
+
+
+func _pixel_card_burn_noise(burn_seed_value: int) -> NoiseTexture2D:
+	var cache_key := str(abs(burn_seed_value))
+	if pixel_card_burn_noise_cache.has(cache_key):
+		return pixel_card_burn_noise_cache[cache_key]
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise.frequency = 0.045
+	noise.fractal_octaves = 3
+	noise.seed = abs(burn_seed_value)
+	var noise_tex := NoiseTexture2D.new()
+	noise_tex.width = 128
+	noise_tex.height = 128
+	noise_tex.seamless = true
+	noise_tex.noise = noise
+	pixel_card_burn_noise_cache[cache_key] = noise_tex
+	return noise_tex
+
+
+func _pixel_card_burn_material(card: Dictionary, rect: Rect2) -> ShaderMaterial:
+	var burn_seed: int = abs(int(card.get("cinzas_burn_seed", abs(_card_id(card).hash()))))
+	var stacks: int = max(1, int(card.get("cinzas_buff_stacks", 1)))
+	var cache_key := "%s:%d:%d" % [_card_id(card), burn_seed, stacks]
+	var mat: ShaderMaterial = pixel_card_burn_material_cache.get(cache_key, null)
+	if mat == null:
+		mat = ShaderMaterial.new()
+		mat.shader = _pixel_card_burn_shader()
+		mat.set_shader_parameter("dissolve_texture", _pixel_card_burn_noise(burn_seed))
+		mat.set_shader_parameter("palette_ramp", _pixel_card_burn_palette())
+		mat.set_shader_parameter("burn_width", 0.055)
+		mat.set_shader_parameter("noise_scroll_speed", Vector2(0.0, 0.0))
+		mat.set_shader_parameter("ember_pulse_speed", 4.6)
+		pixel_card_burn_material_cache[cache_key] = mat
+	var dissolve_amount := clampf(0.016 + float(min(stacks, 8)) * 0.005, 0.016, 0.070)
+	var pixel_factor := clampf(round(minf(rect.size.x, rect.size.y)), 72.0, 180.0)
+	mat.set_shader_parameter("dissolve_value", dissolve_amount)
+	mat.set_shader_parameter("pixel_factor", pixel_factor)
+	return mat
+
+
+func _draw_cinzas_shader_card(card: Dictionary, rect: Rect2, texture: Texture2D, alpha := 1.0, show_title := true) -> bool:
+	if texture == null or _is_empty_shop_slot(card) or not bool(card.get("cinzas_return_buff", false)):
+		return false
+	if alpha <= 0.01 or rect.size.x <= 4.0 or rect.size.y <= 4.0:
+		return false
+	var holder := _ensure_cinzas_burn_shader_node(cinzas_burn_texture_index)
+	cinzas_burn_texture_index += 1
+	holder.visible = true
+	holder.position = rect.position
+	holder.size = rect.size
+	holder.modulate = Color(1.0, 1.0, 1.0, alpha)
+
+	var texture_rect := holder.get_node("Texture") as TextureRect
+	texture_rect.position = Vector2.ZERO
+	texture_rect.size = rect.size
+	texture_rect.texture = texture
+	texture_rect.material = _pixel_card_burn_material(card, rect)
+
+	var title := holder.get_node("Title") as Label
+	title.visible = show_title
+	if show_title:
+		title.text = String(card.get("nick", "")).to_upper()
+		title.position = Vector2(0.0, maxf(0.0, rect.size.y - 42.0))
+		title.size = Vector2(rect.size.x, 38.0)
+		title.add_theme_font_size_override("font_size", 12 if rect.size.x >= 120.0 else 9)
+	return true
 
 
 func _draw_pause(viewport: Vector2) -> void:
@@ -37602,7 +37915,7 @@ func _card_stat_chips(card_name: String) -> Array:
 			return ["20s MARCA", "RAIZ/LOG"]
 		"Escolha Adiada":
 			return ["RESERVA 1"]
-		"Trégua Regenerativa":
+		"TrÃ©gua Regenerativa":
 			return ["6s SEM DANO", "+REGEN"]
 		"Cinzas da Escolha":
 			return ["QUEIMAR", "+PESO FUTURO"]
@@ -37610,9 +37923,9 @@ func _card_stat_chips(card_name: String) -> Array:
 			return ["OVERHEAL", "<35% LIBERA"]
 		"Casulo Reativo":
 			return ["3 HITS/2.2s", "-DANO"]
-		"Passagem Intangível":
+		"Passagem IntangÃ­vel":
 			return ["POS-TP", "SEM CONTATO"]
-		"Âncora Vital":
+		"Ã‚ncora Vital":
 			return ["POS-DANO", "CURA EM AREA"]
 		"Inercia Cronal":
 			return ["-8% CONTROLE", "-18% EMPURRO"]
@@ -37650,7 +37963,7 @@ func _card_stat_chips(card_name: String) -> Array:
 			return ["+6% COMUNS", "RETROATIVA"]
 		"Necrocronismo":
 			return ["12 ABATES", "COPIA CURTA"]
-		"Coração de Antimatéria":
+		"CoraÃ§Ã£o de AntimatÃ©ria":
 			return ["CARGA DANO", "IMPLOSAO"]
 		"Cofre do Excesso":
 			return ["OVERKILL", "ELITE/BOSS"]
@@ -37978,7 +38291,7 @@ func _draw_big_button(rect: Rect2, label: String, bg: Color, border: Color, sele
 	_draw_holo_panel(rect, border, selected, max(0.56, bg.a))
 	draw_rect(rect.grow(-9), Color(bg.r, bg.g, bg.b, 0.42), true)
 
-	# Determinar tamanho de fonte dinÃ¢mico para caber perfeitamente no botÃ£o
+	# Determinar tamanho de fonte dinÃƒÂ¢mico para caber perfeitamente no botÃƒÂ£o
 	var font_size = int(rect.size.y * 0.45)
 	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	while text_size.x > rect.size.x - 24 and font_size > 12:
@@ -41093,7 +41406,7 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void:
 		_set_selected_aura(selected_aura + 1, true)
 		aura_scroll_pos = float(selected_aura)
 		return
-	# 1. Verificar botÃµes de aÃ§Ã£o inferiores
+	# 1. Verificar botÃƒÂµes de aÃƒÂ§ÃƒÂ£o inferiores
 	if buttons.has("manifest_start") and buttons["manifest_start"].has_point(pos):
 		if manifest_select_stage == MANIFEST_STAGE_AURA:
 			_start_game()
@@ -41850,7 +42163,7 @@ func _aura_details(name: String) -> Dictionary:
 				"habilidade": "Eco Insano",
 				"desc_hab": "Ecos repetem disparos apos 1s e multiplicam pressao.",
 				"traco": "Caotica, forte em corredores e tiros bem mirados.",
-				"risco": "Mira ruim desperdiça os ecos."
+				"risco": "Mira ruim desperdiÃ§a os ecos."
 			}
 		"Voraz":
 			return {
@@ -41886,7 +42199,7 @@ func _aura_details(name: String) -> Dictionary:
 				"habilidade": "Pressagio",
 				"desc_hab": "Acertar o alvo marcado aumenta dano e sequencia.",
 				"traco": "Foco, prioridade e leitura limpa de alvo.",
-				"risco": "Ignorar o alvo marcado desperdiça a recompensa."
+				"risco": "Ignorar o alvo marcado desperdiÃ§a a recompensa."
 			}
 		"Sanguinaria":
 			return {
