@@ -1,15 +1,19 @@
 {
-    "version":  "2.0.30e",
-    "version_code":  23005,
-    "filename":  "ruptura_temporal_mobile_2.0.30e.apk",
-    "sha256":  "2a4f2596b2da914773576c13cf6eb9895c6bda750ae1b23171a6c4b4d8e73e73",
-    "size":  644869540,
+    "version":  "2.0.30f",
+    "version_code":  23006,
+    "filename":  "ruptura_temporal_mobile_2.0.30f.apk",
+    "sha256":  "9f8830f5abc766b85191bd93482804dc5dfba6e1b8fd15c5c64f8f58d13be117",
+    "size":  644929532,
     "notes":  [
-                  "Atualizador Android e Windows revisado para substituir a instalacao existente.",
-                  "Limpeza automatica de instaladores antigos para liberar espaco no dispositivo.",
-                  "Pacote Android estabilizado para evitar copias paralelas em futuras atualizacoes.",
-                  "Ajustes de estabilidade no fluxo de atualizacao."
+                  "- Corrigido: a loja podia renovar a oferta inteira apos uma compra e atrapalhava a construcao do deck.",
+                  "- Loja mais justa: apos 6 cartas unicas, as ofertas passam a equilibrar descoberta, consolidacao e liberdade.",
+                  "- Cinzas da Escolha: cartas queimadas agora retornam com peso real, bonus acumulavel e garantia no 5o retorno elegivel.",
+                  "- Cartas sem teto: o roguelike nao bloqueia mais compras por limite artificial.",
+                  "- Pocao ajustada: aumenta vida maxima e cura apenas 5% da vida maxima anterior.",
+                  "- Raras preservadas: a chance continua ligada a Sorte e a loja evita mais de uma rara por geracao.",
+                  "- Reserva melhorada: cartas raras tambem podem ser reservadas sem quebrar a regra de raridade.",
+                  "- Validacao: simulacao de 100 mil lojas e smokes de loja/cartas passaram."
               ],
-    "mandatory":  true,
-    "published_at":  "2026-07-30T02:17:59.2810642Z"
+    "mandatory":  false,
+    "published_at":  "2026-07-30T14:40:30.5527863Z"
 }

@@ -68,8 +68,8 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
         val adjustedSize = adjustedVideoSize(width, height)
         pendingWidth = adjustedSize.width
         pendingHeight = adjustedSize.height
-        pendingFps = fps.coerceIn(20, 30)
-        pendingBitrate = bitrate.coerceIn(350_000, 4_000_000)
+        pendingFps = fps.coerceIn(15, 60)
+        pendingBitrate = bitrate.coerceIn(350_000, 6_000_000)
         status = "pedindo permissao"
         Log.i(TAG, "Requesting MediaProjection for $pendingPublishUrl")
         val hostActivity = activity ?: run {

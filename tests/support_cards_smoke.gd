@@ -68,8 +68,9 @@ func _run() -> void:
 	_check(game._card_count_by_id(game.CARD_CINZAS_ID) == cinzas_before - 1, "Cinzas was not consumed when burning")
 	_check(game.cinzas_burn_marks.size() == 1, "Cinzas did not create a mark")
 	_check(not game._can_burn_shop_card(rare_card), "Cinzas should not burn rare cards")
-	_check(is_equal_approx(game._cinzas_weight_multiplier(game.CARD_TREGUA_ID), 1.0), "Cinzas should not change future common weight")
-	game._update_burned_card_marks_after_shop([])
+	_check(game._cinzas_weight_multiplier(game.CARD_TREGUA_ID) > 2.0, "Cinzas should increase future common weight")
+	for reroll_index in range(8):
+		game._update_burned_card_marks_after_shop([])
 	_check(game.cinzas_burn_marks.size() == 1, "Cinzas mark should persist through rerolls")
 	var returned_cards := [common_card.duplicate(true)]
 	game._update_burned_card_marks_after_shop(returned_cards)

@@ -47,4 +47,8 @@ func _run() -> void:
 		_expect(game.player_hp == expected_hp, "porcao_repeat_heal_wrong_%d" % i)
 
 	print("CARDS_UNLIMITED_SMOKE_OK cards=%d porcao_repeat=true" % game.CARDS.size())
+	root.remove_child(game)
+	game.queue_free()
+	for i in range(4):
+		await process_frame
 	quit(0)

@@ -28,10 +28,11 @@ const STREAM_RTMP_PORT = numberEnv("STREAM_RTMP_PORT", 1935);
 const STREAM_RTMP_APP = process.env.STREAM_RTMP_APP || "live";
 const DEFAULT_MANAGER_PUBLIC_BASE_URL = "http://72.61.217.238:8090";
 const STREAM_MANAGER_PUBLIC_BASE_URL = publicManagerBaseUrl();
-const STREAM_TTL_MS = numberEnv("STREAM_TTL_MS", 4 * 60 * 60 * 1000);
-const STREAM_FRAME_MAX_BYTES = numberEnv("STREAM_FRAME_MAX_BYTES", 6_000_000);
-const STREAM_FRAME_BUFFER_MAX = numberEnv("STREAM_FRAME_BUFFER_MAX", 90);
-const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 900);
+const STREAM_TTL_MS = numberEnv("STREAM_TTL_MS", 30 * 60 * 1000);
+const STREAM_MAX_ACTIVE = numberEnv("STREAM_MAX_ACTIVE", 2);
+const STREAM_FRAME_MAX_BYTES = numberEnv("STREAM_FRAME_MAX_BYTES", 1_600_000);
+const STREAM_FRAME_BUFFER_MAX = numberEnv("STREAM_FRAME_BUFFER_MAX", 12);
+const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 250);
 const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
@@ -75,6 +76,14 @@ let warmRefillTimer = null;
 function numberEnv(name, fallback, allowZero = false) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && (value > 0 || (allowZero && value === 0)) ? value : fallback;
+}
+
+function clampNumber(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, numeric));
 }
 
 function publicManagerBaseUrl() {
@@ -285,17 +294,34 @@ function readBinary(req, maxBytes = STREAM_FRAME_MAX_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let total = 0;
+    let settled = false;
     req.on("data", (chunk) => {
+      if (settled) {
+        return;
+      }
       total += chunk.length;
       if (total > maxBytes) {
-        reject(new Error("frame too large"));
-        req.destroy();
+        settled = true;
+        const error = new Error("frame too large");
+        error.statusCode = 413;
+        reject(error);
+        req.resume();
         return;
       }
       chunks.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(chunks, total)));
-    req.on("error", reject);
+    req.on("end", () => {
+      if (!settled) {
+        settled = true;
+        resolve(Buffer.concat(chunks, total));
+      }
+    });
+    req.on("error", (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
   });
 }
 
@@ -489,12 +515,12 @@ function createStream(payload = {}) {
     player: String(payload.player || "QA"),
     version: String(payload.version || ""),
     protocol: payload.protocol === "rtmp-hls" ? "rtmp-hls" : "frame-mjpeg",
-    streamWidth: Number(payload.streamWidth) || 1280,
-    streamHeight: Number(payload.streamHeight) || 720,
-    streamFps: Number(payload.streamFps) || 30,
-    streamQuality: Number(payload.streamQuality) || 0.86,
-    streamBitrate: Number(payload.streamBitrate) || 3_500_000,
-    bufferMs: Math.max(0, Math.min(1000, Number(payload.bufferMs) || STREAM_FRAME_BUFFER_MS)),
+    streamWidth: clampNumber(payload.streamWidth, 640, 320, 1280),
+    streamHeight: clampNumber(payload.streamHeight, 360, 180, 720),
+    streamFps: clampNumber(payload.streamFps, 24, 8, 60),
+    streamQuality: clampNumber(payload.streamQuality, 0.58, 0.42, 0.72),
+    streamBitrate: clampNumber(payload.streamBitrate, 650_000, 250_000, 6_000_000),
+    bufferMs: clampNumber(payload.bufferMs, STREAM_FRAME_BUFFER_MS, 80, 400),
     createdAt: now,
     expiresAt: now + STREAM_TTL_MS,
     lastFrame: null,
@@ -623,6 +649,7 @@ function sendLatestFrame(res, stream) {
     "Access-Control-Allow-Origin": "*",
     "Cache-Control": "no-store, no-cache, must-revalidate",
     "Pragma": "no-cache",
+    "X-Accel-Buffering": "no",
     "Content-Type": stream.lastFrameType,
     "Content-Length": stream.lastFrame.length,
     "X-Frame-Seq": String(stream.lastFrameSeq),
@@ -636,7 +663,8 @@ function sendMjpegStream(req, res, stream) {
     "Access-Control-Allow-Origin": "*",
     "Cache-Control": "no-store, no-cache, must-revalidate",
     "Pragma": "no-cache",
-    "Connection": "close",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
     "Content-Type": "multipart/x-mixed-replace; boundary=ruptura-frame"
   });
   stream.subscribers.add(res);
@@ -1990,6 +2018,10 @@ async function route(req, res) {
       return;
     }
     const payload = await readJson(req);
+    if (streams.size >= STREAM_MAX_ACTIVE) {
+      sendJson(res, 429, { ok: false, error: "stream capacity reached", active: streams.size, limit: STREAM_MAX_ACTIVE });
+      return;
+    }
     sendJson(res, 201, streamPublic(createStream(payload)));
     return;
   }
@@ -2035,7 +2067,14 @@ async function route(req, res) {
       return;
     }
     if (req.method === "POST") {
-      const frame = await readBinary(req);
+      let frame;
+      try {
+        frame = await readBinary(req);
+      } catch (error) {
+        const status = error && error.statusCode === 413 ? 413 : 400;
+        sendJson(res, status, { ok: false, error: error.message || "invalid frame" });
+        return;
+      }
       if (!frame.length) {
         sendJson(res, 400, { error: "empty frame" });
         return;

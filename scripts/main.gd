@@ -2,10 +2,11 @@ extends Node2D
 
 const AuraSystem = preload("res://scripts/aura_system.gd")
 const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
+const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 
 const WORLD_SIZE := Vector2(1600, 900)
-const GAME_VERSION := "2.0.30e"
-const GAME_VERSION_CODE := 23005
+const GAME_VERSION := "2.0.30f"
+const GAME_VERSION_CODE := 23006
 const MULTIPLAYER_MENU_ENABLED := true
 const UI_PLATFORM_AUTO := "auto"
 const UI_PLATFORM_ANDROID := "android"
@@ -87,40 +88,43 @@ const RUN_TELEMETRY_SAMPLE_INTERVAL := 0.50
 const RUN_TELEMETRY_GRID := Vector2i(16, 9)
 const RUN_TELEMETRY_MAX_DAMAGE_EVENTS := 240
 const ONLINE_RELAY_DEFAULT_HOST := "72.61.217.238"
-const QA_STREAMING_FEATURE_ENABLED := false
+const QA_STREAMING_FEATURE_ENABLED := true
 const QA_STREAM_PLUGIN_NAME := "RupturaStreamer"
 const QA_STREAM_WIDTH := 1280
 const QA_STREAM_HEIGHT := 720
-const QA_STREAM_FPS := 30
-const QA_STREAM_BITRATE := 2400000
-const QA_FRAME_STREAM_MODES := ["720p", "360p", "180p"]
+const QA_STREAM_FPS := 60
+const QA_STREAM_BITRATE := 4500000
+const QA_FRAME_STREAM_MODES := ["360p", "720p"]
 const QA_FRAME_STREAM_MODE_SIZES := {
 	"720p": Vector2i(1280, 720),
-	"360p": Vector2i(640, 360),
-	"180p": Vector2i(320, 180)
+	"360p": Vector2i(640, 360)
+}
+const QA_NATIVE_STREAM_MODE_FPS := {
+	"720p": 60.0,
+	"360p": 30.0
+}
+const QA_NATIVE_STREAM_MODE_BITRATE := {
+	"720p": 4500000,
+	"360p": 1200000
 }
 const QA_FRAME_STREAM_MODE_FPS := {
-	"720p": 30.0,
-	"360p": 30.0,
-	"180p": 30.0
+	"720p": 10.0,
+	"360p": 12.0
 }
 const QA_FRAME_STREAM_MODE_QUALITY := {
-	"720p": 0.76,
-	"360p": 0.68,
-	"180p": 0.58
+	"720p": 0.58,
+	"360p": 0.52
 }
 const QA_FRAME_STREAM_MODE_BITRATE := {
-	"720p": 3500000,
-	"360p": 1200000,
-	"180p": 450000
+	"720p": 900000,
+	"360p": 420000
 }
 const QA_FRAME_STREAM_MODE_MAX_IN_FLIGHT := {
-	"720p": 3,
-	"360p": 2,
-	"180p": 1
+	"720p": 1,
+	"360p": 1
 }
-const QA_FRAME_STREAM_REQUEST_POOL := 8
-const QA_FRAME_STREAM_BUFFER_MS := 450
+const QA_FRAME_STREAM_REQUEST_POOL := 2
+const QA_FRAME_STREAM_BUFFER_MS := 180
 const BULLET_SPEED := 780.0
 const MAX_BULLETS := 56
 const ENEMY_BASE_HP := 30.0
@@ -239,6 +243,30 @@ const FORCED_SHOP_INTERVAL := 180.0
 const SHOP_OPENING_ANIM_TIME := 1.3
 const SHOP_RETURN_TIME := 3.0
 const SHOP_PURCHASE_ANIM_TIME := 0.42
+const SHOP_FAIRNESS_V2 := true
+const SHOP_VERSION_V1 := "legacy_v1"
+const SHOP_VERSION_V2 := "fairness_v2"
+const SHOP_INTENT_DISCOVERY := "discovery"
+const SHOP_INTENT_CONSOLIDATION := "consolidation"
+const SHOP_INTENT_FREE := "free"
+const SHOP_BUILD_UNIQUE_THRESHOLD := 6
+const SHOP_STRUCTURED_PROFILE_CHANCE := 0.70
+const SHOP_DISCOVERY_UNOWNED_MULT := 1.60
+const SHOP_DISCOVERY_OWNED_MULT := 0.55
+const SHOP_CONSOLIDATION_OWNED_MULT := 5.50
+const SHOP_CONSOLIDATION_UNOWNED_MULT := 0.22
+const SHOP_FREE_UNOWNED_MULT := 0.70
+const SHOP_FREE_OWNED_MULT := 1.40
+const SHOP_COPY_PENALTY_RATE := 0.18
+const SHOP_RECENT_UNOWNED_MULT := [0.45, 0.65, 0.82]
+const SHOP_RECENT_OWNED_MULT := [0.65, 0.80, 0.92]
+const SHOP_ASHES_BASE_MULT := 2.0
+const SHOP_ASHES_STACK_MULT := 0.75
+const SHOP_ASHES_GUARANTEE_VISITS := 5
+const SHOP_ASHES_MIN_RECENT_MULT := 0.90
+const SHOP_RECENT_GENERATION_LIMIT := 3
+const SHOP_TELEMETRY_ENABLED := true
+const SHOP_TELEMETRY_DIR := "user://shop_telemetry"
 const SHOP_MP_REQUEST_TIME := 10.0
 const BOSS_MP_REQUEST_TIME := 10.0
 const PAUSE_MP_REQUEST_TIME := 10.0
@@ -328,6 +356,10 @@ const BOSS_READY_TIME := 0.0
 const BOSS_CALL_COUNTDOWN := 1.2
 const BOSS_BASE_HP := 3600.0
 const BOSS_ARMOR := 0.48
+const BOSS_FARM_DAMAGE_MAX_MULT := 1.85
+const BOSS_FARM_DAMAGE_TIME_CAP := 3600.0
+const BOSS_FARM_DAMAGE_SCORE_CAP := 250000.0
+const BOSS_FARM_DAMAGE_KILL_CAP := 3600.0
 const BOSS_ENTRY_TIME := 1.2
 const BOSS_STAGE_JUMP_TIME := 6.0
 const BOSS_STAGE_SLAM_TIME := 1.35
@@ -949,6 +981,20 @@ const BOMBASTICA_IGNITION_RADIUS := 55.0
 const BOMBASTICA_CHAIN_DEPTH_MAX := 5
 const BOMBASTICA_CHAIN_TOUCH_MARGIN := 8.0
 const BOMBASTICA_MANUAL_DAMAGE_MULT := 0.86
+const NECRONADA_EPITAPH_DURATION := 8.0
+const NECRONADA_EPITAPH_MAX_DEPTH := 5
+const NECRONADA_VESTIGE_DURATION := 12.0
+const NECRONADA_OSSUARY_SLOTS := 4
+const NECRONADA_MAX_ACTIVE_REMNANTS := 4
+const NECRONADA_REMNANT_BASE_DURATION := 13.0
+const NECRONADA_REMNANT_SUMMON_TIME := 0.62
+const NECRONADA_REMNANT_TARGET_INTERVAL := 0.22
+const NECRONADA_REMNANT_ATTACK_INTERVAL := 0.62
+const NECRONADA_REQUIEM_DURATION := 15.0
+const NECRONADA_REQUIEM_TICK := 0.38
+const NECRONADA_REQUIEM_MAX_ECHOES := 10
+const NECRONADA_SUPREME_HORDE_COUNT := 4
+const NECRONADA_TOTAL_TAUNT_DURATION := 15.0
 
 const MANIFESTATIONS := [
 	{
@@ -1062,6 +1108,14 @@ const MANIFESTATIONS := [
 		"icon": "res://assets/sprites/manifestacao_bombastica.png",
 		"color": Color(1.0, 0.48, 0.12),
 		"accent": Color(0.18, 0.88, 1.0)
+	},
+	{
+		"key": "necronada",
+		"name": "Necronada",
+		"desc": "Marca epitafios, captura vestigios no Ossuario Temporal e ergue Remanescentes por tempo limitado.",
+		"icon": "res://assets/sprites/manifestacao-necronada.png",
+		"color": Color(0.64, 0.30, 1.0),
+		"accent": Color(0.38, 1.0, 0.86)
 	}
 ]
 
@@ -1091,7 +1145,8 @@ const MANIFEST_EVOLUTION_NAMES := {
 	"contratual": ["Clausula Duplicada", "Artigo Perfurante", "Mandado de Busca", "Elo Jurado", "Quebra de Termo", "Audiencia Forcada", "Selo de Sentenca", "Campo de Clausula", "Passo Notificado"],
 	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"],
 	"eclipsada": ["Umbra Ecoante", "Raio Penumbral", "Sombra Guiada", "Elo de Eclipse", "Pulso do Crepusculo", "Vortice de Penumbra", "Selo do Ocaso", "Campo Eclipsado", "Passo Sem Luz"],
-	"bombastica": ["Estopim Gemeo", "Furo de Granada", "Fagulha Guiada", "Elo de Detonacao", "Pulso de Estouro", "Vortice de Estilhacos", "Selo de Polvora", "Campo Minado", "Passo de Retaguarda"]
+	"bombastica": ["Estopim Gemeo", "Furo de Granada", "Fagulha Guiada", "Elo de Detonacao", "Pulso de Estouro", "Vortice de Estilhacos", "Selo de Polvora", "Campo Minado", "Passo de Retaguarda"],
+	"necronada": ["Epitafio Ecoante", "Agulha Funeraria", "Vestigio Guiado", "Elo Ossuario", "Pulso Mortuario", "Vortice de Remanescentes", "Selo do Ossuario", "Campo Sepulcral", "Passo Funebre"]
 }
 
 const MANIFEST_EVOLUTION_PROFILES := {
@@ -1107,7 +1162,8 @@ const MANIFEST_EVOLUTION_PROFILES := {
 	"ressonante": {"eco": {"every": 4, "scale": 0.40, "spread": 0.28}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 320.0}, "elo": {"radius": 172.0, "slow": 0.74}, "pulso": {"every": 3, "radius": 164.0, "force": 94.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 174.0, "force": 84.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 188.0, "duration": 3.2, "slow": 0.72, "damage": 0.055}, "passo": {"radius": 160.0, "force": 90.0, "damage": 0.11}},
 	"contratual": {"eco": {"every": 4, "scale": 0.36, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 310.0}, "elo": {"radius": 156.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 138.0, "force": 76.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 160.0, "force": 78.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 172.0, "duration": 4.0, "slow": 0.66, "damage": 0.055}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.12}},
 	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.10}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}},
-	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.20}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.70}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}}
+	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.20}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.70}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}},
+	"necronada": {"eco": {"every": 4, "scale": 0.34, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 320.0}, "elo": {"radius": 154.0, "slow": 0.70}, "pulso": {"every": 4, "radius": 144.0, "force": 76.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 172.0, "force": 82.0, "damage": 0.10}, "selo": {"hits": 3, "duration": 0.76}, "campo": {"radius": 170.0, "duration": 3.8, "slow": 0.66, "damage": 0.052}, "passo": {"radius": 150.0, "force": 84.0, "damage": 0.11}}
 }
 
 const CARDS := [
@@ -1128,7 +1184,7 @@ const CARDS := [
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.10, 0.72)},
 	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.40, 0.94, 1.0)},
 	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
-	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima a carta comum selecionada, aumenta sua chance de voltar e faz o retorno vir com bonus unico.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada com um bonus unico acumulavel; o bonus so acaba ao comprar a carta marcada.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
 	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.90, 1.0)},
@@ -1140,6 +1196,14 @@ const CARDS := [
 	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio de coleta de moedas, cartas soltas e orbes neutros.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
 	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.50, 1.0)},
 	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)},
+	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "desc": "Periodicamente deixa um vestigio no caminho. Retornar a ele concede velocidade e recupera parte do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.34, 1.0, 0.86)},
+	{"id": "municao_de_rebate", "name": "Municao de Rebate", "nick": "Fragmento Teimoso", "desc": "Projeteis basicos que somem sem acertar podem gerar um fragmento que busca o alvo mais proximo.", "icon": "Deck/carta-municaorebatente1.png", "frame_2": "Deck/carta-municaorebatente2.png", "color": Color(1.0, 0.76, 0.24)},
+	{"id": "impulso_de_sobras", "name": "Impulso de Sobras", "nick": "Energia Guardada", "desc": "Q, E ou teleporte prontos por tempo suficiente fortalecem os proximos ataques basicos.", "icon": "Deck/carta-impulsodesobras1.png", "frame_2": "Deck/carta-impulsodesobras2.png", "color": Color(0.42, 0.78, 1.0)},
+	{"id": "eco_de_impacto", "name": "Eco de Impacto", "nick": "Repeticao Brutal", "desc": "Acertar o mesmo alvo varias vezes cria um eco que repete parte do ultimo dano real.", "icon": "Deck/carta-ecodeimpacto1.png", "frame_2": "Deck/carta-ecodeimpacto2.png", "color": Color(0.86, 0.64, 1.0)},
+	{"id": "zona_de_descompressao", "name": "Zona de Descompressao", "nick": "Respiro de Cerco", "desc": "Ficar cercado carrega uma onda que repele inimigos proximos e aplica lentidao.", "icon": "Deck/carta-zonadedescompressao1.png", "frame_2": "Deck/carta-zonadedescompressao2.png", "color": Color(0.44, 1.0, 0.70)},
+	{"id": "folego_de_perseguicao", "name": "Folego de Perseguicao", "nick": "Caca Persistente", "desc": "Avancar contra um alvo distante acumula velocidade e fortalece o primeiro impacto ao alcanca-lo.", "icon": "Deck/carta-folegodeperseguicao1.png", "frame_2": "Deck/carta-folegodeperseguicao2.png", "color": Color(1.0, 0.56, 0.22)},
+	{"id": "margem_de_erro", "name": "Margem de Erro", "nick": "Erro Parcelado", "desc": "Depois de sofrer dano, o proximo impacto rapido tem parte adiada e pode ser reduzido com abates.", "icon": "Deck/carta-margemdeerro1.png", "frame_2": "Deck/carta-margemdeerro2.png", "color": Color(1.0, 0.36, 0.46)},
+	{"id": "ressonancia_de_alternancia", "name": "Ressonancia de Alternancia", "nick": "Kit Completo", "desc": "Usar ataque, Q, E e teleporte em alternancia prepara um bonus para a proxima acao.", "icon": "Deck/carta-ressonanciadealternancia1.png", "frame_2": "Deck/carta-ressonanciadealternancia2.png", "color": Color(0.58, 1.0, 0.96)},
 	{"id": "fratura_cronal", "name": "Fratura Cronal", "nick": "Fragilidade Temporal", "desc": "Proximo acerto a cada 7s aplica Fragilidade por 4s.", "icon": "Deck/carta-Fratura_Cronal1.png", "frame_2": "Deck/carta-Fratura_Cronal2.png", "color": Color(0.74, 0.62, 1.0)},
 	{"id": "pulso_desestabilizador", "name": "Pulso Desestabilizador", "nick": "Explosao Instavel", "desc": "Proximo acerto a cada 8s gera uma explosao no alvo.", "icon": "Deck/carta-Pulso_Desestabilizador1.png", "frame_2": "Deck/carta-Pulso_Desestabilizador2.png", "color": Color(1.0, 0.42, 0.32)},
 	{"id": "pressao_cerco", "name": "Pressao de Cerco", "nick": "Alvo Cercado", "desc": "+dano em alvos cercados por 3 inimigos proximos.", "icon": "Deck/carta-Press_o_de_Cerco1.png", "frame_2": "Deck/carta-Press_o_de_Cerco2.png", "color": Color(1.0, 0.78, 0.28)},
@@ -1156,14 +1220,6 @@ const CARDS := [
 ]
 
 const CARD_MAX_COUNTS := {
-	"escolha_adiada": 1,
-	"inercia_cronal": 5,
-	"leitura_instante": 4,
-	"margem_segura": 4,
-	"moeda_estavel": 6,
-	"orbita_coletora": 5,
-	"pacto_possibilidades": 5,
-	"solo_consolidado": 4,
 	"fratura_cronal": 5,
 	"pulso_desestabilizador": 5,
 	"pressao_cerco": 3
@@ -1186,6 +1242,21 @@ const CARD_SOURCE_CHOQUE := "card_choque_fontes"
 const CARD_SOURCE_LIMIAR := "card_limiar_colapso"
 const CARD_SOURCE_DESVIO := "card_desvio_probabilidade"
 const CARD_SOURCE_PONTO_CEGO := "card_ponto_cego"
+const CARD_UNLIMITED_COUNT := 999999
+const PORCAO_MAX_HP_GAIN_RATIO := 0.10
+const PORCAO_HEAL_OLD_MAX_RATIO := 0.05
+const CARD_RASTRO_ID := "rastro_de_retorno"
+const CARD_REBATE_ID := "municao_de_rebate"
+const CARD_IMPULSO_ID := "impulso_de_sobras"
+const CARD_ECO_ID := "eco_de_impacto"
+const CARD_ZONA_ID := "zona_de_descompressao"
+const CARD_FOLEGO_ID := "folego_de_perseguicao"
+const CARD_MARGEM_ID := "margem_de_erro"
+const CARD_RESSONANCIA_ID := "ressonancia_de_alternancia"
+const CARD_SOURCE_REBATE := "card_municao_de_rebate"
+const CARD_SOURCE_ECO := "card_eco_de_impacto"
+const CARD_SOURCE_ZONA := "card_zona_de_descompressao"
+const CARD_SOURCE_MARGEM := "card_margem_de_erro"
 const RARE_SOURCE_NECRO := "rare_necrocronismo"
 const RARE_SOURCE_ANTIMATTER := "rare_coracao_antimateria"
 const RARE_SOURCE_COFRE := "rare_cofre_excesso"
@@ -1535,7 +1606,7 @@ var run_end_payload: Dictionary = {}
 var qa_data_unlocked: bool = false
 var qa_streaming_unlocked: bool = false
 var qa_streaming_enabled: bool = false
-var qa_streaming_quality_mode: String = "720p"
+var qa_streaming_quality_mode: String = "360p"
 var qa_streaming_status: String = ""
 var qa_streaming_in_flight: bool = false
 var qa_streaming_native_active: bool = false
@@ -1740,6 +1811,17 @@ var shop_purchase_pending_price = 0
 var shop_reserved_card_id = ""
 var shop_locked_slots: Dictionary = {}
 var shop_recent_common_ids: Array = []
+var shop_slot_intents: Array = []
+var shop_generation_profile := ""
+var shop_generation_index := 0
+var shop_visit_index := 0
+var shop_reroll_index := 0
+var shop_recent_generation_ids: Array = []
+var shop_current_visit_eligible_cinzas: Dictionary = {}
+var shop_last_generation_telemetry: Dictionary = {}
+var shop_telemetry_enabled := SHOP_TELEMETRY_ENABLED
+var shop_seed: int = 0
+var shop_rng = RandomNumberGenerator.new()
 var shop_endurance_discount = 0.0
 var shop_last_manual_open_time = -999.0
 var shop_recent_manual_open_count = 0
@@ -1783,6 +1865,40 @@ var mandamento_invulnerability = 0.0
 var mandamento_break_flash = 0.0
 var carta_zero_applied_multiplier = 1.0
 var common_card_stat_cache: Dictionary = {}
+var rastro_vestiges: Array = []
+var rastro_spawn_timer := 0.0
+var rastro_last_spawn_pos := PLAYER_START
+var rastro_speed_timer := 0.0
+var rastro_speed_bonus := 0.0
+var impulso_ready_times: Dictionary = {}
+var impulso_charges := 0
+var impulso_bonus := 0.0
+var impulso_timer := 0.0
+var impulso_size_bonus := 0.0
+var eco_counters: Dictionary = {}
+var zona_charge := 0.0
+var zona_cooldown := 0.0
+var zona_flash := 0.0
+var folego_target_key := ""
+var folego_charge := 0.0
+var folego_prev_distance := 0.0
+var folego_damage_window := 0.0
+var folego_damage_bonus := 0.0
+var folego_last_move_dir := Vector2.ZERO
+var margem_window_timer := 0.0
+var margem_debt := 0.0
+var margem_debt_total := 0.0
+var margem_debt_timer := 0.0
+var margem_debt_duration := 0.0
+var margem_debt_tick := 0.0
+var margem_safety_timer := 0.0
+var ressonancia_symbols: Array = []
+var ressonancia_window_timer := 0.0
+var ressonancia_ready_timer := 0.0
+var ressonancia_ready_action := ""
+var ressonancia_speed_timer := 0.0
+var ressonancia_speed_bonus := 0.0
+var ressonancia_preresonance_used := false
 var necro_kill_counter = 0
 var active_necro_specters = []
 var antimatter_charge = 0.0
@@ -1833,6 +1949,14 @@ var bombastica_next_id := 1
 var bombastica_detonator_touch_index := -1
 var bombastica_detonator_hold := 0.0
 var bombastica_total_detonation_flash := 0.0
+var necronada_vestiges: Array = []
+var necronada_ossuary: Array = []
+var necronada_remnants: Array = []
+var necronada_requiem: Dictionary = {}
+var necronada_pente_history: Array = []
+var necronada_selected_slot := 0
+var necronada_next_id := 1
+var necronada_vfx: Array = []
 var devorador_mark_timer = 0.0
 var devorador_mark_kind = ""
 var devorador_mark_uid = 0
@@ -2285,6 +2409,9 @@ var cartographic_boss_displacement = 0
 var cartographic_coord_sequence = 0
 var cartographic_complete_map_timer = 0.0
 var cartographic_trace_flash = 0.0
+var carto_tp_origin = Vector2.ZERO
+var carto_tp_window = 0.0
+var lacerante_attack_lock_timer = 0.0
 var mnesic_trick_timer = 0.0
 var mnesic_trick_origin = Vector2.ZERO
 var mnesic_boss_vulnerability = 0.0
@@ -2357,6 +2484,10 @@ var boss1_stop_music_duck_timer := 0.0
 var boss1_stop_music_duck_from := 1.0
 var boss1_stop_pre_played := false
 var boss1_absorb_stop_started := false
+var music_silence_timer: float = 0.0
+var music_crossfade_target_track: String = ""
+var music_crossfade_timer: float = 0.0
+var music_crossfade_duration: float = 0.6
 var boss1_absorb_end_sfx_played := false
 var boss1_entry_fall_sfx_played := false
 var rain_audio_fade_timer = 0.0
@@ -2533,6 +2664,8 @@ func _exit_tree() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
 		_save_interrupted_run(true)
+		if what == NOTIFICATION_WM_CLOSE_REQUEST or ((qa_streaming_native_active or qa_streaming_frame_active) and not qa_streaming_permission_pending):
+			_stop_qa_streaming("app")
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_cancel_all_touch_state()
 
@@ -3762,7 +3895,10 @@ func _build_run_report_payload(result: String) -> Dictionary:
 			"particles": gfx_particles,
 			"shadows": gfx_shadows,
 			"shop_auto": shop_auto_enabled,
-			"streaming_removed": true
+			"streaming_enabled": QA_STREAMING_FEATURE_ENABLED,
+			"streaming_unlocked": qa_streaming_unlocked,
+			"streaming_active": qa_streaming_native_active or qa_streaming_frame_active,
+			"streaming_quality": _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode)
 		},
 		"leaderboard_score": _run_leaderboard_score(result),
 		"balance_flags": _run_balance_flags()
@@ -4014,12 +4150,14 @@ func _send_run_report_to_discord(payload: Dictionary) -> void:
 		str(network.get("bytes_out", 0)),
 		str(network.get("packets_out", 0))
 	]
-	var settings_line := "baixo=%s | memoria=%s | particulas=%s | sombras=%s\nshop auto=%s | stream removida" % [
+	var settings_line := "baixo=%s | memoria=%s | particulas=%s | sombras=%s\nshop auto=%s | stream=%s %s" % [
 		str(settings.get("graphics_low_resource", false)),
 		str(settings.get("memory_saver", false)),
 		str(settings.get("particles", true)),
 		str(settings.get("shadows", true)),
-		str(settings.get("shop_auto", false))
+		str(settings.get("shop_auto", false)),
+		"ON" if bool(settings.get("streaming_active", false)) else ("liberada" if bool(settings.get("streaming_unlocked", false)) else "off"),
+		String(settings.get("streaming_quality", "360p"))
 	]
 	var fields := [
 		{"name": "Jogador / perfil", "value": _limit_discord_field(player_line), "inline": false},
@@ -4394,9 +4532,10 @@ func _on_run_report_request_completed(_result: int, response_code: int, _headers
 		run_report_status = "Falha Discord HTTP %d" % response_code
 
 
-func _reset_qa_streaming_runtime() -> void:
-	qa_streaming_unlocked = false
-	qa_streaming_enabled = false
+func _reset_qa_streaming_runtime(clear_access := true) -> void:
+	if clear_access:
+		qa_streaming_unlocked = false
+		qa_streaming_enabled = false
 	qa_streaming_in_flight = false
 	qa_streaming_native_active = false
 	qa_streaming_session_id = ""
@@ -4426,11 +4565,14 @@ func _reset_qa_streaming_runtime() -> void:
 
 
 func _start_qa_streaming_session() -> void:
-	_reset_qa_streaming_runtime()
 	if not QA_STREAMING_FEATURE_ENABLED:
+		_reset_qa_streaming_runtime()
 		return
 	if DisplayServer.get_name() == "headless":
+		qa_streaming_enabled = false
+		qa_streaming_status = "Streaming: headless indisponivel"
 		return
+	_reset_qa_streaming_runtime(false)
 	if not qa_streaming_unlocked or not qa_streaming_enabled:
 		qa_streaming_enabled = false
 		return
@@ -4521,6 +4663,35 @@ func _on_qa_stream_discord_request_completed(_result: int, _response_code: int, 
 	pass
 
 
+func _qa_stream_menu_subtitle() -> String:
+	var size := _qa_stream_target_size()
+	if qa_streaming_native_active or qa_streaming_frame_active:
+		if qa_streaming_native_active:
+			return "%s nativo // RTMP H.264 // %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
+		return "%s fallback // %d fps enviados" % [qa_streaming_quality_mode, qa_streaming_sent_per_second]
+	if qa_streaming_in_flight or qa_streaming_permission_pending:
+		return "abrindo permissao // %s %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
+	if qa_streaming_status != "":
+		return qa_streaming_status.replace("Streaming: ", "").to_lower()
+	if not _qa_stream_native_available():
+		return "fallback diagnostico // Android usa RTMP H.264"
+	return "iniciar transmissao // %s %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
+
+
+func _toggle_qa_streaming_from_menu() -> void:
+	if not QA_STREAMING_FEATURE_ENABLED or not qa_streaming_unlocked:
+		return
+	if qa_streaming_native_active or qa_streaming_frame_active or qa_streaming_in_flight:
+		_stop_qa_streaming("manual")
+		_add_text("STREAMING ENCERRADO", player_pos + Vector2(0, -100), Color(1.0, 0.74, 0.22), 1.2, 22)
+		_save_config()
+		return
+	qa_streaming_enabled = true
+	qa_streaming_status = "Streaming: iniciando..."
+	_start_qa_streaming_session()
+	_save_config()
+
+
 func _start_native_qa_stream() -> void:
 	if not QA_STREAMING_FEATURE_ENABLED:
 		_reset_qa_streaming_runtime()
@@ -4541,6 +4712,7 @@ func _start_native_qa_stream() -> void:
 
 
 func _stop_qa_streaming(reason := "stop") -> void:
+	var session_to_close := qa_streaming_session_id
 	if qa_streaming_native_active and Engine.has_singleton(QA_STREAM_PLUGIN_NAME):
 		var streamer = Engine.get_singleton(QA_STREAM_PLUGIN_NAME)
 		streamer.call("stopStream")
@@ -4555,11 +4727,12 @@ func _stop_qa_streaming(reason := "stop") -> void:
 			frame_request.cancel_request()
 		if i < qa_stream_frame_request_busy.size():
 			qa_stream_frame_request_busy[i] = false
-	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_session_id != "" and qa_stream_stop_request != null and qa_stream_stop_request.is_inside_tree():
-		qa_stream_stop_request.request(qa_stream_base_url + "/streams/" + qa_streaming_session_id, [], HTTPClient.METHOD_DELETE)
-	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_session_id != "":
+	if QA_STREAMING_FEATURE_ENABLED and session_to_close != "" and qa_stream_stop_request != null and qa_stream_stop_request.is_inside_tree():
+		qa_stream_stop_request.request(qa_stream_base_url + "/streams/" + session_to_close, [], HTTPClient.METHOD_DELETE)
+	_reset_qa_streaming_runtime(false)
+	qa_streaming_enabled = false
+	if QA_STREAMING_FEATURE_ENABLED and session_to_close != "":
 		qa_streaming_status = "Streaming: encerrado (%s)" % reason
-	_reset_qa_streaming_runtime()
 
 
 func _update_qa_streaming(delta: float) -> void:
@@ -4609,10 +4782,15 @@ func _update_qa_streaming(delta: float) -> void:
 
 func _qa_stream_live_status() -> String:
 	var target_size := _qa_stream_target_size()
-	return "Streaming: %s %d fps %dx%d" % [qa_streaming_quality_mode, qa_streaming_sent_per_second, target_size.x, target_size.y]
+	var mode_label := qa_streaming_quality_mode
+	if not _qa_stream_native_available():
+		mode_label += " fallback"
+	return "Streaming: %s %d fps %dx%d" % [mode_label, qa_streaming_sent_per_second, target_size.x, target_size.y]
 
 
 func _qa_stream_target_fps() -> float:
+	if _qa_stream_native_available():
+		return float(QA_NATIVE_STREAM_MODE_FPS.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), QA_STREAM_FPS))
 	return float(QA_FRAME_STREAM_MODE_FPS.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), 30.0))
 
 
@@ -4667,6 +4845,8 @@ func _qa_stream_max_in_flight() -> int:
 
 
 func _qa_stream_bitrate() -> int:
+	if _qa_stream_native_available():
+		return int(QA_NATIVE_STREAM_MODE_BITRATE.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), QA_STREAM_BITRATE))
 	return int(QA_FRAME_STREAM_MODE_BITRATE.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), 1200000))
 
 
@@ -4838,7 +5018,7 @@ func _load_config() -> void:
 				elif k == "haptics_enabled": haptics_enabled = v != "false"
 				elif k == "show_fps_counter": show_fps_counter = v == "true"
 				elif k == "qa_streaming_enabled": qa_streaming_enabled = false
-				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = false
+				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = QA_STREAMING_FEATURE_ENABLED and v == "true"
 				elif k == "qa_streaming_quality": qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(v)
 				elif k == "qa_data_unlocked": qa_data_unlocked = v == "true"
 				elif k == "force_phase6_start":
@@ -4897,10 +5077,12 @@ func _load_config() -> void:
 	if gfx_memory_saver:
 		gfx_low_resource = true
 	qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode)
-	if not QA_STREAMING_FEATURE_ENABLED or not qa_streaming_unlocked:
+	if not QA_STREAMING_FEATURE_ENABLED:
 		qa_streaming_enabled = false
 		qa_streaming_unlocked = false
 		qa_streaming_status = ""
+	else:
+		qa_streaming_enabled = false
 
 
 func _save_config() -> void:
@@ -4938,7 +5120,7 @@ func _save_config() -> void:
 		file.store_string("haptics_enabled=" + ("true" if haptics_enabled else "false") + "\n")
 		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
 		file.store_string("qa_streaming_enabled=false\n")
-		file.store_string("qa_streaming_unlocked=false\n")
+		file.store_string("qa_streaming_unlocked=" + ("true" if (QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked) else "false") + "\n")
 		file.store_string("qa_streaming_quality=" + _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode) + "\n")
 		file.store_string("qa_data_unlocked=" + ("true" if qa_data_unlocked else "false") + "\n")
 		file.store_string("force_phase6_start=" + ("true" if force_phase6_start else "false") + "\n")
@@ -4990,7 +5172,7 @@ func _interrupted_run_field_names() -> Array:
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer",
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_return_timer",
-		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count",
+		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count",
 		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries",
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing",
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player",
@@ -5003,7 +5185,7 @@ func _interrupted_run_field_names() -> Array:
 		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action",
 		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done",
 		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes",
-		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
+		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
 		"cartographic_coords", "cartographic_route_timer", "cartographic_boss_displacement", "mnesic_trick_timer", "mnesic_trick_origin", "mnesic_boss_vulnerability", "resonant_perfect_streak", "resonant_noise", "resonant_next_perfect", "resonant_speed_timer", "resonant_sinfonia_buff_timer", "resonant_note_index", "boss_resonant_notes", "boss_contract_clause", "boss_contract_infractions", "boss_contract_vulnerability", "contractual_notifications", "contractual_penalty_timer", "contractual_order", "contractual_order_rewards", "contractual_order_penalties",
 		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects",
 		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
@@ -5598,7 +5780,8 @@ func _load_audio_streams() -> void:
 		_register_audio_stream(name, phase2_tracks[name], false, true, _memory_saver_active())
 	var phase3_tracks = {
 		"Fase3-1.mp3": "res://Fase3-1.mp3",
-		"Fase3-2.mp3": "res://Fase3-2.mp3"
+		"Fase3-2.mp3": "res://Fase3-2.mp3",
+		"Fase3-7.mp3": "res://Fase3-7.mp3"
 	}
 	for name in phase3_tracks:
 		_register_audio_stream(name, phase3_tracks[name], false, true, _memory_saver_active())
@@ -5608,6 +5791,11 @@ func _load_audio_streams() -> void:
 		"Fases3.mp3": "res://Fases3.mp3",
 		"Fases4.mp3": "res://Fases4.mp3",
 		"Fases5.mp3": "res://Fases5.mp3",
+		"Fases6.mp3": "res://Fases6.mp3",
+		"Fases7.mp3": "res://Fases7.mp3",
+		"Fases8.mp3": "res://Fases8.mp3",
+		"Fases9.mp3": "res://Fases9.mp3",
+		"Fases10.mp3": "res://Fases10.mp3",
 		"Fase4-4.mp3": "res://Fase4-4.mp3"
 	}
 	for name in extra_phase_tracks:
@@ -6002,7 +6190,7 @@ func _play_phase_music() -> void:
 
 
 func _shared_phase_music_tracks() -> Array:
-	return ["Fases1.mp3", "Fases2.mp3", "Fases3.mp3", "Fases4.mp3", "Fases5.mp3"]
+	return ["Fases1.mp3", "Fases2.mp3", "Fases3.mp3", "Fases4.mp3", "Fases5.mp3", "Fases6.mp3", "Fases7.mp3", "Fases8.mp3", "Fases9.mp3", "Fases10.mp3"]
 
 
 func _phase_music_tracks(phase: int) -> Array:
@@ -6013,7 +6201,7 @@ func _phase_music_tracks(phase: int) -> Array:
 		2:
 			tracks = ["Fase2.mp3", "Fase2-3.mp3", "Fase2-4.mp3"]
 		3:
-			tracks = ["Fase3-1.mp3", "Fase3-2.mp3"]
+			tracks = ["Fase3-1.mp3", "Fase3-2.mp3", "Fase3-7.mp3"]
 		4:
 			tracks = ["Fase_boas.mp3", "Fase4-4.mp3"]
 		5:
@@ -6441,6 +6629,40 @@ func _reset_card_proc_state() -> void:
 	mandamento_invulnerability = 0.0
 	mandamento_break_flash = 0.0
 	carta_zero_applied_multiplier = _carta_zero_multiplier()
+	rastro_vestiges.clear()
+	rastro_spawn_timer = 0.0
+	rastro_last_spawn_pos = player_pos
+	rastro_speed_timer = 0.0
+	rastro_speed_bonus = 0.0
+	impulso_ready_times.clear()
+	impulso_charges = 0
+	impulso_bonus = 0.0
+	impulso_timer = 0.0
+	impulso_size_bonus = 0.0
+	eco_counters.clear()
+	zona_charge = 0.0
+	zona_cooldown = 0.0
+	zona_flash = 0.0
+	folego_target_key = ""
+	folego_charge = 0.0
+	folego_prev_distance = 0.0
+	folego_damage_window = 0.0
+	folego_damage_bonus = 0.0
+	folego_last_move_dir = Vector2.ZERO
+	margem_window_timer = 0.0
+	margem_debt = 0.0
+	margem_debt_total = 0.0
+	margem_debt_timer = 0.0
+	margem_debt_duration = 0.0
+	margem_debt_tick = 0.0
+	margem_safety_timer = 0.0
+	ressonancia_symbols.clear()
+	ressonancia_window_timer = 0.0
+	ressonancia_ready_timer = 0.0
+	ressonancia_ready_action = ""
+	ressonancia_speed_timer = 0.0
+	ressonancia_speed_bonus = 0.0
+	ressonancia_preresonance_used = false
 	necro_kill_counter = 0
 	active_necro_specters.clear()
 	antimatter_charge = 0.0
@@ -6597,6 +6819,7 @@ func _start_game(clear_interrupted_save := true) -> void:
 	shop_auto_elapsed = 0.0
 	shop_endurance_discount = 0.0
 	shop_recent_common_ids.clear()
+	_reset_shop_fairness_state()
 	next_forced_shop_time = shop_auto_interval if shop_auto_enabled else INF
 	shop_opening_timer = 0.0
 	shop_opening_forced = false
@@ -6713,7 +6936,6 @@ func _start_game(clear_interrupted_save := true) -> void:
 	_reset_phase6_state()
 	_apply_initial_phase_setup(current_phase, multiplayer_enemy_hp_scale)
 	_add_text("%s // AUREA %s" % [MANIFESTATIONS[selected_manifestation]["name"], String(AURAS[selected_aura]["name"]).to_upper()], player_pos + Vector2(0, -80), _aura_color(), 2.0, 26)
-	_start_qa_streaming_session()
 	_perf_mark("start_game_total", perf_start_ms)
 
 
@@ -7048,16 +7270,30 @@ func _boss_hp_for_phase(phase: int) -> float:
 	var mp_mult := 1.0
 	match phase:
 		6:
-			return (BOSS_BASE_HP + score_total * 0.12 + enemies_killed * 9.0) * mp_mult
+			return (BOSS_BASE_HP + _boss_farm_hp_bonus(10.0, 42.0)) * mp_mult
 		5:
-			return (26000.0 + score_total * 0.42 + enemies_killed * 38.0) * mp_mult
+			return (26000.0 + _boss_farm_hp_bonus(30.0, 96.0)) * mp_mult
 		4:
-			return (18800.0 + score_total * 0.34 + enemies_killed * 30.0) * mp_mult
+			return (18800.0 + _boss_farm_hp_bonus(25.0, 82.0)) * mp_mult
 		3:
-			return (12800.0 + score_total * 0.25 + enemies_killed * 22.0) * mp_mult
+			return (12800.0 + _boss_farm_hp_bonus(20.0, 68.0)) * mp_mult
 		2:
-			return (6600.0 + score_total * 0.17 + enemies_killed * 14.0) * mp_mult
-	return (BOSS_BASE_HP + score_total * 0.12 + enemies_killed * 9.0) * mp_mult
+			return (6600.0 + _boss_farm_hp_bonus(15.0, 54.0)) * mp_mult
+	return (BOSS_BASE_HP + _boss_farm_hp_bonus(10.0, 42.0)) * mp_mult
+
+
+func _boss_farm_hp_bonus(score_rate: float, kill_rate: float) -> float:
+	var score_root := sqrt(float(max(0, score_total)))
+	var kill_root := sqrt(float(max(0, enemies_killed)))
+	return score_root * score_rate + kill_root * kill_rate
+
+
+func _boss_farm_pressure_multiplier() -> float:
+	var time_pressure := clampf(time_alive / BOSS_FARM_DAMAGE_TIME_CAP, 0.0, 1.0)
+	var score_pressure := clampf(float(max(0, score_total)) / BOSS_FARM_DAMAGE_SCORE_CAP, 0.0, 1.0)
+	var kill_pressure := clampf(float(max(0, enemies_killed)) / BOSS_FARM_DAMAGE_KILL_CAP, 0.0, 1.0)
+	var pressure := time_pressure * 0.50 + score_pressure * 0.30 + kill_pressure * 0.20
+	return lerpf(1.0, BOSS_FARM_DAMAGE_MAX_MULT, clampf(pressure, 0.0, 1.0))
 
 
 func _reset_phase3_state() -> void:
@@ -8207,7 +8443,7 @@ func _update_game(delta: float) -> void:
 			var move = _read_move()
 			if move.length() > 0.05:
 				last_facing = move.normalized()
-				var desired_pos: Vector2 = player_pos + last_facing * player_speed * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _pustule_spit_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
+				var desired_pos: Vector2 = player_pos + last_facing * player_speed * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _pustule_spit_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * _new_common_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
 				player_pos = _resolve_phase2_fire_wall_movement(player_pos, desired_pos)
 			_update_eletrica_recoil(delta)
 		player_pos = player_pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
@@ -8540,6 +8776,7 @@ func _try_attack() -> void:
 	if time_alive - last_attack_time < _current_attack_interval():
 		return
 	last_attack_time = time_alive
+	_record_ressonancia_action("ATTACK")
 
 	match manifestation_key:
 		"prismatica":
@@ -8584,6 +8821,9 @@ func _try_attack() -> void:
 		"bombastica":
 			_play_manifestation_attack_sfx("bombastica")
 			_fire_projectile("bombastica", player_damage * 0.62, BULLET_SPEED * 0.92, 1.25, false)
+		"necronada":
+			_play_manifestation_attack_sfx("necronada")
+			_fire_projectile("necronada", player_damage * 0.66, BULLET_SPEED * 0.94, 1.28, false)
 		_:
 			eletrica_shot_counter += 1
 			var charged = eletrica_shot_counter % 4 == 0
@@ -8601,6 +8841,12 @@ func _fire_projectile(kind: String, damage: float, speed: float, life: float, pi
 	var final_damage = damage
 	if kind == "ancorada":
 		final_damage *= 1.0 + _secondary_ancorada_charge_at_player() * 0.32
+	final_damage *= _consume_impulso_attack_bonus()
+	final_damage *= _consume_folego_damage_bonus(kind, "basic_attack")
+	var ressonancia_attack_bonus := _consume_ressonancia_action_bonus("ATTACK")
+	if ressonancia_attack_bonus > 0.0:
+		final_damage *= 1.0 + ressonancia_attack_bonus
+		pierce = true
 	_add_bullet({
 		"pos": player_pos + dir * 44.0,
 		"origin": player_pos,
@@ -8622,6 +8868,8 @@ func _fire_projectile(kind: String, damage: float, speed: float, life: float, pi
 		"fly_sfx_cd": 0.0,
 		"color": palette["glow"]
 	})
+	if impulso_size_bonus > 0.0:
+		bullets[-1]["visual_scale"] = 1.0 + impulso_size_bonus
 	_apply_manifest_evolution_to_bullet(bullets[-1])
 	_apply_aura_events(AuraSystem.on_attack(aura_state, bullets[-1]))
 	_spawn_projectile_muzzle(kind, player_pos + dir * 34.0, dir)
@@ -9017,6 +9265,8 @@ func _auto_attack_range() -> float:
 			return BULLET_SPEED * 0.92 * 1.25
 		"eclipsada":
 			return ECLIPSADA_SHURIKEN_RANGE
+		"necronada":
+			return BULLET_SPEED * 0.94 * 1.28
 	return BULLET_SPEED * 1.2
 
 
@@ -9110,6 +9360,9 @@ func _use_skill(target_world = null) -> void:
 			_cast_acorrentada_q(target_world)
 		"eclipsada":
 			_cast_eclipsada_q(target_world, skill_power)
+		"necronada":
+			_try_use_necronada_skill(target_world)
+			return
 		_:
 			shockwaves.append({"pos": player_pos, "radius": 0.0, "max": 250.0, "life": 0.45, "damage": player_damage * 1.05 * skill_power, "hit": {}, "source_category": "skill_q"})
 	_manifest_evolution_on_skill(visual_target)
@@ -9466,6 +9719,25 @@ func _damage_source_is_boss_ultimate(source: String) -> bool:
 	]
 
 
+func _damage_source_is_boss(source: String) -> bool:
+	if source == "boss" or source.begins_with("boss"):
+		return true
+	if source.begins_with("boss2_") or source.begins_with("boss3_") or source.begins_with("boss5_") or source.begins_with("boss6_"):
+		return true
+	if source.begins_with("umbra_"):
+		return true
+	if source.ends_with("_nexo") or source in ["planeta_nexo", "zona_nula", "fragmento_cosmico", "mapa_colapso", "laser_gravitacional_nexo"]:
+		return true
+	return source in [
+		"frost_shard",
+		"cauda",
+		"arremesso",
+		"singularidade",
+		"prisao_nexo",
+		"miasma"
+	]
+
+
 func _player_silenced() -> bool:
 	return player_silence_timer > 0.0
 
@@ -9483,6 +9755,8 @@ func _secondary_skill_cooldown() -> float:
 		return BOMBASTICA_E_COOLDOWN
 	if manifestation_key == "contratual":
 		return CONTRACT_ORDER_COOLDOWN
+	if manifestation_key == "necronada":
+		return 48.0
 	return SECONDARY_SKILL_COOLDOWN
 
 
@@ -9497,6 +9771,7 @@ func _network_skill_visual_duration() -> float:
 		"acorrentada": return ACORRENTADA_Q_OVERCHARGE_DURATION if acorrentada_tension >= 100.0 else ACORRENTADA_Q_DURATION
 		"eclipsada": return 0.85
 		"bombastica": return BOMBASTICA_Q_FUSE_MAX
+		"necronada": return NECRONADA_REMNANT_BASE_DURATION
 	return 0.75
 
 
@@ -9607,6 +9882,11 @@ func _use_secondary_skill(target_world = null) -> void:
 		"bombastica":
 			last_secondary_time = time_alive
 			_spawn_secondary_bombastica(target_world)
+		"necronada":
+			if _cast_necronada_requiem():
+				last_secondary_time = time_alive
+			else:
+				ability_activated = false
 		_:
 			ability_activated = false
 			_add_text("2A HABILIDADE EM PREPARO", player_pos + Vector2(0, -110), Color(1.0, 0.82, 0.32), 0.9, 18)
@@ -10041,6 +10321,8 @@ func _ground_target_profile(secondary: bool) -> Dictionary:
 				return {"range": ECLIPSADA_SOL_E_RANGE if _eclipsada_is_sol() else ECLIPSADA_E_AIM_RANGE, "radius": ECLIPSADA_SOL_E_RADIUS if _eclipsada_is_sol() else ECLIPSADA_E_CHAIN_RADIUS, "default": 190.0 if _eclipsada_is_sol() else 105.0, "minimum": 64.0 if _eclipsada_is_sol() else 36.0, "color": _eclipsada_color()}
 			"bombastica":
 				return {"range": 520.0, "radius": 128.0, "default": 230.0, "minimum": 90.0, "color": Color(1.0, 0.62, 0.18)}
+			"necronada":
+				return {"range": 520.0, "radius": 260.0, "default": 0.0, "minimum": 80.0, "color": Color(0.52, 0.34, 0.92)}
 	else:
 		match manifestation_key:
 			"parasitica":
@@ -10051,6 +10333,8 @@ func _ground_target_profile(secondary: bool) -> Dictionary:
 				return {"range": 560.0, "radius": 210.0, "default": 285.0, "minimum": 120.0, "color": Color(0.16, 0.86, 1.0)}
 			"bombastica":
 				return {"range": BOMBASTICA_Q_THROW_RANGE, "radius": BOMBASTICA_Q_RADIUS, "default": 245.0, "minimum": 38.0, "color": Color(1.0, 0.48, 0.12)}
+			"necronada":
+				return {"range": 460.0, "radius": 96.0, "default": 180.0, "minimum": 56.0, "color": Color(0.72, 0.96, 1.0)}
 	return {}
 
 
@@ -10079,15 +10363,20 @@ func _ground_target_world(screen_pos: Vector2, viewport: Vector2, secondary: boo
 
 func _execute_teleport(target_world: Vector2) -> void:
 	var origin: Vector2 = player_pos
+	_interrupt_folego()
 	_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": target_world, "player_pos": player_pos}))
 	player_pos = target_world.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
 	var dash_color: Color = _manifestation_color()
-	slashes.append({"a": origin, "b": player_pos, "life": 0.32, "max": 0.32, "color": dash_color, "width": 38.0})
+	if manifestation_key == "lacerante":
+		slashes.append({"a": origin, "b": player_pos, "life": 0.32, "max": 0.32, "color": dash_color, "width": 38.0, "kind": "lacerante_tp"})
 	_spawn_radial_particles(origin, dash_color, 12)
 	_spawn_radial_particles(player_pos, dash_color, 18)
 	_start_manifestation_teleport_effect(origin, player_pos)
 	_manifest_evolution_on_teleport(origin, player_pos)
 	_activate_passagem_intangivel()
+	_consume_ressonancia_action_bonus("TELEPORT", _current_dash_cooldown())
+	_record_ressonancia_action("TELEPORT", _current_dash_cooldown())
+	_grant_impulso_from_ready_action("TELEPORT")
 	_send_network_ability_visual(NET_ABILITY_TELEPORT, origin, player_pos, 0.55)
 
 
@@ -10122,10 +10411,21 @@ func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2)
 			_start_direct_teleport_cooldown()
 			_add_text("FORMA ELETRICA", destination + Vector2(0, -92), Color(0.28, 0.94, 1.0), 1.0, 20)
 		"cartografica":
-			_add_cartographic_coord(destination, -1, "fixed", "teleport")
-			cartographic_route_timer = max(cartographic_route_timer, 0.75)
-			tp_effects.append({"kind": "cartografica", "life": 0.55, "max": 0.55, "a": origin, "b": destination})
-			_add_text("PASSO CARTOGRAFICO", destination + Vector2(0, -92), Color(0.38, 1.0, 0.82), 0.9, 18)
+			if carto_tp_window > 0.0:
+				var recall_pos: Vector2 = player_pos
+				player_pos = carto_tp_origin.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
+				carto_tp_window = 0.0
+				tp_cooldown_override = 6.0
+				_finish_teleport_effect_cooldown()
+				_send_network_ability_visual(NET_ABILITY_TELEPORT, recall_pos, player_pos, 0.55)
+				_add_text("RECUO CARTOGRAFICO", player_pos + Vector2(0, -92), Color(0.38, 1.0, 0.82), 0.9, 18)
+			else:
+				carto_tp_origin = origin
+				carto_tp_window = 2.0
+				_add_cartographic_coord(destination, -1, "fixed", "teleport")
+				cartographic_route_timer = max(cartographic_route_timer, 0.75)
+				tp_effects.append({"kind": "cartografica", "life": 0.55, "max": 0.55, "a": origin, "b": destination})
+				_add_text("PASSO CARTOGRAFICO", destination + Vector2(0, -92), Color(0.38, 1.0, 0.82), 0.9, 18)
 		"mnesica":
 			mnesic_trick_timer = MNESIC_TRICK_TIME
 			mnesic_trick_origin = origin
@@ -10179,7 +10479,6 @@ func _return_retornante_teleport() -> void:
 		return
 	var current: Vector2 = player_pos
 	player_pos = retornante_tp_origin.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
-	slashes.append({"a": current, "b": player_pos, "life": 0.30, "max": 0.30, "color": Color(0.68, 0.46, 1.0), "width": 34.0})
 	retornante_tp_window = 0.0
 	for effect in tp_effects:
 		if String(effect.get("kind", "")) == "retornante":
@@ -10284,6 +10583,7 @@ func _reset_advanced_manifestation_state() -> void:
 	eclipsada_vfx.clear()
 	manifestation_secondaries = manifestation_secondaries.filter(func(sec): return not String(sec.get("kind", "")).begins_with("eclipsada"))
 	_reset_bombastica_state()
+	_reset_necronada_state()
 
 
 func _update_advanced_manifestation_state(delta: float) -> void:
@@ -10342,6 +10642,479 @@ func _update_advanced_manifestation_state(delta: float) -> void:
 	_update_eclipsada_state(delta)
 	_update_acorrentada_state(delta)
 	_update_bombastica_state(delta)
+	_update_necronada_state(delta)
+
+
+func _reset_necronada_state() -> void:
+	necronada_vestiges.clear()
+	necronada_ossuary.clear()
+	necronada_remnants.clear()
+	necronada_requiem.clear()
+	necronada_pente_history.clear()
+	necronada_selected_slot = 0
+	necronada_next_id = 1
+	necronada_vfx.clear()
+	for enemy in enemies:
+		enemy.erase("necronada_epitaph")
+		enemy.erase("necronada_epitaph_depth")
+		enemy.erase("necronada_epitaph_time")
+		enemy.erase("necronada_epitaph_flash")
+
+
+func _necronada_color() -> Color:
+	return Color(0.52, 0.34, 0.92)
+
+
+func _necronada_accent() -> Color:
+	return Color(0.72, 0.96, 1.0)
+
+
+func _necronada_profile(enemy_type: String) -> Dictionary:
+	var profile := {
+		"name": "Errante reconstruido",
+		"archetype": "predador",
+		"last_act": "rupture",
+		"hp": 0.45,
+		"damage": 0.34,
+		"speed": 118.0,
+		"range": 64.0,
+		"color": _necronada_color()
+	}
+	match enemy_type:
+		ENEMY_ATIRADOR, ENEMY_PROJECTOR, ENEMY_MIASMA_EEL:
+			profile = {"name": "Executor de lapide", "archetype": "executor", "last_act": "shot", "hp": 0.34, "damage": 0.30, "speed": 86.0, "range": 245.0, "color": Color(0.58, 0.76, 1.0)}
+		ENEMY_STALKER, ENEMY_LODARIO, ENEMY_KAMIKAZE:
+			profile = {"name": "Predador funerario", "archetype": "predador", "last_act": "leap", "hp": 0.38, "damage": 0.40, "speed": 152.0, "range": 52.0, "color": Color(0.68, 0.54, 1.0)}
+		ENEMY_CRYSTAL, ENEMY_SHIELD_REFLECTOR, ENEMY_FOSSIL_PUSTULE:
+			profile = {"name": "Bastiao ossuario", "archetype": "bastiao", "last_act": "guard", "hp": 0.62, "damage": 0.24, "speed": 76.0, "range": 58.0, "color": Color(0.86, 0.86, 0.76)}
+		ENEMY_CURATER, ENEMY_DEVOTO, ENEMY_INCENSARIO:
+			profile = {"name": "Ritualista reverso", "archetype": "ritualista", "last_act": "heal", "hp": 0.42, "damage": 0.26, "speed": 96.0, "range": 170.0, "color": Color(0.70, 0.98, 0.92)}
+		ENEMY_LARAPIO, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_ECHO:
+			profile = {"name": "Anomalia insepulta", "archetype": "anomalia", "last_act": "rewind", "hp": 0.36, "damage": 0.36, "speed": 132.0, "range": 120.0, "color": Color(0.86, 0.62, 1.0)}
+	return profile
+
+
+func _apply_necronada_epitaph(enemy: Dictionary, impact_pos: Vector2) -> void:
+	if manifestation_key != "necronada":
+		return
+	var enemy_type := String(enemy.get("type", ENEMY_COMMON))
+	if enemy_type in [ENEMY_LARAPIO, "arauto"] or bool(enemy.get("boss", false)) or bool(enemy.get("mini_boss", false)):
+		return
+	var depth := clampi(int(enemy.get("necronada_epitaph_depth", 0)) + 1, 1, NECRONADA_EPITAPH_MAX_DEPTH)
+	enemy["necronada_epitaph"] = true
+	enemy["necronada_epitaph_depth"] = depth
+	enemy["necronada_epitaph_time"] = NECRONADA_EPITAPH_DURATION
+	enemy["necronada_epitaph_flash"] = 0.45
+	necronada_vfx.append({"kind": "epitaph_hit", "pos": impact_pos, "life": 0.42, "max": 0.42, "depth": depth, "phase": rng.randf_range(0.0, TAU)})
+
+
+func _remember_necronada_species(enemy_type: String) -> void:
+	if enemy_type == "":
+		enemy_type = ENEMY_COMMON
+	if not necronada_pente_history.has(enemy_type):
+		necronada_pente_history.append(enemy_type)
+
+
+func _necronada_on_enemy_killed(enemy: Dictionary) -> void:
+	if manifestation_key != "necronada":
+		return
+	var enemy_type := String(enemy.get("type", ENEMY_COMMON))
+	if enemy_type in [ENEMY_LARAPIO, "arauto"] or bool(enemy.get("boss", false)) or bool(enemy.get("mini_boss", false)):
+		return
+	var source := String(enemy.get("killed_by_source", ""))
+	if source.begins_with("necronada_remnant") or source.begins_with("necronada_requiem"):
+		return
+	_remember_necronada_species(enemy_type)
+	var depth := clampi(int(enemy.get("necronada_epitaph_depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
+	var vestige := {
+		"id": necronada_next_id,
+		"enemy_type": enemy_type,
+		"pos": Vector2(enemy.get("pos", player_pos)),
+		"life": NECRONADA_VESTIGE_DURATION,
+		"max": NECRONADA_VESTIGE_DURATION,
+		"depth": depth,
+		"profile": _necronada_profile(enemy_type),
+		"phase": rng.randf_range(0.0, TAU)
+	}
+	necronada_next_id += 1
+	necronada_vestiges.append(vestige)
+	while necronada_vestiges.size() > 10:
+		necronada_vestiges.pop_front()
+	_add_text("VESTIGIO MORTUARIO", Vector2(vestige["pos"]) + Vector2(0, -78), _necronada_accent(), 0.85, 16)
+
+
+func _try_use_necronada_skill(target_world = null) -> void:
+	if _necronada_has_ossuary_entry():
+		_summon_necronada_remnant(target_world)
+		return
+	if _capture_necronada_vestige(target_world):
+		return
+	_add_text("MARQUE E ABATA PRIMEIRO", player_pos + Vector2(0, -90), Color(0.72, 0.88, 1.0), 0.8, 17)
+
+
+func _necronada_has_ossuary_entry() -> bool:
+	return not necronada_ossuary.is_empty()
+
+
+func _capture_necronada_vestige(target_world = null) -> bool:
+	if necronada_vestiges.is_empty():
+		return false
+	var target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
+	var best_index := -1
+	var best_distance := INF
+	for i in range(necronada_vestiges.size()):
+		var vestige: Dictionary = necronada_vestiges[i]
+		var distance := target.distance_to(Vector2(vestige.get("pos", player_pos)))
+		if distance < best_distance:
+			best_distance = distance
+			best_index = i
+	if best_index < 0:
+		return false
+	var vestige: Dictionary = necronada_vestiges[best_index]
+	necronada_vestiges.remove_at(best_index)
+	var enemy_type_captured := String(vestige.get("enemy_type", ENEMY_COMMON))
+	_remember_necronada_species(enemy_type_captured)
+	var slot := {
+		"id": int(vestige.get("id", necronada_next_id)),
+		"enemy_type": enemy_type_captured,
+		"profile": Dictionary(vestige.get("profile", {})),
+		"depth": int(vestige.get("depth", 1)),
+		"stored_at": time_alive
+	}
+	if necronada_ossuary.size() >= NECRONADA_OSSUARY_SLOTS:
+		necronada_selected_slot = clampi(necronada_selected_slot, 0, necronada_ossuary.size() - 1)
+		necronada_ossuary[necronada_selected_slot] = slot
+	else:
+		necronada_ossuary.append(slot)
+		necronada_selected_slot = necronada_ossuary.size() - 1
+	_add_necronada_horde_progress(1)
+	_add_text("OSSUARIO +1", player_pos + Vector2(0, -96), _necronada_accent(), 0.85, 18)
+	_spawn_radial_particles(Vector2(vestige.get("pos", player_pos)), _necronada_accent(), 18)
+	return true
+
+
+func _add_necronada_horde_progress(_amount: int) -> void:
+	pass
+
+
+func _summon_necronada_remnant(target_world = null, slot_override: Dictionary = {}) -> bool:
+	var slot: Dictionary
+	var consume_slot := slot_override.is_empty()
+	if consume_slot:
+		if necronada_ossuary.is_empty():
+			return false
+		slot = necronada_ossuary.pop_front()
+		necronada_selected_slot = 0
+	else:
+		slot = slot_override.duplicate(true)
+	var profile: Dictionary = Dictionary(slot.get("profile", _necronada_profile(String(slot.get("enemy_type", ENEMY_COMMON)))))
+	var target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _aim_direction() * 92.0
+	var depth := clampi(int(slot.get("depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
+	var base_duration := 15.0
+	var max_hp := maxf(20.0, player_hp_max * 0.50 * (0.90 + depth * 0.10))
+	if bool(slot.get("supreme", false)):
+		max_hp *= 1.60
+	var remnant := {
+		"id": necronada_next_id,
+		"enemy_type": String(slot.get("enemy_type", ENEMY_COMMON)),
+		"profile": profile,
+		"pos": target.clamp(Vector2(64, 64), WORLD_SIZE - Vector2(64, 64)),
+		"facing_dir": Vector2.LEFT,
+		"hp": max_hp,
+		"max_hp": max_hp,
+		"life": base_duration,
+		"max": base_duration,
+		"summon": NECRONADA_REMNANT_SUMMON_TIME,
+		"target_timer": 0.0,
+		"target_kind": "",
+		"target_uid": -1,
+		"target_pos": target,
+		"attack_cd": 0.15,
+		"phase": rng.randf_range(0.0, TAU),
+		"depth": depth,
+		"last_act_done": false,
+		"supreme": bool(slot.get("supreme", false)),
+		"is_ultimate": bool(slot.get("supreme", false))
+	}
+	necronada_next_id += 1
+	necronada_remnants.append(remnant)
+	_add_text("HORDA SUPREMA" if bool(remnant.get("supreme", false)) else "LEVANTE REVERSO", target + Vector2(0, -82), _necronada_accent(), 1.0, 20)
+	_spawn_radial_particles(target, _necronada_color(), 24)
+	return true
+
+
+func _cast_necronada_requiem() -> bool:
+	var pente_types: Array = []
+	for enemy_type in necronada_pente_history:
+		if not pente_types.has(enemy_type):
+			pente_types.append(enemy_type)
+	if pente_types.is_empty():
+		pente_types.append(ENEMY_COMMON)
+	necronada_requiem = {
+		"life": NECRONADA_TOTAL_TAUNT_DURATION,
+		"max": NECRONADA_TOTAL_TAUNT_DURATION,
+		"tick": NECRONADA_REQUIEM_TICK,
+		"echoes": NECRONADA_SUPREME_HORDE_COUNT,
+		"phase": rng.randf_range(0.0, TAU),
+		"total_taunt_timer": NECRONADA_TOTAL_TAUNT_DURATION,
+		"species_pool": pente_types.duplicate()
+	}
+	necronada_remnants.clear()
+	for i in range(NECRONADA_SUPREME_HORDE_COUNT):
+		var enemy_type := String(pente_types[rng.randi_range(0, pente_types.size() - 1)])
+		var angle := TAU * float(i) / float(NECRONADA_SUPREME_HORDE_COUNT) + rng.randf_range(-0.24, 0.24)
+		var slot := {
+			"id": necronada_next_id + i,
+			"enemy_type": enemy_type,
+			"profile": _necronada_profile(enemy_type),
+			"depth": NECRONADA_EPITAPH_MAX_DEPTH,
+			"stored_at": time_alive,
+			"duration": NECRONADA_TOTAL_TAUNT_DURATION,
+			"supreme": true
+		}
+		_summon_necronada_remnant(player_pos + Vector2.from_angle(angle) * 118.0, slot)
+	_spawn_radial_particles(player_pos, _necronada_accent(), 36)
+	_add_text("HORDA SUPREMA", player_pos + Vector2(0, -116), _necronada_accent(), 1.45, 23)
+	return true
+
+
+func _update_necronada_state(delta: float) -> void:
+	if manifestation_key == "necronada":
+		for enemy in enemies:
+			if bool(enemy.get("necronada_epitaph", false)):
+				enemy["necronada_epitaph_time"] = maxf(0.0, float(enemy.get("necronada_epitaph_time", 0.0)) - delta)
+				enemy["necronada_epitaph_flash"] = maxf(0.0, float(enemy.get("necronada_epitaph_flash", 0.0)) - delta)
+				if float(enemy.get("necronada_epitaph_time", 0.0)) <= 0.0:
+					enemy.erase("necronada_epitaph")
+					enemy.erase("necronada_epitaph_depth")
+					enemy.erase("necronada_epitaph_time")
+					enemy.erase("necronada_epitaph_flash")
+	var auto_capture_positions: Array = []
+	for vestige in necronada_vestiges:
+		vestige["life"] = maxf(0.0, float(vestige.get("life", 0.0)) - delta)
+		vestige["phase"] = float(vestige.get("phase", 0.0)) + delta * 2.6
+		if manifestation_key == "necronada" and necronada_ossuary.size() < NECRONADA_OSSUARY_SLOTS and Vector2(vestige.get("pos", player_pos)).distance_to(player_pos) <= 92.0:
+			vestige["auto_capture"] = true
+			auto_capture_positions.append(Vector2(vestige.get("pos", player_pos)))
+	if manifestation_key == "necronada":
+		for capture_pos in auto_capture_positions:
+			_capture_necronada_vestige(capture_pos)
+	necronada_vestiges = necronada_vestiges.filter(func(vestige): return float(vestige.get("life", 0.0)) > 0.0 and not bool(vestige.get("auto_capture", false)))
+	for visual in necronada_vfx:
+		visual["life"] = maxf(0.0, float(visual.get("life", 0.0)) - delta)
+	necronada_vfx = necronada_vfx.filter(func(visual): return float(visual.get("life", 0.0)) > 0.0)
+	_update_necronada_remnants(delta)
+	_update_necronada_requiem(delta)
+
+
+func _update_necronada_remnants(delta: float) -> void:
+	for remnant in necronada_remnants:
+		remnant["phase"] = float(remnant.get("phase", 0.0)) + delta * 4.0
+		if float(remnant.get("summon", 0.0)) > 0.0:
+			remnant["summon"] = maxf(0.0, float(remnant.get("summon", 0.0)) - delta)
+			if float(remnant["summon"]) <= 0.0:
+				_necronada_last_act(remnant)
+			continue
+		remnant["target_timer"] = float(remnant.get("target_timer", 0.0)) - delta
+		if float(remnant["target_timer"]) <= 0.0 or not _necronada_target_alive(remnant):
+			var target := _necronada_find_target(Vector2(remnant.get("pos", player_pos)))
+			remnant["target_kind"] = String(target.get("kind", ""))
+			remnant["target_uid"] = int(target.get("uid", -1))
+			remnant["target_pos"] = Vector2(target.get("pos", player_pos))
+			remnant["target_timer"] = NECRONADA_REMNANT_TARGET_INTERVAL
+		else:
+			remnant["target_pos"] = _necronada_target_pos(remnant)
+		var profile: Dictionary = Dictionary(remnant.get("profile", {}))
+		var pos := Vector2(remnant.get("pos", player_pos))
+		var target_pos := Vector2(remnant.get("target_pos", player_pos))
+		var to_target := target_pos - pos
+		var distance := to_target.length()
+		var attack_range := float(profile.get("range", 62.0))
+		var move_speed: float = player_speed * 0.60
+		var archetype := String(profile.get("archetype", "predador"))
+		var desired := Vector2.ZERO
+		if distance > attack_range * (1.05 if archetype != "executor" else 1.35):
+			desired = to_target.normalized()
+		elif archetype == "executor" and distance < attack_range * 0.62:
+			desired = -to_target.normalized()
+		elif archetype == "bastiao" and player_pos.distance_to(pos) > 132.0:
+			desired = (player_pos - pos).normalized()
+		if desired.length_squared() > 0.01:
+			desired = _steer_entity_with_avoidance(remnant, pos, desired, delta)
+			remnant["facing_dir"] = desired
+		remnant["pos"] = (pos + desired * move_speed * delta).clamp(Vector2(42, 42), WORLD_SIZE - Vector2(42, 42))
+		remnant["attack_cd"] = float(remnant.get("attack_cd", 0.0)) - delta
+		if distance <= attack_range + 18.0 and float(remnant["attack_cd"]) <= 0.0:
+			_necronada_remnant_attack(remnant)
+			remnant["attack_cd"] = NECRONADA_REMNANT_ATTACK_INTERVAL * (0.92 if archetype == "predador" else 1.10 if archetype == "bastiao" else 1.0)
+	necronada_remnants = necronada_remnants.filter(func(remnant): return float(remnant.get("hp", 0.0)) > 0.0)
+
+
+func _necronada_find_target(origin: Vector2) -> Dictionary:
+	var best := {}
+	var best_distance := INF
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var distance := origin.distance_squared_to(Vector2(enemy.get("pos", player_pos)))
+		if distance < best_distance:
+			best_distance = distance
+			best = {"kind": "enemy", "uid": int(enemy.get("uid", -1)), "pos": Vector2(enemy.get("pos", player_pos))}
+	if _arauto_active():
+		var arauto_distance := origin.distance_squared_to(Vector2(arauto.get("pos", player_pos)))
+		if arauto_distance < best_distance:
+			best_distance = arauto_distance
+			best = {"kind": "arauto", "uid": -2, "pos": Vector2(arauto.get("pos", player_pos))}
+	if boss_active and boss_hp > 0.0:
+		var boss_distance := origin.distance_squared_to(boss_pos)
+		if boss_distance < best_distance:
+			best = {"kind": "boss", "uid": -1, "pos": boss_pos}
+	return best
+
+
+func _necronada_target_alive(remnant: Dictionary) -> bool:
+	match String(remnant.get("target_kind", "")):
+		"enemy":
+			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
+			return enemy != null and float(enemy.get("hp", 0.0)) > 0.0
+		"arauto":
+			return _arauto_active()
+		"boss":
+			return boss_active and boss_hp > 0.0
+	return false
+
+
+func _necronada_target_pos(remnant: Dictionary) -> Vector2:
+	match String(remnant.get("target_kind", "")):
+		"enemy":
+			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
+			if enemy != null:
+				return Vector2(enemy.get("pos", player_pos))
+		"arauto":
+			if _arauto_active():
+				return Vector2(arauto.get("pos", player_pos))
+		"boss":
+			if boss_active:
+				return boss_pos
+	return Vector2(remnant.get("target_pos", player_pos))
+
+
+func _necronada_remnant_attack(remnant: Dictionary) -> void:
+	var target_kind := String(remnant.get("target_kind", ""))
+	if target_kind == "":
+		return
+	var profile: Dictionary = Dictionary(remnant.get("profile", {}))
+	var damage: float = player_damage * 0.55
+	if bool(remnant.get("supreme", false)):
+		damage *= 1.18
+	var origin := Vector2(remnant.get("pos", player_pos))
+	var target_pos := _necronada_target_pos(remnant)
+	match target_kind:
+		"enemy":
+			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
+			if enemy != null:
+				_damage_enemy(enemy, damage, "necronada_remnant", false, true, origin, "summon")
+		"arauto":
+			_damage_arauto(damage * 0.72, "necronada_remnant", true, true, "summon", origin)
+		"boss":
+			_damage_boss(damage * 0.58, "necronada_remnant", true, true, "summon", origin)
+	necronada_vfx.append({"kind": "remnant_strike", "a": origin, "b": target_pos, "life": 0.22, "max": 0.22, "color": profile.get("color", _necronada_accent())})
+
+
+
+func _damage_necronada_remnant(remnant: Dictionary, raw_damage: float) -> void:
+	var armor_scale := clampf(1.0 / (1.0 + time_alive * 0.0025 + float(current_phase) * 0.15), 0.25, 1.0)
+	var actual_damage := raw_damage * armor_scale
+	remnant["hp"] = float(remnant.get("hp", 0.0)) - actual_damage
+	if float(remnant.get("hp", 0.0)) <= 0.0:
+		remnant["life"] = 0.0
+		_spawn_radial_particles(Vector2(remnant.get("pos", player_pos)), Color(0.5, 0.3, 0.9), 16)
+
+
+func _necronada_nearest_remnant_pos(origin: Vector2) -> Vector2:
+	var best_pos := Vector2.INF
+	var best_dist := INF
+	for remnant in necronada_remnants:
+		if float(remnant.get("life", 0.0)) <= 0.0 or float(remnant.get("hp", 0.0)) <= 0.0:
+			continue
+		var pos := Vector2(remnant.get("pos", player_pos))
+		var dist := origin.distance_squared_to(pos)
+		if dist < best_dist:
+			best_dist = dist
+			best_pos = pos
+	return best_pos
+
+
+func _necronada_remnant_at_pos(pos: Vector2, radius: float) -> Dictionary:
+	for remnant in necronada_remnants:
+		if float(remnant.get("life", 0.0)) <= 0.0 or float(remnant.get("hp", 0.0)) <= 0.0:
+			continue
+		if Vector2(remnant.get("pos", player_pos)).distance_to(pos) <= radius:
+			return remnant
+	return {}
+
+func _necronada_last_act(remnant: Dictionary) -> void:
+	if bool(remnant.get("last_act_done", false)):
+		return
+	remnant["last_act_done"] = true
+	var profile: Dictionary = Dictionary(remnant.get("profile", {}))
+	var pos := Vector2(remnant.get("pos", player_pos))
+	var color: Color = profile.get("color", _necronada_accent())
+	_spawn_radial_particles(pos, color, 18)
+	var act := String(profile.get("last_act", "rupture"))
+	if act == "heal":
+		_heal_player(maxi(1, int(player_hp_max * 0.035)), "necronada", true)
+	elif act == "guard":
+		shockwaves.append({"pos": pos, "radius": 12.0, "max": 132.0, "life": 0.36, "damage": player_damage * 0.18, "hit": {}, "source_category": "summon", "color": color})
+	elif act == "shot":
+		var target := _necronada_find_target(pos)
+		if not target.is_empty():
+			necronada_vfx.append({"kind": "remnant_strike", "a": pos, "b": Vector2(target.get("pos", pos)), "life": 0.30, "max": 0.30, "color": color})
+	elif act == "rewind":
+		for enemy in enemies:
+			if Vector2(enemy.get("pos", player_pos)).distance_to(pos) <= 148.0:
+				enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.45)
+	else:
+		shockwaves.append({"pos": pos, "radius": 18.0, "max": 96.0, "life": 0.26, "damage": player_damage * 0.24, "hit": {}, "source_category": "summon", "color": color})
+
+
+func _update_necronada_requiem(delta: float) -> void:
+	if necronada_requiem.is_empty():
+		return
+	necronada_requiem["life"] = maxf(0.0, float(necronada_requiem.get("life", 0.0)) - delta)
+	necronada_requiem["tick"] = float(necronada_requiem.get("tick", 0.0)) - delta
+	necronada_requiem["total_taunt_timer"] = maxf(0.0, float(necronada_requiem.get("total_taunt_timer", 0.0)) - delta)
+	if float(necronada_requiem["tick"]) <= 0.0 and int(necronada_requiem.get("echoes", 0)) > 0:
+		necronada_requiem["tick"] = NECRONADA_REQUIEM_TICK
+		necronada_requiem["echoes"] = int(necronada_requiem.get("echoes", 0)) - 1
+		necronada_vfx.append({"kind": "requiem_echo", "pos": player_pos, "life": 0.48, "max": 0.48, "phase": rng.randf_range(0.0, TAU)})
+	if float(necronada_requiem.get("life", 0.0)) <= 0.0:
+		necronada_requiem.clear()
+
+
+func _necronada_has_active_taunt() -> bool:
+	if float(Dictionary(necronada_requiem).get("total_taunt_timer", 0.0)) <= 0.0:
+		return false
+	for remnant in necronada_remnants:
+		if float(Dictionary(remnant).get("hp", 0.0)) > 0.0:
+			return true
+	return false
+
+
+func _necronada_taunt_target_pos(from_pos: Vector2) -> Vector2:
+	if necronada_remnants.is_empty():
+		return player_pos
+	var best_pos: Vector2 = player_pos
+	var best_dist: float = INF
+	for remnant in necronada_remnants:
+		if float(Dictionary(remnant).get("hp", 0.0)) <= 0.0:
+			continue
+		var r_pos: Vector2 = Vector2(Dictionary(remnant).get("pos", player_pos))
+		var d := from_pos.distance_squared_to(r_pos)
+		if d < best_dist:
+			best_dist = d
+			best_pos = r_pos
+	return best_pos
 
 
 func _reset_bombastica_state() -> void:
@@ -12257,14 +13030,22 @@ func _add_cartographic_coord(pos: Vector2, uid := -1, target_kind := "", source 
 	if kind.is_empty():
 		kind = "enemy" if uid >= 0 else "fixed"
 	var clamped_pos := pos.clamp(Vector2(60, 70), WORLD_SIZE - Vector2(60, 70))
+	var coord_life := 5.0
+	if source == "teleport" or kind == "teleport":
+		coord_life = 3.0
+	elif kind in ["enemy", "boss", "arauto"]:
+		coord_life = 10.0
+	else:
+		coord_life = 5.0
+
 	if kind != "fixed":
 		for existing in cartographic_coords:
 			var same_kind := String(existing.get("kind", "fixed")) == kind
 			var same_uid := int(existing.get("uid", -99999)) == uid or kind in ["boss", "arauto"]
 			if same_kind and same_uid:
 				existing["pos"] = clamped_pos
-				existing["life"] = CARTO_COORD_LIFE
-				existing["max"] = CARTO_COORD_LIFE
+				existing["life"] = coord_life
+				existing["max"] = coord_life
 				existing["source"] = source
 				_cartographic_update_coord_slots()
 				return
@@ -12272,8 +13053,8 @@ func _add_cartographic_coord(pos: Vector2, uid := -1, target_kind := "", source 
 	var coord = {
 		"id": cartographic_coord_sequence,
 		"pos": clamped_pos,
-		"life": CARTO_COORD_LIFE,
-		"max": CARTO_COORD_LIFE,
+		"life": coord_life,
+		"max": coord_life,
 		"phase": rng.randf_range(0.0, TAU),
 		"kind": kind,
 		"uid": uid,
@@ -12281,7 +13062,12 @@ func _add_cartographic_coord(pos: Vector2, uid := -1, target_kind := "", source 
 		"slot": cartographic_coords.size()
 	}
 	cartographic_coords.append(coord)
-	while cartographic_coords.size() > CARTO_COORD_MAX:
+	var max_allowed := CARTO_COORD_MAX
+	for c in cartographic_coords:
+		if String(c.get("source", "")) == "teleport":
+			max_allowed = 4
+			break
+	while cartographic_coords.size() > max_allowed:
 		var old_coord = cartographic_coords.pop_front()
 		var old_pos := Vector2(old_coord.get("pos", clamped_pos))
 		slashes.append({"a": old_pos + Vector2(-18, 0), "b": old_pos + Vector2(18, 0), "life": 0.14, "max": 0.14, "color": Color(0.30, 1.0, 0.88), "width": 8.0})
@@ -14325,6 +15111,10 @@ func _damage_arauto(amount: float, source: String, show_text := true, apply_aura
 		_store_excess_damage(max(0.0, final - hp_before), source, effective_source_category)
 	elif actual_damage > 0.0:
 		_select_excess_discharge_target_boss(source, effective_source_category)
+	if trigger_card_effects:
+		_register_eco_impact("arauto", 0, Vector2(arauto["pos"]), actual_damage, source, effective_source_category)
+		if hp_before > 0.0 and float(arauto["hp"]) <= 0.0:
+			_reduce_margem_debt_on_kill(2.0)
 	if show_text:
 		var color := Color(0.62, 1.0, 0.30) if guard_count > 0 else _damage_color(source)
 		_add_text("-%d" % int(final), Vector2(arauto["pos"]) + Vector2(rng.randf_range(-28, 28), -82), color, 0.62, _damage_text_size(18))
@@ -14787,6 +15577,127 @@ func _spawn_point_on_edge() -> Vector2:
 			return Vector2(rng.randf_range(40, WORLD_SIZE.x - 40), WORLD_SIZE.y - 40)
 
 
+
+func _entity_physical_radius(entity: Dictionary) -> float:
+	var kind := String(entity.get("type", entity.get("enemy_type", "common")))
+	match kind:
+		"boss":
+			return 64.0
+		"player":
+			return 24.0
+		ENEMY_AGGLOMERATOR, ENEMY_SHIELD_REFLECTOR, ENEMY_GUARDIAO:
+			return 36.0
+		ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH:
+			return 32.0
+		ENEMY_KAMIKAZE, ENEMY_DEVOTO:
+			return 20.0
+	return 22.0
+
+
+func _steer_entity_with_avoidance(entity: Dictionary, pos: Vector2, desired_dir: Vector2, delta: float) -> Vector2:
+	if desired_dir.length_squared() < 0.001:
+		return Vector2.ZERO
+	desired_dir = desired_dir.normalized()
+	
+	# Update locked bypass timer to prevent direction jitter
+	var bypass_timer := maxf(0.0, float(entity.get("bypass_timer", 0.0)) - delta)
+	var bypass_side := float(entity.get("bypass_side", 0.0))
+	entity["bypass_timer"] = bypass_timer
+	
+	var my_radius := _entity_physical_radius(entity)
+	var ray_length := my_radius * 2.2
+	var obstacle_found := false
+	var obstacle_pos := Vector2.ZERO
+	var obstacle_radius := 20.0
+	
+	# Probe ahead for blocking boss, player, or other entities
+	if boss_active and boss_hp > 0.0 and pos.distance_to(boss_pos) < (my_radius + 68.0 + ray_length):
+		var to_boss: Vector2 = boss_pos - pos
+		if desired_dir.dot(to_boss.normalized()) > 0.5:
+			obstacle_found = true
+			obstacle_pos = boss_pos
+			obstacle_radius = 64.0
+	
+	if not obstacle_found:
+		for other in enemies:
+			if other == entity or float(other.get("hp", 0.0)) <= 0.0:
+				continue
+			var other_pos := Vector2(other.get("pos", pos))
+			var other_radius := _entity_physical_radius(other)
+			var dist := pos.distance_to(other_pos)
+			if dist > 0.1 and dist < (my_radius + other_radius + ray_length):
+				var to_other := (other_pos - pos).normalized()
+				if desired_dir.dot(to_other) > 0.65:
+					obstacle_found = true
+					obstacle_pos = other_pos
+					obstacle_radius = other_radius
+					break
+	
+	if not obstacle_found:
+		entity["bypass_side"] = 0.0
+		return desired_dir
+	
+	# If obstacle found, lock bypass side (+1 right, -1 left) for 0.45s to avoid oscillation
+	if bypass_timer <= 0.0 or bypass_side == 0.0:
+		var to_obs := (obstacle_pos - pos).normalized()
+		var cross_val := desired_dir.cross(to_obs)
+		bypass_side = -1.0 if cross_val > 0.0 else 1.0
+		entity["bypass_side"] = bypass_side
+		entity["bypass_timer"] = 0.45
+	
+	var tangent := desired_dir.orthogonal() * bypass_side
+	return (desired_dir * 0.40 + tangent * 0.60).normalized()
+
+
+func _apply_entity_separation(delta: float) -> void:
+	if delta <= 0.0:
+		return
+	
+	# 1. Separate Enemies vs Enemies & Necro Aliados
+	var all_minions: Array = []
+	for e in enemies:
+		if float(e.get("hp", 0.0)) > 0.0:
+			all_minions.append(e)
+	for r in necronada_remnants:
+		if float(r.get("hp", 0.0)) > 0.0:
+			all_minions.append(r)
+	
+	var count := all_minions.size()
+	for i in range(count):
+		var a: Dictionary = all_minions[i]
+		var pos_a := Vector2(a.get("pos", Vector2.ZERO))
+		var r_a := _entity_physical_radius(a)
+		
+		# Boss hard collision push
+		if boss_active and boss_hp > 0.0:
+			var d_boss := pos_a.distance_to(boss_pos)
+			var min_boss_d := r_a + 64.0
+			if d_boss < min_boss_d and d_boss > 0.001:
+				var push_b := (pos_a - boss_pos).normalized() * (min_boss_d - d_boss)
+				a["pos"] = (pos_a + push_b).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+				pos_a = Vector2(a["pos"])
+		
+		# Player separation
+		var d_player := pos_a.distance_to(player_pos)
+		var min_player_d := r_a + 22.0
+		if d_player < min_player_d and d_player > 0.001:
+			var push_p := (pos_a - player_pos).normalized() * (min_player_d - d_player) * 0.65
+			a["pos"] = (pos_a + push_p).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+			pos_a = Vector2(a["pos"])
+		
+		for j in range(i + 1, count):
+			var b: Dictionary = all_minions[j]
+			var pos_b := Vector2(b.get("pos", Vector2.ZERO))
+			var r_b := _entity_physical_radius(b)
+			var dist := pos_a.distance_to(pos_b)
+			var min_dist := r_a + r_b
+			if dist < min_dist and dist > 0.001:
+				var overlap := min_dist - dist
+				var push_dir := (pos_a - pos_b) / dist
+				var push_amount := push_dir * (overlap * 0.45)
+				a["pos"] = (pos_a + push_amount).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+				b["pos"] = (pos_b - push_amount).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+
 func _update_enemies(delta: float) -> void:
 	if not _is_world_authority():
 		return
@@ -14870,7 +15781,11 @@ func _update_enemies(delta: float) -> void:
 			continue
 
 		if not lacerante_storm and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
-			if _local_player_damageable_by_contact() and enemy["pos"].distance_to(player_pos) < 46.0:
+			var remnant_hit: Dictionary = _necronada_remnant_at_pos(Vector2(enemy.get("pos", player_pos)), 48.0)
+			if not remnant_hit.is_empty():
+				enemy["hit_cd"] = 0.55
+				_damage_necronada_remnant(remnant_hit, _enemy_damage(enemy))
+			elif _local_player_damageable_by_contact() and enemy["pos"].distance_to(player_pos) < 46.0:
 				enemy["hit_cd"] = 0.55
 				_damage_player(_enemy_damage(enemy), enemy["type"])
 			else:
@@ -14964,8 +15879,17 @@ func _enemy_prefers_remote(enemy: Dictionary) -> bool:
 
 
 func _get_enemy_target_pos(enemy: Dictionary) -> Vector2:
+	if _necronada_has_active_taunt():
+		return _necronada_taunt_target_pos(Vector2(enemy.get("pos", player_pos)))
 	if float(enemy.get("blind_confusion", 0.0)) > 0.0:
 		return Vector2(enemy.get("blind_decoy_position", player_pos))
+	if not necronada_remnants.is_empty():
+		var uid := int(enemy.get("uid", 0))
+		var focus_rng := fmod(abs(sin(float(uid) * 12.9898 + time_alive * 0.5)), 1.0)
+		if focus_rng >= 0.70:
+			var nearest_remnant_pos := _necronada_nearest_remnant_pos(Vector2(enemy.get("pos", player_pos)))
+			if nearest_remnant_pos != Vector2.INF:
+				return nearest_remnant_pos
 	var targets := _combat_targets()
 	if targets.is_empty():
 		return Vector2(enemy.get("pos", player_pos))
@@ -14984,6 +15908,8 @@ func _target_pos_is_local_player(pos: Vector2) -> bool:
 
 
 func _get_nearest_player_pos(pos: Vector2) -> Vector2:
+	if _necronada_has_active_taunt():
+		return _necronada_taunt_target_pos(pos)
 	var targets := _combat_targets()
 	if targets.is_empty():
 		return pos
@@ -15957,6 +16883,7 @@ func _move_enemy(enemy: Dictionary, delta: float) -> void:
 	if enemy["type"] == ENEMY_SHIELD_REFLECTOR and not _shield_reflector_active(enemy):
 		speed_mult *= SHIELD_REFLECTOR_UNBURDENED_SPEED_MULT
 	if dir.length() > 0.05:
+		dir = _steer_entity_with_avoidance(enemy, Vector2(enemy["pos"]), dir, delta)
 		enemy["last_move_dir"] = dir
 		enemy["facing_dir"] = dir
 	enemy["pos"] += dir * float(enemy["speed"]) * speed_mult * AuraSystem.world_multiplier(aura_state) * delta
@@ -16724,10 +17651,9 @@ func _update_bullets(delta: float) -> void:
 		# Prismatica Refraction Split
 		if bullet["kind"] == "prismatica" and not bool(bullet.get("refracted", false)):
 			for prism in prisms:
-				var prism_radius: float = float(prism.get("radius", 25.0))
-				if Vector2(bullet["pos"]).distance_to(Vector2(prism["pos"])) < prism_radius:
+				if _prismatica_bullet_can_refract(bullet, prism, previous_pos):
 					var current_angle = bullet["dir"].angle()
-					var angles = [-0.42, -0.21, 0.0, 0.21, 0.42]
+					var angles = _prismatica_refraction_offsets(bullet, prism)
 					for offset_angle in angles:
 						var new_dir = Vector2.from_angle(current_angle + offset_angle)
 						new_bullets.append({
@@ -16758,6 +17684,7 @@ func _update_bullets(delta: float) -> void:
 			if String(bullet.get("kind", "")) == "cartografica" and not bool(bullet.get("coord_spawned", false)):
 				_add_cartographic_coord(Vector2(bullet.get("pos", player_pos)))
 				bullet["coord_spawned"] = true
+			_try_rebate_from_bullet(bullet)
 			_play_projectile_end_sfx_once(bullet)
 			continue
 		if current_phase == 4 and _damage_phase4_planet_at(Vector2(bullet["pos"]), float(bullet["damage"]), 56.0):
@@ -16994,6 +17921,28 @@ func _apply_remote_projectile_visual_impact(bullet: Dictionary, target_key: Stri
 
 
 
+func _prismatica_bullet_can_refract(bullet: Dictionary, prism: Dictionary, previous_pos: Vector2) -> bool:
+	if bool(bullet.get("refracted", false)):
+		return false
+	var prism_pos := Vector2(prism.get("pos", player_pos))
+	var prism_radius: float = float(prism.get("radius", 25.0))
+	var current_pos := Vector2(bullet.get("pos", previous_pos))
+	var origin_pos := Vector2(bullet.get("origin", previous_pos))
+	if origin_pos.distance_to(prism_pos) <= prism_radius + 10.0:
+		return false
+	return _distance_to_segment(prism_pos, previous_pos, current_pos) <= prism_radius
+
+
+func _prismatica_refraction_offsets(bullet: Dictionary, prism: Dictionary) -> Array:
+	var prism_pos := Vector2(prism.get("pos", player_pos))
+	var prism_radius: float = float(prism.get("radius", 25.0))
+	var origin_pos := Vector2(bullet.get("origin", Vector2(bullet.get("pos", player_pos))))
+	var entry_distance := maxf(0.0, origin_pos.distance_to(prism_pos) - prism_radius)
+	var close_ratio := 1.0 - clampf((entry_distance - 30.0) / 420.0, 0.0, 1.0)
+	var spread := lerpf(0.075, 0.48, close_ratio)
+	return [-spread, -spread * 0.52, 0.0, spread * 0.52, spread]
+
+
 func _shield_front_alignment(enemy: Dictionary, vector_from_enemy_to_source: Vector2) -> float:
 	var facing := Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
 	var incoming := vector_from_enemy_to_source.normalized()
@@ -17066,6 +18015,8 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void:
 		enemy["parasite_mark_time"] = PARASITE_MARK_DURATION
 	if bullet["kind"] == "bombastica":
 		_apply_bombastica_powder_to_target("enemy", int(enemy.get("uid", -1)), Vector2(enemy["pos"]))
+	if bullet["kind"] == "necronada":
+		_apply_necronada_epitaph(enemy, Vector2(bullet.get("pos", enemy["pos"])))
 	if bullet["kind"] == "gravitante":
 		orbitals.append({
 			"target_kind": "enemy",
@@ -17783,6 +18734,7 @@ func _kill_enemy(enemy: Dictionary) -> void:
 	if _try_reconstitute_enemy(enemy):
 		return
 	_try_gain_eclipsada_trait(enemy)
+	_necronada_on_enemy_killed(enemy)
 	_handle_devorador_enemy_death(enemy)
 	_register_valid_necro_kill(enemy)
 	if String(enemy.get("killed_by_source", "")).begins_with("lacerante") or (manifestation_key == "lacerante" and not is_multiplayer):
@@ -17867,8 +18819,8 @@ func _kill_enemy(enemy: Dictionary) -> void:
 	player_damage += 0.06 * mult
 	enemy_speed_base = min(300.0, enemy_speed_base + 0.009)
 	if not boss_active and not boss_dead:
-		boss_hp_max += 6.0 * mult
-		boss_hp += 6.0 * mult
+		boss_hp_max = _boss_hp_for_phase(current_phase)
+		boss_hp = boss_hp_max
 
 
 func _points_for_enemy(enemy: Dictionary) -> int:
@@ -21161,6 +22113,8 @@ func _boss_target_entry(force_rotate: bool = false) -> Dictionary:
 
 
 func _boss_target_pos(force_rotate: bool = false, prediction: float = 0.0) -> Vector2:
+	if _necronada_has_active_taunt():
+		return _necronada_taunt_target_pos(boss_pos)
 	if current_phase == 6 and not boss6_fossil_echo.is_empty() and boss6_fossil_echo.get("timer", 0.0) > 0.0:
 		return Vector2(boss6_fossil_echo.get("pos", player_pos))
 	var target := _boss_target_entry(force_rotate)
@@ -24296,28 +25250,28 @@ func _update_boss_call(delta: float) -> void:
 		_mark_boss_reached(current_phase)
 		_play_boss_music_random()
 		if current_phase == 6:
-			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(6))
+			boss_hp_max = _boss_hp_for_phase(6)
 			boss_name = "MATRIARCA DA CHAGA"
 			boss_title_color = Color(1.0, 0.64, 0.18)
 		elif current_phase == 5:
-			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(5))
+			boss_hp_max = _boss_hp_for_phase(5)
 			boss_name = "UMBRA"
 			boss_title_color = Color(0.42, 1.0, 0.55)
 			_load_umbra_mobile_memory()
 		elif current_phase == 4:
-			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(4))
+			boss_hp_max = _boss_hp_for_phase(4)
 			boss_name = "NEXO DA RUPTURA"
 			boss_title_color = Color(1.0, 0.76, 0.18)
 		elif current_phase == 3:
-			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(3))
+			boss_hp_max = _boss_hp_for_phase(3)
 			boss_name = "PAI-RATO"
 			boss_title_color = Color(0.72, 0.92, 0.24)
 		elif current_phase == 2:
-			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(2))
+			boss_hp_max = _boss_hp_for_phase(2)
 			boss_name = "SENTINELA GLACIAL"
 			boss_title_color = Color(0.50, 0.86, 1.0)
 		else:
-			boss_hp_max = max(boss_hp_max, _boss_hp_for_phase(1))
+			boss_hp_max = _boss_hp_for_phase(1)
 			boss_name = "CARANGUEJO COSMICO GIGANTE"
 			boss_title_color = Color(1.0, 0.52, 0.16)
 		boss_hp = boss_hp_max
@@ -24548,7 +25502,7 @@ func _update_shop(delta: float) -> void:
 	_apply_card(card)
 	card_cost += _shop_price_increment_after_purchase()
 	_clear_locked_shop_slot_for_card(card)
-	shop_cards = _roll_shop_cards()
+	_refill_shop_slot_after_purchase(shop_selected)
 	shop_selected = clamp(shop_selected, 0, max(0, shop_cards.size() - 1))
 	shop_select_pulse_index = shop_selected
 	shop_select_pulse_timer = 0.22
@@ -24575,7 +25529,8 @@ func _open_shop(forced: bool) -> void:
 	shop_mp_ready_to_leave = false
 	shop_mp_partner_ready = false
 	_clear_shop_mp_request()
-	shop_cards = _roll_shop_cards()
+	_begin_shop_visit()
+	shop_cards = _roll_shop_cards("open")
 	shop_selected = 0
 	shop_select_pulse_index = 0
 	shop_select_pulse_timer = 0.20
@@ -24682,7 +25637,222 @@ func _clear_locked_shop_slot_for_card(card: Dictionary) -> void:
 			return
 
 
-func _roll_shop_cards() -> Array:
+func _reset_shop_fairness_state() -> void:
+	shop_slot_intents.clear()
+	shop_generation_profile = ""
+	shop_generation_index = 0
+	shop_visit_index = 0
+	shop_reroll_index = 0
+	shop_recent_generation_ids.clear()
+	shop_current_visit_eligible_cinzas.clear()
+	shop_last_generation_telemetry.clear()
+	shop_seed = abs(int(Time.get_ticks_msec()) ^ int(rng.randi()))
+	shop_rng.seed = shop_seed
+
+
+func _set_shop_rng_seed(seed_value: int) -> void:
+	shop_seed = seed_value
+	shop_rng.seed = seed_value
+
+
+func _shop_randf() -> float:
+	return shop_rng.randf()
+
+
+func _shop_randi_range(from_value: int, to_value: int) -> int:
+	return shop_rng.randi_range(from_value, to_value)
+
+
+func _shop_shuffle(values: Array) -> Array:
+	var shuffled := values.duplicate(true)
+	for i in range(shuffled.size() - 1, 0, -1):
+		var j := _shop_randi_range(0, i)
+		var temp = shuffled[i]
+		shuffled[i] = shuffled[j]
+		shuffled[j] = temp
+	return shuffled
+
+
+func _begin_shop_visit() -> void:
+	shop_visit_index += 1
+	shop_reroll_index = 0
+	shop_current_visit_eligible_cinzas.clear()
+	_count_cinzas_eligible_visit_once()
+
+
+func _shop_version_label() -> String:
+	return SHOP_VERSION_V2 if SHOP_FAIRNESS_V2 else SHOP_VERSION_V1
+
+
+func _owned_unique_common_card_count() -> int:
+	var unique := 0
+	for card in CARDS:
+		if _is_common_card(card) and _card_count(card) > 0:
+			unique += 1
+	return unique
+
+
+func _choose_shop_slot_intents() -> void:
+	var unique_common := _owned_unique_common_card_count()
+	shop_slot_intents.clear()
+	if unique_common < SHOP_BUILD_UNIQUE_THRESHOLD:
+		shop_generation_profile = "discovery"
+		shop_slot_intents = [SHOP_INTENT_DISCOVERY, SHOP_INTENT_DISCOVERY, SHOP_INTENT_FREE]
+		return
+	if _shop_randf() < SHOP_STRUCTURED_PROFILE_CHANCE:
+		shop_generation_profile = "structured"
+		shop_slot_intents = [SHOP_INTENT_CONSOLIDATION, SHOP_INTENT_DISCOVERY, SHOP_INTENT_FREE]
+	else:
+		shop_generation_profile = "free"
+		shop_slot_intents = [SHOP_INTENT_FREE, SHOP_INTENT_FREE, SHOP_INTENT_FREE]
+
+
+func _ensure_shop_slot_intents() -> void:
+	if shop_slot_intents.size() != 3:
+		_choose_shop_slot_intents()
+
+
+func _shop_locked_card_ids(except_slot := -1) -> Dictionary:
+	var ids := {}
+	for key in shop_locked_slots.keys():
+		var index := int(key)
+		if index == except_slot:
+			continue
+		var entry: Dictionary = shop_locked_slots.get(key, {})
+		var card: Dictionary = entry.get("card", {})
+		if not card.is_empty():
+			ids[_card_id(card)] = true
+	return ids
+
+
+func _shop_has_locked_rare() -> bool:
+	for key in shop_locked_slots.keys():
+		var entry: Dictionary = shop_locked_slots.get(key, {})
+		var card: Dictionary = entry.get("card", {})
+		if not card.is_empty() and _is_rare_card(card):
+			return true
+	return false
+
+
+func _shop_unlocked_slot_indices() -> Array:
+	var indices := []
+	for i in range(3):
+		if not _shop_slot_locked(i):
+			indices.append(i)
+	return indices
+
+
+func _shop_card_eligible_for_roll(card: Dictionary, excluded_ids: Dictionary) -> bool:
+	if card.is_empty() or _card_at_max(card):
+		return false
+	return not excluded_ids.has(_card_id(card))
+
+
+func _shop_common_eligible_for_roll(card: Dictionary, excluded_ids: Dictionary) -> bool:
+	return _is_common_card(card) and _shop_card_eligible_for_roll(card, excluded_ids)
+
+
+func _shop_intent_multiplier(intent: String, owned_count: int) -> float:
+	var owned := owned_count > 0
+	match intent:
+		SHOP_INTENT_DISCOVERY:
+			return SHOP_DISCOVERY_OWNED_MULT if owned else SHOP_DISCOVERY_UNOWNED_MULT
+		SHOP_INTENT_CONSOLIDATION:
+			return SHOP_CONSOLIDATION_OWNED_MULT if owned else SHOP_CONSOLIDATION_UNOWNED_MULT
+		_:
+			return SHOP_FREE_OWNED_MULT if owned else SHOP_FREE_UNOWNED_MULT
+
+
+func _shop_copy_multiplier(owned_count: int) -> float:
+	# A primeira copia confirma a direcao da build; a penalidade so comeca na segunda.
+	return 1.0 / (1.0 + SHOP_COPY_PENALTY_RATE * float(max(0, owned_count - 1)))
+
+
+func _shop_recent_multiplier(card_id: String, owned_count: int) -> float:
+	for i in range(min(SHOP_RECENT_GENERATION_LIMIT, shop_recent_generation_ids.size())):
+		var ids: Array = shop_recent_generation_ids[i]
+		if ids.has(card_id):
+			var table: Array = SHOP_RECENT_OWNED_MULT if owned_count > 0 else SHOP_RECENT_UNOWNED_MULT
+			return float(table[i])
+	return 1.0
+
+
+func _shop_common_weight_breakdown(card: Dictionary, intent: String) -> Dictionary:
+	var card_id := _card_id(card)
+	var owned_count := _card_count(card)
+	var base_weight := 1.0
+	var intent_multiplier := _shop_intent_multiplier(intent, owned_count)
+	var copy_multiplier := _shop_copy_multiplier(owned_count)
+	var recent_multiplier := _shop_recent_multiplier(card_id, owned_count)
+	var ashes_multiplier := _cinzas_weight_multiplier(card_id)
+	if ashes_multiplier > 1.0:
+		recent_multiplier = maxf(recent_multiplier, SHOP_ASHES_MIN_RECENT_MULT)
+	var final_weight := base_weight * intent_multiplier * copy_multiplier * recent_multiplier * ashes_multiplier
+	return {
+		"card_id": card_id,
+		"name": String(card.get("name", "")),
+		"owned_count": owned_count,
+		"base_weight": base_weight,
+		"intent_multiplier": intent_multiplier,
+		"copy_multiplier": copy_multiplier,
+		"recent_multiplier": recent_multiplier,
+		"ashes_multiplier": ashes_multiplier,
+		"final_weight": maxf(0.0, final_weight),
+		"intent": intent
+	}
+
+
+func _shop_weighted_common_result(slot_index: int, excluded_ids: Dictionary, capture_candidates := true) -> Dictionary:
+	var intent := String(shop_slot_intents[slot_index]) if slot_index < shop_slot_intents.size() else SHOP_INTENT_FREE
+	var candidates := []
+	var total_weight := 0.0
+	var has_primary_intent := false
+	for card in CARDS:
+		if not _shop_common_eligible_for_roll(card, excluded_ids):
+			continue
+		var owned := _card_count(card) > 0
+		if intent == SHOP_INTENT_DISCOVERY and not owned:
+			has_primary_intent = true
+		elif intent == SHOP_INTENT_CONSOLIDATION and owned:
+			has_primary_intent = true
+		elif intent == SHOP_INTENT_FREE:
+			has_primary_intent = true
+		var breakdown := _shop_common_weight_breakdown(card, intent)
+		total_weight += float(breakdown.get("final_weight", 0.0))
+		var candidate_entry := {"card": card, "weight": float(breakdown.get("final_weight", 0.0))}
+		if capture_candidates:
+			candidate_entry["breakdown"] = breakdown
+		candidates.append(candidate_entry)
+	if candidates.is_empty():
+		return {"card": {}, "candidates": [], "fallback": "pool_empty", "total_weight": 0.0}
+	var roll := _shop_randf() * maxf(0.001, total_weight)
+	for candidate in candidates:
+		roll -= float(candidate.get("weight", 0.0))
+		if roll <= 0.0:
+			return {
+				"card": Dictionary(candidate.get("card", {})).duplicate(true),
+				"candidates": candidates if capture_candidates else [],
+				"fallback": "" if has_primary_intent else "intent_to_free",
+				"total_weight": total_weight,
+				"breakdown": _shop_common_weight_breakdown(Dictionary(candidate.get("card", {})), intent)
+			}
+	var last_candidate: Dictionary = candidates[candidates.size() - 1]
+	return {
+		"card": Dictionary(last_candidate.get("card", {})).duplicate(true),
+		"candidates": candidates if capture_candidates else [],
+		"fallback": "weighted_fallback",
+		"total_weight": total_weight,
+		"breakdown": _shop_common_weight_breakdown(Dictionary(last_candidate.get("card", {})), intent)
+	}
+
+
+func _roll_shop_cards(generation_type := "open") -> Array:
+	if not SHOP_FAIRNESS_V2:
+		return _roll_shop_cards_legacy()
+	return _roll_shop_cards_v2(generation_type)
+
+
+func _roll_shop_cards_legacy() -> Array:
 	var pool_rares = []
 	var pool_commons = []
 	var rares_unlocked := _rare_cards_unlocked()
@@ -24700,13 +25870,11 @@ func _roll_shop_cards() -> Array:
 	shop_reserved_card_id = ""
 	var chance_rara = _chance_carta_rara()
 
-	# Determine if we should roll a rare card
 	if picks.size() < 3 and rng.randf() < chance_rara and pool_rares.size() > 0:
 		var idx = rng.randi_range(0, pool_rares.size() - 1)
 		picks.append(pool_rares[idx])
 		pool_rares.remove_at(idx)
 
-	# Fill remaining slots with commons
 	while picks.size() < 3 and pool_commons.size() > 0:
 		picks.append(_shop_pop_weighted_common(pool_commons))
 
@@ -24715,6 +25883,74 @@ func _roll_shop_cards() -> Array:
 	_register_shop_common_rolls(picks)
 	_update_burned_card_marks_after_shop(picks)
 	return picks
+
+
+func _roll_shop_cards_v2(generation_type := "open") -> Array:
+	var full_generation := generation_type == "open" or generation_type == "reroll" or shop_slot_intents.size() != 3
+	if full_generation:
+		_choose_shop_slot_intents()
+	shop_generation_index += 1
+	var excluded_ids := _shop_locked_card_ids()
+	var picks := [_make_empty_shop_slot(), _make_empty_shop_slot(), _make_empty_shop_slot()]
+	var weight_slots: Array = []
+	var rare_success := false
+	var rare_card_id := ""
+	var chance_rara := _chance_carta_rara()
+	var unlocked_slots := _shop_unlocked_slot_indices()
+	if not _shop_has_locked_rare() and unlocked_slots.size() > 0 and _shop_randf() < chance_rara:
+		var rare_pool := []
+		for card in CARDS:
+			if _is_rare_card(card) and _rare_cards_unlocked() and _shop_card_eligible_for_roll(card, excluded_ids):
+				rare_pool.append(card)
+		if rare_pool.size() > 0:
+			var rare_card: Dictionary = rare_pool[_shop_randi_range(0, rare_pool.size() - 1)].duplicate(true)
+			var rare_slot: int = int(unlocked_slots[_shop_randi_range(0, unlocked_slots.size() - 1)])
+			picks[rare_slot] = rare_card
+			excluded_ids[_card_id(rare_card)] = true
+			rare_success = true
+			rare_card_id = _card_id(rare_card)
+	for i in range(3):
+		if _shop_slot_locked(i) or not _is_empty_shop_slot(picks[i]):
+			continue
+		var result := _shop_weighted_common_result(i, excluded_ids, shop_telemetry_enabled)
+		var card: Dictionary = result.get("card", {})
+		weight_slots.append({"slot": i, "intent": String(shop_slot_intents[i]), "result": result})
+		if not card.is_empty():
+			picks[i] = card
+			excluded_ids[_card_id(card)] = true
+	picks = _apply_locked_shop_slots(picks)
+	picks = _apply_cinzas_guarantee_to_shop_picks(picks)
+	_update_burned_card_marks_after_shop(picks)
+	_register_shop_common_rolls(picks, generation_type)
+	_record_shop_generation_telemetry(generation_type, picks, rare_success, rare_card_id, chance_rara, weight_slots)
+	return picks
+
+
+func _refill_shop_slot_after_purchase(index: int) -> void:
+	if not SHOP_FAIRNESS_V2:
+		shop_cards = _roll_shop_cards_legacy()
+		return
+	_ensure_shop_slot_intents()
+	shop_generation_index += 1
+	var excluded_ids := _shop_locked_card_ids(index)
+	for i in range(shop_cards.size()):
+		if i == index:
+			continue
+		var card: Dictionary = shop_cards[i]
+		if not _is_empty_shop_slot(card):
+			excluded_ids[_card_id(card)] = true
+	var result := _shop_weighted_common_result(index, excluded_ids, shop_telemetry_enabled)
+	var card: Dictionary = result.get("card", {})
+	if index < 0:
+		return
+	while shop_cards.size() <= index:
+		shop_cards.append(_make_empty_shop_slot())
+	shop_cards[index] = card if not card.is_empty() else _make_empty_shop_slot()
+	var picks := [shop_cards[index]]
+	_update_burned_card_marks_after_shop(picks)
+	shop_cards[index] = picks[0]
+	_register_shop_common_rolls([shop_cards[index]], "refill")
+	_record_shop_generation_telemetry("refill", [shop_cards[index]], false, "", _chance_carta_rara(), [{"slot": index, "intent": String(shop_slot_intents[index]), "result": result}])
 
 
 func _shop_pop_weighted_common(pool_commons: Array) -> Dictionary:
@@ -24745,12 +25981,197 @@ func _shop_pop_weighted_common(pool_commons: Array) -> Dictionary:
 	return fallback
 
 
-func _register_shop_common_rolls(picks: Array) -> void:
+func _register_shop_common_rolls(picks: Array, generation_type := "open") -> void:
+	var ids := []
 	for card in picks:
-		if _is_common_card(card):
-			shop_recent_common_ids.append(_card_id(card))
+		if _is_common_card(card) and not _is_empty_shop_slot(card) and not bool(card.get("locked_slot", false)):
+			var card_id := _card_id(card)
+			if not ids.has(card_id):
+				ids.append(card_id)
+			shop_recent_common_ids.append(card_id)
 	while shop_recent_common_ids.size() > 9:
 		shop_recent_common_ids.pop_front()
+	if SHOP_FAIRNESS_V2 and not ids.is_empty():
+		shop_recent_generation_ids.push_front(ids)
+		while shop_recent_generation_ids.size() > SHOP_RECENT_GENERATION_LIMIT:
+			shop_recent_generation_ids.pop_back()
+
+
+func _shop_visible_card_ids(picks: Array) -> Dictionary:
+	var ids := {}
+	for card in picks:
+		if not _is_empty_shop_slot(card):
+			ids[_card_id(card)] = true
+	return ids
+
+
+func _shop_best_cinzas_guarantee_candidate(picks: Array) -> Dictionary:
+	var visible_ids := _shop_visible_card_ids(picks)
+	var candidates := []
+	for mark in cinzas_burn_marks:
+		var card_id := String(Dictionary(mark).get("card_id", ""))
+		if card_id == "" or visible_ids.has(card_id):
+			continue
+		if int(Dictionary(mark).get("eligible_misses", 0)) < SHOP_ASHES_GUARANTEE_VISITS:
+			continue
+		if not _cinzas_card_eligible_for_return(card_id):
+			continue
+		var card := _find_card_by_id(card_id)
+		if card.is_empty():
+			continue
+		candidates.append({"card": card, "misses": int(Dictionary(mark).get("eligible_misses", 0)), "stacks": int(Dictionary(mark).get("stacks", 1))})
+	if candidates.is_empty():
+		return {}
+	candidates.sort_custom(func(a, b):
+		var miss_a := int(Dictionary(a).get("misses", 0))
+		var miss_b := int(Dictionary(b).get("misses", 0))
+		if miss_a != miss_b:
+			return miss_a > miss_b
+		var stack_a := int(Dictionary(a).get("stacks", 1))
+		var stack_b := int(Dictionary(b).get("stacks", 1))
+		if stack_a != stack_b:
+			return stack_a > stack_b
+		return _shop_randf() < 0.5
+	)
+	return candidates[0]
+
+
+func _shop_slot_priority_for_ashes(intent: String) -> int:
+	match intent:
+		SHOP_INTENT_CONSOLIDATION:
+			return 0
+		SHOP_INTENT_FREE:
+			return 1
+		_:
+			return 2
+
+
+func _apply_cinzas_guarantee_to_shop_picks(picks: Array) -> Array:
+	var candidate := _shop_best_cinzas_guarantee_candidate(picks)
+	if candidate.is_empty():
+		return picks
+	var slots := []
+	for i in range(min(3, picks.size())):
+		var card: Dictionary = picks[i]
+		if _shop_slot_locked(i) or _is_empty_shop_slot(card) or _is_rare_card(card):
+			continue
+		slots.append({"index": i, "priority": _shop_slot_priority_for_ashes(String(shop_slot_intents[i]))})
+	if slots.is_empty():
+		return picks
+	slots.sort_custom(func(a, b):
+		return int(Dictionary(a).get("priority", 99)) < int(Dictionary(b).get("priority", 99))
+	)
+	var slot_index := int(Dictionary(slots[0]).get("index", 0))
+	var result := picks.duplicate(true)
+	result[slot_index] = Dictionary(candidate.get("card", {})).duplicate(true)
+	shop_last_generation_telemetry["ashes_guarantee_card"] = _card_id(result[slot_index])
+	shop_last_generation_telemetry["ashes_guarantee_slot"] = slot_index
+	return result
+
+
+func _shop_telemetry_card_counts() -> Dictionary:
+	var counts := {}
+	for card in CARDS:
+		var amount := _card_count(card)
+		if amount > 0:
+			counts[_card_id(card)] = amount
+	return counts
+
+
+func _shop_weight_candidates_for_telemetry(slot_data: Array) -> Array:
+	var compact := []
+	for slot_entry in slot_data:
+		var result: Dictionary = Dictionary(slot_entry).get("result", {})
+		var candidates: Array = result.get("candidates", [])
+		var candidate_rows := []
+		for candidate in candidates:
+			var breakdown: Dictionary = Dictionary(candidate).get("breakdown", {})
+			candidate_rows.append({
+				"card_id": String(breakdown.get("card_id", "")),
+				"owned": int(breakdown.get("owned_count", 0)),
+				"base": float(breakdown.get("base_weight", 0.0)),
+				"intent": float(breakdown.get("intent_multiplier", 0.0)),
+				"copy": float(breakdown.get("copy_multiplier", 0.0)),
+				"recent": float(breakdown.get("recent_multiplier", 0.0)),
+				"ashes": float(breakdown.get("ashes_multiplier", 0.0)),
+				"final": float(breakdown.get("final_weight", 0.0))
+			})
+		compact.append({
+			"slot": int(Dictionary(slot_entry).get("slot", -1)),
+			"intent": String(Dictionary(slot_entry).get("intent", "")),
+			"fallback": String(result.get("fallback", "")),
+			"selected": _card_id(Dictionary(result.get("card", {}))) if not Dictionary(result.get("card", {})).is_empty() else "",
+			"candidates": candidate_rows
+		})
+	return compact
+
+
+func _record_shop_generation_telemetry(generation_type: String, picks: Array, rare_success: bool, rare_card_id: String, rare_chance: float, weight_slots: Array) -> void:
+	var slots := []
+	for i in range(picks.size()):
+		var card: Dictionary = picks[i]
+		slots.append({
+			"slot": i,
+			"intent": String(shop_slot_intents[i]) if i < shop_slot_intents.size() else "",
+			"card_id": _card_id(card) if not _is_empty_shop_slot(card) else "",
+			"name": String(card.get("name", "")),
+			"rarity": _card_rarity_label(card) if not _is_empty_shop_slot(card) else "VAZIA",
+			"price": _effective_card_price(card) if not _is_empty_shop_slot(card) else 0,
+			"affordable": score >= _effective_card_price(card) if not _is_empty_shop_slot(card) else false,
+			"owned_count": _card_count(card) if not _is_empty_shop_slot(card) else 0,
+			"reserved": bool(card.get("locked_slot", false)),
+			"cinzas_marked": bool(card.get("cinzas_return_buff", false)),
+			"cinzas_stacks": int(card.get("cinzas_buff_stacks", 0))
+		})
+	var event := {
+		"event": "shop_roll",
+		"run_id": run_security_session_id,
+		"profile_id": player_profile_id,
+		"shop_version": _shop_version_label(),
+		"seed": shop_seed,
+		"time_alive": time_alive,
+		"phase": current_phase,
+		"manifestation": manifestation_key,
+		"spectrum": String(AURAS[selected_aura].get("name", "")) if selected_aura >= 0 and selected_aura < AURAS.size() else "",
+		"visit_index": shop_visit_index,
+		"generation_index": shop_generation_index,
+		"generation_type": generation_type,
+		"reroll_index": shop_reroll_index,
+		"unique_common_cards": _owned_unique_common_card_count(),
+		"owned_cards": _shop_telemetry_card_counts(),
+		"profile": shop_generation_profile,
+		"slot_intents": shop_slot_intents.duplicate(),
+		"rare_chance": rare_chance,
+		"rare_success": rare_success,
+		"rare_selected": rare_card_id,
+		"score_before": score,
+		"card_cost": card_cost,
+		"rerolls_left": shop_rerolls,
+		"slots": slots,
+		"weights": _shop_weight_candidates_for_telemetry(weight_slots),
+		"cinzas_marks": cinzas_burn_marks.duplicate(true)
+	}
+	if shop_last_generation_telemetry.has("ashes_guarantee_card"):
+		event["ashes_guarantee_card"] = String(shop_last_generation_telemetry.get("ashes_guarantee_card", ""))
+		event["ashes_guarantee_slot"] = int(shop_last_generation_telemetry.get("ashes_guarantee_slot", -1))
+	shop_last_generation_telemetry = event.duplicate(true)
+	_write_shop_telemetry_event(event)
+
+
+func _write_shop_telemetry_event(event: Dictionary) -> void:
+	if not shop_telemetry_enabled:
+		return
+	var dir_path := ProjectSettings.globalize_path(SHOP_TELEMETRY_DIR)
+	DirAccess.make_dir_recursive_absolute(dir_path)
+	var file_path := SHOP_TELEMETRY_DIR.path_join("shop_%s.jsonl" % Time.get_date_string_from_system().replace("-", ""))
+	var file := FileAccess.open(file_path, FileAccess.READ_WRITE)
+	if file == null:
+		file = FileAccess.open(file_path, FileAccess.WRITE)
+	if file == null:
+		return
+	file.seek_end()
+	file.store_line(JSON.stringify(event))
+	file.close()
 
 
 func _is_rare_card(card: Dictionary) -> bool:
@@ -24794,11 +26215,11 @@ func _consume_card_count(card_id: String, amount := 1) -> bool:
 
 
 func _card_max_count(card: Dictionary) -> int:
-	return int(CARD_MAX_COUNTS.get(_card_id(card), 999999))
+	return CARD_UNLIMITED_COUNT
 
 
 func _card_at_max(card: Dictionary) -> bool:
-	return _card_count(card) >= _card_max_count(card)
+	return false
 
 
 func _find_card_by_id(card_id: String) -> Dictionary:
@@ -24902,6 +26323,22 @@ func _is_carta_zero_scalable(card_id: String, stat_id := "") -> bool:
 			return stat_id in ["near_miss_radius", "bonus_damage"]
 		"ponto_cego":
 			return stat_id in ["threshold", "damage", "confusion"]
+		CARD_RASTRO_ID:
+			return stat_id in ["interval", "duration", "speed", "tp_recovery"]
+		CARD_REBATE_ID:
+			return stat_id in ["chance", "damage", "radius"]
+		CARD_IMPULSO_ID:
+			return stat_id in ["threshold", "damage", "charges", "size"]
+		CARD_ECO_ID:
+			return stat_id in ["hits", "damage", "radius"]
+		CARD_ZONA_ID:
+			return stat_id in ["pressure", "charge", "cooldown", "slow", "knockback"]
+		CARD_FOLEGO_ID:
+			return stat_id in ["charge", "speed", "damage"]
+		CARD_MARGEM_ID:
+			return stat_id in ["window", "defer", "debt", "reduction"]
+		CARD_RESSONANCIA_ID:
+			return stat_id in ["window", "duration", "damage", "cooldown", "speed"]
 	return false
 
 
@@ -25029,7 +26466,7 @@ func _effective_card_price(card: Dictionary, base_cost := -1) -> int:
 
 
 func _can_reserve_shop_card(card: Dictionary) -> bool:
-	return _new_common_card_count(CARD_ESCOLHA_ADIADA_ID) > 0 and _is_common_card(card) and not _card_at_max(card) and not _is_empty_shop_slot(card)
+	return _new_common_card_count(CARD_ESCOLHA_ADIADA_ID) > 0 and not _card_at_max(card) and not _is_empty_shop_slot(card)
 
 
 func _can_toggle_shop_reserve(index: int) -> bool:
@@ -25050,6 +26487,205 @@ func _support_sqrt_extra(card_id: String) -> float:
 
 func _support_log2_count(card_id: String) -> float:
 	return log(float(max(2, _support_card_count(card_id) + 1))) / log(2.0)
+
+
+func _common_ln_count(card_id: String) -> float:
+	return log(float(max(1, _new_common_card_count(card_id))))
+
+
+func _common_ln_one_plus(card_id: String) -> float:
+	return log(float(max(1, _new_common_card_count(card_id)) + 1))
+
+
+func _rastro_interval() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_RASTRO_ID))
+	return 3.2 + 4.8 * exp(-0.10 * float(count - 1))
+
+
+func _rastro_duration() -> float:
+	return 12.0 + 2.0 * _common_ln_one_plus(CARD_RASTRO_ID)
+
+
+func _rastro_activation_radius() -> float:
+	return 50.0 + 5.0 * _card_sqrt_extra(CARD_RASTRO_ID)
+
+
+func _rastro_speed_duration() -> float:
+	return 1.5 + 0.25 * _common_ln_count(CARD_RASTRO_ID)
+
+
+func _rastro_speed_multiplier_bonus() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_RASTRO_ID))
+	return 0.10 + 0.10 * (1.0 - exp(-0.14 * float(count - 1)))
+
+
+func _rastro_tp_recovery() -> float:
+	return 0.25 + 0.12 * _common_ln_count(CARD_RASTRO_ID)
+
+
+func _rebate_chance() -> float:
+	return clampf(1.0 - pow(0.82, float(max(0, _new_common_card_count(CARD_REBATE_ID)))), 0.0, 1.0)
+
+
+func _rebate_damage_multiplier() -> float:
+	return 0.35 + 0.09 * _common_ln_count(CARD_REBATE_ID)
+
+
+func _rebate_search_radius() -> float:
+	return 260.0 + 35.0 * _card_sqrt_extra(CARD_REBATE_ID)
+
+
+func _impulso_threshold() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_IMPULSO_ID))
+	return 1.5 + 1.5 * exp(-0.10 * float(count - 1))
+
+
+func _impulso_base_bonus() -> float:
+	return 0.12 + 0.05 * _common_ln_count(CARD_IMPULSO_ID)
+
+
+func _impulso_max_charges() -> int:
+	return 1 + int(floor(_common_ln_count(CARD_IMPULSO_ID) / log(3.0)))
+
+
+func _impulso_size_bonus_value() -> float:
+	return 0.08 + 0.03 * _common_ln_count(CARD_IMPULSO_ID)
+
+
+func _eco_required_impacts() -> int:
+	var count: int = max(1, _new_common_card_count(CARD_ECO_ID))
+	return maxi(3, 3 + int(round(4.0 * exp(-0.22 * float(count - 1)))))
+
+
+func _eco_damage_ratio() -> float:
+	return 0.24 + 0.10 * _common_ln_count(CARD_ECO_ID)
+
+
+func _eco_radius() -> float:
+	return 12.0 + 18.0 * _common_ln_one_plus(CARD_ECO_ID)
+
+
+func _zona_pressure_radius() -> float:
+	return 160.0 + 12.0 * _card_sqrt_extra(CARD_ZONA_ID)
+
+
+func _zona_required_pressure() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_ZONA_ID))
+	return 2.5 + 1.5 * exp(-0.10 * float(count - 1))
+
+
+func _zona_charge_time() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_ZONA_ID))
+	return 0.65 + 0.75 * exp(-0.12 * float(count - 1))
+
+
+func _zona_cooldown_time() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_ZONA_ID))
+	return 4.0 + 5.0 * exp(-0.10 * float(count - 1))
+
+
+func _zona_slow_ratio() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_ZONA_ID))
+	return 0.20 + 0.25 * (1.0 - exp(-0.10 * float(count - 1)))
+
+
+func _zona_slow_duration() -> float:
+	return 1.0 + 0.25 * _common_ln_count(CARD_ZONA_ID)
+
+
+func _zona_knockback() -> float:
+	return 220.0 + 25.0 * _card_sqrt_extra(CARD_ZONA_ID)
+
+
+func _folego_charge_time() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_FOLEGO_ID))
+	return 0.8 + 1.0 * exp(-0.12 * float(count - 1))
+
+
+func _folego_max_speed_bonus() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_FOLEGO_ID))
+	return 0.12 + 0.10 * (1.0 - exp(-0.12 * float(count - 1)))
+
+
+func _folego_damage_multiplier_bonus() -> float:
+	return 0.10 + 0.08 * _common_ln_count(CARD_FOLEGO_ID)
+
+
+func _margem_window() -> float:
+	return 1.2 + 0.18 * _common_ln_count(CARD_MARGEM_ID)
+
+
+func _margem_defer_fraction() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_MARGEM_ID))
+	return clampf(0.20 + 0.40 * (1.0 - exp(-0.16 * float(count - 1))), 0.0, 0.60)
+
+
+func _margem_debt_lifetime() -> float:
+	return 3.0 + 0.30 * _common_ln_count(CARD_MARGEM_ID)
+
+
+func _margem_kill_reduction_ratio(weight := 1.0) -> float:
+	var count: int = max(1, _new_common_card_count(CARD_MARGEM_ID))
+	return (0.15 + 0.30 * (1.0 - exp(-0.12 * float(count - 1)))) * float(weight)
+
+
+func _ressonancia_window() -> float:
+	return 10.0 + 1.5 * _common_ln_count(CARD_RESSONANCIA_ID)
+
+
+func _ressonancia_ready_duration() -> float:
+	return 8.0 + 0.75 * _common_ln_count(CARD_RESSONANCIA_ID)
+
+
+func _ressonancia_attack_damage_bonus() -> float:
+	return 0.10 + 0.05 * _common_ln_count(CARD_RESSONANCIA_ID)
+
+
+func _ressonancia_attack_pierce_bonus() -> int:
+	return 1 + int(floor(_common_ln_count(CARD_RESSONANCIA_ID) / log(4.0)))
+
+
+func _ressonancia_cooldown_recovery() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_RESSONANCIA_ID))
+	return 0.08 + 0.05 * (1.0 - exp(-0.15 * float(count - 1)))
+
+
+func _ressonancia_skill_bonus() -> float:
+	return 0.10 + 0.06 * _common_ln_count(CARD_RESSONANCIA_ID)
+
+
+func _ressonancia_tp_speed_bonus() -> float:
+	var count: int = max(1, _new_common_card_count(CARD_RESSONANCIA_ID))
+	return 0.12 + 0.08 * (1.0 - exp(-0.12 * float(count - 1)))
+
+
+func _ressonancia_tp_speed_duration() -> float:
+	return 1.5 + 0.20 * _common_ln_count(CARD_RESSONANCIA_ID)
+
+
+func _ressonancia_preresonance_fraction() -> float:
+	var count: int = max(0, _new_common_card_count(CARD_RESSONANCIA_ID) - 3)
+	return 0.35 + 0.20 * (1.0 - exp(-0.10 * float(count)))
+
+
+func _new_common_speed_multiplier() -> float:
+	var mult: float = 1.0
+	if rastro_speed_timer > 0.0:
+		mult += rastro_speed_bonus
+	if folego_charge > 0.0:
+		mult += _folego_max_speed_bonus() * clampf(folego_charge, 0.0, 1.0)
+	if ressonancia_speed_timer > 0.0:
+		mult += ressonancia_speed_bonus
+	return mult
+
+
+func _interrupt_folego() -> void:
+	folego_target_key = ""
+	folego_charge = 0.0
+	folego_prev_distance = 0.0
+	folego_damage_window = 0.0
+	folego_damage_bonus = 0.0
+	folego_last_move_dir = Vector2.ZERO
 
 
 func _heal_player(amount: float, source: String = "generic", feed_reserva: bool = true) -> float:
@@ -25291,10 +26927,7 @@ func _make_burned_shop_slot(card: Dictionary) -> Dictionary:
 
 
 func _cinzas_max_burned_cards() -> int:
-	var count := _support_card_count(CARD_CINZAS_ID)
-	if count <= 0:
-		return 0
-	return 1 + int(log(float(count)) / log(3.0))
+	return 999999
 
 
 func _cinzas_weight_bonus() -> float:
@@ -25305,10 +26938,7 @@ func _cinzas_weight_bonus() -> float:
 
 
 func _cinzas_duration_in_shops() -> int:
-	var count := _support_card_count(CARD_CINZAS_ID)
-	if count <= 0:
-		return 0
-	return 3 + int(_support_log2_count(CARD_CINZAS_ID))
+	return 999999
 
 
 func _cinzas_mark_index(card_id: String) -> int:
@@ -25318,8 +26948,11 @@ func _cinzas_mark_index(card_id: String) -> int:
 	return -1
 
 
-func _cinzas_weight_multiplier(_card_id_unused: String) -> float:
-	return 1.0
+func _cinzas_weight_multiplier(card_id: String) -> float:
+	var stacks := _cinzas_mark_stacks(card_id)
+	if stacks <= 0:
+		return 1.0
+	return SHOP_ASHES_BASE_MULT + SHOP_ASHES_STACK_MULT * sqrt(float(stacks))
 
 
 func _cinzas_mark_stacks(card_id: String) -> int:
@@ -25327,6 +26960,41 @@ func _cinzas_mark_stacks(card_id: String) -> int:
 	if mark_index < 0:
 		return 0
 	return max(1, int(Dictionary(cinzas_burn_marks[mark_index]).get("stacks", 1)))
+
+
+func _cinzas_card_eligible_for_return(card_id: String) -> bool:
+	var card := _find_card_by_id(card_id)
+	if card.is_empty() or not _is_common_card(card) or _card_at_max(card):
+		return false
+	return not _shop_locked_card_ids().has(card_id)
+
+
+func _count_cinzas_eligible_visit_once() -> void:
+	if cinzas_burn_marks.is_empty():
+		return
+	var changed := false
+	for i in range(cinzas_burn_marks.size()):
+		var mark: Dictionary = cinzas_burn_marks[i]
+		var card_id := String(mark.get("card_id", ""))
+		if card_id == "" or shop_current_visit_eligible_cinzas.has(card_id):
+			continue
+		if not _cinzas_card_eligible_for_return(card_id):
+			continue
+		mark["eligible_misses"] = int(mark.get("eligible_misses", 0)) + 1
+		mark["last_eligible_visit"] = shop_visit_index
+		shop_current_visit_eligible_cinzas[card_id] = true
+		cinzas_burn_marks[i] = mark
+		changed = true
+	if changed:
+		cinzas_burn_marks.sort_custom(func(a, b):
+			var a_miss := int(Dictionary(a).get("eligible_misses", 0))
+			var b_miss := int(Dictionary(b).get("eligible_misses", 0))
+			if a_miss != b_miss:
+				return a_miss > b_miss
+			var a_stack := int(Dictionary(a).get("stacks", 1))
+			var b_stack := int(Dictionary(b).get("stacks", 1))
+			return a_stack > b_stack
+		)
 
 
 func _clear_cinzas_mark(card_id: String) -> void:
@@ -25350,7 +27018,6 @@ func _burn_shop_card(index: int) -> bool:
 	var card: Dictionary = shop_cards[index]
 	if not _can_burn_shop_card(card):
 		return false
-	var max_marks := _cinzas_max_burned_cards()
 	if not _consume_card_count(CARD_CINZAS_ID):
 		return false
 	var card_id := _card_id(card)
@@ -25358,26 +27025,27 @@ func _burn_shop_card(index: int) -> bool:
 	if mark_index >= 0:
 		var existing: Dictionary = cinzas_burn_marks[mark_index]
 		existing["stacks"] = max(1, int(existing.get("stacks", 1))) + 1
-		existing["shops_left"] = max(1, _cinzas_duration_in_shops())
+		existing["shops_left"] = _cinzas_duration_in_shops()
 		existing["skip_decay_once"] = true
 		existing["return_buff"] = true
 		existing["weight_bonus"] = 0.0
+		existing["eligible_misses"] = 0
+		existing["last_seen_visit"] = -1
 		cinzas_burn_marks[mark_index] = existing
 	else:
 		var mark := {
 			"card_id": card_id,
-			"shops_left": max(1, _cinzas_duration_in_shops()),
+			"shops_left": _cinzas_duration_in_shops(),
 			"created_at": time_alive,
 			"skip_decay_once": true,
 			"return_buff": true,
 			"weight_bonus": 0.0,
 			"stacks": 1,
+			"eligible_misses": 0,
+			"last_seen_visit": -1,
+			"last_eligible_visit": -1,
 			"holes_seed": abs(("%s:%d" % [card_id, Time.get_ticks_msec()]).hash())
 		}
-		if cinzas_burn_marks.size() >= _cinzas_max_burned_cards() and cinzas_burn_marks.size() > 0:
-			cinzas_burn_marks.pop_front()
-		if max_marks > 0 and cinzas_burn_marks.size() >= max_marks and cinzas_burn_marks.size() > 0:
-			cinzas_burn_marks.pop_front()
 		cinzas_burn_marks.append(mark)
 	shop_cards[index] = _make_burned_shop_slot(card)
 	shop_selected = clamp(index, 0, max(0, shop_cards.size() - 1))
@@ -25401,8 +27069,10 @@ func _update_burned_card_marks_after_shop(picks: Array) -> void:
 				buffed["cinzas_return_buff"] = true
 				buffed["cinzas_buff_stacks"] = _cinzas_mark_stacks(_card_id(card))
 				buffed["cinzas_burn_seed"] = int(cinzas_burn_marks[mark_index].get("holes_seed", abs(_card_id(card).hash())))
-				buffed["desc"] = String(buffed.get("desc", "")) + "\nRetorno das Cinzas x%d: esta compra vem chamuscada com um bonus unico." % int(buffed["cinzas_buff_stacks"])
+				buffed["desc"] = String(buffed.get("desc", "")) + "\nRetorno das Cinzas x%d: esta compra vem chamuscada com um bonus unico. Se voce rolar ou comprar outra carta, a brasa permanece ate esta carta ser comprada." % int(buffed["cinzas_buff_stacks"])
 				picks[i] = buffed
+				cinzas_burn_marks[mark_index]["eligible_misses"] = 0
+				cinzas_burn_marks[mark_index]["last_seen_visit"] = shop_visit_index
 				visible_marked_ids[_card_id(card)] = true
 	var kept: Array = []
 	for mark in cinzas_burn_marks:
@@ -25412,11 +27082,8 @@ func _update_burned_card_marks_after_shop(picks: Array) -> void:
 			continue
 		if bool(mark.get("skip_decay_once", false)):
 			mark["skip_decay_once"] = false
-			kept.append(mark)
-			continue
-		mark["shops_left"] = int(mark.get("shops_left", 0)) - 1
-		if int(mark.get("shops_left", 0)) > 0:
-			kept.append(mark)
+		mark["shops_left"] = _cinzas_duration_in_shops()
+		kept.append(mark)
 	cinzas_burn_marks = kept
 
 
@@ -25852,6 +27519,10 @@ func _handle_enemy_post_damage_cards(enemy: Dictionary, hp_before: float, hp_aft
 	_try_ponto_cego_on_enemy(enemy, source, category, hit_origin)
 	_check_limiar_enemy(enemy, hp_before, hp_after, source, pos)
 	_try_choque_on_enemy(enemy, source, category, pos)
+	var actual_damage: float = maxf(0.0, hp_before - hp_after)
+	_register_eco_impact("enemy", int(enemy.get("uid", 0)), pos, actual_damage, source, category)
+	if hp_before > 0.0 and hp_after <= 0.0:
+		_reduce_margem_debt_on_kill(1.5 if _is_uncommon_enemy(enemy) else 1.0)
 
 
 func _handle_boss_post_damage_cards(hp_before: float, hp_after: float, source: String, hit_origin: Vector2, source_category := "") -> void:
@@ -25863,6 +27534,471 @@ func _handle_boss_post_damage_cards(hp_before: float, hp_after: float, source: S
 	_try_ponto_cego_on_boss(source, category, hit_origin)
 	_check_limiar_boss(hp_before, hp_after, source)
 	_try_choque_on_boss(source, category)
+	var actual_damage: float = maxf(0.0, hp_before - hp_after)
+	_register_eco_impact("boss", 0, boss_pos, actual_damage, source, category)
+	if hp_before > 0.0 and hp_after <= 0.0:
+		_reduce_margem_debt_on_kill(2.0)
+
+
+func _update_new_common_card_effects(delta: float) -> void:
+	rastro_speed_timer = maxf(0.0, rastro_speed_timer - delta)
+	if rastro_speed_timer <= 0.0:
+		rastro_speed_bonus = 0.0
+	impulso_timer = maxf(0.0, impulso_timer - delta)
+	if impulso_timer <= 0.0:
+		impulso_charges = 0
+		impulso_bonus = 0.0
+		impulso_size_bonus = 0.0
+	zona_cooldown = maxf(0.0, zona_cooldown - delta)
+	zona_flash = maxf(0.0, zona_flash - delta)
+	folego_damage_window = maxf(0.0, folego_damage_window - delta)
+	if folego_damage_window <= 0.0:
+		folego_damage_bonus = 0.0
+	margem_window_timer = maxf(0.0, margem_window_timer - delta)
+	margem_safety_timer = maxf(0.0, margem_safety_timer - delta)
+	ressonancia_window_timer = maxf(0.0, ressonancia_window_timer - delta)
+	ressonancia_ready_timer = maxf(0.0, ressonancia_ready_timer - delta)
+	ressonancia_speed_timer = maxf(0.0, ressonancia_speed_timer - delta)
+	if ressonancia_speed_timer <= 0.0:
+		ressonancia_speed_bonus = 0.0
+	if ressonancia_window_timer <= 0.0 and not ressonancia_symbols.is_empty():
+		ressonancia_symbols.clear()
+		ressonancia_preresonance_used = false
+	if ressonancia_ready_timer <= 0.0:
+		ressonancia_ready_action = ""
+	_update_rastro_de_retorno(delta)
+	_update_impulso_de_sobras(delta)
+	_update_eco_counters(delta)
+	_update_zona_de_descompressao(delta)
+	_update_folego_de_perseguicao(delta)
+	_update_margem_de_erro(delta)
+
+
+func _update_rastro_de_retorno(delta: float) -> void:
+	if _new_common_card_count(CARD_RASTRO_ID) <= 0:
+		return
+	for vestige in rastro_vestiges:
+		vestige["life"] = maxf(0.0, float(vestige.get("life", 0.0)) - delta)
+		vestige["arm"] = maxf(0.0, float(vestige.get("arm", 0.0)) - delta)
+	rastro_vestiges = rastro_vestiges.filter(func(v): return float(v.get("life", 0.0)) > 0.0)
+	if is_dead or mode != "game":
+		return
+	var moving: bool = _read_move().length() > 0.10
+	if moving:
+		rastro_spawn_timer -= delta
+		if rastro_spawn_timer <= 0.0 and player_pos.distance_to(rastro_last_spawn_pos) >= 90.0:
+			var pos: Vector2 = player_pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
+			rastro_vestiges.append({"pos": pos, "life": _rastro_duration(), "max": _rastro_duration(), "arm": 0.7, "phase": rng.randf_range(0.0, TAU)})
+			rastro_last_spawn_pos = pos
+			rastro_spawn_timer = _rastro_interval()
+			common_card_effects.append({"kind": "rastro_spawn", "pos": pos, "life": 0.45, "max": 0.45, "radius": 44.0, "color": Color(0.34, 1.0, 0.86)})
+	else:
+		rastro_spawn_timer = minf(maxf(0.35, rastro_spawn_timer), _rastro_interval())
+	var radius: float = _rastro_activation_radius()
+	for vestige in rastro_vestiges:
+		if float(vestige.get("arm", 0.0)) <= 0.0 and player_pos.distance_to(Vector2(vestige.get("pos", player_pos))) <= radius:
+			vestige["life"] = 0.0
+			rastro_speed_bonus = maxf(rastro_speed_bonus, _rastro_speed_multiplier_bonus())
+			rastro_speed_timer = maxf(rastro_speed_timer, _rastro_speed_duration())
+			var recovery: float = _rastro_tp_recovery()
+			last_dash_time -= minf(recovery, _current_dash_cooldown())
+			_spawn_radial_particles(Vector2(vestige.get("pos", player_pos)), Color(0.34, 1.0, 0.86), 12)
+			_add_text("RETORNO", player_pos + Vector2(0, -86), Color(0.34, 1.0, 0.86), 0.65, 18)
+			break
+
+
+func _update_impulso_de_sobras(delta: float) -> void:
+	if _new_common_card_count(CARD_IMPULSO_ID) <= 0 or is_dead or mode != "game":
+		return
+	var cooldowns: Dictionary = {
+		"Q": maxf(0.0, _skill_cooldown() - (time_alive - last_skill_time)),
+		"E": maxf(0.0, _secondary_skill_cooldown() - (time_alive - last_secondary_time)),
+		"TELEPORT": maxf(0.0, _current_dash_cooldown() - (time_alive - last_dash_time))
+	}
+	for key in cooldowns.keys():
+		if float(cooldowns[key]) <= 0.0:
+			impulso_ready_times[key] = float(impulso_ready_times.get(key, 0.0)) + delta
+		else:
+			impulso_ready_times[key] = 0.0
+
+
+func _grant_impulso_from_ready_action(action: String) -> void:
+	if _new_common_card_count(CARD_IMPULSO_ID) <= 0:
+		return
+	var ready_time: float = float(impulso_ready_times.get(action, 0.0))
+	impulso_ready_times[action] = 0.0
+	var threshold: float = _impulso_threshold()
+	if ready_time < threshold:
+		return
+	var excess: float = maxf(0.0, ready_time - threshold)
+	var wait_factor: float = 1.0 + 0.5 * (1.0 - exp(-excess / 4.0))
+	impulso_bonus = maxf(impulso_bonus, _impulso_base_bonus() * wait_factor)
+	impulso_size_bonus = maxf(impulso_size_bonus, _impulso_size_bonus_value())
+	impulso_charges = maxi(impulso_charges, _impulso_max_charges())
+	impulso_timer = 5.0
+	common_card_effects.append({"kind": "impulso", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 62.0, "color": Color(0.42, 0.78, 1.0)})
+	_add_text("IMPULSO", player_pos + Vector2(0, -112), Color(0.42, 0.78, 1.0), 0.65, 17)
+
+
+func _consume_impulso_attack_bonus() -> float:
+	if impulso_charges <= 0:
+		return 1.0
+	impulso_charges -= 1
+	var mult: float = 1.0 + impulso_bonus
+	if impulso_charges <= 0:
+		impulso_bonus = 0.0
+		impulso_size_bonus = 0.0
+		impulso_timer = 0.0
+	return mult
+
+
+func _target_key(kind: String, uid: int) -> String:
+	return "%s:%d" % [kind, uid]
+
+
+func _update_eco_counters(delta: float) -> void:
+	var remove_keys: Array = []
+	for key in eco_counters.keys():
+		var entry: Dictionary = eco_counters[key]
+		entry["timer"] = float(entry.get("timer", 0.0)) - delta
+		if float(entry["timer"]) <= 0.0:
+			entry["decay"] = float(entry.get("decay", 1.5)) - delta
+			if float(entry["decay"]) <= 0.0:
+				entry["count"] = maxi(0, int(entry.get("count", 0)) - 1)
+				entry["decay"] = 1.5
+				entry["timer"] = 0.0
+		if int(entry.get("count", 0)) <= 0:
+			remove_keys.append(key)
+		else:
+			eco_counters[key] = entry
+	for key in remove_keys:
+		eco_counters.erase(key)
+
+
+func _register_eco_impact(kind: String, uid: int, pos: Vector2, actual_damage: float, source: String, source_category := "") -> void:
+	if _new_common_card_count(CARD_ECO_ID) <= 0 or actual_damage <= 0.0:
+		return
+	if not _is_direct_player_damage_source(source, source_category):
+		return
+	var key: String = _target_key(kind, uid)
+	var entry: Dictionary = eco_counters.get(key, {"count": 0, "timer": 4.0, "decay": 1.5})
+	entry["count"] = int(entry.get("count", 0)) + 1
+	entry["timer"] = 4.0
+	entry["decay"] = 1.5
+	entry["pos"] = pos
+	if int(entry["count"]) >= _eco_required_impacts():
+		eco_counters.erase(key)
+		_trigger_eco_impact(kind, uid, pos, actual_damage)
+	else:
+		eco_counters[key] = entry
+
+
+func _trigger_eco_impact(kind: String, uid: int, pos: Vector2, actual_damage: float) -> void:
+	var eco_damage: float = maxf(1.0, actual_damage * _eco_damage_ratio())
+	common_card_effects.append({"kind": "eco", "pos": pos, "life": 0.55, "max": 0.55, "radius": _eco_radius(), "color": Color(0.86, 0.64, 1.0)})
+	_spawn_radial_particles(pos, Color(0.86, 0.64, 1.0), 12)
+	if kind == "enemy":
+		var enemy: Variant = _enemy_by_uid(uid)
+		if enemy != null and enemies.has(enemy) and float(enemy.get("hp", 0.0)) > 0.0:
+			_damage_enemy(enemy, eco_damage, CARD_SOURCE_ECO, false, false, pos, "common_card")
+	elif kind == "boss":
+		if boss_active and boss_hp > 0.0:
+			_damage_boss(eco_damage, CARD_SOURCE_ECO, false, false, "common_card", pos)
+	elif kind == "arauto" and _arauto_active():
+		_damage_arauto(eco_damage, CARD_SOURCE_ECO, false, false, "common_card", pos)
+	var radius: float = _eco_radius()
+	for enemy in enemies:
+		if uid == int(enemy.get("uid", -999)) and kind == "enemy":
+			continue
+		if float(enemy.get("hp", 0.0)) > 0.0 and Vector2(enemy.get("pos", pos)).distance_to(pos) <= radius + _enemy_radius(enemy):
+			_damage_enemy(enemy, eco_damage * 0.5, CARD_SOURCE_ECO, false, false, pos, "common_card")
+
+
+func _update_zona_de_descompressao(delta: float) -> void:
+	if _new_common_card_count(CARD_ZONA_ID) <= 0 or is_dead or mode != "game":
+		zona_charge = maxf(0.0, zona_charge - delta * 0.8)
+		return
+	var pressure: float = 0.0
+	var radius: float = _zona_pressure_radius()
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0 or Vector2(enemy.get("pos", player_pos)).distance_to(player_pos) > radius + _enemy_radius(enemy):
+			continue
+		pressure += 2.0 if _is_uncommon_enemy(enemy) else 1.0
+	if _arauto_active() and Vector2(arauto.get("pos", player_pos)).distance_to(player_pos) <= radius + 60.0:
+		pressure += 2.0
+	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(player_pos) <= radius + _boss_hit_radius():
+		pressure += 1.0
+	if pressure >= _zona_required_pressure() and zona_cooldown <= 0.0 and pressure > 1.0:
+		zona_charge += delta / maxf(0.05, _zona_charge_time())
+		if zona_charge >= 1.0:
+			_trigger_zona_descompressao()
+	else:
+		zona_charge = maxf(0.0, zona_charge - delta * 0.65)
+
+
+func _trigger_zona_descompressao() -> void:
+	zona_charge = 0.0
+	zona_cooldown = _zona_cooldown_time()
+	zona_flash = 0.75
+	var radius: float = _zona_pressure_radius()
+	var slow_mult: float = 1.0 - _zona_slow_ratio()
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var enemy_pos: Vector2 = Vector2(enemy.get("pos", player_pos))
+		var dist: float = enemy_pos.distance_to(player_pos)
+		if dist > radius + _enemy_radius(enemy):
+			continue
+		var dir: Vector2 = (enemy_pos - player_pos).normalized()
+		if dir.length() <= 0.05:
+			dir = Vector2.RIGHT.rotated(rng.randf_range(0.0, TAU))
+		var elite: bool = _is_uncommon_enemy(enemy)
+		var push: float = _zona_knockback() * (0.35 if elite else 1.0)
+		enemy["pos"] = (enemy_pos + dir * push).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), _zona_slow_duration())
+		enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), slow_mult)
+	if _arauto_active() and Vector2(arauto.get("pos", player_pos)).distance_to(player_pos) <= radius + 70.0:
+		arauto["stun"] = maxf(float(arauto.get("stun", 0.0)), 0.08)
+	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(player_pos) <= radius + _boss_hit_radius():
+		boss_ferrolho_slow_timer = maxf(boss_ferrolho_slow_timer, minf(0.55, _zona_slow_duration()))
+		boss_ferrolho_slow_ratio = maxf(boss_ferrolho_slow_ratio, minf(0.08, _zona_slow_ratio() * 0.25))
+	common_card_effects.append({"kind": "zona", "pos": player_pos, "life": 0.62, "max": 0.62, "radius": radius, "color": Color(0.44, 1.0, 0.70)})
+	_add_text("DESCOMPRESSAO", player_pos + Vector2(0, -122), Color(0.44, 1.0, 0.70), 0.7, 16)
+
+
+func _folego_select_target() -> Dictionary:
+	var best: Dictionary = {}
+	var best_score: float = INF
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var enemy_pos: Vector2 = Vector2(enemy.get("pos", player_pos))
+		var dist: float = player_pos.distance_to(enemy_pos)
+		if dist < 220.0:
+			continue
+		var dir: Vector2 = (enemy_pos - player_pos).normalized()
+		var score: float = dist - maxf(0.0, last_facing.normalized().dot(dir)) * 160.0
+		if score < best_score:
+			best_score = score
+			best = {"kind": "enemy", "uid": int(enemy.get("uid", 0)), "pos": enemy_pos}
+	if boss_active and boss_hp > 0.0 and player_pos.distance_to(boss_pos) >= 220.0:
+		var boss_score: float = player_pos.distance_to(boss_pos) - 90.0
+		if boss_score < best_score:
+			best = {"kind": "boss", "uid": 0, "pos": boss_pos}
+	if _arauto_active() and player_pos.distance_to(Vector2(arauto.get("pos", player_pos))) >= 220.0:
+		var pos: Vector2 = Vector2(arauto.get("pos", player_pos))
+		var arauto_score: float = player_pos.distance_to(pos) - 70.0
+		if arauto_score < best_score:
+			best = {"kind": "arauto", "uid": 0, "pos": pos}
+	return best
+
+
+func _folego_target_pos_from_key(key: String) -> Vector2:
+	if key.begins_with("enemy:"):
+		var enemy: Variant = _enemy_by_uid(int(key.get_slice(":", 1)))
+		if enemy != null and enemies.has(enemy) and float(enemy.get("hp", 0.0)) > 0.0:
+			return Vector2(enemy.get("pos", player_pos))
+		return Vector2.INF
+	if key == "boss:0" and boss_active and boss_hp > 0.0:
+		return boss_pos
+	if key == "arauto:0" and _arauto_active():
+		return Vector2(arauto.get("pos", player_pos))
+	return Vector2.INF
+
+
+func _update_folego_de_perseguicao(delta: float) -> void:
+	if _new_common_card_count(CARD_FOLEGO_ID) <= 0 or is_dead or mode != "game":
+		_interrupt_folego()
+		return
+	var move: Vector2 = _read_move()
+	if move.length() <= 0.10:
+		folego_charge = maxf(0.0, folego_charge - delta * 1.2)
+		return
+	var target_pos: Vector2 = _folego_target_pos_from_key(folego_target_key)
+	if target_pos == Vector2.INF:
+		var target: Dictionary = _folego_select_target()
+		if target.is_empty():
+			folego_charge = maxf(0.0, folego_charge - delta * 0.8)
+			return
+		folego_target_key = _target_key(String(target.get("kind", "")), int(target.get("uid", 0)))
+		target_pos = Vector2(target.get("pos", player_pos))
+		folego_prev_distance = player_pos.distance_to(target_pos)
+	var dist: float = player_pos.distance_to(target_pos)
+	var dir_to_target: Vector2 = (target_pos - player_pos).normalized()
+	var move_dir: Vector2 = move.normalized()
+	var stable_turn: bool = folego_last_move_dir == Vector2.ZERO or folego_last_move_dir.dot(move_dir) > 0.35
+	if move_dir.dot(dir_to_target) >= 0.70 and dist < folego_prev_distance + 2.0 and stable_turn:
+		folego_charge = minf(1.0, folego_charge + delta / maxf(0.05, _folego_charge_time()))
+		if dist <= 96.0 and folego_charge > 0.0:
+			folego_damage_window = 1.0
+			folego_damage_bonus = _folego_damage_multiplier_bonus() * folego_charge
+			folego_charge = 0.0
+	else:
+		folego_charge = maxf(0.0, folego_charge - delta * 1.1)
+	folego_prev_distance = dist
+	folego_last_move_dir = move_dir
+
+
+func _consume_folego_damage_bonus(source: String, source_category: String) -> float:
+	if folego_damage_window <= 0.0 or not _is_direct_player_damage_source(source, source_category):
+		return 1.0
+	var mult: float = 1.0 + folego_damage_bonus
+	folego_damage_window = 0.0
+	folego_damage_bonus = 0.0
+	return mult
+
+
+func _apply_margem_de_erro_damage(amount: float, source: String) -> float:
+	if _new_common_card_count(CARD_MARGEM_ID) <= 0 or amount <= 0.0 or source == CARD_SOURCE_MARGEM:
+		return amount
+	if margem_debt > 0.0 or margem_safety_timer > 0.0:
+		return amount
+	if margem_window_timer > 0.0:
+		var deferred: float = amount * _margem_defer_fraction()
+		margem_debt += deferred
+		margem_debt_total += deferred
+		margem_debt_duration = _margem_debt_lifetime()
+		margem_debt_timer = margem_debt_duration
+		margem_debt_tick = 0.25
+		margem_window_timer = 0.0
+		common_card_effects.append({"kind": "margem", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 58.0, "color": Color(1.0, 0.36, 0.46)})
+		return maxf(1.0, amount - deferred)
+	margem_window_timer = _margem_window()
+	return amount
+
+
+func _update_margem_de_erro(delta: float) -> void:
+	if margem_debt <= 0.0:
+		return
+	margem_debt_timer = maxf(0.0, margem_debt_timer - delta)
+	margem_debt_tick -= delta
+	if margem_debt_tick > 0.0:
+		return
+	margem_debt_tick = 0.25
+	var remaining_time: float = maxf(0.25, margem_debt_timer)
+	var tick_damage: float = minf(margem_debt, margem_debt * 0.25 / remaining_time)
+	margem_debt = maxf(0.0, margem_debt - tick_damage)
+	player_hp -= int(ceil(tick_damage))
+	_track_player_damage(int(ceil(tick_damage)), CARD_SOURCE_MARGEM)
+	if margem_debt <= 0.0 or margem_debt_timer <= 0.0:
+		margem_debt = 0.0
+		margem_debt_total = 0.0
+		margem_debt_timer = 0.0
+		margem_debt_duration = 0.0
+		margem_safety_timer = 0.75
+
+
+func _reduce_margem_debt_on_kill(weight := 1.0) -> void:
+	if margem_debt <= 0.0 or _new_common_card_count(CARD_MARGEM_ID) <= 0:
+		return
+	var reduction: float = margem_debt * clampf(_margem_kill_reduction_ratio(weight), 0.0, 0.90)
+	margem_debt = maxf(0.0, margem_debt - reduction)
+	common_card_effects.append({"kind": "margem_reduce", "pos": player_pos, "life": 0.45, "max": 0.45, "radius": 50.0, "color": Color(1.0, 0.36, 0.46)})
+
+
+func _record_ressonancia_action(action: String, cooldown_total := 0.0) -> void:
+	if _new_common_card_count(CARD_RESSONANCIA_ID) <= 0:
+		return
+	if action not in ["ATTACK", "Q", "E", "TELEPORT"]:
+		return
+	if not ressonancia_symbols.has(action):
+		ressonancia_symbols.append(action)
+		ressonancia_window_timer = _ressonancia_window()
+		if ressonancia_symbols.size() == 3 and _new_common_card_count(CARD_RESSONANCIA_ID) >= 3 and not ressonancia_preresonance_used:
+			ressonancia_preresonance_used = true
+			common_card_effects.append({"kind": "ressonancia", "pos": player_pos, "life": 0.42, "max": 0.42, "radius": 58.0, "color": Color(0.58, 1.0, 0.96)})
+	if ressonancia_symbols.size() >= 4:
+		ressonancia_symbols.clear()
+		ressonancia_preresonance_used = false
+		ressonancia_window_timer = 0.0
+		ressonancia_ready_timer = _ressonancia_ready_duration()
+		ressonancia_ready_action = "ANY"
+		common_card_effects.append({"kind": "ressonancia_ready", "pos": player_pos, "life": 0.72, "max": 0.72, "radius": 82.0, "color": Color(0.58, 1.0, 0.96)})
+		_add_text("RESSONANCIA", player_pos + Vector2(0, -122), Color(0.58, 1.0, 0.96), 0.75, 18)
+
+
+func _consume_ressonancia_action_bonus(action: String, cooldown_total := 0.0) -> float:
+	if ressonancia_ready_timer <= 0.0 or ressonancia_ready_action == "":
+		return 0.0
+	ressonancia_ready_timer = 0.0
+	ressonancia_ready_action = ""
+	match action:
+		"ATTACK":
+			return _ressonancia_attack_damage_bonus()
+		"Q":
+			last_skill_time -= cooldown_total * _ressonancia_cooldown_recovery()
+			return 0.0
+		"E":
+			return _ressonancia_skill_bonus()
+		"TELEPORT":
+			ressonancia_speed_bonus = maxf(ressonancia_speed_bonus, _ressonancia_tp_speed_bonus())
+			ressonancia_speed_timer = maxf(ressonancia_speed_timer, _ressonancia_tp_speed_duration())
+			return 0.0
+	return 0.0
+
+
+func _try_rebate_from_bullet(bullet: Dictionary) -> void:
+	if _new_common_card_count(CARD_REBATE_ID) <= 0:
+		return
+	if bool(bullet.get("rebate_fragment", false)) or String(bullet.get("source_category", "")) != "basic_attack":
+		return
+	if Dictionary(bullet.get("hits", {})).size() > 0:
+		return
+	if rng.randf() > _rebate_chance():
+		return
+	var origin: Vector2 = Vector2(bullet.get("pos", player_pos))
+	var target: Dictionary = _nearest_rebate_target(origin, _rebate_search_radius())
+	if target.is_empty():
+		common_card_effects.append({"kind": "rebate_fail", "pos": origin, "life": 0.28, "max": 0.28, "radius": 36.0, "color": Color(1.0, 0.76, 0.24)})
+		return
+	var target_pos: Vector2 = Vector2(target.get("pos", origin))
+	var dir: Vector2 = (target_pos - origin).normalized()
+	if dir.length() <= 0.05:
+		return
+	_add_bullet({
+		"pos": origin,
+		"origin": origin,
+		"source_category": "common_card",
+		"dir": dir,
+		"life": 0.75,
+		"max_life": 0.75,
+		"age": 0.0,
+		"phase": rng.randf_range(0.0, TAU),
+		"trail_cd": 0.0,
+		"damage": maxf(1.0, float(bullet.get("damage", player_damage)) * _rebate_damage_multiplier()),
+		"player_damage": player_damage,
+		"speed": BULLET_SPEED * 1.15,
+		"kind": "rebate_fragment",
+		"pierce": false,
+		"hits": {},
+		"rebate_fragment": true,
+		"color": Color(1.0, 0.76, 0.24)
+	})
+	common_card_effects.append({"kind": "rebate", "pos": origin, "life": 0.42, "max": 0.42, "radius": 48.0, "color": Color(1.0, 0.76, 0.24)})
+
+
+func _nearest_rebate_target(origin: Vector2, radius: float) -> Dictionary:
+	var best: Dictionary = {}
+	var best_dist: float = radius
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var pos: Vector2 = Vector2(enemy.get("pos", origin))
+		var dist: float = origin.distance_to(pos)
+		if dist <= best_dist:
+			best_dist = dist
+			best = {"kind": "enemy", "uid": int(enemy.get("uid", 0)), "pos": pos}
+	if boss_active and boss_hp > 0.0:
+		var boss_dist: float = origin.distance_to(boss_pos)
+		if boss_dist <= best_dist:
+			best_dist = boss_dist
+			best = {"kind": "boss", "uid": 0, "pos": boss_pos}
+	if _arauto_active():
+		var pos: Vector2 = Vector2(arauto.get("pos", origin))
+		var dist: float = origin.distance_to(pos)
+		if dist <= best_dist:
+			best = {"kind": "arauto", "uid": 0, "pos": pos}
+	return best
 
 
 func _mandamento_count() -> int:
@@ -25888,11 +28024,21 @@ func _mandamento_invulnerability_duration() -> float:
 
 
 func _register_manual_skill_use(skill_type: String, cooldown_total: float) -> float:
+	var action: String = ""
+	if skill_type == "skill_q":
+		action = "Q"
+	elif skill_type == "skill_e":
+		action = "E"
+	var resonance_scale: float = 1.0
+	if action != "":
+		resonance_scale += _consume_ressonancia_action_bonus(action, cooldown_total)
+		_record_ressonancia_action(action, cooldown_total)
+		_grant_impulso_from_ready_action(action)
 	if _mandamento_count() <= 0:
-		return 1.0
+		return resonance_scale
 	mandamento_skill_uses = posmod(mandamento_skill_uses + 1, 3)
 	if mandamento_skill_uses != 0:
-		return 1.0
+		return resonance_scale
 	var power_scale: float = 1.0 + _mandamento_power_bonus()
 	var recovery: float = cooldown_total * _mandamento_cooldown_recovery()
 	if skill_type == "skill_q":
@@ -25905,7 +28051,7 @@ func _register_manual_skill_use(skill_type: String, cooldown_total: float) -> fl
 	mandamento_break_flash = 0.85
 	rare_card_effects.append({"kind": "mandamento", "pos": player_pos, "life": 0.62, "max": 0.62, "radius": 96.0})
 	_add_text("TERCEIRA LEI", player_pos + Vector2(0, -126), Color(1.0, 0.78, 0.24), 0.95, 20)
-	return power_scale
+	return power_scale * resonance_scale
 
 
 func _mandamento_damage_multiplier(source_category: String) -> float:
@@ -26215,6 +28361,7 @@ func _update_card_proc_state(delta: float) -> void:
 	_update_casulo_reativo(delta)
 	_update_passagem_intangivel(delta)
 	_update_ancora_vital(delta)
+	_update_new_common_card_effects(delta)
 	_update_ferrolho_ruptura(delta)
 	boss_ferrolho_slow_timer = max(0.0, boss_ferrolho_slow_timer - delta)
 	if boss_ferrolho_slow_timer <= 0.0:
@@ -26757,7 +28904,8 @@ func _reroll_shop() -> void:
 		return
 	if shop_rerolls > 0:
 		shop_rerolls -= 1
-		shop_cards = _roll_shop_cards()
+		shop_reroll_index += 1
+		shop_cards = _roll_shop_cards("reroll")
 		shop_selected = 0
 		shop_select_pulse_index = 0
 		shop_select_pulse_timer = 0.20
@@ -26784,7 +28932,7 @@ func _card_category(card_name: String) -> String:
 		"Devorador de Destinos": return "MARCA RARA E COLAPSO"
 		"Escolha Adiada": return "LOJA E RESERVA"
 		"TrÃ©gua Regenerativa": return "REGENERAÃ‡ÃƒO SEGURA"
-		"Cinzas da Escolha": return "LOJA E PROBABILIDADE"
+		"Cinzas da Escolha": return "LOJA E BRASA"
 		"Reserva de Pulso": return "OVERHEAL ARMAZENADO"
 		"Casulo Reativo": return "DEFESA CONTRA RAJADA"
 		"Passagem IntangÃ­vel": return "FASE POS-TELEPORTE"
@@ -26831,7 +28979,7 @@ func _card_lore(card_name: String) -> String:
 		"Devorador de Destinos": return "O destino mais pesado vira ancora. Quando ele cai, os futuros proximos se partem e Geovana veste os restos."
 		"Escolha Adiada": return "Uma decisao recusada hoje fica presa ao mesmo preco ate Geovana aceitar pagar ou soltar a linha."
 		"TrÃ©gua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
-		"Cinzas da Escolha": return "Uma carta sacrificada nao desaparece; ela deixa fuligem nas probabilidades futuras e volta com uma ultima fagulha."
+		"Cinzas da Escolha": return "Uma carta sacrificada nao desaparece; ela volta chamuscada, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dela."
 		"Reserva de Pulso": return "A cura que sobraria fica guardada como uma batida extra para o pior instante."
 		"Casulo Reativo": return "Depois de muitos impactos, a defesa fecha por instinto e ensina a rajada a esperar."
 		"Passagem IntangÃ­vel": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
@@ -27015,16 +29163,32 @@ func _apply_card(card: Dictionary) -> void:
 		return
 	var counter_key := _card_counter_key(card)
 	cards_bought[counter_key] = int(cards_bought.get(counter_key, 0)) + 1
+	match counter_key:
+		CARD_RASTRO_ID:
+			rastro_spawn_timer = minf(rastro_spawn_timer, 0.35)
+			common_card_effects.append({"kind": "rastro_spawn", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(0.34, 1.0, 0.86)})
+		CARD_REBATE_ID:
+			common_card_effects.append({"kind": "rebate", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(1.0, 0.76, 0.24)})
+		CARD_IMPULSO_ID:
+			common_card_effects.append({"kind": "impulso", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(0.42, 0.78, 1.0)})
+		CARD_ECO_ID:
+			common_card_effects.append({"kind": "eco", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(0.86, 0.64, 1.0)})
+		CARD_ZONA_ID:
+			common_card_effects.append({"kind": "zona", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 64.0, "color": Color(0.44, 1.0, 0.70)})
+		CARD_FOLEGO_ID:
+			common_card_effects.append({"kind": "folego", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(1.0, 0.56, 0.22)})
+		CARD_MARGEM_ID:
+			common_card_effects.append({"kind": "margem", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(1.0, 0.36, 0.46)})
+		CARD_RESSONANCIA_ID:
+			common_card_effects.append({"kind": "ressonancia", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(0.58, 1.0, 0.96)})
 	match name:
 		"Speed Boost":
 			_recalculate_common_card_stat_bonuses()
 		"Porcao":
-			var heal = int(player_hp_max * _apply_carta_zero_to_common_value("Porcao", "heal", 0.45))
-			var missing_before: int = max(0, player_hp_max - player_hp)
-			var overheal: int = max(0, heal - missing_before)
-			if overheal > 0:
-				_register_overheal_for_reserva(float(overheal), "porcao")
-				player_hp_max += int(float(overheal) * _apply_carta_zero_to_common_value("Porcao", "overflow_hp", 0.35))
+			var old_max_hp: int = player_hp_max
+			var max_gain: int = int(round(float(old_max_hp) * _apply_carta_zero_to_common_value("Porcao", "overflow_hp", PORCAO_MAX_HP_GAIN_RATIO)))
+			var heal: int = int(round(float(old_max_hp) * _apply_carta_zero_to_common_value("Porcao", "heal", PORCAO_HEAL_OLD_MAX_RATIO)))
+			player_hp_max += max_gain
 			_heal_player(heal, "porcao", false)
 		"TrÃ©gua Regenerativa":
 			tregua_regenerativa_pulse = 0.75
@@ -27371,6 +29535,8 @@ func _damage_player(amount: int, source: String) -> void:
 		amount = max(1, int(round(float(amount) * 1.35)))
 	if contractual_order_penalties.has("silence_tick"):
 		player_silence_timer = max(player_silence_timer, 1.2)
+	if boss_active and boss_hp > 0.0 and _damage_source_is_boss(source):
+		amount = max(1, int(round(float(amount) * _boss_farm_pressure_multiplier())))
 	_play_sfx("hit_person.mp3")
 	var final = max(1, amount - int(player_defense))
 	final = _absorb_devorador_shield(final)
@@ -27378,6 +29544,9 @@ func _damage_player(amount: int, source: String) -> void:
 		_spawn_radial_particles(player_pos, Color(0.96, 0.12, 0.72), 10)
 		return
 	final = _apply_casulo_damage_reduction(final)
+	if source != CARD_SOURCE_MARGEM:
+		_interrupt_folego()
+	final = int(round(_apply_margem_de_erro_damage(float(final), source)))
 	_track_player_damage(final, source)
 	player_hp -= final
 	_reset_tregua_regenerativa_timer()
@@ -27716,6 +29885,8 @@ func _projectile_palette(kind: String) -> Dictionary:
 			return {"core": Color(1.0, 0.92, 0.46), "glow": Color(1.0, 0.46, 0.08, 0.94), "trail": Color(0.18, 0.88, 1.0, 0.36), "size": 9.0, "trail_size": 8.0}
 		"retornante":
 			return {"core": Color(1.0, 0.92, 1.0), "glow": Color(1.0, 0.34, 0.88, 0.94), "trail": Color(0.72, 0.42, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
+		"necronada":
+			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.48, 0.34, 0.92, 0.94), "trail": Color(0.72, 0.96, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
 		"eclipsada_lua", "shuriken_eclipsado":
 			return {"core": Color(0.92, 0.86, 1.0), "glow": Color(0.70, 0.36, 1.0, 0.94), "trail": Color(0.36, 0.72, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
 		"eclipsada_sol":
@@ -27850,6 +30021,7 @@ func _draw_phase_transition(viewport: Vector2) -> void:
 
 func _draw() -> void:
 	var viewport = get_viewport_rect().size
+	_reset_cinzas_burn_shader_nodes()
 	if mode != "phase_transition":
 		_reset_phase_transition_nodes()
 	_update_button_layout(viewport)
@@ -28138,12 +30310,14 @@ func _draw_menu(viewport: Vector2) -> void:
 	var status_rect: Rect2
 	if portrait:
 		avatar_rect = Rect2(viewport.x * 0.13, viewport.y * 0.145, viewport.x * 0.74, viewport.y * 0.27)
-		manifest_rect = Rect2(viewport.x * 0.08, menu_buttons["catalog"].end.y + 12.0, viewport.x * 0.84, clamp(viewport.y * 0.095, 66.0, 84.0))
+		var portrait_lower_menu_rect: Rect2 = menu_buttons["stream"] if menu_buttons.has("stream") else menu_buttons["catalog"]
+		manifest_rect = Rect2(viewport.x * 0.08, portrait_lower_menu_rect.end.y + 12.0, viewport.x * 0.84, clamp(viewport.y * 0.095, 66.0, 84.0))
 		status_rect = Rect2(viewport.x * 0.08, manifest_rect.end.y + 12.0, viewport.x * 0.84, 42.0)
 	else:
 		var avatar_w = min(360.0, viewport.x * 0.30)
 		avatar_rect = Rect2(viewport.x - avatar_w - viewport.x * 0.09, viewport.y * 0.24, avatar_w, viewport.y * 0.58)
-		manifest_rect = Rect2(viewport.x * 0.08, menu_buttons["catalog"].end.y + 14.0, min(430.0, viewport.x * 0.38), 96.0)
+		var desktop_lower_menu_rect: Rect2 = menu_buttons["stream"] if menu_buttons.has("stream") else menu_buttons["catalog"]
+		manifest_rect = Rect2(viewport.x * 0.08, desktop_lower_menu_rect.end.y + 14.0, min(430.0, viewport.x * 0.38), 96.0)
 		status_rect = Rect2(viewport.x * 0.08, manifest_rect.end.y + 14.0, min(430.0, viewport.x * 0.38), 42.0)
 
 	_draw_holo_panel(avatar_rect, accent, true, 0.24)
@@ -28165,6 +30339,12 @@ func _draw_menu(viewport: Vector2) -> void:
 		_draw_hub_button(menu_buttons["multiplayer"], "ONLINE CO-OP", "host/client via tunel online", Color(1.0, 0.44, 0.88), menu_selected == _menu_index_for("multiplayer"), false)
 	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "bestiario e cartas", Color(0.36, 0.84, 1.0), menu_selected == _menu_index_for("catalog"), false)
 	_draw_hub_button(menu_buttons["settings"], "CONFIG", "controles e jogo", Color(1.0, 0.74, 0.22), menu_selected == _menu_index_for("settings"), false)
+	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and menu_buttons.has("stream"):
+		var stream_active := qa_streaming_native_active or qa_streaming_frame_active or qa_streaming_in_flight
+		var stream_title := "ENCERRAR STREAM" if stream_active else "STREAM QA"
+		var stream_subtitle := _qa_stream_menu_subtitle()
+		var stream_color := Color(0.0, 1.0, 0.82) if stream_active else Color(0.38, 0.88, 1.0)
+		_draw_hub_button(menu_buttons["stream"], stream_title, stream_subtitle, stream_color, menu_selected == _menu_index_for("stream"), false)
 	_draw_hub_button(menu_buttons["exit"], "SAIR", "", Color(1.0, 0.26, 0.36), menu_selected == _menu_index_for("exit"), false)
 
 	draw_string(font, Vector2(safe, viewport.y - safe * 0.55), "v" + GAME_VERSION, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.74, 0.92, 1.0, 0.78))
@@ -28505,17 +30685,10 @@ func _draw_gameplay_settings(viewport: Vector2) -> void:
 	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["haptics"]), haptics_enabled, haptics_accent)
 	if ui_platform_override_unlocked and settings_buttons.has("ui_platform_profile"):
 		_draw_gameplay_preference(settings_buttons["ui_platform_profile"], "PERFIL DE INTERFACE", "Auto detecta %s; cheat libera Android/Desktop." % _runtime_platform_name(), _ui_platform_profile_label(), Color(1.0, 0.78, 0.22), settings_selected == _gameplay_preference_index("ui_platform_profile"))
-	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and settings_buttons.has("qa_streaming"):
-		var stream_accent = Color(0.0, 1.0, 0.82) if qa_streaming_enabled else Color(0.48, 0.52, 0.58)
-		var stream_value = "ON" if qa_streaming_enabled else "OFF"
-		if qa_streaming_status != "" and qa_streaming_enabled:
-			stream_value = "ATIVO" if qa_streaming_native_active or qa_streaming_frame_active else "ON"
-		_draw_gameplay_preference(settings_buttons["qa_streaming"], "STREAMING QA", "Transmite a tela real ao iniciar a run.", stream_value, stream_accent, settings_selected == _gameplay_preference_index("qa_streaming"))
-		_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["qa_streaming"]), qa_streaming_enabled, stream_accent)
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and settings_buttons.has("qa_stream_quality"):
 		var quality_size := _qa_stream_target_size()
 		var quality_label := "%s (%dx%d)" % [qa_streaming_quality_mode.to_upper(), quality_size.x, quality_size.y]
-		_draw_gameplay_preference(settings_buttons["qa_stream_quality"], "QUALIDADE STREAM", "Escolha a resolucao enviada pelo aparelho.", quality_label, Color(0.38, 0.88, 1.0), settings_selected == _gameplay_preference_index("qa_stream_quality"))
+		_draw_gameplay_preference(settings_buttons["qa_stream_quality"], "QUALIDADE STREAM", "Usada pelo botao STREAM QA do hub.", quality_label, Color(0.38, 0.88, 1.0), settings_selected == _gameplay_preference_index("qa_stream_quality"))
 	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == _gameplay_preference_index("back"))
 	if gameplay_cheat_focused:
 		_draw_cheat_popup(viewport)
@@ -28710,7 +30883,6 @@ func _gameplay_preference_keys() -> Array:
 	if ui_platform_override_unlocked:
 		keys.append("ui_platform_profile")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
-		keys.append("qa_streaming")
 		keys.append("qa_stream_quality")
 	keys.append("back")
 	return keys
@@ -28980,7 +31152,10 @@ func _menu_option_keys() -> Array:
 	keys.append("start")
 	if MULTIPLAYER_MENU_ENABLED:
 		keys.append("multiplayer")
-	keys.append_array(["catalog", "settings", "exit"])
+	keys.append_array(["catalog", "settings"])
+	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
+		keys.append("stream")
+	keys.append("exit")
 	return keys
 
 
@@ -29015,6 +31190,8 @@ func _activate_menu_option(key: String) -> void:
 			settings_selected = 0
 			settings_previous_mode = "menu"
 			mode = "settings"
+		"stream":
+			_toggle_qa_streaming_from_menu()
 		"exit":
 			get_tree().quit()
 
@@ -29045,6 +31222,9 @@ func _menu_rects(viewport: Vector2) -> Dictionary:
 			y += multi_h + 12.0
 		rects["catalog"] = Rect2(margin, y, half_w, utility_h)
 		rects["settings"] = Rect2(margin + half_w + gap, y, half_w, utility_h)
+		if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
+			y += utility_h + 10.0
+			rects["stream"] = Rect2(margin, y, viewport.x - margin * 2.0, utility_h)
 		rects["exit"] = Rect2(viewport.x - margin - 118.0, viewport.y - 62.0, 118.0, 42.0)
 		return rects
 	var x = viewport.x * 0.08
@@ -29067,6 +31247,9 @@ func _menu_rects(viewport: Vector2) -> Dictionary:
 		y += small_h + 14.0
 	rects["catalog"] = Rect2(x, y, (w - gap) * 0.5, small_h)
 	rects["settings"] = Rect2(x + (w - gap) * 0.5 + gap, y, (w - gap) * 0.5, small_h)
+	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
+		y += small_h + 12.0
+		rects["stream"] = Rect2(x, y, w, small_h)
 	rects["exit"] = Rect2(x, viewport.y - 74.0, min(170.0, w * 0.40), 46.0)
 	return rects
 
@@ -30616,6 +32799,35 @@ func _draw_common_card_world(camera: Vector2) -> void:
 				draw_arc(pos, radius, 0.0, TAU, 60, Color(0.34, 1.0, 0.66, 0.42 * ratio), 2.6)
 				draw_line(pos + Vector2(0, -18), pos + Vector2(0, 18), Color(0.34, 1.0, 0.66, 0.62 * ratio), 3.0, true)
 				draw_line(pos + Vector2(-14, 8), pos + Vector2(14, 8), Color(0.34, 1.0, 0.66, 0.50 * ratio), 2.0, true)
+			"rastro_spawn":
+				draw_circle(pos, radius * 0.35, Color(0.34, 1.0, 0.86, 0.16 * ratio))
+				draw_arc(pos, radius, t * 2.2, t * 2.2 + PI * 1.55, 44, Color(0.34, 1.0, 0.86, 0.58 * ratio), 2.3)
+			"rebate", "rebate_fail":
+				draw_arc(pos, radius, -t * 4.0, -t * 4.0 + PI * 1.70, 42, Color(1.0, 0.76, 0.24, 0.62 * ratio), 2.8)
+				draw_line(pos + Vector2(-radius * 0.35, 0), pos + Vector2(radius * 0.35, 0), Color(1.0, 0.92, 0.50, 0.50 * ratio), 2.0, true)
+			"impulso":
+				draw_arc(pos, radius, -PI * 0.45, PI * 1.45, 48, Color(0.42, 0.78, 1.0, 0.60 * ratio), 3.0)
+				draw_arc(pos, radius * 0.65, PI * 0.35, PI * 1.65, 34, Color(1.0, 0.78, 0.24, 0.48 * ratio), 2.0)
+			"eco":
+				for i in range(3):
+					draw_arc(pos, radius * (0.55 + float(i) * 0.22), t * (1.0 + i), TAU + t * (1.0 + i), 48, Color(0.86, 0.64, 1.0, 0.34 * ratio), 1.6 + i)
+			"zona":
+				draw_circle(pos, radius, Color(0.44, 1.0, 0.70, 0.045 * ratio))
+				draw_arc(pos, radius, 0.0, TAU, 72, Color(0.44, 1.0, 0.70, 0.46 * ratio), 3.0)
+			"folego":
+				var dir := last_facing.normalized()
+				if dir.length() <= 0.05:
+					dir = Vector2.RIGHT
+				draw_line(pos - dir * radius * 0.65, pos + dir * radius * 0.70, Color(1.0, 0.56, 0.22, 0.54 * ratio), 4.0, true)
+				draw_arc(pos, radius, dir.angle() - 0.65, dir.angle() + 0.65, 28, Color(1.0, 0.86, 0.34, 0.58 * ratio), 2.0)
+			"margem", "margem_reduce":
+				draw_arc(pos, radius, -t * 2.0, TAU - t * 2.0, 50, Color(1.0, 0.36, 0.46, 0.58 * ratio), 2.6)
+				draw_rect(Rect2(pos - Vector2(18, 10), Vector2(36, 20)), Color(0.16, 0.02, 0.05, 0.18 * ratio), true)
+			"ressonancia", "ressonancia_ready":
+				for i in range(4):
+					var a := t * 1.4 + float(i) * TAU / 4.0
+					draw_circle(pos + Vector2.from_angle(a) * radius * 0.65, 4.8, Color(0.58, 1.0, 0.96, 0.72 * ratio))
+				draw_arc(pos, radius, t, TAU + t, 64, Color(0.58, 1.0, 0.96, 0.38 * ratio), 2.0)
 	if desvio_probabilidade_charges > 0:
 		var player_screen: Vector2 = player_pos - camera
 		for i in range(desvio_probabilidade_charges):
@@ -30624,6 +32836,13 @@ func _draw_common_card_world(camera: Vector2) -> void:
 			draw_circle(p, 5.5, Color(0.74, 0.48, 1.0, 0.76))
 			draw_arc(p, 10.0, -angle, -angle + PI, 18, Color(0.92, 0.82, 1.0, 0.62), 1.8)
 	var support_player_screen: Vector2 = player_pos - camera
+	for vestige in rastro_vestiges:
+		var vestige_pos: Vector2 = Vector2(vestige.get("pos", player_pos)) - camera
+		var vestige_ratio: float = clamp(float(vestige.get("life", 0.0)) / maxf(0.01, float(vestige.get("max", 1.0))), 0.0, 1.0)
+		var arm := float(vestige.get("arm", 0.0))
+		var vestige_radius := _rastro_activation_radius() * (0.62 + sin(t * 4.0 + float(vestige.get("phase", 0.0))) * 0.05)
+		draw_circle(vestige_pos, vestige_radius, Color(0.34, 1.0, 0.86, 0.035 * vestige_ratio))
+		draw_arc(vestige_pos, vestige_radius, t * 1.5, t * 1.5 + PI * 1.65, 56, Color(0.34, 1.0, 0.86, (0.22 if arm <= 0.0 else 0.10) * vestige_ratio), 2.0)
 	if tregua_regenerativa_active:
 		var pulse: float = 0.5 + sin(t * 5.0) * 0.5
 		draw_circle(support_player_screen, 48.0 + pulse * 5.0, Color(0.38, 1.0, 0.72, 0.08 + pulse * 0.04))
@@ -32006,6 +34225,7 @@ func _draw_advanced_manifestation_world(camera: Vector2) -> void:
 		_draw_resonant_player_beat(camera)
 	_draw_resonant_world_marks(camera)
 	_draw_mnesic_marks(camera)
+	_draw_necronada_world(camera)
 
 
 func _draw_cartographic_marks(camera: Vector2) -> void:
@@ -32055,6 +34275,100 @@ func _draw_mnesic_marks(camera: Vector2) -> void:
 		draw_arc(p, 38.0, -time_alive * 1.2, TAU - time_alive * 1.2, 48, Color(0.86, 0.58, 1.0, alpha), 2.0)
 		for i in range(memories.size()):
 			draw_circle(p + Vector2.from_angle(time_alive * 1.6 + i * TAU / 3.0) * 27.0, 4.0, Color(1.0, 0.72, 1.0, 0.80))
+
+
+
+func _draw_necro_aliado_health_bar(pos: Vector2, width: float, ratio: float, alpha: float) -> void:
+	var height := 6.0
+	var rect := Rect2(pos, Vector2(width, height))
+	draw_rect(rect.grow(1.5), Color(0.02, 0.08, 0.12, 0.85 * alpha), true)
+	draw_rect(rect, Color(0.04, 0.16, 0.22, 0.90 * alpha), true)
+	if ratio > 0.0:
+		var fill_rect := Rect2(pos, Vector2(width * clampf(ratio, 0.0, 1.0), height))
+		draw_rect(fill_rect, Color(0.22, 0.92, 0.62, 0.95 * alpha), true)
+	draw_rect(rect, Color(0.42, 0.96, 1.0, 0.85 * alpha), false, 1.2)
+
+func _draw_necronada_world(camera: Vector2) -> void:
+	for vestige in necronada_vestiges:
+		var p := Vector2(vestige.get("pos", player_pos)) - camera
+		var ratio := clampf(float(vestige.get("life", 0.0)) / maxf(0.01, float(vestige.get("max", NECRONADA_VESTIGE_DURATION))), 0.0, 1.0)
+		var phase: float = float(vestige.get("phase", 0.0)) + time_alive * 1.4
+		var depth := int(vestige.get("depth", 1))
+		draw_circle(p, 22.0 + depth * 4.0, Color(0.05, 0.08, 0.16, 0.32 * ratio))
+		draw_arc(p, 28.0 + sin(phase) * 3.0, -phase, TAU - phase, 48, Color(0.72, 0.96, 1.0, 0.62 * ratio), 1.8)
+		draw_line(p + Vector2(-10, 8), p + Vector2(10, -8), Color(0.88, 0.90, 0.80, 0.72 * ratio), 2.0)
+		draw_line(p + Vector2(-8, -8), p + Vector2(8, 8), Color(0.52, 0.34, 0.92, 0.72 * ratio), 2.0)
+	for remnant in necronada_remnants:
+		var p := Vector2(remnant.get("pos", player_pos)) - camera
+		var profile: Dictionary = Dictionary(remnant.get("profile", {}))
+		var color: Color = profile.get("color", _necronada_accent())
+		var life_ratio := clampf(float(remnant.get("life", 0.0)) / maxf(0.01, float(remnant.get("max", 15.0))), 0.0, 1.0)
+		var summon_ratio := 1.0 - clampf(float(remnant.get("summon", 0.0)) / NECRONADA_REMNANT_SUMMON_TIME, 0.0, 1.0)
+		
+		# Build mock enemy dict to fetch exact sprite texture, size, visual offset and flip!
+		var mock_enemy := {
+			"type": String(remnant.get("enemy_type", ENEMY_COMMON)),
+			"phase": float(remnant.get("phase", 0.0)),
+			"facing_dir": Vector2(remnant.get("facing_dir", Vector2.LEFT)),
+			"pos": Vector2(remnant.get("pos", player_pos))
+		}
+		var tex := _enemy_texture(mock_enemy)
+		var size := _enemy_draw_size(mock_enemy)
+		var draw_pos := p + _enemy_visual_offset(mock_enemy)
+		var flip := _enemy_should_flip(mock_enemy)
+		
+		# Draw dynamic shadow
+		_draw_dynamic_shadow(tex, p, size, flip, 0.38 * life_ratio)
+		
+		# Draw spectral necro aura under feet
+		draw_circle(p, size.x * 0.44, Color(0.18, 0.58, 0.95, 0.26 * life_ratio * summon_ratio))
+		draw_arc(p, size.x * 0.48, time_alive * 2.5, time_alive * 2.5 + TAU * 0.62, 32, Color(0.65, 0.92, 1.0, 0.52 * life_ratio), 1.8)
+		
+		# Draw entity sprite with spectral ghostly modulate
+		var ghost_modulate := Color(0.68, 0.88, 1.0, 0.92 * life_ratio * summon_ratio)
+		_draw_entity(tex, draw_pos, size, ghost_modulate, flip)
+		
+		# Draw Necro Aliado green/cyan health bar
+		var hp_ratio := clampf(float(remnant.get("hp", 1.0)) / maxf(1.0, float(remnant.get("max_hp", 1.0))), 0.0, 1.0)
+		_draw_necro_aliado_health_bar(p + Vector2(-25.0, -size.y * 0.55 - 12.0), 50.0, hp_ratio, life_ratio)
+		
+		var target_pos := Vector2(remnant.get("target_pos", remnant.get("pos", player_pos))) - camera
+		if target_pos.distance_to(p) > 22.0 and float(remnant.get("summon", 0.0)) <= 0.0:
+			draw_line(p, target_pos, Color(color.r, color.g, color.b, 0.16 * life_ratio), 1.2)
+	for enemy in enemies:
+		if not bool(enemy.get("necronada_epitaph", false)):
+			continue
+		var p_enemy := Vector2(enemy.get("pos", player_pos)) - camera
+		var depth_enemy := int(enemy.get("necronada_epitaph_depth", 1))
+		var alpha := clampf(0.55 + float(enemy.get("necronada_epitaph_flash", 0.0)) * 0.45, 0.0, 1.0)
+		for i in range(depth_enemy):
+			var arc_radius := 34.0 + i * 4.5
+			var arc_color := Color(0.80, 0.40, 1.0, alpha * (0.54 + float(i) * 0.045))
+			draw_arc(p_enemy, arc_radius, -time_alive * (1.0 + i * 0.18), TAU - time_alive * (1.0 + i * 0.18), 52, arc_color, 1.8)
+			draw_arc(p_enemy, arc_radius + 1.5, time_alive * (0.75 + i * 0.12), time_alive * (0.75 + i * 0.12) + TAU * 0.34, 32, Color(0.72, 0.96, 1.0, alpha * 0.30), 1.1)
+		var stack_label := "E x%d" % depth_enemy
+		var badge_w := 58.0
+		var badge_h := 23.0
+		var badge_rect := Rect2(p_enemy + Vector2(-badge_w * 0.5, -62.0), Vector2(badge_w, badge_h))
+		draw_rect(badge_rect.grow(2.0), Color(0.45, 0.10, 0.78, 0.22 * alpha), true)
+		draw_rect(badge_rect, Color(0.035, 0.018, 0.075, 0.90 * alpha), true)
+		draw_rect(badge_rect, Color(0.86, 0.38, 1.0, 0.96 * alpha), false, 1.7)
+		draw_line(badge_rect.position + Vector2(4, badge_h - 3), badge_rect.position + Vector2(badge_w - 4, badge_h - 3), Color(0.72, 0.96, 1.0, 0.34 * alpha), 1.0)
+		draw_string(font, badge_rect.position + Vector2(0, 16.0), stack_label, HORIZONTAL_ALIGNMENT_CENTER, badge_w, _readable_text_size(12), Color(0.95, 0.98, 1.0, alpha))
+	for visual in necronada_vfx:
+		var kind := String(visual.get("kind", ""))
+		var alpha_v := clampf(float(visual.get("life", 0.0)) / maxf(0.01, float(visual.get("max", 0.3))), 0.0, 1.0)
+		if kind == "remnant_strike":
+			var color_v: Color = visual.get("color", _necronada_accent())
+			draw_line(Vector2(visual.get("a", player_pos)) - camera, Vector2(visual.get("b", player_pos)) - camera, Color(color_v.r, color_v.g, color_v.b, 0.72 * alpha_v), 3.0)
+		elif kind == "requiem_echo":
+			var center := Vector2(visual.get("pos", player_pos)) - camera
+			var radius_v := lerpf(32.0, 122.0, 1.0 - alpha_v)
+			draw_circle(center, radius_v, Color(0.04, 0.06, 0.14, 0.18 * alpha_v))
+			draw_arc(center, radius_v, 0.0, TAU, 64, Color(0.72, 0.96, 1.0, 0.58 * alpha_v), 2.2)
+		else:
+			var pos := Vector2(visual.get("pos", player_pos)) - camera
+			draw_circle(pos, 18.0 * alpha_v, Color(0.72, 0.96, 1.0, 0.36 * alpha_v))
 
 
 func _draw_resonant_world_marks(camera: Vector2) -> void:
@@ -36233,6 +38547,7 @@ func _draw_hud(viewport: Vector2) -> void:
 	_draw_card_mechanic_huds(viewport, left_rect)
 	_draw_acorrentada_hud(viewport, left_rect)
 	_draw_bombastica_hud(viewport, left_rect)
+	_draw_necronada_hud(viewport, left_rect)
 	_draw_aura_hud(viewport, left_rect)
 	_draw_revive_heal_penalty_hud(viewport, left_rect)
 	_draw_lacerante_coagulum_hud(viewport)
@@ -36421,6 +38736,31 @@ func _draw_bombastica_hud(viewport: Vector2, anchor: Rect2) -> void:
 	draw_string(font, rect.position + Vector2(92, 51), "POLVORA %d" % powder_targets, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.78, 1.0, 1.0))
 
 
+func _draw_necronada_hud(viewport: Vector2, anchor: Rect2) -> void:
+	if manifestation_key != "necronada":
+		return
+	var width := minf(262.0, viewport.x * 0.48)
+	var origin := _cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
+	var rect := Rect2(origin, Vector2(width, 64.0))
+	_draw_combat_panel(rect, _necronada_color(), 0.58)
+	draw_string(font, rect.position + Vector2(10, 18), "OSSUARIO TEMPORAL", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, _readable_text_size(11), _necronada_accent())
+	var slot_size := 20.0
+	var slot_gap := 8.0
+	var start := rect.position + Vector2(12.0, 32.0)
+	for i in range(NECRONADA_OSSUARY_SLOTS):
+		var slot_rect := Rect2(start + Vector2(i * (slot_size + slot_gap), 0.0), Vector2(slot_size, slot_size))
+		var filled := i < necronada_ossuary.size()
+		var selected := i == necronada_selected_slot
+		draw_rect(slot_rect, Color(0.05, 0.03, 0.10, 0.76), true)
+		draw_rect(slot_rect, _necronada_accent() if selected else _necronada_color(), false, 1.5 if selected else 1.0)
+		if filled:
+			var slot: Dictionary = necronada_ossuary[i]
+			var profile: Dictionary = Dictionary(slot.get("profile", {}))
+			var color: Color = profile.get("color", _necronada_accent())
+			draw_circle(slot_rect.get_center(), 6.0 + int(slot.get("depth", 1)) * 1.2, Color(color.r, color.g, color.b, 0.86))
+	draw_string(font, rect.position + Vector2(126.0, 46.0), "VESTIGIOS %d" % necronada_vestiges.size(), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 136.0, _readable_text_size(10), Color(0.92, 0.96, 1.0))
+
+
 func _draw_card_mechanic_huds(viewport: Vector2, anchor: Rect2) -> void:
 	var width = min(224.0, viewport.x * 0.46)
 	var origin = _cards_panel_pos(viewport, anchor)
@@ -36498,6 +38838,42 @@ func _draw_card_mechanic_huds(viewport: Vector2, anchor: Rect2) -> void:
 			draw_arc(pip_pos, 6.8, 0, TAU, 16, Color(1.0, 0.92, 0.54, 0.68), 1.0)
 		draw_string(font, rect.position + Vector2(10, 34), "+%.0f%% TERCEIRA" % (_mandamento_power_bonus() * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 		y += 48.0
+	if _new_common_card_count(CARD_IMPULSO_ID) > 0 and impulso_charges > 0:
+		var rect = Rect2(origin.x, y, width, 38.0)
+		_draw_combat_panel(rect, Color(0.42, 0.78, 1.0), 0.52)
+		draw_string(font, rect.position + Vector2(10, 17), "IMPULSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.62, 0.90, 1.0))
+		draw_string(font, rect.position + Vector2(width - 76, 17), "x%d" % impulso_charges, HORIZONTAL_ALIGNMENT_RIGHT, 68, 11, Color.WHITE)
+		draw_string(font, rect.position + Vector2(10, 32), "+%.0f%% ATK" % (impulso_bonus * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.86, 0.42))
+		y += 44.0
+	if _new_common_card_count(CARD_ZONA_ID) > 0 and (zona_charge > 0.0 or zona_cooldown > 0.0):
+		var rect = Rect2(origin.x, y, width, 38.0)
+		_draw_combat_panel(rect, Color(0.44, 1.0, 0.70), 0.52)
+		var label := "%.0f%%" % (zona_charge * 100.0) if zona_cooldown <= 0.0 else "CD %.1f" % zona_cooldown
+		draw_string(font, rect.position + Vector2(10, 17), "ZONA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.58, 1.0, 0.78))
+		draw_string(font, rect.position + Vector2(width - 88, 17), label, HORIZONTAL_ALIGNMENT_RIGHT, 80, 11, Color.WHITE)
+		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2((width - 20) * clampf(zona_charge, 0.0, 1.0), 5)), Color(0.44, 1.0, 0.70, 0.92), true)
+		y += 44.0
+	if _new_common_card_count(CARD_FOLEGO_ID) > 0 and folego_charge > 0.0:
+		var rect = Rect2(origin.x, y, width, 38.0)
+		_draw_combat_panel(rect, Color(1.0, 0.56, 0.22), 0.52)
+		draw_string(font, rect.position + Vector2(10, 17), "FOLEGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.74, 0.34))
+		draw_string(font, rect.position + Vector2(width - 76, 17), "%.0f%%" % (folego_charge * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 68, 11, Color.WHITE)
+		y += 44.0
+	if _new_common_card_count(CARD_MARGEM_ID) > 0 and (margem_window_timer > 0.0 or margem_debt > 0.0):
+		var rect = Rect2(origin.x, y, width, 42.0)
+		_draw_combat_panel(rect, Color(1.0, 0.36, 0.46), 0.54)
+		draw_string(font, rect.position + Vector2(10, 17), "MARGEM", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.54, 0.62))
+		var label := "%.0f HP" % margem_debt if margem_debt > 0.0 else "%.1fs" % margem_window_timer
+		draw_string(font, rect.position + Vector2(width - 92, 17), label, HORIZONTAL_ALIGNMENT_RIGHT, 84, 11, Color.WHITE)
+		draw_string(font, rect.position + Vector2(10, 34), "DIVIDA" if margem_debt > 0.0 else "JANELA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.82, 0.86))
+		y += 48.0
+	if _new_common_card_count(CARD_RESSONANCIA_ID) > 0 and (not ressonancia_symbols.is_empty() or ressonancia_ready_timer > 0.0):
+		var rect = Rect2(origin.x, y, width, 40.0)
+		_draw_combat_panel(rect, Color(0.58, 1.0, 0.96), 0.52)
+		draw_string(font, rect.position + Vector2(10, 17), "RESSONANCIA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.66, 1.0, 0.98))
+		var label := "PRONTA" if ressonancia_ready_timer > 0.0 else "%d/4" % ressonancia_symbols.size()
+		draw_string(font, rect.position + Vector2(width - 86, 17), label, HORIZONTAL_ALIGNMENT_RIGHT, 78, 11, Color.WHITE)
+		y += 46.0
 	if _rare_card_count("carta_zero") > 0:
 		var rect = Rect2(origin.x, y, width, 38.0)
 		_draw_combat_panel(rect, Color(0.88, 0.96, 1.0), 0.56)
@@ -36663,8 +39039,11 @@ func _draw_teleport_preview(viewport: Vector2, camera: Vector2) -> void:
 	var dest = _desktop_dash_target() if desktop_aim_action == "dash" else _teleport_destination_from_drag(teleport_drag_screen, viewport)
 	var a = player_pos - camera
 	var b = dest - camera
-	draw_line(a, b, Color(0.25, 0.95, 1.0, 0.72), 8)
-	draw_line(a, b, Color(1.0, 0.14, 0.95, 0.42), 3)
+	if manifestation_key == "lacerante":
+		draw_line(a, b, Color(0.25, 0.95, 1.0, 0.72), 8)
+		draw_line(a, b, Color(1.0, 0.14, 0.95, 0.42), 3)
+	else:
+		draw_arc(a, 18.0, -time_alive * 3.0, TAU - time_alive * 3.0, 36, Color(0.25, 0.95, 1.0, 0.44), 2.0)
 	draw_circle(b, 28, Color(0.05, 0.85, 1.0, 0.22))
 	draw_arc(b, 34, 0, TAU, 48, Color(0.80, 0.15, 1.0, 0.88), 4)
 
@@ -37265,12 +39644,14 @@ func _draw_shop(viewport: Vector2) -> void:
 			if cinzas_buffed:
 				bg_color = Color(0.030, 0.022, 0.018).lerp(card["color"], 0.05 if i == shop_selected else 0.02)
 			bg_color.a = 0.94 * card_alpha
-			draw_rect(rect, bg_color, true)
-			var border_color = rarity_color if i == shop_selected else Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.58)
 			if cinzas_buffed:
-				border_color = Color(0.10, 0.045, 0.020, 0.72)
-			border_color.a = max(0.16, card_alpha)
-			draw_rect(rect, border_color, false, 2 if cinzas_buffed else (5 if i == shop_selected else 2))
+				_draw_cinzas_burn_glow(rect, card_alpha, i == shop_selected)
+			else:
+				draw_rect(rect, bg_color, true)
+			var border_color = rarity_color if i == shop_selected else Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.58)
+			if not cinzas_buffed:
+				border_color.a = max(0.16, card_alpha)
+				draw_rect(rect, border_color, false, 5 if i == shop_selected else 2)
 			if purchase_animating and i == purchase_index:
 				var glow = (0.35 + sin(Time.get_ticks_msec() * 0.01) * 0.15) * (1.0 - purchase_progress * 0.35)
 				for g in range(1, 4):
@@ -37399,7 +39780,10 @@ func _draw_shop(viewport: Vector2) -> void:
 		bg_color = bg_color.lerp(card["color"], 0.14 if is_sel else 0.05)
 		if cinzas_buffed:
 			bg_color = Color(0.028, 0.022, 0.018, 0.88 * alpha).lerp(card["color"], 0.045 if is_sel else 0.02)
-		draw_rect(rect, bg_color, true)
+		if cinzas_buffed:
+			_draw_cinzas_burn_glow(rect, alpha, is_sel)
+		else:
+			draw_rect(rect, bg_color, true)
 
 		# Glow concentric if selected
 		if is_sel and not cinzas_buffed:
@@ -37413,9 +39797,8 @@ func _draw_shop(viewport: Vector2) -> void:
 
 		# Card Border
 		var border_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, alpha if is_sel else 0.55 * alpha)
-		if cinzas_buffed:
-			border_color = Color(0.10, 0.045, 0.020, 0.70 * alpha)
-		draw_rect(rect, border_color, false, 1 if cinzas_buffed else (4 if is_sel else 2))
+		if not cinzas_buffed:
+			draw_rect(rect, border_color, false, 4 if is_sel else 2)
 		if is_sel and not cinzas_buffed:
 			var scan_y = rect.position.y + 12.0 + fposmod(Time.get_ticks_msec() * 0.065, max(1.0, rect.size.y - 24.0))
 			draw_line(Vector2(rect.position.x + 10.0, scan_y), Vector2(rect.end.x - 10.0, scan_y), Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.72), 2.0)
@@ -37432,8 +39815,9 @@ func _draw_shop(viewport: Vector2) -> void:
 				_draw_texture_contain(icon, icon_rect, Color(1, 1, 1, alpha))
 
 		# Small overlay for card title/nickname on the card itself
-		var text_color = Color(1.0, 1.0, 1.0, alpha)
-		_draw_centered(card["nick"].to_upper(), Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y - 18), _readable_text_size(12 if is_sel else 10), text_color)
+		if not cinzas_buffed:
+			var text_color = Color(1.0, 1.0, 1.0, alpha)
+			_draw_centered(card["nick"].to_upper(), Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y - 18), _readable_text_size(12 if is_sel else 10), text_color)
 
 		if is_sel and purchase_animating and i == purchase_index:
 			var overlay_rect = Rect2(rect.position.x, rect.position.y + rect.size.y * 0.5 - 18, rect.size.x, 36)
@@ -37566,21 +39950,15 @@ func _ensure_cinzas_burn_shader_node(index: int) -> Control:
 		texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		texture_rect.stretch_mode = TextureRect.STRETCH_SCALE
 		holder.add_child(texture_rect)
 
-		var title := Label.new()
-		title.name = "Title"
-		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		title.add_theme_color_override("font_color", Color.WHITE)
-		title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.82))
-		title.add_theme_constant_override("shadow_offset_x", 1)
-		title.add_theme_constant_override("shadow_offset_y", 1)
-		if font:
-			title.add_theme_font_override("font", font)
-		holder.add_child(title)
+		for ember_index in range(18):
+			var ember := ColorRect.new()
+			ember.name = "Ember%d" % ember_index
+			ember.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			ember.visible = false
+			holder.add_child(ember)
 
 		add_child(holder)
 		cinzas_burn_texture_nodes.append(holder)
@@ -37591,6 +39969,19 @@ func _reset_cinzas_burn_shader_nodes() -> void:
 	cinzas_burn_texture_index = 0
 	for holder in cinzas_burn_texture_nodes:
 		holder.visible = false
+		holder.position = Vector2.ZERO
+		holder.size = Vector2.ZERO
+		holder.modulate = Color.WHITE
+		var texture_rect := holder.get_node_or_null("Texture") as TextureRect
+		if texture_rect != null:
+			texture_rect.texture = null
+			texture_rect.material = null
+			texture_rect.position = Vector2.ZERO
+			texture_rect.size = Vector2.ZERO
+		for child in holder.get_children():
+			var ember := child as ColorRect
+			if ember != null:
+				ember.visible = false
 
 
 func _pixel_card_burn_shader() -> Shader:
@@ -37645,18 +40036,66 @@ func _pixel_card_burn_material(card: Dictionary, rect: Rect2) -> ShaderMaterial:
 		mat.shader = _pixel_card_burn_shader()
 		mat.set_shader_parameter("dissolve_texture", _pixel_card_burn_noise(burn_seed))
 		mat.set_shader_parameter("palette_ramp", _pixel_card_burn_palette())
-		mat.set_shader_parameter("burn_width", 0.055)
+		mat.set_shader_parameter("burn_width", 0.12)
 		mat.set_shader_parameter("noise_scroll_speed", Vector2(0.0, 0.0))
 		mat.set_shader_parameter("ember_pulse_speed", 4.6)
 		pixel_card_burn_material_cache[cache_key] = mat
-	var dissolve_amount := clampf(0.016 + float(min(stacks, 8)) * 0.005, 0.016, 0.070)
+	var dissolve_amount := clampf(0.20 + float(min(stacks, 14)) * 0.035, 0.20, 0.58)
 	var pixel_factor := clampf(round(minf(rect.size.x, rect.size.y)), 72.0, 180.0)
 	mat.set_shader_parameter("dissolve_value", dissolve_amount)
 	mat.set_shader_parameter("pixel_factor", pixel_factor)
 	return mat
 
 
-func _draw_cinzas_shader_card(card: Dictionary, rect: Rect2, texture: Texture2D, alpha := 1.0, show_title := true) -> bool:
+func _cinzas_hash01(seed_value: int, salt: int) -> float:
+	var h: int = abs(("%d:%d" % [seed_value, salt]).hash())
+	return float(h % 10000) / 10000.0
+
+
+func _draw_cinzas_burn_glow(rect: Rect2, alpha: float, selected: bool) -> void:
+	var pulse := 0.5 + sin(Time.get_ticks_msec() * 0.007) * 0.5
+	var glow_alpha := (0.18 + pulse * 0.10) * alpha
+	if selected:
+		for g in range(1, 4):
+			draw_rect(rect.grow(g * 5.0), Color(1.0, 0.34, 0.04, glow_alpha / float(g)), false, 1)
+	draw_rect(rect.grow(2.0), Color(0.16, 0.045, 0.015, 0.24 * alpha), true)
+
+
+func _configure_cinzas_ember_nodes(holder: Control, card: Dictionary, size: Vector2, alpha: float) -> void:
+	var seed_value: int = abs(int(card.get("cinzas_burn_seed", abs(_card_id(card).hash()))))
+	var stacks: int = max(1, int(card.get("cinzas_buff_stacks", 1)))
+	var ember_count: int = mini(18, 8 + stacks * 2)
+	for ember_index in range(18):
+		var ember := holder.get_node_or_null("Ember%d" % ember_index) as ColorRect
+		if ember == null:
+			continue
+		if ember_index >= ember_count or alpha <= 0.03:
+			ember.visible = false
+			continue
+		var phase: float = _cinzas_hash01(seed_value, ember_index * 31 + 7)
+		var side: int = int(floor(_cinzas_hash01(seed_value, ember_index * 43 + 11) * 4.0))
+		var drift: float = fposmod(time_alive * (0.22 + _cinzas_hash01(seed_value, ember_index * 17 + 5) * 0.16) + phase, 1.0)
+		var edge_t: float = _cinzas_hash01(seed_value, ember_index * 23 + 19)
+		var pos := Vector2.ZERO
+		match side:
+			0:
+				pos = Vector2(edge_t * size.x, size.y - drift * size.y * 0.78)
+			1:
+				pos = Vector2(edge_t * size.x, drift * size.y * 0.36)
+			2:
+				pos = Vector2(drift * size.x * 0.24, edge_t * size.y)
+			_:
+				pos = Vector2(size.x - drift * size.x * 0.24, edge_t * size.y)
+		pos += Vector2(sin((time_alive + phase) * 7.0) * 8.0, -drift * 22.0)
+		var ember_size: float = 2.0 + floor(_cinzas_hash01(seed_value, ember_index * 29 + 3) * 3.0)
+		ember.position = pos.clamp(Vector2.ZERO, size - Vector2(ember_size, ember_size))
+		ember.size = Vector2(ember_size, ember_size)
+		var heat: float = 0.45 + 0.55 * sin(time_alive * 10.0 + phase * TAU)
+		ember.color = Color(1.0, 0.34 + heat * 0.36, 0.05, alpha * (0.16 + (1.0 - drift) * 0.58))
+		ember.visible = true
+
+
+func _draw_cinzas_shader_card(card: Dictionary, rect: Rect2, texture: Texture2D, alpha: float = 1.0, _show_title: bool = true) -> bool:
 	if texture == null or _is_empty_shop_slot(card) or not bool(card.get("cinzas_return_buff", false)):
 		return false
 	if alpha <= 0.01 or rect.size.x <= 4.0 or rect.size.y <= 4.0:
@@ -37673,14 +40112,7 @@ func _draw_cinzas_shader_card(card: Dictionary, rect: Rect2, texture: Texture2D,
 	texture_rect.size = rect.size
 	texture_rect.texture = texture
 	texture_rect.material = _pixel_card_burn_material(card, rect)
-
-	var title := holder.get_node("Title") as Label
-	title.visible = show_title
-	if show_title:
-		title.text = String(card.get("nick", "")).to_upper()
-		title.position = Vector2(0.0, maxf(0.0, rect.size.y - 42.0))
-		title.size = Vector2(rect.size.x, 38.0)
-		title.add_theme_font_size_override("font_size", 12 if rect.size.x >= 120.0 else 9)
+	_configure_cinzas_ember_nodes(holder, card, rect.size, alpha)
 	return true
 
 
@@ -38148,9 +40580,9 @@ func _draw_game_over_overlay(viewport: Vector2) -> void:
 	var labels = [
 		["end_retry", "TENTAR NOVAMENTE", Color(0.0, 1.0, 0.82)],
 		["end_ranking", "ABRIR RANKING", Color(1.0, 0.28, 0.78)],
-		["end_menu", "VOLTAR AO MENU", Color(0.72, 0.34, 1.0)],
-		["end_exit", "SAIR", Color(1.0, 0.22, 0.28)]
+		["end_menu", "VOLTAR AO MENU", Color(0.72, 0.34, 1.0)]
 	]
+	buttons.erase("end_exit")
 	for i in range(labels.size()):
 		var rect: Rect2 = end_buttons[String(labels[i][0])]
 		buttons[String(labels[i][0])] = rect
@@ -38173,7 +40605,6 @@ func _game_over_button_layout(viewport: Vector2) -> Dictionary:
 	rects["end_retry"] = Rect2(center.x - btn_w * 0.5, start_y, btn_w, btn_h)
 	rects["end_ranking"] = Rect2(center.x - btn_w * 0.5, start_y + btn_h + gap, btn_w, btn_h)
 	rects["end_menu"] = Rect2(center.x - btn_w * 0.5, start_y + (btn_h + gap) * 2.0, btn_w, btn_h)
-	rects["end_exit"] = Rect2(center.x - btn_w * 0.5, start_y + (btn_h + gap) * 3.0, btn_w, btn_h)
 	return rects
 
 
@@ -39583,14 +42014,6 @@ func _handle_gameplay_settings_touch(pos: Vector2, viewport: Vector2) -> void:
 		_close_gameplay_cheat_popup()
 		_cycle_ui_platform_override()
 		_save_config()
-	elif QA_STREAMING_FEATURE_ENABLED and settings_buttons.has("qa_streaming") and settings_buttons["qa_streaming"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		qa_streaming_enabled = qa_streaming_unlocked and not qa_streaming_enabled
-		if not qa_streaming_enabled:
-			_stop_qa_streaming("desativado")
-		else:
-			qa_streaming_status = "Streaming: pronto para proxima run"
-		_save_config()
 	elif QA_STREAMING_FEATURE_ENABLED and settings_buttons.has("qa_stream_quality") and settings_buttons["qa_stream_quality"].has_point(pos):
 		_close_gameplay_cheat_popup()
 		_cycle_qa_stream_quality_mode()
@@ -40447,12 +42870,6 @@ func _handle_key(event: InputEventKey) -> void:
 				"retornante_cheat": _open_gameplay_cheat_popup()
 				"haptics": haptics_enabled = not haptics_enabled
 				"ui_platform_profile": _cycle_ui_platform_override()
-				"qa_streaming":
-					qa_streaming_enabled = qa_streaming_unlocked and not qa_streaming_enabled
-					if not qa_streaming_enabled:
-						_stop_qa_streaming("desativado")
-					else:
-						qa_streaming_status = "Streaming: pronto para proxima run"
 				"qa_stream_quality": _cycle_qa_stream_quality_mode()
 				"back":
 					_save_config()
@@ -40733,9 +43150,9 @@ func _handle_key(event: InputEventKey) -> void:
 		if event.keycode == KEY_ESCAPE:
 			_go_to_menu()
 		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			gameover_selected = (gameover_selected - 1 + 4) % 4
+			gameover_selected = (gameover_selected - 1 + 3) % 3
 		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			gameover_selected = (gameover_selected + 1) % 4
+			gameover_selected = (gameover_selected + 1) % 3
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			if gameover_selected == 0:
 				_start_game()
@@ -40743,8 +43160,6 @@ func _handle_key(event: InputEventKey) -> void:
 				_open_leaderboard_site()
 			elif gameover_selected == 2:
 				_go_to_menu()
-			elif gameover_selected == 3:
-				get_tree().quit()
 	elif mode == "victory" and event.keycode in [KEY_ENTER, KEY_SPACE]:
 		_go_to_menu()
 
@@ -40847,8 +43262,6 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void:
 			_open_leaderboard_site()
 		elif buttons.get("end_menu", Rect2()).has_point(pos):
 			_go_to_menu()
-		elif buttons.get("end_exit", Rect2()).has_point(pos):
-			get_tree().quit()
 		return
 	if mode == "victory":
 		if buttons.get("end_ranking", Rect2()).has_point(pos):
@@ -41051,12 +43464,17 @@ func _try_unlock_retornante_cheat() -> bool:
 		_vibrate(80, 0.32)
 		return true
 	if cheat.to_upper() == "CHANZADA":
-		_reset_qa_streaming_runtime()
+		_reset_qa_streaming_runtime(false)
+		qa_streaming_unlocked = true
+		qa_streaming_enabled = false
+		qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode)
+		qa_streaming_status = "Streaming: liberado no hub"
 		gameplay_cheat_text = ""
-		_save_config()
-		_add_text("STREAMING REMOVIDO", player_pos + Vector2(0, -100), Color(1.0, 0.74, 0.22), 1.4, 24)
-		_play_sfx("ui_spectrum_switch", 0.01, 0.60, 1.12)
-		_vibrate(80, 0.32)
+		if DisplayServer.get_name() != "headless":
+			_save_config()
+			_add_text("STREAMING QA LIBERADO", player_pos + Vector2(0, -100), Color(0.0, 1.0, 0.82), 1.4, 24)
+			_play_sfx("ui_spectrum_switch", 0.01, 0.60, 1.12)
+			_vibrate(80, 0.32)
 		return true
 	if _try_apply_initial_phase_cheat(cheat):
 		return true
@@ -41745,6 +44163,8 @@ func _manifestation_base_damage() -> float:
 			return PLAYER_BASE_DAMAGE * 0.84
 		"bombastica":
 			return PLAYER_BASE_DAMAGE * 0.90
+		"necronada":
+			return PLAYER_BASE_DAMAGE * 0.84
 	return PLAYER_BASE_DAMAGE
 
 
@@ -41772,11 +44192,15 @@ func _manifestation_attack_interval() -> float:
 			return 0.58
 		"bombastica":
 			return 0.58
+		"necronada":
+			return 0.64
 	return PLAYER_BASE_ATTACK_INTERVAL
 
 
 func _current_attack_interval() -> float:
 	var interval = player_attack_interval
+	if manifestation_key == "necronada":
+		interval /= 0.75
 	if manifestation_key == "lacerante":
 		interval /= 1.0 + float(lacerante_coagula) * LACERANTE_COAGULUM_ATTACK_SPEED_RATE
 	if manifestation_key == "ancorada":
@@ -41835,6 +44259,8 @@ func _skill_cooldown() -> float:
 			return BOMBASTICA_Q_RECHARGE
 		"eclipsada":
 			return _eclipsada_q_cooldown_for_form()
+		"necronada":
+			return PLAYER_BASE_SKILL_COOLDOWN + 0.45
 	return PLAYER_BASE_SKILL_COOLDOWN
 
 
@@ -42266,6 +44692,9 @@ func _aura_details(name: String) -> Dictionary:
 
 
 func _manifestation_details(key: String) -> Dictionary:
+	var catalog_details := CatalogDetails.manifestation_details(self, key)
+	if String(catalog_details.get("funcao", "")) != "Forma em leitura.":
+		return catalog_details
 	match key:
 		"eletrica":
 			return {
@@ -45854,7 +48283,9 @@ func _apply_graphics_settings() -> void:
 		gfx_particles = false
 		gfx_shadows = false
 		gfx_screen_shake = false
-	if not QA_STREAMING_FEATURE_ENABLED or not qa_streaming_unlocked:
+		if qa_streaming_quality_mode == "720p":
+			qa_streaming_quality_mode = "360p"
+	if not QA_STREAMING_FEATURE_ENABLED:
 		qa_streaming_enabled = false
 		qa_streaming_unlocked = false
 		qa_streaming_status = ""

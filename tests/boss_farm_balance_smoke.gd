@@ -43,6 +43,9 @@ func _run() -> void:
 	game.contractual_order.clear()
 	game.contractual_order_penalties.clear()
 	game.current_phase = 1
+	game.boss_active = true
+	game.boss_hp = 1000.0
+	game.boss_hp_max = farm_phase1_hp
 	game.is_dead = false
 	game.player_hp_max = 1000
 	game.player_hp = 1000

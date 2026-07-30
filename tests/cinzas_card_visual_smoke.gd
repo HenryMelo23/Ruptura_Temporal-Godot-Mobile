@@ -12,9 +12,18 @@ func _check(condition: bool, message: String) -> void:
 	quit(1)
 
 
+func _visible_cinzas_holders() -> int:
+	var total := 0
+	for holder in game.cinzas_burn_texture_nodes:
+		if is_instance_valid(holder) and holder.visible:
+			total += 1
+	return total
+
+
 func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
 	game = load("res://scenes/Main.tscn").instantiate()
+	game.orientation_poll_timer = 9999.0
 	root.add_child(game)
 	call_deferred("_run")
 
@@ -50,13 +59,35 @@ func _run() -> void:
 
 	_check(bool(buffed_card.get("cinzas_return_buff", false)), "Cinzas return buff property flag not set on card")
 	_check(int(buffed_card.get("cinzas_buff_stacks", 0)) == 3, "Cinzas buff stacks missing on card")
+	_check(_visible_cinzas_holders() == 1, "Cinzas shader nodes should draw exactly one buffed card in the shop")
 
-	var image: Image = root.get_texture().get_image()
-	if image != null:
-		if image.save_png(OUTPUT) != OK:
-			push_error("CINZAS_CARD_VISUAL_FAIL could not save screenshot")
+	for loop in range(5):
+		game.queue_redraw()
+		await process_frame
+		_check(_visible_cinzas_holders() == 1, "Cinzas shader nodes accumulated after repeated redraw %d" % loop)
+
+	game.mode = "game"
+	game.queue_redraw()
+	await process_frame
+	_check(_visible_cinzas_holders() == 0, "Cinzas shader nodes remained visible after leaving the shop")
+
+	game.mode = "shop"
+	game.queue_redraw()
+	await process_frame
+	_check(_visible_cinzas_holders() == 1, "Cinzas shader nodes did not recover cleanly after reopening the shop")
+
+	if DisplayServer.get_name() != "headless":
+		var viewport_texture: ViewportTexture = root.get_texture()
+		var image: Image = viewport_texture.get_image()
+		if image != null:
+			if image.save_png(OUTPUT) != OK:
+				push_error("CINZAS_CARD_VISUAL_FAIL could not save screenshot")
+		image = null
+		viewport_texture = null
 
 	print("CINZAS_CARD_VISUAL_SMOKE_OK " + ProjectSettings.globalize_path(OUTPUT))
+	root.remove_child(game)
 	game.queue_free()
-	await process_frame
+	for i in range(4):
+		await process_frame
 	quit(0)

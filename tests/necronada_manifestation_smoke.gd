@@ -87,6 +87,12 @@ func _run() -> void:
 	_check(game.necronada_ossuary.size() == 1, "Q did not capture Vestige into Ossuary")
 	_check(game.necronada_vestiges.is_empty(), "captured Vestige remained on field")
 
+	game.necronada_vestiges.append({"id": 777, "enemy_type": game.ENEMY_STALKER, "pos": game.player_pos + Vector2(36, 0), "life": 5.0, "max": 5.0, "depth": 1, "profile": game._necronada_profile(game.ENEMY_STALKER), "phase": 0.0})
+	game.necronada_ossuary.clear()
+	game._update_necronada_state(0.08)
+	_check(game.necronada_ossuary.size() == 1, "nearby Vestige did not auto-capture into Ossuary")
+	_check(game.necronada_vestiges.is_empty(), "auto-captured Vestige remained on field")
+
 	game.last_skill_time = -999.0
 	game._try_use_necronada_skill(game.player_pos + Vector2(120, 0))
 	_check(game.necronada_ossuary.is_empty(), "summon did not consume Ossuary slot")
@@ -106,16 +112,17 @@ func _run() -> void:
 		{"id": 1001, "enemy_type": game.ENEMY_COMMON, "profile": game._necronada_profile(game.ENEMY_COMMON), "depth": 3, "stored_at": game.time_alive},
 		{"id": 1002, "enemy_type": game.ENEMY_STALKER, "profile": game._necronada_profile(game.ENEMY_STALKER), "depth": 2, "stored_at": game.time_alive}
 	]
-	game.necronada_pente_history = [game.ENEMY_COMMON, game.ENEMY_STALKER]
+	game.necronada_pente_history = [game.ENEMY_COMMON]
 	var ossuary_before: Array = game.necronada_ossuary.duplicate(true)
 	game._use_secondary_skill(game.player_pos)
 	_check(not game.necronada_requiem.is_empty(), "E did not start Requiem")
 	_check(game.necronada_ossuary.size() == ossuary_before.size(), "E consumed Ossuary slots")
 	_check(game.necronada_ossuary == ossuary_before, "E changed stored Ossuary slots")
+	_check(Array(game.necronada_requiem.get("species_pool", [])).size() == 1, "E species pool ignored unique pente history")
 	_check(game.necronada_remnants.size() == game.NECRONADA_SUPREME_HORDE_COUNT, "E did not summon 4 supreme allies")
 	for remnant in game.necronada_remnants:
 		_check(bool(remnant.get("is_ultimate", false)), "E summoned a non-supreme remnant")
-		_check(game.necronada_pente_history.has(String(remnant.get("enemy_type", ""))), "E summoned a species outside pente history")
+		_check(String(remnant.get("enemy_type", "")) == game.ENEMY_COMMON, "E did not repeat the only species in pente history")
 	_check(is_equal_approx(float(game.necronada_requiem.get("total_taunt_timer", 0.0)), game.NECRONADA_TOTAL_TAUNT_DURATION), "E did not start 15s total taunt")
 	_check(game._necronada_has_active_taunt(), "total taunt was not considered active")
 	var taunt_enemy := _spawn_test_enemy(game.player_pos + Vector2(300, 0), 240.0)
