@@ -40,6 +40,9 @@ func _seed_history() -> void:
 
 func _run() -> void:
 	assert(is_equal_approx(game.BOSS1_REWIND_COOLDOWN, 45.0))
+	assert(is_equal_approx(game.BOSS1_CLOCK_TURN_TIME, 8.0))
+	assert(is_equal_approx(game.BOSS1_REWIND_PLAYBACK_TIME, 8.0))
+	assert(game.audio_streams.has("Retrocede.mp3"))
 	game._start_game()
 	game.current_phase = 1
 	game.boss_active = true
@@ -49,10 +52,14 @@ func _run() -> void:
 	game.boss_hp = 305.0
 	game.player_hp_max = 450.0
 	_seed_history()
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
 
 	game._damage_boss(120.0, "eletrica")
 	assert(is_equal_approx(game.boss1_rewind_cooldown, game.BOSS1_REWIND_COOLDOWN))
 	assert(not game.boss1_time_wave.is_empty())
+	assert(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Retrocede.mp3"]))
 	assert(game.boss_hp > 0.0 and game.boss_hp <= game.boss_hp_max * game.BOSS1_REWIND_THRESHOLD)
 	var warning_radius = float(game.boss1_time_wave["radius"])
 	game._update_boss1_time_wave(game.BOSS1_TIME_WAVE_WARNING * 0.50)
@@ -116,7 +123,7 @@ func _run() -> void:
 	game._update_boss1_time_wave(0.20)
 	assert(not game.boss1_rewind_sequence.is_empty())
 
-	print("BOSS1_REWIND_SMOKE_OK recurring=true cooldown=45s rewind=10s return_hit=true boss_heal=%.2f player_hp=%d" % [expected_heal, expected_player_hp])
+	print("BOSS1_REWIND_SMOKE_OK recurring=true cooldown=45s rewind=8s return_hit=true boss_heal=%.2f player_hp=%d" % [expected_heal, expected_player_hp])
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

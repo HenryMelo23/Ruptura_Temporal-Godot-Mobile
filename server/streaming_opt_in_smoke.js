@@ -87,7 +87,7 @@ async function run() {
     assert.strictEqual(stream.streamWidth, 1280, "width should be clamped");
     assert.strictEqual(stream.streamHeight, 720, "height should be clamped");
     assert.strictEqual(stream.streamFps, 60, "fps should be clamped");
-    assert.strictEqual(stream.streamBitrate, 6000000, "bitrate should be clamped");
+    assert.strictEqual(stream.streamBitrate, 9000000, "bitrate should accept high quality requests");
     assert(stream.viewerUrl.includes(`127.0.0.1:${port}/streams/`), "viewer URL should use public manager base");
 
     const second = await request("POST", "/streams", { player: "QA2" });
@@ -106,6 +106,26 @@ async function run() {
     assert.strictEqual(closed.status, 200, "stream should close cleanly");
     const missing = await request("GET", `/streams/${stream.id}`);
     assert.strictEqual(missing.status, 404, "closed stream should disappear");
+
+    const native = await request("POST", "/streams", {
+      player: "AndroidQA",
+      room: "android-smoke",
+      version: "smoke",
+      protocol: "rtmp-hls",
+      streamWidth: 640,
+      streamHeight: 360,
+      streamFps: 60,
+      streamBitrate: 1600000
+    });
+    assert.strictEqual(native.status, 201, output || native.body.toString("utf8"));
+    const nativeStream = JSON.parse(native.body.toString("utf8"));
+    assert.strictEqual(nativeStream.protocol, "rtmp-hls", "native stream should keep RTMP/HLS protocol");
+    assert(nativeStream.rtmpPublishUrl.endsWith(`/live/${nativeStream.id}`), "native publish URL should target RTMP live path");
+    assert(nativeStream.hlsUrl.endsWith(`/live/${nativeStream.id}/`), "native HLS URL should point to MediaMTX player path");
+    assert(nativeStream.hlsPlaylistUrl.endsWith(`/live/${nativeStream.id}/index.m3u8`), "native playlist URL should remain available for diagnostics");
+    assert(nativeStream.webrtcUrl.endsWith(`/live/${nativeStream.id}/`), "native WebRTC URL should point to MediaMTX player path");
+    assert.strictEqual(nativeStream.watchUrl, nativeStream.hlsUrl, "Android should probe the playable media page");
+    await request("DELETE", `/streams/${nativeStream.id}`);
 
     console.log("STREAMING_OPT_IN_SMOKE_OK clamp=true capacity=true frame=true close=true");
   } finally {

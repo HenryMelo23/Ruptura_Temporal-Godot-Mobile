@@ -1,6 +1,7 @@
 package com.ruptura.streaming
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
@@ -65,13 +66,13 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
         }
         pendingPublishUrl = publishUrl
         pendingWatchUrl = watchUrl
-        val adjustedSize = adjustedVideoSize(width, height)
-        pendingWidth = adjustedSize.width
-        pendingHeight = adjustedSize.height
-        pendingFps = fps.coerceIn(15, 60)
-        pendingBitrate = bitrate.coerceIn(350_000, 6_000_000)
+        val adjustedProfile = adjustedStreamProfile(width, height, fps, bitrate)
+        pendingWidth = adjustedProfile.size.width
+        pendingHeight = adjustedProfile.size.height
+        pendingFps = adjustedProfile.fps
+        pendingBitrate = adjustedProfile.bitrate
         status = "pedindo permissao"
-        Log.i(TAG, "Requesting MediaProjection for $pendingPublishUrl")
+        Log.i(TAG, "Requesting MediaProjection for $pendingPublishUrl profile=${pendingWidth}x${pendingHeight} ${pendingFps}fps ${pendingBitrate}bps budget=${isBudgetDevice()}")
         val hostActivity = activity ?: run {
             status = "activity indisponivel"
             return "ERRO:ACTIVITY"
@@ -125,6 +126,11 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
     @UsedByGodot
     fun getStatus(): String {
         return status
+    }
+
+    @UsedByGodot
+    fun getDeviceProfile(): String {
+        return if (isBudgetDevice()) "budget" else "standard"
     }
 
     @UsedByGodot
@@ -221,7 +227,7 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
                         startBitrate = pendingBitrate,
                         resolution = Size(pendingWidth, pendingHeight),
                         fps = pendingFps,
-                        gopDurationInS = 1.0f
+                        gopDurationInS = 0.5f
                     )
                 )
                 status = "publicando"
@@ -286,16 +292,48 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
         return target
     }
 
+    private fun adjustedStreamProfile(requestedWidth: Int, requestedHeight: Int, requestedFps: Int, requestedBitrate: Int): StreamProfile {
+        val size = adjustedVideoSize(requestedWidth, requestedHeight)
+        val budgetDevice = isBudgetDevice()
+        var fps = requestedFps.coerceIn(15, 60)
+        var bitrate = requestedBitrate.coerceIn(350_000, 10_000_000)
+        if (budgetDevice) {
+            if (size.width >= 1000 || size.height >= 600) {
+                fps = fps.coerceAtMost(30)
+                bitrate = bitrate.coerceAtMost(3_200_000)
+            } else {
+                fps = fps.coerceAtMost(60)
+                bitrate = bitrate.coerceAtMost(1_600_000)
+            }
+        }
+        return StreamProfile(size, fps, bitrate)
+    }
+
+    private fun isBudgetDevice(): Boolean {
+        val hostActivity = activity ?: return false
+        val manager = hostActivity.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
+        val memoryInfo = ActivityManager.MemoryInfo()
+        manager.getMemoryInfo(memoryInfo)
+        val totalRamGb = memoryInfo.totalMem.toDouble() / (1024.0 * 1024.0 * 1024.0)
+        return manager.isLowRamDevice || manager.memoryClass <= 256 || totalRamGb <= 5.5
+    }
+
     private fun even(value: Int): Int {
         return if (value % 2 == 0) value else value + 1
     }
+
+    private data class StreamProfile(
+        val size: Size,
+        val fps: Int,
+        val bitrate: Int
+    )
 
     private suspend fun waitForHlsMedia(watchUrl: String): Boolean = withContext(Dispatchers.IO) {
         if (watchUrl.isBlank()) {
             return@withContext false
         }
         repeat(HLS_PROBE_ATTEMPTS) {
-            if (hasHlsPlaylist(watchUrl)) {
+            if (hasPlayableMediaEndpoint(watchUrl)) {
                 return@withContext true
             }
             delay(HLS_PROBE_INTERVAL_MS)
@@ -303,7 +341,7 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
         false
     }
 
-    private fun hasHlsPlaylist(watchUrl: String): Boolean {
+    private fun hasPlayableMediaEndpoint(watchUrl: String): Boolean {
         var connection: HttpURLConnection? = null
         return try {
             connection = URL(watchUrl).openConnection() as HttpURLConnection
@@ -314,13 +352,20 @@ class RupturaStreamerPlugin(godot: Godot) : GodotPlugin(godot) {
             if (connection.responseCode !in 200..299) {
                 false
             } else {
-                val playlist = connection.inputStream.bufferedReader().use { it.readText() }
-                playlist.contains("#EXTM3U") && (
-                    playlist.contains("#EXT-X-STREAM-INF") ||
-                    playlist.contains("#EXT-X-MEDIA-SEQUENCE") ||
-                    playlist.contains("#EXTINF") ||
-                    playlist.contains("#EXT-X-PART")
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                val lowerBody = body.lowercase()
+                val hlsPlaylist = body.contains("#EXTM3U") && (
+                    body.contains("#EXT-X-STREAM-INF") ||
+                    body.contains("#EXT-X-MEDIA-SEQUENCE") ||
+                    body.contains("#EXTINF") ||
+                    body.contains("#EXT-X-PART")
                 )
+                val mediaMtxPlayer = lowerBody.contains("<html") && (
+                    lowerBody.contains("mediamtx") ||
+                    lowerBody.contains("webrtc") ||
+                    lowerBody.contains("hls")
+                )
+                hlsPlaylist || mediaMtxPlayer
             }
         } catch (_: Throwable) {
             false

@@ -5,8 +5,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node relay_manager.js",
-    "check": "node --check relay_manager.js && node --check leaderboard_site.js",
+    "check": "node --check relay_manager.js && node --check leaderboard_site.js && node --check streaming_fps_smoke.js && node --check streaming_http_mjpeg_smoke.js",
     "test:leaderboard": "node leaderboard_smoke.js",
-    "test:rooms": "node room_lifecycle_smoke.js"
+    "test:rooms": "node room_lifecycle_smoke.js",
+    "test:streaming": "node streaming_opt_in_smoke.js && node streaming_fps_smoke.js && node streaming_http_mjpeg_smoke.js"
   }
 }

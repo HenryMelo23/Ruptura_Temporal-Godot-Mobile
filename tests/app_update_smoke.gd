@@ -99,4 +99,7 @@ func _run() -> void:
 	game.ui_platform_override = original_platform
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(update_path))
 	print("APP_UPDATE_SMOKE_OK popup=true streamed_file=true sha256=true current_version_ignored=true windows=true")
+	game.queue_free()
+	await process_frame
+	game = null
 	quit(0)

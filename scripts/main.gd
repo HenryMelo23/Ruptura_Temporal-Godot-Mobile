@@ -5,8 +5,11 @@ const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 
 const WORLD_SIZE := Vector2(1600, 900)
-const GAME_VERSION := "2.0.30f"
-const GAME_VERSION_CODE := 23006
+const GAME_VERSION := "2.0.31b"
+const GAME_VERSION_CODE := 23102
+const STARTUP_THANKS_TEXTURE_PATH := "res://assets/sprites/startup_thanks_2_0_31.png"
+const STARTUP_THANKS_HOLD_TIME := 5.0
+const STARTUP_THANKS_FADE_TIME := 0.5
 const MULTIPLAYER_MENU_ENABLED := true
 const UI_PLATFORM_AUTO := "auto"
 const UI_PLATFORM_ANDROID := "android"
@@ -73,7 +76,7 @@ const APP_UPDATE_DOWNLOAD_TIMEOUT := 1800.0
 const APP_UPDATE_HASH_CHUNK_BYTES := 1024 * 1024
 const APP_UPDATE_PLUGIN_NAME := "RupturaStreamer"
 const APP_UPDATE_STORAGE_DIR := "user://updates"
-const APP_UPDATE_CACHED_EXTENSIONS := ["apk", "idsig", "exe", "tmp", "part"]
+var APP_UPDATE_CACHED_EXTENSIONS := ["apk", "idsig", "exe", "tmp", "part"]
 const INPUT_BIND_NONE := ""
 const INPUT_BIND_KEY_PREFIX := "KEY:"
 const INPUT_BIND_MOUSE_PREFIX := "MOUSE:"
@@ -90,6 +93,7 @@ const RUN_TELEMETRY_MAX_DAMAGE_EVENTS := 240
 const ONLINE_RELAY_DEFAULT_HOST := "72.61.217.238"
 const QA_STREAMING_FEATURE_ENABLED := true
 const QA_STREAM_PLUGIN_NAME := "RupturaStreamer"
+const QA_DESKTOP_STREAM_FFMPEG_ENV := "RUPTURA_FFMPEG_BIN"
 const QA_STREAM_WIDTH := 1280
 const QA_STREAM_HEIGHT := 720
 const QA_STREAM_FPS := 60
@@ -100,31 +104,31 @@ const QA_FRAME_STREAM_MODE_SIZES := {
 	"360p": Vector2i(640, 360)
 }
 const QA_NATIVE_STREAM_MODE_FPS := {
-	"720p": 60.0,
-	"360p": 30.0
+	"720p": 30.0,
+	"360p": 60.0
 }
 const QA_NATIVE_STREAM_MODE_BITRATE := {
-	"720p": 4500000,
-	"360p": 1200000
+	"720p": 3200000,
+	"360p": 1600000
 }
 const QA_FRAME_STREAM_MODE_FPS := {
-	"720p": 10.0,
-	"360p": 12.0
+	"720p": 60.0,
+	"360p": 60.0
 }
 const QA_FRAME_STREAM_MODE_QUALITY := {
-	"720p": 0.58,
-	"360p": 0.52
+	"720p": 0.66,
+	"360p": 0.58
 }
 const QA_FRAME_STREAM_MODE_BITRATE := {
-	"720p": 900000,
-	"360p": 420000
+	"720p": 8000000,
+	"360p": 3600000
 }
 const QA_FRAME_STREAM_MODE_MAX_IN_FLIGHT := {
-	"720p": 1,
-	"360p": 1
+	"720p": 8,
+	"360p": 8
 }
-const QA_FRAME_STREAM_REQUEST_POOL := 2
-const QA_FRAME_STREAM_BUFFER_MS := 180
+const QA_FRAME_STREAM_REQUEST_POOL := 10
+const QA_FRAME_STREAM_BUFFER_MS := 60
 const BULLET_SPEED := 780.0
 const MAX_BULLETS := 56
 const ENEMY_BASE_HP := 30.0
@@ -379,7 +383,7 @@ const BOSS_STAGE_ENRAGED_DAMAGE_RATE := 0.038
 const BOSS_STAGE_ENRAGED_DAMAGE_FLAT := 16.0
 const BOSS_STAGE_ENRAGED_SLOW_TIME := 1.65
 const BOSS1_REWIND_THRESHOLD := 0.30
-const BOSS1_REWIND_SECONDS := 10.0
+const BOSS1_REWIND_SECONDS := 8.0
 const BOSS1_REWIND_COOLDOWN := 45.0
 const BOSS1_REWIND_BOSS_HEAL := 0.40
 const BOSS1_REWIND_PLAYER_HEAL := 0.25
@@ -388,8 +392,8 @@ const BOSS1_TIME_WAVE_SPEED := 360.0
 const BOSS1_TIME_WAVE_WIDTH := 22.0
 const BOSS1_TIME_WAVE_WARNING := 0.65
 const BOSS1_CLOCK_TRAVEL_TIME := 0.70
-const BOSS1_CLOCK_TURN_TIME := 3.20
-const BOSS1_REWIND_PLAYBACK_TIME := 3.20
+const BOSS1_CLOCK_TURN_TIME := 8.00
+const BOSS1_REWIND_PLAYBACK_TIME := 8.00
 const BOSS1_RAIN_THRESHOLD := 0.30
 const BOSS1_ABSORB_COOLDOWN := 40.0
 const BOSS1_ABSORB_DURATION := 6.0
@@ -437,7 +441,7 @@ const PETRO_BASE_DAMAGE := 25.0
 const PETRO_ATTACK_INTERVAL := 1.0
 const PETRO_ATTACK_RANGE := 58.0
 const PETRO_MOVE_SPEED := 235.0
-const RARE_CARD_NAMES := ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso"]
+const RARE_CARD_NAMES := ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso", "Egide Hemofaga"]
 const CARD_RARITY_COMMON_COLOR := Color(0.96, 0.97, 1.0)
 const CARD_RARITY_RARE_COLOR := Color(1.0, 0.76, 0.12)
 const BOSS_ATTACK_BASE_COOLDOWN := 3.8
@@ -510,7 +514,9 @@ const BOSS2_FLASH_FREEZE_RADIUS := 138.0
 const BOSS2_FLASH_FREEZE_STUN := 2.60
 const PHASE2_FREEZE_VISUAL_MIN_TIME := 2.30
 const BOSS1_WALK_AUDIO_VOLUME := 0.13
-const PHASE_TRANSITION_TIME := 1.4
+const PHASE_TRANSITION_HOLD_TIME := 1.7
+const PHASE_TRANSITION_WIPE_TIME := 2.0
+const PHASE_TRANSITION_TIME := 3.7
 const BOSS_FRAGMENT_PICKUP_RADIUS := 42.0
 const MUSIC_PAUSE_FADE_TIME := 3.0
 const LARAPIO_SPAWN_TIME := 180.0
@@ -903,7 +909,7 @@ const CONTRACT_TRAP_LIFE := 5.2
 const CONTRACT_MAX_INFRACTIONS := 3
 const CONTRACT_ORDER_DURATION := 30.0
 const CONTRACT_ORDER_SLOW_IN_TIME := 3.0
-const CONTRACT_ORDER_REVEAL_TIME := 5.0
+const CONTRACT_ORDER_REVEAL_TIME := 1.5
 const CONTRACT_ORDER_SLOW_OUT_TIME := 3.0
 const CONTRACT_ORDER_READ_END_TIME := CONTRACT_ORDER_SLOW_IN_TIME + CONTRACT_ORDER_REVEAL_TIME
 const CONTRACT_ORDER_EXECUTION_START_TIME := CONTRACT_ORDER_READ_END_TIME + CONTRACT_ORDER_SLOW_OUT_TIME
@@ -984,17 +990,47 @@ const BOMBASTICA_MANUAL_DAMAGE_MULT := 0.86
 const NECRONADA_EPITAPH_DURATION := 8.0
 const NECRONADA_EPITAPH_MAX_DEPTH := 5
 const NECRONADA_VESTIGE_DURATION := 12.0
+const NECRONADA_ROSE_MAX := 7
+const NECRONADA_ROSE_SUMMON_RADIUS := 350.0
+const NECRONADA_PASSIVE_ATTACKS := 4
+const NECRONADA_PASSIVE_HEAL_RATE := 0.025
 const NECRONADA_OSSUARY_SLOTS := 4
-const NECRONADA_MAX_ACTIVE_REMNANTS := 4
-const NECRONADA_REMNANT_BASE_DURATION := 13.0
-const NECRONADA_REMNANT_SUMMON_TIME := 0.62
+const NECRONADA_MAX_ACTIVE_REMNANTS := 7
+const NECRONADA_REMNANT_HEALTH_MULT := 0.80
+const NECRONADA_REMNANT_BASE_DURATION := 18.0
+const NECRONADA_REMNANT_SUMMON_TIME := 1.20
 const NECRONADA_REMNANT_TARGET_INTERVAL := 0.22
 const NECRONADA_REMNANT_ATTACK_INTERVAL := 0.62
+const NECRONADA_REMNANT_MELEE_RANGE_MIN := 128.0
+const NECRONADA_REMNANT_SUPPORT_RANGE_MIN := 230.0
+const NECRONADA_REMNANT_RANGED_RANGE_MIN := 340.0
 const NECRONADA_REQUIEM_DURATION := 15.0
 const NECRONADA_REQUIEM_TICK := 0.38
 const NECRONADA_REQUIEM_MAX_ECHOES := 10
 const NECRONADA_SUPREME_HORDE_COUNT := 4
 const NECRONADA_TOTAL_TAUNT_DURATION := 15.0
+const NECRONADA_EMPOWER_DURATION := 3.0
+const NECRONADA_EMPOWER_COOLDOWN := 3.0
+const NECRONADA_EMPOWER_RANGE := 300.0
+const NECRONADA_EMPOWER_DAMAGE_MULT := 0.22
+const NECRONADA_EMPOWER_ALLY_BUFF_DURATION := 3.0
+const NECRONADA_EMPOWER_ALLY_DAMAGE_MULT := 1.35
+const NECRONADA_EMPOWER_ALLY_SPEED_MULT := 1.38
+const NECRONADA_ULTIMATE_REQUIRED_REVIVES := 30
+const NECRONADA_ULTIMATE_RADIUS := 420.0
+const NECRONADA_ULTIMATE_FULL_RADIUS := 180.0
+const NECRONADA_ULTIMATE_DAMAGE_MAX := 1.20
+const NECRONADA_ULTIMATE_DAMAGE_MIN := 0.60
+const NECRONADA_ULTIMATE_SLOW_MULT := 0.55
+const NECRONADA_ULTIMATE_CRIT_CHANCE := 0.45
+const NECRONADA_ULTIMATE_MARK_DURATION := 4.0
+const NECRONADA_ULTIMATE_COOLDOWN := 10.0
+const NECRONADA_EMPOWER_ROSE_WINDOW := 6.0
+const NECRONADA_EMPOWER_ROSE_REQUIRED_HITS := 4
+const NECRONADA_TP_DUST_RADIUS := 210.0
+const NECRONADA_TP_DUST_HALF_ANGLE := 0.62
+const NECRONADA_TP_DUST_DAMAGE_MULT := 0.30
+const NECRONADA_TP_DUST_PUSH := 115.0
 
 const MANIFESTATIONS := [
 	{
@@ -1204,6 +1240,11 @@ const CARDS := [
 	{"id": "folego_de_perseguicao", "name": "Folego de Perseguicao", "nick": "Caca Persistente", "desc": "Avancar contra um alvo distante acumula velocidade e fortalece o primeiro impacto ao alcanca-lo.", "icon": "Deck/carta-folegodeperseguicao1.png", "frame_2": "Deck/carta-folegodeperseguicao2.png", "color": Color(1.0, 0.56, 0.22)},
 	{"id": "margem_de_erro", "name": "Margem de Erro", "nick": "Erro Parcelado", "desc": "Depois de sofrer dano, o proximo impacto rapido tem parte adiada e pode ser reduzido com abates.", "icon": "Deck/carta-margemdeerro1.png", "frame_2": "Deck/carta-margemdeerro2.png", "color": Color(1.0, 0.36, 0.46)},
 	{"id": "ressonancia_de_alternancia", "name": "Ressonancia de Alternancia", "nick": "Kit Completo", "desc": "Usar ataque, Q, E e teleporte em alternancia prepara um bonus para a proxima acao.", "icon": "Deck/carta-ressonanciadealternancia1.png", "frame_2": "Deck/carta-ressonanciadealternancia2.png", "color": Color(0.58, 1.0, 0.96)},
+	{"id": "intervalo_fraturado", "name": "Intervalo Fraturado", "nick": "Recarga Fraturada", "desc": "Reduz o tempo de recarga da Hab1 e da Ultimate. A reducao da Ultimate e menor.", "icon": "Deck/carta-Intervalo_Fraturado1.png", "frame_2": "Deck/carta-Intervalo_Fraturado2.png", "color": Color(0.58, 0.84, 1.0)},
+	{"id": "nucleo_revigorante", "name": "Nucleo Revigorante", "nick": "Orbe Revigorado", "desc": "As orbes de cura encontradas no mapa restauram mais vida.", "icon": "Deck/carta-N_cleo_Revigorante1.png", "frame_2": "Deck/carta-N_cleo_Revigorante2.png", "color": Color(0.44, 1.0, 0.62)},
+	{"id": "limiar_de_ruina", "name": "Limiar de Ruina", "nick": "Primeira Fenda", "desc": "Causa dano adicional a inimigos que estejam acima de 90% da vida maxima.", "icon": "Deck/carta-Limiar_de_Ru_na1.png", "frame_2": "Deck/carta-Limiar_de_Ru_na2.png", "color": Color(1.0, 0.45, 0.22)},
+	{"id": "estase_reparadora", "name": "Estase Reparadora", "nick": "Quietude Tecidual", "desc": "Apos permanecer imovel por 5 segundos, recupera continuamente uma parte da vida perdida.", "icon": "Deck/carta-Estase_Reparadora1.png", "frame_2": "Deck/carta-Estase_Reparadora2.png", "color": Color(0.52, 1.0, 0.86)},
+	{"id": "egide_hemofaga", "name": "Egide Hemofaga", "nick": "Escudo Hematico", "desc": "Parte do roubo de vida que ultrapassaria sua vida maxima e convertida em escudo temporario.", "icon": "Deck/carta-gide_Hem_faga1.png", "frame_2": "Deck/carta-gide_Hem_faga2.png", "color": Color(1.0, 0.72, 0.22)},
 	{"id": "fratura_cronal", "name": "Fratura Cronal", "nick": "Fragilidade Temporal", "desc": "Proximo acerto a cada 7s aplica Fragilidade por 4s.", "icon": "Deck/carta-Fratura_Cronal1.png", "frame_2": "Deck/carta-Fratura_Cronal2.png", "color": Color(0.74, 0.62, 1.0)},
 	{"id": "pulso_desestabilizador", "name": "Pulso Desestabilizador", "nick": "Explosao Instavel", "desc": "Proximo acerto a cada 8s gera uma explosao no alvo.", "icon": "Deck/carta-Pulso_Desestabilizador1.png", "frame_2": "Deck/carta-Pulso_Desestabilizador2.png", "color": Color(1.0, 0.42, 0.32)},
 	{"id": "pressao_cerco", "name": "Pressao de Cerco", "nick": "Alvo Cercado", "desc": "+dano em alvos cercados por 3 inimigos proximos.", "icon": "Deck/carta-Press_o_de_Cerco1.png", "frame_2": "Deck/carta-Press_o_de_Cerco2.png", "color": Color(1.0, 0.78, 0.28)},
@@ -1269,6 +1310,13 @@ const CARD_RESERVA_ID := "reserva_pulso"
 const CARD_CASULO_ID := "casulo_reativo"
 const CARD_PASSAGEM_ID := "passagem_intangivel"
 const CARD_ANCORA_ID := "ancora_vital"
+const CARD_INTERVALO_ID := "intervalo_fraturado"
+const CARD_NUCLEO_ID := "nucleo_revigorante"
+const CARD_LIMIAR_RUINA_ID := "limiar_de_ruina"
+const CARD_ESTASE_ID := "estase_reparadora"
+const CARD_EGIDE_ID := "egide_hemofaga"
+const CARD_SOURCE_ESTASE := "card_estase_reparadora"
+const CARD_SOURCE_LIMIAR_RUINA := "card_limiar_de_ruina"
 const CASULO_HIT_WINDOW := 2.2
 const CASULO_INTERNAL_COOLDOWN := 12.0
 const ANCORA_VITAL_LIFE := 4.0
@@ -1298,6 +1346,9 @@ var mode = "menu"
 var previous_mode = "game"
 var font: Font
 var textures = {}
+var startup_thanks_timer := 0.0
+var startup_thanks_fading := false
+var startup_thanks_done := false
 var pixel_card_burn_shader: Shader = null
 var pixel_card_burn_palette: GradientTexture1D = null
 var pixel_card_burn_noise_cache: Dictionary = {}
@@ -1610,9 +1661,14 @@ var qa_streaming_quality_mode: String = "360p"
 var qa_streaming_status: String = ""
 var qa_streaming_in_flight: bool = false
 var qa_streaming_native_active: bool = false
+var qa_streaming_desktop_ffmpeg_active: bool = false
+var qa_streaming_desktop_ffmpeg_pid: int = -1
+var qa_streaming_desktop_ffmpeg_path: String = ""
+var qa_streaming_desktop_gfxcapture_probe: int = -1
 var qa_streaming_session_id: String = ""
 var qa_streaming_publish_url: String = ""
 var qa_streaming_native_publish_url: String = ""
+var qa_streaming_desktop_publish_url: String = ""
 var qa_streaming_watch_url: String = ""
 var qa_streaming_viewer_url: String = ""
 var qa_streaming_poll_timer: float = 0.0
@@ -1707,6 +1763,12 @@ var player_attack_interval = PLAYER_BASE_ATTACK_INTERVAL
 var player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 var player_defense = 0.0
 var player_crit_chance = 0.0
+var ancorada_still_timer := 0.0
+var ancorada_crit_bonus := 0.0
+var ancorada_weight_timer := 0.0
+var ancorada_weight_knockback := 5.0
+var ancorada_prev_pos := Vector2.ZERO
+var ancorada_spinning := []
 var player_lifesteal = 0.0
 var poison_damage = 0.0
 var execute_threshold = 0.0
@@ -1858,6 +1920,15 @@ var casulo_reativo_timer := 0.0
 var casulo_reativo_cooldown := 0.0
 var passagem_intangivel_timer := 0.0
 var ancora_vital_state: Dictionary = {}
+var estase_reparadora_timer := 0.0
+var estase_reparadora_tick := 0.0
+var estase_reparadora_pause := 0.0
+var estase_reparadora_anchor := PLAYER_START
+var estase_reparadora_active := false
+var estase_reparadora_pulse := 0.0
+var egide_hemofaga_shield := 0.0
+var egide_hemofaga_full_timer := 0.0
+var egide_hemofaga_pulse := 0.0
 var mandamento_skill_uses = 0
 var mandamento_empowered_until = 0.0
 var mandamento_empowered_scale = 1.0
@@ -1957,6 +2028,13 @@ var necronada_pente_history: Array = []
 var necronada_selected_slot := 0
 var necronada_next_id := 1
 var necronada_vfx: Array = []
+var necronada_attack_counter := 0
+var necronada_empowered_ready := false
+var necronada_empower_until := 0.0
+var necronada_empower_cooldown_until := 0.0
+var necronada_horde_progress := 0
+var necronada_boss_empower_rose_window := 0.0
+var necronada_boss_empower_rose_hits := 0
 var devorador_mark_timer = 0.0
 var devorador_mark_kind = ""
 var devorador_mark_uid = 0
@@ -2236,6 +2314,7 @@ var boss2_ultimate_wind_dir = Vector2.RIGHT
 var boss2_ultimate_hail_timer = BOSS2_ULTIMATE_HAIL_INTERVAL
 var boss2_ultimate_fan_timer = BOSS2_ULTIMATE_FAN_INTERVAL
 var boss2_ultimate_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
+var boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
 var boss2_ultimate_blizzard_exposure = 0.0
 var boss2_ultimate_hit_gate = 0.0
 var boss2_ultimate_used = false
@@ -2475,6 +2554,7 @@ var boss1_walk_audio_player = null
 var boss1_stop_audio_player = null
 var acorrentada_walk_audio_player = null
 var prismatica_ultimate_audio_player = null
+var nevasca_audio_player = null
 var acorrentada_walk_current_volume := 0.0
 var acorrentada_walk_previous_pos = PLAYER_START
 var boss1_walk_previous_pos = Vector2.ZERO
@@ -2556,6 +2636,10 @@ func _ready() -> void:
 	prismatica_ultimate_audio_player = AudioStreamPlayer.new()
 	prismatica_ultimate_audio_player.bus = "Master"
 	add_child(prismatica_ultimate_audio_player)
+
+	nevasca_audio_player = AudioStreamPlayer.new()
+	nevasca_audio_player.bus = "Master"
+	add_child(nevasca_audio_player)
 
 	for i in range(12):
 		var p = AudioStreamPlayer.new()
@@ -2641,6 +2725,7 @@ func _ready() -> void:
 	_load_textures()
 	_reset_card_counts()
 	mode = "nick_setup" if player_nickname == "" else "menu"
+	_startup_thanks_reset()
 	_update_nickname_input_visibility()
 	_update_webhook_input_visibility()
 	set_process(true)
@@ -2664,7 +2749,7 @@ func _exit_tree() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
 		_save_interrupted_run(true)
-		if what == NOTIFICATION_WM_CLOSE_REQUEST or ((qa_streaming_native_active or qa_streaming_frame_active) and not qa_streaming_permission_pending):
+		if what == NOTIFICATION_WM_CLOSE_REQUEST or ((qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active) and not qa_streaming_permission_pending):
 			_stop_qa_streaming("app")
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_cancel_all_touch_state()
@@ -2719,6 +2804,9 @@ func _cleanup_runtime_resources() -> void:
 	if prismatica_ultimate_audio_player != null:
 		prismatica_ultimate_audio_player.stop()
 		prismatica_ultimate_audio_player.stream = null
+	if nevasca_audio_player != null:
+		nevasca_audio_player.stop()
+		nevasca_audio_player.stream = null
 	for player in sfx_players:
 		if player != null:
 			player.stop()
@@ -3897,7 +3985,7 @@ func _build_run_report_payload(result: String) -> Dictionary:
 			"shop_auto": shop_auto_enabled,
 			"streaming_enabled": QA_STREAMING_FEATURE_ENABLED,
 			"streaming_unlocked": qa_streaming_unlocked,
-			"streaming_active": qa_streaming_native_active or qa_streaming_frame_active,
+			"streaming_active": qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active,
 			"streaming_quality": _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode)
 		},
 		"leaderboard_score": _run_leaderboard_score(result),
@@ -4538,9 +4626,12 @@ func _reset_qa_streaming_runtime(clear_access := true) -> void:
 		qa_streaming_enabled = false
 	qa_streaming_in_flight = false
 	qa_streaming_native_active = false
+	qa_streaming_desktop_ffmpeg_active = false
+	qa_streaming_desktop_ffmpeg_pid = -1
 	qa_streaming_session_id = ""
 	qa_streaming_publish_url = ""
 	qa_streaming_native_publish_url = ""
+	qa_streaming_desktop_publish_url = ""
 	qa_streaming_watch_url = ""
 	qa_streaming_viewer_url = ""
 	qa_streaming_poll_timer = 0.0
@@ -4618,6 +4709,7 @@ func _on_qa_stream_session_request_completed(result: int, response_code: int, _h
 	qa_streaming_session_id = String(payload.get("id", ""))
 	qa_streaming_publish_url = String(payload.get("publishUrl", ""))
 	qa_streaming_native_publish_url = String(payload.get("rtmpPublishUrl", qa_streaming_publish_url))
+	qa_streaming_desktop_publish_url = String(payload.get("mjpegPublishUrl", ""))
 	qa_streaming_frame_url = String(payload.get("frameUrl", qa_streaming_publish_url))
 	qa_streaming_watch_url = String(payload.get("hlsUrl", payload.get("mjpegUrl", payload.get("watchUrl", ""))))
 	qa_streaming_viewer_url = String(payload.get("viewerUrl", qa_streaming_watch_url))
@@ -4626,6 +4718,8 @@ func _on_qa_stream_session_request_completed(result: int, response_code: int, _h
 		return
 	if _qa_stream_native_available() and qa_streaming_native_publish_url.begins_with("rtmp"):
 		_start_native_qa_stream()
+	elif _qa_stream_desktop_encoder_available() and qa_streaming_desktop_publish_url.begins_with("http"):
+		_start_desktop_qa_stream()
 	else:
 		if qa_streaming_frame_url == "":
 			qa_streaming_status = "Streaming: sessao invalida"
@@ -4665,9 +4759,11 @@ func _on_qa_stream_discord_request_completed(_result: int, _response_code: int, 
 
 func _qa_stream_menu_subtitle() -> String:
 	var size := _qa_stream_target_size()
-	if qa_streaming_native_active or qa_streaming_frame_active:
+	if qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active:
 		if qa_streaming_native_active:
 			return "%s nativo // RTMP H.264 // %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
+		if qa_streaming_desktop_ffmpeg_active:
+			return "%s desktop // FFmpeg MJPEG // %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
 		return "%s fallback // %d fps enviados" % [qa_streaming_quality_mode, qa_streaming_sent_per_second]
 	if qa_streaming_in_flight or qa_streaming_permission_pending:
 		return "abrindo permissao // %s %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
@@ -4681,7 +4777,7 @@ func _qa_stream_menu_subtitle() -> String:
 func _toggle_qa_streaming_from_menu() -> void:
 	if not QA_STREAMING_FEATURE_ENABLED or not qa_streaming_unlocked:
 		return
-	if qa_streaming_native_active or qa_streaming_frame_active or qa_streaming_in_flight:
+	if qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active or qa_streaming_in_flight:
 		_stop_qa_streaming("manual")
 		_add_text("STREAMING ENCERRADO", player_pos + Vector2(0, -100), Color(1.0, 0.74, 0.22), 1.2, 22)
 		_save_config()
@@ -4711,12 +4807,150 @@ func _start_native_qa_stream() -> void:
 	qa_streaming_status = "Streaming: permissao Android" if str(result).begins_with("OK") else ("Streaming: " + str(result))
 
 
+func _qa_stream_desktop_encoder_available() -> bool:
+	if not QA_STREAMING_FEATURE_ENABLED:
+		return false
+	if OS.get_name() != "Windows" or DisplayServer.get_name() == "headless":
+		return false
+	if qa_streaming_desktop_ffmpeg_path != "":
+		return true
+	var candidates: Array[String] = []
+	var env_path := OS.get_environment(QA_DESKTOP_STREAM_FFMPEG_ENV).strip_edges()
+	if env_path != "":
+		candidates.append(env_path)
+	candidates.append("ffmpeg")
+	for candidate in candidates:
+		var output: Array = []
+		var code := OS.execute(candidate, PackedStringArray(["-version"]), output, true, false)
+		if code == 0:
+			qa_streaming_desktop_ffmpeg_path = candidate
+			return true
+	return false
+
+
+func _qa_stream_desktop_window_title() -> String:
+	var app_name := String(ProjectSettings.get_setting("application/config/name", "Ruptura Temporal Mobile"))
+	if OS.has_feature("debug"):
+		return app_name + " (DEBUG)"
+	return app_name
+
+
+func _qa_stream_desktop_gfxcapture_available() -> bool:
+	if qa_streaming_desktop_gfxcapture_probe >= 0:
+		return qa_streaming_desktop_gfxcapture_probe == 1
+	if qa_streaming_desktop_ffmpeg_path == "":
+		qa_streaming_desktop_gfxcapture_probe = 0
+		return false
+	var output: Array = []
+	var code := OS.execute(qa_streaming_desktop_ffmpeg_path, PackedStringArray(["-hide_banner", "-h", "filter=gfxcapture"]), output, true, false)
+	var probe_text := ""
+	for line in output:
+		probe_text += str(line) + "\n"
+	qa_streaming_desktop_gfxcapture_probe = 1 if code == 0 and probe_text.find("gfxcapture") >= 0 else 0
+	return qa_streaming_desktop_gfxcapture_probe == 1
+
+
+func _qa_stream_desktop_capture_rect() -> Rect2i:
+	var window_pos := DisplayServer.window_get_position()
+	var window_size := DisplayServer.window_get_size()
+	if window_size.x <= 32 or window_size.y <= 32:
+		var screen := DisplayServer.window_get_current_screen()
+		window_pos = DisplayServer.screen_get_position(screen)
+		window_size = DisplayServer.screen_get_size(screen)
+	window_size.x = maxi(32, window_size.x - (window_size.x % 2))
+	window_size.y = maxi(32, window_size.y - (window_size.y % 2))
+	return Rect2i(window_pos, window_size)
+
+
+func _qa_stream_desktop_gdigrab_args() -> PackedStringArray:
+	var target_size := _qa_stream_target_size()
+	var fps: int = maxi(15, int(round(_qa_stream_target_fps())))
+	var jpeg_quality := _qa_stream_desktop_mjpeg_quality()
+	var capture_rect := _qa_stream_desktop_capture_rect()
+	return PackedStringArray([
+		"-hide_banner",
+		"-loglevel", "error",
+		"-nostdin",
+		"-f", "gdigrab",
+		"-framerate", str(fps),
+		"-offset_x", str(capture_rect.position.x),
+		"-offset_y", str(capture_rect.position.y),
+		"-video_size", "%dx%d" % [capture_rect.size.x, capture_rect.size.y],
+		"-draw_mouse", "0",
+		"-i", "desktop",
+		"-vf", "scale=%d:%d:flags=fast_bilinear" % [target_size.x, target_size.y],
+		"-c:v", "mjpeg",
+		"-q:v", str(jpeg_quality),
+		"-f", "mpjpeg",
+		"-boundary_tag", "ruptura-frame",
+		qa_streaming_desktop_publish_url
+	])
+
+
+func _qa_stream_desktop_gfxcapture_args() -> PackedStringArray:
+	var target_size := _qa_stream_target_size()
+	var fps: int = maxi(15, int(round(_qa_stream_target_fps())))
+	var jpeg_quality := _qa_stream_desktop_mjpeg_quality()
+	var hwnd := int(DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE))
+	var source := "gfxcapture=capture_cursor=0:capture_border=0:display_border=0:width=%d:height=%d:resize_mode=scale_aspect:max_framerate=%d:output_fmt=bgra" % [target_size.x, target_size.y, fps]
+	if hwnd > 0:
+		source = "gfxcapture=hwnd=%d:capture_cursor=0:capture_border=0:display_border=0:width=%d:height=%d:resize_mode=scale_aspect:max_framerate=%d:output_fmt=bgra" % [hwnd, target_size.x, target_size.y, fps]
+	return PackedStringArray([
+		"-hide_banner",
+		"-loglevel", "error",
+		"-nostdin",
+		"-f", "lavfi",
+		"-i", source,
+		"-vf", "hwdownload,format=bgra,scale=%d:%d:flags=fast_bilinear" % [target_size.x, target_size.y],
+		"-c:v", "mjpeg",
+		"-q:v", str(jpeg_quality),
+		"-f", "mpjpeg",
+		"-boundary_tag", "ruptura-frame",
+		qa_streaming_desktop_publish_url
+	])
+
+
+func _qa_stream_desktop_ffmpeg_args() -> PackedStringArray:
+	if _qa_stream_desktop_gfxcapture_available():
+		return _qa_stream_desktop_gfxcapture_args()
+	return _qa_stream_desktop_gdigrab_args()
+
+
+func _start_desktop_qa_stream() -> void:
+	if not QA_STREAMING_FEATURE_ENABLED:
+		_reset_qa_streaming_runtime()
+		return
+	if not _qa_stream_desktop_encoder_available():
+		qa_streaming_status = "Streaming: ffmpeg indisponivel"
+		return
+	var pid := OS.create_process(qa_streaming_desktop_ffmpeg_path, _qa_stream_desktop_ffmpeg_args(), false)
+	if pid <= 0:
+		qa_streaming_status = "Streaming: falha ao abrir ffmpeg"
+		return
+	qa_streaming_desktop_ffmpeg_pid = pid
+	qa_streaming_desktop_ffmpeg_active = true
+	qa_streaming_native_active = false
+	qa_streaming_permission_pending = false
+	qa_streaming_frame_active = false
+	qa_streaming_frame_in_flight = false
+	qa_streaming_frame_in_flight_count = 0
+	qa_streaming_publish_wait = 0.0
+	qa_streaming_poll_timer = 0.0
+	qa_streaming_link_sent = true
+	qa_streaming_status = _qa_stream_live_status()
+	_send_qa_stream_link_to_discord()
+
+
 func _stop_qa_streaming(reason := "stop") -> void:
 	var session_to_close := qa_streaming_session_id
 	if qa_streaming_native_active and Engine.has_singleton(QA_STREAM_PLUGIN_NAME):
 		var streamer = Engine.get_singleton(QA_STREAM_PLUGIN_NAME)
 		streamer.call("stopStream")
+	if qa_streaming_desktop_ffmpeg_active and qa_streaming_desktop_ffmpeg_pid > 0:
+		OS.kill(qa_streaming_desktop_ffmpeg_pid)
 	qa_streaming_native_active = false
+	qa_streaming_desktop_ffmpeg_active = false
+	qa_streaming_desktop_ffmpeg_pid = -1
 	qa_streaming_permission_pending = false
 	qa_streaming_frame_active = false
 	qa_streaming_frame_in_flight = false
@@ -4757,6 +4991,18 @@ func _update_qa_streaming(delta: float) -> void:
 		if qa_streaming_publish_wait > 35.0 and not qa_streaming_link_sent:
 			_stop_qa_streaming("timeout-video")
 		return
+	if qa_streaming_desktop_ffmpeg_active:
+		qa_streaming_publish_wait += delta
+		qa_streaming_poll_timer += delta
+		if qa_streaming_poll_timer >= 1.0:
+			qa_streaming_poll_timer = 0.0
+			if qa_streaming_desktop_ffmpeg_pid > 0 and not OS.is_process_running(qa_streaming_desktop_ffmpeg_pid):
+				qa_streaming_desktop_ffmpeg_active = false
+				qa_streaming_desktop_ffmpeg_pid = -1
+				qa_streaming_status = "Streaming: ffmpeg encerrou"
+				return
+			qa_streaming_status = _qa_stream_live_status()
+		return
 	if not qa_streaming_frame_active:
 		return
 	if not qa_streaming_link_sent:
@@ -4783,9 +5029,12 @@ func _update_qa_streaming(delta: float) -> void:
 func _qa_stream_live_status() -> String:
 	var target_size := _qa_stream_target_size()
 	var mode_label := qa_streaming_quality_mode
-	if not _qa_stream_native_available():
+	if qa_streaming_desktop_ffmpeg_active:
+		mode_label += " desktop FFmpeg"
+	elif not _qa_stream_native_available():
 		mode_label += " fallback"
-	return "Streaming: %s %d fps %dx%d" % [mode_label, qa_streaming_sent_per_second, target_size.x, target_size.y]
+	var fps_label := int(round(_qa_stream_target_fps())) if qa_streaming_desktop_ffmpeg_active else qa_streaming_sent_per_second
+	return "Streaming: %s %d fps %dx%d" % [mode_label, fps_label, target_size.x, target_size.y]
 
 
 func _qa_stream_target_fps() -> float:
@@ -4836,6 +5085,15 @@ func _qa_stream_target_size() -> Vector2i:
 	return Vector2i(target_width, target_height)
 
 
+func _qa_stream_desktop_mjpeg_quality() -> int:
+	match _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode):
+		"720p":
+			return 31
+		"360p":
+			return 12
+	return 12
+
+
 func _qa_stream_jpeg_quality() -> float:
 	return float(QA_FRAME_STREAM_MODE_QUALITY.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), 0.68))
 
@@ -4845,7 +5103,7 @@ func _qa_stream_max_in_flight() -> int:
 
 
 func _qa_stream_bitrate() -> int:
-	if _qa_stream_native_available():
+	if _qa_stream_native_available() or _qa_stream_desktop_encoder_available():
 		return int(QA_NATIVE_STREAM_MODE_BITRATE.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), QA_STREAM_BITRATE))
 	return int(QA_FRAME_STREAM_MODE_BITRATE.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), 1200000))
 
@@ -4972,8 +5230,11 @@ func _qa_streaming_status_failed(status: String) -> bool:
 
 
 func _load_config() -> void:
-	# Retornante is a session-only secret and must never be inherited from a save.
+	# Secret QA/dev unlocks are session-only and must never be inherited from a save.
 	retornante_unlocked = false
+	qa_streaming_unlocked = false
+	qa_streaming_enabled = false
+	qa_streaming_status = ""
 	if not FileAccess.file_exists("user://hud_config.save"):
 		return
 	var file = FileAccess.open("user://hud_config.save", FileAccess.READ)
@@ -5018,7 +5279,7 @@ func _load_config() -> void:
 				elif k == "haptics_enabled": haptics_enabled = v != "false"
 				elif k == "show_fps_counter": show_fps_counter = v == "true"
 				elif k == "qa_streaming_enabled": qa_streaming_enabled = false
-				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = QA_STREAMING_FEATURE_ENABLED and v == "true"
+				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = false
 				elif k == "qa_streaming_quality": qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(v)
 				elif k == "qa_data_unlocked": qa_data_unlocked = v == "true"
 				elif k == "force_phase6_start":
@@ -5120,7 +5381,7 @@ func _save_config() -> void:
 		file.store_string("haptics_enabled=" + ("true" if haptics_enabled else "false") + "\n")
 		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
 		file.store_string("qa_streaming_enabled=false\n")
-		file.store_string("qa_streaming_unlocked=" + ("true" if (QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked) else "false") + "\n")
+		file.store_string("qa_streaming_unlocked=false\n")
 		file.store_string("qa_streaming_quality=" + _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode) + "\n")
 		file.store_string("qa_data_unlocked=" + ("true" if qa_data_unlocked else "false") + "\n")
 		file.store_string("force_phase6_start=" + ("true" if force_phase6_start else "false") + "\n")
@@ -5185,9 +5446,9 @@ func _interrupted_run_field_names() -> Array:
 		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action",
 		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done",
 		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes",
-		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
+		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "estase_reparadora_timer", "estase_reparadora_tick", "estase_reparadora_pause", "estase_reparadora_anchor", "estase_reparadora_active", "estase_reparadora_pulse", "egide_hemofaga_shield", "egide_hemofaga_full_timer", "egide_hemofaga_pulse", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
 		"cartographic_coords", "cartographic_route_timer", "cartographic_boss_displacement", "mnesic_trick_timer", "mnesic_trick_origin", "mnesic_boss_vulnerability", "resonant_perfect_streak", "resonant_noise", "resonant_next_perfect", "resonant_speed_timer", "resonant_sinfonia_buff_timer", "resonant_note_index", "boss_resonant_notes", "boss_contract_clause", "boss_contract_infractions", "boss_contract_vulnerability", "contractual_notifications", "contractual_penalty_timer", "contractual_order", "contractual_order_rewards", "contractual_order_penalties",
-		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects",
+		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects", "necronada_vestiges", "necronada_remnants", "necronada_requiem", "necronada_pente_history", "necronada_attack_counter", "necronada_empowered_ready", "necronada_empower_until", "necronada_empower_cooldown_until", "necronada_horde_progress",
 		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
 	]
 
@@ -5389,7 +5650,7 @@ func _keyboard_action_subtitle(action: String) -> String:
 		"skill": return "Mira no cursor quando a skill usa area"
 		"secondary": return "Ultimate no cursor; pode usar teclado ou mouse"
 		"dash": return "Teleporte para o cursor apenas no botao vinculado"
-		"lacerante_empower": return "Reforco da Lacerante ou troca Sol/Lua da Eclipsada"
+		"lacerante_empower": return "Reforco da Lacerante, troca Sol/Lua da Eclipsada ou Poeira da Necronada"
 		"pause": return "Pausar e sair de telas"
 		"shop": return "Chamar loja manual no desktop"
 		"boss": return "Chamar boss quando estiver pronto"
@@ -5530,6 +5791,7 @@ func _load_textures() -> void:
 	_register_texture("map_phase_4", base + "Fase4.png", true)
 	_register_texture("map_phase_5", base + "Fase5-1.png", true)
 	_register_texture("map_phase_6", base + "Fase6.png", true)
+	textures["startup_thanks"] = _safe_load(STARTUP_THANKS_TEXTURE_PATH)
 	textures["menu"] = _safe_load(base + "Menu_intro.png.png")
 	textures["choice_bg"] = _safe_load(base + "Escolha.png")
 	textures["cards_back"] = _safe_load(base + "Cartas_back.png")
@@ -5683,6 +5945,57 @@ func _safe_load(path: String) -> Texture2D:
 	return null
 
 
+func _startup_thanks_reset() -> void:
+	startup_thanks_timer = 0.0
+	startup_thanks_fading = false
+	startup_thanks_done = textures.get("startup_thanks", null) == null
+
+
+func _startup_thanks_active() -> bool:
+	return not startup_thanks_done
+
+
+func _skip_startup_thanks() -> void:
+	if startup_thanks_done:
+		return
+	startup_thanks_fading = true
+	startup_thanks_timer = 0.0
+
+
+func _update_startup_thanks(delta: float) -> void:
+	if startup_thanks_done:
+		return
+	startup_thanks_timer += maxf(delta, 0.0)
+	if startup_thanks_fading:
+		if startup_thanks_timer >= STARTUP_THANKS_FADE_TIME:
+			startup_thanks_done = true
+			startup_thanks_fading = false
+			startup_thanks_timer = 0.0
+		return
+	if startup_thanks_timer >= STARTUP_THANKS_HOLD_TIME:
+		startup_thanks_fading = true
+		startup_thanks_timer = 0.0
+
+
+func _draw_startup_thanks(viewport: Vector2) -> void:
+	if startup_thanks_done:
+		return
+	var texture: Texture2D = textures.get("startup_thanks", null)
+	if texture == null:
+		return
+	var alpha := 1.0
+	if startup_thanks_fading:
+		alpha = 1.0 - clampf(startup_thanks_timer / maxf(0.01, STARTUP_THANKS_FADE_TIME), 0.0, 1.0)
+	var texture_size := texture.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
+		return
+	var scale := minf(viewport.x / texture_size.x, viewport.y / texture_size.y)
+	var draw_size := texture_size * scale
+	var image_rect := Rect2((viewport - draw_size) * 0.5, draw_size)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, alpha), true)
+	draw_texture_rect(texture, image_rect, false, Color(1.0, 1.0, 1.0, alpha))
+
+
 func _safe_load_manifestation_icon(file_name: String, sprite_base: String) -> Texture2D:
 	return _safe_load_sprite_icon(file_name, sprite_base)
 
@@ -5735,6 +6048,53 @@ func _release_unused_music_streams(active_name: String) -> void:
 			audio_streams.erase(name)
 
 
+func _is_shared_phase_music_name(name: String) -> bool:
+	if name.get_extension().to_lower() != "mp3":
+		return false
+	var stem := name.get_basename()
+	if not stem.begins_with("Fases"):
+		return false
+	var suffix := stem.substr(5)
+	return suffix.is_valid_int() and int(suffix) > 0
+
+
+func _shared_phase_music_index(name: String) -> int:
+	if not _is_shared_phase_music_name(name):
+		return 999999
+	return int(name.get_basename().substr(5))
+
+
+func _shared_phase_music_less(a, b) -> bool:
+	var left := String(a)
+	var right := String(b)
+	var left_index := _shared_phase_music_index(left)
+	var right_index := _shared_phase_music_index(right)
+	if left_index == right_index:
+		return left < right
+	return left_index < right_index
+
+
+func _discover_shared_phase_music_tracks() -> Array:
+	var tracks: Array = []
+	var dir := DirAccess.open("res://")
+	if dir == null:
+		return tracks
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if not dir.current_is_dir() and _is_shared_phase_music_name(file_name):
+			tracks.append(file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	tracks.sort_custom(_shared_phase_music_less)
+	return tracks
+
+
+func _register_shared_phase_music_tracks() -> void:
+	for name in _discover_shared_phase_music_tracks():
+		_register_audio_stream(String(name), "res://" + String(name), false, true, _memory_saver_active())
+
+
 func _load_audio_streams() -> void:
 	var perf_start_ms := Time.get_ticks_msec()
 	audio_stream_paths.clear()
@@ -5785,17 +6145,8 @@ func _load_audio_streams() -> void:
 	}
 	for name in phase3_tracks:
 		_register_audio_stream(name, phase3_tracks[name], false, true, _memory_saver_active())
+	_register_shared_phase_music_tracks()
 	var extra_phase_tracks = {
-		"Fases1.mp3": "res://Fases1.mp3",
-		"Fases2.mp3": "res://Fases2.mp3",
-		"Fases3.mp3": "res://Fases3.mp3",
-		"Fases4.mp3": "res://Fases4.mp3",
-		"Fases5.mp3": "res://Fases5.mp3",
-		"Fases6.mp3": "res://Fases6.mp3",
-		"Fases7.mp3": "res://Fases7.mp3",
-		"Fases8.mp3": "res://Fases8.mp3",
-		"Fases9.mp3": "res://Fases9.mp3",
-		"Fases10.mp3": "res://Fases10.mp3",
 		"Fase4-4.mp3": "res://Fase4-4.mp3"
 	}
 	for name in extra_phase_tracks:
@@ -5803,6 +6154,15 @@ func _load_audio_streams() -> void:
 	var root_sfx = {
 		"rain": "res://rain.mp3",
 		"Risada-Loop.mp3": "res://Risada-Loop.mp3",
+		"Risada-Loop2.mp3": "res://Risada-Loop2.mp3",
+		"Risada-Loop3.mp3": "res://Risada-Loop3.mp3",
+		"Lodario-mov.mp3": "res://Lodario-mov.mp3",
+		"Mina-Bombastica.mp3": "res://Mina-Bombastica.mp3",
+		"Bomba-Bombastica.mp3": "res://Bomba-Bombastica.mp3",
+		"Nevasca.mp3": "res://Nevasca.mp3",
+		"Congelando.mp3": "res://Congelando.mp3",
+		"Descongelando.mp3": "res://Descongelando.mp3",
+		"Retrocede.mp3": "res://Retrocede.mp3",
 		"Risada-Moeda.mp3": "res://Risada-Moeda.mp3",
 		"Risada-Pedra.mp3": "res://Risada-Pedra.mp3",
 		"Risada-Dinheiro.mp3": "res://Risada-Dinheiro.mp3",
@@ -5836,10 +6196,24 @@ func _load_audio_streams() -> void:
 	}
 	# Root recordings take priority over the procedural fallbacks.
 	for name in root_sfx:
-		var is_looping: bool = name in ["rain", "boss1_walk", "boss1_stop_loop", "acorrentada_walk"]
+		var is_looping: bool = name in ["rain", "boss1_walk", "boss1_stop_loop", "acorrentada_walk", "Nevasca.mp3"]
 		_register_audio_stream(name, root_sfx[name], is_looping, name == "rain", _memory_saver_active() and is_looping)
 	_load_procedural_sfx()
 	_perf_mark("load_audio_streams", perf_start_ms)
+
+
+func _start_nevasca_sfx() -> void:
+	if nevasca_audio_player == null: return
+	if _ensure_audio_loaded("Nevasca.mp3"):
+		nevasca_audio_player.stream = audio_streams["Nevasca.mp3"]
+		nevasca_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * 0.75))
+		if not nevasca_audio_player.playing:
+			nevasca_audio_player.play()
+
+
+func _stop_nevasca_sfx() -> void:
+	if nevasca_audio_player != null and nevasca_audio_player.playing:
+		nevasca_audio_player.stop()
 
 
 func _load_procedural_sfx() -> void:
@@ -6118,7 +6492,7 @@ func _play_music(name: String) -> void:
 		music_pause_fade_timer = 0.0
 		music_pause_resume_volume = max(0.001, _music_target_volume())
 		_set_music_linear_volume(0.001)
-	else:
+	elif music_player != null:
 		music_player.stop()
 
 
@@ -6135,11 +6509,11 @@ func _set_music_linear_volume(value: float) -> void:
 func _begin_pause_music_fade_out() -> void:
 	if music_player == null or music_player.stream == null or not music_player.playing:
 		return
-	music_pause_fade_mode = "out"
+	music_pause_fade_mode = ""
 	music_pause_fade_timer = 0.0
 	music_pause_resume_volume = max(0.001, _music_target_volume())
-	music_paused_by_pause = false
-	music_player.stream_paused = false
+	music_paused_by_pause = true
+	music_player.stream_paused = true
 
 
 func _begin_pause_music_fade_in() -> void:
@@ -6153,6 +6527,21 @@ func _begin_pause_music_fade_in() -> void:
 	music_player.stream_paused = false
 	_set_music_linear_volume(0.001)
 	music_paused_by_pause = false
+
+
+func _stop_battle_music_for_screen_transition() -> void:
+	if music_player == null:
+		return
+	music_pause_fade_mode = ""
+	music_pause_fade_timer = 0.0
+	music_paused_by_pause = false
+	boss1_stop_music_duck_active = false
+	prismatica_music_duck_active = false
+	if current_music != "" and not current_music.begins_with("Menu"):
+		music_player.stream_paused = false
+		music_player.stop()
+		music_player.stream = null
+		current_music = ""
 
 
 func _update_music_pause_fade(delta: float) -> void:
@@ -6190,7 +6579,14 @@ func _play_phase_music() -> void:
 
 
 func _shared_phase_music_tracks() -> Array:
-	return ["Fases1.mp3", "Fases2.mp3", "Fases3.mp3", "Fases4.mp3", "Fases5.mp3", "Fases6.mp3", "Fases7.mp3", "Fases8.mp3", "Fases9.mp3", "Fases10.mp3"]
+	var tracks: Array = []
+	for name in audio_stream_paths.keys():
+		if _is_shared_phase_music_name(String(name)):
+			tracks.append(String(name))
+	if tracks.is_empty():
+		tracks = _discover_shared_phase_music_tracks()
+	tracks.sort_custom(_shared_phase_music_less)
+	return tracks
 
 
 func _phase_music_tracks(phase: int) -> Array:
@@ -6201,13 +6597,9 @@ func _phase_music_tracks(phase: int) -> Array:
 		2:
 			tracks = ["Fase2.mp3", "Fase2-3.mp3", "Fase2-4.mp3"]
 		3:
-			tracks = ["Fase3-1.mp3", "Fase3-2.mp3", "Fase3-7.mp3"]
+			tracks = ["Fase3-2.mp3", "Fase3-7.mp3"]
 		4:
-			tracks = ["Fase_boas.mp3", "Fase4-4.mp3"]
-		5:
-			tracks = ["Fase_boas.mp3"]
-		_:
-			tracks = ["fases.mp3"]
+			tracks = ["Fase4-4.mp3"]
 	tracks.append_array(_shared_phase_music_tracks())
 	return tracks
 
@@ -6218,7 +6610,10 @@ func _play_phase_music_random(phase: int) -> void:
 		if _audio_key_available(track):
 			available.append(track)
 	if available.is_empty():
-		_play_music("fases.mp3")
+		for fallback_track in _shared_phase_music_tracks():
+			if _audio_key_available(String(fallback_track)):
+				_play_music(String(fallback_track))
+				return
 		return
 	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
 	if chosen == current_music and music_player != null:
@@ -6230,11 +6625,11 @@ func _play_phase_music_random(phase: int) -> void:
 func _boss_music_tracks(phase: int) -> Array:
 	match phase:
 		1:
-			return ["Boss1-1.mp3", "Boss1-Music-3.mp3"]
+			return ["Boss1-1.mp3", "Boss1-Music-3.mp3", "Boss1.mp3"]
 		2:
-			return ["Boss2-Music-2.mp3", "Boss2-Music-3.mp3", "Boss2-Music-4.mp3", "Boss2-Music-5.mp3"]
+			return ["Boss2-Music-2.mp3", "Boss2-Music-3.mp3", "Boss2-Music-4.mp3", "Boss2-Music-5.mp3", "Fase2_Boss.mp3", "Boss2.mp3"]
 		3:
-			return ["Boss3-Music-1.mp3"]
+			return ["Boss3-Music-1.mp3", "Fase3_Boss.mp3", "Boss3.mp3"]
 		5:
 			return ["Fase_boas.mp3"]
 	return ["Fase_boas.mp3"]
@@ -6299,7 +6694,7 @@ func _replay_current_music(name: String, fade_in := false) -> void:
 func _play_menu_music_random() -> void:
 	var available = []
 	for track in ["Menu.mp3", "Menu1-2.mp3", "Menu1-3.MP3", "Menu1-4.mp3"]:
-		if audio_streams.has(track):
+		if _audio_key_available(track):
 			available.append(track)
 	if available.is_empty():
 		return
@@ -6325,6 +6720,7 @@ func _play_phase3_music_random() -> void:
 func _go_to_menu() -> void:
 	_save_interrupted_run(true)
 	_stop_qa_streaming("menu")
+	_stop_battle_music_for_screen_transition()
 	mode = "menu"
 	_stop_boss1_walk_audio()
 	_stop_boss1_stop_audio_context(true)
@@ -6356,6 +6752,8 @@ func _update_audio_volumes() -> void:
 		acorrentada_walk_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * ACORRENTADA_WALK_VOLUME * acorrentada_walk_current_volume))
 	if prismatica_ultimate_audio_player != null and prismatica_ultimate_audio_player.playing:
 		prismatica_ultimate_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_music * 0.82))
+	if nevasca_audio_player != null and nevasca_audio_player.playing:
+		nevasca_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * 0.75))
 
 
 func _update_boss1_walk_audio(delta: float) -> void:
@@ -6622,6 +7020,15 @@ func _reset_card_proc_state() -> void:
 	casulo_reativo_cooldown = 0.0
 	passagem_intangivel_timer = 0.0
 	ancora_vital_state.clear()
+	estase_reparadora_timer = 0.0
+	estase_reparadora_tick = 0.0
+	estase_reparadora_pause = 0.0
+	estase_reparadora_anchor = player_pos
+	estase_reparadora_active = false
+	estase_reparadora_pulse = 0.0
+	egide_hemofaga_shield = 0.0
+	egide_hemofaga_full_timer = 0.0
+	egide_hemofaga_pulse = 0.0
 	common_card_stat_cache = {}
 	mandamento_skill_uses = 0
 	mandamento_empowered_until = 0.0
@@ -7108,9 +7515,11 @@ func _advance_to_phase(phase: int) -> void:
 	current_phase = phase
 	pending_phase = 0
 	phase_started_at = time_alive
-	mode = "game"
+	if mode != "phase_transition":
+		mode = "game"
 	_play_phase_music()
-	phase_transition_timer = 0.0
+	if mode != "phase_transition":
+		phase_transition_timer = 0.0
 	phase_fragment.clear()
 	player_pos = PLAYER_START
 	petro_pos = player_pos + Vector2(-64, 32)
@@ -7571,6 +7980,7 @@ func _build_umbra_predatory_mods() -> void:
 
 
 func _reset_boss2_state() -> void:
+	_stop_nevasca_sfx()
 	boss2_state = BOSS2_STATE_IDLE
 	boss2_action_timer = 0.0
 	boss2_target_position = WORLD_SIZE * 0.5
@@ -7594,6 +8004,7 @@ func _reset_boss2_state() -> void:
 	boss2_ultimate_hail_timer = BOSS2_ULTIMATE_HAIL_INTERVAL
 	boss2_ultimate_fan_timer = BOSS2_ULTIMATE_FAN_INTERVAL
 	boss2_ultimate_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
+	boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
 	boss2_ultimate_blizzard_exposure = 0.0
 	boss2_ultimate_hit_gate = 0.0
 	boss2_ultimate_used = false
@@ -7699,7 +8110,7 @@ func _gamepad_action_subtitle(action: String) -> String:
 		"skill": return "Habilidade principal"
 		"secondary": return "Efeito passivo/ativo"
 		"dash": return "Movimento de esquiva"
-		"lacerante_empower": return "Lacerante ou Eclipsada"
+		"lacerante_empower": return "Lacerante, Eclipsada ou Necronada"
 		"bombastica_detonator": return "Bombastica apenas"
 		"pause": return "Abrir, navegar e sair do pause"
 		"shop": return "Abre a loja manual"
@@ -8094,6 +8505,10 @@ func _process(delta: float) -> void:
 		_update_dedicated_room_lifecycle()
 		return
 	_update_interrupted_run_autosave(delta)
+	_update_startup_thanks(delta)
+	if _startup_thanks_active():
+		queue_redraw()
+		return
 	_update_app_update_check(delta)
 	_update_qa_streaming(delta)
 	_update_run_security_checkpoint(delta)
@@ -8423,7 +8838,10 @@ func _update_game(delta: float) -> void:
 	var player_locked = _secondary_player_locked()
 	player_stun_timer = max(0.0, player_stun_timer - delta)
 	player_control_immunity_timer = max(0.0, player_control_immunity_timer - delta)
+	var was_frozen: bool = player_freeze_visual_timer > 0.0
 	player_freeze_visual_timer = max(0.0, player_freeze_visual_timer - delta)
+	if was_frozen and player_freeze_visual_timer <= 0.0:
+		_play_sfx("Descongelando.mp3", 0.05, 0.75, 1.0)
 	player_silence_timer = max(0.0, player_silence_timer - delta)
 	revive_heal_penalty_timer = maxf(0.0, revive_heal_penalty_timer - delta)
 	boss_wave_slow_timer = max(0.0, boss_wave_slow_timer - delta)
@@ -8480,6 +8898,8 @@ func _update_game(delta: float) -> void:
 					_trigger_bombastica_detonator(false)
 				elif manifestation_key == "eclipsada":
 					_toggle_eclipsada_form()
+				elif manifestation_key == "necronada":
+					_try_arm_necronada_empower()
 				else:
 					_try_arm_lacerante_empower()
 			lacerante_empower_key_was_pressed = empower_key_pressed
@@ -8505,6 +8925,7 @@ func _update_game(delta: float) -> void:
 	_update_return_bullets(delta)
 	_update_phase6_pustule_pools(delta)
 	_update_enemies(delta)
+	_apply_entity_separation(delta)
 	_update_enemy_bullets(delta)
 	_update_phase4_environment(delta)
 	_update_larapio_coin_drops(delta)
@@ -8823,7 +9244,11 @@ func _try_attack() -> void:
 			_fire_projectile("bombastica", player_damage * 0.62, BULLET_SPEED * 0.92, 1.25, false)
 		"necronada":
 			_play_manifestation_attack_sfx("necronada")
-			_fire_projectile("necronada", player_damage * 0.66, BULLET_SPEED * 0.94, 1.28, false)
+			_necronada_register_attack_passive()
+			if necronada_empowered_ready:
+				_fire_necronada_empowered_dust()
+			else:
+				_fire_projectile("necronada", player_damage * 0.40, BULLET_SPEED * 0.94, 1.28, false)
 		_:
 			eletrica_shot_counter += 1
 			var charged = eletrica_shot_counter % 4 == 0
@@ -8831,6 +9256,78 @@ func _try_attack() -> void:
 			_fire_projectile("eletrica_charged" if charged else "eletrica", player_damage * (1.28 if charged else 1.0), BULLET_SPEED, 1.2, false)
 			if charged:
 				_add_text("SOBRECARGA", player_pos + Vector2(0, -88), Color(0.48, 1.0, 1.0), 0.7, 22)
+
+
+func _necronada_register_attack_passive() -> void:
+	necronada_attack_counter += 1
+	if necronada_attack_counter < NECRONADA_PASSIVE_ATTACKS:
+		return
+	necronada_attack_counter = 0
+	var heal := maxi(1, int(player_hp_max * NECRONADA_PASSIVE_HEAL_RATE))
+	_heal_player(heal, "necronada_passive", true)
+	_add_text("+%d" % heal, player_pos + Vector2(0, -76), _necronada_accent(), 0.58, 17)
+
+
+func _try_arm_necronada_empower() -> bool:
+	if manifestation_key != "necronada":
+		return false
+	if necronada_empowered_ready:
+		_add_text("POEIRA JA ERGUIDA", player_pos + Vector2(0, -88), _necronada_accent(), 0.55, 17)
+		return false
+	if time_alive < necronada_empower_cooldown_until:
+		_add_text("%.1fs" % (necronada_empower_cooldown_until - time_alive), player_pos + Vector2(0, -88), Color(1.0, 0.82, 0.36), 0.55, 17)
+		return false
+	necronada_empowered_ready = true
+	necronada_empower_until = time_alive + NECRONADA_EMPOWER_DURATION
+	_add_text("POEIRA FUNERARIA", player_pos + Vector2(0, -88), _necronada_accent(), 0.75, 19)
+	_spawn_radial_particles(player_pos, _necronada_color(), 14)
+	return true
+
+
+func _fire_necronada_empowered_dust() -> void:
+	var dir := _aim_direction()
+	if dir.length() <= 0.05:
+		dir = last_facing.normalized()
+	if dir.length() <= 0.05:
+		dir = Vector2.RIGHT
+	necronada_empowered_ready = false
+	necronada_empower_cooldown_until = time_alive + NECRONADA_EMPOWER_COOLDOWN
+	var target := (player_pos + dir * NECRONADA_EMPOWER_RANGE).clamp(Vector2(50, 50), WORLD_SIZE - Vector2(50, 50))
+	var palette := _projectile_palette("necronada_dust")
+	_add_bullet({
+		"pos": player_pos + dir * 34.0,
+		"origin": player_pos,
+		"target_pos": target,
+		"source_category": "basic_attack",
+		"dir": dir,
+		"life": 0.78,
+		"max_life": 0.78,
+		"age": 0.0,
+		"phase": rng.randf_range(0.0, TAU),
+		"trail_cd": 0.0,
+		"damage": player_damage * NECRONADA_EMPOWER_DAMAGE_MULT,
+		"player_damage": player_damage,
+		"speed": BULLET_SPEED * 0.66,
+		"kind": "necronada_dust",
+		"pierce": true,
+		"hits": {},
+		"ricochets": 0,
+		"durability": 0.0,
+		"fly_sfx_cd": 0.0,
+		"color": palette["glow"],
+		"visual_scale": 1.35
+	})
+	_necronada_empower_allies(target)
+	_spawn_projectile_muzzle("necronada_dust", player_pos + dir * 34.0, dir)
+
+
+func _necronada_empower_allies(target: Vector2) -> void:
+	for remnant in necronada_remnants:
+		if float(remnant.get("hp", 0.0)) <= 0.0:
+			continue
+		remnant["empower_timer"] = maxf(float(remnant.get("empower_timer", 0.0)), NECRONADA_EMPOWER_ALLY_BUFF_DURATION)
+		remnant["empower_target_pos"] = target
+	necronada_vfx.append({"kind": "empower_target", "pos": target, "life": NECRONADA_EMPOWER_ALLY_BUFF_DURATION, "max": NECRONADA_EMPOWER_ALLY_BUFF_DURATION})
 
 
 func _fire_projectile(kind: String, damage: float, speed: float, life: float, pierce: bool) -> void:
@@ -9330,7 +9827,9 @@ func _use_skill(target_world = null) -> void:
 		"gravitante":
 			_trigger_gravitante_mark_collision()
 		"ancorada":
-			shockwaves.append({"pos": player_pos, "radius": 0.0, "max": 270.0, "life": 0.55, "damage": player_damage * 1.25 * skill_power, "hit": {}, "source_category": "skill_q"})
+			ancorada_spinning.append({"life": 5.0, "max": 5.0, "angle": 0.0, "damage_tick": 0.0, "hit": {}})
+			_add_text("ANCORAS GIRATÓRIAS", player_pos + Vector2(0, -90), Color(0.42, 0.92, 1.0), 1.1, 22)
+			_spawn_radial_particles(player_pos, Color(0.42, 0.92, 1.0), 18)
 		"prismatica":
 			var prism_pos = Vector2(target_world) if target_world is Vector2 else player_pos
 			prisms.append({
@@ -9715,7 +10214,12 @@ func _damage_source_is_boss_ultimate(source: String) -> bool:
 		"boss4_ultimate",
 		"boss5_laser_sobrecarga",
 		"boss5_prisao",
-		"boss5_miasma"
+		"boss5_miasma",
+		"boss6_necro_erosion_burn",
+		"boss6_carnage_slime",
+		"boss6_carnage_pool",
+		"boss6_reflux_wave",
+		"boss6_cracked_heart_wave"
 	]
 
 
@@ -9746,7 +10250,7 @@ func _show_silenced_feedback() -> void:
 	_add_text("SILENCIADO %.1fs" % player_silence_timer, player_pos + Vector2(0, -84), Color(0.78, 0.88, 1.0), 0.35, 17)
 
 
-func _secondary_skill_cooldown() -> float:
+func _secondary_skill_cooldown_base() -> float:
 	if manifestation_key == "eclipsada":
 		return _eclipsada_e_cooldown_for_form()
 	if manifestation_key == "cartografica":
@@ -9756,8 +10260,12 @@ func _secondary_skill_cooldown() -> float:
 	if manifestation_key == "contratual":
 		return CONTRACT_ORDER_COOLDOWN
 	if manifestation_key == "necronada":
-		return 48.0
+		return NECRONADA_ULTIMATE_COOLDOWN
 	return SECONDARY_SKILL_COOLDOWN
+
+
+func _secondary_skill_cooldown() -> float:
+	return _intervalo_apply_to_ultimate(_secondary_skill_cooldown_base())
 
 
 func _network_skill_visual_duration() -> float:
@@ -10147,18 +10655,26 @@ func _spawn_secondary_gravitante(target_world = null) -> void:
 
 
 func _spawn_secondary_ancorada(target_world = null) -> void:
-	var center = Vector2(target_world) if target_world is Vector2 else player_pos
-	manifestation_secondaries.append({
-		"kind": "ancorada",
-		"life": SECONDARY_ANCORADA_DURATION,
-		"max": SECONDARY_ANCORADA_DURATION,
-		"center": center,
-		"charge": 0.0,
-		"pulse_tick": 0.0,
-		"final_wave": false
-	})
-	_add_text("DOMINIO FIXO", center + Vector2(0, -110), Color(0.42, 0.92, 1.0), 1.4, 28)
+	var center: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
+	var rain_radius := 380.0
+	var rain_damage: float = player_damage * 1.20
+	var root_duration := 3.0
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		if Vector2(enemy.get("pos", Vector2.ZERO)).distance_to(center) <= rain_radius:
+			_damage_enemy(enemy, rain_damage, "ancorada", false)
+			enemy["ferrolho_root"] = maxf(float(enemy.get("ferrolho_root", 0.0)), root_duration)
+			enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.35)
+	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= rain_radius:
+		_damage_boss(rain_damage, "ancorada")
+		boss_tp_stun_timer = maxf(boss_tp_stun_timer, root_duration)
+	if _arauto_active() and Vector2(arauto.get("pos", Vector2.ZERO)).distance_to(center) <= rain_radius:
+		_damage_arauto(rain_damage, "ancorada", false)
+		arauto["stun"] = maxf(float(arauto.get("stun", 0.0)), root_duration)
+	_add_text("CHUVA DE ANCORAS", center + Vector2(0, -110), Color(0.42, 0.92, 1.0), 1.4, 28)
 	_spawn_radial_particles(center, Color(0.42, 0.92, 1.0), 32)
+	necronada_vfx.append({"kind": "ancorada_rain", "pos": center, "radius": rain_radius, "life": 0.65, "max": 0.65, "color": Color(0.42, 0.92, 1.0)})
 
 
 func _try_dash() -> void:
@@ -10322,7 +10838,7 @@ func _ground_target_profile(secondary: bool) -> Dictionary:
 			"bombastica":
 				return {"range": 520.0, "radius": 128.0, "default": 230.0, "minimum": 90.0, "color": Color(1.0, 0.62, 0.18)}
 			"necronada":
-				return {"range": 520.0, "radius": 260.0, "default": 0.0, "minimum": 80.0, "color": Color(0.52, 0.34, 0.92)}
+				return {"range": 0.0, "radius": NECRONADA_ULTIMATE_RADIUS, "default": 0.0, "minimum": 0.0, "color": Color(0.52, 0.34, 0.92)}
 	else:
 		match manifestation_key:
 			"parasitica":
@@ -10334,7 +10850,7 @@ func _ground_target_profile(secondary: bool) -> Dictionary:
 			"bombastica":
 				return {"range": BOMBASTICA_Q_THROW_RANGE, "radius": BOMBASTICA_Q_RADIUS, "default": 245.0, "minimum": 38.0, "color": Color(1.0, 0.48, 0.12)}
 			"necronada":
-				return {"range": 460.0, "radius": 96.0, "default": 180.0, "minimum": 56.0, "color": Color(0.72, 0.96, 1.0)}
+				return {"range": 420.0, "radius": NECRONADA_ROSE_SUMMON_RADIUS, "default": 0.0, "minimum": 0.0, "color": Color(0.72, 0.96, 1.0)}
 	return {}
 
 
@@ -10449,6 +10965,15 @@ func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2)
 			contractual_notifications.append({"pos": origin, "life": CONTRACT_TRAP_LIFE, "max": CONTRACT_TRAP_LIFE, "phase": rng.randf_range(0.0, TAU)})
 			tp_effects.append({"kind": "contratual", "life": 0.55, "max": 0.55, "a": origin, "b": destination})
 			_add_text("NOTIFICACAO", origin + Vector2(0, -78), Color(1.0, 0.58, 0.24), 0.9, 18)
+		"necronada":
+			var dust_dir := (destination - origin).normalized()
+			if dust_dir.length() <= 0.05:
+				dust_dir = last_facing.normalized()
+			if dust_dir.length() <= 0.05:
+				dust_dir = Vector2.RIGHT
+			_apply_necronada_teleport_dust(destination, dust_dir)
+			_start_direct_teleport_cooldown()
+			_add_text("POEIRA DO OSSUARIO", destination + Vector2(0, -92), _necronada_accent(), 0.9, 18)
 		"acorrentada":
 			_start_tp_acorrentada(origin, destination)
 		"eclipsada":
@@ -10643,6 +11168,8 @@ func _update_advanced_manifestation_state(delta: float) -> void:
 	_update_acorrentada_state(delta)
 	_update_bombastica_state(delta)
 	_update_necronada_state(delta)
+	_update_ancorada_standing_still(delta)
+	_update_ancorada_spinning(delta)
 
 
 func _reset_necronada_state() -> void:
@@ -10654,11 +11181,22 @@ func _reset_necronada_state() -> void:
 	necronada_selected_slot = 0
 	necronada_next_id = 1
 	necronada_vfx.clear()
+	necronada_attack_counter = 0
+	necronada_empowered_ready = false
+	necronada_empower_until = 0.0
+	necronada_empower_cooldown_until = 0.0
+	necronada_horde_progress = 0
+	necronada_boss_empower_rose_window = 0.0
+	necronada_boss_empower_rose_hits = 0
 	for enemy in enemies:
 		enemy.erase("necronada_epitaph")
 		enemy.erase("necronada_epitaph_depth")
 		enemy.erase("necronada_epitaph_time")
 		enemy.erase("necronada_epitaph_flash")
+		enemy.erase("necronada_crit_window")
+		enemy.erase("necronada_empower_rose_window")
+		enemy.erase("necronada_empower_rose_hits")
+		enemy.erase("necronada_crit_chance")
 
 
 func _necronada_color() -> Color:
@@ -10677,20 +11215,20 @@ func _necronada_profile(enemy_type: String) -> Dictionary:
 		"hp": 0.45,
 		"damage": 0.34,
 		"speed": 118.0,
-		"range": 64.0,
+		"range": 128.0,
 		"color": _necronada_color()
 	}
 	match enemy_type:
-		ENEMY_ATIRADOR, ENEMY_PROJECTOR, ENEMY_MIASMA_EEL:
-			profile = {"name": "Executor de lapide", "archetype": "executor", "last_act": "shot", "hp": 0.34, "damage": 0.30, "speed": 86.0, "range": 245.0, "color": Color(0.58, 0.76, 1.0)}
-		ENEMY_STALKER, ENEMY_LODARIO, ENEMY_KAMIKAZE:
-			profile = {"name": "Predador funerario", "archetype": "predador", "last_act": "leap", "hp": 0.38, "damage": 0.40, "speed": 152.0, "range": 52.0, "color": Color(0.68, 0.54, 1.0)}
+		ENEMY_ATIRADOR, ENEMY_PROJECTOR, ENEMY_MIASMA_EEL, ENEMY_PYRO_PENGUIN:
+			profile = {"name": "Executor de lapide", "archetype": "executor", "last_act": "shot", "hp": 0.46, "damage": 0.34, "speed": 96.0, "range": 340.0, "color": Color(0.58, 0.76, 1.0)}
+		ENEMY_STALKER, ENEMY_LODARIO, ENEMY_KAMIKAZE, ENEMY_CHRONAL_LEECH:
+			profile = {"name": "Predador funerario", "archetype": "predador", "last_act": "leap", "hp": 0.48, "damage": 0.43, "speed": 156.0, "range": 132.0, "color": Color(0.68, 0.54, 1.0)}
 		ENEMY_CRYSTAL, ENEMY_SHIELD_REFLECTOR, ENEMY_FOSSIL_PUSTULE:
-			profile = {"name": "Bastiao ossuario", "archetype": "bastiao", "last_act": "guard", "hp": 0.62, "damage": 0.24, "speed": 76.0, "range": 58.0, "color": Color(0.86, 0.86, 0.76)}
+			profile = {"name": "Bastiao ossuario", "archetype": "bastiao", "last_act": "guard", "hp": 0.78, "damage": 0.28, "speed": 82.0, "range": 142.0, "color": Color(0.86, 0.86, 0.76)}
 		ENEMY_CURATER, ENEMY_DEVOTO, ENEMY_INCENSARIO:
-			profile = {"name": "Ritualista reverso", "archetype": "ritualista", "last_act": "heal", "hp": 0.42, "damage": 0.26, "speed": 96.0, "range": 170.0, "color": Color(0.70, 0.98, 0.92)}
+			profile = {"name": "Ritualista reverso", "archetype": "ritualista", "last_act": "heal", "hp": 0.56, "damage": 0.30, "speed": 104.0, "range": 230.0, "color": Color(0.70, 0.98, 0.92)}
 		ENEMY_LARAPIO, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_ECHO:
-			profile = {"name": "Anomalia insepulta", "archetype": "anomalia", "last_act": "rewind", "hp": 0.36, "damage": 0.36, "speed": 132.0, "range": 120.0, "color": Color(0.86, 0.62, 1.0)}
+			profile = {"name": "Anomalia insepulta", "archetype": "anomalia", "last_act": "rewind", "hp": 0.48, "damage": 0.38, "speed": 138.0, "range": 170.0, "color": Color(0.86, 0.62, 1.0)}
 	return profile
 
 
@@ -10708,11 +11246,135 @@ func _apply_necronada_epitaph(enemy: Dictionary, impact_pos: Vector2) -> void:
 	necronada_vfx.append({"kind": "epitaph_hit", "pos": impact_pos, "life": 0.42, "max": 0.42, "depth": depth, "phase": rng.randf_range(0.0, TAU)})
 
 
+func _necronada_start_empower_rose_window(enemy: Dictionary) -> void:
+	if manifestation_key != "necronada":
+		return
+	enemy["necronada_empower_rose_window"] = NECRONADA_EMPOWER_ROSE_WINDOW
+	enemy["necronada_empower_rose_hits"] = 0
+
+
+func _necronada_register_empower_followup_hit(enemy: Dictionary) -> void:
+	if manifestation_key != "necronada":
+		return
+	if float(enemy.get("necronada_empower_rose_window", 0.0)) <= 0.0:
+		return
+	var hits := int(enemy.get("necronada_empower_rose_hits", 0)) + 1
+	enemy["necronada_empower_rose_hits"] = hits
+	if hits < NECRONADA_EMPOWER_ROSE_REQUIRED_HITS:
+		_add_text("%d/%d" % [hits, NECRONADA_EMPOWER_ROSE_REQUIRED_HITS], Vector2(enemy.get("pos", player_pos)) + Vector2(18, -58), _necronada_accent(), 0.34, 13)
+		return
+	enemy["necronada_empower_rose_window"] = 0.0
+	enemy["necronada_empower_rose_hits"] = 0
+	var enemy_type := String(enemy.get("type", ENEMY_COMMON))
+	var depth := clampi(int(enemy.get("necronada_epitaph_depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
+	if _drop_necronada_rose(enemy_type, Vector2(enemy.get("pos", player_pos)), depth, "ROSA FORCADA"):
+		_spawn_radial_particles(Vector2(enemy.get("pos", player_pos)), _necronada_accent(), 18)
+
+
+func _necronada_start_boss_empower_rose_window() -> void:
+	if manifestation_key != "necronada":
+		return
+	necronada_boss_empower_rose_window = NECRONADA_EMPOWER_ROSE_WINDOW
+	necronada_boss_empower_rose_hits = 0
+
+
+func _necronada_register_boss_empower_followup_hit() -> void:
+	if manifestation_key != "necronada" or not boss_active or boss_hp <= 0.0:
+		return
+	if necronada_boss_empower_rose_window <= 0.0:
+		return
+	necronada_boss_empower_rose_hits += 1
+	if necronada_boss_empower_rose_hits < NECRONADA_EMPOWER_ROSE_REQUIRED_HITS:
+		_add_text("%d/%d" % [necronada_boss_empower_rose_hits, NECRONADA_EMPOWER_ROSE_REQUIRED_HITS], boss_pos + Vector2(34, -118), _necronada_accent(), 0.36, 14)
+		return
+	necronada_boss_empower_rose_window = 0.0
+	necronada_boss_empower_rose_hits = 0
+	var history: Array = necronada_pente_history if not necronada_pente_history.is_empty() else [ENEMY_COMMON]
+	var enemy_type := String(history[rng.randi_range(0, history.size() - 1)])
+	var rose_pos := (boss_pos + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(70.0, 125.0)).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
+	if _drop_necronada_rose(enemy_type, rose_pos, 1, "ROSA DO CHEFE"):
+		_spawn_radial_particles(rose_pos, _necronada_accent(), 20)
+
+
 func _remember_necronada_species(enemy_type: String) -> void:
 	if enemy_type == "":
 		enemy_type = ENEMY_COMMON
 	if not necronada_pente_history.has(enemy_type):
 		necronada_pente_history.append(enemy_type)
+
+
+func _necronada_active_remnant_count() -> int:
+	var count := 0
+	for remnant in necronada_remnants:
+		if float(remnant.get("hp", 0.0)) > 0.0:
+			count += 1
+	return count
+
+
+func _necronada_rose_capacity_available() -> bool:
+	return _necronada_active_remnant_count() + necronada_vestiges.size() < NECRONADA_MAX_ACTIVE_REMNANTS
+
+
+func _drop_necronada_rose(enemy_type: String, pos: Vector2, depth := 1, label := "ALMA FLORESCEU") -> bool:
+	if manifestation_key != "necronada":
+		return false
+	if not _necronada_rose_capacity_available():
+		return false
+	enemy_type = String(enemy_type)
+	if enemy_type == "":
+		enemy_type = ENEMY_COMMON
+	_remember_necronada_species(enemy_type)
+	var vestige := {
+		"id": necronada_next_id,
+		"enemy_type": enemy_type,
+		"pos": pos.clamp(Vector2(58, 58), WORLD_SIZE - Vector2(58, 58)),
+		"life": 999999.0,
+		"max": 999999.0,
+		"depth": clampi(depth, 1, NECRONADA_EPITAPH_MAX_DEPTH),
+		"profile": _necronada_profile(enemy_type),
+		"phase": rng.randf_range(0.0, TAU)
+	}
+	necronada_next_id += 1
+	necronada_vestiges.append(vestige)
+	while necronada_vestiges.size() > NECRONADA_ROSE_MAX:
+		necronada_vestiges.pop_front()
+	_add_text(label, Vector2(vestige["pos"]) + Vector2(0, -78), _necronada_accent(), 0.85, 16)
+	return true
+
+
+func _apply_necronada_teleport_dust(origin: Vector2, dir: Vector2) -> void:
+	dir = dir.normalized()
+	if dir.length() <= 0.05:
+		dir = Vector2.RIGHT
+	var base_damage: float = float(player_damage) * NECRONADA_TP_DUST_DAMAGE_MULT
+	var hit_count := 0
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var enemy_pos := Vector2(enemy.get("pos", origin))
+		var to_enemy := enemy_pos - origin
+		var distance := to_enemy.length()
+		if distance > NECRONADA_TP_DUST_RADIUS or distance <= 1.0:
+			continue
+		if absf(dir.angle_to(to_enemy.normalized())) > NECRONADA_TP_DUST_HALF_ANGLE:
+			continue
+		var falloff := 1.0 - clampf(distance / NECRONADA_TP_DUST_RADIUS, 0.0, 1.0) * 0.42
+		enemy["pos"] = (enemy_pos + dir * NECRONADA_TP_DUST_PUSH * falloff).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		_damage_enemy(enemy, base_damage * falloff, "necronada_tp_dust", true, true, origin, "teleport")
+		hit_count += 1
+	if _arauto_active():
+		var arauto_pos := Vector2(arauto.get("pos", origin))
+		var to_arauto := arauto_pos - origin
+		if to_arauto.length() <= NECRONADA_TP_DUST_RADIUS and to_arauto.length() > 1.0 and absf(dir.angle_to(to_arauto.normalized())) <= NECRONADA_TP_DUST_HALF_ANGLE:
+			_damage_arauto(base_damage * 0.72, "necronada_tp_dust", true, true, "teleport", origin)
+			hit_count += 1
+	if boss_active and boss_hp > 0.0:
+		var to_boss: Vector2 = boss_pos - origin
+		if to_boss.length() <= NECRONADA_TP_DUST_RADIUS + _boss_hit_radius() and to_boss.length() > 1.0 and absf(dir.angle_to(to_boss.normalized())) <= NECRONADA_TP_DUST_HALF_ANGLE:
+			_damage_boss(base_damage * 0.62, "necronada_tp_dust", true, true, "teleport", origin)
+			hit_count += 1
+	necronada_vfx.append({"kind": "tp_dust_fan", "pos": origin, "dir": dir, "radius": NECRONADA_TP_DUST_RADIUS, "life": 0.42, "max": 0.42, "hits": hit_count})
+	_spawn_radial_particles(origin + dir * 36.0, _necronada_accent(), 14 + mini(18, hit_count * 3))
 
 
 func _necronada_on_enemy_killed(enemy: Dictionary) -> void:
@@ -10724,32 +11386,38 @@ func _necronada_on_enemy_killed(enemy: Dictionary) -> void:
 	var source := String(enemy.get("killed_by_source", ""))
 	if source.begins_with("necronada_remnant") or source.begins_with("necronada_requiem"):
 		return
-	_remember_necronada_species(enemy_type)
 	var depth := clampi(int(enemy.get("necronada_epitaph_depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
-	var vestige := {
-		"id": necronada_next_id,
-		"enemy_type": enemy_type,
-		"pos": Vector2(enemy.get("pos", player_pos)),
-		"life": NECRONADA_VESTIGE_DURATION,
-		"max": NECRONADA_VESTIGE_DURATION,
-		"depth": depth,
-		"profile": _necronada_profile(enemy_type),
-		"phase": rng.randf_range(0.0, TAU)
-	}
-	necronada_next_id += 1
-	necronada_vestiges.append(vestige)
-	while necronada_vestiges.size() > 10:
-		necronada_vestiges.pop_front()
-	_add_text("VESTIGIO MORTUARIO", Vector2(vestige["pos"]) + Vector2(0, -78), _necronada_accent(), 0.85, 16)
+	_drop_necronada_rose(enemy_type, Vector2(enemy.get("pos", player_pos)), depth)
 
 
 func _try_use_necronada_skill(target_world = null) -> void:
-	if _necronada_has_ossuary_entry():
-		_summon_necronada_remnant(target_world)
-		return
-	if _capture_necronada_vestige(target_world):
-		return
-	_add_text("MARQUE E ABATA PRIMEIRO", player_pos + Vector2(0, -90), Color(0.72, 0.88, 1.0), 0.8, 17)
+	var center: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
+	var summoned := 0
+	var remaining: Array = []
+	for vestige in necronada_vestiges:
+		var rose_pos := Vector2(vestige.get("pos", player_pos))
+		if rose_pos.distance_to(center) <= NECRONADA_ROSE_SUMMON_RADIUS:
+			var slot := {
+				"id": int(vestige.get("id", necronada_next_id)),
+				"enemy_type": String(vestige.get("enemy_type", ENEMY_COMMON)),
+				"profile": Dictionary(vestige.get("profile", {})),
+				"depth": int(vestige.get("depth", 1)),
+				"stored_at": time_alive
+			}
+			if _summon_necronada_remnant(rose_pos, slot):
+				summoned += 1
+			else:
+				remaining.append(vestige)
+		else:
+			remaining.append(vestige)
+	necronada_vestiges = remaining
+	if summoned > 0:
+		_add_necronada_horde_progress(summoned)
+		_add_text("LEVANTE x%d" % summoned, center + Vector2(0, -92), _necronada_accent(), 1.0, 20)
+		_spawn_radial_particles(center, _necronada_color(), 24)
+		necronada_vfx.append({"kind": "rose_summon_ring", "pos": center, "life": 0.48, "max": 0.48, "radius": NECRONADA_ROSE_SUMMON_RADIUS})
+	else:
+		_add_text("NENHUMA ALMA NO RAIO", player_pos + Vector2(0, -90), Color(0.72, 0.88, 1.0), 0.8, 17)
 
 
 func _necronada_has_ossuary_entry() -> bool:
@@ -10794,10 +11462,12 @@ func _capture_necronada_vestige(target_world = null) -> bool:
 
 
 func _add_necronada_horde_progress(_amount: int) -> void:
-	pass
+	necronada_horde_progress = maxi(0, necronada_horde_progress + maxi(0, _amount))
 
 
 func _summon_necronada_remnant(target_world = null, slot_override: Dictionary = {}) -> bool:
+	if _necronada_active_remnant_count() >= NECRONADA_MAX_ACTIVE_REMNANTS:
+		return false
 	var slot: Dictionary
 	var consume_slot := slot_override.is_empty()
 	if consume_slot:
@@ -10807,75 +11477,113 @@ func _summon_necronada_remnant(target_world = null, slot_override: Dictionary = 
 		necronada_selected_slot = 0
 	else:
 		slot = slot_override.duplicate(true)
-	var profile: Dictionary = Dictionary(slot.get("profile", _necronada_profile(String(slot.get("enemy_type", ENEMY_COMMON)))))
+	var enemy_type_str := String(slot.get("enemy_type", ENEMY_COMMON))
+	var profile: Dictionary = Dictionary(slot.get("profile", _necronada_profile(enemy_type_str)))
 	var target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _aim_direction() * 92.0
 	var depth := clampi(int(slot.get("depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
-	var base_duration := 15.0
-	var max_hp := maxf(20.0, player_hp_max * 0.50 * (0.90 + depth * 0.10))
+	var profile_hp := clampf(float(profile.get("hp", 0.45)), 0.30, 0.95)
+	var max_hp := maxf(24.0, player_hp_max * (0.42 + profile_hp * 0.42))
 	if bool(slot.get("supreme", false)):
-		max_hp *= 1.60
+		max_hp *= 1.65
+	max_hp = maxf(24.0, max_hp * NECRONADA_REMNANT_HEALTH_MULT)
+	var archetype := String(profile.get("archetype", "predador"))
+	var is_ranged := archetype == "executor" or enemy_type_str in [ENEMY_ATIRADOR, ENEMY_PROJECTOR, ENEMY_MIASMA_EEL, ENEMY_PYRO_PENGUIN]
+	var is_curate := archetype == "ritualista"
 	var remnant := {
 		"id": necronada_next_id,
-		"enemy_type": String(slot.get("enemy_type", ENEMY_COMMON)),
+		"enemy_type": enemy_type_str,
 		"profile": profile,
 		"pos": target.clamp(Vector2(64, 64), WORLD_SIZE - Vector2(64, 64)),
 		"facing_dir": Vector2.LEFT,
 		"hp": max_hp,
 		"max_hp": max_hp,
-		"life": base_duration,
-		"max": base_duration,
-		"summon": NECRONADA_REMNANT_SUMMON_TIME,
+		"summon": NECRONADA_REMNANT_SUMMON_TIME, # 2.4s invocation animation (Task 9)
 		"target_timer": 0.0,
 		"target_kind": "",
 		"target_uid": -1,
 		"target_pos": target,
-		"attack_cd": 0.15,
+		"attack_cd": 0.4,
 		"phase": rng.randf_range(0.0, TAU),
 		"depth": depth,
 		"last_act_done": false,
 		"supreme": bool(slot.get("supreme", false)),
-		"is_ultimate": bool(slot.get("supreme", false))
+		"is_ultimate": bool(slot.get("supreme", false)),
+		"is_ranged": is_ranged,
+		"is_curate": is_curate,
+		"empower_timer": 0.0,
+		"empower_target_pos": target,
+		"blocked_retries": 0,
+		"wait_timer": 0.0
 	}
 	necronada_next_id += 1
 	necronada_remnants.append(remnant)
 	_add_text("HORDA SUPREMA" if bool(remnant.get("supreme", false)) else "LEVANTE REVERSO", target + Vector2(0, -82), _necronada_accent(), 1.0, 20)
-	_spawn_radial_particles(target, _necronada_color(), 24)
+	_spawn_radial_particles(target, _necronada_color(), 28)
 	return true
 
 
 func _cast_necronada_requiem() -> bool:
-	var pente_types: Array = []
-	for enemy_type in necronada_pente_history:
-		if not pente_types.has(enemy_type):
-			pente_types.append(enemy_type)
-	if pente_types.is_empty():
-		pente_types.append(ENEMY_COMMON)
+	if necronada_horde_progress < NECRONADA_ULTIMATE_REQUIRED_REVIVES:
+		_add_text("ONDA %d/%d" % [necronada_horde_progress, NECRONADA_ULTIMATE_REQUIRED_REVIVES], player_pos + Vector2(0, -114), _necronada_accent(), 0.9, 18)
+		return false
+	necronada_horde_progress -= NECRONADA_ULTIMATE_REQUIRED_REVIVES
 	necronada_requiem = {
-		"life": NECRONADA_TOTAL_TAUNT_DURATION,
-		"max": NECRONADA_TOTAL_TAUNT_DURATION,
-		"tick": NECRONADA_REQUIEM_TICK,
-		"echoes": NECRONADA_SUPREME_HORDE_COUNT,
+		"kind": "necrotic_wave",
+		"life": 1.18,
+		"max": 1.18,
+		"tick": 0.06,
+		"echoes": 9,
 		"phase": rng.randf_range(0.0, TAU),
-		"total_taunt_timer": NECRONADA_TOTAL_TAUNT_DURATION,
-		"species_pool": pente_types.duplicate()
+		"total_taunt_timer": 0.0,
+		"origin": player_pos
 	}
-	necronada_remnants.clear()
-	for i in range(NECRONADA_SUPREME_HORDE_COUNT):
-		var enemy_type := String(pente_types[rng.randi_range(0, pente_types.size() - 1)])
-		var angle := TAU * float(i) / float(NECRONADA_SUPREME_HORDE_COUNT) + rng.randf_range(-0.24, 0.24)
-		var slot := {
-			"id": necronada_next_id + i,
-			"enemy_type": enemy_type,
-			"profile": _necronada_profile(enemy_type),
-			"depth": NECRONADA_EPITAPH_MAX_DEPTH,
-			"stored_at": time_alive,
-			"duration": NECRONADA_TOTAL_TAUNT_DURATION,
-			"supreme": true
-		}
-		_summon_necronada_remnant(player_pos + Vector2.from_angle(angle) * 118.0, slot)
-	_spawn_radial_particles(player_pos, _necronada_accent(), 36)
-	_add_text("HORDA SUPREMA", player_pos + Vector2(0, -116), _necronada_accent(), 1.45, 23)
+	_apply_necronada_necrotic_wave(player_pos)
+	_spawn_radial_particles(player_pos, _necronada_accent(), 42)
+	_add_text("ONDA NECROTICA", player_pos + Vector2(0, -116), _necronada_accent(), 1.45, 23)
 	return true
+
+
+func _apply_necronada_necrotic_wave(origin: Vector2) -> void:
+	var targets: Array = []
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var pos := Vector2(enemy.get("pos", origin))
+		var distance := origin.distance_to(pos)
+		if distance <= NECRONADA_ULTIMATE_RADIUS:
+			targets.append({"kind": "enemy", "ref": enemy, "pos": pos, "distance": distance})
+	if _arauto_active():
+		var a_pos := Vector2(arauto.get("pos", origin))
+		var a_distance := origin.distance_to(a_pos)
+		if a_distance <= NECRONADA_ULTIMATE_RADIUS:
+			targets.append({"kind": "arauto", "pos": a_pos, "distance": a_distance})
+	if boss_active and boss_hp > 0.0:
+		var b_distance := origin.distance_to(boss_pos)
+		if b_distance <= NECRONADA_ULTIMATE_RADIUS:
+			targets.append({"kind": "boss", "pos": boss_pos, "distance": b_distance})
+	targets.sort_custom(func(a, b): return float(a.get("distance", 0.0)) < float(b.get("distance", 0.0)))
+	var dust_integrity := 1.0
+	for target in targets:
+		var distance := float(target.get("distance", 0.0))
+		var falloff := clampf((distance - NECRONADA_ULTIMATE_FULL_RADIUS) / maxf(1.0, NECRONADA_ULTIMATE_RADIUS - NECRONADA_ULTIMATE_FULL_RADIUS), 0.0, 1.0)
+		var damage_mult := lerpf(NECRONADA_ULTIMATE_DAMAGE_MAX, NECRONADA_ULTIMATE_DAMAGE_MIN, falloff) * dust_integrity
+		var damage: float = player_damage * damage_mult
+		var pos := Vector2(target.get("pos", origin))
+		match String(target.get("kind", "")):
+			"enemy":
+				var enemy: Dictionary = target.get("ref", {})
+				if not enemy.is_empty():
+					enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), 2.2)
+					enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), NECRONADA_ULTIMATE_SLOW_MULT)
+					enemy["necronada_crit_window"] = maxf(float(enemy.get("necronada_crit_window", 0.0)), NECRONADA_ULTIMATE_MARK_DURATION)
+					enemy["necronada_crit_chance"] = maxf(float(enemy.get("necronada_crit_chance", 0.0)), NECRONADA_ULTIMATE_CRIT_CHANCE)
+					_damage_enemy(enemy, damage, "necronada_requiem", true, true, origin, "manifestation_secondary")
+			"arauto":
+				_damage_arauto(damage * 0.88, "necronada_requiem")
+			"boss":
+				_damage_boss(damage * 0.72, "necronada_requiem")
+		necronada_vfx.append({"kind": "requiem_impact", "pos": pos, "life": 0.42, "max": 0.42, "damage_mult": damage_mult})
+		dust_integrity = maxf(0.42, dust_integrity * 0.84)
 
 
 func _update_necronada_state(delta: float) -> void:
@@ -10889,17 +11597,23 @@ func _update_necronada_state(delta: float) -> void:
 					enemy.erase("necronada_epitaph_depth")
 					enemy.erase("necronada_epitaph_time")
 					enemy.erase("necronada_epitaph_flash")
+			if float(enemy.get("necronada_crit_window", 0.0)) > 0.0:
+				enemy["necronada_crit_window"] = maxf(0.0, float(enemy.get("necronada_crit_window", 0.0)) - delta)
+			if float(enemy.get("necronada_empower_rose_window", 0.0)) > 0.0:
+				enemy["necronada_empower_rose_window"] = maxf(0.0, float(enemy.get("necronada_empower_rose_window", 0.0)) - delta)
+				if float(enemy.get("necronada_empower_rose_window", 0.0)) <= 0.0:
+					enemy["necronada_empower_rose_hits"] = 0
+		if necronada_boss_empower_rose_window > 0.0:
+			necronada_boss_empower_rose_window = maxf(0.0, necronada_boss_empower_rose_window - delta)
+			if necronada_boss_empower_rose_window <= 0.0:
+				necronada_boss_empower_rose_hits = 0
 	var auto_capture_positions: Array = []
 	for vestige in necronada_vestiges:
-		vestige["life"] = maxf(0.0, float(vestige.get("life", 0.0)) - delta)
 		vestige["phase"] = float(vestige.get("phase", 0.0)) + delta * 2.6
-		if manifestation_key == "necronada" and necronada_ossuary.size() < NECRONADA_OSSUARY_SLOTS and Vector2(vestige.get("pos", player_pos)).distance_to(player_pos) <= 92.0:
-			vestige["auto_capture"] = true
-			auto_capture_positions.append(Vector2(vestige.get("pos", player_pos)))
-	if manifestation_key == "necronada":
-		for capture_pos in auto_capture_positions:
-			_capture_necronada_vestige(capture_pos)
-	necronada_vestiges = necronada_vestiges.filter(func(vestige): return float(vestige.get("life", 0.0)) > 0.0 and not bool(vestige.get("auto_capture", false)))
+	necronada_vestiges = necronada_vestiges.filter(func(vestige): return not bool(vestige.get("auto_capture", false)))
+	if necronada_empowered_ready and time_alive > necronada_empower_until:
+		necronada_empowered_ready = false
+		necronada_empower_cooldown_until = time_alive + NECRONADA_EMPOWER_COOLDOWN
 	for visual in necronada_vfx:
 		visual["life"] = maxf(0.0, float(visual.get("life", 0.0)) - delta)
 	necronada_vfx = necronada_vfx.filter(func(visual): return float(visual.get("life", 0.0)) > 0.0)
@@ -10910,66 +11624,183 @@ func _update_necronada_state(delta: float) -> void:
 func _update_necronada_remnants(delta: float) -> void:
 	for remnant in necronada_remnants:
 		remnant["phase"] = float(remnant.get("phase", 0.0)) + delta * 4.0
+		remnant["empower_timer"] = maxf(0.0, float(remnant.get("empower_timer", 0.0)) - delta)
+		# 2.4s invocation animation countdown (Task 9)
 		if float(remnant.get("summon", 0.0)) > 0.0:
 			remnant["summon"] = maxf(0.0, float(remnant.get("summon", 0.0)) - delta)
 			if float(remnant["summon"]) <= 0.0:
 				_necronada_last_act(remnant)
 			continue
+		
+		# Task 8: Retry wait timer countdown (15s if blocked and no other targets exist)
+		var wait_timer := maxf(0.0, float(remnant.get("wait_timer", 0.0)) - delta)
+		remnant["wait_timer"] = wait_timer
+		if wait_timer > 0.0:
+			continue
+		
 		remnant["target_timer"] = float(remnant.get("target_timer", 0.0)) - delta
 		if float(remnant["target_timer"]) <= 0.0 or not _necronada_target_alive(remnant):
 			var target := _necronada_find_target(Vector2(remnant.get("pos", player_pos)))
-			remnant["target_kind"] = String(target.get("kind", ""))
-			remnant["target_uid"] = int(target.get("uid", -1))
-			remnant["target_pos"] = Vector2(target.get("pos", player_pos))
+			if target.is_empty():
+				remnant["target_kind"] = ""
+				remnant["target_uid"] = -1
+				remnant["target_pos"] = Vector2(remnant.get("pos", player_pos))
+			else:
+				remnant["target_kind"] = String(target.get("kind", ""))
+				remnant["target_uid"] = int(target.get("uid", -1))
+				remnant["target_pos"] = Vector2(target.get("pos", player_pos))
 			remnant["target_timer"] = NECRONADA_REMNANT_TARGET_INTERVAL
+			remnant["blocked_retries"] = 0
 		else:
-			remnant["target_pos"] = _necronada_target_pos(remnant)
+			remnant["target_pos"] = _necronada_remnant_target_pos(remnant)
+		
 		var profile: Dictionary = Dictionary(remnant.get("profile", {}))
 		var pos := Vector2(remnant.get("pos", player_pos))
 		var target_pos := Vector2(remnant.get("target_pos", player_pos))
 		var to_target := target_pos - pos
 		var distance := to_target.length()
-		var attack_range := float(profile.get("range", 62.0))
-		var move_speed: float = player_speed * 0.60
-		var archetype := String(profile.get("archetype", "predador"))
+		var is_ranged := bool(remnant.get("is_ranged", false))
+		var is_curate := bool(remnant.get("is_curate", false))
+		var profile_range := float(profile.get("range", 62.0))
+		var attack_range := profile_range
+		if is_ranged:
+			attack_range = maxf(profile_range, NECRONADA_REMNANT_RANGED_RANGE_MIN)
+		elif is_curate:
+			attack_range = maxf(profile_range, NECRONADA_REMNANT_SUPPORT_RANGE_MIN)
+		else:
+			attack_range = maxf(profile_range, NECRONADA_REMNANT_MELEE_RANGE_MIN)
+		var move_speed: float = maxf(float(profile.get("speed", 118.0)), player_speed * 0.50)
+		if bool(remnant.get("supreme", false)):
+			move_speed *= 1.15
+		if float(remnant.get("empower_timer", 0.0)) > 0.0:
+			move_speed *= NECRONADA_EMPOWER_ALLY_SPEED_MULT
+			var empowered_pos := Vector2(remnant.get("empower_target_pos", target_pos))
+			var empowered_target := _necronada_find_target_near(empowered_pos)
+			if not empowered_target.is_empty():
+				remnant["target_kind"] = String(empowered_target.get("kind", remnant.get("target_kind", "")))
+				remnant["target_uid"] = int(empowered_target.get("uid", remnant.get("target_uid", -1)))
+				remnant["target_pos"] = Vector2(empowered_target.get("pos", target_pos))
+				target_pos = Vector2(remnant["target_pos"])
+				to_target = target_pos - pos
+				distance = to_target.length()
+		
 		var desired := Vector2.ZERO
-		if distance > attack_range * (1.05 if archetype != "executor" else 1.35):
+		if distance > attack_range * 0.85:
 			desired = to_target.normalized()
-		elif archetype == "executor" and distance < attack_range * 0.62:
+		elif is_ranged and distance < 100.0:
 			desired = -to_target.normalized()
-		elif archetype == "bastiao" and player_pos.distance_to(pos) > 132.0:
-			desired = (player_pos - pos).normalized()
-		if desired.length_squared() > 0.01:
-			desired = _steer_entity_with_avoidance(remnant, pos, desired, delta)
-			remnant["facing_dir"] = desired
-		remnant["pos"] = (pos + desired * move_speed * delta).clamp(Vector2(42, 42), WORLD_SIZE - Vector2(42, 42))
+			
+		var dir := _steer_entity_with_avoidance(remnant, pos, desired, delta)
+		var old_pos := pos
+		if dir.length_squared() > 0.001:
+			remnant["facing_dir"] = dir
+			remnant["pos"] = (pos + dir * move_speed * delta).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		
+		var moved_dist := old_pos.distance_to(Vector2(remnant.get("pos", old_pos)))
+		if distance > attack_range and moved_dist < 0.5:
+			# Task 8: Check if blocked trying to reach target
+			remnant["blocked_retries"] = int(remnant.get("blocked_retries", 0)) + 1
+			if int(remnant["blocked_retries"]) >= 5:
+				remnant["blocked_retries"] = 0
+				# Retry target switch excluding current target
+				var curr_uid := int(remnant.get("target_uid", -1))
+				var alt_target := _necronada_find_target(pos, [curr_uid])
+				if not alt_target.is_empty():
+					remnant["target_kind"] = String(alt_target.get("kind", ""))
+					remnant["target_uid"] = int(alt_target.get("uid", -1))
+					remnant["target_pos"] = Vector2(alt_target.get("pos", player_pos))
+				else:
+					# No other target available: wait 15s before retrying
+					remnant["wait_timer"] = 15.0
+		
 		remnant["attack_cd"] = float(remnant.get("attack_cd", 0.0)) - delta
-		if distance <= attack_range + 18.0 and float(remnant["attack_cd"]) <= 0.0:
-			_necronada_remnant_attack(remnant)
-			remnant["attack_cd"] = NECRONADA_REMNANT_ATTACK_INTERVAL * (0.92 if archetype == "predador" else 1.10 if archetype == "bastiao" else 1.0)
+		if float(remnant["attack_cd"]) <= 0.0:
+			if is_curate:
+				# Task 6: Curate Necro Ally healing pulse (30% of enemy curate heal)
+				remnant["attack_cd"] = 3.5
+				for other_r in necronada_remnants:
+					if float(other_r.get("hp", 0.0)) > 0.0 and Vector2(other_r.get("pos", player_pos)).distance_to(pos) <= 160.0:
+						var max_h := float(other_r.get("max_hp", player_hp_max * 0.60))
+						var heal := maxf(1.0, max_h * 0.12 * 0.30) # 30% of curate heal (Task 6)
+						other_r["hp"] = minf(max_h, float(other_r["hp"]) + heal)
+						_add_text("+%.0f" % heal, Vector2(other_r.get("pos", player_pos)) + Vector2(0, -30), Color(0.2, 1.0, 0.4), 0.8, 16)
+			elif distance <= attack_range and String(remnant.get("target_kind", "")) != "":
+				# Task 1: Ability execution matching enemy species & Task 5 lifesteal self-healing
+				_necronada_remnant_attack(remnant)
+				var archetype := String(profile.get("archetype", "predador"))
+				remnant["attack_cd"] = 1.05 if is_ranged else (1.35 if archetype == "bastiao" else 0.76)
 	necronada_remnants = necronada_remnants.filter(func(remnant): return float(remnant.get("hp", 0.0)) > 0.0)
 
 
-func _necronada_find_target(origin: Vector2) -> Dictionary:
+func _necronada_find_target_near(point: Vector2) -> Dictionary:
 	var best := {}
-	var best_distance := INF
+	var best_dist := INF
 	for enemy in enemies:
 		if float(enemy.get("hp", 0.0)) <= 0.0:
 			continue
-		var distance := origin.distance_squared_to(Vector2(enemy.get("pos", player_pos)))
-		if distance < best_distance:
-			best_distance = distance
-			best = {"kind": "enemy", "uid": int(enemy.get("uid", -1)), "pos": Vector2(enemy.get("pos", player_pos))}
+		var pos := Vector2(enemy.get("pos", player_pos))
+		var distance := point.distance_squared_to(pos)
+		if distance < best_dist:
+			best_dist = distance
+			best = {"kind": "enemy", "uid": int(enemy.get("uid", -1)), "pos": pos}
 	if _arauto_active():
-		var arauto_distance := origin.distance_squared_to(Vector2(arauto.get("pos", player_pos)))
-		if arauto_distance < best_distance:
-			best_distance = arauto_distance
-			best = {"kind": "arauto", "uid": -2, "pos": Vector2(arauto.get("pos", player_pos))}
-	if boss_active and boss_hp > 0.0:
-		var boss_distance := origin.distance_squared_to(boss_pos)
-		if boss_distance < best_distance:
+		var arauto_pos := Vector2(arauto.get("pos", player_pos))
+		var arauto_distance := point.distance_squared_to(arauto_pos)
+		if arauto_distance < best_dist:
+			best_dist = arauto_distance
+			best = {"kind": "arauto", "uid": -2, "pos": arauto_pos}
+	if _necronada_can_target_boss():
+		var boss_distance := point.distance_squared_to(boss_pos)
+		if boss_distance < best_dist:
 			best = {"kind": "boss", "uid": -1, "pos": boss_pos}
 	return best
+
+
+func _necronada_find_target(origin: Vector2, exclude_uids: Array = []) -> Dictionary:
+	var best := {}
+	var best_score := -999999.0
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var uid := int(enemy.get("uid", -1))
+		if uid in exclude_uids:
+			continue
+		var hp := float(enemy.get("hp", 1.0))
+		var max_hp := maxf(1.0, float(enemy.get("max_hp", 1.0)))
+		var hp_ratio := hp / max_hp
+		# 1st priority: lowest remaining HP % (Task 3)
+		var hp_score := (1.0 - hp_ratio) * 100.0
+		# 2nd priority: player hit count (Necro Allies only go after player shot target if shot 4+ times)
+		var hits := int(enemy.get("player_hits", 0))
+		var hit_score := 500.0 if hits >= 4 else 0.0
+		var dist_penalty := origin.distance_to(Vector2(enemy.get("pos", player_pos))) * 0.05
+		var total_score := hp_score + hit_score - dist_penalty
+		if total_score > best_score:
+			best_score = total_score
+			best = {"kind": "enemy", "uid": uid, "pos": Vector2(enemy.get("pos", player_pos))}
+	if _arauto_active() and -2 not in exclude_uids:
+		var arauto_hp_val := float(arauto.get("hp", 0.0))
+		var arauto_max_val := maxf(1.0, float(arauto.get("max_hp", 100.0)))
+		var arauto_hp_ratio := arauto_hp_val / arauto_max_val
+		var arauto_score := (1.0 - arauto_hp_ratio) * 120.0 - origin.distance_to(Vector2(arauto.get("pos", player_pos))) * 0.04
+		if arauto_score > best_score:
+			best_score = arauto_score
+			best = {"kind": "arauto", "uid": -2, "pos": Vector2(arauto.get("pos", player_pos))}
+	if _necronada_can_target_boss() and -1 not in exclude_uids:
+		var boss_hp_ratio: float = float(boss_hp) / maxf(1.0, float(boss_hp_max))
+		var boss_score := (1.0 - boss_hp_ratio) * 150.0 - origin.distance_to(boss_pos) * 0.03
+		if boss_score > best_score:
+			best_score = boss_score
+			best = {"kind": "boss", "uid": -1, "pos": boss_pos}
+	return best
+
+
+func _necronada_can_target_boss() -> bool:
+	if not boss_active or boss_hp <= 0.0:
+		return false
+	if current_phase == 2 and boss2_ultimate_timer > 0.0 and not _boss2_ultimate_boss_visible():
+		return false
+	return true
 
 
 func _necronada_target_alive(remnant: Dictionary) -> bool:
@@ -10980,11 +11811,11 @@ func _necronada_target_alive(remnant: Dictionary) -> bool:
 		"arauto":
 			return _arauto_active()
 		"boss":
-			return boss_active and boss_hp > 0.0
+			return _necronada_can_target_boss()
 	return false
 
 
-func _necronada_target_pos(remnant: Dictionary) -> Vector2:
+func _necronada_remnant_target_pos(remnant: Dictionary) -> Vector2:
 	match String(remnant.get("target_kind", "")):
 		"enemy":
 			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
@@ -10994,36 +11825,71 @@ func _necronada_target_pos(remnant: Dictionary) -> Vector2:
 			if _arauto_active():
 				return Vector2(arauto.get("pos", player_pos))
 		"boss":
-			if boss_active:
+			if _necronada_can_target_boss():
 				return boss_pos
 	return Vector2(remnant.get("target_pos", player_pos))
 
 
 func _necronada_remnant_attack(remnant: Dictionary) -> void:
 	var target_kind := String(remnant.get("target_kind", ""))
-	if target_kind == "":
-		return
+	var pos := Vector2(remnant.get("pos", player_pos))
+	var target_pos := Vector2(remnant.get("target_pos", pos))
 	var profile: Dictionary = Dictionary(remnant.get("profile", {}))
-	var damage: float = player_damage * 0.55
+	var color: Color = profile.get("color", _necronada_accent())
+	var archetype := String(profile.get("archetype", "predador"))
+	var is_ranged := bool(remnant.get("is_ranged", false))
+	var base_dmg: float = float(player_damage) * (0.54 if is_ranged else (0.74 if archetype == "predador" else 0.62))
 	if bool(remnant.get("supreme", false)):
-		damage *= 1.18
-	var origin := Vector2(remnant.get("pos", player_pos))
-	var target_pos := _necronada_target_pos(remnant)
+		base_dmg *= 1.35
+	if float(remnant.get("empower_timer", 0.0)) > 0.0:
+		base_dmg *= NECRONADA_EMPOWER_ALLY_DAMAGE_MULT
+	
+	# Task 5: Player card critical chance inheritance
+	var is_crit := rng.randf() < clampf(player_crit_chance, 0.0, 0.85)
+	if is_crit:
+		base_dmg *= 1.50
+		
+	var final_damage := base_dmg
+	var strike_kind := "remnant_bolt" if is_ranged else ("remnant_shock" if archetype == "bastiao" else "remnant_strike")
+	necronada_vfx.append({"kind": strike_kind, "a": pos, "b": target_pos, "life": 0.26, "max": 0.26, "color": color, "archetype": archetype})
+	_spawn_radial_particles(target_pos, color, 8 if is_ranged else 12)
+	
+	# Deal damage to target
+	var hit_success := false
 	match target_kind:
 		"enemy":
 			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
 			if enemy != null:
-				_damage_enemy(enemy, damage, "necronada_remnant", false, true, origin, "summon")
+				if archetype == "executor":
+					enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), 0.35)
+					enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), 0.82)
+				elif archetype == "anomalia":
+					enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.20)
+				elif archetype == "bastiao":
+					shockwaves.append({"pos": target_pos, "radius": 14.0, "max": 82.0, "life": 0.22, "damage": final_damage * 0.28, "hit": {}, "source_category": "summon", "color": color})
+				_damage_enemy(enemy, final_damage, "necronada_remnant", true, true, pos)
+				hit_success = true
 		"arauto":
-			_damage_arauto(damage * 0.72, "necronada_remnant", true, true, "summon", origin)
+			if _arauto_active():
+				_damage_arauto(final_damage, "necronada_remnant")
+				hit_success = true
 		"boss":
-			_damage_boss(damage * 0.58, "necronada_remnant", true, true, "summon", origin)
-	necronada_vfx.append({"kind": "remnant_strike", "a": origin, "b": target_pos, "life": 0.22, "max": 0.22, "color": profile.get("color", _necronada_accent())})
+			if boss_active:
+				_damage_boss(final_damage * 0.46, "necronada_remnant", true, true, "summon", pos)
+				hit_success = true
 
 
 
 func _damage_necronada_remnant(remnant: Dictionary, raw_damage: float) -> void:
-	var armor_scale := clampf(1.0 / (1.0 + time_alive * 0.0025 + float(current_phase) * 0.15), 0.25, 1.0)
+	var profile: Dictionary = Dictionary(remnant.get("profile", {}))
+	var archetype := String(profile.get("archetype", "predador"))
+	var armor_scale := clampf(0.72 / (1.0 + time_alive * 0.0018 + float(current_phase) * 0.10), 0.18, 0.72)
+	if archetype == "bastiao":
+		armor_scale *= 0.78
+	if bool(remnant.get("supreme", false)):
+		armor_scale *= 0.74
+	if player_defense > 0.0:
+		armor_scale *= clampf(1.0 - player_defense * 0.012, 0.38, 1.0)
 	var actual_damage := raw_damage * armor_scale
 	remnant["hp"] = float(remnant.get("hp", 0.0)) - actual_damage
 	if float(remnant.get("hp", 0.0)) <= 0.0:
@@ -11035,7 +11901,7 @@ func _necronada_nearest_remnant_pos(origin: Vector2) -> Vector2:
 	var best_pos := Vector2.INF
 	var best_dist := INF
 	for remnant in necronada_remnants:
-		if float(remnant.get("life", 0.0)) <= 0.0 or float(remnant.get("hp", 0.0)) <= 0.0:
+		if float(remnant.get("hp", 0.0)) <= 0.0:
 			continue
 		var pos := Vector2(remnant.get("pos", player_pos))
 		var dist := origin.distance_squared_to(pos)
@@ -11047,7 +11913,7 @@ func _necronada_nearest_remnant_pos(origin: Vector2) -> Vector2:
 
 func _necronada_remnant_at_pos(pos: Vector2, radius: float) -> Dictionary:
 	for remnant in necronada_remnants:
-		if float(remnant.get("life", 0.0)) <= 0.0 or float(remnant.get("hp", 0.0)) <= 0.0:
+		if float(remnant.get("hp", 0.0)) <= 0.0:
 			continue
 		if Vector2(remnant.get("pos", player_pos)).distance_to(pos) <= radius:
 			return remnant
@@ -11222,6 +12088,7 @@ func _try_cast_bombastica_q(target_world = null) -> void:
 	if placed:
 		target = player_pos.clamp(Vector2(95, 95), WORLD_SIZE - Vector2(95, 95))
 	_spawn_bombastica_bomb(target, player_damage * BOMBASTICA_Q_DAMAGE_MULT * skill_power * damage_mult, BOMBASTICA_Q_RADIUS * radius_mult, selected_fuse, not placed)
+	_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.75, 1.0)
 	_add_text("TRIADE %.0fs" % selected_fuse, target + Vector2(0, -72), Color(1.0, 0.62, 0.18), 0.9, 20)
 	_manifest_evolution_on_skill(target)
 	_send_network_ability_visual(NET_ABILITY_SKILL, player_pos, target, selected_fuse)
@@ -11274,6 +12141,7 @@ func _spawn_secondary_bombastica(target_world = null) -> void:
 		"seed": rng.randi()
 	})
 	_add_text("CAMPO MINADO", center + Vector2(0, -112), Color(1.0, 0.62, 0.16), 1.2, 24)
+	_play_sfx("Mina-Bombastica.mp3", 0.05, 0.70, 1.0)
 	_spawn_radial_particles(center, Color(1.0, 0.50, 0.10), 22)
 
 
@@ -11301,6 +12169,7 @@ func _update_secondary_bombastica(secondary: Dictionary, delta: float) -> void:
 			should_trigger = true
 		if should_trigger:
 			mine["triggered"] = true
+			_play_sfx("Mina-Bombastica.mp3", 0.05, 0.80, 1.05)
 			_apply_bombastica_explosion(mine_pos, BOMBASTICA_E_MINE_RADIUS, player_damage * BOMBASTICA_E_MINE_DAMAGE_MULT, "bombastic_field_mine", false, 0, {})
 		else:
 			active_count += 1
@@ -11329,6 +12198,7 @@ func _trigger_bombastica_detonator(total := false) -> bool:
 
 
 func _detonate_bombastica_bomb(bomb: Dictionary, manual: bool, chain_depth: int, affected: Dictionary) -> void:
+	_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.85, 1.05)
 	if bool(bomb.get("exploded", false)):
 		return
 	bomb["exploded"] = true
@@ -15092,6 +15962,7 @@ func _damage_arauto(amount: float, source: String, show_text := true, apply_aura
 		_consume_fratura_cronal_on_arauto(source)
 	var guard_count: int = _count_aguilhao_nodules() if _arauto_is_aguilhao() else _count_arauto_echoes()
 	var reduction: float = min(AGUILHAO_MAX_NODE_REDUCTION, float(guard_count) * AGUILHAO_NODE_DAMAGE_REDUCTION) if _arauto_is_aguilhao() else min(ARAUTO_MAX_DAMAGE_REDUCTION, float(guard_count) * ARAUTO_ECHO_DAMAGE_REDUCTION)
+	amount = _apply_limiar_ruina_damage(amount, float(arauto.get("hp", 0.0)), float(arauto.get("max_hp", arauto.get("hp", 1.0))), source, effective_source_category, Vector2(arauto.get("pos", player_pos)))
 	var final: float = max(1.0, amount * (1.0 - reduction))
 	if _arauto_is_aguilhao() and float(arauto.get("aguilhao_vulnerable", 0.0)) > 0.0:
 		final *= AGUILHAO_STUN_VULNERABILITY_MULT
@@ -15181,8 +16052,8 @@ func _spawn_arauto_card_rewards(pos: Vector2) -> void:
 func _spawn_random_card_drops(pos: Vector2, count: int, rare_slots: int) -> void:
 	for peer_id in _reward_peer_ids():
 		var peer_rare_slots := rare_slots
-		var rare_pool: Array = CARDS.filter(func(card): return _rare_cards_unlocked() and _is_rare_card(card) and not _card_at_max(card))
-		var common_pool: Array = CARDS.filter(func(card): return _is_common_card(card) and not _card_at_max(card))
+		var rare_pool: Array = CARDS.filter(func(card): return _rare_cards_unlocked() and _is_rare_card(card) and not _card_at_max(card) and _card_drop_texture_available(card))
+		var common_pool: Array = CARDS.filter(func(card): return _is_common_card(card) and not _card_at_max(card) and _card_drop_texture_available(card))
 		for i in range(count):
 			var card: Dictionary = {}
 			if peer_rare_slots > 0 and not rare_pool.is_empty():
@@ -15213,11 +16084,13 @@ func _reward_peer_ids() -> Array[int]:
 
 
 func _append_owned_card_drop(card: Dictionary, pos: Vector2, angle: float, owner_peer: int, life: float, min_speed: float, max_speed: float, min_radius: float, max_radius: float) -> void:
+	if not _card_drop_texture_available(card):
+		return
 	net_reward_sequence += 1
 	arauto_card_drops.append({
 		"drop_id": "drop_%d_%d" % [Time.get_ticks_msec(), net_reward_sequence],
 		"owner_peer": owner_peer,
-		"card": card,
+		"card": card.duplicate(true),
 		"pos": (pos + Vector2.from_angle(angle) * rng.randf_range(min_radius, max_radius)).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80)),
 		"vel": Vector2.from_angle(angle) * rng.randf_range(min_speed, max_speed),
 		"life": life,
@@ -15233,6 +16106,10 @@ func _reward_owned_by_local(reward: Dictionary) -> bool:
 
 func _update_arauto_card_drops(delta: float) -> void:
 	for drop in arauto_card_drops:
+		var card: Dictionary = drop.get("card", {})
+		if not _card_drop_texture_available(card):
+			drop["life"] = 0.0
+			continue
 		drop["age"] = float(drop.get("age", 0.0)) + delta
 		drop["life"] = float(drop.get("life", 0.0)) - delta
 		drop["pos"] = (Vector2(drop["pos"]) + Vector2(drop.get("vel", Vector2.ZERO)) * delta).clamp(Vector2(60, 70), WORLD_SIZE - Vector2(60, 70))
@@ -15241,7 +16118,6 @@ func _update_arauto_card_drops(delta: float) -> void:
 		if drop_id != "" and net_collected_drop_ids.has(drop_id):
 			continue
 		if _reward_owned_by_local(drop) and Vector2(drop["pos"]).distance_to(player_pos) <= _neutral_pickup_radius(50.0):
-			var card: Dictionary = drop["card"]
 			_apply_card(card)
 			if drop_id != "":
 				net_collected_drop_ids[drop_id] = true
@@ -15253,7 +16129,7 @@ func _update_arauto_card_drops(delta: float) -> void:
 
 
 func _available_card_drop_pool() -> Array:
-	return CARDS.filter(func(card): return not _card_at_max(card) and (_is_common_card(card) or _rare_cards_unlocked()))
+	return CARDS.filter(func(card): return not _card_at_max(card) and (_is_common_card(card) or _rare_cards_unlocked()) and _card_drop_texture_available(card))
 
 
 func _update_arauto_evolution_fragment(delta: float) -> void:
@@ -15653,7 +16529,6 @@ func _apply_entity_separation(delta: float) -> void:
 	if delta <= 0.0:
 		return
 	
-	# 1. Separate Enemies vs Enemies & Necro Aliados
 	var all_minions: Array = []
 	for e in enemies:
 		if float(e.get("hp", 0.0)) > 0.0:
@@ -15672,17 +16547,17 @@ func _apply_entity_separation(delta: float) -> void:
 		if boss_active and boss_hp > 0.0:
 			var d_boss := pos_a.distance_to(boss_pos)
 			var min_boss_d := r_a + 64.0
-			if d_boss < min_boss_d and d_boss > 0.001:
-				var push_b := (pos_a - boss_pos).normalized() * (min_boss_d - d_boss)
-				a["pos"] = (pos_a + push_b).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+			if d_boss < min_boss_d:
+				var push_b := (pos_a - boss_pos).normalized() if d_boss > 0.01 else Vector2.RIGHT.rotated(float(i))
+				a["pos"] = (boss_pos + push_b * min_boss_d).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
 				pos_a = Vector2(a["pos"])
 		
 		# Player separation
 		var d_player := pos_a.distance_to(player_pos)
-		var min_player_d := r_a + 22.0
-		if d_player < min_player_d and d_player > 0.001:
-			var push_p := (pos_a - player_pos).normalized() * (min_player_d - d_player) * 0.65
-			a["pos"] = (pos_a + push_p).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		var min_player_d := r_a + 24.0
+		if d_player < min_player_d:
+			var push_p := (pos_a - player_pos).normalized() if d_player > 0.01 else Vector2.UP.rotated(float(i))
+			a["pos"] = (player_pos + push_p * min_player_d).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
 			pos_a = Vector2(a["pos"])
 		
 		for j in range(i + 1, count):
@@ -15690,13 +16565,71 @@ func _apply_entity_separation(delta: float) -> void:
 			var pos_b := Vector2(b.get("pos", Vector2.ZERO))
 			var r_b := _entity_physical_radius(b)
 			var dist := pos_a.distance_to(pos_b)
-			var min_dist := r_a + r_b
-			if dist < min_dist and dist > 0.001:
+			var is_both_remnants := (a in necronada_remnants) and (b in necronada_remnants)
+			var min_dist := 50.0 if is_both_remnants else (r_a + r_b) # Task 8: 50px inter-ally spacing
+			if dist < min_dist:
 				var overlap := min_dist - dist
-				var push_dir := (pos_a - pos_b) / dist
-				var push_amount := push_dir * (overlap * 0.45)
+				var push_dir := (pos_a - pos_b).normalized() if dist > 0.01 else Vector2.RIGHT.rotated(float(i * 3 + j * 7))
+				var push_amount := push_dir * (maxf(overlap, 4.0) * 0.55)
 				a["pos"] = (pos_a + push_amount).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
 				b["pos"] = (pos_b - push_amount).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+				pos_a = Vector2(a["pos"])
+
+func _update_ancorada_standing_still(delta: float) -> void:
+	if manifestation_key != "ancorada":
+		ancorada_crit_bonus = 0.0
+		ancorada_weight_knockback = 5.0
+		ancorada_still_timer = 0.0
+		ancorada_weight_timer = 0.0
+		return
+	var moved := player_pos.distance_to(ancorada_prev_pos) > 1.5
+	ancorada_prev_pos = player_pos
+	if moved:
+		ancorada_still_timer = 0.0
+		ancorada_crit_bonus = 0.0
+		ancorada_weight_timer = 0.0
+		ancorada_weight_knockback = 5.0
+		return
+	ancorada_still_timer += delta
+	if ancorada_still_timer >= 3.0:
+		var crit_ticks := int((ancorada_still_timer - 3.0) / 3.0) + 1
+		ancorada_crit_bonus = minf(0.50, float(crit_ticks) * 0.02)
+	ancorada_weight_timer += delta
+	while ancorada_weight_timer >= 2.0:
+		ancorada_weight_timer -= 2.0
+		ancorada_weight_knockback = minf(50.0, ancorada_weight_knockback + 2.0)
+
+
+func _update_ancorada_spinning(delta: float) -> void:
+	for spin in ancorada_spinning:
+		spin["life"] = maxf(0.0, float(spin.get("life", 0.0)) - delta)
+		spin["angle"] = float(spin.get("angle", 0.0)) + delta * 2.2
+		spin["damage_tick"] = float(spin.get("damage_tick", 0.0)) - delta
+		if float(spin["damage_tick"]) <= 0.0:
+			spin["damage_tick"] = 0.45
+			var center: Vector2 = player_pos
+			var arm_count := 4
+			for arm_i in range(arm_count):
+				var arm_angle: float = float(spin["angle"]) + float(arm_i) * TAU / float(arm_count)
+				var arm_tip: Vector2 = center + Vector2.from_angle(arm_angle) * 92.0
+				for enemy in enemies:
+					if float(enemy.get("hp", 0.0)) <= 0.0:
+						continue
+					var hit_key := str(int(enemy.get("uid", 0))) + "_" + str(arm_i)
+					if spin.get("hit", {}).has(hit_key):
+						continue
+					if Vector2(enemy.get("pos", Vector2.ZERO)).distance_to(arm_tip) < 52.0:
+						_damage_enemy(enemy, player_damage * 0.65, "ancorada", false)
+						if not spin.has("hit"):
+							spin["hit"] = {}
+						spin["hit"][hit_key] = true
+				if boss_active and boss_hp > 0.0 and boss_pos.distance_to(arm_tip) < 72.0:
+					_damage_boss(player_damage * 0.38, "ancorada")
+				if _arauto_active() and Vector2(arauto.get("pos", Vector2.ZERO)).distance_to(arm_tip) < 72.0:
+					_damage_arauto(player_damage * 0.38, "ancorada", false)
+			spin["hit"] = {}
+	ancorada_spinning = ancorada_spinning.filter(func(s): return float(s.get("life", 0.0)) > 0.0)
+
 
 func _update_enemies(delta: float) -> void:
 	if not _is_world_authority():
@@ -15705,7 +16638,10 @@ func _update_enemies(delta: float) -> void:
 	var lacerante_storm = not _active_lacerante_secondary().is_empty()
 	var phase1_boss_freeze = _phase1_boss_freezes_enemies()
 	for enemy in enemies:
-		enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
+		if String(enemy.get("type", "")) == ENEMY_FOSSIL_PUSTULE:
+			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 2.0
+		else:
+			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
 		enemy["hit_cd"] = max(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
 		enemy["stun"] = max(0.0, float(enemy.get("stun", 0.0)) - delta)
 		enemy["ferrolho_root"] = max(0.0, float(enemy.get("ferrolho_root", 0.0)) - delta)
@@ -15878,18 +16814,31 @@ func _enemy_prefers_remote(enemy: Dictionary) -> bool:
 	return not bool(selected.get("local", false))
 
 
+func _is_boss_or_mini_boss_or_larapio(enemy: Dictionary) -> bool:
+	if bool(enemy.get("boss", false)) or bool(enemy.get("mini_boss", false)) or bool(enemy.get("is_boss", false)) or bool(enemy.get("is_mini_boss", false)):
+		return true
+	var type_str := String(enemy.get("type", enemy.get("kind", ""))).to_lower()
+	if type_str in [ENEMY_LARAPIO, "larapio", "arauto", "boss", "mini_boss", "mini_boss_1", "mini_boss_2"]:
+		return true
+	if type_str.find("boss") >= 0 or type_str.find("larapio") >= 0 or type_str.find("arauto") >= 0:
+		return true
+	return false
+
+
 func _get_enemy_target_pos(enemy: Dictionary) -> Vector2:
-	if _necronada_has_active_taunt():
-		return _necronada_taunt_target_pos(Vector2(enemy.get("pos", player_pos)))
-	if float(enemy.get("blind_confusion", 0.0)) > 0.0:
-		return Vector2(enemy.get("blind_decoy_position", player_pos))
-	if not necronada_remnants.is_empty():
-		var uid := int(enemy.get("uid", 0))
-		var focus_rng := fmod(abs(sin(float(uid) * 12.9898 + time_alive * 0.5)), 1.0)
-		if focus_rng >= 0.70:
+	var is_boss_or_special := _is_boss_or_mini_boss_or_larapio(enemy)
+	if not is_boss_or_special:
+		if _necronada_has_active_taunt():
+			return _necronada_taunt_target_pos(Vector2(enemy.get("pos", player_pos)))
+		if float(enemy.get("blind_confusion", 0.0)) > 0.0:
+			return Vector2(enemy.get("blind_decoy_position", player_pos))
+		if not necronada_remnants.is_empty():
 			var nearest_remnant_pos := _necronada_nearest_remnant_pos(Vector2(enemy.get("pos", player_pos)))
 			if nearest_remnant_pos != Vector2.INF:
 				return nearest_remnant_pos
+	else:
+		if float(enemy.get("blind_confusion", 0.0)) > 0.0:
+			return Vector2(enemy.get("blind_decoy_position", player_pos))
 	var targets := _combat_targets()
 	if targets.is_empty():
 		return Vector2(enemy.get("pos", player_pos))
@@ -16273,6 +17222,7 @@ func _update_lodario(enemy: Dictionary, delta: float) -> void:
 			if was_lunge:
 				enemy["lodario_lunge_cd"] = LODARIO_LUNGE_COOLDOWN
 			enemy["lodario_jump_timer"] = _lodario_hop_interval(enemy)
+			_play_sfx("Lodario-mov.mp3", 0.05, 0.68, rng.randf_range(0.92, 1.08))
 		return
 	var target_pos := _lodario_target_pos(enemy)
 	var current_pos := Vector2(enemy["pos"])
@@ -17264,7 +18214,7 @@ func _start_larapio_ultimate(enemy: Dictionary) -> void:
 	enemy["portal_pause"] = maxf(float(enemy.get("portal_pause", 0.0)), 0.8)
 	enemy["alerted"] = true
 	_add_text("PORTAIS LADINOS!", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -88), Color(0.88, 0.34, 1.0), 1.1, 20)
-	_play_larapio_sfx(enemy, "Risada-Loop.mp3", 0.66, 1.10, true)
+	_play_larapio_walk_laugh(enemy, 0.66, 1.10, true)
 
 
 func _larapio_jump_between_ultimate_portals(enemy: Dictionary, target_pos: Vector2) -> void:
@@ -17321,7 +18271,19 @@ func _update_larapio_laughs(enemy: Dictionary, delta: float, has_loot: bool) -> 
 		enemy["larapio_idle_laugh_cd"] = float(enemy.get("larapio_idle_laugh_cd", LARAPIO_IDLE_LAUGH_INTERVAL)) - delta
 		if float(enemy["larapio_idle_laugh_cd"]) <= 0.0:
 			enemy["larapio_idle_laugh_cd"] = LARAPIO_IDLE_LAUGH_INTERVAL + rng.randf_range(-0.65, 0.75)
-			_play_larapio_sfx(enemy, "Risada-Loop.mp3", 0.56, 1.0)
+			_play_larapio_walk_laugh(enemy, 0.56, 1.0)
+
+
+func _larapio_walk_laugh_options() -> Array[String]:
+	return ["Risada-Loop.mp3", "Risada-Loop2.mp3", "Risada-Loop3.mp3"]
+
+
+func _play_larapio_walk_laugh(enemy: Dictionary, volume := 0.56, pitch := 1.0, force := false) -> void:
+	var laugh_options := _larapio_walk_laugh_options()
+	if laugh_options.is_empty():
+		return
+	var chosen_laugh: String = laugh_options[rng.randi_range(0, laugh_options.size() - 1)]
+	_play_larapio_sfx(enemy, chosen_laugh, volume, pitch, force)
 
 
 func _play_larapio_sfx(enemy: Dictionary, name: String, volume := 0.70, pitch := 1.0, force := false) -> void:
@@ -17787,7 +18749,8 @@ func _update_bullets(delta: float) -> void:
 			if not bullet["hits"].has("boss"):
 				bullet["hits"]["boss"] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
-				_damage_boss(float(bullet["damage"]), bullet["kind"], true, true, String(bullet.get("source_category", "basic_attack")), Vector2(bullet.get("origin", player_pos)))
+				var boss_bullet_damage := _critical_damage(float(bullet["damage"]), bool(bullet.get("always_crit", false)))
+				_damage_boss(boss_bullet_damage, bullet["kind"], true, true, String(bullet.get("source_category", "basic_attack")), Vector2(bullet.get("origin", player_pos)))
 				if bool(bullet.get("solar_splash", false)):
 					_apply_eclipsada_solar_splash(Vector2(bullet["pos"]), float(bullet.get("damage", player_damage)), String(bullet.get("source_category", "basic_attack")))
 				var evolution_keep_boss := _manifest_evolution_on_projectile_hit(bullet, {"uid": "boss", "kind": "boss", "pos": boss_pos}, boss_pos)
@@ -17807,6 +18770,11 @@ func _update_bullets(delta: float) -> void:
 					boss_parasite_mark_time = PARASITE_MARK_DURATION
 				if bullet["kind"] == "bombastica":
 					_apply_bombastica_powder_to_target("boss", -1, boss_pos)
+				if bullet["kind"] == "necronada":
+					_necronada_register_boss_empower_followup_hit()
+				if bullet["kind"] == "necronada_dust":
+					_necronada_start_boss_empower_rose_window()
+					necronada_vfx.append({"kind": "dust_hit", "pos": boss_pos, "life": 0.34, "max": 0.34})
 				if bullet["kind"] == "eletrica_charged":
 					shockwaves.append({"pos": boss_pos, "radius": 18.0, "max": 132.0, "life": 0.28, "damage": float(bullet["damage"]) * 0.42, "hit": {}})
 					_spawn_radial_particles(boss_pos, Color(0.46, 1.0, 1.0), 10)
@@ -17996,6 +18964,10 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void:
 		damage *= 1.18
 	if float(enemy.get("contract_vulnerable", 0.0)) > 0.0:
 		damage *= 1.16
+	if float(enemy.get("necronada_crit_window", 0.0)) > 0.0 and rng.randf() < clampf(float(enemy.get("necronada_crit_chance", NECRONADA_ULTIMATE_CRIT_CHANCE)), 0.0, 0.85):
+		damage *= 1.50
+		enemy["necronada_epitaph_flash"] = maxf(float(enemy.get("necronada_epitaph_flash", 0.0)), 0.35)
+		_add_text("CRITICO FUNERARIO", Vector2(enemy["pos"]) + Vector2(-64, -78), _necronada_accent(), 0.38, 14)
 	_damage_enemy(enemy, damage, bullet["kind"], true, true, Vector2(bullet.get("origin", player_pos)), String(bullet.get("source_category", "basic_attack")))
 
 	_spawn_custom_collision(bullet["pos"], bullet["kind"])
@@ -18017,6 +18989,19 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void:
 		_apply_bombastica_powder_to_target("enemy", int(enemy.get("uid", -1)), Vector2(enemy["pos"]))
 	if bullet["kind"] == "necronada":
 		_apply_necronada_epitaph(enemy, Vector2(bullet.get("pos", enemy["pos"])))
+		_necronada_register_empower_followup_hit(enemy)
+	if bullet["kind"] == "necronada_dust":
+		enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), 1.0)
+		enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), 0.70)
+		enemy["necronada_crit_window"] = maxf(float(enemy.get("necronada_crit_window", 0.0)), 2.6)
+		enemy["necronada_crit_chance"] = maxf(float(enemy.get("necronada_crit_chance", 0.0)), 0.26)
+		_necronada_start_empower_rose_window(enemy)
+		necronada_vfx.append({"kind": "dust_hit", "pos": Vector2(bullet.get("pos", enemy["pos"])), "life": 0.34, "max": 0.34})
+	if bullet["kind"] == "ancorada" and ancorada_weight_knockback > 0.0:
+		var push_dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
+		if push_dir.length() < 0.01:
+			push_dir = (Vector2(enemy["pos"]) - player_pos).normalized()
+		enemy["pos"] = (Vector2(enemy["pos"]) + push_dir * ancorada_weight_knockback).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
 	if bullet["kind"] == "gravitante":
 		orbitals.append({
 			"target_kind": "enemy",
@@ -18092,9 +19077,12 @@ func _apply_bullet_effect_to_arauto(bullet: Dictionary) -> void:
 
 
 func _critical_damage(base: float, always_crit := false) -> float:
-	if always_crit or rng.randf() < player_crit_chance:
+	var effective_crit: float = player_crit_chance + ancorada_crit_bonus
+	var crit_chance: float = clampf(effective_crit, 0.0, 1.0)
+	var crit_overcap: float = maxf(0.0, effective_crit - 1.0)
+	if always_crit or rng.randf() < crit_chance:
 		_add_text("CRIT!", player_pos + Vector2(0, -86), Color(0.92, 0.45, 1.0) if always_crit else Color(1.0, 0.82, 0.18), 0.6, 22)
-		return base * 3.0
+		return base * 3.0 * (1.0 + crit_overcap)
 	return base
 
 
@@ -18316,6 +19304,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	if _is_direct_player_damage_source(source, effective_source_category):
+		enemy["player_hits"] = int(enemy.get("player_hits", 0)) + 1 # Task 3 player focus target priority
 		var opportunity := AuraSystem.consume_opportunity_damage(aura_state, player_damage)
 		amount += float(opportunity.get("bonus", 0.0))
 		_apply_aura_events(opportunity.get("events", []))
@@ -18362,6 +19351,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text :
 	amount *= _acorrentada_chained_damage_multiplier(enemy)
 	amount *= _cartographic_trace_damage_multiplier(enemy, source)
 	var hp_before := float(enemy["hp"])
+	amount = _apply_limiar_ruina_damage(amount, hp_before, float(enemy.get("max_hp", hp_before)), source, effective_source_category, Vector2(enemy.get("pos", damage_origin)))
 	var incoming_damage: float = max(1.0, amount)
 	var antimatter_should_trigger: bool = _antimatter_direct_trigger(source, effective_source_category)
 	enemy["hp"] = float(enemy["hp"]) - incoming_damage
@@ -18512,6 +19502,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier := true, 
 		var opportunity := AuraSystem.consume_opportunity_damage(aura_state, player_damage)
 		amount += float(opportunity.get("bonus", 0.0))
 		_apply_aura_events(opportunity.get("events", []))
+	amount = _apply_limiar_ruina_damage(amount, boss_hp, boss_hp_max, source, effective_source_category, boss_pos)
 	var final = max(1.0, amount * (1.0 - armor))
 	if mnesic_boss_vulnerability > 0.0 and source != "parasite_feast":
 		final *= 1.16
@@ -18649,6 +19640,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier := true, 
 		if next_phase > 0:
 			_spawn_phase_fragment(boss_pos, next_phase)
 		else:
+			_stop_battle_music_for_screen_transition()
 			_finalize_run_report("Vitoria")
 			mode = "victory"
 
@@ -18948,7 +19940,8 @@ func _update_enemy_bullets(delta: float) -> void:
 				_spawn_boss2_slow_zone(Vector2(bullet["pos"]), rng.randf_range(14.0, 20.0), 1.25)
 		var bullet_hit_radius := float(bullet.get("hit_radius", bullet.get("radius", 34.0)))
 		_track_probability_near_miss(bullet, previous_bullet_pos, bullet_hit_radius)
-		if bullet["pos"].distance_to(player_pos) < bullet_hit_radius:
+		var remnant_hit := _damage_remnant_from_enemy_bullet(bullet, bullet_hit_radius)
+		if not remnant_hit and bullet["pos"].distance_to(player_pos) < bullet_hit_radius:
 			bullet["probability_near_miss_registered"] = true
 			bullet_type = String(bullet.get("type", "projetador"))
 			var hit_was_blocked := _player_invulnerable()
@@ -18988,6 +19981,45 @@ func _update_enemy_bullets(delta: float) -> void:
 			bullet["probability_near_miss_registered"] = true
 			_gain_desvio_charge(Vector2(bullet.get("pos", player_pos)))
 	enemy_bullets = enemy_bullets.filter(func(b): return float(b["life"]) > 0.0)
+
+
+func _enemy_bullet_should_end_on_remnant_hit(bullet_type: String) -> bool:
+	return bullet_type not in [
+		"boss6_carnage_slime",
+		"boss6_carnage_pool"
+	]
+
+
+func _damage_remnant_from_enemy_bullet(bullet: Dictionary, hit_radius: float) -> bool:
+	if necronada_remnants.is_empty():
+		return false
+	var bullet_pos := Vector2(bullet.get("pos", player_pos))
+	var bullet_type := String(bullet.get("type", "projetador"))
+	var closest_remnant := {}
+	var closest_dist := INF
+	for remnant in necronada_remnants:
+		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
+			continue
+		var remnant_pos := Vector2(remnant.get("pos", player_pos))
+		var dist := remnant_pos.distance_to(bullet_pos)
+		if dist <= hit_radius + 18.0 and dist < closest_dist:
+			closest_dist = dist
+			closest_remnant = remnant
+	if closest_remnant.is_empty():
+		return false
+	var damage := maxf(1.0, float(bullet.get("damage", 1.0)) * 0.80)
+	_damage_necronada_remnant(closest_remnant, damage)
+	var hit_pos := Vector2(closest_remnant.get("pos", bullet_pos))
+	_add_text("-%d" % int(damage), hit_pos + Vector2(0, -42), Color(1.0, 0.35, 0.35), 0.45, 15)
+	_spawn_radial_particles(hit_pos, Color(0.92, 0.25, 0.36), 7)
+	if bullet_type == "pyro_wall_seed":
+		_add_phase2_fire_wall_tile(bullet_pos)
+	elif bullet_type == "rat_spit":
+		_add_phase3_miasma(bullet_pos, 48.0, 1.9, 0.018)
+		bullet["exploded"] = true
+	if _enemy_bullet_should_end_on_remnant_hit(bullet_type):
+		bullet["life"] = 0.0
+	return true
 
 
 func _teleport_player_from_phase4_magic() -> void:
@@ -19522,6 +20554,7 @@ func _freeze_player(duration: float, label := "CONGELADO!") -> void:
 		_add_text("IMUNE!", player_pos + Vector2(0, -42), Color(0.7, 0.9, 1.0), 0.6, 18)
 		return
 	var freeze_time := maxf(PHASE2_FREEZE_VISUAL_MIN_TIME, duration)
+	_play_sfx("Congelando.mp3", 0.05, 0.75, 1.0)
 	player_stun_timer = max(player_stun_timer, _hostile_control_duration(freeze_time))
 	player_control_immunity_timer = player_stun_timer + 3.0
 	player_freeze_visual_duration = freeze_time
@@ -20515,9 +21548,10 @@ func _update_heal_orbs(delta: float) -> void:
 	for orb in heal_orbs:
 		orb["life"] = float(orb["life"]) - delta
 		if orb["pos"].distance_to(player_pos) < _neutral_pickup_radius(58.0):
-			var heal = int((player_hp_max - player_hp) * float(orb["fraction"]))
+			var base_heal := float(player_hp_max - player_hp) * float(orb["fraction"])
+			var heal = int(round(_nucleo_orb_heal_amount(base_heal)))
 			if heal > 0:
-				_heal_player(heal, "heal_orb", true)
+				_heal_player(heal, "heal_orb", _support_card_count(CARD_NUCLEO_ID) <= 0)
 				_add_text("+%d" % heal, player_pos + Vector2(0, -64), Color(0.36, 1.0, 0.46), 0.8, 18)
 			orb["life"] = 0.0
 	heal_orbs = heal_orbs.filter(func(o): return float(o["life"]) > 0.0)
@@ -20655,6 +21689,7 @@ func _start_boss1_time_wave() -> void:
 	screen_shake_strength = 7.0
 	_vibrate(70, 0.24)
 	_add_text(_chrono_variant_name(variant), boss_pos + Vector2(0, -126), _chrono_variant_color(variant), 2.0, 28)
+	_play_sfx("Retrocede.mp3", 0.05, 0.85, 1.0)
 	_spawn_radial_particles(boss_pos, Color(0.34, 0.84, 1.0), 32)
 
 
@@ -23870,22 +24905,26 @@ func _start_boss2_ultimate() -> void:
 	boss2_ultimate_hail_timer = BOSS2_ULTIMATE_HAIL_INTERVAL
 	boss2_ultimate_fan_timer = BOSS2_ULTIMATE_FAN_INTERVAL
 	boss2_ultimate_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
+	boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
 	boss2_ultimate_blizzard_exposure = 0.0
 	boss2_ultimate_hit_gate = 0.0
 	boss_attacks.clear()
 	_boss2_start_idle(0.4)
 	_add_text("ULTIMATE: NEVASCA DO SENTINELA", boss2_ultimate_center + Vector2(0, -BOSS2_ULTIMATE_SAFE_RADIUS - 42), Color(0.55, 0.92, 1.0), 2.2, 27)
+	_start_nevasca_sfx()
 	screen_shake_timer = max(screen_shake_timer, 0.34)
 	screen_shake_strength = max(screen_shake_strength, 12.0)
 	_vibrate(220, 0.62)
 
 
 func _end_boss2_ultimate() -> void:
+	_stop_nevasca_sfx()
 	boss2_ultimate_timer = 0.0
 	boss2_ultimate_wind_active = 0.0
 	boss2_ultimate_cooldown = 0.0
 	boss2_ultimate_blizzard_exposure = 0.0
 	boss2_ultimate_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
+	boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
 	_boss2_start_reposition()
 	_add_text("NEVASCA CESSOU", player_pos + Vector2(0, -118), Color(0.75, 1.0, 1.0), 1.5, 24)
 
@@ -23930,6 +24969,10 @@ func _update_boss2_ultimate_orbit(delta: float) -> void:
 
 
 func _update_boss2_ultimate_blizzard_damage(delta: float) -> void:
+	boss2_ultimate_remnant_blizzard_tick -= delta
+	if boss2_ultimate_remnant_blizzard_tick <= 0.0:
+		boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
+		_damage_remnants_outside_boss2_safe(float(30 + player_hp_max * 0.065) * 0.68, "boss2_ultimate_blizzard")
 	var distance: float = player_pos.distance_to(boss2_ultimate_center)
 	if distance <= BOSS2_ULTIMATE_SAFE_RADIUS:
 		boss2_ultimate_blizzard_exposure = max(0.0, boss2_ultimate_blizzard_exposure - delta * 0.75)
@@ -23943,6 +24986,18 @@ func _update_boss2_ultimate_blizzard_damage(delta: float) -> void:
 		_damage_player(int(30 + player_hp_max * 0.065), "boss2_ultimate_blizzard")
 		_damage_remote_player(int(30 + player_hp_max * 0.065), "boss2_ultimate_blizzard")
 		_spawn_boss2_slow_zone(player_pos, 42.0, 1.6)
+
+
+func _damage_remnants_outside_boss2_safe(damage: float, source: String) -> void:
+	for remnant in necronada_remnants:
+		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
+			continue
+		var r_pos := Vector2(remnant.get("pos", player_pos))
+		if r_pos.distance_to(boss2_ultimate_center) <= BOSS2_ULTIMATE_SAFE_RADIUS:
+			continue
+		_damage_necronada_remnant(remnant, damage)
+		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(0.58, 0.92, 1.0), 0.45, 16)
+		_spawn_radial_particles(r_pos, Color(0.58, 0.92, 1.0), 7)
 
 
 func _update_boss2_ultimate_spit(delta: float) -> void:
@@ -24702,6 +25757,7 @@ func _update_boss_transition_waves(delta: float) -> void:
 			continue
 		wave["radius"] = float(wave["radius"]) + float(wave["speed"]) * delta
 		_apply_boss_transition_wave_to_player(wave, player_pos, 0)
+		_apply_boss_transition_wave_to_remnants(wave)
 		for peer_id in _targetable_remote_peer_ids():
 			var state: Dictionary = net_players_by_peer.get(peer_id, {})
 			_apply_boss_transition_wave_to_player(wave, Vector2(state.get("pos", Vector2.ZERO)), peer_id)
@@ -24733,6 +25789,34 @@ func _apply_boss_transition_wave_to_player(wave: Dictionary, target_pos: Vector2
 		if enraged:
 			boss_wave_slow_timer = max(boss_wave_slow_timer, _hostile_control_duration(BOSS_STAGE_ENRAGED_SLOW_TIME))
 	_play_sfx("boss_impact", 0.035, 0.78, 0.82 if enraged else 1.0)
+
+
+func _apply_boss_transition_wave_to_remnants(wave: Dictionary) -> void:
+	var wave_pos := Vector2(wave["pos"])
+	var enraged := bool(wave.get("enraged", false))
+	var damage := int(player_hp_max * (BOSS_STAGE_ENRAGED_DAMAGE_RATE if enraged else BOSS_STAGE_WAVE_DAMAGE_RATE) + (BOSS_STAGE_ENRAGED_DAMAGE_FLAT if enraged else BOSS_STAGE_WAVE_DAMAGE_FLAT))
+	for i in range(necronada_remnants.size()):
+		var remnant: Dictionary = necronada_remnants[i]
+		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
+			continue
+		var hit_key := "hit_remnant_%d_%d" % [int(remnant.get("id", -1)), i]
+		if bool(wave.get(hit_key, false)):
+			continue
+		var r_pos := Vector2(remnant.get("pos", player_pos))
+		var dist := r_pos.distance_to(wave_pos)
+		if abs(dist - float(wave["radius"])) > float(wave["width"]) + 16.0:
+			continue
+		var angle_to_remnant := (r_pos - wave_pos).angle()
+		var opening := float(wave["open_angle"])
+		var opening_size := float(wave["open_size"])
+		var first_gap: bool = abs(wrapf(angle_to_remnant - opening, -PI, PI)) <= opening_size * 0.5
+		var opposite_gap: bool = abs(wrapf(angle_to_remnant - (opening + PI), -PI, PI)) <= opening_size * 0.5
+		if first_gap or opposite_gap:
+			continue
+		wave[hit_key] = true
+		_damage_necronada_remnant(remnant, float(damage) * 0.75)
+		_add_text("-%d" % int(float(damage) * 0.75), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
+		_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
 
 
 func _launch_boss_attack() -> void:
@@ -26241,6 +27325,12 @@ func _card_texture(card: Dictionary) -> Texture2D:
 	return _get_texture(key)
 
 
+func _card_drop_texture_available(card: Dictionary) -> bool:
+	if card.is_empty() or String(card.get("name", "")) == "":
+		return false
+	return _card_texture(card) != null
+
+
 func _new_common_card_count(card_id: String) -> int:
 	return _card_count_by_id(card_id)
 
@@ -26489,6 +27579,90 @@ func _support_log2_count(card_id: String) -> float:
 	return log(float(max(2, _support_card_count(card_id) + 1))) / log(2.0)
 
 
+func _diminishing_count_value(count: int, base: float, gain: float, curve: float) -> float:
+	if count <= 0:
+		return 0.0
+	var extra: int = max(0, count - 1)
+	return base + gain * (1.0 - exp(-curve * float(extra)))
+
+
+func _intervalo_hab1_reduction(count := -1) -> float:
+	var n := _support_card_count(CARD_INTERVALO_ID) if count < 0 else count
+	return _diminishing_count_value(n, 0.06, 0.24, 0.18)
+
+
+func _intervalo_ultimate_reduction(count := -1) -> float:
+	var n := _support_card_count(CARD_INTERVALO_ID) if count < 0 else count
+	return _diminishing_count_value(n, 0.03, 0.15, 0.16)
+
+
+func _intervalo_apply_to_hab1(base_cooldown: float, count := -1) -> float:
+	var reduction := _intervalo_hab1_reduction(count)
+	if reduction <= 0.0:
+		return base_cooldown
+	return max(0.20, base_cooldown * (1.0 - reduction))
+
+
+func _intervalo_apply_to_ultimate(base_cooldown: float, count := -1) -> float:
+	var reduction := _intervalo_ultimate_reduction(count)
+	if reduction <= 0.0:
+		return base_cooldown
+	return max(0.35, base_cooldown * (1.0 - reduction))
+
+
+func _nucleo_orb_heal_bonus(count := -1) -> float:
+	var n := _support_card_count(CARD_NUCLEO_ID) if count < 0 else count
+	return _diminishing_count_value(n, 0.20, 0.55, 0.18)
+
+
+func _nucleo_orb_heal_amount(base_amount: float, count := -1) -> float:
+	return base_amount * (1.0 + _nucleo_orb_heal_bonus(count))
+
+
+func _limiar_ruina_bonus(count := -1) -> float:
+	var n := _support_card_count(CARD_LIMIAR_RUINA_ID) if count < 0 else count
+	return _diminishing_count_value(n, 0.20, 0.30, 0.22)
+
+
+func _limiar_ruina_applies(hp_before: float, max_hp: float, source: String, source_category := "") -> bool:
+	if _support_card_count(CARD_LIMIAR_RUINA_ID) <= 0:
+		return false
+	if max_hp <= 0.0 or hp_before / max_hp <= 0.90:
+		return false
+	return _is_direct_player_damage_source(source, source_category)
+
+
+func _apply_limiar_ruina_damage(amount: float, hp_before: float, max_hp: float, source: String, source_category: String, pos: Vector2) -> float:
+	if not _limiar_ruina_applies(hp_before, max_hp, source, source_category):
+		return amount
+	var bonus := _limiar_ruina_bonus()
+	common_card_effects.append({"kind": "limiar_ruina", "pos": pos, "life": 0.38, "max": 0.38, "radius": 58.0, "color": Color(1.0, 0.45, 0.22)})
+	if rng.randf() < 0.70:
+		_add_text("RUINA +%d%%" % int(round(bonus * 100.0)), pos + Vector2(0, -92), Color(1.0, 0.45, 0.22), 0.42, 15)
+	return amount * (1.0 + bonus)
+
+
+func _estase_heal_rate(count := -1) -> float:
+	var n := _support_card_count(CARD_ESTASE_ID) if count < 0 else count
+	if n <= 0:
+		return 0.0
+	return 0.03 + 0.015 * log(float(n))
+
+
+func _egide_conversion(count := -1) -> float:
+	var n := _rare_card_count(CARD_EGIDE_ID) if count < 0 else count
+	return _diminishing_count_value(n, 0.35, 0.45, 0.30)
+
+
+func _egide_limit_fraction(count := -1) -> float:
+	var n := _rare_card_count(CARD_EGIDE_ID) if count < 0 else count
+	return _diminishing_count_value(n, 0.10, 0.25, 0.22)
+
+
+func _egide_shield_limit(count := -1) -> float:
+	return float(player_hp_max) * _egide_limit_fraction(count)
+
+
 func _common_ln_count(card_id: String) -> float:
 	return log(float(max(1, _new_common_card_count(card_id))))
 
@@ -26714,7 +27888,55 @@ func _heal_player(amount: float, source: String = "generic", feed_reserva: bool 
 		_apply_aura_events(aura_heal.get("events", []))
 	if feed_reserva and overheal > 0.0:
 		_register_overheal_for_reserva(overheal, source)
+	if source == "lifesteal" and overheal > 0.0:
+		_add_egide_hemofaga_shield(overheal)
 	return applied
+
+
+func _add_egide_hemofaga_shield(lifesteal_overheal: float) -> void:
+	if _rare_card_count(CARD_EGIDE_ID) <= 0 or lifesteal_overheal <= 0.0:
+		return
+	var limit := _egide_shield_limit()
+	if limit <= 0.0:
+		return
+	var converted := lifesteal_overheal * _egide_conversion()
+	var before := egide_hemofaga_shield
+	egide_hemofaga_shield = min(limit, egide_hemofaga_shield + converted)
+	if egide_hemofaga_shield <= before:
+		return
+	egide_hemofaga_full_timer = 8.0
+	egide_hemofaga_pulse = 0.85
+	rare_card_effects.append({"kind": "egide", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 70.0, "color": Color(1.0, 0.24, 0.30)})
+	if rng.randf() < 0.55:
+		_add_text("+ESCUDO %.0f" % (egide_hemofaga_shield - before), player_pos + Vector2(0, -104), Color(1.0, 0.72, 0.22), 0.62, 17)
+
+
+func _absorb_egide_hemofaga_shield(damage_amount: int) -> int:
+	if damage_amount <= 0 or egide_hemofaga_shield <= 0.0:
+		return damage_amount
+	var absorbed: float = min(float(damage_amount), egide_hemofaga_shield)
+	egide_hemofaga_shield = max(0.0, egide_hemofaga_shield - absorbed)
+	egide_hemofaga_pulse = 0.70
+	if absorbed > 0.0:
+		_spawn_radial_particles(player_pos, Color(1.0, 0.32, 0.24), 7)
+		_add_text("EGIDE -%d" % int(round(absorbed)), player_pos + Vector2(0, -96), Color(1.0, 0.72, 0.22), 0.45, 15)
+	return max(0, int(round(float(damage_amount) - absorbed)))
+
+
+func _update_egide_hemofaga(delta: float) -> void:
+	egide_hemofaga_pulse = max(0.0, egide_hemofaga_pulse - delta)
+	if _rare_card_count(CARD_EGIDE_ID) <= 0:
+		egide_hemofaga_shield = 0.0
+		egide_hemofaga_full_timer = 0.0
+		return
+	egide_hemofaga_shield = min(egide_hemofaga_shield, _egide_shield_limit())
+	if egide_hemofaga_shield <= 0.0:
+		egide_hemofaga_full_timer = 0.0
+		return
+	if egide_hemofaga_full_timer > 0.0:
+		egide_hemofaga_full_timer = max(0.0, egide_hemofaga_full_timer - delta)
+	else:
+		egide_hemofaga_shield = max(0.0, egide_hemofaga_shield - egide_hemofaga_shield * 0.12 * delta)
 
 
 func _register_overheal_for_reserva(overheal_amount: float, source: String = "generic") -> void:
@@ -26765,6 +27987,49 @@ func _update_tregua_regenerativa(delta: float) -> void:
 		var healed := _heal_player(_tregua_regen_per_second() * delta, CARD_TREGUA_ID, false)
 		if healed > 0.0 and rng.randf() < 0.18:
 			_spawn_radial_particles(player_pos, Color(0.38, 1.0, 0.72), 2)
+
+
+func _reset_estase_reparadora(reason := "") -> void:
+	if _support_card_count(CARD_ESTASE_ID) <= 0:
+		return
+	estase_reparadora_timer = 0.0
+	estase_reparadora_tick = 0.0
+	estase_reparadora_active = false
+	estase_reparadora_anchor = player_pos
+
+
+func _update_estase_reparadora(delta: float) -> void:
+	estase_reparadora_pulse = max(0.0, estase_reparadora_pulse - delta)
+	estase_reparadora_pause = max(0.0, estase_reparadora_pause - delta)
+	if _support_card_count(CARD_ESTASE_ID) <= 0 or is_dead or mode != "game":
+		estase_reparadora_active = false
+		estase_reparadora_anchor = player_pos
+		return
+	if player_pos.distance_to(estase_reparadora_anchor) > 8.0:
+		estase_reparadora_anchor = player_pos
+		estase_reparadora_timer = 0.0
+		estase_reparadora_tick = 0.0
+		estase_reparadora_active = false
+		return
+	estase_reparadora_timer += delta
+	var was_active := estase_reparadora_active
+	estase_reparadora_active = estase_reparadora_timer >= 5.0
+	if estase_reparadora_active and not was_active:
+		estase_reparadora_pulse = 0.85
+		common_card_effects.append({"kind": "estase", "pos": player_pos, "life": 0.82, "max": 0.82, "radius": 66.0, "color": Color(0.52, 1.0, 0.86)})
+	if not estase_reparadora_active or estase_reparadora_pause > 0.0 or player_hp >= player_hp_max:
+		return
+	estase_reparadora_tick += delta
+	while estase_reparadora_tick >= 0.25:
+		estase_reparadora_tick -= 0.25
+		var missing: float = max(0.0, float(player_hp_max - player_hp))
+		if missing <= 0.0:
+			break
+		var heal: float = missing * _estase_heal_rate() * 0.25
+		if _heal_player(heal, CARD_SOURCE_ESTASE, false) > 0.0:
+			estase_reparadora_pulse = 0.35
+			if rng.randf() < 0.18:
+				_spawn_radial_particles(player_pos, Color(0.52, 1.0, 0.86), 2)
 
 
 func _reserva_release_per_second() -> float:
@@ -28357,10 +29622,12 @@ func _update_card_proc_state(delta: float) -> void:
 	_update_rare_card_effects(delta)
 	_update_common_card_effects(delta)
 	_update_tregua_regenerativa(delta)
+	_update_estase_reparadora(delta)
 	_update_reserva_pulso(delta)
 	_update_casulo_reativo(delta)
 	_update_passagem_intangivel(delta)
 	_update_ancora_vital(delta)
+	_update_egide_hemofaga(delta)
 	_update_new_common_card_effects(delta)
 	_update_ferrolho_ruptura(delta)
 	boss_ferrolho_slow_timer = max(0.0, boss_ferrolho_slow_timer - delta)
@@ -28957,6 +30224,11 @@ func _card_category(card_name: String) -> String:
 		"Necrocronismo": return "COPIA ESPECTRAL"
 		"CoraÃ§Ã£o de AntimatÃ©ria": return "CARGA DE IMPLOSAO"
 		"Cofre do Excesso": return "OVERKILL ARMAZENADO"
+		"Intervalo Fraturado": return "COOLDOWN DE HABILIDADES"
+		"Nucleo Revigorante": return "ORBE DE CURA"
+		"Limiar de Ruina": return "ABERTURA DE COMBATE"
+		"Estase Reparadora": return "REGENERAÃƒâ€¡ÃƒÆ’O ESTATICA"
+		"Egide Hemofaga": return "OVERHEAL E ESCUDO"
 	return "MELHORIA"
 
 
@@ -29004,6 +30276,11 @@ func _card_lore(card_name: String) -> String:
 		"Necrocronismo": return "A morte recente vira copia breve, fraca no corpo e agressiva na memoria."
 		"CoraÃ§Ã£o de AntimatÃ©ria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
 		"Cofre do Excesso": return "Nada se perde no excesso. O dano que sobraria e guardado para cobrar elites e chefes."
+		"Intervalo Fraturado": return "Uma fratura curta entre duas acoes permite que Hab1 e Ultimate retornem antes do tempo previsto."
+		"Nucleo Revigorante": return "Orbes de cura passam por um nucleo estavel e devolvem mais vida quando Geovana os recolhe."
+		"Limiar de Ruina": return "A primeira rachadura e a mais limpa: inimigos quase intactos recebem o golpe onde a linha ainda esta tensa."
+		"Estase Reparadora": return "O corpo entende a pausa como oficina. Quanto mais quieta Geovana fica, mais a ruptura costura a vida perdida."
+		"Egide Hemofaga": return "O sangue roubado que nao caberia no corpo endurece por instantes como uma couraca viva."
 	return ""
 
 
@@ -29052,9 +30329,35 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 			return "carga de antimataria x%d; proximo acerto implode o alvo" % safe_count
 		"cofre_excesso":
 			return "cofre x%d armazena dano excedente para elite/boss" % safe_count
+		CARD_INTERVALO_ID:
+			return "Hab1 -%.1f%% recarga; Ultimate -%.1f%% recarga" % [_intervalo_hab1_reduction(safe_count) * 100.0, _intervalo_ultimate_reduction(safe_count) * 100.0]
+		CARD_NUCLEO_ID:
+			return "orbes de cura +%.1f%% de restauracao" % (_nucleo_orb_heal_bonus(safe_count) * 100.0)
+		CARD_LIMIAR_RUINA_ID:
+			return "+%.1f%% dano direto em alvos acima de 90%% da vida" % (_limiar_ruina_bonus(safe_count) * 100.0)
+		CARD_ESTASE_ID:
+			return "apos 5s parado, cura %.2f%% da vida perdida por segundo" % (_estase_heal_rate(safe_count) * 100.0)
+		CARD_EGIDE_ID:
+			return "%.1f%% do overheal de roubo vira escudo; limite %.1f%% da vida maxima" % [_egide_conversion(safe_count) * 100.0, _egide_limit_fraction(safe_count) * 100.0]
 	if safe_count <= 0:
 		return "efeito ainda inativo"
 	return "%s ativo x%d" % [String(card.get("desc", "Efeito ativo.")), safe_count]
+
+
+func _preserve_intervalo_cooldown_progress(previous_count: int) -> void:
+	var new_count := _support_card_count(CARD_INTERVALO_ID)
+	if new_count <= previous_count:
+		return
+	var old_q := _intervalo_apply_to_hab1(_skill_cooldown_base(), previous_count)
+	var new_q := _intervalo_apply_to_hab1(_skill_cooldown_base(), new_count)
+	if old_q > 0.0 and time_alive - last_skill_time > 0.0 and time_alive - last_skill_time < old_q:
+		var q_progress := clampf((time_alive - last_skill_time) / old_q, 0.0, 1.0)
+		last_skill_time = time_alive - new_q * q_progress
+	var old_e := _intervalo_apply_to_ultimate(_secondary_skill_cooldown_base(), previous_count)
+	var new_e := _intervalo_apply_to_ultimate(_secondary_skill_cooldown_base(), new_count)
+	if old_e > 0.0 and time_alive - last_secondary_time > 0.0 and time_alive - last_secondary_time < old_e:
+		var e_progress := clampf((time_alive - last_secondary_time) / old_e, 0.0, 1.0)
+		last_secondary_time = time_alive - new_e * e_progress
 
 
 func _card_projection_lines(card: Dictionary) -> Array:
@@ -29162,6 +30465,7 @@ func _apply_card(card: Dictionary) -> void:
 	if _card_at_max(card):
 		return
 	var counter_key := _card_counter_key(card)
+	var previous_counter_count := int(cards_bought.get(counter_key, 0))
 	cards_bought[counter_key] = int(cards_bought.get(counter_key, 0)) + 1
 	match counter_key:
 		CARD_RASTRO_ID:
@@ -29181,6 +30485,19 @@ func _apply_card(card: Dictionary) -> void:
 			common_card_effects.append({"kind": "margem", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(1.0, 0.36, 0.46)})
 		CARD_RESSONANCIA_ID:
 			common_card_effects.append({"kind": "ressonancia", "pos": player_pos, "life": 0.55, "max": 0.55, "radius": 56.0, "color": Color(0.58, 1.0, 0.96)})
+		CARD_INTERVALO_ID:
+			_preserve_intervalo_cooldown_progress(previous_counter_count)
+			common_card_effects.append({"kind": "intervalo", "pos": player_pos, "life": 0.58, "max": 0.58, "radius": 58.0, "color": Color(0.58, 0.84, 1.0)})
+		CARD_NUCLEO_ID:
+			common_card_effects.append({"kind": "nucleo", "pos": player_pos, "life": 0.58, "max": 0.58, "radius": 58.0, "color": Color(0.44, 1.0, 0.62)})
+		CARD_LIMIAR_RUINA_ID:
+			common_card_effects.append({"kind": "limiar_ruina", "pos": player_pos, "life": 0.58, "max": 0.58, "radius": 58.0, "color": Color(1.0, 0.45, 0.22)})
+		CARD_ESTASE_ID:
+			_reset_estase_reparadora("purchase")
+			common_card_effects.append({"kind": "estase", "pos": player_pos, "life": 0.58, "max": 0.58, "radius": 58.0, "color": Color(0.52, 1.0, 0.86)})
+		CARD_EGIDE_ID:
+			egide_hemofaga_pulse = 0.85
+			rare_card_effects.append({"kind": "egide", "pos": player_pos, "life": 0.72, "max": 0.72, "radius": 72.0, "color": Color(1.0, 0.72, 0.22)})
 	match name:
 		"Speed Boost":
 			_recalculate_common_card_stat_bonuses()
@@ -29479,10 +30796,83 @@ func _warn_if_damage_visual_missing(source: String) -> void:
 			push_warning("MULTIPLAYER: dano da nevasca sem visual ativo | " + detail)
 
 
+func _damage_remnants_in_area(epicenter: Vector2, radius: float, damage: float, source: String) -> void:
+	for remnant in necronada_remnants:
+		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
+			continue
+		var r_pos := Vector2(remnant.get("pos", player_pos))
+		if r_pos.distance_to(epicenter) <= radius + 24.0:
+			_damage_necronada_remnant(remnant, damage)
+			_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
+			_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
+
+
+func _damage_remnants_in_area_once(epicenter: Vector2, radius: float, damage: float, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
+	var hit_any := false
+	for i in range(necronada_remnants.size()):
+		var remnant: Dictionary = necronada_remnants[i]
+		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
+			continue
+		var remnant_key := ""
+		if hit_key != "":
+			remnant_key = "%s_remnant_%d_%d" % [hit_key, int(remnant.get("id", -1)), i]
+			if bool(hit_owner.get(remnant_key, false)):
+				continue
+		var r_pos := Vector2(remnant.get("pos", player_pos))
+		if r_pos.distance_to(epicenter) > radius + 24.0:
+			continue
+		if remnant_key != "":
+			hit_owner[remnant_key] = true
+		_damage_necronada_remnant(remnant, damage)
+		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
+		_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
+		hit_any = true
+	return hit_any
+
+
+func _damage_remnants_on_segment_once(a: Vector2, b: Vector2, width: float, damage: float, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
+	var hit_any := false
+	for i in range(necronada_remnants.size()):
+		var remnant: Dictionary = necronada_remnants[i]
+		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
+			continue
+		var remnant_key := ""
+		if hit_key != "":
+			remnant_key = "%s_remnant_%d_%d" % [hit_key, int(remnant.get("id", -1)), i]
+			if bool(hit_owner.get(remnant_key, false)):
+				continue
+		var r_pos := Vector2(remnant.get("pos", player_pos))
+		if _distance_to_segment(r_pos, a, b) > width + 18.0:
+			continue
+		if remnant_key != "":
+			hit_owner[remnant_key] = true
+		_damage_necronada_remnant(remnant, damage)
+		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
+		_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
+		hit_any = true
+	return hit_any
+
+
+func _damage_all_necronada_remnants(damage: float, source: String) -> void:
+	for remnant in necronada_remnants:
+		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
+			continue
+		var r_pos := Vector2(remnant.get("pos", player_pos))
+		_damage_necronada_remnant(remnant, damage)
+		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.24, 0.36), 0.45, 16)
+		_spawn_radial_particles(r_pos, Color(1.0, 0.18, 0.28), 6)
+
+
 func _damage_player(amount: int, source: String) -> void:
 	if is_dead:
 		return
 	_warn_if_damage_visual_missing(source)
+	var boss_ultimate_damage := _damage_source_is_boss_ultimate(source)
+	if boss_ultimate_damage:
+		if source != "boss2_ultimate_blizzard":
+			_damage_all_necronada_remnants(float(amount) * 0.68, source)
+	else:
+		_damage_remnants_in_area(player_pos, 146.0 if _damage_source_is_boss(source) else 54.0, float(amount) * 0.75, source)
 	if _contractual_blocks_damage():
 		if rng.randf() < 0.28:
 			_spawn_radial_particles(player_pos, Color(1.0, 0.74, 0.24), 3)
@@ -29490,7 +30880,6 @@ func _damage_player(amount: int, source: String) -> void:
 		return
 	if qa_streaming_permission_pending:
 		return
-	var boss_ultimate_damage := _damage_source_is_boss_ultimate(source)
 	if not boss_ultimate_damage and _player_invulnerable():
 		return
 	if not boss_ultimate_damage and _passagem_blocks_contact_damage(source):
@@ -29540,6 +30929,7 @@ func _damage_player(amount: int, source: String) -> void:
 	_play_sfx("hit_person.mp3")
 	var final = max(1, amount - int(player_defense))
 	final = _absorb_devorador_shield(final)
+	final = _absorb_egide_hemofaga_shield(final)
 	if final <= 0:
 		_spawn_radial_particles(player_pos, Color(0.96, 0.12, 0.72), 10)
 		return
@@ -29549,6 +30939,7 @@ func _damage_player(amount: int, source: String) -> void:
 	final = int(round(_apply_margem_de_erro_damage(float(final), source)))
 	_track_player_damage(final, source)
 	player_hp -= final
+	estase_reparadora_pause = max(estase_reparadora_pause, 0.5)
 	_reset_tregua_regenerativa_timer()
 	_register_hit_for_casulo(final)
 	_create_ancora_vital(final, player_pos)
@@ -29598,9 +30989,11 @@ func _handle_player_down() -> void:
 	if is_multiplayer:
 		rpc("_rpc_player_died")
 		if _all_multiplayer_players_dead():
+			_stop_battle_music_for_screen_transition()
 			_finalize_run_report("Derrota")
 			mode = "game_over"
 		return
+	_stop_battle_music_for_screen_transition()
 	_finalize_run_report("Derrota")
 	mode = "game_over"
 
@@ -29609,8 +31002,14 @@ func _update_phase_transition(delta: float) -> void:
 	phase_transition_timer -= delta
 	_update_environment_weather(delta)
 	_update_effects(delta)
-	if phase_transition_timer <= 0.0 and pending_phase > 0:
-		_advance_to_phase(pending_phase)
+	if phase_transition_timer <= PHASE_TRANSITION_WIPE_TIME and pending_phase > 0:
+		var target_phase: int = pending_phase
+		pending_phase = 0
+		_advance_to_phase(target_phase)
+		mode = "phase_transition"
+	elif phase_transition_timer <= 0.0:
+		mode = "game"
+		_reset_phase_transition_nodes()
 
 
 func _spawn_phase_fragment(pos: Vector2, next_phase: int) -> void:
@@ -29887,6 +31286,8 @@ func _projectile_palette(kind: String) -> Dictionary:
 			return {"core": Color(1.0, 0.92, 1.0), "glow": Color(1.0, 0.34, 0.88, 0.94), "trail": Color(0.72, 0.42, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
 		"necronada":
 			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.48, 0.34, 0.92, 0.94), "trail": Color(0.72, 0.96, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
+		"necronada_dust":
+			return {"core": Color(0.82, 0.70, 1.0), "glow": Color(0.35, 0.14, 0.58, 0.92), "trail": Color(0.06, 0.03, 0.10, 0.52), "size": 11.0, "trail_size": 14.0}
 		"eclipsada_lua", "shuriken_eclipsado":
 			return {"core": Color(0.92, 0.86, 1.0), "glow": Color(0.70, 0.36, 1.0, 0.94), "trail": Color(0.36, 0.72, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
 		"eclipsada_sol":
@@ -29954,11 +31355,13 @@ func _ensure_phase_transition_nodes() -> void:
 	if phase_transition_title_label == null or not is_instance_valid(phase_transition_title_label):
 		phase_transition_title_label = Label.new()
 		phase_transition_title_label.name = "PhaseTransitionTitleLabel"
-		phase_transition_title_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		phase_transition_title_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		phase_transition_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		phase_transition_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		phase_transition_title_label.add_theme_font_size_override("font_size", 34)
-		phase_transition_title_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.45))
+		phase_transition_title_label.add_theme_font_size_override("font_size", 44)
+		phase_transition_title_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.40))
+		phase_transition_title_label.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.0, 0.9))
+		phase_transition_title_label.add_theme_constant_override("outline_size", 6)
 		phase_transition_overlay_node.add_child(phase_transition_title_label)
 
 
@@ -29984,16 +31387,18 @@ func _draw_phase_transition(viewport: Vector2) -> void:
 	phase_transition_overlay_node.position = Vector2.ZERO
 	phase_transition_overlay_node.size = viewport
 
+	phase_transition_title_label.position = Vector2.ZERO
+	phase_transition_title_label.size = viewport
+
 	var target_phase: int = int(pending_phase if pending_phase > 0 else current_phase)
-	var total_time: float = maxf(0.1, PHASE_TRANSITION_TIME)
-	var t: float = 1.0 - clampf(phase_transition_timer / total_time, 0.0, 1.0)
+	var elapsed_time: float = clampf(PHASE_TRANSITION_TIME - phase_transition_timer, 0.0, PHASE_TRANSITION_TIME)
 
 	var phase_names := {
-		1: "RUÃNAS CÃ“SMICAS",
-		2: "ÃRTICO IMPERIAL",
+		1: "RUÍNAS CÓSMICAS",
+		2: "ÁRTICO IMPERIAL",
 		3: "CATEDRAL DOS VERMES",
 		4: "CHARCO DOS SAPOS",
-		5: "COLISÃƒO DE MUNDOS",
+		5: "COLISÃO DE MUNDOS",
 		6: "ABISMO FINAL"
 	}
 	var phase_shaders := {
@@ -30005,14 +31410,15 @@ func _draw_phase_transition(viewport: Vector2) -> void:
 		6: "res://shaders/transitions/worm_devour.gdshader"
 	}
 
-	if t < 0.45:
+	if elapsed_time < PHASE_TRANSITION_HOLD_TIME:
 		phase_transition_title_label.visible = true
 		phase_transition_title_label.text = String(phase_names.get(target_phase, "FASE %d" % target_phase)).to_upper()
 		phase_transition_overlay_node.color = Color.BLACK
 		phase_transition_overlay_node.material = null
 	else:
 		phase_transition_title_label.visible = false
-		var progress := (t - 0.45) / 0.55
+		phase_transition_overlay_node.color = Color.WHITE
+		var progress: float = clampf((elapsed_time - PHASE_TRANSITION_HOLD_TIME) / maxf(0.01, PHASE_TRANSITION_WIPE_TIME), 0.0, 1.0)
 		var shader_path: String = String(phase_shaders.get(target_phase, phase_shaders[1]))
 		var mat := _get_phase_transition_material(shader_path)
 		mat.set_shader_parameter("progress", progress)
@@ -30123,6 +31529,8 @@ func _draw() -> void:
 		_draw_qa_streaming_status(viewport)
 	if app_update_popup_visible:
 		_draw_app_update_popup(viewport)
+	if _startup_thanks_active():
+		_draw_startup_thanks(viewport)
 	if _should_draw_custom_mouse_cursor():
 		_draw_custom_mouse_cursor(viewport)
 
@@ -30249,7 +31657,7 @@ func _draw_fps_counter(viewport: Vector2) -> void:
 func _draw_qa_streaming_status(viewport: Vector2) -> void:
 	var label := qa_streaming_status.to_upper()
 	var rect := Rect2(viewport.x * 0.5 - 190.0, 8.0, 380.0, 28.0)
-	var accent := Color(0.0, 1.0, 0.82) if (qa_streaming_native_active or qa_streaming_frame_active) else Color(1.0, 0.78, 0.22)
+	var accent := Color(0.0, 1.0, 0.82) if (qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active) else Color(1.0, 0.78, 0.22)
 	draw_rect(rect, Color(0.0, 0.0, 0.0, 0.48), true)
 	draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.72), false, 1.5)
 	_draw_centered(label, rect.get_center() + Vector2(0, 5), 11, Color(0.86, 1.0, 0.96, 0.92))
@@ -30340,7 +31748,7 @@ func _draw_menu(viewport: Vector2) -> void:
 	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "bestiario e cartas", Color(0.36, 0.84, 1.0), menu_selected == _menu_index_for("catalog"), false)
 	_draw_hub_button(menu_buttons["settings"], "CONFIG", "controles e jogo", Color(1.0, 0.74, 0.22), menu_selected == _menu_index_for("settings"), false)
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and menu_buttons.has("stream"):
-		var stream_active := qa_streaming_native_active or qa_streaming_frame_active or qa_streaming_in_flight
+		var stream_active := qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active or qa_streaming_in_flight
 		var stream_title := "ENCERRAR STREAM" if stream_active else "STREAM QA"
 		var stream_subtitle := _qa_stream_menu_subtitle()
 		var stream_color := Color(0.0, 1.0, 0.82) if stream_active else Color(0.38, 0.88, 1.0)
@@ -32828,6 +34236,22 @@ func _draw_common_card_world(camera: Vector2) -> void:
 					var a := t * 1.4 + float(i) * TAU / 4.0
 					draw_circle(pos + Vector2.from_angle(a) * radius * 0.65, 4.8, Color(0.58, 1.0, 0.96, 0.72 * ratio))
 				draw_arc(pos, radius, t, TAU + t, 64, Color(0.58, 1.0, 0.96, 0.38 * ratio), 2.0)
+			"intervalo":
+				draw_arc(pos, radius, -t * 3.0, -t * 3.0 + PI * 1.65, 54, Color(0.58, 0.84, 1.0, 0.62 * ratio), 3.0)
+				draw_arc(pos, radius * 0.62, t * 4.2, t * 4.2 + PI * 1.15, 36, Color(0.86, 0.96, 1.0, 0.46 * ratio), 2.0)
+				draw_line(pos + Vector2(-18, 0), pos + Vector2(18, 0), Color(0.58, 0.84, 1.0, 0.58 * ratio), 2.0, true)
+			"nucleo":
+				draw_circle(pos, radius * 0.42, Color(0.36, 1.0, 0.58, 0.12 * ratio))
+				draw_arc(pos, radius, t * 1.7, t * 1.7 + PI * 1.72, 58, Color(0.36, 1.0, 0.58, 0.54 * ratio), 2.6)
+				draw_arc(pos, radius * 0.70, -t * 1.2, -t * 1.2 + PI * 1.2, 42, Color(0.66, 1.0, 0.90, 0.42 * ratio), 1.8)
+			"limiar_ruina":
+				draw_arc(pos, radius, PI * 0.08, PI * 1.92, 50, Color(1.0, 0.32, 0.22, 0.64 * ratio), 3.4)
+				draw_line(pos + Vector2(-radius * 0.42, -radius * 0.28), pos + Vector2(radius * 0.42, radius * 0.28), Color(1.0, 0.72, 0.26, 0.58 * ratio), 2.2, true)
+				draw_circle(pos, radius * 0.18, Color(1.0, 0.18, 0.12, 0.16 * ratio))
+			"estase":
+				draw_circle(pos, radius * 0.48, Color(0.52, 1.0, 0.86, 0.10 * ratio))
+				draw_arc(pos, radius, 0.0, TAU, 70, Color(0.52, 1.0, 0.86, 0.44 * ratio), 2.0)
+				draw_arc(pos, radius * 0.78, PI * 0.15, PI * 0.85, 34, Color(0.86, 1.0, 0.96, 0.48 * ratio), 2.0)
 	if desvio_probabilidade_charges > 0:
 		var player_screen: Vector2 = player_pos - camera
 		for i in range(desvio_probabilidade_charges):
@@ -32847,6 +34271,11 @@ func _draw_common_card_world(camera: Vector2) -> void:
 		var pulse: float = 0.5 + sin(t * 5.0) * 0.5
 		draw_circle(support_player_screen, 48.0 + pulse * 5.0, Color(0.38, 1.0, 0.72, 0.08 + pulse * 0.04))
 		draw_arc(support_player_screen, 54.0, -t * 1.2, TAU - t * 1.2, 56, Color(0.38, 1.0, 0.72, 0.46), 2.0)
+	if estase_reparadora_active:
+		var estase_pulse: float = 0.5 + sin(t * 4.0) * 0.5
+		draw_circle(support_player_screen, 50.0 + estase_pulse * 7.0, Color(0.52, 1.0, 0.86, 0.07 + estase_pulse * 0.05))
+		draw_arc(support_player_screen, 60.0, t * 0.8, t * 0.8 + PI * 1.75, 64, Color(0.52, 1.0, 0.86, 0.48), 2.2)
+		draw_arc(support_player_screen, 42.0, -t * 1.1, -t * 1.1 + PI * 1.25, 42, Color(0.86, 1.0, 0.96, 0.32), 1.8)
 	if casulo_reativo_timer > 0.0:
 		var casulo_world_ratio: float = clamp(casulo_reativo_timer / max(0.01, _casulo_duration()), 0.0, 1.0)
 		draw_circle(support_player_screen, 56.0, Color(0.54, 1.0, 0.86, 0.12 * casulo_world_ratio))
@@ -32895,6 +34324,12 @@ func _draw_rare_card_world(camera: Vector2) -> void:
 					var outer := pos + Vector2.from_angle(a) * radius * (0.92 - (1.0 - ratio) * 0.18)
 					draw_line(outer, pos, Color(0.84, 0.28, 1.0, 0.36 * ratio), 2.2, true)
 				draw_arc(pos, radius, t * 3.2, t * 3.2 + PI * 1.55, 72, Color(0.84, 0.28, 1.0, 0.72 * ratio), 4.0)
+			"egide":
+				draw_circle(pos, radius * 0.42, Color(0.40, 0.02, 0.02, 0.18 * ratio))
+				draw_arc(pos, radius, t * 2.4, t * 2.4 + PI * 1.62, 62, Color(1.0, 0.72, 0.22, 0.66 * ratio), 3.2)
+				draw_arc(pos, radius * 0.72, -t * 2.0, -t * 2.0 + PI * 1.22, 44, Color(1.0, 0.24, 0.30, 0.52 * ratio), 2.2)
+				draw_line(pos + Vector2(-18, -10), pos + Vector2(0, 16), Color(1.0, 0.86, 0.44, 0.54 * ratio), 2.4, true)
+				draw_line(pos + Vector2(18, -10), pos + Vector2(0, 16), Color(1.0, 0.86, 0.44, 0.54 * ratio), 2.4, true)
 	if _mandamento_count() > 0 and mandamento_invulnerability > 0.0:
 		var p: Vector2 = player_pos - camera
 		var r: float = 52.0 + sin(t * 12.0) * 4.0
@@ -32911,6 +34346,15 @@ func _draw_rare_card_world(camera: Vector2) -> void:
 		var vault_ratio: float = clamp(stored_excess / max(1.0, player_damage * 12.0), 0.0, 1.0)
 		var p: Vector2 = player_pos - camera + Vector2(0, 30)
 		draw_arc(p, 42.0 + vault_ratio * 18.0, t * 1.6, t * 1.6 + PI * 1.25, 42, Color(1.0, 0.72, 0.20, 0.40 + vault_ratio * 0.20), 3.0)
+	if egide_hemofaga_shield > 0.0:
+		var p: Vector2 = player_pos - camera
+		var limit := maxf(1.0, _egide_shield_limit())
+		var shield_ratio := clampf(egide_hemofaga_shield / limit, 0.0, 1.0)
+		var pulse := 0.5 + sin(t * 5.6) * 0.5
+		var r := 56.0 + shield_ratio * 14.0 + pulse * 4.0
+		draw_circle(p, r, Color(1.0, 0.28, 0.18, 0.05 + shield_ratio * 0.09))
+		draw_arc(p, r, t * 1.5, t * 1.5 + PI * 1.62, 68, Color(1.0, 0.72, 0.22, 0.34 + shield_ratio * 0.26), 2.6)
+		draw_arc(p, r * 0.78, -t * 1.8, -t * 1.8 + PI * 1.12, 44, Color(1.0, 0.22, 0.26, 0.26 + shield_ratio * 0.22), 1.8)
 	for specter in active_necro_specters:
 		var pos: Vector2 = Vector2(specter.get("pos", player_pos)) - camera
 		var life_ratio: float = clamp(float(specter.get("life", 0.0)) / max(0.01, float(specter.get("max", 1.0))), 0.0, 1.0)
@@ -33725,6 +35169,8 @@ func _draw_arauto_card_drops(camera: Vector2) -> void:
 		if not _reward_owned_by_local(drop) or (drop_id != "" and net_collected_drop_ids.has(drop_id)):
 			continue
 		var card: Dictionary = drop.get("card", {})
+		if not _card_drop_texture_available(card):
+			continue
 		var p := Vector2(drop.get("pos", player_pos)) - camera
 		var age := float(drop.get("age", 0.0))
 		var alpha: float = clamp(float(drop.get("life", 0.0)) / 1.2, 0.0, 1.0)
@@ -33734,11 +35180,11 @@ func _draw_arauto_card_drops(camera: Vector2) -> void:
 		draw_circle(rect.get_center(), 42.0, Color(accent.r, accent.g, accent.b, 0.12 * alpha))
 		draw_rect(rect.grow(3.0), Color(0.01, 0.03, 0.05, 0.78 * alpha), true)
 		draw_rect(rect.grow(3.0), accent, false, 2.0)
-		var tex: Texture2D = textures.get("card_" + String(card.get("name", "")))
+		var tex: Texture2D = _card_texture(card)
 		if tex:
 			_draw_texture_contain(tex, rect.grow(-5.0), Color(1, 1, 1, alpha))
 		else:
-			draw_circle(rect.get_center(), 13.0, Color(accent.r, accent.g, accent.b, 0.78 * alpha))
+			draw_rect(rect.grow(-9.0), Color(accent.r, accent.g, accent.b, 0.32 * alpha), true)
 		_draw_centered("CARTA", p + Vector2(0, 42 + bob), 10, Color(0.88, 0.96, 1.0, 0.86 * alpha))
 
 
@@ -34291,19 +35737,26 @@ func _draw_necro_aliado_health_bar(pos: Vector2, width: float, ratio: float, alp
 func _draw_necronada_world(camera: Vector2) -> void:
 	for vestige in necronada_vestiges:
 		var p := Vector2(vestige.get("pos", player_pos)) - camera
-		var ratio := clampf(float(vestige.get("life", 0.0)) / maxf(0.01, float(vestige.get("max", NECRONADA_VESTIGE_DURATION))), 0.0, 1.0)
 		var phase: float = float(vestige.get("phase", 0.0)) + time_alive * 1.4
 		var depth := int(vestige.get("depth", 1))
-		draw_circle(p, 22.0 + depth * 4.0, Color(0.05, 0.08, 0.16, 0.32 * ratio))
-		draw_arc(p, 28.0 + sin(phase) * 3.0, -phase, TAU - phase, 48, Color(0.72, 0.96, 1.0, 0.62 * ratio), 1.8)
-		draw_line(p + Vector2(-10, 8), p + Vector2(10, -8), Color(0.88, 0.90, 0.80, 0.72 * ratio), 2.0)
-		draw_line(p + Vector2(-8, -8), p + Vector2(8, 8), Color(0.52, 0.34, 0.92, 0.72 * ratio), 2.0)
+		draw_circle(p + Vector2(0, 10), 13.0 + sin(phase) * 1.2, Color(0.04, 0.05, 0.09, 0.36))
+		draw_line(p + Vector2(0, 8), p + Vector2(0, -12), Color(0.22, 0.62, 0.32, 0.92), 2.2)
+		draw_line(p + Vector2(0, 1), p + Vector2(-8, -3), Color(0.20, 0.74, 0.42, 0.76), 2.0)
+		draw_line(p + Vector2(0, 3), p + Vector2(8, -1), Color(0.16, 0.56, 0.35, 0.76), 2.0)
+		for petal in range(6):
+			var angle := phase * 0.18 + float(petal) * TAU / 6.0
+			var petal_pos := p + Vector2.from_angle(angle) * (5.0 + depth * 0.5) + Vector2(0, -16)
+			draw_circle(petal_pos, 4.4, Color(0.32, 0.80, 1.0, 0.88))
+			draw_circle(petal_pos + Vector2(0, -0.8), 2.0, Color(0.76, 0.96, 1.0, 0.90))
+		draw_circle(p + Vector2(0, -16), 4.2, Color(0.54, 0.34, 0.92, 0.94))
+		for i in range(depth):
+			draw_arc(p + Vector2(0, -8), 19.0 + i * 4.0, -phase * (0.6 + i * 0.1), TAU - phase * (0.6 + i * 0.1), 36, Color(0.72, 0.96, 1.0, 0.28), 1.1)
 	for remnant in necronada_remnants:
 		var p := Vector2(remnant.get("pos", player_pos)) - camera
 		var profile: Dictionary = Dictionary(remnant.get("profile", {}))
 		var color: Color = profile.get("color", _necronada_accent())
-		var life_ratio := clampf(float(remnant.get("life", 0.0)) / maxf(0.01, float(remnant.get("max", 15.0))), 0.0, 1.0)
-		var summon_ratio := 1.0 - clampf(float(remnant.get("summon", 0.0)) / NECRONADA_REMNANT_SUMMON_TIME, 0.0, 1.0)
+		var summon_time := float(remnant.get("summon", 0.0))
+		var summon_pct := 1.0 - clampf(summon_time / NECRONADA_REMNANT_SUMMON_TIME, 0.0, 1.0)
 		
 		# Build mock enemy dict to fetch exact sprite texture, size, visual offset and flip!
 		var mock_enemy := {
@@ -34313,28 +35766,44 @@ func _draw_necronada_world(camera: Vector2) -> void:
 			"pos": Vector2(remnant.get("pos", player_pos))
 		}
 		var tex := _enemy_texture(mock_enemy)
-		var size := _enemy_draw_size(mock_enemy)
+		var base_size := _enemy_draw_size(mock_enemy)
+		# Task 9: 2.4s invocation animation scaling (0.2 -> 1.0)
+		var size := base_size * (0.20 + 0.80 * summon_pct)
 		var draw_pos := p + _enemy_visual_offset(mock_enemy)
 		var flip := _enemy_should_flip(mock_enemy)
 		
 		# Draw dynamic shadow
-		_draw_dynamic_shadow(tex, p, size, flip, 0.38 * life_ratio)
+		_draw_dynamic_shadow(tex, p, size, flip, 0.38 * summon_pct)
+		
+		# Task 9: Ground particles and energy circle forming during 2.4s invocation animation
+		if summon_time > 0.0:
+			var anim_rot := (NECRONADA_REMNANT_SUMMON_TIME - summon_time) * 4.0
+			draw_circle(p, base_size.x * 0.50 * summon_pct, Color(0.20, 0.90, 0.85, 0.28 * (1.0 - summon_time / NECRONADA_REMNANT_SUMMON_TIME)))
+			draw_arc(p, base_size.x * (0.60 - 0.20 * summon_pct), anim_rot, anim_rot + TAU * 0.75, 32, Color(0.50, 0.95, 1.0, 0.85), 2.2)
 		
 		# Draw spectral necro aura under feet
-		draw_circle(p, size.x * 0.44, Color(0.18, 0.58, 0.95, 0.26 * life_ratio * summon_ratio))
-		draw_arc(p, size.x * 0.48, time_alive * 2.5, time_alive * 2.5 + TAU * 0.62, 32, Color(0.65, 0.92, 1.0, 0.52 * life_ratio), 1.8)
+		draw_circle(p, size.x * 0.44, Color(0.18, 0.58, 0.95, 0.26 * summon_pct))
+		draw_arc(p, size.x * 0.48, time_alive * 2.5, time_alive * 2.5 + TAU * 0.62, 32, Color(0.65, 0.92, 1.0, 0.52 * summon_pct), 1.8)
 		
-		# Draw entity sprite with spectral ghostly modulate
-		var ghost_modulate := Color(0.68, 0.88, 1.0, 0.92 * life_ratio * summon_ratio)
-		_draw_entity(tex, draw_pos, size, ghost_modulate, flip)
+		# Task 10: Glitch visual effect offset jitter & dimensional anomaly spectral modulate
+		var glitch_jitter := Vector2(rng.randf_range(-3.0, 3.0), rng.randf_range(-2.0, 2.0)) if (int(time_alive * 24.0 + float(remnant.get("id", 0))) % 6 == 0) else Vector2.ZERO
+		var ghost_modulate := Color(0.68, 0.88, 1.0, 0.92 * summon_pct)
+		_draw_entity(tex, draw_pos + glitch_jitter, size, ghost_modulate, flip)
+		if glitch_jitter != Vector2.ZERO:
+			# Chromatic split anomaly ghosting
+			_draw_entity(tex, draw_pos - glitch_jitter * 1.5, size, Color(0.1, 0.95, 0.85, 0.38 * summon_pct), flip)
 		
-		# Draw Necro Aliado green/cyan health bar
-		var hp_ratio := clampf(float(remnant.get("hp", 1.0)) / maxf(1.0, float(remnant.get("max_hp", 1.0))), 0.0, 1.0)
-		_draw_necro_aliado_health_bar(p + Vector2(-25.0, -size.y * 0.55 - 12.0), 50.0, hp_ratio, life_ratio)
-		
+		# Draw Necro Aliado health bar once invoked
+		if summon_time <= 0.0:
+			var hp_ratio := clampf(float(remnant.get("hp", 1.0)) / maxf(1.0, float(remnant.get("max_hp", 1.0))), 0.0, 1.0)
+			_draw_necro_aliado_health_bar(p + Vector2(-25.0, -size.y * 0.55 - 12.0), 50.0, hp_ratio, 1.0)
+			
 		var target_pos := Vector2(remnant.get("target_pos", remnant.get("pos", player_pos))) - camera
-		if target_pos.distance_to(p) > 22.0 and float(remnant.get("summon", 0.0)) <= 0.0:
-			draw_line(p, target_pos, Color(color.r, color.g, color.b, 0.16 * life_ratio), 1.2)
+		if target_pos.distance_to(p) > 22.0 and summon_time <= 0.0:
+			var line_alpha := 0.34 if float(remnant.get("empower_timer", 0.0)) > 0.0 else 0.16
+			draw_line(p, target_pos, Color(color.r, color.g, color.b, line_alpha), 1.2)
+			if float(remnant.get("empower_timer", 0.0)) > 0.0:
+				draw_arc(p, 34.0 + sin(time_alive * 7.0) * 4.0, 0.0, TAU, 42, Color(0.78, 0.46, 1.0, 0.52), 2.0)
 	for enemy in enemies:
 		if not bool(enemy.get("necronada_epitaph", false)):
 			continue
@@ -34358,17 +35827,63 @@ func _draw_necronada_world(camera: Vector2) -> void:
 	for visual in necronada_vfx:
 		var kind := String(visual.get("kind", ""))
 		var alpha_v := clampf(float(visual.get("life", 0.0)) / maxf(0.01, float(visual.get("max", 0.3))), 0.0, 1.0)
-		if kind == "remnant_strike":
+		if kind == "remnant_strike" or kind == "remnant_bolt" or kind == "remnant_shock":
 			var color_v: Color = visual.get("color", _necronada_accent())
-			draw_line(Vector2(visual.get("a", player_pos)) - camera, Vector2(visual.get("b", player_pos)) - camera, Color(color_v.r, color_v.g, color_v.b, 0.72 * alpha_v), 3.0)
+			var a_pos := Vector2(visual.get("a", player_pos)) - camera
+			var b_pos := Vector2(visual.get("b", player_pos)) - camera
+			if kind == "remnant_bolt":
+				draw_line(a_pos, b_pos, Color(0.16, 0.06, 0.30, 0.52 * alpha_v), 7.0)
+				draw_line(a_pos, b_pos, Color(color_v.r, color_v.g, color_v.b, 0.82 * alpha_v), 2.4)
+			elif kind == "remnant_shock":
+				draw_arc(b_pos, 24.0 + (1.0 - alpha_v) * 46.0, 0.0, TAU, 42, Color(color_v.r, color_v.g, color_v.b, 0.55 * alpha_v), 2.4)
+			else:
+				draw_line(a_pos, b_pos, Color(color_v.r, color_v.g, color_v.b, 0.72 * alpha_v), 3.0)
+		elif kind == "empower_target":
+			var pos_target := Vector2(visual.get("pos", player_pos)) - camera
+			draw_circle(pos_target, 32.0 + sin(time_alive * 9.0) * 4.0, Color(0.08, 0.03, 0.14, 0.24 * alpha_v))
+			draw_arc(pos_target, 44.0, -time_alive * 2.0, TAU - time_alive * 2.0, 54, Color(0.74, 0.44, 1.0, 0.56 * alpha_v), 2.0)
+		elif kind == "tp_dust_fan":
+			var fan_origin := Vector2(visual.get("pos", player_pos)) - camera
+			var fan_dir := Vector2(visual.get("dir", Vector2.RIGHT)).normalized()
+			var fan_radius := float(visual.get("radius", NECRONADA_TP_DUST_RADIUS))
+			var points := PackedVector2Array([fan_origin])
+			for i in range(11):
+				var ratio := float(i) / 10.0
+				var angle := fan_dir.angle() - NECRONADA_TP_DUST_HALF_ANGLE + NECRONADA_TP_DUST_HALF_ANGLE * 2.0 * ratio
+				points.append(fan_origin + Vector2.from_angle(angle) * fan_radius * (0.86 + sin(time_alive * 18.0 + float(i)) * 0.035))
+			draw_polygon(points, PackedColorArray([Color(0.18, 0.05, 0.28, 0.20 * alpha_v)]))
+			for i in range(7):
+				var angle := fan_dir.angle() - NECRONADA_TP_DUST_HALF_ANGLE + NECRONADA_TP_DUST_HALF_ANGLE * 2.0 * float(i) / 6.0
+				draw_line(fan_origin + Vector2.from_angle(angle) * 18.0, fan_origin + Vector2.from_angle(angle) * fan_radius, Color(0.70, 0.36, 1.0, 0.20 * alpha_v), 2.0, true)
+		elif kind == "dust_hit" or kind == "requiem_impact":
+			var pos_hit := Vector2(visual.get("pos", player_pos)) - camera
+			for i in range(7):
+				var angle: float = float(i) * TAU / 7.0 + time_alive * 1.8
+				draw_circle(pos_hit + Vector2.from_angle(angle) * (10.0 + (1.0 - alpha_v) * 28.0), 4.0 * alpha_v, Color(0.68, 0.34, 1.0, 0.52 * alpha_v))
 		elif kind == "requiem_echo":
 			var center := Vector2(visual.get("pos", player_pos)) - camera
 			var radius_v := lerpf(32.0, 122.0, 1.0 - alpha_v)
 			draw_circle(center, radius_v, Color(0.04, 0.06, 0.14, 0.18 * alpha_v))
 			draw_arc(center, radius_v, 0.0, TAU, 64, Color(0.72, 0.96, 1.0, 0.58 * alpha_v), 2.2)
+		elif kind == "rose_summon_ring":
+			var center := Vector2(visual.get("pos", player_pos)) - camera
+			var radius_v := float(visual.get("radius", NECRONADA_ROSE_SUMMON_RADIUS))
+			draw_circle(center, radius_v, Color(0.12, 0.04, 0.20, 0.055 * alpha_v))
+			draw_arc(center, radius_v, 0.0, TAU, 96, Color(0.72, 0.96, 1.0, 0.28 * alpha_v), 2.0)
 		else:
 			var pos := Vector2(visual.get("pos", player_pos)) - camera
 			draw_circle(pos, 18.0 * alpha_v, Color(0.72, 0.96, 1.0, 0.36 * alpha_v))
+	if not necronada_requiem.is_empty() and String(necronada_requiem.get("kind", "")) == "necrotic_wave":
+		var origin := Vector2(necronada_requiem.get("origin", player_pos)) - camera
+		var progress := 1.0 - clampf(float(necronada_requiem.get("life", 0.0)) / maxf(0.01, float(necronada_requiem.get("max", 1.0))), 0.0, 1.0)
+		var radius := lerpf(42.0, NECRONADA_ULTIMATE_RADIUS, progress)
+		draw_circle(origin, radius, Color(0.035, 0.015, 0.055, 0.16 * (1.0 - progress)))
+		for i in range(18):
+			var angle := float(i) * TAU / 18.0 + sin(time_alive + float(i)) * 0.10
+			var local_ratio := 0.72 + 0.28 * (0.5 + 0.5 * sin(float(i) * 2.13 + time_alive * 2.4))
+			var dust_pos := origin + Vector2.from_angle(angle) * (radius * local_ratio)
+			draw_circle(dust_pos, 4.0 + 5.0 * (0.5 + 0.5 * cos(float(i) * 1.7 + time_alive * 3.1)), Color(0.44, 0.16, 0.70, 0.28 * (1.0 - progress)))
+		draw_arc(origin, radius, -time_alive * 1.2, TAU - time_alive * 1.2, 96, Color(0.72, 0.42, 1.0, 0.58 * (1.0 - progress)), 4.0)
 
 
 func _draw_resonant_world_marks(camera: Vector2) -> void:
@@ -34830,6 +36345,7 @@ func _draw_network_secondary_replica(visual: Dictionary, camera: Vector2) -> voi
 		"eclipsada": _draw_secondary_eclipsada(visual, camera)
 		"bombastica": _draw_secondary_bombastica(visual, camera)
 		"cartografica", "mnesica", "ressonante", "contratual": _draw_secondary_advanced(visual, camera)
+	_draw_ancorada_spinning_anchors(camera)
 
 
 func _draw_network_parasite_spit_replica(visual: Dictionary, camera: Vector2) -> void:
@@ -36075,6 +37591,23 @@ func _draw_enemy_texture_raw(texture: Texture2D, center: Vector2, size: Vector2,
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
+func _draw_ancorada_spinning_anchors(camera: Vector2) -> void:
+	for spin in ancorada_spinning:
+		if float(spin.get("life", 0.0)) <= 0.0:
+			continue
+		var center: Vector2 = player_pos - camera
+		var alpha: float = clampf(float(spin.get("life", 0.0)) / maxf(0.01, float(spin.get("max", 5.0))), 0.0, 1.0)
+		var arm_count := 4
+		for arm_i in range(arm_count):
+			var arm_angle: float = float(spin.get("angle", 0.0)) + float(arm_i) * TAU / float(arm_count)
+			var arm_start: Vector2 = center + Vector2.from_angle(arm_angle) * 22.0
+			var arm_end: Vector2 = center + Vector2.from_angle(arm_angle) * 92.0
+			draw_line(arm_start, arm_end, Color(0.42, 0.92, 1.0, 0.85 * alpha), 5.0)
+			draw_circle(arm_end, 14.0, Color(0.32, 0.72, 0.96, 0.9 * alpha))
+			draw_circle(arm_end, 8.0, Color(0.82, 0.96, 1.0, 0.95 * alpha))
+		draw_arc(center, 92.0, 0.0, TAU, 48, Color(0.42, 0.92, 1.0, 0.25 * alpha), 1.5)
+
+
 func _draw_secondary_ancorada(secondary: Dictionary, camera: Vector2) -> void:
 	var center_world: Vector2 = secondary.get("center", player_pos)
 	var center = center_world - camera
@@ -36129,7 +37662,7 @@ func _enemy_texture(enemy: Dictionary) -> Texture2D:
 		elif kind6 == ENEMY_LODARIO:
 			idx = 1 if float(enemy.get("lodario_jump_progress", 0.0)) > 0.0 else 0
 		elif kind6 == ENEMY_FOSSIL_PUSTULE:
-			idx = 1 if float(enemy.get("pustule_spit_flash", 0.0)) > 0.0 else 0
+			idx = 1 if float(enemy.get("pustule_spit_flash", 0.0)) > 0.0 else (int(floor(time_alive / 0.5)) % 2)
 		elif kind6 == ENEMY_CHRONAL_LEECH:
 			var leech_state := String(enemy.get("leech_state", SANGUESSUGA_STATE_FALL_WARNING))
 			idx = 1 if leech_state in [SANGUESSUGA_STATE_LEAPING, SANGUESSUGA_STATE_ATTACHED] else 0
@@ -36395,6 +37928,15 @@ func _draw_projectiles(camera: Vector2) -> void:
 				for i in range(3):
 					var ang = age * 7.0 + phase + i * TAU / 3.0
 					draw_circle(draw_pos + Vector2.from_angle(ang) * 7.0, 2.2, Color(0.72, 1.0, 0.40, 0.82))
+			"necronada_dust":
+				var dust_alpha := clampf(float(bullet.get("life", 0.0)) / maxf(0.01, float(bullet.get("max_life", 0.8))), 0.0, 1.0)
+				for i in range(10):
+					var local: Vector2 = -dir * (float(i) * 5.0 + sin(age * 9.0 + float(i)) * 2.0) + side * sin(age * 11.0 + phase + float(i) * 0.7) * (4.0 + float(i) * 0.65)
+					var grain_pos: Vector2 = pos + local
+					var size := 4.5 + sin(age * 14.0 + float(i)) * 1.2
+					draw_circle(grain_pos, size, Color(0.05, 0.025, 0.08, 0.40 * dust_alpha))
+					draw_circle(grain_pos + dir * 1.5, maxf(1.5, size * 0.45), Color(0.66, 0.35, 1.0, 0.54 * dust_alpha))
+				draw_arc(pos, 20.0 + sin(age * 16.0) * 3.0, phase + age * 5.0, phase + age * 5.0 + PI * 1.25, 24, Color(0.78, 0.58, 1.0, 0.62 * dust_alpha), 2.0)
 			"gravitante":
 				draw_circle(pos, 10.0, palette["glow"])
 				draw_circle(pos, 4.5, palette["core"])
@@ -38743,22 +40285,24 @@ func _draw_necronada_hud(viewport: Vector2, anchor: Rect2) -> void:
 	var origin := _cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
 	var rect := Rect2(origin, Vector2(width, 64.0))
 	_draw_combat_panel(rect, _necronada_color(), 0.58)
-	draw_string(font, rect.position + Vector2(10, 18), "OSSUARIO TEMPORAL", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, _readable_text_size(11), _necronada_accent())
-	var slot_size := 20.0
-	var slot_gap := 8.0
-	var start := rect.position + Vector2(12.0, 32.0)
-	for i in range(NECRONADA_OSSUARY_SLOTS):
-		var slot_rect := Rect2(start + Vector2(i * (slot_size + slot_gap), 0.0), Vector2(slot_size, slot_size))
-		var filled := i < necronada_ossuary.size()
-		var selected := i == necronada_selected_slot
-		draw_rect(slot_rect, Color(0.05, 0.03, 0.10, 0.76), true)
-		draw_rect(slot_rect, _necronada_accent() if selected else _necronada_color(), false, 1.5 if selected else 1.0)
+	draw_string(font, rect.position + Vector2(10, 18), "JARDIM OSSUARIO", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, _readable_text_size(11), _necronada_accent())
+	var start := rect.position + Vector2(18.0, 42.0)
+	for i in range(NECRONADA_ROSE_MAX):
+		var rose_pos := start + Vector2(i * 22.0, 0.0)
+		var filled := i < necronada_vestiges.size()
+		draw_circle(rose_pos + Vector2(0, 6), 7.0, Color(0.03, 0.04, 0.08, 0.78))
 		if filled:
-			var slot: Dictionary = necronada_ossuary[i]
-			var profile: Dictionary = Dictionary(slot.get("profile", {}))
-			var color: Color = profile.get("color", _necronada_accent())
-			draw_circle(slot_rect.get_center(), 6.0 + int(slot.get("depth", 1)) * 1.2, Color(color.r, color.g, color.b, 0.86))
-	draw_string(font, rect.position + Vector2(126.0, 46.0), "VESTIGIOS %d" % necronada_vestiges.size(), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 136.0, _readable_text_size(10), Color(0.92, 0.96, 1.0))
+			draw_line(rose_pos + Vector2(0, 6), rose_pos + Vector2(0, -7), Color(0.22, 0.62, 0.32, 0.95), 1.7)
+			for p_i in range(5):
+				draw_circle(rose_pos + Vector2.from_angle(float(p_i) * TAU / 5.0) * 3.4 + Vector2(0, -9), 2.9, Color(0.34, 0.82, 1.0, 0.94))
+		else:
+			draw_arc(rose_pos, 7.0, 0.0, TAU, 18, Color(0.25, 0.32, 0.42, 0.58), 1.0)
+	var progress := clampf(float(necronada_horde_progress) / float(NECRONADA_ULTIMATE_REQUIRED_REVIVES), 0.0, 1.0)
+	var bar := Rect2(rect.position + Vector2(136.0, 34.0), Vector2(maxf(52.0, rect.size.x - 150.0), 8.0))
+	draw_rect(bar, Color(0.04, 0.05, 0.09, 0.82), true)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), Color(0.66, 0.34, 1.0, 0.92), true)
+	draw_rect(bar, _necronada_accent(), false, 1.0)
+	draw_string(font, rect.position + Vector2(132.0, 58.0), "ONDA %d/%d" % [necronada_horde_progress, NECRONADA_ULTIMATE_REQUIRED_REVIVES], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 142.0, _readable_text_size(10), Color(0.92, 0.96, 1.0))
 
 
 func _draw_card_mechanic_huds(viewport: Vector2, anchor: Rect2) -> void:
@@ -38803,6 +40347,22 @@ func _draw_card_mechanic_huds(viewport: Vector2, anchor: Rect2) -> void:
 		draw_string(font, rect.position + Vector2(10, 17), "RESERVA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.58, 0.96, 1.0))
 		draw_string(font, rect.position + Vector2(width - 92, 17), "%.0f HP" % reserva_pulso_stored, HORIZONTAL_ALIGNMENT_RIGHT, 84, 11, Color.WHITE)
 		draw_string(font, rect.position + Vector2(10, 32), "LIBERANDO" if reserva_pulso_releasing else "ARMAZENADA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.78, 0.92, 0.96))
+		y += 44.0
+	if _support_card_count(CARD_ESTASE_ID) > 0:
+		var rect = Rect2(origin.x, y, width, 38.0)
+		_draw_combat_panel(rect, Color(0.52, 1.0, 0.86), 0.52)
+		var ratio := 1.0 if estase_reparadora_active else clampf(estase_reparadora_timer / 5.0, 0.0, 1.0)
+		draw_string(font, rect.position + Vector2(10, 17), "ESTASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.66, 1.0, 0.90))
+		draw_string(font, rect.position + Vector2(width - 84, 17), "ATIVA" if estase_reparadora_active else "%.0f%%" % (ratio * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 76, 11, Color.WHITE)
+		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2(width - 20, 5)), Color(0.04, 0.10, 0.09, 0.80), true)
+		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2((width - 20) * ratio, 5)), Color(0.52, 1.0, 0.86, 0.90), true)
+		y += 44.0
+	if _rare_card_count(CARD_EGIDE_ID) > 0 and egide_hemofaga_shield > 0.0:
+		var rect = Rect2(origin.x, y, width, 38.0)
+		_draw_combat_panel(rect, Color(1.0, 0.72, 0.22), 0.56)
+		draw_string(font, rect.position + Vector2(10, 17), "EGIDE", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.82, 0.36))
+		draw_string(font, rect.position + Vector2(width - 84, 17), "%.0f HP" % egide_hemofaga_shield, HORIZONTAL_ALIGNMENT_RIGHT, 76, 11, Color.WHITE)
+		draw_string(font, rect.position + Vector2(10, 32), "INTEGRA" if egide_hemofaga_full_timer > 0.0 else "DECAINDO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.88, 0.70))
 		y += 44.0
 	if _support_card_count(CARD_CASULO_ID) > 0 and (casulo_reativo_timer > 0.0 or casulo_reativo_cooldown > 0.0):
 		var rect = Rect2(origin.x, y, width, 38.0)
@@ -39108,6 +40668,9 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void:
 	if manifestation_key == "eclipsada":
 		var form_color := _eclipsada_color()
 		icons.append({ "label": _eclipsada_form_label(), "sub": "Forma", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(form_color.r, form_color.g, form_color.b, 0.86), "cd_elapsed": 1.0, "cd_max": 1.0 })
+	if manifestation_key == "necronada":
+		var necr_cd_elapsed := NECRONADA_EMPOWER_COOLDOWN if necronada_empowered_ready else NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, necronada_empower_cooldown_until - time_alive)
+		icons.append({ "label": "PO" if necronada_empowered_ready else "+", "sub": "Poeira", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.52, 0.34, 0.92, 0.94 if necronada_empowered_ready else 0.70), "cd_elapsed": necr_cd_elapsed, "cd_max": NECRONADA_EMPOWER_COOLDOWN })
 	if manifestation_key == "bombastica":
 		var det_ready := 1.0 if bombastica_bombs.size() > 0 else 0.0
 		icons.append({ "label": "DET", "sub": "Detonar", "charges": bombastica_bombs.size(), "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0 })
@@ -39245,6 +40808,14 @@ func _draw_touch_controls(viewport: Vector2) -> void:
 			if not is_gamepad_active:
 				_draw_button(empower_c, empower_r, _eclipsada_form_label(), Color(form_color.r, form_color.g, form_color.b, 0.78))
 				_draw_centered("FORMA", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.90, 0.72, 0.92))
+		elif manifestation_key == "necronada":
+			if necronada_empowered_ready:
+				draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(0.52, 0.34, 0.92, 0.18 + armed_pulse * 0.16))
+			if not is_gamepad_active:
+				_draw_button(empower_c, empower_r, "PO" if necronada_empowered_ready else "+", Color(0.52, 0.34, 0.92, 0.92 if necronada_empowered_ready else 0.68))
+				_draw_centered("POEIRA", empower_c + Vector2(0, empower_r + 13.0), 9, _necronada_accent())
+			if not necronada_empowered_ready:
+				_draw_cooldown_overlay(empower_c, empower_r, NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, necronada_empower_cooldown_until - time_alive), NECRONADA_EMPOWER_COOLDOWN)
 		else:
 			if lacerante_empowered_ready:
 				draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(1.0, 0.02, 0.10, 0.18 + armed_pulse * 0.18))
@@ -40399,6 +41970,16 @@ func _card_stat_chips(card_name: String) -> Array:
 			return ["CARGA DANO", "IMPLOSAO"]
 		"Cofre do Excesso":
 			return ["OVERKILL", "ELITE/BOSS"]
+		"Intervalo Fraturado":
+			return ["-HAB1 CD", "-ULT CD"]
+		"Nucleo Revigorante":
+			return ["+ORBE CURA"]
+		"Limiar de Ruina":
+			return [">90% VIDA", "+DANO"]
+		"Estase Reparadora":
+			return ["5s PARADO", "+VIDA PERDIDA"]
+		"Egide Hemofaga":
+			return ["OVERHEAL", "+ESCUDO"]
 	return ["MELHORIA"]
 
 
@@ -41280,7 +42861,7 @@ func _update_button_layout(viewport: Vector2) -> void:
 		buttons["skill"] = Rect2(x + (icon + gap), y, icon, icon)
 		buttons["secondary"] = Rect2(x + (icon + gap) * 2.0, y, icon, icon)
 		buttons["dash"] = Rect2(x + (icon + gap) * 3.0, y, icon, icon)
-		if manifestation_key == "lacerante" or manifestation_key == "eclipsada":
+		if manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada":
 			buttons["lacerante_empower"] = Rect2(x + total_w + gap, y + 8.0, 42.0, 42.0)
 		else:
 			buttons.erase("lacerante_empower")
@@ -41303,7 +42884,7 @@ func _update_button_layout(viewport: Vector2) -> void:
 	buttons["secondary"] = Rect2(_secondary_center(viewport) - Vector2(secondary_r, secondary_r), Vector2(secondary_r * 2.0, secondary_r * 2.0))
 	var dash_r = 52.0 * _dash_scale()
 	buttons["dash"] = Rect2(_dash_center(viewport) - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0))
-	if manifestation_key == "lacerante" or manifestation_key == "eclipsada" or mode == "edit_layout":
+	if manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada" or mode == "edit_layout":
 		var empower_r = 32.0 * _lacerante_empower_scale()
 		buttons["lacerante_empower"] = Rect2(_lacerante_empower_center(viewport) - Vector2(empower_r, empower_r), Vector2(empower_r * 2.0, empower_r * 2.0))
 	else:
@@ -41348,6 +42929,37 @@ func _handle_app_update_input(event: InputEvent, viewport: Vector2) -> void:
 			_dismiss_app_update()
 
 
+func _handle_startup_thanks_input(event: InputEvent) -> bool:
+	if not _startup_thanks_active():
+		return false
+	if event is InputEventScreenTouch:
+		ignore_mouse_until_msec = Time.get_ticks_msec() + 300
+		if event.pressed:
+			_skip_startup_thanks()
+		return true
+	if event is InputEventScreenDrag:
+		ignore_mouse_until_msec = Time.get_ticks_msec() + 300
+		_skip_startup_thanks()
+		return true
+	if event is InputEventMouseButton:
+		if event.pressed and not _should_ignore_emulated_mouse():
+			_skip_startup_thanks()
+		return true
+	if event is InputEventKey:
+		if event.pressed and not event.echo:
+			_skip_startup_thanks()
+		return true
+	if event is InputEventJoypadButton:
+		if event.pressed:
+			_skip_startup_thanks()
+		return true
+	if event is InputEventJoypadMotion:
+		if absf(event.axis_value) > 0.5:
+			_skip_startup_thanks()
+		return true
+	return true
+
+
 func _app_update_move_selection(direction: int, viewport: Vector2) -> void:
 	var count := _app_update_button_rects(viewport).size()
 	if app_update_status == "verifying" or count <= 0:
@@ -41384,6 +42996,8 @@ func _activate_app_update_selection() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	var viewport = get_viewport_rect().size
 	_update_button_layout(viewport)
+	if _handle_startup_thanks_input(event):
+		return
 	if keyboard_mapping_action != "" and mode == "settings_keys":
 		if event is InputEventKey and event.pressed:
 			_capture_keyboard_binding(event)
@@ -42205,6 +43819,8 @@ func _handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 		_claim_action_touch(index)
 		if manifestation_key == "eclipsada":
 			_toggle_eclipsada_form()
+		elif manifestation_key == "necronada":
+			_try_arm_necronada_empower()
 		else:
 			_try_arm_lacerante_empower()
 		return
@@ -42344,6 +43960,8 @@ func _handle_mouse_press(pos: Vector2, viewport: Vector2) -> void:
 			_claim_action_touch(-2)
 			if manifestation_key == "eclipsada":
 				_toggle_eclipsada_form()
+			elif manifestation_key == "necronada":
+				_try_arm_necronada_empower()
 			else:
 				_try_arm_lacerante_empower()
 			return
@@ -42620,6 +44238,8 @@ func _execute_desktop_action(action: String) -> void:
 				_trigger_bombastica_detonator(false)
 			elif manifestation_key == "eclipsada":
 				_toggle_eclipsada_form()
+			elif manifestation_key == "necronada":
+				_try_arm_necronada_empower()
 			else:
 				_try_arm_lacerante_empower()
 		"pause":
@@ -44233,7 +45853,7 @@ func _current_dash_cooldown() -> float:
 	return base_cooldown * AuraSystem.dash_cooldown_multiplier(aura_state, burning)
 
 
-func _skill_cooldown() -> float:
+func _skill_cooldown_base() -> float:
 	match manifestation_key:
 		"eletrica":
 			return 10.0
@@ -44244,7 +45864,7 @@ func _skill_cooldown() -> float:
 		"gravitante":
 			return PLAYER_BASE_SKILL_COOLDOWN + 0.8
 		"ancorada":
-			return PLAYER_BASE_SKILL_COOLDOWN + 0.2
+			return 10.0
 		"cartografica":
 			return 7.5
 		"mnesica":
@@ -44262,6 +45882,10 @@ func _skill_cooldown() -> float:
 		"necronada":
 			return PLAYER_BASE_SKILL_COOLDOWN + 0.45
 	return PLAYER_BASE_SKILL_COOLDOWN
+
+
+func _skill_cooldown() -> float:
+	return _intervalo_apply_to_hab1(_skill_cooldown_base())
 
 
 func _manifestation_color() -> Color:
@@ -45998,6 +47622,7 @@ func _damage_remote_player(amount: int, source: String) -> void:
 
 
 func _damage_remote_player_in_radius(center: Vector2, radius: float, amount: int, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
+	_damage_remnants_in_area_once(center, radius, float(amount) * 0.75, source, hit_owner, hit_key)
 	if not _remote_player_damage_ready():
 		return false
 	var hit_any := false
@@ -46016,6 +47641,7 @@ func _damage_remote_player_in_radius(center: Vector2, radius: float, amount: int
 
 
 func _damage_remote_player_on_segment(a: Vector2, b: Vector2, width: float, amount: int, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
+	_damage_remnants_on_segment_once(a, b, width, float(amount) * 0.75, source, hit_owner, hit_key)
 	if not _remote_player_damage_ready():
 		return false
 	var hit_any := false
@@ -47968,6 +49594,7 @@ func _rpc_player_death_state(peer_id: int, dead: bool) -> void:
 	if dead:
 		next_larapio_spawn_time = time_alive + 15.0
 	if _all_multiplayer_players_dead():
+		_stop_battle_music_for_screen_transition()
 		_finalize_run_report("Derrota")
 		mode = "game_over"
 

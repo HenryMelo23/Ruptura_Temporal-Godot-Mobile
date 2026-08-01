@@ -30,9 +30,9 @@ const DEFAULT_MANAGER_PUBLIC_BASE_URL = "http://72.61.217.238:8090";
 const STREAM_MANAGER_PUBLIC_BASE_URL = publicManagerBaseUrl();
 const STREAM_TTL_MS = numberEnv("STREAM_TTL_MS", 30 * 60 * 1000);
 const STREAM_MAX_ACTIVE = numberEnv("STREAM_MAX_ACTIVE", 2);
-const STREAM_FRAME_MAX_BYTES = numberEnv("STREAM_FRAME_MAX_BYTES", 1_600_000);
-const STREAM_FRAME_BUFFER_MAX = numberEnv("STREAM_FRAME_BUFFER_MAX", 12);
-const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 250);
+const STREAM_FRAME_MAX_BYTES = numberEnv("STREAM_FRAME_MAX_BYTES", 2_400_000);
+const STREAM_FRAME_BUFFER_MAX = numberEnv("STREAM_FRAME_BUFFER_MAX", 8);
+const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 100);
 const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
@@ -471,10 +471,12 @@ function streamPublic(stream) {
   const isNative = stream.protocol === "rtmp-hls";
   const rtmpPath = `${STREAM_RTMP_APP}/${path}`;
   const rtmpUrl = `rtmp://${STREAM_PUBLIC_HOST}:${STREAM_RTMP_PORT}/${rtmpPath}`;
-  const hlsUrl = `${STREAM_PUBLIC_SCHEME}://${STREAM_PUBLIC_HOST}:${STREAM_HLS_PORT}/${rtmpPath}/index.m3u8`;
-  const webrtcUrl = `${STREAM_PUBLIC_SCHEME}://${STREAM_PUBLIC_HOST}:${STREAM_WEBRTC_PORT}/${rtmpPath}`;
+  const hlsUrl = `${STREAM_PUBLIC_SCHEME}://${STREAM_PUBLIC_HOST}:${STREAM_HLS_PORT}/${rtmpPath}/`;
+  const hlsPlaylistUrl = `${STREAM_PUBLIC_SCHEME}://${STREAM_PUBLIC_HOST}:${STREAM_HLS_PORT}/${rtmpPath}/index.m3u8`;
+  const webrtcUrl = `${STREAM_PUBLIC_SCHEME}://${STREAM_PUBLIC_HOST}:${STREAM_WEBRTC_PORT}/${rtmpPath}/`;
   const mjpegUrl = `${STREAM_MANAGER_PUBLIC_BASE_URL}/streams/${stream.id}/mjpeg`;
   const frameUrl = `${STREAM_MANAGER_PUBLIC_BASE_URL}/streams/${stream.id}/frame`;
+  const mjpegPublishUrl = `${STREAM_MANAGER_PUBLIC_BASE_URL}/streams/${stream.id}/mjpeg-publish`;
   return {
     id: stream.id,
     path,
@@ -486,8 +488,10 @@ function streamPublic(stream) {
     watchUrl: isNative ? hlsUrl : mjpegUrl,
     rtmpPublishUrl: rtmpUrl,
     hlsUrl,
+    hlsPlaylistUrl,
     webrtcUrl,
     frameUrl,
+    mjpegPublishUrl,
     mjpegUrl,
     viewerUrl: `${STREAM_MANAGER_PUBLIC_BASE_URL}/streams/${stream.id}`,
     createdAt: stream.createdAt,
@@ -518,9 +522,9 @@ function createStream(payload = {}) {
     streamWidth: clampNumber(payload.streamWidth, 640, 320, 1280),
     streamHeight: clampNumber(payload.streamHeight, 360, 180, 720),
     streamFps: clampNumber(payload.streamFps, 24, 8, 60),
-    streamQuality: clampNumber(payload.streamQuality, 0.58, 0.42, 0.72),
-    streamBitrate: clampNumber(payload.streamBitrate, 650_000, 250_000, 6_000_000),
-    bufferMs: clampNumber(payload.bufferMs, STREAM_FRAME_BUFFER_MS, 80, 400),
+    streamQuality: clampNumber(payload.streamQuality, 0.64, 0.42, 0.78),
+    streamBitrate: clampNumber(payload.streamBitrate, 1_600_000, 250_000, 10_000_000),
+    bufferMs: clampNumber(payload.bufferMs, STREAM_FRAME_BUFFER_MS, 50, 220),
     createdAt: now,
     expiresAt: now + STREAM_TTL_MS,
     lastFrame: null,
@@ -533,6 +537,7 @@ function createStream(payload = {}) {
     fpsWindowStartedAt: now,
     bytesReceived: 0,
     frameBuffer: [],
+    mjpegPublishBuffer: Buffer.alloc(0),
     subscribers: new Set(),
     idleTimer: null
   };
@@ -610,18 +615,16 @@ function refreshStreamFps(stream, now = Date.now()) {
 
 function publishFrame(stream, frame, contentType, seq = 0) {
   const now = Date.now();
-  if (seq && seq <= stream.lastFrameSeq) {
-    return false;
-  }
+  const frameSeq = seq || stream.lastFrameSeq + 1;
   stream.lastFrame = frame;
   stream.lastFrameType = contentType;
   stream.lastFrameAt = now;
-  stream.lastFrameSeq = seq || stream.lastFrameSeq + 1;
+  stream.lastFrameSeq = Math.max(stream.lastFrameSeq, frameSeq);
   stream.frameCount += 1;
   refreshStreamFps(stream, now);
   stream.framesThisSecond += 1;
   stream.bytesReceived += frame.length;
-  stream.frameBuffer.push({ frame, contentType, seq: stream.lastFrameSeq, createdAt: now });
+  stream.frameBuffer.push({ frame, contentType, seq: frameSeq, createdAt: now });
   const keepAfter = now - Math.max(stream.bufferMs, STREAM_FRAME_BUFFER_MS);
   stream.frameBuffer = stream.frameBuffer
     .filter((entry) => entry.createdAt >= keepAfter)
@@ -630,14 +633,46 @@ function publishFrame(stream, frame, contentType, seq = 0) {
   for (const res of Array.from(stream.subscribers)) {
     try {
       if (res.rupturaBlocked) {
-        res.rupturaLatest = { frame, contentType, seq: stream.lastFrameSeq, createdAt: now };
+        res.rupturaLatest = { frame, contentType, seq: frameSeq, createdAt: now };
         continue;
       }
-      pushFrameToSubscriber(res, frame, contentType, stream.lastFrameSeq, now);
+      pushFrameToSubscriber(res, frame, contentType, frameSeq, now);
     } catch (_error) {
       stream.subscribers.delete(res);
     }
   }
+  return true;
+}
+
+function publishMjpegChunk(stream, chunk) {
+  if (!Buffer.isBuffer(chunk) || chunk.length === 0) {
+    return 0;
+  }
+  stream.mjpegPublishBuffer = Buffer.concat([stream.mjpegPublishBuffer || Buffer.alloc(0), chunk]);
+  if (stream.mjpegPublishBuffer.length > STREAM_FRAME_MAX_BYTES * 3) {
+    const start = stream.mjpegPublishBuffer.indexOf(Buffer.from([0xff, 0xd8]), Math.max(0, stream.mjpegPublishBuffer.length - STREAM_FRAME_MAX_BYTES * 2));
+    stream.mjpegPublishBuffer = start >= 0 ? stream.mjpegPublishBuffer.slice(start) : Buffer.alloc(0);
+  }
+  let published = 0;
+  while (stream.mjpegPublishBuffer.length > 4) {
+    const start = stream.mjpegPublishBuffer.indexOf(Buffer.from([0xff, 0xd8]));
+    if (start < 0) {
+      stream.mjpegPublishBuffer = stream.mjpegPublishBuffer.slice(-2);
+      break;
+    }
+    const end = stream.mjpegPublishBuffer.indexOf(Buffer.from([0xff, 0xd9]), start + 2);
+    if (end < 0) {
+      if (start > 0) stream.mjpegPublishBuffer = stream.mjpegPublishBuffer.slice(start);
+      break;
+    }
+    const frame = stream.mjpegPublishBuffer.slice(start, end + 2);
+    stream.mjpegPublishBuffer = stream.mjpegPublishBuffer.slice(end + 2);
+    if (frame.length <= STREAM_FRAME_MAX_BYTES) {
+      publishFrame(stream, frame, "image/jpeg");
+      published += 1;
+    }
+  }
+  return published;
 }
 
 function sendLatestFrame(res, stream) {
@@ -696,6 +731,7 @@ function streamViewerHtml(stream) {
   const mjpegUrl = data.mjpegUrl;
   const frameUrl = data.frameUrl;
   const hlsUrl = data.hlsUrl;
+  const hlsPlaylistUrl = data.hlsPlaylistUrl || data.hlsUrl;
   const webrtcUrl = data.webrtcUrl;
   const webrtcEmbedUrl = `${webrtcUrl}?controls=false&muted=true&autoplay=true&playsInline=true&disablepictureinpicture=true`;
   const statusUrl = `${data.viewerUrl}?format=json`;
@@ -729,6 +765,7 @@ function streamViewerHtml(stream) {
   <script>
     const protocol = "${data.protocol}";
     const hlsUrl = "${hlsUrl}";
+    const hlsPlaylistUrl = "${hlsPlaylistUrl}";
     const webrtcUrl = "${webrtcEmbedUrl}";
     const statusEl = document.getElementById("status");
     const emptyEl = document.getElementById("empty");
@@ -740,8 +777,9 @@ function streamViewerHtml(stream) {
     let usingWebRtc = false;
     function showFallbackHls(message) {
       usingWebRtc = false;
-      webrtc.style.display = "none";
-      video.style.display = "block";
+      video.style.display = "none";
+      webrtc.style.display = "block";
+      webrtc.src = hlsUrl;
       if (message) emptyEl.textContent = message;
     }
     if (protocol === "rtmp-hls") {
@@ -762,7 +800,7 @@ function streamViewerHtml(stream) {
       };
       function startHls() {
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = hlsUrl;
+        video.src = hlsPlaylistUrl;
       } else if (window.Hls && Hls.isSupported()) {
         const hls = new Hls({
           lowLatencyMode: true,
@@ -773,7 +811,7 @@ function streamViewerHtml(stream) {
           backBufferLength: 0,
           enableWorker: true
         });
-        hls.loadSource(hlsUrl);
+        hls.loadSource(hlsPlaylistUrl);
         hls.attachMedia(video);
       } else {
         emptyEl.textContent = "Navegador sem HLS. Abra no Chrome/Edge atualizado.";
@@ -1867,7 +1905,7 @@ async function route(req, res) {
       standbyStarting: Math.max(0, standbyRooms().length - readyStandby),
       streams: STREAMING_ENABLED ? streams.size : 0,
       runs: leaderboardSnapshot().recent.length,
-      protocols: STREAMING_ENABLED ? ["rtmp-hls", "frame-mjpeg"] : [],
+      protocols: STREAMING_ENABLED ? ["rtmp-hls", "frame-mjpeg", "http-mjpeg"] : [],
       streaming: STREAMING_ENABLED
     });
     return;
@@ -2052,6 +2090,42 @@ async function route(req, res) {
     }
     const stopped = closeStream(streamMatch[1]);
     sendJson(res, stopped ? 200 : 404, { stopped });
+    return;
+  }
+
+  const streamMjpegPublishMatch = url.pathname.match(/^\/streams\/([a-zA-Z0-9_-]+)\/mjpeg-publish$/);
+  if (streamMjpegPublishMatch) {
+    if (!STREAMING_ENABLED) {
+      sendStreamingDisabled(res);
+      return;
+    }
+    const stream = streams.get(streamMjpegPublishMatch[1]);
+    if (!stream) {
+      sendJson(res, 404, { error: "stream not found" });
+      return;
+    }
+    if (req.method !== "POST") {
+      sendJson(res, 405, { error: "method not allowed" });
+      return;
+    }
+    refreshStreamTtl(stream);
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Connection": "keep-alive"
+    });
+    let published = 0;
+    req.on("data", (chunk) => {
+      published += publishMjpegChunk(stream, chunk);
+    });
+    req.on("end", () => {
+      if (!res.destroyed) {
+        res.end(JSON.stringify({ ok: true, id: stream.id, published, frameCount: stream.frameCount }));
+      }
+    });
+    req.on("error", () => {
+      if (!res.destroyed) res.end();
+    });
     return;
   }
 

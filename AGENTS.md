@@ -27,6 +27,18 @@ For any Godot implementation, debugging, scene, resource, gameplay, UI, animatio
 
 - `.agents/skills/godot-engineer/SKILL.md`
 
+For 2D pixel art particles, physics optimization, spatial hashing, and soft-body separation, use:
+
+- `.agents/skills/godot-pixel-physics-particles/SKILL.md`
+
+For 2D collision rules, layer/mask matrix, DirectSpaceState2D queries, NavigationAgent2D, and NPC/Bot steering AI, use:
+
+- `.agents/skills/godot-2d-collisions-ai/SKILL.md`
+
+For game design, mathematical stat scaling, diminishing returns, damage formulas, and Roguelike/Roguelite/Soulslike balancing rules, use:
+
+- `.agents/skills/godot-game-balancing/SKILL.md`
+
 After any source, scene, resource, project setting, addon configuration, or test change, use:
 
 - `.agents/skills/godot-test-repair/SKILL.md`

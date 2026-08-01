@@ -61,6 +61,8 @@ func _run() -> void:
 	_check(is_equal_approx(game._manifestation_attack_interval(), 0.58), "Bombastica base cadence is not 0.58s")
 	_check(game._ground_target_profile(false).has("radius"), "Bombastica Q does not expose a ground targeting profile")
 	_check(game._ground_target_profile(true).has("radius"), "Bombastica E does not expose a ground targeting profile")
+	_check(game.audio_streams.has("Bomba-Bombastica.mp3"), "Bombastica bomb SFX is not registered")
+	_check(game.audio_streams.has("Mina-Bombastica.mp3"), "Bombastica mine SFX is not registered")
 
 	var enemy: Dictionary = _spawn_test_enemy(game.player_pos + Vector2(96, 0), 1000.0)
 	game._try_attack()
@@ -76,7 +78,11 @@ func _run() -> void:
 	_check(int(game.bombastica_powder_marks[powder_key].get("stacks", 0)) == game.BOMBASTICA_POWDER_MAX_STACKS, "Bombastica powder did not cap at three stacks")
 
 	var hp_before_q: float = float(enemy["hp"])
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
 	game._try_cast_bombastica_q(Vector2(enemy["pos"]))
+	_check(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Bomba-Bombastica.mp3"]), "Bombastica Q did not play bomb SFX")
 	_check(game.bombastica_bombs.size() == 1, "Bombastica Q did not create a bomb")
 	_check(game._bombastica_ready_charges() == 2, "Bombastica Q did not consume exactly one charge")
 	game.bombastica_bombs[0]["state"] = "armed"
@@ -88,7 +94,11 @@ func _run() -> void:
 
 	game.last_secondary_time = -999.0
 	var mine_enemy: Dictionary = _spawn_test_enemy(game.player_pos + Vector2(150, 0), 1000.0)
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
 	game._use_secondary_skill(Vector2(mine_enemy["pos"]))
+	_check(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Mina-Bombastica.mp3"]), "Bombastica E did not play minefield SFX")
 	_check(not game.manifestation_secondaries.is_empty(), "Bombastica E did not create a minefield")
 	var minefield: Dictionary = game.manifestation_secondaries[-1]
 	_check(String(minefield.get("kind", "")) == "bombastica", "Bombastica E secondary has wrong kind")

@@ -24,9 +24,9 @@ Environment=STREAM_HLS_PORT=8888
 Environment=STREAM_WEBRTC_PORT=8889
 Environment=STREAM_MAX_ACTIVE=2
 Environment=STREAM_TTL_MS=1800000
-Environment=STREAM_FRAME_MAX_BYTES=1600000
-Environment=STREAM_FRAME_BUFFER_MAX=12
-Environment=STREAM_FRAME_BUFFER_MS=250
+Environment=STREAM_FRAME_MAX_BYTES=2400000
+Environment=STREAM_FRAME_BUFFER_MAX=8
+Environment=STREAM_FRAME_BUFFER_MS=60
 ExecStart=/usr/bin/node relay_manager.js
 Restart=always
 RestartSec=3

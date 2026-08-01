@@ -14,9 +14,9 @@ Este manager fica sempre ligado no VPS e cria uma sala Godot headless somente qu
 - `STREAM_MANAGER_PUBLIC_BASE_URL`: URL publica do manager usada na pagina/link enviado ao Discord. Padrao: `http://ROOM_HOST:PORT`.
 - `STREAMING_ENABLED`: `1` libera a transmissao QA opt-in. No jogo ela so aparece apos o cheat `CHANZADA` e so inicia quando o jogador aperta o botao `STREAM QA` no hub.
 - `STREAM_MAX_ACTIVE`: limite duro de transmissoes simultaneas. Padrao: `2`.
-- `STREAM_FRAME_MAX_BYTES`: maior frame aceito pelo modo MJPEG. Padrao: `1600000`.
-- `STREAM_FRAME_BUFFER_MAX`: quantidade maxima de frames em memoria por stream. Padrao: `12`.
-- `STREAM_FRAME_BUFFER_MS`: buffer alvo do modo MJPEG. Padrao: `250`.
+- `STREAM_FRAME_MAX_BYTES`: maior frame aceito pelo modo MJPEG. Padrao: `2400000`.
+- `STREAM_FRAME_BUFFER_MAX`: quantidade maxima de frames em memoria por stream. Padrao: `8`.
+- `STREAM_FRAME_BUFFER_MS`: buffer alvo do modo MJPEG. Padrao: `100`.
 - `RUN_REPORT_MAX_BYTES`: limite do JSON de ficha de run recebido em `/runs`. Padrao: `524288`.
 - `LEADERBOARD_PATH`: arquivo local onde o ranking salva as runs. Padrao: `server/leaderboard_runs.json`.
 - `LEADERBOARD_MAX_RUNS`: maximo de runs mantidas no ranking. Padrao: `500`.
@@ -93,6 +93,8 @@ A transmissao ao vivo voltou como recurso de QA, mas com consentimento explicito
 - o botao `STREAM QA` no hub abre/encerra a sessao;
 - ao sair/fechar o jogo o cliente envia `DELETE /streams/:id`;
 - o relay limita sessoes simultaneas, tamanho de frame, bitrate e buffer.
+- no Windows, quando `ffmpeg` estiver no PATH ou em `RUPTURA_FFMPEG_BIN`, o jogo usa `POST /streams/:id/mjpeg-publish` para enviar MJPEG continuo em ate 60 FPS pela porta `8090`, sem depender da porta RTMP `1935`;
+- o fallback GDScript por `POST /streams/:id/frame` continua existindo apenas como reserva quando FFmpeg/plugin nativo nao estiver disponivel.
 
 Nao use a porta `8080`; o manager publico deste projeto fica em `8090`.
 

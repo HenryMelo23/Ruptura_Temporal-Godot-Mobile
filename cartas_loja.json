@@ -1,0 +1,402 @@
+[
+    {
+        "id": "speed_boost",
+        "nome": "Speed Boost",
+        "subtitulo": "Vento Celeste",
+        "descricao_loja": "+6.5% velocidade de movimento.",
+        "icone": "Deck/Speed_boost1.png",
+        "frame_secundario": "Deck/Speed_boost2.png"
+    },
+    {
+        "id": "porcao",
+        "nome": "Porcao",
+        "subtitulo": "Sopro Vital",
+        "descricao_loja": "Cura 45% da vida maxima; excesso aumenta vida maxima.",
+        "icone": "Deck/carta_por1.png",
+        "frame_secundario": "Deck/carta_por2.png"
+    },
+    {
+        "id": "disparo_crescente",
+        "nome": "Disparo crescente",
+        "subtitulo": "Odio Canalizado",
+        "descricao_loja": "+10% do dano atual do auto attack.",
+        "icone": "Deck/carta_odio1.png",
+        "frame_secundario": "Deck/carta_odio2.png"
+    },
+    {
+        "id": "tempestade",
+        "nome": "Tempestade",
+        "subtitulo": "Precisao Critica",
+        "descricao_loja": "+5 dano e +2% chance critica.",
+        "icone": "Deck/Carta_tempestade_crescente1.png",
+        "frame_secundario": "Deck/Carta_tempestade_crescente2.png"
+    },
+    {
+        "id": "trembo",
+        "nome": "Trembo",
+        "subtitulo": "Reversao Temporal",
+        "descricao_loja": "Trembo é como seu anjo, ao chegar no quase morte ele doa sua propria vida teleportando você pra um lugar seguro e restaurando sua vida",
+        "icone": "Deck/carta_trem1.png",
+        "frame_secundario": "Deck/carta_trem2.png"
+    },
+    {
+        "id": "roubo_de_vida",
+        "nome": "Roubo de Vida",
+        "subtitulo": "Hemofluxo",
+        "descricao_loja": "Projeteis curam uma fracao da vida perdida ao acertar.",
+        "icone": "Deck/Carta_roubo_vida1.png",
+        "frame_secundario": "Deck/Carta_roubo_vida2.png"
+    },
+    {
+        "id": "speed_atack",
+        "nome": "Speed Atack",
+        "subtitulo": "Fluidez Letal",
+        "descricao_loja": "Reduz levemente o intervalo entre disparos.",
+        "icone": "Deck/carta_onda.png",
+        "frame_secundario": "Deck/carta_onda2.png"
+    },
+    {
+        "id": "teleporte",
+        "nome": "Teleporte",
+        "subtitulo": "Salto Espacial",
+        "descricao_loja": "Reduz recarga do teleporte ate 0.5s.",
+        "icone": "Deck/carta_teleporte1.png",
+        "frame_secundario": "Deck/carta_teleporte2.png"
+    },
+    {
+        "id": "petro",
+        "nome": "Petro",
+        "subtitulo": "Sentinela Leal",
+        "descricao_loja": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.",
+        "icone": "Deck/carta_petro1.png",
+        "frame_secundario": "Deck/carta_petro2.png"
+    },
+    {
+        "id": "defesa",
+        "nome": "Defesa",
+        "subtitulo": "Pele Cronal",
+        "descricao_loja": "+3.5 de resistencia, ate 50.",
+        "icone": "Deck/carta_defesa1.png",
+        "frame_secundario": "Deck/carta_defesa2.png"
+    },
+    {
+        "id": "sorte",
+        "nome": "Sorte",
+        "subtitulo": "Anomalia Favoravel",
+        "descricao_loja": "+0.3% sorte para drops. A chance rara escala de forma mais gradual.",
+        "icone": "Deck/carta_sorte1.png",
+        "frame_secundario": "Deck/carta_sorte2.png"
+    },
+    {
+        "id": "poison",
+        "nome": "Poison",
+        "subtitulo": "Toxina Temporal",
+        "descricao_loja": "Projeteis envenenam inimigos e boss com dano por tempo.",
+        "icone": "Deck/carta_poison1.png",
+        "frame_secundario": "Deck/carta_poison2.png"
+    },
+    {
+        "id": "coletora",
+        "nome": "Coletora",
+        "subtitulo": "Foice do Tempo",
+        "descricao_loja": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.",
+        "icone": "Deck/carta_estalo1.png",
+        "frame_secundario": "Deck/carta_estalo2.png"
+    },
+    {
+        "id": "mercenaria",
+        "nome": "Mercenaria",
+        "subtitulo": "Contrato de Guerra",
+        "descricao_loja": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.",
+        "icone": "Deck/carta_mercenaria1.png",
+        "frame_secundario": "Deck/carta_mercenaria2.png"
+    },
+    {
+        "id": "devorador_destinos",
+        "nome": "Devorador de Destinos",
+        "subtitulo": "Devorador de Destinos",
+        "descricao_loja": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.",
+        "icone": "Deck/carta-Devorador_de_Destinos1.png",
+        "frame_secundario": "Deck/carta-Devorador_de_Destinos2.png"
+    },
+    {
+        "id": "escolha_adiada",
+        "nome": "Escolha Adiada",
+        "subtitulo": "Reserva Causal",
+        "descricao_loja": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.",
+        "icone": "Deck/carta-Escolha_Adiada1.png",
+        "frame_secundario": "Deck/carta-Escolha_Adiada2.png"
+    },
+    {
+        "id": "tregua_regenerativa",
+        "nome": "Trégua Regenerativa",
+        "subtitulo": "Paz Tecidual",
+        "descricao_loja": "Sem receber dano, regenera vida passivamente.",
+        "icone": "Deck/carta-Tr_guaRegenerativa1.png",
+        "frame_secundario": "Deck/carta-Tr_guaRegenerativa2.png"
+    },
+    {
+        "id": "cinzas_escolha",
+        "nome": "Cinzas da Escolha",
+        "subtitulo": "Marca de Cinzas",
+        "descricao_loja": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada com um bonus unico acumulavel; o bonus so acaba ao comprar a carta marcada.",
+        "icone": "Deck/carta-CinzasdaEscolha1.png",
+        "frame_secundario": "Deck/carta-CinzasdaEscolha2.png"
+    },
+    {
+        "id": "reserva_pulso",
+        "nome": "Reserva de Pulso",
+        "subtitulo": "Cura Guardada",
+        "descricao_loja": "Guarda cura excedente e a libera em situacao critica.",
+        "icone": "Deck/carta-ReservadePulso1.png",
+        "frame_secundario": "Deck/carta-ReservadePulso2.png"
+    },
+    {
+        "id": "casulo_reativo",
+        "nome": "Casulo Reativo",
+        "subtitulo": "Defesa de Rajada",
+        "descricao_loja": "Ao sofrer rajada de dano, forma um casulo protetor.",
+        "icone": "Deck/carta-CasuloReativo1.png",
+        "frame_secundario": "Deck/carta-CasuloReativo2.png"
+    },
+    {
+        "id": "passagem_intangivel",
+        "nome": "Passagem Intangível",
+        "subtitulo": "Fase Fantasma",
+        "descricao_loja": "Apos o teleporte, atravesse inimigos sem sofrer contato.",
+        "icone": "Deck/carta-PassagemIntang_vel1.png",
+        "frame_secundario": "Deck/carta-PassagemIntang_vel2.png"
+    },
+    {
+        "id": "ancora_vital",
+        "nome": "Âncora Vital",
+        "subtitulo": "Selo de Retorno",
+        "descricao_loja": "Ao sofrer dano, cria uma ancora que devolve parte da vida.",
+        "icone": "Deck/carta-ncoraVital1.png",
+        "frame_secundario": "Deck/carta-ncoraVital2.png"
+    },
+    {
+        "id": "inercia_cronal",
+        "nome": "Inercia Cronal",
+        "subtitulo": "Corpo Ancorado",
+        "descricao_loja": "Reduz empurroes e controles hostis sofridos pelo jogador.",
+        "icone": "Deck/carta-InerciaCronal1.png",
+        "frame_secundario": "Deck/carta-InerciaCronal2.png"
+    },
+    {
+        "id": "leitura_instante",
+        "nome": "Leitura do Instante",
+        "subtitulo": "Previsao Clara",
+        "descricao_loja": "Aumenta a antecedencia visual de ataques inimigos e de chefes.",
+        "icone": "Deck/carta-LeituraInstante1.png",
+        "frame_secundario": "Deck/carta-LeituraInstante2.png"
+    },
+    {
+        "id": "margem_segura",
+        "nome": "Margem Segura",
+        "subtitulo": "Distancia Certa",
+        "descricao_loja": "Inimigos comuns surgem mais longe do jogador.",
+        "icone": "Deck/carta-MargenSegura1.png",
+        "frame_secundario": "Deck/carta-MargenSegura2.png"
+    },
+    {
+        "id": "moeda_estavel",
+        "nome": "Moeda Estavel",
+        "subtitulo": "Economia Fixa",
+        "descricao_loja": "Reduz o aumento de preco das proximas compras da loja.",
+        "icone": "Deck/carta-MoedaEstavel1.png",
+        "frame_secundario": "Deck/carta-MoedaEstavel2.png"
+    },
+    {
+        "id": "orbita_coletora",
+        "nome": "Orbita Coletora",
+        "subtitulo": "Alcance Neutro",
+        "descricao_loja": "Aumenta o raio de coleta de moedas, cartas soltas e orbes neutros.",
+        "icone": "Deck/carta-OrbitaColetora1.png",
+        "frame_secundario": "Deck/carta-OrbitaColetora2.png"
+    },
+    {
+        "id": "pacto_possibilidades",
+        "nome": "Pacto das Possibilidades",
+        "subtitulo": "Primeira Oferta",
+        "descricao_loja": "Cartas comuns ainda nao compradas ficam mais baratas na loja.",
+        "icone": "Deck/carta-Pacto_das_Possibilidades1.png",
+        "frame_secundario": "Deck/carta-Pacto_das_Possibilidades2.png"
+    },
+    {
+        "id": "solo_consolidado",
+        "nome": "Solo Consolidado",
+        "subtitulo": "Chao Estavel",
+        "descricao_loja": "Reduz a duracao de perigos hostis persistentes no chao.",
+        "icone": "Deck/carta-SoloConsolidado1.png",
+        "frame_secundario": "Deck/carta-SoloConsolidado2.png"
+    },
+    {
+        "id": "rastro_de_retorno",
+        "nome": "Rastro de Retorno",
+        "subtitulo": "Vestigio Vivo",
+        "descricao_loja": "Periodicamente deixa um vestigio no caminho. Retornar a ele concede velocidade e recupera parte do teleporte.",
+        "icone": "Deck/carta-RastrodeRetorno1.png",
+        "frame_secundario": "Deck/carta-RastrodeRetorno2.png"
+    },
+    {
+        "id": "municao_de_rebate",
+        "nome": "Municao de Rebate",
+        "subtitulo": "Fragmento Teimoso",
+        "descricao_loja": "Projeteis basicos que somem sem acertar podem gerar um fragmento que busca o alvo mais proximo.",
+        "icone": "Deck/carta-municaorebatente1.png",
+        "frame_secundario": "Deck/carta-municaorebatente2.png"
+    },
+    {
+        "id": "impulso_de_sobras",
+        "nome": "Impulso de Sobras",
+        "subtitulo": "Energia Guardada",
+        "descricao_loja": "Q, E ou teleporte prontos por tempo suficiente fortalecem os proximos ataques basicos.",
+        "icone": "Deck/carta-impulsodesobras1.png",
+        "frame_secundario": "Deck/carta-impulsodesobras2.png"
+    },
+    {
+        "id": "eco_de_impacto",
+        "nome": "Eco de Impacto",
+        "subtitulo": "Repeticao Brutal",
+        "descricao_loja": "Acertar o mesmo alvo varias vezes cria um eco que repete parte do ultimo dano real.",
+        "icone": "Deck/carta-ecodeimpacto1.png",
+        "frame_secundario": "Deck/carta-ecodeimpacto2.png"
+    },
+    {
+        "id": "zona_de_descompressao",
+        "nome": "Zona de Descompressao",
+        "subtitulo": "Respiro de Cerco",
+        "descricao_loja": "Ficar cercado carrega uma onda que repele inimigos proximos e aplica lentidao.",
+        "icone": "Deck/carta-zonadedescompressao1.png",
+        "frame_secundario": "Deck/carta-zonadedescompressao2.png"
+    },
+    {
+        "id": "folego_de_perseguicao",
+        "nome": "Folego de Perseguicao",
+        "subtitulo": "Caca Persistente",
+        "descricao_loja": "Avancar contra um alvo distante acumula velocidade e fortalece o primeiro impacto ao alcanca-lo.",
+        "icone": "Deck/carta-folegodeperseguicao1.png",
+        "frame_secundario": "Deck/carta-folegodeperseguicao2.png"
+    },
+    {
+        "id": "margem_de_erro",
+        "nome": "Margem de Erro",
+        "subtitulo": "Erro Parcelado",
+        "descricao_loja": "Depois de sofrer dano, o proximo impacto rapido tem parte adiada e pode ser reduzido com abates.",
+        "icone": "Deck/carta-margemdeerro1.png",
+        "frame_secundario": "Deck/carta-margemdeerro2.png"
+    },
+    {
+        "id": "ressonancia_de_alternancia",
+        "nome": "Ressonancia de Alternancia",
+        "subtitulo": "Kit Completo",
+        "descricao_loja": "Usar ataque, Q, E e teleporte em alternancia prepara um bonus para a proxima acao.",
+        "icone": "Deck/carta-ressonanciadealternancia1.png",
+        "frame_secundario": "Deck/carta-ressonanciadealternancia2.png"
+    },
+    {
+        "id": "fratura_cronal",
+        "nome": "Fratura Cronal",
+        "subtitulo": "Fragilidade Temporal",
+        "descricao_loja": "Proximo acerto a cada 7s aplica Fragilidade por 4s.",
+        "icone": "Deck/carta-Fratura_Cronal1.png",
+        "frame_secundario": "Deck/carta-Fratura_Cronal2.png"
+    },
+    {
+        "id": "pulso_desestabilizador",
+        "nome": "Pulso Desestabilizador",
+        "subtitulo": "Explosao Instavel",
+        "descricao_loja": "Proximo acerto a cada 8s gera uma explosao no alvo.",
+        "icone": "Deck/carta-Pulso_Desestabilizador1.png",
+        "frame_secundario": "Deck/carta-Pulso_Desestabilizador2.png"
+    },
+    {
+        "id": "pressao_cerco",
+        "nome": "Pressao de Cerco",
+        "subtitulo": "Alvo Cercado",
+        "descricao_loja": "+dano em alvos cercados por 3 inimigos proximos.",
+        "icone": "Deck/carta-Press_o_de_Cerco1.png",
+        "frame_secundario": "Deck/carta-Press_o_de_Cerco2.png"
+    },
+    {
+        "id": "choque_fontes",
+        "nome": "Choque de Fontes",
+        "subtitulo": "Interferencia Temporal",
+        "descricao_loja": "Fontes diferentes de dano no mesmo alvo provocam uma descarga.",
+        "icone": "Deck/carta-Choque_de_Fontes1.png",
+        "frame_secundario": "Deck/carta-Choque_de_Fontes2.png"
+    },
+    {
+        "id": "ferrolho_ruptura",
+        "nome": "Ferrolho de Ruptura",
+        "subtitulo": "Prego Espacial",
+        "descricao_loja": "O proximo acerto direto a cada 10s fixa o alvo no espaco.",
+        "icone": "Deck/carta-Ferrolho_de_Ruptura1.png",
+        "frame_secundario": "Deck/carta-Ferrolho_de_Ruptura2.png"
+    },
+    {
+        "id": "limiar_colapso",
+        "nome": "Limiar de Colapso",
+        "subtitulo": "Ruptura Vital",
+        "descricao_loja": "Rompe inimigos ao cruzarem 70%, 40% e 15% de vida.",
+        "icone": "Deck/carta-Limiar_de_Colapso1.png",
+        "frame_secundario": "Deck/carta-Limiar_de_Colapso2.png"
+    },
+    {
+        "id": "desvio_probabilidade",
+        "nome": "Desvio de Probabilidade",
+        "subtitulo": "Quase Acerto",
+        "descricao_loja": "Quase acertos hostis fortalecem o proximo golpe direto.",
+        "icone": "Deck/carta-Desvio_de_Probabilidade1.png",
+        "frame_secundario": "Deck/carta-Desvio_de_Probabilidade2.png"
+    },
+    {
+        "id": "ponto_cego",
+        "nome": "Ponto Cego",
+        "subtitulo": "Ataque pelas Costas",
+        "descricao_loja": "Ataques por tras causam dano extra e desorientam.",
+        "icone": "Deck/carta-Ponto_Cego1.png",
+        "frame_secundario": "Deck/carta-Ponto_Cego2.png"
+    },
+    {
+        "id": "mandamento_ruptura",
+        "nome": "Mandamento da Ruptura",
+        "subtitulo": "Terceira Lei",
+        "descricao_loja": "A cada 3 habilidades, a terceira rompe seus limites.",
+        "icone": "Deck/carta-Mandamento_da_Ruptura1.png",
+        "frame_secundario": "Deck/carta-Mandamento_da_Ruptura2.png"
+    },
+    {
+        "id": "carta_zero",
+        "nome": "Carta Zero",
+        "subtitulo": "Origem Numerica",
+        "descricao_loja": "Amplifica todos os efeitos numericos das cartas comuns.",
+        "icone": "Deck/carta-Zero1.png",
+        "frame_secundario": "Deck/carta-Zero2.png"
+    },
+    {
+        "id": "necrocronismo",
+        "nome": "Necrocronismo",
+        "subtitulo": "Aliados Espectrais",
+        "descricao_loja": "Inimigos derrotados retornam temporariamente como aliados.",
+        "icone": "Deck/carta-Necrocronismo1.png",
+        "frame_secundario": "Deck/carta-Necrocronismo2.png"
+    },
+    {
+        "id": "coracao_antimateria",
+        "nome": "Coração de Antimatéria",
+        "subtitulo": "Implosao Instavel",
+        "descricao_loja": "Dano carrega um coracao que implode no proximo acerto.",
+        "icone": "Deck/carta-Cora_o_de_Antimat_ria1.png",
+        "frame_secundario": "Deck/carta-Cora_o_de_Antimat_ria2.png"
+    },
+    {
+        "id": "cofre_excesso",
+        "nome": "Cofre do Excesso",
+        "subtitulo": "Reserva de Overkill",
+        "descricao_loja": "Armazena dano excedente e descarrega em alvos poderosos.",
+        "icone": "Deck/carta-Cofre_do_Excesso1.png",
+        "frame_secundario": "Deck/carta-Cofre_do_Excesso2.png"
+    }
+]

@@ -1,19 +1,16 @@
 {
-    "version":  "2.0.30f",
-    "version_code":  23006,
-    "filename":  "ruptura_temporal_mobile_2.0.30f.apk",
-    "sha256":  "9f8830f5abc766b85191bd93482804dc5dfba6e1b8fd15c5c64f8f58d13be117",
-    "size":  644929532,
+    "version":  "2.0.31b",
+    "version_code":  23102,
+    "filename":  "ruptura_temporal_mobile_2.0.31b.apk",
+    "sha256":  "7d03d4a42928b1aafa2dd2bf50bc70c81522aba92fecdd16ef64adabcab52a6e",
+    "size":  647283339,
     "notes":  [
-                  "- Corrigido: a loja podia renovar a oferta inteira apos uma compra e atrapalhava a construcao do deck.",
-                  "- Loja mais justa: apos 6 cartas unicas, as ofertas passam a equilibrar descoberta, consolidacao e liberdade.",
-                  "- Cinzas da Escolha: cartas queimadas agora retornam com peso real, bonus acumulavel e garantia no 5o retorno elegivel.",
-                  "- Cartas sem teto: o roguelike nao bloqueia mais compras por limite artificial.",
-                  "- Pocao ajustada: aumenta vida maxima e cura apenas 5% da vida maxima anterior.",
-                  "- Raras preservadas: a chance continua ligada a Sorte e a loja evita mais de uma rara por geracao.",
-                  "- Reserva melhorada: cartas raras tambem podem ser reservadas sem quebrar a regra de raridade.",
-                  "- Validacao: simulacao de 100 mil lojas e smokes de loja/cartas passaram."
+                  "- Correcao rapida: o botao STREAM QA e a configuracao de qualidade agora ficam ocultos para jogadores comuns.",
+                  "- O streaming QA so aparece depois de digitar o cheat CHANZADA na sessao atual.",
+                  "- Configuracoes antigas que tentavam manter o streaming liberado agora sao ignoradas.",
+                  "- Tela de agradecimento mantida por 5 segundos com fade suave para o Hub Temporal.",
+                  "- Validacao: smoke do cheat, tela inicial, cena principal e builds passaram sem erros de Godot."
               ],
     "mandatory":  false,
-    "published_at":  "2026-07-30T14:40:30.5527863Z"
+    "published_at":  "2026-08-01T00:46:48.7282727Z"
 }

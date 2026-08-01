@@ -24,8 +24,13 @@ func _run() -> void:
 	_check(game.audio_streams.has("Boss1-Music-3.mp3"), "missing boss1 playlist alternate")
 	_check(game.audio_streams.has("Boss2-Music-4.mp3"), "missing converted boss2 playlist track")
 	_check(game.audio_streams.has("Boss3-Music-1.mp3"), "missing boss3 playlist track")
-	for track in ["Fases1.mp3", "Fases2.mp3", "Fases3.mp3", "Fases6.mp3", "Fases7.mp3", "Fases8.mp3", "Fases9.mp3", "Fases10.mp3", "Fase4-4.mp3", "Fase3-7.mp3"]:
+	_check(game._shared_phase_music_tracks().size() >= 12, "missing shared FasesN phase playlist tracks")
+	for track in game._shared_phase_music_tracks() + ["Fase4-4.mp3", "Fase3-7.mp3", "Menu.mp3", "Nevasca.mp3", "Congelando.mp3", "Descongelando.mp3", "Retrocede.mp3"]:
 		_check(game.audio_streams.has(track), "missing extra phase track: " + track)
+	for shared_track in game._shared_phase_music_tracks():
+		_check(String(shared_track).begins_with("Fases"), "shared playlist contains a non-global phase track: " + String(shared_track))
+	for leaked in ["Fase1.mp3", "Fase2.mp3", "Fase3-7.mp3", "Fase4-4.mp3", "Fase_boas.mp3", "fases.mp3", "Tema_Neve.mp3", "Tema_Praia.mp3", "Tema_Ratos.mp3"]:
+		_check(not (leaked in game._shared_phase_music_tracks()), "legacy or phase-specific track leaked into shared playlist: " + leaked)
 	for phase in range(1, 4):
 		for track in game._boss_music_tracks(phase):
 			_check(game.audio_streams.has(track), "missing boss playlist stream: " + String(track))
@@ -38,6 +43,10 @@ func _run() -> void:
 	_check("Fase3-7.mp3" in game._phase_music_tracks(3), "Fase3-7 is not exclusive to phase 3 playlist")
 	_check(not ("Fase3-7.mp3" in game._phase_music_tracks(1)), "Fase3-7 leaked into phase 1")
 	_check(not ("Fase3-7.mp3" in game._phase_music_tracks(4)), "Fase3-7 leaked into phase 4")
+	_check(not ("Fase1.mp3" in game._phase_music_tracks(2)), "Fase1 leaked into phase 2")
+	_check(not ("Fase2.mp3" in game._phase_music_tracks(1)), "Fase2 leaked into phase 1")
+	_check(not ("Fase_boas.mp3" in game._phase_music_tracks(5)), "legacy Fase_boas leaked into phase 5")
+	_check(not ("fases.mp3" in game._phase_music_tracks(6)), "legacy fases.mp3 leaked into phase 6")
 	_check(game.audio_streams.has("player_shot"), "missing player shot recording")
 	_check(game.audio_streams.has("atk_lacerante_1") and game.audio_streams.has("lacerante_kill"), "missing Lacerante recordings")
 	_check(game.audio_streams["player_shot"] is AudioStreamMP3, "player shot is not the root MP3 recording")

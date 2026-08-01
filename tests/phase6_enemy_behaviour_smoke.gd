@@ -165,6 +165,23 @@ func _run() -> void:
 	_check(is_equal_approx(game.LODARIO_PHEROMONE_HOP_DISTANCE, 90.0), "Pheromone hop distance was not retuned")
 	_check(is_equal_approx(game.LODARIO_PHEROMONE_HOP_INTERVAL, 0.55), "Pheromone hop interval was not retuned")
 	_check(game._lodario_target_pos(attracted_lodario).distance_to(game.player_pos) < 1.0, "Pheromone did not make Lodario target the player instead of the explosion")
+	_check(game.audio_streams.has("Lodario-mov.mp3"), "Lodario landing SFX is not registered")
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
+	var sound_lodario := attracted_lodario
+	sound_lodario["lodario_jump_timer"] = 0.0
+	sound_lodario["lodario_jump_progress"] = 0.0
+	game._update_lodario(sound_lodario, 0.01)
+	_check(not game.sfx_players.any(func(player): return player.stream == game.audio_streams["Lodario-mov.mp3"]), "Lodario landing SFX played while jump started")
+	game._update_lodario(sound_lodario, float(sound_lodario.get("lodario_jump_duration", game.LODARIO_HOP_DURATION)) + 0.05)
+	_check(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Lodario-mov.mp3"]), "Lodario landing SFX did not play on ground contact")
+	var anim_pustule := {"type": game.ENEMY_FOSSIL_PUSTULE, "phase": 0.0, "pustule_spit_flash": 0.0}
+	game.time_alive = 0.0
+	var pustule_frame_a = game._enemy_texture(anim_pustule)
+	game.time_alive = 0.51
+	var pustule_frame_b = game._enemy_texture(anim_pustule)
+	_check(pustule_frame_a != null and pustule_frame_b != null and pustule_frame_a != pustule_frame_b, "Fossil Pustule frame did not advance near 500ms")
 
 	game.enemies.clear()
 	game.enemy_bullets.clear()

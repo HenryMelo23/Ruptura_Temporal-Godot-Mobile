@@ -36,8 +36,13 @@ func _run() -> void:
 	game.qa_streaming_enabled = true
 	game.qa_streaming_quality_mode = "720p"
 	_check(game._qa_stream_target_size() == Vector2i(1280, 720), "720p target size mismatch")
-	_check(is_equal_approx(game._qa_stream_target_fps(), 10.0), "desktop fallback should stay capped for CPU/bandwidth")
-	_check(game._qa_stream_max_in_flight() == 1, "frame stream should keep a single in-flight request")
+	_check(is_equal_approx(game._qa_stream_target_fps(), 60.0), "desktop fallback should target 60 fps")
+	_check(float(game.QA_NATIVE_STREAM_MODE_FPS.get("360p", 0.0)) == 60.0, "Android 360p should remain 60fps for Samsung A QA")
+	_check(float(game.QA_NATIVE_STREAM_MODE_FPS.get("720p", 60.0)) <= 30.0, "Android 720p should be capped to protect mid-range phones")
+	_check(int(game.QA_NATIVE_STREAM_MODE_BITRATE.get("720p", 8000000)) <= 3200000, "Android 720p bitrate should stay mobile-safe")
+	_check(game._qa_stream_max_in_flight() >= 8, "frame stream should allow enough parallel uploads for 60fps")
+	_check(game._qa_stream_bitrate() >= 8000000, "720p fallback bitrate should not regress to low quality")
+	_check(game._qa_stream_jpeg_quality() >= 0.66, "720p fallback quality should not regress")
 	game._start_qa_streaming_session()
 	_check(game.qa_streaming_session_id == "", "headless smoke must not open stream sessions")
 	_check(not game.qa_streaming_frame_active, "headless smoke must not activate frame streaming")
