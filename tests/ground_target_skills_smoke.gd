@@ -109,7 +109,7 @@ func _run() -> void:
 	game.effects.clear()
 	var anchor_target = Vector2(610.0, 640.0)
 	game._use_secondary_skill(anchor_target)
-	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(anchor_target) < 0.1, "anchored ultimate ignored its ground target")
+	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(game.player_pos) < 0.1, "anchored ultimate should be centered on the player")
 
 	print("GROUND_TARGET_SKILLS_SMOKE_OK parasitic_q=true prismatic_q=true tp_aim=true gravitante_e=true ancorada_e=true cancel=true")
 	quit(0)

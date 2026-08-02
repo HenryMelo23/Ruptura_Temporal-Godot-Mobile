@@ -2,15 +2,25 @@ extends SceneTree
 
 const MainScene := preload("res://scripts/main.gd")
 
+var game: Node
+var booted := false
+
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		push_error(message)
 		quit(1)
 
 
-func _init() -> void:
-	var game = MainScene.new()
+func _initialize() -> void:
+	if booted:
+		return
+	booted = true
+	game = MainScene.new()
 	root.add_child(game)
+	call_deferred("_run")
+
+
+func _run() -> void:
 	await process_frame
 
 	game._start_game()
@@ -30,7 +40,7 @@ func _init() -> void:
 	game.time_alive = 12.0
 	game.tp_cooldown_pending = true
 	game._consume_lacerante_tp_charge()
-	_check(game.lacerante_tp_charges == 1 and is_equal_approx(game.lacerante_tp_chain_timer, 0.8), "lacerante TP chain did not open for 800ms")
+	_check(game.lacerante_tp_charges == 1 and is_equal_approx(game.lacerante_tp_chain_timer, game.LACERANTE_TP_CHAIN_WINDOW), "lacerante TP chain did not open for the configured window")
 	game._consume_lacerante_tp_charge()
 	_check(game.lacerante_tp_charges == 0 and game.lacerante_tp_chain_timer <= 0.0, "lacerante TP did not spend its second charge")
 	game.tp_effects.clear()
@@ -61,7 +71,7 @@ func _init() -> void:
 	game._clamp_deck_selection(3)
 	_check(game.deck_selected == 0 or game.deck_selected == 2, "deck carousel did not wrap backward")
 
-	_check(game.BOSS2_ULTIMATE_DURATION == 40.0, "boss2 ultimate duration not increased")
+	_check(game.BOSS2_ULTIMATE_DURATION == 28.0, "boss2 ultimate duration not reduced to 28s")
 	game.current_phase = 2
 	game.boss_active = true
 	game.boss_hp = 1000.0
@@ -79,4 +89,22 @@ func _init() -> void:
 
 	_check(game.BOSS3_MIASMA_COOLDOWN == 24.0, "boss3 miasma cooldown was not tightened")
 	print("BALANCE_PACK_LACERANTE_BOSSES_SMOKE_OK lacerante=true larapio=true curater=true boss2=true boss3=true deck=true")
+	game._cleanup_runtime_resources()
+	if game.music_player != null:
+		game.music_player.stop()
+		game.music_player.stream = null
+	if game.rain_audio_player != null:
+		game.rain_audio_player.stop()
+		game.rain_audio_player.stream = null
+	for player in game.sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(2):
+		await process_frame
 	quit(0)

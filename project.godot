@@ -19,9 +19,12 @@ SceneTransitionManager="*res://scripts/scene_transition_manager.gd"
 [application]
 
 config/name="Ruptura Temporal Mobile"
-run/main_scene="res://scenes/Main.tscn"
+config/version="2.0.31b"
+run/main_scene="res://scenes/Boot.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://img/icone.png"
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0.006, 0.01, 0.026, 1)
 
 [display]
 
@@ -30,6 +33,10 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=4
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
 [input_devices]
 

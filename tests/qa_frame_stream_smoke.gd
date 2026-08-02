@@ -24,8 +24,9 @@ func _run() -> void:
 	game.qa_streaming_frame_url = "http://127.0.0.1:9/streams/test/frame"
 	game._reset_qa_streaming_runtime(false)
 
-	_check(game.qa_streaming_unlocked, "soft reset should preserve CHANZADA unlock")
-	_check(game.qa_streaming_enabled, "soft reset should preserve the pending menu request")
+	_check(not game.QA_STREAMING_FEATURE_ENABLED, "QA streaming feature flag should be disabled")
+	_check(not game.qa_streaming_unlocked, "soft reset should clear removed CHANZADA unlock")
+	_check(not game.qa_streaming_enabled, "soft reset should clear removed pending menu request")
 	_check(not game.qa_streaming_frame_active, "soft reset should clear active frame mode")
 	_check(game.qa_streaming_frame_url == "", "soft reset should clear frame URL")
 
@@ -46,11 +47,28 @@ func _run() -> void:
 	game._start_qa_streaming_session()
 	_check(game.qa_streaming_session_id == "", "headless smoke must not open stream sessions")
 	_check(not game.qa_streaming_frame_active, "headless smoke must not activate frame streaming")
+	_check(not game.qa_streaming_enabled, "removed streaming feature should stay disabled")
 	_check(game._capture_qa_stream_frame().is_empty(), "headless capture should not allocate frames")
 	game._send_qa_stream_frame()
 	_check(game.qa_streaming_frame_count == 0, "headless send should not count frames")
 
 	print("QA_FRAME_STREAM_SMOKE_OK modes=360p,720p headless_safe=true")
-	game.queue_free()
-	await process_frame
+	game._cleanup_runtime_resources()
+	if game.music_player != null:
+		game.music_player.stop()
+		game.music_player.stream = null
+	if game.rain_audio_player != null:
+		game.rain_audio_player.stop()
+		game.rain_audio_player.stream = null
+	for player in game.sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(4):
+		await process_frame
 	quit()

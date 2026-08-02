@@ -79,6 +79,7 @@ func _run() -> void:
 	game._use_skill(game.player_pos + Vector2.RIGHT * 180.0)
 	_check(game.bullets.size() == 3, "Sol Q did not fire a 3-shuriken fan")
 	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "q_sol"), "Sol Q VFX missing")
+	_check(game.eclipsada_vfx.any(func(visual): return String(visual.get("kind", "")) == "q_sol" and not bool(visual.get("draw_bars", true))), "Sol Q VFX should not draw yellow bars")
 	_check(not game.eclipsada_lua_stealth_active, "Sol Q should not enable Lua stealth")
 
 	game.eclipsada_sol_last_secondary_time = -999.0
@@ -145,6 +146,16 @@ func _run() -> void:
 
 	print("ECLIPSADA_REWORK_SMOKE_OK forms=true lua_blades=true stealth_toggle=true e_variants=true passive=true")
 	game._cleanup_runtime_resources()
+	if game.music_player != null:
+		game.music_player.stop()
+		game.music_player.stream = null
+	if game.rain_audio_player != null:
+		game.rain_audio_player.stop()
+		game.rain_audio_player.stream = null
+	for player in game.sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
 	game.textures.clear()
 	game.audio_streams.clear()
 	root.remove_child(game)

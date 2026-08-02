@@ -1,27 +1,9 @@
 extends SceneTree
 
 var game: Node
-var booted := false
-
-
-func _init() -> void:
-	call_deferred("_bootstrap")
 
 
 func _initialize() -> void:
-	call_deferred("_bootstrap")
-
-
-func _process(_delta: float) -> bool:
-	if not booted:
-		_bootstrap()
-	return false
-
-
-func _bootstrap() -> void:
-	if booted:
-		return
-	booted = true
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	call_deferred("_run")
@@ -60,7 +42,7 @@ func _run() -> void:
 	game.boss2_ultimate_used = false
 	game._start_boss2_ultimate()
 	_expect(game.boss2_ultimate_timer == game.BOSS2_ULTIMATE_DURATION, "duration_not_started")
-	_expect(game.BOSS2_ULTIMATE_DURATION == 40.0, "duration_not_40_seconds")
+	_expect(game.BOSS2_ULTIMATE_DURATION == 28.0, "duration_not_28_seconds")
 	_expect(game.boss2_ultimate_cooldown == 0.0, "ultimate_should_have_no_initial_cooldown")
 	_expect(game.BOSS2_ULTIMATE_SAFE_RADIUS == 385.0, "safe_radius_not_385")
 	_expect(game.boss_attacks.is_empty(), "old_attacks_not_cleared")
@@ -113,4 +95,22 @@ func _run() -> void:
 	_expect(resisted_push < 16.0, "opposite_analog_did_not_resist_center_wind")
 
 	print("BOSS2_ULTIMATE_SMOKE_OK timer=true orbit=true blizzard=true wind=true")
+	game._cleanup_runtime_resources()
+	if game.music_player != null:
+		game.music_player.stop()
+		game.music_player.stream = null
+	if game.rain_audio_player != null:
+		game.rain_audio_player.stop()
+		game.rain_audio_player.stream = null
+	for player in game.sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+	for i in range(4):
+		await process_frame
 	quit(0)

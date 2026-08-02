@@ -61,6 +61,9 @@ func _run() -> void:
 	_check(is_equal_approx(game._manifestation_attack_interval(), 0.58), "Bombastica base cadence is not 0.58s")
 	_check(game._ground_target_profile(false).has("radius"), "Bombastica Q does not expose a ground targeting profile")
 	_check(game._ground_target_profile(true).has("radius"), "Bombastica E does not expose a ground targeting profile")
+	_check(is_equal_approx(game.BOMBASTICA_Q_DAMAGE_MULT, 1.9375), "Bombastica Q bomb damage was not increased by 25%")
+	_check(is_equal_approx(game.BOMBASTICA_E_MINE_DAMAGE_MULT, 0.60), "Bombastica secondary bomb damage was not increased by 25%")
+	_check(is_equal_approx(float(game._ground_target_profile(true).get("radius", 0.0)), game.BOMBASTICA_ULTIMATE_RADIUS), "Bombastica E targeting radius is not the comet bomb radius")
 	_check(game.audio_streams.has("Bomba-Bombastica.mp3"), "Bombastica bomb SFX is not registered")
 	_check(game.audio_streams.has("Mina-Bombastica.mp3"), "Bombastica mine SFX is not registered")
 
@@ -82,13 +85,14 @@ func _run() -> void:
 		player.stop()
 		player.stream = null
 	game._try_cast_bombastica_q(Vector2(enemy["pos"]))
-	_check(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Bomba-Bombastica.mp3"]), "Bombastica Q did not play bomb SFX")
+	_check(not game.sfx_players.any(func(player): return player.stream == game.audio_streams["Bomba-Bombastica.mp3"]), "Bombastica Q played explosion SFX on launch")
 	_check(game.bombastica_bombs.size() == 1, "Bombastica Q did not create a bomb")
 	_check(game._bombastica_ready_charges() == 2, "Bombastica Q did not consume exactly one charge")
 	game.bombastica_bombs[0]["state"] = "armed"
 	game.bombastica_bombs[0]["pos"] = Vector2(enemy["pos"])
 	game.bombastica_bombs[0]["fuse"] = 0.01
 	game._update_bombastica_state(0.05)
+	_check(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Bomba-Bombastica.mp3"]), "Bombastica Q explosion did not play bomb SFX")
 	_check(float(enemy["hp"]) < hp_before_q, "Bombastica Q explosion did not damage enemy")
 	_check(not game.bombastica_powder_marks.has(powder_key), "Bombastica ignition did not consume max powder stacks")
 
@@ -98,16 +102,30 @@ func _run() -> void:
 		player.stop()
 		player.stream = null
 	game._use_secondary_skill(Vector2(mine_enemy["pos"]))
-	_check(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Mina-Bombastica.mp3"]), "Bombastica E did not play minefield SFX")
-	_check(not game.manifestation_secondaries.is_empty(), "Bombastica E did not create a minefield")
-	var minefield: Dictionary = game.manifestation_secondaries[-1]
-	_check(String(minefield.get("kind", "")) == "bombastica", "Bombastica E secondary has wrong kind")
-	_check(Array(minefield.get("mines", [])).size() == game.BOMBASTICA_E_MINE_COUNT, "Bombastica E did not create five mines")
-	var mines: Array = minefield["mines"]
-	mine_enemy["pos"] = Vector2(mines[0].get("pos", mine_enemy["pos"]))
-	var hp_before_mine: float = float(mine_enemy["hp"])
-	game._update_secondary_bombastica(minefield, game.BOMBASTICA_E_ARM_TIME + 0.05)
-	_check(float(mine_enemy["hp"]) < hp_before_mine, "Bombastica E mine did not damage enemy")
+	_check(not game.sfx_players.any(func(player): return player.stream == game.audio_streams["Bomba-Bombastica.mp3"]), "Bombastica E played explosion SFX on launch")
+	_check(not game.manifestation_secondaries.is_empty(), "Bombastica E did not create a secondary tracker")
+	var comet_tracker: Dictionary = game.manifestation_secondaries[-1]
+	_check(String(comet_tracker.get("kind", "")) == "bombastica" and String(comet_tracker.get("mode", "")) == "ultimate_bomb", "Bombastica E secondary has wrong mode")
+	var comet_bombs: Array = game.bombastica_bombs.filter(func(bomb): return String(bomb.get("kind", "")) == "ultimate_bomb")
+	_check(comet_bombs.size() == 1, "Bombastica E did not create one comet bomb")
+	var comet: Dictionary = comet_bombs[0]
+	_check(is_equal_approx(float(comet.get("radius", 0.0)), game.BOMBASTICA_ULTIMATE_RADIUS), "Bombastica comet radius mismatch")
+	_check(is_equal_approx(float(comet.get("speed", 0.0)), game.BOMBASTICA_ULTIMATE_SPEED), "Bombastica comet speed mismatch")
+	_check(is_equal_approx(float(comet.get("life", 0.0)), game.BOMBASTICA_ULTIMATE_DURATION), "Bombastica comet duration mismatch")
+	mine_enemy["pos"] = Vector2(comet.get("pos", mine_enemy["pos"]))
+	var hp_before_comet: float = float(mine_enemy["hp"])
+	game._update_bombastica_state(game.BOMBASTICA_ULTIMATE_BOUNCE_PERIOD)
+	_check(game.sfx_players.any(func(player): return player.stream == game.audio_streams["Bomba-Bombastica.mp3"]), "Bombastica comet bounce explosion did not play bomb SFX")
+	_check(float(mine_enemy["hp"]) < hp_before_comet, "Bombastica comet bounce explosion did not damage enemy")
+	var comet_after_bounce: Dictionary = game._bombastica_bomb_by_id(int(comet.get("id", -1)))
+	comet_after_bounce["bounce_phase"] = 0.02
+	comet_after_bounce["pos"] = game.player_pos + Vector2(80, 0)
+	var damage_before_shot: float = float(comet_after_bounce.get("damage", 0.0))
+	var dir_before_shot: Vector2 = Vector2(comet_after_bounce.get("dir", Vector2.RIGHT))
+	var shot := {"pos": Vector2(comet_after_bounce["pos"]), "origin": game.player_pos, "dir": Vector2.DOWN, "damage": 80.0, "kind": "bombastica", "source_category": "basic_attack", "hits": {}, "pierce": false}
+	_check(game._try_hit_bombastica_ultimate_with_bullet(shot), "Bombastica comet did not accept a grounded shot")
+	_check(float(comet_after_bounce.get("damage", 0.0)) > damage_before_shot, "Bombastica comet shot did not increase damage")
+	_check(Vector2(comet_after_bounce.get("dir", Vector2.RIGHT)).distance_to(Vector2.DOWN) < 0.01 and dir_before_shot.distance_to(Vector2.DOWN) > 0.01, "Bombastica comet shot did not redirect movement")
 
 	game.bombastica_bombs.clear()
 	var chain_radius: float = game.BOMBASTICA_Q_RADIUS
@@ -128,12 +146,16 @@ func _run() -> void:
 
 	var details: Dictionary = game._manifestation_details("bombastica")
 	_check(String(details.get("habilidade", "")).contains("Triade"), "Bombastica details do not explain Q")
-	_check(String(details.get("traco", "")).contains("Campo Minado"), "Bombastica details do not explain E")
+	_check(String(details.get("traco", "")).contains("Bomba-Cometario"), "Bombastica details do not explain E comet bomb")
 	game._reset_advanced_manifestation_state()
 	_check(game.bombastica_bombs.is_empty(), "Bombastica reset did not clear bombs")
 	_check(game.bombastica_powder_marks.is_empty(), "Bombastica reset did not clear powder marks")
-	print("BOMBASTICA_MANIFESTATION_SMOKE_OK icon=true atk=true powder=true q=true e=true chain=true detonator=true reset=true")
+	print("BOMBASTICA_MANIFESTATION_SMOKE_OK icon=true atk=true powder=true q=true comet=true chain=true detonator=true reset=true")
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
 	root.remove_child(game)
-	game.queue_free()
-	await process_frame
+	game.free()
+	for i in range(4):
+		await process_frame
 	quit(0)

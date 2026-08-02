@@ -42,21 +42,23 @@ func _cleanup_audio_resources() -> void:
 
 
 func _run() -> void:
-	# 1. Simular Host Online Criando Sala
+	_check(not game.MULTIPLAYER_MENU_ENABLED, "Multiplayer option should be disabled")
+	_check(not game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should not expose the multiplayer button")
+
+	# 1. Garantir que atalhos/metodos online nao reativam multiplayer
 	game._create_online_room()
-	_check(game.is_multiplayer == true, "Host online deve marcar is_multiplayer como true")
-	_check(game.is_host == false, "Host online usa P2P emulado, entao is_host deve ser false")
-	_check(game.online_room_owner == true, "Dono da sala online deve ter online_room_owner = true")
-	_check(game.mode == "lobby_online_host", "Dono da sala online deve ir para o modo lobby_online_host")
+	_check(game.is_multiplayer == false, "Host online removido nao deve marcar is_multiplayer")
+	_check(game.online_room_owner == false, "Host online removido nao deve marcar dono da sala")
+	_check(game.mode == "menu", "Host online removido deve voltar para o menu")
 
-	# 2. Simular Client Online Entrando na Sala
+	# 2. Simular Client Online com multiplayer removido
 	game._join_online_room()
-	_check(game.is_multiplayer == true, "Client online deve marcar is_multiplayer como true")
-	_check(game.is_host == false, "Client online deve ter is_host como false")
-	_check(game.online_room_owner == false, "Client online nao e dono da sala, online_room_owner deve ser false")
-	_check(game.mode == "lobby_online_client", "Client online deve ir para o modo lobby_online_client")
+	_check(game.is_multiplayer == false, "Client online removido nao deve marcar is_multiplayer")
+	_check(game.is_host == false, "Client online removido deve manter is_host false")
+	_check(game.online_room_owner == false, "Client online removido nao deve marcar dono da sala")
+	_check(game.mode == "menu", "Client online removido deve voltar para o menu")
 
-	# 3. Simular recebimento do estado do lobby online
+	# 3. Estado de lobby recebido isoladamente continua parseavel para compatibilidade interna
 	game._online_lobby_state("ABCDEF", 2, 1)
 	_check(game.online_room_code == "ABCDEF", "Codigo da sala deve ser atualizado")
 	_check(game.online_lobby_connected_count == 2, "Contagem de conexoes deve ser 2")
@@ -74,4 +76,4 @@ func _run() -> void:
 	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
 	_check(game._online_client_ready(), "Host deve reconhecer client pronto pelo estado v2")
 
-	await _finish_ok("ONLINE_LOBBY_SMOKE_OK - Host/Client states validated successfully")
+	await _finish_ok("ONLINE_LOBBY_SMOKE_OK - online entry disabled and lobby state parsing preserved")

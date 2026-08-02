@@ -118,6 +118,15 @@ func _run() -> void:
 	_check(Vector2(gravity_enemy["pos"]).distance_to(gravity_before) >= 140.0, "gravity TP did not push nearby enemies")
 
 	_reset_tp("lacerante")
+	_check(is_equal_approx(game.TP_LACERANTE_DAMAGE_MULT, 0.70), "lacerante TP damage multiplier was not reduced by 30 percent")
+	var single_cut_enemy := _enemy(Vector2(610, 400), 10000.0)
+	game._start_tp_lacerante(game.player_pos, Vector2(720, 400))
+	var single_cut_hp: float = float(single_cut_enemy["hp"])
+	game._update_tp_lacerante(game.tp_effects[0], 0.01)
+	var expected_cut_damage: float = (50.0 + float(single_cut_enemy["max_hp"]) * 0.005) * game.TP_LACERANTE_DAMAGE_MULT
+	_check(abs((single_cut_hp - float(single_cut_enemy["hp"])) - expected_cut_damage) <= 0.05, "lacerante TP first cut did not use the reduced damage")
+
+	_reset_tp("lacerante")
 	game.lacerante_coagula = 20
 	var cut_enemy := _enemy(Vector2(610, 400), 50000.0)
 	game._execute_teleport(Vector2(720, 400))

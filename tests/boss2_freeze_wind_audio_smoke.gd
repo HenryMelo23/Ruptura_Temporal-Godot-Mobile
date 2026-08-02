@@ -16,6 +16,25 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 
+func _cleanup_game() -> void:
+	if not is_instance_valid(game):
+		return
+	game._cleanup_runtime_resources()
+	for player in [game.music_player, game.rain_audio_player, game.boss1_walk_audio_player, game.nevasca_audio_player]:
+		if player != null:
+			player.stop()
+			player.stream = null
+	for player in game.sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+
+
 func _run() -> void:
 	game._start_game()
 	_expect(game.audio_streams.has("boss1_walk"), "boss1_walk_audio_missing")
@@ -83,4 +102,7 @@ func _run() -> void:
 	_expect(not game.nevasca_audio_player.playing, "nevasca_audio_did_not_stop")
 
 	print("BOSS2_FREEZE_WIND_AUDIO_OK center_wind=true freeze_frames=1-2-1-2-1 steps_loop=true nevasca_loop=true freeze_sfx=true")
+	_cleanup_game()
+	for i in range(4):
+		await process_frame
 	quit(0)

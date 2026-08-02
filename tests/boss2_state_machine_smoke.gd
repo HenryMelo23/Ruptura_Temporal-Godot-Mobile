@@ -16,6 +16,27 @@ func _expect(ok: bool, message: String) -> void:
 	quit(1)
 
 
+func _cleanup_game() -> void:
+	if not is_instance_valid(game):
+		return
+	game._cleanup_runtime_resources()
+	if game.music_player != null:
+		game.music_player.stop()
+		game.music_player.stream = null
+	if game.rain_audio_player != null:
+		game.rain_audio_player.stop()
+		game.rain_audio_player.stream = null
+	for player in game.sfx_players:
+		if player != null:
+			player.stop()
+			player.stream = null
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	game = null
+
+
 func _run() -> void:
 	game._start_game()
 	game.current_phase = 2
@@ -79,4 +100,7 @@ func _run() -> void:
 	_expect(game.BOSS2_ULTIMATE_WARNING_TIME >= 1.55, "ultimate_warning_too_short")
 
 	print("BOSS2_STATE_MACHINE_SMOKE_OK reposition=true breath=true spin=true stomp=true prison=true double_blizzard=true flash_freeze=true warnings_balanced=true")
+	_cleanup_game()
+	for i in range(4):
+		await process_frame
 	quit(0)

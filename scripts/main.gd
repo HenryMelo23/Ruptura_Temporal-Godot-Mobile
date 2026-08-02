@@ -355,7 +355,16 @@ const PARASITE_SPIT_RADIUS := 155.0
 const PARASITE_SPIT_DURATION := 4.8
 const PARASITE_SPIT_TRAVEL := 0.46
 const SECONDARY_GRAVITANTE_DURATION := 8.0
-const SECONDARY_ANCORADA_DURATION := 8.0
+const SECONDARY_ANCORADA_DURATION := 10.0
+const SECONDARY_ANCORADA_COOLDOWN := 65.0
+const ANCORADA_ULTIMATE_RADIUS := 350.0
+const ANCORADA_ULTIMATE_DROP_INTERVAL := 1.5
+const ANCORADA_ULTIMATE_FALL_TIME := 0.62
+const ANCORADA_ULTIMATE_IMPACT_RADIUS := 78.0
+const ANCORADA_ULTIMATE_DAMAGE_MULT := 1.85
+const ANCORADA_ULTIMATE_BOSS_DAMAGE_MULT := 1.15
+const ANCORADA_ULTIMATE_SLOW_DURATION := 2.2
+const ANCORADA_ULTIMATE_SLOW_MULT := 0.35
 const BOSS_READY_TIME := 0.0
 const BOSS_CALL_COUNTDOWN := 1.2
 const BOSS_BASE_HP := 3600.0
@@ -1345,6 +1354,8 @@ const AURAS := [
 var mode = "menu"
 var previous_mode = "game"
 var font: Font
+var menu_title_font: Font
+var menu_button_font: Font
 var textures = {}
 var startup_thanks_timer := 0.0
 var startup_thanks_fading := false
@@ -2608,6 +2619,7 @@ func _ready() -> void:
 		return
 	_net_report_start()
 	font = ThemeDB.fallback_font
+	_load_menu_fonts()
 	rng.randomize()
 	if _is_mobile_runtime():
 		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
@@ -5542,9 +5554,26 @@ func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
 	var total_seconds := int(max(0.0, float(fields.get("time_alive", 0.0))))
 	var manifestation_index := clampi(int(fields.get("selected_manifestation", 0)), 0, MANIFESTATIONS.size() - 1)
 	var aura_index := clampi(int(fields.get("selected_aura", 0)), 0, AURAS.size() - 1)
+	
+	var date_str := ""
+	var saved_unix := int(snapshot.get("saved_unix", 0))
+	if saved_unix > 0:
+		var dt := Time.get_datetime_dict_from_unix_time(saved_unix)
+		date_str = "%02d/%02d/%04d" % [int(dt["day"]), int(dt["month"]), int(dt["year"])]
+	else:
+		var raw_saved := String(snapshot.get("saved_at", ""))
+		if raw_saved.length() >= 10:
+			var parts := raw_saved.split(" ")[0].split("-")
+			if parts.size() == 3:
+				date_str = "%02d/%02d/%04d" % [int(parts[2]), int(parts[1]), int(parts[0])]
+	if date_str == "":
+		var dt_now := Time.get_datetime_dict_from_system()
+		date_str = "%02d/%02d/%04d" % [int(dt_now["day"]), int(dt_now["month"]), int(dt_now["year"])]
+
 	return {
 		"phase": phase,
 		"time": "%02d:%02d" % [int(total_seconds / 60), total_seconds % 60],
+		"date": date_str,
 		"manifestation": String(MANIFESTATIONS[manifestation_index].get("name", "Manifestacao")),
 		"aura": String(AURAS[aura_index].get("name", "Aura")).to_upper(),
 		"saved_at": String(snapshot.get("saved_at", ""))
@@ -5553,12 +5582,10 @@ func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
 
 func _interrupted_run_detail_text() -> String:
 	if not interrupted_run_available:
-		return "sem run salva"
-	return "fase %d // %s // %s" % [
-		int(interrupted_run_summary.get("phase", 1)),
-		String(interrupted_run_summary.get("time", "00:00")),
-		String(interrupted_run_summary.get("manifestation", "RUN"))
-	]
+		return "SEM RUN SALVA"
+	var t_str := String(interrupted_run_summary.get("time", "00:00"))
+	var d_str := String(interrupted_run_summary.get("date", "01/08/2026"))
+	return "%s  |  %s" % [t_str, d_str]
 
 
 func _resume_interrupted_run() -> bool:
@@ -5796,6 +5823,7 @@ func _load_textures() -> void:
 	textures["choice_bg"] = _safe_load(base + "Escolha.png")
 	textures["cards_back"] = _safe_load(base + "Cartas_back.png")
 	textures["menu_panels"] = [_safe_load(base + "Melhoria_1.png"), _safe_load(base + "Melhoria_2.png"), _safe_load(base + "Melhoria_3.png"), _safe_load(base + "Melhoria_4.png"), _safe_load(base + "Melhoria_5.png")]
+	_perf_mark("menu_assets_loaded", perf_start_ms)
 	textures["player_idle"] = [_safe_load(base + "Geo1.png"), _safe_load(base + "Geo2.png"), _safe_load(base + "Geo3.png"), _safe_load(base + "Geo4.png")]
 	textures["player_right"] = [_safe_load(base + "Geo1-Dir.png"), _safe_load(base + "Geo2-Dir.png"), _safe_load(base + "Geo3-Dir.png")]
 	textures["player_left"] = [_safe_load(base + "Geo1-Esq.png"), _safe_load(base + "Geo2-Esq.png"), _safe_load(base + "Geo3-Esq.png")]
@@ -5885,6 +5913,7 @@ func _load_textures() -> void:
 		_register_texture(card_key, base + String(card["icon"]), _memory_saver_active())
 		if card.has("frame_2"):
 			_register_texture(card_key + "_2", base + String(card["frame_2"]), _memory_saver_active())
+	_perf_mark("run_assets_loaded", perf_start_ms)
 	_perf_mark("load_textures", perf_start_ms)
 
 
@@ -10257,6 +10286,8 @@ func _secondary_skill_cooldown_base() -> float:
 		return 50.0
 	if manifestation_key == "bombastica":
 		return BOMBASTICA_E_COOLDOWN
+	if manifestation_key == "ancorada":
+		return SECONDARY_ANCORADA_COOLDOWN
 	if manifestation_key == "contratual":
 		return CONTRACT_ORDER_COOLDOWN
 	if manifestation_key == "necronada":
@@ -10655,26 +10686,20 @@ func _spawn_secondary_gravitante(target_world = null) -> void:
 
 
 func _spawn_secondary_ancorada(target_world = null) -> void:
-	var center: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
-	var rain_radius := 380.0
-	var rain_damage: float = player_damage * 1.20
-	var root_duration := 3.0
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		if Vector2(enemy.get("pos", Vector2.ZERO)).distance_to(center) <= rain_radius:
-			_damage_enemy(enemy, rain_damage, "ancorada", false)
-			enemy["ferrolho_root"] = maxf(float(enemy.get("ferrolho_root", 0.0)), root_duration)
-			enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.35)
-	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= rain_radius:
-		_damage_boss(rain_damage, "ancorada")
-		boss_tp_stun_timer = maxf(boss_tp_stun_timer, root_duration)
-	if _arauto_active() and Vector2(arauto.get("pos", Vector2.ZERO)).distance_to(center) <= rain_radius:
-		_damage_arauto(rain_damage, "ancorada", false)
-		arauto["stun"] = maxf(float(arauto.get("stun", 0.0)), root_duration)
-	_add_text("CHUVA DE ANCORAS", center + Vector2(0, -110), Color(0.42, 0.92, 1.0), 1.4, 28)
-	_spawn_radial_particles(center, Color(0.42, 0.92, 1.0), 32)
-	necronada_vfx.append({"kind": "ancorada_rain", "pos": center, "radius": rain_radius, "life": 0.65, "max": 0.65, "color": Color(0.42, 0.92, 1.0)})
+	var center: Vector2 = player_pos
+	manifestation_secondaries.append({
+		"kind": "ancorada",
+		"life": SECONDARY_ANCORADA_DURATION,
+		"max": SECONDARY_ANCORADA_DURATION,
+		"center": center,
+		"radius": ANCORADA_ULTIMATE_RADIUS,
+		"drop_tick": 0.0,
+		"charge": 0.0,
+		"drops": [],
+		"impacts": []
+	})
+	_add_text("CEU ANCORADO", center + Vector2(0, -110), Color(0.34, 1.0, 0.42), 1.4, 28)
+	_spawn_radial_particles(center, Color(0.32, 1.0, 0.42), 32)
 
 
 func _try_dash() -> void:
@@ -17814,13 +17839,6 @@ func _move_enemy(enemy: Dictionary, delta: float) -> void:
 			if anchor["pos"].distance_to(enemy["pos"]) < 130.0:
 				speed_mult = 0.76
 				break
-	for secondary in manifestation_secondaries:
-		if String(secondary.get("kind", "")) != "ancorada":
-			continue
-		var center: Vector2 = secondary.get("center", target_pos)
-		if Vector2(enemy["pos"]).distance_to(center) <= 220.0:
-			var charge = clamp(float(secondary.get("charge", 0.0)) / SECONDARY_ANCORADA_DURATION, 0.0, 1.0)
-			speed_mult = min(speed_mult, 0.78 - charge * 0.18)
 	if enemy["type"] == ENEMY_LARAPIO:
 		if bool(enemy.get("direct_steal", false)) and player_stun_timer > 0.0:
 			speed_mult *= 1.55
@@ -21508,40 +21526,97 @@ func _gravitante_edge_ratio(dist: float, radius: float) -> float:
 
 func _update_secondary_ancorada(secondary: Dictionary, delta: float) -> void:
 	var center: Vector2 = secondary.get("center", player_pos)
-	var radius = 220.0
-	if player_pos.distance_to(center) <= radius:
-		secondary["charge"] = min(SECONDARY_ANCORADA_DURATION, float(secondary.get("charge", 0.0)) + delta)
-	secondary["pulse_tick"] = float(secondary.get("pulse_tick", 0.0)) - delta
-	var charge_ratio = clamp(float(secondary.get("charge", 0.0)) / SECONDARY_ANCORADA_DURATION, 0.0, 1.0)
-	if float(secondary["pulse_tick"]) <= 0.0:
-		secondary["pulse_tick"] = 0.62
-		for enemy in enemies:
-			if float(enemy.get("hp", 0.0)) <= 0.0:
-				continue
-			var dist = Vector2(enemy["pos"]).distance_to(center)
-			if dist <= radius:
-				var push = (Vector2(enemy["pos"]) - center).normalized()
-				if push.length() <= 0.01:
-					push = Vector2.RIGHT
-				enemy["pos"] += push * (5.0 + charge_ratio * 7.0)
-				enemy["pos"] = enemy["pos"].clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
-				_damage_enemy(enemy, player_damage * (0.40 + charge_ratio * 0.55), "ancorada", false)
-		if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= radius:
-			_damage_boss(player_damage * (0.24 + charge_ratio * 0.32), "ancorada")
-		if _arauto_active() and Vector2(arauto["pos"]).distance_to(center) <= radius:
-			_damage_arauto(player_damage * (0.24 + charge_ratio * 0.32), "ancorada", false)
-	var progress = 1.0 - float(secondary.get("life", 0.0)) / max(0.01, float(secondary.get("max", SECONDARY_ANCORADA_DURATION)))
-	if progress >= 0.90 and not bool(secondary.get("final_wave", false)):
-		secondary["final_wave"] = true
-		for enemy in enemies:
-			if float(enemy.get("hp", 0.0)) <= 0.0:
-				continue
-			if Vector2(enemy["pos"]).distance_to(center) <= radius * 1.22:
-				_damage_enemy(enemy, player_damage * (1.8 + charge_ratio * 4.2), "ancorada", false)
-		if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= radius * 1.25:
-			_damage_boss(player_damage * (0.75 + charge_ratio * 1.4), "ancorada")
-		if _arauto_active() and Vector2(arauto["pos"]).distance_to(center) <= radius * 1.25:
-			_damage_arauto(player_damage * (0.75 + charge_ratio * 1.4), "ancorada", false)
+	var radius: float = float(secondary.get("radius", ANCORADA_ULTIMATE_RADIUS))
+	secondary["charge"] = min(SECONDARY_ANCORADA_DURATION, float(secondary.get("charge", 0.0)) + delta)
+	secondary["drop_tick"] = float(secondary.get("drop_tick", 0.0)) - delta
+	if float(secondary["drop_tick"]) <= 0.0 and float(secondary.get("life", 0.0)) > 0.0:
+		secondary["drop_tick"] = ANCORADA_ULTIMATE_DROP_INTERVAL
+		_spawn_ancorada_ultimate_drops(secondary, center, radius)
+	_update_ancorada_ultimate_drops(secondary, delta, center, radius)
+	_update_ancorada_ultimate_impacts(secondary, delta)
+
+
+func _spawn_ancorada_ultimate_drops(secondary: Dictionary, center: Vector2, radius: float) -> void:
+	var drops: Array = secondary.get("drops", [])
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var target := Vector2(enemy.get("pos", Vector2.ZERO))
+		if target.distance_to(center) <= radius:
+			drops.append(_make_ancorada_ultimate_drop(target, "enemy", int(enemy.get("uid", -1))))
+	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= radius:
+		drops.append(_make_ancorada_ultimate_drop(boss_pos, "boss", -1))
+	if _arauto_active():
+		var arauto_pos := Vector2(arauto.get("pos", Vector2.ZERO))
+		if arauto_pos.distance_to(center) <= radius:
+			drops.append(_make_ancorada_ultimate_drop(arauto_pos, "arauto", -1))
+	secondary["drops"] = drops
+
+
+func _make_ancorada_ultimate_drop(target: Vector2, target_kind: String, target_uid: int) -> Dictionary:
+	var viewport := get_viewport_rect().size
+	var camera := _camera(viewport)
+	var start := Vector2(target.x + rng.randf_range(-42.0, 42.0), camera.y - rng.randf_range(92.0, 168.0))
+	return {
+		"target": target,
+		"start": start,
+		"age": 0.0,
+		"fall": ANCORADA_ULTIMATE_FALL_TIME,
+		"kind": target_kind,
+		"uid": target_uid,
+		"seed": rng.randf_range(0.0, 1000.0),
+		"hit": false,
+		"hit_ids": {}
+	}
+
+
+func _update_ancorada_ultimate_drops(secondary: Dictionary, delta: float, center: Vector2, radius: float) -> void:
+	var drops: Array = secondary.get("drops", [])
+	for drop in drops:
+		drop["age"] = float(drop.get("age", 0.0)) + delta
+		var fall_time := maxf(0.05, float(drop.get("fall", ANCORADA_ULTIMATE_FALL_TIME)))
+		if not bool(drop.get("hit", false)) and float(drop["age"]) >= fall_time:
+			drop["hit"] = true
+			_apply_ancorada_ultimate_impact(drop, secondary, center, radius)
+	drops = drops.filter(func(drop): return float(drop.get("age", 0.0)) <= float(drop.get("fall", ANCORADA_ULTIMATE_FALL_TIME)) + 0.42)
+	secondary["drops"] = drops
+
+
+func _update_ancorada_ultimate_impacts(secondary: Dictionary, delta: float) -> void:
+	var impacts: Array = secondary.get("impacts", [])
+	for impact in impacts:
+		impact["life"] = float(impact.get("life", 0.0)) - delta
+	impacts = impacts.filter(func(impact): return float(impact.get("life", 0.0)) > 0.0)
+	secondary["impacts"] = impacts
+
+
+func _apply_ancorada_ultimate_impact(drop: Dictionary, secondary: Dictionary, center: Vector2, radius: float) -> void:
+	var target := Vector2(drop.get("target", center))
+	var hit_ids: Dictionary = drop.get("hit_ids", {})
+	for enemy in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var enemy_pos := Vector2(enemy.get("pos", Vector2.ZERO))
+		if enemy_pos.distance_to(center) > radius:
+			continue
+		if enemy_pos.distance_to(target) > ANCORADA_ULTIMATE_IMPACT_RADIUS:
+			continue
+		var uid := int(enemy.get("uid", -1))
+		if hit_ids.has(uid):
+			continue
+		hit_ids[uid] = true
+		_damage_enemy(enemy, player_damage * ANCORADA_ULTIMATE_DAMAGE_MULT, "ancorada", false)
+		enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), ANCORADA_ULTIMATE_SLOW_DURATION)
+		enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), ANCORADA_ULTIMATE_SLOW_MULT)
+	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= radius and boss_pos.distance_to(target) <= ANCORADA_ULTIMATE_IMPACT_RADIUS:
+		_damage_boss(player_damage * ANCORADA_ULTIMATE_BOSS_DAMAGE_MULT, "ancorada")
+	if _arauto_active() and Vector2(arauto.get("pos", Vector2.ZERO)).distance_to(center) <= radius and Vector2(arauto.get("pos", Vector2.ZERO)).distance_to(target) <= ANCORADA_ULTIMATE_IMPACT_RADIUS:
+		_damage_arauto(player_damage * ANCORADA_ULTIMATE_BOSS_DAMAGE_MULT, "ancorada", false)
+	drop["hit_ids"] = hit_ids
+	var impacts: Array = secondary.get("impacts", [])
+	impacts.append({"pos": target, "life": 0.58, "max": 0.58, "radius": ANCORADA_ULTIMATE_IMPACT_RADIUS, "seed": float(drop.get("seed", 0.0))})
+	secondary["impacts"] = impacts
+	_spawn_radial_particles(target, Color(0.30, 1.0, 0.36), 18)
 
 
 func _update_heal_orbs(delta: float) -> void:
@@ -31694,68 +31769,44 @@ func _draw_menu(viewport: Vector2) -> void:
 		var idx = clamp(trans_pos, 0, sequence.size() - 1)
 		current_bg = textures["menu_panels"][sequence[idx]]
 
-	var accent = Color(0.0, 1.0, 0.82)
-	var danger = Color(1.0, 0.08, 0.46)
+	var accent := Color(0.0, 1.0, 0.82)
 	_draw_holo_background(viewport, current_bg, accent)
-	var portrait = _is_portrait(viewport)
 	menu_buttons = _menu_rects(viewport)
 	menu_selected = clampi(menu_selected, 0, max(0, _menu_option_count() - 1))
 
-	var safe = max(18.0, min(viewport.x, viewport.y) * 0.034)
-	var title_size = 34 if portrait else 46
-	var title_pos = Vector2(viewport.x * 0.5, safe + title_size * (0.62 if portrait else 0.92))
-	_draw_glitch_title("RUPTURA TEMPORAL", title_pos, title_size, accent)
-
-	var top_chip = Rect2(viewport.x * 0.5 - (170.0 if portrait else 210.0), title_pos.y + title_size * (0.50 if portrait else 0.58), 340.0 if portrait else 420.0, 30.0)
-	_draw_hub_chip(top_chip, "RUPTURA " + GAME_VERSION + " / HUB TEMPORAL", accent, true)
-	if player_nickname != "":
-		var nick_chip = Rect2(top_chip.position.x, top_chip.end.y + 8.0, top_chip.size.x, 24.0)
-		_draw_hub_chip(nick_chip, "QA: " + player_nickname, Color(0.72, 0.92, 1.0), false)
-
-	var avatar_rect: Rect2
-	var primary_rect: Rect2 = menu_buttons["start"]
-	var manifest_rect: Rect2
-	var status_rect: Rect2
-	if portrait:
-		avatar_rect = Rect2(viewport.x * 0.13, viewport.y * 0.145, viewport.x * 0.74, viewport.y * 0.27)
-		var portrait_lower_menu_rect: Rect2 = menu_buttons["stream"] if menu_buttons.has("stream") else menu_buttons["catalog"]
-		manifest_rect = Rect2(viewport.x * 0.08, portrait_lower_menu_rect.end.y + 12.0, viewport.x * 0.84, clamp(viewport.y * 0.095, 66.0, 84.0))
-		status_rect = Rect2(viewport.x * 0.08, manifest_rect.end.y + 12.0, viewport.x * 0.84, 42.0)
-	else:
-		var avatar_w = min(360.0, viewport.x * 0.30)
-		avatar_rect = Rect2(viewport.x - avatar_w - viewport.x * 0.09, viewport.y * 0.24, avatar_w, viewport.y * 0.58)
-		var desktop_lower_menu_rect: Rect2 = menu_buttons["stream"] if menu_buttons.has("stream") else menu_buttons["catalog"]
-		manifest_rect = Rect2(viewport.x * 0.08, desktop_lower_menu_rect.end.y + 14.0, min(430.0, viewport.x * 0.38), 96.0)
-		status_rect = Rect2(viewport.x * 0.08, manifest_rect.end.y + 14.0, min(430.0, viewport.x * 0.38), 42.0)
-
-	_draw_holo_panel(avatar_rect, accent, true, 0.24)
-	_draw_energy_particles(avatar_rect, danger, 26)
-	for i in range(5):
-		var scan_y = avatar_rect.position.y + fmod(Time.get_ticks_msec() * 0.030 + i * avatar_rect.size.y * 0.22, avatar_rect.size.y)
-		draw_line(Vector2(avatar_rect.position.x + 18.0, scan_y), Vector2(avatar_rect.end.x - 18.0, scan_y), Color(accent.r, accent.g, accent.b, 0.08 + i * 0.016), 1.0)
-
-	var geo_tex: Texture2D = textures["player_idle"][int(Time.get_ticks_msec() / 170) % textures["player_idle"].size()]
-	if portrait:
-		_draw_entity_fit(geo_tex, avatar_rect.get_center() + Vector2(0, avatar_rect.size.y * 0.11), Vector2(avatar_rect.size.x * 0.52, avatar_rect.size.y * 0.90), Color.WHITE, true)
-	else:
-		_draw_entity_fit(geo_tex, avatar_rect.get_center() + Vector2(0, avatar_rect.size.y * 0.08), Vector2(avatar_rect.size.x * 0.58, avatar_rect.size.y * 0.82), Color.WHITE, true)
+	var safe: float = maxf(16.0, minf(viewport.x, viewport.y) * 0.03)
+	var title_size := int(clampf(viewport.y * 0.105, 54.0, 84.0))
+	var title_pos := Vector2(viewport.x * 0.5, viewport.y * 0.155)
+	_draw_menu_atmosphere(viewport, accent)
+	_draw_glitch_title("RUPTURA TEMPORAL 2.0", title_pos, title_size, accent)
+	_draw_centered("v" + GAME_VERSION, title_pos + Vector2(0.0, title_size * 0.5 + 8.0), 13, Color(0.74, 0.92, 1.0, 0.85))
 
 	if menu_buttons.has("continue"):
-		_draw_hub_button(menu_buttons["continue"], "CONTINUAR RUN", _interrupted_run_detail_text(), accent, menu_selected == _menu_index_for("continue"), true)
-	_draw_hub_button(menu_buttons["start"], "NOVA SOLO RUN" if interrupted_run_available else "SOLO RUN", "selecao de manifestacao", accent, menu_selected == _menu_index_for("start"), not interrupted_run_available)
-	if MULTIPLAYER_MENU_ENABLED and menu_buttons.has("multiplayer"):
-		_draw_hub_button(menu_buttons["multiplayer"], "ONLINE CO-OP", "host/client via tunel online", Color(1.0, 0.44, 0.88), menu_selected == _menu_index_for("multiplayer"), false)
-	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "bestiario e cartas", Color(0.36, 0.84, 1.0), menu_selected == _menu_index_for("catalog"), false)
-	_draw_hub_button(menu_buttons["settings"], "CONFIG", "controles e jogo", Color(1.0, 0.74, 0.22), menu_selected == _menu_index_for("settings"), false)
+		_draw_hub_button(menu_buttons["continue"], "CONTINUAR RUN", _interrupted_run_detail_text(), Color(0.18, 0.55, 0.98), menu_selected == _menu_index_for("continue"), true, "continue")
+	_draw_hub_button(menu_buttons["start"], "NOVA RUN" if interrupted_run_available else "INICIAR JORNADA", "", Color(0.18, 0.58, 0.98), menu_selected == _menu_index_for("start"), not interrupted_run_available, "start")
+	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "", Color(0.38, 0.78, 0.96), menu_selected == _menu_index_for("catalog"), false, "catalog")
+	_draw_hub_button(menu_buttons["settings"], "CONFIGURACAO", "", Color(1.0, 0.75, 0.22), menu_selected == _menu_index_for("settings"), false, "settings")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and menu_buttons.has("stream"):
 		var stream_active := qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active or qa_streaming_in_flight
 		var stream_title := "ENCERRAR STREAM" if stream_active else "STREAM QA"
-		var stream_subtitle := _qa_stream_menu_subtitle()
 		var stream_color := Color(0.0, 1.0, 0.82) if stream_active else Color(0.38, 0.88, 1.0)
-		_draw_hub_button(menu_buttons["stream"], stream_title, stream_subtitle, stream_color, menu_selected == _menu_index_for("stream"), false)
-	_draw_hub_button(menu_buttons["exit"], "SAIR", "", Color(1.0, 0.26, 0.36), menu_selected == _menu_index_for("exit"), false)
+		_draw_hub_button(menu_buttons["stream"], stream_title, "", stream_color, menu_selected == _menu_index_for("stream"), false, "stream")
+	_draw_hub_button(menu_buttons["exit"], "SAIR DO JOGO", "", Color(0.95, 0.22, 0.25), menu_selected == _menu_index_for("exit"), false, "exit")
 
-	draw_string(font, Vector2(safe, viewport.y - safe * 0.55), "v" + GAME_VERSION, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.74, 0.92, 1.0, 0.78))
+	if player_nickname != "":
+		draw_string(menu_button_font, Vector2(safe, viewport.y - safe * 0.58), player_nickname, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.74, 0.92, 1.0, 0.45))
+
+
+func _draw_menu_atmosphere(viewport: Vector2, accent: Color) -> void:
+	var t := float(Time.get_ticks_msec()) * 0.001
+	draw_circle(Vector2(viewport.x * 0.50, viewport.y * 0.48), minf(viewport.x, viewport.y) * 0.40, Color(0.0, 0.76, 0.72, 0.045))
+	draw_circle(Vector2(viewport.x * 0.58, viewport.y * 0.50), minf(viewport.x, viewport.y) * 0.34, Color(0.86, 0.12, 1.0, 0.040))
+	for i in range(8):
+		var p := fposmod(t * (0.035 + float(i) * 0.005) + float(i) * 0.173, 1.0)
+		var x := lerpf(-90.0, viewport.x + 90.0, p)
+		var y := viewport.y * (0.17 + float(i % 4) * 0.18) + sin(t * 0.9 + i) * 10.0
+		draw_line(Vector2(x - 34.0, y), Vector2(x + 56.0, y + 9.0), Color(accent.r, accent.g, accent.b, 0.075), 1.5, true)
+
 
 
 func _app_update_panel_rect(viewport: Vector2) -> Rect2:
@@ -31870,36 +31921,95 @@ func _draw_menu_button(rect: Rect2, label: String, is_selected: bool) -> void:
 		_draw_centered(label, rect.get_center() + Vector2(0, 6), 16, Color(0.78, 0.78, 0.86))
 
 
-func _draw_hub_button(rect: Rect2, label: String, detail: String, accent: Color, is_selected: bool, primary := false) -> void:
-	var fill = 0.64 if primary else 0.52
-	_draw_holo_panel(rect, accent, is_selected or primary, fill)
+func _draw_hub_button(rect: Rect2, label: String, detail: String, accent: Color, is_selected: bool, _primary := false, button_type := "") -> void:
+	var msec := Time.get_ticks_msec()
+	var msec_f := float(msec)
+	var pulse := 0.5 + 0.5 * sin(msec_f * 0.006)
+	var glitch := is_selected and (msec % 620) < 92
+	var jitter := Vector2(0.0, 0.0)
+	if glitch:
+		jitter = Vector2(sin(msec_f * 0.21) * 2.4, sin(msec_f * 0.37) * 1.2)
+
+	var local_rect := Rect2(rect.position + jitter * 0.45, rect.size)
+
+	# Cores especificas por tipo de botao
+	var fill := Color(0.035, 0.035, 0.062, 0.62)
+	var border := Color(accent.r, accent.g, accent.b, 0.42)
+
+	match button_type:
+		"exit":
+			accent = Color(0.95, 0.22, 0.25)
+			fill = Color(0.22, 0.04, 0.06, 0.85) if is_selected else Color(0.12, 0.02, 0.04, 0.60)
+			border = Color(0.98, 0.28, 0.32, 0.95 if is_selected else 0.55)
+		"start":
+			accent = Color(0.18, 0.58, 0.98)
+			fill = Color(0.04, 0.16, 0.36, 0.85) if is_selected else Color(0.02, 0.09, 0.22, 0.60)
+			border = Color(0.24, 0.68, 1.0, 0.95 if is_selected else 0.55)
+		"continue":
+			accent = Color(0.20, 0.55, 0.98)
+			fill = Color(0.03, 0.10, 0.28, 0.92) if is_selected else Color(0.02, 0.06, 0.20, 0.78)
+			border = Color(0.28, 0.65, 1.0, 0.95 if is_selected else 0.65)
+		_:
+			fill = Color(accent.r * 0.12, accent.g * 0.12, accent.b * 0.12, 0.75 if is_selected else 0.55)
+			border = Color(accent.r, accent.g, accent.b, 0.90 if is_selected else 0.42)
+
+	draw_rect(local_rect, fill, true)
+	draw_rect(local_rect, border, false, 2.0 if is_selected else 1.2)
+
 	if is_selected:
-		draw_rect(rect.grow(5.0), Color(accent.r, accent.g, accent.b, 0.12), false, 4)
-	var core = Rect2(rect.position + Vector2(10.0, 10.0), rect.size - Vector2(20.0, 20.0))
-	draw_rect(core, Color(0.0, 0.0, 0.0, 0.16), true)
-	var icon_r = min(core.size.y * 0.34, core.size.x * 0.12)
-	var icon_center = Vector2(core.position.x + icon_r + 10.0, core.get_center().y)
-	draw_circle(icon_center, icon_r, Color(accent.r, accent.g, accent.b, 0.20))
-	draw_arc(icon_center, icon_r + 4.0, -PI * 0.25, PI * 1.25, 28, Color(accent.r, accent.g, accent.b, 0.86), 2.4)
-	if primary:
-		var tri = PackedVector2Array([
-			icon_center + Vector2(-icon_r * 0.28, -icon_r * 0.48),
-			icon_center + Vector2(icon_r * 0.54, 0.0),
-			icon_center + Vector2(-icon_r * 0.28, icon_r * 0.48)
-		])
-		draw_polygon(tri, PackedColorArray([Color.WHITE]))
-	else:
-		draw_circle(icon_center, max(3.0, icon_r * 0.18), Color.WHITE)
-		draw_arc(icon_center, icon_r * 0.58, 0, TAU, 20, Color.WHITE, 1.6)
-	var title_size = int(clamp(rect.size.y * (0.30 if primary else 0.26), 15.0, 26.0))
-	var text_x = icon_center.x + icon_r + 16.0
-	var title_y = rect.position.y + rect.size.y * (0.46 if detail == "" else 0.38)
-	draw_string(font, Vector2(text_x, title_y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size, Color.WHITE)
+		draw_rect(local_rect.grow(4.0 + pulse * 3.0), Color(accent.r, accent.g, accent.b, 0.14 + pulse * 0.12), false, 2.0)
+		draw_rect(Rect2(local_rect.position, Vector2(6.0, local_rect.size.y)), accent, true)
+
+	# Efeito de curto-circuito / faíscas elétricas no botão de Continuar Run
+	if button_type == "continue":
+		for i in range(5):
+			var spark_time := fmod(msec_f * 0.012 + float(i) * 1.37, 1.0)
+			if spark_time < 0.50:
+				var side := i % 4
+				var ratio := fmod(msec_f * 0.007 + float(i) * 0.23, 1.0)
+				var start_p := Vector2.ZERO
+				match side:
+					0: start_p = Vector2(local_rect.position.x + local_rect.size.x * ratio, local_rect.position.y)
+					1: start_p = Vector2(local_rect.end.x, local_rect.position.y + local_rect.size.y * ratio)
+					2: start_p = Vector2(local_rect.position.x + local_rect.size.x * ratio, local_rect.end.y)
+					3: start_p = Vector2(local_rect.position.x, local_rect.position.y + local_rect.size.y * ratio)
+
+				var ang := sin(msec_f * 0.04 + float(i)) * PI * 2.0
+				var spark_len := 5.0 + fmod(msec_f * 0.15 + float(i) * 3.0, 9.0)
+				var mid_p := start_p + Vector2(cos(ang), sin(ang)) * (spark_len * 0.5) + Vector2(sin(msec_f * 0.08 + float(i)) * 3.0, cos(msec_f * 0.08) * 3.0)
+				var end_p := start_p + Vector2(cos(ang), sin(ang)) * spark_len
+				var spark_col := Color(0.72, 0.95, 1.0, 0.92) if (i % 2 == 0) else Color(1.0, 0.90, 0.30, 0.95)
+
+				draw_line(start_p, mid_p, spark_col, 1.8)
+				draw_line(mid_p, end_p, spark_col, 1.2)
+				draw_circle(end_p, 1.4, Color.WHITE)
+
+	# Desenho dos textos do botão
 	if detail != "":
-		var detail_size = int(clamp(rect.size.y * 0.16, 10.0, 14.0))
-		draw_string(font, Vector2(text_x, rect.position.y + rect.size.y * 0.68), detail.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, detail_size, Color(0.68, 0.86, 0.90, 0.82))
-	var rail_x = rect.end.x - 22.0
-	draw_line(Vector2(rail_x, rect.position.y + 14.0), Vector2(rail_x, rect.end.y - 14.0), Color(accent.r, accent.g, accent.b, 0.40), 2)
+		var title_size := _fit_text_size(label, local_rect.size.x - 24.0, int(clampf(local_rect.size.y * 0.38, 14.0, 22.0)), 12)
+		var detail_size := int(clampf(local_rect.size.y * 0.22, 10.0, 13.0))
+		var title_y := local_rect.position.y + local_rect.size.y * 0.35
+		var detail_y := local_rect.position.y + local_rect.size.y * 0.74
+
+		if is_selected:
+			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x - 1.5, title_y), title_size, Color(0.0, 0.95, 1.0, 0.70))
+			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x + 1.5, title_y), title_size, Color(1.0, 0.20, 0.60, 0.70))
+			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x, title_y), title_size, Color.WHITE)
+		else:
+			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x, title_y), title_size, Color(0.90, 0.94, 1.0))
+
+		var detail_color := Color(0.68, 0.90, 1.0, 0.95) if is_selected else Color(0.55, 0.78, 0.92, 0.80)
+		_draw_centered(detail, Vector2(local_rect.get_center().x, detail_y), detail_size, detail_color)
+	else:
+		var text_size := _fit_text_size(label, local_rect.size.x - 24.0, int(clampf(local_rect.size.y * 0.48, 16.0, 26.0)), 13)
+		var center := local_rect.get_center() + Vector2(0.0, 1.0)
+		if is_selected:
+			_draw_centered_with_font(menu_button_font, label, center + Vector2(-1.5, 0.0) + jitter, text_size, Color(0.0, 0.95, 1.0, 0.70))
+			_draw_centered_with_font(menu_button_font, label, center + Vector2(1.5, 0.0) - jitter, text_size, Color(1.0, 0.20, 0.60, 0.70))
+			_draw_centered_with_font(menu_button_font, label, center, text_size, Color.WHITE)
+		else:
+			_draw_centered_with_font(menu_button_font, label, center, text_size, Color(0.88, 0.92, 0.98, 0.90))
+
 
 
 func _draw_hub_manifest_card(rect: Rect2) -> void:
@@ -32413,11 +32523,34 @@ func _draw_holo_background(viewport: Vector2, texture: Texture2D = null, accent 
 
 
 func _draw_glitch_title(text: String, pos: Vector2, size: int, accent := Color(0.0, 1.0, 0.82)) -> void:
-	var jitter = sin(Time.get_ticks_msec() * 0.025) * 2.0
-	_draw_centered(text, pos + Vector2(-3.0 + jitter, 1), size, Color(1.0, 0.08, 0.78, 0.58))
-	_draw_centered(text, pos + Vector2(3.0 - jitter, -1), size, Color(0.0, 0.90, 1.0, 0.64))
-	_draw_centered(text, pos, size, Color.WHITE)
-	draw_line(pos + Vector2(-170, size * 0.42), pos + Vector2(170, size * 0.42), Color(accent.r, accent.g, accent.b, 0.72), 2)
+	var msec := Time.get_ticks_msec()
+	var sec := float(msec) * 0.001
+	var cycle := fposmod(sec, 20.0)
+	var is_glitching := cycle < 1.0
+
+	var title_font := menu_title_font if menu_title_font != null else font
+	var line_w := title_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x * 0.58
+
+	if is_glitching:
+		var glitch_intensity := sin(cycle * PI)
+		var jitter := sin(float(msec) * 0.08) * (7.0 * glitch_intensity)
+		var offset_r := Vector2(-5.0 * glitch_intensity + jitter, sin(sec * 45.0) * 3.0)
+		var offset_b := Vector2(5.0 * glitch_intensity - jitter, -sin(sec * 40.0) * 3.0)
+
+		_draw_centered_with_font(title_font, text, pos + Vector2(5.0, 6.0), size, Color(0.06, 0.0, 0.10, 0.96))
+		_draw_centered_with_font(title_font, text, pos + offset_r, size, Color(1.0, 0.08, 0.32, 0.88))
+		_draw_centered_with_font(title_font, text, pos + offset_b, size, Color(0.0, 0.92, 1.0, 0.88))
+		_draw_centered_with_font(title_font, text, pos + Vector2(jitter * 0.6, 0), size, Color(1.0, 0.92, 0.20, 0.65))
+		_draw_centered_with_font(title_font, text, pos, size, Color(0.96, 0.98, 1.0))
+
+		var scan_y := pos.y + (sin(sec * 60.0) * size * 0.35)
+		draw_line(pos + Vector2(-line_w * 1.1, scan_y - pos.y), pos + Vector2(line_w * 1.1, scan_y - pos.y), Color(1.0, 0.18, 0.45, 0.85), 2.5)
+	else:
+		_draw_centered_with_font(title_font, text, pos + Vector2(3.0, 4.0), size, Color(0.04, 0.0, 0.08, 0.80))
+		_draw_centered_with_font(title_font, text, pos + Vector2(1.0, 1.0), size, Color(accent.r, accent.g, accent.b, 0.35))
+		_draw_centered_with_font(title_font, text, pos, size, Color(0.96, 0.98, 1.0))
+
+	draw_line(pos + Vector2(-line_w, size * 0.45), pos + Vector2(line_w, size * 0.45), Color(accent.r, accent.g, accent.b, 0.74), 2)
 
 
 func _draw_holo_panel(rect: Rect2, border := Color(0.0, 1.0, 0.82), selected := false, fill_alpha := 0.70) -> void:
@@ -32558,8 +32691,6 @@ func _menu_option_keys() -> Array:
 	if interrupted_run_available:
 		keys.append("continue")
 	keys.append("start")
-	if MULTIPLAYER_MENU_ENABLED:
-		keys.append("multiplayer")
 	keys.append_array(["catalog", "settings"])
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
 		keys.append("stream")
@@ -32605,61 +32736,26 @@ func _activate_menu_option(key: String) -> void:
 
 
 func _menu_rects(viewport: Vector2) -> Dictionary:
-	var portrait = _is_portrait(viewport)
-	var rects := {}
+	var rects: Dictionary = {}
+	var safe: float = maxf(16.0, minf(viewport.x, viewport.y) * 0.03)
+	var menu_scale: float = clampf(minf(viewport.x / 1280.0, viewport.y / 720.0), 0.74, 1.18)
+	var keys := _menu_option_keys()
+	var w: float = clampf(viewport.x * 0.32, 300.0 * menu_scale, 420.0 * menu_scale)
+	var btn_h: float = clampf(50.0 * menu_scale, 46.0, 60.0)
+	var gap: float = clampf(20.0 * menu_scale, 14.0, 24.0)
+	var x: float = maxf(safe + 22.0 * menu_scale, viewport.x * 0.055)
+	var total_h: float = float(keys.size()) * btn_h + float(max(0, keys.size() - 1)) * gap
+	var y: float = viewport.y * 0.47
+	if keys.size() > 4:
+		y = viewport.y * 0.43
+	y = minf(y, viewport.y - safe - total_h - 36.0 * menu_scale)
+	y = maxf(y, safe + viewport.y * 0.25)
 
-	if portrait:
-		var margin = viewport.x * 0.08
-		var start_y = viewport.y * 0.43
-		var start_h = clamp(viewport.y * 0.105, 72.0, 96.0)
-		var multi_h = clamp(viewport.y * 0.085, 54.0, 68.0)
-		var utility_h = clamp(viewport.y * 0.085, 54.0, 68.0)
-		var gap = 12.0
-		var half_w = (viewport.x - margin * 2.0 - gap) * 0.5
-		var y: float = start_y
-		if interrupted_run_available:
-			rects["continue"] = Rect2(margin, y, viewport.x - margin * 2.0, start_h)
-			y += start_h + 10.0
-			rects["start"] = Rect2(margin, y, viewport.x - margin * 2.0, multi_h)
-			y += multi_h + 10.0
-		else:
-			rects["start"] = Rect2(margin, y, viewport.x - margin * 2.0, start_h)
-			y += start_h + 12.0
-		if MULTIPLAYER_MENU_ENABLED:
-			rects["multiplayer"] = Rect2(margin, y, viewport.x - margin * 2.0, multi_h)
-			y += multi_h + 12.0
-		rects["catalog"] = Rect2(margin, y, half_w, utility_h)
-		rects["settings"] = Rect2(margin + half_w + gap, y, half_w, utility_h)
-		if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
-			y += utility_h + 10.0
-			rects["stream"] = Rect2(margin, y, viewport.x - margin * 2.0, utility_h)
-		rects["exit"] = Rect2(viewport.x - margin - 118.0, viewport.y - 62.0, 118.0, 42.0)
-		return rects
-	var x = viewport.x * 0.08
-	var w = min(430.0, viewport.x * 0.38)
-	var start_h = clamp(viewport.y * 0.14, 86.0, 108.0)
-	var start_y = viewport.y * 0.23
-	var small_h = clamp(viewport.y * 0.09, 56.0, 68.0)
-	var gap = 14.0
-	var y: float = start_y
-	if interrupted_run_available:
-		rects["continue"] = Rect2(x, y, w, start_h)
-		y += start_h + 12.0
-		rects["start"] = Rect2(x, y, w, small_h)
-		y += small_h + 12.0
-	else:
-		rects["start"] = Rect2(x, y, w, start_h)
-		y += start_h + 14.0
-	if MULTIPLAYER_MENU_ENABLED:
-		rects["multiplayer"] = Rect2(x, y, w, small_h)
-		y += small_h + 14.0
-	rects["catalog"] = Rect2(x, y, (w - gap) * 0.5, small_h)
-	rects["settings"] = Rect2(x + (w - gap) * 0.5 + gap, y, (w - gap) * 0.5, small_h)
-	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
-		y += small_h + 12.0
-		rects["stream"] = Rect2(x, y, w, small_h)
-	rects["exit"] = Rect2(x, viewport.y - 74.0, min(170.0, w * 0.40), 46.0)
+	for key in keys:
+		rects[key] = Rect2(x, y, w, btn_h)
+		y += btn_h + gap
 	return rects
+
 
 
 func _draw_catalog(viewport: Vector2) -> void:
@@ -37602,25 +37698,100 @@ func _draw_ancorada_spinning_anchors(camera: Vector2) -> void:
 			var arm_angle: float = float(spin.get("angle", 0.0)) + float(arm_i) * TAU / float(arm_count)
 			var arm_start: Vector2 = center + Vector2.from_angle(arm_angle) * 22.0
 			var arm_end: Vector2 = center + Vector2.from_angle(arm_angle) * 92.0
-			draw_line(arm_start, arm_end, Color(0.42, 0.92, 1.0, 0.85 * alpha), 5.0)
-			draw_circle(arm_end, 14.0, Color(0.32, 0.72, 0.96, 0.9 * alpha))
-			draw_circle(arm_end, 8.0, Color(0.82, 0.96, 1.0, 0.95 * alpha))
-		draw_arc(center, 92.0, 0.0, TAU, 48, Color(0.42, 0.92, 1.0, 0.25 * alpha), 1.5)
+			draw_line(arm_start, arm_end, Color(0.02, 0.08, 0.03, 0.58 * alpha), 6.0)
+			draw_line(arm_start, arm_end, Color(0.24, 1.0, 0.38, 0.72 * alpha), 2.4)
+			_draw_ancorada_anchor_icon(arm_end, 32.0, arm_angle + PI * 0.5, alpha, 0.82)
+		draw_arc(center, 92.0, 0.0, TAU, 48, Color(0.30, 1.0, 0.42, 0.28 * alpha), 1.8)
+
+
+func _draw_ancorada_anchor_icon(center: Vector2, size := 32.0, draw_rotation := 0.0, alpha := 1.0, energy := 1.0) -> void:
+	var s := size / 32.0
+	var outline := Color(0.01, 0.03, 0.015, 0.92 * alpha)
+	var body := Color(0.07, 0.43, 0.16, 0.96 * alpha)
+	var edge := Color(0.32, 1.0, 0.38, 0.98 * alpha)
+	var core := Color(0.84, 1.0, 0.72, 0.92 * alpha)
+	draw_set_transform(center, draw_rotation, Vector2.ONE)
+	draw_arc(Vector2(0.0, -9.8) * s, 6.2 * s, 0.0, TAU, 26, outline, 4.8 * s, true)
+	draw_arc(Vector2(0.0, -9.8) * s, 6.2 * s, 0.0, TAU, 26, edge, 2.2 * s, true)
+	draw_line(Vector2(0.0, -4.0) * s, Vector2(0.0, 11.5) * s, outline, 6.2 * s, true)
+	draw_line(Vector2(0.0, -4.0) * s, Vector2(0.0, 11.5) * s, body, 3.6 * s, true)
+	draw_line(Vector2(-7.0, 1.5) * s, Vector2(7.0, 1.5) * s, outline, 5.4 * s, true)
+	draw_line(Vector2(-7.0, 1.5) * s, Vector2(7.0, 1.5) * s, edge, 2.5 * s, true)
+	var left_fluke := PackedVector2Array([
+		Vector2(0.0, 9.0) * s,
+		Vector2(-9.0, 14.0) * s,
+		Vector2(-13.0, 7.2) * s,
+		Vector2(-9.4, 8.3) * s,
+		Vector2(-4.4, 5.7) * s
+	])
+	var right_fluke := PackedVector2Array([
+		Vector2(0.0, 9.0) * s,
+		Vector2(9.0, 14.0) * s,
+		Vector2(13.0, 7.2) * s,
+		Vector2(9.4, 8.3) * s,
+		Vector2(4.4, 5.7) * s
+	])
+	draw_polyline(left_fluke, outline, 5.4 * s, true)
+	draw_polyline(right_fluke, outline, 5.4 * s, true)
+	draw_polyline(left_fluke, edge, 2.5 * s, true)
+	draw_polyline(right_fluke, edge, 2.5 * s, true)
+	draw_circle(Vector2.ZERO, 2.2 * s, core)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if energy > 0.0:
+		var pulse := 0.5 + 0.5 * sin(time_alive * 14.0 + center.x * 0.01)
+		draw_arc(center, (size * 0.58) + pulse * 3.0, time_alive * 6.0, time_alive * 6.0 + PI * 1.35, 22, Color(0.38, 1.0, 0.42, 0.34 * alpha * energy), 1.5)
+		draw_circle(center + Vector2(cos(time_alive * 18.0), sin(time_alive * 13.0)) * size * 0.42, 2.0 * s, Color(0.76, 1.0, 0.48, 0.72 * alpha * energy))
 
 
 func _draw_secondary_ancorada(secondary: Dictionary, camera: Vector2) -> void:
 	var center_world: Vector2 = secondary.get("center", player_pos)
-	var center = center_world - camera
-	var radius = 220.0
-	var charge = clamp(float(secondary.get("charge", 0.0)) / SECONDARY_ANCORADA_DURATION, 0.0, 1.0)
-	draw_arc(center, radius, 0.0, TAU, 48, Color(0.62, 0.94, 1.0, 0.82), 2.0)
-	draw_arc(center, 54.0 + 42.0 * charge, 0.0, TAU, 32, Color(0.30, 0.88, 1.0, 0.94), 2.6)
-	for i in range(12):
-		var ang = time_alive * 0.7 + i * TAU / 12.0
-		var p = center + Vector2.from_angle(ang) * radius
-		draw_line(center, p, Color(0.72, 0.96, 1.0, 0.24), 1.0)
-	if not bool(secondary.get("network_replica", false)) and player_pos.distance_to(center_world) <= radius:
-		draw_arc(player_pos - camera, 32.0, 0.0, TAU, 28, Color(1.0, 0.96, 0.72, 0.92), 2.0)
+	var center: Vector2 = center_world - camera
+	var radius: float = float(secondary.get("radius", ANCORADA_ULTIMATE_RADIUS))
+	var charge: float = clampf(float(secondary.get("charge", 0.0)) / SECONDARY_ANCORADA_DURATION, 0.0, 1.0)
+	var life_ratio: float = clampf(float(secondary.get("life", 0.0)) / maxf(0.01, float(secondary.get("max", SECONDARY_ANCORADA_DURATION))), 0.0, 1.0)
+	var ring_alpha: float = 0.20 + 0.40 * life_ratio
+	draw_arc(center, radius, 0.0, TAU, 80, Color(0.01, 0.04, 0.02, 0.72 * ring_alpha), 5.0)
+	draw_arc(center, radius, 0.0, TAU, 80, Color(0.28, 1.0, 0.36, 0.86 * ring_alpha), 2.2)
+	draw_arc(center, radius * (0.22 + 0.12 * sin(time_alive * 2.5 + charge * 3.0)), 0.0, TAU, 44, Color(0.70, 1.0, 0.44, 0.34 * life_ratio), 1.6)
+	for i in range(16):
+		var ang: float = time_alive * 0.48 + float(i) * TAU / 16.0
+		var inner: Vector2 = center + Vector2.from_angle(ang) * (radius - 18.0)
+		var outer: Vector2 = center + Vector2.from_angle(ang + 0.05) * (radius + 12.0)
+		draw_line(inner, outer, Color(0.32, 1.0, 0.42, 0.13 * life_ratio), 1.2)
+	var drops: Array = secondary.get("drops", [])
+	for drop in drops:
+		var fall: float = maxf(0.05, float(drop.get("fall", ANCORADA_ULTIMATE_FALL_TIME)))
+		var p: float = clampf(float(drop.get("age", 0.0)) / fall, 0.0, 1.0)
+		var eased: float = 1.0 - pow(1.0 - p, 2.2)
+		var start: Vector2 = Vector2(drop.get("start", center_world)) - camera
+		var target: Vector2 = Vector2(drop.get("target", center_world)) - camera
+		var pos: Vector2 = start.lerp(target, eased)
+		var drop_seed: float = float(drop.get("seed", 0.0))
+		var drop_alpha: float = 1.0 if not bool(drop.get("hit", false)) else clampf(1.0 - (float(drop.get("age", 0.0)) - fall) / 0.42, 0.0, 1.0)
+		for spark_i in range(5):
+			var spark_phase: float = drop_seed + float(spark_i) * 1.9 + time_alive * (8.0 + float(spark_i))
+			var offset: Vector2 = Vector2(sin(spark_phase) * (5.0 + float(spark_i)), -float(spark_i) * 8.0 - 12.0)
+			draw_line(pos + offset, pos + offset + Vector2(sin(spark_phase * 0.7) * 4.0, -22.0), Color(0.38, 1.0, 0.36, 0.40 * drop_alpha), 1.6)
+		draw_line(pos + Vector2(0.0, -46.0), pos + Vector2(0.0, -10.0), Color(0.22, 1.0, 0.38, 0.24 * drop_alpha), 5.0)
+		_draw_ancorada_anchor_icon(pos, 46.0, 0.0, drop_alpha, 1.0)
+	var impacts: Array = secondary.get("impacts", [])
+	for impact in impacts:
+		var impact_pos: Vector2 = Vector2(impact.get("pos", center_world)) - camera
+		var max_life: float = maxf(0.01, float(impact.get("max", 0.58)))
+		var impact_progress: float = 1.0 - clampf(float(impact.get("life", 0.0)) / max_life, 0.0, 1.0)
+		var impact_alpha: float = 1.0 - impact_progress
+		var ripple_radius: float = 18.0 + float(impact.get("radius", ANCORADA_ULTIMATE_IMPACT_RADIUS)) * (0.48 + impact_progress * 0.72)
+		draw_circle(impact_pos, ripple_radius * 0.95, Color(0.16, 1.0, 0.25, 0.10 * impact_alpha))
+		draw_circle(impact_pos, 18.0 + 28.0 * impact_progress, Color(0.62, 1.0, 0.12, 0.32 * impact_alpha))
+		draw_arc(impact_pos, ripple_radius, 0.0, TAU, 64, Color(0.0, 0.015, 0.0, 0.96 * impact_alpha), 10.0)
+		draw_arc(impact_pos, ripple_radius, 0.0, TAU, 64, Color(0.88, 1.0, 0.16, 1.0 * impact_alpha), 4.8)
+		draw_arc(impact_pos, ripple_radius * 0.68, 0.0, TAU, 52, Color(0.26, 1.0, 0.26, 0.94 * impact_alpha), 3.4)
+		draw_arc(impact_pos, ripple_radius * 0.38, 0.0, TAU, 42, Color(0.96, 1.0, 0.54, 0.82 * impact_alpha), 2.4)
+		for ray_i in range(8):
+			var ray_angle: float = time_alive * 0.12 + float(ray_i) * TAU / 8.0
+			var ray_a: Vector2 = impact_pos + Vector2.from_angle(ray_angle) * (ripple_radius * 0.28)
+			var ray_b: Vector2 = impact_pos + Vector2.from_angle(ray_angle) * (ripple_radius * 0.92)
+			draw_line(ray_a, ray_b, Color(0.44, 1.0, 0.36, 0.22 * impact_alpha), 1.8)
 
 
 func _texture_frame(key: String, index: int) -> Texture2D:
@@ -37953,11 +38124,8 @@ func _draw_projectiles(camera: Vector2) -> void:
 				draw_arc(head, 16.0, age * 8.0, age * 8.0 + PI * 1.4, 28, Color(1.0, 0.84, 0.28, 0.76), 2.0)
 				draw_circle(fuse_tip, 4.5 + sin(age * 24.0) * 1.5, Color(1.0, 0.96, 0.62, 0.90))
 			"ancorada":
-				var head = pos + dir * 10.0
-				var tail = pos - dir * 18.0
-				draw_line(tail, head, Color(0.30, 0.95, 1.0, 0.88), 4.5)
-				draw_line(tail, head, Color(1.0, 1.0, 1.0, 0.68), 1.2)
-				draw_arc(head, 6.0, dir.angle() - PI * 0.9, dir.angle() + PI * 0.9, 18, Color(1.0, 0.82, 0.22, 0.76), 2)
+				draw_line(pos - dir * 20.0, pos - dir * 8.0, Color(0.24, 1.0, 0.38, 0.26), 5.0)
+				_draw_ancorada_anchor_icon(pos, 32.0, dir.angle() - PI * 0.5, 1.0, 0.90)
 			"eletrica", "eletrica_charged":
 				var charge_mult = 1.45 if kind == "eletrica_charged" else 1.0
 				var a = pos - dir * (16.0 * charge_mult)
@@ -42732,6 +42900,23 @@ func _draw_centered(text: String, pos: Vector2, size: int, color: Color) -> void
 	draw_string(font, Vector2(pos.x - text_size.x * 0.5, baseline_y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 
+func _load_menu_fonts() -> void:
+	var loaded_title: Resource = load("res://Game Base/Ruptura_Temporal-APOLO2.0/Texto/Top_Menu.otf")
+	var loaded_button: Resource = load("res://Game Base/Ruptura_Temporal-APOLO2.0/Texto/World.otf")
+	menu_title_font = loaded_title as Font
+	menu_button_font = loaded_button as Font
+	if menu_title_font == null:
+		menu_title_font = font
+	if menu_button_font == null:
+		menu_button_font = font
+
+
+func _draw_centered_with_font(font_resource: Font, text: String, pos: Vector2, size: int, color: Color) -> void:
+	var text_size := font_resource.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size)
+	var baseline_y := pos.y + font_resource.get_ascent(size) - text_size.y * 0.5
+	draw_string(font_resource, Vector2(pos.x - text_size.x * 0.5, baseline_y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+
+
 func _draw_centered_outlined(text: String, pos: Vector2, size: int, color: Color, outline: Color, thickness: int) -> void:
 	var offsets = [
 		Vector2(-thickness, 0),
@@ -44403,6 +44588,10 @@ func _handle_key(event: InputEventKey) -> void:
 		if event.keycode == KEY_UP or event.keycode == KEY_W:
 			menu_selected = (menu_selected - 1 + _menu_option_count()) % _menu_option_count()
 		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
+			menu_selected = (menu_selected + 1) % _menu_option_count()
+		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
+			menu_selected = (menu_selected - 1 + _menu_option_count()) % _menu_option_count()
+		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			menu_selected = (menu_selected + 1) % _menu_option_count()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			var keys := _menu_option_keys()
@@ -46110,7 +46299,8 @@ func _secondary_ancorada_charge_at_player() -> float:
 		if String(secondary.get("kind", "")) != "ancorada":
 			continue
 		var center: Vector2 = secondary.get("center", player_pos)
-		if player_pos.distance_to(center) <= 220.0:
+		var radius: float = float(secondary.get("radius", ANCORADA_ULTIMATE_RADIUS))
+		if player_pos.distance_to(center) <= radius:
 			best = max(best, clamp(float(secondary.get("charge", 0.0)) / SECONDARY_ANCORADA_DURATION, 0.0, 1.0))
 	return best
 
@@ -46121,7 +46311,8 @@ func _secondary_ancorada_projectile_slow_at(pos: Vector2) -> float:
 		if String(secondary.get("kind", "")) != "ancorada":
 			continue
 		var center: Vector2 = secondary.get("center", player_pos)
-		if pos.distance_to(center) <= 220.0:
+		var radius: float = float(secondary.get("radius", ANCORADA_ULTIMATE_RADIUS))
+		if pos.distance_to(center) <= radius:
 			var charge = clamp(float(secondary.get("charge", 0.0)) / SECONDARY_ANCORADA_DURATION, 0.0, 1.0)
 			slow = min(slow, 0.55 - charge * 0.18)
 	return max(0.28, slow)
@@ -48179,7 +48370,10 @@ func _start_multiplayer_game() -> void:
 	if is_host and not dedicated_server_mode:
 		var container = get_node_or_null("PlayersContainer")
 		if container:
-			var player_scene = preload("res://scenes/Player.tscn")
+			var player_scene: PackedScene = load("res://scenes/Player.tscn")
+			if player_scene == null:
+				push_error("Failed to load multiplayer player scene: res://scenes/Player.tscn")
+				return
 			var host_p = player_scene.instantiate()
 			host_p.name = str(_mp_unique_id())
 			container.add_child(host_p, true)

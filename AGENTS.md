@@ -27,6 +27,22 @@ For any Godot implementation, debugging, scene, resource, gameplay, UI, animatio
 
 - `.agents/skills/godot-engineer/SKILL.md`
 
+For any Ruptura Temporal task, first preserve the project context and visual identity:
+
+- `.agents/skills/ruptura-project-context/SKILL.md`
+
+For UI, HUD, menu, settings, catalog, modal, typography, button, layout, or interaction work, use:
+
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-ui-professional/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
+For combat VFX, particles, projectiles, boss attacks, shaders, impact feedback, animation, or visual gameplay effects, use:
+
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-combat-vfx/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
 For 2D pixel art particles, physics optimization, spatial hashing, and soft-body separation, use:
 
 - `.agents/skills/godot-pixel-physics-particles/SKILL.md`

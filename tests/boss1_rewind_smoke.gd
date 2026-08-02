@@ -40,8 +40,8 @@ func _seed_history() -> void:
 
 func _run() -> void:
 	assert(is_equal_approx(game.BOSS1_REWIND_COOLDOWN, 45.0))
-	assert(is_equal_approx(game.BOSS1_CLOCK_TURN_TIME, 8.0))
-	assert(is_equal_approx(game.BOSS1_REWIND_PLAYBACK_TIME, 8.0))
+	assert(is_equal_approx(game.BOSS1_CLOCK_TURN_TIME, 2.0))
+	assert(is_equal_approx(game.BOSS1_REWIND_PLAYBACK_TIME, 2.0))
 	assert(game.audio_streams.has("Retrocede.mp3"))
 	game._start_game()
 	game.current_phase = 1
@@ -123,7 +123,7 @@ func _run() -> void:
 	game._update_boss1_time_wave(0.20)
 	assert(not game.boss1_rewind_sequence.is_empty())
 
-	print("BOSS1_REWIND_SMOKE_OK recurring=true cooldown=45s rewind=8s return_hit=true boss_heal=%.2f player_hp=%d" % [expected_heal, expected_player_hp])
+	print("BOSS1_REWIND_SMOKE_OK recurring=true cooldown=45s rewind=8s anim=2s return_hit=true boss_heal=%.2f player_hp=%d" % [expected_heal, expected_player_hp])
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
