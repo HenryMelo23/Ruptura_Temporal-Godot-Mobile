@@ -42,9 +42,9 @@ func _run() -> void:
 	game.boss2_ultimate_used = false
 	game._start_boss2_ultimate()
 	_expect(game.boss2_ultimate_timer == game.BOSS2_ULTIMATE_DURATION, "duration_not_started")
-	_expect(game.BOSS2_ULTIMATE_DURATION == 28.0, "duration_not_28_seconds")
+	_expect(game.BOSS2_ULTIMATE_DURATION == 40.0, "duration_not_40_seconds")
 	_expect(game.boss2_ultimate_cooldown == 0.0, "ultimate_should_have_no_initial_cooldown")
-	_expect(game.BOSS2_ULTIMATE_SAFE_RADIUS == 385.0, "safe_radius_not_385")
+	_expect(game.BOSS2_ULTIMATE_SAFE_RADIUS == 485.0, "safe_radius_not_485")
 	_expect(game.boss_attacks.is_empty(), "old_attacks_not_cleared")
 	game.boss2_ultimate_spit_timer = 2.0
 	game.boss2_ultimate_wind_active = 0.0

@@ -1,16 +1,14 @@
 {
-    "version":  "2.0.31b",
-    "version_code":  23102,
-    "filename":  "ruptura_temporal_mobile_2.0.31b.apk",
-    "sha256":  "7d03d4a42928b1aafa2dd2bf50bc70c81522aba92fecdd16ef64adabcab52a6e",
-    "size":  647283339,
+    "version":  "2.0.31d",
+    "version_code":  23104,
+    "filename":  "ruptura_temporal_mobile_2.0.31d.apk",
+    "sha256":  "420f36db975460d624ab506166cacf8978b99a1644bf07dae9d9838c123161c1",
+    "size":  1210230458,
     "notes":  [
-                  "- Correcao rapida: o botao STREAM QA e a configuracao de qualidade agora ficam ocultos para jogadores comuns.",
-                  "- O streaming QA so aparece depois de digitar o cheat CHANZADA na sessao atual.",
-                  "- Configuracoes antigas que tentavam manter o streaming liberado agora sao ignoradas.",
-                  "- Tela de agradecimento mantida por 5 segundos com fade suave para o Hub Temporal.",
-                  "- Validacao: smoke do cheat, tela inicial, cena principal e builds passaram sem erros de Godot."
+                  "Corrige a abertura do jogo para eliminar artefatos visuais e blocos corrompidos.",
+                  "A tela inicial agora usa uma reproducao mais estavel por frames, com audio e transicao suave para o menu.",
+                  "Ajusta o empacotamento para impedir que o video antigo corrompido entre na nova versao."
               ],
     "mandatory":  false,
-    "published_at":  "2026-08-01T00:46:48.7282727Z"
+    "published_at":  "2026-08-03T21:56:13.3559671Z"
 }

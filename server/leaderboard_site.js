@@ -85,21 +85,57 @@ function playerPathByKey(key) {
   return `/leaderboard/player/${encodeURIComponent(String(key || ""))}`;
 }
 
-function phaseLabel(run) {
-  const phase = Math.max(0, Math.floor(safeNumber(run && run.phase)));
-  const reached = arrayOf(run && run.bossDetail).filter((row) => row && row.reached).length;
-  if (String(run && run.result).toLowerCase().includes("vitoria")) return `Vitoria completa - fase ${phase || 1}`;
-  if (reached >= phase && phase > 0) return `Boss da fase ${phase} alcancado`;
+function rawPhase(run) {
+  return Math.max(0, Math.floor(safeNumber(run && run.phase)));
+}
+
+function campaignPhase(run) {
+  const phase = rawPhase(run);
+  if (phase === 6) return 1;
+  return Math.max(0, Math.min(5, phase));
+}
+
+function phaseSortLabel(run) {
+  const phase = rawPhase(run);
+  if (phase === 6) return "Fase 6 - ramificacao inicial";
   return `Fase ${phase || 1}`;
 }
 
-function progressValue(run) {
-  const victory = String(run && run.result || "").toLowerCase().includes("vitoria") ? 1 : 0;
+function phaseLabel(run) {
+  const phase = rawPhase(run);
   const reached = arrayOf(run && run.bossDetail).filter((row) => row && row.reached).length;
-  return victory * 1000000000 + safeNumber(run && run.phase) * 1000000 + reached * 10000 + safeNumber(run && run.durationSeconds);
+  const label = phase === 6 ? "Fase 6 (ramificacao inicial)" : `Fase ${phase || 1}`;
+  if (String(run && run.result).toLowerCase().includes("vitoria")) return `Vitoria completa - ${label}`;
+  if (reached >= campaignPhase(run) && phase > 0) return `Boss da ${label} alcancado`;
+  return label;
+}
+
+function bossReachedCount(run) {
+  return arrayOf(run && run.bossDetail).filter((row) => row && row.reached).length;
+}
+
+function progressRank(run) {
+  const victory = String(run && run.result || "").toLowerCase().includes("vitoria") ? 1 : 0;
+  const reached = Math.min(5, bossReachedCount(run));
+  const campaign = campaignPhase(run);
+  return victory * 1000 + campaign * 10 + Math.min(9, reached);
+}
+
+function progressValue(run) {
+  return progressRank(run) * 1000000 + safeNumber(run && run.durationSeconds);
+}
+
+function speedrunValue(run) {
+  const duration = Math.max(1, safeNumber(run && run.durationSeconds, 1));
+  return progressRank(run) * 1000000 - duration;
+}
+
+function speedrunDetail(run) {
+  return `${phaseLabel(run)} em ${formatDuration(run && run.durationSeconds)} | ${formatNumber(run && run.score)} pts`;
 }
 
 function phaseMapPath(phase) {
+  if (phase === 6) return "Fase6.png";
   if (phase === 5) return "Fase5-1.png";
   return `Fase${Math.max(1, Math.min(4, Math.floor(safeNumber(phase, 1))))}.png`;
 }
@@ -203,7 +239,7 @@ function aggregateSnapshot(snapshot) {
   const totalEnemyDamage = runs.reduce((sum, run) => sum + safeNumber(run.enemyDamage), 0);
   const totalKills = runs.reduce((sum, run) => sum + safeNumber(run.kills), 0);
   const latestVersion = mostFrequent(latest.slice(0, 20).map((run) => run.version))[0];
-  const maxPhase = Math.max(0, ...runs.map((run) => safeNumber(run.phase)));
+  const maxPhase = Math.max(0, ...runs.map((run) => campaignPhase(run)));
   return {
     runs,
     profiles: profiles.sort((a, b) => safeNumber(b.best.score) - safeNumber(a.best.score)),
@@ -221,7 +257,7 @@ function aggregateSnapshot(snapshot) {
     manifestations: countBy(runs.map((run) => run.manifestation)).slice(0, 10),
     spectra: countBy(runs.map((run) => run.spectrum)).slice(0, 10),
     versions: countBy(runs.map((run) => run.version)).slice(0, 10),
-    phases: countBy(runs.map((run) => `Fase ${Math.max(1, Math.floor(safeNumber(run.phase, 1)))}`)).slice(0, 8),
+    phases: countBy(runs.map((run) => phaseSortLabel(run))).slice(0, 8),
     cards: collectCards(runs)
   };
 }
@@ -229,6 +265,8 @@ function aggregateSnapshot(snapshot) {
 function pageMeta(active) {
   const meta = {
     home: ["CENTRAL DO OBSERVATORIO", "Estado consolidado das linhas temporais registradas."],
+    story: ["ARQUIVO NARRATIVO", "Historia da ruptura, das fases e das escolhas dos operadores."],
+    catalog: ["CATALOGO HISTORICO", "Bestiario, manifestacoes, espectros e cartas vistos como memoria do mundo."],
     rankings: ["MATRIZ COMPETITIVA", "Comparacao entre sobrevivencia, ofensiva e progressao."],
     player: ["DOSSIE DO OPERADOR", "Historico, padroes de combate e assinaturas recorrentes."],
     run: ["RELATORIO DE EXPEDICAO", "Reconstrucao tecnica de uma linha temporal registrada."],
@@ -286,6 +324,8 @@ function bossIcon(run, publicAssetUrl) {
 function nav(active, analytics) {
   const links = [
     ["home", "/leaderboard", "Visao geral"],
+    ["story", "/leaderboard/historia", "Historia"],
+    ["catalog", "/leaderboard/catalogo", "Catalogo"],
     ["operators", "/leaderboard#operadores", "Operadores"],
     ["rankings", "/leaderboard/rankings", "Rankings"],
     ["archive", "/leaderboard#arquivo", "Arquivo de runs"]
@@ -434,14 +474,14 @@ function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
   const heroImage = best ? manifestationIcon(best, publicAssetUrl) : publicAsset(publicAssetUrl, "Geo1.png");
   const heroTitle = analytics.runs.length ? "A RUPTURA CONTINUA INSTAVEL" : "NENHUMA EXPEDICAO SINCRONIZADA";
   const heroText = analytics.runs.length
-    ? `${formatNumber(analytics.runs.length)} expedicoes de ${formatNumber(analytics.profiles.length)} operadores foram recuperadas. O limite registrado atualmente e a Fase ${formatNumber(analytics.maxPhase || 1)}.`
+    ? `${formatNumber(analytics.runs.length)} expedicoes de ${formatNumber(analytics.profiles.length)} operadores foram recuperadas. A fase 6 e tratada como ramificacao inicial; o limite de campanha registrado e a Fase ${formatNumber(analytics.maxPhase || 1)}.`
     : "O terminal esta ativo e aguardando a primeira run enviada pelas builds do jogo.";
   const cards = arrayOf(best && best.cards).slice(0, 8);
   const campaign = [1, 2, 3, 4, 5].map((phase) => {
-    const count = analytics.runs.filter((run) => Math.floor(safeNumber(run.phase)) >= phase).length;
+    const count = analytics.runs.filter((run) => campaignPhase(run) >= phase).length;
     const active = count > 0;
     return `<article class="campaign-stage ${active ? "active" : ""}">
-      <span>F${phase}</span><b>${active ? `${formatNumber(count)} registros` : "Sem leitura"}</b><small>${phase === 5 ? "Umbra" : `Linha ${phase}`}</small>
+      <span>F${phase}</span><b>${active ? `${formatNumber(count)} registros` : "Sem leitura"}</b><small>${phase === 1 ? "Linha 1 / Chaga" : phase === 5 ? "Umbra" : `Linha ${phase}`}</small>
     </article>`;
   }).join("");
   const playerCards = analytics.profiles.slice(0, 6).map((profile, index) => `<a class="player-tile" href="${playerPathByKey(profile.key)}">
@@ -458,6 +498,7 @@ function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
         <p>${escapeHtml(heroText)}</p>
         <div class="hero-actions">
           <a class="button primary" href="/leaderboard/rankings">Explorar rankings</a>
+          <a class="button ghost" href="/leaderboard/historia">Ler historia</a>
           ${analytics.latestRun ? `<a class="button ghost" href="${runPath(analytics.latestRun)}">Abrir ultima expedicao</a>` : `<span class="button disabled">Aguardando expedicao</span>`}
         </div>
       </div>
@@ -504,6 +545,84 @@ function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
       </div>
     </section>`;
   return pageShell({ title: "CENTRAL DO OBSERVATORIO", subtitle: "Estado consolidado das linhas temporais registradas.", active: "home", analytics, content, pageClass: "home-page" });
+}
+
+function renderStory(snapshot) {
+  const analytics = aggregateSnapshot(snapshot);
+  const chapters = [
+    ["O primeiro rasgo", "Geovana encontra uma ruptura que nao so abre espaco: ela altera habito, tempo e memoria. Cada run e uma tentativa de atravessar uma regra nova sem perder o proprio corpo no processo."],
+    ["A ramificacao da Chaga", "A fase 6 nao e o fim numerico da jornada. Ela e uma abertura alternativa, uma contaminacao inicial que pode substituir ou interromper a primeira linha antes da campanha seguir para as camadas seguintes."],
+    ["As manifestacoes", "Cada manifestacao e uma forma diferente de negociar com a Ruptura. Eletrica insiste em energia acumulada, Necronada transforma perda em exercito, Contratual troca risco por julgamento e Bombastica altera o mapa com consequencias explosivas."],
+    ["O observatorio", "Este site le as runs como documentos. Tempo, dano, escolhas, cartas e posicoes mostram onde o jogador dominou a partida e onde a fase obrigou uma decisao ruim."]
+  ];
+  const content = `
+    <section class="lore-hero">
+      <div>
+        <p class="eyebrow">ARQUIVO // RUPTURA TEMPORAL</p>
+        <h2>A campanha nao e uma linha reta.</h2>
+        <p>A fase 6 funciona como ramificacao inicial. Por isso o observatorio nao considera "chegar na fase 6" mais distante do que chegar na fase 5; ele interpreta a Chaga como uma abertura alternativa dentro do primeiro trecho da campanha.</p>
+      </div>
+      <aside>
+        <b>${formatNumber(analytics.runs.length)}</b>
+        <span>expedicoes preservadas</span>
+        <small>Dados vivos: builds, decks, dano, fase, bosses e rotas de cada jogador.</small>
+      </aside>
+    </section>
+    <section class="story-grid">
+      ${chapters.map(([title, text], index) => `<article>
+        <span>${String(index + 1).padStart(2, "0")}</span>
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(text)}</p>
+      </article>`).join("")}
+    </section>
+    <section class="observatory-grid">
+      <div class="terminal-panel span-7">
+        ${sectionHeader("Leitura narrativa", "O que os dados contam", "Os melhores registros nao mostram so quem sobreviveu: mostram qual escolha sustentou a pressao.")}
+        <div class="insight-grid">
+          ${analytics.bestProgress ? `<article><b>Avanco mais profundo</b><span>${escapeHtml(textValue(analytics.bestProgress.player, "Jogador"))}</span><small>${escapeHtml(phaseLabel(analytics.bestProgress))} com ${formatDuration(analytics.bestProgress.durationSeconds)}</small></article>` : emptyState("Sem progresso", "Ainda nao ha runs elegiveis.")}
+          ${analytics.bestBoss ? `<article><b>Maior pressao em chefe</b><span>${escapeHtml(textValue(analytics.bestBoss.player, "Jogador"))}</span><small>${formatNumber(analytics.bestBoss.bossDamage)} dano em boss</small></article>` : emptyState("Sem boss", "Nenhum dano de boss registrado.")}
+          ${analytics.bestTime ? `<article><b>Maior resistencia</b><span>${escapeHtml(textValue(analytics.bestTime.player, "Jogador"))}</span><small>${formatDuration(analytics.bestTime.durationSeconds)} vivo</small></article>` : emptyState("Sem tempo", "Nenhum tempo registrado.")}
+        </div>
+      </div>
+      <div class="terminal-panel span-5">
+        ${sectionHeader("Campanha", "Ordem interpretada")}
+        <ol class="route-list">
+          <li><b>Fase 1 ou Fase 6</b><span>Abertura sorteada/alternada.</span></li>
+          <li><b>Fase 2</b><span>Escalada fria e controle de espaco.</span></li>
+          <li><b>Fase 6 ou Fase 3</b><span>Se a Chaga nao veio no inicio, ela pode entrar aqui.</span></li>
+          <li><b>Fase 4</b><span>Ruptura de gravidade e pressao mecanica.</span></li>
+          <li><b>Fase 5</b><span>UMBRA, limite real de campanha.</span></li>
+        </ol>
+      </div>
+    </section>`;
+  return pageShell({ title: "ARQUIVO NARRATIVO", subtitle: "Historia da ruptura, das fases e das escolhas dos operadores.", active: "story", analytics, content, pageClass: "story-page" });
+}
+
+function renderCatalog(snapshot, cardAssetUrl) {
+  const analytics = aggregateSnapshot(snapshot);
+  const catalogBlocks = [
+    ["Manifestacoes", analytics.manifestations, "Formas de ruptura escolhidas pelos jogadores."],
+    ["Espectros", analytics.spectra, "Aureas que alteram a leitura de risco da run."],
+    ["Versoes", analytics.versions, "Builds que produziram os registros atuais."],
+    ["Fases registradas", analytics.phases, "Distribuicao final considerando a fase 6 como ramificacao inicial."]
+  ];
+  const content = `
+    <section class="catalog-intro">
+      <p class="eyebrow">CATALOGO // HISTORIA VIVA</p>
+      <h2>Cada registro vira memoria jogavel.</h2>
+      <p>O catalogo historico cruza lore e telemetria: o que aparece mais, o que sustenta builds, quais cartas retornam e como as linhas temporais estao sendo vencidas ou quebradas.</p>
+    </section>
+    <section class="catalog-grid">
+      ${catalogBlocks.map(([title, items, detail]) => `<article class="terminal-panel">
+        ${sectionHeader("Catalogo", title, detail)}
+        ${signatureList(items, "cyan")}
+      </article>`).join("")}
+    </section>
+    <section class="terminal-panel">
+      ${sectionHeader("Decks", "Cartas mais presentes", "Cartas vistas com maior frequencia nas runs enviadas.")}
+      <div class="deck-grid catalog-deck">${analytics.cards.slice(0, 18).map((card) => cardTile(card, cardAssetUrl)).join("") || emptyState("Sem cartas", "Nenhuma carta foi enviada nas runs atuais.")}</div>
+    </section>`;
+  return pageShell({ title: "CATALOGO HISTORICO", subtitle: "Bestiario, manifestacoes, espectros e cartas vistos como memoria do mundo.", active: "catalog", analytics, content, pageClass: "catalog-page" });
 }
 
 function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
@@ -597,6 +716,7 @@ function renderRankings(snapshot) {
   const byTime = analytics.profiles.map((player) => player.bestTime).sort((a, b) => safeNumber(b.durationSeconds) - safeNumber(a.durationSeconds));
   const byBoss = analytics.profiles.map((player) => player.bestBoss).sort((a, b) => safeNumber(b.bossDamage) - safeNumber(a.bossDamage));
   const byProgress = analytics.profiles.map((player) => player.farthest).sort((a, b) => progressValue(b) - progressValue(a));
+  const bySpeedrun = analytics.profiles.map((player) => player.farthest).sort((a, b) => speedrunValue(b) - speedrunValue(a));
   const scatter = bestRuns.slice(0, 48).map((run) => ({
     player: textValue(run.player, "Jogador"),
     time: safeNumber(run.durationSeconds),
@@ -616,6 +736,7 @@ function renderRankings(snapshot) {
       ${rankingTable("Maior tempo vivo", "Sobrevivencia", byTime, (run, formatted) => formatted ? formatDuration(run.durationSeconds) : run.durationSeconds, (run) => `${phaseLabel(run)} | v${textValue(run.version, "?")}`, "amber")}
       ${rankingTable("Maior dano em boss", "Pressao ofensiva", byBoss, (run, formatted) => formatted ? `${formatNumber(run.bossDamage)} dano` : run.bossDamage, (run) => `${textValue(run.manifestation, "?")} + ${textValue(run.spectrum, "?")}`, "magenta")}
       ${rankingTable("Maior progressao", "Avanco na campanha", byProgress, (run, formatted) => formatted ? phaseLabel(run) : progressValue(run), (run) => `${formatDuration(run.durationSeconds)} | ${textValue(run.result, "Run")}`, "green")}
+      ${rankingTable("Speedrun de progressao", "Longe em pouco tempo", bySpeedrun, (run, formatted) => formatted ? `${phaseLabel(run)} · ${formatDuration(run.durationSeconds)}` : speedrunValue(run), speedrunDetail, "violet")}
     </section>
     <section class="observatory-grid">
       <div class="terminal-panel span-7">
@@ -698,6 +819,10 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
       ${metric("Abates", formatNumber(run.kills), `${formatNumber(run.enemyDamage)} dano em inimigos`, "green", "KIL")}
     </section>
     <section class="observatory-grid">
+      <div class="terminal-panel span-12">
+        ${sectionHeader("Diagnostico", "Onde a run ganhou ou quebrou", "Leitura heuristica feita com dano, deck, economia e ritmo de boss.")}
+        ${runInsightCards(run)}
+      </div>
       <div class="terminal-panel span-7">
         ${sectionHeader("Posicionamento", "Mapa de calor e dano", "Reconstrucao espacial da permanencia e dos pontos de impacto.", `<div class="phase-switch">${phases.map((phase, index) => `<button type="button" data-phase="${phase}" class="${index === 0 ? "active" : ""}">Fase ${phase}</button>`).join("")}</div>`)}
         <div class="map-wrap"><canvas id="run-map" aria-label="Mapa de calor da movimentacao e pontos de dano"></canvas></div>
@@ -754,6 +879,8 @@ function renderNotFound(message, snapshot = {}) {
 
 function renderLeaderboardSite({ pathname, snapshot, cardAssetUrl, publicAssetUrl }) {
   if (pathname === "/leaderboard" || pathname === "/leaderboard/") return renderHome(snapshot, cardAssetUrl, publicAssetUrl);
+  if (pathname === "/leaderboard/historia") return renderStory(snapshot);
+  if (pathname === "/leaderboard/catalogo") return renderCatalog(snapshot, cardAssetUrl);
   if (pathname === "/leaderboard/rankings") return renderRankings(snapshot, publicAssetUrl);
   const playerMatch = pathname.match(/^\/leaderboard\/player\/([^/]+)$/);
   if (playerMatch) return renderPlayer(decodeURIComponent(playerMatch[1]), snapshot, cardAssetUrl, publicAssetUrl);
@@ -778,11 +905,57 @@ function mapScript(data) {
   return `registerRunMap('run-map',${safeJson(data)});`;
 }
 
+function runInsightCards(run) {
+  const durationMinutes = Math.max(1, safeNumber(run && run.durationSeconds) / 60);
+  const damagePerMinute = safeNumber(run && run.damageTaken) / durationMinutes;
+  const bossDamagePerMinute = safeNumber(run && run.bossDamage) / durationMinutes;
+  const cardsTotal = safeNumber(run && run.cardsTotal);
+  const topThreat = arrayOf(run && run.damageThreats).sort((a, b) => safeNumber(b.damage) - safeNumber(a.damage))[0] || null;
+  const strongestCard = arrayOf(run && run.cards).sort((a, b) => safeNumber(b.count, 1) - safeNumber(a.count, 1))[0] || null;
+  const insights = [
+    {
+      title: "Possivel erro principal",
+      value: topThreat ? textValue(topThreat.name, "Origem desconhecida") : "Sem dano dominante",
+      detail: topThreat
+        ? `${formatNumber(topThreat.damage)} dano em ${formatNumber(topThreat.hits)} impactos. A run provavelmente perdeu estabilidade contra esta ameaca.`
+        : "A build nao enviou origem de dano suficiente para apontar um erro dominante."
+    },
+    {
+      title: "Escolha que sustentou",
+      value: strongestCard ? textValue(strongestCard.name, "Carta") : textValue(run && run.manifestation, "Manifestacao"),
+      detail: strongestCard
+        ? `Carta mais repetida no deck: x${formatNumber(strongestCard.count)}. Ela pode ter sido o eixo que manteve a run viva.`
+        : "Sem deck detalhado; use manifestacao/espectro para comparar escolhas."
+    },
+    {
+      title: "Pressao por minuto",
+      value: `${formatNumber(damagePerMinute)} dano/min`,
+      detail: damagePerMinute > 180 ? "Pressao alta: o jogador provavelmente ficou preso em rotas perigosas ou aceitou trocas ruins." : "Pressao controlada: o jogador recebeu dano em ritmo administravel."
+    },
+    {
+      title: "Ritmo contra boss",
+      value: `${formatNumber(bossDamagePerMinute)} dano/min`,
+      detail: bossDamagePerMinute <= 0 ? "Nenhum dano relevante em chefe. Pode indicar boss nao chamado, luta travada ou build sem janela ofensiva." : "Permite comparar se a build farmada converteu tempo em dano real contra chefe."
+    },
+    {
+      title: "Economia da run",
+      value: `${formatNumber(cardsTotal)} cartas`,
+      detail: `${formatNumber(run && run.pointsEarned)} pontos ganhos e ${formatNumber(run && run.pointsSpent)} gastos. Ajuda a ver se o jogador segurou pontos demais ou comprou sem direcao.`
+    }
+  ];
+  return `<div class="insight-grid">${insights.map((item) => `<article>
+    <b>${escapeHtml(item.title)}</b>
+    <span>${escapeHtml(item.value)}</span>
+    <small>${escapeHtml(item.detail)}</small>
+  </article>`).join("")}</div>`;
+}
+
 function baseClientScript() {
   return `
 (function(){
   const reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const charts=[];
+  const imageCache=new Map();
   function byId(id){return document.getElementById(id)}
   function prepareCanvas(canvas,minHeight){
     const ratio=Math.min(2,window.devicePixelRatio||1);
@@ -867,8 +1040,8 @@ function baseClientScript() {
     const draw=function(){
       const prepared=prepareCanvas(canvas,250),ctx=prepared.ctx,w=prepared.w,h=prepared.h;
       ctx.clearRect(0,0,w,h);ctx.fillStyle='#05070b';ctx.fillRect(0,0,w,h);
-      const image=new Image();
-      image.onload=function(){
+      const src=(data.maps&&data.maps[selected])||'';
+      function paint(image){
         const scale=Math.min(w/image.width,h/image.height),dw=image.width*scale,dh=image.height*scale,ox=(w-dw)/2,oy=(h-dh)/2;
         ctx.clearRect(0,0,w,h);ctx.drawImage(image,ox,oy,dw,dh);
         const cells=((data.heatmap&&data.heatmap.cells)||[]).filter(function(cell){return Number(cell.phase||1)===Number(selected)});
@@ -887,9 +1060,14 @@ function baseClientScript() {
           ctx.fillStyle='rgba(255,93,104,.82)';ctx.strokeStyle='#fff1f3';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke();
         });
         if(!cells.length && !((data.events)||[]).length){ctx.fillStyle='rgba(2,5,10,.74)';ctx.fillRect(0,0,w,h);ctx.fillStyle='#f3f7fa';ctx.font='14px Segoe UI, sans-serif';ctx.fillText('Nenhuma telemetria espacial recuperada para esta fase.',24,36)}
-      };
+      }
+      if(!src){ctx.fillStyle='#8b9aac';ctx.font='14px Segoe UI, sans-serif';ctx.fillText('Mapa da fase indisponivel.',24,36);return}
+      const cached=imageCache.get(src);
+      if(cached&&cached.complete&&cached.naturalWidth){paint(cached);return}
+      const image=cached||new Image();
+      image.onload=function(){paint(image)};
       image.onerror=function(){ctx.fillStyle='#8b9aac';ctx.font='14px Segoe UI, sans-serif';ctx.fillText('Mapa da fase indisponivel.',24,36)};
-      image.src=(data.maps&&data.maps[selected])||'';
+      if(!cached){imageCache.set(src,image);image.src=src}
     };
     function clamp(value,min,max){return Math.max(min,Math.min(max,value))}
     document.querySelectorAll('[data-phase]').forEach(function(button){button.addEventListener('click',function(){document.querySelectorAll('[data-phase]').forEach(function(item){item.classList.remove('active')});button.classList.add('active');selected=Number(button.dataset.phase)||selected;draw()})});
@@ -998,7 +1176,7 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .metric:before{content:"";position:absolute;right:-28px;bottom:-36px;width:110px;height:110px;border:18px solid var(--tone);opacity:.045;transform:rotate(24deg)}.metric span{color:var(--tone);font:800 11px var(--font-mono)}.metric b{display:block;margin:14px 0 4px;color:var(--text-main);font:900 clamp(23px,2.4vw,36px) var(--font-mono);overflow-wrap:anywhere}.metric strong{display:block;text-transform:uppercase;font-size:12px}.metric small{display:block;margin-top:7px;color:var(--text-soft);line-height:1.4}
 .tone-cyan{--tone:var(--rupture-cyan)}.tone-magenta{--tone:var(--rupture-magenta)}.tone-amber{--tone:var(--survival-yellow)}.tone-green{--tone:var(--progress-green)}.tone-red{--tone:var(--danger-red)}.tone-violet{--tone:var(--rupture-violet)}
 .observatory-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:22px}.span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-7{grid-column:span 7}.span-5{grid-column:span 5}.span-4{grid-column:span 4}
-.terminal-panel{position:relative;padding:20px;border:1px solid var(--line);background:linear-gradient(180deg,var(--surface),rgba(4,8,14,.92));box-shadow:0 20px 46px rgba(0,0,0,.24);overflow:hidden}.terminal-panel:before{content:"";position:absolute;left:12px;top:12px;width:76px;height:1px;background:linear-gradient(90deg,var(--rupture-cyan),transparent);opacity:.7}
+.terminal-panel{position:relative;padding:20px;border:1px solid var(--line);background:linear-gradient(180deg,var(--surface),rgba(4,8,14,.92));box-shadow:0 20px 46px rgba(0,0,0,.20);overflow:hidden;content-visibility:auto;contain-intrinsic-size:360px}.terminal-panel:before{content:"";position:absolute;left:12px;top:12px;width:76px;height:1px;background:linear-gradient(90deg,var(--rupture-cyan),transparent);opacity:.7}
 .section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}.section-head h2{margin:0;font-family:var(--font-display);font-size:clamp(22px,2vw,32px);text-transform:uppercase}.section-head p:not(.eyebrow){margin:7px 0 0;color:var(--text-soft);line-height:1.45}.section-head>a{color:var(--rupture-cyan);font-weight:800;font-size:12px;text-transform:uppercase}
 .run-list{display:grid;gap:8px}.run-row{border:1px solid var(--line);background:rgba(255,255,255,.025);transition:transform var(--fast),border-color var(--fast),background var(--fast)}.run-row:hover{transform:translateX(4px);border-color:var(--line-strong);background:rgba(37,244,229,.045)}.run-row-main{display:grid;grid-template-columns:170px minmax(0,1fr) 118px;align-items:center;gap:14px;padding:13px}.run-row time,.run-row small,.run-row-meta span{color:var(--text-soft);font-size:12px}.run-row b,.run-row small,.run-row-main span{display:block}.run-row-main span{color:var(--rupture-cyan);font:800 11px var(--font-mono)}.run-row strong{text-align:right;color:var(--rupture-cyan);font-family:var(--font-mono)}.run-row-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 13px 13px}
 .status-badge{display:inline-flex;align-items:center;min-height:24px;padding:4px 8px;border:1px solid var(--tone);color:var(--tone);font:800 11px var(--font-mono);text-transform:uppercase;background:rgba(255,255,255,.025)}
@@ -1007,6 +1185,10 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .campaign-line{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.campaign-stage{position:relative;padding:16px;border:1px solid var(--line);background:rgba(255,255,255,.025)}.campaign-stage.active{border-color:rgba(85,239,139,.45);background:rgba(85,239,139,.045)}.campaign-stage span{color:var(--rupture-cyan);font:900 28px var(--font-mono)}.campaign-stage b,.campaign-stage small{display:block}.campaign-stage small{color:var(--text-soft);margin-top:4px}
 .player-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.player-tile{display:grid;gap:5px;padding:13px;border:1px solid var(--line);background:rgba(255,255,255,.025)}.player-tile:hover{border-color:var(--rupture-cyan);background:var(--rupture-cyan-soft)}.player-tile span{color:var(--rupture-magenta);font:900 13px var(--font-mono)}.player-tile small{color:var(--text-soft)}.player-tile i{color:var(--rupture-cyan);font-style:normal;font-weight:900}
 .dual-signatures{display:grid;gap:18px}.dual-signatures h3{margin:0 0 8px;font-size:15px;text-transform:uppercase}.signature-list{display:grid;gap:8px}.signature-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.signature-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signature-row b{color:var(--tone)}.signature-row i{grid-column:1/-1;height:3px;background:var(--tone);box-shadow:0 0 12px var(--tone)}
+.lore-hero{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;margin-bottom:24px;padding:30px;border:1px solid var(--line-strong);background:linear-gradient(115deg,rgba(37,244,229,.10),rgba(6,12,20,.94),rgba(85,239,139,.08));clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px)}.lore-hero h2,.catalog-intro h2{margin:0 0 12px;font-family:var(--font-display);font-size:clamp(34px,5vw,72px);line-height:.96;text-transform:uppercase}.lore-hero p,.catalog-intro p{max-width:850px;color:#c5d5df;line-height:1.65}.lore-hero aside{display:grid;align-content:center;gap:6px;padding:20px;border:1px solid var(--line);background:rgba(2,5,10,.38)}.lore-hero aside b{color:var(--rupture-cyan);font:900 52px var(--font-mono)}.lore-hero aside span{text-transform:uppercase;font-weight:900}.lore-hero aside small{color:var(--text-soft);line-height:1.45}
+.story-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:24px}.story-grid article,.insight-grid article{padding:16px;border:1px solid var(--line);background:rgba(10,19,30,.76)}.story-grid span{color:var(--rupture-cyan);font:900 22px var(--font-mono)}.story-grid h3,.insight-grid b{display:block;margin:10px 0 8px;font-family:var(--font-display);font-size:22px;text-transform:uppercase}.story-grid p,.insight-grid small{color:var(--text-soft);line-height:1.52}.route-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}.route-list li{display:grid;gap:3px;padding:12px;border-left:2px solid var(--rupture-cyan);background:rgba(255,255,255,.025)}.route-list span{color:var(--text-soft)}
+.catalog-intro{margin-bottom:24px;padding:26px;border-left:3px solid var(--rupture-magenta);background:linear-gradient(90deg,rgba(255,72,189,.09),rgba(10,19,30,.82))}.catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:22px}.catalog-deck{grid-template-columns:repeat(3,minmax(0,1fr))}
+.insight-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.insight-grid span{display:block;color:var(--rupture-cyan);font:900 19px var(--font-mono);overflow-wrap:anywhere}
 .operator-highlight{display:grid;align-content:start;gap:7px;min-height:196px;padding:18px;border:1px solid var(--line);background:var(--surface)}.operator-avatar{width:64px;height:64px}.operator-highlight>span{color:var(--text-soft);font-size:11px;text-transform:uppercase}.operator-highlight b{font-size:20px}.operator-highlight strong{color:var(--tone);font:900 26px var(--font-mono)}.operator-highlight small{color:var(--text-soft);line-height:1.4}
 .profile-hero,.run-header{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:24px;padding:24px;border-left:3px solid var(--rupture-cyan);background:linear-gradient(90deg,rgba(37,244,229,.09),var(--surface) 54%,rgba(152,92,255,.08))}.profile-hero h2,.run-header h2{margin:0;font-family:var(--font-display);font-size:clamp(36px,5vw,66px);text-transform:uppercase}.profile-hero p,.run-header p{color:var(--text-soft)}.profile-badges,.run-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.run-actions a,.back-link{color:var(--rupture-cyan);font-weight:800;font-size:12px;text-transform:uppercase}
 .facts-list dl{margin:0}.facts-list dl>div{display:grid;grid-template-columns:1fr 1.35fr;gap:18px;padding:14px 0;border-top:1px solid var(--line)}.facts-list dt{color:var(--text-soft)}.facts-list dd{margin:0;text-align:right;font-weight:800}.facts-list dd small{display:block;color:var(--text-soft);font-weight:400}
@@ -1020,8 +1202,8 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 @keyframes scan{0%{transform:translateX(-80%)}100%{transform:translateX(80%)}}
 @media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 @media (prefers-contrast: more){:root{--line:rgba(210,240,255,.35);--text-soft:#c8d8e2}.terminal-panel,.metric,.run-row{border-color:var(--line-strong)}}
-@media(max-width:1180px){.topbar{grid-template-columns:1fr}.brand{min-width:0}.operator-search{max-width:420px}.pulse-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.span-8,.span-7,.span-5,.span-4{grid-column:span 12}.hero-terminal{grid-template-columns:1fr}.rankings-layout{grid-template-columns:1fr}}
-@media(max-width:760px){main{padding-left:16px;padding-right:16px}.topbar{position:relative;padding:12px 16px}.main-nav{width:100%;padding-bottom:4px}.page-heading h1{font-size:38px}.hero-copy h2{font-size:42px}.pulse-grid,.campaign-line,.player-grid{grid-template-columns:1fr}.run-row-main{grid-template-columns:1fr}.run-row strong{text-align:left}.deck-grid{grid-template-columns:1fr}.section-head,.profile-hero,.run-header{flex-direction:column;align-items:flex-start}.facts-list dl>div{grid-template-columns:1fr}.facts-list dd{text-align:left}.chart-wrap.large{height:330px}.map-wrap{min-height:230px}.terminal-panel{padding:16px}.brand em{display:none}}
+@media(max-width:1180px){.topbar{grid-template-columns:1fr}.brand{min-width:0}.operator-search{max-width:420px}.pulse-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.span-8,.span-7,.span-5,.span-4{grid-column:span 12}.hero-terminal,.lore-hero{grid-template-columns:1fr}.rankings-layout,.catalog-grid{grid-template-columns:1fr}.story-grid,.insight-grid,.catalog-deck{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){main{padding-left:16px;padding-right:16px}.topbar{position:relative;padding:12px 16px;backdrop-filter:none}.main-nav{width:100%;padding-bottom:4px}.page-heading h1{font-size:38px}.hero-copy h2{font-size:42px}.pulse-grid,.campaign-line,.player-grid,.story-grid,.insight-grid,.catalog-deck{grid-template-columns:1fr}.run-row-main{grid-template-columns:1fr}.run-row strong{text-align:left}.deck-grid{grid-template-columns:1fr}.section-head,.profile-hero,.run-header{flex-direction:column;align-items:flex-start}.facts-list dl>div{grid-template-columns:1fr}.facts-list dd{text-align:left}.chart-wrap.large{height:330px}.map-wrap{min-height:230px}.terminal-panel{padding:16px}.brand em{display:none}.hero-terminal:before{display:none}}
 `;
 }
 

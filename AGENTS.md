@@ -40,8 +40,27 @@ For UI, HUD, menu, settings, catalog, modal, typography, button, layout, or inte
 For combat VFX, particles, projectiles, boss attacks, shaders, impact feedback, animation, or visual gameplay effects, use:
 
 - `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-pixel-art-animation/SKILL.md` when sprite/frame animation, pixel-art motion, animated UI/icons/cards, or animation polish is involved
 - `.agents/skills/godot-combat-vfx/SKILL.md`
 - `.agents/skills/godot-visual-qa/SKILL.md`
+
+For pixel-art animation work that looks flat, generic, low-detail, blurry, lifeless, or too procedural, use:
+
+- `.agents/skills/godot-pixel-art-animation/SKILL.md`
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
+For layered scene/map/menu/phase/dimensional transitions where one image, texture, map, or frame is revealed under another, use:
+
+- `.agents/skills/godot-image-reveal-transitions/SKILL.md`
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
+For UMBRA/Fase 5 AI, predatory memory, prophecy, DQN weight export/import, dimension transmutation, ability gating, or Game Base-to-Godot mind compatibility, use:
+
+- `.agents/skills/godot-umbra-ai-port/SKILL.md`
+- `.agents/skills/godot-2d-collisions-ai/SKILL.md` when movement, steering, hitboxes, hazards, or spatial queries change
+- `.agents/skills/godot-combat-vfx/SKILL.md` and `.agents/skills/godot-visual-qa/SKILL.md` when VFX or visual readability changes
 
 For 2D pixel art particles, physics optimization, spatial hashing, and soft-body separation, use:
 

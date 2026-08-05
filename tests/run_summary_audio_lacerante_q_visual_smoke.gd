@@ -15,9 +15,15 @@ func _save_view(file_name: String) -> void:
 	await process_frame
 	await process_frame
 	var image: Image = root.get_texture().get_image()
-	assert(image != null and image.get_size() == Vector2i(1280, 720))
+	if image == null or image.get_width() < 1280 or image.get_height() < 720:
+		push_error("RUN_SUMMARY_VISUAL_FAIL invalid capture " + file_name)
+		quit(1)
+		return
 	var output = "res://.codex/" + file_name
-	assert(image.save_png(output) == OK)
+	if image.save_png(output) != OK:
+		push_error("RUN_SUMMARY_VISUAL_FAIL could not save " + file_name)
+		quit(1)
+		return
 	print("RUN_SUMMARY_VISUAL_OK " + ProjectSettings.globalize_path(output))
 
 
@@ -25,6 +31,9 @@ func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	game.selected_manifestation = 1
 	game._start_game()
+	game.startup_thanks_done = true
+	game.startup_thanks_timer = 0.0
+	game.startup_thanks_fading = false
 	game.manifestation_key = "lacerante"
 	game.time_alive = 754.0
 	game.enemies_killed = 287

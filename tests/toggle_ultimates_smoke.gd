@@ -60,8 +60,10 @@ func _run() -> void:
 	game.enemies.clear()
 	game.time_alive += 3.1
 	game._update_manifestation_secondaries(3.1)
-	_check(game._active_eletrica_secondary().is_empty(), "electric_empty_ring_not_finished")
-	_check(is_equal_approx(game.last_secondary_time, game.time_alive), "electric_empty_finish_cooldown_wrong")
+	_check(not game._active_eletrica_secondary().is_empty(), "electric_should_not_auto_finish_without_targets")
+	game._use_secondary_skill()
+	_check(game._active_eletrica_secondary().is_empty(), "electric_manual_cancel_after_empty_failed")
+	_check(is_equal_approx(game.last_secondary_time, game.time_alive), "electric_empty_manual_cancel_cooldown_wrong")
 
 	game.manifestation_secondaries.clear()
 	game.manifestation_key = "prismatica"
@@ -88,7 +90,7 @@ func _run() -> void:
 	_check(game._active_prismatica_secondary().is_empty(), "prism_duration_finish_failed")
 	_check(is_equal_approx(game.last_secondary_time, prism_second_activation_time), "prism_duration_stamp_changed")
 
-	print("TOGGLE_ULTIMATES_SMOKE_OK electric_tick=0.4s electric_drain_after=15s cancel=true cooldown_on_stop=true prism_cancel=true")
+	print("TOGGLE_ULTIMATES_SMOKE_OK electric_tick=0.4s electric_drain_after=18s cancel=true cooldown_on_stop=true prism_cancel=true")
 	game._cleanup_runtime_resources()
 	if game.music_player != null:
 		game.music_player.stop()

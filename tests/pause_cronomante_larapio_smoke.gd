@@ -23,14 +23,15 @@ func _run() -> void:
 	_expect(game.music_player.stream != null, "music_stream_missing")
 	if not game.music_player.playing:
 		game.music_player.play()
+	game.music_player.seek(6.0)
+	var paused_at: float = game.music_player.get_playback_position()
 	game._begin_pause_music_fade_out()
-	_expect(game.music_pause_fade_mode == "out", "fade_out_not_started")
-	game._update_music_pause_fade(3.1)
 	_expect(game.music_paused_by_pause, "music_not_marked_paused")
 	_expect(game.music_player.stream_paused, "stream_not_paused")
 	game._begin_pause_music_fade_in()
 	_expect(game.music_pause_fade_mode == "in", "fade_in_not_started")
 	_expect(not game.music_player.stream_paused, "stream_still_paused")
+	_expect(game.music_player.get_playback_position() >= paused_at - 0.30, "music_resume_restarted_track")
 	game._update_music_pause_fade(3.1)
 	_expect(game.music_pause_fade_mode == "", "fade_in_not_finished")
 

@@ -31,6 +31,11 @@ func _initialize() -> void:
 func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	await process_frame
+	game.startup_thanks_done = true
+	game.startup_thanks_fading = false
+	game.startup_thanks_timer = 0.0
+	if game.startup_thanks_canvas != null:
+		game.startup_thanks_canvas.visible = false
 	game._start_game()
 	game.score = 7615
 	game.card_cost = 1700
@@ -47,7 +52,8 @@ func _run() -> void:
 	buffed_card["cinzas_return_buff"] = true
 	buffed_card["cinzas_buff_stacks"] = 3
 	buffed_card["cinzas_burn_seed"] = 49975293
-	buffed_card["desc"] = String(buffed_card.get("desc", "")) + "\nRetorno das Cinzas x3: esta compra vem chamuscada com um bonus unico."
+	buffed_card["cinzas_bonus_summary"] = game._cinzas_return_bonus_summary(buffed_card)
+	buffed_card["desc"] = String(buffed_card.get("desc", "")) + "\nRetorno das Cinzas x3: %s." % String(buffed_card["cinzas_bonus_summary"])
 
 	game.shop_cards = [left_card, buffed_card, right_card]
 	game.shop_selected = 1
@@ -59,6 +65,8 @@ func _run() -> void:
 
 	_check(bool(buffed_card.get("cinzas_return_buff", false)), "Cinzas return buff property flag not set on card")
 	_check(int(buffed_card.get("cinzas_buff_stacks", 0)) == 3, "Cinzas buff stacks missing on card")
+	_check(String(buffed_card.get("cinzas_bonus_summary", "")) != "", "Cinzas visual smoke did not expose concrete bonus text")
+	_check(not String(buffed_card.get("desc", "")).contains("bonus unico"), "Cinzas visual smoke used generic bonus text")
 	_check(_visible_cinzas_holders() == 1, "Cinzas shader nodes should draw exactly one buffed card in the shop")
 
 	for loop in range(5):

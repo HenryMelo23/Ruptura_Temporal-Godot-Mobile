@@ -80,7 +80,7 @@ func _run() -> void:
 	game.queue_redraw()
 	await process_frame
 	game.manifest_transition_elapsed = game.MANIFEST_SPECTRUM_TRANSITION_TIME
-	game._process(0.016)
+	game._update_manifest_selection_flow(0.016)
 	_check(game.manifest_select_stage == game.MANIFEST_STAGE_AURA, "spectrum reveal did not finish on aura stage")
 	game.queue_redraw()
 	await process_frame

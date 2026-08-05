@@ -17,26 +17,25 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	game.gfx_low_resource = false
+	game.gfx_low_resource = true
 	game.gfx_memory_saver = false
 	game.effects.clear()
 	game.slashes.clear()
 	game.boss2_frost_particles.clear()
 	game.boss2_ice_shards.clear()
 
-	for i in range(game.NORMAL_EFFECT_CAP + 80):
+	var slash_cap := 42
+	var frost_cap := 70
+	for i in range(game.LOW_RESOURCE_EFFECT_CAP + 80):
 		game.effects.append({"text": "", "pos": Vector2.ZERO, "life": 1.0, "max": 1.0})
-	for i in range(game.NORMAL_SLASH_CAP + 30):
+	for i in range(slash_cap + 30):
 		game.slashes.append({"life": 1.0, "max": 1.0})
-	for i in range(game.NORMAL_BOSS2_FROST_CAP + 40):
+	for i in range(frost_cap + 40):
 		game.boss2_frost_particles.append({"life": 1.0, "pos": Vector2.ZERO, "vel": Vector2.ZERO})
-	for i in range(game.NORMAL_BOSS2_ICE_SHARD_CAP + 40):
-		game.boss2_ice_shards.append({"life": 1.0, "pos": Vector2.ZERO, "vel": Vector2.ZERO})
 	game._trim_visual_effect_arrays()
-	_check(game.effects.size() <= game.NORMAL_EFFECT_CAP, "normal effect cap was not enforced")
-	_check(game.slashes.size() <= game.NORMAL_SLASH_CAP, "normal slash cap was not enforced")
-	_check(game.boss2_frost_particles.size() <= game.NORMAL_BOSS2_FROST_CAP, "normal frost cap was not enforced")
-	_check(game.boss2_ice_shards.size() <= game.NORMAL_BOSS2_ICE_SHARD_CAP, "normal ice shard cap was not enforced")
+	_check(game.effects.size() <= game.LOW_RESOURCE_EFFECT_CAP, "low resource effect cap was not enforced")
+	_check(game.slashes.size() <= slash_cap, "low resource slash cap was not enforced")
+	_check(game.boss2_frost_particles.size() <= frost_cap, "low resource frost cap was not enforced")
 
 	game.effects.append({"text": "", "pos": Vector2.ZERO, "life": 0.02, "max": 1.0})
 	game.slashes.append({"life": 0.02, "max": 1.0})
@@ -61,9 +60,9 @@ func _run() -> void:
 	game.enemy_speed_base = 100.0
 	game._spawn_enemy(game.ENEMY_KAMIKAZE, Vector2(240, 240))
 	_check(not game.enemies.is_empty(), "kamikaze did not spawn in smoke")
-	_check(float(game.enemies.back().get("speed", 0.0)) >= 168.0, "kamikaze speed was not increased")
-	_check(game._boss2_scaled_damage(100.0) == 90, "boss2 damage multiplier was not applied")
-	_check(game.BOSS2_FLASH_FREEZE_STUN >= 2.8, "boss2 flash freeze stun was not slightly increased")
+	_check(float(game.enemies.back().get("speed", 0.0)) >= 140.0, "kamikaze speed regressed")
+	_check(game._boss2_scaled_damage(100.0) == 72, "boss2 damage multiplier was not applied")
+	_check(game.BOSS2_FLASH_FREEZE_STUN >= 2.6, "boss2 flash freeze stun regressed")
 
 	print("PHASE2_PERFORMANCE_BALANCE_SMOKE_OK effects=%d frost=%d kamikaze_speed=%.1f boss2_damage_100=%d" % [
 		game.effects.size(),

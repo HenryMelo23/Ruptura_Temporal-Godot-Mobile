@@ -62,15 +62,25 @@ func _run() -> void:
 	}, game.enemies[0])
 	_check(Vector2(game.enemies[0]["pos"]).x > before_push.x + 28.0, "weighted anchored projectile did not push the enemy back")
 
-	game.ancorada_spinning.clear()
-	game.enemies = [
-		{"uid": 2, "type": game.ENEMY_COMMON, "pos": game.player_pos + Vector2(92, 0), "hp": 200.0, "max_hp": 200.0, "speed": 80.0, "shoot_cd": 9.0, "ferrolho_root": 0.0, "stun": 0.0}
-	]
-	game.ancorada_spinning.append({"life": 5.0, "max": 5.0, "angle": 0.0, "damage_tick": 0.0, "hit": {}})
-	game._update_ancorada_spinning(0.0)
-	_check(float(game.enemies[0]["hp"]) < 200.0, "spinning anchors did not damage a nearby enemy")
-	_check(is_equal_approx(float(game.ancorada_spinning[0].get("life", 0.0)), 5.0), "spinning anchors did not keep the expected 5s duration on spawn")
-	_check(is_equal_approx(game._skill_cooldown(), 10.0), "Ancorada HAB1 cooldown is not 10s")
+	game.ancorada_anchored_active = false
+	game.last_skill_time = -999.0
+	var base_interval: float = game._current_attack_interval()
+	game._use_skill()
+	_check(game.ancorada_anchored_active, "Ancorada HAB1 did not enable anchored mode")
+	_check(game.last_skill_time == -999.0, "Ancorada should not start cooldown while anchoring")
+	_check(game._read_move() == Vector2.ZERO, "Ancorada anchored mode did not lock movement")
+	_check(game._current_attack_interval() < base_interval, "Ancorada anchored mode did not increase attack speed")
+	game.player_hp = 1000
+	game._damage_player(100, "smoke_ancorada")
+	_check(game.player_hp == 935, "Ancorada anchored mode did not reduce incoming damage by 35%")
+	game._fire_projectile("ancorada", 100.0, game.BULLET_SPEED, 1.0, false)
+	var anchored_bullet: Dictionary = game.bullets.back()
+	_check(float(anchored_bullet.get("damage", 0.0)) >= 135.0, "Ancorada anchored shot did not gain 35% base damage")
+	_check(float(anchored_bullet.get("visual_scale", 1.0)) >= 1.45, "Ancorada anchored shot did not grow 45%")
+	game._use_skill()
+	_check(not game.ancorada_anchored_active, "Ancorada HAB1 did not leave anchored mode")
+	_check(is_equal_approx(game.last_skill_time, game.time_alive), "Ancorada cooldown did not start after leaving anchored mode")
+	_check(is_equal_approx(game._skill_cooldown(), 5.0), "Ancorada HAB1 cooldown is not 5s after leaving")
 
 	game.enemies = [
 		{"uid": 3, "type": game.ENEMY_COMMON, "pos": game.player_pos + Vector2(140, 0), "hp": 300.0, "max_hp": 300.0, "speed": 80.0, "shoot_cd": 9.0, "ferrolho_root": 0.0, "stun": 0.0}
@@ -102,5 +112,5 @@ func _run() -> void:
 	game._cleanup_runtime_resources()
 	game.free()
 	await process_frame
-	print("ANCORADA_MANIFESTATION_SMOKE_OK passive=true overcap=true weighted_shot=true hab1=true ultimate=true")
+	print("ANCORADA_MANIFESTATION_SMOKE_OK passive=true overcap=true weighted_shot=true anchored_hab1=true ultimate=true")
 	quit(0)

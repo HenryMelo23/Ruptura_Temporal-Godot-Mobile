@@ -225,7 +225,7 @@ func _draw_status(viewport: Vector2, t: float) -> void:
 
 
 func _draw_version(viewport: Vector2) -> void:
-	var version := String(ProjectSettings.get_setting("application/config/version", "2.0.31b"))
+	var version := String(ProjectSettings.get_setting("application/config/version", "2.0.31c"))
 	draw_string(body_font, Vector2(18.0, viewport.y - 14.0), "v" + version, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.72, 0.88, 0.95, 0.62))
 
 

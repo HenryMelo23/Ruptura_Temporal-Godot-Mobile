@@ -103,11 +103,13 @@ func _capture(file_name: String) -> void:
 	await process_frame
 	await process_frame
 	var image: Image = root.get_texture().get_image()
-	_check(image != null and image.get_width() == 1280 and image.get_height() == 720, "invalid capture " + file_name)
+	_check(image != null and image.get_width() >= 1280 and image.get_height() >= 720, "invalid capture " + file_name)
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var output := OUT_DIR.path_join(file_name)
 	_check(image.save_png(output) == OK, "could not save " + file_name)
 	_check(_green_signal_count(image) > 60, "green Ancorada VFX is not visible in " + file_name)
+	if file_name.begins_with("ancorada_ultimate"):
+		_check(_orbit_anchor_signal_count(image) > 28, "orbiting Ancorada anchors are not visible in " + file_name)
 
 
 func _green_signal_count(image: Image) -> int:
@@ -116,5 +118,23 @@ func _green_signal_count(image: Image) -> int:
 		for x in range(0, image.get_width(), 8):
 			var c := image.get_pixel(x, y)
 			if c.g > 0.42 and c.g > c.r * 1.18 and c.g > c.b * 0.92:
+				count += 1
+	return count
+
+
+func _orbit_anchor_signal_count(image: Image) -> int:
+	var count := 0
+	var scale: float = minf(float(image.get_width()) / 1280.0, float(image.get_height()) / 720.0)
+	var center := Vector2(image.get_width(), image.get_height()) * 0.5
+	var inner := 68.0 * scale
+	var outer := 182.0 * scale
+	for y in range(0, image.get_height(), 4):
+		for x in range(0, image.get_width(), 4):
+			var pos := Vector2(x, y)
+			var distance := pos.distance_to(center)
+			if distance < inner or distance > outer:
+				continue
+			var c := image.get_pixel(x, y)
+			if c.g > 0.46 and c.g > c.r * 1.12 and c.g > c.b * 0.84:
 				count += 1
 	return count

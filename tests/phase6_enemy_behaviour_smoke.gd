@@ -181,8 +181,10 @@ func _run() -> void:
 	var lodario_sfx_players: Array = game.sfx_players.filter(func(player): return player.stream == game.audio_streams["Lodario-mov.mp3"])
 	_check(not lodario_sfx_players.is_empty(), "Lodario landing SFX did not play on ground contact")
 	var lodario_volume := db_to_linear(lodario_sfx_players[0].volume_db)
-	var expected_lodario_volume: float = game.vol_master * game.vol_sfx * game.LODARIO_SFX_VOLUME
-	_check(abs(lodario_volume - expected_lodario_volume) <= 0.002, "Lodario landing SFX volume is not 30 percent")
+	var lodario_scale: float = game._lodario_landing_sfx_volume(sound_lodario)
+	var expected_lodario_volume: float = game.vol_master * game.vol_sfx * lodario_scale
+	_check(lodario_scale >= game.LODARIO_SFX_VOLUME_MIN - 0.001 and lodario_scale <= game.LODARIO_SFX_VOLUME_MAX + 0.001, "Lodario landing SFX scale is outside 0 to 20 percent")
+	_check(abs(lodario_volume - expected_lodario_volume) <= 0.002, "Lodario landing SFX volume does not follow distance-scaled 15 to 35 percent mix")
 	var anim_pustule := {"type": game.ENEMY_FOSSIL_PUSTULE, "phase": 0.0, "pustule_spit_flash": 0.0}
 	game.time_alive = 0.0
 	var pustule_frame_a = game._enemy_texture(anim_pustule)

@@ -213,12 +213,18 @@ static func manifestation_details(host: Node, key: String) -> Dictionary:
 			}
 		"ancorada":
 			return {
-				"funcao": "Controle de territorio. Escolha uma area boa e lute perto das ancoras.",
-				"disparo": "ATK: planta uma ancora e dispara. Perto das ancoras, seus tiros ficam mais fortes.",
-				"habilidade": "Q - Onda Ancorada",
-				"desc_hab": "Solta uma onda a partir da Geovana, causando dano nos inimigos ao redor.",
-				"traco": "E - Dominio Fixo: cria uma area fixa. Dentro dela, sua cadencia melhora e projeteis inimigos ficam mais lentos.",
-				"risco": "Perde forca se voce for obrigada a fugir o tempo todo ou sair do territorio preparado."
+				"funcao": "Manifestacao de firmeza. Ficar parada por 3s inicia acumulo de critico: +2% a cada 3s ate +50%. Ao mover, o bonus some imediatamente.",
+				"disparo": "ATK - Bala Ancorada: quanto mais tempo Geovana fica parada, mais pesado o disparo fica. O empurrao comeca em 5px e cresce +2px a cada 2s, ate 50px.",
+				"habilidade": "Q - Modo Ancorado",
+				"desc_hab": "Liga/desliga o estado ancorado. Enquanto ativo, Geovana fica travada no lugar, recebe mais armadura, toma menos dano, ganha +20% velocidade de ataque, +35% dano base e disparos 45% maiores.",
+				"traco": "E - Queda das Ancoras: todos os inimigos em 380px recebem ancoras do ceu, sofrem 120% do dano atual e ficam enraizados por 3s. Funciona tambem em chefes.",
+				"risco": "A forca vem de escolher quando parar. Se mover cedo demais, perde critico e peso; ao sair do Modo Ancorado, Q entra em recarga de 5s.",
+				"info_rows": [
+					{"label": "PASSIVA", "text": "3s parada inicia carga. +2% critico a cada 3s, maximo +50%. Critico acima de 100% vira dano critico extra."},
+					{"label": "PESO", "text": "Disparo ganha empurrao enquanto parada: 5px base, +2px a cada 2s, maximo 50px."},
+					{"label": "Q", "text": "Ativacao manual. Trava Geovana, aumenta defesa, cadencia, dano base e tamanho do disparo. Desativar inicia cooldown de 5s."},
+					{"label": "E", "text": "Raio 380px. Ancoras caem do ceu, causam 120% do dano atual e enraizam por 3s, inclusive bosses."}
+				]
 			}
 		"cartografica":
 			return {
@@ -313,18 +319,18 @@ static func manifestation_details(host: Node, key: String) -> Dictionary:
 			}
 		"necronada":
 			return {
-				"funcao": "Manifestacao de Reconstrucao Mortuaria. Marca inimigos com Epitafio, captura Vestigios Mortuarios e transforma mortes recentes em Remanescentes temporarios.",
-				"disparo": "ATK - Epitafio Curto: projetil violeta e cian que causa dano moderado e empilha ate 5 camadas de Epitafio por 8s. O alvo mostra E xN acima da cabeca.",
-				"habilidade": "Q - Ossuario Temporal / Levante Reverso",
-				"desc_hab": "Se houver Vestigio no campo, captura para um dos 4 slots do Ossuario. Se o Ossuario ja tiver carga, consome um slot e invoca um Remanescente aliado por tempo limitado.",
-				"traco": "E - Horda Suprema: preserva os slots do Ossuario e invoca 4 necro-aliados supremos sorteados entre especies derrotadas/coletadas na run.",
-				"risco": "Durante 15s, todos os inimigos comuns, Arauto e chefes ignoram Geovana e atacam apenas a Horda Suprema. Kills feitas por Remanescentes nao geram novos Vestigios.",
+				"funcao": "Manifestacao de Reconstrucao Mortuaria e jardim funerario. A cada 4 ataques, Geovana cura uma pequena porcentagem da vida maxima; mortes deixam rosas azuis no chao quando ainda ha espaco para invocar.",
+				"disparo": "ATK - Epitafio Curto: projetil violeta/cian que marca Epitafio ate 5 camadas por 8s. O inimigo mostra E xN acima da cabeca e arcos concentricos indicam a profundidade.",
+				"habilidade": "Q - Levante do Ossuario",
+				"desc_hab": "Invoca todos os vestigios em forma de rosa dentro de 350px. Cada rosa vira um necro-aliado inspirado na especie morta, com limite de 7 aliados ativos.",
+				"traco": "REFORCO - Poeira Funeraria: arma o proximo ataque por 3s. Ele vira uma poeira inclinada ate 300px, causa dano leve, marca o alvo e faz necro-aliados focarem nele com mais dano e velocidade por 3s.",
+				"risco": "E - Onda Necrotica: carrega a cada 30 inimigos revividos e tem cooldown de 10s. A poeira percorre 420px, causa 120% perto da origem e cai ate 60% longe, aplicando slow e janela de critico.",
 				"info_rows": [
-					{"label": "EPITAFIO", "text": "Cada ATK marca o inimigo por 8s, ate 5 camadas. O badge E xN mostra stacks e os arcos concentricos mostram a profundeza."},
-					{"label": "OSSUARIO", "text": "Guarda ate 4 Vestigios. Ao lotar, o proximo capturado substitui o slot selecionado."},
-					{"label": "REM", "text": "Remanescentes copiam um traco do tipo de inimigo morto: predador, executor, bastiao, ritualista ou anomalia."},
-					{"label": "Q", "text": "Sem carga, captura o Vestigio mais proximo da mira. Com carga, invoca o Remanescente no ponto mirado."},
-					{"label": "E", "text": "Horda Suprema invoca 4 aliados do historico de especies da run. Se so uma especie foi registrada, os 4 aliados usam essa especie."}
+					{"label": "ROSAS", "text": "Maximo de 7 no mapa. Se nao houver espaco para novo aliado, uma morte nao cria rosa. As rosas nao sao coletaveis; HAB1 usa o raio."},
+					{"label": "ALIADOS", "text": "Necro-aliados usam movimento e habilidade inspirados no inimigo original, mas com dano, vida e duracao balanceados."},
+					{"label": "BOSS", "text": "Em boss fight, reforcar um alvo e acertar 4 ataques nele cria uma rosa se ainda houver espaco para invocar."},
+					{"label": "TP", "text": "Ao teleportar, solta poeira em leque na frente da Geovana, causando dano e empurrando inimigos."},
+					{"label": "E", "text": "Onda Necrotica nasce em Geovana, dissipa ao bater em alvos e perde dano com distancia. Alvos marcados recebem chance de critico."}
 				]
 			}
 	return {

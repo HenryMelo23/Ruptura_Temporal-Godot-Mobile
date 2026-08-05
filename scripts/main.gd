@@ -434,7 +434,7 @@ const LOW_RESOURCE_PUDDLE_CAP := 12
 const MEMORY_SAVER_RAIN_DROP_CAP := 42
 const MEMORY_SAVER_SNOW_FLAKE_CAP := 28
 const MEMORY_SAVER_PUDDLE_CAP := 6
-const LOW_RESOURCE_MAP_KEYS := ["map_phase_1", "map_phase_2", "map_phase_3", "map_phase_4", "map_phase_5", "map_phase_6"]
+const LOW_RESOURCE_MAP_KEYS := ["map_phase_1", "map_phase_2", "map_phase_3", "map_phase_4", "map_phase_5", "map_phase_6", "map_phase_7", "map_phase_9"]
 const WEATHER_PUDDLE_MIN_SIZE := 10.0
 const WEATHER_PUDDLE_MAX_SIZE := 30.0
 const WEATHER_PUDDLE_SLOW_MULT := 0.90
@@ -872,12 +872,14 @@ const BOSS5_PROJECTILE_DAMAGE_RATE := 0.075
 const BOSS5_PROJECTILE_DAMAGE_FLAT := 42.0
 const BOSS5_TELEPORT_DELAY := 0.72
 const BOSS5_TELEPORT_COOLDOWN := 9.0
-const BOSS5_TRANSMUTE_COOLDOWN := 18.0
+const BOSS5_TRANSMUTE_COOLDOWN := 60.0
 const BOSS5_SIPHON_DURATION := 4.6
 const BOSS5_SIPHON_COOLDOWN := 18.0
 const BOSS5_SIPHON_HEAL_RATE := 0.012
-const BOSS5_VORTEX_DURATION := 6.0
-const BOSS5_PRISON_DURATION := 3.4
+const BOSS5_VORTEX_DURATION := 8.0
+const BOSS5_VORTEX_WARNING := 1.5
+const BOSS5_PRISON_DURATION := 3.5
+const BOSS5_PRISON_WARNING := 1.5
 const BOSS5_MIASMA_DURATION := 4.5
 const BOSS5_DISCHARGE_WARNING := 0.85
 const BOSS5_DISCHARGE_DURATION := 1.25
@@ -886,6 +888,7 @@ const BOSS5_RAT_DURATION := 8.0
 const BOSS5_RAT_SPEED := 212.0
 const BOSS5_RAT_DAMAGE := 36
 const BOSS5_MEMORY_RESOURCE := "res://Game Base/memoria_predatoria_umbra.json"
+const BOSS5_DQN_WEIGHTS_PATH := "res://assets/weights/umbra_dqn_weights.json"
 const BOSS5_MEMORY_USER := "user://memoria_predatoria_umbra_mobile.json"
 const BOSS5_ACTIONS := ["FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE", "TELEPORTE_JUKE", "TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO", "VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "PRAGA_RATOS", "LASER_SOBRECARGA", "CAMINHO_ESPINHOS", "NENHUMA"]
 const PHASE4_RIFT_WARNING := 0.85
@@ -2471,6 +2474,22 @@ var boss5_decision_timer = 0.0
 var boss5_current_action = "NENHUMA"
 var boss5_dimension = "base"
 var boss5_last_dimension = ""
+var boss5_dimension_timer: float = 0.0
+var boss5_transmute_hangover: float = 0.0
+var phase5_transmute_active: bool = false
+var phase5_transmute_timer: float = 0.0
+var phase5_transmute_duration: float = 4.0
+var phase5_transmute_center: Vector2 = Vector2.ZERO
+var phase5_transmute_old_tex: Texture2D = null
+var phase5_transmute_new_tex: Texture2D = null
+var phase5_transmute_color: Color = Color(0.36, 1.0, 0.56)
+var phase5_transmute_particles: Array = []
+var boss5_thorns_pattern: String = "X"
+var boss5_bonus_shots: int = 0
+var boss5_rat_extras: int = 0
+var player_burn_stacks: int = 0
+var player_burn_timer: float = 0.0
+var player_burn_tick_timer: float = 0.0
 var boss5_mental_state = "OBSERVANDO"
 var boss5_velocity = Vector2.ZERO
 var boss5_target = WORLD_SIZE * 0.5
@@ -2482,6 +2501,7 @@ var boss5_ability_cooldowns: Dictionary = {}
 var boss5_memory_loaded = false
 var boss5_memory: Dictionary = {}
 var boss5_mobile_weights: Dictionary = {}
+var boss5_dqn_weights: Dictionary = {}
 var boss5_predatory_mods: Array = []
 var boss5_profile_confidence = 0.0
 var boss5_last_reward_action = ""
@@ -5818,6 +5838,8 @@ func _load_textures() -> void:
 	_register_texture("map_phase_4", base + "Fase4.png", true)
 	_register_texture("map_phase_5", base + "Fase5-1.png", true)
 	_register_texture("map_phase_6", base + "Fase6.png", true)
+	_register_texture("map_phase_7", base + "Fase7.png", true)
+	_register_texture("map_phase_9", base + "Fase9.png", true)
 	textures["startup_thanks"] = _safe_load(STARTUP_THANKS_TEXTURE_PATH)
 	textures["menu"] = _safe_load(base + "Menu_intro.png.png")
 	textures["choice_bg"] = _safe_load(base + "Escolha.png")
@@ -5935,7 +5957,7 @@ func _get_texture(key: String) -> Texture2D:
 
 
 func _release_unused_lazy_maps(active_key: String) -> void:
-	if not gfx_low_resource:
+	if not gfx_low_resource or phase5_transmute_active:
 		return
 	for key in LOW_RESOURCE_MAP_KEYS:
 		if key != active_key:
@@ -5970,7 +5992,10 @@ func _safe_load(path: String) -> Texture2D:
 		var image := Image.new()
 		var err = image.load(path)
 		if err == OK and not image.is_empty():
-			return ImageTexture.create_from_image(image)
+			var tex_res := ImageTexture.create_from_image(image)
+			if tex_res != null:
+				tex_res.resource_path = path
+			return tex_res
 	return null
 
 
@@ -7818,11 +7843,21 @@ func _reset_phase5_state() -> void:
 	phase5_hazards.clear()
 	phase5_rats.clear()
 	phase5_telegraphs.clear()
+	boss5_rat_extras = 0
+	player_burn_stacks = 0
+	player_burn_timer = 0.0
+	player_burn_tick_timer = 0.0
 	boss5_action_timer = BOSS5_ACTION_INTERVAL
 	boss5_decision_timer = 0.0
 	boss5_current_action = "NENHUMA"
 	boss5_dimension = "base"
 	boss5_last_dimension = ""
+	boss5_dimension_timer = 0.0
+	phase5_transmute_active = false
+	phase5_transmute_timer = 0.0
+	phase5_transmute_old_tex = null
+	phase5_transmute_new_tex = null
+	phase5_transmute_particles.clear()
 	boss5_mental_state = "OBSERVANDO"
 	boss5_velocity = Vector2.ZERO
 	boss5_target = WORLD_SIZE * 0.5
@@ -7943,6 +7978,11 @@ func _load_umbra_mobile_memory() -> void:
 	for action in BOSS5_ACTIONS:
 		boss5_mobile_weights[action] = 0.0
 	boss5_memory = _read_json_dict(BOSS5_MEMORY_RESOURCE)
+	boss5_dqn_weights = _read_json_dict(BOSS5_DQN_WEIGHTS_PATH)
+	if boss5_dqn_weights.is_empty():
+		print("UMBRA_MIND: DQN weights NOT found or empty at: ", BOSS5_DQN_WEIGHTS_PATH)
+	else:
+		print("UMBRA_MIND: DQN weights loaded successfully. Layers: ", boss5_dqn_weights.keys())
 	var learned := _read_json_dict(BOSS5_MEMORY_USER)
 	if learned.has("weights") and learned["weights"] is Dictionary:
 		for action in learned["weights"].keys():
@@ -14720,6 +14760,8 @@ func _update_contractual_timed_effects(delta: float) -> void:
 
 
 func _contractual_order_world_time_scale() -> float:
+	if current_phase == 5 and phase5_transmute_active:
+		return 0.25
 	if contractual_order.is_empty():
 		return 1.0
 	var age := float(contractual_order.get("real_age", contractual_order.get("age", 0.0)))
@@ -20643,6 +20685,18 @@ func _environment_player_slow_mult() -> float:
 			if String(hazard.get("kind", "")) == "boss4_collapse" and player_pos.distance_to(Vector2(hazard["pos"])) <= float(hazard.get("radius", 110.0)):
 				mult = min(mult, 0.74)
 				break
+	if current_phase == 5:
+		for hazard in phase5_hazards:
+			if String(hazard.get("kind", "")) == "prison":
+				var max_life := float(hazard.get("max", BOSS5_PRISON_DURATION))
+				var life := float(hazard.get("life", max_life))
+				var elapsed := max_life - life
+				var warning_dur := float(hazard.get("warning", BOSS5_PRISON_WARNING))
+				if elapsed >= warning_dur:
+					var radius_atual := float(hazard.get("radius_atual", hazard.get("radius_inicial", 45.0)))
+					if player_pos.distance_to(Vector2(hazard["pos"])) <= radius_atual:
+						mult = min(mult, 0.30)
+						break
 	return mult
 
 
@@ -20843,7 +20897,7 @@ func _boss_contact_damage() -> int:
 
 
 func _boss_hit_radius() -> float:
-	return 132.0 if current_phase == 4 else 82.0
+	return 132.0 if current_phase == 6 else (132.0 if current_phase == 4 else (30.0 if current_phase == 5 else 82.0))
 
 
 func _boss_absorb_time_stop_active() -> bool:
@@ -21986,6 +22040,49 @@ func _boss3_miasma_hides_boss_bar() -> bool:
 	return _boss3_miasma_active() and boss3_miasma_variant == 1
 
 
+func _is_umbra_miasma_active() -> bool:
+	if current_phase != 5 or is_dead or not boss_active:
+		return false
+	for hazard in phase5_hazards:
+		if String(hazard.get("kind", "")) == "miasma":
+			return true
+	return false
+
+
+func _umbra_miasma_hides_boss_bar() -> bool:
+	if not _is_umbra_miasma_active():
+		return false
+	return fmod(time_alive * 3.5, 0.8) < 0.40
+
+
+func _is_umbra_ability_active() -> bool:
+	if boss5_siphon_timer > 0.0:
+		return true
+	if not phase5_hazards.is_empty():
+		return true
+	return false
+
+
+func _boss5_dimension_map_key(dim: String) -> String:
+	match dim:
+		"vortice":
+			return "map_phase_1"
+		"gravidade":
+			return "map_phase_2"
+		"necrose":
+			return "map_phase_3"
+		"atrito":
+			return "map_phase_7"
+		"hemorragia":
+			return "map_phase_6"
+		"rastro":
+			return "map_phase_9"
+		"ressonancia":
+			return "map_phase_4"
+		_:
+			return "map_phase_5"
+
+
 func _start_boss3_miasma(forced_variant := 0) -> void:
 	if current_phase != 3 or not boss_active or boss_hp <= 0.0 or _boss3_miasma_active():
 		return
@@ -22240,7 +22337,36 @@ func _update_boss_phase5(delta: float) -> void:
 	boss5_save_timer = max(0.0, boss5_save_timer - delta)
 	boss5_teleport_cooldown = max(0.0, boss5_teleport_cooldown - delta)
 	boss5_transmute_cooldown = max(0.0, boss5_transmute_cooldown - delta)
+	boss5_transmute_hangover = max(0.0, boss5_transmute_hangover - delta)
 	boss5_siphon_cooldown = max(0.0, boss5_siphon_cooldown - delta)
+	if boss5_transmute_hangover > 0.0:
+		boss5_mental_state = "RESSACA DE TRANSMUTAÇÃO"
+	elif boss5_dimension != "base" and boss5_mental_state == "RESSACA DE TRANSMUTAÇÃO":
+		boss5_mental_state = "DIMENSAO " + boss5_dimension.to_upper()
+	if phase5_transmute_active:
+		var real_dt: float = contractual_order_real_delta if contractual_order_real_delta > 0.0 else delta
+		phase5_transmute_timer += real_dt
+		var p_count: int = phase5_transmute_particles.size()
+		for i in range(p_count):
+			var p: Dictionary = phase5_transmute_particles[i]
+			p["pos"] = Vector2(p["pos"]) + Vector2(p["vel"]) * real_dt
+			p["life"] = float(p["life"]) - real_dt
+		if phase5_transmute_timer >= phase5_transmute_duration:
+			phase5_transmute_active = false
+			phase5_transmute_particles.clear()
+
+	if boss5_dimension != "base":
+		boss5_dimension_timer = maxf(0.0, boss5_dimension_timer - delta)
+		if boss5_dimension_timer <= 0.0 and not _is_umbra_ability_active():
+			var old_dim: String = String(boss5_dimension)
+			boss5_last_dimension = old_dim
+			boss5_dimension = "base"
+			boss5_mental_state = "DIMENSAO BASE"
+			if old_dim == "rastro":
+				phase5_rats.clear()
+			_spawn_radial_particles(boss_pos, Color(0.36, 1.0, 0.56), 120)
+			_start_phase5_transmute_vfx(old_dim, "base", Color(0.36, 1.0, 0.56))
+			_add_text("RETORNO A BASE", boss_pos + Vector2(0, -130), Color(0.36, 1.0, 0.56), 1.2, 22)
 	for key in boss5_ability_cooldowns.keys():
 		boss5_ability_cooldowns[key] = max(0.0, float(boss5_ability_cooldowns[key]) - delta)
 	_sample_umbra_player_history(delta)
@@ -22308,24 +22434,192 @@ func _umbra_available_actions() -> Array:
 		available.append("TELEPORTE_JUKE")
 	if boss5_siphon_cooldown <= 0.0 and time_alive > 20.0:
 		available.append("SIFON")
-	if boss5_transmute_cooldown <= 0.0:
+	if boss5_transmute_cooldown <= 0.0 and (boss5_dimension == "base" or boss5_dimension_timer <= 25.0) and not _is_umbra_ability_active():
 		for action in ["TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO"]:
-			available.append(action)
-	for action in ["VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "CAMINHO_ESPINHOS", "PRAGA_RATOS", "LASER_SOBRECARGA"]:
-		if float(boss5_ability_cooldowns.get(action, 0.0)) <= 0.0:
-			available.append(action)
+			var target_dim: String = action.replace("TRANSMUTAR_", "").to_lower()
+			if target_dim != boss5_last_dimension and target_dim != boss5_dimension:
+				available.append(action)
+
+	if boss5_transmute_hangover <= 0.0:
+		match boss5_dimension:
+			"vortice":
+				if float(boss5_ability_cooldowns.get("VORTICE", 0.0)) <= 0.0:
+					available.append("VORTICE")
+			"gravidade":
+				if float(boss5_ability_cooldowns.get("PRISAO", 0.0)) <= 0.0:
+					available.append("PRISAO")
+			"necrose":
+				if float(boss5_ability_cooldowns.get("MIASMA", 0.0)) <= 0.0:
+					available.append("MIASMA")
+			"ressonancia":
+				if float(boss5_ability_cooldowns.get("DESCARGA_ELETRICA", 0.0)) <= 0.0:
+					available.append("DESCARGA_ELETRICA")
+			"hemorragia":
+				if float(boss5_ability_cooldowns.get("CAMINHO_ESPINHOS", 0.0)) <= 0.0:
+					available.append("CAMINHO_ESPINHOS")
+			"atrito":
+				if float(boss5_ability_cooldowns.get("LASER_SOBRECARGA", 0.0)) <= 0.0:
+					available.append("LASER_SOBRECARGA")
+			"rastro":
+				if float(boss5_ability_cooldowns.get("PRAGA_RATOS", 0.0)) <= 0.0:
+					available.append("PRAGA_RATOS")
 	return available
 
 
+func _is_hazard_active(kind: String) -> bool:
+	for h in phase5_hazards:
+		if h.get("kind", "") == kind:
+			return true
+	return false
+
+
+func _umbra_discretizar_estado() -> Array:
+	var feat_vida: float = boss_hp / max(1.0, boss_hp_max)
+	var feat_dist: float = boss_pos.distance_to(player_pos) / 2000.0
+	
+	var sob_fogo: float = 0.0
+	var ameaca_x: float = 0.0
+	var ameaca_y: float = 0.0
+	for d in bullets:
+		var bullet_pos: Vector2 = d.get("pos", Vector2.ZERO)
+		var bullet_dir: Vector2 = d.get("dir", Vector2.RIGHT).normalized()
+		var dx_tiro: float = boss_pos.x - bullet_pos.x
+		if (dx_tiro > 0.0 and bullet_dir.x > 0.0) or (dx_tiro < 0.0 and bullet_dir.x < 0.0):
+			var dist_h: float = boss_pos.distance_to(bullet_pos)
+			if dist_h < 400.0:
+				sob_fogo = 1.0
+				ameaca_x = bullet_dir.x
+				ameaca_y = bullet_dir.y
+				break
+
+	var vx_p: float = 0.0
+	var vy_p: float = 0.0
+	if phase5_player_history.size() >= 3:
+		var p1: Vector2 = phase5_player_history[phase5_player_history.size() - 3]
+		var p3: Vector2 = phase5_player_history[phase5_player_history.size() - 1]
+		vx_p = (p3.x - p1.x) / 30.0
+		vy_p = (p3.y - p1.y) / 30.0
+	var feat_vx: float = clampf(vx_p, -1.0, 1.0)
+	var feat_vy: float = clampf(vy_p, -1.0, 1.0)
+
+	var dx: float = (boss_pos.x - player_pos.x) / 1000.0
+	var dy: float = (boss_pos.y - player_pos.y) / 1000.0
+
+	var feat_vortice: float = 1.0 if _is_hazard_active("vortex") else 0.0
+	var feat_prisao: float = 1.0 if _is_hazard_active("prison") else 0.0
+	var feat_espinhos: float = 1.0 if _is_hazard_active("thorns") else 0.0
+	var feat_laser: float = 1.0 if _is_hazard_active("umbra_overload_laser") else 0.0
+	var feat_descarga: float = 1.0 if _is_hazard_active("discharge") else 0.0
+	var feat_miasma: float = 1.0 if _is_hazard_active("miasma") else 0.0
+	var feat_ratos: float = 1.0 if phase5_rats.size() > 0 else 0.0
+	var feat_parede: float = 1.0 if _is_hazard_active("siphon") else 0.0
+
+	var map_val: float = 0.0
+	var map_key: String = _boss5_dimension_map_key(boss5_dimension)
+	if not map_key.is_empty():
+		var num_str: String = ""
+		for c in map_key:
+			if c >= '0' and c <= '9':
+				num_str += c
+		if not num_str.is_empty():
+			map_val = float(num_str) / 10.0
+
+	var meio_w: float = WORLD_SIZE.x / 2.0
+	var meio_h: float = WORLD_SIZE.y / 2.0
+	var p_borda_x: float = minf(player_pos.x, WORLD_SIZE.x - player_pos.x) / maxf(1.0, meio_w)
+	var p_borda_y: float = minf(player_pos.y, WORLD_SIZE.y - player_pos.y) / maxf(1.0, meio_h)
+	var b_borda_x: float = minf(boss_pos.x, WORLD_SIZE.x - boss_pos.x) / maxf(1.0, meio_w)
+	var b_borda_y: float = minf(boss_pos.y, WORLD_SIZE.y - boss_pos.y) / maxf(1.0, meio_h)
+	
+	var p_canto: float = 0.0
+	if p_borda_x < 0.25 and p_borda_y < 0.25:
+		p_canto = 1.0
+	
+	var p_dist_centro: float = player_pos.distance_to(WORLD_SIZE * 0.5) / maxf(1.0, WORLD_SIZE.length() * 0.5)
+
+	return [
+		feat_vida, feat_dist, sob_fogo, feat_vx, feat_vy, dx, dy,
+		feat_vortice, feat_prisao, feat_espinhos, feat_laser, feat_descarga, feat_miasma, feat_ratos, feat_parede,
+		map_val, ameaca_x, ameaca_y, p_borda_x, p_borda_y, b_borda_x, b_borda_y, p_canto, p_dist_centro
+	]
+
+
+func _umbra_dqn_forward(features: Array) -> Array:
+	if boss5_dqn_weights.is_empty():
+		return []
+
+	var w1 = boss5_dqn_weights.get("net.0.weight", [])
+	var b1 = boss5_dqn_weights.get("net.0.bias", [])
+	var w2 = boss5_dqn_weights.get("net.2.weight", [])
+	var b2 = boss5_dqn_weights.get("net.2.bias", [])
+	var w3 = boss5_dqn_weights.get("net.4.weight", [])
+	var b3 = boss5_dqn_weights.get("net.4.bias", [])
+
+	if w1.is_empty() or b1.is_empty() or w2.is_empty() or b2.is_empty() or w3.is_empty() or b3.is_empty():
+		return []
+
+	# Layer 1: 24 -> 128
+	var out1 := []
+	out1.resize(128)
+	for j in range(128):
+		var sum_val: float = b1[j]
+		var w_row: Array = w1[j]
+		for i in range(24):
+			sum_val += float(features[i]) * float(w_row[i])
+		if sum_val < 0.0:
+			sum_val *= 0.01
+		out1[j] = sum_val
+
+	# Layer 2: 128 -> 64
+	var out2: Array = []
+	out2.resize(64)
+	for j in range(64):
+		var sum_val: float = b2[j]
+		var w_row: Array = w2[j]
+		for i in range(128):
+			sum_val += float(out1[i]) * float(w_row[i])
+		if sum_val < 0.0:
+			sum_val *= 0.01
+		out2[j] = sum_val
+
+	# Layer 3: 64 -> 22
+	var out3: Array = []
+	out3.resize(22)
+	for j in range(22):
+		var sum_val: float = b3[j]
+		var w_row: Array = w3[j]
+		for i in range(64):
+			sum_val += float(out2[i]) * float(w_row[i])
+		out3[j] = sum_val
+
+	return out3
+
+
 func _umbra_choose_action() -> String:
-	var available := _umbra_available_actions()
+	var available: Array = _umbra_available_actions()
 	if available.is_empty():
 		return "NENHUMA"
 	var dist: float = boss_pos.distance_to(player_pos)
 	var hp_ratio: float = boss_hp / max(1.0, boss_hp_max)
-	var scores := {}
-	for action in available:
-		scores[action] = float(boss5_mobile_weights.get(action, 0.0)) + rng.randf_range(-0.10, 0.10)
+	var scores: Dictionary = {}
+	
+	if not boss5_dqn_weights.is_empty():
+		var features: Array = _umbra_discretizar_estado()
+		var q_values: Array = _umbra_dqn_forward(features)
+		var acoes_base: Array = boss5_dqn_weights.get("acoes_base", [])
+		for action in available:
+			var score: float = 0.0
+			if acoes_base.has(action):
+				var idx: int = acoes_base.find(action)
+				if idx >= 0 and idx < q_values.size():
+					score = float(q_values[idx])
+			# Add mobile weights refinement
+			scores[action] = score + float(boss5_mobile_weights.get(action, 0.0)) + rng.randf_range(-0.05, 0.05)
+	else:
+		# Fallback to pure mobile weights
+		for action in available:
+			scores[action] = float(boss5_mobile_weights.get(action, 0.0)) + rng.randf_range(-0.10, 0.10)
+			
 	scores["ATAQUE"] = float(scores.get("ATAQUE", 0.0)) + (0.45 if dist > 220.0 else 0.10)
 	if available.has("SIFON"):
 		scores["SIFON"] = float(scores.get("SIFON", 0.0)) + (1.25 if hp_ratio < 0.34 else (-0.50 if hp_ratio > 0.72 else 0.20))
@@ -22345,11 +22639,13 @@ func _umbra_choose_action() -> String:
 		scores["CAMINHO_ESPINHOS"] = float(scores.get("CAMINHO_ESPINHOS", 0.0)) + (0.45 if dist < 520.0 else 0.18)
 	if available.has("PRAGA_RATOS") and phase5_rats.size() < 5:
 		scores["PRAGA_RATOS"] = float(scores.get("PRAGA_RATOS", 0.0)) + 0.38
+		
 	_apply_umbra_predatory_bias(scores, available, dist)
-	var best := String(available[0])
-	var best_score := -9999.0
+	
+	var best: String = String(available[0])
+	var best_score: float = -9999.0
 	for action in available:
-		var value := float(scores.get(action, -9999.0))
+		var value: float = float(scores.get(action, -9999.0))
 		if value > best_score:
 			best_score = value
 			best = String(action)
@@ -22408,33 +22704,126 @@ func _spawn_umbra_action(action: String) -> void:
 			_queue_umbra_teleport(_umbra_teleport_target(true), false)
 		"VORTICE":
 			boss5_ability_cooldowns["VORTICE"] = 12.0
-			phase5_hazards.append({"kind": "vortex", "pos": WORLD_SIZE * 0.5, "life": BOSS5_VORTEX_DURATION, "max": BOSS5_VORTEX_DURATION, "radius": 300.0, "tick": 0.0, "phase": rng.randf_range(0.0, TAU)})
+			phase5_hazards.append({
+				"kind": "vortex",
+				"pos": WORLD_SIZE * 0.5,
+				"life": BOSS5_VORTEX_DURATION,
+				"max": BOSS5_VORTEX_DURATION,
+				"warning": BOSS5_VORTEX_WARNING,
+				"radius_aviso": 150.0,
+				"radius_succao": 850.0,
+				"radius_dano": 150.0,
+				"tick": 0.0,
+				"phase": rng.randf_range(0.0, TAU)
+			})
 			_add_text("VORTICE", WORLD_SIZE * 0.5 + Vector2(0, -185), Color(0.35, 1.0, 0.76), 1.0, 20)
 		"PRISAO":
-			boss5_ability_cooldowns["PRISAO"] = 9.0
-			var target := _predict_player_pos(0.65).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
-			phase5_hazards.append({"kind": "prison", "pos": target, "life": BOSS5_PRISON_DURATION, "max": BOSS5_PRISON_DURATION, "radius": 76.0, "warning": 0.85, "triggered": false})
+			boss5_ability_cooldowns["PRISAO"] = 12.0
+			var spears: Array[Dictionary] = []
+			var num_spears: int = 180
+			for i in range(num_spears):
+				var ang: float = float(i) * (TAU / float(num_spears)) + rng.randf_range(-0.015, 0.015)
+				var spd: float = rng.randf_range(480.0, 560.0)
+				spears.append({
+					"pos": boss_pos,
+					"vel": Vector2.from_angle(ang) * spd,
+					"angle": ang,
+					"hit": false
+				})
+			phase5_hazards.append({
+				"kind": "sopro_artico",
+				"spears": spears,
+				"life": 3.2,
+				"max_life": 3.2
+			})
+			_play_sfx("Congelando.mp3", 0.05, 0.75, 1.0)
+			_add_text("SOPRO ÁRTICO", boss_pos + Vector2(0, -110), Color(0.35, 0.88, 1.0), 1.0, 22)
 		"MIASMA":
 			boss5_ability_cooldowns["MIASMA"] = 10.0
-			phase5_hazards.append({"kind": "miasma", "pos": player_pos, "life": BOSS5_MIASMA_DURATION, "max": BOSS5_MIASMA_DURATION, "radius": 168.0, "tick": 0.0, "phase": rng.randf_range(0.0, TAU)})
+			phase5_hazards.append({
+				"kind": "miasma",
+				"pos": player_pos,
+				"life": BOSS5_MIASMA_DURATION,
+				"max": BOSS5_MIASMA_DURATION,
+				"radius": 220.0,
+				"tick_timer": 0.0
+			})
+			_add_text("MIASMA TOXICO", player_pos + Vector2(0, -100), Color(0.25, 0.95, 0.30), 1.0, 20)
 		"DESCARGA_ELETRICA":
 			boss5_ability_cooldowns["DESCARGA_ELETRICA"] = 11.0
 			var dir: Vector2 = (_predict_player_pos(0.45) - boss_pos).normalized()
 			if dir.length() <= 0.01:
 				dir = Vector2.RIGHT
-			phase5_hazards.append({"kind": "discharge", "pos": boss_pos, "dir": dir, "life": BOSS5_DISCHARGE_WARNING + BOSS5_DISCHARGE_DURATION, "max": BOSS5_DISCHARGE_WARNING + BOSS5_DISCHARGE_DURATION, "warning": BOSS5_DISCHARGE_WARNING, "hit": false})
+			phase5_hazards.append({
+				"kind": "discharge",
+				"pos": boss_pos,
+				"dir": dir,
+				"life": 0.6 + 1.8,
+				"max": 2.4,
+				"warning": 0.6,
+				"radius": 380.0,
+				"abertura": 0.9,
+				"tick_timer": 0.0,
+				"seed": rng.randi()
+			})
+			_add_text("DESCARGA ELETRICA", boss_pos + Vector2(0, -110), Color(1.0, 0.90, 0.20), 1.0, 22)
 		"CAMINHO_ESPINHOS":
 			boss5_ability_cooldowns["CAMINHO_ESPINHOS"] = 8.0
-			var a: Vector2 = boss_pos
-			var b: Vector2 = _predict_player_pos(0.95).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
-			phase5_hazards.append({"kind": "thorns", "a": a, "b": b, "life": BOSS5_THORNS_DURATION, "max": BOSS5_THORNS_DURATION, "tick": 0.0, "phase": rng.randf_range(0.0, TAU)})
+			var current_pat: String = boss5_thorns_pattern
+			if boss5_thorns_pattern == "X":
+				boss5_thorns_pattern = "H3"
+			else:
+				boss5_thorns_pattern = "X"
+
+			var segments: Array[Dictionary] = []
+			var growth_dur: float = 1.8 if current_pat == "X" else 1.4
+			var exp_dur: float = 1.6
+			var max_w: float = 90.0 if current_pat == "X" else 80.0
+
+			if current_pat == "X":
+				var angles: Array[float] = [PI * 0.25, PI * 0.75, PI * 1.25, PI * 1.75]
+				for ang in angles:
+					var start_pt: Vector2 = boss_pos
+					var end_pt: Vector2 = boss_pos + Vector2.from_angle(ang) * 1200.0
+					segments.append({"a": start_pt, "b": end_pt})
+			else:
+				var y_ratios: Array[float] = [0.25, 0.50, 0.75]
+				for r in y_ratios:
+					var start_pt: Vector2 = Vector2(0.0, WORLD_SIZE.y * r)
+					var end_pt: Vector2 = Vector2(WORLD_SIZE.x, WORLD_SIZE.y * r)
+					segments.append({"a": start_pt, "b": end_pt})
+
+			phase5_hazards.append({
+				"kind": "thorns",
+				"pattern": current_pat,
+				"segments": segments,
+				"growth_duration": growth_dur,
+				"expansion_duration": exp_dur,
+				"life": growth_dur + exp_dur,
+				"max_life": growth_dur + exp_dur,
+				"max_width": max_w,
+				"current_width": 10.0,
+				"phase": "crescimento",
+				"hit_cooldown": 0.0
+			})
+			_add_text("ESPINHOS (%s)" % current_pat, boss_pos + Vector2(0, -110), Color(0.90, 0.15, 0.20), 1.0, 22)
 		"PRAGA_RATOS":
 			boss5_ability_cooldowns["PRAGA_RATOS"] = 12.0
 			_spawn_umbra_rats(5)
 		"LASER_SOBRECARGA":
-			boss5_ability_cooldowns["LASER_SOBRECARGA"] = 13.0
-			var laser_dir: Vector2 = (player_pos - boss_pos).normalized()
-			phase5_hazards.append({"kind": "discharge", "pos": boss_pos, "dir": laser_dir, "life": 2.6, "max": 2.6, "warning": 1.1, "hit": false, "laser": true})
+			boss5_ability_cooldowns["LASER_SOBRECARGA"] = 24.0
+			phase5_hazards.append({
+				"kind": "umbra_overload_laser",
+				"fase": "caminhando",
+				"stage_timer": 0.0,
+				"walk_timeout": 0.0,
+				"angle": (player_pos - WORLD_SIZE * 0.5).angle(),
+				"num_beams": 2,
+				"hit_cooldown": 0.0,
+				"life": 30.0,
+				"max_life": 30.0
+			})
+			_add_text("OVERDRIVE ATRITOR", boss_pos + Vector2(0, -110), Color(1.0, 0.20, 0.10), 1.0, 22)
 		_:
 			if action.begins_with("TRANSMUTAR_"):
 				_transmute_umbra_dimension(action)
@@ -22457,6 +22846,18 @@ func _predict_player_pos(seconds: float) -> Vector2:
 	return player_pos + velocity * seconds
 
 
+func _predict_player_pos_prison() -> Vector2:
+	if phase5_player_history.size() >= 5:
+		var idx: int = phase5_player_history.size() - 5
+		var older: Vector2 = Vector2(phase5_player_history[idx])
+		var vx: float = player_pos.x - older.x
+		var vy: float = player_pos.y - older.y
+		var alvo_x: float = player_pos.x + vx * 6.0
+		var alvo_y: float = player_pos.y + vy * 6.0
+		return Vector2(alvo_x, alvo_y).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
+	return player_pos.clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
+
+
 func _queue_umbra_teleport(target: Vector2, real := true) -> void:
 	boss5_teleport_cooldown = BOSS5_TELEPORT_COOLDOWN
 	phase5_telegraphs.append({"from": boss_pos, "to": target, "life": BOSS5_TELEPORT_DELAY, "max": BOSS5_TELEPORT_DELAY, "real": real, "phase": rng.randf_range(0.0, TAU)})
@@ -22477,23 +22878,100 @@ func _transmute_umbra_dimension(action: String) -> void:
 	var dimension := action.replace("TRANSMUTAR_", "").to_lower()
 	boss5_last_dimension = boss5_dimension
 	boss5_dimension = dimension
-	boss5_mental_state = "DIMENSAO " + dimension.to_upper()
+	boss5_dimension_timer = 40.0
+	boss5_transmute_hangover = 5.0
+	boss5_mental_state = "RESSACA DE TRANSMUTAÇÃO"
+	if boss5_last_dimension == "rastro" and dimension != "rastro":
+		phase5_rats.clear()
+
+	var dim_color := Color(0.36, 1.0, 0.56)
 	match dimension:
 		"vortice":
-			boss5_ability_cooldowns["VORTICE"] = 0.0
-		"gravidade", "ressonancia":
-			boss5_ability_cooldowns["DESCARGA_ELETRICA"] = 0.0
+			boss5_ability_cooldowns["VORTICE"] = 5.0
+			dim_color = Color(0.50, 0.20, 1.0)
+		"gravidade":
+			boss5_ability_cooldowns["PRISAO"] = 5.0
+			dim_color = Color(0.20, 0.40, 1.0)
+		"ressonancia":
+			boss5_ability_cooldowns["DESCARGA_ELETRICA"] = 5.0
+			dim_color = Color(1.0, 0.90, 0.20)
 		"necrose":
-			boss5_ability_cooldowns["MIASMA"] = 0.0
-		"hemorragia", "rastro":
-			boss5_ability_cooldowns["PRAGA_RATOS"] = 0.0
+			boss5_ability_cooldowns["MIASMA"] = 5.0
+			dim_color = Color(0.20, 0.95, 0.30)
+		"hemorragia":
+			boss5_ability_cooldowns["CAMINHO_ESPINHOS"] = 5.0
+			dim_color = Color(0.95, 0.10, 0.15)
+		"rastro":
+			boss5_ability_cooldowns["PRAGA_RATOS"] = 5.0
+			dim_color = Color(0.30, 0.85, 1.0)
 		"atrito":
-			boss5_ability_cooldowns["LASER_SOBRECARGA"] = 0.0
-	_spawn_radial_particles(boss_pos, Color(0.36, 1.0, 0.56), 28)
+			boss5_ability_cooldowns["LASER_SOBRECARGA"] = 5.0
+			dim_color = Color(1.0, 0.45, 0.10)
+	_spawn_radial_particles(boss_pos, dim_color, 400)
+	_start_phase5_transmute_vfx(boss5_last_dimension, dimension, dim_color)
 	_queue_umbra_teleport(_umbra_teleport_target(false), true)
 
 
+func _start_phase5_transmute_vfx(old_dim: String, new_dim: String, dim_color: Color) -> void:
+	var old_key: String = _boss5_dimension_map_key(old_dim)
+	var new_key: String = _boss5_dimension_map_key(new_dim)
+	var old_tex: Texture2D = _get_texture(old_key)
+	var new_tex: Texture2D = _get_texture(new_key)
+	if old_tex == null:
+		old_tex = _get_texture("map_phase_5")
+	if new_tex == null:
+		new_tex = _get_texture("map_phase_5")
+
+	phase5_transmute_active = true
+	phase5_transmute_timer = 0.0
+	phase5_transmute_duration = 4.0
+	phase5_transmute_center = player_pos
+	phase5_transmute_old_tex = old_tex
+	phase5_transmute_new_tex = new_tex
+	phase5_transmute_color = dim_color
+	phase5_transmute_particles.clear()
+
+	for i in range(120):
+		var ang: float = rng.randf_range(0.0, TAU)
+		var speed: float = rng.randf_range(500.0, 950.0)
+		var radius: float = rng.randf_range(16.0, 36.0)
+		phase5_transmute_particles.append({
+			"pos": boss_pos,
+			"vel": Vector2.from_angle(ang) * speed,
+			"size": radius,
+			"max_life": 3.5,
+			"life": 3.5
+		})
+
+
+func _get_umbra_transmute_material() -> ShaderMaterial:
+	var shader_path := "res://shaders/transitions/umbra_transmute.gdshader"
+	var mat: ShaderMaterial = phase_transition_materials_cache.get(shader_path, null)
+	if mat == null:
+		mat = ShaderMaterial.new()
+		if ResourceLoader.exists(shader_path):
+			mat.shader = load(shader_path) as Shader
+		phase_transition_materials_cache[shader_path] = mat
+	return mat
+
+
 func _move_umbra(delta: float) -> void:
+	for h in phase5_hazards:
+		if h.get("kind") == "umbra_overload_laser":
+			var fase_str: String = String(h.get("fase", ""))
+			if fase_str == "caminhando":
+				boss5_target = WORLD_SIZE * 0.5
+				var to_target: Vector2 = boss5_target - boss_pos
+				var max_spd: float = 240.0
+				var desired_vel: Vector2 = to_target.normalized() * max_spd if to_target.length() > 8.0 else Vector2.ZERO
+				boss5_velocity = boss5_velocity.lerp(desired_vel, clampf(delta * 8.0, 0.0, 1.0))
+				boss_pos = (boss_pos + boss5_velocity * delta).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
+				return
+			else:
+				boss_pos = WORLD_SIZE * 0.5
+				boss5_velocity = Vector2.ZERO
+				return
+
 	var dist: float = boss_pos.distance_to(player_pos)
 	var desired := Vector2.ZERO
 	match _umbra_movement_mode(dist):
@@ -22547,46 +23025,285 @@ func _update_phase5_hazards(delta: float) -> void:
 		match kind:
 			"vortex":
 				var center := Vector2(hazard["pos"])
-				var radius := float(hazard.get("radius", 300.0))
-				var dist := player_pos.distance_to(center)
-				if dist < radius and dist > 4.0:
-					var pull := (center - player_pos).normalized() * (240.0 * (1.0 - dist / radius)) * delta
-					player_pos = (player_pos + _hostile_knockback(pull)).clamp(Vector2(55, 55), WORLD_SIZE - Vector2(55, 55))
-				_hazard_tick_damage(hazard, delta, radius, int(player_hp_max * 0.035 + 20), "umbra_vortex")
+				var max_life := float(hazard.get("max", BOSS5_VORTEX_DURATION))
+				var life := float(hazard.get("life", max_life))
+				var elapsed := max_life - life
+				var warning_dur := float(hazard.get("warning", BOSS5_VORTEX_WARNING))
+				if elapsed >= warning_dur:
+					var radius_succao := float(hazard.get("radius_succao", 850.0))
+					var radius_dano := float(hazard.get("radius_dano", 150.0))
+					var dist := player_pos.distance_to(center)
+					if dist < radius_succao and dist > 4.0:
+						var pull_speed := 280.0 * (1.0 - clampf(dist / radius_succao, 0.0, 1.0))
+						var pull := (center - player_pos).normalized() * pull_speed * delta
+						player_pos = (player_pos + _hostile_knockback(pull)).clamp(Vector2(55, 55), WORLD_SIZE - Vector2(55, 55))
+					_hazard_tick_damage(hazard, delta, radius_dano, int(player_hp_max * 0.035 + 20), "umbra_vortex")
 			"prison":
-				if float(hazard.get("max", 0.0)) - float(hazard.get("life", 0.0)) >= float(hazard.get("warning", 0.85)) and not bool(hazard.get("triggered", false)):
-					if player_pos.distance_to(Vector2(hazard["pos"])) <= float(hazard.get("radius", 76.0)):
-						player_stun_timer = max(player_stun_timer, _hostile_control_duration(1.35))
-						_damage_player(int(player_hp_max * 0.045 + 30), "umbra_prison")
-						hazard["triggered"] = true
-						_umbra_learn("PRISAO", 0.35)
-					if _damage_remote_player_in_radius(Vector2(hazard["pos"]), float(hazard.get("radius", 76.0)), int(player_hp_max * 0.045 + 30), "umbra_prison", hazard, "triggered_remote"):
-						_umbra_learn("PRISAO", 0.18)
+				var max_life := float(hazard.get("max", BOSS5_PRISON_DURATION))
+				var life := float(hazard.get("life", max_life))
+				var elapsed := max_life - life
+				var warning_dur := float(hazard.get("warning", BOSS5_PRISON_WARNING))
+				if elapsed >= warning_dur:
+					var active_elapsed := elapsed - warning_dur
+					var active_total := max_life - warning_dur
+					var r_min := float(hazard.get("radius_inicial", 45.0))
+					var r_max := float(hazard.get("radius_max", 180.0))
+					var prog: float = clampf(active_elapsed / maxf(0.01, active_total), 0.0, 1.0)
+					var radius_atual: float = lerpf(r_min, r_max, prog) + sin(time_alive * 7.0) * 8.0
+					hazard["radius_atual"] = radius_atual
+					var dist := player_pos.distance_to(Vector2(hazard["pos"]))
+					if dist <= radius_atual:
+						hazard["text_timer"] = float(hazard.get("text_timer", 0.0)) - delta
+						if float(hazard["text_timer"]) <= 0.0:
+							hazard["text_timer"] = 1.2
+							_add_text("ZERO ABSOLUTO!", player_pos + Vector2(0, -50), Color(0.40, 0.90, 1.0), 0.85, 18)
+						if not bool(hazard.get("triggered", false)):
+							_damage_player(int(player_hp_max * 0.045 + 30), "umbra_prison")
+							hazard["triggered"] = true
+							_umbra_learn("PRISAO", 0.35)
+						if _damage_remote_player_in_radius(Vector2(hazard["pos"]), radius_atual, int(player_hp_max * 0.045 + 30), "umbra_prison", hazard, "triggered_remote"):
+							_umbra_learn("PRISAO", 0.18)
 			"miasma":
-				_hazard_tick_damage(hazard, delta, float(hazard.get("radius", 168.0)), int(player_hp_max * 0.028 + 18), "umbra_miasma")
+				hazard["pos"] = Vector2(hazard.get("pos", player_pos)).lerp(player_pos, 0.12)
+				hazard["tick_timer"] = float(hazard.get("tick_timer", 0.0)) - delta
+				if float(hazard["tick_timer"]) <= 0.0:
+					hazard["tick_timer"] = 1.0
+					var dmg: int = int(maxf(1.0, player_hp_max * 0.01))
+					_damage_player(dmg, "umbra_miasma")
+					_add_text("NECROSE -%d" % dmg, player_pos + Vector2(0, -50), Color(0.20, 0.95, 0.25), 0.85, 18)
+					_umbra_learn("MIASMA", 0.15)
+				_damage_remote_player_in_radius(Vector2(hazard["pos"]), float(hazard.get("radius", 220.0)), int(maxf(1.0, player_hp_max * 0.01)), "umbra_miasma", hazard, "tick_remote")
 			"siphon":
 				_hazard_tick_damage(hazard, delta, float(hazard.get("radius", 190.0)), int(player_hp_max * 0.020 + 12), "umbra_siphon")
 			"discharge":
-				var elapsed := float(hazard.get("max", 1.0)) - float(hazard.get("life", 0.0))
-				if elapsed >= float(hazard.get("warning", BOSS5_DISCHARGE_WARNING)) and not bool(hazard.get("hit", false)):
-					var start := Vector2(hazard["pos"])
-					var dir := Vector2(hazard.get("dir", Vector2.RIGHT)).normalized()
-					if _distance_to_segment(player_pos, start - dir * 80.0, start + dir * 980.0) <= (42.0 if bool(hazard.get("laser", false)) else 28.0):
-						_damage_player(int(player_hp_max * (0.12 if bool(hazard.get("laser", false)) else 0.08) + 48), "umbra_discharge")
-						player_stun_timer = max(player_stun_timer, _hostile_control_duration(0.55))
-						_umbra_learn("DESCARGA_ELETRICA", 0.28)
-					_damage_remote_player_on_segment(start - dir * 80.0, start + dir * 980.0, 42.0 if bool(hazard.get("laser", false)) else 28.0, int(player_hp_max * (0.12 if bool(hazard.get("laser", false)) else 0.08) + 48), "umbra_discharge", hazard, "hit_remote")
-					hazard["hit"] = true
+				var max_life: float = float(hazard.get("max", 2.4))
+				var life: float = float(hazard.get("life", 0.0))
+				var elapsed: float = max_life - life
+				var warning_dur: float = float(hazard.get("warning", 0.6))
+				if elapsed >= warning_dur:
+					hazard["pos"] = boss_pos
+					var origin: Vector2 = Vector2(hazard["pos"])
+					var dir: Vector2 = Vector2(hazard.get("dir", Vector2.RIGHT)).normalized()
+					var max_radius: float = float(hazard.get("radius", 380.0))
+					var half_abertura: float = float(hazard.get("abertura", 0.9)) * 0.5
+
+					var dist: float = player_pos.distance_to(origin)
+					var angle_to_player: float = (player_pos - origin).angle()
+					var diff_ang: float = abs(wrapf(angle_to_player - dir.angle(), -PI, PI))
+
+					var in_cone: bool = (dist <= max_radius) and (diff_ang <= half_abertura)
+					hazard["in_cone"] = in_cone
+					hazard["diff_ang"] = diff_ang
+					hazard["dist"] = dist
+
+					if in_cone:
+						hazard["tick_timer"] = float(hazard.get("tick_timer", 0.0)) - delta
+						if float(hazard["tick_timer"]) <= 0.0:
+							hazard["tick_timer"] = 0.20
+							_damage_player(12, "umbra_discharge")
+							player_stun_timer = maxf(player_stun_timer, 0.40)
+							_add_text("DESCARGA!", player_pos + Vector2(0, -50), Color(1.0, 0.90, 0.20), 0.75, 18)
+							_umbra_learn("DESCARGA_ELETRICA", 0.25)
+						_damage_remote_player_in_radius(origin, max_radius, 12, "umbra_discharge", hazard, "discharge_remote")
 			"thorns":
-				hazard["tick"] = float(hazard.get("tick", 0.0)) - delta
-				if float(hazard["tick"]) <= 0.0:
-					hazard["tick"] = 0.45
-					if _distance_to_segment(player_pos, Vector2(hazard["a"]), Vector2(hazard["b"])) <= 36.0:
-						_damage_player(int(player_hp_max * 0.035 + 26), "umbra_thorns")
-						_umbra_learn("CAMINHO_ESPINHOS", 0.18)
-					if _damage_remote_player_on_segment(Vector2(hazard["a"]), Vector2(hazard["b"]), 36.0, int(player_hp_max * 0.035 + 26), "umbra_thorns"):
-						_umbra_learn("CAMINHO_ESPINHOS", 0.09)
+				var max_life: float = float(hazard.get("max_life", 3.4))
+				var life: float = float(hazard.get("life", max_life))
+				var elapsed: float = max_life - life
+				var growth_dur: float = float(hazard.get("growth_duration", 1.8))
+				var exp_dur: float = float(hazard.get("expansion_duration", 1.6))
+				var max_w: float = float(hazard.get("max_width", 90.0))
+
+				if elapsed < growth_dur:
+					hazard["phase"] = "crescimento"
+					hazard["current_width"] = 10.0
+					hazard["in_expansion"] = false
+				else:
+					hazard["phase"] = "expansao"
+					hazard["in_expansion"] = true
+					var exp_elapsed: float = elapsed - growth_dur
+					var prog: float = clampf(exp_elapsed / maxf(0.01, exp_dur), 0.0, 1.0)
+					var curr_w: float = lerpf(10.0, max_w, prog)
+					hazard["current_width"] = curr_w
+
+					hazard["hit_cooldown"] = float(hazard.get("hit_cooldown", 0.0)) - delta
+					if float(hazard["hit_cooldown"]) <= 0.0:
+						var segs: Array = hazard.get("segments", [])
+						var hit_detected: bool = false
+						for seg in segs:
+							var a: Vector2 = Vector2(seg["a"])
+							var b: Vector2 = Vector2(seg["b"])
+							if _distance_to_segment(player_pos, a, b) <= curr_w * 0.5:
+								hit_detected = true
+								break
+						if hit_detected:
+							hazard["hit_cooldown"] = 1.0
+							_damage_player(50, "umbra_thorns")
+							player_stun_timer = maxf(player_stun_timer, 4.0)
+							boss5_bonus_shots += 2
+							_add_text("ESPINHOS +2 TIROS!", player_pos + Vector2(0, -60), Color(1.0, 0.20, 0.20), 1.0, 20)
+							_umbra_learn("CAMINHO_ESPINHOS", 0.35)
+			"sopro_artico":
+				hazard["life"] = float(hazard.get("life", 0.0)) - delta
+				var spears: Array = hazard.get("spears", [])
+				var active_spears: Array = []
+				for s_item in spears:
+					if not s_item is Dictionary:
+						continue
+					var sp: Dictionary = s_item
+					if bool(sp.get("hit", false)):
+						continue
+					var p_pos: Vector2 = Vector2(sp.get("pos", boss_pos)) + Vector2(sp.get("vel", Vector2.ZERO)) * delta
+					sp["pos"] = p_pos
+					if p_pos.distance_to(boss_pos) > 1600.0:
+						continue
+					active_spears.append(sp)
+
+					if p_pos.distance_to(player_pos) <= 22.0:
+						sp["hit"] = true
+						player_stun_timer = 1.5
+						player_freeze_visual_timer = 1.5
+						player_freeze_visual_duration = 1.5
+						player_control_immunity_timer = 0.0
+						_damage_player(12, "sopro_artico")
+						_play_sfx("Congelando.mp3", 0.05, 0.75, 1.0)
+						_add_text("CONGELADO!", player_pos + Vector2(0, -42), Color(0.2, 0.85, 1.0), 0.8, 20)
+						_spawn_radial_particles(player_pos, Color(0.6, 0.9, 1.0), 6)
+				hazard["spears"] = active_spears
+
+			"umbra_overload_laser":
+				var fase: String = String(hazard.get("fase", "caminhando"))
+				var st: float = float(hazard.get("stage_timer", 0.0))
+				var curr_ang: float = float(hazard.get("angle", 0.0))
+				var hit_cd: float = float(hazard.get("hit_cooldown", 0.0)) - delta
+				hazard["hit_cooldown"] = hit_cd
+
+				match fase:
+					"caminhando":
+						var w_t: float = float(hazard.get("walk_timeout", 0.0)) + delta
+						hazard["walk_timeout"] = w_t
+						if boss_pos.distance_to(WORLD_SIZE * 0.5) <= 35.0 or w_t >= 4.0:
+							boss_pos = WORLD_SIZE * 0.5
+							hazard["fase"] = "esfera_carga_1"
+							hazard["stage_timer"] = 1.2
+					"esfera_carga_1":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						if st <= 0.0:
+							hazard["fase"] = "laser_2"
+							hazard["stage_timer"] = 3.0
+							hazard["num_beams"] = 2
+					"laser_2":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						curr_ang += PI * delta
+						hazard["angle"] = curr_ang
+						_check_laser_hit(hazard, 2, curr_ang, 38.0, 16)
+						if st <= 0.0:
+							hazard["fase"] = "esfera_recolher_1"
+							hazard["stage_timer"] = 0.8
+					"esfera_recolher_1":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						if st <= 0.0:
+							hazard["fase"] = "laser_4_aviso"
+							hazard["stage_timer"] = 0.6
+							hazard["num_beams"] = 4
+					"laser_4_aviso":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						if st <= 0.0:
+							hazard["fase"] = "laser_4"
+							hazard["stage_timer"] = 4.0
+							hazard["num_beams"] = 4
+					"laser_4":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						curr_ang -= PI * delta
+						hazard["angle"] = curr_ang
+						_check_laser_hit(hazard, 4, curr_ang, 32.0, 16)
+						if st <= 0.0:
+							hazard["fase"] = "esfera_recolher_2"
+							hazard["stage_timer"] = 0.8
+					"esfera_recolher_2":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						if st <= 0.0:
+							hazard["fase"] = "laser_6_aviso"
+							hazard["stage_timer"] = 0.48
+							hazard["num_beams"] = 6
+					"laser_6_aviso":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						if st <= 0.0:
+							hazard["fase"] = "laser_6_ccw"
+							hazard["stage_timer"] = 3.0
+							hazard["num_beams"] = 6
+					"laser_6_ccw":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						curr_ang -= PI * delta
+						hazard["angle"] = curr_ang
+						_check_laser_hit(hazard, 6, curr_ang, 26.0, 16)
+						if st <= 0.0:
+							hazard["fase"] = "laser_6_cw"
+							hazard["stage_timer"] = 3.0
+							hazard["num_beams"] = 6
+					"laser_6_cw":
+						boss_pos = WORLD_SIZE * 0.5
+						st -= delta
+						hazard["stage_timer"] = st
+						curr_ang += PI * delta
+						hazard["angle"] = curr_ang
+						_check_laser_hit(hazard, 6, curr_ang, 26.0, 16)
+						if st <= 0.0:
+							hazard["fase"] = "fim"
+							hazard["life"] = 0.0
+	if player_burn_stacks > 0:
+		player_burn_timer -= delta
+		player_burn_tick_timer -= delta
+		if player_burn_tick_timer <= 0.0:
+			player_burn_tick_timer = 1.0
+			var burn_dmg: int = int(maxf(1.0, float(player_hp) * 0.02) * float(player_burn_stacks))
+			_damage_player(burn_dmg, "umbra_incineration")
+			_add_text("FOGO -%d (x%d)" % [burn_dmg, player_burn_stacks], player_pos + Vector2(0, -70), Color(1.0, 0.35, 0.05), 0.85, 18)
+		if player_burn_timer <= 0.0:
+			player_burn_stacks = 0
 	phase5_hazards = phase5_hazards.filter(func(hazard): return float(hazard.get("life", 0.0)) > 0.0)
+
+
+func _check_laser_hit(hazard: Dictionary, num_beams: int, curr_ang: float, width: float, damage: int) -> void:
+	if float(hazard.get("hit_cooldown", 0.0)) > 0.0:
+		return
+	var origin: Vector2 = WORLD_SIZE * 0.5
+	var step_ang: float = TAU / float(num_beams)
+	var hit_detected: bool = false
+	var v_player: Vector2 = player_pos - origin
+
+	for b in range(num_beams):
+		var b_ang: float = curr_ang + float(b) * step_ang
+		var b_dir: Vector2 = Vector2.from_angle(b_ang)
+		var dot: float = v_player.dot(b_dir)
+		if dot > 0.0:
+			var perp_dist: float = (v_player - b_dir * dot).length()
+			if perp_dist <= width * 0.5:
+				hit_detected = true
+				break
+
+	if hit_detected:
+		hazard["hit_cooldown"] = 0.12
+		_damage_player(damage, "umbra_overload_laser")
+		player_burn_stacks += 1
+		player_burn_timer = 4.0
+		_add_text("FOGO (x%d)!" % player_burn_stacks, player_pos + Vector2(0, -50), Color(1.0, 0.40, 0.10), 0.75, 18)
+		_umbra_learn("LASER_SOBRECARGA", 0.25)
 
 
 func _hazard_tick_damage(hazard: Dictionary, delta: float, radius: float, damage: int, source: String) -> void:
@@ -22601,33 +23318,72 @@ func _hazard_tick_damage(hazard: Dictionary, delta: float, radius: float, damage
 		_umbra_learn(boss5_current_action, 0.08)
 
 
-func _spawn_umbra_rats(count: int) -> void:
-	for i in range(count):
-		var angle := rng.randf_range(0.0, TAU)
-		phase5_rats.append({"pos": boss_pos + Vector2.from_angle(angle) * rng.randf_range(32.0, 88.0), "life": BOSS5_RAT_DURATION, "hit_cd": rng.randf_range(0.1, 0.4), "phase": angle})
-	_add_text("PRAGA", boss_pos + Vector2(0, -120), Color(0.56, 1.0, 0.28), 1.0, 20)
+func _spawn_umbra_rats(_count: int) -> void:
+	var corners: Array[Vector2] = [
+		Vector2(100.0, 100.0),
+		Vector2(WORLD_SIZE.x - 100.0, 100.0),
+		Vector2(100.0, WORLD_SIZE.y - 100.0),
+		Vector2(WORLD_SIZE.x - 100.0, WORLD_SIZE.y - 100.0)
+	]
+	var total_to_spawn: int = 4 + boss5_rat_extras
+
+	var spawned: int = 0
+	for i in range(total_to_spawn):
+		if phase5_rats.size() >= 40:
+			break
+		var corner_idx: int = i % 4
+		var corner_pos: Vector2 = corners[corner_idx]
+		var offset: Vector2 = Vector2(rng.randf_range(-18.0, 18.0), rng.randf_range(-18.0, 18.0))
+		var speed_mult: float = minf(1.4, 0.84 + float(boss5_rat_extras) * 0.048)
+		phase5_rats.append({
+			"pos": corner_pos + offset,
+			"corner_idx": corner_idx,
+			"life": 5.0,
+			"max_life": 5.0,
+			"size": 30.0,
+			"speed": 280.0 * speed_mult,
+			"phase": rng.randf_range(0.0, TAU)
+		})
+		spawned += 1
+
+	_add_text("PRAGA DOS RATOS (%d)" % spawned, boss_pos + Vector2(0, -120), Color(0.30, 0.80, 1.0), 1.0, 20)
 
 
 func _update_phase5_rats(delta: float) -> void:
+	if boss5_dimension != "rastro" and current_phase == 5:
+		phase5_rats.clear()
+		return
+
 	for rat in phase5_rats:
-		rat["life"] = float(rat.get("life", 0.0)) - delta
-		rat["hit_cd"] = max(0.0, float(rat.get("hit_cd", 0.0)) - delta)
+		var life: float = float(rat.get("life", 0.0)) - delta
+		rat["life"] = life
+		if life <= 0.0:
+			continue
+
 		rat["phase"] = float(rat.get("phase", 0.0)) + delta * 8.0
-		var pos := Vector2(rat["pos"])
-		var dir := (player_pos - pos).normalized()
-		pos = (pos + dir * BOSS5_RAT_SPEED * delta).clamp(Vector2(30, 30), WORLD_SIZE - Vector2(30, 30))
+		var pos: Vector2 = Vector2(rat["pos"])
+		var dir: Vector2 = (player_pos - pos).normalized()
+		var speed: float = float(rat.get("speed", 235.0))
+		pos = (pos + dir * speed * delta).clamp(Vector2(30, 30), WORLD_SIZE - Vector2(30, 30))
 		rat["pos"] = pos
-		if pos.distance_to(player_pos) <= 34.0 and float(rat["hit_cd"]) <= 0.0:
-			rat["hit_cd"] = 0.75
-			_damage_player(BOSS5_RAT_DAMAGE, "umbra_rat")
-			boss_hp = min(boss_hp_max, boss_hp + BOSS5_RAT_DAMAGE * 0.45)
+
+		if pos.distance_to(player_pos) <= 30.0:
+			_damage_player(80, "umbra_rat")
+			boss_hp = minf(boss_hp_max, boss_hp + boss_hp_max * 0.002)
+			boss5_rat_extras = mini(4, boss5_rat_extras + 1)
+			_add_text("RATO HIT (+1 EXTRA)", player_pos + Vector2(0, -40), Color(0.30, 0.80, 1.0), 0.75, 16)
 			_umbra_learn("PRAGA_RATOS", 0.22)
-		rat["remote_hit_cd"] = max(0.0, float(rat.get("remote_hit_cd", 0.0)) - delta)
-		if pos.distance_to(net_player_pos) <= 34.0 and float(rat["remote_hit_cd"]) <= 0.0:
+			rat["life"] = 0.0
+
+		rat["remote_hit_cd"] = maxf(0.0, float(rat.get("remote_hit_cd", 0.0)) - delta)
+		if pos.distance_to(net_player_pos) <= 30.0 and float(rat["remote_hit_cd"]) <= 0.0:
 			rat["remote_hit_cd"] = 0.75
-			_damage_remote_player(BOSS5_RAT_DAMAGE, "umbra_rat")
-			boss_hp = min(boss_hp_max, boss_hp + BOSS5_RAT_DAMAGE * 0.25)
+			_damage_remote_player(80, "umbra_rat")
+			boss_hp = minf(boss_hp_max, boss_hp + boss_hp_max * 0.002)
+			boss5_rat_extras = mini(4, boss5_rat_extras + 1)
 			_umbra_learn("PRAGA_RATOS", 0.12)
+			rat["life"] = 0.0
+
 	phase5_rats = phase5_rats.filter(func(rat): return float(rat.get("life", 0.0)) > 0.0)
 
 
@@ -25537,7 +26293,7 @@ func _update_boss2_attacks(delta: float) -> void:
 				var dist = to_player.length()
 				if dist > 0.0:
 					var angle_diff = abs(wrapf(to_player.angle() - dir.angle(), -PI, PI))
-					if dist < 420.0 and angle_diff < 0.48 and float(attack["tick"]) <= 0.0:
+					if dist < 280.0 and angle_diff < 0.48 and float(attack["tick"]) <= 0.0:
 						attack["tick"] = 0.18
 						_damage_player(int(player_hp_max * 0.022 + 8), "boss")
 						_spawn_boss2_slow_zone(player_pos, 42.0, 1.4)
@@ -25546,7 +26302,7 @@ func _update_boss2_attacks(delta: float) -> void:
 				var remote_dist = to_remote.length()
 				if remote_dist > 0.0:
 					var remote_angle_diff = abs(wrapf(to_remote.angle() - dir.angle(), -PI, PI))
-					if remote_dist < 420.0 and remote_angle_diff < 0.48 and float(attack["remote_tick"]) <= 0.0:
+					if remote_dist < 280.0 and remote_angle_diff < 0.48 and float(attack["remote_tick"]) <= 0.0:
 						attack["remote_tick"] = 0.18
 						_damage_remote_player(int(net_player_hp_max * 0.022 + 8), "boss")
 				if float(attack["tick"]) <= 0.0:
@@ -33922,13 +34678,13 @@ func _draw_boss_world(camera: Vector2) -> void:
 		return
 	var boss_tex: Texture2D = _boss_texture()
 	var boss_draw_pos = _boss_draw_position()
-	var boss_draw_size := Vector2(286, 257) if current_phase == 6 else (Vector2(300, 250) if current_phase == 4 else (Vector2(172, 178) if current_phase == 5 else Vector2(184, 170)))
+	var boss_draw_size := Vector2(286, 257) if current_phase == 6 else (Vector2(300, 250) if current_phase == 4 else (Vector2(59.4, 88.0) if current_phase == 5 else Vector2(184, 170)))
 	if current_phase == 2:
 		_draw_dynamic_shadow_fit(boss_tex, boss_draw_pos - camera + Vector2(0, 10), Vector2(122, 82), boss2_facing_dir < 0.0, true, 0.34)
 	else:
 		_draw_dynamic_shadow_fit(boss_tex, boss_pos - camera, boss_draw_size, false, true, 0.44)
 	var boss_modulate = Color.WHITE
-	if _attack_target_is_boss() and not _boss3_miasma_hides_boss_bar():
+	if _attack_target_is_boss() and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
 		_draw_attack_target_marker(boss_draw_pos - camera + Vector2(0, 55), 64.0, locked_target_kind == "boss")
 		boss_modulate = Color(1.0, 0.93, 0.48, 1.0)
 	if current_phase == 2:
@@ -33939,8 +34695,8 @@ func _draw_boss_world(camera: Vector2) -> void:
 		_draw_boss6_amber_heart(boss_draw_pos - camera, boss_draw_size)
 		_draw_boss6_smoke_shield(boss_draw_pos - camera, boss_draw_size)
 		_draw_boss6_rotating_barrier(boss_draw_pos - camera)
-	if not _boss3_miasma_hides_boss_bar():
-		var boss_bar_width := 232.0 if current_phase == 6 else (220.0 if current_phase == 4 else (176.0 if current_phase == 5 else 148.0))
+	if not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
+		var boss_bar_width := 232.0 if current_phase == 6 else (220.0 if current_phase == 4 else (66.0 if current_phase == 5 else 148.0))
 		var bar_color := Color(1.0, 0.58, 0.16) if current_phase == 6 else (Color(0.24, 1.0, 0.42) if current_phase == 5 else (Color(1.0, 0.62, 0.08) if current_phase == 4 else Color(1.0, 0.12, 0.22)))
 		_draw_bar(boss_draw_pos - camera + Vector2(-boss_bar_width * 0.5, -boss_draw_size.y * 0.54), boss_bar_width, boss_hp / boss_hp_max, bar_color)
 
@@ -33950,10 +34706,34 @@ func _draw_game(viewport: Vector2) -> void:
 	camera += _screen_shake_offset()
 	var map_texture = _current_map_texture()
 	if map_texture:
-		draw_texture_rect(map_texture, _desktop_stage_draw_rect(camera), false)
+		if current_phase == 5 and phase5_transmute_active:
+			var mat := _get_umbra_transmute_material()
+			var stage_rect: Rect2 = _desktop_stage_draw_rect(camera)
+			if mat and mat.shader:
+				var progress: float = clampf(phase5_transmute_timer / maxf(0.01, phase5_transmute_duration), 0.0, 1.0)
+				var draw_size: Vector2 = stage_rect.size
+				var rect_world_origin: Vector2 = (WORLD_SIZE - draw_size) * 0.5
+				var center_uv: Vector2 = (phase5_transmute_center - rect_world_origin) / draw_size
+				var aspect: float = draw_size.x / maxf(1.0, draw_size.y)
+				mat.set_shader_parameter("progress", progress)
+				mat.set_shader_parameter("center_uv", center_uv)
+				mat.set_shader_parameter("aspect_ratio", aspect)
+				mat.set_shader_parameter("transmute_color", phase5_transmute_color)
+				if phase5_transmute_old_tex:
+					mat.set_shader_parameter("tex_old", phase5_transmute_old_tex)
+				if phase5_transmute_new_tex:
+					mat.set_shader_parameter("tex_new", phase5_transmute_new_tex)
+				RenderingServer.canvas_item_set_material(get_canvas_item(), mat.get_rid())
+				draw_texture_rect(map_texture, stage_rect, false)
+				RenderingServer.canvas_item_set_material(get_canvas_item(), RID())
+			else:
+				draw_texture_rect(map_texture, stage_rect, false)
+		else:
+			draw_texture_rect(map_texture, _desktop_stage_draw_rect(camera), false)
 	else:
 		draw_rect(Rect2(-camera, WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
 	_draw_boss6_necro_erosion(camera)
+	_draw_phase5_transmute_particles(camera)
 
 	if not _active_prismatica_secondary().is_empty():
 		var dr = Rect2(-camera, WORLD_SIZE)
@@ -34092,6 +34872,8 @@ func _draw_game(viewport: Vector2) -> void:
 		_draw_boss3_miasma_clouds(camera)
 	if _boss3_miasma_active() and boss3_miasma_variant != 3:
 		_draw_boss3_miasma_overlay(viewport, camera)
+	if _is_umbra_miasma_active():
+		_draw_umbra_miasma_overlay(viewport, camera)
 	if preview_capture_mode:
 		return
 	_draw_hud(viewport)
@@ -38371,6 +39153,21 @@ func _draw_boss6_necro_erosion(camera: Vector2) -> void:
 		_draw_centered("CALCIFICADO - SAIA DO NEVOEIRO", Vector2(viewport_size.x * 0.5, viewport_size.y * 0.35), 24, Color(0.9, 0.15, 0.25))
 
 
+func _draw_phase5_transmute_particles(camera: Vector2) -> void:
+	if not phase5_transmute_active:
+		return
+	var count: int = phase5_transmute_particles.size()
+	for i in range(count):
+		var p: Dictionary = phase5_transmute_particles[i]
+		var life_ratio: float = clampf(float(p["life"]) / maxf(0.01, float(p["max_life"])), 0.0, 1.0)
+		var p_pos: Vector2 = Vector2(p["pos"]) - camera
+		var p_size: float = float(p["size"]) * life_ratio
+		var col: Color = phase5_transmute_color
+		col.a = life_ratio * 0.8
+		draw_circle(p_pos, p_size, col)
+		draw_arc(p_pos, p_size * 1.3, 0.0, TAU, 12, Color(1.0, 1.0, 1.0, col.a * 0.5), 1.5)
+
+
 func _draw_player(camera: Vector2) -> void:
 	if is_dead:
 		return
@@ -38680,6 +39477,26 @@ func _draw_boss3_miasma_clouds(camera: Vector2) -> void:
 			draw_circle(mote, 4.0 + float(i % 2), Color(0.86, 1.0, 0.48, alpha * 0.86))
 
 
+func _draw_umbra_miasma_overlay(viewport: Vector2, camera: Vector2) -> void:
+	if not _is_umbra_miasma_active():
+		return
+	var center: Vector2 = player_pos - camera
+	var inner_r: float = 110.0 + sin(time_alive * 4.0) * 8.0
+	var outer_r: float = 380.0
+	for i in range(7):
+		var r: float = inner_r + (outer_r - inner_r) * (float(i + 1) / 7.0)
+		var alpha: float = 0.12 + (float(i) / 6.0) * 0.72
+		draw_arc(center, r, 0.0, TAU, 48, Color(0.02, 0.10, 0.04, alpha), 42.0)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.02, 0.08, 0.03, 0.45), false, 80.0)
+
+	for i in range(16):
+		var ang: float = time_alive * 2.5 + float(i) * (TAU / 16.0)
+		var orbit_dist: float = inner_r * (0.40 + 0.55 * sin(time_alive * 3.0 + float(i)))
+		var particle_pos: Vector2 = center + Vector2(cos(ang), sin(ang)) * orbit_dist
+		draw_rect(Rect2(particle_pos - Vector2(3, 3), Vector2(6, 6)), Color(0.18, 0.75, 0.12, 0.75), true)
+		draw_rect(Rect2(particle_pos - Vector2(1, 1), Vector2(2, 2)), Color(0.60, 1.0, 0.35, 0.90), true)
+
+
 func _draw_boss3_miasma_overlay(viewport: Vector2, camera: Vector2) -> void:
 	if not _boss3_miasma_active():
 		return
@@ -38793,6 +39610,30 @@ func _draw_phase4_environment(camera: Vector2) -> void:
 		_draw_bar(pos + Vector2(-45, -64), 90.0, float(planet.get("hp", 0.0)) / max(1.0, float(planet.get("max_hp", BOSS4_PLANET_HP))), Color(0.88, 0.34, 1.0))
 
 
+func _draw_procedural_lightning_bolt(from: Vector2, to_angle: float, max_dist: float, color: Color, thickness: float, b_seed: int) -> void:
+	var l_rng := RandomNumberGenerator.new()
+	l_rng.seed = b_seed
+	var curr: Vector2 = from
+	var main_dir: Vector2 = Vector2.from_angle(to_angle)
+	var perp: Vector2 = main_dir.orthogonal()
+	var dist_traveled: float = 0.0
+
+	while dist_traveled < max_dist:
+		var step_len: float = l_rng.randf_range(25.0, 60.0)
+		dist_traveled += step_len
+		var clamped_dist: float = minf(dist_traveled, max_dist)
+		var jitter: float = l_rng.randf_range(-18.0, 18.0) + sin(time_alive * 25.0 + float(b_seed % 7)) * 10.0
+		var nxt: Vector2 = from + main_dir * clamped_dist + perp * jitter
+		draw_line(curr, nxt, color, thickness)
+
+		if l_rng.randf() < 0.38 and dist_traveled < max_dist * 0.8:
+			var branch_dir: Vector2 = (main_dir + perp * l_rng.randf_range(-0.8, 0.8)).normalized()
+			var branch_end: Vector2 = nxt + branch_dir * l_rng.randf_range(30.0, 70.0)
+			draw_line(nxt, branch_end, color * Color(1, 1, 1, 0.7), maxf(1.0, thickness - 1.5))
+
+		curr = nxt
+
+
 func _draw_phase5_environment(camera: Vector2) -> void:
 	if current_phase != 5:
 		return
@@ -38809,17 +39650,86 @@ func _draw_phase5_environment(camera: Vector2) -> void:
 		match kind:
 			"vortex":
 				var pos := Vector2(hazard["pos"]) - camera
-				var radius := float(hazard.get("radius", 300.0))
-				draw_circle(pos, radius, Color(0.02, 0.18, 0.10, 0.18))
-				for i in range(5):
-					var r := radius * (0.22 + i * 0.16)
-					draw_arc(pos, r, time_alive * (1.1 + i * 0.15), time_alive * (1.1 + i * 0.15) + TAU * 0.72, 64, Color(0.24, 1.0, 0.56, 0.50), 3.0)
+				var max_life := float(hazard.get("max", BOSS5_VORTEX_DURATION))
+				var life := float(hazard.get("life", max_life))
+				var elapsed := max_life - life
+				var warning_dur := float(hazard.get("warning", BOSS5_VORTEX_WARNING))
+				var radius_aviso := float(hazard.get("radius_aviso", 150.0))
+				var radius_succao := float(hazard.get("radius_succao", 850.0))
+				var radius_dano := float(hazard.get("radius_dano", 150.0))
+				if elapsed < warning_dur:
+					var prog: float = elapsed / maxf(0.01, warning_dur)
+					var pulse_alpha: float = 0.20 + sin(time_alive * 10.0) * 0.10
+					draw_circle(pos, radius_aviso, Color(0.54, 0.17, 0.89, pulse_alpha))
+					draw_arc(pos, radius_aviso, 0, TAU, 64, Color(1.0, 0.0, 0.50, 0.85), 3.0)
+					var ring_radius: float = radius_aviso * (1.0 - prog)
+					if ring_radius > 2.0:
+						draw_arc(pos, ring_radius, 0, TAU, 48, Color(1.0, 1.0, 1.0, 0.90), 2.0)
+						draw_circle(pos, ring_radius, Color(1.0, 1.0, 1.0, 0.08 * prog))
+				else:
+					var fade: float = clampf(life / 0.5, 0.0, 1.0)
+					var spin: float = time_alive * 2.5
+					draw_arc(pos, radius_succao * 0.40, spin * 0.5, spin * 0.5 + TAU, 64, Color(0.40, 0.15, 0.70, 0.12 * fade), 1.5)
+					for i in range(6):
+						var r: float = radius_dano + (radius_succao * 0.35 - radius_dano) * (float(i) / 5.0)
+						var angle_offset: float = spin * (1.2 + float(i) * 0.2)
+						draw_arc(pos, r, angle_offset, angle_offset + TAU * 0.65, 48, Color(0.58, 0.20, 0.90, 0.35 * fade), 2.0)
+						var inward_r: float = r * (1.0 - fmod(time_alive * 0.8 + float(i) * 0.15, 1.0))
+						if inward_r > 10.0:
+							draw_arc(pos, inward_r, -angle_offset, -angle_offset + PI * 0.5, 32, Color(0.35, 0.85, 1.0, 0.45 * fade), 1.5)
+					draw_circle(pos, radius_dano, Color(0.18, 0.04, 0.32, 0.35 * fade))
+					draw_arc(pos, radius_dano, -spin * 1.5, TAU - spin * 1.5, 64, Color(1.0, 0.10, 0.60, 0.90 * fade), 3.5)
+					draw_circle(pos, 45.0, Color(0.05, 0.02, 0.10, 0.95 * fade))
+					draw_circle(pos, 22.0, Color(0.0, 0.0, 0.0, 1.0 * fade))
+					var core_pulse: float = 8.0 + sin(time_alive * 12.0) * 4.0
+					draw_circle(pos, core_pulse, Color(0.40, 0.95, 1.0, 0.90 * fade))
+					draw_arc(pos, 55.0, spin * 3.0, spin * 3.0 + PI * 1.2, 36, Color(0.30, 0.90, 1.0, 0.80 * fade), 2.5)
 			"prison":
 				var pos := Vector2(hazard["pos"]) - camera
-				var radius := float(hazard.get("radius", 76.0))
-				var warned := (float(hazard.get("max", 0.0)) - float(hazard.get("life", 0.0))) >= float(hazard.get("warning", 0.85))
-				draw_circle(pos, radius, Color(0.16, 0.78, 0.44, 0.10 if not warned else 0.24))
-				draw_arc(pos, radius, -time_alive * 2.0, TAU - time_alive * 2.0, 44, Color(0.46, 1.0, 0.74, 0.82), 3.0)
+				var max_life: float = float(hazard.get("max", BOSS5_PRISON_DURATION))
+				var life: float = float(hazard.get("life", max_life))
+				var elapsed: float = max_life - life
+				var warning_dur: float = float(hazard.get("warning", BOSS5_PRISON_WARNING))
+				var r_max: float = float(hazard.get("radius_max", 180.0))
+				if elapsed < warning_dur:
+					var prog: float = elapsed / maxf(0.01, warning_dur)
+					var pulse_alpha: float = 0.22 + sin(time_alive * 9.0) * 0.10
+					draw_circle(pos, r_max, Color(0.0, 0.47, 1.0, pulse_alpha))
+					draw_arc(pos, r_max, 0, TAU, 64, Color(0.0, 1.0, 1.0, 0.85), 3.0)
+					var ring_radius: float = r_max * (1.0 - prog)
+					if ring_radius > 2.0:
+						draw_arc(pos, ring_radius, 0, TAU, 48, Color(1.0, 1.0, 1.0, 0.95), 2.0)
+						draw_circle(pos, ring_radius, Color(0.70, 0.95, 1.0, 0.12 * prog))
+					for i in range(12):
+						var flake_angle: float = float(i) * (TAU / 12.0) + time_alive * 0.6
+						var flake_dist: float = r_max * (0.25 + 0.65 * fmod(time_alive * 0.35 + float(i) * 0.083, 1.0))
+						var flake_pos: Vector2 = pos + Vector2(cos(flake_angle), sin(flake_angle)) * flake_dist
+						draw_rect(Rect2(flake_pos - Vector2(2, 2), Vector2(4, 4)), Color(0.80, 0.95, 1.0, 0.80), true)
+				else:
+					var radius_atual: float = float(hazard.get("radius_atual", 45.0))
+					var fade: float = clampf(life / 0.5, 0.0, 1.0)
+					var spin: float = time_alive * 2.2
+					draw_circle(pos, radius_atual, Color(0.05, 0.30, 0.80, 0.28 * fade))
+					var r_core: float = radius_atual * 0.60 + sin(time_alive * 8.0) * 6.0
+					draw_circle(pos, r_core, Color(0.0, 0.31, 1.0, 0.45 * fade))
+					draw_circle(pos, r_core * 0.70, Color(0.0, 0.62, 1.0, 0.65 * fade))
+					draw_circle(pos, r_core * 0.30, Color(0.58, 0.94, 1.0, 0.90 * fade))
+					var num_segments: int = 20
+					var step_ang: float = TAU / float(num_segments)
+					for i in range(num_segments):
+						var seg_ang: float = spin + float(i) * step_ang
+						var seg_r: float = radius_atual + sin(time_alive * 12.0 + float(i)) * 3.0
+						var seg_pos: Vector2 = pos + Vector2(cos(seg_ang), sin(seg_ang)) * seg_r
+						draw_circle(seg_pos, 3.0, Color(0.78, 0.98, 1.0, 0.85 * fade))
+					for i in range(16):
+						var p_angle: float = -spin * 1.5 + float(i) * (TAU / 16.0)
+						var p_r: float = radius_atual * (0.2 + 0.75 * fmod(time_alive * 0.5 + float(i) * 0.0625, 1.0))
+						var p_pos: Vector2 = pos + Vector2(cos(p_angle), sin(p_angle)) * p_r
+						if i % 3 == 0:
+							draw_rect(Rect2(p_pos - Vector2(2, 2), Vector2(4, 4)), Color(1.0, 1.0, 1.0, 0.90 * fade), true)
+						else:
+							draw_rect(Rect2(p_pos - Vector2(3, 3), Vector2(6, 6)), Color(0.60, 0.92, 1.0, 0.85 * fade), true)
+							draw_rect(Rect2(p_pos - Vector2(1, 4), Vector2(2, 8)), Color(1.0, 1.0, 1.0, 0.95 * fade), true)
 			"miasma", "siphon":
 				var pos := Vector2(hazard.get("pos", boss_pos)) - camera
 				var radius := float(hazard.get("radius", 160.0))
@@ -38827,27 +39737,179 @@ func _draw_phase5_environment(camera: Vector2) -> void:
 				draw_circle(pos, radius, color)
 				draw_arc(pos, radius * (0.92 + sin(time_alive * 5.0) * 0.04), 0, TAU, 60, Color(0.34, 1.0, 0.44, 0.65), 3.0)
 			"discharge":
-				var start := Vector2(hazard.get("pos", boss_pos)) - camera
-				var dir := Vector2(hazard.get("dir", Vector2.RIGHT)).normalized()
-				var elapsed := float(hazard.get("max", 1.0)) - float(hazard.get("life", 0.0))
-				var active := elapsed >= float(hazard.get("warning", BOSS5_DISCHARGE_WARNING))
-				var end := start + dir * 980.0
-				draw_line(start, end, Color(0.24, 1.0, 0.50, 0.24 if not active else 0.78), 12.0 if active else 5.0)
-				draw_line(start, end, Color(0.92, 1.0, 0.86, 0.42 if not active else 0.92), 2.0 if active else 1.0)
+				var start: Vector2 = Vector2(hazard.get("pos", boss_pos)) - camera
+				var dir: Vector2 = Vector2(hazard.get("dir", Vector2.RIGHT)).normalized()
+				var base_angle: float = dir.angle()
+				var max_radius: float = float(hazard.get("radius", 380.0))
+				var half_abertura: float = float(hazard.get("abertura", 0.9)) * 0.5
+				var max_life: float = float(hazard.get("max", 2.4))
+				var life: float = float(hazard.get("life", 0.0))
+				var elapsed: float = max_life - life
+				var warning_dur: float = float(hazard.get("warning", 0.6))
+				var is_active: bool = elapsed >= warning_dur
+
+				if not is_active:
+					var pts: Array[Vector2] = [start]
+					for k in range(16):
+						var a: float = base_angle - half_abertura + (float(k) / 15.0) * (half_abertura * 2.0)
+						pts.append(start + Vector2.from_angle(a) * max_radius)
+					draw_polygon(pts, [Color(1.0, 0.80, 0.15, 0.18)])
+					draw_arc(start, max_radius, base_angle - half_abertura, base_angle + half_abertura, 24, Color(1.0, 0.90, 0.25, 0.70), 3.0)
+					draw_line(start, start + Vector2.from_angle(base_angle - half_abertura) * max_radius, Color(1.0, 0.90, 0.25, 0.60), 2.0)
+					draw_line(start, start + Vector2.from_angle(base_angle + half_abertura) * max_radius, Color(1.0, 0.90, 0.25, 0.60), 2.0)
+				else:
+					var base_seed: int = int(hazard.get("seed", 12345)) + int(time_alive * 24.0)
+					var colors: Array[Color] = [
+						Color(1.0, 0.92, 0.20),
+						Color(0.75, 0.35, 1.0),
+						Color(1.0, 1.0, 1.0),
+						Color(1.0, 0.85, 0.10),
+						Color(0.65, 0.25, 0.95),
+						Color(1.0, 1.0, 1.0)
+					]
+
+					var fill_pts: Array[Vector2] = [start]
+					for k in range(16):
+						var a: float = base_angle - half_abertura + (float(k) / 15.0) * (half_abertura * 2.0)
+						fill_pts.append(start + Vector2.from_angle(a) * max_radius)
+					draw_polygon(fill_pts, [Color(0.55, 0.20, 0.90, 0.12)])
+
+					for b in range(6):
+						var t_angle: float = lerpf(base_angle - half_abertura + 0.04, base_angle + half_abertura - 0.04, float(b) / 5.0)
+						var bolt_color: Color = colors[b % colors.size()]
+						var thickness: float = 2.0 + float((b * 3 + int(time_alive * 10.0)) % 6)
+						var bolt_seed: int = base_seed + b * 1337
+						_draw_procedural_lightning_bolt(start, t_angle, max_radius, bolt_color, thickness, bolt_seed)
 			"thorns":
-				var a := Vector2(hazard["a"]) - camera
-				var b := Vector2(hazard["b"]) - camera
-				draw_line(a, b, Color(0.16, 1.0, 0.34, 0.55), 18.0)
-				draw_line(a, b, Color(0.90, 1.0, 0.72, 0.84), 3.0)
-				for i in range(8):
-					var p := a.lerp(b, float(i) / 7.0)
-					draw_circle(p + Vector2.from_angle(float(i) * 2.1 + time_alive) * 8.0, 5.0, Color(0.22, 1.0, 0.42, 0.72))
+				var segs: Array = hazard.get("segments", [])
+				var phase_str: String = String(hazard.get("phase", "crescimento"))
+				var curr_w: float = float(hazard.get("current_width", 10.0))
+
+				if phase_str == "crescimento":
+					var pulse: float = 0.55 + sin(time_alive * 12.0) * 0.25
+					for seg in segs:
+						var a: Vector2 = Vector2(seg["a"]) - camera
+						var b: Vector2 = Vector2(seg["b"]) - camera
+						draw_line(a, b, Color(0.85, 0.15, 0.20, pulse), 10.0)
+						draw_line(a, b, Color(1.0, 0.80, 0.82, 0.90), 2.0)
+				else:
+					for seg in segs:
+						var a: Vector2 = Vector2(seg["a"]) - camera
+						var b: Vector2 = Vector2(seg["b"]) - camera
+						var seg_vec: Vector2 = b - a
+						var seg_len: float = seg_vec.length()
+						var seg_dir: Vector2 = seg_vec.normalized() if seg_len > 0.01 else Vector2.RIGHT
+						var perp: Vector2 = seg_dir.orthogonal()
+
+						draw_line(a, b, Color(0.35, 0.03, 0.06, 0.88), curr_w)
+						draw_line(a, b, Color(0.85, 0.10, 0.15, 0.95), maxf(2.0, curr_w * 0.25))
+
+						var num_pts: int = int(maxf(8.0, seg_len / 45.0))
+						var wavy1: Array[Vector2] = []
+						var wavy2: Array[Vector2] = []
+						for i in range(num_pts + 1):
+							var t: float = float(i) / float(num_pts)
+							var pt: Vector2 = a.lerp(b, t)
+							var off1: float = sin(t * 18.0 + time_alive * 10.0) * (curr_w * 0.40)
+							var off2: float = cos(t * 18.0 + time_alive * 10.0) * (curr_w * 0.40)
+							wavy1.append(pt + perp * off1)
+							wavy2.append(pt - perp * off2)
+
+						for i in range(wavy1.size() - 1):
+							draw_line(wavy1[i], wavy1[i + 1], Color(1.0, 0.30, 0.35, 0.80), 3.0)
+							draw_line(wavy2[i], wavy2[i + 1], Color(1.0, 0.70, 0.75, 0.80), 3.0)
+
+						for i in range(8):
+							var t: float = (float(i) + 0.5) / 8.0
+							var base_p: Vector2 = a.lerp(b, t)
+							var side: float = 1.0 if i % 2 == 0 else -1.0
+							var thorn_len: float = curr_w * 0.65
+							var thorn_tip: Vector2 = base_p + (perp * side + seg_dir * 0.3).normalized() * thorn_len
+							draw_line(base_p, thorn_tip, Color(0.95, 0.15, 0.20, 0.90), 4.0)
+			"sopro_artico":
+				var spears: Array = hazard.get("spears", [])
+				for s_item in spears:
+					if not s_item is Dictionary:
+						continue
+					var sp: Dictionary = s_item
+					if bool(sp.get("hit", false)):
+						continue
+					var s_pos: Vector2 = Vector2(sp.get("pos", boss_pos)) - camera
+					var s_ang: float = float(sp.get("angle", 0.0))
+					var dir: Vector2 = Vector2.from_angle(s_ang)
+					var perp: Vector2 = dir.orthogonal()
+					var tip: Vector2 = s_pos + dir * 18.0
+					var tail: Vector2 = s_pos - dir * 10.0
+					var p1: Vector2 = tail + perp * 4.0
+					var p2: Vector2 = tail - perp * 4.0
+					draw_polygon([tip, p1, p2], [Color(0.35, 0.85, 1.0, 0.85)])
+					draw_line(s_pos - dir * 8.0, tip, Color(1.0, 1.0, 1.0, 0.95), 2.0)
+			"umbra_overload_laser":
+				var start: Vector2 = (WORLD_SIZE * 0.5) - camera
+				var fase_str: String = String(hazard.get("fase", "caminhando"))
+				var curr_ang: float = float(hazard.get("angle", 0.0))
+				var num_beams: int = int(hazard.get("num_beams", 2))
+
+				if fase_str in ["esfera_carga_1", "esfera_recolher_1", "esfera_recolher_2"]:
+					var st: float = float(hazard.get("stage_timer", 1.0))
+					var r_sphere: float = 50.0 + sin(time_alive * 20.0) * 8.0
+					if fase_str == "esfera_carga_1":
+						r_sphere = lerpf(65.0, 25.0, clampf(st / 1.2, 0.0, 1.0))
+					draw_circle(start, r_sphere, Color(0.95, 0.10, 0.15, 0.60))
+					draw_arc(start, r_sphere + 8.0, 0, TAU, 48, Color(1.0, 0.80, 0.20, 0.85), 3.0)
+				elif fase_str in ["laser_4_aviso", "laser_6_aviso"]:
+					draw_circle(start, 35.0, Color(0.95, 0.10, 0.15, 0.40))
+					var step_ang: float = TAU / float(num_beams)
+					var warn_pulse: float = 0.40 + sin(time_alive * 25.0) * 0.35
+					for b in range(num_beams):
+						var b_ang: float = curr_ang + float(b) * step_ang
+						var b_dir: Vector2 = Vector2.from_angle(b_ang)
+						draw_line(start, start + b_dir * 1400.0, Color(1.0, 0.20, 0.15, warn_pulse), 3.0)
+				elif fase_str in ["laser_2", "laser_4", "laser_6_ccw", "laser_6_cw"]:
+					var width: float = 38.0 if num_beams == 2 else (32.0 if num_beams == 4 else 26.0)
+					var step_ang: float = TAU / float(num_beams)
+
+					draw_circle(start, 50.0 + sin(time_alive * 20.0) * 8.0, Color(1.0, 0.30, 0.10, 0.70))
+
+					for b in range(num_beams):
+						var b_ang: float = curr_ang + float(b) * step_ang
+						var b_dir: Vector2 = Vector2.from_angle(b_ang)
+						var end_pt: Vector2 = start + b_dir * 1400.0
+
+						draw_line(start, end_pt, Color(0.40, 0.02, 0.05, 0.85), width)
+						draw_line(start, end_pt, Color(0.95, 0.10, 0.15, 0.95), width * 0.60)
+						draw_line(start, end_pt, Color(1.0, 0.50, 0.10, 0.95), width * 0.35)
+						draw_line(start, end_pt, Color(1.0, 0.98, 0.92, 1.0), width * 0.15)
+
+						for s in range(5):
+							var t_spark: float = fmod(float(s) * 0.20 + time_alive * 3.0, 1.0)
+							var spark_pos: Vector2 = start.lerp(end_pt, t_spark)
+							var offset: Vector2 = b_dir.orthogonal() * (sin(time_alive * 30.0 + float(s) * 4.0) * width * 0.35)
+							draw_circle(spark_pos + offset, 3.5, Color(1.0, 0.85, 0.20, 0.90))
 	for rat in phase5_rats:
-		var pos := Vector2(rat.get("pos", boss_pos)) - camera
-		var pulse := 1.0 + sin(float(rat.get("phase", 0.0))) * 0.12
-		draw_circle(pos, 13.0 * pulse, Color(0.02, 0.06, 0.03, 0.88))
-		draw_circle(pos, 8.0 * pulse, Color(0.34, 1.0, 0.26, 0.70))
-		draw_circle(pos + Vector2(4, -3), 2.0, Color(0.96, 1.0, 0.86, 0.90))
+		var pos: Vector2 = Vector2(rat.get("pos", boss_pos)) - camera
+		var life: float = float(rat.get("life", 5.0))
+		var max_life: float = float(rat.get("max_life", 5.0))
+		var is_flashing: bool = life <= 2.0 and fmod(time_alive * 12.0, 0.4) < 0.2
+		var body_color: Color = Color(1.0, 0.20, 0.25, 0.95) if is_flashing else Color(0.18, 0.58, 0.95, 0.95)
+		var outline_color: Color = Color(1.0, 0.70, 0.70, 0.95) if is_flashing else Color(0.60, 0.88, 1.0, 0.95)
+
+		var pulse: float = 1.0 + sin(float(rat.get("phase", 0.0))) * 0.10
+		# Shadow
+		draw_circle(pos + Vector2(0, 10), 14.0 * pulse, Color(0.0, 0.0, 0.0, 0.35))
+		# Body & Outline
+		draw_circle(pos, 15.0 * pulse, body_color)
+		draw_arc(pos, 15.0 * pulse, 0, TAU, 24, outline_color, 2.5)
+		# Eyes
+		draw_circle(pos + Vector2(4, -3), 2.5, Color(1.0, 0.95, 0.80, 0.95))
+
+		# Lifespan Bar
+		var bar_w: float = 24.0
+		var bar_h: float = 4.0
+		var bar_pos: Vector2 = pos + Vector2(-12.0, -22.0)
+		draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.08, 0.08, 0.12, 0.75), true)
+		var fill_w: float = bar_w * clampf(life / maxf(0.01, max_life), 0.0, 1.0)
+		draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.20, 0.80, 1.0, 0.90), true)
 	if boss_active and boss_hp > 0.0:
 		_draw_centered("MENTE: %s" % boss5_mental_state, Vector2(get_viewport_rect().size.x * 0.5, 128.0), 17, Color(0.58, 1.0, 0.66, 0.92))
 
@@ -40227,7 +41289,7 @@ func _draw_hud(viewport: Vector2) -> void:
 	draw_string(font, right_rect.position + Vector2(84 * sm, 30 * sm), str(score), HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), Color.WHITE)
 	draw_string(font, right_rect.position + Vector2(16 * sm, 60 * sm), "CARTAS %d" % _affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * sm), Color(1.0, 0.86, 0.26))
 	draw_string(font, right_rect.position + Vector2(112 * sm, 60 * sm), "CUSTO %d" % card_cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * sm), Color(1.0, 0.86, 0.26))
-	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar():
+	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
 		var boss_rect = Rect2(_boss_panel_pos(viewport), Vector2(380 * sm, 30 * sm))
 		_draw_combat_panel(boss_rect, Color(1.0, 0.16, 0.30), 0.62)
 		_draw_hud_bar(boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, 8.0 * sm, boss_hp / boss_hp_max, Color(1.0, 0.16, 0.28))
@@ -46685,7 +47747,7 @@ func _current_map_texture() -> Texture2D:
 	if current_phase == 6:
 		key = "map_phase_6"
 	elif current_phase == 5:
-		key = "map_phase_5"
+		key = _boss5_dimension_map_key(boss5_dimension)
 	elif current_phase == 4:
 		key = "map_phase_4"
 	elif current_phase == 3:

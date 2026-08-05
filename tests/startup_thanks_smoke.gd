@@ -18,19 +18,28 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await process_frame
-	_check(FileAccess.file_exists(game.STARTUP_THANKS_TEXTURE_PATH), "image file missing")
-	_check(is_equal_approx(game.STARTUP_THANKS_HOLD_TIME, 5.0), "thanks screen hold time should be 5s")
-	_check(game.textures.get("startup_thanks", null) != null, "image texture not loaded")
-	_check(game._startup_thanks_active(), "thanks screen should start active")
+	_check(game._startup_thanks_frame_exists(1), "first teaser frame missing")
+	_check(game._startup_thanks_frame_exists(game.STARTUP_THANKS_FRAME_COUNT), "last teaser frame missing")
+	_check(FileAccess.file_exists(game.STARTUP_THANKS_AUDIO_PATH), "teaser audio file missing")
+	_check(game.startup_thanks_frame_view != null, "teaser frame view was not created")
+	_check(game.startup_thanks_teaser_available, "teaser frame player was not loaded")
+	_check(game._startup_thanks_active(), "startup teaser should start active")
 
-	game._update_startup_thanks(game.STARTUP_THANKS_HOLD_TIME - 0.05)
-	_check(game._startup_thanks_active(), "thanks screen ended before hold time")
-	_check(not game.startup_thanks_fading, "thanks screen started fading too early")
+	game._update_startup_thanks(0.25)
+	_check(game._startup_thanks_active(), "startup teaser ended before video finish")
+	_check(not game.startup_thanks_fading, "startup teaser started fading too early")
+	_check(game.startup_thanks_frame_index >= 1, "teaser did not advance to a real frame")
 
+	game._update_startup_thanks(game._startup_thanks_duration() + 0.01)
+	_check(game.startup_thanks_fading, "teaser duration did not start fade")
+	game._update_startup_thanks(game.STARTUP_THANKS_FADE_TIME + 0.01)
+	_check(not game._startup_thanks_active(), "startup teaser did not finish after fade")
+
+	game._startup_thanks_reset()
 	game._skip_startup_thanks()
 	_check(game.startup_thanks_fading, "skip did not start fade")
 	game._update_startup_thanks(game.STARTUP_THANKS_FADE_TIME + 0.01)
-	_check(not game._startup_thanks_active(), "thanks screen did not finish after fade")
+	_check(not game._startup_thanks_active(), "startup teaser did not finish after skip fade")
 
 	game._startup_thanks_reset()
 	var tap := InputEventScreenTouch.new()
@@ -38,8 +47,10 @@ func _run() -> void:
 	tap.position = Vector2(320, 180)
 	_check(game._handle_startup_thanks_input(tap), "touch event was not captured")
 	_check(game.startup_thanks_fading, "touch did not start fade")
-	print("STARTUP_THANKS_SMOKE_OK hold=5.0 fade=0.5 touch_skip=true")
+	print("STARTUP_THANKS_SMOKE_OK teaser=true fade=0.5 touch_skip=true")
+	game._finish_startup_thanks()
 	game.queue_free()
-	await process_frame
+	for i in range(4):
+		await process_frame
 	game = null
 	quit(0)

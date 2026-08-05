@@ -2,12 +2,12 @@ extends SceneTree
 
 const PREVIEW_DIR := "res://assets/previews/manifestations"
 const FRAME_SIZE := Vector2i(1280, 720)
-const FRAME_COUNT := 12
+const FRAME_COUNT := 24
 const ATLAS_COLS := 4
-const ATLAS_ROWS := 3
+const ATLAS_ROWS := 6
 const FPS := 12.0
 const DT := 1.0 / FPS
-const WEBP_QUALITY := 0.50
+const WEBP_QUALITY := 0.32
 
 var game: Node
 var output_dir := PREVIEW_DIR
@@ -28,6 +28,8 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	if DisplayServer.get_name().to_lower().contains("headless"):
+		_check(false, "preview capture needs a rendered viewport; run this script without --headless")
 	var only_key := ""
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--key="):
@@ -37,6 +39,9 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(_globalize_output_dir(output_dir))
 	var clip_count := 0
 	await process_frame
+	game.startup_thanks_done = true
+	game.startup_thanks_fading = false
+	game.startup_thanks_timer = 0.0
 	for i in range(game.MANIFESTATIONS.size()):
 		var item: Dictionary = game.MANIFESTATIONS[i]
 		if only_key != "" and String(item["key"]) != only_key:
@@ -61,6 +66,7 @@ func _capture_clip(index: int, key: String, kind: String) -> void:
 		var viewport_texture := root.get_texture()
 		_check(viewport_texture != null, "viewport texture is null; run without --headless so Godot can render preview frames")
 		var image: Image = viewport_texture.get_image()
+		_check(image != null, "viewport image is null; run without --headless so Godot can render preview frames")
 		if image.get_size() != FRAME_SIZE:
 			image.resize(FRAME_SIZE.x, FRAME_SIZE.y, Image.INTERPOLATE_LANCZOS)
 		if image.get_format() != Image.FORMAT_RGBA8:
@@ -88,6 +94,9 @@ func _setup_clip(index: int, key: String, kind: String) -> void:
 	game.selected_manifestation = index
 	game.selected_aura = 0
 	game._start_game()
+	game.startup_thanks_done = true
+	game.startup_thanks_fading = false
+	game.startup_thanks_timer = 0.0
 	game.preview_capture_mode = true
 	game.mode = "game"
 	game.current_phase = 1

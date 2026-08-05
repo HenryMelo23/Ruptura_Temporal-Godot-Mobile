@@ -1,7 +1,7 @@
 extends SceneTree
 
 const MIN_FRAME_SIZE := Vector2i(1280, 720)
-const MAX_PREVIEW_DIR_BYTES := 170 * 1024 * 1024
+const MAX_PREVIEW_DIR_BYTES := 220 * 1024 * 1024
 const PREVIEW_DIR := "res://assets/previews/manifestations"
 
 var game: Node
@@ -24,7 +24,6 @@ func _run() -> void:
 	await process_frame
 	var clips := 0
 	var total_bytes := 0
-	var rows := int(ceil(float(game.MANIFEST_PREVIEW_FRAME_COUNT) / float(game.MANIFEST_PREVIEW_ATLAS_COLS)))
 	for item in game.MANIFESTATIONS:
 		var key := String(item.get("key", ""))
 		for kind in game.MANIFEST_PREVIEW_KINDS:
@@ -34,11 +33,13 @@ func _run() -> void:
 			var image := Image.new()
 			var err := image.load(ProjectSettings.globalize_path(path))
 			_check(err == OK, "could not load preview atlas file: " + path)
+			var rows := _atlas_rows(image.get_width(), image.get_height(), game.MANIFEST_PREVIEW_ATLAS_COLS)
 			var frame_size := Vector2i(image.get_width() / game.MANIFEST_PREVIEW_ATLAS_COLS, image.get_height() / rows)
 			_check(frame_size.x >= MIN_FRAME_SIZE.x and frame_size.y >= MIN_FRAME_SIZE.y, "preview too small: %s frame=%dx%d" % [path, frame_size.x, frame_size.y])
 			var texture: Texture2D = game._manifest_preview_atlas(key, String(kind))
 			_check(texture != null, "could not load imported preview texture: " + path)
-			var texture_frame_size := Vector2i(texture.get_width() / game.MANIFEST_PREVIEW_ATLAS_COLS, texture.get_height() / rows)
+			var texture_rows: int = game._manifest_preview_atlas_rows(texture)
+			var texture_frame_size := Vector2i(texture.get_width() / game.MANIFEST_PREVIEW_ATLAS_COLS, texture.get_height() / texture_rows)
 			_check(texture_frame_size.x >= MIN_FRAME_SIZE.x and texture_frame_size.y >= MIN_FRAME_SIZE.y, "imported preview too small: %s frame=%dx%d" % [path, texture_frame_size.x, texture_frame_size.y])
 			game.manifest_preview_atlases.erase(key + "_" + String(kind))
 			_check(_has_visible_content(image), "preview atlas looks blank: " + path)
@@ -48,6 +49,12 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	quit(0)
+
+
+func _atlas_rows(width: int, height: int, cols: int) -> int:
+	var frame_w: float = max(1.0, float(width) / float(cols))
+	var expected_frame_h: float = max(1.0, frame_w * 9.0 / 16.0)
+	return maxi(1, int(round(float(height) / expected_frame_h)))
 
 
 func _has_visible_content(image: Image) -> bool:

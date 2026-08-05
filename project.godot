@@ -19,7 +19,7 @@ SceneTransitionManager="*res://scripts/scene_transition_manager.gd"
 [application]
 
 config/name="Ruptura Temporal Mobile"
-config/version="2.0.31b"
+config/version="2.0.31c"
 run/main_scene="res://scenes/Boot.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://img/icone.png"
@@ -32,7 +32,7 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation=4
+window/handheld/orientation=0
 
 [editor_plugins]
 

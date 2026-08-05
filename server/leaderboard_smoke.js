@@ -362,15 +362,19 @@ async function run() {
     const home = (await request("GET", "/leaderboard")).body.toString("utf8");
     const profile = (await request("GET", `/leaderboard/player/${encodeURIComponent(signedStored.profileKey)}`)).body.toString("utf8");
     const rankings = (await request("GET", "/leaderboard/rankings")).body.toString("utf8");
+    const story = (await request("GET", "/leaderboard/historia")).body.toString("utf8");
+    const catalog = (await request("GET", "/leaderboard/catalogo")).body.toString("utf8");
     const summary = (await request("GET", `/leaderboard/run/${signedStored.id}`)).body.toString("utf8");
     const missing = (await request("GET", "/leaderboard/linha-inexistente")).body.toString("utf8");
     assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Maior dano em boss") && home.includes("36.000"), "dashboard metrics missing");
     assert(home.includes("OPERADOR EM DESTAQUE") && home.includes("Expedicoes recentes") && home.includes("Buscar operador"), "dashboard observatory shell missing");
     assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Ancorada + Sanguinaria"), "player profile missing");
-    assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Plano cartesiano") && rankings.includes("Maior progressao"), "ranking charts missing");
+    assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Plano cartesiano") && rankings.includes("Maior progressao") && rankings.includes("Speedrun de progressao"), "ranking charts missing");
+    assert(story.includes("ARQUIVO NARRATIVO") && story.includes("ramificacao inicial"), "story page missing");
+    assert(catalog.includes("CATALOGO HISTORICO") && catalog.includes("Cartas mais presentes"), "catalog page missing");
     assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador"), "run summary telemetry missing");
     assert(missing.includes("LINHA TEMPORAL NAO LOCALIZADA") && missing.includes("Voltar ao observatorio"), "not found page missing");
-    for (const [label, html] of [["home", home], ["profile", profile], ["rankings", rankings], ["summary", summary], ["missing", missing]]) {
+    for (const [label, html] of [["home", home], ["profile", profile], ["rankings", rankings], ["story", story], ["catalog", catalog], ["summary", summary], ["missing", missing]]) {
       assertCleanHtml(label, html);
     }
     const cardMatch = home.match(/src="([^"]*carta_por1\.png)"/i);
