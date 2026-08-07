@@ -1,9 +1,9 @@
 {
-    "version":  "2.0.31d",
-    "version_code":  23104,
-    "filename":  "Ruptura_Temporal_2.0.31d.exe",
-    "sha256":  "d850ea46ef4ee97a5bb9273dbd3a41c7d5bed2ed4bb807127a684329c29af18c",
-    "size":  1284907400,
+    "version":  "2.0.31f",
+    "version_code":  23106,
+    "filename":  "Ruptura_Temporal_2.0.31f.exe",
+    "sha256":  "",
+    "size":  1300244296,
     "notes":  [
                   "Corrige a abertura do jogo para eliminar artefatos visuais e blocos corrompidos.",
                   "A tela inicial agora usa uma reproducao mais estavel por frames, com audio e transicao suave para o menu.",

@@ -12,19 +12,20 @@ config_version=5
 
 compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
-[autoload]
-
-SceneTransitionManager="*res://scripts/scene_transition_manager.gd"
-
 [application]
 
 config/name="Ruptura Temporal Mobile"
-config/version="2.0.31c"
+config/version="2.0.31f"
 run/main_scene="res://scenes/Boot.tscn"
-config/features=PackedStringArray("4.7", "Mobile")
-config/icon="res://img/icone.png"
-boot_splash/show_image=false
+config/features=PackedStringArray("4.6", "Mobile")
 boot_splash/bg_color=Color(0.006, 0.01, 0.026, 1)
+boot_splash/show_image=false
+config/icon="res://img/icone.png"
+
+[autoload]
+
+SceneTransitionManager="*res://scripts/scene_transition_manager.gd"
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
 
@@ -32,7 +33,6 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation=0
 
 [editor_plugins]
 
