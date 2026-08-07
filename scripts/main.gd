@@ -369,8 +369,8 @@ const ANCORADA_ULTIMATE_SLOW_DURATION: = 2.2
 const ANCORADA_ULTIMATE_SLOW_MULT: = 0.35
 const BOSS_READY_TIME: = 0.0
 const BOSS_CALL_COUNTDOWN: = 1.2
-const BOSS_BASE_HP: = 3600.0
-const BOSS_ARMOR: = 0.48
+const BOSS_BASE_HP: = 4860.0
+const BOSS_ARMOR: = 0.528
 const BOSS_FARM_DAMAGE_MAX_MULT: = 1.85
 const BOSS_FARM_DAMAGE_TIME_CAP: = 3600.0
 const BOSS_FARM_DAMAGE_SCORE_CAP: = 250000.0
@@ -1004,6 +1004,15 @@ const BOMBASTICA_IGNITION_RADIUS: = 55.0
 const BOMBASTICA_CHAIN_DEPTH_MAX: = 5
 const BOMBASTICA_CHAIN_TOUCH_MARGIN: = 8.0
 const BOMBASTICA_MANUAL_DAMAGE_MULT: = 0.86
+const BOMBASTICA_ULT_TRAIL_DURATION: float = 5.0
+const BOMBASTICA_ULT_BLAST_SPACING: float = 64.0
+const BOMBASTICA_ULT_MAX_BLASTS: int = 24
+const BOMBASTICA_ULT_BLAST_INTERVAL: float = 0.085
+const BOMBASTICA_ULT_BLAST_RADIUS: float = 110.0
+const BOMBASTICA_ULT_BLAST_DAMAGE_MULT: float = 1.30
+const BOMBASTICA_ULT_FINALE_RADIUS: float = 155.0
+const BOMBASTICA_ULT_FINALE_DAMAGE_MULT: float = 2.80
+const BOMBASTICA_ULT_FINALE_REPEAT_FLOOR: float = 0.75
 const NECRONADA_EPITAPH_DURATION: = 8.0
 const NECRONADA_EPITAPH_MAX_DEPTH: = 5
 const NECRONADA_VESTIGE_DURATION: = 12.0
@@ -2039,6 +2048,25 @@ var bombastica_next_id: = 1
 var bombastica_detonator_touch_index: = -1
 var bombastica_detonator_hold: = 0.0
 var bombastica_total_detonation_flash: = 0.0
+var bombastica_explosion_vfx_scene: PackedScene = preload("res://vfx/bombastica/BombasticaExplosionVFX.tscn")
+var bombastica_mine_vfx_scene: PackedScene = preload("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn")
+var bombastica_ignition_vfx_scene: PackedScene = preload("res://vfx/bombastica/BombasticaIgnitionVFX.tscn")
+var bombastica_explosion_pool: Array = []
+var bombastica_mine_pool: Array = []
+var bombastica_ignition_pool: Array = []
+var bombastica_use_old_vfx: bool = false
+var bombastica_ult_state: String = "IDLE"
+var bombastica_ult_timer: float = 0.0
+var bombastica_ult_visual_path: Array = []
+var bombastica_ult_blast_anchors: Array = []
+var bombastica_ult_reverse_anchors: Array = []
+var bombastica_ult_start_pos: Vector2 = Vector2.ZERO
+var bombastica_ult_detonation_index: int = 0
+var bombastica_ult_detonation_timer: float = 0.0
+var bombastica_ult_target_hits: Dictionary = {}
+var bombastica_ult_fuse_pos: Vector2 = Vector2.ZERO
+var bombastica_ult_seed: int = 0
+var bombastica_powder_trail_tex: Texture2D = preload("res://vfx/bombastica/textures/powder_trail_texture.png")
 var necronada_vestiges: Array = []
 var necronada_ossuary: Array = []
 var necronada_remnants: Array = []
@@ -7751,13 +7779,13 @@ func _boss_hp_for_phase(phase: int) -> float:
 		6:
 			return (BOSS_BASE_HP + _boss_farm_hp_bonus(10.0, 42.0)) * mp_mult
 		5:
-			return (26000.0 + _boss_farm_hp_bonus(30.0, 96.0)) * mp_mult
+			return (35100.0 + _boss_farm_hp_bonus(30.0, 96.0)) * mp_mult
 		4:
-			return (18800.0 + _boss_farm_hp_bonus(25.0, 82.0)) * mp_mult
+			return (25380.0 + _boss_farm_hp_bonus(25.0, 82.0)) * mp_mult
 		3:
-			return (12800.0 + _boss_farm_hp_bonus(20.0, 68.0)) * mp_mult
+			return (17280.0 + _boss_farm_hp_bonus(20.0, 68.0)) * mp_mult
 		2:
-			return (6600.0 + _boss_farm_hp_bonus(15.0, 54.0)) * mp_mult
+			return (8910.0 + _boss_farm_hp_bonus(15.0, 54.0)) * mp_mult
 	return (BOSS_BASE_HP + _boss_farm_hp_bonus(10.0, 42.0)) * mp_mult
 
 
@@ -8170,6 +8198,14 @@ func _clear_spectator_local_combat_state() -> void :
 	bombastica_powder_marks.clear()
 	bombastica_detonator_touch_index = -1
 	bombastica_detonator_hold = 0.0
+	bombastica_ult_state = "IDLE"
+	bombastica_ult_timer = 0.0
+	bombastica_ult_visual_path.clear()
+	bombastica_ult_blast_anchors.clear()
+	bombastica_ult_reverse_anchors.clear()
+	bombastica_ult_target_hits.clear()
+	bombastica_ult_detonation_index = 0
+	bombastica_ult_detonation_timer = 0.0
 	tp_effects.clear()
 
 
@@ -10419,6 +10455,9 @@ func _player_invulnerable() -> bool:
 
 func _damage_source_is_boss_ultimate(source: String) -> bool:
 	return source in [
+		"boss_wave",
+		"boss_wave_enraged",
+		"boss1_wave",
 		"boss2_ultimate_blizzard", 
 		"boss2_ice_pillar", 
 		"boss2_flash_freeze", 
@@ -10605,8 +10644,10 @@ func _use_secondary_skill(target_world = null) -> void :
 			else:
 				ability_activated = false
 		"bombastica":
-			last_secondary_time = time_alive
-			_spawn_secondary_bombastica(target_world)
+			if _start_bombastica_ultimate():
+				last_secondary_time = time_alive
+			else:
+				ability_activated = false
 		"necronada":
 			if _cast_necronada_requiem():
 				last_secondary_time = time_alive
@@ -12208,10 +12249,22 @@ func _reset_bombastica_state() -> void :
 	bombastica_detonator_touch_index = -1
 	bombastica_detonator_hold = 0.0
 	bombastica_total_detonation_flash = 0.0
+	bombastica_ult_state = "IDLE"
+	bombastica_ult_timer = 0.0
+	bombastica_ult_visual_path.clear()
+	bombastica_ult_blast_anchors.clear()
+	bombastica_ult_reverse_anchors.clear()
+	bombastica_ult_target_hits.clear()
+	bombastica_ult_detonation_index = 0
+	bombastica_ult_detonation_timer = 0.0
 	manifestation_secondaries = manifestation_secondaries.filter( func(sec): return String(sec.get("kind", "")) != "bombastica")
+	for node in bombastica_explosion_pool + bombastica_mine_pool + bombastica_ignition_pool:
+		if is_instance_valid(node):
+			node.hide()
 
 
 func _update_bombastica_state(delta: float) -> void :
+	_update_bombastica_ultimate(delta)
 	for i in range(bombastica_q_recharges.size()):
 		bombastica_q_recharges[i] = maxf(0.0, float(bombastica_q_recharges[i]) - delta)
 	var expired_marks: Array = []
@@ -12258,6 +12311,187 @@ func _update_bombastica_state(delta: float) -> void :
 		else:
 			armed_bombs.append(bomb)
 	bombastica_bombs = armed_bombs.filter( func(bomb): return not bool(bomb.get("exploded", false)))
+
+
+func _trigger_screen_shake(strength: float, duration: float) -> void:
+	screen_shake_strength = maxf(screen_shake_strength, strength)
+	screen_shake_timer = maxf(screen_shake_timer, duration)
+
+
+func _start_bombastica_ultimate() -> bool:
+	if bombastica_ult_state != "IDLE":
+		return false
+	
+	bombastica_ult_state = "DRAWING"
+	bombastica_ult_timer = 0.0
+	bombastica_ult_start_pos = player_pos
+	bombastica_ult_fuse_pos = player_pos
+	bombastica_ult_visual_path.clear()
+	bombastica_ult_blast_anchors.clear()
+	bombastica_ult_reverse_anchors.clear()
+	bombastica_ult_target_hits.clear()
+	bombastica_ult_detonation_index = 0
+	bombastica_ult_detonation_timer = 0.0
+	bombastica_ult_seed = rng.randi()
+	
+	bombastica_ult_visual_path.append(player_pos)
+	
+	_spawn_bombastica_explosion_vfx(player_pos, BOMBASTICA_IGNITION_RADIUS, "bombastic_powder_ignition")
+	_add_text("RASTRO DE PÓLVORA!", player_pos + Vector2(0, -112), Color(1.0, 0.45, 0.15), 1.2, 26)
+	_trigger_screen_shake(12.0, 0.35)
+	_spawn_radial_particles(player_pos, Color(1.0, 0.5, 0.12), 16)
+	return true
+
+
+func _update_bombastica_ultimate(delta: float) -> void:
+	if bombastica_ult_state == "IDLE":
+		return
+		
+	bombastica_ult_timer += delta
+	
+	if bombastica_ult_state == "DRAWING":
+		var last_p: Vector2 = Vector2(bombastica_ult_visual_path.back()) if not bombastica_ult_visual_path.is_empty() else player_pos
+		if player_pos.distance_to(last_p) >= 12.0:
+			bombastica_ult_visual_path.append(player_pos)
+			_spawn_radial_particles(player_pos, Color(1.0, 0.6, 0.2, 0.6), 2)
+		
+		if bombastica_ult_timer >= BOMBASTICA_ULT_TRAIL_DURATION * 0.5:
+			_finish_bombastica_drawing_phase()
+			
+	elif bombastica_ult_state == "BURNING":
+		_update_bombastica_burning_phase(delta)
+		
+	elif bombastica_ult_state == "DETONATING":
+		_update_bombastica_detonating_phase(delta)
+
+
+func _finish_bombastica_drawing_phase() -> void:
+	if bombastica_ult_visual_path.size() < 2:
+		bombastica_ult_visual_path.append(player_pos + Vector2(10, 0))
+	
+	var total_len: float = 0.0
+	for i in range(1, bombastica_ult_visual_path.size()):
+		total_len += Vector2(bombastica_ult_visual_path[i]).distance_to(Vector2(bombastica_ult_visual_path[i-1]))
+	
+	var num_anchors: int = max(2, int(total_len / BOMBASTICA_ULT_BLAST_SPACING))
+	num_anchors = mini(num_anchors, BOMBASTICA_ULT_MAX_BLASTS)
+	bombastica_ult_blast_anchors.clear()
+	
+	var step_dist: float = total_len / float(num_anchors)
+	
+	for i in range(num_anchors + 1):
+		var target_d: float = float(i) * step_dist
+		var anchor_p: Vector2 = _get_point_at_distance_on_path(bombastica_ult_visual_path, target_d)
+		bombastica_ult_blast_anchors.append(anchor_p)
+	
+	bombastica_ult_reverse_anchors = bombastica_ult_blast_anchors.duplicate()
+	bombastica_ult_reverse_anchors.reverse()
+	
+	bombastica_ult_state = "BURNING"
+	bombastica_ult_timer = 0.0
+	bombastica_ult_fuse_pos = Vector2(bombastica_ult_visual_path[0])
+	
+	_trigger_screen_shake(16.0, 0.4)
+	_add_text("FUSÍVEL ACESO!", bombastica_ult_fuse_pos + Vector2(0, -40), Color(1.0, 0.85, 0.3), 0.8, 22)
+
+
+func _get_point_at_distance_on_path(path: Array, dist: float) -> Vector2:
+	if path.is_empty():
+		return player_pos
+	if path.size() == 1 or dist <= 0.0:
+		return Vector2(path[0])
+		
+	var walked: float = 0.0
+	for i in range(1, path.size()):
+		var p0: Vector2 = Vector2(path[i-1])
+		var p1: Vector2 = Vector2(path[i])
+		var seg_len: float = p0.distance_to(p1)
+		if walked + seg_len >= dist:
+			var remain: float = dist - walked
+			var t: float = remain / maxf(0.001, seg_len)
+			return p0.lerp(p1, t)
+		walked += seg_len
+	return Vector2(path.back())
+
+
+func _update_bombastica_burning_phase(delta: float) -> void:
+	var burn_duration: float = 0.8
+	var progress: float = clampf(bombastica_ult_timer / burn_duration, 0.0, 1.0)
+	
+	var total_len: float = 0.0
+	for i in range(1, bombastica_ult_visual_path.size()):
+		total_len += Vector2(bombastica_ult_visual_path[i]).distance_to(Vector2(bombastica_ult_visual_path[i-1]))
+	
+	var current_d: float = progress * total_len
+	bombastica_ult_fuse_pos = _get_point_at_distance_on_path(bombastica_ult_visual_path, current_d)
+	
+	if randf() < 0.8:
+		_spawn_radial_particles(bombastica_ult_fuse_pos, Color(1.0, 0.8, 0.2), 3)
+	
+	_spawn_bombastica_explosion_vfx(bombastica_ult_fuse_pos, BOMBASTICA_IGNITION_RADIUS, "bombastic_powder_ignition")
+		
+	if progress >= 1.0:
+		bombastica_ult_state = "DETONATING"
+		bombastica_ult_timer = 0.0
+		bombastica_ult_detonation_index = 0
+		bombastica_ult_detonation_timer = 0.0
+		_trigger_screen_shake(24.0, 0.6)
+
+
+func _update_bombastica_detonating_phase(delta: float) -> void:
+	bombastica_ult_detonation_timer += delta
+	
+	var interval: float = BOMBASTICA_ULT_BLAST_INTERVAL
+	while bombastica_ult_detonation_index < bombastica_ult_reverse_anchors.size() and bombastica_ult_detonation_timer >= (bombastica_ult_detonation_index * interval):
+		var pos: Vector2 = Vector2(bombastica_ult_reverse_anchors[bombastica_ult_detonation_index])
+		_trigger_trail_segment_detonation(pos, bombastica_ult_detonation_index)
+		bombastica_ult_detonation_index += 1
+		
+	if bombastica_ult_detonation_index >= bombastica_ult_reverse_anchors.size() and bombastica_ult_detonation_timer >= (bombastica_ult_reverse_anchors.size() * interval + 0.5):
+		bombastica_ult_state = "IDLE"
+		bombastica_ult_visual_path.clear()
+		bombastica_ult_blast_anchors.clear()
+		bombastica_ult_reverse_anchors.clear()
+		bombastica_ult_target_hits.clear()
+
+
+func _trigger_trail_segment_detonation(pos: Vector2, idx: int) -> void:
+	var is_finale: bool = (idx == bombastica_ult_reverse_anchors.size() - 1)
+	var radius: float = BOMBASTICA_ULT_FINALE_RADIUS if is_finale else BOMBASTICA_ULT_BLAST_RADIUS
+	var damage_mult: float = BOMBASTICA_ULT_FINALE_DAMAGE_MULT if is_finale else BOMBASTICA_ULT_BLAST_DAMAGE_MULT
+	var final_damage: float = player_damage * damage_mult
+	
+	_apply_bombastica_explosion(pos, radius, final_damage, "bombastica_ult_finale" if is_finale else "bombastica_ult_blast", false, 0, {})
+	
+	if is_finale:
+		_trigger_screen_shake(26.0, 0.45)
+		_spawn_radial_particles(pos, Color(1.0, 0.85, 0.25), 24)
+	else:
+		_spawn_radial_particles(pos, Color(1.0, 0.6, 0.18), 10)
+
+
+func _draw_bombastica_powder_trail_world(camera: Vector2) -> void:
+	if bombastica_ult_state == "IDLE" or bombastica_ult_visual_path.size() < 2:
+		return
+		
+	var points: PackedVector2Array = PackedVector2Array()
+	for p in bombastica_ult_visual_path:
+		points.append(Vector2(p) - camera)
+		
+	if points.size() >= 2:
+		var trail_color: Color = Color(0.95, 0.45, 0.12, 0.85)
+		if bombastica_ult_state == "BURNING":
+			trail_color = Color(1.0, 0.65, 0.2, 0.95)
+		elif bombastica_ult_state == "DETONATING":
+			trail_color = Color(1.0, 0.85, 0.4, 1.0)
+			
+		draw_polyline(points, trail_color, 16.0, true)
+		draw_polyline(points, Color(1.0, 0.95, 0.7, 0.9), 6.0, true)
+		
+	if bombastica_ult_state == "BURNING":
+		var fuse_canvas: Vector2 = bombastica_ult_fuse_pos - camera
+		draw_circle(fuse_canvas, 10.0, Color(1.0, 0.9, 0.4, 0.95))
+		draw_circle(fuse_canvas, 5.0, Color(1.0, 1.0, 1.0, 1.0))
 
 
 func _bombastica_available_q_charge_index() -> int:
@@ -12502,10 +12736,65 @@ func _spawn_bombastica_link(a: Vector2, b: Vector2, color: Color) -> void :
 
 func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: String) -> void :
 	var chain_depth: = 1 if source == "bombastic_chain_explosion" else 0
-	var life: = 0.58 if chain_depth > 0 else 0.52
-	bombastica_vfx.append({"kind": "explosion", "pos": center, "radius": radius, "life": life, "max": life, "source": source, "chain_depth": chain_depth, "seed": rng.randi()})
+	var seed_val: = rng.randi()
+	
+	# Register shockwave for physical collision visual wave
 	shockwaves.append({"pos": center, "radius": 12.0, "max": radius * 1.1, "life": 0.32, "damage": 0.0, "hit": {}, "visual_only": true, "kind": "bombastica"})
-	_spawn_radial_particles(center, Color(1.0, 0.5, 0.1), 26 if chain_depth == 0 else 32)
+	
+	# Determine Graphic Quality Profile
+	var quality: String = "HIGH"
+	if _memory_saver_active() or gfx_low_resource:
+		quality = "LOW"
+	elif not gfx_particles:
+		quality = "MEDIUM"
+		
+	var scale_mult: = radius / BOMBASTICA_Q_RADIUS
+	
+	# Dispatch to specialized 2D Engine VFX Scenes
+	if source == "bombastic_field_mine":
+		var inst: Node2D = null
+		for node in bombastica_mine_pool:
+			if is_instance_valid(node) and not node.visible:
+				inst = node
+				break
+		if not inst and bombastica_mine_vfx_scene:
+			inst = bombastica_mine_vfx_scene.instantiate()
+			add_child(inst)
+			bombastica_mine_pool.append(inst)
+		if inst and inst.has_method("play_at"):
+			inst.play_at(center, quality, seed_val)
+	elif source == "bombastic_powder_ignition":
+		var inst: Node2D = null
+		for node in bombastica_ignition_pool:
+			if is_instance_valid(node) and not node.visible:
+				inst = node
+				break
+		if not inst and bombastica_ignition_vfx_scene:
+			inst = bombastica_ignition_vfx_scene.instantiate()
+			add_child(inst)
+			bombastica_ignition_pool.append(inst)
+		if inst and inst.has_method("play_at"):
+			inst.play_at(center, quality)
+	else:
+		# Main Bombástica Q Explosion / Chain Reaction Explosion
+		var inst: Node2D = null
+		for node in bombastica_explosion_pool:
+			if is_instance_valid(node) and not node.visible:
+				inst = node
+				break
+		if not inst and bombastica_explosion_vfx_scene:
+			inst = bombastica_explosion_vfx_scene.instantiate()
+			add_child(inst)
+			bombastica_explosion_pool.append(inst)
+		if inst and inst.has_method("play_at"):
+			var red_flashes: bool = bool(get("gfx_reduced_flashes")) if has_node("/root/Main") else false
+			var red_motion: bool = not gfx_screen_shake
+			inst.play_at(center, scale_mult, quality, chain_depth, seed_val, red_flashes, red_motion)
+			
+	var life: = 0.58 if chain_depth > 0 else 0.52
+	bombastica_vfx.append({"kind": "explosion", "pos": center, "radius": radius, "life": life, "max": life, "source": source, "chain_depth": chain_depth, "seed": seed_val})
+	if bombastica_use_old_vfx:
+		_spawn_radial_particles(center, Color(1.0, 0.5, 0.1), 26 if chain_depth == 0 else 32)
 
 
 func _eclipsada_speed_multiplier() -> float:
@@ -19758,11 +20047,11 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		_play_sfx("Hit_Boss1.mp3", 0.06, 0.3)
 	var armor = BOSS_ARMOR + (time_alive / 60.0) * 0.0016 + enemies_killed * 6e-05 + cards_bought.get("Coletora", 0) * 0.004
 	if current_phase == 2:
-		armor += 0.015
+		armor += 0.0165
 	elif current_phase == 3:
-		armor += 0.045
+		armor += 0.0495
 	elif current_phase == 4:
-		armor += 0.075
+		armor += 0.0825
 	if source == "veneno":
 		armor += 0.1
 	if source == "parasite_feast":
@@ -37269,10 +37558,25 @@ func _draw_manifestation_secondaries(camera: Vector2) -> void :
 
 
 func _draw_bombastica_world(camera: Vector2) -> void :
+	_draw_bombastica_powder_trail_world(camera)
 	for bomb in bombastica_bombs:
 		if bool(bomb.get("exploded", false)):
 			continue
 		var p: = Vector2(bomb.get("pos", player_pos)) - camera
+		var state: = String(bomb.get("state", "armed"))
+		
+		# Parabolic Arc Ground Shadow during Throw (Section 29)
+		if state == "flying":
+			var target_p: = Vector2(bomb.get("target", player_pos)) - camera
+			var age: = float(bomb.get("age", 0.0))
+			var travel: = maxf(0.01, float(bomb.get("travel", 0.28)))
+			var progress: = clampf(age / travel, 0.0, 1.0)
+			var height_factor: = sin(progress * PI)
+			var shadow_rx: = lerpf(14.0, 6.0, height_factor)
+			var shadow_ry: = lerpf(7.0, 3.0, height_factor)
+			var shadow_alpha: = lerpf(0.55, 0.22, height_factor)
+			draw_ellipse(target_p + Vector2(0, 10), shadow_rx, shadow_ry, Color(0.02, 0.02, 0.04, shadow_alpha))
+			
 		var radius: = float(bomb.get("radius", BOMBASTICA_Q_RADIUS))
 		var fuse: = maxf(0.0, float(bomb.get("fuse", 0.0)))
 		var fuse_total: = maxf(0.01, float(bomb.get("fuse_total", BOMBASTICA_Q_FUSE_MIN)))
@@ -37282,8 +37586,12 @@ func _draw_bombastica_world(camera: Vector2) -> void :
 		var aura: = Color(1.0, 0.44, 0.08, 0.08 + urgent * 0.08)
 		if bool(bomb.get("critical", false)):
 			aura = Color(1.0, 0.1, 0.08, 0.18 + pulse * 0.08)
+			
+		# Range Telegraph Circle
 		draw_circle(p, radius, aura)
 		draw_arc(p, radius + pulse * 5.0, - time_alive * 1.7, TAU - time_alive * 1.7, 72, Color(1.0, 0.58, 0.1, 0.58 + urgent * 0.3), 2.6)
+		
+		# Bomb Body & Fuse
 		draw_circle(p, 18.0 + pulse * 2.0, Color(0.04, 0.04, 0.06, 0.92))
 		draw_circle(p, 11.0, Color(1.0, 0.46, 0.06, 0.88))
 		draw_circle(p - Vector2(3, 4), 4.0, Color(1.0, 0.95, 0.62, 0.92))
@@ -37294,29 +37602,31 @@ func _draw_bombastica_world(camera: Vector2) -> void :
 		if fuse <= 1.0:
 			draw_arc(p, 27.0 + pulse * 6.0, 0.0, TAU, 36, Color(1.0, 1.0, 1.0, 0.74), 2.0)
 		_draw_centered("%.1f" % fuse, p + Vector2(0, -47), 11, Color(1.0, 0.88, 0.48, 0.92))
+		
 	for visual in bombastica_vfx:
 		var alpha: = clampf(float(visual.get("life", 0.0)) / maxf(0.01, float(visual.get("max", 1.0))), 0.0, 1.0)
 		match String(visual.get("kind", "")):
 			"explosion":
-				var center: = Vector2(visual.get("pos", player_pos)) - camera
-				var max_radius: = float(visual.get("radius", BOMBASTICA_Q_RADIUS))
-				var grow: = 1.0 - alpha
-				var explosion_seed: = int(visual.get("seed", 0))
-				var chain_power: = 1.0 + float(int(visual.get("chain_depth", 0))) * 0.12
-				draw_circle(center, max_radius * (0.36 + grow * 0.54), Color(1.0, 0.2, 0.04, 0.11 * alpha * chain_power))
-				draw_circle(center, max_radius * grow, Color(1.0, 0.52, 0.06, 0.18 * alpha))
-				draw_circle(center, max_radius * 0.24 * (0.55 + grow), Color(1.0, 0.92, 0.46, 0.34 * alpha))
-				draw_arc(center, max_radius * grow, 0.0, TAU, 92, Color(1.0, 0.8, 0.22, 0.88 * alpha), 6.0)
-				draw_arc(center, max_radius * (0.62 + grow * 0.34), - time_alive * 5.2, TAU - time_alive * 5.2, 72, Color(0.18, 0.88, 1.0, 0.48 * alpha), 2.6)
-				draw_arc(center, max_radius * (0.42 + grow * 0.46), time_alive * 4.0, time_alive * 4.0 + TAU * 0.68, 64, Color(1.0, 0.22, 0.08, 0.62 * alpha), 3.2)
-				for i in range(16):
-					var angle: float = float(i) * TAU / 16.0 + float(explosion_seed % 97) * 0.017 + sin(time_alive * 3.0 + i) * 0.08
-					var inner: = center + Vector2.from_angle(angle) * max_radius * 0.14 * grow
-					var outer: = center + Vector2.from_angle(angle) * max_radius * (0.45 + grow * (0.42 + float(i % 4) * 0.045))
-					var spark_color: = Color(1.0, 0.92 - float(i % 3) * 0.08, 0.36, 0.52 * alpha)
-					draw_line(inner, outer, spark_color, 1.8 + float(i % 3) * 0.45)
-					if i % 3 == 0:
-						draw_circle(outer, 3.0 + grow * 2.0, Color(1.0, 0.58, 0.14, 0.54 * alpha))
+				if bombastica_use_old_vfx:
+					var center: = Vector2(visual.get("pos", player_pos)) - camera
+					var max_radius: = float(visual.get("radius", BOMBASTICA_Q_RADIUS))
+					var grow: = 1.0 - alpha
+					var explosion_seed: = int(visual.get("seed", 0))
+					var chain_power: = 1.0 + float(int(visual.get("chain_depth", 0))) * 0.12
+					draw_circle(center, max_radius * (0.36 + grow * 0.54), Color(1.0, 0.2, 0.04, 0.11 * alpha * chain_power))
+					draw_circle(center, max_radius * grow, Color(1.0, 0.52, 0.06, 0.18 * alpha))
+					draw_circle(center, max_radius * 0.24 * (0.55 + grow), Color(1.0, 0.92, 0.46, 0.34 * alpha))
+					draw_arc(center, max_radius * grow, 0.0, TAU, 92, Color(1.0, 0.8, 0.22, 0.88 * alpha), 6.0)
+					draw_arc(center, max_radius * (0.62 + grow * 0.34), - time_alive * 5.2, TAU - time_alive * 5.2, 72, Color(0.18, 0.88, 1.0, 0.48 * alpha), 2.6)
+					draw_arc(center, max_radius * (0.42 + grow * 0.46), time_alive * 4.0, time_alive * 4.0 + TAU * 0.68, 64, Color(1.0, 0.22, 0.08, 0.62 * alpha), 3.2)
+					for i in range(16):
+						var angle: float = float(i) * TAU / 16.0 + float(explosion_seed % 97) * 0.017 + sin(time_alive * 3.0 + i) * 0.08
+						var inner: = center + Vector2.from_angle(angle) * max_radius * 0.14 * grow
+						var outer: = center + Vector2.from_angle(angle) * max_radius * (0.45 + grow * (0.42 + float(i % 4) * 0.045))
+						var spark_color: = Color(1.0, 0.92 - float(i % 3) * 0.08, 0.36, 0.52 * alpha)
+						draw_line(inner, outer, spark_color, 1.8 + float(i % 3) * 0.45)
+						if i % 3 == 0:
+							draw_circle(outer, 3.0 + grow * 2.0, Color(1.0, 0.58, 0.14, 0.54 * alpha))
 			"link":
 				var a: = Vector2(visual.get("a", player_pos)) - camera
 				var b: = Vector2(visual.get("b", player_pos)) - camera
@@ -41252,17 +41562,167 @@ func _draw_boss1_rewind_overlay(viewport: Vector2, camera: Vector2) -> void :
 		_draw_centered("LINHA RESTAURADA", clock_center + Vector2(0, radius + 40.0), 22, Color(0.48, 0.94, 1.0))
 
 
-func _draw_boss_wave_safe_sector(center: Vector2, angle: float, size: float, radius: float, alpha: float) -> void :
+func _get_boss_wave_quality_profile() -> String :
+	if gfx_memory_saver or (gfx_low_resource and not gfx_particles):
+		return "LOW"
+	elif gfx_low_resource or not gfx_shadows:
+		return "MEDIUM"
+	return "HIGH"
+
+
+func _draw_boss1_oceanic_slam_impact(camera: Vector2) -> void :
+	if not boss_active or current_phase != 1:
+		return
+	if boss_stage_timer <= 0.0 or boss_stage_timer > (BOSS_STAGE_JUMP_TIME - BOSS_STAGE_SLAM_TIME):
+		return
+	var time_since_slam: float = (BOSS_STAGE_JUMP_TIME - BOSS_STAGE_SLAM_TIME) - boss_stage_timer
+	if time_since_slam > 0.85:
+		return
+	var center: Vector2 = boss_pos - camera
+	var progress: float = clamp(time_since_slam / 0.85, 0.0, 1.0)
+	var radius: float = lerpf(20.0, 280.0, progress)
+	var alpha: float = (1.0 - progress) * 0.75
+	var profile: String = _get_boss_wave_quality_profile()
+
+	draw_arc(center, radius * 0.7, 0.0, TAU, 48, Color(0.08, 0.62, 0.92, alpha * 0.6), 8.0)
+	draw_arc(center, radius, 0.0, TAU, 64, Color(0.32, 0.88, 1.0, alpha), 5.0)
+	draw_arc(center, radius + 3.0, 0.0, TAU, 64, Color(0.9, 0.98, 1.0, alpha * 0.85), 2.0)
+
+	if profile != "LOW":
+		var ray_count: int = 12 if profile == "HIGH" else 8
+		for i in range(ray_count):
+			var ray_angle: float = float(i) * TAU / float(ray_count) + time_since_slam * 0.5
+			var r_inner: Vector2 = center + Vector2.from_angle(ray_angle) * (radius * 0.4)
+			var r_outer: Vector2 = center + Vector2.from_angle(ray_angle) * (radius * 1.1)
+			draw_line(r_inner, r_outer, Color(0.5, 0.95, 1.0, alpha * 0.5), 2.0)
+
+
+func _draw_boss_wave_safe_sector(center: Vector2, angle: float, size: float, radius: float, alpha: float, enraged: bool = false) -> void :
+	var profile: String = _get_boss_wave_quality_profile()
 	var points = PackedVector2Array([center])
 	var segments = 14
 	for segment in range(segments + 1):
 		var sector_angle = angle - size * 0.5 + size * float(segment) / float(segments)
 		points.append(center + Vector2.from_angle(sector_angle) * radius)
-	draw_polygon(points, PackedColorArray([Color(0.1, 0.88, 0.62, alpha)]))
+
+	var fill_color: Color = Color(0.04, 0.78, 0.72, alpha) if not enraged else Color(0.02, 0.85, 0.82, alpha * 1.1)
+	draw_polygon(points, PackedColorArray([fill_color]))
+
 	var left = center + Vector2.from_angle(angle - size * 0.5) * radius
 	var right = center + Vector2.from_angle(angle + size * 0.5) * radius
-	draw_line(center, left, Color(0.32, 1.0, 0.84, min(0.72, alpha * 2.4)), 2.0)
-	draw_line(center, right, Color(0.32, 1.0, 0.84, min(0.72, alpha * 2.4)), 2.0)
+	var border_color: Color = Color(0.32, 1.0, 0.84, min(0.82, alpha * 2.6))
+	draw_line(center, left, border_color, 2.2)
+	draw_line(center, right, border_color, 2.2)
+
+	if profile != "LOW" and alpha > 0.06:
+		var line_step: float = 140.0
+		var max_r: float = min(radius, 600.0)
+		var step_r: float = 120.0
+		while step_r < max_r:
+			var arc_left: Vector2 = center + Vector2.from_angle(angle - size * 0.35) * step_r
+			var arc_right: Vector2 = center + Vector2.from_angle(angle + size * 0.35) * step_r
+			draw_line(arc_left, arc_right, Color(0.4, 0.98, 0.9, alpha * 0.45), 1.2)
+			step_r += line_step
+
+
+func _draw_boss_wave_water_body(center: Vector2, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
+	var c_base: Color = Color(0.02, 0.22, 0.58, 0.52) if enraged else Color(0.04, 0.28, 0.68, 0.48)
+	var c_core: Color = Color(0.0, 0.65, 0.92, 0.82) if enraged else Color(0.08, 0.58, 0.88, 0.78)
+	var c_upper: Color = Color(0.45, 0.92, 1.0, 0.88) if enraged else Color(0.32, 0.84, 0.96, 0.82)
+
+	for arc in arc_ranges:
+		var a1: float = float(arc.x)
+		var a2: float = float(arc.y)
+
+		draw_arc(center, radius, a1, a2, 58, c_base, width + 7.0)
+		draw_arc(center, radius, a1, a2, 58, c_core, width + 1.0)
+
+		if profile != "LOW":
+			draw_arc(center, radius + width * 0.15, a1, a2, 58, c_upper, max(2.0, width * 0.4))
+
+
+func _draw_boss_wave_crest_and_foam(center: Vector2, wave: Dictionary, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
+	var age: float = float(wave.get("age", 0.0))
+	var wave_idx: int = int(wave.get("idx", 0))
+
+	var crest_color: Color = Color(0.94, 0.99, 1.0, 0.95)
+	var undertone_color: Color = Color(0.45, 0.92, 1.0, 0.86) if enraged else Color(0.38, 0.88, 0.98, 0.80)
+
+	var crest_r: float = radius + width * 0.45
+
+	for arc in arc_ranges:
+		var a1: float = float(arc.x)
+		var a2: float = float(arc.y)
+
+		if profile == "LOW":
+			draw_arc(center, crest_r, a1, a2, 58, undertone_color, 4.0)
+			draw_arc(center, crest_r + 1.0, a1, a2, 58, crest_color, 2.0)
+		else:
+			var segments: int = 42
+			var arc_len: float = a2 - a1
+			var pts_undertone: PackedVector2Array = PackedVector2Array()
+			var pts_crest: PackedVector2Array = PackedVector2Array()
+
+			for s in range(segments + 1):
+				var frac: float = float(s) / float(segments)
+				var angle: float = a1 + frac * arc_len
+				var jitter: float = sin(angle * 16.0 + age * 14.0 + float(wave_idx) * 2.5) * (2.2 if enraged else 1.5)
+				var cur_r: float = crest_r + jitter
+				pts_crest.append(center + Vector2.from_angle(angle) * cur_r)
+				pts_undertone.append(center + Vector2.from_angle(angle) * (cur_r - 1.5))
+
+			if pts_undertone.size() > 1:
+				draw_polyline(pts_undertone, undertone_color, 4.0, true)
+			if pts_crest.size() > 1:
+				draw_polyline(pts_crest, crest_color, 2.0, true)
+
+		var foam_step: float = 0.08 if enraged else 0.12
+		if profile == "LOW":
+			foam_step = 0.24
+
+		var angle_curr: float = a1
+		var step_i: int = 0
+		while angle_curr < a2:
+			step_i += 1
+			var h1: float = sin(float(wave_idx) * 17.3 + float(step_i) * 9.1 + floor(age * 8.0) * 0.3)
+			var h2: float = cos(float(step_i) * 13.7 + float(wave_idx) * 5.2)
+
+			if h1 > (0.1 if profile == "HIGH" else 0.35):
+				var f_angle: float = angle_curr + h2 * 0.03
+				var f_dist: float = crest_r + h1 * (3.5 if enraged else 2.5)
+				var foam_pos: Vector2 = center + Vector2.from_angle(f_angle) * f_dist
+				var foam_size: float = 2.0 + abs(h2) * (2.4 if enraged else 1.8)
+				var foam_col: Color = Color(0.96, 1.0, 1.0, 0.85 + h1 * 0.15) if h2 > 0.0 else Color(0.6, 0.95, 1.0, 0.78)
+
+				draw_circle(foam_pos, foam_size, foam_col)
+
+				if profile == "HIGH" and h1 > 0.65:
+					var spray_pos: Vector2 = center + Vector2.from_angle(f_angle + 0.015) * (f_dist + 4.5)
+					draw_circle(spray_pos, 1.2, Color(0.9, 0.98, 1.0, 0.7))
+
+			angle_curr += foam_step
+
+
+func _draw_boss_wave_trail(center: Vector2, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
+	if profile == "LOW":
+		return
+
+	var trail_r: float = radius - width * 0.55
+	var trail_width: float = width * 0.7
+	var trail_color: Color = Color(0.02, 0.35, 0.75, 0.32) if not enraged else Color(0.01, 0.45, 0.85, 0.42)
+
+	for arc in arc_ranges:
+		var a1: float = float(arc.x)
+		var a2: float = float(arc.y)
+		draw_arc(center, trail_r, a1, a2, 48, trail_color, trail_width)
+
+
+func _draw_boss_wave_gate_markers(center: Vector2, radius: float, opening: float, opening_size: float, enraged: bool) -> void :
+	for gap_angle in [opening, opening + PI]:
+		var gate_pos: Vector2 = center + Vector2.from_angle(gap_angle) * radius
+		var gate_color: Color = Color(0.2, 0.95, 0.85, 0.88)
+		draw_arc(gate_pos, 14.0, 0.0, TAU, 24, gate_color, 2.2)
+		draw_circle(gate_pos, 4.0, Color(0.8, 1.0, 0.95, 0.9))
 
 
 func _draw_boss1_absorb(camera: Vector2) -> void :
@@ -41286,8 +41746,11 @@ func _draw_boss1_absorb(camera: Vector2) -> void :
 func _draw_boss_attacks(camera: Vector2) -> void :
 	_draw_boss1_time_wave(camera)
 	_draw_boss1_absorb(camera)
+	_draw_boss1_oceanic_slam_impact(camera)
+	var profile: String = _get_boss_wave_quality_profile()
 	for wave in boss_transition_waves:
 		var center = Vector2(wave["pos"]) - camera
+		var enraged = bool(wave.get("enraged", false))
 		if String(wave.get("kind", "")) == "dupla_abertura":
 			var age = float(wave.get("age", 0.0))
 			var warning = float(wave.get("warning", BOSS_STAGE_WAVE_WARNING))
@@ -41295,32 +41758,31 @@ func _draw_boss_attacks(camera: Vector2) -> void :
 			var opening_size = float(wave["open_size"])
 			var warning_progress = clamp(age / max(0.01, warning), 0.0, 1.0)
 			var sector_alpha = (0.18 + warning_progress * 0.12) if age < warning else 0.08
-			_draw_boss_wave_safe_sector(center, opening, opening_size, 780.0, sector_alpha)
-			_draw_boss_wave_safe_sector(center, opening + PI, opening_size, 780.0, sector_alpha)
+			_draw_boss_wave_safe_sector(center, opening, opening_size, 780.0, sector_alpha, enraged)
+			_draw_boss_wave_safe_sector(center, opening + PI, opening_size, 780.0, sector_alpha, enraged)
 			if age < warning:
-				draw_circle(center, 44.0 + warning_progress * 28.0, Color(0.78, 0.08, 1.0, 0.1 + warning_progress * 0.12))
-				draw_arc(center, 48.0 + warning_progress * 30.0, 0.0, TAU, 52, Color(1.0, 0.34, 0.78, 0.72), 3.0)
+				draw_circle(center, 44.0 + warning_progress * 28.0, Color(0.08, 0.65, 0.92, 0.12 + warning_progress * 0.15))
+				draw_arc(center, 48.0 + warning_progress * 30.0, 0.0, TAU, 52, Color(0.4, 0.95, 1.0, 0.8), 3.0)
 				continue
 			var radius = float(wave["radius"])
+			var width = float(wave.get("width", 20.0))
 			var half_gap = opening_size * 0.5
 			var dangerous_arcs = [
 				Vector2(opening + half_gap, opening + PI - half_gap), 
 				Vector2(opening + PI + half_gap, opening + TAU - half_gap)
 			]
-			for arc_range in dangerous_arcs:
-				draw_arc(center, radius, arc_range.x, arc_range.y, 58, Color(0.52, 0.0, 0.72, 0.76), float(wave["width"]) + 6.0)
-				draw_arc(center, radius, arc_range.x, arc_range.y, 58, Color(1.0, 0.22, 0.54, 0.88), float(wave["width"]) + 1.0)
-				draw_arc(center, radius, arc_range.x, arc_range.y, 58, Color(1.0, 0.88, 1.0, 0.82), 2.0)
-			for gap_angle in [opening, opening + PI]:
-				var gate = center + Vector2.from_angle(gap_angle) * radius
-				draw_arc(gate, 13.0, 0.0, TAU, 20, Color(0.32, 1.0, 0.86, 0.78), 2.0)
+			_draw_boss_wave_trail(center, radius, dangerous_arcs, width, enraged, profile)
+			_draw_boss_wave_water_body(center, radius, dangerous_arcs, width, enraged, profile)
+			_draw_boss_wave_crest_and_foam(center, wave, radius, dangerous_arcs, width, enraged, profile)
+			_draw_boss_wave_gate_markers(center, radius, opening, opening_size, enraged)
 			continue
-		var c1 = Color(0.58, 0.0, 1.0, 0.75)
-		var c2 = Color(0.0, 1.0, 1.0, 0.72)
 		var start = float(wave.get("open_angle", 0.0)) + float(wave.get("open_size", 0.0)) * 0.5
 		var end = start + TAU - float(wave.get("open_size", 0.0))
-		draw_arc(center, float(wave["radius"]), start, end, 96, c1, float(wave["width"]) + 4)
-		draw_arc(center, float(wave["radius"]), start, end, 96, c2, max(2.0, float(wave["width"]) - 4))
+		var fallback_arcs = [Vector2(start, end)]
+		var fallback_width = float(wave.get("width", 20.0))
+		var fallback_radius = float(wave.get("radius", 0.0))
+		_draw_boss_wave_water_body(center, fallback_radius, fallback_arcs, fallback_width, enraged, profile)
+		_draw_boss_wave_crest_and_foam(center, wave, fallback_radius, fallback_arcs, fallback_width, enraged, profile)
 	for attack in boss_attacks:
 		var age = float(attack.get("age", 0.0))
 		if age < 0.0:
