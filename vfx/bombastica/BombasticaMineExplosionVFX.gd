@@ -12,7 +12,7 @@ var _max_lifetime: float = 1.2
 var _is_playing: bool = false
 var _light_tween: Tween
 
-func play_at(pos: Vector2, quality: String = "HIGH", seed_val: int = 0) -> void:
+func play_at(pos: Vector2, quality: String = "HIGH", _seed_val: int = 0) -> void:
 	global_position = pos
 	_is_playing = true
 	_life_timer = 0.0

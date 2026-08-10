@@ -1,14 +1,15 @@
 {
-    "version":  "2.0.31f",
-    "version_code":  23106,
-    "filename":  "Ruptura_Temporal_2.0.31f.exe",
-    "sha256":  "",
-    "size":  1300244296,
+    "version":  "2.0.31g",
+    "version_code":  23107,
+    "filename":  "Ruptura_Temporal_2.0.31g.exe",
+    "sha256":  "9dec56d95099e9b3f6c5e9a48f4c42e5ddf393ac84e8d12d00c50b8fdc247257",
+    "size":  1301781864,
     "notes":  [
-                  "Corrige a abertura do jogo para eliminar artefatos visuais e blocos corrompidos.",
-                  "A tela inicial agora usa uma reproducao mais estavel por frames, com audio e transicao suave para o menu.",
-                  "Ajusta o empacotamento para impedir que o video antigo corrompido entre na nova versao."
+                  "Jogadores veteranos recuperam automaticamente manifestacoes e espectros ja usados em runs registradas quando atualizam.",
+                  "Catalogo Temporal revisado para reduzir textos achatados e vazando dos paineis.",
+                  "Tela de atualizacao preparada com textos mais claros para proximas versoes.",
+                  "Ajustes internos de compatibilidade para manter jogadores novos com progresso bloqueado por merito."
               ],
     "mandatory":  false,
-    "published_at":  "2026-08-03T21:57:31.3700304Z"
+    "published_at":  "2026-08-09T17:24:55.2852392Z"
 }

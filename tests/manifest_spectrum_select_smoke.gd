@@ -19,6 +19,11 @@ func _run() -> void:
 	await process_frame
 	game.selected_manifestation = 1
 	game.selected_aura = 4
+	game.unlocked_manifestation_ids[String(game.MANIFESTATIONS[1].get("key", ""))] = true
+	game.unlocked_manifestation_ids[String(game.MANIFESTATIONS[2].get("key", ""))] = true
+	game.unlocked_spectrum_ids[String(game.AURAS[4].get("key", ""))] = true
+	game.unlocked_spectrum_ids[String(game.AURAS[5].get("key", ""))] = true
+	game.unlocked_spectrum_ids[String(game.AURAS[9].get("key", ""))] = true
 	game._open_manifest_select()
 	_check(game.mode == "manifest", "manifest selector did not open")
 	_check(game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION, "selector did not start on manifestation stage")

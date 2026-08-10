@@ -1,0 +1,39 @@
+{
+  "source": "C:\\Users\\luish\\Downloads\\Fenix-egg.png",
+  "sheet": "Fenix-egg",
+  "frame_count": 4,
+  "uniform_canvas": true,
+  "padding": 4,
+  "boxes": [
+    {
+      "left": 119,
+      "top": 52,
+      "right": 252,
+      "bottom": 226
+    },
+    {
+      "left": 326,
+      "top": 50,
+      "right": 458,
+      "bottom": 226
+    },
+    {
+      "left": 540,
+      "top": 51,
+      "right": 675,
+      "bottom": 226
+    },
+    {
+      "left": 741,
+      "top": 52,
+      "right": 871,
+      "bottom": 227
+    }
+  ],
+  "files": [
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_egg\\Fenix-egg_01.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_egg\\Fenix-egg_02.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_egg\\Fenix-egg_03.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_egg\\Fenix-egg_04.png"
+  ]
+}

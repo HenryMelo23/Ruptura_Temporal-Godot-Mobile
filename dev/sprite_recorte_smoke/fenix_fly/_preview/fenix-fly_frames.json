@@ -1,0 +1,39 @@
+{
+  "source": "C:\\Users\\luish\\Downloads\\fenix-fly.png",
+  "sheet": "fenix-fly",
+  "frame_count": 4,
+  "uniform_canvas": true,
+  "padding": 4,
+  "boxes": [
+    {
+      "left": 2,
+      "top": 64,
+      "right": 211,
+      "bottom": 311
+    },
+    {
+      "left": 207,
+      "top": 101,
+      "right": 368,
+      "bottom": 311
+    },
+    {
+      "left": 367,
+      "top": 113,
+      "right": 489,
+      "bottom": 311
+    },
+    {
+      "left": 491,
+      "top": 108,
+      "right": 654,
+      "bottom": 310
+    }
+  ],
+  "files": [
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_fly\\fenix-fly_01.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_fly\\fenix-fly_02.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_fly\\fenix-fly_03.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_fly\\fenix-fly_04.png"
+  ]
+}

@@ -1388,6 +1388,87 @@ function profileKeyForRun(run) {
   return `name-${crypto.createHash("sha1").update(player || "jogador").digest("hex").slice(0, 16)}`;
 }
 
+const MANIFESTATION_UNLOCK_ALIASES = {
+  eletrica: "eletrica",
+  lacerante: "lacerante",
+  prismatica: "prismatica",
+  retornante: "retornante",
+  parasitica: "parasitica",
+  gravitante: "gravitante",
+  ancorada: "ancorada",
+  cartografica: "cartografica",
+  mnesica: "mnesica",
+  ressonante: "ressonante",
+  contratual: "contratual",
+  acorrentada: "acorrentada",
+  eclipsada: "eclipsada",
+  bombastica: "bombastica",
+  necronada: "necronada"
+};
+
+const SPECTER_UNLOCK_ALIASES = {
+  impulsiva: "impulsiva",
+  racional: "racional",
+  devota: "devota",
+  vanguarda: "vanguarda",
+  insana: "insana",
+  voraz: "voraz",
+  nula: "nula",
+  abissal: "abissal",
+  profetica: "profetica",
+  sanguinaria: "sanguinaria",
+  crepuscular: "crepuscular",
+  peregrino: "peregrino",
+  peregrina: "peregrino",
+  equilibrista: "equilibrista",
+  avarento: "avarento",
+  avarenta: "avarento",
+  oportunista: "oportunista"
+};
+
+function normalizeUnlockAlias(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function unlockKeyFromValue(value, aliases) {
+  return aliases[normalizeUnlockAlias(value)] || "";
+}
+
+function veteranUnlockSnapshot(query) {
+  const profileId = String(query.get("profile_id") || "").trim().slice(0, 64);
+  const player = String(query.get("player") || "").trim().toLowerCase().slice(0, 32);
+  const versionCode = Math.max(0, Math.floor(Number(query.get("version_code")) || 0));
+  const store = loadLeaderboardStore();
+  const manifestations = new Set(["eletrica"]);
+  const specters = new Set(["impulsiva"]);
+  let matchedRuns = 0;
+
+  for (const run of Array.isArray(store.runs) ? store.runs : []) {
+    const runProfileId = String(run.profileId || "").trim();
+    const byProfile = profileId && runProfileId && runProfileId === profileId;
+    const byName = !byProfile && player && String(run.player || "").trim().toLowerCase() === player && run.rankEligible !== false;
+    if (!byProfile && !byName) continue;
+    matchedRuns += 1;
+    const manifestation = unlockKeyFromValue(run.manifestationKey || run.manifestation, MANIFESTATION_UNLOCK_ALIASES);
+    const specter = unlockKeyFromValue(run.spectrumKey || run.spectrum, SPECTER_UNLOCK_ALIASES);
+    if (manifestation) manifestations.add(manifestation);
+    if (specter) specters.add(specter);
+  }
+
+  return {
+    ok: true,
+    profile_id: profileId,
+    matched_runs: matchedRuns,
+    version_code: versionCode,
+    manifestations: Array.from(manifestations).sort(),
+    specters: Array.from(specters).sort()
+  };
+}
+
 function normalizeCardRows(cards) {
   if (!Array.isArray(cards)) {
     return [];
@@ -1922,6 +2003,12 @@ async function route(req, res) {
     const currentVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("version_code")) || 0));
     res.setHeader("Cache-Control", "no-store, max-age=0");
     sendJson(res, 200, updatePublic("windows", currentVersionCode));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/updates/unlocks/veteran") {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, veteranUnlockSnapshot(url.searchParams));
     return;
   }
 

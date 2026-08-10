@@ -1,13 +1,13 @@
 [gd_scene load_steps=18 format=3 uid="uid://b8m2mine1234"]
 
 [ext_resource type="Script" path="res://vfx/bombastica/BombasticaMineExplosionVFX.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://c1core_sheet" path="res://vfx/bombastica/textures/explosion_core_sheet.png" id="2_core_sheet"]
-[ext_resource type="Texture2D" uid="uid://c4spark" path="res://vfx/bombastica/textures/spark_texture.png" id="3_spark_tex"]
-[ext_resource type="Texture2D" uid="uid://c5ember" path="res://vfx/bombastica/textures/ember_texture.png" id="4_ember_tex"]
-[ext_resource type="Texture2D" uid="uid://c6debris" path="res://vfx/bombastica/textures/debris_texture.png" id="5_debris_tex"]
-[ext_resource type="Material" uid="uid://m1sparks" path="res://vfx/bombastica/materials/bombastica_sparks.tres" id="6_sparks_mat"]
-[ext_resource type="Material" uid="uid://m2embers" path="res://vfx/bombastica/materials/bombastica_embers.tres" id="7_embers_mat"]
-[ext_resource type="Material" uid="uid://m3debris" path="res://vfx/bombastica/materials/bombastica_debris.tres" id="8_debris_mat"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/explosion_core_sheet.png" id="2_core_sheet"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/spark_texture.png" id="3_spark_tex"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/ember_texture.png" id="4_ember_tex"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/debris_texture.png" id="5_debris_tex"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_sparks.tres" id="6_sparks_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_embers.tres" id="7_embers_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_debris.tres" id="8_debris_mat"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_m0"]
 atlas = ExtResource("2_core_sheet")

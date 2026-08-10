@@ -1,11 +1,11 @@
 [gd_scene load_steps=12 format=3 uid="uid://b8m2igni5678"]
 
 [ext_resource type="Script" path="res://vfx/bombastica/BombasticaIgnitionVFX.gd" id="1_script"]
-[ext_resource type="Texture2D" uid="uid://c1core_sheet" path="res://vfx/bombastica/textures/explosion_core_sheet.png" id="2_core_sheet"]
-[ext_resource type="Texture2D" uid="uid://c5ember" path="res://vfx/bombastica/textures/ember_texture.png" id="3_ember_tex"]
-[ext_resource type="Texture2D" uid="uid://c7quantum" path="res://vfx/bombastica/textures/quantum_spark.png" id="4_quantum_tex"]
-[ext_resource type="Material" uid="uid://m2embers" path="res://vfx/bombastica/materials/bombastica_embers.tres" id="5_embers_mat"]
-[ext_resource type="Material" uid="uid://m6quantum" path="res://vfx/bombastica/materials/bombastica_quantum.tres" id="6_quantum_mat"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/explosion_core_sheet.png" id="2_core_sheet"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/ember_texture.png" id="3_ember_tex"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/quantum_spark.png" id="4_quantum_tex"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_embers.tres" id="5_embers_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_quantum.tres" id="6_quantum_mat"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_i0"]
 atlas = ExtResource("2_core_sheet")
