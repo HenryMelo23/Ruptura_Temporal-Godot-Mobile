@@ -758,6 +758,8 @@ const BOSS7_STATE_FLY: = "fly"
 const BOSS7_STATE_FEATHER: = "feather_volley"
 const BOSS7_STATE_WING: = "wing_blast"
 const BOSS7_STATE_DIVE_PREP: = "dive_prepare"
+const BOSS7_STATE_DIVE_WAIT: = "dive_wait"
+const BOSS7_STATE_DIVE_MARK: = "dive_mark"
 const BOSS7_STATE_DIVE: = "dive"
 const BOSS7_STATE_RECOVERY: = "recovery"
 const BOSS7_STATE_REBIRTH_START: = "rebirth_start"
@@ -769,6 +771,8 @@ const BOSS7_ATTACK_DIVE_TRAIL: = "boss7_dive_trail"
 const BOSS7_ATTACK_THERMAL: = "boss7_thermal"
 const BOSS7_ATTACK_ASH_RAIN: = "boss7_ash_rain"
 const BOSS7_ATTACK_CROWN: = "boss7_crown"
+const BOSS7_ATTACK_SKY_FIREBALLS: = "boss7_sky_fireballs"
+const BOSS7_ATTACK_WHIRLWIND: = "boss7_whirlwind"
 const BOSS7_FEATHER_WINDUP: = 0.44
 const BOSS7_FEATHER_SPEED: = 360.0
 const BOSS7_FEATHER_REBORN_SPEED: = 395.0
@@ -1092,14 +1096,14 @@ const BOMBASTICA_Q_CHARGES: = 3
 const BOMBASTICA_Q_RECHARGE: = 7.0
 const BOMBASTICA_Q_FUSE_MIN: = 3.0
 const BOMBASTICA_Q_FUSE_MAX: = 6.0
-const BOMBASTICA_Q_DAMAGE_MULT: = 1.55
+const BOMBASTICA_Q_DAMAGE_MULT: = 1.9375
 const BOMBASTICA_Q_RADIUS: = 105.0
 const BOMBASTICA_Q_PLACE_DISTANCE: = 70.0
 const BOMBASTICA_Q_THROW_RANGE: = 430.0
 const BOMBASTICA_E_COOLDOWN: = 13.5
-const BOMBASTICA_E_DURATION: = 7.0
+const BOMBASTICA_E_DURATION: = 10.0
 const BOMBASTICA_E_MINE_COUNT: = 5
-const BOMBASTICA_E_MINE_DAMAGE_MULT: = 0.48
+const BOMBASTICA_E_MINE_DAMAGE_MULT: = 0.60
 const BOMBASTICA_E_MINE_RADIUS: = 65.0
 const BOMBASTICA_E_ARM_TIME: = 0.26
 const BOMBASTICA_POWDER_DURATION: = 5.0
@@ -1119,6 +1123,13 @@ const BOMBASTICA_ULT_BLAST_DAMAGE_MULT: float = 1.30
 const BOMBASTICA_ULT_FINALE_RADIUS: float = 155.0
 const BOMBASTICA_ULT_FINALE_DAMAGE_MULT: float = 2.80
 const BOMBASTICA_ULT_FINALE_REPEAT_FLOOR: float = 0.75
+const BOMBASTICA_ULTIMATE_RADIUS: float = 280.0
+const BOMBASTICA_ULTIMATE_DURATION: float = 10.0
+const BOMBASTICA_ULTIMATE_SPEED: float = 85.0
+const BOMBASTICA_ULTIMATE_BOUNCE_PERIOD: float = 1.5
+const BOMBASTICA_ULTIMATE_DAMAGE_MULT: float = 3.65
+const BOMBASTICA_ULTIMATE_SHOT_DAMAGE_MULT: float = 0.82
+const BOMBASTICA_ULTIMATE_GROUNDED_WINDOW: float = 0.22
 const NECRONADA_EPITAPH_DURATION: = 8.0
 const NECRONADA_EPITAPH_MAX_DEPTH: = 5
 const NECRONADA_VESTIGE_DURATION: = 12.0
@@ -2491,6 +2502,7 @@ var keyboard_bindings: Dictionary = {
 	"secondary": INPUT_BIND_KEY_PREFIX + str(KEY_E), 
 	"dash": INPUT_BIND_KEY_PREFIX + str(KEY_F), 
 	"lacerante_empower": INPUT_BIND_KEY_PREFIX + str(KEY_R), 
+	"dance": INPUT_BIND_KEY_PREFIX + str(KEY_O),
 	"pause": INPUT_BIND_KEY_PREFIX + str(KEY_ESCAPE), 
 	"shop": INPUT_BIND_KEY_PREFIX + str(KEY_P), 
 	"boss": INPUT_BIND_KEY_PREFIX + str(KEY_B)
@@ -2573,6 +2585,17 @@ var boss7_core_hp_max: float = 0.0
 var boss7_core_damage: float = 0.0
 var boss7_core_timer: float = 0.0
 var boss7_cooldowns: Dictionary = {}
+var boss7_whirlwind_active: bool = false
+var boss7_whirlwind_shots_left: int = 0
+var boss7_whirlwind_timer: float = 0.0
+var boss7_whirlwind_spawn_timer: float = 0.0
+var boss7_whirlwind_angle: float = 0.0
+var boss7_ultimate_active: bool = false
+var boss7_ultimate_used: bool = false
+var boss7_ultimate_timer: float = 0.0
+var boss7_ultimate_cooldown: float = 0.0
+var boss7_ultimate_quadrants: Array = []
+var boss7_ultimate_tick_timer: float = 0.0
 var boss2_state = BOSS2_STATE_IDLE
 var boss2_action_timer = 0.0
 var boss2_target_position = WORLD_SIZE * 0.5
@@ -2757,6 +2780,14 @@ var boss5_rat_extras: int = 0
 var player_burn_stacks: int = 0
 var player_burn_timer: float = 0.0
 var player_burn_tick_timer: float = 0.0
+var player_burn_vfx_timer: float = 0.0
+var boss7_flame_waves: Array = []
+var dance_wheel_active: bool = false
+var dance_wheel_touch_index: int = -1
+var dance_wheel_start_pos: Vector2 = Vector2.ZERO
+var dance_wheel_hold_timer: float = 0.0
+var player_dancing: bool = false
+var player_dance_timer: float = 0.0
 var boss5_mental_state = "OBSERVANDO"
 var boss5_velocity = Vector2.ZERO
 var boss5_target = WORLD_SIZE * 0.5
@@ -6443,7 +6474,7 @@ func _serialize_gamepad_bindings() -> String:
 
 
 func _keyboard_action_order() -> Array:
-	return ["attack", "skill", "secondary", "dash", "lacerante_empower", "pause", "shop", "boss"]
+	return ["attack", "skill", "secondary", "dash", "lacerante_empower", "dance", "pause", "shop", "boss"]
 
 
 func _keyboard_action_title(action: String) -> String:
@@ -6457,6 +6488,7 @@ func _keyboard_action_subtitle(action: String) -> String:
 		"secondary": return "Ultimate no cursor; pode usar teclado ou mouse"
 		"dash": return "Teleporte para o cursor apenas no botao vinculado"
 		"lacerante_empower": return "Reforco da Lacerante, troca Sol/Lua da Eclipsada ou Poeira da Necronada"
+		"dance": return "Ativa a danca/emote do jogador"
 		"pause": return "Pausar e sair de telas"
 		"shop": return "Chamar loja manual no desktop"
 		"boss": return "Chamar boss quando estiver pronto"
@@ -8613,6 +8645,7 @@ func _reset_boss7_state() -> void:
 	boss7_core_hp_max = 0.0
 	boss7_core_damage = 0.0
 	boss7_core_timer = 0.0
+	boss7_flame_waves.clear()
 	boss7_cooldowns = {
 		BOSS7_ATTACK_FEATHER: 0.0,
 		BOSS7_ATTACK_WING: 0.9,
@@ -9041,6 +9074,7 @@ func _gamepad_action_title(action: String) -> String:
 		"dash": return "DASH / TP"
 		"lacerante_empower": return "REFORCO (+)"
 		"bombastica_detonator": return "DETONADOR"
+		"dance": return "DANCA / EMOTE"
 		"pause": return "PAUSAR / MENU"
 		"shop": return "CHAMAR LOJA"
 		"boss": return "CHAMAR BOSS"
@@ -9055,6 +9089,7 @@ func _gamepad_action_subtitle(action: String) -> String:
 		"dash": return "Movimento de esquiva"
 		"lacerante_empower": return "Lacerante, Eclipsada ou Necronada"
 		"bombastica_detonator": return "Bombastica apenas"
+		"dance": return "Ativa a danca do jogador"
 		"pause": return "Abrir, navegar e sair do pause"
 		"shop": return "Abre a loja manual"
 		"boss": return "Inicia chamado do boss"
@@ -9069,6 +9104,7 @@ func _gamepad_action_color(action: String) -> Color:
 		"dash": return Color(0.2, 0.85, 1.0)
 		"lacerante_empower": return Color(0.92, 0.03, 0.12)
 		"bombastica_detonator": return Color(1.0, 0.48, 0.12)
+		"dance": return Color(0.95, 0.45, 1.0)
 		"pause": return Color(0.8, 0.8, 0.8)
 		"shop": return Color(0.0, 1.0, 0.82)
 		"boss": return Color(1.0, 0.52, 0.16)
@@ -9817,6 +9853,9 @@ func _update_game(delta: float) -> void :
 		if player_stun_timer <= 0.0 and not player_locked:
 			var move = _read_move()
 			if move.length() > 0.05:
+				if player_dancing:
+					player_dancing = false
+					player_dance_timer = 0.0
 				last_facing = move.normalized()
 				var desired_pos: Vector2 = player_pos + last_facing * player_speed * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _pustule_spit_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * _new_common_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
 				player_pos = _resolve_phase2_fire_wall_movement(player_pos, desired_pos)
@@ -11375,7 +11414,7 @@ func _network_secondary_visual_duration() -> float:
 		"cartografica", "mnesica", "ressonante", "contratual": return 5.2
 		"acorrentada": return ACORRENTADA_E_DURATION
 		"eclipsada": return ECLIPSADA_SOL_E_DURATION if _eclipsada_is_sol() else ECLIPSADA_E_MAX_TARGET_TIME
-		"bombastica": return BOMBASTICA_E_DURATION
+		"bombastica": return BOMBASTICA_ULTIMATE_DURATION
 	return 1.0
 
 
@@ -11468,10 +11507,8 @@ func _use_secondary_skill(target_world = null) -> void :
 			else:
 				ability_activated = false
 		"bombastica":
-			if _start_bombastica_ultimate():
-				last_secondary_time = time_alive
-			else:
-				ability_activated = false
+			_spawn_secondary_bombastica(target_world)
+			last_secondary_time = time_alive
 		"necronada":
 			if _cast_necronada_requiem():
 				last_secondary_time = time_alive
@@ -11917,7 +11954,7 @@ func _ground_target_profile(secondary: bool) -> Dictionary:
 			"eclipsada":
 				return {"range": ECLIPSADA_SOL_E_RANGE if _eclipsada_is_sol() else ECLIPSADA_E_AIM_RANGE, "radius": ECLIPSADA_SOL_E_RADIUS if _eclipsada_is_sol() else ECLIPSADA_E_CHAIN_RADIUS, "default": 190.0 if _eclipsada_is_sol() else 105.0, "minimum": 64.0 if _eclipsada_is_sol() else 36.0, "color": _eclipsada_color()}
 			"bombastica":
-				return {"range": 520.0, "radius": 128.0, "default": 230.0, "minimum": 90.0, "color": Color(1.0, 0.62, 0.18)}
+				return {"range": 520.0, "radius": BOMBASTICA_ULTIMATE_RADIUS, "default": 230.0, "minimum": 90.0, "color": Color(1.0, 0.62, 0.18)}
 			"necronada":
 				return {"range": 0.0, "radius": NECRONADA_ULTIMATE_RADIUS, "default": 0.0, "minimum": 0.0, "color": Color(0.52, 0.34, 0.92)}
 	else:
@@ -13118,6 +13155,11 @@ func _update_bombastica_state(delta: float) -> void :
 	for bomb in bombastica_bombs:
 		if bool(bomb.get("exploded", false)):
 			continue
+		if String(bomb.get("kind", "")) == "ultimate_bomb":
+			_update_bombastica_ultimate_bomb(bomb, delta)
+			if not bool(bomb.get("exploded", false)) and float(bomb.get("life", 0.0)) > 0.0:
+				armed_bombs.append(bomb)
+			continue
 		var state: = String(bomb.get("state", "armed"))
 		if state == "flying":
 			bomb["age"] = float(bomb.get("age", 0.0)) + delta
@@ -13365,7 +13407,6 @@ func _try_cast_bombastica_q(target_world = null) -> void :
 	if placed:
 		target = player_pos.clamp(Vector2(95, 95), WORLD_SIZE - Vector2(95, 95))
 	_spawn_bombastica_bomb(target, player_damage * BOMBASTICA_Q_DAMAGE_MULT * skill_power * damage_mult, BOMBASTICA_Q_RADIUS * radius_mult, selected_fuse, not placed)
-	_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.75, 1.0)
 	_add_text("TRIADE %.0fs" % selected_fuse, target + Vector2(0, -72), Color(1.0, 0.62, 0.18), 0.9, 20)
 	_manifest_evolution_on_skill(target)
 	_send_network_ability_visual(NET_ABILITY_SKILL, player_pos, target, selected_fuse)
@@ -13401,28 +13442,49 @@ func _spawn_bombastica_bomb(target: Vector2, damage: float, radius: float, fuse:
 
 
 func _spawn_secondary_bombastica(target_world = null) -> void :
-	var center: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _aim_direction() * 210.0
-	center = center.clamp(Vector2(110, 110), WORLD_SIZE - Vector2(110, 110))
-	var offsets: = [Vector2.ZERO, Vector2(92, 0), Vector2(-92, 0), Vector2(0, 92), Vector2(0, -92)]
-	var mines: Array = []
-	for i in range(BOMBASTICA_E_MINE_COUNT):
-		var pos: Vector2 = (center + offsets[i]).clamp(Vector2(85, 85), WORLD_SIZE - Vector2(85, 85))
-		mines.append({"pos": pos, "armed": false, "arm": BOMBASTICA_E_ARM_TIME + float(i) * 0.04, "triggered": false, "hit": {}, "phase": rng.randf_range(0.0, TAU)})
+	var skill_power: float = _register_manual_skill_use("skill_e", BOMBASTICA_E_COOLDOWN)
+	var direction: Vector2 = _aim_direction()
+	if target_world is Vector2:
+		var aimed: Vector2 = Vector2(target_world) - player_pos
+		if aimed.length() > 0.05:
+			direction = aimed.normalized()
+	var bomb_id: int = bombastica_next_id
+	bombastica_next_id += 1
+	var comet: Dictionary = {
+		"id": bomb_id,
+		"kind": "ultimate_bomb",
+		"pos": player_pos + direction * 40.0,
+		"dir": direction,
+		"radius": BOMBASTICA_ULTIMATE_RADIUS,
+		"speed": BOMBASTICA_ULTIMATE_SPEED,
+		"life": BOMBASTICA_ULTIMATE_DURATION,
+		"max_life": BOMBASTICA_ULTIMATE_DURATION,
+		"damage": player_damage * BOMBASTICA_ULTIMATE_DAMAGE_MULT * skill_power,
+		"bounce_phase": 0.0,
+		"grounded_timer": 0.0,
+		"exploded": false
+	}
+	bombastica_bombs.append(comet)
 	manifestation_secondaries.append({
-		"kind": "bombastica", 
-		"life": BOMBASTICA_E_DURATION, 
-		"max": BOMBASTICA_E_DURATION, 
-		"center": center, 
-		"mines": mines, 
-		"collapse_done": false, 
-		"seed": rng.randi()
+		"kind": "bombastica",
+		"mode": "ultimate_bomb",
+		"life": BOMBASTICA_ULTIMATE_DURATION,
+		"max": BOMBASTICA_ULTIMATE_DURATION,
+		"id": bomb_id
 	})
-	_add_text("CAMPO MINADO", center + Vector2(0, -112), Color(1.0, 0.62, 0.16), 1.2, 24)
-	_play_sfx("Mina-Bombastica.mp3", 0.05, 0.7, 1.0)
-	_spawn_radial_particles(center, Color(1.0, 0.5, 0.1), 22)
+	_add_text("BOMBA-COMETÁRIO", player_pos + Vector2(0, -112), Color(1.0, 0.62, 0.16), 1.2, 24)
+	_spawn_radial_particles(player_pos, Color(1.0, 0.5, 0.1), 22)
 
 
 func _update_secondary_bombastica(secondary: Dictionary, delta: float) -> void :
+	if String(secondary.get("mode", "")) == "ultimate_bomb":
+		var bomb_id: int = int(secondary.get("id", -1))
+		var bomb: Dictionary = _bombastica_bomb_by_id(bomb_id)
+		if bomb.is_empty() or bool(bomb.get("exploded", false)) or float(bomb.get("life", 0.0)) <= 0.0:
+			secondary["life"] = 0.0
+		else:
+			secondary["life"] = float(bomb.get("life", 0.0))
+		return
 	var mines: Array = secondary.get("mines", [])
 	var active_count: = 0
 	for mine in mines:
@@ -13454,6 +13516,54 @@ func _update_secondary_bombastica(secondary: Dictionary, delta: float) -> void :
 	if active_count <= 0 and not bool(secondary.get("collapse_done", false)):
 		secondary["collapse_done"] = true
 		secondary["life"] = minf(float(secondary.get("life", 0.0)), 0.15)
+
+
+func _bombastica_bomb_by_id(id: int) -> Dictionary:
+	for bomb in bombastica_bombs:
+		if int(bomb.get("id", -1)) == id:
+			return bomb
+	return {}
+
+
+func _update_bombastica_ultimate_bomb(bomb: Dictionary, delta: float) -> void:
+	bomb["life"] = maxf(0.0, float(bomb.get("life", 0.0)) - delta)
+	var dir: Vector2 = Vector2(bomb.get("dir", Vector2.RIGHT))
+	var speed: float = float(bomb.get("speed", BOMBASTICA_ULTIMATE_SPEED))
+	var pos: Vector2 = Vector2(bomb.get("pos", player_pos)) + dir * speed * delta
+	bomb["pos"] = pos.clamp(Vector2(110, 110), WORLD_SIZE - Vector2(110, 110))
+	bomb["grounded_timer"] = maxf(0.0, float(bomb.get("grounded_timer", 0.0)) - delta)
+	var bounce_phase: float = float(bomb.get("bounce_phase", 0.0)) + delta
+	if bounce_phase >= BOMBASTICA_ULTIMATE_BOUNCE_PERIOD:
+		bounce_phase = fmod(bounce_phase, BOMBASTICA_ULTIMATE_BOUNCE_PERIOD)
+		bomb["grounded_timer"] = BOMBASTICA_ULTIMATE_GROUNDED_WINDOW
+		var dmg: float = float(bomb.get("damage", player_damage))
+		var rad: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
+		_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.85, 1.05)
+		_apply_bombastica_explosion(Vector2(bomb["pos"]), rad, dmg, "bombastic_ultimate_bounce", false, 0, {})
+	bomb["bounce_phase"] = bounce_phase
+	if float(bomb["life"]) <= 0.0:
+		bomb["exploded"] = true
+		_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.85, 1.05)
+		_apply_bombastica_explosion(Vector2(bomb["pos"]), float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS)), float(bomb.get("damage", player_damage)), "bombastic_ultimate_detonation", false, 0, {})
+
+
+func _try_hit_bombastica_ultimate_with_bullet(bullet: Dictionary) -> bool:
+	for bomb in bombastica_bombs:
+		if String(bomb.get("kind", "")) != "ultimate_bomb" or bool(bomb.get("exploded", false)):
+			continue
+		var comet_pos: Vector2 = Vector2(bomb.get("pos", player_pos))
+		var bullet_pos: Vector2 = Vector2(bullet.get("pos", player_pos))
+		var rad: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
+		if bullet_pos.distance_to(comet_pos) <= rad * 0.5 or float(bomb.get("grounded_timer", 0.0)) > 0.0:
+			var shot_dmg: float = float(bullet.get("damage", 0.0))
+			bomb["damage"] = float(bomb.get("damage", player_damage)) + shot_dmg * BOMBASTICA_ULTIMATE_SHOT_DAMAGE_MULT
+			var shot_dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT))
+			if shot_dir.length() > 0.01:
+				bomb["dir"] = shot_dir.normalized()
+			_spawn_radial_particles(comet_pos, Color(1.0, 0.8, 0.2), 12)
+			_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.95, 1.15)
+			return true
+	return false
 
 
 func _trigger_bombastica_detonator(total: = false) -> bool:
@@ -20411,6 +20521,7 @@ func _update_bullets(delta: float) -> void :
 			bullet["trail_cd"] = 0.028 if String(bullet.get("kind", "")) == "eletrica_charged" else 0.04
 			_emit_projectile_trail(bullet)
 		_maybe_cartographic_redirect(bullet)
+		_try_hit_bombastica_ultimate_with_bullet(bullet)
 
 
 		if bullet["kind"] == "prismatica":
@@ -21464,6 +21575,11 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			_umbra_learn(boss5_last_reward_action, - min(0.45, final / max(1.0, boss_hp_max) * 8.0))
 	if current_phase == 6 and boss6_special_event_id == "final_birth" and _boss6_damage_nearest_organ(final, attack_origin if attack_origin != Vector2.ZERO else player_pos):
 		return
+	if current_phase == 7 and boss7_core_active:
+		final *= 0.60
+		boss7_core_damage += final
+		boss7_core_hp = maxf(0.0, boss7_core_hp - final)
+		_add_text("ESCUDO DE CINZAS", boss_pos + Vector2(rng.randf_range(-24, 24), -102), Color(1.0, 0.62, 0.18), 0.45, 15)
 	final *= _fragilidade_boss_multiplier(source)
 	final *= _pressao_cerco_boss_multiplier(source)
 	var boss_hp_before: float = boss_hp
@@ -25318,8 +25434,93 @@ func _check_laser_hit(hazard: Dictionary, num_beams: int, curr_ang: float, width
 		_damage_player(damage, "umbra_overload_laser")
 		player_burn_stacks += 1
 		player_burn_timer = 4.0
-		_add_text("FOGO (x%d)!" % player_burn_stacks, player_pos + Vector2(0, -50), Color(1.0, 0.4, 0.1), 0.75, 18)
 		_umbra_learn("LASER_SOBRECARGA", 0.25)
+
+
+func _apply_boss_burn(stacks: int = 1, duration: float = 4.0) -> void:
+	player_burn_stacks = min(10, player_burn_stacks + stacks)
+	player_burn_timer = maxf(player_burn_timer, duration)
+	_add_text("QUEIMADURA x%d" % player_burn_stacks, player_pos + Vector2(0, -50), Color(1.0, 0.35, 0.08), 0.75, 18)
+
+
+func _update_player_burn(delta: float) -> void:
+	if player_burn_stacks <= 0:
+		return
+	player_burn_timer = maxf(0.0, player_burn_timer - delta)
+	player_burn_tick_timer -= delta
+	if player_burn_tick_timer <= 0.0:
+		player_burn_tick_timer = 0.65
+		var dmg: int = player_burn_stacks * 4
+		_damage_player(dmg, "fenix_burn")
+		_spawn_radial_particles(player_pos, Color(1.0, 0.4, 0.1), 4)
+	player_burn_vfx_timer -= delta
+	if player_burn_vfx_timer <= 0.0:
+		player_burn_vfx_timer = 0.06
+		if gfx_particles and _particle_budget_available():
+			var smoke_offset: Vector2 = Vector2(rng.randf_range(-12, 12), rng.randf_range(-22, 4))
+			effects.append({
+				"text": "",
+				"pos": player_pos + smoke_offset,
+				"life": rng.randf_range(0.4, 0.75),
+				"max": 0.75,
+				"color": Color(0.22, 0.18, 0.18, 0.55),
+				"size": rng.randi_range(4, 9),
+				"vel": Vector2(rng.randf_range(-14, 14), rng.randf_range(-45, -18)),
+				"kind": "burn_smoke"
+			})
+			var ember_count: int = mini(4, 1 + int(player_burn_stacks / 2))
+			for i in range(ember_count):
+				var ember_offset: Vector2 = Vector2(rng.randf_range(-14, 14), rng.randf_range(-25, 8))
+				effects.append({
+					"text": "",
+					"pos": player_pos + ember_offset,
+					"life": rng.randf_range(0.25, 0.55),
+					"max": 0.55,
+					"color": Color(1.0, rng.randf_range(0.3, 0.75), 0.05, 0.95),
+					"size": rng.randi_range(2, 4),
+					"vel": Vector2(rng.randf_range(-28, 28), rng.randf_range(-65, -25)),
+					"kind": "burn_ember"
+				})
+	if player_burn_timer <= 0.0:
+		player_burn_stacks = 0
+
+
+func _update_dance_state(delta: float) -> void:
+	if dance_wheel_touch_index != -1:
+		dance_wheel_hold_timer += delta
+	if player_dancing:
+		player_dance_timer += delta
+		if touch_move.length() > 0.15 or attack_holding or skill_touch_index != -1 or secondary_touch_index != -1 or dash_touch_index != -1:
+			player_dancing = false
+		elif rng.randf() < 0.2:
+			_spawn_radial_particles(player_pos + Vector2(rng.randf_range(-14, 14), rng.randf_range(-25, 5)), Color(0.95, 0.45, 1.0), 2)
+
+
+func _draw_dance_wheel(viewport: Vector2) -> void:
+	if not dance_wheel_active:
+		return
+	var center: Vector2 = dance_wheel_start_pos
+	var radius: float = 85.0
+	draw_circle(center, radius, Color(0.08, 0.04, 0.12, 0.72))
+	draw_arc(center, radius, 0.0, TAU, 48, Color(0.9, 0.35, 1.0, 0.85), 3.0)
+	draw_arc(center, radius * 0.4, 0.0, TAU, 32, Color(0.7, 0.4, 0.9, 0.5), 1.5)
+	var emotes: Array = ["DANCA 💃", "FOGO 🔥", "VITORIA 🏆", "ESPECIAL ✨"]
+	for i in range(emotes.size()):
+		var angle: float = float(i) * (TAU / float(emotes.size())) - (PI * 0.5)
+		var item_pos: Vector2 = center + Vector2.from_angle(angle) * (radius * 0.65)
+		draw_circle(item_pos, 16.0, Color(0.3, 0.1, 0.4, 0.8))
+		draw_arc(item_pos, 16.0, 0.0, TAU, 24, Color(0.95, 0.5, 1.0, 0.9), 1.5)
+		_draw_centered(emotes[i], item_pos, 11, Color.WHITE)
+
+
+func _draw_player_dance_emote(camera: Vector2) -> void:
+	if not player_dancing:
+		return
+	var pos: Vector2 = player_pos - camera + Vector2(0, -65 + sin(player_dance_timer * 10.0) * 8.0)
+	var scale_pulse: float = 1.0 + sin(player_dance_timer * 12.0) * 0.08
+	draw_circle(pos, 22.0 * scale_pulse, Color(0.9, 0.2, 0.95, 0.35))
+	draw_arc(pos, 22.0 * scale_pulse, 0.0, TAU, 32, Color(1.0, 0.6, 1.0, 0.9), 2.0)
+	_draw_centered("💃 DANCA!", pos, 14, Color(1.0, 0.95, 0.4))
 
 
 func _hazard_tick_damage(hazard: Dictionary, delta: float, radius: float, damage: int, source: String) -> void :
@@ -26171,8 +26372,14 @@ func _boss7_attack_delay() -> float:
 
 
 func _update_boss_phase7(delta: float) -> void:
-	boss_phase += delta * (8.0 if boss7_reborn else 6.2)
+	var flap_speed: float = 20.0 if boss7_state == BOSS7_STATE_DIVE_PREP else (8.0 if boss7_reborn else 6.2)
+	boss_phase += delta * flap_speed
+	_update_player_burn(delta)
+	_update_dance_state(delta)
 	_update_boss7_cooldowns(delta)
+	_update_boss7_whirlwind(delta)
+	_check_boss7_ultimate(delta)
+	_update_boss7_ultimate(delta)
 	_update_boss_attacks(delta)
 	if boss7_core_active:
 		_update_boss7_core(delta)
@@ -26194,7 +26401,7 @@ func _update_boss_phase7(delta: float) -> void:
 		_spawn_radial_particles(boss_pos, Color(1.0, 0.28, 0.06), 110)
 		_add_text("GRITO DE COMBUSTAO", boss_pos + Vector2(0, -118), Color(1.0, 0.55, 0.12), 1.35, 24)
 		return
-	if boss7_state in [BOSS7_STATE_FEATHER, BOSS7_STATE_WING, BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE, BOSS7_STATE_RECOVERY, BOSS7_STATE_REBIRTH]:
+	if boss7_state in [BOSS7_STATE_FEATHER, BOSS7_STATE_WING, BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE_WAIT, BOSS7_STATE_DIVE_MARK, BOSS7_STATE_DIVE, BOSS7_STATE_RECOVERY, BOSS7_STATE_REBIRTH]:
 		_update_boss7_state(delta)
 		return
 	_update_boss7_flight(delta)
@@ -26227,6 +26434,7 @@ func _update_boss7_flight(delta: float) -> void:
 
 func _update_boss7_state(delta: float) -> void:
 	boss7_state_timer = maxf(0.0, boss7_state_timer - delta)
+	_update_boss7_flame_waves(delta)
 	match boss7_state:
 		BOSS7_STATE_FEATHER:
 			if boss7_state_timer <= 0.0:
@@ -26237,25 +26445,45 @@ func _update_boss7_state(delta: float) -> void:
 				_fire_boss7_wing_blast()
 				_boss7_enter_recovery(0.46)
 		BOSS7_STATE_DIVE_PREP:
+			# 1- Bate asa subindo rapidamente para o topo da tela saindo de cena (1s)
+			boss_pos.y = move_toward(boss_pos.y, -180.0, 750.0 * delta)
+			if boss7_state_timer <= 0.0:
+				boss7_state = BOSS7_STATE_DIVE_WAIT
+				boss7_state_timer = 0.8
+		BOSS7_STATE_DIVE_WAIT:
+			# 2- Espera fora de cena (800ms)
+			boss_pos.y = -180.0
+			if boss7_state_timer <= 0.0:
+				boss7_state = BOSS7_STATE_DIVE_MARK
+				boss7_state_timer = 0.9
+				var aim: Vector2 = _boss_target_pos(true, 0.32)
+				boss7_target_pos = aim.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
+		BOSS7_STATE_DIVE_MARK:
+			# 3- Mira em cima do jogador e mostra marca no chão (900ms)
+			boss_pos.y = -180.0
 			if boss7_state_timer <= 0.0:
 				boss7_state = BOSS7_STATE_DIVE
-				boss7_state_timer = 0.95
-				var aim: = _boss_target_pos(true, 0.32)
-				boss7_target_pos = aim.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-				boss7_attack_dir = (boss7_target_pos - boss_pos).normalized()
-				if boss7_attack_dir.length() <= 0.05:
-					boss7_attack_dir = Vector2.LEFT
+				boss7_state_timer = 0.45
+				# Posiciona diagonalmente no topo-esquerdo do alvo para queda condizente com fenix_down_04.png!
+				boss_pos = boss7_target_pos - Vector2(380.0, 380.0)
+				boss7_attack_dir = Vector2(1, 1).normalized()
 		BOSS7_STATE_DIVE:
+			# 4- Boss desce em alta velocidade com frame fixo fenix_down_04.png
 			var old_pos: Vector2 = boss_pos
-			var speed: = BOSS7_DIVE_REBORN_SPEED if boss7_reborn else BOSS7_DIVE_SPEED
+			var speed: float = 1750.0 if boss7_reborn else 1550.0
 			boss_pos = boss_pos.move_toward(boss7_target_pos, speed * delta)
 			_add_boss7_dive_trail(old_pos, boss_pos)
 			if old_pos.distance_to(boss_pos) > 1.0:
 				if _distance_to_segment(player_pos, old_pos, boss_pos) <= BOSS7_DIVE_WIDTH * 0.5 and _local_player_damageable_by_contact():
-					_damage_player(int(player_hp_max * (0.083 if boss7_reborn else 0.075) + (25 if boss7_reborn else 22)), "boss7_dive")
+					_damage_player(int(player_hp_max * (0.093 if boss7_reborn else 0.085) + (28 if boss7_reborn else 25)), "boss7_dive")
+					_apply_boss_burn(2)
 					player_pos = (player_pos + _hostile_knockback(boss7_attack_dir * 185.0)).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
-				_damage_remote_player_on_segment(old_pos, boss_pos, BOSS7_DIVE_WIDTH * 0.5, int(net_player_hp_max * (0.083 if boss7_reborn else 0.075) + (25 if boss7_reborn else 22)), "boss7_dive", {}, "boss7_dive")
-			if boss_pos.distance_to(boss7_target_pos) <= 8.0 or boss7_state_timer <= 0.0:
+				_damage_remote_player_on_segment(old_pos, boss_pos, BOSS7_DIVE_WIDTH * 0.5, int(net_player_hp_max * (0.093 if boss7_reborn else 0.085) + (28 if boss7_reborn else 25)), "boss7_dive", {}, "boss7_dive")
+			if boss_pos.distance_to(boss7_target_pos) <= 12.0 or boss7_state_timer <= 0.0:
+				boss_pos = boss7_target_pos
+				_boss_entry_impact_feedback(0.85)
+				_play_sfx("boss_impact", 0.03, 0.45, 1.25)
+				_spawn_boss7_flame_wave(boss7_target_pos, 250.0)
 				_boss7_enter_recovery(0.55)
 		BOSS7_STATE_REBIRTH:
 			var p: float = 1.0 - boss7_state_timer / maxf(0.01, BOSS7_REBIRTH_ANIM_TIME)
@@ -26274,12 +26502,77 @@ func _boss7_enter_recovery(time: float) -> void:
 	boss_attack_timer = _boss7_attack_delay()
 
 
+func _spawn_boss7_flame_wave(center: Vector2, max_radius: float = 250.0) -> void:
+	var flames: Array = []
+	var count: int = 72
+	for i in range(count):
+		var angle: float = (float(i) / float(count)) * TAU + rng.randf_range(-0.05, 0.05)
+		var layer: String = "yellow" if i % 3 == 0 else ("orange" if i % 3 == 1 else "red")
+		var dist_mult: float = rng.randf_range(0.85, 1.0)
+		var size: float = rng.randf_range(7.0, 14.0)
+		flames.append({
+			"angle": angle,
+			"layer": layer,
+			"dist_mult": dist_mult,
+			"size": size,
+			"offset": Vector2(rng.randf_range(-4, 4), rng.randf_range(-4, 4))
+		})
+	boss7_flame_waves.append({
+		"pos": center,
+		"radius": 0.0,
+		"max_radius": max_radius,
+		"expand_speed": 310.0,
+		"life": 1.0,
+		"flames": flames,
+		"hit_player": false
+	})
+
+
+func _update_boss7_flame_waves(delta: float) -> void:
+	for wave in boss7_flame_waves:
+		wave["radius"] = float(wave.get("radius", 0.0)) + float(wave.get("expand_speed", 310.0)) * delta
+		var radius: float = float(wave["radius"])
+		var center: Vector2 = Vector2(wave["pos"])
+		if not bool(wave.get("hit_player", false)):
+			if player_pos.distance_to(center) <= radius + 22.0:
+				wave["hit_player"] = true
+				_damage_player(int(player_hp_max * 0.088 + 26), "boss7_flame_wave")
+				_apply_boss_burn(2)
+		_damage_remote_player_in_radius(center, radius + 22.0, int(net_player_hp_max * 0.088 + 26), "boss7_flame_wave")
+	boss7_flame_waves = boss7_flame_waves.filter(func(w): return float(w.get("radius", 0.0)) < float(w.get("max_radius", 250.0)))
+
+
+func _draw_boss7_flame_waves(camera: Vector2) -> void:
+	for wave in boss7_flame_waves:
+		var center: Vector2 = Vector2(wave["pos"]) - camera
+		var r: float = float(wave.get("radius", 0.0))
+		var max_r: float = maxf(1.0, float(wave.get("max_radius", 250.0)))
+		var p: float = clampf(r / max_r, 0.0, 1.0)
+		var base_alpha: float = (1.0 - p * 0.65)
+		var flames: Array = wave.get("flames", [])
+		for f in flames:
+			var angle: float = float(f["angle"])
+			var dist: float = r * float(f.get("dist_mult", 1.0))
+			var p_pos: Vector2 = center + Vector2.from_angle(angle) * dist + Vector2(f.get("offset", Vector2.ZERO))
+			var size: float = maxf(2.0, float(f.get("size", 10.0)) * (1.0 - p * 0.55))
+			var layer: String = String(f.get("layer", "yellow"))
+			var color: Color = Color(1.0, 0.92, 0.28, base_alpha * 0.85)
+			if layer == "orange":
+				color = Color(1.0, 0.52, 0.08, base_alpha * 0.8)
+			elif layer == "red":
+				color = Color(0.92, 0.16, 0.04, base_alpha * 0.75)
+			draw_circle(p_pos, size, color)
+			draw_circle(p_pos, size * 0.5, Color(1.0, 1.0, 0.7, color.a))
+
+
 func _start_boss7_attack() -> void:
 	var stage: = _boss7_stage()
 	var candidates: Array = []
 	candidates.append({"kind": BOSS7_ATTACK_FEATHER, "weight": 38.0 if stage == 1 else (25.0 if stage == 2 else 20.0)})
 	candidates.append({"kind": BOSS7_ATTACK_WING, "weight": 27.0 if stage == 1 else (18.0 if stage == 2 else 12.0)})
 	candidates.append({"kind": BOSS7_ATTACK_DIVE_TRAIL, "weight": 35.0 if stage == 1 else (27.0 if stage == 2 else 25.0)})
+	candidates.append({"kind": BOSS7_ATTACK_SKY_FIREBALLS, "weight": 30.0 if stage == 1 else (35.0 if stage == 2 else 40.0)})
+	candidates.append({"kind": BOSS7_ATTACK_WHIRLWIND, "weight": 20.0 if stage == 1 else (25.0 if stage == 2 else 30.0)})
 	if stage >= 2:
 		candidates.append({"kind": BOSS7_ATTACK_THERMAL, "weight": 18.0})
 		candidates.append({"kind": BOSS7_ATTACK_ASH_RAIN, "weight": 12.0 if stage == 2 else 10.0})
@@ -26306,6 +26599,10 @@ func _start_boss7_attack() -> void:
 			_start_boss7_wing_blast()
 		BOSS7_ATTACK_DIVE_TRAIL:
 			_start_boss7_dive()
+		BOSS7_ATTACK_SKY_FIREBALLS:
+			_start_boss7_sky_fireballs()
+		BOSS7_ATTACK_WHIRLWIND:
+			_start_boss7_whirlwind()
 		BOSS7_ATTACK_THERMAL:
 			_start_boss7_thermal()
 		BOSS7_ATTACK_ASH_RAIN:
@@ -26351,10 +26648,10 @@ func _fire_boss7_wing_blast() -> void:
 
 func _start_boss7_dive() -> void:
 	boss7_state = BOSS7_STATE_DIVE_PREP
-	boss7_state_timer = BOSS7_DIVE_PREPARE
+	boss7_state_timer = 1.0
 	boss7_target_pos = (_boss_target_pos(true, 0.32)).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-	boss7_attack_dir = (boss7_target_pos - boss_pos).normalized()
-	boss7_cooldowns[BOSS7_ATTACK_DIVE_TRAIL] = 3.0
+	boss7_attack_dir = Vector2.UP
+	boss7_cooldowns[BOSS7_ATTACK_DIVE_TRAIL] = 20.0
 
 
 func _add_boss7_dive_trail(a: Vector2, b: Vector2) -> void:
@@ -26416,6 +26713,167 @@ func _update_boss7_core(delta: float) -> void:
 		boss_hp = maxf(1.0, boss7_original_hp_max * rebirth_ratio)
 		_spawn_radial_particles(boss7_core_pos, Color(1.0, 0.48, 0.1), 150)
 		_add_text("RENASCIMENTO %.0f%%" % (rebirth_ratio * 100.0), boss7_core_pos + Vector2(0, -96), Color(1.0, 0.48, 0.12), 1.2, 25)
+
+
+func _start_boss7_whirlwind() -> void:
+	boss7_whirlwind_active = true
+	boss7_whirlwind_timer = 2.5
+	boss7_whirlwind_angle = 0.0
+	boss7_whirlwind_spawn_timer = 0.0
+	boss7_whirlwind_shots_left = 30
+	boss7_cooldowns[BOSS7_ATTACK_WHIRLWIND] = 40.0
+	boss_attack_timer = _boss7_attack_delay() + 2.5
+	_add_text("REDEMOINHO DE FOGO", boss_pos + Vector2(0, -110), Color(1.0, 0.4, 0.1), 1.2, 24)
+
+
+func _update_boss7_whirlwind(delta: float) -> void:
+	if not boss7_whirlwind_active:
+		return
+	boss7_whirlwind_timer = maxf(0.0, boss7_whirlwind_timer - delta)
+	boss7_whirlwind_spawn_timer -= delta
+	if boss7_whirlwind_spawn_timer <= 0.0 and boss7_whirlwind_shots_left > 0:
+		boss7_whirlwind_spawn_timer = 0.08
+		boss7_whirlwind_shots_left -= 1
+		boss7_whirlwind_angle += TAU / 30.0
+		var dir: Vector2 = Vector2.from_angle(boss7_whirlwind_angle)
+		var speed: float = 340.0
+		enemy_bullets.append({
+			"pos": boss_pos + dir * 30.0,
+			"dir": dir,
+			"life": 3.8,
+			"damage": int(player_hp_max * 0.07 + 20.0),
+			"phase": rng.randf_range(0.0, TAU),
+			"type": "phase7_fireball",
+			"speed_mult": speed / 210.0,
+			"radius": 14.0
+		})
+		_spawn_radial_particles(boss_pos + dir * 30.0, Color(1.0, 0.5, 0.1), 3)
+	if boss7_whirlwind_timer <= 0.0 and boss7_whirlwind_shots_left <= 0:
+		boss7_whirlwind_active = false
+
+
+func _start_boss7_sky_fireballs() -> void:
+	boss7_cooldowns[BOSS7_ATTACK_SKY_FIREBALLS] = 9.0
+	var count: int = 15 if boss7_reborn else 12
+	var spots: Array = []
+	var base_target: Vector2 = _boss_target_pos(true, 0.2)
+	spots.append(base_target.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)))
+	for i in range(count - 1):
+		var offset: Vector2 = Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(80.0, 220.0)
+		spots.append((base_target + offset).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)))
+	_add_boss_attack({
+		"kind": BOSS7_ATTACK_SKY_FIREBALLS,
+		"age": 0.0,
+		"duration": 2.2,
+		"warning": 0.85,
+		"spots": spots,
+		"hit": {}
+	})
+	boss_attack_timer = _boss7_attack_delay()
+	_add_text("CHUVA DE FOGO", boss_pos + Vector2(0, -90), Color(1.0, 0.6, 0.1), 1.0, 20)
+
+
+func _check_boss7_ultimate(_delta: float) -> void:
+	if boss7_ultimate_active:
+		return
+	if boss_hp / maxf(1.0, boss_hp_max) <= 0.30 and boss_active and not boss7_core_active:
+		boss7_ultimate_active = true
+		boss7_ultimate_timer = 50.0
+		boss7_ultimate_tick_timer = 0.6
+		boss7_ultimate_quadrants = [1, 1, 1, 1]
+		_add_text("AQUECIMENTO GLOBAL!", boss_pos + Vector2(0, -130), Color(1.0, 0.2, 0.0), 2.0, 32)
+		_vibrate(250, 0.8)
+
+
+func _update_boss7_ultimate(delta: float) -> void:
+	if not boss7_ultimate_active:
+		return
+	boss7_ultimate_timer = maxf(0.0, boss7_ultimate_timer - delta)
+	if boss7_ultimate_timer <= 0.0:
+		boss7_ultimate_active = false
+		return
+
+	var elapsed: float = 50.0 - boss7_ultimate_timer
+	var phase: int = 1
+	if elapsed >= 32.0:
+		phase = 3
+	elif elapsed >= 15.0:
+		phase = 2
+
+	for i in range(4):
+		boss7_ultimate_quadrants[i] = phase
+
+	if phase >= 3:
+		boss7_ultimate_tick_timer -= delta
+		if boss7_ultimate_tick_timer <= 0.0:
+			boss7_ultimate_tick_timer = 0.6
+			var center: Vector2 = WORLD_SIZE * 0.5
+			var quad_idx: int = 0
+			if player_pos.x >= center.x and player_pos.y < center.y:
+				quad_idx = 1
+			elif player_pos.x < center.x and player_pos.y >= center.y:
+				quad_idx = 2
+			elif player_pos.x >= center.x and player_pos.y >= center.y:
+				quad_idx = 3
+			else:
+				quad_idx = 0
+
+			if boss7_ultimate_quadrants[quad_idx] >= 3 and _local_player_damageable_by_contact():
+				_damage_player(int(player_hp_max * 0.025 + 10), "boss7_global_warming")
+				_apply_boss_burn(1)
+
+
+func _draw_boss7_ultimate(camera: Vector2) -> void:
+	if not boss7_ultimate_active:
+		return
+	var half_size: Vector2 = WORLD_SIZE * 0.5
+	var quads: Array[Rect2] = [
+		Rect2(-camera, half_size),
+		Rect2(Vector2(half_size.x, 0) - camera, half_size),
+		Rect2(Vector2(0, half_size.y) - camera, half_size),
+		Rect2(half_size - camera, half_size)
+	]
+	for i in range(4):
+		var phase: int = boss7_ultimate_quadrants[i]
+		if phase <= 0:
+			continue
+		var rect: Rect2 = quads[i]
+		var col: Color = Color(1.0, 0.9, 0.2, 0.08 + sin(time_alive * 4.0) * 0.02)
+		if phase == 2:
+			col = Color(1.0, 0.5, 0.05, 0.16 + sin(time_alive * 6.0) * 0.04)
+		elif phase >= 3:
+			col = Color(0.95, 0.12, 0.04, 0.26 + sin(time_alive * 8.0) * 0.06)
+		draw_rect(rect, col, true)
+		draw_rect(rect, Color(col.r, col.g, col.b, col.a * 1.5), false, 2.5)
+
+
+func _draw_boss7_ground_indicators(camera: Vector2) -> void:
+	if current_phase != 7:
+		return
+	if boss7_state == BOSS7_STATE_DIVE_MARK:
+		var pos: Vector2 = boss7_target_pos - camera
+		var p: float = clampf(1.0 - boss7_state_timer / 0.9, 0.0, 1.0)
+		draw_circle(pos, 86.0, Color(1.0, 0.22, 0.05, 0.22 + p * 0.15))
+		draw_arc(pos, 86.0, 0.0, TAU, 48, Color(1.0, 0.4, 0.08, 0.6), 2.0)
+		draw_arc(pos, 86.0, -PI * 0.5, -PI * 0.5 + TAU * p, 48, Color(1.0, 0.88, 0.24, 0.95), 4.5)
+		draw_line(pos + Vector2(-30, 0), pos + Vector2(30, 0), Color(1.0, 0.9, 0.3, 0.8), 2.0)
+		draw_line(pos + Vector2(0, -30), pos + Vector2(0, 30), Color(1.0, 0.9, 0.3, 0.8), 2.0)
+		draw_circle(pos, 12.0 * (1.0 - p * 0.5), Color(1.0, 0.95, 0.5, 0.9))
+
+	for atk in boss_attacks:
+		if atk.get("kind") == BOSS7_ATTACK_SKY_FIREBALLS:
+			var spots: Array = atk.get("spots", [])
+			var age: float = float(atk.get("age", 0.0))
+			var warning: float = float(atk.get("warning", 0.85))
+			if age < warning:
+				var p: float = clampf(age / warning, 0.0, 1.0)
+				for spot in spots:
+					var spot_pos: Vector2 = Vector2(spot) - camera
+					draw_circle(spot_pos, 42.0, Color(1.0, 0.18, 0.02, 0.25 * p))
+					draw_arc(spot_pos, 42.0, 0.0, TAU, 32, Color(1.0, 0.55, 0.1, 0.85), 2.0)
+					draw_circle(spot_pos, 42.0 * (1.0 - p), Color(1.0, 0.92, 0.28, 0.75))
+
+
 func _update_boss_phase6(delta: float) -> void :
 	boss_phase += delta * 2.6
 	_update_boss6_timers(delta)
@@ -35523,6 +35981,7 @@ func _reset_keyboard_bindings() -> void :
 		"secondary": _key_input_binding(KEY_E), 
 		"dash": _key_input_binding(KEY_F), 
 		"lacerante_empower": _key_input_binding(KEY_R), 
+		"dance": _key_input_binding(KEY_O),
 		"pause": _key_input_binding(KEY_ESCAPE), 
 		"shop": _key_input_binding(KEY_P), 
 		"boss": _key_input_binding(KEY_B)
@@ -37518,6 +37977,9 @@ func _draw_game(viewport: Vector2) -> void :
 	_draw_parasite_spit_zones(camera)
 	_draw_phase6_pustule_pools(camera)
 	_draw_phase7_ember_patches(camera)
+	_draw_boss7_flame_waves(camera)
+	_draw_boss7_ultimate(camera)
+	_draw_boss7_ground_indicators(camera)
 	_draw_boss2_environment(camera)
 	_draw_phase3_environment(camera)
 	_draw_phase4_environment(camera)
@@ -41930,7 +42392,15 @@ func _draw_projectiles(camera: Vector2) -> void :
 		if state == "instavel":
 			draw_arc(pos, outer + 8.0, age * 4.5, age * 4.5 + PI * 1.15, 22, Color(1.0, 0.76, 0.92, 0.56), 1.6)
 	for bullet in enemy_bullets:
-		if bullet.get("type") == "pyro_wall_seed":
+		if bullet.get("type") == "phase7_fireball":
+			var pos: Vector2 = Vector2(bullet["pos"]) - camera
+			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
+			var side: Vector2 = dir.orthogonal()
+			draw_circle(pos, 16.0, Color(1.0, 0.25, 0.05, 0.35))
+			draw_circle(pos, 10.0, Color(1.0, 0.55, 0.1))
+			draw_circle(pos, 5.0, Color(1.0, 0.95, 0.4))
+			draw_line(pos - dir * 14.0, pos - dir * 28.0 + side * sin(time_alive * 20.0) * 3.0, Color(1.0, 0.3, 0.05, 0.7), 4.0, true)
+		elif bullet.get("type") == "pyro_wall_seed":
 			var pos: = Vector2(bullet["pos"]) - camera
 			var dir: = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
 			var side: = dir.orthogonal()
@@ -45495,6 +45965,7 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 		_draw_desktop_session_buttons(viewport)
 		if _ability_cancel_active():
 			_draw_ability_cancel_button(viewport)
+		_draw_player_dance_emote(_camera(viewport))
 		return
 	if is_gamepad_active:
 		_draw_desktop_combat_hud(viewport)
@@ -45635,6 +46106,8 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 		_draw_hud_rect_button(boss_rect, "BOSS", Color(1.0, 0.52, 0.16))
 	if _ability_cancel_active():
 		_draw_ability_cancel_button(viewport)
+	_draw_dance_wheel(viewport)
+	_draw_player_dance_emote(_camera(viewport))
 
 func _draw_edit_layout(viewport: Vector2) -> void :
 	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.05, 0.05, 0.08, 0.9))
@@ -48634,7 +49107,7 @@ func _claim_action_touch(index: int) -> void :
 
 
 func _touch_index_has_action(index: int) -> bool:
-	return index == attack_drag_touch_index or index == skill_touch_index or index == secondary_touch_index or index == dash_touch_index or index == bombastica_detonator_touch_index
+	return index == attack_drag_touch_index or index == skill_touch_index or index == secondary_touch_index or index == dash_touch_index or index == bombastica_detonator_touch_index or index == dance_wheel_touch_index
 
 
 func _try_start_move_touch(index: int, pos: Vector2, viewport: Vector2) -> bool:
@@ -48724,7 +49197,11 @@ func _handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if buttons["boss"].has_point(pos):
 		_start_boss_call()
 		return
-	_try_start_move_touch(index, pos, viewport)
+	if not _try_start_move_touch(index, pos, viewport):
+		dance_wheel_touch_index = index
+		dance_wheel_start_pos = pos
+		dance_wheel_hold_timer = 0.0
+		dance_wheel_active = false
 
 
 func _handle_touch_drag(index: int, pos: Vector2, viewport: Vector2) -> void :
@@ -48748,12 +49225,22 @@ func _handle_touch_drag(index: int, pos: Vector2, viewport: Vector2) -> void :
 		teleport_drag_screen = pos
 	elif index == move_touch_index:
 		touch_move = ((pos - joystick_origin) / (76.0 * _joy_scale())).limit_length(1.0)
+	elif index == dance_wheel_touch_index:
+		if pos.distance_to(dance_wheel_start_pos) > 18.0 or dance_wheel_hold_timer > 0.2:
+			dance_wheel_active = true
 
 
 func _handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void :
 	var combat_active = _combat_controls_active()
 	if index == move_touch_index:
 		_stop_move_touch()
+	if index == dance_wheel_touch_index:
+		if dance_wheel_active:
+			dance_wheel_active = false
+			player_dancing = true
+			player_dance_timer = 0.0
+			_add_text("DANCA PRISMATICA!", player_pos + Vector2(0, -60), Color(0.95, 0.45, 1.0), 1.25, 22)
+		dance_wheel_touch_index = -1
 	if index == attack_touch_index:
 		attack_touch_index = -1
 	if index == attack_drag_touch_index:
@@ -49100,12 +49587,23 @@ func _execute_desktop_action(action: String) -> void :
 				_try_arm_necronada_empower()
 			else:
 				_try_arm_lacerante_empower()
+		"dance":
+			_toggle_player_dance()
 		"pause":
 			_start_pause_countdown()
 		"shop":
 			_try_open_manual_shop()
 		"boss":
 			_start_boss_call()
+
+
+func _toggle_player_dance() -> void:
+	if mode != "game" or player_hp <= 0:
+		return
+	player_dancing = not player_dancing
+	if player_dancing:
+		player_dance_timer = 0.0
+		_add_text("DANCA PRISMATICA!", player_pos + Vector2(0, -60), Color(0.95, 0.45, 1.0), 1.25, 22)
 
 
 func _desktop_action_uses_aim(action: String) -> bool:
@@ -51404,7 +51902,7 @@ func _manifestation_details(key: String) -> Dictionary:
 				"disparo": "ATK - Estopim Instavel: tiro mais lento que aplica Polvora Instavel. Cada alvo segura ate 3 cargas por 5s.", 
 				"habilidade": "Q - Triade de Demolicao", 
 				"desc_hab": "Possui 3 cargas independentes. Cada Q planta ou arremessa uma bomba com fusivel entre 3s e 6s, raio de 105px e dano alto. Bombas proximas podem acionar cadeia.", 
-				"traco": "E - Campo Minado Temporal: cria 5 minas por 7s. Cada mina explode ao detectar alvo, causa dano menor e aplica Polvora.", 
+				"traco": "E - Bomba-Cometario: lança uma bomba viva que anda pelo mapa, quica periodicamente causando explosão e absorve tiros para redirecionar.", 
 				"risco": "Aos 3 acumulos de Polvora, a proxima explosao consome as cargas e causa Ignicao. Segure DET para detonar todas; toque curto detona a bomba mais antiga.", 
 				"info_rows": [
 					{"label": "ATK", "text": "0,62x dano atual, 92% da velocidade padrao e cadencia de 0,58s. Serve para preparar Polvora, nao para ser a unica fonte de dano."}, 
