@@ -59,6 +59,15 @@ func _run() -> void:
 	_check(game.boss_attacks.any(func(a): return String(a.get("kind", "")) == game.BOSS7_ATTACK_FEATHER), "Fenix feather volley did not spawn projectiles")
 
 	game.boss_attacks.clear()
+	game.enemy_bullets.clear()
+	game._start_boss7_whirlwind()
+	_check(game.boss7_whirlwind_shots_left == 60, "Fenix whirlwind should start with 60 shots left")
+	for step in range(65):
+		game._update_boss7_whirlwind(0.05)
+	_check(game.enemy_bullets.size() == 60, "Fenix whirlwind should spawn exactly 60 fireballs")
+	_check(is_equal_approx(float(game.enemy_bullets[0].get("speed_mult", 0.0)), 170.0 / 210.0), "Fenix whirlwind fireball speed should be reduced by 50% (170/210)")
+
+	game.boss_attacks.clear()
 	game.boss7_reborn = true
 	game._start_boss7_crown()
 	_check(game.boss_attacks.any(func(a): return String(a.get("kind", "")) == game.BOSS7_ATTACK_CROWN), "Fenix reborn crown did not spawn")

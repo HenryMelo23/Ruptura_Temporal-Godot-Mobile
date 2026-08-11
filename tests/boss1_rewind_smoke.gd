@@ -40,8 +40,8 @@ func _seed_history() -> void:
 
 func _run() -> void:
 	assert(is_equal_approx(game.BOSS1_REWIND_COOLDOWN, 45.0))
-	assert(is_equal_approx(game.BOSS1_CLOCK_TURN_TIME, 2.0))
-	assert(is_equal_approx(game.BOSS1_REWIND_PLAYBACK_TIME, 2.0))
+	assert(is_equal_approx(game.BOSS1_CLOCK_TURN_TIME, 3.0))
+	assert(is_equal_approx(game.BOSS1_REWIND_PLAYBACK_TIME, 3.0))
 	assert(game.audio_streams.has("Retrocede.mp3"))
 	game._start_game()
 	game.current_phase = 1

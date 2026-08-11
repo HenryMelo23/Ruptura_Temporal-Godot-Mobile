@@ -430,8 +430,8 @@ const BOSS1_TIME_WAVE_SPEED: = 360.0
 const BOSS1_TIME_WAVE_WIDTH: = 22.0
 const BOSS1_TIME_WAVE_WARNING: = 0.65
 const BOSS1_CLOCK_TRAVEL_TIME: = 0.7
-const BOSS1_CLOCK_TURN_TIME: = 8.0
-const BOSS1_REWIND_PLAYBACK_TIME: = 8.0
+const BOSS1_CLOCK_TURN_TIME: = 3.0
+const BOSS1_REWIND_PLAYBACK_TIME: = 3.0
 const BOSS1_RAIN_THRESHOLD: = 0.3
 const BOSS1_ABSORB_COOLDOWN: = 40.0
 const BOSS1_ABSORB_DURATION: = 6.0
@@ -760,6 +760,7 @@ const BOSS7_STATE_WING: = "wing_blast"
 const BOSS7_STATE_DIVE_PREP: = "dive_prepare"
 const BOSS7_STATE_DIVE_WAIT: = "dive_wait"
 const BOSS7_STATE_DIVE_MARK: = "dive_mark"
+const BOSS7_STATE_DIVE_FAKE: = "dive_fake"
 const BOSS7_STATE_DIVE: = "dive"
 const BOSS7_STATE_RECOVERY: = "recovery"
 const BOSS7_STATE_REBIRTH_START: = "rebirth_start"
@@ -2572,6 +2573,7 @@ var phase7_ember_patches = []
 var phase7_ember_hit_gate = 0.0
 var boss7_state: String = BOSS7_STATE_FLY
 var boss7_state_timer: float = 0.0
+var boss7_dive_fake_count: int = 0
 var boss7_velocity: Vector2 = Vector2.ZERO
 var boss7_attack_dir: Vector2 = Vector2.LEFT
 var boss7_target_pos: Vector2 = Vector2.ZERO
@@ -26401,7 +26403,7 @@ func _update_boss_phase7(delta: float) -> void:
 		_spawn_radial_particles(boss_pos, Color(1.0, 0.28, 0.06), 110)
 		_add_text("GRITO DE COMBUSTAO", boss_pos + Vector2(0, -118), Color(1.0, 0.55, 0.12), 1.35, 24)
 		return
-	if boss7_state in [BOSS7_STATE_FEATHER, BOSS7_STATE_WING, BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE_WAIT, BOSS7_STATE_DIVE_MARK, BOSS7_STATE_DIVE, BOSS7_STATE_RECOVERY, BOSS7_STATE_REBIRTH]:
+	if boss7_state in [BOSS7_STATE_FEATHER, BOSS7_STATE_WING, BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE_WAIT, BOSS7_STATE_DIVE_MARK, BOSS7_STATE_DIVE_FAKE, BOSS7_STATE_DIVE, BOSS7_STATE_RECOVERY, BOSS7_STATE_REBIRTH]:
 		_update_boss7_state(delta)
 		return
 	_update_boss7_flight(delta)
@@ -26462,11 +26464,37 @@ func _update_boss7_state(delta: float) -> void:
 			# 3- Mira em cima do jogador e mostra marca no chão (900ms)
 			boss_pos.y = -180.0
 			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_DIVE
-				boss7_state_timer = 0.45
-				# Posiciona diagonalmente no topo-esquerdo do alvo para queda condizente com fenix_down_04.png!
-				boss_pos = boss7_target_pos - Vector2(380.0, 380.0)
-				boss7_attack_dir = Vector2(1, 1).normalized()
+				if boss7_dive_fake_count < 3 and rng.randf() < 0.5:
+					boss7_dive_fake_count += 1
+					boss7_state = BOSS7_STATE_DIVE_FAKE
+					boss7_state_timer = 2.0
+					var spawn_pos: Vector2 = Vector2(boss7_target_pos.x, -100.0)
+					var dir: Vector2 = (boss7_target_pos - spawn_pos).normalized()
+					var fireball_speed: float = 380.0
+					enemy_bullets.append({
+						"pos": spawn_pos,
+						"dir": dir,
+						"life": 4.5,
+						"damage": int(player_hp_max * 0.08 + 20),
+						"phase": rng.randf_range(0.0, TAU),
+						"type": "phase7_fireball",
+						"speed_mult": fireball_speed / 210.0,
+						"radius": 14.0
+					})
+					_play_sfx("Frasco.mp3", 0.04, 0.5, 0.9 + rng.randf() * 0.2)
+				else:
+					boss7_state = BOSS7_STATE_DIVE
+					boss7_state_timer = 0.45
+					# Posiciona diagonalmente no topo-esquerdo do alvo para queda condizente com fenix_down_04.png!
+					boss_pos = boss7_target_pos - Vector2(380.0, 380.0)
+					boss7_attack_dir = Vector2(1, 1).normalized()
+		BOSS7_STATE_DIVE_FAKE:
+			boss_pos.y = -180.0
+			if boss7_state_timer <= 0.0:
+				boss7_state = BOSS7_STATE_DIVE_MARK
+				boss7_state_timer = 0.9
+				var aim: Vector2 = _boss_target_pos(true, 0.32)
+				boss7_target_pos = aim.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
 		BOSS7_STATE_DIVE:
 			# 4- Boss desce em alta velocidade com frame fixo fenix_down_04.png
 			var old_pos: Vector2 = boss_pos
@@ -26651,6 +26679,7 @@ func _start_boss7_dive() -> void:
 	boss7_state_timer = 1.0
 	boss7_target_pos = (_boss_target_pos(true, 0.32)).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
 	boss7_attack_dir = Vector2.UP
+	boss7_dive_fake_count = 0
 	boss7_cooldowns[BOSS7_ATTACK_DIVE_TRAIL] = 20.0
 
 
@@ -26720,7 +26749,7 @@ func _start_boss7_whirlwind() -> void:
 	boss7_whirlwind_timer = 2.5
 	boss7_whirlwind_angle = 0.0
 	boss7_whirlwind_spawn_timer = 0.0
-	boss7_whirlwind_shots_left = 30
+	boss7_whirlwind_shots_left = 60
 	boss7_cooldowns[BOSS7_ATTACK_WHIRLWIND] = 40.0
 	boss_attack_timer = _boss7_attack_delay() + 2.5
 	_add_text("REDEMOINHO DE FOGO", boss_pos + Vector2(0, -110), Color(1.0, 0.4, 0.1), 1.2, 24)
@@ -26732,15 +26761,15 @@ func _update_boss7_whirlwind(delta: float) -> void:
 	boss7_whirlwind_timer = maxf(0.0, boss7_whirlwind_timer - delta)
 	boss7_whirlwind_spawn_timer -= delta
 	if boss7_whirlwind_spawn_timer <= 0.0 and boss7_whirlwind_shots_left > 0:
-		boss7_whirlwind_spawn_timer = 0.08
+		boss7_whirlwind_spawn_timer = 0.04
 		boss7_whirlwind_shots_left -= 1
-		boss7_whirlwind_angle += TAU / 30.0
+		boss7_whirlwind_angle += TAU / 60.0
 		var dir: Vector2 = Vector2.from_angle(boss7_whirlwind_angle)
-		var speed: float = 340.0
+		var speed: float = 170.0
 		enemy_bullets.append({
 			"pos": boss_pos + dir * 30.0,
 			"dir": dir,
-			"life": 3.8,
+			"life": 4.5,
 			"damage": int(player_hp_max * 0.07 + 20.0),
 			"phase": rng.randf_range(0.0, TAU),
 			"type": "phase7_fireball",
@@ -42151,7 +42180,7 @@ func _enemy_visual_offset(enemy: Dictionary) -> Vector2:
 
 func _boss_texture() -> Texture2D:
 	if current_phase == 7:
-		var key7: = "boss7_dive" if boss7_state in [BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE] else "boss7_fly"
+		var key7: = "boss7_dive" if boss7_state == BOSS7_STATE_DIVE else "boss7_fly"
 		var frames7: Array = textures.get(key7, [])
 		if not frames7.is_empty() and frames7[int(boss_phase) % frames7.size()] != null:
 			return frames7[int(boss_phase) % frames7.size()]
@@ -49445,9 +49474,6 @@ func _handle_gamepad_virtual_button(btn_id: String, pressed: bool, viewport: Vec
 func _capture_keyboard_binding(event: InputEvent) -> void :
 	var new_bind: = ""
 	if event is InputEventKey:
-		if event.keycode == KEY_ESCAPE:
-			keyboard_mapping_action = ""
-			return
 		if event.keycode == KEY_BACKSPACE or event.keycode == KEY_DELETE:
 			keyboard_bindings[keyboard_mapping_action] = INPUT_BIND_NONE
 			keyboard_mapping_action = ""
