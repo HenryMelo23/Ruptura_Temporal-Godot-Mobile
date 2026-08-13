@@ -22,6 +22,7 @@ func _run() -> void:
 	game.player_hp_max = 1000.0
 	game.player_hp = 1000
 	game.manifestation_key = "eletrica"
+	_check(is_equal_approx(float(game._secondary_skill_cooldown()), 10.0), "electric_ultimate_cooldown_should_be_10s")
 	game.last_secondary_time = -999.0
 	game.enemies.clear()
 	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(100.0, 0.0))
@@ -35,7 +36,8 @@ func _run() -> void:
 	var enemy_hp_before = float(game.enemies[0]["hp"])
 	game._update_secondary_eletrica(electric, game.SECONDARY_ELETRICA_DRAIN_DELAY)
 	_check(game.player_hp == 1000, "electric_drained_before_tension_max")
-	var expected_shock_damage = float(game.enemies[0]["max_hp"]) * game.SECONDARY_ELETRICA_SHOCK_MAX_HP_RATE + game.player_damage * game.SECONDARY_ELETRICA_SHOCK_DAMAGE_RATE
+	var safe_progress := clampf(game.SECONDARY_ELETRICA_DRAIN_DELAY / game.SECONDARY_ELETRICA_DRAIN_DELAY, 0.0, 1.0)
+	var expected_shock_damage = float(game.enemies[0]["max_hp"]) * game.SECONDARY_ELETRICA_SHOCK_MAX_HP_RATE * (1.0 + 0.15 * safe_progress) + game.player_damage * game.SECONDARY_ELETRICA_SHOCK_DAMAGE_RATE * (1.0 + 0.25 * safe_progress)
 	_check(is_equal_approx(float(game.enemies[0]["hp"]), enemy_hp_before - expected_shock_damage), "electric_shock_damage_changed")
 	_check(float(game.enemies[0]["stun"]) >= game.SECONDARY_ELETRICA_SHOCK_STUN, "electric_stun_missing")
 	game._update_secondary_eletrica(electric, game.SECONDARY_ELETRICA_DRAIN_INTERVAL)
@@ -54,13 +56,16 @@ func _run() -> void:
 	_check(game.last_secondary_time == electric_cancel_time, "electric_cooldown_stamp_changed")
 
 	game.manifestation_secondaries.clear()
-	game.time_alive += game.SECONDARY_SKILL_COOLDOWN + 0.1
+	game.time_alive += game._secondary_skill_cooldown() + 0.1
 	game._use_secondary_skill()
 	_check(not game._active_eletrica_secondary().is_empty(), "electric_restart_after_cooldown_failed")
 	game.enemies.clear()
 	game.time_alive += 3.1
 	game._update_manifestation_secondaries(3.1)
-	_check(not game._active_eletrica_secondary().is_empty(), "electric_should_not_auto_finish_without_targets")
+	_check(game._active_eletrica_secondary().is_empty(), "electric_should_auto_finish_without_targets")
+	game.time_alive += game._secondary_skill_cooldown() + 0.1
+	game._use_secondary_skill()
+	_check(not game._active_eletrica_secondary().is_empty(), "electric_restart_after_empty_finish_failed")
 	game._use_secondary_skill()
 	_check(game._active_eletrica_secondary().is_empty(), "electric_manual_cancel_after_empty_failed")
 	_check(is_equal_approx(game.last_secondary_time, game.time_alive), "electric_empty_manual_cancel_cooldown_wrong")

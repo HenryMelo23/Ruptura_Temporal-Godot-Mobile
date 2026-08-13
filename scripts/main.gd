@@ -23,6 +23,7 @@ const DESKTOP_AIM_CONFIRM: = "confirm"
 const DESKTOP_TELEPORT_CURSOR: = "cursor"
 const DESKTOP_TELEPORT_AUTO: = "auto"
 const DESKTOP_STAGE_SIZE: = Vector2(1088, 768)
+const MAP_SAFE_OVERSCAN: = Vector2(170.0, 118.0)
 const PLAYER_START: = Vector2(420, 500)
 const PLAYER_BASE_HP: = 450
 const PLAYER_BASE_SPEED: = 280.0
@@ -57,6 +58,61 @@ const MANIFEST_PREVIEW_FRAME_COUNT: = 12
 const MANIFEST_PREVIEW_ATLAS_COLS: = 4
 const MANIFEST_PREVIEW_FPS: = 12.0
 const MANIFEST_PREVIEW_KINDS: = ["atk", "skill", "ultimate"]
+const TUTORIAL_STATE_NONE: = ""
+const TUTORIAL_STATE_OFFER: = "offer"
+const TUTORIAL_STATE_ATTACK: = "attack"
+const TUTORIAL_STATE_SKILL: = "skill"
+const TUTORIAL_STATE_SECONDARY: = "secondary"
+const TUTORIAL_STATE_DASH: = "dash"
+const TUTORIAL_STATE_MANIFESTATION: = "manifestation"
+const TUTORIAL_STATE_AURA: = "aura"
+const TUTORIAL_STATE_ESSENCE: = "essence"
+const TUTORIAL_STATE_FINISH: = "finish"
+const TUTORIAL_STEP_TEXTS: = {
+	TUTORIAL_STATE_ATTACK: {
+		"title": "DISPARO CONTRA INIMIGOS",
+		"body": "Derrube o alvo instavel. A mira escolhe ameacas proximas, mas voce ainda decide quando pressionar o ataque.",
+		"hint": "Use ATK para eliminar o alvo."
+	},
+	TUTORIAL_STATE_SKILL: {
+		"title": "HAB1",
+		"body": "Cada Manifestacao expressa uma primeira tecnica diferente. Use-a para sentir o ritmo antes que a run fique caotica.",
+		"hint": "Use HAB1 uma vez."
+	},
+	TUTORIAL_STATE_SECONDARY: {
+		"title": "SEGUNDA HABILIDADE",
+		"body": "A segunda habilidade e mais rara e muda bastante de uma Manifestacao para outra. Ela existe para virar momentos perigosos.",
+		"hint": "Use ULT uma vez."
+	},
+	TUTORIAL_STATE_DASH: {
+		"title": "DASH / TELEPORTE",
+		"body": "Reposicionamento salva vidas. A Ruptura quase sempre pune quem fica parado no centro do caos.",
+		"hint": "Use TP para sair da zona marcada."
+	},
+	TUTORIAL_STATE_MANIFESTATION: {
+		"title": "MANIFESTACAO",
+		"body": "Manifestacoes sao formas instaveis da anomalia se expressando atraves da Geovana. Ninguem entende tudo ainda, nem ela.",
+		"hint": "Avance para entender a Aurea."
+	},
+	TUTORIAL_STATE_AURA: {
+		"title": "AUREA",
+		"body": "A Aurea e o rastro emocional e temporal que envolve Geovana. Ela altera a jornada, nao e so um poder: e uma leitura do universo.",
+		"hint": "Avance para falar sobre essencia."
+	},
+	TUTORIAL_STATE_ESSENCE: {
+		"title": "ESSENCIA",
+		"body": "Ao eliminar inimigos, Geovana absorve essencia e fica mais forte. E isso que empurra a jornada ate o fim.",
+		"hint": "Cada partida abre quase outro universo, com ameacas e oportunidades diferentes."
+	},
+	TUTORIAL_STATE_FINISH: {
+		"title": "JORNADA LIBERADA",
+		"body": "Voce e Geovana estao descobrindo o que esta acontecendo ao mesmo tempo. Sobreviva, adapte-se e leia cada universo.",
+		"hint": "Comecar run normal."
+	}
+}
+const TUTORIAL_TRAINING_DAMAGE_MULT: = 0.16
+const TUTORIAL_TRAINING_SPEED_MULT: = 0.38
+const TUTORIAL_STAGE_ACTION_GRACE: = 0.65
 const UNLOCK_NOTIFICATION_LIFETIME: = 6.0
 const UNLOCK_NOTIFICATION_ENTER_TIME: = 0.45
 const UNLOCK_NOTIFICATION_EXIT_TIME: = 0.55
@@ -750,8 +806,8 @@ const PHASE7_CORVOL_DIVE_TIME: = 0.70
 const PHASE7_CORVOL_RECOVER: = 0.65
 const PHASE7_CORVOL_IMPACT_RADIUS: = 42.0
 const BOSS7_ENTRY_TIME: = 1.65
-const BOSS7_VISUAL_SIZE: = Vector2(183.6, 167.4)
-const BOSS7_HIT_RADIUS: = 42.0
+const BOSS7_VISUAL_SIZE: = Vector2(367.2, 334.8)
+const BOSS7_HIT_RADIUS: = 164.0
 const BOSS7_HP_SCALE: = 1.75
 const BOSS7_STATE_INTRO: = "intro"
 const BOSS7_STATE_FLY: = "fly"
@@ -786,6 +842,11 @@ const BOSS7_DIVE_REBORN_SPEED: = 840.0
 const BOSS7_DIVE_WIDTH: = 86.0
 const BOSS7_THERMAL_WARNING: = 0.88
 const BOSS7_THERMAL_RADIUS: = 74.0
+const BOSS7_DIVE_FIREBALL_RADIUS: = 34.0
+const BOSS7_DIVE_FIREBALL_SPEED: = 520.0
+const BOSS7_DIVE_FIREBALL_DAMAGE_RATIO: = 0.32
+const BOSS7_DIVE_FIREBALL_DAMAGE_FLAT: = 95.0
+const BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT: = 1.5
 const BOSS7_ASH_CORE_TIME: = 6.0
 const BOSS7_CORE_HP_RATIO: = 0.18
 const BOSS7_REBIRTH_MIN_RATIO: = 0.18
@@ -1349,7 +1410,7 @@ const MANIFEST_EVOLUTION_PROFILES: = {
 const CARDS: = [
 	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)}, 
 	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)}, 
-	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+10% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)}, 
+	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+15% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)}, 
 	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +2% chance critica.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)}, 
 	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)}, 
 	{"name": "Roubo de Vida", "nick": "Hemofluxo", "desc": "Projeteis curam uma fracao da vida perdida ao acertar.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)}, 
@@ -2070,6 +2131,14 @@ var game_time = 0.0
 var time_alive = 0.0
 var elapsed_unpaused = 0.0
 var spawn_timer = 0.0
+var tutorial_state: = TUTORIAL_STATE_NONE
+var tutorial_previous_phase: = 1
+var tutorial_elapsed: = 0.0
+var tutorial_action_grace: = 0.0
+var tutorial_prompt_selected: = 0
+var tutorial_targets_spawned: Dictionary = {}
+var tutorial_offer_available: = false
+var tutorial_finish_hold: = 0.0
 var last_attack_time = -10.0
 var last_dash_time = -10.0
 var last_skill_time = -10.0
@@ -2363,6 +2432,7 @@ var fusion_check_timer = 0.0
 var event_alert_text = ""
 var event_alert_color = Color.WHITE
 var event_alert_timer = 0.0
+var event_alert_seed: int = 0
 var screen_shake_timer = 0.0
 var screen_shake_strength = 0.0
 var damage_flash_timer = 0.0
@@ -2467,6 +2537,7 @@ var desktop_aim_event_binding: String = ""
 var desktop_aim_is_hold: bool = false
 var damage_text_scale: float = 1.0
 var show_fps_counter: bool = false
+var run_tutorial_enabled: bool = true
 var retornante_unlocked: bool = false
 var gameplay_cheat_text: String = ""
 var gameplay_cheat_focused: bool = false
@@ -6102,6 +6173,7 @@ func _load_config() -> void :
 				elif k == "auto_target_priority": auto_target_priority = _sanitize_target_priority(v)
 				elif k == "haptics_enabled": haptics_enabled = v != "false"
 				elif k == "show_fps_counter": show_fps_counter = v == "true"
+				elif k == "run_tutorial_enabled": run_tutorial_enabled = v == "true"
 				elif k == "qa_streaming_enabled": qa_streaming_enabled = false
 				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = false
 				elif k == "qa_streaming_quality": qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(v)
@@ -6204,6 +6276,7 @@ func _save_config() -> void :
 		file.store_string("auto_target_priority=" + auto_target_priority + "\n")
 		file.store_string("haptics_enabled=" + ("true" if haptics_enabled else "false") + "\n")
 		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
+		file.store_string("run_tutorial_enabled=" + ("true" if run_tutorial_enabled else "false") + "\n")
 		file.store_string("qa_streaming_enabled=false\n")
 		file.store_string("qa_streaming_unlocked=false\n")
 		file.store_string("qa_streaming_quality=" + _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode) + "\n")
@@ -7978,6 +8051,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	score = 0
 	score_total = 0
 	unlock_notifications.clear()
+	_reset_tutorial_state()
 	_ensure_card_unlock_defaults()
 	card_unlock_runtime_accumulator = 0.0
 	card_unlock_last_player_pos = PLAYER_START
@@ -8158,6 +8232,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	fusion_check_timer = 0.0
 	event_alert_text = ""
 	event_alert_timer = 0.0
+	event_alert_seed = 0
 	alert_stalker_done = false
 	alert_projector_done = false
 	alert_crystal_done = false
@@ -8233,9 +8308,412 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	_reset_phase4_state()
 	_reset_phase5_state()
 	_reset_phase6_state()
+	var offer_run_tutorial: = _should_offer_run_tutorial(clear_interrupted_save)
 	_apply_initial_phase_setup(current_phase, multiplayer_enemy_hp_scale)
-	_add_text("%s // AUREA %s" % [MANIFESTATIONS[selected_manifestation]["name"], String(AURAS[selected_aura]["name"]).to_upper()], player_pos + Vector2(0, -80), _aura_color(), 2.0, 26)
+	effects.clear()
+	if offer_run_tutorial:
+		_begin_tutorial_offer()
 	_perf_mark("start_game_total", perf_start_ms)
+
+
+func _reset_tutorial_state() -> void :
+	tutorial_state = TUTORIAL_STATE_NONE
+	tutorial_previous_phase = 1
+	tutorial_elapsed = 0.0
+	tutorial_action_grace = 0.0
+	tutorial_prompt_selected = 0
+	tutorial_targets_spawned.clear()
+	tutorial_offer_available = false
+	tutorial_finish_hold = 0.0
+
+
+func _should_offer_run_tutorial(clear_interrupted_save: bool) -> bool:
+	return run_tutorial_enabled and clear_interrupted_save and not is_multiplayer and not dedicated_server_mode and not online_local_spectator
+
+
+func _set_run_tutorial_enabled(enabled: bool, persist: = true) -> void:
+	run_tutorial_enabled = enabled
+	if persist:
+		_save_config()
+
+
+func _begin_tutorial_offer() -> void :
+	tutorial_state = TUTORIAL_STATE_OFFER
+	tutorial_previous_phase = current_phase
+	tutorial_elapsed = 0.0
+	tutorial_action_grace = 0.0
+	tutorial_prompt_selected = 0
+	tutorial_targets_spawned.clear()
+	tutorial_offer_available = true
+	tutorial_finish_hold = 0.0
+	effects.clear()
+	_clear_attack_lock()
+	_stop_move_touch()
+	attack_holding = false
+	attack_dragging = false
+	skill_touch_index = -1
+	secondary_touch_index = -1
+	dash_touch_index = -1
+	teleport_dragging = false
+
+
+func _tutorial_active() -> bool:
+	return tutorial_state != TUTORIAL_STATE_NONE
+
+
+func _tutorial_blocks_normal_spawn() -> bool:
+	return tutorial_state != TUTORIAL_STATE_NONE
+
+
+func _tutorial_pauses_world() -> bool:
+	return tutorial_state in [TUTORIAL_STATE_OFFER, TUTORIAL_STATE_MANIFESTATION, TUTORIAL_STATE_AURA, TUTORIAL_STATE_ESSENCE, TUTORIAL_STATE_FINISH]
+
+
+func _tutorial_practical_state() -> bool:
+	return tutorial_state in [TUTORIAL_STATE_ATTACK, TUTORIAL_STATE_SKILL, TUTORIAL_STATE_SECONDARY, TUTORIAL_STATE_DASH]
+
+
+func _update_tutorial(delta: float) -> void :
+	if not _tutorial_active():
+		return
+	tutorial_elapsed += delta
+	tutorial_action_grace = maxf(0.0, tutorial_action_grace - delta)
+	if tutorial_state == TUTORIAL_STATE_FINISH:
+		tutorial_finish_hold += delta
+		if tutorial_finish_hold >= 0.95:
+			_finish_tutorial(true)
+		return
+	if _tutorial_practical_state():
+		_ensure_tutorial_targets()
+
+
+func _accept_tutorial_offer(play_tutorial: bool) -> void :
+	if tutorial_state != TUTORIAL_STATE_OFFER:
+		return
+	if play_tutorial:
+		_begin_tutorial_run()
+	else:
+		_set_run_tutorial_enabled(false)
+		_finish_tutorial(false)
+
+
+func _continue_tutorial_story() -> void :
+	match tutorial_state:
+		TUTORIAL_STATE_MANIFESTATION:
+			_advance_tutorial(TUTORIAL_STATE_AURA)
+		TUTORIAL_STATE_AURA:
+			_advance_tutorial(TUTORIAL_STATE_ESSENCE)
+		TUTORIAL_STATE_ESSENCE:
+			_advance_tutorial(TUTORIAL_STATE_FINISH)
+		TUTORIAL_STATE_FINISH:
+			_finish_tutorial(true)
+
+
+func _handle_tutorial_input(event: InputEvent, viewport: Vector2) -> bool:
+	if not _tutorial_active():
+		return false
+	if _tutorial_practical_state():
+		return false
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_LEFT, KEY_A:
+				if tutorial_state == TUTORIAL_STATE_OFFER:
+					tutorial_prompt_selected = 0
+					queue_redraw()
+				return true
+			KEY_RIGHT, KEY_D:
+				if tutorial_state == TUTORIAL_STATE_OFFER:
+					tutorial_prompt_selected = 1
+					queue_redraw()
+				return true
+			KEY_ESCAPE:
+				if tutorial_state == TUTORIAL_STATE_OFFER:
+					_accept_tutorial_offer(false)
+				else:
+					_finish_tutorial(true)
+				return true
+			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
+				if tutorial_state == TUTORIAL_STATE_OFFER:
+					_accept_tutorial_offer(tutorial_prompt_selected == 0)
+				else:
+					_continue_tutorial_story()
+				return true
+	if event is InputEventScreenTouch:
+		if not event.pressed:
+			return true
+		return _handle_tutorial_pointer_press(event.position, viewport)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if not event.pressed:
+			return true
+		return _handle_tutorial_pointer_press(event.position, viewport)
+	return false
+
+
+func _handle_tutorial_pointer_press(pos: Vector2, viewport: Vector2) -> bool:
+	var rects: Dictionary = _tutorial_prompt_rects(viewport)
+	if tutorial_state == TUTORIAL_STATE_OFFER:
+		if rects.has("tutorial_yes") and Rect2(rects["tutorial_yes"]).has_point(pos):
+			_accept_tutorial_offer(true)
+			return true
+		if rects.has("tutorial_no") and Rect2(rects["tutorial_no"]).has_point(pos):
+			_accept_tutorial_offer(false)
+			return true
+		return _tutorial_panel_rect(viewport).has_point(pos)
+	if rects.has("tutorial_continue") and Rect2(rects["tutorial_continue"]).has_point(pos):
+		_continue_tutorial_story()
+		return true
+	return _tutorial_panel_rect(viewport).has_point(pos)
+
+
+func _begin_tutorial_run() -> void :
+	tutorial_state = TUTORIAL_STATE_ATTACK
+	tutorial_elapsed = 0.0
+	tutorial_action_grace = 0.0
+	tutorial_targets_spawned.clear()
+	enemies.clear()
+	enemy_bullets.clear()
+	bullets.clear()
+	larapio_coin_drops.clear()
+	next_larapio_spawn_time = INF
+	boss_ready = false
+	boss_call_timer = -1.0
+	spawn_timer = INF
+	last_attack_time = time_alive - _current_attack_interval()
+	last_skill_time = time_alive - _skill_cooldown()
+	last_secondary_time = time_alive - _secondary_skill_cooldown()
+	last_dash_time = time_alive - _current_dash_cooldown()
+	player_pos = PLAYER_START
+	effects.clear()
+	_spawn_tutorial_enemy(TUTORIAL_STATE_ATTACK)
+
+
+func _finish_tutorial(completed: bool) -> void :
+	var was_active: = tutorial_state != TUTORIAL_STATE_NONE
+	tutorial_state = TUTORIAL_STATE_NONE
+	tutorial_elapsed = 0.0
+	tutorial_action_grace = 0.0
+	tutorial_offer_available = false
+	tutorial_finish_hold = 0.0
+	tutorial_targets_spawned.clear()
+	if completed:
+		_set_run_tutorial_enabled(false)
+		enemies.clear()
+		enemy_bullets.clear()
+		bullets.clear()
+		spawn_timer = 0.0
+		next_larapio_spawn_time = time_alive + _larapio_spawn_delay()
+		boss_ready = time_alive >= BOSS_READY_TIME
+		_add_text("RUN LIBERADA", player_pos + Vector2(0, -98), Color(0.0, 1.0, 0.82), 1.3, 24)
+	elif was_active:
+		spawn_timer = minf(spawn_timer, 0.2)
+
+
+func _advance_tutorial(next_state: String) -> void :
+	if tutorial_state == next_state:
+		return
+	tutorial_state = next_state
+	tutorial_elapsed = 0.0
+	tutorial_action_grace = TUTORIAL_STAGE_ACTION_GRACE
+	if _tutorial_practical_state():
+		_ensure_tutorial_targets()
+	else:
+		enemies.clear()
+		enemy_bullets.clear()
+
+
+func _tutorial_note_action(action: String) -> void :
+	if tutorial_action_grace > 0.0:
+		return
+	match action:
+		"skill":
+			if tutorial_state == TUTORIAL_STATE_SKILL:
+				_advance_tutorial(TUTORIAL_STATE_SECONDARY)
+		"secondary":
+			if tutorial_state == TUTORIAL_STATE_SECONDARY:
+				_advance_tutorial(TUTORIAL_STATE_DASH)
+		"dash":
+			if tutorial_state == TUTORIAL_STATE_DASH:
+				_advance_tutorial(TUTORIAL_STATE_MANIFESTATION)
+
+
+func _tutorial_enemy_was_killed(enemy: Dictionary) -> void :
+	if not bool(enemy.get("tutorial", false)):
+		return
+	var stage: String = String(enemy.get("tutorial_stage", ""))
+	if stage == TUTORIAL_STATE_ATTACK and tutorial_state == TUTORIAL_STATE_ATTACK:
+		_advance_tutorial(TUTORIAL_STATE_SKILL)
+
+
+func _ensure_tutorial_targets() -> void :
+	if not _tutorial_practical_state():
+		return
+	if bool(tutorial_targets_spawned.get(tutorial_state, false)):
+		var alive_for_stage: = false
+		for enemy in enemies:
+			if bool(enemy.get("tutorial", false)) and String(enemy.get("tutorial_stage", "")) == tutorial_state and float(enemy.get("hp", 0.0)) > 0.0:
+				alive_for_stage = true
+				break
+		if alive_for_stage:
+			return
+		if tutorial_state == TUTORIAL_STATE_ATTACK:
+			_spawn_tutorial_enemy(tutorial_state)
+		return
+	if tutorial_state in [TUTORIAL_STATE_ATTACK, TUTORIAL_STATE_SKILL, TUTORIAL_STATE_SECONDARY]:
+		_spawn_tutorial_enemy(tutorial_state)
+	tutorial_targets_spawned[tutorial_state] = true
+
+
+func _spawn_tutorial_enemy(stage: String) -> void :
+	if not _is_world_authority():
+		return
+	var angle_by_stage: = {
+		TUTORIAL_STATE_ATTACK: 0.0,
+		TUTORIAL_STATE_SKILL: -0.58,
+		TUTORIAL_STATE_SECONDARY: 0.58
+	}
+	var angle: float = float(angle_by_stage.get(stage, 0.0))
+	var pos: Vector2 = (player_pos + Vector2.from_angle(angle) * 245.0 + Vector2(130.0, -18.0)).clamp(Vector2(90, 100), WORLD_SIZE - Vector2(90, 100))
+	_spawn_enemy(ENEMY_COMMON, pos)
+	if enemies.is_empty():
+		return
+	var enemy: Dictionary = enemies[-1]
+	var hp_mult: float = 0.75 if stage == TUTORIAL_STATE_ATTACK else (0.95 if stage == TUTORIAL_STATE_SKILL else 1.2)
+	var hp: float = maxf(18.0, player_damage * hp_mult)
+	enemy["tutorial"] = true
+	enemy["tutorial_stage"] = stage
+	enemy["hp"] = hp
+	enemy["max_hp"] = hp
+	enemy["speed"] = maxf(34.0, float(enemy.get("speed", enemy_speed_base)) * TUTORIAL_TRAINING_SPEED_MULT)
+	enemy["damage"] = maxf(1.0, float(enemy.get("damage", 4.0)) * TUTORIAL_TRAINING_DAMAGE_MULT)
+	enemy["points"] = 28
+	enemy["no_reconstitute"] = true
+	enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.25)
+	enemy["phase"] = rng.randf_range(0.0, TAU)
+	enemies[-1] = enemy
+
+
+func _tutorial_prompt_rects(viewport: Vector2) -> Dictionary:
+	var panel: Rect2 = _tutorial_panel_rect(viewport)
+	var button_w: float = minf(184.0, (panel.size.x - 72.0) * 0.5)
+	var gap: float = 18.0
+	var y: float = panel.end.y - 62.0
+	return {
+		"tutorial_yes": Rect2(panel.get_center().x - button_w - gap * 0.5, y, button_w, 42.0),
+		"tutorial_no": Rect2(panel.get_center().x + gap * 0.5, y, button_w, 42.0),
+		"tutorial_continue": Rect2(panel.get_center().x - minf(220.0, panel.size.x * 0.34) * 0.5, y, minf(220.0, panel.size.x * 0.34), 42.0)
+	}
+
+
+func _tutorial_panel_rect(viewport: Vector2) -> Rect2:
+	var panel_w: float = minf(720.0, viewport.x * 0.74)
+	var panel_h: float = minf(260.0, viewport.y * 0.42)
+	return Rect2(viewport * 0.5 - Vector2(panel_w, panel_h) * 0.5, Vector2(panel_w, panel_h))
+
+
+func _tutorial_compact_panel_rect(viewport: Vector2) -> Rect2:
+	var panel_w: float = minf(660.0, viewport.x * 0.66)
+	var panel_h: float = minf(148.0, viewport.y * 0.26)
+	var pos: = Vector2(viewport.x * 0.5 - panel_w * 0.5, maxf(76.0, viewport.y * 0.12))
+	return Rect2(pos, Vector2(panel_w, panel_h))
+
+
+func _draw_tutorial_overlay(viewport: Vector2, camera: Vector2) -> void:
+	if not _tutorial_active():
+		return
+	var t: float = Time.get_ticks_msec() * 0.001
+	if tutorial_state == TUTORIAL_STATE_OFFER:
+		_draw_tutorial_offer(viewport, t)
+		return
+	if _tutorial_practical_state():
+		_draw_tutorial_practical_step(viewport, camera, t)
+		return
+	_draw_tutorial_story_step(viewport, t)
+
+
+func _draw_tutorial_offer(viewport: Vector2, t: float) -> void:
+	var panel: Rect2 = _tutorial_panel_rect(viewport)
+	var rects: Dictionary = _tutorial_prompt_rects(viewport)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.48), true)
+	_draw_menu_grid(viewport, Color(0.0, 1.0, 0.82, 0.09), 42.0)
+	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.84)
+	_draw_glitch_title("TREINAMENTO DE RUPTURA", panel.position + Vector2(panel.size.x * 0.5, 48.0), 28, Color(0.0, 1.0, 0.82))
+	_draw_wrapped("Antes da partida comecar, Geovana pode sincronizar um treinamento curto. Ele ensina disparo, habilidade, segunda habilidade e dash sem liberar a invasao completa.", panel.grow(-42.0).grow_side(SIDE_TOP, -56.0).grow_side(SIDE_BOTTOM, -58.0), 18, Color(0.88, 0.96, 1.0, 0.96))
+	var pulse: float = 0.5 + sin(t * 5.0) * 0.5
+	draw_line(panel.position + Vector2(34.0, panel.size.y - 78.0), panel.position + Vector2(panel.size.x - 34.0, panel.size.y - 78.0), Color(1.0, 0.12, 0.72, 0.2 + pulse * 0.22), 2.0)
+	_draw_big_button(Rect2(rects["tutorial_yes"]), "JOGAR TUTORIAL", Color(0.0, 0.42, 0.42, 0.75), Color(0.0, 1.0, 0.82), tutorial_prompt_selected == 0)
+	_draw_big_button(Rect2(rects["tutorial_no"]), "INICIAR RUN", Color(0.22, 0.06, 0.11, 0.72), Color(1.0, 0.18, 0.48), tutorial_prompt_selected == 1)
+
+
+func _draw_tutorial_story_step(viewport: Vector2, t: float) -> void:
+	var panel: Rect2 = _tutorial_panel_rect(viewport)
+	var rects: Dictionary = _tutorial_prompt_rects(viewport)
+	var data: Dictionary = Dictionary(TUTORIAL_STEP_TEXTS.get(tutorial_state, {}))
+	var title: String = String(data.get("title", "RUPTURA"))
+	var body: String = String(data.get("body", ""))
+	var hint: String = String(data.get("hint", ""))
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.44), true)
+	_draw_menu_grid(viewport, Color(0.36, 0.0, 0.8, 0.085), 46.0)
+	_draw_holo_panel(panel, Color(0.76, 0.18, 1.0), true, 0.86)
+	var pulse: float = 0.55 + sin(t * 4.8) * 0.45
+	draw_arc(panel.get_center(), minf(panel.size.x, panel.size.y) * 0.46 + pulse * 7.0, t, t + PI * 1.4, 64, Color(0.0, 1.0, 0.82, 0.2), 2.0, true)
+	_draw_centered(title, panel.position + Vector2(panel.size.x * 0.5, 48.0), 26, Color(0.94, 0.98, 1.0, 0.98))
+	_draw_wrapped(body, panel.grow(-44.0).grow_side(SIDE_TOP, -62.0).grow_side(SIDE_BOTTOM, -74.0), 18, Color(0.88, 0.94, 1.0, 0.96))
+	_draw_centered(hint, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 76.0), 15, Color(0.0, 1.0, 0.82, 0.86))
+	_draw_big_button(Rect2(rects["tutorial_continue"]), "CONTINUAR", Color(0.02, 0.34, 0.4, 0.75), Color(0.0, 1.0, 0.82), true)
+
+
+func _draw_tutorial_practical_step(viewport: Vector2, camera: Vector2, t: float) -> void:
+	var panel: Rect2 = _tutorial_compact_panel_rect(viewport)
+	var data: Dictionary = Dictionary(TUTORIAL_STEP_TEXTS.get(tutorial_state, {}))
+	var title: String = String(data.get("title", "TREINO"))
+	var body: String = String(data.get("body", ""))
+	var hint: String = String(data.get("hint", ""))
+	_draw_tutorial_target_markers(camera, t)
+	_draw_tutorial_control_highlight(t)
+	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.78)
+	_draw_centered(title, panel.position + Vector2(panel.size.x * 0.5, 32.0), 23, Color(0.96, 0.98, 1.0, 0.98))
+	_draw_wrapped(body, panel.grow(-28.0).grow_side(SIDE_TOP, -42.0).grow_side(SIDE_BOTTOM, -34.0), 15, Color(0.86, 0.94, 1.0, 0.93))
+	_draw_centered(hint, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 22.0), 15, Color(1.0, 0.84, 0.22, 0.95))
+
+
+func _draw_tutorial_target_markers(camera: Vector2, t: float) -> void:
+	if tutorial_state == TUTORIAL_STATE_DASH:
+		var player_screen: Vector2 = player_pos - camera
+		var danger_r: float = 84.0 + sin(t * 6.0) * 7.0
+		draw_circle(player_screen, danger_r, Color(1.0, 0.12, 0.16, 0.07))
+		draw_arc(player_screen, danger_r, 0.0, TAU, 58, Color(1.0, 0.22, 0.24, 0.76), 3.0, true)
+		draw_arc(player_screen, danger_r + 22.0, -t * 2.0, -t * 2.0 + PI * 1.2, 50, Color(0.0, 1.0, 0.82, 0.58), 2.0, true)
+		return
+	for enemy in enemies:
+		if not bool(enemy.get("tutorial", false)) or String(enemy.get("tutorial_stage", "")) != tutorial_state:
+			continue
+		var pos: Vector2 = Vector2(enemy.get("pos", player_pos)) - camera
+		var radius: float = 44.0 + sin(t * 7.0 + float(enemy.get("uid", 0))) * 5.0
+		draw_circle(pos, radius, Color(1.0, 0.2, 0.62, 0.08))
+		draw_arc(pos, radius, t * 2.4, t * 2.4 + PI * 1.55, 48, Color(1.0, 0.18, 0.72, 0.82), 3.0, true)
+		draw_arc(pos, radius * 0.72, -t * 3.1, -t * 3.1 + PI * 1.25, 42, Color(0.0, 1.0, 0.82, 0.76), 2.0, true)
+		_draw_centered("ALVO", pos + Vector2(0.0, -radius - 14.0), 13, Color(1.0, 0.9, 0.3, 0.95))
+
+
+func _draw_tutorial_control_highlight(t: float) -> void:
+	var action_key: = ""
+	match tutorial_state:
+		TUTORIAL_STATE_ATTACK:
+			action_key = "attack"
+		TUTORIAL_STATE_SKILL:
+			action_key = "skill"
+		TUTORIAL_STATE_SECONDARY:
+			action_key = "secondary"
+		TUTORIAL_STATE_DASH:
+			action_key = "dash"
+	if action_key == "" or not buttons.has(action_key):
+		return
+	var rect: Rect2 = Rect2(buttons[action_key])
+	var pulse: float = 0.5 + sin(t * 7.0) * 0.5
+	var glow: Rect2 = rect.grow(10.0 + pulse * 7.0)
+	draw_rect(glow, Color(0.0, 1.0, 0.82, 0.075 + pulse * 0.045), true)
+	draw_rect(glow, Color(0.0, 1.0, 0.82, 0.86), false, 3.0)
+	draw_rect(rect.grow(4.0), Color(1.0, 0.18, 0.72, 0.64), false, 2.0)
 
 
 func _pick_initial_phase() -> int:
@@ -8488,6 +8966,7 @@ func _advance_to_phase(phase: int) -> void :
 	alert_curater_done = false
 	event_alert_text = ""
 	event_alert_timer = 0.0
+	event_alert_seed = 0
 	insane_echo_visuals.clear()
 	rational_trail_points.clear()
 	rational_trail_sample_timer = 0.0
@@ -9788,6 +10267,9 @@ func _update_game(delta: float) -> void :
 	_sync_touch_state()
 	if _spectator_controls_locked():
 		_clear_spectator_local_combat_state()
+	_update_tutorial(delta)
+	if _tutorial_pauses_world():
+		return
 	time_alive += delta
 	elapsed_unpaused += delta
 	_update_card_unlock_runtime(delta)
@@ -9823,7 +10305,7 @@ func _update_game(delta: float) -> void :
 	_update_phase2_fire_walls(delta)
 	_update_phase7_ember_patches(delta)
 	_update_phase3_environment(delta)
-	if not boss_ready and time_alive >= BOSS_READY_TIME:
+	if not boss_ready and time_alive >= BOSS_READY_TIME and not _tutorial_blocks_normal_spawn():
 		boss_ready = true
 		_add_text("Aperte BOSS quando quiser chamar", player_pos + Vector2(0, -100), Color(1.0, 0.72, 0.2), 2.2, 24)
 	if _should_trigger_forced_shop():
@@ -9902,13 +10384,14 @@ func _update_game(delta: float) -> void :
 					_try_arm_lacerante_empower()
 			lacerante_empower_key_was_pressed = empower_key_pressed
 
-	if _is_world_authority() and spawn_timer <= 0.0 and not boss_dead:
+	if _is_world_authority() and spawn_timer <= 0.0 and not boss_dead and not _tutorial_blocks_normal_spawn():
 		_spawn_wave()
 	_update_event_alerts(delta)
 	if _is_world_authority():
 		_update_agglomeration(delta)
-		_try_spawn_larapio()
-		_try_spawn_arauto()
+		if not _tutorial_blocks_normal_spawn():
+			_try_spawn_larapio()
+			_try_spawn_arauto()
 
 	_update_phase_fragment(delta)
 
@@ -10781,10 +11264,17 @@ func _use_skill(target_world = null) -> void :
 	if effects.any( func(e): return e.get("skill_lock", false)):
 		return
 	if manifestation_key == "bombastica":
+		var bombastica_before_skill: float = last_skill_time
 		_try_cast_bombastica_q(target_world)
+		if last_skill_time != bombastica_before_skill:
+			_tutorial_note_action("skill")
 		return
 	if manifestation_key == "eclipsada":
+		var sol_before_skill: float = eclipsada_sol_last_skill_time
+		var lua_before_skill: float = eclipsada_lua_last_skill_time
 		_try_use_eclipsada_q(target_world)
+		if eclipsada_sol_last_skill_time != sol_before_skill or eclipsada_lua_last_skill_time != lua_before_skill:
+			_tutorial_note_action("skill")
 		return
 	var cooldown = _skill_cooldown()
 	if time_alive - last_skill_time < cooldown:
@@ -10855,6 +11345,7 @@ func _use_skill(target_world = null) -> void :
 			_cast_eclipsada_q(target_world, skill_power)
 		"necronada":
 			_try_use_necronada_skill(target_world)
+			_tutorial_note_action("skill")
 			return
 		_:
 			shockwaves.append({"pos": player_pos, "radius": 0.0, "max": 250.0, "life": 0.45, "damage": player_damage * 1.05 * skill_power, "hit": {}, "source_category": "skill_q"})
@@ -10862,6 +11353,7 @@ func _use_skill(target_world = null) -> void :
 	_send_network_ability_visual(NET_ABILITY_SKILL, visual_origin, visual_target, _network_skill_visual_duration())
 	_spawn_radial_particles(player_pos, _manifestation_color(), 22)
 	effects.append({"pos": player_pos, "text": "", "life": 0.25, "max": 0.25, "color": Color.WHITE, "size": 1, "skill_lock": true})
+	_tutorial_note_action("skill")
 
 
 func _trigger_gravitante_mark_collision() -> void :
@@ -11378,6 +11870,8 @@ func _secondary_skill_cooldown_base() -> float:
 		return BOMBASTICA_E_COOLDOWN
 	if manifestation_key == "ancorada":
 		return SECONDARY_ANCORADA_COOLDOWN
+	if manifestation_key == "eletrica":
+		return 10.0
 	if manifestation_key == "contratual":
 		return CONTRACT_ORDER_COOLDOWN
 	if manifestation_key == "necronada":
@@ -11412,7 +11906,7 @@ func _network_secondary_visual_duration() -> float:
 		"parasitica": return PARASITE_ULTIMATE_MAX_DURATION
 		"gravitante": return SECONDARY_GRAVITANTE_DURATION
 		"ancorada": return SECONDARY_ANCORADA_DURATION
-		"eletrica": return 8.0
+		"eletrica": return SECONDARY_ELETRICA_DURATION
 		"cartografica", "mnesica", "ressonante", "contratual": return 5.2
 		"acorrentada": return ACORRENTADA_E_DURATION
 		"eclipsada": return ECLIPSADA_SOL_E_DURATION if _eclipsada_is_sol() else ECLIPSADA_E_MAX_TARGET_TIME
@@ -11524,6 +12018,7 @@ func _use_secondary_skill(target_world = null) -> void :
 		if manifestation_key == "lacerante":
 			visual_target = player_pos
 		_send_network_ability_visual(NET_ABILITY_SECONDARY, visual_origin, visual_target, _network_secondary_visual_duration())
+		_tutorial_note_action("secondary")
 
 
 func _finish_toggle_secondary(secondary: Dictionary, message: String, color: Color, start_cooldown: = true) -> void :
@@ -12017,6 +12512,7 @@ func _execute_teleport(target_world: Vector2) -> void :
 	_grant_impulso_from_ready_action("TELEPORT")
 	_add_card_unlock_progress("teleports_used", 1.0)
 	_send_network_ability_visual(NET_ABILITY_TELEPORT, origin, player_pos, 0.55)
+	_tutorial_note_action("dash")
 
 
 func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2) -> void :
@@ -20348,9 +20844,10 @@ func _throw_larapio_projectile(enemy: Dictionary) -> void :
 		"dir": dir, 
 		"life": 3.4, 
 		"damage": max(1.0, player_hp_max * 0.015 + enemy_far_damage * 0.35) * stone_damage_mult, 
-		"phase": 0.0, 
+		"phase": rng.randf_range(0.0, TAU), 
 		"type": "larapio_coin" if has_loot else "larapio_stone", 
 		"speed_mult": 1.5 * stone_speed_mult, 
+		"spin": rng.randf_range(-1.0, 1.0), 
 		"owner_uid": int(enemy.get("uid", -1))
 	})
 	_add_text("PEDRA PESADA!" if desperate and not has_loot else ("PEDRA!" if aggressive and not has_loot else "TIN!"), Vector2(enemy["pos"]) + Vector2(0, -72), Color(1.0, 0.36, 0.12) if desperate else (Color(1.0, 0.52, 0.18) if aggressive else Color(1.0, 0.82, 0.24)), 0.45, 14)
@@ -20484,7 +20981,9 @@ func _show_event_alert(text: String, color: Color) -> void :
 	event_alert_text = text
 	event_alert_color = color
 	event_alert_timer = 4.0
-	_add_text(text, player_pos + Vector2(0, -128), color, 2.0, 22)
+	event_alert_seed = rng.randi()
+	screen_shake_timer = maxf(screen_shake_timer, 0.12)
+	screen_shake_strength = maxf(screen_shake_strength, 2.8)
 
 
 func _enemy_damage(enemy: Dictionary) -> int:
@@ -21784,6 +22283,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if String(enemy.get("type", "")) == ENEMY_DEVOTO:
 		_add_phase3_miasma(kill_pos, 52.0, 2.0, 0.018)
 	enemies.erase(enemy)
+	_tutorial_enemy_was_killed(enemy)
 	enemies_killed += 1
 	_add_card_unlock_progress("enemy_kills", 1.0)
 	_contractual_order_progress("kill", 1)
@@ -21970,6 +22470,9 @@ func _update_enemy_bullets(delta: float) -> void :
 		bullet["life"] = float(bullet["life"]) - delta
 		bullet["phase"] = float(bullet.get("phase", 0.0)) + delta * 9.0
 		var bullet_type: = String(bullet.get("type", ""))
+		if bullet_type == "boss7_dive_fireball":
+			_update_boss7_dive_fireball_projectile(bullet, previous_bullet_pos)
+			continue
 		if bullet_type == "pyro_wall_seed":
 			var last_wall_pos: = Vector2(bullet.get("last_wall_pos", bullet["pos"]))
 			var current_pos: = Vector2(bullet["pos"])
@@ -22885,6 +23388,8 @@ func _boss_contact_damage() -> int:
 
 
 func _boss_hit_radius() -> float:
+	if current_phase == 7:
+		return BOSS7_HIT_RADIUS
 	return 132.0 if current_phase == 6 else (132.0 if current_phase == 4 else (30.0 if current_phase == 5 else 82.0))
 
 
@@ -26468,20 +26973,7 @@ func _update_boss7_state(delta: float) -> void:
 					boss7_dive_fake_count += 1
 					boss7_state = BOSS7_STATE_DIVE_FAKE
 					boss7_state_timer = 2.0
-					var spawn_pos: Vector2 = Vector2(boss7_target_pos.x, -100.0)
-					var dir: Vector2 = (boss7_target_pos - spawn_pos).normalized()
-					var fireball_speed: float = 380.0
-					enemy_bullets.append({
-						"pos": spawn_pos,
-						"dir": dir,
-						"life": 4.5,
-						"damage": int(player_hp_max * 0.08 + 20),
-						"phase": rng.randf_range(0.0, TAU),
-						"type": "phase7_fireball",
-						"speed_mult": fireball_speed / 210.0,
-						"radius": 14.0
-					})
-					_play_sfx("Frasco.mp3", 0.04, 0.5, 0.9 + rng.randf() * 0.2)
+					_spawn_boss7_dive_fireball(boss7_target_pos)
 				else:
 					boss7_state = BOSS7_STATE_DIVE
 					boss7_state_timer = 0.45
@@ -26554,6 +27046,68 @@ func _spawn_boss7_flame_wave(center: Vector2, max_radius: float = 250.0) -> void
 		"flames": flames,
 		"hit_player": false
 	})
+
+
+func _boss7_dive_fireball_damage() -> int:
+	return int(player_hp_max * BOSS7_DIVE_FIREBALL_DAMAGE_RATIO + BOSS7_DIVE_FIREBALL_DAMAGE_FLAT)
+
+
+func _spawn_boss7_dive_fireball(target: Vector2) -> void:
+	var impact_pos: Vector2 = target.clamp(Vector2(90.0, 90.0), WORLD_SIZE - Vector2(90.0, 90.0))
+	var spawn_pos: Vector2 = Vector2(impact_pos.x, -124.0)
+	var dir: Vector2 = (impact_pos - spawn_pos).normalized()
+	enemy_bullets.append({
+		"pos": spawn_pos,
+		"dir": dir,
+		"life": 4.5,
+		"damage": _boss7_dive_fireball_damage(),
+		"phase": rng.randf_range(0.0, TAU),
+		"type": "boss7_dive_fireball",
+		"speed_mult": BOSS7_DIVE_FIREBALL_SPEED / 210.0,
+		"radius": BOSS7_DIVE_FIREBALL_RADIUS,
+		"hit_radius": BOSS7_DIVE_FIREBALL_RADIUS,
+		"impact_pos": impact_pos,
+		"wave_radius": 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT,
+		"hit": {}
+	})
+	_play_sfx("Frasco.mp3", 0.04, 0.56, 0.86 + rng.randf() * 0.16)
+
+
+func _update_boss7_dive_fireball_projectile(bullet: Dictionary, previous_pos: Vector2) -> void:
+	var current_pos: Vector2 = Vector2(bullet.get("pos", previous_pos))
+	var impact_pos: Vector2 = Vector2(bullet.get("impact_pos", boss7_target_pos))
+	var hit_radius: float = float(bullet.get("hit_radius", BOSS7_DIVE_FIREBALL_RADIUS))
+	var damage: int = int(bullet.get("damage", _boss7_dive_fireball_damage()))
+	if _local_player_damageable_by_contact() and _distance_to_segment(player_pos, previous_pos, current_pos) <= hit_radius:
+		bullet["probability_near_miss_registered"] = true
+		_damage_player(damage, "boss7_dive_fireball")
+		_apply_boss_burn(4)
+		_spawn_radial_particles(player_pos, Color(1.0, 0.32, 0.08), 34)
+		_add_text("IMPACTO", player_pos + Vector2(0.0, -74.0), Color(1.0, 0.42, 0.1), 0.65, 22)
+		bullet["life"] = 0.0
+		return
+	var hit_owner: Dictionary = bullet.get("hit", {})
+	if _damage_remote_player_on_segment(previous_pos, current_pos, hit_radius, damage, "boss7_dive_fireball", hit_owner, "dive_fireball"):
+		bullet["hit"] = hit_owner
+		bullet["life"] = 0.0
+		return
+	bullet["hit"] = hit_owner
+	if _distance_to_segment(impact_pos, previous_pos, current_pos) <= maxf(10.0, hit_radius * 0.45) or current_pos.y >= impact_pos.y:
+		bullet["pos"] = impact_pos
+		_boss7_dive_fireball_ground_impact(bullet)
+		bullet["life"] = 0.0
+
+
+func _boss7_dive_fireball_ground_impact(bullet: Dictionary) -> void:
+	if bool(bullet.get("ground_exploded", false)):
+		return
+	bullet["ground_exploded"] = true
+	var impact_pos: Vector2 = Vector2(bullet.get("impact_pos", bullet.get("pos", boss7_target_pos)))
+	var wave_radius: float = float(bullet.get("wave_radius", 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT))
+	_boss_entry_impact_feedback(0.72)
+	_play_sfx("boss_impact", 0.03, 0.5, 1.18)
+	_spawn_boss7_flame_wave(impact_pos, wave_radius)
+	_spawn_radial_particles(impact_pos, Color(1.0, 0.38, 0.06), 76)
 
 
 func _update_boss7_flame_waves(delta: float) -> void:
@@ -26888,6 +27442,21 @@ func _draw_boss7_ground_indicators(camera: Vector2) -> void:
 		draw_line(pos + Vector2(-30, 0), pos + Vector2(30, 0), Color(1.0, 0.9, 0.3, 0.8), 2.0)
 		draw_line(pos + Vector2(0, -30), pos + Vector2(0, 30), Color(1.0, 0.9, 0.3, 0.8), 2.0)
 		draw_circle(pos, 12.0 * (1.0 - p * 0.5), Color(1.0, 0.95, 0.5, 0.9))
+
+	for bullet in enemy_bullets:
+		if String(bullet.get("type", "")) != "boss7_dive_fireball":
+			continue
+		var impact: Vector2 = Vector2(bullet.get("impact_pos", bullet.get("pos", boss7_target_pos))) - camera
+		var world_pos: Vector2 = Vector2(bullet.get("pos", boss7_target_pos))
+		var impact_world: Vector2 = Vector2(bullet.get("impact_pos", boss7_target_pos))
+		var descent: float = clampf(1.0 - world_pos.distance_to(impact_world) / 520.0, 0.0, 1.0)
+		var direct_r: float = BOSS7_DIVE_FIREBALL_RADIUS * (1.55 + descent * 0.2)
+		var wave_r: float = float(bullet.get("wave_radius", 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT))
+		draw_circle(impact, direct_r + 20.0 * descent, Color(1.0, 0.12, 0.02, 0.12 + descent * 0.12))
+		draw_arc(impact, direct_r, 0.0, TAU, 48, Color(1.0, 0.72, 0.16, 0.68 + descent * 0.18), 3.0, true)
+		draw_arc(impact, wave_r, -time_alive * 2.5, TAU - time_alive * 2.5, 96, Color(1.0, 0.34, 0.04, 0.22 + descent * 0.14), 3.0, true)
+		draw_line(impact + Vector2(-18.0, 0.0), impact + Vector2(18.0, 0.0), Color(1.0, 0.88, 0.32, 0.82), 2.0)
+		draw_line(impact + Vector2(0.0, -18.0), impact + Vector2(0.0, 18.0), Color(1.0, 0.88, 0.32, 0.82), 2.0)
 
 	for atk in boss_attacks:
 		if atk.get("kind") == BOSS7_ATTACK_SKY_FIREBALLS:
@@ -31161,7 +31730,7 @@ func _current_common_card_stat_bonuses() -> Dictionary:
 	var speed_count: int = _card_count_by_id("Speed Boost")
 	var speed_bonus: float = PLAYER_BASE_SPEED * ((pow(1.065, speed_count) - 1.0) * zero)
 	var damage_count: int = _card_count_by_id("Disparo crescente")
-	var damage_bonus: float = _manifestation_base_damage() * ((pow(1.1, damage_count) - 1.0) * zero)
+	var damage_bonus: float = _manifestation_base_damage() * ((pow(1.15, damage_count) - 1.0) * zero)
 	damage_bonus += 5.0 * float(_card_count_by_id("Tempestade")) * zero
 	return {
 		"speed_bonus": speed_bonus, 
@@ -34006,7 +34575,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		"Porcao":
 			return "cura %.0f%% da vida maxima; excesso vira %.0f%% de vida maxima" % [_apply_carta_zero_to_common_value("Porcao", "heal", 0.45) * 100.0, _apply_carta_zero_to_common_value("Porcao", "overflow_hp", 0.35) * 100.0]
 		"Disparo crescente":
-			return "auto attack +%.1f%% de dano sobre a base da manifestacao" % ((pow(1.1, safe_count) - 1.0) * 100.0 * zero)
+			return "auto attack +%.1f%% de dano sobre a base da manifestacao" % ((pow(1.15, safe_count) - 1.0) * 100.0 * zero)
 		"Tempestade":
 			return "+%d dano e +%.0f%% chance critica" % [int(round(5.0 * safe_count * zero)), 2.0 * safe_count * zero]
 		"Roubo de Vida":
@@ -36051,6 +36620,9 @@ func _draw_gameplay_settings(viewport: Vector2) -> void :
 	var fps_accent = Color(0.0, 1.0, 0.82) if show_fps_counter else Color(0.48, 0.52, 0.58)
 	_draw_gameplay_preference(settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if show_fps_counter else "OFF", fps_accent, settings_selected == _gameplay_preference_index("fps"))
 	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["fps"]), show_fps_counter, fps_accent)
+	var tutorial_accent = Color(0.0, 1.0, 0.82) if run_tutorial_enabled else Color(0.48, 0.52, 0.58)
+	_draw_gameplay_preference(settings_buttons["tutorial"], "TUTORIAL INICIAL", "Pergunta ao iniciar a proxima partida.", "ON" if run_tutorial_enabled else "OFF", tutorial_accent, settings_selected == _gameplay_preference_index("tutorial"))
+	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["tutorial"]), run_tutorial_enabled, tutorial_accent)
 	var cheat_value = "QA ATIVO" if qa_data_unlocked else ("RETORNANTE OK" if retornante_unlocked else (gameplay_cheat_text if gameplay_cheat_text != "" else "TOQUE E DIGITE"))
 	var cheat_accent = Color(0.74, 1.0, 0.36) if qa_data_unlocked else (Color(0.86, 0.48, 1.0) if retornante_unlocked else Color(0.64, 0.44, 1.0))
 	if gameplay_cheat_focused:
@@ -36251,7 +36823,7 @@ func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 
 
 func _gameplay_preference_keys() -> Array:
-	var keys: = ["analog", "shop_mode", "shop_interval", "target_priority", "damage_text", "interface_text", "fps", "retornante_cheat", "haptics"]
+	var keys: = ["analog", "shop_mode", "shop_interval", "target_priority", "damage_text", "interface_text", "fps", "tutorial", "retornante_cheat", "haptics"]
 	if _uses_desktop_ui():
 		keys.insert(4, "desktop_aim")
 		keys.insert(5, "desktop_teleport")
@@ -37887,6 +38459,8 @@ func _draw_boss_world(camera: Vector2) -> void :
 	if current_phase == 2:
 		_draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, Vector2(184, 170), boss2_facing_dir < 0.0, boss_modulate, true)
 	else:
+		if current_phase == 7:
+			_draw_boss7_fire_aura(boss_tex, boss_draw_pos - camera, boss_draw_size)
 		_draw_entity_fit(boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate, true)
 	if current_phase == 6:
 		_draw_boss6_amber_heart(boss_draw_pos - camera, boss_draw_size)
@@ -37896,8 +38470,59 @@ func _draw_boss_world(camera: Vector2) -> void :
 		var boss_bar_width: = 168.0 if current_phase == 7 else (232.0 if current_phase == 6 else (220.0 if current_phase == 4 else (66.0 if current_phase == 5 else 148.0)))
 		var bar_color: = Color(1.0, 0.46, 0.08) if current_phase == 7 else (Color(1.0, 0.58, 0.16) if current_phase == 6 else (Color(0.24, 1.0, 0.42) if current_phase == 5 else (Color(1.0, 0.62, 0.08) if current_phase == 4 else Color(1.0, 0.12, 0.22))))
 		_draw_bar(boss_draw_pos - camera + Vector2( - boss_bar_width * 0.5, - boss_draw_size.y * 0.54), boss_bar_width, boss_hp / boss_hp_max, bar_color)
-		if boss_eletrica_static_stacks > 0 and boss_eletrica_static_timer > 0.0:
+		if manifestation_key == "eletrica" and boss_eletrica_static_stacks > 0 and boss_eletrica_static_timer > 0.0:
 			_draw_eletrica_static_indicator(self, boss_draw_pos - camera + Vector2(0, - boss_draw_size.y * 0.54 - 12), boss_eletrica_static_stacks, boss_eletrica_static_timer, -1)
+
+
+func _draw_boss7_fire_aura(texture: Texture2D, center: Vector2, size: Vector2) -> void:
+	if texture == null:
+		return
+	var pulse: float = 0.5 + 0.5 * sin(time_alive * 7.4)
+	var dive_boost: float = 1.18 if boss7_state in [BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE_WAIT, BOSS7_STATE_DIVE_MARK, BOSS7_STATE_DIVE_FAKE, BOSS7_STATE_DIVE] else 1.0
+	var reborn_boost: float = 1.18 if boss7_reborn else 1.0
+	var layers: int = 2 if _memory_saver_active() else 3
+	for i in range(layers):
+		var layer_f: float = float(i)
+		var grow: float = (1.08 + layer_f * 0.055 + pulse * 0.026) * dive_boost
+		var offset: Vector2 = Vector2(sin(time_alive * (2.1 + layer_f) + layer_f * 1.7) * 4.0, -7.0 - layer_f * 5.0 + cos(time_alive * (2.9 + layer_f)) * 2.0)
+		var alpha: float = (0.2 - layer_f * 0.04) * reborn_boost
+		var color: Color = Color(1.0, 0.32 + layer_f * 0.12, 0.04, alpha)
+		_draw_entity_fit(texture, center + offset, size * grow, color, true)
+	var ember_count: int = 7 if not _memory_saver_active() else 4
+	for i in range(ember_count):
+		var angle: float = time_alive * (1.8 + float(i) * 0.13) + float(i) * TAU / float(ember_count)
+		var radius: Vector2 = Vector2(size.x * 0.32, size.y * 0.42)
+		var ember_pos: Vector2 = center + Vector2(cos(angle) * radius.x, sin(angle * 1.25) * radius.y - size.y * 0.06)
+		var ember_alpha: float = 0.32 + 0.24 * sin(time_alive * 8.0 + float(i))
+		draw_circle(ember_pos, 2.4 + pulse * 1.8, Color(1.0, 0.52, 0.12, ember_alpha))
+
+
+func _draw_event_alert_world(camera: Vector2, viewport: Vector2) -> void:
+	if event_alert_timer <= 0.0:
+		return
+	var progress: float = clampf(1.0 - event_alert_timer / 4.0, 0.0, 1.0)
+	var fade: float = sin(progress * PI)
+	var center_world: Vector2 = player_pos.lerp(WORLD_SIZE * 0.5, 0.18)
+	var center: Vector2 = center_world - camera
+	var accent: Color = event_alert_color
+	var t: float = time_alive * 2.8 + float(event_alert_seed % 97) * 0.013
+	var max_radius: float = maxf(viewport.x, viewport.y) * 0.72
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(accent.r, accent.g, accent.b, 0.035 * fade), true)
+	for ring in range(4):
+		var ring_p: float = fposmod(progress + float(ring) * 0.18, 1.0)
+		var radius: float = lerpf(70.0, max_radius, ring_p)
+		var alpha: float = (1.0 - ring_p) * 0.32 * fade
+		draw_arc(center, radius, t + float(ring), t + float(ring) + TAU * 0.78, 96, Color(accent.r, accent.g, accent.b, alpha), 3.0, true)
+		draw_arc(center, radius * 0.72, -t * 0.9 - float(ring), -t * 0.9 - float(ring) + TAU * 0.38, 64, Color(1.0, 0.94, 1.0, alpha * 0.45), 1.6, true)
+	var cracks: int = 11 if not _memory_saver_active() else 6
+	for i in range(cracks):
+		var base_angle: float = float(i) * TAU / float(cracks) + sin(t + float(i)) * 0.18
+		var a: Vector2 = center + Vector2.from_angle(base_angle) * (70.0 + sin(t * 1.7 + i) * 16.0)
+		var b: Vector2 = center + Vector2.from_angle(base_angle + sin(t + i) * 0.08) * (max_radius * (0.42 + 0.18 * sin(float(i) * 1.3)))
+		draw_line(a, b, Color(accent.r, accent.g, accent.b, 0.16 * fade), 2.0, true)
+		if i % 3 == 0:
+			var mid: Vector2 = a.lerp(b, 0.58)
+			draw_line(mid, mid + Vector2.from_angle(base_angle + 0.72) * 34.0, Color(1.0, 0.82, 1.0, 0.12 * fade), 1.2, true)
 
 
 func _draw_game(viewport: Vector2) -> void :
@@ -37911,6 +38536,7 @@ func _draw_game(viewport: Vector2) -> void :
 			draw_texture_rect(map_texture, _desktop_stage_draw_rect(camera), false)
 	else:
 		draw_rect(Rect2( - camera, WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
+	_draw_event_alert_world(camera, viewport)
 	_draw_boss6_necro_erosion(camera)
 	_draw_phase5_transmute_particles(camera)
 	if vfx_director:
@@ -38069,6 +38695,7 @@ func _draw_game(viewport: Vector2) -> void :
 		if teleport_dragging:
 			_draw_teleport_preview(viewport, camera)
 		_draw_touch_controls(viewport)
+	_draw_tutorial_overlay(viewport, camera)
 	if _boss3_miasma_qte_active():
 		_draw_boss3_miasma_overlay(viewport, camera)
 	_draw_revive_request(viewport)
@@ -38878,7 +39505,7 @@ func _draw_enemies(camera: Vector2) -> void :
 			_draw_enemy_health_bar(enemy, enemy_bar_draw_pos, 60.0, enemy_hp_ratio)
 		var static_stacks: = int(enemy.get("eletrica_static_stacks", 0))
 		var static_timer: = float(enemy.get("eletrica_static_timer", 0.0))
-		if static_stacks > 0 and static_timer > 0.0:
+		if manifestation_key == "eletrica" and static_stacks > 0 and static_timer > 0.0:
 			_draw_eletrica_static_indicator(self, enemy_bar_draw_pos + Vector2(30, -10), static_stacks, static_timer, int(enemy["uid"]))
 		if execute_threshold > 0.0:
 			_draw_collector_threshold(enemy_bar_draw_pos, 60.0, execute_threshold, enemy_hp_ratio)
@@ -42421,7 +43048,27 @@ func _draw_projectiles(camera: Vector2) -> void :
 		if state == "instavel":
 			draw_arc(pos, outer + 8.0, age * 4.5, age * 4.5 + PI * 1.15, 22, Color(1.0, 0.76, 0.92, 0.56), 1.6)
 	for bullet in enemy_bullets:
-		if bullet.get("type") == "phase7_fireball":
+		if bullet.get("type") == "boss7_dive_fireball":
+			var pos: Vector2 = Vector2(bullet["pos"]) - camera
+			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.DOWN)).normalized()
+			var side: Vector2 = dir.orthogonal()
+			var phase: float = float(bullet.get("phase", 0.0))
+			var radius: float = float(bullet.get("radius", BOSS7_DIVE_FIREBALL_RADIUS))
+			var wobble: float = sin(phase * 1.7) * 3.0
+			var flame_shape: = PackedVector2Array([
+				pos + dir * (radius * 1.05),
+				pos + side * (radius * 0.82 + sin(phase) * 3.0) - dir * 3.0,
+				pos - dir * (radius * 0.78 + wobble),
+				pos - side * (radius * 0.58 + cos(phase * 0.8) * 4.0) - dir * 2.0
+			])
+			draw_circle(pos, radius * 1.65, Color(1.0, 0.12, 0.02, 0.22))
+			draw_line(pos - dir * radius * 0.8, pos - dir * radius * 2.35 + side * sin(phase * 2.2) * 8.0, Color(1.0, 0.18, 0.02, 0.58), radius * 0.34, true)
+			draw_line(pos - dir * radius * 0.4, pos - dir * radius * 1.85 - side * cos(phase * 2.0) * 6.0, Color(1.0, 0.66, 0.12, 0.5), radius * 0.2, true)
+			draw_colored_polygon(flame_shape, Color(1.0, 0.25, 0.04, 0.96))
+			draw_polyline(PackedVector2Array([flame_shape[0], flame_shape[1], flame_shape[2], flame_shape[3], flame_shape[0]]), Color(1.0, 0.82, 0.24, 0.92), 2.8, true)
+			draw_circle(pos, radius * 0.46, Color(1.0, 0.94, 0.38, 0.92))
+			draw_arc(pos, radius * 1.2, phase + time_alive * 5.0, phase + time_alive * 5.0 + PI * 1.35, 34, Color(1.0, 0.58, 0.08, 0.82), 3.0, true)
+		elif bullet.get("type") == "phase7_fireball":
 			var pos: Vector2 = Vector2(bullet["pos"]) - camera
 			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
 			var side: Vector2 = dir.orthogonal()
@@ -42528,14 +43175,33 @@ func _draw_projectiles(camera: Vector2) -> void :
 			var pos = Vector2(bullet["pos"]) - camera
 			var phase = float(bullet.get("phase", 0.0))
 			var is_coin = bullet.get("type") == "larapio_coin"
-			var body = Color(1.0, 0.78, 0.14) if is_coin else Color(0.36, 0.34, 0.32)
-			var rim = Color(0.52, 0.28, 0.04) if is_coin else Color(0.12, 0.11, 0.1)
-			draw_circle(pos, 10.0, Color(body.r, body.g, body.b, 0.82))
-			draw_arc(pos, 12.5, phase, phase + TAU * 0.92, 28, rim, 2.0)
 			if is_coin:
+				var body = Color(1.0, 0.78, 0.14)
+				var rim = Color(0.52, 0.28, 0.04)
+				draw_circle(pos, 10.0, Color(body.r, body.g, body.b, 0.82))
+				draw_arc(pos, 12.5, phase, phase + TAU * 0.92, 28, rim, 2.0)
 				draw_line(pos + Vector2(cos(phase), sin(phase)) * -6.0, pos + Vector2(cos(phase), sin(phase)) * 6.0, Color(1.0, 1.0, 0.72, 0.75), 1.6)
 			else:
-				draw_line(pos + Vector2(-4, 2), pos + Vector2(5, -3), Color(0.18, 0.17, 0.16, 0.9), 1.4)
+				var spin: float = float(bullet.get("spin", 1.0))
+				var angle: float = phase * (0.72 + absf(spin) * 0.42) * signf(spin if spin != 0.0 else 1.0)
+				var forward: Vector2 = Vector2.from_angle(angle)
+				var side: Vector2 = forward.orthogonal()
+				var wobble: float = sin(phase * 1.8)
+				var rock: = PackedVector2Array([
+					pos + forward * (15.0 + wobble * 2.0) - side * 2.0,
+					pos + forward * 4.0 + side * (13.0 + cos(phase) * 2.0),
+					pos - forward * (10.0 + sin(phase * 0.7) * 2.0) + side * 9.0,
+					pos - forward * (15.0 + cos(phase * 1.1) * 2.0) - side * 4.0,
+					pos - forward * 2.0 - side * (12.0 + wobble * 2.0)
+				])
+				var crack_col: Color = Color(0.72, 0.16, 1.0, 0.88).lerp(Color(1.0, 0.28, 0.72, 0.94), 0.5 + 0.5 * sin(phase * 2.3))
+				draw_circle(pos, 20.0, Color(0.42, 0.14, 0.68, 0.2))
+				draw_colored_polygon(rock, Color(0.54, 0.5, 0.56, 0.96))
+				draw_polyline(PackedVector2Array([rock[0], rock[1], rock[2], rock[3], rock[4], rock[0]]), Color(0.06, 0.045, 0.065, 0.9), 2.2, true)
+				draw_line(pos - forward * 9.0 - side * 4.0, pos + forward * 7.0 + side * 3.0, crack_col, 1.8, true)
+				draw_line(pos - forward * 2.0 + side * 8.0, pos + forward * 4.0 + side * 1.0, crack_col, 1.4, true)
+				draw_circle(pos + forward * 6.0 - side * 7.0, 2.5, Color(0.02, 0.015, 0.02, 0.92))
+				draw_circle(pos - forward * 7.0 + side * 2.0, 2.0, Color(0.02, 0.015, 0.02, 0.86))
 		elif bullet.get("type") == "atirador":
 			var c = Color(0.65, 0.85, 1.0)
 			draw_circle(bullet["pos"] - camera, 14, c)
@@ -45087,10 +45753,6 @@ func _draw_hud(viewport: Vector2) -> void :
 			draw_string(font, faith_rect.position + Vector2(8 * sm, 17 * sm), "FE %d" % int(boss3_faith), HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * sm), Color(0.86, 1.0, 0.58))
 			if boss3_ritual_timer > 0.0:
 				_draw_centered("RITUAL %.1fs  %d/2" % [boss3_ritual_timer, boss3_ritual_destroyed], Vector2(viewport.x * 0.5, 112 * sm), int(20 * sm), Color(1.0, 0.42, 0.18))
-	if event_alert_timer > 0.0:
-		var c = event_alert_color
-		c.a = min(1.0, event_alert_timer)
-		_draw_centered(event_alert_text, Vector2(viewport.x * 0.5, 92 * sm), int(24 * sm), c)
 	if is_multiplayer and online_connected:
 		var ping_text: = "PING %sms" % (str(net_ping_ms) if net_ping_ms >= 0 else "--")
 		if net_remote_ping_ms >= 0:
@@ -45130,13 +45792,13 @@ func _draw_unlock_notifications(viewport: Vector2) -> void :
 		var accent: Color = notice.get("accent", Color(0.12, 0.82, 1.0))
 		var alpha: float = visibility
 		var glow: Rect2 = rect.grow(10.0 + sin(t * 8.0 + float(i)) * 2.0)
-		draw_rect(glow, Color(accent.r, accent.g, accent.b, 0.06 * alpha), true)
-		draw_rect(rect, Color(0.006, 0.018, 0.034, 0.86 * alpha), true)
-		draw_rect(rect.grow(-4.0), Color(accent.r, accent.g, accent.b, 0.055 * alpha), true)
+		draw_rect(glow, Color(accent.r, accent.g, accent.b, 0.045 * alpha), true)
+		draw_rect(rect, Color(0.006, 0.018, 0.034, 0.56 * alpha), true)
+		draw_rect(rect.grow(-4.0), Color(accent.r, accent.g, accent.b, 0.035 * alpha), true)
 		draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.9 * alpha), false, 2.5)
 		draw_rect(rect.grow(-5.0), Color(0.72, 0.95, 1.0, 0.18 * alpha), false, 1.0)
 		var icon_rect: = Rect2(rect.position + Vector2(16.0, 14.0), Vector2(60.0, 60.0))
-		draw_rect(icon_rect.grow(5.0), Color(0.0, 0.12, 0.18, 0.78 * alpha), true)
+		draw_rect(icon_rect.grow(5.0), Color(0.0, 0.12, 0.18, 0.5 * alpha), true)
 		draw_rect(icon_rect.grow(5.0), Color(accent.r, accent.g, accent.b, 0.75 * alpha), false, 1.5)
 		var icon_texture: Texture2D = notice.get("icon", null)
 		_draw_texture_contain(icon_texture, icon_rect, Color(1.0, 1.0, 1.0, alpha))
@@ -45918,7 +46580,7 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void :
 
 	icons.append({"label": "ATK", "sub": "Ataque", "charges": 0, "bind": _compact_key_binding_name("attack") if _uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.26, 0.85), "cd_elapsed": 100.0, "cd_max": 1.0})
 	icons.append({"label": "HAB1", "sub": "Hab 1", "charges": q_charges, "bind": _compact_key_binding_name("skill") if _uses_desktop_ui() else _compact_binding_name("skill"), "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.85), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown()})
-	icons.append({"label": ult_label, "sub": ult_sub, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": time_alive - last_secondary_time, "cd_max": SECONDARY_SKILL_COOLDOWN})
+	icons.append({"label": ult_label, "sub": ult_sub, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": time_alive - last_secondary_time, "cd_max": _secondary_skill_cooldown()})
 	icons.append({"label": dash_label, "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown()})
 	if manifestation_key == "lacerante":
 		icons.append({"label": "REFORÃ‡O" if lacerante_empowered_ready else "+", "sub": "ReforÃ§o", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN})
@@ -46034,6 +46696,19 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 		draw_circle(secondary_c, secondary_r * 0.96, Color(0.4, 0.0, 0.02, 0.92))
 	if not is_gamepad_active:
 		_draw_button(secondary_c, secondary_r, "CANCELAR" if toggle_ultimate_active else "ULT", Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72))
+	if manifestation_key == "eletrica" and not toggle_ultimate_active:
+		var cd_total: float = _secondary_skill_cooldown()
+		var cd_elapsed: float = clampf(time_alive - last_secondary_time, 0.0, cd_total)
+		if cd_elapsed < cd_total:
+			var cd_ratio: float = cd_elapsed / maxf(0.01, cd_total)
+			var cd_phase: float = time_alive * 7.0
+			var cd_col: Color = Color(0.14, 0.72, 1.0, 0.42).lerp(Color(0.9, 0.12, 1.0, 0.76), 1.0 - cd_ratio)
+			draw_arc(secondary_c, secondary_r + 11.0, -PI * 0.5, -PI * 0.5 + TAU * cd_ratio, 58, cd_col, 4.0, true)
+			draw_arc(secondary_c, secondary_r + 17.0, cd_phase, cd_phase + PI * 0.8, 26, Color(0.58, 0.96, 1.0, 0.28 + 0.3 * (1.0 - cd_ratio)), 2.0, true)
+			for spark in range(3):
+				var a: float = cd_phase + float(spark) * TAU / 3.0
+				var start: Vector2 = secondary_c + Vector2.from_angle(a) * (secondary_r + 15.0)
+				draw_line(start, start + Vector2.from_angle(a + 0.8) * 7.0, Color(0.86, 0.98, 1.0, 0.42), 1.4, true)
 	if toggle_ultimate_active:
 		draw_arc(secondary_c, secondary_r + 7.0 + cancel_pulse * 4.0, 0.0, TAU, 54, Color(1.0, 0.1, 0.13, 1.0), 4.0)
 	if not active_eletrica_secondary.is_empty():
@@ -47204,7 +47879,7 @@ func _card_stat_chips(card_name: String) -> Array:
 		"Porcao":
 			return ["+45% CURA", "+HP MAX"]
 		"Disparo crescente":
-			return ["+10% DANO"]
+			return ["+15% DANO"]
 		"Tempestade":
 			return ["+5 DANO", "+2% CRIT"]
 		"Trembo":
@@ -48207,7 +48882,13 @@ func _camera(viewport: Vector2) -> Vector2:
 	if is_multiplayer and (online_local_spectator or (is_dead and not _all_multiplayer_players_dead())):
 		target = _spectator_target_pos()
 	var camera = target - viewport * 0.5
-	return camera.clamp(Vector2.ZERO, WORLD_SIZE - viewport)
+	var overscan: Vector2 = _map_camera_overscan(viewport)
+	return camera.clamp(-overscan, WORLD_SIZE - viewport + overscan)
+
+
+func _map_camera_overscan(viewport: Vector2) -> Vector2:
+	var scale: float = clampf(minf(viewport.x / 1280.0, viewport.y / 720.0), 0.72, 1.15)
+	return MAP_SAFE_OVERSCAN * scale
 
 
 func _update_button_layout(viewport: Vector2) -> void :
@@ -48369,6 +49050,10 @@ func _unhandled_input(event: InputEvent) -> void :
 		if event is InputEventScreenTouch and (event.canceled or not event.pressed):
 			_cancel_touch_index(event.index)
 		_handle_app_update_input(event, viewport)
+		return
+	if _handle_tutorial_input(event, viewport):
+		if event is InputEventScreenTouch and (event.canceled or not event.pressed):
+			_cancel_touch_index(event.index)
 		return
 	if event is InputEventJoypadButton:
 		if gamepad_mapping_action == "" and _gamepad_navigation_mode():
@@ -48975,6 +49660,9 @@ func _handle_gameplay_settings_touch(pos: Vector2, viewport: Vector2) -> void :
 		_close_gameplay_cheat_popup()
 		show_fps_counter = not show_fps_counter
 		_save_config()
+	elif settings_buttons["tutorial"].has_point(pos):
+		_close_gameplay_cheat_popup()
+		_set_run_tutorial_enabled(not run_tutorial_enabled)
 	elif settings_buttons["retornante_cheat"].has_point(pos):
 		if not retornante_unlocked or not qa_data_unlocked:
 			_open_gameplay_cheat_popup()
@@ -49873,6 +50561,7 @@ func _handle_key(event: InputEventKey) -> void :
 				"desktop_teleport": _cycle_desktop_teleport_mode()
 				"desktop_attack_aim": _cycle_desktop_attack_aim_mode()
 				"fps": show_fps_counter = not show_fps_counter
+				"tutorial": _set_run_tutorial_enabled(not run_tutorial_enabled, false)
 				"retornante_cheat": _open_gameplay_cheat_popup()
 				"haptics": haptics_enabled = not haptics_enabled
 				"ui_platform_profile": _cycle_ui_platform_override()
@@ -49890,6 +50579,7 @@ func _handle_key(event: InputEventKey) -> void :
 				"desktop_aim": _cycle_desktop_aim_mode(-1)
 				"desktop_teleport": _cycle_desktop_teleport_mode(-1)
 				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(-1)
+				"tutorial": _set_run_tutorial_enabled(false, false)
 				"ui_platform_profile": _cycle_ui_platform_override(-1)
 				"qa_stream_quality": _cycle_qa_stream_quality_mode(-1)
 			_save_config()
@@ -49902,6 +50592,7 @@ func _handle_key(event: InputEventKey) -> void :
 				"desktop_aim": _cycle_desktop_aim_mode(1)
 				"desktop_teleport": _cycle_desktop_teleport_mode(1)
 				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(1)
+				"tutorial": _set_run_tutorial_enabled(true, false)
 				"ui_platform_profile": _cycle_ui_platform_override(1)
 				"qa_stream_quality": _cycle_qa_stream_quality_mode(1)
 			_save_config()
@@ -51782,10 +52473,10 @@ func _manifestation_details(key: String) -> Dictionary:
 		"eletrica":
 			return {
 				"funcao": "Mais facil de entender e jogar. Boa para primeira partida, fase cheia e troca rapida de alvo.", 
-				"disparo": "ATK: tiro eletrico reto. A cada 4 tiros, sai uma Sobrecarga mais forte que explode em area pequena.", 
+				"disparo": "ATK: tiro eletrico reto. A passiva marca Sobrecarga apenas enquanto Eletrica esta ativa; a cada 4 tiros, sai um disparo mais forte que explode em area pequena.", 
 				"habilidade": "Q - Onda Cinetica", 
 				"desc_hab": "Empurra inimigos proximos, causa dano em area e abre espaco quando a tela fecha.", 
-				"traco": "E - Bobina de Tesla: cria uma zona eletrica. Inimigos dentro do raio tomam choque a cada 0,4s e ficam levemente atordoados.", 
+				"traco": "E - Bobina de Tesla: recarga de 10s. Cria uma zona eletrica; inimigos dentro do raio tomam choque a cada 0,4s e ficam levemente atordoados.", 
 				"risco": "E drena vida depois de 2 minutos. TP: vira eletricidade por 3s e causa 0,5% da vida maxima a cada 300ms nos alvos atravessados; so entao recarrega."
 			}
 		"lacerante":
@@ -51980,8 +52671,9 @@ func _desktop_stage_draw_rect(camera: Vector2) -> Rect2:
 	var draw_size = Vector2(WORLD_SIZE.y * stage_aspect, WORLD_SIZE.y)
 	if draw_size.x < WORLD_SIZE.x:
 		draw_size = Vector2(WORLD_SIZE.x, WORLD_SIZE.x / stage_aspect)
+	var overscan: Vector2 = _map_camera_overscan(get_viewport_rect().size)
 	var origin = Vector2( - camera.x, - camera.y) + (WORLD_SIZE - draw_size) * 0.5
-	return Rect2(origin, draw_size)
+	return Rect2(origin - overscan, draw_size + overscan * 2.0)
 
 
 func _spawn_custom_collision(pos: Vector2, kind: String) -> void :

@@ -153,10 +153,10 @@ static func manifestation_details(host: Node, key: String) -> Dictionary:
 		"eletrica":
 			return {
 				"funcao": "Mais facil de entender e jogar. Boa para primeira partida, fase cheia e troca rapida de alvo.", 
-				"disparo": "ATK: tiro eletrico reto. A cada 4 tiros, sai uma Sobrecarga mais forte que explode em area pequena.", 
+				"disparo": "ATK: tiro eletrico reto. A passiva marca Sobrecarga apenas enquanto Eletrica esta ativa; a cada 4 tiros, sai um disparo mais forte que explode em area pequena.", 
 				"habilidade": "Q - Onda Cinetica", 
 				"desc_hab": "Empurra inimigos proximos, causa dano em area e abre espaco quando a tela fecha.", 
-				"traco": "E - Bobina de Tesla: cria uma zona eletrica. Inimigos dentro do raio tomam choque a cada 0,4s e ficam levemente atordoados.", 
+				"traco": "E - Bobina de Tesla: recarga de 10s. Cria uma zona eletrica; inimigos dentro do raio tomam choque a cada 0,4s e ficam levemente atordoados.", 
 				"risco": "E drena vida depois de 2 minutos. TP: vira eletricidade por 3s e causa 0,5% da vida maxima a cada 300ms nos alvos atravessados; so entao recarrega."
 			}
 		"lacerante":

@@ -39,6 +39,8 @@ func _run() -> void:
 	_check(game.textures["boss7_fly"].all(func(t): return t != null), "Fenix fly frames missing")
 	_check(game.textures["boss7_dive"].all(func(t): return t != null), "Fenix dive frames missing")
 	_check(game.textures["boss7_core"].all(func(t): return t != null), "Fenix core frames missing")
+	_check(game.BOSS7_VISUAL_SIZE.x >= 360.0 and game.BOSS7_VISUAL_SIZE.y >= 330.0, "Fenix visual size was not doubled")
+	_check(is_equal_approx(float(game._boss_hit_radius()), float(game.BOSS7_HIT_RADIUS)), "Fenix hit radius is not using phase 7 tuning")
 	_check(game._boss_call_can_start(false), "Fenix boss call gate is closed")
 
 	game._start_boss_call_local()
@@ -66,6 +68,34 @@ func _run() -> void:
 		game._update_boss7_whirlwind(0.05)
 	_check(game.enemy_bullets.size() == 60, "Fenix whirlwind should spawn exactly 60 fireballs")
 	_check(is_equal_approx(float(game.enemy_bullets[0].get("speed_mult", 0.0)), 170.0 / 210.0), "Fenix whirlwind fireball speed should be reduced by 50% (170/210)")
+
+	game.enemy_bullets.clear()
+	game.boss7_flame_waves.clear()
+	var dive_target: Vector2 = game.player_pos + Vector2(160.0, -44.0)
+	game._spawn_boss7_dive_fireball(dive_target)
+	_check(game.enemy_bullets.size() == 1, "Fenix dive fake fireball did not spawn")
+	var fireball: Dictionary = game.enemy_bullets[0]
+	_check(String(fireball.get("type", "")) == "boss7_dive_fireball", "Fenix dive fake fireball type mismatch")
+	_check(Vector2(fireball.get("impact_pos", Vector2.ZERO)).distance_to(dive_target) < 0.01, "Fenix dive fake fireball impact does not match threatened landing")
+	_check(float(fireball.get("radius", 0.0)) >= game.BOSS7_DIVE_FIREBALL_RADIUS, "Fenix dive fake fireball stayed too small")
+	_check(is_equal_approx(float(fireball.get("wave_radius", 0.0)), 250.0 * game.BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT), "Fenix dive fake fireball wave is not 50 percent larger")
+	game.player_pos = dive_target + Vector2(190.0, 0.0)
+	for step in range(36):
+		game._update_enemy_bullets(0.04)
+	_check(game.enemy_bullets.is_empty(), "Fenix dive fake fireball did not resolve after reaching ground")
+	_check(not game.boss7_flame_waves.is_empty(), "Fenix dive fake fireball did not create a flame wave on ground")
+	_check(is_equal_approx(float(game.boss7_flame_waves.back().get("max_radius", 0.0)), 375.0), "Fenix dive fake fireball ground wave radius mismatch")
+
+	game.enemy_bullets.clear()
+	game.boss7_flame_waves.clear()
+	game.player_pos = dive_target + Vector2(0.0, -86.0)
+	game.player_hp = game.player_hp_max
+	var hp_before_fireball: float = float(game.player_hp)
+	game._spawn_boss7_dive_fireball(dive_target)
+	for step in range(40):
+		game._update_enemy_bullets(0.04)
+	_check(float(game.player_hp) < hp_before_fireball - 100.0, "Fenix dive fake fireball did not deal brutal direct damage")
+	_check(game.boss7_flame_waves.is_empty(), "Fenix dive fake fireball should not explode after direct player collision")
 
 	game.boss_attacks.clear()
 	game.boss7_reborn = true
