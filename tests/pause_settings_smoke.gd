@@ -34,7 +34,7 @@ func _run() -> void:
 	assert(game._ui_input_blocked())
 	if Input.get_connected_joypads().is_empty():
 		assert(not game._settings_rects(viewport).has("gamepad"))
-		assert(game._settings_index_for("gameplay") == 1)
+		assert(game._settings_index_for("gameplay") > game._settings_index_for("controls"))
 
 	game._handle_press(game._settings_rects(viewport)["graphics"].get_center(), viewport)
 	assert(game.mode == "settings")

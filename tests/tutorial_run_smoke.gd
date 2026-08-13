@@ -57,19 +57,41 @@ func _run() -> void:
 	var target: Dictionary = game.enemies[0]
 	game._kill_enemy(target)
 	_check(game.tutorial_state == game.TUTORIAL_STATE_SKILL, "attack kill did not advance to HAB1")
+	_check(game.enemies.size() == 1, "HAB1 step did not create one training enemy")
+	var skill_target: Dictionary = game.enemies[0]
+	var skill_hp_before: float = float(skill_target.get("hp", 0.0))
+	game._damage_enemy(skill_target, 999.0, "eletrica", true, true, game.player_pos, "basic_attack")
+	_check(is_equal_approx(float(skill_target.get("hp", 0.0)), skill_hp_before), "wrong basic attack damaged HAB1 tutorial enemy")
+	game._damage_enemy(skill_target, 1.0, "eletrica", true, true, game.player_pos, "skill_q")
+	_check(float(skill_target.get("hp", 0.0)) < skill_hp_before, "correct HAB1 damage did not affect tutorial enemy")
 	game.tutorial_action_grace = 0.0
 	game._tutorial_note_action("skill")
 	_check(game.tutorial_state == game.TUTORIAL_STATE_SECONDARY, "HAB1 action did not advance to secondary")
+	_check(game.enemies.size() == 1, "secondary step did not create one training enemy")
+	var secondary_target: Dictionary = game.enemies[0]
+	var secondary_hp_before: float = float(secondary_target.get("hp", 0.0))
+	game._damage_enemy(secondary_target, 999.0, "eletrica", true, true, game.player_pos, "skill_q")
+	_check(is_equal_approx(float(secondary_target.get("hp", 0.0)), secondary_hp_before), "wrong HAB1 damaged ULT tutorial enemy")
+	game._damage_enemy(secondary_target, 1.0, "eletrica", true, true, game.player_pos, "skill_e")
+	_check(float(secondary_target.get("hp", 0.0)) < secondary_hp_before, "correct ULT damage did not affect tutorial enemy")
 	game.tutorial_action_grace = 0.0
 	game._tutorial_note_action("secondary")
 	_check(game.tutorial_state == game.TUTORIAL_STATE_DASH, "secondary action did not advance to dash")
 	game.tutorial_action_grace = 0.0
 	game._tutorial_note_action("dash")
 	_check(game.tutorial_state == game.TUTORIAL_STATE_MANIFESTATION, "dash action did not advance to manifestation context")
+	await _capture("tutorial_manifestation_1280x720.png")
 	game._continue_tutorial_story()
 	_check(game.tutorial_state == game.TUTORIAL_STATE_AURA, "manifestation context did not advance to aura")
+	await _capture("tutorial_aura_1280x720.png")
+	root.size = Vector2i(960, 540)
+	await process_frame
+	await _capture("tutorial_aura_960x540.png", Vector2i(960, 540))
+	root.size = Vector2i(1280, 720)
+	await process_frame
 	game._continue_tutorial_story()
 	_check(game.tutorial_state == game.TUTORIAL_STATE_ESSENCE, "aura context did not advance to essence")
+	await _capture("tutorial_essence_1280x720.png")
 	game._continue_tutorial_story()
 	_check(game.tutorial_state == game.TUTORIAL_STATE_FINISH, "essence context did not advance to finish")
 	game._continue_tutorial_story()

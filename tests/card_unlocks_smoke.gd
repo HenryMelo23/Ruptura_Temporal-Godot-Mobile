@@ -43,12 +43,20 @@ func _run() -> void:
 	_check(not game._card_available_for_reward(locked_card, true, false), "locked cards should not drop as reward")
 
 	game._add_card_unlock_progress("enemy_kills", 29.0)
+	game._add_card_unlock_progress("shop_purchases", 5.0)
+	game._add_card_unlock_progress("teleports_used", 20.0)
+	game._add_card_unlock_progress("abilities_used", 35.0)
+	game._add_card_unlock_progress("shots_fired", 220.0)
+	game._add_card_unlock_progress("damage_taken_events", 15.0)
+	game._set_card_unlock_progress_max("survive_seconds", 119.0)
+	var early_unlocks: int = game.unlock_notifications.size()
+	_check(early_unlocks == 0, "short first-run activity unlocked items too early")
 	_check(not game._card_unlocked(locked_card), "Poison unlocked before its challenge target")
-	game._add_card_unlock_progress("enemy_kills", 1.0)
+	game._add_card_unlock_progress("enemy_kills", 151.0)
 	_check(game._card_unlocked(locked_card), "Poison did not unlock after enemy-kill challenge")
 	_check(game.unlock_notifications.size() == 1, "card unlock notification was not queued")
 	_check(String(game.unlock_notifications[0].get("title", "")) == "CARTA DESBLOQUEADA", "card unlock title mismatch")
-	_check(String(game.unlock_notifications[0].get("challenge", "")).contains("Eliminar 30/30"), "card unlock challenge text mismatch")
+	_check(String(game.unlock_notifications[0].get("challenge", "")).contains("Eliminar 180/180"), "card unlock challenge text mismatch")
 	var sfx_was_played: bool = false
 	for player in game.sfx_players:
 		if player != null and player.stream == game.audio_streams["unlock_notification"]:
@@ -56,7 +64,9 @@ func _run() -> void:
 			break
 	_check(sfx_was_played, "unlock notification sfx did not play")
 
-	game._add_card_unlock_progress("shop_purchases", 12.0)
+	game._add_card_unlock_progress("shop_purchases", 25.0)
+	_check(not game._card_unlocked(ashes_card), "Cinzas unlocked without survival requirement")
+	game._set_card_unlock_progress_max("survive_seconds", 900.0)
 	_check(game._card_unlocked(ashes_card), "Cinzas did not unlock after purchase challenge")
 	game._flush_card_unlocks_if_dirty()
 	_check(not game.card_unlocks_dirty, "card unlock save dirty flag did not flush")

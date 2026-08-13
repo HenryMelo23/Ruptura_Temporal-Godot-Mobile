@@ -60,18 +60,29 @@ func _run() -> void:
 
 	game.mode = "game"
 	game.pending_phase = 0
+	game.dimension_route_queue.clear()
+	game.dimension_route_farm_cycles = 0
+	game.dimension_route_completed_count = 4
+	game.current_phase = 4
 	game.player_pos = Vector2(640, 420)
 	game._spawn_phase_choice_portals(Vector2(640, 420))
 	var choices: Array = Array(game.phase_fragment.get("choices", []))
 	_check(choices.size() == 2, "boss 4 should create two phase choice portals")
-	_check(choices.any(func(choice): return int(choice.get("next_phase", 0)) == 7 and String(choice.get("kind", "")) == "red"), "red portal should route to phase 7")
+	_check(choices.any(func(choice): return String(choice.get("action", "")) == "farm" and String(choice.get("kind", "")) == "farm"), "red farm portal should start the farm route")
 	_check(choices.any(func(choice): return int(choice.get("next_phase", 0)) == 5 and String(choice.get("kind", "")) == "umbra"), "green blue portal should route to Umbra phase 5")
 	for choice in choices:
-		if int(choice.get("next_phase", 0)) == 7:
+		if String(choice.get("action", "")) == "farm":
 			game.player_pos = Vector2(choice["pos"])
 			break
 	game._update_phase_fragment(0.016)
 	_check(int(game.pending_phase) == 7 and String(game.mode) == "phase_transition", "red portal did not start transition to phase 7")
+	_check(int(game.dimension_route_farm_cycles) == 1, "first farm portal should register one farm cycle")
+	_check(Array(game.dimension_route_queue).size() == 3, "first farm cycle should queue three rolled dimensions after phase 7")
+	var previous_phase := 7
+	for queued_phase in game.dimension_route_queue:
+		_check(int(queued_phase) != 5, "farm queue should never include phase 5")
+		_check(int(queued_phase) != previous_phase, "farm queue should not repeat the last played phase")
+		previous_phase = int(queued_phase)
 	game.pending_phase = 0
 	game.mode = "game"
 	game._spawn_phase_choice_portals(Vector2(640, 420))
@@ -83,10 +94,28 @@ func _run() -> void:
 	game._update_phase_fragment(0.016)
 	_check(int(game.pending_phase) == 5 and String(game.mode) == "phase_transition", "green blue portal did not start transition to phase 5")
 
+	game.pending_phase = 0
+	game.mode = "game"
+	game.current_phase = 2
+	game.dimension_route_queue.clear()
+	game.dimension_route_farm_cycles = 1
+	game.dimension_route_completed_count = 10
+	game.player_pos = Vector2(640, 420)
+	game._spawn_phase_choice_portals(Vector2(640, 420))
+	choices = Array(game.phase_fragment.get("choices", []))
+	_check(choices.size() == 3, "ten completed dimensions should add an extraction portal")
+	for choice in choices:
+		if String(choice.get("action", "")) == "extract":
+			game.player_pos = Vector2(choice["pos"])
+			break
+	game._update_phase_fragment(0.016)
+	_check(bool(game.run_extracted), "extraction portal should mark the run as extracted")
+	_check(String(game.mode) == "victory", "extraction portal should finish the run on the victory screen")
+
 	if failed:
 		await _finish(1)
 		return
-	print("PHASE_ROUTE_FRAGMENT_PORTALS_OK phase1_after6 arauto_clock unique_jewel boss4_choice_portals")
+	print("PHASE_ROUTE_FRAGMENT_PORTALS_OK phase1_after6 arauto_clock unique_jewel dimension_choice_farm_umbra_extraction")
 	await _finish(0)
 
 
