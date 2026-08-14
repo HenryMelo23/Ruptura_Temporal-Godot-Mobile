@@ -8,8 +8,15 @@ const WORLD_SIZE: = Vector2(1600, 900)
 const GAME_VERSION: = "2.0.31g"
 const GAME_VERSION_CODE: = 23107
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
-const STARTUP_THANKS_HOLD_TIME: = 5.0
-const STARTUP_THANKS_FADE_TIME: = 0.5
+const STARTUP_THANKS_FRAME_COUNT: int = 500
+const STARTUP_THANKS_FRAME_PATH_FORMAT: String = "res://assets/videos/startup_teaser_frames/frame_%04d.webp"
+const STARTUP_THANKS_AUDIO_PATH: String = "res://assets/videos/startup_teaser_audio.ogg"
+const STARTUP_THANKS_VIDEO_PATH: String = "res://assets/videos/startup_teaser.ogv"
+const STARTUP_THANKS_HOLD_TIME: float = 28.5
+const STARTUP_THANKS_FADE_TIME: float = 0.5
+const STARTUP_THANKS_SKIP_HOLD_TIME: float = 3.0
+const STARTUP_THANKS_MAX_SKIPS: int = 3
+const STARTUP_THANKS_CONFIG_PATH: String = "user://startup_video_config.save"
 const MULTIPLAYER_MENU_ENABLED: = true
 const UI_PLATFORM_AUTO: = "auto"
 const UI_PLATFORM_ANDROID: = "android"
@@ -1648,9 +1655,19 @@ var font: Font
 var menu_title_font: Font
 var menu_button_font: Font
 var textures = {}
-var startup_thanks_timer: = 0.0
-var startup_thanks_fading: = false
-var startup_thanks_done: = false
+var startup_thanks_timer: float = 0.0
+var startup_thanks_fading: bool = false
+var startup_thanks_done: bool = false
+var startup_thanks_frame_index: int = 1
+var startup_thanks_frame_view: TextureRect = null
+var startup_thanks_teaser_available: bool = false
+var startup_thanks_audio_player: AudioStreamPlayer = null
+var startup_thanks_holding: bool = false
+var startup_thanks_hold_timer: float = 0.0
+var startup_thanks_hold_pos: Vector2 = Vector2.ZERO
+var startup_thanks_skip_count: int = 0
+var startup_video_disabled: bool = false
+var startup_thanks_frame_cache: Dictionary = {}
 var pixel_card_burn_shader: Shader = null
 var pixel_card_burn_palette: GradientTexture1D = null
 var pixel_card_burn_noise_cache: Dictionary = {}
@@ -2608,6 +2625,7 @@ var trigger_states: Dictionary = {JOY_AXIS_TRIGGER_LEFT: false, JOY_AXIS_TRIGGER
 var edit_layout_selected: String = ""
 var edit_layout_touch_index: int = -1
 var settings_selected = 0
+var audio_slider_drag_index: int = -1
 var buttons = {}
 var menu_buttons = {}
 var settings_buttons = {}
@@ -7271,14 +7289,125 @@ func _safe_load(path: String) -> Texture2D:
 	return null
 
 
+func _load_startup_video_config() -> void:
+	startup_thanks_skip_count = 0
+	startup_video_disabled = false
+	if not FileAccess.file_exists(STARTUP_THANKS_CONFIG_PATH):
+		return
+	var file := FileAccess.open(STARTUP_THANKS_CONFIG_PATH, FileAccess.READ)
+	if file:
+		var text := file.get_as_text()
+		file.close()
+		for line in text.split("\n"):
+			var parts := line.split("=")
+			if parts.size() == 2:
+				var key := parts[0].strip_edges()
+				var val := parts[1].strip_edges()
+				if key == "skip_count":
+					startup_thanks_skip_count = int(val)
+				elif key == "disabled":
+					startup_video_disabled = (val == "true" or val == "1")
+	if startup_thanks_skip_count >= STARTUP_THANKS_MAX_SKIPS:
+		startup_video_disabled = true
+
+
+func _save_startup_video_config() -> void:
+	var file := FileAccess.open(STARTUP_THANKS_CONFIG_PATH, FileAccess.WRITE)
+	if file:
+		file.store_string("skip_count=" + str(startup_thanks_skip_count) + "\n")
+		file.store_string("disabled=" + str("true" if startup_video_disabled else "false") + "\n")
+		file.close()
+
+
+func _startup_thanks_frame_exists(index: int) -> bool:
+	return FileAccess.file_exists(STARTUP_THANKS_FRAME_PATH_FORMAT % index)
+
+
+func _startup_thanks_duration() -> float:
+	if startup_thanks_audio_player and startup_thanks_audio_player.stream:
+		var stream_len := startup_thanks_audio_player.stream.get_length()
+		if stream_len > 0.0:
+			return stream_len
+	return STARTUP_THANKS_HOLD_TIME
+
+
+func _get_startup_thanks_frame_texture(index: int) -> Texture2D:
+	index = clampi(index, 1, STARTUP_THANKS_FRAME_COUNT)
+	if startup_thanks_frame_cache.has(index):
+		return startup_thanks_frame_cache[index]
+	var path := STARTUP_THANKS_FRAME_PATH_FORMAT % index
+	var tex: Texture2D = _safe_load(path)
+	if tex != null:
+		if startup_thanks_frame_cache.size() > 30:
+			var keys := startup_thanks_frame_cache.keys()
+			keys.sort()
+			for k in keys:
+				if abs(k - index) > 15:
+					startup_thanks_frame_cache.erase(k)
+		startup_thanks_frame_cache[index] = tex
+	return tex
+
+
 func _startup_thanks_reset() -> void :
+	_load_startup_video_config()
 	startup_thanks_timer = 0.0
 	startup_thanks_fading = false
-	startup_thanks_done = textures.get("startup_thanks", null) == null
+	startup_thanks_holding = false
+	startup_thanks_hold_timer = 0.0
+	startup_thanks_hold_pos = Vector2.ZERO
+	startup_thanks_frame_index = 1
+	startup_thanks_frame_cache.clear()
+
+	startup_thanks_teaser_available = FileAccess.file_exists(STARTUP_THANKS_AUDIO_PATH) and _startup_thanks_frame_exists(1)
+
+	if startup_video_disabled or startup_thanks_skip_count >= STARTUP_THANKS_MAX_SKIPS:
+		startup_thanks_done = true
+	else:
+		startup_thanks_done = not startup_thanks_teaser_available and (textures.get("startup_thanks", null) == null)
+
+	if startup_thanks_frame_view == null:
+		startup_thanks_frame_view = TextureRect.new()
+		startup_thanks_frame_view.name = "StartupThanksFrameView"
+		startup_thanks_frame_view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		startup_thanks_frame_view.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		startup_thanks_frame_view.anchors_preset = Control.PRESET_FULL_RECT
+		startup_thanks_frame_view.z_index = -100
+		startup_thanks_frame_view.show_behind_parent = true
+		startup_thanks_frame_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(startup_thanks_frame_view)
+
+	startup_thanks_frame_view.visible = not startup_thanks_done
+	startup_thanks_frame_view.position = Vector2.ZERO
+	startup_thanks_frame_view.size = get_viewport_rect().size
+
+	if not startup_thanks_done and startup_thanks_teaser_available:
+		var first_tex := _get_startup_thanks_frame_texture(1)
+		if first_tex != null:
+			startup_thanks_frame_view.texture = first_tex
+		if startup_thanks_audio_player == null:
+			startup_thanks_audio_player = AudioStreamPlayer.new()
+			startup_thanks_audio_player.name = "StartupThanksAudioPlayer"
+			startup_thanks_audio_player.bus = &"Master"
+			add_child(startup_thanks_audio_player)
+		var stream := _safe_load_audio(STARTUP_THANKS_AUDIO_PATH, false)
+		if stream != null:
+			startup_thanks_audio_player.stream = stream
+			startup_thanks_audio_player.play()
 
 
 func _startup_thanks_active() -> bool:
 	return not startup_thanks_done
+
+
+func _finish_startup_thanks() -> void :
+	startup_thanks_done = true
+	startup_thanks_fading = false
+	startup_thanks_holding = false
+	startup_thanks_hold_timer = 0.0
+	if startup_thanks_frame_view != null:
+		startup_thanks_frame_view.visible = false
+	if startup_thanks_audio_player != null and startup_thanks_audio_player.playing:
+		startup_thanks_audio_player.stop()
 
 
 func _skip_startup_thanks() -> void :
@@ -7286,40 +7415,108 @@ func _skip_startup_thanks() -> void :
 		return
 	startup_thanks_fading = true
 	startup_thanks_timer = 0.0
+	if startup_thanks_audio_player != null and startup_thanks_audio_player.playing:
+		startup_thanks_audio_player.stop()
 
 
 func _update_startup_thanks(delta: float) -> void :
 	if startup_thanks_done:
 		return
+
+	if startup_thanks_holding and not startup_thanks_fading:
+		startup_thanks_hold_timer += maxf(delta, 0.0)
+		if startup_thanks_hold_timer >= STARTUP_THANKS_SKIP_HOLD_TIME:
+			startup_thanks_holding = false
+			startup_thanks_hold_timer = 0.0
+			startup_thanks_skip_count += 1
+			if startup_thanks_skip_count >= STARTUP_THANKS_MAX_SKIPS:
+				startup_video_disabled = true
+			_save_startup_video_config()
+			_skip_startup_thanks()
+			return
+	else:
+		if startup_thanks_hold_timer > 0.0:
+			startup_thanks_hold_timer = maxf(0.0, startup_thanks_hold_timer - delta * 4.0)
+
 	startup_thanks_timer += maxf(delta, 0.0)
+	var duration := _startup_thanks_duration()
+
+	if startup_thanks_teaser_available:
+		var progress := clampf(startup_thanks_timer / duration, 0.0, 1.0)
+		startup_thanks_frame_index = clampi(int(progress * float(STARTUP_THANKS_FRAME_COUNT - 1)) + 1, 1, STARTUP_THANKS_FRAME_COUNT)
+		var current_tex := _get_startup_thanks_frame_texture(startup_thanks_frame_index)
+		if startup_thanks_frame_view != null:
+			startup_thanks_frame_view.position = Vector2.ZERO
+			startup_thanks_frame_view.size = get_viewport_rect().size
+			if current_tex != null:
+				startup_thanks_frame_view.texture = current_tex
+			var alpha := 1.0
+			if startup_thanks_fading:
+				alpha = 1.0 - clampf(startup_thanks_timer / maxf(0.01, STARTUP_THANKS_FADE_TIME), 0.0, 1.0)
+			startup_thanks_frame_view.modulate = Color(1.0, 1.0, 1.0, alpha)
+			startup_thanks_frame_view.visible = true
+
 	if startup_thanks_fading:
 		if startup_thanks_timer >= STARTUP_THANKS_FADE_TIME:
-			startup_thanks_done = true
-			startup_thanks_fading = false
-			startup_thanks_timer = 0.0
+			_finish_startup_thanks()
 		return
-	if startup_thanks_timer >= STARTUP_THANKS_HOLD_TIME:
+
+	if startup_thanks_timer >= duration:
 		startup_thanks_fading = true
 		startup_thanks_timer = 0.0
+		if startup_thanks_audio_player != null and startup_thanks_audio_player.playing:
+			startup_thanks_audio_player.stop()
 
 
 func _draw_startup_thanks(viewport: Vector2) -> void :
 	if startup_thanks_done:
 		return
-	var texture: Texture2D = textures.get("startup_thanks", null)
-	if texture == null:
-		return
-	var alpha: = 1.0
+
+	var alpha := 1.0
 	if startup_thanks_fading:
 		alpha = 1.0 - clampf(startup_thanks_timer / maxf(0.01, STARTUP_THANKS_FADE_TIME), 0.0, 1.0)
-	var texture_size: = texture.get_size()
-	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
-		return
-	var scale: = minf(viewport.x / texture_size.x, viewport.y / texture_size.y)
-	var draw_size: = texture_size * scale
-	var image_rect: = Rect2((viewport - draw_size) * 0.5, draw_size)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, alpha), true)
-	draw_texture_rect(texture, image_rect, false, Color(1.0, 1.0, 1.0, alpha))
+
+	var texture: Texture2D = null
+	if startup_thanks_teaser_available:
+		texture = _get_startup_thanks_frame_texture(startup_thanks_frame_index)
+	else:
+		texture = textures.get("startup_thanks", null)
+	if texture != null:
+		var texture_size := texture.get_size()
+		if texture_size.x > 0.0 and texture_size.y > 0.0:
+			var scale := maxf(viewport.x / texture_size.x, viewport.y / texture_size.y)
+			var draw_size := texture_size * scale
+			var image_rect := Rect2((viewport - draw_size) * 0.5, draw_size)
+			draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, alpha), true)
+			draw_texture_rect(texture, image_rect, false, Color(1.0, 1.0, 1.0, alpha))
+
+	if startup_thanks_hold_timer > 0.0 and not startup_thanks_fading:
+		var ratio := clampf(startup_thanks_hold_timer / STARTUP_THANKS_SKIP_HOLD_TIME, 0.0, 1.0)
+		var center := startup_thanks_hold_pos
+		if center == Vector2.ZERO or center.x < 0.0 or center.y < 0.0:
+			center = viewport * 0.5
+
+		var radius := 56.0
+		var width := 8.0
+
+		draw_circle(center, radius + 18.0, Color(0.0, 0.0, 0.0, 0.45 * alpha))
+		draw_arc(center, radius, 0.0, TAU, 64, Color(0.0, 0.0, 0.0, 0.72 * alpha), width + 6.0, true)
+		draw_arc(center, radius, 0.0, TAU, 48, Color(0.1, 0.15, 0.25, 0.5 * alpha), width, true)
+		var start_angle := -PI * 0.5
+		var end_angle := start_angle + ratio * TAU
+		if ratio > 0.01:
+			draw_arc(center, radius, start_angle, end_angle, 64, Color(0.0, 0.85, 1.0, 0.95 * alpha), width + 2.0, true)
+			draw_arc(center, radius, start_angle, end_angle, 48, Color(1.0, 1.0, 1.0, 0.9 * alpha), width * 0.5, true)
+
+		draw_circle(center, radius * 0.35, Color(0.0, 0.85, 1.0, 0.15 * ratio * alpha))
+
+		if font != null:
+			var text := "SEGURE ESC PARA PULAR" if _uses_desktop_ui() else "SEGURE PARA PULAR"
+			var font_size := 18
+			var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+			var text_pos := Vector2(center.x - text_size.x * 0.5, center.y + radius + 22.0)
+			draw_string_outline(font, text_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 3, Color(0.0, 0.0, 0.0, 0.8 * alpha))
+			draw_string(font, text_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.9, 0.95, 1.0, 0.9 * alpha))
 
 
 func _safe_load_manifestation_icon(file_name: String, sprite_base: String) -> Texture2D:
@@ -37109,7 +37306,7 @@ func _draw_hub_chip(rect: Rect2, label: String, accent: Color, strong: = false) 
 
 
 func _draw_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, textures["choice_bg"], Color(1.0, 0.74, 0.22))
+	_draw_holo_background(viewport, null, Color(1.0, 0.74, 0.22))
 	var portrait = _is_portrait(viewport)
 	_draw_glitch_title("CONFIGURACOES", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(1.0, 0.74, 0.22))
 	settings_buttons = _settings_rects(viewport)
@@ -37182,6 +37379,24 @@ func _draw_keyboard_settings(viewport: Vector2) -> void :
 
 func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
 	var portrait = _is_portrait(viewport)
+	var actions = _gamepad_action_order()
+	if not portrait:
+		var outer_w: float = min(1060.0, viewport.x * 0.86)
+		var x: float = viewport.x * 0.5 - outer_w * 0.5
+		var y: float = viewport.y * 0.15
+		var gap: float = 12.0
+		var col_gap: float = 18.0
+		var col_w: float = (outer_w - col_gap) * 0.5
+		var rows: int = int(ceil(float(actions.size()) / 2.0))
+		var back_h: float = 54.0
+		var row_h: float = clamp((viewport.y - y - back_h - 30.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 54.0, 68.0)
+		var wide_rects: Dictionary = {}
+		for i in range(actions.size()):
+			var col: int = i % 2
+			var row: int = int(i / 2)
+			wide_rects[actions[i]] = Rect2(x + float(col) * (col_w + col_gap), y + float(row) * (row_h + gap), col_w, row_h)
+		wide_rects["back"] = Rect2(x, y + float(rows) * (row_h + gap) + 8.0, outer_w, back_h)
+		return wide_rects
 	var margin = viewport.x * (0.08 if portrait else 0.18)
 	var w = viewport.x - margin * 2.0
 	if not portrait: w = min(720.0, viewport.x * 0.58);margin = viewport.x * 0.5 - w * 0.5
@@ -37191,7 +37406,6 @@ func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
 	var max_h = viewport.y - y - (76.0 if portrait else 48.0)
 	var h = clamp((max_h - gap * float(count - 1)) / float(count), 36.0, 58.0)
 	var rects = {}
-	var actions = _gamepad_action_order()
 	for i in range(actions.size()):
 		rects[actions[i]] = Rect2(margin, y + (h + gap) * float(i), w, h)
 	rects["back"] = Rect2(margin, y + (h + gap) * float(actions.size()), w, h)
@@ -37200,12 +37414,31 @@ func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
 
 func _keyboard_settings_rects(viewport: Vector2) -> Dictionary:
 	var portrait = _is_portrait(viewport)
+	var actions = _keyboard_action_order()
+	if not portrait:
+		var outer_w: float = min(1080.0, viewport.x * 0.88)
+		var x: float = viewport.x * 0.5 - outer_w * 0.5
+		var y: float = viewport.y * 0.145
+		var gap: float = 10.0
+		var col_gap: float = 18.0
+		var col_w: float = (outer_w - col_gap) * 0.5
+		var action_rows: int = int(ceil(float(actions.size()) / 2.0))
+		var footer_h: float = 54.0
+		var row_h: float = clamp((viewport.y - y - footer_h - 42.0 - gap * float(maxi(0, action_rows - 1))) / float(maxi(1, action_rows)), 54.0, 68.0)
+		var wide_rects: Dictionary = {}
+		for i in range(actions.size()):
+			var col: int = i % 2
+			var row: int = int(i / 2)
+			wide_rects[actions[i]] = Rect2(x + float(col) * (col_w + col_gap), y + float(row) * (row_h + gap), col_w, row_h)
+		var footer_y: float = y + float(action_rows) * (row_h + gap) + 8.0
+		wide_rects["reset"] = Rect2(x, footer_y, col_w, footer_h)
+		wide_rects["back"] = Rect2(x + col_w + col_gap, footer_y, col_w, footer_h)
+		return wide_rects
 	var margin = viewport.x * (0.08 if portrait else 0.18)
 	var w = viewport.x - margin * 2.0
 	if not portrait:
 		w = min(720.0, viewport.x * 0.58)
 		margin = viewport.x * 0.5 - w * 0.5
-	var actions = _keyboard_action_order()
 	var gap: = 10.0
 	var count = actions.size() + 2
 	var y = viewport.y * (0.14 if portrait else 0.15)
@@ -37309,40 +37542,89 @@ func _draw_cheat_popup(viewport: Vector2) -> void :
 func _draw_gameplay_preference(rect: Rect2, title: String, subtitle: String, value: String, accent: Color, selected: bool = false) -> void :
 	_draw_holo_panel(rect, accent, selected, 0.6)
 	var value_rect = _gameplay_value_rect(rect)
-	var text_width = max(120.0, value_rect.position.x - rect.position.x - 84.0)
-	draw_string(font, rect.position + Vector2(18, 28), title, HORIZONTAL_ALIGNMENT_LEFT, text_width, 17, Color.WHITE)
-	draw_string(font, rect.position + Vector2(18, 50), subtitle.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, text_width, 10, Color(0.7, 0.86, 0.9, 0.84))
+	var text_width = max(120.0, value_rect.position.x - rect.position.x - 80.0)
+	var title_size: int = int(clamp(rect.size.y * 0.28, 14.0, 17.0))
+	var subtitle_size: int = int(clamp(rect.size.y * 0.18, 9.0, 11.0))
+	draw_string(font, rect.position + Vector2(18, rect.size.y * 0.42), title, HORIZONTAL_ALIGNMENT_LEFT, text_width, title_size, Color.WHITE)
+	_draw_wrapped_clamped(subtitle.to_upper(), Rect2(rect.position + Vector2(18, rect.size.y * 0.53), Vector2(text_width, rect.size.y * 0.36)), subtitle_size, Color(0.7, 0.86, 0.9, 0.84), 2)
 	draw_rect(value_rect, Color(accent.r, accent.g, accent.b, 0.16), true)
 	draw_rect(value_rect, Color(accent.r, accent.g, accent.b, 0.82), false, 2)
-	_draw_centered(value, value_rect.get_center() + Vector2(0, 5), 14, Color.WHITE)
+	var value_size: int = 14
+	while value_size > 9 and font.get_string_size(value, HORIZONTAL_ALIGNMENT_CENTER, -1, value_size).x > value_rect.size.x - 12.0:
+		value_size -= 1
+	_draw_centered(value, value_rect.get_center() + Vector2(0, 5), value_size, Color.WHITE)
 
 
 func _draw_audio_settings(viewport: Vector2) -> void :
 	_draw_holo_background(viewport, null, Color(1.0, 0.42, 0.78))
 	var portrait = _is_portrait(viewport)
 	_draw_glitch_title("SOM", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(1.0, 0.42, 0.78))
-	settings_buttons = _gameplay_settings_rects(viewport)
-	var panel = settings_buttons["analog"]
-	_draw_holo_panel(panel, Color(1.0, 0.42, 0.78), false, 0.62)
+	settings_buttons = _audio_settings_rects(viewport)
+	var panel: Rect2 = settings_buttons["panel"]
+	_draw_holo_panel(panel, Color(1.0, 0.42, 0.78), true, 0.64)
+	draw_string(font, panel.position + Vector2(26.0, 34.0), "MIXAGEM DA RUPTURA", HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 52.0, 18, Color.WHITE)
+	draw_string(font, panel.position + Vector2(26.0, 57.0), "Arraste os canais ou use +/- para ajustar sem reiniciar a musica.", HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 52.0, 12, Color(0.82, 0.92, 1.0, 0.78))
 	var titles = ["MASTER", "MUSICA", "EFEITOS", "DISPAROS"]
 	var vols = [vol_master, vol_music, vol_sfx, vol_shots]
 	for i in range(4):
 		var bar_rect = _audio_slider_rect(panel, i)
-		var y_off = bar_rect.position.y
-		draw_string(font, Vector2(panel.position.x + 20, y_off + 20), titles[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
-		draw_rect(bar_rect, Color(1, 1, 1, 0.1), true)
-		if settings_selected == i:
-			draw_rect(Rect2(bar_rect.position.x - 42, bar_rect.position.y - 8, bar_rect.size.x + 84, bar_rect.size.y + 16), Color(1.0, 0.42, 0.78, 0.3), true)
-		draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * vols[i], bar_rect.size.y)), Color(1.0, 0.42, 0.78), true)
-		_draw_small_rect_button(Rect2(bar_rect.position.x - 38, y_off - 4, 34, 34), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-		_draw_small_rect_button(Rect2(bar_rect.end.x + 4, y_off - 4, 34, 34), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+		var row_rect: Rect2 = _audio_slider_row_rect(panel, i)
+		var accent: Color = Color(1.0, 0.42, 0.78)
+		var active: bool = settings_selected == i or audio_slider_drag_index == i
+		draw_rect(row_rect, Color(0.0, 0.0, 0.0, 0.32), true)
+		draw_rect(row_rect, Color(accent.r, accent.g, accent.b, 0.42 if active else 0.2), false, 1)
+		draw_string(font, row_rect.position + Vector2(16.0, 30.0), titles[i], HORIZONTAL_ALIGNMENT_LEFT, 130.0, 16, Color.WHITE)
+		_draw_centered("%d%%" % int(round(vols[i] * 100.0)), Vector2(row_rect.end.x - 44.0, row_rect.get_center().y + 5.0), 13, Color(0.95, 0.98, 1.0, 0.92))
+		draw_rect(bar_rect, Color(1, 1, 1, 0.08), true)
+		draw_rect(bar_rect.grow(1.0), Color(accent.r, accent.g, accent.b, 0.38), false, 1)
+		draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * vols[i], bar_rect.size.y)), Color(accent.r, accent.g, accent.b, 0.92), true)
+		var knob_x: float = bar_rect.position.x + bar_rect.size.x * vols[i]
+		draw_circle(Vector2(knob_x, bar_rect.get_center().y), 12.0 if active else 9.0, Color(0.04, 0.0, 0.05, 0.92))
+		draw_circle(Vector2(knob_x, bar_rect.get_center().y), 6.0, Color.WHITE)
+		draw_arc(Vector2(knob_x, bar_rect.get_center().y), 15.0, -time_alive * 2.0, TAU - time_alive * 2.0, 24, Color(accent.r, accent.g, accent.b, 0.76), 2.0)
+		_draw_small_rect_button(_audio_minus_rect(panel, i), "-", Color(0.16, 0.04, 0.11, 0.92), accent)
+		_draw_small_rect_button(_audio_plus_rect(panel, i), "+", Color(0.16, 0.04, 0.11, 0.92), accent)
 	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == 4)
 
 
+func _audio_settings_rects(viewport: Vector2) -> Dictionary:
+	var portrait: bool = _is_portrait(viewport)
+	var w: float = min(920.0, viewport.x * (0.86 if portrait else 0.72))
+	var x: float = viewport.x * 0.5 - w * 0.5
+	var panel_h: float = min(420.0, viewport.y * 0.58)
+	var y: float = viewport.y * (0.15 if portrait else 0.16)
+	var back_h: float = 54.0
+	return {
+		"panel": Rect2(x, y, w, panel_h),
+		"back": Rect2(x, y + panel_h + 18.0, w, back_h)
+	}
+
+
+func _audio_slider_row_rect(panel: Rect2, index: int) -> Rect2:
+	var top: float = panel.position.y + 82.0
+	var available_h: float = panel.size.y - 104.0
+	var row_h: float = clamp(available_h / 4.0 - 8.0, 58.0, 72.0)
+	return Rect2(panel.position.x + 20.0, top + float(index) * (row_h + 10.0), panel.size.x - 40.0, row_h)
+
+
 func _audio_slider_rect(panel: Rect2, index: int) -> Rect2:
-	var spacing = max(30.0, (panel.size.y - 58.0) / 3.0)
-	var y_off = panel.position.y + 24.0 + float(index) * spacing
-	return Rect2(panel.position.x + 150.0, y_off, panel.size.x - 210.0, 26.0)
+	var row_rect: Rect2 = _audio_slider_row_rect(panel, index)
+	var x: float = row_rect.position.x + 154.0
+	return Rect2(x, row_rect.get_center().y - 8.0, max(180.0, row_rect.size.x - 270.0), 16.0)
+
+
+func _audio_minus_rect(panel: Rect2, index: int) -> Rect2:
+	var bar_rect: Rect2 = _audio_slider_rect(panel, index)
+	return Rect2(bar_rect.position.x - 44.0, bar_rect.get_center().y - 18.0, 36.0, 36.0)
+
+
+func _audio_plus_rect(panel: Rect2, index: int) -> Rect2:
+	var bar_rect: Rect2 = _audio_slider_rect(panel, index)
+	return Rect2(bar_rect.end.x + 8.0, bar_rect.get_center().y - 18.0, 36.0, 36.0)
+
+
+func _audio_slider_hit_rect(panel: Rect2, index: int) -> Rect2:
+	return _audio_slider_rect(panel, index).grow_individual(0.0, 18.0, 0.0, 18.0)
 
 
 func _draw_data_settings(viewport: Vector2) -> void :
@@ -37378,7 +37660,11 @@ func _draw_settings_card(rect: Rect2, title: String, subtitle: String, accent: C
 	draw_rect(marker, Color(accent.r, accent.g, accent.b, 0.68), false, 1)
 	draw_circle(marker.get_center(), min(marker.size.x, marker.size.y) * (0.18 + (0.06 * pulse if selected else 0.0)), Color.WHITE)
 	draw_arc(marker.get_center(), min(marker.size.x, marker.size.y) * 0.37, -time_alive * 2.2, TAU - time_alive * 2.2, 24, Color(accent.r, accent.g, accent.b, 0.72 if selected else 0.36), 2.0)
-	draw_string(font, rect.position + Vector2(70, rect.size.y * 0.42), title, HORIZONTAL_ALIGNMENT_LEFT, -1, int(clamp(rect.size.y * 0.28, 16, 22)), Color.WHITE)
+	var title_rect: Rect2 = Rect2(rect.position + Vector2(70.0, rect.size.y * 0.20), Vector2(rect.size.x - 100.0, rect.size.y * 0.34))
+	var title_size: int = int(clamp(rect.size.y * 0.28, 15.0, 22.0))
+	while title_size > 11 and font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size).x > title_rect.size.x:
+		title_size -= 1
+	draw_string(font, title_rect.position + Vector2(0.0, title_size), title, HORIZONTAL_ALIGNMENT_LEFT, title_rect.size.x, title_size, Color.WHITE)
 	if subtitle != "":
 		_draw_wrapped_clamped(subtitle.to_upper(), Rect2(rect.position + Vector2(70, rect.size.y * 0.52), Vector2(rect.size.x - 88.0, rect.size.y * 0.42)), int(clamp(rect.size.y * 0.15, 10, 13)), Color(0.7, 0.86, 0.9, 0.84), 2)
 	if selected:
@@ -37573,12 +37859,34 @@ func _gameplay_settings_rects(viewport: Vector2) -> Dictionary:
 
 func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 	var portrait: bool = _is_portrait(viewport)
+	var keys: Array = _gameplay_preference_keys()
+	if not portrait:
+		var outer_w: float = min(1080.0, viewport.x * 0.88)
+		var x: float = viewport.x * 0.5 - outer_w * 0.5
+		var y: float = viewport.y * 0.135
+		var gap: float = 8.0
+		var col_gap: float = 18.0
+		var col_w: float = (outer_w - col_gap) * 0.5
+		var back_h: float = 54.0
+		var option_count: int = maxi(1, keys.size() - 1)
+		var rows: int = int(ceil(float(option_count) / 2.0))
+		var row_h: float = clamp((viewport.y - y - back_h - 28.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 50.0, 60.0)
+		var rects_wide: Dictionary = {}
+		var option_index: int = 0
+		for key in keys:
+			if key == "back":
+				continue
+			var col: int = option_index % 2
+			var row: int = int(option_index / 2)
+			rects_wide[key] = Rect2(x + float(col) * (col_w + col_gap), y + float(row) * (row_h + gap), col_w, row_h)
+			option_index += 1
+		rects_wide["back"] = Rect2(x, y + float(rows) * (row_h + gap) + 8.0, outer_w, back_h)
+		return rects_wide
 	var w: float = min(760.0, viewport.x * (0.86 if portrait else 0.68))
 	var x: float = viewport.x * 0.5 - w * 0.5
 	var y: float = viewport.y * (0.12 if portrait else 0.13)
 	var gap: float = 8.0
 	var back_h: float = clamp(viewport.y * 0.075, 48.0, 58.0)
-	var keys: Array = _gameplay_preference_keys()
 	var option_count: int = maxi(1, keys.size() - 1)
 	var panel_h: float = clamp((viewport.y - y - back_h - 24.0 - gap * float(option_count)) / float(option_count), 34.0, 58.0)
 	var rects: Dictionary = {}
@@ -38302,6 +38610,14 @@ func _catalog_fraction_items() -> Array:
 	]
 
 
+func _catalog_detail_panel_rect(viewport: Vector2) -> Rect2:
+	return Rect2(viewport.x * 0.06, 132, viewport.x * 0.88, viewport.y - 220) if _is_portrait(viewport) else Rect2(viewport.x * 0.05, 132, viewport.x * 0.9, viewport.y - 212)
+
+
+func _catalog_detail_back_rect(viewport: Vector2) -> Rect2:
+	return Rect2(viewport.x * 0.5 - 120, viewport.y - 72, 240, 48)
+
+
 func _draw_catalog_detail(viewport: Vector2) -> void :
 	var items = _catalog_items()
 	if items.is_empty():
@@ -38311,7 +38627,7 @@ func _draw_catalog_detail(viewport: Vector2) -> void :
 	var kind: = _catalog_item_kind(item)
 	var locked_item: = _catalog_item_locked(item)
 	var color: Color = Color(0.42, 0.46, 0.68) if locked_item else item.get("color", Color(0.0, 1.0, 0.82))
-	var panel = Rect2(viewport.x * 0.06, 132, viewport.x * 0.88, viewport.y - 220) if portrait else Rect2(viewport.x * 0.05, 132, viewport.x * 0.9, viewport.y - 212)
+	var panel = _catalog_detail_panel_rect(viewport)
 	_draw_holo_panel(panel, color, true, 0.78)
 
 	var image_rect: Rect2
@@ -38369,7 +38685,7 @@ func _draw_catalog_detail(viewport: Vector2) -> void :
 	text_y += 18
 	_draw_wrapped_clamped(_catalog_detail_mechanics(item), Rect2(text_x, text_y, text_w, panel.end.y - text_y - 22.0), 13, Color(0.82, 0.9, 0.94), 7)
 
-	_draw_big_button(Rect2(viewport.x * 0.5 - 120, viewport.y - 72, 240, 48), "VOLTAR AO INDICE", Color(0.08, 0.04, 0.1, 0.9), Color(1.0, 0.2, 0.78))
+	_draw_big_button(_catalog_detail_back_rect(viewport), "VOLTAR AO INDICE", Color(0.08, 0.04, 0.1, 0.9), Color(1.0, 0.2, 0.78))
 
 
 func _catalog_item_texture(item: Dictionary) -> Texture2D:
@@ -50087,30 +50403,51 @@ func _handle_app_update_input(event: InputEvent, viewport: Vector2) -> void :
 func _handle_startup_thanks_input(event: InputEvent) -> bool:
 	if not _startup_thanks_active():
 		return false
+	var viewport := get_viewport_rect().size
 	if event is InputEventScreenTouch:
 		ignore_mouse_until_msec = Time.get_ticks_msec() + 300
 		if event.pressed:
-			_skip_startup_thanks()
+			startup_thanks_holding = true
+			startup_thanks_hold_pos = event.position
+		else:
+			startup_thanks_holding = false
 		return true
 	if event is InputEventScreenDrag:
 		ignore_mouse_until_msec = Time.get_ticks_msec() + 300
-		_skip_startup_thanks()
+		if startup_thanks_holding:
+			startup_thanks_hold_pos = event.position
 		return true
 	if event is InputEventMouseButton:
-		if event.pressed and not _should_ignore_emulated_mouse():
-			_skip_startup_thanks()
+		if not _should_ignore_emulated_mouse():
+			if event.button_index == MOUSE_BUTTON_LEFT and _uses_touch_ui():
+				if event.pressed:
+					startup_thanks_holding = true
+					startup_thanks_hold_pos = event.position
+				else:
+					startup_thanks_holding = false
 		return true
 	if event is InputEventKey:
+		if event.keycode != KEY_ESCAPE:
+			return true
 		if event.pressed and not event.echo:
-			_skip_startup_thanks()
+			startup_thanks_holding = true
+			startup_thanks_hold_pos = viewport * 0.5
+		elif not event.pressed:
+			startup_thanks_holding = false
 		return true
 	if event is InputEventJoypadButton:
 		if event.pressed:
-			_skip_startup_thanks()
+			startup_thanks_holding = true
+			startup_thanks_hold_pos = viewport * 0.5
+		else:
+			startup_thanks_holding = false
 		return true
 	if event is InputEventJoypadMotion:
 		if absf(event.axis_value) > 0.5:
-			_skip_startup_thanks()
+			startup_thanks_holding = true
+			startup_thanks_hold_pos = viewport * 0.5
+		else:
+			startup_thanks_holding = false
 		return true
 	return true
 
@@ -50232,6 +50569,8 @@ func _unhandled_input(event: InputEvent) -> void :
 			active_screen_touches[event.index] = _touch_record(event.position)
 		else:
 			active_screen_touches.erase(event.index)
+			if mode == "settings_audio":
+				audio_slider_drag_index = -1
 		if event.pressed:
 			if mode != "game" and mode != "shop_countdown" and mode != "boss_call" and mode != "pause_countdown" and _ui_input_blocked():
 				return
@@ -50275,6 +50614,8 @@ func _unhandled_input(event: InputEvent) -> void :
 			_update_manifest_drag(event.position, viewport)
 		elif mode == "pause_deck" and event.index == deck_drag_touch_index:
 			_update_deck_drag(event.position, viewport)
+		elif mode == "settings_audio" and audio_slider_drag_index != -1:
+			_update_audio_slider_from_pos(event.position, viewport)
 		else:
 			_handle_touch_drag(event.index, event.position, viewport)
 	elif event is InputEventMouseButton:
@@ -50320,6 +50661,9 @@ func _unhandled_input(event: InputEvent) -> void :
 			if mode == "pause_deck" and deck_drag_touch_index == -2:
 				_finish_deck_drag(event.position, viewport)
 				return
+			if mode == "settings_audio":
+				audio_slider_drag_index = -1
+				return
 			_handle_touch_release(-2, event.position, viewport)
 	elif event is InputEventMouseMotion:
 		if _should_ignore_emulated_mouse():
@@ -50334,6 +50678,8 @@ func _unhandled_input(event: InputEvent) -> void :
 			_update_manifest_drag(event.position, viewport)
 		elif mode == "pause_deck" and deck_drag_touch_index == -2:
 			_update_deck_drag(event.position, viewport)
+		elif mode == "settings_audio" and audio_slider_drag_index != -1:
+			_update_audio_slider_from_pos(event.position, viewport)
 		else:
 			if desktop_aim_action == "dash":
 				teleport_drag_screen = event.position
@@ -50802,31 +51148,58 @@ func _handle_gameplay_settings_touch(pos: Vector2, viewport: Vector2) -> void :
 
 
 func _handle_audio_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	settings_buttons = _gameplay_settings_rects(viewport)
-	var panel = settings_buttons["analog"]
+	settings_buttons = _audio_settings_rects(viewport)
+	var panel: Rect2 = settings_buttons["panel"]
 	for i in range(4):
-		var bar_rect = _audio_slider_rect(panel, i)
-		var y_off = bar_rect.position.y
-		if Rect2(bar_rect.position.x - 38, y_off - 4, 34, 34).has_point(pos):
-			if i == 0: vol_master = max(0.0, vol_master - 0.1)
-			elif i == 1: vol_music = max(0.0, vol_music - 0.1)
-			elif i == 2: vol_sfx = max(0.0, vol_sfx - 0.1)
-			elif i == 3: vol_shots = max(0.0, vol_shots - 0.1)
-			_update_audio_volumes()
-			_save_config()
+		if _audio_minus_rect(panel, i).has_point(pos):
+			settings_selected = i
+			_set_audio_volume_index(i, _audio_volume_index(i) - 0.1)
 			return
-		if Rect2(bar_rect.end.x + 4, y_off - 4, 34, 34).has_point(pos):
-			if i == 0: vol_master = min(1.0, vol_master + 0.1)
-			elif i == 1: vol_music = min(1.0, vol_music + 0.1)
-			elif i == 2: vol_sfx = min(1.0, vol_sfx + 0.1)
-			elif i == 3: vol_shots = min(1.0, vol_shots + 0.1)
-			_update_audio_volumes()
-			_save_config()
+		if _audio_plus_rect(panel, i).has_point(pos):
+			settings_selected = i
+			_set_audio_volume_index(i, _audio_volume_index(i) + 0.1)
+			return
+		if _audio_slider_hit_rect(panel, i).has_point(pos):
+			settings_selected = i
+			audio_slider_drag_index = i
+			_update_audio_slider_from_pos(pos, viewport)
 			return
 	if settings_buttons["back"].has_point(pos):
 		_save_config()
 		mode = "settings"
 		_block_ui_input()
+
+
+func _audio_volume_index(index: int) -> float:
+	match index:
+		0: return vol_master
+		1: return vol_music
+		2: return vol_sfx
+		3: return vol_shots
+	return 0.0
+
+
+func _set_audio_volume_index(index: int, value: float) -> void:
+	var clamped_value: float = clampf(value, 0.0, 1.0)
+	match index:
+		0: vol_master = clamped_value
+		1: vol_music = clamped_value
+		2: vol_sfx = clamped_value
+		3: vol_shots = clamped_value
+		_:
+			return
+	_update_audio_volumes()
+	_save_config()
+
+
+func _update_audio_slider_from_pos(pos: Vector2, viewport: Vector2) -> void:
+	if audio_slider_drag_index < 0 or audio_slider_drag_index > 3:
+		return
+	var rects: Dictionary = _audio_settings_rects(viewport)
+	var panel: Rect2 = rects["panel"]
+	var bar_rect: Rect2 = _audio_slider_rect(panel, audio_slider_drag_index)
+	var value: float = clampf((pos.x - bar_rect.position.x) / max(1.0, bar_rect.size.x), 0.0, 1.0)
+	_set_audio_volume_index(audio_slider_drag_index, value)
 
 
 func _handle_data_settings_touch(pos: Vector2, viewport: Vector2) -> void :
@@ -51720,17 +52093,17 @@ func _handle_key(event: InputEventKey) -> void :
 			settings_selected = (settings_selected + 1) % 5
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
 			match settings_selected:
-				0: vol_master = max(0.0, vol_master - 0.1);_update_audio_buses()
-				1: vol_music = max(0.0, vol_music - 0.1);_update_audio_buses()
-				2: vol_sfx = max(0.0, vol_sfx - 0.1);_update_audio_buses()
-				3: vol_shots = max(0.0, vol_shots - 0.1);_update_audio_buses()
+				0: _set_audio_volume_index(0, vol_master - 0.1)
+				1: _set_audio_volume_index(1, vol_music - 0.1)
+				2: _set_audio_volume_index(2, vol_sfx - 0.1)
+				3: _set_audio_volume_index(3, vol_shots - 0.1)
 			_save_config()
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			match settings_selected:
-				0: vol_master = min(1.0, vol_master + 0.1);_update_audio_buses()
-				1: vol_music = min(1.0, vol_music + 0.1);_update_audio_buses()
-				2: vol_sfx = min(1.0, vol_sfx + 0.1);_update_audio_buses()
-				3: vol_shots = min(1.0, vol_shots + 0.1);_update_audio_buses()
+				0: _set_audio_volume_index(0, vol_master + 0.1)
+				1: _set_audio_volume_index(1, vol_music + 0.1)
+				2: _set_audio_volume_index(2, vol_sfx + 0.1)
+				3: _set_audio_volume_index(3, vol_shots + 0.1)
 			_save_config()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			if settings_selected == 4:
@@ -52136,7 +52509,10 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 func _handle_catalog_touch(pos: Vector2, viewport: Vector2) -> void :
 	var portrait = _is_portrait(viewport)
 	if catalog_detail_open:
-		if Rect2(viewport.x * 0.5 - 120, viewport.y - 72, 240, 48).has_point(pos):
+		if _catalog_detail_back_rect(viewport).has_point(pos):
+			catalog_detail_open = false
+			return
+		if not _catalog_detail_panel_rect(viewport).has_point(pos):
 			catalog_detail_open = false
 		return
 	var tab_w = viewport.x / CATALOG_TABS.size()
@@ -54163,11 +54539,33 @@ func _graphics_setting_keys() -> Array:
 
 func _graphics_settings_rects(viewport: Vector2) -> Dictionary:
 	var portrait = _is_portrait(viewport)
+	var keys: = _graphics_setting_keys()
+	if not portrait:
+		var outer_w: float = min(1080.0, viewport.x * 0.88)
+		var x: float = viewport.x * 0.5 - outer_w * 0.5
+		var y: float = viewport.y * 0.15
+		var gap: float = 12.0
+		var col_gap: float = 18.0
+		var col_w: float = (outer_w - col_gap) * 0.5
+		var option_count: int = maxi(1, keys.size() - 1)
+		var rows: int = int(ceil(float(option_count) / 2.0))
+		var back_h: float = 54.0
+		var row_h: float = clamp((viewport.y - y - back_h - 32.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 56.0, 72.0)
+		var wide_rects: Dictionary = {}
+		var option_index: int = 0
+		for key in keys:
+			if key == "back":
+				continue
+			var col: int = option_index % 2
+			var row: int = int(option_index / 2)
+			wide_rects[String(key)] = Rect2(x + float(col) * (col_w + col_gap), y + float(row) * (row_h + gap), col_w, row_h)
+			option_index += 1
+		wide_rects["back"] = Rect2(x, y + float(rows) * (row_h + gap) + 8.0, outer_w, back_h)
+		return wide_rects
 	var w = min(760.0, viewport.x * (0.86 if portrait else 0.66))
 	var x = viewport.x * 0.5 - w * 0.5
 	var y = viewport.y * (0.14 if portrait else 0.15)
 	var gap = 9.0
-	var keys: = _graphics_setting_keys()
 	var row_h = clamp((viewport.y - y - 42.0 - gap * float(keys.size() - 1)) / float(keys.size()), 42.0, 58.0)
 	var rects: = {}
 	for i in range(keys.size()):

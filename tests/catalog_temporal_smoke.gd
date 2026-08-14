@@ -66,7 +66,14 @@ func _run() -> void:
 	game._catalog_reset_tab(1)
 	game.catalog_selected = 3
 	game.catalog_detail_open = true
-	game.catalog_detail_open = false
+	var detail_panel: Rect2 = game._catalog_detail_panel_rect(viewport)
+	game._handle_catalog_touch(detail_panel.get_center(), viewport)
+	_check(game.catalog_detail_open, "detail_inner_touch_closed")
+	game._handle_catalog_touch(Vector2(viewport.x - 18.0, viewport.y * 0.5), viewport)
+	_check(not game.catalog_detail_open, "detail_outside_touch_did_not_close")
+	game.catalog_detail_open = true
+	game._handle_catalog_touch(game._catalog_detail_back_rect(viewport).get_center(), viewport)
+	_check(not game.catalog_detail_open, "detail_back_button_did_not_close")
 	print("CATALOG_TEMPORAL_SMOKE_OK tabs=%d enemies=%d cards=%d" % [game.CATALOG_TABS.size(), game._catalog_enemy_items().size(), game.CARDS.size()])
 	game.textures.clear()
 	game.audio_streams.clear()
