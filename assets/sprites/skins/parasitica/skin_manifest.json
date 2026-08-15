@@ -1,0 +1,60 @@
+{
+  "skin_key": "parasitica",
+  "source": "C:\\Users\\luish\\Downloads\\Skins\\Parasitica.png",
+  "frames": {
+    "idle_01": "idle_01.png",
+    "idle_02": "idle_02.png",
+    "side_01": "side_01.png",
+    "side_02": "side_02.png",
+    "side_02_repeat_unused": "side_02_repeat_unused.png",
+    "front_01": "front_01.png",
+    "back_01": "back_01.png"
+  },
+  "ignored_runtime_frames": [
+    "side_02_repeat_unused"
+  ],
+  "boxes": [
+    {
+      "left": 59,
+      "top": 21,
+      "right": 368,
+      "bottom": 510
+    },
+    {
+      "left": 434,
+      "top": 21,
+      "right": 739,
+      "bottom": 510
+    },
+    {
+      "left": 837,
+      "top": 33,
+      "right": 1136,
+      "bottom": 461
+    },
+    {
+      "left": 1206,
+      "top": 39,
+      "right": 1570,
+      "bottom": 437
+    },
+    {
+      "left": 53,
+      "top": 515,
+      "right": 365,
+      "bottom": 928
+    },
+    {
+      "left": 469,
+      "top": 510,
+      "right": 721,
+      "bottom": 938
+    },
+    {
+      "left": 847,
+      "top": 510,
+      "right": 1086,
+      "bottom": 938
+    }
+  ]
+}

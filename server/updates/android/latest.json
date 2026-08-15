@@ -1,15 +1,16 @@
 {
-    "version":  "2.0.31g",
-    "version_code":  23107,
-    "filename":  "ruptura_temporal_mobile_2.0.31g.apk",
-    "sha256":  "368b888643cb3dd0ceb6727f53b3cde295359d94be494c1db5b899eb16a68855",
-    "size":  1222979186,
-    "notes":  [
-                  "Jogadores veteranos recuperam automaticamente manifestacoes e espectros ja usados em runs registradas quando atualizam.",
-                  "Catalogo Temporal revisado para reduzir textos achatados e vazando dos paineis.",
-                  "Tela de atualizacao preparada com textos mais claros para proximas versoes.",
-                  "Ajustes internos de compatibilidade para manter jogadores novos com progresso bloqueado por merito."
-              ],
-    "mandatory":  false,
-    "published_at":  "2026-08-09T17:23:35.3253944Z"
+  "version": "2.0.31i",
+  "version_code": 23109,
+  "filename": "ruptura_temporal_mobile_2.0.31i.apk",
+  "sha256": "15ee188525e7b2f28d7f97a4b89f71cff62454c0c24104c45b7d8c56d86d8b78",
+  "size": 1281553011,
+  "notes": [
+    "Correção de empacotamento de ícones, teaser de abertura e músicas no APK/EXE.",
+    "As fases agora usam a playlist da pasta Sounds com rotação aleatória e transição suave.",
+    "Músicas antigas Fase/Fases deixam de ter prioridade nas fases comuns; músicas de boss continuam específicas.",
+    "Sons dos inimigos da fase 6 agora respeitam distância do jogador.",
+    "Boss 2 recebeu mais tempo de aviso antes das habilidades."
+  ],
+  "mandatory": false,
+  "published_at": "2026-08-15T00:18:44.4203997Z"
 }

@@ -1,0 +1,60 @@
+{
+  "skin_key": "prismatica",
+  "source": "C:\\Users\\luish\\Downloads\\Skins\\Prismatica.png",
+  "frames": {
+    "idle_01": "idle_01.png",
+    "idle_02": "idle_02.png",
+    "side_01": "side_01.png",
+    "side_02": "side_02.png",
+    "side_02_repeat_unused": "side_02_repeat_unused.png",
+    "front_01": "front_01.png",
+    "back_01": "back_01.png"
+  },
+  "ignored_runtime_frames": [
+    "side_02_repeat_unused"
+  ],
+  "boxes": [
+    {
+      "left": 84,
+      "top": 32,
+      "right": 354,
+      "bottom": 439
+    },
+    {
+      "left": 473,
+      "top": 31,
+      "right": 736,
+      "bottom": 438
+    },
+    {
+      "left": 850,
+      "top": 31,
+      "right": 1110,
+      "bottom": 439
+    },
+    {
+      "left": 1236,
+      "top": 31,
+      "right": 1510,
+      "bottom": 423
+    },
+    {
+      "left": 80,
+      "top": 490,
+      "right": 334,
+      "bottom": 893
+    },
+    {
+      "left": 485,
+      "top": 484,
+      "right": 718,
+      "bottom": 900
+    },
+    {
+      "left": 868,
+      "top": 484,
+      "right": 1101,
+      "bottom": 899
+    }
+  ]
+}

@@ -21,6 +21,7 @@ func _initialize() -> void:
 func _run() -> void:
 	if DisplayServer.get_name().to_lower().contains("headless"):
 		print("STARTUP_TEASER_VISUAL_OK headless_skip")
+		_cleanup_game()
 		quit(0)
 		return
 	await process_frame
@@ -36,10 +37,18 @@ func _run() -> void:
 	outputs.append(await _capture_hold_indicator(false, "res://.codex/startup_teaser_hold_mobile.png"))
 	outputs.append(await _capture_hold_indicator(true, "res://.codex/startup_teaser_hold_desktop.png"))
 	print("STARTUP_TEASER_VISUAL_OK " + ", ".join(outputs))
-	game.queue_free()
-	await process_frame
-	game = null
+	_cleanup_game()
 	quit(0)
+
+
+func _cleanup_game() -> void:
+	if not is_instance_valid(game):
+		return
+	if game.has_method("_cleanup_runtime_resources"):
+		game.call("_cleanup_runtime_resources")
+	root.remove_child(game)
+	game.free()
+	game = null
 
 
 func _force_startup_teaser_for_test() -> void:
@@ -49,7 +58,7 @@ func _force_startup_teaser_for_test() -> void:
 	game.startup_thanks_fading = false
 	game.startup_thanks_timer = 0.0
 	game.startup_thanks_frame_index = 1
-	game.startup_thanks_teaser_available = FileAccess.file_exists(game.STARTUP_THANKS_AUDIO_PATH) and game._startup_thanks_frame_exists(1)
+	game.startup_thanks_teaser_available = game._resource_or_file_exists(game.STARTUP_THANKS_AUDIO_PATH) and game._startup_thanks_frame_exists(1)
 	if game.startup_thanks_frame_view != null:
 		game.startup_thanks_frame_view.visible = true
 		game.startup_thanks_frame_view.texture = game._get_startup_thanks_frame_texture(1)

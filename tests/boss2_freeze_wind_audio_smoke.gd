@@ -37,6 +37,8 @@ func _cleanup_game() -> void:
 
 func _run() -> void:
 	game._start_game()
+	game.vol_master = 1.0
+	game.vol_sfx = 1.0
 	_expect(game.audio_streams.has("boss1_walk"), "boss1_walk_audio_missing")
 	_expect(game.audio_streams.has("Nevasca.mp3"), "nevasca_audio_missing")
 	_expect(game.audio_streams.has("Congelando.mp3"), "freeze_audio_missing")

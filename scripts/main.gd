@@ -5,12 +5,14 @@ const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.31g"
-const GAME_VERSION_CODE: = 23107
+const GAME_VERSION: = "2.0.31i"
+const GAME_VERSION_CODE: = 23109
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
 const STARTUP_THANKS_FRAME_PATH_FORMAT: String = "res://assets/videos/startup_teaser_frames/frame_%04d.webp"
 const STARTUP_THANKS_AUDIO_PATH: String = "res://assets/videos/startup_teaser_audio.ogg"
+const AURA_SANGUINARIA_ICON_PATH: = "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea_sanguinaria.png"
+const AURA_SANGUINARIA_EXPORT_FALLBACK_PATH: = "res://assets/sprites/aurea_sanguinaria.png"
 const STARTUP_THANKS_VIDEO_PATH: String = "res://assets/videos/startup_teaser.ogv"
 const STARTUP_THANKS_HOLD_TIME: float = 28.5
 const STARTUP_THANKS_FADE_TIME: float = 0.5
@@ -48,6 +50,22 @@ const PLAYER_DRAW_SHOT_SIZE: = Vector2(52, 77)
 const PLAYER_DRAW_DAMAGE_SIZE: = Vector2(54, 80)
 const PLAYER_DRAW_LACERAR_HEIGHT: = 77.0
 const PLAYER_DRAW_FROZEN_SIZE: = Vector2(58.8, 84.0)
+const PLAYER_SKIN_BASE_PATH: = "res://assets/sprites/skins/"
+const PLAYER_SKIN_MANIFESTATION_KEYS: = {
+	"acorrentada": "acorrentada",
+	"ancorada": "ancorada",
+	"bombastica": "bombastica",
+	"cartografica": "cartografica",
+	"contratual": "contratual",
+	"eclipsada_sol": "eclipsada_sol",
+	"eclipsada_lua": "eclipsada_lua",
+	"gravitante": "gravitante",
+	"lacerante": "lacerante",
+	"necronada": "necronada",
+	"parasitica": "parasitica",
+	"prismatica": "prismatica",
+	"ressonante": "ressonante",
+}
 const PLAYER_ATTACK_PREP_FRAME_TIME: = 0.085
 const ATTACK_LOCK_HOLD_TIME: = 0.8
 const ATTACK_LOCK_MIN_DRAG: = 18.0
@@ -522,14 +540,20 @@ const WEATHER_MAX_SNOW_FLAKES: = 170
 const WEATHER_MAX_PUDDLES: = 28
 const LOW_RESOURCE_FPS: = 60
 const MEMORY_SAVER_FPS: = 60
-const LOW_RESOURCE_EFFECT_CAP: = 180
+const LOW_RESOURCE_EFFECT_CAP: = 96
 const MEMORY_SAVER_EFFECT_CAP: = 72
-const LOW_RESOURCE_RAIN_DROP_CAP: = 105
-const LOW_RESOURCE_SNOW_FLAKE_CAP: = 70
-const LOW_RESOURCE_PUDDLE_CAP: = 12
+const LOW_RESOURCE_RAIN_DROP_CAP: = 64
+const LOW_RESOURCE_SNOW_FLAKE_CAP: = 44
+const LOW_RESOURCE_PUDDLE_CAP: = 8
 const MEMORY_SAVER_RAIN_DROP_CAP: = 42
 const MEMORY_SAVER_SNOW_FLAKE_CAP: = 28
 const MEMORY_SAVER_PUDDLE_CAP: = 6
+const MOBILE_ADAPTIVE_FPS_FLOOR: = 46.0
+const MOBILE_ADAPTIVE_FPS_RECOVER: = 56.0
+const MOBILE_ADAPTIVE_TRIGGER_TIME: = 3.5
+const MOBILE_ADAPTIVE_RECOVER_TIME: = 10.0
+const MOBILE_EFFECT_DRAW_CAP: = 76
+const MEMORY_EFFECT_DRAW_CAP: = 44
 const LOW_RESOURCE_MAP_KEYS: = ["map_phase_1", "map_phase_2", "map_phase_3", "map_phase_4", "map_phase_5", "map_phase_6", "map_phase_7", "map_phase_9"]
 const WEATHER_PUDDLE_MIN_SIZE: = 10.0
 const WEATHER_PUDDLE_MAX_SIZE: = 30.0
@@ -552,7 +576,7 @@ const CARD_RARITY_RARE_COLOR: = Color(1.0, 0.76, 0.12)
 const BOSS_ATTACK_BASE_COOLDOWN: = 3.8
 const BOSS1_STAGE_APPROACH_SPEED: = 260.0
 const BOSS2_ENTRY_TIME: = 2.5
-const BOSS2_WARNING_TIME: = 1.95
+const BOSS2_WARNING_TIME: = 2.45
 const BOSS2_ATTACK_INTERVAL: = 5.2
 const BOSS2_WAVE_SPEED_MULT: = 0.82
 const BOSS2_WAVE_WIDTH_MULT: = 0.88
@@ -599,22 +623,22 @@ const BOSS2_REPOSITION_MIN_DISTANCE: = 150.0
 const BOSS2_REPOSITION_MAX_DISTANCE: = 290.0
 const BOSS2_IDLE_MIN_TIME: = 0.55
 const BOSS2_IDLE_MAX_TIME: = 1.05
-const BOSS2_STOMP_WARN: = 1.05
+const BOSS2_STOMP_WARN: = 1.55
 const BOSS2_STOMP_ACTIVE: = 0.42
-const BOSS2_PRISON_WARN: = 1.35
+const BOSS2_PRISON_WARN: = 1.85
 const BOSS2_PRISON_HOLD: = 2.35
 const BOSS2_ULTIMATE_DURATION: = 40.0
 const BOSS2_ULTIMATE_HP_THRESHOLD: = 0.4
 const BOSS2_ULTIMATE_SAFE_RADIUS: = 385.0
 const BOSS2_ULTIMATE_ORBIT_RADIUS: = 640.0
-const BOSS2_ULTIMATE_WARNING_TIME: = 1.6
+const BOSS2_ULTIMATE_WARNING_TIME: = 2.1
 const BOSS2_ULTIMATE_SPIT_INTERVAL: = 5.0
 const BOSS2_ULTIMATE_WIND_INTERVAL: = 8.5
 const BOSS2_ULTIMATE_WIND_DURATION: = 3.0
 const BOSS2_ULTIMATE_BLIZZARD_BASE_TICK: = 2.0
 const BOSS2_ULTIMATE_HAIL_INTERVAL: = 4.0
 const BOSS2_ULTIMATE_FAN_INTERVAL: = 6.0
-const BOSS2_FLASH_FREEZE_WARNING: = 1.45
+const BOSS2_FLASH_FREEZE_WARNING: = 1.95
 const BOSS2_FLASH_FREEZE_RADIUS: = 138.0
 const BOSS2_FLASH_FREEZE_STUN: = 2.6
 const PHASE2_FREEZE_VISUAL_MIN_TIME: = 2.3
@@ -624,6 +648,8 @@ const PHASE_TRANSITION_WIPE_TIME: = 2.0
 const PHASE_TRANSITION_TIME: = 3.7
 const BOSS_FRAGMENT_PICKUP_RADIUS: = 42.0
 const MUSIC_PAUSE_FADE_TIME: = 3.0
+const MUSIC_CROSSFADE_TIME: = 5.0
+const PHASE_MUSIC_DIR: = "res://Sounds"
 const LARAPIO_SPAWN_TIME: = 180.0
 const LARAPIO_PORTAL_TIME: = 10.0
 const LARAPIO_PORTAL_HIT_PAUSE: = 2.0
@@ -763,6 +789,10 @@ const LODARIO_DAMAGE_RAMP_TIME: = 720.0
 const LODARIO_DAMAGE_RAMP_MAX: = 0.16
 const LODARIO_HOP_DAMAGE_REDUCTION: = 0.88
 const LODARIO_LUNGE_DAMAGE_REDUCTION: = 0.78
+const LODARIO_SFX_CLOSE_DISTANCE: = 24.0
+const LODARIO_SFX_FAR_DISTANCE: = 280.0
+const LODARIO_SFX_VOLUME_MIN: = 0.0
+const LODARIO_SFX_VOLUME_MAX: = 0.2
 const PUSTULE_PHEROMONE_TIME: = 5.0
 const BOSS6_PUSTULE_PHEROMONE_TIME: = 7.0
 const BOSS6_HUNGRY_LODARIO_COUNT: = 2
@@ -1641,7 +1671,7 @@ const AURAS: = [
 	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."}, 
 	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."}, 
 	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."}, 
-	{"key": "sanguinaria", "name": "Sanguinaria", "icon": "Aurea.png", "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."}, 
+	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."}, 
 	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."}, 
 	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."}, 
 	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://assets/sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."}, 
@@ -2552,6 +2582,9 @@ var gfx_screen_shake: bool = true
 var gfx_low_resource: bool = false
 var gfx_memory_saver: bool = false
 var mobile_low_resource_defaulted: bool = false
+var mobile_adaptive_visual_budget: bool = false
+var mobile_low_fps_seconds: float = 0.0
+var mobile_recovered_fps_seconds: float = 0.0
 var ui_platform_override: String = UI_PLATFORM_AUTO
 var ui_platform_override_unlocked: bool = false
 var desktop_window_mode: String = DESKTOP_WINDOW_FULLSCREEN
@@ -3003,15 +3036,20 @@ var rng = RandomNumberGenerator.new()
 
 var sfx_players = []
 var music_player = null
+var music_crossfade_player: AudioStreamPlayer = null
 var current_music = ""
 var audio_streams = {}
 var audio_stream_paths: Dictionary = {}
 var audio_stream_loops: Dictionary = {}
 var audio_music_keys: Dictionary = {}
+var phase_music_bag: Array[String] = []
 var music_pause_fade_mode = ""
 var music_pause_fade_timer = 0.0
 var music_pause_resume_volume = 1.0
 var music_paused_by_pause = false
+var music_crossfade_active: bool = false
+var music_crossfade_from_volume: float = 1.0
+var music_crossfade_to_volume: float = 1.0
 var prismatica_music_duck_active: = false
 var prismatica_music_restore_volume: = 1.0
 var rain_audio_player = null
@@ -3029,10 +3067,9 @@ var boss1_stop_music_duck_timer: = 0.0
 var boss1_stop_music_duck_from: = 1.0
 var boss1_stop_pre_played: = false
 var boss1_absorb_stop_started: = false
-var music_silence_timer: float = 0.0
 var music_crossfade_target_track: String = ""
 var music_crossfade_timer: float = 0.0
-var music_crossfade_duration: float = 0.6
+var music_crossfade_duration: float = MUSIC_CROSSFADE_TIME
 var boss1_absorb_end_sfx_played: = false
 var boss1_entry_fall_sfx_played: = false
 var rain_audio_fade_timer = 0.0
@@ -3082,6 +3119,9 @@ func _ready() -> void :
 	music_player.bus = "Master"
 	add_child(music_player)
 	music_player.finished.connect(_on_music_finished)
+	music_crossfade_player = AudioStreamPlayer.new()
+	music_crossfade_player.bus = "Master"
+	add_child(music_crossfade_player)
 
 	rain_audio_player = AudioStreamPlayer.new()
 	rain_audio_player.bus = "Master"
@@ -3265,6 +3305,9 @@ func _cleanup_runtime_resources() -> void :
 	if music_player != null:
 		music_player.stop()
 		music_player.stream = null
+	if music_crossfade_player != null:
+		music_crossfade_player.stop()
+		music_crossfade_player.stream = null
 	if rain_audio_player != null:
 		rain_audio_player.stop()
 		rain_audio_player.stream = null
@@ -3283,10 +3326,16 @@ func _cleanup_runtime_resources() -> void :
 	if nevasca_audio_player != null:
 		nevasca_audio_player.stop()
 		nevasca_audio_player.stream = null
+	if startup_thanks_audio_player != null:
+		startup_thanks_audio_player.stop()
+		startup_thanks_audio_player.stream = null
 	for player in sfx_players:
 		if player != null:
 			player.stop()
 			player.stream = null
+	if startup_thanks_frame_view != null:
+		startup_thanks_frame_view.texture = null
+	startup_thanks_frame_cache.clear()
 	audio_streams.clear()
 	textures.clear()
 
@@ -3381,12 +3430,18 @@ func _shadows_enabled() -> bool:
 
 
 func _particle_budget_available() -> bool:
-	return not (gfx_low_resource or _memory_saver_active()) or effects.size() < _visual_effect_cap()
+	return not _runtime_visual_budget_active() or effects.size() < _visual_effect_cap()
+
+
+func _runtime_visual_budget_active() -> bool:
+	return gfx_low_resource or _memory_saver_active() or mobile_adaptive_visual_budget
 
 
 func _low_resource_cap(default_cap: int, low_cap: int) -> int:
 	if _memory_saver_active():
 		return mini(low_cap, int(ceil(float(low_cap) * 0.42)))
+	if mobile_adaptive_visual_budget:
+		return mini(low_cap, int(ceil(float(low_cap) * 0.62)))
 	return low_cap if gfx_low_resource else default_cap
 
 
@@ -3404,14 +3459,17 @@ func _phase7_ember_patch_cap() -> int:
 	return PHASE7_EMBER_PATCH_LOW_CAP if _phase7_visual_budget_enabled() else PHASE7_EMBER_PATCH_CAP
 
 
-func _world_point_in_view(world_pos: Vector2, camera: Vector2, margin: float = 96.0) -> bool:
+func _screen_point_in_view(screen_pos: Vector2, margin: float = 96.0) -> bool:
 	var viewport: Vector2 = get_viewport_rect().size
-	var screen_pos: Vector2 = world_pos - camera
 	return screen_pos.x >= -margin and screen_pos.y >= -margin and screen_pos.x <= viewport.x + margin and screen_pos.y <= viewport.y + margin
 
 
+func _world_point_in_view(world_pos: Vector2, camera: Vector2, margin: float = 96.0) -> bool:
+	return _screen_point_in_view(world_pos - camera, margin)
+
+
 func _trim_visual_effect_arrays() -> void :
-	if not gfx_low_resource and not _memory_saver_active():
+	if not _runtime_visual_budget_active():
 		return
 	while effects.size() > _visual_effect_cap():
 		effects.pop_front()
@@ -3424,6 +3482,44 @@ func _trim_visual_effect_arrays() -> void :
 	var phase7_patch_cap: int = _phase7_ember_patch_cap()
 	while phase7_ember_patches.size() > phase7_patch_cap:
 		phase7_ember_patches.pop_front()
+	while raindrops.size() > _low_resource_cap(WEATHER_MAX_RAIN_DROPS, LOW_RESOURCE_RAIN_DROP_CAP):
+		raindrops.pop_front()
+	while snowflakes.size() > _low_resource_cap(WEATHER_MAX_SNOW_FLAKES, LOW_RESOURCE_SNOW_FLAKE_CAP):
+		snowflakes.pop_front()
+	while puddles.size() > _low_resource_cap(WEATHER_MAX_PUDDLES, LOW_RESOURCE_PUDDLE_CAP):
+		puddles.pop_front()
+	var splash_cap: int = 16 if _memory_saver_active() else 26
+	while rain_splashes.size() > splash_cap:
+		rain_splashes.pop_front()
+	var flame_wave_cap: int = 2 if _memory_saver_active() else 4
+	while boss7_flame_waves.size() > flame_wave_cap:
+		boss7_flame_waves.pop_front()
+
+
+func _update_mobile_performance_budget(delta: float) -> void:
+	if not _is_mobile_runtime() or mode != "game" or _memory_saver_active():
+		mobile_low_fps_seconds = 0.0
+		mobile_recovered_fps_seconds = 0.0
+		return
+	var fps: float = Engine.get_frames_per_second()
+	if fps <= 0.0:
+		return
+	if fps < MOBILE_ADAPTIVE_FPS_FLOOR:
+		mobile_low_fps_seconds += delta
+		mobile_recovered_fps_seconds = 0.0
+		if mobile_low_fps_seconds >= MOBILE_ADAPTIVE_TRIGGER_TIME and not mobile_adaptive_visual_budget:
+			mobile_adaptive_visual_budget = true
+			gfx_low_resource = true
+			_trim_visual_effect_arrays()
+	elif fps >= MOBILE_ADAPTIVE_FPS_RECOVER:
+		mobile_recovered_fps_seconds += delta
+		mobile_low_fps_seconds = 0.0
+		if mobile_adaptive_visual_budget and mobile_recovered_fps_seconds >= MOBILE_ADAPTIVE_RECOVER_TIME:
+			mobile_adaptive_visual_budget = false
+			mobile_recovered_fps_seconds = 0.0
+	else:
+		mobile_low_fps_seconds = 0.0
+		mobile_recovered_fps_seconds = 0.0
 
 
 func _sync_sfx_player_pool() -> void :
@@ -7117,6 +7213,7 @@ func _load_textures() -> void :
 	textures["player_fire"] = [_safe_load(base + "Geo_Disp1.png"), _safe_load(base + "Geo_Disp2.png")]
 	textures["player_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
+	_load_manifestation_skin_textures(PLAYER_SKIN_BASE_PATH)
 	var prismatica_dance_loop: Array = []
 	for dance_index in range(15):
 		prismatica_dance_loop.append(_safe_load(base + "Geo-Dance%02d.png" % dance_index))
@@ -7220,6 +7317,10 @@ func _load_textures() -> void :
 	for aura in AURAS:
 		var aura_icon: = String(aura["icon"])
 		textures["aura_" + aura["key"]] = _safe_load_sprite_icon(aura_icon, base)
+	var sanguinaria_icon := _safe_load(AURA_SANGUINARIA_ICON_PATH)
+	if sanguinaria_icon == null:
+		sanguinaria_icon = preload("res://assets/sprites/aurea_sanguinaria.png")
+	textures["aura_sanguinaria"] = sanguinaria_icon
 	for card in CARDS:
 		var card_key: = "card_" + String(card["name"])
 		_register_texture(card_key, base + String(card["icon"]), _memory_saver_active())
@@ -7227,6 +7328,37 @@ func _load_textures() -> void :
 			_register_texture(card_key + "_2", base + String(card["frame_2"]), _memory_saver_active())
 	_perf_mark("run_assets_loaded", perf_start_ms)
 	_perf_mark("load_textures", perf_start_ms)
+
+
+func _load_manifestation_skin_textures(base_path: String) -> void :
+	for skin_key_value in PLAYER_SKIN_MANIFESTATION_KEYS.keys():
+		var skin_key: = String(skin_key_value)
+		var folder: = String(PLAYER_SKIN_MANIFESTATION_KEYS[skin_key_value])
+		var skin_path: = base_path.path_join(folder)
+		var prefix: = "player_skin_%s_" % skin_key
+		var idle_frames: = _load_player_skin_frame_set(skin_path, ["idle_01", "idle_02"])
+		var side_frames: = _load_player_skin_frame_set(skin_path, ["side_01", "side_02"])
+		var front_frames: = _load_player_skin_frame_set(skin_path, ["front_01"])
+		var back_frames: = _load_player_skin_frame_set(skin_path, ["back_01"])
+		if idle_frames.size() >= 2:
+			textures[prefix + "idle"] = idle_frames
+		if side_frames.size() >= 2:
+			textures[prefix + "right"] = side_frames
+		if front_frames.size() >= 1:
+			textures[prefix + "down"] = front_frames
+		if back_frames.size() >= 1:
+			textures[prefix + "up"] = back_frames
+
+
+func _load_player_skin_frame_set(folder_path: String, frame_names: Array) -> Array:
+	var frames: Array = []
+	for frame_name_value in frame_names:
+		var frame_name: = String(frame_name_value)
+		var tex: = _safe_load(folder_path.path_join(frame_name + ".png"))
+		if tex == null:
+			return []
+		frames.append(tex)
+	return frames
 
 
 func _register_texture(key: String, path: String, lazy_when_low_resource: = false) -> void :
@@ -7320,7 +7452,11 @@ func _save_startup_video_config() -> void:
 
 
 func _startup_thanks_frame_exists(index: int) -> bool:
-	return FileAccess.file_exists(STARTUP_THANKS_FRAME_PATH_FORMAT % index)
+	return _resource_or_file_exists(STARTUP_THANKS_FRAME_PATH_FORMAT % index)
+
+
+func _resource_or_file_exists(path: String) -> bool:
+	return ResourceLoader.exists(path) or FileAccess.file_exists(path)
 
 
 func _startup_thanks_duration() -> float:
@@ -7358,7 +7494,7 @@ func _startup_thanks_reset() -> void :
 	startup_thanks_frame_index = 1
 	startup_thanks_frame_cache.clear()
 
-	startup_thanks_teaser_available = FileAccess.file_exists(STARTUP_THANKS_AUDIO_PATH) and _startup_thanks_frame_exists(1)
+	startup_thanks_teaser_available = _resource_or_file_exists(STARTUP_THANKS_AUDIO_PATH) and _startup_thanks_frame_exists(1)
 
 	if startup_video_disabled or startup_thanks_skip_count >= STARTUP_THANKS_MAX_SKIPS:
 		startup_thanks_done = true
@@ -7572,19 +7708,17 @@ func _release_unused_music_streams(active_name: String) -> void :
 
 
 func _is_shared_phase_music_name(name: String) -> bool:
-	if name.get_extension().to_lower() != "mp3":
-		return false
-	var stem: = name.get_basename()
-	if not stem.begins_with("Fases"):
-		return false
-	var suffix: = stem.substr(5)
-	return suffix.is_valid_int() and int(suffix) > 0
+	return name.get_extension().to_lower() == "mp3"
 
 
 func _shared_phase_music_index(name: String) -> int:
-	if not _is_shared_phase_music_name(name):
+	var stem: = name.get_basename()
+	if not stem.begins_with("Fases"):
 		return 999999
-	return int(name.get_basename().substr(5))
+	var suffix: = stem.substr(5)
+	if not suffix.is_valid_int():
+		return 999999
+	return int(suffix)
 
 
 func _shared_phase_music_less(a, b) -> bool:
@@ -7593,13 +7727,13 @@ func _shared_phase_music_less(a, b) -> bool:
 	var left_index: = _shared_phase_music_index(left)
 	var right_index: = _shared_phase_music_index(right)
 	if left_index == right_index:
-		return left < right
+		return left.to_lower() < right.to_lower()
 	return left_index < right_index
 
 
 func _discover_shared_phase_music_tracks() -> Array:
 	var tracks: Array = []
-	var dir: = DirAccess.open("res://")
+	var dir: = DirAccess.open(PHASE_MUSIC_DIR)
 	if dir == null:
 		return tracks
 	dir.list_dir_begin()
@@ -7615,7 +7749,7 @@ func _discover_shared_phase_music_tracks() -> Array:
 
 func _register_shared_phase_music_tracks() -> void :
 	for name in _discover_shared_phase_music_tracks():
-		_register_audio_stream(String(name), "res://" + String(name), false, true, _memory_saver_active())
+		_register_audio_stream(String(name), PHASE_MUSIC_DIR + "/" + String(name), false, true, _memory_saver_active())
 
 
 func _load_audio_streams() -> void :
@@ -7647,33 +7781,7 @@ func _load_audio_streams() -> void :
 	}
 	for name in boss_music:
 		_register_audio_stream(name, boss_music[name], false, true, _memory_saver_active())
-	var phase1_tracks = {
-		"Fase1.mp3": "res://Fase1.mp3", 
-		"Fase1-2.mp3": "res://Fase1-2.mp3", 
-		"Fase1-4.mp3": "res://Fase1-4.mp3"
-	}
-	for name in phase1_tracks:
-		_register_audio_stream(name, phase1_tracks[name], false, true, _memory_saver_active())
-	var phase2_tracks = {
-		"Fase2.mp3": "res://Fase2.mp3", 
-		"Fase2-3.mp3": "res://Fase2-3.mp3", 
-		"Fase2-4.mp3": "res://Fase2-4.mp3"
-	}
-	for name in phase2_tracks:
-		_register_audio_stream(name, phase2_tracks[name], false, true, _memory_saver_active())
-	var phase3_tracks = {
-		"Fase3-1.mp3": "res://Fase3-1.mp3", 
-		"Fase3-2.mp3": "res://Fase3-2.mp3", 
-		"Fase3-7.mp3": "res://Fase3-7.mp3"
-	}
-	for name in phase3_tracks:
-		_register_audio_stream(name, phase3_tracks[name], false, true, _memory_saver_active())
 	_register_shared_phase_music_tracks()
-	var extra_phase_tracks = {
-		"Fase4-4.mp3": "res://Fase4-4.mp3"
-	}
-	for name in extra_phase_tracks:
-		_register_audio_stream(name, extra_phase_tracks[name], false, true, _memory_saver_active())
 	var root_sfx = {
 		"rain": "res://rain.mp3", 
 		"Risada-Loop.mp3": "res://Risada-Loop.mp3", 
@@ -8002,20 +8110,40 @@ func _update_projectile_travel_sfx(bullet: Dictionary, delta: float) -> void :
 		_play_sfx("eletrica_travel", 0.018, 0.34 if kind == "eletrica" else 0.46, 1.0)
 
 func _play_music(name: String) -> void :
-	if current_music == name: return
-	current_music = name
+	if current_music == name and not music_crossfade_active:
+		return
+	if music_player == null:
+		return
+	if music_crossfade_active:
+		_finish_music_crossfade()
+	var had_active_music: bool = music_player.stream != null and music_player.playing and current_music != ""
 	music_pause_fade_mode = ""
 	music_paused_by_pause = false
 	if _ensure_audio_loaded(name):
-		music_player.stream = audio_streams[name]
-		music_player.stream_paused = false
-		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
-		music_player.play()
+		current_music = name
+		if had_active_music and music_crossfade_player != null:
+			music_crossfade_player.stop()
+			music_crossfade_player.stream = audio_streams[name]
+			music_crossfade_player.stream_paused = false
+			music_crossfade_player.volume_db = linear_to_db(0.001)
+			music_crossfade_player.play()
+			music_crossfade_active = true
+			music_crossfade_target_track = name
+			music_crossfade_timer = 0.0
+			music_crossfade_duration = MUSIC_CROSSFADE_TIME
+			music_crossfade_from_volume = _current_music_linear_volume()
+			music_crossfade_to_volume = max(0.001, _music_target_volume())
+			music_pause_fade_mode = ""
+		else:
+			music_player.stream = audio_streams[name]
+			music_player.stream_paused = false
+			music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
+			music_player.play()
+			music_pause_fade_mode = "in"
+			music_pause_fade_timer = 0.0
+			music_pause_resume_volume = max(0.001, _music_target_volume())
+			_set_music_linear_volume(0.001)
 		_release_unused_music_streams(name)
-		music_pause_fade_mode = "in"
-		music_pause_fade_timer = 0.0
-		music_pause_resume_volume = max(0.001, _music_target_volume())
-		_set_music_linear_volume(0.001)
 	elif music_player != null:
 		music_player.stop()
 
@@ -8030,6 +8158,44 @@ func _set_music_linear_volume(value: float) -> void :
 	music_player.volume_db = linear_to_db(max(0.001, value))
 
 
+func _set_crossfade_music_linear_volume(value: float) -> void:
+	if music_crossfade_player == null:
+		return
+	music_crossfade_player.volume_db = linear_to_db(max(0.001, value))
+
+
+func _finish_music_crossfade() -> void:
+	if not music_crossfade_active:
+		return
+	var resume_pos: float = 0.0
+	var target_stream: AudioStream = null
+	if music_crossfade_player != null and music_crossfade_player.stream != null:
+		resume_pos = music_crossfade_player.get_playback_position()
+		target_stream = music_crossfade_player.stream
+	if music_player != null:
+		music_player.stop()
+		music_player.stream = target_stream
+		music_player.stream_paused = false
+		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
+		if target_stream != null:
+			music_player.play(maxf(0.0, resume_pos))
+	if music_crossfade_player != null:
+		music_crossfade_player.stop()
+		music_crossfade_player.stream = null
+	music_crossfade_active = false
+	music_crossfade_target_track = ""
+	music_crossfade_timer = 0.0
+
+
+func _cancel_music_crossfade() -> void:
+	music_crossfade_active = false
+	music_crossfade_target_track = ""
+	music_crossfade_timer = 0.0
+	if music_crossfade_player != null:
+		music_crossfade_player.stop()
+		music_crossfade_player.stream = null
+
+
 func _begin_pause_music_fade_out() -> void :
 	if music_player == null or music_player.stream == null or not music_player.playing:
 		return
@@ -8038,10 +8204,18 @@ func _begin_pause_music_fade_out() -> void :
 	music_pause_resume_volume = max(0.001, _music_target_volume())
 	music_paused_by_pause = true
 	music_player.stream_paused = true
+	if music_crossfade_player != null and music_crossfade_player.stream != null:
+		music_crossfade_player.stream_paused = true
 
 
 func _begin_pause_music_fade_in() -> void :
 	if music_player == null or music_player.stream == null:
+		return
+	if music_crossfade_active:
+		music_player.stream_paused = false
+		if music_crossfade_player != null and music_crossfade_player.stream != null:
+			music_crossfade_player.stream_paused = false
+		music_paused_by_pause = false
 		return
 	music_pause_fade_mode = "in"
 	music_pause_fade_timer = 0.0
@@ -8049,6 +8223,8 @@ func _begin_pause_music_fade_in() -> void :
 	if not music_player.playing:
 		music_player.play()
 	music_player.stream_paused = false
+	if music_crossfade_player != null and music_crossfade_player.stream != null:
+		music_crossfade_player.stream_paused = false
 	_set_music_linear_volume(0.001)
 	music_paused_by_pause = false
 
@@ -8059,6 +8235,7 @@ func _stop_battle_music_for_screen_transition() -> void :
 	music_pause_fade_mode = ""
 	music_pause_fade_timer = 0.0
 	music_paused_by_pause = false
+	_cancel_music_crossfade()
 	boss1_stop_music_duck_active = false
 	prismatica_music_duck_active = false
 	if current_music != "" and not current_music.begins_with("Menu"):
@@ -8069,6 +8246,10 @@ func _stop_battle_music_for_screen_transition() -> void :
 
 
 func _update_music_pause_fade(delta: float) -> void :
+	if music_crossfade_active:
+		_update_music_crossfade(delta)
+		return
+	_update_music_auto_crossfade()
 	if music_player != null and not music_player.playing and music_player.stream != null and not music_paused_by_pause and current_music != "":
 		_on_music_finished()
 	if boss1_stop_music_duck_active:
@@ -8077,6 +8258,8 @@ func _update_music_pause_fade(delta: float) -> void :
 	if prismatica_music_duck_active:
 		if music_player != null and music_player.stream != null:
 			_set_music_linear_volume(0.001)
+		if music_crossfade_player != null and music_crossfade_player.stream != null:
+			_set_crossfade_music_linear_volume(0.001)
 		return
 	if music_player == null or music_pause_fade_mode == "":
 		return
@@ -8098,48 +8281,94 @@ func _update_music_pause_fade(delta: float) -> void :
 			_update_audio_volumes()
 
 
+func _update_music_crossfade(delta: float) -> void:
+	if music_player == null or music_crossfade_player == null or music_crossfade_player.stream == null:
+		_cancel_music_crossfade()
+		return
+	if music_paused_by_pause:
+		return
+	music_crossfade_timer += delta
+	var duration: float = maxf(0.001, music_crossfade_duration)
+	var progress: float = clampf(music_crossfade_timer / duration, 0.0, 1.0)
+	_set_music_linear_volume(lerpf(max(0.001, music_crossfade_from_volume), 0.001, progress))
+	_set_crossfade_music_linear_volume(lerpf(0.001, max(0.001, music_crossfade_to_volume), progress))
+	if progress >= 1.0:
+		_finish_music_crossfade()
+
+
+func _update_music_auto_crossfade() -> void:
+	if music_player == null or music_player.stream == null or current_music == "":
+		return
+	if music_paused_by_pause or music_pause_fade_mode != "":
+		return
+	if not music_player.playing:
+		return
+	var length: float = music_player.stream.get_length()
+	if length <= MUSIC_CROSSFADE_TIME + 0.25:
+		return
+	var remaining: float = length - music_player.get_playback_position()
+	if remaining <= MUSIC_CROSSFADE_TIME:
+		_on_music_finished()
+
+
 func _play_phase_music() -> void :
 	_play_phase_music_random(current_phase)
 
 
 func _shared_phase_music_tracks() -> Array:
-	var tracks: Array = []
-	for name in audio_stream_paths.keys():
-		if _is_shared_phase_music_name(String(name)):
-			tracks.append(String(name))
-	if tracks.is_empty():
-		tracks = _discover_shared_phase_music_tracks()
+	var tracks: Array = _discover_shared_phase_music_tracks()
 	tracks.sort_custom(_shared_phase_music_less)
 	return tracks
 
 
 func _phase_music_tracks(phase: int) -> Array:
-	var tracks: Array = []
-	match phase:
-		1:
-			tracks = ["Fase1.mp3", "Fase1-2.mp3", "Fase1-4.mp3"]
-		2:
-			tracks = ["Fase2.mp3", "Fase2-3.mp3", "Fase2-4.mp3"]
-		3:
-			tracks = ["Fase3-2.mp3", "Fase3-7.mp3"]
-		4:
-			tracks = ["Fase4-4.mp3"]
-	tracks.append_array(_shared_phase_music_tracks())
-	return tracks
+	return _shared_phase_music_tracks()
+
+
+func _phase_music_available_tracks(phase: int) -> Array:
+	var available: Array = []
+	for track in _phase_music_tracks(phase):
+		if _audio_key_available(String(track)):
+			available.append(String(track))
+	return available
+
+
+func _phase_music_bag_matches_available(available: Array) -> bool:
+	for track in phase_music_bag:
+		if not available.has(String(track)):
+			return false
+	return true
+
+
+func _refill_phase_music_bag(available: Array) -> void:
+	phase_music_bag.clear()
+	for track in available:
+		phase_music_bag.append(String(track))
+	for i in range(phase_music_bag.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var tmp: String = phase_music_bag[i]
+		phase_music_bag[i] = phase_music_bag[j]
+		phase_music_bag[j] = tmp
+	if phase_music_bag.size() > 1 and phase_music_bag[phase_music_bag.size() - 1] == current_music:
+		var swap_index: int = rng.randi_range(0, phase_music_bag.size() - 2)
+		var tmp_first: String = phase_music_bag[phase_music_bag.size() - 1]
+		phase_music_bag[phase_music_bag.size() - 1] = phase_music_bag[swap_index]
+		phase_music_bag[swap_index] = tmp_first
+
+
+func _next_phase_music_track(phase: int) -> String:
+	var available: Array = _phase_music_available_tracks(phase)
+	if available.is_empty():
+		return ""
+	if phase_music_bag.is_empty() or not _phase_music_bag_matches_available(available):
+		_refill_phase_music_bag(available)
+	return String(phase_music_bag.pop_back())
 
 
 func _play_phase_music_random(phase: int) -> void :
-	var available: Array = []
-	for track in _phase_music_tracks(phase):
-		if _audio_key_available(track):
-			available.append(track)
-	if available.is_empty():
-		for fallback_track in _shared_phase_music_tracks():
-			if _audio_key_available(String(fallback_track)):
-				_play_music(String(fallback_track))
-				return
+	var chosen: String = _next_phase_music_track(phase)
+	if chosen == "":
 		return
-	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
 	if chosen == current_music and music_player != null:
 		_replay_current_music(chosen)
 		return
@@ -8182,6 +8411,8 @@ func _is_boss_music(name: String) -> bool:
 
 
 func _on_music_finished() -> void :
+	if music_crossfade_active:
+		return
 	if current_music.begins_with("Menu"):
 		_play_menu_music_random()
 		return
@@ -8262,7 +8493,7 @@ func _go_to_menu() -> void :
 		_play_menu_music_random()
 
 func _update_audio_volumes() -> void :
-	if music_pause_fade_mode != "" or music_paused_by_pause:
+	if music_pause_fade_mode != "" or music_paused_by_pause or music_crossfade_active:
 		return
 	if music_player != null and not prismatica_music_duck_active and not boss1_stop_music_duck_active:
 		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
@@ -10762,6 +10993,7 @@ func _process(delta: float) -> void :
 		_update_effects(delta)
 	elif mode == "game_over" or mode == "victory":
 		_update_effects(delta)
+	_update_mobile_performance_budget(delta)
 	queue_redraw()
 
 func _update_multiplayer_preload(_delta: float) -> void :
@@ -20455,7 +20687,9 @@ func _update_lodario(enemy: Dictionary, delta: float) -> void :
 			if was_lunge:
 				enemy["lodario_lunge_cd"] = LODARIO_LUNGE_COOLDOWN
 			enemy["lodario_jump_timer"] = _lodario_hop_interval(enemy)
-			_play_sfx("Lodario-mov.mp3", 0.05, 0.68, rng.randf_range(0.92, 1.08))
+			var landing_volume: = _lodario_landing_sfx_volume(enemy)
+			if landing_volume > 0.001:
+				_play_sfx("Lodario-mov.mp3", 0.05, landing_volume, rng.randf_range(0.92, 1.08))
 		return
 	var target_pos: = _lodario_target_pos(enemy)
 	var current_pos: = Vector2(enemy["pos"])
@@ -20481,6 +20715,18 @@ func _update_lodario(enemy: Dictionary, delta: float) -> void :
 	if rng.randf() < 0.28 or lunge:
 		enemy["strafe"] = - float(enemy.get("strafe", 1.0))
 	enemy["lodario_jump_progress"] = 0.001
+
+
+func _lodario_landing_sfx_volume(enemy: Dictionary) -> float:
+	var pos: = Vector2(enemy.get("pos", player_pos))
+	var distance: = pos.distance_to(player_pos)
+	if distance >= LODARIO_SFX_FAR_DISTANCE:
+		return LODARIO_SFX_VOLUME_MIN
+	if distance <= LODARIO_SFX_CLOSE_DISTANCE:
+		return LODARIO_SFX_VOLUME_MAX
+	var t: = 1.0 - clampf((distance - LODARIO_SFX_CLOSE_DISTANCE) / maxf(1.0, LODARIO_SFX_FAR_DISTANCE - LODARIO_SFX_CLOSE_DISTANCE), 0.0, 1.0)
+	var eased: = t * t * (3.0 - 2.0 * t)
+	return lerpf(LODARIO_SFX_VOLUME_MIN, LODARIO_SFX_VOLUME_MAX, eased)
 
 
 func _update_fossil_pustule(enemy: Dictionary, _delta: float) -> bool:
@@ -27860,7 +28106,7 @@ func _boss7_enter_recovery(time: float) -> void:
 
 func _spawn_boss7_flame_wave(center: Vector2, max_radius: float = 250.0) -> void:
 	var flames: Array = []
-	var count: int = 72
+	var count: int = 24 if _memory_saver_active() else (34 if _runtime_visual_budget_active() else 72)
 	for i in range(count):
 		var angle: float = (float(i) / float(count)) * TAU + rng.randf_range(-0.05, 0.05)
 		var layer: String = "yellow" if i % 3 == 0 else ("orange" if i % 3 == 1 else "red")
@@ -27962,6 +28208,8 @@ func _update_boss7_flame_waves(delta: float) -> void:
 
 func _draw_boss7_flame_waves(camera: Vector2) -> void:
 	for wave in boss7_flame_waves:
+		if not _world_point_in_view(Vector2(wave.get("pos", Vector2.ZERO)), camera, float(wave.get("max_radius", 250.0)) + 120.0):
+			continue
 		var center: Vector2 = Vector2(wave["pos"]) - camera
 		var r: float = float(wave.get("radius", 0.0))
 		var max_r: float = maxf(1.0, float(wave.get("max_radius", 250.0)))
@@ -30090,7 +30338,7 @@ func _update_boss2_ultimate_hail(delta: float) -> void :
 	for i in range(count):
 		var offset = Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(18.0, 130.0)
 		var target = (player_pos + offset).clamp(Vector2(92, 92), WORLD_SIZE - Vector2(92, 92))
-		_add_boss_attack({"kind": "ice_pillar", "age": 0.0, "duration": 0.98, "warn": 0.6, "target": target, "radius": rng.randf_range(46.0, 62.0), "hit": false, "dropped": false, "ultimate": true})
+		_add_boss_attack({"kind": "ice_pillar", "age": 0.0, "duration": 1.48, "warn": 1.1, "target": target, "radius": rng.randf_range(46.0, 62.0), "hit": false, "dropped": false, "ultimate": true})
 	_add_text("SARAIVADA GLACIAL", player_pos + Vector2(0, -88), Color(0.76, 0.98, 1.0), 0.9, 18)
 
 
@@ -30270,7 +30518,7 @@ func _add_boss2_spin_spit_up() -> void :
 		targets.append({
 			"pos": (player_pos + offset).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)), 
 			"radius": radius, 
-			"delay": 0.48 + i * rng.randf_range(0.16, 0.24), 
+			"delay": 0.98 + i * rng.randf_range(0.16, 0.24), 
 			"phase": rng.randf_range(0.0, TAU)
 		})
 	_add_boss_attack({
@@ -30278,7 +30526,7 @@ func _add_boss2_spin_spit_up() -> void :
 		"targets": targets, 
 		"age": 0.0, 
 		"duration": 3.35, 
-		"warn": 1.15, 
+		"warn": 1.65, 
 		"hit": {}, 
 		"dropped": {}
 	})
@@ -36500,9 +36748,14 @@ func _adaptive_particle_count(count: int) -> int:
 		factor = 0.62
 	elif enemy_count >= 7:
 		factor = 0.78
-	if gfx_low_resource:
+	if _memory_saver_active():
+		factor *= 0.22
+	elif mobile_adaptive_visual_budget:
+		factor *= 0.28
+	elif gfx_low_resource:
 		factor *= 0.45
-	return clampi(int(ceil(float(count) * factor)), 2, count)
+	var min_count: int = 1 if _runtime_visual_budget_active() else 2
+	return clampi(int(ceil(float(count) * factor)), min_count, count)
 
 
 func _spawn_music_notes(pos: Vector2, count: int) -> void :
@@ -37714,7 +37967,7 @@ func _settings_selected_key() -> String:
 
 func _settings_option_title(key: String) -> String:
 	match key:
-		"controls": return "CONTROLES EM TELA"
+		"controls": return "AJUSTE DE HUB" if _uses_desktop_ui() else "CONTROLES EM TELA"
 		"gamepad": return "GAMEPAD"
 		"keys": return "TECLAS"
 		"gameplay": return "JOGABILIDADE"
@@ -37727,7 +37980,7 @@ func _settings_option_title(key: String) -> String:
 
 func _settings_option_summary(key: String) -> String:
 	match key:
-		"controls": return "reposicionar botoes, tamanho e HUD"
+		"controls": return "paineis e zonas seguras" if _uses_desktop_ui() else "reposicionar botoes, tamanho e HUD"
 		"gamepad": return "mapear botoes do controle"
 		"keys": return "atalhos de teclado e mouse"
 		"gameplay": return "mira, loja, tutorial e leitura"
@@ -37741,6 +37994,8 @@ func _settings_option_summary(key: String) -> String:
 func _settings_option_help(key: String) -> String:
 	match key:
 		"controls":
+			if _uses_desktop_ui():
+				return "Ajusta os paineis do hub de combate no desktop. Os botoes virtuais ficam ocultos; use para mover vida, pontos, boss, loja e avisos sem cobrir a arena."
 			return "Ajusta posicao e escala dos botoes do HUD. Use quando algum botao cobre a mao, fica pequeno demais ou atrapalha a visao da arena."
 		"gamepad":
 			return "Permite atribuir cada acao ao controle conectado. A tela so aparece quando um joystick e detectado para evitar opcoes mortas."
@@ -40609,6 +40864,8 @@ func _init_link_chain_physics(link: Dictionary) -> void :
 
 func _draw_enemies(camera: Vector2) -> void :
 	for enemy in enemies:
+		if not _world_point_in_view(Vector2(enemy.get("pos", Vector2.ZERO)), camera, 180.0):
+			continue
 		var pos: Vector2 = enemy["pos"] - camera
 		var tex = _enemy_texture(enemy)
 		var size = _enemy_draw_size(enemy)
@@ -44281,6 +44538,8 @@ func _draw_projectiles(camera: Vector2) -> void :
 		return
 	var all_bullets = bullets + remote_bullets
 	for bullet in all_bullets:
+		if not _world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
+			continue
 		var kind = String(bullet.get("kind", ""))
 		var palette = _projectile_palette(kind)
 		var pos = bullet["pos"] - camera
@@ -44388,6 +44647,8 @@ func _draw_projectiles(camera: Vector2) -> void :
 				c.a = 0.22
 				draw_circle(pos, 15, c)
 	for bullet in return_bullets:
+		if not _world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
+			continue
 		var pos = bullet["pos"] - camera
 		var dir = Vector2(bullet.get("dir", Vector2.RIGHT))
 		var age = float(bullet.get("age", 0.0))
@@ -44406,6 +44667,8 @@ func _draw_projectiles(camera: Vector2) -> void :
 		if state == "instavel":
 			draw_arc(pos, outer + 8.0, age * 4.5, age * 4.5 + PI * 1.15, 22, Color(1.0, 0.76, 0.92, 0.56), 1.6)
 	for bullet in enemy_bullets:
+		if not _world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
+			continue
 		if bullet.get("type") == "boss7_dive_fireball":
 			var pos: Vector2 = Vector2(bullet["pos"]) - camera
 			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.DOWN)).normalized()
@@ -44614,6 +44877,8 @@ func _draw_projectiles(camera: Vector2) -> void :
 			anchor = boss_pos
 		var orbit_radius = 62.0 if String(orbital.get("target_kind", "enemy")) == "boss" else 42.0
 		var p = anchor + Vector2.from_angle(float(orbital["angle"])) * orbit_radius
+		if not _world_point_in_view(p, camera, 120.0):
+			continue
 		draw_circle(p - camera, 8, Color(0.55, 0.82, 1.0))
 		draw_arc(anchor - camera, orbit_radius, float(orbital["angle"]) - 0.7, float(orbital["angle"]) + 0.35, 18, Color(0.46, 0.78, 1.0, 0.42), 1.6)
 
@@ -44724,11 +44989,17 @@ func _should_flip_player_sprite() -> bool:
 		return lacerante_prepare_dir.x < -0.1
 	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
 		return _aim_direction().x < -0.1
+	if _active_player_skin_key() != "" and abs(move.x) <= 0.1 and abs(move.y) > 0.1:
+		return _player_vertical_skin_mirror_flip()
 	if move.x < -0.1:
 		return true
 	if move.x > 0.1:
 		return false
 	return last_facing.x < -0.1
+
+
+func _player_vertical_skin_mirror_flip() -> bool:
+	return int(Time.get_ticks_msec() / 120) % 2 == 1
 
 
 func _player_is_moving_for_animation() -> bool:
@@ -45758,6 +46029,8 @@ func _draw_boss2_environment(camera: Vector2) -> void :
 		return
 	_draw_boss2_ultimate_environment(camera)
 	for zone in boss2_snow_zones:
+		if not _world_point_in_view(Vector2(zone.get("pos", Vector2.ZERO)), camera, float(zone.get("radius", 96.0)) + 90.0):
+			continue
 		var fade = clamp(float(zone.get("life", 0.0)) / max(0.01, float(zone.get("max", BOSS2_SLOW_ZONE_TIME))), 0.0, 1.0)
 		var pos = Vector2(zone["pos"]) - camera
 		var radius = float(zone["radius"]) * (0.78 + 0.22 * sin(time_alive * 4.0 + float(zone.get("phase", 0.0))))
@@ -45767,6 +46040,8 @@ func _draw_boss2_environment(camera: Vector2) -> void :
 			var ang = float(zone.get("phase", 0.0)) + time_alive * 0.8 + i * TAU / 5.0
 			draw_circle(pos + Vector2.from_angle(ang) * radius * 0.52, 2.4, Color(1.0, 1.0, 1.0, 0.46 * fade))
 	for shard in boss2_ice_shards:
+		if not _world_point_in_view(Vector2(shard.get("pos", Vector2.ZERO)), camera, 120.0):
+			continue
 		var fade = clamp(float(shard.get("life", 0.0)) / max(0.01, float(shard.get("max", 1.2))), 0.0, 1.0)
 		var pos = Vector2(shard["pos"]) - camera
 		var angle = float(shard.get("angle", 0.0))
@@ -45776,7 +46051,14 @@ func _draw_boss2_environment(camera: Vector2) -> void :
 		var points = PackedVector2Array([pos + tip, pos + side, pos - tip, pos - side])
 		draw_polygon(points, PackedColorArray([Color(0.72, 0.94, 1.0, 0.78 * fade)]))
 		draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, 0.62 * fade), 1.2, true)
+	var frost_drawn: int = 0
+	var frost_draw_cap: int = 28 if _memory_saver_active() else (52 if _runtime_visual_budget_active() else 999999)
 	for particle in boss2_frost_particles:
+		if frost_drawn >= frost_draw_cap:
+			break
+		if not _world_point_in_view(Vector2(particle.get("pos", Vector2.ZERO)), camera, 100.0):
+			continue
+		frost_drawn += 1
 		var fade = clamp(float(particle.get("life", 0.0)) / max(0.01, float(particle.get("max", 0.58))), 0.0, 1.0)
 		var pos = Vector2(particle["pos"]) - camera
 		var radius = float(particle.get("size", 12.0)) * fade
@@ -45787,6 +46069,8 @@ func _draw_boss2_environment(camera: Vector2) -> void :
 
 func _draw_phase2_fire_walls(camera: Vector2) -> void :
 	for tile in phase2_fire_walls:
+		if not _world_point_in_view(Vector2(tile.get("pos", Vector2.ZERO)), camera, PYRO_WALL_TILE_SIZE + 90.0):
+			continue
 		var fade: float = clamp(float(tile.get("life", 0.0)) / min(1.2, float(tile.get("max", PYRO_WALL_DURATION))), 0.0, 1.0)
 		var pos: = Vector2(tile["pos"]) - camera
 		var phase: = float(tile.get("phase", 0.0))
@@ -47012,7 +47296,15 @@ func _draw_boss3_faith_link(camera: Vector2) -> void :
 
 
 func _draw_effects(camera: Vector2) -> void :
+	var draw_cap: int = MEMORY_EFFECT_DRAW_CAP if _memory_saver_active() else (MOBILE_EFFECT_DRAW_CAP if _runtime_visual_budget_active() else 999999)
+	var drawn: int = 0
 	for effect in (effects + net_effects):
+		if drawn >= draw_cap:
+			break
+		var effect_world_pos: Vector2 = Vector2(effect.get("pos", Vector2.ZERO))
+		if not _world_point_in_view(effect_world_pos, camera, 160.0):
+			continue
+		drawn += 1
 		var alpha = clamp(float(effect["life"]) / float(effect["max"]), 0.0, 1.0)
 		var color: Color = effect["color"]
 		color.a = alpha
@@ -48171,52 +48463,130 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 	_draw_dance_wheel(viewport)
 	_draw_player_dance_emote(_camera(viewport))
 
+func _edit_layout_uses_virtual_controls() -> bool:
+	return _uses_touch_ui()
+
+
+func _edit_layout_title() -> String:
+	return "AJUSTAR HUB DESKTOP (Arraste para Mover)" if not _edit_layout_uses_virtual_controls() else "CONTROLES EM TELA (Arraste para Mover)"
+
+
+func _edit_layout_safe_margin(_viewport: Vector2) -> Vector2:
+	return Vector2(28.0, 28.0)
+
+
+func _edit_layout_safe_rect(viewport: Vector2) -> Rect2:
+	var margin: Vector2 = _edit_layout_safe_margin(viewport)
+	return Rect2(margin, (viewport - margin * 2.0).max(Vector2(64.0, 64.0)))
+
+
+func _clamp_layout_point(target: Vector2, viewport: Vector2, padding: float = 28.0) -> Vector2:
+	var min_pos: = Vector2(padding, padding)
+	var max_pos: = viewport - Vector2(padding, padding)
+	if max_pos.x < min_pos.x:
+		max_pos.x = min_pos.x
+	if max_pos.y < min_pos.y:
+		max_pos.y = min_pos.y
+	return Vector2(clampf(target.x, min_pos.x, max_pos.x), clampf(target.y, min_pos.y, max_pos.y))
+
+
+func _clamp_layout_rect_position(target: Vector2, size: Vector2, viewport: Vector2, padding: float = 28.0) -> Vector2:
+	var min_pos: = Vector2(padding, padding)
+	var max_pos: = viewport - size - Vector2(padding, padding)
+	if max_pos.x < min_pos.x:
+		max_pos.x = min_pos.x
+	if max_pos.y < min_pos.y:
+		max_pos.y = min_pos.y
+	return Vector2(clampf(target.x, min_pos.x, max_pos.x), clampf(target.y, min_pos.y, max_pos.y))
+
+
+func _clamp_layout_center(target: Vector2, radius: float, viewport: Vector2, padding: float = 28.0) -> Vector2:
+	return _clamp_layout_point(target, viewport, padding + radius)
+
+
+func _draw_edit_layout_safe_guides(viewport: Vector2) -> void:
+	var safe_rect: Rect2 = _edit_layout_safe_rect(viewport)
+	var accent: = Color(0.0, 1.0, 0.82, 0.42)
+	var warn: = Color(1.0, 0.72, 0.22, 0.32)
+	draw_rect(safe_rect, Color(0.0, 0.8, 0.7, 0.035), false, 1.0)
+	var corner_len: = 42.0
+	var points: = [
+		safe_rect.position,
+		Vector2(safe_rect.end.x, safe_rect.position.y),
+		Vector2(safe_rect.position.x, safe_rect.end.y),
+		safe_rect.end
+	]
+	for p in points:
+		var sx: = 1.0 if p.x <= safe_rect.position.x + 1.0 else -1.0
+		var sy: = 1.0 if p.y <= safe_rect.position.y + 1.0 else -1.0
+		draw_line(p, p + Vector2(corner_len * sx, 0.0), accent, 2.0)
+		draw_line(p, p + Vector2(0.0, corner_len * sy), accent, 2.0)
+		draw_circle(p, 3.0, warn)
+	_draw_centered("AREA SEGURA DAS QUINAS", Vector2(viewport.x * 0.5, viewport.y - 118.0), 13, Color(0.7, 0.92, 1.0, 0.72))
+
+
 func _draw_edit_layout(viewport: Vector2) -> void :
 	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.05, 0.05, 0.08, 0.9))
-	_draw_centered("EDITAR HUD (Arraste para Mover)", Vector2(viewport.x * 0.5, 40), 28, Color(0.0, 1.0, 0.82))
+	_draw_edit_layout_safe_guides(viewport)
+	_draw_centered(_edit_layout_title(), Vector2(viewport.x * 0.5, 40), 28, Color(0.0, 1.0, 0.82))
+	if not _edit_layout_uses_virtual_controls():
+		_draw_centered("Desktop: mova paineis, loja, boss e avisos. Controles ficam em TECLAS.", Vector2(viewport.x * 0.5, viewport.y - 142.0), 14, Color(0.72, 0.92, 1.0, 0.82))
 
-	var joy = _joy_center(viewport)
-	var joy_r = 76.0 * _joy_scale()
-	draw_circle(joy, joy_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "joy" else Color(0.0, 0.8, 0.8, 0.4))
-	draw_arc(joy, joy_r, 0, TAU, 64, Color(1.0, 1.0, 0.0) if edit_layout_selected == "joy" else Color(0.0, 1.0, 0.85), 3)
-	_draw_centered("JOY", joy, 20, Color.WHITE)
-	_draw_small_rect_button(Rect2(joy.x - 60, joy.y + joy_r + 10, 50, 40), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	_draw_small_rect_button(Rect2(joy.x + 10, joy.y + joy_r + 10, 50, 40), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+	if _edit_layout_uses_virtual_controls():
+		var joy = _joy_center(viewport)
+		var joy_r = 76.0 * _joy_scale()
+		draw_circle(joy, joy_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "joy" else Color(0.0, 0.8, 0.8, 0.4))
+		draw_arc(joy, joy_r, 0, TAU, 64, Color(1.0, 1.0, 0.0) if edit_layout_selected == "joy" else Color(0.0, 1.0, 0.85), 3)
+		_draw_centered("JOY", joy, 20, Color.WHITE)
+		if edit_layout_selected == "joy":
+			var joy_scale_controls: = _circle_scale_control_rects(joy, joy_r, viewport)
+			_draw_small_rect_button(joy_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+			_draw_small_rect_button(joy_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 
-	var atk_c = buttons["attack"].position + buttons["attack"].size * 0.5
-	var atk_r = 54.0 * _attack_scale()
-	draw_circle(atk_c, atk_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28, 0.4))
-	draw_arc(atk_c, atk_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28), 3)
-	_draw_centered("ATK", atk_c, 20, Color.WHITE)
-	_draw_small_rect_button(Rect2(atk_c.x - 60, atk_c.y + atk_r + 10, 50, 40), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	_draw_small_rect_button(Rect2(atk_c.x + 10, atk_c.y + atk_r + 10, 50, 40), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+		var atk_c = buttons["attack"].position + buttons["attack"].size * 0.5
+		var atk_r = 54.0 * _attack_scale()
+		draw_circle(atk_c, atk_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28, 0.4))
+		draw_arc(atk_c, atk_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28), 3)
+		_draw_centered("ATK", atk_c, 20, Color.WHITE)
+		if edit_layout_selected == "attack":
+			var atk_scale_controls: = _circle_scale_control_rects(atk_c, atk_r, viewport)
+			_draw_small_rect_button(atk_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+			_draw_small_rect_button(atk_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 
-	var secondary_c = buttons["secondary"].position + buttons["secondary"].size * 0.5
-	var secondary_r = 43.0 * _secondary_scale()
-	draw_circle(secondary_c, secondary_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "secondary" else Color(1.0, 0.72, 0.22, 0.4))
-	draw_arc(secondary_c, secondary_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "secondary" else Color(1.0, 0.72, 0.22), 3)
-	_draw_centered("E", secondary_c + Vector2(0, -6), 20, Color.WHITE)
-	_draw_centered("ULT", secondary_c + Vector2(0, 13), 12, Color.WHITE)
-	_draw_small_rect_button(Rect2(secondary_c.x - 60, secondary_c.y + secondary_r + 10, 50, 40), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	_draw_small_rect_button(Rect2(secondary_c.x + 10, secondary_c.y + secondary_r + 10, 50, 40), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+		var secondary_c = buttons["secondary"].position + buttons["secondary"].size * 0.5
+		var secondary_r = 43.0 * _secondary_scale()
+		draw_circle(secondary_c, secondary_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "secondary" else Color(1.0, 0.72, 0.22, 0.4))
+		draw_arc(secondary_c, secondary_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "secondary" else Color(1.0, 0.72, 0.22), 3)
+		_draw_centered("E", secondary_c + Vector2(0, -6), 20, Color.WHITE)
+		_draw_centered("ULT", secondary_c + Vector2(0, 13), 12, Color.WHITE)
+		if edit_layout_selected == "secondary":
+			var secondary_scale_controls: = _circle_scale_control_rects(secondary_c, secondary_r, viewport)
+			_draw_small_rect_button(secondary_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+			_draw_small_rect_button(secondary_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 
-	var dash_c = buttons["dash"].position + buttons["dash"].size * 0.5
-	var dash_r = 46.0 * _dash_scale()
-	draw_circle(dash_c, dash_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0, 0.4))
-	draw_arc(dash_c, dash_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0), 3)
-	_draw_centered("TP", dash_c, 20, Color.WHITE)
-	_draw_small_rect_button(Rect2(dash_c.x - 60, dash_c.y + dash_r + 10, 50, 40), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	_draw_small_rect_button(Rect2(dash_c.x + 10, dash_c.y + dash_r + 10, 50, 40), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+		var dash_c = buttons["dash"].position + buttons["dash"].size * 0.5
+		var dash_r = 46.0 * _dash_scale()
+		draw_circle(dash_c, dash_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0, 0.4))
+		draw_arc(dash_c, dash_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0), 3)
+		_draw_centered("TP", dash_c, 20, Color.WHITE)
+		if edit_layout_selected == "dash":
+			var dash_scale_controls: = _circle_scale_control_rects(dash_c, dash_r, viewport)
+			_draw_small_rect_button(dash_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+			_draw_small_rect_button(dash_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 
-	var empower_r = 32.0 * _lacerante_empower_scale()
-	var empower_c = _lacerante_empower_center(viewport)
-	buttons["lacerante_empower"] = Rect2(empower_c - Vector2(empower_r, empower_r), Vector2(empower_r * 2.0, empower_r * 2.0))
-	var is_empower_selected = (edit_layout_selected == "lacerante_empower")
-	draw_circle(empower_c, empower_r, Color(0.8, 0.8, 0.0, 0.4) if is_empower_selected else Color(0.92, 0.03, 0.12, 0.4))
-	draw_arc(empower_c, empower_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if is_empower_selected else Color(0.92, 0.03, 0.12), 3)
-	_draw_centered("+", empower_c, 24, Color.WHITE)
-	_draw_small_rect_button(Rect2(empower_c.x - 60, empower_c.y + empower_r + 10, 50, 40), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	_draw_small_rect_button(Rect2(empower_c.x + 10, empower_c.y + empower_r + 10, 50, 40), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+		var empower_r = 32.0 * _lacerante_empower_scale()
+		var empower_c = _lacerante_empower_center(viewport)
+		buttons["lacerante_empower"] = Rect2(empower_c - Vector2(empower_r, empower_r), Vector2(empower_r * 2.0, empower_r * 2.0))
+		var is_empower_selected = (edit_layout_selected == "lacerante_empower")
+		draw_circle(empower_c, empower_r, Color(0.8, 0.8, 0.0, 0.4) if is_empower_selected else Color(0.92, 0.03, 0.12, 0.4))
+		draw_arc(empower_c, empower_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if is_empower_selected else Color(0.92, 0.03, 0.12), 3)
+		_draw_centered("+", empower_c, 24, Color.WHITE)
+		if edit_layout_selected == "lacerante_empower":
+			var empower_scale_controls: = _circle_scale_control_rects(empower_c, empower_r, viewport)
+			_draw_small_rect_button(empower_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+			_draw_small_rect_button(empower_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+	else:
+		buttons.erase("lacerante_empower")
 
 	var portrait = _is_portrait(viewport)
 	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
@@ -48246,13 +48616,15 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 	var c_aura = Color(1, 1, 0, 0.6) if edit_layout_selected == "aura_panel" else Color(0.54, 0.82, 1.0, 0.3)
 	draw_rect(aura_rect, c_aura, false, 2)
 	_draw_centered("AUREA", aura_rect.get_center(), 13, Color.WHITE)
-	_draw_layout_scale_controls(aura_rect)
+	if edit_layout_selected == "aura_panel":
+		_draw_layout_scale_controls(aura_rect)
 
 	var cards_rect = Rect2(_cards_panel_pos(viewport, left_rect), Vector2(min(224.0, viewport.x * 0.46), 94.0) * hud_cards_panel_scale)
 	var c_cards = Color(1, 1, 0, 0.6) if edit_layout_selected == "cards_panel" else Color(1.0, 0.64, 0.18, 0.3)
 	draw_rect(cards_rect, c_cards, false, 2)
 	_draw_centered("CARTAS HUD", cards_rect.get_center(), 13, Color.WHITE)
-	_draw_layout_scale_controls(cards_rect)
+	if edit_layout_selected == "cards_panel":
+		_draw_layout_scale_controls(cards_rect)
 
 	var coag_center = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
 	var coag_size: = Vector2(160, 48) * hud_coagulum_scale
@@ -48260,16 +48632,20 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 	var c_coag = Color(1, 1, 0, 0.6) if edit_layout_selected == "coagulum" else Color(1.0, 0.12, 0.22, 0.3)
 	draw_rect(coag_rect, c_coag, false, 2)
 	_draw_centered("COAGULO", coag_rect.get_center(), 13, Color.WHITE)
-	_draw_layout_scale_controls(coag_rect)
+	if edit_layout_selected == "coagulum":
+		_draw_layout_scale_controls(coag_rect)
 
-	var skill_r = 46.0 * _skill_scale()
-	var skill_rect = Rect2(_skill_pos(viewport), Vector2(skill_r * 2.0, skill_r * 2.0))
-	var skill_c = skill_rect.get_center()
-	draw_circle(skill_c, skill_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "skill" else Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.4))
-	draw_arc(skill_c, skill_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "skill" else _manifestation_color(), 3)
-	_draw_centered("HAB1", skill_c, 18, Color.WHITE)
-	_draw_small_rect_button(Rect2(skill_c.x - 60, skill_c.y + skill_r + 10, 50, 40), "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	_draw_small_rect_button(Rect2(skill_c.x + 10, skill_c.y + skill_r + 10, 50, 40), "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+	if _edit_layout_uses_virtual_controls():
+		var skill_r = 46.0 * _skill_scale()
+		var skill_rect = Rect2(_skill_pos(viewport), Vector2(skill_r * 2.0, skill_r * 2.0))
+		var skill_c = skill_rect.get_center()
+		draw_circle(skill_c, skill_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "skill" else Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.4))
+		draw_arc(skill_c, skill_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "skill" else _manifestation_color(), 3)
+		_draw_centered("HAB1", skill_c, 18, Color.WHITE)
+		if edit_layout_selected == "skill":
+			var skill_scale_controls: = _circle_scale_control_rects(skill_c, skill_r, viewport)
+			_draw_small_rect_button(skill_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
+			_draw_small_rect_button(skill_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 
 	var pause_rect = Rect2(_pause_pos(viewport), Vector2(52, 42))
 	var c_pause = Color(1, 1, 0, 0.6) if edit_layout_selected == "pause" else Color(1, 1, 1, 0.3)
@@ -48290,11 +48666,33 @@ func _draw_layout_scale_controls(rect: Rect2) -> void :
 	_draw_small_rect_button(controls[1], "+", Color(0.12, 0.14, 0.18), Color(0.54, 0.72, 0.82))
 
 
+func _circle_scale_control_rects(center: Vector2, radius: float, viewport: Vector2) -> Array[Rect2]:
+	var y: = center.y + radius + 10.0
+	if y + 40.0 > viewport.y - 54.0:
+		y = center.y - radius - 50.0
+	var controls: Array[Rect2] = [
+		Rect2(center.x - 60.0, y, 50.0, 40.0),
+		Rect2(center.x + 10.0, y, 50.0, 40.0)
+	]
+	for i in range(controls.size()):
+		var control: Rect2 = controls[i]
+		control.position = _clamp_layout_rect_position(control.position, control.size, viewport, 8.0)
+		controls[i] = control
+	return controls
+
+
 func _layout_scale_control_rects(rect: Rect2) -> Array[Rect2]:
-	return [
+	var controls: Array[Rect2] = [
 		Rect2(rect.end.x - 76.0, rect.position.y - 30.0, 34.0, 26.0), 
 		Rect2(rect.end.x - 38.0, rect.position.y - 30.0, 34.0, 26.0)
 	]
+	var viewport_size: Vector2 = get_viewport_rect().size
+	if viewport_size.x > 0.0 and viewport_size.y > 0.0:
+		for i in range(controls.size()):
+			var control: Rect2 = controls[i]
+			control.position = _clamp_layout_rect_position(control.position, control.size, viewport_size, 8.0)
+			controls[i] = control
+	return controls
 
 
 
@@ -50253,14 +50651,45 @@ func _player_texture() -> Texture2D:
 		return _frame_texture_relative("player_fire", time_alive - last_attack_time, 70, "player_idle")
 	var idle_speed = 115 if time_alive - last_attack_time < 0.65 or time_alive - last_dash_time < 1.0 else 175
 	if move.y < -0.1:
-		return _frame_texture("player_up", 120, "player_idle")
+		return _frame_texture(_player_animation_texture_key("up", "player_up"), 120, "player_idle")
 	if move.y > 0.1:
-		return _frame_texture("player_down", 120, "player_idle")
+		return _frame_texture(_player_animation_texture_key("down", "player_down"), 120, "player_idle")
 	if move.x > 0.1:
-		return _frame_texture("player_right", 105, "player_idle")
+		return _frame_texture(_player_animation_texture_key("right", "player_right"), 105, "player_idle")
 	if move.x < -0.1:
-		return _frame_texture("player_right", 105, "player_idle")
-	return _frame_texture("player_idle", idle_speed, "player_fire")
+		return _frame_texture(_player_animation_texture_key("right", "player_right"), 105, "player_idle")
+	return _frame_texture(_player_animation_texture_key("idle", "player_idle"), idle_speed, "player_fire")
+
+
+func _player_animation_texture_key(anim: String, fallback_key: String) -> String:
+	var skin_key: = _active_player_skin_key()
+	if skin_key == "":
+		return fallback_key
+	var candidate: = "player_skin_%s_%s" % [skin_key, anim]
+	var frames: Array = textures.get(candidate, [])
+	if frames.is_empty():
+		return fallback_key
+	return candidate
+
+
+func _active_player_skin_key() -> String:
+	return _manifestation_skin_key(manifestation_key, true)
+
+
+func _manifestation_skin_key(key: String, use_local_eclipsada_form: = false) -> String:
+	if key == "eclipsada":
+		if use_local_eclipsada_form:
+			return "eclipsada_sol" if _eclipsada_is_sol() else "eclipsada_lua"
+		return "eclipsada_sol"
+	if PLAYER_SKIN_MANIFESTATION_KEYS.has(key):
+		return String(PLAYER_SKIN_MANIFESTATION_KEYS[key])
+	return ""
+
+
+func _manifestation_index_skin_key(index: int) -> String:
+	if index < 0 or index >= MANIFESTATIONS.size():
+		return ""
+	return _manifestation_skin_key(String(MANIFESTATIONS[index].get("key", "")), false)
 
 
 func _frame_texture(key: String, period_ms: int, fallback_key: String) -> Texture2D:
@@ -50763,94 +51192,101 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		mode = "settings"
 		return
 
-	var joy = _joy_center(viewport)
-	var joy_r = 76.0 * _joy_scale()
-	if Rect2(joy.x - 60, joy.y + joy_r + 10, 50, 40).has_point(pos):
-		hud_joy_scale = max(HUD_CONTROL_SCALE_MIN, hud_joy_scale - 0.1)
-		return
-	if Rect2(joy.x + 10, joy.y + joy_r + 10, 50, 40).has_point(pos):
-		hud_joy_scale = min(HUD_CONTROL_SCALE_MAX, hud_joy_scale + 0.1)
-		return
-	if pos.distance_to(joy) < joy_r:
-		edit_layout_selected = "joy"
-		edit_layout_touch_index = index
-		edit_layout_offset = hud_joy_pos - pos
-		return
-
-	var atk_c = buttons.get("attack", Rect2()).position + buttons.get("attack", Rect2()).size * 0.5
-	var atk_r = 54.0 * _attack_scale()
-	if Rect2(atk_c.x - 60, atk_c.y + atk_r + 10, 50, 40).has_point(pos):
-		hud_attack_scale = max(HUD_CONTROL_SCALE_MIN, hud_attack_scale - 0.1)
-		return
-	if Rect2(atk_c.x + 10, atk_c.y + atk_r + 10, 50, 40).has_point(pos):
-		hud_attack_scale = min(HUD_ATTACK_SCALE_MAX, hud_attack_scale + 0.1)
-		return
-	if pos.distance_to(atk_c) < atk_r:
-		edit_layout_selected = "attack"
-		edit_layout_touch_index = index
-		edit_layout_offset = hud_attack_pos - pos
-		return
-
-	var secondary_c = buttons.get("secondary", Rect2()).position + buttons.get("secondary", Rect2()).size * 0.5
-	var secondary_r = 43.0 * _secondary_scale()
-	if Rect2(secondary_c.x - 60, secondary_c.y + secondary_r + 10, 50, 40).has_point(pos):
-		hud_secondary_scale = max(HUD_CONTROL_SCALE_MIN, hud_secondary_scale - 0.1)
-		return
-	if Rect2(secondary_c.x + 10, secondary_c.y + secondary_r + 10, 50, 40).has_point(pos):
-		hud_secondary_scale = min(HUD_CONTROL_SCALE_MAX, hud_secondary_scale + 0.1)
-		return
-	if pos.distance_to(secondary_c) < secondary_r:
-		edit_layout_selected = "secondary"
-		edit_layout_touch_index = index
-		edit_layout_offset = hud_secondary_pos - pos
-		return
-
-	var dash_c = buttons.get("dash", Rect2()).position + buttons.get("dash", Rect2()).size * 0.5
-	var dash_r = 46.0 * _dash_scale()
-	if Rect2(dash_c.x - 60, dash_c.y + dash_r + 10, 50, 40).has_point(pos):
-		hud_dash_scale = max(HUD_CONTROL_SCALE_MIN, hud_dash_scale - 0.1)
-		return
-	if Rect2(dash_c.x + 10, dash_c.y + dash_r + 10, 50, 40).has_point(pos):
-		hud_dash_scale = min(HUD_CONTROL_SCALE_MAX, hud_dash_scale + 0.1)
-		return
-	if pos.distance_to(dash_c) < dash_r:
-		edit_layout_selected = "dash"
-		edit_layout_touch_index = index
-		edit_layout_offset = hud_dash_pos - pos
-		return
-
-	if buttons.has("lacerante_empower"):
-		var empower_rect: Rect2 = buttons.get("lacerante_empower", Rect2())
-		var empower_c = empower_rect.position + empower_rect.size * 0.5
-		var empower_r = empower_rect.size.x * 0.5
-		if Rect2(empower_c.x - 60, empower_c.y + empower_r + 10, 50, 40).has_point(pos):
-			hud_lacerante_empower_scale = max(HUD_CONTROL_SCALE_MIN, hud_lacerante_empower_scale - 0.1)
+	if _edit_layout_uses_virtual_controls():
+		var joy = _joy_center(viewport)
+		var joy_r = 76.0 * _joy_scale()
+		var joy_scale_controls: = _circle_scale_control_rects(joy, joy_r, viewport)
+		if edit_layout_selected == "joy" and joy_scale_controls[0].has_point(pos):
+			hud_joy_scale = max(HUD_CONTROL_SCALE_MIN, hud_joy_scale - 0.1)
 			return
-		if Rect2(empower_c.x + 10, empower_c.y + empower_r + 10, 50, 40).has_point(pos):
-			hud_lacerante_empower_scale = min(HUD_CONTROL_SCALE_MAX, hud_lacerante_empower_scale + 0.1)
+		if edit_layout_selected == "joy" and joy_scale_controls[1].has_point(pos):
+			hud_joy_scale = min(HUD_CONTROL_SCALE_MAX, hud_joy_scale + 0.1)
 			return
-		if pos.distance_to(empower_c) < empower_r:
-			edit_layout_selected = "lacerante_empower"
+		if pos.distance_to(joy) < joy_r:
+			edit_layout_selected = "joy"
 			edit_layout_touch_index = index
-			edit_layout_offset = hud_lacerante_empower_pos - pos
-			if hud_lacerante_empower_pos == Vector2(-1, -1):
-				edit_layout_offset = empower_c - pos
+			edit_layout_offset = hud_joy_pos - pos
 			return
 
-	var skill_r = 46.0 * _skill_scale()
-	var skill_rect = Rect2(_skill_pos(viewport), Vector2(skill_r * 2.0, skill_r * 2.0))
-	var skill_c = skill_rect.get_center()
-	if Rect2(skill_c.x - 60, skill_c.y + skill_r + 10, 50, 40).has_point(pos):
-		hud_skill_scale = max(HUD_CONTROL_SCALE_MIN, hud_skill_scale - 0.1)
-		return
-	if Rect2(skill_c.x + 10, skill_c.y + skill_r + 10, 50, 40).has_point(pos):
-		hud_skill_scale = min(HUD_CONTROL_SCALE_MAX, hud_skill_scale + 0.1)
-		return
-	if pos.distance_to(skill_c) < skill_r:
-		edit_layout_selected = "skill"
-		edit_layout_touch_index = index
-		edit_layout_offset = _skill_pos(viewport) - pos
-		return
+		var atk_c = buttons.get("attack", Rect2()).position + buttons.get("attack", Rect2()).size * 0.5
+		var atk_r = 54.0 * _attack_scale()
+		var atk_scale_controls: = _circle_scale_control_rects(atk_c, atk_r, viewport)
+		if edit_layout_selected == "attack" and atk_scale_controls[0].has_point(pos):
+			hud_attack_scale = max(HUD_CONTROL_SCALE_MIN, hud_attack_scale - 0.1)
+			return
+		if edit_layout_selected == "attack" and atk_scale_controls[1].has_point(pos):
+			hud_attack_scale = min(HUD_ATTACK_SCALE_MAX, hud_attack_scale + 0.1)
+			return
+		if pos.distance_to(atk_c) < atk_r:
+			edit_layout_selected = "attack"
+			edit_layout_touch_index = index
+			edit_layout_offset = hud_attack_pos - pos
+			return
+
+		var secondary_c = buttons.get("secondary", Rect2()).position + buttons.get("secondary", Rect2()).size * 0.5
+		var secondary_r = 43.0 * _secondary_scale()
+		var secondary_scale_controls: = _circle_scale_control_rects(secondary_c, secondary_r, viewport)
+		if edit_layout_selected == "secondary" and secondary_scale_controls[0].has_point(pos):
+			hud_secondary_scale = max(HUD_CONTROL_SCALE_MIN, hud_secondary_scale - 0.1)
+			return
+		if edit_layout_selected == "secondary" and secondary_scale_controls[1].has_point(pos):
+			hud_secondary_scale = min(HUD_CONTROL_SCALE_MAX, hud_secondary_scale + 0.1)
+			return
+		if pos.distance_to(secondary_c) < secondary_r:
+			edit_layout_selected = "secondary"
+			edit_layout_touch_index = index
+			edit_layout_offset = hud_secondary_pos - pos
+			return
+
+		var dash_c = buttons.get("dash", Rect2()).position + buttons.get("dash", Rect2()).size * 0.5
+		var dash_r = 46.0 * _dash_scale()
+		var dash_scale_controls: = _circle_scale_control_rects(dash_c, dash_r, viewport)
+		if edit_layout_selected == "dash" and dash_scale_controls[0].has_point(pos):
+			hud_dash_scale = max(HUD_CONTROL_SCALE_MIN, hud_dash_scale - 0.1)
+			return
+		if edit_layout_selected == "dash" and dash_scale_controls[1].has_point(pos):
+			hud_dash_scale = min(HUD_CONTROL_SCALE_MAX, hud_dash_scale + 0.1)
+			return
+		if pos.distance_to(dash_c) < dash_r:
+			edit_layout_selected = "dash"
+			edit_layout_touch_index = index
+			edit_layout_offset = hud_dash_pos - pos
+			return
+
+		if buttons.has("lacerante_empower"):
+			var empower_rect: Rect2 = buttons.get("lacerante_empower", Rect2())
+			var empower_c = empower_rect.position + empower_rect.size * 0.5
+			var empower_r = empower_rect.size.x * 0.5
+			var empower_scale_controls: = _circle_scale_control_rects(empower_c, empower_r, viewport)
+			if edit_layout_selected == "lacerante_empower" and empower_scale_controls[0].has_point(pos):
+				hud_lacerante_empower_scale = max(HUD_CONTROL_SCALE_MIN, hud_lacerante_empower_scale - 0.1)
+				return
+			if edit_layout_selected == "lacerante_empower" and empower_scale_controls[1].has_point(pos):
+				hud_lacerante_empower_scale = min(HUD_CONTROL_SCALE_MAX, hud_lacerante_empower_scale + 0.1)
+				return
+			if pos.distance_to(empower_c) < empower_r:
+				edit_layout_selected = "lacerante_empower"
+				edit_layout_touch_index = index
+				edit_layout_offset = hud_lacerante_empower_pos - pos
+				if hud_lacerante_empower_pos == Vector2(-1, -1):
+					edit_layout_offset = empower_c - pos
+				return
+
+		var skill_r = 46.0 * _skill_scale()
+		var skill_rect = Rect2(_skill_pos(viewport), Vector2(skill_r * 2.0, skill_r * 2.0))
+		var skill_c = skill_rect.get_center()
+		var skill_scale_controls: = _circle_scale_control_rects(skill_c, skill_r, viewport)
+		if edit_layout_selected == "skill" and skill_scale_controls[0].has_point(pos):
+			hud_skill_scale = max(HUD_CONTROL_SCALE_MIN, hud_skill_scale - 0.1)
+			return
+		if edit_layout_selected == "skill" and skill_scale_controls[1].has_point(pos):
+			hud_skill_scale = min(HUD_CONTROL_SCALE_MAX, hud_skill_scale + 0.1)
+			return
+		if pos.distance_to(skill_c) < skill_r:
+			edit_layout_selected = "skill"
+			edit_layout_touch_index = index
+			edit_layout_offset = _skill_pos(viewport) - pos
+			return
 
 	var portrait = _is_portrait(viewport)
 	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
@@ -50868,6 +51304,8 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		["cards_panel", cards_rect], 
 		["coagulum", coag_rect]
 	]:
+		if edit_layout_selected != scale_entry[0]:
+			continue
 		var scale_controls: = _layout_scale_control_rects(scale_entry[1])
 		if scale_controls[0].has_point(pos):
 			_adjust_layout_box_scale(scale_entry[0], -0.1)
@@ -50910,26 +51348,32 @@ func _adjust_layout_box_scale(box_key: String, delta: float) -> void :
 func _handle_edit_layout_drag(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if index != edit_layout_touch_index: return
 	var target = pos + edit_layout_offset
+	var portrait = _is_portrait(viewport)
+	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
+	var right_w = 220.0 if not portrait else min(220.0, viewport.x * 0.44)
+	var aura_size: = Vector2(min(224.0, viewport.x * 0.46), 48.0) * hud_aura_panel_scale
+	var cards_size: = Vector2(min(224.0, viewport.x * 0.46), 94.0) * hud_cards_panel_scale
+	var coag_size: = Vector2(160.0, 48.0) * hud_coagulum_scale
 	if edit_layout_selected == "joy":
-		hud_joy_pos = target.clamp(Vector2.ZERO, viewport)
+		hud_joy_pos = _clamp_layout_center(target, 76.0 * _joy_scale(), viewport)
 	elif edit_layout_selected == "attack":
-		hud_attack_pos = target.clamp(Vector2.ZERO, viewport)
+		hud_attack_pos = _clamp_layout_center(target, 54.0 * _attack_scale(), viewport)
 	elif edit_layout_selected == "secondary":
-		hud_secondary_pos = target.clamp(Vector2.ZERO, viewport)
+		hud_secondary_pos = _clamp_layout_center(target, 43.0 * _secondary_scale(), viewport)
 	elif edit_layout_selected == "dash":
-		hud_dash_pos = target.clamp(Vector2.ZERO, viewport)
+		hud_dash_pos = _clamp_layout_center(target, 46.0 * _dash_scale(), viewport)
 	elif edit_layout_selected == "lacerante_empower":
-		hud_lacerante_empower_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "left_panel": hud_left_panel_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "right_panel": hud_right_panel_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "boss_panel": hud_boss_panel_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "aura_panel": hud_aura_panel_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "cards_panel": hud_cards_panel_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "coagulum": hud_coagulum_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "skill": hud_skill_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "pause": hud_pause_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "boss_call": hud_boss_call_pos = target.clamp(Vector2.ZERO, viewport)
-	elif edit_layout_selected == "shop_manual": hud_shop_pos = target.clamp(Vector2.ZERO, viewport)
+		hud_lacerante_empower_pos = _clamp_layout_center(target, 32.0 * _lacerante_empower_scale(), viewport)
+	elif edit_layout_selected == "left_panel": hud_left_panel_pos = _clamp_layout_rect_position(target, Vector2(left_w, 76.0), viewport)
+	elif edit_layout_selected == "right_panel": hud_right_panel_pos = _clamp_layout_rect_position(target, Vector2(right_w, 76.0), viewport)
+	elif edit_layout_selected == "boss_panel": hud_boss_panel_pos = _clamp_layout_rect_position(target, Vector2(380.0, 30.0), viewport)
+	elif edit_layout_selected == "aura_panel": hud_aura_panel_pos = _clamp_layout_rect_position(target, aura_size, viewport)
+	elif edit_layout_selected == "cards_panel": hud_cards_panel_pos = _clamp_layout_rect_position(target, cards_size, viewport)
+	elif edit_layout_selected == "coagulum": hud_coagulum_pos = _clamp_layout_center(target, maxf(coag_size.x, coag_size.y) * 0.5, viewport)
+	elif edit_layout_selected == "skill": hud_skill_pos = _clamp_layout_rect_position(target, Vector2(92.0, 92.0) * _skill_scale(), viewport)
+	elif edit_layout_selected == "pause": hud_pause_pos = _clamp_layout_rect_position(target, Vector2(52.0, 42.0), viewport)
+	elif edit_layout_selected == "boss_call": hud_boss_call_pos = _clamp_layout_rect_position(target, Vector2(96.0, 42.0), viewport)
+	elif edit_layout_selected == "shop_manual": hud_shop_pos = _clamp_layout_rect_position(target, Vector2(104.0, 42.0), viewport)
 
 func _handle_edit_layout_release(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if index == edit_layout_touch_index:
@@ -50946,6 +51390,8 @@ func _open_edit_layout(viewport: Vector2) -> void :
 	hud_lacerante_empower_pos = _lacerante_empower_center(viewport)
 	hud_skill_pos = _skill_pos(viewport)
 	hud_shop_pos = _manual_shop_pos(viewport)
+	if hud_boss_panel_pos == Vector2(-1, -1):
+		hud_boss_panel_pos = _clamp_layout_rect_position(Vector2(viewport.x * 0.5 - 190.0, 96.0), Vector2(380.0, 30.0), viewport)
 	var portrait = _is_portrait(viewport)
 	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
 	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
@@ -54346,7 +54792,7 @@ func _spawn_raindrop() -> void :
 
 
 func _update_rain(delta: float) -> void :
-	var rain_rate = WEATHER_RAIN_DROP_RATE * lerp(0.22, 1.0, _rain_intensity()) * (0.45 if gfx_low_resource else 1.0)
+	var rain_rate = WEATHER_RAIN_DROP_RATE * lerp(0.22, 1.0, _rain_intensity()) * (0.32 if mobile_adaptive_visual_budget else (0.45 if gfx_low_resource else 1.0))
 	var spawn_count = int(rain_rate * delta)
 	if rng.randf() < fmod(rain_rate * delta, 1.0):
 		spawn_count += 1
@@ -54384,7 +54830,7 @@ func _update_rain(delta: float) -> void :
 		puddle["grow"] = min(float(puddle.get("grow_time", 1.4)), float(puddle.get("grow", 0.0)) + delta)
 		puddle["phase"] = float(puddle["phase"]) + delta * 0.85
 	puddles = puddles.filter( func(p): return float(p["life"]) > 0.0)
-	while puddles.size() < _low_resource_cap(WEATHER_MAX_PUDDLES, LOW_RESOURCE_PUDDLE_CAP) and rng.randf() < (0.08 if gfx_low_resource else 0.22):
+	while puddles.size() < _low_resource_cap(WEATHER_MAX_PUDDLES, LOW_RESOURCE_PUDDLE_CAP) and rng.randf() < (0.045 if mobile_adaptive_visual_budget else (0.08 if gfx_low_resource else 0.22)):
 		_add_rain_puddle(Vector2(rng.randf_range(90.0, WORLD_SIZE.x - 90.0), rng.randf_range(90.0, WORLD_SIZE.y - 90.0)), rng.randf_range(WEATHER_PUDDLE_MIN_SIZE, WEATHER_PUDDLE_MAX_SIZE), rng.randf_range(16.0, 30.0))
 
 
@@ -54448,6 +54894,8 @@ func _update_snow(delta: float) -> void :
 func _draw_rain_puddles(camera: Vector2) -> void :
 	var t = float(Time.get_ticks_msec()) * 0.001
 	for puddle in puddles:
+		if not _world_point_in_view(Vector2(puddle.get("pos", Vector2.ZERO)), camera, float(puddle.get("r", WEATHER_PUDDLE_MAX_SIZE)) + 90.0):
+			continue
 		var life_alpha = clamp(float(puddle["life"]) / max(0.01, float(puddle["max_life"])), 0.0, 1.0)
 		var grow_alpha = clamp(float(puddle.get("grow", 0.0)) / max(0.01, float(puddle.get("grow_time", 1.4))), 0.0, 1.0)
 		var alpha = min(life_alpha, grow_alpha)
@@ -54477,18 +54925,32 @@ func _draw_weather_precipitation(camera: Vector2) -> void :
 
 
 func _draw_raindrops(camera: Vector2) -> void :
+	var draw_cap: int = _low_resource_cap(WEATHER_MAX_RAIN_DROPS, LOW_RESOURCE_RAIN_DROP_CAP)
+	var drawn: int = 0
 	for drop in raindrops:
+		if drawn >= draw_cap:
+			break
 		var ground = Vector2(drop["ground"])
 		var pos = Vector2(ground.x, ground.y - float(drop["height"])) - camera
+		if not _screen_point_in_view(pos, 120.0):
+			continue
+		drawn += 1
 		var streak = Vector2(float(drop["wind"]) * 0.055, float(drop["len"]))
 		draw_line(pos - streak * 0.5, pos + streak * 0.5, Color(0.78, 0.92, 1.0, 0.56), float(drop["size"]))
 		draw_line(pos + streak * 0.12, pos + streak * 0.34, Color(1.0, 1.0, 1.0, 0.34), max(1.0, float(drop["size"]) * 0.55))
 
 
 func _draw_rain_splashes(camera: Vector2) -> void :
+	var draw_cap: int = 16 if _memory_saver_active() else (26 if _runtime_visual_budget_active() else 90)
+	var drawn: int = 0
 	for splash in rain_splashes:
+		if drawn >= draw_cap:
+			break
 		var alpha = clamp(float(splash["life"]) / max(0.01, float(splash["max_life"])), 0.0, 1.0)
 		var center = Vector2(splash["pos"]) - camera
+		if not _screen_point_in_view(center, 96.0):
+			continue
+		drawn += 1
 		var radius = float(splash["radius"]) * (1.0 + (1.0 - alpha) * 1.4)
 		draw_set_transform(center, 0.0, Vector2(1.0, 0.36))
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, Color(0.86, 0.96, 1.0, 0.42 * alpha), 1.2)
@@ -54498,8 +54960,15 @@ func _draw_rain_splashes(camera: Vector2) -> void :
 
 
 func _draw_snowflakes(camera: Vector2) -> void :
+	var draw_cap: int = _low_resource_cap(WEATHER_MAX_SNOW_FLAKES, LOW_RESOURCE_SNOW_FLAKE_CAP)
+	var drawn: int = 0
 	for flake in snowflakes:
+		if drawn >= draw_cap:
+			break
 		var pos = Vector2(flake["pos"]) - camera
+		if not _screen_point_in_view(pos, 120.0):
+			continue
+		drawn += 1
 		var size = float(flake["size"])
 		var alpha = clamp(float(flake["life"]) / 2.0, 0.18, 0.82)
 		draw_circle(pos, size, Color(0.88, 0.96, 1.0, alpha))
@@ -55913,23 +56382,38 @@ func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void :
 func _net_player_texture() -> Texture2D:
 	var key: = "player_idle"
 	var fallback: = "player_idle"
+	var skin_anim: = "idle"
 	match net_player_anim_state:
 		NET_ANIM_FROZEN:
 			key = "player_frozen"
+			skin_anim = ""
 		NET_ANIM_UP:
 			key = "player_up"
+			skin_anim = "up"
 		NET_ANIM_DOWN:
 			key = "player_down"
+			skin_anim = "down"
 		NET_ANIM_RIGHT:
 			key = "player_right"
+			skin_anim = "right"
 		NET_ANIM_FIRE:
 			key = "player_fire"
+			skin_anim = ""
 		NET_ANIM_DAMAGE:
 			key = "player_damage"
+			skin_anim = ""
 		NET_ANIM_LACERANTE:
 			key = "player_lacerar"
+			skin_anim = ""
 		_:
 			fallback = "player_fire"
+	if skin_anim != "":
+		var skin_key: = _manifestation_index_skin_key(net_player_manifestation)
+		if skin_key != "":
+			var candidate: = "player_skin_%s_%s" % [skin_key, skin_anim]
+			var candidate_frames: Array = textures.get(candidate, [])
+			if not candidate_frames.is_empty():
+				key = candidate
 	var frames: Array = textures.get(key, [])
 	if frames.is_empty():
 		frames = textures.get(fallback, [])
@@ -56007,7 +56491,7 @@ func _draw_remote_player_state(camera: Vector2, peer_id: int, state: Dictionary)
 	_draw_centered(String(state.get("name", "Player %d" % peer_id)), p + Vector2(0, -58), 12, accent)
 	_draw_ally_health_bar(p + Vector2(0, -44), 62.0, _remote_player_health_ratio(state), accent)
 	_draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], p + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
-	var tex: = _net_player_texture_for_state(anim_state, frame_idx)
+	var tex: = _net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)))
 
 	var rotation = 0.0
 	var move: = Vector2(state.get("move", Vector2.ZERO)).normalized()
@@ -56046,16 +56530,38 @@ func _draw_ally_health_bar(center: Vector2, width: float, ratio: float, accent: 
 	draw_rect(Rect2(pos, Vector2(width, height)), Color(accent.r, accent.g, accent.b, 0.82), false, 1.2)
 
 
-func _net_player_texture_for_state(anim_state: int, frame_idx: int) -> Texture2D:
+func _net_player_texture_for_state(anim_state: int, frame_idx: int, manifestation_index: int = -1) -> Texture2D:
 	var key: = "player_idle"
+	var skin_anim: = "idle"
 	match anim_state:
-		NET_ANIM_FROZEN: key = "player_frozen"
-		NET_ANIM_UP: key = "player_up"
-		NET_ANIM_DOWN: key = "player_down"
-		NET_ANIM_RIGHT: key = "player_right"
-		NET_ANIM_FIRE: key = "player_fire"
-		NET_ANIM_DAMAGE: key = "player_damage"
-		NET_ANIM_LACERANTE: key = "player_lacerar"
+		NET_ANIM_FROZEN:
+			key = "player_frozen"
+			skin_anim = ""
+		NET_ANIM_UP:
+			key = "player_up"
+			skin_anim = "up"
+		NET_ANIM_DOWN:
+			key = "player_down"
+			skin_anim = "down"
+		NET_ANIM_RIGHT:
+			key = "player_right"
+			skin_anim = "right"
+		NET_ANIM_FIRE:
+			key = "player_fire"
+			skin_anim = ""
+		NET_ANIM_DAMAGE:
+			key = "player_damage"
+			skin_anim = ""
+		NET_ANIM_LACERANTE:
+			key = "player_lacerar"
+			skin_anim = ""
+	if skin_anim != "" and manifestation_index >= 0:
+		var skin_key: = _manifestation_index_skin_key(manifestation_index)
+		if skin_key != "":
+			var candidate: = "player_skin_%s_%s" % [skin_key, skin_anim]
+			var candidate_frames: Array = textures.get(candidate, [])
+			if not candidate_frames.is_empty():
+				key = candidate
 	var frames: Array = textures.get(key, [])
 	if frames.is_empty():
 		frames = textures.get("player_idle", [])

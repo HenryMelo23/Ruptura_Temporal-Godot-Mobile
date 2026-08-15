@@ -1,0 +1,60 @@
+{
+  "skin_key": "lacerante",
+  "source": "C:\\Users\\luish\\Downloads\\Skins\\Lacerante.png",
+  "frames": {
+    "idle_01": "idle_01.png",
+    "idle_02": "idle_02.png",
+    "side_01": "side_01.png",
+    "side_02": "side_02.png",
+    "side_02_repeat_unused": "side_02_repeat_unused.png",
+    "front_01": "front_01.png",
+    "back_01": "back_01.png"
+  },
+  "ignored_runtime_frames": [
+    "side_02_repeat_unused"
+  ],
+  "boxes": [
+    {
+      "left": 46,
+      "top": 32,
+      "right": 399,
+      "bottom": 437
+    },
+    {
+      "left": 414,
+      "top": 32,
+      "right": 761,
+      "bottom": 437
+    },
+    {
+      "left": 783,
+      "top": 66,
+      "right": 1136,
+      "bottom": 434
+    },
+    {
+      "left": 1145,
+      "top": 67,
+      "right": 1526,
+      "bottom": 428
+    },
+    {
+      "left": 26,
+      "top": 532,
+      "right": 391,
+      "bottom": 889
+    },
+    {
+      "left": 447,
+      "top": 509,
+      "right": 742,
+      "bottom": 916
+    },
+    {
+      "left": 807,
+      "top": 536,
+      "right": 1108,
+      "bottom": 902
+    }
+  ]
+}

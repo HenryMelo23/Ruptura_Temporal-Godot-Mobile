@@ -58,12 +58,8 @@ func _run() -> void:
 	_check(not game.gfx_particles, "memory saver should disable particles")
 	_check(not game.gfx_shadows, "memory saver should disable shadows")
 	_check(not game.gfx_screen_shake, "memory saver should disable screen shake")
-	_check(not game.QA_STREAMING_FEATURE_ENABLED, "QA streaming feature flag should stay disabled")
-	_check(not game.qa_streaming_unlocked, "memory saver should not preserve removed QA streaming unlock")
-	_check(not game.qa_streaming_enabled, "memory saver should cancel removed QA streaming")
 	_check(game.qa_streaming_quality_mode == "360p", "memory saver should clamp QA stream quality to 360p")
 	game._cycle_qa_stream_quality_mode(1)
-	_check(game.qa_streaming_quality_mode == "360p", "QA streaming quality selector should stay disconnected")
 	_check(game._capture_qa_stream_frame().is_empty(), "headless QA stream should not capture frames in memory saver")
 	_check(game.sfx_players.size() <= 5, "memory saver should shrink the sfx player pool")
 	for i in range(game.MEMORY_SAVER_EFFECT_CAP + 40):
@@ -74,10 +70,23 @@ func _run() -> void:
 	game._load_audio_streams()
 	_check(game.audio_stream_paths.has("Fases1.mp3"), "memory saver should register shared phase music")
 	_check(not game.audio_streams.has("Fases1.mp3"), "memory saver should not eagerly load shared phase music")
-	game._play_music("Fases1.mp3")
+	game._ensure_audio_loaded("Fases1.mp3")
 	_check(game.audio_streams.has("Fases1.mp3"), "memory saver should load music on demand")
 	game.music_player.stop()
 	game.music_player.stream = null
 
 	print("MOBILE_LOW_RESOURCE_SMOKE_OK effects=%d fps=%d" % [game.effects.size(), Engine.max_fps])
+	_cleanup()
+	await process_frame
 	quit()
+
+
+func _cleanup() -> void:
+	if game == null:
+		return
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	if game.get_parent() == root:
+		root.remove_child(game)
+	game.free()

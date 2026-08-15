@@ -1,0 +1,60 @@
+{
+  "skin_key": "gravitante",
+  "source": "C:\\Users\\luish\\Downloads\\Skins\\Gravitante.png",
+  "frames": {
+    "idle_01": "idle_01.png",
+    "idle_02": "idle_02.png",
+    "side_01": "side_01.png",
+    "side_02": "side_02.png",
+    "side_02_repeat_unused": "side_02_repeat_unused.png",
+    "front_01": "front_01.png",
+    "back_01": "back_01.png"
+  },
+  "ignored_runtime_frames": [
+    "side_02_repeat_unused"
+  ],
+  "boxes": [
+    {
+      "left": 81,
+      "top": 23,
+      "right": 361,
+      "bottom": 433
+    },
+    {
+      "left": 479,
+      "top": 23,
+      "right": 756,
+      "bottom": 433
+    },
+    {
+      "left": 873,
+      "top": 23,
+      "right": 1163,
+      "bottom": 433
+    },
+    {
+      "left": 1274,
+      "top": 23,
+      "right": 1565,
+      "bottom": 425
+    },
+    {
+      "left": 75,
+      "top": 480,
+      "right": 344,
+      "bottom": 893
+    },
+    {
+      "left": 489,
+      "top": 475,
+      "right": 747,
+      "bottom": 896
+    },
+    {
+      "left": 887,
+      "top": 473,
+      "right": 1137,
+      "bottom": 896
+    }
+  ]
+}

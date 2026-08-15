@@ -1,0 +1,60 @@
+{
+  "skin_key": "ancorada",
+  "source": "C:\\Users\\luish\\Downloads\\Skins\\Ancorada.png",
+  "frames": {
+    "idle_01": "idle_01.png",
+    "idle_02": "idle_02.png",
+    "side_01": "side_01.png",
+    "side_02": "side_02.png",
+    "side_02_repeat_unused": "side_02_repeat_unused.png",
+    "front_01": "front_01.png",
+    "back_01": "back_01.png"
+  },
+  "ignored_runtime_frames": [
+    "side_02_repeat_unused"
+  ],
+  "boxes": [
+    {
+      "left": 96,
+      "top": 8,
+      "right": 342,
+      "bottom": 448
+    },
+    {
+      "left": 492,
+      "top": 11,
+      "right": 736,
+      "bottom": 448
+    },
+    {
+      "left": 886,
+      "top": 10,
+      "right": 1158,
+      "bottom": 448
+    },
+    {
+      "left": 1286,
+      "top": 12,
+      "right": 1569,
+      "bottom": 433
+    },
+    {
+      "left": 82,
+      "top": 477,
+      "right": 342,
+      "bottom": 909
+    },
+    {
+      "left": 510,
+      "top": 483,
+      "right": 716,
+      "bottom": 914
+    },
+    {
+      "left": 919,
+      "top": 480,
+      "right": 1110,
+      "bottom": 912
+    }
+  ]
+}

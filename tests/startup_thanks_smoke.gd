@@ -21,7 +21,7 @@ func _run() -> void:
 	_force_startup_teaser_for_test()
 	_check(game._startup_thanks_frame_exists(1), "first teaser frame missing")
 	_check(game._startup_thanks_frame_exists(game.STARTUP_THANKS_FRAME_COUNT), "last teaser frame missing")
-	_check(FileAccess.file_exists(game.STARTUP_THANKS_AUDIO_PATH), "teaser audio file missing")
+	_check(game._resource_or_file_exists(game.STARTUP_THANKS_AUDIO_PATH), "teaser audio file missing")
 	_check(game.startup_thanks_frame_view != null, "teaser frame view was not created")
 	_check(game.startup_thanks_teaser_available, "teaser frame player was not loaded")
 	_check(game._startup_thanks_active(), "startup teaser should start active")
@@ -102,7 +102,7 @@ func _force_startup_teaser_for_test() -> void:
 	game.startup_thanks_fading = false
 	game.startup_thanks_timer = 0.0
 	game.startup_thanks_frame_index = 1
-	game.startup_thanks_teaser_available = FileAccess.file_exists(game.STARTUP_THANKS_AUDIO_PATH) and game._startup_thanks_frame_exists(1)
+	game.startup_thanks_teaser_available = game._resource_or_file_exists(game.STARTUP_THANKS_AUDIO_PATH) and game._startup_thanks_frame_exists(1)
 	if game.startup_thanks_frame_view != null:
 		game.startup_thanks_frame_view.visible = true
 		game.startup_thanks_frame_view.texture = game._get_startup_thanks_frame_texture(1)

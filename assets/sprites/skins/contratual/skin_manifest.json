@@ -1,0 +1,60 @@
+{
+  "skin_key": "contratual",
+  "source": "C:\\Users\\luish\\Downloads\\Skins\\Contratual.png",
+  "frames": {
+    "idle_01": "idle_01.png",
+    "idle_02": "idle_02.png",
+    "side_01": "side_01.png",
+    "side_02": "side_02.png",
+    "side_02_repeat_unused": "side_02_repeat_unused.png",
+    "front_01": "front_01.png",
+    "back_01": "back_01.png"
+  },
+  "ignored_runtime_frames": [
+    "side_02_repeat_unused"
+  ],
+  "boxes": [
+    {
+      "left": 120,
+      "top": 32,
+      "right": 334,
+      "bottom": 440
+    },
+    {
+      "left": 520,
+      "top": 32,
+      "right": 734,
+      "bottom": 440
+    },
+    {
+      "left": 924,
+      "top": 33,
+      "right": 1138,
+      "bottom": 431
+    },
+    {
+      "left": 1295,
+      "top": 36,
+      "right": 1552,
+      "bottom": 431
+    },
+    {
+      "left": 79,
+      "top": 491,
+      "right": 330,
+      "bottom": 884
+    },
+    {
+      "left": 532,
+      "top": 483,
+      "right": 711,
+      "bottom": 893
+    },
+    {
+      "left": 924,
+      "top": 483,
+      "right": 1102,
+      "bottom": 885
+    }
+  ]
+}

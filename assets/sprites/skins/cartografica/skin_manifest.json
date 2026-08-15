@@ -1,0 +1,60 @@
+{
+  "skin_key": "cartografica",
+  "source": "C:\\Users\\luish\\Downloads\\Skins\\Cartografica.png",
+  "frames": {
+    "idle_01": "idle_01.png",
+    "idle_02": "idle_02.png",
+    "side_01": "side_01.png",
+    "side_02": "side_02.png",
+    "side_02_repeat_unused": "side_02_repeat_unused.png",
+    "front_01": "front_01.png",
+    "back_01": "back_01.png"
+  },
+  "ignored_runtime_frames": [
+    "side_02_repeat_unused"
+  ],
+  "boxes": [
+    {
+      "left": 78,
+      "top": 22,
+      "right": 376,
+      "bottom": 437
+    },
+    {
+      "left": 491,
+      "top": 22,
+      "right": 787,
+      "bottom": 437
+    },
+    {
+      "left": 876,
+      "top": 28,
+      "right": 1203,
+      "bottom": 437
+    },
+    {
+      "left": 1274,
+      "top": 28,
+      "right": 1615,
+      "bottom": 430
+    },
+    {
+      "left": 77,
+      "top": 471,
+      "right": 388,
+      "bottom": 897
+    },
+    {
+      "left": 483,
+      "top": 475,
+      "right": 774,
+      "bottom": 904
+    },
+    {
+      "left": 871,
+      "top": 482,
+      "right": 1134,
+      "bottom": 901
+    }
+  ]
+}

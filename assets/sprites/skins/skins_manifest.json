@@ -1,0 +1,782 @@
+{
+  "acorrentada": {
+    "skin_key": "acorrentada",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Acorrentada.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 61,
+        "top": 18,
+        "right": 316,
+        "bottom": 406
+      },
+      {
+        "left": 472,
+        "top": 18,
+        "right": 719,
+        "bottom": 406
+      },
+      {
+        "left": 839,
+        "top": 15,
+        "right": 1122,
+        "bottom": 411
+      },
+      {
+        "left": 1263,
+        "top": 15,
+        "right": 1560,
+        "bottom": 400
+      },
+      {
+        "left": 48,
+        "top": 465,
+        "right": 324,
+        "bottom": 866
+      },
+      {
+        "left": 488,
+        "top": 465,
+        "right": 716,
+        "bottom": 871
+      },
+      {
+        "left": 883,
+        "top": 462,
+        "right": 1113,
+        "bottom": 871
+      }
+    ]
+  },
+  "ancorada": {
+    "skin_key": "ancorada",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Ancorada.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 96,
+        "top": 8,
+        "right": 342,
+        "bottom": 448
+      },
+      {
+        "left": 492,
+        "top": 11,
+        "right": 736,
+        "bottom": 448
+      },
+      {
+        "left": 886,
+        "top": 10,
+        "right": 1158,
+        "bottom": 448
+      },
+      {
+        "left": 1286,
+        "top": 12,
+        "right": 1569,
+        "bottom": 433
+      },
+      {
+        "left": 82,
+        "top": 477,
+        "right": 342,
+        "bottom": 909
+      },
+      {
+        "left": 510,
+        "top": 483,
+        "right": 716,
+        "bottom": 914
+      },
+      {
+        "left": 919,
+        "top": 480,
+        "right": 1110,
+        "bottom": 912
+      }
+    ]
+  },
+  "bombastica": {
+    "skin_key": "bombastica",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Bombastica.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 94,
+        "top": 23,
+        "right": 352,
+        "bottom": 432
+      },
+      {
+        "left": 493,
+        "top": 23,
+        "right": 742,
+        "bottom": 432
+      },
+      {
+        "left": 893,
+        "top": 33,
+        "right": 1165,
+        "bottom": 431
+      },
+      {
+        "left": 1297,
+        "top": 41,
+        "right": 1578,
+        "bottom": 421
+      },
+      {
+        "left": 68,
+        "top": 484,
+        "right": 347,
+        "bottom": 875
+      },
+      {
+        "left": 502,
+        "top": 467,
+        "right": 741,
+        "bottom": 894
+      },
+      {
+        "left": 897,
+        "top": 474,
+        "right": 1152,
+        "bottom": 894
+      }
+    ]
+  },
+  "cartografica": {
+    "skin_key": "cartografica",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Cartografica.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 78,
+        "top": 22,
+        "right": 376,
+        "bottom": 437
+      },
+      {
+        "left": 491,
+        "top": 22,
+        "right": 787,
+        "bottom": 437
+      },
+      {
+        "left": 876,
+        "top": 28,
+        "right": 1203,
+        "bottom": 437
+      },
+      {
+        "left": 1274,
+        "top": 28,
+        "right": 1615,
+        "bottom": 430
+      },
+      {
+        "left": 77,
+        "top": 471,
+        "right": 388,
+        "bottom": 897
+      },
+      {
+        "left": 483,
+        "top": 475,
+        "right": 774,
+        "bottom": 904
+      },
+      {
+        "left": 871,
+        "top": 482,
+        "right": 1134,
+        "bottom": 901
+      }
+    ]
+  },
+  "contratual": {
+    "skin_key": "contratual",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Contratual.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 120,
+        "top": 32,
+        "right": 334,
+        "bottom": 440
+      },
+      {
+        "left": 520,
+        "top": 32,
+        "right": 734,
+        "bottom": 440
+      },
+      {
+        "left": 924,
+        "top": 33,
+        "right": 1138,
+        "bottom": 431
+      },
+      {
+        "left": 1295,
+        "top": 36,
+        "right": 1552,
+        "bottom": 431
+      },
+      {
+        "left": 79,
+        "top": 491,
+        "right": 330,
+        "bottom": 884
+      },
+      {
+        "left": 532,
+        "top": 483,
+        "right": 711,
+        "bottom": 893
+      },
+      {
+        "left": 924,
+        "top": 483,
+        "right": 1102,
+        "bottom": 885
+      }
+    ]
+  },
+  "eclipsada_lua": {
+    "skin_key": "eclipsada_lua",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Eclipsada-Lua.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 93,
+        "top": 30,
+        "right": 356,
+        "bottom": 424
+      },
+      {
+        "left": 493,
+        "top": 30,
+        "right": 758,
+        "bottom": 424
+      },
+      {
+        "left": 869,
+        "top": 30,
+        "right": 1166,
+        "bottom": 430
+      },
+      {
+        "left": 1234,
+        "top": 30,
+        "right": 1576,
+        "bottom": 400
+      },
+      {
+        "left": 53,
+        "top": 483,
+        "right": 343,
+        "bottom": 868
+      },
+      {
+        "left": 483,
+        "top": 483,
+        "right": 755,
+        "bottom": 881
+      },
+      {
+        "left": 907,
+        "top": 477,
+        "right": 1159,
+        "bottom": 875
+      }
+    ]
+  },
+  "eclipsada_sol": {
+    "skin_key": "eclipsada_sol",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Eclipsada-Sol.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 76,
+        "top": 33,
+        "right": 330,
+        "bottom": 401
+      },
+      {
+        "left": 470,
+        "top": 32,
+        "right": 725,
+        "bottom": 401
+      },
+      {
+        "left": 835,
+        "top": 31,
+        "right": 1130,
+        "bottom": 409
+      },
+      {
+        "left": 1221,
+        "top": 31,
+        "right": 1550,
+        "bottom": 382
+      },
+      {
+        "left": 57,
+        "top": 460,
+        "right": 341,
+        "bottom": 825
+      },
+      {
+        "left": 460,
+        "top": 460,
+        "right": 725,
+        "bottom": 837
+      },
+      {
+        "left": 871,
+        "top": 460,
+        "right": 1109,
+        "bottom": 837
+      }
+    ]
+  },
+  "gravitante": {
+    "skin_key": "gravitante",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Gravitante.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 81,
+        "top": 23,
+        "right": 361,
+        "bottom": 433
+      },
+      {
+        "left": 479,
+        "top": 23,
+        "right": 756,
+        "bottom": 433
+      },
+      {
+        "left": 873,
+        "top": 23,
+        "right": 1163,
+        "bottom": 433
+      },
+      {
+        "left": 1274,
+        "top": 23,
+        "right": 1565,
+        "bottom": 425
+      },
+      {
+        "left": 75,
+        "top": 480,
+        "right": 344,
+        "bottom": 893
+      },
+      {
+        "left": 489,
+        "top": 475,
+        "right": 747,
+        "bottom": 896
+      },
+      {
+        "left": 887,
+        "top": 473,
+        "right": 1137,
+        "bottom": 896
+      }
+    ]
+  },
+  "lacerante": {
+    "skin_key": "lacerante",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Lacerante.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 46,
+        "top": 32,
+        "right": 399,
+        "bottom": 437
+      },
+      {
+        "left": 414,
+        "top": 32,
+        "right": 761,
+        "bottom": 437
+      },
+      {
+        "left": 783,
+        "top": 66,
+        "right": 1136,
+        "bottom": 434
+      },
+      {
+        "left": 1145,
+        "top": 67,
+        "right": 1526,
+        "bottom": 428
+      },
+      {
+        "left": 26,
+        "top": 532,
+        "right": 391,
+        "bottom": 889
+      },
+      {
+        "left": 447,
+        "top": 509,
+        "right": 742,
+        "bottom": 916
+      },
+      {
+        "left": 807,
+        "top": 536,
+        "right": 1108,
+        "bottom": 902
+      }
+    ]
+  },
+  "necronada": {
+    "skin_key": "necronada",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Necronada.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 93,
+        "top": 40,
+        "right": 357,
+        "bottom": 453
+      },
+      {
+        "left": 490,
+        "top": 36,
+        "right": 749,
+        "bottom": 453
+      },
+      {
+        "left": 878,
+        "top": 36,
+        "right": 1141,
+        "bottom": 453
+      },
+      {
+        "left": 1278,
+        "top": 36,
+        "right": 1564,
+        "bottom": 437
+      },
+      {
+        "left": 85,
+        "top": 505,
+        "right": 343,
+        "bottom": 918
+      },
+      {
+        "left": 501,
+        "top": 497,
+        "right": 735,
+        "bottom": 924
+      },
+      {
+        "left": 902,
+        "top": 501,
+        "right": 1129,
+        "bottom": 924
+      }
+    ]
+  },
+  "parasitica": {
+    "skin_key": "parasitica",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Parasitica.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 59,
+        "top": 21,
+        "right": 368,
+        "bottom": 510
+      },
+      {
+        "left": 434,
+        "top": 21,
+        "right": 739,
+        "bottom": 510
+      },
+      {
+        "left": 837,
+        "top": 33,
+        "right": 1136,
+        "bottom": 461
+      },
+      {
+        "left": 1206,
+        "top": 39,
+        "right": 1570,
+        "bottom": 437
+      },
+      {
+        "left": 53,
+        "top": 515,
+        "right": 365,
+        "bottom": 928
+      },
+      {
+        "left": 469,
+        "top": 510,
+        "right": 721,
+        "bottom": 938
+      },
+      {
+        "left": 847,
+        "top": 510,
+        "right": 1086,
+        "bottom": 938
+      }
+    ]
+  },
+  "prismatica": {
+    "skin_key": "prismatica",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Prismatica.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 84,
+        "top": 32,
+        "right": 354,
+        "bottom": 439
+      },
+      {
+        "left": 473,
+        "top": 31,
+        "right": 736,
+        "bottom": 438
+      },
+      {
+        "left": 850,
+        "top": 31,
+        "right": 1110,
+        "bottom": 439
+      },
+      {
+        "left": 1236,
+        "top": 31,
+        "right": 1510,
+        "bottom": 423
+      },
+      {
+        "left": 80,
+        "top": 490,
+        "right": 334,
+        "bottom": 893
+      },
+      {
+        "left": 485,
+        "top": 484,
+        "right": 718,
+        "bottom": 900
+      },
+      {
+        "left": 868,
+        "top": 484,
+        "right": 1101,
+        "bottom": 899
+      }
+    ]
+  },
+  "ressonante": {
+    "skin_key": "ressonante",
+    "source": "C:\\Users\\luish\\Downloads\\Skins\\Ressonante.png",
+    "frames": {
+      "idle_01": "idle_01.png",
+      "idle_02": "idle_02.png",
+      "side_01": "side_01.png",
+      "side_02": "side_02.png",
+      "side_02_repeat_unused": "side_02_repeat_unused.png",
+      "front_01": "front_01.png",
+      "back_01": "back_01.png"
+    },
+    "ignored_runtime_frames": [
+      "side_02_repeat_unused"
+    ],
+    "boxes": [
+      {
+        "left": 75,
+        "top": 20,
+        "right": 351,
+        "bottom": 433
+      },
+      {
+        "left": 471,
+        "top": 20,
+        "right": 744,
+        "bottom": 433
+      },
+      {
+        "left": 867,
+        "top": 20,
+        "right": 1153,
+        "bottom": 435
+      },
+      {
+        "left": 1263,
+        "top": 20,
+        "right": 1552,
+        "bottom": 426
+      },
+      {
+        "left": 51,
+        "top": 483,
+        "right": 327,
+        "bottom": 888
+      },
+      {
+        "left": 482,
+        "top": 480,
+        "right": 726,
+        "bottom": 901
+      },
+      {
+        "left": 903,
+        "top": 480,
+        "right": 1134,
+        "bottom": 898
+      }
+    ]
+  }
+}
