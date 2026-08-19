@@ -125,7 +125,8 @@ func _run() -> void:
 	var shot := {"pos": Vector2(comet_after_bounce["pos"]), "origin": game.player_pos, "dir": Vector2.DOWN, "damage": 80.0, "kind": "bombastica", "source_category": "basic_attack", "hits": {}, "pierce": false}
 	_check(game._try_hit_bombastica_ultimate_with_bullet(shot), "Bombastica comet did not accept a grounded shot")
 	_check(float(comet_after_bounce.get("damage", 0.0)) > damage_before_shot, "Bombastica comet shot did not increase damage")
-	_check(Vector2(comet_after_bounce.get("dir", Vector2.RIGHT)).distance_to(Vector2.DOWN) < 0.01 and dir_before_shot.distance_to(Vector2.DOWN) > 0.01, "Bombastica comet shot did not redirect movement")
+	_check(Vector2(comet_after_bounce.get("dir", Vector2.RIGHT)).distance_to(Vector2.DOWN) < 0.20 and dir_before_shot.distance_to(Vector2.DOWN) > 0.01, "Bombastica comet shot did not redirect movement")
+	_check(int(comet_after_bounce.get("hit_count", 0)) == 1, "Bombastica comet shot did not increment hit_count")
 
 	game.bombastica_bombs.clear()
 	var chain_radius: float = game.BOMBASTICA_Q_RADIUS
@@ -147,6 +148,9 @@ func _run() -> void:
 	var details: Dictionary = game._manifestation_details("bombastica")
 	_check(String(details.get("habilidade", "")).contains("Triade"), "Bombastica details do not explain Q")
 	_check(String(details.get("traco", "")).contains("Bomba-Cometario"), "Bombastica details do not explain E comet bomb")
+	var info_rows: Array = details.get("info_rows", [])
+	var e_row: String = String(info_rows.filter(func(r): return String(r.get("label", "")) == "E").map(func(r): return String(r.get("text", "")))[0])
+	_check(not e_row.contains("minas"), "Bombastica E catalog info row still contains old minas text")
 	game._reset_advanced_manifestation_state()
 	_check(game.bombastica_bombs.is_empty(), "Bombastica reset did not clear bombs")
 	_check(game.bombastica_powder_marks.is_empty(), "Bombastica reset did not clear powder marks")

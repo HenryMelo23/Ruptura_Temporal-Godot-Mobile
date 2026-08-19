@@ -2049,6 +2049,10 @@ var phase_started_at: float = 0.0
 var selected_manifestation = 0
 var selected_aura = 1
 var aura_state: Dictionary = {}
+var rational_dilation_flash: float = 0.0
+var rational_trail_points: Array = []
+var rational_trail_sample_timer: float = 0.0
+var rational_rebound_active: bool = false
 var pause_selected = 0
 var multiplayer_menu_selected = 0
 var lobby_host_selected = 0
@@ -2825,9 +2829,6 @@ var boss6_necro_erosion_timer = 0.0
 var boss6_necro_erosion_duration = 10.0
 var boss6_necro_erosion_damage_timer = 0.0
 var insane_echo_visuals = []
-var rational_trail_points = []
-var rational_trail_sample_timer = 0.0
-var rational_dilation_flash = 0.0
 var boss3_faith = 50.0
 var boss3_stage = 1
 var boss3_stun_timer = 0.0
@@ -7451,6 +7452,13 @@ func _save_startup_video_config() -> void:
 		file.close()
 
 
+func reset_startup_video() -> void:
+	startup_thanks_skip_count = 0
+	startup_video_disabled = false
+	_save_startup_video_config()
+
+
+
 func _startup_thanks_frame_exists(index: int) -> bool:
 	return _resource_or_file_exists(STARTUP_THANKS_FRAME_PATH_FORMAT % index)
 
@@ -11413,6 +11421,21 @@ func _update_aura_visual_state(delta: float) -> void :
 		echo["life"] = float(echo.get("life", 0.0)) - delta
 		echo["phase"] = float(echo.get("phase", 0.0)) + delta
 	insane_echo_visuals = insane_echo_visuals.filter( func(echo): return float(echo.get("life", 0.0)) > 0.0)
+
+	if String(aura_state.get("name", "")) == "Racional":
+		var rebound: float = float(aura_state.get("rational_rebound", 0.0))
+		var dilation: float = float(aura_state.get("rational_dilation", 0.0))
+		if rebound > 0.0 and dilation <= 0.0:
+			if not rational_rebound_active:
+				rational_rebound_active = true
+				screen_shake_timer = maxf(screen_shake_timer, 0.16)
+				screen_shake_strength = maxf(screen_shake_strength, 5.0)
+				_spawn_radial_particles(player_pos, Color(1.0, 0.52, 0.12), 24)
+				_play_sfx("Bomba-Bombastica.mp3", 0.05, 1.25, 1.45)
+				_add_text("REBOTE TEMPORAL (1.18x)", player_pos + Vector2(0, -92), Color(1.0, 0.52, 0.12), 1.0, 20)
+		else:
+			rational_rebound_active = false
+
 	if String(aura_state.get("name", "")) != "Racional" or float(aura_state.get("rational_dilation", 0.0)) <= 0.0:
 		return
 	rational_trail_sample_timer -= delta
@@ -11421,6 +11444,26 @@ func _update_aura_visual_state(delta: float) -> void :
 		rational_trail_points.append({"pos": player_pos, "life": RATIONAL_TRAIL_LIFE, "max": RATIONAL_TRAIL_LIFE, "phase": time_alive})
 		if rational_trail_points.size() > 34:
 			rational_trail_points.pop_front()
+
+
+func _trigger_rational_dilation_fx() -> void :
+	rational_dilation_flash = 0.55
+	screen_shake_timer = maxf(screen_shake_timer, 0.22)
+	screen_shake_strength = maxf(screen_shake_strength, 7.5)
+	_vibrate(85, 0.38)
+	_spawn_radial_particles(player_pos, Color(0.18, 0.88, 1.0), 32)
+	_spawn_radial_particles(player_pos, Color(1.0, 0.88, 0.32), 16)
+	_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.65, 0.85)
+	for i in range(16):
+		effects.append({
+			"text": "", 
+			"pos": player_pos + Vector2.from_angle(i * TAU / 16.0) * rng.randf_range(12.0, 42.0), 
+			"life": rng.randf_range(0.18, 0.34), 
+			"max": 0.34, 
+			"color": Color(0.28, 0.86, 1.0, 0.95), 
+			"size": rng.randi_range(3, 6), 
+			"vel": Vector2.from_angle(i * TAU / 16.0) * rng.randf_range(120.0, 260.0)
+		})
 
 
 func _update_voracious_contact(delta: float) -> void :
@@ -11483,10 +11526,14 @@ func _apply_aura_events(events: Array) -> void :
 			"score":
 				var amount: = int(event.get("amount", 0))
 				_apply_score_delta(amount)
-				_add_text(String(event.get("text", "+%d" % amount)), player_pos + Vector2(0, -98), _aura_color(), 1.0, 19)
+				var score_text: String = String(event.get("text", "+%d" % amount))
+				if String(aura_state.get("name", "")) == "Racional" and score_text.begins_with("ANALISE"):
+					_spawn_radial_particles(player_pos, Color(0.18, 0.88, 1.0), 22)
+					_play_sfx("Mina-Bombastica.mp3", 0.05, 1.15, 1.35)
+				_add_text(score_text, player_pos + Vector2(0, -98), _aura_color(), 1.0, 19)
 			"text":
 				var text: = String(event.get("text", "AUREA"))
-				if String(aura_state.get("name", "")) == "Racional" and text == "DILATACAO":
+				if String(aura_state.get("name", "")) == "Racional" and text.contains("DILATACAO"):
 					_trigger_rational_dilation_fx()
 				_add_text(text, player_pos + Vector2(0, -98), _aura_color(), 1.0, 19)
 			"heal_lost":
@@ -11551,22 +11598,6 @@ func _spawn_insane_echo_visual(pos: Vector2, direction: Vector2) -> void :
 	if insane_echo_visuals.size() > 10:
 		insane_echo_visuals.pop_front()
 
-
-func _trigger_rational_dilation_fx() -> void :
-	rational_dilation_flash = 0.55
-	screen_shake_timer = maxf(screen_shake_timer, 0.16)
-	screen_shake_strength = maxf(screen_shake_strength, 5.5)
-	_vibrate(85, 0.38)
-	for i in range(16):
-		effects.append({
-			"text": "", 
-			"pos": player_pos + Vector2.from_angle(i * TAU / 16.0) * rng.randf_range(12.0, 42.0), 
-			"life": rng.randf_range(0.18, 0.34), 
-			"max": 0.34, 
-			"color": Color(0.28, 0.86, 1.0, 0.95), 
-			"size": rng.randi_range(3, 6), 
-			"vel": Vector2.from_angle(i * TAU / 16.0) * rng.randf_range(120.0, 260.0)
-		})
 
 
 func _read_move() -> Vector2:
@@ -14942,6 +14973,13 @@ func _spawn_secondary_bombastica(target_world = null) -> void :
 		"damage": player_damage * BOMBASTICA_ULTIMATE_DAMAGE_MULT * skill_power,
 		"bounce_phase": 0.0,
 		"grounded_timer": 0.0,
+		"hit_count": 0,
+		"spin_angle": 0.0,
+		"spin_vel": 0.0,
+		"squash_x": 1.0,
+		"squash_y": 1.0,
+		"flash_timer": 0.0,
+		"trail_history": [],
 		"exploded": false
 	}
 	bombastica_bombs.append(comet)
@@ -15012,14 +15050,43 @@ func _update_bombastica_ultimate_bomb(bomb: Dictionary, delta: float) -> void:
 	var pos: Vector2 = Vector2(bomb.get("pos", player_pos)) + dir * speed * delta
 	bomb["pos"] = pos.clamp(Vector2(110, 110), WORLD_SIZE - Vector2(110, 110))
 	bomb["grounded_timer"] = maxf(0.0, float(bomb.get("grounded_timer", 0.0)) - delta)
+	bomb["flash_timer"] = maxf(0.0, float(bomb.get("flash_timer", 0.0)) - delta)
+
+	var spin_vel: float = float(bomb.get("spin_vel", 0.0)) * exp(- delta * 6.0)
+	bomb["spin_vel"] = spin_vel
+	bomb["spin_angle"] = fmod(float(bomb.get("spin_angle", 0.0)) + (spin_vel + 2.5) * delta, TAU)
+
+	var trails: Array = bomb.get("trail_history", [])
+	trails.append({"pos": Vector2(bomb["pos"]), "dir": dir, "life": 0.42})
+	if trails.size() > 14:
+		trails.pop_front()
+	for t in trails:
+		t["life"] = maxf(0.0, float(t.get("life", 0.0)) - delta)
+	bomb["trail_history"] = trails.filter(func(t): return float(t.get("life", 0.0)) > 0.0)
+
 	var bounce_phase: float = float(bomb.get("bounce_phase", 0.0)) + delta
-	if bounce_phase >= BOMBASTICA_ULTIMATE_BOUNCE_PERIOD:
-		bounce_phase = fmod(bounce_phase, BOMBASTICA_ULTIMATE_BOUNCE_PERIOD)
+	var bounce_period: float = BOMBASTICA_ULTIMATE_BOUNCE_PERIOD
+	var time_to_bounce: float = bounce_period - bounce_phase
+
+	if bounce_phase >= bounce_period:
+		bounce_phase = fmod(bounce_phase, bounce_period)
 		bomb["grounded_timer"] = BOMBASTICA_ULTIMATE_GROUNDED_WINDOW
 		var dmg: float = float(bomb.get("damage", player_damage))
 		var rad: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
+		bomb["squash_y"] = 1.35
+		bomb["squash_x"] = 0.75
+		_spawn_radial_particles(Vector2(bomb["pos"]), Color(1.0, 0.55, 0.1), 18)
+		_spawn_radial_particles(Vector2(bomb["pos"]), Color(0.2, 0.88, 1.0), 12)
 		_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.85, 1.05)
 		_apply_bombastica_explosion(Vector2(bomb["pos"]), rad, dmg, "bombastic_ultimate_bounce", false, 0, {})
+	elif time_to_bounce <= 0.15 and time_to_bounce > 0.0:
+		var compress_ratio: float = 1.0 - (time_to_bounce / 0.15)
+		bomb["squash_y"] = lerpf(1.0, 0.65, compress_ratio)
+		bomb["squash_x"] = lerpf(1.0, 1.30, compress_ratio)
+	else:
+		bomb["squash_y"] = lerpf(float(bomb.get("squash_y", 1.0)), 1.0, delta * 12.0)
+		bomb["squash_x"] = lerpf(float(bomb.get("squash_x", 1.0)), 1.0, delta * 12.0)
+
 	bomb["bounce_phase"] = bounce_phase
 	if float(bomb["life"]) <= 0.0:
 		bomb["exploded"] = true
@@ -15035,13 +15102,28 @@ func _try_hit_bombastica_ultimate_with_bullet(bullet: Dictionary) -> bool:
 		var bullet_pos: Vector2 = Vector2(bullet.get("pos", player_pos))
 		var rad: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
 		if bullet_pos.distance_to(comet_pos) <= rad * 0.5 or float(bomb.get("grounded_timer", 0.0)) > 0.0:
+			var shot_hits: int = int(bomb.get("hit_count", 0)) + 1
+			bomb["hit_count"] = shot_hits
+			bomb["flash_timer"] = 0.25
+			bomb["spin_vel"] = float(bomb.get("spin_vel", 0.0)) + 16.0
+
 			var shot_dmg: float = float(bullet.get("damage", 0.0))
 			bomb["damage"] = float(bomb.get("damage", player_damage)) + shot_dmg * BOMBASTICA_ULTIMATE_SHOT_DAMAGE_MULT
+
+			bomb["radius"] = minf(480.0, float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS)) + 14.0)
+			bomb["speed"] = minf(250.0, float(bomb.get("speed", BOMBASTICA_ULTIMATE_SPEED)) + 12.0)
+
 			var shot_dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT))
 			if shot_dir.length() > 0.01:
-				bomb["dir"] = shot_dir.normalized()
-			_spawn_radial_particles(comet_pos, Color(1.0, 0.8, 0.2), 12)
-			_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.95, 1.15)
+				var deflection: float = randf_range(-0.14, 0.14)
+				bomb["dir"] = shot_dir.rotated(deflection).normalized()
+
+			_spawn_radial_particles(comet_pos, Color(1.0, 0.62, 0.15), 18)
+			_spawn_radial_particles(comet_pos, Color(0.18, 0.88, 1.0), 12)
+			screen_shake_timer = maxf(screen_shake_timer, 0.14)
+			screen_shake_strength = maxf(screen_shake_strength, 6.0)
+			_play_sfx("Bomba-Bombastica.mp3", 0.05, 1.05, 1.25)
+			_add_text("+DANO! [x%d]" % shot_hits, comet_pos + Vector2(0, -42), Color(1.0, 0.68, 0.18), 0.75, 18)
 			return true
 	return false
 
@@ -15128,23 +15210,46 @@ func _apply_bombastica_explosion(center: Vector2, radius: float, damage: float, 
 	screen_shake_timer = maxf(screen_shake_timer, 0.12)
 	screen_shake_strength = maxf(screen_shake_strength, 5.0)
 	_spawn_bombastica_explosion_vfx(center, radius, source)
+	var is_comet_blast: bool = source.begins_with("bombastic_ultimate")
+
 	for enemy in enemies:
 		if float(enemy.get("hp", 0.0)) <= 0.0:
 			continue
-		if center.distance_to(Vector2(enemy["pos"])) <= radius + _enemy_radius(enemy) * 0.55:
+		var enemy_pos: Vector2 = Vector2(enemy["pos"])
+		if center.distance_to(enemy_pos) <= radius + _enemy_radius(enemy) * 0.55:
 			var uid: = int(enemy.get("uid", -1))
-			var total_damage: = damage * _bombastica_powder_bonus("enemy", uid)
+			var powder_mult: float = _bombastica_powder_bonus("enemy", uid)
+			var total_damage: = damage * powder_mult
 			_damage_enemy(enemy, total_damage, source, true, true, center, "manifestation_secondary")
-			_try_bombastica_ignition("enemy", uid, Vector2(enemy["pos"]))
-			var away: = (Vector2(enemy["pos"]) - center).normalized()
+			_try_bombastica_ignition("enemy", uid, enemy_pos)
+
+			# Powder Instável Extra Ignition Synergy for Bomba-Cometário
+			if is_comet_blast and powder_mult > 1.0:
+				_spawn_bombastica_explosion_vfx(enemy_pos, 75.0, "bombastic_powder_ignition")
+				_spawn_radial_particles(enemy_pos, Color(1.0, 0.5, 0.1), 14)
+				_spawn_radial_particles(enemy_pos, Color(0.18, 0.88, 1.0), 10)
+
+			var away: = (enemy_pos - center).normalized()
 			if away.length() > 0.01:
-				enemy["pos"] = (Vector2(enemy["pos"]) + away * 18.0).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+				enemy["pos"] = (enemy_pos + away * 18.0).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+
 	if boss_active and boss_hp > 0.0 and center.distance_to(boss_pos) <= radius + _boss_hit_radius() * 0.65:
-		_damage_boss(damage * _bombastica_powder_bonus("boss", -1), source, true, true, "manifestation_secondary", center)
+		var boss_mult: float = _bombastica_powder_bonus("boss", -1)
+		_damage_boss(damage * boss_mult, source, true, true, "manifestation_secondary", center)
 		_try_bombastica_ignition("boss", -1, boss_pos)
+		if is_comet_blast and boss_mult > 1.0:
+			_spawn_bombastica_explosion_vfx(boss_pos, 90.0, "bombastic_powder_ignition")
+			_spawn_radial_particles(boss_pos, Color(1.0, 0.5, 0.1), 18)
+			_spawn_radial_particles(boss_pos, Color(0.18, 0.88, 1.0), 12)
+
 	if _arauto_active() and center.distance_to(Vector2(arauto.get("pos", center))) <= radius + 68.0:
-		_damage_arauto(damage * _bombastica_powder_bonus("arauto", -2), source, true, true, "manifestation_secondary", center)
-		_try_bombastica_ignition("arauto", -2, Vector2(arauto.get("pos", center)))
+		var arauto_pos: Vector2 = Vector2(arauto.get("pos", center))
+		var arauto_mult: float = _bombastica_powder_bonus("arauto", -2)
+		_damage_arauto(damage * arauto_mult, source, true, true, "manifestation_secondary", center)
+		_try_bombastica_ignition("arauto", -2, arauto_pos)
+		if is_comet_blast and arauto_mult > 1.0:
+			_spawn_bombastica_explosion_vfx(arauto_pos, 85.0, "bombastic_powder_ignition")
+			_spawn_radial_particles(arauto_pos, Color(1.0, 0.5, 0.1), 16)
 
 
 func _spawn_bombastica_link(a: Vector2, b: Vector2, color: Color) -> void :
@@ -15204,7 +15309,7 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 			add_child(inst)
 			bombastica_explosion_pool.append(inst)
 		if inst and inst.has_method("play_at"):
-			var red_flashes: bool = bool(get("gfx_reduced_flashes")) if has_node("/root/Main") else false
+			var red_flashes: bool = (get("gfx_reduced_flashes") == true)
 			var red_motion: bool = not gfx_screen_shake
 			inst.play_at(center, scale_mult, quality, chain_depth, seed_val, red_flashes, red_motion)
 			
@@ -41193,40 +41298,97 @@ func _draw_remote_aura_world(camera: Vector2) -> void :
 func _draw_rational_aura_world(camera: Vector2, player_screen: Vector2, color: Color) -> void :
 	var viewport: = get_viewport_rect().size
 	var dilation: = float(aura_state.get("rational_dilation", 0.0))
+	var rebound: = float(aura_state.get("rational_rebound", 0.0))
+	var still: = float(aura_state.get("still", 0.0))
 	var ready: = float(aura_state.get("rational_cooldown", 0.0)) <= 0.0
+
+	# 1. Passiva Parada - Campo de Análise Analítica (Idle Observation Field & Charge Arc)
+	if still > 0.0:
+		var still_ratio: float = clampf(still / 4.5, 0.0, 1.0)
+		_draw_rational_analysis_field(player_screen, still_ratio, color)
+
+	# 2. Dilatação Temporal (Active Dilation - 8s)
 	if dilation > 0.0:
-		var flash: float = clamp(rational_dilation_flash / 0.55, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.02, 0.16, 0.38, 0.13 + flash * 0.14), true)
-		_draw_rational_border_bolts(viewport, color, 0.58 + flash * 0.34)
+		var flash: float = clampf(rational_dilation_flash / 0.55, 0.0, 1.0)
+		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.02, 0.22, 0.48, 0.16 + flash * 0.14), true)
+		_draw_rational_border_oscilloscope(viewport, color, 0.65 + flash * 0.35, false)
 		for i in range(6):
 			draw_arc(player_screen, 48.0 + i * 30.0 + sin(time_alive * 4.4 + i) * 6.0, - time_alive * (1.2 + i * 0.08), TAU - time_alive * (1.2 + i * 0.08), 72, Color(color.r, color.g, color.b, 0.2 - i * 0.018), 2.0)
+
+	# 3. Rebote Temporal (Active Rebound - 3s after dilation)
+	elif rebound > 0.0:
+		var rebound_pulse: float = 0.5 + 0.5 * sin(time_alive * 12.0)
+		var amber_color: Color = Color(1.0, 0.48, 0.08)
+		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.38, 0.14, 0.02, 0.12 + rebound_pulse * 0.08), true)
+		_draw_rational_border_oscilloscope(viewport, amber_color, 0.7 + rebound_pulse * 0.3, true)
+		_draw_rational_rebound_warning(player_screen, amber_color)
+
 	_draw_rational_trail(camera, color)
-	if ready:
+	if ready and dilation <= 0.0 and rebound <= 0.0:
 		_draw_rational_ready_sparks(player_screen, color)
 
 
-func _draw_rational_border_bolts(viewport: Vector2, color: Color, alpha: float) -> void :
-	var center: = viewport * 0.5
-	for i in range(18):
-		var edge: = i % 4
-		var t: = fmod(time_alive * (0.42 + i * 0.017) + i * 0.217, 1.0)
-		var from: = Vector2.ZERO
-		match edge:
-			0:
-				from = Vector2(t * viewport.x, 0.0)
-			1:
-				from = Vector2(viewport.x, t * viewport.y)
-			2:
-				from = Vector2((1.0 - t) * viewport.x, viewport.y)
-			_:
-				from = Vector2(0.0, (1.0 - t) * viewport.y)
-		var inward: = (center - from).normalized()
-		var len: = 34.0 + 22.0 * sin(time_alive * 13.0 + i)
-		var bend: = inward.rotated(sin(time_alive * 17.0 + i) * 0.22)
-		var mid: = from + bend * len
-		var tip: = from + inward * (len + 20.0)
-		draw_line(from, mid, Color(color.r, color.g, color.b, alpha * 0.72), 2.2)
-		draw_line(mid, tip, Color(0.72, 0.95, 1.0, alpha), 1.3)
+func _draw_rational_analysis_field(player_screen: Vector2, progress: float, color: Color) -> void :
+	# Concentric analytical circles
+	draw_arc(player_screen, 38.0, time_alive * 0.8, time_alive * 0.8 + TAU * 0.82, 48, Color(color.r, color.g, color.b, 0.45 * progress), 2.0)
+	draw_arc(player_screen, 58.0, - time_alive * 0.6, - time_alive * 0.6 + TAU * 0.7, 54, Color(0.18, 0.88, 1.0, 0.3 * progress), 1.6)
+	draw_arc(player_screen, 78.0, time_alive * 0.4, time_alive * 0.4 + TAU * 0.6, 60, Color(0.72, 0.95, 1.0, 0.2 * progress), 1.2)
+
+	# Clock ticks (12 notches)
+	for i in range(12):
+		var angle: float = float(i) * TAU / 12.0 + time_alive * 0.5
+		var p1: Vector2 = player_screen + Vector2.from_angle(angle) * 34.0
+		var p2: Vector2 = player_screen + Vector2.from_angle(angle) * 42.0
+		draw_line(p1, p2, Color(color.r, color.g, color.b, 0.55 * progress), 1.5)
+
+	# Digital crosshair scanning lines
+	var line_len: float = 85.0 * progress
+	draw_line(player_screen + Vector2(-line_len, 0), player_screen + Vector2(line_len, 0), Color(0.18, 0.88, 1.0, 0.22 * progress), 1.0)
+	draw_line(player_screen + Vector2(0, -line_len), player_screen + Vector2(0, line_len), Color(0.18, 0.88, 1.0, 0.22 * progress), 1.0)
+
+	# 360-degree radial charging arc & tip spark
+	var arc_end: float = - PI * 0.5 + progress * TAU
+	draw_arc(player_screen, 48.0, - PI * 0.5, arc_end, 52, Color(0.18, 0.88, 1.0, 0.88), 3.4)
+	var tip: Vector2 = player_screen + Vector2.from_angle(arc_end) * 48.0
+	draw_circle(tip, 4.0, Color(1.0, 0.95, 0.5, 0.95))
+
+	# Floating badge showing percentage
+	_draw_centered("ANÁLISE %d%%" % int(progress * 100.0), player_screen + Vector2(0, -62), 11, Color(0.2, 0.9, 1.0, 0.92))
+
+
+func _draw_rational_border_oscilloscope(viewport: Vector2, color: Color, alpha: float, is_rebound: bool) -> void :
+	var time_factor: float = 14.0 if is_rebound else 9.0
+
+	# Top and Bottom Oscilloscope Waveforms
+	for i in range(24):
+		var tx: float = float(i) / 24.0
+		var x: float = tx * viewport.x
+		var wave_t: float = sin(time_alive * time_factor + tx * 18.0) * (8.0 if is_rebound else 5.0)
+
+		draw_line(Vector2(x, 0.0), Vector2(x, 14.0 + wave_t), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
+		draw_line(Vector2(x, viewport.y), Vector2(x, viewport.y - 14.0 - wave_t), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
+
+	# Left and Right Oscilloscope Waveforms
+	for j in range(16):
+		var ty: float = float(j) / 16.0
+		var y: float = ty * viewport.y
+		var wave_l: float = cos(time_alive * time_factor + ty * 14.0) * (8.0 if is_rebound else 5.0)
+
+		draw_line(Vector2(0.0, y), Vector2(14.0 + wave_l, y), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
+		draw_line(Vector2(viewport.x, y), Vector2(viewport.x - 14.0 - wave_l, y), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
+
+	# Broken clock ticks along screen corners
+	for corner in [Vector2(24, 24), Vector2(viewport.x - 24, 24), Vector2(24, viewport.y - 24), Vector2(viewport.x - 24, viewport.y - 24)]:
+		draw_arc(corner, 18.0, time_alive * 3.0, time_alive * 3.0 + PI * 1.4, 16, Color(color.r, color.g, color.b, alpha * 0.7), 2.2)
+
+
+func _draw_rational_rebound_warning(player_screen: Vector2, color: Color) -> void :
+	var badge_y: float = - 64.0 + sin(time_alive * 10.0) * 3.0
+	var badge_center: Vector2 = player_screen + Vector2(0, badge_y)
+	var badge_rect: Rect2 = Rect2(badge_center - Vector2(70, 13), Vector2(140, 26))
+	draw_rect(badge_rect, Color(0.1, 0.04, 0.02, 0.88), true)
+	draw_rect(badge_rect, Color(color.r, color.g, color.b, 0.92), false, 2.0)
+	_draw_centered("REBOTE TEMPORAL", badge_center + Vector2(0, 4), 11, Color(1.0, 0.88, 0.52, 0.95))
 
 
 func _draw_rational_trail(camera: Vector2, color: Color) -> void :
@@ -42261,6 +42423,10 @@ func _draw_bombastica_world(camera: Vector2) -> void :
 	for bomb in bombastica_bombs:
 		if bool(bomb.get("exploded", false)):
 			continue
+		if String(bomb.get("kind", "")) == "ultimate_bomb":
+			_draw_bombastica_ultimate_bomb(bomb, camera)
+			continue
+
 		var p: = Vector2(bomb.get("pos", player_pos)) - camera
 		var state: = String(bomb.get("state", "armed"))
 		
@@ -42301,6 +42467,69 @@ func _draw_bombastica_world(camera: Vector2) -> void :
 		if fuse <= 1.0:
 			draw_arc(p, 27.0 + pulse * 6.0, 0.0, TAU, 36, Color(1.0, 1.0, 1.0, 0.74), 2.0)
 		_draw_centered("%.1f" % fuse, p + Vector2(0, -47), 11, Color(1.0, 0.88, 0.48, 0.92))
+
+
+func _draw_bombastica_ultimate_bomb(bomb: Dictionary, camera: Vector2) -> void :
+	var p: Vector2 = Vector2(bomb.get("pos", player_pos)) - camera
+	var radius: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
+	var spin_angle: float = float(bomb.get("spin_angle", 0.0))
+	var squash_x: float = float(bomb.get("squash_x", 1.0))
+	var squash_y: float = float(bomb.get("squash_y", 1.0))
+	var flash_timer: float = float(bomb.get("flash_timer", 0.0))
+	var grounded_timer: float = float(bomb.get("grounded_timer", 0.0))
+	var bounce_phase: float = float(bomb.get("bounce_phase", 0.0))
+	var hit_count: int = int(bomb.get("hit_count", 0))
+
+	# 1. Rastro Laranja / Azul de Trajetória e Redirecionamento
+	var trails: Array = bomb.get("trail_history", [])
+	if trails.size() > 1:
+		for i in range(trails.size() - 1):
+			var t1: Dictionary = trails[i]
+			var t2: Dictionary = trails[i + 1]
+			var p1: Vector2 = Vector2(t1.get("pos", player_pos)) - camera
+			var p2: Vector2 = Vector2(t2.get("pos", player_pos)) - camera
+			var alpha_t: float = float(i) / float(trails.size())
+			var trail_color: Color = Color(1.0, 0.52, 0.1, 0.6 * alpha_t) if i % 2 == 0 else Color(0.18, 0.88, 1.0, 0.6 * alpha_t)
+			draw_line(p1, p2, trail_color, 4.0 * alpha_t + 1.0, true)
+
+	# 2. Sombra e Área de Impacto
+	draw_ellipse(p + Vector2(0, 16), 38.0 * squash_x, 16.0 * squash_y, Color(0.02, 0.02, 0.04, 0.5))
+	var pulse_area: float = 0.5 + 0.5 * sin(time_alive * 5.0)
+	draw_circle(p, radius, Color(1.0, 0.42, 0.08, 0.06 + pulse_area * 0.04))
+	draw_arc(p, radius, 0.0, TAU, 72, Color(1.0, 0.55, 0.12, 0.45 + pulse_area * 0.25), 2.4)
+	draw_arc(p, radius * (0.65 + pulse_area * 0.1), - time_alive * 2.0, - time_alive * 2.0 + TAU * 0.75, 48, Color(0.18, 0.88, 1.0, 0.35), 1.8)
+
+	# 3. Corpo da Bomba com Compressão/Extensão (Squash/Stretch) & Rotação
+	draw_set_transform(p, spin_angle, Vector2(squash_x, squash_y))
+	var core_color: Color = Color(1.0, 0.45, 0.06, 0.95) if flash_timer <= 0.0 else Color(1.0, 0.95, 0.5, 1.0)
+	draw_circle(Vector2.ZERO, 34.0, Color(0.04, 0.04, 0.06, 0.95))
+	draw_circle(Vector2.ZERO, 25.0, core_color)
+	draw_arc(Vector2.ZERO, 19.0, 0.0, TAU, 36, Color(0.18, 0.88, 1.0, 0.85), 3.0)
+	draw_circle(Vector2(-7, -9), 7.0, Color(1.0, 0.95, 0.65, 0.92))
+	for i in range(4):
+		var angle: float = float(i) * PI * 0.5 + spin_angle
+		var spike_tip: Vector2 = Vector2.from_angle(angle) * 32.0
+		draw_line(Vector2.ZERO, spike_tip, Color(1.0, 0.68, 0.18, 0.8), 2.2)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	# 4. Telegraph de Controle: Anel Pulsante + Tag "ATIRE PARA GUIAR"
+	var is_shootable: bool = grounded_timer > 0.0 or bounce_phase < 0.35 or bounce_phase > (BOMBASTICA_ULTIMATE_BOUNCE_PERIOD - 0.35)
+	if is_shootable:
+		var shoot_pulse: float = sin(time_alive * 10.0) * 5.0
+		draw_arc(p, 54.0 + shoot_pulse, 0.0, TAU, 48, Color(1.0, 0.7, 0.12, 0.9), 3.2)
+		draw_arc(p, 68.0 - shoot_pulse, 0.0, TAU, 48, Color(0.18, 0.88, 1.0, 0.7), 2.0)
+
+		# Label Badge "ATIRE PARA GUIAR"
+		var badge_y: float = - 62.0 + sin(time_alive * 6.0) * 4.0
+		var badge_center: Vector2 = p + Vector2(0, badge_y)
+		var badge_rect: Rect2 = Rect2(badge_center - Vector2(62, 12), Vector2(124, 24))
+		draw_rect(badge_rect, Color(0.06, 0.05, 0.08, 0.88), true)
+		draw_rect(badge_rect, Color(1.0, 0.58, 0.12, 0.92), false, 1.8)
+		_draw_centered("ATIRE PARA GUIAR", badge_center + Vector2(0, 4), 11, Color(1.0, 0.92, 0.54, 0.95))
+
+	# 5. Badge de Multiplicador de Tiros Aceitos
+	if hit_count > 0:
+		_draw_centered("[+x%d]" % hit_count, p + Vector2(0, -92), 12, Color(0.2, 0.9, 1.0, 0.95))
 		
 	for visual in bombastica_vfx:
 		var alpha: = clampf(float(visual.get("life", 0.0)) / maxf(0.01, float(visual.get("max", 1.0))), 0.0, 1.0)
@@ -48099,9 +48328,15 @@ func _aura_status_text() -> String:
 			var dilation: = float(aura_state.get("rational_dilation", 0.0))
 			if dilation > 0.0:
 				return "DILATACAO %.0fs" % ceil(dilation)
+			var rebound: = float(aura_state.get("rational_rebound", 0.0))
+			if rebound > 0.0:
+				return "REBOTE %.0fs" % ceil(rebound)
 			var cooldown: = float(aura_state.get("rational_cooldown", 0.0))
 			if cooldown > 0.0:
 				return "RECARGA %.0fs" % ceil(cooldown)
+			var still: = float(aura_state.get("still", 0.0))
+			if still > 0.0:
+				return "ANALISE %d%%" % int(still / 4.5 * 100.0)
 			return "PRONTA"
 		"Impulsiva": return "FRENESI x%d" % int(aura_state.get("impulsive_rank", 0)) if float(aura_state.get("impulsive_active", 0.0)) > 0.0 else "%d/5 ABATES" % int(aura_state.get("impulsive_kills", 0))
 		"Devota": return "%d CARGAS" % int(aura_state.get("devoted_charges", 0))
@@ -53144,6 +53379,14 @@ func _try_apply_collection_unlock_cheat(cheat: String) -> bool:
 
 func _try_unlock_retornante_cheat() -> bool:
 	var cheat: = gameplay_cheat_text.strip_edges()
+	if cheat.to_upper() in ["CUTSCENE", "VIDEO", "RESET_CUTSCENE", "RESET_VIDEO", "ABERTURA", "RESET_ABERTURA"]:
+		reset_startup_video()
+		gameplay_cheat_text = ""
+		_save_config()
+		_add_text("CUTSCENE REATIVADA", player_pos + Vector2(0, -100), Color(0.38, 0.92, 1.0), 1.4, 24)
+		_play_sfx("ui_spectrum_switch", 0.01, 0.6, 1.14)
+		_vibrate(80, 0.32)
+		return true
 	if cheat.to_lower() == "geovaninha":
 		retornante_unlocked = true
 		unlocked_manifestation_ids["retornante"] = true

@@ -307,14 +307,14 @@ static func manifestation_details(host: Node, key: String) -> Dictionary:
 				"disparo": "ATK - Estopim Instavel: tiro mais lento que aplica Polvora Instavel. Cada alvo segura ate 3 cargas por 5s.", 
 				"habilidade": "Q - Triade de Demolicao", 
 				"desc_hab": "Possui 3 cargas independentes. Cada Q planta ou arremessa uma bomba com fusivel entre 3s e 6s, raio de 105px e dano alto 25% maior. Bombas proximas podem acionar cadeia.", 
-				"traco": "E - Bomba-Cometario: solta uma bomba redonda que quica por 10s, desloca a 85px/s e explode em raio de 280px sempre que toca o chao.", 
-				"risco": "Aos 3 acumulos de Polvora, a proxima explosao consome as cargas e causa Ignicao. A Bomba-Cometario so colide perto do chao; tiros nesse momento aumentam seu dano e redirecionam o salto.", 
+				"traco": "E - Bomba-Cometario: Lança uma bomba viva. Ela quica, explode em área e pode ser empurrada/redirecionada por seus tiros.", 
+				"risco": "Aos 3 acumulos de Polvora, a proxima explosao consome as cargas e causa Ignicao. A Bomba-Cometario absorve tiros no chao: cada tiro acelera, expande o raio e aumenta o dano.", 
 				"info_rows": [
 					{"label": "ATK", "text": "0,62x dano atual, 92% da velocidade padrao e cadencia de 0,58s. Serve para preparar Polvora, nao para ser a unica fonte de dano."}, 
 					{"label": "POLVORA", "text": "Ate 3 cargas por alvo, 5s. Cada carga aumenta em 6% o dano explosivo Bombastica recebido."}, 
 					{"label": "Q", "text": "3 cargas, cada uma recarrega em 7s. Bomba perto da Geovana e plantada; alvo distante vira arremesso."}, 
 					{"label": "DETONADOR", "text": "Toque curto detona uma bomba. Segurar por 0,62s aciona Detonacao Total com penalidade de controle."}, 
-					{"label": "E", "text": "Bola explosiva por 10s, raio de explosao de 280px e movimento de 85px/s. Sem colisao no alto; vulneravel a tiros perto do chao."}
+					{"label": "E", "text": "Lança uma bomba viva. Ela quica, explode em área e pode ser empurrada/redirecionada por seus tiros."}
 				]
 			}
 		"necronada":
