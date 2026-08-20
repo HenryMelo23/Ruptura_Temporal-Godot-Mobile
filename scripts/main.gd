@@ -50,22 +50,6 @@ const PLAYER_DRAW_SHOT_SIZE: = Vector2(52, 77)
 const PLAYER_DRAW_DAMAGE_SIZE: = Vector2(54, 80)
 const PLAYER_DRAW_LACERAR_HEIGHT: = 77.0
 const PLAYER_DRAW_FROZEN_SIZE: = Vector2(58.8, 84.0)
-const PLAYER_SKIN_BASE_PATH: = "res://assets/sprites/skins/"
-const PLAYER_SKIN_MANIFESTATION_KEYS: = {
-	"acorrentada": "acorrentada",
-	"ancorada": "ancorada",
-	"bombastica": "bombastica",
-	"cartografica": "cartografica",
-	"contratual": "contratual",
-	"eclipsada_sol": "eclipsada_sol",
-	"eclipsada_lua": "eclipsada_lua",
-	"gravitante": "gravitante",
-	"lacerante": "lacerante",
-	"necronada": "necronada",
-	"parasitica": "parasitica",
-	"prismatica": "prismatica",
-	"ressonante": "ressonante",
-}
 const PLAYER_ATTACK_PREP_FRAME_TIME: = 0.085
 const ATTACK_LOCK_HOLD_TIME: = 0.8
 const ATTACK_LOCK_MIN_DRAG: = 18.0
@@ -7214,7 +7198,6 @@ func _load_textures() -> void :
 	textures["player_fire"] = [_safe_load(base + "Geo_Disp1.png"), _safe_load(base + "Geo_Disp2.png")]
 	textures["player_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
-	_load_manifestation_skin_textures(PLAYER_SKIN_BASE_PATH)
 	var prismatica_dance_loop: Array = []
 	for dance_index in range(15):
 		prismatica_dance_loop.append(_safe_load(base + "Geo-Dance%02d.png" % dance_index))
@@ -7329,37 +7312,6 @@ func _load_textures() -> void :
 			_register_texture(card_key + "_2", base + String(card["frame_2"]), _memory_saver_active())
 	_perf_mark("run_assets_loaded", perf_start_ms)
 	_perf_mark("load_textures", perf_start_ms)
-
-
-func _load_manifestation_skin_textures(base_path: String) -> void :
-	for skin_key_value in PLAYER_SKIN_MANIFESTATION_KEYS.keys():
-		var skin_key: = String(skin_key_value)
-		var folder: = String(PLAYER_SKIN_MANIFESTATION_KEYS[skin_key_value])
-		var skin_path: = base_path.path_join(folder)
-		var prefix: = "player_skin_%s_" % skin_key
-		var idle_frames: = _load_player_skin_frame_set(skin_path, ["idle_01", "idle_02"])
-		var side_frames: = _load_player_skin_frame_set(skin_path, ["side_01", "side_02"])
-		var front_frames: = _load_player_skin_frame_set(skin_path, ["front_01"])
-		var back_frames: = _load_player_skin_frame_set(skin_path, ["back_01"])
-		if idle_frames.size() >= 2:
-			textures[prefix + "idle"] = idle_frames
-		if side_frames.size() >= 2:
-			textures[prefix + "right"] = side_frames
-		if front_frames.size() >= 1:
-			textures[prefix + "down"] = front_frames
-		if back_frames.size() >= 1:
-			textures[prefix + "up"] = back_frames
-
-
-func _load_player_skin_frame_set(folder_path: String, frame_names: Array) -> Array:
-	var frames: Array = []
-	for frame_name_value in frame_names:
-		var frame_name: = String(frame_name_value)
-		var tex: = _safe_load(folder_path.path_join(frame_name + ".png"))
-		if tex == null:
-			return []
-		frames.append(tex)
-	return frames
 
 
 func _register_texture(key: String, path: String, lazy_when_low_resource: = false) -> void :
@@ -45218,17 +45170,11 @@ func _should_flip_player_sprite() -> bool:
 		return lacerante_prepare_dir.x < -0.1
 	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
 		return _aim_direction().x < -0.1
-	if _active_player_skin_key() != "" and abs(move.x) <= 0.1 and abs(move.y) > 0.1:
-		return _player_vertical_skin_mirror_flip()
 	if move.x < -0.1:
 		return true
 	if move.x > 0.1:
 		return false
 	return last_facing.x < -0.1
-
-
-func _player_vertical_skin_mirror_flip() -> bool:
-	return int(Time.get_ticks_msec() / 120) % 2 == 1
 
 
 func _player_is_moving_for_animation() -> bool:
@@ -50896,35 +50842,8 @@ func _player_texture() -> Texture2D:
 	return _frame_texture(_player_animation_texture_key("idle", "player_idle"), idle_speed, "player_fire")
 
 
-func _player_animation_texture_key(anim: String, fallback_key: String) -> String:
-	var skin_key: = _active_player_skin_key()
-	if skin_key == "":
-		return fallback_key
-	var candidate: = "player_skin_%s_%s" % [skin_key, anim]
-	var frames: Array = textures.get(candidate, [])
-	if frames.is_empty():
-		return fallback_key
-	return candidate
-
-
-func _active_player_skin_key() -> String:
-	return _manifestation_skin_key(manifestation_key, true)
-
-
-func _manifestation_skin_key(key: String, use_local_eclipsada_form: = false) -> String:
-	if key == "eclipsada":
-		if use_local_eclipsada_form:
-			return "eclipsada_sol" if _eclipsada_is_sol() else "eclipsada_lua"
-		return "eclipsada_sol"
-	if PLAYER_SKIN_MANIFESTATION_KEYS.has(key):
-		return String(PLAYER_SKIN_MANIFESTATION_KEYS[key])
-	return ""
-
-
-func _manifestation_index_skin_key(index: int) -> String:
-	if index < 0 or index >= MANIFESTATIONS.size():
-		return ""
-	return _manifestation_skin_key(String(MANIFESTATIONS[index].get("key", "")), false)
+func _player_animation_texture_key(_anim: String, fallback_key: String) -> String:
+	return fallback_key
 
 
 func _frame_texture(key: String, period_ms: int, fallback_key: String) -> Texture2D:
@@ -56625,38 +56544,23 @@ func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void :
 func _net_player_texture() -> Texture2D:
 	var key: = "player_idle"
 	var fallback: = "player_idle"
-	var skin_anim: = "idle"
 	match net_player_anim_state:
 		NET_ANIM_FROZEN:
 			key = "player_frozen"
-			skin_anim = ""
 		NET_ANIM_UP:
 			key = "player_up"
-			skin_anim = "up"
 		NET_ANIM_DOWN:
 			key = "player_down"
-			skin_anim = "down"
 		NET_ANIM_RIGHT:
 			key = "player_right"
-			skin_anim = "right"
 		NET_ANIM_FIRE:
 			key = "player_fire"
-			skin_anim = ""
 		NET_ANIM_DAMAGE:
 			key = "player_damage"
-			skin_anim = ""
 		NET_ANIM_LACERANTE:
 			key = "player_lacerar"
-			skin_anim = ""
 		_:
 			fallback = "player_fire"
-	if skin_anim != "":
-		var skin_key: = _manifestation_index_skin_key(net_player_manifestation)
-		if skin_key != "":
-			var candidate: = "player_skin_%s_%s" % [skin_key, skin_anim]
-			var candidate_frames: Array = textures.get(candidate, [])
-			if not candidate_frames.is_empty():
-				key = candidate
 	var frames: Array = textures.get(key, [])
 	if frames.is_empty():
 		frames = textures.get(fallback, [])
@@ -56773,38 +56677,23 @@ func _draw_ally_health_bar(center: Vector2, width: float, ratio: float, accent: 
 	draw_rect(Rect2(pos, Vector2(width, height)), Color(accent.r, accent.g, accent.b, 0.82), false, 1.2)
 
 
-func _net_player_texture_for_state(anim_state: int, frame_idx: int, manifestation_index: int = -1) -> Texture2D:
+func _net_player_texture_for_state(anim_state: int, frame_idx: int, _manifestation_index: int = -1) -> Texture2D:
 	var key: = "player_idle"
-	var skin_anim: = "idle"
 	match anim_state:
 		NET_ANIM_FROZEN:
 			key = "player_frozen"
-			skin_anim = ""
 		NET_ANIM_UP:
 			key = "player_up"
-			skin_anim = "up"
 		NET_ANIM_DOWN:
 			key = "player_down"
-			skin_anim = "down"
 		NET_ANIM_RIGHT:
 			key = "player_right"
-			skin_anim = "right"
 		NET_ANIM_FIRE:
 			key = "player_fire"
-			skin_anim = ""
 		NET_ANIM_DAMAGE:
 			key = "player_damage"
-			skin_anim = ""
 		NET_ANIM_LACERANTE:
 			key = "player_lacerar"
-			skin_anim = ""
-	if skin_anim != "" and manifestation_index >= 0:
-		var skin_key: = _manifestation_index_skin_key(manifestation_index)
-		if skin_key != "":
-			var candidate: = "player_skin_%s_%s" % [skin_key, skin_anim]
-			var candidate_frames: Array = textures.get(candidate, [])
-			if not candidate_frames.is_empty():
-				key = candidate
 	var frames: Array = textures.get(key, [])
 	if frames.is_empty():
 		frames = textures.get("player_idle", [])
