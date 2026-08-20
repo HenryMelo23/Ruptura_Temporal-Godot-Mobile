@@ -2383,9 +2383,9 @@ var bombastica_next_id: = 1
 var bombastica_detonator_touch_index: = -1
 var bombastica_detonator_hold: = 0.0
 var bombastica_total_detonation_flash: = 0.0
-var bombastica_explosion_vfx_scene: PackedScene = preload("res://vfx/bombastica/BombasticaExplosionVFX.tscn")
-var bombastica_mine_vfx_scene: PackedScene = preload("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn")
-var bombastica_ignition_vfx_scene: PackedScene = preload("res://vfx/bombastica/BombasticaIgnitionVFX.tscn")
+var bombastica_explosion_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaExplosionVFX.tscn") else null)
+var bombastica_mine_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") else null)
+var bombastica_ignition_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") else null)
 var bombastica_explosion_pool: Array = []
 var bombastica_mine_pool: Array = []
 var bombastica_ignition_pool: Array = []
@@ -2401,7 +2401,7 @@ var bombastica_ult_detonation_timer: float = 0.0
 var bombastica_ult_target_hits: Dictionary = {}
 var bombastica_ult_fuse_pos: Vector2 = Vector2.ZERO
 var bombastica_ult_seed: int = 0
-var bombastica_powder_trail_tex: Texture2D = preload("res://vfx/bombastica/textures/powder_trail_texture.png")
+var bombastica_powder_trail_tex: Texture2D = _safe_load("res://vfx/bombastica/textures/powder_trail_texture.png")
 var necronada_vestiges: Array = []
 var necronada_ossuary: Array = []
 var necronada_remnants: Array = []
@@ -3250,6 +3250,8 @@ func _notification(what: int) -> void :
 		_flush_card_unlocks_if_dirty()
 		if what == NOTIFICATION_WM_CLOSE_REQUEST or ((qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active) and not qa_streaming_permission_pending):
 			_stop_qa_streaming("app")
+	elif what == NOTIFICATION_APPLICATION_FOCUS_OUT and _qa_streaming_is_active() and not qa_streaming_permission_pending:
+		_stop_qa_streaming("focus")
 	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_cancel_all_touch_state()
 
@@ -5958,6 +5960,20 @@ func _reset_qa_streaming_runtime(clear_access: = true) -> void :
 	qa_streaming_status = ""
 
 
+func _qa_streaming_is_active() -> bool:
+	return qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active or qa_streaming_in_flight
+
+
+func _qa_stream_transport_label() -> String:
+	if _qa_stream_native_available():
+		return "android nativo"
+	return "viewport"
+
+
+func _qa_stream_session_protocol() -> String:
+	return "rtmp-hls" if _qa_stream_native_available() else "frame-mjpeg"
+
+
 func _start_qa_streaming_session() -> void :
 	if not QA_STREAMING_FEATURE_ENABLED:
 		_reset_qa_streaming_runtime()
@@ -5981,7 +5997,7 @@ func _start_qa_streaming_session() -> void :
 		"player": player_nickname, 
 		"room": online_room_code if online_room_code != "" else ("solo-%d" % int(Time.get_unix_time_from_system())), 
 		"version": GAME_VERSION, 
-		"protocol": "rtmp-hls" if _qa_stream_native_available() else "frame-mjpeg", 
+		"protocol": _qa_stream_session_protocol(), 
 		"streamWidth": _qa_stream_target_size().x, 
 		"streamHeight": _qa_stream_target_size().y, 
 		"streamFps": _qa_stream_target_fps(), 
@@ -6021,8 +6037,6 @@ func _on_qa_stream_session_request_completed(result: int, response_code: int, _h
 		return
 	if _qa_stream_native_available() and qa_streaming_native_publish_url.begins_with("rtmp"):
 		_start_native_qa_stream()
-	elif _qa_stream_desktop_encoder_available() and qa_streaming_desktop_publish_url.begins_with("http"):
-		_start_desktop_qa_stream()
 	else:
 		if qa_streaming_frame_url == "":
 			qa_streaming_status = "Streaming: sessao invalida"
@@ -6045,11 +6059,11 @@ func _send_qa_stream_link_to_discord() -> void :
 	if link == "":
 		return
 	var body: = {
-		"username": "Ruptura Temporal QA", 
-		"content": "Streaming QA iniciado por **%s**: %s" % [player_nickname if player_nickname != "" else "Jogador", link], 
+		"username": "Ruptura Temporal", 
+		"content": "Transmissao da partida iniciada por **%s**: %s" % [player_nickname if player_nickname != "" else "Jogador", link], 
 		"embeds": [{
 			"title": "Stream ao vivo - v%s" % GAME_VERSION, 
-			"description": "Transmissao real do viewport renderizado pelo jogo. Perfil: %dx%d @ %.0f FPS alvo." % [_qa_stream_target_size().x, _qa_stream_target_size().y, _qa_stream_target_fps()], 
+			"description": "Tela da partida enviada pelo jogo. Transporte: %s. Perfil: %dx%d @ %.0f FPS alvo." % [_qa_stream_transport_label(), _qa_stream_target_size().x, _qa_stream_target_size().y, _qa_stream_target_fps()], 
 			"color": 65525
 		}]
 	}
@@ -6067,20 +6081,20 @@ func _qa_stream_menu_subtitle() -> String:
 			return "%s nativo // RTMP H.264 // %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
 		if qa_streaming_desktop_ffmpeg_active:
 			return "%s desktop // FFmpeg MJPEG // %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
-		return "%s fallback // %d fps enviados" % [qa_streaming_quality_mode, qa_streaming_sent_per_second]
+		return "%s viewport // %d fps enviados" % [qa_streaming_quality_mode, qa_streaming_sent_per_second]
 	if qa_streaming_in_flight or qa_streaming_permission_pending:
 		return "abrindo permissao // %s %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
 	if qa_streaming_status != "":
 		return qa_streaming_status.replace("Streaming: ", "").to_lower()
 	if not _qa_stream_native_available():
-		return "fallback diagnostico // Android usa RTMP H.264"
+		return "iniciar transmissao // viewport %s %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
 	return "iniciar transmissao // %s %dx%d" % [qa_streaming_quality_mode, size.x, size.y]
 
 
 func _toggle_qa_streaming_from_menu() -> void :
 	if not QA_STREAMING_FEATURE_ENABLED or not qa_streaming_unlocked:
 		return
-	if qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active or qa_streaming_in_flight:
+	if _qa_streaming_is_active():
 		_stop_qa_streaming("manual")
 		_add_text("STREAMING ENCERRADO", player_pos + Vector2(0, -100), Color(1.0, 0.74, 0.22), 1.2, 22)
 		_save_config()
@@ -6246,6 +6260,8 @@ func _start_desktop_qa_stream() -> void :
 
 func _stop_qa_streaming(reason: = "stop") -> void :
 	var session_to_close: = qa_streaming_session_id
+	if qa_streaming_in_flight and qa_stream_session_request != null and qa_stream_session_request.is_inside_tree():
+		qa_stream_session_request.cancel_request()
 	if qa_streaming_native_active and Engine.has_singleton(QA_STREAM_PLUGIN_NAME):
 		var streamer = Engine.get_singleton(QA_STREAM_PLUGIN_NAME)
 		streamer.call("stopStream")
@@ -6331,11 +6347,9 @@ func _update_qa_streaming(delta: float) -> void :
 
 func _qa_stream_live_status() -> String:
 	var target_size: = _qa_stream_target_size()
-	var mode_label: = qa_streaming_quality_mode
+	var mode_label: = "%s %s" % [qa_streaming_quality_mode, _qa_stream_transport_label()]
 	if qa_streaming_desktop_ffmpeg_active:
 		mode_label += " desktop FFmpeg"
-	elif not _qa_stream_native_available():
-		mode_label += " fallback"
 	var fps_label: = int(round(_qa_stream_target_fps())) if qa_streaming_desktop_ffmpeg_active else qa_streaming_sent_per_second
 	return "Streaming: %s %d fps %dx%d" % [mode_label, fps_label, target_size.x, target_size.y]
 
@@ -6406,7 +6420,7 @@ func _qa_stream_max_in_flight() -> int:
 
 
 func _qa_stream_bitrate() -> int:
-	if _qa_stream_native_available() or _qa_stream_desktop_encoder_available():
+	if _qa_stream_native_available():
 		return int(QA_NATIVE_STREAM_MODE_BITRATE.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), QA_STREAM_BITRATE))
 	return int(QA_FRAME_STREAM_MODE_BITRATE.get(_sanitize_qa_stream_quality_mode(qa_streaming_quality_mode), 1200000))
 
@@ -6583,7 +6597,7 @@ func _load_config() -> void :
 				elif k == "show_fps_counter": show_fps_counter = v == "true"
 				elif k == "run_tutorial_enabled": run_tutorial_enabled = v == "true"
 				elif k == "qa_streaming_enabled": qa_streaming_enabled = false
-				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = false
+				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = v == "true"
 				elif k == "qa_streaming_quality": qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(v)
 				elif k == "qa_data_unlocked": qa_data_unlocked = v == "true"
 				elif k == "force_phase6_start":
@@ -6686,7 +6700,7 @@ func _save_config() -> void :
 		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
 		file.store_string("run_tutorial_enabled=" + ("true" if run_tutorial_enabled else "false") + "\n")
 		file.store_string("qa_streaming_enabled=false\n")
-		file.store_string("qa_streaming_unlocked=false\n")
+		file.store_string("qa_streaming_unlocked=" + ("true" if qa_streaming_unlocked else "false") + "\n")
 		file.store_string("qa_streaming_quality=" + _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode) + "\n")
 		file.store_string("qa_data_unlocked=" + ("true" if qa_data_unlocked else "false") + "\n")
 		file.store_string("force_phase6_start=" + ("true" if force_phase6_start else "false") + "\n")
@@ -7303,7 +7317,7 @@ func _load_textures() -> void :
 		textures["aura_" + aura["key"]] = _safe_load_sprite_icon(aura_icon, base)
 	var sanguinaria_icon := _safe_load(AURA_SANGUINARIA_ICON_PATH)
 	if sanguinaria_icon == null:
-		sanguinaria_icon = preload("res://assets/sprites/aurea_sanguinaria.png")
+		sanguinaria_icon = _safe_load(AURA_SANGUINARIA_EXPORT_FALLBACK_PATH)
 	textures["aura_sanguinaria"] = sanguinaria_icon
 	for card in CARDS:
 		var card_key: = "card_" + String(card["name"])
@@ -37364,10 +37378,10 @@ func _draw_menu(viewport: Vector2) -> void :
 	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "", Color(0.38, 0.78, 0.96), menu_selected == _menu_index_for("catalog"), false, "catalog")
 	_draw_hub_button(menu_buttons["settings"], "CONFIGURACAO", "", Color(1.0, 0.75, 0.22), menu_selected == _menu_index_for("settings"), false, "settings")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and menu_buttons.has("stream"):
-		var stream_active: = qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active or qa_streaming_in_flight
-		var stream_title: = "ENCERRAR STREAM" if stream_active else "STREAM QA"
+		var stream_active: = _qa_streaming_is_active()
+		var stream_title: = "ENCERRAR AO VIVO" if stream_active else "TRANSMITIR PARTIDA"
 		var stream_color: = Color(0.0, 1.0, 0.82) if stream_active else Color(0.38, 0.88, 1.0)
-		_draw_hub_button(menu_buttons["stream"], stream_title, "", stream_color, menu_selected == _menu_index_for("stream"), false, "stream")
+		_draw_hub_button(menu_buttons["stream"], stream_title, _qa_stream_menu_subtitle(), stream_color, menu_selected == _menu_index_for("stream"), false, "stream")
 	_draw_hub_button(menu_buttons["exit"], "SAIR DO JOGO", "", Color(0.95, 0.22, 0.25), menu_selected == _menu_index_for("exit"), false, "exit")
 
 	if player_nickname != "":
@@ -37826,7 +37840,7 @@ func _draw_gameplay_settings(viewport: Vector2) -> void :
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and settings_buttons.has("qa_stream_quality"):
 		var quality_size: = _qa_stream_target_size()
 		var quality_label: = "%s (%dx%d)" % [qa_streaming_quality_mode.to_upper(), quality_size.x, quality_size.y]
-		_draw_gameplay_preference(settings_buttons["qa_stream_quality"], "QUALIDADE STREAM", "Usada pelo botao STREAM QA do hub.", quality_label, Color(0.38, 0.88, 1.0), settings_selected == _gameplay_preference_index("qa_stream_quality"))
+		_draw_gameplay_preference(settings_buttons["qa_stream_quality"], "QUALIDADE AO VIVO", "Usada pelo botao de transmissao do menu.", quality_label, Color(0.38, 0.88, 1.0), settings_selected == _gameplay_preference_index("qa_stream_quality"))
 	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == _gameplay_preference_index("back"))
 	if gameplay_cheat_focused:
 		_draw_cheat_popup(viewport)
@@ -53335,7 +53349,7 @@ func _try_unlock_retornante_cheat() -> bool:
 		gameplay_cheat_text = ""
 		if DisplayServer.get_name() != "headless":
 			_save_config()
-			_add_text("STREAMING QA LIBERADO", player_pos + Vector2(0, -100), Color(0.0, 1.0, 0.82), 1.4, 24)
+			_add_text("TRANSMISSAO LIBERADA", player_pos + Vector2(0, -100), Color(0.0, 1.0, 0.82), 1.4, 24)
 			_play_sfx("ui_spectrum_switch", 0.01, 0.6, 1.12)
 			_vibrate(80, 0.32)
 		return true

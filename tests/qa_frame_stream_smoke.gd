@@ -24,14 +24,15 @@ func _run() -> void:
 	game.qa_streaming_frame_url = "http://127.0.0.1:9/streams/test/frame"
 	game._reset_qa_streaming_runtime(false)
 
-	_check(not game.QA_STREAMING_FEATURE_ENABLED, "QA streaming feature flag should be disabled")
-	_check(not game.qa_streaming_unlocked, "soft reset should clear removed CHANZADA unlock")
-	_check(not game.qa_streaming_enabled, "soft reset should clear removed pending menu request")
+	_check(game.QA_STREAMING_FEATURE_ENABLED, "streaming feature flag should be enabled")
+	_check(game.qa_streaming_unlocked, "soft reset should preserve CHANZADA unlock")
+	_check(game.qa_streaming_enabled, "soft reset should preserve pending menu request")
 	_check(not game.qa_streaming_frame_active, "soft reset should clear active frame mode")
 	_check(game.qa_streaming_frame_url == "", "soft reset should clear frame URL")
 
 	game._reset_qa_streaming_runtime()
 	_check(not game.qa_streaming_unlocked, "hard reset should clear CHANZADA unlock")
+	_check(not game.qa_streaming_enabled, "hard reset should clear pending menu request")
 
 	game.qa_streaming_unlocked = true
 	game.qa_streaming_enabled = true
@@ -47,12 +48,12 @@ func _run() -> void:
 	game._start_qa_streaming_session()
 	_check(game.qa_streaming_session_id == "", "headless smoke must not open stream sessions")
 	_check(not game.qa_streaming_frame_active, "headless smoke must not activate frame streaming")
-	_check(not game.qa_streaming_enabled, "removed streaming feature should stay disabled")
+	_check(not game.qa_streaming_enabled, "headless stream start should disable pending request")
 	_check(game._capture_qa_stream_frame().is_empty(), "headless capture should not allocate frames")
 	game._send_qa_stream_frame()
 	_check(game.qa_streaming_frame_count == 0, "headless send should not count frames")
 
-	print("QA_FRAME_STREAM_SMOKE_OK modes=360p,720p headless_safe=true")
+	print("QA_FRAME_STREAM_SMOKE_OK modes=360p,720p enabled=true headless_safe=true")
 	game._cleanup_runtime_resources()
 	if game.music_player != null:
 		game.music_player.stop()
