@@ -1,16 +1,16 @@
 {
-  "version": "2.0.31i",
-  "version_code": 23109,
-  "filename": "Ruptura_Temporal_2.0.31i.exe",
-  "sha256": "6789abc90ce6e700d491b08fbe1264c01a6172b5c2642dade00011a2751f3e33",
-  "size": 1356670096,
+  "version": "2.0.32",
+  "version_code": 23200,
+  "filename": "Ruptura_Temporal_2.0.32.exe",
+  "sha256": "384a2c480c543391c96e255aea5534a26b2b7fd259f64a483766a23b250f8551",
+  "size": 1370916888,
   "notes": [
-    "Correção de empacotamento de ícones, teaser de abertura e músicas no APK/EXE.",
-    "As fases agora usam a playlist da pasta Sounds com rotação aleatória e transição suave.",
-    "Músicas antigas Fase/Fases deixam de ter prioridade nas fases comuns; músicas de boss continuam específicas.",
-    "Sons dos inimigos da fase 6 agora respeitam distância do jogador.",
-    "Boss 2 recebeu mais tempo de aviso antes das habilidades."
+    "Novas trilhas exclusivas para chefes das fases 3, 4, 5 e 7.",
+    "Trilhas antigas de boss foram removidas da rotacao.",
+    "A playlist normal continua usando as musicas da pasta Sounds com rotacao aleatoria e crossfade.",
+    "Corrigida uma condicao em que a musica podia parar e nao voltar automaticamente.",
+    "Versao 2.0.32 com ajustes de empacotamento e validacao de inicializacao."
   ],
   "mandatory": false,
-  "published_at": "2026-08-15T00:20:15.2000318Z"
+  "published_at": "2026-08-23T21:58:23.6302916Z"
 }

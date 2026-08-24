@@ -86,6 +86,16 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"blood_wounds": 0, 
 		"blood_burst": false, 
 		"blood_slow": 0.0, 
+		"blood_hunt_uid": -1,
+		"blood_hunt_rule": "",
+		"blood_hunt_quadrant": -1,
+		"blood_combo": 0,
+		"blood_combo_damage": 0.0,
+		"blood_combo_speed": 0.0,
+		"blood_combo_cooldown": 0.0,
+		"blood_grace": 0.0,
+		"blood_hunt_serial": 0,
+		"blood_reward_text": "",
 		"crepuscular_phase": "alvorada", 
 		"crepuscular_phase_timer": CREPUSCULAR_PHASE_TIME, 
 		"crepuscular_charge": 0.0, 
@@ -744,7 +754,9 @@ static func speed_multiplier(state: Dictionary) -> float:
 				mult -= penalty * penalty_mult
 			return maxf(0.72, mult)
 		"Abissal": return maxf(0.78, 1.0 - float(state["abyss_depth"]) * 0.0016 - (0.04 if float(state["abyss_tide"]) > 0.0 else 0.0))
-		"Sanguinaria": return 0.95 if float(state["blood_slow"]) > 0.0 else 1.0
+		"Sanguinaria":
+			var blood_speed: float = float(state.get("blood_combo_speed", 0.0))
+			return maxf(0.82, (0.95 if float(state["blood_slow"]) > 0.0 else 1.0) + blood_speed)
 	return 1.0
 
 static func damage_multiplier(state: Dictionary) -> float:
@@ -754,6 +766,7 @@ static func damage_multiplier(state: Dictionary) -> float:
 		"Devota": return (float(state["devoted_damage_mult"]) + (0.18 if ascended else 0.0)) if float(state["devoted_damage"]) > 0.0 else 1.0
 		"Voraz": return 1.0 + (voracious_intensity(state) * 0.12 if ascended else 0.0)
 		"Crepuscular": return 1.0 + _crepuscular_damage_bonus(state) + (0.08 if ascended and _crepuscular_is_eclipse(state) else 0.0)
+		"Sanguinaria": return 1.0 + float(state.get("blood_combo_damage", 0.0))
 		"Equilibrista": return 1.0 + (0.1 + 0.03 * _rank(state) if ascended and float(state.get("equilibrista_state", 0.0)) > 0.0 else 0.07 + 0.03 * _rank(state) if float(state.get("equilibrista_state", 0.0)) > 0.0 else 0.0)
 		"Oportunista": return 1.08 if ascended and bool(state.get("oportunista_armed", false)) else 1.0
 	return 1.0
@@ -762,6 +775,7 @@ static func attack_interval_multiplier(state: Dictionary) -> float:
 	if String(state.get("name", "")) == "Racional" and float(state["rational_dilation"]) > 0.0: return 0.66 if bool(state.get("ascended", false)) else 0.72
 	if String(state.get("name", "")) == "Voraz": return maxf(0.84 if bool(state.get("ascended", false)) else 0.88, 1.0 - voracious_intensity(state) * (0.045 + int(state["level"]) * 0.003))
 	if String(state.get("name", "")) == "Crepuscular": return maxf(0.75, 1.0 - _crepuscular_attack_reduction(state))
+	if String(state.get("name", "")) == "Sanguinaria": return maxf(0.7, 1.0 - float(state.get("blood_combo_cooldown", 0.0)))
 	return 1.0
 
 static func world_multiplier(state: Dictionary) -> float:

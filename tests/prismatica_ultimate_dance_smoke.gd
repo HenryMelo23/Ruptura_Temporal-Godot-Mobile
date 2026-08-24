@@ -32,7 +32,7 @@ func _run() -> void:
 	_check(Array(game.textures["prismatica_dance_loop"]).size() == 15, "dance loop must have 15 frames")
 	_check(Array(game.textures["prismatica_dance_final"]).size() == 2, "dance final must have 2 frames")
 	_check(game.audio_streams.has("ult_prismatica"), "missing prismatica ultimate song")
-	game._play_music("Fase1.mp3")
+	game._play_music("Fases1.mp3")
 	game.music_pause_fade_mode = ""
 	game._set_music_linear_volume(game._music_target_volume())
 	var phase_volume_before := db_to_linear(game.music_player.volume_db)
