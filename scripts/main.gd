@@ -176,7 +176,7 @@ const RUN_LEADERBOARD_CHECKPOINT_PATH: = "/runs/checkpoint"
 const RUN_LEADERBOARD_VIEW_PATH: = "/leaderboard"
 const RUN_REPORT_INTEGRITY_VERSION: = 1
 const RUN_REPORT_INTEGRITY_SALT: = "ruptura-temporal-run-integrity-v1-2.0.30c"
-const RUN_SECURITY_CHECKPOINT_INTERVAL: = 20.0
+const RUN_SECURITY_CHECKPOINT_INTERVAL: = 120.0
 const RUN_TELEMETRY_SAMPLE_INTERVAL: = 0.5
 const RUN_TELEMETRY_GRID: = Vector2i(16, 9)
 const RUN_TELEMETRY_MAX_DAMAGE_EVENTS: = 240
@@ -5359,7 +5359,7 @@ func _http_request_busy(request: HTTPRequest) -> bool:
 
 func _run_security_base_payload() -> Dictionary:
 	_ensure_player_profile_id()
-	return {
+	var payload: = {
 		"player": player_nickname, 
 		"profile_id": player_profile_id, 
 		"room": online_room_code if online_room_code != "" else "solo", 
@@ -5369,34 +5369,50 @@ func _run_security_base_payload() -> Dictionary:
 		"role": _run_role_text(), 
 		"started_unix": run_started_unix
 	}
+	payload.merge(_run_security_combat_snapshot_payload(), true)
+	return payload
+
+
+func _run_security_combat_snapshot_payload() -> Dictionary:
+	return {
+		"duration_seconds": int(round(time_alive)), 
+		"phase": current_phase, 
+		"kills": enemies_killed, 
+		"points_earned": run_points_earned, 
+		"points_spent": run_points_spent, 
+		"score_current": score, 
+		"score_total": score_total, 
+		"cards_total": _deck_total_cards(), 
+		"boss_damage_total": _total_boss_damage_report(), 
+		"enemy_damage_total": run_damage_to_enemies, 
+		"damage_taken_total": run_damage_taken_total, 
+		"base_damage_start": run_start_damage, 
+		"base_damage_end": player_damage, 
+		"player_stats": {
+			"hp": player_hp, 
+			"hp_max": player_hp_max, 
+			"speed": player_speed, 
+			"attack_interval": player_attack_interval, 
+			"dash_cooldown": player_dash_cooldown, 
+			"defense": player_defense, 
+			"crit_chance": player_crit_chance, 
+			"lifesteal": player_lifesteal, 
+			"luck": luck
+		}, 
+		"enemy_scaling": {
+			"limit": _enemy_limit(), 
+			"base_hp": enemy_base_hp, 
+			"base_speed": enemy_speed_base, 
+			"close_damage": enemy_close_damage, 
+			"far_damage": enemy_far_damage
+		}
+	}
 
 
 func _run_security_checkpoint_payload() -> Dictionary:
 	var payload: = _run_security_base_payload()
 	payload["session_id"] = run_security_session_id
 	payload["session_token"] = run_security_session_token
-	payload["duration_seconds"] = int(round(time_alive))
-	payload["phase"] = current_phase
-	payload["kills"] = enemies_killed
-	payload["points_earned"] = run_points_earned
-	payload["points_spent"] = run_points_spent
-	payload["score_current"] = score
-	payload["score_total"] = score_total
-	payload["cards_total"] = _deck_total_cards()
-	payload["boss_damage_total"] = _total_boss_damage_report()
-	payload["enemy_damage_total"] = run_damage_to_enemies
-	payload["base_damage_end"] = player_damage
-	payload["player_stats"] = {
-		"hp": player_hp, 
-		"hp_max": player_hp_max, 
-		"speed": player_speed, 
-		"attack_interval": player_attack_interval, 
-		"dash_cooldown": player_dash_cooldown, 
-		"defense": player_defense, 
-		"crit_chance": player_crit_chance, 
-		"lifesteal": player_lifesteal, 
-		"luck": luck
-	}
 	return payload
 
 
@@ -5454,13 +5470,11 @@ func _on_run_security_start_completed(_result: int, response_code: int, _headers
 	var data: Dictionary = parsed
 	run_security_session_id = String(data.get("session_id", ""))
 	run_security_session_token = String(data.get("session_token", ""))
-	run_security_checkpoint_interval = clampf(float(data.get("checkpoint_interval_seconds", RUN_SECURITY_CHECKPOINT_INTERVAL)), 8.0, 60.0)
+	run_security_checkpoint_interval = clampf(float(data.get("checkpoint_interval_seconds", RUN_SECURITY_CHECKPOINT_INTERVAL)), 30.0, 180.0)
 	run_security_session_ready = run_security_session_id != "" and run_security_session_token != ""
 	run_security_session_failed = not run_security_session_ready
 	run_security_last_error = "" if run_security_session_ready else "Sessao sem token"
-	run_security_checkpoint_timer = 0.0
-	if run_security_session_ready:
-		_send_run_security_checkpoint(true)
+	run_security_checkpoint_timer = run_security_checkpoint_interval
 
 
 func _on_run_security_checkpoint_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void :

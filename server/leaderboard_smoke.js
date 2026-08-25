@@ -196,7 +196,9 @@ async function run() {
       points_spent: 1600,
       manifestation_key: "eletrica",
       spectrum_key: "racional",
-      player_stats: { hp: 300 }
+      base_damage_end: 58,
+      player_stats: { hp: 300, hp_max: 420, defense: 14.5, crit_chance: 0.22 },
+      enemy_scaling: { limit: 88, base_hp: 190, base_speed: 132, close_damage: 18, far_damage: 9 }
     };
     const sessionStart = await request("POST", "/runs/start", {
       player: signedPayload.player,
@@ -206,11 +208,26 @@ async function run() {
       platform: signedPayload.platform,
       role: signedPayload.role,
       room: signedPayload.room,
-      started_unix: signedPayload.started_unix
+      started_unix: signedPayload.started_unix,
+      duration_seconds: 0,
+      phase: 1,
+      kills: 0,
+      points_earned: 0,
+      points_spent: 0,
+      score_current: 0,
+      score_total: 0,
+      cards_total: 0,
+      boss_damage_total: 0,
+      enemy_damage_total: 0,
+      damage_taken_total: 0,
+      base_damage_end: 30,
+      player_stats: { hp: 300, hp_max: 300, defense: 0, crit_chance: 0.05 },
+      enemy_scaling: { limit: 50, base_hp: 100, base_speed: 100, close_damage: 10, far_damage: 4 }
     });
     assert.strictEqual(sessionStart.status, 201, "secure run session was not created");
     const sessionData = JSON.parse(sessionStart.body.toString("utf8"));
     assert(sessionData.session_id && sessionData.session_token, "secure session did not return credentials");
+    assert.strictEqual(sessionData.checkpoint_interval_seconds, 120, "secure checkpoint interval should be 2 minutes");
     const checkpointBase = {
       session_id: sessionData.session_id,
       session_token: sessionData.session_token,
@@ -236,7 +253,8 @@ async function run() {
       cards_total: 1,
       boss_damage_total: 1200,
       enemy_damage_total: 6000,
-      base_damage_end: 34
+      base_damage_end: 34,
+      enemy_scaling: { limit: 66, base_hp: 128, base_speed: 118, close_damage: 12, far_damage: 6 }
     });
     assert.strictEqual(checkpoint1.status, 200, "first secure checkpoint was not accepted");
     const checkpoint2 = await request("POST", "/runs/checkpoint", {
@@ -251,7 +269,8 @@ async function run() {
       cards_total: signedPayload.cards_total,
       boss_damage_total: signedPayload.boss_damage_total,
       enemy_damage_total: signedPayload.enemy_damage_total,
-      base_damage_end: signedPayload.base_damage_end
+      base_damage_end: signedPayload.base_damage_end,
+      enemy_scaling: signedPayload.enemy_scaling
     });
     assert.strictEqual(checkpoint2.status, 200, "second secure checkpoint was not accepted");
     signedPayload.run_session_id = sessionData.session_id;
@@ -264,6 +283,10 @@ async function run() {
     const signedStored = JSON.parse(signedCreated.body.toString("utf8")).run;
     assert.strictEqual(signedStored.rankEligible, true, "signed run should remain eligible");
     assert(signedStored.serverScore > 0 && signedStored.score === signedStored.serverScore, "server score was not applied to signed run");
+    assert(Array.isArray(signedStored.timeline) && signedStored.timeline.length >= 2, "signed run timeline was not preserved");
+    assert.strictEqual(signedStored.timeline[0].source, "initial", "signed run initial baseline was not preserved");
+    assert.strictEqual(signedStored.analysisCalculable, true, "signed run should be calculable after the 2 minute checkpoint");
+    assert.strictEqual(Math.round(Number(signedStored.timeline[signedStored.timeline.length - 1].enemyBaseHp)), 190, "final enemy HP scaling missing from timeline");
     const tolerantPayload = {
       ...payload,
       player: "ToleranceQA",
@@ -361,6 +384,7 @@ async function run() {
     assert(tamperedStored.suspicionReasons.includes("signature_mismatch") || tamperedStored.suspicionReasons.includes("reported_score_mismatch"), "tampered run did not explain suspicion");
     const home = (await request("GET", "/leaderboard")).body.toString("utf8");
     const profile = (await request("GET", `/leaderboard/player/${encodeURIComponent(signedStored.profileKey)}`)).body.toString("utf8");
+    const loserProfile = (await request("GET", `/leaderboard/player/${encodeURIComponent(tamperedStored.profileKey)}`)).body.toString("utf8");
     const rankings = (await request("GET", "/leaderboard/rankings")).body.toString("utf8");
     const story = (await request("GET", "/leaderboard/historia")).body.toString("utf8");
     const catalog = (await request("GET", "/leaderboard/catalogo")).body.toString("utf8");
@@ -369,12 +393,14 @@ async function run() {
     assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Maior dano em boss") && home.includes("36.000"), "dashboard metrics missing");
     assert(home.includes("OPERADOR EM DESTAQUE") && home.includes("Expedicoes recentes") && home.includes("Buscar operador"), "dashboard observatory shell missing");
     assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Ancorada + Sanguinaria"), "player profile missing");
+    assert(loserProfile.includes("LOSER") && loserProfile.includes("Observatorio viu a gambiarra temporal"), "tampered player profile loser warning missing");
     assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Plano cartesiano") && rankings.includes("Maior progressao") && rankings.includes("Speedrun de progressao"), "ranking charts missing");
     assert(story.includes("ARQUIVO NARRATIVO") && story.includes("ramificacao inicial"), "story page missing");
     assert(catalog.includes("CATALOGO HISTORICO") && catalog.includes("Cartas mais presentes"), "catalog page missing");
     assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador"), "run summary telemetry missing");
+    assert(summary.includes("Grafico da partida") && summary.includes("Pontos/min") && summary.includes("Vida dos inimigos") && summary.includes("Condicoes do score"), "run numeric timeline analysis missing");
     assert(missing.includes("LINHA TEMPORAL NAO LOCALIZADA") && missing.includes("Voltar ao observatorio"), "not found page missing");
-    for (const [label, html] of [["home", home], ["profile", profile], ["rankings", rankings], ["story", story], ["catalog", catalog], ["summary", summary], ["missing", missing]]) {
+    for (const [label, html] of [["home", home], ["profile", profile], ["loser profile", loserProfile], ["rankings", rankings], ["story", story], ["catalog", catalog], ["summary", summary], ["missing", missing]]) {
       assertCleanHtml(label, html);
     }
     const cardMatch = home.match(/src="([^"]*carta_por1\.png)"/i);

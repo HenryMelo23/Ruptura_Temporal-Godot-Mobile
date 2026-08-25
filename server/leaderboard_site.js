@@ -162,6 +162,12 @@ function mostFrequent(values) {
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))[0] || ["Nao registrado", 0];
 }
 
+const RUN_ANALYSIS_MIN_SECONDS = 120;
+
+function suspiciousRun(run) {
+  return Boolean(run && (run.suspicious || run.rankEligible === false || arrayOf(run.suspicionReasons).length));
+}
+
 function aggregatePlayer(key, runs) {
   const sorted = [...runs].sort((a, b) => safeNumber(b.score) - safeNumber(a.score));
   const best = sorted[0] || {};
@@ -170,6 +176,7 @@ function aggregatePlayer(key, runs) {
   const farthest = [...runs].sort((a, b) => progressValue(b) - progressValue(a))[0] || best;
   const build = mostFrequent(runs.map((run) => `${textValue(run.manifestation, "?")} + ${textValue(run.spectrum, "?")}`));
   const version = mostFrequent(runs.map((run) => textValue(run.version, "?")));
+  const suspiciousRuns = runs.filter(suspiciousRun);
   return {
     key,
     player: textValue(best.player || (runs[0] && runs[0].player), "Jogador"),
@@ -186,6 +193,8 @@ function aggregatePlayer(key, runs) {
     averageDamageTaken: runs.reduce((sum, run) => sum + safeNumber(run.damageTaken), 0) / Math.max(1, runs.length),
     totalBossDamage: runs.reduce((sum, run) => sum + safeNumber(run.bossDamage), 0),
     totalKills: runs.reduce((sum, run) => sum + safeNumber(run.kills), 0),
+    suspiciousRuns: suspiciousRuns.length,
+    suspicionReasons: Array.from(new Set(suspiciousRuns.flatMap((run) => arrayOf(run.suspicionReasons).map(String)))).slice(0, 8),
     lastRun: [...runs].sort((a, b) => safeNumber(b.endedUnix) - safeNumber(a.endedUnix))[0] || best
   };
 }
@@ -229,6 +238,7 @@ function collectCards(runs) {
 
 function aggregateSnapshot(snapshot) {
   const runs = arrayOf(snapshot && (snapshot.runs || snapshot.recent));
+  const auditedRuns = arrayOf(snapshot && snapshot.auditedRuns).length ? arrayOf(snapshot && snapshot.auditedRuns) : runs;
   const profiles = playerAggregates(runs);
   const bestScore = [...runs].sort((a, b) => safeNumber(b.score) - safeNumber(a.score))[0] || null;
   const bestTime = [...runs].sort((a, b) => safeNumber(b.durationSeconds) - safeNumber(a.durationSeconds))[0] || null;
@@ -242,6 +252,7 @@ function aggregateSnapshot(snapshot) {
   const maxPhase = Math.max(0, ...runs.map((run) => campaignPhase(run)));
   return {
     runs,
+    auditedRuns,
     profiles: profiles.sort((a, b) => safeNumber(b.best.score) - safeNumber(a.best.score)),
     bestScore,
     bestTime,
@@ -396,6 +407,170 @@ function metric(label, value, detail, tone = "cyan", code = "SYS") {
     <strong>${escapeHtml(label)}</strong>
     <small>${escapeHtml(detail)}</small>
   </article>`;
+}
+
+function formatSigned(value, suffix = "") {
+  const number = safeNumber(value);
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${formatDecimal(number, Math.abs(number) >= 10 ? 0 : 1)}${suffix}`;
+}
+
+function formatPercent(value) {
+  return `${formatDecimal(safeNumber(value) * 100, 1)}%`;
+}
+
+function statNumber(source, keys, fallback = 0) {
+  const object = source && typeof source === "object" ? source : {};
+  for (const key of keys) {
+    if (object[key] != null && object[key] !== "") {
+      return safeNumber(object[key], fallback);
+    }
+  }
+  return fallback;
+}
+
+function finalRunStats(run) {
+  const stats = run && run.playerStats && typeof run.playerStats === "object" ? run.playerStats : {};
+  const scaling = run && run.enemyScaling && typeof run.enemyScaling === "object" ? run.enemyScaling : {};
+  return {
+    source: "final",
+    duration: Math.max(0, safeNumber(run && run.durationSeconds)),
+    phase: rawPhase(run),
+    kills: safeNumber(run && run.kills),
+    pointsEarned: safeNumber(run && run.pointsEarned),
+    pointsSpent: safeNumber(run && run.pointsSpent),
+    scoreCurrent: safeNumber(run && run.scoreCurrent),
+    scoreTotal: safeNumber(run && run.scoreTotal),
+    cardsTotal: safeNumber(run && run.cardsTotal),
+    bossDamage: safeNumber(run && run.bossDamage),
+    enemyDamage: safeNumber(run && run.enemyDamage),
+    damageTaken: safeNumber(run && run.damageTaken),
+    hp: statNumber(stats, ["hp"]),
+    hpMax: statNumber(stats, ["hp_max", "hpMax"]),
+    damage: safeNumber(run && (run.baseDamageEnd || run.base_damage_end), safeNumber(run && run.baseDamageStart)),
+    defense: statNumber(stats, ["defense"]),
+    critChance: statNumber(stats, ["crit_chance", "critChance"]),
+    enemyBaseHp: statNumber(scaling, ["base_hp", "baseHp"]),
+    enemyLimit: statNumber(scaling, ["limit"]),
+    enemySpeed: statNumber(scaling, ["base_speed", "baseSpeed"]),
+    enemyCloseDamage: statNumber(scaling, ["close_damage", "closeDamage"]),
+    enemyFarDamage: statNumber(scaling, ["far_damage", "farDamage"])
+  };
+}
+
+function normalizeTimelinePoint(point, fallbackSource = "checkpoint") {
+  const source = point && typeof point === "object" ? point : {};
+  return {
+    source: textValue(source.source, fallbackSource),
+    duration: Math.max(0, safeNumber(source.duration)),
+    phase: Math.max(0, Math.floor(safeNumber(source.phase))),
+    kills: Math.max(0, safeNumber(source.kills)),
+    pointsEarned: Math.max(0, safeNumber(source.pointsEarned)),
+    pointsSpent: Math.max(0, safeNumber(source.pointsSpent)),
+    scoreCurrent: Math.max(0, safeNumber(source.scoreCurrent)),
+    scoreTotal: Math.max(0, safeNumber(source.scoreTotal)),
+    cardsTotal: Math.max(0, safeNumber(source.cardsTotal)),
+    bossDamage: Math.max(0, safeNumber(source.bossDamage)),
+    enemyDamage: Math.max(0, safeNumber(source.enemyDamage)),
+    damageTaken: Math.max(0, safeNumber(source.damageTaken)),
+    hp: Math.max(0, safeNumber(source.hp)),
+    hpMax: Math.max(0, safeNumber(source.hpMax)),
+    damage: Math.max(0, safeNumber(source.damage)),
+    defense: Math.max(0, safeNumber(source.defense)),
+    critChance: Math.max(0, safeNumber(source.critChance)),
+    enemyBaseHp: Math.max(0, safeNumber(source.enemyBaseHp)),
+    enemyLimit: Math.max(0, safeNumber(source.enemyLimit)),
+    enemySpeed: Math.max(0, safeNumber(source.enemySpeed)),
+    enemyCloseDamage: Math.max(0, safeNumber(source.enemyCloseDamage)),
+    enemyFarDamage: Math.max(0, safeNumber(source.enemyFarDamage))
+  };
+}
+
+function runTimelineReport(run) {
+  const finalPoint = finalRunStats(run);
+  const realPoints = arrayOf(run && run.timeline)
+    .map((point) => normalizeTimelinePoint(point))
+    .filter((point) => point.source === "initial" || point.duration > 0 || point.kills > 0 || point.pointsEarned > 0)
+    .sort((a, b) => a.duration - b.duration);
+  let points = realPoints;
+  let precision = "observed";
+  let note = "Timeline real preservada pelos checkpoints seguros da run. Deltas sao calculados entre registros consecutivos recebidos pelo servidor.";
+  if (!points.length) {
+    precision = "final-only";
+    note = "Esta run nao possui checkpoints historicos salvos. O site mostra os valores finais e uma linha estimada apenas para contextualizar tempo; deltas de escalonamento nao sao inventados.";
+    const start = normalizeTimelinePoint({
+      source: "estimado",
+      duration: 0,
+      damage: safeNumber(run && run.baseDamageStart, finalPoint.damage),
+      hp: finalPoint.hp,
+      hpMax: finalPoint.hpMax,
+      defense: finalPoint.defense,
+      critChance: finalPoint.critChance,
+      enemyBaseHp: finalPoint.enemyBaseHp,
+      enemyLimit: finalPoint.enemyLimit,
+      enemySpeed: finalPoint.enemySpeed,
+      enemyCloseDamage: finalPoint.enemyCloseDamage,
+      enemyFarDamage: finalPoint.enemyFarDamage
+    }, "estimado");
+    points = [start, normalizeTimelinePoint(finalPoint, "final")];
+  } else {
+    const last = points[points.length - 1];
+    if (last.duration !== finalPoint.duration || last.pointsEarned !== finalPoint.pointsEarned || last.kills !== finalPoint.kills) {
+      points.push(normalizeTimelinePoint(finalPoint, "final"));
+    } else {
+      points[points.length - 1] = normalizeTimelinePoint({ ...last, ...finalPoint, source: "final" }, "final");
+    }
+  }
+  const hasInitial = points.some((point) => point.source === "initial");
+  const hasTwoMinutePoint = points.some((point) => safeNumber(point.duration) >= RUN_ANALYSIS_MIN_SECONDS);
+  const calculable = run && run.analysisCalculable !== false && finalPoint.duration >= RUN_ANALYSIS_MIN_SECONDS && hasInitial && hasTwoMinutePoint;
+  if (!calculable) {
+    return {
+      points,
+      chartPoints: [],
+      windows: [],
+      precision: "not-calculable",
+      note: finalPoint.duration < RUN_ANALYSIS_MIN_SECONDS
+        ? "Run menor que 2 minutos. O Observatorio preserva o registro, mas nao usa esta partida como parametro do grafico por falta de variaveis suficientes."
+        : "Sem baseline inicial e checkpoint de 2 minutos na mesma run. O registro existe, mas nao entra como parametro calculavel."
+    };
+  }
+  const windows = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const prev = points[index - 1];
+    const next = points[index];
+    const elapsed = Math.max(1, next.duration - prev.duration);
+    const earnedDelta = Math.max(0, next.pointsEarned - prev.pointsEarned);
+    const scoreDelta = Math.max(0, next.scoreTotal - prev.scoreTotal);
+    const damageDelta = Math.max(0, next.enemyDamage + next.bossDamage - prev.enemyDamage - prev.bossDamage);
+    const causes = [];
+    if (next.kills > prev.kills) causes.push(`${formatNumber(next.kills - prev.kills)} abates`);
+    if (next.bossDamage > prev.bossDamage) causes.push(`${formatNumber(next.bossDamage - prev.bossDamage)} dano em boss`);
+    if (next.phase > prev.phase) causes.push(`fase ${formatNumber(prev.phase)} -> ${formatNumber(next.phase)}`);
+    if (next.cardsTotal > prev.cardsTotal) causes.push(`${formatNumber(next.cardsTotal - prev.cardsTotal)} cartas`);
+    if (next.damageTaken > prev.damageTaken) causes.push(`${formatNumber(next.damageTaken - prev.damageTaken)} dano sofrido`);
+    windows.push({
+      from: prev.duration,
+      to: next.duration,
+      earnedDelta,
+      scoreDelta,
+      damageDelta,
+      pointsPerMinute: earnedDelta / elapsed * 60,
+      scorePerMinute: scoreDelta / elapsed * 60,
+      damagePerMinute: damageDelta / elapsed * 60,
+      causes: causes.length ? causes.join(" | ") : "Sem condicao nova observada neste intervalo"
+    });
+  }
+  return { points, chartPoints: points, windows, precision, note };
+}
+
+function statDelta(finalPoint, firstPoint, key) {
+  if (!firstPoint || finalPoint[key] <= 0 && firstPoint[key] <= 0) return null;
+  return finalPoint[key] - firstPoint[key];
+}
+
+function timelineScript(data) {
+  return `registerRunTimelineChart('run-timeline-chart',${safeJson(data)});`;
 }
 
 function leaderStrip(label, run, value, detail, tone, publicAssetUrl) {
@@ -627,7 +802,7 @@ function renderCatalog(snapshot, cardAssetUrl) {
 
 function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
   const analytics = aggregateSnapshot(snapshot);
-  const allRuns = analytics.runs;
+  const allRuns = analytics.auditedRuns || analytics.runs;
   const runs = allRuns.filter((run) => profileKey(run) === runKey).sort((a, b) => safeNumber(b.endedUnix) - safeNumber(a.endedUnix));
   if (!runs.length) return renderNotFound("Jogador nao encontrado", snapshot);
   const player = aggregatePlayer(runKey, runs);
@@ -638,6 +813,14 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
     time: safeNumber(run.durationSeconds),
     boss: safeNumber(run.bossDamage)
   }));
+  const loserWarning = player.suspiciousRuns > 0 ? `<section class="loser-alert">
+    <span>LOSER</span>
+    <div>
+      <b>O Observatorio viu a gambiarra temporal.</b>
+      <p>Tentou dobrar a Ruptura no alicate, mas deixou impressao digital ate no eco do checkpoint. ${formatNumber(player.suspiciousRuns)} run(s) deste perfil foram marcadas como adulteradas e nao entram nos rankings.</p>
+      <small>${escapeHtml(player.suspicionReasons.length ? `Motivos: ${player.suspicionReasons.join(", ")}` : "Motivo: protocolo competitivo recusado.")}</small>
+    </div>
+  </section>` : "";
   const content = `
     <section class="profile-hero">
       <div>
@@ -651,6 +834,7 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
       </div>
       <a class="button primary" href="${runPath(player.best)}">Ver melhor partida</a>
     </section>
+    ${loserWarning}
     <section class="pulse-grid">
       ${metric("Melhor score", `${formatNumber(player.best.score)} pts`, `v${textValue(player.best.version, "?")}`, "cyan", "SCR")}
       ${metric("Melhor tempo", formatDuration(player.bestTime.durationSeconds), formatDate(player.bestTime), "amber", "TMP")}
@@ -794,6 +978,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
     phases
   };
   const bossRows = arrayOf(run.bossDetail).filter((row) => row && (row.reached || safeNumber(row.damage) > 0));
+  const timeline = runTimelineReport(run);
   const currentIndex = analytics.latest.findIndex((item) => String(item.id) === String(run.id));
   const prev = currentIndex >= 0 ? analytics.latest[currentIndex + 1] : null;
   const next = currentIndex > 0 ? analytics.latest[currentIndex - 1] : null;
@@ -818,11 +1003,13 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
       ${metric("Dano recebido", `${formatNumber(run.damageTaken)} dano`, `${formatNumber(arrayOf(run.damageEvents).length)} eventos mapeados`, "red", "HIT")}
       ${metric("Abates", formatNumber(run.kills), `${formatNumber(run.enemyDamage)} dano em inimigos`, "green", "KIL")}
     </section>
+    ${runScalingMetrics(run, timeline)}
     <section class="observatory-grid">
       <div class="terminal-panel span-12">
         ${sectionHeader("Diagnostico", "Onde a run ganhou ou quebrou", "Leitura heuristica feita com dano, deck, economia e ritmo de boss.")}
         ${runInsightCards(run)}
       </div>
+      ${runTimelinePanel(run, timeline)}
       <div class="terminal-panel span-7">
         ${sectionHeader("Posicionamento", "Mapa de calor e dano", "Reconstrucao espacial da permanencia e dos pontos de impacto.", `<div class="phase-switch">${phases.map((phase, index) => `<button type="button" data-phase="${phase}" class="${index === 0 ? "active" : ""}">Fase ${phase}</button>`).join("")}</div>`)}
         <div class="map-wrap"><canvas id="run-map" aria-label="Mapa de calor da movimentacao e pontos de dano"></canvas></div>
@@ -837,6 +1024,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
         ${sectionHeader("Build final", "Deck da partida", `${formatNumber(run.cardsTotal)} cartas registradas nesta run.`)}
         <div class="deck-grid">${arrayOf(run.cards).map((card) => cardTile(card, cardAssetUrl)).join("") || emptyState("Deck nao registrado", "Esta versao da build nao enviou os detalhes das cartas.")}</div>
       </div>
+      ${scoreBreakdown(run)}
       <div class="terminal-panel span-5 facts-list">
         ${sectionHeader("Reconstrucao", "Resumo tecnico")}
         <dl>
@@ -854,7 +1042,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
     active: "run",
     analytics,
     content,
-    script: mapScript(mapData),
+    script: mapScript(mapData) + timelineScript(timeline.chartPoints || timeline.points),
     pageClass: "run-page"
   });
 }
@@ -950,6 +1138,83 @@ function runInsightCards(run) {
   </article>`).join("")}</div>`;
 }
 
+function runScalingMetrics(run, timeline) {
+  const points = timeline.points;
+  const first = timeline.precision === "observed" ? points[0] : null;
+  const finalPoint = points[points.length - 1] || finalRunStats(run);
+  const minutes = Math.max(1 / 60, safeNumber(run && run.durationSeconds) / 60);
+  const offensiveDamage = safeNumber(run && run.enemyDamage) + safeNumber(run && run.bossDamage);
+  const dpm = offensiveDamage / minutes;
+  const enemyHpDelta = statDelta(finalPoint, first, "enemyBaseHp");
+  const hpDelta = statDelta(finalPoint, first, "hpMax");
+  const critDelta = statDelta(finalPoint, first, "critChance");
+  const defenseDelta = statDelta(finalPoint, first, "defense");
+  const deltaLabel = timeline.precision === "observed" ? "desde o primeiro checkpoint" : (timeline.precision === "not-calculable" ? "run nao calculavel" : "sem checkpoint inicial");
+  return `
+    <section class="pulse-grid run-scaling-grid">
+      ${metric("Dano por minuto", `${formatNumber(dpm)} dmg/min`, `${formatNumber(offensiveDamage)} dano total ofensivo`, "magenta", "DPM")}
+      ${metric("Vida dos inimigos", `${formatDecimal(finalPoint.enemyBaseHp, 1)} HP`, enemyHpDelta == null ? deltaLabel : `${formatSigned(enemyHpDelta, " HP")} ${deltaLabel}`, "red", "EHP")}
+      ${metric("Vida maxima do jogador", `${formatDecimal(finalPoint.hpMax, 1)} HP`, hpDelta == null ? deltaLabel : `${formatSigned(hpDelta, " HP")} ${deltaLabel}`, "green", "PHP")}
+      ${metric("Critico", formatPercent(finalPoint.critChance), critDelta == null ? deltaLabel : `${formatSigned(critDelta * 100, "%")} ${deltaLabel}`, "violet", "CRT")}
+      ${metric("Defesa", formatDecimal(finalPoint.defense, 1), defenseDelta == null ? deltaLabel : `${formatSigned(defenseDelta)} ${deltaLabel}`, "amber", "DEF")}
+    </section>`;
+}
+
+function runTimelinePanel(run, timeline) {
+  const latest = timeline.points[timeline.points.length - 1] || finalRunStats(run);
+  const precisionTone = timeline.precision === "observed" ? "green" : (timeline.precision === "not-calculable" ? "red" : "amber");
+  const rows = timeline.windows.slice(-24).map((row) => `<tr>
+    <td>${escapeHtml(formatDuration(row.from))} -> ${escapeHtml(formatDuration(row.to))}</td>
+    <td>${formatNumber(row.earnedDelta)}</td>
+    <td>${formatDecimal(row.pointsPerMinute, 1)}</td>
+    <td>${formatNumber(row.scoreDelta)}</td>
+    <td>${formatDecimal(row.scorePerMinute, 1)}</td>
+    <td>${formatNumber(row.damageDelta)}</td>
+    <td>${escapeHtml(row.causes)}</td>
+  </tr>`).join("");
+  return `
+    <div class="terminal-panel span-12">
+      ${sectionHeader("Grafico da partida", "Evolucao numerica da run", "Tempo, pontos/minuto, dano, vida, critico, defesa e escalonamento inimigo preservados por checkpoint.")}
+      <div class="precision-banner tone-${precisionTone}">
+        <b>${timeline.precision === "observed" ? "Dados observados" : (timeline.precision === "not-calculable" ? "Nao calculavel" : "Reconstrucao final")}</b>
+        <span>${escapeHtml(timeline.note)}</span>
+      </div>
+      <div class="chart-wrap large"><canvas id="run-timeline-chart" aria-label="Grafico de evolucao numerica da partida"></canvas></div>
+      <div class="chart-legend scale-legend">
+        <span class="cyan">Pontos ganhos</span><span class="magenta">Dano ofensivo</span><span class="red">Vida inimiga</span><span class="green">Vida jogador</span><span class="violet">Critico</span><span class="amber">Defesa</span>
+      </div>
+      <div class="timeline-table-wrap">
+        <table class="timeline-table">
+          <caption>Janelas de pontuacao por tempo</caption>
+          <thead><tr><th>Tempo</th><th>Pontos</th><th>Pontos/min</th><th>Score</th><th>Score/min</th><th>Dano</th><th>Condicoes observadas</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="7">Sem janela calculavel. Valores finais preservados: ${formatNumber(latest.pointsEarned)} pontos ganhos, ${formatNumber(latest.kills)} abates, ${formatNumber(latest.bossDamage)} dano em boss.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function scoreBreakdown(run) {
+  const rows = [
+    ["Tempo vivo", `${formatNumber(run && run.durationSeconds)}s x 2`, Math.round(safeNumber(run && run.durationSeconds) * 2)],
+    ["Abates", `${formatNumber(run && run.kills)} x 20`, Math.floor(safeNumber(run && run.kills)) * 20],
+    ["Fase", `${formatNumber(run && run.phase)} x 250`, Math.floor(safeNumber(run && run.phase)) * 250],
+    ["Dano em boss", `${formatNumber(run && run.bossDamage)} / 12`, Math.round(safeNumber(run && run.bossDamage) / 12)],
+    ["Cartas", `${formatNumber(run && run.cardsTotal)} x 15`, Math.floor(safeNumber(run && run.cardsTotal)) * 15],
+    ["Vida restante", `${formatDecimal(statNumber(run && run.playerStats, ["hp"]), 1)} x 0,5`, Math.round(Math.max(0, statNumber(run && run.playerStats, ["hp"])) * 0.5)]
+  ];
+  if (String(run && run.result || "") === "Vitoria") rows.push(["Vitoria", "bonus fixo", 1500]);
+  const total = rows.reduce((sum, row) => sum + safeNumber(row[2]), 0);
+  return `
+    <div class="terminal-panel span-5 facts-list score-breakdown">
+      ${sectionHeader("Calculo", "Condicoes do score", "Formula competitiva recalculada pelo servidor.")}
+      <dl>
+        ${rows.map(([label, formula, value]) => `<div><dt>${escapeHtml(label)}<small>${escapeHtml(formula)}</small></dt><dd>${formatNumber(value)} pts</dd></div>`).join("")}
+        <div><dt>Total recalculado</dt><dd>${formatNumber(total)} pts</dd></div>
+        <div><dt>Score publicado</dt><dd>${formatNumber(run && run.score)} pts</dd></div>
+      </dl>
+    </div>`;
+}
+
 function baseClientScript() {
   return `
 (function(){
@@ -1034,6 +1299,52 @@ function baseClientScript() {
     };
     charts.push(draw);draw();
   }
+  function registerRunTimelineChart(id,data){
+    const canvas=byId(id); if(!canvas) return;
+    let active=-1;
+    const series=[
+      {key:'pointsEarned',label:'Pontos',color:'#25f4e5',value:function(p){return p.pointsEarned||0}},
+      {key:'damageTotal',label:'Dano',color:'#ff48bd',value:function(p){return (p.enemyDamage||0)+(p.bossDamage||0)}},
+      {key:'enemyBaseHp',label:'Vida inimiga',color:'#ff5d68',value:function(p){return p.enemyBaseHp||0}},
+      {key:'hpMax',label:'Vida jogador',color:'#55ef8b',value:function(p){return p.hpMax||0}},
+      {key:'critChance',label:'Critico %',color:'#985cff',value:function(p){return (p.critChance||0)*100}},
+      {key:'defense',label:'Defesa',color:'#ffc94a',value:function(p){return p.defense||0}}
+    ];
+    function fmt(value){return Math.round(Number(value)||0).toLocaleString('pt-BR')}
+    const draw=function(){
+      const prepared=prepareCanvas(canvas,360),ctx=prepared.ctx,w=prepared.w,h=prepared.h;
+      ctx.clearRect(0,0,w,h);axes(ctx,w,h,'tempo da partida','series normalizadas');
+      if(!data.length){ctx.fillStyle='#8b9aac';ctx.fillText('Sem timeline numerica recuperada.',64,62);return}
+      const maxTime=Math.max(1,...data.map(function(p){return Number(p.duration)||0}));
+      series.forEach(function(s){
+        const max=Math.max(1,...data.map(function(p){return Number(s.value(p))||0}));
+        const pts=data.map(function(p,index){return{x:56+(w-86)*(Number(p.duration)||0)/maxTime,y:h-40-(h-78)*(Number(s.value(p))||0)/max,index:index,value:s.value(p)}});
+        ctx.strokeStyle=s.color;ctx.lineWidth=2.2;ctx.beginPath();
+        pts.forEach(function(point,index){if(index===0)ctx.moveTo(point.x,point.y);else ctx.lineTo(point.x,point.y)});
+        ctx.stroke();ctx.fillStyle=s.color;
+        pts.forEach(function(point){ctx.beginPath();ctx.arc(point.x,point.y,active===point.index?5.5:3.3,0,Math.PI*2);ctx.fill()});
+      });
+      const tickCount=5;ctx.fillStyle='#8b9aac';ctx.font='11px Segoe UI, sans-serif';
+      for(let i=0;i<=tickCount;i+=1){const sec=maxTime*i/tickCount,x=56+(w-86)*i/tickCount;ctx.fillText(Math.floor(sec/60)+':'+String(Math.floor(sec%60)).padStart(2,'0'),x-12,h-22)}
+      if(active>=0&&data[active]){
+        const p=data[active],x=56+(w-86)*(Number(p.duration)||0)/maxTime;
+        ctx.strokeStyle='rgba(255,255,255,.62)';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(x,24);ctx.lineTo(x,h-38);ctx.stroke();ctx.setLineDash([]);
+        const lines=['t '+Math.floor((p.duration||0)/60)+':'+String(Math.floor((p.duration||0)%60)).padStart(2,'0')].concat(series.map(function(s){return s.label+': '+fmt(s.value(p))}));
+        const boxW=190,boxH=22+lines.length*17,boxX=Math.min(w-boxW-18,Math.max(58,x+12)),boxY=30;
+        ctx.fillStyle='rgba(3,7,13,.94)';ctx.strokeStyle='rgba(129,213,224,.34)';ctx.fillRect(boxX,boxY,boxW,boxH);ctx.strokeRect(boxX,boxY,boxW,boxH);
+        lines.forEach(function(line,index){ctx.fillStyle=index===0?'#f3f7fa':series[index-1].color;ctx.fillText(line,boxX+12,boxY+22+index*17)});
+      }
+    };
+    canvas.addEventListener('mousemove',function(event){
+      const rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left;
+      const maxTime=Math.max(1,...data.map(function(p){return Number(p.duration)||0}));
+      let best=-1,bestDistance=Infinity;
+      data.forEach(function(p,index){const px=56+(rect.width-86)*(Number(p.duration)||0)/maxTime,d=Math.abs(px-x);if(d<bestDistance){best=index;bestDistance=d}});
+      active=best;draw();
+    },{passive:true});
+    canvas.addEventListener('mouseleave',function(){active=-1;draw()},{passive:true});
+    charts.push(draw);draw();
+  }
   function registerRunMap(id,data){
     const canvas=byId(id); if(!canvas) return;
     let selected=(data.phases&&data.phases[0])||1;
@@ -1076,6 +1387,7 @@ function baseClientScript() {
   window.registerLineChart=registerLineChart;
   window.registerScatterChart=registerScatterChart;
   window.registerBarChart=registerBarChart;
+  window.registerRunTimelineChart=registerRunTimelineChart;
   window.registerRunMap=registerRunMap;
   let timer=0;window.addEventListener('resize',function(){clearTimeout(timer);timer=setTimeout(function(){charts.forEach(function(draw){draw()})},160)},{passive:true});
   if(!reduceMotion){
@@ -1191,8 +1503,12 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .insight-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.insight-grid span{display:block;color:var(--rupture-cyan);font:900 19px var(--font-mono);overflow-wrap:anywhere}
 .operator-highlight{display:grid;align-content:start;gap:7px;min-height:196px;padding:18px;border:1px solid var(--line);background:var(--surface)}.operator-avatar{width:64px;height:64px}.operator-highlight>span{color:var(--text-soft);font-size:11px;text-transform:uppercase}.operator-highlight b{font-size:20px}.operator-highlight strong{color:var(--tone);font:900 26px var(--font-mono)}.operator-highlight small{color:var(--text-soft);line-height:1.4}
 .profile-hero,.run-header{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:24px;padding:24px;border-left:3px solid var(--rupture-cyan);background:linear-gradient(90deg,rgba(37,244,229,.09),var(--surface) 54%,rgba(152,92,255,.08))}.profile-hero h2,.run-header h2{margin:0;font-family:var(--font-display);font-size:clamp(36px,5vw,66px);text-transform:uppercase}.profile-hero p,.run-header p{color:var(--text-soft)}.profile-badges,.run-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.run-actions a,.back-link{color:var(--rupture-cyan);font-weight:800;font-size:12px;text-transform:uppercase}
+.loser-alert{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;align-items:center;margin:-10px 0 24px;padding:18px;border:1px solid var(--danger-red);border-left:6px solid var(--danger-red);background:linear-gradient(90deg,rgba(255,93,104,.18),rgba(36,5,9,.84));box-shadow:0 0 0 1px rgba(255,255,255,.035) inset}.loser-alert>span{display:grid;place-items:center;min-height:86px;color:#210105;background:var(--danger-red);font:900 28px var(--font-mono);letter-spacing:.08em}.loser-alert b{display:block;color:#fff;font-family:var(--font-display);font-size:26px;text-transform:uppercase}.loser-alert p{margin:6px 0;color:#ffd8dc;line-height:1.5}.loser-alert small{color:#ff9ca5;font-family:var(--font-mono);overflow-wrap:anywhere}
 .facts-list dl{margin:0}.facts-list dl>div{display:grid;grid-template-columns:1fr 1.35fr;gap:18px;padding:14px 0;border-top:1px solid var(--line)}.facts-list dt{color:var(--text-soft)}.facts-list dd{margin:0;text-align:right;font-weight:800}.facts-list dd small{display:block;color:var(--text-soft);font-weight:400}
 .chart-wrap{position:relative;height:300px}.chart-wrap.large{height:460px}.chart-wrap canvas,.map-wrap canvas{display:block;width:100%;height:100%}.chart-legend,.map-legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--text-soft);font-size:12px}.chart-legend span:before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;background:currentColor}.cyan{color:var(--rupture-cyan)}.amber{color:var(--survival-yellow)}.magenta{color:var(--rupture-magenta)}
+.scale-legend .red{color:var(--danger-red)}.scale-legend .green{color:var(--progress-green)}.scale-legend .violet{color:var(--rupture-violet)}
+.precision-banner{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin-bottom:14px;padding:12px;border:1px solid var(--tone);background:rgba(255,255,255,.025)}.precision-banner b{color:var(--tone);text-transform:uppercase;font:900 12px var(--font-mono)}.precision-banner span{color:#c1d0d8;font-size:13px;line-height:1.45}
+.timeline-table-wrap{margin-top:16px;overflow:auto;border:1px solid var(--line);background:rgba(2,5,10,.34)}.timeline-table{width:100%;min-width:860px;border-collapse:collapse;font-size:12px}.timeline-table caption{padding:10px 12px;text-align:left;color:var(--rupture-cyan);font:900 11px var(--font-mono);text-transform:uppercase}.timeline-table th,.timeline-table td{padding:10px 12px;border-top:1px solid var(--line);vertical-align:top}.timeline-table th{color:var(--text-soft);text-align:left;text-transform:uppercase;font-size:11px}.timeline-table td:nth-child(2),.timeline-table td:nth-child(3),.timeline-table td:nth-child(4),.timeline-table td:nth-child(5),.timeline-table td:nth-child(6){font-family:var(--font-mono);color:var(--text-main);white-space:nowrap}.score-breakdown dt small{display:block;margin-top:4px;color:var(--text-muted);font-size:11px}.run-scaling-grid{margin-top:-12px}
 .rankings-layout{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:22px 0}.ranking-column{padding:18px;border:1px solid var(--line);border-top:3px solid var(--tone);background:var(--surface)}.ranking-list a{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:center;padding:13px 0;border-top:1px solid var(--line)}.ranking-list a:hover strong{color:var(--tone)}.ranking-list a>b{color:var(--tone);font-family:var(--font-mono)}.ranking-list strong,.ranking-list small{display:block}.ranking-list small{margin:4px 0 8px;color:var(--text-soft);font-size:11px}.ranking-list i{display:block;height:3px;background:var(--tone)}.ranking-list span{text-align:right;font-weight:900}
 .formula-text{color:#c1d0d8;line-height:1.75}.formula-text b{color:var(--rupture-cyan)}
 .map-wrap{width:100%;aspect-ratio:16/9;min-height:320px;background:#05070b;border:1px solid var(--line)}.phase-switch{display:flex;gap:6px;flex-wrap:wrap}.phase-switch button{min-height:34px;padding:7px 10px;border:1px solid var(--line);background:#07101a;color:var(--text-soft);cursor:pointer}.phase-switch button:hover,.phase-switch button.active{border-color:var(--rupture-cyan);color:var(--rupture-cyan);background:var(--rupture-cyan-soft)}.map-legend{margin-top:12px}.map-legend i{display:inline-block;width:10px;height:10px;margin-right:6px}.map-legend .heat{background:var(--survival-yellow);box-shadow:0 0 8px var(--rupture-magenta)}.map-legend .damage{border-radius:50%;background:var(--danger-red)}.data-note{color:var(--text-soft);font-size:12px;line-height:1.55}
@@ -1203,7 +1519,7 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 @media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 @media (prefers-contrast: more){:root{--line:rgba(210,240,255,.35);--text-soft:#c8d8e2}.terminal-panel,.metric,.run-row{border-color:var(--line-strong)}}
 @media(max-width:1180px){.topbar{grid-template-columns:1fr}.brand{min-width:0}.operator-search{max-width:420px}.pulse-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.span-8,.span-7,.span-5,.span-4{grid-column:span 12}.hero-terminal,.lore-hero{grid-template-columns:1fr}.rankings-layout,.catalog-grid{grid-template-columns:1fr}.story-grid,.insight-grid,.catalog-deck{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:760px){main{padding-left:16px;padding-right:16px}.topbar{position:relative;padding:12px 16px;backdrop-filter:none}.main-nav{width:100%;padding-bottom:4px}.page-heading h1{font-size:38px}.hero-copy h2{font-size:42px}.pulse-grid,.campaign-line,.player-grid,.story-grid,.insight-grid,.catalog-deck{grid-template-columns:1fr}.run-row-main{grid-template-columns:1fr}.run-row strong{text-align:left}.deck-grid{grid-template-columns:1fr}.section-head,.profile-hero,.run-header{flex-direction:column;align-items:flex-start}.facts-list dl>div{grid-template-columns:1fr}.facts-list dd{text-align:left}.chart-wrap.large{height:330px}.map-wrap{min-height:230px}.terminal-panel{padding:16px}.brand em{display:none}.hero-terminal:before{display:none}}
+@media(max-width:760px){main{padding-left:16px;padding-right:16px}.topbar{position:relative;padding:12px 16px;backdrop-filter:none}.main-nav{width:100%;padding-bottom:4px}.page-heading h1{font-size:38px}.hero-copy h2{font-size:42px}.pulse-grid,.campaign-line,.player-grid,.story-grid,.insight-grid,.catalog-deck{grid-template-columns:1fr}.run-row-main{grid-template-columns:1fr}.run-row strong{text-align:left}.deck-grid{grid-template-columns:1fr}.section-head,.profile-hero,.run-header{flex-direction:column;align-items:flex-start}.loser-alert{grid-template-columns:1fr}.loser-alert>span{min-height:52px}.facts-list dl>div{grid-template-columns:1fr}.facts-list dd{text-align:left}.chart-wrap.large{height:330px}.map-wrap{min-height:230px}.terminal-panel{padding:16px}.brand em{display:none}.hero-terminal:before{display:none}}
 `;
 }
 

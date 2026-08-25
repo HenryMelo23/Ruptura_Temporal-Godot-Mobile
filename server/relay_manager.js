@@ -45,8 +45,9 @@ const RUN_REPORT_MAX_CLOCK_SKEW_SECONDS = numberEnv("RUN_REPORT_MAX_CLOCK_SKEW_S
 const RUN_REPORT_MAX_AGE_SECONDS = numberEnv("RUN_REPORT_MAX_AGE_SECONDS", 36 * 60 * 60);
 const RUN_SECURITY_PATH = process.env.RUN_SECURITY_PATH || path.join(__dirname, "leaderboard_security.json");
 const RUN_SESSION_TTL_MS = numberEnv("RUN_SESSION_TTL_MS", 8 * 60 * 60 * 1000);
-const RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS = numberEnv("RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS", 20);
+const RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS = numberEnv("RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS", 120);
 const RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS = numberEnv("RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS", 95);
+const RUN_SESSION_TIMELINE_LIMIT = numberEnv("RUN_SESSION_TIMELINE_LIMIT", 1440);
 const RUN_SECURITY_WINDOW_MS = numberEnv("RUN_SECURITY_WINDOW_MS", 10 * 60 * 1000);
 const RUN_SECURITY_MAX_REPORTS_PER_WINDOW = numberEnv("RUN_SECURITY_MAX_REPORTS_PER_WINDOW", 10);
 const RUN_SECURITY_BLOCK_THRESHOLD = numberEnv("RUN_SECURITY_BLOCK_THRESHOLD", 4);
@@ -1229,6 +1230,7 @@ function sessionTokenHash(token) {
 
 function normalizeSessionMetrics(payload) {
   const stats = payload && payload.player_stats && typeof payload.player_stats === "object" ? payload.player_stats : {};
+  const scaling = payload && payload.enemy_scaling && typeof payload.enemy_scaling === "object" ? payload.enemy_scaling : {};
   return {
     duration: Math.max(0, Math.floor(safeNumber(payload && payload.duration_seconds))),
     phase: Math.max(0, Math.floor(safeNumber(payload && payload.phase))),
@@ -1243,7 +1245,45 @@ function normalizeSessionMetrics(payload) {
     scoreTotal: Math.max(0, Math.floor(safeNumber(payload && payload.score_total))),
     hp: Math.max(0, safeNumber(stats.hp)),
     hpMax: Math.max(0, safeNumber(stats.hp_max)),
-    damage: Math.max(0, safeNumber(payload && payload.base_damage_end))
+    damage: Math.max(0, safeNumber(payload && payload.base_damage_end)),
+    defense: Math.max(0, safeNumber(stats.defense)),
+    critChance: Math.max(0, safeNumber(stats.crit_chance)),
+    attackInterval: Math.max(0, safeNumber(stats.attack_interval)),
+    speed: Math.max(0, safeNumber(stats.speed)),
+    enemyBaseHp: Math.max(0, safeNumber(scaling.base_hp)),
+    enemyLimit: Math.max(0, Math.floor(safeNumber(scaling.limit))),
+    enemySpeed: Math.max(0, safeNumber(scaling.base_speed)),
+    enemyCloseDamage: Math.max(0, safeNumber(scaling.close_damage)),
+    enemyFarDamage: Math.max(0, safeNumber(scaling.far_damage))
+  };
+}
+
+function timelinePointFromMetrics(metrics, source = "checkpoint") {
+  return {
+    source,
+    duration: Math.max(0, Math.floor(safeNumber(metrics && metrics.duration))),
+    phase: Math.max(0, Math.floor(safeNumber(metrics && metrics.phase))),
+    kills: Math.max(0, Math.floor(safeNumber(metrics && metrics.kills))),
+    pointsEarned: Math.max(0, Math.floor(safeNumber(metrics && metrics.pointsEarned))),
+    pointsSpent: Math.max(0, Math.floor(safeNumber(metrics && metrics.pointsSpent))),
+    scoreCurrent: Math.max(0, Math.floor(safeNumber(metrics && metrics.scoreCurrent))),
+    scoreTotal: Math.max(0, Math.floor(safeNumber(metrics && metrics.scoreTotal))),
+    cardsTotal: Math.max(0, Math.floor(safeNumber(metrics && metrics.cardsTotal))),
+    bossDamage: Math.max(0, Math.floor(safeNumber(metrics && metrics.bossDamage))),
+    enemyDamage: Math.max(0, Math.floor(safeNumber(metrics && metrics.enemyDamage))),
+    damageTaken: Math.max(0, Math.floor(safeNumber(metrics && metrics.damageTaken))),
+    hp: Math.max(0, safeNumber(metrics && metrics.hp)),
+    hpMax: Math.max(0, safeNumber(metrics && metrics.hpMax)),
+    damage: Math.max(0, safeNumber(metrics && metrics.damage)),
+    defense: Math.max(0, safeNumber(metrics && metrics.defense)),
+    critChance: Math.max(0, safeNumber(metrics && metrics.critChance)),
+    attackInterval: Math.max(0, safeNumber(metrics && metrics.attackInterval)),
+    speed: Math.max(0, safeNumber(metrics && metrics.speed)),
+    enemyBaseHp: Math.max(0, safeNumber(metrics && metrics.enemyBaseHp)),
+    enemyLimit: Math.max(0, Math.floor(safeNumber(metrics && metrics.enemyLimit))),
+    enemySpeed: Math.max(0, safeNumber(metrics && metrics.enemySpeed)),
+    enemyCloseDamage: Math.max(0, safeNumber(metrics && metrics.enemyCloseDamage)),
+    enemyFarDamage: Math.max(0, safeNumber(metrics && metrics.enemyFarDamage))
   };
 }
 
@@ -1271,6 +1311,7 @@ function createRunSession(ip, payload) {
     checkpoints: 0,
     last: metrics,
     max: metrics,
+    timeline: [timelinePointFromMetrics(metrics, "initial")],
     anomalies: []
   };
   saveSecurityStore(store);
@@ -1331,6 +1372,9 @@ function updateRunSession(ip, payload) {
   const anomalies = mergeSessionMetrics(session, metrics);
   session.lastAt = now;
   session.checkpoints = Math.max(0, Math.floor(safeNumber(session.checkpoints))) + 1;
+  session.timeline = Array.isArray(session.timeline) ? session.timeline : [];
+  session.timeline.push(timelinePointFromMetrics(metrics, "checkpoint"));
+  session.timeline = session.timeline.slice(-RUN_SESSION_TIMELINE_LIMIT);
   saveSecurityStore(store);
   return { ok: anomalies.length === 0, reasons: anomalies, session };
 }
@@ -1377,6 +1421,48 @@ function evaluateRunSession(payload, ip, versionCode) {
   session.final = finalMetrics;
   saveSecurityStore(store);
   return Array.from(new Set(hardRunAuditReasons(reasons)));
+}
+
+function runTimelineFromSession(payload, ip, versionCode) {
+  const sessionId = String(payload && payload.run_session_id || "").trim();
+  const token = String(payload && payload.run_session_token || "").trim();
+  if (!sessionId || !token || versionCode < RUN_REPORT_SESSION_MIN_VERSION_CODE) {
+    return [];
+  }
+  const store = loadSecurityStore();
+  const session = store.sessions[sessionId];
+  if (!session || typeof session !== "object") {
+    return [];
+  }
+  if (session.ip && ip && session.ip !== ip) {
+    return [];
+  }
+  if (session.tokenHash !== sessionTokenHash(token)) {
+    return [];
+  }
+  if (Math.max(0, Math.floor(safeNumber(session.versionCode))) !== Math.max(0, Math.floor(safeNumber(versionCode)))) {
+    return [];
+  }
+  const timeline = (Array.isArray(session.timeline) ? session.timeline : [])
+    .map((point) => timelinePointFromMetrics(point, String(point && point.source || "checkpoint")))
+    .filter((point) => point.source === "initial" || point.duration > 0 || point.kills > 0 || point.pointsEarned > 0);
+  const finalPoint = timelinePointFromMetrics(normalizeSessionMetrics(payload), "final");
+  const lastPoint = timeline[timeline.length - 1];
+  if (!lastPoint || lastPoint.duration !== finalPoint.duration || lastPoint.pointsEarned !== finalPoint.pointsEarned || lastPoint.kills !== finalPoint.kills) {
+    timeline.push(finalPoint);
+  } else {
+    timeline[timeline.length - 1] = { ...lastPoint, ...finalPoint, source: "final" };
+  }
+  return timeline
+    .sort((left, right) => safeNumber(left.duration) - safeNumber(right.duration))
+    .slice(-RUN_SESSION_TIMELINE_LIMIT);
+}
+
+function runAnalysisCalculable(runTimeline, durationSeconds) {
+  const timeline = Array.isArray(runTimeline) ? runTimeline : [];
+  const hasInitial = timeline.some((point) => String(point && point.source) === "initial");
+  const hasTwoMinuteEvidence = timeline.some((point) => safeNumber(point && point.duration) >= RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS);
+  return safeNumber(durationSeconds) >= RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS && hasInitial && hasTwoMinuteEvidence;
 }
 
 function profileKeyForRun(run) {
@@ -1649,6 +1735,8 @@ function normalizeRunPayload(payload, ip = "") {
   const integrity = evaluateRunIntegrity(payload, ip);
   const score = integrity.rankEligible ? (integrity.versionCode >= RUN_REPORT_INTEGRITY_MIN_VERSION_CODE ? integrity.expectedScore : integrity.reportedScore) : 0;
   const endedUnix = Math.max(0, Math.floor(safeNumber(payload.ended_unix, Date.now() / 1000)));
+  const runTimeline = runTimelineFromSession(payload, ip, integrity.versionCode);
+  const analysisCalculable = runAnalysisCalculable(runTimeline, durationSeconds);
   return {
     id: crypto.createHash("sha1").update(JSON.stringify(payload) + Date.now()).digest("hex").slice(0, 18),
     player,
@@ -1676,6 +1764,8 @@ function normalizeRunPayload(payload, ip = "") {
     scoreTotal: Math.max(0, Math.floor(safeNumber(payload.score_total))),
     pointsEarned: Math.max(0, Math.floor(safeNumber(payload.points_earned))),
     pointsSpent: Math.max(0, Math.floor(safeNumber(payload.points_spent))),
+    baseDamageStart: Math.max(0, safeNumber(payload.base_damage_start)),
+    baseDamageEnd: Math.max(0, safeNumber(payload.base_damage_end)),
     bossDamage,
     enemyDamage: Math.max(0, Math.floor(safeNumber(payload.enemy_damage_total))),
     damageTaken: Math.max(0, Math.floor(safeNumber(payload.damage_taken_total))),
@@ -1690,6 +1780,12 @@ function normalizeRunPayload(payload, ip = "") {
     cards: normalizeCardRows(payload.cards_detail),
     playerStats: payload.player_stats && typeof payload.player_stats === "object" ? payload.player_stats : {},
     enemyScaling: payload.enemy_scaling && typeof payload.enemy_scaling === "object" ? payload.enemy_scaling : {},
+    timeline: runTimeline,
+    timelineSource: runTimeline.length > 1 ? "session_checkpoints" : "final_report",
+    analysisCalculable,
+    analysisNote: analysisCalculable
+      ? "baseline inicial e janela minima de 2 minutos observados"
+      : (durationSeconds < RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS ? "run menor que 2 minutos; parametros insuficientes para grafico confiavel" : "baseline inicial/checkpoint de 2 minutos ausente"),
     network: payload.network && typeof payload.network === "object" ? payload.network : {},
     runSessionId: String(payload.run_session_id || "").slice(0, 64),
     settings: payload.settings && typeof payload.settings === "object" ? payload.settings : {},
