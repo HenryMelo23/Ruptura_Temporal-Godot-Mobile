@@ -174,6 +174,10 @@ const RUN_LEADERBOARD_PATH: = "/runs"
 const RUN_LEADERBOARD_START_PATH: = "/runs/start"
 const RUN_LEADERBOARD_CHECKPOINT_PATH: = "/runs/checkpoint"
 const RUN_LEADERBOARD_VIEW_PATH: = "/leaderboard"
+const UMBRA_MIND_LATEST_PATH: = "/umbra/mind/latest"
+const UMBRA_MIND_STORAGE_DIR: = "user://umbra_mind"
+const UMBRA_MIND_STATE_PATH: = "user://umbra_mind/state.json"
+const UMBRA_MIND_CHECK_INTERVAL_SECONDS: int = 7 * 24 * 60 * 60
 const RUN_REPORT_INTEGRITY_VERSION: = 1
 const RUN_REPORT_INTEGRITY_SALT: = "ruptura-temporal-run-integrity-v1-2.0.30c"
 const RUN_SECURITY_CHECKPOINT_INTERVAL: = 120.0
@@ -1735,6 +1739,10 @@ var app_update_status: = "idle"
 var app_update_error: = ""
 var app_update_download_path: = ""
 var app_update_selected: = 0
+var umbra_mind_check_request: HTTPRequest = null
+var umbra_mind_checked: bool = false
+var umbra_mind_status: String = "idle"
+var umbra_mind_version: String = ""
 var card_unlock_veteran_synced_version_code: = 0
 var qa_stream_session_request: HTTPRequest = null
 var qa_stream_discord_request: HTTPRequest = null
@@ -2011,6 +2019,19 @@ var run_damage_source_meta: Dictionary = {}
 var run_damage_events: Array = []
 var run_heatmap_cells: Dictionary = {}
 var run_heatmap_sample_timer: float = 0.0
+var run_phase_seconds: Dictionary = {}
+var run_behavior_distance: float = 0.0
+var run_behavior_edge_seconds: float = 0.0
+var run_behavior_corner_seconds: float = 0.0
+var run_behavior_center_seconds: float = 0.0
+var run_behavior_dash_count: int = 0
+var run_behavior_shots_fired: int = 0
+var run_behavior_hits: int = 0
+var run_behavior_boss_hits: int = 0
+var run_behavior_player_last_pos: Vector2 = PLAYER_START
+var run_behavior_player_last_sample_pos: Vector2 = PLAYER_START
+var run_behavior_move_samples: int = 0
+var run_behavior_stationary_samples: int = 0
 var run_end_payload: Dictionary = {}
 var qa_data_unlocked: bool = false
 var qa_streaming_unlocked: bool = false
@@ -3196,6 +3217,10 @@ func _ready() -> void :
 	add_child(app_update_download_request)
 	app_update_download_request.request_completed.connect(_on_app_update_download_completed)
 	_cleanup_stale_app_update_files()
+	umbra_mind_check_request = HTTPRequest.new()
+	umbra_mind_check_request.timeout = 8.0
+	add_child(umbra_mind_check_request)
+	umbra_mind_check_request.request_completed.connect(_on_umbra_mind_check_completed)
 
 	veteran_unlock_request = HTTPRequest.new()
 	veteran_unlock_request.timeout = 8.0
@@ -3299,6 +3324,8 @@ func _cleanup_runtime_resources() -> void :
 		online_heartbeat_in_flight = false
 	if run_report_request != null:
 		run_report_request.cancel_request()
+	if umbra_mind_check_request != null:
+		umbra_mind_check_request.cancel_request()
 	if veteran_unlock_request != null:
 		veteran_unlock_request.cancel_request()
 	if run_leaderboard_request != null:
@@ -4837,6 +4864,19 @@ func _reset_run_report_stats() -> void :
 	run_damage_events.clear()
 	run_heatmap_cells.clear()
 	run_heatmap_sample_timer = 0.0
+	run_phase_seconds.clear()
+	run_behavior_distance = 0.0
+	run_behavior_edge_seconds = 0.0
+	run_behavior_corner_seconds = 0.0
+	run_behavior_center_seconds = 0.0
+	run_behavior_dash_count = 0
+	run_behavior_shots_fired = 0
+	run_behavior_hits = 0
+	run_behavior_boss_hits = 0
+	run_behavior_player_last_pos = player_pos
+	run_behavior_player_last_sample_pos = player_pos
+	run_behavior_move_samples = 0
+	run_behavior_stationary_samples = 0
 	for phase in range(1, 6):
 		run_damage_to_boss_by_phase[phase] = 0.0
 		run_boss_reached[phase] = false
@@ -4853,6 +4893,7 @@ func _track_enemy_damage(enemy: Dictionary, amount: float) -> void :
 	if amount <= 0.0:
 		return
 	run_damage_to_enemies += amount
+	_track_behavior_hit(false)
 	var key: = _enemy_report_name(String(enemy.get("type", ENEMY_COMMON)))
 	run_damage_by_enemy[key] = float(run_damage_by_enemy.get(key, 0.0)) + amount
 
@@ -4860,6 +4901,7 @@ func _track_enemy_damage(enemy: Dictionary, amount: float) -> void :
 func _track_boss_damage(amount: float) -> void :
 	if amount <= 0.0:
 		return
+	_track_behavior_hit(true)
 	run_damage_to_boss_by_phase[current_phase] = float(run_damage_to_boss_by_phase.get(current_phase, 0.0)) + amount
 
 
@@ -4993,15 +5035,81 @@ func _telemetry_normalized_pos(pos: Vector2) -> Vector2:
 func _update_run_telemetry(delta: float) -> void :
 	if is_dead:
 		return
+	run_phase_seconds[current_phase] = float(run_phase_seconds.get(current_phase, 0.0)) + delta
+	run_behavior_distance += player_pos.distance_to(run_behavior_player_last_pos)
+	run_behavior_player_last_pos = player_pos
+	var edge_x: float = minf(player_pos.x, WORLD_SIZE.x - player_pos.x)
+	var edge_y: float = minf(player_pos.y, WORLD_SIZE.y - player_pos.y)
+	if edge_x < 180.0 or edge_y < 135.0:
+		run_behavior_edge_seconds += delta
+	if edge_x < 180.0 and edge_y < 135.0:
+		run_behavior_corner_seconds += delta
+	if player_pos.distance_to(WORLD_SIZE * 0.5) <= minf(WORLD_SIZE.x, WORLD_SIZE.y) * 0.22:
+		run_behavior_center_seconds += delta
 	run_heatmap_sample_timer -= delta
 	if run_heatmap_sample_timer > 0.0:
 		return
 	run_heatmap_sample_timer = RUN_TELEMETRY_SAMPLE_INTERVAL
+	if player_pos.distance_to(run_behavior_player_last_sample_pos) < 18.0:
+		run_behavior_stationary_samples += 1
+	else:
+		run_behavior_move_samples += 1
+	run_behavior_player_last_sample_pos = player_pos
 	var normalized: = _telemetry_normalized_pos(player_pos)
 	var cell_x: = clampi(int(floor(normalized.x * RUN_TELEMETRY_GRID.x)), 0, RUN_TELEMETRY_GRID.x - 1)
 	var cell_y: = clampi(int(floor(normalized.y * RUN_TELEMETRY_GRID.y)), 0, RUN_TELEMETRY_GRID.y - 1)
 	var cell_key: = "%d:%d:%d" % [current_phase, cell_x, cell_y]
 	run_heatmap_cells[cell_key] = int(run_heatmap_cells.get(cell_key, 0)) + 1
+
+
+func _track_behavior_dash(origin: Vector2, destination: Vector2) -> void:
+	run_behavior_dash_count += 1
+	run_behavior_distance += origin.distance_to(destination)
+
+
+func _track_behavior_shot() -> void:
+	run_behavior_shots_fired += 1
+
+
+func _track_behavior_hit(is_boss_hit: bool = false) -> void:
+	run_behavior_hits += 1
+	if is_boss_hit:
+		run_behavior_boss_hits += 1
+
+
+func _run_phase_seconds_report() -> Dictionary:
+	var rows: Dictionary = {}
+	for key in run_phase_seconds.keys():
+		rows[str(key)] = snappedf(float(run_phase_seconds[key]), 0.1)
+	return rows
+
+
+func _run_behavior_report() -> Dictionary:
+	var duration: float = maxf(1.0, time_alive)
+	var move_samples: int = maxi(1, run_behavior_move_samples + run_behavior_stationary_samples)
+	var edge_ratio: float = clampf(run_behavior_edge_seconds / duration, 0.0, 1.0)
+	var corner_ratio: float = clampf(run_behavior_corner_seconds / duration, 0.0, 1.0)
+	var center_ratio: float = clampf(run_behavior_center_seconds / duration, 0.0, 1.0)
+	var hit_rate: float = float(run_behavior_hits) / maxf(1.0, float(run_behavior_shots_fired))
+	return {
+		"phase_seconds": _run_phase_seconds_report(),
+		"phase1_seconds": snappedf(float(run_phase_seconds.get(1, 0.0)), 0.1),
+		"distance_traveled": int(round(run_behavior_distance)),
+		"edge_seconds": snappedf(run_behavior_edge_seconds, 0.1),
+		"corner_seconds": snappedf(run_behavior_corner_seconds, 0.1),
+		"center_seconds": snappedf(run_behavior_center_seconds, 0.1),
+		"edge_ratio": snappedf(edge_ratio, 0.0001),
+		"corner_ratio": snappedf(corner_ratio, 0.0001),
+		"center_ratio": snappedf(center_ratio, 0.0001),
+		"dash_count": run_behavior_dash_count,
+		"dash_per_minute": snappedf(float(run_behavior_dash_count) / duration * 60.0, 0.01),
+		"shots_fired": run_behavior_shots_fired,
+		"shots_per_minute": snappedf(float(run_behavior_shots_fired) / duration * 60.0, 0.01),
+		"hits": run_behavior_hits,
+		"boss_hits": run_behavior_boss_hits,
+		"hit_rate": snappedf(hit_rate, 0.0001),
+		"stationary_ratio": snappedf(float(run_behavior_stationary_samples) / float(move_samples), 0.0001)
+	}
 
 
 func _track_player_damage(amount: int, source: String) -> void :
@@ -5248,6 +5356,7 @@ func _build_run_report_payload(result: String) -> Dictionary:
 			"world_height": int(WORLD_SIZE.y), 
 			"cells": _run_heatmap_report_rows()
 		}, 
+		"behavior_metrics": _run_behavior_report(), 
 		"boss_damage_total": _total_boss_damage_report(), 
 		"boss_report": _boss_report_text(), 
 		"boss_detail": _boss_report_rows(), 
@@ -5405,7 +5514,8 @@ func _run_security_combat_snapshot_payload() -> Dictionary:
 			"base_speed": enemy_speed_base, 
 			"close_damage": enemy_close_damage, 
 			"far_damage": enemy_far_damage
-		}
+		}, 
+		"behavior_metrics": _run_behavior_report()
 	}
 
 
@@ -5710,6 +5820,94 @@ func _update_app_update_check(delta: float) -> void :
 	var err: = app_update_check_request.request(url, ["Cache-Control: no-cache"])
 	if err != OK:
 		print("Atualizador: falha ao iniciar consulta: ", error_string(err))
+
+
+func _umbra_mind_remote_supported() -> bool:
+	return ONLINE_RELAY_BASE_URL.strip_edges() != ""
+
+
+func _read_json_file(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var file: = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	if parsed is Dictionary:
+		return parsed
+	return {}
+
+
+func _update_umbra_mind_check(_delta: float) -> void:
+	if umbra_mind_checked or dedicated_server_mode or not _umbra_mind_remote_supported():
+		return
+	if mode != "menu":
+		return
+	umbra_mind_checked = true
+	if umbra_mind_check_request == null:
+		return
+	var state: Dictionary = _read_json_file(UMBRA_MIND_STATE_PATH)
+	var now: int = int(Time.get_unix_time_from_system())
+	var last_check: int = int(state.get("last_check_unix", 0))
+	if last_check > 0 and now - last_check < UMBRA_MIND_CHECK_INTERVAL_SECONDS:
+		umbra_mind_status = "cached"
+		umbra_mind_version = String(state.get("mind_version", ""))
+		return
+	_ensure_player_profile_id()
+	var url: = "%s%s?profile_id=%s&player=%s&version_code=%d&current=%s" % [
+		ONLINE_RELAY_BASE_URL, 
+		UMBRA_MIND_LATEST_PATH, 
+		player_profile_id.uri_encode(), 
+		player_nickname.uri_encode(), 
+		GAME_VERSION_CODE, 
+		String(state.get("mind_version", "")).uri_encode()
+	]
+	umbra_mind_status = "checking"
+	var err: = umbra_mind_check_request.request(url, ["Cache-Control: no-cache"])
+	if err != OK:
+		umbra_mind_status = "error"
+		print("UMBRA_MIND: falha ao consultar mente remota: ", error_string(err))
+
+
+func _on_umbra_mind_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		umbra_mind_status = "error"
+		return
+	var payload = JSON.parse_string(body.get_string_from_utf8())
+	if not payload is Dictionary or not bool(payload.get("ok", false)):
+		umbra_mind_status = "error"
+		print("UMBRA_MIND: resposta remota invalida")
+		return
+	_apply_umbra_mind_payload(payload)
+
+
+func _apply_umbra_mind_payload(payload: Dictionary) -> void:
+	var version: String = String(payload.get("mind_version", payload.get("version", "")))
+	if version == "":
+		umbra_mind_status = "error"
+		return
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(UMBRA_MIND_STORAGE_DIR))
+	var files: Dictionary = payload.get("files", {})
+	for remote_file_name in files.keys():
+		var safe_name: String = String(remote_file_name).get_file()
+		if not safe_name.ends_with(".json"):
+			continue
+		var file_path: String = UMBRA_MIND_STORAGE_DIR + "/" + safe_name
+		var file = FileAccess.open(file_path, FileAccess.WRITE)
+		if file != null:
+			file.store_string(JSON.stringify(files[remote_file_name], "\t"))
+	var state: = {
+		"mind_version": version, 
+		"last_check_unix": int(Time.get_unix_time_from_system()), 
+		"trained_runs": int(payload.get("trained_runs", 0)), 
+		"trained_players": int(payload.get("trained_players", 0))
+	}
+	var state_file = FileAccess.open(UMBRA_MIND_STATE_PATH, FileAccess.WRITE)
+	if state_file != null:
+		state_file.store_string(JSON.stringify(state, "\t"))
+	umbra_mind_version = version
+	umbra_mind_status = "updated" if bool(payload.get("updated", true)) else "current"
+	boss5_memory_loaded = false
 
 
 func _update_veteran_unlock_sync(delta: float) -> void:
@@ -10426,6 +10624,7 @@ func _load_umbra_mobile_memory() -> void :
 				boss5_mobile_weights[action] = clampf(float(learned["weights"][action]), -3.5, 3.5)
 	if learned.has("tendencias") and not learned["tendencias"].is_empty():
 		boss5_memory["tendencias"] = learned["tendencias"]
+	_apply_remote_umbra_mind()
 	_build_umbra_predatory_mods()
 
 
@@ -10439,6 +10638,27 @@ func _read_json_dict(path: String) -> Dictionary:
 	if parsed is Dictionary:
 		return parsed
 	return {}
+
+
+func _apply_remote_umbra_mind() -> void:
+	var global_profile: Dictionary = _read_json_dict(UMBRA_MIND_STORAGE_DIR + "/umbra_global_profile.json")
+	var dossiers: Dictionary = _read_json_dict(UMBRA_MIND_STORAGE_DIR + "/umbra_player_dossiers.json")
+	var archetypes: Dictionary = _read_json_dict(UMBRA_MIND_STORAGE_DIR + "/umbra_archetypes.json")
+	if global_profile.is_empty() and dossiers.is_empty() and archetypes.is_empty():
+		return
+	_ensure_player_profile_id()
+	var profile: Dictionary = global_profile.get("perfil_jogador", {})
+	if dossiers.has("players") and dossiers["players"] is Dictionary:
+		var players: Dictionary = dossiers["players"]
+		var individual: Dictionary = players.get(player_profile_id, {})
+		if individual.is_empty() and player_nickname != "":
+			individual = players.get(player_nickname.to_lower(), {})
+		if not individual.is_empty():
+			profile = individual.get("perfil_jogador", individual)
+	if not profile.is_empty():
+		boss5_memory["perfil_jogador"] = profile
+	if archetypes.has("actions") and archetypes["actions"] is Dictionary:
+		boss5_memory["umbra_archetype_actions"] = archetypes["actions"]
 
 
 func _save_umbra_mobile_memory(force: = false) -> void :
@@ -11036,6 +11256,7 @@ func _process(delta: float) -> void :
 		queue_redraw()
 		return
 	_update_app_update_check(delta)
+	_update_umbra_mind_check(delta)
 	_update_veteran_unlock_sync(delta)
 	_update_qa_streaming(delta)
 	_update_run_security_checkpoint(delta)
@@ -12174,6 +12395,7 @@ func _fire_projectile(kind: String, damage: float, speed: float, life: float, pi
 	_apply_aura_events(AuraSystem.on_attack(aura_state, bullets[-1]))
 	_spawn_projectile_muzzle(kind, player_pos + dir * 34.0, dir)
 	_add_card_unlock_progress("shots_fired", 1.0)
+	_track_behavior_shot()
 
 
 func _fire_returning() -> void :
@@ -12218,6 +12440,7 @@ func _fire_returning() -> void :
 	_spawn_projectile_muzzle("retornante", player_pos + dir * 34.0, dir)
 	_apply_aura_events(AuraSystem.on_attack(aura_state, bullet))
 	_add_card_unlock_progress("shots_fired", 1.0)
+	_track_behavior_shot()
 	if retornante_memoria_pending:
 		retornante_memoria_pending = false
 		_activate_retornante_memory(bullet)
@@ -13861,6 +14084,7 @@ func _execute_teleport(target_world: Vector2) -> void :
 			_record_ressonancia_action("TELEPORT", _current_dash_cooldown())
 			_grant_impulso_from_ready_action("TELEPORT")
 			_add_card_unlock_progress("teleports_used", 1.0)
+			_track_behavior_dash(origin, player_pos)
 			_tutorial_note_action("dash")
 			return
 		_start_cartografica_teleport_pin(origin, target_world)
@@ -13878,6 +14102,7 @@ func _execute_teleport(target_world: Vector2) -> void :
 	_record_ressonancia_action("TELEPORT", _current_dash_cooldown())
 	_grant_impulso_from_ready_action("TELEPORT")
 	_add_card_unlock_progress("teleports_used", 1.0)
+	_track_behavior_dash(origin, player_pos)
 	_send_network_ability_visual(NET_ABILITY_TELEPORT, origin, player_pos, 0.55)
 	_tutorial_note_action("dash")
 

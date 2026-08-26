@@ -171,6 +171,25 @@ async function run() {
       damage_taken_detail: [{ kind: "espreitador", name: "Espreitador", icon: "espreitador1.png", phase: 1, damage: 570, hits: 8 }],
       damage_events: [{ x: 0.5, y: 0.5, amount: 70, source: "espreitador", name: "Espreitador", time: 50, phase: 1 }],
       position_heatmap: { columns: 16, rows: 9, cells: [{ phase: 1, x: 8, y: 4, count: 30 }] },
+      behavior_metrics: {
+        phase_seconds: { "1": 333 },
+        phase1_seconds: 333,
+        distance_traveled: 9200,
+        edge_seconds: 42,
+        corner_seconds: 4,
+        center_seconds: 91,
+        edge_ratio: 0.1261,
+        corner_ratio: 0.012,
+        center_ratio: 0.2733,
+        dash_count: 22,
+        dash_per_minute: 3.96,
+        shots_fired: 260,
+        shots_per_minute: 46.8,
+        hits: 132,
+        boss_hits: 18,
+        hit_rate: 0.5077,
+        stationary_ratio: 0.18
+      },
       boss_detail: [{ phase: 1, reached: true, duration: "00:20", damage: 4232 }]
     };
     const created = await request("POST", "/runs", payload);
@@ -286,6 +305,7 @@ async function run() {
     assert(Array.isArray(signedStored.timeline) && signedStored.timeline.length >= 2, "signed run timeline was not preserved");
     assert.strictEqual(signedStored.timeline[0].source, "initial", "signed run initial baseline was not preserved");
     assert.strictEqual(signedStored.analysisCalculable, true, "signed run should be calculable after the 2 minute checkpoint");
+    assert.strictEqual(signedStored.umbraTrainingEligible, true, "signed run should train UMBRA when phase 1 lasts at least 5 minutes");
     assert.strictEqual(Math.round(Number(signedStored.timeline[signedStored.timeline.length - 1].enemyBaseHp)), 190, "final enemy HP scaling missing from timeline");
     const tolerantPayload = {
       ...payload,
@@ -310,7 +330,26 @@ async function run() {
       damage_taken_total: 420,
       manifestation_key: "prismatica",
       spectrum_key: "racional",
-      player_stats: { hp: 410 }
+      player_stats: { hp: 410 },
+      behavior_metrics: {
+        phase_seconds: { "1": 122 },
+        phase1_seconds: 122,
+        distance_traveled: 42000,
+        edge_seconds: 36,
+        corner_seconds: 2,
+        center_seconds: 390,
+        edge_ratio: 0.0277,
+        corner_ratio: 0.0015,
+        center_ratio: 0.3,
+        dash_count: 140,
+        dash_per_minute: 6.46,
+        shots_fired: 900,
+        shots_per_minute: 41.54,
+        hits: 280,
+        boss_hits: 42,
+        hit_rate: 0.3111,
+        stationary_ratio: 0.08
+      }
     };
     const tolerantSessionStart = await request("POST", "/runs/start", {
       player: tolerantPayload.player,
@@ -376,6 +415,8 @@ async function run() {
     assert.strictEqual(tolerantCreated.status, 201, "session-backed run with short wall clock and legitimate jumps was blocked");
     const tolerantStored = JSON.parse(tolerantCreated.body.toString("utf8")).run;
     assert.strictEqual(tolerantStored.rankEligible, true, "tolerant run should be ranking eligible");
+    assert.strictEqual(tolerantStored.umbraTrainingEligible, false, "phase 1 under 5 minutes must not train UMBRA");
+    assert(tolerantStored.umbraTrainingReasons.includes("phase1_under_5_minutes"), "short phase 1 rejection reason missing");
     const tamperedPayload = { ...signedPayload, player: "CheatEngineQA", profile_id: "cheat-engine-qa", leaderboard_score: 99999999 };
     const tamperedCreated = await request("POST", "/runs", tamperedPayload);
     assert.strictEqual(tamperedCreated.status, 202, "tampered run should still be stored for audit");
@@ -399,6 +440,9 @@ async function run() {
     assert(catalog.includes("CATALOGO HISTORICO") && catalog.includes("Cartas mais presentes"), "catalog page missing");
     assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador"), "run summary telemetry missing");
     assert(summary.includes("Grafico da partida") && summary.includes("Pontos/min") && summary.includes("Vida dos inimigos") && summary.includes("Condicoes do score"), "run numeric timeline analysis missing");
+    assert(home.includes("Mente da UMBRA") && home.includes("Camadas 1, 2 e 3"), "UMBRA dashboard layer panel missing");
+    assert(profile.includes("Dossie UMBRA") && profile.includes("Memoria predatoria do operador"), "player UMBRA dossier missing");
+    assert(summary.includes("Elegibilidade para treino") && summary.includes("Usada no treino"), "run UMBRA training section missing");
     assert(missing.includes("LINHA TEMPORAL NAO LOCALIZADA") && missing.includes("Voltar ao observatorio"), "not found page missing");
     for (const [label, html] of [["home", home], ["profile", profile], ["loser profile", loserProfile], ["rankings", rankings], ["story", story], ["catalog", catalog], ["summary", summary], ["missing", missing]]) {
       assertCleanHtml(label, html);
@@ -408,6 +452,14 @@ async function run() {
     const asset = await request("GET", cardMatch[1].replace(/&amp;/g, "&"));
     assert.strictEqual(asset.status, 200, "resolved card sprite was not served");
     assert(String(asset.headers["content-type"]).startsWith("image/"), "sprite response is not an image");
+    const mindResponse = await request("GET", `/umbra/mind/latest?profile_id=${encodeURIComponent(signedStored.profileKey)}&player=${encodeURIComponent(signedStored.player)}&current=stale`);
+    assert.strictEqual(mindResponse.status, 200, "UMBRA mind endpoint failed");
+    const mindPayload = JSON.parse(mindResponse.body.toString("utf8"));
+    assert.strictEqual(mindPayload.ok, true, "UMBRA mind payload should be valid");
+    assert.strictEqual(mindPayload.refresh_days, 7, "UMBRA mind should advertise weekly refresh");
+    assert.strictEqual(mindPayload.trained_runs, 1, "only the valid signed run should train UMBRA");
+    assert(mindPayload.files && mindPayload.files["umbra_global_profile.json"], "UMBRA global profile file missing");
+    assert(mindPayload.files["umbra_player_dossiers.json"].players[signedStored.profileKey], "signed player dossier missing from UMBRA payload");
     const update = await request("GET", "/updates/android/latest?version_code=226");
     assert.strictEqual(update.status, 200, "update manifest endpoint failed");
     const updatePayload = JSON.parse(update.body.toString("utf8"));

@@ -48,6 +48,8 @@ const RUN_SESSION_TTL_MS = numberEnv("RUN_SESSION_TTL_MS", 8 * 60 * 60 * 1000);
 const RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS = numberEnv("RUN_SESSION_CHECKPOINT_INTERVAL_SECONDS", 120);
 const RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS = numberEnv("RUN_SESSION_MAX_CHECKPOINT_GAP_SECONDS", 95);
 const RUN_SESSION_TIMELINE_LIMIT = numberEnv("RUN_SESSION_TIMELINE_LIMIT", 1440);
+const UMBRA_TRAINING_MIN_PHASE1_SECONDS = numberEnv("UMBRA_TRAINING_MIN_PHASE1_SECONDS", 300);
+const UMBRA_MIND_REFRESH_DAYS = numberEnv("UMBRA_MIND_REFRESH_DAYS", 7);
 const RUN_SECURITY_WINDOW_MS = numberEnv("RUN_SECURITY_WINDOW_MS", 10 * 60 * 1000);
 const RUN_SECURITY_MAX_REPORTS_PER_WINDOW = numberEnv("RUN_SECURITY_MAX_REPORTS_PER_WINDOW", 10);
 const RUN_SECURITY_BLOCK_THRESHOLD = numberEnv("RUN_SECURITY_BLOCK_THRESHOLD", 4);
@@ -1474,6 +1476,130 @@ function profileKeyForRun(run) {
   return `name-${crypto.createHash("sha1").update(player || "jogador").digest("hex").slice(0, 16)}`;
 }
 
+function runTrainingEligible(run) {
+  return Boolean(run && run.umbraTrainingEligible && run.rankEligible !== false);
+}
+
+function behaviorForRun(run) {
+  return normalizeBehaviorMetrics(run && (run.behaviorMetrics || run.behavior_metrics));
+}
+
+function mean(values) {
+  const clean = values.map(Number).filter(Number.isFinite);
+  return clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
+}
+
+function classifyUmbraArchetypeFromRuns(runs) {
+  if (!Array.isArray(runs) || runs.length === 0) return "SOBREVIVENTE_ADAPTATIVO";
+  const behaviors = runs.map(behaviorForRun);
+  const edge = mean(behaviors.map((b) => b.edgeRatio));
+  const corner = mean(behaviors.map((b) => b.cornerRatio));
+  const dash = mean(behaviors.map((b) => b.dashPerMinute));
+  const shots = mean(behaviors.map((b) => b.shotsPerMinute));
+  const hitRate = mean(behaviors.map((b) => b.hitRate));
+  const stationary = mean(behaviors.map((b) => b.stationaryRatio));
+  const damageTakenPerMinute = mean(runs.map((run) => safeNumber(run.damageTaken) / Math.max(1, safeNumber(run.durationSeconds)) * 60));
+  if (corner >= 0.12 || edge >= 0.34) return "REFUGIADO_DE_CANTO";
+  if (dash >= 8) return "DEPENDENTE_DE_DASH";
+  if (shots >= 48 && hitRate < 0.34) return "ATIRADOR_DISTANTE";
+  if (stationary < 0.14 && edge < 0.22) return "CORREDOR_CIRCULAR";
+  if (damageTakenPerMinute >= 120 && edge < 0.25) return "AGRESSOR_IMPULSIVO";
+  if (hitRate >= 0.48 && damageTakenPerMinute < 80) return "SOBREVIVENTE_ADAPTATIVO";
+  return "SOBREVIVENTE_ADAPTATIVO";
+}
+
+function profileForArchetype(archetype, confidence = 0.45, secondary = "INDEFINIDO") {
+  return {
+    arquetipo_principal: archetype,
+    arquetipo_secundario: secondary,
+    confianca: Math.max(0, Math.min(0.95, confidence)),
+    historico_arquetipos: [archetype].filter(Boolean)
+  };
+}
+
+function buildUmbraDossier(key, player, runs) {
+  const eligibleRuns = runs.filter(runTrainingEligible);
+  const archetype = classifyUmbraArchetypeFromRuns(eligibleRuns);
+  const behaviors = eligibleRuns.map(behaviorForRun);
+  const confidence = Math.min(0.92, 0.35 + eligibleRuns.length * 0.08);
+  return {
+    player,
+    profile_key: key,
+    runs: eligibleRuns.length,
+    perfil_jogador: profileForArchetype(archetype, confidence),
+    behavior: {
+      edge_ratio: Number(mean(behaviors.map((b) => b.edgeRatio)).toFixed(4)),
+      corner_ratio: Number(mean(behaviors.map((b) => b.cornerRatio)).toFixed(4)),
+      center_ratio: Number(mean(behaviors.map((b) => b.centerRatio)).toFixed(4)),
+      dash_per_minute: Number(mean(behaviors.map((b) => b.dashPerMinute)).toFixed(2)),
+      shots_per_minute: Number(mean(behaviors.map((b) => b.shotsPerMinute)).toFixed(2)),
+      hit_rate: Number(mean(behaviors.map((b) => b.hitRate)).toFixed(4)),
+      stationary_ratio: Number(mean(behaviors.map((b) => b.stationaryRatio)).toFixed(4)),
+      damage_taken_per_minute: Number(mean(eligibleRuns.map((run) => safeNumber(run.damageTaken) / Math.max(1, safeNumber(run.durationSeconds)) * 60)).toFixed(2))
+    }
+  };
+}
+
+function buildUmbraMind(snapshot, query = new URLSearchParams()) {
+  const runs = Array.isArray(snapshot && snapshot.runs) ? snapshot.runs : [];
+  const eligible = runs.filter(runTrainingEligible);
+  const grouped = new Map();
+  for (const run of eligible) {
+    const key = profileKeyForRun(run);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(run);
+  }
+  const dossiers = {};
+  for (const [key, playerRuns] of grouped.entries()) {
+    dossiers[key] = buildUmbraDossier(key, String(playerRuns[0].player || "Jogador"), playerRuns);
+    dossiers[String(playerRuns[0].player || "").toLowerCase()] = dossiers[key];
+  }
+  const globalArchetype = classifyUmbraArchetypeFromRuns(eligible);
+  const versionSeed = `${Math.floor(Date.now() / (UMBRA_MIND_REFRESH_DAYS * 24 * 60 * 60 * 1000))}-${eligible.length}-${grouped.size}`;
+  const mindVersion = `umbra-week-${crypto.createHash("sha1").update(versionSeed).digest("hex").slice(0, 10)}`;
+  const profileId = String(query.get("profile_id") || "").trim();
+  const player = String(query.get("player") || "").trim().toLowerCase();
+  const current = String(query.get("current") || "").trim();
+  const selected = dossiers[profileId] || dossiers[player] || null;
+  const files = {
+    "umbra_global_profile.json": {
+      mind_version: mindVersion,
+      trained_runs: eligible.length,
+      trained_players: grouped.size,
+      min_phase1_seconds: UMBRA_TRAINING_MIN_PHASE1_SECONDS,
+      perfil_jogador: selected ? selected.perfil_jogador : profileForArchetype(globalArchetype, eligible.length ? 0.42 : 0.0)
+    },
+    "umbra_archetypes.json": {
+      mind_version: mindVersion,
+      actions: {
+        REFUGIADO_DE_CANTO: ["CORTAR_BORDAS", 0.25],
+        DEPENDENTE_DE_DASH: ["PUNIR_DASH_PREVISIVEL", 0.2],
+        CACADOR_DE_ORBES: ["ISCA_DE_ORBE", 0.2],
+        AGRESSOR_IMPULSIVO: ["CONTRA_IMPULSO", 0.2],
+        ATIRADOR_DISTANTE: ["QUEBRAR_DISTANCIA", 0.25],
+        CORREDOR_CIRCULAR: ["QUEBRAR_ROTACAO", 0.2],
+        SOBREVIVENTE_ADAPTATIVO: ["RESPEITAR_ADAPTATIVO", 0.1]
+      }
+    },
+    "umbra_player_dossiers.json": {
+      mind_version: mindVersion,
+      selected_profile: profileId || player,
+      selected: selected || null,
+      players: dossiers
+    }
+  };
+  return {
+    ok: true,
+    mind_version: mindVersion,
+    updated: current !== mindVersion,
+    refresh_days: UMBRA_MIND_REFRESH_DAYS,
+    trained_runs: eligible.length,
+    trained_players: grouped.size,
+    rejected_runs: runs.length - eligible.length,
+    files
+  };
+}
+
 const MANIFESTATION_UNLOCK_ALIASES = {
   eletrica: "eletrica",
   lacerante: "lacerante",
@@ -1619,6 +1745,51 @@ function normalizeHeatmap(value) {
   };
 }
 
+function normalizeBehaviorMetrics(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const phaseSecondsSource = source.phase_seconds && typeof source.phase_seconds === "object" ? source.phase_seconds : {};
+  const phaseSeconds = {};
+  for (const key of Object.keys(phaseSecondsSource).slice(0, 8)) {
+    const phase = Math.max(0, Math.min(7, Math.floor(safeNumber(key))));
+    if (phase > 0) phaseSeconds[String(phase)] = Math.max(0, safeNumber(phaseSecondsSource[key]));
+  }
+  const phase1Seconds = Math.max(0, safeNumber(source.phase1_seconds, phaseSeconds["1"] || 0));
+  if (phase1Seconds > 0) phaseSeconds["1"] = phase1Seconds;
+  return {
+    phaseSeconds,
+    phase1Seconds,
+    distanceTraveled: Math.max(0, Math.floor(safeNumber(source.distance_traveled))),
+    edgeSeconds: Math.max(0, safeNumber(source.edge_seconds)),
+    cornerSeconds: Math.max(0, safeNumber(source.corner_seconds)),
+    centerSeconds: Math.max(0, safeNumber(source.center_seconds)),
+    edgeRatio: Math.max(0, Math.min(1, safeNumber(source.edge_ratio))),
+    cornerRatio: Math.max(0, Math.min(1, safeNumber(source.corner_ratio))),
+    centerRatio: Math.max(0, Math.min(1, safeNumber(source.center_ratio))),
+    dashCount: Math.max(0, Math.floor(safeNumber(source.dash_count))),
+    dashPerMinute: Math.max(0, safeNumber(source.dash_per_minute)),
+    shotsFired: Math.max(0, Math.floor(safeNumber(source.shots_fired))),
+    shotsPerMinute: Math.max(0, safeNumber(source.shots_per_minute)),
+    hits: Math.max(0, Math.floor(safeNumber(source.hits))),
+    bossHits: Math.max(0, Math.floor(safeNumber(source.boss_hits))),
+    hitRate: Math.max(0, Math.min(1, safeNumber(source.hit_rate))),
+    stationaryRatio: Math.max(0, Math.min(1, safeNumber(source.stationary_ratio)))
+  };
+}
+
+function umbraTrainingEligibility(payload, durationSeconds, rankEligible) {
+  const behavior = normalizeBehaviorMetrics(payload && payload.behavior_metrics);
+  const reasons = [];
+  if (!rankEligible) reasons.push("run_not_rank_eligible");
+  if (safeNumber(behavior.phase1Seconds) < UMBRA_TRAINING_MIN_PHASE1_SECONDS) reasons.push("phase1_under_5_minutes");
+  if (durationSeconds < UMBRA_TRAINING_MIN_PHASE1_SECONDS) reasons.push("run_under_5_minutes");
+  if (Math.floor(safeNumber(payload && payload.kills)) <= 0) reasons.push("no_combat_signal");
+  return {
+    eligible: reasons.length === 0,
+    reasons,
+    behavior
+  };
+}
+
 function runReportSignatureSource(payload) {
   const fields = [
     "player",
@@ -1737,6 +1908,7 @@ function normalizeRunPayload(payload, ip = "") {
   const endedUnix = Math.max(0, Math.floor(safeNumber(payload.ended_unix, Date.now() / 1000)));
   const runTimeline = runTimelineFromSession(payload, ip, integrity.versionCode);
   const analysisCalculable = runAnalysisCalculable(runTimeline, durationSeconds);
+  const umbraTraining = umbraTrainingEligibility(payload, durationSeconds, integrity.rankEligible);
   return {
     id: crypto.createHash("sha1").update(JSON.stringify(payload) + Date.now()).digest("hex").slice(0, 18),
     player,
@@ -1772,6 +1944,9 @@ function normalizeRunPayload(payload, ip = "") {
     damageThreats: normalizeDamageThreats(payload.damage_taken_detail),
     damageEvents: normalizeDamageEvents(payload.damage_events),
     heatmap: normalizeHeatmap(payload.position_heatmap),
+    behaviorMetrics: umbraTraining.behavior,
+    umbraTrainingEligible: umbraTraining.eligible,
+    umbraTrainingReasons: umbraTraining.reasons,
     manifestation: String(payload.manifestation || "").slice(0, 64),
     manifestationKey: String(payload.manifestation_key || "").slice(0, 48),
     spectrum: String(payload.spectrum || "").slice(0, 64),
@@ -2105,6 +2280,12 @@ async function route(req, res) {
   if (req.method === "GET" && url.pathname === "/updates/unlocks/veteran") {
     res.setHeader("Cache-Control", "no-store, max-age=0");
     sendJson(res, 200, veteranUnlockSnapshot(url.searchParams));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/umbra/mind/latest") {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, buildUmbraMind(leaderboardSnapshot(), url.searchParams));
     return;
   }
 

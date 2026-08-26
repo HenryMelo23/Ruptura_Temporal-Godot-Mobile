@@ -213,6 +213,40 @@ function countBy(values) {
   return Array.from(counts.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
+function behaviorOf(run) {
+  return run && run.behaviorMetrics && typeof run.behaviorMetrics === "object" ? run.behaviorMetrics : {};
+}
+
+function classifyUmbraRun(run) {
+  const behavior = behaviorOf(run);
+  const edge = safeNumber(behavior.edgeRatio);
+  const corner = safeNumber(behavior.cornerRatio);
+  const dash = safeNumber(behavior.dashPerMinute);
+  const shots = safeNumber(behavior.shotsPerMinute);
+  const hitRate = safeNumber(behavior.hitRate);
+  const stationary = safeNumber(behavior.stationaryRatio);
+  const dpmTaken = safeNumber(run && run.damageTaken) / Math.max(1, safeNumber(run && run.durationSeconds)) * 60;
+  if (corner >= 0.12 || edge >= 0.34) return "REFUGIADO_DE_CANTO";
+  if (dash >= 8) return "DEPENDENTE_DE_DASH";
+  if (shots >= 48 && hitRate < 0.34) return "ATIRADOR_DISTANTE";
+  if (stationary < 0.14 && edge < 0.22) return "CORREDOR_CIRCULAR";
+  if (dpmTaken >= 120 && edge < 0.25) return "AGRESSOR_IMPULSIVO";
+  return "SOBREVIVENTE_ADAPTATIVO";
+}
+
+function umbraAnalytics(runs) {
+  const audited = arrayOf(runs);
+  const eligible = audited.filter((run) => run && run.umbraTrainingEligible);
+  return {
+    eligible,
+    rejected: Math.max(0, audited.length - eligible.length),
+    archetypes: countBy(eligible.map(classifyUmbraRun)).slice(0, 8),
+    averagePhase1Seconds: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).phase1Seconds), 0) / Math.max(1, eligible.length),
+    averageDashPerMinute: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).dashPerMinute), 0) / Math.max(1, eligible.length),
+    averageEdgeRatio: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).edgeRatio), 0) / Math.max(1, eligible.length)
+  };
+}
+
 function collectCards(runs) {
   const cards = new Map();
   for (const run of runs) {
@@ -265,6 +299,7 @@ function aggregateSnapshot(snapshot) {
     totalKills,
     latestVersion,
     maxPhase,
+    umbra: umbraAnalytics(auditedRuns),
     manifestations: countBy(runs.map((run) => run.manifestation)).slice(0, 10),
     spectra: countBy(runs.map((run) => run.spectrum)).slice(0, 10),
     versions: countBy(runs.map((run) => run.version)).slice(0, 10),
@@ -652,6 +687,8 @@ function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
     ? `${formatNumber(analytics.runs.length)} expedicoes de ${formatNumber(analytics.profiles.length)} operadores foram recuperadas. A fase 6 e tratada como ramificacao inicial; o limite de campanha registrado e a Fase ${formatNumber(analytics.maxPhase || 1)}.`
     : "O terminal esta ativo e aguardando a primeira run enviada pelas builds do jogo.";
   const cards = arrayOf(best && best.cards).slice(0, 8);
+  const umbra = analytics.umbra || umbraAnalytics([]);
+  const topUmbra = arrayOf(umbra.archetypes)[0];
   const campaign = [1, 2, 3, 4, 5].map((phase) => {
     const count = analytics.runs.filter((run) => campaignPhase(run) >= phase).length;
     const active = count > 0;
@@ -692,6 +729,17 @@ function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
       ${metric("Recorde de sobrevivencia", formatDuration(analytics.bestTime && analytics.bestTime.durationSeconds), analytics.bestTime ? textValue(analytics.bestTime.player, "Jogador") : "Sem leitura", "amber", "TMP")}
       ${metric("Dano total auditado", formatNumber(analytics.totalBossDamage + analytics.totalEnemyDamage), "Boss + inimigos em todas as runs", "green", "AUD")}
       ${metric("Maior progressao", analytics.bestProgress ? phaseLabel(analytics.bestProgress) : "Fase 0", analytics.bestProgress ? textValue(analytics.bestProgress.player, "Jogador") : "Sem leitura", "violet", "PRG")}
+    </section>
+    <section class="umbra-mind-block">
+      ${sectionHeader("Mente da UMBRA", "Camadas 1, 2 e 3", "A camada 1 le movimento, a camada 2 separa arquetipos e a camada 3 prepara o dossie individual usado pela mente remota. Runs com Fase 1 abaixo de 5 minutos ficam fora do treino.")}
+      <section class="pulse-grid" aria-label="Resumo da mente da UMBRA">
+        ${metric("Runs de treino", formatNumber(umbra.eligible.length), `${formatNumber(umbra.rejected)} descartadas por baixa confianca`, "magenta", "L1")}
+        ${metric("Tempo medio na Fase 1", formatDuration(umbra.averagePhase1Seconds), "Filtro minimo: 5 minutos", "amber", "L1")}
+        ${metric("Dash medio", `${formatDecimal(umbra.averageDashPerMinute, 1)}/min`, "Memoria de mobilidade", "cyan", "L2")}
+        ${metric("Pressao nas bordas", formatPercent(umbra.averageEdgeRatio), "Leitura de mapa de calor", "green", "L2")}
+        ${metric("Arquetipo dominante", topUmbra ? topUmbra.label : "Sem leitura", topUmbra ? `${formatNumber(topUmbra.count)} dossies` : "Aguardando dados", "violet", "L3")}
+      </section>
+      <div class="terminal-panel">${signatureList(arrayOf(umbra.archetypes), "magenta")}</div>
     </section>
     <section class="observatory-grid">
       <div class="terminal-panel span-8" id="arquivo">
@@ -807,6 +855,16 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
   if (!runs.length) return renderNotFound("Jogador nao encontrado", snapshot);
   const player = aggregatePlayer(runKey, runs);
   const favoriteCards = collectCards(runs).slice(0, 12);
+  const umbraRuns = runs.filter((run) => run && run.umbraTrainingEligible);
+  const umbraRejected = Math.max(0, runs.length - umbraRuns.length);
+  const playerUmbra = umbraAnalytics(runs);
+  const playerArchetype = arrayOf(playerUmbra.archetypes)[0];
+  const playerBehavior = {
+    phase1Seconds: playerUmbra.averagePhase1Seconds,
+    dashPerMinute: playerUmbra.averageDashPerMinute,
+    edgeRatio: playerUmbra.averageEdgeRatio,
+    hitRate: umbraRuns.reduce((sum, run) => sum + safeNumber(behaviorOf(run).hitRate), 0) / Math.max(1, umbraRuns.length)
+  };
   const timeline = [...runs].reverse().map((run) => ({
     label: formatDate(run).slice(0, 10),
     score: safeNumber(run.score),
@@ -857,6 +915,15 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
           <div><dt>Dano total em boss</dt><dd>${formatNumber(player.totalBossDamage)} dano</dd></div>
         </dl>
       </aside>
+      <div class="terminal-panel span-12 facts-list">
+        ${sectionHeader("Dossie UMBRA", "Memoria predatoria do operador", "A mente usa somente runs elegiveis para estimar como iniciar a luta contra este jogador.")}
+        <dl>
+          <div><dt>Camada 1</dt><dd>${formatNumber(umbraRuns.length)} runs de treino <small>${formatNumber(umbraRejected)} descartadas; minimo de 5 minutos na Fase 1</small></dd></div>
+          <div><dt>Camada 2</dt><dd>${escapeHtml(playerArchetype ? playerArchetype.label : "Sem leitura")} <small>${playerArchetype ? `${formatNumber(playerArchetype.count)} leitura(s) compativeis` : "Dados insuficientes"}</small></dd></div>
+          <div><dt>Camada 3</dt><dd>${formatPercent(playerBehavior.hitRate)} precisao <small>${formatDecimal(playerBehavior.dashPerMinute, 1)} dash/min · ${formatPercent(playerBehavior.edgeRatio)} tempo em borda</small></dd></div>
+          <div><dt>Fase 1 media</dt><dd>${formatDuration(playerBehavior.phase1Seconds)}</dd></div>
+        </dl>
+      </div>
       <div class="terminal-panel span-12">
         ${sectionHeader("Deck recorrente", "Cartas mais usadas", "Cartas presentes nas runs deste operador.")}
         <div class="deck-grid">${favoriteCards.map((card) => cardTile(card, cardAssetUrl)).join("") || emptyState("Sem cartas registradas", "Nenhuma run deste operador trouxe detalhes de deck.")}</div>
@@ -978,6 +1045,8 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
     phases
   };
   const bossRows = arrayOf(run.bossDetail).filter((row) => row && (row.reached || safeNumber(row.damage) > 0));
+  const behavior = behaviorOf(run);
+  const umbraReasons = arrayOf(run.umbraTrainingReasons);
   const timeline = runTimelineReport(run);
   const currentIndex = analytics.latest.findIndex((item) => String(item.id) === String(run.id));
   const prev = currentIndex >= 0 ? analytics.latest[currentIndex + 1] : null;
@@ -1010,6 +1079,15 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
         ${runInsightCards(run)}
       </div>
       ${runTimelinePanel(run, timeline)}
+      <div class="terminal-panel span-12 facts-list">
+        ${sectionHeader("UMBRA", "Elegibilidade para treino", "Essa leitura alimenta a atualizacao semanal da mente, sem exigir reinstalacao do jogo.")}
+        <dl>
+          <div><dt>Status</dt><dd>${run.umbraTrainingEligible ? "Usada no treino" : "Descartada"} <small>${run.umbraTrainingEligible ? "Sinal valido para a mente" : escapeHtml(umbraReasons.join(", ") || "sem sinal suficiente")}</small></dd></div>
+          <div><dt>Camada 1</dt><dd>${formatDuration(behavior.phase1Seconds)} na Fase 1 <small>${formatNumber(behavior.distanceTraveled)} px percorridos</small></dd></div>
+          <div><dt>Camada 2</dt><dd>${escapeHtml(classifyUmbraRun(run))} <small>${formatPercent(behavior.edgeRatio)} borda · ${formatPercent(behavior.cornerRatio)} canto</small></dd></div>
+          <div><dt>Camada 3</dt><dd>${formatDecimal(behavior.dashPerMinute, 1)} dash/min <small>${formatDecimal(behavior.shotsPerMinute, 1)} tiros/min · ${formatPercent(behavior.hitRate)} acerto</small></dd></div>
+        </dl>
+      </div>
       <div class="terminal-panel span-7">
         ${sectionHeader("Posicionamento", "Mapa de calor e dano", "Reconstrucao espacial da permanencia e dos pontos de impacto.", `<div class="phase-switch">${phases.map((phase, index) => `<button type="button" data-phase="${phase}" class="${index === 0 ? "active" : ""}">Fase ${phase}</button>`).join("")}</div>`)}
         <div class="map-wrap"><canvas id="run-map" aria-label="Mapa de calor da movimentacao e pontos de dano"></canvas></div>
@@ -1484,7 +1562,7 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .hero-operator{align-self:stretch;display:grid;align-content:center;justify-items:center;text-align:center;padding:24px;border:1px solid rgba(255,255,255,.10);background:rgba(2,5,10,.32)}
 .hero-operator>span{font:800 11px var(--font-mono);color:var(--text-soft)}.hero-orbit{display:grid;place-items:center;width:178px;height:178px;margin:18px 0;border:1px solid var(--rupture-cyan);border-radius:50%;background:radial-gradient(circle,rgba(37,244,229,.14),transparent 64%);box-shadow:0 0 55px rgba(37,244,229,.15)}
 .hero-orbit img,.hero-orbit .asset-fallback{max-width:132px;max-height:132px;object-fit:contain;image-rendering:auto}.hero-operator h3{margin:0;font-size:28px}.hero-operator strong{margin-top:8px;color:var(--rupture-cyan);font:900 36px var(--font-mono)}.hero-operator p{color:var(--text-soft);line-height:1.45}.hero-operator a{color:var(--rupture-cyan);font-weight:800}
-.pulse-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:24px}.metric{position:relative;min-height:146px;padding:18px;border:1px solid var(--line);border-top:3px solid var(--tone);background:linear-gradient(180deg,var(--surface),rgba(5,10,17,.92));overflow:hidden}
+.pulse-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:24px}.umbra-mind-block{margin-bottom:24px}.metric{position:relative;min-height:146px;padding:18px;border:1px solid var(--line);border-top:3px solid var(--tone);background:linear-gradient(180deg,var(--surface),rgba(5,10,17,.92));overflow:hidden}
 .metric:before{content:"";position:absolute;right:-28px;bottom:-36px;width:110px;height:110px;border:18px solid var(--tone);opacity:.045;transform:rotate(24deg)}.metric span{color:var(--tone);font:800 11px var(--font-mono)}.metric b{display:block;margin:14px 0 4px;color:var(--text-main);font:900 clamp(23px,2.4vw,36px) var(--font-mono);overflow-wrap:anywhere}.metric strong{display:block;text-transform:uppercase;font-size:12px}.metric small{display:block;margin-top:7px;color:var(--text-soft);line-height:1.4}
 .tone-cyan{--tone:var(--rupture-cyan)}.tone-magenta{--tone:var(--rupture-magenta)}.tone-amber{--tone:var(--survival-yellow)}.tone-green{--tone:var(--progress-green)}.tone-red{--tone:var(--danger-red)}.tone-violet{--tone:var(--rupture-violet)}
 .observatory-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:22px}.span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-7{grid-column:span 7}.span-5{grid-column:span 5}.span-4{grid-column:span 4}
