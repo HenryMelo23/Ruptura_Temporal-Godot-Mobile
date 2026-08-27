@@ -23,6 +23,10 @@ Never claim that the project works when the verification was skipped, failed, ti
 
 ## Required skills
 
+Before any non-trivial Ruptura Temporal repository task, use the token-efficient workflow skill to keep context gathering, edits, and validation scoped:
+
+- `.agents/skills/ruptura-token-efficient-workflow/SKILL.md`
+
 For any Godot implementation, debugging, scene, resource, gameplay, UI, animation, signal, physics, save system, shader, input, or architecture task, use the repository skill:
 
 - `.agents/skills/godot-engineer/SKILL.md`

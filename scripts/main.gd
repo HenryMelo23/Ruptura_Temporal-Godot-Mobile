@@ -1109,6 +1109,8 @@ const BOSS5_MIASMA_DURATION: = 4.5
 const BOSS5_DISCHARGE_WARNING: = 0.85
 const BOSS5_DISCHARGE_DURATION: = 1.25
 const BOSS5_THORNS_DURATION: = 3.4
+const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.25
+const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.10
 const BOSS5_RAT_DURATION: = 8.0
 const BOSS5_RAT_SPEED: = 212.0
 const BOSS5_RAT_DAMAGE: = 36
@@ -27192,6 +27194,7 @@ func _spawn_umbra_action(action: String) -> void :
 				"max_life": growth_dur + exp_dur, 
 				"max_width": max_w, 
 				"current_width": 10.0, 
+				"growth_progress": 0.0,
 				"phase": "crescimento", 
 				"hit_cooldown": 0.0
 			})
@@ -27582,10 +27585,12 @@ func _update_phase5_hazards(delta: float) -> void :
 				if elapsed < growth_dur:
 					hazard["phase"] = "crescimento"
 					hazard["current_width"] = 10.0
+					hazard["growth_progress"] = clampf(elapsed / maxf(0.01, growth_dur), 0.0, 1.0)
 					hazard["in_expansion"] = false
 				else:
 					hazard["phase"] = "expansao"
 					hazard["in_expansion"] = true
+					hazard["growth_progress"] = 1.0
 					var exp_elapsed: float = elapsed - growth_dur
 					var prog: float = clampf(exp_elapsed / maxf(0.01, exp_dur), 0.0, 1.0)
 					var curr_w: float = lerpf(10.0, max_w, prog)
@@ -27663,7 +27668,7 @@ func _update_phase5_hazards(delta: float) -> void :
 						boss_pos = WORLD_SIZE * 0.5
 						st -= delta
 						hazard["stage_timer"] = st
-						curr_ang += PI * delta
+						curr_ang += _boss5_overload_laser_rotation_speed(2) * delta
 						hazard["angle"] = curr_ang
 						_check_laser_hit(hazard, 2, curr_ang, 38.0, 16)
 						if st <= 0.0:
@@ -27689,7 +27694,7 @@ func _update_phase5_hazards(delta: float) -> void :
 						boss_pos = WORLD_SIZE * 0.5
 						st -= delta
 						hazard["stage_timer"] = st
-						curr_ang -= PI * delta
+						curr_ang -= _boss5_overload_laser_rotation_speed(4) * delta
 						hazard["angle"] = curr_ang
 						_check_laser_hit(hazard, 4, curr_ang, 32.0, 16)
 						if st <= 0.0:
@@ -27715,7 +27720,7 @@ func _update_phase5_hazards(delta: float) -> void :
 						boss_pos = WORLD_SIZE * 0.5
 						st -= delta
 						hazard["stage_timer"] = st
-						curr_ang -= PI * delta
+						curr_ang -= _boss5_overload_laser_rotation_speed(6) * delta
 						hazard["angle"] = curr_ang
 						_check_laser_hit(hazard, 6, curr_ang, 26.0, 16)
 						if st <= 0.0:
@@ -27726,7 +27731,7 @@ func _update_phase5_hazards(delta: float) -> void :
 						boss_pos = WORLD_SIZE * 0.5
 						st -= delta
 						hazard["stage_timer"] = st
-						curr_ang += PI * delta
+						curr_ang += _boss5_overload_laser_rotation_speed(6) * delta
 						hazard["angle"] = curr_ang
 						_check_laser_hit(hazard, 6, curr_ang, 26.0, 16)
 						if st <= 0.0:
@@ -27745,6 +27750,12 @@ func _update_phase5_hazards(delta: float) -> void :
 	phase5_hazards = phase5_hazards.filter( func(hazard): return float(hazard.get("life", 0.0)) > 0.0)
 
 
+func _boss5_overload_laser_rotation_speed(num_beams: int) -> float:
+	if num_beams >= 4:
+		return BOSS5_OVERLOAD_LASER_ROTATION_SLOW
+	return BOSS5_OVERLOAD_LASER_ROTATION_FAST
+
+
 func _check_laser_hit(hazard: Dictionary, num_beams: int, curr_ang: float, width: float, damage: int) -> void :
 	if float(hazard.get("hit_cooldown", 0.0)) > 0.0:
 		return
@@ -27752,6 +27763,7 @@ func _check_laser_hit(hazard: Dictionary, num_beams: int, curr_ang: float, width
 	var step_ang: float = TAU / float(num_beams)
 	var hit_detected: bool = false
 	var v_player: Vector2 = player_pos - origin
+	var min_perp_dist: float = INF
 
 	for b in range(num_beams):
 		var b_ang: float = curr_ang + float(b) * step_ang
@@ -27759,9 +27771,11 @@ func _check_laser_hit(hazard: Dictionary, num_beams: int, curr_ang: float, width
 		var dot: float = v_player.dot(b_dir)
 		if dot > 0.0:
 			var perp_dist: float = (v_player - b_dir * dot).length()
+			min_perp_dist = minf(min_perp_dist, perp_dist)
 			if perp_dist <= width * 0.5:
 				hit_detected = true
 				break
+	hazard["last_laser_dist"] = min_perp_dist if min_perp_dist < INF else -1.0
 
 	if hit_detected:
 		hazard["hit_cooldown"] = 0.12
@@ -46600,48 +46614,51 @@ func _draw_phase5_environment(camera: Vector2) -> void :
 				var segs: Array = hazard.get("segments", [])
 				var phase_str: String = String(hazard.get("phase", "crescimento"))
 				var curr_w: float = float(hazard.get("current_width", 10.0))
+				var growth_progress: float = clampf(float(hazard.get("growth_progress", 1.0)), 0.0, 1.0)
 
-				if phase_str == "crescimento":
-					var pulse: float = 0.55 + sin(time_alive * 12.0) * 0.25
-					for seg in segs:
-						var a: Vector2 = Vector2(seg["a"]) - camera
-						var b: Vector2 = Vector2(seg["b"]) - camera
-						draw_line(a, b, Color(0.85, 0.15, 0.2, pulse), 10.0)
-						draw_line(a, b, Color(1.0, 0.8, 0.82, 0.9), 2.0)
-				else:
-					for seg in segs:
-						var a: Vector2 = Vector2(seg["a"]) - camera
-						var b: Vector2 = Vector2(seg["b"]) - camera
-						var seg_vec: Vector2 = b - a
-						var seg_len: float = seg_vec.length()
-						var seg_dir: Vector2 = seg_vec.normalized() if seg_len > 0.01 else Vector2.RIGHT
-						var perp: Vector2 = seg_dir.orthogonal()
+				for seg in segs:
+					var world_a: Vector2 = Vector2(seg["a"])
+					var world_b: Vector2 = Vector2(seg["b"])
+					var world_tip: Vector2 = world_a.lerp(world_b, growth_progress)
+					var a: Vector2 = world_a - camera
+					var b: Vector2 = world_tip - camera
+					var seg_vec: Vector2 = b - a
+					var seg_len: float = seg_vec.length()
+					if seg_len <= 1.0:
+						continue
+					var seg_dir: Vector2 = seg_vec.normalized()
+					var perp: Vector2 = seg_dir.orthogonal()
+					var num_seg: int = max(2, int(seg_len / 15.0))
+					var points1: Array[Vector2] = []
+					var points2: Array[Vector2] = []
 
-						draw_line(a, b, Color(0.35, 0.03, 0.06, 0.88), curr_w)
-						draw_line(a, b, Color(0.85, 0.1, 0.15, 0.95), maxf(2.0, curr_w * 0.25))
+					for i in range(num_seg + 1):
+						var dist: float = minf(float(i) * 15.0, seg_len)
+						var base_pt: Vector2 = a + seg_dir * dist
+						var wave1: float = sin(float(i) * 0.5 + time_alive * 3.0) * (curr_w * 0.35)
+						var wave2: float = cos(float(i) * 0.7 - time_alive * 2.0) * (curr_w * 0.35)
+						points1.append(base_pt + perp * wave1)
+						points2.append(base_pt + perp * wave2)
 
-						var num_pts: int = int(maxf(8.0, seg_len / 45.0))
-						var wavy1: Array[Vector2] = []
-						var wavy2: Array[Vector2] = []
-						for i in range(num_pts + 1):
-							var t: float = float(i) / float(num_pts)
-							var pt: Vector2 = a.lerp(b, t)
-							var off1: float = sin(t * 18.0 + time_alive * 10.0) * (curr_w * 0.4)
-							var off2: float = cos(t * 18.0 + time_alive * 10.0) * (curr_w * 0.4)
-							wavy1.append(pt + perp * off1)
-							wavy2.append(pt - perp * off2)
+					for i in range(1, points1.size()):
+						var fade: float = 1.0 - float(i) / float(num_seg)
+						var vine_w: float = maxf(2.0, floor(curr_w * 0.15 * fade))
+						draw_line(points1[i - 1] + Vector2(2.0, 2.0), points1[i] + Vector2(2.0, 2.0), Color(0.02, 0.04, 0.02, 0.92), vine_w + 2.0)
+						draw_line(points1[i - 1], points1[i], Color(0.08, 0.30, 0.08, 0.98), vine_w + 1.0)
+						draw_line(points2[i - 1], points2[i], Color(0.20, 0.48, 0.14, 0.94), maxf(1.5, vine_w))
+						draw_line(points1[i - 1], points1[i], Color(0.40, 0.70, 0.24, 0.36), 1.5)
 
-						for i in range(wavy1.size() - 1):
-							draw_line(wavy1[i], wavy1[i + 1], Color(1.0, 0.3, 0.35, 0.8), 3.0)
-							draw_line(wavy2[i], wavy2[i + 1], Color(1.0, 0.7, 0.75, 0.8), 3.0)
-
-						for i in range(8):
-							var t: float = (float(i) + 0.5) / 8.0
-							var base_p: Vector2 = a.lerp(b, t)
-							var side: float = 1.0 if i % 2 == 0 else -1.0
-							var thorn_len: float = curr_w * 0.65
-							var thorn_tip: Vector2 = base_p + (perp * side + seg_dir * 0.3).normalized() * thorn_len
-							draw_line(base_p, thorn_tip, Color(0.95, 0.15, 0.2, 0.9), 4.0)
+						if phase_str == "expansao":
+							var hash_v: int = (i * 37) % 100
+							if hash_v < 35:
+								var side: float = 1.0 if hash_v < 17 else -1.0
+								var thorn_angle: float = seg_dir.angle() + (PI / 2.5 * side)
+								var thorn_size: float = 9.0 + curr_w * 0.20
+								var thorn_base: Vector2 = points1[i]
+								var tip: Vector2 = thorn_base + Vector2.from_angle(thorn_angle) * thorn_size
+								var base1: Vector2 = thorn_base + Vector2.from_angle(thorn_angle + 1.2) * vine_w
+								var base2: Vector2 = thorn_base + Vector2.from_angle(thorn_angle - 1.2) * vine_w
+								draw_polygon([tip, base1, base2], [Color(0.82, 0.92, 0.52, 0.96)])
 			"sopro_artico":
 				var spears: Array = hazard.get("spears", [])
 				for s_item in spears:

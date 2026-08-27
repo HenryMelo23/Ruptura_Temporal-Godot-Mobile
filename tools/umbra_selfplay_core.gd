@@ -76,10 +76,10 @@ const ANTI_ALIASING_FEATURES: Array[String] = [
 func run_training(options: Dictionary = {}) -> Dictionary:
 	var episodes: int = max(1, int(options.get("episodes", 64)))
 	var max_steps: int = max(60, int(options.get("max_steps", 1800)))
-	var seed: int = int(options.get("seed", 7705))
+	var training_seed: int = int(options.get("seed", 7705))
 	var rng := RandomNumberGenerator.new()
-	rng.seed = seed
-	var memory: Dictionary = _initial_memory(seed)
+	rng.seed = training_seed
+	var memory: Dictionary = _initial_memory(training_seed)
 	var episode_rows: Array = []
 	var winners: Dictionary = {"UMBRA": 0, "APOLO": 0, "DRAW": 0}
 	var total_umbra_reward: float = 0.0
@@ -99,7 +99,7 @@ func run_training(options: Dictionary = {}) -> Dictionary:
 	var summary: Dictionary = {
 		"episodes": episodes,
 		"max_steps": max_steps,
-		"seed": seed,
+		"seed": training_seed,
 		"winners": winners,
 		"umbra_average_reward": snappedf(total_umbra_reward / float(episodes), 0.001),
 		"apolo_average_reward": snappedf(total_apolo_reward / float(episodes), 0.001),
@@ -118,7 +118,52 @@ func run_training(options: Dictionary = {}) -> Dictionary:
 	}
 
 
-func _initial_memory(seed: int) -> Dictionary:
+func create_visual_session(options: Dictionary = {}) -> Dictionary:
+	var episodes: int = max(1, int(options.get("episodes", 96)))
+	var max_steps: int = max(60, int(options.get("max_steps", 1200)))
+	var training_seed: int = int(options.get("seed", 7705))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = training_seed
+	var session: Dictionary = {
+		"ok": true,
+		"schema_version": SELFPLAY_SCHEMA_VERSION,
+		"options": options.duplicate(true),
+		"episodes": episodes,
+		"max_steps": max_steps,
+		"seed": training_seed,
+		"rng": rng,
+		"memory": _initial_memory(training_seed),
+		"apolo_memory": _new_action_memory(APOLO_ACTIONS),
+		"episode_index": 0,
+		"completed_episodes": 0,
+		"episode_rows": [],
+		"winners": {"UMBRA": 0, "APOLO": 0, "DRAW": 0},
+		"total_umbra_reward": 0.0,
+		"total_apolo_reward": 0.0,
+		"best_episode": {},
+		"last_episode": {},
+		"done": false
+	}
+	_begin_visual_episode(session)
+	return session
+
+
+func step_visual_session(session: Dictionary, steps_per_tick: int = 1) -> Dictionary:
+	if bool(session.get("done", false)):
+		return _visual_snapshot(session)
+	if Dictionary(session.get("state", {})).is_empty():
+		_begin_visual_episode(session)
+	for _i in range(max(1, steps_per_tick)):
+		var result: Dictionary = _run_session_step(session)
+		if result.is_empty():
+			continue
+		_complete_visual_episode(session, result)
+		if bool(session.get("done", false)):
+			break
+	return _visual_snapshot(session)
+
+
+func _initial_memory(training_seed: int) -> Dictionary:
 	var action_memory: Dictionary = {}
 	for action in UMBRA_ACTIONS:
 		action_memory[action] = {
@@ -132,7 +177,7 @@ func _initial_memory(seed: int) -> Dictionary:
 	return {
 		"schema_version": SELFPLAY_SCHEMA_VERSION,
 		"source": "godot_headless_selfplay",
-		"seed": seed,
+		"seed": training_seed,
 		"trained_episodes": 0,
 		"actions": action_memory,
 		"scenarios": {},
@@ -228,57 +273,109 @@ func _mutate_cards(cards: Array, rng: RandomNumberGenerator) -> Array:
 
 func _run_episode(episode_index: int, scenario: Dictionary, memory: Dictionary, rng: RandomNumberGenerator, max_steps: int) -> Dictionary:
 	var state: Dictionary = _initial_episode_state(scenario, rng)
-	var umbra_action_stats: Dictionary = {}
-	for action in UMBRA_ACTIONS:
-		umbra_action_stats[action] = {"uses": 0, "hits": 0, "misses": 0, "damage": 0.0, "reward": 0.0}
-	var apolo_action_stats: Dictionary = {}
-	for action in APOLO_ACTIONS:
-		apolo_action_stats[action] = {"uses": 0, "hits": 0, "misses": 0, "damage": 0.0, "reward": 0.0}
-	var winner: String = "DRAW"
-	var step: int = 0
-	while step < max_steps:
-		step += 1
-		state["step"] = step
-		state["time"] = float(step) * DT
-		_update_cooldowns(state, DT)
-		var apolo_obs: Dictionary = _observe("APOLO", state, scenario)
-		var umbra_obs: Dictionary = _observe("UMBRA", state, scenario)
-		var apolo_action: Dictionary = _choose_apolo_action(apolo_obs, scenario, rng)
-		var umbra_action: String = _choose_umbra_action(umbra_obs, state, memory, rng)
-		_register_action_use(apolo_action_stats, String(apolo_action.get("id", "AGUARDAR")))
-		_register_action_use(umbra_action_stats, umbra_action)
-		state["last_apolo_action"] = String(apolo_action.get("id", "AGUARDAR"))
-		state["last_umbra_action"] = umbra_action
-		_apply_apolo_action(state, scenario, apolo_action, apolo_action_stats, rng)
-		_apply_umbra_action(state, scenario, umbra_action, umbra_action_stats, rng)
-		_update_projectiles(state, scenario, apolo_action_stats, umbra_action_stats)
-		_update_hazards(state, scenario, apolo_action_stats, umbra_action_stats)
-		_update_rats(state, scenario, umbra_action_stats)
-		_record_motion(state)
-		state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) + 0.004
-		state["umbra_reward"] = float(state.get("umbra_reward", 0.0)) + 0.004
-		if float(state.get("player_hp", 0.0)) <= 0.0:
-			winner = "UMBRA"
-			state["umbra_reward"] = float(state.get("umbra_reward", 0.0)) + 25.0
-			state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) - 22.0
-			_add_action_reward(umbra_action_stats, umbra_action, 8.0)
-			break
-		if float(state.get("umbra_hp", 0.0)) <= 0.0:
-			winner = "APOLO"
-			state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) + 25.0
-			state["umbra_reward"] = float(state.get("umbra_reward", 0.0)) - 22.0
-			_add_action_reward(apolo_action_stats, String(apolo_action.get("id", "AGUARDAR")), 8.0)
-			break
-	if winner == "DRAW":
+	var umbra_action_stats: Dictionary = _new_action_stats(UMBRA_ACTIONS)
+	var apolo_action_stats: Dictionary = _new_action_stats(APOLO_ACTIONS)
+	var result: Dictionary = {}
+	while result.is_empty():
+		result = _run_episode_step(
+			episode_index,
+			scenario,
+			state,
+			memory,
+			rng,
+			max_steps,
+			umbra_action_stats,
+			apolo_action_stats
+		)
+	return result
+
+
+func _begin_visual_episode(session: Dictionary) -> void:
+	var rng: RandomNumberGenerator = session["rng"]
+	var options: Dictionary = Dictionary(session.get("options", {}))
+	var episode_index: int = int(session.get("episode_index", 0))
+	var scenario: Dictionary = _scenario_for_episode(episode_index, rng, options)
+	session["scenario"] = scenario
+	session["state"] = _initial_episode_state(scenario, rng)
+	session["umbra_action_stats"] = _new_action_stats(UMBRA_ACTIONS)
+	session["apolo_action_stats"] = _new_action_stats(APOLO_ACTIONS)
+
+
+func _run_session_step(session: Dictionary) -> Dictionary:
+	var scenario: Dictionary = session["scenario"]
+	var state: Dictionary = session["state"]
+	var memory: Dictionary = session["memory"]
+	var rng: RandomNumberGenerator = session["rng"]
+	var umbra_action_stats: Dictionary = session["umbra_action_stats"]
+	var apolo_action_stats: Dictionary = session["apolo_action_stats"]
+	return _run_episode_step(
+		int(session.get("episode_index", 0)),
+		scenario,
+		state,
+		memory,
+		rng,
+		int(session.get("max_steps", 1200)),
+		umbra_action_stats,
+		apolo_action_stats
+	)
+
+
+func _run_episode_step(
+	episode_index: int,
+	scenario: Dictionary,
+	state: Dictionary,
+	memory: Dictionary,
+	rng: RandomNumberGenerator,
+	max_steps: int,
+	umbra_action_stats: Dictionary,
+	apolo_action_stats: Dictionary
+) -> Dictionary:
+	var step: int = int(state.get("step", 0)) + 1
+	state["step"] = step
+	state["time"] = float(step) * DT
+	_update_cooldowns(state, DT)
+	var apolo_obs: Dictionary = _observe("APOLO", state, scenario)
+	var umbra_obs: Dictionary = _observe("UMBRA", state, scenario)
+	var apolo_action: Dictionary = _choose_apolo_action(apolo_obs, scenario, rng)
+	var umbra_action: String = _choose_umbra_action(umbra_obs, state, memory, rng)
+	_register_action_use(apolo_action_stats, String(apolo_action.get("id", "AGUARDAR")))
+	_register_action_use(umbra_action_stats, umbra_action)
+	state["last_apolo_action"] = String(apolo_action.get("id", "AGUARDAR"))
+	state["last_umbra_action"] = umbra_action
+	_apply_apolo_action(state, scenario, apolo_action, apolo_action_stats, rng)
+	_apply_umbra_action(state, scenario, umbra_action, umbra_action_stats, rng)
+	_update_projectiles(state, scenario, apolo_action_stats, umbra_action_stats)
+	_update_hazards(state, scenario, apolo_action_stats, umbra_action_stats)
+	_update_rats(state, scenario, umbra_action_stats)
+	_record_motion(state)
+	state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) + 0.004
+	state["umbra_reward"] = float(state.get("umbra_reward", 0.0)) + 0.004
+	if float(state.get("player_hp", 0.0)) <= 0.0:
+		state["umbra_reward"] = float(state.get("umbra_reward", 0.0)) + 25.0
+		state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) - 22.0
+		_add_action_reward(umbra_action_stats, umbra_action, 8.0)
+		return _finish_episode_result(episode_index, scenario, state, umbra_action_stats, apolo_action_stats, "UMBRA")
+	if float(state.get("umbra_hp", 0.0)) <= 0.0:
+		state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) + 25.0
+		state["umbra_reward"] = float(state.get("umbra_reward", 0.0)) - 22.0
+		_add_action_reward(apolo_action_stats, String(apolo_action.get("id", "AGUARDAR")), 8.0)
+		return _finish_episode_result(episode_index, scenario, state, umbra_action_stats, apolo_action_stats, "APOLO")
+	if step >= max_steps:
+		var winner := "DRAW"
 		if float(state.get("umbra_hp", 0.0)) / float(state.get("umbra_hp_max", 1.0)) > float(state.get("player_hp", 0.0)) / float(state.get("player_hp_max", 1.0)):
 			state["umbra_reward"] = float(state.get("umbra_reward", 0.0)) + 4.0
 		else:
 			state["apolo_reward"] = float(state.get("apolo_reward", 0.0)) + 4.0
+		return _finish_episode_result(episode_index, scenario, state, umbra_action_stats, apolo_action_stats, winner)
+	return {}
+
+
+func _finish_episode_result(episode_index: int, scenario: Dictionary, state: Dictionary, umbra_action_stats: Dictionary, apolo_action_stats: Dictionary, winner: String) -> Dictionary:
 	return {
 		"episode": episode_index,
 		"scenario": scenario,
-		"steps": step,
-		"duration_seconds": snappedf(float(step) * DT, 0.01),
+		"steps": int(state.get("step", 0)),
+		"duration_seconds": snappedf(float(state.get("step", 0)) * DT, 0.01),
 		"winner": winner,
 		"umbra_reward": snappedf(float(state.get("umbra_reward", 0.0)), 0.001),
 		"apolo_reward": snappedf(float(state.get("apolo_reward", 0.0)), 0.001),
@@ -291,6 +388,116 @@ func _run_episode(episode_index: int, scenario: Dictionary, memory: Dictionary, 
 			"umbra": _observe("UMBRA", state, scenario)
 		}
 	}
+
+
+func _complete_visual_episode(session: Dictionary, result: Dictionary) -> void:
+	var memory: Dictionary = Dictionary(session.get("memory", {}))
+	_update_memory_from_episode(memory, result)
+	session["memory"] = memory
+	var apolo_memory: Dictionary = Dictionary(session.get("apolo_memory", {}))
+	_update_action_memory_from_stats(apolo_memory, Dictionary(result.get("apolo_actions", {})))
+	session["apolo_memory"] = apolo_memory
+	var episode_rows: Array = Array(session.get("episode_rows", []))
+	episode_rows.append(_episode_report_row(result))
+	session["episode_rows"] = episode_rows
+	var winner: String = String(result.get("winner", "DRAW"))
+	var winners: Dictionary = Dictionary(session.get("winners", {}))
+	winners[winner] = int(winners.get(winner, 0)) + 1
+	session["winners"] = winners
+	session["total_umbra_reward"] = float(session.get("total_umbra_reward", 0.0)) + float(result.get("umbra_reward", 0.0))
+	session["total_apolo_reward"] = float(session.get("total_apolo_reward", 0.0)) + float(result.get("apolo_reward", 0.0))
+	var best_episode: Dictionary = Dictionary(session.get("best_episode", {}))
+	if best_episode.is_empty() or float(result.get("umbra_reward", 0.0)) > float(best_episode.get("umbra_reward", -999999.0)):
+		session["best_episode"] = result
+	session["last_episode"] = result
+	session["completed_episodes"] = int(session.get("completed_episodes", 0)) + 1
+	session["episode_index"] = int(session.get("episode_index", 0)) + 1
+	if int(session.get("episode_index", 0)) >= int(session.get("episodes", 1)):
+		session["done"] = true
+	else:
+		_begin_visual_episode(session)
+
+
+func _visual_snapshot(session: Dictionary) -> Dictionary:
+	var completed: int = int(session.get("completed_episodes", 0))
+	var denominator: float = maxf(1.0, float(completed))
+	return {
+		"ok": bool(session.get("ok", false)),
+		"done": bool(session.get("done", false)),
+		"episode_index": int(session.get("episode_index", 0)),
+		"completed_episodes": completed,
+		"episodes": int(session.get("episodes", 0)),
+		"max_steps": int(session.get("max_steps", 0)),
+		"seed": int(session.get("seed", 0)),
+		"winners": Dictionary(session.get("winners", {})).duplicate(true),
+		"umbra_average_reward": snappedf(float(session.get("total_umbra_reward", 0.0)) / denominator, 0.001),
+		"apolo_average_reward": snappedf(float(session.get("total_apolo_reward", 0.0)) / denominator, 0.001),
+		"scenario": Dictionary(session.get("scenario", {})).duplicate(true),
+		"state": Dictionary(session.get("state", {})).duplicate(true),
+		"umbra_action_stats": Dictionary(session.get("umbra_action_stats", {})).duplicate(true),
+		"apolo_action_stats": Dictionary(session.get("apolo_action_stats", {})).duplicate(true),
+		"episode_rows": Array(session.get("episode_rows", [])).duplicate(true),
+		"top_umbra_memory": _top_umbra_memory(Dictionary(session.get("memory", {})), 5),
+		"top_apolo_memory": _top_action_memory(Dictionary(session.get("apolo_memory", {})), 5),
+		"last_episode": Dictionary(session.get("last_episode", {})).duplicate(true)
+	}
+
+
+func _new_action_stats(actions: Array[String]) -> Dictionary:
+	var stats: Dictionary = {}
+	for action in actions:
+		stats[action] = {"uses": 0, "hits": 0, "misses": 0, "damage": 0.0, "reward": 0.0}
+	return stats
+
+
+func _new_action_memory(actions: Array[String]) -> Dictionary:
+	var action_memory: Dictionary = {}
+	for action in actions:
+		action_memory[action] = {
+			"score": 0.0,
+			"uses": 0,
+			"hits": 0,
+			"misses": 0,
+			"damage": 0.0,
+			"reward": 0.0
+		}
+	return action_memory
+
+
+func _update_action_memory_from_stats(action_memory: Dictionary, episode_actions: Dictionary) -> void:
+	for action in episode_actions.keys():
+		var row: Dictionary = Dictionary(episode_actions[action])
+		var current: Dictionary = Dictionary(action_memory.get(action, {}))
+		current["uses"] = int(current.get("uses", 0)) + int(row.get("uses", 0))
+		current["hits"] = int(current.get("hits", 0)) + int(row.get("hits", 0))
+		current["misses"] = int(current.get("misses", 0)) + int(row.get("misses", 0))
+		current["damage"] = snappedf(float(current.get("damage", 0.0)) + float(row.get("damage", 0.0)), 0.01)
+		current["reward"] = snappedf(float(current.get("reward", 0.0)) + float(row.get("reward", 0.0)), 0.001)
+		var uses: float = maxf(1.0, float(current.get("uses", 0)))
+		var reward_per_use: float = float(current.get("reward", 0.0)) / uses
+		var hit_rate: float = float(current.get("hits", 0)) / uses
+		current["score"] = snappedf(clampf(reward_per_use * 0.45 + hit_rate * 0.55, -3.5, 3.5), 0.0001)
+		action_memory[action] = current
+
+
+func _top_umbra_memory(memory: Dictionary, limit: int) -> Array:
+	return _top_action_memory(Dictionary(memory.get("actions", {})), limit)
+
+
+func _top_action_memory(action_memory: Dictionary, limit: int) -> Array:
+	var rows: Array = []
+	for action in action_memory.keys():
+		var row: Dictionary = Dictionary(action_memory.get(action, {}))
+		rows.append({
+			"action": String(action),
+			"score": snappedf(float(row.get("score", 0.0)), 0.001),
+			"uses": int(row.get("uses", 0)),
+			"hits": int(row.get("hits", 0))
+		})
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("score", 0.0)) > float(b.get("score", 0.0))
+	)
+	return rows.slice(0, max(1, limit))
 
 
 func _initial_episode_state(scenario: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
@@ -390,7 +597,6 @@ func _choose_apolo_action(obs: Dictionary, scenario: Dictionary, rng: RandomNumb
 
 func _choose_umbra_action(obs: Dictionary, state: Dictionary, memory: Dictionary, rng: RandomNumberGenerator) -> String:
 	var available: Array[String] = _umbra_available_actions(state)
-	var self_pos: Vector2 = _vec_from_report(Dictionary(obs.get("self_position", {})))
 	var enemy_pos: Vector2 = _vec_from_report(Dictionary(obs.get("enemy_position", {})))
 	var distance: float = float(obs.get("distance_to_enemy", 0.0))
 	var enemy_edge: float = _edge_distance(enemy_pos)

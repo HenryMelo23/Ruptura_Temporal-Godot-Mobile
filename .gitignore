@@ -100,6 +100,8 @@ Game Base/**/SIGMon/
 !.agents/skills/godot-2d-collisions-ai/SKILL.md
 !.agents/skills/godot-game-balancing/
 !.agents/skills/godot-game-balancing/SKILL.md
+!.agents/skills/ruptura-token-efficient-workflow/
+!.agents/skills/ruptura-token-efficient-workflow/SKILL.md
 
 # Scripts de Build Locais
 setup_android_env.ps1

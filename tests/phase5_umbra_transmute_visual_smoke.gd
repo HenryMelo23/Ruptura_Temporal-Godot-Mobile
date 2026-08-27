@@ -8,7 +8,7 @@ const CASES := [
 	{"action": "TRANSMUTAR_NECROSE", "dimension": "necrose", "skill": "MIASMA", "kind": "miasma"},
 	{"action": "TRANSMUTAR_RESSONANCIA", "dimension": "ressonancia", "skill": "DESCARGA_ELETRICA", "kind": "discharge"},
 	{"action": "TRANSMUTAR_HEMORRAGIA", "dimension": "hemorragia", "skill": "CAMINHO_ESPINHOS", "kind": "thorns"},
-	{"action": "TRANSMUTAR_ATRITO", "dimension": "atrito", "skill": "LASER_SOBRECARGA", "kind": "discharge"},
+	{"action": "TRANSMUTAR_ATRITO", "dimension": "atrito", "skill": "LASER_SOBRECARGA", "kind": "umbra_overload_laser"},
 	{"action": "TRANSMUTAR_RASTRO", "dimension": "rastro", "skill": "PRAGA_RATOS", "kind": "rats"},
 ]
 
@@ -151,8 +151,6 @@ func _validate_skill_spawn(skill: String, kind: String) -> void:
 	for hazard in game.phase5_hazards:
 		var data := Dictionary(hazard)
 		if String(data.get("kind", "")) != kind:
-			continue
-		if skill == "LASER_SOBRECARGA" and not bool(data.get("laser", false)):
 			continue
 		found = true
 		break
