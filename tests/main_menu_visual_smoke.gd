@@ -25,6 +25,11 @@ func _save_view(name: String) -> void:
 	print("IMAGE_SAVED: ", ProjectSettings.globalize_path(path), " size: ", image.get_size())
 
 
+func _check(condition: bool, message: String) -> void:
+	if not condition:
+		push_error(message)
+		quit(1)
+
 
 func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
@@ -34,6 +39,7 @@ func _run() -> void:
 
 	await process_frame
 	await process_frame
+	_check(game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "main menu should expose multiplayer button")
 	_save_view("main_menu_desktop_standard.png")
 
 	game.interrupted_run_available = true

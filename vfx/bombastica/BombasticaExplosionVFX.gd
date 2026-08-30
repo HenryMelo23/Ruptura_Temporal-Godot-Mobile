@@ -38,7 +38,9 @@ static func _load_scorch_textures() -> void:
 			_scorch_textures.append(load(path))
 
 func play_at(pos: Vector2, scale_mult: float = 1.0, quality: String = "HIGH", chain_depth: int = 0, seed_val: int = 0, reduced_flashes: bool = false, reduced_motion: bool = false) -> void:
-	global_position = pos
+	position = pos
+	set_meta("bombastica_world_origin", pos)
+	set_meta("bombastica_origin_space", "world")
 	quality_level = quality
 	_is_playing = true
 	_life_timer = 0.0

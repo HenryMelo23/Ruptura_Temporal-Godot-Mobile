@@ -75,6 +75,7 @@ const WINDOWS_UPDATE_MANIFEST = path.join(WINDOWS_UPDATE_ROOT, "latest.json");
 const rooms = new Map();
 const streams = new Map();
 let warmRefillTimer = null;
+let projectIdentityCache = null;
 
 function numberEnv(name, fallback, allowZero = false) {
   const value = Number(process.env[name]);
@@ -144,6 +145,39 @@ function updateConfig(platform) {
     urlField: "apk_url",
     downloadPath: "/updates/android/download/"
   };
+}
+
+function projectIdentity() {
+  const projectFile = path.join(PROJECT_PATH, "project.godot");
+  const mainScript = path.join(PROJECT_PATH, "scripts", "main.gd");
+  try {
+    const projectStat = fs.statSync(projectFile);
+    const mainStat = fs.statSync(mainScript);
+    const cacheKey = `${projectStat.mtimeMs}:${projectStat.size}:${mainStat.mtimeMs}:${mainStat.size}`;
+    if (projectIdentityCache && projectIdentityCache.cacheKey === cacheKey) {
+      return projectIdentityCache.payload;
+    }
+    const projectSource = fs.readFileSync(projectFile, "utf8");
+    const mainSource = fs.readFileSync(mainScript, "utf8");
+    const versionMatch = projectSource.match(/^\s*config\/version="([^"]+)"/m);
+    const rpcMatches = mainSource.match(/^\s*@rpc\(/gm) || [];
+    const payload = {
+      version: versionMatch ? versionMatch[1] : "",
+      mainGdSha256: crypto.createHash("sha256").update(mainSource).digest("hex"),
+      rpcDeclarationCount: rpcMatches.length,
+      projectPath: PROJECT_PATH
+    };
+    projectIdentityCache = { cacheKey, payload };
+    return payload;
+  } catch (error) {
+    return {
+      version: "",
+      mainGdSha256: "",
+      rpcDeclarationCount: 0,
+      projectPath: PROJECT_PATH,
+      error: error.message
+    };
+  }
 }
 
 function readUpdateManifest(platform = "android") {
@@ -332,6 +366,9 @@ function roomPublic(room) {
   const expiresInMs = Math.max(0, room.lastSeen + ROOM_IDLE_MS - Date.now());
   return {
     code: room.code,
+    name: room.roomName || `Sala ${room.code}`,
+    ownerName: room.ownerName || "host",
+    locked: Boolean(room.passwordHash),
     host: ROOM_HOST,
     port: room.port,
     players: room.players,
@@ -341,6 +378,27 @@ function roomPublic(room) {
     expiresInMs,
     heartbeatCount: room.heartbeatCount || 0
   };
+}
+
+function sanitizeRoomName(value, ownerName = "host") {
+  const clean = String(value || "").replace(/[^\w .-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 24);
+  return clean.length >= 2 ? clean : `Sala de ${String(ownerName || "host").slice(0, 16)}`;
+}
+
+function normalizeRoomPassword(value) {
+  return String(value || "").trim().replace(/["\\]/g, "").slice(0, 32);
+}
+
+function passwordHash(value) {
+  const password = normalizeRoomPassword(value);
+  return password ? crypto.createHash("sha256").update(password, "utf8").digest("hex") : "";
+}
+
+function roomPasswordMatches(room, value) {
+  if (!room || !room.passwordHash) {
+    return true;
+  }
+  return passwordHash(value) === room.passwordHash;
 }
 
 function boundUdpPorts() {
@@ -888,6 +946,8 @@ function startRoom(ownerName, options = {}) {
     code,
     port,
     ownerName: standby ? "" : (ownerName || "host"),
+    roomName: standby ? "" : sanitizeRoomName(options.roomName || "", ownerName),
+    passwordHash: standby ? "" : passwordHash(options.password || ""),
     players: standby ? 0 : 1,
     standby,
     createdAt: Date.now(),
@@ -1009,13 +1069,15 @@ function ensureWarmStandby() {
   }
 }
 
-function claimWarmStandby(ownerName) {
+function claimWarmStandby(ownerName, options = {}) {
   const room = warmStandbyRooms().sort((left, right) => left.createdAt - right.createdAt)[0];
   if (!room) {
     return null;
   }
   room.standby = false;
   room.ownerName = ownerName || "host";
+  room.roomName = sanitizeRoomName(options.roomName || "", room.ownerName);
+  room.passwordHash = passwordHash(options.password || "");
   room.players = 1;
   room.createdAt = Date.now();
   room.lastSeen = Date.now();
@@ -1030,7 +1092,7 @@ function claimWarmStandby(ownerName) {
 
 function availableRoom() {
   const candidates = activeRooms()
-    .filter((room) => room.players < MAX_PLAYERS)
+    .filter((room) => room.players < MAX_PLAYERS && !room.passwordHash)
     .sort((left, right) => right.createdAt - left.createdAt);
   if (candidates.length === 0) {
     return null;
@@ -1045,8 +1107,11 @@ function listAvailableRooms() {
     .map(roomPublic);
 }
 
-function reserveRoom(room) {
+function reserveRoom(room, payload = {}) {
   if (!room || room.players >= MAX_PLAYERS) {
+    return null;
+  }
+  if (!roomPasswordMatches(room, payload.password || "")) {
     return null;
   }
   room.players += 1;
@@ -2258,7 +2323,8 @@ async function route(req, res) {
       streams: STREAMING_ENABLED ? streams.size : 0,
       runs: leaderboardSnapshot().recent.length,
       protocols: STREAMING_ENABLED ? ["rtmp-hls", "frame-mjpeg", "http-mjpeg"] : [],
-      streaming: STREAMING_ENABLED
+      streaming: STREAMING_ENABLED,
+      project: projectIdentity()
     });
     return;
   }
@@ -2546,7 +2612,11 @@ async function route(req, res) {
   if (req.method === "POST" && url.pathname === "/rooms") {
     const payload = await readJson(req);
     const ownerName = String(payload.name || "host");
-    const room = claimWarmStandby(ownerName) || startRoom(ownerName);
+    const options = {
+      roomName: payload.roomName || payload.room_name || payload.title || "",
+      password: payload.password || ""
+    };
+    const room = claimWarmStandby(ownerName, options) || startRoom(ownerName, options);
     await waitForRoomReady(room);
     sendJson(res, 201, roomPublic(room));
     return;
@@ -2569,7 +2639,18 @@ async function route(req, res) {
 
   const joinMatch = url.pathname.match(/^\/rooms\/([A-F0-9]{6})\/join$/);
   if (req.method === "POST" && joinMatch) {
-    const room = reserveRoom(roomByCode(joinMatch[1]));
+    let payload = {};
+    try {
+      payload = await readJson(req);
+    } catch (_error) {
+      payload = {};
+    }
+    const candidate = roomByCode(joinMatch[1]);
+    if (candidate && candidate.passwordHash && !roomPasswordMatches(candidate, payload.password || "")) {
+      sendJson(res, 403, { error: "invalid password", locked: true });
+      return;
+    }
+    const room = reserveRoom(candidate, payload);
     if (!room) {
       sendJson(res, 404, { error: "room not available" });
       return;

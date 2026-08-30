@@ -46,7 +46,9 @@ func _run() -> void:
 
 	_check(game.ONLINE_MIN_PLAYERS == 2 and game.ONLINE_MAX_PLAYERS == 3, "room limits are not 2 to 3")
 	_check(game._combat_targets().size() == 3, "combat target registry did not expose all three players")
-	_check(is_equal_approx(game.boss_hp_max, game.BOSS_BASE_HP), "multiplayer still inflated boss health")
+	_check(is_equal_approx(game._multiplayer_enemy_hp_scale(), game.MULTIPLAYER_ENEMY_HP_SCALE_3P), "three-player enemy hp scale is not active")
+	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss hp scale is not active")
+	_check(game._enemy_limit() == game.ENEMY_MAX_BASE + game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player enemy limit bonus is not active")
 
 	var local_peer: int = game._mp_unique_id()
 	var rotated_boss_targets: Dictionary = {}
@@ -170,7 +172,7 @@ func _run() -> void:
 	game._handle_revive(true)
 	_check(not game.is_dead and is_equal_approx(game.player_hp, game.player_hp_max * 0.5), "revive did not return player with half hp")
 
-	print("MULTIPLAYER_THREE_PLAYER_CONTRACT_SMOKE_OK players=3 stealth=true rewards=per_peer choices=exclusive decks=shared shop_return=3s")
+	print("MULTIPLAYER_THREE_PLAYER_CONTRACT_SMOKE_OK players=3 stealth=true rewards=collective_points_individual_spend choices=exclusive decks=shared shop_return=3s balance=scaled")
 	game.queue_free()
 	await process_frame
 	quit(0)

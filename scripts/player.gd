@@ -12,6 +12,7 @@ class_name NetPlayer
 @export var dash_start: Vector2 = Vector2.ZERO
 @export var dash_end: Vector2 = Vector2.ZERO
 @export var is_dashing: bool = false
+@export var anim_state: int = 0
 @export var frame_idx: int = 0
 @export var flip_h: bool = false
 

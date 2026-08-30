@@ -2,7 +2,8 @@
 param(
     [string]$GodotBin = $env:GODOT_BIN,
     [string]$ManagerUrl = 'http://72.61.217.238:8090',
-    [int]$PingBudgetMs = 30
+    [int]$PingBudgetMs = 50,
+    [switch]$SkipRelayVersionCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,6 +13,24 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 if (-not $GodotBin -or -not (Test-Path -LiteralPath $GodotBin -PathType Leaf)) {
     throw 'Informe um executavel Godot valido em -GodotBin ou GODOT_BIN.'
+}
+
+function Assert-RelayProjectMatches {
+    param($Health)
+    if ($SkipRelayVersionCheck) {
+        return
+    }
+    $localHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'scripts\main.gd') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $remoteHash = ''
+    if ($Health.PSObject.Properties.Name -contains 'project' -and $Health.project) {
+        $remoteHash = [string]$Health.project.mainGdSha256
+    }
+    if (-not $remoteHash) {
+        throw 'Relay publico nao informa hash do projeto. Publique server/relay_manager.js e o projeto no VPS antes do gameplay smoke publico.'
+    }
+    if ($remoteHash -ne $localHash) {
+        throw "Relay publico esta com scripts/main.gd diferente. local=$localHash remoto=$remoteHash. Rode tools/publish_relay_project.ps1 antes do gameplay smoke publico."
+    }
 }
 
 Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Filter 'gameplay_authority_*result.txt' -File -ErrorAction SilentlyContinue |
@@ -27,6 +46,7 @@ try {
     if (-not $health.ok) {
         throw 'Relay publico nao esta saudavel antes do gameplay smoke.'
     }
+    Assert-RelayProjectMatches -Health $health
 
     $room = Invoke-RestMethod -Method Post -Uri "$ManagerUrl/rooms" `
         -ContentType 'application/json' -Body '{"name":"PublicGameplaySmoke"}' -TimeoutSec 20

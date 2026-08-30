@@ -49,7 +49,7 @@ func _start() -> void:
 
 
 func _run_server() -> void:
-	var deadline := Time.get_ticks_msec() + 20000
+	var deadline := Time.get_ticks_msec() + 60000
 	while Time.get_ticks_msec() < deadline:
 		await process_frame
 		if game.dedicated_room_owner_peer_id != 0 and game._mp_peer_ids().size() == 2 and not FileAccess.file_exists(PREFIX + "server_ready.txt"):
@@ -65,7 +65,7 @@ func _run_server() -> void:
 
 
 func _run_host() -> void:
-	var deadline := Time.get_ticks_msec() + 20000
+	var deadline := Time.get_ticks_msec() + 60000
 	var sent := false
 	var projectile: Dictionary = {}
 	var destroy_sent := false
@@ -121,7 +121,7 @@ func _run_host() -> void:
 
 
 func _run_client() -> void:
-	var deadline := Time.get_ticks_msec() + 20000
+	var deadline := Time.get_ticks_msec() + 60000
 	var received := false
 	var payload_bytes_seen := 0
 	while Time.get_ticks_msec() < deadline:

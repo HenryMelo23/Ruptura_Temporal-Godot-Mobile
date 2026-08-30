@@ -13,7 +13,9 @@ var _is_playing: bool = false
 var _light_tween: Tween
 
 func play_at(pos: Vector2, quality: String = "HIGH", _seed_val: int = 0) -> void:
-	global_position = pos
+	position = pos
+	set_meta("bombastica_world_origin", pos)
+	set_meta("bombastica_origin_space", "world")
 	_is_playing = true
 	_life_timer = 0.0
 	show()

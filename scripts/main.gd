@@ -3,10 +3,12 @@ extends Node2D
 const AuraSystem = preload("res://scripts/aura_system.gd")
 const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
+const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
+const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.32"
-const GAME_VERSION_CODE: = 23200
+const GAME_VERSION: = "2.0.33"
+const GAME_VERSION_CODE: = 23300
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
 const STARTUP_THANKS_FRAME_PATH_FORMAT: String = "res://assets/videos/startup_teaser_frames/frame_%04d.webp"
@@ -67,7 +69,7 @@ const MANIFEST_DRAG_DEADZONE: = 8.0
 const MANIFEST_STAGE_MANIFESTATION: = "manifestation"
 const MANIFEST_STAGE_TRANSITION: = "transition"
 const MANIFEST_STAGE_AURA: = "aura"
-const MANIFEST_SPECTRUM_TRANSITION_TIME: = 1.65
+const MANIFEST_SPECTRUM_TRANSITION_TIME: = 0.85
 const MANIFEST_PREVIEW_FRAME_COUNT: = 24
 const MANIFEST_PREVIEW_ATLAS_COLS: = 4
 const MANIFEST_PREVIEW_SECONDS: = 7.0
@@ -371,9 +373,18 @@ const SHOP_TELEMETRY_DIR: = "user://shop_telemetry"
 const SHOP_MP_REQUEST_TIME: = 10.0
 const BOSS_MP_REQUEST_TIME: = 10.0
 const PAUSE_MP_REQUEST_TIME: = 10.0
+const PHASE_MP_REQUEST_TIME: = 10.0
 const ONLINE_MIN_PLAYERS: = 2
 const ONLINE_MAX_PLAYERS: = 3
-const ONLINE_READY_RESEND_INTERVAL_MS: = 350
+const ONLINE_READY_RESEND_INTERVAL_MS: = 180
+const ONLINE_READY_PENDING_TIMEOUT_MS: = 3500
+const ONLINE_READY_MAX_PENDING_MS: = 12000
+const MULTIPLAYER_ENEMY_HP_SCALE_2P: = 1.55
+const MULTIPLAYER_ENEMY_HP_SCALE_3P: = 1.95
+const MULTIPLAYER_BOSS_HP_SCALE_2P: = 1.35
+const MULTIPLAYER_BOSS_HP_SCALE_3P: = 1.7
+const MULTIPLAYER_ENEMY_LIMIT_BONUS_2P: = 1
+const MULTIPLAYER_ENEMY_LIMIT_BONUS_3P: = 2
 const SECONDARY_SKILL_COOLDOWN: = 75.0
 const SECONDARY_ELETRICA_DRAIN_DELAY: = 15.0
 const SECONDARY_ELETRICA_DRAIN_INTERVAL: = 1.0
@@ -1721,12 +1732,16 @@ var nickname_error: String = ""
 var nickname_edit: LineEdit = null
 var cheat_edit: LineEdit = null
 var webhook_edit: LineEdit = null
+var online_room_name_edit: LineEdit = null
+var online_room_password_edit: LineEdit = null
+var online_search_code_edit: LineEdit = null
+var online_join_password_edit: LineEdit = null
 var webhook_error: String = ""
 var run_report_request: HTTPRequest = null
 var run_leaderboard_request: HTTPRequest = null
 var run_security_start_request: HTTPRequest = null
 var run_security_checkpoint_request: HTTPRequest = null
-var rt_integrity: RTIntegrityCore = null
+var rt_integrity: RefCounted = null
 var last_run_leaderboard_url: String = ""
 var app_update_check_request: HTTPRequest = null
 var app_update_download_request: HTTPRequest = null
@@ -1763,10 +1778,16 @@ var online_relay_request: HTTPRequest = null
 var online_heartbeat_request: HTTPRequest = null
 var online_relay_action: String = ""
 var online_room_code: String = ""
+var online_room_name: String = ""
+var online_room_password: String = ""
+var online_room_locked: bool = false
+var online_join_code: String = ""
+var online_join_password: String = ""
 var online_room_port: int = 0
 var online_connected: bool = false
 var online_status: String = ""
 var online_room_owner: bool = false
+var online_lobby_roster: Array = []
 var online_lobby_connected_count: int = 0
 var online_lobby_active_player_count: int = 0
 var online_lobby_spectator_count: int = 0
@@ -1778,8 +1799,13 @@ var online_room_list: Array = []
 var online_room_list_selected: int = 0
 var online_joining_room_code: String = ""
 var online_ready_last_sent_ms: int = 0
+var online_ready_pending_started_ms: int = 0
+var online_ready_request_seq: int = 0
+var online_ready_confirmed_seq: int = 0
 var online_lobby_ready_pending: bool = false
 var online_lobby_server_confirmed_ready: bool = false
+var online_start_request_seq: int = 0
+var online_start_confirmed_seq: int = 0
 var online_local_spectator: bool = false
 var online_local_spectator_confirmed: bool = false
 var online_spectator_request_pending: bool = false
@@ -1793,6 +1819,7 @@ var online_heartbeat_last_error: String = ""
 var dedicated_server_mode: bool = false
 var dedicated_room_code: String = ""
 var dedicated_ready_by_peer: Dictionary = {}
+var dedicated_ready_seq_by_peer: Dictionary = {}
 var dedicated_names_by_peer: Dictionary = {}
 var dedicated_spectator_by_peer: Dictionary = {}
 var dedicated_manifest_ready_by_peer: Dictionary = {}
@@ -1802,12 +1829,16 @@ var dedicated_player_state_by_peer: Dictionary = {}
 var dedicated_shop_votes_by_peer: Dictionary = {}
 var dedicated_shop_exit_by_peer: Dictionary = {}
 var dedicated_boss_votes_by_peer: Dictionary = {}
+var dedicated_phase_votes_by_peer: Dictionary = {}
 var dedicated_pause_votes_by_peer: Dictionary = {}
 var dedicated_pause_target: = false
 var dedicated_pause_vote_started_ms: = 0
 var dedicated_shop_vote_started_ms: = 0
 var dedicated_boss_vote_started_ms: = 0
 var dedicated_boss_vote_phase: = 0
+var dedicated_phase_vote_started_ms: = 0
+var dedicated_phase_vote_target: = 0
+var dedicated_phase_vote_action: = "phase"
 var dedicated_room_owner_peer_id: int = 0
 var net_player_peer_id: int = 0
 var net_player_sync_last_ms: int = 0
@@ -1914,7 +1945,7 @@ const NET_LEECH_STATES: = [
 ]
 const NET_OWNER_CONNECT_TIMEOUT_MS: = 30000
 const NET_PRELOAD_TIMEOUT_MS: = 20000
-const NET_MANIFEST_SYNC_INTERVAL_MS: = 90
+const NET_MANIFEST_SYNC_INTERVAL_MS: = 45
 const NET_REPORT_INTERVAL_MS: = 30000
 const NET_REPORT_EVENT_LIMIT: = 180
 const ONLINE_ROOM_HEARTBEAT_INTERVAL_MS: = 20000
@@ -2265,6 +2296,13 @@ var pause_mp_request_outgoing: = false
 var pause_mp_target_paused: = true
 var pause_mp_vote_count: = 0
 var pause_mp_expected_count: = 1
+var phase_mp_request_timer: = 0.0
+var phase_mp_request_incoming: = false
+var phase_mp_request_outgoing: = false
+var phase_mp_target: = 0
+var phase_mp_action: = "phase"
+var phase_mp_vote_count: = 0
+var phase_mp_expected_count: = 1
 var revive_request_cooldown: = 0.0
 var revive_request_timer: = 0.0
 var revive_request_outgoing: = false
@@ -2435,6 +2473,7 @@ var bombastica_total_detonation_flash: = 0.0
 var bombastica_explosion_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaExplosionVFX.tscn") else null)
 var bombastica_mine_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") else null)
 var bombastica_ignition_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") else null)
+var bombastica_world_vfx_root: Node2D = null
 var bombastica_explosion_pool: Array = []
 var bombastica_mine_pool: Array = []
 var bombastica_ignition_pool: Array = []
@@ -2530,6 +2569,7 @@ var event_alert_timer = 0.0
 var event_alert_seed: int = 0
 var screen_shake_timer = 0.0
 var screen_shake_strength = 0.0
+var screen_shake_frame_offset: Vector2 = Vector2.ZERO
 var damage_flash_timer = 0.0
 var low_health_heartbeat_timer = 0.0
 var low_health_heartbeat_double = false
@@ -2611,7 +2651,7 @@ var vol_sfx: float = 1.0
 var vol_shots: float = 1.0
 
 var gfx_particles: bool = true
-var vfx_director: VFXDirector = VFXDirector.new(true)
+var vfx_director: RefCounted = VFXDirectorScript.new(true)
 var hit_freeze_timer: float = 0.0
 var boss_hp_lag: float = -1.0
 var gfx_shadows: bool = true
@@ -3263,6 +3303,7 @@ func _ready() -> void :
 	_setup_nickname_input()
 	_setup_cheat_input()
 	_setup_webhook_input()
+	_setup_online_room_inputs()
 
 	_perf_mark("ready_nodes", perf_ready_started_ms)
 	_prime_resource_mode_defaults()
@@ -3852,6 +3893,42 @@ func _setup_webhook_input() -> void :
 	add_child(webhook_edit)
 
 
+func _setup_online_room_inputs() -> void :
+	online_room_name_edit = LineEdit.new()
+	online_room_name_edit.placeholder_text = "Nome da sala"
+	online_room_name_edit.max_length = 28
+	online_room_name_edit.visible = false
+	online_room_name_edit.virtual_keyboard_enabled = true
+	online_room_name_edit.text_submitted.connect( func(_text): _create_online_room())
+	add_child(online_room_name_edit)
+
+	online_room_password_edit = LineEdit.new()
+	online_room_password_edit.placeholder_text = "Senha opcional"
+	online_room_password_edit.max_length = 18
+	online_room_password_edit.secret = true
+	online_room_password_edit.visible = false
+	online_room_password_edit.virtual_keyboard_enabled = true
+	online_room_password_edit.text_submitted.connect( func(_text): _create_online_room())
+	add_child(online_room_password_edit)
+
+	online_search_code_edit = LineEdit.new()
+	online_search_code_edit.placeholder_text = "Codigo da sala"
+	online_search_code_edit.max_length = 12
+	online_search_code_edit.visible = false
+	online_search_code_edit.virtual_keyboard_enabled = true
+	online_search_code_edit.text_submitted.connect( func(_text): _join_selected_or_typed_online_room())
+	add_child(online_search_code_edit)
+
+	online_join_password_edit = LineEdit.new()
+	online_join_password_edit.placeholder_text = "Senha da sala"
+	online_join_password_edit.max_length = 18
+	online_join_password_edit.secret = true
+	online_join_password_edit.visible = false
+	online_join_password_edit.virtual_keyboard_enabled = true
+	online_join_password_edit.text_submitted.connect( func(_text): _join_selected_or_typed_online_room())
+	add_child(online_join_password_edit)
+
+
 func _load_player_profile() -> void :
 	player_nickname = ""
 	player_profile_id = ""
@@ -4284,7 +4361,7 @@ func _maybe_grant_enemy_spectral_core(enemy: Dictionary, pos: Vector2) -> void:
 
 func _rt_adopt_current_state(_reason: String = "") -> void:
 	if rt_integrity == null:
-		rt_integrity = RTIntegrityCore.new()
+		rt_integrity = RTIntegrityCoreScript.new()
 	if rt_integrity == null:
 		return
 	if String(rt_integrity.run_id) == "":
@@ -4770,6 +4847,115 @@ func _update_webhook_input_visibility() -> void :
 		webhook_edit.grab_focus()
 	else:
 		webhook_edit.release_focus()
+
+
+func _online_create_panel_rect(viewport: Vector2) -> Rect2:
+	var panel_w = min(860.0, viewport.x * 0.82)
+	var panel_h = min(460.0, viewport.y * 0.72)
+	return Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.43, panel_w, panel_h)
+
+
+func _online_find_panel_rect(viewport: Vector2) -> Rect2:
+	var panel_w = min(980.0, viewport.x * 0.86)
+	var panel_h = min(520.0, viewport.y * 0.76)
+	return Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.43, panel_w, panel_h)
+
+
+func _online_create_name_input_rect(viewport: Vector2) -> Rect2:
+	var panel: = _online_create_panel_rect(viewport)
+	return Rect2(panel.position.x + 44.0, panel.position.y + 132.0, panel.size.x - 88.0, 46.0)
+
+
+func _online_create_password_input_rect(viewport: Vector2) -> Rect2:
+	var panel: = _online_create_panel_rect(viewport)
+	return Rect2(panel.position.x + 44.0, panel.position.y + 218.0, panel.size.x - 88.0, 46.0)
+
+
+func _online_find_code_input_rect(viewport: Vector2) -> Rect2:
+	var panel: = _online_find_panel_rect(viewport)
+	return Rect2(panel.position.x + 44.0, panel.end.y - 150.0, panel.size.x * 0.42, 44.0)
+
+
+func _online_find_password_input_rect(viewport: Vector2) -> Rect2:
+	var panel: = _online_find_panel_rect(viewport)
+	return Rect2(panel.position.x + panel.size.x * 0.49, panel.end.y - 150.0, panel.size.x * 0.28, 44.0)
+
+
+func _sync_online_room_input_rects(viewport: Vector2) -> void :
+	if online_room_name_edit != null:
+		var name_rect: = _online_create_name_input_rect(viewport)
+		online_room_name_edit.position = name_rect.position
+		online_room_name_edit.size = name_rect.size
+	if online_room_password_edit != null:
+		var pass_rect: = _online_create_password_input_rect(viewport)
+		online_room_password_edit.position = pass_rect.position
+		online_room_password_edit.size = pass_rect.size
+	if online_search_code_edit != null:
+		var code_rect: = _online_find_code_input_rect(viewport)
+		online_search_code_edit.position = code_rect.position
+		online_search_code_edit.size = code_rect.size
+	if online_join_password_edit != null:
+		var join_pass_rect: = _online_find_password_input_rect(viewport)
+		online_join_password_edit.position = join_pass_rect.position
+		online_join_password_edit.size = join_pass_rect.size
+
+
+func _set_online_input_visible(edit: LineEdit, should_show: bool, value: String) -> void:
+	if edit == null:
+		return
+	if edit.visible != should_show:
+		edit.visible = should_show
+		if should_show:
+			edit.text = value
+		else:
+			edit.release_focus()
+	elif should_show and not edit.has_focus() and edit.text != value:
+		edit.text = value
+
+
+func _update_online_room_input_visibility() -> void :
+	var should_show_create: bool = mode == "online_create_room"
+	var should_show_find: bool = mode == "online_find_room"
+	_sync_online_room_input_rects(get_viewport_rect().size)
+	_set_online_input_visible(online_room_name_edit, should_show_create, online_room_name)
+	_set_online_input_visible(online_room_password_edit, should_show_create, online_room_password)
+	_set_online_input_visible(online_search_code_edit, should_show_find, online_join_code)
+	_set_online_input_visible(online_join_password_edit, should_show_find, online_join_password)
+
+
+func _read_online_create_inputs() -> void:
+	if online_room_name_edit != null:
+		online_room_name = online_room_name_edit.text.strip_edges()
+	if online_room_password_edit != null:
+		online_room_password = online_room_password_edit.text.strip_edges()
+	if online_room_name == "":
+		online_room_name = _default_online_room_name()
+		if online_room_name_edit != null:
+			online_room_name_edit.text = online_room_name
+	online_room_locked = online_room_password != ""
+
+
+func _read_online_join_inputs() -> void:
+	if online_search_code_edit != null:
+		online_join_code = online_search_code_edit.text.strip_edges().to_upper()
+	if online_join_password_edit != null:
+		online_join_password = online_join_password_edit.text.strip_edges()
+
+
+func _default_online_room_name() -> String:
+	var clean_nick: = player_nickname.strip_edges()
+	if clean_nick == "":
+		return "Sala Ruptura"
+	return "Sala de " + clean_nick
+
+
+func _join_selected_or_typed_online_room() -> void:
+	_read_online_join_inputs()
+	var code: = online_join_code
+	if code == "" and lobby_client_selected >= 0 and lobby_client_selected < online_room_list.size():
+		var room: Dictionary = Dictionary(online_room_list[lobby_client_selected])
+		code = String(room.get("code", ""))
+	_join_online_room_code(code)
 
 
 func _save_webhook_from_input() -> void :
@@ -6151,6 +6337,7 @@ func _dismiss_app_update() -> void :
 		_cancel_app_update_download()
 	app_update_popup_visible = false
 	app_update_selected = 0
+	ui_input_block_until_msec = 0
 
 
 func _limit_discord_field(text: String) -> String:
@@ -7480,6 +7667,8 @@ func _load_textures() -> void :
 	textures["enemy_common_phase_1"] = [_safe_load(base + "Inimig1.png"), _safe_load(base + "Inimig2.png")]
 	textures["enemy_common_phase_2_left"] = [_safe_load(base + "inimigo_direita2-1.png"), _safe_load(base + "inimigo_direita2-2.png")]
 	textures["enemy_common_phase_2_right"] = [_safe_load(base + "inimigo_esquerda2-1.png"), _safe_load(base + "inimigo_esquerda2-2.png")]
+	textures["enemy_phase_2_kamikaze"] = [_safe_load(base + "pinguim_kamikaze_01.png"), _safe_load(base + "pinguim_kamikaze_02.png")]
+	textures["enemy_phase_2_pyro"] = [_safe_load(base + "pinguim_incendiario_01.png"), _safe_load(base + "pinguim_incendiario_02.png")]
 	textures["enemy_phase_3_left"] = [_safe_load(base + "inimigo_esquerda3-1.png"), _safe_load(base + "inimigo_esquerda3-2.png")]
 	textures["enemy_phase_3_right"] = [_safe_load(base + "inimigo_direita3-1.png"), _safe_load(base + "inimigo_direita3-2.png")]
 	textures["enemy_phase_3_bullet"] = [_safe_load(base + "Disp_inimigo3_1.png"), _safe_load(base + "Disp_inimigo3_2.png")]
@@ -7904,7 +8093,19 @@ func _register_audio_stream(name: String, path: String, loop: = false, music: = 
 
 
 func _audio_key_available(name: String) -> bool:
-	return audio_streams.has(name) or audio_stream_paths.has(name)
+	if audio_streams.has(name):
+		return true
+	if not audio_stream_paths.has(name):
+		return false
+	return _audio_path_available(String(audio_stream_paths[name]))
+
+
+func _audio_path_available(path: String) -> bool:
+	if path == "":
+		return false
+	if ResourceLoader.exists(path):
+		return true
+	return FileAccess.file_exists(path)
 
 
 func _ensure_audio_loaded(name: String) -> bool:
@@ -7928,7 +8129,13 @@ func _release_unused_music_streams(active_name: String) -> void :
 
 
 func _is_shared_phase_music_name(name: String) -> bool:
-	return name.get_extension().to_lower() == "mp3"
+	if name.get_extension().to_lower() != "mp3":
+		return false
+	var stem: = name.get_basename()
+	if not stem.begins_with("Fases"):
+		return false
+	var suffix: = stem.substr(5)
+	return suffix.is_valid_int()
 
 
 func _shared_phase_music_index(name: String) -> int:
@@ -8373,6 +8580,26 @@ func _play_music(name: String) -> void :
 		_release_unused_music_streams(name)
 	elif music_player != null:
 		music_player.stop()
+		music_player.stream = null
+		current_music = ""
+
+
+func _is_menu_music_name(name: String) -> bool:
+	return name.begins_with("Menu")
+
+
+func _stop_menu_music_for_gameplay() -> void:
+	if not _is_menu_music_name(current_music):
+		return
+	music_pause_fade_mode = ""
+	music_pause_fade_timer = 0.0
+	music_paused_by_pause = false
+	_cancel_music_crossfade()
+	if music_player != null:
+		music_player.stream_paused = false
+		music_player.stop()
+		music_player.stream = null
+	current_music = ""
 
 
 func _music_target_volume() -> float:
@@ -8596,6 +8823,7 @@ func _next_phase_music_track(phase: int) -> String:
 
 
 func _play_phase_music_random(phase: int) -> void :
+	_stop_menu_music_for_gameplay()
 	var chosen: String = _next_phase_music_track(phase)
 	if chosen == "":
 		return
@@ -8648,8 +8876,11 @@ func _is_boss_music(name: String) -> bool:
 func _on_music_finished() -> void :
 	if music_crossfade_active:
 		return
-	if current_music.begins_with("Menu"):
-		_play_menu_music_random()
+	if _is_menu_music_name(current_music):
+		if mode == "game" or mode == "phase_transition":
+			_play_phase_music()
+		else:
+			_play_menu_music_random()
 		return
 	if current_music in _phase_music_tracks(current_phase):
 		_play_phase_music_random(current_phase)
@@ -9181,9 +9412,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	combo_kills = 0
 	enemies_killed = 0
 	phase1_limit_break_kills_start = -1
-	var active_player_count: = _active_run_player_count()
-	var multiplayer_enemy_hp_scale: = 1.0 + float(maxi(0, active_player_count - 1)) * 0.8
-	enemy_base_hp = ENEMY_BASE_HP * (multiplayer_enemy_hp_scale if is_multiplayer else 1.0)
+	enemy_base_hp = ENEMY_BASE_HP * _multiplayer_enemy_hp_scale()
 	enemy_speed_base = ENEMY_BASE_SPEED
 	enemy_close_damage = 0.0
 	enemy_far_damage = 0.0
@@ -9358,7 +9587,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	_reset_phase5_state()
 	_reset_phase6_state()
 	var offer_run_tutorial: = _should_offer_run_tutorial(clear_interrupted_save)
-	_apply_initial_phase_setup(current_phase, multiplayer_enemy_hp_scale)
+	_apply_initial_phase_setup(current_phase, _multiplayer_enemy_hp_scale())
 	effects.clear()
 	if offer_run_tutorial:
 		_begin_tutorial_offer()
@@ -10333,7 +10562,7 @@ func _advance_to_phase(phase: int) -> void :
 
 
 func _boss_hp_for_phase(phase: int) -> float:
-	var mp_mult: = 1.0
+	var mp_mult: = _multiplayer_boss_hp_scale()
 	match phase:
 		7:
 			return (BOSS_BASE_HP * BOSS7_HP_SCALE + _boss_farm_hp_bonus(10.0, 32.0)) * mp_mult
@@ -11296,6 +11525,7 @@ func _process(delta: float) -> void :
 	if mode == "game":
 		_update_shop_mp_request(delta)
 		_update_boss_mp_request(delta)
+		_update_phase_mp_request(delta)
 	if is_multiplayer:
 		_update_pause_mp_request(delta)
 	if mode == "manifest_mp":
@@ -11331,6 +11561,8 @@ func _process(delta: float) -> void :
 		_update_effects(delta)
 	elif mode == "game_over" or mode == "victory":
 		_update_effects(delta)
+	_refresh_screen_shake_frame_offset()
+	_sync_bombastica_scene_vfx_positions()
 	_update_mobile_performance_budget(delta)
 	queue_redraw()
 
@@ -15838,6 +16070,7 @@ func _spawn_bombastica_link(a: Vector2, b: Vector2, color: Color) -> void :
 func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: String) -> void :
 	var chain_depth: = 1 if source == "bombastic_chain_explosion" else 0
 	var seed_val: = rng.randi()
+	var world_root: Node2D = _ensure_bombastica_world_vfx_root()
 	
 	# Register shockwave for physical collision visual wave
 	shockwaves.append({"pos": center, "radius": 12.0, "max": radius * 1.1, "life": 0.32, "damage": 0.0, "hit": {}, "visual_only": true, "kind": "bombastica"})
@@ -15860,9 +16093,10 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 				break
 		if not inst and bombastica_mine_vfx_scene:
 			inst = bombastica_mine_vfx_scene.instantiate()
-			add_child(inst)
+			world_root.add_child(inst)
 			bombastica_mine_pool.append(inst)
 		if inst and inst.has_method("play_at"):
+			_prepare_bombastica_scene_vfx(inst, center)
 			inst.play_at(center, quality, seed_val)
 	elif source == "bombastic_powder_ignition":
 		var inst: Node2D = null
@@ -15872,9 +16106,10 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 				break
 		if not inst and bombastica_ignition_vfx_scene:
 			inst = bombastica_ignition_vfx_scene.instantiate()
-			add_child(inst)
+			world_root.add_child(inst)
 			bombastica_ignition_pool.append(inst)
 		if inst and inst.has_method("play_at"):
+			_prepare_bombastica_scene_vfx(inst, center)
 			inst.play_at(center, quality)
 	else:
 		# Main Bombástica Q Explosion / Chain Reaction Explosion
@@ -15885,9 +16120,10 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 				break
 		if not inst and bombastica_explosion_vfx_scene:
 			inst = bombastica_explosion_vfx_scene.instantiate()
-			add_child(inst)
+			world_root.add_child(inst)
 			bombastica_explosion_pool.append(inst)
 		if inst and inst.has_method("play_at"):
+			_prepare_bombastica_scene_vfx(inst, center)
 			var red_flashes: bool = (get("gfx_reduced_flashes") == true)
 			var red_motion: bool = not gfx_screen_shake
 			inst.play_at(center, scale_mult, quality, chain_depth, seed_val, red_flashes, red_motion)
@@ -15896,6 +16132,48 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 	bombastica_vfx.append({"kind": "explosion", "pos": center, "radius": radius, "life": life, "max": life, "source": source, "chain_depth": chain_depth, "seed": seed_val})
 	if bombastica_use_old_vfx:
 		_spawn_radial_particles(center, Color(1.0, 0.5, 0.1), 26 if chain_depth == 0 else 32)
+
+
+func _ensure_bombastica_world_vfx_root() -> Node2D:
+	if is_instance_valid(bombastica_world_vfx_root):
+		_sync_bombastica_scene_vfx_positions()
+		return bombastica_world_vfx_root
+	bombastica_world_vfx_root = Node2D.new()
+	bombastica_world_vfx_root.name = "BombasticaWorldVFX"
+	bombastica_world_vfx_root.z_as_relative = false
+	bombastica_world_vfx_root.z_index = 18
+	add_child(bombastica_world_vfx_root)
+	_sync_bombastica_scene_vfx_positions()
+	return bombastica_world_vfx_root
+
+
+func _prepare_bombastica_scene_vfx(inst: Node2D, world_origin: Vector2) -> void:
+	var world_root: Node2D = _ensure_bombastica_world_vfx_root()
+	if inst.get_parent() != world_root:
+		if inst.get_parent() != null:
+			inst.get_parent().remove_child(inst)
+		world_root.add_child(inst)
+	inst.position = world_origin
+	inst.rotation = 0.0
+	inst.scale = Vector2.ONE
+	inst.set_meta("bombastica_world_origin", world_origin)
+	inst.set_meta("bombastica_origin_space", "world")
+
+
+func _bombastica_vfx_camera() -> Vector2:
+	return _camera(get_viewport_rect().size) + _screen_shake_offset()
+
+
+func _bombastica_vfx_canvas_pos(world_pos: Vector2) -> Vector2:
+	return world_pos - _bombastica_vfx_camera()
+
+
+func _sync_bombastica_scene_vfx_positions() -> void:
+	if not is_instance_valid(bombastica_world_vfx_root):
+		return
+	bombastica_world_vfx_root.position = -_bombastica_vfx_camera()
+	bombastica_world_vfx_root.rotation = 0.0
+	bombastica_world_vfx_root.scale = Vector2.ONE
 
 
 func _eclipsada_speed_multiplier() -> float:
@@ -18796,36 +19074,37 @@ func _phase6_miasma_eel_cap() -> int:
 
 
 func _enemy_limit() -> int:
+	var mp_bonus: int = _multiplayer_enemy_limit_bonus()
 	if current_phase == 7:
-		return _phase7_enemy_limit()
+		return _phase7_enemy_limit() + mp_bonus
 	if current_phase == 6:
-		return _phase6_enemy_limit()
+		return _phase6_enemy_limit() + mp_bonus
 	if current_phase == 5:
-		return 5
+		return 5 + mp_bonus
 	if current_phase == 4:
-		return PHASE4_LIMIT_EARLY if _phase_elapsed_time() < PHASE4_ADAPT_TIME else PHASE4_LIMIT_FULL
+		return (PHASE4_LIMIT_EARLY if _phase_elapsed_time() < PHASE4_ADAPT_TIME else PHASE4_LIMIT_FULL) + mp_bonus
 	if current_phase == 3:
 		var elapsed3: = _phase_elapsed_time()
 		if elapsed3 < PHASE3_COMMON_ONLY_TIME:
-			return PHASE3_LIMIT_EARLY
+			return PHASE3_LIMIT_EARLY + mp_bonus
 		if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME:
-			return PHASE3_LIMIT_MID
-		return PHASE3_LIMIT_FULL
+			return PHASE3_LIMIT_MID + mp_bonus
+		return PHASE3_LIMIT_FULL + mp_bonus
 	if current_phase == 2:
 		var elapsed: = _phase_elapsed_time()
 		if elapsed >= PHASE2_PYRO_UNLOCK_TIME:
-			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT + PHASE2_PYRO_LIMIT
+			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT + PHASE2_PYRO_LIMIT + mp_bonus
 		if elapsed >= PHASE2_KAMIKAZE_UNLOCK_TIME:
-			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT
-		return PHASE2_COMMON_LIMIT
+			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT + mp_bonus
+		return PHASE2_COMMON_LIMIT + mp_bonus
 	var elapsed1: = _phase_elapsed_time()
 	if elapsed1 >= PHASE1_LIMIT_BREAK_TIME:
 		if phase1_limit_break_kills_start < 0:
 			phase1_limit_break_kills_start = enemies_killed
 		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
-		return ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(PHASE1_LIMIT_KILLS_PER_EXTRA)))
+		return ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(PHASE1_LIMIT_KILLS_PER_EXTRA))) + mp_bonus
 	phase1_limit_break_kills_start = -1
-	return ENEMY_MAX_BASE
+	return ENEMY_MAX_BASE + mp_bonus
 
 
 func _phase6_enemy_limit() -> int:
@@ -36993,6 +37272,73 @@ func _accept_pause_mp_request() -> void :
 	pause_mp_request_outgoing = true
 
 
+func _clear_phase_mp_request() -> void :
+	phase_mp_request_timer = 0.0
+	phase_mp_request_incoming = false
+	phase_mp_request_outgoing = false
+	phase_mp_target = 0
+	phase_mp_action = "phase"
+	phase_mp_vote_count = 0
+	phase_mp_expected_count = 1
+	buttons.erase("phase_mp_accept")
+
+
+func _start_phase_mp_request_overlay(incoming: bool, target_phase: int, action: String = "phase", vote_count: int = 1, expected_count: int = 2) -> void :
+	phase_mp_request_timer = PHASE_MP_REQUEST_TIME
+	phase_mp_request_incoming = incoming
+	phase_mp_request_outgoing = not incoming
+	phase_mp_target = target_phase
+	phase_mp_action = action
+	phase_mp_vote_count = vote_count
+	phase_mp_expected_count = maxi(1, expected_count)
+
+
+func _phase_mp_request_visible() -> bool:
+	return is_multiplayer and mode == "game" and phase_mp_request_timer > 0.0 and (phase_mp_request_incoming or phase_mp_request_outgoing)
+
+
+func _update_phase_mp_request(delta: float) -> void :
+	if not _phase_mp_request_visible():
+		return
+	phase_mp_request_timer = maxf(0.0, phase_mp_request_timer - delta)
+	if phase_mp_request_timer <= 0.0:
+		_clear_phase_mp_request()
+
+
+func _request_phase_mp_consensus(target_phase: int, action: String = "phase") -> void :
+	if target_phase <= 0 and action == "phase":
+		return
+	if phase_mp_request_outgoing and phase_mp_target == target_phase and phase_mp_action == action:
+		return
+	_start_phase_mp_request_overlay(false, target_phase, action, 1, _active_run_player_count())
+	if _shop_rpc_available():
+		rpc("_rpc_request_phase_transfer", target_phase, action)
+
+
+func _accept_phase_mp_request() -> void :
+	if not phase_mp_request_incoming:
+		return
+	var target_phase: int = phase_mp_target
+	var action: String = phase_mp_action
+	phase_mp_request_incoming = false
+	phase_mp_request_outgoing = true
+	if _shop_rpc_available():
+		rpc("_rpc_accept_phase_transfer", target_phase, action)
+
+
+func _commit_phase_mp_transfer(target_phase: int, action: String = "phase") -> void :
+	_clear_phase_mp_request()
+	phase_fragment.clear()
+	if action == "extract":
+		_complete_dimension_extraction()
+		return
+	var next_phase: int = target_phase
+	if action == "farm":
+		next_phase = _begin_farm_dimension_cycle()
+	if next_phase > 0:
+		_start_phase_transition(next_phase)
+
+
 func _warn_if_damage_visual_missing(source: String) -> void :
 	if source == "boss2_ultimate_blizzard" and (current_phase != 2 or boss2_ultimate_timer <= 0.0):
 		var detail: = "source=%s phase=%d timer=%.2f role=%s" % [source, current_phase, boss2_ultimate_timer, _net_report_role()]
@@ -37272,6 +37618,9 @@ func _update_phase_fragment(delta: float) -> void :
 			if player_pos.distance_to(choice_pos) <= BOSS_FRAGMENT_PICKUP_RADIUS * 1.15:
 				var action: String = String(choice.get("action", "phase"))
 				var choice_phase: int = int(choice.get("next_phase", 0))
+				if is_multiplayer:
+					_request_phase_mp_consensus(choice_phase, action)
+					return
 				if action == "farm":
 					choice_phase = _begin_farm_dimension_cycle()
 				phase_fragment.clear()
@@ -37283,6 +37632,9 @@ func _update_phase_fragment(delta: float) -> void :
 		return
 	if player_pos.distance_to(phase_fragment["pos"]) <= BOSS_FRAGMENT_PICKUP_RADIUS:
 		var next_phase = int(phase_fragment.get("next_phase", 0))
+		if is_multiplayer:
+			_request_phase_mp_consensus(next_phase, "phase")
+			return
 		phase_fragment.clear()
 		if next_phase > 0:
 			_start_phase_transition(next_phase)
@@ -37791,6 +38143,7 @@ func _draw() -> void :
 	_update_nickname_input_visibility()
 	_update_cheat_input_visibility()
 	_update_webhook_input_visibility()
+	_update_online_room_input_visibility()
 	match mode:
 		"phase_transition":
 			_draw_phase_transition(viewport)
@@ -37814,6 +38167,10 @@ func _draw() -> void :
 			_draw_data_settings(viewport)
 		"multiplayer_menu":
 			_draw_multiplayer_menu(viewport)
+		"online_create_room":
+			_draw_online_create_room(viewport)
+		"online_find_room":
+			_draw_online_find_room(viewport)
 		"lobby_online_host":
 			_draw_lobby_online_host(viewport)
 		"lobby_online_client":
@@ -37879,6 +38236,8 @@ func _draw() -> void :
 		_draw_shop_mp_request(viewport)
 	if _boss_mp_request_visible():
 		_draw_boss_mp_request(viewport)
+	if _phase_mp_request_visible():
+		_draw_phase_mp_request(viewport)
 	if _pause_mp_request_visible():
 		_draw_pause_mp_request(viewport)
 	if manifestation_key == "ressonante" and mode in ["game", "shop_countdown", "shop_opening", "boss_call", "pause_countdown"]:
@@ -37898,9 +38257,9 @@ func _draw() -> void :
 func _should_show_os_mouse() -> bool:
 	if not _uses_desktop_ui():
 		return true
-	if mode in ["menu", "nick_setup", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "manifest", "manifest_mp", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "game_over", "victory"]:
+	if mode in ["menu", "nick_setup", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "manifest", "manifest_mp", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "game_over", "victory"]:
 		return true
-	if _shop_mp_request_visible() or _boss_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
+	if _shop_mp_request_visible() or _boss_mp_request_visible() or _phase_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
 		return true
 	return false
 
@@ -38069,6 +38428,8 @@ func _draw_menu(viewport: Vector2) -> void :
 	if menu_buttons.has("continue"):
 		_draw_hub_button(menu_buttons["continue"], "CONTINUAR RUN", _interrupted_run_detail_text(), Color(0.18, 0.55, 0.98), menu_selected == _menu_index_for("continue"), true, "continue")
 	_draw_hub_button(menu_buttons["start"], "NOVA RUN" if interrupted_run_available else "INICIAR JORNADA", "", Color(0.18, 0.58, 0.98), menu_selected == _menu_index_for("start"), not interrupted_run_available, "start")
+	if menu_buttons.has("multiplayer"):
+		_draw_hub_button(menu_buttons["multiplayer"], "MODO ONLINE", "", Color(0.0, 1.0, 0.82), menu_selected == _menu_index_for("multiplayer"), false, "multiplayer")
 	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "", Color(0.38, 0.78, 0.96), menu_selected == _menu_index_for("catalog"), false, "catalog")
 	_draw_hub_button(menu_buttons["settings"], "CONFIGURACAO", "", Color(1.0, 0.75, 0.22), menu_selected == _menu_index_for("settings"), false, "settings")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and menu_buttons.has("stream"):
@@ -39332,6 +39693,8 @@ func _menu_option_keys() -> Array:
 	if interrupted_run_available:
 		keys.append("continue")
 	keys.append("start")
+	if MULTIPLAYER_MENU_ENABLED:
+		keys.append("multiplayer")
 	keys.append_array(["catalog", "settings"])
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
 		keys.append("stream")
@@ -39861,29 +40224,139 @@ func _draw_fragmented_choice_texture(texture: Texture2D, rect: Rect2, color: Col
 
 func _draw_manifest_mp(viewport: Vector2) -> void :
 	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
-	var margin = 20.0
 	var local_scroll: float = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
-	var local_width: = viewport.x * (0.56 if mp_manifest_state_by_peer.size() > 1 else 0.5)
-	draw_line(Vector2(local_width, 0), Vector2(local_width, viewport.y), Color(0.0, 1.0, 0.82, 0.5), 2.0)
-	_draw_manifest_mp_half(Rect2(margin, margin, local_width - margin * 2, viewport.y - margin * 2), manifest_select_stage, selected_manifestation, selected_aura, local_scroll, false, mp_local_ready)
-	var remote_rect: = Rect2(local_width + margin, margin, viewport.x - local_width - margin * 2, viewport.y - margin * 2)
-	if mp_manifest_state_by_peer.size() <= 1:
-		_draw_manifest_mp_half(remote_rect, mp_remote_manifest_stage, mp_remote_manifestation, mp_remote_aura, mp_remote_scroll, true, mp_remote_ready)
-	else:
-		var peer_ids: = mp_manifest_state_by_peer.keys()
-		peer_ids.sort()
-		var gap: = 12.0
-		var row_height: = (remote_rect.size.y - gap * float(peer_ids.size() - 1)) / float(peer_ids.size())
-		for index in range(peer_ids.size()):
-			var peer_id: = int(peer_ids[index])
-			_draw_manifest_peer_summary(Rect2(remote_rect.position + Vector2(0, index * (row_height + gap)), Vector2(remote_rect.size.x, row_height)), peer_id, mp_manifest_state_by_peer[peer_id])
+	var aura_view: bool = manifest_select_stage == MANIFEST_STAGE_AURA
+	var active_items: Array = AURAS if aura_view else MANIFESTATIONS
+	var active_selected: int = selected_aura if aura_view else selected_manifestation
+	var item: Dictionary = active_items[active_selected]
+	var color: Color = _manifest_select_item_color(item, aura_view)
+	var margin: float = clampf(viewport.x * 0.03, 18.0, 36.0)
+	var title_size: int = int(clampf(viewport.y * 0.046, 24.0, 34.0))
+	var header_y: float = clampf(viewport.y * 0.085, 44.0, 64.0)
+	_draw_glitch_title("EQUIPE ONLINE", Vector2(viewport.x * 0.5, header_y), title_size, color)
+	var stage_label: String = "ESPECTRO" if aura_view else "MANIFESTACAO"
+	var status_text: String = "confirme seu estado final" if aura_view else "selecione sua manifestacao"
+	if mp_local_ready:
+		status_text = "sua escolha esta travada"
+	_draw_centered(stage_label + " // " + status_text.to_upper(), Vector2(viewport.x * 0.5, header_y + 34.0), _readable_text_size(11), Color(0.78, 0.93, 0.98, 0.9))
+
+	var panel_top: float = header_y + 58.0
+	var panel: Rect2 = Rect2(margin, panel_top, viewport.x - margin * 2.0, viewport.y - panel_top - margin)
+	_draw_holo_panel(panel, color, true, 0.36)
+	var inner_pad: float = clampf(panel.size.x * 0.018, 16.0, 24.0)
+	var team_w: float = clampf(panel.size.x * 0.31, 256.0, 384.0)
+	if viewport.x < 1040.0:
+		team_w = clampf(panel.size.x * 0.29, 238.0, 292.0)
+	var action_h: float = 56.0
+	var content_top: float = panel.position.y + 28.0
+	var content_bottom: float = panel.end.y - action_h - 20.0
+	var choice_rect: Rect2 = Rect2(panel.position.x + inner_pad, content_top, panel.size.x - team_w - inner_pad * 3.0, content_bottom - content_top)
+	var team_rect: Rect2 = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
+	if choice_rect.size.x < 430.0:
+		team_w = maxf(220.0, panel.size.x - inner_pad * 3.0 - 430.0)
+		choice_rect.size.x = panel.size.x - team_w - inner_pad * 3.0
+		team_rect = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
+	_draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color)
+	_draw_manifest_mp_team_panel(team_rect, color)
+	buttons["mp_manifest_ready"] = Rect2(choice_rect.position.x + choice_rect.size.x * 0.16, panel.end.y - action_h - 10.0, choice_rect.size.x * 0.68, 46.0)
+	var btn_label: String = "PRONTO" if aura_view else "REVELAR ESPECTRO"
+	if mp_local_ready:
+		btn_label = "CONFIRMADO"
+	_draw_big_button(buttons["mp_manifest_ready"], btn_label, Color(0.02, 0.14, 0.11, 0.9) if not mp_local_ready else Color(0.03, 0.18, 0.1, 0.72), color if not mp_local_ready else Color(0.2, 1.0, 0.52), mp_local_ready)
 	if mp_manifest_rejection_timer > 0.0 and mp_manifest_rejection_message != "":
-		var warning_rect: = Rect2(viewport.x * 0.5 - 240.0, viewport.y - 58.0, 480.0, 38.0)
+		var warning_rect: Rect2 = Rect2(viewport.x * 0.5 - 240.0, viewport.y - 58.0, 480.0, 38.0)
 		_draw_holo_panel(warning_rect, Color(1.0, 0.18, 0.24), true, 0.86)
 		_draw_centered(mp_manifest_rejection_message, warning_rect.get_center() + Vector2(0, 5), 14, Color.WHITE)
 
 
-func _draw_manifest_peer_summary(rect: Rect2, peer_id: int, state: Dictionary) -> void :
+func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color) -> void :
+	var item: Dictionary = active_items[active_selected]
+	_draw_holo_panel(rect, accent, true, 0.34)
+	var header_h: float = 58.0
+	var title: String = String(item.get("name", "???")).to_upper()
+	var caption: String = "ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA"
+	draw_string(font, rect.position + Vector2(20.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, _fit_text_size(title, rect.size.x - 40.0, 24, 15), accent)
+	draw_string(font, rect.position + Vector2(20.0, 50.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, _readable_text_size(9), Color(0.72, 0.9, 0.96, 0.82))
+	draw_line(rect.position + Vector2(18.0, header_h), rect.position + Vector2(rect.size.x - 18.0, header_h), Color(accent.r, accent.g, accent.b, 0.34), 1.0)
+
+	var carousel_rect: Rect2 = Rect2(rect.position.x + 16.0, rect.position.y + header_h + 10.0, rect.size.x - 32.0, rect.size.y * 0.48)
+	var center_x: float = carousel_rect.get_center().x
+	var center_y: float = carousel_rect.get_center().y
+	var card_w: float = clampf(rect.size.x * 0.17, 78.0, 124.0)
+	var card_h: float = card_w * 1.16
+	var spacing: float = clampf(card_w * 1.13, 90.0, 138.0)
+	var half_size: float = active_items.size() / 2.0
+	for i in range(active_items.size()):
+		var diff: float = float(i) - scroll
+		if diff > half_size:
+			diff -= active_items.size()
+		elif diff < - half_size:
+			diff += active_items.size()
+		var abs_diff: float = abs(diff)
+		if abs_diff > 2.25:
+			continue
+		var card_scale: float = lerp(1.12, 0.68, min(abs_diff, 1.0))
+		var opacity: float = lerp(1.0, 0.26, min(abs_diff, 1.0))
+		var pos_x: float = center_x + diff * spacing
+		var item_rect: Rect2 = Rect2(pos_x - card_w * card_scale * 0.5, center_y - card_h * card_scale * 0.5, card_w * card_scale, card_h * card_scale)
+		var card_item: Dictionary = active_items[i]
+		var item_unlocked: bool = _manifest_select_item_unlocked(i, aura_view)
+		var item_color: Color = _manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68)
+		var taken: bool = _manifest_choice_taken(i, aura_view)
+		if taken:
+			item_color = Color(1.0, 0.18, 0.24)
+		_draw_holo_panel(item_rect, item_color, abs_diff < 0.5, opacity * 0.72)
+		var icon: Texture2D = _manifest_select_item_texture(card_item, aura_view)
+		if not item_unlocked:
+			_draw_catalog_locked_card_icon(item_rect.grow(-18.0 * card_scale), false)
+		elif icon:
+			_draw_texture_contain(icon, item_rect.grow(-17.0 * card_scale), Color(0.38, 0.38, 0.42, opacity) if taken else Color(1, 1, 1, opacity))
+		if taken:
+			_draw_centered("EM USO", item_rect.get_center() + Vector2(0, 5), _fit_text_size("EM USO", item_rect.size.x - 12.0, 12, 9), Color(1.0, 0.88, 0.88, opacity))
+	if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
+		_draw_spectrum_reveal_fragments(center_x, center_y, card_w, card_h, spacing, _manifest_transition_progress())
+
+	var dots_y: float = carousel_rect.end.y + 10.0
+	var total_w: float = active_items.size() * 14.0
+	for i in range(active_items.size()):
+		var x: float = center_x - total_w * 0.5 + i * 14.0
+		draw_circle(Vector2(x, dots_y), 5.5 if i == active_selected else 3.0, accent if i == active_selected else Color(0.36, 0.52, 0.62, 0.42))
+
+	var details: Dictionary = _aura_details(String(item["name"])) if aura_view else _manifestation_details(item["key"])
+	var info_rect: Rect2 = Rect2(rect.position.x + 20.0, dots_y + 18.0, rect.size.x - 40.0, rect.end.y - dots_y - 32.0)
+	_draw_manifest_mp_compact_info(info_rect, item, details, aura_view, accent)
+
+
+func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
+	_draw_holo_panel(rect, Color(0.0, 1.0, 0.82), false, 0.24)
+	draw_string(font, rect.position + Vector2(16.0, 28.0), "EQUIPE", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 32.0, _readable_text_size(16), Color.WHITE)
+	draw_string(font, rect.position + Vector2(16.0, 48.0), "escolhas sincronizadas", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 32.0, _readable_text_size(9), Color(0.72, 0.9, 0.96, 0.78))
+	var local_state: Dictionary = {
+		"stage": manifest_select_stage,
+		"manifestation": selected_manifestation,
+		"aura": selected_aura,
+		"ready": mp_local_ready,
+		"name": player_nickname if player_nickname != "" else "Voce"
+	}
+	var rows: Array = [{"peer_id": _mp_unique_id(), "state": local_state, "local": true}]
+	var peer_ids: Array = mp_manifest_state_by_peer.keys()
+	peer_ids.sort()
+	for peer_id_value in peer_ids:
+		rows.append({"peer_id": int(peer_id_value), "state": mp_manifest_state_by_peer[peer_id_value], "local": false})
+	if rows.size() == 1:
+		rows.append({"peer_id": 0, "state": {"stage": mp_remote_manifest_stage, "manifestation": mp_remote_manifestation, "aura": mp_remote_aura, "ready": mp_remote_ready, "name": "Parceiro"}, "local": false})
+	var gap: float = 10.0
+	var list_top: float = rect.position.y + 66.0
+	var available_h: float = rect.end.y - list_top - 12.0
+	var row_h: float = clampf((available_h - gap * float(maxi(0, rows.size() - 1))) / float(maxi(1, rows.size())), 72.0, 112.0)
+	for i in range(rows.size()):
+		if list_top + float(i) * (row_h + gap) + row_h > rect.end.y - 6.0:
+			break
+		var row_data: Dictionary = rows[i]
+		_draw_manifest_peer_summary_row(Rect2(rect.position.x + 12.0, list_top + float(i) * (row_h + gap), rect.size.x - 24.0, row_h), int(row_data["peer_id"]), Dictionary(row_data["state"]), bool(row_data["local"]))
+
+
+func _draw_manifest_peer_summary_row(rect: Rect2, peer_id: int, state: Dictionary, is_local: = false) -> void :
 	var stage: = String(state.get("stage", MANIFEST_STAGE_MANIFESTATION))
 	var aura_view: = stage == MANIFEST_STAGE_AURA
 	var index: = clampi(int(state.get("aura" if aura_view else "manifestation", 0)), 0, (AURAS if aura_view else MANIFESTATIONS).size() - 1)
@@ -39891,16 +40364,24 @@ func _draw_manifest_peer_summary(rect: Rect2, peer_id: int, state: Dictionary) -
 	var item: Dictionary = items[index]
 	var color: = _manifest_select_item_color(item, aura_view)
 	_draw_holo_panel(rect, color, bool(state.get("ready", false)), 0.58)
-	var icon_rect: = Rect2(rect.position + Vector2(16, 18), Vector2(minf(110.0, rect.size.y - 36.0), minf(110.0, rect.size.y - 36.0)))
-	var icon: = _manifest_select_item_texture(item, aura_view)
+	var icon_size: float = minf(rect.size.y - 20.0, 74.0)
+	var icon_rect: Rect2 = Rect2(rect.position + Vector2(12, 10), Vector2(icon_size, icon_size))
+	var icon: Texture2D = _manifest_select_item_texture(item, aura_view)
 	if icon != null:
 		_draw_texture_contain(icon, icon_rect, Color.WHITE)
-	var text_x: = icon_rect.end.x + 16.0
-	var center_x: = text_x + (rect.end.x - text_x) * 0.5
-	_draw_centered(String(state.get("name", "Player %d" % peer_id)), Vector2(center_x, rect.position.y + 34.0), 16, Color.WHITE)
-	_draw_centered("ESPECTRO" if aura_view else "MANIFESTACAO", Vector2(center_x, rect.position.y + 58.0), 11, Color(color.r, color.g, color.b, 0.82))
-	_draw_centered(String(item.get("name", "???")), Vector2(center_x, rect.position.y + 84.0), 18, color)
-	_draw_centered("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Vector2(center_x, rect.end.y - 24.0), 13, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
+	var text_x: float = icon_rect.end.x + 16.0
+	var text_w: float = rect.end.x - text_x - 14.0
+	var player_label: String = String(state.get("name", "Player %d" % peer_id))
+	if is_local:
+		player_label = "VOCE // " + player_label
+	draw_string(font, Vector2(text_x, rect.position.y + 27.0), player_label.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size(player_label.to_upper(), text_w, 14, 10), Color.WHITE)
+	draw_string(font, Vector2(text_x, rect.position.y + 47.0), ("ESPECTRO" if aura_view else "MANIFESTACAO"), HORIZONTAL_ALIGNMENT_LEFT, text_w, 9, Color(color.r, color.g, color.b, 0.82))
+	draw_string(font, Vector2(text_x, rect.position.y + 68.0), String(item.get("name", "???")), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size(String(item.get("name", "???")), text_w, 16, 10), color)
+	_draw_centered("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Vector2(rect.end.x - 58.0, rect.end.y - 14.0), 10, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
+
+
+func _draw_manifest_peer_summary(rect: Rect2, peer_id: int, state: Dictionary) -> void :
+	_draw_manifest_peer_summary_row(rect, peer_id, state, false)
 
 func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, selected_aur: int, scroll: float, is_remote: bool, is_ready: bool) -> void :
 	var aura_view = stage == MANIFEST_STAGE_AURA
@@ -39958,20 +40439,31 @@ func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, sel
 		if taken:
 			_draw_centered("EM USO", item_rect.get_center() + Vector2(0, 6), 13, Color(1.0, 0.86, 0.88))
 
-	var details_rect = Rect2(rect.position.x, rect.position.y + rect.size.y * 0.65, rect.size.x, rect.size.y * 0.35)
-	_draw_holo_panel(details_rect, color, true, 0.42)
-
 	var details = _aura_details(String(item["name"])) if aura_view else _manifestation_details(item["key"])
-	_draw_manifest_info_panel(details_rect, item, details, aura_view, color)
+	var details_rect = Rect2(rect.position.x + 8.0, rect.end.y - min(138.0, rect.size.y * 0.25), rect.size.x - 16.0, min(138.0, rect.size.y * 0.25))
+	_draw_manifest_mp_compact_info(details_rect, item, details, aura_view, color)
 
 	if is_ready:
 		_draw_holo_panel(rect, Color(0, 1, 0), true, 0.1)
 
 	if not is_remote:
-		var btn_ready_rect = Rect2(rect.position.x + rect.size.x * 0.25, rect.position.y + rect.size.y * 0.53, rect.size.x * 0.5, 46.0)
+		var btn_ready_rect = Rect2(rect.position.x + rect.size.x * 0.22, details_rect.position.y - 64.0, rect.size.x * 0.56, 46.0)
 		buttons["mp_manifest_ready"] = btn_ready_rect
 		var btn_label = "PRONTO" if aura_view else "REVELAR ESPECTRO"
 		_draw_big_button(btn_ready_rect, btn_label, Color(0.02, 0.14, 0.11, 0.88), color)
+
+
+func _draw_manifest_mp_compact_info(rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color) -> void:
+	_draw_holo_panel(rect, accent, true, 0.48)
+	var pad: = 16.0
+	var title: = String(item.get("name", "???")).to_upper()
+	draw_string(font, rect.position + Vector2(pad, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - pad * 2.0, _fit_text_size(title, rect.size.x - pad * 2.0, 22, 13), accent)
+	var caption: = "ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA"
+	draw_string(font, rect.position + Vector2(pad, 52.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - pad * 2.0, 11, Color(0.72, 0.92, 1.0, 0.84))
+	draw_line(rect.position + Vector2(pad, 62.0), rect.position + Vector2(rect.size.x - pad, 62.0), Color(accent.r, accent.g, accent.b, 0.42), 1.0)
+	var rows: Array = _manifest_info_rows(item, details, aura_view)
+	var first_text: = String(rows[0].get("text", "")) if not rows.is_empty() else String(item.get("desc", ""))
+	_draw_wrapped_clamped(first_text, Rect2(rect.position.x + pad, rect.position.y + 72.0, rect.size.x - pad * 2.0, rect.size.y - 84.0), 13, Color(0.88, 0.95, 1.0, 0.92), 2)
 
 
 func _draw_manifest_select(viewport: Vector2) -> void :
@@ -40990,10 +41482,15 @@ func _draw_secondary_drain_border(viewport: Vector2) -> void :
 
 
 func _screen_shake_offset() -> Vector2:
+	return screen_shake_frame_offset
+
+
+func _refresh_screen_shake_frame_offset() -> void:
 	if screen_shake_timer <= 0.0 or not gfx_screen_shake:
-		return Vector2.ZERO
+		screen_shake_frame_offset = Vector2.ZERO
+		return
 	var strength = screen_shake_strength * (screen_shake_timer / 0.24)
-	return Vector2(rng.randf_range( - strength, strength), rng.randf_range( - strength, strength))
+	screen_shake_frame_offset = Vector2(rng.randf_range( - strength, strength), rng.randf_range( - strength, strength))
 
 
 func _draw_companions(camera: Vector2) -> void :
@@ -49771,8 +50268,8 @@ func _revive_request_visible() -> bool:
 func _draw_revive_request(viewport: Vector2) -> void :
 	if not _revive_request_visible():
 		return
-	var panel_w: float = min(540.0, viewport.x * 0.9)
-	var panel_h: = 178.0 if revive_request_incoming else 118.0
+	var panel_w: float = min(620.0, viewport.x * 0.88)
+	var panel_h: = 218.0 if revive_request_incoming else 164.0
 	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.5, panel_w, panel_h)
 	var accent: = Color(0.2, 1.0, 0.5)
 	_draw_holo_panel(panel, accent, true, 0.88)
@@ -49784,10 +50281,11 @@ func _draw_revive_request(viewport: Vector2) -> void :
 	var cost: = _revive_cost() if revive_request_cost <= 0 else revive_request_cost
 	if revive_request_incoming:
 		var remaining: = int(ceil(max(0.0, revive_request_timer)))
-		_draw_centered("ALIADO CAIDO PEDE REVIVE", Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
-		_draw_centered("ESCOLHA COMO REERGUER O ALIADO  |  %ds" % remaining, Vector2(panel.get_center().x, panel.position.y + 56.0), _readable_text_size(12), Color(0.92, 0.96, 1.0))
-		_draw_centered("PONTOS: %d  OU  VIDA: -50%% HP" % cost, Vector2(panel.get_center().x, panel.position.y + 82.0), _readable_text_size(13), Color(1.0, 0.86, 0.26))
-		_draw_centered("SACRIFICIO: SUAS CURAS FICAM 50% MAIS FRACAS POR 1 MINUTO", Vector2(panel.get_center().x, panel.position.y + 106.0), _readable_text_size(11), Color(1.0, 0.58, 0.62))
+		_draw_centered("ALIADO CAIDO PEDE REVIVE", Vector2(panel.get_center().x, panel.position.y + 34.0), _readable_text_size(15), accent)
+		_draw_centered("ESCOLHA COMO REERGUER O ALIADO  |  %ds" % remaining, Vector2(panel.get_center().x, panel.position.y + 66.0), _readable_text_size(12), Color(0.92, 0.96, 1.0))
+		_draw_centered("PONTOS: %d  OU  VIDA: -50%% HP" % cost, Vector2(panel.get_center().x, panel.position.y + 96.0), _readable_text_size(13), Color(1.0, 0.86, 0.26))
+		var sacrifice_rect: = Rect2(panel.position.x + 28.0, panel.position.y + 112.0, panel.size.x - 56.0, 28.0)
+		_draw_wrapped_clamped("SACRIFICIO: SUAS CURAS FICAM 50% MAIS FRACAS POR 1 MINUTO", sacrifice_rect, _readable_text_size(10), Color(1.0, 0.58, 0.62), 1)
 		var gap: = 10.0
 		var bw: = (panel_w - 56.0 - gap * 2.0) / 3.0
 		var by: = panel.end.y - 46.0
@@ -49807,9 +50305,10 @@ func _draw_revive_request(viewport: Vector2) -> void :
 			detail = "PEDIDO ENVIADO %.0fs" % ceil(max(0.0, revive_request_timer))
 		elif revive_request_cooldown > 0.0:
 			detail = "AGUARDE %.0fs PARA PEDIR" % ceil(revive_request_cooldown)
-		_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
-		_draw_centered(detail, Vector2(panel.get_center().x, panel.position.y + 58.0), _readable_text_size(13), Color(0.92, 0.96, 1.0))
-		_draw_centered("DOACAO DE VIDA REDUZ CURAS DO ALIADO POR 1 MINUTO", Vector2(panel.get_center().x, panel.position.y + 80.0), _readable_text_size(10), Color(1.0, 0.58, 0.62))
+		_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 34.0), _readable_text_size(15), accent)
+		_draw_centered(detail, Vector2(panel.get_center().x, panel.position.y + 68.0), _readable_text_size(13), Color(0.92, 0.96, 1.0))
+		var sacrifice_rect: = Rect2(panel.position.x + 30.0, panel.position.y + 88.0, panel.size.x - 60.0, 28.0)
+		_draw_wrapped_clamped("DOACAO DE VIDA REDUZ CURAS DO ALIADO POR 1 MINUTO", sacrifice_rect, _readable_text_size(10), Color(1.0, 0.58, 0.62), 1)
 		buttons["revive_request"] = Rect2(panel.get_center().x - 112.0, panel.end.y - 42.0, 224.0, 32.0)
 		_draw_small_rect_button(buttons["revive_request"], "PEDIR REVIVE", Color(0.03, 0.18, 0.12, 0.92) if enabled else Color(0.09, 0.1, 0.11, 0.86), accent if enabled else Color(0.48, 0.52, 0.56))
 
@@ -49892,6 +50391,41 @@ func _handle_boss_mp_overlay_press(pos: Vector2, viewport: Vector2) -> bool:
 		return false
 	if _boss_mp_accept_rect(viewport).has_point(pos):
 		_accept_boss_mp_request()
+		return true
+	return false
+
+
+func _draw_phase_mp_request(viewport: Vector2) -> void :
+	var panel_w: float = minf(500.0, viewport.x * 0.88)
+	var panel_h: float = 126.0 if phase_mp_request_incoming else 84.0
+	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, 252.0, panel_w, panel_h)
+	var accent: = Color(0.0, 1.0, 0.82) if phase_mp_request_incoming else Color(1.0, 0.82, 0.24)
+	_draw_holo_panel(panel, accent, true, 0.86)
+	var remaining: int = int(ceil(maxf(0.0, phase_mp_request_timer)))
+	var action_label: String = "EXTRACAO" if phase_mp_action == "extract" else ("ROTA FARM" if phase_mp_action == "farm" else "FASE %d" % phase_mp_target)
+	var title: String = "EQUIPE QUER TRANSFERIR: %s" % action_label if phase_mp_request_incoming else "PEDIDO DE TRANSFERENCIA ENVIADO"
+	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
+	_draw_centered("CONFIRMACOES %d/%d - %ds" % [phase_mp_vote_count, phase_mp_expected_count, remaining], Vector2(panel.get_center().x, panel.position.y + 58.0), _readable_text_size(12), Color(0.98, 0.94, 0.86))
+	buttons.erase("phase_mp_accept")
+	if phase_mp_request_incoming:
+		buttons["phase_mp_accept"] = _phase_mp_accept_rect(viewport)
+		_draw_small_rect_button(buttons["phase_mp_accept"], "ACEITAR  ENTER", Color(0.03, 0.18, 0.14, 0.92), accent)
+
+
+func _phase_mp_accept_rect(viewport: Vector2) -> Rect2:
+	var panel_w: float = minf(500.0, viewport.x * 0.88)
+	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, 252.0, panel_w, 126.0)
+	return Rect2(panel.get_center().x - 100.0, panel.end.y - 42.0, 200.0, 32.0)
+
+
+func _handle_phase_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZERO) -> bool:
+	if not _phase_mp_request_visible() or not phase_mp_request_incoming:
+		return false
+	var accept_rect: Rect2 = buttons.get("phase_mp_accept", Rect2())
+	if accept_rect.size == Vector2.ZERO and viewport != Vector2.ZERO:
+		accept_rect = _phase_mp_accept_rect(viewport)
+	if accept_rect.has_point(pos):
+		_accept_phase_mp_request()
 		return true
 	return false
 
@@ -51600,8 +52134,8 @@ func _draw_centered(text: String, pos: Vector2, size: int, color: Color) -> void
 
 
 func _load_menu_fonts() -> void :
-	var loaded_title: Resource = load("res://Game Base/Ruptura_Temporal-APOLO2.0/Texto/Top_Menu.otf")
-	var loaded_button: Resource = load("res://Game Base/Ruptura_Temporal-APOLO2.0/Texto/World.otf")
+	var loaded_title: Resource = load("res://assets/fonts/Top_Menu.otf")
+	var loaded_button: Resource = load("res://assets/fonts/World.otf")
 	menu_title_font = loaded_title as Font
 	menu_button_font = loaded_button as Font
 	if menu_title_font == null:
@@ -52897,9 +53431,13 @@ func _handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void :
 		return
 	if _handle_pause_mp_overlay_press(pos):
 		return
+	if _handle_phase_mp_overlay_press(pos, viewport):
+		return
 	if _handle_shop_mp_overlay_press(pos, viewport):
 		return
 	if _handle_boss_mp_overlay_press(pos, viewport):
+		return
+	if _handle_phase_mp_overlay_press(pos, viewport):
 		return
 	if mode != "game" and mode != "shop_countdown" and mode != "boss_call" and mode != "pause_countdown":
 		_handle_press(pos, viewport)
@@ -53057,6 +53595,8 @@ func _handle_mouse_press(pos: Vector2, viewport: Vector2) -> void :
 	if _handle_shop_mp_overlay_press(pos, viewport):
 		return
 	if _handle_boss_mp_overlay_press(pos, viewport):
+		return
+	if _handle_phase_mp_overlay_press(pos, viewport):
 		return
 	if mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown":
 		if _spectator_controls_locked():
@@ -53481,6 +54021,9 @@ func _handle_multiplayer_request_key(event: InputEventKey) -> bool:
 	if mode == "game" and boss_mp_request_incoming and _boss_mp_request_visible():
 		_accept_boss_mp_request()
 		return true
+	if mode == "game" and phase_mp_request_incoming and _phase_mp_request_visible():
+		_accept_phase_mp_request()
+		return true
 	return false
 
 
@@ -53494,6 +54037,8 @@ func _handle_desktop_request_overlay_press(pos: Vector2, viewport: Vector2) -> b
 	if _handle_shop_mp_overlay_press(pos, viewport):
 		return true
 	if _handle_boss_mp_overlay_press(pos, viewport):
+		return true
+	if _handle_phase_mp_overlay_press(pos, viewport):
 		return true
 	return false
 
@@ -53721,6 +54266,34 @@ func _handle_key(event: InputEventKey) -> void :
 				_join_multiplayer_game()
 			elif multiplayer_menu_selected == 2:
 				_go_to_menu()
+	elif mode == "online_create_room":
+		if event.keycode == KEY_ESCAPE:
+			mode = "multiplayer_menu"
+			_block_ui_input()
+		elif event.keycode == KEY_ENTER:
+			_create_online_room()
+		elif event.keycode == KEY_TAB:
+			if online_room_name_edit != null and online_room_name_edit.has_focus() and online_room_password_edit != null:
+				online_room_password_edit.grab_focus()
+			elif online_room_name_edit != null:
+				online_room_name_edit.grab_focus()
+	elif mode == "online_find_room":
+		if event.keycode == KEY_ESCAPE:
+			mode = "multiplayer_menu"
+			_block_ui_input()
+		elif event.keycode == KEY_UP or event.keycode == KEY_W:
+			var count_find_up: int = maxi(1, online_room_list.size())
+			lobby_client_selected = (lobby_client_selected - 1 + count_find_up) % count_find_up
+		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
+			var count_find_down: int = maxi(1, online_room_list.size())
+			lobby_client_selected = (lobby_client_selected + 1) % count_find_down
+		elif event.keycode == KEY_ENTER:
+			_join_selected_or_typed_online_room()
+		elif event.keycode == KEY_TAB:
+			if online_search_code_edit != null and online_search_code_edit.has_focus() and online_join_password_edit != null:
+				online_join_password_edit.grab_focus()
+			elif online_search_code_edit != null:
+				online_search_code_edit.grab_focus()
 	elif mode == "lobby_online_host":
 		if event.keycode == KEY_ESCAPE:
 			_leave_multiplayer()
@@ -53730,12 +54303,7 @@ func _handle_key(event: InputEventKey) -> void :
 			lobby_host_selected = (lobby_host_selected + 1) % 2
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			if lobby_host_selected == 0:
-				var client_ready = _online_client_ready()
-				var can_start = online_lobby_connected_count >= ONLINE_MIN_PLAYERS and client_ready
-				if can_start:
-					_net_report_count_out("control", 32)
-					_net_report_event("host_request_start_game_out_key", "connected=%d ready=%d" % [online_lobby_connected_count, online_lobby_ready_count])
-					rpc_id(1, "_host_request_start_game")
+				_send_host_start_request()
 			elif lobby_host_selected == 1:
 				_leave_multiplayer()
 	elif mode == "lobby_online_client":
@@ -53924,7 +54492,7 @@ func _handle_key(event: InputEventKey) -> void :
 
 
 func _handle_press(pos: Vector2, viewport: Vector2) -> void :
-	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "manifest_evolution", "specter_upgrade", "paused", "pause_deck", "multiplayer_menu", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "multiplayer_syncing"]):
+	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "manifest_evolution", "specter_upgrade", "paused", "pause_deck", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "multiplayer_syncing"]):
 		return
 	if mode == "nick_setup":
 		if buttons.get("nick_confirm", Rect2()).has_point(pos):
@@ -53969,6 +54537,12 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 		return
 	if mode == "multiplayer_menu":
 		_handle_multiplayer_menu_touch(pos, viewport)
+		return
+	if mode == "online_create_room":
+		_handle_online_create_room_touch(pos, viewport)
+		return
+	if mode == "online_find_room":
+		_handle_online_find_room_touch(pos, viewport)
 		return
 	if mode == "lobby_online_host":
 		_handle_lobby_online_host_touch(pos, viewport)
@@ -56286,24 +56860,57 @@ func _manual_shop_pos(viewport: Vector2) -> Vector2:
 
 
 func _host_multiplayer_game() -> void :
-	_create_online_room()
-
-func _join_multiplayer_game() -> void :
-	_join_online_room()
-
-func _create_online_room() -> void :
-	if online_relay_request == null:
-		return
-	_net_report_event("create_online_room_request", "nickname=%s" % player_nickname)
 	multiplayer_notice = ""
 	_reset_online_room_state()
+	is_multiplayer = false
+	is_host = false
+	online_room_owner = true
+	online_room_name = _default_online_room_name()
+	online_room_password = ""
+	online_room_locked = false
+	online_status = "CONFIGURE SUA SALA"
+	mode = "online_create_room"
+	_update_online_room_input_visibility()
+	_block_ui_input()
+
+func _join_multiplayer_game() -> void :
+	multiplayer_notice = ""
+	_reset_online_room_state()
+	is_multiplayer = false
+	is_host = false
+	online_room_owner = false
+	online_join_code = ""
+	online_join_password = ""
+	online_status = "BUSCANDO SALAS ONLINE..."
+	mode = "online_find_room"
+	_update_online_room_input_visibility()
+	if online_relay_request != null:
+		_request_online_room_list()
+	else:
+		online_status = "DIGITE UM CODIGO OU ATUALIZE"
+	_block_ui_input()
+
+func _create_online_room() -> void :
+	_read_online_create_inputs()
+	if online_relay_request == null:
+		online_status = "SERVIDOR ONLINE INDISPONIVEL"
+		return
+	_net_report_event("create_online_room_request", "nickname=%s room=%s locked=%s" % [player_nickname, online_room_name, str(online_room_locked)])
+	multiplayer_notice = ""
+	var room_name: = online_room_name
+	var room_password: = online_room_password
+	var room_locked: = online_room_locked
+	_reset_online_room_state()
+	online_room_name = room_name
+	online_room_password = room_password
+	online_room_locked = room_locked
 	is_multiplayer = true
 	is_host = false
 	online_room_owner = true
 	mode = "lobby_online_host"
 	online_relay_action = "create"
 	online_status = "CRIANDO SALA ONLINE..."
-	var payload: = {"name": player_nickname}
+	var payload: = {"name": player_nickname, "room_name": online_room_name, "password": online_room_password, "locked": online_room_locked}
 	var err: = online_relay_request.request(
 		ONLINE_RELAY_BASE_URL + "/rooms", 
 		["Content-Type: application/json"], 
@@ -56312,7 +56919,7 @@ func _create_online_room() -> void :
 	)
 	if err != OK:
 		online_status = "ERRO AO CHAMAR SERVIDOR"
-		mode = "multiplayer_menu"
+		mode = "online_create_room"
 
 func _join_online_room() -> void :
 	if online_relay_request == null:
@@ -56322,7 +56929,7 @@ func _join_online_room() -> void :
 	_reset_online_room_state()
 	is_multiplayer = true
 	is_host = false
-	mode = "lobby_online_client"
+	mode = "online_find_room"
 	_request_online_room_list()
 
 func _request_online_room_list() -> void :
@@ -56337,14 +56944,17 @@ func _request_online_room_list() -> void :
 	var err: = online_relay_request.request(ONLINE_RELAY_BASE_URL + "/rooms")
 	if err != OK:
 		online_status = "ERRO AO BUSCAR SALA"
-		mode = "multiplayer_menu"
 
 func _join_online_room_code(code: String) -> void :
+	_read_online_join_inputs()
 	if online_relay_request == null:
+		online_status = "SERVIDOR ONLINE INDISPONIVEL"
 		return
 	var clean_code: = code.strip_edges().to_upper()
 	if clean_code == "":
+		online_status = "INFORME O CODIGO DA SALA"
 		return
+	online_join_code = clean_code
 	online_joining_room_code = clean_code
 	online_relay_action = "join"
 	online_status = "ENTRANDO NA SALA " + clean_code + "..."
@@ -56352,7 +56962,7 @@ func _join_online_room_code(code: String) -> void :
 		ONLINE_RELAY_BASE_URL + "/rooms/" + clean_code + "/join", 
 		["Content-Type: application/json"], 
 		HTTPClient.METHOD_POST, 
-		JSON.stringify({"name": player_nickname})
+		JSON.stringify({"name": player_nickname, "password": online_join_password})
 	)
 	if err != OK:
 		online_status = "ERRO AO ENTRAR NA SALA"
@@ -56364,10 +56974,16 @@ func _reset_online_room_state() -> void :
 		online_heartbeat_request.cancel_request()
 	online_relay_action = ""
 	online_room_code = ""
+	online_room_name = ""
+	online_room_password = ""
+	online_room_locked = false
+	online_join_code = ""
+	online_join_password = ""
 	online_room_port = 0
 	online_connected = false
 	online_status = ""
 	online_room_owner = false
+	online_lobby_roster.clear()
 	online_lobby_connected_count = 0
 	online_lobby_active_player_count = 0
 	online_lobby_spectator_count = 0
@@ -56379,8 +56995,13 @@ func _reset_online_room_state() -> void :
 	online_room_list_selected = 0
 	online_joining_room_code = ""
 	online_ready_last_sent_ms = 0
+	online_ready_pending_started_ms = 0
+	online_ready_request_seq = 0
+	online_ready_confirmed_seq = 0
 	online_lobby_ready_pending = false
 	online_lobby_server_confirmed_ready = false
+	online_start_request_seq = 0
+	online_start_confirmed_seq = 0
 	online_local_spectator = false
 	online_local_spectator_confirmed = false
 	online_spectator_request_pending = false
@@ -56443,7 +57064,8 @@ func _on_online_relay_request_completed(result: int, response_code: int, _header
 			online_relay_action = ""
 		else:
 			online_status = "SERVIDOR ONLINE INDISPONIVEL"
-			mode = "multiplayer_menu"
+			if mode != "online_create_room":
+				mode = "online_create_room"
 		return
 	if online_relay_action == "list":
 		online_room_list = Array(payload.get("rooms", []))
@@ -56453,6 +57075,8 @@ func _on_online_relay_request_completed(result: int, response_code: int, _header
 		return
 	var host: = str(payload.get("host", ONLINE_RELAY_DEFAULT_HOST))
 	online_room_code = str(payload.get("code", ""))
+	online_room_name = str(payload.get("room_name", payload.get("name", online_room_name)))
+	online_room_locked = bool(payload.get("locked", online_room_locked))
 	online_room_port = int(payload.get("port", 0))
 	if online_room_port <= 0:
 		online_status = "SALA ONLINE INVALIDA"
@@ -56485,22 +57109,37 @@ func _send_lobby_ready_state() -> void :
 	if multiplayer == null or multiplayer.multiplayer_peer == null:
 		return
 	online_ready_last_sent_ms = Time.get_ticks_msec()
+	_net_report_count_out("control", 40)
+	_net_report_event("toggle_ready_v2_out", "ready=%s seq=%d" % [str(local_player_ready), online_ready_request_seq])
+	rpc_id(1, "_toggle_ready_v2", local_player_ready, online_ready_request_seq)
 	rpc_id(1, "_toggle_ready", local_player_ready)
 
 func _set_lobby_ready(value: bool) -> void :
 	if online_local_spectator:
 		return
+	if online_lobby_ready_pending and value == local_player_ready:
+		return
 	local_player_ready = value
 	online_local_ready_confirmed = false
 	online_lobby_ready_pending = online_connected
+	if online_lobby_ready_pending:
+		online_ready_request_seq += 1
+	online_ready_pending_started_ms = Time.get_ticks_msec() if online_lobby_ready_pending else 0
 	_send_lobby_ready_state()
 
 func _update_lobby_ready_resend() -> void :
 	if mode != "lobby_online_client" or not online_connected:
 		return
 	var now_ms: = Time.get_ticks_msec()
-	if online_lobby_ready_pending and now_ms - online_ready_last_sent_ms >= ONLINE_READY_RESEND_INTERVAL_MS:
+	if online_lobby_ready_pending and online_ready_pending_started_ms != 0 and now_ms - online_ready_pending_started_ms >= ONLINE_READY_MAX_PENDING_MS:
+		online_lobby_ready_pending = false
+		local_player_ready = online_local_ready_confirmed
+		online_ready_pending_started_ms = 0
+		online_status = "HOST NAO CONFIRMOU - TENTE NOVAMENTE"
+	elif online_lobby_ready_pending and now_ms - online_ready_last_sent_ms >= ONLINE_READY_RESEND_INTERVAL_MS:
 		_send_lobby_ready_state()
+		if online_ready_pending_started_ms != 0 and now_ms - online_ready_pending_started_ms >= ONLINE_READY_PENDING_TIMEOUT_MS:
+			online_status = "REENVIANDO CONFIRMACAO AO HOST..."
 	if online_spectator_request_pending and now_ms - online_spectator_last_sent_ms >= ONLINE_READY_RESEND_INTERVAL_MS:
 		_send_lobby_spectator_state()
 
@@ -56594,6 +57233,21 @@ func _online_client_ready() -> bool:
 	return active_players >= ONLINE_MIN_PLAYERS and online_lobby_ready_count >= expected_active_clients
 
 
+func _send_host_start_request() -> void:
+	if not online_connected or not online_room_owner:
+		return
+	var client_ready = _online_client_ready()
+	var can_start = online_lobby_connected_count >= ONLINE_MIN_PLAYERS and client_ready
+	if not can_start:
+		return
+	online_start_request_seq += 1
+	_net_report_count_out("control", 40)
+	_net_report_event("host_request_start_game_v2_out", "connected=%d ready=%d seq=%d" % [online_lobby_connected_count, online_lobby_ready_count, online_start_request_seq])
+	online_status = "CONFIRMANDO INICIO DA PARTIDA..."
+	rpc_id(1, "_host_request_start_game_v2", online_start_request_seq)
+	rpc_id(1, "_host_request_start_game")
+
+
 func _toggle_online_spectator_mode() -> void :
 	if not online_connected or online_room_owner:
 		return
@@ -56622,6 +57276,8 @@ func _start_dedicated_room_server(port: int) -> void :
 	mode = "dedicated_server"
 	dedicated_started_ms = Time.get_ticks_msec()
 	dedicated_room_shutdown_pending = false
+	dedicated_ready_by_peer.clear()
+	dedicated_ready_seq_by_peer.clear()
 	multiplayer_peer = ENetMultiplayerPeer.new()
 	var err: = multiplayer_peer.create_server(port, ONLINE_MAX_PLAYERS, NET_CHANNEL_COUNT)
 	if err != OK:
@@ -56639,6 +57295,7 @@ func _on_peer_connected(id: int) -> void :
 	_net_report_event("peer_connected", "id=%d peers=%s" % [id, str(_mp_peer_ids())])
 	if dedicated_server_mode:
 		dedicated_ready_by_peer[id] = false
+		dedicated_ready_seq_by_peer[id] = 0
 		dedicated_spectator_by_peer[id] = false
 		_sync_dedicated_lobby_state()
 
@@ -56649,6 +57306,7 @@ func _on_peer_disconnected(id: int) -> void :
 		var shutdown_was_pending: = dedicated_room_shutdown_pending
 		var owner_left: = id == dedicated_room_owner_peer_id
 		dedicated_ready_by_peer.erase(id)
+		dedicated_ready_seq_by_peer.erase(id)
 		dedicated_names_by_peer.erase(id)
 		dedicated_spectator_by_peer.erase(id)
 		dedicated_manifest_ready_by_peer.erase(id)
@@ -56693,6 +57351,7 @@ func _on_connected_to_server() -> void :
 	print("Connected to host")
 	_net_report_event("connected_to_room_server", "room=%s owner=%s" % [online_room_code, str(online_room_owner)])
 	online_connected = true
+	mode = "lobby_online_host" if online_room_owner else "lobby_online_client"
 	online_heartbeat_last_sent_ms = 0
 	online_heartbeat_last_ok_ms = 0
 	online_heartbeat_fail_count = 0
@@ -56725,6 +57384,7 @@ func _leave_multiplayer(reason: String = "") -> void :
 	local_player_ready = false
 	_reset_online_room_state()
 	dedicated_ready_by_peer.clear()
+	dedicated_ready_seq_by_peer.clear()
 	dedicated_names_by_peer.clear()
 	dedicated_spectator_by_peer.clear()
 	dedicated_manifest_ready_by_peer.clear()
@@ -56734,7 +57394,12 @@ func _leave_multiplayer(reason: String = "") -> void :
 	dedicated_shop_votes_by_peer.clear()
 	dedicated_shop_exit_by_peer.clear()
 	dedicated_boss_votes_by_peer.clear()
+	dedicated_phase_votes_by_peer.clear()
 	dedicated_pause_votes_by_peer.clear()
+	dedicated_phase_vote_started_ms = 0
+	dedicated_phase_vote_target = 0
+	dedicated_phase_vote_action = "phase"
+	_clear_phase_mp_request()
 	net_players_by_peer.clear()
 	net_decks_by_peer.clear()
 	mode = "multiplayer_menu"
@@ -56836,6 +57501,39 @@ func _active_run_player_count() -> int:
 	if online_local_spectator:
 		return 1
 	return maxi(1, online_lobby_connected_count)
+
+
+func _multiplayer_enemy_hp_scale() -> float:
+	if not is_multiplayer:
+		return 1.0
+	var active_players: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS)
+	if active_players >= 3:
+		return MULTIPLAYER_ENEMY_HP_SCALE_3P
+	if active_players == 2:
+		return MULTIPLAYER_ENEMY_HP_SCALE_2P
+	return 1.0
+
+
+func _multiplayer_boss_hp_scale() -> float:
+	if not is_multiplayer:
+		return 1.0
+	var active_players: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS)
+	if active_players >= 3:
+		return MULTIPLAYER_BOSS_HP_SCALE_3P
+	if active_players == 2:
+		return MULTIPLAYER_BOSS_HP_SCALE_2P
+	return 1.0
+
+
+func _multiplayer_enemy_limit_bonus() -> int:
+	if not is_multiplayer:
+		return 0
+	var active_players: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS)
+	if active_players >= 3:
+		return MULTIPLAYER_ENEMY_LIMIT_BONUS_3P
+	if active_players == 2:
+		return MULTIPLAYER_ENEMY_LIMIT_BONUS_2P
+	return 0
 
 
 func _local_counts_as_player() -> bool:
@@ -56944,6 +57642,7 @@ func _register_client_info(nick: String, is_owner: bool = false, is_spectator: b
 	if dedicated_server_mode:
 		if sender != 0:
 			dedicated_names_by_peer[sender] = nick
+			dedicated_ready_seq_by_peer[sender] = int(dedicated_ready_seq_by_peer.get(sender, 0))
 			if is_owner:
 				dedicated_room_owner_peer_id = sender
 				dedicated_spectator_by_peer[sender] = false
@@ -56961,23 +57660,42 @@ func _register_client_info(nick: String, is_owner: bool = false, is_spectator: b
 
 @rpc("any_peer", "call_remote", "reliable", 3)
 func _host_request_start_game() -> void :
+	_handle_host_request_start_game(0)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _host_request_start_game_v2(sequence: int) -> void:
+	_handle_host_request_start_game(sequence)
+
+
+func _handle_host_request_start_game(sequence: int) -> void:
 	_net_report_count_in("control", 32)
-	_net_report_event("host_request_start_game_in", "sender=%d owner=%d" % [_mp_sender_id(), dedicated_room_owner_peer_id])
+	_net_report_event("host_request_start_game_in", "sender=%d owner=%d seq=%d" % [_mp_sender_id(), dedicated_room_owner_peer_id, sequence])
 	if not dedicated_server_mode:
 		return
 	if mode != "dedicated_server":
 		return
 	var sender: = _mp_sender_id()
 	if sender == dedicated_room_owner_peer_id:
-		var active_players: = _dedicated_active_peer_ids().size()
-		var spectator_only_client: = active_players == 1 and _dedicated_spectator_count() > 0
-		if active_players <= ONLINE_MAX_PLAYERS and (spectator_only_client or (active_players >= ONLINE_MIN_PLAYERS and _dedicated_clients_ready())):
+		if _dedicated_start_ready():
+			if sequence > 0:
+				_net_report_count_out("control", 32)
+				rpc_id(sender, "_online_start_ack", sequence, true, "preload")
 			if multiplayer_peer != null:
 				multiplayer_peer.refuse_new_connections = true
 			_net_report_count_out("control", 48)
 			_net_report_event("start_multiplayer_preload_out", "reason=host_request")
 			rpc("_start_multiplayer_preload")
 			_start_multiplayer_preload()
+		elif sequence > 0:
+			_net_report_count_out("control", 32)
+			rpc_id(sender, "_online_start_ack", sequence, false, "players_not_ready")
+
+
+func _dedicated_start_ready() -> bool:
+	var active_players: = _dedicated_active_peer_ids().size()
+	var spectator_only_client: = active_players == 1 and _dedicated_spectator_count() > 0
+	return active_players <= ONLINE_MAX_PLAYERS and (spectator_only_client or (active_players >= ONLINE_MIN_PLAYERS and _dedicated_clients_ready()))
 
 @rpc("any_peer", "call_remote", "reliable", 3)
 func _register_host_info(nick: String) -> void :
@@ -56987,19 +57705,71 @@ func _register_host_info(nick: String) -> void :
 
 @rpc("any_peer", "call_remote", "reliable", 3)
 func _toggle_ready(ready: bool) -> void :
+	_apply_lobby_ready_request(ready, 0)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _toggle_ready_v2(ready: bool, sequence: int) -> void:
+	_apply_lobby_ready_request(ready, sequence)
+
+
+func _apply_lobby_ready_request(ready: bool, sequence: int) -> void:
 	_net_report_count_in("control", 32)
-	_net_report_event("toggle_ready_in", "ready=%s sender=%d dedicated=%s" % [str(ready), _mp_sender_id(), str(dedicated_server_mode)])
+	_net_report_event("toggle_ready_in", "ready=%s sender=%d dedicated=%s seq=%d" % [str(ready), _mp_sender_id(), str(dedicated_server_mode), sequence])
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if sender != 0:
 			if _is_dedicated_spectator(sender):
 				dedicated_ready_by_peer[sender] = true
+				dedicated_ready_seq_by_peer[sender] = maxi(sequence, int(dedicated_ready_seq_by_peer.get(sender, 0)))
+				if sequence > 0:
+					_net_report_count_out("control", 40)
+					rpc_id(sender, "_online_lobby_ready_ack", sequence, true, true, dedicated_room_code)
 				_sync_dedicated_lobby_state()
 				return
 			dedicated_ready_by_peer[sender] = ready
+			dedicated_ready_seq_by_peer[sender] = maxi(sequence, int(dedicated_ready_seq_by_peer.get(sender, 0)))
+			if sequence > 0:
+				_net_report_count_out("control", 40)
+				rpc_id(sender, "_online_lobby_ready_ack", sequence, ready, true, dedicated_room_code)
 			_sync_dedicated_lobby_state()
 		return
 	net_player_ready = ready
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _online_lobby_ready_ack(sequence: int, confirmed_ready: bool, accepted: bool, room_code: String = "") -> void:
+	_net_report_count_in("control", 40)
+	_net_report_event("online_lobby_ready_ack_in", "seq=%d confirmed=%s accepted=%s current=%d" % [sequence, str(confirmed_ready), str(accepted), online_ready_request_seq])
+	if sequence <= 0 or sequence < online_ready_confirmed_seq:
+		return
+	if online_ready_request_seq > 0 and sequence != online_ready_request_seq:
+		return
+	online_ready_confirmed_seq = sequence
+	online_lobby_ready_pending = false
+	online_ready_pending_started_ms = 0
+	if room_code != "":
+		online_room_code = room_code
+	if accepted:
+		local_player_ready = confirmed_ready
+		online_local_ready_confirmed = confirmed_ready
+		online_lobby_server_confirmed_ready = confirmed_ready
+		online_status = "PRONTO CONFIRMADO" if confirmed_ready else "PRONTO REMOVIDO"
+	else:
+		local_player_ready = online_local_ready_confirmed
+		online_status = "HOST RECUSOU CONFIRMACAO"
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _online_start_ack(sequence: int, accepted: bool, reason: String = "") -> void:
+	_net_report_count_in("control", 32)
+	_net_report_event("online_start_ack_in", "seq=%d accepted=%s reason=%s current=%d" % [sequence, str(accepted), reason, online_start_request_seq])
+	if sequence <= 0 or sequence < online_start_confirmed_seq:
+		return
+	if online_start_request_seq > 0 and sequence != online_start_request_seq:
+		return
+	online_start_confirmed_seq = sequence
+	online_status = "INICIO CONFIRMADO" if accepted else "AGUARDANDO JOGADORES PRONTOS"
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
@@ -57026,11 +57796,11 @@ func _sync_dedicated_lobby_state() -> void :
 	var connected: = _mp_peer_ids().size()
 	var active_players: = _dedicated_active_peer_ids().size()
 	var spectators: = _dedicated_spectator_count()
-	var ready: = 0
+	var ready_clients: int = 0
 	var client_ready: = false
 	for peer_id in _dedicated_active_client_peer_ids():
 		if bool(dedicated_ready_by_peer.get(peer_id, false)):
-			ready += 1
+			ready_clients += 1
 	for peer_id in _mp_peer_ids():
 		var peer_ready: = bool(dedicated_ready_by_peer.get(peer_id, false))
 		var peer_spectator: = _is_dedicated_spectator(int(peer_id))
@@ -57040,9 +57810,25 @@ func _sync_dedicated_lobby_state() -> void :
 		var peer_ready: = bool(dedicated_ready_by_peer.get(peer_id, false))
 		var peer_spectator: = _is_dedicated_spectator(int(peer_id))
 		_net_report_count_out("control", 64)
-		rpc_id(peer_id, "_online_lobby_state", dedicated_room_code, connected, ready)
-		rpc_id(peer_id, "_online_lobby_state_v2", dedicated_room_code, connected, ready, peer_ready, client_ready if peer_id == dedicated_room_owner_peer_id else null)
-		rpc_id(peer_id, "_online_lobby_state_v3", dedicated_room_code, connected, active_players, spectators, ready, peer_ready, client_ready, peer_spectator)
+		var remote_client_ready = client_ready if peer_id == dedicated_room_owner_peer_id else null
+		rpc_id(peer_id, "_online_lobby_state", dedicated_room_code, connected, ready_clients)
+		rpc_id(peer_id, "_online_lobby_state_v2", dedicated_room_code, connected, ready_clients, peer_ready, remote_client_ready)
+		rpc_id(peer_id, "_online_lobby_state_v3", dedicated_room_code, connected, active_players, spectators, ready_clients, peer_ready, client_ready, peer_spectator)
+		rpc_id(peer_id, "_online_lobby_roster", _dedicated_lobby_roster())
+
+
+func _dedicated_lobby_roster() -> Array:
+	var roster: Array = []
+	for peer_id in _mp_peer_ids():
+		var peer_spectator: = _is_dedicated_spectator(int(peer_id))
+		roster.append({
+			"peer_id": int(peer_id),
+			"name": String(dedicated_names_by_peer.get(peer_id, "Player %d" % int(peer_id))),
+			"owner": int(peer_id) == dedicated_room_owner_peer_id,
+			"ready": bool(dedicated_ready_by_peer.get(peer_id, false)) or peer_spectator,
+			"spectator": peer_spectator
+		})
+	return roster
 
 func _dedicated_all_players_ready() -> bool:
 	var peers: = _dedicated_active_peer_ids()
@@ -57079,6 +57865,67 @@ func _online_lobby_state(room_code: String, connected: int, ready: int) -> void 
 	online_lobby_client_ready = ( not online_room_owner and ready > 0) or (online_room_owner and ready > 0)
 	if not online_room_owner:
 		online_local_ready_confirmed = local_player_ready and ready > 0
+		if online_local_ready_confirmed:
+			online_lobby_ready_pending = false
+			online_ready_pending_started_ms = 0
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _online_lobby_roster(roster: Array) -> void:
+	_net_report_count_in("control", 96 + roster.size() * 48)
+	online_lobby_roster = []
+	var connected: int = 0
+	var active_players: int = 0
+	var spectators: int = 0
+	var ready_clients: int = 0
+	online_lobby_owner_ready = false
+	online_lobby_client_ready = false
+	var local_peer: int = _mp_unique_id()
+	var local_nick: String = player_nickname.strip_edges().to_lower()
+	var local_roster_ready_seen: bool = false
+	var local_roster_ready: bool = false
+	for entry in roster:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var item: Dictionary = Dictionary(entry)
+		var peer_id: int = int(item.get("peer_id", item.get("id", 0)))
+		var entry_name: String = String(item.get("name", "Player %d" % peer_id))
+		var spectator: bool = bool(item.get("spectator", false))
+		var item_ready: bool = bool(item.get("ready", false))
+		var is_owner_entry: bool = bool(item.get("owner", false))
+		online_lobby_roster.append({
+			"peer_id": peer_id,
+			"name": entry_name,
+			"owner": is_owner_entry,
+			"ready": item_ready,
+			"spectator": spectator
+		})
+		if not online_room_owner and not is_owner_entry:
+			var matches_local_peer: bool = local_peer != 0 and peer_id == local_peer
+			var matches_local_name: bool = local_nick != "" and entry_name.strip_edges().to_lower() == local_nick
+			if matches_local_peer or matches_local_name:
+				local_roster_ready_seen = true
+				local_roster_ready = item_ready or spectator
+		connected += 1
+		if spectator:
+			spectators += 1
+		else:
+			active_players += 1
+		if item_ready and not is_owner_entry and not spectator:
+			ready_clients += 1
+		if is_owner_entry:
+			online_lobby_owner_ready = item_ready
+		elif not spectator:
+			online_lobby_client_ready = online_lobby_client_ready or item_ready
+	online_lobby_connected_count = connected
+	online_lobby_active_player_count = active_players
+	online_lobby_spectator_count = spectators
+	online_lobby_ready_count = ready_clients
+	if local_roster_ready_seen and local_roster_ready == local_player_ready:
+		online_lobby_ready_pending = false
+		online_local_ready_confirmed = local_roster_ready
+		online_ready_pending_started_ms = 0
+	net_player_name = "%d jogadores / %d espectador%s" % [active_players, spectators, "" if spectators == 1 else "es"]
 
 @rpc("authority", "call_remote", "reliable", 3)
 func _online_lobby_state_v2(room_code: String, connected: int, ready: int, local_ready_confirmed: bool, remote_client_ready = null) -> void :
@@ -57095,13 +57942,20 @@ func _online_lobby_state_v2(room_code: String, connected: int, ready: int, local
 	online_lobby_ready_count = ready
 	online_lobby_server_confirmed_ready = confirmed_ready
 	if not online_room_owner:
-		local_player_ready = confirmed_ready
-		online_lobby_ready_pending = false
+		if online_lobby_ready_pending:
+			if confirmed_ready == local_player_ready:
+				local_player_ready = confirmed_ready
+				online_lobby_ready_pending = false
+				online_ready_pending_started_ms = 0
+				online_local_ready_confirmed = confirmed_ready
+		else:
+			local_player_ready = confirmed_ready
+			online_lobby_ready_pending = false
+			online_ready_pending_started_ms = 0
+			online_local_ready_confirmed = confirmed_ready
 	net_player_ready = ready >= 1
 	online_lobby_owner_ready = online_room_owner and ready > 0
 	online_lobby_client_ready = online_lobby_client_ready or ( not online_room_owner and ready > 0) or (online_room_owner and ready > 0)
-	if not online_room_owner:
-		online_local_ready_confirmed = confirmed_ready
 	net_player_name = "%d/%d jogadores" % [connected, ONLINE_MAX_PLAYERS]
 
 
@@ -57126,10 +57980,12 @@ func _online_lobby_state_v3(room_code: String, connected: int, active_players: i
 		if online_local_spectator:
 			local_player_ready = true
 			online_lobby_ready_pending = false
+			online_ready_pending_started_ms = 0
 			online_local_ready_confirmed = true
 		elif online_lobby_ready_pending:
 			if confirmed_ready == local_player_ready:
 				online_lobby_ready_pending = false
+				online_ready_pending_started_ms = 0
 				online_local_ready_confirmed = confirmed_ready
 		else:
 			local_player_ready = confirmed_ready
@@ -57469,6 +58325,142 @@ func _start_multiplayer_game() -> void :
 				var p = player_scene.instantiate()
 				p.name = str(peer_id)
 				container.add_child(p, true)
+
+
+func _draw_online_header(viewport: Vector2, title: String, accent: Color, subtitle: String = "") -> void:
+	_draw_holo_background(viewport, null, accent)
+	_draw_glitch_title(title, Vector2(viewport.x * 0.5, 62.0), 34, accent)
+	if subtitle != "":
+		_draw_centered(subtitle, Vector2(viewport.x * 0.5, 102.0), 14, Color(0.76, 0.94, 1.0, 0.9))
+
+
+func _draw_online_create_room(viewport: Vector2) -> void:
+	var accent: = Color(1.0, 0.44, 0.88)
+	_draw_online_header(viewport, "CRIAR SALA ONLINE", accent, "defina nome, senha e convide a equipe")
+	_sync_online_room_input_rects(viewport)
+	var panel: = _online_create_panel_rect(viewport)
+	_draw_holo_panel(panel, accent, true, 0.68)
+	var status: = online_status if online_status != "" else "CONFIGURE SUA SALA"
+	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 54.0), 18, Color.WHITE)
+
+	var name_rect: = _online_create_name_input_rect(viewport)
+	var password_rect: = _online_create_password_input_rect(viewport)
+	_draw_online_input_backing(name_rect, "NOME DA SALA", accent)
+	_draw_online_input_backing(password_rect, "SENHA", accent)
+	var visibility_label: = "PUBLICA" if online_room_password.strip_edges() == "" else "PRIVADA"
+	var info_rect: = Rect2(panel.position.x + 44.0, panel.position.y + 294.0, panel.size.x - 88.0, 56.0)
+	_draw_holo_panel(info_rect, Color(0.0, 1.0, 0.82), false, 0.32)
+	_draw_centered("VISIBILIDADE: " + visibility_label, info_rect.position + Vector2(info_rect.size.x * 0.5, 24.0), 14, Color(0.0, 1.0, 0.82))
+	_draw_centered("sem senha aparece aberta; com senha exige confirmacao ao entrar", info_rect.position + Vector2(info_rect.size.x * 0.5, 44.0), 11, Color(0.76, 0.94, 1.0, 0.82))
+
+	var button_y: = panel.end.y - 76.0
+	buttons["online_create_submit"] = Rect2(panel.position.x + 44.0, button_y, panel.size.x * 0.52, 48.0)
+	buttons["online_create_back"] = Rect2(panel.end.x - panel.size.x * 0.34 - 44.0, button_y, panel.size.x * 0.34, 48.0)
+	_draw_big_button(buttons["online_create_submit"], "CRIAR SALA", Color(0.05, 0.12, 0.12, 0.92), Color(0.0, 1.0, 0.82))
+	_draw_big_button(buttons["online_create_back"], "VOLTAR", Color(0.1, 0.05, 0.07, 0.92), Color(1.0, 0.24, 0.34))
+
+
+func _draw_online_find_room(viewport: Vector2) -> void:
+	var accent: = Color(0.0, 1.0, 0.82)
+	_draw_online_header(viewport, "PROCURAR SALA", accent, "entre por lista publica ou codigo privado")
+	_sync_online_room_input_rects(viewport)
+	for key in buttons.keys():
+		var button_key: = String(key)
+		if button_key.begins_with("room_select_"):
+			buttons.erase(button_key)
+	var panel: = _online_find_panel_rect(viewport)
+	_draw_holo_panel(panel, accent, true, 0.64)
+	var status: = online_status if online_status != "" else "BUSCANDO SALAS ONLINE..."
+	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 48.0), 18, Color.WHITE)
+
+	var list_rect: = Rect2(panel.position.x + 36.0, panel.position.y + 80.0, panel.size.x - 72.0, panel.size.y - 260.0)
+	_draw_holo_panel(list_rect, accent, false, 0.22)
+	if online_room_list.is_empty():
+		_draw_centered("NENHUMA SALA ABERTA", list_rect.get_center() + Vector2(0.0, -12.0), 18, Color(1.0, 0.82, 0.24))
+		_draw_centered("use um codigo privado ou atualize a lista", list_rect.get_center() + Vector2(0.0, 18.0), 12, Color(0.76, 0.94, 1.0, 0.82))
+	else:
+		var row_h: float = min(58.0, (list_rect.size.y - 18.0) / float(mini(5, online_room_list.size())))
+		var visible_count: int = mini(5, online_room_list.size())
+		for i in range(visible_count):
+			var room: Dictionary = Dictionary(online_room_list[i])
+			var row: = Rect2(list_rect.position.x + 16.0, list_rect.position.y + 12.0 + float(i) * (row_h + 8.0), list_rect.size.x - 32.0, row_h)
+			buttons["room_select_" + str(i)] = row
+			_draw_online_room_row(row, room, i == lobby_client_selected)
+
+	var code_rect: = _online_find_code_input_rect(viewport)
+	var password_rect: = _online_find_password_input_rect(viewport)
+	_draw_online_input_backing(code_rect, "CODIGO", accent)
+	_draw_online_input_backing(password_rect, "SENHA", accent)
+	buttons["online_find_join"] = Rect2(panel.end.x - 176.0, panel.end.y - 150.0, 132.0, 44.0)
+	buttons["room_refresh"] = Rect2(panel.position.x + 44.0, panel.end.y - 74.0, 190.0, 44.0)
+	buttons["lobby_cancel"] = Rect2(panel.end.x - 234.0, panel.end.y - 74.0, 190.0, 44.0)
+	_draw_big_button(buttons["online_find_join"], "ENTRAR", Color(0.04, 0.14, 0.13, 0.92), accent)
+	_draw_big_button(buttons["room_refresh"], "ATUALIZAR", Color(0.04, 0.14, 0.13, 0.92), Color(0.72, 1.0, 0.94))
+	_draw_big_button(buttons["lobby_cancel"], "VOLTAR", Color(0.1, 0.05, 0.05, 0.92), Color(1.0, 0.24, 0.34))
+
+
+func _draw_online_input_backing(rect: Rect2, label: String, accent: Color) -> void:
+	draw_rect(rect.grow(2.0), Color(accent.r, accent.g, accent.b, 0.18), true)
+	draw_rect(rect.grow(2.0), Color(accent.r, accent.g, accent.b, 0.72), false, 1.6)
+	draw_string(font, rect.position + Vector2(0.0, -10.0), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, 10, Color(accent.r, accent.g, accent.b, 0.86))
+
+
+func _draw_online_room_row(rect: Rect2, room: Dictionary, selected: bool) -> void:
+	var accent: = Color(0.0, 1.0, 0.82) if not bool(room.get("locked", false)) else Color(1.0, 0.82, 0.24)
+	_draw_holo_panel(rect, accent, selected, 0.34 if not selected else 0.52)
+	var code: = String(room.get("code", "------"))
+	var name: = String(room.get("name", "Sala " + code))
+	var players: = int(room.get("players", 1))
+	var max_players: = int(room.get("maxPlayers", ONLINE_MAX_PLAYERS))
+	var lock_text: = "COM SENHA" if bool(room.get("locked", false)) else "PUBLICA"
+	draw_string(font, rect.position + Vector2(18.0, 24.0), name.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x * 0.52, _fit_text_size(name.to_upper(), rect.size.x * 0.52, 16, 11), Color.WHITE)
+	draw_string(font, rect.position + Vector2(18.0, 45.0), "CODIGO " + code, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x * 0.36, 11, Color(0.72, 0.94, 1.0, 0.86))
+	_draw_centered("%d/%d" % [players, max_players], rect.position + Vector2(rect.size.x * 0.72, rect.size.y * 0.5 + 5.0), 16, accent)
+	_draw_centered(lock_text, rect.position + Vector2(rect.size.x * 0.9, rect.size.y * 0.5 + 5.0), 12, accent)
+
+
+func _handle_online_create_room_touch(pos: Vector2, viewport: Vector2) -> void:
+	if _online_create_name_input_rect(viewport).has_point(pos):
+		if online_room_name_edit != null:
+			online_room_name_edit.grab_focus()
+		return
+	if _online_create_password_input_rect(viewport).has_point(pos):
+		if online_room_password_edit != null:
+			online_room_password_edit.grab_focus()
+		return
+	if buttons.get("online_create_submit", Rect2()).has_point(pos):
+		_create_online_room()
+	elif buttons.get("online_create_back", Rect2()).has_point(pos):
+		mode = "multiplayer_menu"
+		_block_ui_input()
+
+
+func _handle_online_find_room_touch(pos: Vector2, viewport: Vector2) -> void:
+	for i in range(online_room_list.size()):
+		if buttons.get("room_select_" + str(i), Rect2()).has_point(pos):
+			lobby_client_selected = i
+			var room: Dictionary = Dictionary(online_room_list[i])
+			online_join_code = String(room.get("code", "")).to_upper()
+			if online_search_code_edit != null:
+				online_search_code_edit.text = online_join_code
+			if bool(room.get("locked", false)) and online_join_password_edit != null:
+				online_join_password_edit.grab_focus()
+			return
+	if _online_find_code_input_rect(viewport).has_point(pos):
+		if online_search_code_edit != null:
+			online_search_code_edit.grab_focus()
+		return
+	if _online_find_password_input_rect(viewport).has_point(pos):
+		if online_join_password_edit != null:
+			online_join_password_edit.grab_focus()
+		return
+	if buttons.get("online_find_join", Rect2()).has_point(pos):
+		_join_selected_or_typed_online_room()
+	elif buttons.get("room_refresh", Rect2()).has_point(pos):
+		_request_online_room_list()
+	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
+		mode = "multiplayer_menu"
+		_block_ui_input()
 
 
 func _draw_multiplayer_menu(viewport: Vector2) -> void :
@@ -58673,6 +59665,70 @@ func _rpc_pause_vote_state(target_paused: bool, vote_count: int, expected_count:
 func _rpc_commit_pause(target_paused: bool) -> void :
 	_apply_pause_state(target_paused)
 
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_request_phase_transfer(target_phase: int, action: String = "phase") -> void :
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == 0 or _is_dedicated_spectator(sender):
+			return
+		if dedicated_phase_votes_by_peer.is_empty() or dedicated_phase_vote_target != target_phase or dedicated_phase_vote_action != action or _dedicated_vote_expired(dedicated_phase_vote_started_ms, PHASE_MP_REQUEST_TIME):
+			dedicated_phase_votes_by_peer.clear()
+			dedicated_phase_vote_target = target_phase
+			dedicated_phase_vote_action = action
+			dedicated_phase_vote_started_ms = Time.get_ticks_msec()
+		dedicated_phase_votes_by_peer[sender] = true
+		_dedicated_broadcast_phase_vote(sender)
+		return
+	if _mp_sender_is_self():
+		return
+	if mode == "game":
+		_start_phase_mp_request_overlay(true, target_phase, action, 1, _active_run_player_count())
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_accept_phase_transfer(target_phase: int, action: String = "phase") -> void :
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == 0 or _is_dedicated_spectator(sender):
+			return
+		if target_phase != dedicated_phase_vote_target or action != dedicated_phase_vote_action or _dedicated_vote_expired(dedicated_phase_vote_started_ms, PHASE_MP_REQUEST_TIME):
+			dedicated_phase_votes_by_peer.clear()
+			dedicated_phase_vote_started_ms = 0
+			return
+		dedicated_phase_votes_by_peer[sender] = true
+		_dedicated_broadcast_phase_vote(sender)
+		return
+	if _mp_sender_is_self():
+		return
+	if mode == "game" and target_phase > 0:
+		_commit_phase_mp_transfer(target_phase, action)
+
+
+func _dedicated_broadcast_phase_vote(last_voter: int) -> void :
+	var vote_count: int = dedicated_phase_votes_by_peer.size()
+	var active_peers: = _dedicated_active_peer_ids()
+	var expected: int = active_peers.size()
+	if _dedicated_all_peers_voted(dedicated_phase_votes_by_peer):
+		for peer_id in active_peers:
+			rpc_id(peer_id, "_rpc_commit_phase_transfer", dedicated_phase_vote_target, dedicated_phase_vote_action)
+		dedicated_phase_votes_by_peer.clear()
+		dedicated_phase_vote_started_ms = 0
+		return
+	for peer_id in active_peers:
+		rpc_id(peer_id, "_rpc_phase_vote_state", dedicated_phase_vote_target, dedicated_phase_vote_action, vote_count, expected, bool(dedicated_phase_votes_by_peer.get(peer_id, false)), last_voter)
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_phase_vote_state(target_phase: int, action: String, vote_count: int, expected_count: int, local_voted: bool, _last_voter: int) -> void :
+	_start_phase_mp_request_overlay(not local_voted, target_phase, action, vote_count, expected_count)
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_commit_phase_transfer(target_phase: int, action: String = "phase") -> void :
+	_commit_phase_mp_transfer(target_phase, action)
+
+
 @rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_trigger_shop(is_forced: bool) -> void :
 	if dedicated_server_mode:
@@ -59382,114 +60438,103 @@ func _apply_temporal_rewind_result(rewind_pos: Vector2, rewind_hp: float) -> voi
 	_add_text("-10s / TEMPO CAPTURADO", player_pos + Vector2(0, -104), Color(0.48, 0.92, 1.0), 1.5, 24)
 	_spawn_radial_particles(player_pos, Color(0.3, 0.78, 1.0), 34)
 
-func _draw_lobby_online_host(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.85, 0.3, 1.0))
-	_draw_glitch_title("SALA ONLINE - HOST", Vector2(viewport.x * 0.5, 64), 34, Color(0.85, 0.3, 1.0))
+func _draw_online_lobby_roster(rect: Rect2, accent: Color) -> void:
+	_draw_holo_panel(rect, accent, false, 0.24)
+	draw_string(font, rect.position + Vector2(18.0, 28.0), "JOGADORES NA SALA", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 36.0, 15, Color.WHITE)
+	var roster: Array = online_lobby_roster.duplicate()
+	if roster.is_empty():
+		roster.append({"peer_id": _mp_unique_id(), "name": player_nickname if player_nickname != "" else "Voce", "owner": online_room_owner, "ready": online_room_owner, "spectator": false})
+	var row_h: float = clampf((rect.size.y - 58.0) / float(maxi(1, mini(4, roster.size()))), 40.0, 58.0)
+	var visible_count: int = mini(4, roster.size())
+	for i in range(visible_count):
+		var entry: Dictionary = Dictionary(roster[i])
+		var y: float = rect.position.y + 48.0 + float(i) * row_h
+		var row: = Rect2(rect.position.x + 14.0, y, rect.size.x - 28.0, row_h - 8.0)
+		var is_owner_entry: bool = bool(entry.get("owner", false))
+		var is_ready_entry: bool = bool(entry.get("ready", false))
+		var spectator: = bool(entry.get("spectator", false))
+		var row_color: = Color(1.0, 0.82, 0.24) if is_owner_entry else (Color(0.62, 0.42, 1.0) if spectator else accent)
+		_draw_holo_panel(row, row_color, is_ready_entry, 0.28)
+		draw_string(font, row.position + Vector2(14.0, 25.0), String(entry.get("name", "Player")).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, row.size.x * 0.48, _fit_text_size(String(entry.get("name", "PLAYER")).to_upper(), row.size.x * 0.48, 15, 10), Color.WHITE)
+		var role: = "HOST" if is_owner_entry else ("ESPECTADOR" if spectator else "PLAYER")
+		_draw_centered(role, row.position + Vector2(row.size.x * 0.68, row.size.y * 0.5 + 5.0), 11, row_color)
+		_draw_centered("PRONTO" if is_ready_entry else "ESCOLHENDO", row.position + Vector2(row.size.x * 0.9, row.size.y * 0.5 + 5.0), 11, Color(0.2, 1.0, 0.52) if is_ready_entry else Color(1.0, 0.82, 0.24))
 
-	var panel = Rect2(viewport.x * 0.5 - 200, viewport.y * 0.5 - 120, 400, 240)
-	_draw_holo_panel(panel, Color(0.85, 0.3, 1.0), true, 0.6)
+
+func _draw_lobby_online_host(viewport: Vector2) -> void :
+	var accent: = Color(0.85, 0.3, 1.0)
+	_draw_online_header(viewport, "SALA ONLINE - HOST", accent, "acompanhe entradas e inicie quando a equipe estiver pronta")
+
+	var panel = Rect2(viewport.x * 0.5 - min(1040.0, viewport.x * 0.86) * 0.5, viewport.y * 0.17, min(1040.0, viewport.x * 0.86), viewport.y * 0.68)
+	_draw_holo_panel(panel, accent, true, 0.58)
+
+	var room_title: = online_room_name if online_room_name != "" else "Sala " + (online_room_code if online_room_code != "" else "Online")
+	draw_string(font, panel.position + Vector2(34.0, 44.0), room_title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, panel.size.x * 0.56, _fit_text_size(room_title.to_upper(), panel.size.x * 0.56, 22, 14), Color.WHITE)
+	var code_text: = "CODIGO " + (online_room_code if online_room_code != "" else "------")
+	var lock_text: = "PRIVADA" if online_room_locked else "PUBLICA"
+	_draw_centered(code_text, panel.position + Vector2(panel.size.x * 0.72, 39.0), 15, Color(0.0, 1.0, 0.82))
+	_draw_centered(lock_text, panel.position + Vector2(panel.size.x * 0.9, 39.0), 13, Color(1.0, 0.82, 0.24) if online_room_locked else Color(0.0, 1.0, 0.82))
 
 	var status = online_status
 	if status == "":
-		if online_connected:
-			status = "CONECTADO AO SERVIDOR"
-		else:
-			status = "INICIANDO SERVIDOR..."
+		status = "CONECTADO AO SERVIDOR" if online_connected else "INICIANDO SERVIDOR..."
+	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
 
-	_draw_centered(status, panel.position + Vector2(200, 45), 18, Color.WHITE)
-
-	if online_room_code != "":
-		_draw_centered("CODIGO DA SALA: " + online_room_code, panel.position + Vector2(200, 75), 14, Color(0.85, 0.3, 1.0))
+	var roster_rect: = Rect2(panel.position.x + 34.0, panel.position.y + 112.0, panel.size.x - 68.0, panel.size.y - 226.0)
+	_draw_online_lobby_roster(roster_rect, accent)
 
 	var client_ready = _online_client_ready()
 	var active_players: = online_lobby_active_player_count if online_lobby_active_player_count > 0 else online_lobby_connected_count
 	var spectators: = online_lobby_spectator_count
-	var info_text = ""
-	if online_lobby_connected_count < ONLINE_MIN_PLAYERS:
-		info_text = "AGUARDANDO JOGADOR (%d/%d)" % [online_lobby_connected_count, ONLINE_MAX_PLAYERS]
-	else:
-		if client_ready:
-			info_text = "EQUIPE PRONTA! %d JOG. / %d ESP." % [active_players, spectators]
-		else:
-			info_text = "AGUARDANDO EQUIPE: %d/%d PRONTOS" % [online_lobby_ready_count, maxi(0, active_players - 1)]
+	var info_text = "AGUARDANDO JOGADOR (%d/%d)" % [online_lobby_connected_count, ONLINE_MAX_PLAYERS] if online_lobby_connected_count < ONLINE_MIN_PLAYERS else ("EQUIPE PRONTA! %d JOG. / %d ESP." % [active_players, spectators] if client_ready else "AGUARDANDO EQUIPE: %d/%d PRONTOS" % [online_lobby_ready_count, maxi(0, active_players - 1)])
+	_draw_centered(info_text, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 86.0), 14, Color(0.0, 1.0, 0.82) if client_ready else Color(1.0, 0.82, 0.24))
 
-	_draw_centered(info_text, panel.position + Vector2(200, 105), 14, Color(0.0, 1.0, 0.82) if client_ready else Color(1.0, 0.8, 0.2))
-
-	buttons["lobby_start"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
-	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 200, 320, 40)
+	buttons["lobby_start"] = Rect2(panel.position.x + 34.0, panel.end.y - 66.0, panel.size.x * 0.56, 46.0)
+	buttons["lobby_cancel"] = Rect2(panel.end.x - panel.size.x * 0.32 - 34.0, panel.end.y - 66.0, panel.size.x * 0.32, 46.0)
 
 	var can_start = online_lobby_connected_count >= ONLINE_MIN_PLAYERS and client_ready
 	var start_color = Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 0) else (Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5))
 	_draw_big_button(buttons["lobby_start"], "INICIAR JOGO", Color(0.1, 0.1, 0.1, 0.9), start_color)
-	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 1) else Color(1.0, 0.2, 0.2))
+	_draw_big_button(buttons["lobby_cancel"], "CANCELAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 1) else Color(1.0, 0.2, 0.2))
 
 func _draw_lobby_online_client(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
-	_draw_glitch_title("SALA ONLINE - CLIENT", Vector2(viewport.x * 0.5, 64), 34, Color(0.0, 1.0, 0.82))
-	for key in buttons.keys():
-		if String(key).begins_with("room_select_"):
-			buttons.erase(key)
-	buttons.erase("room_refresh")
+	var accent: = Color(0.0, 1.0, 0.82)
+	_draw_online_header(viewport, "SALA ONLINE - CLIENT", accent, "aguarde o host iniciar ou alterne para espectador")
+	if not online_connected and online_room_code == "":
+		_draw_online_find_room(viewport)
+		return
 
-	var panel = Rect2(viewport.x * 0.5 - 230, viewport.y * 0.5 - 150, 460, 300)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.6)
+	var panel = Rect2(viewport.x * 0.5 - min(980.0, viewport.x * 0.86) * 0.5, viewport.y * 0.17, min(980.0, viewport.x * 0.86), viewport.y * 0.68)
+	_draw_holo_panel(panel, accent, true, 0.58)
 
+	var room_title: = online_room_name if online_room_name != "" else "Sala " + (online_room_code if online_room_code != "" else "Online")
+	draw_string(font, panel.position + Vector2(34.0, 44.0), room_title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, panel.size.x * 0.56, _fit_text_size(room_title.to_upper(), panel.size.x * 0.56, 22, 14), Color.WHITE)
+	if online_room_code != "":
+		_draw_centered("CODIGO " + online_room_code, panel.position + Vector2(panel.size.x * 0.76, 39.0), 15, accent)
 	var status = online_status
 	if status == "":
 		status = "CONECTADO" if online_connected else "BUSCANDO SALA..."
-	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 45), 18, Color.WHITE)
+	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
 
-	if not online_connected and online_room_code == "":
-		buttons.erase("lobby_ready")
-		buttons.erase("lobby_spectator")
-		var list_top: float = panel.position.y + 76.0
-		var row_h: float = 42.0
-		if online_room_list.is_empty():
-			_draw_centered("Nenhuma sala aberta agora.", panel.position + Vector2(panel.size.x * 0.5, 112.0), 15, Color(1.0, 0.8, 0.2))
-			_draw_centered("Atualize quando o host criar a sala.", panel.position + Vector2(panel.size.x * 0.5, 136.0), 12, Color(0.76, 0.92, 1.0, 0.82))
-		else:
-			var visible_count: int = mini(4, online_room_list.size())
-			for i in range(visible_count):
-				var room: Dictionary = Dictionary(online_room_list[i])
-				var row: = Rect2(panel.position.x + 36.0, list_top + i * (row_h + 8.0), panel.size.x - 72.0, row_h)
-				buttons["room_select_" + str(i)] = row
-				var selected: bool = is_gamepad_active and lobby_client_selected == i
-				var code: = str(room.get("code", "------"))
-				var players: = int(room.get("players", 1))
-				var max_players: = int(room.get("maxPlayers", ONLINE_MAX_PLAYERS))
-				var label: = "SALA " + code + "    " + str(players) + "/" + str(max_players)
-				_draw_big_button(row, label, Color(0.02, 0.12, 0.11, 0.9), Color.WHITE if selected else Color(0.0, 1.0, 0.82))
-		var refresh_index: int = online_room_list.size()
-		var cancel_index: int = online_room_list.size() + 1
-		buttons["room_refresh"] = Rect2(panel.position.x + 40.0, panel.end.y - 90.0, 170.0, 40.0)
-		buttons["lobby_cancel"] = Rect2(panel.end.x - 210.0, panel.end.y - 90.0, 170.0, 40.0)
-		_draw_big_button(buttons["room_refresh"], "ATUALIZAR", Color(0.04, 0.14, 0.13, 0.9), Color.WHITE if (is_gamepad_active and lobby_client_selected == refresh_index) else Color(0.0, 1.0, 0.82))
-		_draw_big_button(buttons["lobby_cancel"], "VOLTAR", Color(0.1, 0.05, 0.05, 0.9), Color.WHITE if (is_gamepad_active and lobby_client_selected == cancel_index) else Color(1.0, 0.2, 0.2))
-		return
+	var roster_rect: = Rect2(panel.position.x + 34.0, panel.position.y + 112.0, panel.size.x - 68.0, panel.size.y - 228.0)
+	_draw_online_lobby_roster(roster_rect, accent)
 
-	if online_room_code != "":
-		_draw_centered("CODIGO DA SALA: " + online_room_code, panel.position + Vector2(panel.size.x * 0.5, 75), 14, Color(0.0, 1.0, 0.82))
+	var active_players: = online_lobby_active_player_count if online_lobby_active_player_count > 0 else online_lobby_connected_count
+	var info_text = "AGUARDANDO CONEXAO (%d/%d JOGADORES)" % [online_lobby_connected_count, ONLINE_MAX_PLAYERS] if online_lobby_connected_count < ONLINE_MIN_PLAYERS else "SALA ONLINE: %d JOG. / %d ESP." % [active_players, online_lobby_spectator_count]
+	_draw_centered(info_text, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 90.0), 14, Color.WHITE)
 
-	var info_text = ""
-	if online_lobby_connected_count < ONLINE_MIN_PLAYERS:
-		info_text = "AGUARDANDO CONEXAO (%d/%d JOGADORES)" % [online_lobby_connected_count, ONLINE_MAX_PLAYERS]
-	else:
-		var active_players: = online_lobby_active_player_count if online_lobby_active_player_count > 0 else online_lobby_connected_count
-		info_text = "SALA ONLINE: %d JOG. / %d ESP." % [active_players, online_lobby_spectator_count]
-	_draw_centered(info_text, panel.position + Vector2(panel.size.x * 0.5, 105), 14, Color.WHITE)
-
-	buttons["lobby_ready"] = Rect2(panel.position.x + 40, panel.position.y + 140, 320, 50)
-	buttons["lobby_spectator"] = Rect2(panel.position.x + 40, panel.position.y + 195, 320, 40)
-	buttons["lobby_cancel"] = Rect2(panel.position.x + 40, panel.position.y + 240, 320, 40)
+	buttons["lobby_ready"] = Rect2(panel.position.x + 34.0, panel.end.y - 66.0, panel.size.x * 0.42, 46.0)
+	buttons["lobby_spectator"] = Rect2(panel.position.x + panel.size.x * 0.49, panel.end.y - 66.0, panel.size.x * 0.24, 46.0)
+	buttons["lobby_cancel"] = Rect2(panel.end.x - panel.size.x * 0.2 - 34.0, panel.end.y - 66.0, panel.size.x * 0.2, 46.0)
 
 	var ready_bg = Color(0.05, 0.2, 0.1, 0.9) if local_player_ready else Color(0.1, 0.1, 0.1, 0.9)
-	var ready_border = Color(0.0, 1.0, 0.82) if online_connected else Color(0.5, 0.5, 0.5)
-	var ready_text = "ESPECTADOR - SEM ESCOLHAS" if online_local_spectator else ("PRONTO CONFIRMADO!" if online_local_ready_confirmed else ("CONFIRMANDO..." if online_lobby_ready_pending else ("ESTOU PRONTO!" if local_player_ready else "MARCAR COMO PRONTO")))
-	var spectator_text: = "JOGAR NA RUN" if online_local_spectator else "ASSISTIR COMO ESPECTADOR"
+	var ready_border = accent if online_connected else Color(0.5, 0.5, 0.5)
+	var ready_text = "ESPECTADOR" if online_local_spectator else ("PRONTO CONFIRMADO" if online_local_ready_confirmed else ("CONFIRMANDO..." if online_lobby_ready_pending else ("ESTOU PRONTO" if local_player_ready else "MARCAR PRONTO")))
+	var spectator_text: = "JOGAR" if online_local_spectator else "ASSISTIR"
 
 	_draw_big_button(buttons["lobby_ready"], ready_text, ready_bg, ready_border if not online_local_spectator else Color(0.45, 0.62, 0.7))
 	_draw_big_button(buttons["lobby_spectator"], spectator_text, Color(0.04, 0.12, 0.18, 0.9), Color.WHITE if (is_gamepad_active and lobby_client_selected == 1) else Color(0.35, 0.85, 1.0))
-	_draw_big_button(buttons["lobby_cancel"], "CANCELAR E SAIR", Color(0.1, 0.05, 0.05, 0.9), Color.WHITE if (is_gamepad_active and lobby_client_selected == 2) else Color(1.0, 0.2, 0.2))
+	_draw_big_button(buttons["lobby_cancel"], "SAIR", Color(0.1, 0.05, 0.05, 0.9), Color.WHITE if (is_gamepad_active and lobby_client_selected == 2) else Color(1.0, 0.2, 0.2))
 
 func _draw_multiplayer_preload(viewport: Vector2) -> void :
 	_draw_holo_background(viewport, null, Color(0.2, 0.82, 1.0))
@@ -59521,12 +60566,7 @@ func _draw_multiplayer_syncing(viewport: Vector2) -> void :
 
 func _handle_lobby_online_host_touch(pos: Vector2, viewport: Vector2) -> void :
 	if buttons.get("lobby_start", Rect2()).has_point(pos):
-		var client_ready = _online_client_ready()
-		var can_start = online_lobby_connected_count >= ONLINE_MIN_PLAYERS and client_ready
-		if can_start:
-			_net_report_count_out("control", 32)
-			_net_report_event("host_request_start_game_out_touch", "connected=%d ready=%d" % [online_lobby_connected_count, online_lobby_ready_count])
-			rpc_id(1, "_host_request_start_game")
+		_send_host_start_request()
 	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
 		_leave_multiplayer()
 

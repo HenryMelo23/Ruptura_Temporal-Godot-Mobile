@@ -259,7 +259,7 @@ func _run_client_loop() -> void:
 func _host_lobby_and_manifest_flow() -> void:
 	if not requested_start and game.online_lobby_connected_count == 2 and game.online_lobby_ready_count >= 1:
 		requested_start = true
-		game.rpc_id(1, "_host_request_start_game")
+		game._send_host_start_request()
 		return
 	_manifest_selection_flow(1, 1)
 
@@ -267,10 +267,9 @@ func _host_lobby_and_manifest_flow() -> void:
 func _client_lobby_and_manifest_flow() -> void:
 	if not client_marked_ready and game.online_connected and game.mode == "lobby_online_client":
 		client_marked_ready = true
-		game.local_player_ready = true
-		game.rpc_id(1, "_toggle_ready", true)
+		game._set_lobby_ready(true)
 		return
-	_manifest_selection_flow(2, 2)
+	_manifest_selection_flow(2, 3)
 
 
 func _manifest_selection_flow(manifestation: int, aura: int) -> void:

@@ -160,7 +160,7 @@ func _run_host_loop() -> void:
 		if not requested_start and game.online_lobby_connected_count == 3 and game.online_lobby_ready_count >= 2:
 			print("[HOST] Both clients are ready. Requesting start game...")
 			requested_start = true
-			game.rpc_id(1, "_host_request_start_game")
+			game._send_host_start_request()
 
 		# Manifestacao primeiro, espectro depois. So o espectro conta como pronto final.
 		if game.mode == "manifest_mp" and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION and not manifest_reveal_requested:

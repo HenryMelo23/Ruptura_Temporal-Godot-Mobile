@@ -125,6 +125,8 @@ if ($Deep) {
         Where-Object {
             $_.FullName -notmatch '[\\/]\.godot[\\/]' -and
             $_.FullName -notmatch '[\\/]\.git[\\/]' -and
+            $_.FullName -notmatch '[\\/]\.agent_logs[\\/]' -and
+            $_.FullName -notmatch '[\\/]\.codex[\\/]' -and
             $_.FullName -notmatch '[\\/]android[\\/]' -and
             $_.FullName -notmatch '[\\/]builds[\\/]'
         } |

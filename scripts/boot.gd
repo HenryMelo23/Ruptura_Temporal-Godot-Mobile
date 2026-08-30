@@ -66,8 +66,8 @@ func _complete_main_load_after_visual_tick() -> void :
 
 
 func _load_boot_fonts() -> void :
-	var loaded_title: Resource = load("res://Game Base/Ruptura_Temporal-APOLO2.0/Texto/Top_Menu.otf")
-	var loaded_body: Resource = load("res://Game Base/Ruptura_Temporal-APOLO2.0/Texto/World.otf")
+	var loaded_title: Resource = load("res://assets/fonts/Top_Menu.otf")
+	var loaded_body: Resource = load("res://assets/fonts/World.otf")
 	if loaded_title is Font:
 		title_font = loaded_title
 	else:

@@ -10,7 +10,9 @@ var _max_lifetime: float = 0.8
 var _is_playing: bool = false
 
 func play_at(pos: Vector2, quality: String = "HIGH") -> void:
-	global_position = pos
+	position = pos
+	set_meta("bombastica_world_origin", pos)
+	set_meta("bombastica_origin_space", "world")
 	_is_playing = true
 	_life_timer = 0.0
 	show()

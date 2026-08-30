@@ -38,6 +38,13 @@ func _run() -> void:
 	_check(game.app_update_popup_visible, "new version did not open the startup popup")
 	_check(game.app_update_status == "available", "new version status is incorrect")
 	_check(game._app_update_button_rects(Vector2(1280, 720)).size() == 2, "update choice does not expose update/later actions")
+	game.app_update_selected = 1
+	game.ui_input_block_until_msec = Time.get_ticks_msec() + 2000
+	game._activate_app_update_selection()
+	_check(not game.app_update_popup_visible, "optional update later action did not close the popup")
+	_check(not game._ui_input_blocked(), "optional update later action kept the menu input blocked")
+	game._apply_app_update_manifest(payload)
+	_check(game.app_update_popup_visible, "new version did not reopen after optional dismissal")
 
 	var update_dir := ProjectSettings.globalize_path("user://updates")
 	DirAccess.make_dir_recursive_absolute(update_dir)
@@ -78,6 +85,19 @@ func _run() -> void:
 	current_payload["version_code"] = game.GAME_VERSION_CODE
 	game._apply_app_update_manifest(current_payload)
 	_check(not game.app_update_popup_visible, "current version offered an unnecessary update")
+	var published_payload := {
+		"available": true,
+		"version": "2.0.33",
+		"version_code": 23300,
+		"size": UPDATE_BYTES.to_utf8_buffer().size(),
+		"sha256": UPDATE_SHA256,
+		"notes": ["Versao publicada atual"],
+		"mandatory": false,
+		"filename": update_url.get_file()
+	}
+	published_payload[game._app_update_download_url_field()] = update_url
+	game._apply_app_update_manifest(published_payload)
+	_check(not game.app_update_popup_visible, "published 2.0.33 manifest still blocks the local 2.0.33 menu")
 	game.app_update_popup_visible = false
 	var original_platform: String = game.ui_platform_override
 	game.ui_platform_override = game.UI_PLATFORM_DESKTOP
