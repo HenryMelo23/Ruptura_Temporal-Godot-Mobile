@@ -5,8 +5,8 @@ const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.32"
-const GAME_VERSION_CODE: = 23200
+const GAME_VERSION: = "2.0.33"
+const GAME_VERSION_CODE: = 23300
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
 const STARTUP_THANKS_FRAME_PATH_FORMAT: String = "res://assets/videos/startup_teaser_frames/frame_%04d.webp"
@@ -371,6 +371,7 @@ const SHOP_TELEMETRY_DIR: = "user://shop_telemetry"
 const SHOP_MP_REQUEST_TIME: = 10.0
 const BOSS_MP_REQUEST_TIME: = 10.0
 const PAUSE_MP_REQUEST_TIME: = 10.0
+const PHASE_MP_REQUEST_TIME: = 10.0
 const ONLINE_MIN_PLAYERS: = 2
 const ONLINE_MAX_PLAYERS: = 3
 const ONLINE_READY_RESEND_INTERVAL_MS: = 350
@@ -1118,6 +1119,26 @@ const BOSS5_MEMORY_RESOURCE: = "res://Game Base/memoria_predatoria_umbra.json"
 const BOSS5_DQN_WEIGHTS_PATH: = "res://assets/weights/umbra_dqn_weights.json"
 const BOSS5_MEMORY_USER: = "user://memoria_predatoria_umbra_mobile.json"
 const BOSS5_ACTIONS: = ["FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE", "TELEPORTE_JUKE", "TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO", "VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "PRAGA_RATOS", "LASER_SOBRECARGA", "CAMINHO_ESPINHOS", "NENHUMA"]
+const APOLO_PHASE5_ARCH_PATH: = "res://Game Base/Ruptura_Temporal-APOLO2.0/saves/apolo_arq.json"
+const APOLO_PHASE5_CARD_MEMORY_PATH: = "res://Game Base/Ruptura_Temporal-APOLO2.0/saves/memoria_cartas_apolo.json"
+const APOLO_PHASE5_MANIFEST_PROFILES: = {
+	"eletrica": {"speed": 10.0, "lead": 0.70, "ideal": 330.0},
+	"lacerante": {"speed": 18.0, "lead": 0.34, "ideal": 230.0},
+	"prismatica": {"speed": 24.0, "lead": 0.95, "ideal": 390.0},
+	"retornante": {"speed": 12.0, "lead": 0.55, "ideal": 310.0},
+	"parasitica": {"speed": 10.0, "lead": 0.62, "ideal": 360.0},
+	"condutora": {"speed": 14.0, "lead": 0.78, "ideal": 340.0},
+	"gravitante": {"speed": 8.0, "lead": 0.45, "ideal": 300.0},
+	"ancorada": {"speed": 11.0, "lead": 0.38, "ideal": 260.0},
+	"cartografica": {"speed": 16.0, "lead": 0.72, "ideal": 350.0},
+	"mnesica": {"speed": 13.0, "lead": 0.66, "ideal": 320.0},
+	"ressonante": {"speed": 15.0, "lead": 0.58, "ideal": 315.0},
+	"contratual": {"speed": 12.0, "lead": 0.50, "ideal": 300.0},
+	"acorrentada": {"speed": 13.0, "lead": 0.42, "ideal": 250.0},
+	"eclipsada": {"speed": 17.0, "lead": 0.46, "ideal": 270.0},
+	"bombastica": {"speed": 11.0, "lead": 0.52, "ideal": 285.0},
+	"necronada": {"speed": 12.0, "lead": 0.48, "ideal": 300.0}
+}
 const PHASE4_RIFT_WARNING: = 0.85
 const PHASE4_RIFT_ACTIVE_TIME: = 2.8
 const PHASE4_CHRONO_WARNING: = 1.25
@@ -2987,6 +3008,21 @@ var boss5_predatory_mods: Array = []
 var boss5_profile_confidence = 0.0
 var boss5_last_reward_action = ""
 var boss5_save_timer = 0.0
+var apolo_phase5_exhibition_enabled: bool = false
+var apolo_phase5_exhibition_move: Vector2 = Vector2.ZERO
+var apolo_phase5_exhibition_aim: Vector2 = Vector2.RIGHT
+var apolo_phase5_exhibition_target: Vector2 = Vector2.ZERO
+var apolo_phase5_exhibition_dash_target: Vector2 = Vector2.ZERO
+var apolo_phase5_exhibition_state: String = ""
+var apolo_phase5_exhibition_timer: float = 0.0
+var apolo_phase5_exhibition_safe_grid: Dictionary = {}
+var apolo_phase5_exhibition_survival_frames: int = 0
+var apolo_phase5_exhibition_hits_taken: int = 0
+var apolo_phase5_exhibition_damage_done: float = 0.0
+var apolo_phase5_exhibition_last_hp: int = 0
+var apolo_phase5_exhibition_last_boss_hp: float = 0.0
+var apolo_phase5_exhibition_arch: Dictionary = {}
+var apolo_phase5_exhibition_card_memory: Dictionary = {}
 var anchors = []
 var prisms = []
 var orbitals = []
@@ -7480,6 +7516,8 @@ func _load_textures() -> void :
 	textures["enemy_common_phase_1"] = [_safe_load(base + "Inimig1.png"), _safe_load(base + "Inimig2.png")]
 	textures["enemy_common_phase_2_left"] = [_safe_load(base + "inimigo_direita2-1.png"), _safe_load(base + "inimigo_direita2-2.png")]
 	textures["enemy_common_phase_2_right"] = [_safe_load(base + "inimigo_esquerda2-1.png"), _safe_load(base + "inimigo_esquerda2-2.png")]
+	textures["enemy_phase_2_kamikaze"] = [_safe_load(base + "pinguim_kamikaze_01.png"), _safe_load(base + "pinguim_kamikaze_02.png")]
+	textures["enemy_phase_2_pyro"] = [_safe_load(base + "pinguim_incendiario_01.png"), _safe_load(base + "pinguim_incendiario_02.png")]
 	textures["enemy_phase_3_left"] = [_safe_load(base + "inimigo_esquerda3-1.png"), _safe_load(base + "inimigo_esquerda3-2.png")]
 	textures["enemy_phase_3_right"] = [_safe_load(base + "inimigo_direita3-1.png"), _safe_load(base + "inimigo_direita3-2.png")]
 	textures["enemy_phase_3_bullet"] = [_safe_load(base + "Disp_inimigo3_1.png"), _safe_load(base + "Disp_inimigo3_2.png")]
@@ -11617,6 +11655,7 @@ func _update_game(delta: float) -> void :
 	boss_tp_stun_timer = max(0.0, boss_tp_stun_timer - delta)
 	if not is_dead and not _spectator_controls_locked():
 		if player_stun_timer <= 0.0 and not player_locked:
+			_update_apolo_phase5_exhibition(delta)
 			var move = _read_move()
 			if lacerante_preparing:
 				move = Vector2.ZERO
@@ -12174,8 +12213,334 @@ func _spawn_insane_echo_visual(pos: Vector2, direction: Vector2) -> void :
 		insane_echo_visuals.pop_front()
 
 
+func start_apolo_phase5_exhibition(manifestation_index: int = -1) -> void:
+	var target_manifestation: int = selected_manifestation
+	if manifestation_index >= 0:
+		target_manifestation = clampi(manifestation_index, 0, MANIFESTATIONS.size() - 1)
+		var unlock_key: String = String(MANIFESTATIONS[target_manifestation].get("key", "eletrica"))
+		unlocked_manifestation_ids[unlock_key] = true
+		if unlock_key == "retornante":
+			retornante_unlocked = true
+		_set_selected_manifestation(target_manifestation, false)
+	_start_game()
+	_finish_startup_thanks()
+	_set_selected_manifestation(target_manifestation, false)
+	manifestation_key = String(MANIFESTATIONS[selected_manifestation].get("key", "eletrica"))
+	player_damage = _manifestation_base_damage()
+	player_attack_interval = _manifestation_attack_interval()
+	_advance_to_phase(5)
+	mode = "game"
+	current_phase = 5
+	boss_ready = true
+	boss_active = true
+	boss_dead = false
+	boss_entry_timer = 0.0
+	boss_name = "UMBRA"
+	boss_hp_max = _boss_hp_for_phase(5)
+	boss_hp = boss_hp_max
+	boss_pos = WORLD_SIZE * 0.5 + Vector2(280.0, -40.0)
+	boss5_target = boss_pos
+	player_pos = WORLD_SIZE * 0.5 + Vector2(-280.0, 115.0)
+	petro_active = false
+	enemies.clear()
+	enemy_bullets.clear()
+	bullets.clear()
+	phase5_hazards.clear()
+	phase5_rats.clear()
+	phase5_telegraphs.clear()
+	heal_orbs.clear()
+	effects.clear()
+	last_attack_time = time_alive - _current_attack_interval()
+	last_dash_time = time_alive - _current_dash_cooldown()
+	boss5_action_timer = 0.0
+	boss5_decision_timer = 0.0
+	boss5_transmute_cooldown = 0.0
+	for key in boss5_ability_cooldowns.keys():
+		boss5_ability_cooldowns[key] = 0.0
+	phase5_player_history.clear()
+	for i in range(10):
+		phase5_player_history.append(player_pos + Vector2(float(i) * 7.0, sin(float(i)) * 10.0))
+	_load_umbra_mobile_memory()
+	_load_apolo_phase5_memory()
+	_configure_apolo_phase5_exhibition()
+
+
+func _configure_apolo_phase5_exhibition() -> void:
+	apolo_phase5_exhibition_enabled = true
+	apolo_phase5_exhibition_move = Vector2.ZERO
+	apolo_phase5_exhibition_aim = (boss_pos - player_pos).normalized()
+	apolo_phase5_exhibition_target = player_pos
+	apolo_phase5_exhibition_dash_target = player_pos
+	apolo_phase5_exhibition_state = "APOLO ASSUMIU CONTROLE"
+	apolo_phase5_exhibition_timer = 0.0
+	apolo_phase5_exhibition_safe_grid.clear()
+	apolo_phase5_exhibition_survival_frames = 0
+	apolo_phase5_exhibition_hits_taken = 0
+	apolo_phase5_exhibition_damage_done = 0.0
+	apolo_phase5_exhibition_last_hp = player_hp
+	apolo_phase5_exhibition_last_boss_hp = boss_hp
+
+
+func _disable_apolo_phase5_exhibition() -> void:
+	apolo_phase5_exhibition_enabled = false
+	apolo_phase5_exhibition_move = Vector2.ZERO
+	apolo_phase5_exhibition_state = ""
+
+
+func _apolo_phase5_exhibition_active() -> bool:
+	return apolo_phase5_exhibition_enabled and mode == "game" and current_phase == 5 and boss_active and not boss_dead and boss_hp > 0.0 and not is_dead
+
+
+func _load_apolo_phase5_memory() -> void:
+	if apolo_phase5_exhibition_arch.is_empty():
+		apolo_phase5_exhibition_arch = _read_json_dict(APOLO_PHASE5_ARCH_PATH)
+	if apolo_phase5_exhibition_card_memory.is_empty():
+		apolo_phase5_exhibition_card_memory = _read_json_dict(APOLO_PHASE5_CARD_MEMORY_PATH)
+
+
+func _update_apolo_phase5_exhibition(delta: float) -> void:
+	if not _apolo_phase5_exhibition_active():
+		apolo_phase5_exhibition_move = Vector2.ZERO
+		return
+	apolo_phase5_exhibition_timer += delta
+	_load_apolo_phase5_memory()
+	_apolo_phase5_record_grid_feedback()
+	apolo_phase5_exhibition_target = _apolo_phase5_find_safe_target()
+	apolo_phase5_exhibition_move = (apolo_phase5_exhibition_target - player_pos).limit_length(1.0)
+	var profile: Dictionary = _apolo_phase5_manifest_profile()
+	var predicted_boss: Vector2 = (boss_pos + boss5_velocity * float(profile.get("lead", 0.55))).clamp(Vector2(60.0, 60.0), WORLD_SIZE - Vector2(60.0, 60.0))
+	apolo_phase5_exhibition_aim = (predicted_boss - player_pos).normalized()
+	if apolo_phase5_exhibition_aim.length() <= 0.05:
+		apolo_phase5_exhibition_aim = Vector2.RIGHT
+	var immediate_danger: float = _apolo_phase5_danger_at(player_pos, 0.18)
+	if immediate_danger > 720.0 and _apolo_phase5_dash_available():
+		apolo_phase5_exhibition_dash_target = apolo_phase5_exhibition_target
+		_try_dash_to_world(apolo_phase5_exhibition_dash_target)
+	if time_alive - last_attack_time >= _current_attack_interval():
+		_try_attack()
+	var dist_to_goal: float = player_pos.distance_to(apolo_phase5_exhibition_target)
+	if immediate_danger > 360.0:
+		apolo_phase5_exhibition_state = "EVASAO"
+	elif dist_to_goal > 55.0:
+		apolo_phase5_exhibition_state = "REPOSICIONANDO"
+	else:
+		apolo_phase5_exhibition_state = "MIRA PREDITIVA"
+	if player_hp <= 0 or boss_hp <= 0.0:
+		_disable_apolo_phase5_exhibition()
+
+
+func _apolo_phase5_manifest_profile() -> Dictionary:
+	var key: String = manifestation_key
+	if APOLO_PHASE5_MANIFEST_PROFILES.has(key):
+		return Dictionary(APOLO_PHASE5_MANIFEST_PROFILES[key])
+	return {"speed": 12.0, "lead": 0.55, "ideal": 315.0}
+
+
+func _apolo_phase5_dash_available() -> bool:
+	if _teleport_effect_blocks_new_dash() or _is_player_calcified() or _player_silenced():
+		return false
+	if manifestation_key == "lacerante":
+		return _lacerante_tp_available()
+	return time_alive - last_dash_time >= _current_dash_cooldown()
+
+
+func _apolo_phase5_record_grid_feedback() -> void:
+	var key: String = _apolo_phase5_grid_key(player_pos)
+	var rec: Dictionary = Dictionary(apolo_phase5_exhibition_safe_grid.get(key, {"safe": 0.0, "hit": 0.0}))
+	if player_hp < apolo_phase5_exhibition_last_hp:
+		rec["hit"] = float(rec.get("hit", 0.0)) + float(apolo_phase5_exhibition_last_hp - player_hp)
+		apolo_phase5_exhibition_hits_taken += 1
+	else:
+		rec["safe"] = float(rec.get("safe", 0.0)) + 1.0
+		apolo_phase5_exhibition_survival_frames += 1
+	apolo_phase5_exhibition_safe_grid[key] = rec
+	if boss_hp < apolo_phase5_exhibition_last_boss_hp:
+		apolo_phase5_exhibition_damage_done += apolo_phase5_exhibition_last_boss_hp - boss_hp
+	apolo_phase5_exhibition_last_hp = player_hp
+	apolo_phase5_exhibition_last_boss_hp = boss_hp
+
+
+func _apolo_phase5_grid_key(pos: Vector2) -> String:
+	return "%d:%d" % [int(floor(pos.x / 96.0)), int(floor(pos.y / 96.0))]
+
+
+func _apolo_phase5_find_safe_target() -> Vector2:
+	var heal_target: Dictionary = _apolo_phase5_heal_target()
+	if bool(heal_target.get("found", false)):
+		return Vector2(heal_target.get("pos", player_pos))
+	var profile: Dictionary = _apolo_phase5_manifest_profile()
+	var ideal: float = float(profile.get("ideal", 315.0))
+	var step: float = 96.0
+	var radius: int = 4
+	var base_col: int = int(floor(player_pos.x / step))
+	var base_row: int = int(floor(player_pos.y / step))
+	var best_pos: Vector2 = player_pos
+	var best_score: float = -INF
+	for col in range(base_col - radius, base_col + radius + 1):
+		for row in range(base_row - radius, base_row + radius + 1):
+			var candidate: Vector2 = Vector2((float(col) + 0.5) * step, (float(row) + 0.5) * step).clamp(Vector2(70.0, 70.0), WORLD_SIZE - Vector2(70.0, 70.0))
+			var move_dist: float = player_pos.distance_to(candidate)
+			if move_dist > 520.0:
+				continue
+			var boss_dist: float = candidate.distance_to(boss_pos)
+			var score: float = 1000.0
+			score -= move_dist * 0.36
+			score -= absf(boss_dist - ideal) * 0.85
+			if boss_dist < 145.0:
+				score -= 650.0
+			if candidate.x < 140.0 or candidate.y < 120.0 or candidate.x > WORLD_SIZE.x - 140.0 or candidate.y > WORLD_SIZE.y - 120.0:
+				score -= 240.0
+			score -= _apolo_phase5_danger_at(candidate, 0.42)
+			var memory: Dictionary = Dictionary(apolo_phase5_exhibition_safe_grid.get(_apolo_phase5_grid_key(candidate), {"safe": 0.0, "hit": 0.0}))
+			score += minf(180.0, float(memory.get("safe", 0.0)) * 0.16)
+			score -= float(memory.get("hit", 0.0)) * 14.0
+			if score > best_score:
+				best_score = score
+				best_pos = candidate
+	return best_pos
+
+
+func _apolo_phase5_heal_target() -> Dictionary:
+	if player_hp > int(float(player_hp_max) * 0.58):
+		return {"found": false}
+	var best_pos: Vector2 = Vector2.ZERO
+	var best_score: float = -INF
+	for orb_item in heal_orbs:
+		if not orb_item is Dictionary:
+			continue
+		var orb: Dictionary = orb_item
+		var pos: Vector2 = Vector2(orb.get("pos", player_pos))
+		var dist: float = player_pos.distance_to(pos)
+		var score: float = 600.0 - dist - _apolo_phase5_danger_at(pos, 0.28)
+		if score > best_score:
+			best_score = score
+			best_pos = pos
+	return {"found": best_score > -INF, "pos": best_pos}
+
+
+func _apolo_phase5_danger_at(pos: Vector2, forecast: float = 0.25) -> float:
+	var danger: float = 0.0
+	for bullet_item in enemy_bullets:
+		if not bullet_item is Dictionary:
+			continue
+		var bullet: Dictionary = bullet_item
+		var bpos: Vector2 = Vector2(bullet.get("pos", pos))
+		var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
+		var speed: float = 210.0 * float(bullet.get("speed_mult", 1.0))
+		var predicted: Vector2 = bpos + dir * speed * forecast
+		var dist: float = pos.distance_to(predicted)
+		var approach: float = maxf(0.0, (pos - bpos).normalized().dot(dir))
+		if dist < 190.0:
+			danger += pow(1.0 - dist / 190.0, 2.0) * (520.0 + approach * 260.0)
+	for rat_item in phase5_rats:
+		if not rat_item is Dictionary:
+			continue
+		var rat_pos: Vector2 = Vector2(Dictionary(rat_item).get("pos", pos))
+		var rat_dist: float = pos.distance_to(rat_pos)
+		if rat_dist < 170.0:
+			danger += pow(1.0 - rat_dist / 170.0, 2.0) * 420.0
+	for hazard_item in phase5_hazards:
+		if not hazard_item is Dictionary:
+			continue
+		danger += _apolo_phase5_hazard_danger(pos, Dictionary(hazard_item), forecast)
+	return danger
+
+
+func _apolo_phase5_hazard_danger(pos: Vector2, hazard: Dictionary, forecast: float) -> float:
+	var kind: String = String(hazard.get("kind", ""))
+	match kind:
+		"vortex", "siphon":
+			var center: Vector2 = Vector2(hazard.get("pos", WORLD_SIZE * 0.5))
+			var radius: float = float(hazard.get("radius_succao", hazard.get("radius", 190.0)))
+			var damage_radius: float = float(hazard.get("radius_dano", hazard.get("radius", 190.0)))
+			var dist: float = pos.distance_to(center)
+			var value: float = 0.0
+			if dist < radius:
+				value += (1.0 - dist / radius) * 220.0
+			if dist < damage_radius + 45.0:
+				value += (1.0 - dist / (damage_radius + 45.0)) * 760.0
+			return value
+		"miasma":
+			var center: Vector2 = Vector2(hazard.get("pos", pos))
+			var radius: float = float(hazard.get("radius", 220.0))
+			var dist: float = pos.distance_to(center)
+			return pow(1.0 - clampf(dist / maxf(1.0, radius + 70.0), 0.0, 1.0), 2.0) * 540.0
+		"discharge":
+			var origin: Vector2 = Vector2(hazard.get("pos", boss_pos))
+			var dir: Vector2 = Vector2(hazard.get("dir", Vector2.RIGHT)).normalized()
+			var dist: float = pos.distance_to(origin)
+			var radius: float = float(hazard.get("radius", 380.0))
+			var half_opening: float = float(hazard.get("abertura", 0.9)) * 0.5
+			var diff: float = absf(wrapf((pos - origin).angle() - dir.angle(), -PI, PI))
+			if dist <= radius + 50.0 and diff <= half_opening + 0.18:
+				return 620.0 * (1.0 - clampf(diff / maxf(0.01, half_opening + 0.18), 0.0, 1.0))
+		"thorns":
+			var width: float = float(hazard.get("current_width", hazard.get("max_width", 90.0)))
+			if String(hazard.get("phase", "")) == "crescimento":
+				width = float(hazard.get("max_width", width)) * 0.7
+			var segs: Array = hazard.get("segments", [])
+			var result: float = 0.0
+			for seg_item in segs:
+				if not seg_item is Dictionary:
+					continue
+				var seg: Dictionary = seg_item
+				var dist: float = _distance_to_segment(pos, Vector2(seg.get("a", pos)), Vector2(seg.get("b", pos)))
+				if dist < width * 0.5 + 55.0:
+					result = maxf(result, 680.0 * (1.0 - clampf(dist / (width * 0.5 + 55.0), 0.0, 1.0)))
+			return result
+		"sopro_artico":
+			var spears: Array = hazard.get("spears", [])
+			var result: float = 0.0
+			for spear_item in spears:
+				if not spear_item is Dictionary:
+					continue
+				var spear: Dictionary = spear_item
+				var spos: Vector2 = Vector2(spear.get("pos", boss_pos))
+				var vel: Vector2 = Vector2(spear.get("vel", Vector2.ZERO))
+				var dist: float = pos.distance_to(spos + vel * forecast)
+				if dist < 95.0:
+					result += (1.0 - dist / 95.0) * 440.0
+			return result
+		"umbra_overload_laser":
+			return _apolo_phase5_laser_danger_at(pos, hazard, forecast)
+	return 0.0
+
+
+func _apolo_phase5_laser_danger_at(pos: Vector2, hazard: Dictionary, forecast: float) -> float:
+	var fase: String = String(hazard.get("fase", ""))
+	var active: bool = fase.begins_with("laser_")
+	var num_beams: int = int(hazard.get("num_beams", 2))
+	var width: float = 38.0 if num_beams <= 2 else (32.0 if num_beams == 4 else 26.0)
+	var angle: float = float(hazard.get("angle", 0.0))
+	if active:
+		var direction_mult: float = -1.0 if fase == "laser_4" or fase == "laser_6_ccw" else 1.0
+		angle += _boss5_overload_laser_rotation_speed(num_beams) * forecast * direction_mult
+	else:
+		width += 18.0
+	var origin: Vector2 = WORLD_SIZE * 0.5
+	var to_pos: Vector2 = pos - origin
+	var best_dist: float = INF
+	var step_ang: float = TAU / float(maxi(1, num_beams))
+	for b in range(maxi(1, num_beams)):
+		var dir: Vector2 = Vector2.from_angle(angle + float(b) * step_ang)
+		var dot: float = to_pos.dot(dir)
+		if dot <= -80.0:
+			continue
+		var perp: float = (to_pos - dir * maxf(0.0, dot)).length()
+		best_dist = minf(best_dist, perp)
+	if best_dist >= INF:
+		return 0.0
+	var danger_band: float = width * 0.5 + (95.0 if active else 125.0)
+	if best_dist > danger_band:
+		return 0.0
+	var radial: float = clampf(to_pos.length() / 720.0, 0.2, 1.0)
+	return (1.0 - best_dist / danger_band) * 980.0 * radial
+
+
 
 func _read_move() -> Vector2:
+	if _apolo_phase5_exhibition_active():
+		return apolo_phase5_exhibition_move.normalized() if apolo_phase5_exhibition_move.length() > 1.0 else apolo_phase5_exhibition_move
 	var move = Vector2.ZERO
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 		move.x -= 1
@@ -12569,6 +12934,11 @@ func _place_anchor() -> void :
 
 
 func _aim_direction() -> Vector2:
+	if _apolo_phase5_exhibition_active():
+		if apolo_phase5_exhibition_aim.length() > 0.05:
+			return apolo_phase5_exhibition_aim.normalized()
+		if boss_active and boss_hp > 0.0:
+			return (boss_pos - player_pos).normalized()
 	var right_aim: = _right_aim_vector()
 	if right_aim.length() > 0.05:
 		return right_aim
@@ -15219,6 +15589,7 @@ func _reset_bombastica_state() -> void :
 
 func _update_bombastica_state(delta: float) -> void :
 	_update_bombastica_ultimate(delta)
+	_sync_bombastica_scene_vfx_positions()
 	for i in range(bombastica_q_recharges.size()):
 		bombastica_q_recharges[i] = maxf(0.0, float(bombastica_q_recharges[i]) - delta)
 	var expired_marks: Array = []
@@ -15835,6 +16206,24 @@ func _spawn_bombastica_link(a: Vector2, b: Vector2, color: Color) -> void :
 	bombastica_vfx.append({"kind": "link", "a": a, "b": b, "life": 0.42, "max": 0.42, "color": color, "seed": rng.randi()})
 
 
+func _bombastica_vfx_canvas_pos(world_pos: Vector2) -> Vector2:
+	return world_pos - _camera(get_viewport_rect().size)
+
+
+func _prepare_bombastica_scene_vfx(inst: Node2D, world_pos: Vector2) -> Vector2:
+	inst.set_meta("bombastica_world_origin", world_pos)
+	return _bombastica_vfx_canvas_pos(world_pos)
+
+
+func _sync_bombastica_scene_vfx_positions() -> void:
+	var camera: Vector2 = _camera(get_viewport_rect().size)
+	for pool in [bombastica_explosion_pool, bombastica_mine_pool, bombastica_ignition_pool]:
+		for node in pool:
+			if not is_instance_valid(node) or not node.has_meta("bombastica_world_origin"):
+				continue
+			node.global_position = Vector2(node.get_meta("bombastica_world_origin")) - camera
+
+
 func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: String) -> void :
 	var chain_depth: = 1 if source == "bombastic_chain_explosion" else 0
 	var seed_val: = rng.randi()
@@ -15863,7 +16252,7 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 			add_child(inst)
 			bombastica_mine_pool.append(inst)
 		if inst and inst.has_method("play_at"):
-			inst.play_at(center, quality, seed_val)
+			inst.play_at(_prepare_bombastica_scene_vfx(inst, center), quality, seed_val)
 	elif source == "bombastic_powder_ignition":
 		var inst: Node2D = null
 		for node in bombastica_ignition_pool:
@@ -15875,7 +16264,7 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 			add_child(inst)
 			bombastica_ignition_pool.append(inst)
 		if inst and inst.has_method("play_at"):
-			inst.play_at(center, quality)
+			inst.play_at(_prepare_bombastica_scene_vfx(inst, center), quality)
 	else:
 		# Main Bombástica Q Explosion / Chain Reaction Explosion
 		var inst: Node2D = null
@@ -15890,7 +16279,7 @@ func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: Str
 		if inst and inst.has_method("play_at"):
 			var red_flashes: bool = (get("gfx_reduced_flashes") == true)
 			var red_motion: bool = not gfx_screen_shake
-			inst.play_at(center, scale_mult, quality, chain_depth, seed_val, red_flashes, red_motion)
+			inst.play_at(_prepare_bombastica_scene_vfx(inst, center), scale_mult, quality, chain_depth, seed_val, red_flashes, red_motion)
 			
 	var life: = 0.58 if chain_depth > 0 else 0.52
 	bombastica_vfx.append({"kind": "explosion", "pos": center, "radius": radius, "life": life, "max": life, "source": source, "chain_depth": chain_depth, "seed": seed_val})
@@ -40589,6 +40978,38 @@ func _draw_preview_worm_path(start: Vector2, end: Vector2, t: float, color: Colo
 		last = pos
 
 
+func _draw_apolo_phase5_exhibition_world(camera: Vector2) -> void:
+	if not _apolo_phase5_exhibition_active():
+		return
+	var target: Vector2 = apolo_phase5_exhibition_target - camera
+	var player_screen: Vector2 = player_pos - camera
+	var aim_end: Vector2 = player_screen + apolo_phase5_exhibition_aim.normalized() * 150.0
+	draw_line(player_screen, aim_end, Color(0.2, 0.95, 1.0, 0.58), 2.0)
+	draw_arc(target, 24.0, 0.0, TAU, 32, Color(0.2, 1.0, 0.62, 0.86), 2.0)
+	draw_arc(target, 38.0, -time_alive * 2.2, -time_alive * 2.2 + PI * 1.15, 24, Color(1.0, 0.86, 0.24, 0.72), 2.0)
+	draw_circle(target, 4.0, Color(0.75, 1.0, 0.82, 0.95))
+
+
+func _draw_apolo_phase5_exhibition_overlay(viewport: Vector2) -> void:
+	if not apolo_phase5_exhibition_enabled or current_phase != 5:
+		return
+	var width: float = minf(360.0, viewport.x - 32.0)
+	var rect: Rect2 = Rect2(Vector2(18.0, 126.0), Vector2(width, 92.0))
+	var accent: Color = Color(0.18, 1.0, 0.62, 0.92)
+	draw_rect(rect, Color(0.015, 0.025, 0.02, 0.72), true)
+	draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.55), false, 2.0)
+	var title: String = "APOLO VS UMBRA"
+	var manifest_label: String = String(MANIFESTATIONS[selected_manifestation].get("name", manifestation_key)).to_upper()
+	var arch_label: String = "ARQ " + str(apolo_phase5_exhibition_arch.get("version", "?")) + " H" + str(apolo_phase5_exhibition_arch.get("hidden", "?"))
+	var damage_ratio: float = clampf(apolo_phase5_exhibition_damage_done / maxf(1.0, boss_hp_max), 0.0, 1.0)
+	draw_string(font, rect.position + Vector2(14.0, 22.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 28.0, _readable_text_size(13), Color(0.86, 1.0, 0.92, 0.95))
+	draw_string(font, rect.position + Vector2(14.0, 44.0), "%s  %s" % [manifest_label, apolo_phase5_exhibition_state], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 28.0, _readable_text_size(11), Color(0.7, 0.94, 1.0, 0.9))
+	draw_string(font, rect.position + Vector2(14.0, 66.0), "DANO %.1f%%  HITS %d  %s" % [damage_ratio * 100.0, apolo_phase5_exhibition_hits_taken, arch_label], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 28.0, _readable_text_size(11), Color(1.0, 0.86, 0.28, 0.9))
+	var bar_rect: Rect2 = Rect2(rect.position + Vector2(14.0, 76.0), Vector2(rect.size.x - 28.0, 5.0))
+	draw_rect(bar_rect, Color(0.08, 0.18, 0.14, 0.82), true)
+	draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * damage_ratio, bar_rect.size.y)), accent, true)
+
+
 func _draw_boss6_miasma_ultimate(camera: Vector2) -> void :
 	if not _boss6_miasma_ultimate_active():
 		return
@@ -40924,9 +41345,11 @@ func _draw_game(viewport: Vector2) -> void :
 		_draw_boss3_miasma_overlay(viewport, camera)
 	if _is_umbra_miasma_active():
 		_draw_umbra_miasma_overlay(viewport, camera)
+	_draw_apolo_phase5_exhibition_world(camera)
 	if preview_capture_mode:
 		return
 	_draw_hud(viewport)
+	_draw_apolo_phase5_exhibition_overlay(viewport)
 	_draw_boss1_rewind_overlay(viewport, camera)
 	if boss1_rewind_sequence.is_empty() and not _spectator_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown"):
 		if teleport_dragging:
@@ -41648,9 +42071,9 @@ func _draw_enemies(camera: Vector2) -> void :
 		if enemy["type"] == ENEMY_ATIRADOR:
 			modulate_color = Color(0.7, 0.86, 1.0, alpha)
 		elif enemy["type"] == ENEMY_KAMIKAZE:
-			modulate_color = Color(1.0, 0.47, 0.47, alpha)
+			modulate_color = Color(1.0, 1.0, 1.0, alpha)
 			if sin(time_alive * 12.0) > 0.0:
-				modulate_color = Color(1.0, 0.8, 0.8, alpha)
+				modulate_color = Color(1.0, 0.92, 0.9, alpha)
 		elif enemy["type"] == ENEMY_DEVOTO:
 			modulate_color = Color(0.76, 1.0, 0.56, alpha)
 		elif enemy["type"] == ENEMY_INCENSARIO:
@@ -41662,7 +42085,7 @@ func _draw_enemies(camera: Vector2) -> void :
 		elif enemy["type"] == ENEMY_SHIELD_REFLECTOR:
 			modulate_color = Color(0.62, 0.92, 1.0, alpha)
 		elif enemy["type"] == ENEMY_PYRO_PENGUIN:
-			modulate_color = Color(1.0, 0.2, 0.16, alpha)
+			modulate_color = Color(1.0, 1.0, 1.0, alpha)
 		elif enemy["type"] == ENEMY_NEXUS_CARTOGRAPHER:
 			modulate_color = Color(0.92, 0.24, 0.78, alpha)
 		elif enemy["type"] == ENEMY_NEXUS_CHRONOPHAGE:
@@ -41734,7 +42157,7 @@ func _draw_enemies(camera: Vector2) -> void :
 			_draw_entity(tex, draw_pos, visual_size, modulate_color, enemy_flip)
 		if float(enemy.get("crepuscular_ocaso_mark", 0.0)) > 0.0:
 			_draw_crepuscular_ocaso_cracks(draw_pos, visual_size, int(enemy.get("uid", 0)), float(enemy.get("crepuscular_ocaso_mark", 0.0)))
-		var enemy_bar_pos = pos + Vector2(-30, -48)
+		var enemy_bar_pos = draw_pos + Vector2(-30.0, -visual_size.y * 0.55 - 10.0)
 		var enemy_hp_ratio = float(enemy["hp"]) / float(enemy["max_hp"])
 		var tesla_bar_shock: = float(enemy.get("tesla_shock", 0.0))
 		var enemy_bar_draw_pos: Vector2 = enemy_bar_pos
@@ -45124,7 +45547,7 @@ func _enemy_draw_size(enemy: Dictionary) -> Vector2:
 		ENEMY_ATIRADOR:
 			return Vector2(82, 82)
 		ENEMY_KAMIKAZE:
-			return Vector2(64, 64)
+			return Vector2(78, 100)
 		ENEMY_DEVOTO:
 			return Vector2(62, 62)
 		ENEMY_COUT_ATTACK_SPEED:
@@ -45140,7 +45563,7 @@ func _enemy_draw_size(enemy: Dictionary) -> Vector2:
 		ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_REFRACTOR, ENEMY_NEXUS_WEAVER:
 			return Vector2(84, 84)
 		ENEMY_PYRO_PENGUIN:
-			return Vector2(88, 88)
+			return Vector2(96, 137)
 		ENEMY_MIASMA_EEL:
 			return Vector2(92, 82)
 		ENEMY_LODARIO:
@@ -45364,6 +45787,15 @@ func _enemy_texture(enemy: Dictionary) -> Texture2D:
 		if type_texture != null:
 			return type_texture
 	if current_phase == 2:
+		var phase2_kind: = String(enemy.get("type", ENEMY_COMMON))
+		if phase2_kind == ENEMY_KAMIKAZE:
+			var kamikaze_texture: = _texture_frame("enemy_phase_2_kamikaze", idx)
+			if kamikaze_texture != null:
+				return kamikaze_texture
+		if phase2_kind == ENEMY_PYRO_PENGUIN:
+			var pyro_texture: = _texture_frame("enemy_phase_2_pyro", idx)
+			if pyro_texture != null:
+				return pyro_texture
 		var player_is_right = player_pos.x >= float(enemy["pos"].x)
 		var phase2_key = "enemy_common_phase_2_right" if player_is_right else "enemy_common_phase_2_left"
 		var phase2_texture: = _texture_frame(phase2_key, idx)
@@ -45401,6 +45833,8 @@ func _enemy_should_flip(enemy: Dictionary) -> bool:
 	var moving_right = dir.x >= 0.0
 	match String(enemy.get("type", ENEMY_COMMON)):
 		ENEMY_COMMON:
+			return moving_right
+		ENEMY_KAMIKAZE, ENEMY_PYRO_PENGUIN:
 			return moving_right
 		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL:
 			return moving_right
