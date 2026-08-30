@@ -42,8 +42,13 @@ func _cleanup_audio_resources() -> void:
 
 
 func _run() -> void:
-	_check(game.MULTIPLAYER_MENU_ENABLED, "Multiplayer option should be enabled")
-	_check(game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should expose the multiplayer button")
+	game.online_mode_unlocked = false
+	_check(not game._online_menu_available(), "Online mode should start locked without the cheat")
+	_check(not game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should hide the online button while locked")
+	game.gameplay_cheat_text = "ONLINE30"
+	_check(game._try_unlock_retornante_cheat(), "ONLINE30 cheat should unlock the online button")
+	_check(game.online_mode_unlocked and game._online_menu_available(), "Online mode should be available after cheat")
+	_check(game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should expose the multiplayer button after unlock")
 	game._activate_menu_option("multiplayer")
 	_check(game.mode == "multiplayer_menu", "Multiplayer button should open online hub")
 
@@ -133,4 +138,4 @@ func _run() -> void:
 	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
 	_check(game._online_client_ready(), "Host deve reconhecer client pronto pelo estado v2")
 
-	await _finish_ok("ONLINE_LOBBY_SMOKE_OK - online entry enabled, room metadata, roster, and lobby state parsing preserved")
+	await _finish_ok("ONLINE_LOBBY_SMOKE_OK - online cheat unlock, room metadata, roster, and lobby state parsing preserved")

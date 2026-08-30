@@ -7,8 +7,8 @@ const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.33"
-const GAME_VERSION_CODE: = 23300
+const GAME_VERSION: = "2.0.34"
+const GAME_VERSION_CODE: = 23400
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
 const STARTUP_THANKS_FRAME_PATH_FORMAT: String = "res://assets/videos/startup_teaser_frames/frame_%04d.webp"
@@ -21,7 +21,7 @@ const STARTUP_THANKS_FADE_TIME: float = 0.5
 const STARTUP_THANKS_SKIP_HOLD_TIME: float = 3.0
 const STARTUP_THANKS_MAX_SKIPS: int = 3
 const STARTUP_THANKS_CONFIG_PATH: String = "user://startup_video_config.save"
-const MULTIPLAYER_MENU_ENABLED: = true
+const MULTIPLAYER_MENU_ENABLED: = false
 const UI_PLATFORM_AUTO: = "auto"
 const UI_PLATFORM_ANDROID: = "android"
 const UI_PLATFORM_DESKTOP: = "desktop"
@@ -383,6 +383,10 @@ const MULTIPLAYER_ENEMY_HP_SCALE_2P: = 1.55
 const MULTIPLAYER_ENEMY_HP_SCALE_3P: = 1.95
 const MULTIPLAYER_BOSS_HP_SCALE_2P: = 1.35
 const MULTIPLAYER_BOSS_HP_SCALE_3P: = 1.7
+const MULTIPLAYER_BOSS_DAMAGE_SCALE_2P: = 0.92
+const MULTIPLAYER_BOSS_DAMAGE_SCALE_3P: = 0.88
+const MULTIPLAYER_BOSS_TARGET_SWITCH_2P: = 2.15
+const MULTIPLAYER_BOSS_TARGET_SWITCH_3P: = 1.85
 const MULTIPLAYER_ENEMY_LIMIT_BONUS_2P: = 1
 const MULTIPLAYER_ENEMY_LIMIT_BONUS_3P: = 2
 const SECONDARY_SKILL_COOLDOWN: = 75.0
@@ -1958,7 +1962,7 @@ const NET_ABILITY_TELEPORT: = 3
 const NET_ABILITY_SECONDARY_END: = 4
 const NET_ABILITY_VISUAL_LIMIT: = 48
 const NET_REWIND_VISUAL_LIMIT: = 8
-const REVIVE_CARD_COST_MULT: = 5
+const REVIVE_CARD_COST_MULT: = 4
 const REVIVE_REQUEST_COOLDOWN: = 15.0
 const REVIVE_REQUEST_TIMEOUT: = 10.0
 const REVIVE_PAY_POINTS: = "points"
@@ -1966,6 +1970,17 @@ const REVIVE_PAY_LIFE: = "life"
 const REVIVE_LIFE_SACRIFICE_RATE: = 0.5
 const REVIVE_HEAL_PENALTY_MULT: = 0.5
 const REVIVE_HEAL_PENALTY_DURATION: = 60.0
+const REVIVAL_SINGLE_TIME: = 30.0
+const REVIVAL_MULTI_TIME: = 50.0
+const REVIVAL_FRAGMENTS_PER_DEAD: = 5
+const REVIVAL_FRAGMENT_PICKUP_RADIUS: = 42.0
+const REVIVAL_ALTAR_RADIUS: = 68.0
+const REVIVAL_ALTAR_SPACING: = 132.0
+const REVIVAL_MULTI_LIFE_SACRIFICE_RATE: = 0.75
+const REVIVAL_MOBILE_DOUBLE_TAP_MS: = 650
+const REVIVAL_FRAGMENT_RESPAWN_TIME: = 180.0
+const REVIVAL_FRAGMENT_DRIFT_SPEED: = 22.0
+const REVIVAL_FRAGMENT_SYNC_INTERVAL: = 0.45
 const NET_ANIM_IDLE: = 0
 const NET_ANIM_UP: = 1
 const NET_ANIM_DOWN: = 2
@@ -2067,6 +2082,7 @@ var run_behavior_move_samples: int = 0
 var run_behavior_stationary_samples: int = 0
 var run_end_payload: Dictionary = {}
 var qa_data_unlocked: bool = false
+var online_mode_unlocked: bool = false
 var qa_streaming_unlocked: bool = false
 var qa_streaming_enabled: bool = false
 var qa_streaming_quality_mode: String = "360p"
@@ -2313,6 +2329,25 @@ var revive_request_cost: = 0
 var revive_request_method: = REVIVE_PAY_POINTS
 var revive_request_notice: = ""
 var revive_heal_penalty_timer: = 0.0
+var score_event_sequence: int = 0
+var applied_score_event_ids: Dictionary = {}
+var revival_active: bool = false
+var revival_dead_peers: Array = []
+var revival_dead_names: Dictionary = {}
+var revival_dead_positions: Dictionary = {}
+var revival_fragments: Array = []
+var revival_fragments_collected: int = 0
+var revival_timer: float = 0.0
+var revival_total_time: float = 0.0
+var revival_altars_active: bool = false
+var revival_altar_life_pos: Vector2 = Vector2.ZERO
+var revival_altar_points_pos: Vector2 = Vector2.ZERO
+var revival_notice: String = ""
+var revival_fragments_suspended: bool = false
+var revival_fragment_respawn_timer: float = 0.0
+var revival_state_sync_timer: float = 0.0
+var revival_mobile_confirm_method: String = ""
+var revival_mobile_confirm_until_ms: int = 0
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
@@ -2555,6 +2590,10 @@ var boss_empurrou_player = false
 var boss_target_cursor: = -1
 var boss_target_peer_id: = 0
 var boss_target_switch_timer: = 0.0
+var boss_threat_by_peer: Dictionary = {}
+var boss_target_pressure_by_peer: Dictionary = {}
+var run_leader_peer_id: int = 0
+var run_leader_notice_timer: float = 0.0
 var boss_name = "CARANGUEJO COSMICO GIGANTE"
 var boss_title_color = Color(1.0, 0.52, 0.16)
 var phase_transition_timer = 0.0
@@ -2726,6 +2765,7 @@ var keyboard_bindings: Dictionary = {
 	"dash": INPUT_BIND_KEY_PREFIX + str(KEY_SHIFT), 
 	"lacerante_empower": INPUT_BIND_KEY_PREFIX + str(KEY_R), 
 	"dance": INPUT_BIND_KEY_PREFIX + str(KEY_O),
+	"interact": INPUT_BIND_KEY_PREFIX + str(KEY_E),
 	"pause": INPUT_BIND_KEY_PREFIX + str(KEY_ESCAPE), 
 	"shop": INPUT_BIND_KEY_PREFIX + str(KEY_P), 
 	"boss": INPUT_BIND_KEY_PREFIX + str(KEY_B)
@@ -6975,9 +7015,14 @@ func _qa_streaming_status_failed(status: String) -> bool:
 	return normalized.contains("erro") or normalized.contains("falha") or normalized.contains("negada") or normalized.contains("incompativel") or normalized.contains("indisponivel")
 
 
+func _online_menu_available() -> bool:
+	return MULTIPLAYER_MENU_ENABLED or online_mode_unlocked
+
+
 func _load_config() -> void :
 
 	retornante_unlocked = false
+	online_mode_unlocked = false
 	qa_streaming_unlocked = false
 	qa_streaming_enabled = false
 	qa_streaming_status = ""
@@ -7027,6 +7072,7 @@ func _load_config() -> void :
 				elif k == "run_tutorial_enabled": run_tutorial_enabled = v == "true"
 				elif k == "shop_tutorial_seen": shop_tutorial_seen = v == "true"
 				elif k == "boss_call_tutorial_seen": boss_call_tutorial_seen = v == "true"
+				elif k == "online_mode_unlocked": online_mode_unlocked = v == "true"
 				elif k == "qa_streaming_enabled": qa_streaming_enabled = false
 				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = v == "true"
 				elif k == "qa_streaming_quality": qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(v)
@@ -7132,6 +7178,7 @@ func _save_config() -> void :
 		file.store_string("run_tutorial_enabled=" + ("true" if run_tutorial_enabled else "false") + "\n")
 		file.store_string("shop_tutorial_seen=" + ("true" if shop_tutorial_seen else "false") + "\n")
 		file.store_string("boss_call_tutorial_seen=" + ("true" if boss_call_tutorial_seen else "false") + "\n")
+		file.store_string("online_mode_unlocked=" + ("true" if online_mode_unlocked else "false") + "\n")
 		file.store_string("qa_streaming_enabled=false\n")
 		file.store_string("qa_streaming_unlocked=" + ("true" if qa_streaming_unlocked else "false") + "\n")
 		file.store_string("qa_streaming_quality=" + _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode) + "\n")
@@ -7474,7 +7521,7 @@ func _serialize_gamepad_bindings() -> String:
 
 
 func _keyboard_action_order() -> Array:
-	return ["attack", "skill", "secondary", "dash", "lacerante_empower", "dance", "pause", "shop", "boss"]
+	return ["attack", "skill", "secondary", "dash", "lacerante_empower", "dance", "pause", "shop", "boss", "interact"]
 
 
 func _keyboard_action_title(action: String) -> String:
@@ -7489,6 +7536,7 @@ func _keyboard_action_subtitle(action: String) -> String:
 		"dash": return "Teleporte para o cursor apenas no botao vinculado"
 		"lacerante_empower": return "Reforco da Lacerante, troca Sol/Lua da Eclipsada ou Poeira da Necronada"
 		"dance": return "Ativa a danca/emote do jogador"
+		"interact": return "Interagir com altar, revive e objetos de fase"
 		"pause": return "Pausar e sair de telas"
 		"shop": return "Chamar loja manual no desktop"
 		"boss": return "Chamar boss quando estiver pronto"
@@ -9402,6 +9450,9 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	score_total = 0
 	run_points_earned = 0
 	run_points_spent = 0
+	score_event_sequence = 0
+	applied_score_event_ids.clear()
+	_clear_team_revival_state()
 	card_cost = CARD_COST_BASE
 	shop_last_manual_open_time = -999.0
 	shop_recent_manual_open_count = 0
@@ -11063,6 +11114,7 @@ func _gamepad_action_title(action: String) -> String:
 		"lacerante_empower": return "REFORCO (+)"
 		"bombastica_detonator": return "DETONADOR"
 		"dance": return "DANCA / EMOTE"
+		"interact": return "INTERAGIR"
 		"pause": return "PAUSAR / MENU"
 		"shop": return "CHAMAR LOJA"
 		"boss": return "CHAMAR BOSS"
@@ -11078,6 +11130,7 @@ func _gamepad_action_subtitle(action: String) -> String:
 		"lacerante_empower": return "Lacerante, Eclipsada ou Necronada"
 		"bombastica_detonator": return "Bombastica apenas"
 		"dance": return "Ativa a danca do jogador"
+		"interact": return "Altares, revive e objetos"
 		"pause": return "Abrir, navegar e sair do pause"
 		"shop": return "Abre a loja manual"
 		"boss": return "Inicia chamado do boss"
@@ -11093,6 +11146,7 @@ func _gamepad_action_color(action: String) -> Color:
 		"lacerante_empower": return Color(0.92, 0.03, 0.12)
 		"bombastica_detonator": return Color(1.0, 0.48, 0.12)
 		"dance": return Color(0.95, 0.45, 1.0)
+		"interact": return Color(0.0, 1.0, 0.82)
 		"pause": return Color(0.8, 0.8, 0.8)
 		"shop": return Color(0.0, 1.0, 0.82)
 		"boss": return Color(1.0, 0.52, 0.16)
@@ -11900,9 +11954,13 @@ func _update_game(delta: float) -> void :
 					_try_arm_lacerante_empower()
 			lacerante_empower_key_was_pressed = empower_key_pressed
 
+	_refresh_run_leader()
+	if run_leader_notice_timer > 0.0:
+		run_leader_notice_timer = maxf(0.0, run_leader_notice_timer - delta)
 	if _is_world_authority() and spawn_timer <= 0.0 and not boss_active and not _tutorial_blocks_normal_spawn():
 		_spawn_wave()
 	_update_event_alerts(delta)
+	_update_team_revival(delta)
 	if _is_world_authority():
 		_update_agglomeration(delta)
 		if not _tutorial_blocks_normal_spawn():
@@ -20911,6 +20969,147 @@ func _combat_targets() -> Array:
 	return targets
 
 
+func _host_run_peer_id() -> int:
+	if not is_multiplayer:
+		return _mp_unique_id()
+	if online_room_owner or is_host:
+		return _mp_unique_id()
+	if dedicated_room_owner_peer_id != 0:
+		return dedicated_room_owner_peer_id
+	return 1
+
+
+func _living_run_player_peer_ids() -> Array[int]:
+	var peers: Array[int] = []
+	if _local_player_targetable():
+		peers.append(_mp_unique_id())
+	for peer_id in _targetable_remote_peer_ids(true):
+		if not peers.has(peer_id):
+			peers.append(peer_id)
+	peers.sort()
+	return peers
+
+
+func _peer_is_living_runner(peer_id: int) -> bool:
+	if peer_id <= 0:
+		return false
+	if peer_id == _mp_unique_id():
+		return _local_player_targetable()
+	var state: Dictionary = net_players_by_peer.get(peer_id, {})
+	return bool(state.get("has_snapshot", false)) and not bool(state.get("dead", false)) and float(state.get("hp", 0.0)) > 0.0
+
+
+func _refresh_run_leader() -> void:
+	if not is_multiplayer or online_local_spectator:
+		run_leader_peer_id = 0
+		return
+	var host_peer: int = _host_run_peer_id()
+	if _peer_is_living_runner(host_peer):
+		if run_leader_peer_id != host_peer:
+			run_leader_notice_timer = 2.2
+		run_leader_peer_id = host_peer
+		return
+	if _peer_is_living_runner(run_leader_peer_id):
+		return
+	var living: Array[int] = _living_run_player_peer_ids()
+	if living.is_empty():
+		run_leader_peer_id = 0
+		return
+	var next_index: int = rng.randi_range(0, living.size() - 1)
+	run_leader_peer_id = int(living[next_index])
+	run_leader_notice_timer = 2.2
+
+
+func _is_local_run_leader() -> bool:
+	if not is_multiplayer:
+		return true
+	return run_leader_peer_id == 0 or run_leader_peer_id == _mp_unique_id()
+
+
+func _run_leader_name() -> String:
+	if run_leader_peer_id == _mp_unique_id():
+		return _local_player_display_name()
+	var state: Dictionary = net_players_by_peer.get(run_leader_peer_id, {})
+	if not state.is_empty():
+		return String(state.get("name", "Player %d" % run_leader_peer_id))
+	return "Player %d" % run_leader_peer_id
+
+
+func _dedicated_peer_alive_for_leadership(peer_id: int) -> bool:
+	if _is_dedicated_spectator(peer_id):
+		return false
+	var state: Dictionary = dedicated_player_state_by_peer.get(peer_id, {})
+	return state.is_empty() or (not bool(state.get("dead", false)) and float(state.get("hp", 1.0)) > 0.0)
+
+
+func _dedicated_current_leader_peer_id() -> int:
+	if dedicated_room_owner_peer_id != 0 and _dedicated_peer_alive_for_leadership(dedicated_room_owner_peer_id):
+		return dedicated_room_owner_peer_id
+	var living: Array[int] = []
+	for peer_id in _dedicated_active_peer_ids():
+		if _dedicated_peer_alive_for_leadership(int(peer_id)):
+			living.append(int(peer_id))
+	living.sort()
+	return int(living[0]) if not living.is_empty() else dedicated_room_owner_peer_id
+
+
+func _boss_peer_threat(peer_id: int) -> float:
+	return maxf(0.0, float(boss_threat_by_peer.get(peer_id, 0.0)))
+
+
+func _register_boss_threat(peer_id: int, amount: float, source: String, source_category: String = "") -> void:
+	if not is_multiplayer or peer_id <= 0 or amount <= 0.0:
+		return
+	var gain: float = maxf(1.0, amount)
+	if _damage_source_category(source, source_category) == "skill_e":
+		gain *= 1.18
+	elif _damage_source_category(source, source_category) == "skill_q":
+		gain *= 1.08
+	boss_threat_by_peer[peer_id] = _boss_peer_threat(peer_id) + gain
+
+
+func _boss_source_peer_from_origin(attack_origin: Vector2) -> int:
+	if attack_origin == Vector2.ZERO:
+		return _mp_unique_id()
+	var best_peer: int = _mp_unique_id()
+	var best_dist: float = player_pos.distance_squared_to(attack_origin)
+	for peer_id in _targetable_remote_peer_ids(true):
+		var state: Dictionary = net_players_by_peer.get(peer_id, {})
+		var dist: float = Vector2(state.get("pos", net_player_pos)).distance_squared_to(attack_origin)
+		if dist < best_dist:
+			best_dist = dist
+			best_peer = peer_id
+	return best_peer
+
+
+func _boss_target_score(target: Dictionary) -> float:
+	var peer_id: int = int(target.get("peer_id", 0))
+	var target_pos: Vector2 = Vector2(target.get("pos", player_pos))
+	var hp: float = maxf(1.0, float(target.get("hp", 1.0)))
+	var hp_max: float = maxf(1.0, float(target.get("hp_max", 1.0)))
+	var hp_ratio: float = clampf(hp / hp_max, 0.0, 1.0)
+	var distance_score: float = clampf(1.0 - boss_pos.distance_to(target_pos) / 760.0, 0.0, 1.0)
+	var threat_score: float = clampf(_boss_peer_threat(peer_id) / maxf(160.0, boss_hp_max * 0.045), 0.0, 1.45)
+	var danger_relief: float = lerpf(0.76, 1.08, hp_ratio)
+	var current_penalty: float = 0.76 if peer_id == boss_target_peer_id and _active_run_player_count() > 1 else 1.0
+	var pressure_penalty: float = clampf(1.0 - float(boss_target_pressure_by_peer.get(peer_id, 0.0)) * 0.08, 0.72, 1.0)
+	return (0.35 + distance_score * 0.42 + threat_score * 0.48) * danger_relief * current_penalty * pressure_penalty
+
+
+func _choose_boss_target(targets: Array) -> Dictionary:
+	if targets.is_empty():
+		return {}
+	var best: Dictionary = Dictionary(targets[0])
+	var best_score: float = -INF
+	for target_value in targets:
+		var target: Dictionary = target_value
+		var score_value: float = _boss_target_score(target) + rng.randf_range(0.0, 0.06)
+		if score_value > best_score:
+			best_score = score_value
+			best = target
+	return best
+
+
 func _peer_id_at_target_pos(target_pos: Vector2) -> int:
 	var best_peer: = 0
 	var best_distance: = INF
@@ -24010,7 +24209,7 @@ func _voraz_boss_feed_allowed(damage: float, source: String, source_category: = 
 	return category in ["basic_attack", "skill_q", "skill_e", "manifestation_secondary", "teleport"] or source_category == ""
 
 
-func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, release_boss_feed: = true, source_category: = "", attack_origin: = Vector2.ZERO) -> void :
+func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, release_boss_feed: = true, source_category: = "", attack_origin: = Vector2.ZERO, source_peer_id: int = 0) -> void :
 	if _is_player_calcified():
 		amount *= 2.0
 	var effective_source_category: = source_category
@@ -24022,7 +24221,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		amount = _outgoing_damage_amount(amount, source)
 		if release_boss_feed and _voraz_boss_feed_allowed(amount, source, effective_source_category):
 			AuraSystem.on_boss_hit(aura_state, boss_pos, amount)
-		_send_client_damage_request(NET_DAMAGE_BOSS, "", amount, source, attack_origin if attack_origin != Vector2.ZERO else player_pos, true, effective_source_category)
+		_send_client_damage_request(NET_DAMAGE_BOSS, "", amount, source, attack_origin if attack_origin != Vector2.ZERO else player_pos, true, effective_source_category, _mp_unique_id())
 		return
 	if current_phase == 7 and boss7_core_active:
 		if apply_aura_multiplier and not source.begins_with("aura_"):
@@ -24171,6 +24370,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		if is_crit:
 			vfx_director.request_floor_crack(boss_pos, 42.0, elem, 3.0)
 	_track_boss_damage(boss_hp_before - boss_hp)
+	_register_boss_threat(source_peer_id if source_peer_id > 0 else _boss_source_peer_from_origin(attack_origin), actual_boss_damage, source, effective_source_category)
 	_acorrentada_share_link_damage({"kind": "boss"}, boss_hp_before - boss_hp, source, effective_source_category, attack_origin if attack_origin != Vector2.ZERO else player_pos)
 	if antimatter_should_trigger:
 		_trigger_antimatter_implosion(boss_pos)
@@ -24475,19 +24675,42 @@ func _points_for_enemy(enemy: Dictionary) -> int:
 	return max(int(enemy.get("points", 20)), int(round(base_points * mult)))
 
 
-func _apply_score_delta(amount: int, broadcast: = true) -> void :
+func _next_score_event_id() -> String:
+	score_event_sequence += 1
+	return "%d:%d" % [_mp_unique_id(), score_event_sequence]
+
+
+func _mark_score_event_applied(event_id: String) -> bool:
+	if event_id == "":
+		return true
+	if applied_score_event_ids.has(event_id):
+		return false
+	applied_score_event_ids[event_id] = Time.get_ticks_msec()
+	if applied_score_event_ids.size() > 256:
+		var keys: Array = applied_score_event_ids.keys()
+		keys.sort()
+		while applied_score_event_ids.size() > 192 and not keys.is_empty():
+			applied_score_event_ids.erase(keys.pop_front())
+	return true
+
+
+func _apply_score_delta(amount: int, broadcast: = true, event_id: String = "") -> void :
 	if amount == 0:
 		return
+	if not _mark_score_event_applied(event_id):
+		return
 	if is_multiplayer and _is_world_replica():
-		if broadcast and _shop_rpc_available():
-			rpc("_rpc_request_score_delta", amount)
+		if amount > 0 and broadcast and _shop_rpc_available():
+			rpc("_rpc_request_score_delta", amount, event_id if event_id != "" else _next_score_event_id())
 		return
 	score = max(0, score + amount)
 	score_total = max(0, score_total + amount)
 	if amount > 0:
 		run_points_earned += amount
-	if broadcast and is_multiplayer and _is_world_authority() and _shop_rpc_available():
-		rpc("_rpc_add_score", amount)
+	else:
+		run_points_spent += abs(amount)
+	if amount > 0 and broadcast and is_multiplayer and _is_world_authority() and _shop_rpc_available():
+		rpc("_rpc_add_score", amount, event_id if event_id != "" else _next_score_event_id())
 
 
 func _elite_point_multiplier(enemy: Dictionary) -> float:
@@ -28808,16 +29031,21 @@ func _boss_target_entry(force_rotate: bool = false) -> Dictionary:
 	var targets: = _combat_targets()
 	if targets.is_empty():
 		return {"peer_id": _mp_unique_id(), "pos": player_pos, "local": true, "hp": player_hp, "hp_max": player_hp_max}
+	for peer_key in boss_target_pressure_by_peer.keys():
+		boss_target_pressure_by_peer[peer_key] = maxf(0.0, float(boss_target_pressure_by_peer.get(peer_key, 0.0)) - 0.025)
+	for peer_key in boss_threat_by_peer.keys():
+		boss_threat_by_peer[peer_key] = maxf(0.0, float(boss_threat_by_peer.get(peer_key, 0.0)) * 0.996)
 	var current_index: = -1
 	for index in range(targets.size()):
 		if int(Dictionary(targets[index]).get("peer_id", 0)) == boss_target_peer_id:
 			current_index = index
 			break
 	if force_rotate or current_index < 0 or boss_target_switch_timer <= 0.0:
-		boss_target_cursor = posmod(maxi(current_index, boss_target_cursor) + 1, targets.size())
-		var selected: Dictionary = targets[boss_target_cursor]
+		var selected: Dictionary = _choose_boss_target(targets)
+		boss_target_cursor = targets.find(selected)
 		boss_target_peer_id = int(selected.get("peer_id", 0))
-		boss_target_switch_timer = 2.4
+		boss_target_switch_timer = _multiplayer_boss_target_switch_time()
+		boss_target_pressure_by_peer[boss_target_peer_id] = float(boss_target_pressure_by_peer.get(boss_target_peer_id, 0.0)) + 1.0
 		return selected
 	return targets[current_index]
 
@@ -37480,7 +37708,7 @@ func _damage_player(amount: int, source: String) -> void :
 	if contractual_order_penalties.has("silence_tick"):
 		player_silence_timer = max(player_silence_timer, 1.2)
 	if boss_active and boss_hp > 0.0 and _damage_source_is_boss(source):
-		amount = max(1, int(round(float(amount) * _boss_farm_pressure_multiplier())))
+		amount = max(1, int(round(float(amount) * _boss_farm_pressure_multiplier() * _multiplayer_boss_damage_scale())))
 	_play_sfx("hit_person.mp3")
 	var final = max(1, amount - int(player_defense))
 	final = _absorb_devorador_shield(final)
@@ -37544,6 +37772,7 @@ func _handle_player_down() -> void :
 	player_hp = 0
 	next_larapio_spawn_time = time_alive + 15.0
 	if is_multiplayer:
+		_announce_team_revival_death(_mp_unique_id(), player_pos, _local_player_display_name())
 		rpc("_rpc_player_died")
 		if _all_multiplayer_players_dead():
 			_stop_battle_music_for_screen_transition()
@@ -37616,6 +37845,14 @@ func _update_phase_fragment(delta: float) -> void :
 		for choice in choices:
 			var choice_pos: Vector2 = Vector2(choice.get("pos", phase_fragment.get("pos", player_pos)))
 			if player_pos.distance_to(choice_pos) <= BOSS_FRAGMENT_PICKUP_RADIUS * 1.15:
+				if is_multiplayer and not _is_local_run_leader():
+					var warn_cd: float = maxf(0.0, float(phase_fragment.get("leader_warn_cd", 0.0)) - delta)
+					if warn_cd <= 0.0:
+						phase_fragment["leader_warn_cd"] = 1.2
+						_add_text("LIDER DA RUN: %s" % _run_leader_name(), choice_pos + Vector2(0, -86), Color(1.0, 0.86, 0.18), 0.95, 16)
+					else:
+						phase_fragment["leader_warn_cd"] = warn_cd
+					return
 				var action: String = String(choice.get("action", "phase"))
 				var choice_phase: int = int(choice.get("next_phase", 0))
 				if is_multiplayer:
@@ -37633,6 +37870,9 @@ func _update_phase_fragment(delta: float) -> void :
 	if player_pos.distance_to(phase_fragment["pos"]) <= BOSS_FRAGMENT_PICKUP_RADIUS:
 		var next_phase = int(phase_fragment.get("next_phase", 0))
 		if is_multiplayer:
+			if not _is_local_run_leader():
+				_add_text("APENAS O LIDER ATRAVESSA", Vector2(phase_fragment["pos"]) + Vector2(0, -72), Color(1.0, 0.86, 0.18), 0.9, 16)
+				return
 			_request_phase_mp_consensus(next_phase, "phase")
 			return
 		phase_fragment.clear()
@@ -38750,7 +38990,7 @@ func _draw_keyboard_settings(viewport: Vector2) -> void :
 		var action = actions[i]
 		var value = "PRESSIONE TECLA/MOUSE..." if keyboard_mapping_action == action else _format_key_binding_name(keyboard_bindings.get(action, INPUT_BIND_NONE))
 		_draw_gameplay_preference(settings_buttons[action], _keyboard_action_title(action), _keyboard_action_subtitle(action), value, _keyboard_action_color(action), settings_selected == i)
-	_draw_settings_card(settings_buttons["reset"], "RESTAURAR PADRAO", "volta para Q/E/F, espaco e mouse", Color(0.58, 0.82, 1.0), settings_selected == actions.size())
+	_draw_settings_card(settings_buttons["reset"], "RESTAURAR PADRAO", "volta para Q/E/R, E, escape e mouse", Color(0.58, 0.82, 1.0), settings_selected == actions.size())
 	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), settings_selected == actions.size() + 1)
 	var hint_rect: = Rect2(viewport.x * 0.5 - min(760.0, viewport.x * 0.7) * 0.5, viewport.y - 42.0, min(760.0, viewport.x * 0.7), 24.0)
 	_draw_centered("Clique esquerdo ataca. Clique direito usa TP no cursor. Backspace/Delete remove a tecla selecionada.", hint_rect.get_center() + Vector2(0, 5), 12, Color(0.86, 0.94, 1.0, 0.82))
@@ -38839,6 +39079,7 @@ func _reset_keyboard_bindings() -> void :
 		"dash": _key_input_binding(KEY_SHIFT), 
 		"lacerante_empower": _key_input_binding(KEY_R), 
 		"dance": _key_input_binding(KEY_O),
+		"interact": _key_input_binding(KEY_E),
 		"pause": _key_input_binding(KEY_ESCAPE), 
 		"shop": _key_input_binding(KEY_P), 
 		"boss": _key_input_binding(KEY_B)
@@ -38882,8 +39123,8 @@ func _draw_gameplay_settings(viewport: Vector2) -> void :
 	var tutorial_accent = Color(0.0, 1.0, 0.82) if run_tutorial_enabled else Color(0.48, 0.52, 0.58)
 	_draw_gameplay_preference(settings_buttons["tutorial"], "TUTORIAL INICIAL", "Pergunta ao iniciar a proxima partida.", "ON" if run_tutorial_enabled else "OFF", tutorial_accent, settings_selected == _gameplay_preference_index("tutorial"))
 	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["tutorial"]), run_tutorial_enabled, tutorial_accent)
-	var cheat_value = "QA ATIVO" if qa_data_unlocked else ("RETORNANTE OK" if retornante_unlocked else (gameplay_cheat_text if gameplay_cheat_text != "" else "TOQUE E DIGITE"))
-	var cheat_accent = Color(0.74, 1.0, 0.36) if qa_data_unlocked else (Color(0.86, 0.48, 1.0) if retornante_unlocked else Color(0.64, 0.44, 1.0))
+	var cheat_value = "QA ATIVO" if qa_data_unlocked else ("ONLINE OK" if online_mode_unlocked else ("RETORNANTE OK" if retornante_unlocked else (gameplay_cheat_text if gameplay_cheat_text != "" else "TOQUE E DIGITE")))
+	var cheat_accent = Color(0.74, 1.0, 0.36) if qa_data_unlocked else (Color(0.0, 1.0, 0.82) if online_mode_unlocked else (Color(0.86, 0.48, 1.0) if retornante_unlocked else Color(0.64, 0.44, 1.0)))
 	if gameplay_cheat_focused:
 		cheat_value = "DIGITANDO..."
 	_draw_gameplay_preference(settings_buttons["retornante_cheat"], "CHEAT SECRETO", "Campo reservado para codigos de QA e dev.", cheat_value, cheat_accent, settings_selected == _gameplay_preference_index("retornante_cheat"))
@@ -39693,7 +39934,7 @@ func _menu_option_keys() -> Array:
 	if interrupted_run_available:
 		keys.append("continue")
 	keys.append("start")
-	if MULTIPLAYER_MENU_ENABLED:
+	if _online_menu_available():
 		keys.append("multiplayer")
 	keys.append_array(["catalog", "settings"])
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
@@ -39719,7 +39960,7 @@ func _activate_menu_option(key: String) -> void :
 		"start":
 			_open_manifest_select()
 		"multiplayer":
-			if MULTIPLAYER_MENU_ENABLED:
+			if _online_menu_available():
 				mode = "multiplayer_menu"
 			else:
 				_add_text("ONLINE EM MANUTENCAO", player_pos + Vector2(0, -92), Color(1.0, 0.74, 0.22), 0.9, 18)
@@ -41395,6 +41636,7 @@ func _draw_game(viewport: Vector2) -> void :
 	_draw_parasite_foreground(camera)
 	if not phase_fragment.is_empty():
 		_draw_phase_fragment(camera)
+	_draw_team_revival_world(camera)
 	if not online_local_spectator:
 		_draw_companions(camera)
 		_draw_boss6_fossil_echo(camera)
@@ -46505,6 +46747,8 @@ func _draw_player(camera: Vector2) -> void :
 		_draw_entity_by_height_rotated(tex, center + profile["offset"], float(profile.get("height", PLAYER_DRAW_LACERAR_HEIGHT)), rotation, player_modulate, flip_h)
 	else:
 		_draw_entity_stretched_rotated(tex, center + profile["offset"], profile["size"], rotation, player_modulate, flip_h)
+	if is_multiplayer and _is_local_run_leader():
+		_draw_leader_crown(center + Vector2(0.0, -62.0), 0.82, Color(1.0, 0.86, 0.18, 0.95))
 
 
 func _should_flip_player_sprite() -> bool:
@@ -48893,9 +49137,13 @@ func _draw_hud(viewport: Vector2) -> void :
 	var left_h = 76.0 * sm
 	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, left_h))
 	var left_alpha: float = _hud_rect_player_alpha(left_rect, viewport, 84.0)
-	_draw_combat_panel(left_rect, Color(0.0, 1.0, 0.82, left_alpha), 0.58 * left_alpha)
+	var leader_local: bool = is_multiplayer and _is_local_run_leader()
+	var local_bar_color: Color = Color(1.0, 0.86, 0.18) if leader_local else Color(0.2, 1.0, 0.42)
+	_draw_combat_panel(left_rect, Color(local_bar_color.r, local_bar_color.g, local_bar_color.b, left_alpha), 0.58 * left_alpha)
 	draw_string(font, left_rect.position + Vector2(16 * sm, 30 * sm), "VIDA %d/%d" % [player_hp, player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), Color(1.0, 1.0, 1.0, left_alpha))
-	_draw_hud_bar(left_rect.position + Vector2(16 * sm, 43 * sm), left_rect.size.x - 32.0 * sm, 8.0 * sm, float(player_hp) / float(player_hp_max), Color(0.2, 1.0, 0.42))
+	_draw_hud_bar(left_rect.position + Vector2(16 * sm, 43 * sm), left_rect.size.x - 32.0 * sm, 8.0 * sm, float(player_hp) / float(player_hp_max), local_bar_color)
+	if leader_local:
+		_draw_leader_crown(left_rect.position + Vector2(left_rect.size.x - 26.0 * sm, 23.0 * sm), 0.82 * sm, Color(1.0, 0.86, 0.18, left_alpha))
 	var minutes = int(time_alive) / 60
 	var seconds = int(time_alive) % 60
 	var manifest_color = _manifestation_color()
@@ -49848,8 +50096,16 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 	var atk_c = buttons["attack"].position + buttons["attack"].size * 0.5
 	var atk_r = 54.0 * _attack_scale()
 	var atk_alpha: float = _hud_rect_player_alpha(Rect2(atk_c - Vector2(atk_r, atk_r), Vector2(atk_r * 2.0, atk_r * 2.0)), viewport)
+	var revival_method: String = _local_revival_altar_method()
 	if not is_gamepad_active:
-		_draw_button(atk_c, atk_r, "ATK", Color(1.0, 0.24, 0.26, 0.7 * atk_alpha))
+		if revival_method != "":
+			var revive_color: Color = Color(1.0, 0.18, 0.26, 0.82 * atk_alpha) if revival_method == REVIVE_PAY_LIFE else Color(0.08, 0.62, 1.0, 0.82 * atk_alpha)
+			buttons["revival_mobile"] = buttons["attack"]
+			_draw_button(atk_c, atk_r, "REVIVE", revive_color)
+			_draw_centered("2 TOQUES", atk_c + Vector2(0, atk_r + 18.0), 10, Color(0.94, 1.0, 0.98, atk_alpha))
+		else:
+			buttons.erase("revival_mobile")
+			_draw_button(atk_c, atk_r, "ATK", Color(1.0, 0.24, 0.26, 0.7 * atk_alpha))
 	if attack_holding and not attack_dragging:
 		var hold_ratio = clamp(attack_hold_timer / ATTACK_LOCK_HOLD_TIME, 0.0, 1.0)
 		draw_arc(atk_c, atk_r + 7.0, - PI * 0.5, - PI * 0.5 + TAU * hold_ratio, 48, Color(1.0, 0.86, 0.24, 0.96), 4.0)
@@ -50261,12 +50517,141 @@ func _draw_shop_mp_request(viewport: Vector2) -> void :
 		_draw_small_rect_button(buttons["shop_mp_accept"], "ACEITAR  ENTER", Color(0.03, 0.18, 0.12, 0.92), Color(0.0, 1.0, 0.82))
 
 
+func _draw_team_revival_world(camera: Vector2) -> void:
+	if not revival_active or mode != "game":
+		return
+	var t: float = Time.get_ticks_msec() * 0.001
+	for fragment in revival_fragments:
+		var data: Dictionary = fragment
+		if bool(data.get("collected", false)):
+			continue
+		var pos: Vector2 = Vector2(data.get("pos", Vector2.ZERO)) - camera
+		var phase: float = float(data.get("phase", 0.0)) + t * 3.0
+		var shard_size: float = 8.0 + sin(phase) * 2.0
+		var cyan := Color(0.62, 0.96, 1.0, 0.92)
+		var core := Color(1.0, 1.0, 1.0, 0.78)
+		var diamond := PackedVector2Array([pos + Vector2(0, -shard_size), pos + Vector2(shard_size * 0.72, 0), pos + Vector2(0, shard_size), pos + Vector2(-shard_size * 0.72, 0)])
+		var outline := PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]])
+		draw_colored_polygon(diamond, Color(0.05, 0.24, 0.3, 0.88))
+		draw_polyline(outline, cyan, 2.0)
+		draw_line(pos + Vector2(-shard_size * 0.55, -shard_size * 0.12), pos + Vector2(shard_size * 0.54, shard_size * 0.18), core, 1.2)
+		draw_circle(pos, 2.2, core)
+	if revival_altars_active:
+		_draw_team_revival_altar(revival_altar_life_pos - camera, Color(1.0, 0.18, 0.26), "VIDA", t)
+		_draw_team_revival_altar(revival_altar_points_pos - camera, Color(0.08, 0.62, 1.0), "4 CARTAS", t + 1.4)
+		_draw_revival_altar_talkbox(camera)
+
+
+func _draw_team_revival_altar(center: Vector2, color: Color, label: String, phase: float) -> void:
+	var pulse: float = 0.5 + sin(phase * 4.0) * 0.5
+	var ground_alpha: float = 0.11 + pulse * 0.05
+	draw_circle(center + Vector2(0, 20), REVIVAL_ALTAR_RADIUS * 0.86, Color(color.r, color.g, color.b, ground_alpha))
+	draw_arc(center + Vector2(0, 20), REVIVAL_ALTAR_RADIUS * 0.84, phase, phase + TAU, 80, Color(color.r, color.g, color.b, 0.72), 3.0, true)
+	var base_top := PackedVector2Array([
+		center + Vector2(-42, 12),
+		center + Vector2(42, 12),
+		center + Vector2(56, 28),
+		center + Vector2(0, 44),
+		center + Vector2(-56, 28)
+	])
+	var base_face := PackedVector2Array([
+		center + Vector2(-56, 28),
+		center + Vector2(0, 44),
+		center + Vector2(56, 28),
+		center + Vector2(42, 50),
+		center + Vector2(-42, 50)
+	])
+	draw_colored_polygon(base_face, Color(0.03, 0.05, 0.07, 0.94))
+	draw_colored_polygon(base_top, Color(0.05, 0.13, 0.15, 0.96))
+	draw_polyline(PackedVector2Array([base_top[0], base_top[1], base_top[2], base_top[3], base_top[4], base_top[0]]), Color(color.r, color.g, color.b, 0.9), 2.0, true)
+	draw_line(center + Vector2(-42, 50), center + Vector2(42, 50), Color(color.r, color.g, color.b, 0.56), 2.0, true)
+	var crystal_y: float = sin(phase * 3.0) * 4.0 - 14.0
+	var crystal := PackedVector2Array([
+		center + Vector2(0, crystal_y - 38),
+		center + Vector2(22, crystal_y - 10),
+		center + Vector2(14, crystal_y + 22),
+		center + Vector2(-14, crystal_y + 22),
+		center + Vector2(-22, crystal_y - 10)
+	])
+	draw_colored_polygon(crystal, Color(color.r * 0.22, color.g * 0.22, color.b * 0.22, 0.92))
+	draw_polyline(PackedVector2Array([crystal[0], crystal[1], crystal[2], crystal[3], crystal[4], crystal[0]]), Color(color.r, color.g, color.b, 0.98), 2.4, true)
+	draw_line(center + Vector2(0, crystal_y - 34), center + Vector2(0, crystal_y + 18), Color(1.0, 1.0, 1.0, 0.42), 1.2, true)
+	draw_circle(center + Vector2(0, crystal_y - 8), 28.0 + pulse * 6.0, Color(color.r, color.g, color.b, 0.08), true)
+	_draw_centered(label, center + Vector2(0, 72), 13, Color(1.0, 1.0, 1.0, 0.94))
+
+
+func _draw_revival_altar_talkbox(camera: Vector2) -> void:
+	var method: String = _local_revival_altar_method()
+	if method == "":
+		return
+	var altar_world: Vector2 = revival_altar_life_pos if method == REVIVE_PAY_LIFE else revival_altar_points_pos
+	var center: Vector2 = altar_world - camera
+	var key_name: String = _compact_key_binding_name("interact")
+	var cost_text: String = "%.0f%% DA VIDA" % (_revival_life_sacrifice_rate() * 100.0)
+	var detail: String = "divide entre %d caido(s)" % _team_revival_dead_count()
+	if method == REVIVE_PAY_POINTS:
+		cost_text = "%d PONTOS" % _revival_points_cost()
+		detail = "gasto individual"
+	var rect: Rect2 = Rect2(center.x - 172.0, center.y - 132.0, 344.0, 72.0)
+	_draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
+	_draw_centered("ALTAR " + _revival_method_label(method), Vector2(rect.get_center().x, rect.position.y + 23.0), _readable_text_size(12), Color(0.0, 1.0, 0.82))
+	_draw_centered("%s  %s  |  %s" % [key_name, cost_text, detail], Vector2(rect.get_center().x, rect.position.y + 49.0), _readable_text_size(10), Color(0.94, 1.0, 0.98))
+
+
+func _team_revival_hud_visible() -> bool:
+	return is_multiplayer and mode == "game" and revival_active
+
+
 func _revive_request_visible() -> bool:
-	return is_multiplayer and mode == "game" and (is_dead or revive_request_incoming or revive_request_outgoing or revive_request_cooldown > 0.0)
+	return is_multiplayer and mode == "game" and (_team_revival_hud_visible() or is_dead or revive_request_incoming or revive_request_outgoing or revive_request_cooldown > 0.0)
+
+
+func _draw_team_revival_hud(viewport: Vector2) -> void:
+	buttons.erase("revival_mobile")
+	var panel_w: float = min(620.0, viewport.x * 0.78)
+	var panel_h: float = 104.0
+	var panel: Rect2 = Rect2(viewport.x * 0.5 - panel_w * 0.5, 76.0, panel_w, panel_h)
+	var accent: Color = Color(0.0, 1.0, 0.82) if not is_dead else Color(1.0, 0.24, 0.3)
+	_draw_holo_panel(panel, accent, true, 0.82)
+	var remaining: int = int(ceil(maxf(0.0, revival_timer)))
+	var total: int = maxi(1, revival_fragments.size())
+	var title: String = "VOCE FOI ELIMINADO" if is_dead else ("ALTARES DE REVIVE ATIVOS" if revival_altars_active else "RECONSTITUA O ALIADO")
+	if revival_fragments_suspended:
+		title = "FRAGMENTOS DISSIPADOS"
+	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 25.0), _readable_text_size(15), accent)
+	if revival_fragments_suspended:
+		var wait_info: String = "RETORNAM EM %ds  |  colete de novo para invocar os altares" % int(ceil(maxf(0.0, revival_fragment_respawn_timer)))
+		_draw_wrapped_clamped(wait_info, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
+	elif revival_altars_active:
+		var rate: float = _revival_life_sacrifice_rate() * 100.0
+		var cost: int = _revival_points_cost()
+		var info: String = "VERMELHO: sacrifica %.0f%% da vida e divide entre %d caido(s)  |  AZUL: %d pontos" % [rate, _team_revival_dead_count(), cost]
+		_draw_wrapped_clamped(info, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
+	else:
+		var info2: String = "FRAGMENTOS %d/%d  |  %ds  |  mais de um caido: 50s e sacrificio sobe para 75%%" % [revival_fragments_collected, total, remaining]
+		_draw_wrapped_clamped(info2, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
+	_draw_centered(revival_notice.to_upper(), Vector2(panel.get_center().x, panel.end.y - 18.0), _readable_text_size(10), Color(1.0, 0.86, 0.24, 0.92))
+
+
+func _draw_revival_interaction_prompt(viewport: Vector2) -> void:
+	var method: String = _local_revival_altar_method()
+	if method == "":
+		return
+	var key_name: String = _compact_key_binding_name("interact")
+	var cost_text: String = "%.0f%% DA VIDA" % (_revival_life_sacrifice_rate() * 100.0)
+	if method == REVIVE_PAY_POINTS:
+		cost_text = "%d PONTOS" % _revival_points_cost()
+	var text: String = "%s INTERAGIR - ALTAR %s (%s)" % [key_name, _revival_method_label(method), cost_text]
+	var rect: Rect2 = Rect2(viewport.x * 0.5 - 230.0, viewport.y * 0.58, 460.0, 38.0)
+	_draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
+	_draw_centered(text, rect.get_center() + Vector2(0, 4), _readable_text_size(12), Color(0.94, 1.0, 0.98))
 
 
 func _draw_revive_request(viewport: Vector2) -> void :
 	if not _revive_request_visible():
+		return
+	if _team_revival_hud_visible():
+		_draw_team_revival_hud(viewport)
 		return
 	var panel_w: float = min(620.0, viewport.x * 0.88)
 	var panel_h: = 218.0 if revive_request_incoming else 164.0
@@ -53459,6 +53844,10 @@ func _handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void :
 		bombastica_detonator_touch_index = index
 		bombastica_detonator_hold = 0.0
 		return
+	if buttons.has("revival_mobile") and buttons["revival_mobile"].has_point(pos):
+		_claim_action_touch(index)
+		_handle_revival_mobile_tap()
+		return
 	if buttons["attack"].has_point(pos):
 		_claim_action_touch(index)
 		attack_drag_touch_index = index
@@ -53887,6 +54276,8 @@ func _execute_desktop_action(action: String) -> void :
 				_try_arm_lacerante_empower()
 		"dance":
 			_toggle_player_dance()
+		"interact":
+			_try_interact_revival_altar()
 		"pause":
 			_start_pause_countdown()
 		"shop":
@@ -54829,6 +55220,16 @@ func _try_apply_collection_unlock_cheat(cheat: String) -> bool:
 
 func _try_unlock_retornante_cheat() -> bool:
 	var cheat: = gameplay_cheat_text.strip_edges()
+	var normalized: = cheat.to_upper().replace(" ", "").replace("_", "").replace("-", "")
+	if normalized == "ONLINE30":
+		online_mode_unlocked = true
+		gameplay_cheat_text = ""
+		_save_config()
+		menu_selected = clampi(menu_selected, 0, max(0, _menu_option_count() - 1))
+		_add_text("MODO ONLINE LIBERADO", player_pos + Vector2(0, -100), Color(0.0, 1.0, 0.82), 1.4, 24)
+		_play_sfx("ui_spectrum_switch", 0.01, 0.6, 1.12)
+		_vibrate(80, 0.32)
+		return true
 	if cheat.to_upper() in ["CUTSCENE", "VIDEO", "RESET_CUTSCENE", "RESET_VIDEO", "ABERTURA", "RESET_ABERTURA"]:
 		reset_startup_video()
 		gameplay_cheat_text = ""
@@ -57525,6 +57926,28 @@ func _multiplayer_boss_hp_scale() -> float:
 	return 1.0
 
 
+func _multiplayer_boss_damage_scale() -> float:
+	if not is_multiplayer:
+		return 1.0
+	var active_players: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS)
+	if active_players >= 3:
+		return MULTIPLAYER_BOSS_DAMAGE_SCALE_3P
+	if active_players == 2:
+		return MULTIPLAYER_BOSS_DAMAGE_SCALE_2P
+	return 1.0
+
+
+func _multiplayer_boss_target_switch_time() -> float:
+	if not is_multiplayer:
+		return 2.4
+	var active_players: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS)
+	if active_players >= 3:
+		return MULTIPLAYER_BOSS_TARGET_SWITCH_3P
+	if active_players == 2:
+		return MULTIPLAYER_BOSS_TARGET_SWITCH_2P
+	return 2.4
+
+
 func _multiplayer_enemy_limit_bonus() -> int:
 	if not is_multiplayer:
 		return 0
@@ -58000,33 +58423,32 @@ func _online_lobby_state_v3(room_code: String, connected: int, active_players: i
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
-func _rpc_request_score_delta(amount: int) -> void :
-	if amount == 0:
+func _rpc_request_score_delta(amount: int, event_id: String = "") -> void :
+	if amount <= 0:
 		return
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if sender != 0 and dedicated_room_owner_peer_id != 0 and sender != dedicated_room_owner_peer_id:
-			rpc_id(dedicated_room_owner_peer_id, "_rpc_request_score_delta", amount)
+			rpc_id(dedicated_room_owner_peer_id, "_rpc_request_score_delta", amount, event_id)
 		return
 	if not _is_world_authority():
 		return
-	_apply_score_delta(amount)
+	_apply_score_delta(amount, true, event_id)
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
-func _rpc_add_score(amount: int) -> void :
+func _rpc_add_score(amount: int, event_id: String = "") -> void :
+	if amount <= 0:
+		return
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if sender == dedicated_room_owner_peer_id:
 			for peer_id in _mp_peer_ids():
 				if peer_id != sender:
-					rpc_id(peer_id, "_rpc_add_score", amount)
+					rpc_id(peer_id, "_rpc_add_score", amount, event_id)
 		return
 	if _mp_sender_is_self(): return
-	score = max(0, score + amount)
-	score_total = max(0, score_total + amount)
-	if amount > 0:
-		run_points_earned += amount
+	_apply_score_delta(amount, false, event_id)
 
 @rpc("authority", "call_remote", "reliable", 3)
 func _start_multiplayer_preload() -> void :
@@ -58584,8 +59006,13 @@ func _draw_remote_player_state(camera: Vector2, peer_id: int, state: Dictionary)
 	var size = PLAYER_DRAW_FROZEN_SIZE if anim_state == NET_ANIM_FROZEN else (PLAYER_DRAW_DAMAGE_SIZE if anim_state == NET_ANIM_DAMAGE else PLAYER_DRAW_BOX_SIZE)
 	var rect = Rect2(p - size * 0.5, size)
 	var accent: = Color(1.0, 0.44, 0.88) if peer_id % 2 == 0 else Color(0.0, 1.0, 0.82)
+	var is_leader: bool = is_multiplayer and peer_id == run_leader_peer_id
+	if is_leader:
+		accent = Color(1.0, 0.86, 0.18)
 	_draw_centered(String(state.get("name", "Player %d" % peer_id)), p + Vector2(0, -58), 12, accent)
 	_draw_ally_health_bar(p + Vector2(0, -44), 62.0, _remote_player_health_ratio(state), accent)
+	if is_leader:
+		_draw_leader_crown(p + Vector2(0, -62), 0.72, accent)
 	_draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], p + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
 	var tex: = _net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)))
 
@@ -58612,6 +59039,22 @@ func _remote_player_health_ratio(state: Dictionary) -> float:
 		return 0.0
 	var hp_max: float = maxf(1.0, float(state.get("hp_max", 1.0)))
 	return clampf(float(state.get("hp", hp_max)) / hp_max, 0.0, 1.0)
+
+
+func _draw_leader_crown(center: Vector2, scale: float, color: Color) -> void:
+	var s: float = maxf(0.45, scale)
+	var base: = PackedVector2Array([
+		center + Vector2(-14.0, 7.0) * s,
+		center + Vector2(14.0, 7.0) * s,
+		center + Vector2(12.0, -3.0) * s,
+		center + Vector2(5.0, 3.0) * s,
+		center + Vector2(0.0, -12.0) * s,
+		center + Vector2(-5.0, 3.0) * s,
+		center + Vector2(-12.0, -3.0) * s
+	])
+	draw_polygon(base, PackedColorArray([Color(color.r, color.g, color.b, color.a * 0.92)]))
+	draw_polyline(PackedVector2Array([base[0], base[1], base[2], base[3], base[4], base[5], base[6], base[0]]), Color(1.0, 1.0, 0.78, color.a), 1.4 * s, true)
+	draw_line(center + Vector2(-10.0, 9.0) * s, center + Vector2(10.0, 9.0) * s, Color(0.08, 0.05, 0.01, color.a * 0.72), 2.0 * s, true)
 
 
 func _draw_ally_health_bar(center: Vector2, width: float, ratio: float, accent: Color) -> void :
@@ -58728,10 +59171,11 @@ func _pack_net_boss() -> PackedFloat32Array:
 
 func _pack_net_boss_visuals() -> Dictionary:
 	var packet: = {
-		"arauto": arauto.duplicate(true), 
-		"arauto_rays": arauto_rays.duplicate(true), 
-		"arauto_echo_breaks": arauto_echo_breaks.duplicate(true), 
-		"arauto_card_drops": arauto_card_drops.duplicate(true), 
+		"run_leader_peer_id": run_leader_peer_id,
+		"arauto": arauto.duplicate(true),
+		"arauto_rays": arauto_rays.duplicate(true),
+		"arauto_echo_breaks": arauto_echo_breaks.duplicate(true),
+		"arauto_card_drops": arauto_card_drops.duplicate(true),
 		"arauto_evolution_fragments": arauto_evolution_fragments.duplicate(true), 
 		"boss_attacks": boss_attacks.duplicate(true), 
 		"boss_transition_waves": boss_transition_waves.duplicate(true)
@@ -59255,6 +59699,7 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	if not snapshot_data is Dictionary:
 		return
 	var data: Dictionary = snapshot_data
+	run_leader_peer_id = int(data.get("run_leader_peer_id", run_leader_peer_id))
 	var incoming_arauto = data.get("arauto", arauto)
 	arauto = incoming_arauto.duplicate(true) if incoming_arauto is Dictionary else {}
 	arauto_rays = Array(data.get("arauto_rays", arauto_rays)).duplicate(true)
@@ -59672,6 +60117,8 @@ func _rpc_request_phase_transfer(target_phase: int, action: String = "phase") ->
 		var sender: = _mp_sender_id()
 		if sender == 0 or _is_dedicated_spectator(sender):
 			return
+		if sender != _dedicated_current_leader_peer_id():
+			return
 		if dedicated_phase_votes_by_peer.is_empty() or dedicated_phase_vote_target != target_phase or dedicated_phase_vote_action != action or _dedicated_vote_expired(dedicated_phase_vote_started_ms, PHASE_MP_REQUEST_TIME):
 			dedicated_phase_votes_by_peer.clear()
 			dedicated_phase_vote_target = target_phase
@@ -59681,6 +60128,8 @@ func _rpc_request_phase_transfer(target_phase: int, action: String = "phase") ->
 		_dedicated_broadcast_phase_vote(sender)
 		return
 	if _mp_sender_is_self():
+		return
+	if run_leader_peer_id != 0 and _mp_sender_id() != run_leader_peer_id:
 		return
 	if mode == "game":
 		_start_phase_mp_request_overlay(true, target_phase, action, 1, _active_run_player_count())
@@ -59937,10 +60386,479 @@ func _rpc_player_death_state(peer_id: int, dead: bool) -> void :
 	partner_is_dead = _all_remote_players_dead()
 	if dead:
 		next_larapio_spawn_time = time_alive + 15.0
+		_register_team_revival_dead(peer_id, Vector2(state.get("pos", player_pos)), String(state.get("name", "ALIADO")))
 	if _all_multiplayer_players_dead():
 		_stop_battle_music_for_screen_transition()
 		_finalize_run_report("Derrota")
 		mode = "game_over"
+
+
+func _local_player_display_name() -> String:
+	return player_nickname if player_nickname.strip_edges() != "" else "VOCE"
+
+
+func _clear_team_revival_state() -> void:
+	revival_active = false
+	revival_dead_peers.clear()
+	revival_dead_names.clear()
+	revival_dead_positions.clear()
+	revival_fragments.clear()
+	revival_fragments_collected = 0
+	revival_timer = 0.0
+	revival_total_time = 0.0
+	revival_altars_active = false
+	revival_altar_life_pos = Vector2.ZERO
+	revival_altar_points_pos = Vector2.ZERO
+	revival_fragments_suspended = false
+	revival_fragment_respawn_timer = 0.0
+	revival_state_sync_timer = 0.0
+	revival_mobile_confirm_method = ""
+	revival_mobile_confirm_until_ms = 0
+	buttons.erase("revival_mobile")
+
+
+func _register_team_revival_dead(dead_peer_id: int, dead_pos: Vector2, dead_name: String) -> void:
+	if not is_multiplayer or dead_peer_id <= 0 or online_local_spectator:
+		return
+	if not revival_dead_peers.has(dead_peer_id):
+		revival_dead_peers.append(dead_peer_id)
+	revival_dead_names[dead_peer_id] = dead_name if dead_name.strip_edges() != "" else "ALIADO"
+	revival_dead_positions[dead_peer_id] = dead_pos.clamp(Vector2(72.0, 72.0), WORLD_SIZE - Vector2(72.0, 72.0))
+	revival_active = true
+	revival_fragments_suspended = false
+	revival_fragment_respawn_timer = 0.0
+	revival_total_time = REVIVAL_MULTI_TIME if revival_dead_peers.size() > 1 else REVIVAL_SINGLE_TIME
+	revival_timer = maxf(revival_timer, revival_total_time)
+	revival_notice = "RECONSTITUICAO: colete os fragmentos"
+
+
+func _generate_revival_fragments_for_dead(dead_peer_id: int, dead_pos: Vector2) -> void:
+	var base_angle: float = float(dead_peer_id % 13) * 0.37 + time_alive * 0.11
+	for i in range(REVIVAL_FRAGMENTS_PER_DEAD):
+		var id: int = dead_peer_id * 1000 + i
+		var angle: float = base_angle + TAU * float(i) / float(REVIVAL_FRAGMENTS_PER_DEAD)
+		var ring: float = 110.0 + 46.0 * float(i % 3)
+		var jitter := Vector2(rng.randf_range(-34.0, 34.0), rng.randf_range(-34.0, 34.0))
+		var pos: Vector2 = (dead_pos + Vector2.from_angle(angle) * ring + jitter).clamp(Vector2(58.0, 58.0), WORLD_SIZE - Vector2(58.0, 58.0))
+		revival_fragments.append({
+			"id": id,
+			"dead_peer": dead_peer_id,
+			"origin": dead_pos,
+			"pos": pos,
+			"home": pos,
+			"collected": false,
+			"phase": rng.randf() * TAU,
+			"wander": rng.randf() * TAU,
+			"drift_dir": Vector2.from_angle(rng.randf() * TAU)
+		})
+
+
+func _start_team_revival_for_dead(dead_peer_id: int, dead_pos: Vector2, dead_name: String, broadcast: bool = true) -> void:
+	_register_team_revival_dead(dead_peer_id, dead_pos, dead_name)
+	for fragment in revival_fragments:
+		if int(Dictionary(fragment).get("dead_peer", 0)) == dead_peer_id:
+			if broadcast:
+				_broadcast_team_revival_state()
+			return
+	_generate_revival_fragments_for_dead(dead_peer_id, dead_pos)
+	_refresh_revival_collection_state()
+	if broadcast:
+		_broadcast_team_revival_state()
+
+
+func _reset_revival_fragments_for_active_dead() -> void:
+	revival_fragments.clear()
+	revival_fragments_collected = 0
+	revival_altars_active = false
+	var dead_ids: Array = revival_dead_peers.duplicate()
+	for dead_peer_id in dead_ids:
+		var peer_id: int = int(dead_peer_id)
+		var dead_pos: Vector2 = Vector2(revival_dead_positions.get(peer_id, WORLD_SIZE * 0.5))
+		_generate_revival_fragments_for_dead(peer_id, dead_pos)
+	revival_fragments_suspended = false
+	revival_fragment_respawn_timer = 0.0
+	revival_total_time = REVIVAL_MULTI_TIME if revival_dead_peers.size() > 1 else REVIVAL_SINGLE_TIME
+	revival_timer = revival_total_time
+	revival_notice = "FRAGMENTOS REFORMADOS: colete novamente"
+
+
+func _suspend_revival_fragments() -> void:
+	revival_fragments.clear()
+	revival_fragments_collected = 0
+	revival_altars_active = false
+	revival_fragments_suspended = true
+	revival_fragment_respawn_timer = REVIVAL_FRAGMENT_RESPAWN_TIME
+	revival_state_sync_timer = 0.0
+	revival_timer = 0.0
+	revival_notice = "FRAGMENTOS DISSIPADOS: retornam em 3 min"
+	revival_altar_life_pos = Vector2.ZERO
+	revival_altar_points_pos = Vector2.ZERO
+
+
+func _update_revival_fragment_drift(delta: float) -> void:
+	if not _is_world_authority() or revival_fragments_suspended or revival_altars_active:
+		return
+	for i in range(revival_fragments.size()):
+		var fragment: Dictionary = revival_fragments[i]
+		if bool(fragment.get("collected", false)):
+			continue
+		var pos: Vector2 = Vector2(fragment.get("pos", Vector2.ZERO))
+		var home: Vector2 = Vector2(fragment.get("home", pos))
+		var phase: float = float(fragment.get("phase", 0.0)) + delta * 1.65
+		var wander: float = float(fragment.get("wander", 0.0)) + delta * rng.randf_range(0.35, 0.72)
+		var drift_dir: Vector2 = Vector2(fragment.get("drift_dir", Vector2.RIGHT))
+		var drift: Vector2 = drift_dir.rotated(sin(wander) * 0.35) * REVIVAL_FRAGMENT_DRIFT_SPEED * delta
+		var anchor_pull: Vector2 = (home - pos) * clampf(delta * 0.24, 0.0, 1.0)
+		pos = (pos + drift + anchor_pull).clamp(Vector2(48.0, 48.0), WORLD_SIZE - Vector2(48.0, 48.0))
+		if pos.distance_to(home) > 96.0:
+			drift_dir = (home - pos).normalized()
+		elif rng.randf() < delta * 0.09:
+			drift_dir = Vector2.from_angle(rng.randf() * TAU)
+		fragment["pos"] = pos
+		fragment["phase"] = phase
+		fragment["wander"] = wander
+		fragment["drift_dir"] = drift_dir
+		revival_fragments[i] = fragment
+
+
+func _announce_team_revival_death(dead_peer_id: int, dead_pos: Vector2, dead_name: String) -> void:
+	if not is_multiplayer:
+		return
+	if _is_world_authority():
+		_start_team_revival_for_dead(dead_peer_id, dead_pos, dead_name, true)
+	else:
+		_register_team_revival_dead(dead_peer_id, dead_pos, dead_name)
+	if _shop_rpc_available():
+		rpc("_rpc_revival_player_down", dead_peer_id, dead_pos, dead_name)
+
+
+func _refresh_revival_collection_state() -> void:
+	revival_fragments_collected = 0
+	for fragment in revival_fragments:
+		if bool(Dictionary(fragment).get("collected", false)):
+			revival_fragments_collected += 1
+	if revival_active and not revival_fragments_suspended and revival_fragments.size() > 0 and revival_fragments_collected >= revival_fragments.size():
+		_activate_team_revival_altars()
+
+
+func _activate_team_revival_altars() -> void:
+	revival_altars_active = true
+	var center: Vector2 = (WORLD_SIZE * 0.5).clamp(Vector2(140.0, 140.0), WORLD_SIZE - Vector2(140.0, 140.0))
+	revival_altar_life_pos = center + Vector2(-REVIVAL_ALTAR_SPACING, 0.0)
+	revival_altar_points_pos = center + Vector2(REVIVAL_ALTAR_SPACING, 0.0)
+	revival_notice = "FRAGMENTOS COMPLETOS: escolha um altar"
+
+
+func _team_revival_dead_count() -> int:
+	return maxi(1, revival_dead_peers.size())
+
+
+func _revival_life_sacrifice_rate() -> float:
+	return REVIVAL_MULTI_LIFE_SACRIFICE_RATE if _team_revival_dead_count() > 1 else REVIVE_LIFE_SACRIFICE_RATE
+
+
+func _revival_points_cost() -> int:
+	return max(1, _revive_cost() * _team_revival_dead_count())
+
+
+func _spend_local_score(cost: int) -> bool:
+	if score < cost:
+		return false
+	score = max(0, score - cost)
+	run_points_spent += cost
+	return true
+
+
+func _apply_revival_life_sacrifice(rate: float) -> float:
+	var loss: float = maxf(1.0, float(player_hp) * clampf(rate, 0.0, 0.95))
+	player_hp = maxf(1.0, float(player_hp) - loss)
+	revive_heal_penalty_timer = maxf(revive_heal_penalty_timer, REVIVE_HEAL_PENALTY_DURATION)
+	damage_flash_timer = maxf(damage_flash_timer, 0.18)
+	_spawn_radial_particles(player_pos, Color(1.0, 0.18, 0.3), 26)
+	_add_text("SACRIFICIO %.0f%% DA VIDA" % (rate * 100.0), player_pos + Vector2(0, -96), Color(1.0, 0.34, 0.42), 1.2, 18)
+	return loss
+
+
+func _local_revival_altar_method() -> String:
+	if not revival_active or not revival_altars_active or is_dead or online_local_spectator:
+		return ""
+	var life_distance: float = player_pos.distance_to(revival_altar_life_pos)
+	var points_distance: float = player_pos.distance_to(revival_altar_points_pos)
+	if life_distance <= REVIVAL_ALTAR_RADIUS and (life_distance <= points_distance or points_distance > REVIVAL_ALTAR_RADIUS):
+		return REVIVE_PAY_LIFE
+	if points_distance <= REVIVAL_ALTAR_RADIUS:
+		return REVIVE_PAY_POINTS
+	return ""
+
+
+func _revival_method_label(method: String) -> String:
+	return "VIDA" if method == REVIVE_PAY_LIFE else "PONTOS"
+
+
+func _try_interact_revival_altar(method: String = "") -> void:
+	if not revival_active or not revival_altars_active or is_dead or online_local_spectator:
+		return
+	var selected_method: String = method if method != "" else _local_revival_altar_method()
+	if selected_method == "":
+		return
+	var revive_hp: float = player_hp_max * 0.5
+	if selected_method == REVIVE_PAY_POINTS:
+		var cost: int = _revival_points_cost()
+		if not _spend_local_score(cost):
+			_add_text("PONTOS INSUFICIENTES", player_pos + Vector2(0, -92), Color(1.0, 0.56, 0.28), 0.8, 18)
+			return
+		revival_notice = "ALTAR AZUL: %d pontos gastos" % cost
+	else:
+		var rate: float = _revival_life_sacrifice_rate()
+		var loss: float = _apply_revival_life_sacrifice(rate)
+		revive_hp = maxf(1.0, loss / float(_team_revival_dead_count()))
+		revival_notice = "ALTAR VERMELHO: vida dividida entre os caidos"
+	if _is_world_authority():
+		_complete_team_revival(selected_method, revive_hp, _mp_unique_id())
+	elif _shop_rpc_available():
+		rpc("_rpc_complete_team_revival_request", selected_method, revive_hp, _mp_unique_id())
+
+
+func _handle_revival_mobile_tap() -> bool:
+	var method: String = _local_revival_altar_method()
+	if method == "":
+		return false
+	var now_ms: int = Time.get_ticks_msec()
+	if revival_mobile_confirm_method == method and now_ms <= revival_mobile_confirm_until_ms:
+		revival_mobile_confirm_method = ""
+		revival_mobile_confirm_until_ms = 0
+		_try_interact_revival_altar(method)
+	else:
+		revival_mobile_confirm_method = method
+		revival_mobile_confirm_until_ms = now_ms + REVIVAL_MOBILE_DOUBLE_TAP_MS
+		_add_text("TOQUE DE NOVO: ALTAR " + _revival_method_label(method), player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 0.8, 16)
+	return true
+
+
+func _update_team_revival(delta: float) -> void:
+	if not revival_active:
+		return
+	if not is_multiplayer:
+		_clear_team_revival_state()
+		return
+	if revival_fragments_suspended:
+		if _is_world_authority():
+			revival_fragment_respawn_timer = maxf(0.0, revival_fragment_respawn_timer - delta)
+			if revival_fragment_respawn_timer <= 0.0:
+				_reset_revival_fragments_for_active_dead()
+				_broadcast_team_revival_state()
+				return
+			revival_state_sync_timer += delta
+			if revival_state_sync_timer >= 1.0:
+				revival_state_sync_timer = 0.0
+				_broadcast_team_revival_state()
+		return
+	revival_timer = maxf(0.0, revival_timer - delta)
+	if revival_timer <= 0.0 and not revival_altars_active:
+		if _is_world_authority():
+			_suspend_revival_fragments()
+			_broadcast_team_revival_state()
+		return
+	_update_revival_fragment_drift(delta)
+	if _is_world_authority() and not revival_altars_active:
+		revival_state_sync_timer += delta
+		if revival_state_sync_timer >= REVIVAL_FRAGMENT_SYNC_INTERVAL:
+			revival_state_sync_timer = 0.0
+			_broadcast_team_revival_state()
+	if not is_dead and not online_local_spectator and not revival_altars_active:
+		for fragment_index in range(revival_fragments.size()):
+			var fragment: Dictionary = revival_fragments[fragment_index]
+			if bool(fragment.get("collected", false)):
+				continue
+			var fragment_pos: Vector2 = Vector2(fragment.get("pos", Vector2.ZERO))
+			if player_pos.distance_to(fragment_pos) <= REVIVAL_FRAGMENT_PICKUP_RADIUS:
+				_request_revival_fragment_collect(int(fragment.get("id", 0)))
+				break
+
+
+func _request_revival_fragment_collect(fragment_id: int) -> void:
+	if fragment_id == 0:
+		return
+	if _is_world_authority():
+		_collect_revival_fragment(fragment_id, _mp_unique_id())
+	elif _shop_rpc_available():
+		rpc("_rpc_collect_revival_fragment", fragment_id, _mp_unique_id())
+
+
+func _collector_world_pos(peer_id: int) -> Vector2:
+	if peer_id == _mp_unique_id():
+		return player_pos
+	var state: Dictionary = net_players_by_peer.get(peer_id, {})
+	return Vector2(state.get("pos", Vector2(-999999.0, -999999.0)))
+
+
+func _collect_revival_fragment(fragment_id: int, collector_peer_id: int) -> void:
+	if not _is_world_authority() or not revival_active or revival_altars_active or revival_fragments_suspended:
+		return
+	var collector_pos: Vector2 = _collector_world_pos(collector_peer_id)
+	for i in range(revival_fragments.size()):
+		var fragment: Dictionary = revival_fragments[i]
+		if int(fragment.get("id", 0)) != fragment_id or bool(fragment.get("collected", false)):
+			continue
+		var fragment_pos: Vector2 = Vector2(fragment.get("pos", Vector2.ZERO))
+		if collector_pos.distance_to(fragment_pos) > REVIVAL_FRAGMENT_PICKUP_RADIUS + 34.0:
+			return
+		fragment["collected"] = true
+		revival_fragments[i] = fragment
+		revival_notice = "FRAGMENTO %d/%d" % [revival_fragments_collected + 1, revival_fragments.size()]
+		_spawn_radial_particles(fragment_pos, Color(0.72, 0.95, 1.0), 14)
+		_add_text("+FRAGMENTO", fragment_pos + Vector2(0, -34), Color(0.74, 0.96, 1.0), 0.65, 14)
+		_refresh_revival_collection_state()
+		_broadcast_team_revival_state()
+		return
+
+
+func _apply_team_revival_state(dead_ids: Array, names: Dictionary, positions: Dictionary, fragments: Array, timer: float, altars_active: bool, notice: String, suspended: bool = false, respawn_timer: float = 0.0) -> void:
+	revival_active = dead_ids.size() > 0
+	revival_dead_peers = dead_ids.duplicate()
+	revival_dead_names = names.duplicate()
+	revival_dead_positions = positions.duplicate()
+	revival_fragments = fragments.duplicate(true)
+	revival_timer = maxf(0.0, timer)
+	revival_total_time = REVIVAL_MULTI_TIME if dead_ids.size() > 1 else REVIVAL_SINGLE_TIME
+	revival_altars_active = altars_active
+	revival_notice = notice
+	revival_fragments_suspended = suspended
+	revival_fragment_respawn_timer = maxf(0.0, respawn_timer)
+	if revival_altars_active and not revival_fragments_suspended:
+		_activate_team_revival_altars()
+	_refresh_revival_collection_state()
+
+
+func _broadcast_team_revival_state() -> void:
+	if not is_multiplayer or not _shop_rpc_available():
+		return
+	rpc("_rpc_team_revival_state", revival_dead_peers.duplicate(), revival_dead_names.duplicate(), revival_dead_positions.duplicate(), revival_fragments.duplicate(true), revival_timer, revival_altars_active, revival_notice, revival_fragments_suspended, revival_fragment_respawn_timer)
+
+
+func _handle_revive_with_hp(hp_amount: float) -> void:
+	is_dead = false
+	player_hp = clampf(hp_amount, 1.0, player_hp_max)
+	revive_request_cooldown = 0.0
+	_clear_revive_request()
+	_clear_team_revival_state()
+	_spawn_radial_particles(player_pos, Color(0.2, 1.0, 0.5), 42)
+	mode = "game"
+
+
+func _complete_team_revival(method: String, revive_hp: float, actor_peer_id: int) -> void:
+	if not _is_world_authority() or not revival_active or not revival_altars_active:
+		return
+	var dead_ids: Array = revival_dead_peers.duplicate()
+	for dead_peer_id in dead_ids:
+		var peer_id: int = int(dead_peer_id)
+		if peer_id == _mp_unique_id():
+			if is_dead:
+				_handle_revive_with_hp(revive_hp)
+		else:
+			var state: Dictionary = net_players_by_peer.get(peer_id, {})
+			state["dead"] = false
+			state["hp"] = maxf(1.0, revive_hp)
+			state["has_snapshot"] = true
+			net_players_by_peer[peer_id] = state
+			_sync_legacy_remote_player(peer_id)
+	if _shop_rpc_available():
+		rpc("_rpc_team_revival_complete", dead_ids, revive_hp, method, actor_peer_id)
+	var label: = "REVIVE POR SACRIFICIO" if method == REVIVE_PAY_LIFE else "REVIVE POR PONTOS"
+	_add_text(label, player_pos + Vector2(0, -96), Color(0.2, 1.0, 0.5), 1.0, 20)
+	_clear_team_revival_state()
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_revival_player_down(dead_peer_id: int, dead_pos: Vector2, dead_name: String) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == 0 or _is_dedicated_spectator(sender):
+			return
+		var target_peer: = sender if dead_peer_id <= 0 or dead_peer_id != sender else dead_peer_id
+		if dedicated_room_owner_peer_id != 0:
+			rpc_id(dedicated_room_owner_peer_id, "_rpc_revival_player_down", target_peer, dead_pos, dead_name)
+		return
+	if not _is_world_authority():
+		return
+	var sender_id: = _mp_sender_id()
+	var target_id: int = sender_id if sender_id != 0 and dead_peer_id != sender_id else dead_peer_id
+	_start_team_revival_for_dead(target_id, dead_pos, dead_name, true)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_team_revival_state(dead_ids: Array, names: Dictionary, positions: Dictionary, fragments: Array, timer: float, altars_active: bool, notice: String, suspended: bool = false, respawn_timer: float = 0.0) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _dedicated_active_peer_ids():
+				if peer_id != sender:
+					rpc_id(peer_id, "_rpc_team_revival_state", dead_ids, names, positions, fragments, timer, altars_active, notice, suspended, respawn_timer)
+		return
+	if _mp_sender_is_self():
+		return
+	_apply_team_revival_state(dead_ids, names, positions, fragments, timer, altars_active, notice, suspended, respawn_timer)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_collect_revival_fragment(fragment_id: int, collector_peer_id: int = 0) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == 0 or _is_dedicated_spectator(sender):
+			return
+		if dedicated_room_owner_peer_id != 0:
+			rpc_id(dedicated_room_owner_peer_id, "_rpc_collect_revival_fragment", fragment_id, sender)
+		return
+	if not _is_world_authority():
+		return
+	var sender_id: = _mp_sender_id()
+	var collector_id: int = sender_id if sender_id != 0 else collector_peer_id
+	_collect_revival_fragment(fragment_id, collector_id)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_complete_team_revival_request(method: String, revive_hp: float, actor_peer_id: int = 0) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == 0 or _is_dedicated_spectator(sender):
+			return
+		if dedicated_room_owner_peer_id != 0:
+			rpc_id(dedicated_room_owner_peer_id, "_rpc_complete_team_revival_request", method, revive_hp, sender)
+		return
+	if not _is_world_authority():
+		return
+	var sender_id: = _mp_sender_id()
+	var actor_id: int = sender_id if sender_id != 0 else actor_peer_id
+	_complete_team_revival(_revive_payment_method(method), revive_hp, actor_id)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_team_revival_complete(dead_ids: Array, revive_hp: float, method: String, _actor_peer_id: int = 0) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _dedicated_active_peer_ids():
+				if peer_id != sender:
+					rpc_id(peer_id, "_rpc_team_revival_complete", dead_ids, revive_hp, method, _actor_peer_id)
+		return
+	if _mp_sender_is_self():
+		return
+	for dead_peer_id in dead_ids:
+		var peer_id: int = int(dead_peer_id)
+		if peer_id == _mp_unique_id():
+			if is_dead:
+				_handle_revive_with_hp(revive_hp)
+		else:
+			var state: Dictionary = net_players_by_peer.get(peer_id, {})
+			state["dead"] = false
+			state["hp"] = maxf(1.0, revive_hp)
+			state["has_snapshot"] = true
+			net_players_by_peer[peer_id] = state
+			_sync_legacy_remote_player(peer_id)
+	_clear_team_revival_state()
+	var label: = "REVIVE POR SACRIFICIO" if _revive_payment_method(method) == REVIVE_PAY_LIFE else "REVIVE POR PONTOS"
+	_add_text(label, player_pos + Vector2(0, -96), Color(0.2, 1.0, 0.5), 1.0, 20)
+
 
 func _revive_cost() -> int:
 	return max(1, card_cost * REVIVE_CARD_COST_MULT)
@@ -60027,12 +60945,7 @@ func _reject_team_revive_request() -> void :
 
 
 func _handle_revive(half_health: = true) -> void :
-	is_dead = false
-	player_hp = max(1.0, player_hp_max * (0.5 if half_health else 1.0))
-	revive_request_cooldown = 0.0
-	_clear_revive_request()
-	_spawn_radial_particles(player_pos, Color(0.2, 1.0, 0.5), 42)
-	mode = "game"
+	_handle_revive_with_hp(max(1.0, player_hp_max * (0.5 if half_health else 1.0)))
 
 @rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_revive_player(half_health: = true) -> void :
@@ -60282,23 +61195,24 @@ func _outgoing_damage_amount(amount: float, source: String) -> float:
 	return maxf(0.0, amount)
 
 
-func _send_client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "") -> void :
+func _send_client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "", source_peer_id: int = 0) -> void :
 	if online_local_spectator or multiplayer_peer == null or not is_multiplayer or _is_world_authority():
 		return
-	rpc_id(1, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category)
+	rpc_id(1, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category, source_peer_id if source_peer_id > 0 else _mp_unique_id())
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "") -> void :
+func _client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "", source_peer_id: int = 0) -> void :
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if _is_dedicated_spectator(sender):
 			return
 		if dedicated_room_owner_peer_id != 0 and sender != 0 and sender != dedicated_room_owner_peer_id:
-			rpc_id(dedicated_room_owner_peer_id, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category)
+			rpc_id(dedicated_room_owner_peer_id, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category, sender)
 		return
 	if not _is_world_authority() or not is_finite(amount) or amount <= 0.0:
 		return
+	var attacker_peer_id: int = source_peer_id if source_peer_id > 0 else _mp_sender_id()
 	match target_kind:
 		NET_DAMAGE_ENEMY:
 			for enemy in enemies:
@@ -60306,7 +61220,7 @@ func _client_damage_request(target_kind: int, target_uid: String, amount: float,
 					_damage_enemy(enemy, amount, source, show_text, false, attack_origin, source_category)
 					return
 		NET_DAMAGE_BOSS:
-			_damage_boss(amount, source, false, false, source_category, attack_origin)
+			_damage_boss(amount, source, false, false, source_category, attack_origin, attacker_peer_id)
 		NET_DAMAGE_ARAUTO:
 			_damage_arauto(amount, source, show_text, false)
 

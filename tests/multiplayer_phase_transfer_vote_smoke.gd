@@ -23,12 +23,16 @@ func _run() -> void:
 	game.mode = "game"
 	game.current_phase = 1
 	game.player_pos = Vector2(800, 450)
+	game.run_leader_peer_id = 42
 	game.phase_fragment = {
 		"pos": game.player_pos,
 		"next_phase": 2,
 		"pulse": 0.0,
 		"life": 0.0
 	}
+	game._update_phase_fragment(0.016)
+	_check(not game.phase_mp_request_outgoing and not game.phase_fragment.is_empty(), "non-leader started a multiplayer phase transfer")
+	game.run_leader_peer_id = game._mp_unique_id()
 	game._update_phase_fragment(0.016)
 	_check(game.mode == "game", "multiplayer phase transfer started without consensus")
 	_check(not game.phase_fragment.is_empty(), "multiplayer phase fragment disappeared before consensus")
@@ -54,6 +58,9 @@ func _run() -> void:
 	_check(game.phase_fragment.is_empty(), "single player phase fragment was not consumed")
 
 	print("MULTIPLAYER_PHASE_TRANSFER_VOTE_SMOKE_OK gated=true accept_overlay=true single_player_direct=true")
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
 	game.queue_free()
 	await process_frame
 	quit(0)

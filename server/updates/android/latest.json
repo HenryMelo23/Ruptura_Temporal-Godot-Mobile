@@ -1,14 +1,12 @@
 {
-  "version": "2.0.33",
-  "version_code": 23300,
-  "filename": "ruptura_temporal_mobile_2.0.33.apk",
-  "sha256": "8a7cd8fa3fbb067d44dd5836d55f826057e7648081275ba296d156048d4e837b",
-  "size": 1296780883,
+  "version": "2.0.34",
+  "version_code": 23400,
+  "filename": "ruptura_temporal_mobile_2.0.34.apk",
+  "sha256": "08ee9d8e3a0b8a26db2c2d84000489a2f0f875ea3daa2324cfc4b53ccaf0d5a5",
+  "size": 1297424725,
   "notes": [
-    "Versao 2.0.33 com laboratorio visual Apolo vs UMBRA na fase 5 para teste interno.",
-    "Atualizacao de versionamento e empacotamento Android/Windows.",
-    "Validacao completa Godot e smokes de Fase 5/App Update executados."
+    "v2.0.34 com ajustes de estabilidade, balanceamento de chefes, revive por fragmentos, portais de rota e polimento visual."
   ],
   "mandatory": false,
-  "published_at": "2026-08-27T22:40:19.2662781Z"
+  "published_at": "2026-08-30T19:16:40.9077238Z"
 }

@@ -33,6 +33,15 @@ func _run() -> void:
 	game.online_relay_request = null
 	game.online_heartbeat_request = null
 
+	game.mode = "menu"
+	game.online_mode_unlocked = false
+	await _capture("online_menu_locked_1280x720.png")
+	_check(not game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "locked menu should not expose online")
+	game.gameplay_cheat_text = "ONLINE30"
+	_check(game._try_unlock_retornante_cheat(), "ONLINE30 did not unlock online")
+	await _capture("online_menu_unlocked_1280x720.png")
+	_check(game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "unlocked menu should expose online")
+
 	game.mode = "multiplayer_menu"
 	game.multiplayer_notice = "ONLINE DISPONIVEL"
 	await _capture("online_hub_1280x720.png")
@@ -100,16 +109,26 @@ func _run() -> void:
 
 	game.mode = "game"
 	game.is_multiplayer = true
+	game.is_host = true
 	game.is_dead = true
 	game.player_hp = 0.0
 	game.score = 410
 	game.card_cost = 500
-	game.revive_request_cooldown = 0.0
-	game.revive_request_outgoing = false
-	game.revive_request_incoming = false
-	game.revive_request_cost = 2500
+	game._clear_team_revival_state()
+	game._start_team_revival_for_dead(game._mp_unique_id(), game.player_pos, "Geovana", false)
 	await _capture("online_revive_dead_1280x720.png")
-	_check_button_inside("revive_request", Vector2i(1280, 720))
+	_check(game.revival_active and game.revival_fragments.size() > 0, "revival fragments did not render for dead player")
+	game.is_dead = false
+	game.player_hp = game.player_hp_max
+	for i in range(game.revival_fragments.size()):
+		var fragment_state: Dictionary = game.revival_fragments[i]
+		fragment_state["collected"] = true
+		game.revival_fragments[i] = fragment_state
+	game._refresh_revival_collection_state()
+	game._activate_team_revival_altars()
+	game.player_pos = game.revival_altar_life_pos
+	await _capture("online_revive_altars_1280x720.png")
+	_check(game.revival_altars_active and game._local_revival_altar_method() == game.REVIVE_PAY_LIFE, "revival altar prompt did not become available")
 
 	print("MULTIPLAYER_ONLINE_UI_VISUAL_OK captures=", ", ".join(captures))
 	game.queue_free()
