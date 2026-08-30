@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://debug/phase5_apolo_exhibition.gd" id="1_apolo"]
+
+[node name="Phase5ApoloExhibition" type="Node2D"]
+script = ExtResource("1_apolo")
+manifestation_index = 0

@@ -1,16 +1,14 @@
 {
-  "version": "2.0.32",
-  "version_code": 23200,
-  "filename": "Ruptura_Temporal_2.0.32.exe",
-  "sha256": "384a2c480c543391c96e255aea5534a26b2b7fd259f64a483766a23b250f8551",
-  "size": 1370916888,
+  "version": "2.0.33",
+  "version_code": 23300,
+  "filename": "Ruptura_Temporal_2.0.33.exe",
+  "sha256": "fd8e225bd2f0cf155aa7cac798c0233a539bc14a48ac5af00cbd7c92de0921b8",
+  "size": 1374836744,
   "notes": [
-    "Novas trilhas exclusivas para chefes das fases 3, 4, 5 e 7.",
-    "Trilhas antigas de boss foram removidas da rotacao.",
-    "A playlist normal continua usando as musicas da pasta Sounds com rotacao aleatoria e crossfade.",
-    "Corrigida uma condicao em que a musica podia parar e nao voltar automaticamente.",
-    "Versao 2.0.32 com ajustes de empacotamento e validacao de inicializacao."
+    "Versao 2.0.33 com laboratorio visual Apolo vs UMBRA na fase 5 para teste interno.",
+    "Atualizacao de versionamento e empacotamento Android/Windows.",
+    "Validacao completa Godot e smokes de Fase 5/App Update executados."
   ],
   "mandatory": false,
-  "published_at": "2026-08-23T21:58:23.6302916Z"
+  "published_at": "2026-08-27T22:41:43.1703141Z"
 }
