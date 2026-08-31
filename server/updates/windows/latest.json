@@ -1,12 +1,15 @@
 {
-  "version": "2.0.34",
-  "version_code": 23400,
-  "filename": "Ruptura_Temporal_2.0.34.exe",
-  "sha256": "c06279a622330d206e6c97805a84d23223eadf6a53f6ab5be365e3a9dceedf69",
-  "size": 1375483312,
+  "version": "2.0.35",
+  "version_code": 23500,
+  "filename": "Ruptura_Temporal_2.0.35.exe",
+  "sha256": "763b6d635aa899af25a979488a8ea304d5f1da19c1c3371182afbbea9f09ffe2",
+  "size": 1375728240,
   "notes": [
-    "v2.0.34 com ajustes de estabilidade, balanceamento de chefes, revive por fragmentos, portais de rota e polimento visual."
+    "Fontes embutidas e leitura visual corrigidas.",
+    "Sincronizacao de sala e preparacao de partida ajustadas.",
+    "Atualizador preparado para pacotes de conteudo incremental.",
+    "Polimento de HUD, impacto e entrada da personagem."
   ],
   "mandatory": false,
-  "published_at": "2026-08-30T19:17:45.7757427Z"
+  "published_at": "2026-08-31T00:39:37.0637641Z"
 }

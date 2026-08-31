@@ -14,13 +14,16 @@ const storePath = path.join(logDir, "leaderboard_smoke_runs.json");
 const securityStorePath = path.join(logDir, "leaderboard_smoke_security.json");
 const updateRoot = path.join(logDir, "android_update_smoke");
 const windowsUpdateRoot = path.join(logDir, "windows_update_smoke");
+const contentUpdateRoot = path.join(logDir, "content_update_smoke");
 fs.mkdirSync(logDir, { recursive: true });
 if (fs.existsSync(storePath)) fs.rmSync(storePath, { force: true });
 if (fs.existsSync(securityStorePath)) fs.rmSync(securityStorePath, { force: true });
 fs.rmSync(updateRoot, { recursive: true, force: true });
 fs.rmSync(windowsUpdateRoot, { recursive: true, force: true });
+fs.rmSync(contentUpdateRoot, { recursive: true, force: true });
 fs.mkdirSync(updateRoot, { recursive: true });
 fs.mkdirSync(windowsUpdateRoot, { recursive: true });
+fs.mkdirSync(contentUpdateRoot, { recursive: true });
 const fakeApk = Buffer.from("RUPTURA_ANDROID_UPDATE_SMOKE");
 const fakeApkName = "ruptura_temporal_2.0.27_smoke.apk";
 fs.writeFileSync(path.join(updateRoot, fakeApkName), fakeApk);
@@ -43,6 +46,20 @@ fs.writeFileSync(path.join(windowsUpdateRoot, "latest.json"), JSON.stringify({
   sha256: crypto.createHash("sha256").update(fakeExe).digest("hex"),
   notes: ["Atualizador Windows smoke"],
   mandatory: false,
+  published_at: "2026-07-16T12:00:00Z"
+}));
+const fakeContentPack = Buffer.from("RUPTURA_CONTENT_UPDATE_SMOKE");
+const fakeContentPackName = "ruptura_content_2.0.27_smoke.pck";
+fs.writeFileSync(path.join(contentUpdateRoot, fakeContentPackName), fakeContentPack);
+fs.writeFileSync(path.join(contentUpdateRoot, "latest.json"), JSON.stringify({
+  content_version: "2.0.27-content",
+  content_version_code: 227,
+  packs: [{
+    filename: fakeContentPackName,
+    sha256: crypto.createHash("sha256").update(fakeContentPack).digest("hex"),
+    required_game_version_code: 227
+  }],
+  notes: ["Conteudo incremental smoke"],
   published_at: "2026-07-16T12:00:00Z"
 }));
 
@@ -129,6 +146,7 @@ async function run() {
       RUN_SECURITY_PATH: securityStorePath,
       ANDROID_UPDATE_ROOT: updateRoot,
       WINDOWS_UPDATE_ROOT: windowsUpdateRoot,
+      CONTENT_UPDATE_ROOT: contentUpdateRoot,
       STREAM_MANAGER_PUBLIC_BASE_URL: `http://127.0.0.1:${port}`,
       ALLOW_LOCAL_PUBLIC_BASE_URL: "1"
     },
@@ -495,7 +513,17 @@ async function run() {
     });
     assert.strictEqual(windowsRanged.status, 206, "EXE range download was not honored");
     assert.strictEqual(windowsRanged.body.length, 8, "EXE range returned the wrong byte count");
-    console.log("LEADERBOARD_SMOKE_OK dashboard=true profile=true rankings=true run_heatmap=true sprites=true updater=true range=true windows_updater=true port=18090");
+    const contentUpdate = await request("GET", "/updates/content/latest?version_code=227&content_version_code=226");
+    assert.strictEqual(contentUpdate.status, 200, "content update manifest endpoint failed");
+    const contentPayload = JSON.parse(contentUpdate.body.toString("utf8"));
+    assert.strictEqual(contentPayload.available, true, "newer content pack was not offered");
+    assert.strictEqual(contentPayload.content_version_code, 227, "wrong content version code");
+    assert(Array.isArray(contentPayload.packs) && contentPayload.packs.length === 1, "content packs were not listed");
+    assert(contentPayload.packs[0].download_url.endsWith(encodeURIComponent(fakeContentPackName)), "content manifest did not expose pck download_url");
+    const contentPack = await request("GET", new URL(contentPayload.packs[0].download_url).pathname);
+    assert.strictEqual(contentPack.status, 200, "content pack download failed");
+    assert.strictEqual(contentPack.body.toString("utf8"), fakeContentPack.toString("utf8"), "content pack body changed");
+    console.log("LEADERBOARD_SMOKE_OK dashboard=true profile=true rankings=true run_heatmap=true sprites=true updater=true range=true windows_updater=true content_updater=true port=18090");
   } finally {
     child.kill("SIGTERM");
     await new Promise((resolve) => child.once("exit", resolve));

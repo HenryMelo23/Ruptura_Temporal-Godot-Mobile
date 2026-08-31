@@ -13,9 +13,9 @@ const ROOM_PORT_START = numberEnv("ROOM_PORT_START", 4522);
 const ROOM_PORT_END = numberEnv("ROOM_PORT_END", 4599);
 const GODOT_BIN = process.env.GODOT_BIN || "/opt/godot/Godot_v4.7-stable_linux.x86_64";
 const PROJECT_PATH = process.env.PROJECT_PATH || "/opt/ruptura/Ruptura_Temporal-Godot-Mobile";
-const ROOM_IDLE_MS = numberEnv("ROOM_IDLE_MS", 15 * 60 * 1000);
+const ROOM_IDLE_MS = numberEnv("ROOM_IDLE_MS", 30 * 60 * 1000);
 const ROOM_EVENT_LIMIT = numberEnv("ROOM_EVENT_LIMIT", 80);
-const WARM_STANDBY_ROOMS = numberEnv("WARM_STANDBY_ROOMS", 1, true);
+const WARM_STANDBY_ROOMS = numberEnv("WARM_STANDBY_ROOMS", 2, true);
 const WARM_STANDBY_REFILL_MS = numberEnv("WARM_STANDBY_REFILL_MS", 1500);
 const ROOM_READY_TIMEOUT_MS = numberEnv("ROOM_READY_TIMEOUT_MS", 30 * 1000);
 const MAX_PLAYERS = 3;
@@ -69,8 +69,10 @@ const RUN_AUDIT_BENIGN_REASONS = new Set([
 ]);
 const ANDROID_UPDATE_ROOT = path.resolve(process.env.ANDROID_UPDATE_ROOT || path.join(__dirname, "updates", "android"));
 const WINDOWS_UPDATE_ROOT = path.resolve(process.env.WINDOWS_UPDATE_ROOT || path.join(__dirname, "updates", "windows"));
+const CONTENT_UPDATE_ROOT = path.resolve(process.env.CONTENT_UPDATE_ROOT || path.join(__dirname, "updates", "content"));
 const ANDROID_UPDATE_MANIFEST = path.join(ANDROID_UPDATE_ROOT, "latest.json");
 const WINDOWS_UPDATE_MANIFEST = path.join(WINDOWS_UPDATE_ROOT, "latest.json");
+const CONTENT_UPDATE_MANIFEST = path.join(CONTENT_UPDATE_ROOT, "latest.json");
 
 const rooms = new Map();
 const streams = new Map();
@@ -212,6 +214,48 @@ function readUpdateManifest(platform = "android") {
   }
 }
 
+function readContentUpdateManifest() {
+  try {
+    const raw = fs.readFileSync(CONTENT_UPDATE_MANIFEST, "utf8").replace(/^\uFEFF/, "");
+    const parsed = JSON.parse(raw);
+    const contentVersionCode = Math.max(0, Math.floor(Number(parsed.content_version_code || parsed.version_code) || 0));
+    const packs = Array.isArray(parsed.packs) ? parsed.packs : [];
+    const normalizedPacks = [];
+    for (const pack of packs) {
+      const filename = path.basename(String(pack && pack.filename || ""));
+      const sha256 = String(pack && pack.sha256 || "").toLowerCase();
+      const filePath = filename ? path.join(CONTENT_UPDATE_ROOT, filename) : "";
+      const requiredGameVersionCode = Math.max(0, Math.floor(Number(pack && pack.required_game_version_code) || 0));
+      if (!filename.endsWith(".pck") || !/^[a-f0-9]{64}$/.test(sha256) || !filePath || !fs.existsSync(filePath)) {
+        return null;
+      }
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) {
+        return null;
+      }
+      normalizedPacks.push({
+        filename,
+        sha256,
+        size: stat.size,
+        requiredGameVersionCode,
+        filePath
+      });
+    }
+    if (contentVersionCode <= 0 || normalizedPacks.length === 0) {
+      return null;
+    }
+    return {
+      contentVersion: String(parsed.content_version || parsed.version || "").slice(0, 32),
+      contentVersionCode,
+      notes: Array.isArray(parsed.notes) ? parsed.notes.map((note) => String(note).slice(0, 240)).slice(0, 8) : [],
+      packs: normalizedPacks,
+      publishedAt: String(parsed.published_at || "").slice(0, 64)
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
 function readAndroidUpdateManifest() {
   return readUpdateManifest("android");
 }
@@ -242,6 +286,30 @@ function updatePublic(platform = "android", currentVersionCode = 0) {
 
 function androidUpdatePublic(currentVersionCode = 0) {
   return updatePublic("android", currentVersionCode);
+}
+
+function contentUpdatePublic(currentContentVersionCode = 0, gameVersionCode = 0) {
+  const update = readContentUpdateManifest();
+  if (!update) {
+    return { ok: true, available: false, current_content_version_code: currentContentVersionCode };
+  }
+  const packs = update.packs.filter((pack) => pack.requiredGameVersionCode <= gameVersionCode || gameVersionCode <= 0);
+  return {
+    ok: true,
+    available: update.contentVersionCode > currentContentVersionCode && packs.length > 0,
+    current_content_version_code: currentContentVersionCode,
+    content_version: update.contentVersion,
+    content_version_code: update.contentVersionCode,
+    notes: update.notes,
+    published_at: update.publishedAt,
+    packs: packs.map((pack) => ({
+      filename: pack.filename,
+      sha256: pack.sha256,
+      size: pack.size,
+      required_game_version_code: pack.requiredGameVersionCode,
+      download_url: `${STREAM_MANAGER_PUBLIC_BASE_URL}/updates/content/download/${encodeURIComponent(pack.filename)}`
+    }))
+  };
 }
 
 function sendUpdateFile(req, res, platform, filename) {
@@ -280,7 +348,7 @@ function sendUpdateFile(req, res, platform, filename) {
   const headers = {
     "Accept-Ranges": "bytes",
     "Cache-Control": "public, max-age=31536000, immutable",
-    "Content-Type": "application/vnd.android.package-archive",
+    "Content-Type": platform === "windows" ? "application/vnd.microsoft.portable-executable" : "application/vnd.android.package-archive",
     "Content-Disposition": `attachment; filename="${update.filename.replace(/"/g, "")}"`,
     "Content-Length": end - start + 1
   };
@@ -299,6 +367,30 @@ function sendUpdateFile(req, res, platform, filename) {
 
 function sendAndroidApk(req, res, filename) {
   sendUpdateFile(req, res, "android", filename);
+}
+
+function sendContentPack(req, res, filename) {
+  const update = readContentUpdateManifest();
+  const requested = path.basename(decodeURIComponent(filename || ""));
+  const pack = update && update.packs.find((entry) => entry.filename === requested);
+  if (!pack) {
+    sendJson(res, 404, { error: "content update not found" });
+    return;
+  }
+  res.writeHead(200, {
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Type": "application/octet-stream",
+    "Content-Disposition": `attachment; filename="${pack.filename.replace(/"/g, "")}"`,
+    "Content-Length": pack.size
+  });
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  const stream = fs.createReadStream(pack.filePath);
+  stream.on("error", () => res.destroy());
+  stream.pipe(res);
 }
 
 function readJson(req, maxBytes = 16 * 1024) {
@@ -2343,6 +2435,14 @@ async function route(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/updates/content/latest") {
+    const currentContentVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("content_version_code")) || 0));
+    const gameVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("version_code")) || 0));
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, contentUpdatePublic(currentContentVersionCode, gameVersionCode));
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/updates/unlocks/veteran") {
     res.setHeader("Cache-Control", "no-store, max-age=0");
     sendJson(res, 200, veteranUnlockSnapshot(url.searchParams));
@@ -2364,6 +2464,12 @@ async function route(req, res) {
   const windowsExeMatch = url.pathname.match(/^\/updates\/windows\/download\/([^/]+)$/);
   if ((req.method === "GET" || req.method === "HEAD") && windowsExeMatch) {
     sendUpdateFile(req, res, "windows", windowsExeMatch[1]);
+    return;
+  }
+
+  const contentPackMatch = url.pathname.match(/^\/updates\/content\/download\/([^/]+)$/);
+  if ((req.method === "GET" || req.method === "HEAD") && contentPackMatch) {
+    sendContentPack(req, res, contentPackMatch[1]);
     return;
   }
 

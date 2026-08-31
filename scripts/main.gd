@@ -7,8 +7,8 @@ const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.34"
-const GAME_VERSION_CODE: = 23400
+const GAME_VERSION: = "2.0.35"
+const GAME_VERSION_CODE: = 23500
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
 const STARTUP_THANKS_FRAME_PATH_FORMAT: String = "res://assets/videos/startup_teaser_frames/frame_%04d.webp"
@@ -54,6 +54,10 @@ const PLAYER_DRAW_SHOT_SIZE: = Vector2(52, 77)
 const PLAYER_DRAW_DAMAGE_SIZE: = Vector2(54, 80)
 const PLAYER_DRAW_LACERAR_HEIGHT: = 77.0
 const PLAYER_DRAW_FROZEN_SIZE: = Vector2(58.8, 84.0)
+const PLAYER_START_DOWN_FALL_TIME: float = 0.82
+const PLAYER_START_DOWN_LAND_TIME: float = 1.0
+const PLAYER_START_DOWN_HEIGHT: float = 360.0
+const PLAYER_START_DOWN_FRAME_TIME: float = 0.11
 const PLAYER_WORLD_MARGIN: = Vector2.ZERO
 const HUD_PLAYER_FADE_RADIUS: = 96.0
 const HUD_PLAYER_MIN_ALPHA: = 0.26
@@ -163,6 +167,11 @@ const APP_UPDATE_VETERAN_UNLOCKS_PATH: = "/updates/unlocks/veteran"
 const APP_UPDATE_LATEST_PATH: = APP_UPDATE_ANDROID_LATEST_PATH
 const APP_UPDATE_DOWNLOAD_PREFIX: = APP_UPDATE_ANDROID_DOWNLOAD_PREFIX
 const APP_UPDATE_CHECK_DELAY: = 1.0
+const CONTENT_UPDATE_LATEST_PATH: = "/updates/content/latest"
+const CONTENT_UPDATE_DOWNLOAD_PREFIX: = "/updates/content/download/"
+const CONTENT_UPDATE_CHECK_DELAY: = 1.45
+const CONTENT_UPDATE_STORAGE_DIR: = "user://updates/content"
+const CONTENT_UPDATE_STATE_PATH: = "user://updates/content_state.json"
 const APP_UPDATE_VETERAN_UNLOCK_DELAY: = 2.5
 const APP_UPDATE_DOWNLOAD_TIMEOUT: = 1800.0
 const APP_UPDATE_HASH_CHUNK_BYTES: = 1024 * 1024
@@ -1749,9 +1758,13 @@ var rt_integrity: RefCounted = null
 var last_run_leaderboard_url: String = ""
 var app_update_check_request: HTTPRequest = null
 var app_update_download_request: HTTPRequest = null
+var content_update_check_request: HTTPRequest = null
+var content_update_download_request: HTTPRequest = null
 var veteran_unlock_request: HTTPRequest = null
 var app_update_checked: = false
 var app_update_check_timer: = APP_UPDATE_CHECK_DELAY
+var content_update_checked: = false
+var content_update_check_timer: = CONTENT_UPDATE_CHECK_DELAY
 var veteran_unlock_checked: = false
 var veteran_unlock_check_timer: = APP_UPDATE_VETERAN_UNLOCK_DELAY
 var app_update_popup_visible: = false
@@ -1760,6 +1773,14 @@ var app_update_status: = "idle"
 var app_update_error: = ""
 var app_update_download_path: = ""
 var app_update_selected: = 0
+var content_update_manifest: Dictionary = {}
+var content_update_status: = "idle"
+var content_update_error: = ""
+var content_update_queue: Array = []
+var content_update_current_pack: Dictionary = {}
+var content_update_download_path: = ""
+var content_update_loaded_packs: Array[String] = []
+var content_update_version_code: = 0
 var umbra_mind_check_request: HTTPRequest = null
 var umbra_mind_checked: bool = false
 var umbra_mind_status: String = "idle"
@@ -1787,6 +1808,7 @@ var online_room_password: String = ""
 var online_room_locked: bool = false
 var online_join_code: String = ""
 var online_join_password: String = ""
+var online_room_host: String = ONLINE_RELAY_DEFAULT_HOST
 var online_room_port: int = 0
 var online_connected: bool = false
 var online_status: String = ""
@@ -2163,6 +2185,7 @@ var mp_manifest_rejection_message: = ""
 var mp_manifest_rejection_timer: = 0.0
 var mp_manifest_sync_last_ms: int = 0
 var mp_manifest_sync_last_signature: String = ""
+var mp_manifest_start_pending: bool = false
 var manifest_transition_elapsed = 0.0
 var manifest_transition_seed = 0
 var manifest_preview_open = false
@@ -2200,6 +2223,9 @@ var player_speed = PLAYER_BASE_SPEED
 var player_damage = PLAYER_BASE_DAMAGE
 var player_attack_interval = PLAYER_BASE_ATTACK_INTERVAL
 var player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
+var player_start_down_fall_timer: float = 0.0
+var player_start_down_landing_timer: float = 0.0
+var player_start_down_smoke_spawned: bool = false
 var player_defense = 0.0
 var player_crit_chance = 0.0
 var ancorada_still_timer: = 0.0
@@ -3226,6 +3252,7 @@ func _ready() -> void :
 		return
 	_net_report_start()
 	font = ThemeDB.fallback_font
+	_load_installed_content_packs()
 	_load_menu_fonts()
 	rng.randomize()
 	if _is_mobile_runtime():
@@ -3299,6 +3326,17 @@ func _ready() -> void :
 	add_child(app_update_download_request)
 	app_update_download_request.request_completed.connect(_on_app_update_download_completed)
 	_cleanup_stale_app_update_files()
+	content_update_check_request = HTTPRequest.new()
+	content_update_check_request.timeout = 8.0
+	add_child(content_update_check_request)
+	content_update_check_request.request_completed.connect(_on_content_update_check_completed)
+
+	content_update_download_request = HTTPRequest.new()
+	content_update_download_request.timeout = APP_UPDATE_DOWNLOAD_TIMEOUT
+	content_update_download_request.use_threads = true
+	add_child(content_update_download_request)
+	content_update_download_request.request_completed.connect(_on_content_update_download_completed)
+
 	umbra_mind_check_request = HTTPRequest.new()
 	umbra_mind_check_request.timeout = 8.0
 	add_child(umbra_mind_check_request)
@@ -6066,6 +6104,258 @@ func _read_json_file(path: String) -> Dictionary:
 	return {}
 
 
+func _write_json_file(path: String, payload: Dictionary) -> bool:
+	var absolute_dir: = ProjectSettings.globalize_path(path.get_base_dir())
+	var mkdir_err: = DirAccess.make_dir_recursive_absolute(absolute_dir)
+	if mkdir_err != OK and mkdir_err != ERR_ALREADY_EXISTS:
+		return false
+	var file: = FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(JSON.stringify(payload, "\t"))
+	file.close()
+	return true
+
+
+func _load_installed_content_packs() -> void:
+	content_update_loaded_packs.clear()
+	var state: Dictionary = _read_json_file(CONTENT_UPDATE_STATE_PATH)
+	content_update_version_code = int(state.get("content_version_code", 0))
+	var packs: Array = state.get("packs", [])
+	for entry in packs:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var pack: Dictionary = Dictionary(entry)
+		var filename: String = _content_update_safe_filename(String(pack.get("filename", "")))
+		if filename == "":
+			continue
+		var pack_path: String = _content_update_pack_path(filename)
+		if FileAccess.file_exists(pack_path):
+			_load_content_pack_from_path(pack_path, false)
+
+
+func _content_update_safe_filename(filename: String) -> String:
+	var clean: String = filename.get_file().strip_edges()
+	if clean == "" or clean != filename.strip_edges():
+		return ""
+	if not clean.to_lower().ends_with(".pck"):
+		return ""
+	for character in clean:
+		var code: int = character.unicode_at(0)
+		var is_number: bool = code >= 48 and code <= 57
+		var is_upper: bool = code >= 65 and code <= 90
+		var is_lower: bool = code >= 97 and code <= 122
+		if not (is_number or is_upper or is_lower or character in ["_", "-", "."]):
+			return ""
+	return clean
+
+
+func _content_update_pack_path(filename: String) -> String:
+	return CONTENT_UPDATE_STORAGE_DIR + "/" + filename
+
+
+func _normalize_content_update_manifest(payload: Dictionary) -> Dictionary:
+	if not bool(payload.get("available", false)):
+		return {"ok": false, "reason": "unavailable"}
+	var version_code: int = int(payload.get("content_version_code", payload.get("version_code", 0)))
+	if version_code <= content_update_version_code:
+		return {"ok": false, "reason": "current"}
+	var packs: Array = payload.get("packs", [])
+	if packs.is_empty():
+		return {"ok": false, "reason": "empty"}
+	var normalized_packs: Array = []
+	var expected_prefix: String = ONLINE_RELAY_BASE_URL + CONTENT_UPDATE_DOWNLOAD_PREFIX
+	for entry in packs:
+		if typeof(entry) != TYPE_DICTIONARY:
+			return {"ok": false, "reason": "invalid_pack"}
+		var pack: Dictionary = Dictionary(entry)
+		var filename: String = _content_update_safe_filename(String(pack.get("filename", "")))
+		var download_url: String = String(pack.get("download_url", pack.get("url", "")))
+		var sha256: String = String(pack.get("sha256", "")).to_lower()
+		var size: int = int(pack.get("size", 0))
+		var required_game_version_code: int = int(pack.get("required_game_version_code", 0))
+		if filename == "" or size <= 0 or sha256.length() != 64 or not sha256.is_valid_hex_number(false):
+			return {"ok": false, "reason": "invalid_pack"}
+		if not download_url.begins_with(expected_prefix):
+			return {"ok": false, "reason": "invalid_url"}
+		if required_game_version_code > GAME_VERSION_CODE:
+			return {"ok": false, "reason": "requires_newer_game"}
+		normalized_packs.append({
+			"filename": filename,
+			"download_url": download_url,
+			"sha256": sha256,
+			"size": size,
+			"required_game_version_code": required_game_version_code
+		})
+	return {
+		"ok": true,
+		"content_version": String(payload.get("content_version", payload.get("version", ""))),
+		"content_version_code": version_code,
+		"packs": normalized_packs,
+		"notes": payload.get("notes", [])
+	}
+
+
+func _update_content_update_check(delta: float) -> void:
+	if content_update_checked or dedicated_server_mode or not _app_update_supported():
+		return
+	if mode != "menu" or app_update_popup_visible:
+		return
+	content_update_check_timer -= delta
+	if content_update_check_timer > 0.0:
+		return
+	content_update_checked = true
+	if content_update_check_request == null:
+		return
+	var url: = "%s%s?version=%s&version_code=%d&content_version_code=%d" % [
+		ONLINE_RELAY_BASE_URL,
+		CONTENT_UPDATE_LATEST_PATH,
+		GAME_VERSION.uri_encode(),
+		GAME_VERSION_CODE,
+		content_update_version_code
+	]
+	content_update_status = "checking"
+	var err: = content_update_check_request.request(url, ["Cache-Control: no-cache"])
+	if err != OK:
+		content_update_status = "error"
+		content_update_error = "request_err_%d" % err
+		print("Atualizacao de conteudo: falha ao consultar: ", error_string(err))
+
+
+func _on_content_update_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		content_update_status = "error"
+		content_update_error = "http_%d" % response_code
+		print("Atualizacao de conteudo: consulta indisponivel HTTP ", response_code)
+		return
+	var payload = JSON.parse_string(body.get_string_from_utf8())
+	if not payload is Dictionary:
+		content_update_status = "error"
+		content_update_error = "invalid_manifest"
+		print("Atualizacao de conteudo: manifesto invalido")
+		return
+	_apply_content_update_manifest(payload)
+
+
+func _apply_content_update_manifest(payload: Dictionary) -> bool:
+	var normalized: Dictionary = _normalize_content_update_manifest(payload)
+	if not bool(normalized.get("ok", false)):
+		content_update_status = String(normalized.get("reason", "idle"))
+		return false
+	content_update_manifest = normalized
+	content_update_queue = Array(normalized.get("packs", [])).duplicate(true)
+	content_update_status = "queued"
+	content_update_error = ""
+	_start_next_content_update_download()
+	return true
+
+
+func _start_next_content_update_download() -> void:
+	if content_update_queue.is_empty():
+		_finalize_content_update_state()
+		return
+	if content_update_download_request == null:
+		content_update_status = "error"
+		content_update_error = "download_request_missing"
+		return
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CONTENT_UPDATE_STORAGE_DIR))
+	content_update_current_pack = Dictionary(content_update_queue.pop_front())
+	var filename: String = String(content_update_current_pack.get("filename", ""))
+	content_update_download_path = _content_update_pack_path(filename)
+	var verification: Dictionary = _verify_update_file(
+		content_update_download_path,
+		int(content_update_current_pack.get("size", 0)),
+		String(content_update_current_pack.get("sha256", "")),
+		"PCK"
+	)
+	if bool(verification.get("ok", false)):
+		_load_content_pack_from_path(content_update_download_path, true)
+		_start_next_content_update_download()
+		return
+	var absolute_path: String = ProjectSettings.globalize_path(content_update_download_path)
+	if FileAccess.file_exists(content_update_download_path):
+		DirAccess.remove_absolute(absolute_path)
+	content_update_download_request.download_file = content_update_download_path
+	content_update_status = "downloading"
+	var err: = content_update_download_request.request(String(content_update_current_pack.get("download_url", "")), ["Cache-Control: no-cache"])
+	if err != OK:
+		content_update_download_request.download_file = ""
+		content_update_status = "error"
+		content_update_error = "download_start_%d" % err
+		print("Atualizacao de conteudo: falha ao iniciar download: ", error_string(err))
+
+
+func _on_content_update_download_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	if content_update_download_request != null:
+		content_update_download_request.download_file = ""
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		if content_update_download_path != "" and FileAccess.file_exists(content_update_download_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_path))
+		content_update_status = "error"
+		content_update_error = "download_http_%d" % response_code
+		print("Atualizacao de conteudo: download interrompido HTTP ", response_code)
+		return
+	content_update_status = "verifying"
+	call_deferred("_finish_content_update_download")
+
+
+func _finish_content_update_download() -> void:
+	var verification: Dictionary = _verify_update_file(
+		content_update_download_path,
+		int(content_update_current_pack.get("size", 0)),
+		String(content_update_current_pack.get("sha256", "")),
+		"PCK"
+	)
+	if not bool(verification.get("ok", false)):
+		if content_update_download_path != "" and FileAccess.file_exists(content_update_download_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_path))
+		content_update_status = "error"
+		content_update_error = String(verification.get("error", "content_verification_failed"))
+		print("Atualizacao de conteudo: ", content_update_error)
+		return
+	if not _load_content_pack_from_path(content_update_download_path, true):
+		content_update_status = "error"
+		content_update_error = "load_resource_pack_failed"
+		return
+	_start_next_content_update_download()
+
+
+func _load_content_pack_from_path(pack_path: String, report: bool = true) -> bool:
+	if pack_path in content_update_loaded_packs:
+		return true
+	var loaded: bool = ProjectSettings.load_resource_pack(pack_path, true)
+	if loaded:
+		content_update_loaded_packs.append(pack_path)
+		if report:
+			print("Atualizacao de conteudo aplicada: ", pack_path)
+	else:
+		print("Atualizacao de conteudo: pacote invalido ou nao carregavel: ", pack_path)
+	return loaded
+
+
+func _finalize_content_update_state() -> void:
+	var applied_packs: Array = []
+	for pack in Array(content_update_manifest.get("packs", [])):
+		if typeof(pack) == TYPE_DICTIONARY:
+			var item: Dictionary = Dictionary(pack).duplicate(true)
+			item.erase("download_url")
+			applied_packs.append(item)
+	content_update_version_code = int(content_update_manifest.get("content_version_code", content_update_version_code))
+	var state: = {
+		"content_version": String(content_update_manifest.get("content_version", "")),
+		"content_version_code": content_update_version_code,
+		"game_version": GAME_VERSION,
+		"game_version_code": GAME_VERSION_CODE,
+		"updated_unix": int(Time.get_unix_time_from_system()),
+		"packs": applied_packs
+	}
+	if _write_json_file(CONTENT_UPDATE_STATE_PATH, state):
+		content_update_status = "updated"
+	else:
+		content_update_status = "error"
+		content_update_error = "state_write_failed"
+
+
 func _update_umbra_mind_check(_delta: float) -> void:
 	if umbra_mind_checked or dedicated_server_mode or not _umbra_mind_remote_supported():
 		return
@@ -6313,13 +6603,17 @@ func _finish_app_update_download() -> void :
 
 
 func _verify_app_update_file(file_path: String, expected_size: int, expected_sha256: String) -> Dictionary:
+	return _verify_update_file(file_path, expected_size, expected_sha256, _app_update_file_label())
+
+
+func _verify_update_file(file_path: String, expected_size: int, expected_sha256: String, file_label: String) -> Dictionary:
 	var file: = FileAccess.open(file_path, FileAccess.READ)
 	if file == null:
 		return {"ok": false, "error": "O arquivo baixado nao pode ser aberto."}
 	var actual_size: = file.get_length()
 	if expected_size <= 0 or actual_size != expected_size:
 		file.close()
-		return {"ok": false, "error": "O tamanho do %s nao confere com a versao publicada." % _app_update_file_label()}
+		return {"ok": false, "error": "O tamanho do %s nao confere com a versao publicada." % file_label}
 	var hashing: = HashingContext.new()
 	var hash_err: = hashing.start(HashingContext.HASH_SHA256)
 	if hash_err != OK:
@@ -6330,12 +6624,12 @@ func _verify_app_update_file(file_path: String, expected_size: int, expected_sha
 		var chunk: = file.get_buffer(mini(APP_UPDATE_HASH_CHUNK_BYTES, remaining))
 		if chunk.is_empty():
 			file.close()
-			return {"ok": false, "error": "Leitura incompleta durante a verificacao do APK."}
+			return {"ok": false, "error": "Leitura incompleta durante a verificacao do %s." % file_label}
 		hashing.update(chunk)
 	file.close()
 	var actual_sha256: = hashing.finish().hex_encode().to_lower()
 	if actual_sha256 != expected_sha256.to_lower():
-		return {"ok": false, "error": "A assinatura SHA-256 do APK nao confere."}
+		return {"ok": false, "error": "A assinatura SHA-256 do %s nao confere." % file_label}
 	return {"ok": true, "size": actual_size, "sha256": actual_sha256}
 
 
@@ -7693,6 +7987,14 @@ func _load_textures() -> void :
 	textures["player_fire"] = [_safe_load(base + "Geo_Disp1.png"), _safe_load(base + "Geo_Disp2.png")]
 	textures["player_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
+	textures["player_start_down"] = [
+		_safe_load(base + "player/start_down/Start-Down-Geo0.png"),
+		_safe_load(base + "player/start_down/Start-Down-Geo1.png"),
+		_safe_load(base + "player/start_down/Start-Down-Geo2.png"),
+		_safe_load(base + "player/start_down/Start-Down-Geo3.png"),
+		_safe_load(base + "player/start_down/Start-Down-Geo4.png"),
+		_safe_load(base + "player/start_down/Start-Down-Geo5.png")
+	]
 	var prismatica_dance_loop: Array = []
 	for dance_index in range(15):
 		prismatica_dance_loop.append(_safe_load(base + "Geo-Dance%02d.png" % dance_index))
@@ -9406,6 +9708,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	aura_state = AuraSystem.create(String(AURAS[selected_aura]["name"]), _specter_level(_spectrum_key(selected_aura)))
 	aura_state["last_pos"] = PLAYER_START
 	player_pos = PLAYER_START
+	_begin_player_start_down_intro()
 	player_hp_max = PLAYER_BASE_HP
 	player_hp = player_hp_max
 	player_speed = PLAYER_BASE_SPEED
@@ -11541,6 +11844,7 @@ func _process(delta: float) -> void :
 		queue_redraw()
 		return
 	_update_app_update_check(delta)
+	_update_content_update_check(delta)
 	_update_umbra_mind_check(delta)
 	_update_veteran_unlock_sync(delta)
 	_update_qa_streaming(delta)
@@ -11846,6 +12150,7 @@ func _update_game(delta: float) -> void :
 	screen_shake_timer = max(0.0, screen_shake_timer - delta)
 	damage_flash_timer = max(0.0, damage_flash_timer - delta)
 	_update_low_health_heartbeat(delta)
+	_update_player_start_down_intro(delta)
 	secondary_drain_flash_timer = max(0.0, secondary_drain_flash_timer - delta)
 	controls_inverted_timer = max(0.0, controls_inverted_timer - delta)
 	shop_select_pulse_timer = max(0.0, shop_select_pulse_timer - delta)
@@ -23359,6 +23664,7 @@ func _update_bullets(delta: float) -> void :
 			if bullet["pos"].distance_to(enemy["pos"]) < _enemy_radius(enemy):
 				bullet["hits"][uid] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
+				_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
 				if _try_reflect_shield_enemy_bullet(enemy, bullet):
 					bullet["life"] = 0.0
 					break
@@ -23394,6 +23700,7 @@ func _update_bullets(delta: float) -> void :
 			if not bullet["hits"].has("arauto"):
 				bullet["hits"]["arauto"] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
+				_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
 				_apply_bullet_effect_to_arauto(bullet)
 				if bool(bullet.get("solar_splash", false)):
 					_apply_eclipsada_solar_splash(Vector2(bullet["pos"]), float(bullet.get("damage", player_damage)), String(bullet.get("source_category", "basic_attack")))
@@ -23445,6 +23752,7 @@ func _update_bullets(delta: float) -> void :
 			if not bullet["hits"].has("boss"):
 				bullet["hits"]["boss"] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
+				_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
 				var boss_bullet_damage: = _critical_damage(float(bullet["damage"]), bool(bullet.get("always_crit", false)))
 				_damage_boss(boss_bullet_damage, bullet["kind"], true, true, String(bullet.get("source_category", "basic_attack")), Vector2(bullet.get("origin", player_pos)))
 				if bool(bullet.get("solar_splash", false)):
@@ -37910,6 +38218,14 @@ func _update_effects(delta: float) -> void :
 			if kind == "trail":
 				var trail_vel: Vector2 = effect["vel"]
 				effect["vel"] = trail_vel * max(0.0, 1.0 - delta * 6.0)
+			elif kind == "bullet_fragment":
+				var fragment_vel: Vector2 = effect["vel"]
+				effect["vel"] = fragment_vel * max(0.0, 1.0 - delta * 7.5)
+				effect["phase"] = float(effect.get("phase", 0.0)) + delta * 18.0
+			elif kind == "landing_smoke":
+				var smoke_vel: Vector2 = effect["vel"]
+				effect["vel"] = smoke_vel * max(0.0, 1.0 - delta * 3.8)
+				effect["phase"] = float(effect.get("phase", 0.0)) + delta * 2.2
 			elif kind == "music_note":
 				effect["phase"] = float(effect.get("phase", 0.0)) + delta * 3.0
 				effect["pos"].x += sin(float(effect["phase"])) * 15.0 * delta
@@ -38088,6 +38404,73 @@ func _spawn_radial_particles(pos: Vector2, color: Color, count: int) -> void :
 	var total: = _adaptive_particle_count(count)
 	for i in range(total):
 		effects.append({"text": "", "pos": pos, "life": rng.randf_range(0.25, 0.55), "max": 0.55, "color": color, "size": rng.randi_range(3, 7), "vel": Vector2.from_angle(rng.randf_range(0, TAU)) * rng.randf_range(40, 120)})
+
+
+func _spawn_bullet_hit_fragments(pos: Vector2, bullet: Dictionary) -> void :
+	if not gfx_particles or not _particle_budget_available():
+		return
+	var color: Color = bullet.get("color", _projectile_palette(String(bullet.get("kind", ""))).get("core", Color(0.36, 1.0, 0.94)))
+	var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
+	if dir.length() <= 0.05:
+		dir = Vector2.RIGHT
+	var total: int = _adaptive_particle_count(20)
+	for i in range(total):
+		var spread: float = rng.randf_range(-1.8, 1.8)
+		var shard_dir: Vector2 = dir.rotated(PI + spread).normalized()
+		var speed: float = rng.randf_range(95.0, 245.0)
+		effects.append({
+			"kind": "bullet_fragment",
+			"text": "",
+			"pos": pos + shard_dir * rng.randf_range(2.0, 10.0),
+			"life": rng.randf_range(0.24, 0.44),
+			"max": 0.44,
+			"color": color.lerp(Color.WHITE, rng.randf_range(0.1, 0.42)),
+			"size": rng.randf_range(3.0, 7.0),
+			"vel": shard_dir * speed + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(12.0, 48.0),
+			"phase": rng.randf_range(0.0, TAU)
+		})
+
+
+func _begin_player_start_down_intro() -> void:
+	player_start_down_fall_timer = PLAYER_START_DOWN_FALL_TIME
+	player_start_down_landing_timer = 0.0
+	player_start_down_smoke_spawned = false
+
+
+func _player_start_down_active() -> bool:
+	return player_start_down_fall_timer > 0.0 or player_start_down_landing_timer > 0.0
+
+
+func _update_player_start_down_intro(delta: float) -> void:
+	if player_start_down_fall_timer > 0.0:
+		player_start_down_fall_timer = maxf(0.0, player_start_down_fall_timer - delta)
+		if player_start_down_fall_timer <= 0.0 and not player_start_down_smoke_spawned:
+			player_start_down_landing_timer = PLAYER_START_DOWN_LAND_TIME
+			player_start_down_smoke_spawned = true
+			_spawn_player_landing_smoke(player_pos)
+	elif player_start_down_landing_timer > 0.0:
+		player_start_down_landing_timer = maxf(0.0, player_start_down_landing_timer - delta)
+
+
+func _spawn_player_landing_smoke(pos: Vector2) -> void:
+	if not gfx_particles or not _particle_budget_available():
+		return
+	var total: int = _adaptive_particle_count(46)
+	for i in range(total):
+		var angle: float = float(i) * TAU / float(maxi(1, total)) + rng.randf_range(-0.12, 0.12)
+		var dir: Vector2 = Vector2.from_angle(angle)
+		var life: float = rng.randf_range(0.56, 0.92)
+		effects.append({
+			"kind": "landing_smoke",
+			"text": "",
+			"pos": pos + dir * rng.randf_range(10.0, 28.0),
+			"life": life,
+			"max": life,
+			"color": Color(0.46 + rng.randf_range(-0.05, 0.06), 0.47 + rng.randf_range(-0.04, 0.06), 0.42 + rng.randf_range(-0.04, 0.06), 0.9),
+			"size": rng.randf_range(14.0, 28.0),
+			"vel": dir * rng.randf_range(92.0, 184.0) + Vector2(0.0, rng.randf_range(-10.0, 9.0)),
+			"phase": rng.randf_range(0.0, TAU)
+		})
 
 
 func _adaptive_particle_count(count: int) -> int:
@@ -40499,11 +40882,27 @@ func _draw_manifest_mp(viewport: Vector2) -> void :
 		team_rect = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
 	_draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color)
 	_draw_manifest_mp_team_panel(team_rect, color)
-	buttons["mp_manifest_ready"] = Rect2(choice_rect.position.x + choice_rect.size.x * 0.16, panel.end.y - action_h - 10.0, choice_rect.size.x * 0.68, 46.0)
+	var footer_y: float = panel.end.y - action_h - 10.0
+	buttons["mp_manifest_ready"] = Rect2(choice_rect.position.x, footer_y, choice_rect.size.x * (0.58 if aura_view and not mp_local_ready else 0.74), 46.0)
 	var btn_label: String = "PRONTO" if aura_view else "REVELAR ESPECTRO"
 	if mp_local_ready:
-		btn_label = "CONFIRMADO"
-	_draw_big_button(buttons["mp_manifest_ready"], btn_label, Color(0.02, 0.14, 0.11, 0.9) if not mp_local_ready else Color(0.03, 0.18, 0.1, 0.72), color if not mp_local_ready else Color(0.2, 1.0, 0.52), mp_local_ready)
+		btn_label = "CANCELAR PRONTO"
+	_draw_big_button(buttons["mp_manifest_ready"], btn_label, Color(0.02, 0.14, 0.11, 0.9) if not mp_local_ready else Color(0.18, 0.06, 0.08, 0.78), color if not mp_local_ready else Color(1.0, 0.22, 0.3), mp_local_ready)
+	if aura_view and not mp_local_ready:
+		buttons["mp_manifest_back_manifestation"] = Rect2(buttons["mp_manifest_ready"].end.x + 12.0, footer_y, maxf(136.0, choice_rect.size.x - buttons["mp_manifest_ready"].size.x - 12.0), 46.0)
+		_draw_big_button(buttons["mp_manifest_back_manifestation"], "TROCAR MANIF.", Color(0.03, 0.08, 0.12, 0.86), Color(0.56, 0.76, 1.0), false)
+	else:
+		buttons.erase("mp_manifest_back_manifestation")
+	buttons["mp_manifest_start"] = Rect2(team_rect.position.x, footer_y, team_rect.size.x, 46.0)
+	var all_ready: bool = _manifest_all_players_ready()
+	var can_start: bool = _manifest_mp_start_available()
+	var owner_start: bool = _manifest_mp_local_can_start()
+	var start_label: String = "INICIAR PARTIDA" if can_start and owner_start else ("AGUARDE O HOST" if all_ready and not owner_start else "AGUARDANDO EQUIPE")
+	if mp_manifest_start_pending:
+		start_label = "INICIANDO..."
+	var start_border: Color = Color(0.16, 1.0, 0.54) if can_start and owner_start else Color(0.34, 0.52, 0.62)
+	var start_bg: Color = Color(0.02, 0.16, 0.09, 0.9) if can_start and owner_start else Color(0.03, 0.05, 0.07, 0.62)
+	_draw_big_button(buttons["mp_manifest_start"], start_label, start_bg, start_border, can_start and owner_start)
 	if mp_manifest_rejection_timer > 0.0 and mp_manifest_rejection_message != "":
 		var warning_rect: Rect2 = Rect2(viewport.x * 0.5 - 240.0, viewport.y - 58.0, 480.0, 38.0)
 		_draw_holo_panel(warning_rect, Color(1.0, 0.18, 0.24), true, 0.86)
@@ -40589,7 +40988,7 @@ func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
 	var gap: float = 10.0
 	var list_top: float = rect.position.y + 66.0
 	var available_h: float = rect.end.y - list_top - 12.0
-	var row_h: float = clampf((available_h - gap * float(maxi(0, rows.size() - 1))) / float(maxi(1, rows.size())), 72.0, 112.0)
+	var row_h: float = clampf((available_h - gap * float(maxi(0, rows.size() - 1))) / float(maxi(1, rows.size())), 92.0, 112.0)
 	for i in range(rows.size()):
 		if list_top + float(i) * (row_h + gap) + row_h > rect.end.y - 6.0:
 			break
@@ -40600,24 +40999,33 @@ func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
 func _draw_manifest_peer_summary_row(rect: Rect2, peer_id: int, state: Dictionary, is_local: = false) -> void :
 	var stage: = String(state.get("stage", MANIFEST_STAGE_MANIFESTATION))
 	var aura_view: = stage == MANIFEST_STAGE_AURA
-	var index: = clampi(int(state.get("aura" if aura_view else "manifestation", 0)), 0, (AURAS if aura_view else MANIFESTATIONS).size() - 1)
-	var items: Array = AURAS if aura_view else MANIFESTATIONS
-	var item: Dictionary = items[index]
-	var color: = _manifest_select_item_color(item, aura_view)
+	var manifest_idx: int = clampi(int(state.get("manifestation", 0)), 0, MANIFESTATIONS.size() - 1)
+	var aura_idx: int = clampi(int(state.get("aura", 0)), 0, AURAS.size() - 1)
+	var manifest_item: Dictionary = MANIFESTATIONS[manifest_idx]
+	var aura_item: Dictionary = AURAS[aura_idx]
+	var color: Color = _manifest_select_item_color(aura_item, true) if aura_view else _manifest_select_item_color(manifest_item, false)
+	var manifest_color: Color = _manifest_select_item_color(manifest_item, false)
+	var aura_color: Color = _manifest_select_item_color(aura_item, true)
 	_draw_holo_panel(rect, color, bool(state.get("ready", false)), 0.58)
 	var icon_size: float = minf(rect.size.y - 20.0, 74.0)
 	var icon_rect: Rect2 = Rect2(rect.position + Vector2(12, 10), Vector2(icon_size, icon_size))
-	var icon: Texture2D = _manifest_select_item_texture(item, aura_view)
-	if icon != null:
-		_draw_texture_contain(icon, icon_rect, Color.WHITE)
+	var manifest_icon: Texture2D = _manifest_select_item_texture(manifest_item, false)
+	var aura_icon: Texture2D = _manifest_select_item_texture(aura_item, true)
+	if manifest_icon != null:
+		_draw_texture_contain(manifest_icon, icon_rect, Color(1.0, 1.0, 1.0, 0.88))
+	if aura_view and aura_icon != null:
+		var aura_rect := Rect2(icon_rect.end - Vector2(icon_size * 0.52, icon_size * 0.52), Vector2(icon_size * 0.46, icon_size * 0.46))
+		_draw_holo_panel(aura_rect.grow(3.0), aura_color, true, 0.56)
+		_draw_texture_contain(aura_icon, aura_rect, Color.WHITE)
 	var text_x: float = icon_rect.end.x + 16.0
 	var text_w: float = rect.end.x - text_x - 14.0
 	var player_label: String = String(state.get("name", "Player %d" % peer_id))
 	if is_local:
 		player_label = "VOCE // " + player_label
 	draw_string(font, Vector2(text_x, rect.position.y + 27.0), player_label.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size(player_label.to_upper(), text_w, 14, 10), Color.WHITE)
-	draw_string(font, Vector2(text_x, rect.position.y + 47.0), ("ESPECTRO" if aura_view else "MANIFESTACAO"), HORIZONTAL_ALIGNMENT_LEFT, text_w, 9, Color(color.r, color.g, color.b, 0.82))
-	draw_string(font, Vector2(text_x, rect.position.y + 68.0), String(item.get("name", "???")), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size(String(item.get("name", "???")), text_w, 16, 10), color)
+	draw_string(font, Vector2(text_x, rect.position.y + 47.0), "MANIFESTACAO", HORIZONTAL_ALIGNMENT_LEFT, text_w, 9, Color(manifest_color.r, manifest_color.g, manifest_color.b, 0.82))
+	draw_string(font, Vector2(text_x, rect.position.y + 64.0), String(manifest_item.get("name", "???")), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size(String(manifest_item.get("name", "???")), text_w, 13, 9), manifest_color)
+	draw_string(font, Vector2(text_x, rect.position.y + minf(84.0, rect.size.y - 12.0)), "ESPECTRO: %s" % String(aura_item.get("name", "???")), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size("ESPECTRO: %s" % String(aura_item.get("name", "???")), text_w, 12, 8), aura_color if aura_view else Color(0.72, 0.9, 0.96, 0.68))
 	_draw_centered("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Vector2(rect.end.x - 58.0, rect.end.y - 14.0), 10, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
 
 
@@ -46705,6 +47113,8 @@ func _draw_player(camera: Vector2) -> void :
 		return
 	if not _active_lacerante_secondary().is_empty():
 		return
+	if _draw_player_start_down(camera):
+		return
 	if attack_dragging:
 		var p = player_pos - camera
 		var color = _manifestation_color()
@@ -46749,6 +47159,41 @@ func _draw_player(camera: Vector2) -> void :
 		_draw_entity_stretched_rotated(tex, center + profile["offset"], profile["size"], rotation, player_modulate, flip_h)
 	if is_multiplayer and _is_local_run_leader():
 		_draw_leader_crown(center + Vector2(0.0, -62.0), 0.82, Color(1.0, 0.86, 0.18, 0.95))
+
+
+func _draw_player_start_down(camera: Vector2) -> bool:
+	if not _player_start_down_active():
+		return false
+	var frames: Array = textures.get("player_start_down", [])
+	if frames.is_empty():
+		return false
+	var center: Vector2 = player_pos - camera
+	var tex: Texture2D = null
+	var draw_size := Vector2(66.0, 92.0)
+	var air_offset := Vector2.ZERO
+	if player_start_down_fall_timer > 0.0:
+		var progress: float = clampf(1.0 - player_start_down_fall_timer / PLAYER_START_DOWN_FALL_TIME, 0.0, 1.0)
+		var eased: float = 1.0 - pow(1.0 - progress, 3.0)
+		var frame_idx: int = 2 if progress >= 0.78 else (int(floor(progress / PLAYER_START_DOWN_FRAME_TIME)) % 2)
+		tex = frames[clampi(frame_idx, 0, frames.size() - 1)]
+		air_offset = Vector2(0.0, -lerpf(PLAYER_START_DOWN_HEIGHT, 0.0, eased))
+		var shadow_alpha: float = lerpf(0.12, 0.38, eased)
+		draw_set_transform(center + Vector2(0.0, 40.0), 0.0, Vector2(1.0 + eased * 0.55, 0.26 + eased * 0.12))
+		draw_circle(Vector2.ZERO, lerpf(18.0, 42.0, eased), Color(0.0, 0.0, 0.0, shadow_alpha))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	else:
+		var elapsed: float = PLAYER_START_DOWN_LAND_TIME - player_start_down_landing_timer
+		var land_idx: int = 3 + int(floor(elapsed / PLAYER_START_DOWN_FRAME_TIME)) % 3
+		tex = frames[clampi(land_idx, 0, frames.size() - 1)]
+		var squash: float = sin(clampf(elapsed / 0.32, 0.0, 1.0) * PI)
+		draw_size = Vector2(70.0 + squash * 10.0, 86.0 - squash * 8.0)
+		draw_set_transform(center + Vector2(0.0, 40.0), 0.0, Vector2(1.35, 0.32))
+		draw_circle(Vector2.ZERO, 40.0, Color(0.0, 0.0, 0.0, 0.36))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if tex == null:
+		return false
+	_draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, _should_flip_player_sprite())
+	return true
 
 
 func _should_flip_player_sprite() -> bool:
@@ -49118,6 +49563,24 @@ func _draw_effects(camera: Vector2) -> void :
 			draw_set_transform(p, rot * (1.0 - alpha), Vector2.ONE)
 			draw_rect(Rect2(Vector2( - r, - r), Vector2(r * 2, r * 2)), color, true)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		elif kind == "bullet_fragment":
+			var p: Vector2 = Vector2(effect["pos"]) - camera
+			var r: float = maxf(1.0, float(effect["size"]) * (0.45 + alpha))
+			var angle: float = float(effect.get("phase", 0.0))
+			var forward: Vector2 = Vector2.from_angle(angle) * r * 2.2
+			var side: Vector2 = Vector2.from_angle(angle + PI * 0.5) * r * 0.62
+			var points := PackedVector2Array([p + forward, p + side, p - forward * 0.48, p - side])
+			draw_circle(p, r * 2.4, Color(color.r, color.g, color.b, alpha * 0.18))
+			draw_polygon(points, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.92)]))
+			draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, alpha * 0.78), 1.2, true)
+		elif kind == "landing_smoke":
+			var p: Vector2 = Vector2(effect["pos"]) - camera
+			var growth: float = 1.0 - alpha
+			var r: float = float(effect["size"]) * (0.72 + growth * 1.85)
+			draw_set_transform(p, float(effect.get("phase", 0.0)) * 0.08, Vector2(1.0, 0.34))
+			draw_circle(Vector2.ZERO, r, Color(color.r, color.g, color.b, alpha * 0.46))
+			draw_arc(Vector2.ZERO, r * 1.08, PI * 0.08, PI * 1.72, 14, Color(0.95, 1.0, 0.96, alpha * 0.28), 1.4)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		elif kind == "bit":
 			var p = effect["pos"] - camera
 			var r = float(effect["size"]) * alpha
@@ -49140,8 +49603,14 @@ func _draw_hud(viewport: Vector2) -> void :
 	var leader_local: bool = is_multiplayer and _is_local_run_leader()
 	var local_bar_color: Color = Color(1.0, 0.86, 0.18) if leader_local else Color(0.2, 1.0, 0.42)
 	_draw_combat_panel(left_rect, Color(local_bar_color.r, local_bar_color.g, local_bar_color.b, left_alpha), 0.58 * left_alpha)
-	draw_string(font, left_rect.position + Vector2(16 * sm, 30 * sm), "VIDA %d/%d" % [player_hp, player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), Color(1.0, 1.0, 1.0, left_alpha))
-	_draw_hud_bar(left_rect.position + Vector2(16 * sm, 43 * sm), left_rect.size.x - 32.0 * sm, 8.0 * sm, float(player_hp) / float(player_hp_max), local_bar_color)
+	var hp_ratio: float = clampf(float(player_hp) / maxf(1.0, float(player_hp_max)), 0.0, 1.0)
+	var hit_flash: float = clampf(damage_flash_timer / 0.22, 0.0, 1.0)
+	var health_text_color: Color = Color(1.0, 0.32, 0.28, left_alpha) if hit_flash > 0.0 else Color(1.0, 1.0, 1.0, left_alpha)
+	draw_string(font, left_rect.position + Vector2(16 * sm, 30 * sm), "VIDA %d/%d" % [player_hp, player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), health_text_color)
+	var bar_pos: Vector2 = left_rect.position + Vector2(16 * sm, 43 * sm)
+	if hit_flash > 0.0:
+		bar_pos += Vector2(sin(time_alive * 92.0) * 3.6, cos(time_alive * 77.0) * 2.4) * hit_flash * sm
+	_draw_health_tube_bar(bar_pos, left_rect.size.x - 32.0 * sm, 13.0 * sm, hp_ratio, local_bar_color, hit_flash, left_alpha)
 	if leader_local:
 		_draw_leader_crown(left_rect.position + Vector2(left_rect.size.x - 26.0 * sm, 23.0 * sm), 0.82 * sm, Color(1.0, 0.86, 0.18, left_alpha))
 	var minutes = int(time_alive) / 60
@@ -52106,6 +52575,39 @@ func _draw_hud_bar(pos: Vector2, width: float, height: float, ratio: float, colo
 	draw_line(pos + Vector2(0, height + 3), pos + Vector2(width * ratio, height + 3), Color(color.r, color.g, color.b, 0.5), 2)
 
 
+func _draw_health_tube_bar(pos: Vector2, width: float, height: float, ratio: float, color: Color, hit_flash: float, alpha: float) -> void:
+	ratio = clampf(ratio, 0.0, 1.0)
+	alpha = clampf(alpha, 0.0, 1.0)
+	var rect := Rect2(pos, Vector2(width, height))
+	var fill_color: Color = Color(0.98, 0.12, 0.16).lerp(color, ratio)
+	if hit_flash > 0.0:
+		fill_color = fill_color.lerp(Color(1.0, 0.05, 0.04), hit_flash * 0.72)
+	draw_rect(rect.grow(4.0), Color(0.0, 0.0, 0.0, 0.48 * alpha), true)
+	draw_rect(rect, Color(0.01, 0.018, 0.024, 0.94 * alpha), true)
+	draw_rect(rect.grow(-2.0), Color(0.08, 0.18, 0.2, 0.26 * alpha), true)
+	if ratio > 0.0:
+		var liquid_rect := Rect2(rect.position + Vector2(3.0, 3.0), Vector2(maxf(0.0, (width - 6.0) * ratio), maxf(1.0, height - 6.0)))
+		draw_rect(liquid_rect, Color(fill_color.r, fill_color.g, fill_color.b, 0.9 * alpha), true)
+		draw_line(liquid_rect.position + Vector2(2.0, 2.0), liquid_rect.position + Vector2(maxf(2.0, liquid_rect.size.x - 3.0), 2.0), Color(1.0, 1.0, 1.0, 0.22 * alpha), 1.2)
+	draw_line(rect.position + Vector2(4.0, 3.0), rect.position + Vector2(width - 5.0, 3.0), Color(1.0, 1.0, 1.0, 0.24 * alpha), 1.2)
+	draw_line(rect.position + Vector2(2.0, height - 2.0), rect.position + Vector2(width - 3.0, height - 2.0), Color(0.22, 0.94, 1.0, 0.18 * alpha), 1.0)
+	draw_rect(rect, Color(0.52, 0.96, 1.0, 0.72 * alpha), false, 1.8)
+	draw_rect(rect.grow(-3.0), Color(1.0, 1.0, 1.0, 0.14 * alpha), false, 1.0)
+	var danger: float = clampf((0.7 - ratio) / 0.7, 0.0, 1.0)
+	if danger > 0.0:
+		var crack_count: int = 1 + int(floor(danger * 6.0))
+		for i in range(crack_count):
+			var crack_seed: float = float(i + 1) * 17.23
+			var cx: float = pos.x + width * fposmod(0.18 + crack_seed * 0.137, 0.76)
+			var cy: float = pos.y + height * fposmod(0.2 + crack_seed * 0.091, 0.6)
+			var crack_len: float = lerpf(5.0, 16.0, danger)
+			var a: float = -0.75 + fposmod(crack_seed, 1.0) * 1.5
+			var start := Vector2(cx, cy)
+			var end := start + Vector2.from_angle(a) * crack_len
+			draw_line(start, end, Color(0.84, 1.0, 1.0, 0.18 + danger * 0.52), 1.0)
+			draw_line(start + Vector2(1.0, -1.0), start + Vector2.from_angle(a - 0.75) * crack_len * 0.44, Color(0.84, 1.0, 1.0, 0.14 + danger * 0.36), 1.0)
+
+
 func _draw_virtual_stick(center: Vector2, radius: float, alpha: float = 1.0) -> void :
 	var accent = Color(0.0, 1.0, 0.82)
 	draw_circle(center, radius, Color(0.0, 0.72, 0.72, 0.055 * alpha))
@@ -52524,9 +53026,13 @@ func _load_menu_fonts() -> void :
 	menu_title_font = loaded_title as Font
 	menu_button_font = loaded_button as Font
 	if menu_title_font == null:
+		push_warning("Menu font fallback: Top_Menu.otf was not available.")
 		menu_title_font = font
 	if menu_button_font == null:
+		push_warning("Menu font fallback: World.otf was not available.")
 		menu_button_font = font
+	else:
+		font = menu_button_font
 
 
 func _draw_centered_with_font(font_resource: Font, text: String, pos: Vector2, size: int, color: Color) -> void :
@@ -53040,6 +53546,9 @@ func _unhandled_input(event: InputEvent) -> void :
 				if event.index == manifest_preview_consumed_touch_index:
 					manifest_preview_consumed_touch_index = -999
 					return
+				if mode == "manifest_mp" and _manifest_mp_action_button_pressed(event.position):
+					_handle_manifest_mp_touch(event.position, viewport)
+					return
 				if mode == "manifest_mp" and event.position.x > viewport.x * 0.5:
 					return
 				_start_manifest_drag(event.index, event.position, viewport)
@@ -53093,6 +53602,9 @@ func _unhandled_input(event: InputEvent) -> void :
 				_handle_edit_layout_press(-2, event.position, viewport)
 				return
 			if mode == "manifest" or mode == "manifest_mp":
+				if mode == "manifest_mp" and _manifest_mp_action_button_pressed(event.position):
+					_handle_manifest_mp_touch(event.position, viewport)
+					return
 				if mode == "manifest_mp" and event.position.x > viewport.x * 0.5:
 					return
 				_start_manifest_drag(-2, event.position, viewport)
@@ -55468,6 +55980,7 @@ func _sync_manifest_mp_selection(force: = false) -> void :
 	var scroll: float = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
 	var is_ready: = mp_local_ready and manifest_select_stage == MANIFEST_STAGE_AURA
 	if is_ready or force:
+		mp_ready_last_sent_ms = Time.get_ticks_msec()
 		_send_manifest_mp_rpc("_rpc_confirm_manifest_mp", manifest_select_stage, selected_manifestation, selected_aura, scroll, is_ready)
 		return
 	var now_ms: = Time.get_ticks_msec()
@@ -55490,7 +56003,10 @@ func _update_manifest_mp_ready_resend() -> void :
 
 
 func _confirm_manifest_mp_selection() -> void :
-	if manifest_select_stage == MANIFEST_STAGE_TRANSITION or mp_local_ready:
+	if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
+		return
+	if mp_local_ready:
+		_cancel_manifest_mp_ready()
 		return
 	var aura_stage: bool = manifest_select_stage == MANIFEST_STAGE_AURA
 	var selected_index: int = selected_aura if aura_stage else selected_manifestation
@@ -55505,13 +56021,34 @@ func _confirm_manifest_mp_selection() -> void :
 		return
 	if manifest_select_stage == MANIFEST_STAGE_AURA:
 		mp_local_ready = true
+		mp_manifest_start_pending = false
 		_sync_manifest_mp_selection(true)
-		if not online_connected and is_host and _manifest_all_players_ready():
-			rpc("_start_multiplayer_game")
-			_start_multiplayer_game()
 	else:
 		_start_spectrum_reveal()
 		_sync_manifest_mp_selection(true)
+
+
+func _cancel_manifest_mp_ready() -> void:
+	if not mp_local_ready:
+		return
+	mp_local_ready = false
+	mp_manifest_start_pending = false
+	mp_ready_last_sent_ms = 0
+	mp_manifest_rejection_message = "ESCOLHA LIBERADA"
+	mp_manifest_rejection_timer = 1.2
+	_sync_manifest_mp_selection(true)
+	_play_sfx("ui_manifest_switch", 0.01, 0.26, 0.82)
+
+
+func _return_manifest_mp_to_manifestation() -> void:
+	if mp_local_ready:
+		_cancel_manifest_mp_ready()
+	manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
+	manifest_transition_elapsed = 0.0
+	manifest_scroll_pos = float(selected_manifestation)
+	mp_manifest_start_pending = false
+	_sync_manifest_mp_selection(true)
+	_play_sfx("ui_manifest_switch", 0.01, 0.28, 0.88)
 
 
 func _manifest_choice_taken(index: int, aura_choice: bool, except_peer_id: int = 0) -> bool:
@@ -55543,6 +56080,35 @@ func _manifest_all_players_ready() -> bool:
 		if String(state.get("stage", "")) != MANIFEST_STAGE_AURA or not bool(state.get("ready", false)):
 			return false
 	return true
+
+
+func _manifest_mp_local_can_start() -> bool:
+	if online_connected:
+		return online_room_owner
+	return is_host
+
+
+func _manifest_mp_start_available() -> bool:
+	return _manifest_mp_local_can_start() and _manifest_all_players_ready() and not mp_manifest_start_pending
+
+
+func _request_manifest_mp_start() -> void:
+	if not _manifest_mp_start_available():
+		if _manifest_mp_local_can_start():
+			mp_manifest_rejection_message = "AGUARDE TODOS FICAREM PRONTOS"
+		else:
+			mp_manifest_rejection_message = "APENAS O HOST INICIA A PARTIDA"
+		mp_manifest_rejection_timer = 1.6
+		_play_sfx("ui_error")
+		return
+	mp_manifest_start_pending = true
+	_net_report_count_out("control", 48)
+	_net_report_event("manifest_start_request_out", "online=%s" % str(online_connected))
+	if online_connected:
+		rpc_id(1, "_rpc_request_manifest_mp_start")
+	else:
+		rpc("_start_multiplayer_game")
+		_start_multiplayer_game()
 
 
 func _manifest_preview_kind_index(kind: String) -> int:
@@ -55679,14 +56245,27 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void :
 			return
 
 
+func _manifest_mp_action_button_pressed(pos: Vector2) -> bool:
+	for key in ["mp_manifest_ready", "mp_manifest_back_manifestation", "mp_manifest_start"]:
+		if buttons.has(key) and Rect2(buttons[key]).has_point(pos):
+			return true
+	return false
+
+
 func _handle_manifest_mp_touch(pos: Vector2, viewport: Vector2) -> void :
 	if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
 		return
-	if mp_local_ready:
+	if buttons.has("mp_manifest_start") and buttons["mp_manifest_start"].has_point(pos):
+		_request_manifest_mp_start()
 		return
 
 	if buttons.has("mp_manifest_ready") and buttons["mp_manifest_ready"].has_point(pos):
 		_confirm_manifest_mp_selection()
+		return
+	if buttons.has("mp_manifest_back_manifestation") and buttons["mp_manifest_back_manifestation"].has_point(pos):
+		_return_manifest_mp_to_manifestation()
+		return
+	if mp_local_ready:
 		return
 
 	var rect = Rect2(20.0, 20.0, viewport.x * 0.5 - 40.0, viewport.y - 40.0)
@@ -57475,6 +58054,7 @@ func _on_online_relay_request_completed(result: int, response_code: int, _header
 		online_relay_action = ""
 		return
 	var host: = str(payload.get("host", ONLINE_RELAY_DEFAULT_HOST))
+	online_room_host = host
 	online_room_code = str(payload.get("code", ""))
 	online_room_name = str(payload.get("room_name", payload.get("name", online_room_name)))
 	online_room_locked = bool(payload.get("locked", online_room_locked))
@@ -57497,6 +58077,8 @@ func _connect_to_online_host(ip: String, port: int) -> void :
 		multiplayer.multiplayer_peer = multiplayer_peer
 		if not multiplayer.connected_to_server.is_connected(_on_connected_to_server):
 			multiplayer.connected_to_server.connect(_on_connected_to_server)
+		if not multiplayer.connection_failed.is_connected(_on_connection_failed):
+			multiplayer.connection_failed.connect(_on_connection_failed)
 		if not multiplayer.server_disconnected.is_connected(_on_server_disconnected):
 			multiplayer.server_disconnected.connect(_on_server_disconnected)
 	else:
@@ -57762,6 +58344,19 @@ func _on_connected_to_server() -> void :
 		online_status = "CONECTADO: " + online_room_code
 		_send_online_room_heartbeat("connected")
 	rpc_id(1, "_register_client_info", player_nickname, online_room_owner, online_local_spectator)
+	if not online_room_owner and (local_player_ready or online_local_spectator):
+		call_deferred("_send_lobby_ready_state")
+
+
+func _on_connection_failed() -> void:
+	print("Online room connection failed")
+	online_connected = false
+	online_lobby_ready_pending = false
+	online_spectator_request_pending = false
+	_net_report_event("connection_failed", "room=%s host=%s port=%d" % [online_room_code, online_room_host, online_room_port])
+	_net_report_flush(true)
+	_leave_multiplayer("NAO FOI POSSIVEL CONECTAR NA SALA. TENTE NOVAMENTE.")
+
 
 func _on_server_disconnected() -> void :
 	print("Online room server disconnected")
@@ -58410,6 +59005,10 @@ func _online_lobby_state_v3(room_code: String, connected: int, active_players: i
 				online_lobby_ready_pending = false
 				online_ready_pending_started_ms = 0
 				online_local_ready_confirmed = confirmed_ready
+			elif local_player_ready and typeof(remote_client_ready) == TYPE_BOOL and bool(remote_client_ready) and ready > 0:
+				online_lobby_ready_pending = false
+				online_ready_pending_started_ms = 0
+				online_local_ready_confirmed = true
 		else:
 			local_player_ready = confirmed_ready
 			online_local_ready_confirmed = confirmed_ready
@@ -58591,6 +59190,7 @@ func _start_multiplayer_manifest() -> void :
 	mp_remote_scroll = 0.0
 	mp_manifest_sync_last_ms = 0
 	mp_manifest_sync_last_signature = ""
+	mp_manifest_start_pending = false
 	mp_manifest_state_by_peer.clear()
 	mp_manifest_rejection_message = ""
 	mp_manifest_rejection_timer = 0.0
@@ -58623,20 +59223,9 @@ func _apply_manifest_mp_remote_state(sender: int, stage: String, manifestation: 
 			dedicated_manifest_ready_by_peer[sender] = is_ready and stage == MANIFEST_STAGE_AURA
 			for peer_id in _mp_peer_ids():
 				rpc_id(peer_id, "_rpc_manifest_peer_state", sender, stage, manifestation, aura, scroll, is_ready, String(selection["name"]))
-			if is_ready and _dedicated_manifest_all_ready():
-				_net_report_count_out("control", 48)
-				_net_report_event("start_multiplayer_game_out", "all_manifest_ready")
-				rpc("_start_multiplayer_game")
-				_start_multiplayer_game()
 		return
 	if sender != _mp_unique_id():
 		_apply_manifest_peer_state(sender, stage, manifestation, aura, scroll, is_ready, "Player %d" % sender)
-
-		if not online_connected and is_host and _manifest_all_players_ready():
-			_net_report_count_out("control", 48)
-			_net_report_event("start_multiplayer_game_out", "all_manifest_players_ready")
-			rpc("_start_multiplayer_game")
-			_start_multiplayer_game()
 
 
 func _dedicated_manifest_duplicate_owner(sender: int, stage: String, manifestation: int, aura: int) -> int:
@@ -58697,6 +59286,23 @@ func _rpc_confirm_manifest_mp(stage: String, manifestation: int, aura: int, scro
 	_net_report_count_in("control", 80)
 	_net_report_event("manifest_confirm_in", "stage=%s manifestation=%d aura=%d ready=%s sender=%d" % [stage, manifestation, aura, str(is_ready), _mp_sender_id()])
 	_apply_manifest_mp_remote_state(_mp_sender_id(), stage, manifestation, aura, scroll, is_ready, true)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_request_manifest_mp_start() -> void:
+	if not dedicated_server_mode or mode != "manifest_mp":
+		return
+	var sender: int = _mp_sender_id()
+	if sender != dedicated_room_owner_peer_id:
+		_net_report_event("manifest_start_rejected", "sender_not_owner=%d" % sender)
+		return
+	if not _dedicated_manifest_all_ready():
+		_net_report_event("manifest_start_rejected", "not_all_ready")
+		return
+	_net_report_count_out("control", 48)
+	_net_report_event("start_multiplayer_game_out", "host_manual_start")
+	rpc("_start_multiplayer_game")
+	_start_multiplayer_game()
 
 func _dedicated_manifest_all_ready() -> bool:
 	var peers: = _dedicated_active_peer_ids()

@@ -1,12 +1,15 @@
 {
-  "version": "2.0.34",
-  "version_code": 23400,
-  "filename": "ruptura_temporal_mobile_2.0.34.apk",
-  "sha256": "08ee9d8e3a0b8a26db2c2d84000489a2f0f875ea3daa2324cfc4b53ccaf0d5a5",
-  "size": 1297424725,
+  "version": "2.0.35",
+  "version_code": 23500,
+  "filename": "ruptura_temporal_mobile_2.0.35.apk",
+  "sha256": "34224a0753e12d7a9923b3bff070eb0a00208581246d53539bc20e225dc6d732",
+  "size": 1297672713,
   "notes": [
-    "v2.0.34 com ajustes de estabilidade, balanceamento de chefes, revive por fragmentos, portais de rota e polimento visual."
+    "Fontes embutidas e leitura visual corrigidas.",
+    "Sincronizacao de sala e preparacao de partida ajustadas.",
+    "Atualizador preparado para pacotes de conteudo incremental.",
+    "Polimento de HUD, impacto e entrada da personagem."
   ],
   "mandatory": false,
-  "published_at": "2026-08-30T19:16:40.9077238Z"
+  "published_at": "2026-08-31T00:38:21.2165807Z"
 }

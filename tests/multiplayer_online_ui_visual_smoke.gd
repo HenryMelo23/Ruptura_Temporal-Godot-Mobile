@@ -98,14 +98,27 @@ func _run() -> void:
 	game.selected_aura = 3
 	game.aura_scroll_pos = 3.0
 	game.mp_local_ready = false
+	game.mp_ready_last_sent_ms = Time.get_ticks_msec() + 60000
 	game.mp_manifest_state_by_peer = {
 		22: {"stage": game.MANIFEST_STAGE_AURA, "manifestation": 1, "aura": 2, "scroll": 2.0, "ready": true, "name": "Apolo"},
 		33: {"stage": game.MANIFEST_STAGE_MANIFESTATION, "manifestation": 4, "aura": 0, "scroll": 4.0, "ready": false, "name": "Umbra"}
 	}
 	await _capture("online_manifest_team_1280x720.png")
 	_check_button_inside("mp_manifest_ready", Vector2i(1280, 720))
+	_check_button_inside("mp_manifest_start", Vector2i(1280, 720))
 	await _capture("online_manifest_team_960x540.png", Vector2i(960, 540))
 	_check_button_inside("mp_manifest_ready", Vector2i(960, 540))
+	_check_button_inside("mp_manifest_start", Vector2i(960, 540))
+
+	game.online_room_owner = true
+	game.mp_local_ready = true
+	game.mp_ready_last_sent_ms = Time.get_ticks_msec() + 60000
+	game.mp_manifest_state_by_peer = {
+		22: {"stage": game.MANIFEST_STAGE_AURA, "manifestation": 1, "aura": 2, "scroll": 2.0, "ready": true, "name": "Apolo"},
+		33: {"stage": game.MANIFEST_STAGE_AURA, "manifestation": 4, "aura": 5, "scroll": 5.0, "ready": true, "name": "Umbra"}
+	}
+	await _capture("online_manifest_ready_host_start_1280x720.png")
+	_check(game._manifest_mp_start_available(), "host start button did not unlock after all choices")
 
 	game.mode = "game"
 	game.is_multiplayer = true

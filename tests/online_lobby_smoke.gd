@@ -133,6 +133,13 @@ func _run() -> void:
 	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
 	_check(game.online_lobby_client_ready == true, "Estado v2 deve marcar client pronto explicitamente")
 	_check(game.online_local_ready_confirmed == true, "Client deve receber confirmacao autoritativa do pronto")
+	game.online_room_owner = false
+	game.local_player_ready = true
+	game.online_local_ready_confirmed = false
+	game.online_lobby_ready_pending = true
+	game.online_ready_pending_started_ms = Time.get_ticks_msec()
+	game._online_lobby_state_v3("ABCDEF", 2, 2, 0, 1, false, true, false)
+	_check(game.online_local_ready_confirmed and not game.online_lobby_ready_pending, "Client deve sair de confirmando quando o v3 agregado confirma pronto")
 	game.online_room_owner = true
 	game.online_lobby_client_ready = false
 	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
