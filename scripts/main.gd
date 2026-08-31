@@ -6,6 +6,7 @@ const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
+const RTNetContractScript = preload("res://scripts/systems/online/net_contract.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
 const GAME_VERSION: = "2.0.35"
@@ -1945,22 +1946,22 @@ var online_first_world_snapshot_received: bool = false
 var online_first_player_snapshot_received: bool = false
 var online_game_started_ms: int = 0
 var perf_ready_started_ms: int = 0
-const NET_PLAYER_SYNC_INTERVAL_MS: = 16
-const NET_WORLD_SYNC_INTERVAL_MS: = 25
-const NET_WORLD_VISUAL_SYNC_INTERVAL_MS: = 33
-const NET_PING_INTERVAL_MS: = 250
-const NET_CHANNEL_COUNT: = 5
-const NET_PLAYER_CHANNEL: = 1
-const NET_WORLD_CHANNEL: = 2
-const NET_CONTROL_CHANNEL: = 3
-const NET_VISUAL_CHANNEL: = 4
-const DEDICATED_SERVER_NET_FPS: = 120
-const NET_INTERPOLATION_SHARPNESS: = 30.0
-const NET_EXTRAPOLATION_LIMIT: = 0.06
-const NET_SNAP_DISTANCE: = 360.0
-const NET_ENEMY_STRIDE: = 34
-const NET_UID_CHUNK_MASK: = 65535
-const NET_BULLET_STRIDE: = 11
+const NET_PLAYER_SYNC_INTERVAL_MS: = RTNetContractScript.PLAYER_SYNC_INTERVAL_MS
+const NET_WORLD_SYNC_INTERVAL_MS: = RTNetContractScript.WORLD_SYNC_INTERVAL_MS
+const NET_WORLD_VISUAL_SYNC_INTERVAL_MS: = RTNetContractScript.WORLD_VISUAL_SYNC_INTERVAL_MS
+const NET_PING_INTERVAL_MS: = RTNetContractScript.PING_INTERVAL_MS
+const NET_CHANNEL_COUNT: = RTNetContractScript.CHANNEL_COUNT
+const NET_PLAYER_CHANNEL: = RTNetContractScript.PLAYER_CHANNEL
+const NET_WORLD_CHANNEL: = RTNetContractScript.WORLD_CHANNEL
+const NET_CONTROL_CHANNEL: = RTNetContractScript.CONTROL_CHANNEL
+const NET_VISUAL_CHANNEL: = RTNetContractScript.VISUAL_CHANNEL
+const DEDICATED_SERVER_NET_FPS: = RTNetContractScript.DEDICATED_SERVER_NET_FPS
+const NET_INTERPOLATION_SHARPNESS: = RTNetContractScript.INTERPOLATION_SHARPNESS
+const NET_EXTRAPOLATION_LIMIT: = RTNetContractScript.EXTRAPOLATION_LIMIT
+const NET_SNAP_DISTANCE: = RTNetContractScript.SNAP_DISTANCE
+const NET_ENEMY_STRIDE: = RTNetContractScript.ENEMY_STRIDE
+const NET_UID_CHUNK_MASK: = RTNetContractScript.UID_CHUNK_MASK
+const NET_BULLET_STRIDE: = RTNetContractScript.BULLET_STRIDE
 const NET_LEECH_STATES: = [
 	SANGUESSUGA_STATE_FALL_WARNING, 
 	SANGUESSUGA_STATE_FALLING, 
@@ -1971,21 +1972,21 @@ const NET_LEECH_STATES: = [
 	SANGUESSUGA_STATE_MISSED, 
 	SANGUESSUGA_STATE_EXPIRING
 ]
-const NET_OWNER_CONNECT_TIMEOUT_MS: = 30000
-const NET_PRELOAD_TIMEOUT_MS: = 20000
-const NET_MANIFEST_SYNC_INTERVAL_MS: = 45
-const NET_REPORT_INTERVAL_MS: = 30000
-const NET_REPORT_EVENT_LIMIT: = 180
+const NET_OWNER_CONNECT_TIMEOUT_MS: = RTNetContractScript.OWNER_CONNECT_TIMEOUT_MS
+const NET_PRELOAD_TIMEOUT_MS: = RTNetContractScript.PRELOAD_TIMEOUT_MS
+const NET_MANIFEST_SYNC_INTERVAL_MS: = RTNetContractScript.MANIFEST_SYNC_INTERVAL_MS
+const NET_REPORT_INTERVAL_MS: = RTNetContractScript.REPORT_INTERVAL_MS
+const NET_REPORT_EVENT_LIMIT: = RTNetContractScript.REPORT_EVENT_LIMIT
 const ONLINE_ROOM_HEARTBEAT_INTERVAL_MS: = 20000
 const ONLINE_ROOM_HEARTBEAT_WARN_MS: = 70000
 const ONLINE_ROOM_HEARTBEAT_TIMEOUT: = 6.0
-const NET_ABILITY_ATTACK: = 0
-const NET_ABILITY_SKILL: = 1
-const NET_ABILITY_SECONDARY: = 2
-const NET_ABILITY_TELEPORT: = 3
-const NET_ABILITY_SECONDARY_END: = 4
-const NET_ABILITY_VISUAL_LIMIT: = 48
-const NET_REWIND_VISUAL_LIMIT: = 8
+const NET_ABILITY_ATTACK: = RTNetContractScript.ABILITY_ATTACK
+const NET_ABILITY_SKILL: = RTNetContractScript.ABILITY_SKILL
+const NET_ABILITY_SECONDARY: = RTNetContractScript.ABILITY_SECONDARY
+const NET_ABILITY_TELEPORT: = RTNetContractScript.ABILITY_TELEPORT
+const NET_ABILITY_SECONDARY_END: = RTNetContractScript.ABILITY_SECONDARY_END
+const NET_ABILITY_VISUAL_LIMIT: = RTNetContractScript.ABILITY_VISUAL_LIMIT
+const NET_REWIND_VISUAL_LIMIT: = RTNetContractScript.REWIND_VISUAL_LIMIT
 const REVIVE_CARD_COST_MULT: = 4
 const REVIVE_REQUEST_COOLDOWN: = 15.0
 const REVIVE_REQUEST_TIMEOUT: = 10.0
@@ -2006,17 +2007,17 @@ const REVIVAL_MOBILE_DOUBLE_TAP_MS: = 650
 const REVIVAL_FRAGMENT_RESPAWN_TIME: = 180.0
 const REVIVAL_FRAGMENT_DRIFT_SPEED: = 46.0
 const REVIVAL_FRAGMENT_SYNC_INTERVAL: = 0.45
-const NET_ANIM_IDLE: = 0
-const NET_ANIM_UP: = 1
-const NET_ANIM_DOWN: = 2
-const NET_ANIM_RIGHT: = 3
-const NET_ANIM_FIRE: = 4
-const NET_ANIM_DAMAGE: = 5
-const NET_ANIM_LACERANTE: = 6
-const NET_ANIM_FROZEN: = 7
-const NET_DAMAGE_ENEMY: = 0
-const NET_DAMAGE_BOSS: = 1
-const NET_DAMAGE_ARAUTO: = 2
+const NET_ANIM_IDLE: = RTNetContractScript.ANIM_IDLE
+const NET_ANIM_UP: = RTNetContractScript.ANIM_UP
+const NET_ANIM_DOWN: = RTNetContractScript.ANIM_DOWN
+const NET_ANIM_RIGHT: = RTNetContractScript.ANIM_RIGHT
+const NET_ANIM_FIRE: = RTNetContractScript.ANIM_FIRE
+const NET_ANIM_DAMAGE: = RTNetContractScript.ANIM_DAMAGE
+const NET_ANIM_LACERANTE: = RTNetContractScript.ANIM_LACERANTE
+const NET_ANIM_FROZEN: = RTNetContractScript.ANIM_FROZEN
+const NET_DAMAGE_ENEMY: = RTNetContractScript.DAMAGE_ENEMY
+const NET_DAMAGE_BOSS: = RTNetContractScript.DAMAGE_BOSS
+const NET_DAMAGE_ARAUTO: = RTNetContractScript.DAMAGE_ARAUTO
 const NET_ENEMY_TYPES: = [
 	ENEMY_COMMON, ENEMY_ATIRADOR, ENEMY_KAMIKAZE, ENEMY_AGGLOMERATOR, 
 	ENEMY_STALKER, ENEMY_PROJECTOR, ENEMY_CRYSTAL, ENEMY_CURATER, 
@@ -3930,20 +3931,10 @@ func _net_report_flush(final_flush: = false) -> void :
 	net_report_interval_player_drop_gaps = 0
 
 func _net_report_estimate_packed_bytes(value) -> int:
-	if value is PackedFloat32Array:
-		return value.size() * 4
-	if value is PackedInt32Array:
-		return value.size() * 4
-	if value is PackedByteArray:
-		return value.size()
-	if value is Array:
-		return value.size() * 96
-	if value is Dictionary:
-		return max(64, value.size() * 40)
-	return 32
+	return RTNetContractScript.estimate_packed_bytes(value)
 
 func _net_report_estimate_world_bytes(enemies_data, boss_data, bullets_data) -> int:
-	return 32 + _net_report_estimate_packed_bytes(enemies_data) + _net_report_estimate_packed_bytes(boss_data) + _net_report_estimate_packed_bytes(bullets_data)
+	return RTNetContractScript.estimate_world_bytes(enemies_data, boss_data, bullets_data)
 
 func _setup_nickname_input() -> void :
 	nickname_edit = LineEdit.new()
@@ -59665,16 +59656,7 @@ func _sync_multiplayer_state() -> void :
 			rpc("_update_remote_world_visuals", net_world_sequence, visuals_packet)
 
 func _pack_net_boss() -> PackedFloat32Array:
-	return PackedFloat32Array([
-		boss_pos.x, 
-		boss_pos.y, 
-		boss_hp, 
-		1.0 if boss_dead else 0.0, 
-		1.0 if boss_active else 0.0, 
-		float(current_phase), 
-		boss_hp_max, 
-		boss_phase
-	])
+	return RTNetContractScript.pack_boss(boss_pos, boss_hp, boss_dead, boss_active, current_phase, boss_hp_max, boss_phase)
 
 
 func _pack_net_boss_visuals() -> Dictionary:
@@ -59799,78 +59781,12 @@ func _pack_net_boss_visuals() -> Dictionary:
 
 
 func _pack_net_enemies() -> PackedFloat32Array:
-	var packed: = PackedFloat32Array()
-	packed.resize(enemies.size() * NET_ENEMY_STRIDE)
-	var offset: = 0
-	for enemy in enemies:
-		var uid: = int(enemy.get("uid", 0))
-		var pos: = Vector2(enemy.get("pos", Vector2.ZERO))
-		var facing_value = enemy.get("facing_dir", Vector2.RIGHT)
-		var facing: Vector2 = facing_value if facing_value is Vector2 else Vector2(float(facing_value), 0.0)
-		var last_move: = Vector2(enemy.get("last_move_dir", Vector2.ZERO))
-		packed[offset] = float(uid & NET_UID_CHUNK_MASK)
-		packed[offset + 1] = float((uid >> 16) & NET_UID_CHUNK_MASK)
-		packed[offset + 2] = float(maxi(0, NET_ENEMY_TYPES.find(String(enemy.get("type", ENEMY_COMMON)))))
-		packed[offset + 3] = pos.x
-		packed[offset + 4] = pos.y
-		packed[offset + 5] = float(enemy.get("hp", 0.0))
-		packed[offset + 6] = float(enemy.get("max_hp", enemy.get("hp", 1.0)))
-		packed[offset + 7] = float(enemy.get("phase", 0.0))
-		packed[offset + 8] = float(enemy.get("shield_flash", 0.0))
-		packed[offset + 9] = float(enemy.get("bit", 0))
-		packed[offset + 10] = facing.x
-		packed[offset + 11] = facing.y
-		packed[offset + 12] = last_move.x
-		packed[offset + 13] = last_move.y
-		packed[offset + 14] = 1.0 if bool(enemy.get("invisible", false)) else 0.0
-		packed[offset + 15] = float(enemy.get("alpha", 1.0))
-		packed[offset + 16] = float(enemy.get("seeds", 0))
-		packed[offset + 17] = float(enemy.get("parasite_mark_time", 0.0))
-		packed[offset + 18] = float(enemy.get("tesla_shock", 0.0))
-		packed[offset + 19] = 1.0 if bool(enemy.get("shield_active", true)) else 0.0
-		packed[offset + 20] = float(enemy.get("reconstitute_time", 0.0))
-		packed[offset + 21] = float(enemy.get("eel_relocating", 0.0))
-		var eel_from: = Vector2(enemy.get("eel_relocate_from", pos))
-		var eel_to: = Vector2(enemy.get("eel_relocate_to", pos))
-		packed[offset + 22] = eel_from.x
-		packed[offset + 23] = eel_from.y
-		packed[offset + 24] = eel_to.x
-		packed[offset + 25] = eel_to.y
-		packed[offset + 26] = float(enemy.get("eel_relocate_bend", 0.0))
-		packed[offset + 27] = float(maxi(0, NET_LEECH_STATES.find(String(enemy.get("leech_state", SANGUESSUGA_STATE_DORMANT)))))
-		packed[offset + 28] = float(enemy.get("leech_timer", 0.0))
-		packed[offset + 29] = float(enemy.get("leech_life", 0.0))
-		var leech_to: = Vector2(enemy.get("leech_leap_to", pos))
-		packed[offset + 30] = leech_to.x
-		packed[offset + 31] = leech_to.y
-		packed[offset + 32] = float(enemy.get("leech_target_peer", 0))
-		packed[offset + 33] = 1.0 if bool(enemy.get("boss6_summoned", false)) else 0.0
-		offset += NET_ENEMY_STRIDE
-	return packed
+	return RTNetContractScript.pack_enemies(enemies, NET_ENEMY_TYPES, ENEMY_COMMON, NET_LEECH_STATES, SANGUESSUGA_STATE_DORMANT)
 
 func _pack_net_enemy_bullets() -> PackedFloat32Array:
-	var packed: = PackedFloat32Array()
-	packed.resize(enemy_bullets.size() * NET_BULLET_STRIDE)
-	var offset: = 0
-	for bullet in enemy_bullets:
-		if not bullet.has("_net_uid"):
-			bullet["_net_uid"] = net_enemy_bullet_next_uid
-			net_enemy_bullet_next_uid += 1
-		var pos: = Vector2(bullet.get("pos", Vector2.ZERO))
-		var direction: = Vector2(bullet.get("dir", Vector2.ZERO))
-		packed[offset] = float(bullet.get("_net_uid", 0))
-		packed[offset + 1] = pos.x
-		packed[offset + 2] = pos.y
-		packed[offset + 3] = direction.x
-		packed[offset + 4] = direction.y
-		packed[offset + 5] = float(bullet.get("life", 0.0))
-		packed[offset + 6] = float(bullet.get("damage", 0.0))
-		packed[offset + 7] = float(maxi(0, NET_BULLET_TYPES.find(String(bullet.get("type", "")))))
-		packed[offset + 8] = float(bullet.get("radius", 0.0))
-		packed[offset + 9] = float(bullet.get("phase", 0.0))
-		packed[offset + 10] = float(bullet.get("speed_mult", 1.0))
-		offset += NET_BULLET_STRIDE
-	return packed
+	var result: Dictionary = RTNetContractScript.pack_enemy_bullets(enemy_bullets, NET_BULLET_TYPES, net_enemy_bullet_next_uid)
+	net_enemy_bullet_next_uid = int(result.get("next_uid", net_enemy_bullet_next_uid))
+	return result.get("packed", PackedFloat32Array())
 
 func _update_online_ping(now_ms: int) -> void :
 	if not online_connected or dedicated_server_mode:
@@ -59967,9 +59883,7 @@ func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max:
 func _store_remote_player_state(peer_id: int, incoming: Dictionary) -> void :
 	if peer_id == 0 or peer_id == _mp_unique_id():
 		return
-	var state: Dictionary = net_players_by_peer.get(peer_id, {})
-	for key in incoming.keys():
-		state[key] = incoming[key]
+	var state: Dictionary = RTNetContractScript.merged_remote_player_state(net_players_by_peer.get(peer_id, {}), incoming)
 	net_players_by_peer[peer_id] = state
 	_accept_remote_player_position(peer_id, Vector2(incoming.get("pos", state.get("pos", Vector2.ZERO))))
 	_sync_legacy_remote_player(peer_id)
@@ -60002,15 +59916,11 @@ func _accept_remote_player_position(peer_id: int, pos: Vector2) -> void :
 
 
 func _sync_legacy_remote_player(preferred_peer_id: int = 0) -> void :
-	var peer_id: = preferred_peer_id
-	if peer_id == 0 or not net_players_by_peer.has(peer_id):
-		var keys: = net_players_by_peer.keys()
-		if keys.is_empty():
-			net_player_has_snapshot = false
-			net_player_peer_id = 0
-			return
-		keys.sort()
-		peer_id = int(keys[0])
+	var peer_id: = RTNetContractScript.legacy_remote_peer_id(net_players_by_peer, preferred_peer_id)
+	if peer_id == 0:
+		net_player_has_snapshot = false
+		net_player_peer_id = 0
+		return
 	var state: Dictionary = net_players_by_peer.get(peer_id, {})
 	net_player_peer_id = peer_id
 	net_player_pos = Vector2(state.get("pos", net_player_pos))
@@ -60088,102 +59998,24 @@ func _apply_remote_enemy_snapshot(snapshot_data, now_ms: int) -> void :
 	var existing: = {}
 	for enemy in enemies:
 		existing[int(enemy.get("uid", -1))] = enemy
-	var next_enemies: Array = []
-
-	if snapshot_data is PackedFloat32Array:
-		var packed: PackedFloat32Array = snapshot_data
-		for offset in range(0, packed.size() - NET_ENEMY_STRIDE + 1, NET_ENEMY_STRIDE):
-			var uid: = int(packed[offset]) | (int(packed[offset + 1]) << 16)
-			var incoming_pos: = Vector2(packed[offset + 3], packed[offset + 4])
-			var enemy: Dictionary = existing.get(uid, {})
-			_update_remote_entity_motion(enemy, incoming_pos, now_ms)
-			enemy["uid"] = uid
-			var type_index: = clampi(int(packed[offset + 2]), 0, NET_ENEMY_TYPES.size() - 1)
-			enemy["type"] = NET_ENEMY_TYPES[type_index]
-			enemy["hp"] = packed[offset + 5]
-			enemy["max_hp"] = packed[offset + 6]
-			enemy["phase"] = packed[offset + 7]
-			enemy["shield_flash"] = packed[offset + 8]
-			enemy["bit"] = int(packed[offset + 9])
-			enemy["facing_dir"] = Vector2(packed[offset + 10], packed[offset + 11])
-			enemy["last_move_dir"] = Vector2(packed[offset + 12], packed[offset + 13])
-			enemy["invisible"] = packed[offset + 14] > 0.5
-			enemy["alpha"] = packed[offset + 15]
-			enemy["seeds"] = int(packed[offset + 16])
-			enemy["parasite_mark_time"] = packed[offset + 17]
-			enemy["tesla_shock"] = packed[offset + 18]
-			enemy["shield_active"] = packed[offset + 19] > 0.5
-			enemy["reconstitute_time"] = packed[offset + 20]
-			enemy["eel_relocating"] = packed[offset + 21]
-			enemy["eel_relocate_from"] = Vector2(packed[offset + 22], packed[offset + 23])
-			enemy["eel_relocate_to"] = Vector2(packed[offset + 24], packed[offset + 25])
-			enemy["eel_relocate_bend"] = packed[offset + 26]
-			if packed.size() >= offset + NET_ENEMY_STRIDE and String(enemy["type"]) == ENEMY_CHRONAL_LEECH:
-				var leech_index: = clampi(int(packed[offset + 27]), 0, NET_LEECH_STATES.size() - 1)
-				enemy["leech_state"] = NET_LEECH_STATES[leech_index]
-				enemy["state"] = NET_LEECH_STATES[leech_index]
-				enemy["leech_timer"] = packed[offset + 28]
-				enemy["leech_life"] = packed[offset + 29]
-				enemy["leech_leap_to"] = Vector2(packed[offset + 30], packed[offset + 31])
-				enemy["leech_target_peer"] = int(packed[offset + 32])
-				enemy["boss6_summoned"] = packed[offset + 33] > 0.5
-			next_enemies.append(enemy)
-	else:
-		for item in snapshot_data:
-			if not item is Dictionary:
-				continue
-			var incoming: Dictionary = item
-			var uid: = int(incoming.get("uid", -1))
-			var enemy: Dictionary = existing.get(uid, {})
-			_update_remote_entity_motion(enemy, Vector2(incoming.get("pos", Vector2.ZERO)), now_ms)
-			for key in incoming.keys():
-				if key != "pos":
-					enemy[key] = incoming[key]
-			next_enemies.append(enemy)
-	enemies = next_enemies
+	enemies = RTNetContractScript.unpack_enemy_snapshot(snapshot_data, existing, NET_ENEMY_TYPES, ENEMY_COMMON, NET_LEECH_STATES, ENEMY_CHRONAL_LEECH, now_ms)
 
 
 func _update_remote_entity_motion(entity: Dictionary, incoming_pos: Vector2, now_ms: int) -> void :
-	if entity.is_empty():
-		entity["pos"] = incoming_pos
-		entity["_net_velocity"] = Vector2.ZERO
-	else:
-		var previous_target: = Vector2(entity.get("_net_target_pos", entity.get("pos", incoming_pos)))
-		var previous_ms: = int(entity.get("_net_snapshot_ms", now_ms))
-		var elapsed: = maxf(0.001, float(now_ms - previous_ms) / 1000.0)
-		entity["_net_velocity"] = (incoming_pos - previous_target) / elapsed
-	entity["_net_target_pos"] = incoming_pos
-	entity["_net_snapshot_ms"] = now_ms
+	RTNetContractScript.apply_entity_motion(entity, incoming_pos, now_ms)
 
 
 func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void :
-	var incoming_pos: Vector2 = boss_pos
-	if snapshot_data is PackedFloat32Array:
-		var packed: PackedFloat32Array = snapshot_data
-		if packed.size() < 4:
-			return
-		incoming_pos = Vector2(packed[0], packed[1])
-		boss_hp = packed[2]
-		boss_dead = packed[3] > 0.5
-		if packed.size() >= 5:
-			boss_active = packed[4] > 0.5 and not boss_dead
-		elif boss_hp > 0.0 and not boss_dead and net_boss_has_snapshot:
-			boss_active = true
-		if packed.size() >= 6:
-			current_phase = clampi(int(packed[5]), 1, 6)
-		if packed.size() >= 7:
-			boss_hp_max = max(1.0, packed[6])
-		if packed.size() >= 8:
-			boss_phase = packed[7]
-	elif snapshot_data is Dictionary:
-		incoming_pos = Vector2(snapshot_data.get("pos", boss_pos))
-		boss_hp = snapshot_data.get("hp", boss_hp)
-		boss_dead = snapshot_data.get("dead", boss_dead)
-		boss_active = bool(snapshot_data.get("active", boss_active)) and not boss_dead
-		current_phase = int(snapshot_data.get("phase_index", current_phase))
-		boss_hp_max = max(1.0, float(snapshot_data.get("hp_max", boss_hp_max)))
-	else:
+	var boss_snapshot: Dictionary = RTNetContractScript.unpack_boss_snapshot(snapshot_data, boss_pos, boss_hp, boss_dead, boss_active, current_phase, boss_hp_max, boss_phase, net_boss_has_snapshot)
+	if not bool(boss_snapshot.get("valid", false)):
 		return
+	var incoming_pos: Vector2 = Vector2(boss_snapshot.get("pos", boss_pos))
+	boss_hp = boss_snapshot.get("hp", boss_hp)
+	boss_dead = boss_snapshot.get("dead", boss_dead)
+	boss_active = bool(boss_snapshot.get("active", boss_active))
+	current_phase = int(boss_snapshot.get("phase_index", current_phase))
+	boss_hp_max = float(boss_snapshot.get("hp_max", boss_hp_max))
+	boss_phase = float(boss_snapshot.get("boss_phase", boss_phase))
 	if boss_dead:
 		boss_active = false
 	if boss_active and mode == "boss_call":
@@ -60337,30 +60169,10 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 
 
 func _apply_remote_bullet_snapshot(snapshot_data, now_ms: int) -> void :
-	if not snapshot_data is PackedFloat32Array:
-		enemy_bullets = snapshot_data
-		return
 	var existing: = {}
 	for bullet in enemy_bullets:
 		existing[int(bullet.get("_net_uid", -1))] = bullet
-	var next_bullets: Array = []
-	var packed: PackedFloat32Array = snapshot_data
-	for offset in range(0, packed.size() - NET_BULLET_STRIDE + 1, NET_BULLET_STRIDE):
-		var uid: = int(packed[offset])
-		var incoming_pos: = Vector2(packed[offset + 1], packed[offset + 2])
-		var bullet: Dictionary = existing.get(uid, {})
-		_update_remote_entity_motion(bullet, incoming_pos, now_ms)
-		bullet["_net_uid"] = uid
-		bullet["dir"] = Vector2(packed[offset + 3], packed[offset + 4])
-		bullet["life"] = packed[offset + 5]
-		bullet["damage"] = packed[offset + 6]
-		var type_index: = clampi(int(packed[offset + 7]), 0, NET_BULLET_TYPES.size() - 1)
-		bullet["type"] = NET_BULLET_TYPES[type_index]
-		bullet["radius"] = packed[offset + 8]
-		bullet["phase"] = packed[offset + 9]
-		bullet["speed_mult"] = packed[offset + 10]
-		next_bullets.append(bullet)
-	enemy_bullets = next_bullets
+	enemy_bullets = RTNetContractScript.unpack_bullet_snapshot(snapshot_data, existing, NET_BULLET_TYPES, now_ms)
 
 
 @rpc("any_peer", "call_remote", "unreliable", 3)
