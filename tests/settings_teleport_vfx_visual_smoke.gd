@@ -51,8 +51,12 @@ func _run() -> void:
 	await _capture("teleport_vfx_pack_b_1280x720.png")
 
 	print("SETTINGS_TELEPORT_VFX_VISUAL_OK settings=true teleports=10 captures=3")
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
 	game.queue_free()
-	await process_frame
+	for i in range(4):
+		await process_frame
 	quit(0)
 
 
@@ -85,6 +89,9 @@ func _capture(file_name: String) -> void:
 	game.queue_redraw()
 	await process_frame
 	await process_frame
+	if DisplayServer.get_name() == "headless":
+		print("SETTINGS_TELEPORT_VFX_CAPTURE logic_only=true file=", file_name)
+		return
 	var image: Image = root.get_texture().get_image()
 	_check(image != null and image.get_width() == 1280 and image.get_height() == 720, "invalid capture " + file_name)
 	_check(image.get_used_rect().size.x > 1000 and image.get_used_rect().size.y > 600, "blank capture " + file_name)

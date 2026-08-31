@@ -39,7 +39,13 @@ func _run() -> void:
 	var viewport := Vector2(1280.0, 720.0)
 	var corner_camera: Vector2 = game._camera(viewport)
 	var corner_rects: Array = game._corner_limbo_rects(corner_camera, viewport)
-	_check(corner_rects.size() > 0, "camera corner overscan did not create limbo corner rects")
+	_check(corner_rects.size() > 0, "camera overscan geometry changed unexpectedly")
 
-	print("PLAYER_MARGIN_SMOKE_OK min=%s max=%s old=%s corner_rects=%d" % [str(near_min), str(near_max), str(old_margin), corner_rects.size()])
+	print("PLAYER_MARGIN_SMOKE_OK min=%s max=%s old=%s limbo_render_removed=true corner_rects=%d" % [str(near_min), str(near_max), str(old_margin), corner_rects.size()])
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	game.queue_free()
+	for i in range(4):
+		await process_frame
 	quit()

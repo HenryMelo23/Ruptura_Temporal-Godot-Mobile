@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUTPUT := "res://.agent_logs/corner_limbo_visual_smoke.png"
+const OUTPUT := "res://.agent_logs/corner_limbo_removed_visual_smoke.png"
 
 var game: Node
 
@@ -37,12 +37,12 @@ func _run() -> void:
 	var camera: Vector2 = game._camera(viewport)
 	var rects: Array = game._corner_limbo_rects(camera, viewport)
 	if rects.is_empty():
-		_fail("expected corner limbo rects at top-left map corner")
+		_fail("expected camera overscan rects at top-left map corner")
 		return
 
 	if DisplayServer.get_name() == "headless":
-		print("CORNER_LIMBO_VISUAL_OK logic_only=true rects=", rects.size(), " camera=", camera)
-		_cleanup()
+		print("CORNER_LIMBO_VISUAL_OK logic_only=true render_removed=true rects=", rects.size(), " camera=", camera)
+		await _cleanup_async()
 		quit(0)
 		return
 
@@ -54,8 +54,8 @@ func _run() -> void:
 	if image.save_png(output_path) != OK:
 		_fail("could not save screenshot")
 		return
-	print("CORNER_LIMBO_VISUAL_OK screenshot=", output_path, " rects=", rects.size(), " camera=", camera)
-	_cleanup()
+	print("CORNER_LIMBO_VISUAL_OK screenshot=", output_path, " render_removed=true rects=", rects.size(), " camera=", camera)
+	await _cleanup_async()
 	quit(0)
 
 
@@ -68,3 +68,14 @@ func _cleanup() -> void:
 	if game.get_parent() == root:
 		root.remove_child(game)
 	game.free()
+
+
+func _cleanup_async() -> void:
+	if game == null:
+		return
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	game.queue_free()
+	for i in range(4):
+		await process_frame

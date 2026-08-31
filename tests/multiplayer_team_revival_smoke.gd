@@ -101,9 +101,9 @@ func _run() -> void:
 	_collect_all_fragments()
 	game.player_pos = game.revival_altar_life_pos
 	game._try_interact_revival_altar(game.REVIVE_PAY_LIFE)
-	_check(is_equal_approx(game.player_hp, 100.0), "life altar should sacrifice 75 percent with two dead")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 150.0), "life altar did not split hp to first dead peer")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 150.0), "life altar did not split hp to second dead peer")
+	_check(is_equal_approx(game.player_hp, 184.0), "life altar should apply reduced 54 percent sacrifice with two dead")
+	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 108.0), "life altar did not split reduced hp to first dead peer")
+	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 108.0), "life altar did not split reduced hp to second dead peer")
 
 	print("MULTIPLAYER_TEAM_REVIVAL_SMOKE_OK score_dedup=true fragments=true altars=true life_split=true")
 	game.queue_free()

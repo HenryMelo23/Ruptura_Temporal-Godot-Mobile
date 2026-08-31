@@ -58,6 +58,7 @@ const PLAYER_START_DOWN_FALL_TIME: float = 0.82
 const PLAYER_START_DOWN_LAND_TIME: float = 1.0
 const PLAYER_START_DOWN_HEIGHT: float = 360.0
 const PLAYER_START_DOWN_FRAME_TIME: float = 0.11
+const PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND: float = 0.5
 const PLAYER_WORLD_MARGIN: = Vector2.ZERO
 const HUD_PLAYER_FADE_RADIUS: = 96.0
 const HUD_PLAYER_MIN_ALPHA: = 0.26
@@ -1990,18 +1991,19 @@ const REVIVE_REQUEST_TIMEOUT: = 10.0
 const REVIVE_PAY_POINTS: = "points"
 const REVIVE_PAY_LIFE: = "life"
 const REVIVE_LIFE_SACRIFICE_RATE: = 0.5
+const REVIVE_LIFE_SACRIFICE_REDUCTION: = 0.28
 const REVIVE_HEAL_PENALTY_MULT: = 0.5
 const REVIVE_HEAL_PENALTY_DURATION: = 60.0
 const REVIVAL_SINGLE_TIME: = 30.0
 const REVIVAL_MULTI_TIME: = 50.0
 const REVIVAL_FRAGMENTS_PER_DEAD: = 5
-const REVIVAL_FRAGMENT_PICKUP_RADIUS: = 42.0
+const REVIVAL_FRAGMENT_PICKUP_RADIUS: = 58.0
 const REVIVAL_ALTAR_RADIUS: = 68.0
 const REVIVAL_ALTAR_SPACING: = 132.0
 const REVIVAL_MULTI_LIFE_SACRIFICE_RATE: = 0.75
 const REVIVAL_MOBILE_DOUBLE_TAP_MS: = 650
 const REVIVAL_FRAGMENT_RESPAWN_TIME: = 180.0
-const REVIVAL_FRAGMENT_DRIFT_SPEED: = 22.0
+const REVIVAL_FRAGMENT_DRIFT_SPEED: = 46.0
 const REVIVAL_FRAGMENT_SYNC_INTERVAL: = 0.45
 const NET_ANIM_IDLE: = 0
 const NET_ANIM_UP: = 1
@@ -2693,6 +2695,7 @@ var hud_lacerante_empower_pos: Vector2 = Vector2(-1, -1)
 var hud_lacerante_empower_scale: float = 1.0
 
 var edit_layout_offset = Vector2.ZERO
+var edit_layout_resize_visible: bool = false
 
 var settings_previous_mode: String = "menu"
 
@@ -8820,14 +8823,16 @@ func _play_manifestation_attack_sfx(kind: String) -> void :
 
 
 func _play_manifestation_skill_sfx(key: String) -> void :
-	_play_sfx("skill_" + key, 0.025, 1.1, 0.92)
+	var volume_scale := 0.11 if key == "racional" else 1.1
+	_play_sfx("skill_" + key, 0.025, volume_scale, 0.92)
 
 
 func _play_manifestation_ultimate_sfx(key: String) -> void :
 	if key == "prismatica":
 		_play_prismatica_ultimate_audio()
 		return
-	_play_sfx("ult_" + key, 0.018, 1.18, 0.88)
+	var volume_scale := 0.118 if key == "racional" else 1.18
+	_play_sfx("ult_" + key, 0.018, volume_scale, 0.88)
 
 
 func _play_prismatica_ultimate_audio() -> void :
@@ -11368,6 +11373,18 @@ func _spectator_controls_locked() -> bool:
 	return is_multiplayer and online_local_spectator
 
 
+func _player_start_down_controls_locked() -> bool:
+	if player_start_down_fall_timer > 0.0:
+		return true
+	if player_start_down_landing_timer <= 0.0:
+		return false
+	return player_start_down_landing_timer > PLAYER_START_DOWN_LAND_TIME - PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND
+
+
+func _local_player_controls_locked() -> bool:
+	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked()
+
+
 func _spectator_combat_mode() -> bool:
 	return _spectator_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown")
 
@@ -11461,7 +11478,7 @@ func _gamepad_navigation_mode() -> bool:
 
 
 func _combat_controls_active() -> bool:
-	return not _spectator_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown")
+	return not _local_player_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown")
 
 
 func _reset_arauto_state(reset_spawn_flag: = false) -> void :
@@ -12206,7 +12223,7 @@ func _update_game(delta: float) -> void :
 	_update_phase6_pustule_pheromones(delta)
 	_update_sanguessuga_parasite(delta)
 	boss_tp_stun_timer = max(0.0, boss_tp_stun_timer - delta)
-	if not is_dead and not _spectator_controls_locked():
+	if not _local_player_controls_locked():
 		if player_stun_timer <= 0.0 and not player_locked:
 			var move = _read_move()
 			if lacerante_preparing:
@@ -12804,6 +12821,8 @@ func _right_aim_vector() -> Vector2:
 
 
 func _try_attack() -> void :
+	if _local_player_controls_locked():
+		return
 	if _secondary_player_locked():
 		return
 	if _player_silenced():
@@ -13402,6 +13421,8 @@ func _pos_in_auto_attack_range(pos: Vector2) -> bool:
 
 
 func _use_skill(target_world = null) -> void :
+	if _local_player_controls_locked():
+		return
 	if _secondary_player_locked():
 		return
 	if _player_silenced():
@@ -14061,6 +14082,8 @@ func _network_secondary_visual_duration() -> float:
 
 
 func _use_secondary_skill(target_world = null) -> void :
+	if _local_player_controls_locked():
+		return
 	if _player_silenced():
 		_show_silenced_feedback()
 		return
@@ -14439,6 +14462,8 @@ func _spawn_secondary_ancorada(target_world = null) -> void :
 
 
 func _try_dash() -> void :
+	if _local_player_controls_locked():
+		return
 	if _is_player_calcified():
 		_add_text("CALCIFICADO", player_pos + Vector2(0, -60), Color(0.68, 0.68, 0.72), 0.5, 18)
 		return
@@ -14470,6 +14495,8 @@ func _try_dash() -> void :
 
 
 func _try_dash_to_screen(screen_pos: Vector2, viewport: Vector2) -> void :
+	if _local_player_controls_locked():
+		return
 	if _is_player_calcified():
 		_add_text("CALCIFICADO", player_pos + Vector2(0, -60), Color(0.68, 0.68, 0.72), 0.5, 18)
 		return
@@ -14500,6 +14527,8 @@ func _try_dash_to_screen(screen_pos: Vector2, viewport: Vector2) -> void :
 
 
 func _try_dash_to_world(target_world: Vector2) -> void :
+	if _local_player_controls_locked():
+		return
 	if _is_player_calcified():
 		_add_text("CALCIFICADO", player_pos + Vector2(0, -60), Color(0.68, 0.68, 0.72), 0.5, 18)
 		return
@@ -21010,12 +21039,13 @@ func _apply_entity_separation(delta: float) -> void :
 				pos_a = Vector2(a["pos"])
 
 
-		var d_player: = pos_a.distance_to(player_pos)
-		var min_player_d: = r_a + 24.0
-		if d_player < min_player_d:
-			var push_p: = (pos_a - player_pos).normalized() if d_player > 0.01 else Vector2.UP.rotated(float(i))
-			a["pos"] = (player_pos + push_p * min_player_d).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
-			pos_a = Vector2(a["pos"])
+		if _local_player_targetable():
+			var d_player: = pos_a.distance_to(player_pos)
+			var min_player_d: = r_a + 24.0
+			if d_player < min_player_d:
+				var push_p: = (pos_a - player_pos).normalized() if d_player > 0.01 else Vector2.UP.rotated(float(i))
+				a["pos"] = (player_pos + push_p * min_player_d).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+				pos_a = Vector2(a["pos"])
 
 		for j in range(i + 1, count):
 			var b: Dictionary = all_minions[j]
@@ -23055,7 +23085,7 @@ func _spawn_remote_bullet(source_peer_id: int, uid: String, pos: Vector2, direct
 		var sender: = _mp_sender_id()
 		if sender == 0:
 			return
-		if _is_dedicated_spectator(sender):
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 			return
 		for peer_id in _mp_peer_ids():
 			if peer_id != sender:
@@ -33192,6 +33222,8 @@ func _boss_call_can_start(show_message: = true) -> bool:
 
 
 func _start_boss_call() -> void :
+	if _local_player_controls_locked():
+		return
 	if not _boss_call_can_start(true):
 		return
 	if is_multiplayer:
@@ -33434,6 +33466,10 @@ func _update_shop_mp_request(delta: float) -> void :
 
 func _begin_shop_mp_open_locally() -> void :
 	_clear_shop_mp_request()
+	if is_dead or online_local_spectator:
+		mode = "shop_mp_waiting"
+		_update_audio_volumes()
+		return
 	_start_shop_opening_animation(false)
 
 
@@ -33452,6 +33488,10 @@ func _shop_can_exit() -> bool:
 
 func _request_shop_exit_or_finish() -> void :
 	if is_multiplayer:
+		if is_dead or online_local_spectator:
+			mode = "shop_mp_waiting"
+			_update_audio_volumes()
+			return
 		shop_mp_ready_to_leave = true
 		if _shop_rpc_available():
 			rpc("_rpc_shop_ready")
@@ -37697,6 +37737,8 @@ func _set_shop_auto_enabled(enabled: bool) -> void :
 
 
 func _try_open_manual_shop() -> void :
+	if _local_player_controls_locked():
+		return
 	if shop_auto_enabled or mode != "game":
 		return
 	if _affordable_card_count() <= 0:
@@ -37715,6 +37757,8 @@ func _try_open_manual_shop() -> void :
 
 
 func _start_forced_shop_countdown() -> void :
+	if _local_player_controls_locked():
+		return
 	if not shop_auto_enabled:
 		return
 	if is_multiplayer and not _is_world_authority():
@@ -37728,6 +37772,8 @@ func _start_forced_shop_countdown() -> void :
 
 
 func _start_pause_countdown() -> void :
+	if _local_player_controls_locked():
+		return
 	if mode != "game" and mode != "shop_countdown" and mode != "boss_call":
 		return
 	if is_multiplayer:
@@ -38053,6 +38099,8 @@ func _damage_player(amount: int, source: String) -> void :
 func _handle_player_down() -> void :
 	if is_dead:
 		return
+	_stop_nevasca_sfx()
+	_stop_prismatica_ultimate_audio()
 	sanguessuga_parasite_timer = 0.0
 	sanguessuga_bleed_tick_timer = 0.0
 	sanguessuga_parasite_visual_timer = 0.0
@@ -38078,18 +38126,28 @@ func _handle_player_down() -> void :
 	_capture_retry_run_snapshot()
 	is_dead = true
 	player_hp = 0
+	_cancel_combat_aim_state(true)
 	next_larapio_spawn_time = time_alive + 15.0
 	if is_multiplayer:
 		_announce_team_revival_death(_mp_unique_id(), player_pos, _local_player_display_name())
 		rpc("_rpc_player_died")
-		if _all_multiplayer_players_dead():
-			_stop_battle_music_for_screen_transition()
-			_finalize_run_report("Derrota")
-			mode = "game_over"
+		_finish_multiplayer_defeat_if_all_dead()
 		return
 	_stop_battle_music_for_screen_transition()
 	_finalize_run_report("Derrota")
 	_open_specter_upgrade("game_over", true)
+
+
+func _finish_multiplayer_defeat_if_all_dead() -> bool:
+	if not _all_multiplayer_players_dead():
+		return false
+	_clear_team_revival_state()
+	_stop_nevasca_sfx()
+	_stop_prismatica_ultimate_audio()
+	_stop_battle_music_for_screen_transition()
+	_finalize_run_report("Derrota")
+	mode = "game_over"
+	return true
 
 
 func _update_phase_transition(delta: float) -> void :
@@ -38855,6 +38913,8 @@ func _draw() -> void :
 			_draw_end_overlay(viewport, "BOSS VENCIDO", Color(1.0, 0.82, 0.22))
 		_:
 			_draw_game(viewport)
+	if _local_dead_overlay_active():
+		_draw_local_dead_overlay(viewport)
 	if _shop_mp_request_visible():
 		_draw_shop_mp_request(viewport)
 	if _boss_mp_request_visible():
@@ -41910,7 +41970,6 @@ func _draw_game(viewport: Vector2) -> void :
 			draw_texture_rect(map_texture, _desktop_stage_draw_rect(camera), false)
 	else:
 		draw_rect(Rect2( - camera, WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
-	_draw_corner_limbo(camera, viewport)
 	_draw_event_alert_world(camera, viewport)
 	_draw_boss6_necro_erosion(camera)
 	_draw_phase5_transmute_particles(camera)
@@ -45503,12 +45562,12 @@ func _draw_teleport_effects(camera: Vector2) -> void :
 			for raw_point in path:
 				points.append(Vector2(raw_point) - camera)
 			if points.size() >= 2:
-				for i in range(points.size() - 1):
-					var hue: float = fposmod(time_alive * 0.72 + float(i) * 0.18, 1.0)
-					draw_line(points[i], points[i + 1], Color.from_hsv(hue, 0.85, 1.0, 0.28 * fade), 20.0, true)
-					draw_line(points[i], points[i + 1], Color.from_hsv(fposmod(hue + 0.18, 1.0), 0.65, 1.0, 0.85 * fade), 4.0, true)
-					draw_line(points[i], points[i + 1], Color.WHITE, 1.0, true)
 				var spark: Vector2 = _point_on_polyline(points, progress)
+				for i in range(points.size()):
+					var hue: float = fposmod(time_alive * 0.72 + float(i) * 0.18, 1.0)
+					var radius: float = 8.0 + sin(progress * PI + float(i)) * 4.0
+					draw_circle(points[i], radius + 12.0 * fade, Color.from_hsv(hue, 0.85, 1.0, 0.18 * fade))
+					draw_arc(points[i], radius + 18.0, time_alive * 2.4 + float(i), time_alive * 2.4 + float(i) + PI * 1.35, 30, Color.from_hsv(hue, 0.65, 1.0, 0.74 * fade), 2.0, true)
 				draw_circle(spark, 12.0 + 10.0 * sin(progress * PI), Color(0.85, 1.0, 1.0, 0.78 * fade))
 		elif kind == "retornante":
 			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
@@ -50556,6 +50615,10 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 		return
 	if is_gamepad_active:
 		_draw_desktop_combat_hud(viewport)
+	if is_dead or player_hp <= 0.0 or online_local_spectator:
+		buttons.erase("revival_mobile")
+		_draw_player_dance_emote(_camera(viewport))
+		return
 	var joy = _active_joy_center(viewport)
 	var joy_r = 76.0 * _joy_scale()
 	var joy_alpha: float = _hud_rect_player_alpha(Rect2(joy - Vector2(joy_r, joy_r), Vector2(joy_r * 2.0, joy_r * 2.0)), viewport)
@@ -50786,6 +50849,10 @@ func _draw_edit_layout_safe_guides(viewport: Vector2) -> void:
 	_draw_centered("AREA SEGURA DAS QUINAS", Vector2(viewport.x * 0.5, viewport.y - 118.0), 13, Color(0.7, 0.92, 1.0, 0.72))
 
 
+func _edit_layout_scale_controls_visible(key: String) -> bool:
+	return edit_layout_selected == key and edit_layout_resize_visible
+
+
 func _draw_edit_layout(viewport: Vector2) -> void :
 	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.05, 0.05, 0.08, 0.9))
 	_draw_edit_layout_safe_guides(viewport)
@@ -50799,7 +50866,7 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 		draw_circle(joy, joy_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "joy" else Color(0.0, 0.8, 0.8, 0.4))
 		draw_arc(joy, joy_r, 0, TAU, 64, Color(1.0, 1.0, 0.0) if edit_layout_selected == "joy" else Color(0.0, 1.0, 0.85), 3)
 		_draw_centered("JOY", joy, 20, Color.WHITE)
-		if edit_layout_selected == "joy":
+		if _edit_layout_scale_controls_visible("joy"):
 			var joy_scale_controls: = _circle_scale_control_rects(joy, joy_r, viewport)
 			_draw_small_rect_button(joy_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 			_draw_small_rect_button(joy_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
@@ -50809,7 +50876,7 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 		draw_circle(atk_c, atk_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28, 0.4))
 		draw_arc(atk_c, atk_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28), 3)
 		_draw_centered("ATK", atk_c, 20, Color.WHITE)
-		if edit_layout_selected == "attack":
+		if _edit_layout_scale_controls_visible("attack"):
 			var atk_scale_controls: = _circle_scale_control_rects(atk_c, atk_r, viewport)
 			_draw_small_rect_button(atk_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 			_draw_small_rect_button(atk_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
@@ -50820,7 +50887,7 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 		draw_arc(secondary_c, secondary_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "secondary" else Color(1.0, 0.72, 0.22), 3)
 		_draw_centered("E", secondary_c + Vector2(0, -6), 20, Color.WHITE)
 		_draw_centered("ULT", secondary_c + Vector2(0, 13), 12, Color.WHITE)
-		if edit_layout_selected == "secondary":
+		if _edit_layout_scale_controls_visible("secondary"):
 			var secondary_scale_controls: = _circle_scale_control_rects(secondary_c, secondary_r, viewport)
 			_draw_small_rect_button(secondary_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 			_draw_small_rect_button(secondary_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
@@ -50830,7 +50897,7 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 		draw_circle(dash_c, dash_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0, 0.4))
 		draw_arc(dash_c, dash_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0), 3)
 		_draw_centered("TP", dash_c, 20, Color.WHITE)
-		if edit_layout_selected == "dash":
+		if _edit_layout_scale_controls_visible("dash"):
 			var dash_scale_controls: = _circle_scale_control_rects(dash_c, dash_r, viewport)
 			_draw_small_rect_button(dash_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 			_draw_small_rect_button(dash_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
@@ -50842,7 +50909,7 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 		draw_circle(empower_c, empower_r, Color(0.8, 0.8, 0.0, 0.4) if is_empower_selected else Color(0.92, 0.03, 0.12, 0.4))
 		draw_arc(empower_c, empower_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if is_empower_selected else Color(0.92, 0.03, 0.12), 3)
 		_draw_centered("+", empower_c, 24, Color.WHITE)
-		if edit_layout_selected == "lacerante_empower":
+		if _edit_layout_scale_controls_visible("lacerante_empower"):
 			var empower_scale_controls: = _circle_scale_control_rects(empower_c, empower_r, viewport)
 			_draw_small_rect_button(empower_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 			_draw_small_rect_button(empower_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
@@ -50877,14 +50944,14 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 	var c_aura = Color(1, 1, 0, 0.6) if edit_layout_selected == "aura_panel" else Color(0.54, 0.82, 1.0, 0.3)
 	draw_rect(aura_rect, c_aura, false, 2)
 	_draw_centered("AUREA", aura_rect.get_center(), 13, Color.WHITE)
-	if edit_layout_selected == "aura_panel":
+	if _edit_layout_scale_controls_visible("aura_panel"):
 		_draw_layout_scale_controls(aura_rect)
 
 	var cards_rect = Rect2(_cards_panel_pos(viewport, left_rect), Vector2(min(224.0, viewport.x * 0.46), 94.0) * hud_cards_panel_scale)
 	var c_cards = Color(1, 1, 0, 0.6) if edit_layout_selected == "cards_panel" else Color(1.0, 0.64, 0.18, 0.3)
 	draw_rect(cards_rect, c_cards, false, 2)
 	_draw_centered("CARTAS HUD", cards_rect.get_center(), 13, Color.WHITE)
-	if edit_layout_selected == "cards_panel":
+	if _edit_layout_scale_controls_visible("cards_panel"):
 		_draw_layout_scale_controls(cards_rect)
 
 	var coag_center = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
@@ -50893,7 +50960,7 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 	var c_coag = Color(1, 1, 0, 0.6) if edit_layout_selected == "coagulum" else Color(1.0, 0.12, 0.22, 0.3)
 	draw_rect(coag_rect, c_coag, false, 2)
 	_draw_centered("COAGULO", coag_rect.get_center(), 13, Color.WHITE)
-	if edit_layout_selected == "coagulum":
+	if _edit_layout_scale_controls_visible("coagulum"):
 		_draw_layout_scale_controls(coag_rect)
 
 	if _edit_layout_uses_virtual_controls():
@@ -50903,7 +50970,7 @@ func _draw_edit_layout(viewport: Vector2) -> void :
 		draw_circle(skill_c, skill_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "skill" else Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.4))
 		draw_arc(skill_c, skill_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "skill" else _manifestation_color(), 3)
 		_draw_centered("HAB1", skill_c, 18, Color.WHITE)
-		if edit_layout_selected == "skill":
+		if _edit_layout_scale_controls_visible("skill"):
 			var skill_scale_controls: = _circle_scale_control_rects(skill_c, skill_r, viewport)
 			_draw_small_rect_button(skill_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
 			_draw_small_rect_button(skill_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
@@ -50996,15 +51063,19 @@ func _draw_team_revival_world(camera: Vector2) -> void:
 			continue
 		var pos: Vector2 = Vector2(data.get("pos", Vector2.ZERO)) - camera
 		var phase: float = float(data.get("phase", 0.0)) + t * 3.0
-		var shard_size: float = 8.0 + sin(phase) * 2.0
-		var cyan := Color(0.62, 0.96, 1.0, 0.92)
-		var core := Color(1.0, 1.0, 1.0, 0.78)
+		var pulse: float = 0.5 + sin(phase) * 0.5
+		var shard_size: float = 16.0 + pulse * 6.0
+		var hue: float = fposmod(0.52 + sin(phase * 0.7) * 0.08, 1.0)
+		var cyan := Color.from_hsv(hue, 0.55 + pulse * 0.35, 1.0, 0.94)
+		var core := Color(1.0, 1.0, 1.0, 0.86)
 		var diamond := PackedVector2Array([pos + Vector2(0, -shard_size), pos + Vector2(shard_size * 0.72, 0), pos + Vector2(0, shard_size), pos + Vector2(-shard_size * 0.72, 0)])
 		var outline := PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]])
-		draw_colored_polygon(diamond, Color(0.05, 0.24, 0.3, 0.88))
-		draw_polyline(outline, cyan, 2.0)
-		draw_line(pos + Vector2(-shard_size * 0.55, -shard_size * 0.12), pos + Vector2(shard_size * 0.54, shard_size * 0.18), core, 1.2)
-		draw_circle(pos, 2.2, core)
+		draw_circle(pos, shard_size * (1.65 + pulse * 0.35), Color(cyan.r, cyan.g, cyan.b, 0.13 + pulse * 0.09), true)
+		draw_colored_polygon(diamond, Color(cyan.r * 0.11, cyan.g * 0.2, cyan.b * 0.24, 0.92))
+		draw_polyline(outline, cyan, 3.0, true)
+		draw_polyline(outline, Color(1.0, 1.0, 1.0, 0.5), 1.1, true)
+		draw_line(pos + Vector2(-shard_size * 0.55, -shard_size * 0.12), pos + Vector2(shard_size * 0.54, shard_size * 0.18), core, 2.0, true)
+		draw_circle(pos, 4.2 + pulse * 1.6, core)
 	if revival_altars_active:
 		_draw_team_revival_altar(revival_altar_life_pos - camera, Color(1.0, 0.18, 0.26), "VIDA", t)
 		_draw_team_revival_altar(revival_altar_points_pos - camera, Color(0.08, 0.62, 1.0), "4 CARTAS", t + 1.4)
@@ -51097,7 +51168,8 @@ func _draw_team_revival_hud(viewport: Vector2) -> void:
 		var info: String = "VERMELHO: sacrifica %.0f%% da vida e divide entre %d caido(s)  |  AZUL: %d pontos" % [rate, _team_revival_dead_count(), cost]
 		_draw_wrapped_clamped(info, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
 	else:
-		var info2: String = "FRAGMENTOS %d/%d  |  %ds  |  mais de um caido: 50s e sacrificio sobe para 75%%" % [revival_fragments_collected, total, remaining]
+		var multi_rate: float = REVIVAL_MULTI_LIFE_SACRIFICE_RATE * (1.0 - REVIVE_LIFE_SACRIFICE_REDUCTION) * 100.0
+		var info2: String = "FRAGMENTOS %d/%d  |  %ds  |  mais de um caido: 50s e sacrificio sobe para %.0f%%" % [revival_fragments_collected, total, remaining, multi_rate]
 		_draw_wrapped_clamped(info2, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
 	_draw_centered(revival_notice.to_upper(), Vector2(panel.get_center().x, panel.end.y - 18.0), _readable_text_size(10), Color(1.0, 0.86, 0.24, 0.92))
 
@@ -52016,7 +52088,7 @@ func _rpc_sync_deck(counts: Dictionary) -> void :
 	var sender: = _mp_sender_id()
 	if sender == 0:
 		return
-	if _is_dedicated_spectator(sender):
+	if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 		return
 	for peer_id in _mp_peer_ids():
 		if peer_id != sender:
@@ -52351,6 +52423,21 @@ func _draw_specter_upgrade(viewport: Vector2) -> void:
 	var confirm_label: = "EVOLUIR (%d)" % cost if unlocked and not maxed else "INDISPONIVEL"
 	_draw_big_button(buttons["specter_upgrade_confirm"], confirm_label, Color(0.02, 0.16, 0.14, 0.88) if _specter_can_upgrade() else Color(0.09, 0.09, 0.11, 0.72), Color(0.0, 1.0, 0.82) if _specter_can_upgrade() else Color(0.42, 0.48, 0.54))
 	_draw_big_button(buttons["specter_upgrade_continue"], "CONTINUAR", Color(0.12, 0.04, 0.08, 0.88), Color(1.0, 0.24, 0.42))
+
+
+func _local_dead_overlay_active() -> bool:
+	if not is_dead and player_hp > 0.0:
+		return false
+	return mode in ["game", "shop_mp_waiting", "shop_mp_requested", "shop_countdown", "shop_opening", "boss_call", "pause_countdown"]
+
+
+func _draw_local_dead_overlay(viewport: Vector2) -> void:
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.08, 0.09, 0.1, 0.34), true)
+	var scan_step := 18.0
+	var y := 0.0
+	while y <= viewport.y:
+		draw_line(Vector2(0.0, y), Vector2(viewport.x, y), Color(0.78, 0.86, 0.9, 0.045), 1.0)
+		y += scan_step
 
 
 func _draw_game_over_overlay(viewport: Vector2) -> void :
@@ -53738,14 +53825,15 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		var joy = _joy_center(viewport)
 		var joy_r = 76.0 * _joy_scale()
 		var joy_scale_controls: = _circle_scale_control_rects(joy, joy_r, viewport)
-		if edit_layout_selected == "joy" and joy_scale_controls[0].has_point(pos):
+		if _edit_layout_scale_controls_visible("joy") and joy_scale_controls[0].has_point(pos):
 			hud_joy_scale = max(HUD_CONTROL_SCALE_MIN, hud_joy_scale - 0.1)
 			return
-		if edit_layout_selected == "joy" and joy_scale_controls[1].has_point(pos):
+		if _edit_layout_scale_controls_visible("joy") and joy_scale_controls[1].has_point(pos):
 			hud_joy_scale = min(HUD_CONTROL_SCALE_MAX, hud_joy_scale + 0.1)
 			return
 		if pos.distance_to(joy) < joy_r:
 			edit_layout_selected = "joy"
+			edit_layout_resize_visible = true
 			edit_layout_touch_index = index
 			edit_layout_offset = hud_joy_pos - pos
 			return
@@ -53753,14 +53841,15 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		var atk_c = buttons.get("attack", Rect2()).position + buttons.get("attack", Rect2()).size * 0.5
 		var atk_r = 54.0 * _attack_scale()
 		var atk_scale_controls: = _circle_scale_control_rects(atk_c, atk_r, viewport)
-		if edit_layout_selected == "attack" and atk_scale_controls[0].has_point(pos):
+		if _edit_layout_scale_controls_visible("attack") and atk_scale_controls[0].has_point(pos):
 			hud_attack_scale = max(HUD_CONTROL_SCALE_MIN, hud_attack_scale - 0.1)
 			return
-		if edit_layout_selected == "attack" and atk_scale_controls[1].has_point(pos):
+		if _edit_layout_scale_controls_visible("attack") and atk_scale_controls[1].has_point(pos):
 			hud_attack_scale = min(HUD_ATTACK_SCALE_MAX, hud_attack_scale + 0.1)
 			return
 		if pos.distance_to(atk_c) < atk_r:
 			edit_layout_selected = "attack"
+			edit_layout_resize_visible = true
 			edit_layout_touch_index = index
 			edit_layout_offset = hud_attack_pos - pos
 			return
@@ -53768,14 +53857,15 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		var secondary_c = buttons.get("secondary", Rect2()).position + buttons.get("secondary", Rect2()).size * 0.5
 		var secondary_r = 43.0 * _secondary_scale()
 		var secondary_scale_controls: = _circle_scale_control_rects(secondary_c, secondary_r, viewport)
-		if edit_layout_selected == "secondary" and secondary_scale_controls[0].has_point(pos):
+		if _edit_layout_scale_controls_visible("secondary") and secondary_scale_controls[0].has_point(pos):
 			hud_secondary_scale = max(HUD_CONTROL_SCALE_MIN, hud_secondary_scale - 0.1)
 			return
-		if edit_layout_selected == "secondary" and secondary_scale_controls[1].has_point(pos):
+		if _edit_layout_scale_controls_visible("secondary") and secondary_scale_controls[1].has_point(pos):
 			hud_secondary_scale = min(HUD_CONTROL_SCALE_MAX, hud_secondary_scale + 0.1)
 			return
 		if pos.distance_to(secondary_c) < secondary_r:
 			edit_layout_selected = "secondary"
+			edit_layout_resize_visible = true
 			edit_layout_touch_index = index
 			edit_layout_offset = hud_secondary_pos - pos
 			return
@@ -53783,14 +53873,15 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		var dash_c = buttons.get("dash", Rect2()).position + buttons.get("dash", Rect2()).size * 0.5
 		var dash_r = 46.0 * _dash_scale()
 		var dash_scale_controls: = _circle_scale_control_rects(dash_c, dash_r, viewport)
-		if edit_layout_selected == "dash" and dash_scale_controls[0].has_point(pos):
+		if _edit_layout_scale_controls_visible("dash") and dash_scale_controls[0].has_point(pos):
 			hud_dash_scale = max(HUD_CONTROL_SCALE_MIN, hud_dash_scale - 0.1)
 			return
-		if edit_layout_selected == "dash" and dash_scale_controls[1].has_point(pos):
+		if _edit_layout_scale_controls_visible("dash") and dash_scale_controls[1].has_point(pos):
 			hud_dash_scale = min(HUD_CONTROL_SCALE_MAX, hud_dash_scale + 0.1)
 			return
 		if pos.distance_to(dash_c) < dash_r:
 			edit_layout_selected = "dash"
+			edit_layout_resize_visible = true
 			edit_layout_touch_index = index
 			edit_layout_offset = hud_dash_pos - pos
 			return
@@ -53800,14 +53891,15 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 			var empower_c = empower_rect.position + empower_rect.size * 0.5
 			var empower_r = empower_rect.size.x * 0.5
 			var empower_scale_controls: = _circle_scale_control_rects(empower_c, empower_r, viewport)
-			if edit_layout_selected == "lacerante_empower" and empower_scale_controls[0].has_point(pos):
+			if _edit_layout_scale_controls_visible("lacerante_empower") and empower_scale_controls[0].has_point(pos):
 				hud_lacerante_empower_scale = max(HUD_CONTROL_SCALE_MIN, hud_lacerante_empower_scale - 0.1)
 				return
-			if edit_layout_selected == "lacerante_empower" and empower_scale_controls[1].has_point(pos):
+			if _edit_layout_scale_controls_visible("lacerante_empower") and empower_scale_controls[1].has_point(pos):
 				hud_lacerante_empower_scale = min(HUD_CONTROL_SCALE_MAX, hud_lacerante_empower_scale + 0.1)
 				return
 			if pos.distance_to(empower_c) < empower_r:
 				edit_layout_selected = "lacerante_empower"
+				edit_layout_resize_visible = true
 				edit_layout_touch_index = index
 				edit_layout_offset = hud_lacerante_empower_pos - pos
 				if hud_lacerante_empower_pos == Vector2(-1, -1):
@@ -53818,14 +53910,15 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		var skill_rect = Rect2(_skill_pos(viewport), Vector2(skill_r * 2.0, skill_r * 2.0))
 		var skill_c = skill_rect.get_center()
 		var skill_scale_controls: = _circle_scale_control_rects(skill_c, skill_r, viewport)
-		if edit_layout_selected == "skill" and skill_scale_controls[0].has_point(pos):
+		if _edit_layout_scale_controls_visible("skill") and skill_scale_controls[0].has_point(pos):
 			hud_skill_scale = max(HUD_CONTROL_SCALE_MIN, hud_skill_scale - 0.1)
 			return
-		if edit_layout_selected == "skill" and skill_scale_controls[1].has_point(pos):
+		if _edit_layout_scale_controls_visible("skill") and skill_scale_controls[1].has_point(pos):
 			hud_skill_scale = min(HUD_CONTROL_SCALE_MAX, hud_skill_scale + 0.1)
 			return
 		if pos.distance_to(skill_c) < skill_r:
 			edit_layout_selected = "skill"
+			edit_layout_resize_visible = true
 			edit_layout_touch_index = index
 			edit_layout_offset = _skill_pos(viewport) - pos
 			return
@@ -53846,7 +53939,7 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 		["cards_panel", cards_rect], 
 		["coagulum", coag_rect]
 	]:
-		if edit_layout_selected != scale_entry[0]:
+		if not _edit_layout_scale_controls_visible(String(scale_entry[0])):
 			continue
 		var scale_controls: = _layout_scale_control_rects(scale_entry[1])
 		if scale_controls[0].has_point(pos):
@@ -53858,6 +53951,7 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 
 	if shop_rect.has_point(pos):
 		edit_layout_selected = "shop_manual"
+		edit_layout_resize_visible = false
 		edit_layout_touch_index = index
 		edit_layout_offset = _manual_shop_pos(viewport) - pos
 		return
@@ -53876,6 +53970,7 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 	for key in rects:
 		if rects[key][0].has_point(pos):
 			edit_layout_selected = key
+			edit_layout_resize_visible = true
 			edit_layout_touch_index = index
 			edit_layout_offset = rects[key][1] - pos
 			return
@@ -53889,6 +53984,7 @@ func _adjust_layout_box_scale(box_key: String, delta: float) -> void :
 
 func _handle_edit_layout_drag(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if index != edit_layout_touch_index: return
+	edit_layout_resize_visible = false
 	var target = pos + edit_layout_offset
 	var portrait = _is_portrait(viewport)
 	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
@@ -53920,11 +54016,13 @@ func _handle_edit_layout_drag(index: int, pos: Vector2, viewport: Vector2) -> vo
 func _handle_edit_layout_release(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if index == edit_layout_touch_index:
 		edit_layout_touch_index = -1
-		edit_layout_selected = ""
 
 
 func _open_edit_layout(viewport: Vector2) -> void :
 	mode = "edit_layout"
+	edit_layout_touch_index = -1
+	edit_layout_selected = ""
+	edit_layout_resize_visible = false
 	hud_joy_pos = _joy_center(viewport)
 	hud_attack_pos = _attack_center(viewport)
 	hud_secondary_pos = _secondary_center(viewport)
@@ -54259,7 +54357,6 @@ func _cancel_touch_index(index: int) -> void :
 		teleport_dragging = false
 	if index == edit_layout_touch_index:
 		edit_layout_touch_index = -1
-		edit_layout_selected = ""
 	if index == manifest_drag_touch_index:
 		manifest_drag_touch_index = -999
 		manifest_is_dragging = false
@@ -54281,6 +54378,7 @@ func _cancel_all_touch_state() -> void :
 	_cancel_combat_aim_state(true)
 	edit_layout_touch_index = -1
 	edit_layout_selected = ""
+	edit_layout_resize_visible = false
 	manifest_drag_touch_index = -999
 	manifest_preview_drag_touch_index = -999
 	manifest_preview_consumed_touch_index = -999
@@ -54303,6 +54401,8 @@ func _touch_index_has_action(index: int) -> bool:
 
 
 func _try_start_move_touch(index: int, pos: Vector2, viewport: Vector2) -> bool:
+	if _local_player_controls_locked():
+		return false
 	if move_touch_index != -1:
 		if index != move_touch_index and _move_touch_is_stale(900):
 			_stop_move_touch()
@@ -54339,8 +54439,8 @@ func _handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if mode != "game" and mode != "shop_countdown" and mode != "boss_call" and mode != "pause_countdown":
 		_handle_press(pos, viewport)
 		return
-	if _spectator_controls_locked():
-		_clear_spectator_local_combat_state()
+	if _local_player_controls_locked():
+		_cancel_combat_aim_state(true)
 		return
 	if buttons.has("lacerante_empower") and buttons["lacerante_empower"].has_point(pos):
 		_claim_action_touch(index)
@@ -54500,8 +54600,8 @@ func _handle_mouse_press(pos: Vector2, viewport: Vector2) -> void :
 	if _handle_phase_mp_overlay_press(pos, viewport):
 		return
 	if mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown":
-		if _spectator_controls_locked():
-			_clear_spectator_local_combat_state()
+		if _local_player_controls_locked():
+			_cancel_combat_aim_state(true)
 			return
 		if buttons.has("lacerante_empower") and buttons["lacerante_empower"].has_point(pos):
 			_claim_action_touch(-2)
@@ -57827,13 +57927,19 @@ func _pause_pos(viewport: Vector2) -> Vector2:
 
 func _boss_call_pos(viewport: Vector2) -> Vector2:
 	if hud_boss_call_pos != Vector2(-1, -1): return hud_boss_call_pos
-	return Vector2(viewport.x * 0.5 - 48, 58)
+	var portrait := _is_portrait(viewport)
+	var x := viewport.x - (134.0 if portrait else 170.0)
+	var y := 204.0 if portrait else 184.0
+	return Vector2(maxf(18.0, x), y)
 
 
 func _manual_shop_pos(viewport: Vector2) -> Vector2:
 	if hud_shop_pos != Vector2(-1, -1):
 		return hud_shop_pos
-	return Vector2(viewport.x * 0.5 + 62.0, 58.0)
+	var portrait := _is_portrait(viewport)
+	var x := viewport.x - (142.0 if portrait else 178.0)
+	var y := 154.0 if portrait else 134.0
+	return Vector2(maxf(18.0, x), y)
 
 
 
@@ -58469,6 +58575,15 @@ func _dedicated_active_peer_ids() -> Array:
 			active.append(peer_id)
 	active.sort()
 	return active
+
+
+func _dedicated_living_peer_ids() -> Array:
+	var living: Array = []
+	for peer_id in _dedicated_active_peer_ids():
+		if _dedicated_peer_alive_for_leadership(int(peer_id)):
+			living.append(peer_id)
+	living.sort()
+	return living
 
 
 func _dedicated_active_client_peer_ids() -> Array:
@@ -59129,7 +59244,7 @@ func _rpc_preload_ready(load_ms: int) -> void :
 	var sender: = _mp_sender_id()
 	if sender == 0:
 		return
-	if _is_dedicated_spectator(sender):
+	if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 		return
 	dedicated_preload_ready_by_peer[sender] = true
 	for peer_id in _mp_peer_ids():
@@ -59987,7 +60102,7 @@ func _rpc_client_player_state(state: Dictionary, p_slashes: Array, p_prisms: Arr
 	var sender: = _mp_sender_id()
 	if sender == 0:
 		return
-	if _is_dedicated_spectator(sender):
+	if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 		return
 	dedicated_player_state_by_peer[sender] = state
 	var player_bytes: = _net_report_estimate_packed_bytes(state) + 96
@@ -60004,7 +60119,7 @@ func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bo
 	var sender: = _mp_sender_id()
 	if sender == 0:
 		return
-	if _is_dedicated_spectator(sender):
+	if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 		return
 	var state: = {
 		"pos": pos, 
@@ -60646,7 +60761,7 @@ func _rpc_sync_pause(is_paused: bool) -> void :
 
 
 func _dedicated_all_peers_voted(votes: Dictionary) -> bool:
-	var peers: = _dedicated_active_peer_ids()
+	var peers: = _dedicated_living_peer_ids()
 	if peers.is_empty():
 		return false
 	for peer_id in peers:
@@ -60666,7 +60781,7 @@ func _rpc_request_pause(target_paused: bool) -> void :
 	var sender: = _mp_sender_id()
 	if sender == 0:
 		return
-	if _is_dedicated_spectator(sender):
+	if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 		return
 	if dedicated_pause_votes_by_peer.is_empty() or dedicated_pause_target != target_paused or _dedicated_vote_expired(dedicated_pause_vote_started_ms, PAUSE_MP_REQUEST_TIME):
 		dedicated_pause_votes_by_peer.clear()
@@ -60696,14 +60811,15 @@ func _rpc_accept_pause(target_paused: bool) -> void :
 func _dedicated_broadcast_pause_vote(last_voter: int) -> void :
 	var vote_count: = dedicated_pause_votes_by_peer.size()
 	var active_peers: = _dedicated_active_peer_ids()
-	var expected: = active_peers.size()
+	var living_peers: = _dedicated_living_peer_ids()
+	var expected: = maxi(1, _dedicated_living_peer_ids().size())
 	if _dedicated_all_peers_voted(dedicated_pause_votes_by_peer):
 		for peer_id in active_peers:
 			rpc_id(peer_id, "_rpc_commit_pause", dedicated_pause_target)
 		dedicated_pause_votes_by_peer.clear()
 		dedicated_pause_vote_started_ms = 0
 		return
-	for peer_id in active_peers:
+	for peer_id in living_peers:
 		rpc_id(peer_id, "_rpc_pause_vote_state", dedicated_pause_target, vote_count, expected, bool(dedicated_pause_votes_by_peer.get(peer_id, false)), last_voter)
 
 
@@ -60722,6 +60838,8 @@ func _rpc_request_phase_transfer(target_phase: int, action: String = "phase") ->
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if sender == 0 or _is_dedicated_spectator(sender):
+			return
+		if not _dedicated_peer_alive_for_leadership(sender):
 			return
 		if sender != _dedicated_current_leader_peer_id():
 			return
@@ -60747,6 +60865,8 @@ func _rpc_accept_phase_transfer(target_phase: int, action: String = "phase") -> 
 		var sender: = _mp_sender_id()
 		if sender == 0 or _is_dedicated_spectator(sender):
 			return
+		if not _dedicated_peer_alive_for_leadership(sender):
+			return
 		if target_phase != dedicated_phase_vote_target or action != dedicated_phase_vote_action or _dedicated_vote_expired(dedicated_phase_vote_started_ms, PHASE_MP_REQUEST_TIME):
 			dedicated_phase_votes_by_peer.clear()
 			dedicated_phase_vote_started_ms = 0
@@ -60763,14 +60883,15 @@ func _rpc_accept_phase_transfer(target_phase: int, action: String = "phase") -> 
 func _dedicated_broadcast_phase_vote(last_voter: int) -> void :
 	var vote_count: int = dedicated_phase_votes_by_peer.size()
 	var active_peers: = _dedicated_active_peer_ids()
-	var expected: int = active_peers.size()
+	var living_peers: = _dedicated_living_peer_ids()
+	var expected: int = maxi(1, living_peers.size())
 	if _dedicated_all_peers_voted(dedicated_phase_votes_by_peer):
 		for peer_id in active_peers:
 			rpc_id(peer_id, "_rpc_commit_phase_transfer", dedicated_phase_vote_target, dedicated_phase_vote_action)
 		dedicated_phase_votes_by_peer.clear()
 		dedicated_phase_vote_started_ms = 0
 		return
-	for peer_id in active_peers:
+	for peer_id in living_peers:
 		rpc_id(peer_id, "_rpc_phase_vote_state", dedicated_phase_vote_target, dedicated_phase_vote_action, vote_count, expected, bool(dedicated_phase_votes_by_peer.get(peer_id, false)), last_voter)
 
 
@@ -60808,7 +60929,7 @@ func _rpc_request_shop() -> void :
 		var sender: = _mp_sender_id()
 		if sender == 0:
 			return
-		if _is_dedicated_spectator(sender):
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 			return
 		if dedicated_shop_votes_by_peer.is_empty() or _dedicated_vote_expired(dedicated_shop_vote_started_ms, SHOP_MP_REQUEST_TIME):
 			dedicated_shop_votes_by_peer.clear()
@@ -60820,7 +60941,7 @@ func _rpc_request_shop() -> void :
 			dedicated_shop_votes_by_peer.clear()
 			dedicated_shop_vote_started_ms = 0
 			return
-		for peer_id in _dedicated_active_peer_ids():
+		for peer_id in _dedicated_living_peer_ids():
 			if peer_id != sender and not bool(dedicated_shop_votes_by_peer.get(peer_id, false)):
 				rpc_id(peer_id, "_rpc_request_shop")
 		return
@@ -60834,7 +60955,7 @@ func _rpc_accept_shop() -> void :
 		var sender: = _mp_sender_id()
 		if sender == 0:
 			return
-		if _is_dedicated_spectator(sender):
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 			return
 		if _dedicated_vote_expired(dedicated_shop_vote_started_ms, SHOP_MP_REQUEST_TIME):
 			dedicated_shop_votes_by_peer.clear()
@@ -60860,11 +60981,11 @@ func _rpc_shop_ready() -> void :
 		var sender: = _mp_sender_id()
 		if sender == 0:
 			return
-		if _is_dedicated_spectator(sender):
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 			return
 		dedicated_shop_exit_by_peer[sender] = true
 		var ready_count: = dedicated_shop_exit_by_peer.size()
-		var expected_count: = _dedicated_active_peer_ids().size()
+		var expected_count: = maxi(1, _dedicated_living_peer_ids().size())
 		for peer_id in _dedicated_active_peer_ids():
 			rpc_id(peer_id, "_rpc_shop_ready_state", ready_count, expected_count)
 		if _dedicated_all_peers_voted(dedicated_shop_exit_by_peer):
@@ -60908,7 +61029,7 @@ func _rpc_request_boss_call(phase: int) -> void :
 			dedicated_boss_votes_by_peer.clear()
 			dedicated_boss_vote_started_ms = 0
 			return
-		for peer_id in _dedicated_active_peer_ids():
+		for peer_id in _dedicated_living_peer_ids():
 			if peer_id != sender and not bool(dedicated_boss_votes_by_peer.get(peer_id, false)):
 				rpc_id(peer_id, "_rpc_request_boss_call", phase)
 		return
@@ -60925,7 +61046,7 @@ func _rpc_accept_boss_call(phase: int) -> void :
 		var sender: = _mp_sender_id()
 		if sender == 0:
 			return
-		if _is_dedicated_spectator(sender):
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 			return
 		if phase != dedicated_boss_vote_phase or _dedicated_vote_expired(dedicated_boss_vote_started_ms, BOSS_MP_REQUEST_TIME):
 			dedicated_boss_votes_by_peer.clear()
@@ -60993,10 +61114,7 @@ func _rpc_player_death_state(peer_id: int, dead: bool) -> void :
 	if dead:
 		next_larapio_spawn_time = time_alive + 15.0
 		_register_team_revival_dead(peer_id, Vector2(state.get("pos", player_pos)), String(state.get("name", "ALIADO")))
-	if _all_multiplayer_players_dead():
-		_stop_battle_music_for_screen_transition()
-		_finalize_run_report("Derrota")
-		mode = "game_over"
+	_finish_multiplayer_defeat_if_all_dead()
 
 
 func _local_player_display_name() -> String:
@@ -61043,8 +61161,8 @@ func _generate_revival_fragments_for_dead(dead_peer_id: int, dead_pos: Vector2) 
 	for i in range(REVIVAL_FRAGMENTS_PER_DEAD):
 		var id: int = dead_peer_id * 1000 + i
 		var angle: float = base_angle + TAU * float(i) / float(REVIVAL_FRAGMENTS_PER_DEAD)
-		var ring: float = 110.0 + 46.0 * float(i % 3)
-		var jitter := Vector2(rng.randf_range(-34.0, 34.0), rng.randf_range(-34.0, 34.0))
+		var ring: float = 170.0 + 72.0 * float(i % 3)
+		var jitter := Vector2(rng.randf_range(-58.0, 58.0), rng.randf_range(-58.0, 58.0))
 		var pos: Vector2 = (dead_pos + Vector2.from_angle(angle) * ring + jitter).clamp(Vector2(58.0, 58.0), WORLD_SIZE - Vector2(58.0, 58.0))
 		revival_fragments.append({
 			"id": id,
@@ -61113,12 +61231,12 @@ func _update_revival_fragment_drift(delta: float) -> void:
 		var phase: float = float(fragment.get("phase", 0.0)) + delta * 1.65
 		var wander: float = float(fragment.get("wander", 0.0)) + delta * rng.randf_range(0.35, 0.72)
 		var drift_dir: Vector2 = Vector2(fragment.get("drift_dir", Vector2.RIGHT))
-		var drift: Vector2 = drift_dir.rotated(sin(wander) * 0.35) * REVIVAL_FRAGMENT_DRIFT_SPEED * delta
-		var anchor_pull: Vector2 = (home - pos) * clampf(delta * 0.24, 0.0, 1.0)
+		var drift: Vector2 = drift_dir.rotated(sin(wander) * 0.62) * REVIVAL_FRAGMENT_DRIFT_SPEED * delta
+		var anchor_pull: Vector2 = (home - pos) * clampf(delta * 0.08, 0.0, 1.0)
 		pos = (pos + drift + anchor_pull).clamp(Vector2(48.0, 48.0), WORLD_SIZE - Vector2(48.0, 48.0))
-		if pos.distance_to(home) > 96.0:
+		if pos.distance_to(home) > 220.0:
 			drift_dir = (home - pos).normalized()
-		elif rng.randf() < delta * 0.09:
+		elif rng.randf() < delta * 0.18:
 			drift_dir = Vector2.from_angle(rng.randf() * TAU)
 		fragment["pos"] = pos
 		fragment["phase"] = phase
@@ -61160,7 +61278,8 @@ func _team_revival_dead_count() -> int:
 
 
 func _revival_life_sacrifice_rate() -> float:
-	return REVIVAL_MULTI_LIFE_SACRIFICE_RATE if _team_revival_dead_count() > 1 else REVIVE_LIFE_SACRIFICE_RATE
+	var base_rate: float = REVIVAL_MULTI_LIFE_SACRIFICE_RATE if _team_revival_dead_count() > 1 else REVIVE_LIFE_SACRIFICE_RATE
+	return base_rate * (1.0 - REVIVE_LIFE_SACRIFICE_REDUCTION)
 
 
 func _revival_points_cost() -> int:
@@ -61514,7 +61633,7 @@ func _revive_payment_method(method: String) -> String:
 
 
 func _apply_revive_life_sacrifice() -> void :
-	var loss: float = maxf(1.0, float(player_hp) * REVIVE_LIFE_SACRIFICE_RATE)
+	var loss: float = maxf(1.0, float(player_hp) * REVIVE_LIFE_SACRIFICE_RATE * (1.0 - REVIVE_LIFE_SACRIFICE_REDUCTION))
 	player_hp = maxf(1.0, float(player_hp) - loss)
 	revive_heal_penalty_timer = maxf(revive_heal_penalty_timer, REVIVE_HEAL_PENALTY_DURATION)
 	damage_flash_timer = maxf(damage_flash_timer, 0.18)
@@ -61811,7 +61930,7 @@ func _send_client_damage_request(target_kind: int, target_uid: String, amount: f
 func _client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "", source_peer_id: int = 0) -> void :
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
-		if _is_dedicated_spectator(sender):
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 			return
 		if dedicated_room_owner_peer_id != 0 and sender != 0 and sender != dedicated_room_owner_peer_id:
 			rpc_id(dedicated_room_owner_peer_id, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category, sender)

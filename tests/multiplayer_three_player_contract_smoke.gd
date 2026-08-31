@@ -66,6 +66,15 @@ func _run() -> void:
 	game._refresh_run_leader()
 	_check(game.run_leader_peer_id == local_peer, "host should recover leadership after revive")
 
+	game.is_dead = true
+	game.player_hp = 0.0
+	var dead_target_enemy := {"uid": 601, "pos": game.player_pos + Vector2(40, 0), "target_peer_id": local_peer}
+	var dead_target_pos: Vector2 = game._get_enemy_target_pos(dead_target_enemy)
+	_check(int(dead_target_enemy.get("target_peer_id", 0)) != local_peer, "enemy retained dead local player as target")
+	_check(dead_target_pos != game.player_pos, "enemy kept chasing the eliminated local player")
+	game.is_dead = false
+	game.player_hp = game.player_hp_max
+
 	var rotated_arauto_targets: Dictionary = {}
 	game.boss_pos = Vector2(760, 430)
 	game.boss_hp_max = game.BOSS_BASE_HP
@@ -136,6 +145,8 @@ func _run() -> void:
 	game.net_players_by_peer[43]["dead"] = true
 	game.net_players_by_peer[43]["hp"] = 0.0
 	_check(game._all_multiplayer_players_dead(), "run did not end after the whole team died")
+	game.mode = "game"
+	_check(game._finish_multiplayer_defeat_if_all_dead() and game.mode == "game_over", "all-dead multiplayer run did not transition to game over")
 
 	game.is_dead = false
 	game.player_hp = game.player_hp_max
@@ -192,10 +203,10 @@ func _run() -> void:
 	game.player_hp = 400
 	game.player_pos = game.revival_altar_life_pos
 	game._try_interact_revival_altar(game.REVIVE_PAY_LIFE)
-	_check(is_equal_approx(game.player_hp, 100.0) and not game.revival_active, "life altar did not sacrifice 75 percent when two allies were down")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 150.0) and is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 150.0), "life altar did not split sacrificed health between dead players")
+	_check(is_equal_approx(game.player_hp, 184.0) and not game.revival_active, "life altar did not apply reduced 54 percent sacrifice when two allies were down")
+	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 108.0) and is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 108.0), "life altar did not split reduced sacrificed health between dead players")
 	var healed: float = game._heal_player(100.0, "revive_smoke", false)
-	_check(is_equal_approx(healed, 50.0) and is_equal_approx(game.player_hp, 150.0), "revive sacrifice did not reduce incoming healing by 50 percent")
+	_check(is_equal_approx(healed, 50.0) and is_equal_approx(game.player_hp, 234.0), "revive sacrifice did not reduce incoming healing by 50 percent")
 	game.is_dead = true
 	game.player_hp = 0
 	game._handle_revive(true)

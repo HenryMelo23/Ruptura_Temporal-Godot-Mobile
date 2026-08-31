@@ -97,6 +97,14 @@ func _run() -> void:
 	game._reset_boss2_state()
 	game._start_boss2_ultimate()
 	_expect(game.nevasca_audio_player.playing, "nevasca_audio_did_not_start")
+	game._handle_player_down()
+	_expect(not game.nevasca_audio_player.playing, "nevasca_audio_kept_playing_after_player_death")
+	game.is_dead = false
+	game.player_hp = game.player_hp_max
+	game.mode = "game"
+	game._reset_boss2_state()
+	game._start_boss2_ultimate()
+	_expect(game.nevasca_audio_player.playing, "nevasca_audio_did_not_restart_after death cleanup")
 	_expect(is_zero_approx(game.boss2_ultimate_wind_timer), "ultimate_wind_did_not_start_immediately")
 	game._update_boss2_ultimate_wind(0.01)
 	_expect(game.boss2_ultimate_wind_active > 0.0, "immediate_wind_not_activated")

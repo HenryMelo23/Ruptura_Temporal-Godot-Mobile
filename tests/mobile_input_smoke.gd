@@ -12,6 +12,8 @@ func _initialize() -> void:
 func _run() -> void:
 	var viewport = Vector2(1280, 720)
 	game._start_game()
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.active_screen_touches[4] = true
 	assert(game._try_start_move_touch(4, game._joy_center(viewport) + Vector2(62, 0), viewport))
 	assert(game.move_touch_index == 4)
@@ -85,6 +87,13 @@ func _run() -> void:
 	game._cancel_all_touch_state()
 	assert(game.move_touch_index == -1)
 	assert(game.touch_move == Vector2.ZERO)
+	game.mode = "game"
+	game.is_dead = true
+	game.player_hp = 0.0
+	assert(not game._try_start_move_touch(15, game._joy_center(viewport) + Vector2(72, 0), viewport))
+	assert(game.move_touch_index == -1)
+	game.is_dead = false
+	game.player_hp = game.player_hp_max
 
 	game.move_touch_index = -2
 	game.touch_move = Vector2.RIGHT

@@ -26,6 +26,13 @@ func _run() -> void:
 	var silence := PackedByteArray()
 	silence.resize(44100 * 2 * 3)
 	test_stream.data = silence
+	game.vol_master = 1.0
+	game.vol_shots = 1.0
+	game.audio_streams["skill_racional"] = test_stream
+	game._play_manifestation_skill_sfx("racional")
+	await process_frame
+	var racional_volume: float = db_to_linear(game.sfx_players[0].volume_db)
+	_check(racional_volume <= 0.115, "Racional activation SFX was not reduced by 90 percent")
 	game.music_player.stream = test_stream
 	game.music_player.volume_db = linear_to_db(0.5)
 	game.music_player.play()
