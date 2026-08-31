@@ -5,6 +5,7 @@ const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
+const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
 const GAME_VERSION: = "2.0.35"
@@ -8482,54 +8483,23 @@ func _release_unused_music_streams(active_name: String) -> void :
 
 
 func _is_shared_phase_music_name(name: String) -> bool:
-	if name.get_extension().to_lower() != "mp3":
-		return false
-	var stem: = name.get_basename()
-	if not stem.begins_with("Fases"):
-		return false
-	var suffix: = stem.substr(5)
-	return suffix.is_valid_int()
+	return RTAudioLifecycleScript.is_shared_phase_music_name(name)
 
 
 func _shared_phase_music_index(name: String) -> int:
-	var stem: = name.get_basename()
-	if not stem.begins_with("Fases"):
-		return 999999
-	var suffix: = stem.substr(5)
-	if not suffix.is_valid_int():
-		return 999999
-	return int(suffix)
+	return RTAudioLifecycleScript.shared_phase_music_index(name)
 
 
 func _shared_phase_music_less(a, b) -> bool:
-	var left: = String(a)
-	var right: = String(b)
-	var left_index: = _shared_phase_music_index(left)
-	var right_index: = _shared_phase_music_index(right)
-	if left_index == right_index:
-		return left.to_lower() < right.to_lower()
-	return left_index < right_index
+	return RTAudioLifecycleScript.shared_phase_music_less(a, b)
 
 
 func _discover_shared_phase_music_tracks() -> Array:
-	var tracks: Array = []
-	var dir: = DirAccess.open(PHASE_MUSIC_DIR)
-	if dir == null:
-		return tracks
-	dir.list_dir_begin()
-	var file_name: = dir.get_next()
-	while file_name != "":
-		if not dir.current_is_dir() and _is_shared_phase_music_name(file_name):
-			tracks.append(file_name)
-		file_name = dir.get_next()
-	dir.list_dir_end()
-	tracks.sort_custom(_shared_phase_music_less)
-	return tracks
+	return RTAudioLifecycleScript.discover_shared_phase_music_tracks(PHASE_MUSIC_DIR)
 
 
 func _register_shared_phase_music_tracks() -> void :
-	for name in _discover_shared_phase_music_tracks():
-		_register_audio_stream(String(name), PHASE_MUSIC_DIR + "/" + String(name), false, true, _memory_saver_active())
+	RTAudioLifecycleScript.register_shared_phase_music_tracks(self)
 
 
 func _load_audio_streams() -> void :
@@ -8622,17 +8592,11 @@ func _load_audio_streams() -> void :
 
 
 func _start_nevasca_sfx() -> void :
-	if nevasca_audio_player == null: return
-	if _ensure_audio_loaded("Nevasca.mp3"):
-		nevasca_audio_player.stream = audio_streams["Nevasca.mp3"]
-		nevasca_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * 0.75))
-		if not nevasca_audio_player.playing:
-			nevasca_audio_player.play()
+	RTAudioLifecycleScript.start_nevasca_sfx(self)
 
 
 func _stop_nevasca_sfx() -> void :
-	if nevasca_audio_player != null and nevasca_audio_player.playing:
-		nevasca_audio_player.stop()
+	RTAudioLifecycleScript.stop_nevasca_sfx(self)
 
 
 func _load_procedural_sfx() -> void :
@@ -8940,25 +8904,15 @@ func _play_music(name: String) -> void :
 
 
 func _is_menu_music_name(name: String) -> bool:
-	return name.begins_with("Menu")
+	return RTAudioLifecycleScript.is_menu_music_name(name)
 
 
 func _stop_menu_music_for_gameplay() -> void:
-	if not _is_menu_music_name(current_music):
-		return
-	music_pause_fade_mode = ""
-	music_pause_fade_timer = 0.0
-	music_paused_by_pause = false
-	_cancel_music_crossfade()
-	if music_player != null:
-		music_player.stream_paused = false
-		music_player.stop()
-		music_player.stream = null
-	current_music = ""
+	RTAudioLifecycleScript.stop_menu_music_for_gameplay(self)
 
 
 func _music_target_volume() -> float:
-	return vol_master * vol_music * _shop_countdown_audio_duck()
+	return RTAudioLifecycleScript.music_target_volume(self)
 
 
 func _set_music_linear_volume(value: float) -> void :
@@ -9039,19 +8993,7 @@ func _begin_pause_music_fade_in() -> void :
 
 
 func _stop_battle_music_for_screen_transition() -> void :
-	if music_player == null:
-		return
-	music_pause_fade_mode = ""
-	music_pause_fade_timer = 0.0
-	music_paused_by_pause = false
-	_cancel_music_crossfade()
-	boss1_stop_music_duck_active = false
-	prismatica_music_duck_active = false
-	if current_music != "" and not current_music.begins_with("Menu"):
-		music_player.stream_paused = false
-		music_player.stop()
-		music_player.stream = null
-		current_music = ""
+	RTAudioLifecycleScript.stop_battle_music_for_screen_transition(self)
 
 
 func _update_music_pause_fade(delta: float) -> void :
@@ -9124,130 +9066,51 @@ func _update_music_auto_crossfade() -> void:
 
 
 func _play_phase_music() -> void :
-	_play_phase_music_random(current_phase)
+	RTAudioLifecycleScript.play_phase_music(self)
 
 
 func _shared_phase_music_tracks() -> Array:
-	var tracks: Array = _discover_shared_phase_music_tracks()
-	tracks.sort_custom(_shared_phase_music_less)
-	return tracks
+	return RTAudioLifecycleScript.shared_phase_music_tracks(self)
 
 
 func _phase_music_tracks(phase: int) -> Array:
-	return _shared_phase_music_tracks()
+	return RTAudioLifecycleScript.phase_music_tracks(self, phase)
 
 
 func _phase_music_available_tracks(phase: int) -> Array:
-	var available: Array = []
-	for track in _phase_music_tracks(phase):
-		if _audio_key_available(String(track)):
-			available.append(String(track))
-	return available
+	return RTAudioLifecycleScript.phase_music_available_tracks(self, phase)
 
 
 func _phase_music_bag_matches_available(available: Array) -> bool:
-	for track in phase_music_bag:
-		if not available.has(String(track)):
-			return false
-	return true
+	return RTAudioLifecycleScript.phase_music_bag_matches_available(self, available)
 
 
 func _refill_phase_music_bag(available: Array) -> void:
-	phase_music_bag.clear()
-	for track in available:
-		phase_music_bag.append(String(track))
-	for i in range(phase_music_bag.size() - 1, 0, -1):
-		var j: int = rng.randi_range(0, i)
-		var tmp: String = phase_music_bag[i]
-		phase_music_bag[i] = phase_music_bag[j]
-		phase_music_bag[j] = tmp
-	if phase_music_bag.size() > 1 and phase_music_bag[phase_music_bag.size() - 1] == current_music:
-		var swap_index: int = rng.randi_range(0, phase_music_bag.size() - 2)
-		var tmp_first: String = phase_music_bag[phase_music_bag.size() - 1]
-		phase_music_bag[phase_music_bag.size() - 1] = phase_music_bag[swap_index]
-		phase_music_bag[swap_index] = tmp_first
+	RTAudioLifecycleScript.refill_phase_music_bag(self, available)
 
 
 func _next_phase_music_track(phase: int) -> String:
-	var available: Array = _phase_music_available_tracks(phase)
-	if available.is_empty():
-		return ""
-	if phase_music_bag.is_empty() or not _phase_music_bag_matches_available(available):
-		_refill_phase_music_bag(available)
-	return String(phase_music_bag.pop_back())
+	return RTAudioLifecycleScript.next_phase_music_track(self, phase)
 
 
 func _play_phase_music_random(phase: int) -> void :
-	_stop_menu_music_for_gameplay()
-	var chosen: String = _next_phase_music_track(phase)
-	if chosen == "":
-		return
-	if chosen == current_music and music_player != null:
-		_replay_current_music(chosen)
-		return
-	_play_music(chosen)
+	RTAudioLifecycleScript.play_phase_music_random(self, phase)
 
 
 func _boss_music_tracks(phase: int) -> Array:
-	match phase:
-		1:
-			return ["Boss1-Music-3.mp3"]
-		2:
-			return ["Boss2-Music-2.mp3", "Boss2-Music-3.mp3", "Boss2-Music-4.mp3", "Boss2-Music-5.mp3"]
-		3:
-			return ["Fase3_Boss-1.mp3.mp3", "Fase3_Boss-2.mp3.mp3"]
-		4:
-			return ["Fase4_Boss-1.mp3", "Fase4_Boss-2.mp3"]
-		5:
-			return ["Fase5_Boss-1.mp3", "Fase5_Boss-2.mp3", "Fase5_Boss-3.mp3"]
-		7:
-			return ["Fase7_Boss-1.mp3", "Fase7_Boss-2.mp3"]
-	return []
+	return RTAudioLifecycleScript.boss_music_tracks(phase)
 
 
 func _play_boss_music_random() -> void :
-	var available: Array = []
-	for track in _boss_music_tracks(current_phase):
-		if _audio_key_available(track):
-			available.append(track)
-	if available.is_empty():
-		if not (current_music in _phase_music_tracks(current_phase)):
-			_play_phase_music()
-		return
-	var chosen: = String(available[rng.randi_range(0, available.size() - 1)])
-	if chosen == current_music and music_player != null:
-		_replay_current_music(chosen, true)
-		return
-	_play_music(chosen)
+	RTAudioLifecycleScript.play_boss_music_random(self)
 
 
 func _is_boss_music(name: String) -> bool:
-	for phase in range(1, 8):
-		if name in _boss_music_tracks(phase):
-			return true
-	return false
+	return RTAudioLifecycleScript.is_boss_music(name)
 
 
 func _on_music_finished() -> void :
-	if music_crossfade_active:
-		return
-	if _is_menu_music_name(current_music):
-		if mode == "game" or mode == "phase_transition":
-			_play_phase_music()
-		else:
-			_play_menu_music_random()
-		return
-	if current_music in _phase_music_tracks(current_phase):
-		_play_phase_music_random(current_phase)
-		return
-	if _is_boss_music(current_music):
-		if boss_active and not boss_dead:
-			_play_boss_music_random()
-		else:
-			_play_phase_music()
-		return
-	if current_music != "" and music_player != null and music_player.stream != null:
-		music_player.play()
+	RTAudioLifecycleScript.on_music_finished(self)
 
 
 func _replay_current_music(name: String, fade_in: = false) -> void :
@@ -9268,17 +9131,7 @@ func _replay_current_music(name: String, fade_in: = false) -> void :
 
 
 func _play_menu_music_random() -> void :
-	var available = []
-	for track in ["Menu.mp3", "Menu1-2.mp3", "Menu1-3.MP3", "Menu1-4.mp3"]:
-		if _audio_key_available(track):
-			available.append(track)
-	if available.is_empty():
-		return
-	var chosen = String(available[rng.randi_range(0, available.size() - 1)])
-	if chosen == current_music and music_player != null:
-		_replay_current_music(chosen, true)
-		return
-	_play_music(chosen)
+	RTAudioLifecycleScript.play_menu_music_random(self)
 
 
 func _play_phase1_music_random() -> void :
@@ -9314,47 +9167,15 @@ func _go_to_menu() -> void :
 		_play_menu_music_random()
 
 func _update_audio_volumes() -> void :
-	if music_pause_fade_mode != "" or music_paused_by_pause or music_crossfade_active:
-		return
-	if music_player != null and not prismatica_music_duck_active and not boss1_stop_music_duck_active:
-		music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
-	if rain_audio_player != null and rain_audio_fade_mode == "":
-		rain_audio_player.volume_db = linear_to_db(max(0.001, rain_audio_current_volume))
-	if boss1_walk_audio_player != null:
-		boss1_walk_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * BOSS1_WALK_AUDIO_VOLUME))
-	if boss1_stop_audio_player != null and boss1_stop_audio_player.playing:
-		boss1_stop_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * BOSS1_STOP_AUDIO_VOLUME))
-	if acorrentada_walk_audio_player != null and acorrentada_walk_audio_player.playing:
-		acorrentada_walk_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * ACORRENTADA_WALK_VOLUME * acorrentada_walk_current_volume))
-	if prismatica_ultimate_audio_player != null and prismatica_ultimate_audio_player.playing:
-		prismatica_ultimate_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_music * 0.82))
-	if nevasca_audio_player != null and nevasca_audio_player.playing:
-		nevasca_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * 0.75))
+	RTAudioLifecycleScript.update_audio_volumes(self)
 
 
 func _update_boss1_walk_audio(delta: float) -> void :
-	if boss1_walk_audio_player == null:
-		return
-	if boss1_walk_previous_pos == Vector2.ZERO:
-		boss1_walk_previous_pos = boss_pos
-		return
-	var distance: = boss1_walk_previous_pos.distance_to(boss_pos)
-	boss1_walk_previous_pos = boss_pos
-	var movement_speed: = distance / maxf(0.001, delta)
-	var walking: = mode == "game" and current_phase == 1 and boss_active and not boss_dead and movement_speed >= 18.0 and movement_speed <= 620.0
-	if walking and audio_streams.has("boss1_walk"):
-		if boss1_walk_audio_player.stream != audio_streams["boss1_walk"]:
-			boss1_walk_audio_player.stream = audio_streams["boss1_walk"]
-		boss1_walk_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * BOSS1_WALK_AUDIO_VOLUME))
-		if not boss1_walk_audio_player.playing:
-			boss1_walk_audio_player.play()
-	else:
-		_stop_boss1_walk_audio()
+	RTAudioLifecycleScript.update_boss1_walk_audio(self, delta)
 
 
 func _stop_boss1_walk_audio() -> void :
-	if boss1_walk_audio_player != null and boss1_walk_audio_player.playing:
-		boss1_walk_audio_player.stop()
+	RTAudioLifecycleScript.stop_boss1_walk_audio(self)
 
 
 func _current_music_linear_volume() -> float:
@@ -9479,57 +9300,23 @@ func _stop_acorrentada_walk_audio() -> void :
 
 
 func _rain_audio_target_volume() -> float:
-	return vol_master * vol_music * WEATHER_RAIN_AUDIO_VOLUME
+	return RTAudioLifecycleScript.rain_audio_target_volume(self)
 
 
 func _start_rain_audio() -> void :
-	if rain_audio_player == null or not _ensure_audio_loaded("rain"):
-		return
-	rain_audio_player.stream = audio_streams["rain"]
-	if not rain_audio_player.playing:
-		rain_audio_player.play()
-	rain_audio_player.stream_paused = false
-	rain_audio_current_volume = 0.001
-	rain_audio_player.volume_db = linear_to_db(0.001)
-	rain_audio_fade_timer = 0.0
-	rain_audio_fade_mode = "in"
+	RTAudioLifecycleScript.start_rain_audio(self)
 
 
 func _stop_rain_audio() -> void :
-	if rain_audio_player == null or rain_audio_player.stream == null:
-		return
-	rain_audio_fade_timer = 0.0
-	rain_audio_fade_mode = "out"
+	RTAudioLifecycleScript.stop_rain_audio(self)
 
 
 func _stop_rain_audio_immediate() -> void :
-	if rain_audio_player == null:
-		return
-	rain_audio_fade_mode = ""
-	rain_audio_fade_timer = 0.0
-	rain_audio_current_volume = 0.0
-	rain_audio_player.stop()
+	RTAudioLifecycleScript.stop_rain_audio_immediate(self)
 
 
 func _update_rain_audio_fade(delta: float) -> void :
-	if rain_audio_player == null or rain_audio_fade_mode == "":
-		return
-	rain_audio_fade_timer += delta
-	var progress = clamp(rain_audio_fade_timer / WEATHER_RAIN_FADE_TIME, 0.0, 1.0)
-	if rain_audio_fade_mode == "in":
-		rain_audio_current_volume = lerp(0.001, _rain_audio_target_volume(), progress)
-		rain_audio_player.volume_db = linear_to_db(max(0.001, rain_audio_current_volume))
-		if progress >= 1.0:
-			rain_audio_fade_mode = ""
-			rain_audio_current_volume = _rain_audio_target_volume()
-			rain_audio_player.volume_db = linear_to_db(max(0.001, rain_audio_current_volume))
-	elif rain_audio_fade_mode == "out":
-		rain_audio_current_volume = lerp(rain_audio_current_volume, 0.001, progress)
-		rain_audio_player.volume_db = linear_to_db(max(0.001, rain_audio_current_volume))
-		if progress >= 1.0:
-			rain_audio_fade_mode = ""
-			rain_audio_current_volume = 0.0
-			rain_audio_player.stop()
+	RTAudioLifecycleScript.update_rain_audio_fade(self, delta)
 
 
 func _vibrate(duration_ms: int, amplitude: = 0.5) -> void :
