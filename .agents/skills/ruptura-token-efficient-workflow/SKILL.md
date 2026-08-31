@@ -34,6 +34,15 @@ Load context in this order:
 
 Avoid reading whole lore docs, whole copied game files, whole logs, or all tests unless the task explicitly needs that scope.
 
+## Project Routing Shortcuts
+
+Use the narrow project skills before expanding context:
+
+- `ruptura-main-gd-navigation` for any task that touches `scripts/main.gd` or crosses menus, HUD, gameplay state, online, audio, bosses, phases, or abilities.
+- `ruptura-online-contracts` for lobby, tunnel, host/client packets, readiness, synchronized enemies/players, revive, shared score, votes, leadership, or online balancing.
+- `ruptura-audio-lifecycle` for menu music, phase playlist, `Sounds/`, boss/weather loops, SFX volume, stereo/mono behavior, or audio regressions.
+- `ruptura-release-portability` for GitHub preservation, version bumps, APK/EXE export, updater publishing, fonts, and assets that must work on another machine.
+
 ## Implementation Loop
 
 Keep each loop small:

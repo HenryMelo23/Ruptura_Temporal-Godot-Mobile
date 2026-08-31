@@ -102,6 +102,14 @@ Game Base/**/SIGMon/
 !.agents/skills/godot-game-balancing/SKILL.md
 !.agents/skills/ruptura-token-efficient-workflow/
 !.agents/skills/ruptura-token-efficient-workflow/SKILL.md
+!.agents/skills/ruptura-main-gd-navigation/
+!.agents/skills/ruptura-main-gd-navigation/SKILL.md
+!.agents/skills/ruptura-online-contracts/
+!.agents/skills/ruptura-online-contracts/SKILL.md
+!.agents/skills/ruptura-audio-lifecycle/
+!.agents/skills/ruptura-audio-lifecycle/SKILL.md
+!.agents/skills/ruptura-release-portability/
+!.agents/skills/ruptura-release-portability/SKILL.md
 
 # Scripts de Build Locais
 setup_android_env.ps1

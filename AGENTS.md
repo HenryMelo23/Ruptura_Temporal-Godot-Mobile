@@ -78,6 +78,22 @@ For game design, mathematical stat scaling, diminishing returns, damage formulas
 
 - `.agents/skills/godot-game-balancing/SKILL.md`
 
+For fast navigation of the large `scripts/main.gd` integration file, especially when a task touches menus, HUD, online, audio, bosses, phases, abilities, or player state, use:
+
+- `.agents/skills/ruptura-main-gd-navigation/SKILL.md`
+
+For online/multiplayer, lobby, tunnel, room readiness, host/client packet flow, enemy/player synchronization, revive, score sharing, votes, or leadership, use:
+
+- `.agents/skills/ruptura-online-contracts/SKILL.md`
+
+For music playlist, menu music, phase music, looping boss/weather audio, SFX lifecycle, stereo/mono behavior, or sound assets, use:
+
+- `.agents/skills/ruptura-audio-lifecycle/SKILL.md`
+
+For version bumps, GitHub preservation, APK/EXE export, update-server publishing, release notes, fonts, or asset portability between desktop/notebook/mobile, use:
+
+- `.agents/skills/ruptura-release-portability/SKILL.md`
+
 After any source, scene, resource, project setting, addon configuration, or test change, use:
 
 - `.agents/skills/godot-test-repair/SKILL.md`
