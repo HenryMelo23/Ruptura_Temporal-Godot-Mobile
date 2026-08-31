@@ -7,6 +7,7 @@ const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
 const RTNetContractScript = preload("res://scripts/systems/online/net_contract.gd")
+const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
 const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
@@ -2379,6 +2380,7 @@ var revival_fragment_respawn_timer: float = 0.0
 var revival_state_sync_timer: float = 0.0
 var revival_mobile_confirm_method: String = ""
 var revival_mobile_confirm_until_ms: int = 0
+var team_revival_state = RTTeamRevivalStateScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
@@ -60676,21 +60678,48 @@ func _local_player_display_name() -> String:
 	return player_nickname if player_nickname.strip_edges() != "" else "VOCE"
 
 
+func _sync_team_revival_from_legacy() -> void:
+	team_revival_state.load_legacy_state(
+		revival_active,
+		revival_dead_peers,
+		revival_dead_names,
+		revival_dead_positions,
+		revival_fragments,
+		revival_fragments_collected,
+		revival_timer,
+		revival_total_time,
+		revival_altars_active,
+		revival_altar_life_pos,
+		revival_altar_points_pos,
+		revival_notice,
+		revival_fragments_suspended,
+		revival_fragment_respawn_timer,
+		revival_state_sync_timer
+	)
+
+
+func _sync_team_revival_to_legacy() -> void:
+	var state: Dictionary = team_revival_state.export_legacy_state()
+	revival_active = bool(state.get("active", false))
+	revival_dead_peers = Array(state.get("dead_peers", []))
+	revival_dead_names = Dictionary(state.get("dead_names", {}))
+	revival_dead_positions = Dictionary(state.get("dead_positions", {}))
+	revival_fragments = Array(state.get("fragments", []))
+	revival_fragments_collected = int(state.get("fragments_collected", 0))
+	revival_timer = float(state.get("timer", 0.0))
+	revival_total_time = float(state.get("total_time", 0.0))
+	revival_altars_active = bool(state.get("altars_active", false))
+	revival_altar_life_pos = Vector2(state.get("altar_life_pos", Vector2.ZERO))
+	revival_altar_points_pos = Vector2(state.get("altar_points_pos", Vector2.ZERO))
+	revival_notice = String(state.get("notice", ""))
+	revival_fragments_suspended = bool(state.get("fragments_suspended", false))
+	revival_fragment_respawn_timer = float(state.get("fragment_respawn_timer", 0.0))
+	revival_state_sync_timer = float(state.get("state_sync_timer", 0.0))
+
+
 func _clear_team_revival_state() -> void:
-	revival_active = false
-	revival_dead_peers.clear()
-	revival_dead_names.clear()
-	revival_dead_positions.clear()
-	revival_fragments.clear()
-	revival_fragments_collected = 0
-	revival_timer = 0.0
-	revival_total_time = 0.0
-	revival_altars_active = false
-	revival_altar_life_pos = Vector2.ZERO
-	revival_altar_points_pos = Vector2.ZERO
-	revival_fragments_suspended = false
-	revival_fragment_respawn_timer = 0.0
-	revival_state_sync_timer = 0.0
+	team_revival_state.clear()
+	_sync_team_revival_to_legacy()
 	revival_mobile_confirm_method = ""
 	revival_mobile_confirm_until_ms = 0
 	buttons.erase("revival_mobile")
@@ -60699,105 +60728,49 @@ func _clear_team_revival_state() -> void:
 func _register_team_revival_dead(dead_peer_id: int, dead_pos: Vector2, dead_name: String) -> void:
 	if not is_multiplayer or dead_peer_id <= 0 or online_local_spectator:
 		return
-	if not revival_dead_peers.has(dead_peer_id):
-		revival_dead_peers.append(dead_peer_id)
-	revival_dead_names[dead_peer_id] = dead_name if dead_name.strip_edges() != "" else "ALIADO"
-	revival_dead_positions[dead_peer_id] = dead_pos.clamp(Vector2(72.0, 72.0), WORLD_SIZE - Vector2(72.0, 72.0))
-	revival_active = true
-	revival_fragments_suspended = false
-	revival_fragment_respawn_timer = 0.0
-	revival_total_time = REVIVAL_MULTI_TIME if revival_dead_peers.size() > 1 else REVIVAL_SINGLE_TIME
-	revival_timer = maxf(revival_timer, revival_total_time)
-	revival_notice = "RECONSTITUICAO: colete os fragmentos"
+	_sync_team_revival_from_legacy()
+	team_revival_state.register_dead(dead_peer_id, dead_pos, dead_name, WORLD_SIZE, REVIVAL_SINGLE_TIME, REVIVAL_MULTI_TIME)
+	_sync_team_revival_to_legacy()
 
 
 func _generate_revival_fragments_for_dead(dead_peer_id: int, dead_pos: Vector2) -> void:
-	var base_angle: float = float(dead_peer_id % 13) * 0.37 + time_alive * 0.11
-	for i in range(REVIVAL_FRAGMENTS_PER_DEAD):
-		var id: int = dead_peer_id * 1000 + i
-		var angle: float = base_angle + TAU * float(i) / float(REVIVAL_FRAGMENTS_PER_DEAD)
-		var ring: float = 170.0 + 72.0 * float(i % 3)
-		var jitter := Vector2(rng.randf_range(-58.0, 58.0), rng.randf_range(-58.0, 58.0))
-		var pos: Vector2 = (dead_pos + Vector2.from_angle(angle) * ring + jitter).clamp(Vector2(58.0, 58.0), WORLD_SIZE - Vector2(58.0, 58.0))
-		revival_fragments.append({
-			"id": id,
-			"dead_peer": dead_peer_id,
-			"origin": dead_pos,
-			"pos": pos,
-			"home": pos,
-			"collected": false,
-			"phase": rng.randf() * TAU,
-			"wander": rng.randf() * TAU,
-			"drift_dir": Vector2.from_angle(rng.randf() * TAU)
-		})
+	_sync_team_revival_from_legacy()
+	team_revival_state.generate_fragments_for_dead(dead_peer_id, dead_pos, WORLD_SIZE, REVIVAL_FRAGMENTS_PER_DEAD, time_alive, rng)
+	_sync_team_revival_to_legacy()
 
 
 func _start_team_revival_for_dead(dead_peer_id: int, dead_pos: Vector2, dead_name: String, broadcast: bool = true) -> void:
 	_register_team_revival_dead(dead_peer_id, dead_pos, dead_name)
-	for fragment in revival_fragments:
-		if int(Dictionary(fragment).get("dead_peer", 0)) == dead_peer_id:
-			if broadcast:
-				_broadcast_team_revival_state()
-			return
-	_generate_revival_fragments_for_dead(dead_peer_id, dead_pos)
+	_sync_team_revival_from_legacy()
+	if team_revival_state.has_fragments_for_dead(dead_peer_id):
+		if broadcast:
+			_broadcast_team_revival_state()
+		return
+	team_revival_state.generate_fragments_for_dead(dead_peer_id, dead_pos, WORLD_SIZE, REVIVAL_FRAGMENTS_PER_DEAD, time_alive, rng)
+	_sync_team_revival_to_legacy()
 	_refresh_revival_collection_state()
 	if broadcast:
 		_broadcast_team_revival_state()
 
 
 func _reset_revival_fragments_for_active_dead() -> void:
-	revival_fragments.clear()
-	revival_fragments_collected = 0
-	revival_altars_active = false
-	var dead_ids: Array = revival_dead_peers.duplicate()
-	for dead_peer_id in dead_ids:
-		var peer_id: int = int(dead_peer_id)
-		var dead_pos: Vector2 = Vector2(revival_dead_positions.get(peer_id, WORLD_SIZE * 0.5))
-		_generate_revival_fragments_for_dead(peer_id, dead_pos)
-	revival_fragments_suspended = false
-	revival_fragment_respawn_timer = 0.0
-	revival_total_time = REVIVAL_MULTI_TIME if revival_dead_peers.size() > 1 else REVIVAL_SINGLE_TIME
-	revival_timer = revival_total_time
-	revival_notice = "FRAGMENTOS REFORMADOS: colete novamente"
+	_sync_team_revival_from_legacy()
+	team_revival_state.reset_fragments_for_active_dead(WORLD_SIZE, REVIVAL_FRAGMENTS_PER_DEAD, REVIVAL_SINGLE_TIME, REVIVAL_MULTI_TIME, time_alive, rng)
+	_sync_team_revival_to_legacy()
 
 
 func _suspend_revival_fragments() -> void:
-	revival_fragments.clear()
-	revival_fragments_collected = 0
-	revival_altars_active = false
-	revival_fragments_suspended = true
-	revival_fragment_respawn_timer = REVIVAL_FRAGMENT_RESPAWN_TIME
-	revival_state_sync_timer = 0.0
-	revival_timer = 0.0
-	revival_notice = "FRAGMENTOS DISSIPADOS: retornam em 3 min"
-	revival_altar_life_pos = Vector2.ZERO
-	revival_altar_points_pos = Vector2.ZERO
+	_sync_team_revival_from_legacy()
+	team_revival_state.suspend_fragments(REVIVAL_FRAGMENT_RESPAWN_TIME)
+	_sync_team_revival_to_legacy()
 
 
 func _update_revival_fragment_drift(delta: float) -> void:
 	if not _is_world_authority() or revival_fragments_suspended or revival_altars_active:
 		return
-	for i in range(revival_fragments.size()):
-		var fragment: Dictionary = revival_fragments[i]
-		if bool(fragment.get("collected", false)):
-			continue
-		var pos: Vector2 = Vector2(fragment.get("pos", Vector2.ZERO))
-		var home: Vector2 = Vector2(fragment.get("home", pos))
-		var phase: float = float(fragment.get("phase", 0.0)) + delta * 1.65
-		var wander: float = float(fragment.get("wander", 0.0)) + delta * rng.randf_range(0.35, 0.72)
-		var drift_dir: Vector2 = Vector2(fragment.get("drift_dir", Vector2.RIGHT))
-		var drift: Vector2 = drift_dir.rotated(sin(wander) * 0.62) * REVIVAL_FRAGMENT_DRIFT_SPEED * delta
-		var anchor_pull: Vector2 = (home - pos) * clampf(delta * 0.08, 0.0, 1.0)
-		pos = (pos + drift + anchor_pull).clamp(Vector2(48.0, 48.0), WORLD_SIZE - Vector2(48.0, 48.0))
-		if pos.distance_to(home) > 220.0:
-			drift_dir = (home - pos).normalized()
-		elif rng.randf() < delta * 0.18:
-			drift_dir = Vector2.from_angle(rng.randf() * TAU)
-		fragment["pos"] = pos
-		fragment["phase"] = phase
-		fragment["wander"] = wander
-		fragment["drift_dir"] = drift_dir
-		revival_fragments[i] = fragment
+	_sync_team_revival_from_legacy()
+	team_revival_state.update_fragment_drift(delta, WORLD_SIZE, REVIVAL_FRAGMENT_DRIFT_SPEED, rng)
+	_sync_team_revival_to_legacy()
 
 
 func _announce_team_revival_death(dead_peer_id: int, dead_pos: Vector2, dead_name: String) -> void:
@@ -60812,33 +60785,30 @@ func _announce_team_revival_death(dead_peer_id: int, dead_pos: Vector2, dead_nam
 
 
 func _refresh_revival_collection_state() -> void:
-	revival_fragments_collected = 0
-	for fragment in revival_fragments:
-		if bool(Dictionary(fragment).get("collected", false)):
-			revival_fragments_collected += 1
-	if revival_active and not revival_fragments_suspended and revival_fragments.size() > 0 and revival_fragments_collected >= revival_fragments.size():
-		_activate_team_revival_altars()
+	_sync_team_revival_from_legacy()
+	team_revival_state.refresh_collection_state(WORLD_SIZE, REVIVAL_ALTAR_SPACING)
+	_sync_team_revival_to_legacy()
 
 
 func _activate_team_revival_altars() -> void:
-	revival_altars_active = true
-	var center: Vector2 = (WORLD_SIZE * 0.5).clamp(Vector2(140.0, 140.0), WORLD_SIZE - Vector2(140.0, 140.0))
-	revival_altar_life_pos = center + Vector2(-REVIVAL_ALTAR_SPACING, 0.0)
-	revival_altar_points_pos = center + Vector2(REVIVAL_ALTAR_SPACING, 0.0)
-	revival_notice = "FRAGMENTOS COMPLETOS: escolha um altar"
+	_sync_team_revival_from_legacy()
+	team_revival_state.activate_altars(WORLD_SIZE, REVIVAL_ALTAR_SPACING)
+	_sync_team_revival_to_legacy()
 
 
 func _team_revival_dead_count() -> int:
-	return maxi(1, revival_dead_peers.size())
+	_sync_team_revival_from_legacy()
+	return team_revival_state.dead_count()
 
 
 func _revival_life_sacrifice_rate() -> float:
-	var base_rate: float = REVIVAL_MULTI_LIFE_SACRIFICE_RATE if _team_revival_dead_count() > 1 else REVIVE_LIFE_SACRIFICE_RATE
-	return base_rate * (1.0 - REVIVE_LIFE_SACRIFICE_REDUCTION)
+	_sync_team_revival_from_legacy()
+	return team_revival_state.life_sacrifice_rate(REVIVE_LIFE_SACRIFICE_RATE, REVIVAL_MULTI_LIFE_SACRIFICE_RATE, REVIVE_LIFE_SACRIFICE_REDUCTION)
 
 
 func _revival_points_cost() -> int:
-	return max(1, _revive_cost() * _team_revival_dead_count())
+	_sync_team_revival_from_legacy()
+	return team_revival_state.points_cost(_revive_cost())
 
 
 func _spend_local_score(cost: int) -> bool:
@@ -60860,15 +60830,8 @@ func _apply_revival_life_sacrifice(rate: float) -> float:
 
 
 func _local_revival_altar_method() -> String:
-	if not revival_active or not revival_altars_active or is_dead or online_local_spectator:
-		return ""
-	var life_distance: float = player_pos.distance_to(revival_altar_life_pos)
-	var points_distance: float = player_pos.distance_to(revival_altar_points_pos)
-	if life_distance <= REVIVAL_ALTAR_RADIUS and (life_distance <= points_distance or points_distance > REVIVAL_ALTAR_RADIUS):
-		return REVIVE_PAY_LIFE
-	if points_distance <= REVIVAL_ALTAR_RADIUS:
-		return REVIVE_PAY_POINTS
-	return ""
+	_sync_team_revival_from_legacy()
+	return team_revival_state.altar_method(player_pos, is_dead, online_local_spectator, REVIVAL_ALTAR_RADIUS, REVIVE_PAY_LIFE, REVIVE_PAY_POINTS)
 
 
 func _revival_method_label(method: String) -> String:
@@ -60893,6 +60856,7 @@ func _try_interact_revival_altar(method: String = "") -> void:
 		var loss: float = _apply_revival_life_sacrifice(rate)
 		revive_hp = maxf(1.0, loss / float(_team_revival_dead_count()))
 		revival_notice = "ALTAR VERMELHO: vida dividida entre os caidos"
+		_sync_team_revival_from_legacy()
 	if _is_world_authority():
 		_complete_team_revival(selected_method, revive_hp, _mp_unique_id())
 	elif _shop_rpc_available():
@@ -60916,6 +60880,7 @@ func _handle_revival_mobile_tap() -> bool:
 
 
 func _update_team_revival(delta: float) -> void:
+	_sync_team_revival_from_legacy()
 	if not revival_active:
 		return
 	if not is_multiplayer:
@@ -60929,11 +60894,14 @@ func _update_team_revival(delta: float) -> void:
 				_broadcast_team_revival_state()
 				return
 			revival_state_sync_timer += delta
+			_sync_team_revival_from_legacy()
 			if revival_state_sync_timer >= 1.0:
 				revival_state_sync_timer = 0.0
+				_sync_team_revival_from_legacy()
 				_broadcast_team_revival_state()
 		return
 	revival_timer = maxf(0.0, revival_timer - delta)
+	_sync_team_revival_from_legacy()
 	if revival_timer <= 0.0 and not revival_altars_active:
 		if _is_world_authority():
 			_suspend_revival_fragments()
@@ -60942,8 +60910,10 @@ func _update_team_revival(delta: float) -> void:
 	_update_revival_fragment_drift(delta)
 	if _is_world_authority() and not revival_altars_active:
 		revival_state_sync_timer += delta
+		_sync_team_revival_from_legacy()
 		if revival_state_sync_timer >= REVIVAL_FRAGMENT_SYNC_INTERVAL:
 			revival_state_sync_timer = 0.0
+			_sync_team_revival_from_legacy()
 			_broadcast_team_revival_state()
 	if not is_dead and not online_local_spectator and not revival_altars_active:
 		for fragment_index in range(revival_fragments.size()):
@@ -60976,44 +60946,29 @@ func _collect_revival_fragment(fragment_id: int, collector_peer_id: int) -> void
 	if not _is_world_authority() or not revival_active or revival_altars_active or revival_fragments_suspended:
 		return
 	var collector_pos: Vector2 = _collector_world_pos(collector_peer_id)
-	for i in range(revival_fragments.size()):
-		var fragment: Dictionary = revival_fragments[i]
-		if int(fragment.get("id", 0)) != fragment_id or bool(fragment.get("collected", false)):
-			continue
-		var fragment_pos: Vector2 = Vector2(fragment.get("pos", Vector2.ZERO))
-		if collector_pos.distance_to(fragment_pos) > REVIVAL_FRAGMENT_PICKUP_RADIUS + 34.0:
-			return
-		fragment["collected"] = true
-		revival_fragments[i] = fragment
-		revival_notice = "FRAGMENTO %d/%d" % [revival_fragments_collected + 1, revival_fragments.size()]
-		_spawn_radial_particles(fragment_pos, Color(0.72, 0.95, 1.0), 14)
-		_add_text("+FRAGMENTO", fragment_pos + Vector2(0, -34), Color(0.74, 0.96, 1.0), 0.65, 14)
-		_refresh_revival_collection_state()
-		_broadcast_team_revival_state()
+	_sync_team_revival_from_legacy()
+	var result: Dictionary = team_revival_state.try_collect_fragment(fragment_id, collector_pos, REVIVAL_FRAGMENT_PICKUP_RADIUS, 34.0)
+	_sync_team_revival_to_legacy()
+	if not bool(result.get("collected", false)):
 		return
+	var fragment_pos: Vector2 = Vector2(result.get("pos", Vector2.ZERO))
+	_spawn_radial_particles(fragment_pos, Color(0.72, 0.95, 1.0), 14)
+	_add_text("+FRAGMENTO", fragment_pos + Vector2(0, -34), Color(0.74, 0.96, 1.0), 0.65, 14)
+	_refresh_revival_collection_state()
+	_broadcast_team_revival_state()
 
 
 func _apply_team_revival_state(dead_ids: Array, names: Dictionary, positions: Dictionary, fragments: Array, timer: float, altars_active: bool, notice: String, suspended: bool = false, respawn_timer: float = 0.0) -> void:
-	revival_active = dead_ids.size() > 0
-	revival_dead_peers = dead_ids.duplicate()
-	revival_dead_names = names.duplicate()
-	revival_dead_positions = positions.duplicate()
-	revival_fragments = fragments.duplicate(true)
-	revival_timer = maxf(0.0, timer)
-	revival_total_time = REVIVAL_MULTI_TIME if dead_ids.size() > 1 else REVIVAL_SINGLE_TIME
-	revival_altars_active = altars_active
-	revival_notice = notice
-	revival_fragments_suspended = suspended
-	revival_fragment_respawn_timer = maxf(0.0, respawn_timer)
-	if revival_altars_active and not revival_fragments_suspended:
-		_activate_team_revival_altars()
-	_refresh_revival_collection_state()
+	team_revival_state.apply_network_state(dead_ids, names, positions, fragments, timer, altars_active, notice, suspended, respawn_timer, REVIVAL_SINGLE_TIME, REVIVAL_MULTI_TIME, WORLD_SIZE, REVIVAL_ALTAR_SPACING)
+	_sync_team_revival_to_legacy()
 
 
 func _broadcast_team_revival_state() -> void:
 	if not is_multiplayer or not _shop_rpc_available():
 		return
-	rpc("_rpc_team_revival_state", revival_dead_peers.duplicate(), revival_dead_names.duplicate(), revival_dead_positions.duplicate(), revival_fragments.duplicate(true), revival_timer, revival_altars_active, revival_notice, revival_fragments_suspended, revival_fragment_respawn_timer)
+	_sync_team_revival_from_legacy()
+	var snapshot: Dictionary = team_revival_state.rpc_snapshot()
+	rpc("_rpc_team_revival_state", Array(snapshot.get("dead_ids", [])), Dictionary(snapshot.get("names", {})), Dictionary(snapshot.get("positions", {})), Array(snapshot.get("fragments", [])), float(snapshot.get("timer", 0.0)), bool(snapshot.get("altars_active", false)), String(snapshot.get("notice", "")), bool(snapshot.get("suspended", false)), float(snapshot.get("respawn_timer", 0.0)))
 
 
 func _handle_revive_with_hp(hp_amount: float) -> void:
@@ -61029,7 +60984,8 @@ func _handle_revive_with_hp(hp_amount: float) -> void:
 func _complete_team_revival(method: String, revive_hp: float, actor_peer_id: int) -> void:
 	if not _is_world_authority() or not revival_active or not revival_altars_active:
 		return
-	var dead_ids: Array = revival_dead_peers.duplicate()
+	_sync_team_revival_from_legacy()
+	var dead_ids: Array = team_revival_state.dead_peers.duplicate()
 	for dead_peer_id in dead_ids:
 		var peer_id: int = int(dead_peer_id)
 		if peer_id == _mp_unique_id():
