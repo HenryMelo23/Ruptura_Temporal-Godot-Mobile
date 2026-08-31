@@ -7,6 +7,7 @@ const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
 const RTNetContractScript = preload("res://scripts/systems/online/net_contract.gd")
+const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
 const GAME_VERSION: = "2.0.35"
@@ -50574,36 +50575,23 @@ func _edit_layout_title() -> String:
 
 
 func _edit_layout_safe_margin(_viewport: Vector2) -> Vector2:
-	return Vector2(28.0, 28.0)
+	return RTHudLayoutScript.edit_layout_safe_margin(_viewport)
 
 
 func _edit_layout_safe_rect(viewport: Vector2) -> Rect2:
-	var margin: Vector2 = _edit_layout_safe_margin(viewport)
-	return Rect2(margin, (viewport - margin * 2.0).max(Vector2(64.0, 64.0)))
+	return RTHudLayoutScript.edit_layout_safe_rect(viewport)
 
 
 func _clamp_layout_point(target: Vector2, viewport: Vector2, padding: float = 28.0) -> Vector2:
-	var min_pos: = Vector2(padding, padding)
-	var max_pos: = viewport - Vector2(padding, padding)
-	if max_pos.x < min_pos.x:
-		max_pos.x = min_pos.x
-	if max_pos.y < min_pos.y:
-		max_pos.y = min_pos.y
-	return Vector2(clampf(target.x, min_pos.x, max_pos.x), clampf(target.y, min_pos.y, max_pos.y))
+	return RTHudLayoutScript.clamp_layout_point(target, viewport, padding)
 
 
 func _clamp_layout_rect_position(target: Vector2, size: Vector2, viewport: Vector2, padding: float = 28.0) -> Vector2:
-	var min_pos: = Vector2(padding, padding)
-	var max_pos: = viewport - size - Vector2(padding, padding)
-	if max_pos.x < min_pos.x:
-		max_pos.x = min_pos.x
-	if max_pos.y < min_pos.y:
-		max_pos.y = min_pos.y
-	return Vector2(clampf(target.x, min_pos.x, max_pos.x), clampf(target.y, min_pos.y, max_pos.y))
+	return RTHudLayoutScript.clamp_layout_rect_position(target, size, viewport, padding)
 
 
 func _clamp_layout_center(target: Vector2, radius: float, viewport: Vector2, padding: float = 28.0) -> Vector2:
-	return _clamp_layout_point(target, viewport, padding + radius)
+	return RTHudLayoutScript.clamp_layout_center(target, radius, viewport, padding)
 
 
 func _draw_edit_layout_safe_guides(viewport: Vector2) -> void:
@@ -53153,54 +53141,67 @@ func _with_alpha(color: Color, alpha_multiplier: float) -> Color:
 
 func _update_button_layout(viewport: Vector2) -> void :
 	if _uses_desktop_ui() and mode != "edit_layout":
-		var icon: = 54.0
-		var gap: = 14.0
-		var total_w: = icon * 4.0 + gap * 3.0
-		var x: = viewport.x * 0.5 - total_w * 0.5
-		var y: = viewport.y - icon - 44.0
-		buttons["attack"] = Rect2(x, y, icon, icon)
-		buttons["skill"] = Rect2(x + (icon + gap), y, icon, icon)
-		buttons["secondary"] = Rect2(x + (icon + gap) * 2.0, y, icon, icon)
-		buttons["dash"] = Rect2(x + (icon + gap) * 3.0, y, icon, icon)
-		if manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada":
-			buttons["lacerante_empower"] = Rect2(x + total_w + gap, y + 8.0, 42.0, 42.0)
+		var desktop_rects: Dictionary = RTHudLayoutScript.desktop_button_rects(
+			viewport,
+			manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada",
+			manifestation_key == "bombastica",
+			not shop_auto_enabled
+		)
+		buttons["attack"] = desktop_rects["attack"]
+		buttons["skill"] = desktop_rects["skill"]
+		buttons["secondary"] = desktop_rects["secondary"]
+		buttons["dash"] = desktop_rects["dash"]
+		if desktop_rects.has("lacerante_empower"):
+			buttons["lacerante_empower"] = desktop_rects["lacerante_empower"]
 		else:
 			buttons.erase("lacerante_empower")
-		if manifestation_key == "bombastica":
-			buttons["bombastica_detonator"] = Rect2(x + total_w + gap, y + 8.0, 42.0, 42.0)
+		if desktop_rects.has("bombastica_detonator"):
+			buttons["bombastica_detonator"] = desktop_rects["bombastica_detonator"]
 		else:
 			buttons.erase("bombastica_detonator")
-		buttons["pause"] = Rect2(viewport.x - 62.0, 18.0, 44.0, 36.0)
-		buttons["boss"] = Rect2(viewport.x - 124.0, 124.0, 104.0, 38.0)
-		if shop_auto_enabled:
-			buttons.erase("shop_manual")
+		buttons["pause"] = desktop_rects["pause"]
+		buttons["boss"] = desktop_rects["boss"]
+		if desktop_rects.has("shop_manual"):
+			buttons["shop_manual"] = desktop_rects["shop_manual"]
 		else:
-			buttons["shop_manual"] = Rect2(viewport.x - 124.0, 78.0, 104.0, 38.0)
+			buttons.erase("shop_manual")
 		return
-	var atk_r = 62.0 * _attack_scale()
-	buttons["attack"] = Rect2(_attack_center(viewport) - Vector2(atk_r, atk_r), Vector2(atk_r * 2.0, atk_r * 2.0))
-	var skill_r = 46.0 * _skill_scale()
-	buttons["skill"] = Rect2(_skill_pos(viewport), Vector2(skill_r * 2.0, skill_r * 2.0))
-	var secondary_r = 48.0 * _secondary_scale()
-	buttons["secondary"] = Rect2(_secondary_center(viewport) - Vector2(secondary_r, secondary_r), Vector2(secondary_r * 2.0, secondary_r * 2.0))
-	var dash_r = 52.0 * _dash_scale()
-	buttons["dash"] = Rect2(_dash_center(viewport) - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0))
-	if manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada" or mode == "edit_layout":
-		var empower_r = 32.0 * _lacerante_empower_scale()
-		buttons["lacerante_empower"] = Rect2(_lacerante_empower_center(viewport) - Vector2(empower_r, empower_r), Vector2(empower_r * 2.0, empower_r * 2.0))
+	var touch_rects: Dictionary = RTHudLayoutScript.touch_button_rects(
+		_attack_center(viewport),
+		_attack_scale(),
+		_skill_pos(viewport),
+		_skill_scale(),
+		_secondary_center(viewport),
+		_secondary_scale(),
+		_dash_center(viewport),
+		_dash_scale(),
+		_lacerante_empower_center(viewport),
+		_lacerante_empower_scale(),
+		manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada" or mode == "edit_layout",
+		manifestation_key == "bombastica" and mode != "edit_layout",
+		_pause_pos(viewport),
+		_boss_call_pos(viewport),
+		_manual_shop_pos(viewport),
+		not (shop_auto_enabled and mode != "edit_layout")
+	)
+	buttons["attack"] = touch_rects["attack"]
+	buttons["skill"] = touch_rects["skill"]
+	buttons["secondary"] = touch_rects["secondary"]
+	buttons["dash"] = touch_rects["dash"]
+	if touch_rects.has("lacerante_empower"):
+		buttons["lacerante_empower"] = touch_rects["lacerante_empower"]
 	else:
 		buttons.erase("lacerante_empower")
-	if manifestation_key == "bombastica" and mode != "edit_layout":
-		var det_r = 32.0 * _lacerante_empower_scale()
-		buttons["bombastica_detonator"] = Rect2(_lacerante_empower_center(viewport) - Vector2(det_r, det_r), Vector2(det_r * 2.0, det_r * 2.0))
+	if touch_rects.has("bombastica_detonator"):
+		buttons["bombastica_detonator"] = touch_rects["bombastica_detonator"]
 	else:
 		buttons.erase("bombastica_detonator")
-	buttons["pause"] = Rect2(_pause_pos(viewport), Vector2(52, 42))
-	buttons["boss"] = Rect2(_boss_call_pos(viewport), Vector2(96, 42))
-	if shop_auto_enabled and mode != "edit_layout":
-		buttons.erase("shop_manual")
+	buttons["pause"] = touch_rects["pause"]
+	buttons["boss"] = touch_rects["boss"]
+	if touch_rects.has("shop_manual"):
+		buttons["shop_manual"] = touch_rects["shop_manual"]
 	else:
-		buttons["shop_manual"] = Rect2(_manual_shop_pos(viewport), Vector2(104, 42))
+		buttons.erase("shop_manual")
 
 
 func _handle_app_update_input(event: InputEvent, viewport: Vector2) -> void :
@@ -53702,13 +53703,13 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 			return
 
 	var portrait = _is_portrait(viewport)
-	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
-	var right_w = 220.0 if not portrait else min(220.0, viewport.x * 0.44)
+	var left_w = RTHudLayoutScript.left_panel_width(viewport)
+	var right_w = RTHudLayoutScript.right_panel_width(viewport)
 	var left_anchor: = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
-	var aura_rect: = Rect2(_aura_panel_pos(viewport, left_anchor), Vector2(min(224.0, viewport.x * 0.46), 48.0) * hud_aura_panel_scale)
-	var cards_rect: = Rect2(_cards_panel_pos(viewport, left_anchor), Vector2(min(224.0, viewport.x * 0.46), 94.0) * hud_cards_panel_scale)
+	var aura_rect: = Rect2(_aura_panel_pos(viewport, left_anchor), RTHudLayoutScript.aura_panel_size(viewport, hud_aura_panel_scale))
+	var cards_rect: = Rect2(_cards_panel_pos(viewport, left_anchor), RTHudLayoutScript.cards_panel_size(viewport, hud_cards_panel_scale))
 	var coag_center: = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
-	var coag_size: = Vector2(160, 48) * hud_coagulum_scale
+	var coag_size: = RTHudLayoutScript.coagulum_panel_size(hud_coagulum_scale)
 	var coag_rect: = Rect2(coag_center - coag_size * 0.5, coag_size)
 	var shop_rect: = Rect2(_manual_shop_pos(viewport), Vector2(104, 42))
 
@@ -53764,12 +53765,11 @@ func _handle_edit_layout_drag(index: int, pos: Vector2, viewport: Vector2) -> vo
 	if index != edit_layout_touch_index: return
 	edit_layout_resize_visible = false
 	var target = pos + edit_layout_offset
-	var portrait = _is_portrait(viewport)
-	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
-	var right_w = 220.0 if not portrait else min(220.0, viewport.x * 0.44)
-	var aura_size: = Vector2(min(224.0, viewport.x * 0.46), 48.0) * hud_aura_panel_scale
-	var cards_size: = Vector2(min(224.0, viewport.x * 0.46), 94.0) * hud_cards_panel_scale
-	var coag_size: = Vector2(160.0, 48.0) * hud_coagulum_scale
+	var left_w = RTHudLayoutScript.left_panel_width(viewport)
+	var right_w = RTHudLayoutScript.right_panel_width(viewport)
+	var aura_size: = RTHudLayoutScript.aura_panel_size(viewport, hud_aura_panel_scale)
+	var cards_size: = RTHudLayoutScript.cards_panel_size(viewport, hud_cards_panel_scale)
+	var coag_size: = RTHudLayoutScript.coagulum_panel_size(hud_coagulum_scale)
 	if edit_layout_selected == "joy":
 		hud_joy_pos = _clamp_layout_center(target, 76.0 * _joy_scale(), viewport)
 	elif edit_layout_selected == "attack":
@@ -53809,9 +53809,9 @@ func _open_edit_layout(viewport: Vector2) -> void :
 	hud_skill_pos = _skill_pos(viewport)
 	hud_shop_pos = _manual_shop_pos(viewport)
 	if hud_boss_panel_pos == Vector2(-1, -1):
-		hud_boss_panel_pos = _clamp_layout_rect_position(Vector2(viewport.x * 0.5 - 190.0, 96.0), Vector2(380.0, 30.0), viewport)
+		hud_boss_panel_pos = RTHudLayoutScript.default_edit_layout_boss_panel_pos(viewport)
 	var portrait = _is_portrait(viewport)
-	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
+	var left_w = RTHudLayoutScript.left_panel_width(viewport)
 	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
 	hud_aura_panel_pos = _aura_panel_pos(viewport, left_rect)
 	hud_cards_panel_pos = _cards_panel_pos(viewport, left_rect)
@@ -56337,52 +56337,31 @@ func _handle_shop_touch(pos: Vector2, viewport: Vector2) -> void :
 
 
 func _joy_center(viewport: Vector2) -> Vector2:
-	if hud_joy_pos != Vector2.ZERO: return hud_joy_pos
-	return Vector2(viewport.x * 0.16, viewport.y * 0.76)
+	return RTHudLayoutScript.joy_center(viewport, hud_joy_pos)
 
 
 func _attack_center(viewport: Vector2) -> Vector2:
-	if hud_attack_pos != Vector2.ZERO: return hud_attack_pos
-	return Vector2(viewport.x * 0.88, viewport.y * 0.75)
+	return RTHudLayoutScript.attack_center(viewport, hud_attack_pos)
 
 
 func _secondary_center(viewport: Vector2) -> Vector2:
-	if hud_secondary_pos != Vector2.ZERO: return hud_secondary_pos
-	return Vector2(viewport.x * 0.76, viewport.y * 0.57)
+	return RTHudLayoutScript.secondary_center(viewport, hud_secondary_pos)
 
 
 func _dash_center(viewport: Vector2) -> Vector2:
-	if hud_dash_pos != Vector2.ZERO: return hud_dash_pos
-	return Vector2(viewport.x * 0.73, viewport.y * 0.82)
+	return RTHudLayoutScript.dash_center(viewport, hud_dash_pos)
 
 
 func _lacerante_empower_center(viewport: Vector2) -> Vector2:
-	if hud_lacerante_empower_pos != Vector2(-1, -1):
-		return hud_lacerante_empower_pos
-	var attack = _attack_center(viewport)
-	var skill_radius = 46.0 * _skill_scale()
-	var skill = _skill_pos(viewport) + Vector2(skill_radius, skill_radius)
-	var secondary = _secondary_center(viewport)
-	var dash = _dash_center(viewport)
-	var occupied = [attack, skill, secondary, dash]
-	var candidates = [
-		attack + Vector2(-10.0, -145.0), 
-		skill + Vector2(92.0, -76.0), 
-		secondary + Vector2(96.0, -72.0), 
-		attack + Vector2(-148.0, -62.0), 
-		Vector2(viewport.x * 0.88, viewport.y * 0.44)
-	]
-	var best = Vector2(candidates[0]).clamp(Vector2(viewport.x * 0.52, 70.0), viewport - Vector2(54.0, 48.0))
-	var best_clearance = - INF
-	for raw_candidate in candidates:
-		var candidate = Vector2(raw_candidate).clamp(Vector2(viewport.x * 0.52, 70.0), viewport - Vector2(54.0, 48.0))
-		var clearance = INF
-		for control in occupied:
-			clearance = min(clearance, candidate.distance_to(Vector2(control)))
-		if clearance > best_clearance:
-			best_clearance = clearance
-			best = candidate
-	return best
+	return RTHudLayoutScript.lacerante_empower_center(
+		viewport,
+		hud_lacerante_empower_pos,
+		_attack_center(viewport),
+		_skill_pos(viewport),
+		_skill_scale(),
+		_secondary_center(viewport),
+		_dash_center(viewport)
+	)
 
 
 func _joy_scale() -> float:
@@ -57666,58 +57645,35 @@ func _activate_graphics_setting(key: String) -> void :
 	_save_config()
 
 func _left_panel_pos(viewport: Vector2) -> Vector2:
-	if hud_left_panel_pos != Vector2(-1, -1): return hud_left_panel_pos
-	return Vector2(16, 14)
+	return RTHudLayoutScript.left_panel_pos(viewport, hud_left_panel_pos)
 
 func _right_panel_pos(viewport: Vector2) -> Vector2:
-	if hud_right_panel_pos != Vector2(-1, -1): return hud_right_panel_pos
-	var portrait = _is_portrait(viewport)
-	var right_w = 220.0 if not portrait else min(220.0, viewport.x * 0.44)
-	return Vector2(viewport.x - right_w - 16.0, 14)
+	return RTHudLayoutScript.right_panel_pos(viewport, hud_right_panel_pos)
 
 func _boss_panel_pos(viewport: Vector2) -> Vector2:
-	if hud_boss_panel_pos != Vector2(-1, -1): return hud_boss_panel_pos
-	return Vector2(viewport.x * 0.5 - 190, 16)
+	return RTHudLayoutScript.boss_panel_pos(viewport, hud_boss_panel_pos)
 
 func _aura_panel_pos(viewport: Vector2, anchor: Rect2) -> Vector2:
-	if hud_aura_panel_pos != Vector2(-1, -1):
-		return hud_aura_panel_pos
-	return Vector2(anchor.position.x, anchor.end.y + 8.0)
+	return RTHudLayoutScript.aura_panel_pos(viewport, hud_aura_panel_pos, anchor)
 
 func _cards_panel_pos(viewport: Vector2, anchor: Rect2) -> Vector2:
-	if hud_cards_panel_pos != Vector2(-1, -1):
-		return hud_cards_panel_pos
-	return Vector2(anchor.position.x, anchor.end.y + 62.0)
+	return RTHudLayoutScript.cards_panel_pos(viewport, hud_cards_panel_pos, anchor)
 
 func _coagulum_hud_center(viewport: Vector2, group_width: float, orb_radius: float, center_y: float) -> Vector2:
-	if hud_coagulum_pos != Vector2(-1, -1):
-		return hud_coagulum_pos
-	return Vector2(viewport.x * 0.5 - group_width * 0.5 + orb_radius, center_y)
+	return RTHudLayoutScript.coagulum_hud_center(viewport, hud_coagulum_pos, group_width, orb_radius, center_y)
 
 func _skill_pos(viewport: Vector2) -> Vector2:
-	if hud_skill_pos != Vector2(-1, -1): return hud_skill_pos
-	var radius = 46.0 * _skill_scale()
-	return Vector2(viewport.x * 0.79 - radius, viewport.y * 0.68 - radius)
+	return RTHudLayoutScript.skill_pos(viewport, hud_skill_pos, _skill_scale())
 
 func _pause_pos(viewport: Vector2) -> Vector2:
-	if hud_pause_pos != Vector2(-1, -1): return hud_pause_pos
-	return Vector2(viewport.x - 72, 18)
+	return RTHudLayoutScript.pause_pos(viewport, hud_pause_pos)
 
 func _boss_call_pos(viewport: Vector2) -> Vector2:
-	if hud_boss_call_pos != Vector2(-1, -1): return hud_boss_call_pos
-	var portrait := _is_portrait(viewport)
-	var x := viewport.x - (134.0 if portrait else 170.0)
-	var y := 204.0 if portrait else 184.0
-	return Vector2(maxf(18.0, x), y)
+	return RTHudLayoutScript.boss_call_pos(viewport, hud_boss_call_pos)
 
 
 func _manual_shop_pos(viewport: Vector2) -> Vector2:
-	if hud_shop_pos != Vector2(-1, -1):
-		return hud_shop_pos
-	var portrait := _is_portrait(viewport)
-	var x := viewport.x - (142.0 if portrait else 178.0)
-	var y := 154.0 if portrait else 134.0
-	return Vector2(maxf(18.0, x), y)
+	return RTHudLayoutScript.manual_shop_pos(viewport, hud_shop_pos)
 
 
 
