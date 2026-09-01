@@ -19,6 +19,8 @@ func _check(ok: bool, message: String) -> void:
 func _force_game_mode() -> void:
 	game.mode = "game"
 	game.previous_mode = "game"
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 
 
 func _run() -> void:
@@ -58,6 +60,23 @@ func _run() -> void:
 	game.time_alive += 8.0
 	game._open_shop(false)
 	_check(game.score < score_before_reroll_penalty, "post-purchase reopen did not charge reroll penalty")
+	game._finish_shop()
+
+	game.shop_recent_manual_open_count = 2
+	game.shop_last_manual_open_time = game.time_alive - 3.0
+	game.shop_abuse_penalty_count = 0
+	game.score = 1800
+	game.card_cost = 500
+	_force_game_mode()
+	game._try_open_manual_shop()
+	_check(game.mode == "game", "manual reopen warning should not open shop on first tap")
+	_check(game._manual_shop_reopen_warning_active(), "manual reopen warning was not armed")
+	var score_before_confirm: int = game.score
+	game._try_open_manual_shop()
+	_check(game.mode == "shop_opening", "second quick tap did not start shop opening")
+	_check(game.score < score_before_confirm, "second quick tap did not apply shop penalty")
+	game._update_shop_opening(game.SHOP_OPENING_ANIM_TIME + 0.01)
+	_check(game.mode == "shop", "confirmed manual reopen did not finish in shop")
 
 	var payload: Dictionary = game._build_run_report_payload("Smoke")
 	var integrity: Dictionary = payload.get("integrity", {})
@@ -66,5 +85,5 @@ func _run() -> void:
 	_check(int(integrity.get("version", 0)) == game.RUN_REPORT_INTEGRITY_VERSION, "integrity version missing")
 	_check(signature.length() == 64 and signature.is_valid_hex_number(false), "signature is not a sha256 hex")
 	_check(signature == game._run_report_signature(payload), "signature is not deterministic")
-	print("SHOP_ABUSE_INTEGRITY_SMOKE_OK penalties=true integrity=true")
+	print("SHOP_ABUSE_INTEGRITY_SMOKE_OK penalties=true warning=true integrity=true")
 	quit(0)

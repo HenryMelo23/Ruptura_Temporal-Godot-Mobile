@@ -43,7 +43,7 @@ func _seed_catalog_textures() -> void:
 
 func _run() -> void:
 	var viewport := Vector2(1280, 720)
-	_check(game.CATALOG_TABS.size() == 6, "unexpected_tab_count")
+	_check(game.CATALOG_TABS.size() == 7, "unexpected_tab_count")
 	for tab_index in range(game.CATALOG_TABS.size()):
 		game._catalog_reset_tab(tab_index)
 		var items: Array = game._catalog_items()
@@ -57,6 +57,8 @@ func _run() -> void:
 			_check(String(game._catalog_detail_lore(item)) != "", "item_without_lore_%s" % String(item.get("name", "")))
 			_check(String(game._catalog_detail_mechanics(item)) != "", "item_without_mechanics_%s" % String(item.get("name", "")))
 			_check(game._catalog_item_texture(item) != null, "item_without_texture_%s" % String(item.get("name", "")))
+			if String(item.get("kind", "")) == "phase":
+				_check(int(item.get("phase_index", 0)) > 0, "phase_without_index_%s" % String(item.get("name", "")))
 		if items.size() > game._catalog_visible_count(viewport):
 			game.catalog_selected = items.size() - 1
 			game._catalog_ensure_selected_visible(viewport)
@@ -74,7 +76,7 @@ func _run() -> void:
 	game.catalog_detail_open = true
 	game._handle_catalog_touch(game._catalog_detail_back_rect(viewport).get_center(), viewport)
 	_check(not game.catalog_detail_open, "detail_back_button_did_not_close")
-	print("CATALOG_TEMPORAL_SMOKE_OK tabs=%d enemies=%d cards=%d" % [game.CATALOG_TABS.size(), game._catalog_enemy_items().size(), game.CARDS.size()])
+	print("CATALOG_TEMPORAL_SMOKE_OK tabs=%d enemies=%d cards=%d phases=true" % [game.CATALOG_TABS.size(), game._catalog_enemy_items().size(), game.CARDS.size()])
 	game.textures.clear()
 	game.audio_streams.clear()
 	game.free()

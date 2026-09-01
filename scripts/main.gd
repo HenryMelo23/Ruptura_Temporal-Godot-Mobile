@@ -360,6 +360,7 @@ const FORCED_SHOP_INTERVAL: = 180.0
 const SHOP_OPENING_ANIM_TIME: = 1.3
 const SHOP_RETURN_TIME: = 3.0
 const SHOP_PURCHASE_ANIM_TIME: = 0.42
+const SHOP_MANUAL_REOPEN_CONFIRM_MS: int = 520
 const SHOP_FAIRNESS_V2: = true
 const SHOP_VERSION_V1: = "legacy_v1"
 const SHOP_VERSION_V2: = "fairness_v2"
@@ -680,6 +681,8 @@ const BOSS1_WALK_AUDIO_VOLUME: = 0.13
 const PHASE_TRANSITION_HOLD_TIME: = 1.7
 const PHASE_TRANSITION_WIPE_TIME: = 2.0
 const PHASE_TRANSITION_TIME: = 3.7
+const DEATH_SCREEN_SLOW_TIME: = 0.85
+const RETRY_RETURN_ANIM_TIME: = 1.05
 const BOSS_FRAGMENT_PICKUP_RADIUS: = 42.0
 const MUSIC_PAUSE_FADE_TIME: = 3.0
 const MUSIC_CROSSFADE_TIME: = 5.0
@@ -1025,6 +1028,7 @@ const SANGUESSUGA_FALL_TIME_MAX: = 0.5
 const SANGUESSUGA_DORMANT_TIME: = 20.0
 const SANGUESSUGA_DETECTION_RADIUS: = 200.0
 const SANGUESSUGA_ATTACK_ARM_TIME: = 2.0
+const SANGUESSUGA_CONTACT_GRACE_TIME: = 0.5
 const SANGUESSUGA_SOLITARY_RADIUS: = 220.0
 const SANGUESSUGA_TRIGGER_TIME: = 0.28
 const SANGUESSUGA_LEAP_TIME_MIN: = 0.4
@@ -1697,7 +1701,7 @@ const CASULO_INTERNAL_COOLDOWN: = 12.0
 const ANCORA_VITAL_LIFE: = 4.0
 const ANCORA_VITAL_HEAL_DURATION: = 3.0
 
-const CATALOG_TABS: = ["Manifestacoes", "Inimigos", "Chefes", "Fracoes", "Espectros", "Cartas"]
+const CATALOG_TABS: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Cartas"]
 
 const AURAS: = [
 	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."}, 
@@ -2328,6 +2332,7 @@ var next_forced_shop_time = FORCED_SHOP_INTERVAL
 var shop_auto_elapsed = 0.0
 var shop_opening_timer = 0.0
 var shop_opening_forced = false
+var shop_opening_manual_already_tracked: bool = false
 var shop_return_timer = 0.0
 var shop_mp_request_timer: = 0.0
 var shop_mp_request_incoming: = false
@@ -2409,6 +2414,8 @@ var shop_purchases_this_visit = 0
 var shop_last_exit_had_purchase = false
 var shop_last_exit_time = -999.0
 var shop_abuse_penalty_count = 0
+var shop_manual_reopen_warning_until_ms: int = 0
+var shop_manual_reopen_warning_text: String = ""
 var fratura_cronal_cooldown = 0.0
 var fratura_cronal_armed = false
 var pulso_desestabilizador_cooldown = 0.0
@@ -3136,6 +3143,12 @@ var unlock_notifications = []
 var retry_run_snapshot: Dictionary = {}
 var retry_charges_used: int = 0
 var run_retry_invulnerability_timer: float = 0.0
+var retry_confirm_visible: bool = false
+var retry_confirm_new_run: bool = false
+var retry_return_timer: float = 0.0
+var death_screen_delay_timer: float = 0.0
+var death_screen_pending_result: String = ""
+var death_screen_pending_specter_upgrade: bool = false
 var unlocked_card_ids: Dictionary = {}
 var unlocked_manifestation_ids: Dictionary = {}
 var unlocked_spectrum_ids: Dictionary = {}
@@ -7523,7 +7536,7 @@ func _interrupted_run_field_names() -> Array:
 		"selected_manifestation", "selected_aura", "manifestation_key", "aura_state", "manifest_evolution_state", 
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal", 
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer", 
-		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_return_timer", 
+		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
 		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", 
 		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", 
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing", 
@@ -7751,6 +7764,12 @@ func _use_run_retry() -> bool:
 			set(key, fields[key])
 	is_dead = false
 	partner_is_dead = false
+	retry_confirm_visible = false
+	retry_confirm_new_run = false
+	retry_return_timer = 0.0
+	death_screen_delay_timer = 0.0
+	death_screen_pending_result = ""
+	death_screen_pending_specter_upgrade = false
 	mode = "game"
 	var ratio: float = float(RUN_RETRY_HP_RATIOS[clampi(retry_charges_used - 1, 0, RUN_RETRY_HP_RATIOS.size() - 1)])
 	player_hp = max(1.0, player_hp_max * ratio)
@@ -7782,6 +7801,44 @@ func _use_run_retry() -> bool:
 	_add_text("TENTE NOVAMENTE %d/%d" % [retry_charges_used, RUN_RETRY_MAX_CHARGES], player_pos + Vector2(0, -72), Color(0.48, 1.0, 1.0), 1.8, 24)
 	_block_ui_input()
 	return true
+
+
+func _open_retry_confirm_popup() -> void:
+	retry_confirm_visible = true
+	retry_confirm_new_run = not _retry_available()
+	_block_ui_input()
+
+
+func _confirm_retry_choice() -> void:
+	if retry_confirm_new_run or not _retry_available():
+		retry_confirm_visible = false
+		retry_confirm_new_run = false
+		_start_game()
+		return
+	_start_retry_return_animation()
+
+
+func _cancel_retry_choice() -> void:
+	retry_confirm_visible = false
+	retry_confirm_new_run = false
+	_block_ui_input()
+
+
+func _retry_confirm_lines() -> Array[String]:
+	if retry_confirm_new_run or not _retry_available():
+		return [
+			"A run atual foi encerrada.",
+			"Uma nova jornada reinicia mapa, pontos, cartas e progressao da partida."
+		]
+	var attempt: int = retry_charges_used + 1
+	var hp_ratio: float = float(RUN_RETRY_HP_RATIOS[clampi(attempt - 1, 0, RUN_RETRY_HP_RATIOS.size() - 1)])
+	var penalty: int = _retry_penalty_cost(attempt)
+	var cost_text: String = "pontos atuais zerados" if attempt == 1 else "multa de %d pontos" % penalty
+	return [
+		"Geovana retorna ao ponto salvo antes da ruptura final.",
+		"Vida de retorno: %d%%. Janela segura: %.0fs." % [int(round(hp_ratio * 100.0)), RUN_RETRY_INVULNERABILITY],
+		"Custo deste retorno: %s." % cost_text
+	]
 
 
 func _update_interrupted_run_autosave(delta: float) -> void :
@@ -9155,6 +9212,15 @@ func _go_to_menu() -> void :
 	manifest_preview_consumed_touch_index = -999
 	shop_opening_timer = 0.0
 	shop_opening_forced = false
+	shop_opening_manual_already_tracked = false
+	shop_manual_reopen_warning_until_ms = 0
+	shop_manual_reopen_warning_text = ""
+	retry_confirm_visible = false
+	retry_confirm_new_run = false
+	retry_return_timer = 0.0
+	death_screen_delay_timer = 0.0
+	death_screen_pending_result = ""
+	death_screen_pending_specter_upgrade = false
 	_block_ui_input()
 	_update_audio_volumes()
 	if not current_music.begins_with("Menu") or music_player == null or not music_player.playing:
@@ -9474,6 +9540,12 @@ func _start_game(clear_interrupted_save: = true) -> void :
 
 	is_dead = false
 	partner_is_dead = false
+	retry_confirm_visible = false
+	retry_confirm_new_run = false
+	retry_return_timer = 0.0
+	death_screen_delay_timer = 0.0
+	death_screen_pending_result = ""
+	death_screen_pending_specter_upgrade = false
 	mode = "game"
 	current_phase = _pick_initial_phase() if clear_interrupted_save else 1
 	if clear_interrupted_save:
@@ -9549,6 +9621,9 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	shop_last_exit_had_purchase = false
 	shop_last_exit_time = -999.0
 	shop_abuse_penalty_count = 0
+	shop_opening_manual_already_tracked = false
+	shop_manual_reopen_warning_until_ms = 0
+	shop_manual_reopen_warning_text = ""
 	combo_kills = 0
 	enemies_killed = 0
 	phase1_limit_break_kills_start = -1
@@ -11715,6 +11790,10 @@ func _process(delta: float) -> void :
 		_update_multiplayer_preload(delta)
 	elif mode == "multiplayer_syncing":
 		_update_effects(delta)
+	elif mode == "death_slow":
+		_update_death_screen_delay(delta)
+	elif mode == "retry_return":
+		_update_retry_return(delta)
 	elif mode == "game_over" or mode == "victory":
 		_update_effects(delta)
 	_refresh_screen_shake_frame_offset()
@@ -20603,6 +20682,7 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 		enemies.back()["leech_timer"] = SANGUESSUGA_FALL_WARNING_TIME
 		enemies.back()["leech_life"] = SANGUESSUGA_DORMANT_TIME
 		enemies.back()["leech_arm_timer"] = SANGUESSUGA_ATTACK_ARM_TIME
+		enemies.back()["contact_grace"] = SANGUESSUGA_CONTACT_GRACE_TIME
 		enemies.back()["leech_target_peer"] = 0
 		enemies.back()["leech_target_pos"] = pos
 		enemies.back()["leech_leap_from"] = pos
@@ -20942,6 +21022,7 @@ func _update_enemies(delta: float) -> void :
 		else:
 			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
 		enemy["hit_cd"] = max(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
+		enemy["contact_grace"] = maxf(0.0, float(enemy.get("contact_grace", 0.0)) - delta)
 		enemy["stun"] = max(0.0, float(enemy.get("stun", 0.0)) - delta)
 		enemy["tesla_shock"] = maxf(0.0, float(enemy.get("tesla_shock", 0.0)) - delta)
 		if float(enemy.get("eletrica_static_timer", 0.0)) > 0.0:
@@ -21028,7 +21109,8 @@ func _update_enemies(delta: float) -> void :
 			enemy["hp"] = -1.0
 			continue
 
-		if not lacerante_storm and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
+		var contact_blocked: bool = String(enemy.get("type", "")) == ENEMY_CHRONAL_LEECH
+		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
 			var remnant_hit: Dictionary = _necronada_remnant_at_pos(Vector2(enemy.get("pos", player_pos)), 48.0)
 			if not remnant_hit.is_empty():
 				enemy["hit_cd"] = 0.55
@@ -22536,6 +22618,8 @@ func _sanguessuga_target_current_pos(peer_id: int, fallback: Vector2) -> Vector2
 
 func _sanguessuga_try_hit(enemy: Dictionary) -> void :
 	if bool(enemy.get("leech_hit_done", false)):
+		return
+	if float(enemy.get("contact_grace", 0.0)) > 0.0:
 		return
 	var center: = Vector2(enemy["pos"])
 	var damage: = maxi(1, int(round(float(player_hp_max) * 0.018 + 9.0)))
@@ -33352,7 +33436,14 @@ func _open_shop(forced: bool) -> void :
 	if mode == "shop":
 		return
 	if not forced:
-		_track_manual_shop_opening()
+		if shop_opening_manual_already_tracked:
+			shop_opening_manual_already_tracked = false
+		else:
+			_track_manual_shop_opening()
+	else:
+		shop_opening_manual_already_tracked = false
+	shop_manual_reopen_warning_until_ms = 0
+	shop_manual_reopen_warning_text = ""
 	shop_endurance_discount = _shop_endurance_discount_from_elapsed(shop_auto_elapsed)
 	previous_mode = "game"
 	mode = "shop"
@@ -33403,6 +33494,32 @@ func _apply_shop_abuse_penalty(reason: String) -> void :
 	if shop_abuse_penalty_count <= 2:
 		_add_text(reason.to_upper(), player_pos + Vector2(0, -146), Color(1.0, 0.78, 0.24), 1.2, 17)
 	_vibrate(95, 0.4)
+
+
+func _manual_shop_reopen_would_penalize() -> bool:
+	if score <= 0:
+		return false
+	var rapid: bool = time_alive - shop_last_manual_open_time <= 12.0
+	if rapid and shop_recent_manual_open_count >= 2:
+		return true
+	return shop_last_exit_had_purchase and time_alive - shop_last_exit_time <= 35.0
+
+
+func _manual_shop_penalty_value() -> int:
+	return min(score, max(CARD_COST_BASE, card_cost))
+
+
+func _manual_shop_reopen_warning_active() -> bool:
+	return shop_manual_reopen_warning_until_ms > Time.get_ticks_msec()
+
+
+func _warn_manual_shop_reopen_penalty() -> void:
+	var penalty: int = _manual_shop_penalty_value()
+	shop_manual_reopen_warning_until_ms = Time.get_ticks_msec() + SHOP_MANUAL_REOPEN_CONFIRM_MS
+	shop_manual_reopen_warning_text = "ABRIR AGORA COBRA TAXA DE %d PONTOS. TOQUE DE NOVO PARA CONFIRMAR." % penalty
+	_add_text("LOJA PUNITIVA -%d" % penalty, player_pos + Vector2(0, -112), Color(1.0, 0.72, 0.16), 1.0, 20)
+	_add_text("TOQUE DE NOVO PARA ABRIR", player_pos + Vector2(0, -140), Color(0.0, 1.0, 0.82), 0.9, 17)
+	_vibrate(45, 0.22)
 
 
 func _shop_locked_key(index: int) -> String:
@@ -37435,6 +37552,8 @@ func _close_shop() -> void :
 func _finish_shop() -> void :
 	shop_last_exit_had_purchase = shop_purchases_this_visit > 0
 	shop_last_exit_time = time_alive
+	shop_manual_reopen_warning_until_ms = 0
+	shop_manual_reopen_warning_text = ""
 	shop_purchase_anim_timer = 0.0
 	shop_purchase_pending_card = {}
 	shop_purchase_pending_can_continue = false
@@ -37525,7 +37644,10 @@ func _try_open_manual_shop() -> void :
 	if _affordable_card_count() <= 0:
 		_add_text("FALTAM PONTOS", player_pos + Vector2(0, -96), Color(1.0, 0.56, 0.28), 0.9, 20)
 		return
-	if _maybe_start_context_tutorial(TUTORIAL_STATE_SHOP):
+	if _manual_shop_reopen_would_penalize() and not _manual_shop_reopen_warning_active():
+		_warn_manual_shop_reopen_penalty()
+		return
+	if not _manual_shop_reopen_warning_active() and _maybe_start_context_tutorial(TUTORIAL_STATE_SHOP):
 		return
 	if is_multiplayer:
 		if _shop_mp_request_visible():
@@ -37534,6 +37656,9 @@ func _try_open_manual_shop() -> void :
 		if _shop_rpc_available():
 			rpc("_rpc_request_shop")
 		return
+	if _manual_shop_reopen_would_penalize() and _manual_shop_reopen_warning_active():
+		_track_manual_shop_opening()
+		shop_opening_manual_already_tracked = true
 	_start_shop_opening_animation(false)
 
 
@@ -37914,9 +38039,54 @@ func _handle_player_down() -> void :
 		rpc("_rpc_player_died")
 		_finish_multiplayer_defeat_if_all_dead()
 		return
+	_begin_death_screen_delay("Derrota", true)
+
+
+func _begin_death_screen_delay(result: String, open_specter_upgrade_after: bool) -> void:
+	death_screen_pending_result = result
+	death_screen_pending_specter_upgrade = open_specter_upgrade_after
+	death_screen_delay_timer = DEATH_SCREEN_SLOW_TIME
+	mode = "death_slow"
+	_block_ui_input()
+
+
+func _update_death_screen_delay(delta: float) -> void:
+	death_screen_delay_timer = maxf(0.0, death_screen_delay_timer - delta)
+	var slow_delta: float = delta * 0.18
+	_update_effects(slow_delta)
+	_refresh_screen_shake_frame_offset()
+	if death_screen_delay_timer <= 0.0:
+		_finish_death_screen_delay()
+
+
+func _finish_death_screen_delay() -> void:
+	var result: String = death_screen_pending_result if death_screen_pending_result != "" else "Derrota"
+	var open_upgrade: bool = death_screen_pending_specter_upgrade
+	death_screen_pending_result = ""
+	death_screen_pending_specter_upgrade = false
+	death_screen_delay_timer = 0.0
 	_stop_battle_music_for_screen_transition()
-	_finalize_run_report("Derrota")
-	_open_specter_upgrade("game_over", true)
+	_finalize_run_report(result)
+	if open_upgrade:
+		_open_specter_upgrade("game_over", true)
+	else:
+		mode = "game_over"
+
+
+func _start_retry_return_animation() -> void:
+	retry_confirm_visible = false
+	retry_confirm_new_run = false
+	retry_return_timer = RETRY_RETURN_ANIM_TIME
+	mode = "retry_return"
+	_block_ui_input()
+
+
+func _update_retry_return(delta: float) -> void:
+	retry_return_timer = maxf(0.0, retry_return_timer - delta)
+	_update_effects(delta)
+	if retry_return_timer <= 0.0:
+		if not _use_run_retry():
+			_start_game()
 
 
 func _finish_multiplayer_defeat_if_all_dead() -> bool:
@@ -38655,10 +38825,7 @@ func _draw() -> void :
 			_draw_shop(viewport)
 		"shop_return":
 			_draw_game(viewport)
-			draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.18), true)
-			var return_panel: = Rect2(viewport.x * 0.5 - 190.0, 34.0, 380.0, 58.0)
-			_draw_holo_panel(return_panel, Color(0.72, 1.0, 1.0), true, 0.72)
-			_draw_centered("VOLTANDO EM %.0fs" % max(0.0, shop_return_timer), return_panel.get_center() + Vector2(0, 7), 24, Color(0.72, 1.0, 1.0))
+			_draw_shop_return_transition(viewport)
 		"shop_mp_waiting", "shop_mp_requested":
 			_draw_game(viewport)
 			_draw_shop_mp_waiting(viewport)
@@ -38686,6 +38853,11 @@ func _draw() -> void :
 		"specter_upgrade":
 			_draw_game(viewport)
 			_draw_specter_upgrade(viewport)
+		"death_slow":
+			_draw_game(viewport)
+			_draw_death_slow_transition(viewport)
+		"retry_return":
+			_draw_retry_return_transition(viewport)
 		"game_over":
 			_draw_game(viewport)
 			_draw_end_overlay(viewport, "GAME OVER", Color(1.0, 0.12, 0.18))
@@ -38694,6 +38866,8 @@ func _draw() -> void :
 			_draw_end_overlay(viewport, "BOSS VENCIDO", Color(1.0, 0.82, 0.22))
 		_:
 			_draw_game(viewport)
+	if mode == "game" and _manual_shop_reopen_warning_active():
+		_draw_manual_shop_reopen_warning(viewport)
 	if _local_dead_overlay_active():
 		_draw_local_dead_overlay(viewport)
 	if _shop_mp_request_visible():
@@ -38721,7 +38895,7 @@ func _draw() -> void :
 func _should_show_os_mouse() -> bool:
 	if not _uses_desktop_ui():
 		return true
-	if mode in ["menu", "nick_setup", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "manifest", "manifest_mp", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "game_over", "victory"]:
+	if mode in ["menu", "nick_setup", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "manifest", "manifest_mp", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
 		return true
 	if _shop_mp_request_visible() or _boss_mp_request_visible() or _phase_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
 		return true
@@ -40266,6 +40440,8 @@ func _draw_catalog(viewport: Vector2) -> void :
 	var portrait: = _is_portrait(viewport)
 	var visible: = _catalog_visible_count(viewport)
 	var end_index: = mini(items.size(), catalog_scroll_index + visible)
+	if _catalog_tab_key() == "Fases":
+		_draw_catalog_phase_route(items, catalog_scroll_index, end_index, viewport)
 	for i in range(catalog_scroll_index, end_index):
 		var item: Dictionary = items[i]
 		var rect: = _catalog_item_rect(i, catalog_scroll_index, viewport)
@@ -40307,11 +40483,57 @@ func _catalog_tab_label(index: int) -> String:
 		2:
 			return "CHEFES"
 		3:
-			return "FRACOES"
+			return "FASES"
 		4:
+			return "FRACOES"
+		5:
 			return "ESPECTROS"
 		_:
 			return "CARTAS"
+
+
+func _catalog_tab_key() -> String:
+	if catalog_tab < 0 or catalog_tab >= CATALOG_TABS.size():
+		return ""
+	return String(CATALOG_TABS[catalog_tab])
+
+
+func _draw_catalog_phase_route(items: Array, first_index: int, end_index: int, viewport: Vector2) -> void:
+	var visible_centers: Dictionary = {}
+	var visible_colors: Dictionary = {}
+	for i in range(first_index, end_index):
+		var item: Dictionary = Dictionary(items[i])
+		var id: = String(item.get("id", ""))
+		if id == "":
+			continue
+		var rect: = _catalog_item_rect(i, first_index, viewport)
+		visible_centers[id] = rect.get_center()
+		visible_colors[id] = Color(item.get("color", Color(0.0, 1.0, 0.82)))
+	for i in range(first_index, end_index):
+		var item: Dictionary = Dictionary(items[i])
+		var id: = String(item.get("id", ""))
+		if not visible_centers.has(id):
+			continue
+		var from: Vector2 = visible_centers[id]
+		for next_id in Array(item.get("next_ids", [])):
+			var target_id: = String(next_id)
+			if not visible_centers.has(target_id):
+				continue
+			var to: Vector2 = visible_centers[target_id]
+			var accent: Color = visible_colors.get(id, Color(0.0, 1.0, 0.82))
+			var pulse: float = 0.48 + 0.18 * sin(Time.get_ticks_msec() * 0.004 + float(i))
+			draw_line(from, to, Color(accent.r, accent.g, accent.b, 0.28), 9.0, true)
+			draw_line(from, to, Color(0.0, 1.0, 0.82, pulse), 2.4, true)
+			var dir: Vector2 = (to - from).normalized()
+			if dir.length() > 0.01:
+				var mid: Vector2 = from.lerp(to, 0.58)
+				draw_line(mid - dir.rotated(0.7) * 10.0, mid + dir * 17.0, Color(0.0, 1.0, 0.82, 0.72), 2.0, true)
+				draw_line(mid - dir.rotated(-0.7) * 10.0, mid + dir * 17.0, Color(0.0, 1.0, 0.82, 0.72), 2.0, true)
+	for id in visible_centers.keys():
+		var center: Vector2 = visible_centers[id]
+		var color: Color = visible_colors.get(id, Color(0.0, 1.0, 0.82))
+		draw_circle(center, 8.0, Color(0.0, 0.0, 0.0, 0.62))
+		draw_arc(center, 12.0, 0.0, TAU, 32, Color(color.r, color.g, color.b, 0.72), 2.0)
 
 
 func _catalog_visible_count(viewport: Vector2) -> int:
@@ -40406,6 +40628,7 @@ func _catalog_detail_title(kind: String) -> String:
 		"spectrum": return "ESPECTRO"
 		"enemy": return "INIMIGO"
 		"boss": return "CHEFE"
+		"phase": return "FASE"
 		"fraction": return "FRACAO"
 	return "REGISTRO"
 
@@ -51149,15 +51372,16 @@ func _draw_shop(viewport: Vector2) -> void :
 		return
 
 	if portrait:
-		var header = Rect2(viewport.x * 0.06, 24, viewport.x * 0.88, 104)
+		var header = Rect2(viewport.x * 0.06, 24, viewport.x * 0.88, 124)
 		_draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-		_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 66), 30, Color(0.0, 1.0, 0.82))
+		_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 60), 30, Color(0.0, 1.0, 0.82))
 		var header_text = "Pontos %d  |  Custo %d  |  Rerolls %d" % [score, card_cost, shop_rerolls]
 		if shop_endurance_discount > 0.0:
 			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 		if purchase_animating:
 			header_text = "Carta confirmada  |  sincronizando deck"
-		_draw_centered(header_text, Vector2(viewport.x * 0.5, 108), _readable_text_size(17), Color(1.0, 0.85, 0.24))
+		_draw_centered(header_text, Vector2(viewport.x * 0.5, 96), _readable_text_size(16), Color(1.0, 0.85, 0.24))
+		_draw_shop_tutorial_line(Rect2(header.position + Vector2(20.0, 90.0), Vector2(header.size.x - 40.0, 28.0)), true)
 		_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
 		_draw_shop_round_button(_shop_deck_center(viewport), _shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), _deck_total_cards() > 0 and not purchase_animating, "deck")
 
@@ -51168,7 +51392,7 @@ func _draw_shop(viewport: Vector2) -> void :
 			var rarity_color: = _card_rarity_color(card)
 			var cinzas_buffed: = bool(card.get("cinzas_return_buff", false))
 			var x = viewport.x * 0.5 - w * 0.5
-			var y = 164.0 + i * (h + 22.0)
+			var y = 188.0 + i * (h + 22.0)
 			var rect = Rect2(x, y, w, h)
 			var card_alpha = 1.0
 			if purchase_animating:
@@ -51270,9 +51494,9 @@ func _draw_shop(viewport: Vector2) -> void :
 
 
 
-	var header = Rect2(viewport.x * 0.05, 16, viewport.x * 0.9, 76)
+	var header = Rect2(viewport.x * 0.05, 16, viewport.x * 0.9, 98)
 	_draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-	_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 54), 26, Color(0.0, 1.0, 0.82))
+	_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 46), 26, Color(0.0, 1.0, 0.82))
 
 
 	var hud_text = "Pontos: %d  |  Custo: %d  |  Rerolls: %d" % [score, card_cost, shop_rerolls]
@@ -51280,18 +51504,19 @@ func _draw_shop(viewport: Vector2) -> void :
 		hud_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 	if purchase_animating:
 		hud_text = "Carta confirmada  |  atualizando deck"
-	_draw_centered(hud_text, Vector2(viewport.x * 0.5, 84), _readable_text_size(16), Color(1.0, 0.85, 0.24))
+	_draw_centered(hud_text, Vector2(viewport.x * 0.5, 73), _readable_text_size(16), Color(1.0, 0.85, 0.24))
+	_draw_shop_tutorial_line(Rect2(header.position + Vector2(22.0, 74.0), Vector2(header.size.x - 44.0, 22.0)), false)
 	_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
 	_draw_shop_round_button(_shop_deck_center(viewport), _shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), _deck_total_cards() > 0 and not purchase_animating, "deck")
 	if purchase_animating and shop_cards.size() > purchase_index:
-		_draw_centered("CARTA ADQUIRIDA", Vector2(viewport.x * 0.5, 106), _readable_text_size(14), shop_cards[purchase_index]["color"])
+		_draw_centered("CARTA ADQUIRIDA", Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[purchase_index]["color"])
 	elif shop_select_pulse_timer > 0.0 and shop_cards.size() > shop_selected:
-		_draw_centered("CARTA SELECIONADA", Vector2(viewport.x * 0.5, 106), _readable_text_size(14), shop_cards[shop_selected]["color"])
+		_draw_centered("CARTA SELECIONADA", Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[shop_selected]["color"])
 
 
 	var w = 150.0
 	var h = 200.0
-	var y = 120.0
+	var y = 158.0
 
 
 	for i in range(shop_cards.size()):
@@ -51473,6 +51698,31 @@ func _draw_shop(viewport: Vector2) -> void :
 		draw_rect(btn_sair_rect, Color(1.0, 0.25, 0.28, 0.55 if purchase_animating else 1.0), false, 2)
 		_draw_centered("AGUARDE" if purchase_animating else "FECHAR LOJA", btn_sair_rect.get_center() + Vector2(0, 7), 15, Color(1.0, 1.0, 1.0, 0.75 if purchase_animating else 1.0))
 
+
+
+func _draw_manual_shop_reopen_warning(viewport: Vector2) -> void:
+	var portrait: = _is_portrait(viewport)
+	var w: float = minf(viewport.x * (0.84 if portrait else 0.52), 680.0)
+	var h: float = 76.0 if not portrait else 88.0
+	var rect: = Rect2(viewport.x * 0.5 - w * 0.5, viewport.y * (0.17 if not portrait else 0.14), w, h)
+	var pulse: = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+	_draw_holo_panel(rect, Color(1.0, 0.62, 0.16), true, 0.82)
+	draw_rect(rect.grow(-7.0), Color(0.05, 0.016, 0.006, 0.54 + pulse * 0.12), true)
+	_draw_centered("AVISO DA LOJA", Vector2(rect.get_center().x, rect.position.y + 27.0), 17 if not portrait else 15, Color(1.0, 0.78, 0.26))
+	_draw_wrapped_clamped(shop_manual_reopen_warning_text, Rect2(rect.position.x + 22.0, rect.position.y + 42.0, rect.size.x - 44.0, rect.size.y - 48.0), 13 if not portrait else 11, Color(0.96, 0.98, 1.0, 0.95), 2)
+
+
+func _draw_shop_tutorial_line(rect: Rect2, portrait: bool) -> void:
+	draw_rect(rect, Color(0.0, 0.0, 0.0, 0.22), true)
+	draw_line(Vector2(rect.position.x + 8.0, rect.end.y), Vector2(rect.end.x - 8.0, rect.end.y), Color(0.0, 1.0, 0.82, 0.34), 1.0)
+	var gap: float = 14.0 if not portrait else 8.0
+	var inner: Rect2 = rect.grow(-4.0)
+	var half_w: float = (inner.size.x - gap) * 0.5
+	var left: Rect2 = Rect2(inner.position, Vector2(half_w, inner.size.y))
+	var right: Rect2 = Rect2(Vector2(inner.position.x + half_w + gap, inner.position.y), Vector2(half_w, inner.size.y))
+	var text_size: int = 13 if not portrait else 11
+	_draw_wrapped_clamped("REROLL: troca ofertas.", left, text_size, Color(0.78, 0.94, 1.0, 0.94), 1)
+	_draw_wrapped_clamped("COMPRAR: entra no deck; custo sobe.", right, text_size, Color(0.98, 0.88, 0.28, 0.94), 1)
 
 
 func _prepare_cinzas_burn_shader_nodes(count: int) -> void :
@@ -52271,6 +52521,72 @@ func _draw_game_over_overlay(viewport: Vector2) -> void :
 		_draw_holo_panel(rect, accent, false, 0.68)
 		draw_rect(rect.grow(-8), Color(0.02, 0.014, 0.025, 0.54 + pulse), true)
 		_draw_centered(String(labels[i][1]), rect.get_center() + Vector2(0, 4), 19 if not _is_portrait(viewport) else 17, Color.WHITE)
+	if retry_confirm_visible:
+		_draw_retry_confirm_popup(viewport)
+
+
+func _draw_retry_confirm_popup(viewport: Vector2) -> void:
+	var portrait: = _is_portrait(viewport)
+	var panel_w: float = minf(viewport.x * (0.82 if not portrait else 0.9), 720.0)
+	var panel_h: float = 270.0 if not portrait else 310.0
+	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.5, panel_w, panel_h)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.42), true)
+	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.9)
+	_draw_glitch_title("CONFIRMAR RETORNO", Vector2(panel.get_center().x, panel.position.y + 46.0), 26 if not portrait else 21, Color(0.0, 1.0, 0.82))
+	var body_rect: = Rect2(panel.position.x + 34.0, panel.position.y + 78.0, panel.size.x - 68.0, panel.size.y - 154.0)
+	var lines: Array[String] = _retry_confirm_lines()
+	_draw_wrapped_clamped("\n".join(lines), body_rect, 15 if not portrait else 13, Color(0.84, 0.94, 0.98, 0.96), 6)
+	var btn_h: float = 46.0 if not portrait else 50.0
+	var gap: float = 18.0
+	var btn_w: float = minf(220.0, (panel.size.x - 82.0 - gap) * 0.5)
+	var y: float = panel.end.y - btn_h - 28.0
+	var no_rect: = Rect2(panel.get_center().x - btn_w - gap * 0.5, y, btn_w, btn_h)
+	var yes_rect: = Rect2(panel.get_center().x + gap * 0.5, y, btn_w, btn_h)
+	buttons["retry_confirm_no"] = no_rect
+	buttons["retry_confirm_yes"] = yes_rect
+	_draw_big_button(no_rect, "NAO", Color(0.13, 0.04, 0.08, 0.94), Color(1.0, 0.24, 0.42))
+	_draw_big_button(yes_rect, "SIM", Color(0.02, 0.14, 0.12, 0.94), Color(0.0, 1.0, 0.82))
+
+
+func _draw_shop_return_transition(viewport: Vector2) -> void:
+	var progress: float = clampf(1.0 - shop_return_timer / maxf(0.01, SHOP_RETURN_TIME), 0.0, 1.0)
+	var center: = viewport * 0.5
+	var accent: = Color(0.0, 1.0, 0.82)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.18 + 0.18 * (1.0 - progress)), true)
+	for i in range(4):
+		var radius: float = lerpf(38.0 + i * 34.0, 260.0 + i * 46.0, progress)
+		draw_arc(center, radius, -progress * TAU + i * 0.42, TAU - progress * TAU + i * 0.42, 72, Color(accent.r, accent.g, accent.b, 0.34 - i * 0.045), 2.0)
+	var return_panel: = Rect2(viewport.x * 0.5 - 230.0, 34.0, 460.0, 70.0)
+	_draw_holo_panel(return_panel, Color(0.72, 1.0, 1.0), true, 0.72)
+	_draw_centered("SAINDO DA LOJA", return_panel.get_center() + Vector2(0, -7), 20, Color(0.72, 1.0, 1.0))
+	_draw_centered("CAMPO REABRINDO EM %.0fs" % max(0.0, ceil(shop_return_timer)), return_panel.get_center() + Vector2(0, 19), 13, Color(1.0, 0.88, 0.32))
+
+
+func _draw_death_slow_transition(viewport: Vector2) -> void:
+	var progress: float = clampf(1.0 - death_screen_delay_timer / maxf(0.01, DEATH_SCREEN_SLOW_TIME), 0.0, 1.0)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.18, 0.0, 0.05, 0.16 + progress * 0.34), true)
+	var center: = viewport * 0.5
+	for i in range(7):
+		var y: float = center.y + (float(i) - 3.0) * 28.0 + sin(Time.get_ticks_msec() * 0.006 + i) * 4.0
+		draw_line(Vector2(center.x - 280.0 * progress, y), Vector2(center.x + 280.0 * progress, y), Color(1.0, 0.12, 0.28, 0.08 + progress * 0.12), 2.0)
+	_draw_centered_outlined("RUPTURA CRITICA", Vector2(center.x, center.y - 36.0), 30 if not _is_portrait(viewport) else 22, Color(1.0, 0.82, 0.86, 0.92), Color(0.0, 0.0, 0.0, 0.9), 3)
+
+
+func _draw_retry_return_transition(viewport: Vector2) -> void:
+	var progress: float = clampf(1.0 - retry_return_timer / maxf(0.01, RETRY_RETURN_ANIM_TIME), 0.0, 1.0)
+	var center: = viewport * 0.5
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.012, 0.03, 0.94), true)
+	for i in range(5):
+		var radius: float = lerpf(260.0 - i * 38.0, 48.0 + i * 18.0, progress)
+		var color: = Color(0.0, 1.0, 0.82, 0.14 + progress * 0.16)
+		draw_arc(center, radius, progress * TAU + i * 0.5, progress * TAU + TAU * 0.78 + i * 0.5, 80, color, 3.0)
+	var frames: Array = textures.get("player_idle", [])
+	if not frames.is_empty() and frames[0] is Texture2D:
+		var rise: float = (1.0 - progress) * 110.0
+		var alpha: float = clampf(progress * 1.4, 0.0, 1.0)
+		_draw_entity_fit(frames[0], center + Vector2(0.0, 44.0 - rise), Vector2(82.0, 118.0), Color(1.0, 1.0, 1.0, alpha), false)
+	_draw_glitch_title("GEOVANA RETORNANDO", Vector2(center.x, center.y - 126.0), 28 if not _is_portrait(viewport) else 22, Color(0.0, 1.0, 0.82))
+	_draw_centered("recompondo a run salva...", Vector2(center.x, center.y + 130.0), 15, Color(0.82, 0.94, 1.0, 0.88))
 
 
 func _game_over_button_layout(viewport: Vector2) -> Dictionary:
@@ -55256,6 +55572,12 @@ func _handle_key(event: InputEventKey) -> void :
 			deck_selected = (deck_selected - 1 + owned.size()) % owned.size()
 			deck_scroll_pos = float(deck_selected)
 	elif mode == "game_over":
+		if retry_confirm_visible:
+			if event.keycode == KEY_ESCAPE:
+				_cancel_retry_choice()
+			elif event.keycode == KEY_ENTER or event.keycode == KEY_SPACE:
+				_confirm_retry_choice()
+			return
 		if event.keycode == KEY_ESCAPE:
 			_go_to_menu()
 		elif event.keycode == KEY_UP or event.keycode == KEY_W:
@@ -55264,8 +55586,7 @@ func _handle_key(event: InputEventKey) -> void :
 			gameover_selected = (gameover_selected + 1) % 3
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			if gameover_selected == 0:
-				if not _use_run_retry():
-					_start_game()
+				_open_retry_confirm_popup()
 			elif gameover_selected == 1:
 				_open_leaderboard_site()
 			elif gameover_selected == 2:
@@ -55382,9 +55703,14 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 			_return_from_specter_upgrade()
 		return
 	if mode == "game_over":
+		if retry_confirm_visible:
+			if buttons.get("retry_confirm_yes", Rect2()).has_point(pos):
+				_confirm_retry_choice()
+			elif buttons.get("retry_confirm_no", Rect2()).has_point(pos):
+				_cancel_retry_choice()
+			return
 		if buttons.get("end_retry", Rect2()).has_point(pos):
-			if not _use_run_retry():
-				_start_game()
+			_open_retry_confirm_popup()
 		elif buttons.get("end_ranking", Rect2()).has_point(pos):
 			_open_leaderboard_site()
 		elif buttons.get("end_menu", Rect2()).has_point(pos):
@@ -56286,7 +56612,7 @@ func _handle_shop_touch(pos: Vector2, viewport: Vector2) -> void :
 		var h = min(242.0, viewport.y * 0.19)
 		for i in range(shop_cards.size()):
 			var x = viewport.x * 0.5 - w * 0.5
-			var yy = 164.0 + i * (h + 22.0)
+			var yy = 188.0 + i * (h + 22.0)
 			if Rect2(x, yy, w, h).has_point(pos):
 				_touch_shop_card(i)
 				return
@@ -56323,7 +56649,7 @@ func _handle_shop_touch(pos: Vector2, viewport: Vector2) -> void :
 
 	var w = 150.0
 	var h = 200.0
-	var y = 120.0
+	var y = 158.0
 
 	for i in range(shop_cards.size()):
 		var is_sel = (i == shop_selected)

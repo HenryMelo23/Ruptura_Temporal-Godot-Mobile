@@ -179,8 +179,14 @@ func _draw_grid(viewport: Vector2, t: float) -> void :
 
 
 func _draw_temporal_core(viewport: Vector2, t: float) -> void :
-	var center: = viewport * 0.5 + Vector2(0.0, viewport.y * 0.035)
-	var radius: = minf(viewport.x, viewport.y) * 0.18
+	var title_size: = _boot_title_size(viewport)
+	var title_y: = _boot_title_y(viewport)
+	var status_y: = _boot_status_y(viewport)
+	var top_limit: = title_y + title_size * 0.74
+	var bottom_limit: = status_y - 32.0
+	var center_y: = clampf(viewport.y * 0.5 + viewport.y * 0.035, top_limit + 24.0, bottom_limit - 24.0)
+	var center: = Vector2(viewport.x * 0.5, center_y)
+	var radius: = minf(minf(viewport.x, viewport.y) * 0.18, maxf(34.0, (bottom_limit - top_limit) * 0.42))
 	var pulse: = 0.5 + 0.5 * sin(t * 3.2)
 	draw_circle(center, radius * (0.82 + pulse * 0.06), Color(0.0, 0.8, 1.0, 0.055))
 	draw_circle(center, radius * (0.55 + pulse * 0.04), Color(1.0, 0.0, 0.58, 0.052))
@@ -192,8 +198,8 @@ func _draw_temporal_core(viewport: Vector2, t: float) -> void :
 
 func _draw_boot_title(viewport: Vector2, t: float) -> void :
 	var text: = "RUPTURA TEMPORAL 2.0"
-	var size: = int(clampf(viewport.y * 0.105, 46.0, 78.0))
-	var pos: = Vector2(viewport.x * 0.5, viewport.y * 0.24)
+	var size: = _boot_title_size(viewport)
+	var pos: = Vector2(viewport.x * 0.5, _boot_title_y(viewport))
 	var jitter: = sin(t * 26.0) * 1.8
 	_draw_centered_with_font(title_font, text, pos + Vector2(4.0, 5.0), size, Color(0.02, 0.0, 0.05, 0.96))
 	_draw_centered_with_font(title_font, text, pos + Vector2(-2.0 + jitter, 0.0), size, Color(1.0, 0.08, 0.7, 0.42))
@@ -207,7 +213,7 @@ func _draw_boot_title(viewport: Vector2, t: float) -> void :
 func _draw_status(viewport: Vector2, t: float) -> void :
 	var panel_w: = clampf(viewport.x * 0.42, 340.0, 540.0)
 	var panel_h: = 58.0
-	var rect: = Rect2(Vector2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.68), Vector2(panel_w, panel_h))
+	var rect: = Rect2(Vector2(viewport.x * 0.5 - panel_w * 0.5, _boot_status_y(viewport)), Vector2(panel_w, panel_h))
 	var pulse: = 0.5 + 0.5 * sin(t * 4.0)
 	draw_rect(rect, Color(0.01, 0.016, 0.034, 0.76), true)
 	draw_rect(rect, Color(0.0, 1.0, 0.86, 0.34 + pulse * 0.22), false, 1.5)
@@ -222,6 +228,18 @@ func _draw_status(viewport: Vector2, t: float) -> void :
 	draw_rect(filled, Color(0.0, 1.0, 0.86, 0.88), true)
 	draw_rect(Rect2(filled.position + Vector2(maxf(0.0, filled.size.x - 36.0), 0.0), Vector2(minf(36.0, filled.size.x), filled.size.y)), Color(1.0, 0.04, 0.72, 0.62), true)
 	_draw_centered_with_font(body_font, status_text, rect.position + Vector2(rect.size.x * 0.5, 23.0), 15, Color(0.82, 1.0, 0.96, 0.94))
+
+
+func _boot_title_size(viewport: Vector2) -> int:
+	return int(clampf(minf(viewport.y * 0.096, viewport.x * 0.078), 38.0, 78.0))
+
+
+func _boot_title_y(viewport: Vector2) -> float:
+	return clampf(viewport.y * 0.19, 58.0, 150.0)
+
+
+func _boot_status_y(viewport: Vector2) -> float:
+	return clampf(viewport.y * 0.72, viewport.y - 150.0, viewport.y - 88.0)
 
 
 func _draw_version(viewport: Vector2) -> void :

@@ -1,6 +1,6 @@
 extends RefCounted
 
-const CATEGORIES: = ["Manifestacoes", "Inimigos", "Chefes", "Fracoes", "Espectros", "Cartas"]
+const CATEGORIES: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Cartas"]
 const FILTERS: = ["all", "combat", "lore", "support"]
 const EXTERNAL_TEXT_PATH: = "res://docs/catalogo_temporal_textos.json"
 
@@ -31,8 +31,9 @@ static func category_label(index: int) -> String:
 		0: return "MANIF."
 		1: return "INIMIGOS"
 		2: return "CHEFES"
-		3: return "FRACOES"
-		4: return "ESPECTROS"
+		3: return "FASES"
+		4: return "FRACOES"
+		5: return "ESPECTROS"
 		_: return "CARTAS"
 
 
@@ -41,8 +42,9 @@ static func entries_for_tab(tab_index: int, manifestations: Array, auras: Array,
 		0: return manifestation_entries(manifestations)
 		1: return enemy_entries()
 		2: return boss_entries()
-		3: return faction_entries()
-		4: return specter_entries(auras)
+		3: return phase_entries()
+		4: return faction_entries()
+		5: return specter_entries(auras)
 		_: return card_entries(cards)
 
 
@@ -315,6 +317,28 @@ static func card_entries(cards: Array) -> Array:
 		base["keywords"] = [key, display, String(base.get("nick", "")), "carta", "deck", "loja"]
 		output.append(_apply_external_text(base))
 	return output
+
+
+static func phase_entries() -> Array:
+	return [
+		_phase_entry(1, "Ruinas Cosmicas", "Primeiro rastro do dispositivo", "Geovana acorda no ecossistema mineral onde a Ruptura ainda parece acidente.", "A primeira fase apresenta a linguagem base da travessia: terreno aberto, fauna territorial e pressao crescente. O mapa existe para ensinar que cada escolha de movimento deixa rastro.", "O rastro do dispositivo temporal atravessa as Ruinas Cosmicas como uma cicatriz recente. A natureza local nao foi criada pela Ruptura, mas aprendeu rapido demais que Geovana e uma anomalia.", "Base de leitura. O jogador aprende horda, teleporte, chamadas de loja e decisao de boss antes de aceitar ramificacoes mais instaveis.", "map_phase_1", Color(0.34, 1.0, 0.72), ["fase_2"]),
+		_phase_entry(2, "Dimensao Gelada", "Territorio militar dos pinguins", "A segunda ruptura transforma deslocamento em controle de frio, vento e projeteis.", "O gelo muda a forma como o jogador entende distancia. Os inimigos da fase trabalham por cadencia: alguns fecham rota, outros explodem a pressa, e o boss tenta decidir onde voce acredita que pode ficar.", "A Dimensao Gelada existia antes da chegada da anomalia. A Ruptura apenas atravessou o reino, tornando sua defesa local hostil a qualquer corpo vindo de fora.", "Pressao de rota, tiros gelados, kamikazes e zonas de boss. Boa fase para testar resposta a deslocamento e leitura de arena.", "map_phase_2", Color(0.48, 0.9, 1.0), ["fase_3"]),
+		_phase_entry(3, "Catedral dos Ratos", "Ritual, miasma e insistencia", "A terceira fase troca limpeza simples por zonas impuras, guardioes e leitura de prioridade.", "A arena deixa de parecer natureza e vira liturgia quebrada. O jogador precisa separar ameaca real de excesso visual sem perder a posicao.", "Os ratos nao se veem como monstros; defendem um templo que a anomalia transformou em maquina de fe hostil.", "Controle de area, nuvens, guardioes e pressao em camadas. Prioridade e mais importante que dano bruto.", "map_phase_3", Color(0.68, 1.0, 0.3), ["fase_4"]),
+		_phase_entry(4, "Nexo da Ruptura", "Geometria que decide contra voce", "A quarta fase e o ponto em que mapa, gravidade e trajetoria viram inimigos.", "Aqui a Ruptura parece pensar em linhas. Portais e transicoes deixam claro que a jornada nao e reta: uma escolha de rota pode puxar a run para outro corpo de mundo.", "O Nexo nao odeia Geovana. Ele apenas recalcula o espaco sem reservar lugar para ela continuar viva.", "Fase de ramificacao. Em multiplayer, o lider/host decide o portal ativo; se o lider cai, a run escolhe outro vivo ate o retorno.", "map_phase_4", Color(0.96, 0.76, 0.28), ["fase_5", "fase_6"]),
+		_phase_entry(5, "Laboratorio UMBRA", "Mente que le habitos", "A quinta fase isola adaptacao, memoria e erro repetido em confronto direto.", "UMBRA e menos boss comum e mais espelho agressivo. O jogador precisa variar ritmo, habilidade e rota para nao entregar padrao demais.", "Os registros tratam UMBRA como uma mente ligada ao modo como Geovana sobrevive. Ela aprende porque a Ruptura tambem quer entender.", "Transmutacoes, teleporte, prisao e resposta adaptativa. A fase tambem abriga exibicoes visuais de treino Apolo vs UMBRA.", "map_phase_5", Color(0.56, 1.0, 0.68), ["fase_6"]),
+		_phase_entry(6, "Matriarca da Chaga", "Organismo de sintomas", "A sexta fase troca perseguicao direta por um mapa que fermenta, cai e volta a pulsar.", "O perigo nao e so o inimigo visivel: e o chao ficando menos confiavel. Lodarios, enguias, pustulas e sanguessugas criam custo de permanencia.", "A Chaga preserva dores antigas como se fossem reliquias biologicas. Nada nela nasce limpo; tudo tenta voltar com fome.", "Controle organico do terreno, spawn de sanguessugas, miasma e boss de estados. Bom para testar leitura de espaco contaminado.", "map_phase_6", Color(1.0, 0.62, 0.28), ["fase_7"]),
+		_phase_entry(7, "Cinzas do Fenice", "Combate vertical e renascimento", "A setima ruptura acelera inimigos, fogo e pressao aerea.", "O mapa deixa menos tempo para respirar. Corpos leves mergulham, carapacas rolam e o boss trata morte como etapa da propria mecanica.", "As cinzas nao encerram ciclo; so escondem a proxima forma. Geovana precisa aprender quando perseguir e quando esperar a queda.", "Inimigos de mergulho/rolagem, brasas e boss de renascimento. A fase exige resposta clara a ataques de alto deslocamento.", "map_phase_7", Color(1.0, 0.44, 0.2), [])
+	]
+
+
+static func _phase_entry(index: int, display_name: String, subtitle: String, summary: String, identity: String, history: String, mechanics: String, texture: String, color: Color, next_ids: Array) -> Dictionary:
+	var id: = "fase_%d" % index
+	var entry: Dictionary = _entry("phase", id, "Fase %d - %s" % [index, display_name], subtitle, summary, identity, history, mechanics, texture, color, ["ruptura"] + next_ids, "lore")
+	entry["phase_index"] = index
+	entry["sort_order"] = index
+	entry["next_ids"] = next_ids
+	entry["keywords"] = [id, display_name, "fase", "mapa", "transicao", "ramificacao"]
+	return entry
 
 
 static func enemy_entries() -> Array:

@@ -19,7 +19,7 @@ function Read-GameVersion {
 		throw "Nao encontrei scripts\main.gd para ler GAME_VERSION."
 	}
 	$content = Get-Content -LiteralPath $MainScript -Raw
-	$match = [regex]::Match($content, 'const\s+GAME_VERSION\s*:=\s*"([^"]+)"')
+	$match = [regex]::Match($content, 'const\s+GAME_VERSION\s*(?::\s*[^=]+)?=\s*"([^"]+)"')
 	if (-not $match.Success) {
 		throw "Nao consegui encontrar const GAME_VERSION em scripts\main.gd."
 	}
