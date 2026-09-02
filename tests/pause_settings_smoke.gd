@@ -21,10 +21,26 @@ func _run() -> void:
 	var viewport = Vector2(1280, 720)
 	game._start_game()
 	game._update_button_layout(viewport)
+	game.ui_input_block_until_msec = 0
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 
 	game._handle_touch_press(10, game.buttons["pause"].get_center(), viewport)
 	assert(game.mode == "paused")
 	assert(game.previous_mode == "game")
+	assert(not game.pause_keyboard_active)
+	game._simulate_key_press(KEY_RIGHT)
+	assert(game.pause_selected == 1)
+	assert(game.pause_keyboard_active)
+	assert(game._pause_selection_active(1))
+	game._simulate_key_press(KEY_LEFT)
+	assert(game.pause_selected == 0)
+	game._simulate_key_press(KEY_DOWN)
+	assert(game.pause_selected == 1)
+	game._simulate_key_press(KEY_ENTER)
+	assert(game.mode == "pause_deck")
+	game._return_from_deck()
+	assert(game.mode == "paused")
 
 	game.ui_input_block_until_msec = 0
 	game.buttons["pause_settings"] = _pause_settings_rect(viewport)

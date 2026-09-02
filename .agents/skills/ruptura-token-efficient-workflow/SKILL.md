@@ -63,13 +63,25 @@ Choose the cheapest validation that honestly covers the edit:
 - Gameplay, VFX, AI, collision, UI, or scene edit: run focused parse/test plus the affected scene or flow smoke.
 - Shared systems, project settings, resources, addons, release, online, export, or uncertain blast radius: run the deep project validator.
 
-On Windows, prefer the project validator when code or scene validation is required:
+On Windows, prefer the changed-file validator for the normal edit loop:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -ChangedOnly -Scene "res://scenes/Main.tscn" -SmokeFrames 120
+```
+
+Use `-Scripts` for a precise affected set when Git is dirty with unrelated work:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -Scripts "res://scripts/main.gd","res://tests/example_smoke.gd" -Scene "res://scenes/Main.tscn" -SmokeFrames 120
+```
+
+Reserve the full deep validator for broad/shared changes, release/export work, dependency/addon/project setting changes, uncertain blast radius, or before pushing a large batch:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -Deep
 ```
 
-Use `-Scene "res://path/to/scene.tscn"` and a small `-SmokeFrames` value for focused smoke checks during repair.
+Use `-Scene "res://path/to/scene.tscn"` and a small `-SmokeFrames` value for focused smoke checks during repair. Use `-VerboseOutput` only when the compact log summary hides a needed detail.
 
 ## Output Discipline
 

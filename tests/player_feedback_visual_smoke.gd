@@ -59,6 +59,38 @@ func _run() -> void:
 	_check(game.effects.any(func(e): return String(Dictionary(e).get("kind", "")) == "bullet_fragment"), "bullet hit fragments were not spawned")
 	await _capture("player_feedback_damage_impact_1280x720.png")
 
+	var right_frames: Array = game.textures.get("player_right", [])
+	_check(not right_frames.is_empty(), "player right movement frames were not loaded")
+	game.effects.clear()
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = game.PLAYER_START_DOWN_LAND_TIME - game.PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND - 0.01
+	game.move_touch_index = 0
+	game.active_screen_touches[0] = game._touch_record(game._joy_center(root.size) + Vector2(76.0, 0.0))
+	game.touch_move = Vector2.RIGHT
+	await _capture("player_start_down_move_cancel_1280x720.png")
+	_check(not game._player_start_down_active(), "start down landing animation stayed active after movement input")
+	_check(right_frames.has(game._player_texture()), "movement input after landing did not show movement sprite")
+	game.move_touch_index = -1
+	game.touch_move = Vector2.ZERO
+	game.active_screen_touches.clear()
+
+	game.time_alive = 20.0
+	game.last_attack_time = game.time_alive
+	game.last_damage_time = -10.0
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
+	game.player_attack_visual_dir = Vector2(0.72, -1.0).normalized()
+	game.effects.clear()
+	await _capture("player_attack_northeast_pose_1280x720.png")
+	_check(String(game._player_fire_animation_info().get("key", "")) == "player_fire_back_diag", "northeast attack pose did not select back diagonal frames")
+
+	game.mode = "paused"
+	game.previous_mode = "game"
+	game.pause_selected = 1
+	game.pause_keyboard_active = true
+	await _capture("pause_keyboard_selection_1280x720.png")
+	_check(game._pause_selection_active(1), "pause keyboard selection was not visually active")
+
 	print("PLAYER_FEEDBACK_VISUAL_OK captures=", ", ".join(captures))
 	game.queue_free()
 	await process_frame

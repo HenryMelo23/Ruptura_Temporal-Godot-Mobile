@@ -96,6 +96,17 @@ func _run() -> void:
 	game.player_start_down_landing_timer = game.PLAYER_START_DOWN_LAND_TIME - game.PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND - 0.01
 	game._try_dash()
 	_check(game.player_pos != locked_pos, "player stayed locked after landing grace window")
+	game.move_touch_index = 0
+	game.touch_move = Vector2.RIGHT
+	game.player_start_down_landing_timer = game.PLAYER_START_DOWN_LAND_TIME - game.PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND + 0.01
+	_check(not game._cancel_player_start_down_landing_on_move(), "landing animation cancelled before movement unlock")
+	game.player_start_down_landing_timer = game.PLAYER_START_DOWN_LAND_TIME - game.PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND - 0.01
+	_check(game._cancel_player_start_down_landing_on_move(), "landing animation did not cancel after movement unlock")
+	_check(is_zero_approx(game.player_start_down_landing_timer), "landing animation timer was not cleared on movement")
+	game.move_touch_index = -1
+	game.touch_move = Vector2.ZERO
 
 	print("GAMEPLAY_SAFETY_PACK_OK wall=solid low_hp=progressive hidden_boss=no_auto_target miasma=softer plus=moves")
+	game.queue_free()
+	await process_frame
 	quit(0)

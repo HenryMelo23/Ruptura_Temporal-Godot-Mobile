@@ -2318,6 +2318,7 @@ var tutorial_targets_spawned: Dictionary = {}
 var tutorial_offer_available: = false
 var tutorial_finish_hold: = 0.0
 var last_attack_time = -10.0
+var player_attack_visual_dir: Vector2 = Vector2.RIGHT
 var last_dash_time = -10.0
 var last_skill_time = -10.0
 var last_secondary_time = -999.0
@@ -2788,6 +2789,7 @@ var hud_shop_pos: = Vector2(-1, -1)
 var auto_target_priority: String = "nearest"
 var haptics_enabled: bool = true
 var is_gamepad_active: bool = false
+var pause_keyboard_active: bool = false
 var gamepad_bindings: Dictionary = {
 	"attack": JOY_BUTTON_X, 
 	"skill": JOY_BUTTON_Y, 
@@ -8040,6 +8042,9 @@ func _load_textures() -> void :
 	textures["player_up"] = [_safe_load(base + "Geo1-up.png"), _safe_load(base + "Geo2-up.png")]
 	textures["player_down"] = [_safe_load(base + "Geo1-Down.png"), _safe_load(base + "Geo2-Down.png")]
 	textures["player_fire"] = [_safe_load(base + "Geo_Disp1.png"), _safe_load(base + "Geo_Disp2.png")]
+	textures["player_fire_back_diag"] = [_safe_load(base + "Geo_Disp3.png"), _safe_load(base + "Geo_Disp4.png")]
+	textures["player_fire_up"] = [_safe_load(base + "Geo_Disp5.png"), _safe_load(base + "Geo_Disp6.png")]
+	textures["player_fire_down"] = [_safe_load(base + "Geo_Disp7.png"), _safe_load(base + "Geo_Disp8.png")]
 	textures["player_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
 	textures["player_start_down"] = [
@@ -12701,6 +12706,7 @@ func _try_attack() -> void :
 	if time_alive - last_attack_time < _current_attack_interval():
 		return
 	last_attack_time = time_alive
+	_set_player_attack_visual_dir(_aim_direction())
 	_record_ressonancia_action("ATTACK")
 
 	match manifestation_key:
@@ -12790,6 +12796,7 @@ func _fire_necronada_empowered_dust() -> void :
 		dir = last_facing.normalized()
 	if dir.length() <= 0.05:
 		dir = Vector2.RIGHT
+	_set_player_attack_visual_dir(dir)
 	necronada_empowered_ready = false
 	necronada_empower_cooldown_until = time_alive + NECRONADA_EMPOWER_COOLDOWN
 	var target: = (player_pos + dir * NECRONADA_EMPOWER_RANGE).clamp(Vector2(50, 50), WORLD_SIZE - Vector2(50, 50))
@@ -12834,6 +12841,7 @@ func _fire_projectile(kind: String, damage: float, speed: float, life: float, pi
 	if bullets.size() >= MAX_BULLETS:
 		return
 	var dir = _aim_direction()
+	_set_player_attack_visual_dir(dir)
 	var palette = _projectile_palette(kind)
 	var final_damage = damage
 	if kind == "ancorada":
@@ -12878,6 +12886,7 @@ func _fire_returning() -> void :
 	if return_bullets.size() >= 8:
 		return
 	var dir = _aim_direction()
+	_set_player_attack_visual_dir(dir)
 	var bullet = {
 		"uid": "%d:%d" % [_mp_unique_id(), net_projectile_sequence + 1], 
 		"pos": player_pos + dir * 44.0, 
@@ -13058,6 +13067,15 @@ func _aim_direction() -> Vector2:
 	if target != Vector2.ZERO:
 		return (target - player_pos).normalized()
 	return last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT
+
+
+func _set_player_attack_visual_dir(direction: Vector2) -> void:
+	if direction.length() > 0.05:
+		player_attack_visual_dir = direction.normalized()
+	elif last_facing.length() > 0.05:
+		player_attack_visual_dir = last_facing.normalized()
+	else:
+		player_attack_visual_dir = Vector2.RIGHT
 
 
 func _nearest_target() -> Vector2:
@@ -16634,6 +16652,7 @@ func _perform_eclipsada_attack(step: int) -> void :
 	var dir: = _aim_direction()
 	if dir.length() <= 0.05:
 		dir = last_facing.normalized()
+	_set_player_attack_visual_dir(dir)
 	var color: Color = _eclipsada_color()
 	var sol: = _eclipsada_is_sol()
 	var kind: = "eclipsada_sol" if sol else "eclipsada_lua"
@@ -16690,6 +16709,7 @@ func _perform_eclipsada_lua_blade_attack(step: int) -> void :
 		dir = last_facing.normalized()
 	if dir.length() <= 0.05:
 		dir = Vector2.RIGHT
+	_set_player_attack_visual_dir(dir)
 	var color: Color = _eclipsada_color()
 	var angle_offset: float = [-0.34, 0.34, 0.0][clampi(step - 1, 0, 2)]
 	var slash_dir: Vector2 = dir.rotated(angle_offset).normalized()
@@ -17296,6 +17316,7 @@ func _perform_acorrentada_attack() -> void :
 	if dir.length() <= 0.05:
 		dir = last_facing.normalized()
 	last_attack_time = time_alive
+	_set_player_attack_visual_dir(dir)
 	acorrentada_combo_reset_timer = ACORRENTADA_COMBO_RESET_TIME
 	_play_manifestation_attack_sfx("acorrentada")
 	_apply_aura_events(AuraSystem.on_attack(aura_state, {"pos": player_pos, "dir": dir, "kind": "acorrentada"}))
@@ -37696,12 +37717,14 @@ func _apply_pause_state(paused: bool) -> void :
 			previous_mode = mode
 		forced_shop_timer = -1.0
 		mode = "paused"
+		pause_keyboard_active = false
 		_stop_boss1_walk_audio()
 		_begin_pause_music_fade_out()
 	else:
 		if mode == "paused":
 			mode = previous_mode if (previous_mode != "" and previous_mode != "paused") else "game"
 		forced_shop_timer = -1.0
+		pause_keyboard_active = false
 		_begin_pause_music_fade_in()
 	_block_ui_input()
 	_clear_pause_mp_request()
@@ -38450,6 +38473,17 @@ func _player_start_down_active() -> bool:
 	return player_start_down_fall_timer > 0.0 or player_start_down_landing_timer > 0.0
 
 
+func _cancel_player_start_down_landing_on_move() -> bool:
+	if player_start_down_landing_timer <= 0.0:
+		return false
+	if _player_start_down_controls_locked():
+		return false
+	if _read_move().length() <= 0.12:
+		return false
+	player_start_down_landing_timer = 0.0
+	return true
+
+
 func _update_player_start_down_intro(delta: float) -> void:
 	if player_start_down_fall_timer > 0.0:
 		player_start_down_fall_timer = maxf(0.0, player_start_down_fall_timer - delta)
@@ -38458,6 +38492,8 @@ func _update_player_start_down_intro(delta: float) -> void:
 			player_start_down_smoke_spawned = true
 			_spawn_player_landing_smoke(player_pos)
 	elif player_start_down_landing_timer > 0.0:
+		if _cancel_player_start_down_landing_on_move():
+			return
 		player_start_down_landing_timer = maxf(0.0, player_start_down_landing_timer - delta)
 
 
@@ -47137,6 +47173,8 @@ func _draw_boss6_fossil_echo(camera: Vector2) -> void :
 		var flip_h: bool = _should_flip_player_sprite()
 		if bool(profile.get("preserve_height", false)):
 			_draw_entity_by_height_rotated(tex, center + profile.get("offset", Vector2.ZERO), float(profile.get("height", PLAYER_DRAW_LACERAR_HEIGHT)), 0.0, echo_modulate, flip_h)
+		elif bool(profile.get("fit_aspect", false)):
+			_draw_entity_fit_flipped(tex, center + profile.get("offset", Vector2.ZERO), profile.get("size", Vector2(64, 64)), flip_h, echo_modulate, true)
 		else:
 			_draw_entity_stretched_rotated(tex, center + profile.get("offset", Vector2.ZERO), profile.get("size", Vector2(64, 64)), 0.0, echo_modulate, flip_h)
 
@@ -47210,6 +47248,12 @@ func _draw_player(camera: Vector2) -> void :
 		else:
 			var draw_size = profile["size"]
 			var pos = Vector2( - draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
+			if bool(profile.get("fit_aspect", false)):
+				var tex_size = tex.get_size()
+				if tex_size.x > 0.0 and tex_size.y > 0.0:
+					var fit_scale = min(draw_size.x / tex_size.x, draw_size.y / tex_size.y)
+					draw_size = tex_size * fit_scale
+					pos = Vector2( - draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
 			draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
@@ -47219,13 +47263,18 @@ func _draw_player(camera: Vector2) -> void :
 	if bool(profile.get("preserve_height", false)):
 		_draw_entity_by_height_rotated(tex, center + profile["offset"], float(profile.get("height", PLAYER_DRAW_LACERAR_HEIGHT)), rotation, player_modulate, flip_h)
 	else:
-		_draw_entity_stretched_rotated(tex, center + profile["offset"], profile["size"], rotation, player_modulate, flip_h)
+		if bool(profile.get("fit_aspect", false)):
+			_draw_entity_fit_flipped(tex, center + profile["offset"], profile["size"], flip_h, player_modulate, true)
+		else:
+			_draw_entity_stretched_rotated(tex, center + profile["offset"], profile["size"], rotation, player_modulate, flip_h)
 	if is_multiplayer and _is_local_run_leader():
 		_draw_leader_crown(center + Vector2(0.0, -62.0), 0.82, Color(1.0, 0.86, 0.18, 0.95))
 
 
 func _draw_player_start_down(camera: Vector2) -> bool:
 	if not _player_start_down_active():
+		return false
+	if _cancel_player_start_down_landing_on_move():
 		return false
 	var frames: Array = textures.get("player_start_down", [])
 	if frames.is_empty():
@@ -47264,6 +47313,8 @@ func _should_flip_player_sprite() -> bool:
 	if lacerante_preparing and move.length() <= 0.12:
 		return lacerante_prepare_dir.x < -0.1
 	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
+		if manifestation_key != "lacerante":
+			return bool(_player_fire_animation_info().get("flip_h", false))
 		return _aim_direction().x < -0.1
 	if move.x < -0.1:
 		return true
@@ -47279,6 +47330,58 @@ func _player_is_moving_for_animation() -> bool:
 
 func _player_can_show_attack_sprite() -> bool:
 	return not _player_is_moving_for_animation()
+
+
+func _player_fire_animation_info(direction: Vector2 = Vector2.ZERO) -> Dictionary:
+	var source: = direction if direction.length() > 0.05 else player_attack_visual_dir
+	var dir: = source.normalized() if source.length() > 0.05 else Vector2.RIGHT
+	var key: = "player_fire"
+	var flip_h: = false
+	if dir.y > 0.35:
+		key = "player_fire_down"
+		flip_h = dir.x < -0.12
+	elif dir.y < -0.35:
+		if absf(dir.x) >= 0.45:
+			key = "player_fire_back_diag"
+			flip_h = dir.x < -0.12
+		else:
+			key = "player_fire_up"
+			flip_h = dir.x < -0.12
+	else:
+		flip_h = dir.x < -0.1
+	return {"key": key, "flip_h": flip_h}
+
+
+func _player_fire_texture_for_current_attack(elapsed_time: float) -> Texture2D:
+	var info: = _player_fire_animation_info()
+	return _frame_texture_relative(String(info.get("key", "player_fire")), elapsed_time, 70, "player_fire")
+
+
+func _player_fire_draw_profile() -> Dictionary:
+	var info: = _player_fire_animation_info()
+	match String(info.get("key", "player_fire")):
+		"player_fire_back_diag":
+			return {
+				"size": Vector2(63.8, 70.4),
+				"offset": Vector2.ZERO,
+				"fit_aspect": true
+			}
+		"player_fire_up":
+			return {
+				"size": Vector2(57.2, 74.8),
+				"offset": Vector2.ZERO,
+				"fit_aspect": true
+			}
+		"player_fire_down":
+			return {
+				"size": Vector2(60.5, 72.6),
+				"offset": Vector2.ZERO,
+				"fit_aspect": true
+			}
+	return {
+		"size": PLAYER_DRAW_SHOT_SIZE,
+		"offset": Vector2.ZERO
+	}
 
 
 func _player_draw_profile() -> Dictionary:
@@ -47313,10 +47416,7 @@ func _player_draw_profile() -> Dictionary:
 				"offset": Vector2.ZERO
 			}
 		if not _player_is_moving_for_animation():
-			return {
-				"size": PLAYER_DRAW_SHOT_SIZE, 
-				"offset": Vector2.ZERO
-			}
+			return _player_fire_draw_profile()
 	if move.y < -0.1:
 		return {
 			"size": PLAYER_DRAW_UP_SIZE, 
@@ -49657,6 +49757,9 @@ func _draw_hud(viewport: Vector2) -> void :
 	if _spectator_controls_locked():
 		_draw_spectator_hud(viewport)
 		return
+	if _uses_desktop_ui():
+		_draw_desktop_hud(viewport)
+		return
 	var portrait = _is_portrait(viewport)
 	var sm = 1.25 if is_gamepad_active and not portrait else 1.0
 	var left_w = (236.0 * sm) if not portrait else min(236.0, viewport.x * 0.46)
@@ -50494,16 +50597,333 @@ func _draw_ground_target_preview(viewport: Vector2, camera: Vector2) -> void :
 	draw_line(target + Vector2(0.0, -14.0), target + Vector2(0.0, 14.0), Color.WHITE, 2.0)
 
 
+func _draw_scifi_frame(rect: Rect2, accent: Color = Color(0.0, 0.85, 1.0), corner_cut: float = 8.0, bg_alpha: float = 0.88) -> void:
+	var x: float = rect.position.x
+	var y: float = rect.position.y
+	var w: float = rect.size.x
+	var h: float = rect.size.y
+	var cut: float = minf(corner_cut, minf(w, h) * 0.4)
+
+	var points := PackedVector2Array([
+		Vector2(x + cut, y),
+		Vector2(x + w - cut, y),
+		Vector2(x + w, y + cut),
+		Vector2(x + w, y + h - cut),
+		Vector2(x + w - cut, y + h),
+		Vector2(x + cut, y + h),
+		Vector2(x, y + h - cut),
+		Vector2(x, y + cut)
+	])
+
+	draw_colored_polygon(points, Color(0.04, 0.07, 0.11, bg_alpha))
+
+	var inner_points := PackedVector2Array([
+		Vector2(x + cut + 2, y + 2),
+		Vector2(x + w - cut - 2, y + 2),
+		Vector2(x + w - 2, y + cut + 2),
+		Vector2(x + w - 2, y + h - cut - 2),
+		Vector2(x + w - cut - 2, y + h - 2),
+		Vector2(x + cut + 2, y + h - 2),
+		Vector2(x + 2, y + h - cut - 2),
+		Vector2(x + 2, y + cut + 2)
+	])
+	draw_polyline(inner_points, Color(0.12, 0.17, 0.23, 0.70 * bg_alpha), 1.5)
+
+	var border_pts := points.duplicate()
+	border_pts.append(points[0])
+	draw_polyline(border_pts, Color(0.20, 0.28, 0.36, 0.95 * bg_alpha), 2.0)
+
+	draw_line(Vector2(x, y + cut), Vector2(x + cut, y), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
+	draw_line(Vector2(x + w - cut, y), Vector2(x + w, y + cut), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
+	draw_line(Vector2(x + w, y + h - cut), Vector2(x + w - cut, y + h), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
+	draw_line(Vector2(x + w - cut, y + h), Vector2(x, y + h - cut), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
+
+	var rivet_col := Color(0.25, 0.35, 0.44, 0.85 * bg_alpha)
+	var rivet_r := 1.8
+	draw_circle(Vector2(x + cut + 4.0, y + 5.0), rivet_r, rivet_col)
+	draw_circle(Vector2(x + w - cut - 4.0, y + 5.0), rivet_r, rivet_col)
+	draw_circle(Vector2(x + w - cut - 4.0, y + h - 5.0), rivet_r, rivet_col)
+	draw_circle(Vector2(x + cut + 4.0, y + h - 5.0), rivet_r, rivet_col)
+
+
+func _draw_icon_sword(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	var blade_top := center + Vector2(0, -half * 0.85)
+	var blade_bot := center + Vector2(0, half * 0.4)
+	draw_line(blade_top, blade_bot, color, 3.0)
+	var tip := PackedVector2Array([
+		blade_top,
+		center + Vector2(-3.0, -half * 0.5),
+		blade_bot,
+		center + Vector2(3.0, -half * 0.5)
+	])
+	draw_colored_polygon(tip, Color(color.r, color.g, color.b, 0.35))
+	draw_line(center + Vector2(-half * 0.5, half * 0.2), center + Vector2(half * 0.5, half * 0.2), color, 2.5)
+	draw_line(center + Vector2(0, half * 0.2), center + Vector2(0, half * 0.75), Color(0.7, 0.8, 0.9), 2.0)
+	draw_circle(center + Vector2(0, half * 0.8), 2.5, color)
+
+
+func _draw_icon_star(center: Vector2, size: float, color: Color) -> void:
+	var r_outer: float = size * 0.5
+	var r_inner: float = size * 0.22
+	var pts := PackedVector2Array()
+	for i in range(8):
+		var angle: float = i * PI * 0.25 - PI * 0.5
+		var r: float = r_outer if (i % 2 == 0) else r_inner
+		pts.append(center + Vector2(cos(angle), sin(angle)) * r)
+	draw_colored_polygon(pts, Color(color.r, color.g, color.b, 0.4))
+	pts.append(pts[0])
+	draw_polyline(pts, color, 2.0)
+
+
+func _draw_icon_trident(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	draw_line(center + Vector2(0, -half * 0.85), center + Vector2(0, half * 0.8), color, 2.5)
+	draw_line(center + Vector2(-half * 0.6, -half * 0.1), center + Vector2(half * 0.6, -half * 0.1), color, 2.0)
+	draw_line(center + Vector2(-half * 0.6, -half * 0.1), center + Vector2(-half * 0.6, -half * 0.75), color, 2.0)
+	draw_line(center + Vector2(-half * 0.6, -half * 0.75), center + Vector2(-half * 0.5, -half * 0.85), color, 2.0)
+	draw_line(center + Vector2(half * 0.6, -half * 0.1), center + Vector2(half * 0.6, -half * 0.75), color, 2.0)
+	draw_line(center + Vector2(half * 0.6, -half * 0.75), center + Vector2(half * 0.5, -half * 0.85), color, 2.0)
+	var tip := PackedVector2Array([
+		center + Vector2(0, -half * 0.95),
+		center + Vector2(-3.0, -half * 0.65),
+		center + Vector2(3.0, -half * 0.65)
+	])
+	draw_colored_polygon(tip, color)
+
+
+func _draw_icon_portal(center: Vector2, size: float, color: Color) -> void:
+	var rx: float = size * 0.42
+	var ry: float = size * 0.5
+	var pts := PackedVector2Array()
+	for i in range(24):
+		var angle: float = i * TAU / 24.0
+		pts.append(center + Vector2(cos(angle) * rx, sin(angle) * ry))
+	draw_colored_polygon(pts, Color(color.r, color.g, color.b, 0.25))
+	pts.append(pts[0])
+	draw_polyline(pts, color, 2.0)
+	var inner_pts := PackedVector2Array()
+	for i in range(16):
+		var angle: float = i * TAU / 16.0
+		inner_pts.append(center + Vector2(cos(angle) * rx * 0.55, sin(angle) * ry * 0.55))
+	inner_pts.append(inner_pts[0])
+	draw_polyline(inner_pts, Color(1.0, 1.0, 1.0, 0.85), 1.5)
+	draw_circle(center, 2.5, Color.WHITE)
+
+
+func _draw_icon_hourglass(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	draw_line(center + Vector2(-half * 0.7, -half * 0.8), center + Vector2(half * 0.7, -half * 0.8), color, 2.0)
+	draw_line(center + Vector2(-half * 0.7, half * 0.8), center + Vector2(half * 0.7, half * 0.8), color, 2.0)
+	var top_tri := PackedVector2Array([
+		center + Vector2(-half * 0.65, -half * 0.75),
+		center + Vector2(half * 0.65, -half * 0.75),
+		center + Vector2(0, 0)
+	])
+	var bot_tri := PackedVector2Array([
+		center + Vector2(0, 0),
+		center + Vector2(half * 0.65, half * 0.75),
+		center + Vector2(-half * 0.65, half * 0.75)
+	])
+	draw_colored_polygon(top_tri, Color(color.r, color.g, color.b, 0.35))
+	draw_colored_polygon(bot_tri, Color(color.r, color.g, color.b, 0.55))
+	top_tri.append(top_tri[0])
+	bot_tri.append(bot_tri[0])
+	draw_polyline(top_tri, color, 1.8)
+	draw_polyline(bot_tri, color, 1.8)
+
+
+func _draw_icon_cart(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	draw_line(center + Vector2(-half * 0.8, -half * 0.6), center + Vector2(-half * 0.5, -half * 0.6), color, 2.0)
+	draw_line(center + Vector2(-half * 0.5, -half * 0.6), center + Vector2(-half * 0.3, half * 0.3), color, 2.0)
+	var basket := PackedVector2Array([
+		center + Vector2(-half * 0.45, -half * 0.4),
+		center + Vector2(half * 0.7, -half * 0.4),
+		center + Vector2(half * 0.45, half * 0.3),
+		center + Vector2(-half * 0.3, half * 0.3)
+	])
+	draw_colored_polygon(basket, Color(color.r, color.g, color.b, 0.30))
+	basket.append(basket[0])
+	draw_polyline(basket, color, 2.0)
+	draw_circle(center + Vector2(-half * 0.2, half * 0.6), 3.0, color)
+	draw_circle(center + Vector2(half * 0.35, half * 0.6), 3.0, color)
+
+
+func _draw_icon_skull(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	var head_pts := PackedVector2Array()
+	for i in range(16):
+		var a: float = PI + i * PI / 15.0
+		head_pts.append(center + Vector2(cos(a) * half * 0.65, sin(a) * half * 0.65 - half * 0.1))
+	head_pts.append(center + Vector2(half * 0.4, half * 0.45))
+	head_pts.append(center + Vector2(-half * 0.4, half * 0.45))
+	draw_colored_polygon(head_pts, Color(color.r, color.g, color.b, 0.35))
+	head_pts.append(head_pts[0])
+	draw_polyline(head_pts, color, 2.0)
+	draw_circle(center + Vector2(-half * 0.28, -half * 0.1), 3.2, Color(0.04, 0.06, 0.1))
+	draw_circle(center + Vector2(half * 0.28, -half * 0.1), 3.2, Color(0.04, 0.06, 0.1))
+	draw_line(center + Vector2(-half * 0.15, half * 0.25), center + Vector2(-half * 0.15, half * 0.45), color, 1.5)
+	draw_line(center + Vector2(0, half * 0.2), center + Vector2(0, half * 0.45), color, 1.5)
+	draw_line(center + Vector2(half * 0.15, half * 0.25), center + Vector2(half * 0.15, half * 0.45), color, 1.5)
+
+
+func _draw_icon_ecg(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	var pts := PackedVector2Array([
+		center + Vector2(-half * 0.9, 0),
+		center + Vector2(-half * 0.4, 0),
+		center + Vector2(-half * 0.2, half * 0.3),
+		center + Vector2(0, -half * 0.75),
+		center + Vector2(half * 0.2, half * 0.5),
+		center + Vector2(half * 0.45, -half * 0.2),
+		center + Vector2(half * 0.6, 0),
+		center + Vector2(half * 0.9, 0)
+	])
+	draw_polyline(pts, color, 2.0)
+
+
+func _draw_icon_cards(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	var c1 := Rect2(center.x - half * 0.6, center.y - half * 0.6, half * 0.8, half * 1.1)
+	var c2 := Rect2(center.x - half * 0.2, center.y - half * 0.4, half * 0.8, half * 1.1)
+	draw_rect(c1, Color(color.r, color.g, color.b, 0.3), true)
+	draw_rect(c1, color, false, 1.5)
+	draw_rect(c2, Color(color.r, color.g, color.b, 0.45), true)
+	draw_rect(c2, color, false, 1.8)
+
+
+func _draw_icon_gem(center: Vector2, size: float, color: Color) -> void:
+	var half: float = size * 0.5
+	var pts := PackedVector2Array([
+		center + Vector2(0, -half * 0.85),
+		center + Vector2(half * 0.7, 0),
+		center + Vector2(0, half * 0.85),
+		center + Vector2(-half * 0.7, 0)
+	])
+	draw_colored_polygon(pts, Color(color.r, color.g, color.b, 0.35))
+	pts.append(pts[0])
+	draw_polyline(pts, color, 2.0)
+	draw_line(center + Vector2(0, -half * 0.85), center + Vector2(0, half * 0.85), Color(1.0, 1.0, 1.0, 0.6), 1.2)
+
+
+func _draw_desktop_fps_hud(viewport: Vector2) -> void:
+	var fps: = Engine.get_frames_per_second()
+	var fps_rect := Rect2(viewport.x - 116.0, viewport.y - 48.0, 100.0, 32.0)
+	_draw_scifi_frame(fps_rect, Color(0.0, 0.85, 1.0), 6.0, 0.88)
+	_draw_icon_ecg(Vector2(fps_rect.position.x + 20.0, fps_rect.position.y + 16.0), 18.0, Color(0.0, 0.88, 1.0))
+	_draw_centered("%d FPS" % fps, fps_rect.get_center() + Vector2(12.0, 1.0), 13, Color(0.2, 0.92, 1.0))
+
+
+func _draw_desktop_hud(viewport: Vector2) -> void:
+	var life_rect := Rect2(18.0, 16.0, 276.0, 76.0)
+	var life_alpha: float = _hud_rect_player_alpha(life_rect, viewport, 84.0)
+	var leader_local: bool = is_multiplayer and _is_local_run_leader()
+	var local_bar_color: Color = Color(1.0, 0.86, 0.18) if leader_local else Color(0.2, 1.0, 0.42)
+	_draw_scifi_frame(life_rect, Color(0.0, 0.85, 1.0), 8.0, 0.88 * life_alpha)
+
+	var hp_ratio: float = clampf(float(player_hp) / maxf(1.0, float(player_hp_max)), 0.0, 1.0)
+	var hit_flash: float = clampf(damage_flash_timer / 0.22, 0.0, 1.0)
+	var health_text_color: Color = Color(1.0, 0.32, 0.28, life_alpha) if hit_flash > 0.0 else Color(1.0, 1.0, 1.0, life_alpha)
+
+	draw_string(font, life_rect.position + Vector2(18, 28), "VIDA", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, health_text_color)
+	var hp_str := "%d/%d" % [player_hp, player_hp_max]
+	draw_string(font, life_rect.position + Vector2(62, 28), hp_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.25, 1.0, 0.45, life_alpha))
+
+	var tube_rect := Rect2(life_rect.position.x + 14.0, life_rect.position.y + 34.0, life_rect.size.x - 28.0, 28.0)
+	draw_rect(tube_rect, Color(0.02, 0.08, 0.04, 0.9 * life_alpha), true)
+	draw_rect(tube_rect, Color(0.12, 0.24, 0.16, 0.8 * life_alpha), false, 1.5)
+
+	var left_cap_center := Vector2(tube_rect.position.x + 14.0, tube_rect.position.y + 14.0)
+	draw_circle(left_cap_center, 13.0, Color(0.1, 0.16, 0.22, life_alpha))
+	draw_circle(left_cap_center, 13.0, Color(0.2, 1.0, 0.42, 0.85 * life_alpha), false, 2.0)
+	draw_line(left_cap_center + Vector2(-5, 0), left_cap_center + Vector2(5, 0), Color(0.2, 1.0, 0.42, life_alpha), 2.0)
+	draw_line(left_cap_center + Vector2(0, -5), left_cap_center + Vector2(0, 5), Color(0.2, 1.0, 0.42, life_alpha), 2.0)
+
+	var fill_start_x := tube_rect.position.x + 30.0
+	var fill_max_w := tube_rect.size.x - 42.0
+	var fill_w := fill_max_w * hp_ratio
+	if fill_w > 0.0:
+		var fill_rect := Rect2(fill_start_x, tube_rect.position.y + 3.0, fill_w, tube_rect.size.y - 6.0)
+		draw_rect(fill_rect, Color(0.12, 0.88, 0.32, 0.9 * life_alpha), true)
+		draw_rect(Rect2(fill_rect.position.x, fill_rect.position.y + 2.0, fill_rect.size.x, fill_rect.size.y * 0.5), Color(0.55, 1.0, 0.50, 0.7 * life_alpha), true)
+
+	draw_line(Vector2(fill_start_x, tube_rect.position.y + 2.0), Vector2(fill_start_x + fill_max_w, tube_rect.position.y + 2.0), Color(1.0, 1.0, 1.0, 0.4 * life_alpha), 1.5)
+
+	var right_cap_center := Vector2(tube_rect.position.x + tube_rect.size.x - 10.0, tube_rect.position.y + 14.0)
+	draw_circle(right_cap_center, 9.0, Color(0.16, 0.24, 0.30, life_alpha))
+	draw_circle(right_cap_center, 9.0, Color(0.3, 0.42, 0.52, life_alpha), false, 1.5)
+
+	if leader_local:
+		_draw_leader_crown(life_rect.position + Vector2(life_rect.size.x - 26.0, 23.0), 0.82, Color(1.0, 0.86, 0.18, life_alpha))
+
+	var timer_rect := Rect2(18.0, 100.0, 142.0, 40.0)
+	var timer_alpha: float = _hud_rect_player_alpha(timer_rect, viewport, 84.0)
+	_draw_scifi_frame(timer_rect, Color(0.0, 0.85, 1.0), 6.0, 0.88 * timer_alpha)
+
+	_draw_icon_hourglass(timer_rect.position + Vector2(24.0, 20.0), 20.0, Color(0.0, 0.85, 1.0, timer_alpha))
+
+	var minutes = int(time_alive) / 60
+	var seconds = int(time_alive) % 60
+	var time_str := "%02d:%02d" % [minutes, seconds]
+	draw_string(font, timer_rect.position + Vector2(46.0, 26.0), time_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.2, 0.92, 1.0, timer_alpha))
+
+	var right_rect := Rect2(viewport.x - 220.0 - 18.0, 16.0, 220.0, 108.0)
+	var right_alpha: float = _hud_rect_player_alpha(right_rect, viewport, 84.0)
+	_draw_scifi_frame(right_rect, Color(0.0, 0.85, 1.0), 8.0, 0.88 * right_alpha)
+
+	var r1_y := right_rect.position.y + 12.0
+	_draw_icon_star(Vector2(right_rect.position.x + 22.0, r1_y + 12.0), 18.0, Color(0.2, 0.75, 1.0, right_alpha))
+	draw_string(font, Vector2(right_rect.position.x + 38.0, r1_y + 18.0), "PONTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.72, 0.86, 0.94, right_alpha))
+	draw_string(font, Vector2(right_rect.position.x + right_rect.size.x - 18.0, r1_y + 18.0), str(score), HORIZONTAL_ALIGNMENT_RIGHT, -1, 16, Color(1.0, 1.0, 1.0, right_alpha))
+
+	var r2_y := right_rect.position.y + 44.0
+	_draw_icon_cards(Vector2(right_rect.position.x + 22.0, r2_y + 12.0), 18.0, Color(1.0, 0.8, 0.2, right_alpha))
+	draw_string(font, Vector2(right_rect.position.x + 38.0, r2_y + 18.0), "CARTAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.82, 0.24, right_alpha))
+	draw_string(font, Vector2(right_rect.position.x + right_rect.size.x - 18.0, r2_y + 18.0), str(_affordable_card_count()), HORIZONTAL_ALIGNMENT_RIGHT, -1, 16, Color(1.0, 0.92, 0.35, right_alpha))
+
+	var r3_y := right_rect.position.y + 76.0
+	_draw_icon_gem(Vector2(right_rect.position.x + 22.0, r3_y + 12.0), 18.0, Color(0.2, 0.9, 1.0, right_alpha))
+	draw_string(font, Vector2(right_rect.position.x + 38.0, r3_y + 18.0), "CUSTO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.3, 0.88, 1.0, right_alpha))
+	draw_string(font, Vector2(right_rect.position.x + right_rect.size.x - 18.0, r3_y + 18.0), "%d" % card_cost, HORIZONTAL_ALIGNMENT_RIGHT, -1, 16, Color(0.35, 0.95, 1.0, right_alpha))
+
+	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
+		var boss_rect := Rect2(_boss_panel_pos(viewport), Vector2(380.0, 30.0))
+		_draw_scifi_frame(boss_rect, Color(1.0, 0.16, 0.3), 6.0, 0.88)
+		_draw_hud_bar(boss_rect.position + Vector2(14.0, 11.0), boss_rect.size.x - 28.0, 8.0, boss_hp / boss_hp_max, Color(1.0, 0.16, 0.28))
+		if _boss_execute_threshold() > 0.0:
+			_draw_collector_threshold(boss_rect.position + Vector2(14.0, 11.0), boss_rect.size.x - 28.0, _boss_execute_threshold(), boss_hp / boss_hp_max, 8.0)
+		if current_phase == 1 and boss_hp / maxf(1.0, boss_hp_max) < BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown > 0.0:
+			var chrono_text := "CRONO %.0fs" % ceil(boss1_rewind_cooldown)
+			draw_string(font, boss_rect.position + Vector2(boss_rect.size.x - 94.0, 28.0), chrono_text, HORIZONTAL_ALIGNMENT_LEFT, 82.0, 11, Color(0.48, 0.94, 1.0, 0.92))
+
+	if is_multiplayer and online_connected:
+		var ping_text: = "PING %sms" % (str(net_ping_ms) if net_ping_ms >= 0 else "--")
+		if net_remote_ping_ms >= 0:
+			ping_text += "  PAR %dms" % net_remote_ping_ms
+		if _is_world_replica():
+			ping_text += "  JIT %.0fms" % net_world_jitter_ms
+		draw_string(font, Vector2(viewport.x * 0.5 - 118.0, 28.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
+
+	_draw_card_mechanic_huds(viewport, life_rect)
+	_draw_ancorada_hud(viewport, life_rect)
+	_draw_acorrentada_hud(viewport, life_rect)
+	_draw_bombastica_hud(viewport, life_rect)
+	_draw_necronada_hud(viewport, life_rect)
+	_draw_aura_hud(viewport, life_rect)
+	_draw_revive_heal_penalty_hud(viewport, life_rect)
+	_draw_lacerante_coagulum_hud(viewport)
+	_draw_contractual_order_hud(viewport)
+	_draw_unlock_notifications(viewport)
+
+
 func _draw_desktop_combat_hud(viewport: Vector2) -> void :
-	var icons = []
-	var icon_size = 60.0
-	var spacing = 16.0
+	var icons := []
 
 	var active_eletrica_secondary = _active_eletrica_secondary()
 	var toggle_ultimate_active = (manifestation_key == "prismatica" and time_alive - last_secondary_time < SECONDARY_PRISMATICA_DURATION) or (manifestation_key == "eletrica" and active_eletrica_secondary)
 	var tp_visual_active: = tp_cooldown_pending and not tp_effects.is_empty()
 	var dash_label: = "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
-	var dash_color = Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.2, 0.85, 1.0, 0.72)
 
 	var q_charges: = 0
 	if manifestation_key == "bombastica":
@@ -50513,7 +50933,7 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void :
 	if manifestation_key == "lacerante":
 		tp_charges = lacerante_tp_charges
 
-	var ult_color: = Color(1.0, 0.72, 0.22, 0.85)
+	var ult_color: = Color(1.0, 0.78, 0.2, 0.95)
 	var ult_label: = "ULT"
 	var ult_sub: = "ULTIMATE"
 
@@ -50537,76 +50957,131 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void :
 		ult_sub = "CANCELAR"
 		ult_color = Color(1.0, 0.02, 0.06, 0.98)
 
-	icons.append({"label": "ATK", "sub": "Ataque", "charges": 0, "bind": _compact_key_binding_name("attack") if _uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.26, 0.85), "cd_elapsed": 100.0, "cd_max": 1.0})
-	icons.append({"label": "HAB1", "sub": "Hab 1", "charges": q_charges, "bind": _compact_key_binding_name("skill") if _uses_desktop_ui() else _compact_binding_name("skill"), "color": Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.85), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown()})
-	icons.append({"label": ult_label, "sub": ult_sub, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": time_alive - last_secondary_time, "cd_max": _secondary_skill_cooldown()})
-	icons.append({"label": dash_label, "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": dash_color, "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown()})
+	icons.append({"id": "attack", "label": "ATK", "sub": "Ataque", "charges": 0, "bind": _compact_key_binding_name("attack") if _uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.28), "cd_elapsed": 100.0, "cd_max": 1.0, "icon_type": "sword"})
+	icons.append({"id": "skill", "label": "HAB 1", "sub": "Hab 1", "charges": q_charges, "bind": _compact_key_binding_name("skill") if _uses_desktop_ui() else _compact_binding_name("skill"), "color": Color(0.2, 0.75, 1.0), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown(), "icon_type": "star"})
+	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": time_alive - last_secondary_time, "cd_max": _secondary_skill_cooldown(), "icon_type": "trident"})
+	icons.append({"id": "dash", "label": dash_label, "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": Color(0.2, 0.9, 1.0), "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown(), "icon_type": "portal"})
+
 	if manifestation_key == "lacerante":
-		icons.append({"label": "REFORÃ‡O" if lacerante_empowered_ready else "+", "sub": "ReforÃ§o", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN})
+		icons.append({"id": "lacerante_empower", "label": "REFORÇO" if lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN, "icon_type": "star"})
 	if manifestation_key == "eclipsada":
 		var form_color: = _eclipsada_color()
-		icons.append({"label": _eclipsada_form_label(), "sub": "Forma", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(form_color.r, form_color.g, form_color.b, 0.86), "cd_elapsed": 1.0, "cd_max": 1.0})
+		icons.append({"id": "lacerante_empower", "label": _eclipsada_form_label(), "sub": "Forma", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(form_color.r, form_color.g, form_color.b, 0.86), "cd_elapsed": 1.0, "cd_max": 1.0, "icon_type": "star"})
 	if manifestation_key == "necronada":
 		var necr_cd_elapsed: = NECRONADA_EMPOWER_COOLDOWN if necronada_empowered_ready else NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, necronada_empower_cooldown_until - time_alive)
-		icons.append({"label": "PO" if necronada_empowered_ready else "+", "sub": "Poeira", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.52, 0.34, 0.92, 0.94 if necronada_empowered_ready else 0.7), "cd_elapsed": necr_cd_elapsed, "cd_max": NECRONADA_EMPOWER_COOLDOWN})
+		icons.append({"id": "lacerante_empower", "label": "PO" if necronada_empowered_ready else "+", "sub": "Poeira", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.52, 0.34, 0.92, 0.94 if necronada_empowered_ready else 0.7), "cd_elapsed": necr_cd_elapsed, "cd_max": NECRONADA_EMPOWER_COOLDOWN, "icon_type": "star"})
 	if manifestation_key == "bombastica":
 		var det_ready: = 1.0 if bombastica_bombs.size() > 0 else 0.0
-		icons.append({"label": "DET", "sub": "Detonar", "charges": bombastica_bombs.size(), "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0})
+		icons.append({"id": "bombastica_detonator", "label": "DET", "sub": "Detonar", "charges": bombastica_bombs.size(), "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0, "icon_type": "star"})
 
-	var total_w = icons.size() * icon_size + (icons.size() - 1) * spacing
-	var start_x = viewport.x * 0.5 - total_w * 0.5
-	var start_y = viewport.y - icon_size - 44.0
+	var card_w := 72.0
+	var card_h := 88.0
+	var gap := 12.0
+	var total_w := card_w * float(icons.size()) + gap * float(icons.size() - 1)
+	var start_x := viewport.x * 0.5 - total_w * 0.5
+	var start_y := viewport.y - card_h - 24.0
+
+	var rail_rect := Rect2(start_x - 30.0, viewport.y - 20.0, total_w + 60.0, 8.0)
+	draw_rect(rail_rect, Color(0.04, 0.07, 0.11, 0.9), true)
+	draw_rect(rail_rect, Color(0.20, 0.28, 0.36, 0.95), false, 1.5)
+	_draw_icon_gem(Vector2(viewport.x * 0.5, viewport.y - 16.0), 12.0, Color(0.0, 0.85, 1.0))
 
 	for i in range(icons.size()):
 		var ic = icons[i]
-		var rect = Rect2(start_x + i * (icon_size + spacing), start_y, icon_size, icon_size)
+		var card_rect := Rect2(start_x + i * (card_w + gap), start_y, card_w, card_h)
 		var main_color: Color = ic.color
-
-		draw_rect(rect, Color(0.03, 0.05, 0.09, 0.94), true)
-		draw_rect(rect.grow(-2.0), Color(main_color.r, main_color.g, main_color.b, 0.14), true)
-		draw_rect(rect, Color(main_color.r, main_color.g, main_color.b, 0.88), false, 2.0)
-		draw_line(rect.position + Vector2(2, 2), rect.position + Vector2(rect.size.x - 2, 2), Color(main_color.r, main_color.g, main_color.b, 0.98), 2.0)
 
 		if ic.has("bind") and String(ic["bind"]) != "":
 			var bind_str: String = String(ic["bind"])
-			var cap_w = max(26.0, bind_str.length() * 9.0 + 8.0)
-			var cap_rect = Rect2(rect.get_center().x - cap_w * 0.5, rect.position.y - 19.0, cap_w, 16.0)
-			draw_rect(cap_rect, Color(0.04, 0.06, 0.1, 0.96), true)
-			draw_rect(cap_rect, Color(main_color.r, main_color.g, main_color.b, 0.85), false, 1.2)
-			_draw_centered(bind_str, cap_rect.get_center() + Vector2(0, 1), 10, Color(1.0, 0.96, 0.84))
+			var cap_w := maxf(42.0, bind_str.length() * 8.0 + 12.0)
+			var cap_rect := Rect2(card_rect.get_center().x - cap_w * 0.5, card_rect.position.y - 18.0, cap_w, 18.0)
+			var tab_pts := PackedVector2Array([
+				Vector2(cap_rect.position.x + 4.0, cap_rect.position.y),
+				Vector2(cap_rect.position.x + cap_rect.size.x - 4.0, cap_rect.position.y),
+				Vector2(cap_rect.position.x + cap_rect.size.x, cap_rect.position.y + cap_rect.size.y),
+				Vector2(cap_rect.position.x, cap_rect.position.y + cap_rect.size.y)
+			])
+			draw_colored_polygon(tab_pts, Color(0.06, 0.08, 0.12, 0.96))
+			tab_pts.append(tab_pts[0])
+			draw_polyline(tab_pts, Color(main_color.r, main_color.g, main_color.b, 0.85), 1.5)
+			_draw_centered(bind_str, cap_rect.get_center() + Vector2(0, 1), 11, Color.WHITE)
+
+		_draw_scifi_frame(card_rect, main_color, 6.0, 0.92)
+
+		var icon_center := card_rect.position + Vector2(card_w * 0.5, 30.0)
+		match String(ic.get("icon_type", "")):
+			"sword":
+				_draw_icon_sword(icon_center, 24.0, main_color)
+			"star":
+				_draw_icon_star(icon_center, 22.0, main_color)
+			"trident":
+				_draw_icon_trident(icon_center, 24.0, main_color)
+			"portal":
+				_draw_icon_portal(icon_center, 24.0, main_color)
+			_:
+				_draw_icon_star(icon_center, 22.0, main_color)
+
+		_draw_centered(ic.label, card_rect.position + Vector2(card_w * 0.5, 58.0), 15, main_color)
+
+		var pips_y := card_rect.position.y + 74.0
+		var center_x := card_rect.position.x + card_w * 0.5
+		for p in range(4):
+			var pip_x := center_x + (p - 1.5) * 8.0
+			var pip_filled: bool = (p == 0) or (float(ic.cd_elapsed) >= float(ic.cd_max))
+			var pip_col := main_color if pip_filled else Color(main_color.r * 0.4, main_color.g * 0.4, main_color.b * 0.4, 0.5)
+			draw_circle(Vector2(pip_x, pips_y), 2.0, pip_col)
 
 		if ic.has("charges") and int(ic["charges"]) > 0:
 			var chg_val: int = int(ic["charges"])
-			var chg_str: = "x%d" % chg_val
-			var badge_w = 26.0
-			var badge_rect = Rect2(rect.position.x + rect.size.x - badge_w * 0.6, rect.position.y - 6.0, badge_w, 16.0)
+			var chg_str := "x%d" % chg_val
+			var badge_rect := Rect2(card_rect.position.x + card_w - 24.0, card_rect.position.y + 4.0, 22.0, 15.0)
 			draw_rect(badge_rect, Color(0.08, 0.02, 0.04, 0.96), true)
-			draw_rect(badge_rect, Color(1.0, 0.78, 0.18, 0.95), false, 1.5)
-			_draw_centered(chg_str, badge_rect.get_center() + Vector2(0, 1), 11, Color(1.0, 0.94, 0.32))
-
-		_draw_centered(ic.label, rect.get_center() + Vector2(0, -1 if String(ic.sub) != "" else 4), 16, Color.WHITE)
-		if String(ic.sub) != "":
-			_draw_centered(ic.sub, rect.get_center() + Vector2(0, 14), 9, Color(main_color.r * 0.7 + 0.3, main_color.g * 0.7 + 0.3, main_color.b * 0.7 + 0.3, 0.92))
+			draw_rect(badge_rect, Color(1.0, 0.78, 0.18, 0.95), false, 1.2)
+			_draw_centered(chg_str, badge_rect.get_center() + Vector2(0, 1), 10, Color(1.0, 0.94, 0.32))
 
 		if ic.cd_elapsed < ic.cd_max:
-			var ratio = clamp(ic.cd_elapsed / max(0.01, ic.cd_max), 0.0, 1.0)
-			var h = icon_size * (1.0 - ratio)
-			draw_rect(Rect2(rect.position.x, rect.end.y - h, icon_size, h), Color(0.0, 0.0, 0.0, 0.72), true)
-			_draw_centered("%.1f" % (ic.cd_max - ic.cd_elapsed), rect.get_center() + Vector2(0, 4), 15, Color(1.0, 0.92, 0.4))
+			var ratio := clampf(ic.cd_elapsed / maxf(0.01, ic.cd_max), 0.0, 1.0)
+			var h := card_h * (1.0 - ratio)
+			draw_rect(Rect2(card_rect.position.x, card_rect.end.y - h, card_w, h), Color(0.0, 0.0, 0.0, 0.75), true)
+			_draw_centered("%.1f" % (ic.cd_max - ic.cd_elapsed), card_rect.get_center() + Vector2(0, 2), 14, Color(1.0, 0.92, 0.4))
+
+	_draw_desktop_fps_hud(viewport)
 
 
 func _draw_desktop_session_buttons(_viewport: Vector2) -> void :
-	_draw_hud_rect_button(buttons["pause"], "II", Color(0.0, 1.0, 0.82))
-	_draw_centered(_compact_key_binding_name("pause"), buttons["pause"].get_center() + Vector2(0, -26), 10, Color(0.72, 1.0, 0.94, 0.9))
+	if buttons.has("pause"):
+		var pause_rect: Rect2 = buttons["pause"]
+		_draw_scifi_frame(pause_rect, Color(0.0, 0.85, 1.0), 5.0, 0.88)
+		_draw_centered("II", pause_rect.get_center() + Vector2(0, 4), 16, Color(0.0, 0.95, 1.0))
+		_draw_centered(_compact_key_binding_name("pause"), pause_rect.get_center() + Vector2(0, -24), 10, Color(0.72, 1.0, 0.94, 0.9))
+
 	if buttons.has("shop_manual"):
 		var shop_rect: Rect2 = buttons["shop_manual"]
-		var shop_accent = Color(0.0, 1.0, 0.82) if _affordable_card_count() > 0 and mode == "game" else Color(0.38, 0.42, 0.46)
-		_draw_centered("LOJA " + _compact_key_binding_name("shop"), shop_rect.get_center() + Vector2(0, -27), 11, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.92))
-		_draw_hud_rect_button(shop_rect, "LOJA", shop_accent)
-	if boss_ready and not boss_active and not boss_dead:
+		var shop_accent := Color(0.0, 0.88, 1.0) if _affordable_card_count() > 0 and mode == "game" else Color(0.38, 0.42, 0.46)
+		_draw_scifi_frame(shop_rect, shop_accent, 6.0, 0.88)
+		_draw_icon_cart(Vector2(shop_rect.position.x + 26.0, shop_rect.position.y + 22.0), 22.0, shop_accent)
+		_draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 4.0), 16, shop_accent)
+
+	if boss_ready and not boss_active and not boss_dead and buttons.has("boss"):
 		var boss_rect: Rect2 = buttons["boss"]
-		_draw_centered("BOSS " + _compact_key_binding_name("boss"), boss_rect.get_center() + Vector2(0, -27), 12, Color(1.0, 0.82, 0.24))
-		_draw_hud_rect_button(boss_rect, "BOSS", Color(1.0, 0.52, 0.16))
+		var boss_accent := Color(1.0, 0.22, 0.28)
+		_draw_scifi_frame(boss_rect, boss_accent, 6.0, 0.88)
+		_draw_icon_skull(Vector2(boss_rect.position.x + 26.0, boss_rect.position.y + 22.0), 22.0, boss_accent)
+		_draw_centered("BOSS", boss_rect.get_center() + Vector2(14.0, 4.0), 16, boss_accent)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 func _draw_touch_controls(viewport: Vector2) -> void :
@@ -51948,6 +52423,29 @@ func _draw_cinzas_shader_card(card: Dictionary, rect: Rect2, texture: Texture2D,
 	return true
 
 
+func _move_pause_selection(direction: int) -> void:
+	pause_selected = posmod(pause_selected + direction, 4)
+	pause_keyboard_active = true
+
+
+func _activate_pause_selection() -> void:
+	match pause_selected:
+		0:
+			_resume_from_pause()
+		1:
+			_open_deck("paused")
+		2:
+			settings_selected = 0
+			settings_previous_mode = "paused"
+			mode = "settings"
+		3:
+			_go_to_menu()
+
+
+func _pause_selection_active(index: int) -> bool:
+	return pause_selected == index and (is_gamepad_active or pause_keyboard_active)
+
+
 func _draw_pause(viewport: Vector2) -> void :
 	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.62), true)
 	var portrait = _is_portrait(viewport)
@@ -51981,10 +52479,10 @@ func _draw_pause(viewport: Vector2) -> void :
 	buttons["pause_settings"] = settings_rect
 	buttons["pause_menu"] = menu_rect
 
-	_draw_big_button(resume_rect, "CONTINUAR", Color(0.04, 0.15, 0.18, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and pause_selected == 0) else Color(0.0, 1.0, 0.82))
-	_draw_big_button(deck_rect, "DECK (%d)" % _deck_total_cards(), Color(0.05, 0.1, 0.16, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and pause_selected == 1) else Color(0.44, 0.84, 1.0))
-	_draw_big_button(settings_rect, "CONFIGURACOES", Color(0.04, 0.15, 0.18, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and pause_selected == 2) else Color(1.0, 0.8, 0.2))
-	_draw_big_button(menu_rect, "MENU INICIAL", Color(0.12, 0.05, 0.08, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and pause_selected == 3) else Color(1.0, 0.22, 0.44))
+	_draw_big_button(resume_rect, "CONTINUAR", Color(0.04, 0.15, 0.18, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(0) else Color(0.0, 1.0, 0.82))
+	_draw_big_button(deck_rect, "DECK (%d)" % _deck_total_cards(), Color(0.05, 0.1, 0.16, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(1) else Color(0.44, 0.84, 1.0))
+	_draw_big_button(settings_rect, "CONFIGURACOES", Color(0.04, 0.15, 0.18, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(2) else Color(1.0, 0.8, 0.2))
+	_draw_big_button(menu_rect, "MENU INICIAL", Color(0.12, 0.05, 0.08, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(3) else Color(1.0, 0.22, 0.44))
 
 
 func _draw_pause_deck(viewport: Vector2) -> void :
@@ -53295,7 +53793,7 @@ func _player_texture() -> Texture2D:
 	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
 		if manifestation_key == "lacerante":
 			return _lacerante_combo_texture(time_alive - last_attack_time)
-		return _frame_texture_relative("player_fire", time_alive - last_attack_time, 70, "player_idle")
+		return _player_fire_texture_for_current_attack(time_alive - last_attack_time)
 	var idle_speed = 115 if time_alive - last_attack_time < 0.65 or time_alive - last_dash_time < 1.0 else 175
 	if move.y < -0.1:
 		return _frame_texture(_player_animation_texture_key("up", "player_up"), 120, "player_idle")
@@ -55546,21 +56044,13 @@ func _handle_key(event: InputEventKey) -> void :
 	elif mode == "paused":
 		if _is_escape_or_pause_key(event):
 			_resume_from_pause()
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			pause_selected = (pause_selected - 1 + 4) % 4
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			pause_selected = (pause_selected + 1) % 4
+		elif event.keycode == KEY_UP or event.keycode == KEY_W or event.keycode == KEY_LEFT or event.keycode == KEY_A:
+			_move_pause_selection(-1)
+		elif event.keycode == KEY_DOWN or event.keycode == KEY_S or event.keycode == KEY_RIGHT or event.keycode == KEY_D:
+			_move_pause_selection(1)
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
-			if pause_selected == 0:
-				_resume_from_pause()
-			elif pause_selected == 1:
-				_open_deck("paused")
-			elif pause_selected == 2:
-				settings_selected = 0
-				settings_previous_mode = "paused"
-				mode = "settings"
-			elif pause_selected == 3:
-				_go_to_menu()
+			pause_keyboard_active = true
+			_activate_pause_selection()
 	elif mode == "pause_deck" and (_is_escape_or_pause_key(event) or event.keycode in [KEY_ENTER, KEY_SPACE]):
 		_return_from_deck()
 	elif mode == "pause_deck":

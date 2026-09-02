@@ -130,7 +130,19 @@ Search the repository before assuming a class, node, signal, input action, resou
 
 ## Testing command
 
-On Windows, prefer:
+On Windows, use the changed-file validator during the normal edit loop:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -ChangedOnly -Scene "res://scenes/Main.tscn" -SmokeFrames 120
+```
+
+When the dirty worktree contains unrelated files, pass an explicit script set instead:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -Scripts "res://scripts/main.gd","res://tests/example_smoke.gd" -Scene "res://scenes/Main.tscn" -SmokeFrames 120
+```
+
+Use the full deep validator for broad/shared changes, project settings, addons, release/export work, uncertain blast radius, or before pushing a large batch:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -Deep
@@ -144,7 +156,7 @@ bash ./tools/validate_godot.sh --deep
 
 Use `-Scene "res://path/to/affected_scene.tscn"` on Windows or `--scene "res://path/to/affected_scene.tscn"` on Linux/macOS to smoke-test a specific affected scene.
 
-Run focused checks during implementation and the deep validator after the final edit. If the validator fails, inspect its logs in `.agent_logs/`, correct the cause, and run it again.
+Run focused checks during implementation. Prefer `-ChangedOnly` or `-Scripts` after the final edit unless the change really needs `-Deep`. If the validator fails, inspect its logs in `.agent_logs/`, correct the cause, and run it again.
 
 ## Test-and-repair loop
 

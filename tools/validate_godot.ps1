@@ -3,8 +3,12 @@ param(
     [string]$GodotBin = $env:GODOT_BIN,
     [int]$SmokeFrames = 300,
     [string]$Scene = "",
+    [string[]]$Scripts = @(),
+    [switch]$ChangedOnly,
     [switch]$Deep,
-    [switch]$SkipSmoke
+    [switch]$SkipSmoke,
+    [switch]$VerboseOutput,
+    [int]$LogTailLines = 80
 )
 
 $ErrorActionPreference = "Stop"
@@ -84,10 +88,13 @@ function Invoke-LoggedStep {
     $output = @()
     if (Test-Path -LiteralPath $logPath) {
         $output = Get-Content -LiteralPath $logPath -Encoding UTF8
-        $output | ForEach-Object { Write-Host $_ }
+        if ($VerboseOutput -or $Name -eq "00_godot_version") {
+            $output | ForEach-Object { Write-Host $_ }
+        }
     }
 
     if ($exitCode -ne 0) {
+        $output | Select-Object -Last $LogTailLines | ForEach-Object { Write-Host $_ }
         throw "$Name failed with exit code $exitCode. Log: $logPath"
     }
 
@@ -100,8 +107,115 @@ function Invoke-LoggedStep {
     }
 
     if ($RequiredPattern -and -not ($output | Select-String -Pattern $RequiredPattern -Quiet)) {
+        $output | Select-Object -Last $LogTailLines | ForEach-Object { Write-Host $_ }
         throw "$Name did not emit the required success marker '$RequiredPattern'. Log: $logPath"
     }
+
+    if ($RequiredPattern) {
+        $marker = $output | Select-String -Pattern $RequiredPattern | Select-Object -First 1
+        if ($marker) {
+            Write-Host $marker.Line
+        }
+    } elseif (-not $VerboseOutput -and $Name -ne "00_godot_version") {
+        Write-Host "    OK (log: $logPath)"
+    }
+}
+
+function Convert-ToGodotResourcePath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if ($Path.StartsWith("res://")) {
+        return $Path.Replace('\', '/')
+    }
+
+    $fullPath = $Path
+    if (-not [System.IO.Path]::IsPathRooted($fullPath)) {
+        $fullPath = Join-Path $ProjectRoot $fullPath
+    }
+
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
+        return $null
+    }
+
+    $resolvedPath = (Resolve-Path -LiteralPath $fullPath).Path
+    if (-not $resolvedPath.StartsWith($ProjectRoot)) {
+        return $null
+    }
+
+    $relative = $resolvedPath.Substring($ProjectRoot.Length).TrimStart(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    return "res://$($relative.Replace('\', '/'))"
+}
+
+function Get-ChangedGDScripts {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) {
+        Write-Warning "git was not found; -ChangedOnly cannot discover changed scripts."
+        return @()
+    }
+
+    Push-Location $ProjectRoot
+    try {
+        $tracked = @(& git -c core.autocrlf=false diff --name-only --diff-filter=ACMRTUXB HEAD -- "*.gd" 2>$null)
+        $untracked = @(& git -c core.autocrlf=false ls-files --others --exclude-standard -- "*.gd" 2>$null)
+        return @($tracked + $untracked | Where-Object { $_ } | Sort-Object -Unique)
+    } finally {
+        Pop-Location
+    }
+}
+
+function Get-ValidationScriptList {
+    $scriptMap = [ordered]@{}
+    $requestedScripts = @(
+        foreach ($scriptValue in @($Scripts)) {
+            foreach ($scriptPath in ([string]$scriptValue -split ',')) {
+                $normalizedPath = $scriptPath.Trim()
+                if ($normalizedPath) {
+                    $normalizedPath
+                }
+            }
+        }
+    )
+
+    if ($ChangedOnly) {
+        foreach ($changedPath in Get-ChangedGDScripts) {
+            $resourcePath = Convert-ToGodotResourcePath -Path $changedPath
+            if ($resourcePath) {
+                $scriptMap[$resourcePath] = $true
+            }
+        }
+    }
+
+    foreach ($scriptPath in $requestedScripts) {
+        $resourcePath = Convert-ToGodotResourcePath -Path $scriptPath
+        if ($resourcePath) {
+            $scriptMap[$resourcePath] = $true
+        }
+    }
+
+    if ($Deep -and -not $ChangedOnly -and $requestedScripts.Count -eq 0) {
+        $allScripts = @(Get-ChildItem -LiteralPath $ProjectRoot -Filter "*.gd" -File -Recurse |
+            Where-Object {
+                $_.FullName -notmatch '[\\/]\.godot[\\/]' -and
+                $_.FullName -notmatch '[\\/]\.git[\\/]' -and
+                $_.FullName -notmatch '[\\/]\.agent_logs[\\/]' -and
+                $_.FullName -notmatch '[\\/]\.codex[\\/]' -and
+                $_.FullName -notmatch '[\\/]android[\\/]' -and
+                $_.FullName -notmatch '[\\/]builds[\\/]'
+            } |
+            Sort-Object FullName)
+
+        foreach ($script in $allScripts) {
+            $resourcePath = Convert-ToGodotResourcePath -Path $script.FullName
+            if ($resourcePath) {
+                $scriptMap[$resourcePath] = $true
+            }
+        }
+    }
+
+    return @($scriptMap.Keys)
 }
 
 Invoke-LoggedStep -Name "00_godot_version" -Arguments @("--version") -AllowErrorText
@@ -120,27 +234,13 @@ if ($HasCSharp) {
     )
 }
 
-if ($Deep) {
-    $scripts = @(Get-ChildItem -LiteralPath $ProjectRoot -Filter "*.gd" -File -Recurse |
-        Where-Object {
-            $_.FullName -notmatch '[\\/]\.godot[\\/]' -and
-            $_.FullName -notmatch '[\\/]\.git[\\/]' -and
-            $_.FullName -notmatch '[\\/]\.agent_logs[\\/]' -and
-            $_.FullName -notmatch '[\\/]\.codex[\\/]' -and
-            $_.FullName -notmatch '[\\/]android[\\/]' -and
-            $_.FullName -notmatch '[\\/]builds[\\/]'
-        } |
-        Sort-Object FullName)
-
+$scriptsToParse = @(Get-ValidationScriptList)
+if ($scriptsToParse.Count -gt 0) {
+    Write-Host ("`n==> 03_parse_scripts count={0} changedOnly={1} deep={2}" -f $scriptsToParse.Count, [bool]$ChangedOnly, [bool]$Deep)
     $index = 0
-    foreach ($script in $scripts) {
+    foreach ($resourcePath in $scriptsToParse) {
         $index++
-        $relative = $script.FullName
-        if ($relative.StartsWith($ProjectRoot)) {
-            $relative = $relative.Substring($ProjectRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-        }
-        $relative = $relative.Replace('\', '/')
-        $resourcePath = "res://$relative"
+        $relative = $resourcePath.Substring("res://".Length)
         $stepName = "03_parse_{0:D4}_{1}" -f $index, ($relative -replace '[^A-Za-z0-9_.-]', '_')
         Invoke-LoggedStep -Name $stepName -Arguments @(
             "--headless", "--path", $ProjectRoot, "--script", $resourcePath, "--check-only"

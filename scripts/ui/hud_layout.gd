@@ -221,23 +221,25 @@ static func desktop_button_rects(
 	include_shop_manual: bool
 ) -> Dictionary:
 	var rects: = {}
-	var icon: = 54.0
-	var gap: = 14.0
-	var total_w: = icon * 4.0 + gap * 3.0
+	var card_w: = 72.0
+	var card_h: = 88.0
+	var gap: = 12.0
+	var total_cards: int = 4 + (1 if (include_empower or include_detonator) else 0)
+	var total_w: = card_w * float(total_cards) + gap * float(total_cards - 1)
 	var x: = viewport.x * 0.5 - total_w * 0.5
-	var y: = viewport.y - icon - 44.0
-	rects["attack"] = Rect2(x, y, icon, icon)
-	rects["skill"] = Rect2(x + (icon + gap), y, icon, icon)
-	rects["secondary"] = Rect2(x + (icon + gap) * 2.0, y, icon, icon)
-	rects["dash"] = Rect2(x + (icon + gap) * 3.0, y, icon, icon)
+	var y: = viewport.y - card_h - 24.0
+	rects["attack"] = Rect2(x, y, card_w, card_h)
+	rects["skill"] = Rect2(x + (card_w + gap), y, card_w, card_h)
+	rects["secondary"] = Rect2(x + (card_w + gap) * 2.0, y, card_w, card_h)
+	rects["dash"] = Rect2(x + (card_w + gap) * 3.0, y, card_w, card_h)
 	if include_empower:
-		rects["lacerante_empower"] = Rect2(x + total_w + gap, y + 8.0, 42.0, 42.0)
+		rects["lacerante_empower"] = Rect2(x + (card_w + gap) * 4.0, y, card_w, card_h)
 	if include_detonator:
-		rects["bombastica_detonator"] = Rect2(x + total_w + gap, y + 8.0, 42.0, 42.0)
-	rects["pause"] = Rect2(viewport.x - 62.0, 18.0, 44.0, 36.0)
-	rects["boss"] = Rect2(viewport.x - 124.0, 124.0, 104.0, 38.0)
+		rects["bombastica_detonator"] = Rect2(x + (card_w + gap) * 4.0, y, card_w, card_h)
+	rects["pause"] = Rect2(viewport.x - 58.0, 16.0, 42.0, 36.0)
+	rects["boss"] = Rect2(viewport.x - 178.0, 186.0, 160.0, 44.0)
 	if include_shop_manual:
-		rects["shop_manual"] = Rect2(viewport.x - 124.0, 78.0, 104.0, 38.0)
+		rects["shop_manual"] = Rect2(viewport.x - 178.0, 134.0, 160.0, 44.0)
 	return rects
 
 
