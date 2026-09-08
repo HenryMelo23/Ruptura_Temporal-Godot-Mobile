@@ -34,11 +34,11 @@ func _set_stationary_attack(manifestation: String) -> void:
 	game.touch_move = Vector2.ZERO
 
 
-func _expect_fire_pose(direction: Vector2, expected_key: String, expected_flip: bool, label: String) -> void:
+func _expect_fire_pose(direction: Vector2, expected_flip: bool, label: String) -> void:
 	_set_stationary_attack("eletrica")
 	game._set_player_attack_visual_dir(direction)
 	var info: Dictionary = game._player_fire_animation_info()
-	var frames: Array = game.textures.get(expected_key, [])
+	var frames: Array = game.textures.get("player_fire", [])
 	var tex: Texture2D = game._player_texture()
 	var profile: Dictionary = game._player_draw_profile()
 	var draw_size: Vector2 = Vector2(profile.get("size", Vector2.ZERO))
@@ -47,31 +47,22 @@ func _expect_fire_pose(direction: Vector2, expected_key: String, expected_flip: 
 		var tex_size: Vector2 = tex.get_size()
 		var fit_scale: float = min(draw_size.x / tex_size.x, draw_size.y / tex_size.y)
 		rendered_size = tex_size * fit_scale
-	_check(String(info.get("key", "")) == expected_key, label + " selected wrong fire pose key")
+	_check(String(info.get("key", "")) == "player_fire", label + " selected a non-basic fire pose key")
 	_check(bool(info.get("flip_h", false)) == expected_flip, label + " selected wrong fire pose flip")
 	_check(not frames.is_empty(), label + " fire pose frames missing")
 	_check(frames.has(tex), label + " did not use expected fire pose texture")
 	_check(rendered_size.y <= game.PLAYER_DRAW_STOP_SIZE.y, label + " fire pose rendered taller than stop frame")
-	if expected_key == "player_fire":
-		_check(not bool(profile.get("fit_aspect", false)), label + " lateral fire pose should preserve legacy size")
-	else:
-		var native_ratio: float = tex.get_size().x / tex.get_size().y
-		var rendered_ratio: float = rendered_size.x / rendered_size.y
-		_check(bool(profile.get("fit_aspect", false)), label + " fire pose did not preserve aspect")
-		_check(absf(native_ratio - rendered_ratio) < 0.02, label + " fire pose aspect was distorted")
+	_check(not bool(profile.get("fit_aspect", false)), label + " basic fire pose should preserve legacy size")
 
 
 func _run() -> void:
 	var fire_frames: Array = game.textures.get("player_fire", [])
-	var fire_back_diag_frames: Array = game.textures.get("player_fire_back_diag", [])
-	var fire_up_frames: Array = game.textures.get("player_fire_up", [])
-	var fire_down_frames: Array = game.textures.get("player_fire_down", [])
 	var lacerante_frames: Array = game.textures.get("player_lacerar", [])
 	var right_frames: Array = game.textures.get("player_right", [])
 	_check(not fire_frames.is_empty(), "player_fire frames missing")
-	_check(not fire_back_diag_frames.is_empty(), "player_fire_back_diag frames missing")
-	_check(not fire_up_frames.is_empty(), "player_fire_up frames missing")
-	_check(not fire_down_frames.is_empty(), "player_fire_down frames missing")
+	_check(game.textures.get("player_fire_back_diag", []) == fire_frames, "legacy diagonal key stopped aliasing basic fire frames")
+	_check(game.textures.get("player_fire_up", []) == fire_frames, "legacy up key stopped aliasing basic fire frames")
+	_check(game.textures.get("player_fire_down", []) == fire_frames, "legacy down key stopped aliasing basic fire frames")
 	_check(not lacerante_frames.is_empty(), "player_lacerar frames missing")
 	_check(not right_frames.is_empty(), "player_right frames missing")
 
@@ -87,14 +78,14 @@ func _run() -> void:
 	var stationary_fire_snapshot: Vector2i = game._network_player_animation_snapshot(12345)
 	_check(fire_frames.has(stationary_fire_tex), "stationary eletrica did not use fire sprite")
 	_check(stationary_fire_snapshot.x == game.NET_ANIM_FIRE, "stationary eletrica network snapshot did not use fire anim")
-	_expect_fire_pose(Vector2.RIGHT, "player_fire", false, "east")
-	_expect_fire_pose(Vector2.LEFT, "player_fire", true, "west")
-	_expect_fire_pose(Vector2(0.0, -1.0), "player_fire_up", false, "north")
-	_expect_fire_pose(Vector2(-0.24, -1.0), "player_fire_up", true, "northwest shallow")
-	_expect_fire_pose(Vector2(0.72, -1.0), "player_fire_back_diag", false, "northeast diagonal")
-	_expect_fire_pose(Vector2(-0.72, -1.0), "player_fire_back_diag", true, "northwest diagonal")
-	_expect_fire_pose(Vector2(0.35, 1.0), "player_fire_down", false, "southeast")
-	_expect_fire_pose(Vector2(-0.35, 1.0), "player_fire_down", true, "southwest")
+	_expect_fire_pose(Vector2.RIGHT, false, "east")
+	_expect_fire_pose(Vector2.LEFT, true, "west")
+	_expect_fire_pose(Vector2(0.0, -1.0), false, "north")
+	_expect_fire_pose(Vector2(-0.24, -1.0), true, "northwest shallow")
+	_expect_fire_pose(Vector2(0.72, -1.0), false, "northeast diagonal")
+	_expect_fire_pose(Vector2(-0.72, -1.0), true, "northwest diagonal")
+	_expect_fire_pose(Vector2(0.35, 1.0), false, "southeast")
+	_expect_fire_pose(Vector2(-0.35, 1.0), true, "southwest")
 
 	_set_moving_attack("lacerante")
 	var moving_lacerante_tex: Texture2D = game._player_texture()

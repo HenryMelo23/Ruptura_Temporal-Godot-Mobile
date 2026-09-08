@@ -7,6 +7,7 @@ const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
 const RTNetContractScript = preload("res://scripts/systems/online/net_contract.gd")
+const RTTransportStateScript = preload("res://scripts/systems/online/transport_state.gd")
 const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
 const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
 
@@ -359,7 +360,8 @@ const FORCED_SHOP_MIN_TIME_SCALE: = 0.12
 const FORCED_SHOP_INTERVAL: = 180.0
 const SHOP_OPENING_ANIM_TIME: = 1.3
 const SHOP_RETURN_TIME: = 3.0
-const SHOP_PURCHASE_ANIM_TIME: = 0.42
+const SHOP_RETURN_VISUAL_TIME: = 0.72
+const SHOP_PURCHASE_ANIM_TIME: = 0.62
 const SHOP_MANUAL_REOPEN_CONFIRM_MS: int = 520
 const SHOP_FAIRNESS_V2: = true
 const SHOP_VERSION_V1: = "legacy_v1"
@@ -1069,7 +1071,35 @@ const BOSS3_FAITH_TEST_DAMAGE: = 150
 const BOSS3_FAITH_TEST_MAX_HP_RATE: = 0.1
 const BOSS3_FAITH_LINK_DURATION: = 5.0
 const BOSS4_ENTRY_TIME: = 1.6
-const BOSS4_ATTACK_INTERVAL: = 6.0
+const BOSS4_ATTACK_INTERVAL: = 2.8
+const BOSS4_COMET_LIFETIME: = 3.0
+const BOSS4_COMET_SPEED: = 214.0
+const BOSS4_COMET_RADIUS: = 32.0
+const BOSS4_SECONDARY_COOLDOWN: = 15.0
+const BOSS4_SECONDARY_DURATION: = 8.0
+const BOSS4_SECONDARY_WARNING: = 0.5
+const BOSS4_SECONDARY_UP_COUNT: = 4
+const BOSS4_SECONDARY_DOWN_COUNT: = 3
+const BOSS4_ULTIMATE_COOLDOWN: = 54.0
+const BOSS4_ULTIMATE_RAY_INTERVAL: = 1.35
+const BOSS4_ULTIMATE_RAY_WARNING: = 0.45
+const BOSS4_ULTIMATE_RAY_DURATION: = 1.15
+const BOSS4_ULTIMATE_RAY_RADIUS: = 48.0
+const BOSS4_ULTIMATE_DURATION: = 20.0
+const BOSS4_STRIKE_TELEPORT_TIME: = 0.18
+const BOSS4_STRIKE_LIFT_TIME: = 0.34
+const BOSS4_STRIKE_SLAM_TIME: = 0.22
+const BOSS4_STRIKE_THROW_TIME: = 0.56
+const BOSS4_METEOR_COUNT: = 3
+const BOSS4_METEOR_WARNING: = 0.8
+const BOSS4_METEOR_ARM_TIME: = 3.0
+const BOSS4_METEOR_LIFETIME: = 15.0
+const BOSS4_METEOR_HP: = 440.0
+const BOSS4_METEOR_RADIUS: = 58.0
+const BOSS4_METEOR_SHOCKWAVE_RADIUS: = 154.0
+const BOSS4_METEOR_DRAIN_DAMAGE_RATE: = 0.055
+const BOSS4_METEOR_DRAIN_HP_RATE: = 0.004
+const BOSS4_METEOR_DAMAGE_CAP: = 0.75
 const BOSS4_PLANET_LIFETIME: = 7.0
 const BOSS4_PLANET_SPEED: = 170.0
 const BOSS4_PLANET_HP: = 150.0
@@ -1086,7 +1116,6 @@ const BOSS4_PRISON_DURATION: = 5.2
 const BOSS4_FRAGMENT_WARNING: = 0.9
 const BOSS4_COLLAPSE_DURATION: = 4.2
 const BOSS4_ULTIMATE_THRESHOLD: = 0.35
-const BOSS4_ULTIMATE_DURATION: = 12.0
 const BOSS4_ULTIMATE_ANCHOR_HP: = 420.0
 const BOSS4_ULTIMATE_REQUIRED_ANCHORS: = 3
 const BOSS4_ULTIMATE_STUN_TIME: = 2.8
@@ -1928,6 +1957,9 @@ var net_report_last_role: String = ""
 var net_player_snapshot_last_ms: int = 0
 var net_world_snapshot_last_ms: int = 0
 var net_world_jitter_ms: float = 0.0
+var net_transport_last_activity_ms: int = 0
+var net_transport_health: String = RTTransportStateScript.HEALTH_WARMING
+var net_transport_health_last: String = RTTransportStateScript.HEALTH_WARMING
 var net_enemy_bullet_next_uid: int = 1
 var net_ability_sequence: int = 0
 var net_event_sequence: int = 0
@@ -1983,6 +2015,11 @@ const NET_PRELOAD_TIMEOUT_MS: = RTNetContractScript.PRELOAD_TIMEOUT_MS
 const NET_MANIFEST_SYNC_INTERVAL_MS: = RTNetContractScript.MANIFEST_SYNC_INTERVAL_MS
 const NET_REPORT_INTERVAL_MS: = RTNetContractScript.REPORT_INTERVAL_MS
 const NET_REPORT_EVENT_LIMIT: = RTNetContractScript.REPORT_EVENT_LIMIT
+const NET_PEER_TIMEOUT_MS: = 4000
+const NET_PEER_TIMEOUT_MIN_MS: = 6000
+const NET_PEER_TIMEOUT_MAX_MS: = 12000
+const NET_TRANSPORT_DEGRADED_AFTER_MS: = 750
+const NET_TRANSPORT_STALLED_AFTER_MS: = 5000
 const ONLINE_ROOM_HEARTBEAT_INTERVAL_MS: = 20000
 const ONLINE_ROOM_HEARTBEAT_WARN_MS: = 70000
 const ONLINE_ROOM_HEARTBEAT_TIMEOUT: = 6.0
@@ -2038,7 +2075,7 @@ const NET_BULLET_TYPES: = [
 	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed", 
 	"frost_shard", "larapio_coin", "larapio_stone", "miasma_cheese_spit", 
 	"miasma_eel_spit", "nexus_refracted", "phase4_magic", "pyro_wall_seed", "rat_flask", 
-	"pustula_fossil_spit", "rat_shot", "rat_spit", "reflected_player", "umbra_plasma"
+	"pustula_fossil_spit", "rat_shot", "rat_spit", "reflected_player", "umbra_plasma", "boss4_comet"
 ]
 
 
@@ -2335,6 +2372,7 @@ var shop_opening_timer = 0.0
 var shop_opening_forced = false
 var shop_opening_manual_already_tracked: bool = false
 var shop_return_timer = 0.0
+var shop_return_visual_timer: float = 0.0
 var shop_mp_request_timer: = 0.0
 var shop_mp_request_incoming: = false
 var shop_mp_request_outgoing: = false
@@ -3054,6 +3092,16 @@ var boss4_ultimate_laser_timer = 0.0
 var boss4_ultimate_gravity_timer = 0.0
 var boss4_rupture_anchors = []
 var boss4_ultimate_destroyed = 0
+var boss4_secondary_timer = BOSS4_SECONDARY_COOLDOWN
+var boss4_secondary_active = false
+var boss4_secondary_elapsed = 0.0
+var boss4_ultimate_cooldown = BOSS4_ULTIMATE_COOLDOWN
+var boss4_ultimate_ray_index = 0
+var boss4_strike_sequence: Dictionary = {}
+var boss4_meteorites: Array = []
+var boss4_meteor_event_timer = 5.0
+var boss4_meteor_event_started = false
+var boss4_meteor_damage_bonus = 0.0
 var boss4_stun_timer = 0.0
 var boss4_vulnerable_timer = 0.0
 var boss4_column_barrage_timer = BOSS4_COLUMN_BARRAGE_FIRST_DELAY
@@ -3915,6 +3963,7 @@ func _net_report_flush(final_flush: = false) -> void :
 	net_report_file.store_line("pacotes_estimados: in=%d out=%d total_in=%d total_out=%d" % [net_report_interval_packets_in, net_report_interval_packets_out, net_report_total_packets_in, net_report_total_packets_out])
 	net_report_file.store_line("snapshots: world_in=%d world_out=%d player_in=%d player_out=%d control_in=%d control_out=%d" % [net_report_interval_world_in, net_report_interval_world_out, net_report_interval_player_in, net_report_interval_player_out, net_report_interval_control_in, net_report_interval_control_out])
 	net_report_file.store_line("quedas/gaps: world_gap_max_ms=%d world_gaps_criticos=%d player_gap_max_ms=%d player_gaps_criticos=%d jitter_world_ms=%.1f" % [net_report_interval_world_gap_max_ms, net_report_interval_world_drop_gaps, net_report_interval_player_gap_max_ms, net_report_interval_player_drop_gaps, net_world_jitter_ms])
+	net_report_file.store_line("transporte: health=%s atividade_age_ms=%d intervalos_ms=player/%d world/%d visual/%d" % [net_transport_health, _net_transport_activity_age_ms(), _net_player_sync_interval_ms(), _net_world_sync_interval_ms(), _net_world_visual_sync_interval_ms()])
 	net_report_file.store_line("eventos:")
 	if net_report_events.is_empty():
 		net_report_file.store_line("  nenhum evento no intervalo")
@@ -7548,7 +7597,7 @@ func _interrupted_run_field_names() -> Array:
 		"arauto", "arauto_spawned", "arauto_rays", "arauto_echo_breaks", "arauto_card_drops", "arauto_evolution_fragment", "manifest_evolution_fragment_claimed_this_run", "manifest_evolution_fragment_claim_source", 
 		"boss2_ice_shards", "boss2_snow_zones", "boss2_frost_particles", "phase2_fire_walls", "phase2_fire_wall_hit_cd", "boss2_state", "boss2_action_timer", "boss2_target_position", "boss2_last_attack", "boss2_repeat_count", "boss2_facing_dir", "boss2_walk_speed", "boss2_anim_timer", "boss2_anim_frame", "boss2_breath_dir", "boss2_ultimate_cooldown", "boss2_ultimate_timer", "boss2_ultimate_center", "boss2_ultimate_orbit_angle", "boss2_ultimate_spit_timer", "boss2_ultimate_wind_timer", "boss2_ultimate_wind_active", "boss2_ultimate_wind_dir", "boss2_ultimate_hail_timer", "boss2_ultimate_fan_timer", "boss2_ultimate_blizzard_tick", "boss2_ultimate_blizzard_exposure", "boss2_ultimate_hit_gate", "boss2_ultimate_used", 
 		"phase3_miasma_zones", "phase3_cheeses", "phase6_pustule_pools", "phase6_pustule_pheromone_timer", "boss6_lodarian_pools", "boss6_state", "boss6_current_ability", "boss6_state_timer", "boss6_wait_timer", "boss6_ability_cooldowns", "boss6_last_abilities", "boss6_carapace_plates", "boss6_carapace_timer", "boss6_vulnerability_timer", "boss6_core_exposed_timer", "boss6_core_permanent_bonus", "boss6_event_80_triggered", "boss6_event_60_triggered", "boss6_event_40_triggered", "boss6_event_30_triggered", "boss6_event_15_triggered", "boss6_special_event_id", "boss6_special_timer", "boss6_organs", "boss6_final_mutation", "boss6_final_birth_timer", "boss6_fossil_era_timer", "boss6_fossil_shield", "boss6_rib_prison", "boss6_tail_channels", "boss6_reflux_objects", "boss6_cracked_heart", "sanguessuga_parasite_timer", "sanguessuga_bleed_tick_timer", "boss6_shielded", "boss6_entry_particles", "boss6_relocating", "boss6_relocate_from", "boss6_relocate_to", "boss6_relocate_age", "boss6_relocate_duration", "boss6_miasma_ult_timer", "boss6_miasma_ult_cooldown", "boss6_miasma_ult_angle", "boss6_miasma_ult_pustule_timer", "boss6_miasma_slow_timer", "boss6_miasma_slow_stacks", "boss6_miasma_slow_tick", "boss6_carnage_slow_timer", "boss3_faith", "boss3_stage", "boss3_stun_timer", "boss3_rain_timer", "boss3_spit_timer", "boss3_tail_timer", "boss3_charge_timer", "boss3_cheese_timer", "boss3_dialogue_timer", "boss3_events", "boss3_consume_uid", "boss3_consume_timer", "boss3_ritual_timer", "boss3_ritual_destroyed", "boss3_is_moving", "boss3_miasma_cooldown", "boss3_miasma_timer", "boss3_miasma_variant", "boss3_miasma_clone_timer", "boss3_miasma_clone_positions", "boss3_miasma_spit_timer", "boss3_miasma_qte_required", "boss3_miasma_qte_taps", "boss3_miasma_qte_time_left", "boss3_miasma_qte_idle", "boss3_miasma_qte_tutorial", "boss3_miasma_qte_elapsed", "boss3_miasma_qte_lid_contacts", "boss3_miasma_qte_lids_touching", "boss3_miasma_qte_overtime_timer", "boss3_miasma_qte_overtime_stage", "boss3_miasma_tutorial_seen", "boss3_miasma_clouds", "boss3_faith_test_cooldown", "boss3_faith_test_active", "boss3_faith_test_pulses_left", "boss3_faith_test_pulse_timer", "boss3_faith_link_timer", "boss3_faith_link_damage_done", 
-		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_ultimate_laser_timer", "boss4_ultimate_gravity_timer", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_stun_timer", "boss4_vulnerable_timer", "boss4_column_barrage_timer", "boss4_drag_wave_timer", "boss4_sonic_used", 
+		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_ultimate_laser_timer", "boss4_ultimate_gravity_timer", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_secondary_timer", "boss4_secondary_active", "boss4_secondary_elapsed", "boss4_ultimate_cooldown", "boss4_ultimate_ray_index", "boss4_strike_sequence", "boss4_meteorites", "boss4_meteor_event_timer", "boss4_meteor_event_started", "boss4_meteor_damage_bonus", "boss4_stun_timer", "boss4_vulnerable_timer", "boss4_column_barrage_timer", "boss4_drag_wave_timer", "boss4_sonic_used",
 		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action", 
 		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done", 
 		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes", 
@@ -8042,9 +8091,11 @@ func _load_textures() -> void :
 	textures["player_up"] = [_safe_load(base + "Geo1-up.png"), _safe_load(base + "Geo2-up.png")]
 	textures["player_down"] = [_safe_load(base + "Geo1-Down.png"), _safe_load(base + "Geo2-Down.png")]
 	textures["player_fire"] = [_safe_load(base + "Geo_Disp1.png"), _safe_load(base + "Geo_Disp2.png")]
-	textures["player_fire_back_diag"] = [_safe_load(base + "Geo_Disp3.png"), _safe_load(base + "Geo_Disp4.png")]
-	textures["player_fire_up"] = [_safe_load(base + "Geo_Disp5.png"), _safe_load(base + "Geo_Disp6.png")]
-	textures["player_fire_down"] = [_safe_load(base + "Geo_Disp7.png"), _safe_load(base + "Geo_Disp8.png")]
+	# Keep the old keys as aliases for compatibility with snapshots and tools, but
+	# the playable attack always uses the two basic Dips frames above.
+	textures["player_fire_back_diag"] = textures["player_fire"]
+	textures["player_fire_up"] = textures["player_fire"]
+	textures["player_fire_down"] = textures["player_fire"]
 	textures["player_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
 	textures["player_start_down"] = [
@@ -9689,6 +9740,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	shop_opening_timer = 0.0
 	shop_opening_forced = false
 	shop_return_timer = 0.0
+	shop_return_visual_timer = 0.0
 	boss_ready = false
 	boss_call_timer = -1.0
 	boss_active = false
@@ -24618,7 +24670,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if current_phase == 1 and boss_hp > 0.0 and boss_hp < boss_hp_max * BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown <= 0.0:
 		_start_boss1_time_wave()
 		return
-	if current_phase == 4 and boss_hp > 0.0 and not boss4_ultimate_used and boss_hp / max(1.0, boss_hp_max) <= BOSS4_ULTIMATE_THRESHOLD:
+	if current_phase == 4 and boss_hp > 0.0 and not boss4_ultimate_active and boss4_ultimate_cooldown <= 0.0:
 		_start_boss4_ultimate()
 		return
 	var boss_executed = _boss_execute_threshold() > 0.0 and boss_hp <= boss_hp_max * _boss_execute_threshold()
@@ -24697,6 +24749,16 @@ func _clear_boss_runtime_hazards() -> void:
 		phase4_enemy_hazards.clear()
 		boss4_rupture_anchors.clear()
 		boss4_ultimate_active = false
+		boss4_secondary_timer = BOSS4_SECONDARY_COOLDOWN
+		boss4_secondary_active = false
+		boss4_secondary_elapsed = 0.0
+		boss4_ultimate_cooldown = BOSS4_ULTIMATE_COOLDOWN
+		boss4_ultimate_ray_index = 0
+		boss4_strike_sequence.clear()
+		boss4_meteorites.clear()
+		boss4_meteor_event_timer = 5.0
+		boss4_meteor_event_started = false
+		boss4_meteor_damage_bonus = 0.0
 		boss4_prison.clear()
 		boss4_clone.clear()
 	if current_phase == 5:
@@ -25020,11 +25082,18 @@ func _update_enemy_bullets(delta: float) -> void :
 		return
 	for bullet in enemy_bullets:
 		var previous_bullet_pos: = Vector2(bullet.get("pos", player_pos))
+		var bullet_type: = String(bullet.get("type", ""))
 		var slow_mult = _secondary_ancorada_projectile_slow_at(Vector2(bullet["pos"]))
+		if bullet_type == "boss4_comet":
+			var comet_target: Vector2 = _boss_target_pos(true, 0.12)
+			var desired_dir: Vector2 = (comet_target - Vector2(bullet["pos"])).normalized()
+			var comet_dir: Vector2 = Vector2(bullet.get("dir", Vector2.LEFT)).normalized()
+			if desired_dir.length() > 0.01:
+				comet_dir = comet_dir.lerp(desired_dir, clampf(delta * 2.7, 0.0, 0.22)).normalized()
+			bullet["dir"] = comet_dir
 		bullet["pos"] += bullet["dir"] * 210.0 * slow_mult * float(bullet.get("speed_mult", 1.0)) * AuraSystem.world_multiplier(aura_state) * delta
 		bullet["life"] = float(bullet["life"]) - delta
 		bullet["phase"] = float(bullet.get("phase", 0.0)) + delta * 9.0
-		var bullet_type: = String(bullet.get("type", ""))
 		if bullet_type == "boss7_dive_fireball":
 			_update_boss7_dive_fireball_projectile(bullet, previous_bullet_pos)
 			continue
@@ -25487,6 +25556,20 @@ func _update_phase4_enemy_hazards(delta: float) -> void :
 				_update_boss4_gravity_laser_hazard(hazard)
 			"boss4_gravity_well":
 				_update_boss4_gravity_well_hazard(hazard, delta)
+			"boss4_bubble":
+				_update_boss4_bubble_hazard(hazard)
+			"boss4_ultimate_ray":
+				_update_boss4_ultimate_ray_hazard(hazard)
+			"boss4_meteor_shockwave":
+				if not bool(hazard.get("triggered", false)) and float(hazard.get("age", 0.0)) >= float(hazard.get("warning", 0.12)):
+					hazard["triggered"] = true
+					var shock_pos: Vector2 = Vector2(hazard.get("pos", player_pos))
+					var shock_radius: float = float(hazard.get("radius", BOSS4_METEOR_SHOCKWAVE_RADIUS))
+					var shock_damage: int = _boss4_damage(0.09, 38.0)
+					if player_pos.distance_to(shock_pos) <= shock_radius:
+						_damage_player(shock_damage, "onda_meteorito")
+						_vibrate(135, 0.5)
+					_damage_remote_player_in_radius(shock_pos, shock_radius, shock_damage, "onda_meteorito", hazard, "hit_remote")
 	phase4_enemy_hazards = phase4_enemy_hazards.filter( func(hazard): return float(hazard.get("life", 0.0)) > 0.0)
 
 
@@ -25566,7 +25649,21 @@ func _damage_phase4_planet_at(pos: Vector2, amount: float, radius: float) -> boo
 			planet["life"] = 0.0
 			_spawn_radial_particles(Vector2(planet["pos"]), Color(0.86, 0.4, 1.0), 28)
 			_add_text("PLANETA ROMPIDO", Vector2(planet["pos"]) + Vector2(0, -82), Color(1.0, 0.82, 0.28), 0.9, 19)
-		hit = true
+			hit = true
+	for meteor in boss4_meteorites:
+		if bool(meteor.get("destroyed", false)) or not bool(meteor.get("impacted", false)):
+			continue
+		var meteor_pos: Vector2 = Vector2(meteor.get("pos", Vector2.ZERO))
+		if meteor_pos.distance_to(pos) > radius + BOSS4_METEOR_RADIUS * 0.42:
+			continue
+		meteor["hp"] = float(meteor.get("hp", BOSS4_METEOR_HP)) - amount
+		_add_text("-%d" % int(amount), meteor_pos + Vector2(0, -72), Color(1.0, 0.84, 0.28), 0.42, 16)
+		_spawn_radial_particles(meteor_pos, Color(1.0, 0.72, 0.2), 5)
+		if float(meteor["hp"]) <= 0.0:
+			meteor["destroyed"] = true
+			_spawn_radial_particles(meteor_pos, Color(0.42, 0.9, 1.0), 32)
+			_add_text("METEORITO DESTRUIDO", meteor_pos + Vector2(0, -96), Color(0.54, 1.0, 0.92), 0.9, 18)
+			hit = true
 	return hit
 
 
@@ -28706,10 +28803,12 @@ func _update_boss_phase4(delta: float) -> void :
 	boss_pos = boss4_entry_target
 	_update_boss4_stage()
 	_update_boss4_specials(delta)
+	_update_boss4_strike_sequence(delta)
 	if boss4_ultimate_active:
 		_update_boss4_ultimate(delta)
 		return
-	if not boss4_ultimate_used and boss_hp > 0.0 and boss_hp / max(1.0, boss_hp_max) <= BOSS4_ULTIMATE_THRESHOLD:
+	boss4_ultimate_cooldown = max(0.0, boss4_ultimate_cooldown - delta)
+	if boss4_ultimate_cooldown <= 0.0 and boss_hp > 0.0:
 		_start_boss4_ultimate()
 		return
 	if boss4_stun_timer > 0.0:
@@ -28717,7 +28816,7 @@ func _update_boss_phase4(delta: float) -> void :
 	_update_boss4_pattern_timers(delta)
 	boss4_attack_timer -= delta
 	if boss4_attack_timer <= 0.0:
-		boss4_attack_timer = _boss4_attack_interval()
+		boss4_attack_timer = BOSS4_ATTACK_INTERVAL
 		_spawn_boss4_stage_attack()
 
 
@@ -28739,64 +28838,197 @@ func _update_boss4_stage() -> void :
 
 
 func _boss4_attack_interval() -> float:
-	var unstable: float = clampf(boss4_instability / 100.0, 0.0, 1.0)
-	var stage_bonus: float = float(boss4_stage - 1) * 0.38
-	return max(2.45, BOSS4_ATTACK_INTERVAL - stage_bonus - unstable * 1.15)
+	return BOSS4_ATTACK_INTERVAL
 
 
 func _spawn_boss4_stage_attack() -> void :
-	var roll: float = rng.randf()
-	if boss4_stage <= 1:
-		if roll < 0.56:
-			_spawn_boss4_planet()
-		elif roll < 0.8:
-			_spawn_boss4_gravity_pulse()
-		else:
-			_spawn_boss4_gravity_well()
-	elif boss4_stage == 2:
-		if roll < 0.28:
-			_spawn_boss4_fissure()
-		elif roll < 0.5:
-			_start_boss4_gravity_inversion()
-		elif roll < 0.74:
-			_spawn_boss4_rupture_vector()
-		else:
-			_spawn_boss4_gravity_well()
-	elif boss4_stage == 3:
-		if roll < 0.24 and petro_active:
-			_start_boss4_vampirism()
-		elif roll < 0.48:
-			_start_boss4_orbital_prison()
-		elif roll < 0.7:
-			_spawn_boss4_clone()
-		else:
-			_spawn_boss4_laser_fan(false)
-	else:
-		if roll < 0.25:
-			_spawn_boss4_cosmic_fragments()
-		elif roll < 0.48:
-			_spawn_boss4_collapse_zone()
-		elif roll < 0.68:
-			_spawn_boss4_rupture_vector(true)
-		elif roll < 0.84:
-			_spawn_boss4_gravity_well()
-		else:
-			_spawn_boss4_laser_fan(false)
+	_spawn_boss4_comet()
 
 
 func _update_boss4_pattern_timers(delta: float) -> void :
-	var hp_ratio: float = boss_hp / max(1.0, boss_hp_max)
-	if not boss4_sonic_used and hp_ratio <= BOSS4_SONIC_TRIGGER_RATIO:
-		boss4_sonic_used = true
-		_spawn_boss4_sonic_wave()
-	boss4_column_barrage_timer = max(0.0, boss4_column_barrage_timer - delta)
-	if boss4_column_barrage_timer <= 0.0:
-		boss4_column_barrage_timer = BOSS4_COLUMN_BARRAGE_COOLDOWN
-		_spawn_boss4_column_barrage()
-	boss4_drag_wave_timer = max(0.0, boss4_drag_wave_timer - delta)
-	if boss4_drag_wave_timer <= 0.0:
-		boss4_drag_wave_timer = BOSS4_DRAG_WAVE_COOLDOWN
-		_spawn_boss4_drag_wave()
+	boss4_secondary_timer = max(0.0, boss4_secondary_timer - delta)
+	if boss4_secondary_timer <= 0.0 and not boss4_secondary_active:
+		_start_boss4_secondary()
+		boss4_secondary_timer = BOSS4_SECONDARY_COOLDOWN
+
+
+func _boss4_damage_scale() -> float:
+	return 1.0 + clampf(boss4_meteor_damage_bonus, 0.0, BOSS4_METEOR_DAMAGE_CAP)
+
+
+func _boss4_damage(rate: float, flat: float) -> int:
+	return int((player_hp_max * rate + flat + enemy_far_damage * 0.36) * _boss4_damage_scale())
+
+
+func _spawn_boss4_comet() -> void :
+	var direction: Vector2 = (_boss_target_pos(true, 0.14) - boss_pos).normalized()
+	if direction.length() <= 0.01:
+		direction = Vector2.LEFT
+	enemy_bullets.append({
+		"pos": boss_pos + direction * 68.0,
+		"dir": direction,
+		"life": BOSS4_COMET_LIFETIME,
+		"damage": _boss4_damage(0.11, 48.0),
+		"phase": rng.randf_range(0.0, TAU),
+		"type": "boss4_comet",
+		"radius": BOSS4_COMET_RADIUS,
+		"speed_mult": BOSS4_COMET_SPEED / 210.0,
+		"comet_turn": 0.0
+	})
+	boss4_attack_pose_timer = maxf(boss4_attack_pose_timer, 0.42)
+	_add_text("COMETA DO NEXO", boss_pos + Vector2(0, -132), Color(1.0, 0.76, 0.26), 0.6, 16)
+	_play_sfx("Projetil.mp3", 0.04, 0.72, 1.05)
+
+
+func _start_boss4_secondary() -> void :
+	boss4_secondary_active = true
+	boss4_secondary_elapsed = 0.0
+	boss4_attack_pose_timer = maxf(boss4_attack_pose_timer, 0.8)
+	for i in range(BOSS4_SECONDARY_UP_COUNT):
+		var x: float = WORLD_SIZE.x * (0.14 + float(i) * 0.24) + rng.randf_range(-34.0, 34.0)
+		_add_phase4_hazard({
+			"kind": "boss4_bubble",
+			"start": Vector2(x, WORLD_SIZE.y + 62.0),
+			"end": Vector2(x + rng.randf_range(-70.0, 70.0), -62.0),
+			"pos": Vector2(x, WORLD_SIZE.y + 62.0),
+			"age": 0.0,
+			"delay": 0.0,
+			"warning": BOSS4_SECONDARY_WARNING,
+			"life": BOSS4_SECONDARY_DURATION + 0.3,
+			"max": BOSS4_SECONDARY_DURATION + 0.3,
+			"radius": 28.0,
+			"phase": rng.randf_range(0.0, TAU),
+			"hit": false
+		})
+	for i in range(BOSS4_SECONDARY_DOWN_COUNT):
+		var x: float = WORLD_SIZE.x * (0.2 + float(i) * 0.3) + rng.randf_range(-34.0, 34.0)
+		_add_phase4_hazard({
+			"kind": "boss4_bubble",
+			"start": Vector2(x, -62.0),
+			"end": Vector2(x + rng.randf_range(-70.0, 70.0), WORLD_SIZE.y + 62.0),
+			"pos": Vector2(x, -62.0),
+			"age": 0.0,
+			"delay": 3.5,
+			"warning": BOSS4_SECONDARY_WARNING,
+			"life": BOSS4_SECONDARY_DURATION + 0.3,
+			"max": BOSS4_SECONDARY_DURATION + 0.3,
+			"radius": 28.0,
+			"phase": rng.randf_range(0.0, TAU),
+			"hit": false
+		})
+	_add_text("CORREDOR DE BOLHAS", Vector2(WORLD_SIZE.x * 0.5, 108.0), Color(0.44, 0.9, 1.0), 1.0, 19)
+	_vibrate(80, 0.28)
+
+
+func _update_boss4_secondary(delta: float) -> void :
+	if not boss4_secondary_active:
+		return
+	boss4_secondary_elapsed += delta
+	if boss4_secondary_elapsed >= BOSS4_SECONDARY_DURATION:
+		boss4_secondary_active = false
+		boss4_secondary_elapsed = 0.0
+
+
+func _update_boss4_bubble_hazard(hazard: Dictionary) -> void :
+	var age: float = float(hazard.get("age", 0.0))
+	var delay: float = float(hazard.get("delay", 0.0))
+	var warning: float = float(hazard.get("warning", BOSS4_SECONDARY_WARNING))
+	if age < delay:
+		return
+	var travel_age: float = age - delay
+	if travel_age < warning:
+		return
+	var start: Vector2 = Vector2(hazard.get("start", player_pos))
+	var end: Vector2 = Vector2(hazard.get("end", player_pos))
+	var travel_time: float = maxf(0.1, BOSS4_SECONDARY_DURATION - delay - warning)
+	var progress: float = clampf((travel_age - warning) / travel_time, 0.0, 1.0)
+	var base_pos: Vector2 = start.lerp(end, progress)
+	var path_dir: Vector2 = (end - start).normalized()
+	hazard["pos"] = base_pos + path_dir.orthogonal() * sin(float(hazard.get("phase", 0.0)) + time_alive * 4.0) * 22.0
+	var bubble_pos: Vector2 = Vector2(hazard["pos"])
+	var radius: float = float(hazard.get("radius", 28.0))
+	if not bool(hazard.get("hit", false)) and player_pos.distance_to(bubble_pos) <= radius + 20.0:
+		hazard["hit"] = true
+		_damage_player(_boss4_damage(0.075, 28.0), "bolha_nexo")
+		_spawn_radial_particles(bubble_pos, Color(0.4, 0.88, 1.0), 14)
+		_vibrate(90, 0.3)
+	_damage_remote_player_in_radius(bubble_pos, radius + 20.0, _boss4_damage(0.075, 28.0), "bolha_nexo", hazard, "hit_remote")
+
+
+func _start_boss4_meteor_event() -> void :
+	boss4_meteor_event_started = true
+	boss4_meteorites.clear()
+	boss4_meteor_damage_bonus = 0.0
+	for i in range(BOSS4_METEOR_COUNT):
+		var target: Vector2 = Vector2(
+			WORLD_SIZE.x * (0.2 + float(i) * 0.3) + rng.randf_range(-70.0, 70.0),
+			WORLD_SIZE.y * rng.randf_range(0.27, 0.73)
+		).clamp(Vector2(100.0, 110.0), WORLD_SIZE - Vector2(100.0, 110.0))
+		boss4_meteorites.append({
+			"pos": Vector2(target.x, -170.0), "target": target, "age": 0.0,
+			"ground_age": 0.0, "life": BOSS4_METEOR_LIFETIME,
+			"hp": BOSS4_METEOR_HP, "max_hp": BOSS4_METEOR_HP,
+			"warning": BOSS4_METEOR_WARNING, "phase": rng.randf_range(0.0, TAU),
+			"impacted": false, "draining": false, "shockwave_spawned": false
+		})
+	_add_text("METEORITOS DE ENERGIA", Vector2(WORLD_SIZE.x * 0.5, 144.0), Color(1.0, 0.62, 0.18), 1.4, 23)
+	_vibrate(180, 0.62)
+
+
+func _update_boss4_meteorites(delta: float) -> void :
+	if not boss4_meteor_event_started:
+		boss4_meteor_event_timer = maxf(0.0, boss4_meteor_event_timer - delta)
+		if boss4_meteor_event_timer <= 0.0:
+			_start_boss4_meteor_event()
+		return
+	for meteor in boss4_meteorites:
+		meteor["age"] = float(meteor.get("age", 0.0)) + delta
+		meteor["phase"] = float(meteor.get("phase", 0.0)) + delta * 4.0
+		var warning: float = float(meteor.get("warning", BOSS4_METEOR_WARNING))
+		var target: Vector2 = Vector2(meteor.get("target", player_pos))
+		if not bool(meteor.get("impacted", false)):
+			var fall_progress: float = clampf(float(meteor["age"]) / maxf(0.1, warning), 0.0, 1.0)
+			var eased: float = 1.0 - pow(1.0 - fall_progress, 3.0)
+			meteor["pos"] = Vector2(target.x, -170.0).lerp(target, eased)
+			if fall_progress >= 1.0:
+				meteor["impacted"] = true
+				meteor["ground_age"] = 0.0
+				meteor["pos"] = target
+				if not bool(meteor.get("shockwave_spawned", false)):
+					meteor["shockwave_spawned"] = true
+					_add_phase4_hazard({
+						"kind": "boss4_meteor_shockwave", "pos": target, "age": 0.0,
+						"life": 0.9, "max": 0.9, "warning": 0.12,
+						"radius": BOSS4_METEOR_SHOCKWAVE_RADIUS, "triggered": false
+					})
+					_spawn_radial_particles(target, Color(1.0, 0.52, 0.12), 34)
+					_vibrate(145, 0.5)
+			continue
+		meteor["ground_age"] = float(meteor.get("ground_age", 0.0)) + delta
+		meteor["life"] = float(meteor.get("life", BOSS4_METEOR_LIFETIME)) - delta
+		if float(meteor["ground_age"]) >= BOSS4_METEOR_ARM_TIME:
+			if not bool(meteor.get("draining", false)):
+				meteor["draining"] = true
+				_add_text("DRENAGEM INICIADA", target + Vector2(0, -82), Color(1.0, 0.34, 0.58), 0.8, 17)
+			boss4_meteor_damage_bonus = minf(BOSS4_METEOR_DAMAGE_CAP, boss4_meteor_damage_bonus + BOSS4_METEOR_DRAIN_DAMAGE_RATE * delta)
+			boss_hp = min(boss_hp_max, boss_hp + boss_hp_max * BOSS4_METEOR_DRAIN_HP_RATE * delta)
+	boss4_meteorites = boss4_meteorites.filter(func(m): return not bool(m.get("destroyed", false)) and float(m.get("life", 0.0)) > 0.0)
+	if boss4_meteorites.is_empty():
+		boss4_meteor_damage_bonus = 0.0
+
+
+func _draw_boss4_lightning_link(from_world: Vector2, to_world: Vector2, camera: Vector2, color: Color, thickness: float) -> void:
+	var direction: Vector2 = to_world - from_world
+	if direction.length() <= 0.01:
+		return
+	var side: Vector2 = direction.normalized().orthogonal()
+	var points := PackedVector2Array()
+	for i in range(9):
+		var t: float = float(i) / 8.0
+		var wobble: float = sin(time_alive * 19.0 + float(i) * 2.7) * 10.0 * sin(t * PI)
+		points.append(from_world.lerp(to_world, t) + side * wobble - camera)
+	draw_polyline(points, Color(0.18, 0.1, 0.02, 0.65), thickness + 6.0, true)
+	draw_polyline(points, color, thickness, true)
 
 
 func _spawn_boss4_column_barrage() -> void :
@@ -28897,6 +29129,8 @@ func _decrease_boss4_instability(amount: float) -> void :
 
 
 func _update_boss4_specials(delta: float) -> void :
+	_update_boss4_secondary(delta)
+	_update_boss4_meteorites(delta)
 	if boss4_no_hit_timer > 5.0:
 		_increase_boss4_instability(delta * 2.6)
 	if boss4_gravity_timer > 0.0:
@@ -28908,11 +29142,6 @@ func _update_boss4_specials(delta: float) -> void :
 		_update_boss4_prison(delta)
 	if not boss4_clone.is_empty():
 		_update_boss4_clone(delta)
-	if boss4_stage >= 4:
-		boss4_fragment_timer -= delta
-		if boss4_fragment_timer <= 0.0:
-			boss4_fragment_timer = rng.randf_range(2.2, 3.4)
-			_spawn_boss4_cosmic_fragments(2)
 
 
 func _spawn_boss4_gravity_pulse() -> void :
@@ -29183,15 +29412,12 @@ func _start_boss4_ultimate() -> void :
 	boss4_ultimate_used = true
 	boss4_ultimate_timer = BOSS4_ULTIMATE_DURATION
 	boss4_ultimate_destroyed = 0
-	boss4_ultimate_laser_timer = 0.35
-	boss4_ultimate_gravity_timer = 0.1
+	boss4_ultimate_ray_index = 0
+	boss4_ultimate_laser_timer = 0.0
+	boss4_ultimate_gravity_timer = 0.0
 	boss4_rupture_anchors.clear()
-	var initial_dir: = (WORLD_SIZE * 0.5 - player_pos).normalized()
-	boss4_gravity_dir = initial_dir if initial_dir.length() > 0.01 else Vector2.LEFT
-	boss4_gravity_timer = BOSS4_ULTIMATE_DURATION
 	_increase_boss4_instability(10.0)
-	_add_text("ECLIPSE GRAVITACIONAL", boss_pos + Vector2(0, -162), Color(0.48, 1.0, 0.94), 2.0, 31)
-	_spawn_boss4_gravity_well(player_pos)
+	_add_text("TEMPESTADE DE RAIOS", boss_pos + Vector2(0, -162), Color(1.0, 0.86, 0.28), 2.0, 31)
 	_vibrate(260, 0.82)
 
 
@@ -29199,37 +29425,111 @@ func _update_boss4_ultimate(delta: float) -> void :
 	boss4_ultimate_timer = max(0.0, boss4_ultimate_timer - delta)
 	boss4_attack_pose_timer = max(boss4_attack_pose_timer, 0.25)
 	boss4_ultimate_laser_timer = max(0.0, boss4_ultimate_laser_timer - delta)
-	boss4_ultimate_gravity_timer = max(0.0, boss4_ultimate_gravity_timer - delta)
-	if boss4_ultimate_gravity_timer <= 0.0:
-		boss4_ultimate_gravity_timer = BOSS4_ULTIMATE_GRAVITY_SWAP
-		var dirs: Array[Vector2] = [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN, (WORLD_SIZE * 0.5 - player_pos).normalized()]
-		var next_dir: = dirs[boss4_ultimate_destroyed % dirs.size()]
-		if next_dir.length() <= 0.01:
-			next_dir = Vector2.LEFT
-		boss4_gravity_dir = next_dir
-		boss4_gravity_timer = max(boss4_gravity_timer, BOSS4_ULTIMATE_GRAVITY_SWAP + 0.2)
-		_add_text("GRAVIDADE: %s" % _boss4_gravity_dir_label(next_dir), player_pos + Vector2(0, -92), Color(0.56, 1.0, 0.9), 0.72, 17)
 	if boss4_ultimate_laser_timer <= 0.0:
-		boss4_ultimate_laser_timer = BOSS4_ULTIMATE_LASER_INTERVAL
-		_spawn_boss4_laser_fan(true)
-		boss4_ultimate_destroyed += 1
-		if boss4_ultimate_destroyed % 3 == 0:
-			_spawn_boss4_gravity_well((player_pos + Vector2(rng.randf_range(-120.0, 120.0), rng.randf_range(-80.0, 80.0))).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)))
+		boss4_ultimate_laser_timer = BOSS4_ULTIMATE_RAY_INTERVAL
+		_spawn_boss4_ultimate_ray(boss4_ultimate_ray_index == 0)
+		boss4_ultimate_ray_index += 1
 	if boss4_ultimate_timer <= 0.0:
 		_finish_boss4_ultimate(true)
 
 
 func _finish_boss4_ultimate(success: bool) -> void :
 	boss4_ultimate_active = false
-	boss4_gravity_timer = 0.0
-	boss4_gravity_dir = Vector2.ZERO
 	boss4_stun_timer = BOSS4_ULTIMATE_STUN_TIME if success else 0.0
 	boss4_vulnerable_timer = BOSS4_ULTIMATE_VULNERABLE_TIME if success else 2.0
-	phase4_null_zones.clear()
+	boss4_ultimate_cooldown = BOSS4_ULTIMATE_COOLDOWN
 	_decrease_boss4_instability(18.0 if success else 6.0)
-	_add_text("CAMPO GRAVITACIONAL ROMPIDO", boss_pos + Vector2(0, -154), Color(0.6, 1.0, 0.88), 1.8, 25)
-	boss4_rupture_anchors.clear()
-	_spawn_radial_particles(boss_pos, Color(0.52, 1.0, 0.92), 58)
+	_add_text("TEMPESTADE DISSIPADA", boss_pos + Vector2(0, -154), Color(1.0, 0.92, 0.46), 1.8, 25)
+	_spawn_radial_particles(boss_pos, Color(1.0, 0.86, 0.28), 58)
+
+
+func _spawn_boss4_ultimate_ray(targeted: bool) -> void :
+	var target: Vector2 = _boss_target_pos(true, 0.18) if targeted else Vector2(
+		rng.randf_range(90.0, WORLD_SIZE.x - 90.0), rng.randf_range(90.0, WORLD_SIZE.y - 90.0)
+	)
+	target = target.clamp(Vector2(74.0, 74.0), WORLD_SIZE - Vector2(74.0, 74.0))
+	_add_phase4_hazard({
+		"kind": "boss4_ultimate_ray", "pos": target, "age": 0.0,
+		"life": BOSS4_ULTIMATE_RAY_DURATION, "max": BOSS4_ULTIMATE_RAY_DURATION,
+		"warning": BOSS4_ULTIMATE_RAY_WARNING, "radius": BOSS4_ULTIMATE_RAY_RADIUS,
+		"targeted": targeted, "triggered": false, "phase": rng.randf_range(0.0, TAU)
+	})
+
+
+func _update_boss4_ultimate_ray_hazard(hazard: Dictionary) -> void :
+	if bool(hazard.get("triggered", false)) or float(hazard.get("age", 0.0)) < float(hazard.get("warning", BOSS4_ULTIMATE_RAY_WARNING)):
+		return
+	hazard["triggered"] = true
+	var target: Vector2 = Vector2(hazard.get("pos", player_pos))
+	var radius: float = float(hazard.get("radius", BOSS4_ULTIMATE_RAY_RADIUS))
+	var damage: int = _boss4_damage(0.12, 56.0)
+	_spawn_radial_particles(target, Color(1.0, 0.9, 0.28), 28)
+	_vibrate(120, 0.46)
+	if player_pos.distance_to(target) <= radius and boss4_strike_sequence.is_empty():
+		_start_boss4_strike_sequence(target)
+	_damage_remote_player_in_radius(target, radius, damage, "raio_nexo", hazard, "hit_remote")
+	if player_pos.distance_to(target) > radius:
+		if player_pos.distance_to(target) <= radius * 1.18:
+			_damage_player(damage, "raio_nexo")
+	else:
+		_damage_player(damage, "raio_nexo")
+
+
+func _start_boss4_strike_sequence(hit_pos: Vector2) -> void :
+	var throw_dir: Vector2 = Vector2.from_angle(rng.randf_range(0.0, TAU))
+	var edge: Vector2 = (hit_pos + throw_dir * 1200.0).clamp(Vector2(54.0, 64.0), WORLD_SIZE - Vector2(54.0, 64.0))
+	boss4_strike_sequence = {
+		"state": "teleport", "age": 0.0, "hit_pos": hit_pos,
+		"origin": boss_pos, "throw_dir": throw_dir, "edge": edge,
+		"slam_done": false, "edge_damage_done": false
+	}
+	player_stun_timer = maxf(player_stun_timer, BOSS4_STRIKE_TELEPORT_TIME + BOSS4_STRIKE_LIFT_TIME + BOSS4_STRIKE_SLAM_TIME + BOSS4_STRIKE_THROW_TIME)
+	_add_text("CAPTURA ELETRICA", hit_pos + Vector2(0, -88), Color(1.0, 0.92, 0.34), 0.8, 18)
+
+
+func _update_boss4_strike_sequence(delta: float) -> void :
+	if boss4_strike_sequence.is_empty():
+		return
+	var state: String = String(boss4_strike_sequence.get("state", "teleport"))
+	var age: float = float(boss4_strike_sequence.get("age", 0.0)) + delta
+	var hit_pos: Vector2 = Vector2(boss4_strike_sequence.get("hit_pos", player_pos))
+	var throw_dir: Vector2 = Vector2(boss4_strike_sequence.get("throw_dir", Vector2.RIGHT)).normalized()
+	boss4_strike_sequence["age"] = age
+	if state == "teleport":
+		var progress: float = clampf(age / BOSS4_STRIKE_TELEPORT_TIME, 0.0, 1.0)
+		boss_pos = Vector2(boss4_strike_sequence.get("origin", boss_pos)).lerp(hit_pos + throw_dir * 82.0, 1.0 - pow(1.0 - progress, 3.0))
+		_spawn_radial_particles(boss_pos, Color(0.54, 0.92, 1.0), 2)
+		if progress >= 1.0:
+			boss4_strike_sequence["state"] = "lift"
+			boss4_strike_sequence["age"] = 0.0
+	elif state == "lift":
+		var progress: float = clampf(age / BOSS4_STRIKE_LIFT_TIME, 0.0, 1.0)
+		player_pos = _clamp_player_world(hit_pos + Vector2(0.0, -104.0 * sin(progress * PI * 0.5)))
+		if progress >= 1.0:
+			boss4_strike_sequence["state"] = "slam"
+			boss4_strike_sequence["age"] = 0.0
+	elif state == "slam":
+		player_pos = _clamp_player_world(hit_pos)
+		if not bool(boss4_strike_sequence.get("slam_done", false)):
+			boss4_strike_sequence["slam_done"] = true
+			_damage_player(_boss4_damage(0.18, 80.0), "golpe_nexo")
+			_spawn_radial_particles(hit_pos, Color(1.0, 0.64, 0.16), 36)
+			_vibrate(220, 0.82)
+		if age >= BOSS4_STRIKE_SLAM_TIME:
+			boss4_strike_sequence["state"] = "throw"
+			boss4_strike_sequence["age"] = 0.0
+	elif state == "throw":
+		var progress: float = clampf(age / BOSS4_STRIKE_THROW_TIME, 0.0, 1.0)
+		var edge: Vector2 = Vector2(boss4_strike_sequence.get("edge", hit_pos))
+		var arc: float = sin(progress * PI) * 90.0
+		player_pos = _clamp_player_world(hit_pos.lerp(edge, 1.0 - pow(1.0 - progress, 2.4)) - Vector2(0.0, arc))
+		if progress >= 1.0:
+			if not bool(boss4_strike_sequence.get("edge_damage_done", false)):
+				boss4_strike_sequence["edge_damage_done"] = true
+				_damage_player(_boss4_damage(0.07, 26.0), "impacto_borda_nexo")
+				_spawn_radial_particles(player_pos, Color(1.0, 0.74, 0.28), 22)
+			boss_pos = boss4_entry_target
+			boss4_strike_sequence.clear()
 
 
 func _spawn_boss4_planet() -> void :
@@ -37586,6 +37886,7 @@ func _finish_shop() -> void :
 	shop_mp_expected_count = maxi(1, _active_run_player_count())
 	mode = "shop_return"
 	shop_return_timer = SHOP_RETURN_TIME
+	shop_return_visual_timer = SHOP_RETURN_VISUAL_TIME
 	forced_shop_timer = -1.0
 	forced_shop_triggered = false
 	shop_opening_timer = 0.0
@@ -37601,6 +37902,7 @@ func _finish_shop() -> void :
 
 func _update_shop_return(delta: float) -> void :
 	shop_return_timer -= delta
+	shop_return_visual_timer = maxf(0.0, shop_return_visual_timer - delta)
 	_update_effects(delta)
 	if shop_return_timer <= 0.0:
 		mode = previous_mode if previous_mode != "" else "game"
@@ -46942,7 +47244,31 @@ func _draw_projectiles(camera: Vector2) -> void :
 	for bullet in enemy_bullets:
 		if not _world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue
-		if bullet.get("type") == "boss7_dive_fireball":
+		if bullet.get("type") == "boss4_comet":
+			var comet_pos: Vector2 = Vector2(bullet["pos"]) - camera
+			var comet_dir: Vector2 = Vector2(bullet.get("dir", Vector2.LEFT)).normalized()
+			var comet_side: Vector2 = comet_dir.orthogonal()
+			var comet_phase: float = float(bullet.get("phase", 0.0))
+			var comet_radius: float = BOSS4_COMET_RADIUS
+			var tail := PackedVector2Array()
+			for i in range(7):
+				var tail_t: float = float(i) / 6.0
+				var curve: float = sin(comet_phase * 0.7 + time_alive * 6.0 + tail_t * 5.0) * (1.0 - tail_t) * 12.0
+				tail.append(comet_pos - comet_dir * (comet_radius * (0.3 + tail_t * 2.1)) + comet_side * curve)
+			draw_polyline(tail, Color(0.2, 0.56, 1.0, 0.18), 18.0, true)
+			draw_polyline(tail, Color(0.72, 0.9, 1.0, 0.62), 5.0, true)
+			var rock := PackedVector2Array()
+			for i in range(8):
+				var rock_angle: float = float(i) * TAU / 8.0 + comet_phase * 0.08
+				rock.append(comet_pos + Vector2.from_angle(rock_angle) * comet_radius * (0.82 + 0.16 * sin(comet_phase + i * 2.3)))
+			draw_circle(comet_pos, comet_radius * 1.45, Color(0.16, 0.52, 1.0, 0.16))
+			draw_colored_polygon(rock, Color(0.2, 0.18, 0.22, 0.98))
+			var rock_outline: PackedVector2Array = rock.duplicate()
+			rock_outline.append(rock[0])
+			draw_polyline(rock_outline, Color(1.0, 0.7, 0.22, 0.96), 3.2, true)
+			draw_circle(comet_pos - comet_dir * 7.0 - comet_side * 7.0, 7.0, Color(0.44, 0.76, 0.96, 0.72))
+			draw_arc(comet_pos, comet_radius * 1.18, comet_phase, comet_phase + PI * 1.4, 32, Color(0.42, 0.92, 1.0, 0.78), 2.4)
+		elif bullet.get("type") == "boss7_dive_fireball":
 			var pos: Vector2 = Vector2(bullet["pos"]) - camera
 			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.DOWN)).normalized()
 			var side: Vector2 = dir.orthogonal()
@@ -47335,21 +47661,7 @@ func _player_can_show_attack_sprite() -> bool:
 func _player_fire_animation_info(direction: Vector2 = Vector2.ZERO) -> Dictionary:
 	var source: = direction if direction.length() > 0.05 else player_attack_visual_dir
 	var dir: = source.normalized() if source.length() > 0.05 else Vector2.RIGHT
-	var key: = "player_fire"
-	var flip_h: = false
-	if dir.y > 0.35:
-		key = "player_fire_down"
-		flip_h = dir.x < -0.12
-	elif dir.y < -0.35:
-		if absf(dir.x) >= 0.45:
-			key = "player_fire_back_diag"
-			flip_h = dir.x < -0.12
-		else:
-			key = "player_fire_up"
-			flip_h = dir.x < -0.12
-	else:
-		flip_h = dir.x < -0.1
-	return {"key": key, "flip_h": flip_h}
+	return {"key": "player_fire", "flip_h": dir.x < -0.1}
 
 
 func _player_fire_texture_for_current_attack(elapsed_time: float) -> Texture2D:
@@ -47358,26 +47670,6 @@ func _player_fire_texture_for_current_attack(elapsed_time: float) -> Texture2D:
 
 
 func _player_fire_draw_profile() -> Dictionary:
-	var info: = _player_fire_animation_info()
-	match String(info.get("key", "player_fire")):
-		"player_fire_back_diag":
-			return {
-				"size": Vector2(63.8, 70.4),
-				"offset": Vector2.ZERO,
-				"fit_aspect": true
-			}
-		"player_fire_up":
-			return {
-				"size": Vector2(57.2, 74.8),
-				"offset": Vector2.ZERO,
-				"fit_aspect": true
-			}
-		"player_fire_down":
-			return {
-				"size": Vector2(60.5, 72.6),
-				"offset": Vector2.ZERO,
-				"fit_aspect": true
-			}
 	return {
 		"size": PLAYER_DRAW_SHOT_SIZE,
 		"offset": Vector2.ZERO
@@ -47761,6 +48053,36 @@ func _draw_phase4_environment(camera: Vector2) -> void :
 		_draw_entity_fit(texture, pos, Vector2(104, 104) * pulse, Color.WHITE, true)
 		draw_arc(pos, 58.0 + sin(phase * 2.4) * 4.0, phase, phase + PI * 1.55, 42, Color(1.0, 0.74, 0.22, 0.86), 3.0)
 		_draw_bar(pos + Vector2(-45, -64), 90.0, float(planet.get("hp", 0.0)) / max(1.0, float(planet.get("max_hp", BOSS4_PLANET_HP))), Color(0.88, 0.34, 1.0))
+	for meteor in boss4_meteorites:
+		var meteor_world: Vector2 = Vector2(meteor.get("pos", Vector2.ZERO))
+		if not _world_point_in_view(meteor_world, camera, 180.0):
+			continue
+		var pos: Vector2 = meteor_world - camera
+		var phase: float = float(meteor.get("phase", 0.0))
+		var radius: float = BOSS4_METEOR_RADIUS * (1.0 + 0.05 * sin(phase))
+		var impact_progress: float = clampf(float(meteor.get("age", 0.0)) / maxf(0.1, float(meteor.get("warning", BOSS4_METEOR_WARNING))), 0.0, 1.0)
+		if not bool(meteor.get("impacted", false)):
+			draw_circle(pos, radius * (1.2 + impact_progress), Color(1.0, 0.54, 0.12, 0.2))
+			draw_line(pos - Vector2(0, 240), pos, Color(1.0, 0.86, 0.36, 0.44), 8.0, true)
+		else:
+			var rock := PackedVector2Array()
+			for i in range(9):
+				var angle: float = float(i) * TAU / 9.0 + phase * 0.08
+				rock.append(pos + Vector2.from_angle(angle) * radius * (0.84 + 0.18 * sin(phase + i * 1.9)))
+			draw_circle(pos, radius * 1.32, Color(1.0, 0.32, 0.08, 0.16))
+			draw_colored_polygon(rock, Color(0.22, 0.14, 0.16, 0.98))
+			var rock_outline: PackedVector2Array = rock.duplicate()
+			rock_outline.append(rock[0])
+			draw_polyline(rock_outline, Color(1.0, 0.68, 0.22, 0.9), 3.0, true)
+			for crater in range(3):
+				var crater_pos: Vector2 = pos + Vector2.from_angle(phase + crater * 2.1) * radius * 0.42
+				draw_circle(crater_pos, 7.0 + crater * 2.0, Color(0.06, 0.04, 0.08, 0.76))
+			if bool(meteor.get("draining", false)):
+				_draw_boss4_lightning_link(boss_pos, meteor_world, camera, Color(1.0, 0.84, 0.24, 0.92), 3.0)
+				draw_arc(pos, radius * 1.3, phase, phase + PI * 1.35, 36, Color(1.0, 0.2, 0.64, 0.8), 4.0)
+			else:
+				draw_arc(pos, radius * 1.24, -PI * 0.5, -PI * 0.5 + TAU * clampf(float(meteor.get("ground_age", 0.0)) / BOSS4_METEOR_ARM_TIME, 0.0, 1.0), 42, Color(1.0, 0.76, 0.24, 0.92), 3.0)
+			_draw_bar(pos + Vector2(-radius, -radius - 18.0), radius * 2.0, float(meteor.get("hp", 0.0)) / maxf(1.0, float(meteor.get("max_hp", BOSS4_METEOR_HP))), Color(0.32, 0.9, 1.0) if not bool(meteor.get("draining", false)) else Color(1.0, 0.28, 0.58))
 
 
 func _draw_procedural_lightning_bolt(from: Vector2, to_angle: float, max_dist: float, color: Color, thickness: float, b_seed: int) -> void :
@@ -48159,7 +48481,7 @@ func _draw_boss4_ultimate(camera: Vector2) -> void :
 			var p: = center - dir * (220.0 + float(i) * 92.0) + dir.orthogonal() * sin(time_alive * 3.0 + float(i)) * 54.0
 			draw_polyline(PackedVector2Array([p - dir * 22.0 + dir.orthogonal() * 14.0, p + dir * 18.0, p - dir * 22.0 - dir.orthogonal() * 14.0]), Color(0.7, 1.0, 0.9, 0.66), 3.0, false)
 		_draw_centered("GRAVIDADE: %s" % _boss4_gravity_dir_label(dir), Vector2(viewport.x * 0.5, 122.0), 16, Color(0.7, 1.0, 0.9, 0.92))
-	_draw_centered("ECLIPSE GRAVITACIONAL %.0fs" % ceil(boss4_ultimate_timer), Vector2(viewport.x * 0.5, 92.0), 22, Color(0.56, 1.0, 0.92, 0.98))
+	_draw_centered("TEMPESTADE DE RAIOS %.0fs" % ceil(boss4_ultimate_timer), Vector2(viewport.x * 0.5, 92.0), 22, Color(1.0, 0.86, 0.28, 0.98))
 
 
 func _draw_phase4_enemy_hazards(camera: Vector2) -> void :
@@ -48304,6 +48626,47 @@ func _draw_phase4_enemy_hazards(camera: Vector2) -> void :
 					for i in range(8):
 						var p: = a.lerp(b, fposmod(time_alive * 0.92 + float(i) * 0.13, 1.0))
 						draw_circle(p, 3.0 + float(i % 3), Color(0.92, 1.0, 1.0, 0.62 * fade))
+			"boss4_bubble":
+				var bubble_world: Vector2 = Vector2(hazard.get("pos", hazard.get("start", player_pos)))
+				var bubble_pos: Vector2 = bubble_world - camera
+				var delay: float = float(hazard.get("delay", 0.0))
+				var warning: float = float(hazard.get("warning", BOSS4_SECONDARY_WARNING))
+				var bubble_age: float = age - delay
+				var bubble_phase: float = float(hazard.get("phase", 0.0))
+				if bubble_age < 0.0:
+					var lane_start: Vector2 = Vector2(hazard.get("start", bubble_world)) - camera
+					draw_line(lane_start - Vector2(26, 0), lane_start + Vector2(26, 0), Color(0.38, 0.86, 1.0, 0.24 * fade), 3.0, true)
+				elif bubble_age < warning:
+					var lane_start: Vector2 = Vector2(hazard.get("start", bubble_world)) - camera
+					var lane_end: Vector2 = Vector2(hazard.get("end", bubble_world)) - camera
+					var lane_progress: float = clampf(bubble_age / maxf(0.01, warning), 0.0, 1.0)
+					var telegraph_pos: Vector2 = lane_start.lerp(lane_end, lane_progress)
+					draw_arc(telegraph_pos, 34.0 + sin(time_alive * 16.0) * 4.0, 0.0, TAU, 28, Color(1.0, 0.34, 0.28, 0.8 * fade), 3.0)
+					_draw_centered("!", telegraph_pos, 26, Color(1.0, 0.78, 0.48, 0.92 * fade))
+				else:
+					draw_circle(bubble_pos, 38.0 + sin(time_alive * 8.0 + bubble_phase) * 3.0, Color(0.22, 0.74, 1.0, 0.16 * fade))
+					draw_circle(bubble_pos, 27.0, Color(0.24, 0.72, 1.0, 0.72 * fade))
+					draw_arc(bubble_pos, 30.0, bubble_phase, bubble_phase + PI * 1.45, 34, Color(0.86, 1.0, 1.0, 0.92 * fade), 3.0)
+					draw_circle(bubble_pos - Vector2(8, 9), 7.0, Color(0.92, 1.0, 1.0, 0.56 * fade))
+			"boss4_ultimate_ray":
+				var ray_pos: Vector2 = Vector2(hazard.get("pos", player_pos)) - camera
+				var ray_warning: float = float(hazard.get("warning", BOSS4_ULTIMATE_RAY_WARNING))
+				var ray_active: bool = age >= ray_warning
+				var ray_progress: float = clampf(age / maxf(0.01, ray_warning), 0.0, 1.0)
+				if not ray_active:
+					draw_circle(ray_pos, BOSS4_ULTIMATE_RAY_RADIUS * (0.82 + ray_progress * 0.24), Color(0.96, 0.08, 0.18, 0.18 * fade))
+					draw_arc(ray_pos, BOSS4_ULTIMATE_RAY_RADIUS * (0.9 + ray_progress * 0.22), 0.0, TAU, 42, Color(1.0, 0.16, 0.2, 0.95 * fade), 4.0)
+					_draw_centered("!", ray_pos + Vector2(0, 8), 32, Color(1.0, 0.9, 0.72, 0.98 * fade))
+				else:
+					var pulse: float = 0.5 + 0.5 * sin(time_alive * 18.0 + float(hazard.get("phase", 0.0)))
+					draw_line(ray_pos + Vector2(0, -720), ray_pos, Color(1.0, 0.72, 0.12, 0.18 * fade), 26.0 + pulse * 10.0, true)
+					draw_line(ray_pos + Vector2(0, -720), ray_pos, Color(1.0, 0.94, 0.38, 0.72 * fade), 7.0 + pulse * 4.0, true)
+					draw_circle(ray_pos, BOSS4_ULTIMATE_RAY_RADIUS * (1.0 + pulse * 0.18), Color(1.0, 0.84, 0.2, 0.3 * fade))
+			"boss4_meteor_shockwave":
+				var shock_pos: Vector2 = Vector2(hazard.get("pos", player_pos)) - camera
+				var shock_progress: float = clampf(age / maxf(0.01, float(hazard.get("max", 0.9))), 0.0, 1.0)
+				draw_circle(shock_pos, BOSS4_METEOR_SHOCKWAVE_RADIUS * shock_progress, Color(1.0, 0.5, 0.12, 0.12 * fade))
+				draw_arc(shock_pos, BOSS4_METEOR_SHOCKWAVE_RADIUS * (0.3 + 0.7 * shock_progress), 0.0, TAU, 54, Color(1.0, 0.78, 0.26, 0.84 * fade), 4.0)
 			"boss4_column_barrage":
 				var width: float = float(hazard.get("width", BOSS4_COLUMN_BARRAGE_WIDTH))
 				var step: float = maxf(0.1, float(hazard.get("step", BOSS4_COLUMN_BARRAGE_STEP)))
@@ -51105,7 +51468,7 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 		_draw_virtual_stick(joy, joy_r, joy_alpha)
 
 	var atk_c = buttons["attack"].position + buttons["attack"].size * 0.5
-	var atk_r = 54.0 * _attack_scale()
+	var atk_r: float = minf(54.0 * _attack_scale(), float(buttons["attack"].size.x) * 0.5)
 	var atk_alpha: float = _hud_rect_player_alpha(Rect2(atk_c - Vector2(atk_r, atk_r), Vector2(atk_r * 2.0, atk_r * 2.0)), viewport)
 	var revival_method: String = _local_revival_altar_method()
 	if not is_gamepad_active:
@@ -51124,7 +51487,7 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 			_draw_attack_lock_preview(viewport)
 
 	var skill_c = buttons["skill"].position + buttons["skill"].size * 0.5
-	var skill_r = 46.0 * _skill_scale()
+	var skill_r: float = minf(46.0 * _skill_scale(), float(buttons["skill"].size.x) * 0.5)
 	var skill_alpha: float = _hud_rect_player_alpha(Rect2(skill_c - Vector2(skill_r, skill_r), Vector2(skill_r * 2.0, skill_r * 2.0)), viewport)
 	if not is_gamepad_active:
 		_draw_button(skill_c, skill_r, "HAB1", Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.7 * skill_alpha))
@@ -51134,7 +51497,7 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 		draw_arc(q_badge_center, 14.0, 0.0, TAU, 24, Color(1.0, 0.78, 0.18, 0.98), 2.0)
 		_draw_centered("x%d" % bombastica_bombs.size(), q_badge_center + Vector2(0, 1), 12, Color.WHITE)
 	var secondary_c = buttons["secondary"].position + buttons["secondary"].size * 0.5
-	var secondary_r = 43.0 * _secondary_scale()
+	var secondary_r: float = minf(43.0 * _secondary_scale(), float(buttons["secondary"].size.x) * 0.5)
 	var secondary_alpha: float = _hud_rect_player_alpha(Rect2(secondary_c - Vector2(secondary_r, secondary_r), Vector2(secondary_r * 2.0, secondary_r * 2.0)), viewport)
 	var active_eletrica_secondary = _active_eletrica_secondary()
 	var toggle_ultimate_active = not active_eletrica_secondary.is_empty() or not _active_prismatica_secondary().is_empty()
@@ -51183,7 +51546,7 @@ func _draw_touch_controls(viewport: Vector2) -> void :
 		_draw_centered("CANCELAR", secondary_c + Vector2(0, secondary_r + 17.0), 11, Color(1.0, 0.92, 0.92))
 
 	var dash_c = buttons["dash"].position + buttons["dash"].size * 0.5
-	var dash_r = 46.0 * _dash_scale()
+	var dash_r: float = minf(46.0 * _dash_scale(), float(buttons["dash"].size.x) * 0.5)
 	var dash_alpha: float = _hud_rect_player_alpha(Rect2(dash_c - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0)), viewport)
 	var tp_visual_active: = tp_cooldown_pending and not tp_effects.is_empty()
 	var dash_label: = "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
@@ -51822,6 +52185,43 @@ func _handle_phase_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZE
 	return false
 
 
+func _shop_purchase_stage(progress: float) -> String:
+	if progress < 0.2:
+		return "CONFIRMANDO COMPRA"
+	if progress < 0.78:
+		return "TRANSFERINDO PARA O DECK"
+	return "DECK ATUALIZADO"
+
+
+func _draw_shop_purchase_transfer_fx(origin: Vector2, target: Vector2, progress: float, accent: Color) -> void:
+	var burst_progress: float = clampf(progress / 0.22, 0.0, 1.0)
+	var burst_alpha: float = 1.0 - burst_progress
+	if burst_alpha > 0.0:
+		draw_circle(origin, lerpf(12.0, 46.0, burst_progress), Color(accent.r, accent.g, accent.b, 0.08 * burst_alpha))
+		draw_arc(origin, lerpf(16.0, 52.0, burst_progress), -PI * 0.5, TAU - PI * 0.5, 32, Color(accent.r, accent.g, accent.b, 0.78 * burst_alpha), 2.2)
+		for shard_index in range(8):
+			var shard_angle: float = float(shard_index) * TAU / 8.0 - PI * 0.5
+			var shard_from: Vector2 = origin + Vector2.from_angle(shard_angle) * lerpf(10.0, 26.0, burst_progress)
+			var shard_to: Vector2 = origin + Vector2.from_angle(shard_angle) * lerpf(24.0, 62.0, burst_progress)
+			draw_line(shard_from, shard_to, Color(1.0, 0.92, 0.42, 0.72 * burst_alpha), 1.8, true)
+
+	var transfer_progress: float = clampf((progress - 0.14) / 0.72, 0.0, 1.0)
+	if transfer_progress <= 0.0:
+		return
+	transfer_progress = smoothstep(0.0, 1.0, transfer_progress)
+	var previous: Vector2 = origin
+	for trail_index in range(1, 10):
+		var trail_t: float = float(trail_index) / 9.0 * transfer_progress
+		var point: Vector2 = origin.lerp(target, trail_t) + Vector2(0.0, -sin(trail_t * PI) * 74.0)
+		var trail_alpha: float = 0.52 * (1.0 - float(trail_index) / 12.0)
+		draw_line(previous, point, Color(accent.r, accent.g, accent.b, trail_alpha), 2.0, true)
+		previous = point
+	var target_pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.018)
+	draw_circle(target, 10.0 + target_pulse * 6.0, Color(accent.r, accent.g, accent.b, 0.12 + target_pulse * 0.1))
+	draw_arc(target, 18.0 + target_pulse * 5.0, -PI * 0.5, TAU - PI * 0.5, 32, Color(0.78, 1.0, 0.86, 0.76), 2.0)
+	_draw_centered("+1", target + Vector2(0.0, 34.0), 11, Color(0.76, 1.0, 0.84, 0.86))
+
+
 func _draw_shop(viewport: Vector2) -> void :
 	for key in buttons.keys():
 		if String(key).begins_with("shop_burn_") or String(key).begins_with("shop_reserve_"):
@@ -51854,7 +52254,7 @@ func _draw_shop(viewport: Vector2) -> void :
 		if shop_endurance_discount > 0.0:
 			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 		if purchase_animating:
-			header_text = "Carta confirmada  |  sincronizando deck"
+			header_text = _shop_purchase_stage(purchase_progress)
 		_draw_centered(header_text, Vector2(viewport.x * 0.5, 96), _readable_text_size(16), Color(1.0, 0.85, 0.24))
 		_draw_shop_tutorial_line(Rect2(header.position + Vector2(20.0, 90.0), Vector2(header.size.x - 40.0, 28.0)), true)
 		_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
@@ -51870,6 +52270,8 @@ func _draw_shop(viewport: Vector2) -> void :
 			var y = 188.0 + i * (h + 22.0)
 			var rect = Rect2(x, y, w, h)
 			var card_alpha = 1.0
+			var content_alpha: float = card_alpha
+			var icon_alpha: float = card_alpha
 			if purchase_animating:
 				card_alpha = 0.18 if i != purchase_index else 1.0
 			if i == shop_selected:
@@ -51877,12 +52279,19 @@ func _draw_shop(viewport: Vector2) -> void :
 				if shop_select_pulse_index == i and shop_select_pulse_timer > 0.0:
 					select_pulse = sin((1.0 - shop_select_pulse_timer / 0.26) * PI)
 				rect = rect.grow(12 + select_pulse * 12.0)
+			var purchase_origin: Vector2 = rect.get_center()
 			if purchase_animating and i == purchase_index:
-				var rise = clamp((purchase_progress - 0.18) / 0.82, 0.0, 1.0)
-				var burst = sin(min(1.0, purchase_progress / 0.45) * PI)
-				rect = rect.grow(14.0 + burst * 18.0 - rise * 46.0)
-				rect.position.y -= rise * 86.0
-				card_alpha = 1.0 - rise * 0.76
+				_draw_shop_purchase_transfer_fx(purchase_origin, _shop_deck_center(viewport), purchase_progress, rarity_color)
+				var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
+				var flight_center: Vector2 = purchase_origin.lerp(_shop_deck_center(viewport), transfer_t)
+				var card_scale: float = lerpf(1.0, 0.46, transfer_t)
+				rect.size = rect.size * card_scale
+				rect.position = flight_center - rect.size * 0.5
+				var burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
+				rect = rect.grow(10.0 + burst * 16.0)
+				card_alpha = lerpf(1.0, 0.34, transfer_t)
+				content_alpha = card_alpha * (1.0 - clampf((transfer_t - 0.08) / 0.18, 0.0, 1.0))
+				icon_alpha = card_alpha * lerpf(1.0, 0.72, transfer_t)
 			var bg_color = Color(0.035, 0.045, 0.06)
 			bg_color = bg_color.lerp(card["color"], 0.14 if i == shop_selected else 0.05)
 			if cinzas_buffed:
@@ -51904,40 +52313,40 @@ func _draw_shop(viewport: Vector2) -> void :
 			var icon: Texture2D = _card_texture(card)
 			if icon:
 				var icon_rect = Rect2(rect.position + Vector2(18, 18), Vector2(94, rect.size.y - 36))
-				if not _draw_cinzas_shader_card(card, icon_rect, icon, card_alpha, false):
-					_draw_texture_contain(icon, icon_rect, Color(1.0, 1.0, 1.0, card_alpha))
-			_draw_centered(card["name"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 48), _readable_text_size(19), Color(1.0, 1.0, 1.0, card_alpha))
-			_draw_centered(_card_rarity_label(card), Vector2(rect.end.x - 52.0, rect.position.y + 24.0), _readable_text_size(10), Color(rarity_color.r, rarity_color.g, rarity_color.b, card_alpha))
-			var nick_color = Color(card["color"].r, card["color"].g, card["color"].b, card_alpha)
+				if not _draw_cinzas_shader_card(card, icon_rect, icon, icon_alpha, false):
+					_draw_texture_contain(icon, icon_rect, Color(1.0, 1.0, 1.0, icon_alpha))
+			_draw_centered(card["name"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 48), _readable_text_size(19), Color(1.0, 1.0, 1.0, content_alpha))
+			_draw_centered(_card_rarity_label(card), Vector2(rect.end.x - 52.0, rect.position.y + 24.0), _readable_text_size(10), Color(rarity_color.r, rarity_color.g, rarity_color.b, content_alpha))
+			var nick_color = Color(card["color"].r, card["color"].g, card["color"].b, content_alpha)
 			_draw_centered(card["nick"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 80), _readable_text_size(15), nick_color)
-			_draw_wrapped(card["desc"], Rect2(rect.position + Vector2(128, 102), Vector2(rect.size.x - 150, rect.size.y - 118)), _readable_text_size(12), Color(0.84, 0.89, 0.93, max(0.28, card_alpha)))
+			_draw_wrapped(card["desc"], Rect2(rect.position + Vector2(128, 102), Vector2(rect.size.x - 150, rect.size.y - 118)), _readable_text_size(12), Color(0.84, 0.89, 0.93, max(0.0, content_alpha)))
 			var price_rect = Rect2(rect.end.x - 118.0, rect.end.y - 44.0, 94.0, 28.0)
-			draw_rect(price_rect, Color(0.0, 0.0, 0.0, 0.52 * card_alpha), true)
-			draw_rect(price_rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.7 * card_alpha), false, 1)
+			draw_rect(price_rect, Color(0.0, 0.0, 0.0, 0.52 * content_alpha), true)
+			draw_rect(price_rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.7 * content_alpha), false, 1)
 			var price_label: = "VAZIA" if _is_empty_shop_slot(card) else "%d pts" % _effective_card_price(card)
-			_draw_centered(price_label, price_rect.get_center() + Vector2(0, 4), _readable_text_size(11), Color(1.0, 0.9, 0.35, card_alpha))
+			_draw_centered(price_label, price_rect.get_center() + Vector2(0, 4), _readable_text_size(11), Color(1.0, 0.9, 0.35, content_alpha))
 			if _can_toggle_shop_reserve(i):
 				var reserve_rect = Rect2(rect.position.x + 18.0, rect.end.y - 44.0, 96.0, 28.0)
 				buttons["shop_reserve_%d" % i] = reserve_rect
-				var reserve_color: = Color(0.04, 0.14, 0.2, 0.86 * card_alpha)
+				var reserve_color: = Color(0.04, 0.14, 0.2, 0.86 * content_alpha)
 				if _shop_slot_locked(i):
-					reserve_color = Color(0.12, 0.28, 0.08, 0.9 * card_alpha)
+					reserve_color = Color(0.12, 0.28, 0.08, 0.9 * content_alpha)
 				draw_rect(reserve_rect, reserve_color, true)
-				draw_rect(reserve_rect, Color(0.4, 0.94, 1.0, 0.82 * card_alpha), false, 1)
-				_draw_centered("SOLTAR" if _shop_slot_locked(i) else "TRAVAR", reserve_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color.WHITE)
+				draw_rect(reserve_rect, Color(0.4, 0.94, 1.0, 0.82 * content_alpha), false, 1)
+				_draw_centered("SOLTAR" if _shop_slot_locked(i) else "TRAVAR", reserve_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color(1.0, 1.0, 1.0, content_alpha))
 			if _can_burn_shop_card(card):
 				var burn_rect = Rect2(rect.position.x + 18.0, rect.end.y - 78.0, 96.0, 28.0)
 				buttons["shop_burn_%d" % i] = burn_rect
-				draw_rect(burn_rect, Color(0.2, 0.08, 0.04, 0.88 * card_alpha), true)
-				draw_rect(burn_rect, Color(1.0, 0.58, 0.28, 0.82 * card_alpha), false, 1)
-				_draw_centered("QUEIMAR", burn_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color.WHITE)
+				draw_rect(burn_rect, Color(0.2, 0.08, 0.04, 0.88 * content_alpha), true)
+				draw_rect(burn_rect, Color(1.0, 0.58, 0.28, 0.82 * content_alpha), false, 1)
+				_draw_centered("QUEIMAR", burn_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color(1.0, 1.0, 1.0, content_alpha))
 			if i == shop_selected:
-				_draw_card_stat_chips(_card_stat_chips(String(card["name"])), rect.position + Vector2(128, rect.size.y - 76), rect.size.x - 150, Color(card["color"]), _readable_text_size(11))
+				_draw_card_stat_chips(_card_stat_chips(String(card["name"])), rect.position + Vector2(128, rect.size.y - 76), rect.size.x - 150, Color(card["color"].r, card["color"].g, card["color"].b, content_alpha), _readable_text_size(11))
 				var conf_rect = Rect2(rect.position.x + 128, rect.position.y + rect.size.y - 45, rect.size.x - 140, 35)
-				draw_rect(conf_rect, Color(0.05, 0.35, 0.15, 0.9 * card_alpha), true)
-				draw_rect(conf_rect, Color(0.2, 1.0, 0.45, max(0.14, card_alpha)), false, 1)
+				draw_rect(conf_rect, Color(0.05, 0.35, 0.15, 0.9 * content_alpha), true)
+				draw_rect(conf_rect, Color(0.2, 1.0, 0.45, max(0.0, content_alpha)), false, 1)
 				var confirm_label = "VAZIA" if _is_empty_shop_slot(card) else ("CONFIRMADA" if purchase_animating and i == purchase_index else "SELECIONADA")
-				_draw_centered(confirm_label, Vector2(conf_rect.position.x + conf_rect.size.x * 0.5, conf_rect.position.y + 22), _readable_text_size(16), Color(1.0, 1.0, 1.0, card_alpha))
+				_draw_centered(confirm_label, Vector2(conf_rect.position.x + conf_rect.size.x * 0.5, conf_rect.position.y + 22), _readable_text_size(16), Color(1.0, 1.0, 1.0, content_alpha))
 
 		var btn_h = 44.0
 		var btn_w = viewport.x * 0.4
@@ -51977,14 +52386,12 @@ func _draw_shop(viewport: Vector2) -> void :
 	var hud_text = "Pontos: %d  |  Custo: %d  |  Rerolls: %d" % [score, card_cost, shop_rerolls]
 	if shop_endurance_discount > 0.0:
 		hud_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
-	if purchase_animating:
-		hud_text = "Carta confirmada  |  atualizando deck"
 	_draw_centered(hud_text, Vector2(viewport.x * 0.5, 73), _readable_text_size(16), Color(1.0, 0.85, 0.24))
 	_draw_shop_tutorial_line(Rect2(header.position + Vector2(22.0, 74.0), Vector2(header.size.x - 44.0, 22.0)), false)
 	_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
 	_draw_shop_round_button(_shop_deck_center(viewport), _shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), _deck_total_cards() > 0 and not purchase_animating, "deck")
 	if purchase_animating and shop_cards.size() > purchase_index:
-		_draw_centered("CARTA ADQUIRIDA", Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[purchase_index]["color"])
+		_draw_centered(_shop_purchase_stage(purchase_progress), Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[purchase_index]["color"])
 	elif shop_select_pulse_timer > 0.0 and shop_cards.size() > shop_selected:
 		_draw_centered("CARTA SELECIONADA", Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[shop_selected]["color"])
 
@@ -52005,20 +52412,32 @@ func _draw_shop(viewport: Vector2) -> void :
 		if is_sel and shop_select_pulse_index == i and shop_select_pulse_timer > 0.0:
 			scale += sin((1.0 - shop_select_pulse_timer / 0.26) * PI) * 0.1
 		var alpha = 1.0 if is_sel else 0.5
+		var content_alpha: float = alpha
+		var icon_alpha: float = alpha
 		if purchase_animating:
 			alpha = 0.18 if i != purchase_index else 1.0
 		if purchase_animating and i == purchase_index:
-			var rise = clamp((purchase_progress - 0.18) / 0.82, 0.0, 1.0)
-			var burst = sin(min(1.0, purchase_progress / 0.45) * PI)
-			scale += burst * 0.22 - rise * 0.48
-			alpha = 1.0 - rise * 0.78
+			var burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
+			scale += burst * 0.18
+			var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
+			alpha = lerpf(1.0, 0.34, transfer_t)
 		var curr_w = w * scale
 		var curr_h = h * scale
 		var x = viewport.x * 0.5 + (i - 1) * 200 - curr_w * 0.5
 		var curr_y = y - 10 if is_sel else y + 15
-		if purchase_animating and i == purchase_index:
-			curr_y -= clamp((purchase_progress - 0.18) / 0.82, 0.0, 1.0) * 86.0
 		var rect = Rect2(x, curr_y, curr_w, curr_h)
+		var purchase_origin: Vector2 = rect.get_center()
+		if purchase_animating and i == purchase_index:
+			_draw_shop_purchase_transfer_fx(purchase_origin, _shop_deck_center(viewport), purchase_progress, rarity_color)
+			var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
+			var flight_center: Vector2 = purchase_origin.lerp(_shop_deck_center(viewport), transfer_t)
+			var card_scale: float = lerpf(1.0, 0.46, transfer_t)
+			rect.size = rect.size * card_scale
+			rect.position = flight_center - rect.size * 0.5
+			var rect_burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
+			rect = rect.grow(10.0 + rect_burst * 16.0)
+			content_alpha = alpha * (1.0 - clampf((transfer_t - 0.08) / 0.18, 0.0, 1.0))
+			icon_alpha = alpha * lerpf(1.0, 0.72, transfer_t)
 
 
 		var bg_color = Color(0.04, 0.05, 0.07, 0.85 * alpha)
@@ -52048,27 +52467,27 @@ func _draw_shop(viewport: Vector2) -> void :
 			var scan_y = rect.position.y + 12.0 + fposmod(Time.get_ticks_msec() * 0.065, max(1.0, rect.size.y - 24.0))
 			draw_line(Vector2(rect.position.x + 10.0, scan_y), Vector2(rect.end.x - 10.0, scan_y), Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.72), 2.0)
 			var ribbon = Rect2(rect.position.x + 10.0, rect.position.y + 10.0, rect.size.x - 20.0, 25.0)
-			draw_rect(ribbon, Color(0.0, 0.0, 0.0, 0.68 * alpha), true)
-			draw_rect(ribbon, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.88 * alpha), false, 1)
-			_draw_centered("%s | PRE-SELECIONADA" % _card_rarity_label(card), ribbon.get_center() + Vector2(0, 5), _readable_text_size(9), Color.WHITE)
+			draw_rect(ribbon, Color(0.0, 0.0, 0.0, 0.68 * content_alpha), true)
+			draw_rect(ribbon, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.88 * content_alpha), false, 1)
+			_draw_centered("%s | PRE-SELECIONADA" % _card_rarity_label(card), ribbon.get_center() + Vector2(0, 5), _readable_text_size(9), Color(1.0, 1.0, 1.0, content_alpha))
 
 
 		var icon: Texture2D = _card_texture(card)
 		if icon:
 			var icon_rect = Rect2(rect.position + Vector2(6, 6), rect.size - Vector2(12, 12))
-			if not _draw_cinzas_shader_card(card, icon_rect, icon, alpha, true):
-				_draw_texture_contain(icon, icon_rect, Color(1, 1, 1, alpha))
+			if not _draw_cinzas_shader_card(card, icon_rect, icon, icon_alpha, true):
+				_draw_texture_contain(icon, icon_rect, Color(1, 1, 1, icon_alpha))
 
 
 		if not cinzas_buffed:
-			var text_color = Color(1.0, 1.0, 1.0, alpha)
+			var text_color = Color(1.0, 1.0, 1.0, content_alpha)
 			_draw_centered(card["nick"].to_upper(), Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y - 18), _readable_text_size(12 if is_sel else 10), text_color)
 
 		if is_sel and purchase_animating and i == purchase_index:
 			var overlay_rect = Rect2(rect.position.x, rect.position.y + rect.size.y * 0.5 - 18, rect.size.x, 36)
-			draw_rect(overlay_rect, Color(0.05, 0.35, 0.15, 0.95), true)
-			draw_rect(overlay_rect, Color(0.2, 1.0, 0.45), false, 2)
-			_draw_centered("CONFIRMADA", Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5 + 5), _readable_text_size(16), Color(1.0, 1.0, 1.0, alpha))
+			draw_rect(overlay_rect, Color(0.05, 0.35, 0.15, 0.95 * content_alpha), true)
+			draw_rect(overlay_rect, Color(0.2, 1.0, 0.45, 0.9 * content_alpha), false, 2)
+			_draw_centered("CONFIRMADA", Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5 + 5), _readable_text_size(16), Color(1.0, 1.0, 1.0, content_alpha))
 
 
 	if shop_cards.size() > shop_selected and shop_selected >= 0:
@@ -53047,17 +53466,19 @@ func _draw_retry_confirm_popup(viewport: Vector2) -> void:
 
 
 func _draw_shop_return_transition(viewport: Vector2) -> void:
-	var progress: float = clampf(1.0 - shop_return_timer / maxf(0.01, SHOP_RETURN_TIME), 0.0, 1.0)
+	var progress: float = clampf(1.0 - shop_return_visual_timer / maxf(0.01, SHOP_RETURN_VISUAL_TIME), 0.0, 1.0)
 	var center: = viewport * 0.5
 	var accent: = Color(0.0, 1.0, 0.82)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.18 + 0.18 * (1.0 - progress)), true)
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, lerpf(0.18, 0.035, progress)), true)
 	for i in range(4):
 		var radius: float = lerpf(38.0 + i * 34.0, 260.0 + i * 46.0, progress)
-		draw_arc(center, radius, -progress * TAU + i * 0.42, TAU - progress * TAU + i * 0.42, 72, Color(accent.r, accent.g, accent.b, 0.34 - i * 0.045), 2.0)
+		var ring_alpha: float = (0.34 - i * 0.045) * (1.0 - progress * 0.78)
+		draw_arc(center, radius, -progress * TAU + i * 0.42, TAU - progress * TAU + i * 0.42, 72, Color(accent.r, accent.g, accent.b, ring_alpha), 2.0)
 	var return_panel: = Rect2(viewport.x * 0.5 - 230.0, 34.0, 460.0, 70.0)
 	_draw_holo_panel(return_panel, Color(0.72, 1.0, 1.0), true, 0.72)
-	_draw_centered("SAINDO DA LOJA", return_panel.get_center() + Vector2(0, -7), 20, Color(0.72, 1.0, 1.0))
-	_draw_centered("CAMPO REABRINDO EM %.0fs" % max(0.0, ceil(shop_return_timer)), return_panel.get_center() + Vector2(0, 19), 13, Color(1.0, 0.88, 0.32))
+	var title: String = "SAINDO DA LOJA" if progress < 0.72 else "CAMPO ESTABILIZADO"
+	_draw_centered(title, return_panel.get_center() + Vector2(0, -7), 20, Color(0.72, 1.0, 1.0))
+	_draw_centered("RETOMANDO EM %.0fs" % max(0.0, ceil(shop_return_timer)), return_panel.get_center() + Vector2(0, 19), 13, Color(1.0, 0.88, 0.32))
 
 
 func _draw_death_slow_transition(viewport: Vector2) -> void:
@@ -53298,7 +53719,15 @@ func _draw_button(center: Vector2, radius: float, label: String, color: Color) -
 	draw_circle(center, radius * 0.84, Color(c.r, c.g, c.b, 0.18 * alpha))
 	draw_arc(center, radius, - PI * 0.28, PI * 1.24, 48, Color(c.r, c.g, c.b, 0.92 * alpha), 2.6)
 	draw_arc(center, radius * 0.72, PI * 0.58, PI * 1.66, 32, Color(1.0, 1.0, 1.0, 0.34 * alpha), 1.4)
+	var sweep: float = fposmod(time_alive * 1.7, TAU)
+	draw_arc(center, radius * 0.9, sweep, sweep + 0.52, 18, Color(1.0, 1.0, 1.0, 0.34 * alpha), 1.8)
+	for tick_index in range(4):
+		var tick_angle: float = -PI * 0.7 + float(tick_index) * PI * 0.46
+		var tick_from: Vector2 = center + Vector2.from_angle(tick_angle) * (radius * 0.88)
+		var tick_to: Vector2 = center + Vector2.from_angle(tick_angle) * (radius * 0.98)
+		draw_line(tick_from, tick_to, Color(c.r, c.g, c.b, 0.5 * alpha), 1.2, true)
 	draw_circle(center, radius * 0.34, Color(c.r, c.g, c.b, 0.18 * alpha))
+	draw_arc(center, radius * 0.44, -PI * 0.92, -PI * 0.2, 18, Color(1.0, 1.0, 1.0, 0.26 * alpha), 1.2)
 	var font_size = int(clamp(radius * 0.34, 15.0, 22.0))
 	_draw_centered(label, center + Vector2(0, font_size * 0.3), font_size, Color(1.0, 1.0, 1.0, alpha))
 
@@ -53378,10 +53807,14 @@ func _draw_ability_cancel_button(viewport: Vector2) -> void :
 
 func _draw_hud_rect_button(rect: Rect2, label: String, accent: Color) -> void :
 	var alpha: float = clampf(accent.a, 0.0, 1.0)
+	draw_rect(rect.grow(5.0), Color(accent.r, accent.g, accent.b, 0.035 * alpha), true)
 	draw_rect(rect, Color(0.012, 0.02, 0.028, 0.64 * alpha), true)
 	draw_rect(rect.grow(-4), Color(accent.r, accent.g, accent.b, 0.12 * alpha), true)
 	draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.82 * alpha), false, 2)
 	draw_line(rect.position + Vector2(8, rect.size.y - 6), rect.position + Vector2(rect.size.x - 8, rect.size.y - 6), Color(accent.r, accent.g, accent.b, 0.42 * alpha), 2)
+	draw_line(rect.position + Vector2(8, 5), rect.position + Vector2(minf(rect.size.x * 0.34, 28.0), 5), Color(1.0, 1.0, 1.0, 0.16 * alpha), 1)
+	var scan_x: float = rect.position.x + 8.0 + fposmod(time_alive * 24.0, maxf(12.0, rect.size.x - 16.0))
+	draw_line(Vector2(scan_x, rect.position.y + 7.0), Vector2(scan_x, rect.end.y - 9.0), Color(accent.r, accent.g, accent.b, 0.12 * alpha), 1.0)
 	_draw_centered(label, rect.get_center() + Vector2(0, 6), int(clamp(rect.size.y * 0.38, 13.0, 18.0)), Color(1.0, 1.0, 1.0, alpha))
 
 
@@ -54000,6 +54433,24 @@ func _update_button_layout(viewport: Vector2) -> void :
 		_manual_shop_pos(viewport),
 		not (shop_auto_enabled and mode != "edit_layout")
 	)
+	if mode != "edit_layout" and _touch_hub_has_overlap(touch_rects, viewport):
+		var organized: Dictionary = RTHudLayoutScript.organized_touch_button_rects(
+			viewport,
+			_attack_scale(),
+			_skill_scale(),
+			_secondary_scale(),
+			_dash_scale(),
+			_lacerante_empower_scale(),
+			manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada" or manifestation_key == "bombastica"
+		)
+		for key in ["attack", "skill", "secondary", "dash"]:
+			if organized.has(key):
+				touch_rects[key] = organized[key]
+		if organized.has("extra"):
+			if manifestation_key == "bombastica":
+				touch_rects["bombastica_detonator"] = organized["extra"]
+			else:
+				touch_rects["lacerante_empower"] = organized["extra"]
 	buttons["attack"] = touch_rects["attack"]
 	buttons["skill"] = touch_rects["skill"]
 	buttons["secondary"] = touch_rects["secondary"]
@@ -54018,6 +54469,23 @@ func _update_button_layout(viewport: Vector2) -> void :
 		buttons["shop_manual"] = touch_rects["shop_manual"]
 	else:
 		buttons.erase("shop_manual")
+
+
+func _touch_hub_has_overlap(rects: Dictionary, viewport: Vector2) -> bool:
+	var keys: Array[String] = ["attack", "skill", "secondary", "dash"]
+	if rects.has("lacerante_empower"):
+		keys.append("lacerante_empower")
+	if rects.has("bombastica_detonator"):
+		keys.append("bombastica_detonator")
+	for i in range(keys.size()):
+		var base_rect: Rect2 = rects[keys[i]]
+		if base_rect.position.x < 0.0 or base_rect.position.y < 0.0 or base_rect.end.x > viewport.x or base_rect.end.y > viewport.y:
+			return true
+		var first: Rect2 = base_rect.grow(5.0)
+		for j in range(i + 1, keys.size()):
+			if first.intersects(rects[keys[j]].grow(5.0)):
+				return true
+	return false
 
 
 func _handle_app_update_input(event: InputEvent, viewport: Vector2) -> void :
@@ -58677,6 +59145,9 @@ func _reset_network_interpolation_state() -> void :
 	net_player_snapshot_last_ms = 0
 	net_world_snapshot_last_ms = 0
 	net_world_jitter_ms = 0.0
+	net_transport_last_activity_ms = 0
+	net_transport_health = RTTransportStateScript.HEALTH_WARMING
+	net_transport_health_last = RTTransportStateScript.HEALTH_WARMING
 	net_ability_sequence = 0
 	net_event_sequence = 0
 	net_projectile_sequence = 0
@@ -58733,6 +59204,7 @@ func _connect_to_online_host(ip: String, port: int) -> void :
 	var err = multiplayer_peer.create_client(ip, port, NET_CHANNEL_COUNT)
 	if err == OK:
 		multiplayer.multiplayer_peer = multiplayer_peer
+		_configure_online_peer_tuning(1)
 		if not multiplayer.connected_to_server.is_connected(_on_connected_to_server):
 			multiplayer.connected_to_server.connect(_on_connected_to_server)
 		if not multiplayer.connection_failed.is_connected(_on_connection_failed):
@@ -58933,6 +59405,7 @@ func _start_dedicated_room_server(port: int) -> void :
 
 func _on_peer_connected(id: int) -> void :
 	print("Player connected: ", id)
+	_configure_online_peer_tuning(id)
 	_net_report_event("peer_connected", "id=%d peers=%s" % [id, str(_mp_peer_ids())])
 	if dedicated_server_mode:
 		dedicated_ready_by_peer[id] = false
@@ -58992,6 +59465,9 @@ func _on_connected_to_server() -> void :
 	print("Connected to host")
 	_net_report_event("connected_to_room_server", "room=%s owner=%s" % [online_room_code, str(online_room_owner)])
 	online_connected = true
+	net_transport_last_activity_ms = Time.get_ticks_msec()
+	net_transport_health = RTTransportStateScript.HEALTH_WARMING
+	net_transport_health_last = RTTransportStateScript.HEALTH_WARMING
 	mode = "lobby_online_host" if online_room_owner else "lobby_online_client"
 	online_heartbeat_last_sent_ms = 0
 	online_heartbeat_last_ok_ms = 0
@@ -59235,23 +59711,63 @@ func _is_world_replica() -> bool:
 	return is_multiplayer and not dedicated_server_mode and not _is_world_authority()
 
 func _should_send_player_sync(now_ms: int) -> bool:
-	if now_ms - net_player_sync_last_ms < NET_PLAYER_SYNC_INTERVAL_MS:
+	if now_ms - net_player_sync_last_ms < _net_player_sync_interval_ms():
 		return false
 	net_player_sync_last_ms = now_ms
 	return true
 
 func _should_send_world_sync(now_ms: int) -> bool:
-	if now_ms - net_world_sync_last_ms < NET_WORLD_SYNC_INTERVAL_MS:
+	if now_ms - net_world_sync_last_ms < _net_world_sync_interval_ms():
 		return false
 	net_world_sync_last_ms = now_ms
 	return true
 
 
 func _should_send_world_visual_sync(now_ms: int) -> bool:
-	if now_ms - net_world_visual_sync_last_ms < NET_WORLD_VISUAL_SYNC_INTERVAL_MS:
+	if now_ms - net_world_visual_sync_last_ms < _net_world_visual_sync_interval_ms():
 		return false
 	net_world_visual_sync_last_ms = now_ms
 	return true
+
+
+func _net_player_sync_interval_ms() -> int:
+	return RTTransportStateScript.adaptive_interval_ms(NET_PLAYER_SYNC_INTERVAL_MS, net_ping_ms, net_world_jitter_ms)
+
+
+func _net_world_sync_interval_ms() -> int:
+	return RTTransportStateScript.adaptive_interval_ms(NET_WORLD_SYNC_INTERVAL_MS, net_ping_ms, net_world_jitter_ms)
+
+
+func _net_world_visual_sync_interval_ms() -> int:
+	return RTTransportStateScript.adaptive_interval_ms(NET_WORLD_VISUAL_SYNC_INTERVAL_MS, net_ping_ms, net_world_jitter_ms)
+
+
+func _configure_online_peer_tuning(peer_id: int) -> void:
+	if multiplayer_peer == null or peer_id <= 0:
+		return
+	var peer: ENetPacketPeer = multiplayer_peer.get_peer(peer_id)
+	if peer == null:
+		return
+	if RTTransportStateScript.configure_peer(peer, NET_PEER_TIMEOUT_MS, NET_PEER_TIMEOUT_MIN_MS, NET_PEER_TIMEOUT_MAX_MS):
+		_net_report_event("enet_peer_tuned", "peer=%d timeout=%d/%d/%d" % [peer_id, NET_PEER_TIMEOUT_MS, NET_PEER_TIMEOUT_MIN_MS, NET_PEER_TIMEOUT_MAX_MS])
+
+
+func _update_network_transport_health(now_ms: int) -> void:
+	if not online_connected or dedicated_server_mode:
+		return
+	var active_game: bool = mode in ["game", "multiplayer_syncing", "phase_transition", "shop", "shop_countdown", "boss_call"]
+	var health: String = RTTransportStateScript.health(now_ms, net_transport_last_activity_ms, NET_TRANSPORT_DEGRADED_AFTER_MS, NET_TRANSPORT_STALLED_AFTER_MS, active_game)
+	net_transport_health = health
+	if health == net_transport_health_last:
+		return
+	net_transport_health_last = health
+	_net_report_event("transport_health", "state=%s age_ms=%d ping=%d jitter=%.1f" % [health, maxi(0, now_ms - net_transport_last_activity_ms), net_ping_ms, net_world_jitter_ms])
+
+
+func _net_transport_activity_age_ms() -> int:
+	if net_transport_last_activity_ms <= 0:
+		return -1
+	return maxi(0, Time.get_ticks_msec() - net_transport_last_activity_ms)
 
 func _send_peer_damage(peer_id: int, amount: int, source: String) -> void :
 	if peer_id == 0 or not is_multiplayer:
@@ -60375,6 +60891,7 @@ func _sync_multiplayer_state() -> void :
 
 	var now_ms: = Time.get_ticks_msec()
 	_update_online_ping(now_ms)
+	_update_network_transport_health(now_ms)
 
 	if online_connected:
 		if not online_local_spectator and _should_send_player_sync(now_ms):
@@ -60514,6 +61031,12 @@ func _pack_net_boss_visuals() -> Dictionary:
 			})
 		4:
 			packet["phase4_enemy_hazards"] = phase4_enemy_hazards.duplicate(true)
+			packet["boss4_secondary_active"] = boss4_secondary_active
+			packet["boss4_secondary_elapsed"] = boss4_secondary_elapsed
+			packet["boss4_ultimate_active"] = boss4_ultimate_active
+			packet["boss4_ultimate_timer"] = boss4_ultimate_timer
+			packet["boss4_meteorites"] = boss4_meteorites.duplicate(true)
+			packet["boss4_meteor_damage_bonus"] = boss4_meteor_damage_bonus
 		5:
 			packet["phase5_hazards"] = phase5_hazards.duplicate(true)
 			packet["phase5_telegraphs"] = phase5_telegraphs.duplicate(true)
@@ -60637,6 +61160,7 @@ func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max:
 	_net_report_count_in("player", 72)
 	if peer_id == _mp_unique_id():
 		return
+	net_transport_last_activity_ms = Time.get_ticks_msec()
 	_store_remote_player_state(peer_id, {
 		"pos": pos, 
 		"hp": hp, 
@@ -60753,6 +61277,7 @@ func _update_remote_world_visuals(sequence: int, boss_visuals_data: Dictionary) 
 
 func _apply_remote_world_snapshot(enemies_data, boss_data, bullets_data) -> void :
 	var now_ms: = Time.get_ticks_msec()
+	net_transport_last_activity_ms = now_ms
 	_net_report_note_world_snapshot()
 	if not online_first_world_snapshot_received:
 		online_first_world_snapshot_received = true
@@ -60934,6 +61459,12 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	boss6_miasma_ult_angle = float(data.get("boss6_miasma_ult_angle", boss6_miasma_ult_angle))
 	boss6_miasma_ult_pustule_timer = float(data.get("boss6_miasma_ult_pustule_timer", boss6_miasma_ult_pustule_timer))
 	phase4_enemy_hazards = Array(data.get("phase4_enemy_hazards", phase4_enemy_hazards)).duplicate(true)
+	boss4_secondary_active = bool(data.get("boss4_secondary_active", boss4_secondary_active))
+	boss4_secondary_elapsed = float(data.get("boss4_secondary_elapsed", boss4_secondary_elapsed))
+	boss4_ultimate_active = bool(data.get("boss4_ultimate_active", boss4_ultimate_active))
+	boss4_ultimate_timer = float(data.get("boss4_ultimate_timer", boss4_ultimate_timer))
+	boss4_meteorites = Array(data.get("boss4_meteorites", boss4_meteorites)).duplicate(true)
+	boss4_meteor_damage_bonus = float(data.get("boss4_meteor_damage_bonus", boss4_meteor_damage_bonus))
 	phase5_hazards = Array(data.get("phase5_hazards", phase5_hazards)).duplicate(true)
 	phase5_telegraphs = Array(data.get("phase5_telegraphs", phase5_telegraphs)).duplicate(true)
 	if not (boss2_compact is PackedFloat32Array and boss2_compact.size() >= 27):
@@ -60965,6 +61496,7 @@ func _rpc_ping(sent_ms: int) -> void :
 @rpc("authority", "call_remote", "unreliable", 3)
 func _rpc_pong(sent_ms: int) -> void :
 	_net_report_count_in("control", 24)
+	net_transport_last_activity_ms = Time.get_ticks_msec()
 	net_ping_ms = max(0, Time.get_ticks_msec() - sent_ms)
 	_net_report_sample_ping(net_ping_ms, false)
 

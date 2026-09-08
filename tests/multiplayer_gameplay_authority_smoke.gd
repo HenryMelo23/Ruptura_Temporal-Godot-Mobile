@@ -24,6 +24,7 @@ var ping_budget_ms: int = 30
 
 var manifest_reveal_requested := false
 var spectrum_ready_sent := false
+var manifest_start_requested := false
 var requested_start := false
 var client_marked_ready := false
 var client_hit_sent := false
@@ -262,6 +263,9 @@ func _host_lobby_and_manifest_flow() -> void:
 		game._send_host_start_request()
 		return
 	_manifest_selection_flow(1, 1)
+	if spectrum_ready_sent and not manifest_start_requested and game._manifest_all_players_ready():
+		manifest_start_requested = true
+		game._request_manifest_mp_start()
 
 
 func _client_lobby_and_manifest_flow() -> void:

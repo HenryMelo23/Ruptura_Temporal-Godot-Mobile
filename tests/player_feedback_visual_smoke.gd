@@ -82,7 +82,7 @@ func _run() -> void:
 	game.player_attack_visual_dir = Vector2(0.72, -1.0).normalized()
 	game.effects.clear()
 	await _capture("player_attack_northeast_pose_1280x720.png")
-	_check(String(game._player_fire_animation_info().get("key", "")) == "player_fire_back_diag", "northeast attack pose did not select back diagonal frames")
+	_check(String(game._player_fire_animation_info().get("key", "")) == "player_fire", "attack pose did not stay on the basic Dips frames")
 
 	game.mode = "paused"
 	game.previous_mode = "game"

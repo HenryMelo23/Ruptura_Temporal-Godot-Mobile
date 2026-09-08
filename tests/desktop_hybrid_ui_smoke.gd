@@ -26,7 +26,7 @@ func _run() -> void:
 	game.mode = "game"
 	game.manifestation_key = "eletrica"
 	game._update_button_layout(viewport)
-	_check(game.buttons.has("attack") and game.buttons["attack"].size.x <= 60.0, "desktop attack button is not compact")
+	_check(game.buttons.has("attack") and is_equal_approx(game.buttons["attack"].size.x, 72.0) and is_equal_approx(game.buttons["attack"].size.y, 88.0), "desktop attack card geometry changed")
 	_check(game.buttons.has("pause") and game.buttons["pause"].size.x <= 50.0, "desktop pause button is not compact")
 
 	game.ui_platform_override = game.UI_PLATFORM_ANDROID

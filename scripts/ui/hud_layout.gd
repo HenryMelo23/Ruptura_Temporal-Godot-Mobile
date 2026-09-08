@@ -55,7 +55,7 @@ static func clamp_layout_center(target: Vector2, radius: float, viewport: Vector
 
 
 static func default_joy_center(viewport: Vector2) -> Vector2:
-	return Vector2(viewport.x * 0.16, viewport.y * 0.76)
+	return Vector2(maxf(96.0, viewport.x * 0.13), viewport.y - 84.0)
 
 
 static func joy_center(viewport: Vector2, saved_pos: Vector2) -> Vector2:
@@ -63,7 +63,8 @@ static func joy_center(viewport: Vector2, saved_pos: Vector2) -> Vector2:
 
 
 static func default_attack_center(viewport: Vector2) -> Vector2:
-	return Vector2(viewport.x * 0.88, viewport.y * 0.75)
+	var row = _default_touch_row(viewport)
+	return row[0]
 
 
 static func attack_center(viewport: Vector2, saved_pos: Vector2) -> Vector2:
@@ -71,7 +72,8 @@ static func attack_center(viewport: Vector2, saved_pos: Vector2) -> Vector2:
 
 
 static func default_secondary_center(viewport: Vector2) -> Vector2:
-	return Vector2(viewport.x * 0.76, viewport.y * 0.57)
+	var row = _default_touch_row(viewport)
+	return row[2]
 
 
 static func secondary_center(viewport: Vector2, saved_pos: Vector2) -> Vector2:
@@ -79,7 +81,8 @@ static func secondary_center(viewport: Vector2, saved_pos: Vector2) -> Vector2:
 
 
 static func default_dash_center(viewport: Vector2) -> Vector2:
-	return Vector2(viewport.x * 0.73, viewport.y * 0.82)
+	var row = _default_touch_row(viewport)
+	return row[3]
 
 
 static func dash_center(viewport: Vector2, saved_pos: Vector2) -> Vector2:
@@ -190,8 +193,29 @@ static func coagulum_hud_center(
 static func skill_pos(viewport: Vector2, saved_pos: Vector2, skill_scale: float) -> Vector2:
 	if saved_pos != UNSAVED_PANEL_POS:
 		return saved_pos
-	var radius = 46.0 * skill_scale
-	return Vector2(viewport.x * 0.79 - radius, viewport.y * 0.68 - radius)
+	var radius: float = 46.0 * skill_scale
+	var row = _default_touch_row(viewport)
+	return Vector2(row[1]) - Vector2(radius, radius)
+
+
+static func _default_touch_row(viewport: Vector2) -> Array[Vector2]:
+	var gap: float = 14.0
+	var radii: Array[float] = [62.0, 46.0, 48.0, 52.0]
+	var row_width: float = 0.0
+	for radius_index in range(radii.size()):
+		var radius: float = radii[radius_index]
+		row_width += radius * 2.0
+		if radius_index < radii.size() - 1:
+			row_width += gap
+	var left_margin: float = maxf(222.0, viewport.x * 0.34)
+	var row_x: float = maxf(left_margin, viewport.x - 18.0 - row_width)
+	var row_y: float = viewport.y - 62.0 - 26.0
+	var centers: Array[Vector2] = []
+	var x: float = row_x
+	for radius in radii:
+		centers.append(Vector2(x + radius, row_y))
+		x += radius * 2.0 + gap
+	return centers
 
 
 static func pause_pos(viewport: Vector2, saved_pos: Vector2) -> Vector2:
@@ -280,4 +304,45 @@ static func touch_button_rects(
 	rects["boss"] = Rect2(boss_position, Vector2(96.0, 42.0))
 	if include_shop_manual:
 		rects["shop_manual"] = Rect2(shop_position, Vector2(104.0, 42.0))
+	return rects
+
+
+static func organized_touch_button_rects(
+	viewport: Vector2,
+	attack_scale: float,
+	skill_scale: float,
+	secondary_scale: float,
+	dash_scale: float,
+	extra_scale: float,
+	include_extra: bool
+) -> Dictionary:
+	# Keep the combat controls in one readable rail. The extra control sits above it
+	# so a large touch target never collides with the attack/skill row.
+	var gap: float = 14.0
+	var left_margin: float = maxf(222.0, viewport.x * 0.34)
+	var right_margin: float = 18.0
+	var available_width: float = maxf(180.0, viewport.x - left_margin - right_margin)
+	var requested_width: float = 124.0 * attack_scale + 92.0 * skill_scale + 96.0 * secondary_scale + 104.0 * dash_scale + gap * 3.0
+	var fit: float = minf(1.0, available_width / maxf(1.0, requested_width))
+	var attack_radius: float = 62.0 * attack_scale * fit
+	var skill_radius: float = 46.0 * skill_scale * fit
+	var secondary_radius: float = 48.0 * secondary_scale * fit
+	var dash_radius: float = 52.0 * dash_scale * fit
+	var row_width: float = attack_radius * 2.0 + skill_radius * 2.0 + secondary_radius * 2.0 + dash_radius * 2.0 + gap * 3.0
+	var row_x: float = maxf(left_margin, viewport.x - right_margin - row_width)
+	var max_radius: float = maxf(62.0, maxf(attack_radius, maxf(skill_radius, maxf(secondary_radius, dash_radius))))
+	var row_y: float = viewport.y - max_radius - 26.0
+	var rects: = {}
+	var attack_center: = Vector2(row_x + attack_radius, row_y)
+	var skill_center: = Vector2(attack_center.x + attack_radius + gap + skill_radius, row_y)
+	var secondary_center: = Vector2(skill_center.x + skill_radius + gap + secondary_radius, row_y)
+	var dash_center: = Vector2(secondary_center.x + secondary_radius + gap + dash_radius, row_y)
+	rects["attack"] = Rect2(attack_center - Vector2(attack_radius, attack_radius), Vector2(attack_radius * 2.0, attack_radius * 2.0))
+	rects["skill"] = Rect2(skill_center - Vector2(skill_radius, skill_radius), Vector2(skill_radius * 2.0, skill_radius * 2.0))
+	rects["secondary"] = Rect2(secondary_center - Vector2(secondary_radius, secondary_radius), Vector2(secondary_radius * 2.0, secondary_radius * 2.0))
+	rects["dash"] = Rect2(dash_center - Vector2(dash_radius, dash_radius), Vector2(dash_radius * 2.0, dash_radius * 2.0))
+	if include_extra:
+		var extra_radius: float = 32.0 * extra_scale * fit
+		var extra_center: = Vector2(skill_center.x + skill_radius * 0.5, row_y - max_radius - extra_radius - 18.0)
+		rects["extra"] = Rect2(extra_center - Vector2(extra_radius, extra_radius), Vector2(extra_radius * 2.0, extra_radius * 2.0))
 	return rects
