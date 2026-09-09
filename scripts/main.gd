@@ -2208,6 +2208,12 @@ var lobby_host_selected = 0
 var lobby_client_selected = 0
 var gameover_selected = 0
 var menu_selected = 0
+var menu_ui_font: Font = ThemeDB.fallback_font
+var menu_focus_weights: Dictionary = {}
+var menu_motion_mode: String = ""
+var menu_page_age: float = 0.0
+var menu_selection_age: float = 0.0
+var menu_motion_selection: int = -1
 var interrupted_run_available: = false
 var interrupted_run_summary: Dictionary = {}
 var interrupted_run_autosave_timer: = 0.0
@@ -11754,6 +11760,7 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 
 
 func _process(delta: float) -> void :
+	_update_menu_presentation(delta)
 	if vfx_director:
 		vfx_director.set_particles_enabled(gfx_particles)
 		vfx_director.update(delta)
@@ -39389,45 +39396,172 @@ func _draw_menu(viewport: Vector2) -> void :
 		var idx = clamp(trans_pos, 0, sequence.size() - 1)
 		current_bg = textures["menu_panels"][sequence[idx]]
 
-	var accent: = Color(0.0, 1.0, 0.82)
-	_draw_holo_background(viewport, current_bg, accent)
+	var accent := Color(0.36, 0.88, 0.87)
+	_draw_texture_cover(current_bg, Rect2(Vector2.ZERO, viewport))
+	_draw_menu_scrim(viewport, false)
 	menu_buttons = _menu_rects(viewport)
 	menu_selected = clampi(menu_selected, 0, max(0, _menu_option_count() - 1))
-
-	var safe: float = maxf(16.0, minf(viewport.x, viewport.y) * 0.03)
-	var title_size: = int(clampf(viewport.y * 0.105, 54.0, 84.0))
-	var title_pos: = Vector2(viewport.x * 0.5, viewport.y * 0.155)
-	_draw_menu_atmosphere(viewport, accent)
-	_draw_glitch_title("RUPTURA TEMPORAL 2.0", title_pos, title_size, accent)
-	_draw_centered("v" + GAME_VERSION, title_pos + Vector2(0.0, title_size * 0.5 + 8.0), 13, Color(0.74, 0.92, 1.0, 0.85))
-
+	var x: float = viewport.x * 0.06
+	var title_size := int(clampf(viewport.y * 0.085, 38.0, 68.0))
+	var title_y: float = viewport.y * 0.115
+	_draw_ui_text("D37  /  FRATURA TEMPORAL", Vector2(x, title_y - 28.0), 11, accent)
+	var title_width: float = menu_title_font.get_string_size("TEMPORAL", HORIZONTAL_ALIGNMENT_LEFT, -1, title_size).x
+	_draw_centered_with_font(menu_title_font, "RUPTURA", Vector2(x + title_width * 0.5, title_y + title_size * 0.3), title_size, Color(0.95, 0.94, 0.88))
+	_draw_centered_with_font(menu_title_font, "TEMPORAL", Vector2(x + title_width * 0.5, title_y + title_size * 1.4), title_size, Color(0.95, 0.94, 0.88))
+	_draw_ui_text("O tempo se rompe. Sua jornada continua.", Vector2(x, title_y + title_size * 2.18), 13, Color(0.67, 0.76, 0.78))
 	if menu_buttons.has("continue"):
-		_draw_hub_button(menu_buttons["continue"], "CONTINUAR RUN", _interrupted_run_detail_text(), Color(0.18, 0.55, 0.98), menu_selected == _menu_index_for("continue"), true, "continue")
-	_draw_hub_button(menu_buttons["start"], "NOVA RUN" if interrupted_run_available else "INICIAR JORNADA", "", Color(0.18, 0.58, 0.98), menu_selected == _menu_index_for("start"), not interrupted_run_available, "start")
+		_draw_hub_button(menu_buttons["continue"], "Continuar jornada", _interrupted_run_detail_text(), accent, menu_selected == _menu_index_for("continue"), true, "continue")
+	_draw_hub_button(menu_buttons["start"], "Nova jornada" if interrupted_run_available else "Iniciar jornada", "", accent, menu_selected == _menu_index_for("start"), not interrupted_run_available, "start")
 	if menu_buttons.has("multiplayer"):
-		_draw_hub_button(menu_buttons["multiplayer"], "MODO ONLINE", "", Color(0.0, 1.0, 0.82), menu_selected == _menu_index_for("multiplayer"), false, "multiplayer")
-	_draw_hub_button(menu_buttons["catalog"], "CATALOGO", "", Color(0.38, 0.78, 0.96), menu_selected == _menu_index_for("catalog"), false, "catalog")
-	_draw_hub_button(menu_buttons["settings"], "CONFIGURACAO", "", Color(1.0, 0.75, 0.22), menu_selected == _menu_index_for("settings"), false, "settings")
+		_draw_hub_button(menu_buttons["multiplayer"], "Modo online", "", accent, menu_selected == _menu_index_for("multiplayer"), false, "multiplayer")
+	_draw_hub_button(menu_buttons["catalog"], "Catálogo temporal", "", accent, menu_selected == _menu_index_for("catalog"), false, "catalog")
+	_draw_hub_button(menu_buttons["settings"], "Configurações", "", accent, menu_selected == _menu_index_for("settings"), false, "settings")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and menu_buttons.has("stream"):
-		var stream_active: = _qa_streaming_is_active()
-		var stream_title: = "ENCERRAR AO VIVO" if stream_active else "TRANSMITIR PARTIDA"
-		var stream_color: = Color(0.0, 1.0, 0.82) if stream_active else Color(0.38, 0.88, 1.0)
-		_draw_hub_button(menu_buttons["stream"], stream_title, _qa_stream_menu_subtitle(), stream_color, menu_selected == _menu_index_for("stream"), false, "stream")
-	_draw_hub_button(menu_buttons["exit"], "SAIR DO JOGO", "", Color(0.95, 0.22, 0.25), menu_selected == _menu_index_for("exit"), false, "exit")
-
-	if player_nickname != "":
-		draw_string(menu_button_font, Vector2(safe, viewport.y - safe * 0.58), player_nickname, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.74, 0.92, 1.0, 0.45))
+		_draw_hub_button(menu_buttons["stream"], "Encerrar ao vivo" if _qa_streaming_is_active() else "Transmitir partida", _qa_stream_menu_subtitle(), accent, menu_selected == _menu_index_for("stream"), false, "stream")
+	_draw_hub_button(menu_buttons["exit"], "Sair do jogo", "", Color(0.88, 0.53, 0.44), menu_selected == _menu_index_for("exit"), false, "exit")
+	var footer_y: float = viewport.y - 22.0
+	draw_line(Vector2(x, footer_y - 20.0), Vector2(viewport.x - x, footer_y - 20.0), Color(0.7, 0.84, 0.83, 0.18), 1.0)
+	_draw_ui_text(player_nickname if player_nickname != "" else "RUPTURA TEMPORAL", Vector2(x, footer_y), 11, Color(0.67, 0.76, 0.78))
+	_draw_ui_text("v" + GAME_VERSION, Vector2(viewport.x - x - 65.0, footer_y), 11, Color(0.67, 0.76, 0.78))
 
 
-func _draw_menu_atmosphere(viewport: Vector2, accent: Color) -> void :
-	var t: = float(Time.get_ticks_msec()) * 0.001
-	draw_circle(Vector2(viewport.x * 0.5, viewport.y * 0.48), minf(viewport.x, viewport.y) * 0.4, Color(0.0, 0.76, 0.72, 0.045))
-	draw_circle(Vector2(viewport.x * 0.58, viewport.y * 0.5), minf(viewport.x, viewport.y) * 0.34, Color(0.86, 0.12, 1.0, 0.04))
-	for i in range(8):
-		var p: = fposmod(t * (0.035 + float(i) * 0.005) + float(i) * 0.173, 1.0)
-		var x: = lerpf(-90.0, viewport.x + 90.0, p)
-		var y: = viewport.y * (0.17 + float(i % 4) * 0.18) + sin(t * 0.9 + i) * 10.0
-		draw_line(Vector2(x - 34.0, y), Vector2(x + 56.0, y + 9.0), Color(accent.r, accent.g, accent.b, 0.075), 1.5, true)
+func _update_menu_presentation(delta: float) -> void:
+	if mode != "menu" and not mode.begins_with("settings"):
+		menu_motion_mode = ""
+		return
+	if menu_motion_mode != mode:
+		menu_motion_mode = mode
+		menu_page_age = 0.0
+		menu_focus_weights.clear()
+		menu_motion_selection = -1
+	menu_page_age += delta
+	var keys: Array = _menu_option_keys() if mode == "menu" else _settings_option_keys()
+	var selected_index: int = menu_selected if mode == "menu" else settings_selected
+	if selected_index != menu_motion_selection:
+		menu_motion_selection = selected_index
+		menu_selection_age = 0.0
+	menu_selection_age += delta
+	for i in range(keys.size()):
+		var key: String = String(keys[i])
+		menu_focus_weights[key] = move_toward(float(menu_focus_weights.get(key, 0.0)), 1.0 if i == selected_index else 0.0, delta * 8.0)
+
+
+func _menu_focus_weight(key: String, selected: bool) -> float:
+	return float(menu_focus_weights.get(key, 1.0 if selected else 0.0))
+
+
+func _menu_sentence_case(text: String) -> String:
+	return (text.left(1) + text.substr(1).to_lower()).replace("fps", "FPS").replace("hud", "HUD").replace("qa", "QA")
+
+
+func _draw_ui_text(text: String, draw_pos: Vector2, size: int, color: Color, width: float = -1.0) -> void:
+	var fitted: int = size
+	if width > 0.0:
+		while fitted > 10 and menu_ui_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > width:
+			fitted -= 1
+	var shown: String = text
+	if width > 0.0 and menu_ui_font.get_string_size(shown, HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > width:
+		while shown.length() > 1 and menu_ui_font.get_string_size(shown + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > width:
+			shown = shown.left(shown.length() - 1)
+		shown += "…"
+	draw_string(menu_ui_font, draw_pos, shown, HORIZONTAL_ALIGNMENT_LEFT, width, fitted, color)
+
+
+func _draw_ui_wrap(text: String, rect: Rect2, size: int, color: Color, lines: int = 3) -> void:
+	var words := text.split(" ")
+	var line := ""
+	var y: float = rect.position.y + size
+	var count: int = 0
+	for word in words:
+		var next: String = word if line.is_empty() else line + " " + word
+		if menu_ui_font.get_string_size(next, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and not line.is_empty():
+			_draw_ui_text(line, Vector2(rect.position.x, y), size, color, rect.size.x)
+			count += 1
+			y += size + 5.0
+			line = word
+			if count >= lines or y > rect.end.y:
+				return
+		else:
+			line = next
+	_draw_ui_text(line, Vector2(rect.position.x, y), size, color, rect.size.x)
+
+
+func _draw_menu_scrim(viewport: Vector2, settings: bool) -> void:
+	var left := Color(0.009, 0.02, 0.026, 0.98 if settings else 0.94)
+	var right := Color(0.009, 0.02, 0.026, 0.94 if settings else 0.18)
+	var points := PackedVector2Array([Vector2.ZERO, Vector2(viewport.x, 0), viewport, Vector2(0, viewport.y)])
+	draw_polygon(points, PackedColorArray([left, right, right, left]))
+	draw_rect(Rect2(0, viewport.y - 56.0, viewport.x, 56.0), Color(0.009, 0.02, 0.026, 0.66))
+
+
+func _draw_settings_shell(viewport: Vector2, title: String, detail: String) -> void:
+	_draw_texture_cover(textures["menu_panels"][0], Rect2(Vector2.ZERO, viewport))
+	_draw_menu_scrim(viewport, true)
+	var x: float = viewport.x * 0.06
+	var compact: bool = viewport.y < 600.0
+	_draw_ui_text("RUPTURA TEMPORAL  /  CONFIGURAÇÕES", Vector2(x, 23.0), 10, Color(0.4, 0.73, 0.74))
+	var offset: float = (1.0 - clampf(menu_page_age / 0.2, 0.0, 1.0)) * 6.0
+	_draw_ui_text(title, Vector2(x + offset, 52.0 if compact else 62.0), 27 if compact else 34, Color(0.95, 0.94, 0.89))
+	_draw_ui_text(detail, Vector2(x, 72.0 if compact else 84.0), 11 if compact else 12, Color(0.59, 0.7, 0.73), viewport.x * 0.85)
+	_draw_ui_text("Alterações salvas automaticamente", Vector2(x, viewport.y - 18.0), 11, Color(0.51, 0.65, 0.67))
+
+
+func _draw_settings_surface(rect: Rect2, selected: bool, accent: Color = Color(0.36, 0.88, 0.87)) -> void:
+	var fill := Color(0.028, 0.047, 0.055, 0.96)
+	if selected:
+		fill = fill.lerp(Color(0.09, 0.22, 0.23, 0.98), 0.65 * clampf(menu_selection_age / 0.14, 0.0, 1.0))
+	if selected and rect.has_point(get_global_mouse_position()) and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		fill = fill.lightened(0.08)
+	draw_rect(rect, fill)
+	draw_rect(rect, Color(0.31, 0.49, 0.51, 0.6) if selected else Color(0.25, 0.35, 0.37, 0.35), false, 1.0)
+	if selected:
+		draw_rect(Rect2(rect.position, Vector2(3.0, rect.size.y)), accent)
+
+
+func _update_menu_pointer(pos: Vector2, viewport: Vector2) -> void:
+	var rects: Dictionary = {}
+	var keys: Array = []
+	match mode:
+		"menu":
+			rects = _menu_rects(viewport)
+			keys = _menu_option_keys()
+		"settings":
+			rects = _settings_rects(viewport)
+			keys = _settings_option_keys()
+		"settings_graphics":
+			rects = _graphics_settings_rects(viewport)
+			keys = _graphics_setting_keys()
+		"settings_keys":
+			rects = _keyboard_settings_rects(viewport)
+			keys = _keyboard_action_order().duplicate()
+			keys.append_array(["reset", "back"])
+		"settings_gamepad":
+			rects = _gamepad_settings_rects(viewport)
+			keys = _gamepad_action_order().duplicate()
+			keys.append("back")
+		"settings_gameplay":
+			if gameplay_cheat_focused:
+				return
+			rects = _gameplay_preferences_rects(viewport)
+			keys = _gameplay_preference_keys()
+		"settings_audio":
+			if audio_slider_drag_index != -1:
+				return
+			rects = _audio_settings_rects(viewport)
+			for i in range(4):
+				if _audio_slider_row_rect(rects["panel"], i).has_point(pos):
+					settings_selected = i
+					return
+			if rects["back"].has_point(pos):
+				settings_selected = 4
+			return
+	for i in range(keys.size()):
+		if rects.has(keys[i]) and Rect2(rects[keys[i]]).has_point(pos):
+			if mode == "menu":
+				menu_selected = i
+			else:
+				settings_selected = i
+			return
 
 
 
@@ -39551,95 +39685,27 @@ func _draw_menu_button(rect: Rect2, label: String, is_selected: bool) -> void :
 		_draw_centered(label, rect.get_center() + Vector2(0, 6), 16, Color(0.78, 0.78, 0.86))
 
 
-func _draw_hub_button(rect: Rect2, label: String, detail: String, accent: Color, is_selected: bool, _primary: = false, button_type: = "") -> void :
-	var msec: = Time.get_ticks_msec()
-	var msec_f: = float(msec)
-	var pulse: = 0.5 + 0.5 * sin(msec_f * 0.006)
-	var glitch: = is_selected and (msec % 620) < 92
-	var jitter: = Vector2(0.0, 0.0)
-	if glitch:
-		jitter = Vector2(sin(msec_f * 0.21) * 2.4, sin(msec_f * 0.37) * 1.2)
-
-	var local_rect: = Rect2(rect.position + jitter * 0.45, rect.size)
-
-
-	var fill: = Color(0.035, 0.035, 0.062, 0.62)
-	var border: = Color(accent.r, accent.g, accent.b, 0.42)
-
-	match button_type:
-		"exit":
-			accent = Color(0.95, 0.22, 0.25)
-			fill = Color(0.22, 0.04, 0.06, 0.85) if is_selected else Color(0.12, 0.02, 0.04, 0.6)
-			border = Color(0.98, 0.28, 0.32, 0.95 if is_selected else 0.55)
-		"start":
-			accent = Color(0.18, 0.58, 0.98)
-			fill = Color(0.04, 0.16, 0.36, 0.85) if is_selected else Color(0.02, 0.09, 0.22, 0.6)
-			border = Color(0.24, 0.68, 1.0, 0.95 if is_selected else 0.55)
-		"continue":
-			accent = Color(0.2, 0.55, 0.98)
-			fill = Color(0.03, 0.1, 0.28, 0.92) if is_selected else Color(0.02, 0.06, 0.2, 0.78)
-			border = Color(0.28, 0.65, 1.0, 0.95 if is_selected else 0.65)
-		_:
-			fill = Color(accent.r * 0.12, accent.g * 0.12, accent.b * 0.12, 0.75 if is_selected else 0.55)
-			border = Color(accent.r, accent.g, accent.b, 0.9 if is_selected else 0.42)
-
-	draw_rect(local_rect, fill, true)
-	draw_rect(local_rect, border, false, 2.0 if is_selected else 1.2)
-
-	if is_selected:
-		draw_rect(local_rect.grow(4.0 + pulse * 3.0), Color(accent.r, accent.g, accent.b, 0.14 + pulse * 0.12), false, 2.0)
-		draw_rect(Rect2(local_rect.position, Vector2(6.0, local_rect.size.y)), accent, true)
-
-
-	if button_type == "continue":
-		for i in range(5):
-			var spark_time: = fmod(msec_f * 0.012 + float(i) * 1.37, 1.0)
-			if spark_time < 0.5:
-				var side: = i % 4
-				var ratio: = fmod(msec_f * 0.007 + float(i) * 0.23, 1.0)
-				var start_p: = Vector2.ZERO
-				match side:
-					0: start_p = Vector2(local_rect.position.x + local_rect.size.x * ratio, local_rect.position.y)
-					1: start_p = Vector2(local_rect.end.x, local_rect.position.y + local_rect.size.y * ratio)
-					2: start_p = Vector2(local_rect.position.x + local_rect.size.x * ratio, local_rect.end.y)
-					3: start_p = Vector2(local_rect.position.x, local_rect.position.y + local_rect.size.y * ratio)
-
-				var ang: = sin(msec_f * 0.04 + float(i)) * PI * 2.0
-				var spark_len: = 5.0 + fmod(msec_f * 0.15 + float(i) * 3.0, 9.0)
-				var mid_p: = start_p + Vector2(cos(ang), sin(ang)) * (spark_len * 0.5) + Vector2(sin(msec_f * 0.08 + float(i)) * 3.0, cos(msec_f * 0.08) * 3.0)
-				var end_p: = start_p + Vector2(cos(ang), sin(ang)) * spark_len
-				var spark_col: = Color(0.72, 0.95, 1.0, 0.92) if (i % 2 == 0) else Color(1.0, 0.9, 0.3, 0.95)
-
-				draw_line(start_p, mid_p, spark_col, 1.8)
-				draw_line(mid_p, end_p, spark_col, 1.2)
-				draw_circle(end_p, 1.4, Color.WHITE)
-
-
-	if detail != "":
-		var title_size: = _fit_text_size(label, local_rect.size.x - 24.0, int(clampf(local_rect.size.y * 0.38, 14.0, 22.0)), 12)
-		var detail_size: = int(clampf(local_rect.size.y * 0.22, 10.0, 13.0))
-		var title_y: = local_rect.position.y + local_rect.size.y * 0.35
-		var detail_y: = local_rect.position.y + local_rect.size.y * 0.74
-
-		if is_selected:
-			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x - 1.5, title_y), title_size, Color(0.0, 0.95, 1.0, 0.7))
-			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x + 1.5, title_y), title_size, Color(1.0, 0.2, 0.6, 0.7))
-			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x, title_y), title_size, Color.WHITE)
-		else:
-			_draw_centered_with_font(menu_button_font, label, Vector2(local_rect.get_center().x, title_y), title_size, Color(0.9, 0.94, 1.0))
-
-		var detail_color: = Color(0.68, 0.9, 1.0, 0.95) if is_selected else Color(0.55, 0.78, 0.92, 0.8)
-		_draw_centered(detail, Vector2(local_rect.get_center().x, detail_y), detail_size, detail_color)
-	else:
-		var text_size: = _fit_text_size(label, local_rect.size.x - 24.0, int(clampf(local_rect.size.y * 0.48, 16.0, 26.0)), 13)
-		var center: = local_rect.get_center() + Vector2(0.0, 1.0)
-		if is_selected:
-			_draw_centered_with_font(menu_button_font, label, center + Vector2(-1.5, 0.0) + jitter, text_size, Color(0.0, 0.95, 1.0, 0.7))
-			_draw_centered_with_font(menu_button_font, label, center + Vector2(1.5, 0.0) - jitter, text_size, Color(1.0, 0.2, 0.6, 0.7))
-			_draw_centered_with_font(menu_button_font, label, center, text_size, Color.WHITE)
-		else:
-			_draw_centered_with_font(menu_button_font, label, center, text_size, Color(0.88, 0.92, 0.98, 0.9))
-
+func _draw_hub_button(rect: Rect2, label: String, detail: String, accent: Color, is_selected: bool, primary: = false, button_type: = "") -> void:
+	var weight: float = _menu_focus_weight(button_type, is_selected)
+	var entrance: float = 1.0 - pow(1.0 - clampf(menu_page_age / 0.28, 0.0, 1.0), 3.0)
+	var local_rect := Rect2(rect.position + Vector2((1.0 - entrance) * -12.0, 0.0), rect.size)
+	var pressed: bool = rect.has_point(get_global_mouse_position()) and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	var fill := Color(0.024, 0.045, 0.052, 0.78).lerp(Color(0.1, 0.22, 0.23, 0.96), weight)
+	if primary:
+		fill = Color(0.19, 0.48, 0.48, 0.96).lerp(Color(0.31, 0.68, 0.66, 0.98), weight)
+	if pressed:
+		fill = fill.darkened(0.2)
+	draw_rect(local_rect, fill)
+	draw_line(local_rect.position, Vector2(local_rect.end.x, local_rect.position.y), Color(accent, 0.18 + weight * 0.5), 1.0)
+	draw_rect(Rect2(local_rect.position, Vector2(3.0, local_rect.size.y)), Color(accent, 0.25 + weight * 0.75))
+	var size := 19 if primary else 16
+	var text_color := Color(0.97, 0.97, 0.91) if not primary else Color(0.025, 0.07, 0.075)
+	var baseline: float = local_rect.get_center().y + 6.0 if detail.is_empty() else local_rect.get_center().y - 2.0
+	_draw_ui_text(label, Vector2(local_rect.position.x + 22.0 + weight * 5.0, baseline), size, text_color, local_rect.size.x - 68.0)
+	if not detail.is_empty():
+		_draw_ui_text(detail, Vector2(local_rect.position.x + 27.0, baseline + 16.0), 10, text_color, local_rect.size.x - 65.0)
+	var arrow := Vector2(local_rect.end.x - 24.0 + weight * 3.0, local_rect.get_center().y)
+	draw_polyline(PackedVector2Array([arrow + Vector2(-4, -5), arrow + Vector2(1, 0), arrow + Vector2(-4, 5)]), Color(text_color, 0.45 + weight * 0.55), 1.6, true)
 
 
 func _draw_hub_manifest_card(rect: Rect2) -> void :
@@ -39661,9 +39727,7 @@ func _draw_hub_chip(rect: Rect2, label: String, accent: Color, strong: = false) 
 
 
 func _draw_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(1.0, 0.74, 0.22))
-	var portrait = _is_portrait(viewport)
-	_draw_glitch_title("CONFIGURACOES", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(1.0, 0.74, 0.22))
+	_draw_settings_shell(viewport, "Configurações", "Seu jeito de atravessar a ruptura.")
 	settings_buttons = _settings_rects(viewport)
 	settings_selected = clampi(settings_selected, 0, max(0, _settings_option_count() - 1))
 	var keys: Array = _settings_option_keys()
@@ -39673,8 +39737,6 @@ func _draw_settings(viewport: Vector2) -> void :
 			continue
 		_draw_settings_card(settings_buttons[key_s], _settings_option_title(key_s), _settings_option_summary(key_s), _settings_option_color(key_s), settings_selected == _settings_index_for(key_s))
 	_draw_settings_info_panel(viewport, _settings_selected_key())
-	var info_rect = Rect2(viewport.x * 0.1, viewport.y - (86 if portrait else 70), viewport.x * 0.8, 42)
-	_draw_hub_chip(info_rect, "PERFIL %s | SISTEMA %s | CONFIGURACOES SALVAS AUTOMATICAMENTE" % [_effective_ui_platform().to_upper(), _runtime_platform_name().to_upper()], Color(0.72, 0.92, 1.0), false)
 
 
 func _format_binding_name(val) -> String:
@@ -39704,9 +39766,7 @@ func _compact_binding_name(action: String) -> String:
 
 
 func _draw_gamepad_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.12, 0.98, 0.52))
-	var portrait = _is_portrait(viewport)
-	_draw_glitch_title("GAMEPAD", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.12, 0.98, 0.52))
+	_draw_settings_shell(viewport, "Controle", "Selecione uma ação para mapear o controle conectado.")
 	settings_buttons = _gamepad_settings_rects(viewport)
 	var actions = _gamepad_action_order()
 	for i in range(actions.size()):
@@ -39717,19 +39777,15 @@ func _draw_gamepad_settings(viewport: Vector2) -> void :
 
 
 func _draw_keyboard_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(1.0, 0.78, 0.22))
-	var portrait = _is_portrait(viewport)
-	_draw_glitch_title("TECLAS", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(1.0, 0.78, 0.22))
+	_draw_settings_shell(viewport, "Teclado e mouse", "Selecione uma ação para remapear. Backspace / Delete remove a associação.")
 	settings_buttons = _keyboard_settings_rects(viewport)
 	var actions = _keyboard_action_order()
 	for i in range(actions.size()):
 		var action = actions[i]
 		var value = "PRESSIONE TECLA/MOUSE..." if keyboard_mapping_action == action else _format_key_binding_name(keyboard_bindings.get(action, INPUT_BIND_NONE))
 		_draw_gameplay_preference(settings_buttons[action], _keyboard_action_title(action), _keyboard_action_subtitle(action), value, _keyboard_action_color(action), settings_selected == i)
-	_draw_settings_card(settings_buttons["reset"], "RESTAURAR PADRAO", "volta para Q/E/R, E, escape e mouse", Color(0.58, 0.82, 1.0), settings_selected == actions.size())
+	_draw_settings_card(settings_buttons["reset"], "RESTAURAR PADRAO", "restaurar os atalhos originais", Color(0.58, 0.82, 1.0), settings_selected == actions.size())
 	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), settings_selected == actions.size() + 1)
-	var hint_rect: = Rect2(viewport.x * 0.5 - min(760.0, viewport.x * 0.7) * 0.5, viewport.y - 42.0, min(760.0, viewport.x * 0.7), 24.0)
-	_draw_centered("Clique esquerdo ataca. Clique direito usa TP no cursor. Backspace/Delete remove a tecla selecionada.", hint_rect.get_center() + Vector2(0, 5), 12, Color(0.86, 0.94, 1.0, 0.82))
 
 
 func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
@@ -39738,13 +39794,13 @@ func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
 	if not portrait:
 		var outer_w: float = min(1060.0, viewport.x * 0.86)
 		var x: float = viewport.x * 0.5 - outer_w * 0.5
-		var y: float = viewport.y * 0.15
+		var y: float = maxf(100.0, viewport.y * 0.15)
 		var gap: float = 12.0
 		var col_gap: float = 18.0
 		var col_w: float = (outer_w - col_gap) * 0.5
 		var rows: int = int(ceil(float(actions.size()) / 2.0))
 		var back_h: float = 54.0
-		var row_h: float = clamp((viewport.y - y - back_h - 30.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 54.0, 68.0)
+		var row_h: float = clamp((viewport.y - y - back_h - 30.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 42.0, 68.0)
 		var wide_rects: Dictionary = {}
 		for i in range(actions.size()):
 			var col: int = i % 2
@@ -39773,13 +39829,13 @@ func _keyboard_settings_rects(viewport: Vector2) -> Dictionary:
 	if not portrait:
 		var outer_w: float = min(1080.0, viewport.x * 0.88)
 		var x: float = viewport.x * 0.5 - outer_w * 0.5
-		var y: float = viewport.y * 0.145
+		var y: float = maxf(100.0, viewport.y * 0.145)
 		var gap: float = 10.0
 		var col_gap: float = 18.0
 		var col_w: float = (outer_w - col_gap) * 0.5
 		var action_rows: int = int(ceil(float(actions.size()) / 2.0))
 		var footer_h: float = 54.0
-		var row_h: float = clamp((viewport.y - y - footer_h - 42.0 - gap * float(maxi(0, action_rows - 1))) / float(maxi(1, action_rows)), 54.0, 68.0)
+		var row_h: float = clamp((viewport.y - y - footer_h - 62.0 - gap * float(maxi(0, action_rows - 1))) / float(maxi(1, action_rows)), 42.0, 68.0)
 		var wide_rects: Dictionary = {}
 		for i in range(actions.size()):
 			var col: int = i % 2
@@ -39823,9 +39879,7 @@ func _reset_keyboard_bindings() -> void :
 	keyboard_mapping_action = ""
 
 func _draw_gameplay_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.36, 0.84, 1.0))
-	var portrait = _is_portrait(viewport)
-	_draw_glitch_title("JOGABILIDADE", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.36, 0.84, 1.0))
+	_draw_settings_shell(viewport, "Jogabilidade", "Ajuste os comandos, a mira e a leitura do combate.")
 	settings_buttons = _gameplay_preferences_rects(viewport)
 	var analog_accent = Color(0.0, 1.0, 0.82) if analog_fixed else Color(1.0, 0.74, 0.22)
 	_draw_gameplay_preference(settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if analog_fixed else "DINAMICO", analog_accent, settings_selected == _gameplay_preference_index("analog"))
@@ -39850,7 +39904,7 @@ func _draw_gameplay_settings(viewport: Vector2) -> void :
 	_draw_small_rect_button(_damage_text_minus_rect(damage_panel), "-", Color(0.2, 0.1, 0.08), Color(1.0, 0.5, 0.28))
 	_draw_small_rect_button(_damage_text_plus_rect(damage_panel), "+", Color(0.2, 0.1, 0.08), Color(1.0, 0.5, 0.28))
 	var interface_panel = settings_buttons["interface_text"]
-	_draw_gameplay_preference(interface_panel, "FONTES DA LOJA / MANIFESTACOES", "Tamanho dos textos informativos dessas telas.", "%d%%" % int(round(interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), settings_selected == _gameplay_preference_index("interface_text"))
+	_draw_gameplay_preference(interface_panel, "TEXTOS DA INTERFACE", "Escala de textos da loja e manifestações.", "%d%%" % int(round(interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), settings_selected == _gameplay_preference_index("interface_text"))
 	_draw_small_rect_button(_interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	_draw_small_rect_button(_interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	var fps_accent = Color(0.0, 1.0, 0.82) if show_fps_counter else Color(0.48, 0.52, 0.58)
@@ -39896,87 +39950,88 @@ func _draw_cheat_popup(viewport: Vector2) -> void :
 
 
 func _draw_gameplay_preference(rect: Rect2, title: String, subtitle: String, value: String, accent: Color, selected: bool = false) -> void :
-	_draw_holo_panel(rect, accent, selected, 0.6)
-	var value_rect = _gameplay_value_rect(rect)
-	var text_width = max(120.0, value_rect.position.x - rect.position.x - 80.0)
-	var title_size: int = int(clamp(rect.size.y * 0.28, 14.0, 17.0))
-	var subtitle_size: int = int(clamp(rect.size.y * 0.18, 9.0, 11.0))
-	draw_string(font, rect.position + Vector2(18, rect.size.y * 0.42), title, HORIZONTAL_ALIGNMENT_LEFT, text_width, title_size, Color.WHITE)
-	_draw_wrapped_clamped(subtitle.to_upper(), Rect2(rect.position + Vector2(18, rect.size.y * 0.53), Vector2(text_width, rect.size.y * 0.36)), subtitle_size, Color(0.7, 0.86, 0.9, 0.84), 2)
-	draw_rect(value_rect, Color(accent.r, accent.g, accent.b, 0.16), true)
-	draw_rect(value_rect, Color(accent.r, accent.g, accent.b, 0.82), false, 2)
-	var value_size: int = 14
-	while value_size > 9 and font.get_string_size(value, HORIZONTAL_ALIGNMENT_CENTER, -1, value_size).x > value_rect.size.x - 12.0:
-		value_size -= 1
-	_draw_centered(value, value_rect.get_center() + Vector2(0, 5), value_size, Color.WHITE)
+	_draw_settings_surface(rect, selected)
+	var value_rect: Rect2 = _gameplay_value_rect(rect)
+	if mode == "settings_graphics":
+		value_rect = Rect2(rect.end.x - 136.0, rect.get_center().y - 18.0, 116.0, 36.0)
+	var text_width: float = maxf(100.0, value_rect.position.x - rect.position.x - 30.0)
+	var stepper: bool = title in ["INTERVALO DA LOJA", "TEXTO DE DANO", "TEXTOS DA INTERFACE"]
+	if stepper:
+		text_width -= 48.0
+	var title_size: int = 15 if rect.size.y >= 64.0 else 13
+	_draw_ui_text(_menu_sentence_case(title), rect.position + Vector2(16, rect.size.y * 0.39), title_size, Color(0.93, 0.94, 0.9), text_width)
+	_draw_ui_wrap(subtitle, Rect2(rect.position + Vector2(16, rect.size.y * 0.51), Vector2(text_width, rect.size.y * 0.45)), 11 if rect.size.y >= 64.0 else 10, Color(0.61, 0.72, 0.74), 2 if rect.size.y >= 56.0 else 1)
+	draw_rect(value_rect, Color(accent, 0.09))
+	draw_line(Vector2(value_rect.position.x, value_rect.end.y), value_rect.end, Color(accent, 0.52), 1.0)
+	var shown: String = "Ligado" if value == "ON" else ("Desligado" if value == "OFF" else value)
+	var size: int = 13
+	while size > 10 and menu_ui_font.get_string_size(shown, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > value_rect.size.x - 12.0:
+		size -= 1
+	_draw_centered_with_font(menu_ui_font, shown, value_rect.get_center(), size, Color(0.87, 0.94, 0.92))
 
 
 func _draw_audio_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(1.0, 0.42, 0.78))
-	var portrait = _is_portrait(viewport)
-	_draw_glitch_title("SOM", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(1.0, 0.42, 0.78))
+	_draw_settings_shell(viewport, "Som", "Equilibre a trilha, os impactos e os sons de combate.")
 	settings_buttons = _audio_settings_rects(viewport)
 	var panel: Rect2 = settings_buttons["panel"]
-	_draw_holo_panel(panel, Color(1.0, 0.42, 0.78), true, 0.64)
-	draw_string(font, panel.position + Vector2(26.0, 34.0), "MIXAGEM DA RUPTURA", HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 52.0, 18, Color.WHITE)
-	draw_string(font, panel.position + Vector2(26.0, 57.0), "Arraste os canais ou use +/- para ajustar sem reiniciar a musica.", HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 52.0, 12, Color(0.82, 0.92, 1.0, 0.78))
-	var titles = ["MASTER", "MUSICA", "EFEITOS", "DISPAROS"]
-	var vols = [vol_master, vol_music, vol_sfx, vol_shots]
+	_draw_settings_surface(panel, false)
+	_draw_ui_text("VOLUME POR CANAL", panel.position + Vector2(24.0, 28.0), 11, Color(0.36, 0.78, 0.78))
+	_draw_ui_text("Arraste para ajustar · use − / + para passos de 10%", panel.position + Vector2(24.0, 47.0), 11, Color(0.59, 0.7, 0.73))
+	var titles := ["Geral", "Música", "Efeitos", "Disparos"]
+	var details := ["Todo o áudio", "Trilha sonora", "Impactos e avisos", "Sons de ataque"]
 	for i in range(4):
-		var bar_rect = _audio_slider_rect(panel, i)
-		var row_rect: Rect2 = _audio_slider_row_rect(panel, i)
-		var accent: Color = Color(1.0, 0.42, 0.78)
+		var row: Rect2 = _audio_slider_row_rect(panel, i)
+		var bar: Rect2 = _audio_slider_rect(panel, i)
+		var volume: float = _audio_volume_index(i)
 		var active: bool = settings_selected == i or audio_slider_drag_index == i
-		draw_rect(row_rect, Color(0.0, 0.0, 0.0, 0.32), true)
-		draw_rect(row_rect, Color(accent.r, accent.g, accent.b, 0.42 if active else 0.2), false, 1)
-		draw_string(font, row_rect.position + Vector2(16.0, 30.0), titles[i], HORIZONTAL_ALIGNMENT_LEFT, 130.0, 16, Color.WHITE)
-		_draw_centered("%d%%" % int(round(vols[i] * 100.0)), Vector2(row_rect.end.x - 44.0, row_rect.get_center().y + 5.0), 13, Color(0.95, 0.98, 1.0, 0.92))
-		draw_rect(bar_rect, Color(1, 1, 1, 0.08), true)
-		draw_rect(bar_rect.grow(1.0), Color(accent.r, accent.g, accent.b, 0.38), false, 1)
-		draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * vols[i], bar_rect.size.y)), Color(accent.r, accent.g, accent.b, 0.92), true)
-		var knob_x: float = bar_rect.position.x + bar_rect.size.x * vols[i]
-		draw_circle(Vector2(knob_x, bar_rect.get_center().y), 12.0 if active else 9.0, Color(0.04, 0.0, 0.05, 0.92))
-		draw_circle(Vector2(knob_x, bar_rect.get_center().y), 6.0, Color.WHITE)
-		draw_arc(Vector2(knob_x, bar_rect.get_center().y), 15.0, -time_alive * 2.0, TAU - time_alive * 2.0, 24, Color(accent.r, accent.g, accent.b, 0.76), 2.0)
-		_draw_small_rect_button(_audio_minus_rect(panel, i), "-", Color(0.16, 0.04, 0.11, 0.92), accent)
-		_draw_small_rect_button(_audio_plus_rect(panel, i), "+", Color(0.16, 0.04, 0.11, 0.92), accent)
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == 4)
+		var accent := Color(0.36, 0.88, 0.87)
+		_draw_settings_surface(row, active)
+		_draw_ui_text(titles[i], Vector2(row.position.x + 14.0, row.get_center().y - 2.0), 16, Color(0.93, 0.94, 0.9))
+		_draw_ui_text(details[i], Vector2(row.position.x + 14.0, row.get_center().y + 15.0), 10, Color(0.57, 0.69, 0.71))
+		draw_rect(bar, Color(0.17, 0.26, 0.28))
+		for tick in range(1, 10):
+			var tx: float = bar.position.x + bar.size.x * float(tick) / 10.0
+			draw_line(Vector2(tx, bar.end.y + 5.0), Vector2(tx, bar.end.y + 8.0), Color(0.3, 0.43, 0.44), 1.0)
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * volume, bar.size.y)), Color(accent, 0.9 if active else 0.6))
+		var knob := Vector2(bar.position.x + bar.size.x * volume, bar.get_center().y)
+		if active:
+			draw_circle(knob, 13.0, Color(accent, 0.14))
+		draw_circle(knob, 7.0 if active else 5.0, Color(0.89, 0.97, 0.94))
+		for step in [-1, 1]:
+			var button: Rect2 = _audio_minus_rect(panel, i) if step == -1 else _audio_plus_rect(panel, i)
+			_draw_settings_surface(button, button.has_point(get_global_mouse_position()))
+			_draw_centered_with_font(menu_ui_font, "−" if step == -1 else "+", button.get_center(), 20, Color(0.73, 0.85, 0.84))
+		_draw_centered_with_font(menu_ui_font, "%d%%" % roundi(volume * 100.0), Vector2(row.end.x - 32.0, row.get_center().y), 13, Color(0.9, 0.93, 0.88))
+	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar às configurações", Color(0.36, 0.88, 0.87), settings_selected == 4)
 
 
 func _audio_settings_rects(viewport: Vector2) -> Dictionary:
-	var portrait: bool = _is_portrait(viewport)
-	var w: float = min(920.0, viewport.x * (0.86 if portrait else 0.72))
-	var x: float = viewport.x * 0.5 - w * 0.5
-	var panel_h: float = min(420.0, viewport.y * 0.58)
-	var y: float = viewport.y * (0.15 if portrait else 0.16)
-	var back_h: float = 54.0
-	return {
-		"panel": Rect2(x, y, w, panel_h),
-		"back": Rect2(x, y + panel_h + 18.0, w, back_h)
-	}
+	var width: float = minf(1040.0, viewport.x * 0.88)
+	var x: float = (viewport.x - width) * 0.5
+	var y: float = maxf(100.0, viewport.y * 0.18)
+	var height: float = minf(440.0, viewport.y - y - 112.0)
+	return {"panel": Rect2(x, y, width, height), "back": Rect2(x, y + height + 14.0, width, 48.0)}
 
 
 func _audio_slider_row_rect(panel: Rect2, index: int) -> Rect2:
-	var top: float = panel.position.y + 82.0
-	var available_h: float = panel.size.y - 104.0
-	var row_h: float = clamp(available_h / 4.0 - 8.0, 58.0, 72.0)
-	return Rect2(panel.position.x + 20.0, top + float(index) * (row_h + 10.0), panel.size.x - 40.0, row_h)
+	var top: float = panel.position.y + 60.0
+	var height: float = (panel.size.y - 84.0) / 4.0
+	return Rect2(panel.position.x + 16.0, top + float(index) * (height + 4.0), panel.size.x - 32.0, height)
 
 
 func _audio_slider_rect(panel: Rect2, index: int) -> Rect2:
-	var row_rect: Rect2 = _audio_slider_row_rect(panel, index)
-	var x: float = row_rect.position.x + 154.0
-	return Rect2(x, row_rect.get_center().y - 8.0, max(180.0, row_rect.size.x - 270.0), 16.0)
+	var row: Rect2 = _audio_slider_row_rect(panel, index)
+	return Rect2(row.position.x + 196.0, row.get_center().y - 3.0, maxf(40.0, row.size.x - 324.0), 6.0)
 
 
 func _audio_minus_rect(panel: Rect2, index: int) -> Rect2:
-	var bar_rect: Rect2 = _audio_slider_rect(panel, index)
-	return Rect2(bar_rect.position.x - 44.0, bar_rect.get_center().y - 18.0, 36.0, 36.0)
+	var bar: Rect2 = _audio_slider_rect(panel, index)
+	return Rect2(bar.position.x - 58.0, bar.get_center().y - 22.0, 44.0, 44.0)
 
 
 func _audio_plus_rect(panel: Rect2, index: int) -> Rect2:
-	var bar_rect: Rect2 = _audio_slider_rect(panel, index)
-	return Rect2(bar_rect.end.x + 8.0, bar_rect.get_center().y - 18.0, 36.0, 36.0)
+	var bar: Rect2 = _audio_slider_rect(panel, index)
+	return Rect2(bar.end.x + 14.0, bar.get_center().y - 22.0, 44.0, 44.0)
 
 
 func _audio_slider_hit_rect(panel: Rect2, index: int) -> Rect2:
@@ -40008,42 +40063,28 @@ func _draw_data_settings(viewport: Vector2) -> void :
 	_draw_big_button(settings_buttons["data_back"], "VOLTAR", Color(0.13, 0.04, 0.06, 0.92), Color(1.0, 0.26, 0.36), settings_selected == 2)
 
 
-func _draw_settings_card(rect: Rect2, title: String, subtitle: String, accent: Color, selected: bool) -> void :
-	_draw_holo_panel(rect, accent, selected, 0.58)
-	var pulse: float = 0.5 + 0.5 * sin(time_alive * 5.0)
-	var marker = Rect2(rect.position + Vector2(12, 12), Vector2(42, rect.size.y - 24))
-	draw_rect(marker, Color(accent.r, accent.g, accent.b, 0.16), true)
-	draw_rect(marker, Color(accent.r, accent.g, accent.b, 0.68), false, 1)
-	draw_circle(marker.get_center(), min(marker.size.x, marker.size.y) * (0.18 + (0.06 * pulse if selected else 0.0)), Color.WHITE)
-	draw_arc(marker.get_center(), min(marker.size.x, marker.size.y) * 0.37, -time_alive * 2.2, TAU - time_alive * 2.2, 24, Color(accent.r, accent.g, accent.b, 0.72 if selected else 0.36), 2.0)
-	var title_rect: Rect2 = Rect2(rect.position + Vector2(70.0, rect.size.y * 0.20), Vector2(rect.size.x - 100.0, rect.size.y * 0.34))
-	var title_size: int = int(clamp(rect.size.y * 0.28, 15.0, 22.0))
-	while title_size > 11 and font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size).x > title_rect.size.x:
-		title_size -= 1
-	draw_string(font, title_rect.position + Vector2(0.0, title_size), title, HORIZONTAL_ALIGNMENT_LEFT, title_rect.size.x, title_size, Color.WHITE)
-	if subtitle != "":
-		_draw_wrapped_clamped(subtitle.to_upper(), Rect2(rect.position + Vector2(70, rect.size.y * 0.52), Vector2(rect.size.x - 88.0, rect.size.y * 0.42)), int(clamp(rect.size.y * 0.15, 10, 13)), Color(0.7, 0.86, 0.9, 0.84), 2)
-	if selected:
-		draw_line(rect.position + Vector2(rect.size.x - 42.0, rect.size.y * 0.5), rect.position + Vector2(rect.size.x - 22.0, rect.size.y * 0.5), Color(accent.r, accent.g, accent.b, 0.9), 3.0, true)
-		draw_line(rect.position + Vector2(rect.size.x - 28.0, rect.size.y * 0.38), rect.position + Vector2(rect.size.x - 20.0, rect.size.y * 0.5), Color(accent.r, accent.g, accent.b, 0.9), 3.0, true)
-		draw_line(rect.position + Vector2(rect.size.x - 28.0, rect.size.y * 0.62), rect.position + Vector2(rect.size.x - 20.0, rect.size.y * 0.5), Color(accent.r, accent.g, accent.b, 0.9), 3.0, true)
+func _draw_settings_card(rect: Rect2, title: String, subtitle: String, _accent: Color, selected: bool) -> void:
+	_draw_settings_surface(rect, selected)
+	var is_back: bool = title == "VOLTAR"
+	var center := Vector2(rect.position.x + 23.0, rect.get_center().y)
+	if is_back:
+		draw_polyline(PackedVector2Array([center + Vector2(4, -5), center + Vector2(-2, 0), center + Vector2(4, 5)]), Color(0.53, 0.77, 0.77), 1.6, true)
+	else:
+		draw_rect(Rect2(center - Vector2(3, 3), Vector2(6, 6)), Color(0.36, 0.88, 0.87) if selected else Color(0.33, 0.47, 0.49), selected)
+	var x: float = rect.position.x + 46.0
+	_draw_ui_text(_menu_sentence_case(title), Vector2(x, rect.get_center().y - 2.0), 16, Color(0.93, 0.94, 0.9), rect.size.x - 75.0)
+	_draw_ui_text(subtitle, Vector2(x, rect.get_center().y + 15.0), 11, Color(0.59, 0.7, 0.73), rect.size.x - 75.0)
 
 
 func _settings_rects(viewport: Vector2) -> Dictionary:
-	var portrait = _is_portrait(viewport)
-	var margin = viewport.x * (0.08 if portrait else 0.08)
-	var w = viewport.x - margin * 2.0
-	var option_keys: = _settings_option_keys()
-	var compact: = option_keys.size() >= 6
-	var h = clamp(viewport.y * (0.082 if compact else (0.095 if portrait else 0.12)), 50.0, 78.0)
-	var y = viewport.y * (0.18 if portrait else 0.2)
-	var gap = 10.0 if compact else 14.0
-	if not portrait:
-		w = min(560.0, viewport.x * 0.36)
-		margin = viewport.x * 0.1
-	var rects = {}
-	for i in range(option_keys.size()):
-		rects[String(option_keys[i])] = Rect2(margin, y + (h + gap) * float(i), w, h)
+	var keys: Array = _settings_option_keys()
+	var top: float = maxf(100.0, viewport.y * 0.18)
+	var gap: float = 6.0
+	var height: float = minf(68.0, (viewport.y - top - 40.0 - gap * float(keys.size() - 1)) / float(keys.size()))
+	var width: float = viewport.x * (0.88 if _is_portrait(viewport) else 0.37)
+	var rects: Dictionary = {}
+	for i in range(keys.size()):
+		rects[String(keys[i])] = Rect2(viewport.x * 0.06, top + float(i) * (height + gap), width, height)
 	return rects
 
 
@@ -40070,12 +40111,12 @@ func _settings_selected_key() -> String:
 
 func _settings_option_title(key: String) -> String:
 	match key:
-		"controls": return "AJUSTE DE HUB" if _uses_desktop_ui() else "CONTROLES EM TELA"
+		"controls": return "INTERFACE DE COMBATE" if _uses_desktop_ui() else "CONTROLES EM TELA"
 		"gamepad": return "GAMEPAD"
 		"keys": return "TECLAS"
 		"gameplay": return "JOGABILIDADE"
-		"audio": return "SOM"
-		"graphics": return "GRAFICOS"
+		"audio": return "ÁUDIO"
+		"graphics": return "GRÁFICOS"
 		"data": return "DADOS QA"
 		"back": return "VOLTAR"
 	return key.to_upper()
@@ -40083,14 +40124,14 @@ func _settings_option_title(key: String) -> String:
 
 func _settings_option_summary(key: String) -> String:
 	match key:
-		"controls": return "paineis e zonas seguras" if _uses_desktop_ui() else "reposicionar botoes, tamanho e HUD"
-		"gamepad": return "mapear botoes do controle"
+		"controls": return "painéis e zonas seguras" if _uses_desktop_ui() else "posição, tamanho e HUD"
+		"gamepad": return "mapear botões do controle"
 		"keys": return "atalhos de teclado e mouse"
 		"gameplay": return "mira, loja, tutorial e leitura"
-		"audio": return "volume, musica e efeitos"
+		"audio": return "volume, música e efeitos"
 		"graphics": return "desempenho e efeitos visuais"
 		"data": return "relatorio de balanceamento"
-		"back": return "retomar partida" if settings_previous_mode == "paused" else "retornar ao hub"
+		"back": return "retomar partida" if settings_previous_mode == "paused" else "retornar ao menu"
 	return ""
 
 
@@ -40098,22 +40139,22 @@ func _settings_option_help(key: String) -> String:
 	match key:
 		"controls":
 			if _uses_desktop_ui():
-				return "Ajusta os paineis do hub de combate no desktop. Os botoes virtuais ficam ocultos; use para mover vida, pontos, boss, loja e avisos sem cobrir a arena."
-			return "Ajusta posicao e escala dos botoes do HUD. Use quando algum botao cobre a mao, fica pequeno demais ou atrapalha a visao da arena."
+				return "Organize os painéis de vida, pontos, chefes e loja. Encontre a posição ideal para acompanhar o combate sem cobrir a arena."
+			return "Ajuste a posição e o tamanho dos botões na tela. Deixe os comandos ao alcance das mãos e a arena livre para jogar."
 		"gamepad":
-			return "Permite atribuir cada acao ao controle conectado. A tela so aparece quando um joystick e detectado para evitar opcoes mortas."
+			return "Escolha os botões de cada ação no controle conectado e jogue com os comandos que preferir."
 		"keys":
-			return "Define atalhos de teclado e botoes extras do mouse para o modo desktop. Tambem permite remover uma tecla e restaurar o padrao."
+			return "Personalize os atalhos do teclado e os botões do mouse. Você também pode remover uma associação ou restaurar o padrão."
 		"gameplay":
-			return "Concentra preferencias que mudam como o jogo responde: mira no desktop, prioridade de alvo, loja, tutorial, vibracao e escala de texto."
+			return "Escolha como mirar, abrir a loja e acompanhar o combate. Ajuste também o tutorial, a vibração e o tamanho dos textos."
 		"audio":
-			return "Controla master, musica, efeitos e disparos separadamente. Use para reduzir repeticao auditiva sem perder avisos importantes."
+			return "Encontre seu equilíbrio entre trilha sonora e combate. Ajuste o volume geral, a música, os efeitos e os disparos de forma independente."
 		"graphics":
-			return "Ajusta particulas, sombras, tremor, qualidade e modo de janela. Reduzir efeitos ajuda celulares fracos sem alterar regras do jogo."
+			return "Escolha a intensidade dos efeitos e a qualidade visual. Reduza a carga gráfica para buscar mais fluidez durante o combate."
 		"data":
 			return "Area de QA para relatorios tecnicos e balanceamento. Nao altera dano, progresso ou dificuldade da run."
 		"back":
-			return "Fecha as configuracoes mantendo as preferencias salvas. Se veio do pause, retorna para a partida."
+			return "Suas preferências ficam salvas. Volte ao menu ou retome a partida de onde parou."
 	return ""
 
 
@@ -40131,25 +40172,20 @@ func _settings_option_color(key: String) -> Color:
 
 
 func _draw_settings_info_panel(viewport: Vector2, key: String) -> void:
-	var portrait: bool = _is_portrait(viewport)
-	if portrait:
+	if _is_portrait(viewport):
 		return
-	var list_rect: Rect2 = _settings_list_bounds(viewport)
-	var panel: Rect2 = Rect2(list_rect.end.x + 24.0, list_rect.position.y, viewport.x - list_rect.end.x - 24.0 - viewport.x * 0.1, min(420.0, list_rect.size.y))
-	if panel.size.x < 300.0:
-		return
-	var accent: Color = _settings_option_color(key)
-	_draw_holo_panel(panel, accent, true, 0.64)
-	draw_string(font, panel.position + Vector2(28.0, 48.0), _settings_option_title(key), HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 56.0, 24, Color.WHITE)
-	_draw_wrapped(_settings_option_help(key), Rect2(panel.position + Vector2(28.0, 82.0), Vector2(panel.size.x - 56.0, 108.0)), 15, Color(0.82, 0.94, 1.0, 0.9))
-	var current_rect: Rect2 = Rect2(panel.position.x + 28.0, panel.position.y + 210.0, panel.size.x - 56.0, 70.0)
-	draw_rect(current_rect, Color(accent.r, accent.g, accent.b, 0.12), true)
-	draw_rect(current_rect, Color(accent.r, accent.g, accent.b, 0.46), false, 1)
-	draw_string(font, current_rect.position + Vector2(18.0, 25.0), "IMPACTO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(accent.r, accent.g, accent.b, 0.92))
-	_draw_wrapped(_settings_impact_text(key), Rect2(current_rect.position + Vector2(18.0, 34.0), Vector2(current_rect.size.x - 36.0, 28.0)), 12, Color(0.9, 0.96, 1.0, 0.86))
-	var pulse: float = 0.5 + 0.5 * sin(time_alive * 4.0)
-	draw_line(panel.position + Vector2(28.0, panel.size.y - 42.0), panel.position + Vector2(panel.size.x - 28.0, panel.size.y - 42.0), Color(accent.r, accent.g, accent.b, 0.34 + pulse * 0.22), 2.0)
-	_draw_centered("TOQUE, CLIQUE OU CONFIRME PARA ABRIR", Vector2(panel.get_center().x, panel.end.y - 19.0), 12, Color(0.78, 0.92, 1.0, 0.76))
+	var bounds: Rect2 = _settings_list_bounds(viewport)
+	var panel := Rect2(viewport.x * 0.47, bounds.position.y, viewport.x * 0.47, bounds.size.y)
+	_draw_settings_surface(panel, false)
+	var x: float = panel.position.x + 28.0
+	var width: float = panel.size.x - 56.0
+	_draw_ui_text("PREFERÊNCIAS / %02d" % (_settings_index_for(key) + 1), Vector2(x, panel.position.y + 34.0), 11, Color(0.36, 0.78, 0.78))
+	_draw_ui_text(_menu_sentence_case(_settings_option_title(key)), Vector2(x, panel.position.y + 76.0), 27, Color(0.95, 0.94, 0.89), width)
+	_draw_ui_wrap(_settings_option_help(key), Rect2(x, panel.position.y + 98.0, width, 126.0), 15, Color(0.67, 0.77, 0.79), 5)
+	var note_y: float = maxf(panel.position.y + 228.0, panel.end.y - 106.0)
+	draw_line(Vector2(x, note_y - 16.0), Vector2(x + width, note_y - 16.0), Color(0.36, 0.65, 0.66, 0.3), 1.0)
+	_draw_ui_text("SOBRE ESTE AJUSTE", Vector2(x, note_y + 3.0), 10, Color(0.72, 0.63, 0.44))
+	_draw_ui_wrap(_settings_impact_text(key), Rect2(x, note_y + 14.0, width, 56.0), 12, Color(0.63, 0.73, 0.75), 3)
 
 
 func _settings_impact_text(key: String) -> String:
@@ -40221,14 +40257,14 @@ func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 	if not portrait:
 		var outer_w: float = min(1080.0, viewport.x * 0.88)
 		var x: float = viewport.x * 0.5 - outer_w * 0.5
-		var y: float = viewport.y * 0.135
+		var y: float = maxf(100.0, viewport.y * 0.15)
 		var gap: float = 8.0
 		var col_gap: float = 18.0
 		var col_w: float = (outer_w - col_gap) * 0.5
 		var back_h: float = 54.0
 		var option_count: int = maxi(1, keys.size() - 1)
 		var rows: int = int(ceil(float(option_count) / 2.0))
-		var row_h: float = clamp((viewport.y - y - back_h - 28.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 50.0, 60.0)
+		var row_h: float = clamp((viewport.y - y - back_h - 48.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 36.0, 60.0)
 		var rects_wide: Dictionary = {}
 		var option_index: int = 0
 		for key in keys:
@@ -40717,24 +40753,25 @@ func _activate_menu_option(key: String) -> void :
 
 
 func _menu_rects(viewport: Vector2) -> Dictionary:
+	var keys: Array = _menu_option_keys()
+	var x: float = viewport.x * 0.06
+	var width: float = minf(400.0, viewport.x * 0.36)
+	var top: float = viewport.y * 0.38
+	var available: float = viewport.y - top - 66.0
+	var gap: float = 8.0
+	var height: float = minf(58.0, (available - gap * float(keys.size() - 1)) / float(keys.size()))
 	var rects: Dictionary = {}
-	var safe: float = maxf(16.0, minf(viewport.x, viewport.y) * 0.03)
-	var menu_scale: float = clampf(minf(viewport.x / 1280.0, viewport.y / 720.0), 0.74, 1.18)
-	var keys: = _menu_option_keys()
-	var w: float = clampf(viewport.x * 0.32, 300.0 * menu_scale, 420.0 * menu_scale)
-	var btn_h: float = clampf(50.0 * menu_scale, 46.0, 60.0)
-	var gap: float = clampf(20.0 * menu_scale, 14.0, 24.0)
-	var x: float = maxf(safe + 22.0 * menu_scale, viewport.x * 0.055)
-	var total_h: float = float(keys.size()) * btn_h + float(max(0, keys.size() - 1)) * gap
-	var y: float = viewport.y * 0.47
-	if keys.size() > 4:
-		y = viewport.y * 0.43
-	y = minf(y, viewport.y - safe - total_h - 36.0 * menu_scale)
-	y = maxf(y, safe + viewport.y * 0.25)
-
-	for key in keys:
-		rects[key] = Rect2(x, y, w, btn_h)
-		y += btn_h + gap
+	if height < 44.0:
+		# Keep touch targets comfortable when continue/online/stream are all available.
+		width = viewport.x * 0.44
+		rects[keys[0]] = Rect2(x, top, width, 52.0)
+		for i in range(1, keys.size()):
+			var column: int = (i - 1) % 2
+			var row: int = floori(float(i - 1) / 2.0)
+			rects[keys[i]] = Rect2(x + column * (width + gap) * 0.5, top + 60.0 + row * 52.0, (width - gap) * 0.5, 44.0)
+		return rects
+	for i in range(keys.size()):
+		rects[keys[i]] = Rect2(x, top + float(i) * (height + gap), width, height)
 	return rects
 
 
@@ -53819,6 +53856,10 @@ func _draw_hud_rect_button(rect: Rect2, label: String, accent: Color) -> void :
 
 
 func _draw_small_rect_button(rect: Rect2, label: String, bg: = Color(0.03, 0.1, 0.12), border: = Color(0.0, 1.0, 0.82)) -> void :
+	if mode.begins_with("settings"):
+		_draw_settings_surface(rect, rect.has_point(get_global_mouse_position()))
+		_draw_centered_with_font(menu_ui_font, label, rect.get_center(), 16, Color(0.73, 0.85, 0.84))
+		return
 	draw_rect(rect, bg, true)
 	draw_rect(rect, border, false, 2)
 	var font_size = int(rect.size.y * 0.4)
@@ -53832,6 +53873,8 @@ func _draw_small_rect_button(rect: Rect2, label: String, bg: = Color(0.03, 0.1, 
 
 func _draw_toggle_switch(rect: Rect2, enabled: bool, accent: Color) -> void :
 	var track = accent if enabled else Color(0.28, 0.32, 0.36)
+	if mode.begins_with("settings"):
+		track = Color(0.36, 0.72, 0.72) if enabled else Color(0.28, 0.32, 0.36)
 	draw_rect(rect, Color(track.r, track.g, track.b, 0.3), true)
 	draw_rect(rect, Color(track.r, track.g, track.b, 0.92), false, 2.0)
 	var knob_radius = rect.size.y * 0.34
@@ -54789,6 +54832,7 @@ func _unhandled_input(event: InputEvent) -> void :
 	elif event is InputEventMouseMotion:
 		if _should_ignore_emulated_mouse():
 			return
+		_update_menu_pointer(event.position, viewport)
 		if _should_draw_custom_mouse_cursor():
 			queue_redraw()
 		if mode == "edit_layout" and edit_layout_touch_index != -1:
@@ -58793,9 +58837,7 @@ func _draw_snowflakes(camera: Vector2) -> void :
 
 
 func _draw_graphics_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.6, 0.8, 1.0))
-	var portrait = _is_portrait(viewport)
-	_draw_glitch_title("GRAFICOS", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.6, 0.8, 1.0))
+	_draw_settings_shell(viewport, "Gráficos", "Ajuste a atmosfera e encontre o melhor desempenho.")
 	settings_buttons = _graphics_settings_rects(viewport)
 	var keys: = _graphics_setting_keys()
 	for i in range(keys.size()):
@@ -58826,16 +58868,16 @@ func _graphics_settings_rects(viewport: Vector2) -> Dictionary:
 	var portrait = _is_portrait(viewport)
 	var keys: = _graphics_setting_keys()
 	if not portrait:
-		var outer_w: float = min(1080.0, viewport.x * 0.88)
+		var outer_w: float = min(1120.0, viewport.x * 0.88)
 		var x: float = viewport.x * 0.5 - outer_w * 0.5
-		var y: float = viewport.y * 0.15
+		var y: float = maxf(100.0, viewport.y * 0.18)
 		var gap: float = 12.0
 		var col_gap: float = 18.0
 		var col_w: float = (outer_w - col_gap) * 0.5
 		var option_count: int = maxi(1, keys.size() - 1)
 		var rows: int = int(ceil(float(option_count) / 2.0))
 		var back_h: float = 54.0
-		var row_h: float = clamp((viewport.y - y - back_h - 32.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 56.0, 72.0)
+		var row_h: float = clamp((viewport.y - y - back_h - 64.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 64.0, 108.0)
 		var wide_rects: Dictionary = {}
 		var option_index: int = 0
 		for key in keys:
