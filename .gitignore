@@ -124,4 +124,6 @@ Game Base/**/SIGMon/
 !.agents/skills/godot-ziva-ai/SKILL.md
 !.agents/skills/godot-optional-addons/
 !.agents/skills/godot-optional-addons/SKILL.md
+!.agents/skills/godot-online-addons/
+!.agents/skills/godot-online-addons/SKILL.md
 setup_android_env.ps1
