@@ -8127,7 +8127,7 @@ func _load_textures() -> void :
 	textures["player_fire_back_diag"] = textures["player_fire_northeast"]
 	textures["player_fire_up"] = textures["player_fire_north"]
 	textures["player_fire_down"] = textures["player_fire_south"]
-	textures["player_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
+	textures["player_damage"] = [_safe_load(base + "player/damage/Geo_Damage1.png"), _safe_load(base + "player/damage/Geo_Damage2.png"), _safe_load(base + "player/damage/Geo_Damage3.png"), _safe_load(base + "player/damage/Geo_Damage4.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
 	textures["player_start_down"] = [
 		_safe_load(base + "player/start_down/Start-Down-Geo0.png"),
@@ -62896,4 +62896,3 @@ func _handle_lobby_online_client_touch(pos: Vector2, viewport: Vector2) -> void 
 			_toggle_online_spectator_mode()
 	elif buttons.get("lobby_cancel", Rect2()).has_point(pos):
 		_leave_multiplayer()
-
