@@ -58,6 +58,7 @@ const PLAYER_DRAW_DOWN_SIZE: = Vector2(51, 77)
 const PLAYER_DRAW_SIDE_SIZE: = Vector2(52, 76)
 const PLAYER_DRAW_SHOT_SIZE: = Vector2(52, 77)
 const PLAYER_FIRE_DIRECTIONS: = ["south", "north", "northeast", "northwest", "southwest", "southeast"]
+const CombatHud = preload("res://scripts/ui/combat_hud.gd")
 const PLAYER_FIRE_FRAME_SECONDS: float = 0.09
 # Directional canvases include headroom for the raised hand; body height stays 80.
 const PLAYER_FIRE_CANVAS_HEIGHT: float = 430.0 * 80.0 / 370.0
@@ -2700,6 +2701,7 @@ var screen_shake_timer = 0.0
 var screen_shake_strength = 0.0
 var screen_shake_frame_offset: Vector2 = Vector2.ZERO
 var damage_flash_timer = 0.0
+var hud_feedback: RefCounted = CombatHud.new()
 var low_health_heartbeat_timer = 0.0
 var low_health_heartbeat_double = false
 var secondary_drain_flash_timer = 0.0
@@ -2786,6 +2788,8 @@ var hit_freeze_timer: float = 0.0
 var boss_hp_lag: float = -1.0
 var gfx_shadows: bool = true
 var gfx_screen_shake: bool = true
+var gfx_health_warning_start: float = 0.55
+var gfx_health_warning_strength: float = 1.0
 var gfx_low_resource: bool = false
 var gfx_memory_saver: bool = false
 var mobile_low_resource_defaulted: bool = false
@@ -7479,6 +7483,8 @@ func _load_config() -> void :
 				elif k == "gfx_shadows": gfx_shadows = v == "true"
 
 				elif k == "gfx_screen_shake": gfx_screen_shake = v == "true"
+				elif k == "gfx_health_warning_start": gfx_health_warning_start = clampf(float(v), 0.35, 0.7)
+				elif k == "gfx_health_warning_strength": gfx_health_warning_strength = clampf(float(v), 0.0, 1.35)
 				elif k == "gfx_low_resource": gfx_low_resource = v == "true"
 				elif k == "gfx_memory_saver": gfx_memory_saver = v == "true"
 				elif k == "damage_text_scale": damage_text_scale = clamp(float(v), 0.7, 1.8)
@@ -7580,6 +7586,8 @@ func _save_config() -> void :
 		file.store_string("gfx_shadows=" + ("true" if gfx_shadows else "false") + "\n")
 
 		file.store_string("gfx_screen_shake=" + ("true" if gfx_screen_shake else "false") + "\n")
+		file.store_string("gfx_health_warning_start=" + str(gfx_health_warning_start) + "\n")
+		file.store_string("gfx_health_warning_strength=" + str(gfx_health_warning_strength) + "\n")
 		file.store_string("gfx_low_resource=" + ("true" if gfx_low_resource else "false") + "\n")
 		file.store_string("gfx_memory_saver=" + ("true" if gfx_memory_saver else "false") + "\n")
 		file.store_string("damage_text_scale=" + str(damage_text_scale) + "\n")
@@ -10703,6 +10711,7 @@ func _advance_to_phase(phase: int) -> void :
 	boss_parasite_mark_time = 0.0
 	retornante_memoria_pending = false
 	damage_flash_timer = 0.0
+	hud_feedback.reset(self)
 	low_health_heartbeat_timer = 0.0
 	low_health_heartbeat_double = false
 	secondary_drain_flash_timer = 0.0
@@ -11777,6 +11786,7 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 
 
 func _process(delta: float) -> void :
+	hud_feedback.update(self, delta)
 	CatalogInterface.sync(self, delta)
 	_update_menu_presentation(delta)
 	if vfx_director:
@@ -42395,6 +42405,7 @@ func _draw_game(viewport: Vector2) -> void :
 		_draw_umbra_miasma_overlay(viewport, camera)
 	if preview_capture_mode:
 		return
+	hud_feedback.overlay(self, viewport)
 	_draw_hud(viewport)
 	_draw_boss1_rewind_overlay(viewport, camera)
 	if boss1_rewind_sequence.is_empty() and not _spectator_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown"):
@@ -42407,23 +42418,11 @@ func _draw_game(viewport: Vector2) -> void :
 	_draw_revive_request(viewport)
 	if secondary_drain_flash_timer > 0.0:
 		_draw_secondary_drain_border(viewport)
-	var low_health_alpha: = _low_health_red_alpha()
-	if low_health_alpha > 0.0:
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.72, 0.0, 0.015, low_health_alpha), true)
-	if damage_flash_timer > 0.0:
-		var alpha = clamp(damage_flash_timer / 0.22, 0.0, 1.0) * 0.3
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(1.0, 0.04, 0.02, alpha), true)
 
 
 func _low_health_red_alpha() -> float:
-	if player_hp_max <= 0 or player_hp <= 0:
-		return 0.0
-	var health_ratio: float = clampf(float(player_hp) / float(player_hp_max), 0.0, 1.0)
-	if health_ratio >= 0.25:
-		return 0.0
-	var danger: float = 1.0 - health_ratio / 0.25
-	var pulse: = 0.92 + sin(time_alive * 3.2) * 0.08
-	return (0.035 + pow(danger, 1.25) * 0.235) * pulse
+	# Kept for diagnostics and existing callers; the visible effect is peripheral.
+	return hud_feedback.severity(self) * 0.75 * gfx_health_warning_strength
 
 
 func _draw_secondary_drain_border(viewport: Vector2) -> void :
@@ -50071,33 +50070,15 @@ func _draw_hud(viewport: Vector2) -> void :
 	var left_h = 76.0 * sm
 	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, left_h))
 	var left_alpha: float = _hud_rect_player_alpha(left_rect, viewport, 84.0)
-	var leader_local: bool = is_multiplayer and _is_local_run_leader()
-	var local_bar_color: Color = Color(1.0, 0.86, 0.18) if leader_local else Color(0.2, 1.0, 0.42)
-	_draw_combat_panel(left_rect, Color(local_bar_color.r, local_bar_color.g, local_bar_color.b, left_alpha), 0.58 * left_alpha)
-	var hp_ratio: float = clampf(float(player_hp) / maxf(1.0, float(player_hp_max)), 0.0, 1.0)
-	var hit_flash: float = clampf(damage_flash_timer / 0.22, 0.0, 1.0)
-	var health_text_color: Color = Color(1.0, 0.32, 0.28, left_alpha) if hit_flash > 0.0 else Color(1.0, 1.0, 1.0, left_alpha)
-	draw_string(font, left_rect.position + Vector2(16 * sm, 30 * sm), "VIDA %d/%d" % [player_hp, player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), health_text_color)
-	var bar_pos: Vector2 = left_rect.position + Vector2(16 * sm, 43 * sm)
-	if hit_flash > 0.0:
-		bar_pos += Vector2(sin(time_alive * 92.0) * 3.6, cos(time_alive * 77.0) * 2.4) * hit_flash * sm
-	_draw_health_tube_bar(bar_pos, left_rect.size.x - 32.0 * sm, 13.0 * sm, hp_ratio, local_bar_color, hit_flash, left_alpha)
-	if leader_local:
-		_draw_leader_crown(left_rect.position + Vector2(left_rect.size.x - 26.0 * sm, 23.0 * sm), 0.82 * sm, Color(1.0, 0.86, 0.18, left_alpha))
-	var minutes = int(time_alive) / 60
-	var seconds = int(time_alive) % 60
-	var manifest_color = _manifestation_color()
-	draw_string(font, left_rect.position + Vector2(16 * sm, 66 * sm), "%02d:%02d" % [minutes, seconds], HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * sm), Color(0.36, 0.96, 1.0, left_alpha))
-	draw_string(font, left_rect.position + Vector2(78 * sm, 66 * sm), MANIFESTATIONS[selected_manifestation]["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, int(16 * sm), Color(manifest_color.r, manifest_color.g, manifest_color.b, left_alpha))
+	hud_feedback.health_panel(self, left_rect, left_alpha)
 
 	var right_w = (220.0 * sm) if not portrait else min(220.0, viewport.x * 0.44)
 	var right_rect = Rect2(_right_panel_pos(viewport), Vector2(right_w, left_h))
+	if buttons.has("pause") and right_rect.intersects(buttons["pause"]):
+		right_rect.position.x = maxf(left_rect.end.x + 12.0, Rect2(buttons["pause"]).position.x - right_w - 12.0)
 	var right_alpha: float = _hud_rect_player_alpha(right_rect, viewport, 84.0)
-	_draw_combat_panel(right_rect, Color(1.0, 0.82, 0.2, right_alpha), 0.54 * right_alpha)
-	draw_string(font, right_rect.position + Vector2(16 * sm, 30 * sm), "PONTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * sm), Color(0.72, 0.86, 0.92, right_alpha))
-	draw_string(font, right_rect.position + Vector2(84 * sm, 30 * sm), str(score), HORIZONTAL_ALIGNMENT_LEFT, -1, int(19 * sm), Color(1.0, 1.0, 1.0, right_alpha))
-	draw_string(font, right_rect.position + Vector2(16 * sm, 60 * sm), "CARTAS %d" % _affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * sm), Color(1.0, 0.86, 0.26, right_alpha))
-	draw_string(font, right_rect.position + Vector2(112 * sm, 60 * sm), "CUSTO %d" % card_cost, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14 * sm), Color(1.0, 0.86, 0.26, right_alpha))
+	hud_feedback.stats_panel(self, right_rect, right_alpha)
+
 	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
 		var boss_rect = Rect2(_boss_panel_pos(viewport), Vector2(380 * sm, 30 * sm))
 		_draw_combat_panel(boss_rect, Color(1.0, 0.16, 0.3), 0.62)
@@ -51123,74 +51104,10 @@ func _draw_desktop_fps_hud(viewport: Vector2) -> void:
 func _draw_desktop_hud(viewport: Vector2) -> void:
 	var life_rect := Rect2(18.0, 16.0, 276.0, 76.0)
 	var life_alpha: float = _hud_rect_player_alpha(life_rect, viewport, 84.0)
-	var leader_local: bool = is_multiplayer and _is_local_run_leader()
-	var local_bar_color: Color = Color(1.0, 0.86, 0.18) if leader_local else Color(0.2, 1.0, 0.42)
-	_draw_scifi_frame(life_rect, Color(0.0, 0.85, 1.0), 8.0, 0.88 * life_alpha)
-
-	var hp_ratio: float = clampf(float(player_hp) / maxf(1.0, float(player_hp_max)), 0.0, 1.0)
-	var hit_flash: float = clampf(damage_flash_timer / 0.22, 0.0, 1.0)
-	var health_text_color: Color = Color(1.0, 0.32, 0.28, life_alpha) if hit_flash > 0.0 else Color(1.0, 1.0, 1.0, life_alpha)
-
-	draw_string(font, life_rect.position + Vector2(18, 28), "VIDA", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, health_text_color)
-	var hp_str := "%d/%d" % [player_hp, player_hp_max]
-	draw_string(font, life_rect.position + Vector2(62, 28), hp_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.25, 1.0, 0.45, life_alpha))
-
-	var tube_rect := Rect2(life_rect.position.x + 14.0, life_rect.position.y + 34.0, life_rect.size.x - 28.0, 28.0)
-	draw_rect(tube_rect, Color(0.02, 0.08, 0.04, 0.9 * life_alpha), true)
-	draw_rect(tube_rect, Color(0.12, 0.24, 0.16, 0.8 * life_alpha), false, 1.5)
-
-	var left_cap_center := Vector2(tube_rect.position.x + 14.0, tube_rect.position.y + 14.0)
-	draw_circle(left_cap_center, 13.0, Color(0.1, 0.16, 0.22, life_alpha))
-	draw_circle(left_cap_center, 13.0, Color(0.2, 1.0, 0.42, 0.85 * life_alpha), false, 2.0)
-	draw_line(left_cap_center + Vector2(-5, 0), left_cap_center + Vector2(5, 0), Color(0.2, 1.0, 0.42, life_alpha), 2.0)
-	draw_line(left_cap_center + Vector2(0, -5), left_cap_center + Vector2(0, 5), Color(0.2, 1.0, 0.42, life_alpha), 2.0)
-
-	var fill_start_x := tube_rect.position.x + 30.0
-	var fill_max_w := tube_rect.size.x - 42.0
-	var fill_w := fill_max_w * hp_ratio
-	if fill_w > 0.0:
-		var fill_rect := Rect2(fill_start_x, tube_rect.position.y + 3.0, fill_w, tube_rect.size.y - 6.0)
-		draw_rect(fill_rect, Color(0.12, 0.88, 0.32, 0.9 * life_alpha), true)
-		draw_rect(Rect2(fill_rect.position.x, fill_rect.position.y + 2.0, fill_rect.size.x, fill_rect.size.y * 0.5), Color(0.55, 1.0, 0.50, 0.7 * life_alpha), true)
-
-	draw_line(Vector2(fill_start_x, tube_rect.position.y + 2.0), Vector2(fill_start_x + fill_max_w, tube_rect.position.y + 2.0), Color(1.0, 1.0, 1.0, 0.4 * life_alpha), 1.5)
-
-	var right_cap_center := Vector2(tube_rect.position.x + tube_rect.size.x - 10.0, tube_rect.position.y + 14.0)
-	draw_circle(right_cap_center, 9.0, Color(0.16, 0.24, 0.30, life_alpha))
-	draw_circle(right_cap_center, 9.0, Color(0.3, 0.42, 0.52, life_alpha), false, 1.5)
-
-	if leader_local:
-		_draw_leader_crown(life_rect.position + Vector2(life_rect.size.x - 26.0, 23.0), 0.82, Color(1.0, 0.86, 0.18, life_alpha))
-
-	var timer_rect := Rect2(18.0, 100.0, 142.0, 40.0)
-	var timer_alpha: float = _hud_rect_player_alpha(timer_rect, viewport, 84.0)
-	_draw_scifi_frame(timer_rect, Color(0.0, 0.85, 1.0), 6.0, 0.88 * timer_alpha)
-
-	_draw_icon_hourglass(timer_rect.position + Vector2(24.0, 20.0), 20.0, Color(0.0, 0.85, 1.0, timer_alpha))
-
-	var minutes = int(time_alive) / 60
-	var seconds = int(time_alive) % 60
-	var time_str := "%02d:%02d" % [minutes, seconds]
-	draw_string(font, timer_rect.position + Vector2(46.0, 26.0), time_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.2, 0.92, 1.0, timer_alpha))
-
-	var right_rect := Rect2(viewport.x - 220.0 - 18.0, 16.0, 220.0, 108.0)
+	hud_feedback.health_panel(self, life_rect, life_alpha)
+	var right_rect := Rect2(viewport.x - 300.0, 16.0, 220.0, 76.0)
 	var right_alpha: float = _hud_rect_player_alpha(right_rect, viewport, 84.0)
-	_draw_scifi_frame(right_rect, Color(0.0, 0.85, 1.0), 8.0, 0.88 * right_alpha)
-
-	var r1_y := right_rect.position.y + 12.0
-	_draw_icon_star(Vector2(right_rect.position.x + 22.0, r1_y + 12.0), 18.0, Color(0.2, 0.75, 1.0, right_alpha))
-	draw_string(font, Vector2(right_rect.position.x + 38.0, r1_y + 18.0), "PONTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.72, 0.86, 0.94, right_alpha))
-	draw_string(font, Vector2(right_rect.position.x + right_rect.size.x - 18.0, r1_y + 18.0), str(score), HORIZONTAL_ALIGNMENT_RIGHT, -1, 16, Color(1.0, 1.0, 1.0, right_alpha))
-
-	var r2_y := right_rect.position.y + 44.0
-	_draw_icon_cards(Vector2(right_rect.position.x + 22.0, r2_y + 12.0), 18.0, Color(1.0, 0.8, 0.2, right_alpha))
-	draw_string(font, Vector2(right_rect.position.x + 38.0, r2_y + 18.0), "CARTAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.82, 0.24, right_alpha))
-	draw_string(font, Vector2(right_rect.position.x + right_rect.size.x - 18.0, r2_y + 18.0), str(_affordable_card_count()), HORIZONTAL_ALIGNMENT_RIGHT, -1, 16, Color(1.0, 0.92, 0.35, right_alpha))
-
-	var r3_y := right_rect.position.y + 76.0
-	_draw_icon_gem(Vector2(right_rect.position.x + 22.0, r3_y + 12.0), 18.0, Color(0.2, 0.9, 1.0, right_alpha))
-	draw_string(font, Vector2(right_rect.position.x + 38.0, r3_y + 18.0), "CUSTO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.3, 0.88, 1.0, right_alpha))
-	draw_string(font, Vector2(right_rect.position.x + right_rect.size.x - 18.0, r3_y + 18.0), "%d" % card_cost, HORIZONTAL_ALIGNMENT_RIGHT, -1, 16, Color(0.35, 0.95, 1.0, right_alpha))
+	hud_feedback.stats_panel(self, right_rect, right_alpha)
 
 	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
 		var boss_rect := Rect2(_boss_panel_pos(viewport), Vector2(380.0, 30.0))
@@ -51286,69 +51203,9 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void :
 	var start_x := viewport.x * 0.5 - total_w * 0.5
 	var start_y := viewport.y - card_h - 24.0
 
-	var rail_rect := Rect2(start_x - 30.0, viewport.y - 20.0, total_w + 60.0, 8.0)
-	draw_rect(rail_rect, Color(0.04, 0.07, 0.11, 0.9), true)
-	draw_rect(rail_rect, Color(0.20, 0.28, 0.36, 0.95), false, 1.5)
-	_draw_icon_gem(Vector2(viewport.x * 0.5, viewport.y - 16.0), 12.0, Color(0.0, 0.85, 1.0))
-
 	for i in range(icons.size()):
-		var ic = icons[i]
 		var card_rect := Rect2(start_x + i * (card_w + gap), start_y, card_w, card_h)
-		var main_color: Color = ic.color
-
-		if ic.has("bind") and String(ic["bind"]) != "":
-			var bind_str: String = String(ic["bind"])
-			var cap_w := maxf(42.0, bind_str.length() * 8.0 + 12.0)
-			var cap_rect := Rect2(card_rect.get_center().x - cap_w * 0.5, card_rect.position.y - 18.0, cap_w, 18.0)
-			var tab_pts := PackedVector2Array([
-				Vector2(cap_rect.position.x + 4.0, cap_rect.position.y),
-				Vector2(cap_rect.position.x + cap_rect.size.x - 4.0, cap_rect.position.y),
-				Vector2(cap_rect.position.x + cap_rect.size.x, cap_rect.position.y + cap_rect.size.y),
-				Vector2(cap_rect.position.x, cap_rect.position.y + cap_rect.size.y)
-			])
-			draw_colored_polygon(tab_pts, Color(0.06, 0.08, 0.12, 0.96))
-			tab_pts.append(tab_pts[0])
-			draw_polyline(tab_pts, Color(main_color.r, main_color.g, main_color.b, 0.85), 1.5)
-			_draw_centered(bind_str, cap_rect.get_center() + Vector2(0, 1), 11, Color.WHITE)
-
-		_draw_scifi_frame(card_rect, main_color, 6.0, 0.92)
-
-		var icon_center := card_rect.position + Vector2(card_w * 0.5, 30.0)
-		match String(ic.get("icon_type", "")):
-			"sword":
-				_draw_icon_sword(icon_center, 24.0, main_color)
-			"star":
-				_draw_icon_star(icon_center, 22.0, main_color)
-			"trident":
-				_draw_icon_trident(icon_center, 24.0, main_color)
-			"portal":
-				_draw_icon_portal(icon_center, 24.0, main_color)
-			_:
-				_draw_icon_star(icon_center, 22.0, main_color)
-
-		_draw_centered(ic.label, card_rect.position + Vector2(card_w * 0.5, 58.0), 15, main_color)
-
-		var pips_y := card_rect.position.y + 74.0
-		var center_x := card_rect.position.x + card_w * 0.5
-		for p in range(4):
-			var pip_x := center_x + (p - 1.5) * 8.0
-			var pip_filled: bool = (p == 0) or (float(ic.cd_elapsed) >= float(ic.cd_max))
-			var pip_col := main_color if pip_filled else Color(main_color.r * 0.4, main_color.g * 0.4, main_color.b * 0.4, 0.5)
-			draw_circle(Vector2(pip_x, pips_y), 2.0, pip_col)
-
-		if ic.has("charges") and int(ic["charges"]) > 0:
-			var chg_val: int = int(ic["charges"])
-			var chg_str := "x%d" % chg_val
-			var badge_rect := Rect2(card_rect.position.x + card_w - 24.0, card_rect.position.y + 4.0, 22.0, 15.0)
-			draw_rect(badge_rect, Color(0.08, 0.02, 0.04, 0.96), true)
-			draw_rect(badge_rect, Color(1.0, 0.78, 0.18, 0.95), false, 1.2)
-			_draw_centered(chg_str, badge_rect.get_center() + Vector2(0, 1), 10, Color(1.0, 0.94, 0.32))
-
-		if ic.cd_elapsed < ic.cd_max:
-			var ratio := clampf(ic.cd_elapsed / maxf(0.01, ic.cd_max), 0.0, 1.0)
-			var h := card_h * (1.0 - ratio)
-			draw_rect(Rect2(card_rect.position.x, card_rect.end.y - h, card_w, h), Color(0.0, 0.0, 0.0, 0.75), true)
-			_draw_centered("%.1f" % (ic.cd_max - ic.cd_elapsed), card_rect.get_center() + Vector2(0, 2), 14, Color(1.0, 0.92, 0.4))
+		hud_feedback.ability(self, card_rect, icons[i])
 
 	_draw_desktop_fps_hud(viewport)
 
@@ -53671,7 +53528,7 @@ func _draw_button(center: Vector2, radius: float, label: String, color: Color) -
 	draw_circle(center, radius * 0.34, Color(c.r, c.g, c.b, 0.18 * alpha))
 	draw_arc(center, radius * 0.44, -PI * 0.92, -PI * 0.2, 18, Color(1.0, 1.0, 1.0, 0.26 * alpha), 1.2)
 	var font_size = int(clamp(radius * 0.34, 15.0, 22.0))
-	_draw_centered(label, center + Vector2(0, font_size * 0.3), font_size, Color(1.0, 1.0, 1.0, alpha))
+	draw_string(menu_ui_font, center + Vector2(-radius, font_size * 0.3), label, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, font_size, Color(1.0, 1.0, 1.0, alpha))
 
 
 func _draw_attack_target_marker(center: Vector2, radius: float, confirmed: bool) -> void :
@@ -58744,7 +58601,7 @@ func _handle_graphics_settings_touch(pos: Vector2, viewport: Vector2) -> void :
 
 
 func _graphics_setting_keys() -> Array:
-	var keys: = ["particles", "shadows", "screen_shake", "low_resource", "memory_saver"]
+	var keys: = ["particles", "shadows", "screen_shake", "health_warning_start", "health_warning_strength", "low_resource", "memory_saver"]
 	if _uses_desktop_ui():
 		keys.append("window_mode")
 	keys.append("back")
@@ -58792,6 +58649,8 @@ func _graphics_setting_title(key: String) -> String:
 		"particles": return "PARTICULAS"
 		"shadows": return "SOMBRAS"
 		"screen_shake": return "TREMOR DE TELA"
+		"health_warning_start": return "ALERTA DE VIDA"
+		"health_warning_strength": return "INTENSIDADE DO ALERTA"
 		"low_resource": return "MODO LEVE"
 		"memory_saver": return "DESEMPENHO"
 		"window_mode": return "TELA"
@@ -58803,6 +58662,8 @@ func _graphics_setting_subtitle(key: String) -> String:
 		"particles": return "Efeitos visuais e particulas de combate."
 		"shadows": return "Sombra dinamica quando o modo leve permite."
 		"screen_shake": return "Impacto de tela em explosoes e hits."
+		"health_warning_start": return "Vida em que o vermelho começa. Abaixo de 25%, as veias avançam."
+		"health_warning_strength": return "Intensidade do vermelho e das veias nas bordas da visão."
 		"low_resource": return "Reduz carga visual sem trocar a interface."
 		"memory_saver": return "Prioriza aparelhos modestos e corta efeitos caros."
 		"window_mode": return "Fullscreen, janela ou janela sem borda no desktop."
@@ -58814,6 +58675,8 @@ func _graphics_setting_value(key: String) -> String:
 		"particles": return "ON" if gfx_particles else "OFF"
 		"shadows": return "ON" if _shadows_enabled() else "OFF"
 		"screen_shake": return "ON" if gfx_screen_shake else "OFF"
+		"health_warning_start": return "%d%%" % roundi(gfx_health_warning_start * 100.0)
+		"health_warning_strength": return "DESLIGADO" if gfx_health_warning_strength == 0.0 else ("SUAVE" if gfx_health_warning_strength < 1.0 else ("FORTE" if gfx_health_warning_strength > 1.0 else "PADRÃO"))
 		"low_resource": return "ON" if gfx_low_resource else "OFF"
 		"memory_saver": return "ON" if gfx_memory_saver else "OFF"
 		"window_mode":
@@ -58829,6 +58692,7 @@ func _graphics_setting_color(key: String) -> Color:
 		"particles": return Color(0.6, 0.8, 1.0) if gfx_particles else Color(0.46, 0.5, 0.56)
 		"shadows": return Color(0.6, 0.8, 1.0) if _shadows_enabled() else Color(0.46, 0.5, 0.56)
 		"screen_shake": return Color(0.6, 0.8, 1.0) if gfx_screen_shake else Color(0.46, 0.5, 0.56)
+		"health_warning_start", "health_warning_strength": return Color(1.0, 0.48, 0.42)
 		"low_resource": return Color(1.0, 0.72, 0.28) if gfx_low_resource else Color(0.46, 0.5, 0.56)
 		"memory_saver": return Color(1.0, 0.42, 0.34) if gfx_memory_saver else Color(0.46, 0.5, 0.56)
 		"window_mode": return Color(0.32, 1.0, 0.82)
@@ -58843,6 +58707,10 @@ func _activate_graphics_setting(key: String) -> void :
 			gfx_shadows = not gfx_shadows
 		"screen_shake":
 			gfx_screen_shake = not gfx_screen_shake
+		"health_warning_start":
+			gfx_health_warning_start = 0.55 if gfx_health_warning_start < 0.5 else (0.7 if gfx_health_warning_start < 0.6 else 0.35)
+		"health_warning_strength":
+			gfx_health_warning_strength = 0.6 if gfx_health_warning_strength < 0.1 else (1.0 if gfx_health_warning_strength < 0.9 else (1.35 if gfx_health_warning_strength < 1.2 else 0.0))
 		"low_resource":
 			gfx_low_resource = not gfx_low_resource
 			if not gfx_low_resource:
