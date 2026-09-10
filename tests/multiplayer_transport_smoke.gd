@@ -13,6 +13,14 @@ func _run() -> void:
 	game.net_world_jitter_ms = 40.0
 	_check(game._net_player_sync_interval_ms() > game.NET_PLAYER_SYNC_INTERVAL_MS, "high RTT did not reduce player packet pressure")
 	_check(game._net_world_sync_interval_ms() > game.NET_WORLD_SYNC_INTERVAL_MS, "high RTT did not reduce world packet pressure")
+	_check(game._net_world_payload_bytes() < 200, "empty world snapshot should stay compact")
+	_check(game.RTTransportStateScript.budget_interval_ms(19864, game.NET_WORLD_BUDGET_BYTES_PER_SEC, game.NET_WORLD_SYNC_INTERVAL_MS) >= 66, "large snapshots were not paced by payload budget")
+	for _index in range(120):
+		game.enemies.append({})
+	for _index in range(80):
+		game.enemy_bullets.append({})
+	_check(game._net_world_payload_bytes() >= 19800, "large world payload estimate was unexpectedly small")
+	_check(game._net_world_sync_interval_ms() >= 66, "large world payload was still scheduled at the base cadence")
 	var now_ms: int = Time.get_ticks_msec()
 	game.is_multiplayer = true
 	game.online_connected = true

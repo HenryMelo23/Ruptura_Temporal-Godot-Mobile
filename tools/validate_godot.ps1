@@ -121,6 +121,26 @@ function Invoke-LoggedStep {
     }
 }
 
+function Test-GodotIgnoredPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $directory = Split-Path -Parent $Path
+    while ($directory -and $directory.StartsWith($ProjectRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if (Test-Path -LiteralPath (Join-Path $directory ".gdignore")) {
+            return $true
+        }
+        if ($directory -eq $ProjectRoot) {
+            break
+        }
+        $parent = Split-Path -Parent $directory
+        if ($parent -eq $directory) {
+            break
+        }
+        $directory = $parent
+    }
+    return $false
+}
+
 function Convert-ToGodotResourcePath {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -203,7 +223,8 @@ function Get-ValidationScriptList {
                 $_.FullName -notmatch '[\\/]\.agent_logs[\\/]' -and
                 $_.FullName -notmatch '[\\/]\.codex[\\/]' -and
                 $_.FullName -notmatch '[\\/]android[\\/]' -and
-                $_.FullName -notmatch '[\\/]builds[\\/]'
+                $_.FullName -notmatch '[\\/]builds[\\/]' -and
+                -not (Test-GodotIgnoredPath -Path $_.FullName)
             } |
             Sort-Object FullName)
 

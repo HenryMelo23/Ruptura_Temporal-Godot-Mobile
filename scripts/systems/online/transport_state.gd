@@ -16,6 +16,13 @@ static func adaptive_interval_ms(base_interval_ms: int, ping_ms: int, jitter_ms:
 	return base_interval_ms + extra_ms
 
 
+static func budget_interval_ms(payload_bytes: int, bytes_per_second: int, minimum_interval_ms: int) -> int:
+	if payload_bytes <= 0 or bytes_per_second <= 0:
+		return maxi(1, minimum_interval_ms)
+	var interval_ms: int = int(ceil(float(payload_bytes) * 1000.0 / float(bytes_per_second)))
+	return maxi(maxi(1, minimum_interval_ms), interval_ms)
+
+
 static func health(now_ms: int, last_activity_ms: int, degraded_after_ms: int, stalled_after_ms: int, active: bool) -> String:
 	if not active:
 		return HEALTH_WARMING

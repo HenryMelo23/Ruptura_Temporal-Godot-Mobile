@@ -1914,6 +1914,7 @@ var net_player_peer_id: int = 0
 var net_player_sync_last_ms: int = 0
 var net_world_sync_last_ms: int = 0
 var net_world_visual_sync_last_ms: int = 0
+var net_world_visual_payload_bytes: int = 0
 var net_world_sequence: int = 0
 var net_world_last_sequence: int = -1
 var net_world_visual_last_sequence: int = -1
@@ -2026,6 +2027,8 @@ const NET_PEER_TIMEOUT_MIN_MS: = 6000
 const NET_PEER_TIMEOUT_MAX_MS: = 12000
 const NET_TRANSPORT_DEGRADED_AFTER_MS: = 750
 const NET_TRANSPORT_STALLED_AFTER_MS: = 5000
+const NET_WORLD_BUDGET_BYTES_PER_SEC: = 300000
+const NET_VISUAL_BUDGET_BYTES_PER_SEC: = 180000
 const ONLINE_ROOM_HEARTBEAT_INTERVAL_MS: = 20000
 const ONLINE_ROOM_HEARTBEAT_WARN_MS: = 70000
 const ONLINE_ROOM_HEARTBEAT_TIMEOUT: = 6.0
@@ -58942,6 +58945,7 @@ func _reset_network_interpolation_state() -> void :
 	net_player_snapshot_last_ms = 0
 	net_world_snapshot_last_ms = 0
 	net_world_jitter_ms = 0.0
+	net_world_visual_payload_bytes = 0
 	net_transport_last_activity_ms = 0
 	net_transport_health = RTTransportStateScript.HEALTH_WARMING
 	net_transport_health_last = RTTransportStateScript.HEALTH_WARMING
@@ -59532,11 +59536,19 @@ func _net_player_sync_interval_ms() -> int:
 
 
 func _net_world_sync_interval_ms() -> int:
-	return RTTransportStateScript.adaptive_interval_ms(NET_WORLD_SYNC_INTERVAL_MS, net_ping_ms, net_world_jitter_ms)
+	var adaptive_interval: int = RTTransportStateScript.adaptive_interval_ms(NET_WORLD_SYNC_INTERVAL_MS, net_ping_ms, net_world_jitter_ms)
+	return RTTransportStateScript.budget_interval_ms(_net_world_payload_bytes(), NET_WORLD_BUDGET_BYTES_PER_SEC, adaptive_interval)
 
 
 func _net_world_visual_sync_interval_ms() -> int:
-	return RTTransportStateScript.adaptive_interval_ms(NET_WORLD_VISUAL_SYNC_INTERVAL_MS, net_ping_ms, net_world_jitter_ms)
+	var adaptive_interval: int = RTTransportStateScript.adaptive_interval_ms(NET_WORLD_VISUAL_SYNC_INTERVAL_MS, net_ping_ms, net_world_jitter_ms)
+	return RTTransportStateScript.budget_interval_ms(net_world_visual_payload_bytes, NET_VISUAL_BUDGET_BYTES_PER_SEC, adaptive_interval)
+
+
+func _net_world_payload_bytes() -> int:
+	var enemy_bytes: int = maxi(0, enemies.size()) * NET_ENEMY_STRIDE * 4
+	var bullet_bytes: int = maxi(0, enemy_bullets.size()) * NET_BULLET_STRIDE * 4
+	return 32 + enemy_bytes + bullet_bytes + 8 * 4
 
 
 func _configure_online_peer_tuning(peer_id: int) -> void:
@@ -60742,6 +60754,7 @@ func _sync_multiplayer_state() -> void :
 			rpc("_update_remote_entities", sequence, enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets)
 	if _is_world_authority() and _should_send_world_visual_sync(now_ms):
 		var visuals_packet: = _pack_net_boss_visuals()
+		net_world_visual_payload_bytes = var_to_bytes(visuals_packet).size()
 		if online_connected:
 			rpc_id(1, "_update_remote_world_visuals", net_world_sequence, visuals_packet)
 		else:
