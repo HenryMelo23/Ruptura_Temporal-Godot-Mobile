@@ -3,13 +3,14 @@ extends SceneTree
 const OUTPUT := "res://.codex/catalog_card_lock_1280x720.png"
 
 var game: Node
+var failed: bool = false
 
 
 func _check(condition: bool, message: String) -> void:
 	if condition:
 		return
 	push_error("CATALOG_CARD_LOCK_VISUAL_FAIL " + message)
-	quit(1)
+	failed = true
 
 
 func _initialize() -> void:
@@ -23,11 +24,14 @@ func _initialize() -> void:
 func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	await process_frame
+	root.mode = Window.MODE_WINDOWED
+	root.content_scale_size = Vector2i.ZERO
+	root.size = Vector2i(1280, 720)
 	game.startup_thanks_done = true
 	game.startup_thanks_fading = false
 	game.startup_thanks_timer = 0.0
 	game.mode = "catalog"
-	game.catalog_tab = 5
+	game.catalog_tab = 6
 	game.catalog_scroll_index = 0
 	game.catalog_detail_open = true
 	game.unlocked_card_ids.clear()
@@ -70,4 +74,4 @@ func _run() -> void:
 	game.queue_free()
 	for frame in range(4):
 		await process_frame
-	quit(0)
+	quit(1 if failed else 0)

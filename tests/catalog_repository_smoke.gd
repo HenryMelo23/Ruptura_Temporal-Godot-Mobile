@@ -4,13 +4,12 @@ const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogValidator = preload("res://scripts/catalog/catalog_validator.gd")
 
 var game: Node
+var failed: bool = false
 
 
 func _fail(message: String) -> void:
 	push_error("CATALOG_REPOSITORY_FAIL " + message)
-	if game != null:
-		game.free()
-	quit(1)
+	failed = true
 
 
 func _check(condition: bool, message: String) -> void:
@@ -52,7 +51,7 @@ func _run() -> void:
 	game = null
 	for _i in range(4):
 		await process_frame
-	quit(0)
+	quit(1 if failed else 0)
 
 
 func _catalog_has_no_removed_lore_name(all_tabs: Array) -> bool:

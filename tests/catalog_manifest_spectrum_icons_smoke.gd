@@ -1,6 +1,7 @@
 extends SceneTree
 
 var game: Node
+var failed: bool = false
 
 const EXPECTED_MANIFEST_ICONS := {
 	"eclipsada": "res://assets/sprites/manifestacao-eclipsada.png",
@@ -20,7 +21,7 @@ func _check(condition: bool, message: String) -> void:
 	if condition:
 		return
 	push_error("CATALOG_MANIFEST_SPECTRUM_ICONS_FAIL " + message)
-	quit(1)
+	failed = true
 
 
 func _check_icon_packable(icon_path: String, label: String) -> void:
@@ -38,8 +39,13 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await process_frame
-	_check(game._catalog_tab_label(4) == "ESPECTROS", "catalog tab 4 should be Espectros")
+	_check(game._catalog_tab_label(5) == "ESPECTROS", "catalog tab 5 should be Espectros")
 
+	# This test inspects complete mechanics, so unlock its fixtures in memory.
+	for item in game.MANIFESTATIONS:
+		game.unlocked_manifestation_ids[String(item["key"])] = true
+	for item in game.AURAS:
+		game.unlocked_spectrum_ids[String(item["key"])] = true
 	game.catalog_tab = 0
 	var manifest_items: Array = game._catalog_items()
 	_check(manifest_items.size() == game.MANIFESTATIONS.size(), "catalog manifestation list is not synchronized")
@@ -55,7 +61,7 @@ func _run() -> void:
 		_check(description.length() > 35, "catalog manifestation description too shallow: " + key)
 		_check(mechanics.length() > 35 and mechanics.contains("Risco:"), "catalog manifestation mechanics missing: " + key)
 
-	game.catalog_tab = 4
+	game.catalog_tab = 5
 	var spectrum_items: Array = game._catalog_items()
 	_check(spectrum_items.size() == game.AURAS.size(), "catalog spectrum list is not synchronized")
 	for item in game.AURAS:
@@ -83,4 +89,5 @@ func _run() -> void:
 	game = null
 	await process_frame
 	await process_frame
-	quit(0)
+	await create_timer(0.5).timeout
+	quit(1 if failed else 0)

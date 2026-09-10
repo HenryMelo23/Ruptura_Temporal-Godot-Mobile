@@ -1,6 +1,7 @@
 extends Node2D
 
 const AuraSystem = preload("res://scripts/aura_system.gd")
+const CatalogInterface = preload("res://scripts/catalog/catalog_interface.gd")
 const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
@@ -2872,6 +2873,11 @@ var catalog_tab = 0
 var catalog_selected = 0
 var catalog_scroll_index = 0
 var catalog_detail_open = false
+var catalog_touch_index: int = -1
+var catalog_touch_start: Vector2 = Vector2.ZERO
+var catalog_detail_section: int = 0
+var catalog_detail_text: RichTextLabel
+var catalog_detail_signature: String = ""
 var catalog_search_query: = ""
 var catalog_filter_mode: = "all"
 var eletrica_shot_counter = 0
@@ -11760,6 +11766,7 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 
 
 func _process(delta: float) -> void :
+	CatalogInterface.sync(self, delta)
 	_update_menu_presentation(delta)
 	if vfx_director:
 		vfx_director.set_particles_enabled(gfx_particles)
@@ -40798,55 +40805,8 @@ func _draw_catalog_locked_card_icon(rect: Rect2, large: = false) -> void:
 
 
 
-func _draw_catalog(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.0, 0.88, 1.0))
-	_draw_glitch_title("CATALOGO TEMPORAL", Vector2(viewport.x * 0.5, 54), 34, Color(0.0, 0.88, 1.0))
-	var tab_w = viewport.x / CATALOG_TABS.size()
-	for i in range(CATALOG_TABS.size()):
-		var rect = Rect2(i * tab_w + 3, 92, tab_w - 6, 48)
-		var selected = i == catalog_tab
-		_draw_holo_panel(rect, Color(0.0, 1.0, 0.82) if selected else Color(0.18, 0.38, 0.48), selected, 0.68)
-		_draw_centered(_catalog_tab_label(i), rect.get_center() + Vector2(0, 6), 12 if _is_portrait(viewport) else 16, Color.WHITE)
-	if catalog_detail_open:
-		_draw_catalog_detail(viewport)
-		return
-	var items = _catalog_items()
-	_catalog_ensure_selected_visible(viewport)
-	var portrait: = _is_portrait(viewport)
-	var visible: = _catalog_visible_count(viewport)
-	var end_index: = mini(items.size(), catalog_scroll_index + visible)
-	if _catalog_tab_key() == "Fases":
-		_draw_catalog_phase_route(items, catalog_scroll_index, end_index, viewport)
-	for i in range(catalog_scroll_index, end_index):
-		var item: Dictionary = items[i]
-		var rect: = _catalog_item_rect(i, catalog_scroll_index, viewport)
-		var locked_item: = _catalog_item_locked(item)
-		var color: Color = Color(0.42, 0.46, 0.68) if locked_item else item.get("color", Color(0.62, 0.92, 1.0))
-		_draw_holo_panel(rect, color, catalog_selected == i, 0.74)
-		var icon_size: = minf(76.0, rect.size.y - 42.0)
-		var icon_rect = Rect2(rect.position + Vector2(16, 22), Vector2(icon_size, icon_size))
-		if locked_item:
-			_draw_catalog_locked_card_icon(icon_rect, false)
-			draw_string(font, rect.position + Vector2(rect.size.x - 112, 28), "BLOQUEADA", HORIZONTAL_ALIGNMENT_RIGHT, 92, 10, Color(0.74, 0.82, 1.0, 0.78))
-		else:
-			_draw_texture_contain(_catalog_item_texture(item), icon_rect, Color.WHITE)
-		var title: = _catalog_display_title(item).to_upper()
-		var text_x: = rect.position.x + 106.0
-		var text_w: = rect.end.x - text_x - 24.0
-		var title_size: = _fit_text_size(title, text_w, 20, 13)
-		draw_string(font, Vector2(text_x, rect.position.y + 38.0), title, HORIZONTAL_ALIGNMENT_LEFT, text_w, title_size, Color.WHITE)
-		var body_rect: = Rect2(Vector2(text_x, rect.position.y + 58.0), Vector2(text_w, rect.size.y - 80.0))
-		_draw_wrapped_clamped(_catalog_display_short_text(item), body_rect, 13 if locked_item else 14, Color(0.78, 0.88, 0.92), 3)
-		draw_line(Vector2(text_x, rect.size.y + rect.position.y - 18), Vector2(rect.size.x + rect.position.x - 22, rect.size.y + rect.position.y - 18), Color(color.r, color.g, color.b, 0.38), 1)
-	var page_text: = "%d-%d / %d" % [mini(catalog_scroll_index + 1, maxi(1, items.size())), end_index, items.size()]
-	_draw_centered(page_text, Vector2(viewport.x * 0.5, viewport.y - 45), 13, Color(0.76, 0.92, 1.0, 0.82))
-	var back_rect = Rect2(viewport.x * 0.08, viewport.y - 72, viewport.x * 0.84, 48) if portrait else Rect2(viewport.x * 0.06, viewport.y - 68, 160, 44)
-	_draw_big_button(back_rect, "VOLTAR", Color(0.11, 0.04, 0.06, 0.88), Color(1.0, 0.28, 0.34))
-	if not portrait and items.size() > visible:
-		var prev_rect: = Rect2(viewport.x - 250, viewport.y - 68, 106, 44)
-		var next_rect: = Rect2(viewport.x - 132, viewport.y - 68, 106, 44)
-		_draw_big_button(prev_rect, "<", Color(0.04, 0.08, 0.1, 0.88), Color(0.42, 0.92, 1.0), false)
-		_draw_big_button(next_rect, ">", Color(0.04, 0.08, 0.1, 0.88), Color(0.42, 0.92, 1.0), false)
+func _draw_catalog(viewport: Vector2) -> void:
+	CatalogInterface.draw(self, viewport)
 
 
 func _catalog_tab_label(index: int) -> String:
@@ -40912,45 +40872,26 @@ func _draw_catalog_phase_route(items: Array, first_index: int, end_index: int, v
 
 
 func _catalog_visible_count(viewport: Vector2) -> int:
-	var cols: = _catalog_columns(viewport)
-	var card_h: = 146.0 if _is_portrait(viewport) else 136.0
-	var start_y: = 158.0
-	var bottom_reserved: = 104.0
-	var rows: = maxi(1, int(floor((viewport.y - start_y - bottom_reserved) / (card_h + 16.0))))
-	return rows * cols
+	return CatalogInterface.visible_count(self, viewport)
 
 
 func _catalog_columns(viewport: Vector2) -> int:
-	return 1 if _is_portrait(viewport) else 2
+	return CatalogInterface.columns(self, viewport)
 
 
 func _catalog_item_rect(index: int, first_index: int, viewport: Vector2) -> Rect2:
-	var portrait: = _is_portrait(viewport)
-	var cols: = _catalog_columns(viewport)
-	var card_w = viewport.x * 0.88 if portrait else min(440.0, viewport.x * 0.43)
-	var card_h = 146.0 if portrait else 136.0
-	var start_x = viewport.x * 0.5 - card_w * 0.5 if portrait else viewport.x * 0.5 - card_w - 14
-	var start_y = 158.0
-	var local_index: = index - first_index
-	var row: = int(local_index / cols)
-	var col: = local_index % cols
-	return Rect2(start_x + col * (card_w + 28), start_y + row * (card_h + 16), card_w, card_h)
+	return CatalogInterface.item_rect(self, index, first_index, viewport)
 
 
-func _catalog_ensure_selected_visible(viewport: Vector2) -> void :
-	var items: = _catalog_items()
+func _catalog_ensure_selected_visible(viewport: Vector2) -> void:
+	var items: Array = _catalog_items()
 	if items.is_empty():
 		catalog_selected = 0
 		catalog_scroll_index = 0
 		return
-	var visible: = _catalog_visible_count(viewport)
+	var visible: int = _catalog_visible_count(viewport)
 	catalog_selected = clampi(catalog_selected, 0, items.size() - 1)
-	var max_scroll: int = maxi(0, items.size() - visible)
-	if catalog_selected < catalog_scroll_index:
-		catalog_scroll_index = catalog_selected
-	elif catalog_selected >= catalog_scroll_index + visible:
-		catalog_scroll_index = catalog_selected - visible + 1
-	catalog_scroll_index = clampi(catalog_scroll_index, 0, max_scroll)
+	catalog_scroll_index = floori(float(catalog_selected) / float(visible)) * visible
 
 
 func _catalog_reset_tab(index: int) -> void :
@@ -40958,6 +40899,7 @@ func _catalog_reset_tab(index: int) -> void :
 	catalog_selected = 0
 	catalog_scroll_index = 0
 	catalog_detail_open = false
+	catalog_detail_section = 0
 
 
 func _catalog_change_tab(direction: int) -> void :
@@ -40974,14 +40916,16 @@ func _catalog_select_relative(direction: int, viewport: Vector2) -> void :
 	_catalog_ensure_selected_visible(viewport)
 
 
-func _catalog_page_relative(direction: int, viewport: Vector2) -> void :
+func _catalog_page_relative(direction: int, viewport: Vector2) -> void:
 	if catalog_detail_open:
 		return
-	var items: = _catalog_items()
+	var items: Array = _catalog_items()
 	if items.is_empty():
 		return
-	var visible: = _catalog_visible_count(viewport)
-	catalog_selected = clampi(catalog_selected + direction * visible, 0, items.size() - 1)
+	var visible: int = _catalog_visible_count(viewport)
+	var last_page: int = floori(float(items.size() - 1) / float(visible))
+	var page: int = floori(float(catalog_scroll_index) / float(visible))
+	catalog_selected = clampi(page + direction, 0, last_page) * visible
 	_catalog_ensure_selected_visible(viewport)
 
 
@@ -41057,81 +41001,15 @@ func _catalog_fraction_items() -> Array:
 
 
 func _catalog_detail_panel_rect(viewport: Vector2) -> Rect2:
-	return Rect2(viewport.x * 0.06, 132, viewport.x * 0.88, viewport.y - 220) if _is_portrait(viewport) else Rect2(viewport.x * 0.05, 132, viewport.x * 0.9, viewport.y - 212)
+	return CatalogInterface.detail_panel_rect(viewport)
 
 
 func _catalog_detail_back_rect(viewport: Vector2) -> Rect2:
-	return Rect2(viewport.x * 0.5 - 120, viewport.y - 72, 240, 48)
+	return CatalogInterface.back_detail_rect(viewport)
 
 
-func _draw_catalog_detail(viewport: Vector2) -> void :
-	var items = _catalog_items()
-	if items.is_empty():
-		return
-	var item: Dictionary = items[clamp(catalog_selected, 0, items.size() - 1)]
-	var portrait = _is_portrait(viewport)
-	var kind: = _catalog_item_kind(item)
-	var locked_item: = _catalog_item_locked(item)
-	var color: Color = Color(0.42, 0.46, 0.68) if locked_item else item.get("color", Color(0.0, 1.0, 0.82))
-	var panel = _catalog_detail_panel_rect(viewport)
-	_draw_holo_panel(panel, color, true, 0.78)
-
-	var image_rect: Rect2
-	var text_x: float
-	var text_w: float
-	var text_y: float
-	if portrait:
-		image_rect = Rect2(panel.position + Vector2(20, 20), Vector2(panel.size.x - 40, min(190.0, panel.size.y * 0.3)))
-		text_x = panel.position.x + 20
-		text_w = panel.size.x - 40
-		text_y = image_rect.end.y + 26
-	else:
-		var left_w = panel.size.x * 0.35
-		image_rect = Rect2(panel.position + Vector2(24, 24), Vector2(left_w, panel.size.y - 82))
-		var div_x = panel.position.x + left_w + 48
-		draw_line(Vector2(div_x, panel.position.y + 24), Vector2(div_x, panel.end.y - 24), Color(color.r, color.g, color.b, 0.28), 1)
-		text_x = div_x + 24
-		text_w = panel.end.x - text_x - 24
-		text_y = panel.position.y + 26
-	draw_rect(image_rect, Color(0.0, 0.0, 0.0, 0.32), true)
-	draw_rect(image_rect, Color(color.r, color.g, color.b, 0.5), false, 2)
-	if locked_item:
-		_draw_catalog_locked_card_icon(image_rect.grow(-16), true)
-	else:
-		_draw_texture_contain(_catalog_item_texture(item), image_rect.grow(-16), Color.WHITE)
-
-	if not portrait:
-		var image_title: = _catalog_display_title(item).to_upper()
-		_draw_centered(image_title, Vector2(image_rect.get_center().x, image_rect.end.y + 32), _fit_text_size(image_title, image_rect.size.x - 18.0, 23, 15), Color.WHITE)
-
-	var title = _catalog_display_title(item).to_upper()
-	var title_size: = _fit_text_size(title, text_w, 27 if not portrait else 23, 16)
-	draw_string(font, Vector2(text_x, text_y), "REGISTRO BLOQUEADO" if locked_item else _catalog_detail_title(kind), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
-	text_y += 28
-	draw_string(font, Vector2(text_x, text_y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size, Color.WHITE)
-	text_y += title_size + 20
-
-	var section_gap: = 12.0
-	var remaining_h: = maxf(180.0, panel.end.y - text_y - 30.0)
-	var desc_h: = minf(92.0 if portrait else 76.0, remaining_h * 0.26)
-	var lore_h: = minf(112.0 if portrait else 90.0, remaining_h * 0.3)
-	draw_string(font, Vector2(text_x, text_y), "IDENTIDADE", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
-	text_y += 18
-	_draw_wrapped_clamped(_catalog_detail_description(item), Rect2(text_x, text_y, text_w, desc_h), 13 if portrait else 14, Color(0.85, 0.92, 0.96), 4)
-	text_y += desc_h + section_gap
-
-	draw_line(Vector2(text_x, text_y), Vector2(text_x + text_w, text_y), Color(color.r, color.g, color.b, 0.36), 1)
-	text_y += 18
-	draw_string(font, Vector2(text_x, text_y), "HISTORIA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
-	text_y += 18
-	_draw_wrapped_clamped(_catalog_detail_lore(item), Rect2(text_x, text_y, text_w, lore_h), 13, Color(0.7, 0.82, 0.88), 5)
-	text_y += lore_h + 10.0
-
-	draw_string(font, Vector2(text_x, text_y), "COMO FUNCIONA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
-	text_y += 18
-	_draw_wrapped_clamped(_catalog_detail_mechanics(item), Rect2(text_x, text_y, text_w, panel.end.y - text_y - 22.0), 13, Color(0.82, 0.9, 0.94), 7)
-
-	_draw_big_button(_catalog_detail_back_rect(viewport), "VOLTAR AO INDICE", Color(0.08, 0.04, 0.1, 0.9), Color(1.0, 0.2, 0.78))
+func _draw_catalog_detail(viewport: Vector2) -> void:
+	CatalogInterface.draw_detail(self, viewport)
 
 
 func _catalog_item_texture(item: Dictionary) -> Texture2D:
@@ -54664,6 +54542,8 @@ func _unhandled_input(event: InputEvent) -> void :
 		if event is InputEventScreenTouch and (event.canceled or not event.pressed):
 			_cancel_touch_index(event.index)
 		return
+	if mode == "catalog" and CatalogInterface.handle_event(self, event, viewport):
+		return
 	if event is InputEventJoypadButton:
 		if gamepad_mapping_action == "" and _gamepad_navigation_mode():
 			if event.pressed:
@@ -56447,24 +56327,34 @@ func _handle_key(event: InputEventKey) -> void :
 				else:
 					_leave_multiplayer()
 	elif mode == "catalog":
+		var viewport: Vector2 = get_viewport_rect().size
 		if event.keycode == KEY_ESCAPE:
 			if catalog_detail_open:
 				catalog_detail_open = false
 			else:
 				_go_to_menu()
-		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
-			_catalog_change_tab(1)
-		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
-			_catalog_change_tab(-1)
-		elif event.keycode == KEY_DOWN or event.keycode == KEY_S:
-			_catalog_select_relative(_catalog_columns(get_viewport_rect().size), get_viewport_rect().size)
-		elif event.keycode == KEY_UP or event.keycode == KEY_W:
-			_catalog_select_relative( - _catalog_columns(get_viewport_rect().size), get_viewport_rect().size)
-		elif event.keycode == KEY_PAGEUP:
-			_catalog_page_relative(-1, get_viewport_rect().size)
-		elif event.keycode == KEY_PAGEDOWN:
-			_catalog_page_relative(1, get_viewport_rect().size)
-		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
+		elif event.keycode in [KEY_A, KEY_D, KEY_TAB]:
+			_catalog_change_tab(-1 if event.keycode == KEY_A or event.shift_pressed else 1)
+		elif event.keycode in [KEY_RIGHT, KEY_LEFT]:
+			var direction: int = 1 if event.keycode == KEY_RIGHT else -1
+			if catalog_detail_open:
+				catalog_detail_section = posmod(catalog_detail_section + direction, 3)
+			else:
+				_catalog_select_relative(direction, viewport)
+		elif event.keycode in [KEY_DOWN, KEY_S, KEY_UP, KEY_W]:
+			var direction: int = 1 if event.keycode in [KEY_DOWN, KEY_S] else -1
+			if catalog_detail_open and is_instance_valid(catalog_detail_text):
+				catalog_detail_text.get_v_scroll_bar().value += direction * 54.0
+			else:
+				_catalog_select_relative(direction * _catalog_columns(viewport), viewport)
+		elif event.keycode in [KEY_PAGEUP, KEY_PAGEDOWN]:
+			var direction: int = 1 if event.keycode == KEY_PAGEDOWN else -1
+			if catalog_detail_open and is_instance_valid(catalog_detail_text):
+				catalog_detail_text.get_v_scroll_bar().value += direction * catalog_detail_text.size.y * 0.8
+			else:
+				_catalog_page_relative(direction, viewport)
+		elif event.keycode in [KEY_ENTER, KEY_SPACE] and not _catalog_items().is_empty():
+			catalog_detail_section = 0
 			catalog_detail_open = true
 	elif mode == "manifest" or mode == "manifest_mp":
 		if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
@@ -56748,38 +56638,8 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 	_try_start_move_touch(-2, pos, viewport)
 
 
-func _handle_catalog_touch(pos: Vector2, viewport: Vector2) -> void :
-	var portrait = _is_portrait(viewport)
-	if catalog_detail_open:
-		if _catalog_detail_back_rect(viewport).has_point(pos):
-			catalog_detail_open = false
-			return
-		if not _catalog_detail_panel_rect(viewport).has_point(pos):
-			catalog_detail_open = false
-		return
-	var tab_w = viewport.x / CATALOG_TABS.size()
-	if pos.y >= 92 and pos.y <= 140:
-		_catalog_reset_tab(clamp(int(pos.x / tab_w), 0, CATALOG_TABS.size() - 1))
-		return
-	var items = _catalog_items()
-	_catalog_ensure_selected_visible(viewport)
-	var visible: = _catalog_visible_count(viewport)
-	if not portrait and items.size() > visible:
-		if Rect2(viewport.x - 250, viewport.y - 68, 106, 44).has_point(pos):
-			_catalog_page_relative(-1, viewport)
-			return
-		if Rect2(viewport.x - 132, viewport.y - 68, 106, 44).has_point(pos):
-			_catalog_page_relative(1, viewport)
-			return
-	for i in range(catalog_scroll_index, mini(items.size(), catalog_scroll_index + visible)):
-		var rect: = _catalog_item_rect(i, catalog_scroll_index, viewport)
-		if rect.has_point(pos):
-			catalog_selected = i
-			catalog_detail_open = true
-			return
-	var back_rect = Rect2(viewport.x * 0.08, viewport.y - 72, viewport.x * 0.84, 48) if portrait else Rect2(viewport.x * 0.06, viewport.y - 68, 160, 44)
-	if back_rect.has_point(pos):
-		_go_to_menu()
+func _handle_catalog_touch(pos: Vector2, viewport: Vector2) -> void:
+	CatalogInterface.handle_touch(self, pos, viewport)
 
 
 func _manifest_carousel_spacing(viewport: Vector2) -> float:

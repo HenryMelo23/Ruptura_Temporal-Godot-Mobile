@@ -1,6 +1,6 @@
 extends RefCounted
 
-const VALID_KINDS: = ["manifestation", "enemy", "boss", "fraction", "spectrum", "card"]
+const VALID_KINDS: = ["manifestation", "enemy", "boss", "phase", "fraction", "spectrum", "card"]
 const REQUIRED_ENEMY_IDS: = [
 	"comum", "espreitador", "projetador", "aglomerador", "cristalizado", 
 	"curater", "larapio", "rebobinador", "briguer_escudeiro", 
