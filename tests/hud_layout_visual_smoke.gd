@@ -47,6 +47,7 @@ func _run() -> void:
 	print("HUD_LAYOUT_VISUAL_OK captures=%d desktop=true mobile=true no_overlap=true basic_fire_frames=2" % captures.size())
 	game.queue_free()
 	await process_frame
+	await create_timer(0.6).timeout
 	quit(0)
 
 

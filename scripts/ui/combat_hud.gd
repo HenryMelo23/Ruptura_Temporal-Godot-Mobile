@@ -81,7 +81,6 @@ func pulse() -> float:
 func surface(host: Node2D, rect: Rect2, accent: Color, alpha: float = 1.0) -> void:
 	host.draw_rect(rect, Color(INK, 0.94 * alpha))
 	host.draw_rect(rect, Color(accent, 0.23 * alpha), false, 1.0)
-	host.draw_line(rect.position, rect.position + Vector2(3, 0) + Vector2(0, rect.size.y), Color(accent, 0.0), 1.0)
 	host.draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), Color(accent, 0.9 * alpha))
 
 
@@ -150,27 +149,41 @@ func stats_panel(host: Node2D, rect: Rect2, alpha: float) -> void:
 	surface(host, rect, CYAN, alpha)
 	text(host, "PONTOS", rect.position + Vector2(14, 20), 10, Color(MUTED, alpha))
 	text(host, str(host.score), rect.position + Vector2(14, 43), 23, Color(TEXT, alpha), rect.size.x - 28)
-	var footer: String = "%d cartas  ·  %d por carta" % [host._affordable_card_count(), host.card_cost]
+	var footer: String = "Pode comprar: %d  ·  Custo: %d" % [host._affordable_card_count(), host.card_cost]
 	text(host, footer, rect.position + Vector2(14, 66), 11, Color("ead391") * Color(1, 1, 1, alpha), rect.size.x - 28)
+
+
+func ability_status(info: Dictionary) -> String:
+	if bool(info.get("active", false)):
+		return String(info.get("sub", "")) if not String(info.get("sub", "")).is_empty() else "ATIVO"
+	if float(info.cd_elapsed) < float(info.cd_max):
+		return "%.1fs" % maxf(0.0, float(info.cd_max) - float(info.cd_elapsed))
+	return "PRONTO"
 
 
 func ability(host: Node2D, rect: Rect2, info: Dictionary) -> void:
 	var accent: Color = info.color
 	var ready: bool = float(info.cd_elapsed) >= float(info.cd_max)
-	surface(host, rect, accent if ready else MUTED, 0.95)
+	var active: bool = bool(info.get("active", false))
+	surface(host, rect, accent if ready or active else MUTED, 0.95)
+	if active:
+		host.draw_rect(rect.grow(-3), Color(accent, 0.08 + (0.5 + sin(clock * 4.0) * 0.5) * 0.09))
 	text(host, String(info.get("bind", "")), rect.position + Vector2(9, 15), 10, MUTED, rect.size.x - 18)
 	var center := rect.position + Vector2(rect.size.x * 0.5, 35)
+	var icon_color := accent if ready or active else accent.lerp(MUTED, 0.7)
 	match String(info.icon_type):
-		"sword": host._draw_icon_sword(center, 20.0, accent)
-		"star": host._draw_icon_star(center, 20.0, accent)
-		"trident": host._draw_icon_trident(center, 20.0, accent)
-		"portal": host._draw_icon_portal(center, 20.0, accent)
+		"sword": host._draw_icon_sword(center, 20.0, icon_color)
+		"star": host._draw_icon_star(center, 20.0, icon_color)
+		"trident": host._draw_icon_trident(center, 20.0, icon_color)
+		"portal": host._draw_icon_portal(center, 20.0, icon_color)
 	text(host, String(info.label), rect.position + Vector2(9, 64), 11, TEXT, rect.size.x - 18)
 	var progress: float = clampf(float(info.cd_elapsed) / maxf(0.01, float(info.cd_max)), 0.0, 1.0)
+	if active:
+		progress = 1.0
+	host.draw_rect(Rect2(rect.position + Vector2(8, rect.size.y - 7), Vector2(rect.size.x - 16, 2)), Color(MUTED, 0.2))
 	host.draw_rect(Rect2(rect.position + Vector2(8, rect.size.y - 7), Vector2((rect.size.x - 16) * progress, 2)), accent)
-	if not ready:
-		text(host, "%.1fs" % (float(info.cd_max) - float(info.cd_elapsed)), rect.position + Vector2(9, 78), 10, MUTED, rect.size.x - 18)
-	elif int(info.get("charges", 0)) > 0:
+	text(host, ability_status(info), rect.position + Vector2(9, 80), 10, accent if active else MUTED, rect.size.x - 18)
+	if int(info.get("charges", 0)) > 0:
 		text(host, "×%d" % int(info.charges), rect.position + Vector2(rect.size.x - 28, 15), 10, TEXT, 24)
 
 
@@ -216,18 +229,23 @@ func _vein(host: Node2D, viewport: Vector2, corner: int, branch: int, critical: 
 	var growth: float = clampf(danger * 1.05 + critical * 0.17, 0.0, 1.0)
 	var alpha: float = minf(0.9, danger * (0.44 + critical * 0.44 + beat * 0.14) * strength)
 	var points: Array[Vector2] = []
-	for segment in range(9):
-		var t: float = float(segment) / 8.0 * growth
+	for segment in range(21):
+		var t: float = float(segment) / 20.0 * growth
 		var point: Vector2 = start.lerp(end, t)
 		var bend: float = sin(t * 14.0 + branch * 2.7 + corner) * sin(t * PI) * 0.018
 		point += Vector2(bend, -bend * 0.8)
-		point += Vector2(0.0015, -0.002) * sin(clock * 2.0 + segment) * critical
+		point += Vector2(0.0015, -0.002) * sin(clock * 2.0 + t * 4.0) * critical
 		points.append(origin + point * viewport * flip)
 	for segment in range(1, points.size()):
 		var taper: float = 1.0 - float(segment) / float(points.size())
 		var width: float = (1.0 + taper * (3.0 + critical * 3.0)) * minf(viewport.x / 1280.0, 1.2)
 		host.draw_line(points[segment - 1], points[segment], Color(0.09, 0.0, 0.014, alpha), width + 2.0, true)
 		host.draw_line(points[segment - 1], points[segment], Color(0.64 + beat * 0.12, 0.025, 0.055, alpha * taper), width, true)
-		if segment in [3, 5, 7]:
-			var tip := points[segment] + Vector2(0.033, -0.034) * viewport * flip * growth * taper
-			host.draw_line(points[segment], tip, Color(0.39, 0.005, 0.035, alpha * taper), maxf(0.8, width * 0.45), true)
+		if segment in [7, 12, 17]:
+			var branch_start := points[segment]
+			for twig in range(1, 5):
+				var t := float(twig) / 4.0
+				var offset := Vector2(0.055 * t, -0.042 * t * t) * viewport * flip * growth * taper
+				var tip := points[segment] + offset
+				host.draw_line(branch_start, tip, Color(0.39, 0.005, 0.035, alpha * taper * (1.0 - t * 0.65)), maxf(0.65, width * 0.5 * (1.0 - t * 0.7)), true)
+				branch_start = tip

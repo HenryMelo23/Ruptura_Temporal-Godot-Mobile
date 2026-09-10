@@ -59,6 +59,8 @@ const PLAYER_DRAW_SIDE_SIZE: = Vector2(52, 76)
 const PLAYER_DRAW_SHOT_SIZE: = Vector2(52, 77)
 const PLAYER_FIRE_DIRECTIONS: = ["south", "north", "northeast", "northwest", "southwest", "southeast"]
 const CombatHud = preload("res://scripts/ui/combat_hud.gd")
+const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
+const LaceranteSprites = preload("res://scripts/lacerante_sprites.gd")
 const PLAYER_FIRE_FRAME_SECONDS: float = 0.09
 # Directional canvases include headroom for the raised hand; body height stays 80.
 const PLAYER_FIRE_CANVAS_HEIGHT: float = 430.0 * 80.0 / 370.0
@@ -8132,6 +8134,7 @@ func _load_textures() -> void :
 	textures["player_fire_down"] = textures["player_fire_south"]
 	textures["player_damage"] = [_safe_load(base + "player/damage/Geo_Damage1.png"), _safe_load(base + "player/damage/Geo_Damage2.png"), _safe_load(base + "player/damage/Geo_Damage3.png"), _safe_load(base + "player/damage/Geo_Damage4.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
+	LaceranteSprites.register(self)
 	textures["player_start_down"] = [
 		_safe_load(base + "player/start_down/Start-Down-Geo0.png"),
 		_safe_load(base + "player/start_down/Start-Down-Geo1.png"),
@@ -38055,6 +38058,7 @@ func _apply_pause_state(paused: bool) -> void :
 	if paused:
 		if mode != "paused":
 			previous_mode = mode
+			pause_selected = 0
 		forced_shop_timer = -1.0
 		mode = "paused"
 		pause_keyboard_active = false
@@ -39457,7 +39461,7 @@ func _draw_menu(viewport: Vector2) -> void :
 
 
 func _update_menu_presentation(delta: float) -> void:
-	if mode != "menu" and not mode.begins_with("settings"):
+	if mode != "menu" and mode != "paused" and not mode.begins_with("settings"):
 		menu_motion_mode = ""
 		return
 	if menu_motion_mode != mode:
@@ -39466,8 +39470,13 @@ func _update_menu_presentation(delta: float) -> void:
 		menu_focus_weights.clear()
 		menu_motion_selection = -1
 	menu_page_age += delta
-	var keys: Array = _menu_option_keys() if mode == "menu" else _settings_option_keys()
-	var selected_index: int = menu_selected if mode == "menu" else settings_selected
+	var keys: Array = PauseMenu.KEYS if mode == "paused" else (_menu_option_keys() if mode == "menu" else _settings_option_keys())
+	var selected_index: int = pause_selected if mode == "paused" else (menu_selected if mode == "menu" else settings_selected)
+	if mode == "paused" and _uses_desktop_ui() and not is_gamepad_active and not pause_keyboard_active:
+		selected_index = -1
+		for i in range(keys.size()):
+			if buttons.has(keys[i]) and Rect2(buttons[keys[i]]).has_point(get_global_mouse_position()):
+				selected_index = i
 	if selected_index != menu_motion_selection:
 		menu_motion_selection = selected_index
 		menu_selection_age = 0.0
@@ -39550,6 +39559,13 @@ func _draw_settings_surface(rect: Rect2, selected: bool, accent: Color = Color(0
 
 
 func _update_menu_pointer(pos: Vector2, viewport: Vector2) -> void:
+	if mode == "paused":
+		pause_keyboard_active = false
+		var pause_rects := PauseMenu.action_rects(viewport)
+		for i in range(pause_rects.size()):
+			if pause_rects[i].has_point(pos):
+				pause_selected = i
+		return
 	var rects: Dictionary = {}
 	var keys: Array = []
 	match mode:
@@ -47530,7 +47546,7 @@ func _draw_player_start_down(camera: Vector2) -> bool:
 		return false
 	if _cancel_player_start_down_landing_on_move():
 		return false
-	var frames: Array = textures.get("player_start_down", [])
+	var frames: Array = textures.get("player_lacerante_start_down" if manifestation_key == "lacerante" else "player_start_down", [])
 	if frames.is_empty():
 		return false
 	var center: Vector2 = player_pos - camera
@@ -47622,6 +47638,8 @@ func _player_fire_draw_profile() -> Dictionary:
 
 func _player_draw_profile() -> Dictionary:
 	var move = _read_move()
+	if manifestation_key == "lacerante":
+		return {"preserve_height": true, "height": LaceranteSprites.DRAW_HEIGHT, "offset": Vector2.ZERO}
 	if player_freeze_visual_timer > 0.0:
 		return {
 			"size": PLAYER_DRAW_FROZEN_SIZE, 
@@ -51184,8 +51202,8 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void :
 
 	icons.append({"id": "attack", "label": "ATK", "sub": "Ataque", "charges": 0, "bind": _compact_key_binding_name("attack") if _uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.28), "cd_elapsed": 100.0, "cd_max": 1.0, "icon_type": "sword"})
 	icons.append({"id": "skill", "label": "HAB 1", "sub": "Hab 1", "charges": q_charges, "bind": _compact_key_binding_name("skill") if _uses_desktop_ui() else _compact_binding_name("skill"), "color": Color(0.2, 0.75, 1.0), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown(), "icon_type": "star"})
-	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": time_alive - last_secondary_time, "cd_max": _secondary_skill_cooldown(), "icon_type": "trident"})
-	icons.append({"id": "dash", "label": dash_label, "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": Color(0.2, 0.9, 1.0), "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown(), "icon_type": "portal"})
+	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "active": toggle_ultimate_active, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": time_alive - last_secondary_time, "cd_max": _secondary_skill_cooldown(), "icon_type": "trident"})
+	icons.append({"id": "dash", "label": dash_label, "active": dash_label != "TP", "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": Color(0.2, 0.9, 1.0), "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown(), "icon_type": "portal"})
 
 	if manifestation_key == "lacerante":
 		icons.append({"id": "lacerante_empower", "label": "REFORÇO" if lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN, "icon_type": "star"})
@@ -51199,8 +51217,8 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void :
 		var det_ready: = 1.0 if bombastica_bombs.size() > 0 else 0.0
 		icons.append({"id": "bombastica_detonator", "label": "DET", "sub": "Detonar", "charges": bombastica_bombs.size(), "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0, "icon_type": "star"})
 
-	var card_w := 72.0
-	var card_h := 88.0
+	var card_w := 92.0
+	var card_h := 96.0
 	var gap := 12.0
 	var total_w := card_w * float(icons.size()) + gap * float(icons.size() - 1)
 	var start_x := viewport.x * 0.5 - total_w * 0.5
@@ -51216,21 +51234,20 @@ func _draw_desktop_combat_hud(viewport: Vector2) -> void :
 func _draw_desktop_session_buttons(_viewport: Vector2) -> void :
 	if buttons.has("pause"):
 		var pause_rect: Rect2 = buttons["pause"]
-		_draw_scifi_frame(pause_rect, Color(0.0, 0.85, 1.0), 5.0, 0.88)
-		_draw_centered("II", pause_rect.get_center() + Vector2(0, 4), 16, Color(0.0, 0.95, 1.0))
+		_draw_hud_rect_button(pause_rect, "II", CombatHud.CYAN)
 		_draw_centered(_compact_key_binding_name("pause"), pause_rect.get_center() + Vector2(0, -24), 10, Color(0.72, 1.0, 0.94, 0.9))
 
 	if buttons.has("shop_manual"):
 		var shop_rect: Rect2 = buttons["shop_manual"]
 		var shop_accent := Color(0.0, 0.88, 1.0) if _affordable_card_count() > 0 and mode == "game" else Color(0.38, 0.42, 0.46)
-		_draw_scifi_frame(shop_rect, shop_accent, 6.0, 0.88)
+		hud_feedback.surface(self, shop_rect, shop_accent)
 		_draw_icon_cart(Vector2(shop_rect.position.x + 26.0, shop_rect.position.y + 22.0), 22.0, shop_accent)
 		_draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 4.0), 16, shop_accent)
 
 	if boss_ready and not boss_active and not boss_dead and buttons.has("boss"):
 		var boss_rect: Rect2 = buttons["boss"]
 		var boss_accent := Color(1.0, 0.22, 0.28)
-		_draw_scifi_frame(boss_rect, boss_accent, 6.0, 0.88)
+		hud_feedback.surface(self, boss_rect, boss_accent)
 		_draw_icon_skull(Vector2(boss_rect.position.x + 26.0, boss_rect.position.y + 22.0), 22.0, boss_accent)
 		_draw_centered("BOSS", boss_rect.get_center() + Vector2(14.0, 4.0), 16, boss_accent)
 
@@ -52668,42 +52685,7 @@ func _pause_selection_active(index: int) -> bool:
 
 
 func _draw_pause(viewport: Vector2) -> void :
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.62), true)
-	var portrait = _is_portrait(viewport)
-	var panel = Rect2(viewport.x * 0.18 if not portrait else viewport.x * 0.08, viewport.y * 0.22, viewport.x * 0.64 if not portrait else viewport.x * 0.84, viewport.y * 0.52)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.82)
-	_draw_glitch_title("PAUSE", Vector2(viewport.x * 0.5, panel.position.y + panel.size.y * 0.28), 42 if not portrait else 48, Color(0.0, 1.0, 0.82))
-	_draw_centered("PROTOCOLO TEMPORAL SUSPENSO", Vector2(viewport.x * 0.5, panel.position.y + panel.size.y * 0.52), 14 if not portrait else 16, Color(0.72, 0.94, 1.0))
-
-	var resume_rect: Rect2
-	var settings_rect: Rect2
-	var deck_rect: Rect2
-	var menu_rect: Rect2
-	if not portrait:
-		var btn_w = 160.0
-		var btn_h = 48.0
-		var start_x = viewport.x * 0.5 - (btn_w * 4.0 + 36.0) * 0.5
-		resume_rect = Rect2(start_x, panel.end.y - btn_h - 24.0, btn_w, btn_h)
-		deck_rect = Rect2(start_x + btn_w + 12.0, panel.end.y - btn_h - 24.0, btn_w, btn_h)
-		settings_rect = Rect2(start_x + (btn_w + 12.0) * 2.0, panel.end.y - btn_h - 24.0, btn_w, btn_h)
-		menu_rect = Rect2(start_x + (btn_w + 12.0) * 3.0, panel.end.y - btn_h - 24.0, btn_w, btn_h)
-	else:
-		var btn_w = 260.0
-		var btn_h = 40.0
-		resume_rect = Rect2(viewport.x * 0.5 - 130.0, panel.end.y - 200.0, btn_w, btn_h)
-		deck_rect = Rect2(viewport.x * 0.5 - 130.0, panel.end.y - 150.0, btn_w, btn_h)
-		settings_rect = Rect2(viewport.x * 0.5 - 130.0, panel.end.y - 100.0, btn_w, btn_h)
-		menu_rect = Rect2(viewport.x * 0.5 - 130.0, panel.end.y - 50.0, btn_w, btn_h)
-
-	buttons["pause_resume"] = resume_rect
-	buttons["pause_deck"] = deck_rect
-	buttons["pause_settings"] = settings_rect
-	buttons["pause_menu"] = menu_rect
-
-	_draw_big_button(resume_rect, "CONTINUAR", Color(0.04, 0.15, 0.18, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(0) else Color(0.0, 1.0, 0.82))
-	_draw_big_button(deck_rect, "DECK (%d)" % _deck_total_cards(), Color(0.05, 0.1, 0.16, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(1) else Color(0.44, 0.84, 1.0))
-	_draw_big_button(settings_rect, "CONFIGURACOES", Color(0.04, 0.15, 0.18, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(2) else Color(1.0, 0.8, 0.2))
-	_draw_big_button(menu_rect, "MENU INICIAL", Color(0.12, 0.05, 0.08, 0.9), Color(1.0, 1.0, 1.0) if _pause_selection_active(3) else Color(1.0, 0.22, 0.44))
+	PauseMenu.draw(self, viewport)
 
 
 func _draw_pause_deck(viewport: Vector2) -> void :
@@ -53609,15 +53591,8 @@ func _draw_ability_cancel_button(viewport: Vector2) -> void :
 
 func _draw_hud_rect_button(rect: Rect2, label: String, accent: Color) -> void :
 	var alpha: float = clampf(accent.a, 0.0, 1.0)
-	draw_rect(rect.grow(5.0), Color(accent.r, accent.g, accent.b, 0.035 * alpha), true)
-	draw_rect(rect, Color(0.012, 0.02, 0.028, 0.64 * alpha), true)
-	draw_rect(rect.grow(-4), Color(accent.r, accent.g, accent.b, 0.12 * alpha), true)
-	draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.82 * alpha), false, 2)
-	draw_line(rect.position + Vector2(8, rect.size.y - 6), rect.position + Vector2(rect.size.x - 8, rect.size.y - 6), Color(accent.r, accent.g, accent.b, 0.42 * alpha), 2)
-	draw_line(rect.position + Vector2(8, 5), rect.position + Vector2(minf(rect.size.x * 0.34, 28.0), 5), Color(1.0, 1.0, 1.0, 0.16 * alpha), 1)
-	var scan_x: float = rect.position.x + 8.0 + fposmod(time_alive * 24.0, maxf(12.0, rect.size.x - 16.0))
-	draw_line(Vector2(scan_x, rect.position.y + 7.0), Vector2(scan_x, rect.end.y - 9.0), Color(accent.r, accent.g, accent.b, 0.12 * alpha), 1.0)
-	_draw_centered(label, rect.get_center() + Vector2(0, 6), int(clamp(rect.size.y * 0.38, 13.0, 18.0)), Color(1.0, 1.0, 1.0, alpha))
+	hud_feedback.surface(self, rect, accent, alpha)
+	_draw_centered_with_font(menu_ui_font, label, rect.get_center(), 16, Color(CombatHud.TEXT, alpha))
 
 
 func _draw_small_rect_button(rect: Rect2, label: String, bg: = Color(0.03, 0.1, 0.12), border: = Color(0.0, 1.0, 0.82)) -> void :
@@ -54018,8 +53993,9 @@ func _draw_wrapped_clamped(text: String, rect: Rect2, size: int, color: Color, m
 
 func _player_texture() -> Texture2D:
 	var move = _read_move()
+	var is_lacerante: bool = manifestation_key == "lacerante"
 	if player_freeze_visual_timer > 0.0:
-		var frozen_frames: Array = textures.get("player_frozen", [])
+		var frozen_frames: Array = textures.get("player_lacerante_frozen" if is_lacerante else "player_frozen", [])
 		if not frozen_frames.is_empty():
 			return frozen_frames[clampi(_frozen_player_frame_index(), 0, frozen_frames.size() - 1)]
 	var prismatica_secondary: = _active_prismatica_secondary()
@@ -54028,13 +54004,25 @@ func _player_texture() -> Texture2D:
 		if prismatica_tex != null:
 			return prismatica_tex
 	if time_alive - last_damage_time < 0.35:
+		if is_lacerante:
+			return _lacerante_texture("damage", 70, time_alive - last_damage_time)
 		return _frame_texture_relative("player_damage", time_alive - last_damage_time, 70, "player_idle")
-	if lacerante_preparing and manifestation_key == "lacerante" and move.length() <= 0.12:
+	if lacerante_preparing and is_lacerante and move.length() <= 0.12:
 		return _lacerante_prepare_texture()
 	if _player_attack_pose_active():
-		if manifestation_key == "lacerante":
+		if is_lacerante:
 			return _lacerante_combo_texture(time_alive - last_attack_time)
 		return _player_fire_texture_for_current_attack(time_alive - last_attack_time)
+	if is_lacerante:
+		if move.y < -0.1:
+			return _lacerante_texture("up", 120)
+		if move.y > 0.1:
+			return _lacerante_texture("down", 120)
+		if move.x < -0.1 or (move.length() <= 0.12 and last_facing.x < -0.1):
+			return _lacerante_texture("left", 105)
+		if move.x > 0.1:
+			return _lacerante_texture("right", 105)
+		return _lacerante_texture("idle", 145)
 	var idle_speed = 115 if time_alive - last_attack_time < 0.65 or time_alive - last_dash_time < 1.0 else 175
 	if move.y < -0.1:
 		return _frame_texture(_player_animation_texture_key("up", "player_up"), 120, "player_idle")
@@ -54073,6 +54061,12 @@ func _frame_texture_relative(key: String, elapsed_time: float, period_ms: int, f
 
 
 func _lacerante_combo_texture(elapsed: float) -> Texture2D:
+	if manifestation_key == "lacerante":
+		var attack_key := "player_lacerante_attack_left" if _lacerante_attack_direction().x < -0.1 else "player_lacerante_attack_right"
+		var generated: Array = textures.get(attack_key, [])
+		if generated.size() >= 6:
+			var generated_idx := posmod(int(lacerante_combo_visual), 3) * 2 + (1 if int(elapsed * 1000.0) >= 120 else 0)
+			return generated[clampi(generated_idx, 0, generated.size() - 1)]
 	var all_frames: Array = textures.get("player_lacerar", [])
 	if all_frames.size() < 6:
 		return _frame_texture_relative("player_lacerar", elapsed, 85, "player_fire")
@@ -54087,12 +54081,37 @@ func _lacerante_combo_texture(elapsed: float) -> Texture2D:
 
 
 func _lacerante_prepare_texture() -> Texture2D:
+	if manifestation_key == "lacerante":
+		var attack_key := "player_lacerante_attack_left" if lacerante_prepare_dir.x < -0.1 else "player_lacerante_attack_right"
+		var generated: Array = textures.get(attack_key, [])
+		if generated.size() >= 6:
+			var generated_idx := posmod(int(lacerante_prepare_stage), 3) * 2 + clampi(lacerante_prepare_frame, 0, 1)
+			return generated[clampi(generated_idx, 0, generated.size() - 1)]
 	var all_frames: Array = textures.get("player_lacerar", [])
 	if all_frames.size() < 6:
 		return _frame_texture_relative("player_lacerar", lacerante_prepare_timer, 85, "player_fire")
 	var combo_idx = posmod(int(lacerante_prepare_stage), 3)
 	var frame_idx = combo_idx * 2 + clamp(lacerante_prepare_frame, 0, 1)
 	return all_frames[frame_idx]
+
+
+func _lacerante_attack_direction() -> Vector2:
+	var direction: Vector2 = player_attack_visual_dir if player_attack_visual_dir.length() > 0.05 else last_facing
+	if lacerante_preparing and lacerante_prepare_dir.length() > 0.05:
+		direction = lacerante_prepare_dir
+	return direction.normalized() if direction.length() > 0.05 else Vector2.RIGHT
+
+
+func _lacerante_texture(animation: String, period_ms: int, elapsed: float = -1.0) -> Texture2D:
+	var frames: Array = textures.get("player_lacerante_" + animation, [])
+	if frames.is_empty():
+		return null
+	var frame_index: int
+	if elapsed >= 0.0:
+		frame_index = int(elapsed * 1000.0 / max(1, period_ms))
+	else:
+		frame_index = int(Time.get_ticks_msec() / max(1, period_ms))
+	return frames[posmod(frame_index, frames.size())]
 
 
 func _camera(viewport: Vector2) -> Vector2:
@@ -60513,21 +60532,22 @@ func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void :
 func _net_player_texture() -> Texture2D:
 	var key: = "player_idle"
 	var fallback: = "player_idle"
+	var is_lacerante: bool = LaceranteSprites.is_manifestation(self, net_player_manifestation)
 	match net_player_anim_state:
 		NET_ANIM_FROZEN:
-			key = "player_frozen"
+			key = "player_lacerante_frozen" if is_lacerante else "player_frozen"
 		NET_ANIM_UP:
-			key = "player_up"
+			key = "player_lacerante_up" if is_lacerante else "player_up"
 		NET_ANIM_DOWN:
-			key = "player_down"
+			key = "player_lacerante_down" if is_lacerante else "player_down"
 		NET_ANIM_RIGHT:
-			key = "player_right"
+			key = "player_lacerante_side_network" if is_lacerante else "player_right"
 		NET_ANIM_FIRE:
-			key = "player_fire_network"
+			key = "player_lacerante_attack_network" if is_lacerante else "player_fire_network"
 		NET_ANIM_DAMAGE:
-			key = "player_damage"
+			key = "player_lacerante_damage" if is_lacerante else "player_damage"
 		NET_ANIM_LACERANTE:
-			key = "player_lacerar"
+			key = "player_lacerante_attack_network" if is_lacerante else "player_lacerar"
 		_:
 			fallback = "player_fire"
 	var frames: Array = textures.get(key, [])
@@ -60673,21 +60693,22 @@ func _draw_ally_health_bar(center: Vector2, width: float, ratio: float, accent: 
 
 func _net_player_texture_for_state(anim_state: int, frame_idx: int, _manifestation_index: int = -1) -> Texture2D:
 	var key: = "player_idle"
+	var is_lacerante: bool = LaceranteSprites.is_manifestation(self, _manifestation_index)
 	match anim_state:
 		NET_ANIM_FROZEN:
-			key = "player_frozen"
+			key = "player_lacerante_frozen" if is_lacerante else "player_frozen"
 		NET_ANIM_UP:
-			key = "player_up"
+			key = "player_lacerante_up" if is_lacerante else "player_up"
 		NET_ANIM_DOWN:
-			key = "player_down"
+			key = "player_lacerante_down" if is_lacerante else "player_down"
 		NET_ANIM_RIGHT:
-			key = "player_right"
+			key = "player_lacerante_side_network" if is_lacerante else "player_right"
 		NET_ANIM_FIRE:
-			key = "player_fire_network"
+			key = "player_lacerante_attack_network" if is_lacerante else "player_fire_network"
 		NET_ANIM_DAMAGE:
-			key = "player_damage"
+			key = "player_lacerante_damage" if is_lacerante else "player_damage"
 		NET_ANIM_LACERANTE:
-			key = "player_lacerar"
+			key = "player_lacerante_attack_network" if is_lacerante else "player_lacerar"
 	var frames: Array = textures.get(key, [])
 	if frames.is_empty():
 		frames = textures.get("player_idle", [])
