@@ -57,6 +57,10 @@ const PLAYER_DRAW_UP_SIZE: = Vector2(51, 77)
 const PLAYER_DRAW_DOWN_SIZE: = Vector2(51, 77)
 const PLAYER_DRAW_SIDE_SIZE: = Vector2(52, 76)
 const PLAYER_DRAW_SHOT_SIZE: = Vector2(52, 77)
+const PLAYER_FIRE_DIRECTIONS: = ["south", "north", "northeast", "northwest", "southwest", "southeast"]
+const PLAYER_FIRE_FRAME_SECONDS: float = 0.09
+# Directional canvases include headroom for the raised hand; body height stays 80.
+const PLAYER_FIRE_CANVAS_HEIGHT: float = 430.0 * 80.0 / 370.0
 const PLAYER_DRAW_DAMAGE_SIZE: = Vector2(54, 80)
 const PLAYER_DRAW_LACERAR_HEIGHT: = 77.0
 const PLAYER_DRAW_FROZEN_SIZE: = Vector2(58.8, 84.0)
@@ -8103,11 +8107,18 @@ func _load_textures() -> void :
 	textures["player_up"] = [_safe_load(base + "Geo1-up.png"), _safe_load(base + "Geo2-up.png")]
 	textures["player_down"] = [_safe_load(base + "Geo1-Down.png"), _safe_load(base + "Geo2-Down.png")]
 	textures["player_fire"] = [_safe_load(base + "Geo_Disp1.png"), _safe_load(base + "Geo_Disp2.png")]
-	# Keep the old keys as aliases for compatibility with snapshots and tools, but
-	# the playable attack always uses the two basic Dips frames above.
-	textures["player_fire_back_diag"] = textures["player_fire"]
-	textures["player_fire_up"] = textures["player_fire"]
-	textures["player_fire_down"] = textures["player_fire"]
+	# Snapshot indices 0/1 retain the existing horizontal poses. Each additional
+	# direction owns two indices, so peers need no extra packet or animation state.
+	textures["player_fire_network"] = textures["player_fire"].duplicate()
+	for direction in PLAYER_FIRE_DIRECTIONS:
+		var frames: Array = []
+		for frame in range(2):
+			frames.append(_safe_load(base + "player/fire_directional/%s_%d.png" % [direction, frame]))
+		textures["player_fire_" + direction] = frames
+		textures["player_fire_network"].append_array(frames)
+	textures["player_fire_back_diag"] = textures["player_fire_northeast"]
+	textures["player_fire_up"] = textures["player_fire_north"]
+	textures["player_fire_down"] = textures["player_fire_south"]
 	textures["player_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
 	textures["player_lacerar"] = [_safe_load(base + "Disp_Lacerar1.png"), _safe_load(base + "Disp_Lacerar2.png"), _safe_load(base + "Disp_Lacerar3.png"), _safe_load(base + "Disp_Lacerar4.png"), _safe_load(base + "Disp_Lacerar5.png"), _safe_load(base + "Disp_Lacerar6.png")]
 	textures["player_start_down"] = [
@@ -47553,7 +47564,7 @@ func _should_flip_player_sprite() -> bool:
 	var move = _read_move()
 	if lacerante_preparing and move.length() <= 0.12:
 		return lacerante_prepare_dir.x < -0.1
-	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
+	if _player_attack_pose_active():
 		if manifestation_key != "lacerante":
 			return bool(_player_fire_animation_info().get("flip_h", false))
 		return _aim_direction().x < -0.1
@@ -47573,22 +47584,38 @@ func _player_can_show_attack_sprite() -> bool:
 	return not _player_is_moving_for_animation()
 
 
+func _player_attack_pose_active() -> bool:
+	var elapsed: float = time_alive - last_attack_time
+	var duration: float = 0.5 if manifestation_key == "lacerante" else PLAYER_FIRE_FRAME_SECONDS * 2.0
+	return elapsed >= 0.0 and elapsed < duration and _player_can_show_attack_sprite()
+
+
 func _player_fire_animation_info(direction: Vector2 = Vector2.ZERO) -> Dictionary:
 	var source: = direction if direction.length() > 0.05 else player_attack_visual_dir
 	var dir: = source.normalized() if source.length() > 0.05 else Vector2.RIGHT
-	return {"key": "player_fire", "flip_h": dir.x < -0.1}
+	# Eight equal sectors: preserve E/W, provide real art for N/S and diagonals.
+	var sector: int = posmod(roundi(dir.angle() / (PI / 4.0)), 8)
+	var columns: Array[int] = [-1, 5, 0, 4, -1, 3, 1, 2]
+	var column: int = columns[sector]
+	if column < 0:
+		return {"key": "player_fire", "flip_h": sector == 4, "network_offset": 0}
+	return {"key": "player_fire_" + PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": 2 + column * 2}
+
+
+func _player_fire_frame_index(elapsed_time: float) -> int:
+	return clampi(int(elapsed_time / PLAYER_FIRE_FRAME_SECONDS), 0, 1)
 
 
 func _player_fire_texture_for_current_attack(elapsed_time: float) -> Texture2D:
 	var info: = _player_fire_animation_info()
-	return _frame_texture_relative(String(info.get("key", "player_fire")), elapsed_time, 70, "player_fire")
+	var frames: Array = textures.get(String(info["key"]), [])
+	return frames[_player_fire_frame_index(elapsed_time)] if frames.size() == 2 else null
 
 
 func _player_fire_draw_profile() -> Dictionary:
-	return {
-		"size": PLAYER_DRAW_SHOT_SIZE,
-		"offset": Vector2.ZERO
-	}
+	if int(_player_fire_animation_info()["network_offset"]) > 0:
+		return {"preserve_height": true, "height": PLAYER_FIRE_CANVAS_HEIGHT, "offset": Vector2.ZERO}
+	return {"size": PLAYER_DRAW_SHOT_SIZE, "offset": Vector2.ZERO}
 
 
 func _player_draw_profile() -> Dictionary:
@@ -47615,7 +47642,7 @@ func _player_draw_profile() -> Dictionary:
 			"height": 84.0, 
 			"offset": Vector2.ZERO
 		}
-	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
+	if _player_attack_pose_active():
 		if manifestation_key == "lacerante":
 			return {
 				"preserve_height": true, 
@@ -54144,7 +54171,7 @@ func _player_texture() -> Texture2D:
 		return _frame_texture_relative("player_damage", time_alive - last_damage_time, 70, "player_idle")
 	if lacerante_preparing and manifestation_key == "lacerante" and move.length() <= 0.12:
 		return _lacerante_prepare_texture()
-	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
+	if _player_attack_pose_active():
 		if manifestation_key == "lacerante":
 			return _lacerante_combo_texture(time_alive - last_attack_time)
 		return _player_fire_texture_for_current_attack(time_alive - last_attack_time)
@@ -60616,7 +60643,7 @@ func _net_player_texture() -> Texture2D:
 		NET_ANIM_RIGHT:
 			key = "player_right"
 		NET_ANIM_FIRE:
-			key = "player_fire"
+			key = "player_fire_network"
 		NET_ANIM_DAMAGE:
 			key = "player_damage"
 		NET_ANIM_LACERANTE:
@@ -60642,15 +60669,15 @@ func _network_player_animation_snapshot(now_ms: int) -> Vector2i:
 		var prepare_frames: Array = textures.get("player_lacerar", [])
 		var prepare_idx: = posmod(int(lacerante_prepare_stage), 3) * 2 + clampi(lacerante_prepare_frame, 0, 1) if prepare_frames.size() >= 6 else int(lacerante_prepare_timer * 1000.0 / 85.0)
 		return Vector2i(NET_ANIM_LACERANTE, prepare_idx % maxi(1, prepare_frames.size()))
-	if time_alive - last_attack_time < 0.5 and _player_can_show_attack_sprite():
+	if _player_attack_pose_active():
 		if manifestation_key == "lacerante":
 			var lacerar_frames: Array = textures.get("player_lacerar", [])
 			var combo_idx: = posmod(int(lacerante_combo_visual), 3) * 2
 			if time_alive - last_attack_time >= 0.12:
 				combo_idx += 1
 			return Vector2i(NET_ANIM_LACERANTE, combo_idx % maxi(1, lacerar_frames.size()))
-		var fire_frames: Array = textures.get("player_fire", [])
-		return Vector2i(NET_ANIM_FIRE, int((time_alive - last_attack_time) * 1000.0 / 70.0) % maxi(1, fire_frames.size()))
+		var fire_info: Dictionary = _player_fire_animation_info()
+		return Vector2i(NET_ANIM_FIRE, int(fire_info["network_offset"]) + _player_fire_frame_index(time_alive - last_attack_time))
 	var state: = NET_ANIM_IDLE
 	var period_ms: = 115 if time_alive - last_attack_time < 0.65 or time_alive - last_dash_time < 1.0 else 175
 	var key: = "player_idle"
@@ -60706,6 +60733,10 @@ func _draw_remote_player_state(camera: Vector2, peer_id: int, state: Dictionary)
 		_draw_leader_crown(p + Vector2(0, -62), 0.72, accent)
 	_draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], p + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
 	var tex: = _net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)))
+	var directional_fire: bool = anim_state == NET_ANIM_FIRE and frame_idx >= 2 and frame_idx < 14
+	if directional_fire and tex != null:
+		size = tex.get_size() * (PLAYER_FIRE_CANVAS_HEIGHT / tex.get_height())
+		rect = Rect2(p + Vector2(-size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
 
 	var rotation = 0.0
 	var move: = Vector2(state.get("move", Vector2.ZERO)).normalized()
@@ -60772,7 +60803,7 @@ func _net_player_texture_for_state(anim_state: int, frame_idx: int, _manifestati
 		NET_ANIM_RIGHT:
 			key = "player_right"
 		NET_ANIM_FIRE:
-			key = "player_fire"
+			key = "player_fire_network"
 		NET_ANIM_DAMAGE:
 			key = "player_damage"
 		NET_ANIM_LACERANTE:
