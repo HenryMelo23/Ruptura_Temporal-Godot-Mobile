@@ -114,4 +114,14 @@ Game Base/**/SIGMon/
 # Scripts de Build Locais
 !.agents/skills/godot-pixel-art-animation/
 !.agents/skills/godot-pixel-art-animation/SKILL.md
+!.agents/skills/godot-at-icons/
+!.agents/skills/godot-at-icons/SKILL.md
+!.agents/skills/godot-interaction-feedback/
+!.agents/skills/godot-interaction-feedback/SKILL.md
+!.agents/skills/godot-ai-mcp/
+!.agents/skills/godot-ai-mcp/SKILL.md
+!.agents/skills/godot-ziva-ai/
+!.agents/skills/godot-ziva-ai/SKILL.md
+!.agents/skills/godot-optional-addons/
+!.agents/skills/godot-optional-addons/SKILL.md
 setup_android_env.ps1
