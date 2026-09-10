@@ -112,4 +112,6 @@ Game Base/**/SIGMon/
 !.agents/skills/ruptura-release-portability/SKILL.md
 
 # Scripts de Build Locais
+!.agents/skills/godot-pixel-art-animation/
+!.agents/skills/godot-pixel-art-animation/SKILL.md
 setup_android_env.ps1
