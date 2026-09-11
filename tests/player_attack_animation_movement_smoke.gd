@@ -105,6 +105,8 @@ func _run() -> void:
 
 
 	_set_moving_attack("lacerante")
+	lacerante_frames = game.textures["player_lacerante_attack_network"]
+	right_frames = game.textures["player_lacerante_right"]
 	var moving_lacerante_tex: Texture2D = game._player_texture()
 	var moving_lacerante_snapshot: Vector2i = game._network_player_animation_snapshot(12345)
 	_check(not lacerante_frames.has(moving_lacerante_tex), "moving lacerante used attack sprite")

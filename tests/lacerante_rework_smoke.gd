@@ -1,12 +1,13 @@
 extends SceneTree
 
 var game: Node
+var failed := false
 
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:
+		failed = true
 		push_error(message)
-		quit(1)
 
 
 func _initialize() -> void:
@@ -26,6 +27,10 @@ func _advance_effects(seconds: float, step := 0.05) -> void:
 func _run() -> void:
 	game.selected_manifestation = 1
 	game._start_game()
+	game.set_process(false)
+	# This test starts after landing; startup deliberately blocks ability input.
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.manifestation_key = "lacerante"
 	game.time_alive = 10.0
 	game.player_damage = 100.0
@@ -108,5 +113,9 @@ func _run() -> void:
 	_check(String(details["traco"]).contains("Coagulo"), "manifestation screen does not explain Coagulum")
 	_check(String(details["funcao"]).contains("50%"), "manifestation screen does not explain uncommon enemy bonus")
 
-	print("LACERANTE_REWORK_SMOKE_OK reach=%.1f coagula=%d interval=%.3f uncommon_bonus=50%% button=true q_blade=true" % [Vector2(slash_points[-1]).distance_to(game.player_pos), game.lacerante_coagula, interval_with_coagula])
-	quit(0)
+	if not failed:
+		print("LACERANTE_REWORK_SMOKE_OK reach=%.1f coagula=%d interval=%.3f uncommon_bonus=50%% button=true q_blade=true" % [Vector2(slash_points[-1]).distance_to(game.player_pos), game.lacerante_coagula, interval_with_coagula])
+	game.queue_free()
+	await process_frame
+	await create_timer(0.5).timeout
+	quit(1 if failed else 0)

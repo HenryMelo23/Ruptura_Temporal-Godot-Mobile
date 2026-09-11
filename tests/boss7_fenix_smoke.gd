@@ -21,6 +21,7 @@ func _run() -> void:
 	await process_frame
 
 	game._start_game()
+	game.set_process(false)
 	game.current_phase = 7
 	game.mode = "game"
 	game.player_pos = game.WORLD_SIZE * 0.5 + Vector2(180, 120)
@@ -118,11 +119,11 @@ func _run() -> void:
 	_check(float(game.boss_hp) > 0.0 and float(game.boss_hp) < hp_before_rebirth, "Fenix rebirth HP ratio invalid")
 
 	if failed:
-		_cleanup()
+		await _cleanup()
 		quit(1)
 		return
 	print("BOSS7_FENIX_SMOKE_OK call hp attacks=[feather,crown] rebirth")
-	_cleanup()
+	await _cleanup()
 	quit(0)
 
 
@@ -132,6 +133,6 @@ func _cleanup() -> void:
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
-	if game.get_parent() == root:
-		root.remove_child(game)
-	game.free()
+	game.queue_free()
+	await process_frame
+	await create_timer(0.5).timeout

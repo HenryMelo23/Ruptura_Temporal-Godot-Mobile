@@ -61,6 +61,7 @@ const PLAYER_FIRE_DIRECTIONS: = ["south", "north", "northeast", "northwest", "so
 const CombatHud = preload("res://scripts/ui/combat_hud.gd")
 const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
 const LaceranteSprites = preload("res://scripts/lacerante_sprites.gd")
+const PhoenixFire = preload("res://scripts/vfx/phoenix_fire.gd")
 const PLAYER_FIRE_FRAME_SECONDS: float = 0.09
 # Directional canvases include headroom for the raised hand; body height stays 80.
 const PLAYER_FIRE_CANVAS_HEIGHT: float = 430.0 * 80.0 / 370.0
@@ -10909,6 +10910,13 @@ func _boss_farm_pressure_multiplier() -> float:
 
 
 func _reset_boss7_state() -> void:
+	boss7_ultimate_active = false
+	boss7_ultimate_used = false
+	boss7_ultimate_timer = 0.0
+	boss7_ultimate_tick_timer = 0.0
+	boss7_ultimate_quadrants = [0, 0, 0, 0]
+	boss7_whirlwind_active = false
+	boss7_whirlwind_shots_left = 0
 	boss7_state = BOSS7_STATE_FLY
 	boss7_state_timer = 0.0
 	boss7_velocity = Vector2.ZERO
@@ -13093,6 +13101,7 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 		attack_dir = _aim_direction()
 	if attack_dir.length() <= 0.05:
 		attack_dir = last_facing.normalized()
+	_set_player_attack_visual_dir(attack_dir)
 	last_attack_time = time_alive
 	_apply_aura_events(AuraSystem.on_attack(aura_state, {"pos": player_pos, "dir": attack_dir, "kind": "lacerante"}))
 
@@ -30061,14 +30070,7 @@ func _draw_boss7_flame_waves(camera: Vector2) -> void:
 			var dist: float = r * float(f.get("dist_mult", 1.0))
 			var p_pos: Vector2 = center + Vector2.from_angle(angle) * dist + Vector2(f.get("offset", Vector2.ZERO))
 			var size: float = maxf(2.0, float(f.get("size", 10.0)) * (1.0 - p * 0.55))
-			var layer: String = String(f.get("layer", "yellow"))
-			var color: Color = Color(1.0, 0.92, 0.28, base_alpha * 0.85)
-			if layer == "orange":
-				color = Color(1.0, 0.52, 0.08, base_alpha * 0.8)
-			elif layer == "red":
-				color = Color(0.92, 0.16, 0.04, base_alpha * 0.75)
-			draw_circle(p_pos, size, color)
-			draw_circle(p_pos, size * 0.5, Color(1.0, 1.0, 0.7, color.a))
+			PhoenixFire.draw_flame(self, p_pos, size * 1.8, size * 3.4, time_alive, angle * 5.0, base_alpha, Vector2.UP, _phase7_visual_budget_enabled())
 
 
 func _start_boss7_attack() -> void:
@@ -30191,6 +30193,9 @@ func _start_boss7_crown() -> void:
 
 
 func _start_boss7_rebirth() -> void:
+	boss7_ultimate_active = false
+	boss7_ultimate_timer = 0.0
+	boss7_ultimate_quadrants = [0, 0, 0, 0]
 	boss7_core_active = true
 	boss7_core_pos = boss_pos
 	boss7_core_hp_max = maxf(1.0, boss7_original_hp_max * BOSS7_CORE_HP_RATIO)
@@ -30281,13 +30286,14 @@ func _start_boss7_sky_fireballs() -> void:
 
 
 func _check_boss7_ultimate(_delta: float) -> void:
-	if boss7_ultimate_active:
+	if boss7_ultimate_active or boss7_ultimate_used or not _is_world_authority():
 		return
-	if boss_hp / maxf(1.0, boss_hp_max) <= 0.30 and boss_active and not boss7_core_active:
+	if current_phase == 7 and boss_hp > 0.0 and boss_hp / maxf(1.0, boss_hp_max) <= 0.30 and boss_active and not boss_dead and not boss7_core_active:
 		boss7_ultimate_active = true
-		boss7_ultimate_timer = 50.0
+		boss7_ultimate_used = true
+		boss7_ultimate_timer = PhoenixFire.DURATION
 		boss7_ultimate_tick_timer = 0.6
-		boss7_ultimate_quadrants = [1, 1, 1, 1]
+		_refresh_boss7_ultimate_quadrants()
 		_add_text("AQUECIMENTO GLOBAL!", boss_pos + Vector2(0, -130), Color(1.0, 0.2, 0.0), 2.0, 32)
 		_vibrate(250, 0.8)
 
@@ -30296,62 +30302,39 @@ func _update_boss7_ultimate(delta: float) -> void:
 	if not boss7_ultimate_active:
 		return
 	boss7_ultimate_timer = maxf(0.0, boss7_ultimate_timer - delta)
-	if boss7_ultimate_timer <= 0.0:
+	if boss7_ultimate_timer <= 0.0 or current_phase != 7 or not boss_active or boss_dead or boss7_core_active:
 		boss7_ultimate_active = false
+		boss7_ultimate_timer = 0.0
+		boss7_ultimate_quadrants = [0, 0, 0, 0]
 		return
+	_refresh_boss7_ultimate_quadrants()
+	if not _is_world_authority():
+		return
+	boss7_ultimate_tick_timer -= delta
+	if boss7_ultimate_tick_timer > 0.0:
+		return
+	boss7_ultimate_tick_timer = 0.6
+	var elapsed: float = PhoenixFire.DURATION - boss7_ultimate_timer
+	if PhoenixFire.dangerous(player_pos, WORLD_SIZE, elapsed) and _local_player_damageable_by_contact():
+		_damage_player(int(player_hp_max * 0.025 + 10), "boss7_global_warming")
+		_apply_boss_burn(1)
+	if _remote_player_damage_ready():
+		for peer_id in _targetable_remote_peer_ids():
+			var state: Dictionary = net_players_by_peer.get(peer_id, {})
+			if PhoenixFire.dangerous(Vector2(state.get("pos", Vector2(-10000, -10000))), WORLD_SIZE, elapsed):
+				_send_peer_damage(peer_id, int(float(state.get("hp_max", player_hp_max)) * 0.025 + 10), "boss7_global_warming")
 
-	var elapsed: float = 50.0 - boss7_ultimate_timer
-	var phase: int = 1
-	if elapsed >= 32.0:
-		phase = 3
-	elif elapsed >= 15.0:
-		phase = 2
 
-	for i in range(4):
-		boss7_ultimate_quadrants[i] = phase
-
-	if phase >= 3:
-		boss7_ultimate_tick_timer -= delta
-		if boss7_ultimate_tick_timer <= 0.0:
-			boss7_ultimate_tick_timer = 0.6
-			var center: Vector2 = WORLD_SIZE * 0.5
-			var quad_idx: int = 0
-			if player_pos.x >= center.x and player_pos.y < center.y:
-				quad_idx = 1
-			elif player_pos.x < center.x and player_pos.y >= center.y:
-				quad_idx = 2
-			elif player_pos.x >= center.x and player_pos.y >= center.y:
-				quad_idx = 3
-			else:
-				quad_idx = 0
-
-			if boss7_ultimate_quadrants[quad_idx] >= 3 and _local_player_damageable_by_contact():
-				_damage_player(int(player_hp_max * 0.025 + 10), "boss7_global_warming")
-				_apply_boss_burn(1)
+func _refresh_boss7_ultimate_quadrants() -> void:
+	boss7_ultimate_quadrants.resize(4)
+	for quadrant in range(4):
+		boss7_ultimate_quadrants[quadrant] = PhoenixFire.phase(PhoenixFire.DURATION - boss7_ultimate_timer, quadrant) if boss7_ultimate_active else 0
 
 
 func _draw_boss7_ultimate(camera: Vector2) -> void:
-	if not boss7_ultimate_active:
+	if not boss7_ultimate_active or current_phase != 7 or not boss_active or boss_dead or boss7_core_active:
 		return
-	var half_size: Vector2 = WORLD_SIZE * 0.5
-	var quads: Array[Rect2] = [
-		Rect2(-camera, half_size),
-		Rect2(Vector2(half_size.x, 0) - camera, half_size),
-		Rect2(Vector2(0, half_size.y) - camera, half_size),
-		Rect2(half_size - camera, half_size)
-	]
-	for i in range(4):
-		var phase: int = boss7_ultimate_quadrants[i]
-		if phase <= 0:
-			continue
-		var rect: Rect2 = quads[i]
-		var col: Color = Color(1.0, 0.9, 0.2, 0.08 + sin(time_alive * 4.0) * 0.02)
-		if phase == 2:
-			col = Color(1.0, 0.5, 0.05, 0.16 + sin(time_alive * 6.0) * 0.04)
-		elif phase >= 3:
-			col = Color(0.95, 0.12, 0.04, 0.26 + sin(time_alive * 8.0) * 0.06)
-		draw_rect(rect, col, true)
-		draw_rect(rect, Color(col.r, col.g, col.b, col.a * 1.5), false, 2.5)
+	PhoenixFire.draw_quadrants(self, camera, get_viewport_rect().size, WORLD_SIZE, PhoenixFire.DURATION - boss7_ultimate_timer, time_alive, _phase7_visual_budget_enabled())
 
 
 func _draw_boss7_ground_indicators(camera: Vector2) -> void:
@@ -47243,31 +47226,13 @@ func _draw_projectiles(camera: Vector2) -> void :
 		elif bullet.get("type") == "boss7_dive_fireball":
 			var pos: Vector2 = Vector2(bullet["pos"]) - camera
 			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.DOWN)).normalized()
-			var side: Vector2 = dir.orthogonal()
 			var phase: float = float(bullet.get("phase", 0.0))
 			var radius: float = float(bullet.get("radius", BOSS7_DIVE_FIREBALL_RADIUS))
-			var wobble: float = sin(phase * 1.7) * 3.0
-			var flame_shape: = PackedVector2Array([
-				pos + dir * (radius * 1.05),
-				pos + side * (radius * 0.82 + sin(phase) * 3.0) - dir * 3.0,
-				pos - dir * (radius * 0.78 + wobble),
-				pos - side * (radius * 0.58 + cos(phase * 0.8) * 4.0) - dir * 2.0
-			])
-			draw_circle(pos, radius * 1.65, Color(1.0, 0.12, 0.02, 0.22))
-			draw_line(pos - dir * radius * 0.8, pos - dir * radius * 2.35 + side * sin(phase * 2.2) * 8.0, Color(1.0, 0.18, 0.02, 0.58), radius * 0.34, true)
-			draw_line(pos - dir * radius * 0.4, pos - dir * radius * 1.85 - side * cos(phase * 2.0) * 6.0, Color(1.0, 0.66, 0.12, 0.5), radius * 0.2, true)
-			draw_colored_polygon(flame_shape, Color(1.0, 0.25, 0.04, 0.96))
-			draw_polyline(PackedVector2Array([flame_shape[0], flame_shape[1], flame_shape[2], flame_shape[3], flame_shape[0]]), Color(1.0, 0.82, 0.24, 0.92), 2.8, true)
-			draw_circle(pos, radius * 0.46, Color(1.0, 0.94, 0.38, 0.92))
-			draw_arc(pos, radius * 1.2, phase + time_alive * 5.0, phase + time_alive * 5.0 + PI * 1.35, 34, Color(1.0, 0.58, 0.08, 0.82), 3.0, true)
+			PhoenixFire.draw_projectile(self, pos, dir, radius, time_alive, phase, _phase7_visual_budget_enabled())
 		elif bullet.get("type") == "phase7_fireball":
 			var pos: Vector2 = Vector2(bullet["pos"]) - camera
 			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-			var side: Vector2 = dir.orthogonal()
-			draw_circle(pos, 16.0, Color(1.0, 0.25, 0.05, 0.35))
-			draw_circle(pos, 10.0, Color(1.0, 0.55, 0.1))
-			draw_circle(pos, 5.0, Color(1.0, 0.95, 0.4))
-			draw_line(pos - dir * 14.0, pos - dir * 28.0 + side * sin(time_alive * 20.0) * 3.0, Color(1.0, 0.3, 0.05, 0.7), 4.0, true)
+			PhoenixFire.draw_projectile(self, pos, dir, float(bullet.get("radius", 14.0)), time_alive, float(bullet.get("phase", 0.0)), _phase7_visual_budget_enabled())
 		elif bullet.get("type") == "pyro_wall_seed":
 			var pos: = Vector2(bullet["pos"]) - camera
 			var dir: = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
@@ -47593,7 +47558,8 @@ func _draw_player_start_down(camera: Vector2) -> bool:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	else:
 		var elapsed: float = PLAYER_START_DOWN_LAND_TIME - player_start_down_landing_timer
-		var land_idx: int = 3 + int(floor(elapsed / PLAYER_START_DOWN_FRAME_TIME)) % 3
+		var landing_frame: int = int(floor(elapsed / PLAYER_START_DOWN_FRAME_TIME))
+		var land_idx: int = 3 + (clampi(landing_frame, 0, 2) if manifestation_key == "lacerante" else landing_frame % 3)
 		tex = frames[clampi(land_idx, 0, frames.size() - 1)]
 		var squash: float = sin(clampf(elapsed / 0.32, 0.0, 1.0) * PI)
 		draw_size = Vector2(70.0 + squash * 10.0, 86.0 - squash * 8.0)
@@ -47602,11 +47568,17 @@ func _draw_player_start_down(camera: Vector2) -> bool:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if tex == null:
 		return false
-	_draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, _should_flip_player_sprite())
+	if manifestation_key == "lacerante":
+		_draw_entity_by_height_rotated(tex, center + air_offset, LaceranteSprites.DRAW_HEIGHT, 0.0)
+	else:
+		_draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, _should_flip_player_sprite())
 	return true
 
 
 func _should_flip_player_sprite() -> bool:
+	if manifestation_key == "lacerante":
+		# Dedicated left poses preserve the anatomical side of the eyepatch.
+		return false
 	var move = _read_move()
 	if lacerante_preparing and move.length() <= 0.12:
 		return lacerante_prepare_dir.x < -0.1
@@ -49542,6 +49514,7 @@ func _draw_boss_attacks(camera: Vector2) -> void :
 			BOSS7_ATTACK_FEATHER:
 				var pos7: = Vector2(attack.get("pos", boss_pos)) - camera
 				var dir7: = Vector2(attack.get("dir", Vector2.LEFT)).normalized()
+				PhoenixFire.draw_flame(self, pos7, 12.0, 39.0, time_alive, float(attack.get("phase", 0.0)), 0.76, -dir7, _phase7_visual_budget_enabled())
 				var side7: = dir7.orthogonal()
 				var feather_tip: = pos7 + dir7 * 14.0
 				var feather_tail: = pos7 - dir7 * 13.0
@@ -49553,15 +49526,18 @@ func _draw_boss_attacks(camera: Vector2) -> void :
 				var dir_wing: = Vector2(attack.get("dir", Vector2.LEFT)).normalized()
 				var p_wing: = clampf(age / maxf(0.01, float(attack.get("duration", 1.0))), 0.0, 1.0)
 				var facing7: = dir_wing.angle()
+				var flame_count: int = 8 if _phase7_visual_budget_enabled() else 16
+				for flame_index in range(flame_count):
+					var angle: float = lerpf(facing7 - BOSS7_WING_HALF_ANGLE, facing7 + BOSS7_WING_HALF_ANGLE, float(flame_index) / (flame_count - 1))
+					var flame_pos: Vector2 = origin7 + Vector2.from_angle(angle) * BOSS7_WING_RANGE * (0.25 + p_wing * 0.7)
+					PhoenixFire.draw_flame(self, flame_pos, 24.0, 52.0, time_alive, float(flame_index), 1.0 - p_wing * 0.8, Vector2.UP, _phase7_visual_budget_enabled())
 				draw_arc(origin7, BOSS7_WING_RANGE * (0.75 + p_wing * 0.25), facing7 - BOSS7_WING_HALF_ANGLE, facing7 + BOSS7_WING_HALF_ANGLE, 46, Color(1.0, 0.62, 0.12, 0.52 * (1.0 - p_wing * 0.4)), 14.0, true)
 				draw_arc(origin7, BOSS7_WING_RANGE * 0.55, facing7 - BOSS7_WING_HALF_ANGLE * 0.72, facing7 + BOSS7_WING_HALF_ANGLE * 0.72, 38, Color(1.0, 0.94, 0.36, 0.42), 4.0, true)
 			BOSS7_ATTACK_DIVE_TRAIL:
 				var a7: = Vector2(attack.get("a", boss_pos)) - camera
 				var b7: = Vector2(attack.get("b", boss_pos)) - camera
 				var fade7: = 1.0 - clampf(age / maxf(0.01, float(attack.get("duration", 1.0))), 0.0, 1.0)
-				draw_line(a7, b7, Color(0.28, 0.03, 0.01, 0.3 * fade7), 54.0, true)
-				draw_line(a7, b7, Color(1.0, 0.26, 0.04, 0.46 * fade7), 34.0, true)
-				draw_line(a7, b7, Color(1.0, 0.82, 0.18, 0.42 * fade7), 8.0, true)
+				PhoenixFire.draw_strip(self, a7, b7, 34.0, time_alive, fade7, _phase7_visual_budget_enabled())
 			BOSS7_ATTACK_THERMAL:
 				var p_thermal: = clampf(age / BOSS7_THERMAL_WARNING, 0.0, 1.0)
 				for spot in Array(attack.get("spots", [])):
@@ -49570,6 +49546,10 @@ func _draw_boss_attacks(camera: Vector2) -> void :
 					draw_arc(thermal_screen, BOSS7_THERMAL_RADIUS * (0.3 + p_thermal * 0.7), -time_alive * 3.0, TAU - time_alive * 3.0, 64, Color(1.0, 0.6, 0.12, 0.72), 3.0, true)
 					if not bool(attack.get("fired", false)):
 						draw_line(boss_pos - camera, thermal_screen, Color(1.0, 0.44, 0.08, 0.16 + p_thermal * 0.28), 3.0, true)
+						PhoenixFire.draw_flame(self, thermal_screen, 16.0, 8.0 + 22.0 * p_thermal, time_alive, float(thermal_screen.x), 0.35 * p_thermal, Vector2.UP, true)
+					else:
+						var burst_fade: float = 1.0 - clampf((age - BOSS7_THERMAL_WARNING) / maxf(0.01, float(attack.get("duration", 1.25)) - BOSS7_THERMAL_WARNING), 0.0, 1.0)
+						PhoenixFire.draw_burst(self, thermal_screen, BOSS7_THERMAL_RADIUS * 0.72, time_alive, burst_fade, _phase7_visual_budget_enabled())
 			BOSS7_ATTACK_ASH_RAIN:
 				for drop in Array(attack.get("drops", [])):
 					var drop_data: Dictionary = drop
@@ -49581,10 +49561,11 @@ func _draw_boss_attacks(camera: Vector2) -> void :
 						draw_circle(ground, 42.0 * (0.45 + p_drop * 0.55), Color(0.95, 0.38, 0.08, 0.1 + p_drop * 0.16))
 						draw_arc(ground, 42.0, -time_alive * 2.8, TAU - time_alive * 2.8, 42, Color(1.0, 0.62, 0.16, 0.76), 2.0)
 						var sky: = ground + Vector2(0, -180.0 + p_drop * 180.0)
-						draw_circle(sky, 8.0 + p_drop * 4.0, Color(0.8, 0.34, 0.12, 0.82))
+						PhoenixFire.draw_projectile(self, sky, Vector2.DOWN, 8.0 + p_drop * 4.0, time_alive, float(drop_data.get("phase", 0.0)), _phase7_visual_budget_enabled())
 					else:
 						var fade_drop: = 1.0 - clampf((drop_age - warn) / 0.52, 0.0, 1.0)
 						draw_circle(ground, 38.0 + 16.0 * (1.0 - fade_drop), Color(0.38, 0.28, 0.22, 0.16 * fade_drop))
+						PhoenixFire.draw_burst(self, ground, 35.0, time_alive, fade_drop, _phase7_visual_budget_enabled())
 			BOSS7_ATTACK_CROWN:
 				var crown_alpha: = 0.35 + 0.25 * sin(time_alive * 9.0)
 				for lane in range(6):
@@ -49595,6 +49576,9 @@ func _draw_boss_attacks(camera: Vector2) -> void :
 					var b_crown: Vector2 = boss_pos + Vector2.from_angle(angle7) * 360.0 - camera
 					draw_line(a_crown, b_crown, Color(0.24, 0.04, 0.01, 0.22), 64.0, true)
 					draw_line(a_crown, b_crown, line_color, 8.0 if fired else 3.0, true)
+					if fired:
+						var fire_age: float = age - (1.1 if lane % 2 == 0 else 1.58)
+						PhoenixFire.draw_strip(self, a_crown, b_crown, 26.0, time_alive, clampf(1.0 - fire_age / 0.6, 0.0, 1.0), _phase7_visual_budget_enabled())
 			BOSS6_ABILITY_ACID_BLOOM, BOSS6_ABILITY_INCUBATION:
 				var warn_time: = BOSS6_ACID_BLOOM_FALL_TIME if kind == BOSS6_ABILITY_ACID_BLOOM else 0.9
 				var p: = clampf(age / warn_time, 0.0, 1.0)
@@ -54021,9 +54005,8 @@ func _draw_wrapped_clamped(text: String, rect: Rect2, size: int, color: Color, m
 
 func _player_texture() -> Texture2D:
 	var move = _read_move()
-	var is_lacerante: bool = manifestation_key == "lacerante"
 	if player_freeze_visual_timer > 0.0:
-		var frozen_frames: Array = textures.get("player_lacerante_frozen" if is_lacerante else "player_frozen", [])
+		var frozen_frames: Array = textures.get("player_lacerante_frozen" if manifestation_key == "lacerante" else "player_frozen", [])
 		if not frozen_frames.is_empty():
 			return frozen_frames[clampi(_frozen_player_frame_index(), 0, frozen_frames.size() - 1)]
 	var prismatica_secondary: = _active_prismatica_secondary()
@@ -54031,26 +54014,14 @@ func _player_texture() -> Texture2D:
 		var prismatica_tex: = _prismatica_ultimate_frame_texture(prismatica_secondary)
 		if prismatica_tex != null:
 			return prismatica_tex
+	if manifestation_key == "lacerante":
+		var animation: Vector2i = LaceranteSprites.snapshot(self, Time.get_ticks_msec())
+		var frames: Array = textures.get(LaceranteSprites.remote_key(self, animation.x), [])
+		return frames[animation.y] if not frames.is_empty() else null
 	if time_alive - last_damage_time < 0.35:
-		if is_lacerante:
-			return _lacerante_texture("damage", 70, time_alive - last_damage_time)
 		return _frame_texture_relative("player_damage", time_alive - last_damage_time, 70, "player_idle")
-	if lacerante_preparing and is_lacerante and move.length() <= 0.12:
-		return _lacerante_prepare_texture()
 	if _player_attack_pose_active():
-		if is_lacerante:
-			return _lacerante_combo_texture(time_alive - last_attack_time)
 		return _player_fire_texture_for_current_attack(time_alive - last_attack_time)
-	if is_lacerante:
-		if move.y < -0.1:
-			return _lacerante_texture("up", 120)
-		if move.y > 0.1:
-			return _lacerante_texture("down", 120)
-		if move.x < -0.1 or (move.length() <= 0.12 and last_facing.x < -0.1):
-			return _lacerante_texture("left", 105)
-		if move.x > 0.1:
-			return _lacerante_texture("right", 105)
-		return _lacerante_texture("idle", 145)
 	var idle_speed = 115 if time_alive - last_attack_time < 0.65 or time_alive - last_dash_time < 1.0 else 175
 	if move.y < -0.1:
 		return _frame_texture(_player_animation_texture_key("up", "player_up"), 120, "player_idle")
@@ -54088,58 +54059,11 @@ func _frame_texture_relative(key: String, elapsed_time: float, period_ms: int, f
 	return frames[idx]
 
 
-func _lacerante_combo_texture(elapsed: float) -> Texture2D:
-	if manifestation_key == "lacerante":
-		var attack_key := "player_lacerante_attack_left" if _lacerante_attack_direction().x < -0.1 else "player_lacerante_attack_right"
-		var generated: Array = textures.get(attack_key, [])
-		if generated.size() >= 6:
-			var generated_idx := posmod(int(lacerante_combo_visual), 3) * 2 + (1 if int(elapsed * 1000.0) >= 120 else 0)
-			return generated[clampi(generated_idx, 0, generated.size() - 1)]
-	var all_frames: Array = textures.get("player_lacerar", [])
-	if all_frames.size() < 6:
-		return _frame_texture_relative("player_lacerar", elapsed, 85, "player_fire")
-	var combo_idx = posmod(int(lacerante_combo_visual), 3)
-	var base_idx = combo_idx * 2
-	var frame_a: Texture2D = all_frames[base_idx]
-	var frame_b: Texture2D = all_frames[base_idx + 1]
-	var elapsed_ms = int(elapsed * 1000.0)
-	if elapsed_ms < 120:
-		return frame_a
-	return frame_b
-
-
-func _lacerante_prepare_texture() -> Texture2D:
-	if manifestation_key == "lacerante":
-		var attack_key := "player_lacerante_attack_left" if lacerante_prepare_dir.x < -0.1 else "player_lacerante_attack_right"
-		var generated: Array = textures.get(attack_key, [])
-		if generated.size() >= 6:
-			var generated_idx := posmod(int(lacerante_prepare_stage), 3) * 2 + clampi(lacerante_prepare_frame, 0, 1)
-			return generated[clampi(generated_idx, 0, generated.size() - 1)]
-	var all_frames: Array = textures.get("player_lacerar", [])
-	if all_frames.size() < 6:
-		return _frame_texture_relative("player_lacerar", lacerante_prepare_timer, 85, "player_fire")
-	var combo_idx = posmod(int(lacerante_prepare_stage), 3)
-	var frame_idx = combo_idx * 2 + clamp(lacerante_prepare_frame, 0, 1)
-	return all_frames[frame_idx]
-
-
 func _lacerante_attack_direction() -> Vector2:
 	var direction: Vector2 = player_attack_visual_dir if player_attack_visual_dir.length() > 0.05 else last_facing
 	if lacerante_preparing and lacerante_prepare_dir.length() > 0.05:
 		direction = lacerante_prepare_dir
 	return direction.normalized() if direction.length() > 0.05 else Vector2.RIGHT
-
-
-func _lacerante_texture(animation: String, period_ms: int, elapsed: float = -1.0) -> Texture2D:
-	var frames: Array = textures.get("player_lacerante_" + animation, [])
-	if frames.is_empty():
-		return null
-	var frame_index: int
-	if elapsed >= 0.0:
-		frame_index = int(elapsed * 1000.0 / max(1, period_ms))
-	else:
-		frame_index = int(Time.get_ticks_msec() / max(1, period_ms))
-	return frames[posmod(frame_index, frames.size())]
 
 
 func _camera(viewport: Vector2) -> Vector2:
@@ -60578,6 +60502,8 @@ func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void :
 		_go_to_menu()
 
 func _net_player_texture() -> Texture2D:
+	if LaceranteSprites.is_manifestation(self, net_player_manifestation):
+		return _net_player_texture_for_state(net_player_anim_state, net_player_frame_idx, net_player_manifestation)
 	var key: = "player_idle"
 	var fallback: = "player_idle"
 	var is_lacerante: bool = LaceranteSprites.is_manifestation(self, net_player_manifestation)
@@ -60607,6 +60533,8 @@ func _net_player_texture() -> Texture2D:
 
 
 func _network_player_animation_snapshot(now_ms: int) -> Vector2i:
+	if manifestation_key == "lacerante":
+		return LaceranteSprites.snapshot(self, now_ms)
 	var move: = _read_move()
 	if player_freeze_visual_timer > 0.0:
 		return Vector2i(NET_ANIM_FROZEN, _frozen_player_frame_index())
@@ -60653,6 +60581,7 @@ func _draw_phantom_player(camera: Vector2) -> void :
 				"render_pos": net_player_render_pos, "dead": net_player_dead, "has_snapshot": net_player_has_snapshot, 
 				"anim_state": net_player_anim_state, "frame_idx": net_player_frame_idx, "flip_h": net_player_flip_h, 
 				"move": net_player_move, "name": net_player_name, "stealthed": false, 
+				"manifestation": net_player_manifestation,
 				"hp": net_player_hp, "hp_max": net_player_hp_max
 			})
 		return
@@ -60681,6 +60610,12 @@ func _draw_remote_player_state(camera: Vector2, peer_id: int, state: Dictionary)
 		_draw_leader_crown(p + Vector2(0, -62), 0.72, accent)
 	_draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], p + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
 	var tex: = _net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)))
+	var is_lacerante: bool = LaceranteSprites.is_manifestation(self, int(state.get("manifestation", -1)))
+	if is_lacerante:
+		flip_h = false
+		if tex != null:
+			size = tex.get_size() * (LaceranteSprites.DRAW_HEIGHT / tex.get_height())
+			rect = Rect2(p - size * 0.5, size)
 	var directional_fire: bool = anim_state == NET_ANIM_FIRE and frame_idx >= 2 and frame_idx < 14
 	if directional_fire and tex != null:
 		size = tex.get_size() * (PLAYER_FIRE_CANVAS_HEIGHT / tex.get_height())
@@ -60701,7 +60636,10 @@ func _draw_remote_player_state(camera: Vector2, peer_id: int, state: Dictionary)
 		draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var alpha: = 0.34 if bool(state.get("stealthed", false)) else 0.86
-	_draw_entity_fit_flipped(tex, rect.get_center(), size, flip_h, Color(accent.r, accent.g, accent.b, alpha))
+	if is_lacerante:
+		_draw_entity_by_height_rotated(tex, p, LaceranteSprites.DRAW_HEIGHT, rotation, Color(1.0, 1.0, 1.0, alpha))
+	else:
+		_draw_entity_fit_flipped(tex, rect.get_center(), size, flip_h, Color(accent.r, accent.g, accent.b, alpha))
 
 
 func _remote_player_health_ratio(state: Dictionary) -> float:
@@ -60740,6 +60678,9 @@ func _draw_ally_health_bar(center: Vector2, width: float, ratio: float, accent: 
 
 
 func _net_player_texture_for_state(anim_state: int, frame_idx: int, _manifestation_index: int = -1) -> Texture2D:
+	if LaceranteSprites.is_manifestation(self, _manifestation_index):
+		var lacerante_frames: Array = textures.get(LaceranteSprites.remote_key(self, anim_state), [])
+		return lacerante_frames[posmod(frame_idx, lacerante_frames.size())] if not lacerante_frames.is_empty() else null
 	var key: = "player_idle"
 	var is_lacerante: bool = LaceranteSprites.is_manifestation(self, _manifestation_index)
 	match anim_state:
@@ -60845,6 +60786,9 @@ func _pack_net_boss_visuals() -> Dictionary:
 		"boss_attacks": boss_attacks.duplicate(true), 
 		"boss_transition_waves": boss_transition_waves.duplicate(true)
 	}
+	if current_phase == 7:
+		# One clock reproduces the whole heat field; flames stay local to each client.
+		packet["b7_heat"] = boss7_ultimate_timer if boss7_ultimate_active else -1.0
 	match current_phase:
 		1:
 			packet.merge({
@@ -61238,6 +61182,10 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	if not snapshot_data is Dictionary:
 		return
 	var data: Dictionary = snapshot_data
+	var heat_timer: float = clampf(float(data.get("b7_heat", -1.0)), -1.0, PhoenixFire.DURATION)
+	boss7_ultimate_active = current_phase == 7 and heat_timer > 0.0
+	boss7_ultimate_timer = maxf(0.0, heat_timer) if boss7_ultimate_active else 0.0
+	_refresh_boss7_ultimate_quadrants()
 	run_leader_peer_id = int(data.get("run_leader_peer_id", run_leader_peer_id))
 	var incoming_arauto = data.get("arauto", arauto)
 	arauto = incoming_arauto.duplicate(true) if incoming_arauto is Dictionary else {}

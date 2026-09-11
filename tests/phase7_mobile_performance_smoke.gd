@@ -21,6 +21,7 @@ func _run() -> void:
 	await process_frame
 
 	game._start_game()
+	game.set_process(false)
 	game.mode = "game"
 	game.current_phase = 7
 	game.gfx_low_resource = true
@@ -65,11 +66,11 @@ func _run() -> void:
 	_check(game.phase7_ember_patches.size() <= game.PHASE7_EMBER_PATCH_MEMORY_CAP, "memory saver ember patch cap was not enforced")
 
 	if failed:
-		_cleanup()
+		await _cleanup()
 		quit(1)
 		return
 	print("PHASE7_MOBILE_PERFORMANCE_OK patches=%d elapsed_ms=%.2f" % [game.phase7_ember_patches.size(), elapsed_ms])
-	_cleanup()
+	await _cleanup()
 	quit(0)
 
 
@@ -79,6 +80,6 @@ func _cleanup() -> void:
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
-	if game.get_parent() == root:
-		root.remove_child(game)
-	game.free()
+	game.queue_free()
+	await process_frame
+	await create_timer(0.5).timeout
