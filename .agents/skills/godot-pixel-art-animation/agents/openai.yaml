@@ -1,0 +1,4 @@
+interface:
+  display_name: "Godot Pixel Art Animation"
+  short_description: "Alive pixel-art animation craft for Godot"
+  default_prompt: "Use $godot-pixel-art-animation to design and implement expressive pixel-art animation in Godot."

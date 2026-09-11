@@ -1966,6 +1966,8 @@ var net_report_last_role: String = ""
 var net_player_snapshot_last_ms: int = 0
 var net_world_snapshot_last_ms: int = 0
 var net_world_jitter_ms: float = 0.0
+var net_world_arrival_interval_ms: float = 0.0
+var net_world_visual_sequence: int = 0
 var net_transport_last_activity_ms: int = 0
 var net_transport_health: String = RTTransportStateScript.HEALTH_WARMING
 var net_transport_health_last: String = RTTransportStateScript.HEALTH_WARMING
@@ -11978,8 +11980,13 @@ func _update_network_ability_replica(visual: Dictionary, delta: float) -> void :
 	if int(visual.get("action", -1)) != NET_ABILITY_SECONDARY:
 		return
 	var kind: = String(visual.get("kind", ""))
-	if int(visual.get("source", 0)) == net_player_peer_id and kind in ["eletrica", "prismatica", "retornante", "cartografica", "mnesica", "ressonante", "contratual"]:
-		visual["center"] = net_player_render_pos
+	if kind in ["eletrica", "prismatica", "retornante", "cartografica", "mnesica", "ressonante", "contratual"]:
+		var source_peer: int = int(visual.get("source", 0))
+		var source_state: Dictionary = net_players_by_peer.get(source_peer, {})
+		if not source_state.is_empty():
+			visual["center"] = Vector2(source_state.get("render_pos", source_state.get("pos", visual.get("center", Vector2.ZERO))))
+		elif source_peer == net_player_peer_id:
+			visual["center"] = net_player_render_pos
 	visual["active_time"] = float(visual.get("active_time", 0.0)) + delta
 	visual["angle"] = float(visual.get("angle", 0.0)) + SECONDARY_PRISMATICA_BEAM_SPIN_SPEED * delta
 	visual["charge"] = float(visual.get("charge", 0.0)) + delta
@@ -23845,14 +23852,16 @@ func _update_remote_bullets(delta: float) -> void :
 		b["age"] = float(b.get("age", 0.0)) + delta
 		b["phase"] = float(b.get("phase", 0.0)) + delta * 8.0
 		if String(b.get("motion_mode", "linear")) == "returning":
+			var owner_state: Dictionary = net_players_by_peer.get(int(b.get("source", 0)), {})
+			var owner_pos: Vector2 = Vector2(owner_state.get("render_pos", owner_state.get("pos", net_player_render_pos)))
 			if String(b.get("state", "ida")) == "ida" and float(b["age"]) > 0.58:
 				b["state"] = "volta"
 			if String(b.get("state", "ida")) == "volta":
-				var return_dir: = (net_player_render_pos - Vector2(b["pos"])).normalized()
+				var return_dir: = (owner_pos - Vector2(b["pos"])).normalized()
 				if return_dir.length() > 0.01:
 					b["dir"] = return_dir
 			b["pos"] += b["dir"] * float(b["speed"]) * delta
-			if String(b.get("state", "ida")) == "volta" and Vector2(b["pos"]).distance_to(net_player_render_pos) < 34.0:
+			if String(b.get("state", "ida")) == "volta" and Vector2(b["pos"]).distance_to(owner_pos) < 34.0:
 				b["life"] = 0.0
 		else:
 			b["pos"] += b["dir"] * float(b["speed"]) * delta
@@ -41223,7 +41232,8 @@ func _draw_manifest_mp(viewport: Vector2) -> void :
 
 	var panel_top: float = header_y + 58.0
 	var panel: Rect2 = Rect2(margin, panel_top, viewport.x - margin * 2.0, viewport.y - panel_top - margin)
-	_draw_holo_panel(panel, color, true, 0.36)
+	draw_rect(panel, Color(0.015, 0.025, 0.028, 0.9))
+	draw_line(panel.position, Vector2(panel.end.x, panel.position.y), color, 2.0)
 	var inner_pad: float = clampf(panel.size.x * 0.018, 16.0, 24.0)
 	var team_w: float = clampf(panel.size.x * 0.31, 256.0, 384.0)
 	if viewport.x < 1040.0:
@@ -41268,7 +41278,7 @@ func _draw_manifest_mp(viewport: Vector2) -> void :
 
 func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color) -> void :
 	var item: Dictionary = active_items[active_selected]
-	_draw_holo_panel(rect, accent, true, 0.34)
+	draw_rect(rect, Color(0.02, 0.035, 0.04, 0.82))
 	var header_h: float = 58.0
 	var title: String = String(item.get("name", "???")).to_upper()
 	var caption: String = "ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA"
@@ -41276,7 +41286,7 @@ func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_s
 	draw_string(font, rect.position + Vector2(20.0, 50.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, _readable_text_size(9), Color(0.72, 0.9, 0.96, 0.82))
 	draw_line(rect.position + Vector2(18.0, header_h), rect.position + Vector2(rect.size.x - 18.0, header_h), Color(accent.r, accent.g, accent.b, 0.34), 1.0)
 
-	var carousel_rect: Rect2 = Rect2(rect.position.x + 16.0, rect.position.y + header_h + 10.0, rect.size.x - 32.0, rect.size.y * 0.48)
+	var carousel_rect: Rect2 = Rect2(rect.position.x + 16.0, rect.position.y + header_h + 10.0, rect.size.x - 32.0, maxf(100.0, rect.size.y - 258.0))
 	var center_x: float = carousel_rect.get_center().x
 	var center_y: float = carousel_rect.get_center().y
 	var card_w: float = clampf(rect.size.x * 0.17, 78.0, 124.0)
@@ -41325,9 +41335,7 @@ func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_s
 
 
 func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
-	_draw_holo_panel(rect, Color(0.0, 1.0, 0.82), false, 0.24)
-	draw_string(font, rect.position + Vector2(16.0, 28.0), "EQUIPE", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 32.0, _readable_text_size(16), Color.WHITE)
-	draw_string(font, rect.position + Vector2(16.0, 48.0), "escolhas sincronizadas", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 32.0, _readable_text_size(9), Color(0.72, 0.9, 0.96, 0.78))
+	draw_line(rect.position, Vector2(rect.position.x, rect.end.y), Color(accent, 0.32), 1.0)
 	var local_state: Dictionary = {
 		"stage": manifest_select_stage,
 		"manifestation": selected_manifestation,
@@ -41342,10 +41350,16 @@ func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
 		rows.append({"peer_id": int(peer_id_value), "state": mp_manifest_state_by_peer[peer_id_value], "local": false})
 	if rows.size() == 1:
 		rows.append({"peer_id": 0, "state": {"stage": mp_remote_manifest_stage, "manifestation": mp_remote_manifestation, "aura": mp_remote_aura, "ready": mp_remote_ready, "name": "Parceiro"}, "local": false})
+	var ready_count: int = 0
+	for row in rows:
+		if bool(Dictionary(row["state"]).get("ready", false)):
+			ready_count += 1
+	_draw_online_label("EQUIPE  %d/%d PRONTOS" % [ready_count, rows.size()], Rect2(rect.position + Vector2(16, 8), Vector2(rect.size.x - 32, 26)), 18, Color.WHITE)
+	_draw_online_label("Manifestacao + espectro", Rect2(rect.position + Vector2(16, 36), Vector2(rect.size.x - 32, 22)), 14, Color(0.64, 0.8, 0.83))
 	var gap: float = 10.0
 	var list_top: float = rect.position.y + 66.0
 	var available_h: float = rect.end.y - list_top - 12.0
-	var row_h: float = clampf((available_h - gap * float(maxi(0, rows.size() - 1))) / float(maxi(1, rows.size())), 92.0, 112.0)
+	var row_h: float = minf(112.0, (available_h - gap * float(maxi(0, rows.size() - 1))) / float(maxi(1, rows.size())))
 	for i in range(rows.size()):
 		if list_top + float(i) * (row_h + gap) + row_h > rect.end.y - 6.0:
 			break
@@ -41363,8 +41377,9 @@ func _draw_manifest_peer_summary_row(rect: Rect2, peer_id: int, state: Dictionar
 	var color: Color = _manifest_select_item_color(aura_item, true) if aura_view else _manifest_select_item_color(manifest_item, false)
 	var manifest_color: Color = _manifest_select_item_color(manifest_item, false)
 	var aura_color: Color = _manifest_select_item_color(aura_item, true)
-	_draw_holo_panel(rect, color, bool(state.get("ready", false)), 0.58)
-	var icon_size: float = minf(rect.size.y - 20.0, 74.0)
+	draw_rect(rect, Color(0.035, 0.06, 0.065, 0.96))
+	draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), color)
+	var icon_size: float = minf(rect.size.y - 28.0, 42.0)
 	var icon_rect: Rect2 = Rect2(rect.position + Vector2(12, 10), Vector2(icon_size, icon_size))
 	var manifest_icon: Texture2D = _manifest_select_item_texture(manifest_item, false)
 	var aura_icon: Texture2D = _manifest_select_item_texture(aura_item, true)
@@ -41374,16 +41389,17 @@ func _draw_manifest_peer_summary_row(rect: Rect2, peer_id: int, state: Dictionar
 		var aura_rect := Rect2(icon_rect.end - Vector2(icon_size * 0.52, icon_size * 0.52), Vector2(icon_size * 0.46, icon_size * 0.46))
 		_draw_holo_panel(aura_rect.grow(3.0), aura_color, true, 0.56)
 		_draw_texture_contain(aura_icon, aura_rect, Color.WHITE)
-	var text_x: float = icon_rect.end.x + 16.0
+	var text_x: float = icon_rect.end.x + 10.0
 	var text_w: float = rect.end.x - text_x - 14.0
 	var player_label: String = String(state.get("name", "Player %d" % peer_id))
 	if is_local:
-		player_label = "VOCE // " + player_label
-	draw_string(font, Vector2(text_x, rect.position.y + 27.0), player_label.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size(player_label.to_upper(), text_w, 14, 10), Color.WHITE)
-	draw_string(font, Vector2(text_x, rect.position.y + 47.0), "MANIFESTACAO", HORIZONTAL_ALIGNMENT_LEFT, text_w, 9, Color(manifest_color.r, manifest_color.g, manifest_color.b, 0.82))
-	draw_string(font, Vector2(text_x, rect.position.y + 64.0), String(manifest_item.get("name", "???")), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size(String(manifest_item.get("name", "???")), text_w, 13, 9), manifest_color)
-	draw_string(font, Vector2(text_x, rect.position.y + minf(84.0, rect.size.y - 12.0)), "ESPECTRO: %s" % String(aura_item.get("name", "???")), HORIZONTAL_ALIGNMENT_LEFT, text_w, _fit_text_size("ESPECTRO: %s" % String(aura_item.get("name", "???")), text_w, 12, 8), aura_color if aura_view else Color(0.72, 0.9, 0.96, 0.68))
-	_draw_centered("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Vector2(rect.end.x - 58.0, rect.end.y - 14.0), 10, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
+		player_label += " (voce)"
+	var line_h: float = (rect.size.y - 14.0) / 4.0
+	_draw_online_label(player_label, Rect2(text_x, rect.position.y + 5, text_w, line_h), 16, Color.WHITE)
+	_draw_online_label(String(manifest_item.get("name", "???")), Rect2(text_x, rect.position.y + 5 + line_h, text_w, line_h), 15, manifest_color)
+	var aura_label: String = String(aura_item.get("name", "???")) if aura_view else "Espectro a escolher"
+	_draw_online_label(aura_label, Rect2(text_x, rect.position.y + 5 + line_h * 2, text_w, line_h), 14, aura_color if aura_view else Color(0.65, 0.76, 0.8))
+	_draw_online_label("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Rect2(text_x, rect.position.y + 5 + line_h * 3, text_w, line_h), 12, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
 
 
 func _draw_manifest_peer_summary(rect: Rect2, peer_id: int, state: Dictionary) -> void :
@@ -41460,16 +41476,28 @@ func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, sel
 
 
 func _draw_manifest_mp_compact_info(rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color) -> void:
-	_draw_holo_panel(rect, accent, true, 0.48)
-	var pad: = 16.0
-	var title: = String(item.get("name", "???")).to_upper()
-	draw_string(font, rect.position + Vector2(pad, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - pad * 2.0, _fit_text_size(title, rect.size.x - pad * 2.0, 22, 13), accent)
-	var caption: = "ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA"
-	draw_string(font, rect.position + Vector2(pad, 52.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - pad * 2.0, 11, Color(0.72, 0.92, 1.0, 0.84))
-	draw_line(rect.position + Vector2(pad, 62.0), rect.position + Vector2(rect.size.x - pad, 62.0), Color(accent.r, accent.g, accent.b, 0.42), 1.0)
 	var rows: Array = _manifest_info_rows(item, details, aura_view)
-	var first_text: = String(rows[0].get("text", "")) if not rows.is_empty() else String(item.get("desc", ""))
-	_draw_wrapped_clamped(first_text, Rect2(rect.position.x + pad, rect.position.y + 72.0, rect.size.x - pad * 2.0, rect.size.y - 84.0), 13, Color(0.88, 0.95, 1.0, 0.92), 2)
+	var count: int = mini(3, rows.size())
+	var row_h: float = rect.size.y / float(maxi(1, count))
+	for i in range(count):
+		var row: Dictionary = rows[i]
+		var y: float = rect.position.y + row_h * i
+		draw_line(Vector2(rect.position.x, y), Vector2(rect.end.x, y), Color(accent, 0.3), 1.0)
+		_draw_online_label(String(row.get("label", row.get("title", "EFEITO"))), Rect2(rect.position.x + 4, y + 3, 88, row_h - 6), 14, accent)
+		_draw_online_label(String(row.get("text", item.get("desc", ""))), Rect2(rect.position.x + 96, y + 3, rect.size.x - 100, row_h - 6), 15, Color(0.9, 0.95, 0.97))
+
+
+func _draw_online_label(text: String, rect: Rect2, size: int, color: Color) -> void:
+	var label: String = text
+	var label_size: int = size
+	while label_size > 12 and menu_ui_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > rect.size.x:
+		label_size -= 1
+	if menu_ui_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > rect.size.x:
+		while label.length() > 1 and menu_ui_font.get_string_size(label + "...", HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > rect.size.x:
+			label = label.left(-1)
+		label += "..."
+	var baseline: float = rect.position.y + (rect.size.y - menu_ui_font.get_height(label_size)) * 0.5 + menu_ui_font.get_ascent(label_size)
+	draw_string(menu_ui_font, Vector2(rect.position.x, baseline), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, label_size, color)
 
 
 func _draw_manifest_select(viewport: Vector2) -> void :
@@ -56960,7 +56988,7 @@ func _sync_manifest_mp_selection(force: = false) -> void :
 	var now_ms: = Time.get_ticks_msec()
 	if now_ms - mp_manifest_sync_last_ms < NET_MANIFEST_SYNC_INTERVAL_MS:
 		return
-	var signature: = "%s:%d:%d:%d" % [manifest_select_stage, selected_manifestation, selected_aura, int(round(scroll * 100.0))]
+	var signature: = "%s:%d:%d" % [manifest_select_stage, selected_manifestation, selected_aura]
 	if signature == mp_manifest_sync_last_signature:
 		return
 	mp_manifest_sync_last_ms = now_ms
@@ -58964,6 +58992,8 @@ func _reset_network_interpolation_state() -> void :
 	net_player_snapshot_last_ms = 0
 	net_world_snapshot_last_ms = 0
 	net_world_jitter_ms = 0.0
+	net_world_arrival_interval_ms = 0.0
+	net_world_visual_sequence = 0
 	net_world_visual_payload_bytes = 0
 	net_transport_last_activity_ms = 0
 	net_transport_health = RTTransportStateScript.HEALTH_WARMING
@@ -59023,6 +59053,7 @@ func _connect_to_online_host(ip: String, port: int) -> void :
 	multiplayer_peer = ENetMultiplayerPeer.new()
 	var err = multiplayer_peer.create_client(ip, port, NET_CHANNEL_COUNT)
 	if err == OK:
+		RTTransportStateScript.configure_connection(multiplayer_peer.host)
 		multiplayer.multiplayer_peer = multiplayer_peer
 		_configure_online_peer_tuning(1)
 		if not multiplayer.connected_to_server.is_connected(_on_connected_to_server):
@@ -59217,6 +59248,7 @@ func _start_dedicated_room_server(port: int) -> void :
 		push_error("Failed to start dedicated room server on port %d" % port)
 		get_tree().quit(1)
 		return
+	RTTransportStateScript.configure_connection(multiplayer_peer.host)
 	multiplayer.multiplayer_peer = multiplayer_peer
 	if not multiplayer.peer_connected.is_connected(_on_peer_connected):
 		multiplayer.peer_connected.connect(_on_peer_connected)
@@ -60220,7 +60252,9 @@ func _apply_manifest_mp_remote_state(sender: int, stage: String, manifestation: 
 				return
 			var duplicate_owner: = _dedicated_manifest_duplicate_owner(sender, stage, manifestation, aura)
 			if duplicate_owner != 0:
-				rpc_id(sender, "_rpc_manifest_choice_rejected", stage, manifestation if stage != MANIFEST_STAGE_AURA else aura, String(dedicated_names_by_peer.get(duplicate_owner, "outro jogador")))
+				var owner_choice: Dictionary = dedicated_manifest_selection_by_peer[duplicate_owner]
+				var conflict_stage: String = MANIFEST_STAGE_MANIFESTATION if int(owner_choice.get("manifestation", -1)) == manifestation else MANIFEST_STAGE_AURA
+				rpc_id(sender, "_rpc_manifest_choice_rejected", conflict_stage, manifestation if conflict_stage == MANIFEST_STAGE_MANIFESTATION else aura, String(dedicated_names_by_peer.get(duplicate_owner, "outro jogador")))
 				return
 			var selection: = {
 				"stage": stage, 
@@ -60230,6 +60264,8 @@ func _apply_manifest_mp_remote_state(sender: int, stage: String, manifestation: 
 				"ready": is_ready, 
 				"name": String(dedicated_names_by_peer.get(sender, "Player %d" % sender))
 			}
+			if dedicated_manifest_selection_by_peer.get(sender, {}) == selection:
+				return
 			dedicated_manifest_selection_by_peer[sender] = selection
 			dedicated_manifest_ready_by_peer[sender] = is_ready and stage == MANIFEST_STAGE_AURA
 			for peer_id in _mp_peer_ids():
@@ -60245,11 +60281,11 @@ func _dedicated_manifest_duplicate_owner(sender: int, stage: String, manifestati
 		if peer_id == sender:
 			continue
 		var state: Dictionary = dedicated_manifest_selection_by_peer[peer_key]
+		if int(state.get("manifestation", -1)) == manifestation:
+			return peer_id
 		if stage == MANIFEST_STAGE_AURA:
 			if String(state.get("stage", "")) == MANIFEST_STAGE_AURA and int(state.get("aura", -1)) == aura:
 				return peer_id
-		elif int(state.get("manifestation", -1)) == manifestation:
-			return peer_id
 	return 0
 
 
@@ -60279,14 +60315,16 @@ func _rpc_manifest_peer_state(peer_id: int, stage: String, manifestation: int, a
 @rpc("authority", "call_remote", "reliable", 3)
 func _rpc_manifest_choice_rejected(stage: String, index: int, owner_name: String) -> void :
 	mp_local_ready = false
+	mp_manifest_start_pending = false
 	mp_manifest_rejection_message = "%s JA ESCOLHEU ESTA OPCAO" % owner_name.to_upper()
 	mp_manifest_rejection_timer = 2.8
 	if stage == MANIFEST_STAGE_AURA:
 		_set_selected_aura(index + 1, false)
 	else:
+		manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 		_set_selected_manifestation(index + 1, false)
 
-@rpc("any_peer", "call_remote", "unreliable_ordered", 3)
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_sync_manifest_mp(stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool) -> void :
 	_net_report_count_in("control", 80)
 	_net_report_event("manifest_sync_in", "stage=%s manifestation=%d aura=%d ready=%s sender=%d" % [stage, manifestation, aura, str(is_ready), _mp_sender_id()])
@@ -60309,11 +60347,19 @@ func _rpc_request_manifest_mp_start() -> void:
 		return
 	if not _dedicated_manifest_all_ready():
 		_net_report_event("manifest_start_rejected", "not_all_ready")
+		rpc_id(sender, "_rpc_manifest_start_rejected")
 		return
 	_net_report_count_out("control", 48)
 	_net_report_event("start_multiplayer_game_out", "host_manual_start")
 	rpc("_start_multiplayer_game")
 	_start_multiplayer_game()
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_manifest_start_rejected() -> void:
+	mp_manifest_start_pending = false
+	mp_manifest_rejection_message = "A EQUIPE ALTEROU AS ESCOLHAS. AGUARDE TODOS FICAREM PRONTOS."
+	mp_manifest_rejection_timer = 2.8
 
 func _dedicated_manifest_all_ready() -> bool:
 	var peers: = _dedicated_active_peer_ids()
@@ -60336,6 +60382,8 @@ func _start_multiplayer_game() -> void :
 	net_world_snapshot_last_ms = 0
 	net_player_snapshot_last_ms = 0
 	net_world_jitter_ms = 0.0
+	net_world_arrival_interval_ms = 0.0
+	net_world_visual_sequence = 0
 	net_world_sequence = 0
 	net_world_last_sequence = -1
 	net_world_visual_last_sequence = -1
@@ -60774,12 +60822,13 @@ func _sync_multiplayer_state() -> void :
 			_net_report_count_out("world", _net_report_estimate_world_bytes(enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets))
 			rpc("_update_remote_entities", sequence, enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets)
 	if _is_world_authority() and _should_send_world_visual_sync(now_ms):
+		net_world_visual_sequence += 1
 		var visuals_packet: = _pack_net_boss_visuals()
 		net_world_visual_payload_bytes = var_to_bytes(visuals_packet).size()
 		if online_connected:
-			rpc_id(1, "_update_remote_world_visuals", net_world_sequence, visuals_packet)
+			rpc_id(1, "_update_remote_world_visuals", net_world_visual_sequence, visuals_packet)
 		else:
-			rpc("_update_remote_world_visuals", net_world_sequence, visuals_packet)
+			rpc("_update_remote_world_visuals", net_world_visual_sequence, visuals_packet)
 
 func _pack_net_boss() -> PackedFloat32Array:
 	return RTNetContractScript.pack_boss(boss_pos, boss_hp, boss_dead, boss_active, current_phase, boss_hp_max, boss_phase)
@@ -61017,6 +61066,10 @@ func _store_remote_player_state(peer_id: int, incoming: Dictionary) -> void :
 	if peer_id == 0 or peer_id == _mp_unique_id():
 		return
 	var state: Dictionary = RTNetContractScript.merged_remote_player_state(net_players_by_peer.get(peer_id, {}), incoming)
+	# Keep the previous position until motion has been calculated from this packet.
+	var previous: Dictionary = net_players_by_peer.get(peer_id, {})
+	if bool(previous.get("has_snapshot", false)):
+		state["pos"] = previous.get("pos", Vector2.ZERO)
 	net_players_by_peer[peer_id] = state
 	_accept_remote_player_position(peer_id, Vector2(incoming.get("pos", state.get("pos", Vector2.ZERO))))
 	_sync_legacy_remote_player(peer_id)
@@ -61030,8 +61083,14 @@ func _accept_remote_player_position(peer_id: int, pos: Vector2) -> void :
 		_perf_mark("first_player_snapshot", online_game_started_ms if online_game_started_ms > 0 else now_ms)
 	var state: Dictionary = net_players_by_peer.get(peer_id, {})
 	if bool(state.get("has_snapshot", false)) and int(state.get("snapshot_ms", 0)) > 0:
-		var elapsed: = maxf(0.001, float(now_ms - int(state.get("snapshot_ms", now_ms))) / 1000.0)
-		state["velocity"] = (pos - Vector2(state.get("pos", pos))) / elapsed
+		var elapsed: = maxf(float(NET_PLAYER_SYNC_INTERVAL_MS) / 1000.0, float(now_ms - int(state.get("snapshot_ms", now_ms))) / 1000.0)
+		var previous_pos: Vector2 = Vector2(state.get("pos", pos))
+		if previous_pos.distance_squared_to(pos) >= NET_SNAP_DISTANCE * NET_SNAP_DISTANCE:
+			state["render_pos"] = pos
+			state["last_pos"] = pos
+			state["velocity"] = Vector2.ZERO
+		else:
+			state["velocity"] = (pos - previous_pos) / elapsed
 	else:
 		state["render_pos"] = pos
 		state["last_pos"] = pos
@@ -61097,7 +61156,7 @@ func _update_remote_entities(sequence: int, enemies_data, boss_data, bullets_dat
 func _update_remote_world_visuals(sequence: int, boss_visuals_data: Dictionary) -> void :
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
-		if sender == dedicated_room_owner_peer_id and sequence >= net_world_visual_last_sequence:
+		if sender == dedicated_room_owner_peer_id and sequence > net_world_visual_last_sequence:
 			net_world_visual_last_sequence = sequence
 			for peer_id in _mp_peer_ids():
 				if peer_id != sender and _mp_peer_connected(int(peer_id)):
@@ -61105,7 +61164,7 @@ func _update_remote_world_visuals(sequence: int, boss_visuals_data: Dictionary) 
 		return
 	if _mp_sender_is_self():
 		return
-	if _is_world_replica() and sequence >= net_world_visual_last_sequence:
+	if _is_world_replica() and sequence > net_world_visual_last_sequence:
 		net_world_visual_last_sequence = sequence
 		_apply_remote_boss_visual_snapshot(boss_visuals_data)
 
@@ -61121,7 +61180,9 @@ func _apply_remote_world_snapshot(enemies_data, boss_data, bullets_data) -> void
 			mode = "game"
 	if net_world_snapshot_last_ms > 0:
 		var interval: = float(now_ms - net_world_snapshot_last_ms)
-		net_world_jitter_ms = lerpf(net_world_jitter_ms, absf(interval - NET_WORLD_SYNC_INTERVAL_MS), 0.18)
+		var timing: Vector2 = RTTransportStateScript.arrival_timing(interval, net_world_arrival_interval_ms, net_world_jitter_ms)
+		net_world_arrival_interval_ms = timing.x
+		net_world_jitter_ms = timing.y
 	net_world_snapshot_last_ms = now_ms
 	_apply_remote_enemy_snapshot(enemies_data, now_ms)
 	_apply_remote_boss_snapshot(boss_data, now_ms)
@@ -61159,8 +61220,12 @@ func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void :
 		boss_call_timer = -1.0
 
 	if net_boss_has_snapshot and net_boss_snapshot_last_ms > 0:
-		var elapsed: = maxf(0.001, float(now_ms - net_boss_snapshot_last_ms) / 1000.0)
-		net_boss_velocity = (incoming_pos - net_boss_target_pos) / elapsed
+		var elapsed: = maxf(float(NET_PLAYER_SYNC_INTERVAL_MS) / 1000.0, float(now_ms - net_boss_snapshot_last_ms) / 1000.0)
+		if incoming_pos.distance_squared_to(net_boss_target_pos) >= NET_SNAP_DISTANCE * NET_SNAP_DISTANCE:
+			boss_pos = incoming_pos
+			net_boss_velocity = Vector2.ZERO
+		else:
+			net_boss_velocity = (incoming_pos - net_boss_target_pos) / elapsed
 	else:
 		boss_pos = incoming_pos
 		net_boss_velocity = Vector2.ZERO
@@ -61385,7 +61450,7 @@ func _network_ability_payload(action: int, origin: Vector2, target: Vector2) -> 
 	return payload
 
 
-@rpc("any_peer", "call_remote", "unreliable_ordered", 4)
+@rpc("any_peer", "call_remote", "reliable", 4)
 func _rpc_ability_visual(source_peer_id: int, sequence: int, action: int, manifestation: int, origin: Vector2, target: Vector2, duration: float, extra: float, payload: Dictionary, sender_ping_ms: int) -> void :
 	_net_report_count_in("control", 96)
 	if dedicated_server_mode:
@@ -61433,9 +61498,19 @@ func _rpc_ability_visual(source_peer_id: int, sequence: int, action: int, manife
 	net_ability_visuals.append(visual)
 	while net_ability_visuals.size() > NET_ABILITY_VISUAL_LIMIT:
 		net_ability_visuals.pop_front()
-	if action == NET_ABILITY_TELEPORT and source_peer_id == net_player_peer_id:
-		net_player_render_pos = target
-		net_player_last_pos = target
+	if action == NET_ABILITY_TELEPORT:
+		var source_state: Dictionary = net_players_by_peer.get(source_peer_id, {})
+		if not source_state.is_empty():
+			source_state["pos"] = target
+			source_state["render_pos"] = target
+			source_state["last_pos"] = target
+			source_state["velocity"] = Vector2.ZERO
+			source_state["snapshot_ms"] = Time.get_ticks_msec()
+		if source_peer_id == net_player_peer_id:
+			net_player_pos = target
+			net_player_render_pos = target
+			net_player_last_pos = target
+			net_player_velocity = Vector2.ZERO
 
 
 func _initialize_network_ability_replica(visual: Dictionary) -> void :
@@ -62772,34 +62847,37 @@ func _apply_temporal_rewind_result(rewind_pos: Vector2, rewind_hp: float) -> voi
 	_spawn_radial_particles(player_pos, Color(0.3, 0.78, 1.0), 34)
 
 func _draw_online_lobby_roster(rect: Rect2, accent: Color) -> void:
-	_draw_holo_panel(rect, accent, false, 0.24)
-	draw_string(font, rect.position + Vector2(18.0, 28.0), "JOGADORES NA SALA", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 36.0, 15, Color.WHITE)
+	_draw_online_label("TRIPULACAO", Rect2(rect.position + Vector2(14, 0), Vector2(rect.size.x - 28, 32)), 18, Color.WHITE)
 	var roster: Array = online_lobby_roster.duplicate()
 	if roster.is_empty():
 		roster.append({"peer_id": _mp_unique_id(), "name": player_nickname if player_nickname != "" else "Voce", "owner": online_room_owner, "ready": online_room_owner, "spectator": false})
-	var row_h: float = clampf((rect.size.y - 58.0) / float(maxi(1, mini(4, roster.size()))), 40.0, 58.0)
+	var row_h: float = minf(72.0, (rect.size.y - 44.0) / float(maxi(1, mini(4, roster.size()))))
 	var visible_count: int = mini(4, roster.size())
 	for i in range(visible_count):
 		var entry: Dictionary = Dictionary(roster[i])
-		var y: float = rect.position.y + 48.0 + float(i) * row_h
+		var y: float = rect.position.y + 40.0 + float(i) * row_h
 		var row: = Rect2(rect.position.x + 14.0, y, rect.size.x - 28.0, row_h - 8.0)
 		var is_owner_entry: bool = bool(entry.get("owner", false))
 		var is_ready_entry: bool = bool(entry.get("ready", false))
 		var spectator: = bool(entry.get("spectator", false))
 		var row_color: = Color(1.0, 0.82, 0.24) if is_owner_entry else (Color(0.62, 0.42, 1.0) if spectator else accent)
-		_draw_holo_panel(row, row_color, is_ready_entry, 0.28)
-		draw_string(font, row.position + Vector2(14.0, 25.0), String(entry.get("name", "Player")).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, row.size.x * 0.48, _fit_text_size(String(entry.get("name", "PLAYER")).to_upper(), row.size.x * 0.48, 15, 10), Color.WHITE)
-		var role: = "HOST" if is_owner_entry else ("ESPECTADOR" if spectator else "PLAYER")
-		_draw_centered(role, row.position + Vector2(row.size.x * 0.68, row.size.y * 0.5 + 5.0), 11, row_color)
-		_draw_centered("PRONTO" if is_ready_entry else "ESCOLHENDO", row.position + Vector2(row.size.x * 0.9, row.size.y * 0.5 + 5.0), 11, Color(0.2, 1.0, 0.52) if is_ready_entry else Color(1.0, 0.82, 0.24))
+		draw_rect(row, Color(0.025, 0.05, 0.055, 0.96))
+		draw_rect(Rect2(row.position, Vector2(3, row.size.y)), row_color)
+		_draw_online_label("%02d" % (i + 1), Rect2(row.position + Vector2(14, 0), Vector2(38, row.size.y)), 20, row_color)
+		_draw_online_label(String(entry.get("name", "Player")), Rect2(row.position + Vector2(62, 0), Vector2(row.size.x * 0.48 - 62, row.size.y)), 20, Color.WHITE)
+		var role: = "HOST / LIDER" if is_owner_entry else ("ESPECTADOR" if spectator else "ALIADO")
+		_draw_online_label(role, Rect2(row.position + Vector2(row.size.x * 0.52, 0), Vector2(row.size.x * 0.23, row.size.y)), 15, row_color)
+		var status: String = "ASSISTINDO" if spectator else ("PRONTO" if is_ready_entry or is_owner_entry else "AGUARDANDO")
+		_draw_online_label(status, Rect2(row.position + Vector2(row.size.x * 0.78, 0), Vector2(row.size.x * 0.22 - 12, row.size.y)), 15, Color(0.2, 1.0, 0.52) if is_ready_entry or is_owner_entry else Color(1.0, 0.82, 0.24))
 
 
 func _draw_lobby_online_host(viewport: Vector2) -> void :
-	var accent: = Color(0.85, 0.3, 1.0)
-	_draw_online_header(viewport, "SALA ONLINE - HOST", accent, "acompanhe entradas e inicie quando a equipe estiver pronta")
+	var accent: = Color(0.18, 0.86, 0.78)
+	_draw_online_header(viewport, "SALA ONLINE", accent, "HOST / LIDER DA EQUIPE")
 
 	var panel = Rect2(viewport.x * 0.5 - min(1040.0, viewport.x * 0.86) * 0.5, viewport.y * 0.17, min(1040.0, viewport.x * 0.86), viewport.y * 0.68)
-	_draw_holo_panel(panel, accent, true, 0.58)
+	draw_rect(panel, Color(0.015, 0.025, 0.028, 0.94))
+	draw_line(panel.position, Vector2(panel.end.x, panel.position.y), accent, 2.0)
 
 	var room_title: = online_room_name if online_room_name != "" else "Sala " + (online_room_code if online_room_code != "" else "Online")
 	draw_string(font, panel.position + Vector2(34.0, 44.0), room_title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, panel.size.x * 0.56, _fit_text_size(room_title.to_upper(), panel.size.x * 0.56, 22, 14), Color.WHITE)
@@ -62827,18 +62905,19 @@ func _draw_lobby_online_host(viewport: Vector2) -> void :
 
 	var can_start = online_lobby_connected_count >= ONLINE_MIN_PLAYERS and client_ready
 	var start_color = Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 0) else (Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5))
-	_draw_big_button(buttons["lobby_start"], "INICIAR JOGO", Color(0.1, 0.1, 0.1, 0.9), start_color)
+	_draw_big_button(buttons["lobby_start"], "ESCOLHER HABILIDADES", Color(0.1, 0.1, 0.1, 0.9), start_color)
 	_draw_big_button(buttons["lobby_cancel"], "CANCELAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 1) else Color(1.0, 0.2, 0.2))
 
 func _draw_lobby_online_client(viewport: Vector2) -> void :
 	var accent: = Color(0.0, 1.0, 0.82)
-	_draw_online_header(viewport, "SALA ONLINE - CLIENT", accent, "aguarde o host iniciar ou alterne para espectador")
+	_draw_online_header(viewport, "SALA ONLINE", accent, "EQUIPE / AGUARDANDO O HOST")
 	if not online_connected and online_room_code == "":
 		_draw_online_find_room(viewport)
 		return
 
 	var panel = Rect2(viewport.x * 0.5 - min(980.0, viewport.x * 0.86) * 0.5, viewport.y * 0.17, min(980.0, viewport.x * 0.86), viewport.y * 0.68)
-	_draw_holo_panel(panel, accent, true, 0.58)
+	draw_rect(panel, Color(0.015, 0.025, 0.028, 0.94))
+	draw_line(panel.position, Vector2(panel.end.x, panel.position.y), accent, 2.0)
 
 	var room_title: = online_room_name if online_room_name != "" else "Sala " + (online_room_code if online_room_code != "" else "Online")
 	draw_string(font, panel.position + Vector2(34.0, 44.0), room_title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, panel.size.x * 0.56, _fit_text_size(room_title.to_upper(), panel.size.x * 0.56, 22, 14), Color.WHITE)

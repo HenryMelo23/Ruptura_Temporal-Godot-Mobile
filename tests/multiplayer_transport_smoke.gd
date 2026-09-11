@@ -9,6 +9,14 @@ func _run() -> void:
 	root.add_child(game)
 	_check(game._net_player_sync_interval_ms() == game.NET_PLAYER_SYNC_INTERVAL_MS, "healthy transport changed player cadence")
 	_check(game._net_world_sync_interval_ms() == game.NET_WORLD_SYNC_INTERVAL_MS, "healthy transport changed world cadence")
+	game.net_ping_ms = 240
+	_check(game._net_player_sync_interval_ms() == game.NET_PLAYER_SYNC_INTERVAL_MS, "stable distant connection was penalized with extra input delay")
+	var timing := Vector2.ZERO
+	for _sample in range(60):
+		timing = game.RTTransportStateScript.arrival_timing(67.0, timing.x, timing.y)
+	_check(is_zero_approx(timing.y), "steady bandwidth-paced snapshots were mistaken for jitter")
+	timing = game.RTTransportStateScript.arrival_timing(140.0, timing.x, timing.y)
+	_check(timing.y > 0.0, "variable packet arrival was not detected")
 	game.net_ping_ms = 120
 	game.net_world_jitter_ms = 40.0
 	_check(game._net_player_sync_interval_ms() > game.NET_PLAYER_SYNC_INTERVAL_MS, "high RTT did not reduce player packet pressure")

@@ -243,8 +243,12 @@ static func apply_entity_motion(entity: Dictionary, incoming_pos: Vector2, now_m
 	else:
 		var previous_target: = Vector2(entity.get("_net_target_pos", entity.get("pos", incoming_pos)))
 		var previous_ms: = int(entity.get("_net_snapshot_ms", now_ms))
-		var elapsed: = maxf(0.001, float(now_ms - previous_ms) / 1000.0)
-		entity["_net_velocity"] = (incoming_pos - previous_target) / elapsed
+		var elapsed: = maxf(float(PLAYER_SYNC_INTERVAL_MS) / 1000.0, float(now_ms - previous_ms) / 1000.0)
+		if previous_target.distance_squared_to(incoming_pos) >= SNAP_DISTANCE * SNAP_DISTANCE:
+			entity["pos"] = incoming_pos
+			entity["_net_velocity"] = Vector2.ZERO
+		else:
+			entity["_net_velocity"] = (incoming_pos - previous_target) / elapsed
 	entity["_net_target_pos"] = incoming_pos
 	entity["_net_snapshot_ms"] = now_ms
 

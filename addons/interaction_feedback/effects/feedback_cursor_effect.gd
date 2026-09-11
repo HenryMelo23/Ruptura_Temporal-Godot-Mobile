@@ -1,5 +1,5 @@
 @tool
-@icon("uid://2gs1mtgx55c3")
+@icon("res://addons/interaction_feedback/icons/feedback_cursor_effect.svg")
 class_name FeedbackCursorEffect
 extends FeedbackTriggerEffect
 

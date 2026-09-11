@@ -6,14 +6,27 @@ const HEALTH_DEGRADED: String = "degraded"
 const HEALTH_STALLED: String = "stalled"
 const HEALTH_WARMING: String = "warming"
 
-static func adaptive_interval_ms(base_interval_ms: int, ping_ms: int, jitter_ms: float) -> int:
-	var pressure: float = float(maxi(0, ping_ms)) + maxf(jitter_ms, 0.0) * 2.0
+
+static func configure_connection(connection: ENetConnection) -> void:
+	connection.compress(ENetConnection.COMPRESS_FASTLZ)
+
+static func adaptive_interval_ms(base_interval_ms: int, _ping_ms: int, jitter_ms: float) -> int:
+	# Stable round-trip latency does not indicate congestion.
+	var pressure: float = maxf(jitter_ms, 0.0) * 4.0
 	var extra_ms: int = 0
-	if pressure >= 190.0:
+	if pressure >= 280.0:
 		extra_ms = 16
-	elif pressure >= 100.0:
+	elif pressure >= 150.0:
 		extra_ms = 8
 	return base_interval_ms + extra_ms
+
+
+static func arrival_timing(interval_ms: float, previous_interval_ms: float, jitter_ms: float) -> Vector2:
+	if previous_interval_ms <= 0.0:
+		return Vector2(interval_ms, 0.0)
+	# Use a deliberately calm EWMA: one scheduler/network burst must not
+	# throttle the next packets or make a healthy lobby look degraded.
+	return Vector2(interval_ms, lerpf(jitter_ms, absf(interval_ms - previous_interval_ms), 0.08))
 
 
 static func budget_interval_ms(payload_bytes: int, bytes_per_second: int, minimum_interval_ms: int) -> int:
