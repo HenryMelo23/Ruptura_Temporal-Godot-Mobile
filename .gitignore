@@ -127,3 +127,24 @@ Game Base/**/SIGMon/
 !.agents/skills/godot-online-addons/
 !.agents/skills/godot-online-addons/SKILL.md
 setup_android_env.ps1
+
+# Addons baixados/localmente expandidos que nao devem inflar commits por acidente.
+@icons picker.html
+addons/at-icons/
+addons/godot-rapier2d/
+addons/ziva_agent/
+
+# Experimentos locais do Godot AI sobre o addon ja versionado.
+addons/godot_ai/clients/_dsh_strategy.gd
+addons/godot_ai/clients/_dsh_strategy.gd.uid
+addons/godot_ai/clients/deepseek_harness.gd
+addons/godot_ai/clients/deepseek_harness.gd.uid
+addons/godot_ai/clients/pi.gd
+addons/godot_ai/clients/pi.gd.uid
+addons/godot_ai/custom_tools/
+addons/godot_ai/handlers/csg_handler.gd
+addons/godot_ai/handlers/csg_handler.gd.uid
+addons/godot_ai/handlers/gridmap_handler.gd
+addons/godot_ai/handlers/gridmap_handler.gd.uid
+addons/godot_ai/vision_routing.gd
+addons/godot_ai/vision_routing.gd.uid
