@@ -42,21 +42,85 @@ func _cleanup_audio_resources() -> void:
 
 
 func _run() -> void:
-	# 1. Simular Host Online Criando Sala
-	game._create_online_room()
-	_check(game.is_multiplayer == true, "Host online deve marcar is_multiplayer como true")
-	_check(game.is_host == false, "Host online usa P2P emulado, entao is_host deve ser false")
-	_check(game.online_room_owner == true, "Dono da sala online deve ter online_room_owner = true")
-	_check(game.mode == "lobby_online_host", "Dono da sala online deve ir para o modo lobby_online_host")
+	game.online_mode_unlocked = false
+	_check(not game._online_menu_available(), "Online mode should start locked without the cheat")
+	_check(not game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should hide the online button while locked")
+	game.gameplay_cheat_text = "ONLINE30"
+	_check(game._try_unlock_retornante_cheat(), "ONLINE30 cheat should unlock the online button")
+	_check(game.online_mode_unlocked and game._online_menu_available(), "Online mode should be available after cheat")
+	_check(game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should expose the multiplayer button after unlock")
+	game._activate_menu_option("multiplayer")
+	_check(game.mode == "multiplayer_menu", "Multiplayer button should open online hub")
 
-	# 2. Simular Client Online Entrando na Sala
-	game._join_online_room()
-	_check(game.is_multiplayer == true, "Client online deve marcar is_multiplayer como true")
-	_check(game.is_host == false, "Client online deve ter is_host como false")
-	_check(game.online_room_owner == false, "Client online nao e dono da sala, online_room_owner deve ser false")
-	_check(game.mode == "lobby_online_client", "Client online deve ir para o modo lobby_online_client")
+	game.online_relay_request = null
+	game._host_multiplayer_game()
+	_check(game.mode == "online_create_room", "Host flow should open create-room screen")
+	game._join_multiplayer_game()
+	_check(game.mode == "online_find_room", "Client flow should open find-room screen")
 
-	# 3. Simular recebimento do estado do lobby online
+	game._online_lobby_roster([
+		{"peer_id": 21, "name": "HostQA", "owner": true, "ready": true, "spectator": false},
+		{"peer_id": 22, "name": "ClientQA", "owner": false, "ready": false, "spectator": false}
+	])
+	_check(game.online_lobby_roster.size() == 2, "Lobby roster should be stored")
+	game.player_nickname = "ClientQA"
+	game.online_room_owner = false
+	game.local_player_ready = true
+	game.online_lobby_ready_pending = true
+	game.online_ready_pending_started_ms = Time.get_ticks_msec()
+	game._online_lobby_roster([
+		{"peer_id": 21, "name": "HostQA", "owner": true, "ready": true, "spectator": false},
+		{"peer_id": 22, "name": "ClientQA", "owner": false, "ready": true, "spectator": false}
+	])
+	_check(game.online_local_ready_confirmed and not game.online_lobby_ready_pending, "Local roster ready should clear confirming state")
+	game.online_local_ready_confirmed = false
+	game.local_player_ready = true
+	game.online_lobby_ready_pending = true
+	game.mode = "lobby_online_client"
+	game.online_connected = true
+	game.online_ready_pending_started_ms = Time.get_ticks_msec() - game.ONLINE_READY_PENDING_TIMEOUT_MS - 1
+	game.online_ready_last_sent_ms = Time.get_ticks_msec() - game.ONLINE_READY_RESEND_INTERVAL_MS - 1
+	game._update_lobby_ready_resend()
+	_check(game.online_lobby_ready_pending and game.local_player_ready, "Ready soft timeout should resend without cancelling the pending request")
+	_check(game.online_status == "REENVIANDO CONFIRMACAO AO HOST...", "Ready soft timeout should show resend status")
+	game.local_player_ready = true
+	game.online_local_ready_confirmed = false
+	game.online_lobby_ready_pending = true
+	game.online_ready_pending_started_ms = Time.get_ticks_msec() - game.ONLINE_READY_MAX_PENDING_MS - 1
+	game._update_lobby_ready_resend()
+	_check(not game.online_lobby_ready_pending and not game.local_player_ready, "Ready hard timeout should release the confirming button")
+
+	game.online_connected = true
+	game.online_room_owner = false
+	game.local_player_ready = true
+	game.online_lobby_ready_pending = true
+	game.online_ready_request_seq = 2
+	game.online_ready_confirmed_seq = 0
+	game._online_lobby_ready_ack(1, true, true, "STALE1")
+	_check(game.online_lobby_ready_pending, "Stale ready ack should not clear current confirmation")
+	game._online_lobby_ready_ack(2, true, true, "ABCDEF")
+	_check(game.online_local_ready_confirmed and not game.online_lobby_ready_pending, "Sequenced ready ack should confirm the latest request")
+	game.online_room_owner = true
+	game.online_lobby_connected_count = 2
+	game.online_lobby_active_player_count = 2
+	game.online_lobby_ready_count = 1
+	game.online_start_request_seq = 4
+	game.online_start_confirmed_seq = 0
+	game.online_status = ""
+	game._online_start_ack(3, true, "stale")
+	_check(game.online_start_confirmed_seq == 0 and game.online_status == "", "Stale start ack should be ignored")
+	game._online_start_ack(4, true, "preload")
+	_check(game.online_start_confirmed_seq == 4 and game.online_status == "INICIO CONFIRMADO", "Latest start ack should confirm the match start")
+	game.online_room_owner = false
+
+	game.online_relay_action = "list"
+	game._on_online_relay_request_completed(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), JSON.stringify({
+		"rooms": [{"code": "ABCDEF", "name": "Sala QA", "players": 1, "maxPlayers": 3, "locked": true}]
+	}).to_utf8_buffer())
+	_check(game.online_room_list.size() == 1, "Room list should parse public room metadata")
+	_check(String(Dictionary(game.online_room_list[0]).get("name", "")) == "Sala QA", "Room name should be preserved")
+	_check(bool(Dictionary(game.online_room_list[0]).get("locked", false)), "Locked room flag should be preserved")
+
 	game._online_lobby_state("ABCDEF", 2, 1)
 	_check(game.online_room_code == "ABCDEF", "Codigo da sala deve ser atualizado")
 	_check(game.online_lobby_connected_count == 2, "Contagem de conexoes deve ser 2")
@@ -69,9 +133,16 @@ func _run() -> void:
 	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
 	_check(game.online_lobby_client_ready == true, "Estado v2 deve marcar client pronto explicitamente")
 	_check(game.online_local_ready_confirmed == true, "Client deve receber confirmacao autoritativa do pronto")
+	game.online_room_owner = false
+	game.local_player_ready = true
+	game.online_local_ready_confirmed = false
+	game.online_lobby_ready_pending = true
+	game.online_ready_pending_started_ms = Time.get_ticks_msec()
+	game._online_lobby_state_v3("ABCDEF", 2, 2, 0, 1, false, true, false)
+	_check(game.online_local_ready_confirmed and not game.online_lobby_ready_pending, "Client deve sair de confirmando quando o v3 agregado confirma pronto")
 	game.online_room_owner = true
 	game.online_lobby_client_ready = false
 	game._online_lobby_state_v2("ABCDEF", 2, 1, false, true)
 	_check(game._online_client_ready(), "Host deve reconhecer client pronto pelo estado v2")
 
-	await _finish_ok("ONLINE_LOBBY_SMOKE_OK - Host/Client states validated successfully")
+	await _finish_ok("ONLINE_LOBBY_SMOKE_OK - online cheat unlock, room metadata, roster, and lobby state parsing preserved")

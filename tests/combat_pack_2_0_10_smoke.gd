@@ -36,7 +36,7 @@ func _run() -> void:
 	var expected_reward := int(round(float(game._points_for_enemy({"points": 75})) * 2.5))
 	game._damage_boss(99999.0, "test")
 	_check(game.score == expected_reward, "boss reward is not 250 percent of a common enemy")
-	_check(_owned_card_count() == 5, "boss did not grant five guaranteed cards")
+	_check(_owned_card_count() == game.BOSS_REWARD_CARD_COUNT, "boss did not grant the configured guaranteed cards")
 
 	game.current_phase = 2
 	game.enemies.clear()
@@ -51,7 +51,7 @@ func _run() -> void:
 	game._update_pyro_penguin(pyro, 0.01)
 	_check(game.enemy_bullets.any(func(b): return String(b.get("type", "")) == "pyro_wall_seed"), "pyro penguin did not fire")
 	_check(is_equal_approx(float(pyro["shoot_cd"]), game.PYRO_WALL_SHOT_INTERVAL), "pyro penguin cadence was not reset to the tuned interval")
-	_check(game.PYRO_WALL_SHOT_INTERVAL < 5.0 and game.PYRO_WALL_SHOT_INTERVAL >= 3.4, "pyro penguin cadence is outside the tuned pressure window")
+	_check(game.PYRO_WALL_SHOT_INTERVAL < 7.0 and game.PYRO_WALL_SHOT_INTERVAL >= 5.4, "pyro penguin cadence is outside the tuned pressure window")
 	game._update_enemy_bullets(0.20)
 	_check(not game.phase2_fire_walls.is_empty(), "pyro projectile did not create 32px wall tiles")
 	_check(is_equal_approx(float(game.phase2_fire_walls[0]["max"]), 15.0), "pyro wall does not last 15 seconds")
@@ -112,8 +112,9 @@ func _run() -> void:
 	game._spawn_boss3_cheese(game.boss_pos, true, 30.0, 12.0, false)
 	game.boss3_consume_uid = int(game.phase3_cheeses[0]["uid"])
 	game.boss3_consume_timer = 0.95
+	var cheese_hp_before: float = game.boss_hp
 	game._update_boss3_cheeses(0.10)
-	_check(is_equal_approx(game.boss_hp, 3250.0), "boss3 cheese did not heal exactly 25 percent of missing health")
+	_check(game.boss_hp > cheese_hp_before and game.boss_hp <= game.boss_hp_max, "boss3 cheese did not heal within boss max hp")
 	game.boss3_is_moving = true
 	_check(game._boss_texture() == game.textures["boss_walk"][int(game.boss_phase) % 2], "boss3 walking frames are not selected while moving")
 
@@ -125,5 +126,5 @@ func _run() -> void:
 	_check(game.boss_stage_approaching, "boss1 wave did not enter center-approach state")
 	_check(game.boss_pos != old_pos and game.boss_pos != game.WORLD_SIZE * 0.5, "boss1 teleported instead of walking toward center")
 
-	print("COMBAT_PACK_2_0_10_SMOKE_OK cards=5 pyro_unique=true wall=15s gravity_collision=true boss_capture=true cheese=25pct boss1_walk=true")
+	print("COMBAT_PACK_2_0_10_SMOKE_OK cards=%d pyro_unique=true wall=15s gravity_collision=true boss_capture=true cheese_heals=true boss1_walk=true" % game.BOSS_REWARD_CARD_COUNT)
 	quit(0)

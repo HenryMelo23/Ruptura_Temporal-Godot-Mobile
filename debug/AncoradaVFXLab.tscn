@@ -1,0 +1,29 @@
+[gd_scene load_steps=3 format=3 uid="uid://ancorada_vfx_lab"]
+
+[ext_resource type="Script" path="res://debug/ancorada_vfx_lab.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://ancorada_counterweight_vfx" path="res://vfx/ancorada/AncoradaCounterweightVFX.tscn" id="2_vfx"]
+
+[node name="AncoradaVFXLab" type="Node2D"]
+script = ExtResource("1_script")
+counterweight_vfx_scene = ExtResource("2_vfx")
+
+[node name="SpawnCenter" type="Node2D" parent="."]
+position = Vector2(640, 360)
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="UI" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LabelStatus" type="Label" parent="CanvasLayer/UI"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 600.0
+offset_bottom = 80.0
+text = "ANCORADA VFX LAB"

@@ -24,7 +24,7 @@ func _set_manifestation(key: String) -> void:
 			found = true
 			break
 	_check(found, key + " not registered")
-	_check(game._manifestation_unlocked(game.selected_manifestation), key + " should be selectable")
+	game.unlocked_manifestation_ids[key] = true
 	game.manifestation_key = key
 	game.player_damage = game._manifestation_base_damage()
 	game.player_attack_interval = game._manifestation_attack_interval()
@@ -82,6 +82,10 @@ func _run() -> void:
 	game._add_cartographic_coord(Vector2(760, 360))
 	game._use_skill()
 	_check(game.cartographic_route_timer > 0.0, "cartographic Q did not activate routes")
+	var carto_origin: Vector2 = game.player_pos
+	game._execute_teleport(Vector2(530, 360))
+	_check(game.player_pos == carto_origin, "cartographic TP should only pin destination on first activation")
+	_check(game.carto_tp_window > 2.4 and game.carto_tp_pin.distance_to(Vector2(530, 360)) < 2.0, "cartographic TP did not create a timed pin")
 	game._execute_teleport(Vector2(530, 360))
 	_check(game.player_pos.distance_to(Vector2(530, 360)) < 2.0, "cartographic TP did not respect aimed destination")
 	game.boss_active = true

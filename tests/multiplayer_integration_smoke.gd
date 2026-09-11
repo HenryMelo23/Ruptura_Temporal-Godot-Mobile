@@ -8,6 +8,7 @@ var timer: float = 0.0
 var step: int = 0
 var manifest_reveal_requested: bool = false
 var spectrum_ready_sent: bool = false
+var manifest_start_requested: bool = false
 
 
 func _check(condition: bool, message: String) -> void:
@@ -160,7 +161,7 @@ func _run_host_loop() -> void:
 		if not requested_start and game.online_lobby_connected_count == 3 and game.online_lobby_ready_count >= 2:
 			print("[HOST] Both clients are ready. Requesting start game...")
 			requested_start = true
-			game.rpc_id(1, "_host_request_start_game")
+			game._send_host_start_request()
 
 		# Manifestacao primeiro, espectro depois. So o espectro conta como pronto final.
 		if game.mode == "manifest_mp" and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION and not manifest_reveal_requested:
@@ -173,6 +174,11 @@ func _run_host_loop() -> void:
 			spectrum_ready_sent = true
 			game._set_selected_aura(1, false)
 			game._confirm_manifest_mp_selection()
+
+		if spectrum_ready_sent and not manifest_start_requested and game._manifest_all_players_ready():
+			print("[HOST] All players selected. Requesting final match start...")
+			game._request_manifest_mp_start()
+			manifest_start_requested = game.mp_manifest_start_pending
 
 		if game.mode == "game":
 			await create_timer(3.0).timeout

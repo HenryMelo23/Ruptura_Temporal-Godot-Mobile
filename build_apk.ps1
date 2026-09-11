@@ -12,13 +12,14 @@ $MainScript = Join-Path $ProjectRoot "scripts\main.gd"
 $PresetFile = Join-Path $ProjectRoot "export_presets.cfg"
 $PresetName = "Android"
 $LogsDir = Join-Path $ProjectRoot ".agent_logs"
+$ExpectedAndroidPackageName = "org.rupturatemporal.godotmobile"
 
 function Read-GameVersion {
 	if (-not (Test-Path -LiteralPath $MainScript)) {
 		throw "Nao encontrei scripts\main.gd para ler GAME_VERSION."
 	}
 	$content = Get-Content -LiteralPath $MainScript -Raw
-	$match = [regex]::Match($content, 'const\s+GAME_VERSION\s*:=\s*"([^"]+)"')
+	$match = [regex]::Match($content, 'const\s+GAME_VERSION\s*(?::\s*[^=]+)?=\s*"([^"]+)"')
 	if (-not $match.Success) {
 		throw "Nao consegui encontrar const GAME_VERSION em scripts\main.gd."
 	}
@@ -92,6 +93,7 @@ function Update-AndroidPreset {
 	$updatedExportPath = $false
 	$updatedVersionCode = $false
 	$updatedVersionName = $false
+	$updatedPackageName = $false
 	$normalizedExportPath = $RelativeExportPath.Replace("\", "/")
 
 	for ($index = 0; $index -lt $lines.Count; $index++) {
@@ -127,9 +129,14 @@ function Update-AndroidPreset {
 			$updatedVersionName = $true
 			continue
 		}
+		if ($inAndroidOptions -and $line -match '^package/unique_name=') {
+			$lines[$index] = 'package/unique_name="' + $ExpectedAndroidPackageName + '"'
+			$updatedPackageName = $true
+			continue
+		}
 	}
 
-	if (-not ($updatedExportPath -and $updatedVersionCode -and $updatedVersionName)) {
+	if (-not ($updatedExportPath -and $updatedVersionCode -and $updatedVersionName -and $updatedPackageName)) {
 		throw "Nao consegui atualizar o preset Android em export_presets.cfg."
 	}
 

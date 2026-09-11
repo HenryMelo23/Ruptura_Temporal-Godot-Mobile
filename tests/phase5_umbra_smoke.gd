@@ -65,6 +65,23 @@ func _run() -> void:
 	game._update_phase5_rats(0.16)
 	assert(Vector2(game.phase5_rats[0]["pos"]) != rat_pos)
 
+	game.phase5_hazards.clear()
+	game.phase5_rats.clear()
+	game.boss5_transmute_cooldown = 0.0
+	game.boss5_last_dimension = ""
+	game._transmute_umbra_dimension("TRANSMUTAR_NECROSE")
+	assert(game.boss5_dimension == "necrose")
+	assert(game.boss5_dimension_timer > 29.0)
+	var necrose_actions: Array = game._umbra_available_actions()
+	assert(necrose_actions.has("MIASMA"))
+	assert(not necrose_actions.has("VORTICE"))
+	assert(not necrose_actions.has("PRISAO"))
+	game.phase5_hazards.clear()
+	game.phase5_rats.clear()
+	game.boss5_dimension_timer = 0.0
+	game._update_boss_phase5(0.02)
+	assert(game.boss5_dimension == "base")
+
 	game.boss_hp = 1.0
 	game._damage_boss(999999.0, "eletrica")
 	assert(game.mode == "victory")

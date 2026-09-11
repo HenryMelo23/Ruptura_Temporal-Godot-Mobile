@@ -70,6 +70,7 @@ func _run() -> void:
 		average_ms,
 		payload_bytes
 	])
+	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.free()
 	quit(0)

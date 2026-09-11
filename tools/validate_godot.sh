@@ -133,6 +133,19 @@ run_step() {
   fi
 }
 
+is_godot_ignored_path() {
+  local path="$1"
+  local dir
+  dir="$(dirname "$path")"
+  while [[ "$dir" == "$PROJECT_ROOT"/* ]]; do
+    if [[ -f "$dir/.gdignore" ]]; then
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
 run_step "00_godot_version" 1 "" --version
 run_step "01_project_import" 0 "" --headless --path "$PROJECT_ROOT" --import --verbose
 
@@ -143,6 +156,9 @@ fi
 if [[ $DEEP -eq 1 ]]; then
   index=0
   while IFS= read -r -d '' script; do
+    if is_godot_ignored_path "$script"; then
+      continue
+    fi
     index=$((index + 1))
     relative="${script#"$PROJECT_ROOT"/}"
     resource_path="res://${relative//\\//}"

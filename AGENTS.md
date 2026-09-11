@@ -23,9 +23,76 @@ Never claim that the project works when the verification was skipped, failed, ti
 
 ## Required skills
 
+Before any non-trivial Ruptura Temporal repository task, use the token-efficient workflow skill to keep context gathering, edits, and validation scoped:
+
+- `.agents/skills/ruptura-token-efficient-workflow/SKILL.md`
+
 For any Godot implementation, debugging, scene, resource, gameplay, UI, animation, signal, physics, save system, shader, input, or architecture task, use the repository skill:
 
 - `.agents/skills/godot-engineer/SKILL.md`
+
+For any Ruptura Temporal task, first preserve the project context and visual identity:
+
+- `.agents/skills/ruptura-project-context/SKILL.md`
+
+For UI, HUD, menu, settings, catalog, modal, typography, button, layout, or interaction work, use:
+
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-ui-professional/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
+For combat VFX, particles, projectiles, boss attacks, shaders, impact feedback, animation, or visual gameplay effects, use:
+
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-pixel-art-animation/SKILL.md` when sprite/frame animation, pixel-art motion, animated UI/icons/cards, or animation polish is involved
+- `.agents/skills/godot-combat-vfx/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
+For pixel-art animation work that looks flat, generic, low-detail, blurry, lifeless, or too procedural, use:
+
+- `.agents/skills/godot-pixel-art-animation/SKILL.md`
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
+For layered scene/map/menu/phase/dimensional transitions where one image, texture, map, or frame is revealed under another, use:
+
+- `.agents/skills/godot-image-reveal-transitions/SKILL.md`
+- `.agents/skills/ruptura-visual-direction/SKILL.md`
+- `.agents/skills/godot-visual-qa/SKILL.md`
+
+For UMBRA/Fase 5 AI, predatory memory, prophecy, DQN weight export/import, dimension transmutation, ability gating, or Game Base-to-Godot mind compatibility, use:
+
+- `.agents/skills/godot-umbra-ai-port/SKILL.md`
+- `.agents/skills/godot-2d-collisions-ai/SKILL.md` when movement, steering, hitboxes, hazards, or spatial queries change
+- `.agents/skills/godot-combat-vfx/SKILL.md` and `.agents/skills/godot-visual-qa/SKILL.md` when VFX or visual readability changes
+
+For 2D pixel art particles, physics optimization, spatial hashing, and soft-body separation, use:
+
+- `.agents/skills/godot-pixel-physics-particles/SKILL.md`
+
+For 2D collision rules, layer/mask matrix, DirectSpaceState2D queries, NavigationAgent2D, and NPC/Bot steering AI, use:
+
+- `.agents/skills/godot-2d-collisions-ai/SKILL.md`
+
+For game design, mathematical stat scaling, diminishing returns, damage formulas, and Roguelike/Roguelite/Soulslike balancing rules, use:
+
+- `.agents/skills/godot-game-balancing/SKILL.md`
+
+For fast navigation of the large `scripts/main.gd` integration file, especially when a task touches menus, HUD, online, audio, bosses, phases, abilities, or player state, use:
+
+- `.agents/skills/ruptura-main-gd-navigation/SKILL.md`
+
+For online/multiplayer, lobby, tunnel, room readiness, host/client packet flow, enemy/player synchronization, revive, score sharing, votes, or leadership, use:
+
+- `.agents/skills/ruptura-online-contracts/SKILL.md`
+
+For music playlist, menu music, phase music, looping boss/weather audio, SFX lifecycle, stereo/mono behavior, or sound assets, use:
+
+- `.agents/skills/ruptura-audio-lifecycle/SKILL.md`
+
+For version bumps, GitHub preservation, APK/EXE export, update-server publishing, release notes, fonts, or asset portability between desktop/notebook/mobile, use:
+
+- `.agents/skills/ruptura-release-portability/SKILL.md`
 
 After any source, scene, resource, project setting, addon configuration, or test change, use:
 
@@ -63,7 +130,19 @@ Search the repository before assuming a class, node, signal, input action, resou
 
 ## Testing command
 
-On Windows, prefer:
+On Windows, use the changed-file validator during the normal edit loop:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -ChangedOnly -Scene "res://scenes/Main.tscn" -SmokeFrames 120
+```
+
+When the dirty worktree contains unrelated files, pass an explicit script set instead:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -Scripts "res://scripts/main.gd","res://tests/example_smoke.gd" -Scene "res://scenes/Main.tscn" -SmokeFrames 120
+```
+
+Use the full deep validator for broad/shared changes, project settings, addons, release/export work, uncertain blast radius, or before pushing a large batch:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\validate_godot.ps1 -Deep
@@ -77,7 +156,7 @@ bash ./tools/validate_godot.sh --deep
 
 Use `-Scene "res://path/to/affected_scene.tscn"` on Windows or `--scene "res://path/to/affected_scene.tscn"` on Linux/macOS to smoke-test a specific affected scene.
 
-Run focused checks during implementation and the deep validator after the final edit. If the validator fails, inspect its logs in `.agent_logs/`, correct the cause, and run it again.
+Run focused checks during implementation. Prefer `-ChangedOnly` or `-Scripts` after the final edit unless the change really needs `-Deep`. If the validator fails, inspect its logs in `.agent_logs/`, correct the cause, and run it again.
 
 ## Test-and-repair loop
 

@@ -81,10 +81,20 @@ async function run() {
   child.stderr.on("data", (chunk) => { output += chunk; });
   try {
     await waitForHealth();
-    const created = await request("POST", "/rooms", { name: "HeartbeatHost" });
+    const created = await request("POST", "/rooms", { name: "HeartbeatHost", roomName: "Sala QA", password: "d37" });
     assert.strictEqual(created.status, 201, output);
     const room = JSON.parse(created.body.toString("utf8"));
     assert(room.code && room.port, "room creation did not return code/port");
+    assert.strictEqual(room.name, "Sala QA", "room name was not preserved");
+    assert.strictEqual(room.locked, true, "password room should be marked as locked");
+    const listed = await request("GET", "/rooms");
+    assert.strictEqual(listed.status, 200, output);
+    const listedBody = JSON.parse(listed.body.toString("utf8"));
+    assert(listedBody.rooms.some((entry) => entry.code === room.code && entry.name === "Sala QA" && entry.locked === true), "locked named room was not visible in list");
+    const rejectedJoin = await request("POST", `/rooms/${room.code}/join`, { name: "Intruso" });
+    assert.strictEqual(rejectedJoin.status, 403, "locked room accepted a missing password");
+    const acceptedJoin = await request("POST", `/rooms/${room.code}/join`, { name: "ClientQA", password: "d37" });
+    assert.strictEqual(acceptedJoin.status, 200, "locked room rejected the correct password\n" + output);
     await new Promise((resolve) => setTimeout(resolve, 350));
     const hb1 = await request("POST", `/rooms/${room.code}/heartbeat`, { role: "owner", mode: "game", peer_id: 1 });
     assert.strictEqual(hb1.status, 200, output);

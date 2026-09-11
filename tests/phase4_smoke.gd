@@ -88,9 +88,11 @@ func _run() -> void:
 	game.boss_dead = false
 	game.boss_hp = 1.0
 	game._damage_boss(999999.0, "eletrica")
-	assert(int(game.phase_fragment.get("next_phase", 0)) == 5)
+	assert(Array(game.phase_fragment.get("choices", [])).size() == 2)
+	assert(Array(game.phase_fragment.get("choices", [])).any(func(choice): return String(choice.get("action", "")) == "farm"))
+	assert(Array(game.phase_fragment.get("choices", [])).any(func(choice): return int(choice.get("next_phase", 0)) == 5))
 
-	print("PHASE4_SMOKE_OK map=true enemies=true teleport=true planet=true vortex=true petro=true transition=true phase5_fragment=true")
+	print("PHASE4_SMOKE_OK map=true enemies=true teleport=true planet=true vortex=true petro=true transition=true route_choice_portals=true")
 	game.mode = "menu"
 	game.enemies.clear()
 	game.enemy_bullets.clear()

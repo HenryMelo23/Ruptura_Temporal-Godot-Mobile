@@ -118,11 +118,21 @@ func _run() -> void:
 	_check(Vector2(gravity_enemy["pos"]).distance_to(gravity_before) >= 140.0, "gravity TP did not push nearby enemies")
 
 	_reset_tp("lacerante")
+	var single_cut_enemy := _enemy(Vector2(610, 400), 10000.0)
+	game._start_tp_lacerante(game.player_pos, Vector2(720, 400))
+	var single_cut_hp: float = float(single_cut_enemy["hp"])
+	game._update_tp_lacerante(game.tp_effects[0], 0.01)
+	var expected_cut_damage: float = 50.0 + float(single_cut_enemy["max_hp"]) * 0.005
+	_check(abs((single_cut_hp - float(single_cut_enemy["hp"])) - expected_cut_damage) <= 0.05, "lacerante TP first cut did not use the reduced damage")
+
+	_reset_tp("lacerante")
 	game.lacerante_coagula = 20
+	game.lacerante_tp_charges = 2
+	game.lacerante_tp_cooldown_until = -100.0
 	var cut_enemy := _enemy(Vector2(610, 400), 50000.0)
 	game._execute_teleport(Vector2(720, 400))
 	game._consume_lacerante_tp_charge()
-	_check(game.lacerante_tp_charges == 1 and is_equal_approx(game.lacerante_tp_chain_timer, 0.8), "lacerante first TP did not expose one remaining charge for 800ms")
+	_check(game.lacerante_tp_charges == 1 and is_equal_approx(game.lacerante_tp_chain_timer, game.LACERANTE_TP_CHAIN_WINDOW), "lacerante first TP did not expose one remaining chain charge")
 	_check(game._player_invulnerable(), "lacerante TP did not grant immunity during its cuts")
 	var cut_hp_before: float = cut_enemy["hp"]
 	_advance_tp(0.4, 0.05)

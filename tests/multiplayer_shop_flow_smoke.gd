@@ -49,6 +49,7 @@ func _run() -> void:
 	game._buy_selected_card()
 	assert(game._shop_purchase_animating())
 	game._update_shop(game.SHOP_PURCHASE_ANIM_TIME + 0.05)
+	game._request_shop_exit_or_finish()
 	assert(game.mode == "shop_mp_waiting")
 	assert(game.shop_mp_ready_to_leave)
 	assert(not game.shop_mp_partner_ready)

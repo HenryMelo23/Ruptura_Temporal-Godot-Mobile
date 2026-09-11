@@ -16,13 +16,6 @@ func _find_card(card_id: String) -> Dictionary:
 	return {}
 
 
-func _has_card(cards: Array, card_id: String) -> bool:
-	for card in cards:
-		if game._card_id(card) == card_id:
-			return true
-	return false
-
-
 func _check(condition: bool, message: String) -> void:
 	if condition:
 		return
@@ -55,16 +48,16 @@ func _reset_combat_fixture() -> void:
 
 func _run() -> void:
 	game._start_game()
-	var expected := {
-		"fratura_cronal": 5,
-		"pulso_desestabilizador": 5,
-		"pressao_cerco": 3
-	}
-	for card_id in expected.keys():
+	var expected_ids := [
+		"fratura_cronal",
+		"pulso_desestabilizador",
+		"pressao_cerco"
+	]
+	for card_id in expected_ids:
 		var card := _find_card(card_id)
 		_check(not card.is_empty(), "missing_card_%s" % card_id)
 		_check(not game._is_rare_card(card), "card_should_be_common_%s" % card_id)
-		_check(game._card_max_count(card) == int(expected[card_id]), "bad_max_%s" % card_id)
+		_check(game._card_max_count(card) >= 999999, "card_should_be_unlimited_%s" % card_id)
 		_check(game.textures["card_" + String(card["name"])] != null, "missing_texture_1_%s" % card_id)
 		_check(game.textures["card_" + String(card["name"]) + "_2"] != null, "missing_texture_2_%s" % card_id)
 
@@ -73,9 +66,8 @@ func _run() -> void:
 	var fratura := _find_card("fratura_cronal")
 	for i in range(8):
 		game._apply_card(fratura)
-	_check(game.cards_bought["fratura_cronal"] == 5, "fratura_max_not_clamped")
-	for roll in range(12):
-		_check(not _has_card(game._roll_shop_cards(), "fratura_cronal"), "maxed_fratura_in_shop")
+	_check(game.cards_bought["fratura_cronal"] == 13, "fratura_should_keep_stacking")
+	_check(not game._card_at_max(fratura), "fratura_should_never_be_maxed")
 
 	_reset_combat_fixture()
 	game.cards_bought["fratura_cronal"] = 5
@@ -134,5 +126,5 @@ func _run() -> void:
 	game._damage_boss(100.0, "atk", false, false)
 	_check(game.boss_hp < 945.0, "cerco_boss_damage_bad")
 
-	print("CARD_PROC_EFFECTS_SMOKE_OK fratura=true pulso=true cerco=true assets=true max=true")
+	print("CARD_PROC_EFFECTS_SMOKE_OK fratura=true pulso=true cerco=true assets=true unlimited=true")
 	quit(0)

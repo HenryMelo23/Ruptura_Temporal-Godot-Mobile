@@ -185,6 +185,7 @@ func _run() -> void:
 	_check(String(prismatica_visual.get("kind", "")) == "prismatica", "prismatica ultimate did not initialize as local replica kind")
 	_check(int(prismatica_visual.get("final_frame", -1)) == 1, "prismatica final frame was not preserved from network payload")
 	client_game.net_player_render_pos = Vector2(620, 340)
+	client_game.net_players_by_peer[42]["render_pos"] = Vector2(620, 340)
 	client_game._update_network_ability_replica(prismatica_visual, 1.0 / 60.0)
 	_check(Vector2(prismatica_visual.get("center", Vector2.ZERO)).is_equal_approx(Vector2(620, 340)), "prismatica remote ultimate did not follow remote player position")
 

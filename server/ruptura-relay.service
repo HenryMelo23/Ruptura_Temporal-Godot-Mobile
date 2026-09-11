@@ -16,12 +16,17 @@ Environment=WARM_STANDBY_ROOMS=1
 Environment=GODOT_SILENCE_ROOT_WARNING=1
 Environment=GODOT_BIN=/opt/godot/Godot_v4.7-stable_linux.x86_64
 Environment=PROJECT_PATH=/opt/ruptura/Ruptura_Temporal-Godot-Mobile
-Environment=STREAMING_ENABLED=0
+Environment=STREAMING_ENABLED=1
 Environment=STREAM_PUBLIC_HOST=72.61.217.238
 Environment=STREAM_MANAGER_PUBLIC_BASE_URL=http://72.61.217.238:8090
 Environment=STREAM_RTMP_PORT=1935
 Environment=STREAM_HLS_PORT=8888
 Environment=STREAM_WEBRTC_PORT=8889
+Environment=STREAM_MAX_ACTIVE=2
+Environment=STREAM_TTL_MS=1800000
+Environment=STREAM_FRAME_MAX_BYTES=2400000
+Environment=STREAM_FRAME_BUFFER_MAX=8
+Environment=STREAM_FRAME_BUFFER_MS=60
 ExecStart=/usr/bin/node relay_manager.js
 Restart=always
 RestartSec=3

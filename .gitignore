@@ -9,6 +9,7 @@
 !assets/sprites/aurea-peregrina.png.import
 !assets/sprites/manifestacao-eclipsada.png.import
 !assets/sprites/manifestacao_bombastica.png.import
+!assets/sprites/manifestacao-necronada.png.import
 !assets/sprites/Fase6.png.import
 .agent_logs/
 # Generated Android/export artifacts
@@ -58,6 +59,8 @@ fix_*.py
 scratch_*.gd
 scratch_*.gd.uid
 discord_webhook.local.cfg
+.leaderboard_admin.local.json
+.leaderboard_admin_backups/
 
 # Python/editor noise from the desktop reference project
 __pycache__/
@@ -74,7 +77,74 @@ Game Base/**/SIGMon/
 .env
 
 # Ferramentas IA e Agents
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/ruptura-project-context/
+!.agents/skills/ruptura-project-context/SKILL.md
+!.agents/skills/ruptura-visual-direction/
+!.agents/skills/ruptura-visual-direction/SKILL.md
+!.agents/skills/godot-ui-professional/
+!.agents/skills/godot-ui-professional/SKILL.md
+!.agents/skills/godot-combat-vfx/
+!.agents/skills/godot-combat-vfx/SKILL.md
+!.agents/skills/godot-visual-qa/
+!.agents/skills/godot-visual-qa/SKILL.md
+!.agents/skills/godot-engineer/
+!.agents/skills/godot-engineer/SKILL.md
+!.agents/skills/godot-test-repair/
+!.agents/skills/godot-test-repair/SKILL.md
+!.agents/skills/godot-pixel-physics-particles/
+!.agents/skills/godot-pixel-physics-particles/SKILL.md
+!.agents/skills/godot-2d-collisions-ai/
+!.agents/skills/godot-2d-collisions-ai/SKILL.md
+!.agents/skills/godot-game-balancing/
+!.agents/skills/godot-game-balancing/SKILL.md
+!.agents/skills/ruptura-token-efficient-workflow/
+!.agents/skills/ruptura-token-efficient-workflow/SKILL.md
+!.agents/skills/ruptura-main-gd-navigation/
+!.agents/skills/ruptura-main-gd-navigation/SKILL.md
+!.agents/skills/ruptura-online-contracts/
+!.agents/skills/ruptura-online-contracts/SKILL.md
+!.agents/skills/ruptura-audio-lifecycle/
+!.agents/skills/ruptura-audio-lifecycle/SKILL.md
+!.agents/skills/ruptura-release-portability/
+!.agents/skills/ruptura-release-portability/SKILL.md
 
 # Scripts de Build Locais
+!.agents/skills/godot-pixel-art-animation/
+!.agents/skills/godot-pixel-art-animation/SKILL.md
+!.agents/skills/godot-at-icons/
+!.agents/skills/godot-at-icons/SKILL.md
+!.agents/skills/godot-interaction-feedback/
+!.agents/skills/godot-interaction-feedback/SKILL.md
+!.agents/skills/godot-ai-mcp/
+!.agents/skills/godot-ai-mcp/SKILL.md
+!.agents/skills/godot-ziva-ai/
+!.agents/skills/godot-ziva-ai/SKILL.md
+!.agents/skills/godot-optional-addons/
+!.agents/skills/godot-optional-addons/SKILL.md
+!.agents/skills/godot-online-addons/
+!.agents/skills/godot-online-addons/SKILL.md
 setup_android_env.ps1
+
+# Addons baixados/localmente expandidos que nao devem inflar commits por acidente.
+@icons picker.html
+addons/at-icons/
+addons/godot-rapier2d/
+addons/ziva_agent/
+
+# Experimentos locais do Godot AI sobre o addon ja versionado.
+addons/godot_ai/clients/_dsh_strategy.gd
+addons/godot_ai/clients/_dsh_strategy.gd.uid
+addons/godot_ai/clients/deepseek_harness.gd
+addons/godot_ai/clients/deepseek_harness.gd.uid
+addons/godot_ai/clients/pi.gd
+addons/godot_ai/clients/pi.gd.uid
+addons/godot_ai/custom_tools/
+addons/godot_ai/handlers/csg_handler.gd
+addons/godot_ai/handlers/csg_handler.gd.uid
+addons/godot_ai/handlers/gridmap_handler.gd
+addons/godot_ai/handlers/gridmap_handler.gd.uid
+addons/godot_ai/vision_routing.gd
+addons/godot_ai/vision_routing.gd.uid

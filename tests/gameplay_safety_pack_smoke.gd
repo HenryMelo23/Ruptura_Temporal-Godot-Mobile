@@ -66,15 +66,47 @@ func _run() -> void:
 
 	var viewport := Vector2(1280, 720)
 	game.manifestation_key = "eletrica"
+	game.ui_platform_override = game.UI_PLATFORM_ANDROID
 	game._open_edit_layout(viewport)
 	game._update_button_layout(viewport)
 	_check(game.buttons.has("lacerante_empower"), "plus button is missing from layout editor")
 	var plus_center: Vector2 = game.buttons["lacerante_empower"].get_center()
 	game._handle_edit_layout_press(7, plus_center, viewport)
 	_check(game.edit_layout_selected == "lacerante_empower", "plus button cannot be selected")
+	_check(game.edit_layout_resize_visible, "resize controls should remain visible after selecting a mobile HUD item")
+	var plus_pos_before: Vector2 = game.hud_lacerante_empower_pos
 	var moved_to := plus_center + Vector2(-120, 55)
 	game._handle_edit_layout_drag(7, moved_to, viewport)
-	_check(game.hud_lacerante_empower_pos.distance_to(moved_to) < 1.0, "plus button cannot be moved")
+	_check(game.hud_lacerante_empower_pos.distance_to(plus_pos_before) > 20.0, "plus button cannot be moved")
+	_check(not game.edit_layout_resize_visible, "dragging a HUD item should hide resize controls")
+
+	game.mode = "game"
+	game.player_pos = Vector2(500, 400)
+	game.last_facing = Vector2.RIGHT
+	game.last_dash_time = -999.0
+	game.last_attack_time = -999.0
+	game.bullets.clear()
+	game.player_start_down_fall_timer = 0.1
+	game.player_start_down_landing_timer = 0.0
+	var locked_pos: Vector2 = game.player_pos
+	game._try_dash()
+	game._try_attack()
+	_check(game.player_pos == locked_pos and game.bullets.is_empty(), "start-down intro did not lock player movement and attack")
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = game.PLAYER_START_DOWN_LAND_TIME - game.PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND - 0.01
+	game._try_dash()
+	_check(game.player_pos != locked_pos, "player stayed locked after landing grace window")
+	game.move_touch_index = 0
+	game.touch_move = Vector2.RIGHT
+	game.player_start_down_landing_timer = game.PLAYER_START_DOWN_LAND_TIME - game.PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND + 0.01
+	_check(not game._cancel_player_start_down_landing_on_move(), "landing animation cancelled before movement unlock")
+	game.player_start_down_landing_timer = game.PLAYER_START_DOWN_LAND_TIME - game.PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND - 0.01
+	_check(game._cancel_player_start_down_landing_on_move(), "landing animation did not cancel after movement unlock")
+	_check(is_zero_approx(game.player_start_down_landing_timer), "landing animation timer was not cleared on movement")
+	game.move_touch_index = -1
+	game.touch_move = Vector2.ZERO
 
 	print("GAMEPLAY_SAFETY_PACK_OK wall=solid low_hp=progressive hidden_boss=no_auto_target miasma=softer plus=moves")
+	game.queue_free()
+	await process_frame
 	quit(0)

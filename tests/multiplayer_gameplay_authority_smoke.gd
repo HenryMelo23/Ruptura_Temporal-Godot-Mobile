@@ -24,6 +24,7 @@ var ping_budget_ms: int = 30
 
 var manifest_reveal_requested := false
 var spectrum_ready_sent := false
+var manifest_start_requested := false
 var requested_start := false
 var client_marked_ready := false
 var client_hit_sent := false
@@ -259,18 +260,20 @@ func _run_client_loop() -> void:
 func _host_lobby_and_manifest_flow() -> void:
 	if not requested_start and game.online_lobby_connected_count == 2 and game.online_lobby_ready_count >= 1:
 		requested_start = true
-		game.rpc_id(1, "_host_request_start_game")
+		game._send_host_start_request()
 		return
 	_manifest_selection_flow(1, 1)
+	if spectrum_ready_sent and not manifest_start_requested and game._manifest_all_players_ready():
+		manifest_start_requested = true
+		game._request_manifest_mp_start()
 
 
 func _client_lobby_and_manifest_flow() -> void:
 	if not client_marked_ready and game.online_connected and game.mode == "lobby_online_client":
 		client_marked_ready = true
-		game.local_player_ready = true
-		game.rpc_id(1, "_toggle_ready", true)
+		game._set_lobby_ready(true)
 		return
-	_manifest_selection_flow(2, 2)
+	_manifest_selection_flow(2, 3)
 
 
 func _manifest_selection_flow(manifestation: int, aura: int) -> void:

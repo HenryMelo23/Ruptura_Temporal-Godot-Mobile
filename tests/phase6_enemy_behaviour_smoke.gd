@@ -35,6 +35,9 @@ func _run() -> void:
 	game.player_pos = Vector2(820, 420)
 	game._spawn_enemy(game.ENEMY_LODARIO, Vector2(420, 420))
 	var lodario: Dictionary = game.enemies.back()
+	_check(is_equal_approx(game.LODARIO_SIZE_MULT, 0.70), "Lodario size multiplier should reduce it by 30%")
+	_check(game._enemy_draw_size(lodario).is_equal_approx(Vector2(78.4, 42.0)), "Lodario draw size was not reduced by 30%")
+	_check(is_equal_approx(game._enemy_radius(lodario), 28.0), "Lodario collision radius was not reduced by 30%")
 	var start_x := Vector2(lodario["pos"]).x
 	lodario["lodario_jump_timer"] = 0.0
 	game._update_enemies(0.02)
@@ -165,6 +168,29 @@ func _run() -> void:
 	_check(is_equal_approx(game.LODARIO_PHEROMONE_HOP_DISTANCE, 90.0), "Pheromone hop distance was not retuned")
 	_check(is_equal_approx(game.LODARIO_PHEROMONE_HOP_INTERVAL, 0.55), "Pheromone hop interval was not retuned")
 	_check(game._lodario_target_pos(attracted_lodario).distance_to(game.player_pos) < 1.0, "Pheromone did not make Lodario target the player instead of the explosion")
+	_check(game.audio_streams.has("Lodario-mov.mp3"), "Lodario landing SFX is not registered")
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
+	var sound_lodario := attracted_lodario
+	sound_lodario["lodario_jump_timer"] = 0.0
+	sound_lodario["lodario_jump_progress"] = 0.0
+	game._update_lodario(sound_lodario, 0.01)
+	_check(not game.sfx_players.any(func(player): return player.stream == game.audio_streams["Lodario-mov.mp3"]), "Lodario landing SFX played while jump started")
+	game._update_lodario(sound_lodario, float(sound_lodario.get("lodario_jump_duration", game.LODARIO_HOP_DURATION)) + 0.05)
+	var lodario_sfx_players: Array = game.sfx_players.filter(func(player): return player.stream == game.audio_streams["Lodario-mov.mp3"])
+	_check(not lodario_sfx_players.is_empty(), "Lodario landing SFX did not play on ground contact")
+	var lodario_volume := db_to_linear(lodario_sfx_players[0].volume_db)
+	var lodario_scale: float = game._lodario_landing_sfx_volume(sound_lodario)
+	var expected_lodario_volume: float = game.vol_master * game.vol_sfx * lodario_scale
+	_check(lodario_scale >= game.LODARIO_SFX_VOLUME_MIN - 0.001 and lodario_scale <= game.LODARIO_SFX_VOLUME_MAX + 0.001, "Lodario landing SFX scale is outside 0 to 20 percent")
+	_check(abs(lodario_volume - expected_lodario_volume) <= 0.002, "Lodario landing SFX volume does not follow distance-scaled 15 to 35 percent mix")
+	var anim_pustule := {"type": game.ENEMY_FOSSIL_PUSTULE, "phase": 0.0, "pustule_spit_flash": 0.0}
+	game.time_alive = 0.0
+	var pustule_frame_a = game._enemy_texture(anim_pustule)
+	game.time_alive = 0.51
+	var pustule_frame_b = game._enemy_texture(anim_pustule)
+	_check(pustule_frame_a != null and pustule_frame_b != null and pustule_frame_a != pustule_frame_b, "Fossil Pustule frame did not advance near 500ms")
 
 	game.enemies.clear()
 	game.enemy_bullets.clear()
@@ -233,109 +259,85 @@ func _run() -> void:
 	game.boss_pos = game.WORLD_SIZE * 0.5
 	game.boss_hp_max = 1000.0
 	game.boss_hp = 1000.0
-	_check(not game.has_method("_spawn_boss6_parasite_worms"), "old Boss6 parasite worm spawner still exists")
-	_check(not game.has_method("_start_boss6_parasite_ball"), "old Boss6 parasite ball ability still exists")
-	game._damage_boss(100.0, "smoke", false, false)
-	_check(game.boss_hp < 1000.0, "Boss6 became invulnerable without the old worm shield")
-	var hp_after_plain_damage := float(game.boss_hp)
-	_check(game.BOSS6_PUSTULE_MAX == 7, "Boss6 pustule cap was not raised to seven")
-	game.enemies.clear()
-	for i in range(game.BOSS6_PUSTULE_MAX - 1):
-		game._spawn_boss6_pustule_at(Vector2(140 + i * 78, 180))
-	game._start_boss6_incubation_pustules()
-	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_INCUBATION, "Boss6 incubation did not start near pustule cap")
-	var incubation_spots: Array = game.boss_attacks[0].get("spots", [])
-	_check(incubation_spots.size() == 1, "Boss6 incubation ignored remaining pustule capacity")
-	game._update_boss_attacks(1.1)
-	_check(game._boss6_pustule_count() == game.BOSS6_PUSTULE_MAX, "Boss6 incubation did not fill to the new seven pustule cap")
+	_check(not game.has_method("_start_boss6_incubation_pustules"), "old Boss6 incubation ability still exists")
+	_check(not game.has_method("_start_boss6_acid_bloom"), "old Boss6 acid bloom ability still exists")
+	_check(not game.has_method("_start_boss6_chasing_crack"), "old Boss6 chasing crack ability still exists")
+	_check(not game.has_method("_start_boss6_carnage_tide"), "old Boss6 carnage tide ability still exists")
+	_check(not game.has_method("_start_boss6_vertebral_scythes"), "old Boss6 scythes ability still exists")
+	_check(not game.has_method("_start_boss6_miasma_ultimate"), "old Boss6 miasma ultimate still exists")
+	game._start_boss6_visceral_scourge()
+	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_VISCERAL_SCOURGE, "Boss6 visceral scourge did not start")
+	game.player_pos = Vector2(game.boss_attacks[0].get("b", game.player_pos))
+	var hp_before_scourge := int(game.player_hp)
+	game._update_boss_attacks(game.BOSS6_NEW_VISCERAL_WARNING + 0.02)
+	_check(game.player_hp < hp_before_scourge, "Boss6 visceral scourge did not damage during active window")
 	game.boss_attacks.clear()
-	game._start_boss6_carapace()
-	_check(game.boss6_carapace_plates.size() == 3, "Boss6 carapace did not create three plates")
-	game._damage_boss(100.0, "smoke", false, false)
-	_check(game.boss_hp < hp_after_plain_damage, "Boss6 carapace blocked all damage instead of reducing")
-	_check(game.boss6_carapace_plates.size() <= 3, "Boss6 carapace plate count became invalid")
+	game.boss6_lodarian_pools.clear()
+	game.player_pos = Vector2(640, 360)
+	game._start_boss6_anticipation_fissures()
+	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_ANTICIPATION_FISSURES, "Boss6 anticipation fissures did not start")
+	game._update_boss_attacks(game.BOSS6_NEW_FISSURE_WARNING + 0.02)
+	_check(game.boss6_lodarian_pools.size() == 1 and String(game.boss6_lodarian_pools[0].get("kind", "")) == "anticipation_fissure", "Boss6 fissure did not create toxic pool")
+	_check(is_equal_approx(float(game.boss6_lodarian_pools[0].get("radius", 0.0)), game.BOSS6_NEW_FISSURE_RADIUS), "Boss6 fissure radius mismatch")
+	game.boss_attacks.clear()
+	game.enemies.clear()
+	game._start_boss6_parasitic_symbiosis()
+	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_PARASITIC_SYMBIOSIS, "Boss6 parasitic symbiosis did not start")
+	game._update_boss_attacks(game.BOSS6_NEW_SYMBIOSIS_FLIGHT + 0.02)
+	_check(game.enemies.filter(func(e): return String(e.get("type", "")) == game.ENEMY_FOSSIL_PUSTULE and bool(e.get("boss6_symbiosis", false))).size() == 2, "Boss6 symbiosis did not plant two fossil pustules")
+	game._update_boss_attacks(game.BOSS6_NEW_SYMBIOSIS_HATCH + 0.05)
+	_check(game.enemies.any(func(e): return String(e.get("type", "")) == game.ENEMY_CHRONAL_LEECH and bool(e.get("boss6_summoned", false))), "Boss6 symbiosis did not hatch chronal leeches")
 	game.boss_attacks.clear()
 	game.enemies.clear()
 	game.boss6_lodarian_pools.clear()
-	game._start_boss6_acid_bloom(true)
-	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_ACID_BLOOM, "Boss6 acid bloom did not start")
-	game._update_boss_attacks(1.2)
-	_check(game.enemies.is_empty(), "Boss6 acid bloom should not spawn leeches")
-	_check(game.boss6_lodarian_pools.size() == game.BOSS6_ACID_BLOOM_COUNT, "Boss6 acid bloom did not create five puddles")
-	var acid_positions: Array = []
-	for acid_pool in game.boss6_lodarian_pools:
-		_check(String(acid_pool.get("kind", "")) == "acid_bloom", "Boss6 acid bloom created a non-acid pool")
-		_check(is_equal_approx(float(acid_pool.get("radius", 0.0)), game.BOSS6_ACID_BLOOM_RADIUS), "Boss6 acid bloom pool radius is incorrect")
-		_check(float(acid_pool.get("life", 0.0)) > game.BOSS6_ACID_BLOOM_DURATION - 0.25, "Boss6 acid bloom pool duration is incorrect")
-		acid_positions.append(Vector2(acid_pool.get("pos", Vector2.ZERO)))
-	for i in range(acid_positions.size()):
-		for j in range(i + 1, acid_positions.size()):
-			_check(Vector2(acid_positions[i]).distance_to(Vector2(acid_positions[j])) >= 120.0, "Boss6 acid bloom did not spread puddles across the map")
-	for i in range(game.BOSS6_LEECH_MAX + 4):
-		game._spawn_boss6_leech_at(game.boss_pos + Vector2(140 + i * 12, 0))
-	_check(game._boss6_active_leech_count() <= game.BOSS6_LEECH_MAX, "Boss6 leech global limit was not respected")
-	game.boss_attacks.clear()
-	game._start_boss6_chasing_crack()
-	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_CHASING_CRACK, "Boss6 chasing crack did not start")
-	var crack_start := Vector2(game.boss_attacks[0].get("pos", Vector2.ZERO))
-	game._update_boss_attacks(0.5)
-	var crack_after := Vector2(game.boss_attacks[0].get("pos", Vector2.ZERO))
-	_check(crack_after.distance_to(game.player_pos) < crack_start.distance_to(game.player_pos), "Boss6 chasing crack did not pursue the player")
-	game.boss_attacks.clear()
-	game.boss6_lodarian_pools.clear()
-	game._start_boss6_carnage_tide()
-	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_CARNAGE_TIDE, "Boss6 carnage tide did not start")
-	game._update_boss_attacks(0.75)
-	_check(game.boss6_lodarian_pools.size() >= 1 and String(game.boss6_lodarian_pools[0].get("kind", "")) == "carnage", "Boss6 carnage tide did not create slowing slime")
-	game.boss6_carnage_slow_timer = 0.0
-	game._damage_player(1, "boss6_carnage_slime")
-	_check(game.boss6_carnage_slow_timer >= game.BOSS6_CARNAGE_SLOW_TIME - 0.05, "Boss6 carnage slime did not apply the slow timer")
-	_check(is_equal_approx(game._boss6_carnage_slow_multiplier(), game.BOSS6_CARNAGE_SLOW_MULT), "Boss6 carnage slow multiplier is incorrect")
-	game.boss_attacks.clear()
-	game._start_boss6_vertebral_scythes()
-	_check(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == game.BOSS6_ABILITY_SCYTHES, "Boss6 vertebral scythes did not start")
-	var bones: Array = game.boss_attacks[0].get("bones", [])
-	_check(bones.size() == 5, "Boss6 early vertebral scythe count is incorrect")
-	game.boss_attacks.clear()
-	game.enemies.clear()
-	game.boss_hp = game.boss_hp_max * 0.39
-	game.boss6_miasma_ult_cooldown = 0.0
-	var ult_def := {"id": game.BOSS6_ABILITY_MIASMA_ULTIMATE, "min_pct": 0.0, "max_pct": game.BOSS6_MIASMA_ULT_UNLOCK_PCT, "weight": 1.0, "cooldown": game.BOSS6_MIASMA_ULT_COOLDOWN}
-	_check(game._boss6_ability_available(ult_def, 0), "Boss6 miasma ultimate was not available under 40 percent hp")
-	game._start_boss6_miasma_ultimate()
-	_check(game._boss6_miasma_ultimate_active(), "Boss6 miasma ultimate did not become active")
-	_check(is_equal_approx(game.boss6_miasma_ult_timer, game.BOSS6_MIASMA_ULT_DURATION), "Boss6 miasma ultimate duration is incorrect")
-	_check(is_equal_approx(game.boss6_miasma_ult_cooldown, game.BOSS6_MIASMA_ULT_COOLDOWN), "Boss6 miasma ultimate cooldown is incorrect")
-	_check(not game._boss6_ability_available({"id": game.BOSS6_ABILITY_ACID_BLOOM, "min_pct": 0.0, "max_pct": 1.0, "weight": 1.0, "cooldown": 1.0}, 0), "Boss6 ultimate did not limit acid bloom")
-	_check(game._boss6_ability_available({"id": game.BOSS6_ABILITY_SCYTHES, "min_pct": 0.0, "max_pct": 1.0, "weight": 1.0, "cooldown": 1.0}, 0), "Boss6 ultimate blocked precise bone attack")
-	game.player_pos = game.WORLD_SIZE * 0.5 + Vector2.from_angle(game.boss6_miasma_ult_angle) * (game.BOSS6_MIASMA_ULT_INNER_RADIUS + 40.0)
-	game._update_boss6_timers(0.45)
-	_check(game.boss6_miasma_slow_stacks > 0, "Boss6 miasma ultimate did not stack slow when touching the player")
-	_check(game._boss6_miasma_slow_multiplier() < 1.0, "Boss6 miasma slow multiplier was not applied")
-	_check(game.enemies.filter(func(e): return String(e.get("type", "")) == game.ENEMY_FOSSIL_PUSTULE and bool(e.get("boss6_ult_pustule", false))).size() == game.BOSS6_MIASMA_ULT_PUSTULE_COUNT, "Boss6 ultimate did not spawn three rotating pustules")
-	game.boss_hp = 500.0
-	game.boss6_fossil_shield = 0.0
-	game.boss6_carapace_plates.clear()
-	game.boss6_miasma_ult_angle = 0.0
-	var blocked_origin: Vector2 = game.boss_pos + Vector2.from_angle(game._boss6_barrier_gap_center(0) + game.BOSS6_BARRIER_GAP_ARC + 0.55) * 260.0
-	game._damage_boss(100.0, "smoke", false, false, "", blocked_origin)
-	_check(is_equal_approx(game.boss_hp, 500.0), "Boss6 miasma barrier did not block damage outside a gap")
-	var open_origin: Vector2 = game.boss_pos + Vector2.from_angle(game._boss6_barrier_gap_center(0)) * 260.0
-	game._damage_boss(100.0, "smoke", false, false, "", open_origin)
-	_check(game.boss_hp < 500.0, "Boss6 miasma barrier blocked damage through a gap")
+	game.boss_pos = game.WORLD_SIZE * 0.5
+	game.boss_hp_max = 1000.0
+	game.boss_hp = 1000.0
+	game.boss6_new_ecdysis_triggered = false
 	game.boss6_miasma_ult_timer = 0.0
-	game.boss6_miasma_slow_timer = 0.0
-	game.boss6_miasma_slow_stacks = 0
+	game.boss6_relocating = false
+	game.boss6_new_next_swarm_hp_pct = 0.85
+	game.time_alive = 0.0
+	game._damage_boss(1200.0, "smoke", false, false)
+	_check(game.boss6_relocating, "Boss6 relocation did not trigger after 15 percent hp loss")
+	_check(is_equal_approx(game.boss6_relocate_duration, game.BOSS6_NEW_SWARM_DURATION), "Boss6 relocation duration mismatch")
+	game._update_boss6_relocation(0.45)
+	_check(game.boss_attacks.any(func(a): return String(a.get("kind", "")) == game.BOSS6_ATTACK_RELOCATION_RAIN), "Boss6 relocation did not spawn corrosive rain")
+	_check(is_equal_approx(game.BOSS6_NEW_SWARM_RAIN_WARNING, 0.70), "Boss6 relocation rain warning should be 700ms")
+	var rain_target: Vector2 = game.player_pos
 	game.boss_attacks.clear()
-	game._start_boss6_swarm_dissolution()
-	_check(game.boss6_relocating, "Boss6 relocation did not start")
-	_check(game.boss6_entry_particles.size() == game.BOSS6_ENTRY_PARTICLES, "Boss6 relocation did not create the requested particle swarm")
+	game.boss_attacks.append({"kind": game.BOSS6_ATTACK_RELOCATION_RAIN, "age": 0.0, "duration": game._boss6_relocation_rain_impact_time() + game.BOSS6_NEW_SWARM_RAIN_SPLASH_TIME, "target": rain_target, "hit_local": false, "phase": 0.0, "fall_side": 0.0})
+	var rain_hp: int = game.player_hp
+	game._update_boss_attacks(game.BOSS6_NEW_SWARM_RAIN_WARNING + 0.05)
+	_check(game.player_hp == rain_hp, "Boss6 relocation rain damaged before the visible falling drop impacted")
+	game._update_boss_attacks(game.BOSS6_NEW_SWARM_RAIN_FALL_TIME + 0.05)
+	_check(game.player_hp < rain_hp, "Boss6 relocation rain did not damage on impact")
+	game.boss6_relocating = false
+	game.boss_attacks.clear()
+	game.boss_hp = game.boss_hp_max * 0.39
+	game._start_boss6_miasma_ecdysis()
+	_check(game._boss6_miasma_ultimate_active(), "Boss6 miasma ecdysis did not become active")
+	_check(game.boss6_shielded, "Boss6 ecdysis did not activate barrier")
+	_check(game.boss6_organs.size() == game.BOSS6_ECDYSIS_ORGAN_COUNT, "Boss6 ecdysis did not spawn four organs")
+	game.player_pos = game.WORLD_SIZE * 0.5 + Vector2.from_angle(game.boss6_miasma_ult_angle) * 260.0
+	game._update_boss6_timers(0.45)
+	_check(game.boss6_miasma_slow_stacks > 0, "Boss6 ecdysis beam did not stack slow")
+	var blocked_hp := float(game.boss_hp)
+	game._damage_boss(100.0, "smoke", false, false, "", game.boss_pos + Vector2(10, 0))
+	_check(is_equal_approx(game.boss_hp, blocked_hp), "Boss6 ecdysis barrier allowed direct damage")
+	for i in range(game.boss6_organs.size()):
+		var organ: Dictionary = game.boss6_organs[i]
+		organ["hp"] = 0.0
+		organ["alive"] = false
+		game.boss6_organs[i] = organ
+	game._update_boss6_timers(0.05)
+	_check(game.boss6_state == game.BOSS6_STATE_STUNNED and game.boss6_vulnerability_timer > 0.0, "Boss6 ecdysis success did not stun boss")
 
 	game.gameplay_cheat_text = "FASE6"
 	_check(game._try_unlock_retornante_cheat(), "FASE6 cheat did not toggle off")
 	_check(not game.force_phase6_start, "FASE6 cheat did not disable forced start")
 
-	print("PHASE6_ENEMY_BEHAVIOUR_SMOKE_OK cheat=true lodario_hop=35 pheromone_hop=90 eel_cd=30 phase6_1=true pustule_pool=true pustule_spit=true boss6_pustules=7 boss6=true")
+	print("PHASE6_ENEMY_BEHAVIOUR_SMOKE_OK cheat=true lodario_hop=35 pheromone_hop=90 eel_cd=30 phase6_1=true pustule_pool=true pustule_spit=true boss6_rework=true")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

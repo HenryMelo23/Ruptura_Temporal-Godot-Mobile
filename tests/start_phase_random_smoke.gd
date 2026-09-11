@@ -45,14 +45,15 @@ func _check_phase_route_and_boss_hp() -> void:
 	_check(is_equal_approx(phase6_hp, phase1_hp), "phase 6 boss hp should match phase 1 scaling")
 	game.run_initial_phase = 6
 	game.run_phase6_completed = false
-	_check(int(game._next_phase_after_boss(6)) == 1, "initial phase 6 should transition to phase 1")
-	_check(int(game._next_phase_after_boss(1)) == 2, "phase 1 should transition to phase 2")
+	_check(int(game._next_phase_after_boss(6)) == 2, "initial phase 6 should transition to phase 2")
 	_check(int(game._next_phase_after_boss(2)) == 3, "phase 2 after initial phase 6 should transition to phase 3")
+	_check(int(game._next_phase_after_boss(3)) == 4, "phase 3 should transition to phase 4")
 	game.run_initial_phase = 1
 	game.run_phase6_completed = false
 	_check(int(game._next_phase_after_boss(1)) == 2, "initial phase 1 should transition to phase 2")
-	_check(int(game._next_phase_after_boss(2)) == 6, "phase 2 should insert phase 6 when it was not the initial phase")
-	_check(int(game._next_phase_after_boss(6)) == 3, "inserted phase 6 should transition to phase 3 without loop")
+	_check(int(game._next_phase_after_boss(2)) == 3, "phase 2 should transition to phase 3")
+	_check(int(game._next_phase_after_boss(4)) == 0, "phase 4 should offer portals instead of a direct phase")
+	_check(game._should_offer_dimension_choice_after_boss(4), "phase 4 should open dimension choice portals")
 
 
 func _check_forced_initial_phase_cheats() -> void:
@@ -62,9 +63,10 @@ func _check_forced_initial_phase_cheats() -> void:
 		3: "PAI-RATO",
 		4: "NEXO DA RUPTURA",
 		5: "UMBRA",
-		6: "MATRIARCA DA CHAGA"
+		6: "MATRIARCA DA CHAGA",
+		7: "FENIX"
 	}
-	for phase in range(1, 7):
+	for phase in range(1, 8):
 		game.gameplay_cheat_text = "FASE%d" % phase
 		_check(game._try_unlock_retornante_cheat(), "FASE%d cheat was not accepted" % phase)
 		_check(int(game.forced_initial_phase) == phase, "FASE%d did not set forced initial phase" % phase)
@@ -74,6 +76,9 @@ func _check_forced_initial_phase_cheats() -> void:
 		_check(String(game.boss_name) == String(expected_names[phase]), "FASE%d boss name mismatch" % phase)
 		_check(game.enemies.size() >= 1, "FASE%d did not spawn initial enemies" % phase)
 		_check(game._current_map_texture() != null, "FASE%d map texture missing" % phase)
+		if phase == 7:
+			_check(not bool(game.boss_ready), "FASE7 should start without boss call")
+			_check(String(game.enemies[0].get("type", "")) == game.ENEMY_CINERIDO, "FASE7 should start with Cinerido")
 	game.gameplay_cheat_text = "FASE3"
 	_check(game._try_unlock_retornante_cheat(), "FASE3 cheat was not accepted before phase6 replace")
 	game.gameplay_cheat_text = "FASE6"
@@ -127,7 +132,7 @@ func _run() -> void:
 
 	_check(seen_phase_1, "phase 1 was not rolled")
 	_check(seen_phase_6, "phase 6 was not rolled")
-	print("START_PHASE_RANDOM_SMOKE_OK phases=[1,6] forced=[1,2,3,4,5,6]")
+	print("START_PHASE_RANDOM_SMOKE_OK phases=[1,6] forced=[1,2,3,4,5,6,7]")
 	game._set_initial_phase_bias(0, 0.0, true)
 	game._cleanup_runtime_resources()
 	game.textures.clear()

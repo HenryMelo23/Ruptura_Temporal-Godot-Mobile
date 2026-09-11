@@ -1,0 +1,100 @@
+[gd_scene load_steps=2 format=3 uid="uid://umbra_transmutation_lab"]
+
+[ext_resource type="Script" path="res://debug/umbra_transmutation_lab.gd" id="1_script"]
+
+[node name="UmbraTransmutationLab" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.025, 0.026, 0.032, 1)
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="UI" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="StatusPanel" type="PanelContainer" parent="CanvasLayer/UI"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 446.0
+offset_bottom = 96.0
+
+[node name="LabelStatus" type="Label" parent="CanvasLayer/UI"]
+layout_mode = 0
+offset_left = 28.0
+offset_top = 22.0
+offset_right = 428.0
+offset_bottom = 88.0
+text = "UMBRA TRANSMUTATION LAB"
+
+[node name="GridButtons" type="GridContainer" parent="CanvasLayer/UI"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 110.0
+offset_right = 300.0
+offset_bottom = 538.0
+columns = 1
+
+[node name="BtnVortice" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "1. VORTICE"
+
+[node name="BtnGravidade" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "2. GRAVIDADE"
+
+[node name="BtnNecrose" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "3. NECROSE"
+
+[node name="BtnRessonancia" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "4. RESSONANCIA"
+
+[node name="BtnHemorragia" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "5. HEMORRAGIA"
+
+[node name="BtnAtrito" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "6. ATRITO"
+
+[node name="BtnRastro" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "7. RASTRO"
+
+[node name="BtnReplay" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "REPLAY ATUAL"
+
+[node name="BtnNext" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "PROXIMA"
+
+[node name="BtnSequence" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "SEQUENCIA: ON"
+
+[node name="BtnLoop" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "LOOP: OFF"
+
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnVortice" to="." method="select_vortice"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnGravidade" to="." method="select_gravidade"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnNecrose" to="." method="select_necrose"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnRessonancia" to="." method="select_ressonancia"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnHemorragia" to="." method="select_hemorragia"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnAtrito" to="." method="select_atrito"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnRastro" to="." method="select_rastro"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnReplay" to="." method="replay_current"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnNext" to="." method="play_next_case"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnSequence" to="." method="play_sequence"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnLoop" to="." method="toggle_loop"]

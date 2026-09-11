@@ -99,12 +99,13 @@ func _run() -> void:
 	var viewport = Vector2(1280, 720)
 	game.mode = "game_over"
 	var end_buttons: Dictionary = game._game_over_button_layout(viewport)
-	_expect(end_buttons.has("end_retry") and end_buttons.has("end_ranking") and end_buttons.has("end_menu") and end_buttons.has("end_exit"), "game_over_buttons_missing")
+	_expect(end_buttons.has("end_retry") and end_buttons.has("end_ranking") and end_buttons.has("end_menu"), "game_over_buttons_missing")
+	_expect(not end_buttons.has("end_exit"), "game_over_exit_button_should_be_removed")
 	_expect(String(game._leaderboard_url()).ends_with(game.RUN_LEADERBOARD_VIEW_PATH), "leaderboard_url_invalid")
 	var fixed_run_url: String = game._sanitize_leaderboard_url("http://127.0.0.1:18191/leaderboard/run/5347688565db2d3df3")
 	_expect(fixed_run_url == "http://72.61.217.238:8090/leaderboard/run/5347688565db2d3df3", "leaderboard_localhost_not_sanitized")
 	game._on_run_leaderboard_request_completed(0, 201, PackedStringArray(), JSON.stringify({"run": {"id": "abc123"}, "runUrl": "http://127.0.0.1:18191/leaderboard/run/abc123"}).to_utf8_buffer())
 	_expect(game._leaderboard_url() == "http://72.61.217.238:8090/leaderboard/run/abc123", "leaderboard_run_url_not_used")
 
-	print("COMBAT_GAMEOVER_ADJUSTMENTS_OK prism_durability=true target_range=true rewind_clock=true rewind_clears_aim=true boiling_bubbles=true gameover_buttons=true ranking_button=true")
+	print("COMBAT_GAMEOVER_ADJUSTMENTS_OK prism_durability=true target_range=true rewind_clock=true rewind_clears_aim=true boiling_bubbles=true gameover_buttons=true no_exit=true ranking_button=true")
 	quit(0)

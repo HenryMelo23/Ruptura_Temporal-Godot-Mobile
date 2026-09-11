@@ -1,0 +1,278 @@
+[gd_scene load_steps=22 format=3 uid="uid://b8m2b1o4s8p9a"]
+
+[ext_resource type="Script" path="res://vfx/bombastica/BombasticaExplosionVFX.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/explosion_core_sheet.png" id="2_core_sheet"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/smoke_flipbook_sheet.png" id="3_smoke_sheet"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/flame_mini_sheet.png" id="4_flame_sheet"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/spark_texture.png" id="5_spark_tex"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/ember_texture.png" id="6_ember_tex"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/debris_texture.png" id="7_debris_tex"]
+[ext_resource type="Texture2D" path="res://vfx/bombastica/textures/quantum_spark.png" id="8_quantum_tex"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_sparks.tres" id="9_sparks_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_embers.tres" id="10_embers_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_debris.tres" id="11_debris_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_smoke_hot.tres" id="12_smoke_hot_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_smoke_cold.tres" id="13_smoke_cold_mat"]
+[ext_resource type="Material" path="res://vfx/bombastica/materials/bombastica_quantum.tres" id="14_quantum_mat"]
+[ext_resource type="Shader" path="res://vfx/bombastica/shaders/heat_distortion.gdshader" id="15_heat_shader"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_0"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(0, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_1"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(64, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_2"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(128, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_3"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(192, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_4"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(256, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_5"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(320, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_6"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(384, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_7"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(448, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_8"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(512, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_9"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(576, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_10"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(640, 0, 64, 64)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_core_11"]
+atlas = ExtResource("2_core_sheet")
+region = Rect2(704, 0, 64, 64)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_core"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_0")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_2")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_3")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_4")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_5")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_6")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_7")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_8")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_9")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_10")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_core_11")
+}],
+"loop": false,
+"name": &"default",
+"speed": 24.0
+}]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_flame_0"]
+atlas = ExtResource("4_flame_sheet")
+region = Rect2(0, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_flame_1"]
+atlas = ExtResource("4_flame_sheet")
+region = Rect2(16, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_flame_2"]
+atlas = ExtResource("4_flame_sheet")
+region = Rect2(32, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_flame_3"]
+atlas = ExtResource("4_flame_sheet")
+region = Rect2(48, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_flame_4"]
+atlas = ExtResource("4_flame_sheet")
+region = Rect2(64, 0, 16, 16)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_flame_5"]
+atlas = ExtResource("4_flame_sheet")
+region = Rect2(80, 0, 16, 16)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_flame"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_flame_0")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_flame_1")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_flame_2")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_flame_3")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_flame_4")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_flame_5")
+}],
+"loop": true,
+"name": &"default",
+"speed": 12.0
+}]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_heat"]
+shader = ExtResource("15_heat_shader")
+shader_parameter/strength = 0.015
+shader_parameter/progress = 0.0
+shader_parameter/frequency = 24.0
+shader_parameter/speed = 12.0
+
+[sub_resource type="Gradient" id="Gradient_light"]
+offsets = PackedFloat32Array(0, 0.4, 0.8, 1)
+colors = PackedColorArray(1, 0.95, 0.8, 1, 1, 0.6, 0.15, 0.8, 1, 0.3, 0.05, 0.3, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_light"]
+gradient = SubResource("Gradient_light")
+width = 128
+height = 128
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+
+[node name="BombasticaExplosionVFX" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="ScorchDecal" type="Sprite2D" parent="."]
+z_index = -1
+
+[node name="ExplosionCore" type="AnimatedSprite2D" parent="."]
+texture_filter = 0
+sprite_frames = SubResource("SpriteFrames_core")
+autoplay = "default"
+
+[node name="ResidualFlame" type="AnimatedSprite2D" parent="."]
+visible = false
+texture_filter = 0
+sprite_frames = SubResource("SpriteFrames_flame")
+
+[node name="FlameFragments" type="GPUParticles2D" parent="."]
+texture_filter = 0
+emitting = false
+amount = 10
+process_material = ExtResource("9_sparks_mat")
+texture = ExtResource("5_spark_tex")
+lifetime = 0.4
+one_shot = true
+explosiveness = 0.9
+
+[node name="Sparks" type="GPUParticles2D" parent="."]
+texture_filter = 0
+emitting = false
+amount = 26
+process_material = ExtResource("9_sparks_mat")
+texture = ExtResource("5_spark_tex")
+lifetime = 0.35
+one_shot = true
+explosiveness = 0.95
+
+[node name="Embers" type="GPUParticles2D" parent="."]
+texture_filter = 0
+emitting = false
+amount = 22
+process_material = ExtResource("10_embers_mat")
+texture = ExtResource("6_ember_tex")
+lifetime = 0.8
+one_shot = true
+explosiveness = 0.85
+
+[node name="Debris" type="GPUParticles2D" parent="."]
+texture_filter = 0
+emitting = false
+amount = 12
+process_material = ExtResource("11_debris_mat")
+texture = ExtResource("7_debris_tex")
+lifetime = 0.6
+one_shot = true
+explosiveness = 0.95
+
+[node name="SmokeHot" type="GPUParticles2D" parent="."]
+texture_filter = 0
+emitting = false
+amount = 16
+process_material = ExtResource("12_smoke_hot_mat")
+texture = ExtResource("3_smoke_sheet")
+lifetime = 0.7
+one_shot = true
+explosiveness = 0.8
+
+[node name="SmokeCold" type="GPUParticles2D" parent="."]
+texture_filter = 0
+emitting = false
+amount = 14
+process_material = ExtResource("13_smoke_cold_mat")
+texture = ExtResource("3_smoke_sheet")
+lifetime = 1.2
+one_shot = true
+explosiveness = 0.7
+
+[node name="QuantumSparks" type="GPUParticles2D" parent="."]
+texture_filter = 0
+emitting = false
+amount = 12
+process_material = ExtResource("14_quantum_mat")
+texture = ExtResource("8_quantum_tex")
+lifetime = 0.4
+one_shot = true
+explosiveness = 0.95
+
+[node name="HeatDistortion" type="ColorRect" parent="."]
+visible = false
+material = SubResource("ShaderMaterial_heat")
+offset_left = -80.0
+offset_top = -80.0
+offset_right = 80.0
+offset_bottom = 80.0
+
+[node name="FlashLight" type="PointLight2D" parent="."]
+visible = false
+color = Color(1, 0.65, 0.2, 1)
+energy = 2.2
+texture = SubResource("GradientTexture2D_light")
+texture_scale = 1.2

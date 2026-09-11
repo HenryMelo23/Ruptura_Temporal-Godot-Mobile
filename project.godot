@@ -15,9 +15,16 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Ruptura Temporal Mobile"
-run/main_scene="res://scenes/Main.tscn"
+config/version="2.0.35"
+run/main_scene="res://scenes/Boot.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
+boot_splash/bg_color=Color(0.006, 0.01, 0.026, 1)
+boot_splash/show_image=false
 config/icon="res://img/icone.png"
+
+[autoload]
+
+SceneTransitionManager="*res://scripts/scene_transition_manager.gd"
 
 [display]
 
@@ -25,7 +32,10 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation=4
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/at-icons/plugin.cfg", "res://addons/interaction_feedback/plugin.cfg")
 
 [input_devices]
 

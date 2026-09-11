@@ -1,0 +1,3 @@
+# The bundled Godot AI snapshot is kept for optional MCP use, but is disabled
+# in this project until its generated client scripts are upgraded together.
+# Remove this file and enable the plugin only after installing a compatible release.

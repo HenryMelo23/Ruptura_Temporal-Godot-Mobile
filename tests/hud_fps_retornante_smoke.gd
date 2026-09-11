@@ -53,4 +53,7 @@ func _run() -> void:
 	game._save_config()
 
 	print("HUD_FPS_RETORNANTE_SMOKE_OK fps=true cheat=true scalable_hud=true")
+	game.queue_free()
+	await process_frame
+	await create_timer(0.25).timeout
 	quit(0)

@@ -1,0 +1,101 @@
+import os
+
+DEBUG_DIR = "debug"
+os.makedirs(DEBUG_DIR, exist_ok=True)
+
+tscn_content = """[gd_scene load_steps=2 format=3 uid="uid://lab1bombastica"]
+
+[ext_resource type="Script" path="res://debug/bombastica_vfx_lab.gd" id="1_script"]
+
+[node name="BombasticaVFXLab" type="Node2D"]
+script = ExtResource("1_script")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.08, 0.09, 0.12, 1)
+
+[node name="SpawnCenter" type="Node2D" parent="."]
+position = Vector2(640, 360)
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="UI" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="LabelStatus" type="Label" parent="CanvasLayer/UI"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 600.0
+offset_bottom = 80.0
+text = "BOMBASTICA VFX LAB"
+
+[node name="GridButtons" type="GridContainer" parent="CanvasLayer/UI"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 90.0
+offset_right = 320.0
+offset_bottom = 500.0
+columns = 1
+
+[node name="BtnQNormal" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "1. Q NORMAL"
+
+[node name="BtnQLong" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "2. Q FUSE LONGO"
+
+[node name="BtnMine" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "3. MINA E"
+
+[node name="BtnIgnition" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "4. IGNIÇÃO PASSIVA"
+
+[node name="BtnChain1" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "5. CHAIN 1"
+
+[node name="BtnChain3" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "6. CHAIN 3"
+
+[node name="BtnChain5" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "7. CHAIN 5"
+
+[node name="BtnTotal" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "8. DETONAÇÃO TOTAL"
+
+[node name="BtnQuality" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "TOGGLE QUALITY (LOW/MED/HIGH)"
+
+[node name="BtnOldVFX" type="Button" parent="CanvasLayer/UI/GridButtons"]
+layout_mode = 2
+text = "TOGGLE OLD / NEW VFX"
+
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnQNormal" to="." method="spawn_q_normal"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnQLong" to="." method="spawn_q_long_fuse"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnMine" to="." method="spawn_mine"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnIgnition" to="." method="spawn_ignition"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnChain1" to="." method="spawn_chain" binds=[1]]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnChain3" to="." method="spawn_chain" binds=[3]]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnChain5" to="." method="spawn_chain" binds=[5]]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnTotal" to="." method="spawn_total_detonation"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnQuality" to="." method="toggle_quality"]
+[connection signal="pressed" from="CanvasLayer/UI/GridButtons/BtnOldVFX" to="." method="toggle_old_vfx"]
+"""
+
+with open(os.path.join(DEBUG_DIR, "BombasticaVFXLab.tscn"), "w", encoding="utf-8") as f:
+    f.write(tscn_content)
+print("Created BombasticaVFXLab.tscn")

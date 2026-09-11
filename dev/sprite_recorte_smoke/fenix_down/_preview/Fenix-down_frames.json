@@ -1,0 +1,39 @@
+{
+  "source": "C:\\Users\\luish\\Downloads\\Fenix-down.png",
+  "sheet": "Fenix-down",
+  "frame_count": 4,
+  "uniform_canvas": true,
+  "padding": 4,
+  "boxes": [
+    {
+      "left": 27,
+      "top": 44,
+      "right": 218,
+      "bottom": 234
+    },
+    {
+      "left": 239,
+      "top": 80,
+      "right": 422,
+      "bottom": 245
+    },
+    {
+      "left": 463,
+      "top": 80,
+      "right": 623,
+      "bottom": 256
+    },
+    {
+      "left": 649,
+      "top": 113,
+      "right": 830,
+      "bottom": 258
+    }
+  ],
+  "files": [
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_down\\Fenix-down_01.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_down\\Fenix-down_02.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_down\\Fenix-down_03.png",
+    "C:\\Users\\luish\\Documents\\GitHub\\Ruptura_Temporal-Godot-Mobile\\dev\\sprite_recorte_smoke\\fenix_down\\Fenix-down_04.png"
+  ]
+}

@@ -37,17 +37,22 @@ func _run() -> void:
 	game.current_phase = 1
 	game.time_alive = game.PHASE1_LIMIT_BREAK_TIME - 1.0
 	game.enemies_killed = 80
-	game.phase1_limit_break_kills_start = -1
+	game._reset_enemy_limit_scaling_state()
+	game._sync_enemy_limit_scaling_state()
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE)
 	game.time_alive = game.PHASE1_LIMIT_BREAK_TIME
 	game.enemies_killed = 40
+	game._sync_enemy_limit_scaling_state()
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE)
-	game.enemies_killed = 69
+	game.enemies_killed = 59
+	game._sync_enemy_limit_scaling_state()
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE)
-	game.enemies_killed = 70
+	game.enemies_killed = 60
+	game._sync_enemy_limit_scaling_state()
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE + 1)
 
 	game.current_phase = 2
+	game._reset_enemy_limit_scaling_state()
 	game.phase_started_at = 100.0
 	game.time_alive = game.phase_started_at + 239.0
 	assert(game._enemy_limit() == game.PHASE2_COMMON_LIMIT)
@@ -59,6 +64,7 @@ func _run() -> void:
 	assert(game._enemy_limit() == game.PHASE2_COMMON_LIMIT + game.PHASE2_KAMIKAZE_LIMIT + game.PHASE2_PYRO_LIMIT)
 
 	game.current_phase = 3
+	game._reset_enemy_limit_scaling_state()
 	game.phase_started_at = 200.0
 	game.time_alive = game.phase_started_at + 120.0
 	assert(game._enemy_limit() == game.PHASE3_LIMIT_EARLY)
@@ -70,6 +76,7 @@ func _run() -> void:
 	assert(game._enemy_limit() == game.PHASE3_LIMIT_FULL)
 
 	game.current_phase = 4
+	game._reset_enemy_limit_scaling_state()
 	game.phase_started_at = 300.0
 	game.time_alive = game.phase_started_at + 90.0
 	assert(game._enemy_limit() == game.PHASE4_LIMIT_EARLY)
@@ -77,6 +84,7 @@ func _run() -> void:
 	assert(game._enemy_limit() == game.PHASE4_LIMIT_FULL)
 
 	game.current_phase = 2
+	game._reset_enemy_limit_scaling_state()
 	game.phase_started_at = 100.0
 	game.enemies.clear()
 	for i in range(4):
@@ -97,7 +105,7 @@ func _run() -> void:
 	game.player_hp = 1000
 	game.player_silence_timer = 0.0
 	game.enemy_far_damage = 20.0
-	game._apply_arauto_silence_hit(game.player_pos, game.ARAUTO_SILENCE_RADIUS, false)
+	game._apply_arauto_silence_hit(game.player_pos, game.ARAUTO_SILENCE_RADIUS, false, game._mp_unique_id())
 	assert(game.player_silence_timer > 0.0)
 	assert(game.player_hp < 1000)
 

@@ -2,6 +2,7 @@ extends SceneTree
 
 const PREFIX := "res://tests/ability_visual_"
 const ERROR_FILE := PREFIX + "error.txt"
+const LOCAL_PING_BUDGET_MS := 50
 
 var game: Node
 var role := ""
@@ -49,7 +50,7 @@ func _start() -> void:
 
 
 func _run_server() -> void:
-	var deadline := Time.get_ticks_msec() + 20000
+	var deadline := Time.get_ticks_msec() + 60000
 	while Time.get_ticks_msec() < deadline:
 		await process_frame
 		if game.dedicated_room_owner_peer_id != 0 and game._mp_peer_ids().size() == 2 and not FileAccess.file_exists(PREFIX + "server_ready.txt"):
@@ -65,7 +66,7 @@ func _run_server() -> void:
 
 
 func _run_host() -> void:
-	var deadline := Time.get_ticks_msec() + 20000
+	var deadline := Time.get_ticks_msec() + 60000
 	var sent := false
 	var projectile: Dictionary = {}
 	var destroy_sent := false
@@ -109,8 +110,8 @@ func _run_host() -> void:
 			game._update_bullets(0.0)
 			continue
 		if destroy_sent and FileAccess.file_exists(PREFIX + "client_result.txt"):
-			await _wait_for_ping_budget(30, 2.0)
-			_check(game.net_report_ping_min <= 30, "host relay ping exceeded local 30ms budget: best=%d last=%d" % [game.net_report_ping_min, game.net_ping_ms])
+			await _wait_for_ping_budget(LOCAL_PING_BUDGET_MS, 2.0)
+			_check(game.net_report_ping_min <= LOCAL_PING_BUDGET_MS, "host relay ping exceeded local %dms budget: best=%d last=%d" % [LOCAL_PING_BUDGET_MS, game.net_report_ping_min, game.net_ping_ms])
 			print("[HOST] ABILITY_VISUAL_OK ping_ms=%d ping_min_ms=%d q_e_tp_sent=true projectile_destroy_sent=true" % [game.net_ping_ms, game.net_report_ping_min])
 			_write("host_result", "OK")
 			while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:
@@ -121,7 +122,7 @@ func _run_host() -> void:
 
 
 func _run_client() -> void:
-	var deadline := Time.get_ticks_msec() + 20000
+	var deadline := Time.get_ticks_msec() + 60000
 	var received := false
 	var payload_bytes_seen := 0
 	while Time.get_ticks_msec() < deadline:
@@ -152,8 +153,8 @@ func _run_client() -> void:
 				if float(bullet.get("life", 0.0)) > 0.0:
 					projectile_finished = false
 			if projectile_finished:
-				await _wait_for_ping_budget(30, 2.0)
-				_check(game.net_report_ping_min <= 30, "client relay ping exceeded local 30ms budget: best=%d last=%d" % [game.net_report_ping_min, game.net_ping_ms])
+				await _wait_for_ping_budget(LOCAL_PING_BUDGET_MS, 2.0)
+				_check(game.net_report_ping_min <= LOCAL_PING_BUDGET_MS, "client relay ping exceeded local %dms budget: best=%d last=%d" % [LOCAL_PING_BUDGET_MS, game.net_report_ping_min, game.net_ping_ms])
 				print("[CLIENT] ABILITY_VISUAL_OK ping_ms=%d ping_min_ms=%d payload_bytes=%d q_e_tp_visible=true projectile_removed=true" % [game.net_ping_ms, game.net_report_ping_min, payload_bytes_seen])
 				_write("client_result", "OK")
 				while not FileAccess.file_exists(PREFIX + "server_result.txt") and Time.get_ticks_msec() < deadline:

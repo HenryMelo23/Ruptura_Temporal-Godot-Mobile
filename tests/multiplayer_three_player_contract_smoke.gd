@@ -33,6 +33,7 @@ func _remote_state(pos: Vector2, name: String) -> Dictionary:
 func _run() -> void:
 	await process_frame
 	game.is_multiplayer = true
+	game.is_host = true
 	game.online_connected = false
 	game.online_lobby_connected_count = 3
 	game._start_game()
@@ -43,18 +44,46 @@ func _run() -> void:
 	}
 	game.net_player_peer_id = 42
 	game._sync_legacy_remote_player(42)
+	var local_peer: int = game._mp_unique_id()
 
 	_check(game.ONLINE_MIN_PLAYERS == 2 and game.ONLINE_MAX_PLAYERS == 3, "room limits are not 2 to 3")
 	_check(game._combat_targets().size() == 3, "combat target registry did not expose all three players")
-	_check(is_equal_approx(game.boss_hp_max, game.BOSS_BASE_HP), "multiplayer still inflated boss health")
+	_check(is_equal_approx(game._multiplayer_enemy_hp_scale(), game.MULTIPLAYER_ENEMY_HP_SCALE_3P), "three-player enemy hp scale is not active")
+	_check(is_equal_approx(game._multiplayer_boss_damage_scale(), game.MULTIPLAYER_BOSS_DAMAGE_SCALE_3P), "three-player boss damage scale is not active")
+	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss hp scale is not active")
+	_check(game._enemy_limit() == game.ENEMY_MAX_BASE + game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player enemy limit bonus is not active")
+	game.online_room_owner = true
+	game.is_host = true
+	game.run_leader_peer_id = 0
+	game._refresh_run_leader()
+	_check(game.run_leader_peer_id == local_peer, "living host should lead phase routing")
+	game.is_dead = true
+	game.player_hp = 0.0
+	game._refresh_run_leader()
+	_check(game.run_leader_peer_id in [42, 43], "leader should move to a living player while host is dead")
+	game.is_dead = false
+	game.player_hp = game.player_hp_max
+	game._refresh_run_leader()
+	_check(game.run_leader_peer_id == local_peer, "host should recover leadership after revive")
 
-	var local_peer: int = game._mp_unique_id()
-	var rotated_boss_targets: Dictionary = {}
+	game.is_dead = true
+	game.player_hp = 0.0
+	var dead_target_enemy := {"uid": 601, "pos": game.player_pos + Vector2(40, 0), "target_peer_id": local_peer}
+	var dead_target_pos: Vector2 = game._get_enemy_target_pos(dead_target_enemy)
+	_check(int(dead_target_enemy.get("target_peer_id", 0)) != local_peer, "enemy retained dead local player as target")
+	_check(dead_target_pos != game.player_pos, "enemy kept chasing the eliminated local player")
+	game.is_dead = false
+	game.player_hp = game.player_hp_max
+
 	var rotated_arauto_targets: Dictionary = {}
+	game.boss_pos = Vector2(760, 430)
+	game.boss_hp_max = game.BOSS_BASE_HP
+	game.boss_target_peer_id = 0
+	game.boss_threat_by_peer = {42: 1200.0, 43: 20.0, local_peer: 10.0}
+	var boss_target: Dictionary = game._boss_target_entry(true)
+	_check(int(boss_target.get("peer_id", 0)) == 42, "boss did not focus the highest threat player")
 	for index in range(3):
-		rotated_boss_targets[int(game._boss_target_entry(true).get("peer_id", 0))] = true
 		rotated_arauto_targets[int(game._arauto_target_entry(true).get("peer_id", 0))] = true
-	_check(rotated_boss_targets.size() == 3, "boss did not rotate between three living players")
 	_check(rotated_arauto_targets.size() == 3, "Arauto did not rotate between three living players")
 
 	var eclipsada_index := -1
@@ -116,6 +145,8 @@ func _run() -> void:
 	game.net_players_by_peer[43]["dead"] = true
 	game.net_players_by_peer[43]["hp"] = 0.0
 	_check(game._all_multiplayer_players_dead(), "run did not end after the whole team died")
+	game.mode = "game"
+	_check(game._finish_multiplayer_defeat_if_all_dead() and game.mode == "game_over", "all-dead multiplayer run did not transition to game over")
 
 	game.is_dead = false
 	game.player_hp = game.player_hp_max
@@ -129,48 +160,59 @@ func _run() -> void:
 	_check(game.NET_PLAYER_SYNC_INTERVAL_MS <= 16 and game.NET_WORLD_SYNC_INTERVAL_MS <= 25 and game.NET_WORLD_VISUAL_SYNC_INTERVAL_MS <= 33, "network cadence exceeds the low-latency budget")
 
 	game.online_room_owner = false
+	game.is_host = false
 	game.score = 100
 	game.score_total = 100
 	game._apply_score_delta(50)
 	_check(game.score == 100 and game.score_total == 100, "world replica mutated score locally instead of waiting for host authority")
 	game.online_room_owner = true
+	game.is_host = true
 	game._apply_score_delta(50, false)
 	_check(game.score == 150 and game.score_total == 150, "world authority did not apply score delta locally")
 
 	game.mode = "game"
-	game.is_dead = true
-	game.player_hp = 0
-	game.card_cost = 100
-	game.score = 0
-	game.revive_request_cooldown = 0.0
-	game._request_team_revive()
-	_check(game.revive_request_outgoing and game.revive_request_timer > 0.0, "dead player could not request team revive without points")
-	game._rpc_reject_team_revive(game._mp_unique_id())
-	_check(game.revive_request_cooldown >= game.REVIVE_REQUEST_COOLDOWN - 0.01, "rejected revive request did not start cooldown")
 	game.is_dead = false
-	game.player_hp = game.player_hp_max
-	game.revive_request_incoming = true
-	game.revive_request_target_peer = 42
-	game.revive_request_cost = 120
-	game.score = 500
-	game._accept_team_revive_request(game.REVIVE_PAY_POINTS)
-	_check(game.score == 380 and not game.revive_request_incoming, "accepting revive did not deduct team cost and clear request")
-	game.revive_request_incoming = true
-	game.revive_request_target_peer = 43
-	game.revive_request_cost = 240
-	game.score = 0
 	game.player_hp_max = 500
+	game.player_hp = 500
+	game.card_cost = 100
+	game.score = 500
+	game._clear_team_revival_state()
+	game.net_players_by_peer[42] = _remote_state(Vector2(900, 430), "DOIS")
+	game.net_players_by_peer[42]["dead"] = true
+	game._start_team_revival_for_dead(42, Vector2(900, 430), "DOIS", false)
+	_check(game.revival_active and game.revival_fragments.size() == game.REVIVAL_FRAGMENTS_PER_DEAD and is_equal_approx(game.revival_total_time, game.REVIVAL_SINGLE_TIME), "single dead did not start fragment reconstruction")
+	for fragment in game.revival_fragments.duplicate(true):
+		game.player_pos = Vector2(Dictionary(fragment).get("pos", game.player_pos))
+		game._collect_revival_fragment(int(Dictionary(fragment).get("id", 0)), game._mp_unique_id())
+	_check(game.revival_altars_active and game.revival_fragments_collected == game.revival_fragments.size(), "collecting all fragments did not spawn altars")
+	game.player_pos = game.revival_altar_points_pos
+	game._try_interact_revival_altar(game.REVIVE_PAY_POINTS)
+	_check(game.score == 100 and not game.revival_active and not bool(Dictionary(game.net_players_by_peer[42]).get("dead", true)), "points altar did not spend four cards and revive remote player")
+
+	game._clear_team_revival_state()
+	game.net_players_by_peer[42] = _remote_state(Vector2(900, 430), "DOIS")
+	game.net_players_by_peer[43] = _remote_state(Vector2(1180, 560), "TRES")
+	game.net_players_by_peer[42]["dead"] = true
+	game.net_players_by_peer[43]["dead"] = true
+	game._start_team_revival_for_dead(42, Vector2(900, 430), "DOIS", false)
+	game._start_team_revival_for_dead(43, Vector2(1180, 560), "TRES", false)
+	_check(game.revival_fragments.size() == game.REVIVAL_FRAGMENTS_PER_DEAD * 2 and is_equal_approx(game.revival_total_time, game.REVIVAL_MULTI_TIME), "multiple dead did not increase fragment window")
+	for fragment in game.revival_fragments.duplicate(true):
+		game.player_pos = Vector2(Dictionary(fragment).get("pos", game.player_pos))
+		game._collect_revival_fragment(int(Dictionary(fragment).get("id", 0)), game._mp_unique_id())
 	game.player_hp = 400
-	game._accept_team_revive_request(game.REVIVE_PAY_LIFE)
-	_check(game.score == 0 and is_equal_approx(game.player_hp, 200.0) and game.revive_heal_penalty_timer >= game.REVIVE_HEAL_PENALTY_DURATION - 0.01 and not game.revive_request_incoming, "life revive did not sacrifice hp, apply heal penalty and clear request")
+	game.player_pos = game.revival_altar_life_pos
+	game._try_interact_revival_altar(game.REVIVE_PAY_LIFE)
+	_check(is_equal_approx(game.player_hp, 184.0) and not game.revival_active, "life altar did not apply reduced 54 percent sacrifice when two allies were down")
+	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 108.0) and is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 108.0), "life altar did not split reduced sacrificed health between dead players")
 	var healed: float = game._heal_player(100.0, "revive_smoke", false)
-	_check(is_equal_approx(healed, 50.0) and is_equal_approx(game.player_hp, 250.0), "revive sacrifice did not reduce incoming healing by 50 percent")
+	_check(is_equal_approx(healed, 50.0) and is_equal_approx(game.player_hp, 234.0), "revive sacrifice did not reduce incoming healing by 50 percent")
 	game.is_dead = true
 	game.player_hp = 0
 	game._handle_revive(true)
 	_check(not game.is_dead and is_equal_approx(game.player_hp, game.player_hp_max * 0.5), "revive did not return player with half hp")
 
-	print("MULTIPLAYER_THREE_PLAYER_CONTRACT_SMOKE_OK players=3 stealth=true rewards=per_peer choices=exclusive decks=shared shop_return=3s")
+	print("MULTIPLAYER_THREE_PLAYER_CONTRACT_SMOKE_OK players=3 stealth=true rewards=collective_points_individual_spend choices=exclusive decks=shared shop_return=3s balance=scaled")
 	game.queue_free()
 	await process_frame
 	quit(0)

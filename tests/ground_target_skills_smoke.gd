@@ -52,6 +52,7 @@ func _run() -> void:
 		"speed": 0.0,
 		"life": 1.0,
 		"max_life": 1.0,
+		"origin": prism_target - Vector2(180.0, 0.0),
 		"age": 0.0,
 		"phase": 0.0,
 		"trail_cd": 99.0,
@@ -66,6 +67,28 @@ func _run() -> void:
 	})
 	game._update_bullets(0.0)
 	_check(game.bullets.size() == 5, "prismatic prism did not split into 5 beams")
+	game.bullets.clear()
+	game.bullets.append({
+		"pos": prism_target,
+		"origin": prism_target,
+		"dir": Vector2.RIGHT,
+		"speed": 0.0,
+		"life": 1.0,
+		"max_life": 1.0,
+		"age": 0.0,
+		"phase": 0.0,
+		"trail_cd": 99.0,
+		"damage": 100.0,
+		"kind": "prismatica",
+		"color": Color(0.32, 1.0, 0.96),
+		"pierce": true,
+		"hits": {},
+		"refracted": false,
+		"ricochets": 3,
+		"durability": 100.0
+	})
+	game._update_bullets(0.0)
+	_check(game.bullets.size() == 1 and not bool(game.bullets[0].get("refracted", false)), "prismatic shot born inside prism should not refract")
 
 	game.attack_dragging = true
 	game.attack_drag_direction = Vector2.UP
@@ -86,7 +109,7 @@ func _run() -> void:
 	game.effects.clear()
 	var anchor_target = Vector2(610.0, 640.0)
 	game._use_secondary_skill(anchor_target)
-	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(anchor_target) < 0.1, "anchored ultimate ignored its ground target")
+	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(game.player_pos) < 0.1, "anchored ultimate should be centered on the player")
 
 	print("GROUND_TARGET_SKILLS_SMOKE_OK parasitic_q=true prismatic_q=true tp_aim=true gravitante_e=true ancorada_e=true cancel=true")
 	quit(0)

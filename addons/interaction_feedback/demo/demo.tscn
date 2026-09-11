@@ -1,0 +1,110 @@
+[gd_scene format=3 uid="uid://cwd7dt6st8bpi"]
+
+[ext_resource type="Script" uid="uid://cig58e50ttrlr" path="res://addons/interaction_feedback/demo/demo.gd" id="1_demo"]
+
+[sub_resource type="StyleBoxFlat" id="SB_switch_normal"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
+bg_color = Color(0.898, 0.929, 0.973, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="SB_switch_pressed"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
+bg_color = Color(0.702, 0.796, 0.937, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="SB_switch_hover"]
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
+bg_color = Color(0.784, 0.855, 0.961, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[node name="Demo" type="Control" unique_id=478902330]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_demo")
+
+[node name="Background" type="ColorRect" parent="." unique_id=600074406]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=302932750]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="Layout" type="VBoxContainer" parent="Margin" unique_id=1571280349]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="VBoxContainer" parent="Margin/Layout" unique_id=1856682493]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Margin/Layout/Header" unique_id=563515089]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.16, 0.21, 0.32, 1)
+theme_override_font_sizes/font_size = 40
+text = "InteractionFeedback"
+horizontal_alignment = 1
+
+[node name="Switch" type="CheckButton" parent="Margin/Layout/Header" unique_id=770001122]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0.2, 0.26, 0.36, 1)
+theme_override_colors/font_focus_color = Color(0.2, 0.26, 0.36, 1)
+theme_override_colors/font_pressed_color = Color(0.2, 0.26, 0.36, 1)
+theme_override_colors/font_hover_color = Color(0.2, 0.26, 0.36, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("SB_switch_normal")
+theme_override_styles/pressed = SubResource("SB_switch_pressed")
+theme_override_styles/hover = SubResource("SB_switch_hover")
+theme_override_styles/hover_pressed = SubResource("SB_switch_hover")
+theme_override_styles/focus = SubResource("SB_switch_normal")
+text = "Try on Node2D"
+
+[node name="Scroll" type="ScrollContainer" parent="Margin/Layout" unique_id=880011234]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Stage" type="HBoxContainer" parent="Margin/Layout/Scroll" unique_id=990022345]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
