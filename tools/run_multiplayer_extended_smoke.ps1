@@ -41,9 +41,17 @@ function Invoke-MultiplayerCase {
                 "--role=$role",
                 "--port=$Port"
             )
-            $processes += Start-Process -FilePath $GodotBin -ArgumentList $arguments `
-                -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-                -WindowStyle Hidden -PassThru
+            $startArgs = @{
+                FilePath = $GodotBin
+                ArgumentList = $arguments
+                RedirectStandardOutput = $stdout
+                RedirectStandardError = $stderr
+                PassThru = $true
+            }
+            if ($IsWindows) {
+                $startArgs.WindowStyle = 'Hidden'
+            }
+            $processes += Start-Process @startArgs
             if ($role -eq 'server') {
                 Start-Sleep -Milliseconds 1200
             }

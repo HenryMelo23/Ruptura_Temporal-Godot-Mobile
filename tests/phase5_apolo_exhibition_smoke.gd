@@ -59,6 +59,8 @@ func _run() -> void:
 
 	print("PHASE5_APOLO_EXHIBITION_SMOKE_OK phase=5 clean=true apolo_memory=true movement=true aim=true attack=true laser_awareness=true")
 	_cleanup()
+	await process_frame
+	await process_frame
 	quit(0)
 
 

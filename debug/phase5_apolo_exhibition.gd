@@ -8,6 +8,7 @@ var game: Node
 func _ready() -> void:
 	game = preload("res://scenes/Main.tscn").instantiate()
 	game.name = "Phase5Main"
+	game.test_audio_disabled = true
 	add_child(game)
 	call_deferred("_start_exhibition")
 

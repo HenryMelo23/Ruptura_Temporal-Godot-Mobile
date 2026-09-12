@@ -3314,6 +3314,7 @@ var sfx_players = []
 var music_player = null
 var music_crossfade_player: AudioStreamPlayer = null
 var current_music = ""
+var test_audio_disabled: bool = false
 var audio_streams = {}
 var audio_stream_paths: Dictionary = {}
 var audio_stream_loops: Dictionary = {}
@@ -3522,7 +3523,8 @@ func _ready() -> void :
 	_load_config()
 	_apply_graphics_settings()
 	_sync_sfx_player_pool()
-	_load_audio_streams()
+	if not test_audio_disabled:
+		_load_audio_streams()
 	_load_player_profile()
 	_load_card_unlocks()
 	_load_run_report_webhook_url()
@@ -3535,7 +3537,8 @@ func _ready() -> void :
 	_update_webhook_input_visibility()
 	set_process(true)
 
-	_play_menu_music_random()
+	if not test_audio_disabled:
+		_play_menu_music_random()
 	_perf_mark("ready_total", perf_ready_started_ms)
 
 
