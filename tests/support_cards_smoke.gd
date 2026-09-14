@@ -66,9 +66,9 @@ func _run() -> void:
 	game.shop_locked_slots[game._shop_locked_key(0)] = {"card": common_card.duplicate(true), "price": 500, "visit": 0}
 	_check(game._burn_shop_card(0), "Cinzas could not burn a valid common card")
 	_check(game._is_empty_shop_slot(game.shop_cards[0]), "Cinzas did not leave an empty slot")
-	_check(not game.shop_cinzas_burn_anim.is_empty(), "Cinzas did not start its 1.4s burn animation")
-	_check(float(game.shop_cinzas_burn_anim.get("max", 0.0)) == game.SHOP_CINZAS_BURN_ANIM_TIME, "Cinzas burn animation did not use the expected duration")
-	_check(String(Dictionary(game.shop_cinzas_burn_anim.get("card", {})).get("cinzas_bonus_summary", "")) != "", "Cinzas burn animation did not explain the future bonus")
+	_check(game.shop_presentation.action == "burn", "Cinzas did not start its burn animation")
+	_check(game.shop_presentation.duration == game.shop_presentation.BURN_TIME, "Cinzas burn duration drifted")
+	_check(String(game.shop_presentation.previous_cards[0].get("cinzas_bonus_summary", "")) != "", "Cinzas burn animation did not explain the future bonus")
 	_check(not game._shop_slot_locked(0), "Cinzas did not unlock a burned reserved card")
 	_check(game._card_count_by_id(game.CARD_CINZAS_ID) == cinzas_before - 1, "Cinzas was not consumed when burning")
 	_check(game.cinzas_burn_marks.size() == 1, "Cinzas did not create a mark")
@@ -85,6 +85,7 @@ func _run() -> void:
 	_check(String(returned_cards[0].get("cinzas_bonus_summary", "")) != "", "Cinzas returned card did not expose the concrete bonus")
 	game._apply_card(game._find_card_by_id(game.CARD_CINZAS_ID))
 	game.shop_cards = [returned_cards[0].duplicate(true)]
+	game.shop_presentation.update(game.shop_presentation.BURN_TIME)
 	_check(game._burn_shop_card(0), "Cinzas could not burn an already-buffed common card")
 	_check(game._cinzas_mark_stacks(game.CARD_TREGUA_ID) == 2, "Cinzas did not stack when burning a buffed return")
 	var stacked_return := [common_card.duplicate(true)]

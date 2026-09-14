@@ -242,12 +242,14 @@ static func desktop_button_rects(
 	viewport: Vector2,
 	include_empower: bool,
 	include_detonator: bool,
-	include_shop_manual: bool
+	include_shop_manual: bool,
+	desktop_scale: float = 1.0
 ) -> Dictionary:
 	var rects: = {}
-	var card_w: = 72.0
-	var card_h: = 88.0
-	var gap: = 12.0
+	var scale: float = clampf(desktop_scale, 0.5, 1.0)
+	var card_w: = 92.0 * scale
+	var card_h: = 96.0 * scale
+	var gap: = 12.0 * scale
 	var total_cards: int = 4 + (1 if (include_empower or include_detonator) else 0)
 	var total_w: = card_w * float(total_cards) + gap * float(total_cards - 1)
 	var x: = viewport.x * 0.5 - total_w * 0.5

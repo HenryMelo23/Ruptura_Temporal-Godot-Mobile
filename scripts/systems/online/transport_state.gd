@@ -7,8 +7,10 @@ const HEALTH_STALLED: String = "stalled"
 const HEALTH_WARMING: String = "warming"
 
 
-static func configure_connection(connection: ENetConnection) -> void:
-	connection.compress(ENetConnection.COMPRESS_FASTLZ)
+static func configure_connection(connection: ENetConnection, compression: int = ENetConnection.COMPRESS_NONE) -> void:
+	# Public relays use ENet's default. Compression must agree on both ends
+	# before connecting; forcing FastLZ silently breaks the handshake.
+	connection.compress(compression)
 
 static func adaptive_interval_ms(base_interval_ms: int, _ping_ms: int, jitter_ms: float) -> int:
 	# Stable round-trip latency does not indicate congestion.

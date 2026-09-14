@@ -50,7 +50,8 @@ func _run() -> void:
 	assert(game._ui_input_blocked())
 	if Input.get_connected_joypads().is_empty():
 		assert(not game._settings_rects(viewport).has("gamepad"))
-		assert(game._settings_index_for("gameplay") > game._settings_index_for("controls"))
+		assert(not game._settings_option_keys().has("controls"))
+		assert(game._settings_index_for("gameplay") >= 0)
 
 	game._handle_press(game._settings_rects(viewport)["graphics"].get_center(), viewport)
 	assert(game.mode == "settings")
@@ -74,4 +75,14 @@ func _run() -> void:
 	assert(game._ui_input_blocked())
 
 	print("PAUSE_SETTINGS_SMOKE_OK pause_first_tap=true settings_hub=true no_touch_leak=true back_to_pause=true")
+	if game.music_player != null:
+		game.music_player.stop()
+	if game.music_crossfade_player != null:
+		game.music_crossfade_player.stop()
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
+	game.queue_free()
+	await process_frame
+	await process_frame
 	quit(0)

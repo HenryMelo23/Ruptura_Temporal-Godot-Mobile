@@ -18,6 +18,9 @@ func _expect(ok: bool, message: String) -> void:
 
 func _run() -> void:
 	game._start_game()
+	game.set_process(false)
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.current_phase = 2
 	game.boss_active = true
 	game.boss_dead = false
@@ -44,11 +47,13 @@ func _run() -> void:
 	_expect(game.boss2_ultimate_timer == game.BOSS2_ULTIMATE_DURATION, "duration_not_started")
 	_expect(game.BOSS2_ULTIMATE_DURATION == 40.0, "duration_not_40_seconds")
 	_expect(game.boss2_ultimate_cooldown == 0.0, "ultimate_should_have_no_initial_cooldown")
-	_expect(game.BOSS2_ULTIMATE_SAFE_RADIUS == 485.0, "safe_radius_not_485")
+	_expect(game.BOSS2_ULTIMATE_SAFE_RADIUS == 480.0, "safe_radius_not_480")
 	_expect(game.boss_attacks.is_empty(), "old_attacks_not_cleared")
-	game.boss2_ultimate_spit_timer = 2.0
+	game.boss2_ultimate_spit_timer = 2.5
 	game.boss2_ultimate_wind_active = 0.0
 	_expect(not game._boss2_ultimate_boss_visible(), "boss_should_hide_inside_blizzard")
+	game.boss2_ultimate_spit_timer = game._telegraph_window(game.BOSS2_ULTIMATE_WARNING_TIME) - 0.01
+	_expect(game._boss2_ultimate_boss_visible(), "boss_should_reveal_for_entire_warning")
 	game.boss2_ultimate_spit_timer = 0.8
 	_expect(game._boss2_ultimate_boss_visible(), "boss_should_reveal_before_ice_spit")
 	game.boss2_ultimate_spit_timer = 2.0
@@ -79,6 +84,18 @@ func _run() -> void:
 	var hp_before: int = game.player_hp
 	game._update_boss2_ultimate_blizzard_damage(0.04)
 	_expect(game.player_hp < hp_before, "blizzard_did_not_damage_outside_safe_zone")
+	for distance in [430.0, game.BOSS2_ULTIMATE_SAFE_RADIUS]:
+		game.player_pos = game.boss2_ultimate_center + Vector2(distance, 0)
+		game.boss2_ultimate_blizzard_tick = 0.01
+		game.boss2_ultimate_blizzard_exposure = 1.0
+		var hp_safe: int = game.player_hp
+		game._update_boss2_ultimate_blizzard_damage(0.04)
+		_expect(game.player_hp == hp_safe, "expanded_safe_area_damaged_player")
+		_expect(game.boss2_ultimate_blizzard_exposure < 1.0, "safe_edge_did_not_reduce_exposure")
+	game.player_pos = game.boss2_ultimate_center + Vector2(game.BOSS2_ULTIMATE_SAFE_RADIUS + 1.0, 0)
+	game.boss2_ultimate_blizzard_exposure = 0.0
+	game._update_boss2_ultimate_blizzard_damage(0.01)
+	_expect(game.boss2_ultimate_blizzard_exposure > 0.0, "outside_edge_did_not_add_exposure")
 
 	game.player_pos = game.WORLD_SIZE * 0.5 + Vector2(360, 0)
 	game.boss2_ultimate_wind_dir = Vector2.LEFT

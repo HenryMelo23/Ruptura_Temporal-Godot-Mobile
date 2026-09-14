@@ -2,6 +2,7 @@ extends SceneTree
 
 const CONTENT_BYTES := "RUPTURA_CONTENT_SMOKE"
 const CONTENT_SHA256 := "da7a040e6cdf8ec8ba06fe084ec21a910f72244938eecf1b6551b4606d6ab79d"
+const CONTENT_SIGNATURE := "hmOTMMhU66G1C+DBjkOzgNgMF5uGdXPUxfzqdj93F0VjtdQCitGg6zZ9QA98ASPZ/cpFNXltMlUNncTRsip9HvdG/8ZgucLFy4WjMhbGk+0JGaCc9l2PMsk5XPp2vJbkJv9DI3SoaFUl3603vmo4UPi1m3/oIc/7QbpbWR9lLW0e239N/f15peTNhWyPG9aIc7xcX7XIW3zTiXYBQUILwygeX0zaXAV06bKz4Uv2YEnb7we4QLyyz76Jo1YSS71wKi1wlyxmH1A2ncDpnIp0XIjA3Mb2LxtpPU+uzHJmmEDlwX+fupjjJJbss8C7kLoqDgeHSC7Hnatp2Y4puAKfsAw4BusOgzEbptKmHhnPd5iftWKCQZ/gEguXcBY/xAj2j2VOG1oDV0sMRpSTwg8t1NtehRBgtXgPqda1+I32qGrq/ggQLdH6/8QjPCNjvSL+SFma/VIqHyasljXgliGtet2sha/2UZyUNNG86/2hndsdhkv1t6BZzu+vsjjyrDDF"
 
 var game: Node
 
@@ -31,11 +32,16 @@ func _run() -> void:
 			"download_url": valid_url,
 			"size": CONTENT_BYTES.to_utf8_buffer().size(),
 			"sha256": CONTENT_SHA256,
-			"required_game_version_code": game.GAME_VERSION_CODE
+			"required_game_version_code": game.GAME_VERSION_CODE,
+			"platform": OS.get_name().to_lower(),
+			"signature": CONTENT_SIGNATURE
 		}]
 	}
 	var normalized: Dictionary = game._normalize_content_update_manifest(payload)
 	_check(bool(normalized.get("ok", false)), "valid content manifest was rejected")
+	var unsigned: Dictionary = payload.duplicate(true)
+	unsigned.packs[0].erase("signature")
+	_check(not bool(game._normalize_content_update_manifest(unsigned).get("ok", true)), "unsigned pack accepted")
 	_check(game._content_update_safe_filename("../escape.pck") == "", "path traversal filename was accepted")
 	_check(game._content_update_safe_filename("bad.txt") == "", "non-pck filename was accepted")
 	var invalid_payload: Dictionary = payload.duplicate(true)

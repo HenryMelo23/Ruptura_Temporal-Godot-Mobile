@@ -54,7 +54,7 @@ func _run() -> void:
 		player.stop()
 		player.stream = null
 	game._play_sfx("atk_eletrica")
-	_check(game.sfx_players[0].stream == game.audio_streams["player_shot"], "legacy attack did not redirect to player shot")
+	_check(game.sfx_players[0].stream == null and not game.sfx_players[0].playing, "legacy attack shot should stay silent")
 	for player in game.sfx_players:
 		player.stop()
 		player.stream = null
@@ -84,9 +84,39 @@ func _run() -> void:
 	game._update_music_pause_fade(0.1)
 	_check(game.music_player.playing, "stopped music did not recover")
 	_check(game.music_pause_fade_mode != "auto_out", "auto fade mode returned")
+	game.mode = "game"
+	game.boss_active = false
+	game.boss_dead = false
+	game.music_pause_fade_mode = ""
+	game._set_music_linear_volume(0.001)
+	game._update_music_pause_fade(0.1)
+	_check(db_to_linear(game.music_player.volume_db) > 0.01, "inaudible phase music did not recover during run")
+
+	game.current_music = "Boss1-Music-3.mp3"
+	game.music_player.stream = game.audio_streams["Boss1-Music-3.mp3"]
+	game.music_player.play()
+	game.boss_active = false
+	game.boss_dead = true
+	game.phase_music_bag.clear()
+	game._update_music_pause_fade(0.1)
+	_check(game.current_music in game._phase_music_tracks(game.current_phase), "boss music remained after returning to normal run")
+
+	game.gfx_memory_saver = true
+	game._apply_graphics_settings()
+	game.audio_streams.clear()
+	game.phase_music_bag.clear()
+	game._load_audio_streams()
+	_check(game.audio_stream_paths.has("Fases1.mp3"), "memory saver phase track path was not registered")
+	_check(not game.audio_streams.has("Fases1.mp3"), "memory saver eagerly loaded phase music")
+	game._start_game()
+	_check(game.current_music in game._phase_music_tracks(game.current_phase), "memory saver run did not select phase music")
+	_check(game.music_player != null and game.music_player.stream != null and game.music_player.playing, "memory saver run did not start phase music")
+	game._update_music_pause_fade(game.MUSIC_PAUSE_FADE_TIME + 0.1)
+	_check(db_to_linear(game.music_player.volume_db) > 0.01, "memory saver phase music stayed inaudible")
 
 	game.boss_active = true
 	game.boss_dead = false
+	game.current_phase = 1
 	game._play_boss_music_random()
 	_check(game.current_music in game._boss_music_tracks(1), "boss1 playlist did not select an exclusive track")
 	var boss_stream_ok: bool = game.music_player.stream == game.audio_streams[game.current_music]
@@ -98,4 +128,14 @@ func _run() -> void:
 	_check(game.current_music in game._boss_music_tracks(1), "boss playlist did not rotate")
 
 	print("MUSIC_ROTATION_SMOKE_OK phase_tracks=true boss_playlists=true root_sfx=true no_silent_stop=true")
+	if game.music_player != null:
+		game.music_player.stop()
+	if game.music_crossfade_player != null:
+		game.music_crossfade_player.stop()
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
+	game.queue_free()
+	await process_frame
+	await process_frame
 	quit(0)

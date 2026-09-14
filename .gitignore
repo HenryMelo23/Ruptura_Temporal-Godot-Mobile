@@ -49,6 +49,9 @@ android/build/src/main/java/com/ruptura/streaming/*
 !android/build/src/main/java/com/ruptura/streaming/RupturaStreamerPlugin.kt
 builds/
 toolchain/
+!toolchain/
+toolchain/*
+!toolchain/.gdignore
 *.apk
 *.idsig
 

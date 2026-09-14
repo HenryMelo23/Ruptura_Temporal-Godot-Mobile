@@ -42,6 +42,7 @@ func _run() -> void:
 	game.vol_music = 0.65
 	game.vol_sfx = 0.8
 	game.vol_shots = 0.4
+	game.desktop_hud_scale = game.DESKTOP_HUD_SCALE_MIN
 
 	await _capture_mode("settings", Vector2i(1280, 720), "settings_hub_1280x720.png")
 	await _capture_mode("settings_keys", Vector2i(1280, 720), "settings_keys_1280x720.png")
@@ -55,6 +56,8 @@ func _run() -> void:
 	await _capture_mode("settings_gameplay", Vector2i(960, 540), "settings_gameplay_960x540.png")
 	await _capture_mode("settings_gamepad", Vector2i(1280, 720), "settings_gamepad_1280x720.png")
 	game.ui_platform_override = "android"
+	_check(game._settings_option_keys().has("controls"), "mobile settings lost layout controls")
+	_check(not game._gameplay_preference_keys().has("desktop_hud_scale"), "mobile gameplay exposed desktop HUD scale")
 	await _capture_mode("settings", Vector2i(960, 540), "settings_hub_mobile.png")
 	await _capture_mode("settings_graphics", Vector2i(960, 540), "settings_graphics_mobile.png")
 	await _capture_mode("settings_gameplay", Vector2i(960, 540), "settings_gameplay_mobile.png")
@@ -149,6 +152,8 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 	game.mode = "settings"
 	game.settings_previous_mode = "paused"
 	var hub: Dictionary = game._settings_rects(viewport)
+	_check(not hub.has("controls"), "desktop settings exposed mobile layout controls")
+	_check(game._gameplay_preference_keys().has("desktop_hud_scale"), "desktop gameplay did not expose HUD scale")
 	game._update_menu_pointer(Rect2(hub["audio"]).get_center(), viewport)
 	_check(game.settings_selected == game._settings_index_for("audio"), "settings hover did not select audio")
 	game._handle_settings_touch(Rect2(hub["audio"]).get_center(), viewport)
@@ -172,6 +177,17 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 		game._handle_graphics_settings_touch(Rect2(graphics[key]).get_center(), viewport)
 	game._handle_graphics_settings_touch(Rect2(graphics["back"]).get_center(), viewport)
 	_check(game.mode == "settings", "graphics back")
+	game._handle_settings_touch(Rect2(hub["gameplay"]).get_center(), viewport)
+	_check(game.mode == "settings_gameplay", "gameplay did not open")
+	var gameplay: Dictionary = game._gameplay_preferences_rects(viewport)
+	_check(gameplay.has("desktop_hud_scale"), "desktop HUD scale rect missing")
+	game.desktop_hud_scale = game.DESKTOP_HUD_SCALE_MIN
+	game._handle_gameplay_settings_touch(game._desktop_hud_scale_plus_rect(gameplay["desktop_hud_scale"]).get_center(), viewport)
+	_check(is_equal_approx(game.desktop_hud_scale, game.DESKTOP_HUD_SCALE_MIN + game.DESKTOP_HUD_SCALE_STEP), "desktop HUD scale plus failed")
+	game._handle_gameplay_settings_touch(game._desktop_hud_scale_minus_rect(gameplay["desktop_hud_scale"]).get_center(), viewport)
+	_check(is_equal_approx(game.desktop_hud_scale, game.DESKTOP_HUD_SCALE_MIN), "desktop HUD scale minus failed")
+	game._handle_gameplay_settings_touch(Rect2(gameplay["back"]).get_center(), viewport)
+	_check(game.mode == "settings", "gameplay back")
 	game._handle_settings_touch(Rect2(hub["back"]).get_center(), viewport)
 	_check(game.mode == "paused", "settings must return to pause")
 	game._set_audio_volume_index(1, 0.37)

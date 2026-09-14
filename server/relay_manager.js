@@ -238,6 +238,8 @@ function readContentUpdateManifest() {
         sha256,
         size: stat.size,
         requiredGameVersionCode,
+        platform: String(pack.platform || ""),
+        signature: String(pack.signature || ""),
         filePath
       });
     }
@@ -288,12 +290,12 @@ function androidUpdatePublic(currentVersionCode = 0) {
   return updatePublic("android", currentVersionCode);
 }
 
-function contentUpdatePublic(currentContentVersionCode = 0, gameVersionCode = 0) {
+function contentUpdatePublic(currentContentVersionCode = 0, gameVersionCode = 0, platform = "") {
   const update = readContentUpdateManifest();
   if (!update) {
     return { ok: true, available: false, current_content_version_code: currentContentVersionCode };
   }
-  const packs = update.packs.filter((pack) => pack.requiredGameVersionCode <= gameVersionCode || gameVersionCode <= 0);
+  const packs = update.packs.filter((pack) => pack.requiredGameVersionCode === gameVersionCode && pack.platform === platform && pack.signature);
   return {
     ok: true,
     available: update.contentVersionCode > currentContentVersionCode && packs.length > 0,
@@ -307,6 +309,8 @@ function contentUpdatePublic(currentContentVersionCode = 0, gameVersionCode = 0)
       sha256: pack.sha256,
       size: pack.size,
       required_game_version_code: pack.requiredGameVersionCode,
+      platform: pack.platform,
+      signature: pack.signature,
       download_url: `${STREAM_MANAGER_PUBLIC_BASE_URL}/updates/content/download/${encodeURIComponent(pack.filename)}`
     }))
   };
@@ -2439,7 +2443,7 @@ async function route(req, res) {
     const currentContentVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("content_version_code")) || 0));
     const gameVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("version_code")) || 0));
     res.setHeader("Cache-Control", "no-store, max-age=0");
-    sendJson(res, 200, contentUpdatePublic(currentContentVersionCode, gameVersionCode));
+    sendJson(res, 200, contentUpdatePublic(currentContentVersionCode, gameVersionCode, url.searchParams.get("platform") || ""));
     return;
   }
 

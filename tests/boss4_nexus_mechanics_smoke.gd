@@ -81,6 +81,7 @@ func _run() -> void:
 	for i in range(12):
 		game._update_boss4_strike_sequence(0.12)
 	assert(game.boss4_strike_sequence.is_empty())
+	assert(game.player_hp > 700.0)
 	game._finish_boss4_ultimate(true)
 	assert(not game.boss4_ultimate_active)
 	assert(is_equal_approx(game.boss4_ultimate_cooldown, game.BOSS4_ULTIMATE_COOLDOWN))

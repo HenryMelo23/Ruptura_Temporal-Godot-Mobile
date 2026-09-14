@@ -30,11 +30,11 @@ func _measure(packet: PackedByteArray, compressed: bool) -> int:
 	assert(receiver.create_host_bound("127.0.0.1", 0, 1, 5) == OK)
 	assert(sender.create_host(1, 5) == OK)
 	if compressed:
-		Transport.configure_connection(receiver)
-		Transport.configure_connection(sender)
+		Transport.configure_connection(receiver, ENetConnection.COMPRESS_FASTLZ)
+		Transport.configure_connection(sender, ENetConnection.COMPRESS_FASTLZ)
 	else:
-		receiver.compress(ENetConnection.COMPRESS_NONE)
-		sender.compress(ENetConnection.COMPRESS_NONE)
+		# Default clients must connect to an unconfigured public relay.
+		Transport.configure_connection(sender)
 	var peer := sender.connect_to_host("127.0.0.1", receiver.get_local_port(), 5)
 	var connected := false
 	var deadline := Time.get_ticks_msec() + 4000

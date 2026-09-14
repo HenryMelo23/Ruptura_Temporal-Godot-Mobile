@@ -6,7 +6,7 @@ static func is_shared_phase_music_name(name: String) -> bool:
 	if name.get_extension().to_lower() != "mp3":
 		return false
 	var stem: = name.get_basename()
-	if not stem.begins_with("Fases"):
+	if not stem.to_lower().begins_with("fases"):
 		return false
 	var suffix: = stem.substr(5)
 	return suffix.is_valid_int()
@@ -14,7 +14,7 @@ static func is_shared_phase_music_name(name: String) -> bool:
 
 static func shared_phase_music_index(name: String) -> int:
 	var stem: = name.get_basename()
-	if not stem.begins_with("Fases"):
+	if not stem.to_lower().begins_with("fases"):
 		return 999999
 	var suffix: = stem.substr(5)
 	if not suffix.is_valid_int():
@@ -123,6 +123,10 @@ static func phase_music_tracks(game: Node, _phase: int) -> Array:
 static func phase_music_available_tracks(game: Node, phase: int) -> Array:
 	var available: Array = []
 	for track in phase_music_tracks(game, phase):
+		if not game.audio_stream_paths.has(String(track)):
+			var path: String = game.PHASE_MUSIC_DIR + "/" + String(track)
+			if game._audio_path_available(path):
+				game._register_audio_stream(String(track), path, false, true, game._memory_saver_active())
 		if game._audio_key_available(String(track)):
 			available.append(String(track))
 	return available

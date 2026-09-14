@@ -21,6 +21,9 @@ func _run() -> void:
 	game.shop_auto_interval = 180.0
 	game.shop_auto_elapsed = 120.0
 	game._advance_to_phase(2)
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
+	game.run_tutorial_enabled = false
 	_check(is_equal_approx(game.shop_auto_elapsed, 120.0), "phase transition reset the automatic shop cadence")
 
 	game.shop_auto_elapsed = 179.9

@@ -11,6 +11,10 @@ func _initialize() -> void:
 
 func _run() -> void:
 	game._start_game()
+	# Exercise shop consensus after the arrival animation and tutorial.
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
+	game.run_tutorial_enabled = false
 	game.is_multiplayer = true
 	game.shop_auto_enabled = false
 	game.mode = "game"
@@ -64,11 +68,28 @@ func _run() -> void:
 	game._update_shop_return(game.SHOP_RETURN_TIME + 0.05)
 	assert(game.mode == "game")
 
+	# Eliminated peers follow the same return; they never block the living player.
+	game.mode = "shop_mp_waiting"
+	game.is_dead = true
+	game.shop_mp_ready_to_leave = false
+	game._rpc_shop_ready_state(1, 1)
+	assert(game.mode == "shop_return")
+	game.mode = "shop_mp_waiting"
+	game.is_dead = false
+	game.shop_mp_ready_to_leave = true
+	game._rpc_shop_ready_state(1, 1)
+	assert(game.mode == "shop_return")
+	game.dedicated_ready_by_peer = {2: true, 3: true, 4: true}
+	game.dedicated_player_state_by_peer = {2: {"hp": 100}, 3: {"hp": 0, "dead": true}, 4: {"hp": 100}}
+	game.dedicated_shop_exit_by_peer = {2: true, 3: true, 999: true}
+	assert(game._dedicated_shop_exit_counts() == Vector2i(1, 2))
+
 	game._start_game()
 	game.is_dead = true
 	game._draw_player(Vector2.ZERO)
 
 	print("MULTIPLAYER_SHOP_FLOW_SMOKE_OK request_overlay=true synced_exit=true dead_draw_guard=true")
+	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame
 	quit(0)

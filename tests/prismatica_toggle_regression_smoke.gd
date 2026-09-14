@@ -18,7 +18,13 @@ func _check(ok: bool, message: String) -> void:
 
 func _run() -> void:
 	game._start_game()
+	for i in range(game.MANIFESTATIONS.size()):
+		if String(game.MANIFESTATIONS[i].get("key", "")) == "prismatica":
+			game.selected_manifestation = i
+			break
 	game.manifestation_key = "prismatica"
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.time_alive = 100.0
 	game.last_secondary_time = -999.0
 	game._use_secondary_skill()
@@ -27,6 +33,8 @@ func _run() -> void:
 	game.player_hp = 777
 	game._damage_player(250, "smoke_prismatica")
 	_check(game.player_hp == 777, "ultimate_invulnerability_missing")
+	game._damage_player(250, "boss4_ultimate")
+	_check(game.player_hp == 777, "boss_ultimate_bypassed_prismatica")
 	game._use_secondary_skill()
 	_check(game._active_prismatica_secondary().is_empty(), "ultimate_cancel_failed")
 	_check(is_equal_approx(float(game.last_secondary_time), activation_time), "cancel_should_not_restart_cooldown")
