@@ -1192,12 +1192,12 @@ const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.10
 const BOSS5_RAT_DURATION: = 8.0
 const BOSS5_RAT_SPEED: = 212.0
 const BOSS5_RAT_DAMAGE: = 24
-const BOSS5_MEMORY_RESOURCE: = "res://Game Base/memoria_predatoria_umbra.json"
+const BOSS5_MEMORY_RESOURCE: = "res://assets/data/memoria_predatoria_umbra.json"
 const BOSS5_DQN_WEIGHTS_PATH: = "res://assets/weights/umbra_dqn_weights.json"
 const BOSS5_MEMORY_USER: = "user://memoria_predatoria_umbra_mobile.json"
 const BOSS5_ACTIONS: = ["FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE", "TELEPORTE_JUKE", "TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO", "VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "PRAGA_RATOS", "LASER_SOBRECARGA", "CAMINHO_ESPINHOS", "NENHUMA"]
-const APOLO_PHASE5_ARCH_PATH: = "res://Game Base/Ruptura_Temporal-APOLO2.0/saves/apolo_arq.json"
-const APOLO_PHASE5_CARD_MEMORY_PATH: = "res://Game Base/Ruptura_Temporal-APOLO2.0/saves/memoria_cartas_apolo.json"
+const APOLO_PHASE5_ARCH_PATH: = "res://assets/data/apolo_arq.json"
+const APOLO_PHASE5_CARD_MEMORY_PATH: = "res://assets/data/memoria_cartas_apolo.json"
 const APOLO_PHASE5_MANIFEST_PROFILES: = {
 	"eletrica": {"speed": 10.0, "lead": 0.70, "ideal": 330.0},
 	"lacerante": {"speed": 18.0, "lead": 0.34, "ideal": 230.0},
