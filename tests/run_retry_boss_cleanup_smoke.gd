@@ -64,6 +64,11 @@ func _run() -> void:
 	game.player_hp = 123.0
 	game.score = 1234
 	game.card_cost = 500
+	game.time_alive = 487.0
+	game.run_damage_to_enemies = 321.0
+	game.run_damage_to_boss_by_phase[2] = 654.0
+	game.run_boss_reached[2] = true
+	game.run_behavior_shots_fired = 44
 	var death_pos: Vector2 = game.player_pos
 	game._capture_retry_run_snapshot()
 	game.is_dead = true
@@ -77,6 +82,11 @@ func _run() -> void:
 	_check(is_equal_approx(float(game.player_hp), float(game.player_hp_max) * 0.70), "first retry hp ratio is wrong")
 	_check(game.score == 0, "first retry did not remove carried points")
 	_check(game.run_retry_invulnerability_timer > 4.8, "retry invulnerability was not applied")
+	_check(game.time_alive >= 487.0, "retry reset run timer")
+	_check(is_equal_approx(float(game.run_damage_to_enemies), 321.0), "retry reset enemy damage telemetry")
+	_check(is_equal_approx(float(game.run_damage_to_boss_by_phase.get(2, 0.0)), 654.0), "retry reset boss damage telemetry")
+	_check(bool(game.run_boss_reached.get(2, false)), "retry reset boss reached telemetry")
+	_check(game.run_behavior_shots_fired == 44, "retry reset behavior telemetry")
 
-	print("RUN_RETRY_BOSS_CLEANUP_SMOKE_OK boss_cleanup=true retry=true hp=%.1f score=%d" % [game.player_hp, game.score])
+	print("RUN_RETRY_BOSS_CLEANUP_SMOKE_OK boss_cleanup=true retry=true telemetry=true hp=%.1f score=%d" % [game.player_hp, game.score])
 	_cleanup(0)

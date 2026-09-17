@@ -1,15 +1,14 @@
 {
-  "version": "2.0.35",
-  "version_code": 23500,
-  "filename": "Ruptura_Temporal_2.0.35.exe",
-  "sha256": "763b6d635aa899af25a979488a8ea304d5f1da19c1c3371182afbbea9f09ffe2",
-  "size": 1375728240,
+  "version": "2.0.37",
+  "version_code": 23700,
+  "filename": "Ruptura_Temporal_2.0.37.exe",
+  "sha256": "a0db62eff67da96e8583e35206562551a3442cf4775409c93849d2ba2e7d6b5e",
+  "size": 1380049232,
   "notes": [
-    "Fontes embutidas e leitura visual corrigidas.",
-    "Confirmacao de prontidao e preparacao de partida ajustadas.",
-    "Atualizador preparado para pacotes de conteudo incremental.",
-    "Polimento de HUD, impacto e entrada da personagem."
+    "Melhoria visual da chuva e neve nas fases iniciais.",
+    "VFX do Boss 2 mais legiveis durante a nevasca.",
+    "Zona segura da nevasca ampliada e sinalizacao das habilidades reforcada."
   ],
   "mandatory": false,
-  "published_at": "2026-08-31T00:39:37.0637641Z"
+  "published_at": "2026-09-14T01:29:50.1534387Z"
 }

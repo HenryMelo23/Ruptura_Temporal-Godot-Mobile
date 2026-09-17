@@ -73,16 +73,16 @@ try {
     Set-SCPItem -ComputerName $Server -Credential $Credential -Path $exe.FullName -Destination $stagingPath -AcceptKey -Force
     Set-SCPItem -ComputerName $Server -Credential $Credential -Path $manifestPath -Destination $stagingPath -AcceptKey -Force
 
-    $activateCommand = @"
-set -e
-cd '$RemoteUpdatePath'
-test "`$(stat -c %s 'staging/$($exe.Name)')" = '$($exe.Length)'
-test "`$(sha256sum 'staging/$($exe.Name)' | awk '{print `$1}')" = '$sha256'
-mv -f 'staging/$($exe.Name)' '$remoteFileName'
-mv -f 'staging/latest.json.next' 'latest.json'
-chown ruptura:ruptura '$remoteFileName' 'latest.json'
-chmod 0644 '$remoteFileName' 'latest.json'
-"@
+    $activateCommand = @(
+        'set -e',
+        "cd '$RemoteUpdatePath'",
+        "test ""`$(stat -c %s 'staging/$($exe.Name)')"" = '$($exe.Length)'",
+        "test ""`$(sha256sum 'staging/$($exe.Name)' | awk '{print `$1}')"" = '$sha256'",
+        "mv -f 'staging/$($exe.Name)' '$remoteFileName'",
+        "mv -f 'staging/latest.json.next' 'latest.json'",
+        "chown ruptura:ruptura '$remoteFileName' 'latest.json'",
+        "chmod 0644 '$remoteFileName' 'latest.json'"
+    ) -join "`n"
     $activate = Invoke-SSHCommand -SessionId $session.SessionId -Command $activateCommand
     if ($activate.ExitStatus -ne 0) {
         throw "Falha ao ativar atualizacao Windows: $($activate.Error -join [Environment]::NewLine)"

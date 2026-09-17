@@ -11,6 +11,9 @@ func _initialize() -> void:
 
 func _run() -> void:
 	game._start_game()
+	game.run_tutorial_enabled = false
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.current_phase = 1
 	game.boss_active = true
 	game.boss_dead = false

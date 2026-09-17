@@ -31,6 +31,8 @@ func _run() -> void:
 	game.player_hp_max = 1000
 	game.player_hp = 1000
 	game.player_defense = 0.0
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game._load_umbra_mobile_memory()
 	assert(game.boss5_mobile_weights.has("ATAQUE"))
 	assert(game._umbra_available_actions().has("ATAQUE"))
@@ -43,35 +45,46 @@ func _run() -> void:
 	assert(String(game.enemy_bullets[0].get("type", "")) == "umbra_plasma")
 
 	game.phase5_telegraphs.clear()
+	game.boss5_teleport_cooldown = 0.0
 	game._spawn_umbra_action("TELEPORTE")
 	assert(game.phase5_telegraphs.size() == 1)
 	var target := Vector2(game.phase5_telegraphs[0]["to"])
-	game._update_phase5_telegraphs(game.BOSS5_TELEPORT_DELAY + 0.05)
+	game._update_phase5_telegraphs(float(game.phase5_telegraphs[0].get("max", game.BOSS5_TELEPORT_DELAY)) + 0.05)
 	assert(game.boss_pos.distance_to(target) < 1.0)
 
 	game.phase5_hazards.clear()
 	game._spawn_umbra_action("VORTICE")
 	assert(game.phase5_hazards.any(func(h): return String(h.get("kind", "")) == "vortex"))
-	game.player_pos = game.WORLD_SIZE * 0.5 + Vector2(110, 0)
+	game.player_pos = Vector2(game.phase5_hazards[0].get("pos", game.player_pos))
 	var before_hp: int = int(game.player_hp)
 	game.phase5_hazards[0]["tick"] = 0.0
-	game._update_phase5_hazards(0.02)
+	game._update_phase5_hazards(game.BOSS5_VORTEX_WARNING + 0.02)
 	assert(game.player_hp < before_hp)
 
 	game.phase5_rats.clear()
+	game.boss5_dimension = "rastro"
 	game._spawn_umbra_rats(3)
-	assert(game.phase5_rats.size() == 3)
+	assert(game.BOSS5_RAT_DAMAGE <= 24)
+	assert(game.phase5_rats.size() == 4)
 	var rat_pos := Vector2(game.phase5_rats[0]["pos"])
 	game._update_phase5_rats(0.16)
 	assert(Vector2(game.phase5_rats[0]["pos"]) != rat_pos)
+	game.phase5_rats[0]["pos"] = game.player_pos
+	var hp_before_rat: int = game.player_hp
+	game._update_phase5_rats(0.02)
+	assert(hp_before_rat - game.player_hp <= game.BOSS5_RAT_DAMAGE + 2)
 
 	game.phase5_hazards.clear()
 	game.phase5_rats.clear()
 	game.boss5_transmute_cooldown = 0.0
 	game.boss5_last_dimension = ""
+	for key in game.boss5_ability_cooldowns.keys():
+		game.boss5_ability_cooldowns[key] = 0.0
 	game._transmute_umbra_dimension("TRANSMUTAR_NECROSE")
 	assert(game.boss5_dimension == "necrose")
 	assert(game.boss5_dimension_timer > 29.0)
+	game.boss5_transmute_hangover = 0.0
+	game.boss5_ability_cooldowns["MIASMA"] = 0.0
 	var necrose_actions: Array = game._umbra_available_actions()
 	assert(necrose_actions.has("MIASMA"))
 	assert(not necrose_actions.has("VORTICE"))
@@ -84,7 +97,10 @@ func _run() -> void:
 
 	game.boss_hp = 1.0
 	game._damage_boss(999999.0, "eletrica")
-	assert(game.mode == "victory")
+	assert(game.boss_dead)
+	assert(not game.boss_active)
+	assert(game.mode == "specter_upgrade")
+	assert(game.specter_upgrade_previous_mode == "victory")
 
 	print("PHASE5_UMBRA_SMOKE_OK map=true assets=true memory=true decisions=true skills=true victory=true")
 	quit(0)

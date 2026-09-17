@@ -18,6 +18,7 @@ var spawned_main: Node
 
 
 func _ready() -> void :
+	preload("res://scripts/systems/content_pack_state.gd").mount_installed()
 	boot_started_ms = Time.get_ticks_msec()
 	title_font = ThemeDB.fallback_font
 	body_font = ThemeDB.fallback_font

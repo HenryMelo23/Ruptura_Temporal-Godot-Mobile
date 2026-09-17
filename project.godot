@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Ruptura Temporal Mobile"
-config/version="2.0.35"
+config/version="2.0.37"
 run/main_scene="res://scenes/Boot.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 boot_splash/bg_color=Color(0.006, 0.01, 0.026, 1)
@@ -35,7 +35,7 @@ window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/at-icons/plugin.cfg", "res://addons/interaction_feedback/plugin.cfg")
+enabled=PackedStringArray("res://addons/interaction_feedback/plugin.cfg")
 
 [input_devices]
 
