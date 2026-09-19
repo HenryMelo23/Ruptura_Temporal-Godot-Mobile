@@ -26,7 +26,7 @@ func _run() -> void:
 	_check(game.buttons.has("shop_manual"), "shop button must be editable even when automatic shop is enabled")
 
 	var start_pos: Vector2 = game._manual_shop_pos(viewport)
-	var drag_to := start_pos + Vector2(130, 70)
+	var drag_to := start_pos + Vector2(-130, 70)
 	game._handle_edit_layout_press(-2, start_pos + Vector2(52, 21), viewport)
 	_check(game.edit_layout_selected == "shop_manual", "shop button did not become the selected layout item")
 	game._handle_edit_layout_drag(-2, drag_to + Vector2(52, 21), viewport)

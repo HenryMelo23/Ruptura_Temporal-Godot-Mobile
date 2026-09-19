@@ -2481,7 +2481,8 @@ var team_revival_state = RTTeamRevivalStateScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
-var shop_presentation = preload("res://scripts/ui/shop_presentation.gd").new()
+var shop_controller = preload("res://scripts/ui/shop_controller.gd").new()
+var shop_presentation = shop_controller.presentation
 var shop_purchase_anim_timer = 0.0
 var shop_purchase_pending_card = {}
 var shop_purchase_pending_can_continue = false
@@ -3388,6 +3389,10 @@ func _ready() -> void :
 	perf_ready_started_ms = Time.get_ticks_msec()
 	var args: Array = OS.get_cmdline_args()
 	args.append_array(OS.get_cmdline_user_args())
+	add_child(shop_controller)
+	shop_controller.configure(self)
+	get_node("/root/AudioManager").bind_game(self)
+	get_node("/root/TelemetrySystem").bind_game(self)
 	if "--dedicated-server" in args:
 		_configure_dedicated_server_timing()
 		_net_report_start()
@@ -3656,6 +3661,8 @@ func _cleanup_runtime_resources() -> void :
 	startup_thanks_frame_cache.clear()
 	audio_streams.clear()
 	textures.clear()
+	get_node("/root/AudioManager").unbind_game(self)
+	get_node("/root/TelemetrySystem").unbind_game(self)
 
 func _cmd_arg_value(args: Array, prefix: String, fallback: String) -> String:
 	for arg in args:
@@ -5251,53 +5258,7 @@ func _save_run_report_webhook_url() -> void :
 
 
 func _reset_run_report_stats() -> void :
-	run_report_sent = false
-	run_report_in_flight = false
-	run_finalized_result = ""
-	run_report_status = "Pendente"
-	run_end_payload.clear()
-	run_started_at = _datetime_text()
-	run_started_unix = int(Time.get_unix_time_from_system())
-	run_security_session_id = ""
-	run_security_session_token = ""
-	run_security_session_ready = false
-	run_security_session_failed = false
-	run_security_checkpoint_timer = 0.0
-	run_security_checkpoint_interval = RUN_SECURITY_CHECKPOINT_INTERVAL
-	run_security_checkpoint_count = 0
-	run_security_last_error = ""
-	run_start_damage = player_damage
-	run_damage_to_enemies = 0.0
-	run_damage_by_enemy.clear()
-	run_damage_to_boss_by_phase.clear()
-	run_boss_reached.clear()
-	run_boss_started_at.clear()
-	run_boss_duration.clear()
-	run_damage_taken_total = 0
-	run_damage_taken_by_source.clear()
-	run_damage_hits_by_source.clear()
-	run_damage_source_meta.clear()
-	run_damage_events.clear()
-	run_heatmap_cells.clear()
-	run_heatmap_sample_timer = 0.0
-	run_phase_seconds.clear()
-	run_behavior_distance = 0.0
-	run_behavior_edge_seconds = 0.0
-	run_behavior_corner_seconds = 0.0
-	run_behavior_center_seconds = 0.0
-	run_behavior_dash_count = 0
-	run_behavior_shots_fired = 0
-	run_behavior_hits = 0
-	run_behavior_boss_hits = 0
-	run_behavior_player_last_pos = player_pos
-	run_behavior_player_last_sample_pos = player_pos
-	run_behavior_move_samples = 0
-	run_behavior_stationary_samples = 0
-	for phase in range(1, 6):
-		run_damage_to_boss_by_phase[phase] = 0.0
-		run_boss_reached[phase] = false
-		run_boss_started_at[phase] = -1.0
-		run_boss_duration[phase] = -1.0
+	get_node("/root/TelemetrySystem").start_report()
 
 
 func _datetime_text() -> String:
@@ -5449,33 +5410,7 @@ func _telemetry_normalized_pos(pos: Vector2) -> Vector2:
 
 
 func _update_run_telemetry(delta: float) -> void :
-	if is_dead:
-		return
-	run_phase_seconds[current_phase] = float(run_phase_seconds.get(current_phase, 0.0)) + delta
-	run_behavior_distance += player_pos.distance_to(run_behavior_player_last_pos)
-	run_behavior_player_last_pos = player_pos
-	var edge_x: float = minf(player_pos.x, WORLD_SIZE.x - player_pos.x)
-	var edge_y: float = minf(player_pos.y, WORLD_SIZE.y - player_pos.y)
-	if edge_x < 180.0 or edge_y < 135.0:
-		run_behavior_edge_seconds += delta
-	if edge_x < 180.0 and edge_y < 135.0:
-		run_behavior_corner_seconds += delta
-	if player_pos.distance_to(WORLD_SIZE * 0.5) <= minf(WORLD_SIZE.x, WORLD_SIZE.y) * 0.22:
-		run_behavior_center_seconds += delta
-	run_heatmap_sample_timer -= delta
-	if run_heatmap_sample_timer > 0.0:
-		return
-	run_heatmap_sample_timer = RUN_TELEMETRY_SAMPLE_INTERVAL
-	if player_pos.distance_to(run_behavior_player_last_sample_pos) < 18.0:
-		run_behavior_stationary_samples += 1
-	else:
-		run_behavior_move_samples += 1
-	run_behavior_player_last_sample_pos = player_pos
-	var normalized: = _telemetry_normalized_pos(player_pos)
-	var cell_x: = clampi(int(floor(normalized.x * RUN_TELEMETRY_GRID.x)), 0, RUN_TELEMETRY_GRID.x - 1)
-	var cell_y: = clampi(int(floor(normalized.y * RUN_TELEMETRY_GRID.y)), 0, RUN_TELEMETRY_GRID.y - 1)
-	var cell_key: = "%d:%d:%d" % [current_phase, cell_x, cell_y]
-	run_heatmap_cells[cell_key] = int(run_heatmap_cells.get(cell_key, 0)) + 1
+	get_node("/root/TelemetrySystem").update_run(delta)
 
 
 func _track_behavior_dash(origin: Vector2, destination: Vector2) -> void:
@@ -5702,160 +5637,11 @@ func _run_leaderboard_score(result: String) -> int:
 
 
 func _build_run_report_payload(result: String) -> Dictionary:
-	var manifest_name: String = String(MANIFESTATIONS[selected_manifestation]["name"]) if selected_manifestation >= 0 and selected_manifestation < MANIFESTATIONS.size() else manifestation_key
-	var aura_name: String = String(AURAS[selected_aura]["name"]) if selected_aura >= 0 and selected_aura < AURAS.size() else String(aura_state.get("name", "N/A"))
-	_ensure_player_profile_id()
-	var payload: = {
-		"player": player_nickname, 
-		"profile_id": player_profile_id, 
-		"room": online_room_code if online_room_code != "" else "solo", 
-		"version": GAME_VERSION, 
-		"version_code": GAME_VERSION_CODE, 
-		"platform": OS.get_name(), 
-		"role": _run_role_text(), 
-		"run_session_id": run_security_session_id, 
-		"run_session_token": run_security_session_token, 
-		"run_session_checkpoints": run_security_checkpoint_count, 
-		"run_session_ready": run_security_session_ready, 
-		"run_session_last_error": run_security_last_error, 
-		"date": _datetime_text(), 
-		"started_at": run_started_at, 
-		"started_unix": run_started_unix, 
-		"ended_unix": int(Time.get_unix_time_from_system()), 
-		"result": result, 
-		"duration": _run_time_text(), 
-		"duration_seconds": int(round(time_alive)), 
-		"phase": current_phase, 
-		"kills": enemies_killed, 
-		"points_earned": run_points_earned, 
-		"points_spent": run_points_spent, 
-		"score_current": score, 
-		"score_total": score_total, 
-		"cards_total": _deck_total_cards(), 
-		"cards": _cards_report_text(), 
-		"cards_detail": _cards_report_rows(), 
-		"manifestation": manifest_name, 
-		"manifestation_key": manifestation_key, 
-		"spectrum": aura_name, 
-		"spectrum_key": String(aura_state.get("name", "")), 
-		"base_damage_start": run_start_damage, 
-		"base_damage_end": player_damage, 
-		"player_stats": {
-			"hp": player_hp, 
-			"hp_max": player_hp_max, 
-			"speed": player_speed, 
-			"attack_interval": player_attack_interval, 
-			"dash_cooldown": player_dash_cooldown, 
-			"defense": player_defense, 
-			"crit_chance": player_crit_chance, 
-			"lifesteal": player_lifesteal, 
-			"luck": luck
-		}, 
-		"enemy_scaling": {
-			"limit": _enemy_limit(), 
-			"base_hp": enemy_base_hp, 
-			"base_speed": enemy_speed_base, 
-			"close_damage": enemy_close_damage, 
-			"far_damage": enemy_far_damage
-		}, 
-		"enemy_damage_total": run_damage_to_enemies, 
-		"enemy_damage_breakdown": _enemy_damage_report_text(), 
-		"enemy_damage_detail": _enemy_damage_report_rows(), 
-		"damage_taken_total": run_damage_taken_total, 
-		"damage_taken_detail": _run_damage_taken_report_rows(), 
-		"damage_events": run_damage_events.duplicate(true), 
-		"position_heatmap": {
-			"columns": RUN_TELEMETRY_GRID.x, 
-			"rows": RUN_TELEMETRY_GRID.y, 
-			"sample_interval": RUN_TELEMETRY_SAMPLE_INTERVAL, 
-			"world_width": int(WORLD_SIZE.x), 
-			"world_height": int(WORLD_SIZE.y), 
-			"cells": _run_heatmap_report_rows()
-		}, 
-		"behavior_metrics": _run_behavior_report(), 
-		"boss_damage_total": _total_boss_damage_report(), 
-		"boss_report": _boss_report_text(), 
-		"boss_detail": _boss_report_rows(), 
-		"dimension_route": {
-			"initial_phase": run_initial_phase, 
-			"farm_cycles": dimension_route_farm_cycles, 
-			"completed_count": dimension_route_completed_count, 
-			"last_phase": dimension_route_last_phase, 
-			"pending_queue": dimension_route_queue.duplicate(), 
-			"extracted": run_extracted
-		}, 
-		"network": {
-			"ping_ms": net_ping_ms, 
-			"remote_ping_ms": net_remote_ping_ms, 
-			"bytes_in": net_report_total_bytes_in, 
-			"bytes_out": net_report_total_bytes_out, 
-			"packets_in": net_report_total_packets_in, 
-			"packets_out": net_report_total_packets_out
-		}, 
-		"settings": {
-			"graphics_low_resource": gfx_low_resource, 
-			"memory_saver": gfx_memory_saver, 
-			"particles": gfx_particles, 
-			"shadows": gfx_shadows, 
-			"shop_auto": shop_auto_enabled, 
-			"streaming_enabled": QA_STREAMING_FEATURE_ENABLED, 
-			"streaming_unlocked": qa_streaming_unlocked, 
-			"streaming_active": qa_streaming_native_active or qa_streaming_desktop_ffmpeg_active or qa_streaming_frame_active, 
-			"streaming_quality": _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode)
-		}, 
-		"leaderboard_score": _run_leaderboard_score(result), 
-		"balance_flags": _run_balance_flags()
-	}
-	payload["integrity"] = {
-		"version": RUN_REPORT_INTEGRITY_VERSION, 
-		"signature": _run_report_signature(payload)
-	}
-	return payload
+	return get_node("/root/TelemetrySystem").build_run_report_payload(result)
 
 
 func _run_report_signature(payload: Dictionary) -> String:
-	var source: = _run_report_signature_source(payload)
-	var hashing: = HashingContext.new()
-	if hashing.start(HashingContext.HASH_SHA256) != OK:
-		return ""
-	hashing.update(source.to_utf8_buffer())
-	return hashing.finish().hex_encode().to_lower()
-
-
-func _run_report_signature_source(payload: Dictionary) -> String:
-	var fields: = [
-		"player", 
-		"profile_id", 
-		"room", 
-		"version", 
-		"version_code", 
-		"platform", 
-		"role", 
-		"result", 
-		"started_unix", 
-		"ended_unix", 
-		"duration_seconds", 
-		"phase", 
-		"kills", 
-		"points_earned", 
-		"points_spent", 
-		"score_current", 
-		"score_total", 
-		"cards_total", 
-		"manifestation_key", 
-		"spectrum_key", 
-		"enemy_damage_total", 
-		"damage_taken_total", 
-		"boss_damage_total", 
-		"leaderboard_score", 
-		"run_session_id", 
-		"run_session_checkpoints"
-	]
-	var parts: Array[String] = []
-	for field in fields:
-		parts.append("%s=%s" % [field, str(payload.get(field, ""))])
-	parts.append("salt=" + RUN_REPORT_INTEGRITY_SALT)
-	return "|".join(parts)
+	return get_node("/root/TelemetrySystem").run_report_signature(payload, RUN_REPORT_INTEGRITY_SALT)
 
 
 func _finalize_run_report(result: String) -> void :
@@ -8968,37 +8754,7 @@ func _is_silent_manifestation_shot_sfx(name: String) -> bool:
 
 
 func _play_sfx(name: String, pitch_variance: = 0.0, volume_scale: = 1.0, pitch_center: = 1.0) -> void :
-	if _is_silent_manifestation_shot_sfx(name):
-		return
-	if name in ["Disparo_Geo.wav", "Disparo.MP3"]:
-		name = "player_shot"
-	elif name in ["skill_acorrentada", "ult_acorrentada", "atk_acorrentada_light", "atk_acorrentada_heavy"]:
-		return
-	elif name.begins_with("skill_") or name.begins_with("ult_") or (name.begins_with("atk_") and not name.begins_with("atk_lacerante_")):
-		if name.contains("lacerante"):
-			name = "atk_lacerante_3" if name.begins_with("ult_") else "atk_lacerante_2"
-		else:
-			name = "player_shot"
-	if not _ensure_audio_loaded(name): return
-	var stream = audio_streams[name]
-	var duck = 1.0 if name == "shop_countdown_tick" else _shop_countdown_audio_duck()
-	var channel_volume = _sfx_channel_volume(name)
-	if vol_master <= 0.001 or channel_volume <= 0.001:
-		return
-	var db = linear_to_db(max(0.001, vol_master * channel_volume * volume_scale * duck))
-	var pitch = clamp(pitch_center + (rng.randf_range( - pitch_variance, pitch_variance) if pitch_variance > 0.0 else 0.0), 0.55, 1.65)
-	for p in sfx_players:
-		if not p.playing:
-			p.stream = stream
-			p.volume_db = db
-			p.pitch_scale = pitch
-			p.play()
-			return
-	if sfx_players.size() > 0:
-		sfx_players[0].stream = stream
-		sfx_players[0].volume_db = db
-		sfx_players[0].pitch_scale = pitch
-		sfx_players[0].play()
+	get_node("/root/AudioManager").play_sfx(name, pitch_variance, volume_scale, pitch_center)
 
 
 func _is_shot_audio(name: String) -> bool:
@@ -9109,44 +8865,7 @@ func _update_projectile_travel_sfx(bullet: Dictionary, delta: float) -> void :
 		_play_sfx("eletrica_travel", 0.018, 0.34 if kind == "eletrica" else 0.46, 1.0)
 
 func _play_music(name: String) -> void :
-	if current_music == name and not music_crossfade_active and music_player != null and music_player.playing:
-		return
-	if music_player == null:
-		return
-	if music_crossfade_active:
-		_finish_music_crossfade()
-	var had_active_music: bool = music_player.stream != null and music_player.playing and current_music != ""
-	music_pause_fade_mode = ""
-	music_paused_by_pause = false
-	if _ensure_audio_loaded(name):
-		current_music = name
-		if had_active_music and music_crossfade_player != null:
-			music_crossfade_player.stop()
-			music_crossfade_player.stream = audio_streams[name]
-			music_crossfade_player.stream_paused = false
-			music_crossfade_player.volume_db = linear_to_db(0.001)
-			music_crossfade_player.play()
-			music_crossfade_active = true
-			music_crossfade_target_track = name
-			music_crossfade_timer = 0.0
-			music_crossfade_duration = MUSIC_CROSSFADE_TIME
-			music_crossfade_from_volume = _current_music_linear_volume()
-			music_crossfade_to_volume = max(0.001, _music_target_volume())
-			music_pause_fade_mode = ""
-		else:
-			music_player.stream = audio_streams[name]
-			music_player.stream_paused = false
-			music_player.volume_db = linear_to_db(max(0.001, _music_target_volume()))
-			music_player.play()
-			music_pause_fade_mode = "in"
-			music_pause_fade_timer = 0.0
-			music_pause_resume_volume = max(0.001, _music_target_volume())
-			_set_music_linear_volume(0.001)
-		_release_unused_music_streams(name)
-	elif music_player != null:
-		music_player.stop()
-		music_player.stream = null
-		current_music = ""
+	get_node("/root/AudioManager").play_music(name)
 
 
 func _is_menu_music_name(name: String) -> bool:
@@ -9630,7 +9349,7 @@ func _reset_card_counts() -> void :
 
 
 func _reset_card_proc_state() -> void :
-	shop_presentation.reset()
+	shop_controller.reset()
 	fratura_cronal_cooldown = 0.0
 	fratura_cronal_armed = false
 	pulso_desestabilizador_cooldown = 0.0
@@ -34207,7 +33926,7 @@ func _accept_shop_mp_request() -> void :
 
 
 func _shop_can_exit() -> bool:
-	return not _shop_purchase_animating() and not shop_presentation.busy()
+	return shop_controller.can_exit()
 
 
 func _request_shop_exit_or_finish() -> void :
@@ -34265,36 +33984,7 @@ func _accept_boss_mp_request() -> void :
 
 
 func _update_shop(delta: float) -> void :
-	shop_presentation.update(delta)
-	shop_select_pulse_timer = max(0.0, shop_select_pulse_timer - delta)
-	shop_spend_anim_timer = max(0.0, shop_spend_anim_timer - delta)
-	_update_effects(delta)
-	if not _shop_purchase_animating():
-		return
-	shop_purchase_anim_timer = max(0.0, shop_purchase_anim_timer - delta)
-	if shop_purchase_anim_timer > 0.0:
-		return
-	var card: Dictionary = shop_purchase_pending_card
-	var paid_price: int = shop_purchase_pending_price
-	shop_purchase_pending_card = {}
-	shop_purchase_pending_price = 0
-	shop_purchases_this_visit += 1
-	run_points_spent += paid_price
-	_apply_aura_events(AuraSystem.on_points_spent(aura_state, paid_price, player_hp_max))
-	score -= paid_price
-	shop_spend_anim_amount = paid_price
-	shop_spend_anim_timer = SHOP_SPEND_ANIM_TIME
-	_apply_card(card)
-	_register_card_purchase_unlock_progress(card)
-	card_cost += _shop_price_increment_after_purchase()
-	_clear_locked_shop_slot_for_card(card)
-	_refill_shop_slot_after_purchase(shop_selected)
-	shop_selected = clamp(shop_selected, 0, max(0, shop_cards.size() - 1))
-	shop_select_pulse_index = shop_selected
-	shop_select_pulse_timer = 0.22
-	shop_last_tap_index = -1
-	shop_last_tap_msec = 0
-	shop_purchase_pending_can_continue = false
+	shop_controller.update(delta)
 
 
 func _open_shop(forced: bool) -> void :
@@ -34314,7 +34004,7 @@ func _open_shop(forced: bool) -> void :
 	mode = "shop"
 	_update_audio_volumes()
 	shop_rerolls = 3
-	shop_presentation.reset()
+	shop_controller.reset()
 	shop_mp_ready_count = 0
 	shop_mp_expected_count = maxi(1, _living_run_player_peer_ids().size())
 	shop_purchase_anim_timer = 0.0
@@ -36016,7 +35706,7 @@ func _clear_cinzas_mark(card_id: String) -> void :
 
 
 func _can_burn_shop_card(card: Dictionary) -> bool:
-	if shop_presentation.busy():
+	if shop_controller.busy():
 		return false
 	if _support_card_count(CARD_CINZAS_ID) <= 0 or _shop_purchase_animating() or _is_empty_shop_slot(card):
 		return false
@@ -36063,7 +35753,7 @@ func _burn_shop_card(index: int) -> bool:
 		cinzas_burn_marks.append(mark)
 	card["cinzas_buff_stacks"] = _cinzas_mark_stacks(card_id)
 	card["cinzas_bonus_summary"] = _cinzas_return_bonus_summary(card)
-	shop_presentation.begin("burn", shop_cards, index)
+	shop_controller.begin("burn", shop_cards, index)
 	shop_locked_slots.erase(_shop_locked_key(index))
 	shop_cards[index] = _make_burned_shop_slot(card)
 	shop_selected = clamp(index, 0, max(0, shop_cards.size() - 1))
@@ -37846,7 +37536,7 @@ func _chance_carta_rara() -> float:
 
 
 func _buy_selected_card() -> void :
-	if shop_presentation.busy() or mode != "shop":
+	if shop_controller.busy() or mode != "shop":
 		return
 	if shop_cards.is_empty():
 		return
@@ -37870,7 +37560,7 @@ func _buy_selected_card() -> void :
 
 
 func _set_shop_selection(index: int) -> void :
-	if _shop_purchase_animating() or shop_presentation.busy():
+	if _shop_purchase_animating() or shop_controller.busy():
 		return
 	if index < 0 or index >= shop_cards.size():
 		return
@@ -37882,7 +37572,7 @@ func _set_shop_selection(index: int) -> void :
 
 
 func _touch_shop_card(index: int) -> void :
-	if _shop_purchase_animating() or shop_presentation.busy():
+	if _shop_purchase_animating() or shop_controller.busy():
 		return
 	var now_msec: = Time.get_ticks_msec()
 	var is_double_tap: = shop_last_tap_index == index and now_msec - shop_last_tap_msec <= 360
@@ -37897,11 +37587,11 @@ func _touch_shop_card(index: int) -> void :
 
 
 func _reserve_shop_card(index: int) -> void :
-	if _shop_purchase_animating() or shop_presentation.busy() or index < 0 or index >= shop_cards.size():
+	if _shop_purchase_animating() or shop_controller.busy() or index < 0 or index >= shop_cards.size():
 		return
 	var card: Dictionary = shop_cards[index]
 	if _shop_slot_locked(index):
-		shop_presentation.begin("unlock", shop_cards, index)
+		shop_controller.begin("unlock", shop_cards, index)
 		shop_locked_slots.erase(_shop_locked_key(index))
 		if shop_cards.size() > index:
 			shop_cards[index].erase("locked_slot")
@@ -37913,7 +37603,7 @@ func _reserve_shop_card(index: int) -> void :
 		return
 	if not _consume_card_count(CARD_ESCOLHA_ADIADA_ID):
 		return
-	shop_presentation.begin("lock", shop_cards, index)
+	shop_controller.begin("lock", shop_cards, index)
 	var locked: = card.duplicate(true)
 	var locked_price: = _effective_card_price(card)
 	locked["locked_slot"] = true
@@ -37926,10 +37616,10 @@ func _reserve_shop_card(index: int) -> void :
 
 
 func _reroll_shop() -> void :
-	if _shop_purchase_animating() or shop_presentation.busy():
+	if _shop_purchase_animating() or shop_controller.busy():
 		return
 	if shop_rerolls > 0:
-		shop_presentation.begin("reroll", shop_cards)
+		shop_controller.begin("reroll", shop_cards)
 		shop_rerolls -= 1
 		shop_reroll_index += 1
 		_add_card_unlock_progress("shop_rerolls", 1.0)
@@ -52343,7 +52033,7 @@ func _draw_revive_request(viewport: Vector2) -> void :
 
 
 func _draw_shop_mp_waiting(viewport: Vector2) -> void:
-	shop_presentation.draw_waiting(self, viewport)
+	shop_controller.draw_waiting(viewport)
 
 
 func _draw_shop_mp_waiting_legacy(viewport: Vector2) -> void :
@@ -52514,7 +52204,7 @@ func _draw_shop_spend_anim(center: Vector2) -> void:
 
 func _draw_shop(viewport: Vector2) -> void:
 	if not _is_portrait(viewport):
-		shop_presentation.draw(self, viewport)
+		shop_controller.draw(viewport)
 	else:
 		_draw_shop_legacy(viewport)
 
@@ -53492,13 +53182,13 @@ func _shop_round_button_radius(viewport: Vector2) -> float:
 
 func _shop_reroll_center(viewport: Vector2) -> Vector2:
 	if not _is_portrait(viewport):
-		return shop_presentation.layout(viewport).reroll.get_center()
+		return shop_controller.layout(viewport).reroll.get_center()
 	return Vector2(viewport.x * (0.09 if not _is_portrait(viewport) else 0.13), 58.0 if not _is_portrait(viewport) else 76.0)
 
 
 func _shop_deck_center(viewport: Vector2) -> Vector2:
 	if not _is_portrait(viewport):
-		return shop_presentation.layout(viewport).deck.get_center()
+		return shop_controller.layout(viewport).deck.get_center()
 	return Vector2(viewport.x * (0.91 if not _is_portrait(viewport) else 0.87), 58.0 if not _is_portrait(viewport) else 76.0)
 
 
@@ -53734,7 +53424,7 @@ func _draw_retry_confirm_popup(viewport: Vector2) -> void:
 
 
 func _draw_shop_return_transition(viewport: Vector2) -> void:
-	shop_presentation.draw_exit(self, viewport)
+	shop_controller.draw_exit(viewport)
 
 
 func _draw_shop_return_transition_legacy(viewport: Vector2) -> void:
@@ -56778,7 +56468,7 @@ func _handle_key(event: InputEventKey) -> void :
 		elif event.keycode == KEY_TAB:
 			_return_from_specter_upgrade()
 	elif mode == "shop":
-		if _shop_purchase_animating() or shop_presentation.busy():
+		if _shop_purchase_animating() or shop_controller.busy():
 			return
 		if event.keycode == KEY_RIGHT or event.keycode == KEY_D or event.keycode == KEY_DOWN or event.keycode == KEY_S:
 			_set_shop_selection(min(shop_cards.size() - 1, shop_selected + 1))
@@ -57802,99 +57492,7 @@ func _handle_deck_touch(pos: Vector2, viewport: Vector2) -> void :
 
 
 func _handle_shop_touch(pos: Vector2, viewport: Vector2) -> void :
-	if _shop_purchase_animating() or shop_presentation.busy():
-		return
-	if not _is_portrait(viewport):
-		var areas: Dictionary = shop_presentation.layout(viewport)
-		if Rect2(areas.buy).has_point(pos):
-			_buy_selected_card()
-		elif Rect2(areas.exit).has_point(pos):
-			_request_shop_exit_or_finish()
-		elif Rect2(areas.reroll).has_point(pos):
-			_reroll_shop()
-		elif Rect2(areas.deck).has_point(pos) and _deck_total_cards() > 0:
-			_open_deck("shop")
-		elif Rect2(areas.burn).has_point(pos):
-			_burn_shop_card(shop_selected)
-		elif Rect2(areas.reserve).has_point(pos):
-			_reserve_shop_card(shop_selected)
-		else:
-			for i in range(mini(3, shop_cards.size())):
-				if Rect2(areas.cards[i]).has_point(pos):
-					_touch_shop_card(i)
-		return
-	for i in range(shop_cards.size()):
-		var burn_key: = "shop_burn_%d" % i
-		if buttons.has(burn_key) and Rect2(buttons[burn_key]).has_point(pos):
-			_burn_shop_card(i)
-			return
-		var key: = "shop_reserve_%d" % i
-		if buttons.has(key) and Rect2(buttons[key]).has_point(pos):
-			_reserve_shop_card(i)
-			return
-	var portrait = _is_portrait(viewport)
-	var round_r = _shop_round_button_radius(viewport) + 10.0
-	if pos.distance_to(_shop_reroll_center(viewport)) <= round_r:
-		_reroll_shop()
-		return
-	if pos.distance_to(_shop_deck_center(viewport)) <= round_r and _deck_total_cards() > 0:
-		_open_deck("shop")
-		return
-	if portrait:
-		var w = viewport.x * 0.74
-		var h = min(242.0, viewport.y * 0.19)
-		for i in range(shop_cards.size()):
-			var x = viewport.x * 0.5 - w * 0.5
-			var yy = 188.0 + i * (h + 22.0)
-			if Rect2(x, yy, w, h).has_point(pos):
-				_touch_shop_card(i)
-				return
-
-		var btn_h = 44.0
-		var btn_w = viewport.x * 0.4
-		var btn_y = viewport.y - btn_h - 24
-
-		var btn_buy_rect = Rect2(viewport.x * 0.25 - btn_w * 0.5, btn_y, btn_w, btn_h)
-		var btn_sair_rect = Rect2(viewport.x * 0.75 - btn_w * 0.5, btn_y, btn_w, btn_h)
-		if btn_buy_rect.has_point(pos):
-			_buy_selected_card()
-		elif btn_sair_rect.has_point(pos):
-			if _shop_can_exit():
-				_request_shop_exit_or_finish()
-		return
-
-
-	var btn_w = 220.0
-	var btn_h = 42.0
-	var btn_y = viewport.y - btn_h - 24.0
-
-	var btn_buy_rect = Rect2(viewport.x * 0.38 - btn_w * 0.5, btn_y, btn_w, btn_h)
-	var btn_sair_rect = Rect2(viewport.x * 0.62 - btn_w * 0.5, btn_y, btn_w, btn_h)
-
-	if btn_buy_rect.has_point(pos):
-		_buy_selected_card()
-		return
-	if btn_sair_rect.has_point(pos):
-		if _shop_can_exit():
-			_request_shop_exit_or_finish()
-		return
-
-
-	var w = 150.0
-	var h = 200.0
-	var y = 158.0
-
-	for i in range(shop_cards.size()):
-		var is_sel = (i == shop_selected)
-		var scale = 1.15 if is_sel else 0.85
-		var curr_w = w * scale
-		var curr_h = h * scale
-		var x = viewport.x * 0.5 + (i - 1) * 200 - curr_w * 0.5
-		var curr_y = y - 10 if is_sel else y + 15
-		var rect = Rect2(x, curr_y, curr_w, curr_h)
-		if rect.has_point(pos):
-			_touch_shop_card(i)
-			return
+	shop_controller.handle_touch(pos, viewport)
 
 
 func _joy_center(viewport: Vector2) -> Vector2:

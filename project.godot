@@ -25,6 +25,8 @@ config/icon="res://img/icone.png"
 [autoload]
 
 SceneTransitionManager="*res://scripts/scene_transition_manager.gd"
+AudioManager="*res://scripts/systems/audio/audio_manager.gd"
+TelemetrySystem="*res://scripts/systems/telemetry/telemetry_system.gd"
 
 [display]
 
