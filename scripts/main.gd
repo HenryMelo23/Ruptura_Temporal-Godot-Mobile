@@ -11,6 +11,9 @@ const RTNetContractScript = preload("res://scripts/systems/online/net_contract.g
 const RTTransportStateScript = preload("res://scripts/systems/online/transport_state.gd")
 const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
 const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
+const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
+const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
+const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
 const GAME_VERSION: = "2.0.37"
@@ -2478,6 +2481,9 @@ var revival_state_sync_timer: float = 0.0
 var revival_mobile_confirm_method: String = ""
 var revival_mobile_confirm_until_ms: int = 0
 var team_revival_state = RTTeamRevivalStateScript.new()
+var enemy_manager: EnemyManager = EnemyManagerScript.new()
+var early_boss_controller: EarlyBossController = EarlyBossControllerScript.new()
+var modern_boss_controller: ModernBossController = ModernBossControllerScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
@@ -3389,6 +3395,12 @@ func _ready() -> void :
 	perf_ready_started_ms = Time.get_ticks_msec()
 	var args: Array = OS.get_cmdline_args()
 	args.append_array(OS.get_cmdline_user_args())
+	add_child(enemy_manager)
+	enemy_manager.bind_game(self)
+	add_child(early_boss_controller)
+	early_boss_controller.bind_game(self)
+	add_child(modern_boss_controller)
+	modern_boss_controller.bind_game(self)
 	add_child(shop_controller)
 	shop_controller.configure(self)
 	get_node("/root/AudioManager").bind_game(self)
@@ -12094,8 +12106,7 @@ func _update_game(delta: float) -> void :
 	_refresh_run_leader()
 	if run_leader_notice_timer > 0.0:
 		run_leader_notice_timer = maxf(0.0, run_leader_notice_timer - delta)
-	if _is_world_authority() and spawn_timer <= 0.0 and not boss_active and not _tutorial_blocks_normal_spawn():
-		_spawn_wave()
+	enemy_manager.update(delta)
 	_update_event_alerts(delta)
 	_update_team_revival(delta)
 	if _is_world_authority():
@@ -19438,16 +19449,7 @@ func _update_tp_electric(effect: Dictionary, delta: float) -> void :
 
 
 func _spawn_wave() -> void :
-	if not _is_world_authority():
-		return
-	spawn_timer = _enemy_spawn_interval()
-	if boss_active or _arauto_active():
-		return
-	var limit = _enemy_limit()
-	if enemies.size() >= limit:
-		return
-	var kind = _choose_enemy_type()
-	_spawn_enemy(kind, _spawn_point_for_type(kind))
+	enemy_manager.spawn_wave()
 
 
 func _phase_elapsed_time() -> float:
@@ -19629,111 +19631,31 @@ func _phase6_miasma_eel_cap() -> int:
 
 
 func _enemy_limit() -> int:
-	var mp_bonus: int = _multiplayer_enemy_limit_bonus()
-	if current_phase == 7:
-		return _phase7_enemy_limit() + mp_bonus
-	if current_phase == 6:
-		return _phase6_enemy_limit() + mp_bonus
-	if current_phase == 5:
-		return 5 + mp_bonus
-	if current_phase == 4:
-		return (PHASE4_LIMIT_EARLY if _phase_elapsed_time() < PHASE4_ADAPT_TIME else PHASE4_LIMIT_FULL) + mp_bonus
-	if current_phase == 3:
-		var elapsed3: = _phase_elapsed_time()
-		if elapsed3 < PHASE3_COMMON_ONLY_TIME:
-			return PHASE3_LIMIT_EARLY + mp_bonus
-		if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME:
-			return PHASE3_LIMIT_MID + mp_bonus
-		return PHASE3_LIMIT_FULL + mp_bonus
-	if current_phase == 2:
-		var elapsed: = _phase_elapsed_time()
-		if elapsed >= PHASE2_PYRO_UNLOCK_TIME:
-			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT + PHASE2_PYRO_LIMIT + mp_bonus
-		if elapsed >= PHASE2_KAMIKAZE_UNLOCK_TIME:
-			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT + mp_bonus
-		return PHASE2_COMMON_LIMIT + mp_bonus
-	var elapsed1: = _phase_elapsed_time()
-	if elapsed1 >= PHASE1_LIMIT_BREAK_TIME:
-		if phase1_limit_break_kills_start < 0:
-			phase1_limit_break_kills_start = enemies_killed
-		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
-		return ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(PHASE1_LIMIT_KILLS_PER_EXTRA))) + mp_bonus
-	phase1_limit_break_kills_start = -1
-	return ENEMY_MAX_BASE + mp_bonus
+	return enemy_manager.get_enemy_limit()
 
 
 func _phase6_enemy_limit() -> int:
-	var elapsed: = _phase_elapsed_time()
-	if elapsed >= PHASE1_LIMIT_BREAK_TIME:
-		if phase1_limit_break_kills_start < 0:
-			phase1_limit_break_kills_start = enemies_killed
-		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
-		return ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(PHASE1_LIMIT_KILLS_PER_EXTRA)))
-	phase1_limit_break_kills_start = -1
-	return ENEMY_MAX_BASE
+	return enemy_manager._phase6_enemy_limit()
 
 
 func _phase7_enemy_limit() -> int:
-	var elapsed: = _phase_elapsed_time()
-	if elapsed >= PHASE7_LIMIT_BREAK_TIME:
-		if phase1_limit_break_kills_start < 0:
-			phase1_limit_break_kills_start = enemies_killed
-		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
-		return PHASE7_ENEMY_LIMIT_BASE + int(floor(float(kills_after_break) / float(PHASE7_LIMIT_KILLS_PER_EXTRA)))
-	phase1_limit_break_kills_start = -1
-	return PHASE7_ENEMY_LIMIT_BASE
+	return enemy_manager._phase7_enemy_limit()
 
 
 func _curater_limit() -> int:
-	return 3 if _phase_elapsed_time() < 1500.0 else 5
+	return enemy_manager.get_curater_limit()
 
 
 func _enemy_spawn_interval() -> float:
-	if current_phase == 7:
-		return _phase7_spawn_interval()
-	if current_phase == 6:
-		return _phase6_spawn_interval()
-	if current_phase == 5:
-		return 1.1
-	if current_phase == 4:
-		return 1.42 if _phase_elapsed_time() < PHASE4_ADAPT_TIME else 1.24
-	var interval = ENEMY_SPAWN_INTERVAL
-	if current_phase == 3:
-		var elapsed3: = _phase_elapsed_time()
-		interval = 1.3 if elapsed3 < PHASE3_COMMON_ONLY_TIME else (1.16 if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME else 1.02)
-		if not _active_prismatica_secondary().is_empty():
-			interval *= 0.5
-		return interval
-	if current_phase == 2:
-		var elapsed: = _phase_elapsed_time()
-		interval = 1.32 if elapsed < PHASE2_KAMIKAZE_UNLOCK_TIME else (1.12 if elapsed < PHASE2_PYRO_UNLOCK_TIME else 0.98)
-		if not _active_prismatica_secondary().is_empty():
-			interval *= 0.5
-		return interval
-	if current_phase != 2:
-		var ramp_window = max(1.0, ENEMY_RAMP_PEAK_TIME - ENEMY_RAMP_START_TIME)
-		var progress = clamp((_phase_elapsed_time() - ENEMY_RAMP_START_TIME) / ramp_window, 0.0, 1.0)
-		interval = lerp(ENEMY_SPAWN_INTERVAL_EARLY, ENEMY_SPAWN_INTERVAL_LATE, progress)
-	if not _active_prismatica_secondary().is_empty():
-		interval *= 0.5
-	return interval
+	return enemy_manager.get_enemy_spawn_interval()
 
 
 func _phase6_spawn_interval() -> float:
-	var ramp_window = max(1.0, ENEMY_RAMP_PEAK_TIME - ENEMY_RAMP_START_TIME)
-	var progress = clamp((_phase_elapsed_time() - ENEMY_RAMP_START_TIME) / ramp_window, 0.0, 1.0)
-	var interval = lerp(ENEMY_SPAWN_INTERVAL_EARLY, ENEMY_SPAWN_INTERVAL_LATE, progress)
-	if not _active_prismatica_secondary().is_empty():
-		interval *= 0.5
-	return interval
+	return enemy_manager._phase6_spawn_interval()
 
 
 func _phase7_spawn_interval() -> float:
-	var progress: float = clampf(_phase_elapsed_time() / 300.0, 0.0, 1.0)
-	var interval: float = lerpf(1.22, 0.92, progress)
-	if not _active_prismatica_secondary().is_empty():
-		interval *= 0.5
-	return interval
+	return enemy_manager._phase7_spawn_interval()
 
 
 func _has_enemy_type(kind: String) -> bool:
@@ -21314,123 +21236,7 @@ func _update_ancorada_spinning(delta: float) -> void :
 
 
 func _update_enemies(delta: float) -> void :
-	if not _is_world_authority():
-		return
-	var dead = []
-	var lacerante_storm = not _active_lacerante_secondary().is_empty()
-	var phase1_boss_freeze = _phase1_boss_freezes_enemies()
-	for enemy in enemies:
-		if String(enemy.get("type", "")) == ENEMY_FOSSIL_PUSTULE:
-			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 2.0
-		else:
-			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
-		enemy["hit_cd"] = max(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
-		enemy["contact_grace"] = maxf(0.0, float(enemy.get("contact_grace", 0.0)) - delta)
-		enemy["stun"] = max(0.0, float(enemy.get("stun", 0.0)) - delta)
-		enemy["tesla_shock"] = maxf(0.0, float(enemy.get("tesla_shock", 0.0)) - delta)
-		if float(enemy.get("eletrica_static_timer", 0.0)) > 0.0:
-			enemy["eletrica_static_timer"] = maxf(0.0, float(enemy.get("eletrica_static_timer", 0.0)) - delta)
-			if float(enemy["eletrica_static_timer"]) <= 0.0:
-				enemy["eletrica_static_stacks"] = 0
-				enemy["eletrica_static_last_source"] = ""
-		enemy["ferrolho_root"] = max(0.0, float(enemy.get("ferrolho_root", 0.0)) - delta)
-		enemy["blind_confusion"] = max(0.0, float(enemy.get("blind_confusion", 0.0)) - delta)
-		enemy["resonant_stun_notes"] = max(0.0, float(enemy.get("resonant_stun_notes", 0.0)) - delta)
-		enemy["shield_flash"] = max(0.0, float(enemy.get("shield_flash", 0.0)) - delta)
-		enemy["reconstitute_time"] = max(0.0, float(enemy.get("reconstitute_time", 0.0)) - delta)
-		enemy["reconstitute_immunity"] = max(0.0, float(enemy.get("reconstitute_immunity", 0.0)) - delta)
-		enemy["evolution_slow"] = max(0.0, float(enemy.get("evolution_slow", 0.0)) - delta)
-		if float(enemy["evolution_slow"]) <= 0.0:
-			enemy["evolution_slow_mult"] = 1.0
-		enemy["fragilidade_cronal"] = max(0.0, float(enemy.get("fragilidade_cronal", 0.0)) - delta)
-		if float(enemy["fragilidade_cronal"]) <= 0.0:
-			enemy["fragilidade_cronal_bonus"] = 0.0
-		_update_shield_reflector(enemy, delta)
-		_update_enemy_dots(enemy, delta)
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			dead.append(enemy)
-			continue
-		if phase1_boss_freeze:
-			continue
-		if enemy["type"] == ENEMY_CURATER:
-			_update_curater(enemy, delta)
-		if enemy["type"] == ENEMY_STALKER:
-			_update_stalker(enemy, delta)
-		if enemy["type"] == ENEMY_PROJECTOR:
-			_update_projector(enemy, delta)
-		if enemy["type"] == ENEMY_ATIRADOR:
-			_update_atirador(enemy, delta)
-		if enemy["type"] == ENEMY_KAMIKAZE:
-			_update_kamikaze(enemy, delta)
-		if enemy["type"] == ENEMY_LARAPIO:
-			_update_larapio(enemy, delta)
-		if enemy["type"] == ENEMY_FOSSIL_PUSTULE and _update_fossil_pustule(enemy, delta):
-			dead.append(enemy)
-			continue
-		if enemy["type"] == ENEMY_LODARIO:
-			_update_lodario(enemy, delta)
-		if enemy["type"] == ENEMY_MIASMA_EEL:
-			_update_miasma_eel(enemy, delta)
-		if enemy["type"] == ENEMY_CHRONAL_LEECH:
-			if _update_sanguessuga_cronal(enemy, delta):
-				dead.append(enemy)
-				continue
-		if enemy["type"] == ENEMY_CINERIDO:
-			_update_cinerido(enemy, delta)
-		if enemy["type"] == ENEMY_PANGOLIRO:
-			_update_pangoliro(enemy, delta)
-		if enemy["type"] == ENEMY_CORVOL:
-			_update_corvol(enemy, delta)
-		if enemy["type"] == ENEMY_COUT_ATTACK_SPEED:
-			_update_cout_attack_speed(enemy, delta)
-		if enemy["type"] == ENEMY_PYRO_PENGUIN:
-			_update_pyro_penguin(enemy, delta)
-		if current_phase == 2 and enemy["type"] == ENEMY_COMMON:
-			_update_phase2_common_penguin(enemy, delta)
-		if current_phase == 3:
-			_update_phase3_enemy(enemy, delta)
-		elif current_phase == 4:
-			_update_phase4_enemy(enemy, delta)
-		var is_disco = not _active_prismatica_secondary().is_empty()
-		var custom_phase6_move: = String(enemy.get("type", "")) == ENEMY_LODARIO or String(enemy.get("type", "")) == ENEMY_MIASMA_EEL or String(enemy.get("type", "")) == ENEMY_CHRONAL_LEECH
-		var custom_phase7_move: = String(enemy.get("type", "")) == ENEMY_CINERIDO or String(enemy.get("type", "")) == ENEMY_PANGOLIRO or String(enemy.get("type", "")) == ENEMY_CORVOL
-		if not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and ( not bool(enemy.get("parado", false)) or is_disco):
-			_move_enemy(enemy, delta)
-
-		var t_pos = _get_nearest_player_pos(enemy["pos"])
-		if not lacerante_storm and enemy["type"] == ENEMY_KAMIKAZE and enemy["pos"].distance_to(t_pos) < 60.0:
-			if _target_pos_is_local_player(t_pos):
-				_damage_player(player_hp_max * 0.15, ENEMY_KAMIKAZE)
-				if not _player_invulnerable():
-					player_stun_timer = _hostile_control_duration(1.0)
-					_add_text("CONGELADO!", player_pos + Vector2(0, -40), Color(0.0, 0.88, 1.0), 1.5, 20)
-					_spawn_radial_particles(enemy["pos"], Color(0.6, 0.9, 1.0), 16)
-			else:
-				var kamikaze_peer: = _peer_id_at_target_pos(t_pos)
-				if kamikaze_peer != 0:
-					_send_peer_damage(kamikaze_peer, int(player_hp_max * 0.15), ENEMY_KAMIKAZE)
-			enemy["hp"] = -1.0
-			continue
-
-		var contact_blocked: bool = String(enemy.get("type", "")) == ENEMY_CHRONAL_LEECH
-		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
-			var remnant_hit: Dictionary = _necronada_remnant_at_pos(Vector2(enemy.get("pos", player_pos)), 48.0)
-			if not remnant_hit.is_empty():
-				enemy["hit_cd"] = 0.55
-				_damage_necronada_remnant(remnant_hit, _enemy_damage(enemy))
-			elif _local_player_damageable_by_contact() and enemy["pos"].distance_to(player_pos) < 46.0:
-				enemy["hit_cd"] = 0.55
-				_damage_player(_enemy_damage(enemy), enemy["type"])
-			else:
-				for peer_id in _targetable_remote_peer_ids():
-					var remote_state: Dictionary = net_players_by_peer.get(peer_id, {})
-					if Vector2(enemy["pos"]).distance_to(Vector2(remote_state.get("pos", Vector2(-10000, -10000)))) < 46.0:
-						enemy["hit_cd"] = 0.55
-						_send_peer_damage(peer_id, _enemy_damage(enemy), enemy["type"])
-						break
-
-	for enemy in dead:
-		_kill_enemy(enemy)
+	enemy_manager.update_enemies(delta)
 
 func _local_player_targetable() -> bool:
 	return _local_counts_as_player() and player_hp > 0.0 and not is_dead and not _eclipsada_is_stealthed()
@@ -27111,224 +26917,39 @@ func _spawn_heal_orb(pos: Vector2, fraction: float) -> void :
 
 
 func _capture_boss1_rewind_projectiles() -> Array:
-	var captured = []
-	for bullet in bullets:
-		if captured.size() >= 24:
-			break
-		captured.append({
-			"visual": "player", 
-			"kind": String(bullet.get("kind", "eletrica")), 
-			"pos": Vector2(bullet.get("pos", player_pos)), 
-			"dir": Vector2(bullet.get("dir", last_facing))
-		})
-	for bullet in return_bullets:
-		if captured.size() >= 30:
-			break
-		captured.append({
-			"visual": "returning", 
-			"kind": "retornante", 
-			"pos": Vector2(bullet.get("pos", player_pos)), 
-			"dir": Vector2(bullet.get("dir", last_facing))
-		})
-	for bullet in enemy_bullets:
-		if captured.size() >= 36:
-			break
-		captured.append({
-			"visual": "enemy", 
-			"kind": String(bullet.get("type", "enemy")), 
-			"pos": Vector2(bullet.get("pos", boss_pos)), 
-			"dir": Vector2(bullet.get("dir", Vector2.DOWN))
-		})
-	for wave in shockwaves:
-		if captured.size() >= 40:
-			break
-		captured.append({"visual": "shockwave", "pos": Vector2(wave.get("pos", player_pos)), "radius": float(wave.get("radius", 0.0))})
-	for prism in prisms:
-		if captured.size() >= 44:
-			break
-		captured.append({"visual": "prism", "pos": Vector2(prism.get("pos", player_pos))})
-	for wave in boss_transition_waves:
-		if captured.size() >= 47:
-			break
-		captured.append({"visual": "boss_wave", "pos": Vector2(wave.get("pos", boss_pos)), "radius": float(wave.get("radius", 0.0))})
-	return captured
+	return early_boss_controller.capture_boss1_rewind_projectiles()
 
 
 func _capture_boss1_rewind_snapshot() -> Dictionary:
-	return {
-		"time": time_alive, 
-		"elapsed": elapsed_unpaused, 
-		"player_pos": player_pos, 
-		"boss_pos": boss_pos, 
-		"player_hp": player_hp, 
-		"last_facing": last_facing, 
-		"last_attack": last_attack_time, 
-		"last_dash": last_dash_time, 
-		"last_skill": last_skill_time, 
-		"last_secondary": last_secondary_time, 
-		"last_damage": last_damage_time, 
-		"boss_phase": boss_phase, 
-		"boss_attack_timer": boss_attack_timer, 
-		"projectiles": _capture_boss1_rewind_projectiles()
-	}
+	return early_boss_controller.capture_boss1_rewind_snapshot()
 
 
 func _record_boss1_rewind_history(delta: float) -> void :
-	if not boss1_rewind_sequence.is_empty():
-		return
-	boss1_rewind_sample_timer += delta
-	if not boss1_rewind_history.is_empty() and boss1_rewind_sample_timer < BOSS1_REWIND_SAMPLE_INTERVAL:
-		return
-	boss1_rewind_sample_timer = fmod(boss1_rewind_sample_timer, BOSS1_REWIND_SAMPLE_INTERVAL)
-	boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	var cutoff = time_alive - BOSS1_REWIND_SECONDS - BOSS1_REWIND_SAMPLE_INTERVAL
-	while boss1_rewind_history.size() > 1 and float(boss1_rewind_history[0].get("time", time_alive)) < cutoff:
-		boss1_rewind_history.pop_front()
+	early_boss_controller.record_boss1_rewind_history(delta)
 
 
 func _chrono_variant_name(variant: int) -> String:
-	match variant:
-		1:
-			return "CRONO-FENDA DUPLA"
-		2:
-			return "ESPIRAL DE 11:10"
-		3:
-			return "PONTEIROS PARTIDOS"
-	return "ONDA DE RETROCESSO"
+	return early_boss_controller.chrono_variant_name(variant)
 
 
 func _chrono_variant_color(variant: int) -> Color:
-	match variant:
-		1:
-			return Color(1.0, 0.44, 0.78)
-		2:
-			return Color(0.72, 0.52, 1.0)
-		3:
-			return Color(1.0, 0.78, 0.3)
-	return Color(0.36, 0.94, 1.0)
+	return early_boss_controller.chrono_variant_color(variant)
 
 
 func _start_boss1_time_wave() -> void :
-	if current_phase != 1 or boss1_rewind_cooldown > 0.0 or boss_dead or boss_hp <= 0.0 or boss_hp >= boss_hp_max * BOSS1_REWIND_THRESHOLD:
-		return
-	boss1_rewind_cooldown = BOSS1_REWIND_COOLDOWN
-	boss_stage_timer = 0.0
-	boss_stage_approaching = false
-	boss_attacks.clear()
-	boss_transition_waves.clear()
-	if boss1_rewind_history.is_empty() or time_alive - float(boss1_rewind_history[-1].get("time", -999.0)) > 0.02:
-		boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	var origin = boss_pos
-	var max_radius = 0.0
-	for corner in [Vector2.ZERO, Vector2(WORLD_SIZE.x, 0.0), Vector2(0.0, WORLD_SIZE.y), WORLD_SIZE]:
-		max_radius = max(max_radius, origin.distance_to(corner))
-	var variant = rng.randi_range(0, 3)
-	var wave_target: = _boss_target_entry(true)
-	boss1_time_wave = {
-		"origin": origin, 
-		"radius": 48.0, 
-		"direction": 1.0, 
-		"max_radius": max_radius + 48.0, 
-		"age": 0.0, 
-		"variant": variant, 
-		"target_peer": int(wave_target.get("peer_id", _mp_unique_id()))
-	}
-	boss_pos = origin
-	screen_shake_timer = 0.18
-	screen_shake_strength = 7.0
-	_vibrate(70, 0.24)
-	_add_text(_chrono_variant_name(variant), boss_pos + Vector2(0, -126), _chrono_variant_color(variant), 2.0, 28)
-	_play_sfx("Retrocede.mp3", 0.05, 0.85, 1.0)
-	_spawn_radial_particles(boss_pos, Color(0.34, 0.84, 1.0), 32)
+	early_boss_controller.start_boss1_time_wave()
 
 
 func _update_boss1_time_wave(delta: float) -> void :
-	if boss1_time_wave.is_empty():
-		return
-	boss_pos = Vector2(boss1_time_wave["origin"])
-	boss1_time_wave["age"] = float(boss1_time_wave.get("age", 0.0)) + delta
-	if float(boss1_time_wave["age"]) < BOSS1_TIME_WAVE_WARNING:
-		return
-	var previous_radius = float(boss1_time_wave["radius"])
-	var direction = float(boss1_time_wave["direction"])
-	var next_radius = previous_radius + direction * BOSS1_TIME_WAVE_SPEED * delta
-	var max_radius = float(boss1_time_wave["max_radius"])
-	if direction > 0.0 and next_radius >= max_radius:
-		next_radius = max_radius
-		boss1_time_wave["direction"] = -1.0
-		screen_shake_timer = 0.2
-		screen_shake_strength = 9.0
-		_add_text("A ONDA ESTA VOLTANDO", boss_pos + Vector2(0, -112), Color(1.0, 0.34, 0.72), 1.4, 22)
-	elif direction < 0.0 and next_radius <= 34.0:
-		boss1_time_wave.clear()
-		boss_attack_timer = 1.6
-		_add_text("LINHA TEMPORAL EVITADA", boss_pos + Vector2(0, -108), Color(0.42, 1.0, 0.78), 1.2, 21)
-		return
-	boss1_time_wave["radius"] = next_radius
-	var swept_min = min(previous_radius, next_radius) - BOSS1_TIME_WAVE_WIDTH - 22.0
-	var swept_max = max(previous_radius, next_radius) + BOSS1_TIME_WAVE_WIDTH + 22.0
-	var target_peer: = int(boss1_time_wave.get("target_peer", _mp_unique_id()))
-	if target_peer == _mp_unique_id():
-		var player_distance = player_pos.distance_to(Vector2(boss1_time_wave["origin"]))
-		if player_distance >= swept_min and player_distance <= swept_max:
-			_start_boss1_rewind_sequence()
-	else:
-		var remote_state: Dictionary = net_players_by_peer.get(target_peer, {})
-		if remote_state.is_empty() or bool(remote_state.get("dead", false)) or bool(remote_state.get("stealthed", false)):
-			var replacement: = _boss_target_entry(true)
-			boss1_time_wave["target_peer"] = int(replacement.get("peer_id", _mp_unique_id()))
-			return
-		var remote_distance: = Vector2(remote_state.get("pos", Vector2.ZERO)).distance_to(Vector2(boss1_time_wave["origin"]))
-		if remote_distance >= swept_min and remote_distance <= swept_max:
-			_trigger_boss1_remote_rewind(target_peer)
+	early_boss_controller.update_boss1_time_wave(delta)
 
 
 func _trigger_boss1_remote_rewind(peer_id: int) -> void :
-	var state: Dictionary = net_players_by_peer.get(peer_id, {})
-	if not _is_world_authority() or state.is_empty() or bool(state.get("dead", false)):
-		return
-	_start_boss1_rewind_sequence()
+	early_boss_controller.trigger_boss1_remote_rewind(peer_id)
 
 
 func _start_boss1_rewind_sequence(event_id: String = "", variant: int = -1) -> void :
-	if not boss1_rewind_sequence.is_empty():
-		return
-	if _is_world_replica() and event_id == "":
-		return
-	if event_id != "" and net_rewind_seen.has(event_id):
-		return
-	if event_id == "":
-		event_id = _next_network_event_id("boss1_team_rewind")
-	net_rewind_seen[event_id] = true
-	while net_rewind_seen.size() > NET_REPORT_EVENT_LIMIT:
-		net_rewind_seen.erase(net_rewind_seen.keys()[0])
-	if boss1_rewind_history.is_empty():
-		boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	elif time_alive - float(boss1_rewind_history[-1].get("time", -999.0)) > 0.02:
-		boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	var chrono_variant = variant if variant >= 0 else int(boss1_time_wave.get("variant", rng.randi_range(0, 3)))
-	boss1_time_wave.clear()
-	boss_attacks.clear()
-	boss_transition_waves.clear()
-	effects.clear()
-	boss1_rewind_visual_projectiles = Array(boss1_rewind_history[-1].get("projectiles", [])).duplicate(true)
-	boss1_rewind_sequence = {
-		"event_id": event_id,
-		"elapsed": 0.0, 
-		"variant": chrono_variant, 
-		"rewind_local_player": not is_dead and not online_local_spectator,
-		"boss_heal": (boss_hp_max - boss_hp) * BOSS1_REWIND_BOSS_HEAL, 
-		"player_final_hp": min(player_hp_max, player_hp + (player_hp_max - player_hp) * BOSS1_REWIND_PLAYER_HEAL)
-	}
-	_cancel_combat_aim_state(true)
-	screen_shake_timer = 0.16
-	screen_shake_strength = 6.0
-	_vibrate(110, 0.35)
-	boss1_rewind_vibration_timer = 0.0
-	boss1_rewind_clock_tick = -1
-	_add_text("TEMPO CAPTURADO", player_pos + Vector2(0, -102), Color(0.48, 0.92, 1.0), 1.2, 26)
-	if is_multiplayer and _is_world_authority() and _shop_rpc_available():
-		rpc("_rpc_boss1_team_rewind", event_id, chrono_variant)
+	early_boss_controller.start_boss1_rewind_sequence(event_id, variant)
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
@@ -27347,129 +26968,27 @@ func _rpc_boss1_team_rewind(event_id: String, variant: int) -> void:
 
 
 func _apply_boss1_rewind_sync(data: Dictionary) -> void:
-	# Only the shared clock crosses the wire. HP, cooldowns and paths stay local.
-	var event_id: String = String(data.get("event_id", ""))
-	if event_id == "" or current_phase != 1 or not boss_active or boss_dead:
-		return
-	_start_boss1_rewind_sequence(event_id, int(data.get("variant", 0)))
-	if String(boss1_rewind_sequence.get("event_id", "")) == event_id:
-		boss1_rewind_sequence["elapsed"] = maxf(float(boss1_rewind_sequence.get("elapsed", 0.0)), float(data.get("elapsed", 0.0)))
-		boss1_time_wave.clear()
+	early_boss_controller.apply_boss1_rewind_sync(data)
 
 
 func _boss1_rewind_interpolated_sample(progress: float) -> Dictionary:
-	if boss1_rewind_history.is_empty():
-		return {}
-	var cursor = lerp(float(boss1_rewind_history.size() - 1), 0.0, clamp(progress, 0.0, 1.0))
-	var lower_index = int(floor(cursor))
-	var upper_index = min(lower_index + 1, boss1_rewind_history.size() - 1)
-	var weight = cursor - lower_index
-	var lower: Dictionary = boss1_rewind_history[lower_index]
-	var upper: Dictionary = boss1_rewind_history[upper_index]
-	var nearest: Dictionary = boss1_rewind_history[int(round(cursor))]
-	return {
-		"time": lerp(float(lower["time"]), float(upper["time"]), weight), 
-		"elapsed": lerp(float(lower["elapsed"]), float(upper["elapsed"]), weight), 
-		"player_pos": Vector2(lower["player_pos"]).lerp(Vector2(upper["player_pos"]), weight), 
-		"boss_pos": Vector2(lower["boss_pos"]).lerp(Vector2(upper["boss_pos"]), weight), 
-		"player_hp": lerp(float(lower["player_hp"]), float(upper["player_hp"]), weight), 
-		"last_facing": Vector2(nearest["last_facing"]), 
-		"last_attack": float(nearest["last_attack"]), 
-		"last_dash": float(nearest["last_dash"]), 
-		"last_skill": float(nearest["last_skill"]), 
-		"last_secondary": float(nearest["last_secondary"]), 
-		"last_damage": float(nearest["last_damage"]), 
-		"boss_phase": lerp(float(lower["boss_phase"]), float(upper["boss_phase"]), weight), 
-		"boss_attack_timer": float(nearest["boss_attack_timer"]), 
-		"projectiles": Array(nearest.get("projectiles", []))
-	}
+	return early_boss_controller.boss1_rewind_interpolated_sample(progress)
 
 
 func _apply_boss1_rewind_sample(sample: Dictionary) -> void :
-	if sample.is_empty():
-		return
-	time_alive = float(sample["time"])
-	elapsed_unpaused = float(sample["elapsed"])
-	if _is_world_authority():
-		boss_pos = Vector2(sample["boss_pos"])
-		boss_phase = float(sample["boss_phase"])
-		boss_attack_timer = float(sample["boss_attack_timer"])
-	if not bool(boss1_rewind_sequence.get("rewind_local_player", true)):
-		return
-	player_pos = Vector2(sample["player_pos"])
-	player_hp = clampi(int(round(float(sample["player_hp"]))), 1, int(player_hp_max))
-	last_facing = Vector2(sample["last_facing"])
-	last_attack_time = float(sample["last_attack"])
-	last_dash_time = float(sample["last_dash"])
-	last_skill_time = float(sample["last_skill"])
-	last_secondary_time = float(sample["last_secondary"])
-	last_damage_time = float(sample["last_damage"])
-	boss1_rewind_visual_projectiles = Array(sample.get("projectiles", [])).duplicate(true)
+	early_boss_controller.apply_boss1_rewind_sample(sample)
 
 
 func _update_boss1_rewind_sequence(delta: float) -> void :
-	if boss1_rewind_sequence.is_empty():
-		return
-	boss1_rewind_sequence["elapsed"] = float(boss1_rewind_sequence.get("elapsed", 0.0)) + delta
-	var elapsed = float(boss1_rewind_sequence["elapsed"])
-	_update_boss1_rewind_feedback(delta, elapsed)
-	if elapsed < BOSS1_CLOCK_TRAVEL_TIME:
-		return
-	var progress = clamp((elapsed - BOSS1_CLOCK_TRAVEL_TIME) / BOSS1_CLOCK_TURN_TIME, 0.0, 1.0)
-	_apply_boss1_rewind_sample(_boss1_rewind_interpolated_sample(progress))
-	if progress >= 1.0:
-		_finish_boss1_rewind()
+	early_boss_controller.update_boss1_rewind_sequence(delta)
 
 
 func _update_boss1_rewind_feedback(delta: float, elapsed: float) -> void :
-	boss1_rewind_vibration_timer -= delta
-	if boss1_rewind_vibration_timer <= 0.0:
-		boss1_rewind_vibration_timer = 0.9
-		_vibrate(95, 0.3)
-	if elapsed >= BOSS1_CLOCK_TRAVEL_TIME and elapsed <= BOSS1_CLOCK_TRAVEL_TIME + BOSS1_CLOCK_TURN_TIME:
-		var turn_progress = clamp((elapsed - BOSS1_CLOCK_TRAVEL_TIME) / BOSS1_CLOCK_TURN_TIME, 0.0, 1.0)
-		var tick = int(floor(turn_progress * 10.0))
-		if tick != boss1_rewind_clock_tick:
-			boss1_rewind_clock_tick = tick
-			_play_sfx("shop_countdown_tick", 0.015, 0.52, 0.82 + turn_progress * 0.14)
+	early_boss_controller.update_boss1_rewind_feedback(delta, elapsed)
 
 
 func _finish_boss1_rewind() -> void :
-	if boss1_rewind_sequence.is_empty():
-		return
-	var heal = float(boss1_rewind_sequence.get("boss_heal", 0.0))
-	if not boss1_rewind_history.is_empty():
-		_apply_boss1_rewind_sample(boss1_rewind_history[0])
-	if _is_world_authority():
-		boss_hp = min(boss_hp_max, boss_hp + heal)
-	if bool(boss1_rewind_sequence.get("rewind_local_player", true)):
-		player_hp = clampi(int(round(float(boss1_rewind_sequence.get("player_final_hp", player_hp)))), 1, int(player_hp_max))
-	bullets.clear()
-	remote_bullets.clear()
-	return_bullets.clear()
-	enemy_bullets.clear()
-	eletrica_waves.clear()
-	eletrica_chains.clear()
-	eletrica_recoil_velocity = Vector2.ZERO
-	shockwaves.clear()
-	slashes.clear()
-	prisms.clear()
-	orbitals.clear()
-	seed_links.clear()
-	parasite_spit_zones.clear()
-	manifestation_secondaries.clear()
-	effects.clear()
-	boss_attacks.clear()
-	boss_transition_waves.clear()
-	boss1_rewind_history.clear()
-	boss1_rewind_visual_projectiles.clear()
-	boss1_rewind_sequence.clear()
-	boss1_rewind_sample_timer = 0.0
-	boss1_rewind_vibration_timer = 0.0
-	boss1_rewind_clock_tick = -1
-	boss_attack_timer = max(1.4, boss_attack_timer)
-	_add_text("-%.0fs  /  BOSS +40%%  /  GEO +25%%" % BOSS1_REWIND_SECONDS, boss_pos + Vector2(0, -120), Color(0.42, 0.94, 1.0), 1.8, 24)
-	_spawn_radial_particles(boss_pos, Color(0.3, 0.78, 1.0), 36)
+	early_boss_controller.finish_boss1_rewind()
 	if mode == "shop_countdown" and forced_shop_timer <= 0.0:
 		_start_shop_opening_animation(true)
 
@@ -30069,210 +29588,43 @@ func _update_boss_phase7(delta: float) -> void:
 
 
 func _update_boss7_cooldowns(delta: float) -> void:
-	for key in boss7_cooldowns.keys():
-		boss7_cooldowns[key] = maxf(0.0, float(boss7_cooldowns.get(key, 0.0)) - delta)
+	modern_boss_controller.update_boss7_cooldowns(delta)
 
 
 func _update_boss7_flight(delta: float) -> void:
-	var target: = _boss_target_pos(true, 0.18)
-	var to_target: Vector2 = target - boss_pos
-	var dist: = to_target.length()
-	var desired: = Vector2.ZERO
-	if dist < 250.0:
-		desired = -to_target.normalized() * 142.0
-	elif dist > 390.0:
-		desired = to_target.normalized() * 142.0
-	else:
-		desired = to_target.normalized().orthogonal() * (78.0 if int(time_alive * 0.2) % 2 == 0 else -78.0)
-	boss7_velocity = boss7_velocity.move_toward(desired, 420.0 * delta)
-	boss_pos = (boss_pos + boss7_velocity * delta).clamp(Vector2(100, 92), WORLD_SIZE - Vector2(100, 92))
-	if boss7_velocity.length() > 8.0:
-		boss7_attack_dir = boss7_velocity.normalized()
+	modern_boss_controller.update_boss7_flight(delta)
 
 
 func _update_boss7_state(delta: float) -> void:
-	boss7_state_timer = maxf(0.0, boss7_state_timer - delta)
-	_update_boss7_flame_waves(delta)
-	match boss7_state:
-		BOSS7_STATE_FEATHER:
-			if boss7_state_timer <= 0.0:
-				_fire_boss7_feathers()
-				_boss7_enter_recovery(0.36)
-		BOSS7_STATE_WING:
-			if boss7_state_timer <= 0.0:
-				_fire_boss7_wing_blast()
-				_boss7_enter_recovery(0.46)
-		BOSS7_STATE_DIVE_PREP:
-			# 1- Bate asa subindo rapidamente para o topo da tela saindo de cena (1s)
-			boss_pos.y = move_toward(boss_pos.y, -180.0, 750.0 * delta)
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_DIVE_WAIT
-				boss7_state_timer = 0.8
-		BOSS7_STATE_DIVE_WAIT:
-			# 2- Espera fora de cena (800ms)
-			boss_pos.y = -180.0
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_DIVE_MARK
-				boss7_state_timer = 0.9
-				var aim: Vector2 = _boss_target_pos(true, 0.32)
-				boss7_target_pos = aim.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-		BOSS7_STATE_DIVE_MARK:
-			# 3- Mira em cima do jogador e mostra marca no chão (900ms)
-			boss_pos.y = -180.0
-			if boss7_state_timer <= 0.0:
-				if boss7_dive_fake_count < 3 and rng.randf() < 0.5:
-					boss7_dive_fake_count += 1
-					boss7_state = BOSS7_STATE_DIVE_FAKE
-					boss7_state_timer = 2.0
-					_spawn_boss7_dive_fireball(boss7_target_pos)
-				else:
-					boss7_state = BOSS7_STATE_DIVE
-					boss7_state_timer = 0.45
-					# Posiciona diagonalmente no topo-esquerdo do alvo para queda condizente com fenix_down_04.png!
-					boss_pos = boss7_target_pos - Vector2(380.0, 380.0)
-					boss7_attack_dir = Vector2(1, 1).normalized()
-		BOSS7_STATE_DIVE_FAKE:
-			boss_pos.y = -180.0
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_DIVE_MARK
-				boss7_state_timer = 0.9
-				var aim: Vector2 = _boss_target_pos(true, 0.32)
-				boss7_target_pos = aim.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-		BOSS7_STATE_DIVE:
-			# 4- Boss desce em alta velocidade com frame fixo fenix_down_04.png
-			var old_pos: Vector2 = boss_pos
-			var speed: float = 1750.0 if boss7_reborn else 1550.0
-			boss_pos = boss_pos.move_toward(boss7_target_pos, speed * delta)
-			_add_boss7_dive_trail(old_pos, boss_pos)
-			if old_pos.distance_to(boss_pos) > 1.0:
-				if _distance_to_segment(player_pos, old_pos, boss_pos) <= BOSS7_DIVE_WIDTH * 0.5 and _local_player_damageable_by_contact():
-					_damage_player(int(player_hp_max * (0.093 if boss7_reborn else 0.085) + (28 if boss7_reborn else 25)), "boss7_dive")
-					_apply_boss_burn(2)
-					player_pos = _clamp_player_world(player_pos + _hostile_knockback(boss7_attack_dir * 185.0))
-				_damage_remote_player_on_segment(old_pos, boss_pos, BOSS7_DIVE_WIDTH * 0.5, int(net_player_hp_max * (0.093 if boss7_reborn else 0.085) + (28 if boss7_reborn else 25)), "boss7_dive", {}, "boss7_dive")
-			if boss_pos.distance_to(boss7_target_pos) <= 12.0 or boss7_state_timer <= 0.0:
-				boss_pos = boss7_target_pos
-				_boss_entry_impact_feedback(0.85)
-				_play_sfx("boss_impact", 0.03, 0.45, 1.25)
-				_spawn_boss7_flame_wave(boss7_target_pos, 250.0)
-				_boss7_enter_recovery(0.55)
-		BOSS7_STATE_REBIRTH:
-			var p: float = 1.0 - boss7_state_timer / maxf(0.01, BOSS7_REBIRTH_ANIM_TIME)
-			boss_pos = boss7_core_pos + Vector2(0.0, -80.0 + 80.0 * _ease_out_cubic(p))
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_FLY
-				boss_attack_timer = 0.45
-		BOSS7_STATE_RECOVERY:
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_FLY
+	modern_boss_controller.update_boss7_state(delta)
 
 
 func _boss7_enter_recovery(time: float) -> void:
-	boss7_state = BOSS7_STATE_RECOVERY
-	boss7_state_timer = time
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.boss7_enter_recovery(time)
 
 
 func _spawn_boss7_flame_wave(center: Vector2, max_radius: float = 250.0) -> void:
-	var flames: Array = []
-	var count: int = 24 if _memory_saver_active() else (34 if _runtime_visual_budget_active() else 72)
-	for i in range(count):
-		var angle: float = (float(i) / float(count)) * TAU + rng.randf_range(-0.05, 0.05)
-		var layer: String = "yellow" if i % 3 == 0 else ("orange" if i % 3 == 1 else "red")
-		var dist_mult: float = rng.randf_range(0.85, 1.0)
-		var size: float = rng.randf_range(7.0, 14.0)
-		flames.append({
-			"angle": angle,
-			"layer": layer,
-			"dist_mult": dist_mult,
-			"size": size,
-			"offset": Vector2(rng.randf_range(-4, 4), rng.randf_range(-4, 4))
-		})
-	boss7_flame_waves.append({
-		"pos": center,
-		"radius": 0.0,
-		"max_radius": max_radius,
-		"expand_speed": 310.0,
-		"life": 1.0,
-		"flames": flames,
-		"hit_player": false
-	})
+	modern_boss_controller.spawn_boss7_flame_wave(center, max_radius)
 
 
 func _boss7_dive_fireball_damage() -> int:
-	return int(player_hp_max * BOSS7_DIVE_FIREBALL_DAMAGE_RATIO + BOSS7_DIVE_FIREBALL_DAMAGE_FLAT)
+	return modern_boss_controller.boss7_dive_fireball_damage()
 
 
 func _spawn_boss7_dive_fireball(target: Vector2) -> void:
-	var impact_pos: Vector2 = target.clamp(Vector2(90.0, 90.0), WORLD_SIZE - Vector2(90.0, 90.0))
-	var spawn_pos: Vector2 = Vector2(impact_pos.x, -124.0)
-	var dir: Vector2 = (impact_pos - spawn_pos).normalized()
-	enemy_bullets.append({
-		"pos": spawn_pos,
-		"dir": dir,
-		"life": 4.5,
-		"damage": _boss7_dive_fireball_damage(),
-		"phase": rng.randf_range(0.0, TAU),
-		"type": "boss7_dive_fireball",
-		"speed_mult": BOSS7_DIVE_FIREBALL_SPEED / 210.0,
-		"radius": BOSS7_DIVE_FIREBALL_RADIUS,
-		"hit_radius": BOSS7_DIVE_FIREBALL_RADIUS,
-		"impact_pos": impact_pos,
-		"wave_radius": 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT,
-		"hit": {}
-	})
-	_play_sfx("Frasco.mp3", 0.04, 0.56, 0.86 + rng.randf() * 0.16)
+	modern_boss_controller.spawn_boss7_dive_fireball(target)
 
 
 func _update_boss7_dive_fireball_projectile(bullet: Dictionary, previous_pos: Vector2) -> void:
-	var current_pos: Vector2 = Vector2(bullet.get("pos", previous_pos))
-	var impact_pos: Vector2 = Vector2(bullet.get("impact_pos", boss7_target_pos))
-	var hit_radius: float = float(bullet.get("hit_radius", BOSS7_DIVE_FIREBALL_RADIUS))
-	var damage: int = int(bullet.get("damage", _boss7_dive_fireball_damage()))
-	if _local_player_damageable_by_contact() and _distance_to_segment(player_pos, previous_pos, current_pos) <= hit_radius:
-		bullet["probability_near_miss_registered"] = true
-		_damage_player(damage, "boss7_dive_fireball")
-		_apply_boss_burn(4)
-		_spawn_radial_particles(player_pos, Color(1.0, 0.32, 0.08), 34)
-		_add_text("IMPACTO", player_pos + Vector2(0.0, -74.0), Color(1.0, 0.42, 0.1), 0.65, 22)
-		bullet["life"] = 0.0
-		return
-	var hit_owner: Dictionary = bullet.get("hit", {})
-	if _damage_remote_player_on_segment(previous_pos, current_pos, hit_radius, damage, "boss7_dive_fireball", hit_owner, "dive_fireball"):
-		bullet["hit"] = hit_owner
-		bullet["life"] = 0.0
-		return
-	bullet["hit"] = hit_owner
-	if _distance_to_segment(impact_pos, previous_pos, current_pos) <= maxf(10.0, hit_radius * 0.45) or current_pos.y >= impact_pos.y:
-		bullet["pos"] = impact_pos
-		_boss7_dive_fireball_ground_impact(bullet)
-		bullet["life"] = 0.0
+	modern_boss_controller.update_boss7_dive_fireball_projectile(bullet, previous_pos)
 
 
 func _boss7_dive_fireball_ground_impact(bullet: Dictionary) -> void:
-	if bool(bullet.get("ground_exploded", false)):
-		return
-	bullet["ground_exploded"] = true
-	var impact_pos: Vector2 = Vector2(bullet.get("impact_pos", bullet.get("pos", boss7_target_pos)))
-	var wave_radius: float = float(bullet.get("wave_radius", 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT))
-	_boss_entry_impact_feedback(0.72)
-	_play_sfx("boss_impact", 0.03, 0.5, 1.18)
-	_spawn_boss7_flame_wave(impact_pos, wave_radius)
-	_spawn_radial_particles(impact_pos, Color(1.0, 0.38, 0.06), 76)
+	modern_boss_controller.boss7_dive_fireball_ground_impact(bullet)
 
 
 func _update_boss7_flame_waves(delta: float) -> void:
-	for wave in boss7_flame_waves:
-		wave["radius"] = float(wave.get("radius", 0.0)) + float(wave.get("expand_speed", 310.0)) * delta
-		var radius: float = float(wave["radius"])
-		var center: Vector2 = Vector2(wave["pos"])
-		if not bool(wave.get("hit_player", false)):
-			if player_pos.distance_to(center) <= radius + 22.0:
-				wave["hit_player"] = true
-				_damage_player(int(player_hp_max * 0.088 + 26), "boss7_flame_wave")
-				_apply_boss_burn(2)
-		_damage_remote_player_in_radius(center, radius + 22.0, int(net_player_hp_max * 0.088 + 26), "boss7_flame_wave")
-	boss7_flame_waves = boss7_flame_waves.filter(func(w): return float(w.get("radius", 0.0)) < float(w.get("max_radius", 250.0)))
+	modern_boss_controller.update_boss7_flame_waves(delta)
 
 
 func _draw_boss7_flame_waves(camera: Vector2) -> void:
@@ -30294,261 +29646,75 @@ func _draw_boss7_flame_waves(camera: Vector2) -> void:
 
 
 func _start_boss7_attack() -> void:
-	var stage: = _boss7_stage()
-	var candidates: Array = []
-	candidates.append({"kind": BOSS7_ATTACK_FEATHER, "weight": 38.0 if stage == 1 else (25.0 if stage == 2 else 20.0)})
-	candidates.append({"kind": BOSS7_ATTACK_WING, "weight": 27.0 if stage == 1 else (18.0 if stage == 2 else 12.0)})
-	candidates.append({"kind": BOSS7_ATTACK_DIVE_TRAIL, "weight": 35.0 if stage == 1 else (27.0 if stage == 2 else 25.0)})
-	candidates.append({"kind": BOSS7_ATTACK_SKY_FIREBALLS, "weight": 30.0 if stage == 1 else (35.0 if stage == 2 else 40.0)})
-	candidates.append({"kind": BOSS7_ATTACK_WHIRLWIND, "weight": 20.0 if stage == 1 else (25.0 if stage == 2 else 30.0)})
-	if stage >= 2:
-		candidates.append({"kind": BOSS7_ATTACK_THERMAL, "weight": 18.0})
-		candidates.append({"kind": BOSS7_ATTACK_ASH_RAIN, "weight": 12.0 if stage == 2 else 10.0})
-	if stage >= 3:
-		candidates.append({"kind": BOSS7_ATTACK_CROWN, "weight": 15.0})
-	var available: Array = candidates.filter(func(item): return float(boss7_cooldowns.get(String(item.get("kind", "")), 0.0)) <= 0.0)
-	if available.is_empty():
-		boss_attack_timer = 0.25
-		return
-	var total: = 0.0
-	for item in available:
-		total += float(item.get("weight", 0.0))
-	var roll: = rng.randf() * maxf(0.01, total)
-	var selected: String = String(available[0].get("kind", BOSS7_ATTACK_FEATHER))
-	for item in available:
-		roll -= float(item.get("weight", 0.0))
-		if roll <= 0.0:
-			selected = String(item.get("kind", selected))
-			break
-	match selected:
-		BOSS7_ATTACK_FEATHER:
-			_start_boss7_feather_volley()
-		BOSS7_ATTACK_WING:
-			_start_boss7_wing_blast()
-		BOSS7_ATTACK_DIVE_TRAIL:
-			_start_boss7_dive()
-		BOSS7_ATTACK_SKY_FIREBALLS:
-			_start_boss7_sky_fireballs()
-		BOSS7_ATTACK_WHIRLWIND:
-			_start_boss7_whirlwind()
-		BOSS7_ATTACK_THERMAL:
-			_start_boss7_thermal()
-		BOSS7_ATTACK_ASH_RAIN:
-			_start_boss7_ash_rain()
-		BOSS7_ATTACK_CROWN:
-			_start_boss7_crown()
+	modern_boss_controller.start_boss7_attack()
 
 
 func _start_boss7_feather_volley() -> void:
-	boss7_state = BOSS7_STATE_FEATHER
-	boss7_state_timer = BOSS7_FEATHER_WINDUP
-	boss7_attack_dir = (_boss_target_pos(true, 0.14) - boss_pos).normalized()
-	if boss7_attack_dir.length() <= 0.05:
-		boss7_attack_dir = Vector2.LEFT
-	boss7_cooldowns[BOSS7_ATTACK_FEATHER] = 1.4
+	modern_boss_controller.start_boss7_feather_volley()
 
 
 func _fire_boss7_feathers() -> void:
-	var stage: = _boss7_stage()
-	var count: = 7 if stage == 1 else (9 if stage == 2 else 11)
-	var spread: = deg_to_rad(66.0 if stage == 1 else (80.0 if stage == 2 else 92.0))
-	var speed: = BOSS7_FEATHER_REBORN_SPEED if boss7_reborn else BOSS7_FEATHER_SPEED
-	for i in range(count):
-		var ratio: = 0.0 if count <= 1 else float(i) / float(count - 1)
-		var dir: = boss7_attack_dir.rotated(lerpf(-spread * 0.5, spread * 0.5, ratio)).normalized()
-		_add_boss_attack({"kind": BOSS7_ATTACK_FEATHER, "age": 0.0, "duration": 2.1, "pos": boss_pos + dir * 48.0, "prev": boss_pos + dir * 48.0, "dir": dir, "speed": speed, "hit": false, "phase": rng.randf_range(0.0, TAU)})
-	_play_sfx("boss_impact", 0.014, 0.48, 1.18)
+	modern_boss_controller.fire_boss7_feathers()
 
 
 func _start_boss7_wing_blast() -> void:
-	boss7_state = BOSS7_STATE_WING
-	boss7_state_timer = BOSS7_WING_WINDUP
-	boss7_attack_dir = (_boss_target_pos(true, 0.12) - boss_pos).normalized()
-	if boss7_attack_dir.length() <= 0.05:
-		boss7_attack_dir = Vector2.LEFT
-	boss7_cooldowns[BOSS7_ATTACK_WING] = 2.4
+	modern_boss_controller.start_boss7_wing_blast()
 
 
 func _fire_boss7_wing_blast() -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_WING, "age": 0.0, "duration": 1.2, "origin": boss_pos, "dir": boss7_attack_dir, "hit": false})
-	_spawn_radial_particles(boss_pos + boss7_attack_dir * 74.0, Color(1.0, 0.64, 0.16), 42)
+	modern_boss_controller.fire_boss7_wing_blast()
 
 
 func _start_boss7_dive() -> void:
-	boss7_state = BOSS7_STATE_DIVE_PREP
-	boss7_state_timer = 1.0
-	boss7_target_pos = (_boss_target_pos(true, 0.32)).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-	boss7_attack_dir = Vector2.UP
-	boss7_dive_fake_count = 0
-	boss7_cooldowns[BOSS7_ATTACK_DIVE_TRAIL] = 20.0
+	modern_boss_controller.start_boss7_dive()
 
 
 func _add_boss7_dive_trail(a: Vector2, b: Vector2) -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_DIVE_TRAIL, "age": 0.0, "duration": 3.8 if boss7_reborn else 3.2, "a": a, "b": b, "tick": 0.45, "hit": {}})
+	modern_boss_controller.add_boss7_dive_trail(a, b)
 
 
 func _start_boss7_thermal() -> void:
-	var spots: Array = []
-	var base_target: = _boss_target_pos(true, 0.18)
-	spots.append(base_target.clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80)))
-	var count: = 4 if boss7_reborn else 3
-	for i in range(count - 1):
-		var offset: = Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(90.0, 180.0)
-		spots.append((base_target + offset).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80)))
-	_add_boss_attack({"kind": BOSS7_ATTACK_THERMAL, "age": 0.0, "duration": 1.25, "spots": spots, "hit": {}})
-	boss7_cooldowns[BOSS7_ATTACK_THERMAL] = 3.4
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.start_boss7_thermal()
 
 
 func _start_boss7_ash_rain() -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_ASH_RAIN, "age": 0.0, "duration": 3.6, "spawn_cd": 0.0, "spawned": 0, "drops": []})
-	boss7_cooldowns[BOSS7_ATTACK_ASH_RAIN] = 5.2
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.start_boss7_ash_rain()
 
 
 func _start_boss7_crown() -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_CROWN, "age": 0.0, "duration": 2.1, "hit": {}})
-	boss7_cooldowns[BOSS7_ATTACK_CROWN] = BOSS7_CROWN_COOLDOWN
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.start_boss7_crown()
 
 
 func _start_boss7_rebirth() -> void:
-	boss7_ultimate_active = false
-	boss7_ultimate_timer = 0.0
-	boss7_ultimate_quadrants = [0, 0, 0, 0]
-	boss7_core_active = true
-	boss7_core_pos = boss_pos
-	boss7_core_hp_max = maxf(1.0, boss7_original_hp_max * BOSS7_CORE_HP_RATIO)
-	boss7_core_hp = boss7_core_hp_max
-	boss7_core_damage = 0.0
-	boss7_core_timer = BOSS7_ASH_CORE_TIME
-	boss7_state = BOSS7_STATE_ASH_CORE
-	boss_active = true
-	boss_hp = 0.0
-	boss_attacks.clear()
-	_spawn_radial_particles(boss7_core_pos, Color(1.0, 0.32, 0.08), 130)
-	_add_text("CORACAO DE CINZAS", boss7_core_pos + Vector2(0, -86), Color(1.0, 0.72, 0.22), 1.2, 24)
+	modern_boss_controller.start_boss7_rebirth()
 
 
 func _update_boss7_core(delta: float) -> void:
-	boss7_core_timer = maxf(0.0, boss7_core_timer - delta)
-	boss_phase += delta * 5.0
-	if boss7_core_timer <= 0.0:
-		var damage_ratio: = clampf(boss7_core_damage / maxf(1.0, boss7_core_hp_max), 0.0, 1.0)
-		var rebirth_ratio: = lerpf(BOSS7_REBIRTH_MAX_RATIO, BOSS7_REBIRTH_MIN_RATIO, damage_ratio)
-		boss7_core_active = false
-		boss7_reborn = true
-		boss7_state = BOSS7_STATE_REBIRTH
-		boss7_state_timer = BOSS7_REBIRTH_ANIM_TIME
-		boss_pos = boss7_core_pos + Vector2(0.0, -80.0)
-		boss_hp_max = maxf(1.0, boss7_original_hp_max)
-		boss_hp = maxf(1.0, boss7_original_hp_max * rebirth_ratio)
-		_spawn_radial_particles(boss7_core_pos, Color(1.0, 0.48, 0.1), 150)
-		_add_text("RENASCIMENTO %.0f%%" % (rebirth_ratio * 100.0), boss7_core_pos + Vector2(0, -96), Color(1.0, 0.48, 0.12), 1.2, 25)
+	modern_boss_controller.update_boss7_core(delta)
 
 
 func _start_boss7_whirlwind() -> void:
-	boss7_whirlwind_active = true
-	boss7_whirlwind_timer = 2.5
-	boss7_whirlwind_angle = 0.0
-	boss7_whirlwind_spawn_timer = 0.0
-	boss7_whirlwind_shots_left = 60
-	boss7_cooldowns[BOSS7_ATTACK_WHIRLWIND] = 40.0
-	boss_attack_timer = _boss7_attack_delay() + 2.5
-	_add_text("REDEMOINHO DE FOGO", boss_pos + Vector2(0, -110), Color(1.0, 0.4, 0.1), 1.2, 24)
+	modern_boss_controller.start_boss7_whirlwind()
 
 
 func _update_boss7_whirlwind(delta: float) -> void:
-	if not boss7_whirlwind_active:
-		return
-	boss7_whirlwind_timer = maxf(0.0, boss7_whirlwind_timer - delta)
-	boss7_whirlwind_spawn_timer -= delta
-	if boss7_whirlwind_spawn_timer <= 0.0 and boss7_whirlwind_shots_left > 0:
-		boss7_whirlwind_spawn_timer = 0.04
-		boss7_whirlwind_shots_left -= 1
-		boss7_whirlwind_angle += TAU / 60.0
-		var dir: Vector2 = Vector2.from_angle(boss7_whirlwind_angle)
-		var speed: float = 170.0
-		enemy_bullets.append({
-			"pos": boss_pos + dir * 30.0,
-			"dir": dir,
-			"life": 4.5,
-			"damage": int(player_hp_max * 0.07 + 20.0),
-			"phase": rng.randf_range(0.0, TAU),
-			"type": "phase7_fireball",
-			"speed_mult": speed / 210.0,
-			"radius": 14.0
-		})
-		_spawn_radial_particles(boss_pos + dir * 30.0, Color(1.0, 0.5, 0.1), 3)
-	if boss7_whirlwind_timer <= 0.0 and boss7_whirlwind_shots_left <= 0:
-		boss7_whirlwind_active = false
+	modern_boss_controller.update_boss7_whirlwind(delta)
 
 
 func _start_boss7_sky_fireballs() -> void:
-	boss7_cooldowns[BOSS7_ATTACK_SKY_FIREBALLS] = 9.0
-	var count: int = 15 if boss7_reborn else 12
-	var spots: Array = []
-	var base_target: Vector2 = _boss_target_pos(true, 0.2)
-	spots.append(base_target.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)))
-	for i in range(count - 1):
-		var offset: Vector2 = Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(80.0, 220.0)
-		spots.append((base_target + offset).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)))
-	_add_boss_attack({
-		"kind": BOSS7_ATTACK_SKY_FIREBALLS,
-		"age": 0.0,
-		"duration": 2.2,
-		"warning": 0.85,
-		"spots": spots,
-		"hit": {}
-	})
-	boss_attack_timer = _boss7_attack_delay()
-	_add_text("CHUVA DE FOGO", boss_pos + Vector2(0, -90), Color(1.0, 0.6, 0.1), 1.0, 20)
+	modern_boss_controller.start_boss7_sky_fireballs()
 
 
 func _check_boss7_ultimate(_delta: float) -> void:
-	if boss7_ultimate_active or boss7_ultimate_used or not _is_world_authority():
-		return
-	if current_phase == 7 and boss_hp > 0.0 and boss_hp / maxf(1.0, boss_hp_max) <= 0.30 and boss_active and not boss_dead and not boss7_core_active:
-		boss7_ultimate_active = true
-		boss7_ultimate_used = true
-		boss7_ultimate_timer = PhoenixFire.DURATION
-		boss7_ultimate_tick_timer = 0.6
-		_refresh_boss7_ultimate_quadrants()
-		_add_text("AQUECIMENTO GLOBAL!", boss_pos + Vector2(0, -130), Color(1.0, 0.2, 0.0), 2.0, 32)
-		_vibrate(250, 0.8)
+	modern_boss_controller.check_boss7_ultimate(_delta)
 
 
 func _update_boss7_ultimate(delta: float) -> void:
-	if not boss7_ultimate_active:
-		return
-	boss7_ultimate_timer = maxf(0.0, boss7_ultimate_timer - delta)
-	if boss7_ultimate_timer <= 0.0 or current_phase != 7 or not boss_active or boss_dead or boss7_core_active:
-		boss7_ultimate_active = false
-		boss7_ultimate_timer = 0.0
-		boss7_ultimate_quadrants = [0, 0, 0, 0]
-		return
-	_refresh_boss7_ultimate_quadrants()
-	if not _is_world_authority():
-		return
-	boss7_ultimate_tick_timer -= delta
-	if boss7_ultimate_tick_timer > 0.0:
-		return
-	boss7_ultimate_tick_timer = 0.6
-	var elapsed: float = PhoenixFire.DURATION - boss7_ultimate_timer
-	if PhoenixFire.dangerous(player_pos, WORLD_SIZE, elapsed) and _local_player_damageable_by_contact():
-		_damage_player(int(player_hp_max * 0.025 + 10), "boss7_global_warming")
-		_apply_boss_burn(1)
-	if _remote_player_damage_ready():
-		for peer_id in _targetable_remote_peer_ids():
-			var state: Dictionary = net_players_by_peer.get(peer_id, {})
-			if PhoenixFire.dangerous(Vector2(state.get("pos", Vector2(-10000, -10000))), WORLD_SIZE, elapsed):
-				_send_peer_damage(peer_id, int(float(state.get("hp_max", player_hp_max)) * 0.025 + 10), "boss7_global_warming")
+	modern_boss_controller.update_boss7_ultimate(delta)
 
 
 func _refresh_boss7_ultimate_quadrants() -> void:
-	boss7_ultimate_quadrants.resize(4)
-	for quadrant in range(4):
-		boss7_ultimate_quadrants[quadrant] = PhoenixFire.phase(PhoenixFire.DURATION - boss7_ultimate_timer, quadrant) if boss7_ultimate_active else 0
+	modern_boss_controller.refresh_boss7_ultimate_quadrants()
 
 
 func _draw_boss7_ultimate(camera: Vector2) -> void:
@@ -30652,56 +29818,7 @@ func _update_boss_phase6(delta: float) -> void :
 
 
 func _update_boss6_timers(delta: float) -> void :
-	boss6_carapace_timer = maxf(0.0, boss6_carapace_timer - delta)
-	if boss6_carapace_timer <= 0.0:
-		boss6_carapace_plates.clear()
-	boss6_vulnerability_timer = maxf(0.0, boss6_vulnerability_timer - delta)
-	boss6_core_exposed_timer = maxf(0.0, boss6_core_exposed_timer - delta)
-	boss6_fossil_era_timer = maxf(0.0, boss6_fossil_era_timer - delta)
-	boss6_miasma_ult_cooldown = maxf(0.0, boss6_miasma_ult_cooldown - delta)
-	boss6_miasma_slow_timer = maxf(0.0, boss6_miasma_slow_timer - delta)
-	if boss6_miasma_slow_timer <= 0.0:
-		boss6_miasma_slow_stacks = 0
-		boss6_miasma_slow_tick = 0.0
-	boss6_carnage_slow_timer = maxf(0.0, boss6_carnage_slow_timer - delta)
-
-
-	if not boss6_fossil_echo.is_empty():
-		boss6_fossil_echo["timer"] = maxf(0.0, float(boss6_fossil_echo.get("timer", 0.0)) - delta)
-		if float(boss6_fossil_echo["timer"]) <= 0.0:
-			boss6_fossil_echo.clear()
-	boss6_fossil_echo_slow_timer = maxf(0.0, boss6_fossil_echo_slow_timer - delta)
-
-	if boss6_necro_erosion_active:
-		boss6_necro_erosion_timer = maxf(0.0, boss6_necro_erosion_timer - delta)
-		if boss6_necro_erosion_timer <= 0.0:
-			boss6_necro_erosion_active = false
-
-
-	boss6_history_sample_timer -= delta
-	if boss6_history_sample_timer <= 0.0:
-		boss6_history_sample_timer = 0.15
-		boss6_player_history.append({"time": time_alive, "pos": player_pos})
-		if boss6_player_history.size() > 40:
-			boss6_player_history.pop_front()
-
-
-	if _is_player_calcified():
-		boss6_necro_erosion_damage_timer -= delta
-		if boss6_necro_erosion_damage_timer <= 0.0:
-			boss6_necro_erosion_damage_timer = 0.75
-			_damage_player(int(player_hp_max * 0.025 + 5), "boss6_necro_erosion_burn")
-
-	for key in boss6_ability_cooldowns.keys():
-		boss6_ability_cooldowns[key] = maxf(0.0, float(boss6_ability_cooldowns[key]) - delta)
-	_update_boss6_miasma_ultimate(delta)
-	_update_boss6_lodarian_pools(delta)
-	_update_boss6_rib_prison(delta)
-	if boss6_core_exposed_timer > 0.0:
-		boss6_core_pulse_timer -= delta
-		if boss6_core_pulse_timer <= 0.0:
-			boss6_core_pulse_timer = 1.6
-			_boss6_core_proximity_pulse()
+	modern_boss_controller.update_boss6_timers(delta)
 
 
 func _boss6_hp_pct() -> float:
