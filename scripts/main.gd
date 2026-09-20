@@ -1,5 +1,7 @@
 extends Node2D
 
+const MENU_PRESENTATION = preload("res://scripts/ui/menu_presentation.gd")
+
 const AuraSystem = preload("res://scripts/aura_system.gd")
 const CatalogInterface = preload("res://scripts/catalog/catalog_interface.gd")
 const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
@@ -16,8 +18,8 @@ const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_cont
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.37"
-const GAME_VERSION_CODE: = 23700
+const GAME_VERSION: = "2.0.38"
+const GAME_VERSION_CODE: = 23800
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
@@ -2481,9 +2483,9 @@ var revival_state_sync_timer: float = 0.0
 var revival_mobile_confirm_method: String = ""
 var revival_mobile_confirm_until_ms: int = 0
 var team_revival_state = RTTeamRevivalStateScript.new()
-var enemy_manager: EnemyManager = EnemyManagerScript.new()
-var early_boss_controller: EarlyBossController = EarlyBossControllerScript.new()
-var modern_boss_controller: ModernBossController = ModernBossControllerScript.new()
+var enemy_manager: Node = EnemyManagerScript.new()
+var early_boss_controller: Node = EarlyBossControllerScript.new()
+var modern_boss_controller: Node = ModernBossControllerScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
@@ -3673,8 +3675,13 @@ func _cleanup_runtime_resources() -> void :
 	startup_thanks_frame_cache.clear()
 	audio_streams.clear()
 	textures.clear()
-	get_node("/root/AudioManager").unbind_game(self)
-	get_node("/root/TelemetrySystem").unbind_game(self)
+	if is_inside_tree():
+		var audio_manager := get_node_or_null("/root/AudioManager")
+		if audio_manager != null:
+			audio_manager.unbind_game(self)
+		var telemetry_system := get_node_or_null("/root/TelemetrySystem")
+		if telemetry_system != null:
+			telemetry_system.unbind_game(self)
 
 func _cmd_arg_value(args: Array, prefix: String, fallback: String) -> String:
 	for arg in args:
@@ -32908,138 +32915,67 @@ func _update_boss_call(delta: float) -> void :
 
 
 func _update_shop_countdown(delta: float) -> void :
-	if not boss1_rewind_sequence.is_empty() or not boss1_time_wave.is_empty():
-		_update_audio_volumes()
-		_update_game(delta)
-		return
-	forced_shop_timer -= delta
-	if forced_shop_timer <= 0.0:
-		_start_shop_opening_animation(true)
-		return
-	_update_audio_volumes()
-	_update_shop_countdown_tick()
-	_update_game(delta * _shop_countdown_time_scale())
+	shop_controller.update_countdown(delta)
 
 
 func _start_shop_opening_animation(forced: bool) -> void :
-	if not boss1_rewind_sequence.is_empty() or not boss1_time_wave.is_empty():
-		return
-	_clear_shop_mp_request()
-	forced_shop_timer = 0.0
-	shop_opening_timer = SHOP_OPENING_ANIM_TIME
-	shop_opening_forced = forced
-	mode = "shop_opening"
-	_update_audio_volumes()
-	screen_shake_timer = max(screen_shake_timer, 0.42)
-	screen_shake_strength = max(screen_shake_strength, 18.0)
-	_vibrate(460, 0.88)
-	_play_sfx("shop_countdown_tick", 0.0, 0.7, 0.72)
+	shop_controller.start_opening_animation(forced)
 
 
 func _update_shop_opening(delta: float) -> void :
-	shop_opening_timer -= delta
-	if shop_opening_timer <= 0.0:
-		shop_opening_timer = 0.0
-		_open_shop(shop_opening_forced)
-		return
-	screen_shake_timer = max(0.0, screen_shake_timer - delta)
-	if shop_opening_timer <= SHOP_OPENING_ANIM_TIME * 0.42 and shop_opening_timer + delta > SHOP_OPENING_ANIM_TIME * 0.42:
-		_vibrate(240, 0.62)
-		_play_sfx("shop_countdown_tick", 0.0, 0.46, 1.08)
-	_update_effects(delta)
-	_update_audio_volumes()
+	shop_controller.update_opening(delta)
 
 
 func _shop_countdown_time_scale() -> float:
-	if forced_shop_timer > FORCED_SHOP_SLOW_START:
-		return 1.0
-	var slow_progress = clamp(1.0 - forced_shop_timer / FORCED_SHOP_SLOW_START, 0.0, 1.0)
-	return lerp(1.0, FORCED_SHOP_MIN_TIME_SCALE, slow_progress)
+	return shop_controller.countdown_time_scale()
 
 
 func _shop_countdown_visible_second() -> int:
-	return int(ceil(max(0.01, forced_shop_timer)))
+	return shop_controller.countdown_visible_second()
 
 
 func _shop_countdown_tick_volume() -> float:
-	var progress = clamp(1.0 - (forced_shop_timer - FORCED_SHOP_SLOW_START) / max(0.01, FORCED_SHOP_WARNING - FORCED_SHOP_SLOW_START), 0.0, 1.0)
-	return lerp(0.1, 0.7, progress)
+	return shop_controller.countdown_tick_volume()
 
 
 func _shop_countdown_audio_duck() -> float:
-	if mode == "shop_opening":
-		return 0.28
-	if mode != "shop_countdown" or forced_shop_timer <= 0.0:
-		return 1.0
-	var progress = clamp(1.0 - forced_shop_timer / FORCED_SHOP_WARNING, 0.0, 1.0)
-	return lerp(1.0, 0.32, progress)
+	return shop_controller.countdown_audio_duck()
 
 
 func _update_shop_countdown_tick() -> void :
-	var second = _shop_countdown_visible_second()
-	if second == shop_countdown_last_second:
-		return
-	shop_countdown_last_second = second
-	_play_sfx("shop_countdown_tick", 0.0, _shop_countdown_tick_volume())
+	shop_controller.update_countdown_tick()
 
 
 func _shop_purchase_animating() -> bool:
-	return shop_purchase_anim_timer > 0.0 and not shop_purchase_pending_card.is_empty()
+	return shop_controller.purchase_animating()
 
 
 func _shop_rpc_available() -> bool:
-	return _multiplayer_peer_active()
+	return shop_controller.rpc_available()
 
 
 func _clear_shop_mp_request() -> void :
-	shop_mp_request_timer = 0.0
-	shop_mp_request_incoming = false
-	shop_mp_request_outgoing = false
-	buttons.erase("shop_mp_accept")
+	shop_controller.clear_mp_request()
 
 
 func _start_shop_mp_request_overlay(incoming: bool) -> void :
-	if not is_multiplayer:
-		return
-	shop_mp_request_timer = SHOP_MP_REQUEST_TIME
-	shop_mp_request_incoming = incoming
-	shop_mp_request_outgoing = not incoming
-	if mode == "shop_mp_waiting" or mode == "shop_mp_requested":
-		mode = "game"
+	shop_controller.start_mp_request_overlay(incoming)
 
 
 func _shop_mp_request_visible() -> bool:
-	return is_multiplayer and mode == "game" and shop_mp_request_timer > 0.0 and (shop_mp_request_incoming or shop_mp_request_outgoing)
+	return shop_controller.mp_request_visible()
 
 
 func _update_shop_mp_request(delta: float) -> void :
-	if not _shop_mp_request_visible():
-		return
-	shop_mp_request_timer = max(0.0, shop_mp_request_timer - delta)
-	if shop_mp_request_timer <= 0.0:
-		_clear_shop_mp_request()
+	shop_controller.update_mp_request(delta)
 
 
 func _begin_shop_mp_open_locally() -> void :
-	_clear_shop_mp_request()
-	shop_mp_ready_count = 0
-	shop_mp_expected_count = maxi(1, _living_run_player_peer_ids().size())
-	shop_mp_partner_ready = false
-	shop_mp_ready_to_leave = false
-	if is_dead or online_local_spectator:
-		mode = "shop_mp_waiting"
-		_update_audio_volumes()
-		return
-	_start_shop_opening_animation(false)
+	shop_controller.begin_mp_open_locally()
 
 
 func _accept_shop_mp_request() -> void :
-	if not shop_mp_request_incoming:
-		return
-	if _shop_rpc_available():
-		rpc("_rpc_accept_shop")
-	shop_mp_request_incoming = false
-	shop_mp_request_outgoing = true
+	shop_controller.accept_mp_request()
 
 
 func _shop_can_exit() -> bool:
@@ -33047,21 +32983,7 @@ func _shop_can_exit() -> bool:
 
 
 func _request_shop_exit_or_finish() -> void :
-	if not _shop_can_exit():
-		return
-	if is_multiplayer:
-		if is_dead or online_local_spectator:
-			mode = "shop_mp_waiting"
-			_update_audio_volumes()
-			return
-		shop_mp_ready_to_leave = true
-		if _shop_rpc_available():
-			rpc("_rpc_shop_ready")
-		if not _check_shop_mp_exit():
-			mode = "shop_mp_waiting"
-			_update_audio_volumes()
-	else:
-		_finish_shop()
+	shop_controller.request_exit_or_finish()
 
 
 func _clear_boss_mp_request() -> void :
@@ -33105,98 +33027,31 @@ func _update_shop(delta: float) -> void :
 
 
 func _open_shop(forced: bool) -> void :
-	if mode == "shop":
-		return
-	if not forced:
-		if shop_opening_manual_already_tracked:
-			shop_opening_manual_already_tracked = false
-		else:
-			_track_manual_shop_opening()
-	else:
-		shop_opening_manual_already_tracked = false
-	shop_manual_reopen_warning_until_ms = 0
-	shop_manual_reopen_warning_text = ""
-	shop_endurance_discount = _shop_endurance_discount_from_elapsed(shop_auto_elapsed)
-	previous_mode = "game"
-	mode = "shop"
-	_update_audio_volumes()
-	shop_rerolls = 3
-	shop_controller.reset()
-	shop_mp_ready_count = 0
-	shop_mp_expected_count = maxi(1, _living_run_player_peer_ids().size())
-	shop_purchase_anim_timer = 0.0
-	shop_purchase_pending_card = {}
-	shop_purchase_pending_can_continue = false
-	shop_purchase_pending_price = 0
-	shop_spend_anim_timer = 0.0
-	shop_spend_anim_amount = 0
-	shop_purchases_this_visit = 0
-	shop_mp_ready_to_leave = false
-	shop_mp_partner_ready = false
-	_clear_shop_mp_request()
-	_begin_shop_visit()
-	shop_cards = _roll_shop_cards("open")
-	shop_selected = 0
-	shop_select_pulse_index = 0
-	shop_select_pulse_timer = 0.2
-	shop_last_tap_index = -1
-	shop_last_tap_msec = 0
-	if forced:
-		_add_text("Loja forcada", player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 1.4, 26)
-	if shop_endurance_discount > 0.0:
-		_add_text("RESISTENCIA: -%d%%" % int(round(shop_endurance_discount * 100.0)), player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
+	shop_controller.open_shop(forced)
 
 
 func _track_manual_shop_opening() -> void :
-	var rapid: bool = time_alive - shop_last_manual_open_time <= 12.0
-	if rapid:
-		shop_recent_manual_open_count += 1
-	else:
-		shop_recent_manual_open_count = 1
-	shop_last_manual_open_time = time_alive
-	if shop_recent_manual_open_count > 2:
-		_apply_shop_abuse_penalty("abertura rapida")
-	if shop_last_exit_had_purchase and time_alive - shop_last_exit_time <= 35.0:
-		_apply_shop_abuse_penalty("reroll por saida")
+	shop_controller.track_manual_opening()
 
 
 func _apply_shop_abuse_penalty(reason: String) -> void :
-	if score <= 0:
-		return
-	var penalty: int = min(score, max(CARD_COST_BASE, card_cost))
-	score = max(0, score - penalty)
-	run_points_spent += penalty
-	shop_abuse_penalty_count += 1
-	_add_text("TAXA DA LOJA -%d" % penalty, player_pos + Vector2(0, -116), Color(1.0, 0.38, 0.18), 1.35, 22)
-	if shop_abuse_penalty_count <= 2:
-		_add_text(reason.to_upper(), player_pos + Vector2(0, -146), Color(1.0, 0.78, 0.24), 1.2, 17)
-	_vibrate(95, 0.4)
+	shop_controller.apply_abuse_penalty(reason)
 
 
 func _manual_shop_reopen_would_penalize() -> bool:
-	if score <= 0:
-		return false
-	var rapid: bool = time_alive - shop_last_manual_open_time <= 12.0
-	if rapid and shop_recent_manual_open_count >= 2:
-		return true
-	return shop_last_exit_had_purchase and time_alive - shop_last_exit_time <= 35.0
+	return shop_controller.manual_reopen_would_penalize()
 
 
 func _manual_shop_penalty_value() -> int:
-	return min(score, max(CARD_COST_BASE, card_cost))
+	return shop_controller.manual_penalty_value()
 
 
 func _manual_shop_reopen_warning_active() -> bool:
-	return shop_manual_reopen_warning_until_ms > Time.get_ticks_msec()
+	return shop_controller.manual_reopen_warning_active()
 
 
 func _warn_manual_shop_reopen_penalty() -> void:
-	var penalty: int = _manual_shop_penalty_value()
-	shop_manual_reopen_warning_until_ms = Time.get_ticks_msec() + SHOP_MANUAL_REOPEN_CONFIRM_MS
-	shop_manual_reopen_warning_text = "ABRIR AGORA COBRA TAXA DE %d PONTOS. TOQUE DE NOVO PARA CONFIRMAR." % penalty
-	_add_text("LOJA PUNITIVA -%d" % penalty, player_pos + Vector2(0, -112), Color(1.0, 0.72, 0.16), 1.0, 20)
-	_add_text("TOQUE DE NOVO PARA ABRIR", player_pos + Vector2(0, -140), Color(0.0, 1.0, 0.82), 0.9, 17)
-	_vibrate(45, 0.22)
+	shop_controller.warn_manual_reopen_penalty()
 
 
 func _shop_locked_key(index: int) -> String:
@@ -36653,99 +36508,23 @@ func _chance_carta_rara() -> float:
 
 
 func _buy_selected_card() -> void :
-	if shop_controller.busy() or mode != "shop":
-		return
-	if shop_cards.is_empty():
-		return
-	if _shop_purchase_animating():
-		return
-	var card: Dictionary = shop_cards[shop_selected]
-	if _is_empty_shop_slot(card):
-		_add_text("VAGA VAZIA", player_pos + Vector2(0, -92), Color(0.72, 0.46, 0.32), 0.7, 17)
-		return
-	var price: = _effective_card_price(card)
-	if score < price:
-		_add_text("PONTOS INSUFICIENTES", player_pos + Vector2(0, -92), Color(1.0, 0.56, 0.28), 0.8, 18)
-		return
-	var next_score = score - price
-	shop_purchase_pending_card = card.duplicate(true)
-	shop_purchase_pending_price = price
-	shop_purchase_pending_can_continue = next_score > 0
-	shop_purchase_anim_timer = SHOP_PURCHASE_ANIM_TIME
-	shop_select_pulse_index = shop_selected
-	shop_select_pulse_timer = 0.26
+	shop_controller.buy_selected_card()
 
 
 func _set_shop_selection(index: int) -> void :
-	if _shop_purchase_animating() or shop_controller.busy():
-		return
-	if index < 0 or index >= shop_cards.size():
-		return
-	if shop_selected == index:
-		return
-	shop_selected = index
-	shop_select_pulse_index = index
-	shop_select_pulse_timer = 0.26
+	shop_controller.set_selection(index)
 
 
 func _touch_shop_card(index: int) -> void :
-	if _shop_purchase_animating() or shop_controller.busy():
-		return
-	var now_msec: = Time.get_ticks_msec()
-	var is_double_tap: = shop_last_tap_index == index and now_msec - shop_last_tap_msec <= 360
-	_set_shop_selection(index)
-	if is_double_tap:
-		shop_selected = index
-		shop_select_pulse_index = index
-		shop_select_pulse_timer = 0.36
-		_vibrate(42, 0.22)
-	shop_last_tap_index = index
-	shop_last_tap_msec = now_msec
+	shop_controller.touch_card(index)
 
 
 func _reserve_shop_card(index: int) -> void :
-	if _shop_purchase_animating() or shop_controller.busy() or index < 0 or index >= shop_cards.size():
-		return
-	var card: Dictionary = shop_cards[index]
-	if _shop_slot_locked(index):
-		shop_controller.begin("unlock", shop_cards, index)
-		shop_locked_slots.erase(_shop_locked_key(index))
-		if shop_cards.size() > index:
-			shop_cards[index].erase("locked_slot")
-			shop_cards[index].erase("locked_price")
-		_add_text("RESERVA SOLTA", player_pos + Vector2(-90, -92), Color(0.4, 0.94, 1.0), 0.9, 17)
-		_vibrate(32, 0.14)
-		return
-	if not _can_reserve_shop_card(card):
-		return
-	if not _consume_card_count(CARD_ESCOLHA_ADIADA_ID):
-		return
-	shop_controller.begin("lock", shop_cards, index)
-	var locked: = card.duplicate(true)
-	var locked_price: = _effective_card_price(card)
-	locked["locked_slot"] = true
-	locked["locked_price"] = locked_price
-	shop_locked_slots[_shop_locked_key(index)] = {"card": locked.duplicate(true), "price": locked_price, "locked_at_cost": card_cost}
-	shop_cards[index] = locked
-	shop_reserved_card_id = ""
-	_add_text("TRAVADA: %s" % String(card.get("nick", card.get("name", ""))), player_pos + Vector2(-90, -92), Color(card.get("color", Color.WHITE)), 1.1, 18)
-	_vibrate(44, 0.2)
+	shop_controller.reserve_card(index)
 
 
 func _reroll_shop() -> void :
-	if _shop_purchase_animating() or shop_controller.busy():
-		return
-	if shop_rerolls > 0:
-		shop_controller.begin("reroll", shop_cards)
-		shop_rerolls -= 1
-		shop_reroll_index += 1
-		_add_card_unlock_progress("shop_rerolls", 1.0)
-		shop_cards = _roll_shop_cards("reroll")
-		shop_selected = 0
-		shop_select_pulse_index = 0
-		shop_select_pulse_timer = 0.2
-		shop_last_tap_index = -1
-		shop_last_tap_msec = 0
+	shop_controller.reroll()
 
 
 func _card_category(card_name: String) -> String:
@@ -37252,47 +37031,15 @@ func _close_shop() -> void :
 
 
 func _finish_shop() -> void :
-	shop_last_exit_had_purchase = shop_purchases_this_visit > 0
-	shop_last_exit_time = time_alive
-	shop_manual_reopen_warning_until_ms = 0
-	shop_manual_reopen_warning_text = ""
-	shop_purchase_anim_timer = 0.0
-	shop_purchase_pending_card = {}
-	shop_purchase_pending_can_continue = false
-	shop_purchase_pending_price = 0
-	_clear_shop_mp_request()
-	shop_mp_ready_to_leave = false
-	shop_mp_partner_ready = false
-	shop_mp_ready_count = 0
-	shop_mp_expected_count = maxi(1, _active_run_player_count())
-	mode = "shop_return"
-	shop_return_timer = SHOP_RETURN_TIME
-	shop_return_visual_timer = SHOP_RETURN_VISUAL_TIME
-	forced_shop_timer = -1.0
-	forced_shop_triggered = false
-	shop_opening_timer = 0.0
-	shop_opening_forced = false
-	shop_last_tap_index = -1
-	shop_last_tap_msec = 0
-	shop_auto_elapsed = 0.0
-	shop_endurance_discount = 0.0
-	next_forced_shop_time = shop_auto_interval if shop_auto_enabled else INF
-	_update_audio_volumes()
-	_block_ui_input()
+	shop_controller.finish()
 
 
 func _update_shop_return(delta: float) -> void :
-	shop_return_timer -= delta
-	shop_return_visual_timer = maxf(0.0, shop_return_visual_timer - delta)
-	_update_effects(delta)
-	if shop_return_timer <= 0.0:
-		mode = previous_mode if previous_mode != "" else "game"
-		shop_return_timer = 0.0
+	shop_controller.update_return(delta)
 
 
 func _update_shop_mp_waiting(delta: float) -> void :
-	_update_effects(delta)
-	_check_shop_mp_exit()
+	shop_controller.update_waiting(delta)
 
 
 func _affordable_card_count() -> int:
@@ -37314,71 +37061,19 @@ func _affordable_card_count() -> int:
 
 
 func _should_trigger_forced_shop() -> bool:
-	if not shop_auto_enabled or forced_shop_triggered or forced_shop_timer >= 0.0 or shop_opening_timer > 0.0:
-		return false
-	return shop_auto_elapsed >= shop_auto_interval
+	return shop_controller.should_trigger_forced()
 
 
 func _set_shop_auto_enabled(enabled: bool) -> void :
-	shop_auto_enabled = enabled
-	forced_shop_enabled = enabled
-	forced_shop_timer = -1.0
-	forced_shop_triggered = false
-	shop_opening_timer = 0.0
-	shop_opening_forced = false
-	shop_countdown_last_second = -1
-	shop_auto_elapsed = 0.0
-	if enabled:
-		next_forced_shop_time = shop_auto_interval
-	else:
-		next_forced_shop_time = INF
-		if mode == "shop_countdown" or mode == "shop_opening":
-			mode = "game"
-		if previous_mode == "shop_countdown":
-			previous_mode = "game"
-		if settings_previous_mode == "shop_countdown":
-			settings_previous_mode = "game"
+	shop_controller.set_auto_enabled(enabled)
 
 
 func _try_open_manual_shop() -> void :
-	if _local_player_controls_locked():
-		return
-	if shop_auto_enabled or mode != "game":
-		return
-	if _affordable_card_count() <= 0:
-		_add_text("FALTAM PONTOS", player_pos + Vector2(0, -96), Color(1.0, 0.56, 0.28), 0.9, 20)
-		return
-	if _manual_shop_reopen_would_penalize() and not _manual_shop_reopen_warning_active():
-		_warn_manual_shop_reopen_penalty()
-		return
-	if not _manual_shop_reopen_warning_active() and _maybe_start_context_tutorial(TUTORIAL_STATE_SHOP):
-		return
-	if is_multiplayer:
-		if _shop_mp_request_visible():
-			return
-		_start_shop_mp_request_overlay(false)
-		if _shop_rpc_available():
-			rpc("_rpc_request_shop")
-		return
-	if _manual_shop_reopen_would_penalize() and _manual_shop_reopen_warning_active():
-		_track_manual_shop_opening()
-		shop_opening_manual_already_tracked = true
-	_start_shop_opening_animation(false)
+	shop_controller.try_open_manual()
 
 
 func _start_forced_shop_countdown() -> void :
-	if _local_player_controls_locked():
-		return
-	if not shop_auto_enabled:
-		return
-	if is_multiplayer and not _is_world_authority():
-		return
-	if is_multiplayer and _is_world_authority():
-		rpc("_rpc_trigger_shop", true)
-	forced_shop_triggered = true
-	forced_shop_timer = FORCED_SHOP_WARNING
-	shop_countdown_last_second = -1
-	mode = "shop_countdown"
+	shop_controller.start_forced_countdown()
 
 
 func _start_pause_countdown() -> void :
@@ -38874,35 +38569,15 @@ func _draw_ui_wrap(text: String, rect: Rect2, size: int, color: Color, lines: in
 
 
 func _draw_menu_scrim(viewport: Vector2, settings: bool) -> void:
-	var left := Color(0.009, 0.02, 0.026, 0.98 if settings else 0.94)
-	var right := Color(0.009, 0.02, 0.026, 0.94 if settings else 0.18)
-	var points := PackedVector2Array([Vector2.ZERO, Vector2(viewport.x, 0), viewport, Vector2(0, viewport.y)])
-	draw_polygon(points, PackedColorArray([left, right, right, left]))
-	draw_rect(Rect2(0, viewport.y - 56.0, viewport.x, 56.0), Color(0.009, 0.02, 0.026, 0.66))
+	MENU_PRESENTATION.draw_menu_scrim(self, viewport, settings)
 
 
 func _draw_settings_shell(viewport: Vector2, title: String, detail: String) -> void:
-	_draw_texture_cover(textures["menu_panels"][0], Rect2(Vector2.ZERO, viewport))
-	_draw_menu_scrim(viewport, true)
-	var x: float = viewport.x * 0.06
-	var compact: bool = viewport.y < 600.0
-	_draw_ui_text("RUPTURA TEMPORAL  /  CONFIGURAÇÕES", Vector2(x, 23.0), 10, Color(0.4, 0.73, 0.74))
-	var offset: float = (1.0 - clampf(menu_page_age / 0.2, 0.0, 1.0)) * 6.0
-	_draw_ui_text(title, Vector2(x + offset, 52.0 if compact else 62.0), 27 if compact else 34, Color(0.95, 0.94, 0.89))
-	_draw_ui_text(detail, Vector2(x, 72.0 if compact else 84.0), 11 if compact else 12, Color(0.59, 0.7, 0.73), viewport.x * 0.85)
-	_draw_ui_text("Alterações salvas automaticamente", Vector2(x, viewport.y - 18.0), 11, Color(0.51, 0.65, 0.67))
+	MENU_PRESENTATION.draw_settings_shell(self, viewport, title, detail, textures["menu_panels"][0], menu_page_age)
 
 
 func _draw_settings_surface(rect: Rect2, selected: bool, accent: Color = Color(0.36, 0.88, 0.87)) -> void:
-	var fill := Color(0.028, 0.047, 0.055, 0.96)
-	if selected:
-		fill = fill.lerp(Color(0.09, 0.22, 0.23, 0.98), 0.65 * clampf(menu_selection_age / 0.14, 0.0, 1.0))
-	if selected and rect.has_point(get_global_mouse_position()) and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		fill = fill.lightened(0.08)
-	draw_rect(rect, fill)
-	draw_rect(rect, Color(0.31, 0.49, 0.51, 0.6) if selected else Color(0.25, 0.35, 0.37, 0.35), false, 1.0)
-	if selected:
-		draw_rect(Rect2(rect.position, Vector2(3.0, rect.size.y)), accent)
+	MENU_PRESENTATION.draw_settings_surface(self, rect, selected, accent, menu_selection_age)
 
 
 func _update_menu_pointer(pos: Vector2, viewport: Vector2) -> void:
@@ -39463,16 +39138,7 @@ func _draw_data_settings(viewport: Vector2) -> void :
 
 
 func _draw_settings_card(rect: Rect2, title: String, subtitle: String, _accent: Color, selected: bool) -> void:
-	_draw_settings_surface(rect, selected)
-	var is_back: bool = title == "VOLTAR"
-	var center := Vector2(rect.position.x + 23.0, rect.get_center().y)
-	if is_back:
-		draw_polyline(PackedVector2Array([center + Vector2(4, -5), center + Vector2(-2, 0), center + Vector2(4, 5)]), Color(0.53, 0.77, 0.77), 1.6, true)
-	else:
-		draw_rect(Rect2(center - Vector2(3, 3), Vector2(6, 6)), Color(0.36, 0.88, 0.87) if selected else Color(0.33, 0.47, 0.49), selected)
-	var x: float = rect.position.x + 46.0
-	_draw_ui_text(_menu_sentence_case(title), Vector2(x, rect.get_center().y - 2.0), 16, Color(0.93, 0.94, 0.9), rect.size.x - 75.0)
-	_draw_ui_text(subtitle, Vector2(x, rect.get_center().y + 15.0), 11, Color(0.59, 0.7, 0.73), rect.size.x - 75.0)
+	MENU_PRESENTATION.draw_settings_card(self, rect, title, subtitle, selected, menu_selection_age)
 
 
 func _settings_rects(viewport: Vector2) -> Dictionary:
@@ -39776,14 +39442,7 @@ func _readable_text_size(base_size: int) -> int:
 
 
 func _draw_menu_grid(viewport: Vector2, color: Color, spacing: float) -> void :
-	var x = 0.0
-	while x <= viewport.x:
-		draw_line(Vector2(x, 0), Vector2(x, viewport.y), color, 1)
-		x += spacing
-	var y = 0.0
-	while y <= viewport.y:
-		draw_line(Vector2(0, y), Vector2(viewport.x, y), color, 1)
-		y += spacing
+	MENU_PRESENTATION.draw_menu_grid(self, viewport, color, spacing)
 
 
 func _is_portrait(viewport: Vector2) -> bool:
@@ -51271,52 +50930,15 @@ func _handle_phase_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZE
 
 
 func _shop_purchase_stage(progress: float) -> String:
-	if progress < 0.2:
-		return "CONFIRMANDO COMPRA"
-	if progress < 0.78:
-		return "TRANSFERINDO PARA O DECK"
-	return "DECK ATUALIZADO"
+	return shop_presentation.purchase_stage(progress)
 
 
 func _draw_shop_purchase_transfer_fx(origin: Vector2, target: Vector2, progress: float, accent: Color) -> void:
-	var burst_progress: float = clampf(progress / 0.22, 0.0, 1.0)
-	var burst_alpha: float = 1.0 - burst_progress
-	if burst_alpha > 0.0:
-		draw_circle(origin, lerpf(12.0, 46.0, burst_progress), Color(accent.r, accent.g, accent.b, 0.08 * burst_alpha))
-		draw_arc(origin, lerpf(16.0, 52.0, burst_progress), -PI * 0.5, TAU - PI * 0.5, 32, Color(accent.r, accent.g, accent.b, 0.78 * burst_alpha), 2.2)
-		for shard_index in range(8):
-			var shard_angle: float = float(shard_index) * TAU / 8.0 - PI * 0.5
-			var shard_from: Vector2 = origin + Vector2.from_angle(shard_angle) * lerpf(10.0, 26.0, burst_progress)
-			var shard_to: Vector2 = origin + Vector2.from_angle(shard_angle) * lerpf(24.0, 62.0, burst_progress)
-			draw_line(shard_from, shard_to, Color(1.0, 0.92, 0.42, 0.72 * burst_alpha), 1.8, true)
-
-	var transfer_progress: float = clampf((progress - 0.14) / 0.72, 0.0, 1.0)
-	if transfer_progress <= 0.0:
-		return
-	transfer_progress = smoothstep(0.0, 1.0, transfer_progress)
-	var previous: Vector2 = origin
-	for trail_index in range(1, 10):
-		var trail_t: float = float(trail_index) / 9.0 * transfer_progress
-		var point: Vector2 = origin.lerp(target, trail_t) + Vector2(0.0, -sin(trail_t * PI) * 74.0)
-		var trail_alpha: float = 0.52 * (1.0 - float(trail_index) / 12.0)
-		draw_line(previous, point, Color(accent.r, accent.g, accent.b, trail_alpha), 2.0, true)
-		previous = point
-	var target_pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.018)
-	draw_circle(target, 10.0 + target_pulse * 6.0, Color(accent.r, accent.g, accent.b, 0.12 + target_pulse * 0.1))
-	draw_arc(target, 18.0 + target_pulse * 5.0, -PI * 0.5, TAU - PI * 0.5, 32, Color(0.78, 1.0, 0.86, 0.76), 2.0)
-	_draw_centered("+1", target + Vector2(0.0, 34.0), 11, Color(0.76, 1.0, 0.84, 0.86))
+	shop_presentation.draw_purchase_transfer_fx(self, origin, target, progress, accent)
 
 
 func _draw_shop_spend_anim(center: Vector2) -> void:
-	if shop_spend_anim_timer <= 0.0 or shop_spend_anim_amount <= 0:
-		return
-	var progress: float = 1.0 - clampf(shop_spend_anim_timer / maxf(0.01, SHOP_SPEND_ANIM_TIME), 0.0, 1.0)
-	var alpha: float = 1.0 - smoothstep(0.62, 1.0, progress)
-	var pos: Vector2 = center + Vector2(0.0, -sin(progress * PI) * 18.0)
-	var rect := Rect2(pos - Vector2(64.0, 16.0), Vector2(128.0, 32.0))
-	draw_rect(rect, Color(0.16, 0.035, 0.02, 0.78 * alpha), true)
-	draw_rect(rect, Color(1.0, 0.42, 0.16, 0.86 * alpha), false, 2)
-	_draw_centered("-%d PTS" % shop_spend_anim_amount, rect.get_center() + Vector2(0.0, 5.0), _readable_text_size(14), Color(1.0, 0.58, 0.24, alpha))
+	shop_presentation.draw_spend_anim(self, center)
 
 
 func _draw_shop(viewport: Vector2) -> void:
@@ -51327,402 +50949,14 @@ func _draw_shop(viewport: Vector2) -> void:
 
 
 func _draw_shop_legacy(viewport: Vector2) -> void :
-	for key in buttons.keys():
-		if String(key).begins_with("shop_burn_") or String(key).begins_with("shop_reserve_"):
-			buttons.erase(key)
-
-	_draw_holo_background(viewport, textures["cards_back"], Color(0.0, 1.0, 0.82))
-
-	var portrait = _is_portrait(viewport)
-	var purchase_animating = _shop_purchase_animating()
-	var purchase_progress = 0.0
-	if purchase_animating:
-		purchase_progress = 1.0 - clamp(shop_purchase_anim_timer / SHOP_PURCHASE_ANIM_TIME, 0.0, 1.0)
-	var purchase_index = shop_select_pulse_index if purchase_animating else -1
-	if shop_cards.is_empty():
-		var empty_w: float = min(480.0, viewport.x * 0.86)
-		var empty_panel: = Rect2(viewport.x * 0.5 - empty_w * 0.5, viewport.y * 0.5 - 84.0, empty_w, 168.0)
-		_draw_holo_panel(empty_panel, Color(0.0, 1.0, 0.82), true, 0.8)
-		_draw_glitch_title("LOJA SINCRONIZADA", Vector2(empty_panel.get_center().x, empty_panel.position.y + 50.0), 24, Color(0.0, 1.0, 0.82))
-		var wait_text: = "AGUARDANDO PARCEIRO"
-		if not is_multiplayer:
-			wait_text = "SEM CARTAS DISPONIVEIS"
-		_draw_centered(wait_text, empty_panel.get_center() + Vector2(0, 22), _readable_text_size(17), Color(1.0, 0.88, 0.32))
-		return
-
-	if portrait:
-		var header = Rect2(viewport.x * 0.06, 24, viewport.x * 0.88, 124)
-		_draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-		_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 60), 30, Color(0.0, 1.0, 0.82))
-		var header_text = "Pontos %d  |  Custo %d  |  Rerolls %d" % [score, card_cost, shop_rerolls]
-		if shop_endurance_discount > 0.0:
-			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
-		if purchase_animating:
-			header_text = _shop_purchase_stage(purchase_progress)
-		_draw_centered(header_text, Vector2(viewport.x * 0.5, 96), _readable_text_size(16), Color(1.0, 0.85, 0.24))
-		_draw_shop_spend_anim(Vector2(viewport.x * 0.5, 132.0))
-		_draw_shop_tutorial_line(Rect2(header.position + Vector2(20.0, 90.0), Vector2(header.size.x - 40.0, 28.0)), true)
-		_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
-		_draw_shop_round_button(_shop_deck_center(viewport), _shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), _deck_total_cards() > 0 and not purchase_animating, "deck")
-
-		var w = viewport.x * 0.74
-		var h = min(242.0, viewport.y * 0.19)
-		for i in range(shop_cards.size()):
-			var card: Dictionary = shop_cards[i]
-			var rarity_color: = _card_rarity_color(card)
-			var cinzas_buffed: = bool(card.get("cinzas_return_buff", false))
-			var x = viewport.x * 0.5 - w * 0.5
-			var y = 188.0 + i * (h + 22.0)
-			var rect = Rect2(x, y, w, h)
-			var card_alpha = 1.0
-			var content_alpha: float = card_alpha
-			var icon_alpha: float = card_alpha
-			if purchase_animating:
-				card_alpha = 0.18 if i != purchase_index else 1.0
-			if i == shop_selected:
-				var select_pulse = 0.0
-				if shop_select_pulse_index == i and shop_select_pulse_timer > 0.0:
-					select_pulse = sin((1.0 - shop_select_pulse_timer / 0.26) * PI)
-				rect = rect.grow(12 + select_pulse * 12.0)
-			var purchase_origin: Vector2 = rect.get_center()
-			if purchase_animating and i == purchase_index:
-				_draw_shop_purchase_transfer_fx(purchase_origin, _shop_deck_center(viewport), purchase_progress, rarity_color)
-				var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
-				var flight_center: Vector2 = purchase_origin.lerp(_shop_deck_center(viewport), transfer_t)
-				var card_scale: float = lerpf(1.0, 0.46, transfer_t)
-				rect.size = rect.size * card_scale
-				rect.position = flight_center - rect.size * 0.5
-				var burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
-				rect = rect.grow(10.0 + burst * 16.0)
-				card_alpha = lerpf(1.0, 0.34, transfer_t)
-				content_alpha = card_alpha * (1.0 - clampf((transfer_t - 0.08) / 0.18, 0.0, 1.0))
-				icon_alpha = card_alpha * lerpf(1.0, 0.72, transfer_t)
-			var bg_color = Color(0.035, 0.045, 0.06)
-			bg_color = bg_color.lerp(card["color"], 0.14 if i == shop_selected else 0.05)
-			if cinzas_buffed:
-				bg_color = Color(0.03, 0.022, 0.018).lerp(card["color"], 0.05 if i == shop_selected else 0.02)
-			bg_color.a = 0.94 * card_alpha
-			if cinzas_buffed:
-				_draw_cinzas_burn_glow(rect, card_alpha, i == shop_selected)
-			else:
-				draw_rect(rect, bg_color, true)
-			var border_color = rarity_color if i == shop_selected else Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.58)
-			if not cinzas_buffed:
-				border_color.a = max(0.16, card_alpha)
-				draw_rect(rect, border_color, false, 5 if i == shop_selected else 2)
-			if purchase_animating and i == purchase_index:
-				var glow = (0.35 + sin(Time.get_ticks_msec() * 0.01) * 0.15) * (1.0 - purchase_progress * 0.35)
-				for g in range(1, 4):
-					var glow_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, glow / float(g))
-					draw_rect(rect.grow(g * 7.0), glow_color, false, 2)
-			var icon: Texture2D = _card_texture(card)
-			if icon:
-				var icon_rect = Rect2(rect.position + Vector2(18, 18), Vector2(94, rect.size.y - 36))
-				if not _draw_cinzas_shader_card(card, icon_rect, icon, icon_alpha, false):
-					_draw_texture_contain(icon, icon_rect, Color(1.0, 1.0, 1.0, icon_alpha))
-			_draw_centered(card["name"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 48), _readable_text_size(19), Color(1.0, 1.0, 1.0, content_alpha))
-			_draw_centered(_card_rarity_label(card), Vector2(rect.end.x - 52.0, rect.position.y + 24.0), _readable_text_size(10), Color(rarity_color.r, rarity_color.g, rarity_color.b, content_alpha))
-			var nick_color = Color(card["color"].r, card["color"].g, card["color"].b, content_alpha)
-			_draw_centered(card["nick"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 80), _readable_text_size(15), nick_color)
-			_draw_wrapped(card["desc"], Rect2(rect.position + Vector2(128, 102), Vector2(rect.size.x - 150, rect.size.y - 118)), _readable_text_size(12), Color(0.84, 0.89, 0.93, max(0.0, content_alpha)))
-			var price_rect = Rect2(rect.end.x - 118.0, rect.end.y - 44.0, 94.0, 28.0)
-			draw_rect(price_rect, Color(0.0, 0.0, 0.0, 0.52 * content_alpha), true)
-			draw_rect(price_rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.7 * content_alpha), false, 1)
-			var price_label: = "VAZIA" if _is_empty_shop_slot(card) else "%d pts" % _effective_card_price(card)
-			_draw_centered(price_label, price_rect.get_center() + Vector2(0, 4), _readable_text_size(11), Color(1.0, 0.9, 0.35, content_alpha))
-			if _can_toggle_shop_reserve(i):
-				var reserve_rect = Rect2(rect.position.x + 18.0, rect.end.y - 44.0, 96.0, 28.0)
-				buttons["shop_reserve_%d" % i] = reserve_rect
-				var reserve_color: = Color(0.04, 0.14, 0.2, 0.86 * content_alpha)
-				if _shop_slot_locked(i):
-					reserve_color = Color(0.12, 0.28, 0.08, 0.9 * content_alpha)
-				draw_rect(reserve_rect, reserve_color, true)
-				draw_rect(reserve_rect, Color(0.4, 0.94, 1.0, 0.82 * content_alpha), false, 1)
-				_draw_centered("SOLTAR" if _shop_slot_locked(i) else "TRAVAR", reserve_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color(1.0, 1.0, 1.0, content_alpha))
-			if _can_burn_shop_card(card):
-				var burn_rect = Rect2(rect.position.x + 18.0, rect.end.y - 78.0, 96.0, 28.0)
-				buttons["shop_burn_%d" % i] = burn_rect
-				draw_rect(burn_rect, Color(0.2, 0.08, 0.04, 0.88 * content_alpha), true)
-				draw_rect(burn_rect, Color(1.0, 0.58, 0.28, 0.82 * content_alpha), false, 1)
-				_draw_centered("QUEIMAR", burn_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color(1.0, 1.0, 1.0, content_alpha))
-			if i == shop_selected:
-				_draw_card_stat_chips(_card_stat_chips(String(card["name"])), rect.position + Vector2(128, rect.size.y - 76), rect.size.x - 150, Color(card["color"].r, card["color"].g, card["color"].b, content_alpha), _readable_text_size(11))
-				var conf_rect = Rect2(rect.position.x + 128, rect.position.y + rect.size.y - 45, rect.size.x - 140, 35)
-				draw_rect(conf_rect, Color(0.05, 0.35, 0.15, 0.9 * content_alpha), true)
-				draw_rect(conf_rect, Color(0.2, 1.0, 0.45, max(0.0, content_alpha)), false, 1)
-				var confirm_label = "VAZIA" if _is_empty_shop_slot(card) else ("CONFIRMADA" if purchase_animating and i == purchase_index else "SELECIONADA")
-				_draw_centered(confirm_label, Vector2(conf_rect.position.x + conf_rect.size.x * 0.5, conf_rect.position.y + 22), _readable_text_size(16), Color(1.0, 1.0, 1.0, content_alpha))
-
-		var btn_h = 44.0
-		var btn_w = viewport.x * 0.4
-		var btn_y = viewport.y - btn_h - 24
-
-
-		var btn_buy_rect = Rect2(viewport.x * 0.25 - btn_w * 0.5, btn_y, btn_w, btn_h)
-		var selected_empty_portrait: bool = shop_cards.size() > shop_selected and _is_empty_shop_slot(shop_cards[shop_selected])
-		var selected_price_portrait: int = _effective_card_price(shop_cards[shop_selected]) if shop_cards.size() > shop_selected and not selected_empty_portrait else card_cost
-		var buy_bg_portrait: Color = Color(0.03, 0.12, 0.05) if score >= selected_price_portrait and not selected_empty_portrait else Color(0.08, 0.08, 0.08)
-		var buy_border_portrait: Color = Color(0.2, 1.0, 0.45) if score >= selected_price_portrait and not selected_empty_portrait else Color(0.3, 0.3, 0.3)
-		if purchase_animating:
-			buy_bg_portrait = Color(0.08, 0.08, 0.08, 0.55)
-			buy_border_portrait = Color(0.36, 0.36, 0.36, 0.55)
-		var buy_label_portrait: String = "VAZIA" if selected_empty_portrait else ("CONFIRMANDO..." if purchase_animating else "COMPRAR %d" % selected_price_portrait)
-		_draw_small_rect_button(btn_buy_rect, buy_label_portrait, buy_bg_portrait, buy_border_portrait)
-
-
-		var btn_sair_rect = Rect2(viewport.x * 0.75 - btn_w * 0.5, btn_y, btn_w, btn_h)
-		var can_exit = _shop_can_exit()
-
-		if not can_exit:
-			_draw_small_rect_button(btn_sair_rect, "GASTE SEUS PONTOS", Color(0.15, 0.03, 0.05, 0.9), Color(0.5, 0.25, 0.28, 1.0))
-		elif shop_mp_ready_to_leave:
-			_draw_small_rect_button(btn_sair_rect, "AGUARDANDO PARCEIRO", Color(0.05, 0.15, 0.05, 0.9), Color(0.2, 1.0, 0.45, 1.0))
-		else:
-			_draw_small_rect_button(btn_sair_rect, "AGUARDE" if purchase_animating else "FECHAR LOJA", Color(0.12, 0.03, 0.05, 0.55 if purchase_animating else 1.0), Color(1.0, 0.25, 0.28, 0.55 if purchase_animating else 1.0))
-		return
-
-
-
-	var header = Rect2(viewport.x * 0.05, 16, viewport.x * 0.9, 98)
-	_draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-	_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 46), 26, Color(0.0, 1.0, 0.82))
-
-
-	var hud_text = "Pontos: %d  |  Custo: %d  |  Rerolls: %d" % [score, card_cost, shop_rerolls]
-	if shop_endurance_discount > 0.0:
-		hud_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
-	_draw_centered(hud_text, Vector2(viewport.x * 0.5, 73), _readable_text_size(16), Color(1.0, 0.85, 0.24))
-	_draw_shop_spend_anim(Vector2(viewport.x * 0.5, 116.0))
-	_draw_shop_tutorial_line(Rect2(header.position + Vector2(22.0, 74.0), Vector2(header.size.x - 44.0, 22.0)), false)
-	_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
-	_draw_shop_round_button(_shop_deck_center(viewport), _shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), _deck_total_cards() > 0 and not purchase_animating, "deck")
-	if purchase_animating and shop_cards.size() > purchase_index:
-		_draw_centered(_shop_purchase_stage(purchase_progress), Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[purchase_index]["color"])
-	elif shop_select_pulse_timer > 0.0 and shop_cards.size() > shop_selected:
-		_draw_centered("CARTA SELECIONADA", Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[shop_selected]["color"])
-
-
-	var w = 150.0
-	var h = 200.0
-	var y = 158.0
-
-
-	for i in range(shop_cards.size()):
-		var card: Dictionary = shop_cards[i]
-		var rarity_color: = _card_rarity_color(card)
-		var cinzas_buffed: = bool(card.get("cinzas_return_buff", false))
-
-
-		var is_sel = (i == shop_selected)
-		var scale = 1.15 if is_sel else 0.85
-		if is_sel and shop_select_pulse_index == i and shop_select_pulse_timer > 0.0:
-			scale += sin((1.0 - shop_select_pulse_timer / 0.26) * PI) * 0.1
-		var alpha = 1.0 if is_sel else 0.5
-		var content_alpha: float = alpha
-		var icon_alpha: float = alpha
-		if purchase_animating:
-			alpha = 0.18 if i != purchase_index else 1.0
-		if purchase_animating and i == purchase_index:
-			var burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
-			scale += burst * 0.18
-			var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
-			alpha = lerpf(1.0, 0.34, transfer_t)
-		var curr_w = w * scale
-		var curr_h = h * scale
-		var x = viewport.x * 0.5 + (i - 1) * 200 - curr_w * 0.5
-		var curr_y = y - 10 if is_sel else y + 15
-		var rect = Rect2(x, curr_y, curr_w, curr_h)
-		var purchase_origin: Vector2 = rect.get_center()
-		if purchase_animating and i == purchase_index:
-			_draw_shop_purchase_transfer_fx(purchase_origin, _shop_deck_center(viewport), purchase_progress, rarity_color)
-			var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
-			var flight_center: Vector2 = purchase_origin.lerp(_shop_deck_center(viewport), transfer_t)
-			var card_scale: float = lerpf(1.0, 0.46, transfer_t)
-			rect.size = rect.size * card_scale
-			rect.position = flight_center - rect.size * 0.5
-			var rect_burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
-			rect = rect.grow(10.0 + rect_burst * 16.0)
-			content_alpha = alpha * (1.0 - clampf((transfer_t - 0.08) / 0.18, 0.0, 1.0))
-			icon_alpha = alpha * lerpf(1.0, 0.72, transfer_t)
-
-
-		var bg_color = Color(0.04, 0.05, 0.07, 0.85 * alpha)
-		bg_color = bg_color.lerp(card["color"], 0.14 if is_sel else 0.05)
-		if cinzas_buffed:
-			bg_color = Color(0.028, 0.022, 0.018, 0.88 * alpha).lerp(card["color"], 0.045 if is_sel else 0.02)
-		if cinzas_buffed:
-			_draw_cinzas_burn_glow(rect, alpha, is_sel)
-		else:
-			draw_rect(rect, bg_color, true)
-
-
-		if is_sel and not cinzas_buffed:
-			var pulsar = (sin(Time.get_ticks_msec() * 0.005) + 1.0) * 0.5
-			for g in range(1, 5):
-				var glow_alpha = (1.0 - float(g) / 5.0) * (0.3 + pulsar * 0.15)
-				if purchase_animating and i == purchase_index:
-					glow_alpha += 0.16
-				var glow_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, glow_alpha)
-				draw_rect(rect.grow(g * 3), glow_color, false, 1)
-
-
-		var border_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, alpha if is_sel else 0.55 * alpha)
-		if not cinzas_buffed:
-			draw_rect(rect, border_color, false, 4 if is_sel else 2)
-		if is_sel and not cinzas_buffed:
-			var scan_y = rect.position.y + 12.0 + fposmod(Time.get_ticks_msec() * 0.065, max(1.0, rect.size.y - 24.0))
-			draw_line(Vector2(rect.position.x + 10.0, scan_y), Vector2(rect.end.x - 10.0, scan_y), Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.72), 2.0)
-			var ribbon = Rect2(rect.position.x + 10.0, rect.position.y + 10.0, rect.size.x - 20.0, 25.0)
-			draw_rect(ribbon, Color(0.0, 0.0, 0.0, 0.68 * content_alpha), true)
-			draw_rect(ribbon, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.88 * content_alpha), false, 1)
-			_draw_centered("%s | PRE-SELECIONADA" % _card_rarity_label(card), ribbon.get_center() + Vector2(0, 5), _readable_text_size(9), Color(1.0, 1.0, 1.0, content_alpha))
-
-
-		var icon: Texture2D = _card_texture(card)
-		if icon:
-			var icon_rect = Rect2(rect.position + Vector2(6, 6), rect.size - Vector2(12, 12))
-			if not _draw_cinzas_shader_card(card, icon_rect, icon, icon_alpha, true):
-				_draw_texture_contain(icon, icon_rect, Color(1, 1, 1, icon_alpha))
-
-
-		if not cinzas_buffed:
-			var text_color = Color(1.0, 1.0, 1.0, content_alpha)
-			_draw_centered(card["nick"].to_upper(), Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y - 18), _readable_text_size(12 if is_sel else 10), text_color)
-
-		if is_sel and purchase_animating and i == purchase_index:
-			var overlay_rect = Rect2(rect.position.x, rect.position.y + rect.size.y * 0.5 - 18, rect.size.x, 36)
-			draw_rect(overlay_rect, Color(0.05, 0.35, 0.15, 0.95 * content_alpha), true)
-			draw_rect(overlay_rect, Color(0.2, 1.0, 0.45, 0.9 * content_alpha), false, 2)
-			_draw_centered("CONFIRMADA", Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5 + 5), _readable_text_size(16), Color(1.0, 1.0, 1.0, content_alpha))
-
-
-	if shop_cards.size() > shop_selected and shop_selected >= 0:
-		var sel_card = shop_cards[shop_selected]
-		var sel_rarity_color: = _card_rarity_color(sel_card)
-		var panel_w = viewport.x * 0.9
-		var panel_h = 180.0
-		var panel_x = viewport.x * 0.05
-		var panel_y = viewport.y - panel_h - 96.0
-		var panel_rect = Rect2(panel_x, panel_y, panel_w, panel_h)
-
-
-		draw_rect(panel_rect, Color(0.03, 0.04, 0.06, 0.92), true)
-
-
-		var border_p_color = Color(sel_rarity_color.r, sel_rarity_color.g, sel_rarity_color.b, 0.8)
-		draw_rect(panel_rect, border_p_color, false, 2)
-
-
-		var sep_x = panel_x + panel_w * 0.5 + 30.0
-		draw_line(Vector2(sep_x, panel_y + 16), Vector2(sep_x, panel_y + panel_h - 16), Color(0.2, 0.2, 0.25, 0.6), 1)
-
-
-
-		var title_pos = Vector2(panel_x + 24, panel_y + 30)
-		draw_string(font, title_pos, sel_card["name"].to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(22), sel_card["color"])
-
-
-		var nick_pos = Vector2(panel_x + 24, panel_y + 60)
-		draw_string(font, nick_pos, "\"" + sel_card["nick"].to_upper() + "\"", HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(15), Color(1, 1, 1, 0.9))
-
-
-		var desc_rect = Rect2(panel_x + 24, panel_y + 82, (sep_x - panel_x) - 48, panel_h - 94)
-		_draw_wrapped(sel_card["desc"], desc_rect, _readable_text_size(13), Color(0.88, 0.92, 0.96))
-
-
-		var cat_name = _card_category(sel_card["name"])
-
-
-		var cat_pos = Vector2(sep_x + 24, panel_y + 30)
-		draw_string(font, cat_pos, "%s | %s" % [_card_rarity_label(sel_card), cat_name], HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(14), sel_rarity_color)
-
-
-		_draw_card_stat_chips(_card_stat_chips(String(sel_card["name"])), Vector2(sep_x + 24, panel_y + 56), (panel_x + panel_w - sep_x) - 48, Color(sel_card["color"]), _readable_text_size(13))
-
-		var projection_lines: = _card_projection_lines(sel_card)
-		_draw_wrapped("\n".join(projection_lines), Rect2(sep_x + 24, panel_y + 98, (panel_x + panel_w - sep_x) - 196, 54), _readable_text_size(11), Color(0.84, 0.92, 0.96))
-
-
-		var owned_count = _card_count(sel_card)
-		var owned_text = "POSSUIDO NO DECK: %d" % owned_count
-		var owned_pos = Vector2(sep_x + 24, panel_y + panel_h - 18)
-		draw_string(font, owned_pos, owned_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(13), sel_card["color"])
-		if _can_toggle_shop_reserve(shop_selected):
-			var reserve_rect = Rect2(panel_x + panel_w - 164.0, panel_y + panel_h - 44.0, 138.0, 30.0)
-			buttons["shop_reserve_%d" % shop_selected] = reserve_rect
-			var reserve_bg: = Color(0.04, 0.14, 0.2, 0.92)
-			if _shop_slot_locked(shop_selected):
-				reserve_bg = Color(0.12, 0.28, 0.08, 0.94)
-			draw_rect(reserve_rect, reserve_bg, true)
-			draw_rect(reserve_rect, Color(0.4, 0.94, 1.0, 0.92), false, 1)
-			_draw_centered("DESTRAVAR" if _shop_slot_locked(shop_selected) else "TRAVAR", reserve_rect.get_center() + Vector2(0, 5), _readable_text_size(12), Color.WHITE)
-		if _can_burn_shop_card(sel_card):
-			var burn_rect = Rect2(panel_x + panel_w - 164.0, panel_y + panel_h - 80.0, 138.0, 30.0)
-			buttons["shop_burn_%d" % shop_selected] = burn_rect
-			draw_rect(burn_rect, Color(0.2, 0.08, 0.04, 0.92), true)
-			draw_rect(burn_rect, Color(1.0, 0.58, 0.28, 0.92), false, 1)
-			_draw_centered("QUEIMAR", burn_rect.get_center() + Vector2(0, 5), _readable_text_size(12), Color.WHITE)
-
-
-	var btn_w = 220.0
-	var btn_h = 42.0
-	var btn_y = viewport.y - btn_h - 24.0
-
-
-	var btn_buy_rect = Rect2(viewport.x * 0.38 - btn_w * 0.5, btn_y, btn_w, btn_h)
-	var selected_empty: bool = shop_cards.size() > shop_selected and _is_empty_shop_slot(shop_cards[shop_selected])
-	var selected_price: int = _effective_card_price(shop_cards[shop_selected]) if shop_cards.size() > shop_selected and not selected_empty else card_cost
-	var buy_enabled: bool = score >= selected_price and not purchase_animating and not selected_empty
-	var buy_bg: Color = Color(0.03, 0.16, 0.08, 0.9) if buy_enabled else Color(0.08, 0.08, 0.08, 0.6)
-	var buy_border: Color = Color(0.2, 1.0, 0.45) if buy_enabled else Color(0.3, 0.3, 0.3)
-	var buy_text_color: Color = Color(1.0, 1.0, 1.0) if buy_enabled else Color(0.5, 0.5, 0.5)
-	draw_rect(btn_buy_rect, buy_bg, true)
-	draw_rect(btn_buy_rect, buy_border, false, 2)
-	var buy_label: String = "VAZIA" if selected_empty else ("CONFIRMANDO..." if purchase_animating else "COMPRAR (%d pts)" % selected_price)
-	_draw_centered(buy_label, btn_buy_rect.get_center() + Vector2(0, 7), 15, buy_text_color)
-
-
-	var btn_sair_rect = Rect2(viewport.x * 0.62 - btn_w * 0.5, btn_y, btn_w, btn_h)
-	var can_exit = _shop_can_exit()
-
-	if not can_exit:
-		draw_rect(btn_sair_rect, Color(0.15, 0.03, 0.05, 0.9), true)
-		draw_rect(btn_sair_rect, Color(0.5, 0.25, 0.28, 1.0), false, 2)
-		_draw_centered("GASTE SEUS PONTOS", btn_sair_rect.get_center() + Vector2(0, 7), 15, Color(1.0, 0.5, 0.5, 1.0))
-	elif shop_mp_ready_to_leave:
-		draw_rect(btn_sair_rect, Color(0.05, 0.15, 0.05, 0.9), true)
-		draw_rect(btn_sair_rect, Color(0.2, 1.0, 0.45, 1.0), false, 2)
-		_draw_centered("AGUARDANDO PARCEIRO", btn_sair_rect.get_center() + Vector2(0, 7), 13, Color(0.5, 1.0, 0.7, 1.0))
-	else:
-		draw_rect(btn_sair_rect, Color(0.15, 0.03, 0.05, 0.5 if purchase_animating else 0.9), true)
-		draw_rect(btn_sair_rect, Color(1.0, 0.25, 0.28, 0.55 if purchase_animating else 1.0), false, 2)
-		_draw_centered("AGUARDE" if purchase_animating else "FECHAR LOJA", btn_sair_rect.get_center() + Vector2(0, 7), 15, Color(1.0, 1.0, 1.0, 0.75 if purchase_animating else 1.0))
-
-
+	shop_presentation.draw_legacy(self, viewport)
 
 func _draw_manual_shop_reopen_warning(viewport: Vector2) -> void:
-	var portrait: = _is_portrait(viewport)
-	var w: float = minf(viewport.x * (0.84 if portrait else 0.52), 680.0)
-	var h: float = 76.0 if not portrait else 88.0
-	var rect: = Rect2(viewport.x * 0.5 - w * 0.5, viewport.y * (0.17 if not portrait else 0.14), w, h)
-	var pulse: = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
-	_draw_holo_panel(rect, Color(1.0, 0.62, 0.16), true, 0.82)
-	draw_rect(rect.grow(-7.0), Color(0.05, 0.016, 0.006, 0.54 + pulse * 0.12), true)
-	_draw_centered("AVISO DA LOJA", Vector2(rect.get_center().x, rect.position.y + 27.0), 17 if not portrait else 15, Color(1.0, 0.78, 0.26))
-	_draw_wrapped_clamped(shop_manual_reopen_warning_text, Rect2(rect.position.x + 22.0, rect.position.y + 42.0, rect.size.x - 44.0, rect.size.y - 48.0), 13 if not portrait else 11, Color(0.96, 0.98, 1.0, 0.95), 2)
+	shop_presentation.draw_manual_reopen_warning(self, viewport)
 
 
 func _draw_shop_tutorial_line(rect: Rect2, portrait: bool) -> void:
-	draw_rect(rect, Color(0.0, 0.0, 0.0, 0.22), true)
-	draw_line(Vector2(rect.position.x + 8.0, rect.end.y), Vector2(rect.end.x - 8.0, rect.end.y), Color(0.0, 1.0, 0.82, 0.34), 1.0)
-	var gap: float = 14.0 if not portrait else 8.0
-	var inner: Rect2 = rect.grow(-4.0)
-	var half_w: float = (inner.size.x - gap) * 0.5
-	var left: Rect2 = Rect2(inner.position, Vector2(half_w, inner.size.y))
-	var right: Rect2 = Rect2(Vector2(inner.position.x + half_w + gap, inner.position.y), Vector2(half_w, inner.size.y))
-	var text_size: int = 13 if not portrait else 11
-	_draw_wrapped_clamped("REROLL: troca ofertas.", left, text_size, Color(0.78, 0.94, 1.0, 0.94), 1)
-	_draw_wrapped_clamped("COMPRAR: entra no deck; custo sobe.", right, text_size, Color(0.98, 0.88, 0.28, 0.94), 1)
+	shop_presentation.draw_tutorial_line(self, rect, portrait)
 
 
 func _prepare_cinzas_burn_shader_nodes(count: int) -> void :
@@ -51976,48 +51210,7 @@ func _draw_pause(viewport: Vector2) -> void :
 
 
 func _draw_pause_deck(viewport: Vector2) -> void :
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.66), true)
-	var portrait = _is_portrait(viewport)
-	var panel = Rect2(viewport.x * 0.08 if not portrait else viewport.x * 0.05, viewport.y * 0.08, viewport.x * 0.84 if not portrait else viewport.x * 0.9, viewport.y * 0.8)
-	_draw_holo_panel(panel, Color(0.44, 0.84, 1.0), true, 0.84)
-	var view_counts: = _deck_view_counts()
-	var view_name: = _deck_view_name()
-	_draw_glitch_title("DECK DE %s" % view_name.to_upper(), Vector2(viewport.x * 0.5, panel.position.y + 44), 30 if not portrait else 26, Color(0.44, 0.84, 1.0))
-	_draw_centered("TOTAL DE CARTAS: %d" % _deck_total_cards_from_counts(view_counts), Vector2(viewport.x * 0.5, panel.position.y + 84), 18, Color.WHITE)
-
-	var owned = _owned_deck_cards_from_counts(view_counts)
-	if owned.is_empty():
-		_draw_centered("Nenhuma carta comprada nesta run.", panel.get_center(), 18, Color(0.72, 0.88, 0.94))
-	else:
-		_clamp_deck_selection(owned.size())
-		var center = Vector2(viewport.x * 0.5, panel.position.y + (245.0 if not portrait else 260.0))
-		var spacing = _deck_carousel_spacing(viewport)
-		var card_w = 154.0 if not portrait else min(160.0, viewport.x * 0.34)
-		var card_h = 214.0 if not portrait else 224.0
-		for i in range(owned.size()):
-			var diff = _carousel_diff(float(i), deck_scroll_pos, owned.size())
-			if abs(diff) > 2.15:
-				continue
-			var selected = abs(diff) < 0.45
-			var scale = clamp(1.0 - abs(diff) * 0.16, 0.66, 1.0)
-			var rect = Rect2(center.x + diff * spacing - card_w * scale * 0.5, center.y - card_h * scale * 0.5 + abs(diff) * 18.0, card_w * scale, card_h * scale)
-			var alpha = clamp(1.0 - abs(diff) * 0.26, 0.36, 1.0)
-			_draw_card_surface(owned[i]["card"], rect, selected, alpha, int(owned[i]["count"]))
-
-		var selected_entry: Dictionary = owned[deck_selected]
-		var detail = Rect2(panel.position.x + 26.0, panel.end.y - 190.0, panel.size.x - 52.0, 126.0)
-		_draw_card_detail_panel(selected_entry["card"], detail, int(selected_entry["count"]), true)
-
-	var back_rect = Rect2(panel.get_center().x - 112.0, panel.end.y - 50.0, 224.0, 36.0)
-	buttons["pause_deck_back"] = back_rect
-	_draw_small_rect_button(back_rect, "VOLTAR", Color(0.03, 0.1, 0.14, 0.9), Color(0.44, 0.84, 1.0))
-	buttons.erase("pause_deck_prev_player")
-	buttons.erase("pause_deck_next_player")
-	if is_multiplayer and not net_decks_by_peer.is_empty():
-		buttons["pause_deck_prev_player"] = Rect2(panel.position.x + 24.0, panel.position.y + 28.0, 42.0, 34.0)
-		buttons["pause_deck_next_player"] = Rect2(panel.end.x - 66.0, panel.position.y + 28.0, 42.0, 34.0)
-		_draw_small_rect_button(buttons["pause_deck_prev_player"], "<", Color(0.03, 0.1, 0.14, 0.9), Color(0.44, 0.84, 1.0))
-		_draw_small_rect_button(buttons["pause_deck_next_player"], ">", Color(0.03, 0.1, 0.14, 0.9), Color(0.44, 0.84, 1.0))
+	MENU_PRESENTATION.draw_pause_deck(self, viewport)
 
 
 func _deck_total_cards() -> int:
@@ -52134,102 +51327,7 @@ func _carousel_diff(index: float, scroll: float, count: int) -> float:
 
 
 func _card_stat_chips(card_name: String) -> Array:
-	match card_name:
-		"Speed Boost":
-			return ["+6.5% VEL"]
-		"Porcao":
-			return ["+45% CURA", "+HP MAX"]
-		"Disparo crescente":
-			return ["+15% DANO"]
-		"Tempestade":
-			return ["+5 DANO", "+2% CRIT"]
-		"Trembo":
-			return ["+1 REVIVER"]
-		"Roubo de Vida":
-			return ["+0.1% ROUBO"]
-		"Speed Atack":
-			return ["-0.026s ATK"]
-		"Teleporte":
-			return ["-0.30s TP"]
-		"Petro":
-			return ["+PETRO", "+2 DANO"]
-		"Defesa":
-			return ["+3.5 DEF"]
-		"Sorte":
-			return ["+0.3% SORTE"]
-		"Poison":
-			return ["+0.9% VENENO"]
-		"Coletora":
-			return ["+0.8% EXEC"]
-		"Mercenaria":
-			return ["+40 CONTRATO"]
-		"Devorador de Destinos":
-			return ["20s MARCA", "RAIZ/LOG"]
-		"Escolha Adiada":
-			return ["RESERVA 1"]
-		"TrÃ©gua Regenerativa":
-			return ["6s SEM DANO", "+REGEN"]
-		"Cinzas da Escolha":
-			return ["QUEIMAR", "+PESO FUTURO"]
-		"Reserva de Pulso":
-			return ["OVERHEAL", "<35% LIBERA"]
-		"Casulo Reativo":
-			return ["3 HITS/2.2s", "-DANO"]
-		"Passagem IntangÃ­vel":
-			return ["POS-TP", "SEM CONTATO"]
-		"Ã‚ncora Vital":
-			return ["POS-DANO", "CURA EM AREA"]
-		"Inercia Cronal":
-			return ["-8% CONTROLE", "-18% EMPURRO"]
-		"Leitura do Instante":
-			return ["+7% AVISO"]
-		"Margem Segura":
-			return ["+35px SPAWN"]
-		"Moeda Estavel":
-			return ["-6 CUSTO+"]
-		"Orbita Coletora":
-			return ["+22% COLETA"]
-		"Pacto das Possibilidades":
-			return ["-4% COMUM"]
-		"Solo Consolidado":
-			return ["-8% ZONA"]
-		"Fratura Cronal":
-			return ["7s ARMAR", "+4/12% FRAG"]
-		"Pulso Desestabilizador":
-			return ["8s ARMAR", "40/100% DANO"]
-		"Pressao de Cerco":
-			return ["+5/15% CERCO"]
-		"Choque de Fontes":
-			return ["2 FONTES", "4s/ALVO"]
-		"Ferrolho de Ruptura":
-			return ["10s ARMAR", "ROOT/SLOW"]
-		"Limiar de Colapso":
-			return ["70/40/15%", "SEM LOOP"]
-		"Desvio de Probabilidade":
-			return ["QUASE HIT", "+CARGA"]
-		"Ponto Cego":
-			return ["CONE TRAS", "+DANO"]
-		"Mandamento da Ruptura":
-			return ["3 Q/E", "+RUPTURA"]
-		"Carta Zero":
-			return ["+6% COMUNS", "RETROATIVA"]
-		"Necrocronismo":
-			return ["12 ABATES", "COPIA CURTA"]
-		"CoraÃ§Ã£o de AntimatÃ©ria":
-			return ["CARGA DANO", "IMPLOSAO"]
-		"Cofre do Excesso":
-			return ["OVERKILL", "ELITE/BOSS"]
-		"Intervalo Fraturado":
-			return ["-HAB1 CD", "-ULT CD"]
-		"Nucleo Revigorante":
-			return ["+ORBE CURA"]
-		"Limiar de Ruina":
-			return [">90% VIDA", "+DANO"]
-		"Estase Reparadora":
-			return ["5s PARADO", "+VIDA PERDIDA"]
-		"Egide Hemofaga":
-			return ["OVERHEAL", "+ESCUDO"]
-	return ["MELHORIA"]
+	return shop_presentation.card_stat_chips(card_name)
 
 
 func _draw_card_surface(card: Dictionary, rect: Rect2, selected: bool, alpha: = 1.0, count: = 0) -> void :
@@ -52259,21 +51357,7 @@ func _draw_card_surface(card: Dictionary, rect: Rect2, selected: bool, alpha: = 
 
 
 func _draw_card_stat_chips(chips: Array, origin: Vector2, max_width: float, accent: Color, size: = 13) -> float:
-	var x = origin.x
-	var y = origin.y
-	var chip_h = max(22.0, float(size) + 10.0)
-	for chip in chips:
-		var text = String(chip)
-		var chip_w = clamp(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 22.0, 58.0, max_width)
-		if x + chip_w > origin.x + max_width:
-			x = origin.x
-			y += chip_h + 6.0
-		var rect = Rect2(x, y, chip_w, chip_h)
-		draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.18), true)
-		draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.82), false, 1)
-		_draw_centered(text, rect.get_center() + Vector2(0, float(size) * 0.16), size, Color.WHITE)
-		x += chip_w + 8.0
-	return y + chip_h + 2.0 - origin.y
+	return shop_presentation.draw_card_stat_chips(self, chips, origin, max_width, accent, size)
 
 
 func _draw_card_detail_panel(card: Dictionary, rect: Rect2, owned_count: = 0, compact: = false) -> void :
@@ -52294,44 +51378,19 @@ func _draw_card_detail_panel(card: Dictionary, rect: Rect2, owned_count: = 0, co
 
 
 func _shop_round_button_radius(viewport: Vector2) -> float:
-	return 32.0 if not _is_portrait(viewport) else 28.0
+	return shop_presentation.round_button_radius(self, viewport)
 
 
 func _shop_reroll_center(viewport: Vector2) -> Vector2:
-	if not _is_portrait(viewport):
-		return shop_controller.layout(viewport).reroll.get_center()
-	return Vector2(viewport.x * (0.09 if not _is_portrait(viewport) else 0.13), 58.0 if not _is_portrait(viewport) else 76.0)
+	return shop_presentation.reroll_center(self, viewport)
 
 
 func _shop_deck_center(viewport: Vector2) -> Vector2:
-	if not _is_portrait(viewport):
-		return shop_controller.layout(viewport).deck.get_center()
-	return Vector2(viewport.x * (0.91 if not _is_portrait(viewport) else 0.87), 58.0 if not _is_portrait(viewport) else 76.0)
+	return shop_presentation.deck_center(self, viewport)
 
 
 func _draw_shop_round_button(center: Vector2, radius: float, label: String, accent: Color, enabled: bool, kind: String) -> void :
-	var alpha = 1.0 if enabled else 0.42
-	draw_circle(center, radius + 7.0, Color(accent.r, accent.g, accent.b, 0.1 * alpha))
-	draw_circle(center, radius, Color(0.015, 0.025, 0.04, 0.92 * alpha))
-	draw_arc(center, radius, 0, TAU, 48, Color(accent.r, accent.g, accent.b, 0.92 * alpha), 2.4)
-	if kind == "reroll":
-		var rot = time_alive * 3.2
-		for i in range(2):
-			var start = rot + i * PI
-			draw_arc(center, radius * 0.48, start, start + PI * 0.74, 24, Color.WHITE, 2.8)
-			var tip = center + Vector2.from_angle(start + PI * 0.74) * radius * 0.48
-			var side = Vector2.from_angle(start + PI * 0.74 + PI * 0.68)
-			var tri = PackedVector2Array([tip, tip - Vector2.from_angle(start + PI * 0.74) * 8.0 + side * 4.0, tip - Vector2.from_angle(start + PI * 0.74) * 8.0 - side * 4.0])
-			draw_polygon(tri, PackedColorArray([Color.WHITE]))
-		_draw_centered(str(shop_rerolls), center + Vector2(0, 5), 13, accent if enabled else Color(0.6, 0.6, 0.6))
-	else:
-		var w = radius * 0.72
-		var h = radius * 0.92
-		for offset in [-7.0, 0.0, 7.0]:
-			var rect = Rect2(center.x - w * 0.5 + offset, center.y - h * 0.5 - abs(offset) * 0.25, w, h)
-			draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.16 * alpha), true)
-			draw_rect(rect, Color.WHITE, false, 1)
-	_draw_centered(label, center + Vector2(0, radius + 18.0), 10, Color(0.82, 0.92, 0.96, alpha))
+	shop_presentation.draw_round_button(self, center, radius, label, accent, enabled, kind)
 
 
 func _draw_end_overlay(viewport: Vector2, title: String, color: Color) -> void :
@@ -52634,18 +51693,7 @@ func _draw_run_summary(area: Rect2, accent: Color, lost: bool) -> void :
 
 
 func _draw_shop_countdown_alert(viewport: Vector2) -> void :
-	var portrait = _is_portrait(viewport)
-	var center = Vector2(viewport.x * 0.5, viewport.y * (0.17 if portrait else 0.18) + 20.0)
-	var seconds_left = _shop_countdown_visible_second()
-	var slow_phase = forced_shop_timer <= FORCED_SHOP_SLOW_START
-	var danger = clamp(1.0 - forced_shop_timer / FORCED_SHOP_WARNING, 0.0, 1.0)
-	var pulse = 1.0 + sin(Time.get_ticks_msec() * (0.008 if slow_phase else 0.006)) * (0.035 if slow_phase else 0.025)
-	var base_size = 70 if not portrait else 62
-	var number_size = int(base_size * pulse)
-	var number_color = Color(1.0, lerp(0.68, 0.04, danger), lerp(0.44, 0.02, danger))
-	_draw_centered_outlined(str(seconds_left), center, number_size, number_color, Color(0.0, 0.0, 0.0, 1.0), 6)
-	var label_y = center.y + (46.0 if portrait else 52.0)
-	_draw_centered_outlined("Afaste-se dos inimigos", Vector2(center.x, label_y), 13 if portrait else 15, Color(1.0, 0.86, 0.8, 0.94), Color(0.0, 0.0, 0.0, 0.9), 2)
+	shop_presentation.draw_countdown_alert(self, viewport)
 
 
 func _draw_shop_opening_upgrade(viewport: Vector2) -> void :
@@ -52891,19 +51939,7 @@ func _draw_hud_rect_button(rect: Rect2, label: String, accent: Color) -> void :
 
 
 func _draw_small_rect_button(rect: Rect2, label: String, bg: = Color(0.03, 0.1, 0.12), border: = Color(0.0, 1.0, 0.82)) -> void :
-	if mode.begins_with("settings"):
-		_draw_settings_surface(rect, rect.has_point(get_global_mouse_position()))
-		_draw_centered_with_font(menu_ui_font, label, rect.get_center(), 16, Color(0.73, 0.85, 0.84))
-		return
-	draw_rect(rect, bg, true)
-	draw_rect(rect, border, false, 2)
-	var font_size = int(rect.size.y * 0.4)
-	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-	while text_size.x > rect.size.x - 12 and font_size > 10:
-		font_size -= 1
-		text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-	var y_offset = text_size.y * 0.16
-	_draw_centered(label, rect.get_center() + Vector2(0, y_offset), font_size, Color.WHITE)
+	shop_presentation.draw_small_rect_button(self, rect, label, bg, border)
 
 
 func _draw_toggle_switch(rect: Rect2, enabled: bool, accent: Color) -> void :
@@ -54151,21 +53187,19 @@ func _open_edit_layout(viewport: Vector2) -> void :
 	edit_layout_touch_index = -1
 	edit_layout_selected = ""
 	edit_layout_resize_visible = false
-	hud_joy_pos = _joy_center(viewport)
-	hud_attack_pos = _attack_center(viewport)
-	hud_secondary_pos = _secondary_center(viewport)
-	hud_dash_pos = _dash_center(viewport)
-	hud_lacerante_empower_pos = _lacerante_empower_center(viewport)
-	hud_skill_pos = _skill_pos(viewport)
-	hud_shop_pos = _manual_shop_pos(viewport)
+	# Keep saved positions intact; the layout helpers already provide defaults for unset fields.
 	if hud_boss_panel_pos == Vector2(-1, -1):
 		hud_boss_panel_pos = RTHudLayoutScript.default_edit_layout_boss_panel_pos(viewport)
-	var portrait = _is_portrait(viewport)
-	var left_w = RTHudLayoutScript.left_panel_width(viewport)
-	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
-	hud_aura_panel_pos = _aura_panel_pos(viewport, left_rect)
-	hud_cards_panel_pos = _cards_panel_pos(viewport, left_rect)
-	hud_coagulum_pos = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
+	if hud_aura_panel_pos == Vector2(-1, -1) or hud_cards_panel_pos == Vector2(-1, -1) or hud_coagulum_pos == Vector2(-1, -1):
+		var portrait = _is_portrait(viewport)
+		var left_w = RTHudLayoutScript.left_panel_width(viewport)
+		var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
+		if hud_aura_panel_pos == Vector2(-1, -1):
+			hud_aura_panel_pos = _aura_panel_pos(viewport, left_rect)
+		if hud_cards_panel_pos == Vector2(-1, -1):
+			hud_cards_panel_pos = _cards_panel_pos(viewport, left_rect)
+		if hud_coagulum_pos == Vector2(-1, -1):
+			hud_coagulum_pos = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
 
 
 func _return_from_settings() -> void :
@@ -57088,325 +56122,10 @@ func _lacerante_stage_points(origin: Vector2, dir: Vector2, stage: int) -> Array
 
 
 func _aura_details(name: String) -> Dictionary:
-	match name:
-		"Racional":
-			return {
-				"funcao": "Controle e leitura. Recompensa ficar calma, parar por instantes e usar o tempo contra a fase.", 
-				"disparo": "Fique imovel para gerar Analise; use Teleporte para ativar Dilatacao.", 
-				"habilidade": "Dilatacao", 
-				"desc_hab": "Desacelera o mundo por 8s e cria Rebote por 3s.", 
-				"traco": "Controle, leitura e reposicionamento seguro.", 
-				"risco": "Perde valor se voce nunca para ou teleporta sem plano."
-			}
-		"Impulsiva":
-			return {
-				"funcao": "Ritmo agressivo. Quanto mais abates sem tomar dano, maior a pressao ofensiva.", 
-				"disparo": "A cada 5 abates sem dano, ativa Frenesi.", 
-				"habilidade": "Frenesi", 
-				"desc_hab": "Acelera o ritmo ofensivo e premia sequencias limpas.", 
-				"traco": "Explosiva, rapida e focada em limpar ondas.", 
-				"risco": "Tomar dano quebra a sequencia e reduz o pico."
-			}
-		"Devota":
-			return {
-				"funcao": "Sobrevivencia por fe. Cria margem para errar e abre pequenas janelas de recuperacao.", 
-				"disparo": "Comeca com 3 cargas de protecao.", 
-				"habilidade": "Fe Restaurada", 
-				"desc_hab": "Anula impactos, cura parte da vida perdida e recarrega depois.", 
-				"traco": "Defensiva, estavel e boa para sobrevivencia.", 
-				"risco": "Gastar cargas em dano fraco deixa voce exposta."
-			}
-		"Vanguarda":
-			return {
-				"funcao": "Transforma dano recebido em area perigosa para inimigos.", 
-				"disparo": "Sofrer dano acende fogo ao redor de Geovana.", 
-				"habilidade": "Incendio Cronal", 
-				"desc_hab": "Queimaduras causam dano por vida maxima nos inimigos.", 
-				"traco": "Combate de contato, punicao e controle de cerco.", 
-				"risco": "Depende de tomar dano; force troca apenas com vida."
-			}
-		"Insana":
-			return {
-				"funcao": "Eco e repeticao. Cria copias atrasadas dos disparos e bagunca o campo.", 
-				"disparo": "Quando pronta, seus tiros criam ecos atrasados.", 
-				"habilidade": "Eco Insano", 
-				"desc_hab": "Ecos repetem disparos apos 1s e multiplicam pressao.", 
-				"traco": "Caotica, forte em corredores e tiros bem mirados.", 
-				"risco": "Mira ruim desperdiÃ§a os ecos."
-			}
-		"Voraz":
-			return {
-				"funcao": "Fome crescente. Coleta coagulos, cura vida perdida e fortalece o combate com ciclos.", 
-				"disparo": "Coagulos alimentam Fome e curam vida perdida.", 
-				"habilidade": "Mordida Voraz", 
-				"desc_hab": "Fome alta fortalece disparos, recargas e mordidas.", 
-				"traco": "Cresce em lutas longas e mapas cheios.", 
-				"risco": "Sem coleta, a Fome demora a virar poder."
-			}
-		"Nula":
-			return {
-				"funcao": "Precisao e paciencia. Carrega Vazio quando Geovana fica sem atacar.", 
-				"disparo": "Ficar sem atacar carrega Nulo.", 
-				"habilidade": "Nulificacao", 
-				"desc_hab": "O proximo tiro enfraquece alvo robusto e aumenta o dano.", 
-				"traco": "Precisao, paciencia e alto valor contra elites.", 
-				"risco": "Atirar sem pensar consome a janela carregada."
-			}
-		"Abissal":
-			return {
-				"funcao": "Escala com cerco. Quanto mais inimigos perto, mais Profundidade acumula.", 
-				"disparo": "Cerco e inimigos proximos carregam Profundidade.", 
-				"habilidade": "Mare Negra", 
-				"desc_hab": "Com 100%, invoca Mare Negra que puxa e fere alvos.", 
-				"traco": "Forte contra hordas e cercos densos.", 
-				"risco": "Posicionamento ruim pode prender Geovana no cerco."
-			}
-		"Profetica":
-			return {
-				"funcao": "Destino marcado. Escolhe pressagios e recompensa cumprir o alvo correto.", 
-				"disparo": "Marca um alvo por tempo limitado.", 
-				"habilidade": "Pressagio", 
-				"desc_hab": "Acertar o alvo marcado aumenta dano e sequencia.", 
-				"traco": "Foco, prioridade e leitura limpa de alvo.", 
-				"risco": "Ignorar o alvo marcado desperdiÃ§a a recompensa."
-			}
-		"Sanguinaria":
-			return {
-				"funcao": "Feridas e sede. Dano repetido no mesmo alvo cria Feridas e alimenta Sede.", 
-				"disparo": "Acertos repetidos no mesmo alvo abrem Feridas.", 
-				"habilidade": "Carnificina Controlada", 
-				"desc_hab": "Feridas alimentam Sede e preparam Carnificina.", 
-				"traco": "Foco constante e pico contra alvos resistentes.", 
-				"risco": "Trocar muito de alvo derruba Feridas e Sede."
-			}
-		"Crepuscular":
-			return {
-				"funcao": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Se carregar a fase ate 100%, ativa Eclipse.", 
-				"disparo": "Ocaso carrega com dano direto e abates; Alvorada carrega com cura real e tempo sem dano.", 
-				"habilidade": "Eclipse", 
-				"desc_hab": "Combina parte da defesa da Alvorada com parte do dano e cadencia do Ocaso.", 
-				"traco": "Controle de transicao, leitura de risco e janela perfeita de teleporte.", 
-				"risco": "Tomar dano reduz carga; usar TP fora da janela nao acelera o Eclipse."
-			}
-		"Peregrino":
-			return {
-				"funcao": "Explora setores diferentes da arena para iniciar Jornada e marcar um Refugio.", 
-				"disparo": "Cada setor novo concede Passos; repetir os ultimos setores nao conta.", 
-				"habilidade": "Jornada", 
-				"desc_hab": "Aumenta velocidade, coleta e regeneracao por vida perdida ate voltar ao Refugio.", 
-				"traco": "Mobilidade planejada, rotas e reposicionamento constante.", 
-				"risco": "Ficar parado ou pingar entre os mesmos setores perde Passos."
-			}
-		"Equilibrista":
-			return {
-				"funcao": "Fica mais forte mantendo a vida entre 35% e 80%.", 
-				"disparo": "Dentro da faixa, carrega Equilibrio; fora dela, a barra cai.", 
-				"habilidade": "Equilibrio", 
-				"desc_hab": "Concede dano e reducao de dano. Overheal acima de 80% vira escudo temporario.", 
-				"traco": "Jogo fino de vida, risco controlado e sobrevivencia ativa.", 
-				"risco": "Dano que cruza 35% vira Divida e pode matar se ignorada."
-			}
-		"Avarento":
-			return {
-				"funcao": "Pontos guardados viram Lastro: defesa e resistencia a impacto em troca de peso.", 
-				"disparo": "Quanto mais pontos em relacao ao custo da loja, maior o Lastro.", 
-				"habilidade": "Rompimento do Cofre", 
-				"desc_hab": "Ao comprar carta, suspende o peso, concede velocidade e escudo.", 
-				"traco": "Economia defensiva, timing de compra e explosao curta apos gastar.", 
-				"risco": "Guardar muito pesa a movimentacao; fragmentos de TP nao dao pontos."
-			}
-		"Oportunista":
-			return {
-				"funcao": "Procura Aberturas durante preparacao, recuperacao, stun ou janela de ataque inimiga.", 
-				"disparo": "Acertos diretos em Abertura carregam o proximo Golpe de Oportunidade.", 
-				"habilidade": "Golpe de Oportunidade", 
-				"desc_hab": "O proximo dano direto recebe bonus, atrasa o inimigo e recupera parte de Q ou E.", 
-				"traco": "Precisao, leitura de telegraph e punicao de ataques inimigos.", 
-				"risco": "Dano de cartas, areas persistentes e aliados nao carregam Aberturas."
-			}
-	return {
-		"funcao": "Estado espectral em leitura.", 
-		"disparo": "Gatilho ainda instavel.", 
-		"habilidade": "Indefinida", 
-		"desc_hab": "A aurea ainda nao estabilizou.", 
-		"traco": "Espectro desconhecido.", 
-		"risco": "Instavel demais para combate."
-	}
-
+	return CatalogDetails.aura_details(name)
 
 func _manifestation_details(key: String) -> Dictionary:
-	var catalog_details: = CatalogDetails.manifestation_details(self, key)
-	if String(catalog_details.get("funcao", "")) != "Forma em leitura.":
-		return catalog_details
-	match key:
-		"eletrica":
-			return {
-				"funcao": "Mais facil de entender e jogar. Boa para primeira partida, fase cheia e troca rapida de alvo.", 
-				"disparo": "ATK: tiro eletrico reto. A passiva marca Sobrecarga apenas enquanto Eletrica esta ativa; a cada 4 tiros, sai um disparo mais forte que explode em area pequena.", 
-				"habilidade": "Q - Onda Cinetica", 
-				"desc_hab": "Empurra inimigos proximos, causa dano em area e abre espaco quando a tela fecha.", 
-				"traco": "E - Bobina de Tesla: recarga de 10s. Cria uma zona eletrica; inimigos dentro do raio tomam choque a cada 0,4s e ficam levemente atordoados.", 
-				"risco": "E drena vida depois de 2 minutos. TP: vira eletricidade por 3s e causa 0,5% da vida maxima a cada 300ms nos alvos atravessados; so entao recarrega."
-			}
-		"lacerante":
-			return {
-				"funcao": "Cacadora de alto risco e recompensa. Eliminar qualquer inimigo incomum concede 50% mais pontos.", 
-				"disparo": "ATK: sequencia de 3 laminas espaciais. A cada 20 Coagulos, o alcance do corte aumenta +5px.", 
-				"habilidade": "Q - Circulo Lacerante", 
-				"desc_hab": "A lamina gira 5 voltas em 1,5s. Cada volta causa dano e cura 0,25% da vida perdida por alvo atingido. Ganha +1 volta a cada 10 Coagulos.", 
-				"traco": "REFORCO (3s): arma o proximo ATK. Se executar um alvo, gera +1 Coagulo. Cada Coagulo concede +0,30% dano e +0,25% velocidade de ataque.", 
-				"risco": "TP: possui 2 cargas. Apos a primeira, ha 800ms para usar a segunda. Ao atravessar ate 3 alvos, fica invulneravel e aplica 10 cortes em 3s; a recarga de 2s inicia depois dos cortes.", 
-				"info_rows": [
-					{"label": "ATK", "text": "3 laminas com +15px base. +5px de alcance a cada 20 Coagulos. Corpos grandes recebem dano maior."}, 
-					{"label": "Q", "text": "5 voltas em 1,5s, cada uma com dano e cura. +1 volta a cada 10 Coagulos."}, 
-					{"label": "REFORCO", "text": "Recarga de 3s. Arma o proximo ATK; executar um alvo com ele gera +1 Coagulo."}, 
-					{"label": "PASSIVAS", "text": "Incomuns valem +50% pontos. Cada Coagulo concede +0,30% dano e +0,25% velocidade de ataque."}, 
-					{"label": "E / TP", "text": "TP tem 2 cargas e janela de 800ms. Carnificina e TP ganham +2 cortes a cada 20 Coagulos."}
-				]
-			}
-		"prismatica":
-			return {
-				"funcao": "Tecnica de mira. Recompensa angulo, ricochete e preparo antes de apertar os botoes.", 
-				"disparo": "ATK: feixe rapido e fino. Ricocheteia em parede ou inimigo e pode acertar mais de uma vez.", 
-				"habilidade": "Q - Prisma de Refracao", 
-				"desc_hab": "Coloca um prisma na posicao da Geovana. Tiros que atravessam o prisma se dividem em 5 feixes.", 
-				"traco": "E - Coroa Espectral: Geovana fica invulneravel; linhas de luz giram e causam dano. Aperte E novamente para cancelar.", 
-				"risco": "TP: cria no destino um prisma maior, atravessavel por disparos. A recarga comeca quando o prisma termina."
-			}
-		"retornante":
-			return {
-				"funcao": "Dano atrasado. O tiro vai mais fraco e volta mais perigoso para perto da Geovana.", 
-				"disparo": "ATK: pulso que sai, atravessa o campo e depois retorna. A volta causa mais dano que a ida.", 
-				"habilidade": "Q - Memoria Instavel", 
-				"desc_hab": "Marca um pulso ativo para procurar alvos e voltar fortalecido. Se nao houver pulso, o proximo tiro recebe a memoria.", 
-				"traco": "E - Paradoxo de Retorno: prolonga os retornos ativos e cria linhas temporais que causam dano entre Geovana e os pulsos.", 
-				"risco": "TP: durante 850ms, toque novamente para voltar a origem. Usando ou nao o retorno, a recarga de 1,2s comeca depois da janela."
-			}
-		"parasitica":
-			return {
-				"funcao": "Infestacao com janela curta. Cada acerto mantem larvas visiveis no alvo por 6 segundos.", 
-				"disparo": "ATK: verme parasita reforcado. Causa dano e adiciona larvas; novos acertos renovam a marca de 6s.", 
-				"habilidade": "Q - Cuspe Infestante", 
-				"desc_hab": "Cospe um bolo de vermes na direcao da mira. O impacto cria uma area viva que causa dano e contamina inimigos dentro dela.", 
-				"traco": "E - Enxame Subterraneo: vermes entram pelas bordas, escavam ate cada alvo marcado e devoram por 8s, causando 5% da vida atual por segundo.", 
-				"risco": "TP: deixa 3 ovos na origem; os vermes perseguem e atordoam por 1,8s. Chefes usando habilidade resistem ao atordoamento."
-			}
-		"gravitante":
-			return {
-				"funcao": "Controle automatico. Ajuda quando a tela esta cheia porque parte do dano segue os alvos sozinho.", 
-				"disparo": "ATK: orbe gravitante. Ao acertar, cria uma orbita no alvo e causa pequenos ticks de dano.", 
-				"habilidade": "Q - Colisao Gravitacional", 
-				"desc_hab": "Colide todos os alvos marcados pelos ATKs, causa dano e empurra inimigos nao marcados que estiverem proximos.", 
-				"traco": "E - Nucleo Gravitante: prende e gira inimigos e chefes, causando dano crescente perto da borda antes do colapso.", 
-				"risco": "TP: a origem libera uma onda de 230px que empurra inimigos comuns e elites, mas nao move chefes."
-			}
-		"ancorada":
-			return {
-				"funcao": "Controle de territorio. Escolha uma area boa e lute perto das ancoras.", 
-				"disparo": "ATK: planta uma ancora e dispara. Perto das ancoras, seus tiros ficam mais fortes.", 
-				"habilidade": "Q - Onda Ancorada", 
-				"desc_hab": "Solta uma onda a partir da Geovana, causando dano nos inimigos ao redor.", 
-				"traco": "E - Dominio Fixo: cria uma area fixa. Dentro dela, sua cadencia melhora e projeteis inimigos ficam mais lentos.", 
-				"risco": "Perde forca se voce for obrigada a fugir o tempo todo ou sair do territorio preparado."
-			}
-		"cartografica":
-			return {
-				"funcao": "Controle espacial sem roubar sua mira. Marca ate 3 coordenadas e transforma tiros que atravessam essas rotas em golpes mais fortes.", 
-				"disparo": "ATK - Agulha de Levantamento: sempre nasce na Geovana e segue sua mira. Ao expirar cria coordenada no chao; ao acertar alvo cria coordenada nele.", 
-				"habilidade": "Q - Dobra Cartografica", 
-				"desc_hab": "Fixa coordenada no alvo ou na direcao da mira e ativa rotas. Com 3 coordenadas abre Mapa Completo, ampliando o triangulo de controle.", 
-				"traco": "E - Mapa Rasgado: por alguns segundos dispara agulhas de leitura a partir da Geovana contra alvos importantes e reforca as rotas ja preparadas.", 
-				"risco": "TP: Passo Cartografico respeita o destino escolhido e deixa uma coordenada no ponto final. Tiros que cruzam 1/2/3 coordenadas ganham dano, perfuracao e explosao."
-			}
-		"mnesica":
-			return {
-				"funcao": "Punicao de padroes. Registra lembrancas de dor, ataque ou perseguicao e transforma a memoria do inimigo contra ele.", 
-				"disparo": "ATK - Estilhaco de Lembranca: dano baixo que grava ate 3 lembrancas no alvo. Com 3, ativa Deja-vu.", 
-				"habilidade": "Q - Revivencia", 
-				"desc_hab": "Detona lembrancas proximas. Dor repete dano, ataque atrasa e erra alvo, perseguicao forca trajetoria instavel.", 
-				"traco": "E - Arquivo Vivo: por alguns segundos, ataques proximos gravam memorias rapidamente para preparar uma punicao maior.", 
-				"risco": "TP: Apagao Mnemico faz inimigos mirarem a posicao antiga e o proximo golpe contra enganados causa mais dano. Chefes abrem janela curta de vulnerabilidade."
-			}
-		"ressonante":
-			return {
-				"funcao": "Manifestacao de timing. Um compasso visual de 4 batidas recompensa ataques no ritmo certo.", 
-				"disparo": "ATK - Nota Curta: fora do tempo causa dano normal; no tempo perfeito causa mais dano e aplica Grave, Aguda ou Quebrada.", 
-				"habilidade": "Q - Silencio Absoluto", 
-				"desc_hab": "Detona notas aplicadas, atrasa ataques inimigos e usa sua sequencia perfeita para aumentar o efeito.", 
-				"traco": "E - Crescendo: garante proxima Nota Perfeita, gera acordes ao redor e melhora o ritmo ofensivo por poucos segundos.", 
-				"risco": "TP: Contratempo. Se usado na janela perfeita, ganha invulnerabilidade maior, velocidade curta e proxima nota garantida."
-			}
-		"contratual":
-			return {
-				"funcao": "Regras e sentencas. Marca inimigos com clausulas e pune quem quebra agressao, aproximacao ou fuga. Letras: A = agressao, P = aproximacao, F = fuga.", 
-				"disparo": "ATK - Selo de Clausula: aplica regra conforme comportamento do alvo. O dano direto e baixo, mas prepara execucao e infracoes.", 
-				"habilidade": "Q - Execucao de Contrato", 
-				"desc_hab": "Executa contratos ativos. Mais infracoes aumentam dano, postura quebrada, stun curto e vulnerabilidade.", 
-				"traco": "E - Ordem Judicial: sorteia uma ordem de 15s, mostra o contrato no centro e depois fixa o progresso no canto. Cumprir concede uma bencao poderosa por 60s; falhar ativa Confisco por 2min.", 
-				"risco": "TP: Notificacao Judicial deixa uma armadilha na origem. Quebras de contrato reduzem um pouco a recarga da Ordem Judicial. Usar Q em muitos contratos sem infracao ainda ativa Multa de Ruptura."
-			}
-		"acorrentada":
-			return {
-				"funcao": "Controle e ruptura. Prende inimigos, acumula Tensao e transforma Elos em golpes pesados.", 
-				"disparo": "ATK - Ciclo dos Tres Elos: golpe 1 aplica Elo em linha, golpe 2 varre em arco e golpe 3 rompe os Elos com duas correntes cruzadas.", 
-				"habilidade": "Q - Prisao Geminada", 
-				"desc_hab": "Liga dois inimigos, prende um alvo ao chao ou contem boss sem puxar. Parte do dano direto em um alvo ligado passa para o outro.", 
-				"traco": "E - Sentenca dos Grilhoes: aperta alvos com Elo, ligados pelo Q ou dentro da area; dano cresce por Elo e consome as marcas.", 
-				"risco": "Tensao chega a 100 e fortalece o proximo Q ou E, depois volta para 35. TP deixa uma corrente que aplica Elo e pode avancar o combo.", 
-				"info_rows": [
-					{"label": "ELOS", "text": "Cada alvo acumula ate 3 Elos por 6s. O terceiro ATK consome tudo para aumentar o dano."}, 
-					{"label": "TENSAO", "text": "40+ aumenta alcance; 70+ aumenta dano/area; 100 fortalece o proximo Q ou E."}, 
-					{"label": "Q", "text": "Dois alvos compartilham 18% do dano direto. Com Sobretensao prende ate 3 e sobe para 24%."}, 
-					{"label": "E", "text": "Raio de 420px, preparo curto e dano por Elo. Em boss aplica Rachadura para reforcar o proximo golpe 3."}, 
-					{"label": "TP", "text": "Troca de Elo deixa rastro de corrente por 1,2s, aplica 1 Elo por alvo e nao consome Sobretensao."}
-				]
-			}
-		"eclipsada":
-			var trait_status: = "Passiva pronta para copiar um traco no proximo abate." if eclipsada_passive_timer <= 0.0 else "Passiva recarrega em %.0fs." % eclipsada_passive_timer
-			if eclipsada_trait_timer > 0.0:
-				trait_status = "Traco ativo: %s por %.0fs. Cor e comportamento das habilidades mudam enquanto durar." % [eclipsada_trait_name, eclipsada_trait_timer]
-			var form_status: = "Forma atual: SOL. Shurikens explodem, HAB1 dispara rajada solar e ULT cria uma coroa de dano em area." if _eclipsada_is_sol() else "Forma atual: LUA. ATK usa duas laminas de 180px, HAB1 liga/desliga furtividade com drenagem progressiva e ULT cria um eclipse de cortes proximos."
-			return {
-				"funcao": "Duelista hibrida de curto alcance. O botao REFORCO alterna entre Lua e Sol a qualquer momento, mudando ATK, HAB1 e ULT.", 
-				"disparo": "ATK - Lua usa duas laminas proximas em tres direcoes, com o terceiro corte sempre critico. Sol usa shuriken de 280px; aos 285px a lamina perde forca e cai.", 
-				"habilidade": "Q - Lua Rasante / Estilhaco Solar", 
-				"desc_hab": "Lua: liga/desliga furtividade. Depois de 3s invisivel, perde vida a cada segundo e o custo aumenta a cada 3s. Sol: dispara 3 shurikens solares em leque com explosao no impacto.", 
-				"traco": "E - Eclipse Laminar / Coroa Solar: Lua cria um campo movel de cortes ao redor da Geovana; Sol cria uma zona pulsante de cortes no ponto mirado.", 
-				"risco": form_status + " " + trait_status, 
-				"info_rows": [
-					{"label": "FORMA", "text": "REFORCO troca Lua/Sol sem recarga e cria um anel visual ao redor da Geovana."}, 
-					{"label": "ATK LUA", "text": "Duas laminas de 180px. O combo corta esquerda, direita e centro; o terceiro hit sempre crita e escala com critico."}, 
-					{"label": "ATK SOL", "text": "Shuriken curto mais forte, nao perfura, mas explode em raio pequeno no impacto."}, 
-					{"label": "Q", "text": "Lua e uma ativacao: invisivel ate desligar, com cooldown de 10s apos revelar. Sol foca rajada direta e area curta."}, 
-					{"label": "E", "text": "Lua invoca um eclipse que pulsa cortes em ate 3 alvos proximos; Sol coloca uma coroa pulsante ate 260px."}, 
-					{"label": "PASSIVA", "text": "Lua ganha dano nas laminas enquanto segue oculta. Sol deixa queimadura curta nas explosoes. A cada 80s, um abate ainda copia traco inimigo por 60s."}
-				]
-			}
-		"bombastica":
-			return {
-				"funcao": "Especialista em armadilhas e reacao em cadeia. Fraca se atira sem preparar terreno, muito forte quando controla onde a luta acontece.", 
-				"disparo": "ATK - Estopim Instavel: tiro mais lento que aplica Polvora Instavel. Cada alvo segura ate 3 cargas por 5s.", 
-				"habilidade": "Q - Triade de Demolicao", 
-				"desc_hab": "Possui 3 cargas independentes. Cada Q planta ou arremessa uma bomba com fusivel entre 3s e 6s, raio de 105px e dano alto. Bombas proximas podem acionar cadeia.", 
-				"traco": "E - Bomba-Cometario: lança uma bomba viva que anda pelo mapa, quica periodicamente causando explosão e absorve tiros para redirecionar.", 
-				"risco": "Aos 3 acumulos de Polvora, a proxima explosao consome as cargas e causa Ignicao. Segure DET para detonar todas; toque curto detona a bomba mais antiga.", 
-				"info_rows": [
-					{"label": "ATK", "text": "0,62x dano atual, 92% da velocidade padrao e cadencia de 0,58s. Serve para preparar Polvora, nao para ser a unica fonte de dano."}, 
-					{"label": "POLVORA", "text": "Ate 3 cargas por alvo, 5s. Cada carga aumenta em 6% o dano explosivo Bombastica recebido."}, 
-					{"label": "Q", "text": "3 cargas, cada uma recarrega em 7s. Bomba perto da Geovana e plantada; alvo distante vira arremesso."}, 
-					{"label": "DETONADOR", "text": "Toque curto detona uma bomba. Segurar por 0,62s aciona Detonacao Total com penalidade de controle."}, 
-					{"label": "E", "text": "Campo por 7s com 5 minas, recarga de 13,5s. Bom para segurar corredores e preparar cadeia."}
-				]
-			}
-	return {
-		"funcao": "Forma em leitura.", 
-		"disparo": "Sinal incompleto.", 
-		"habilidade": "Indefinida", 
-		"desc_hab": "Eco ainda nao dominado.", 
-		"traco": "Aguardando dominio.", 
-		"risco": "Instavel demais para combate."
-	}
-
+	return CatalogDetails.manifestation_details(self, key)
 
 func _current_map_texture() -> Texture2D:
 	var key: = "map_phase_1"
@@ -57819,39 +56538,7 @@ func _graphics_setting_keys() -> Array:
 
 
 func _graphics_settings_rects(viewport: Vector2) -> Dictionary:
-	var portrait = _is_portrait(viewport)
-	var keys: = _graphics_setting_keys()
-	if not portrait:
-		var outer_w: float = min(1120.0, viewport.x * 0.88)
-		var x: float = viewport.x * 0.5 - outer_w * 0.5
-		var y: float = maxf(100.0, viewport.y * 0.18)
-		var gap: float = 12.0
-		var col_gap: float = 18.0
-		var col_w: float = (outer_w - col_gap) * 0.5
-		var option_count: int = maxi(1, keys.size() - 1)
-		var rows: int = int(ceil(float(option_count) / 2.0))
-		var back_h: float = 54.0
-		var row_h: float = clamp((viewport.y - y - back_h - 64.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 64.0, 108.0)
-		var wide_rects: Dictionary = {}
-		var option_index: int = 0
-		for key in keys:
-			if key == "back":
-				continue
-			var col: int = option_index % 2
-			var row: int = int(option_index / 2)
-			wide_rects[String(key)] = Rect2(x + float(col) * (col_w + col_gap), y + float(row) * (row_h + gap), col_w, row_h)
-			option_index += 1
-		wide_rects["back"] = Rect2(x, y + float(rows) * (row_h + gap) + 8.0, outer_w, back_h)
-		return wide_rects
-	var w = min(760.0, viewport.x * (0.86 if portrait else 0.66))
-	var x = viewport.x * 0.5 - w * 0.5
-	var y = viewport.y * (0.14 if portrait else 0.15)
-	var gap = 9.0
-	var row_h = clamp((viewport.y - y - 42.0 - gap * float(keys.size() - 1)) / float(keys.size()), 42.0, 58.0)
-	var rects: = {}
-	for i in range(keys.size()):
-		rects[String(keys[i])] = Rect2(x, y + (row_h + gap) * float(i), w, row_h)
-	return rects
+	return MENU_PRESENTATION.graphics_settings_rects(self, viewport)
 
 
 func _graphics_setting_title(key: String) -> String:

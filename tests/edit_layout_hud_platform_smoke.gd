@@ -74,6 +74,12 @@ func _check_desktop_interaction(viewport: Vector2) -> void:
 	game._handle_edit_layout_drag(-2, Vector2(-500.0, -500.0), viewport)
 	_check(game.hud_left_panel_pos.x >= 27.0 and game.hud_left_panel_pos.y >= 27.0, "left panel not clamped to safe area")
 	game._handle_edit_layout_release(-2, game.hud_left_panel_pos, viewport)
+	var saved_left_panel: Vector2 = game.hud_left_panel_pos
+	game._save_config()
+	game.hud_left_panel_pos = Vector2(-1, -1)
+	game._load_config()
+	game._open_edit_layout(viewport)
+	_check(game.hud_left_panel_pos.distance_to(saved_left_panel) < 0.1, "hub layout position was not restored after save/load")
 
 
 func _check_mobile_interaction(viewport: Vector2) -> void:
