@@ -43,4 +43,7 @@ func _run() -> void:
 	game._update_shop_return(game.SHOP_RETURN_TIME)
 	_check(game.mode == "game", "logical return state did not finish")
 	print("SHOP_HUB_ANIMATION_SMOKE_OK purchase_transfer=true hub_finish=true visual_exit=0.72s network_window=3s")
+	game._cleanup_runtime_resources()
+	game.free()
+	await process_frame
 	quit(0)
