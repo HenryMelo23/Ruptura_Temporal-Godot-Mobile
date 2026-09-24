@@ -1,14 +1,14 @@
 {
-  "version": "2.0.38",
-  "version_code": 23800,
-  "filename": "Ruptura_Temporal_2.0.38.exe",
-  "sha256": "af0d5c10b7f4cabdf38a0792f9f94e8fd0f8ca5337d6968e96ed8d87a0f72430",
-  "size": 1380075424,
+  "version": "2.0.39",
+  "version_code": 23900,
+  "filename": "Ruptura_Temporal_2.0.39.exe",
+  "sha256": "d2533797c79405fb6954916ac6350cc00f85471354eb7b3dc1f5067d4a3cebe9",
+  "size": 1380154976,
   "notes": [
-    "Atualizacao tecnica 2.0.38 para corrigir a oferta de update apos a 2.0.37.",
-    "Clientes em 2.0.37 agora recebem uma versao nova com versionCode 23800.",
-    "Ajustes de compatibilidade para sincronizacao online e relay."
+    "Corrige a ordem da tela de nome apos a cutscene inicial.",
+    "Reduz uso de memoria durante a cutscene inicial.",
+    "Otimiza carregamento de mapas sem reduzir a qualidade visual."
   ],
   "mandatory": false,
-  "published_at": "2026-09-20T01:21:41.8824101Z"
+  "published_at": "2026-09-23T01:04:40.7052844Z"
 }

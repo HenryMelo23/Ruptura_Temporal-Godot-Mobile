@@ -4918,6 +4918,8 @@ func _sanitize_player_nickname(raw_text: String) -> String:
 
 
 func _submit_player_nickname() -> void :
+	if _startup_thanks_active():
+		return
 	var text: = nickname_edit.text if nickname_edit != null else player_nickname
 	var clean: = _sanitize_player_nickname(text)
 	if clean.length() < 2:
@@ -4979,7 +4981,7 @@ func _sync_nickname_input_rect(viewport: Vector2) -> void :
 func _update_nickname_input_visibility() -> void :
 	if nickname_edit == null:
 		return
-	var should_show: bool = mode == "nick_setup"
+	var should_show: bool = mode == "nick_setup" and not _startup_thanks_active()
 	if nickname_edit.visible == should_show:
 		return
 	nickname_edit.visible = should_show
@@ -8141,7 +8143,7 @@ func _load_textures() -> void :
 func _register_texture(key: String, path: String, lazy_when_low_resource: = false) -> void :
 	if lazy_when_low_resource:
 		lazy_texture_paths[key] = path
-	if lazy_when_low_resource and gfx_low_resource:
+	if lazy_when_low_resource:
 		textures.erase(key)
 		return
 	textures[key] = _safe_load(path)
@@ -8156,7 +8158,7 @@ func _get_texture(key: String) -> Texture2D:
 
 
 func _release_unused_lazy_maps(active_key: String) -> void :
-	if not gfx_low_resource or phase5_transmute_active:
+	if phase5_transmute_active:
 		return
 	for key in LOW_RESOURCE_MAP_KEYS:
 		if key != active_key:
@@ -8258,12 +8260,10 @@ func _get_startup_thanks_frame_texture(index: int) -> Texture2D:
 	var path := STARTUP_THANKS_FRAME_PATH_FORMAT % index
 	var tex: Texture2D = _safe_load(path)
 	if tex != null:
-		if startup_thanks_frame_cache.size() > 30:
-			var keys := startup_thanks_frame_cache.keys()
-			keys.sort()
-			for k in keys:
-				if abs(k - index) > 15:
-					startup_thanks_frame_cache.erase(k)
+		# Playback moves forward; retaining decoded history only increases memory.
+		for k in startup_thanks_frame_cache.keys():
+			if k != index - 1:
+				startup_thanks_frame_cache.erase(k)
 		startup_thanks_frame_cache[index] = tex
 	return tex
 
@@ -8296,7 +8296,8 @@ func _startup_thanks_reset() -> void :
 		startup_thanks_frame_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(startup_thanks_frame_view)
 
-	startup_thanks_frame_view.visible = not startup_thanks_done
+	# The CanvasItem draws this texture; do not also render a full-screen TextureRect.
+	startup_thanks_frame_view.visible = false
 	startup_thanks_frame_view.position = Vector2.ZERO
 	startup_thanks_frame_view.size = get_viewport_rect().size
 
@@ -8326,8 +8327,13 @@ func _finish_startup_thanks() -> void :
 	startup_thanks_hold_timer = 0.0
 	if startup_thanks_frame_view != null:
 		startup_thanks_frame_view.visible = false
+		startup_thanks_frame_view.texture = null
+	startup_thanks_frame_cache.clear()
 	if startup_thanks_audio_player != null and startup_thanks_audio_player.playing:
 		startup_thanks_audio_player.stop()
+	if startup_thanks_audio_player != null:
+		startup_thanks_audio_player.stream = null
+	_update_nickname_input_visibility()
 
 
 func _skip_startup_thanks() -> void :
@@ -8361,7 +8367,7 @@ func _update_startup_thanks(delta: float) -> void :
 	startup_thanks_timer += maxf(delta, 0.0)
 	var duration := _startup_thanks_duration()
 
-	if startup_thanks_teaser_available:
+	if startup_thanks_teaser_available and not startup_thanks_fading:
 		var progress := clampf(startup_thanks_timer / duration, 0.0, 1.0)
 		startup_thanks_frame_index = clampi(int(progress * float(STARTUP_THANKS_FRAME_COUNT - 1)) + 1, 1, STARTUP_THANKS_FRAME_COUNT)
 		var current_tex := _get_startup_thanks_frame_texture(startup_thanks_frame_index)
@@ -8374,7 +8380,7 @@ func _update_startup_thanks(delta: float) -> void :
 			if startup_thanks_fading:
 				alpha = 1.0 - clampf(startup_thanks_timer / maxf(0.01, STARTUP_THANKS_FADE_TIME), 0.0, 1.0)
 			startup_thanks_frame_view.modulate = Color(1.0, 1.0, 1.0, alpha)
-			startup_thanks_frame_view.visible = true
+			startup_thanks_frame_view.visible = false
 
 	if startup_thanks_fading:
 		if startup_thanks_timer >= STARTUP_THANKS_FADE_TIME:
@@ -37432,6 +37438,10 @@ func _draw() -> void :
 	_update_cheat_input_visibility()
 	_update_webhook_input_visibility()
 	_update_online_room_input_visibility()
+	if _startup_thanks_active():
+		draw_rect(Rect2(Vector2.ZERO, viewport), Color.BLACK)
+		_draw_startup_thanks(viewport)
+		return
 	match mode:
 		"phase_transition":
 			_draw_phase_transition(viewport)

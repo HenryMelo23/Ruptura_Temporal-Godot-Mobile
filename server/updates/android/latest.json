@@ -1,14 +1,14 @@
 {
-  "version": "2.0.38",
-  "version_code": 23800,
-  "filename": "ruptura_temporal_mobile_2.0.38.apk",
-  "sha256": "6dcd18e3b3e86e3802a35ced34537dc1605d463b3eb7dc08519899c8a164cf1f",
-  "size": 1301956060,
+  "version": "2.0.39",
+  "version_code": 23900,
+  "filename": "ruptura_temporal_mobile_2.0.39.apk",
+  "sha256": "11229c885fcc4dfe1773f693658c5b55fecf96b94bab3f61772894c32da470c7",
+  "size": 1302039164,
   "notes": [
-    "Atualizacao tecnica 2.0.38 para corrigir a oferta de update apos a 2.0.37.",
-    "Clientes em 2.0.37 agora recebem uma versao nova com versionCode 23800.",
-    "Ajustes de compatibilidade para sincronizacao online e relay."
+    "Corrige a ordem da tela de nome apos a cutscene inicial.",
+    "Reduz uso de memoria durante a cutscene inicial.",
+    "Otimiza carregamento de mapas sem reduzir a qualidade visual."
   ],
   "mandatory": false,
-  "published_at": "2026-09-20T01:20:22.1754494Z"
+  "published_at": "2026-09-23T01:02:25.7584379Z"
 }
