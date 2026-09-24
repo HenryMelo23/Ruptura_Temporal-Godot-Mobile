@@ -1,14 +1,14 @@
 {
-  "version": "2.0.37",
-  "version_code": 23700,
-  "filename": "ruptura_temporal_mobile_2.0.37.apk",
-  "sha256": "b4fbc985bf99d10b6f8799b2ea77f101f78a176186f712d19bf83d15ed11c955",
-  "size": 1301932726,
+  "version": "2.0.39",
+  "version_code": 23900,
+  "filename": "ruptura_temporal_mobile_2.0.39.apk",
+  "sha256": "11229c885fcc4dfe1773f693658c5b55fecf96b94bab3f61772894c32da470c7",
+  "size": 1302039164,
   "notes": [
-    "Melhoria visual da chuva e neve nas fases iniciais.",
-    "VFX do Boss 2 mais legiveis durante a nevasca.",
-    "Zona segura da nevasca ampliada e sinalizacao das habilidades reforcada."
+    "Corrige a ordem da tela de nome apos a cutscene inicial.",
+    "Reduz uso de memoria durante a cutscene inicial.",
+    "Otimiza carregamento de mapas sem reduzir a qualidade visual."
   ],
   "mandatory": false,
-  "published_at": "2026-09-14T01:28:30.4927001Z"
+  "published_at": "2026-09-23T01:02:25.7584379Z"
 }

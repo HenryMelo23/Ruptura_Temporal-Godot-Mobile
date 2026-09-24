@@ -1,4 +1,16 @@
 extends Node2D
+const CombatVfxRuntime = preload("res://scripts/vfx/combat_vfx_runtime.gd")
+const BombasticaSceneVfx = preload("res://scripts/vfx/bombastica_scene_vfx.gd")
+const ChainVisualPhysics = preload("res://scripts/vfx/chain_visual_physics.gd")
+const EntityVisualProfiles = preload("res://scripts/vfx/entity_visual_profiles.gd")
+const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
+const HudPresentation = preload("res://scripts/presentation/hud_presentation.gd")
+const CombatEffectsPresentation = preload("res://scripts/presentation/combat_effects_presentation.gd")
+const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
+const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
+const SettingsController = preload("res://scripts/ui/settings_controller.gd")
+
+const MENU_PRESENTATION = preload("res://scripts/ui/menu_presentation.gd")
 
 const AuraSystem = preload("res://scripts/aura_system.gd")
 const CatalogInterface = preload("res://scripts/catalog/catalog_interface.gd")
@@ -11,10 +23,13 @@ const RTNetContractScript = preload("res://scripts/systems/online/net_contract.g
 const RTTransportStateScript = preload("res://scripts/systems/online/transport_state.gd")
 const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
 const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
+const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
+const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
+const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.37"
-const GAME_VERSION_CODE: = 23700
+const GAME_VERSION: = "2.0.38"
+const GAME_VERSION_CODE: = 23800
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
@@ -2478,6 +2493,9 @@ var revival_state_sync_timer: float = 0.0
 var revival_mobile_confirm_method: String = ""
 var revival_mobile_confirm_until_ms: int = 0
 var team_revival_state = RTTeamRevivalStateScript.new()
+var enemy_manager: Node = EnemyManagerScript.new()
+var early_boss_controller: Node = EarlyBossControllerScript.new()
+var modern_boss_controller: Node = ModernBossControllerScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
@@ -3389,6 +3407,12 @@ func _ready() -> void :
 	perf_ready_started_ms = Time.get_ticks_msec()
 	var args: Array = OS.get_cmdline_args()
 	args.append_array(OS.get_cmdline_user_args())
+	add_child(enemy_manager)
+	enemy_manager.bind_game(self)
+	add_child(early_boss_controller)
+	early_boss_controller.bind_game(self)
+	add_child(modern_boss_controller)
+	modern_boss_controller.bind_game(self)
 	add_child(shop_controller)
 	shop_controller.configure(self)
 	get_node("/root/AudioManager").bind_game(self)
@@ -3661,8 +3685,13 @@ func _cleanup_runtime_resources() -> void :
 	startup_thanks_frame_cache.clear()
 	audio_streams.clear()
 	textures.clear()
-	get_node("/root/AudioManager").unbind_game(self)
-	get_node("/root/TelemetrySystem").unbind_game(self)
+	if is_inside_tree():
+		var audio_manager := get_node_or_null("/root/AudioManager")
+		if audio_manager != null:
+			audio_manager.unbind_game(self)
+		var telemetry_system := get_node_or_null("/root/TelemetrySystem")
+		if telemetry_system != null:
+			telemetry_system.unbind_game(self)
 
 func _cmd_arg_value(args: Array, prefix: String, fallback: String) -> String:
 	for arg in args:
@@ -3759,70 +3788,39 @@ func _shadows_enabled() -> bool:
 
 
 func _particle_budget_available() -> bool:
-	return not _runtime_visual_budget_active() or effects.size() < _visual_effect_cap()
+	return CombatVfxRuntime._particle_budget_available(self)
 
 
 func _runtime_visual_budget_active() -> bool:
-	return gfx_low_resource or _memory_saver_active() or mobile_adaptive_visual_budget
+	return CombatVfxRuntime._runtime_visual_budget_active(self)
 
 
 func _low_resource_cap(default_cap: int, low_cap: int) -> int:
-	if _memory_saver_active():
-		return mini(low_cap, int(ceil(float(low_cap) * 0.42)))
-	if mobile_adaptive_visual_budget:
-		return mini(low_cap, int(ceil(float(low_cap) * 0.62)))
-	return low_cap if gfx_low_resource else default_cap
+	return CombatVfxRuntime._low_resource_cap(self, default_cap, low_cap)
 
 
 func _visual_effect_cap() -> int:
-	return MEMORY_SAVER_EFFECT_CAP if _memory_saver_active() else LOW_RESOURCE_EFFECT_CAP
+	return CombatVfxRuntime._visual_effect_cap(self)
 
 
 func _phase7_visual_budget_enabled() -> bool:
-	return current_phase == 7 and (gfx_low_resource or _memory_saver_active() or _is_mobile_runtime())
+	return CombatVfxRuntime._phase7_visual_budget_enabled(self)
 
 
 func _phase7_ember_patch_cap() -> int:
-	if _memory_saver_active():
-		return PHASE7_EMBER_PATCH_MEMORY_CAP
-	return PHASE7_EMBER_PATCH_LOW_CAP if _phase7_visual_budget_enabled() else PHASE7_EMBER_PATCH_CAP
+	return CombatVfxRuntime._phase7_ember_patch_cap(self)
 
 
 func _screen_point_in_view(screen_pos: Vector2, margin: float = 96.0) -> bool:
-	var viewport: Vector2 = get_viewport_rect().size
-	return screen_pos.x >= -margin and screen_pos.y >= -margin and screen_pos.x <= viewport.x + margin and screen_pos.y <= viewport.y + margin
+	return CombatVfxRuntime._screen_point_in_view(self, screen_pos, margin)
 
 
 func _world_point_in_view(world_pos: Vector2, camera: Vector2, margin: float = 96.0) -> bool:
-	return _screen_point_in_view(world_pos - camera, margin)
+	return CombatVfxRuntime._world_point_in_view(self, world_pos, camera, margin)
 
 
 func _trim_visual_effect_arrays() -> void :
-	if not _runtime_visual_budget_active():
-		return
-	while effects.size() > _visual_effect_cap():
-		effects.pop_front()
-	var slash_cap: = 18 if _memory_saver_active() else 42
-	while slashes.size() > slash_cap:
-		slashes.pop_front()
-	var frost_cap: = 28 if _memory_saver_active() else 70
-	while boss2_frost_particles.size() > frost_cap:
-		boss2_frost_particles.pop_front()
-	var phase7_patch_cap: int = _phase7_ember_patch_cap()
-	while phase7_ember_patches.size() > phase7_patch_cap:
-		phase7_ember_patches.pop_front()
-	while raindrops.size() > _low_resource_cap(WEATHER_MAX_RAIN_DROPS, LOW_RESOURCE_RAIN_DROP_CAP):
-		raindrops.pop_front()
-	while snowflakes.size() > _low_resource_cap(WEATHER_MAX_SNOW_FLAKES, LOW_RESOURCE_SNOW_FLAKE_CAP):
-		snowflakes.pop_front()
-	while puddles.size() > _low_resource_cap(WEATHER_MAX_PUDDLES, LOW_RESOURCE_PUDDLE_CAP):
-		puddles.pop_front()
-	var splash_cap: int = 16 if _memory_saver_active() else 26
-	while rain_splashes.size() > splash_cap:
-		rain_splashes.pop_front()
-	var flame_wave_cap: int = 2 if _memory_saver_active() else 4
-	while boss7_flame_waves.size() > flame_wave_cap:
-		boss7_flame_waves.pop_front()
+	CombatVfxRuntime._trim_visual_effect_arrays(self)
 
 
 func _update_mobile_performance_budget(delta: float) -> void:
@@ -4920,6 +4918,8 @@ func _sanitize_player_nickname(raw_text: String) -> String:
 
 
 func _submit_player_nickname() -> void :
+	if _startup_thanks_active():
+		return
 	var text: = nickname_edit.text if nickname_edit != null else player_nickname
 	var clean: = _sanitize_player_nickname(text)
 	if clean.length() < 2:
@@ -4981,7 +4981,7 @@ func _sync_nickname_input_rect(viewport: Vector2) -> void :
 func _update_nickname_input_visibility() -> void :
 	if nickname_edit == null:
 		return
-	var should_show: bool = mode == "nick_setup"
+	var should_show: bool = mode == "nick_setup" and not _startup_thanks_active()
 	if nickname_edit.visible == should_show:
 		return
 	nickname_edit.visible = should_show
@@ -8143,7 +8143,7 @@ func _load_textures() -> void :
 func _register_texture(key: String, path: String, lazy_when_low_resource: = false) -> void :
 	if lazy_when_low_resource:
 		lazy_texture_paths[key] = path
-	if lazy_when_low_resource and gfx_low_resource:
+	if lazy_when_low_resource:
 		textures.erase(key)
 		return
 	textures[key] = _safe_load(path)
@@ -8158,7 +8158,7 @@ func _get_texture(key: String) -> Texture2D:
 
 
 func _release_unused_lazy_maps(active_key: String) -> void :
-	if not gfx_low_resource or phase5_transmute_active:
+	if phase5_transmute_active:
 		return
 	for key in LOW_RESOURCE_MAP_KEYS:
 		if key != active_key:
@@ -8260,12 +8260,10 @@ func _get_startup_thanks_frame_texture(index: int) -> Texture2D:
 	var path := STARTUP_THANKS_FRAME_PATH_FORMAT % index
 	var tex: Texture2D = _safe_load(path)
 	if tex != null:
-		if startup_thanks_frame_cache.size() > 30:
-			var keys := startup_thanks_frame_cache.keys()
-			keys.sort()
-			for k in keys:
-				if abs(k - index) > 15:
-					startup_thanks_frame_cache.erase(k)
+		# Playback moves forward; retaining decoded history only increases memory.
+		for k in startup_thanks_frame_cache.keys():
+			if k != index - 1:
+				startup_thanks_frame_cache.erase(k)
 		startup_thanks_frame_cache[index] = tex
 	return tex
 
@@ -8298,7 +8296,8 @@ func _startup_thanks_reset() -> void :
 		startup_thanks_frame_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(startup_thanks_frame_view)
 
-	startup_thanks_frame_view.visible = not startup_thanks_done
+	# The CanvasItem draws this texture; do not also render a full-screen TextureRect.
+	startup_thanks_frame_view.visible = false
 	startup_thanks_frame_view.position = Vector2.ZERO
 	startup_thanks_frame_view.size = get_viewport_rect().size
 
@@ -8328,8 +8327,13 @@ func _finish_startup_thanks() -> void :
 	startup_thanks_hold_timer = 0.0
 	if startup_thanks_frame_view != null:
 		startup_thanks_frame_view.visible = false
+		startup_thanks_frame_view.texture = null
+	startup_thanks_frame_cache.clear()
 	if startup_thanks_audio_player != null and startup_thanks_audio_player.playing:
 		startup_thanks_audio_player.stop()
+	if startup_thanks_audio_player != null:
+		startup_thanks_audio_player.stream = null
+	_update_nickname_input_visibility()
 
 
 func _skip_startup_thanks() -> void :
@@ -8363,7 +8367,7 @@ func _update_startup_thanks(delta: float) -> void :
 	startup_thanks_timer += maxf(delta, 0.0)
 	var duration := _startup_thanks_duration()
 
-	if startup_thanks_teaser_available:
+	if startup_thanks_teaser_available and not startup_thanks_fading:
 		var progress := clampf(startup_thanks_timer / duration, 0.0, 1.0)
 		startup_thanks_frame_index = clampi(int(progress * float(STARTUP_THANKS_FRAME_COUNT - 1)) + 1, 1, STARTUP_THANKS_FRAME_COUNT)
 		var current_tex := _get_startup_thanks_frame_texture(startup_thanks_frame_index)
@@ -8376,7 +8380,7 @@ func _update_startup_thanks(delta: float) -> void :
 			if startup_thanks_fading:
 				alpha = 1.0 - clampf(startup_thanks_timer / maxf(0.01, STARTUP_THANKS_FADE_TIME), 0.0, 1.0)
 			startup_thanks_frame_view.modulate = Color(1.0, 1.0, 1.0, alpha)
-			startup_thanks_frame_view.visible = true
+			startup_thanks_frame_view.visible = false
 
 	if startup_thanks_fading:
 		if startup_thanks_timer >= STARTUP_THANKS_FADE_TIME:
@@ -8391,54 +8395,7 @@ func _update_startup_thanks(delta: float) -> void :
 
 
 func _draw_startup_thanks(viewport: Vector2) -> void :
-	if startup_thanks_done:
-		return
-
-	var alpha := 1.0
-	if startup_thanks_fading:
-		alpha = 1.0 - clampf(startup_thanks_timer / maxf(0.01, STARTUP_THANKS_FADE_TIME), 0.0, 1.0)
-
-	var texture: Texture2D = null
-	if startup_thanks_teaser_available:
-		texture = _get_startup_thanks_frame_texture(startup_thanks_frame_index)
-	else:
-		texture = textures.get("startup_thanks", null)
-	if texture != null:
-		var texture_size := texture.get_size()
-		if texture_size.x > 0.0 and texture_size.y > 0.0:
-			var scale := maxf(viewport.x / texture_size.x, viewport.y / texture_size.y)
-			var draw_size := texture_size * scale
-			var image_rect := Rect2((viewport - draw_size) * 0.5, draw_size)
-			draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, alpha), true)
-			draw_texture_rect(texture, image_rect, false, Color(1.0, 1.0, 1.0, alpha))
-
-	if startup_thanks_hold_timer > 0.0 and not startup_thanks_fading:
-		var ratio := clampf(startup_thanks_hold_timer / STARTUP_THANKS_SKIP_HOLD_TIME, 0.0, 1.0)
-		var center := startup_thanks_hold_pos
-		if center == Vector2.ZERO or center.x < 0.0 or center.y < 0.0:
-			center = viewport * 0.5
-
-		var radius := 56.0
-		var width := 8.0
-
-		draw_circle(center, radius + 18.0, Color(0.0, 0.0, 0.0, 0.45 * alpha))
-		draw_arc(center, radius, 0.0, TAU, 64, Color(0.0, 0.0, 0.0, 0.72 * alpha), width + 6.0, true)
-		draw_arc(center, radius, 0.0, TAU, 48, Color(0.1, 0.15, 0.25, 0.5 * alpha), width, true)
-		var start_angle := -PI * 0.5
-		var end_angle := start_angle + ratio * TAU
-		if ratio > 0.01:
-			draw_arc(center, radius, start_angle, end_angle, 64, Color(0.0, 0.85, 1.0, 0.95 * alpha), width + 2.0, true)
-			draw_arc(center, radius, start_angle, end_angle, 48, Color(1.0, 1.0, 1.0, 0.9 * alpha), width * 0.5, true)
-
-		draw_circle(center, radius * 0.35, Color(0.0, 0.85, 1.0, 0.15 * ratio * alpha))
-
-		if font != null:
-			var text := "SEGURE ESC PARA PULAR" if _uses_desktop_ui() else "SEGURE PARA PULAR"
-			var font_size := 18
-			var text_size := font.get_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
-			var text_pos := Vector2(center.x - text_size.x * 0.5, center.y + radius + 22.0)
-			draw_string_outline(font, text_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 3, Color(0.0, 0.0, 0.0, 0.8 * alpha))
-			draw_string(font, text_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.9, 0.95, 1.0, 0.9 * alpha))
+	MenusPresentation._draw_startup_thanks(self, viewport)
 
 
 func _safe_load_manifestation_icon(file_name: String, sprite_base: String) -> Texture2D:
@@ -10138,135 +10095,31 @@ func _tutorial_compact_panel_rect(viewport: Vector2) -> Rect2:
 
 
 func _draw_tutorial_overlay(viewport: Vector2, camera: Vector2) -> void:
-	if not _tutorial_active():
-		return
-	var t: float = Time.get_ticks_msec() * 0.001
-	if tutorial_state == TUTORIAL_STATE_OFFER:
-		_draw_tutorial_offer(viewport, t)
-		return
-	if _tutorial_practical_state():
-		_draw_tutorial_practical_step(viewport, camera, t)
-		return
-	_draw_tutorial_story_step(viewport, t)
+	MenusPresentation._draw_tutorial_overlay(self, viewport, camera)
 
 
 func _draw_tutorial_offer(viewport: Vector2, t: float) -> void:
-	var panel: Rect2 = _tutorial_panel_rect(viewport)
-	var rects: Dictionary = _tutorial_prompt_rects(viewport)
-	var body_rect: = Rect2(panel.position + Vector2(42.0, 82.0), Vector2(panel.size.x - 84.0, maxf(72.0, panel.size.y - 166.0)))
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.48), true)
-	_draw_menu_grid(viewport, Color(0.0, 1.0, 0.82, 0.09), 42.0)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.84)
-	_draw_glitch_title("TREINAMENTO DE RUPTURA", panel.position + Vector2(panel.size.x * 0.5, 48.0), 28, Color(0.0, 1.0, 0.82))
-	_draw_wrapped("Antes da partida comecar, Geovana pode sincronizar um treinamento curto. Ele ensina disparo, habilidade, segunda habilidade e dash sem liberar a invasao completa.", body_rect, 18, Color(0.88, 0.96, 1.0, 0.96))
-	var pulse: float = 0.5 + sin(t * 5.0) * 0.5
-	draw_line(panel.position + Vector2(34.0, panel.size.y - 78.0), panel.position + Vector2(panel.size.x - 34.0, panel.size.y - 78.0), Color(1.0, 0.12, 0.72, 0.2 + pulse * 0.22), 2.0)
-	_draw_big_button(Rect2(rects["tutorial_yes"]), "JOGAR TUTORIAL", Color(0.0, 0.42, 0.42, 0.75), Color(0.0, 1.0, 0.82), tutorial_prompt_selected == 0)
-	_draw_big_button(Rect2(rects["tutorial_no"]), "INICIAR RUN", Color(0.22, 0.06, 0.11, 0.72), Color(1.0, 0.18, 0.48), tutorial_prompt_selected == 1)
+	MenusPresentation._draw_tutorial_offer(self, viewport, t)
 
 
 func _draw_tutorial_story_step(viewport: Vector2, t: float) -> void:
-	var panel: Rect2 = _tutorial_panel_rect(viewport)
-	var rects: Dictionary = _tutorial_prompt_rects(viewport)
-	var data: Dictionary = Dictionary(TUTORIAL_STEP_TEXTS.get(tutorial_state, {}))
-	var title: String = String(data.get("title", "RUPTURA"))
-	var body: String = String(data.get("body", ""))
-	var hint: String = String(data.get("hint", ""))
-	var body_rect: = Rect2(panel.position + Vector2(44.0, 86.0), Vector2(panel.size.x - 88.0, maxf(74.0, panel.size.y - 182.0)))
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.44), true)
-	_draw_menu_grid(viewport, Color(0.36, 0.0, 0.8, 0.085), 46.0)
-	_draw_holo_panel(panel, Color(0.76, 0.18, 1.0), true, 0.86)
-	var pulse: float = 0.55 + sin(t * 4.8) * 0.45
-	draw_arc(panel.get_center(), minf(panel.size.x, panel.size.y) * 0.46 + pulse * 7.0, t, t + PI * 1.4, 64, Color(0.0, 1.0, 0.82, 0.2), 2.0, true)
-	_draw_centered(title, panel.position + Vector2(panel.size.x * 0.5, 48.0), 26, Color(0.94, 0.98, 1.0, 0.98))
-	_draw_wrapped(body, body_rect, 18, Color(0.88, 0.94, 1.0, 0.96))
-	_draw_centered(hint, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 82.0), 15, Color(0.0, 1.0, 0.82, 0.86))
-	_draw_tutorial_context_button_hint(t)
-	_draw_big_button(Rect2(rects["tutorial_continue"]), "CONTINUAR", Color(0.02, 0.34, 0.4, 0.75), Color(0.0, 1.0, 0.82), true)
+	MenusPresentation._draw_tutorial_story_step(self, viewport, t)
 
 
 func _draw_tutorial_practical_step(viewport: Vector2, camera: Vector2, t: float) -> void:
-	var panel: Rect2 = _tutorial_compact_panel_rect(viewport)
-	var data: Dictionary = Dictionary(TUTORIAL_STEP_TEXTS.get(tutorial_state, {}))
-	var title: String = String(data.get("title", "TREINO"))
-	var body: String = String(data.get("body", ""))
-	var hint: String = String(data.get("hint", ""))
-	var body_rect: = Rect2(panel.position + Vector2(28.0, 52.0), Vector2(panel.size.x - 56.0, maxf(40.0, panel.size.y - 88.0)))
-	_draw_tutorial_target_markers(camera, t)
-	_draw_tutorial_control_highlight(t)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.78)
-	_draw_centered(title, panel.position + Vector2(panel.size.x * 0.5, 32.0), 23, Color(0.96, 0.98, 1.0, 0.98))
-	_draw_wrapped(body, body_rect, 15, Color(0.86, 0.94, 1.0, 0.93))
-	_draw_centered(hint, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 22.0), 15, Color(1.0, 0.84, 0.22, 0.95))
+	MenusPresentation._draw_tutorial_practical_step(self, viewport, camera, t)
 
 
 func _draw_tutorial_target_markers(camera: Vector2, t: float) -> void:
-	if tutorial_state == TUTORIAL_STATE_DASH:
-		var player_screen: Vector2 = player_pos - camera
-		var danger_r: float = 84.0 + sin(t * 6.0) * 7.0
-		draw_circle(player_screen, danger_r, Color(1.0, 0.12, 0.16, 0.07))
-		draw_arc(player_screen, danger_r, 0.0, TAU, 58, Color(1.0, 0.22, 0.24, 0.76), 3.0, true)
-		draw_arc(player_screen, danger_r + 22.0, -t * 2.0, -t * 2.0 + PI * 1.2, 50, Color(0.0, 1.0, 0.82, 0.58), 2.0, true)
-		return
-	for enemy in enemies:
-		if not bool(enemy.get("tutorial", false)) or String(enemy.get("tutorial_stage", "")) != tutorial_state:
-			continue
-		var pos: Vector2 = Vector2(enemy.get("pos", player_pos)) - camera
-		var radius: float = 44.0 + sin(t * 7.0 + float(enemy.get("uid", 0))) * 5.0
-		draw_circle(pos, radius, Color(1.0, 0.2, 0.62, 0.08))
-		draw_arc(pos, radius, t * 2.4, t * 2.4 + PI * 1.55, 48, Color(1.0, 0.18, 0.72, 0.82), 3.0, true)
-		draw_arc(pos, radius * 0.72, -t * 3.1, -t * 3.1 + PI * 1.25, 42, Color(0.0, 1.0, 0.82, 0.76), 2.0, true)
-		_draw_centered("ALVO", pos + Vector2(0.0, -radius - 14.0), 13, Color(1.0, 0.9, 0.3, 0.95))
+	MenusPresentation._draw_tutorial_target_markers(self, camera, t)
 
 
 func _draw_tutorial_control_highlight(t: float) -> void:
-	var action_key: = ""
-	match tutorial_state:
-		TUTORIAL_STATE_ATTACK:
-			action_key = "attack"
-		TUTORIAL_STATE_SKILL:
-			action_key = "skill"
-		TUTORIAL_STATE_SECONDARY:
-			action_key = "secondary"
-		TUTORIAL_STATE_DASH:
-			action_key = "dash"
-	if action_key == "" or not buttons.has(action_key):
-		return
-	var rect: Rect2 = Rect2(buttons[action_key])
-	var pulse: float = 0.5 + sin(t * 7.0) * 0.5
-	var glow: Rect2 = rect.grow(10.0 + pulse * 7.0)
-	draw_rect(glow, Color(0.0, 1.0, 0.82, 0.075 + pulse * 0.045), true)
-	draw_rect(glow, Color(0.0, 1.0, 0.82, 0.86), false, 3.0)
-	draw_rect(rect.grow(4.0), Color(1.0, 0.18, 0.72, 0.64), false, 2.0)
+	HudPresentation._draw_tutorial_control_highlight(self, t)
 
 
 func _draw_tutorial_context_button_hint(t: float) -> void:
-	var action_key: = ""
-	var label: = ""
-	match tutorial_state:
-		TUTORIAL_STATE_SHOP:
-			action_key = "shop_manual"
-			label = "LOJA"
-		TUTORIAL_STATE_BOSS_CALL:
-			action_key = "boss"
-			label = "BOSS"
-	if action_key == "" or not buttons.has(action_key):
-		return
-	var rect: Rect2 = Rect2(buttons[action_key])
-	var pulse: float = 0.5 + sin(t * 6.2) * 0.5
-	var glow: Rect2 = rect.grow(12.0 + pulse * 8.0)
-	draw_rect(glow, Color(1.0, 0.74, 0.16, 0.08 + pulse * 0.05), true)
-	draw_rect(glow, Color(1.0, 0.74, 0.16, 0.82), false, 3.0)
-	var arrow_tip: Vector2 = rect.get_center()
-	var arrow_from: Vector2 = arrow_tip + Vector2(-92.0, -70.0)
-	if arrow_tip.x < get_viewport_rect().size.x * 0.5:
-		arrow_from = arrow_tip + Vector2(92.0, -70.0)
-	draw_line(arrow_from, arrow_tip, Color(1.0, 0.82, 0.22, 0.88), 4.0)
-	var dir: Vector2 = (arrow_tip - arrow_from).normalized()
-	var side: Vector2 = dir.orthogonal()
-	var head: PackedVector2Array = PackedVector2Array([arrow_tip, arrow_tip - dir * 22.0 + side * 10.0, arrow_tip - dir * 22.0 - side * 10.0])
-	draw_colored_polygon(head, Color(1.0, 0.82, 0.22, 0.9))
-	_draw_centered(label, arrow_from + Vector2(0.0, -14.0), 16, Color(1.0, 0.88, 0.3, 0.96))
+	MenusPresentation._draw_tutorial_context_button_hint(self, t)
 
 
 func _pick_initial_phase() -> int:
@@ -10969,30 +10822,7 @@ func _reset_phase6_state() -> void :
 
 
 func _spawn_boss6_entry_particles(target: Vector2, source: = Vector2.ZERO) -> void :
-	boss6_entry_particles.clear()
-	for i in range(BOSS6_ENTRY_PARTICLES):
-		var edge: = posmod(i + rng.randi_range(0, 3), 4)
-		var start: = Vector2.ZERO
-		match edge:
-			0:
-				start = Vector2(rng.randf_range(-140.0, WORLD_SIZE.x + 140.0), -120.0)
-			1:
-				start = Vector2(WORLD_SIZE.x + 140.0, rng.randf_range(-120.0, WORLD_SIZE.y + 120.0))
-			2:
-				start = Vector2(rng.randf_range(-140.0, WORLD_SIZE.x + 140.0), WORLD_SIZE.y + 120.0)
-			_:
-				start = Vector2(-140.0, rng.randf_range(-120.0, WORLD_SIZE.y + 120.0))
-		if source != Vector2.ZERO:
-			start = source + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(20.0, 220.0)
-		boss6_entry_particles.append({
-			"start": start, 
-			"target": target + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(0.0, 74.0), 
-			"delay": rng.randf_range(0.0, 0.7), 
-			"duration": rng.randf_range(1.45, BOSS6_ENTRY_TIME), 
-			"bend": rng.randf_range(-260.0, 260.0), 
-			"size": rng.randf_range(1.4, 3.8), 
-			"phase": rng.randf_range(0.0, TAU)
-		})
+	CombatVfxRuntime._spawn_boss6_entry_particles(self, target, source)
 
 
 func _load_umbra_mobile_memory() -> void :
@@ -12094,8 +11924,7 @@ func _update_game(delta: float) -> void :
 	_refresh_run_leader()
 	if run_leader_notice_timer > 0.0:
 		run_leader_notice_timer = maxf(0.0, run_leader_notice_timer - delta)
-	if _is_world_authority() and spawn_timer <= 0.0 and not boss_active and not _tutorial_blocks_normal_spawn():
-		_spawn_wave()
+	enemy_manager.update(delta)
 	_update_event_alerts(delta)
 	_update_team_revival(delta)
 	if _is_world_authority():
@@ -12596,9 +12425,7 @@ func _spawn_aura_echo_projectile(pos: Vector2, direction: Vector2, damage_mult: 
 
 
 func _spawn_insane_echo_visual(pos: Vector2, direction: Vector2) -> void :
-	insane_echo_visuals.append({"pos": pos, "dir": direction.normalized(), "life": 0.72, "max": 0.72, "phase": rng.randf_range(0.0, TAU)})
-	if insane_echo_visuals.size() > 10:
-		insane_echo_visuals.pop_front()
+	CombatVfxRuntime._spawn_insane_echo_visual(self, pos, direction)
 
 
 func start_apolo_phase5_exhibition(manifestation_index: int = -1) -> void:
@@ -14078,41 +13905,7 @@ func _trigger_eletrica_static_lightning(target: Dictionary, target_pos: Vector2)
 
 
 func _draw_eletrica_static_indicator(ci: CanvasItem, pos: Vector2, stacks: int, timer: float, uid: int) -> void :
-	if stacks <= 0 or timer <= 0.0:
-		return
-	var t: = float(Time.get_ticks_msec()) * 0.001
-	var timer_ratio: = clampf(timer / 3.0, 0.0, 1.0)
-	var draw_pos: = pos + Vector2(0, -42)
-
-	var base_col: Color = Color(0.2, 0.85, 1.0)
-	if stacks == 2:
-		base_col = Color(1.0, 0.9, 0.2)
-	elif stacks >= 3:
-		base_col = Color(1.0, 0.35, 0.15).lerp(Color.WHITE, sin(t * 30.0) * 0.5 + 0.5)
-
-	base_col.a = clampf(timer_ratio * 1.2, 0.2, 1.0)
-
-	var bar_w: = 24.0
-	var bar_h: = 5.0
-	var bar_rect: = Rect2(draw_pos - Vector2(bar_w * 0.5, bar_h * 0.5), Vector2(bar_w, bar_h))
-
-	ci.draw_rect(bar_rect.grow(1.0), Color(0.05, 0.06, 0.09, base_col.a * 0.85), true)
-
-	var slot_w: = (bar_w - 4.0) / 3.0
-	for i in range(3):
-		var slot_x: = bar_rect.position.x + 1.0 + i * (slot_w + 1.0)
-		var slot_r: = Rect2(slot_x, bar_rect.position.y + 1.0, slot_w, bar_h - 2.0)
-		if i < stacks:
-			ci.draw_rect(slot_r, base_col, true)
-			var spark_y: = slot_r.position.y - 3.0 + sin(t * 18.0 + uid + i) * 1.5
-			ci.draw_circle(Vector2(slot_r.get_center().x, spark_y), 1.5, Color.WHITE)
-		else:
-			ci.draw_rect(slot_r, Color(0.18, 0.22, 0.28, base_col.a * 0.5), true)
-
-	var arc_rad: = 16.0 + sin(t * 8.0 + uid) * 2.0
-	var start_ang: = t * (4.0 + stacks * 2.0) + uid
-	var end_ang: = start_ang + PI * (0.4 + stacks * 0.25)
-	ci.draw_arc(draw_pos, arc_rad, start_ang, end_ang, 16, base_col, 2.0, true)
+	CombatEffectsPresentation._draw_eletrica_static_indicator(self, ci, pos, stacks, timer, uid)
 
 
 func _secondary_player_locked() -> bool:
@@ -16214,27 +16007,7 @@ func _trigger_trail_segment_detonation(pos: Vector2, idx: int) -> void:
 
 
 func _draw_bombastica_powder_trail_world(camera: Vector2) -> void:
-	if bombastica_ult_state == "IDLE" or bombastica_ult_visual_path.size() < 2:
-		return
-		
-	var points: PackedVector2Array = PackedVector2Array()
-	for p in bombastica_ult_visual_path:
-		points.append(Vector2(p) - camera)
-		
-	if points.size() >= 2:
-		var trail_color: Color = Color(0.95, 0.45, 0.12, 0.85)
-		if bombastica_ult_state == "BURNING":
-			trail_color = Color(1.0, 0.65, 0.2, 0.95)
-		elif bombastica_ult_state == "DETONATING":
-			trail_color = Color(1.0, 0.85, 0.4, 1.0)
-			
-		draw_polyline(points, trail_color, 16.0, true)
-		draw_polyline(points, Color(1.0, 0.95, 0.7, 0.9), 6.0, true)
-		
-	if bombastica_ult_state == "BURNING":
-		var fuse_canvas: Vector2 = bombastica_ult_fuse_pos - camera
-		draw_circle(fuse_canvas, 10.0, Color(1.0, 0.9, 0.4, 0.95))
-		draw_circle(fuse_canvas, 5.0, Color(1.0, 1.0, 1.0, 1.0))
+	CombatEffectsPresentation._draw_bombastica_powder_trail_world(self, camera)
 
 
 func _bombastica_available_q_charge_index() -> int:
@@ -16620,112 +16393,27 @@ func _spawn_bombastica_link(a: Vector2, b: Vector2, color: Color) -> void :
 
 
 func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: String) -> void :
-	var chain_depth: = 1 if source == "bombastic_chain_explosion" else 0
-	var seed_val: = rng.randi()
-	var world_root: Node2D = _ensure_bombastica_world_vfx_root()
-	
-	# Register shockwave for physical collision visual wave
-	shockwaves.append({"pos": center, "radius": 12.0, "max": radius * 1.1, "life": 0.32, "damage": 0.0, "hit": {}, "visual_only": true, "kind": "bombastica"})
-	
-	# Determine Graphic Quality Profile
-	var quality: String = "HIGH"
-	if _memory_saver_active() or gfx_low_resource:
-		quality = "LOW"
-	elif not gfx_particles:
-		quality = "MEDIUM"
-		
-	var scale_mult: = radius / BOMBASTICA_Q_RADIUS
-	
-	# Dispatch to specialized 2D Engine VFX Scenes
-	if source == "bombastic_field_mine":
-		var inst: Node2D = null
-		for node in bombastica_mine_pool:
-			if is_instance_valid(node) and not node.visible:
-				inst = node
-				break
-		if not inst and bombastica_mine_vfx_scene:
-			inst = bombastica_mine_vfx_scene.instantiate()
-			world_root.add_child(inst)
-			bombastica_mine_pool.append(inst)
-		if inst and inst.has_method("play_at"):
-			_prepare_bombastica_scene_vfx(inst, center)
-			inst.play_at(center, quality, seed_val)
-	elif source == "bombastic_powder_ignition":
-		var inst: Node2D = null
-		for node in bombastica_ignition_pool:
-			if is_instance_valid(node) and not node.visible:
-				inst = node
-				break
-		if not inst and bombastica_ignition_vfx_scene:
-			inst = bombastica_ignition_vfx_scene.instantiate()
-			world_root.add_child(inst)
-			bombastica_ignition_pool.append(inst)
-		if inst and inst.has_method("play_at"):
-			_prepare_bombastica_scene_vfx(inst, center)
-			inst.play_at(center, quality)
-	else:
-		# Main Bombástica Q Explosion / Chain Reaction Explosion
-		var inst: Node2D = null
-		for node in bombastica_explosion_pool:
-			if is_instance_valid(node) and not node.visible:
-				inst = node
-				break
-		if not inst and bombastica_explosion_vfx_scene:
-			inst = bombastica_explosion_vfx_scene.instantiate()
-			world_root.add_child(inst)
-			bombastica_explosion_pool.append(inst)
-		if inst and inst.has_method("play_at"):
-			_prepare_bombastica_scene_vfx(inst, center)
-			var red_flashes: bool = (get("gfx_reduced_flashes") == true)
-			var red_motion: bool = not gfx_screen_shake
-			inst.play_at(center, scale_mult, quality, chain_depth, seed_val, red_flashes, red_motion)
-			
-	var life: = 0.58 if chain_depth > 0 else 0.52
-	bombastica_vfx.append({"kind": "explosion", "pos": center, "radius": radius, "life": life, "max": life, "source": source, "chain_depth": chain_depth, "seed": seed_val})
-	if bombastica_use_old_vfx:
-		_spawn_radial_particles(center, Color(1.0, 0.5, 0.1), 26 if chain_depth == 0 else 32)
+	BombasticaSceneVfx._spawn_bombastica_explosion_vfx(self, center, radius, source)
 
 
 func _ensure_bombastica_world_vfx_root() -> Node2D:
-	if is_instance_valid(bombastica_world_vfx_root):
-		_sync_bombastica_scene_vfx_positions()
-		return bombastica_world_vfx_root
-	bombastica_world_vfx_root = Node2D.new()
-	bombastica_world_vfx_root.name = "BombasticaWorldVFX"
-	bombastica_world_vfx_root.z_as_relative = false
-	bombastica_world_vfx_root.z_index = 18
-	add_child(bombastica_world_vfx_root)
-	_sync_bombastica_scene_vfx_positions()
-	return bombastica_world_vfx_root
+	return BombasticaSceneVfx._ensure_bombastica_world_vfx_root(self)
 
 
 func _prepare_bombastica_scene_vfx(inst: Node2D, world_origin: Vector2) -> void:
-	var world_root: Node2D = _ensure_bombastica_world_vfx_root()
-	if inst.get_parent() != world_root:
-		if inst.get_parent() != null:
-			inst.get_parent().remove_child(inst)
-		world_root.add_child(inst)
-	inst.position = world_origin
-	inst.rotation = 0.0
-	inst.scale = Vector2.ONE
-	inst.set_meta("bombastica_world_origin", world_origin)
-	inst.set_meta("bombastica_origin_space", "world")
+	BombasticaSceneVfx._prepare_bombastica_scene_vfx(self, inst, world_origin)
 
 
 func _bombastica_vfx_camera() -> Vector2:
-	return _camera(get_viewport_rect().size) + _screen_shake_offset()
+	return BombasticaSceneVfx._bombastica_vfx_camera(self)
 
 
 func _bombastica_vfx_canvas_pos(world_pos: Vector2) -> Vector2:
-	return world_pos - _bombastica_vfx_camera()
+	return BombasticaSceneVfx._bombastica_vfx_canvas_pos(self, world_pos)
 
 
 func _sync_bombastica_scene_vfx_positions() -> void:
-	if not is_instance_valid(bombastica_world_vfx_root):
-		return
-	bombastica_world_vfx_root.position = -_bombastica_vfx_camera()
-	bombastica_world_vfx_root.rotation = 0.0
-	bombastica_world_vfx_root.scale = Vector2.ONE
+	BombasticaSceneVfx._sync_bombastica_scene_vfx_positions(self)
 
 
 func _eclipsada_speed_multiplier() -> float:
@@ -16903,15 +16591,7 @@ func _update_eclipsada_state(delta: float) -> void :
 
 
 func _push_eclipsada_vfx(visual: Dictionary) -> void :
-	if not visual.has("life"):
-		visual["life"] = 0.35
-	if not visual.has("max"):
-		visual["max"] = float(visual["life"])
-	visual["color"] = visual.get("color", _eclipsada_color())
-	visual["seed"] = int(visual.get("seed", rng.randi()))
-	eclipsada_vfx.append(visual)
-	while eclipsada_vfx.size() > 72:
-		eclipsada_vfx.pop_front()
+	CombatVfxRuntime._push_eclipsada_vfx(self, visual)
 
 
 func _try_eclipsada_attack() -> void :
@@ -18909,16 +18589,7 @@ func _contract_clause_color(clause: String) -> Color:
 
 
 func _spawn_contract_break_vfx(pos: Vector2, clause: String, infractions: int) -> void :
-	contractual_vfx.append({
-		"kind": "gavel", 
-		"pos": pos, 
-		"clause": clause, 
-		"infractions": infractions, 
-		"life": 0.62, 
-		"max": 0.62, 
-		"seed": rng.randi()
-	})
-	_spawn_radial_particles(pos + Vector2(0, -42), _contract_clause_color(clause), 8 + infractions * 3)
+	CombatVfxRuntime._spawn_contract_break_vfx(self, pos, clause, infractions)
 
 
 func _update_contract_clause(enemy: Dictionary, delta: float) -> void :
@@ -19415,9 +19086,7 @@ func _update_tp_lacerante(effect: Dictionary, delta: float) -> void :
 
 
 func _spawn_tp_cut_visual(pos: Vector2, cut_index: int) -> void :
-	var angle: = float(cut_index) * 2.399
-	var direction: = Vector2.from_angle(angle)
-	slashes.append({"a": pos - direction * 46.0, "b": pos + direction * 46.0, "life": 0.18, "max": 0.18, "color": Color(1.0, 0.02, 0.1), "width": 15.0})
+	CombatVfxRuntime._spawn_tp_cut_visual(self, pos, cut_index)
 
 
 func _update_tp_electric(effect: Dictionary, delta: float) -> void :
@@ -19438,16 +19107,7 @@ func _update_tp_electric(effect: Dictionary, delta: float) -> void :
 
 
 func _spawn_wave() -> void :
-	if not _is_world_authority():
-		return
-	spawn_timer = _enemy_spawn_interval()
-	if boss_active or _arauto_active():
-		return
-	var limit = _enemy_limit()
-	if enemies.size() >= limit:
-		return
-	var kind = _choose_enemy_type()
-	_spawn_enemy(kind, _spawn_point_for_type(kind))
+	enemy_manager.spawn_wave()
 
 
 func _phase_elapsed_time() -> float:
@@ -19629,111 +19289,31 @@ func _phase6_miasma_eel_cap() -> int:
 
 
 func _enemy_limit() -> int:
-	var mp_bonus: int = _multiplayer_enemy_limit_bonus()
-	if current_phase == 7:
-		return _phase7_enemy_limit() + mp_bonus
-	if current_phase == 6:
-		return _phase6_enemy_limit() + mp_bonus
-	if current_phase == 5:
-		return 5 + mp_bonus
-	if current_phase == 4:
-		return (PHASE4_LIMIT_EARLY if _phase_elapsed_time() < PHASE4_ADAPT_TIME else PHASE4_LIMIT_FULL) + mp_bonus
-	if current_phase == 3:
-		var elapsed3: = _phase_elapsed_time()
-		if elapsed3 < PHASE3_COMMON_ONLY_TIME:
-			return PHASE3_LIMIT_EARLY + mp_bonus
-		if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME:
-			return PHASE3_LIMIT_MID + mp_bonus
-		return PHASE3_LIMIT_FULL + mp_bonus
-	if current_phase == 2:
-		var elapsed: = _phase_elapsed_time()
-		if elapsed >= PHASE2_PYRO_UNLOCK_TIME:
-			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT + PHASE2_PYRO_LIMIT + mp_bonus
-		if elapsed >= PHASE2_KAMIKAZE_UNLOCK_TIME:
-			return PHASE2_COMMON_LIMIT + PHASE2_KAMIKAZE_LIMIT + mp_bonus
-		return PHASE2_COMMON_LIMIT + mp_bonus
-	var elapsed1: = _phase_elapsed_time()
-	if elapsed1 >= PHASE1_LIMIT_BREAK_TIME:
-		if phase1_limit_break_kills_start < 0:
-			phase1_limit_break_kills_start = enemies_killed
-		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
-		return ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(PHASE1_LIMIT_KILLS_PER_EXTRA))) + mp_bonus
-	phase1_limit_break_kills_start = -1
-	return ENEMY_MAX_BASE + mp_bonus
+	return enemy_manager.get_enemy_limit()
 
 
 func _phase6_enemy_limit() -> int:
-	var elapsed: = _phase_elapsed_time()
-	if elapsed >= PHASE1_LIMIT_BREAK_TIME:
-		if phase1_limit_break_kills_start < 0:
-			phase1_limit_break_kills_start = enemies_killed
-		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
-		return ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(PHASE1_LIMIT_KILLS_PER_EXTRA)))
-	phase1_limit_break_kills_start = -1
-	return ENEMY_MAX_BASE
+	return enemy_manager._phase6_enemy_limit()
 
 
 func _phase7_enemy_limit() -> int:
-	var elapsed: = _phase_elapsed_time()
-	if elapsed >= PHASE7_LIMIT_BREAK_TIME:
-		if phase1_limit_break_kills_start < 0:
-			phase1_limit_break_kills_start = enemies_killed
-		var kills_after_break = max(0, enemies_killed - phase1_limit_break_kills_start)
-		return PHASE7_ENEMY_LIMIT_BASE + int(floor(float(kills_after_break) / float(PHASE7_LIMIT_KILLS_PER_EXTRA)))
-	phase1_limit_break_kills_start = -1
-	return PHASE7_ENEMY_LIMIT_BASE
+	return enemy_manager._phase7_enemy_limit()
 
 
 func _curater_limit() -> int:
-	return 3 if _phase_elapsed_time() < 1500.0 else 5
+	return enemy_manager.get_curater_limit()
 
 
 func _enemy_spawn_interval() -> float:
-	if current_phase == 7:
-		return _phase7_spawn_interval()
-	if current_phase == 6:
-		return _phase6_spawn_interval()
-	if current_phase == 5:
-		return 1.1
-	if current_phase == 4:
-		return 1.42 if _phase_elapsed_time() < PHASE4_ADAPT_TIME else 1.24
-	var interval = ENEMY_SPAWN_INTERVAL
-	if current_phase == 3:
-		var elapsed3: = _phase_elapsed_time()
-		interval = 1.3 if elapsed3 < PHASE3_COMMON_ONLY_TIME else (1.16 if elapsed3 < PHASE3_GUARDIAO_UNLOCK_TIME else 1.02)
-		if not _active_prismatica_secondary().is_empty():
-			interval *= 0.5
-		return interval
-	if current_phase == 2:
-		var elapsed: = _phase_elapsed_time()
-		interval = 1.32 if elapsed < PHASE2_KAMIKAZE_UNLOCK_TIME else (1.12 if elapsed < PHASE2_PYRO_UNLOCK_TIME else 0.98)
-		if not _active_prismatica_secondary().is_empty():
-			interval *= 0.5
-		return interval
-	if current_phase != 2:
-		var ramp_window = max(1.0, ENEMY_RAMP_PEAK_TIME - ENEMY_RAMP_START_TIME)
-		var progress = clamp((_phase_elapsed_time() - ENEMY_RAMP_START_TIME) / ramp_window, 0.0, 1.0)
-		interval = lerp(ENEMY_SPAWN_INTERVAL_EARLY, ENEMY_SPAWN_INTERVAL_LATE, progress)
-	if not _active_prismatica_secondary().is_empty():
-		interval *= 0.5
-	return interval
+	return enemy_manager.get_enemy_spawn_interval()
 
 
 func _phase6_spawn_interval() -> float:
-	var ramp_window = max(1.0, ENEMY_RAMP_PEAK_TIME - ENEMY_RAMP_START_TIME)
-	var progress = clamp((_phase_elapsed_time() - ENEMY_RAMP_START_TIME) / ramp_window, 0.0, 1.0)
-	var interval = lerp(ENEMY_SPAWN_INTERVAL_EARLY, ENEMY_SPAWN_INTERVAL_LATE, progress)
-	if not _active_prismatica_secondary().is_empty():
-		interval *= 0.5
-	return interval
+	return enemy_manager._phase6_spawn_interval()
 
 
 func _phase7_spawn_interval() -> float:
-	var progress: float = clampf(_phase_elapsed_time() / 300.0, 0.0, 1.0)
-	var interval: float = lerpf(1.22, 0.92, progress)
-	if not _active_prismatica_secondary().is_empty():
-		interval *= 0.5
-	return interval
+	return enemy_manager._phase7_spawn_interval()
 
 
 func _has_enemy_type(kind: String) -> bool:
@@ -20020,12 +19600,7 @@ func _update_arauto(delta: float) -> void :
 
 
 func _update_arauto_vfx(delta: float) -> void :
-	for ray in arauto_rays:
-		ray["life"] = float(ray.get("life", 0.0)) - delta
-	for fx in arauto_echo_breaks:
-		fx["life"] = float(fx.get("life", 0.0)) - delta
-	arauto_rays = arauto_rays.filter( func(ray): return float(ray.get("life", 0.0)) > 0.0)
-	arauto_echo_breaks = arauto_echo_breaks.filter( func(fx): return float(fx.get("life", 0.0)) > 0.0)
+	CombatVfxRuntime._update_arauto_vfx(self, delta)
 
 
 func _move_arauto(delta: float, phase2: bool) -> void :
@@ -21314,123 +20889,7 @@ func _update_ancorada_spinning(delta: float) -> void :
 
 
 func _update_enemies(delta: float) -> void :
-	if not _is_world_authority():
-		return
-	var dead = []
-	var lacerante_storm = not _active_lacerante_secondary().is_empty()
-	var phase1_boss_freeze = _phase1_boss_freezes_enemies()
-	for enemy in enemies:
-		if String(enemy.get("type", "")) == ENEMY_FOSSIL_PUSTULE:
-			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 2.0
-		else:
-			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
-		enemy["hit_cd"] = max(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
-		enemy["contact_grace"] = maxf(0.0, float(enemy.get("contact_grace", 0.0)) - delta)
-		enemy["stun"] = max(0.0, float(enemy.get("stun", 0.0)) - delta)
-		enemy["tesla_shock"] = maxf(0.0, float(enemy.get("tesla_shock", 0.0)) - delta)
-		if float(enemy.get("eletrica_static_timer", 0.0)) > 0.0:
-			enemy["eletrica_static_timer"] = maxf(0.0, float(enemy.get("eletrica_static_timer", 0.0)) - delta)
-			if float(enemy["eletrica_static_timer"]) <= 0.0:
-				enemy["eletrica_static_stacks"] = 0
-				enemy["eletrica_static_last_source"] = ""
-		enemy["ferrolho_root"] = max(0.0, float(enemy.get("ferrolho_root", 0.0)) - delta)
-		enemy["blind_confusion"] = max(0.0, float(enemy.get("blind_confusion", 0.0)) - delta)
-		enemy["resonant_stun_notes"] = max(0.0, float(enemy.get("resonant_stun_notes", 0.0)) - delta)
-		enemy["shield_flash"] = max(0.0, float(enemy.get("shield_flash", 0.0)) - delta)
-		enemy["reconstitute_time"] = max(0.0, float(enemy.get("reconstitute_time", 0.0)) - delta)
-		enemy["reconstitute_immunity"] = max(0.0, float(enemy.get("reconstitute_immunity", 0.0)) - delta)
-		enemy["evolution_slow"] = max(0.0, float(enemy.get("evolution_slow", 0.0)) - delta)
-		if float(enemy["evolution_slow"]) <= 0.0:
-			enemy["evolution_slow_mult"] = 1.0
-		enemy["fragilidade_cronal"] = max(0.0, float(enemy.get("fragilidade_cronal", 0.0)) - delta)
-		if float(enemy["fragilidade_cronal"]) <= 0.0:
-			enemy["fragilidade_cronal_bonus"] = 0.0
-		_update_shield_reflector(enemy, delta)
-		_update_enemy_dots(enemy, delta)
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			dead.append(enemy)
-			continue
-		if phase1_boss_freeze:
-			continue
-		if enemy["type"] == ENEMY_CURATER:
-			_update_curater(enemy, delta)
-		if enemy["type"] == ENEMY_STALKER:
-			_update_stalker(enemy, delta)
-		if enemy["type"] == ENEMY_PROJECTOR:
-			_update_projector(enemy, delta)
-		if enemy["type"] == ENEMY_ATIRADOR:
-			_update_atirador(enemy, delta)
-		if enemy["type"] == ENEMY_KAMIKAZE:
-			_update_kamikaze(enemy, delta)
-		if enemy["type"] == ENEMY_LARAPIO:
-			_update_larapio(enemy, delta)
-		if enemy["type"] == ENEMY_FOSSIL_PUSTULE and _update_fossil_pustule(enemy, delta):
-			dead.append(enemy)
-			continue
-		if enemy["type"] == ENEMY_LODARIO:
-			_update_lodario(enemy, delta)
-		if enemy["type"] == ENEMY_MIASMA_EEL:
-			_update_miasma_eel(enemy, delta)
-		if enemy["type"] == ENEMY_CHRONAL_LEECH:
-			if _update_sanguessuga_cronal(enemy, delta):
-				dead.append(enemy)
-				continue
-		if enemy["type"] == ENEMY_CINERIDO:
-			_update_cinerido(enemy, delta)
-		if enemy["type"] == ENEMY_PANGOLIRO:
-			_update_pangoliro(enemy, delta)
-		if enemy["type"] == ENEMY_CORVOL:
-			_update_corvol(enemy, delta)
-		if enemy["type"] == ENEMY_COUT_ATTACK_SPEED:
-			_update_cout_attack_speed(enemy, delta)
-		if enemy["type"] == ENEMY_PYRO_PENGUIN:
-			_update_pyro_penguin(enemy, delta)
-		if current_phase == 2 and enemy["type"] == ENEMY_COMMON:
-			_update_phase2_common_penguin(enemy, delta)
-		if current_phase == 3:
-			_update_phase3_enemy(enemy, delta)
-		elif current_phase == 4:
-			_update_phase4_enemy(enemy, delta)
-		var is_disco = not _active_prismatica_secondary().is_empty()
-		var custom_phase6_move: = String(enemy.get("type", "")) == ENEMY_LODARIO or String(enemy.get("type", "")) == ENEMY_MIASMA_EEL or String(enemy.get("type", "")) == ENEMY_CHRONAL_LEECH
-		var custom_phase7_move: = String(enemy.get("type", "")) == ENEMY_CINERIDO or String(enemy.get("type", "")) == ENEMY_PANGOLIRO or String(enemy.get("type", "")) == ENEMY_CORVOL
-		if not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and ( not bool(enemy.get("parado", false)) or is_disco):
-			_move_enemy(enemy, delta)
-
-		var t_pos = _get_nearest_player_pos(enemy["pos"])
-		if not lacerante_storm and enemy["type"] == ENEMY_KAMIKAZE and enemy["pos"].distance_to(t_pos) < 60.0:
-			if _target_pos_is_local_player(t_pos):
-				_damage_player(player_hp_max * 0.15, ENEMY_KAMIKAZE)
-				if not _player_invulnerable():
-					player_stun_timer = _hostile_control_duration(1.0)
-					_add_text("CONGELADO!", player_pos + Vector2(0, -40), Color(0.0, 0.88, 1.0), 1.5, 20)
-					_spawn_radial_particles(enemy["pos"], Color(0.6, 0.9, 1.0), 16)
-			else:
-				var kamikaze_peer: = _peer_id_at_target_pos(t_pos)
-				if kamikaze_peer != 0:
-					_send_peer_damage(kamikaze_peer, int(player_hp_max * 0.15), ENEMY_KAMIKAZE)
-			enemy["hp"] = -1.0
-			continue
-
-		var contact_blocked: bool = String(enemy.get("type", "")) == ENEMY_CHRONAL_LEECH
-		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
-			var remnant_hit: Dictionary = _necronada_remnant_at_pos(Vector2(enemy.get("pos", player_pos)), 48.0)
-			if not remnant_hit.is_empty():
-				enemy["hit_cd"] = 0.55
-				_damage_necronada_remnant(remnant_hit, _enemy_damage(enemy))
-			elif _local_player_damageable_by_contact() and enemy["pos"].distance_to(player_pos) < 46.0:
-				enemy["hit_cd"] = 0.55
-				_damage_player(_enemy_damage(enemy), enemy["type"])
-			else:
-				for peer_id in _targetable_remote_peer_ids():
-					var remote_state: Dictionary = net_players_by_peer.get(peer_id, {})
-					if Vector2(enemy["pos"]).distance_to(Vector2(remote_state.get("pos", Vector2(-10000, -10000)))) < 46.0:
-						enemy["hit_cd"] = 0.55
-						_send_peer_damage(peer_id, _enemy_damage(enemy), enemy["type"])
-						break
-
-	for enemy in dead:
-		_kill_enemy(enemy)
+	enemy_manager.update_enemies(delta)
 
 func _local_player_targetable() -> bool:
 	return _local_counts_as_player() and player_hp > 0.0 and not is_dead and not _eclipsada_is_stealthed()
@@ -26115,14 +25574,7 @@ func _spawn_boss2_ice_burst(pos: Vector2, count: int, power: = 1.0) -> void :
 
 
 func _spawn_boss2_frost_particle(pos: Vector2, dir: Vector2) -> void :
-	var side = dir.orthogonal().normalized()
-	boss2_frost_particles.append({
-		"pos": pos + side * rng.randf_range(-26.0, 26.0), 
-		"vel": dir * rng.randf_range(240.0, 390.0) + side * rng.randf_range(-70.0, 70.0), 
-		"life": rng.randf_range(0.28, 0.58), 
-		"max": 0.58, 
-		"size": rng.randf_range(8.0, 18.0)
-	})
+	CombatVfxRuntime._spawn_boss2_frost_particle(self, pos, dir)
 
 
 func _spawn_boss2_frost_bullet(pos: Vector2, dir: Vector2, damage: float, speed: = 5.8) -> void :
@@ -27111,224 +26563,39 @@ func _spawn_heal_orb(pos: Vector2, fraction: float) -> void :
 
 
 func _capture_boss1_rewind_projectiles() -> Array:
-	var captured = []
-	for bullet in bullets:
-		if captured.size() >= 24:
-			break
-		captured.append({
-			"visual": "player", 
-			"kind": String(bullet.get("kind", "eletrica")), 
-			"pos": Vector2(bullet.get("pos", player_pos)), 
-			"dir": Vector2(bullet.get("dir", last_facing))
-		})
-	for bullet in return_bullets:
-		if captured.size() >= 30:
-			break
-		captured.append({
-			"visual": "returning", 
-			"kind": "retornante", 
-			"pos": Vector2(bullet.get("pos", player_pos)), 
-			"dir": Vector2(bullet.get("dir", last_facing))
-		})
-	for bullet in enemy_bullets:
-		if captured.size() >= 36:
-			break
-		captured.append({
-			"visual": "enemy", 
-			"kind": String(bullet.get("type", "enemy")), 
-			"pos": Vector2(bullet.get("pos", boss_pos)), 
-			"dir": Vector2(bullet.get("dir", Vector2.DOWN))
-		})
-	for wave in shockwaves:
-		if captured.size() >= 40:
-			break
-		captured.append({"visual": "shockwave", "pos": Vector2(wave.get("pos", player_pos)), "radius": float(wave.get("radius", 0.0))})
-	for prism in prisms:
-		if captured.size() >= 44:
-			break
-		captured.append({"visual": "prism", "pos": Vector2(prism.get("pos", player_pos))})
-	for wave in boss_transition_waves:
-		if captured.size() >= 47:
-			break
-		captured.append({"visual": "boss_wave", "pos": Vector2(wave.get("pos", boss_pos)), "radius": float(wave.get("radius", 0.0))})
-	return captured
+	return early_boss_controller.capture_boss1_rewind_projectiles()
 
 
 func _capture_boss1_rewind_snapshot() -> Dictionary:
-	return {
-		"time": time_alive, 
-		"elapsed": elapsed_unpaused, 
-		"player_pos": player_pos, 
-		"boss_pos": boss_pos, 
-		"player_hp": player_hp, 
-		"last_facing": last_facing, 
-		"last_attack": last_attack_time, 
-		"last_dash": last_dash_time, 
-		"last_skill": last_skill_time, 
-		"last_secondary": last_secondary_time, 
-		"last_damage": last_damage_time, 
-		"boss_phase": boss_phase, 
-		"boss_attack_timer": boss_attack_timer, 
-		"projectiles": _capture_boss1_rewind_projectiles()
-	}
+	return early_boss_controller.capture_boss1_rewind_snapshot()
 
 
 func _record_boss1_rewind_history(delta: float) -> void :
-	if not boss1_rewind_sequence.is_empty():
-		return
-	boss1_rewind_sample_timer += delta
-	if not boss1_rewind_history.is_empty() and boss1_rewind_sample_timer < BOSS1_REWIND_SAMPLE_INTERVAL:
-		return
-	boss1_rewind_sample_timer = fmod(boss1_rewind_sample_timer, BOSS1_REWIND_SAMPLE_INTERVAL)
-	boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	var cutoff = time_alive - BOSS1_REWIND_SECONDS - BOSS1_REWIND_SAMPLE_INTERVAL
-	while boss1_rewind_history.size() > 1 and float(boss1_rewind_history[0].get("time", time_alive)) < cutoff:
-		boss1_rewind_history.pop_front()
+	early_boss_controller.record_boss1_rewind_history(delta)
 
 
 func _chrono_variant_name(variant: int) -> String:
-	match variant:
-		1:
-			return "CRONO-FENDA DUPLA"
-		2:
-			return "ESPIRAL DE 11:10"
-		3:
-			return "PONTEIROS PARTIDOS"
-	return "ONDA DE RETROCESSO"
+	return early_boss_controller.chrono_variant_name(variant)
 
 
 func _chrono_variant_color(variant: int) -> Color:
-	match variant:
-		1:
-			return Color(1.0, 0.44, 0.78)
-		2:
-			return Color(0.72, 0.52, 1.0)
-		3:
-			return Color(1.0, 0.78, 0.3)
-	return Color(0.36, 0.94, 1.0)
+	return early_boss_controller.chrono_variant_color(variant)
 
 
 func _start_boss1_time_wave() -> void :
-	if current_phase != 1 or boss1_rewind_cooldown > 0.0 or boss_dead or boss_hp <= 0.0 or boss_hp >= boss_hp_max * BOSS1_REWIND_THRESHOLD:
-		return
-	boss1_rewind_cooldown = BOSS1_REWIND_COOLDOWN
-	boss_stage_timer = 0.0
-	boss_stage_approaching = false
-	boss_attacks.clear()
-	boss_transition_waves.clear()
-	if boss1_rewind_history.is_empty() or time_alive - float(boss1_rewind_history[-1].get("time", -999.0)) > 0.02:
-		boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	var origin = boss_pos
-	var max_radius = 0.0
-	for corner in [Vector2.ZERO, Vector2(WORLD_SIZE.x, 0.0), Vector2(0.0, WORLD_SIZE.y), WORLD_SIZE]:
-		max_radius = max(max_radius, origin.distance_to(corner))
-	var variant = rng.randi_range(0, 3)
-	var wave_target: = _boss_target_entry(true)
-	boss1_time_wave = {
-		"origin": origin, 
-		"radius": 48.0, 
-		"direction": 1.0, 
-		"max_radius": max_radius + 48.0, 
-		"age": 0.0, 
-		"variant": variant, 
-		"target_peer": int(wave_target.get("peer_id", _mp_unique_id()))
-	}
-	boss_pos = origin
-	screen_shake_timer = 0.18
-	screen_shake_strength = 7.0
-	_vibrate(70, 0.24)
-	_add_text(_chrono_variant_name(variant), boss_pos + Vector2(0, -126), _chrono_variant_color(variant), 2.0, 28)
-	_play_sfx("Retrocede.mp3", 0.05, 0.85, 1.0)
-	_spawn_radial_particles(boss_pos, Color(0.34, 0.84, 1.0), 32)
+	early_boss_controller.start_boss1_time_wave()
 
 
 func _update_boss1_time_wave(delta: float) -> void :
-	if boss1_time_wave.is_empty():
-		return
-	boss_pos = Vector2(boss1_time_wave["origin"])
-	boss1_time_wave["age"] = float(boss1_time_wave.get("age", 0.0)) + delta
-	if float(boss1_time_wave["age"]) < BOSS1_TIME_WAVE_WARNING:
-		return
-	var previous_radius = float(boss1_time_wave["radius"])
-	var direction = float(boss1_time_wave["direction"])
-	var next_radius = previous_radius + direction * BOSS1_TIME_WAVE_SPEED * delta
-	var max_radius = float(boss1_time_wave["max_radius"])
-	if direction > 0.0 and next_radius >= max_radius:
-		next_radius = max_radius
-		boss1_time_wave["direction"] = -1.0
-		screen_shake_timer = 0.2
-		screen_shake_strength = 9.0
-		_add_text("A ONDA ESTA VOLTANDO", boss_pos + Vector2(0, -112), Color(1.0, 0.34, 0.72), 1.4, 22)
-	elif direction < 0.0 and next_radius <= 34.0:
-		boss1_time_wave.clear()
-		boss_attack_timer = 1.6
-		_add_text("LINHA TEMPORAL EVITADA", boss_pos + Vector2(0, -108), Color(0.42, 1.0, 0.78), 1.2, 21)
-		return
-	boss1_time_wave["radius"] = next_radius
-	var swept_min = min(previous_radius, next_radius) - BOSS1_TIME_WAVE_WIDTH - 22.0
-	var swept_max = max(previous_radius, next_radius) + BOSS1_TIME_WAVE_WIDTH + 22.0
-	var target_peer: = int(boss1_time_wave.get("target_peer", _mp_unique_id()))
-	if target_peer == _mp_unique_id():
-		var player_distance = player_pos.distance_to(Vector2(boss1_time_wave["origin"]))
-		if player_distance >= swept_min and player_distance <= swept_max:
-			_start_boss1_rewind_sequence()
-	else:
-		var remote_state: Dictionary = net_players_by_peer.get(target_peer, {})
-		if remote_state.is_empty() or bool(remote_state.get("dead", false)) or bool(remote_state.get("stealthed", false)):
-			var replacement: = _boss_target_entry(true)
-			boss1_time_wave["target_peer"] = int(replacement.get("peer_id", _mp_unique_id()))
-			return
-		var remote_distance: = Vector2(remote_state.get("pos", Vector2.ZERO)).distance_to(Vector2(boss1_time_wave["origin"]))
-		if remote_distance >= swept_min and remote_distance <= swept_max:
-			_trigger_boss1_remote_rewind(target_peer)
+	early_boss_controller.update_boss1_time_wave(delta)
 
 
 func _trigger_boss1_remote_rewind(peer_id: int) -> void :
-	var state: Dictionary = net_players_by_peer.get(peer_id, {})
-	if not _is_world_authority() or state.is_empty() or bool(state.get("dead", false)):
-		return
-	_start_boss1_rewind_sequence()
+	early_boss_controller.trigger_boss1_remote_rewind(peer_id)
 
 
 func _start_boss1_rewind_sequence(event_id: String = "", variant: int = -1) -> void :
-	if not boss1_rewind_sequence.is_empty():
-		return
-	if _is_world_replica() and event_id == "":
-		return
-	if event_id != "" and net_rewind_seen.has(event_id):
-		return
-	if event_id == "":
-		event_id = _next_network_event_id("boss1_team_rewind")
-	net_rewind_seen[event_id] = true
-	while net_rewind_seen.size() > NET_REPORT_EVENT_LIMIT:
-		net_rewind_seen.erase(net_rewind_seen.keys()[0])
-	if boss1_rewind_history.is_empty():
-		boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	elif time_alive - float(boss1_rewind_history[-1].get("time", -999.0)) > 0.02:
-		boss1_rewind_history.append(_capture_boss1_rewind_snapshot())
-	var chrono_variant = variant if variant >= 0 else int(boss1_time_wave.get("variant", rng.randi_range(0, 3)))
-	boss1_time_wave.clear()
-	boss_attacks.clear()
-	boss_transition_waves.clear()
-	effects.clear()
-	boss1_rewind_visual_projectiles = Array(boss1_rewind_history[-1].get("projectiles", [])).duplicate(true)
-	boss1_rewind_sequence = {
-		"event_id": event_id,
-		"elapsed": 0.0, 
-		"variant": chrono_variant, 
-		"rewind_local_player": not is_dead and not online_local_spectator,
-		"boss_heal": (boss_hp_max - boss_hp) * BOSS1_REWIND_BOSS_HEAL, 
-		"player_final_hp": min(player_hp_max, player_hp + (player_hp_max - player_hp) * BOSS1_REWIND_PLAYER_HEAL)
-	}
-	_cancel_combat_aim_state(true)
-	screen_shake_timer = 0.16
-	screen_shake_strength = 6.0
-	_vibrate(110, 0.35)
-	boss1_rewind_vibration_timer = 0.0
-	boss1_rewind_clock_tick = -1
-	_add_text("TEMPO CAPTURADO", player_pos + Vector2(0, -102), Color(0.48, 0.92, 1.0), 1.2, 26)
-	if is_multiplayer and _is_world_authority() and _shop_rpc_available():
-		rpc("_rpc_boss1_team_rewind", event_id, chrono_variant)
+	early_boss_controller.start_boss1_rewind_sequence(event_id, variant)
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
@@ -27347,129 +26614,27 @@ func _rpc_boss1_team_rewind(event_id: String, variant: int) -> void:
 
 
 func _apply_boss1_rewind_sync(data: Dictionary) -> void:
-	# Only the shared clock crosses the wire. HP, cooldowns and paths stay local.
-	var event_id: String = String(data.get("event_id", ""))
-	if event_id == "" or current_phase != 1 or not boss_active or boss_dead:
-		return
-	_start_boss1_rewind_sequence(event_id, int(data.get("variant", 0)))
-	if String(boss1_rewind_sequence.get("event_id", "")) == event_id:
-		boss1_rewind_sequence["elapsed"] = maxf(float(boss1_rewind_sequence.get("elapsed", 0.0)), float(data.get("elapsed", 0.0)))
-		boss1_time_wave.clear()
+	early_boss_controller.apply_boss1_rewind_sync(data)
 
 
 func _boss1_rewind_interpolated_sample(progress: float) -> Dictionary:
-	if boss1_rewind_history.is_empty():
-		return {}
-	var cursor = lerp(float(boss1_rewind_history.size() - 1), 0.0, clamp(progress, 0.0, 1.0))
-	var lower_index = int(floor(cursor))
-	var upper_index = min(lower_index + 1, boss1_rewind_history.size() - 1)
-	var weight = cursor - lower_index
-	var lower: Dictionary = boss1_rewind_history[lower_index]
-	var upper: Dictionary = boss1_rewind_history[upper_index]
-	var nearest: Dictionary = boss1_rewind_history[int(round(cursor))]
-	return {
-		"time": lerp(float(lower["time"]), float(upper["time"]), weight), 
-		"elapsed": lerp(float(lower["elapsed"]), float(upper["elapsed"]), weight), 
-		"player_pos": Vector2(lower["player_pos"]).lerp(Vector2(upper["player_pos"]), weight), 
-		"boss_pos": Vector2(lower["boss_pos"]).lerp(Vector2(upper["boss_pos"]), weight), 
-		"player_hp": lerp(float(lower["player_hp"]), float(upper["player_hp"]), weight), 
-		"last_facing": Vector2(nearest["last_facing"]), 
-		"last_attack": float(nearest["last_attack"]), 
-		"last_dash": float(nearest["last_dash"]), 
-		"last_skill": float(nearest["last_skill"]), 
-		"last_secondary": float(nearest["last_secondary"]), 
-		"last_damage": float(nearest["last_damage"]), 
-		"boss_phase": lerp(float(lower["boss_phase"]), float(upper["boss_phase"]), weight), 
-		"boss_attack_timer": float(nearest["boss_attack_timer"]), 
-		"projectiles": Array(nearest.get("projectiles", []))
-	}
+	return early_boss_controller.boss1_rewind_interpolated_sample(progress)
 
 
 func _apply_boss1_rewind_sample(sample: Dictionary) -> void :
-	if sample.is_empty():
-		return
-	time_alive = float(sample["time"])
-	elapsed_unpaused = float(sample["elapsed"])
-	if _is_world_authority():
-		boss_pos = Vector2(sample["boss_pos"])
-		boss_phase = float(sample["boss_phase"])
-		boss_attack_timer = float(sample["boss_attack_timer"])
-	if not bool(boss1_rewind_sequence.get("rewind_local_player", true)):
-		return
-	player_pos = Vector2(sample["player_pos"])
-	player_hp = clampi(int(round(float(sample["player_hp"]))), 1, int(player_hp_max))
-	last_facing = Vector2(sample["last_facing"])
-	last_attack_time = float(sample["last_attack"])
-	last_dash_time = float(sample["last_dash"])
-	last_skill_time = float(sample["last_skill"])
-	last_secondary_time = float(sample["last_secondary"])
-	last_damage_time = float(sample["last_damage"])
-	boss1_rewind_visual_projectiles = Array(sample.get("projectiles", [])).duplicate(true)
+	early_boss_controller.apply_boss1_rewind_sample(sample)
 
 
 func _update_boss1_rewind_sequence(delta: float) -> void :
-	if boss1_rewind_sequence.is_empty():
-		return
-	boss1_rewind_sequence["elapsed"] = float(boss1_rewind_sequence.get("elapsed", 0.0)) + delta
-	var elapsed = float(boss1_rewind_sequence["elapsed"])
-	_update_boss1_rewind_feedback(delta, elapsed)
-	if elapsed < BOSS1_CLOCK_TRAVEL_TIME:
-		return
-	var progress = clamp((elapsed - BOSS1_CLOCK_TRAVEL_TIME) / BOSS1_CLOCK_TURN_TIME, 0.0, 1.0)
-	_apply_boss1_rewind_sample(_boss1_rewind_interpolated_sample(progress))
-	if progress >= 1.0:
-		_finish_boss1_rewind()
+	early_boss_controller.update_boss1_rewind_sequence(delta)
 
 
 func _update_boss1_rewind_feedback(delta: float, elapsed: float) -> void :
-	boss1_rewind_vibration_timer -= delta
-	if boss1_rewind_vibration_timer <= 0.0:
-		boss1_rewind_vibration_timer = 0.9
-		_vibrate(95, 0.3)
-	if elapsed >= BOSS1_CLOCK_TRAVEL_TIME and elapsed <= BOSS1_CLOCK_TRAVEL_TIME + BOSS1_CLOCK_TURN_TIME:
-		var turn_progress = clamp((elapsed - BOSS1_CLOCK_TRAVEL_TIME) / BOSS1_CLOCK_TURN_TIME, 0.0, 1.0)
-		var tick = int(floor(turn_progress * 10.0))
-		if tick != boss1_rewind_clock_tick:
-			boss1_rewind_clock_tick = tick
-			_play_sfx("shop_countdown_tick", 0.015, 0.52, 0.82 + turn_progress * 0.14)
+	early_boss_controller.update_boss1_rewind_feedback(delta, elapsed)
 
 
 func _finish_boss1_rewind() -> void :
-	if boss1_rewind_sequence.is_empty():
-		return
-	var heal = float(boss1_rewind_sequence.get("boss_heal", 0.0))
-	if not boss1_rewind_history.is_empty():
-		_apply_boss1_rewind_sample(boss1_rewind_history[0])
-	if _is_world_authority():
-		boss_hp = min(boss_hp_max, boss_hp + heal)
-	if bool(boss1_rewind_sequence.get("rewind_local_player", true)):
-		player_hp = clampi(int(round(float(boss1_rewind_sequence.get("player_final_hp", player_hp)))), 1, int(player_hp_max))
-	bullets.clear()
-	remote_bullets.clear()
-	return_bullets.clear()
-	enemy_bullets.clear()
-	eletrica_waves.clear()
-	eletrica_chains.clear()
-	eletrica_recoil_velocity = Vector2.ZERO
-	shockwaves.clear()
-	slashes.clear()
-	prisms.clear()
-	orbitals.clear()
-	seed_links.clear()
-	parasite_spit_zones.clear()
-	manifestation_secondaries.clear()
-	effects.clear()
-	boss_attacks.clear()
-	boss_transition_waves.clear()
-	boss1_rewind_history.clear()
-	boss1_rewind_visual_projectiles.clear()
-	boss1_rewind_sequence.clear()
-	boss1_rewind_sample_timer = 0.0
-	boss1_rewind_vibration_timer = 0.0
-	boss1_rewind_clock_tick = -1
-	boss_attack_timer = max(1.4, boss_attack_timer)
-	_add_text("-%.0fs  /  BOSS +40%%  /  GEO +25%%" % BOSS1_REWIND_SECONDS, boss_pos + Vector2(0, -120), Color(0.42, 0.94, 1.0), 1.8, 24)
-	_spawn_radial_particles(boss_pos, Color(0.3, 0.78, 1.0), 36)
+	early_boss_controller.finish_boss1_rewind()
 	if mode == "shop_countdown" and forced_shop_timer <= 0.0:
 		_start_shop_opening_animation(true)
 
@@ -28417,35 +27582,7 @@ func _transmute_umbra_dimension(action: String) -> void :
 
 
 func _start_phase5_transmute_vfx(old_dim: String, new_dim: String, dim_color: Color) -> void :
-	var old_key: String = _boss5_dimension_map_key(old_dim)
-	var new_key: String = _boss5_dimension_map_key(new_dim)
-	var old_tex: Texture2D = _get_texture(old_key)
-	var new_tex: Texture2D = _get_texture(new_key)
-	if old_tex == null:
-		old_tex = _get_texture("map_phase_5")
-	if new_tex == null:
-		new_tex = _get_texture("map_phase_5")
-
-	phase5_transmute_active = true
-	phase5_transmute_timer = 0.0
-	phase5_transmute_duration = BOSS5_TRANSMUTE_VFX_DURATION
-	phase5_transmute_center = player_pos
-	phase5_transmute_old_tex = old_tex
-	phase5_transmute_new_tex = new_tex
-	phase5_transmute_color = dim_color
-	phase5_transmute_particles.clear()
-
-	for i in range(120):
-		var ang: float = rng.randf_range(0.0, TAU)
-		var speed: float = rng.randf_range(500.0, 950.0)
-		var radius: float = rng.randf_range(2.0, 7.0)
-		phase5_transmute_particles.append({
-			"pos": boss_pos, 
-			"vel": Vector2.from_angle(ang) * speed, 
-			"size": radius, 
-			"max_life": BOSS5_TRANSMUTE_VFX_DURATION, 
-			"life": BOSS5_TRANSMUTE_VFX_DURATION
-		})
+	CombatVfxRuntime._start_phase5_transmute_vfx(self, old_dim, new_dim, dim_color)
 
 
 func _get_umbra_transmute_material() -> ShaderMaterial:
@@ -28460,50 +27597,7 @@ func _get_umbra_transmute_material() -> ShaderMaterial:
 
 
 func _draw_phase5_transmute_map_reveal(map_texture: Texture2D, stage_rect: Rect2) -> void :
-	var progress: float = clampf(phase5_transmute_timer / maxf(0.01, phase5_transmute_duration), 0.0, 1.0)
-	var old_tex: = phase5_transmute_old_tex if phase5_transmute_old_tex else map_texture
-	var new_tex: = phase5_transmute_new_tex if phase5_transmute_new_tex else map_texture
-	draw_texture_rect(new_tex, stage_rect, false)
-	if old_tex == null:
-		return
-	var tex_size: Vector2 = old_tex.get_size()
-	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
-		return
-	var slice_h: = 24.0
-	var frontier_base: = stage_rect.position.x + stage_rect.size.x * progress
-	var t: = float(Time.get_ticks_msec()) * 0.001
-	var row_count: = int(ceil(stage_rect.size.y / slice_h))
-	for row in range(row_count):
-		var y: = stage_rect.position.y + float(row) * slice_h
-		var normalized_y: = clampf((y - stage_rect.position.y) / maxf(1.0, stage_rect.size.y), 0.0, 1.0)
-		var tear_noise: = sin(normalized_y * 34.0 + t * 8.0) * 0.026
-		tear_noise += sin(normalized_y * 91.0 + progress * 17.0) * 0.014
-		tear_noise += sin(normalized_y * 173.0 - t * 4.0) * 0.008
-		var frontier_x: = clampf(frontier_base + tear_noise * stage_rect.size.x, stage_rect.position.x, stage_rect.end.x)
-		var remaining_width: = stage_rect.end.x - frontier_x
-		if remaining_width <= 0.5:
-			continue
-		var dst_rect: = Rect2(frontier_x, y, remaining_width, minf(slice_h, stage_rect.end.y - y))
-		var src_x: = ((frontier_x - stage_rect.position.x) / stage_rect.size.x) * tex_size.x
-		var src_y: = ((y - stage_rect.position.y) / stage_rect.size.y) * tex_size.y
-		var src_w: = (remaining_width / stage_rect.size.x) * tex_size.x
-		var src_h: = (dst_rect.size.y / stage_rect.size.y) * tex_size.y
-		draw_texture_rect_region(old_tex, dst_rect, Rect2(src_x, src_y, src_w, src_h))
-		if row % 2 == 0:
-			var edge_a: = 0.24 + 0.28 * sin(progress * PI)
-			var edge_col: = phase5_transmute_color.lightened(0.22)
-			edge_col.a = edge_a
-			draw_line(Vector2(frontier_x, y), Vector2(frontier_x + 12.0, y + dst_rect.size.y), Color(0.02, 0.0, 0.04, edge_a * 0.8), 4.0)
-			draw_line(Vector2(frontier_x, y), Vector2(frontier_x + 12.0, y + dst_rect.size.y), edge_col, 2.0)
-	var seam_x: = clampf(frontier_base, stage_rect.position.x, stage_rect.end.x)
-	var pulse: = sin(progress * PI)
-	for spark in range(24):
-		var sy: = stage_rect.position.y + fmod(float(spark) * 47.0 + t * 55.0, stage_rect.size.y)
-		var sx: = seam_x + sin(float(spark) * 3.71 + t * 7.0) * 28.0
-		var s_col: = phase5_transmute_color.lightened(0.35)
-		s_col.a = 0.26 * pulse
-		draw_rect(Rect2(Vector2(round(sx), round(sy)), Vector2(3, 3)), Color(0.02, 0.0, 0.04, s_col.a), true)
-		draw_rect(Rect2(Vector2(round(sx) + 1.0, round(sy) + 1.0), Vector2(2, 2)), s_col, true)
+	WorldEnvironmentPresentation._draw_phase5_transmute_map_reveal(self, map_texture, stage_rect)
 
 
 func _move_umbra(delta: float) -> void :
@@ -28943,20 +28037,7 @@ func _update_dance_state(delta: float) -> void:
 
 
 func _draw_dance_wheel(viewport: Vector2) -> void:
-	if not dance_wheel_active:
-		return
-	var center: Vector2 = dance_wheel_start_pos
-	var radius: float = 85.0
-	draw_circle(center, radius, Color(0.08, 0.04, 0.12, 0.72))
-	draw_arc(center, radius, 0.0, TAU, 48, Color(0.9, 0.35, 1.0, 0.85), 3.0)
-	draw_arc(center, radius * 0.4, 0.0, TAU, 32, Color(0.7, 0.4, 0.9, 0.5), 1.5)
-	var emotes: Array = ["DANCA 💃", "FOGO 🔥", "VITORIA 🏆", "ESPECIAL ✨"]
-	for i in range(emotes.size()):
-		var angle: float = float(i) * (TAU / float(emotes.size())) - (PI * 0.5)
-		var item_pos: Vector2 = center + Vector2.from_angle(angle) * (radius * 0.65)
-		draw_circle(item_pos, 16.0, Color(0.3, 0.1, 0.4, 0.8))
-		draw_arc(item_pos, 16.0, 0.0, TAU, 24, Color(0.95, 0.5, 1.0, 0.9), 1.5)
-		_draw_centered(emotes[i], item_pos, 11, Color.WHITE)
+	MenusPresentation._draw_dance_wheel(self, viewport)
 
 
 func _draw_player_dance_emote(camera: Vector2) -> void:
@@ -29293,17 +28374,7 @@ func _update_boss4_meteorites(delta: float) -> void :
 
 
 func _draw_boss4_lightning_link(from_world: Vector2, to_world: Vector2, camera: Vector2, color: Color, thickness: float) -> void:
-	var direction: Vector2 = to_world - from_world
-	if direction.length() <= 0.01:
-		return
-	var side: Vector2 = direction.normalized().orthogonal()
-	var points := PackedVector2Array()
-	for i in range(9):
-		var t: float = float(i) / 8.0
-		var wobble: float = sin(time_alive * 19.0 + float(i) * 2.7) * 10.0 * sin(t * PI)
-		points.append(from_world.lerp(to_world, t) + side * wobble - camera)
-	draw_polyline(points, Color(0.18, 0.1, 0.02, 0.65), thickness + 6.0, true)
-	draw_polyline(points, color, thickness, true)
+	WorldEnvironmentPresentation._draw_boss4_lightning_link(self, from_world, to_world, camera, color, thickness)
 
 
 func _spawn_boss4_column_barrage() -> void :
@@ -30069,486 +29140,119 @@ func _update_boss_phase7(delta: float) -> void:
 
 
 func _update_boss7_cooldowns(delta: float) -> void:
-	for key in boss7_cooldowns.keys():
-		boss7_cooldowns[key] = maxf(0.0, float(boss7_cooldowns.get(key, 0.0)) - delta)
+	modern_boss_controller.update_boss7_cooldowns(delta)
 
 
 func _update_boss7_flight(delta: float) -> void:
-	var target: = _boss_target_pos(true, 0.18)
-	var to_target: Vector2 = target - boss_pos
-	var dist: = to_target.length()
-	var desired: = Vector2.ZERO
-	if dist < 250.0:
-		desired = -to_target.normalized() * 142.0
-	elif dist > 390.0:
-		desired = to_target.normalized() * 142.0
-	else:
-		desired = to_target.normalized().orthogonal() * (78.0 if int(time_alive * 0.2) % 2 == 0 else -78.0)
-	boss7_velocity = boss7_velocity.move_toward(desired, 420.0 * delta)
-	boss_pos = (boss_pos + boss7_velocity * delta).clamp(Vector2(100, 92), WORLD_SIZE - Vector2(100, 92))
-	if boss7_velocity.length() > 8.0:
-		boss7_attack_dir = boss7_velocity.normalized()
+	modern_boss_controller.update_boss7_flight(delta)
 
 
 func _update_boss7_state(delta: float) -> void:
-	boss7_state_timer = maxf(0.0, boss7_state_timer - delta)
-	_update_boss7_flame_waves(delta)
-	match boss7_state:
-		BOSS7_STATE_FEATHER:
-			if boss7_state_timer <= 0.0:
-				_fire_boss7_feathers()
-				_boss7_enter_recovery(0.36)
-		BOSS7_STATE_WING:
-			if boss7_state_timer <= 0.0:
-				_fire_boss7_wing_blast()
-				_boss7_enter_recovery(0.46)
-		BOSS7_STATE_DIVE_PREP:
-			# 1- Bate asa subindo rapidamente para o topo da tela saindo de cena (1s)
-			boss_pos.y = move_toward(boss_pos.y, -180.0, 750.0 * delta)
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_DIVE_WAIT
-				boss7_state_timer = 0.8
-		BOSS7_STATE_DIVE_WAIT:
-			# 2- Espera fora de cena (800ms)
-			boss_pos.y = -180.0
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_DIVE_MARK
-				boss7_state_timer = 0.9
-				var aim: Vector2 = _boss_target_pos(true, 0.32)
-				boss7_target_pos = aim.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-		BOSS7_STATE_DIVE_MARK:
-			# 3- Mira em cima do jogador e mostra marca no chão (900ms)
-			boss_pos.y = -180.0
-			if boss7_state_timer <= 0.0:
-				if boss7_dive_fake_count < 3 and rng.randf() < 0.5:
-					boss7_dive_fake_count += 1
-					boss7_state = BOSS7_STATE_DIVE_FAKE
-					boss7_state_timer = 2.0
-					_spawn_boss7_dive_fireball(boss7_target_pos)
-				else:
-					boss7_state = BOSS7_STATE_DIVE
-					boss7_state_timer = 0.45
-					# Posiciona diagonalmente no topo-esquerdo do alvo para queda condizente com fenix_down_04.png!
-					boss_pos = boss7_target_pos - Vector2(380.0, 380.0)
-					boss7_attack_dir = Vector2(1, 1).normalized()
-		BOSS7_STATE_DIVE_FAKE:
-			boss_pos.y = -180.0
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_DIVE_MARK
-				boss7_state_timer = 0.9
-				var aim: Vector2 = _boss_target_pos(true, 0.32)
-				boss7_target_pos = aim.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-		BOSS7_STATE_DIVE:
-			# 4- Boss desce em alta velocidade com frame fixo fenix_down_04.png
-			var old_pos: Vector2 = boss_pos
-			var speed: float = 1750.0 if boss7_reborn else 1550.0
-			boss_pos = boss_pos.move_toward(boss7_target_pos, speed * delta)
-			_add_boss7_dive_trail(old_pos, boss_pos)
-			if old_pos.distance_to(boss_pos) > 1.0:
-				if _distance_to_segment(player_pos, old_pos, boss_pos) <= BOSS7_DIVE_WIDTH * 0.5 and _local_player_damageable_by_contact():
-					_damage_player(int(player_hp_max * (0.093 if boss7_reborn else 0.085) + (28 if boss7_reborn else 25)), "boss7_dive")
-					_apply_boss_burn(2)
-					player_pos = _clamp_player_world(player_pos + _hostile_knockback(boss7_attack_dir * 185.0))
-				_damage_remote_player_on_segment(old_pos, boss_pos, BOSS7_DIVE_WIDTH * 0.5, int(net_player_hp_max * (0.093 if boss7_reborn else 0.085) + (28 if boss7_reborn else 25)), "boss7_dive", {}, "boss7_dive")
-			if boss_pos.distance_to(boss7_target_pos) <= 12.0 or boss7_state_timer <= 0.0:
-				boss_pos = boss7_target_pos
-				_boss_entry_impact_feedback(0.85)
-				_play_sfx("boss_impact", 0.03, 0.45, 1.25)
-				_spawn_boss7_flame_wave(boss7_target_pos, 250.0)
-				_boss7_enter_recovery(0.55)
-		BOSS7_STATE_REBIRTH:
-			var p: float = 1.0 - boss7_state_timer / maxf(0.01, BOSS7_REBIRTH_ANIM_TIME)
-			boss_pos = boss7_core_pos + Vector2(0.0, -80.0 + 80.0 * _ease_out_cubic(p))
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_FLY
-				boss_attack_timer = 0.45
-		BOSS7_STATE_RECOVERY:
-			if boss7_state_timer <= 0.0:
-				boss7_state = BOSS7_STATE_FLY
+	modern_boss_controller.update_boss7_state(delta)
 
 
 func _boss7_enter_recovery(time: float) -> void:
-	boss7_state = BOSS7_STATE_RECOVERY
-	boss7_state_timer = time
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.boss7_enter_recovery(time)
 
 
 func _spawn_boss7_flame_wave(center: Vector2, max_radius: float = 250.0) -> void:
-	var flames: Array = []
-	var count: int = 24 if _memory_saver_active() else (34 if _runtime_visual_budget_active() else 72)
-	for i in range(count):
-		var angle: float = (float(i) / float(count)) * TAU + rng.randf_range(-0.05, 0.05)
-		var layer: String = "yellow" if i % 3 == 0 else ("orange" if i % 3 == 1 else "red")
-		var dist_mult: float = rng.randf_range(0.85, 1.0)
-		var size: float = rng.randf_range(7.0, 14.0)
-		flames.append({
-			"angle": angle,
-			"layer": layer,
-			"dist_mult": dist_mult,
-			"size": size,
-			"offset": Vector2(rng.randf_range(-4, 4), rng.randf_range(-4, 4))
-		})
-	boss7_flame_waves.append({
-		"pos": center,
-		"radius": 0.0,
-		"max_radius": max_radius,
-		"expand_speed": 310.0,
-		"life": 1.0,
-		"flames": flames,
-		"hit_player": false
-	})
+	modern_boss_controller.spawn_boss7_flame_wave(center, max_radius)
 
 
 func _boss7_dive_fireball_damage() -> int:
-	return int(player_hp_max * BOSS7_DIVE_FIREBALL_DAMAGE_RATIO + BOSS7_DIVE_FIREBALL_DAMAGE_FLAT)
+	return modern_boss_controller.boss7_dive_fireball_damage()
 
 
 func _spawn_boss7_dive_fireball(target: Vector2) -> void:
-	var impact_pos: Vector2 = target.clamp(Vector2(90.0, 90.0), WORLD_SIZE - Vector2(90.0, 90.0))
-	var spawn_pos: Vector2 = Vector2(impact_pos.x, -124.0)
-	var dir: Vector2 = (impact_pos - spawn_pos).normalized()
-	enemy_bullets.append({
-		"pos": spawn_pos,
-		"dir": dir,
-		"life": 4.5,
-		"damage": _boss7_dive_fireball_damage(),
-		"phase": rng.randf_range(0.0, TAU),
-		"type": "boss7_dive_fireball",
-		"speed_mult": BOSS7_DIVE_FIREBALL_SPEED / 210.0,
-		"radius": BOSS7_DIVE_FIREBALL_RADIUS,
-		"hit_radius": BOSS7_DIVE_FIREBALL_RADIUS,
-		"impact_pos": impact_pos,
-		"wave_radius": 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT,
-		"hit": {}
-	})
-	_play_sfx("Frasco.mp3", 0.04, 0.56, 0.86 + rng.randf() * 0.16)
+	modern_boss_controller.spawn_boss7_dive_fireball(target)
 
 
 func _update_boss7_dive_fireball_projectile(bullet: Dictionary, previous_pos: Vector2) -> void:
-	var current_pos: Vector2 = Vector2(bullet.get("pos", previous_pos))
-	var impact_pos: Vector2 = Vector2(bullet.get("impact_pos", boss7_target_pos))
-	var hit_radius: float = float(bullet.get("hit_radius", BOSS7_DIVE_FIREBALL_RADIUS))
-	var damage: int = int(bullet.get("damage", _boss7_dive_fireball_damage()))
-	if _local_player_damageable_by_contact() and _distance_to_segment(player_pos, previous_pos, current_pos) <= hit_radius:
-		bullet["probability_near_miss_registered"] = true
-		_damage_player(damage, "boss7_dive_fireball")
-		_apply_boss_burn(4)
-		_spawn_radial_particles(player_pos, Color(1.0, 0.32, 0.08), 34)
-		_add_text("IMPACTO", player_pos + Vector2(0.0, -74.0), Color(1.0, 0.42, 0.1), 0.65, 22)
-		bullet["life"] = 0.0
-		return
-	var hit_owner: Dictionary = bullet.get("hit", {})
-	if _damage_remote_player_on_segment(previous_pos, current_pos, hit_radius, damage, "boss7_dive_fireball", hit_owner, "dive_fireball"):
-		bullet["hit"] = hit_owner
-		bullet["life"] = 0.0
-		return
-	bullet["hit"] = hit_owner
-	if _distance_to_segment(impact_pos, previous_pos, current_pos) <= maxf(10.0, hit_radius * 0.45) or current_pos.y >= impact_pos.y:
-		bullet["pos"] = impact_pos
-		_boss7_dive_fireball_ground_impact(bullet)
-		bullet["life"] = 0.0
+	modern_boss_controller.update_boss7_dive_fireball_projectile(bullet, previous_pos)
 
 
 func _boss7_dive_fireball_ground_impact(bullet: Dictionary) -> void:
-	if bool(bullet.get("ground_exploded", false)):
-		return
-	bullet["ground_exploded"] = true
-	var impact_pos: Vector2 = Vector2(bullet.get("impact_pos", bullet.get("pos", boss7_target_pos)))
-	var wave_radius: float = float(bullet.get("wave_radius", 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT))
-	_boss_entry_impact_feedback(0.72)
-	_play_sfx("boss_impact", 0.03, 0.5, 1.18)
-	_spawn_boss7_flame_wave(impact_pos, wave_radius)
-	_spawn_radial_particles(impact_pos, Color(1.0, 0.38, 0.06), 76)
+	modern_boss_controller.boss7_dive_fireball_ground_impact(bullet)
 
 
 func _update_boss7_flame_waves(delta: float) -> void:
-	for wave in boss7_flame_waves:
-		wave["radius"] = float(wave.get("radius", 0.0)) + float(wave.get("expand_speed", 310.0)) * delta
-		var radius: float = float(wave["radius"])
-		var center: Vector2 = Vector2(wave["pos"])
-		if not bool(wave.get("hit_player", false)):
-			if player_pos.distance_to(center) <= radius + 22.0:
-				wave["hit_player"] = true
-				_damage_player(int(player_hp_max * 0.088 + 26), "boss7_flame_wave")
-				_apply_boss_burn(2)
-		_damage_remote_player_in_radius(center, radius + 22.0, int(net_player_hp_max * 0.088 + 26), "boss7_flame_wave")
-	boss7_flame_waves = boss7_flame_waves.filter(func(w): return float(w.get("radius", 0.0)) < float(w.get("max_radius", 250.0)))
+	modern_boss_controller.update_boss7_flame_waves(delta)
 
 
 func _draw_boss7_flame_waves(camera: Vector2) -> void:
-	for wave in boss7_flame_waves:
-		if not _world_point_in_view(Vector2(wave.get("pos", Vector2.ZERO)), camera, float(wave.get("max_radius", 250.0)) + 120.0):
-			continue
-		var center: Vector2 = Vector2(wave["pos"]) - camera
-		var r: float = float(wave.get("radius", 0.0))
-		var max_r: float = maxf(1.0, float(wave.get("max_radius", 250.0)))
-		var p: float = clampf(r / max_r, 0.0, 1.0)
-		var base_alpha: float = (1.0 - p * 0.65)
-		var flames: Array = wave.get("flames", [])
-		for f in flames:
-			var angle: float = float(f["angle"])
-			var dist: float = r * float(f.get("dist_mult", 1.0))
-			var p_pos: Vector2 = center + Vector2.from_angle(angle) * dist + Vector2(f.get("offset", Vector2.ZERO))
-			var size: float = maxf(2.0, float(f.get("size", 10.0)) * (1.0 - p * 0.55))
-			PhoenixFire.draw_flame(self, p_pos, size * 1.8, size * 3.4, time_alive, angle * 5.0, base_alpha, Vector2.UP, _phase7_visual_budget_enabled())
+	WorldEnvironmentPresentation._draw_boss7_flame_waves(self, camera)
 
 
 func _start_boss7_attack() -> void:
-	var stage: = _boss7_stage()
-	var candidates: Array = []
-	candidates.append({"kind": BOSS7_ATTACK_FEATHER, "weight": 38.0 if stage == 1 else (25.0 if stage == 2 else 20.0)})
-	candidates.append({"kind": BOSS7_ATTACK_WING, "weight": 27.0 if stage == 1 else (18.0 if stage == 2 else 12.0)})
-	candidates.append({"kind": BOSS7_ATTACK_DIVE_TRAIL, "weight": 35.0 if stage == 1 else (27.0 if stage == 2 else 25.0)})
-	candidates.append({"kind": BOSS7_ATTACK_SKY_FIREBALLS, "weight": 30.0 if stage == 1 else (35.0 if stage == 2 else 40.0)})
-	candidates.append({"kind": BOSS7_ATTACK_WHIRLWIND, "weight": 20.0 if stage == 1 else (25.0 if stage == 2 else 30.0)})
-	if stage >= 2:
-		candidates.append({"kind": BOSS7_ATTACK_THERMAL, "weight": 18.0})
-		candidates.append({"kind": BOSS7_ATTACK_ASH_RAIN, "weight": 12.0 if stage == 2 else 10.0})
-	if stage >= 3:
-		candidates.append({"kind": BOSS7_ATTACK_CROWN, "weight": 15.0})
-	var available: Array = candidates.filter(func(item): return float(boss7_cooldowns.get(String(item.get("kind", "")), 0.0)) <= 0.0)
-	if available.is_empty():
-		boss_attack_timer = 0.25
-		return
-	var total: = 0.0
-	for item in available:
-		total += float(item.get("weight", 0.0))
-	var roll: = rng.randf() * maxf(0.01, total)
-	var selected: String = String(available[0].get("kind", BOSS7_ATTACK_FEATHER))
-	for item in available:
-		roll -= float(item.get("weight", 0.0))
-		if roll <= 0.0:
-			selected = String(item.get("kind", selected))
-			break
-	match selected:
-		BOSS7_ATTACK_FEATHER:
-			_start_boss7_feather_volley()
-		BOSS7_ATTACK_WING:
-			_start_boss7_wing_blast()
-		BOSS7_ATTACK_DIVE_TRAIL:
-			_start_boss7_dive()
-		BOSS7_ATTACK_SKY_FIREBALLS:
-			_start_boss7_sky_fireballs()
-		BOSS7_ATTACK_WHIRLWIND:
-			_start_boss7_whirlwind()
-		BOSS7_ATTACK_THERMAL:
-			_start_boss7_thermal()
-		BOSS7_ATTACK_ASH_RAIN:
-			_start_boss7_ash_rain()
-		BOSS7_ATTACK_CROWN:
-			_start_boss7_crown()
+	modern_boss_controller.start_boss7_attack()
 
 
 func _start_boss7_feather_volley() -> void:
-	boss7_state = BOSS7_STATE_FEATHER
-	boss7_state_timer = BOSS7_FEATHER_WINDUP
-	boss7_attack_dir = (_boss_target_pos(true, 0.14) - boss_pos).normalized()
-	if boss7_attack_dir.length() <= 0.05:
-		boss7_attack_dir = Vector2.LEFT
-	boss7_cooldowns[BOSS7_ATTACK_FEATHER] = 1.4
+	modern_boss_controller.start_boss7_feather_volley()
 
 
 func _fire_boss7_feathers() -> void:
-	var stage: = _boss7_stage()
-	var count: = 7 if stage == 1 else (9 if stage == 2 else 11)
-	var spread: = deg_to_rad(66.0 if stage == 1 else (80.0 if stage == 2 else 92.0))
-	var speed: = BOSS7_FEATHER_REBORN_SPEED if boss7_reborn else BOSS7_FEATHER_SPEED
-	for i in range(count):
-		var ratio: = 0.0 if count <= 1 else float(i) / float(count - 1)
-		var dir: = boss7_attack_dir.rotated(lerpf(-spread * 0.5, spread * 0.5, ratio)).normalized()
-		_add_boss_attack({"kind": BOSS7_ATTACK_FEATHER, "age": 0.0, "duration": 2.1, "pos": boss_pos + dir * 48.0, "prev": boss_pos + dir * 48.0, "dir": dir, "speed": speed, "hit": false, "phase": rng.randf_range(0.0, TAU)})
-	_play_sfx("boss_impact", 0.014, 0.48, 1.18)
+	modern_boss_controller.fire_boss7_feathers()
 
 
 func _start_boss7_wing_blast() -> void:
-	boss7_state = BOSS7_STATE_WING
-	boss7_state_timer = BOSS7_WING_WINDUP
-	boss7_attack_dir = (_boss_target_pos(true, 0.12) - boss_pos).normalized()
-	if boss7_attack_dir.length() <= 0.05:
-		boss7_attack_dir = Vector2.LEFT
-	boss7_cooldowns[BOSS7_ATTACK_WING] = 2.4
+	modern_boss_controller.start_boss7_wing_blast()
 
 
 func _fire_boss7_wing_blast() -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_WING, "age": 0.0, "duration": 1.2, "origin": boss_pos, "dir": boss7_attack_dir, "hit": false})
-	_spawn_radial_particles(boss_pos + boss7_attack_dir * 74.0, Color(1.0, 0.64, 0.16), 42)
+	modern_boss_controller.fire_boss7_wing_blast()
 
 
 func _start_boss7_dive() -> void:
-	boss7_state = BOSS7_STATE_DIVE_PREP
-	boss7_state_timer = 1.0
-	boss7_target_pos = (_boss_target_pos(true, 0.32)).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
-	boss7_attack_dir = Vector2.UP
-	boss7_dive_fake_count = 0
-	boss7_cooldowns[BOSS7_ATTACK_DIVE_TRAIL] = 20.0
+	modern_boss_controller.start_boss7_dive()
 
 
 func _add_boss7_dive_trail(a: Vector2, b: Vector2) -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_DIVE_TRAIL, "age": 0.0, "duration": 3.8 if boss7_reborn else 3.2, "a": a, "b": b, "tick": 0.45, "hit": {}})
+	CombatVfxRuntime._add_boss7_dive_trail(self, a, b)
 
 
 func _start_boss7_thermal() -> void:
-	var spots: Array = []
-	var base_target: = _boss_target_pos(true, 0.18)
-	spots.append(base_target.clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80)))
-	var count: = 4 if boss7_reborn else 3
-	for i in range(count - 1):
-		var offset: = Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(90.0, 180.0)
-		spots.append((base_target + offset).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80)))
-	_add_boss_attack({"kind": BOSS7_ATTACK_THERMAL, "age": 0.0, "duration": 1.25, "spots": spots, "hit": {}})
-	boss7_cooldowns[BOSS7_ATTACK_THERMAL] = 3.4
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.start_boss7_thermal()
 
 
 func _start_boss7_ash_rain() -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_ASH_RAIN, "age": 0.0, "duration": 3.6, "spawn_cd": 0.0, "spawned": 0, "drops": []})
-	boss7_cooldowns[BOSS7_ATTACK_ASH_RAIN] = 5.2
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.start_boss7_ash_rain()
 
 
 func _start_boss7_crown() -> void:
-	_add_boss_attack({"kind": BOSS7_ATTACK_CROWN, "age": 0.0, "duration": 2.1, "hit": {}})
-	boss7_cooldowns[BOSS7_ATTACK_CROWN] = BOSS7_CROWN_COOLDOWN
-	boss_attack_timer = _boss7_attack_delay()
+	modern_boss_controller.start_boss7_crown()
 
 
 func _start_boss7_rebirth() -> void:
-	boss7_ultimate_active = false
-	boss7_ultimate_timer = 0.0
-	boss7_ultimate_quadrants = [0, 0, 0, 0]
-	boss7_core_active = true
-	boss7_core_pos = boss_pos
-	boss7_core_hp_max = maxf(1.0, boss7_original_hp_max * BOSS7_CORE_HP_RATIO)
-	boss7_core_hp = boss7_core_hp_max
-	boss7_core_damage = 0.0
-	boss7_core_timer = BOSS7_ASH_CORE_TIME
-	boss7_state = BOSS7_STATE_ASH_CORE
-	boss_active = true
-	boss_hp = 0.0
-	boss_attacks.clear()
-	_spawn_radial_particles(boss7_core_pos, Color(1.0, 0.32, 0.08), 130)
-	_add_text("CORACAO DE CINZAS", boss7_core_pos + Vector2(0, -86), Color(1.0, 0.72, 0.22), 1.2, 24)
+	modern_boss_controller.start_boss7_rebirth()
 
 
 func _update_boss7_core(delta: float) -> void:
-	boss7_core_timer = maxf(0.0, boss7_core_timer - delta)
-	boss_phase += delta * 5.0
-	if boss7_core_timer <= 0.0:
-		var damage_ratio: = clampf(boss7_core_damage / maxf(1.0, boss7_core_hp_max), 0.0, 1.0)
-		var rebirth_ratio: = lerpf(BOSS7_REBIRTH_MAX_RATIO, BOSS7_REBIRTH_MIN_RATIO, damage_ratio)
-		boss7_core_active = false
-		boss7_reborn = true
-		boss7_state = BOSS7_STATE_REBIRTH
-		boss7_state_timer = BOSS7_REBIRTH_ANIM_TIME
-		boss_pos = boss7_core_pos + Vector2(0.0, -80.0)
-		boss_hp_max = maxf(1.0, boss7_original_hp_max)
-		boss_hp = maxf(1.0, boss7_original_hp_max * rebirth_ratio)
-		_spawn_radial_particles(boss7_core_pos, Color(1.0, 0.48, 0.1), 150)
-		_add_text("RENASCIMENTO %.0f%%" % (rebirth_ratio * 100.0), boss7_core_pos + Vector2(0, -96), Color(1.0, 0.48, 0.12), 1.2, 25)
+	modern_boss_controller.update_boss7_core(delta)
 
 
 func _start_boss7_whirlwind() -> void:
-	boss7_whirlwind_active = true
-	boss7_whirlwind_timer = 2.5
-	boss7_whirlwind_angle = 0.0
-	boss7_whirlwind_spawn_timer = 0.0
-	boss7_whirlwind_shots_left = 60
-	boss7_cooldowns[BOSS7_ATTACK_WHIRLWIND] = 40.0
-	boss_attack_timer = _boss7_attack_delay() + 2.5
-	_add_text("REDEMOINHO DE FOGO", boss_pos + Vector2(0, -110), Color(1.0, 0.4, 0.1), 1.2, 24)
+	modern_boss_controller.start_boss7_whirlwind()
 
 
 func _update_boss7_whirlwind(delta: float) -> void:
-	if not boss7_whirlwind_active:
-		return
-	boss7_whirlwind_timer = maxf(0.0, boss7_whirlwind_timer - delta)
-	boss7_whirlwind_spawn_timer -= delta
-	if boss7_whirlwind_spawn_timer <= 0.0 and boss7_whirlwind_shots_left > 0:
-		boss7_whirlwind_spawn_timer = 0.04
-		boss7_whirlwind_shots_left -= 1
-		boss7_whirlwind_angle += TAU / 60.0
-		var dir: Vector2 = Vector2.from_angle(boss7_whirlwind_angle)
-		var speed: float = 170.0
-		enemy_bullets.append({
-			"pos": boss_pos + dir * 30.0,
-			"dir": dir,
-			"life": 4.5,
-			"damage": int(player_hp_max * 0.07 + 20.0),
-			"phase": rng.randf_range(0.0, TAU),
-			"type": "phase7_fireball",
-			"speed_mult": speed / 210.0,
-			"radius": 14.0
-		})
-		_spawn_radial_particles(boss_pos + dir * 30.0, Color(1.0, 0.5, 0.1), 3)
-	if boss7_whirlwind_timer <= 0.0 and boss7_whirlwind_shots_left <= 0:
-		boss7_whirlwind_active = false
+	modern_boss_controller.update_boss7_whirlwind(delta)
 
 
 func _start_boss7_sky_fireballs() -> void:
-	boss7_cooldowns[BOSS7_ATTACK_SKY_FIREBALLS] = 9.0
-	var count: int = 15 if boss7_reborn else 12
-	var spots: Array = []
-	var base_target: Vector2 = _boss_target_pos(true, 0.2)
-	spots.append(base_target.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)))
-	for i in range(count - 1):
-		var offset: Vector2 = Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(80.0, 220.0)
-		spots.append((base_target + offset).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90)))
-	_add_boss_attack({
-		"kind": BOSS7_ATTACK_SKY_FIREBALLS,
-		"age": 0.0,
-		"duration": 2.2,
-		"warning": 0.85,
-		"spots": spots,
-		"hit": {}
-	})
-	boss_attack_timer = _boss7_attack_delay()
-	_add_text("CHUVA DE FOGO", boss_pos + Vector2(0, -90), Color(1.0, 0.6, 0.1), 1.0, 20)
+	modern_boss_controller.start_boss7_sky_fireballs()
 
 
 func _check_boss7_ultimate(_delta: float) -> void:
-	if boss7_ultimate_active or boss7_ultimate_used or not _is_world_authority():
-		return
-	if current_phase == 7 and boss_hp > 0.0 and boss_hp / maxf(1.0, boss_hp_max) <= 0.30 and boss_active and not boss_dead and not boss7_core_active:
-		boss7_ultimate_active = true
-		boss7_ultimate_used = true
-		boss7_ultimate_timer = PhoenixFire.DURATION
-		boss7_ultimate_tick_timer = 0.6
-		_refresh_boss7_ultimate_quadrants()
-		_add_text("AQUECIMENTO GLOBAL!", boss_pos + Vector2(0, -130), Color(1.0, 0.2, 0.0), 2.0, 32)
-		_vibrate(250, 0.8)
+	modern_boss_controller.check_boss7_ultimate(_delta)
 
 
 func _update_boss7_ultimate(delta: float) -> void:
-	if not boss7_ultimate_active:
-		return
-	boss7_ultimate_timer = maxf(0.0, boss7_ultimate_timer - delta)
-	if boss7_ultimate_timer <= 0.0 or current_phase != 7 or not boss_active or boss_dead or boss7_core_active:
-		boss7_ultimate_active = false
-		boss7_ultimate_timer = 0.0
-		boss7_ultimate_quadrants = [0, 0, 0, 0]
-		return
-	_refresh_boss7_ultimate_quadrants()
-	if not _is_world_authority():
-		return
-	boss7_ultimate_tick_timer -= delta
-	if boss7_ultimate_tick_timer > 0.0:
-		return
-	boss7_ultimate_tick_timer = 0.6
-	var elapsed: float = PhoenixFire.DURATION - boss7_ultimate_timer
-	if PhoenixFire.dangerous(player_pos, WORLD_SIZE, elapsed) and _local_player_damageable_by_contact():
-		_damage_player(int(player_hp_max * 0.025 + 10), "boss7_global_warming")
-		_apply_boss_burn(1)
-	if _remote_player_damage_ready():
-		for peer_id in _targetable_remote_peer_ids():
-			var state: Dictionary = net_players_by_peer.get(peer_id, {})
-			if PhoenixFire.dangerous(Vector2(state.get("pos", Vector2(-10000, -10000))), WORLD_SIZE, elapsed):
-				_send_peer_damage(peer_id, int(float(state.get("hp_max", player_hp_max)) * 0.025 + 10), "boss7_global_warming")
+	modern_boss_controller.update_boss7_ultimate(delta)
 
 
 func _refresh_boss7_ultimate_quadrants() -> void:
-	boss7_ultimate_quadrants.resize(4)
-	for quadrant in range(4):
-		boss7_ultimate_quadrants[quadrant] = PhoenixFire.phase(PhoenixFire.DURATION - boss7_ultimate_timer, quadrant) if boss7_ultimate_active else 0
+	modern_boss_controller.refresh_boss7_ultimate_quadrants()
 
 
 func _draw_boss7_ultimate(camera: Vector2) -> void:
@@ -30558,45 +29262,7 @@ func _draw_boss7_ultimate(camera: Vector2) -> void:
 
 
 func _draw_boss7_ground_indicators(camera: Vector2) -> void:
-	if current_phase != 7:
-		return
-	if boss7_state == BOSS7_STATE_DIVE_MARK:
-		var pos: Vector2 = boss7_target_pos - camera
-		var p: float = clampf(1.0 - boss7_state_timer / 0.9, 0.0, 1.0)
-		draw_circle(pos, 86.0, Color(1.0, 0.22, 0.05, 0.22 + p * 0.15))
-		draw_arc(pos, 86.0, 0.0, TAU, 48, Color(1.0, 0.4, 0.08, 0.6), 2.0)
-		draw_arc(pos, 86.0, -PI * 0.5, -PI * 0.5 + TAU * p, 48, Color(1.0, 0.88, 0.24, 0.95), 4.5)
-		draw_line(pos + Vector2(-30, 0), pos + Vector2(30, 0), Color(1.0, 0.9, 0.3, 0.8), 2.0)
-		draw_line(pos + Vector2(0, -30), pos + Vector2(0, 30), Color(1.0, 0.9, 0.3, 0.8), 2.0)
-		draw_circle(pos, 12.0 * (1.0 - p * 0.5), Color(1.0, 0.95, 0.5, 0.9))
-
-	for bullet in enemy_bullets:
-		if String(bullet.get("type", "")) != "boss7_dive_fireball":
-			continue
-		var impact: Vector2 = Vector2(bullet.get("impact_pos", bullet.get("pos", boss7_target_pos))) - camera
-		var world_pos: Vector2 = Vector2(bullet.get("pos", boss7_target_pos))
-		var impact_world: Vector2 = Vector2(bullet.get("impact_pos", boss7_target_pos))
-		var descent: float = clampf(1.0 - world_pos.distance_to(impact_world) / 520.0, 0.0, 1.0)
-		var direct_r: float = BOSS7_DIVE_FIREBALL_RADIUS * (1.55 + descent * 0.2)
-		var wave_r: float = float(bullet.get("wave_radius", 250.0 * BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT))
-		draw_circle(impact, direct_r + 20.0 * descent, Color(1.0, 0.12, 0.02, 0.12 + descent * 0.12))
-		draw_arc(impact, direct_r, 0.0, TAU, 48, Color(1.0, 0.72, 0.16, 0.68 + descent * 0.18), 3.0, true)
-		draw_arc(impact, wave_r, -time_alive * 2.5, TAU - time_alive * 2.5, 96, Color(1.0, 0.34, 0.04, 0.22 + descent * 0.14), 3.0, true)
-		draw_line(impact + Vector2(-18.0, 0.0), impact + Vector2(18.0, 0.0), Color(1.0, 0.88, 0.32, 0.82), 2.0)
-		draw_line(impact + Vector2(0.0, -18.0), impact + Vector2(0.0, 18.0), Color(1.0, 0.88, 0.32, 0.82), 2.0)
-
-	for atk in boss_attacks:
-		if atk.get("kind") == BOSS7_ATTACK_SKY_FIREBALLS:
-			var spots: Array = atk.get("spots", [])
-			var age: float = float(atk.get("age", 0.0))
-			var warning: float = float(atk.get("warning", 0.85))
-			if age < warning:
-				var p: float = clampf(age / warning, 0.0, 1.0)
-				for spot in spots:
-					var spot_pos: Vector2 = Vector2(spot) - camera
-					draw_circle(spot_pos, 42.0, Color(1.0, 0.18, 0.02, 0.25 * p))
-					draw_arc(spot_pos, 42.0, 0.0, TAU, 32, Color(1.0, 0.55, 0.1, 0.85), 2.0)
-					draw_circle(spot_pos, 42.0 * (1.0 - p), Color(1.0, 0.92, 0.28, 0.75))
+	WorldEnvironmentPresentation._draw_boss7_ground_indicators(self, camera)
 
 
 func _update_boss_phase6(delta: float) -> void :
@@ -30652,56 +29318,7 @@ func _update_boss_phase6(delta: float) -> void :
 
 
 func _update_boss6_timers(delta: float) -> void :
-	boss6_carapace_timer = maxf(0.0, boss6_carapace_timer - delta)
-	if boss6_carapace_timer <= 0.0:
-		boss6_carapace_plates.clear()
-	boss6_vulnerability_timer = maxf(0.0, boss6_vulnerability_timer - delta)
-	boss6_core_exposed_timer = maxf(0.0, boss6_core_exposed_timer - delta)
-	boss6_fossil_era_timer = maxf(0.0, boss6_fossil_era_timer - delta)
-	boss6_miasma_ult_cooldown = maxf(0.0, boss6_miasma_ult_cooldown - delta)
-	boss6_miasma_slow_timer = maxf(0.0, boss6_miasma_slow_timer - delta)
-	if boss6_miasma_slow_timer <= 0.0:
-		boss6_miasma_slow_stacks = 0
-		boss6_miasma_slow_tick = 0.0
-	boss6_carnage_slow_timer = maxf(0.0, boss6_carnage_slow_timer - delta)
-
-
-	if not boss6_fossil_echo.is_empty():
-		boss6_fossil_echo["timer"] = maxf(0.0, float(boss6_fossil_echo.get("timer", 0.0)) - delta)
-		if float(boss6_fossil_echo["timer"]) <= 0.0:
-			boss6_fossil_echo.clear()
-	boss6_fossil_echo_slow_timer = maxf(0.0, boss6_fossil_echo_slow_timer - delta)
-
-	if boss6_necro_erosion_active:
-		boss6_necro_erosion_timer = maxf(0.0, boss6_necro_erosion_timer - delta)
-		if boss6_necro_erosion_timer <= 0.0:
-			boss6_necro_erosion_active = false
-
-
-	boss6_history_sample_timer -= delta
-	if boss6_history_sample_timer <= 0.0:
-		boss6_history_sample_timer = 0.15
-		boss6_player_history.append({"time": time_alive, "pos": player_pos})
-		if boss6_player_history.size() > 40:
-			boss6_player_history.pop_front()
-
-
-	if _is_player_calcified():
-		boss6_necro_erosion_damage_timer -= delta
-		if boss6_necro_erosion_damage_timer <= 0.0:
-			boss6_necro_erosion_damage_timer = 0.75
-			_damage_player(int(player_hp_max * 0.025 + 5), "boss6_necro_erosion_burn")
-
-	for key in boss6_ability_cooldowns.keys():
-		boss6_ability_cooldowns[key] = maxf(0.0, float(boss6_ability_cooldowns[key]) - delta)
-	_update_boss6_miasma_ultimate(delta)
-	_update_boss6_lodarian_pools(delta)
-	_update_boss6_rib_prison(delta)
-	if boss6_core_exposed_timer > 0.0:
-		boss6_core_pulse_timer -= delta
-		if boss6_core_pulse_timer <= 0.0:
-			boss6_core_pulse_timer = 1.6
-			_boss6_core_proximity_pulse()
+	modern_boss_controller.update_boss6_timers(delta)
 
 
 func _boss6_hp_pct() -> float:
@@ -33791,138 +32408,67 @@ func _update_boss_call(delta: float) -> void :
 
 
 func _update_shop_countdown(delta: float) -> void :
-	if not boss1_rewind_sequence.is_empty() or not boss1_time_wave.is_empty():
-		_update_audio_volumes()
-		_update_game(delta)
-		return
-	forced_shop_timer -= delta
-	if forced_shop_timer <= 0.0:
-		_start_shop_opening_animation(true)
-		return
-	_update_audio_volumes()
-	_update_shop_countdown_tick()
-	_update_game(delta * _shop_countdown_time_scale())
+	shop_controller.update_countdown(delta)
 
 
 func _start_shop_opening_animation(forced: bool) -> void :
-	if not boss1_rewind_sequence.is_empty() or not boss1_time_wave.is_empty():
-		return
-	_clear_shop_mp_request()
-	forced_shop_timer = 0.0
-	shop_opening_timer = SHOP_OPENING_ANIM_TIME
-	shop_opening_forced = forced
-	mode = "shop_opening"
-	_update_audio_volumes()
-	screen_shake_timer = max(screen_shake_timer, 0.42)
-	screen_shake_strength = max(screen_shake_strength, 18.0)
-	_vibrate(460, 0.88)
-	_play_sfx("shop_countdown_tick", 0.0, 0.7, 0.72)
+	shop_controller.start_opening_animation(forced)
 
 
 func _update_shop_opening(delta: float) -> void :
-	shop_opening_timer -= delta
-	if shop_opening_timer <= 0.0:
-		shop_opening_timer = 0.0
-		_open_shop(shop_opening_forced)
-		return
-	screen_shake_timer = max(0.0, screen_shake_timer - delta)
-	if shop_opening_timer <= SHOP_OPENING_ANIM_TIME * 0.42 and shop_opening_timer + delta > SHOP_OPENING_ANIM_TIME * 0.42:
-		_vibrate(240, 0.62)
-		_play_sfx("shop_countdown_tick", 0.0, 0.46, 1.08)
-	_update_effects(delta)
-	_update_audio_volumes()
+	shop_controller.update_opening(delta)
 
 
 func _shop_countdown_time_scale() -> float:
-	if forced_shop_timer > FORCED_SHOP_SLOW_START:
-		return 1.0
-	var slow_progress = clamp(1.0 - forced_shop_timer / FORCED_SHOP_SLOW_START, 0.0, 1.0)
-	return lerp(1.0, FORCED_SHOP_MIN_TIME_SCALE, slow_progress)
+	return shop_controller.countdown_time_scale()
 
 
 func _shop_countdown_visible_second() -> int:
-	return int(ceil(max(0.01, forced_shop_timer)))
+	return shop_controller.countdown_visible_second()
 
 
 func _shop_countdown_tick_volume() -> float:
-	var progress = clamp(1.0 - (forced_shop_timer - FORCED_SHOP_SLOW_START) / max(0.01, FORCED_SHOP_WARNING - FORCED_SHOP_SLOW_START), 0.0, 1.0)
-	return lerp(0.1, 0.7, progress)
+	return shop_controller.countdown_tick_volume()
 
 
 func _shop_countdown_audio_duck() -> float:
-	if mode == "shop_opening":
-		return 0.28
-	if mode != "shop_countdown" or forced_shop_timer <= 0.0:
-		return 1.0
-	var progress = clamp(1.0 - forced_shop_timer / FORCED_SHOP_WARNING, 0.0, 1.0)
-	return lerp(1.0, 0.32, progress)
+	return shop_controller.countdown_audio_duck()
 
 
 func _update_shop_countdown_tick() -> void :
-	var second = _shop_countdown_visible_second()
-	if second == shop_countdown_last_second:
-		return
-	shop_countdown_last_second = second
-	_play_sfx("shop_countdown_tick", 0.0, _shop_countdown_tick_volume())
+	shop_controller.update_countdown_tick()
 
 
 func _shop_purchase_animating() -> bool:
-	return shop_purchase_anim_timer > 0.0 and not shop_purchase_pending_card.is_empty()
+	return shop_controller.purchase_animating()
 
 
 func _shop_rpc_available() -> bool:
-	return _multiplayer_peer_active()
+	return shop_controller.rpc_available()
 
 
 func _clear_shop_mp_request() -> void :
-	shop_mp_request_timer = 0.0
-	shop_mp_request_incoming = false
-	shop_mp_request_outgoing = false
-	buttons.erase("shop_mp_accept")
+	shop_controller.clear_mp_request()
 
 
 func _start_shop_mp_request_overlay(incoming: bool) -> void :
-	if not is_multiplayer:
-		return
-	shop_mp_request_timer = SHOP_MP_REQUEST_TIME
-	shop_mp_request_incoming = incoming
-	shop_mp_request_outgoing = not incoming
-	if mode == "shop_mp_waiting" or mode == "shop_mp_requested":
-		mode = "game"
+	shop_controller.start_mp_request_overlay(incoming)
 
 
 func _shop_mp_request_visible() -> bool:
-	return is_multiplayer and mode == "game" and shop_mp_request_timer > 0.0 and (shop_mp_request_incoming or shop_mp_request_outgoing)
+	return shop_controller.mp_request_visible()
 
 
 func _update_shop_mp_request(delta: float) -> void :
-	if not _shop_mp_request_visible():
-		return
-	shop_mp_request_timer = max(0.0, shop_mp_request_timer - delta)
-	if shop_mp_request_timer <= 0.0:
-		_clear_shop_mp_request()
+	shop_controller.update_mp_request(delta)
 
 
 func _begin_shop_mp_open_locally() -> void :
-	_clear_shop_mp_request()
-	shop_mp_ready_count = 0
-	shop_mp_expected_count = maxi(1, _living_run_player_peer_ids().size())
-	shop_mp_partner_ready = false
-	shop_mp_ready_to_leave = false
-	if is_dead or online_local_spectator:
-		mode = "shop_mp_waiting"
-		_update_audio_volumes()
-		return
-	_start_shop_opening_animation(false)
+	shop_controller.begin_mp_open_locally()
 
 
 func _accept_shop_mp_request() -> void :
-	if not shop_mp_request_incoming:
-		return
-	if _shop_rpc_available():
-		rpc("_rpc_accept_shop")
-	shop_mp_request_incoming = false
-	shop_mp_request_outgoing = true
+	shop_controller.accept_mp_request()
 
 
 func _shop_can_exit() -> bool:
@@ -33930,21 +32476,7 @@ func _shop_can_exit() -> bool:
 
 
 func _request_shop_exit_or_finish() -> void :
-	if not _shop_can_exit():
-		return
-	if is_multiplayer:
-		if is_dead or online_local_spectator:
-			mode = "shop_mp_waiting"
-			_update_audio_volumes()
-			return
-		shop_mp_ready_to_leave = true
-		if _shop_rpc_available():
-			rpc("_rpc_shop_ready")
-		if not _check_shop_mp_exit():
-			mode = "shop_mp_waiting"
-			_update_audio_volumes()
-	else:
-		_finish_shop()
+	shop_controller.request_exit_or_finish()
 
 
 func _clear_boss_mp_request() -> void :
@@ -33988,98 +32520,31 @@ func _update_shop(delta: float) -> void :
 
 
 func _open_shop(forced: bool) -> void :
-	if mode == "shop":
-		return
-	if not forced:
-		if shop_opening_manual_already_tracked:
-			shop_opening_manual_already_tracked = false
-		else:
-			_track_manual_shop_opening()
-	else:
-		shop_opening_manual_already_tracked = false
-	shop_manual_reopen_warning_until_ms = 0
-	shop_manual_reopen_warning_text = ""
-	shop_endurance_discount = _shop_endurance_discount_from_elapsed(shop_auto_elapsed)
-	previous_mode = "game"
-	mode = "shop"
-	_update_audio_volumes()
-	shop_rerolls = 3
-	shop_controller.reset()
-	shop_mp_ready_count = 0
-	shop_mp_expected_count = maxi(1, _living_run_player_peer_ids().size())
-	shop_purchase_anim_timer = 0.0
-	shop_purchase_pending_card = {}
-	shop_purchase_pending_can_continue = false
-	shop_purchase_pending_price = 0
-	shop_spend_anim_timer = 0.0
-	shop_spend_anim_amount = 0
-	shop_purchases_this_visit = 0
-	shop_mp_ready_to_leave = false
-	shop_mp_partner_ready = false
-	_clear_shop_mp_request()
-	_begin_shop_visit()
-	shop_cards = _roll_shop_cards("open")
-	shop_selected = 0
-	shop_select_pulse_index = 0
-	shop_select_pulse_timer = 0.2
-	shop_last_tap_index = -1
-	shop_last_tap_msec = 0
-	if forced:
-		_add_text("Loja forcada", player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 1.4, 26)
-	if shop_endurance_discount > 0.0:
-		_add_text("RESISTENCIA: -%d%%" % int(round(shop_endurance_discount * 100.0)), player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
+	shop_controller.open_shop(forced)
 
 
 func _track_manual_shop_opening() -> void :
-	var rapid: bool = time_alive - shop_last_manual_open_time <= 12.0
-	if rapid:
-		shop_recent_manual_open_count += 1
-	else:
-		shop_recent_manual_open_count = 1
-	shop_last_manual_open_time = time_alive
-	if shop_recent_manual_open_count > 2:
-		_apply_shop_abuse_penalty("abertura rapida")
-	if shop_last_exit_had_purchase and time_alive - shop_last_exit_time <= 35.0:
-		_apply_shop_abuse_penalty("reroll por saida")
+	shop_controller.track_manual_opening()
 
 
 func _apply_shop_abuse_penalty(reason: String) -> void :
-	if score <= 0:
-		return
-	var penalty: int = min(score, max(CARD_COST_BASE, card_cost))
-	score = max(0, score - penalty)
-	run_points_spent += penalty
-	shop_abuse_penalty_count += 1
-	_add_text("TAXA DA LOJA -%d" % penalty, player_pos + Vector2(0, -116), Color(1.0, 0.38, 0.18), 1.35, 22)
-	if shop_abuse_penalty_count <= 2:
-		_add_text(reason.to_upper(), player_pos + Vector2(0, -146), Color(1.0, 0.78, 0.24), 1.2, 17)
-	_vibrate(95, 0.4)
+	shop_controller.apply_abuse_penalty(reason)
 
 
 func _manual_shop_reopen_would_penalize() -> bool:
-	if score <= 0:
-		return false
-	var rapid: bool = time_alive - shop_last_manual_open_time <= 12.0
-	if rapid and shop_recent_manual_open_count >= 2:
-		return true
-	return shop_last_exit_had_purchase and time_alive - shop_last_exit_time <= 35.0
+	return shop_controller.manual_reopen_would_penalize()
 
 
 func _manual_shop_penalty_value() -> int:
-	return min(score, max(CARD_COST_BASE, card_cost))
+	return shop_controller.manual_penalty_value()
 
 
 func _manual_shop_reopen_warning_active() -> bool:
-	return shop_manual_reopen_warning_until_ms > Time.get_ticks_msec()
+	return shop_controller.manual_reopen_warning_active()
 
 
 func _warn_manual_shop_reopen_penalty() -> void:
-	var penalty: int = _manual_shop_penalty_value()
-	shop_manual_reopen_warning_until_ms = Time.get_ticks_msec() + SHOP_MANUAL_REOPEN_CONFIRM_MS
-	shop_manual_reopen_warning_text = "ABRIR AGORA COBRA TAXA DE %d PONTOS. TOQUE DE NOVO PARA CONFIRMAR." % penalty
-	_add_text("LOJA PUNITIVA -%d" % penalty, player_pos + Vector2(0, -112), Color(1.0, 0.72, 0.16), 1.0, 20)
-	_add_text("TOQUE DE NOVO PARA ABRIR", player_pos + Vector2(0, -140), Color(0.0, 1.0, 0.82), 0.9, 17)
-	_vibrate(45, 0.22)
+	shop_controller.warn_manual_reopen_penalty()
 
 
 func _shop_locked_key(index: int) -> String:
@@ -37536,99 +36001,23 @@ func _chance_carta_rara() -> float:
 
 
 func _buy_selected_card() -> void :
-	if shop_controller.busy() or mode != "shop":
-		return
-	if shop_cards.is_empty():
-		return
-	if _shop_purchase_animating():
-		return
-	var card: Dictionary = shop_cards[shop_selected]
-	if _is_empty_shop_slot(card):
-		_add_text("VAGA VAZIA", player_pos + Vector2(0, -92), Color(0.72, 0.46, 0.32), 0.7, 17)
-		return
-	var price: = _effective_card_price(card)
-	if score < price:
-		_add_text("PONTOS INSUFICIENTES", player_pos + Vector2(0, -92), Color(1.0, 0.56, 0.28), 0.8, 18)
-		return
-	var next_score = score - price
-	shop_purchase_pending_card = card.duplicate(true)
-	shop_purchase_pending_price = price
-	shop_purchase_pending_can_continue = next_score > 0
-	shop_purchase_anim_timer = SHOP_PURCHASE_ANIM_TIME
-	shop_select_pulse_index = shop_selected
-	shop_select_pulse_timer = 0.26
+	shop_controller.buy_selected_card()
 
 
 func _set_shop_selection(index: int) -> void :
-	if _shop_purchase_animating() or shop_controller.busy():
-		return
-	if index < 0 or index >= shop_cards.size():
-		return
-	if shop_selected == index:
-		return
-	shop_selected = index
-	shop_select_pulse_index = index
-	shop_select_pulse_timer = 0.26
+	shop_controller.set_selection(index)
 
 
 func _touch_shop_card(index: int) -> void :
-	if _shop_purchase_animating() or shop_controller.busy():
-		return
-	var now_msec: = Time.get_ticks_msec()
-	var is_double_tap: = shop_last_tap_index == index and now_msec - shop_last_tap_msec <= 360
-	_set_shop_selection(index)
-	if is_double_tap:
-		shop_selected = index
-		shop_select_pulse_index = index
-		shop_select_pulse_timer = 0.36
-		_vibrate(42, 0.22)
-	shop_last_tap_index = index
-	shop_last_tap_msec = now_msec
+	shop_controller.touch_card(index)
 
 
 func _reserve_shop_card(index: int) -> void :
-	if _shop_purchase_animating() or shop_controller.busy() or index < 0 or index >= shop_cards.size():
-		return
-	var card: Dictionary = shop_cards[index]
-	if _shop_slot_locked(index):
-		shop_controller.begin("unlock", shop_cards, index)
-		shop_locked_slots.erase(_shop_locked_key(index))
-		if shop_cards.size() > index:
-			shop_cards[index].erase("locked_slot")
-			shop_cards[index].erase("locked_price")
-		_add_text("RESERVA SOLTA", player_pos + Vector2(-90, -92), Color(0.4, 0.94, 1.0), 0.9, 17)
-		_vibrate(32, 0.14)
-		return
-	if not _can_reserve_shop_card(card):
-		return
-	if not _consume_card_count(CARD_ESCOLHA_ADIADA_ID):
-		return
-	shop_controller.begin("lock", shop_cards, index)
-	var locked: = card.duplicate(true)
-	var locked_price: = _effective_card_price(card)
-	locked["locked_slot"] = true
-	locked["locked_price"] = locked_price
-	shop_locked_slots[_shop_locked_key(index)] = {"card": locked.duplicate(true), "price": locked_price, "locked_at_cost": card_cost}
-	shop_cards[index] = locked
-	shop_reserved_card_id = ""
-	_add_text("TRAVADA: %s" % String(card.get("nick", card.get("name", ""))), player_pos + Vector2(-90, -92), Color(card.get("color", Color.WHITE)), 1.1, 18)
-	_vibrate(44, 0.2)
+	shop_controller.reserve_card(index)
 
 
 func _reroll_shop() -> void :
-	if _shop_purchase_animating() or shop_controller.busy():
-		return
-	if shop_rerolls > 0:
-		shop_controller.begin("reroll", shop_cards)
-		shop_rerolls -= 1
-		shop_reroll_index += 1
-		_add_card_unlock_progress("shop_rerolls", 1.0)
-		shop_cards = _roll_shop_cards("reroll")
-		shop_selected = 0
-		shop_select_pulse_index = 0
-		shop_select_pulse_timer = 0.2
-		shop_last_tap_index = -1
-		shop_last_tap_msec = 0
+	shop_controller.reroll()
 
 
 func _card_category(card_name: String) -> String:
@@ -38135,47 +36524,15 @@ func _close_shop() -> void :
 
 
 func _finish_shop() -> void :
-	shop_last_exit_had_purchase = shop_purchases_this_visit > 0
-	shop_last_exit_time = time_alive
-	shop_manual_reopen_warning_until_ms = 0
-	shop_manual_reopen_warning_text = ""
-	shop_purchase_anim_timer = 0.0
-	shop_purchase_pending_card = {}
-	shop_purchase_pending_can_continue = false
-	shop_purchase_pending_price = 0
-	_clear_shop_mp_request()
-	shop_mp_ready_to_leave = false
-	shop_mp_partner_ready = false
-	shop_mp_ready_count = 0
-	shop_mp_expected_count = maxi(1, _active_run_player_count())
-	mode = "shop_return"
-	shop_return_timer = SHOP_RETURN_TIME
-	shop_return_visual_timer = SHOP_RETURN_VISUAL_TIME
-	forced_shop_timer = -1.0
-	forced_shop_triggered = false
-	shop_opening_timer = 0.0
-	shop_opening_forced = false
-	shop_last_tap_index = -1
-	shop_last_tap_msec = 0
-	shop_auto_elapsed = 0.0
-	shop_endurance_discount = 0.0
-	next_forced_shop_time = shop_auto_interval if shop_auto_enabled else INF
-	_update_audio_volumes()
-	_block_ui_input()
+	shop_controller.finish()
 
 
 func _update_shop_return(delta: float) -> void :
-	shop_return_timer -= delta
-	shop_return_visual_timer = maxf(0.0, shop_return_visual_timer - delta)
-	_update_effects(delta)
-	if shop_return_timer <= 0.0:
-		mode = previous_mode if previous_mode != "" else "game"
-		shop_return_timer = 0.0
+	shop_controller.update_return(delta)
 
 
 func _update_shop_mp_waiting(delta: float) -> void :
-	_update_effects(delta)
-	_check_shop_mp_exit()
+	shop_controller.update_waiting(delta)
 
 
 func _affordable_card_count() -> int:
@@ -38197,71 +36554,19 @@ func _affordable_card_count() -> int:
 
 
 func _should_trigger_forced_shop() -> bool:
-	if not shop_auto_enabled or forced_shop_triggered or forced_shop_timer >= 0.0 or shop_opening_timer > 0.0:
-		return false
-	return shop_auto_elapsed >= shop_auto_interval
+	return shop_controller.should_trigger_forced()
 
 
 func _set_shop_auto_enabled(enabled: bool) -> void :
-	shop_auto_enabled = enabled
-	forced_shop_enabled = enabled
-	forced_shop_timer = -1.0
-	forced_shop_triggered = false
-	shop_opening_timer = 0.0
-	shop_opening_forced = false
-	shop_countdown_last_second = -1
-	shop_auto_elapsed = 0.0
-	if enabled:
-		next_forced_shop_time = shop_auto_interval
-	else:
-		next_forced_shop_time = INF
-		if mode == "shop_countdown" or mode == "shop_opening":
-			mode = "game"
-		if previous_mode == "shop_countdown":
-			previous_mode = "game"
-		if settings_previous_mode == "shop_countdown":
-			settings_previous_mode = "game"
+	shop_controller.set_auto_enabled(enabled)
 
 
 func _try_open_manual_shop() -> void :
-	if _local_player_controls_locked():
-		return
-	if shop_auto_enabled or mode != "game":
-		return
-	if _affordable_card_count() <= 0:
-		_add_text("FALTAM PONTOS", player_pos + Vector2(0, -96), Color(1.0, 0.56, 0.28), 0.9, 20)
-		return
-	if _manual_shop_reopen_would_penalize() and not _manual_shop_reopen_warning_active():
-		_warn_manual_shop_reopen_penalty()
-		return
-	if not _manual_shop_reopen_warning_active() and _maybe_start_context_tutorial(TUTORIAL_STATE_SHOP):
-		return
-	if is_multiplayer:
-		if _shop_mp_request_visible():
-			return
-		_start_shop_mp_request_overlay(false)
-		if _shop_rpc_available():
-			rpc("_rpc_request_shop")
-		return
-	if _manual_shop_reopen_would_penalize() and _manual_shop_reopen_warning_active():
-		_track_manual_shop_opening()
-		shop_opening_manual_already_tracked = true
-	_start_shop_opening_animation(false)
+	shop_controller.try_open_manual()
 
 
 func _start_forced_shop_countdown() -> void :
-	if _local_player_controls_locked():
-		return
-	if not shop_auto_enabled:
-		return
-	if is_multiplayer and not _is_world_authority():
-		return
-	if is_multiplayer and _is_world_authority():
-		rpc("_rpc_trigger_shop", true)
-	forced_shop_triggered = true
-	forced_shop_timer = FORCED_SHOP_WARNING
-	shop_countdown_last_second = -1
-	mode = "shop_countdown"
+	shop_controller.start_forced_countdown()
 
 
 func _start_pause_countdown() -> void :
@@ -38896,7 +37201,7 @@ func _apply_lacerante_spin_hit(slash: Dictionary, center: Vector2, radius: float
 
 
 func _add_text(text: String, pos: Vector2, color: Color, life: float, size: int) -> void :
-	effects.append({"text": text, "pos": pos, "life": life, "max": life, "color": color, "size": size, "vel": Vector2(0, -24)})
+	CombatVfxRuntime._add_text(self, text, pos, color, life, size)
 
 
 func _queue_unlock_card_notification(card: Dictionary, challenge_text: String) -> void :
@@ -39003,36 +37308,11 @@ func _update_unlock_notifications(delta: float) -> void :
 
 
 func _spawn_radial_particles(pos: Vector2, color: Color, count: int) -> void :
-	if not gfx_particles or not _particle_budget_available():
-		return
-	var total: = _adaptive_particle_count(count)
-	for i in range(total):
-		effects.append({"text": "", "pos": pos, "life": rng.randf_range(0.25, 0.55), "max": 0.55, "color": color, "size": rng.randi_range(3, 7), "vel": Vector2.from_angle(rng.randf_range(0, TAU)) * rng.randf_range(40, 120)})
+	CombatVfxRuntime._spawn_radial_particles(self, pos, color, count)
 
 
 func _spawn_bullet_hit_fragments(pos: Vector2, bullet: Dictionary) -> void :
-	if not gfx_particles or not _particle_budget_available():
-		return
-	var color: Color = bullet.get("color", _projectile_palette(String(bullet.get("kind", ""))).get("core", Color(0.36, 1.0, 0.94)))
-	var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-	if dir.length() <= 0.05:
-		dir = Vector2.RIGHT
-	var total: int = _adaptive_particle_count(20)
-	for i in range(total):
-		var spread: float = rng.randf_range(-1.8, 1.8)
-		var shard_dir: Vector2 = dir.rotated(PI + spread).normalized()
-		var speed: float = rng.randf_range(95.0, 245.0)
-		effects.append({
-			"kind": "bullet_fragment",
-			"text": "",
-			"pos": pos + shard_dir * rng.randf_range(2.0, 10.0),
-			"life": rng.randf_range(0.24, 0.44),
-			"max": 0.44,
-			"color": color.lerp(Color.WHITE, rng.randf_range(0.1, 0.42)),
-			"size": rng.randf_range(3.0, 7.0),
-			"vel": shard_dir * speed + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(12.0, 48.0),
-			"phase": rng.randf_range(0.0, TAU)
-		})
+	CombatVfxRuntime._spawn_bullet_hit_fragments(self, pos, bullet)
 
 
 func _begin_player_start_down_intro() -> void:
@@ -39070,223 +37350,39 @@ func _update_player_start_down_intro(delta: float) -> void:
 
 
 func _spawn_player_landing_smoke(pos: Vector2) -> void:
-	if not gfx_particles or not _particle_budget_available():
-		return
-	var total: int = _adaptive_particle_count(46)
-	for i in range(total):
-		var angle: float = float(i) * TAU / float(maxi(1, total)) + rng.randf_range(-0.12, 0.12)
-		var dir: Vector2 = Vector2.from_angle(angle)
-		var life: float = rng.randf_range(0.56, 0.92)
-		effects.append({
-			"kind": "landing_smoke",
-			"text": "",
-			"pos": pos + dir * rng.randf_range(10.0, 28.0),
-			"life": life,
-			"max": life,
-			"color": Color(0.46 + rng.randf_range(-0.05, 0.06), 0.47 + rng.randf_range(-0.04, 0.06), 0.42 + rng.randf_range(-0.04, 0.06), 0.9),
-			"size": rng.randf_range(14.0, 28.0),
-			"vel": dir * rng.randf_range(92.0, 184.0) + Vector2(0.0, rng.randf_range(-10.0, 9.0)),
-			"phase": rng.randf_range(0.0, TAU)
-		})
+	CombatVfxRuntime._spawn_player_landing_smoke(self, pos)
 
 
 func _adaptive_particle_count(count: int) -> int:
-	if count <= 0:
-		return 0
-	if count == 1:
-		return 1
-	var enemy_count: = enemies.size()
-	var factor: = 1.0
-	if enemy_count >= 22:
-		factor = 0.34
-	elif enemy_count >= 16:
-		factor = 0.46
-	elif enemy_count >= 11:
-		factor = 0.62
-	elif enemy_count >= 7:
-		factor = 0.78
-	if _memory_saver_active():
-		factor *= 0.22
-	elif mobile_adaptive_visual_budget:
-		factor *= 0.28
-	elif gfx_low_resource:
-		factor *= 0.45
-	var min_count: int = 1 if _runtime_visual_budget_active() else 2
-	return clampi(int(ceil(float(count) * factor)), min_count, count)
+	return CombatVfxRuntime._adaptive_particle_count(self, count)
 
 
 func _spawn_music_notes(pos: Vector2, count: int) -> void :
-	if not gfx_particles or not _particle_budget_available(): return
-	var notes = ["â™ª", "â™«", "â™¬", "â™©"]
-	for i in range(_adaptive_particle_count(count)):
-		var note = notes[rng.randi() % notes.size()]
-		var color = Color(1.0, 0.8 + rng.randf_range(-0.1, 0.2), 0.2 + rng.randf_range(0, 0.3))
-		effects.append({
-			"text": note, 
-			"pos": pos + Vector2(rng.randf_range(-15, 15), rng.randf_range(-15, 15)), 
-			"life": rng.randf_range(0.8, 1.2), 
-			"max": 1.2, 
-			"color": color, 
-			"size": rng.randi_range(16, 24), 
-			"vel": Vector2(rng.randf_range(-15, 15), rng.randf_range(-40, -20)), 
-			"kind": "music_note", 
-			"phase": rng.randf_range(0, TAU)
-		})
+	CombatVfxRuntime._spawn_music_notes(self, pos, count)
 
 
 func _spawn_secondary_drain_sparks(pos: Vector2) -> void :
-	if not gfx_particles or not _particle_budget_available():
-		return
-	for i in range(_adaptive_particle_count(10)):
-		var angle: = - PI * 0.5 + rng.randf_range(-1.35, 1.35)
-		effects.append({
-			"text": "", 
-			"pos": pos + Vector2(rng.randf_range(-26.0, 26.0), rng.randf_range(-34.0, 18.0)), 
-			"life": rng.randf_range(0.16, 0.32), 
-			"max": 0.32, 
-			"color": Color(1.0, rng.randf_range(0.12, 0.34), 0.22, 0.96), 
-			"size": rng.randi_range(3, 6), 
-			"vel": Vector2.from_angle(angle) * rng.randf_range(85.0, 190.0)
-		})
+	CombatVfxRuntime._spawn_secondary_drain_sparks(self, pos)
 
 
 func _enemy_shard_color(enemy: Dictionary) -> Color:
-	match String(enemy.get("type", ENEMY_COMMON)):
-		ENEMY_AGGLOMERATOR:
-			return Color(0.86, 0.78, 1.0)
-		ENEMY_STALKER:
-			return Color(0.42, 0.94, 1.0)
-		ENEMY_PROJECTOR:
-			return Color(0.84, 0.64, 1.0)
-		ENEMY_CRYSTAL:
-			return Color(0.22, 0.9, 1.0)
-		ENEMY_CURATER:
-			return Color(0.44, 1.0, 0.6)
-		ENEMY_LARAPIO:
-			return Color(0.92, 0.52, 1.0)
-		ENEMY_ATIRADOR:
-			return Color(0.74, 0.88, 1.0)
-		ENEMY_KAMIKAZE:
-			return Color(1.0, 0.52, 0.52)
-		ENEMY_NEXUS_CARTOGRAPHER:
-			return Color(1.0, 0.3, 0.78)
-		ENEMY_NEXUS_CHRONOPHAGE:
-			return Color(1.0, 0.72, 0.18)
-		ENEMY_NEXUS_REFRACTOR:
-			return Color(0.28, 0.9, 1.0)
-		ENEMY_NEXUS_WEAVER:
-			return Color(0.24, 1.0, 0.66)
-		ENEMY_NEXUS_ECHO:
-			return Color(1.0, 0.3, 0.7)
-	return Color(0.76, 0.88, 1.0)
+	return CombatVfxRuntime._enemy_shard_color(self, enemy)
 
 
 func _spawn_enemy_desfragmentation(pos: Vector2, color: Color, count: int) -> void :
-	if not gfx_particles or not _particle_budget_available():
-		return
-	var total = int(clamp(_adaptive_particle_count(count), 6, 28))
-	for i in range(total):
-		var angle = rng.randf_range(0.0, TAU)
-		var speed = rng.randf_range(90.0, 250.0)
-		var size = rng.randf_range(4.0, 10.0)
-		effects.append({
-			"kind": "enemy_shard", 
-			"text": "", 
-			"pos": pos + Vector2.from_angle(angle) * rng.randf_range(6.0, 20.0), 
-			"life": rng.randf_range(0.85, 1.25), 
-			"max": 1.25, 
-			"color": Color(color.r, color.g, color.b, 1.0), 
-			"size": size, 
-			"vel": Vector2.from_angle(angle) * speed, 
-			"speed": speed, 
-			"home_speed": rng.randf_range(360.0, 560.0), 
-			"delay": rng.randf_range(0.05, 0.18), 
-			"phase": rng.randf_range(0.0, TAU), 
-			"spin": rng.randf_range(5.0, 11.0)
-		})
+	CombatVfxRuntime._spawn_enemy_desfragmentation(self, pos, color, count)
 
 
 func _projectile_palette(kind: String) -> Dictionary:
-	match kind:
-		"eletrica":
-			return {"core": Color(0.76, 1.0, 1.0), "glow": Color(0.1, 0.95, 1.0, 0.92), "trail": Color(0.82, 0.22, 1.0, 0.46), "size": 8.0, "trail_size": 7.0}
-		"eletrica_charged":
-			return {"core": Color(1.0, 1.0, 1.0), "glow": Color(0.18, 1.0, 1.0, 1.0), "trail": Color(0.92, 0.32, 1.0, 0.62), "size": 11.0, "trail_size": 10.0}
-		"prismatica":
-			return {"core": Color(1.0, 1.0, 1.0), "glow": Color(0.36, 1.0, 0.96, 0.95), "trail": Color(1.0, 0.42, 0.78, 0.44), "size": 7.0, "trail_size": 6.0}
-		"parasitica":
-			return {"core": Color(0.8, 1.0, 0.54), "glow": Color(0.24, 0.95, 0.38, 0.9), "trail": Color(0.78, 1.0, 0.26, 0.42), "size": 8.0, "trail_size": 8.0}
-		"gravitante":
-			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.5, 0.78, 1.0, 0.92), "trail": Color(0.74, 0.54, 1.0, 0.34), "size": 9.0, "trail_size": 9.0}
-		"ancorada":
-			return {"core": Color(1.0, 1.0, 1.0), "glow": Color(0.26, 0.96, 1.0, 0.9), "trail": Color(1.0, 0.78, 0.24, 0.38), "size": 8.0, "trail_size": 6.0}
-		"cartografica":
-			return {"core": Color(0.94, 1.0, 0.8), "glow": Color(0.3, 1.0, 0.78, 0.92), "trail": Color(1.0, 0.78, 0.24, 0.42), "size": 7.0, "trail_size": 6.0}
-		"mnesica":
-			return {"core": Color(1.0, 0.88, 1.0), "glow": Color(0.8, 0.5, 1.0, 0.9), "trail": Color(1.0, 0.42, 0.88, 0.38), "size": 7.0, "trail_size": 7.0}
-		"ressonante":
-			return {"core": Color(1.0, 0.96, 0.72), "glow": Color(1.0, 0.72, 0.18, 0.92), "trail": Color(0.34, 0.92, 1.0, 0.4), "size": 8.0, "trail_size": 7.0}
-		"contratual":
-			return {"core": Color(1.0, 0.96, 0.82), "glow": Color(1.0, 0.52, 0.2, 0.92), "trail": Color(1.0, 0.86, 0.42, 0.36), "size": 8.0, "trail_size": 6.0}
-		"bombastica":
-			return {"core": Color(1.0, 0.92, 0.46), "glow": Color(1.0, 0.46, 0.08, 0.94), "trail": Color(0.18, 0.88, 1.0, 0.36), "size": 9.0, "trail_size": 8.0}
-		"retornante":
-			return {"core": Color(1.0, 0.92, 1.0), "glow": Color(1.0, 0.34, 0.88, 0.94), "trail": Color(0.72, 0.42, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"necronada":
-			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.48, 0.34, 0.92, 0.94), "trail": Color(0.72, 0.96, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"necronada_dust":
-			return {"core": Color(0.82, 0.7, 1.0), "glow": Color(0.35, 0.14, 0.58, 0.92), "trail": Color(0.06, 0.03, 0.1, 0.52), "size": 11.0, "trail_size": 14.0}
-		"eclipsada_lua", "shuriken_eclipsado":
-			return {"core": Color(0.92, 0.86, 1.0), "glow": Color(0.7, 0.36, 1.0, 0.94), "trail": Color(0.36, 0.72, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"eclipsada_sol":
-			return {"core": Color(1.0, 0.96, 0.62), "glow": Color(1.0, 0.62, 0.16, 0.96), "trail": Color(1.0, 0.88, 0.3, 0.42), "size": 9.0, "trail_size": 9.0}
-		"petro":
-			return {"core": Color(0.82, 1.0, 1.0), "glow": Color(0.16, 0.92, 1.0, 0.88), "trail": Color(0.72, 1.0, 1.0, 0.38), "size": 6.0, "trail_size": 5.0}
-	return {"core": Color.WHITE, "glow": Color(0.72, 0.92, 1.0, 0.9), "trail": Color(0.72, 0.92, 1.0, 0.35), "size": 7.0, "trail_size": 6.0}
+	return CombatVfxRuntime._projectile_palette(self, kind)
 
 
 func _spawn_projectile_muzzle(kind: String, pos: Vector2, dir: Vector2) -> void :
-	var palette = _projectile_palette(kind)
-	var glow: Color = palette["glow"]
-	var core: Color = palette["core"]
-	var count = 7 if kind == "eletrica_charged" else 5
-	_spawn_radial_particles(pos, glow, count)
-	var sparks: = 1 if gfx_low_resource else 3
-	for i in range(sparks):
-		if not _particle_budget_available():
-			break
-		var spread = rng.randf_range(-0.42, 0.42)
-		var spark_dir = dir.rotated(spread)
-		effects.append({
-			"kind": "trail", 
-			"text": "", 
-			"pos": pos + spark_dir * rng.randf_range(6.0, 12.0), 
-			"life": rng.randf_range(0.12, 0.2), 
-			"max": 0.2, 
-			"color": Color(core.r, core.g, core.b, 0.95), 
-			"size": rng.randf_range(6.0, 11.0), 
-			"vel": spark_dir * rng.randf_range(120.0, 280.0)
-		})
+	CombatVfxRuntime._spawn_projectile_muzzle(self, kind, pos, dir)
 
 
 func _emit_projectile_trail(bullet: Dictionary) -> void :
-	if gfx_low_resource and (effects.size() >= LOW_RESOURCE_EFFECT_CAP or rng.randf() < 0.45):
-		return
-	var palette = _projectile_palette(String(bullet.get("kind", "")))
-	var trail: Color = palette["trail"]
-	var dir = Vector2(bullet.get("dir", Vector2.RIGHT))
-	var side = dir.orthogonal().normalized()
-	var drift = side * sin(float(bullet.get("age", 0.0)) * 18.0 + float(bullet.get("phase", 0.0))) * 6.0
-	effects.append({
-		"kind": "trail", 
-		"text": "", 
-		"pos": bullet["pos"] - dir * rng.randf_range(12.0, 22.0) + drift, 
-		"life": rng.randf_range(0.12, 0.22), 
-		"max": 0.22, 
-		"color": trail, 
-		"size": float(palette["trail_size"]) + rng.randf_range(-1.5, 1.5), 
-		"vel": - dir * rng.randf_range(20.0, 55.0) + drift * 2.5
-	})
+	CombatVfxRuntime._emit_projectile_trail(self, bullet)
 
 
 var phase_transition_overlay_node: ColorRect = null
@@ -39329,49 +37425,7 @@ func _get_phase_transition_material(shader_path: String) -> ShaderMaterial:
 
 
 func _draw_phase_transition(viewport: Vector2) -> void :
-	_draw_game(viewport)
-	_ensure_phase_transition_nodes()
-	phase_transition_overlay_node.visible = true
-	phase_transition_overlay_node.set_deferred("position", Vector2.ZERO)
-	phase_transition_overlay_node.set_deferred("size", viewport)
-	phase_transition_title_label.set_deferred("position", Vector2.ZERO)
-	phase_transition_title_label.set_deferred("size", viewport)
-
-	var target_phase: int = int(pending_phase if pending_phase > 0 else current_phase)
-	var elapsed_time: float = clampf(PHASE_TRANSITION_TIME - phase_transition_timer, 0.0, PHASE_TRANSITION_TIME)
-
-	var phase_names: = {
-		1: "RUÍNAS CÓSMICAS", 
-		2: "ÁRTICO IMPERIAL", 
-		3: "CATEDRAL DOS VERMES", 
-		4: "CHARCO DOS SAPOS", 
-		5: "COLISÃO DE MUNDOS", 
-		6: "ABISMO FINAL", 
-		7: "CINZAS DA RUPTURA"
-	}
-	var phase_shaders: = {
-		1: "res://shaders/transitions/star_dissolve.gdshader", 
-		2: "res://shaders/transitions/blizzard_wipe.gdshader", 
-		3: "res://shaders/transitions/slime_drip_melt.gdshader", 
-		4: "res://shaders/transitions/black_hole_vortex.gdshader", 
-		5: "res://shaders/transitions/energy_crack_shatter.gdshader", 
-		6: "res://shaders/transitions/worm_devour.gdshader", 
-		7: "res://shaders/transitions/slime_drip_melt.gdshader"
-	}
-
-	if elapsed_time < PHASE_TRANSITION_HOLD_TIME:
-		phase_transition_title_label.visible = true
-		phase_transition_title_label.text = String(phase_names.get(target_phase, "FASE %d" % target_phase)).to_upper()
-		phase_transition_overlay_node.color = Color.BLACK
-		phase_transition_overlay_node.material = null
-	else:
-		phase_transition_title_label.visible = false
-		phase_transition_overlay_node.color = Color.WHITE
-		var progress: float = clampf((elapsed_time - PHASE_TRANSITION_HOLD_TIME) / maxf(0.01, PHASE_TRANSITION_WIPE_TIME), 0.0, 1.0)
-		var shader_path: String = String(phase_shaders.get(target_phase, phase_shaders[1]))
-		var mat: = _get_phase_transition_material(shader_path)
-		mat.set_shader_parameter("progress", progress)
-		phase_transition_overlay_node.material = mat
+	WorldEnvironmentPresentation._draw_phase_transition(self, viewport)
 
 
 func _draw() -> void :
@@ -39384,6 +37438,10 @@ func _draw() -> void :
 	_update_cheat_input_visibility()
 	_update_webhook_input_visibility()
 	_update_online_room_input_visibility()
+	if _startup_thanks_active():
+		draw_rect(Rect2(Vector2.ZERO, viewport), Color.BLACK)
+		_draw_startup_thanks(viewport)
+		return
 	match mode:
 		"phase_transition":
 			_draw_phase_transition(viewport)
@@ -39532,83 +37590,15 @@ func _update_mouse_cursor_mode() -> void :
 
 
 func _draw_custom_mouse_cursor(_viewport: Vector2) -> void :
-	var pos: = get_viewport().get_mouse_position()
-	var red_accent: = Color(1.0, 0.12, 0.18, 1.0)
-	var bright_center: = Color(1.0, 0.92, 0.92, 1.0)
-	var outline_color: = Color(0.0, 0.0, 0.0, 0.85)
-
-	draw_arc(pos, 14.0, 0.0, TAU, 32, outline_color, 2.5, true)
-	draw_arc(pos, 14.0, 0.0, TAU, 32, red_accent, 1.2, true)
-
-	var gap: = 5.0
-	var tick_len: = 10.0
-	var dirs: = [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]
-
-	for d in dirs:
-		var p1 = pos + d * gap
-		var p2 = pos + d * (gap + tick_len)
-		draw_line(p1, p2, outline_color, 3.0, true)
-		draw_line(p1, p2, red_accent, 1.6, true)
-
-	draw_circle(pos, 3.5, outline_color)
-	draw_circle(pos, 2.2, red_accent)
-	draw_circle(pos, 1.0, bright_center)
+	MenusPresentation._draw_custom_mouse_cursor(self, _viewport)
 
 
 func _draw_manifest_evolution_choice(viewport: Vector2) -> void :
-	manifest_evolution_focus_timer += 0.016
-	var accent: = _manifestation_color()
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.46), true)
-	var panel_w: float = min(980.0, viewport.x * 0.88)
-	var panel_h: float = min(520.0, viewport.y * 0.72)
-	var panel: = Rect2(viewport * 0.5 - Vector2(panel_w, panel_h) * 0.5, Vector2(panel_w, panel_h))
-	_draw_holo_panel(panel, accent, true, 0.88)
-	_draw_glitch_title("EVOLUCAO DO ARAUTO", Vector2(panel.get_center().x, panel.position.y + 54.0), 30, accent)
-	_draw_centered(_manifestation_display_name(manifestation_key), Vector2(panel.get_center().x, panel.position.y + 92.0), 17, Color(0.86, 0.96, 1.0, 0.9))
-	var gap: = 18.0
-	var card_w: = (panel.size.x - 72.0 - gap * 2.0) / 3.0
-	var card_h: = panel.size.y - 164.0
-	var start_x: = panel.position.x + 36.0
-	var start_y: = panel.position.y + 126.0
-	for i in range(manifest_evolution_options.size()):
-		var entry: Dictionary = manifest_evolution_options[i]
-		var rect: = Rect2(start_x + i * (card_w + gap), start_y, card_w, card_h)
-		buttons["manifest_evolution_%d" % i] = rect
-		var selected: = i == manifest_evolution_selected
-		var pulse: = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008 + i)
-		var border: = Color(1.0, 1.0, 1.0, 0.92) if selected else accent
-		var fill: = Color(accent.r * 0.12, accent.g * 0.12, accent.b * 0.12, 0.88)
-		draw_rect(rect, fill, true)
-		draw_rect(rect.grow(4.0 if selected else 2.0), Color(border.r, border.g, border.b, (0.72 + pulse * 0.18) if selected else 0.42), false, 2.4 if selected else 1.4)
-		draw_circle(rect.get_center() + Vector2(0, - card_h * 0.24), 34.0 + pulse * 4.0, Color(accent.r, accent.g, accent.b, 0.16))
-		_draw_centered(String(entry.get("name", "")), Vector2(rect.get_center().x, rect.position.y + 72.0), 18, Color.WHITE)
-		_draw_centered(String(entry.get("family", "")).to_upper(), Vector2(rect.get_center().x, rect.position.y + 104.0), 12, accent)
-		_draw_wrapped(String(entry.get("summary", "")), Rect2(rect.position.x + 18.0, rect.position.y + 132.0, rect.size.x - 36.0, rect.size.y - 176.0), 14, Color(0.84, 0.92, 1.0, 0.88))
-		_draw_centered("ESCOLHER", Vector2(rect.get_center().x, rect.end.y - 28.0), 15, Color(1.0, 0.92, 0.52, 0.95) if selected else Color(0.78, 0.86, 0.9, 0.75))
+	MenusPresentation._draw_manifest_evolution_choice(self, viewport)
 
 
 func _draw_resonant_meter(viewport: Vector2) -> void :
-	var rect: = Rect2(viewport.x * 0.5 - 96.0, viewport.y - 52.0, 192.0, 18.0)
-	draw_rect(rect.grow(4.0), Color(0.0, 0.0, 0.0, 0.46), true)
-	draw_rect(rect.grow(4.0), Color(1.0, 0.72, 0.2, 0.36), false, 1.4)
-	var is_perfect: bool = _resonant_is_perfect()
-	var pulse: float = (0.5 + sin(Time.get_ticks_msec() * 0.018) * 0.5) if is_perfect else 0.0
-	var perfect_zone_w: float = max(9.0, rect.size.x * (RESONANT_PERFECT_WINDOW / (RESONANT_BEAT_INTERVAL * 4.0)) * 2.0)
-	for i in range(5):
-		var x: float = rect.position.x + rect.size.x * (float(i) / 4.0)
-		var zone: = Rect2(x - perfect_zone_w * 0.5, rect.position.y - 3.0, perfect_zone_w, rect.size.y + 6.0)
-		draw_rect(zone, Color(1.0, 0.66, 0.12, 0.16 + pulse * 0.18), true)
-		draw_line(Vector2(x, rect.position.y - 6.0), Vector2(x, rect.end.y + 6.0), Color(1.0, 0.86, 0.38, 0.72), 1.6)
-	var progress: float = fposmod(time_alive, RESONANT_BEAT_INTERVAL * 4.0) / (RESONANT_BEAT_INTERVAL * 4.0)
-	var p: = Vector2(rect.position.x + rect.size.x * progress, rect.get_center().y)
-	var perfect_alpha: float = 1.0 if is_perfect else 0.42
-	if is_perfect:
-		draw_rect(rect.grow(8.0 + pulse * 5.0), Color(1.0, 0.7, 0.14, 0.16 + pulse * 0.12), false, 2.0)
-	draw_circle(p, 8.0 + pulse * 4.0, Color(1.0, 0.82, 0.22, perfect_alpha))
-	var prompt: = "ATIRE AGORA" if is_perfect else "ESPERE A BATIDA"
-	var prompt_color: = Color(1.0, 0.92, 0.36, 1.0) if is_perfect else Color(0.84, 0.9, 1.0, 0.72)
-	_draw_centered(prompt, rect.get_center() + Vector2(0, -22), 13 if is_perfect else 11, prompt_color)
-	_draw_centered("COMBO %d  x%.2f" % [resonant_perfect_streak, _resonant_combo_multiplier()], rect.get_center() + Vector2(0, 22), 10, Color(1.0, 0.9, 0.62, 0.86))
+	HudPresentation._draw_resonant_meter(self, viewport)
 
 
 func _draw_fps_counter(viewport: Vector2) -> void :
@@ -39629,65 +37619,11 @@ func _draw_qa_streaming_status(viewport: Vector2) -> void :
 
 
 func _draw_nickname_setup(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, textures.get("choice_bg", null), Color(0.0, 1.0, 0.82))
-	_sync_nickname_input_rect(viewport)
-	var panel: = _nickname_panel_rect(viewport)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.82)
-	_draw_glitch_title("IDENTIDADE", Vector2(panel.get_center().x, panel.position.y + 58.0), 34, Color(0.0, 1.0, 0.82))
-	_draw_centered("Escolha o nick usado no placar das runs.", Vector2(panel.get_center().x, panel.position.y + 104.0), 16, Color(0.82, 0.95, 1.0, 0.92))
-	var input_rect = Rect2(panel.position.x + 44.0, panel.position.y + panel.size.y * 0.44, panel.size.x - 88.0, 48.0)
-	draw_rect(input_rect.grow(5.0), Color(0.0, 0.0, 0.0, 0.64), true)
-	draw_rect(input_rect.grow(5.0), Color(0.0, 1.0, 0.82, 0.74), false, 2)
-	var confirm = Rect2(panel.get_center().x - 126.0, panel.end.y - 76.0, 252.0, 52.0)
-	buttons["nick_confirm"] = confirm
-	_draw_big_button(confirm, "CONFIRMAR", Color(0.02, 0.14, 0.13, 0.92), Color(0.0, 1.0, 0.82))
-	if nickname_error != "":
-		_draw_centered(nickname_error, Vector2(panel.get_center().x, confirm.position.y - 18.0), 13, Color(1.0, 0.28, 0.28))
-	else:
-		_draw_centered("Pode trocar depois limpando o perfil salvo.", Vector2(panel.get_center().x, confirm.position.y - 18.0), 12, Color(0.68, 0.8, 0.86, 0.78))
+	MenusPresentation._draw_nickname_setup(self, viewport)
 
 
 func _draw_menu(viewport: Vector2) -> void :
-	var msec = Time.get_ticks_msec()
-	var cycle_pos = msec % 6950
-	var current_bg: Texture2D = null
-	if cycle_pos < 5000:
-		current_bg = textures["menu_panels"][0]
-	else:
-		var trans_pos = int((cycle_pos - 5000) / 150)
-		var sequence = [0, 3, 1, 3, 4, 2, 1, 2, 3, 4, 2, 1, 4]
-		var idx = clamp(trans_pos, 0, sequence.size() - 1)
-		current_bg = textures["menu_panels"][sequence[idx]]
-
-	var accent := Color(0.36, 0.88, 0.87)
-	_draw_texture_cover(current_bg, Rect2(Vector2.ZERO, viewport))
-	_draw_menu_scrim(viewport, false)
-	menu_buttons = _menu_rects(viewport)
-	menu_selected = clampi(menu_selected, 0, max(0, _menu_option_count() - 1))
-	var x: float = viewport.x * 0.06
-	var title_size := int(clampf(viewport.y * 0.085, 38.0, 68.0))
-	var title_y: float = viewport.y * 0.115
-	_draw_ui_text("D37  /  FRATURA TEMPORAL", Vector2(x, title_y - 28.0), 11, accent)
-	var title_width: float = menu_title_font.get_string_size("TEMPORAL", HORIZONTAL_ALIGNMENT_LEFT, -1, title_size).x
-	_draw_centered_with_font(menu_title_font, "RUPTURA", Vector2(x + title_width * 0.5, title_y + title_size * 0.3), title_size, Color(0.95, 0.94, 0.88))
-	_draw_centered_with_font(menu_title_font, "TEMPORAL", Vector2(x + title_width * 0.5, title_y + title_size * 1.4), title_size, Color(0.95, 0.94, 0.88))
-	_draw_ui_text("O tempo se rompe. Sua jornada continua.", Vector2(x, title_y + title_size * 2.18), 13, Color(0.67, 0.76, 0.78))
-	if menu_buttons.has("continue"):
-		_draw_hub_button(menu_buttons["continue"], "Continuar jornada", _interrupted_run_detail_text(), accent, menu_selected == _menu_index_for("continue"), true, "continue")
-	_draw_hub_button(menu_buttons["start"], "Nova jornada" if interrupted_run_available else "Iniciar jornada", "", accent, menu_selected == _menu_index_for("start"), not interrupted_run_available, "start")
-	if menu_buttons.has("multiplayer"):
-		_draw_hub_button(menu_buttons["multiplayer"], "Modo online", "", accent, menu_selected == _menu_index_for("multiplayer"), false, "multiplayer")
-	_draw_hub_button(menu_buttons["catalog"], "Catálogo temporal", "", accent, menu_selected == _menu_index_for("catalog"), false, "catalog")
-	_draw_hub_button(menu_buttons["settings"], "Configurações", "", accent, menu_selected == _menu_index_for("settings"), false, "settings")
-	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and menu_buttons.has("stream"):
-		_draw_hub_button(menu_buttons["stream"], "Encerrar ao vivo" if _qa_streaming_is_active() else "Transmitir partida", _qa_stream_menu_subtitle(), accent, menu_selected == _menu_index_for("stream"), false, "stream")
-	_draw_hub_button(menu_buttons["exit"], "Sair do jogo", "", Color(0.88, 0.53, 0.44), menu_selected == _menu_index_for("exit"), false, "exit")
-	var footer_y: float = viewport.y - 22.0
-	draw_line(Vector2(x, footer_y - 20.0), Vector2(viewport.x - x, footer_y - 20.0), Color(0.7, 0.84, 0.83, 0.18), 1.0)
-	_draw_ui_text(player_nickname if player_nickname != "" else "RUPTURA TEMPORAL", Vector2(x, footer_y), 11, Color(0.67, 0.76, 0.78))
-	_draw_ui_text("v" + GAME_VERSION, Vector2(viewport.x - x - 65.0, footer_y), 11, Color(0.67, 0.76, 0.78))
-	if content_update_status == "updated":
-		_draw_centered("Conteudo atualizado. Feche e reabra o jogo para aplicar.", Vector2(viewport.x * 0.5, footer_y), 11, Color(0.4, 1.0, 0.8))
+	MenusPresentation._draw_menu(self, viewport)
 
 
 func _update_menu_presentation(delta: float) -> void:
@@ -39725,67 +37661,23 @@ func _menu_sentence_case(text: String) -> String:
 
 
 func _draw_ui_text(text: String, draw_pos: Vector2, size: int, color: Color, width: float = -1.0) -> void:
-	var fitted: int = size
-	if width > 0.0:
-		while fitted > 10 and menu_ui_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > width:
-			fitted -= 1
-	var shown: String = text
-	if width > 0.0 and menu_ui_font.get_string_size(shown, HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > width:
-		while shown.length() > 1 and menu_ui_font.get_string_size(shown + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, fitted).x > width:
-			shown = shown.left(shown.length() - 1)
-		shown += "…"
-	draw_string(menu_ui_font, draw_pos, shown, HORIZONTAL_ALIGNMENT_LEFT, width, fitted, color)
+	MenusPresentation._draw_ui_text(self, text, draw_pos, size, color, width)
 
 
 func _draw_ui_wrap(text: String, rect: Rect2, size: int, color: Color, lines: int = 3) -> void:
-	var words := text.split(" ")
-	var line := ""
-	var y: float = rect.position.y + size
-	var count: int = 0
-	for word in words:
-		var next: String = word if line.is_empty() else line + " " + word
-		if menu_ui_font.get_string_size(next, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and not line.is_empty():
-			_draw_ui_text(line, Vector2(rect.position.x, y), size, color, rect.size.x)
-			count += 1
-			y += size + 5.0
-			line = word
-			if count >= lines or y > rect.end.y:
-				return
-		else:
-			line = next
-	_draw_ui_text(line, Vector2(rect.position.x, y), size, color, rect.size.x)
+	MenusPresentation._draw_ui_wrap(self, text, rect, size, color, lines)
 
 
 func _draw_menu_scrim(viewport: Vector2, settings: bool) -> void:
-	var left := Color(0.009, 0.02, 0.026, 0.98 if settings else 0.94)
-	var right := Color(0.009, 0.02, 0.026, 0.94 if settings else 0.18)
-	var points := PackedVector2Array([Vector2.ZERO, Vector2(viewport.x, 0), viewport, Vector2(0, viewport.y)])
-	draw_polygon(points, PackedColorArray([left, right, right, left]))
-	draw_rect(Rect2(0, viewport.y - 56.0, viewport.x, 56.0), Color(0.009, 0.02, 0.026, 0.66))
+	MENU_PRESENTATION.draw_menu_scrim(self, viewport, settings)
 
 
 func _draw_settings_shell(viewport: Vector2, title: String, detail: String) -> void:
-	_draw_texture_cover(textures["menu_panels"][0], Rect2(Vector2.ZERO, viewport))
-	_draw_menu_scrim(viewport, true)
-	var x: float = viewport.x * 0.06
-	var compact: bool = viewport.y < 600.0
-	_draw_ui_text("RUPTURA TEMPORAL  /  CONFIGURAÇÕES", Vector2(x, 23.0), 10, Color(0.4, 0.73, 0.74))
-	var offset: float = (1.0 - clampf(menu_page_age / 0.2, 0.0, 1.0)) * 6.0
-	_draw_ui_text(title, Vector2(x + offset, 52.0 if compact else 62.0), 27 if compact else 34, Color(0.95, 0.94, 0.89))
-	_draw_ui_text(detail, Vector2(x, 72.0 if compact else 84.0), 11 if compact else 12, Color(0.59, 0.7, 0.73), viewport.x * 0.85)
-	_draw_ui_text("Alterações salvas automaticamente", Vector2(x, viewport.y - 18.0), 11, Color(0.51, 0.65, 0.67))
+	MENU_PRESENTATION.draw_settings_shell(self, viewport, title, detail, textures["menu_panels"][0], menu_page_age)
 
 
 func _draw_settings_surface(rect: Rect2, selected: bool, accent: Color = Color(0.36, 0.88, 0.87)) -> void:
-	var fill := Color(0.028, 0.047, 0.055, 0.96)
-	if selected:
-		fill = fill.lerp(Color(0.09, 0.22, 0.23, 0.98), 0.65 * clampf(menu_selection_age / 0.14, 0.0, 1.0))
-	if selected and rect.has_point(get_global_mouse_position()) and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		fill = fill.lightened(0.08)
-	draw_rect(rect, fill)
-	draw_rect(rect, Color(0.31, 0.49, 0.51, 0.6) if selected else Color(0.25, 0.35, 0.37, 0.35), false, 1.0)
-	if selected:
-		draw_rect(Rect2(rect.position, Vector2(3.0, rect.size.y)), accent)
+	MENU_PRESENTATION.draw_settings_surface(self, rect, selected, accent, menu_selection_age)
 
 
 func _update_menu_pointer(pos: Vector2, viewport: Vector2) -> void:
@@ -39872,128 +37764,19 @@ func _format_download_size(bytes: int) -> String:
 
 
 func _draw_app_update_popup(viewport: Vector2) -> void :
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.76), true)
-	var panel: = _app_update_panel_rect(viewport)
-	var accent: = Color(0.0, 1.0, 0.82)
-	_draw_holo_panel(panel, accent, true, 0.94)
-	var version: = String(app_update_manifest.get("version", "NOVA"))
-	_draw_glitch_title("ATUALIZACAO DISPONIVEL", Vector2(panel.get_center().x, panel.position.y + 48.0), 27, accent)
-	_draw_centered("v%s  ->  v%s" % [GAME_VERSION, version], Vector2(panel.get_center().x, panel.position.y + 82.0), 17, Color(0.82, 0.96, 1.0))
-	var summary_rect: = Rect2(panel.position.x + 36.0, panel.position.y + 104.0, panel.size.x - 72.0, 62.0)
-	draw_rect(summary_rect, Color(0.0, 0.06, 0.08, 0.74), true)
-	draw_rect(summary_rect, Color(accent.r, accent.g, accent.b, 0.38), false, 1.5)
-	var summary: = "%s seguro | %s | instalador antigo sera limpo automaticamente" % [_app_update_file_label(), _format_download_size(int(app_update_manifest.get("size", 0)))]
-	_draw_wrapped_clamped(summary, summary_rect.grow(-14.0), 14, Color(0.86, 0.96, 1.0, 0.92), 2)
-	var content_rect: = Rect2(panel.position.x + 42.0, panel.position.y + 184.0, panel.size.x - 84.0, panel.size.y - 282.0)
-	var status_text: = ""
-	match app_update_status:
-		"available":
-			var notes: Array = app_update_manifest.get("notes", [])
-			status_text = "Esta versao substitui a anterior e preserva seus saves locais."
-			if not notes.is_empty():
-				status_text += "\n\nPrincipais mudancas:"
-				var limit: int = mini(7, notes.size())
-				for i in range(limit):
-					status_text += "\n- " + String(notes[i])
-		"downloading":
-			var downloaded: = app_update_download_request.get_downloaded_bytes() if app_update_download_request != null else 0
-			var total: = int(app_update_manifest.get("size", 0))
-			var progress: = clampf(float(downloaded) / float(maxi(1, total)), 0.0, 1.0)
-			status_text = "Baixando %s direto do servidor.\nMantenha o jogo aberto ate a verificacao terminar.\n%s de %s" % [_app_update_file_label(), _format_download_size(downloaded), _format_download_size(total)]
-			var bar: = Rect2(content_rect.position.x, content_rect.position.y + 96.0, content_rect.size.x, 20.0)
-			draw_rect(bar, Color(0.01, 0.04, 0.07, 0.92), true)
-			draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), Color(0.0, 0.88, 0.72, 0.92), true)
-			draw_rect(bar, Color(0.42, 1.0, 0.9, 0.7), false, 1.5)
-			_draw_centered("%d%%" % int(round(progress * 100.0)), bar.get_center() + Vector2(0, 5), 12, Color.WHITE)
-		"verifying":
-			status_text = "Download concluido.\nVerificando tamanho e assinatura SHA-256 antes de abrir o instalador."
-		"permission_required":
-			status_text = "O Android pediu permissao para instalar atualizacoes deste app.\nAutorize o Ruptura Temporal, volte ao jogo e toque em CONTINUAR INSTALACAO."
-		"installer_open":
-			status_text = "APK validado. O instalador do Android foi aberto para concluir a atualizacao." if OS.get_name() == "Android" else "EXE validado. A nova versao foi aberta; feche esta janela antiga quando terminar."
-		"browser_fallback":
-			status_text = "Este aparelho abriu o download seguro no navegador porque o instalador integrado nao estava disponivel."
-		"validated":
-			status_text = "%s baixado e validado com sucesso." % _app_update_file_label()
-		"error":
-			status_text = app_update_error
-		_:
-			status_text = "Preparando atualizacao..."
-	_draw_wrapped_clamped(status_text, content_rect, 15, Color(0.86, 0.94, 0.98, 0.94), 10)
-	var rects: = _app_update_button_rects(viewport)
-	buttons.erase("app_update_primary")
-	buttons.erase("app_update_later")
-	if app_update_status == "verifying":
-		_draw_centered("VERIFICANDO...", Vector2(panel.get_center().x, panel.end.y - 44.0), 16, accent)
-		return
-	if rects.is_empty():
-		return
-	buttons["app_update_primary"] = rects[0]
-	var primary_label: = "ATUALIZAR AGORA"
-	match app_update_status:
-		"downloading": primary_label = "CANCELAR DOWNLOAD"
-		"permission_required": primary_label = "CONTINUAR INSTALACAO"
-		"error": primary_label = "TENTAR NOVAMENTE"
-		"installer_open", "browser_fallback", "validated": primary_label = "FECHAR"
-	_draw_big_button(rects[0], primary_label, Color(0.02, 0.16, 0.14, 0.96), accent)
-	if app_update_selected == 0:
-		draw_rect(rects[0].grow(5.0), Color(0.72, 1.0, 0.94, 0.92), false, 2.5)
-	if rects.size() > 1:
-		buttons["app_update_later"] = rects[1]
-		_draw_big_button(rects[1], "DEPOIS", Color(0.12, 0.06, 0.1, 0.96), Color(1.0, 0.32, 0.56))
-		if app_update_selected == 1:
-			draw_rect(rects[1].grow(5.0), Color(1.0, 0.76, 0.86, 0.92), false, 2.5)
+	MenusPresentation._draw_app_update_popup(self, viewport)
 
 
 func _draw_menu_button(rect: Rect2, label: String, is_selected: bool) -> void :
-	if is_selected:
-		var bg_color = Color(0.0, 0.7, 0.78, 0.25)
-		draw_rect(rect, bg_color, true)
-		var border_color = Color(0.0, 1.0, 0.9, 1.0)
-		draw_rect(rect, border_color, false, 2)
-		var bar_rect = Rect2(rect.position, Vector2(6.0, rect.size.y))
-		draw_rect(bar_rect, Color(0.0, 1.0, 0.9), true)
-		_draw_centered(label, rect.get_center() + Vector2(0, 6), 16, Color.WHITE)
-	else:
-		var bg_color = Color(0.06, 0.06, 0.1, 0.62)
-		draw_rect(rect, bg_color, true)
-		var border_color = Color(0.39, 0.39, 0.58, 0.18)
-		draw_rect(rect, border_color, false, 1)
-		_draw_centered(label, rect.get_center() + Vector2(0, 6), 16, Color(0.78, 0.78, 0.86))
+	MenusPresentation._draw_menu_button(self, rect, label, is_selected)
 
 
 func _draw_hub_button(rect: Rect2, label: String, detail: String, accent: Color, is_selected: bool, primary: = false, button_type: = "") -> void:
-	var weight: float = _menu_focus_weight(button_type, is_selected)
-	var entrance: float = 1.0 - pow(1.0 - clampf(menu_page_age / 0.28, 0.0, 1.0), 3.0)
-	var local_rect := Rect2(rect.position + Vector2((1.0 - entrance) * -12.0, 0.0), rect.size)
-	var pressed: bool = rect.has_point(get_global_mouse_position()) and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-	var fill := Color(0.024, 0.045, 0.052, 0.78).lerp(Color(0.1, 0.22, 0.23, 0.96), weight)
-	if primary:
-		fill = Color(0.19, 0.48, 0.48, 0.96).lerp(Color(0.31, 0.68, 0.66, 0.98), weight)
-	if pressed:
-		fill = fill.darkened(0.2)
-	draw_rect(local_rect, fill)
-	draw_line(local_rect.position, Vector2(local_rect.end.x, local_rect.position.y), Color(accent, 0.18 + weight * 0.5), 1.0)
-	draw_rect(Rect2(local_rect.position, Vector2(3.0, local_rect.size.y)), Color(accent, 0.25 + weight * 0.75))
-	var size := 19 if primary else 16
-	var text_color := Color(0.97, 0.97, 0.91) if not primary else Color(0.025, 0.07, 0.075)
-	var baseline: float = local_rect.get_center().y + 6.0 if detail.is_empty() else local_rect.get_center().y - 2.0
-	_draw_ui_text(label, Vector2(local_rect.position.x + 22.0 + weight * 5.0, baseline), size, text_color, local_rect.size.x - 68.0)
-	if not detail.is_empty():
-		_draw_ui_text(detail, Vector2(local_rect.position.x + 27.0, baseline + 16.0), 10, text_color, local_rect.size.x - 65.0)
-	var arrow := Vector2(local_rect.end.x - 24.0 + weight * 3.0, local_rect.get_center().y)
-	draw_polyline(PackedVector2Array([arrow + Vector2(-4, -5), arrow + Vector2(1, 0), arrow + Vector2(-4, 5)]), Color(text_color, 0.45 + weight * 0.55), 1.6, true)
+	MenusPresentation._draw_hub_button(self, rect, label, detail, accent, is_selected, primary, button_type)
 
 
 func _draw_hub_manifest_card(rect: Rect2) -> void :
-	var item: Dictionary = MANIFESTATIONS[selected_manifestation]
-	var color: Color = item["color"]
-	_draw_holo_panel(rect, color, false, 0.5)
-	var icon_rect = Rect2(rect.position + Vector2(12.0, 10.0), Vector2(rect.size.y - 20.0, rect.size.y - 20.0))
-	_draw_texture_contain(textures.get("manifestation_" + item["key"]), icon_rect, Color.WHITE)
-	var text_x = icon_rect.end.x + 14.0
-	draw_string(font, Vector2(text_x, rect.position.y + rect.size.y * 0.36), String(item["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, color)
-	_draw_wrapped(String(item["desc"]), Rect2(Vector2(text_x, rect.position.y + rect.size.y * 0.48), Vector2(rect.end.x - text_x - 12.0, rect.size.y * 0.44)), 12, Color(0.8, 0.9, 0.92, 0.86))
+	MenusPresentation._draw_hub_manifest_card(self, rect)
 
 
 func _draw_hub_chip(rect: Rect2, label: String, accent: Color, strong: = false) -> void :
@@ -40004,16 +37787,7 @@ func _draw_hub_chip(rect: Rect2, label: String, accent: Color, strong: = false) 
 
 
 func _draw_settings(viewport: Vector2) -> void :
-	_draw_settings_shell(viewport, "Configurações", "Seu jeito de atravessar a ruptura.")
-	settings_buttons = _settings_rects(viewport)
-	settings_selected = clampi(settings_selected, 0, max(0, _settings_option_count() - 1))
-	var keys: Array = _settings_option_keys()
-	for key in keys:
-		var key_s: String = String(key)
-		if not settings_buttons.has(key_s):
-			continue
-		_draw_settings_card(settings_buttons[key_s], _settings_option_title(key_s), _settings_option_summary(key_s), _settings_option_color(key_s), settings_selected == _settings_index_for(key_s))
-	_draw_settings_info_panel(viewport, _settings_selected_key())
+	MenusPresentation._draw_settings(self, viewport)
 
 
 func _format_binding_name(val) -> String:
@@ -40043,26 +37817,11 @@ func _compact_binding_name(action: String) -> String:
 
 
 func _draw_gamepad_settings(viewport: Vector2) -> void :
-	_draw_settings_shell(viewport, "Controle", "Selecione uma ação para mapear o controle conectado.")
-	settings_buttons = _gamepad_settings_rects(viewport)
-	var actions = _gamepad_action_order()
-	for i in range(actions.size()):
-		var action = actions[i]
-		var value = "Pressione..." if gamepad_mapping_action == action else _format_binding_name(gamepad_bindings.get(action, -1))
-		_draw_gameplay_preference(settings_buttons[action], _gamepad_action_title(action), _gamepad_action_subtitle(action), value, _gamepad_action_color(action), settings_selected == i)
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), settings_selected == actions.size())
+	MenusPresentation._draw_gamepad_settings(self, viewport)
 
 
 func _draw_keyboard_settings(viewport: Vector2) -> void :
-	_draw_settings_shell(viewport, "Teclado e mouse", "Selecione uma ação para remapear. Backspace / Delete remove a associação.")
-	settings_buttons = _keyboard_settings_rects(viewport)
-	var actions = _keyboard_action_order()
-	for i in range(actions.size()):
-		var action = actions[i]
-		var value = "PRESSIONE TECLA/MOUSE..." if keyboard_mapping_action == action else _format_key_binding_name(keyboard_bindings.get(action, INPUT_BIND_NONE))
-		_draw_gameplay_preference(settings_buttons[action], _keyboard_action_title(action), _keyboard_action_subtitle(action), value, _keyboard_action_color(action), settings_selected == i)
-	_draw_settings_card(settings_buttons["reset"], "RESTAURAR PADRAO", "restaurar os atalhos originais", Color(0.58, 0.82, 1.0), settings_selected == actions.size())
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar", Color(1.0, 0.26, 0.36), settings_selected == actions.size() + 1)
+	MenusPresentation._draw_keyboard_settings(self, viewport)
 
 
 func _gamepad_settings_rects(viewport: Vector2) -> Dictionary:
@@ -40156,135 +37915,19 @@ func _reset_keyboard_bindings() -> void :
 	keyboard_mapping_action = ""
 
 func _draw_gameplay_settings(viewport: Vector2) -> void :
-	_draw_settings_shell(viewport, "Jogabilidade", "Ajuste os comandos, a mira e a leitura do combate.")
-	settings_buttons = _gameplay_preferences_rects(viewport)
-	var analog_accent = Color(0.0, 1.0, 0.82) if analog_fixed else Color(1.0, 0.74, 0.22)
-	_draw_gameplay_preference(settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if analog_fixed else "DINAMICO", analog_accent, settings_selected == _gameplay_preference_index("analog"))
-	var shop_accent = Color(0.0, 1.0, 0.82) if shop_auto_enabled else Color(1.0, 0.68, 0.24)
-	_draw_gameplay_preference(settings_buttons["shop_mode"], "ABERTURA DA LOJA", "Automatica usa contagem; manual usa botao no HUD.", "AUTOMATICA" if shop_auto_enabled else "MANUAL", shop_accent, settings_selected == _gameplay_preference_index("shop_mode"))
-	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["shop_mode"]), shop_auto_enabled, shop_accent)
-	var interval_panel: Rect2 = settings_buttons["shop_interval"]
-	var interval_value = "%d MIN" % int(shop_auto_interval / 60.0) if shop_auto_enabled else "DESATIVADO"
-	_draw_gameplay_preference(interval_panel, "INTERVALO DA LOJA", "Tempo entre aberturas automaticas.", interval_value, Color(0.44, 0.82, 1.0) if shop_auto_enabled else Color(0.48, 0.52, 0.58), settings_selected == _gameplay_preference_index("shop_interval"))
-	if shop_auto_enabled:
-		_draw_small_rect_button(_shop_interval_minus_rect(interval_panel), "-", Color(0.04, 0.1, 0.14), Color(0.44, 0.82, 1.0))
-		_draw_small_rect_button(_shop_interval_plus_rect(interval_panel), "+", Color(0.04, 0.1, 0.14), Color(0.44, 0.82, 1.0))
-	_draw_gameplay_preference(settings_buttons["target_priority"], "PRIORIDADE DO DISPARO", "Define o alvo escolhido pela mira automatica.", _target_priority_label(), Color(1.0, 0.48, 0.74), settings_selected == _gameplay_preference_index("target_priority"))
-	if _uses_desktop_ui() and settings_buttons.has("desktop_aim"):
-		_draw_gameplay_preference(settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", _desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), settings_selected == _gameplay_preference_index("desktop_aim"))
-	if _uses_desktop_ui() and settings_buttons.has("desktop_teleport"):
-		_draw_gameplay_preference(settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", "Cursor, alvo automatico ou confirmacao visual.", _desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), settings_selected == _gameplay_preference_index("desktop_teleport"))
-	if _uses_desktop_ui() and settings_buttons.has("desktop_attack_aim"):
-		_draw_gameplay_preference(settings_buttons["desktop_attack_aim"], "MIRA DO ATAQUE BASICO", "Alvo automatico ou direcao do cursor.", _desktop_attack_aim_mode_label(), Color(0.48, 0.88, 0.64), settings_selected == _gameplay_preference_index("desktop_attack_aim"))
-	if _uses_desktop_ui() and settings_buttons.has("desktop_hud_scale"):
-		var desktop_hud_panel: Rect2 = settings_buttons["desktop_hud_scale"]
-		_draw_gameplay_preference(desktop_hud_panel, "TAMANHO DO HUD", "Proporcao dos icones fixos no desktop.", _desktop_hud_scale_label(), Color(0.72, 1.0, 0.48), settings_selected == _gameplay_preference_index("desktop_hud_scale"))
-		_draw_small_rect_button(_desktop_hud_scale_minus_rect(desktop_hud_panel), "-", Color(0.06, 0.14, 0.08), Color(0.72, 1.0, 0.48))
-		_draw_small_rect_button(_desktop_hud_scale_plus_rect(desktop_hud_panel), "+", Color(0.06, 0.14, 0.08), Color(0.72, 1.0, 0.48))
-	var damage_panel = settings_buttons["damage_text"]
-	_draw_gameplay_preference(damage_panel, "TEXTO DE DANO", "Tamanho dos numeros exibidos nos inimigos.", "%d%%" % int(round(damage_text_scale * 100.0)), Color(1.0, 0.5, 0.28), settings_selected == _gameplay_preference_index("damage_text"))
-	_draw_small_rect_button(_damage_text_minus_rect(damage_panel), "-", Color(0.2, 0.1, 0.08), Color(1.0, 0.5, 0.28))
-	_draw_small_rect_button(_damage_text_plus_rect(damage_panel), "+", Color(0.2, 0.1, 0.08), Color(1.0, 0.5, 0.28))
-	var interface_panel = settings_buttons["interface_text"]
-	_draw_gameplay_preference(interface_panel, "TEXTOS DA INTERFACE", "Escala de textos da loja e manifestações.", "%d%%" % int(round(interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), settings_selected == _gameplay_preference_index("interface_text"))
-	_draw_small_rect_button(_interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
-	_draw_small_rect_button(_interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
-	var fps_accent = Color(0.0, 1.0, 0.82) if show_fps_counter else Color(0.48, 0.52, 0.58)
-	_draw_gameplay_preference(settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if show_fps_counter else "OFF", fps_accent, settings_selected == _gameplay_preference_index("fps"))
-	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["fps"]), show_fps_counter, fps_accent)
-	var tutorial_accent = Color(0.0, 1.0, 0.82) if run_tutorial_enabled else Color(0.48, 0.52, 0.58)
-	_draw_gameplay_preference(settings_buttons["tutorial"], "TUTORIAL INICIAL", "Pergunta ao iniciar a proxima partida.", "ON" if run_tutorial_enabled else "OFF", tutorial_accent, settings_selected == _gameplay_preference_index("tutorial"))
-	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["tutorial"]), run_tutorial_enabled, tutorial_accent)
-	var cheat_value = "QA ATIVO" if qa_data_unlocked else ("ONLINE OK" if online_mode_unlocked else ("RETORNANTE OK" if retornante_unlocked else (gameplay_cheat_text if gameplay_cheat_text != "" else "TOQUE E DIGITE")))
-	var cheat_accent = Color(0.74, 1.0, 0.36) if qa_data_unlocked else (Color(0.0, 1.0, 0.82) if online_mode_unlocked else (Color(0.86, 0.48, 1.0) if retornante_unlocked else Color(0.64, 0.44, 1.0)))
-	if gameplay_cheat_focused:
-		cheat_value = "DIGITANDO..."
-	_draw_gameplay_preference(settings_buttons["retornante_cheat"], "CHEAT SECRETO", "Campo reservado para codigos de QA e dev.", cheat_value, cheat_accent, settings_selected == _gameplay_preference_index("retornante_cheat"))
-	var haptics_accent = Color(0.0, 1.0, 0.82) if haptics_enabled else Color(0.48, 0.52, 0.58)
-	_draw_gameplay_preference(settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if haptics_enabled else "OFF", haptics_accent, settings_selected == _gameplay_preference_index("haptics"))
-	_draw_toggle_switch(_shop_mode_toggle_rect(settings_buttons["haptics"]), haptics_enabled, haptics_accent)
-	if ui_platform_override_unlocked and settings_buttons.has("ui_platform_profile"):
-		_draw_gameplay_preference(settings_buttons["ui_platform_profile"], "PERFIL DE INTERFACE", "Auto detecta %s; cheat libera Android/Desktop." % _runtime_platform_name(), _ui_platform_profile_label(), Color(1.0, 0.78, 0.22), settings_selected == _gameplay_preference_index("ui_platform_profile"))
-	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked and settings_buttons.has("qa_stream_quality"):
-		var quality_size: = _qa_stream_target_size()
-		var quality_label: = "%s (%dx%d)" % [qa_streaming_quality_mode.to_upper(), quality_size.x, quality_size.y]
-		_draw_gameplay_preference(settings_buttons["qa_stream_quality"], "QUALIDADE AO VIVO", "Usada pelo botao de transmissao do menu.", quality_label, Color(0.38, 0.88, 1.0), settings_selected == _gameplay_preference_index("qa_stream_quality"))
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == _gameplay_preference_index("back"))
-	if gameplay_cheat_focused:
-		_draw_cheat_popup(viewport)
+	MenusPresentation._draw_gameplay_settings(self, viewport)
 
 
 func _draw_cheat_popup(viewport: Vector2) -> void :
-	_sync_cheat_input_rect(viewport)
-	var accent: = Color(0.64, 0.44, 1.0)
-	var panel: = _cheat_popup_rect(viewport)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.54), true)
-	_draw_holo_panel(panel, accent, true, 0.84)
-	_draw_glitch_title("CHEAT", Vector2(panel.get_center().x, panel.position.y + 48.0), 30, accent)
-	_draw_centered("Digite o codigo secreto.", Vector2(panel.get_center().x, panel.position.y + 82.0), 14, Color(0.82, 0.92, 1.0, 0.88))
-	var input_rect: = _cheat_input_rect(viewport)
-	draw_rect(input_rect.grow(5.0), Color(0.0, 0.0, 0.0, 0.7), true)
-	draw_rect(input_rect.grow(5.0), Color(accent.r, accent.g, accent.b, 0.82), false, 2)
-	settings_buttons["cheat_ok"] = Rect2(panel.position.x + panel.size.x * 0.5 - 168.0, panel.end.y - 62.0, 152.0, 44.0)
-	settings_buttons["cheat_cancel"] = Rect2(panel.position.x + panel.size.x * 0.5 + 16.0, panel.end.y - 62.0, 152.0, 44.0)
-	_draw_big_button(settings_buttons["cheat_ok"], "OK", Color(0.06, 0.12, 0.18, 0.94), accent)
-	_draw_big_button(settings_buttons["cheat_cancel"], "CANCELAR", Color(0.13, 0.04, 0.06, 0.94), Color(1.0, 0.26, 0.36))
+	MenusPresentation._draw_cheat_popup(self, viewport)
 
 
 func _draw_gameplay_preference(rect: Rect2, title: String, subtitle: String, value: String, accent: Color, selected: bool = false) -> void :
-	_draw_settings_surface(rect, selected)
-	var value_rect: Rect2 = _gameplay_value_rect(rect)
-	if mode == "settings_graphics":
-		value_rect = Rect2(rect.end.x - 136.0, rect.get_center().y - 18.0, 116.0, 36.0)
-	var text_width: float = maxf(100.0, value_rect.position.x - rect.position.x - 30.0)
-	var stepper: bool = title in ["INTERVALO DA LOJA", "TEXTO DE DANO", "TEXTOS DA INTERFACE", "TAMANHO DO HUD"]
-	if stepper:
-		text_width -= 48.0
-	var title_size: int = 15 if rect.size.y >= 64.0 else 13
-	_draw_ui_text(_menu_sentence_case(title), rect.position + Vector2(16, rect.size.y * 0.39), title_size, Color(0.93, 0.94, 0.9), text_width)
-	_draw_ui_wrap(subtitle, Rect2(rect.position + Vector2(16, rect.size.y * 0.51), Vector2(text_width, rect.size.y * 0.45)), 11 if rect.size.y >= 64.0 else 10, Color(0.61, 0.72, 0.74), 2 if rect.size.y >= 56.0 else 1)
-	draw_rect(value_rect, Color(accent, 0.09))
-	draw_line(Vector2(value_rect.position.x, value_rect.end.y), value_rect.end, Color(accent, 0.52), 1.0)
-	var shown: String = "Ligado" if value == "ON" else ("Desligado" if value == "OFF" else value)
-	var size: int = 13
-	while size > 10 and menu_ui_font.get_string_size(shown, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > value_rect.size.x - 12.0:
-		size -= 1
-	_draw_centered_with_font(menu_ui_font, shown, value_rect.get_center(), size, Color(0.87, 0.94, 0.92))
+	MenusPresentation._draw_gameplay_preference(self, rect, title, subtitle, value, accent, selected)
 
 
 func _draw_audio_settings(viewport: Vector2) -> void :
-	_draw_settings_shell(viewport, "Som", "Equilibre a trilha, os impactos e os sons de combate.")
-	settings_buttons = _audio_settings_rects(viewport)
-	var panel: Rect2 = settings_buttons["panel"]
-	_draw_settings_surface(panel, false)
-	_draw_ui_text("VOLUME POR CANAL", panel.position + Vector2(24.0, 28.0), 11, Color(0.36, 0.78, 0.78))
-	_draw_ui_text("Arraste para ajustar · use − / + para passos de 10%", panel.position + Vector2(24.0, 47.0), 11, Color(0.59, 0.7, 0.73))
-	var titles := ["Geral", "Música", "Efeitos", "Disparos"]
-	var details := ["Todo o áudio", "Trilha sonora", "Impactos e avisos", "Sons de ataque"]
-	for i in range(4):
-		var row: Rect2 = _audio_slider_row_rect(panel, i)
-		var bar: Rect2 = _audio_slider_rect(panel, i)
-		var volume: float = _audio_volume_index(i)
-		var active: bool = settings_selected == i or audio_slider_drag_index == i
-		var accent := Color(0.36, 0.88, 0.87)
-		_draw_settings_surface(row, active)
-		_draw_ui_text(titles[i], Vector2(row.position.x + 14.0, row.get_center().y - 2.0), 16, Color(0.93, 0.94, 0.9))
-		_draw_ui_text(details[i], Vector2(row.position.x + 14.0, row.get_center().y + 15.0), 10, Color(0.57, 0.69, 0.71))
-		draw_rect(bar, Color(0.17, 0.26, 0.28))
-		for tick in range(1, 10):
-			var tx: float = bar.position.x + bar.size.x * float(tick) / 10.0
-			draw_line(Vector2(tx, bar.end.y + 5.0), Vector2(tx, bar.end.y + 8.0), Color(0.3, 0.43, 0.44), 1.0)
-		draw_rect(Rect2(bar.position, Vector2(bar.size.x * volume, bar.size.y)), Color(accent, 0.9 if active else 0.6))
-		var knob := Vector2(bar.position.x + bar.size.x * volume, bar.get_center().y)
-		if active:
-			draw_circle(knob, 13.0, Color(accent, 0.14))
-		draw_circle(knob, 7.0 if active else 5.0, Color(0.89, 0.97, 0.94))
-		for step in [-1, 1]:
-			var button: Rect2 = _audio_minus_rect(panel, i) if step == -1 else _audio_plus_rect(panel, i)
-			_draw_settings_surface(button, button.has_point(get_global_mouse_position()))
-			_draw_centered_with_font(menu_ui_font, "−" if step == -1 else "+", button.get_center(), 20, Color(0.73, 0.85, 0.84))
-		_draw_centered_with_font(menu_ui_font, "%d%%" % roundi(volume * 100.0), Vector2(row.end.x - 32.0, row.get_center().y), 13, Color(0.9, 0.93, 0.88))
-	_draw_settings_card(settings_buttons["back"], "VOLTAR", "retornar às configurações", Color(0.36, 0.88, 0.87), settings_selected == 4)
+	MenusPresentation._draw_audio_settings(self, viewport)
 
 
 func _audio_settings_rects(viewport: Vector2) -> Dictionary:
@@ -40321,41 +37964,11 @@ func _audio_slider_hit_rect(panel: Rect2, index: int) -> Rect2:
 
 
 func _draw_data_settings(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.74, 1.0, 0.36))
-	_sync_webhook_input_rect(viewport)
-	var portrait = _is_portrait(viewport)
-	_draw_glitch_title("DADOS QA", Vector2(viewport.x * 0.5, 56 if not portrait else 48), 34 if not portrait else 30, Color(0.74, 1.0, 0.36))
-	var panel: = _data_settings_panel_rect(viewport)
-	_draw_holo_panel(panel, Color(0.74, 1.0, 0.36), true, 0.7)
-	draw_string(font, panel.position + Vector2(34, 44), "ENVIO DE DADOS DA PARTIDA", HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 68.0, 20, Color.WHITE)
-	draw_string(font, panel.position + Vector2(34, 72), "Cole aqui o webhook descartavel enviado pelo dev. O jogo envia o relatorio ao fim da run.", HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 68.0, 12, Color(0.78, 0.92, 0.84, 0.86))
-	var input_rect = Rect2(panel.position.x + 40.0, panel.position.y + panel.size.y * 0.38, panel.size.x - 80.0, 48.0)
-	draw_rect(input_rect.grow(5.0), Color(0.0, 0.0, 0.0, 0.64), true)
-	draw_rect(input_rect.grow(5.0), Color(0.74, 1.0, 0.36, 0.78), false, 2)
-	var active_text = "CONFIGURADO" if run_report_webhook_url != "" else "NAO CONFIGURADO"
-	var status_color = Color(0.74, 1.0, 0.36) if run_report_webhook_url != "" else Color(1.0, 0.34, 0.32)
-	_draw_centered(active_text, Vector2(panel.get_center().x, input_rect.position.y - 18.0), 13, status_color)
-	if webhook_error != "":
-		_draw_centered(webhook_error, Vector2(panel.get_center().x, input_rect.end.y + 28.0), 12, Color(0.86, 0.96, 0.88, 0.9))
-	settings_buttons["data_save"] = Rect2(panel.position.x + 40.0, panel.end.y - 78.0, 170.0, 52.0)
-	settings_buttons["data_clear"] = Rect2(panel.position.x + 228.0, panel.end.y - 78.0, 170.0, 52.0)
-	settings_buttons["data_back"] = Rect2(panel.end.x - 210.0, panel.end.y - 78.0, 170.0, 52.0)
-	_draw_big_button(settings_buttons["data_save"], "SALVAR", Color(0.05, 0.15, 0.06, 0.92), Color(0.74, 1.0, 0.36), settings_selected == 0)
-	_draw_big_button(settings_buttons["data_clear"], "LIMPAR", Color(0.15, 0.1, 0.04, 0.92), Color(1.0, 0.68, 0.24), settings_selected == 1)
-	_draw_big_button(settings_buttons["data_back"], "VOLTAR", Color(0.13, 0.04, 0.06, 0.92), Color(1.0, 0.26, 0.36), settings_selected == 2)
+	MenusPresentation._draw_data_settings(self, viewport)
 
 
 func _draw_settings_card(rect: Rect2, title: String, subtitle: String, _accent: Color, selected: bool) -> void:
-	_draw_settings_surface(rect, selected)
-	var is_back: bool = title == "VOLTAR"
-	var center := Vector2(rect.position.x + 23.0, rect.get_center().y)
-	if is_back:
-		draw_polyline(PackedVector2Array([center + Vector2(4, -5), center + Vector2(-2, 0), center + Vector2(4, 5)]), Color(0.53, 0.77, 0.77), 1.6, true)
-	else:
-		draw_rect(Rect2(center - Vector2(3, 3), Vector2(6, 6)), Color(0.36, 0.88, 0.87) if selected else Color(0.33, 0.47, 0.49), selected)
-	var x: float = rect.position.x + 46.0
-	_draw_ui_text(_menu_sentence_case(title), Vector2(x, rect.get_center().y - 2.0), 16, Color(0.93, 0.94, 0.9), rect.size.x - 75.0)
-	_draw_ui_text(subtitle, Vector2(x, rect.get_center().y + 15.0), 11, Color(0.59, 0.7, 0.73), rect.size.x - 75.0)
+	MENU_PRESENTATION.draw_settings_card(self, rect, title, subtitle, selected, menu_selection_age)
 
 
 func _settings_rects(viewport: Vector2) -> Dictionary:
@@ -40456,20 +38069,7 @@ func _settings_option_color(key: String) -> Color:
 
 
 func _draw_settings_info_panel(viewport: Vector2, key: String) -> void:
-	if _is_portrait(viewport):
-		return
-	var bounds: Rect2 = _settings_list_bounds(viewport)
-	var panel := Rect2(viewport.x * 0.47, bounds.position.y, viewport.x * 0.47, bounds.size.y)
-	_draw_settings_surface(panel, false)
-	var x: float = panel.position.x + 28.0
-	var width: float = panel.size.x - 56.0
-	_draw_ui_text("PREFERÊNCIAS / %02d" % (_settings_index_for(key) + 1), Vector2(x, panel.position.y + 34.0), 11, Color(0.36, 0.78, 0.78))
-	_draw_ui_text(_menu_sentence_case(_settings_option_title(key)), Vector2(x, panel.position.y + 76.0), 27, Color(0.95, 0.94, 0.89), width)
-	_draw_ui_wrap(_settings_option_help(key), Rect2(x, panel.position.y + 98.0, width, 126.0), 15, Color(0.67, 0.77, 0.79), 5)
-	var note_y: float = maxf(panel.position.y + 228.0, panel.end.y - 106.0)
-	draw_line(Vector2(x, note_y - 16.0), Vector2(x + width, note_y - 16.0), Color(0.36, 0.65, 0.66, 0.3), 1.0)
-	_draw_ui_text("SOBRE ESTE AJUSTE", Vector2(x, note_y + 3.0), 10, Color(0.72, 0.63, 0.44))
-	_draw_ui_wrap(_settings_impact_text(key), Rect2(x, note_y + 14.0, width, 56.0), 12, Color(0.63, 0.73, 0.75), 3)
+	MenusPresentation._draw_settings_info_panel(self, viewport, key)
 
 
 func _settings_impact_text(key: String) -> String:
@@ -40659,14 +38259,7 @@ func _readable_text_size(base_size: int) -> int:
 
 
 func _draw_menu_grid(viewport: Vector2, color: Color, spacing: float) -> void :
-	var x = 0.0
-	while x <= viewport.x:
-		draw_line(Vector2(x, 0), Vector2(x, viewport.y), color, 1)
-		x += spacing
-	var y = 0.0
-	while y <= viewport.y:
-		draw_line(Vector2(0, y), Vector2(viewport.x, y), color, 1)
-		y += spacing
+	MENU_PRESENTATION.draw_menu_grid(self, viewport, color, spacing)
 
 
 func _is_portrait(viewport: Vector2) -> bool:
@@ -40674,21 +38267,7 @@ func _is_portrait(viewport: Vector2) -> bool:
 
 
 func _draw_texture_cover(texture: Texture2D, rect: Rect2, modulate: = Color.WHITE) -> void :
-	if texture == null:
-		draw_rect(rect, Color(0.01, 0.014, 0.03), true)
-		return
-	var src = Rect2(Vector2.ZERO, texture.get_size())
-	var src_ratio = src.size.x / max(1.0, src.size.y)
-	var dst_ratio = rect.size.x / max(1.0, rect.size.y)
-	if src_ratio > dst_ratio:
-		var w = src.size.y * dst_ratio
-		src.position.x = (src.size.x - w) * 0.5
-		src.size.x = w
-	else:
-		var h = src.size.x / dst_ratio
-		src.position.y = (src.size.y - h) * 0.5
-		src.size.y = h
-	draw_texture_rect_region(texture, rect, src, modulate)
+	MenusPresentation._draw_texture_cover(self, texture, rect, modulate)
 
 
 func _draw_texture_contain(texture: Texture2D, rect: Rect2, modulate: = Color.WHITE) -> void :
@@ -40702,93 +38281,19 @@ func _draw_texture_contain(texture: Texture2D, rect: Rect2, modulate: = Color.WH
 
 
 func _draw_holo_background(viewport: Vector2, texture: Texture2D = null, accent: = Color(0.0, 1.0, 0.82)) -> void :
-	if texture:
-		_draw_texture_cover(texture, Rect2(Vector2.ZERO, viewport))
-	else:
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.006, 0.01, 0.026), true)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.58), true)
-	_draw_menu_grid(viewport, Color(accent.r, accent.g, accent.b, 0.13), 38.0)
-	for i in range(12):
-		var x1 = fmod(time_alive * (28.0 + i * 2.0) + i * 97.0, viewport.x + 220.0) - 110.0
-		var y1 = viewport.y * (0.1 + (i % 6) * 0.14)
-		draw_line(Vector2(x1, y1), Vector2(x1 + 92.0, y1 + 12.0), Color(accent.r, accent.g, accent.b, 0.15), 2)
-	for y in range(0, int(viewport.y), 5):
-		if y % 15 == 0:
-			draw_line(Vector2(0, y), Vector2(viewport.x, y), Color(1, 1, 1, 0.025), 1)
+	MenusPresentation._draw_holo_background(self, viewport, texture, accent)
 
 
 func _draw_glitch_title(text: String, pos: Vector2, size: int, accent: = Color(0.0, 1.0, 0.82)) -> void :
-	var msec: = Time.get_ticks_msec()
-	var sec: = float(msec) * 0.001
-	var cycle: = fposmod(sec, 20.0)
-	var is_glitching: = cycle < 1.0
-
-	var title_font: = menu_title_font if menu_title_font != null else font
-	var line_w: = title_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x * 0.58
-
-	if is_glitching:
-		var glitch_intensity: = sin(cycle * PI)
-		var jitter: = sin(float(msec) * 0.08) * (7.0 * glitch_intensity)
-		var offset_r: = Vector2(-5.0 * glitch_intensity + jitter, sin(sec * 45.0) * 3.0)
-		var offset_b: = Vector2(5.0 * glitch_intensity - jitter, - sin(sec * 40.0) * 3.0)
-
-		_draw_centered_with_font(title_font, text, pos + Vector2(5.0, 6.0), size, Color(0.06, 0.0, 0.1, 0.96))
-		_draw_centered_with_font(title_font, text, pos + offset_r, size, Color(1.0, 0.08, 0.32, 0.88))
-		_draw_centered_with_font(title_font, text, pos + offset_b, size, Color(0.0, 0.92, 1.0, 0.88))
-		_draw_centered_with_font(title_font, text, pos + Vector2(jitter * 0.6, 0), size, Color(1.0, 0.92, 0.2, 0.65))
-		_draw_centered_with_font(title_font, text, pos, size, Color(0.96, 0.98, 1.0))
-
-		var scan_y: = pos.y + (sin(sec * 60.0) * size * 0.35)
-		draw_line(pos + Vector2( - line_w * 1.1, scan_y - pos.y), pos + Vector2(line_w * 1.1, scan_y - pos.y), Color(1.0, 0.18, 0.45, 0.85), 2.5)
-	else:
-		_draw_centered_with_font(title_font, text, pos + Vector2(3.0, 4.0), size, Color(0.04, 0.0, 0.08, 0.8))
-		_draw_centered_with_font(title_font, text, pos + Vector2(1.0, 1.0), size, Color(accent.r, accent.g, accent.b, 0.35))
-		_draw_centered_with_font(title_font, text, pos, size, Color(0.96, 0.98, 1.0))
-
-	draw_line(pos + Vector2( - line_w, size * 0.45), pos + Vector2(line_w, size * 0.45), Color(accent.r, accent.g, accent.b, 0.74), 2)
+	MenusPresentation._draw_glitch_title(self, text, pos, size, accent)
 
 
 func _draw_holo_panel(rect: Rect2, border: = Color(0.0, 1.0, 0.82), selected: = false, fill_alpha: = 0.7) -> void :
-	var bg = Color(0.01, 0.025, 0.04, fill_alpha)
-	if selected:
-		bg = bg.lerp(border, 0.12)
-	draw_rect(rect, bg, true)
-	draw_rect(rect.grow(-5), Color(1, 1, 1, 0.035), false, 1)
-	draw_rect(rect, Color(border.r, border.g, border.b, 0.96 if selected else 0.54), false, 3 if selected else 2)
-	var left = rect.position + Vector2(0, rect.size.y * 0.2)
-	var right = rect.position + Vector2(rect.size.x, rect.size.y * 0.8)
-	draw_line(left, left + Vector2(0, rect.size.y * 0.58), Color(border.r, border.g, border.b, 0.5), 4)
-	draw_line(right, right - Vector2(0, rect.size.y * 0.58), Color(1.0, 0.08, 0.78, 0.28), 3)
-	for i in range(3):
-		var yy = rect.position.y + 12 + i * 9
-		draw_line(Vector2(rect.position.x + 14, yy), Vector2(rect.position.x + 54 + i * 18, yy), Color(border.r, border.g, border.b, 0.28), 1)
+	MenusPresentation._draw_holo_panel(self, rect, border, selected, fill_alpha)
 
 
 func _draw_section_flow(label: String, label_color: Color, text: String, text_color: Color, start_y: float, details_rect: Rect2, font_size: int) -> float:
-
-	draw_string(font, Vector2(details_rect.position.x + 20, start_y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size + 1, label_color)
-
-
-	var text_y = start_y + font_size + 5
-	var words = text.split(" ")
-	var line = ""
-	var max_w = details_rect.size.x - 40
-
-	for word in words:
-		var test = line + (" " if line != "" else "") + word
-		if font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > max_w and line != "":
-			draw_string(font, Vector2(details_rect.position.x + 20, text_y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
-			line = word
-			text_y += font_size + 4
-		else:
-			line = test
-
-	if line != "":
-		draw_string(font, Vector2(details_rect.position.x + 20, text_y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
-		text_y += font_size + 4
-
-
-	return text_y + 12
+	return MenusPresentation._draw_section_flow(self, label, label_color, text, text_color, start_y, details_rect, font_size)
 
 
 func _fit_text_size(text: String, max_width: float, start_size: int, min_size: int) -> int:
@@ -40799,43 +38304,11 @@ func _fit_text_size(text: String, max_width: float, start_size: int, min_size: i
 
 
 func _draw_minimal_info_row(rect: Rect2, label: String, text: String, accent: Color, selected: = false) -> void :
-	var fill = Color(accent.r, accent.g, accent.b, 0.1 if not selected else 0.16)
-	draw_rect(rect, fill, true)
-	draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.26 if not selected else 0.45), false, 1)
-	var label_w = min(122.0, rect.size.x * 0.27)
-	var label_rect = Rect2(rect.position + Vector2(10.0, 7.0), Vector2(label_w, rect.size.y - 14.0))
-	draw_rect(label_rect, Color(0.0, 0.0, 0.0, 0.2), true)
-	draw_line(label_rect.position + Vector2(0, label_rect.size.y), label_rect.end, Color(accent.r, accent.g, accent.b, 0.62), 2)
-	var label_size = _fit_text_size(label, label_rect.size.x - 12.0, mini(_readable_text_size(11), 13), 9)
-	_draw_centered(label, label_rect.get_center() + Vector2(0, 4), label_size, Color(accent.r, accent.g, accent.b, 0.96))
-	var text_rect = Rect2(rect.position.x + label_w + 24.0, rect.position.y + 8.0, rect.size.x - label_w - 36.0, rect.size.y - 16.0)
-	var body_size = mini(_readable_text_size(12), 15)
-	_draw_wrapped(text, text_rect, body_size, Color(0.88, 0.94, 0.97, 0.92))
+	MenusPresentation._draw_minimal_info_row(self, rect, label, text, accent, selected)
 
 
 func _draw_manifest_info_panel(rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color) -> void :
-	_draw_holo_panel(rect, accent, true, 0.94)
-	var pad = 18.0
-	var header_h = 76.0
-	var title_size = _fit_text_size(String(item["name"]).to_upper(), rect.size.x - pad * 2.0, mini(_readable_text_size(25), 27), 18)
-	draw_string(font, rect.position + Vector2(pad, 34.0), String(item["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - pad * 2.0, title_size, accent)
-	var caption = "ESTADO ESPECTRAL" if aura_view else "MANIFESTACAO ATIVA"
-	var caption_size = _fit_text_size(caption, rect.size.x - pad * 2.0, mini(_readable_text_size(11), 13), 9)
-	draw_string(font, rect.position + Vector2(pad, 58.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - pad * 2.0, caption_size, Color(0.62, 0.8, 0.86, 0.8))
-	draw_line(rect.position + Vector2(pad, header_h), rect.position + Vector2(rect.size.x - pad, header_h), Color(accent.r, accent.g, accent.b, 0.34), 1)
-
-	var rows = _manifest_info_rows(item, details, aura_view)
-	var footer_h = 48.0
-	var gap = 8.0
-	var rows_area = Rect2(rect.position.x + pad, rect.position.y + header_h + 14.0, rect.size.x - pad * 2.0, rect.size.y - header_h - footer_h - 30.0)
-	var row_h = max(54.0, (rows_area.size.y - gap * float(rows.size() - 1)) / max(1.0, float(rows.size())))
-	for i in range(rows.size()):
-		var row = rows[i]
-		var row_rect = Rect2(rows_area.position.x, rows_area.position.y + i * (row_h + gap), rows_area.size.x, row_h)
-		_draw_minimal_info_row(row_rect, String(row["label"]), String(row["text"]), accent, i == 0)
-
-	var footer = Rect2(rect.position.x + pad, rect.end.y - footer_h - 14.0, rect.size.x - pad * 2.0, footer_h)
-	_draw_manifest_footer(footer, aura_view, accent)
+	MenusPresentation._draw_manifest_info_panel(self, rect, item, details, aura_view, accent)
 
 
 func _manifest_info_rows(item: Dictionary, details: Dictionary, aura_view: bool) -> Array:
@@ -40970,20 +38443,7 @@ func _manifest_selection_summary_rows(key: String) -> Array:
 
 
 func _draw_manifest_footer(rect: Rect2, aura_view: bool, accent: Color) -> void :
-	draw_rect(rect, Color(0.0, 0.0, 0.0, 0.18), true)
-	draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.3), false, 1)
-	var label = "ESCOLHA O ESPECTRO" if aura_view else "PROXIMA ETAPA"
-	var value = String(AURAS[selected_aura]["name"]).to_upper() if aura_view else "REVELAR ESPECTRO"
-	if aura_view:
-		buttons["aura_prev"] = Rect2(rect.position, Vector2(44.0, rect.size.y))
-		buttons["aura_next"] = Rect2(rect.end - Vector2(44.0, rect.size.y), Vector2(44.0, rect.size.y))
-		_draw_centered("<", buttons["aura_prev"].get_center() + Vector2(0, 5), 22, accent)
-		_draw_centered(">", buttons["aura_next"].get_center() + Vector2(0, 5), 22, accent)
-	else:
-		buttons.erase("aura_prev")
-		buttons.erase("aura_next")
-	draw_string(font, rect.position + Vector2(54.0, 18.0), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 108.0, mini(_readable_text_size(9), 11), Color(0.65, 0.8, 0.84, 0.78))
-	_draw_centered(value, rect.get_center() + Vector2(0, 8), _fit_text_size(value, rect.size.x - 116.0, mini(_readable_text_size(14), 16), 10), accent)
+	MenusPresentation._draw_manifest_footer(self, rect, aura_view, accent)
 
 
 func _draw_energy_particles(area: Rect2, accent: = Color(0.0, 1.0, 0.82), count: = 18) -> void :
@@ -41070,25 +38530,7 @@ func _menu_rects(viewport: Vector2) -> Dictionary:
 
 
 func _draw_catalog_locked_card_icon(rect: Rect2, large: = false) -> void:
-	var bg: = Color(0.015, 0.022, 0.03, 0.92)
-	var edge: = Color(0.54, 0.26, 0.92, 0.88)
-	var cyan: = Color(0.26, 0.9, 1.0, 0.48)
-	draw_rect(rect, bg, true)
-	draw_rect(rect, edge, false, 2)
-	draw_rect(rect.grow(-5), Color(0.06, 0.02, 0.11, 0.42), false, 1)
-	var scan_step: float = maxf(6.0, rect.size.y / 10.0)
-	var scan_y: float = rect.position.y + 6.0
-	while scan_y < rect.end.y - 4.0:
-		draw_line(Vector2(rect.position.x + 7.0, scan_y), Vector2(rect.end.x - 7.0, scan_y), Color(cyan.r, cyan.g, cyan.b, 0.18), 1)
-		scan_y += scan_step
-	for i in range(4):
-		var p0: = rect.position + Vector2(8.0 + i * 9.0, 10.0 + i * 5.0)
-		draw_line(p0, p0 + Vector2(rect.size.x * 0.22, 0.0), Color(edge.r, edge.g, edge.b, 0.55), 1)
-	var pulse: float = 0.65 + 0.25 * sin(float(Time.get_ticks_msec()) / 230.0)
-	var text_size: int = 32 if large else 22
-	_draw_centered("???", rect.get_center() + Vector2(0, -4 if large else 0), text_size, Color(0.86, 0.92, 1.0, pulse))
-	if large:
-		_draw_centered("REGISTRO BLOQUEADO", Vector2(rect.get_center().x, rect.end.y - 34.0), 13, Color(0.68, 0.82, 1.0, 0.86))
+	MenusPresentation._draw_catalog_locked_card_icon(self, rect, large)
 
 
 
@@ -41121,41 +38563,7 @@ func _catalog_tab_key() -> String:
 
 
 func _draw_catalog_phase_route(items: Array, first_index: int, end_index: int, viewport: Vector2) -> void:
-	var visible_centers: Dictionary = {}
-	var visible_colors: Dictionary = {}
-	for i in range(first_index, end_index):
-		var item: Dictionary = Dictionary(items[i])
-		var id: = String(item.get("id", ""))
-		if id == "":
-			continue
-		var rect: = _catalog_item_rect(i, first_index, viewport)
-		visible_centers[id] = rect.get_center()
-		visible_colors[id] = Color(item.get("color", Color(0.0, 1.0, 0.82)))
-	for i in range(first_index, end_index):
-		var item: Dictionary = Dictionary(items[i])
-		var id: = String(item.get("id", ""))
-		if not visible_centers.has(id):
-			continue
-		var from: Vector2 = visible_centers[id]
-		for next_id in Array(item.get("next_ids", [])):
-			var target_id: = String(next_id)
-			if not visible_centers.has(target_id):
-				continue
-			var to: Vector2 = visible_centers[target_id]
-			var accent: Color = visible_colors.get(id, Color(0.0, 1.0, 0.82))
-			var pulse: float = 0.48 + 0.18 * sin(Time.get_ticks_msec() * 0.004 + float(i))
-			draw_line(from, to, Color(accent.r, accent.g, accent.b, 0.28), 9.0, true)
-			draw_line(from, to, Color(0.0, 1.0, 0.82, pulse), 2.4, true)
-			var dir: Vector2 = (to - from).normalized()
-			if dir.length() > 0.01:
-				var mid: Vector2 = from.lerp(to, 0.58)
-				draw_line(mid - dir.rotated(0.7) * 10.0, mid + dir * 17.0, Color(0.0, 1.0, 0.82, 0.72), 2.0, true)
-				draw_line(mid - dir.rotated(-0.7) * 10.0, mid + dir * 17.0, Color(0.0, 1.0, 0.82, 0.72), 2.0, true)
-	for id in visible_centers.keys():
-		var center: Vector2 = visible_centers[id]
-		var color: Color = visible_colors.get(id, Color(0.0, 1.0, 0.82))
-		draw_circle(center, 8.0, Color(0.0, 0.0, 0.0, 0.62))
-		draw_arc(center, 12.0, 0.0, TAU, 32, Color(color.r, color.g, color.b, 0.72), 2.0)
+	WorldEnvironmentPresentation._draw_catalog_phase_route(self, items, first_index, end_index, viewport)
 
 
 func _catalog_visible_count(viewport: Vector2) -> int:
@@ -41402,642 +38810,53 @@ func _manifest_select_item_texture(item: Dictionary, aura_view: bool) -> Texture
 
 
 func _draw_spectrum_reveal_fragments(center_x: float, center_y: float, card_w: float, card_h: float, spacing: float, progress: float) -> void :
-	var break_t = smoothstep(0.0, 0.56, progress)
-	var rebuild_t = smoothstep(0.34, 1.0, progress)
-	for diff in [-1, 0, 1]:
-		var abs_diff = abs(float(diff))
-		var scale = 1.15 if diff == 0 else 0.85
-		var pos_x = center_x + float(diff) * spacing
-		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
-		var manifest_idx = posmod(selected_manifestation + diff, MANIFESTATIONS.size())
-		var aura_idx = posmod(selected_aura + diff, AURAS.size())
-		var manifest_item: Dictionary = MANIFESTATIONS[manifest_idx]
-		var aura_item: Dictionary = AURAS[aura_idx]
-		var manifest_color: = _manifest_select_item_color(manifest_item, false)
-		var aura_color: = _manifest_select_item_color(aura_item, true)
-		var manifest_tex: = _manifest_select_item_texture(manifest_item, false)
-		var aura_tex: = _manifest_select_item_texture(aura_item, true)
-		if progress < 0.78:
-			_draw_fragmented_choice_texture(manifest_tex, rect.grow(-22 * scale), manifest_color, break_t, true, diff)
-		if progress > 0.24:
-			_draw_fragmented_choice_texture(aura_tex, rect.grow(-22 * scale), aura_color, rebuild_t, false, diff + 9)
-		var pull_alpha = sin(clamp(progress, 0.0, 1.0) * PI) * (0.3 if diff == 0 else 0.16)
-		for ray in range(5):
-			var a = float(ray) * TAU / 5.0 + progress * TAU + diff * 0.7
-			var from = rect.get_center() + Vector2.from_angle(a) * rect.size.x * 0.72
-			draw_line(from, rect.get_center(), Color(aura_color.r, aura_color.g, aura_color.b, pull_alpha), 1)
+	MenusPresentation._draw_spectrum_reveal_fragments(self, center_x, center_y, card_w, card_h, spacing, progress)
 
 
 func _draw_fragmented_choice_texture(texture: Texture2D, rect: Rect2, color: Color, amount: float, breaking: bool, slot: int) -> void :
-	var cols = 4
-	var rows = 4
-	var piece_size = Vector2(rect.size.x / cols, rect.size.y / rows)
-	var tex_size = texture.get_size() if texture else Vector2(256, 256)
-	for gx in range(cols):
-		for gy in range(rows):
-			var piece = Rect2(rect.position + Vector2(gx * piece_size.x, gy * piece_size.y), piece_size)
-			var src = Rect2(Vector2(float(gx) / cols, float(gy) / rows) * tex_size, Vector2(tex_size.x / cols, tex_size.y / rows))
-			var seed = float(abs((manifest_transition_seed + slot * 971 + gx * 193 + gy * 449) % 1000)) / 1000.0
-			var dir = Vector2.from_angle(seed * TAU + float(gx - gy) * 0.22)
-			var force = 38.0 + 78.0 * seed
-			var t = clamp(amount, 0.0, 1.0)
-			var offset = dir * force * (t if breaking else 1.0 - t)
-			offset += Vector2(sin(Time.get_ticks_msec() * 0.012 + seed * 9.0), cos(Time.get_ticks_msec() * 0.01 + seed * 7.0)) * 5.0 * sin(t * PI)
-			var alpha = (1.0 - t * 0.82) if breaking else t
-			var dest = Rect2(piece.position + offset, piece.size).grow(-1.0)
-			if texture:
-				draw_texture_rect_region(texture, dest, src, Color(1, 1, 1, alpha))
-				draw_rect(dest, Color(color.r, color.g, color.b, 0.22 * alpha), true)
-			draw_rect(dest, Color(color.r, color.g, color.b, 0.26 * alpha), false, 1)
+	MenusPresentation._draw_fragmented_choice_texture(self, texture, rect, color, amount, breaking, slot)
 
 func _draw_manifest_mp(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
-	var local_scroll: float = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
-	var aura_view: bool = manifest_select_stage == MANIFEST_STAGE_AURA
-	var active_items: Array = AURAS if aura_view else MANIFESTATIONS
-	var active_selected: int = selected_aura if aura_view else selected_manifestation
-	var item: Dictionary = active_items[active_selected]
-	var color: Color = _manifest_select_item_color(item, aura_view)
-	var margin: float = clampf(viewport.x * 0.03, 18.0, 36.0)
-	var title_size: int = int(clampf(viewport.y * 0.046, 24.0, 34.0))
-	var header_y: float = clampf(viewport.y * 0.085, 44.0, 64.0)
-	_draw_glitch_title("EQUIPE ONLINE", Vector2(viewport.x * 0.5, header_y), title_size, color)
-	var stage_label: String = "ESPECTRO" if aura_view else "MANIFESTACAO"
-	var status_text: String = "confirme seu estado final" if aura_view else "selecione sua manifestacao"
-	if mp_local_ready:
-		status_text = "sua escolha esta travada"
-	_draw_centered(stage_label + " // " + status_text.to_upper(), Vector2(viewport.x * 0.5, header_y + 34.0), _readable_text_size(11), Color(0.78, 0.93, 0.98, 0.9))
-
-	var panel_top: float = header_y + 58.0
-	var panel: Rect2 = Rect2(margin, panel_top, viewport.x - margin * 2.0, viewport.y - panel_top - margin)
-	draw_rect(panel, Color(0.015, 0.025, 0.028, 0.9))
-	draw_line(panel.position, Vector2(panel.end.x, panel.position.y), color, 2.0)
-	var inner_pad: float = clampf(panel.size.x * 0.018, 16.0, 24.0)
-	var team_w: float = clampf(panel.size.x * 0.31, 256.0, 384.0)
-	if viewport.x < 1040.0:
-		team_w = clampf(panel.size.x * 0.29, 238.0, 292.0)
-	var action_h: float = 56.0
-	var content_top: float = panel.position.y + 28.0
-	var content_bottom: float = panel.end.y - action_h - 20.0
-	var choice_rect: Rect2 = Rect2(panel.position.x + inner_pad, content_top, panel.size.x - team_w - inner_pad * 3.0, content_bottom - content_top)
-	var team_rect: Rect2 = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
-	if choice_rect.size.x < 430.0:
-		team_w = maxf(220.0, panel.size.x - inner_pad * 3.0 - 430.0)
-		choice_rect.size.x = panel.size.x - team_w - inner_pad * 3.0
-		team_rect = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
-	_draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color)
-	_draw_manifest_mp_team_panel(team_rect, color)
-	var footer_y: float = panel.end.y - action_h - 10.0
-	buttons["mp_manifest_ready"] = Rect2(choice_rect.position.x, footer_y, choice_rect.size.x * (0.58 if aura_view and not mp_local_ready else 0.74), 46.0)
-	var btn_label: String = "PRONTO" if aura_view else "REVELAR ESPECTRO"
-	if mp_local_ready:
-		btn_label = "CANCELAR PRONTO"
-	_draw_big_button(buttons["mp_manifest_ready"], btn_label, Color(0.02, 0.14, 0.11, 0.9) if not mp_local_ready else Color(0.18, 0.06, 0.08, 0.78), color if not mp_local_ready else Color(1.0, 0.22, 0.3), mp_local_ready)
-	if aura_view and not mp_local_ready:
-		buttons["mp_manifest_back_manifestation"] = Rect2(buttons["mp_manifest_ready"].end.x + 12.0, footer_y, maxf(136.0, choice_rect.size.x - buttons["mp_manifest_ready"].size.x - 12.0), 46.0)
-		_draw_big_button(buttons["mp_manifest_back_manifestation"], "TROCAR MANIF.", Color(0.03, 0.08, 0.12, 0.86), Color(0.56, 0.76, 1.0), false)
-	else:
-		buttons.erase("mp_manifest_back_manifestation")
-	buttons["mp_manifest_start"] = Rect2(team_rect.position.x, footer_y, team_rect.size.x, 46.0)
-	var all_ready: bool = _manifest_all_players_ready()
-	var can_start: bool = _manifest_mp_start_available()
-	var owner_start: bool = _manifest_mp_local_can_start()
-	var start_label: String = "INICIAR PARTIDA" if can_start and owner_start else ("AGUARDE O HOST" if all_ready and not owner_start else "AGUARDANDO EQUIPE")
-	if mp_manifest_start_pending:
-		start_label = "INICIANDO..."
-	var start_border: Color = Color(0.16, 1.0, 0.54) if can_start and owner_start else Color(0.34, 0.52, 0.62)
-	var start_bg: Color = Color(0.02, 0.16, 0.09, 0.9) if can_start and owner_start else Color(0.03, 0.05, 0.07, 0.62)
-	_draw_big_button(buttons["mp_manifest_start"], start_label, start_bg, start_border, can_start and owner_start)
-	if mp_manifest_rejection_timer > 0.0 and mp_manifest_rejection_message != "":
-		var warning_rect: Rect2 = Rect2(viewport.x * 0.5 - 240.0, viewport.y - 58.0, 480.0, 38.0)
-		_draw_holo_panel(warning_rect, Color(1.0, 0.18, 0.24), true, 0.86)
-		_draw_centered(mp_manifest_rejection_message, warning_rect.get_center() + Vector2(0, 5), 14, Color.WHITE)
+	MenusPresentation._draw_manifest_mp(self, viewport)
 
 
 func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color) -> void :
-	var item: Dictionary = active_items[active_selected]
-	draw_rect(rect, Color(0.02, 0.035, 0.04, 0.82))
-	var header_h: float = 58.0
-	var title: String = String(item.get("name", "???")).to_upper()
-	var caption: String = "ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA"
-	draw_string(font, rect.position + Vector2(20.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, _fit_text_size(title, rect.size.x - 40.0, 24, 15), accent)
-	draw_string(font, rect.position + Vector2(20.0, 50.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, _readable_text_size(9), Color(0.72, 0.9, 0.96, 0.82))
-	draw_line(rect.position + Vector2(18.0, header_h), rect.position + Vector2(rect.size.x - 18.0, header_h), Color(accent.r, accent.g, accent.b, 0.34), 1.0)
-
-	var carousel_rect: Rect2 = Rect2(rect.position.x + 16.0, rect.position.y + header_h + 10.0, rect.size.x - 32.0, maxf(100.0, rect.size.y - 258.0))
-	var center_x: float = carousel_rect.get_center().x
-	var center_y: float = carousel_rect.get_center().y
-	var card_w: float = clampf(rect.size.x * 0.17, 78.0, 124.0)
-	var card_h: float = card_w * 1.16
-	var spacing: float = clampf(card_w * 1.13, 90.0, 138.0)
-	var half_size: float = active_items.size() / 2.0
-	for i in range(active_items.size()):
-		var diff: float = float(i) - scroll
-		if diff > half_size:
-			diff -= active_items.size()
-		elif diff < - half_size:
-			diff += active_items.size()
-		var abs_diff: float = abs(diff)
-		if abs_diff > 2.25:
-			continue
-		var card_scale: float = lerp(1.12, 0.68, min(abs_diff, 1.0))
-		var opacity: float = lerp(1.0, 0.26, min(abs_diff, 1.0))
-		var pos_x: float = center_x + diff * spacing
-		var item_rect: Rect2 = Rect2(pos_x - card_w * card_scale * 0.5, center_y - card_h * card_scale * 0.5, card_w * card_scale, card_h * card_scale)
-		var card_item: Dictionary = active_items[i]
-		var item_unlocked: bool = _manifest_select_item_unlocked(i, aura_view)
-		var item_color: Color = _manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68)
-		var taken: bool = _manifest_choice_taken(i, aura_view)
-		if taken:
-			item_color = Color(1.0, 0.18, 0.24)
-		_draw_holo_panel(item_rect, item_color, abs_diff < 0.5, opacity * 0.72)
-		var icon: Texture2D = _manifest_select_item_texture(card_item, aura_view)
-		if not item_unlocked:
-			_draw_catalog_locked_card_icon(item_rect.grow(-18.0 * card_scale), false)
-		elif icon:
-			_draw_texture_contain(icon, item_rect.grow(-17.0 * card_scale), Color(0.38, 0.38, 0.42, opacity) if taken else Color(1, 1, 1, opacity))
-		if taken:
-			_draw_centered("EM USO", item_rect.get_center() + Vector2(0, 5), _fit_text_size("EM USO", item_rect.size.x - 12.0, 12, 9), Color(1.0, 0.88, 0.88, opacity))
-	if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
-		_draw_spectrum_reveal_fragments(center_x, center_y, card_w, card_h, spacing, _manifest_transition_progress())
-
-	var dots_y: float = carousel_rect.end.y + 10.0
-	var total_w: float = active_items.size() * 14.0
-	for i in range(active_items.size()):
-		var x: float = center_x - total_w * 0.5 + i * 14.0
-		draw_circle(Vector2(x, dots_y), 5.5 if i == active_selected else 3.0, accent if i == active_selected else Color(0.36, 0.52, 0.62, 0.42))
-
-	var details: Dictionary = _aura_details(String(item["name"])) if aura_view else _manifestation_details(item["key"])
-	var info_rect: Rect2 = Rect2(rect.position.x + 20.0, dots_y + 18.0, rect.size.x - 40.0, rect.end.y - dots_y - 32.0)
-	_draw_manifest_mp_compact_info(info_rect, item, details, aura_view, accent)
+	MenusPresentation._draw_manifest_mp_choice_surface(self, rect, active_items, active_selected, scroll, aura_view, accent)
 
 
 func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
-	draw_line(rect.position, Vector2(rect.position.x, rect.end.y), Color(accent, 0.32), 1.0)
-	var local_state: Dictionary = {
-		"stage": manifest_select_stage,
-		"manifestation": selected_manifestation,
-		"aura": selected_aura,
-		"ready": mp_local_ready,
-		"name": player_nickname if player_nickname != "" else "Voce"
-	}
-	var rows: Array = [{"peer_id": _mp_unique_id(), "state": local_state, "local": true}]
-	var peer_ids: Array = mp_manifest_state_by_peer.keys()
-	peer_ids.sort()
-	for peer_id_value in peer_ids:
-		rows.append({"peer_id": int(peer_id_value), "state": mp_manifest_state_by_peer[peer_id_value], "local": false})
-	if rows.size() == 1:
-		rows.append({"peer_id": 0, "state": {"stage": mp_remote_manifest_stage, "manifestation": mp_remote_manifestation, "aura": mp_remote_aura, "ready": mp_remote_ready, "name": "Parceiro"}, "local": false})
-	var ready_count: int = 0
-	for row in rows:
-		if bool(Dictionary(row["state"]).get("ready", false)):
-			ready_count += 1
-	_draw_online_label("EQUIPE  %d/%d PRONTOS" % [ready_count, rows.size()], Rect2(rect.position + Vector2(16, 8), Vector2(rect.size.x - 32, 26)), 18, Color.WHITE)
-	_draw_online_label("Manifestacao + espectro", Rect2(rect.position + Vector2(16, 36), Vector2(rect.size.x - 32, 22)), 14, Color(0.64, 0.8, 0.83))
-	var gap: float = 10.0
-	var list_top: float = rect.position.y + 66.0
-	var available_h: float = rect.end.y - list_top - 12.0
-	var row_h: float = minf(112.0, (available_h - gap * float(maxi(0, rows.size() - 1))) / float(maxi(1, rows.size())))
-	for i in range(rows.size()):
-		if list_top + float(i) * (row_h + gap) + row_h > rect.end.y - 6.0:
-			break
-		var row_data: Dictionary = rows[i]
-		_draw_manifest_peer_summary_row(Rect2(rect.position.x + 12.0, list_top + float(i) * (row_h + gap), rect.size.x - 24.0, row_h), int(row_data["peer_id"]), Dictionary(row_data["state"]), bool(row_data["local"]))
+	MenusPresentation._draw_manifest_mp_team_panel(self, rect, accent)
 
 
 func _draw_manifest_peer_summary_row(rect: Rect2, peer_id: int, state: Dictionary, is_local: = false) -> void :
-	var stage: = String(state.get("stage", MANIFEST_STAGE_MANIFESTATION))
-	var aura_view: = stage == MANIFEST_STAGE_AURA
-	var manifest_idx: int = clampi(int(state.get("manifestation", 0)), 0, MANIFESTATIONS.size() - 1)
-	var aura_idx: int = clampi(int(state.get("aura", 0)), 0, AURAS.size() - 1)
-	var manifest_item: Dictionary = MANIFESTATIONS[manifest_idx]
-	var aura_item: Dictionary = AURAS[aura_idx]
-	var color: Color = _manifest_select_item_color(aura_item, true) if aura_view else _manifest_select_item_color(manifest_item, false)
-	var manifest_color: Color = _manifest_select_item_color(manifest_item, false)
-	var aura_color: Color = _manifest_select_item_color(aura_item, true)
-	draw_rect(rect, Color(0.035, 0.06, 0.065, 0.96))
-	draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), color)
-	var icon_size: float = minf(rect.size.y - 28.0, 42.0)
-	var icon_rect: Rect2 = Rect2(rect.position + Vector2(12, 10), Vector2(icon_size, icon_size))
-	var manifest_icon: Texture2D = _manifest_select_item_texture(manifest_item, false)
-	var aura_icon: Texture2D = _manifest_select_item_texture(aura_item, true)
-	if manifest_icon != null:
-		_draw_texture_contain(manifest_icon, icon_rect, Color(1.0, 1.0, 1.0, 0.88))
-	if aura_view and aura_icon != null:
-		var aura_rect := Rect2(icon_rect.end - Vector2(icon_size * 0.52, icon_size * 0.52), Vector2(icon_size * 0.46, icon_size * 0.46))
-		_draw_holo_panel(aura_rect.grow(3.0), aura_color, true, 0.56)
-		_draw_texture_contain(aura_icon, aura_rect, Color.WHITE)
-	var text_x: float = icon_rect.end.x + 10.0
-	var text_w: float = rect.end.x - text_x - 14.0
-	var player_label: String = String(state.get("name", "Player %d" % peer_id))
-	if is_local:
-		player_label += " (voce)"
-	var line_h: float = (rect.size.y - 14.0) / 4.0
-	_draw_online_label(player_label, Rect2(text_x, rect.position.y + 5, text_w, line_h), 16, Color.WHITE)
-	_draw_online_label(String(manifest_item.get("name", "???")), Rect2(text_x, rect.position.y + 5 + line_h, text_w, line_h), 15, manifest_color)
-	var aura_label: String = String(aura_item.get("name", "???")) if aura_view else "Espectro a escolher"
-	_draw_online_label(aura_label, Rect2(text_x, rect.position.y + 5 + line_h * 2, text_w, line_h), 14, aura_color if aura_view else Color(0.65, 0.76, 0.8))
-	_draw_online_label("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Rect2(text_x, rect.position.y + 5 + line_h * 3, text_w, line_h), 12, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
+	MenusPresentation._draw_manifest_peer_summary_row(self, rect, peer_id, state, is_local)
 
 
 func _draw_manifest_peer_summary(rect: Rect2, peer_id: int, state: Dictionary) -> void :
 	_draw_manifest_peer_summary_row(rect, peer_id, state, false)
 
 func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, selected_aur: int, scroll: float, is_remote: bool, is_ready: bool) -> void :
-	var aura_view = stage == MANIFEST_STAGE_AURA
-	var active_items: Array = AURAS if aura_view else MANIFESTATIONS
-	var active_selected = selected_aur if aura_view else selected_manif
-
-	var item: Dictionary = active_items[active_selected]
-	var color: Color = _manifest_select_item_color(item, aura_view)
-
-	var center_x = rect.position.x + rect.size.x * 0.5
-	var center_y = rect.position.y + rect.size.y * 0.35
-	var card_w = 110.0
-	var card_h = 130.0
-	var spacing = 120.0
-
-	var title = "ESPECTRO" if aura_view else "MANIFESTACOES"
-	var subtitle = "AGUARDANDO PARCEIRO..." if is_remote else ("SUA ESCOLHA: " + title)
-	if is_ready: subtitle = "PRONTO!"
-
-	var is_host_player = multiplayer.is_server() if multiplayer != null else is_host
-	var side_is_host = is_host_player if not is_remote else not is_host_player
-	var identity_str = "VOCE (" + ("HOST" if is_host_player else "CLIENT") + ")" if not is_remote else "PARCEIRO (" + ("HOST" if side_is_host else "CLIENT") + ")"
-
-	_draw_spectrum_title(title, Vector2(center_x, rect.position.y + 36), 24, color, 1.0)
-	_draw_centered(identity_str, Vector2(center_x, rect.position.y + 64), _readable_text_size(14), Color(1, 0.84, 0.0) if side_is_host else Color(0.3, 0.8, 1.0))
-	_draw_centered(subtitle, Vector2(center_x, rect.position.y + 84), _readable_text_size(11), color if is_ready else Color(0.72, 0.94, 1.0, 0.9))
-
-	var half_size = active_items.size() / 2.0
-	for i in range(active_items.size()):
-		var diff = float(i) - scroll
-		if diff > half_size: diff -= active_items.size()
-		elif diff < - half_size: diff += active_items.size()
-
-		var abs_diff = abs(diff)
-		if abs_diff > 2.0: continue
-
-		var scale = lerp(1.1, 0.7, min(abs_diff, 1.0))
-		var opacity = lerp(1.0, 0.3, min(abs_diff, 1.0))
-
-		var pos_x = center_x + diff * spacing
-		var item_rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
-
-		var card_item = active_items[i]
-		if not aura_view and not _manifestation_unlocked(i): continue
-
-		var item_color = _manifest_select_item_color(card_item, aura_view)
-		var taken: = not is_remote and _manifest_choice_taken(i, aura_view)
-		if taken:
-			item_color = Color(1.0, 0.18, 0.24)
-		_draw_holo_panel(item_rect, item_color, abs_diff < 0.5, opacity * 0.7)
-
-		var icon: Texture2D = _manifest_select_item_texture(card_item, aura_view)
-		if icon:
-			_draw_texture_contain(icon, item_rect.grow(-15 * scale), Color(0.36, 0.36, 0.4, opacity) if taken else Color(1, 1, 1, opacity))
-		if taken:
-			_draw_centered("EM USO", item_rect.get_center() + Vector2(0, 6), 13, Color(1.0, 0.86, 0.88))
-
-	var details = _aura_details(String(item["name"])) if aura_view else _manifestation_details(item["key"])
-	var details_rect = Rect2(rect.position.x + 8.0, rect.end.y - min(138.0, rect.size.y * 0.25), rect.size.x - 16.0, min(138.0, rect.size.y * 0.25))
-	_draw_manifest_mp_compact_info(details_rect, item, details, aura_view, color)
-
-	if is_ready:
-		_draw_holo_panel(rect, Color(0, 1, 0), true, 0.1)
-
-	if not is_remote:
-		var btn_ready_rect = Rect2(rect.position.x + rect.size.x * 0.22, details_rect.position.y - 64.0, rect.size.x * 0.56, 46.0)
-		buttons["mp_manifest_ready"] = btn_ready_rect
-		var btn_label = "PRONTO" if aura_view else "REVELAR ESPECTRO"
-		_draw_big_button(btn_ready_rect, btn_label, Color(0.02, 0.14, 0.11, 0.88), color)
+	MenusPresentation._draw_manifest_mp_half(self, rect, stage, selected_manif, selected_aur, scroll, is_remote, is_ready)
 
 
 func _draw_manifest_mp_compact_info(rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color) -> void:
-	var rows: Array = _manifest_info_rows(item, details, aura_view)
-	var count: int = mini(3, rows.size())
-	var row_h: float = rect.size.y / float(maxi(1, count))
-	for i in range(count):
-		var row: Dictionary = rows[i]
-		var y: float = rect.position.y + row_h * i
-		draw_line(Vector2(rect.position.x, y), Vector2(rect.end.x, y), Color(accent, 0.3), 1.0)
-		_draw_online_label(String(row.get("label", row.get("title", "EFEITO"))), Rect2(rect.position.x + 4, y + 3, 88, row_h - 6), 14, accent)
-		_draw_online_label(String(row.get("text", item.get("desc", ""))), Rect2(rect.position.x + 96, y + 3, rect.size.x - 100, row_h - 6), 15, Color(0.9, 0.95, 0.97))
+	MenusPresentation._draw_manifest_mp_compact_info(self, rect, item, details, aura_view, accent)
 
 
 func _draw_online_label(text: String, rect: Rect2, size: int, color: Color) -> void:
-	var label: String = text
-	var label_size: int = size
-	while label_size > 12 and menu_ui_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > rect.size.x:
-		label_size -= 1
-	if menu_ui_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > rect.size.x:
-		while label.length() > 1 and menu_ui_font.get_string_size(label + "...", HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x > rect.size.x:
-			label = label.left(-1)
-		label += "..."
-	var baseline: float = rect.position.y + (rect.size.y - menu_ui_font.get_height(label_size)) * 0.5 + menu_ui_font.get_ascent(label_size)
-	draw_string(menu_ui_font, Vector2(rect.position.x, baseline), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, label_size, color)
+	MenusPresentation._draw_online_label(self, text, rect, size, color)
 
 
 func _draw_manifest_select(viewport: Vector2) -> void :
-
-	_draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
-	var portrait = _is_portrait(viewport)
-
-
-	var title_x = viewport.x * 0.5 if portrait else viewport.x * 0.28
-	var title_y = 74 if portrait else 64
-	var transition_t = _manifest_transition_progress()
-	var aura_view = manifest_select_stage == MANIFEST_STAGE_AURA or (manifest_select_stage == MANIFEST_STAGE_TRANSITION and transition_t >= 0.52)
-	var title_manifest_alpha = 1.0 if manifest_select_stage == MANIFEST_STAGE_MANIFESTATION else 1.0 - smoothstep(0.0, 0.42, transition_t)
-	var title_aura_alpha = 1.0 if aura_view else smoothstep(0.38, 1.0, transition_t)
-	if title_manifest_alpha > 0.02:
-		_draw_spectrum_title("MANIFESTACOES", Vector2(title_x, title_y), 34, Color(0.0, 1.0, 0.82), title_manifest_alpha)
-	if title_aura_alpha > 0.02:
-		_draw_spectrum_title("ESPECTRO", Vector2(title_x, title_y), 34, _aura_color(), title_aura_alpha)
-	var subtitle_text = "ESCOLHA A FORMA DA RUPTURA EM GEOVANA" if not aura_view and manifest_select_stage != MANIFEST_STAGE_TRANSITION else "ESCOLHA O ESTADO ESPECTRAL DA PERSONAGEM"
-	_draw_centered(subtitle_text, Vector2(title_x, title_y + 38), _readable_text_size(12 if not portrait else 14), Color(0.72, 0.94, 1.0, 0.9))
-
-	var active_items: Array = AURAS if aura_view else MANIFESTATIONS
-	var active_scroll = aura_scroll_pos if aura_view else manifest_scroll_pos
-	var active_selected = selected_aura if aura_view else selected_manifestation
-	var item: Dictionary = active_items[active_selected]
-	var selected_unlocked: = _manifest_select_item_unlocked(active_selected, aura_view)
-	var color: Color = _manifest_select_item_color(item, aura_view) if selected_unlocked else Color(0.42, 0.46, 0.68)
-
-
-	var center_x = viewport.x * 0.5 if portrait else viewport.x * 0.28
-	var center_y = viewport.y * 0.29 if portrait else viewport.y * 0.405
-	var card_w = 136.0 if portrait else 154.0
-	var card_h = 154.0 if portrait else 174.0
-	var spacing = _manifest_carousel_spacing(viewport)
-
-	var half_size = active_items.size() / 2.0
-	for i in range(active_items.size()):
-		var diff = float(i) - active_scroll
-		if diff > half_size:
-			diff -= active_items.size()
-		elif diff < - half_size:
-			diff += active_items.size()
-
-		var abs_diff = abs(diff)
-		if abs_diff > 2.2:
-			continue
-
-
-		var scale = 1.15
-		if abs_diff <= 1.0:
-			scale = lerp(1.15, 0.85, abs_diff)
-		else:
-			scale = lerp(0.85, 0.65, clamp(abs_diff - 1.0, 0.0, 1.0))
-
-		var opacity = 1.0
-		if abs_diff <= 1.0:
-			opacity = lerp(1.0, 0.45, abs_diff)
-		else:
-			opacity = lerp(0.45, 0.15, clamp(abs_diff - 1.0, 0.0, 1.0))
-
-		var pos_x = center_x + diff * spacing
-		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
-
-
-		var card_item: Dictionary = active_items[i]
-		var item_unlocked: = _manifest_select_item_unlocked(i, aura_view)
-		var item_color: Color = _manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68)
-		_draw_holo_panel(rect, item_color, abs_diff < 0.5, opacity * 0.7)
-
-		if abs_diff < 0.5:
-
-			_draw_energy_particles(rect, item_color, int(24 * (1.0 - abs_diff)))
-
-
-		var icon: Texture2D = _manifest_select_item_texture(card_item, aura_view)
-		if not item_unlocked:
-			_draw_catalog_locked_card_icon(rect.grow(-26 * scale), false)
-		elif icon:
-			var icon_color = Color(1, 1, 1, opacity)
-			_draw_texture_contain(icon, rect.grow(-26 * scale), icon_color)
-
-
-		var name_color = Color(1, 1, 1, opacity)
-		var label_y = rect.end.y - (18 * scale)
-		var display_name: = String(card_item["name"]).to_upper() if item_unlocked else "???"
-		_draw_centered(display_name, Vector2(rect.get_center().x, label_y), _readable_text_size(int(16 * scale)), name_color)
-
-	if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
-		_draw_spectrum_reveal_fragments(center_x, center_y, card_w, card_h, spacing, transition_t)
-
-
-	var dots_y = center_y + (card_h * 0.65) + 10
-	var total_w = active_items.size() * 18
-	for i in range(active_items.size()):
-		var x = center_x - total_w * 0.5 + i * 18
-		draw_circle(Vector2(x, dots_y), 4 if i != active_selected else 7, color if i == active_selected else Color(0.38, 0.52, 0.62, 0.6 * (1.0 if i == active_selected else 0.5)))
-
-
-	var details_rect: Rect2
-	if portrait:
-		details_rect = Rect2(viewport.x * 0.06, viewport.y * 0.48, viewport.x * 0.88, viewport.y * 0.38)
-	else:
-		details_rect = Rect2(viewport.x * 0.53, viewport.y * 0.145, viewport.x * 0.405, viewport.y * 0.67)
-
-	var details = _aura_details(String(item["name"])) if aura_view and selected_unlocked else (_manifestation_details(item["key"]) if selected_unlocked else {})
-	var panel_shake = _spectrum_panel_shake()
-	details_rect.position += panel_shake
-	_draw_holo_panel(details_rect, color, true, 0.42)
-
-
-	var title_pos = details_rect.position + Vector2(20, 26)
-	draw_string(font, title_pos, item["name"].to_upper() if selected_unlocked else "???", HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(22), color)
-	var detail_caption = "ESPECTRO DA AUREA // ESTADO ATIVO" if aura_view else "NOME DE CODIGO // SINAL ESTAVEL"
-	if not selected_unlocked:
-		detail_caption = "REGISTRO BLOQUEADO // OBJETIVO PENDENTE"
-	draw_string(font, title_pos + Vector2(0, 24), detail_caption, HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(12), Color(0.5, 0.78, 0.86, 0.82))
-
-
-	var line_y = title_pos.y + _readable_text_size(22) + 16
-	draw_line(Vector2(details_rect.position.x + 20, line_y), Vector2(details_rect.end.x - 20, line_y), Color(color.r, color.g, color.b, 0.26), 1)
-
-
-	var current_y = line_y + 14
-	var font_size = _readable_text_size(11 if portrait else 12)
-	var text_color = Color(0.8, 0.9, 0.95, 0.9)
-
-	if selected_unlocked:
-		current_y = _draw_section_flow("FUNCAO", color, details["funcao"], text_color, current_y, details_rect, font_size)
-		current_y = _draw_section_flow("GATILHO" if aura_view else "DISPARO", color, details["disparo"], text_color, current_y, details_rect, font_size)
-		var third_label = "EFEITO PRINCIPAL" if aura_view else "HABILIDADE ATIVA: " + String(details["habilidade"]).to_upper()
-		current_y = _draw_section_flow(third_label, color, details["desc_hab"], text_color, current_y, details_rect, font_size)
-
-		var traco_risco_text = details["traco"] + " // Risco: " + details["risco"]
-		current_y = _draw_section_flow("TRACO E RISCO", color, traco_risco_text, text_color, current_y, details_rect, font_size)
-	else:
-		current_y = _draw_section_flow("OBJETIVO", color, _manifest_select_unlock_objective_text(active_selected, aura_view, true), text_color, current_y, details_rect, font_size)
-		current_y = _draw_section_flow("ARQUIVO", color, "Nome, imagem e detalhes permanecem lacrados ate cumprir o desafio.", text_color, current_y, details_rect, font_size)
-
-	var aura_item: Dictionary = AURAS[selected_aura]
-	var aura_color: = _aura_color()
-	var aura_rect: = Rect2(details_rect.position.x + 18.0, details_rect.end.y - 62.0, details_rect.size.x - 36.0, 46.0)
-	_draw_combat_panel(aura_rect, aura_color if aura_view else color, 0.52)
-	buttons.erase("aura_prev")
-	buttons.erase("aura_next")
-	if aura_view:
-		buttons["aura_prev"] = Rect2(aura_rect.position, Vector2(44.0, aura_rect.size.y))
-		buttons["aura_next"] = Rect2(aura_rect.end - Vector2(44.0, aura_rect.size.y), Vector2(44.0, aura_rect.size.y))
-		_draw_centered("<", buttons["aura_prev"].get_center() + Vector2(0, 5), 24, aura_color)
-		_draw_centered(">", buttons["aura_next"].get_center() + Vector2(0, 5), 24, aura_color)
-		_draw_centered("ESPECTRO // " + String(aura_item["name"]).to_upper(), aura_rect.get_center() + Vector2(0, -6), _readable_text_size(14), aura_color)
-		_draw_wrapped(String(MANIFESTATIONS[selected_manifestation]["name"]).to_upper() + " vinculada a esta aurea", Rect2(aura_rect.position + Vector2(48, 24), Vector2(aura_rect.size.x - 96, 18)), _readable_text_size(8), Color(0.84, 0.91, 0.94, 0.86))
-	else:
-		if selected_unlocked:
-			_draw_centered("PROXIMO: REVELAR ESPECTRO", aura_rect.get_center() + Vector2(0, -6), _readable_text_size(14), aura_color)
-			_draw_wrapped("Depois da manifestacao, escolha a aurea que define o estado da Geovana.", Rect2(aura_rect.position + Vector2(16, 24), Vector2(aura_rect.size.x - 32, 18)), _readable_text_size(8), Color(0.84, 0.91, 0.94, 0.86))
-		else:
-			_draw_centered("BLOQUEADO", aura_rect.get_center() + Vector2(0, -6), _readable_text_size(14), color)
-			_draw_wrapped(_manifest_select_unlock_objective_text(active_selected, aura_view, false), Rect2(aura_rect.position + Vector2(16, 24), Vector2(aura_rect.size.x - 32, 18)), _readable_text_size(8), Color(0.84, 0.91, 0.94, 0.86))
-
-
-	var detail_clean_rect = Rect2(details_rect.position - Vector2(8.0, 8.0), Vector2(details_rect.size.x + 16.0, viewport.y - details_rect.position.y - 78.0))
-	draw_rect(detail_clean_rect, Color(0.0, 0.0, 0.0, 1.0), true)
-	if selected_unlocked:
-		_draw_manifest_info_panel(details_rect, item, details, aura_view, color)
-	else:
-		_draw_holo_panel(details_rect, color, true, 0.46)
-		_draw_catalog_locked_card_icon(Rect2(details_rect.position + Vector2(26, 86), Vector2(minf(150.0, details_rect.size.x * 0.32), minf(150.0, details_rect.size.y * 0.32))), true)
-		var lock_text_rect: = Rect2(details_rect.position + Vector2(206, 92), Vector2(details_rect.size.x - 232, 120))
-		if portrait:
-			lock_text_rect = Rect2(details_rect.position + Vector2(26, 210), Vector2(details_rect.size.x - 52, 92))
-		_draw_wrapped(_manifest_select_unlock_objective_text(active_selected, aura_view, true), lock_text_rect, _readable_text_size(12), Color(0.84, 0.91, 0.98, 0.92))
-
-	var button_y = viewport.y - 72
-	var btn_w = 200.0
-	var btn_h = 44.0
-	var btn_start_rect: Rect2
-	var btn_back_rect: Rect2
-	var btn_preview_rect: Rect2
-	var btn_details_rect: Rect2
-
-	if portrait:
-		var py = viewport.y - 82
-		var pw = viewport.x * 0.4
-		var ph = 52.0
-		btn_start_rect = Rect2(viewport.x * 0.08, py, pw, ph)
-		btn_back_rect = Rect2(viewport.x * 0.52, py, pw, ph)
-		btn_preview_rect = Rect2(viewport.x * 0.08, py - 54.0, viewport.x * 0.4, 40.0)
-		btn_details_rect = Rect2(viewport.x * 0.52, py - 54.0, viewport.x * 0.4, 40.0)
-	else:
-		btn_start_rect = Rect2(viewport.x * 0.1, button_y, btn_w, btn_h)
-		btn_back_rect = Rect2(viewport.x * 0.1 + 220, button_y, btn_w, btn_h)
-		btn_preview_rect = Rect2(viewport.x * 0.1 + 440, button_y, 172.0, btn_h)
-		btn_details_rect = Rect2(viewport.x * 0.1 + 632.0, button_y, 172.0, btn_h)
-
-
-	buttons["manifest_start"] = btn_start_rect
-	buttons["manifest_back"] = btn_back_rect
-	buttons.erase("manifest_preview")
-	buttons.erase("manifest_details")
-	buttons.erase("manifest_preview_popup")
-	buttons.erase("manifest_details_popup")
-	buttons.erase("manifest_details_close")
-	if not aura_view and manifest_select_stage == MANIFEST_STAGE_MANIFESTATION and selected_unlocked:
-		buttons["manifest_preview"] = btn_preview_rect
-		buttons["manifest_details"] = btn_details_rect
-
-	var start_label = "INICIAR" if aura_view else "REVELAR ESPECTRO"
-	if not selected_unlocked:
-		start_label = "BLOQUEADO"
-	var start_accent = (aura_color if aura_view else Color(0.0, 1.0, 0.82)) if selected_unlocked else Color(0.48, 0.52, 0.68)
-	_draw_big_button(btn_start_rect, start_label, Color(0.02, 0.14, 0.11, 0.88), start_accent)
-	_draw_big_button(btn_back_rect, "VOLTAR", Color(0.12, 0.04, 0.05, 0.88), Color(1.0, 0.28, 0.34))
-	if buttons.has("manifest_preview"):
-		_draw_big_button(btn_preview_rect, "PREVIEW", Color(0.04, 0.1, 0.16, 0.88), color)
-	if buttons.has("manifest_details"):
-		_draw_big_button(btn_details_rect, "DETALHES", Color(0.05, 0.08, 0.12, 0.88), color)
-	if manifest_preview_open:
-		_draw_manifest_preview_popup(viewport, MANIFESTATIONS[selected_manifestation])
-	if manifest_details_open:
-		_draw_manifest_details_popup(viewport, MANIFESTATIONS[selected_manifestation])
+	MenusPresentation._draw_manifest_select(self, viewport)
 
 
 func _draw_manifest_preview_popup(viewport: Vector2, item: Dictionary) -> void :
-	var portrait = _is_portrait(viewport)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.56), true)
-
-	var popup_size = Vector2(min(viewport.x * 0.88, 1100.0), min(viewport.y * 0.88, 640.0))
-	if portrait:
-		popup_size = Vector2(viewport.x * 0.94, viewport.y * 0.88)
-	var popup = Rect2(viewport * 0.5 - popup_size * 0.5, popup_size)
-	buttons["manifest_preview_popup"] = popup
-
-	var accent: Color = item.get("color", Color(0.0, 1.0, 0.82))
-	_draw_holo_panel(popup, accent, true, 0.88)
-	draw_rect(popup.grow(-10.0), Color(0.0, 0.0, 0.0, 0.22), true)
-
-	_draw_centered("PREVIEW // " + String(item["name"]).to_upper(), popup.position + Vector2(popup.size.x * 0.5, 28.0), _readable_text_size(18), accent)
-
-	var tab_y = popup.position.y + 52.0
-	var tab_w = min(124.0, popup.size.x * 0.25)
-	var tab_h = 36.0
-	var tab_gap = 10.0
-	var tab_total = tab_w * 3.0 + tab_gap * 2.0
-	var tab_x = popup.position.x + popup.size.x * 0.5 - tab_total * 0.5
-	var tabs = [
-		{"label": "ATK", "kind": "atk"}, 
-		{"label": "Q", "kind": "skill"}, 
-		{"label": "E", "kind": "ultimate"}
-	]
-	for i in range(tabs.size()):
-		var tab: Dictionary = tabs[i]
-		var rect = Rect2(tab_x + i * (tab_w + tab_gap), tab_y, tab_w, tab_h)
-		buttons["manifest_preview_" + String(tab["kind"])] = rect
-		var selected = manifest_preview_kind == String(tab["kind"])
-		_draw_holo_panel(rect, accent if selected else Color(0.34, 0.52, 0.62), selected, 0.56)
-		_draw_centered(String(tab["label"]), rect.get_center() + Vector2(0, 4), _readable_text_size(13), Color.WHITE if selected else Color(0.72, 0.84, 0.9, 0.78))
-
-	var video_rect = popup.grow(-28.0)
-	video_rect.position.y = tab_y + tab_h + 10.0
-	video_rect.size.y = popup.end.y - video_rect.position.y - 46.0
-	_draw_manifest_preview_scene(video_rect, item, _manifest_preview_tab_label(manifest_preview_kind), manifest_preview_kind, manifest_preview_time, accent, true)
-	_draw_centered("TOQUE NA JANELA PARA FECHAR", popup.position + Vector2(popup.size.x * 0.5, popup.size.y - 24.0), _readable_text_size(10), Color(0.86, 0.94, 1.0, 0.7))
+	MenusPresentation._draw_manifest_preview_popup(self, viewport, item)
 
 
 func _draw_manifest_details_popup(viewport: Vector2, item: Dictionary) -> void :
-	var portrait: = _is_portrait(viewport)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.58), true)
-	var popup_size: = Vector2(min(viewport.x * 0.9, 980.0), min(viewport.y * 0.88, 620.0))
-	if portrait:
-		popup_size = Vector2(viewport.x * 0.94, viewport.y * 0.88)
-	var popup: = Rect2(viewport * 0.5 - popup_size * 0.5, popup_size)
-	buttons["manifest_details_popup"] = popup
-	var accent: Color = item.get("color", Color(0.0, 1.0, 0.82))
-	_draw_holo_panel(popup, accent, true, 0.9)
-	draw_rect(popup.grow(-10.0), Color(0.0, 0.0, 0.0, 0.3), true)
-
-	var close_rect: = Rect2(popup.end - Vector2(58.0, popup.size.y - 16.0), Vector2(40.0, 32.0))
-	buttons["manifest_details_close"] = close_rect
-	_draw_holo_panel(close_rect, Color(1.0, 0.24, 0.32), false, 0.72)
-	_draw_centered("X", close_rect.get_center() + Vector2(0, 5), _readable_text_size(16), Color.WHITE)
-
-	_draw_centered("DETALHES // " + String(item["name"]).to_upper(), popup.position + Vector2(popup.size.x * 0.5, 30.0), _readable_text_size(20), accent)
-	_draw_wrapped(String(item.get("desc", "")), Rect2(popup.position + Vector2(34.0, 56.0), Vector2(popup.size.x - 68.0, 48.0)), _readable_text_size(13), Color(0.86, 0.95, 1.0, 0.9))
-
-	var details: = _manifestation_details(String(item.get("key", "")))
-	var content: = popup.grow(-32.0)
-	content.position.y += 102.0
-	content.size.y -= 138.0
-	var y: = content.position.y
-	var fs: = _readable_text_size(12 if portrait else 13)
-	var body: = Color(0.82, 0.92, 0.96, 0.92)
-	y = _draw_section_flow("FUNCAO", accent, String(details.get("funcao", "")), body, y, content, fs)
-	y = _draw_section_flow("ATK", accent, String(details.get("disparo", "")), body, y, content, fs)
-	y = _draw_section_flow(String(details.get("habilidade", "Q")), accent, String(details.get("desc_hab", "")), body, y, content, fs)
-	y = _draw_section_flow("E / TRACO", accent, String(details.get("traco", "")), body, y, content, fs)
-	y = _draw_section_flow("RISCO / TP", accent, String(details.get("risco", "")), body, y, content, fs)
-	var rows: Array = details.get("info_rows", [])
-	for row in rows:
-		if y > content.end.y - 38.0:
-			break
-		y = _draw_section_flow(String(row.get("label", "INFO")), accent, String(row.get("text", "")), body, y, content, fs - 1)
-	_draw_centered("TOQUE FORA OU NO X PARA FECHAR", popup.position + Vector2(popup.size.x * 0.5, popup.size.y - 24.0), _readable_text_size(10), Color(0.86, 0.94, 1.0, 0.7))
+	MenusPresentation._draw_manifest_details_popup(self, viewport, item)
 
 
 func _manifest_preview_tab_label(kind: String) -> String:
@@ -42050,24 +38869,7 @@ func _manifest_preview_tab_label(kind: String) -> String:
 
 
 func _draw_manifest_preview_scene(rect: Rect2, item: Dictionary, label: String, kind: String, t: float, accent: Color, large: = false) -> void :
-	_draw_combat_panel(rect, accent, 0.56)
-	draw_rect(rect.grow(-7.0), Color(accent.r, accent.g, accent.b, 0.045), true)
-	draw_string(font, rect.position + Vector2(16.0, 30.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(16 if large else 14), accent)
-	var scene = rect.grow(-20.0 if large else -18.0)
-	scene.position.y += 36.0 if large else 24.0
-	scene.size.y -= 44.0 if large else 24.0
-	var key = String(item["key"])
-	var title = "DISPARO" if kind == "atk" else ("SEGUNDA HABILIDADE" if kind == "skill" else "ULTIMATE")
-	_draw_centered(title, Vector2(rect.get_center().x, rect.end.y - 17.0), _readable_text_size(10 if large else 8), Color(0.82, 0.92, 0.98, 0.66))
-	if _draw_manifest_preview_atlas(scene, key, kind, t):
-		return
-	match kind:
-		"atk":
-			_draw_manifest_preview_atk(scene, key, t, accent)
-		"skill":
-			_draw_manifest_preview_skill(scene, key, t, accent)
-		_:
-			_draw_manifest_preview_ultimate(scene, key, t, accent)
+	MenusPresentation._draw_manifest_preview_scene(self, rect, item, label, kind, t, accent, large)
 
 
 func _manifest_preview_atlas(key: String, kind: String) -> Texture2D:
@@ -42081,24 +38883,7 @@ func _manifest_preview_atlas(key: String, kind: String) -> Texture2D:
 
 
 func _draw_manifest_preview_atlas(rect: Rect2, key: String, kind: String, t: float) -> bool:
-	if preview_capture_mode:
-		return false
-	var texture = _manifest_preview_atlas(key, kind)
-	if texture == null:
-		return false
-	var frame = posmod(int(floor(t * MANIFEST_PREVIEW_FPS)), MANIFEST_PREVIEW_FRAME_COUNT)
-	var frame_w = texture.get_width() / MANIFEST_PREVIEW_ATLAS_COLS
-	var frame_h = texture.get_height() / _manifest_preview_atlas_rows(texture)
-	if frame_w <= 0 or frame_h <= 0:
-		return false
-	var col = frame % MANIFEST_PREVIEW_ATLAS_COLS
-	var row = frame / MANIFEST_PREVIEW_ATLAS_COLS
-	var src = Rect2(col * frame_w, row * frame_h, frame_w, frame_h)
-	var dst = _contain_rect(Vector2(frame_w, frame_h), rect)
-	draw_rect(rect, Color(0.0, 0.0, 0.0, 0.42), true)
-	draw_texture_rect_region(texture, dst, src, Color.WHITE)
-	draw_rect(dst, Color(1.0, 1.0, 1.0, 0.16), false, 1.0)
-	return true
+	return MenusPresentation._draw_manifest_preview_atlas(self, rect, key, kind, t)
 
 
 func _manifest_preview_atlas_rows(texture: Texture2D) -> int:
@@ -42118,182 +38903,15 @@ func _contain_rect(source_size: Vector2, bounds: Rect2) -> Rect2:
 
 
 func _draw_manifest_preview_atk(rect: Rect2, key: String, t: float, accent: Color) -> void :
-	var p = Vector2(rect.position.x + rect.size.x * 0.23, rect.get_center().y + rect.size.y * 0.18)
-	var e = Vector2(rect.end.x - rect.size.x * 0.18, rect.get_center().y - rect.size.y * 0.1)
-	_draw_preview_geovana(p, rect.size.y * 0.16, accent)
-	_draw_preview_enemy(e, rect.size.y * 0.13, accent)
-	var pulse = 0.5 + 0.5 * sin(t * TAU)
-	match key:
-		"eletrica":
-			_draw_preview_bolt(p + Vector2(20, -8), e - Vector2(16, 0), accent, t, 3.0)
-			draw_circle(e, 22.0 + pulse * 8.0, Color(0.55, 0.95, 1.0, 0.12))
-		"lacerante":
-			for i in range(3):
-				var off = Vector2(lerp(8.0, rect.size.x * 0.48, pulse), -18.0 + i * 18.0)
-				_draw_preview_slash(p + off, -0.22 + i * 0.12, rect.size.x * 0.34, Color(1.0, 0.08, 0.14, 0.88), 4.0 - i)
-		"prismatica":
-			var beam_end = e - Vector2(16, 0)
-			draw_line(p + Vector2(22, -8), beam_end, Color(accent.r, accent.g, accent.b, 0.38), 8.0)
-			draw_line(p + Vector2(22, -8), beam_end, Color(1.0, 1.0, 1.0, 0.8), 2.0)
-			draw_circle(beam_end, 12.0 + pulse * 8.0, Color(1.0, 0.42, 0.88, 0.32))
-		"retornante":
-			var mid = p.lerp(e, 0.52) + Vector2(0, -34.0 * sin(t * TAU))
-			draw_arc(mid, rect.size.x * 0.21, PI * 0.15, PI * 1.18, 42, Color(accent.r, accent.g, accent.b, 0.6), 3.0)
-			draw_circle(p.lerp(e, fposmod(t * 0.6, 1.0)), 8.0, Color(1.0, 0.48, 0.84, 0.9))
-			draw_circle(e.lerp(p, fposmod(t * 0.8 + 0.35, 1.0)), 6.0, Color(0.82, 0.7, 1.0, 0.8))
-		"parasitica":
-			var worm = p.lerp(e, fposmod(t * 0.75, 1.0))
-			_draw_preview_worm_path(p + Vector2(18, 0), e - Vector2(16, 0), t, accent)
-			draw_circle(worm, 7.0, Color(0.72, 1.0, 0.3, 0.88))
-			draw_circle(e + Vector2(0, 14), 16.0, Color(0.2, 0.92, 0.22, 0.18))
-		"gravitante":
-			var orb = p.lerp(e, fposmod(t * 0.55, 1.0))
-			draw_circle(orb, 12.0, Color(0.15, 0.45, 1.0, 0.34))
-			draw_arc(orb, 18.0, - t * TAU, - t * TAU + PI * 1.3, 32, accent, 2.0)
-			draw_line(orb, e, Color(0.66, 0.88, 1.0, 0.26), 2.0)
-		"acorrentada":
-			var step: = int(fposmod(floor(t * 3.0), 3.0)) + 1
-			if step == 1:
-				_draw_acorrentada_chain(p + Vector2(18, -4), e - Vector2(14, 0), Color(0.18, 0.86, 1.0, 0.86), 5.0, 1.0, true)
-			elif step == 2:
-				draw_arc(p, rect.size.x * 0.34, -0.65, 0.75, 42, Color(0.92, 0.12, 0.1, 0.68), 6.0)
-				_draw_acorrentada_chain(p + Vector2(20, 8), e - Vector2(8, 8), Color(0.92, 0.12, 0.1, 0.84), 8.0, 1.0, false)
-			else:
-				_draw_acorrentada_chain(p + Vector2(16, -22), e + Vector2(-10, 18), Color(0.18, 0.86, 1.0, 0.84), 6.0, 1.0, true)
-				_draw_acorrentada_chain(p + Vector2(16, 22), e + Vector2(-10, -18), Color(0.92, 0.12, 0.1, 0.84), 8.0, 1.0, false)
-				draw_circle(e, 18.0 + pulse * 7.0, Color(1.0, 1.0, 1.0, 0.24))
-		"eclipsada":
-			var step: = int(fposmod(floor(t * 4.0), 4.0)) + 1
-			var slash_center: Vector2 = p + Vector2(54.0, -8.0)
-			var slash_angle: float = -0.9 + pulse * 1.8 + float(step) * 0.34
-			draw_circle(slash_center, 80.0, Color(0.06, 0.2, 0.48, 0.1))
-			draw_arc(slash_center, 80.0, slash_angle, slash_angle + PI * 1.38, 54, Color(accent.r, accent.g, accent.b, 0.88), 7.0 if step == 4 else 5.0)
-			draw_arc(slash_center, 72.0, slash_angle + 0.12, slash_angle + PI * 1.22, 48, Color(0.9, 0.98, 1.0, 0.78), 2.0)
-			if step == 4:
-				draw_arc(slash_center, 54.0, - slash_angle, TAU - slash_angle, 48, Color(1.0, 0.86, 0.3, 0.68), 3.0)
-		_:
-			draw_line(p + Vector2(20, 0), e - Vector2(16, 0), Color(accent.r, accent.g, accent.b, 0.7), 5.0)
-			draw_circle(e, 17.0 + pulse * 5.0, Color(1.0, 0.78, 0.26, 0.2))
+	MenusPresentation._draw_manifest_preview_atk(self, rect, key, t, accent)
 
 
 func _draw_manifest_preview_skill(rect: Rect2, key: String, t: float, accent: Color) -> void :
-	var c = rect.get_center()
-	var p = c + Vector2( - rect.size.x * 0.24, rect.size.y * 0.16)
-	var e1 = c + Vector2(rect.size.x * 0.2, - rect.size.y * 0.12)
-	var e2 = c + Vector2(rect.size.x * 0.3, rect.size.y * 0.22)
-	_draw_preview_geovana(p, rect.size.y * 0.15, accent)
-	_draw_preview_enemy(e1, rect.size.y * 0.11, accent)
-	_draw_preview_enemy(e2, rect.size.y * 0.1, accent)
-	var pulse = 0.5 + 0.5 * sin(t * TAU)
-	match key:
-		"eletrica":
-			for i in range(3):
-				draw_arc(p, 34.0 + i * 18.0 + pulse * 6.0, 0.0, TAU, 64, Color(0.44, 0.96, 1.0, 0.42 - i * 0.09), 2.0)
-			_draw_preview_bolt(p, e1, accent, t, 2.0)
-			_draw_preview_bolt(p, e2, accent, t + 0.3, 2.0)
-		"lacerante":
-			draw_arc(p, 52.0 + pulse * 10.0, - PI * 0.1, PI * 1.7, 72, Color(1.0, 0.08, 0.14, 0.76), 5.0)
-			for i in range(5):
-				_draw_preview_slash(p + Vector2.from_angle(t * TAU + i) * (30.0 + i * 3.0), t + i * 0.35, 48.0, Color(1.0, 0.12, 0.2, 0.76), 2.5)
-		"prismatica":
-			var prism = c + Vector2(10, 0)
-			_draw_preview_diamond(prism, 24.0 + pulse * 3.0, accent)
-			for angle in [-0.7, 0.0, 0.7, 1.35, -1.35]:
-				draw_line(prism, prism + Vector2.from_angle(angle) * rect.size.x * 0.28, Color(accent.r, accent.g, accent.b, 0.48), 4.0)
-		"retornante":
-			for i in range(4):
-				var r = 28.0 + i * 13.0 + pulse * 4.0
-				draw_arc(c, r, t * TAU + i, t * TAU + i + PI * 1.25, 48, Color(accent.r, accent.g, accent.b, 0.42 - i * 0.06), 2.0)
-			draw_circle(c, 10.0 + pulse * 5.0, Color(1.0, 0.38, 0.7, 0.42))
-		"parasitica":
-			draw_circle(c + Vector2(8, 10), 58.0 + pulse * 6.0, Color(0.16, 0.75, 0.18, 0.18))
-			for i in range(8):
-				var a = t * TAU + i * TAU / 8.0
-				var worm = c + Vector2(cos(a) * 44.0, sin(a * 1.7) * 18.0 + 10.0)
-				draw_circle(worm, 5.0 + float(i % 2), Color(0.75, 1.0, 0.28, 0.82))
-		"gravitante":
-			_draw_preview_enemy(e1 + (c - e1).normalized() * pulse * 28.0, rect.size.y * 0.1, accent)
-			_draw_preview_enemy(e2 + (c - e2).normalized() * pulse * 28.0, rect.size.y * 0.1, accent)
-			draw_line(e1, e2, Color(0.64, 0.88, 1.0, 0.46), 3.0)
-			draw_circle(c, 24.0 + pulse * 12.0, Color(0.12, 0.28, 0.72, 0.24))
-		"acorrentada":
-			_draw_acorrentada_chain(e1, e2, Color(0.18, 0.86, 1.0, 0.82), 6.0, 1.0, true)
-			_draw_acorrentada_chain(p + Vector2(10, -4), e1, Color(0.92, 0.12, 0.1, 0.7), 7.0, 1.0, false)
-			draw_arc(e1.lerp(e2, 0.5), 26.0 + pulse * 9.0, 0.0, TAU, 36, Color(1.0, 0.24, 0.18, 0.42), 2.4)
-		"eclipsada":
-			var dash_end: Vector2 = p + Vector2(52.0, -18.0)
-			draw_rect(rect, Color(0.02, 0.16, 0.38, 0.12), true)
-			draw_line(p - Vector2(42, 0), dash_end + Vector2(34, 0), Color(0.04, 0.1, 0.28, 0.72), 24.0, true)
-			draw_line(p - Vector2(42, 0), dash_end + Vector2(34, 0), Color(accent.r, accent.g, accent.b, 0.82), 5.0, true)
-			for enemy_pos in [e1, e2]:
-				draw_arc(enemy_pos + Vector2(8, -8), 18.0 + pulse * 5.0, - t * TAU, TAU - t * TAU, 30, Color(1.0, 0.88, 0.3, 0.88), 2.5)
-				draw_line(enemy_pos + Vector2(0, -8), enemy_pos + Vector2(16, -8), Color(0.92, 0.98, 1.0, 0.78), 1.5)
-		_:
-			draw_arc(p, 58.0 + pulse * 7.0, 0.0, TAU, 72, Color(accent.r, accent.g, accent.b, 0.54), 3.0)
-			draw_line(p, e1, Color(1.0, 0.8, 0.26, 0.46), 3.0)
+	MenusPresentation._draw_manifest_preview_skill(self, rect, key, t, accent)
 
 
 func _draw_manifest_preview_ultimate(rect: Rect2, key: String, t: float, accent: Color) -> void :
-	var c = rect.get_center()
-	var p = c + Vector2( - rect.size.x * 0.18, rect.size.y * 0.12)
-	var pulse = 0.5 + 0.5 * sin(t * TAU)
-	_draw_preview_geovana(p, rect.size.y * 0.14, accent)
-	for i in range(3):
-		_draw_preview_enemy(c + Vector2.from_angle(i * TAU / 3.0 + 0.35) * rect.size.y * 0.3, rect.size.y * 0.09, accent)
-	match key:
-		"eletrica":
-			for i in range(8):
-				var a = t * TAU + i * TAU / 8.0
-				var endpoint = p + Vector2.from_angle(a) * (44.0 + pulse * 12.0)
-				_draw_preview_bolt(p, endpoint, accent, t + i, 1.5)
-			draw_arc(p, 70.0, 0.0, TAU, 96, Color(0.5, 0.95, 1.0, 0.24), 2.0)
-		"lacerante":
-			for i in range(12):
-				var a = t * TAU * 0.9 + i * TAU / 12.0
-				_draw_preview_slash(c + Vector2.from_angle(a) * (20.0 + i % 3 * 13.0), a, 58.0, Color(1.0, 0.06, 0.14, 0.6), 2.4)
-			draw_circle(c, 76.0, Color(1.0, 0.02, 0.08, 0.08))
-		"prismatica":
-			for i in range(4):
-				var a = t * TAU + i * PI * 0.5
-				draw_line(c - Vector2.from_angle(a) * 78.0, c + Vector2.from_angle(a) * 78.0, Color.from_hsv(fposmod(t * 0.4 + i * 0.18, 1.0), 0.9, 1.0, 0.3), 8.0)
-				draw_line(c - Vector2.from_angle(a) * 78.0, c + Vector2.from_angle(a) * 78.0, Color(1.0, 1.0, 1.0, 0.42), 2.0)
-			_draw_preview_diamond(c, 34.0 + pulse * 5.0, accent)
-		"retornante":
-			for i in range(5):
-				var r = 28.0 + i * 18.0
-				draw_arc(c, r, - t * TAU - i, - t * TAU - i + PI * 1.55, 72, Color(accent.r, accent.g, accent.b, 0.4 - i * 0.045), 2.5)
-			draw_line(c + Vector2(-62, 20), c + Vector2(62, -24), Color(1.0, 0.42, 0.72, 0.32), 5.0)
-		"parasitica":
-			for i in range(12):
-				var edge = Vector2(rect.position.x + (rect.size.x if i % 2 == 0 else 0.0), rect.position.y + rect.size.y * float(i) / 12.0)
-				var target = c + Vector2.from_angle(i) * 24.0
-				_draw_preview_worm_path(edge, target, t + i * 0.1, accent)
-			draw_circle(c, 58.0, Color(0.22, 0.72, 0.12, 0.2))
-		"gravitante":
-			draw_circle(c, 42.0, Color(0.0, 0.0, 0.0, 0.84))
-			for i in range(5):
-				draw_arc(c, 52.0 + i * 14.0 + pulse * 4.0, t * TAU + i, t * TAU + i + PI * 1.42, 78, Color(0.54, 0.78, 1.0, 0.34 - i * 0.04), 2.5)
-			for i in range(8):
-				var frag = c + Vector2.from_angle( - t * TAU + i) * (82.0 - pulse * 18.0)
-				draw_rect(Rect2(frag - Vector2(4, 4), Vector2(8, 8)), Color(0.78, 0.9, 1.0, 0.38), true)
-		"acorrentada":
-			for i in range(3):
-				var enemy_pos: Vector2 = c + Vector2.from_angle(i * TAU / 3.0 + 0.35) * rect.size.y * 0.3
-				_draw_acorrentada_chain(enemy_pos, c, Color(0.92, 0.12, 0.1, 0.72), 8.0, 1.0, false)
-			draw_circle(c, 50.0 + pulse * 12.0, Color(0.18, 0.86, 1.0, 0.12))
-			draw_arc(c, 62.0, - t * TAU, TAU - t * TAU, 72, Color(1.0, 0.22, 0.16, 0.58), 4.0)
-		"eclipsada":
-			draw_circle(c, 82.0, Color(0.02, 0.1, 0.28, 0.22))
-			for i in range(10):
-				var angle: = t * TAU * 1.8 + float(i) * TAU / 10.0
-				var cut_center: Vector2 = c + Vector2.from_angle(angle) * (28.0 + float(i % 3) * 18.0)
-				_draw_preview_slash(cut_center, angle + PI * 0.36, 58.0 + float(i % 2) * 18.0, Color(0.42, 0.82, 1.0, 0.82), 4.0)
-			draw_arc(c, 86.0, - t * TAU * 2.0, - t * TAU * 2.0 + PI * 1.65, 72, Color(accent.r, accent.g, accent.b, 0.84), 4.0)
-			draw_arc(c, 58.0, t * TAU * 2.4, t * TAU * 2.4 + PI * 1.42, 54, Color(1.0, 0.88, 0.32, 0.72), 2.5)
-		_:
-			for i in range(6):
-				draw_arc(c, 34.0 + i * 13.0, t * TAU + i * 0.5, t * TAU + i * 0.5 + PI, 48, Color(accent.r, accent.g, accent.b, 0.38), 3.0)
-			draw_line(c + Vector2(0, -68), c + Vector2(0, 68), Color(1.0, 0.78, 0.26, 0.46), 4.0)
+	CombatEffectsPresentation._draw_manifest_preview_ultimate(self, rect, key, t, accent)
 
 
 func _draw_preview_geovana(pos: Vector2, size: float, accent: Color) -> void :
@@ -42313,17 +38931,7 @@ func _draw_preview_enemy(pos: Vector2, size: float, accent: Color) -> void :
 
 
 func _draw_preview_bolt(start: Vector2, end: Vector2, color: Color, t: float, width: float) -> void :
-	var points: = PackedVector2Array()
-	var dir = end - start
-	var normal = dir.orthogonal().normalized()
-	points.append(start)
-	for i in range(1, 7):
-		var k = float(i) / 7.0
-		var jitter = sin(t * 18.0 + i * 2.17) * 9.0 + cos(t * 11.0 + i) * 4.0
-		points.append(start.lerp(end, k) + normal * jitter)
-	points.append(end)
-	draw_polyline(points, Color(color.r, color.g, color.b, 0.42), width + 3.0, true)
-	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.84), max(1.0, width), true)
+	CombatEffectsPresentation._draw_preview_bolt(self, start, end, color, t, width)
 
 
 func _draw_preview_slash(center: Vector2, angle: float, length: float, color: Color, width: float) -> void :
@@ -42333,14 +38941,7 @@ func _draw_preview_slash(center: Vector2, angle: float, length: float, color: Co
 
 
 func _draw_preview_diamond(center: Vector2, radius: float, color: Color) -> void :
-	var points = PackedVector2Array([
-		center + Vector2(0, - radius), 
-		center + Vector2(radius * 0.72, 0), 
-		center + Vector2(0, radius), 
-		center + Vector2( - radius * 0.72, 0)
-	])
-	draw_colored_polygon(points, Color(color.r, color.g, color.b, 0.24))
-	draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, 0.76), 2.0, true)
+	CombatEffectsPresentation._draw_preview_diamond(self, center, radius, color)
 
 
 func _draw_preview_worm_path(start: Vector2, end: Vector2, t: float, color: Color) -> void :
@@ -42354,391 +38955,39 @@ func _draw_preview_worm_path(start: Vector2, end: Vector2, t: float, color: Colo
 
 
 func _draw_apolo_phase5_exhibition_world(camera: Vector2) -> void:
-	if not _apolo_phase5_exhibition_active():
-		return
-	var target: Vector2 = apolo_phase5_exhibition_target - camera
-	var player_screen: Vector2 = player_pos - camera
-	var aim_end: Vector2 = player_screen + apolo_phase5_exhibition_aim.normalized() * 150.0
-	draw_line(player_screen, aim_end, Color(0.2, 0.95, 1.0, 0.58), 2.0)
-	draw_arc(target, 24.0, 0.0, TAU, 32, Color(0.2, 1.0, 0.62, 0.86), 2.0)
-	draw_arc(target, 38.0, -time_alive * 2.2, -time_alive * 2.2 + PI * 1.15, 24, Color(1.0, 0.86, 0.24, 0.72), 2.0)
-	draw_circle(target, 4.0, Color(0.75, 1.0, 0.82, 0.95))
+	WorldEnvironmentPresentation._draw_apolo_phase5_exhibition_world(self, camera)
 
 
 func _draw_apolo_phase5_exhibition_overlay(viewport: Vector2) -> void:
-	if not apolo_phase5_exhibition_enabled or current_phase != 5:
-		return
-	var width: float = minf(360.0, viewport.x - 32.0)
-	var rect: Rect2 = Rect2(Vector2(18.0, 126.0), Vector2(width, 92.0))
-	var accent: Color = Color(0.18, 1.0, 0.62, 0.92)
-	draw_rect(rect, Color(0.015, 0.025, 0.02, 0.72), true)
-	draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.55), false, 2.0)
-	var title: String = "APOLO VS UMBRA"
-	var manifest_label: String = String(MANIFESTATIONS[selected_manifestation].get("name", manifestation_key)).to_upper()
-	var arch_label: String = "ARQ " + str(apolo_phase5_exhibition_arch.get("version", "?")) + " H" + str(apolo_phase5_exhibition_arch.get("hidden", "?"))
-	var damage_ratio: float = clampf(apolo_phase5_exhibition_damage_done / maxf(1.0, boss_hp_max), 0.0, 1.0)
-	draw_string(font, rect.position + Vector2(14.0, 22.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 28.0, _readable_text_size(13), Color(0.86, 1.0, 0.92, 0.95))
-	draw_string(font, rect.position + Vector2(14.0, 44.0), "%s  %s" % [manifest_label, apolo_phase5_exhibition_state], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 28.0, _readable_text_size(11), Color(0.7, 0.94, 1.0, 0.9))
-	draw_string(font, rect.position + Vector2(14.0, 66.0), "DANO %.1f%%  HITS %d  %s" % [damage_ratio * 100.0, apolo_phase5_exhibition_hits_taken, arch_label], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 28.0, _readable_text_size(11), Color(1.0, 0.86, 0.28, 0.9))
-	var bar_rect: Rect2 = Rect2(rect.position + Vector2(14.0, 76.0), Vector2(rect.size.x - 28.0, 5.0))
-	draw_rect(bar_rect, Color(0.08, 0.18, 0.14, 0.82), true)
-	draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * damage_ratio, bar_rect.size.y)), accent, true)
+	WorldEnvironmentPresentation._draw_apolo_phase5_exhibition_overlay(self, viewport)
 
 
 func _draw_boss6_miasma_ultimate(camera: Vector2) -> void :
-	if not _boss6_miasma_ultimate_active():
-		return
-	var center: = WORLD_SIZE * 0.5 - camera
-	var inner: = BOSS6_MIASMA_ULT_INNER_RADIUS
-	var outer: = _boss6_miasma_outer_radius()
-	var pulse: = 0.5 + sin(time_alive * 3.7) * 0.5
-
-
-	draw_arc(center, inner, 0.0, TAU, 72, Color(0.22, 0.58, 0.2, 0.35 + pulse * 0.15), 3.0, true)
-	draw_arc(center, outer, 0.0, TAU, 96, Color(0.35, 0.78, 0.25, 0.28 + pulse * 0.12), 3.0, true)
-
-	for front_index in range(BOSS6_MIASMA_ULT_FRONT_COUNT):
-		var front: float = boss6_miasma_ult_angle + float(front_index) * TAU / float(BOSS6_MIASMA_ULT_FRONT_COUNT)
-		var start_angle: = front - BOSS6_MIASMA_ULT_ARC
-		var end_angle: = front + BOSS6_MIASMA_ULT_ARC
-
-
-		var strand: = PackedVector2Array()
-		for step in range(16):
-			var t: = float(step) / 15.0
-			var ang: = lerpf(start_angle, end_angle, t) + sin(time_alive * 1.8 + t * 4.0 + front_index) * 0.05
-			var r: = lerpf(inner + 15.0, outer - 15.0, t)
-			strand.append(center + Vector2.from_angle(ang) * r)
-
-
-		draw_polyline(strand, Color(0.08, 0.24, 0.1, 0.35), 16.0, true)
-		draw_polyline(strand, Color(0.22, 0.64, 0.2, 0.45), 6.0, true)
-		draw_polyline(strand, Color(0.62, 0.95, 0.35, 0.65 + pulse * 0.2), 2.2, true)
-
-
-		for puff in range(8):
-			var puff_t: = float(puff) / 7.0
-			var drift: = fposmod(time_alive * 0.08 + front_index * 0.33 + puff_t * 0.4, 1.0)
-			var puff_angle: = lerpf(start_angle, end_angle, puff_t) + sin(time_alive * 1.4 + puff + front_index) * 0.04
-			var puff_radius: = lerpf(inner + 25.0, outer - 25.0, drift)
-			var puff_pos: = center + Vector2.from_angle(puff_angle) * puff_radius
-			draw_circle(puff_pos, 8.0 + pulse * 3.0, Color(0.12, 0.42, 0.12, 0.25))
-			draw_circle(puff_pos, 4.0 + pulse * 2.0, Color(0.48, 0.92, 0.28, 0.7))
-			draw_circle(puff_pos + Vector2(-1, -1), 1.8, Color(0.85, 1.0, 0.6, 0.85))
+	WorldEnvironmentPresentation._draw_boss6_miasma_ultimate(self, camera)
 
 
 func _draw_boss6_rotating_barrier(screen_pos: Vector2) -> void :
-	if not _boss6_miasma_ultimate_active():
-		return
-	var radius: = BOSS6_BARRIER_RADIUS
-	var gap_half: = BOSS6_BARRIER_GAP_ARC
-	for i in range(BOSS6_BARRIER_GAP_COUNT):
-		var gap_center: = _boss6_barrier_gap_center(i)
-		var next_gap: = _boss6_barrier_gap_center((i + 1) % BOSS6_BARRIER_GAP_COUNT)
-		var start_angle: = gap_center + gap_half
-		var end_angle: = next_gap - gap_half
-		if end_angle <= start_angle:
-			end_angle += TAU
-		draw_arc(screen_pos, radius, start_angle, end_angle, 48, Color(0.42, 1.0, 0.18, 0.62), 8.0, true)
-		draw_arc(screen_pos, radius + 13.0, start_angle + 0.04, end_angle - 0.04, 42, Color(0.78, 1.0, 0.36, 0.28), 3.0, true)
-		var gap_tip: = screen_pos + Vector2.from_angle(gap_center) * radius
-		draw_circle(gap_tip, 11.0, Color(0.05, 0.16, 0.04, 0.56))
-		draw_arc(screen_pos, radius - 26.0, gap_center - gap_half * 0.92, gap_center + gap_half * 0.92, 24, Color(0.14, 0.42, 0.1, 0.34), 2.0, true)
+	WorldEnvironmentPresentation._draw_boss6_rotating_barrier(self, screen_pos)
 
 
 func _boss_draw_size() -> Vector2:
-	return BOSS7_VISUAL_SIZE if current_phase == 7 else (Vector2(286, 257) if current_phase == 6 else (Vector2(300, 250) if current_phase == 4 else (Vector2(59.4, 88.0) if current_phase == 5 else Vector2(184, 170))))
+	return EntityVisualProfiles._boss_draw_size(self)
 
 
 func _draw_boss_world(camera: Vector2) -> void :
-	if not (boss_active and boss_hp > 0.0) and not (current_phase == 7 and boss7_core_active):
-		return
-	if current_phase == 7 and boss7_core_active:
-		var core_frames: Array = textures.get("boss7_core", [])
-		var core_tex: Texture2D = null
-		if not core_frames.is_empty():
-			core_tex = core_frames[int(boss_phase) % core_frames.size()]
-		if core_tex != null:
-			_draw_dynamic_shadow_fit(core_tex, boss7_core_pos - camera + Vector2(0, 16), Vector2(92, 72), false, true, 0.34)
-			_draw_entity_fit(core_tex, boss7_core_pos - camera, Vector2(92, 82), Color(1.0, 0.86, 0.62), true)
-		var core_pulse: = 0.5 + 0.5 * sin(time_alive * 9.0)
-		draw_circle(boss7_core_pos - camera, 54.0 + core_pulse * 6.0, Color(1.0, 0.32, 0.05, 0.12))
-		draw_arc(boss7_core_pos - camera, 58.0 + core_pulse * 8.0, -time_alive * 2.0, TAU - time_alive * 2.0, 72, Color(1.0, 0.66, 0.16, 0.72), 3.0)
-		_draw_bar(boss7_core_pos - camera + Vector2(-70, -78), 140.0, boss7_core_hp / maxf(1.0, boss7_core_hp_max), Color(1.0, 0.52, 0.08))
-		_draw_centered("%.1fs" % boss7_core_timer, boss7_core_pos - camera + Vector2(0, -104), 18, Color(1.0, 0.86, 0.48))
-		return
-	var draw_boss_sprite: bool = not (current_phase == 2 and boss2_ultimate_timer > 0.0 and not _boss2_ultimate_boss_visible())
-	if current_phase == 6 and (boss_entry_timer > 0.0 or boss6_relocating):
-		draw_boss_sprite = false
-	if boss_entry_timer > 0.0 or (current_phase == 6 and boss6_relocating):
-		_draw_boss_entry(camera)
-	if not draw_boss_sprite:
-		return
-	var boss_tex: Texture2D = _boss_texture()
-	var boss_draw_pos = _boss_draw_position()
-	var boss_draw_size: = _boss_draw_size()
-	if current_phase == 2:
-		_draw_dynamic_shadow_fit(boss_tex, boss_draw_pos - camera + Vector2(0, 10), Vector2(122, 82), boss2_facing_dir < 0.0, true, 0.34)
-	else:
-		_draw_dynamic_shadow_fit(boss_tex, boss_pos - camera, boss_draw_size, false, true, 0.44)
-	var boss_modulate = Color.WHITE
-	if _attack_target_is_boss() and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
-		_draw_attack_target_marker(boss_draw_pos - camera + Vector2(0, 55), 64.0, locked_target_kind == "boss")
-		boss_modulate = Color(1.0, 0.93, 0.48, 1.0)
-	if current_phase == 2:
-		_draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, Vector2(184, 170), boss2_facing_dir < 0.0, boss_modulate, true)
-	else:
-		if current_phase == 7:
-			_draw_boss7_fire_aura(boss_tex, boss_draw_pos - camera, boss_draw_size)
-		_draw_entity_fit(boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate, true)
-	if current_phase == 6:
-		_draw_boss6_amber_heart(boss_draw_pos - camera, boss_draw_size)
-		_draw_boss6_smoke_shield(boss_draw_pos - camera, boss_draw_size)
-		_draw_boss6_rotating_barrier(boss_draw_pos - camera)
-	if not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
-		var boss_bar_width: = 168.0 if current_phase == 7 else (232.0 if current_phase == 6 else (220.0 if current_phase == 4 else (66.0 if current_phase == 5 else 148.0)))
-		var bar_color: = Color(1.0, 0.46, 0.08) if current_phase == 7 else (Color(1.0, 0.58, 0.16) if current_phase == 6 else (Color(0.24, 1.0, 0.42) if current_phase == 5 else (Color(1.0, 0.62, 0.08) if current_phase == 4 else Color(1.0, 0.12, 0.22))))
-		_draw_bar(boss_draw_pos - camera + Vector2( - boss_bar_width * 0.5, - boss_draw_size.y * 0.54), boss_bar_width, boss_hp / boss_hp_max, bar_color)
-		if manifestation_key == "eletrica" and boss_eletrica_static_stacks > 0 and boss_eletrica_static_timer > 0.0:
-			_draw_eletrica_static_indicator(self, boss_draw_pos - camera + Vector2(0, - boss_draw_size.y * 0.54 - 12), boss_eletrica_static_stacks, boss_eletrica_static_timer, -1)
+	WorldEnvironmentPresentation._draw_boss_world(self, camera)
 
 
 func _draw_boss7_fire_aura(texture: Texture2D, center: Vector2, size: Vector2) -> void:
-	if texture == null:
-		return
-	var pulse: float = 0.5 + 0.5 * sin(time_alive * 7.4)
-	var dive_boost: float = 1.18 if boss7_state in [BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE_WAIT, BOSS7_STATE_DIVE_MARK, BOSS7_STATE_DIVE_FAKE, BOSS7_STATE_DIVE] else 1.0
-	var reborn_boost: float = 1.18 if boss7_reborn else 1.0
-	var layers: int = 2 if _memory_saver_active() else 3
-	for i in range(layers):
-		var layer_f: float = float(i)
-		var grow: float = (1.08 + layer_f * 0.055 + pulse * 0.026) * dive_boost
-		var offset: Vector2 = Vector2(sin(time_alive * (2.1 + layer_f) + layer_f * 1.7) * 4.0, -7.0 - layer_f * 5.0 + cos(time_alive * (2.9 + layer_f)) * 2.0)
-		var alpha: float = (0.2 - layer_f * 0.04) * reborn_boost
-		var color: Color = Color(1.0, 0.32 + layer_f * 0.12, 0.04, alpha)
-		_draw_entity_fit(texture, center + offset, size * grow, color, true)
-	var ember_count: int = 7 if not _memory_saver_active() else 4
-	for i in range(ember_count):
-		var angle: float = time_alive * (1.8 + float(i) * 0.13) + float(i) * TAU / float(ember_count)
-		var radius: Vector2 = Vector2(size.x * 0.32, size.y * 0.42)
-		var ember_pos: Vector2 = center + Vector2(cos(angle) * radius.x, sin(angle * 1.25) * radius.y - size.y * 0.06)
-		var ember_alpha: float = 0.32 + 0.24 * sin(time_alive * 8.0 + float(i))
-		draw_circle(ember_pos, 2.4 + pulse * 1.8, Color(1.0, 0.52, 0.12, ember_alpha))
+	WorldEnvironmentPresentation._draw_boss7_fire_aura(self, texture, center, size)
 
 
 func _draw_event_alert_world(camera: Vector2, viewport: Vector2) -> void:
-	if event_alert_timer <= 0.0:
-		return
-	var progress: float = clampf(1.0 - event_alert_timer / 4.0, 0.0, 1.0)
-	var fade: float = sin(progress * PI)
-	var center_world: Vector2 = player_pos.lerp(WORLD_SIZE * 0.5, 0.18)
-	var center: Vector2 = center_world - camera
-	var accent: Color = event_alert_color
-	var t: float = time_alive * 2.8 + float(event_alert_seed % 97) * 0.013
-	var max_radius: float = maxf(viewport.x, viewport.y) * 0.72
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(accent.r, accent.g, accent.b, 0.035 * fade), true)
-	for ring in range(4):
-		var ring_p: float = fposmod(progress + float(ring) * 0.18, 1.0)
-		var radius: float = lerpf(70.0, max_radius, ring_p)
-		var alpha: float = (1.0 - ring_p) * 0.32 * fade
-		draw_arc(center, radius, t + float(ring), t + float(ring) + TAU * 0.78, 96, Color(accent.r, accent.g, accent.b, alpha), 3.0, true)
-		draw_arc(center, radius * 0.72, -t * 0.9 - float(ring), -t * 0.9 - float(ring) + TAU * 0.38, 64, Color(1.0, 0.94, 1.0, alpha * 0.45), 1.6, true)
-	var cracks: int = 11 if not _memory_saver_active() else 6
-	for i in range(cracks):
-		var base_angle: float = float(i) * TAU / float(cracks) + sin(t + float(i)) * 0.18
-		var a: Vector2 = center + Vector2.from_angle(base_angle) * (70.0 + sin(t * 1.7 + i) * 16.0)
-		var b: Vector2 = center + Vector2.from_angle(base_angle + sin(t + i) * 0.08) * (max_radius * (0.42 + 0.18 * sin(float(i) * 1.3)))
-		draw_line(a, b, Color(accent.r, accent.g, accent.b, 0.16 * fade), 2.0, true)
-		if i % 3 == 0:
-			var mid: Vector2 = a.lerp(b, 0.58)
-			draw_line(mid, mid + Vector2.from_angle(base_angle + 0.72) * 34.0, Color(1.0, 0.82, 1.0, 0.12 * fade), 1.2, true)
+	CombatEffectsPresentation._draw_event_alert_world(self, camera, viewport)
 
 
 func _draw_game(viewport: Vector2) -> void :
-	var camera = _camera(viewport)
-	camera += _screen_shake_offset()
-	var map_texture = _current_map_texture()
-	if map_texture:
-		if current_phase == 5 and phase5_transmute_active:
-			_draw_phase5_transmute_map_reveal(map_texture, _desktop_stage_draw_rect(camera))
-		else:
-			draw_texture_rect(map_texture, _desktop_stage_draw_rect(camera), false)
-	else:
-		draw_rect(Rect2( - camera, WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
-	_draw_event_alert_world(camera, viewport)
-	_draw_boss6_necro_erosion(camera)
-	_draw_phase5_transmute_particles(camera)
-	if vfx_director:
-		vfx_director.draw_floor_effects(self, camera)
-
-	if not _active_prismatica_secondary().is_empty():
-		var dr = Rect2( - camera, WORLD_SIZE)
-		draw_rect(dr, Color(0.01, 0.0, 0.05, 0.85), true)
-		var t = float(Time.get_ticks_msec()) * 0.001
-		var p_pos = player_pos - camera
-		if gfx_low_resource:
-			var hue = fposmod(t * 0.32, 1.0)
-			draw_circle(p_pos, 210.0 + sin(t * 2.4) * 18.0, Color.from_hsv(hue, 0.85, 1.0, 0.08))
-			draw_arc(p_pos, 152.0, t * TAU, t * TAU + PI * 1.45, 96, Color.from_hsv(hue + 0.18, 0.9, 1.0, 0.28), 3.0)
-			draw_arc(p_pos, 92.0, - t * TAU * 0.7, - t * TAU * 0.7 + PI * 1.2, 72, Color(1.0, 1.0, 1.0, 0.2), 2.0)
-		else:
-
-
-			var grid_size = 100.0
-			var ox = fmod(camera.x, grid_size)
-			var oy = fmod(camera.y, grid_size)
-			for x in range(int(viewport.x / grid_size) + 2):
-				for y in range(int(viewport.y / grid_size) + 2):
-					if (x + y) % 2 == 0:
-						var rect = Rect2(x * grid_size - ox, y * grid_size - oy, grid_size, grid_size)
-						var hue = fmod(t * 0.4 + (x + y) * 0.05, 1.0)
-						draw_rect(rect, Color.from_hsv(hue, 0.9, 1.0, 0.15), true)
-
-
-			for i in range(4):
-				var a = t * (1.2 + i * 0.3) + i * TAU / 4.0
-				var center = Vector2(viewport.x / 2, viewport.y / 2) + Vector2(cos(a * 0.8), sin(a * 1.2)) * (300.0 + sin(t) * 50.0)
-				var c = Color.from_hsv(fmod(t * 0.5 + i * 0.25, 1.0), 1.0, 1.0, 1.0)
-				var base_r = 180.0 + sin(t * 3 + i) * 40.0
-
-				for k in range(5):
-					draw_circle(center, base_r * (1.0 - k * 0.15), Color(c.r, c.g, c.b, 0.04 + k * 0.02))
-
-			for i in range(10):
-				var r = 160.0 + sin(t * 2.5 + i) * 35.0 + i * 45.0
-				var c = Color.from_hsv(fmod(t * 0.2 + i * 0.15, 1.0), 0.9, 1.0, 0.05)
-				draw_circle(p_pos, r, c)
-
-	if boss1_rain_active and weather_kind == "rain":
-		_draw_rain_puddles(camera)
-	for anchor in (anchors + net_anchors):
-		var p: Vector2 = anchor["pos"] - camera
-		draw_circle(p, 52, Color(0.2, 0.86, 1.0, 0.1))
-		draw_arc(p, 52, 0, TAU, 48, Color(0.4, 0.95, 1.0, 0.55), 2)
-	for prism in (prisms + net_prisms):
-		_draw_prismatica_prism(prism, camera)
-	_draw_advanced_manifestation_world(camera)
-	_draw_teleport_effects(camera)
-	_draw_manifest_evolution_fields(camera)
-	for link in (seed_links + net_seed_links):
-		var enemy = _enemy_by_uid(int(link.get("uid", -1)))
-		if enemy:
-			draw_arc(enemy["pos"] - camera, 34, 0, TAU, 32, Color(0.4, 1.0, 0.36, 0.66), 3)
-	for slash in (slashes + net_slashes):
-		var alpha = clamp(float(slash["life"]) / float(slash["max"]), 0.0, 1.0)
-		var slash_kind = String(slash.get("kind", ""))
-		if slash_kind == "lacerante_spin":
-			_draw_lacerante_spin(slash, camera, alpha)
-		elif slash_kind == "lacerante_blade":
-			_draw_lacerante_blade(slash, camera, alpha)
-		elif slash.has("points"):
-			var c: Color = slash["color"]
-			c.a = 0.22 + alpha * 0.55
-			var packed: = PackedVector2Array()
-			for point in slash["points"]:
-				packed.append(point - camera)
-			draw_polyline(packed, c, float(slash["width"]) * alpha, true)
-		else:
-			var c: Color = slash["color"]
-			c.a = 0.22 + alpha * 0.55
-			draw_line(slash["a"] - camera, slash["b"] - camera, c, float(slash["width"]) * alpha)
-	for wave in shockwaves:
-		var w_kind = String(wave.get("kind", ""))
-		var w_max = float(wave.get("max_life", 1.0))
-		var w_life = float(wave.get("life", 0.0))
-		var w_alpha = clamp(w_life / max(0.01, w_max), 0.0, 1.0)
-		if w_kind == "sinfonia_silencio":
-			draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(1.0, 0.84, 0.2, w_alpha * 0.8), 6)
-			draw_arc(wave["pos"] - camera, max(0.0, float(wave["radius"]) - 10.0), 0, TAU, 60, Color(1.0, 0.6, 0.1, w_alpha * 0.4), 2)
-		else:
-			draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(0.2, 1.0, 1.0, 0.6), 4)
-	_draw_eletrica_kinetic_waves(camera)
-	_draw_eletrica_chains(camera)
-	_draw_manifestation_secondaries(camera)
-	_draw_network_ability_visuals(camera)
-	if vfx_director:
-		vfx_director.draw_world_vfx(self, camera)
-	_draw_parasite_spit_zones(camera)
-	_draw_phase6_pustule_pools(camera)
-	_draw_phase7_ember_patches(camera)
-	_draw_boss7_flame_waves(camera)
-	_draw_boss7_ultimate(camera)
-	_draw_boss7_ground_indicators(camera)
-	_draw_boss2_environment(camera)
-	_draw_phase3_environment(camera)
-	_draw_phase4_environment(camera)
-	_draw_phase5_environment(camera)
-	if boss1_rain_active and current_phase == 2:
-		_draw_weather_precipitation(camera)
-	_draw_boss_attacks(camera)
-	_draw_boss6_miasma_ultimate(camera)
-	_draw_boss3_faith_link(camera)
-	_draw_boss1_rewind_world(camera)
-	_draw_network_rewind_visuals(camera)
-	for orb in heal_orbs:
-		draw_circle(orb["pos"] - camera, 15, Color(0.25, 1.0, 0.42, 0.78))
-		draw_arc(orb["pos"] - camera, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
-	_draw_larapio_ultimate_portals(camera)
-	_draw_larapio_coin_drops(camera)
-	_draw_arauto_card_drops(camera)
-	_draw_arauto_evolution_fragment(camera)
-	_draw_aura_world(camera)
-	_draw_remote_aura_world(camera)
-	_draw_devorador_world(camera)
-	_draw_common_card_world(camera)
-	_draw_rare_card_world(camera)
-	_draw_acorrentada_world(camera)
-	_draw_arauto(camera)
-	_draw_crepuscular_arauto_cracks(camera)
-	_draw_enemies(camera)
-	_draw_projectiles(camera)
-	_draw_boss3_miasma_clones(camera)
-	if current_phase != 6:
-		_draw_boss_world(camera)
-		_draw_crepuscular_boss_cracks(camera)
-	_draw_parasite_marks(camera)
-	_draw_parasite_foreground(camera)
-	if not phase_fragment.is_empty():
-		_draw_phase_fragment(camera)
-	_draw_team_revival_world(camera)
-	if not online_local_spectator:
-		_draw_companions(camera)
-		_draw_boss6_fossil_echo(camera)
-		_draw_player(camera)
-	if current_phase == 6:
-		_draw_boss_world(camera)
-		_draw_crepuscular_boss_cracks(camera)
-	_draw_phantom_player(camera)
-	_draw_effects(camera)
-	_draw_eclipsada_vfx(camera)
-	_draw_eclipsada_stealth_overlay(viewport, camera)
-	if boss1_rain_active and current_phase != 2:
-		_draw_weather_precipitation(camera)
-	if boss1_rewind_sequence.is_empty() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown"):
-		_draw_ground_target_preview(viewport, camera)
-	if _boss3_miasma_active() and boss3_miasma_variant == 3:
-		_draw_boss3_miasma_clouds(camera)
-	if _boss3_miasma_active() and boss3_miasma_variant != 3 and not _boss3_miasma_qte_active():
-		_draw_boss3_miasma_overlay(viewport, camera)
-	if _is_umbra_miasma_active():
-		_draw_umbra_miasma_overlay(viewport, camera)
-	_draw_apolo_phase5_exhibition_world(camera)
-	if preview_capture_mode:
-		return
-	hud_feedback.overlay(self, viewport)
-	_draw_hud(viewport)
-	_draw_apolo_phase5_exhibition_overlay(viewport)
-	_draw_boss1_rewind_overlay(viewport, camera)
-	if boss1_rewind_sequence.is_empty() and not _spectator_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown"):
-		if teleport_dragging:
-			_draw_teleport_preview(viewport, camera)
-		_draw_touch_controls(viewport)
-	_draw_tutorial_overlay(viewport, camera)
-	if _boss3_miasma_qte_active():
-		_draw_boss3_miasma_overlay(viewport, camera)
-	_draw_revive_request(viewport)
-	if secondary_drain_flash_timer > 0.0:
-		_draw_secondary_drain_border(viewport)
+	CombatEffectsPresentation._draw_game(self, viewport)
 
 
 func _low_health_red_alpha() -> float:
@@ -42747,35 +38996,7 @@ func _low_health_red_alpha() -> float:
 
 
 func _draw_secondary_drain_border(viewport: Vector2) -> void :
-	var ratio: float = clamp(secondary_drain_flash_timer / 0.3, 0.0, 1.0)
-	var pulse: float = 0.55 + sin(time_alive * 38.0) * 0.45
-	var alpha: float = (0.2 + pulse * 0.18) * ratio
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.2, 0.0, 0.02, 0.1 * ratio), true)
-	var thickness: float = 18.0 + 10.0 * pulse
-	var red: = Color(1.0, 0.04, 0.1, alpha + 0.1 * ratio)
-	var blue: = Color(0.35, 0.9, 1.0, alpha * 0.75)
-	draw_rect(Rect2(0.0, 0.0, viewport.x, thickness), red, true)
-	draw_rect(Rect2(0.0, viewport.y - thickness, viewport.x, thickness), red, true)
-	draw_rect(Rect2(0.0, 0.0, thickness, viewport.y), red, true)
-	draw_rect(Rect2(viewport.x - thickness, 0.0, thickness, viewport.y), red, true)
-	for i in range(10):
-		var t: float = fmod(time_alive * (1.2 + i * 0.04) + i * 0.137, 1.0)
-		var edge: = i % 4
-		var from: = Vector2.ZERO
-		match edge:
-			0:
-				from = Vector2(t * viewport.x, thickness * 0.52)
-			1:
-				from = Vector2(viewport.x - thickness * 0.52, t * viewport.y)
-			2:
-				from = Vector2((1.0 - t) * viewport.x, viewport.y - thickness * 0.52)
-			_:
-				from = Vector2(thickness * 0.52, (1.0 - t) * viewport.y)
-		var inward: = (viewport * 0.5 - from).normalized()
-		var mid: = from + inward.rotated(sin(time_alive * 22.0 + i) * 0.35) * (24.0 + pulse * 16.0)
-		var tip: = from + inward * (44.0 + pulse * 22.0)
-		draw_line(from, mid, red, 4.0)
-		draw_line(mid, tip, blue, 2.0)
+	WorldEnvironmentPresentation._draw_secondary_drain_border(self, viewport)
 
 
 func _screen_shake_offset() -> Vector2:
@@ -42791,445 +39012,39 @@ func _refresh_screen_shake_frame_offset() -> void:
 
 
 func _draw_companions(camera: Vector2) -> void :
-	if trembo_charges > 0:
-		var trembo_texture = _companion_frame("trembo_" + trembo_facing, trembo_anim_time, 7.0)
-		var trembo_screen = trembo_pos - camera
-		_draw_dynamic_shadow_fit(trembo_texture, trembo_screen, Vector2(66, 92), false, true, 0.38)
-		_draw_entity_fit(trembo_texture, trembo_screen, Vector2(66, 92), Color.WHITE, true)
-		var pulse = 0.5 + sin(trembo_anim_time * 4.0) * 0.12
-		draw_arc(trembo_screen + Vector2(0, 34), 25.0, 0, TAU, 30, Color(0.32, 0.84, 1.0, pulse), 2.0)
-	if petro_active:
-		var petro_texture = _petro_frame()
-		var size = Vector2(58, 72) if petro_evolution == 1 else (Vector2(86, 104) if petro_evolution == 2 else Vector2(122, 138))
-		var petro_screen = petro_pos - camera
-		_draw_dynamic_shadow_fit(petro_texture, petro_screen, size, false, true, 0.42)
-		_draw_entity_fit(petro_texture, petro_screen, size, Color.WHITE, true)
-		_draw_bar(petro_screen + Vector2(-28, - size.y * 0.55), 56, clamp(petro_hp / max(1.0, petro_hp_max), 0.0, 1.0), Color(0.18, 0.94, 1.0))
-		_draw_centered("PETRO %d" % petro_evolution, petro_screen + Vector2(0, - size.y * 0.55 - 8), 12, Color(0.78, 1.0, 1.0, 0.92))
+	CombatEffectsPresentation._draw_companions(self, camera)
 
 
 func _petro_frame() -> Texture2D:
-	var direction: String = petro_facing
-	if petro_evolution > 1 and direction in ["up", "down", "stop"]:
-		direction = "left" if petro_facing != "right" else "right"
-	var candidates: = [
-		"petro_%d_%s" % [petro_evolution, direction], 
-		"petro_%d_left" % petro_evolution, 
-		"petro_%d_right" % petro_evolution, 
-		"petro_1_%s" % direction, 
-		"petro_1_stop", 
-		"petro_1_left", 
-		"petro_1_right"
-	]
-	for key in candidates:
-		var frame: = _companion_frame(String(key), petro_anim_time, 6.0)
-		if frame != null:
-			return frame
-	return null
+	return EntityVisualProfiles._petro_frame(self)
 
 
 func _companion_frame(key: String, animation_time: float, fps: float) -> Texture2D:
-	var frames = textures.get(key, [])
-	if not frames is Array or frames.is_empty():
-		return null
-	return frames[int(animation_time * fps) % frames.size()]
+	return EntityVisualProfiles._companion_frame(self, key, animation_time, fps)
 
 
 func _draw_devorador_world(camera: Vector2) -> void :
-	var t: float = float(Time.get_ticks_msec()) * 0.001
-	for effect in devorador_effects:
-		var pos: Vector2 = Vector2(effect.get("pos", player_pos)) - camera
-		var life: float = float(effect.get("life", 0.0))
-		var max_life: float = max(0.01, float(effect.get("max", 1.0)))
-		var ratio: float = clamp(life / max_life, 0.0, 1.0)
-		var radius: float = float(effect.get("radius", 120.0)) * (1.0 - ratio * 0.28)
-		var phase: float = float(effect.get("phase", 0.0))
-		draw_circle(pos, radius * (1.0 - ratio) * 0.18, Color(0.1, 0.0, 0.08, 0.3 * ratio))
-		draw_arc(pos, radius, 0, TAU, 96, Color(0.96, 0.12, 0.72, 0.18 + ratio * 0.24), 5.0)
-		draw_arc(pos, radius * 0.64, phase + t * 2.2, phase + t * 2.2 + PI * 1.3, 48, Color(1.0, 0.38, 0.92, 0.54 * ratio), 4.0)
-		for i in range(8):
-			var a: float = phase + t * 1.6 + float(i) * TAU / 8.0
-			var outer: Vector2 = pos + Vector2.from_angle(a) * radius * 0.92
-			var inner: Vector2 = pos + Vector2.from_angle(a + sin(t + i) * 0.18) * radius * 0.2
-			draw_line(outer, inner, Color(1.0, 0.22, 0.84, 0.34 * ratio), 2.0, true)
-	if devorador_mark_kind != "":
-		var mark_pos: Vector2 = devorador_mark_pos
-		if devorador_mark_kind == "enemy":
-			var enemy = _enemy_by_uid(devorador_mark_uid)
-			if enemy != null:
-				mark_pos = Vector2(enemy.get("pos", mark_pos))
-		elif devorador_mark_kind == "boss" and boss_active:
-			mark_pos = boss_pos
-		var p: Vector2 = mark_pos - camera
-		var pulse: float = 0.5 + 0.5 * sin(t * 5.2)
-		var r: float = 48.0 if devorador_mark_kind == "enemy" else 92.0
-		draw_circle(p, r * 0.55, Color(0.12, 0.0, 0.1, 0.18 + pulse * 0.08))
-		draw_arc(p, r, t * 1.8, t * 1.8 + PI * 1.65, 56, Color(1.0, 0.18, 0.82, 0.7), 3.0)
-		draw_arc(p, r * 0.72, - t * 2.1, - t * 2.1 + PI * 1.45, 44, Color(0.34, 0.92, 1.0, 0.42), 2.0)
-		var crown_y: float = p.y - r * 0.82
-		draw_line(Vector2(p.x - 18, crown_y), Vector2(p.x, crown_y - 16.0 - pulse * 6.0), Color(1.0, 0.84, 0.24, 0.82), 2.5)
-		draw_line(Vector2(p.x, crown_y - 16.0 - pulse * 6.0), Vector2(p.x + 18, crown_y), Color(1.0, 0.84, 0.24, 0.82), 2.5)
-		draw_line(Vector2(p.x - 24, crown_y + 5), Vector2(p.x + 24, crown_y + 5), Color(1.0, 0.18, 0.82, 0.74), 2.5)
-	if devorador_destiny_shield > 0.0 and devorador_shield_timer > 0.0:
-		var shield_pos: Vector2 = player_pos - camera
-		var shield_ratio: float = clamp(devorador_shield_timer / DEVORADOR_SHIELD_DURATION, 0.0, 1.0)
-		var shield_pulse: float = 0.5 + 0.5 * sin(t * 7.0)
-		var shield_radius: float = 50.0 + shield_pulse * 5.0
-		draw_circle(shield_pos, shield_radius, Color(0.96, 0.12, 0.72, 0.08 + shield_ratio * 0.1))
-		draw_arc(shield_pos, shield_radius, t * 2.5, t * 2.5 + PI * 1.55, 60, Color(1.0, 0.2, 0.84, 0.62 * shield_ratio), 3.0)
-		draw_arc(shield_pos, shield_radius + 8.0, - t * 1.8, - t * 1.8 + PI * 1.1, 48, Color(0.36, 0.94, 1.0, 0.42 * shield_ratio), 2.0)
+	CombatEffectsPresentation._draw_devorador_world(self, camera)
 
 
 func _draw_common_card_world(camera: Vector2) -> void :
-	var t: float = float(Time.get_ticks_msec()) * 0.001
-	for effect in common_card_effects:
-		var pos: Vector2 = Vector2(effect.get("pos", player_pos)) - camera
-		var life: float = float(effect.get("life", 0.0))
-		var max_life: float = max(0.01, float(effect.get("max", 1.0)))
-		var ratio: float = clamp(life / max_life, 0.0, 1.0)
-		var radius: float = float(effect.get("radius", 46.0)) * (1.0 - ratio * 0.18)
-		var color: Color = Color(effect.get("color", Color(0.86, 0.94, 1.0)))
-		match String(effect.get("kind", "")):
-			"choque":
-				color = Color(0.92, 0.86, 1.0, 0.7 * ratio)
-				draw_circle(pos, radius * 0.25, Color(1.0, 1.0, 1.0, 0.2 * ratio))
-				draw_arc(pos, radius, t * 4.0, t * 4.0 + PI * 1.35, 54, color, 4.0)
-				draw_arc(pos, radius * 0.62, - t * 4.6, - t * 4.6 + PI * 1.1, 44, Color(0.42, 1.0, 1.0, 0.5 * ratio), 3.0)
-			"choque_seed":
-				draw_arc(pos, radius, 0.0, TAU, 20, Color(0.7, 0.92, 1.0, 0.26 * ratio), 2.0)
-			"ferrolho":
-				draw_arc(pos, radius, 0.0, TAU, 48, Color(0.92, 0.58, 1.0, 0.58 * ratio), 4.0)
-				draw_line(pos + Vector2(0, - radius * 0.75), pos + Vector2(0, radius * 0.34), Color(0.96, 0.78, 1.0, 0.72 * ratio), 5.0, true)
-			"limiar":
-				draw_arc(pos, radius, 0.0, TAU * 0.7, 52, Color(color.r, color.g, color.b, 0.64 * ratio), 5.0)
-				draw_arc(pos, radius * 0.58, PI, PI + TAU * 0.55, 38, Color(color.r, color.g, color.b, 0.4 * ratio), 3.0)
-			"desvio_gain":
-				draw_arc(player_pos - camera, 54.0, t * 2.2, t * 2.2 + PI * 1.25, 48, Color(0.74, 0.48, 1.0, 0.52 * ratio), 3.0)
-			"desvio_hit":
-				draw_arc(pos, radius, - t * 3.0, - t * 3.0 + PI * 1.5, 48, Color(0.74, 0.48, 1.0, 0.68 * ratio), 4.0)
-			"ponto_cego":
-				draw_arc(pos, radius, PI * 0.18, PI * 1.82, 44, Color(1.0, 0.86, 0.34, 0.62 * ratio), 3.0)
-				draw_line(pos + Vector2(-18, - radius * 0.45), pos + Vector2(18, - radius * 0.45), Color(1.0, 0.86, 0.34, 0.72 * ratio), 3.0, true)
-			"tregua":
-				draw_circle(pos, radius * 0.46, Color(0.38, 1.0, 0.72, 0.1 * ratio))
-				draw_arc(pos, radius, - t * 1.4, TAU - t * 1.4, 48, Color(0.38, 1.0, 0.72, 0.48 * ratio), 2.5)
-				draw_arc(pos, radius * 0.68, t * 1.2, t * 1.2 + PI * 1.3, 36, Color(0.44, 0.92, 1.0, 0.38 * ratio), 2.0)
-			"cinzas":
-				draw_arc(pos, radius, t * 3.0, t * 3.0 + PI * 1.45, 40, Color(1.0, 0.58, 0.28, 0.58 * ratio), 3.0)
-				draw_circle(pos, radius * 0.25, Color(0.4, 0.18, 0.08, 0.18 * ratio))
-			"casulo":
-				for i in range(5):
-					var a: = t * 1.8 + float(i) * TAU / 5.0
-					var p: = pos + Vector2.from_angle(a) * radius * 0.72
-					draw_circle(p, 7.0, Color(0.54, 1.0, 0.86, 0.46 * ratio))
-				draw_arc(pos, radius, - t * 2.0, TAU - t * 2.0, 54, Color(0.54, 1.0, 0.86, 0.52 * ratio), 3.0)
-			"passagem":
-				draw_circle(pos, radius * 0.38, Color(0.72, 0.9, 1.0, 0.13 * ratio))
-				draw_arc(pos, radius, t * 2.6, t * 2.6 + PI * 1.6, 48, Color(0.72, 0.9, 1.0, 0.55 * ratio), 2.4)
-			"ancora":
-				draw_arc(pos, radius, 0.0, TAU, 60, Color(0.34, 1.0, 0.66, 0.42 * ratio), 2.6)
-				draw_line(pos + Vector2(0, -18), pos + Vector2(0, 18), Color(0.34, 1.0, 0.66, 0.62 * ratio), 3.0, true)
-				draw_line(pos + Vector2(-14, 8), pos + Vector2(14, 8), Color(0.34, 1.0, 0.66, 0.5 * ratio), 2.0, true)
-			"rastro_spawn":
-				draw_circle(pos, radius * 0.35, Color(0.34, 1.0, 0.86, 0.16 * ratio))
-				draw_arc(pos, radius, t * 2.2, t * 2.2 + PI * 1.55, 44, Color(0.34, 1.0, 0.86, 0.58 * ratio), 2.3)
-			"rebate", "rebate_fail":
-				draw_arc(pos, radius, - t * 4.0, - t * 4.0 + PI * 1.7, 42, Color(1.0, 0.76, 0.24, 0.62 * ratio), 2.8)
-				draw_line(pos + Vector2( - radius * 0.35, 0), pos + Vector2(radius * 0.35, 0), Color(1.0, 0.92, 0.5, 0.5 * ratio), 2.0, true)
-			"impulso":
-				draw_arc(pos, radius, - PI * 0.45, PI * 1.45, 48, Color(0.42, 0.78, 1.0, 0.6 * ratio), 3.0)
-				draw_arc(pos, radius * 0.65, PI * 0.35, PI * 1.65, 34, Color(1.0, 0.78, 0.24, 0.48 * ratio), 2.0)
-			"eco":
-				for i in range(3):
-					draw_arc(pos, radius * (0.55 + float(i) * 0.22), t * (1.0 + i), TAU + t * (1.0 + i), 48, Color(0.86, 0.64, 1.0, 0.34 * ratio), 1.6 + i)
-			"zona":
-				draw_circle(pos, radius, Color(0.44, 1.0, 0.7, 0.045 * ratio))
-				draw_arc(pos, radius, 0.0, TAU, 72, Color(0.44, 1.0, 0.7, 0.46 * ratio), 3.0)
-			"folego":
-				var dir: = last_facing.normalized()
-				if dir.length() <= 0.05:
-					dir = Vector2.RIGHT
-				draw_line(pos - dir * radius * 0.65, pos + dir * radius * 0.7, Color(1.0, 0.56, 0.22, 0.54 * ratio), 4.0, true)
-				draw_arc(pos, radius, dir.angle() - 0.65, dir.angle() + 0.65, 28, Color(1.0, 0.86, 0.34, 0.58 * ratio), 2.0)
-			"margem", "margem_reduce":
-				draw_arc(pos, radius, - t * 2.0, TAU - t * 2.0, 50, Color(1.0, 0.36, 0.46, 0.58 * ratio), 2.6)
-				draw_rect(Rect2(pos - Vector2(18, 10), Vector2(36, 20)), Color(0.16, 0.02, 0.05, 0.18 * ratio), true)
-			"ressonancia", "ressonancia_ready":
-				for i in range(4):
-					var a: = t * 1.4 + float(i) * TAU / 4.0
-					draw_circle(pos + Vector2.from_angle(a) * radius * 0.65, 4.8, Color(0.58, 1.0, 0.96, 0.72 * ratio))
-				draw_arc(pos, radius, t, TAU + t, 64, Color(0.58, 1.0, 0.96, 0.38 * ratio), 2.0)
-			"intervalo":
-				draw_arc(pos, radius, - t * 3.0, - t * 3.0 + PI * 1.65, 54, Color(0.58, 0.84, 1.0, 0.62 * ratio), 3.0)
-				draw_arc(pos, radius * 0.62, t * 4.2, t * 4.2 + PI * 1.15, 36, Color(0.86, 0.96, 1.0, 0.46 * ratio), 2.0)
-				draw_line(pos + Vector2(-18, 0), pos + Vector2(18, 0), Color(0.58, 0.84, 1.0, 0.58 * ratio), 2.0, true)
-			"nucleo":
-				draw_circle(pos, radius * 0.42, Color(0.36, 1.0, 0.58, 0.12 * ratio))
-				draw_arc(pos, radius, t * 1.7, t * 1.7 + PI * 1.72, 58, Color(0.36, 1.0, 0.58, 0.54 * ratio), 2.6)
-				draw_arc(pos, radius * 0.7, - t * 1.2, - t * 1.2 + PI * 1.2, 42, Color(0.66, 1.0, 0.9, 0.42 * ratio), 1.8)
-			"limiar_ruina":
-				draw_arc(pos, radius, PI * 0.08, PI * 1.92, 50, Color(1.0, 0.32, 0.22, 0.64 * ratio), 3.4)
-				draw_line(pos + Vector2( - radius * 0.42, - radius * 0.28), pos + Vector2(radius * 0.42, radius * 0.28), Color(1.0, 0.72, 0.26, 0.58 * ratio), 2.2, true)
-				draw_circle(pos, radius * 0.18, Color(1.0, 0.18, 0.12, 0.16 * ratio))
-			"estase":
-				draw_circle(pos, radius * 0.48, Color(0.52, 1.0, 0.86, 0.1 * ratio))
-				draw_arc(pos, radius, 0.0, TAU, 70, Color(0.52, 1.0, 0.86, 0.44 * ratio), 2.0)
-				draw_arc(pos, radius * 0.78, PI * 0.15, PI * 0.85, 34, Color(0.86, 1.0, 0.96, 0.48 * ratio), 2.0)
-	if desvio_probabilidade_charges > 0:
-		var player_screen: Vector2 = player_pos - camera
-		for i in range(desvio_probabilidade_charges):
-			var angle: float = t * 2.4 + float(i) * TAU / float(max(1, desvio_probabilidade_charges))
-			var p: Vector2 = player_screen + Vector2.from_angle(angle) * 58.0
-			draw_circle(p, 5.5, Color(0.74, 0.48, 1.0, 0.76))
-			draw_arc(p, 10.0, - angle, - angle + PI, 18, Color(0.92, 0.82, 1.0, 0.62), 1.8)
-	var support_player_screen: Vector2 = player_pos - camera
-	for vestige in rastro_vestiges:
-		var vestige_pos: Vector2 = Vector2(vestige.get("pos", player_pos)) - camera
-		var vestige_ratio: float = clamp(float(vestige.get("life", 0.0)) / maxf(0.01, float(vestige.get("max", 1.0))), 0.0, 1.0)
-		var arm: = float(vestige.get("arm", 0.0))
-		var vestige_radius: = _rastro_activation_radius() * (0.62 + sin(t * 4.0 + float(vestige.get("phase", 0.0))) * 0.05)
-		draw_circle(vestige_pos, vestige_radius, Color(0.34, 1.0, 0.86, 0.035 * vestige_ratio))
-		draw_arc(vestige_pos, vestige_radius, t * 1.5, t * 1.5 + PI * 1.65, 56, Color(0.34, 1.0, 0.86, (0.22 if arm <= 0.0 else 0.1) * vestige_ratio), 2.0)
-	if tregua_regenerativa_active:
-		var pulse: float = 0.5 + sin(t * 5.0) * 0.5
-		draw_circle(support_player_screen, 48.0 + pulse * 5.0, Color(0.38, 1.0, 0.72, 0.08 + pulse * 0.04))
-		draw_arc(support_player_screen, 54.0, - t * 1.2, TAU - t * 1.2, 56, Color(0.38, 1.0, 0.72, 0.46), 2.0)
-	if estase_reparadora_active:
-		var estase_pulse: float = 0.5 + sin(t * 4.0) * 0.5
-		draw_circle(support_player_screen, 50.0 + estase_pulse * 7.0, Color(0.52, 1.0, 0.86, 0.07 + estase_pulse * 0.05))
-		draw_arc(support_player_screen, 60.0, t * 0.8, t * 0.8 + PI * 1.75, 64, Color(0.52, 1.0, 0.86, 0.48), 2.2)
-		draw_arc(support_player_screen, 42.0, - t * 1.1, - t * 1.1 + PI * 1.25, 42, Color(0.86, 1.0, 0.96, 0.32), 1.8)
-	if casulo_reativo_timer > 0.0:
-		var casulo_world_ratio: float = clamp(casulo_reativo_timer / max(0.01, _casulo_duration()), 0.0, 1.0)
-		draw_circle(support_player_screen, 56.0, Color(0.54, 1.0, 0.86, 0.12 * casulo_world_ratio))
-		draw_arc(support_player_screen, 62.0, t * 2.4, t * 2.4 + PI * 1.5, 52, Color(0.54, 1.0, 0.86, 0.68 * casulo_world_ratio), 4.0)
-	if passagem_intangivel_timer > 0.0:
-		var passagem_world_ratio: float = clamp(passagem_intangivel_timer / max(0.01, _passagem_duration()), 0.0, 1.0)
-		draw_circle(support_player_screen, 44.0, Color(0.72, 0.9, 1.0, 0.1 * passagem_world_ratio))
-		draw_arc(support_player_screen, 50.0, - t * 3.0, - t * 3.0 + PI * 1.8, 48, Color(0.72, 0.9, 1.0, 0.64 * passagem_world_ratio), 2.6)
-	if not ancora_vital_state.is_empty():
-		var anchor_pos: Vector2 = Vector2(ancora_vital_state.get("pos", player_pos)) - camera
-		var radius: = float(ancora_vital_state.get("radius", _ancora_radius()))
-		var ancora_world_ratio: float = clamp(float(ancora_vital_state.get("life", 0.0)) / max(0.01, float(ancora_vital_state.get("max", ANCORA_VITAL_LIFE))), 0.0, 1.0)
-		draw_circle(anchor_pos, radius, Color(0.34, 1.0, 0.66, 0.045 * ancora_world_ratio))
-		draw_arc(anchor_pos, radius, t * 1.4, TAU + t * 1.4, 72, Color(0.34, 1.0, 0.66, 0.42 * ancora_world_ratio), 2.4)
-		draw_circle(anchor_pos, 13.0 + sin(t * 7.0) * 2.0, Color(0.34, 1.0, 0.66, 0.48 * ancora_world_ratio))
+	CombatEffectsPresentation._draw_common_card_world(self, camera)
 
 
 func _draw_rare_card_world(camera: Vector2) -> void :
-	var t: float = float(Time.get_ticks_msec()) * 0.001
-	for effect in rare_card_effects:
-		var pos: Vector2 = Vector2(effect.get("pos", player_pos)) - camera
-		var life: float = float(effect.get("life", 0.0))
-		var max_life: float = max(0.01, float(effect.get("max", 1.0)))
-		var ratio: float = clamp(life / max_life, 0.0, 1.0)
-		var radius: float = float(effect.get("radius", 84.0))
-		match String(effect.get("kind", "")):
-			"mandamento":
-				var law_color: = Color(1.0, 0.78, 0.24, 0.68 * ratio)
-				for i in range(3):
-					var a: = t * 2.6 + float(i) * TAU / 3.0
-					draw_arc(pos, radius * (0.62 + float(i) * 0.18), a, a + PI * 1.05, 48, law_color, 3.0)
-				draw_line(pos + Vector2( - radius * 0.52, 0.0), pos + Vector2(radius * 0.52, 0.0), Color(1.0, 0.96, 0.7, 0.48 * ratio), 2.0, true)
-			"carta_zero":
-				for i in range(4):
-					var r: = radius * (0.35 + float(i) * 0.18) * (1.0 + (1.0 - ratio) * 0.18)
-					draw_arc(pos, r, t * (1.4 + i * 0.3), t * (1.4 + i * 0.3) + PI * 1.42, 54, Color(0.9, 0.96, 1.0, (0.42 - i * 0.06) * ratio), 2.0)
-				draw_circle(pos, 10.0 + 10.0 * (1.0 - ratio), Color(1.0, 1.0, 1.0, 0.18 * ratio))
-			"necro_spawn", "necro_ready":
-				draw_circle(pos, radius * 0.36, Color(0.22, 0.02, 0.42, 0.2 * ratio))
-				draw_arc(pos, radius, - t * 2.0, - t * 2.0 + PI * 1.7, 56, Color(0.46, 1.0, 0.94, 0.52 * ratio), 3.0)
-				draw_arc(pos, radius * 0.68, t * 2.8, t * 2.8 + PI * 1.1, 38, Color(0.78, 0.38, 1.0, 0.46 * ratio), 2.0)
-			"antimatter":
-				draw_circle(pos, radius * (1.0 - ratio) * 0.72, Color(0.04, 0.0, 0.09, 0.42 * ratio))
-				for i in range(7):
-					var a: = t * 5.0 + float(i) * TAU / 7.0
-					var outer: = pos + Vector2.from_angle(a) * radius * (0.92 - (1.0 - ratio) * 0.18)
-					draw_line(outer, pos, Color(0.84, 0.28, 1.0, 0.36 * ratio), 2.2, true)
-				draw_arc(pos, radius, t * 3.2, t * 3.2 + PI * 1.55, 72, Color(0.84, 0.28, 1.0, 0.72 * ratio), 4.0)
-			"egide":
-				draw_circle(pos, radius * 0.42, Color(0.4, 0.02, 0.02, 0.18 * ratio))
-				draw_arc(pos, radius, t * 2.4, t * 2.4 + PI * 1.62, 62, Color(1.0, 0.72, 0.22, 0.66 * ratio), 3.2)
-				draw_arc(pos, radius * 0.72, - t * 2.0, - t * 2.0 + PI * 1.22, 44, Color(1.0, 0.24, 0.3, 0.52 * ratio), 2.2)
-				draw_line(pos + Vector2(-18, -10), pos + Vector2(0, 16), Color(1.0, 0.86, 0.44, 0.54 * ratio), 2.4, true)
-				draw_line(pos + Vector2(18, -10), pos + Vector2(0, 16), Color(1.0, 0.86, 0.44, 0.54 * ratio), 2.4, true)
-	if _mandamento_count() > 0 and mandamento_invulnerability > 0.0:
-		var p: Vector2 = player_pos - camera
-		var r: float = 52.0 + sin(t * 12.0) * 4.0
-		draw_circle(p, r, Color(1.0, 0.78, 0.24, 0.12))
-		draw_arc(p, r, t * 2.8, t * 2.8 + PI * 1.6, 54, Color(1.0, 0.86, 0.36, 0.74), 3.0)
-	if antimatter_armed:
-		var p: Vector2 = player_pos - camera
-		var pulse: float = 0.5 + sin(t * 9.0) * 0.5
-		draw_arc(p, 64.0 + pulse * 9.0, - t * 3.4, TAU - t * 3.4, 70, Color(0.84, 0.26, 1.0, 0.54 + pulse * 0.18), 3.0)
-	elif _rare_card_count("coracao_antimateria") > 0 and antimatter_charge > 0.0:
-		var ratio: float = clamp(antimatter_charge / max(1.0, _antimatter_required_charge()), 0.0, 1.0)
-		draw_arc(player_pos - camera, 48.0, - PI * 0.5, - PI * 0.5 + TAU * ratio, 48, Color(0.84, 0.26, 1.0, 0.5), 2.0)
-	if stored_excess > 1.0:
-		var vault_ratio: float = clamp(stored_excess / max(1.0, player_damage * 12.0), 0.0, 1.0)
-		var p: Vector2 = player_pos - camera + Vector2(0, 30)
-		draw_arc(p, 42.0 + vault_ratio * 18.0, t * 1.6, t * 1.6 + PI * 1.25, 42, Color(1.0, 0.72, 0.2, 0.4 + vault_ratio * 0.2), 3.0)
-	if egide_hemofaga_shield > 0.0:
-		var p: Vector2 = player_pos - camera
-		var limit: = maxf(1.0, _egide_shield_limit())
-		var shield_ratio: = clampf(egide_hemofaga_shield / limit, 0.0, 1.0)
-		var pulse: = 0.5 + sin(t * 5.6) * 0.5
-		var r: = 56.0 + shield_ratio * 14.0 + pulse * 4.0
-		draw_circle(p, r, Color(1.0, 0.28, 0.18, 0.05 + shield_ratio * 0.09))
-		draw_arc(p, r, t * 1.5, t * 1.5 + PI * 1.62, 68, Color(1.0, 0.72, 0.22, 0.34 + shield_ratio * 0.26), 2.6)
-		draw_arc(p, r * 0.78, - t * 1.8, - t * 1.8 + PI * 1.12, 44, Color(1.0, 0.22, 0.26, 0.26 + shield_ratio * 0.22), 1.8)
-	for specter in active_necro_specters:
-		var pos: Vector2 = Vector2(specter.get("pos", player_pos)) - camera
-		var life_ratio: float = clamp(float(specter.get("life", 0.0)) / max(0.01, float(specter.get("max", 1.0))), 0.0, 1.0)
-		var tex: Texture2D = _enemy_texture(specter)
-		var size: = Vector2(62, 62) if not bool(specter.get("elite", false)) else Vector2(76, 76)
-		_draw_dynamic_shadow_fit(tex, pos + Vector2(0, 5), size, false, true, 0.24 * life_ratio)
-		_draw_entity_fit(tex, pos + Vector2(0, sin(t * 5.0 + float(specter.get("phase", 0.0))) * 3.0), size, Color(0.5, 1.0, 0.94, 0.46 + life_ratio * 0.3), true)
-		draw_arc(pos, size.x * 0.52, t * 2.0, t * 2.0 + PI * 1.2, 36, Color(0.46, 1.0, 0.94, 0.46 * life_ratio), 2.0)
+	CombatEffectsPresentation._draw_rare_card_world(self, camera)
 
 
 func _draw_acorrentada_world(camera: Vector2) -> void :
-	if manifestation_key != "acorrentada" and acorrentada_links.is_empty() and acorrentada_visuals.is_empty():
-		return
-	var t: float = float(Time.get_ticks_msec()) * 0.001
-	_draw_acorrentada_worn_chains(camera, t)
-	for link in acorrentada_links:
-		var fade: float = clampf(float(link.get("life", 0.0)) / max(0.01, float(link.get("max", 1.0))), 0.0, 1.0)
-		match String(link.get("kind", "")):
-			"pair", "triad":
-				var targets: Array = link.get("targets", [])
-				var chains: Dictionary = link.get("chains", {})
-				for i in range(targets.size()):
-					for j in range(i + 1, targets.size()):
-						if not _acorrentada_target_alive(targets[i]) or not _acorrentada_target_alive(targets[j]):
-							continue
-						var key: = "%d_%d" % [i, j]
-						if chains.has(key):
-							_draw_physical_chain(chains[key], camera, Color(0.2, 0.84, 1.0, 0.82 * fade), 8.0, fade, false)
-						else:
-							_draw_acorrentada_chain(_acorrentada_target_pos(targets[i]) - camera, _acorrentada_target_pos(targets[j]) - camera, Color(0.2, 0.84, 1.0, 0.82 * fade), 8.0, fade, false)
-			"anchor":
-				var target: Dictionary = link.get("target", {})
-				var anchor: = Vector2(link.get("anchor", player_pos))
-				if target.is_empty():
-					draw_arc(anchor - camera, 38.0, 0.0, TAU, 28, Color(0.2, 0.84, 1.0, 0.42 * fade), 2.0)
-				elif _acorrentada_target_alive(target):
-					if link.has("physics"):
-						_draw_physical_chain(link["physics"], camera, Color(0.2, 0.84, 1.0, 0.78 * fade), 7.0, fade, false)
-					else:
-						_draw_acorrentada_chain(_acorrentada_target_pos(target) - camera, anchor - camera, Color(0.2, 0.84, 1.0, 0.78 * fade), 7.0, fade, false)
-					draw_arc(anchor - camera, 28.0 + sin(t * 6.0) * 3.0, 0.0, TAU, 28, Color(0.88, 0.16, 0.12, 0.52 * fade), 2.0)
-			"boss":
-				if boss_active and boss_hp > 0.0:
-					draw_arc(boss_pos - camera, 132.0 + sin(t * 4.0) * 5.0, 0.0, TAU, 72, Color(0.2, 0.84, 1.0, 0.3 * fade), 3.0)
-					draw_arc(boss_pos - camera, 94.0, t, t + PI * 1.3, 54, Color(0.88, 0.16, 0.12, 0.46 * fade), 3.0)
-	for visual in acorrentada_visuals:
-		var fade: float = clampf(float(visual.get("life", 0.0)) / max(0.01, float(visual.get("max", 1.0))), 0.0, 1.0)
-		match String(visual.get("kind", "")):
-			"light":
-				if visual.has("physics"):
-					_draw_physical_chain(visual["physics"], camera, Color(0.18, 0.86, 1.0, 0.88 * fade), 6.0, fade, true)
-				else:
-					_draw_acorrentada_chain(Vector2(visual.get("a", player_pos)) - camera, Vector2(visual.get("b", player_pos)) - camera, Color(0.18, 0.86, 1.0, 0.88 * fade), 6.0, fade, true)
-			"heavy":
-				if visual.has("physics"):
-					_draw_physical_chain(visual["physics"], camera, Color(0.92, 0.12, 0.1, 0.84 * fade), 10.0, fade, false)
-				else:
-					_draw_acorrentada_chain(Vector2(visual.get("a", player_pos)) - camera, Vector2(visual.get("b", player_pos)) - camera, Color(0.92, 0.12, 0.1, 0.84 * fade), 10.0, fade, false)
-			"cross":
-				if visual.has("physics_1") and visual.has("physics_2"):
-					_draw_physical_chain(visual["physics_1"], camera, Color(0.18, 0.86, 1.0, 0.9 * fade), 8.0, fade, true)
-					_draw_physical_chain(visual["physics_2"], camera, Color(0.92, 0.12, 0.1, 0.88 * fade), 10.0, fade, false)
-				else:
-					var a: = Vector2(visual.get("a", player_pos))
-					var b: = Vector2(visual.get("b", player_pos))
-					var dir: = (b - a).normalized()
-					if dir.length() <= 0.01:
-						dir = Vector2.RIGHT
-					var side: = dir.orthogonal() * 42.0
-					_draw_acorrentada_chain(a + side - camera, b - side - camera, Color(0.18, 0.86, 1.0, 0.9 * fade), 8.0, fade, true)
-					_draw_acorrentada_chain(a - side - camera, b + side - camera, Color(0.92, 0.12, 0.1, 0.88 * fade), 10.0, fade, false)
-				var b: = Vector2(visual.get("b", player_pos))
-				draw_circle(b - camera, 18.0 + 16.0 * (1.0 - fade), Color(1.0, 1.0, 1.0, 0.3 * fade))
-			"sweep":
-				var origin: = Vector2(visual.get("pos", player_pos)) - camera
-				var dir: = Vector2(visual.get("dir", Vector2.RIGHT)).normalized()
-				var radius: = float(visual.get("radius", 260.0))
-				var start_a: = dir.angle() - deg_to_rad(58.0)
-				var end_a: = dir.angle() + deg_to_rad(58.0)
-				for k in range(4):
-					draw_arc(origin, radius * (0.52 + float(k) * 0.12), start_a, end_a, 36, Color(0.92, 0.12, 0.1, (0.26 + k * 0.06) * fade), 3.0 + k)
-			"implosion":
-				var center: = Vector2(visual.get("pos", player_pos)) - camera
-				var radius: = float(visual.get("radius", 300.0)) * (0.35 + 0.65 * fade)
-				draw_circle(center, radius, Color(0.12, 0.0, 0.0, 0.1 * fade))
-				draw_arc(center, radius, - t * 2.4, TAU - t * 2.4, 80, Color(1.0, 0.18, 0.14, 0.52 * fade), 4.0)
-	for enemy in enemies:
-		var count: int = _acorrentada_enemy_elos(enemy)
-		if count <= 0:
-			continue
-		var pos: Vector2 = Vector2(enemy["pos"]) - camera
-		var flash: = clampf(float(enemy.get("acorrentada_flash", 0.0)) / 0.7, 0.0, 1.0)
-		for i in range(count):
-			var angle: float = t * (1.2 + count * 0.18) + float(i) * TAU / float(max(1, count))
-			var p: Vector2 = pos + Vector2.from_angle(angle) * (34.0 + count * 4.0)
-			draw_arc(p, 8.0 + flash * 3.0, angle, angle + PI * 1.55, 16, Color(0.18, 0.86, 1.0, 0.62 + flash * 0.26), 2.0)
-	if boss_active and boss_hp > 0.0 and acorrentada_boss_elos > 0:
-		var pos: Vector2 = boss_pos - camera
-		for i in range(acorrentada_boss_elos):
-			var angle: float = t * 0.9 + float(i) * TAU / float(max(1, acorrentada_boss_elos))
-			draw_arc(pos + Vector2.from_angle(angle) * 72.0, 14.0, angle, angle + PI * 1.55, 18, Color(0.18, 0.86, 1.0, 0.48), 2.4)
-	if acorrentada_boss_crack_timer > 0.0 and boss_active:
-		draw_arc(boss_pos - camera, 108.0, - t * 1.2, TAU - t * 1.2, 64, Color(1.0, 0.22, 0.16, 0.48), 3.0)
+	CombatEffectsPresentation._draw_acorrentada_world(self, camera)
 
 
 func _draw_acorrentada_worn_chains(camera: Vector2, t: float) -> void :
-	if manifestation_key != "acorrentada":
-		return
-	var base_fade: float = 0.58 + clampf(acorrentada_tension / 100.0, 0.0, 1.0) * 0.34
-	for entry in acorrentada_worn_chains:
-		if not entry.has("physics"):
-			continue
-		var index: = int(entry.get("index", 0))
-		var warm: = index % 2 == 1
-		var attacking: bool = entry.has("attack_motion")
-		var color: = Color(1.0, 0.16, 0.1, base_fade) if warm else Color(0.05, 0.92, 1.0, base_fade)
-		var width: = (8.8 if warm else 7.6) if attacking else (6.2 if warm else 5.2)
-		var chain_fade: = minf(1.0, base_fade + (0.3 if attacking else 0.0))
-		_draw_physical_chain(entry["physics"], camera, color, width, chain_fade, not warm)
-		if attacking:
-			var tip: = Vector2(entry["physics"].get("b", player_pos)) - camera
-			draw_circle(tip, 8.0, Color(color.r, color.g, color.b, 0.18 * chain_fade))
-			draw_arc(tip, 13.0, - t * 5.0, TAU - t * 5.0, 18, Color(1.0, 0.92, 0.72, 0.68 * chain_fade), 2.0)
-		var pulse_center: Vector2 = player_pos - camera + Vector2.from_angle(t * (1.4 + index * 0.12) + float(index)) * (28.0 + index * 3.0)
-		draw_circle(pulse_center, 3.2 + sin(t * 8.0 + index) * 1.2, Color(color.r, color.g, color.b, 0.32 * base_fade))
+	CombatEffectsPresentation._draw_acorrentada_worn_chains(self, camera, t)
 
 
 func _draw_acorrentada_chain(a: Vector2, b: Vector2, color: Color, width: float, fade: float, light: = false) -> void :
-	var delta: = b - a
-	var length: = delta.length()
-	if length <= 4.0:
-		return
-	var dir: = delta / length
-	var normal: = dir.orthogonal()
-	var spacing: = 18.0 if light else 22.0
-	var count: int = max(2, int(length / spacing))
-	_draw_acorrentada_chain_glow(PackedVector2Array([a, b]), color, width, fade)
-	for i in range(count + 1):
-		var k: = float(i) / float(count)
-		var center: Vector2 = a.lerp(b, k) + normal * sin(k * TAU * 2.0 + time_alive * 8.0) * (2.0 if light else 4.0)
-		var tangent: = dir * (7.0 if light else 9.0)
-		var side: = normal * (4.0 if light else 6.0)
-		var p1: Vector2 = center - tangent
-		var p2: Vector2 = center + side
-		var p3: Vector2 = center + tangent
-		var p4: Vector2 = center - side
-		var link_color: = _acorrentada_link_color(color, fade, i, light)
-		draw_polyline(PackedVector2Array([p1, p2, p3, p4, p1]), _acorrentada_link_outline_color(color, fade), max(2.0, width * 0.42), true)
-		draw_polyline(PackedVector2Array([p1, p2, p3, p4, p1]), link_color, max(1.4, width * 0.24), true)
-		if i % 3 == 0:
-			draw_circle(center, max(1.5, width * 0.19), _acorrentada_link_outline_color(color, fade * 0.65))
-			draw_circle(center, max(1.1, width * 0.15), Color(1.0, 0.96, 0.7, 0.42 * fade))
+	CombatEffectsPresentation._draw_acorrentada_chain(self, a, b, color, width, fade, light)
 
 
 func _draw_acorrentada_chain_glow(path: PackedVector2Array, color: Color, width: float, fade: float) -> void :
@@ -43257,506 +39072,43 @@ func _acorrentada_link_outline_color(color: Color, fade: float) -> Color:
 
 
 func _init_chain_physics(a: Vector2, b: Vector2, kind: = "heavy") -> Dictionary:
-	var distance: float = a.distance_to(b)
-	var spacing: float = 18.0 if kind == "light" else 22.0
-	var num_nodes: int = clamp(int(distance / spacing), 8, 28)
-	var chain: Dictionary = {
-		"points": [], 
-		"progress": 0.0, 
-		"a": a, 
-		"b": a, 
-		"target_b": b, 
-		"ripple_t": 0.0, 
-		"ripple_amp": 260.0, 
-		"kind": kind
-	}
-	for i in range(num_nodes):
-		var t: float = float(i) / float(num_nodes - 1)
-		var pos: Vector2 = a.lerp(b, t)
-		chain["points"].append({
-			"pos": pos, 
-			"prev_pos": pos, 
-			"fixed": (i == 0 or i == num_nodes - 1)
-		})
-	return chain
+	return ChainVisualPhysics._init_chain_physics(self, a, b, kind)
 
 
 func _update_single_chain_physics(chain: Dictionary, a_curr: Vector2, b_target: Vector2, delta: float) -> void :
-	if delta <= 0.0:
-		return
-
-	if float(chain.get("progress", 0.0)) < 1.0:
-		chain["progress"] = minf(1.0, float(chain.get("progress", 0.0)) + delta * 6.5)
-
-	var progress: float = float(chain.get("progress", 0.0))
-	var b_curr: Vector2 = a_curr.lerp(b_target, progress)
-
-	chain["a"] = a_curr
-	chain["b"] = b_curr
-	chain["target_b"] = b_target
-
-	var points: Array = chain.get("points", [])
-	var num_nodes: int = points.size()
-	if num_nodes < 2:
-		return
-
-	var gravity: Vector2 = Vector2(0.0, 6000.0)
-	var damping: float = 0.94
-
-	var ripple_amp: float = float(chain.get("ripple_amp", 0.0))
-	var ripple_t: float = float(chain.get("ripple_t", 0.0))
-	if ripple_amp > 0.0:
-		ripple_t += delta
-		ripple_amp = maxf(0.0, ripple_amp - delta * 150.0)
-		chain["ripple_t"] = ripple_t
-		chain["ripple_amp"] = ripple_amp
-
-	var dir: Vector2 = (b_curr - a_curr).normalized()
-	if dir.length() <= 0.01:
-		dir = Vector2.RIGHT
-	var normal: Vector2 = dir.orthogonal()
-
-	for i in range(num_nodes):
-		var p: Dictionary = points[i]
-		if i == 0:
-			p["pos"] = a_curr
-			p["fixed"] = true
-		elif i == num_nodes - 1:
-			p["pos"] = b_curr
-			p["fixed"] = true
-		else:
-			p["fixed"] = false
-
-		if not bool(p.get("fixed", false)):
-			var pos: Vector2 = Vector2(p.get("pos", Vector2.ZERO))
-			var prev_pos: Vector2 = Vector2(p.get("prev_pos", pos))
-			var temp: Vector2 = pos
-			var velocity: Vector2 = (pos - prev_pos) * damping
-			pos += velocity + gravity * delta * delta
-			p["pos"] = pos
-			p["prev_pos"] = temp
-
-			if ripple_amp > 0.0:
-				var k: float = float(i) / float(num_nodes - 1)
-				var wave: float = sin(k * PI * 3.0 - ripple_t * 25.0)
-				p["pos"] = pos + normal * wave * ripple_amp * delta
-
-	var total_dist: float = a_curr.distance_to(b_curr)
-	var rest_length: float = total_dist / float(num_nodes - 1)
-	if rest_length > 0.1:
-		for iter in range(3):
-			for i in range(num_nodes - 1):
-				var p1: Dictionary = points[i]
-				var p2: Dictionary = points[i + 1]
-				var pos1: Vector2 = Vector2(p1.get("pos", Vector2.ZERO))
-				var pos2: Vector2 = Vector2(p2.get("pos", Vector2.ZERO))
-				var delta_vec: Vector2 = pos2 - pos1
-				var dist: float = delta_vec.length()
-				if dist > 0.01:
-					var diff: float = rest_length - dist
-					var percent: float = (diff / dist) * 0.5
-					var offset: Vector2 = delta_vec * percent
-					var f1: bool = bool(p1.get("fixed", false))
-					var f2: bool = bool(p2.get("fixed", false))
-					if f1 and f2:
-						pass
-					elif f1:
-						p2["pos"] = pos2 + offset * 2.0
-					elif f2:
-						p1["pos"] = pos1 - offset * 2.0
-					else:
-						p1["pos"] = pos1 - offset
-						p2["pos"] = pos2 + offset
+	ChainVisualPhysics._update_single_chain_physics(self, chain, a_curr, b_target, delta)
 
 
 func _draw_physical_chain(chain: Dictionary, camera: Vector2, color: Color, width: float, fade: float, light: = false) -> void :
-	var points: Array = chain.get("points", [])
-	var num_nodes: int = points.size()
-	if num_nodes < 2:
-		return
-
-	var backing_points: PackedVector2Array = PackedVector2Array()
-	for i in range(num_nodes):
-		var p: Dictionary = points[i]
-		backing_points.append(Vector2(p.get("pos", Vector2.ZERO)) - camera)
-	_draw_acorrentada_chain_glow(backing_points, color, width, fade)
-
-	for i in range(num_nodes - 1):
-		var p1: Vector2 = Vector2(points[i].get("pos", Vector2.ZERO)) - camera
-		var p2: Vector2 = Vector2(points[i + 1].get("pos", Vector2.ZERO)) - camera
-		var segment: Vector2 = p2 - p1
-		var dist: float = segment.length()
-		if dist < 1.0:
-			continue
-		var dir: Vector2 = segment / dist
-		var normal: Vector2 = dir.orthogonal()
-
-		var center: Vector2 = p1 + segment * 0.5
-
-		var is_wide: bool = (i % 2 == 0)
-		var link_tangent_len: float = 7.0 if light else 9.0
-		var link_side_len: float = (5.5 if light else 8.0) if is_wide else (3.2 if light else 4.5)
-
-		var tangent: Vector2 = dir * link_tangent_len
-		var side: Vector2 = normal * link_side_len
-
-		var pt1: Vector2 = center - tangent
-		var pt2: Vector2 = center + side
-		var pt3: Vector2 = center + tangent
-		var pt4: Vector2 = center - side
-
-		draw_polyline(PackedVector2Array([pt1, pt2, pt3, pt4, pt1]), _acorrentada_link_outline_color(color, fade), max(2.0, width * 0.42), true)
-		draw_polyline(PackedVector2Array([pt1, pt2, pt3, pt4, pt1]), _acorrentada_link_color(color, fade, i, light), max(1.4, width * 0.24), true)
-		if i % 3 == 0:
-			draw_circle(center, max(1.4, width * 0.18), _acorrentada_link_outline_color(color, fade * 0.62))
-			draw_circle(center, max(1.0, width * 0.13), Color(1.0, 0.96, 0.7, 0.38 * fade))
+	CombatEffectsPresentation._draw_physical_chain(self, chain, camera, color, width, fade, light)
 
 
 func _init_link_chain_physics(link: Dictionary) -> void :
-	var kind: String = String(link.get("kind", ""))
-	if kind == "anchor":
-		var target: Dictionary = link.get("target", {})
-		var target_pos: Vector2 = _acorrentada_target_pos(target) if not target.is_empty() else Vector2(link.get("anchor"))
-		link["physics"] = _init_chain_physics(Vector2(link.get("anchor")), target_pos, "heavy")
-	elif kind == "pair" or kind == "triad":
-		var targets: Array = link.get("targets", [])
-		var chains: Dictionary = {}
-		for i in range(targets.size()):
-			for j in range(i + 1, targets.size()):
-				var a: Vector2 = _acorrentada_target_pos(targets[i])
-				var b: Vector2 = _acorrentada_target_pos(targets[j])
-				chains["%d_%d" % [i, j]] = _init_chain_physics(a, b, "heavy")
-		link["chains"] = chains
+	ChainVisualPhysics._init_link_chain_physics(self, link)
 
 
 func _draw_enemies(camera: Vector2) -> void :
-	for enemy in enemies:
-		if not _world_point_in_view(Vector2(enemy.get("pos", Vector2.ZERO)), camera, 180.0):
-			continue
-		var pos: Vector2 = enemy["pos"] - camera
-		var tex = _enemy_texture(enemy)
-		var size = _enemy_draw_size(enemy)
-		var draw_pos = pos + _enemy_visual_offset(enemy)
-		var alpha = float(enemy.get("alpha", 1.0))
-		var modulate_color = Color(1, 1, 1, alpha)
-		if enemy["type"] == ENEMY_ATIRADOR:
-			modulate_color = Color(0.7, 0.86, 1.0, alpha)
-		elif enemy["type"] == ENEMY_KAMIKAZE:
-			modulate_color = Color(1.0, 1.0, 1.0, alpha)
-			if sin(time_alive * 12.0) > 0.0:
-				modulate_color = Color(1.0, 0.92, 0.9, alpha)
-		elif enemy["type"] == ENEMY_DEVOTO:
-			modulate_color = Color(0.76, 1.0, 0.56, alpha)
-		elif enemy["type"] == ENEMY_INCENSARIO:
-			modulate_color = Color(0.88, 0.72, 1.0, alpha)
-		elif enemy["type"] == ENEMY_GUARDIAO:
-			modulate_color = Color(0.7, 0.76, 0.62, alpha)
-		elif enemy["type"] == ENEMY_COUT_ATTACK_SPEED:
-			modulate_color = Color(1.0, 0.66, 0.18, alpha)
-		elif enemy["type"] == ENEMY_SHIELD_REFLECTOR:
-			modulate_color = Color(0.62, 0.92, 1.0, alpha)
-		elif enemy["type"] == ENEMY_PYRO_PENGUIN:
-			modulate_color = Color(1.0, 1.0, 1.0, alpha)
-		elif enemy["type"] == ENEMY_NEXUS_CARTOGRAPHER:
-			modulate_color = Color(0.92, 0.24, 0.78, alpha)
-		elif enemy["type"] == ENEMY_NEXUS_CHRONOPHAGE:
-			modulate_color = Color(1.0, 0.68, 0.16, alpha)
-		elif enemy["type"] == ENEMY_NEXUS_REFRACTOR:
-			modulate_color = Color(0.24, 0.88, 1.0, alpha)
-		elif enemy["type"] == ENEMY_NEXUS_WEAVER:
-			modulate_color = Color(0.2, 1.0, 0.64, alpha)
-		elif enemy["type"] == ENEMY_NEXUS_ECHO:
-			modulate_color = Color(1.0, 0.34, 0.68, alpha * 0.82)
-		elif enemy["type"] == ENEMY_MIASMA_EEL:
-			modulate_color = Color(0.58, 1.0, 0.78, alpha)
-		elif enemy["type"] == ENEMY_LODARIO:
-			modulate_color = Color(0.86, 0.7, 0.46, alpha)
-		elif enemy["type"] == ENEMY_FOSSIL_PUSTULE:
-			modulate_color = Color(1.0, 0.62, 0.32, alpha)
-		elif enemy["type"] == ENEMY_CHRONAL_LEECH:
-			modulate_color = Color(0.92, 0.42, 0.72, alpha)
-		elif enemy["type"] == ENEMY_CINERIDO:
-			modulate_color = Color(1.0, 0.7, 0.42, alpha)
-		elif enemy["type"] == ENEMY_PANGOLIRO:
-			modulate_color = Color(1.0, 0.82, 0.48, alpha)
-			if float(enemy.get("phase7_vulnerable", 0.0)) > 0.0:
-				modulate_color = Color(1.0, 0.52, 0.22, alpha)
-		elif enemy["type"] == ENEMY_CORVOL:
-			modulate_color = Color(0.82, 0.82, 0.76, alpha)
-		if enemy["type"] == ENEMY_MIASMA_EEL and float(enemy.get("eel_relocating", 0.0)) > 0.0:
-			_draw_miasma_eel_relocation_path(enemy, camera)
-			continue
-		if enemy["type"] == ENEMY_CHRONAL_LEECH:
-			_draw_sanguessuga_state(enemy, camera)
-		var visual_size: Vector2 = size
-		if enemy["type"] == ENEMY_PANGOLIRO and String(enemy.get("phase7_state", "walk")) == "roll":
-			visual_size *= PHASE7_PANGOLIRO_ROLL_VISUAL_SCALE
-		var reconstitute_ratio: float = clamp(float(enemy.get("reconstitute_time", 0.0)) / COUT_AS_RECONSTITUTE_TIME, 0.0, 1.0)
-		if reconstitute_ratio > 0.0:
-			var rebuild: = 1.0 - reconstitute_ratio
-			visual_size *= 0.72 + rebuild * 0.28
-			draw_pos += Vector2(sin(time_alive * 36.0 + int(enemy["uid"])) * 4.0, -14.0 * reconstitute_ratio)
-			modulate_color = modulate_color.lerp(Color(1.0, 0.58, 0.14, alpha), 0.55)
-			for shard in range(5):
-				var angle: float = time_alive * 4.5 + float(shard) * TAU / 5.0 + int(enemy["uid"]) * 0.01
-				var shard_pos: Vector2 = pos + Vector2.from_angle(angle) * (18.0 + reconstitute_ratio * 42.0)
-				draw_line(shard_pos, draw_pos, Color(1.0, 0.48, 0.1, 0.3 + reconstitute_ratio * 0.34), 2.0)
-		var enemy_flip: bool = _enemy_should_flip(enemy)
-		_draw_dynamic_shadow(tex, pos, visual_size, enemy_flip, 0.4 * alpha)
-		var is_attack_target = _attack_target_is_enemy(int(enemy["uid"]))
-		if is_attack_target:
-			_draw_attack_target_marker(draw_pos + Vector2(0, visual_size.y * 0.3), visual_size.x * 0.43, locked_target_kind == "enemy" and locked_target_uid == int(enemy["uid"]))
-
-		if not _active_prismatica_secondary().is_empty() and enemy["pos"].distance_to(player_pos) < 900.0:
-			var t = float(Time.get_ticks_msec()) * 0.001
-			var hue = fmod(t * 0.8 + int(enemy["uid"]) * 0.15, 1.0)
-			var c = Color.from_hsv(hue, 1.0, 1.0, 0.5)
-
-			draw_circle(draw_pos + Vector2(0, 16), 46, Color(c.r, c.g, c.b, 0.18))
-			modulate_color = c
-		if is_attack_target:
-			modulate_color = modulate_color.lerp(Color(1.0, 0.92, 0.34, alpha), 0.48)
-
-		_draw_phase7_enemy_vfx(enemy, camera, pos, draw_pos, visual_size)
-		if enemy["type"] == ENEMY_PANGOLIRO and String(enemy.get("phase7_state", "walk")) == "roll":
-			var roll_dir: Vector2 = Vector2(enemy.get("phase7_roll_dir", enemy.get("facing_dir", Vector2.LEFT))).normalized()
-			var roll_sign: float = 1.0 if roll_dir.x >= 0.0 else -1.0
-			var roll_turns: float = PHASE7_PANGOLIRO_ROLL_VISUAL_TURNS
-			var roll_rotation: float = float(enemy.get("phase7_timer", 0.0)) / maxf(0.01, PHASE7_PANGOLIRO_ROLL_TIME) * TAU * roll_turns * roll_sign
-			_draw_entity_stretched_rotated(tex, draw_pos, visual_size, roll_rotation, modulate_color, enemy_flip)
-		else:
-			_draw_entity(tex, draw_pos, visual_size, modulate_color, enemy_flip)
-		if float(enemy.get("crepuscular_ocaso_mark", 0.0)) > 0.0:
-			_draw_crepuscular_ocaso_cracks(draw_pos, visual_size, int(enemy.get("uid", 0)), float(enemy.get("crepuscular_ocaso_mark", 0.0)))
-		var enemy_bar_pos = draw_pos + Vector2(-30.0, -visual_size.y * 0.55 - 10.0)
-		var enemy_hp_ratio = float(enemy["hp"]) / float(enemy["max_hp"])
-		var tesla_bar_shock: = float(enemy.get("tesla_shock", 0.0))
-		var enemy_bar_draw_pos: Vector2 = enemy_bar_pos
-		if tesla_bar_shock > 0.0:
-			var shake_power: float = clamp(tesla_bar_shock / 0.42, 0.0, 1.0)
-			enemy_bar_draw_pos += Vector2(sin(time_alive * 90.0 + int(enemy["uid"])) * 2.8, cos(time_alive * 76.0 + int(enemy["uid"]) * 0.37) * 1.8) * shake_power
-			_draw_tesla_health_bar_fx(enemy_bar_draw_pos, 60.0, enemy_hp_ratio, tesla_bar_shock, int(enemy["uid"]))
-		else:
-			_draw_enemy_health_bar(enemy, enemy_bar_draw_pos, 60.0, enemy_hp_ratio)
-		if bool(enemy.get("sanguinaria_hunt", false)):
-			_draw_sanguinaria_hunt_mark(enemy_bar_draw_pos, 60.0)
-		var static_stacks: = int(enemy.get("eletrica_static_stacks", 0))
-		var static_timer: = float(enemy.get("eletrica_static_timer", 0.0))
-		if manifestation_key == "eletrica" and static_stacks > 0 and static_timer > 0.0:
-			_draw_eletrica_static_indicator(self, enemy_bar_draw_pos + Vector2(30, -10), static_stacks, static_timer, int(enemy["uid"]))
-		if execute_threshold > 0.0:
-			_draw_collector_threshold(enemy_bar_draw_pos, 60.0, execute_threshold, enemy_hp_ratio)
-		if enemy["type"] == ENEMY_AGGLOMERATOR:
-			for i in range(8):
-				var ang = time_alive * 5.0 + i * TAU / 8.0
-				draw_circle(pos + Vector2(cos(ang), sin(ang)) * 44.0, 3 + int(i % 3), Color(0.48, 0.48, 0.56, 0.75))
-		if enemy["type"] == ENEMY_CURATER:
-			draw_arc(pos, 92, 0, TAU, 48, Color(0.32, 1.0, 0.42, 0.35), 2)
-			for i in range(7):
-				var px = pos.x + cos(i * 1.7) * 30.0 + sin(time_alive * 2.0 + i) * 2.0
-				var py = pos.y + 26.0 + sin(i * 1.3) * 8.0
-				draw_line(Vector2(px, py), Vector2(px, py - 10 - (i % 3) * 3), Color(0.28, 0.86, 0.36), 2)
-				draw_circle(Vector2(px + 3, py - 12), 4, Color(0.5, 1.0, 0.58))
-		if enemy["type"] == ENEMY_PROJECTOR:
-			var r = 24.0 + sin(time_alive * 9.0) * 3.0
-			draw_arc(pos, r, 0, TAU, 40, Color(1.0, 0.76, 0.28, 0.86), 2)
-			draw_circle(pos + Vector2(0, -12), 5, Color(1.0, 0.96, 0.62, 0.95))
-		if enemy["type"] == ENEMY_CRYSTAL:
-			_draw_hex(pos, 38.0 + sin(time_alive * 4.0) * 8.0, Color(0.0, 0.78, 1.0, 0.7))
-		if enemy["type"] == ENEMY_LARAPIO and int(enemy.get("stolen", 0)) > 0:
-			var bag_pulse = 0.5 + 0.5 * sin(time_alive * 8.0)
-			draw_circle(draw_pos + Vector2(23, -21), 11.0 + bag_pulse * 2.0, Color(1.0, 0.78, 0.18, 0.72))
-			draw_circle(draw_pos + Vector2(23, -21), 5.0, Color(0.45, 0.24, 0.04, 0.88))
-			_draw_centered(str(int(enemy.get("stolen", 0))), draw_pos + Vector2(23, -39), 11, Color(1.0, 0.92, 0.42, 0.92))
-		if enemy["type"] == ENEMY_LARAPIO and int(enemy.get("stolen", 0)) > 0 and enemy["hp"] < enemy["max_hp"] * 0.7:
-			var ratio = clamp(float(enemy.get("portal", 0.0)) / LARAPIO_PORTAL_TIME, 0.0, 1.0)
-			var portal_center: = pos + Vector2(0, 28)
-			var portal_radius: float = 18.0 + 42.0 * ratio
-			var portal_tilt: = -0.18 + sin(time_alive * 1.7 + int(enemy.get("uid", 0))) * 0.035
-			draw_set_transform(portal_center, portal_tilt, Vector2(1.0 + ratio * 0.2, 0.34 + ratio * 0.06))
-			draw_circle(Vector2.ZERO, portal_radius, Color(0.15, 0.0, 0.25, 0.44))
-			draw_arc(Vector2.ZERO, portal_radius + 3.0, - time_alive * 2.0, TAU - time_alive * 2.0, 48, Color(0.75, 0.2, 1.0, 0.82), 3.2)
-			draw_arc(Vector2.ZERO, portal_radius * 0.68, time_alive * 2.4, time_alive * 2.4 + PI * 1.45, 34, Color(1.0, 0.74, 0.32, 0.56), 2.0)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		if enemy["type"] == ENEMY_COUT_ATTACK_SPEED:
-			var stacks = int(enemy.get("as_stack", 0))
-			var pulse = 0.5 + 0.5 * sin(time_alive * 9.0 + int(enemy["uid"]))
-			var aura_alpha = 0.12 + stacks * 0.035
-			var rebuild_pulse: float = clamp(float(enemy.get("reconstitute_pulse", 0.0)) / 0.55, 0.0, 1.0)
-			draw_circle(pos, COUT_AS_AURA_RADIUS + rebuild_pulse * 18.0, Color(1.0, 0.5, 0.08, min(0.3, aura_alpha + rebuild_pulse * 0.08)))
-			if rebuild_pulse > 0.0:
-				draw_arc(pos, COUT_AS_AURA_RADIUS + 12.0 + rebuild_pulse * 28.0, - time_alive * 5.0, TAU - time_alive * 5.0, 64, Color(1.0, 0.76, 0.2, 0.88 * rebuild_pulse), 4.0)
-			draw_arc(pos, 36.0 + pulse * 5.0, - time_alive * 2.4, TAU - time_alive * 2.4, 32, Color(1.0, 0.72, 0.16, 0.82), 2.6)
-			if stacks > 0:
-				_draw_centered("x%d" % stacks, pos + Vector2(0, -66), 15, Color(1.0, 0.86, 0.34, 0.92))
-		if enemy["type"] == ENEMY_INCENSARIO and float(enemy.get("prepare", 0.0)) > 0.0:
-			var target = Vector2(enemy.get("miasma_target", player_pos)) - camera
-			draw_circle(target, 64.0, Color(0.42, 0.72, 0.08, 0.13))
-			draw_arc(target, 64.0, 0, TAU, 40, Color(0.72, 1.0, 0.28, 0.82), 3.0)
-		if enemy["type"] == ENEMY_GUARDIAO:
-			var shield_dir = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
-			draw_arc(pos + shield_dir * 26.0, 42.0, shield_dir.angle() - PI * 0.45, shield_dir.angle() + PI * 0.45, 24, Color(0.78, 0.92, 0.56, 0.82), 5.0)
-		if enemy["type"] == ENEMY_SHIELD_REFLECTOR:
-			var shield_dir = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
-			if _shield_reflector_active(enemy):
-				var flash = clamp(float(enemy.get("shield_flash", 0.0)) / 0.32, 0.0, 1.0)
-				var shield_color = Color(0.76, 0.96, 1.0, 0.76 + flash * 0.22)
-				draw_arc(pos + shield_dir * 28.0, 44.0 + flash * 9.0, shield_dir.angle() - PI * 0.46, shield_dir.angle() + PI * 0.46, 28, shield_color, 5.0 + flash * 3.0)
-				draw_line(pos + shield_dir * 32.0 + shield_dir.orthogonal() * 24.0, pos + shield_dir * 32.0 - shield_dir.orthogonal() * 24.0, Color(0.86, 1.0, 1.0, 0.52), 2.0)
-			else:
-				var speed_pulse: = 0.5 + 0.5 * sin(time_alive * 10.0 + int(enemy.get("uid", 0)))
-				draw_line(pos - shield_dir * (30.0 + speed_pulse * 12.0), pos - shield_dir * 58.0, Color(1.0, 0.58, 0.18, 0.5), 3.0)
-		if enemy["type"] == ENEMY_PYRO_PENGUIN:
-			var flame_pulse: = 0.5 + 0.5 * sin(time_alive * 9.0 + int(enemy["uid"]))
-			draw_circle(draw_pos + Vector2(0, 24), 25.0 + flame_pulse * 5.0, Color(1.0, 0.12, 0.02, 0.13))
-			draw_arc(draw_pos, 45.0, time_alive * 2.2, time_alive * 2.2 + PI * 1.35, 30, Color(1.0, 0.44, 0.08, 0.82), 3.0)
-		if current_phase == 4:
-			_draw_phase4_enemy_identity(enemy, draw_pos, size)
-		if int(enemy.get("laceracao", 0)) > 0:
-			_draw_centered("x%d" % int(enemy["laceracao"]), pos + Vector2(28, -36), 14, Color(1.0, 0.2, 0.25))
-		if float(enemy.get("eclipsada_weak_time", 0.0)) > 0.0:
-			_draw_eclipsada_weakpoint(enemy, camera)
-		if float(enemy.get("resonant_stun_notes", 0.0)) > 0.0:
-			var note_time = time_alive * 8.0
-			var note_text = "â™«" if int(note_time) % 2 == 0 else "â™ª"
-			_draw_centered(note_text, draw_pos + Vector2(0, -66.0 + sin(note_time) * 6.0), 24, Color(1.0, 0.74, 0.2, 0.9))
+	EntitiesPresentation._draw_enemies(self, camera)
 
 
 func _draw_eclipsada_weakpoint(enemy: Dictionary, camera: Vector2) -> void :
-	var p: = _eclipsada_weakpoint_pos(enemy) - camera
-	var flash: = clampf(float(enemy.get("eclipsada_weak_flash", 0.0)) / 0.45, 0.0, 1.0)
-	var alpha: = clampf(float(enemy.get("eclipsada_weak_time", 0.0)) / ECLIPSADA_Q_WEAKPOINT_TIME, 0.22, 1.0)
-	var color: = _eclipsada_color().lerp(Color(1.0, 0.86, 0.28), 0.35 + flash * 0.45)
-	draw_circle(p, 12.0 + flash * 5.0, Color(color.r, color.g, color.b, 0.18 * alpha))
-	draw_arc(p, 15.0 + flash * 7.0, - time_alive * 5.0, TAU - time_alive * 5.0, 32, Color(1.0, 0.88, 0.32, 0.88 * alpha), 2.4 + flash * 1.5)
-	draw_line(p + Vector2(-7, 0), p + Vector2(7, 0), Color(1.0, 1.0, 1.0, 0.72 * alpha), 1.6)
-	draw_line(p + Vector2(0, -7), p + Vector2(0, 7), Color(1.0, 1.0, 1.0, 0.72 * alpha), 1.6)
+	CombatEffectsPresentation._draw_eclipsada_weakpoint(self, enemy, camera)
 
 
 func _draw_phase4_enemy_identity(enemy: Dictionary, pos: Vector2, size: Vector2) -> void :
-	var kind: = String(enemy.get("type", ""))
-	var pulse: = 0.5 + 0.5 * sin(time_alive * 5.0 + int(enemy["uid"]) * 0.01)
-	var casting: = float(enemy.get("nexus_casting", 0.0)) > 0.0
-	match kind:
-		ENEMY_NEXUS_CARTOGRAPHER:
-			draw_arc(pos, size.x * 0.48, time_alive, time_alive + PI * 1.55, 30, Color(1.0, 0.34, 0.82, 0.78), 2.5)
-			for i in range(4):
-				var angle: float = float(i) * PI * 0.5 + time_alive * 0.25
-				draw_line(pos + Vector2.from_angle(angle) * 22.0, pos + Vector2.from_angle(angle + 0.52) * 38.0, Color(0.88, 0.58, 1.0, 0.68), 2.0)
-		ENEMY_NEXUS_CHRONOPHAGE:
-			draw_arc(pos, 44.0 + pulse * 5.0, - time_alive * 1.8, - time_alive * 1.8 + PI * 1.72, 34, Color(1.0, 0.76, 0.2, 0.88), 3.0)
-			draw_line(pos, pos + Vector2.from_angle( - time_alive * 2.3) * 28.0, Color(1.0, 0.94, 0.62), 2.5)
-			draw_circle(pos, 5.0, Color(0.24, 0.02, 0.18, 0.92))
-		ENEMY_NEXUS_REFRACTOR:
-			var diamond: = PackedVector2Array([pos + Vector2(0, -42), pos + Vector2(32, 0), pos + Vector2(0, 42), pos + Vector2(-32, 0), pos + Vector2(0, -42)])
-			draw_polyline(diamond, Color(0.42, 0.94, 1.0, 0.88), 3.0, true)
-			draw_line(pos + Vector2(-34, 24), pos + Vector2(36, -26), Color(1.0, 0.28, 0.72, 0.72), 2.0, true)
-		ENEMY_NEXUS_WEAVER:
-			for i in range(6):
-				var angle: float = float(i) * TAU / 6.0 + time_alive * 0.45
-				var p: = pos + Vector2.from_angle(angle) * (34.0 + pulse * 5.0)
-				var direction: = Vector2.from_angle(angle + 0.66)
-				draw_line(p - direction * 8.0, p + direction * 8.0, Color(0.34, 1.0, 0.72, 0.84), 2.2, true)
-		ENEMY_NEXUS_ECHO:
-			for i in range(3):
-				var offset: = Vector2(-18.0 - i * 11.0, sin(time_alive * 8.0 + i) * 4.0)
-				draw_circle(pos + offset, 24.0 - i * 4.0, Color(1.0, 0.22, 0.66, 0.12 - i * 0.025))
-	if casting:
-		draw_arc(pos, size.x * 0.58 + pulse * 7.0, 0.0, TAU, 42, Color(1.0, 0.92, 0.48, 0.82), 3.0)
+	WorldEnvironmentPresentation._draw_phase4_enemy_identity(self, enemy, pos, size)
 
 
 func _draw_aura_world(camera: Vector2) -> void :
-	if aura_state.is_empty():
-		return
-	var name: = String(aura_state.get("name", ""))
-	var color: = _aura_color()
-	var player_screen: Vector2 = player_pos - camera
-	if name == "Crepuscular":
-		_draw_crepuscular_player_aura(camera, player_screen)
-	elif name == "Sanguinaria":
-		_draw_sanguinaria_hunt_path(camera)
-		_draw_sanguinaria_blood_drop(camera)
-	if name == "Racional":
-		_draw_rational_aura_world(camera, player_screen, color)
-	elif name == "Vanguarda" and float(aura_state.get("vanguard_ring", 0.0)) > 0.0:
-		draw_circle(player_screen, 150.0, Color(1.0, 0.1, 0.02, 0.07))
-		for i in range(24):
-			var angle: = i * TAU / 24.0 + sin(time_alive * 3.0 + i) * 0.08
-			var foot: Vector2 = player_screen + Vector2.from_angle(angle) * 145.0
-			draw_line(foot, foot - Vector2(0, 12.0 + sin(time_alive * 9.0 + i) * 7.0), Color(1.0, 0.32, 0.04, 0.72), 3.0)
-	elif name == "Abissal" and float(aura_state.get("abyss_tide", 0.0)) > 0.0:
-		for i in range(5): draw_arc(player_screen, 190.0 - i * 27.0, time_alive * (0.4 + i * 0.12), time_alive * (0.4 + i * 0.12) + PI * 1.55, 54, Color(color.r, color.g, color.b, 0.26 - i * 0.025), 5.0 - i * 0.5)
-	elif name == "Insana":
-		for echo in Array(aura_state.get("insane_queue", [])):
-			var p: = Vector2(echo.get("pos", player_pos)) - camera
-			_draw_insane_echo_copy(p, Vector2(echo.get("dir", Vector2.RIGHT)), 0.58, time_alive + float(echo.get("delay", 0.0)))
-		for echo in insane_echo_visuals:
-			var ratio: float = clamp(float(echo.get("life", 0.0)) / maxf(0.01, float(echo.get("max", 1.0))), 0.0, 1.0)
-			_draw_insane_echo_copy(Vector2(echo.get("pos", player_pos)) - camera, Vector2(echo.get("dir", Vector2.RIGHT)), ratio * 0.72, time_alive + float(echo.get("phase", 0.0)))
-	elif name == "Voraz":
-		for drop in Array(aura_state.get("voracious_drops", [])):
-			var p: = Vector2(drop.get("pos", Vector2.ZERO)) - camera
-			var pulse: = 0.5 + sin(time_alive * 8.0 + p.x) * 0.5
-			var boss_particle: = bool(drop.get("boss_particle", false))
-			draw_circle(p, (9.0 if boss_particle else 7.0) + pulse * 3.0, Color(0.92, 0.08, 0.02, 0.9) if boss_particle else Color(0.68, 0.02, 0.03, 0.84))
-			draw_arc(p, (16.0 if boss_particle else 12.0) + pulse * 3.0, - time_alive * 2.8, TAU - time_alive * 2.8, 20, Color(1.0, 0.62, 0.08, 0.78) if boss_particle else Color(1.0, 0.34, 0.08, 0.56), 2.5 if boss_particle else 2.0)
-	for enemy in enemies:
-		var p: = Vector2(enemy["pos"]) - camera
-		if float(enemy.get("aura_burn", 0.0)) > 0.0:
-			for i in range(5): draw_line(p + Vector2(-18 + i * 9, 22), p + Vector2(-14 + i * 8, -18 - sin(time_alive * 11.0 + i) * 8.0), Color(1.0, 0.3 + i * 0.06, 0.02, 0.66), 3.0)
-		if float(enemy.get("aura_null", 0.0)) > 0.0:
-			draw_arc(p, 40.0, - time_alive * 2.0, TAU - time_alive * 2.0, 40, Color(0.76, 0.96, 1.0, 0.84), 3.0)
-			draw_circle(p, 30.0, Color(0.0, 0.04, 0.08, 0.2))
-		if float(enemy.get("aura_prophecy", 0.0)) > 0.0 or int(aura_state.get("prophecy_uid", -1)) == int(enemy.get("uid", -2)):
-			var eye: = p + Vector2(0, -58)
-			draw_arc(eye, 15.0, PI * 0.12, PI * 0.88, 18, Color(1.0, 0.9, 0.32, 0.92), 3.0)
-			draw_arc(eye, 15.0, PI * 1.12, PI * 1.88, 18, Color(1.0, 0.9, 0.32, 0.92), 3.0)
-			draw_circle(eye, 4.0, Color.WHITE)
-		if float(enemy.get("aura_wound", 0.0)) > 0.0:
-			for i in range(3): draw_line(p + Vector2(-18 + i * 12, -28), p + Vector2(-4 + i * 12, 24), Color(1.0, 0.04, 0.1, 0.82), 3.0)
+	CombatEffectsPresentation._draw_aura_world(self, camera)
 
 
 func _draw_crepuscular_player_aura(camera: Vector2, player_screen: Vector2) -> void:
-	var phase: String = String(aura_state.get("crepuscular_phase", "alvorada"))
-	var timer_ratio: float = clampf(float(aura_state.get("crepuscular_phase_timer", 0.0)) / AuraSystem.CREPUSCULAR_PHASE_TIME, 0.0, 1.0)
-	var approach: float = 1.0 - timer_ratio
-	var dawn := Color(1.0, 0.88, 0.44, 0.0)
-	var dusk := Color(0.82, 0.22, 1.0, 0.0)
-	var base: Color = dawn.lerp(dusk, approach) if phase == "alvorada" else dusk.lerp(dawn, approach)
-	var flash: float = clampf(crepuscular_phase_flash_timer / 0.95, 0.0, 1.0)
-	for ring in range(4):
-		var radius: float = 38.0 + ring * 14.0 + sin(time_alive * (2.1 + ring * 0.25)) * (2.0 + approach * 4.0)
-		var alpha: float = 0.16 + approach * 0.16 + flash * 0.18 - ring * 0.025
-		draw_arc(player_screen, radius, -time_alive * (0.75 + ring * 0.18), TAU - time_alive * (0.75 + ring * 0.18), 58, Color(base.r, base.g, base.b, maxf(0.03, alpha)), 2.0 + flash)
-	if crepuscular_spotlight_timer > 0.0:
-		var ratio: float = clampf(crepuscular_spotlight_timer / 0.7, 0.0, 1.0)
-		var top: Vector2 = player_screen + Vector2(0, -360.0)
-		var beam := PackedVector2Array([
-			top + Vector2(-44.0 * ratio, 0.0),
-			top + Vector2(44.0 * ratio, 0.0),
-			player_screen + Vector2(52.0, 46.0),
-			player_screen + Vector2(-52.0, 46.0)
-		])
-		draw_polygon(beam, PackedColorArray([Color(1.0, 0.93, 0.52, 0.0), Color(1.0, 0.93, 0.52, 0.0), Color(1.0, 0.93, 0.52, 0.22 * ratio), Color(1.0, 0.93, 0.52, 0.22 * ratio)]))
-		draw_circle(player_screen, 54.0 + sin(time_alive * 18.0) * 3.0, Color(1.0, 0.86, 0.35, 0.18 * ratio))
+	EntitiesPresentation._draw_crepuscular_player_aura(self, camera, player_screen)
 
 
 func _draw_crepuscular_ocaso_cracks(center: Vector2, size: Vector2, seed: int, timer: float) -> void:
-	var alpha: float = clampf(timer / 3.5, 0.0, 1.0)
-	var radius: float = max(size.x, size.y) * 0.34
-	for i in range(7):
-		var seed_value: int = seed * 37 + i * 71
-		var angle: float = float(posmod(seed_value, 360)) * PI / 180.0
-		var start_jitter: float = 0.18 + float(posmod(seed * 17 + i * 43, 100)) * 0.0024
-		var mid_jitter: float = 0.52 + float(i % 3) * 0.12
-		var end_jitter: float = 0.86 + float(i % 2) * 0.14
-		var start: Vector2 = center + Vector2.from_angle(angle) * radius * start_jitter
-		var mid: Vector2 = center + Vector2.from_angle(angle + sin(float(seed + i)) * 0.35) * radius * mid_jitter
-		var end: Vector2 = center + Vector2.from_angle(angle + cos(float(seed - i)) * 0.28) * radius * end_jitter
-		draw_line(start, mid, Color(0.0, 0.0, 0.0, 0.62 * alpha), 2.8, true)
-		draw_line(mid, end, Color(0.0, 0.0, 0.0, 0.56 * alpha), 2.2, true)
-		if i % 2 == 0:
-			draw_circle(end, 2.0 + float(i % 3), Color(0.02, 0.0, 0.0, 0.52 * alpha))
+	CombatEffectsPresentation._draw_crepuscular_ocaso_cracks(self, center, size, seed, timer)
 
 
 func _draw_crepuscular_boss_cracks(camera: Vector2) -> void:
@@ -43772,52 +39124,7 @@ func _draw_crepuscular_arauto_cracks(camera: Vector2) -> void:
 
 
 func _draw_sanguinaria_hunt_path(camera: Vector2) -> void:
-	var hunted := _sanguinaria_find_hunt_enemy()
-	if hunted.is_empty():
-		return
-	var start: Vector2 = Vector2(hunted.get("pos", player_pos)) - camera
-	var finish: Vector2 = player_pos - camera
-	var dir: Vector2 = finish - start
-	var dist: float = dir.length()
-	if dist <= 10.0:
-		return
-	dir /= dist
-	var normal := Vector2(-dir.y, dir.x)
-	var steps := clampi(int(dist / 20.0), 10, 32)
-	var flow := fmod(time_alive * 0.42, 1.0)
-	for layer in range(3):
-		var layer_offset := float(layer) * 1.71
-		var previous := start
-		for i in range(1, steps + 1):
-			var t: float = float(i) / float(steps)
-			var drift: float = sin(t * TAU * 1.65 + time_alive * (1.25 + layer * 0.18) + layer_offset) * (7.0 + layer * 4.0)
-			drift += sin(t * TAU * 4.2 - time_alive * (1.7 + layer * 0.25)) * (2.5 + layer)
-			var current := start.lerp(finish, t) + normal * drift
-			current += dir * sin(time_alive * 2.1 + t * 8.0 + layer_offset) * 3.0
-			var segment_alpha := (0.24 - float(layer) * 0.04) * (0.72 + 0.28 * sin(time_alive * 3.0 + t * 9.0 + layer_offset))
-			var broken := fmod(t + flow + float(layer) * 0.18, 1.0)
-			if broken < 0.72:
-				draw_line(previous, current, Color(0.62 + layer * 0.08, 0.0, 0.045, segment_alpha), 1.2 + layer * 0.35, true)
-			previous = current
-	for i in range(steps):
-		var t: float = (float(i) + 0.35) / float(steps)
-		var wave: float = sin(t * TAU * 2.35 + time_alive * 2.4) * 13.0 + sin(t * TAU * 5.0 - time_alive * 1.8) * 4.0
-		var p := start.lerp(finish, t) + normal * wave
-		var pulse := 0.72 + 0.28 * sin(time_alive * 5.0 + float(i) * 1.37)
-		var fade := 1.0 - t * 0.38
-		var radius := (11.0 + 7.0 * pulse) * fade
-		var alpha := 0.24 * fade
-		draw_circle(p, radius * 1.25, Color(0.06, 0.0, 0.018, alpha * 0.72))
-		draw_circle(p, radius, Color(0.62, 0.0, 0.05, alpha))
-		if i % 3 == 0:
-			draw_circle(p + normal * radius * 0.55, radius * 0.46, Color(1.0, 0.07, 0.13, alpha))
-		if i % 4 == 1:
-			draw_arc(p + normal * 3.0, radius * 0.74, time_alive * 1.8 + float(i), time_alive * 1.8 + float(i) + PI * 0.9, 10, Color(1.0, 0.05, 0.08, alpha * 1.15), 1.3, true)
-	for spark in range(9):
-		var t: float = fmod(float(spark) * 0.143 + time_alive * 0.18, 1.0)
-		var jitter := sin(time_alive * 6.0 + spark * 2.4) * 8.0
-		var p := start.lerp(finish, t) + normal * jitter
-		draw_circle(p, 1.5 + 0.8 * sin(time_alive * 7.0 + spark), Color(1.0, 0.18, 0.16, 0.32))
+	CombatEffectsPresentation._draw_sanguinaria_hunt_path(self, camera)
 
 
 func _draw_sanguinaria_hunt_mark(bar_pos: Vector2, width: float) -> void:
@@ -43838,140 +39145,19 @@ func _draw_sanguinaria_blood_drop(camera: Vector2) -> void:
 
 
 func _draw_remote_aura_world(camera: Vector2) -> void :
-	if not is_multiplayer or net_player_dead or not net_player_has_snapshot:
-		return
-	var aura_index: = clampi(net_player_secondary_manifestation, 0, AURAS.size() - 1)
-	var aura_name: = String(AURAS[aura_index].get("name", ""))
-	var color: Color = AuraSystem.COLORS.get(aura_name, Color.WHITE)
-	var center: Vector2 = net_player_render_pos - camera
-	var pulse: float = 0.5 + sin(time_alive * 5.0 + float(net_player_peer_id % 17)) * 0.5
-	match aura_name:
-		"Racional":
-			for ring in range(3):
-				draw_arc(center, 42.0 + ring * 16.0, - time_alive * (0.7 + ring * 0.2), TAU - time_alive * (0.7 + ring * 0.2), 42, Color(color.r, color.g, color.b, 0.22 - ring * 0.04), 1.8)
-		"Impulsiva":
-			for ray in range(8):
-				var angle: float = time_alive * 1.8 + float(ray) * TAU / 8.0
-				draw_line(center + Vector2.from_angle(angle) * 35.0, center + Vector2.from_angle(angle) * (52.0 + pulse * 13.0), Color(color.r, color.g, color.b, 0.54), 2.4)
-		"Devota":
-			for shield in range(3):
-				var angle: float = time_alive * 0.8 + float(shield) * TAU / 3.0
-				draw_arc(center + Vector2.from_angle(angle) * 45.0, 12.0, angle - 1.0, angle + 1.0, 16, Color(color.r, color.g, color.b, 0.66), 2.2)
-		"Vanguarda":
-			for flame in range(12):
-				var angle: float = float(flame) * TAU / 12.0
-				var foot: Vector2 = center + Vector2.from_angle(angle) * 52.0
-				draw_line(foot, foot - Vector2(0, 8.0 + pulse * 11.0), Color(color.r, color.g, color.b, 0.58), 2.5)
-		"Insana":
-			for echo in range(3):
-				var offset: Vector2 = - net_player_move.normalized() * (18.0 + echo * 13.0)
-				draw_circle(center + offset, 24.0 - echo * 3.0, Color(color.r, color.g, color.b, 0.1 - echo * 0.02))
-		"Voraz":
-			for drop in range(5):
-				var angle: float = - time_alive * 1.2 + float(drop) * TAU / 5.0
-				draw_circle(center + Vector2.from_angle(angle) * (42.0 + pulse * 7.0), 4.0, Color(color.r, color.g, color.b, 0.72))
-		"Nula":
-			draw_circle(center, 48.0 + pulse * 8.0, Color(0.0, 0.025, 0.05, 0.22))
-			draw_arc(center, 55.0, - time_alive * 1.7, TAU - time_alive * 1.7, 44, Color(color.r, color.g, color.b, 0.54), 2.2)
-		"Abissal":
-			for tide in range(4):
-				draw_arc(center, 48.0 + tide * 13.0, time_alive * (0.35 + tide * 0.12), time_alive * (0.35 + tide * 0.12) + PI * 1.5, 44, Color(color.r, color.g, color.b, 0.24 - tide * 0.035), 2.5)
-		"Profetica":
-			var eye: Vector2 = center + Vector2(0, -54)
-			draw_arc(eye, 14.0, PI * 0.12, PI * 0.88, 18, Color(color.r, color.g, color.b, 0.82), 2.5)
-			draw_arc(eye, 14.0, PI * 1.12, PI * 1.88, 18, Color(color.r, color.g, color.b, 0.82), 2.5)
-			draw_circle(eye, 3.5, Color.WHITE)
-		"Sanguinaria":
-			for cut in range(3):
-				var x: = -18.0 + cut * 18.0
-				draw_line(center + Vector2(x - 8.0, -38.0), center + Vector2(x + 8.0, 38.0), Color(color.r, color.g, color.b, 0.58), 2.8)
+	CombatEffectsPresentation._draw_remote_aura_world(self, camera)
 
 
 func _draw_rational_aura_world(camera: Vector2, player_screen: Vector2, color: Color) -> void :
-	var viewport: = get_viewport_rect().size
-	var dilation: = float(aura_state.get("rational_dilation", 0.0))
-	var rebound: = float(aura_state.get("rational_rebound", 0.0))
-	var still: = float(aura_state.get("still", 0.0))
-	var ready: = float(aura_state.get("rational_cooldown", 0.0)) <= 0.0
-
-	# 1. Passiva Parada - Campo de Análise Analítica (Idle Observation Field & Charge Arc)
-	if still > 0.0:
-		var still_ratio: float = clampf(still / 4.5, 0.0, 1.0)
-		_draw_rational_analysis_field(player_screen, still_ratio, color)
-
-	# 2. Dilatação Temporal (Active Dilation - 8s)
-	if dilation > 0.0:
-		var flash: float = clampf(rational_dilation_flash / 0.55, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.02, 0.22, 0.48, 0.16 + flash * 0.14), true)
-		_draw_rational_border_oscilloscope(viewport, color, 0.65 + flash * 0.35, false)
-		for i in range(6):
-			draw_arc(player_screen, 48.0 + i * 30.0 + sin(time_alive * 4.4 + i) * 6.0, - time_alive * (1.2 + i * 0.08), TAU - time_alive * (1.2 + i * 0.08), 72, Color(color.r, color.g, color.b, 0.2 - i * 0.018), 2.0)
-
-	# 3. Rebote Temporal (Active Rebound - 3s after dilation)
-	elif rebound > 0.0:
-		var rebound_pulse: float = 0.5 + 0.5 * sin(time_alive * 12.0)
-		var amber_color: Color = Color(1.0, 0.48, 0.08)
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.38, 0.14, 0.02, 0.12 + rebound_pulse * 0.08), true)
-		_draw_rational_border_oscilloscope(viewport, amber_color, 0.7 + rebound_pulse * 0.3, true)
-		_draw_rational_rebound_warning(player_screen, amber_color)
-
-	_draw_rational_trail(camera, color)
-	if ready and dilation <= 0.0 and rebound <= 0.0:
-		_draw_rational_ready_sparks(player_screen, color)
+	CombatEffectsPresentation._draw_rational_aura_world(self, camera, player_screen, color)
 
 
 func _draw_rational_analysis_field(player_screen: Vector2, progress: float, color: Color) -> void :
-	# Concentric analytical circles
-	draw_arc(player_screen, 38.0, time_alive * 0.8, time_alive * 0.8 + TAU * 0.82, 48, Color(color.r, color.g, color.b, 0.45 * progress), 2.0)
-	draw_arc(player_screen, 58.0, - time_alive * 0.6, - time_alive * 0.6 + TAU * 0.7, 54, Color(0.18, 0.88, 1.0, 0.3 * progress), 1.6)
-	draw_arc(player_screen, 78.0, time_alive * 0.4, time_alive * 0.4 + TAU * 0.6, 60, Color(0.72, 0.95, 1.0, 0.2 * progress), 1.2)
-
-	# Clock ticks (12 notches)
-	for i in range(12):
-		var angle: float = float(i) * TAU / 12.0 + time_alive * 0.5
-		var p1: Vector2 = player_screen + Vector2.from_angle(angle) * 34.0
-		var p2: Vector2 = player_screen + Vector2.from_angle(angle) * 42.0
-		draw_line(p1, p2, Color(color.r, color.g, color.b, 0.55 * progress), 1.5)
-
-	# Digital crosshair scanning lines
-	var line_len: float = 85.0 * progress
-	draw_line(player_screen + Vector2(-line_len, 0), player_screen + Vector2(line_len, 0), Color(0.18, 0.88, 1.0, 0.22 * progress), 1.0)
-	draw_line(player_screen + Vector2(0, -line_len), player_screen + Vector2(0, line_len), Color(0.18, 0.88, 1.0, 0.22 * progress), 1.0)
-
-	# 360-degree radial charging arc & tip spark
-	var arc_end: float = - PI * 0.5 + progress * TAU
-	draw_arc(player_screen, 48.0, - PI * 0.5, arc_end, 52, Color(0.18, 0.88, 1.0, 0.88), 3.4)
-	var tip: Vector2 = player_screen + Vector2.from_angle(arc_end) * 48.0
-	draw_circle(tip, 4.0, Color(1.0, 0.95, 0.5, 0.95))
-
-	# Floating badge showing percentage
-	_draw_centered("ANÁLISE %d%%" % int(progress * 100.0), player_screen + Vector2(0, -62), 11, Color(0.2, 0.9, 1.0, 0.92))
+	CombatEffectsPresentation._draw_rational_analysis_field(self, player_screen, progress, color)
 
 
 func _draw_rational_border_oscilloscope(viewport: Vector2, color: Color, alpha: float, is_rebound: bool) -> void :
-	var time_factor: float = 14.0 if is_rebound else 9.0
-
-	# Top and Bottom Oscilloscope Waveforms
-	for i in range(24):
-		var tx: float = float(i) / 24.0
-		var x: float = tx * viewport.x
-		var wave_t: float = sin(time_alive * time_factor + tx * 18.0) * (8.0 if is_rebound else 5.0)
-
-		draw_line(Vector2(x, 0.0), Vector2(x, 14.0 + wave_t), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
-		draw_line(Vector2(x, viewport.y), Vector2(x, viewport.y - 14.0 - wave_t), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
-
-	# Left and Right Oscilloscope Waveforms
-	for j in range(16):
-		var ty: float = float(j) / 16.0
-		var y: float = ty * viewport.y
-		var wave_l: float = cos(time_alive * time_factor + ty * 14.0) * (8.0 if is_rebound else 5.0)
-
-		draw_line(Vector2(0.0, y), Vector2(14.0 + wave_l, y), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
-		draw_line(Vector2(viewport.x, y), Vector2(viewport.x - 14.0 - wave_l, y), Color(color.r, color.g, color.b, alpha * 0.42), 2.0)
-
-	# Broken clock ticks along screen corners
-	for corner in [Vector2(24, 24), Vector2(viewport.x - 24, 24), Vector2(24, viewport.y - 24), Vector2(viewport.x - 24, viewport.y - 24)]:
-		draw_arc(corner, 18.0, time_alive * 3.0, time_alive * 3.0 + PI * 1.4, 16, Color(color.r, color.g, color.b, alpha * 0.7), 2.2)
+	CombatEffectsPresentation._draw_rational_border_oscilloscope(self, viewport, color, alpha, is_rebound)
 
 
 func _draw_rational_rebound_warning(player_screen: Vector2, color: Color) -> void :
@@ -43984,55 +39170,15 @@ func _draw_rational_rebound_warning(player_screen: Vector2, color: Color) -> voi
 
 
 func _draw_rational_trail(camera: Vector2, color: Color) -> void :
-	var previous: = Vector2.ZERO
-	var has_previous: = false
-	var texture: = _player_texture()
-	var draw_index: = 0
-	for point in rational_trail_points:
-		var ratio: float = clamp(float(point.get("life", 0.0)) / maxf(0.01, float(point.get("max", 1.0))), 0.0, 1.0)
-		var p: = Vector2(point.get("pos", player_pos)) - camera
-		if has_previous:
-			_draw_rational_speed_segment(previous, p, ratio, draw_index)
-		if draw_index % 2 == 0:
-			var ghost_size: = Vector2(54, 80) * (0.78 + ratio * 0.18)
-			var ghost_offset: = Vector2(sin(time_alive * 18.0 + float(draw_index)) * 5.0, -4.0 + cos(time_alive * 13.0 + float(draw_index)) * 3.0)
-			_draw_entity_fit(texture, p + ghost_offset, ghost_size, Color(0.22, 0.86, 1.0, 0.13 * ratio), true)
-			_draw_entity_fit(texture, p + ghost_offset + Vector2(-4, 0), ghost_size * 0.96, Color(1.0, 0.86, 0.18, 0.11 * ratio), true)
-		_draw_rational_body_energy(p, ratio, draw_index)
-		previous = p
-		has_previous = true
-		draw_index += 1
+	CombatEffectsPresentation._draw_rational_trail(self, camera, color)
 
 
 func _draw_rational_speed_segment(a: Vector2, b: Vector2, ratio: float, index: int) -> void :
-	var delta: Vector2 = b - a
-	if delta.length() <= 2.0:
-		return
-	var dir: Vector2 = delta.normalized()
-	var normal: Vector2 = dir.orthogonal()
-	draw_line(a, b, Color(0.04, 0.86, 1.0, 0.24 * ratio), 8.0 * ratio + 2.0, true)
-	draw_line(a + normal * 5.0, b + normal * 5.0, Color(1.0, 0.82, 0.15, 0.42 * ratio), 3.2 * ratio + 1.0, true)
-	draw_line(a - normal * 7.0, b - normal * 7.0, Color(0.42, 0.96, 1.0, 0.36 * ratio), 2.4 * ratio + 1.0, true)
-	for branch in range(2):
-		var t: float = 0.25 + float(branch) * 0.38
-		var base: Vector2 = a.lerp(b, t)
-		var z: float = sin(time_alive * 24.0 + float(index * 7 + branch))
-		var end: Vector2 = base - dir * (18.0 + 18.0 * ratio) + normal * z * (22.0 + 12.0 * ratio)
-		draw_line(base, end, Color(1.0, 0.9, 0.26, 0.56 * ratio), 2.0, true)
-		draw_line(base + normal * 3.0, end, Color(0.56, 1.0, 1.0, 0.34 * ratio), 1.2, true)
+	CombatEffectsPresentation._draw_rational_speed_segment(self, a, b, ratio, index)
 
 
 func _draw_rational_body_energy(p: Vector2, ratio: float, index: int) -> void :
-	var yellow: Color = Color(1.0, 0.86, 0.18, 0.78 * ratio)
-	var cyan: Color = Color(0.32, 0.96, 1.0, 0.62 * ratio)
-	for i in range(3):
-		var angle: float = time_alive * (5.0 + float(i)) + float(index) * 0.31 + float(i) * TAU / 3.0
-		var start: Vector2 = p + Vector2.from_angle(angle) * (20.0 + i * 7.0)
-		var mid: Vector2 = p + Vector2.from_angle(angle + 0.7) * (34.0 + i * 5.0)
-		var finish: Vector2 = mid + Vector2.from_angle(angle - 1.3) * (12.0 + 7.0 * ratio)
-		draw_line(start, mid, yellow if i % 2 == 0 else cyan, 2.0, true)
-		draw_line(mid, finish, cyan if i % 2 == 0 else yellow, 1.2, true)
-	draw_circle(p + Vector2(0, -14), 16.0 + 8.0 * ratio, Color(1.0, 0.84, 0.12, 0.055 * ratio))
+	CombatEffectsPresentation._draw_rational_body_energy(self, p, ratio, index)
 
 
 func _draw_rational_ready_sparks(player_screen: Vector2, color: Color) -> void :
@@ -44045,269 +39191,43 @@ func _draw_rational_ready_sparks(player_screen: Vector2, color: Color) -> void :
 
 
 func _draw_insane_echo_copy(screen_pos: Vector2, direction: Vector2, alpha: float, phase: float) -> void :
-	var frames: Array = textures.get("player_fire", [])
-	if frames.is_empty():
-		frames = textures.get("player_idle", [])
-	var texture: Texture2D = null
-	if not frames.is_empty():
-		texture = frames[posmod(int(phase * 9.0), frames.size())]
-	var wobble: = Vector2(sin(phase * 11.0) * 3.0, cos(phase * 8.0) * 2.0)
-	var rect: = Rect2(screen_pos - PLAYER_DRAW_SHOT_SIZE * 0.5 + wobble, PLAYER_DRAW_SHOT_SIZE)
-	draw_circle(screen_pos + Vector2(0, 26), 23.0, Color(0.34, 0.04, 0.58, 0.16 * alpha))
-	_draw_texture_contain(texture, rect.grow(3.0), Color(0.96, 0.16, 1.0, 0.25 * alpha))
-	_draw_texture_contain(texture, Rect2(rect.position + Vector2(3, -2), rect.size), Color(0.12, 1.0, 0.82, 0.34 * alpha))
-	_draw_texture_contain(texture, rect, Color(0.78, 0.38, 1.0, 0.78 * alpha))
-	var dir: = direction.normalized() if direction.length() > 0.05 else Vector2.RIGHT
-	draw_line(screen_pos + dir * 16.0, screen_pos + dir * 48.0, Color(0.35, 1.0, 0.52, 0.58 * alpha), 4.0)
-	draw_arc(screen_pos, 34.0 + sin(phase * 6.0) * 3.0, phase * 1.7, phase * 1.7 + TAU * 0.78, 32, Color(0.34, 1.0, 0.45, 0.64 * alpha), 3.0)
+	CombatEffectsPresentation._draw_insane_echo_copy(self, screen_pos, direction, alpha, phase)
 
 
 func _draw_larapio_coin_drops(camera: Vector2) -> void :
-	for coin in larapio_coin_drops:
-		var pos = Vector2(coin.get("pos", Vector2.ZERO)) - camera
-		var life_ratio = clamp(float(coin.get("life", 0.0)) / max(0.01, float(coin.get("max", 1.0))), 0.0, 1.0)
-		var collectable = bool(coin.get("collectable", false))
-		var radius = 7.0 if collectable else 4.5
-		var shine = 0.5 + 0.5 * sin(float(coin.get("phase", 0.0)) * 3.2)
-		var alpha = 0.95 if collectable else clamp(life_ratio, 0.0, 0.85)
-		draw_circle(pos + Vector2(0, 5), radius * 1.25, Color(0.05, 0.035, 0.0, 0.22 * alpha))
-		draw_circle(pos, radius, Color(1.0, 0.76 + shine * 0.16, 0.12, alpha))
-		draw_arc(pos, radius + 2.0, 0, TAU, 20, Color(0.5, 0.3, 0.03, 0.86 * alpha), 1.3)
-		draw_line(pos + Vector2( - radius * 0.35, - radius * 0.35), pos + Vector2(radius * 0.35, radius * 0.35), Color(1.0, 1.0, 0.72, 0.55 * alpha), 1.2)
-		if collectable:
-			draw_arc(pos, radius + 7.0 + shine * 2.0, 0, TAU, 24, Color(1.0, 0.82, 0.2, 0.36), 1.4)
+	CombatEffectsPresentation._draw_larapio_coin_drops(self, camera)
 
 
 func _draw_larapio_ultimate_portals(camera: Vector2) -> void :
-	for enemy in enemies:
-		if String(enemy.get("type", "")) != ENEMY_LARAPIO:
-			continue
-		var timer: = float(enemy.get("larapio_ult_timer", 0.0))
-		if timer <= 0.0:
-			continue
-		var portals: Array = Array(enemy.get("larapio_ult_portals", []))
-		var fade: = clampf(timer / 1.2, 0.0, 1.0)
-		for i in range(portals.size()):
-			var portal: Dictionary = Dictionary(portals[i])
-			var p: = Vector2(portal.get("pos", Vector2.ZERO)) - camera
-			var phase: float = float(portal.get("phase", 0.0)) + time_alive * (2.2 + float(i) * 0.08)
-			var pulse: = 0.5 + 0.5 * sin(phase * 2.1)
-			draw_set_transform(p, -0.16 + sin(phase) * 0.035, Vector2(1.0, 0.36))
-			draw_circle(Vector2.ZERO, LARAPIO_ULTIMATE_PORTAL_RADIUS * (0.82 + pulse * 0.1), Color(0.12, 0.0, 0.24, 0.42 * fade))
-			draw_arc(Vector2.ZERO, LARAPIO_ULTIMATE_PORTAL_RADIUS, - phase, TAU - phase, 54, Color(0.76, 0.22, 1.0, 0.88 * fade), 3.0)
-			draw_arc(Vector2.ZERO, LARAPIO_ULTIMATE_PORTAL_RADIUS * 0.58, phase * 1.35, phase * 1.35 + PI * 1.45, 38, Color(1.0, 0.76, 0.24, 0.64 * fade), 2.0)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	CombatEffectsPresentation._draw_larapio_ultimate_portals(self, camera)
 
 
 func _draw_arauto_card_drops(camera: Vector2) -> void :
-	for drop in arauto_card_drops:
-		var drop_id: = String(drop.get("drop_id", ""))
-		if not _reward_owned_by_local(drop) or (drop_id != "" and net_collected_drop_ids.has(drop_id)):
-			continue
-		var card: Dictionary = drop.get("card", {})
-		if not _card_drop_texture_available(card):
-			continue
-		var p: = Vector2(drop.get("pos", player_pos)) - camera
-		var age: = float(drop.get("age", 0.0))
-		var alpha: float = clamp(float(drop.get("life", 0.0)) / 1.2, 0.0, 1.0)
-		var accent: = _card_rarity_color(card)
-		var bob: = sin(age * 5.0 + float(drop.get("phase", 0.0))) * 5.0
-		var rect: = Rect2(p + Vector2(-22, -30 + bob), Vector2(44, 60))
-		draw_circle(rect.get_center(), 42.0, Color(accent.r, accent.g, accent.b, 0.12 * alpha))
-		draw_rect(rect.grow(3.0), Color(0.01, 0.03, 0.05, 0.78 * alpha), true)
-		draw_rect(rect.grow(3.0), accent, false, 2.0)
-		var tex: Texture2D = _card_texture(card)
-		if tex:
-			_draw_texture_contain(tex, rect.grow(-5.0), Color(1, 1, 1, alpha))
-		else:
-			draw_rect(rect.grow(-9.0), Color(accent.r, accent.g, accent.b, 0.32 * alpha), true)
-		_draw_centered("CARTA", p + Vector2(0, 42 + bob), 10, Color(0.88, 0.96, 1.0, 0.86 * alpha))
+	CombatEffectsPresentation._draw_arauto_card_drops(self, camera)
 
 
 func _draw_arauto_evolution_fragment(camera: Vector2) -> void :
-	if is_multiplayer:
-		for fragment in arauto_evolution_fragments:
-			var fragment_id: = String(fragment.get("fragment_id", ""))
-			if _reward_owned_by_local(fragment) and not net_collected_fragment_ids.has(fragment_id):
-				_draw_arauto_evolution_fragment_item(fragment, camera)
-		return
-	if not arauto_evolution_fragment.is_empty():
-		_draw_arauto_evolution_fragment_item(arauto_evolution_fragment, camera)
+	CombatEffectsPresentation._draw_arauto_evolution_fragment(self, camera)
 
 
 func _draw_arauto_evolution_fragment_item(fragment: Dictionary, camera: Vector2) -> void :
-	var pos: = Vector2(fragment.get("pos", player_pos)) - camera
-	var pulse_t: = float(fragment.get("pulse", 0.0))
-	var age: = float(fragment.get("life", 0.0))
-	var pulse: = 0.5 + 0.5 * sin(pulse_t)
-	var hover: = sin(age * 2.3) * 7.0
-	pos.y += hover
-	var accent: = _manifestation_color()
-	var outer_r: = 34.0 + pulse * 9.0
-	draw_circle(pos, outer_r * 1.28, Color(0.06, 0.0, 0.12, 0.3))
-	draw_circle(pos, outer_r, Color(accent.r, accent.g, accent.b, 0.16 + pulse * 0.08))
-	draw_arc(pos, outer_r + 10.0, pulse_t, pulse_t + PI * 1.45, 64, Color(accent.r, accent.g, accent.b, 0.92), 3.0)
-	draw_arc(pos, outer_r * 0.72, - pulse_t * 0.8, - pulse_t * 0.8 + PI * 1.65, 56, Color(0.24, 0.94, 1.0, 0.82), 2.0)
-	for i in range(5):
-		var ang: = pulse_t * 1.4 + float(i) * TAU / 5.0
-		var shard: = pos + Vector2.from_angle(ang) * (outer_r + 9.0)
-		var sz: = 6.0 + float(i % 2) * 2.0
-		var points: = PackedVector2Array([
-			shard + Vector2(0, - sz), 
-			shard + Vector2(sz * 0.58, 0), 
-			shard + Vector2(0, sz), 
-			shard + Vector2( - sz * 0.58, 0)
-		])
-		draw_polygon(points, PackedColorArray([Color(0.9, 0.96, 1.0, 0.86)]))
-		draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(accent.r, accent.g, accent.b, 0.78), 1.4, true)
-	draw_circle(pos, 13.0 + pulse * 3.0, Color(0.94, 0.9, 1.0, 0.95))
-	_draw_centered("EVOLUCAO", pos + Vector2(0, 58.0), 11, Color(0.9, 0.96, 1.0, 0.92))
+	CombatEffectsPresentation._draw_arauto_evolution_fragment_item(self, fragment, camera)
 
 
 func _draw_arauto(camera: Vector2) -> void :
-	_draw_arauto_vfx(camera)
-	if not _arauto_active():
-		return
-	if _arauto_is_aguilhao():
-		_draw_aguilhao_arauto(camera)
-		return
-	var pos: = Vector2(arauto["pos"]) - camera
-	var world_pos: = Vector2(arauto["pos"])
-	var phase: = float(arauto.get("anim", 0.0))
-	var entry_ratio: float = 1.0 - clamp(float(arauto.get("entry_timer", 0.0)) / ARAUTO_ENTRY_TIME, 0.0, 1.0)
-	for enemy in enemies:
-		if bool(enemy.get("eco_vinculado", false)):
-			var ep: = Vector2(enemy["pos"]) - camera
-			var pulse: = 0.35 + sin(time_alive * 5.0 + int(enemy["uid"]) * 0.01) * 0.1
-			draw_line(pos, ep, Color(0.42, 0.78, 1.0, pulse), 2.0, true)
-			draw_arc(ep, _enemy_radius(enemy) + 9.0, phase * 1.8, phase * 1.8 + PI * 1.35, 24, Color(0.62, 0.92, 1.0, 0.72), 2.0)
-	if bool(arauto.get("gaze_active", false)):
-		var origin: = _arauto_eye_pos() - camera
-		var target: = Vector2(arauto.get("gaze_target", world_pos)) - camera
-		var charge: float = ARAUTO_GAZE_CHARGE_PHASE2 if bool(arauto.get("phase2", false)) else ARAUTO_GAZE_CHARGE
-		var ratio: float = clamp(float(arauto.get("gaze_age", 0.0)) / max(0.01, charge), 0.0, 1.0)
-		var c: = Color(1.0, 0.22, 0.78, 0.22 + ratio * 0.52)
-		draw_line(origin, target, Color(c.r, c.g, c.b, 0.28), 12.0 + ratio * 8.0, true)
-		draw_line(origin, target, Color(1.0, 0.78, 1.0, 0.82), 2.0 + ratio * 2.0, true)
-		draw_arc(target, 42.0 + ratio * 16.0, 0.0, TAU, 42, Color(1.0, 0.22, 0.78, 0.82), 3.0)
-	if bool(arauto.get("silence_active", false)):
-		var target: = Vector2(arauto.get("silence_target", world_pos)) - camera
-		var charge: float = ARAUTO_SILENCE_WARNING * (0.82 if bool(arauto.get("phase2", false)) else 1.0)
-		var ratio: float = clamp(float(arauto.get("silence_age", 0.0)) / max(0.01, charge), 0.0, 1.0)
-		var radius: float = ARAUTO_SILENCE_RADIUS * (1.14 if bool(arauto.get("phase2", false)) else 1.0)
-		draw_circle(target, radius, Color(0.18, 0.78, 1.0, 0.1 + ratio * 0.08))
-		draw_arc(target, radius + ratio * 10.0, - PI * 0.5, TAU * ratio - PI * 0.5, 42, Color(0.66, 0.94, 1.0, 0.72), 3.0)
-		draw_arc(target, radius * 0.55 + sin(time_alive * 12.0) * 4.0, 0.0, TAU, 32, Color(0.36, 0.84, 1.0, 0.42), 2.0)
-	var tex: = _arauto_texture()
-	var draw_size: Vector2 = ARAUTO_SIZE * (0.82 + entry_ratio * 0.18)
-	var modulate: = Color(0.88, 0.82, 1.0, 0.35 + entry_ratio * 0.65)
-	if bool(arauto.get("phase2", false)):
-		modulate = modulate.lerp(Color(1.0, 0.5, 0.92, modulate.a), 0.35 + 0.18 * sin(time_alive * 7.0))
-	_draw_dynamic_shadow_fit(tex, pos + Vector2(0, 14), draw_size, float(arauto.get("facing", 1.0)) < 0.0, true, 0.38 * entry_ratio)
-	if tex:
-		_draw_entity_fit_flipped(tex, pos, draw_size, float(arauto.get("facing", 1.0)) < 0.0, modulate, true)
-	else:
-		_draw_arauto_fallback(pos, draw_size, modulate)
-	var eye: = _arauto_eye_pos() - camera
-	draw_circle(eye, 9.0, Color(0.02, 0.0, 0.08, 0.92))
-	draw_circle(eye, 4.0 + sin(time_alive * 8.0) * 1.2, Color(0.92, 0.26, 1.0, 0.95))
-	draw_arc(pos + Vector2(0, 28), 68.0 + sin(time_alive * 3.2) * 5.0, phase, phase + PI * 1.65, 48, Color(0.48, 0.72, 1.0, 0.65), 2.0)
-	if _attack_target_is_arauto():
-		_draw_attack_target_marker(pos + Vector2(0, 44), 65.0, locked_target_kind == "arauto")
-	var hp_ratio: float = float(arauto["hp"]) / max(1.0, float(arauto["max_hp"]))
-	_draw_bar(pos + Vector2(-74, -86), 148.0, hp_ratio, Color(0.66, 0.24, 1.0))
-	var echo_count: = _count_arauto_echoes()
-	var protect: = int(min(ARAUTO_MAX_DAMAGE_REDUCTION, float(echo_count) * ARAUTO_ECHO_DAMAGE_REDUCTION) * 100.0)
-	_draw_centered("ARAUTO", pos + Vector2(0, -110), 16, Color(0.78, 0.92, 1.0))
-	_draw_centered("ECOS %d  PROTECAO %d%%" % [echo_count, protect], pos + Vector2(0, -67), 11, Color(0.64, 0.88, 1.0, 0.94))
+	CombatEffectsPresentation._draw_arauto(self, camera)
 
 
 func _draw_arauto_vfx(camera: Vector2) -> void :
-	for ray in arauto_rays:
-		var alpha: float = clamp(float(ray.get("life", 0.0)) / max(0.01, float(ray.get("max", 0.42))), 0.0, 1.0)
-		var a: = Vector2(ray.get("a", player_pos)) - camera
-		var b: = Vector2(ray.get("b", player_pos)) - camera
-		var blocked: = bool(ray.get("blocked", false))
-		var c: = Color(0.48, 0.92, 1.0, 0.55 * alpha) if blocked else Color(1.0, 0.18, 0.72, 0.62 * alpha)
-		draw_line(a, b, Color(c.r, c.g, c.b, 0.18 * alpha), 18.0 * alpha, true)
-		draw_line(a, b, c, 4.0 * alpha, true)
-	for fx in arauto_echo_breaks:
-		var alpha: float = clamp(float(fx.get("life", 0.0)) / max(0.01, float(fx.get("max", 0.5))), 0.0, 1.0)
-		var p: = Vector2(fx.get("pos", player_pos)) - camera
-		var fx_color: Color = fx.get("color", Color(0.58, 0.92, 1.0))
-		for i in range(8):
-			var ang: float = float(i) * TAU / 8.0 + float(fx.get("phase", 0.0)) + time_alive * 1.4
-			draw_line(p, p + Vector2.from_angle(ang) * (18.0 + 34.0 * (1.0 - alpha)), Color(fx_color.r, fx_color.g, fx_color.b, 0.58 * alpha), 2.0)
+	CombatEffectsPresentation._draw_arauto_vfx(self, camera)
 
 
 func _draw_aguilhao_arauto(camera: Vector2) -> void :
-	var pos: = Vector2(arauto["pos"]) - camera
-	var world_pos: = Vector2(arauto["pos"])
-	var phase: = float(arauto.get("anim", 0.0))
-	var entry_ratio: float = 1.0 - clamp(float(arauto.get("entry_timer", 0.0)) / ARAUTO_ENTRY_TIME, 0.0, 1.0)
-	for enemy in enemies:
-		if bool(enemy.get("aguilhao_nodule", false)):
-			var ep: = Vector2(enemy["pos"]) - camera
-			var pulse: = 0.26 + sin(time_alive * 5.8 + float(enemy.get("phase", 0.0))) * 0.08
-			draw_line(pos, ep, Color(0.46, 1.0, 0.18, pulse), 3.0, true)
-			draw_arc(ep, _enemy_radius(enemy) + 12.0, - phase * 1.4, TAU - phase * 1.4, 36, Color(0.62, 1.0, 0.24, 0.62), 2.2)
-	var state: = String(arauto.get("state", "idle"))
-	if state == "charge_windup":
-		var dir: = Vector2(arauto.get("charge_dir", Vector2.RIGHT)).normalized()
-		var end: = world_pos + dir * 780.0
-		var ratio: float = 1.0 - clamp(float(arauto.get("state_timer", 0.0)) / (AGUILHAO_CHARGE_WINDUP_PHASE2 if bool(arauto.get("phase2", false)) else AGUILHAO_CHARGE_WINDUP), 0.0, 1.0)
-		draw_line(pos, end - camera, Color(0.38, 1.0, 0.12, 0.18 + ratio * 0.32), 26.0, true)
-		draw_line(pos, end - camera, Color(0.86, 1.0, 0.38, 0.76), 3.0 + ratio * 3.0, true)
-		draw_arc(end - camera, AGUILHAO_CHARGE_HIT_WIDTH + ratio * 10.0, 0.0, TAU, 36, Color(0.7, 1.0, 0.22, 0.68), 2.0)
-	elif state == "pulse":
-		var stage: = int(arauto.get("pulse_stage", 0))
-		var warn: = AGUILHAO_PULSE_WARNING if stage == 0 else 0.42
-		var ratio: float = 1.0 - clamp(float(arauto.get("state_timer", 0.0)) / maxf(0.01, warn), 0.0, 1.0)
-		var radius: = AGUILHAO_PULSE_RADIUS * (1.22 if bool(arauto.get("phase2", false)) and stage > 0 else 1.0)
-		draw_circle(pos, radius, Color(0.26, 1.0, 0.1, 0.08 + ratio * 0.08))
-		draw_arc(pos, radius + ratio * 12.0, - PI * 0.5, TAU * ratio - PI * 0.5, 54, Color(0.7, 1.0, 0.22, 0.72), 3.0)
-	elif state == "seed":
-		for spot in Array(arauto.get("seed_spots", [])):
-			var sp: = Vector2(spot) - camera
-			var ratio: float = 1.0 - clamp(float(arauto.get("state_timer", 0.0)) / AGUILHAO_SEED_WARNING, 0.0, 1.0)
-			draw_circle(sp, 26.0 + ratio * 12.0, Color(0.36, 1.0, 0.12, 0.1))
-			draw_arc(sp, 34.0, - time_alive * 2.0, TAU - time_alive * 2.0, 36, Color(0.74, 1.0, 0.24, 0.58), 2.2)
-	var tex: = _arauto_texture()
-	var draw_size: Vector2 = AGUILHAO_SIZE * (0.82 + entry_ratio * 0.18)
-	var modulate: = Color(0.82, 1.0, 0.64, 0.35 + entry_ratio * 0.65)
-	if bool(arauto.get("phase2", false)):
-		modulate = modulate.lerp(Color(0.56, 1.0, 0.18, modulate.a), 0.34 + 0.2 * sin(time_alive * 7.0))
-	if float(arauto.get("aguilhao_vulnerable", 0.0)) > 0.0:
-		modulate = modulate.lerp(Color(1.0, 0.88, 0.24, modulate.a), 0.48)
-	_draw_dynamic_shadow_fit(tex, pos + Vector2(0, 18), draw_size, float(arauto.get("facing", 1.0)) < 0.0, true, 0.42 * entry_ratio)
-	if tex:
-		_draw_entity_fit_flipped(tex, pos, draw_size, float(arauto.get("facing", 1.0)) < 0.0, modulate, true)
-	else:
-		_draw_arauto_fallback(pos, draw_size, modulate)
-	draw_circle(pos + Vector2(14.0 * float(arauto.get("facing", 1.0)), -10), 12.0 + sin(time_alive * 6.0) * 2.5, Color(0.46, 1.0, 0.12, 0.34))
-	draw_arc(pos + Vector2(0, 30), 82.0 + sin(time_alive * 3.4) * 5.0, phase, phase + PI * 1.45, 52, Color(0.46, 1.0, 0.18, 0.58), 2.0)
-	if _attack_target_is_arauto():
-		_draw_attack_target_marker(pos + Vector2(0, 34), 72.0, locked_target_kind == "arauto")
-	var hp_ratio: float = float(arauto["hp"]) / max(1.0, float(arauto["max_hp"]))
-	_draw_bar(pos + Vector2(-84, -72), 168.0, hp_ratio, Color(0.44, 1.0, 0.2))
-	var nodes: = _count_aguilhao_nodules()
-	var protect: = int(min(AGUILHAO_MAX_NODE_REDUCTION, float(nodes) * AGUILHAO_NODE_DAMAGE_REDUCTION) * 100.0)
-	_draw_centered("AGUILHAO", pos + Vector2(0, -96), 16, Color(0.78, 1.0, 0.46))
-	_draw_centered("NODULOS %d  PROTECAO %d%%" % [nodes, protect], pos + Vector2(0, -52), 11, Color(0.68, 1.0, 0.32, 0.94))
+	CombatEffectsPresentation._draw_aguilhao_arauto(self, camera)
 
 
 func _arauto_texture() -> Texture2D:
-	var frames: Array = textures.get("aguilhao" if _arauto_is_aguilhao() else "arauto", [])
-	if frames is Array and not frames.is_empty():
-		var aguilhao_attack_frame: = _arauto_is_aguilhao() and String(arauto.get("state", "idle")) in ["charge_windup", "charge", "seed", "pulse", "phase2_transition"]
-		var index: = 1 if aguilhao_attack_frame and frames.size() > 1 else int(float(arauto.get("anim", 0.0)) * 5.5) % frames.size()
-		var tex = frames[index]
-		if tex:
-			return tex
-	var fallback: Array = textures.get("enemy_common_phase_1", [])
-	if fallback is Array and not fallback.is_empty():
-		return fallback[int(float(arauto.get("anim", 0.0)) * 5.5) % fallback.size()]
-	return null
+	return EntityVisualProfiles._arauto_texture(self)
 
 
 func _draw_arauto_fallback(pos: Vector2, size: Vector2, modulate: Color) -> void :
@@ -44318,326 +39238,39 @@ func _draw_arauto_fallback(pos: Vector2, size: Vector2, modulate: Color) -> void
 
 
 func _draw_phase_choice_portal(choice: Dictionary, camera: Vector2, pulse_t: float, life: float) -> void:
-	var kind: String = String(choice.get("kind", "red"))
-	var label: String = String(choice.get("label", "PORTAL"))
-	var pos: Vector2 = Vector2(choice.get("pos", phase_fragment.get("pos", player_pos))) - camera
-	pos.y += sin(life * 2.2 + (1.6 if kind == "umbra" else 0.0)) * 5.0
-	var pulse: float = 0.5 + 0.5 * sin(pulse_t * 2.0 + (0.8 if kind == "umbra" else 0.0))
-	var primary: Color = Color(1.0, 0.13, 0.08, 0.92)
-	var secondary: Color = Color(1.0, 0.62, 0.16, 0.84)
-	var fill: Color = Color(0.34, 0.02, 0.02, 0.26)
-	if kind == "farm":
-		primary = Color(1.0, 0.16, 0.08, 0.92)
-		secondary = Color(1.0, 0.58, 0.12, 0.84)
-		fill = Color(0.35, 0.02, 0.02, 0.26)
-	if kind == "umbra":
-		primary = Color(0.14, 1.0, 0.78, 0.92)
-		secondary = Color(0.12, 0.62, 1.0, 0.86)
-		fill = Color(0.02, 0.18, 0.22, 0.28)
-	elif kind == "extract":
-		primary = Color(0.95, 1.0, 0.78, 0.94)
-		secondary = Color(0.22, 1.0, 0.86, 0.88)
-		fill = Color(0.18, 0.22, 0.08, 0.26)
-	var radius: float = 42.0 + pulse * 7.0
-	draw_set_transform(pos, sin(pulse_t * 0.7) * 0.05, Vector2(1.0, 0.46))
-	draw_circle(Vector2.ZERO, radius * 1.35, Color(primary.r, primary.g, primary.b, 0.12))
-	draw_circle(Vector2.ZERO, radius, fill)
-	for i in range(4):
-		var local_r: float = radius * (0.44 + float(i) * 0.14) + sin(pulse_t * 2.8 + float(i)) * 3.0
-		var start: float = pulse_t * (0.34 + float(i) * 0.08) + float(i) * 0.9
-		draw_arc(Vector2.ZERO, local_r, start, start + PI * 1.45, 72, primary if i % 2 == 0 else secondary, 2.2)
-	for i in range(10):
-		var ang: float = pulse_t * 1.7 + float(i) * TAU / 10.0
-		var drop_pos: Vector2 = Vector2.from_angle(ang) * (radius * (0.72 + 0.22 * sin(pulse_t + float(i))))
-		draw_circle(drop_pos, 2.2 + float(i % 3), secondary if i % 2 == 0 else primary)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	if label != "":
-		_draw_centered(label, pos + Vector2(0, -64), 16, primary)
-	_draw_centered("ATRAVESSAR", pos + Vector2(0, 62), 12, Color(0.84, 0.94, 1.0, 0.88))
+	WorldEnvironmentPresentation._draw_phase_choice_portal(self, choice, camera, pulse_t, life)
 
 
 func _draw_phase_fragment(camera: Vector2) -> void :
-	var choices: Array = Array(phase_fragment.get("choices", []))
-	if not choices.is_empty():
-		var pulse_t_choices: float = float(phase_fragment.get("pulse", 0.0))
-		var life_choices: float = float(phase_fragment.get("life", 0.0))
-		for choice in choices:
-			_draw_phase_choice_portal(choice, camera, pulse_t_choices, life_choices)
-		_draw_centered("ESCOLHA A PROXIMA RUPTURA", Vector2(640, 132), 18, Color(0.92, 0.98, 1.0, 0.96))
-		return
-	var pos: Vector2 = phase_fragment["pos"] - camera
-	var pulse_t = float(phase_fragment.get("pulse", 0.0))
-	var pulse = 0.5 + 0.5 * sin(pulse_t * 2.0)
-	var hover = sin(float(phase_fragment.get("life", 0.0)) * 2.4) * 7.0
-	pos.y += hover
-	var outer_r = 38.0 + pulse * 10.0
-	var inner_r = 20.0 + pulse * 5.0
-	draw_circle(pos, outer_r * 1.2, Color(0.06, 0.0, 0.12, 0.28))
-	draw_circle(pos, outer_r * 0.92, Color(0.45, 0.08, 1.0, 0.12 + pulse * 0.06))
-	draw_arc(pos, outer_r + 12.0, 0, TAU, 72, Color(0.74, 0.34, 1.0, 0.92), 3)
-	draw_arc(pos, outer_r * 0.78, 0, TAU, 64, Color(0.22, 0.92, 1.0, 0.82), 2)
-	for i in range(6):
-		var ang = pulse_t * 1.55 + i * TAU / 6.0
-		var shard_pos = pos + Vector2.from_angle(ang) * (outer_r + 12.0 + sin(pulse_t * 3.0 + i) * 5.0)
-		var shard_size = 7.0 + float(i % 2) * 2.0
-		var shard_points = PackedVector2Array([
-			shard_pos + Vector2(0, - shard_size), 
-			shard_pos + Vector2(shard_size * 0.58, 0), 
-			shard_pos + Vector2(0, shard_size), 
-			shard_pos + Vector2( - shard_size * 0.58, 0)
-		])
-		draw_polygon(shard_points, PackedColorArray([Color(0.86, 0.94, 1.0, 0.82)]))
-		draw_polyline(PackedVector2Array([shard_points[0], shard_points[1], shard_points[2], shard_points[3], shard_points[0]]), Color(0.3, 0.94, 1.0, 0.78), 1.5, true)
-	var core_points = PackedVector2Array([
-		pos + Vector2(0, - inner_r * 1.35), 
-		pos + Vector2(inner_r * 0.58, - inner_r * 0.28), 
-		pos + Vector2(inner_r * 0.74, inner_r * 0.48), 
-		pos + Vector2(0, inner_r * 1.5), 
-		pos + Vector2( - inner_r * 0.74, inner_r * 0.48), 
-		pos + Vector2( - inner_r * 0.58, - inner_r * 0.28)
-	])
-	draw_polygon(core_points, PackedColorArray([Color(0.78, 0.9, 1.0, 0.92)]))
-	draw_polyline(PackedVector2Array([core_points[0], core_points[1], core_points[2], core_points[3], core_points[4], core_points[5], core_points[0]]), Color(1.0, 1.0, 1.0, 0.92), 2.0, true)
-	draw_circle(pos, inner_r * 0.48, Color(0.18, 0.95, 1.0, 0.86))
-	draw_circle(pos, inner_r * 0.22, Color(1.0, 1.0, 1.0, 0.94))
-	for i in range(4):
-		var line_ang = pulse_t * 2.2 + i * PI * 0.5
-		draw_line(pos + Vector2.from_angle(line_ang) * 8.0, pos + Vector2.from_angle(line_ang) * (outer_r + 4.0), Color(1.0, 1.0, 1.0, 0.54), 1.6)
-	_draw_centered("FRAGMENTO", pos + Vector2(0, -62), 18, Color(0.92, 0.98, 1.0))
-	_draw_centered("TOQUE PARA ATRAVESSAR", pos + Vector2(0, 68), 13, Color(0.58, 0.94, 1.0, 0.92))
+	WorldEnvironmentPresentation._draw_phase_fragment(self, camera)
 
 
 func _draw_parasite_spit_zones(camera: Vector2) -> void :
-	for zone in parasite_spit_zones:
-		var state = String(zone.get("state", "flying"))
-		var phase = float(zone.get("phase", 0.0))
-		if state == "flying":
-			var progress = clamp(float(zone.get("age", 0.0)) / max(0.01, float(zone.get("travel", PARASITE_SPIT_TRAVEL))), 0.0, 1.0)
-			var world_pos = Vector2(zone["origin"]).lerp(Vector2(zone["target"]), progress) + Vector2(0, - sin(progress * PI) * 92.0)
-			var pos = world_pos - camera
-			draw_circle(pos, 21.0, Color(0.18, 0.3, 0.05, 0.3))
-			for worm_index in range(4):
-				var angle = phase + progress * 10.0 + worm_index * TAU / 4.0
-				_draw_parasite_worm(pos + Vector2.from_angle(angle) * 13.0, angle + PI * 0.5, 0.62, time_alive * 8.0 + worm_index, 0.96)
-			var shadow = Vector2(zone["origin"]).lerp(Vector2(zone["target"]), progress) - camera
-			draw_set_transform(shadow, 0.0, Vector2(1.0, 0.34))
-			draw_circle(Vector2.ZERO, 20.0 + progress * 10.0, Color(0.05, 0.04, 0.02, 0.28))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-			continue
-		var center = Vector2(zone["target"]) - camera
-		var fade = clamp(float(zone.get("life", 0.0)) / max(0.01, float(zone.get("max", PARASITE_SPIT_DURATION))), 0.0, 1.0)
-		var pulse = 0.5 + 0.5 * sin(time_alive * 5.5 + phase)
-		draw_circle(center, PARASITE_SPIT_RADIUS, Color(0.22, 0.34, 0.05, 0.1 * fade))
-		draw_arc(center, PARASITE_SPIT_RADIUS + pulse * 5.0, 0.0, TAU, 56, Color(0.58, 0.88, 0.18, 0.54 * fade), 2.4)
-		draw_arc(center, PARASITE_SPIT_RADIUS * 0.72, time_alive * 0.35, time_alive * 0.35 + PI * 1.55, 40, Color(0.78, 1.0, 0.32, 0.28 * fade), 1.2)
-		for crack_index in range(11):
-			var angle = phase + crack_index * TAU / 11.0
-			var start = center + Vector2.from_angle(angle) * (24.0 + (crack_index % 3) * 13.0)
-			var finish = center + Vector2.from_angle(angle + sin(crack_index * 2.4) * 0.1) * (72.0 + (crack_index % 4) * 14.0)
-			draw_line(start, finish, Color(0.1, 0.075, 0.025, 0.58 * fade), 2.0)
-		for worm_index in range(7):
-			var angle = time_alive * (0.34 + worm_index * 0.015) + phase + worm_index * TAU / 7.0
-			var radius = PARASITE_SPIT_RADIUS * (0.25 + 0.55 * float((worm_index % 3) + 1) / 3.0)
-			var worm_pos = center + Vector2.from_angle(angle) * radius
-			_draw_parasite_worm(worm_pos, angle + PI * 0.58, 0.46 + (worm_index % 2) * 0.1, time_alive * 5.0 + worm_index, fade)
+	CombatEffectsPresentation._draw_parasite_spit_zones(self, camera)
 
 
 func _draw_phase6_pustule_pools(camera: Vector2) -> void :
-	for pool in boss6_lodarian_pools:
-		var life: = float(pool.get("life", 0.0))
-		var max_life: = maxf(0.01, float(pool.get("max", 4.0)))
-		var fade: = clampf(life / max_life, 0.0, 1.0)
-		var center: = Vector2(pool.get("pos", Vector2.ZERO)) - camera
-		var radius: = float(pool.get("radius", 78.0))
-		var pool_kind: = String(pool.get("kind", "lodarian"))
-		var base_color: = Color(0.58, 1.0, 0.2, 0.48 * fade)
-		var fill_color: = Color(0.22, 0.44, 0.07, 0.16 * fade)
-		if pool_kind == "acid_bloom":
-			base_color = Color(0.48, 1.0, 0.12, 0.54 * fade)
-			fill_color = Color(0.1, 0.42, 0.05, 0.18 * fade)
-		elif pool_kind == "carnage":
-			base_color = Color(0.7, 1.0, 0.18, 0.58 * fade)
-			fill_color = Color(0.3, 0.56, 0.04, 0.2 * fade)
-		draw_circle(center, radius, fill_color)
-		draw_circle(center, radius * 0.52, Color(base_color.r, base_color.g, base_color.b, 0.1 * fade))
-		draw_arc(center, radius + sin(time_alive * 5.0 + float(pool.get("phase", 0.0))) * 5.0, - time_alive * 0.8, TAU - time_alive * 0.8, 76, base_color, 2.0)
-		if pool_kind in ["acid_bloom", "carnage"]:
-			for bubble_index in range(8):
-				var angle: float = float(bubble_index) * TAU / 8.0 + time_alive * (0.38 + float(bubble_index % 3) * 0.08)
-				var bubble_pos: = center + Vector2.from_angle(angle) * radius * (0.2 + 0.58 * absf(sin(time_alive * 0.7 + float(bubble_index))))
-				draw_circle(bubble_pos, 3.0 + float(bubble_index % 3), Color(0.8, 1.0, 0.28, 0.32 * fade))
-	for pool in phase6_pustule_pools:
-		var life: = float(pool.get("life", 0.0))
-		var max_life: = maxf(0.01, float(pool.get("max", PUSTULE_POOL_DURATION)))
-		var fade: = clampf(life / max_life, 0.0, 1.0)
-		var age: = max_life - life
-		var center: = Vector2(pool.get("pos", Vector2.ZERO)) - camera
-		var radius: = float(pool.get("radius", PUSTULE_POOL_RADIUS))
-		var phase: = float(pool.get("phase", 0.0))
-		var pulse: = 0.5 + 0.5 * sin(time_alive * 5.6 + phase)
-		draw_circle(center, radius, Color(0.12, 0.28, 0.04, 0.16 * fade))
-		draw_circle(center, radius * 0.72, Color(0.34, 0.82, 0.12, 0.15 * fade))
-		draw_arc(center, radius + pulse * 5.0, phase + time_alive * 0.42, phase + time_alive * 0.42 + TAU, 72, Color(0.62, 1.0, 0.18, 0.62 * fade), 2.4)
-		draw_arc(center, radius * 0.55, - time_alive * 1.1, TAU - time_alive * 1.1, 44, Color(0.78, 1.0, 0.22, 0.18 * fade), 1.2)
-		var fragments: Array = pool.get("fragments", [])
-		for fragment in fragments:
-			var delay: = float(fragment.get("delay", 0.0))
-			var progress: = clampf((age - delay) / 0.72, 0.0, 1.0)
-			if progress <= 0.0:
-				continue
-			var eased: = 1.0 - pow(1.0 - progress, 2.5)
-			var angle: = float(fragment.get("angle", 0.0))
-			var distance: = float(fragment.get("distance", PUSTULE_FRAGMENT_MAX_DISTANCE))
-			var wobble: = Vector2.from_angle(angle + PI * 0.5) * sin(time_alive * 10.0 + float(fragment.get("phase", 0.0))) * 4.0 * (1.0 - progress)
-			var drop: = Vector2.from_angle(angle) * distance * eased + wobble
-			var pos: = center + drop + Vector2(0, sin(progress * PI) * -22.0)
-			var size: = float(fragment.get("size", 4.0)) * (1.1 - progress * 0.32)
-			var shard_color: = Color(0.62, 0.36, 0.14, 0.9 * fade).lerp(Color(0.48, 1.0, 0.14, 0.82 * fade), progress)
-			draw_circle(pos, size + 2.0, Color(0.04, 0.1, 0.02, 0.28 * fade))
-			draw_circle(pos, size, shard_color)
-			if progress > 0.58:
-				var puddle_pos: = center + Vector2.from_angle(angle) * distance * minf(1.0, progress + 0.08)
-				draw_circle(puddle_pos, size * (2.0 + progress), Color(0.36, 0.86, 0.08, 0.18 * fade))
-				draw_line(pos, puddle_pos, Color(0.42, 0.92, 0.1, 0.34 * fade), maxf(1.0, size * 0.42))
-	if phase6_pustule_pheromone_timer > 0.0 and _local_counts_as_player() and player_hp > 0 and not is_dead:
-		var pheromone_fade: = clampf(phase6_pustule_pheromone_timer / maxf(0.01, BOSS6_PUSTULE_PHEROMONE_TIME), 0.0, 1.0)
-		var pheromone_center: Vector2 = player_pos - camera
-		var pheromone_radius: = 42.0 + sin(time_alive * 7.0) * 3.0
-		draw_circle(pheromone_center, pheromone_radius, Color(0.42, 0.92, 0.12, 0.055 * pheromone_fade))
-		draw_arc(pheromone_center, pheromone_radius + 5.0, - time_alive * 2.3, TAU - time_alive * 2.3, 56, Color(0.74, 1.0, 0.22, 0.38 * pheromone_fade), 1.8)
-		for i in range(6):
-			var angle: float = time_alive * 1.7 + float(i) * TAU / 6.0
-			var mote: Vector2 = pheromone_center + Vector2.from_angle(angle) * (pheromone_radius * 0.68 + sin(time_alive * 4.0 + float(i)) * 6.0)
-			draw_circle(mote, 2.2, Color(0.72, 1.0, 0.22, 0.42 * pheromone_fade))
+	WorldEnvironmentPresentation._draw_phase6_pustule_pools(self, camera)
 
 
 func _draw_miasma_eel_relocation_path(enemy: Dictionary, camera: Vector2) -> void :
-	var progress: = clampf(float(enemy.get("eel_relocating", 0.0)), 0.0, 1.0)
-	if progress <= 0.0:
-		return
-	var from: = Vector2(enemy.get("eel_relocate_from", enemy.get("pos", Vector2.ZERO)))
-	var to: = Vector2(enemy.get("eel_relocate_to", enemy.get("pos", Vector2.ZERO)))
-	var bend: = float(enemy.get("eel_relocate_bend", 0.0))
-	var phase: = float(enemy.get("eel_relocate_phase", 0.0))
-	var head: = _parasite_curve_point(from, to, progress, bend) - camera
-	var before: = _parasite_curve_point(from, to, maxf(0.0, progress - 0.025), bend) - camera
-	var move_dir: = (head - before).normalized()
-	if move_dir.length() <= 0.05:
-		move_dir = (to - from).normalized()
-	var side: = move_dir.orthogonal()
-	var trail: = PackedVector2Array()
-	var samples: = 9
-	for i in range(samples):
-		var back: = minf(100.0, float(i) * 13.5)
-		var t: = maxf(0.0, progress - back / maxf(1.0, from.distance_to(to)))
-		var base: = _parasite_curve_point(from, to, t, bend) - camera
-		var wobble: = sin(time_alive * 7.0 + phase + float(i) * 0.9) * (8.0 - float(i) * 0.45)
-		trail.append(base + side * wobble)
-	if trail.size() >= 2:
-		draw_polyline(trail, Color(0.055, 0.06, 0.05, 0.62), 18.0, true)
-		draw_polyline(trail, Color(0.42, 0.43, 0.35, 0.72), 8.0, true)
-		draw_polyline(trail, Color(0.22, 0.78, 0.18, 0.2), 2.2, true)
-	for i in range(18):
-		var drift: = fposmod(time_alive * (0.4 + float(i % 5) * 0.03) + phase + float(i) * 0.137, 1.0)
-		var back: = drift * 104.0
-		var t: = maxf(0.0, progress - back / maxf(1.0, from.distance_to(to)))
-		var center: = _parasite_curve_point(from, to, t, bend) - camera
-		var scatter: = side * sin(phase + float(i) * 1.73) * (3.0 + fposmod(float(i) * 7.31 + phase, 16.0))
-		var lift: = Vector2(0, -1) * sin(drift * PI) * (2.0 + fposmod(float(i) * 3.17 + phase, 6.0))
-		var alpha: = (1.0 - drift) * 0.46
-		var color: = Color(0.38, 0.4, 0.33, alpha) if i % 3 != 0 else Color(0.3, 0.8, 0.18, alpha * 0.72)
-		draw_circle(center + scatter + lift, 1.6 + fposmod(float(i) * 1.11 + phase, 3.2), color)
-	draw_circle(head, 25.0, Color(0.1, 0.12, 0.09, 0.48))
-	draw_circle(head + move_dir * 7.0, 15.0, Color(0.46, 0.48, 0.38, 0.58))
-	draw_arc(head, 24.0, phase + time_alive * 2.2, phase + time_alive * 2.2 + PI * 1.3, 24, Color(0.54, 0.8, 0.28, 0.44), 2.2)
+	CombatEffectsPresentation._draw_miasma_eel_relocation_path(self, enemy, camera)
 
 
 func _draw_sanguessuga_state(enemy: Dictionary, camera: Vector2) -> void :
-	var state: = String(enemy.get("leech_state", SANGUESSUGA_STATE_DORMANT))
-	var center: = Vector2(enemy.get("pos", Vector2.ZERO)) - camera
-	match state:
-		SANGUESSUGA_STATE_FALL_WARNING:
-			var p: = 1.0 - clampf(float(enemy.get("leech_timer", 0.0)) / SANGUESSUGA_FALL_WARNING_TIME, 0.0, 1.0)
-			draw_circle(center, 28.0 + p * 9.0, Color(0.68, 1.0, 0.2, 0.12 + p * 0.12))
-			draw_arc(center, 30.0 + p * 10.0, - time_alive * 2.0, TAU - time_alive * 2.0, 38, Color(0.78, 1.0, 0.24, 0.62), 2.0)
-		SANGUESSUGA_STATE_FALLING:
-			var p: = clampf(1.0 - float(enemy.get("leech_timer", 0.0)) / maxf(0.01, float(enemy.get("leech_fall_duration", SANGUESSUGA_FALL_TIME_MAX))), 0.0, 1.0)
-			draw_line(center + Vector2(0, -150.0 * (1.0 - p)), center, Color(0.58, 1.0, 0.18, 0.36), 3.0, true)
-		SANGUESSUGA_STATE_DORMANT:
-			var life: = float(enemy.get("leech_life", SANGUESSUGA_DORMANT_TIME))
-			var fade: = clampf(life / 3.0, 0.28, 1.0) if life <= 3.0 else 1.0
-			draw_circle(center, SANGUESSUGA_DETECTION_RADIUS, Color(0.28, 1.0, 0.18, 0.045 * fade))
-			draw_arc(center, SANGUESSUGA_DETECTION_RADIUS + sin(time_alive * 4.4 + float(enemy.get("phase", 0.0))) * 4.0, - time_alive * 0.6, TAU - time_alive * 0.6, 72, Color(0.58, 1.0, 0.2, 0.24 * fade), 1.4)
-		SANGUESSUGA_STATE_TRIGGERED:
-			draw_circle(center, 38.0 + sin(time_alive * 18.0) * 4.0, Color(1.0, 0.18, 0.16, 0.2))
-			draw_arc(center, 42.0, - time_alive * 4.0, TAU - time_alive * 4.0, 42, Color(1.0, 0.42, 0.18, 0.78), 2.4)
-		SANGUESSUGA_STATE_LEAPING:
-			var from: = Vector2(enemy.get("leech_leap_from", enemy.get("pos", Vector2.ZERO))) - camera
-			draw_line(from, center, Color(0.68, 1.0, 0.18, 0.44), 4.0, true)
+	CombatEffectsPresentation._draw_sanguessuga_state(self, enemy, camera)
 
 
 func _draw_parasite_marks(camera: Vector2) -> void :
-	for enemy in enemies:
-		var mark_time = float(enemy.get("parasite_mark_time", 0.0))
-		if mark_time <= 0.0 or float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		_draw_parasite_host(Vector2(enemy["pos"]) - camera, 30.0, int(enemy.get("seeds", 1)), int(enemy["uid"]), mark_time)
-	if boss_active and boss_hp > 0.0 and boss_parasite_mark_time > 0.0:
-		_draw_parasite_host(boss_pos - camera, 78.0, max(3, boss_parasite_seeds), -9173, boss_parasite_mark_time)
-	if _arauto_active() and float(arauto.get("parasite_mark_time", 0.0)) > 0.0:
-		_draw_parasite_host(Vector2(arauto["pos"]) - camera, 58.0, max(2, int(arauto.get("seeds", 1))), -8121, float(arauto.get("parasite_mark_time", 0.0)))
+	CombatEffectsPresentation._draw_parasite_marks(self, camera)
 
 
 func _draw_parasite_host(center: Vector2, radius: float, seeds: int, uid: int, mark_time: float) -> void :
-	var pulse = 0.5 + 0.5 * sin(time_alive * 7.0 + uid * 0.013)
-	var fade = clamp(mark_time / PARASITE_MARK_DURATION, 0.0, 1.0)
-	draw_circle(center, radius * 0.82, Color(0.12, 0.22, 0.04, 0.07 + pulse * 0.04))
-	for vein_index in range(5):
-		var vein_angle = time_alive * 0.16 + uid * 0.007 + vein_index * TAU / 5.0
-		var inner = center + Vector2.from_angle(vein_angle + sin(time_alive * 2.0 + vein_index) * 0.12) * radius * 0.34
-		var outer = center + Vector2.from_angle(vein_angle) * radius * (0.78 + pulse * 0.1)
-		draw_line(inner, outer, Color(0.36, 0.68, 0.12, 0.34 * fade), 3.4)
-		draw_line(inner, outer, Color(0.76, 1.0, 0.32, 0.54 * fade), 1.0)
-	var worm_count = clamp(seeds + 1, 3, 6)
-	for worm_index in range(worm_count):
-		var angle = time_alive * (0.72 + worm_index * 0.035) + worm_index * TAU / worm_count + uid * 0.001
-		var orbit = radius * (0.7 + 0.13 * sin(time_alive * 2.7 + worm_index))
-		var worm_pos = center + Vector2.from_angle(angle) * orbit
-		_draw_parasite_worm(worm_pos, angle + PI * 0.56, 0.72 + (worm_index % 3) * 0.1, time_alive * 5.0 + worm_index, fade)
-	for drop_index in range(3):
-		var cycle = fposmod(time_alive * (0.58 + drop_index * 0.08) + drop_index * 0.31 + abs(uid) * 0.0007, 1.0)
-		var drop_alpha = sin(cycle * PI) * fade
-		var x = center.x + sin(uid * 0.017 + drop_index * 2.1) * radius * 0.52
-		var start_y = center.y + radius * 0.34
-		var larva_pos = Vector2(x + sin(cycle * 8.0 + drop_index) * 3.0, start_y + cycle * (radius * 0.82 + 24.0))
-		draw_line(Vector2(x, start_y - 3.0), larva_pos, Color(0.42, 0.7, 0.16, 0.18 * drop_alpha), 1.0)
-		_draw_parasite_larva_drop(larva_pos, 0.62 + drop_index * 0.08, drop_alpha)
+	CombatEffectsPresentation._draw_parasite_host(self, center, radius, seeds, uid, mark_time)
 
 
 func _draw_parasite_worm(origin: Vector2, angle: float, scale: float, phase: float, alpha: = 1.0) -> void :
-	var points = PackedVector2Array()
-	var segments = 8
-	for segment in range(segments):
-		var along = (float(segment) / float(segments - 1) - 0.5) * 30.0 * scale
-		var local = Vector2(along, sin(phase + segment * 0.92) * 4.2 * scale)
-		points.append(origin + local.rotated(angle))
-	if points.size() < 2:
-		return
-	draw_polyline(points, Color(0.035, 0.055, 0.018, 0.92 * alpha), 9.0 * scale, true)
-	draw_polyline(points, Color(0.42, 0.68, 0.15, 0.96 * alpha), 6.0 * scale, true)
-	draw_polyline(points, Color(0.78, 0.96, 0.32, 0.46 * alpha), 1.4 * scale, true)
-	for segment in range(1, segments - 1):
-		var segment_radius = (2.4 + (segment % 2) * 0.7) * scale
-		draw_circle(points[segment], segment_radius, Color(0.54, 0.78, 0.2, 0.88 * alpha))
-	var head = points[points.size() - 1]
-	var head_dir = (head - points[points.size() - 2]).normalized()
-	var side = head_dir.orthogonal()
-	draw_circle(head, 5.4 * scale, Color(0.2, 0.32, 0.08, 0.96 * alpha))
-	draw_circle(head + head_dir * 1.4 * scale, 3.8 * scale, Color(0.62, 0.84, 0.22, 0.96 * alpha))
-	draw_circle(head + side * 2.1 * scale, 0.85 * scale, Color(1.0, 0.76, 0.18, alpha))
-	draw_circle(head - side * 2.1 * scale, 0.85 * scale, Color(1.0, 0.76, 0.18, alpha))
-	draw_line(head + head_dir * 3.0 * scale, head + head_dir * 7.0 * scale + side * 3.0 * scale, Color(0.92, 0.92, 0.48, 0.92 * alpha), 1.4 * scale)
-	draw_line(head + head_dir * 3.0 * scale, head + head_dir * 7.0 * scale - side * 3.0 * scale, Color(0.92, 0.92, 0.48, 0.92 * alpha), 1.4 * scale)
+	CombatEffectsPresentation._draw_parasite_worm(self, origin, angle, scale, phase, alpha)
 
 
 func _draw_parasite_larva_drop(pos: Vector2, scale: float, alpha: float) -> void :
@@ -44658,537 +39291,51 @@ func _draw_advanced_manifestation_world(camera: Vector2) -> void :
 
 
 func _draw_cartographic_marks(camera: Vector2) -> void :
-	var points = _cartographic_coord_points()
-	if points.size() >= 2:
-		for i in range(points.size()):
-			if points.size() == 2 and i > 0:
-				break
-			var a: Vector2 = points[i] - camera
-			var b: Vector2 = points[(i + 1) % points.size()] - camera
-			var alpha: = 0.24 + (0.38 if cartographic_route_timer > 0.0 else 0.0) + (0.18 if cartographic_trace_flash > 0.0 else 0.0)
-			var route_color: = _cartographic_coord_color(i)
-			draw_line(a, b, Color(route_color.r, route_color.g, route_color.b, alpha * 0.28), CARTO_ROUTE_WIDTH, true)
-			draw_line(a, b, Color(0.78, 1.0, 0.42, alpha), 2.4, true)
-	if points.size() >= 3:
-		var poly = PackedVector2Array([points[0] - camera, points[1] - camera, points[2] - camera])
-		var map_alpha: = 0.055 if cartographic_complete_map_timer <= 0.0 else 0.145
-		draw_polygon(poly, PackedColorArray([Color(0.1, 1.0, 0.7, map_alpha)]))
-	for coord in cartographic_coords:
-		var p: = _cartographic_coord_world_pos(coord) - camera
-		var life_ratio = clamp(float(coord.get("life", 0.0)) / max(0.01, float(coord.get("max", CARTO_COORD_LIFE))), 0.0, 1.0)
-		var phase = float(coord.get("phase", 0.0)) + time_alive * 2.0
-		var slot: = int(coord.get("slot", 0))
-		var color: = _cartographic_coord_color(slot)
-		draw_circle(p, 26.0, Color(color.r, color.g, color.b, 0.09 * life_ratio))
-		draw_arc(p, 29.0 + sin(phase) * 2.0, phase, phase + TAU * 0.72, 48, Color(color.r, color.g, color.b, 0.88 * life_ratio), 2.0)
-		draw_line(p + Vector2(-18, 0), p + Vector2(18, 0), Color(1.0, 0.82, 0.24, 0.58 * life_ratio), 1.4)
-		draw_line(p + Vector2(0, -18), p + Vector2(0, 18), Color(1.0, 0.82, 0.24, 0.58 * life_ratio), 1.4)
-	for enemy in enemies:
-		var stacks: = int(enemy.get("carto_trace_stacks", 0))
-		if stacks <= 0 and float(enemy.get("carto_point_timer", 0.0)) <= 0.0:
-			continue
-		var p_enemy: = Vector2(enemy.get("pos", player_pos)) - camera
-		var ring_color: = Color(1.0, 0.84, 0.3) if float(enemy.get("carto_point_timer", 0.0)) > 0.0 else Color(0.34, 1.0, 0.82)
-		for i in range(max(1, stacks)):
-			draw_arc(p_enemy, 34.0 + i * 5.0, time_alive * (1.4 + i * 0.2), time_alive * (1.4 + i * 0.2) + TAU * 0.64, 36, Color(ring_color.r, ring_color.g, ring_color.b, 0.46), 1.8)
+	CombatEffectsPresentation._draw_cartographic_marks(self, camera)
 
 
 func _draw_mnesic_marks(camera: Vector2) -> void :
-	for enemy in enemies:
-		var memories: Array = enemy.get("mnesic_memories", [])
-		var dejavu = float(enemy.get("mnesic_dejavu", 0.0))
-		if memories.is_empty() and dejavu <= 0.0 and float(enemy.get("mnesic_tricked", 0.0)) <= 0.0:
-			continue
-		var p: = Vector2(enemy["pos"]) - camera
-		var alpha = 0.3 + min(0.45, memories.size() * 0.12)
-		draw_arc(p, 38.0, - time_alive * 1.2, TAU - time_alive * 1.2, 48, Color(0.86, 0.58, 1.0, alpha), 2.0)
-		for i in range(memories.size()):
-			draw_circle(p + Vector2.from_angle(time_alive * 1.6 + i * TAU / 3.0) * 27.0, 4.0, Color(1.0, 0.72, 1.0, 0.8))
+	CombatEffectsPresentation._draw_mnesic_marks(self, camera)
 
 
 
 func _draw_necro_aliado_health_bar(pos: Vector2, width: float, ratio: float, alpha: float) -> void :
-	var height: = 6.0
-	var rect: = Rect2(pos, Vector2(width, height))
-	draw_rect(rect.grow(1.5), Color(0.02, 0.08, 0.12, 0.85 * alpha), true)
-	draw_rect(rect, Color(0.04, 0.16, 0.22, 0.9 * alpha), true)
-	if ratio > 0.0:
-		var fill_rect: = Rect2(pos, Vector2(width * clampf(ratio, 0.0, 1.0), height))
-		draw_rect(fill_rect, Color(0.22, 0.92, 0.62, 0.95 * alpha), true)
-	draw_rect(rect, Color(0.42, 0.96, 1.0, 0.85 * alpha), false, 1.2)
+	CombatEffectsPresentation._draw_necro_aliado_health_bar(self, pos, width, ratio, alpha)
 
 func _draw_necronada_world(camera: Vector2) -> void :
-	for vestige in necronada_vestiges:
-		var p: = Vector2(vestige.get("pos", player_pos)) - camera
-		var phase: float = float(vestige.get("phase", 0.0)) + time_alive * 1.4
-		var depth: = int(vestige.get("depth", 1))
-		draw_circle(p + Vector2(0, 10), 13.0 + sin(phase) * 1.2, Color(0.04, 0.05, 0.09, 0.36))
-		draw_line(p + Vector2(0, 8), p + Vector2(0, -12), Color(0.22, 0.62, 0.32, 0.92), 2.2)
-		draw_line(p + Vector2(0, 1), p + Vector2(-8, -3), Color(0.2, 0.74, 0.42, 0.76), 2.0)
-		draw_line(p + Vector2(0, 3), p + Vector2(8, -1), Color(0.16, 0.56, 0.35, 0.76), 2.0)
-		for petal in range(6):
-			var angle: = phase * 0.18 + float(petal) * TAU / 6.0
-			var petal_pos: = p + Vector2.from_angle(angle) * (5.0 + depth * 0.5) + Vector2(0, -16)
-			draw_circle(petal_pos, 4.4, Color(0.32, 0.8, 1.0, 0.88))
-			draw_circle(petal_pos + Vector2(0, -0.8), 2.0, Color(0.76, 0.96, 1.0, 0.9))
-		draw_circle(p + Vector2(0, -16), 4.2, Color(0.54, 0.34, 0.92, 0.94))
-		for i in range(depth):
-			draw_arc(p + Vector2(0, -8), 19.0 + i * 4.0, - phase * (0.6 + i * 0.1), TAU - phase * (0.6 + i * 0.1), 36, Color(0.72, 0.96, 1.0, 0.28), 1.1)
-	for remnant in necronada_remnants:
-		var p: = Vector2(remnant.get("pos", player_pos)) - camera
-		var profile: Dictionary = Dictionary(remnant.get("profile", {}))
-		var color: Color = profile.get("color", _necronada_accent())
-		var summon_time: = float(remnant.get("summon", 0.0))
-		var summon_pct: = 1.0 - clampf(summon_time / NECRONADA_REMNANT_SUMMON_TIME, 0.0, 1.0)
-
-
-		var mock_enemy: = {
-			"type": String(remnant.get("enemy_type", ENEMY_COMMON)), 
-			"phase": float(remnant.get("phase", 0.0)), 
-			"facing_dir": Vector2(remnant.get("facing_dir", Vector2.LEFT)), 
-			"pos": Vector2(remnant.get("pos", player_pos))
-		}
-		var tex: = _enemy_texture(mock_enemy)
-		var base_size: = _enemy_draw_size(mock_enemy)
-
-		var size: = base_size * (0.2 + 0.8 * summon_pct)
-		var draw_pos: = p + _enemy_visual_offset(mock_enemy)
-		var flip: = _enemy_should_flip(mock_enemy)
-
-
-		_draw_dynamic_shadow(tex, p, size, flip, 0.38 * summon_pct)
-
-
-		if summon_time > 0.0:
-			var anim_rot: = (NECRONADA_REMNANT_SUMMON_TIME - summon_time) * 4.0
-			draw_circle(p, base_size.x * 0.5 * summon_pct, Color(0.2, 0.9, 0.85, 0.28 * (1.0 - summon_time / NECRONADA_REMNANT_SUMMON_TIME)))
-			draw_arc(p, base_size.x * (0.6 - 0.2 * summon_pct), anim_rot, anim_rot + TAU * 0.75, 32, Color(0.5, 0.95, 1.0, 0.85), 2.2)
-
-
-		draw_circle(p, size.x * 0.44, Color(0.18, 0.58, 0.95, 0.26 * summon_pct))
-		draw_arc(p, size.x * 0.48, time_alive * 2.5, time_alive * 2.5 + TAU * 0.62, 32, Color(0.65, 0.92, 1.0, 0.52 * summon_pct), 1.8)
-
-
-		var glitch_jitter: = Vector2(rng.randf_range(-3.0, 3.0), rng.randf_range(-2.0, 2.0)) if (int(time_alive * 24.0 + float(remnant.get("id", 0))) % 6 == 0) else Vector2.ZERO
-		var ghost_modulate: = Color(0.68, 0.88, 1.0, 0.92 * summon_pct)
-		_draw_entity(tex, draw_pos + glitch_jitter, size, ghost_modulate, flip)
-		if glitch_jitter != Vector2.ZERO:
-
-			_draw_entity(tex, draw_pos - glitch_jitter * 1.5, size, Color(0.1, 0.95, 0.85, 0.38 * summon_pct), flip)
-
-
-		if summon_time <= 0.0:
-			var hp_ratio: = clampf(float(remnant.get("hp", 1.0)) / maxf(1.0, float(remnant.get("max_hp", 1.0))), 0.0, 1.0)
-			_draw_necro_aliado_health_bar(p + Vector2(-25.0, - size.y * 0.55 - 12.0), 50.0, hp_ratio, 1.0)
-
-		var target_pos: = Vector2(remnant.get("target_pos", remnant.get("pos", player_pos))) - camera
-		if target_pos.distance_to(p) > 22.0 and summon_time <= 0.0:
-			var line_alpha: = 0.34 if float(remnant.get("empower_timer", 0.0)) > 0.0 else 0.16
-			draw_line(p, target_pos, Color(color.r, color.g, color.b, line_alpha), 1.2)
-			if float(remnant.get("empower_timer", 0.0)) > 0.0:
-				draw_arc(p, 34.0 + sin(time_alive * 7.0) * 4.0, 0.0, TAU, 42, Color(0.78, 0.46, 1.0, 0.52), 2.0)
-	for enemy in enemies:
-		if not bool(enemy.get("necronada_epitaph", false)):
-			continue
-		var p_enemy: = Vector2(enemy.get("pos", player_pos)) - camera
-		var depth_enemy: = int(enemy.get("necronada_epitaph_depth", 1))
-		var alpha: = clampf(0.55 + float(enemy.get("necronada_epitaph_flash", 0.0)) * 0.45, 0.0, 1.0)
-		for i in range(depth_enemy):
-			var arc_radius: = 34.0 + i * 4.5
-			var arc_color: = Color(0.8, 0.4, 1.0, alpha * (0.54 + float(i) * 0.045))
-			draw_arc(p_enemy, arc_radius, - time_alive * (1.0 + i * 0.18), TAU - time_alive * (1.0 + i * 0.18), 52, arc_color, 1.8)
-			draw_arc(p_enemy, arc_radius + 1.5, time_alive * (0.75 + i * 0.12), time_alive * (0.75 + i * 0.12) + TAU * 0.34, 32, Color(0.72, 0.96, 1.0, alpha * 0.3), 1.1)
-		var stack_label: = "E x%d" % depth_enemy
-		var badge_w: = 58.0
-		var badge_h: = 23.0
-		var badge_rect: = Rect2(p_enemy + Vector2( - badge_w * 0.5, -62.0), Vector2(badge_w, badge_h))
-		draw_rect(badge_rect.grow(2.0), Color(0.45, 0.1, 0.78, 0.22 * alpha), true)
-		draw_rect(badge_rect, Color(0.035, 0.018, 0.075, 0.9 * alpha), true)
-		draw_rect(badge_rect, Color(0.86, 0.38, 1.0, 0.96 * alpha), false, 1.7)
-		draw_line(badge_rect.position + Vector2(4, badge_h - 3), badge_rect.position + Vector2(badge_w - 4, badge_h - 3), Color(0.72, 0.96, 1.0, 0.34 * alpha), 1.0)
-		draw_string(font, badge_rect.position + Vector2(0, 16.0), stack_label, HORIZONTAL_ALIGNMENT_CENTER, badge_w, _readable_text_size(12), Color(0.95, 0.98, 1.0, alpha))
-	for visual in necronada_vfx:
-		var kind: = String(visual.get("kind", ""))
-		var alpha_v: = clampf(float(visual.get("life", 0.0)) / maxf(0.01, float(visual.get("max", 0.3))), 0.0, 1.0)
-		if kind == "remnant_strike" or kind == "remnant_bolt" or kind == "remnant_shock":
-			var color_v: Color = visual.get("color", _necronada_accent())
-			var a_pos: = Vector2(visual.get("a", player_pos)) - camera
-			var b_pos: = Vector2(visual.get("b", player_pos)) - camera
-			if kind == "remnant_bolt":
-				draw_line(a_pos, b_pos, Color(0.16, 0.06, 0.3, 0.52 * alpha_v), 7.0)
-				draw_line(a_pos, b_pos, Color(color_v.r, color_v.g, color_v.b, 0.82 * alpha_v), 2.4)
-			elif kind == "remnant_shock":
-				draw_arc(b_pos, 24.0 + (1.0 - alpha_v) * 46.0, 0.0, TAU, 42, Color(color_v.r, color_v.g, color_v.b, 0.55 * alpha_v), 2.4)
-			else:
-				draw_line(a_pos, b_pos, Color(color_v.r, color_v.g, color_v.b, 0.72 * alpha_v), 3.0)
-		elif kind == "empower_target":
-			var pos_target: = Vector2(visual.get("pos", player_pos)) - camera
-			draw_circle(pos_target, 32.0 + sin(time_alive * 9.0) * 4.0, Color(0.08, 0.03, 0.14, 0.24 * alpha_v))
-			draw_arc(pos_target, 44.0, - time_alive * 2.0, TAU - time_alive * 2.0, 54, Color(0.74, 0.44, 1.0, 0.56 * alpha_v), 2.0)
-		elif kind == "tp_dust_fan":
-			var fan_origin: = Vector2(visual.get("pos", player_pos)) - camera
-			var fan_dir: = Vector2(visual.get("dir", Vector2.RIGHT)).normalized()
-			var fan_radius: = float(visual.get("radius", NECRONADA_TP_DUST_RADIUS))
-			var points: = PackedVector2Array([fan_origin])
-			for i in range(11):
-				var ratio: = float(i) / 10.0
-				var angle: = fan_dir.angle() - NECRONADA_TP_DUST_HALF_ANGLE + NECRONADA_TP_DUST_HALF_ANGLE * 2.0 * ratio
-				points.append(fan_origin + Vector2.from_angle(angle) * fan_radius * (0.86 + sin(time_alive * 18.0 + float(i)) * 0.035))
-			draw_polygon(points, PackedColorArray([Color(0.18, 0.05, 0.28, 0.2 * alpha_v)]))
-			for i in range(7):
-				var angle: = fan_dir.angle() - NECRONADA_TP_DUST_HALF_ANGLE + NECRONADA_TP_DUST_HALF_ANGLE * 2.0 * float(i) / 6.0
-				draw_line(fan_origin + Vector2.from_angle(angle) * 18.0, fan_origin + Vector2.from_angle(angle) * fan_radius, Color(0.7, 0.36, 1.0, 0.2 * alpha_v), 2.0, true)
-		elif kind == "dust_hit" or kind == "requiem_impact":
-			var pos_hit: = Vector2(visual.get("pos", player_pos)) - camera
-			for i in range(7):
-				var angle: float = float(i) * TAU / 7.0 + time_alive * 1.8
-				draw_circle(pos_hit + Vector2.from_angle(angle) * (10.0 + (1.0 - alpha_v) * 28.0), 4.0 * alpha_v, Color(0.68, 0.34, 1.0, 0.52 * alpha_v))
-		elif kind == "requiem_echo":
-			var center: = Vector2(visual.get("pos", player_pos)) - camera
-			var radius_v: = lerpf(32.0, 122.0, 1.0 - alpha_v)
-			draw_circle(center, radius_v, Color(0.04, 0.06, 0.14, 0.18 * alpha_v))
-			draw_arc(center, radius_v, 0.0, TAU, 64, Color(0.72, 0.96, 1.0, 0.58 * alpha_v), 2.2)
-		elif kind == "rose_summon_ring":
-			var center: = Vector2(visual.get("pos", player_pos)) - camera
-			var radius_v: = float(visual.get("radius", NECRONADA_ROSE_SUMMON_RADIUS))
-			draw_circle(center, radius_v, Color(0.12, 0.04, 0.2, 0.055 * alpha_v))
-			draw_arc(center, radius_v, 0.0, TAU, 96, Color(0.72, 0.96, 1.0, 0.28 * alpha_v), 2.0)
-		else:
-			var pos: = Vector2(visual.get("pos", player_pos)) - camera
-			draw_circle(pos, 18.0 * alpha_v, Color(0.72, 0.96, 1.0, 0.36 * alpha_v))
-	if not necronada_requiem.is_empty() and String(necronada_requiem.get("kind", "")) == "necrotic_wave":
-		var origin: = Vector2(necronada_requiem.get("origin", player_pos)) - camera
-		var progress: = 1.0 - clampf(float(necronada_requiem.get("life", 0.0)) / maxf(0.01, float(necronada_requiem.get("max", 1.0))), 0.0, 1.0)
-		var radius: = lerpf(42.0, NECRONADA_ULTIMATE_RADIUS, progress)
-		draw_circle(origin, radius, Color(0.035, 0.015, 0.055, 0.16 * (1.0 - progress)))
-		for i in range(18):
-			var angle: = float(i) * TAU / 18.0 + sin(time_alive + float(i)) * 0.1
-			var local_ratio: = 0.72 + 0.28 * (0.5 + 0.5 * sin(float(i) * 2.13 + time_alive * 2.4))
-			var dust_pos: = origin + Vector2.from_angle(angle) * (radius * local_ratio)
-			draw_circle(dust_pos, 4.0 + 5.0 * (0.5 + 0.5 * cos(float(i) * 1.7 + time_alive * 3.1)), Color(0.44, 0.16, 0.7, 0.28 * (1.0 - progress)))
-		draw_arc(origin, radius, - time_alive * 1.2, TAU - time_alive * 1.2, 96, Color(0.72, 0.42, 1.0, 0.58 * (1.0 - progress)), 4.0)
+	CombatEffectsPresentation._draw_necronada_world(self, camera)
 
 
 func _draw_resonant_world_marks(camera: Vector2) -> void :
-	for enemy in enemies:
-		var notes: Array = enemy.get("resonant_notes", [])
-		if notes.is_empty() and float(enemy.get("resonant_flash", 0.0)) <= 0.0:
-			continue
-		var p: = Vector2(enemy["pos"]) - camera
-		for i in range(max(1, notes.size())):
-			var angle = time_alive * 2.4 + i * TAU / 3.0
-			draw_circle(p + Vector2.from_angle(angle) * 31.0, 4.5, Color(1.0, 0.8, 0.24, 0.75))
-		draw_arc(p, 42.0, time_alive * 1.7, time_alive * 1.7 + TAU * 0.55, 40, Color(0.36, 0.92, 1.0, 0.48), 2.0)
+	CombatEffectsPresentation._draw_resonant_world_marks(self, camera)
 
 
 func _draw_resonant_player_beat(camera: Vector2) -> void :
-	var center: Vector2 = player_pos - camera + Vector2(0, -4)
-	var beat: float = fposmod(time_alive, RESONANT_BEAT_INTERVAL)
-	var beat_progress: float = beat / RESONANT_BEAT_INTERVAL
-	var cycle_progress: float = fposmod(time_alive, RESONANT_BEAT_INTERVAL * 4.0) / (RESONANT_BEAT_INTERVAL * 4.0)
-	var to_hit: float = minf(beat, RESONANT_BEAT_INTERVAL - beat) / maxf(0.001, RESONANT_PERFECT_WINDOW)
-	var perfect_ratio: float = 1.0 - clampf(to_hit, 0.0, 1.0)
-	var pulse: float = 0.5 + 0.5 * sin(time_alive * 5.5)
-	var radius: float = 82.0 + perfect_ratio * 11.0
-	var alpha: float = 0.2 + perfect_ratio * 0.54
-	draw_circle(center, radius + 18.0, Color(0.18, 0.72, 1.0, 0.03 + perfect_ratio * 0.035))
-	draw_circle(center, 44.0 + perfect_ratio * 10.0, Color(1.0, 0.78, 0.18, 0.025 + perfect_ratio * 0.05))
-	draw_arc(center, radius, 0.0, TAU, 96, Color(1.0, 0.78, 0.18, alpha), 2.0 + perfect_ratio * 1.9)
-	draw_arc(center, radius + 12.0 + pulse * 3.0, 0.0, TAU, 96, Color(0.46, 0.94, 1.0, 0.16 + perfect_ratio * 0.26), 1.5)
-	for i in range(4):
-		var angle: = - PI * 0.5 + TAU * (float(i) / 4.0)
-		var gate_alpha: = 0.34 + (0.46 if perfect_ratio > 0.0 and i == int(floor(cycle_progress * 4.0)) else 0.0)
-		var gate_radius: = radius + 2.0 + perfect_ratio * 8.0
-		draw_arc(center, gate_radius, angle - 0.18, angle + 0.18, 18, Color(1.0, 0.96, 0.48, gate_alpha), 5.0)
-		var note_pos: = center + Vector2.from_angle(angle) * (gate_radius + 15.0)
-		draw_circle(note_pos, 4.5 + perfect_ratio * 2.0, Color(1.0, 0.82, 0.22, 0.46 + perfect_ratio * 0.34))
-	for i in range(16):
-		var angle: = - PI * 0.5 + TAU * (float(i) / 16.0)
-		var wave: = sin(time_alive * 3.6 + float(i) * 0.9)
-		var inner: Vector2 = center + Vector2.from_angle(angle) * (radius - 8.0 + wave * 2.0)
-		var outer: Vector2 = center + Vector2.from_angle(angle) * (radius + 12.0 + wave * 8.0 + perfect_ratio * 8.0)
-		draw_line(inner, outer, Color(0.52, 0.94, 1.0, 0.16 + perfect_ratio * 0.3), 1.2)
-	var hand_angle: = - PI * 0.5 + cycle_progress * TAU
-	var hand_end: Vector2 = center + Vector2.from_angle(hand_angle) * (radius + 22.0)
-	draw_line(center, hand_end, Color(1.0, 0.86, 0.24, 0.28 + perfect_ratio * 0.36), 1.4 + perfect_ratio * 1.2)
-	draw_circle(hand_end, 5.0 + perfect_ratio * 4.0 + pulse * perfect_ratio * 1.5, Color(1.0, 0.92, 0.3, 0.66 + perfect_ratio * 0.28))
-	var beat_wave: = radius * (0.52 + beat_progress * 0.62)
-	draw_arc(center, beat_wave, 0.0, TAU, 72, Color(1.0, 0.96, 0.52, (0.26 + perfect_ratio * 0.36) * (1.0 - beat_progress * 0.45)), 2.0)
-	if perfect_ratio > 0.05:
-		draw_arc(center, radius + 24.0 + perfect_ratio * 8.0, - time_alive * 1.3, - time_alive * 1.3 + TAU * 0.62, 60, Color(1.0, 0.96, 0.52, perfect_ratio * 0.48), 2.8)
+	EntitiesPresentation._draw_resonant_player_beat(self, camera)
 
 
 func _draw_contractual_notifications(camera: Vector2) -> void :
-	for trap in contractual_notifications:
-		var p: = Vector2(trap.get("pos", player_pos)) - camera
-		var alpha = clamp(float(trap.get("life", 0.0)) / max(0.01, float(trap.get("max", CONTRACT_TRAP_LIFE))), 0.0, 1.0)
-		var phase = float(trap.get("phase", 0.0))
-		draw_circle(p, 48.0, Color(1.0, 0.54, 0.18, 0.08 * alpha))
-		for i in range(4):
-			var a = phase + time_alive * 1.4 + i * PI * 0.5
-			var corner = p + Vector2.from_angle(a) * 38.0
-			draw_line(corner - Vector2.from_angle(a) * 14.0, corner + Vector2.from_angle(a + PI * 0.5) * 10.0, Color(1.0, 0.82, 0.38, 0.7 * alpha), 2.0)
-	for enemy in enemies:
-		if not enemy.has("contract_clause"):
-			continue
-		var p: = Vector2(enemy["pos"]) - camera
-		var infractions = int(enemy.get("contract_infractions", 0))
-		var clause: = String(enemy.get("contract_clause", "aproximacao"))
-		var clause_color: = _contract_clause_color(clause)
-		var alpha = 0.46 + 0.16 * infractions + float(enemy.get("contract_flash", 0.0)) * 0.34
-		draw_arc(p, 43.0, - PI * 0.5, PI * 1.5, 52, Color(clause_color.r, clause_color.g, clause_color.b, alpha), 2.2)
-		draw_arc(p, 49.0 + sin(time_alive * 5.0 + float(infractions)) * 2.5, time_alive * 0.55, time_alive * 0.55 + TAU * 0.32, 36, Color(1.0, 0.92, 0.62, 0.28 + float(enemy.get("contract_flash", 0.0)) * 0.36), 1.6)
-		var paper_center: = p + Vector2(39, -42)
-		var paper_rect: = Rect2(paper_center - Vector2(11, 15), Vector2(22, 30))
-		draw_rect(paper_rect, Color(0.96, 0.88, 0.66, 0.92), true)
-		draw_rect(paper_rect, Color(clause_color.r, clause_color.g, clause_color.b, 0.82), false, 1.6)
-		draw_line(paper_center + Vector2(-6, -5), paper_center + Vector2(6, -5), Color(0.38, 0.22, 0.08, 0.52), 1.0)
-		draw_line(paper_center + Vector2(-5, 2), paper_center + Vector2(5, 2), Color(0.38, 0.22, 0.08, 0.42), 1.0)
-		_draw_centered(_contract_clause_letter(clause), paper_center + Vector2(0, 10), 14, Color(0.18, 0.1, 0.04, 0.94))
-		if infractions > 0:
-			_draw_centered("x%d" % infractions, paper_center + Vector2(15, -16), 9, Color(1.0, 0.32, 0.16, 0.92))
-	for visual in contractual_vfx:
-		if String(visual.get("kind", "")) != "gavel":
-			continue
-		var center: = Vector2(visual.get("pos", player_pos)) - camera
-		var v_alpha: = clampf(float(visual.get("life", 0.0)) / maxf(0.01, float(visual.get("max", 1.0))), 0.0, 1.0)
-		var progress: = 1.0 - v_alpha
-		var clause: = String(visual.get("clause", "aproximacao"))
-		var clause_color: = _contract_clause_color(clause)
-		var strike: = sin(clampf(progress, 0.0, 1.0) * PI)
-		var hammer_pos: = center + Vector2(-16.0 + strike * 14.0, -78.0 + strike * 42.0)
-		draw_line(center + Vector2(-28, -47), center + Vector2(28, -47), Color(1.0, 0.86, 0.44, 0.46 * v_alpha), 2.0)
-		draw_set_transform(hammer_pos, -0.68 + strike * 0.92, Vector2.ONE)
-		draw_rect(Rect2(Vector2(-18, -6), Vector2(36, 12)), Color(0.72, 0.52, 0.28, 0.92 * v_alpha), true)
-		draw_rect(Rect2(Vector2(-13, -3), Vector2(26, 6)), Color(1.0, 0.82, 0.44, 0.7 * v_alpha), true)
-		draw_rect(Rect2(Vector2(-4, 5), Vector2(8, 32)), Color(0.34, 0.18, 0.08, 0.9 * v_alpha), true)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		draw_circle(center + Vector2(0, -42), 22.0 + strike * 14.0, Color(clause_color.r, clause_color.g, clause_color.b, 0.15 * v_alpha))
-		draw_arc(center + Vector2(0, -42), 29.0 + strike * 10.0, 0.0, TAU, 38, Color(1.0, 0.9, 0.48, 0.58 * v_alpha), 2.2)
-		_draw_centered(_contract_clause_letter(clause), center + Vector2(0, -66 - progress * 16.0), 15, Color(1.0, 0.92, 0.62, 0.88 * v_alpha))
+	CombatEffectsPresentation._draw_contractual_notifications(self, camera)
 
 
 func _draw_manifest_evolution_fields(camera: Vector2) -> void :
-	if manifest_evolution_state.is_empty():
-		return
-	for field in Array(manifest_evolution_state.get("fields", [])):
-		var center: = Vector2(field.get("pos", player_pos)) - camera
-		var radius: = float(field.get("radius", 150.0))
-		var max_life: = maxf(0.01, float(field.get("max", 1.0)))
-		var alpha: = clampf(float(field.get("life", 0.0)) / max_life, 0.0, 1.0)
-		var color: Color = field.get("color", _manifestation_color())
-		draw_circle(center, radius, Color(color.r, color.g, color.b, 0.06 * alpha))
-		draw_arc(center, radius, 0.0, TAU, 96, Color(color.r, color.g, color.b, 0.42 * alpha), 3.0)
-		draw_arc(center, radius * (0.68 + 0.06 * sin(time_alive * 6.0)), 0.0, TAU, 72, Color(1.0, 1.0, 1.0, 0.16 * alpha), 1.5)
+	CombatEffectsPresentation._draw_manifest_evolution_fields(self, camera)
 
 
 func _draw_manifestation_secondaries(camera: Vector2) -> void :
-	for secondary in manifestation_secondaries:
-		match String(secondary.get("kind", "")):
-			"eletrica":
-				_draw_secondary_eletrica(secondary, camera)
-			"lacerante":
-				_draw_secondary_lacerante(secondary, camera)
-			"prismatica":
-				_draw_secondary_prismatica(secondary, camera)
-			"retornante":
-				_draw_secondary_retornante(secondary, camera)
-			"parasitica":
-				_draw_secondary_parasitica(secondary, camera)
-			"gravitante":
-				_draw_secondary_gravitante(secondary, camera)
-			"ancorada":
-				_draw_secondary_ancorada(secondary, camera)
-			"acorrentada":
-				_draw_secondary_acorrentada(secondary, camera)
-			"eclipsada", "eclipsada_sol", "eclipsada_lua_eclipse":
-				_draw_secondary_eclipsada(secondary, camera)
-			"bombastica":
-				_draw_secondary_bombastica(secondary, camera)
-			"cartografica", "mnesica", "ressonante", "contratual":
-				_draw_secondary_advanced(secondary, camera)
-	_draw_bombastica_world(camera)
+	CombatEffectsPresentation._draw_manifestation_secondaries(self, camera)
 
 
 func _draw_bombastica_world(camera: Vector2) -> void :
-	_draw_bombastica_powder_trail_world(camera)
-	for bomb in bombastica_bombs:
-		if bool(bomb.get("exploded", false)):
-			continue
-		if String(bomb.get("kind", "")) == "ultimate_bomb":
-			_draw_bombastica_ultimate_bomb(bomb, camera)
-			continue
-
-		var p: = Vector2(bomb.get("pos", player_pos)) - camera
-		var state: = String(bomb.get("state", "armed"))
-		
-		# Parabolic Arc Ground Shadow during Throw (Section 29)
-		if state == "flying":
-			var target_p: = Vector2(bomb.get("target", player_pos)) - camera
-			var age: = float(bomb.get("age", 0.0))
-			var travel: = maxf(0.01, float(bomb.get("travel", 0.28)))
-			var progress: = clampf(age / travel, 0.0, 1.0)
-			var height_factor: = sin(progress * PI)
-			var shadow_rx: = lerpf(14.0, 6.0, height_factor)
-			var shadow_ry: = lerpf(7.0, 3.0, height_factor)
-			var shadow_alpha: = lerpf(0.55, 0.22, height_factor)
-			draw_ellipse(target_p + Vector2(0, 10), shadow_rx, shadow_ry, Color(0.02, 0.02, 0.04, shadow_alpha))
-			
-		var radius: = float(bomb.get("radius", BOMBASTICA_Q_RADIUS))
-		var fuse: = maxf(0.0, float(bomb.get("fuse", 0.0)))
-		var fuse_total: = maxf(0.01, float(bomb.get("fuse_total", BOMBASTICA_Q_FUSE_MIN)))
-		var ratio: = clampf(fuse / fuse_total, 0.0, 1.0)
-		var urgent: = 1.0 - ratio
-		var pulse: = 0.5 + 0.5 * sin(time_alive * lerpf(4.0, 16.0, urgent) + float(bomb.get("phase", 0.0)))
-		var aura: = Color(1.0, 0.44, 0.08, 0.08 + urgent * 0.08)
-		if bool(bomb.get("critical", false)):
-			aura = Color(1.0, 0.1, 0.08, 0.18 + pulse * 0.08)
-			
-		# Range Telegraph Circle
-		draw_circle(p, radius, aura)
-		draw_arc(p, radius + pulse * 5.0, - time_alive * 1.7, TAU - time_alive * 1.7, 72, Color(1.0, 0.58, 0.1, 0.58 + urgent * 0.3), 2.6)
-		
-		# Bomb Body & Fuse
-		draw_circle(p, 18.0 + pulse * 2.0, Color(0.04, 0.04, 0.06, 0.92))
-		draw_circle(p, 11.0, Color(1.0, 0.46, 0.06, 0.88))
-		draw_circle(p - Vector2(3, 4), 4.0, Color(1.0, 0.95, 0.62, 0.92))
-		var fuse_start: = p + Vector2(0, -18)
-		var fuse_tip: = p + Vector2(cos(time_alive * 6.0) * 8.0, -32.0 - pulse * 5.0)
-		draw_line(fuse_start, fuse_tip, Color(0.18, 0.88, 1.0, 0.68), 2.2)
-		draw_circle(fuse_tip, 4.0 + pulse * 2.0, Color(1.0, 0.92, 0.44, 0.92))
-		if fuse <= 1.0:
-			draw_arc(p, 27.0 + pulse * 6.0, 0.0, TAU, 36, Color(1.0, 1.0, 1.0, 0.74), 2.0)
-		_draw_centered("%.1f" % fuse, p + Vector2(0, -47), 11, Color(1.0, 0.88, 0.48, 0.92))
+	CombatEffectsPresentation._draw_bombastica_world(self, camera)
 
 
 func _draw_bombastica_ultimate_bomb(bomb: Dictionary, camera: Vector2) -> void :
-	var p: Vector2 = Vector2(bomb.get("pos", player_pos)) - camera
-	var radius: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
-	var spin_angle: float = float(bomb.get("spin_angle", 0.0))
-	var squash_x: float = float(bomb.get("squash_x", 1.0))
-	var squash_y: float = float(bomb.get("squash_y", 1.0))
-	var flash_timer: float = float(bomb.get("flash_timer", 0.0))
-	var grounded_timer: float = float(bomb.get("grounded_timer", 0.0))
-	var bounce_phase: float = float(bomb.get("bounce_phase", 0.0))
-	var hit_count: int = int(bomb.get("hit_count", 0))
-
-	# 1. Rastro Laranja / Azul de Trajetória e Redirecionamento
-	var trails: Array = bomb.get("trail_history", [])
-	if trails.size() > 1:
-		for i in range(trails.size() - 1):
-			var t1: Dictionary = trails[i]
-			var t2: Dictionary = trails[i + 1]
-			var p1: Vector2 = Vector2(t1.get("pos", player_pos)) - camera
-			var p2: Vector2 = Vector2(t2.get("pos", player_pos)) - camera
-			var alpha_t: float = float(i) / float(trails.size())
-			var trail_color: Color = Color(1.0, 0.52, 0.1, 0.6 * alpha_t) if i % 2 == 0 else Color(0.18, 0.88, 1.0, 0.6 * alpha_t)
-			draw_line(p1, p2, trail_color, 4.0 * alpha_t + 1.0, true)
-
-	# 2. Sombra e Área de Impacto
-	draw_ellipse(p + Vector2(0, 16), 38.0 * squash_x, 16.0 * squash_y, Color(0.02, 0.02, 0.04, 0.5))
-	var pulse_area: float = 0.5 + 0.5 * sin(time_alive * 5.0)
-	draw_circle(p, radius, Color(1.0, 0.42, 0.08, 0.06 + pulse_area * 0.04))
-	draw_arc(p, radius, 0.0, TAU, 72, Color(1.0, 0.55, 0.12, 0.45 + pulse_area * 0.25), 2.4)
-	draw_arc(p, radius * (0.65 + pulse_area * 0.1), - time_alive * 2.0, - time_alive * 2.0 + TAU * 0.75, 48, Color(0.18, 0.88, 1.0, 0.35), 1.8)
-
-	# 3. Corpo da Bomba com Compressão/Extensão (Squash/Stretch) & Rotação
-	draw_set_transform(p, spin_angle, Vector2(squash_x, squash_y))
-	var core_color: Color = Color(1.0, 0.45, 0.06, 0.95) if flash_timer <= 0.0 else Color(1.0, 0.95, 0.5, 1.0)
-	draw_circle(Vector2.ZERO, 34.0, Color(0.04, 0.04, 0.06, 0.95))
-	draw_circle(Vector2.ZERO, 25.0, core_color)
-	draw_arc(Vector2.ZERO, 19.0, 0.0, TAU, 36, Color(0.18, 0.88, 1.0, 0.85), 3.0)
-	draw_circle(Vector2(-7, -9), 7.0, Color(1.0, 0.95, 0.65, 0.92))
-	for i in range(4):
-		var angle: float = float(i) * PI * 0.5 + spin_angle
-		var spike_tip: Vector2 = Vector2.from_angle(angle) * 32.0
-		draw_line(Vector2.ZERO, spike_tip, Color(1.0, 0.68, 0.18, 0.8), 2.2)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	# 4. Telegraph de Controle: Anel Pulsante + Tag "ATIRE PARA GUIAR"
-	var is_shootable: bool = grounded_timer > 0.0 or bounce_phase < 0.35 or bounce_phase > (BOMBASTICA_ULTIMATE_BOUNCE_PERIOD - 0.35)
-	if is_shootable:
-		var shoot_pulse: float = sin(time_alive * 10.0) * 5.0
-		draw_arc(p, 54.0 + shoot_pulse, 0.0, TAU, 48, Color(1.0, 0.7, 0.12, 0.9), 3.2)
-		draw_arc(p, 68.0 - shoot_pulse, 0.0, TAU, 48, Color(0.18, 0.88, 1.0, 0.7), 2.0)
-
-		# Label Badge "ATIRE PARA GUIAR"
-		var badge_y: float = - 62.0 + sin(time_alive * 6.0) * 4.0
-		var badge_center: Vector2 = p + Vector2(0, badge_y)
-		var badge_rect: Rect2 = Rect2(badge_center - Vector2(62, 12), Vector2(124, 24))
-		draw_rect(badge_rect, Color(0.06, 0.05, 0.08, 0.88), true)
-		draw_rect(badge_rect, Color(1.0, 0.58, 0.12, 0.92), false, 1.8)
-		_draw_centered("ATIRE PARA GUIAR", badge_center + Vector2(0, 4), 11, Color(1.0, 0.92, 0.54, 0.95))
-
-	# 5. Badge de Multiplicador de Tiros Aceitos
-	if hit_count > 0:
-		_draw_centered("[+x%d]" % hit_count, p + Vector2(0, -92), 12, Color(0.2, 0.9, 1.0, 0.95))
-		
-	for visual in bombastica_vfx:
-		var alpha: = clampf(float(visual.get("life", 0.0)) / maxf(0.01, float(visual.get("max", 1.0))), 0.0, 1.0)
-		match String(visual.get("kind", "")):
-			"explosion":
-				if bombastica_use_old_vfx:
-					var center: = Vector2(visual.get("pos", player_pos)) - camera
-					var max_radius: = float(visual.get("radius", BOMBASTICA_Q_RADIUS))
-					var grow: = 1.0 - alpha
-					var explosion_seed: = int(visual.get("seed", 0))
-					var chain_power: = 1.0 + float(int(visual.get("chain_depth", 0))) * 0.12
-					draw_circle(center, max_radius * (0.36 + grow * 0.54), Color(1.0, 0.2, 0.04, 0.11 * alpha * chain_power))
-					draw_circle(center, max_radius * grow, Color(1.0, 0.52, 0.06, 0.18 * alpha))
-					draw_circle(center, max_radius * 0.24 * (0.55 + grow), Color(1.0, 0.92, 0.46, 0.34 * alpha))
-					draw_arc(center, max_radius * grow, 0.0, TAU, 92, Color(1.0, 0.8, 0.22, 0.88 * alpha), 6.0)
-					draw_arc(center, max_radius * (0.62 + grow * 0.34), - time_alive * 5.2, TAU - time_alive * 5.2, 72, Color(0.18, 0.88, 1.0, 0.48 * alpha), 2.6)
-					draw_arc(center, max_radius * (0.42 + grow * 0.46), time_alive * 4.0, time_alive * 4.0 + TAU * 0.68, 64, Color(1.0, 0.22, 0.08, 0.62 * alpha), 3.2)
-					for i in range(16):
-						var angle: float = float(i) * TAU / 16.0 + float(explosion_seed % 97) * 0.017 + sin(time_alive * 3.0 + i) * 0.08
-						var inner: = center + Vector2.from_angle(angle) * max_radius * 0.14 * grow
-						var outer: = center + Vector2.from_angle(angle) * max_radius * (0.45 + grow * (0.42 + float(i % 4) * 0.045))
-						var spark_color: = Color(1.0, 0.92 - float(i % 3) * 0.08, 0.36, 0.52 * alpha)
-						draw_line(inner, outer, spark_color, 1.8 + float(i % 3) * 0.45)
-						if i % 3 == 0:
-							draw_circle(outer, 3.0 + grow * 2.0, Color(1.0, 0.58, 0.14, 0.54 * alpha))
-			"link":
-				var a: = Vector2(visual.get("a", player_pos)) - camera
-				var b: = Vector2(visual.get("b", player_pos)) - camera
-				var color: Color = visual.get("color", Color(1.0, 0.52, 0.1))
-				var dir: = (b - a).normalized()
-				if dir.length() <= 0.01:
-					dir = Vector2.RIGHT
-				var side: = dir.orthogonal()
-				var link_seed: = int(visual.get("seed", 0))
-				draw_line(a, b, Color(color.r, color.g, color.b, 0.22 * alpha), 10.0, true)
-				draw_line(a, b, Color(color.r, color.g, color.b, 0.82 * alpha), 2.4, true)
-				for i in range(5):
-					var t: = (float(i) + 0.5) / 5.0
-					var spark: = a.lerp(b, t) + side * sin(time_alive * 14.0 + float(i) + float(link_seed % 31)) * 9.0
-					draw_circle(spark, 3.6, Color(1.0, 0.92, 0.42, 0.7 * alpha))
+	CombatEffectsPresentation._draw_bombastica_ultimate_bomb(self, bomb, camera)
 
 
 func _draw_secondary_bombastica(secondary: Dictionary, camera: Vector2) -> void :
-	var maximum: = maxf(0.01, float(secondary.get("max", BOMBASTICA_E_DURATION)))
-	var alpha: = clampf(float(secondary.get("life", 0.0)) / maximum, 0.0, 1.0)
-	var center: = Vector2(secondary.get("center", player_pos)) - camera
-	var phase: float = time_alive * 2.8 + float(secondary.get("seed", 0)) * 0.001
-	draw_circle(center, 128.0, Color(1.0, 0.48, 0.08, 0.045 * alpha))
-	draw_arc(center, 128.0, phase, phase + TAU * 0.86, 84, Color(1.0, 0.58, 0.1, 0.34 * alpha), 2.0)
-	var mine_points: Array = []
-	for mine in Array(secondary.get("mines", [])):
-		if bool(mine.get("triggered", false)):
-			continue
-		var p: = Vector2(mine.get("pos", player_pos)) - camera
-		mine_points.append(p)
-		var armed: = bool(mine.get("armed", false))
-		var mine_alpha: = alpha * (0.92 if armed else 0.42)
-		draw_circle(p, BOMBASTICA_E_MINE_RADIUS, Color(1.0, 0.42, 0.06, 0.06 * mine_alpha))
-		draw_arc(p, BOMBASTICA_E_MINE_RADIUS, - phase, TAU - phase, 44, Color(1.0, 0.62, 0.18, 0.62 * mine_alpha), 2.0)
-		draw_circle(p, 10.0, Color(0.06, 0.05, 0.06, 0.88 * mine_alpha))
-		draw_circle(p, 5.0, Color(1.0, 0.68, 0.18, 0.92 * mine_alpha))
-		if not armed:
-			_draw_centered("ARM", p + Vector2(0, -24), 9, Color(0.18, 0.88, 1.0, 0.8 * mine_alpha))
-	for i in range(mine_points.size()):
-		for j in range(i + 1, mine_points.size()):
-			if mine_points[i].distance_to(mine_points[j]) <= 135.0:
-				draw_line(mine_points[i], mine_points[j], Color(0.18, 0.88, 1.0, 0.14 * alpha), 2.0, true)
+	CombatEffectsPresentation._draw_secondary_bombastica(self, secondary, camera)
 
 
 func _draw_eletrica_kinetic_waves(camera: Vector2) -> void :
@@ -45197,192 +39344,19 @@ func _draw_eletrica_kinetic_waves(camera: Vector2) -> void :
 
 
 func _draw_eletrica_kinetic_wave_at(pos_world: Vector2, direction: Vector2, age: float, phase: float, camera: Vector2, alpha: float) -> void :
-	var dir: = direction.normalized()
-	if dir.length() <= 0.01:
-		dir = Vector2.RIGHT
-	var side: = dir.orthogonal()
-	var pos: = pos_world - camera
-	var pulse: = 0.5 + 0.5 * sin(age * 22.0 + phase)
-	draw_circle(pos, ELETRICA_WAVE_RADIUS * 1.42, Color(0.08, 0.7, 1.0, 0.055 * alpha))
-	draw_circle(pos, ELETRICA_WAVE_RADIUS * 0.78, Color(0.56, 0.96, 1.0, 0.105 * alpha))
-	draw_circle(pos, ELETRICA_WAVE_RADIUS * 0.4, Color(0.88, 1.0, 1.0, 0.28 * alpha))
-	for arc_index in range(3):
-		var radius: = ELETRICA_WAVE_RADIUS * (0.42 + arc_index * 0.13) + pulse * 5.0
-		var start: = age * (5.0 + arc_index) + arc_index * TAU / 3.0
-		draw_arc(pos, radius, start, start + PI * 1.45, 38, Color(0.56, 0.96, 1.0, (0.62 - arc_index * 0.12) * alpha), 2.0)
-	var core_a: = pos - dir * 28.0 + side * sin(age * 19.0 + phase) * 7.0
-	var core_b: = pos - dir * 4.0 - side * sin(age * 26.0 + phase) * 8.0
-	var core_c: = pos + dir * 24.0
-	draw_polyline(PackedVector2Array([core_a, core_b, core_c]), Color(0.86, 0.28, 1.0, 0.46 * alpha), 11.0, true)
-	draw_polyline(PackedVector2Array([core_a, core_b, core_c]), Color(0.74, 1.0, 1.0, 0.9 * alpha), 4.0, true)
-	for spark_index in range(5):
-		var spark_angle: = phase + age * 9.0 + spark_index * TAU / 5.0
-		var inner: = pos + Vector2.from_angle(spark_angle) * (ELETRICA_WAVE_RADIUS * 0.28)
-		var outer: = pos + Vector2.from_angle(spark_angle + sin(age * 7.0 + spark_index) * 0.12) * (ELETRICA_WAVE_RADIUS * (0.7 + pulse * 0.18))
-		draw_line(inner, outer, Color(0.74, 1.0, 1.0, 0.34 * alpha), 1.4)
+	CombatEffectsPresentation._draw_eletrica_kinetic_wave_at(self, pos_world, direction, age, phase, camera, alpha)
 
 
 func _draw_eletrica_chains(camera: Vector2) -> void :
-	for chain in eletrica_chains:
-		var age: = float(chain.get("age", 0.0))
-		var life: = float(chain.get("life", 0.0))
-		var max_life: = maxf(0.01, float(chain.get("max", ELETRICA_WAVE_CHAIN_DURATION)))
-		var alpha: = clampf(life / max_life, 0.0, 1.0)
-		var reached_depth: = int(floor(age / ELETRICA_WAVE_CHAIN_LEVEL_DELAY))
-		var seed: = int(chain.get("seed", 0))
-		var origin_fallback: = Vector2(chain.get("origin_pos", Vector2.ZERO))
-		for link in Array(chain.get("links", [])):
-			var depth: = int(link.get("depth", 0))
-			if depth > reached_depth:
-				continue
-			var a_uid: = int(link.get("a", -1))
-			var b_uid: = int(link.get("b", -1))
-			var a_pos: = _eletrica_chain_entity_pos(a_uid, origin_fallback)
-			var b_pos: = _eletrica_chain_entity_pos(b_uid, a_pos)
-			if a_pos == Vector2.ZERO or b_pos == Vector2.ZERO:
-				continue
-			var link_alpha: = alpha * clampf((age - float(depth) * ELETRICA_WAVE_CHAIN_LEVEL_DELAY) / 0.22, 0.0, 1.0)
-			_draw_tesla_bolt(a_pos - camera, b_pos - camera, seed + a_uid * 17 + b_uid * 31, link_alpha, 4.2)
-		for uid_value in Array(chain.get("targets", [])):
-			var uid: = int(uid_value)
-			var depths: Dictionary = chain.get("depths", {})
-			if int(depths.get(uid, 999)) > reached_depth:
-				continue
-			var enemy = _enemy_by_uid(uid)
-			if enemy != null and float(enemy.get("hp", 0.0)) > 0.0:
-				var t_shock: = float(enemy.get("tesla_shock", 0.0))
-				if t_shock > 0.0:
-					_draw_tesla_enemy_crown(Vector2(enemy["pos"]) - camera, clampf(t_shock / 0.42, 0.0, 1.0), uid)
+	CombatEffectsPresentation._draw_eletrica_chains(self, camera)
 
 
 func _draw_network_ability_visuals(camera: Vector2) -> void :
-	for visual in net_ability_visuals:
-		var action: = int(visual.get("action", NET_ABILITY_SKILL))
-		var manifestation: = clampi(int(visual.get("manifestation", 0)), 0, MANIFESTATIONS.size() - 1)
-		var kind: = String(MANIFESTATIONS[manifestation].get("key", "eletrica"))
-		var color: Color = MANIFESTATIONS[manifestation].get("color", Color.WHITE)
-		var origin: = Vector2(visual.get("origin", net_player_render_pos)) - camera
-		var target: = Vector2(visual.get("target", net_player_render_pos)) - camera
-		var maximum: = maxf(0.01, float(visual.get("max", 1.0)))
-		var life: = maxf(0.0, float(visual.get("life", 0.0)))
-		var progress: = clampf(1.0 - life / maximum, 0.0, 1.0)
-		var fade: = clampf(minf(progress * 5.0, life * 4.0), 0.0, 1.0)
-		match action:
-			NET_ABILITY_ATTACK:
-				var direction: = (target - origin).normalized()
-				if direction.length() <= 0.01:
-					direction = Vector2.RIGHT
-				var reach: = minf(origin.distance_to(target), 260.0)
-				var tip: = origin + direction * reach * minf(1.0, progress * 3.0)
-				if kind == "lacerante":
-					var side: = direction.orthogonal() * (24.0 + float(visual.get("extra", 0.0)) * 8.0)
-					var world_origin: = Vector2(visual.get("origin", net_player_render_pos))
-					var world_tip: = Vector2(visual.get("target", net_player_render_pos))
-					_draw_lacerante_blade({"points": [world_origin - side, world_origin.lerp(world_tip, 0.55) + side, world_tip], "empowered": float(visual.get("extra", 0.0)) > 2.0}, camera, life / maximum)
-				elif kind == "acorrentada":
-					var stage: = clampi(int(visual.get("extra", 1.0)), 1, 3)
-					var travel: = _acorrentada_replica_travel(stage, progress)
-					var arc: = 26.0 if stage == 1 else (64.0 if stage == 2 else 42.0)
-					var windup_ratio: = _acorrentada_attack_windup_time(stage) / _acorrentada_attack_duration(stage)
-					var hit_ratio: = (_acorrentada_attack_windup_time(stage) + _acorrentada_attack_out_time(stage)) / _acorrentada_attack_duration(stage)
-					var arc_phase: = 0.0
-					if progress < windup_ratio:
-						arc_phase = - sin(clampf(progress / maxf(0.01, windup_ratio), 0.0, 1.0) * PI) * 0.18
-					else:
-						arc_phase = sin(clampf((progress - windup_ratio) / maxf(0.01, hit_ratio - windup_ratio), 0.0, 1.0) * PI)
-					tip = origin.lerp(target, travel) + direction.orthogonal() * arc_phase * arc * (-1.0 if stage != 2 else 1.0)
-					var width: = 6.0 if stage == 1 else (9.0 if stage == 2 else 11.0)
-					var chain_color: = Color(0.18, 0.86, 1.0, 0.86 * fade) if stage == 1 else Color(0.92, 0.12, 0.1, 0.82 * fade)
-					if stage == 3:
-						var side: = direction.orthogonal() * 18.0
-						_draw_acorrentada_chain(origin + side, tip - side, Color(0.18, 0.86, 1.0, 0.88 * fade), width, fade, true)
-						_draw_acorrentada_chain(origin - side, tip + side, Color(0.92, 0.12, 0.1, 0.88 * fade), width, fade, false)
-					else:
-						_draw_acorrentada_chain(origin, tip, chain_color, width, fade, stage == 1)
-				elif kind == "eclipsada":
-					var stage: = clampi(int(visual.get("extra", 1.0)), 1, 4)
-					var slash_radius: = 80.0
-					var side: = direction.orthogonal() * slash_radius
-					var center: = origin.lerp(target, minf(1.0, progress * 2.4))
-					draw_line(center - side, center + side, Color(0.0, 0.02, 0.12, 0.78 * fade), 20.0 if stage >= 4 else 14.0, true)
-					draw_line(center - side, center + side, Color(color.r, color.g, color.b, 0.92 * fade), 7.0 if stage >= 4 else 5.0, true)
-					draw_line(center - side, center + side, Color(0.92, 0.98, 1.0, 0.9 * fade), 1.8, true)
-					if stage >= 4:
-						draw_arc(center, slash_radius, - time_alive * 3.4, TAU - time_alive * 3.4, 42, Color(1.0, 0.86, 0.28, 0.6 * fade), 2.6)
-				else:
-					var orb: = origin.lerp(target, minf(1.0, progress * 2.0))
-					draw_circle(orb, 12.0, Color(color.r, color.g, color.b, 0.26 * fade))
-					draw_circle(orb, 5.0, Color(1.0, 1.0, 1.0, 0.92 * fade))
-			NET_ABILITY_SKILL:
-				match kind:
-					"eletrica":
-						var wave_dir: = (target - origin).normalized()
-						if wave_dir.length() <= 0.01:
-							wave_dir = Vector2.RIGHT
-						var travel: = minf(origin.distance_to(target), ELETRICA_WAVE_SPEED * maximum)
-						var wave_pos: = origin + wave_dir * minf(travel, ELETRICA_WAVE_SPEED * progress * maximum)
-						_draw_eletrica_kinetic_wave_at(wave_pos + camera, wave_dir, progress * maximum, float(visual.get("seed", 0)) * 0.001, camera, fade)
-					"lacerante":
-						_draw_lacerante_spin({"center": Vector2(visual.get("origin", net_player_render_pos)), "radius": 128.0, "life": life, "max": maximum, "rotations": float(visual.get("rotations", LACERANTE_Q_ROTATIONS))}, camera, fade)
-					"parasitica":
-						_draw_network_parasite_spit_replica(visual, camera)
-					"prismatica":
-						_draw_prismatica_prism({
-							"pos": Vector2(visual.get("target", target + camera)), 
-							"life": life, 
-							"max_life": maximum, 
-							"network_fade": fade
-						}, camera)
-					"acorrentada":
-						var side: = (target - origin).normalized().orthogonal() * 18.0
-						_draw_acorrentada_chain(origin + side, target - side, Color(0.18, 0.86, 1.0, 0.84 * fade), 6.0, fade, true)
-						_draw_acorrentada_chain(origin - side, target + side, Color(0.92, 0.12, 0.1, 0.74 * fade), 8.0, fade, false)
-					"eclipsada":
-						var q_dir: = (target - origin).normalized()
-						if q_dir.length() <= 0.01:
-							q_dir = Vector2.RIGHT
-						var q_start: = origin - q_dir * 54.0
-						var q_finish: = target + q_dir * 42.0
-						draw_line(q_start, q_finish, Color(0.0, 0.03, 0.14, 0.82 * fade), 28.0, true)
-						draw_line(q_start, q_finish, Color(color.r, color.g, color.b, 0.86 * fade), 6.0, true)
-						for endpoint in [origin, target]:
-							draw_circle(endpoint, 28.0, Color(0.03, 0.16, 0.42, 0.24 * fade))
-							draw_arc(endpoint, 30.0 + progress * 16.0, - time_alive * 4.0, - time_alive * 4.0 + PI * 1.55, 42, Color(0.48, 0.88, 1.0, 0.78 * fade), 3.0)
-					"bombastica":
-						var bomb_p: = target
-						var pulse: = 0.5 + 0.5 * sin(time_alive * 12.0 + float(visual.get("seed", 0)))
-						draw_circle(bomb_p, BOMBASTICA_Q_RADIUS, Color(1.0, 0.42, 0.08, 0.08 * fade))
-						draw_arc(bomb_p, BOMBASTICA_Q_RADIUS + pulse * 6.0, - time_alive * 2.0, TAU - time_alive * 2.0, 68, Color(1.0, 0.58, 0.12, 0.72 * fade), 3.0)
-						draw_circle(bomb_p, 18.0 + pulse * 3.0, Color(0.08, 0.05, 0.03, 0.72 * fade))
-						draw_circle(bomb_p, 8.0, Color(1.0, 0.7, 0.18, 0.9 * fade))
-						draw_line(origin, bomb_p, Color(0.18, 0.88, 1.0, 0.28 * fade), 5.0, true)
-					_:
-						var skill_center: = origin if kind in ["eletrica", "ancorada", "retornante", "cartografica", "mnesica", "ressonante", "contratual"] else target
-						var radius: = lerpf(24.0, 170.0, minf(1.0, progress * 2.0))
-						draw_circle(skill_center, radius, Color(color.r, color.g, color.b, 0.055 * fade))
-						draw_arc(skill_center, radius, - time_alive * 1.8, TAU - time_alive * 1.8, 64, Color(color.r, color.g, color.b, 0.72 * fade), 4.0)
-			NET_ABILITY_SECONDARY:
-				_draw_network_secondary_replica(visual, camera)
-			NET_ABILITY_TELEPORT:
-				_draw_network_teleport_replica(visual, camera, kind, color, progress, fade)
+	CombatEffectsPresentation._draw_network_ability_visuals(self, camera)
 
 
 func _draw_prismatica_prism(prism: Dictionary, camera: Vector2) -> void :
-	var p: Vector2 = Vector2(prism.get("pos", player_pos)) - camera
-	var life: = float(prism.get("life", prism.get("max_life", 1.0)))
-	var fade: = clampf(float(prism.get("network_fade", 1.0)), 0.0, 1.0)
-	var pulse = 0.5 + 0.5 * sin(life * 8.0)
-	var size = float(prism.get("radius", 42.0)) + pulse * (9.0 if bool(prism.get("tp_prism", false)) else 6.0)
-	var points = PackedVector2Array([
-		p + Vector2(0, - size), 
-		p + Vector2(size, 0), 
-		p + Vector2(0, size), 
-		p + Vector2( - size, 0)
-	])
-	draw_polygon(points, PackedColorArray([Color(0.27, 0.96, 1.0, 0.14 * fade)]))
-	draw_polyline(points, Color(0.27, 0.96, 1.0, 0.82 * fade), 3.0)
-	draw_circle(p, size * 0.45, Color(1.0, 0.45, 0.72, (0.22 + pulse * 0.15) * fade))
-	draw_arc(p, size * 0.45, 0, TAU, 32, Color(1.0, 0.45, 0.72, 0.82 * fade), 1.5)
+	CombatEffectsPresentation._draw_prismatica_prism(self, prism, camera)
 
 
 func _acorrentada_replica_travel(stage: int, progress: float) -> float:
@@ -45406,125 +39380,19 @@ func _acorrentada_replica_travel(stage: int, progress: float) -> float:
 
 
 func _draw_network_secondary_replica(visual: Dictionary, camera: Vector2) -> void :
-	match String(visual.get("kind", "")):
-		"eletrica": _draw_secondary_eletrica(visual, camera)
-		"lacerante": _draw_secondary_lacerante(visual, camera)
-		"prismatica": _draw_secondary_prismatica(visual, camera)
-		"retornante": _draw_secondary_retornante(visual, camera)
-		"parasitica": _draw_secondary_parasitica(visual, camera)
-		"gravitante": _draw_secondary_gravitante(visual, camera)
-		"ancorada": _draw_secondary_ancorada(visual, camera)
-		"acorrentada": _draw_secondary_acorrentada(visual, camera)
-		"eclipsada": _draw_secondary_eclipsada(visual, camera)
-		"bombastica": _draw_secondary_bombastica(visual, camera)
-		"cartografica", "mnesica", "ressonante", "contratual": _draw_secondary_advanced(visual, camera)
-	_draw_ancorada_spinning_anchors(camera)
+	CombatEffectsPresentation._draw_network_secondary_replica(self, visual, camera)
 
 
 func _draw_network_parasite_spit_replica(visual: Dictionary, camera: Vector2) -> void :
-	var maximum: = maxf(0.01, float(visual.get("max", 3.2)))
-	var elapsed: = maximum - float(visual.get("life", maximum))
-	var travel: = PARASITE_SPIT_TRAVEL
-	var origin: = Vector2(visual.get("origin", net_player_render_pos))
-	var target: = Vector2(visual.get("target", origin))
-	var phase: = float(visual.get("phase", 0.0))
-	if elapsed < travel:
-		var progress: = clampf(elapsed / travel, 0.0, 1.0)
-		var world_pos: = origin.lerp(target, progress) + Vector2(0, - sin(progress * PI) * 92.0)
-		var pos: = world_pos - camera
-		draw_circle(pos, 21.0, Color(0.18, 0.3, 0.05, 0.3))
-		for worm_index in range(4):
-			var angle: = phase + progress * 10.0 + worm_index * TAU / 4.0
-			_draw_parasite_worm(pos + Vector2.from_angle(angle) * 13.0, angle + PI * 0.5, 0.62, time_alive * 8.0 + worm_index, 0.96)
-		return
-	var center: = target - camera
-	var fade: = clampf(float(visual.get("life", 0.0)) / maximum, 0.0, 1.0)
-	var pulse: = 0.5 + 0.5 * sin(time_alive * 5.5 + phase)
-	draw_circle(center, PARASITE_SPIT_RADIUS, Color(0.22, 0.34, 0.05, 0.1 * fade))
-	draw_arc(center, PARASITE_SPIT_RADIUS + pulse * 5.0, 0.0, TAU, 56, Color(0.58, 0.88, 0.18, 0.54 * fade), 2.4)
-	for worm_index in range(7):
-		var angle: float = time_alive * (0.34 + worm_index * 0.015) + phase + float(worm_index) * TAU / 7.0
-		var radius: = PARASITE_SPIT_RADIUS * (0.25 + 0.55 * float((worm_index % 3) + 1) / 3.0)
-		_draw_parasite_worm(center + Vector2.from_angle(angle) * radius, angle + PI * 0.58, 0.46 + (worm_index % 2) * 0.1, time_alive * 5.0 + worm_index, fade)
+	CombatEffectsPresentation._draw_network_parasite_spit_replica(self, visual, camera)
 
 
 func _draw_secondary_eclipsada(secondary: Dictionary, camera: Vector2) -> void :
-	if String(secondary.get("kind", "")) == "eclipsada_sol":
-		var sol_life: = maxf(0.0, float(secondary.get("life", 0.0)))
-		var sol_max: = maxf(0.01, float(secondary.get("max", ECLIPSADA_SOL_E_DURATION)))
-		var sol_alpha: = clampf(sol_life / sol_max, 0.0, 1.0)
-		var sol_color: Color = secondary.get("color", _eclipsada_color())
-		var sol_pos: = Vector2(secondary.get("pos", player_pos)) - camera
-		var sol_radius: = float(secondary.get("radius", ECLIPSADA_SOL_E_RADIUS))
-		var sol_phase: float = float(secondary.get("phase", 0.0)) + time_alive * 3.2
-		draw_circle(sol_pos, sol_radius, Color(1.0, 0.58, 0.12, 0.055 * sol_alpha))
-		draw_circle(sol_pos, sol_radius * 0.54, Color(sol_color.r, sol_color.g, sol_color.b, 0.07 * sol_alpha))
-		for i in range(5):
-			var angle: = sol_phase + float(i) * TAU / 5.0
-			draw_arc(sol_pos, sol_radius * (0.44 + float(i % 3) * 0.16), angle, angle + PI * 1.24, 54, Color(sol_color.r, sol_color.g, sol_color.b, (0.46 - i * 0.045) * sol_alpha), 3.2)
-		for ray in range(12):
-			var ray_angle: float = sol_phase * 0.55 + float(ray) * TAU / 12.0
-			var a: = sol_pos + Vector2.from_angle(ray_angle) * sol_radius * 0.22
-			var b: = sol_pos + Vector2.from_angle(ray_angle + sin(time_alive * 4.0 + ray) * 0.04) * sol_radius * 0.92
-			draw_line(a, b, Color(1.0, 0.92, 0.46, 0.2 * sol_alpha), 2.0, true)
-		return
-	if String(secondary.get("kind", "")) == "eclipsada_lua_eclipse":
-		var lua_life: = maxf(0.0, float(secondary.get("life", 0.0)))
-		var lua_max: = maxf(0.01, float(secondary.get("max", ECLIPSADA_LUA_E_DURATION)))
-		var lua_alpha: = clampf(lua_life / lua_max, 0.0, 1.0)
-		var lua_color: Color = secondary.get("color", _eclipsada_color())
-		var lua_pos: = Vector2(secondary.get("center", player_pos)) - camera
-		var lua_radius: = float(secondary.get("radius", ECLIPSADA_LUA_E_RADIUS))
-		var lua_phase: float = float(secondary.get("phase", 0.0)) + time_alive * 2.1
-		draw_circle(lua_pos, lua_radius, Color(0.01, 0.03, 0.12, 0.075 * lua_alpha))
-		draw_circle(lua_pos, lua_radius * 0.48, Color(0.12, 0.22, 0.52, 0.085 * lua_alpha))
-		for ring in range(4):
-			var radius: = lua_radius * (0.34 + float(ring) * 0.18)
-			draw_arc(lua_pos, radius, lua_phase + float(ring) * 0.58, lua_phase + float(ring) * 0.58 + PI * 1.36, 58, Color(lua_color.r, lua_color.g, lua_color.b, (0.58 - ring * 0.07) * lua_alpha), 2.6)
-		for blade in range(6):
-			var angle: = lua_phase * -0.55 + float(blade) * TAU / 6.0
-			var a: = lua_pos + Vector2.from_angle(angle) * lua_radius * 0.18
-			var b: = lua_pos + Vector2.from_angle(angle + sin(time_alive * 3.4 + blade) * 0.06) * lua_radius * 0.92
-			draw_line(a, b, Color(0.03, 0.05, 0.14, 0.56 * lua_alpha), 8.0, true)
-			draw_line(a, b, Color(lua_color.r, lua_color.g, lua_color.b, 0.42 * lua_alpha), 2.5, true)
-		return
-	var life: = maxf(0.0, float(secondary.get("life", 0.0)))
-	var maximum: = maxf(0.01, float(secondary.get("max", ECLIPSADA_E_MAX_TARGET_TIME)))
-	var alpha: = clampf(life / maximum, 0.0, 1.0)
-	var color: Color = secondary.get("color", _eclipsada_color())
-	var target: Dictionary = secondary.get("target", {})
-	var center: Vector2 = Vector2(secondary.get("last_pos", player_pos))
-	if not target.is_empty() and _eclipsada_target_alive(target):
-		center = _eclipsada_target_pos(target)
-	var p: Vector2 = center - camera
-	var phase: float = float(secondary.get("phase", 0.0)) + time_alive * 8.0
-	draw_circle(p, 62.0, Color(0.01, 0.04, 0.16, 0.34 * alpha))
-	draw_circle(p, 54.0, Color(color.r, color.g, color.b, 0.13 * alpha))
-	draw_arc(p, 58.0, phase, phase + PI * 1.72, 56, Color(color.r, color.g, color.b, 0.88 * alpha), 4.0)
-	draw_arc(p, 67.0, - phase * 0.72, - phase * 0.72 + PI * 1.32, 52, Color(0.28, 0.78, 1.0, 0.52 * alpha), 2.4)
-	draw_arc(p, 30.0 + sin(time_alive * 10.0) * 4.0, - phase * 1.3, TAU - phase * 1.3, 36, Color(1.0, 0.86, 0.28, 0.7 * alpha), 2.6)
-	for i in range(8):
-		var angle: = phase + float(i) * PI * 0.5
-		var a: = p + Vector2.from_angle(angle) * 14.0
-		var b: = p + Vector2.from_angle(angle + 0.42) * (54.0 + 7.0 * sin(time_alive * 11.0 + i))
-		draw_line(a, b, Color(0.02, 0.06, 0.18, 0.72 * alpha), 8.0, true)
-		draw_line(a, b, Color(color.r, color.g, color.b, 0.82 * alpha), 3.0, true)
-	var cuts_left: = int(secondary.get("cuts_left", 0))
-	if cuts_left > 0:
-		_draw_centered(str(cuts_left), p + Vector2(0, -68), 16, Color(1.0, 0.88, 0.34, 0.86 * alpha))
+	CombatEffectsPresentation._draw_secondary_eclipsada(self, secondary, camera)
 
 
 func _draw_eclipsada_vfx(camera: Vector2) -> void :
-	for visual in eclipsada_vfx:
-		match String(visual.get("kind", "")):
-			"attack":
-				_draw_eclipsada_attack_vfx(visual, camera)
-			"q_dash", "q_sol":
-				_draw_eclipsada_q_vfx(visual, camera)
-			"e_entry", "e_cut", "e_chain", "e_exit":
-				_draw_eclipsada_e_vfx(visual, camera)
-			"form_swap", "shuriken_fall", "sol_burst", "sol_pulse", "lua_eclipse_pulse":
-				_draw_eclipsada_special_vfx(visual, camera)
+	CombatEffectsPresentation._draw_eclipsada_vfx(self, camera)
 
 
 func _eclipsada_vfx_progress(visual: Dictionary) -> float:
@@ -45540,175 +39408,19 @@ func _eclipsada_vfx_fade(visual: Dictionary) -> float:
 
 
 func _draw_eclipsada_attack_vfx(visual: Dictionary, camera: Vector2) -> void :
-	var center: = Vector2(visual.get("center", player_pos)) - camera
-	var direction: = Vector2(visual.get("dir", Vector2.RIGHT)).normalized()
-	if direction.length() <= 0.01:
-		direction = Vector2.RIGHT
-	var radius: = float(visual.get("radius", ECLIPSADA_ATTACK_SLASH_RADIUS))
-	var step: = clampi(int(visual.get("step", 1)), 1, 4)
-	var progress: = _eclipsada_vfx_progress(visual)
-	var fade: = _eclipsada_vfx_fade(visual)
-	var color: Color = visual.get("color", _eclipsada_color())
-	if String(visual.get("style", "")) == "lua_blades":
-		var origin: Vector2 = Vector2(visual.get("origin", player_pos)) - camera
-		var side: Vector2 = direction.orthogonal()
-		var crit: bool = bool(visual.get("crit", false))
-		var sweep: float = sin(progress * PI)
-		for lane in [-1.0, 1.0]:
-			var offset: Vector2 = side * lane * (13.0 + sweep * 5.0)
-			var start: Vector2 = origin + direction * 18.0 + offset
-			var finish: Vector2 = origin + direction * radius + offset + side * lane * 10.0 * sweep
-			var mid: Vector2 = start.lerp(finish, 0.52) + side * lane * (18.0 + 12.0 * sweep)
-			var trail: = PackedVector2Array([start, mid, finish])
-			draw_polyline(trail, Color(0.0, 0.015, 0.08, 0.84 * fade), 22.0 if crit else 17.0, true)
-			draw_polyline(trail, Color(color.r, color.g, color.b, 0.32 * fade), 14.0 if crit else 10.0, true)
-			draw_polyline(trail, Color(color.r, color.g, color.b, 0.96 * fade), 5.0 if crit else 3.8, true)
-			draw_polyline(trail, Color(0.88, 0.97, 1.0, 0.95 * fade), 1.5, true)
-		if crit:
-			draw_arc(origin, radius * 0.72, direction.angle() - 0.62, direction.angle() + 0.62, 54, Color(0.82, 0.92, 1.0, 0.7 * fade), 4.0)
-			draw_circle(origin + direction * radius * 0.8, 18.0 + sweep * 18.0, Color(color.r, color.g, color.b, 0.18 * fade))
-		return
-	var swing_sign: = -1.0 if step % 2 == 0 else 1.0
-	var head_angle: = direction.angle() - swing_sign * 1.22 + swing_sign * 2.44 * ease(progress, 0.34)
-	var trail: = PackedVector2Array()
-	for index in range(24):
-		var ratio: = float(index) / 23.0
-		var angle: = head_angle - swing_sign * (1.58 - ratio * 1.58)
-		var blade_radius: = radius * (0.78 + sin(ratio * PI) * 0.18)
-		trail.append(center + Vector2.from_angle(angle) * blade_radius)
-	draw_polyline(trail, Color(0.01, 0.03, 0.12, 0.78 * fade), 22.0 if step >= 4 else 16.0, true)
-	draw_polyline(trail, Color(color.r, color.g, color.b, 0.3 * fade), 15.0 if step >= 4 else 11.0, true)
-	draw_polyline(trail, Color(color.r, color.g, color.b, 0.96 * fade), 6.0 if step >= 4 else 4.5, true)
-	draw_polyline(trail, Color(0.88, 0.97, 1.0, 0.96 * fade), 1.7, true)
-	var tip: = trail[trail.size() - 1]
-	var tangent: = Vector2.from_angle(head_angle + PI * 0.5)
-	draw_line(tip - tangent * 13.0, tip + tangent * 20.0, Color(0.78, 0.94, 1.0, 0.86 * fade), 3.0, true)
-	if step >= 4:
-		draw_circle(center, radius * (0.3 + progress * 0.32), Color(color.r, color.g, color.b, 0.08 * fade))
-		draw_arc(center, radius, - head_angle, TAU - head_angle, 72, Color(0.32, 0.82, 1.0, 0.72 * fade), 4.0)
-		draw_arc(center, radius * 0.68, head_angle, head_angle + PI * 1.55, 54, Color(1.0, 0.86, 0.3, 0.7 * fade), 2.8)
-		var cross_dir: = direction.orthogonal()
-		draw_line(center - cross_dir * radius * 0.72, center + cross_dir * radius * 0.72, Color(0.92, 0.98, 1.0, 0.72 * fade), 3.0, true)
+	CombatEffectsPresentation._draw_eclipsada_attack_vfx(self, visual, camera)
 
 
 func _draw_eclipsada_q_vfx(visual: Dictionary, camera: Vector2) -> void :
-	var kind: = String(visual.get("kind", "q_dash"))
-	var origin: = Vector2(visual.get("origin", player_pos)) - camera
-	var target: = Vector2(visual.get("target", player_pos)) - camera
-	var direction: = Vector2(visual.get("dir", Vector2.RIGHT)).normalized()
-	if direction.length() <= 0.01:
-		direction = Vector2.RIGHT
-	var progress: = _eclipsada_vfx_progress(visual)
-	var fade: = _eclipsada_vfx_fade(visual)
-	var color: Color = visual.get("color", _eclipsada_color())
-	if kind == "q_sol":
-		var side: = direction.orthogonal()
-		for lane in range(3):
-			var offset: = (float(lane) - 1.0) * 26.0
-			var start_sol: = origin + side * offset
-			var finish_sol: = start_sol.lerp(target + side * offset * 0.45, minf(1.0, progress * 1.35))
-			draw_line(start_sol, finish_sol, Color(0.16, 0.06, 0.0, 0.52 * fade), 18.0, true)
-			draw_line(start_sol, finish_sol, Color(color.r, color.g, color.b, 0.82 * fade), 5.0, true)
-			draw_circle(finish_sol, 12.0 + sin(time_alive * 10.0 + lane) * 2.0, Color(1.0, 0.92, 0.46, 0.42 * fade))
-		draw_arc(origin, 48.0 + progress * 24.0, - time_alive * 5.0, TAU - time_alive * 5.0, 58, Color(1.0, 0.78, 0.24, 0.74 * fade), 3.5)
-		return
-	var start: = origin - direction * 54.0
-	var finish: = target + direction * 42.0
-	var side: = direction.orthogonal()
-	var path: = PackedVector2Array([start, origin + side * sin(progress * PI) * 13.0, finish])
-	draw_polyline(path, Color(0.0, 0.03, 0.14, 0.82 * fade), 30.0, true)
-	draw_polyline(path, Color(0.12, 0.5, 1.0, 0.3 * fade), 20.0, true)
-	draw_polyline(path, Color(color.r, color.g, color.b, 0.92 * fade), 6.0, true)
-	for index in range(5):
-		var ratio: = float(index) / 4.0
-		var ghost: = start.lerp(finish, ratio) + side * sin(progress * 8.0 + index) * 7.0
-		draw_arc(ghost, 18.0 + index * 2.0, direction.angle() - 1.1, direction.angle() + 1.1, 22, Color(0.42, 0.82, 1.0, (0.18 + ratio * 0.1) * fade), 3.0)
-	for endpoint in [origin, target]:
-		draw_circle(endpoint, 28.0 * (1.0 - progress * 0.45), Color(0.03, 0.16, 0.42, 0.28 * fade))
-		draw_arc(endpoint, 30.0 + progress * 18.0, time_alive * 4.0, time_alive * 4.0 + PI * 1.52, 42, Color(0.46, 0.88, 1.0, 0.78 * fade), 3.0)
+	CombatEffectsPresentation._draw_eclipsada_q_vfx(self, visual, camera)
 
 
 func _draw_eclipsada_e_vfx(visual: Dictionary, camera: Vector2) -> void :
-	var kind: = String(visual.get("kind", "e_cut"))
-	var progress: = _eclipsada_vfx_progress(visual)
-	var fade: = _eclipsada_vfx_fade(visual)
-	var color: Color = visual.get("color", _eclipsada_color())
-	var target: = Vector2(visual.get("target", player_pos)) - camera
-	if kind == "e_entry":
-		var origin: = Vector2(visual.get("origin", player_pos)) - camera
-		var direction: = (target - origin).normalized()
-		if direction.length() <= 0.01:
-			direction = Vector2.RIGHT
-		var side: = direction.orthogonal()
-		var streak: = PackedVector2Array([origin - direction * 28.0, origin.lerp(target, 0.55) + side * 26.0 * sin(progress * PI), target])
-		draw_polyline(streak, Color(0.0, 0.02, 0.12, 0.82 * fade), 34.0, true)
-		draw_polyline(streak, Color(color.r, color.g, color.b, 0.86 * fade), 7.0, true)
-		draw_arc(target, 66.0 * (0.45 + progress * 0.55), - time_alive * 5.0, TAU - time_alive * 5.0, 60, Color(0.42, 0.84, 1.0, 0.84 * fade), 4.0)
-	elif kind == "e_cut":
-		var direction: = Vector2(visual.get("dir", Vector2.RIGHT)).normalized()
-		var length: = 62.0 + sin(progress * PI) * 22.0
-		var start: = target - direction * length
-		var finish: = target + direction * length
-		draw_line(start, finish, Color(0.0, 0.02, 0.12, 0.88 * fade), 24.0, true)
-		draw_line(start, finish, Color(color.r, color.g, color.b, 0.96 * fade), 8.0, true)
-		draw_line(start, finish, Color(0.94, 0.99, 1.0, 0.98 * fade), 2.0, true)
-		var cross: = direction.orthogonal()
-		draw_line(target - cross * length * 0.48, target + cross * length * 0.48, Color(0.36, 0.78, 1.0, 0.56 * fade), 3.0, true)
-		draw_circle(target, 12.0 + progress * 18.0, Color(0.7, 0.92, 1.0, 0.24 * fade))
-	elif kind == "e_chain":
-		var origin: = Vector2(visual.get("origin", player_pos)) - camera
-		var delta: = target - origin
-		var side: = delta.normalized().orthogonal() if delta.length() > 0.01 else Vector2.UP
-		var path: = PackedVector2Array([origin, origin.lerp(target, 0.5) + side * sin(progress * PI) * 38.0, target])
-		draw_polyline(path, Color(0.0, 0.03, 0.14, 0.8 * fade), 22.0, true)
-		draw_polyline(path, Color(0.38, 0.82, 1.0, 0.9 * fade), 5.0, true)
-		for index in range(4):
-			draw_circle(origin.lerp(target, (float(index) + progress) / 4.0), 4.0, Color(0.9, 0.98, 1.0, 0.82 * fade))
-	else:
-		var collapse: = 74.0 * (1.0 - progress * 0.72)
-		var exit_color: = Color(0.32, 0.58, 0.72) if bool(visual.get("cancelled", false)) else color
-		draw_circle(target, collapse * 0.52, Color(0.01, 0.05, 0.16, 0.28 * fade))
-		draw_arc(target, collapse, time_alive * 6.0, time_alive * 6.0 + PI * 1.68, 56, Color(exit_color.r, exit_color.g, exit_color.b, 0.82 * fade), 4.0)
-		draw_arc(target, collapse * 0.62, - time_alive * 8.0, - time_alive * 8.0 + PI * 1.38, 42, Color(0.82, 0.96, 1.0, 0.7 * fade), 2.0)
+	CombatEffectsPresentation._draw_eclipsada_e_vfx(self, visual, camera)
 
 
 func _draw_eclipsada_special_vfx(visual: Dictionary, camera: Vector2) -> void :
-	var kind: = String(visual.get("kind", "form_swap"))
-	var progress: = _eclipsada_vfx_progress(visual)
-	var fade: = _eclipsada_vfx_fade(visual)
-	var color: Color = visual.get("color", _eclipsada_color())
-	var target: = Vector2(visual.get("target", player_pos)) - camera
-	match kind:
-		"form_swap":
-			var solar: = String(visual.get("form", ECLIPSADA_FORM_LUA)) == ECLIPSADA_FORM_SOL
-			var opposite: = Color(0.58, 0.42, 1.0) if solar else Color(1.0, 0.66, 0.18)
-			for ring in range(3):
-				var radius: = 26.0 + progress * (34.0 + ring * 18.0)
-				draw_arc(target, radius, time_alive * (4.0 + ring) + ring, time_alive * (4.0 + ring) + ring + PI * 1.55, 58, Color(color.r, color.g, color.b, (0.76 - ring * 0.14) * fade), 3.0)
-				draw_arc(target, radius * 0.76, - time_alive * (3.0 + ring), - time_alive * (3.0 + ring) + PI * 1.1, 44, Color(opposite.r, opposite.g, opposite.b, (0.46 - ring * 0.1) * fade), 2.0)
-			draw_circle(target, 18.0 + sin(time_alive * 12.0) * 3.0, Color(color.r, color.g, color.b, 0.2 * fade))
-		"shuriken_fall":
-			var radius: = 18.0 + progress * 22.0
-			draw_circle(target, radius * 0.7, Color(0.02, 0.02, 0.04, 0.28 * fade))
-			draw_arc(target, radius, time_alive * 5.0, time_alive * 5.0 + PI * 1.6, 36, Color(color.r, color.g, color.b, 0.72 * fade), 2.4)
-			for i in range(4):
-				var dir: = Vector2.from_angle(float(i) * TAU / 4.0 + progress * 2.5)
-				draw_line(target, target + dir * (12.0 + progress * 28.0), Color(color.r, color.g, color.b, 0.34 * fade), 1.5, true)
-		"sol_burst", "sol_pulse":
-			var radius: = float(visual.get("radius", ECLIPSADA_SOL_SPLASH_RADIUS))
-			var current: = radius * (0.3 + progress * 0.7)
-			draw_circle(target, current, Color(color.r, color.g, color.b, 0.07 * fade))
-			draw_arc(target, current, - time_alive * 4.0, TAU - time_alive * 4.0, 64, Color(color.r, color.g, color.b, 0.82 * fade), 3.8)
-			draw_arc(target, current * 0.62, time_alive * 6.0, time_alive * 6.0 + PI * 1.35, 46, Color(1.0, 0.94, 0.58, 0.62 * fade), 2.4)
-			for ray in range(8):
-				var ray_angle: float = time_alive * 0.9 + float(ray) * TAU / 8.0
-				draw_line(target + Vector2.from_angle(ray_angle) * current * 0.18, target + Vector2.from_angle(ray_angle) * current, Color(1.0, 0.86, 0.32, 0.24 * fade), 1.8, true)
-		"lua_eclipse_pulse":
-			var radius: = float(visual.get("radius", ECLIPSADA_LUA_E_RADIUS))
-			var current: = radius * (0.5 + progress * 0.5)
-			draw_circle(target, current, Color(0.02, 0.04, 0.18, 0.055 * fade))
-			draw_arc(target, current, time_alive * 3.2, time_alive * 3.2 + PI * 1.64, 72, Color(color.r, color.g, color.b, 0.72 * fade), 3.4)
-			draw_arc(target, current * 0.72, - time_alive * 4.4, - time_alive * 4.4 + PI * 1.18, 58, Color(0.48, 0.82, 1.0, 0.46 * fade), 2.2)
+	CombatEffectsPresentation._draw_eclipsada_special_vfx(self, visual, camera)
 
 
 func _eclipsada_stealth_overlay_alpha() -> float:
@@ -45722,263 +39434,23 @@ func _eclipsada_stealth_overlay_alpha() -> float:
 
 
 func _draw_eclipsada_stealth_overlay(viewport: Vector2, camera: Vector2) -> void :
-	var alpha: = _eclipsada_stealth_overlay_alpha()
-	if alpha <= 0.0:
-		return
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.015, 0.16, 0.38, alpha), true)
-	var edge_alpha: = alpha * 1.75
-	var edge_size: = 10.0
-	draw_rect(Rect2(0.0, 0.0, viewport.x, edge_size), Color(0.18, 0.62, 1.0, edge_alpha), true)
-	draw_rect(Rect2(0.0, viewport.y - edge_size, viewport.x, edge_size), Color(0.08, 0.38, 0.82, edge_alpha), true)
-	draw_rect(Rect2(0.0, 0.0, edge_size, viewport.y), Color(0.08, 0.38, 0.82, edge_alpha), true)
-	draw_rect(Rect2(viewport.x - edge_size, 0.0, edge_size, viewport.y), Color(0.18, 0.62, 1.0, edge_alpha), true)
-	var player_screen: Vector2 = player_pos - camera
-	var pulse: = 0.5 + 0.5 * sin(time_alive * 5.0)
-	draw_arc(player_screen, 58.0 + pulse * 6.0, time_alive * 1.8, time_alive * 1.8 + PI * 1.55, 52, Color(0.46, 0.86, 1.0, 0.4 + pulse * 0.12), 2.4)
+	CombatEffectsPresentation._draw_eclipsada_stealth_overlay(self, viewport, camera)
 
 
 func _draw_network_teleport_replica(visual: Dictionary, camera: Vector2, kind: String, color: Color, progress: float, fade: float) -> void :
-	var origin: = Vector2(visual.get("origin", net_player_render_pos)) - camera
-	var target: = Vector2(visual.get("target", net_player_render_pos)) - camera
-	var direction: = (target - origin).normalized()
-	if direction.length() <= 0.01:
-		direction = Vector2.RIGHT
-	if kind == "eletrica":
-		_draw_tesla_bolt(origin, target, int(visual.get("seed", 0)), fade, 5.0)
-	elif kind == "prismatica":
-		for endpoint in [origin, target]:
-			var radius: = 22.0 + progress * 28.0
-			var diamond: = PackedVector2Array([endpoint + Vector2(0, - radius), endpoint + Vector2(radius, 0), endpoint + Vector2(0, radius), endpoint + Vector2( - radius, 0), endpoint + Vector2(0, - radius)])
-			draw_polyline(diamond, Color(0.72, 1.0, 1.0, 0.88 * fade), 3.0, true)
-	elif kind == "parasitica":
-		for index in range(6):
-			var point: = origin.lerp(target, float(index) / 5.0)
-			draw_circle(point, 9.0, Color(0.38, 0.72, 0.12, 0.72 * fade))
-	elif kind == "acorrentada":
-		_draw_acorrentada_chain(origin, target, Color(0.18, 0.86, 1.0, 0.88 * fade), 8.0, fade, true)
-		_draw_acorrentada_chain(origin + direction.orthogonal() * 10.0, target - direction.orthogonal() * 10.0, Color(0.92, 0.12, 0.1, 0.54 * fade), 5.0, fade, false)
-	else:
-		var side: = direction.orthogonal()
-		var middle: = origin.lerp(target, 0.5) + side * sin(progress * PI) * 18.0
-		var path: = PackedVector2Array([origin, middle, target])
-		draw_polyline(path, Color(color.r, color.g, color.b, 0.24 * fade), 28.0, true)
-		draw_polyline(path, Color(color.r, color.g, color.b, 0.88 * fade), 6.0, true)
-	draw_circle(origin, 28.0 * (1.0 - progress), Color(color.r, color.g, color.b, 0.36 * fade))
-	draw_circle(target, 18.0 + progress * 20.0, Color(color.r, color.g, color.b, 0.3 * fade))
+	CombatEffectsPresentation._draw_network_teleport_replica(self, visual, camera, kind, color, progress, fade)
 
 
 func _draw_secondary_advanced(secondary: Dictionary, camera: Vector2) -> void :
-	var kind: = String(secondary.get("kind", ""))
-	var alpha: float = clamp(float(secondary.get("life", 0.0)) / max(0.01, float(secondary.get("max", 1.0))), 0.0, 1.0)
-	var color: = _damage_color(kind)
-	var center: Vector2 = Vector2(secondary.get("center", player_pos)) - camera
-	match kind:
-		"cartografica":
-			draw_arc(center, 210.0 + sin(time_alive * 4.0) * 5.0, time_alive, time_alive + TAU * 0.82, 84, Color(color.r, color.g, color.b, 0.36 * alpha), 3.0)
-		"mnesica":
-			draw_circle(center, MNESIC_REENACT_RADIUS * 0.55, Color(color.r, color.g, color.b, 0.035 * alpha))
-			draw_arc(center, MNESIC_REENACT_RADIUS * 0.55, - time_alive * 0.7, TAU - time_alive * 0.7, 88, Color(color.r, color.g, color.b, 0.3 * alpha), 2.0)
-		"ressonante":
-			var r = 110.0 + sin(time_alive * 8.0) * 8.0
-			draw_arc(center, r, 0, TAU, 64, Color(color.r, color.g, color.b, 0.48 * alpha), 3.0)
-
-			for i in range(24):
-				var angle = i * TAU / 24.0
-				var bar_len = 10.0 + sin(time_alive * 12.0 + i) * 15.0
-				var p1 = center + Vector2.from_angle(angle) * r
-				var p2 = center + Vector2.from_angle(angle) * (r + bar_len)
-				draw_line(p1, p2, Color(1.0, 0.8, 0.3, 0.6 * alpha), 4.0)
-
-			for i in range(3):
-				var laser_angle = time_alive * 1.5 + i * TAU / 3.0
-				draw_line(center, center + Vector2.from_angle(laser_angle) * 800.0, Color(1.0, 0.9, 0.5, 0.15 * alpha), 25.0)
-				draw_line(center, center + Vector2.from_angle(laser_angle) * 800.0, Color(1.0, 1.0, 1.0, 0.25 * alpha), 6.0)
-		"contratual":
-			draw_arc(center, 180.0, - PI * 0.5, PI * 1.5, 72, Color(color.r, color.g, color.b, 0.4 * alpha), 2.2)
-			draw_line(center + Vector2(-90, -72), center + Vector2(90, -72), Color(1.0, 0.86, 0.48, 0.38 * alpha), 2.0)
+	CombatEffectsPresentation._draw_secondary_advanced(self, secondary, camera)
 
 
 func _draw_secondary_eletrica(secondary: Dictionary, camera: Vector2) -> void :
-	var active_time: = float(secondary.get("active_time", 0.0))
-	var ring_radius: = _secondary_eletrica_radius(active_time)
-	var center_world: = Vector2(secondary.get("center", player_pos))
-	var center: = center_world - camera
-
-
-	var shock_age: float = time_alive - float(secondary.get("last_shock_time", -999.0))
-	var shock_pulse_bonus: = 0.0
-	if shock_age >= 0.0 and shock_age < 0.2:
-		shock_pulse_bonus = (1.0 - shock_age / 0.2) * 6.0
-
-
-	var drain_age: float = time_alive - float(secondary.get("last_drain_time", -999.0))
-	var drain_pulse_shrink: = 0.0
-	if drain_age >= 0.0 and drain_age < 0.25:
-		drain_pulse_shrink = (1.0 - drain_age / 0.25) * 8.0
-
-	var effective_radius: = ring_radius + shock_pulse_bonus - drain_pulse_shrink
-
-
-	var state_hue: = Color(0.36, 0.98, 1.0)
-	var rot_speed: = 0.45
-	var outer_alpha: = 0.22
-
-	if active_time >= 15.0:
-		state_hue = Color(1.0, 0.12, 0.24)
-		rot_speed = 1.65
-		outer_alpha = 0.45
-	elif active_time >= 13.0:
-		var t: = (active_time - 13.0) / 2.0
-		state_hue = Color(1.0, lerpf(0.55, 0.15, t), 0.1)
-		rot_speed = 1.2
-		outer_alpha = 0.38
-	elif active_time >= 10.0:
-		var t: = (active_time - 10.0) / 3.0
-		state_hue = Color(lerpf(0.36, 1.0, t), lerpf(0.98, 0.85, t), lerpf(1.0, 0.2, t))
-		rot_speed = 0.8
-		outer_alpha = 0.3
-
-
-	draw_circle(center, effective_radius, Color(state_hue.r, state_hue.g, state_hue.b, 0.04))
-	draw_circle(center, effective_radius * 0.66, Color(state_hue.r, state_hue.g, state_hue.b, 0.03))
-
-	for band in range(3):
-		var radius: float = effective_radius - float(band) * 18.0 + sin(time_alive * (2.2 + band * 0.3)) * 3.0
-		var band_rot: float = time_alive * (rot_speed + float(band) * 0.12)
-		draw_arc(center, radius, - band_rot, TAU - band_rot, 96, Color(state_hue.r, state_hue.g, state_hue.b, outer_alpha - float(band) * 0.045), 1.6)
-
-
-	var ray_count: = 22
-	var pulse: float = 0.5 + sin(time_alive * (7.0 if active_time < 13.0 else 14.0)) * 0.5
-	for i in range(ray_count):
-		var ang: float = time_alive * (rot_speed * 1.2) + float(i) * TAU / float(ray_count)
-		var inner: Vector2 = center + Vector2.from_angle(ang + sin(time_alive * 2.0 + float(i)) * 0.04) * (effective_radius * rng_deterministic_wave(i, 0.5, 0.8))
-		var outer: Vector2 = center + Vector2.from_angle(ang) * (effective_radius + sin(time_alive * 8.0 + float(i)) * 8.0)
-		draw_line(inner, outer, Color(state_hue.r, state_hue.g, state_hue.b, 0.13 + pulse * 0.1), 1.3)
-
-
-	if active_time >= 13.0:
-		var tendon_count: = 6
-		var chest_pos: = center + Vector2(0, -14)
-		for t in range(tendon_count):
-			var ang: float = time_alive * 2.4 + float(t) * TAU / float(tendon_count)
-			var rim_pt: = center + Vector2.from_angle(ang) * (effective_radius * 0.45)
-			var tendon_col: = Color(1.0, 0.4, 0.2, 0.45 + pulse * 0.3) if active_time < 15.0 else Color(1.0, 0.9, 0.95, 0.7 + pulse * 0.25)
-			draw_line(rim_pt, chest_pos, tendon_col, 1.5)
-
-
-	for enemy in enemies:
-		var dist = Vector2(enemy["pos"]).distance_to(center_world)
-		if dist <= ring_radius + _enemy_radius(enemy) * 0.55:
-			var target = Vector2(enemy["pos"]) - camera
-			var shock_alpha: float = 0.34 + clamp(float(enemy.get("tesla_shock", 0.0)) / 0.42, 0.0, 1.0) * 0.58
-			_draw_tesla_bolt(center + Vector2(0, -18), target + Vector2(0, -16), int(enemy.get("uid", 0)) + int(active_time * 10.0), shock_alpha, 4.2)
-			_draw_tesla_enemy_crown(target, float(enemy.get("tesla_shock", 0.0)), int(enemy.get("uid", 0)))
-	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center_world) <= ring_radius + 68.0:
-		var boss_alpha: float = 0.34 + clamp(float(secondary.get("boss_tesla_shock", 0.0)) / 0.42, 0.0, 1.0) * 0.48
-		_draw_tesla_bolt(center + Vector2(0, -18), boss_pos - camera + Vector2(0, -30), int(secondary.get("seed", 0)) + 99, boss_alpha, 5.2)
-
-
-	_draw_tesla_bar(secondary, camera)
+	CombatEffectsPresentation._draw_secondary_eletrica(self, secondary, camera)
 
 
 func _draw_tesla_bar(secondary: Dictionary, camera: Vector2) -> void :
-	var active_time: = float(secondary.get("active_time", 0.0))
-	var safe_progress: = clampf(active_time / SECONDARY_ELETRICA_DRAIN_DELAY, 0.0, 1.0)
-	var overload_time: = maxf(0.0, active_time - SECONDARY_ELETRICA_DRAIN_DELAY)
-	var overload_tier: = int(floor(overload_time / SECONDARY_ELETRICA_DRAIN_TIER_SECONDS))
-	var tier_progress_sec: = fmod(overload_time, SECONDARY_ELETRICA_DRAIN_TIER_SECONDS)
-
-
-	var bar_base: Vector2 = player_pos - camera + Vector2(0, -58)
-
-
-	var vibrate_offset: = Vector2.ZERO
-	var allow_vibration: bool = bool(gfx_screen_shake)
-
-	if allow_vibration:
-		if active_time >= 15.0:
-			var drain_age: float = time_alive - float(secondary.get("last_drain_time", -999.0))
-			if drain_age >= 0.0 and drain_age < 0.25:
-				var p: = 1.0 - drain_age / 0.25
-				vibrate_offset = Vector2(round(sin(drain_age * 60.0) * 3.0 * p), round(cos(drain_age * 50.0) * 2.0 * p))
-			else:
-				vibrate_offset = Vector2(round(sin(time_alive * 30.0) * 0.8), round(cos(time_alive * 24.0) * 0.5))
-		elif active_time >= 14.0:
-			vibrate_offset = Vector2(round(sin(time_alive * 44.0) * 1.5), round(cos(time_alive * 36.0) * 1.0))
-		elif active_time >= 13.0:
-			vibrate_offset = Vector2(round(sin(time_alive * 28.0) * 1.0), round(cos(time_alive * 22.0) * 0.5))
-		elif active_time >= 10.0:
-			vibrate_offset = Vector2(round(sin(time_alive * 18.0) * 0.5), 0)
-
-	var bar_center: Vector2 = bar_base + vibrate_offset
-
-
-	var bar_w: = 44.0
-	var bar_h: = 6.0
-	var inner_w: = 42.0
-	var inner_h: = 4.0
-
-	var frame_rect: = Rect2(bar_center.x - bar_w * 0.5, bar_center.y - bar_h * 0.5, bar_w, bar_h)
-	var inner_rect: = Rect2(bar_center.x - inner_w * 0.5, bar_center.y - inner_h * 0.5, inner_w, inner_h)
-
-
-	var fill_color: = Color(0.02, 0.7, 1.0)
-	if active_time >= 15.0:
-		var red_pulse: = 0.5 + 0.5 * sin(time_alive * 16.0)
-		fill_color = Color(1.0, 0.05 + red_pulse * 0.15, 0.12 + red_pulse * 0.2)
-	elif active_time >= 14.0:
-		var t: = active_time - 14.0
-		fill_color = Color(1.0, lerpf(0.45, 0.12, t), 0.05)
-	elif active_time >= 13.0:
-		var t: = active_time - 13.0
-		fill_color = Color(1.0, lerpf(0.9, 0.45, t), 0.05)
-	elif active_time >= 10.0:
-		var t: = (active_time - 10.0) / 3.0
-		fill_color = Color(lerpf(0.02, 1.0, t), lerpf(0.7, 0.9, t), lerpf(1.0, 0.05, t))
-
-
-	draw_rect(frame_rect, Color(0.03, 0.05, 0.09, 0.92), true)
-	draw_rect(inner_rect, Color(0.02, 0.04, 0.07, 0.95), true)
-
-
-	var fill_px: = int(round(safe_progress * inner_w))
-	if fill_px > 0:
-		var fill_rect: = Rect2(inner_rect.position.x, inner_rect.position.y, float(fill_px), inner_h)
-		draw_rect(fill_rect, fill_color, true)
-		draw_line(fill_rect.position + Vector2(0, 1), fill_rect.position + Vector2(fill_rect.size.x, 1), Color(1.0, 1.0, 1.0, 0.5), 1.0)
-
-
-	draw_rect(frame_rect, Color(0.18, 0.24, 0.34, 0.85), false, 1.0)
-
-
-	var pin_count: = 4
-	for p in range(pin_count):
-		var pin_x: = inner_rect.position.x + (float(p + 1) / float(pin_count + 1)) * inner_w
-		var pin_lit: = false
-		if active_time >= 15.0:
-			pin_lit = (tier_progress_sec >= float(p + 1))
-		var pin_col: = Color(1.0, 0.92, 0.35) if pin_lit else Color(0.12, 0.16, 0.24)
-		draw_rect(Rect2(pin_x - 1.0, inner_rect.position.y - 1.0, 2.0, 2.0), pin_col, true)
-		if pin_lit:
-			draw_rect(Rect2(pin_x - 1.0, inner_rect.position.y + inner_h - 1.0, 2.0, 2.0), pin_col, true)
-
-
-	if overload_tier > 0:
-		var notch_col: = Color(1.0, 0.3, 0.2, 0.9)
-		for t in range(mini(overload_tier, 5)):
-			var notch_x: = inner_rect.position.x + (float(t + 1) * 7.0)
-			draw_line(Vector2(notch_x, frame_rect.position.y - 2.0), Vector2(notch_x + 2.0, frame_rect.position.y + bar_h + 2.0), notch_col, 1.0)
-
-
-	if active_time >= 10.0:
-		var spark_count: = 1 if active_time < 13.0 else (3 if active_time <= 15.0 else 2)
-		for s in range(spark_count):
-			var spark_t: float = time_alive * 12.0 + float(s) * 2.3
-			var spark_x: = inner_rect.position.x + fmod(abs(sin(spark_t)) * inner_w, inner_w)
-			var spark_y: = inner_rect.position.y + sin(spark_t * 3.1) * 3.0
-			var spark_col: = Color(1.0, 0.9, 0.3) if active_time < 13.0 else Color(1.0, 0.35, 0.15)
-			draw_rect(Rect2(spark_x, spark_y, 1.5, 1.5), spark_col, true)
+	CombatEffectsPresentation._draw_tesla_bar(self, secondary, camera)
 
 
 func rng_deterministic_wave(index: int, min_value: float, max_value: float) -> float:
@@ -45987,109 +39459,19 @@ func rng_deterministic_wave(index: int, min_value: float, max_value: float) -> f
 
 
 func _draw_tesla_bolt(start: Vector2, finish: Vector2, seed: int, alpha: float, width: float) -> void :
-	var delta: = finish - start
-	var length: = delta.length()
-	if length <= 4.0:
-		return
-	var dir: = delta / length
-	var normal: = dir.orthogonal()
-	var points: = PackedVector2Array()
-	var segments: = 9
-	for i in range(segments + 1):
-		var t: = float(i) / float(segments)
-		var taper: = sin(t * PI)
-		var jitter: = sin(float(seed) * 0.73 + float(i) * 2.41 + time_alive * 31.0) * 18.0 * taper
-		var small: = cos(float(seed) * 1.19 + float(i) * 5.17 + time_alive * 19.0) * 6.0 * taper
-		points.append(start + delta * t + normal * jitter + dir.rotated(PI * 0.5) * small)
-	if points.size() < 2:
-		return
-	draw_polyline(points, Color(0.1, 0.92, 1.0, 0.2 * alpha), width + 7.0, true)
-	draw_polyline(points, Color(0.54, 0.96, 1.0, 0.72 * alpha), width, true)
-	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.92 * alpha), maxf(1.0, width * 0.34), true)
-	for branch in range(2):
-		var branch_t: = 0.28 + float(branch) * 0.28 + 0.08 * sin(float(seed + branch) + time_alive * 9.0)
-		var base: = start + delta * branch_t
-		var branch_dir: = dir.rotated((0.65 if branch == 0 else -0.65) + sin(time_alive * 7.0 + branch + seed) * 0.28)
-		var branch_end: = base + branch_dir * (26.0 + 14.0 * sin(time_alive * 11.0 + seed + branch))
-		draw_line(base, branch_end, Color(0.42, 0.92, 1.0, 0.38 * alpha), maxf(1.0, width * 0.42), true)
+	CombatEffectsPresentation._draw_tesla_bolt(self, start, finish, seed, alpha, width)
 
 
 func _draw_tesla_enemy_crown(center: Vector2, shock_time: float, uid: int) -> void :
-	var alpha: float = clamp(shock_time / 0.42, 0.18, 1.0)
-	var radius: float = 34.0 + sin(time_alive * 12.0 + uid) * 3.0
-	draw_arc(center, radius, time_alive * 2.2, time_alive * 2.2 + TAU * 0.72, 42, Color(0.35, 1.0, 1.0, 0.44 * alpha), 2.2)
-	for i in range(5):
-		var ang: float = time_alive * 4.6 + float(i) * TAU / 5.0 + float(uid) * 0.017
-		var a: Vector2 = center + Vector2.from_angle(ang) * (radius * 0.55)
-		var b: Vector2 = center + Vector2.from_angle(ang + 0.36) * (radius + 8.0)
-		draw_line(a, b, Color(1.0, 1.0, 1.0, 0.44 * alpha), 1.5, true)
+	EntitiesPresentation._draw_tesla_enemy_crown(self, center, shock_time, uid)
 
 
 func _draw_lacerante_blade(slash: Dictionary, camera: Vector2, alpha: float) -> void :
-	var path: = PackedVector2Array()
-	for point in slash.get("points", []):
-		path.append(Vector2(point) - camera)
-	if path.size() < 2:
-		return
-	var empowered = bool(slash.get("empowered", false))
-	var appear = clamp((1.0 - alpha) * 5.0, 0.0, 1.0)
-	var fade = clamp(alpha * 1.7, 0.0, 1.0) * appear
-	var glow = 22.0 if empowered else 15.0
-	draw_polyline(path, Color(0.2, 0.0, 0.025, 0.72 * fade), glow + 10.0, true)
-	draw_polyline(path, Color(1.0, 0.01, 0.08, (0.3 if empowered else 0.2) * fade), glow + 18.0, true)
-	draw_polyline(path, Color(0.82, 0.015, 0.08, 0.94 * fade), 8.5 if empowered else 6.5, true)
-	draw_polyline(path, Color(1.0, 0.28, 0.34, 0.94 * fade), 4.2, true)
-	draw_polyline(path, Color(1.0, 0.92, 0.9, 0.96 * fade), 1.7, true)
-	var finish = path[path.size() - 1]
-	var direction = (finish - path[path.size() - 2]).normalized()
-	var side = direction.orthogonal()
-	var blade = PackedVector2Array([
-		finish + direction * (24.0 if empowered else 18.0), 
-		finish + side * (8.0 if empowered else 6.0), 
-		finish - direction * 9.0, 
-		finish - side * (8.0 if empowered else 6.0)
-	])
-	draw_polygon(blade, PackedColorArray([Color(1.0, 0.16, 0.22, 0.86 * fade)]))
-	draw_polyline(PackedVector2Array([blade[0], blade[1], blade[2], blade[3], blade[0]]), Color(1.0, 0.88, 0.86, 0.9 * fade), 1.4, true)
+	CombatEffectsPresentation._draw_lacerante_blade(self, slash, camera, alpha)
 
 
 func _draw_lacerante_spin(slash: Dictionary, camera: Vector2, alpha: float) -> void :
-	var center = Vector2(slash.get("center", player_pos)) - camera
-	var radius = float(slash.get("radius", 128.0))
-	var max_life = max(0.01, float(slash.get("max", LACERANTE_Q_DURATION)))
-	var progress = clamp(1.0 - float(slash.get("life", 0.0)) / max_life, 0.0, 1.0)
-	var rotations = float(slash.get("rotations", LACERANTE_Q_ROTATIONS))
-	var head_angle = - PI * 0.5 + progress * TAU * rotations
-	var fade = clamp(alpha * 1.8, 0.0, 1.0)
-	draw_circle(center, radius + 24.0, Color(0.2, 0.0, 0.025, 0.055 * fade))
-	draw_arc(center, radius, 0.0, TAU, 80, Color(1.0, 0.04, 0.1, 0.13 * fade), 1.3)
-	var trail: = PackedVector2Array()
-	var trail_span = 1.55
-	for i in range(30):
-		var t = float(i) / 29.0
-		var angle = head_angle - trail_span + trail_span * t
-		var wobble = sin(t * PI) * 4.0
-		trail.append(center + Vector2.from_angle(angle) * (radius + wobble))
-	draw_polyline(trail, Color(0.28, 0.0, 0.035, 0.72 * fade), 24.0, true)
-	draw_polyline(trail, Color(1.0, 0.0, 0.08, 0.2 * fade), 34.0, true)
-	draw_polyline(trail, Color(0.94, 0.03, 0.1, 0.92 * fade), 9.0, true)
-	draw_polyline(trail, Color(1.0, 0.42, 0.44, 0.96 * fade), 4.0, true)
-	draw_polyline(trail, Color(1.0, 0.96, 0.9, 0.94 * fade), 1.6, true)
-	var tip = center + Vector2.from_angle(head_angle) * radius
-	var tangent = Vector2.from_angle(head_angle + PI * 0.5)
-	var radial = Vector2.from_angle(head_angle)
-	var blade = PackedVector2Array([
-		tip + tangent * 31.0, 
-		tip + radial * 10.0, 
-		tip - tangent * 18.0, 
-		tip - radial * 10.0
-	])
-	draw_polygon(blade, PackedColorArray([Color(0.94, 0.04, 0.1, 0.94 * fade)]))
-	draw_polyline(PackedVector2Array([blade[0], blade[1], blade[2], blade[3], blade[0]]), Color(1.0, 0.92, 0.88, 0.96 * fade), 2.0, true)
-	for i in range(6):
-		var spark_angle = head_angle - float(i) * 0.19
-		var spark = center + Vector2.from_angle(spark_angle) * (radius + sin(time_alive * 17.0 + i) * 9.0)
-		draw_line(spark, spark - Vector2.from_angle(spark_angle + PI * 0.5) * (10.0 + i * 2.0), Color(1.0, 0.34, 0.4, (0.72 - i * 0.08) * fade), 1.5, true)
+	CombatEffectsPresentation._draw_lacerante_spin(self, slash, camera, alpha)
 
 
 func _point_on_polyline(points: PackedVector2Array, progress: float) -> Vector2:
@@ -46115,298 +39497,23 @@ func _point_on_polyline(points: PackedVector2Array, progress: float) -> Vector2:
 
 
 func _draw_teleport_effects(camera: Vector2) -> void :
-	for effect in tp_effects:
-		var kind: = String(effect.get("kind", ""))
-		var fade: float = clampf(float(effect.get("life", 0.0)) / max(0.01, float(effect.get("max", 1.0))), 0.0, 1.0)
-		var progress: float = 1.0 - fade
-		if kind == "parasite_egg":
-			var pos: Vector2 = Vector2(effect.get("pos", player_pos)) - camera
-			var phase: float = float(effect.get("phase", 0.0))
-			var forward: = Vector2.from_angle(phase) * 9.0
-			draw_circle(pos, 10.0, Color(0.18, 0.08, 0.02, 0.88 * fade))
-			draw_arc(pos, 10.0, 0.0, TAU, 18, Color(0.62, 1.0, 0.22, 0.92 * fade), 2.0)
-			draw_line(pos - forward, pos + forward, Color(0.82, 1.0, 0.42, 0.78 * fade), 3.0, true)
-		elif kind == "eletrica":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			var points: = PackedVector2Array([a])
-			for i in range(1, 12):
-				var t: = float(i) / 12.0
-				var base: = a.lerp(b, t)
-				var normal: = (b - a).normalized().orthogonal()
-				points.append(base + normal * sin(time_alive * 24.0 + i * 2.1) * 14.0)
-			points.append(b)
-			draw_polyline(points, Color(0.08, 0.5, 1.0, 0.25 * fade), 22.0, true)
-			draw_polyline(points, Color(0.3, 0.96, 1.0, 0.88 * fade), 5.0, true)
-			draw_polyline(points, Color.WHITE, 1.4, true)
-			for endpoint in [a, b]:
-				draw_circle(endpoint, 34.0 * (0.35 + progress), Color(0.22, 0.92, 1.0, 0.16 * fade))
-				for i in range(8):
-					var angle: float = time_alive * 5.0 + float(i) * TAU / 8.0
-					draw_line(endpoint, endpoint + Vector2.from_angle(angle) * (22.0 + 18.0 * progress), Color(0.72, 1.0, 1.0, 0.62 * fade), 2.0, true)
-		elif kind == "prismatica":
-			var path: Array = effect.get("path", [Vector2(effect.get("a", player_pos)), Vector2(effect.get("b", player_pos))])
-			var points: PackedVector2Array = PackedVector2Array()
-			for raw_point in path:
-				points.append(Vector2(raw_point) - camera)
-			if points.size() >= 2:
-				var spark: Vector2 = _point_on_polyline(points, progress)
-				for i in range(points.size()):
-					var hue: float = fposmod(time_alive * 0.72 + float(i) * 0.18, 1.0)
-					var radius: float = 8.0 + sin(progress * PI + float(i)) * 4.0
-					draw_circle(points[i], radius + 12.0 * fade, Color.from_hsv(hue, 0.85, 1.0, 0.18 * fade))
-					draw_arc(points[i], radius + 18.0, time_alive * 2.4 + float(i), time_alive * 2.4 + float(i) + PI * 1.35, 30, Color.from_hsv(hue, 0.65, 1.0, 0.74 * fade), 2.0, true)
-				draw_circle(spark, 12.0 + 10.0 * sin(progress * PI), Color(0.85, 1.0, 1.0, 0.78 * fade))
-		elif kind == "retornante":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			var center: Vector2 = a.lerp(b, 0.5)
-			draw_arc(a, 32.0 + 8.0 * sin(time_alive * 9.0), -time_alive * 4.0, TAU - time_alive * 4.0, 40, Color(0.72, 0.54, 1.0, 0.75 * fade), 2.0)
-			draw_arc(b, 42.0 + 10.0 * sin(time_alive * 7.0), time_alive * 4.0, TAU + time_alive * 4.0, 48, Color(0.9, 0.72, 1.0, 0.75 * fade), 2.0)
-			draw_line(a, center, Color(0.62, 0.42, 1.0, 0.3 * fade), 4.0, true)
-			draw_line(center, b, Color(0.78, 0.64, 1.0, 0.3 * fade), 4.0, true)
-		elif kind == "parasitica":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			var dir: Vector2 = (b - a).normalized()
-			if dir.length() <= 0.01:
-				dir = Vector2.RIGHT
-			var side: Vector2 = dir.orthogonal()
-			var trail: PackedVector2Array = PackedVector2Array()
-			for i in range(12):
-				var t: float = float(i) / 11.0
-				trail.append(a.lerp(b, t) + side * sin(t * PI * 3.0 + time_alive * 6.0) * 8.0)
-			draw_polyline(trail, Color(0.06, 0.12, 0.02, 0.72 * fade), 28.0, true)
-			draw_polyline(trail, Color(0.48, 0.95, 0.18, 0.5 * fade), 8.0, true)
-			var head: Vector2 = a.lerp(b, progress) + side * sin(progress * PI * 3.0 + time_alive * 6.0) * 8.0
-			draw_circle(head, 14.0, Color(0.58, 1.0, 0.22, 0.65 * fade))
-			draw_circle(a, 26.0, Color(0.1, 0.05, 0.02, 0.38 * fade))
-			draw_circle(b, 30.0, Color(0.18, 0.1, 0.04, 0.42 * fade))
-		elif kind == "gravitante":
-			var a: Vector2 = Vector2(effect.get("a", effect.get("center", player_pos))) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			for endpoint in [a, b]:
-				draw_circle(endpoint, 42.0 + 24.0 * progress, Color(0.02, 0.04, 0.12, 0.55 * fade))
-				draw_arc(endpoint, 44.0 + 18.0 * progress, time_alive * 3.4, TAU * 0.88 + time_alive * 3.4, 64, Color(0.52, 0.78, 1.0, 0.78 * fade), 4.0)
-				draw_arc(endpoint, 25.0 + 12.0 * progress, -time_alive * 5.0, TAU - time_alive * 5.0, 48, Color(0.9, 0.96, 1.0, 0.48 * fade), 2.0)
-			draw_line(a, b, Color(0.34, 0.68, 1.0, 0.18 * fade), 16.0, true)
-		elif kind == "cartografica_pin":
-			var pos: Vector2 = Vector2(effect.get("pos", player_pos)) - camera
-			var pin_tip: Vector2 = pos
-			var pin_head: Vector2 = pos + Vector2(0.0, -42.0 - 12.0 * sin(progress * PI))
-			draw_line(pin_head, pin_tip, Color(0.75, 1.0, 0.92, 0.95 * fade), 3.0, true)
-			draw_circle(pin_head, 12.0, Color(0.04, 0.16, 0.14, 0.9 * fade))
-			draw_arc(pin_tip, 28.0 + 8.0 * sin(time_alive * 8.0), 0.0, TAU, 42, Color(0.38, 1.0, 0.82, 0.7 * fade), 2.0)
-		elif kind == "cartografica":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			draw_line(a, b, Color(0.08, 0.5, 0.38, 0.28 * fade), 18.0, true)
-			for i in range(7):
-				var t: float = fposmod(progress + float(i) * 0.16, 1.0)
-				var dot: Vector2 = a.lerp(b, t)
-				draw_circle(dot, 5.0 + float(i % 2) * 2.0, Color(0.42, 1.0, 0.84, 0.68 * fade))
-			draw_arc(b, 38.0, time_alive * 4.0, TAU + time_alive * 4.0, 48, Color(0.38, 1.0, 0.82, 0.72 * fade), 2.5)
-		elif kind == "mnesica":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			for i in range(18):
-				var angle: float = float(i) * TAU / 18.0 + sin(time_alive * 3.0 + i) * 0.2
-				var length: float = 18.0 + 96.0 * progress + float(i % 4) * 6.0
-				var shard: Vector2 = a + Vector2.from_angle(angle) * length
-				draw_line(a + Vector2.from_angle(angle) * 8.0, shard, Color(0.86, 0.58, 1.0, 0.48 * fade), 3.0, true)
-			draw_circle(a, 34.0 + 48.0 * progress, Color(0.64, 0.34, 1.0, 0.16 * fade))
-			draw_circle(b, 28.0, Color(0.92, 0.72, 1.0, 0.22 * fade))
-		elif kind == "contratual":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			for i in range(16):
-				var t: float = clampf(progress + sin(float(i) * 2.13) * 0.08, 0.0, 1.0)
-				var side: Vector2 = (b - a).normalized().orthogonal()
-				var scrap: Vector2 = a.lerp(b, t) + side * sin(time_alive * 8.0 + i) * (18.0 + float(i % 3) * 8.0)
-				var paper: Rect2 = Rect2(scrap - Vector2(5.0, 7.0), Vector2(10.0, 14.0))
-				draw_rect(paper, Color(0.96, 0.86, 0.62, 0.78 * fade), true)
-				draw_rect(paper, Color(1.0, 0.58, 0.24, 0.72 * fade), false, 1)
-			draw_line(a, b, Color(1.0, 0.58, 0.24, 0.16 * fade), 12.0, true)
-		elif kind == "necronada":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			var dir: Vector2 = (b - a).normalized()
-			if dir.length() <= 0.01:
-				dir = Vector2.RIGHT
-			var side: Vector2 = dir.orthogonal()
-			var cloud: Vector2 = a.lerp(b, progress)
-			draw_line(a, b, Color(0.12, 0.02, 0.18, 0.45 * fade), 24.0, true)
-			for i in range(22):
-				var t: float = clampf(progress - 0.26 + float(i) / 22.0 * 0.52, 0.0, 1.0)
-				var p: Vector2 = a.lerp(b, t) + side * sin(time_alive * 7.0 + i * 1.7) * (12.0 + float(i % 5) * 3.0)
-				var c: Color = Color(0.54, 0.2, 0.88, 0.5 * fade) if i % 4 != 0 else Color(0.02, 0.0, 0.04, 0.65 * fade)
-				draw_circle(p, 3.0 + float(i % 4), c)
-			draw_circle(cloud, 30.0, Color(0.38, 0.12, 0.62, 0.24 * fade))
-		elif kind == "ancorada":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			var dir: Vector2 = (b - a).normalized()
-			if dir.length() <= 0.01:
-				dir = Vector2.RIGHT
-			var side: Vector2 = dir.orthogonal()
-			var arc_pos: Vector2 = a.lerp(b, progress) - Vector2(0.0, sin(progress * PI) * 88.0)
-			var anchor_angle: float = time_alive * 12.0 + progress * TAU * 2.0
-			draw_polyline(PackedVector2Array([a, a.lerp(b, 0.5) - Vector2(0, 76), b]), Color(0.32, 1.0, 0.42, 0.18 * fade), 7.0, true)
-			var arm: Vector2 = Vector2.from_angle(anchor_angle) * 18.0
-			draw_line(arc_pos - arm, arc_pos + arm, Color(0.82, 1.0, 0.86, 0.92 * fade), 4.0, true)
-			draw_line(arc_pos, arc_pos + dir * 24.0, Color(0.34, 1.0, 0.42, 0.9 * fade), 5.0, true)
-			draw_arc(arc_pos + dir * 18.0, 16.0, anchor_angle, anchor_angle + PI, 20, Color(0.34, 1.0, 0.42, 0.9 * fade), 3.0)
-			draw_line(b, a.lerp(b, maxf(0.0, progress - 0.12)), Color(0.62, 1.0, 0.68, 0.32 * fade), 4.0, true)
-		elif kind == "acorrentada":
-			if effect.has("physics"):
-				_draw_physical_chain(effect["physics"], camera, Color(0.18, 0.86, 1.0, 0.88 * fade), max(8.0, float(effect.get("width", 34.0)) * 0.2), fade, true)
-			else:
-				_draw_acorrentada_chain(Vector2(effect.get("a", player_pos)) - camera, Vector2(effect.get("b", player_pos)) - camera, Color(0.18, 0.86, 1.0, 0.88 * fade), max(8.0, float(effect.get("width", 34.0)) * 0.2), fade, true)
-		elif kind == "eclipsada_lua_tp" or kind == "eclipsada_sol_tp":
-			var a: Vector2 = Vector2(effect.get("a", player_pos)) - camera
-			var b: Vector2 = Vector2(effect.get("b", player_pos)) - camera
-			var color: Color = effect.get("color", _eclipsada_color())
-			var dir: = (b - a).normalized()
-			if dir.length() <= 0.01:
-				dir = Vector2.RIGHT
-			var side: = dir.orthogonal()
-			if kind == "eclipsada_lua_tp":
-				var path: = PackedVector2Array([a, a.lerp(b, 0.5) + side * sin(progress * PI) * 24.0, b])
-				draw_polyline(path, Color(0.0, 0.02, 0.11, 0.8 * fade), 28.0, true)
-				draw_polyline(path, Color(color.r, color.g, color.b, 0.82 * fade), 5.0, true)
-				draw_arc(b, 32.0 + progress * 18.0, time_alive * 5.0, time_alive * 5.0 + PI * 1.4, 42, Color(0.48, 0.84, 1.0, 0.72 * fade), 2.5)
-			else:
-				draw_line(a, b, Color(0.15, 0.05, 0.0, 0.56 * fade), 22.0, true)
-				draw_line(a, b, Color(color.r, color.g, color.b, 0.82 * fade), 4.5, true)
-				draw_circle(b, 30.0 + progress * 32.0, Color(color.r, color.g, color.b, 0.13 * fade))
-				draw_arc(b, 48.0 + progress * 22.0, - time_alive * 4.0, TAU - time_alive * 4.0, 58, Color(1.0, 0.9, 0.44, 0.75 * fade), 3.0)
+	CombatEffectsPresentation._draw_teleport_effects(self, camera)
 
 
 func _draw_secondary_acorrentada(secondary: Dictionary, camera: Vector2) -> void :
-	var center_world: = Vector2(secondary.get("center", player_pos))
-	var center: = center_world - camera
-	var maximum: = maxf(0.01, float(secondary.get("max", 0.65)))
-	var life: = maxf(0.0, float(secondary.get("life", maximum)))
-	var progress: = clampf(1.0 - life / maximum, 0.0, 1.0)
-	var fade: = clampf(minf(progress * 3.5, life * 5.0), 0.0, 1.0)
-	var radius: = float(secondary.get("radius", ACORRENTADA_E_RADIUS))
-	var overcharged: = bool(secondary.get("overcharged", false))
-	var pulse: = 0.5 + 0.5 * sin(time_alive * 10.0)
-	draw_circle(center, radius, Color(0.3, 0.02, 0.025, 0.055 * fade))
-	draw_arc(center, radius, - time_alive * 1.9, TAU - time_alive * 1.9, 96, Color(0.92, 0.12, 0.1, 0.7 * fade), 4.0)
-	draw_arc(center, radius * 0.7, time_alive * 1.3, TAU + time_alive * 1.3, 80, Color(0.18, 0.86, 1.0, 0.54 * fade), 2.5)
-	if overcharged:
-		draw_arc(center, radius + 18.0 + pulse * 8.0, 0.0, TAU, 96, Color(1.0, 1.0, 1.0, 0.44 * fade), 2.0)
-	for i in range(10):
-		var angle: float = time_alive * 0.75 + float(i) * TAU / 10.0
-		var inner: = center + Vector2.from_angle(angle) * (radius * 0.25 + pulse * 8.0)
-		var outer: = center + Vector2.from_angle(angle + sin(time_alive * 2.0 + i) * 0.08) * (radius * (0.7 + 0.08 * float(i % 3)))
-		draw_line(inner, outer, Color(0.9, 0.1, 0.09, 0.16 * fade), 3.0, true)
-	var target_positions: = []
-	for raw_pos in secondary.get("target_positions", []):
-		target_positions.append(Vector2(raw_pos))
-	if target_positions.is_empty():
-		for target in secondary.get("targets", []):
-			if typeof(target) != TYPE_DICTIONARY:
-				continue
-			var target_dict: Dictionary = target
-			if _acorrentada_target_alive(target_dict):
-				target_positions.append(_acorrentada_target_pos(target_dict))
-	var chains: Array = secondary.get("chains", [])
-	for i in range(mini(target_positions.size(), 8)):
-		var target_pos: = Vector2(target_positions[i]) - camera
-		var width: = 7.0 + float(i % 2) * 2.0
-		var color: = Color(0.18, 0.86, 1.0, 0.62 * fade) if i % 2 == 0 else Color(0.92, 0.12, 0.1, 0.62 * fade)
-		if i < chains.size():
-			_draw_physical_chain(chains[i], camera, color, width, fade, i % 2 == 0)
-		else:
-			_draw_acorrentada_chain(center, target_pos, color, width, fade, i % 2 == 0)
-		draw_circle(target_pos, 18.0 + pulse * 4.0, Color(color.r, color.g, color.b, 0.12 * fade))
+	CombatEffectsPresentation._draw_secondary_acorrentada(self, secondary, camera)
 
 
 func _draw_secondary_lacerante(secondary: Dictionary, camera: Vector2) -> void :
-	var center_world: Vector2 = secondary.get("center", player_pos)
-	var center = center_world - camera
-	var pulse = 132.0 + 30.0 * pow(sin(time_alive * 5.0), 2.0)
-	draw_circle(center, pulse, Color(0.12, 0.0, 0.03, 0.12))
-	draw_arc(center, pulse, 0, TAU, 56, Color(0.55, 0.0, 0.1, 0.75), 2.0)
-	draw_arc(center, max(42.0, pulse * 0.58), 0, TAU, 42, Color(1.0, 0.18, 0.24, 0.82), 1.5)
-	for cut in secondary.get("cuts", []):
-		var fade = clamp(float(cut.get("life", 0.0)) / max(0.01, float(cut.get("max", 0.36))), 0.0, 1.0)
-		var world_a: Vector2 = cut["a"]
-		var world_b: Vector2 = cut["b"]
-		var a = world_a - camera
-		var b = world_b - camera
-		var width = max(1.0, 10.0 * fade)
-		draw_line(a, b, Color(0.37, 0.0, 0.05, 0.82), width + 5.0)
-		draw_line(a, b, Color(1.0, 0.16, 0.22, 0.94), width)
-		draw_line(a, b, Color(1.0, 0.9, 0.88, 0.92), max(1.0, width * 0.26))
+	CombatEffectsPresentation._draw_secondary_lacerante(self, secondary, camera)
 
 
 func _draw_secondary_prismatica(secondary: Dictionary, camera: Vector2) -> void :
-	var center_world: Vector2 = secondary.get("center", player_pos)
-	var center = center_world - camera
-	var ring = 42.0 + sin(time_alive * 4.2) * 6.0
-	draw_arc(center, ring, 0.0, TAU, 32, Color(0.42, 1.0, 0.96, 0.68), 2.2)
-	draw_arc(center, ring + 12.0, time_alive * 1.4, time_alive * 1.4 + PI * 1.3, 26, Color(1.0, 0.54, 0.78, 0.82), 1.8)
-	var angle = float(secondary.get("angle", 0.0))
-	var beam_dirs = _secondary_prismatica_beam_dirs(angle)
-	for beam_index in range(beam_dirs.size()):
-		var dir: Vector2 = beam_dirs[beam_index]
-		var hue = fposmod(time_alive * 0.65 + float(beam_index) * 0.19, 1.0)
-		var disco = Color.from_hsv(hue, 0.82, 1.0, 0.22)
-		var disco_alt = Color.from_hsv(fposmod(hue + 0.34, 1.0), 0.76, 1.0, 0.16)
-		var beam_start = center_world - dir * SECONDARY_PRISMATICA_BEAM_RANGE - camera
-		var beam_end = center_world + dir * SECONDARY_PRISMATICA_BEAM_RANGE - camera
-		draw_line(beam_start, beam_end, disco, SECONDARY_PRISMATICA_BEAM_WIDTH * 0.78)
-		draw_line(beam_start, beam_end, disco_alt, SECONDARY_PRISMATICA_BEAM_WIDTH * 0.36)
-		draw_line(beam_start, beam_end, Color(1.0, 1.0, 1.0, 0.28), 1.4)
-		draw_line(beam_start, beam_end, Color.from_hsv(hue, 0.55, 1.0, 0.24), 0.8)
-		var side = dir.orthogonal().normalized()
-		for tip_dir in [-1.0, 1.0]:
-			var tip = center + dir * SECONDARY_PRISMATICA_BEAM_RANGE * tip_dir
-			var diamond_dir = dir * tip_dir
-			var diamond = PackedVector2Array([
-				tip + diamond_dir * 10.0, 
-				tip + side * 6.0, 
-				tip - diamond_dir * 10.0, 
-				tip - side * 6.0
-			])
-			draw_polygon(diamond, PackedColorArray([Color(disco_alt.r, disco_alt.g, disco_alt.b, 0.18)]))
-			draw_polyline(PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]]), Color(1.0, 1.0, 1.0, 0.34), 1.0, true)
-	for i in range(3):
-		var phase_offset = float(i + 1) * 0.08
-		var ghost_alpha = 0.1 - i * 0.025
-		for ghost_index in range(beam_dirs.size()):
-			var dir: Vector2 = _secondary_prismatica_beam_dirs(angle - phase_offset)[ghost_index]
-			var ghost_color = Color.from_hsv(fposmod(time_alive * 0.65 + float(ghost_index) * 0.19 - phase_offset, 1.0), 0.82, 1.0, ghost_alpha)
-			var ga = center_world - dir * SECONDARY_PRISMATICA_BEAM_RANGE - camera
-			var gb = center_world + dir * SECONDARY_PRISMATICA_BEAM_RANGE - camera
-			draw_line(ga, gb, ghost_color, max(1.0, SECONDARY_PRISMATICA_BEAM_WIDTH * (0.16 - i * 0.035)))
-	for beam in secondary.get("beams", []):
-		var fade = clamp(float(beam.get("life", 0.0)) / max(0.01, float(beam.get("max", 0.28))), 0.0, 1.0)
-		var beam_color: Color = beam.get("color", Color(0.32, 1.0, 0.96))
-		for segment in beam.get("segments", []):
-			var a = Vector2(segment["a"]) - camera
-			var b = Vector2(segment["b"]) - camera
-			draw_line(a, b, Color(beam_color.r, beam_color.g, beam_color.b, 0.18 + fade * 0.22), 6.0)
-			draw_line(a, b, Color(beam_color.r, beam_color.g, beam_color.b, 0.85), 3.0)
-			draw_line(a, b, Color(1.0, 1.0, 1.0, 0.92), 1.0)
-	for zap in secondary.get("zaps", []):
-		_draw_secondary_prismatica_zap(zap, camera)
+	CombatEffectsPresentation._draw_secondary_prismatica(self, secondary, camera)
 
 
 func _draw_prismatica_ultimate_dance(secondary: Dictionary, center: Vector2) -> void :
-	var tex: = _prismatica_ultimate_frame_texture(secondary)
-	if tex == null:
-		return
-	var max_life: = maxf(0.01, float(secondary.get("max", SECONDARY_PRISMATICA_DURATION)))
-	var life: = float(secondary.get("life", max_life))
-	var start_ratio: = clampf((max_life - life) / 0.45, 0.0, 1.0)
-	var end_ratio: = clampf(life / 0.35, 0.0, 1.0)
-	var alpha: = minf(start_ratio, end_ratio)
-	var pulse: = 1.0 + sin(time_alive * TAU * 2.0) * 0.025
-	_draw_entity_fit(tex, center, Vector2(60, 86) * pulse, Color(1.0, 1.0, 1.0, alpha), true)
+	CombatEffectsPresentation._draw_prismatica_ultimate_dance(self, secondary, center)
 
 
 func _prismatica_ultimate_frame_texture(secondary: Dictionary) -> Texture2D:
@@ -46425,129 +39532,23 @@ func _prismatica_ultimate_frame_texture(secondary: Dictionary) -> Texture2D:
 
 
 func _spawn_prismatica_ultimate_finish(center: Vector2) -> void :
-	if bool(_active_prismatica_secondary().get("finish_burst_done", false)):
-		return
-	_spawn_radial_particles(center, Color(0.72, 1.0, 0.98), 48)
-	_spawn_radial_particles(center, Color(1.0, 0.42, 0.92), 36)
-	for ring_index in range(3):
-		var life: = 0.32 + float(ring_index) * 0.09
-		shockwaves.append({
-			"pos": center, 
-			"radius": 10.0 + float(ring_index) * 14.0, 
-			"max": 118.0 + float(ring_index) * 54.0, 
-			"life": life, 
-			"max_life": life, 
-			"damage": 0.0, 
-			"hit": {}, 
-			"visual_only": true, 
-			"kind": "prismatica_finish"
-		})
-	for ray_index in range(20):
-		var angle: = float(ray_index) * TAU / 20.0 + rng.randf_range(-0.055, 0.055)
-		var dir: = Vector2.from_angle(angle)
-		var start: = center + dir * rng.randf_range(8.0, 20.0)
-		var finish: = center + dir * rng.randf_range(84.0, 182.0)
-		var hue: = fposmod(0.48 + float(ray_index) * 0.071 + rng.randf_range(-0.025, 0.025), 1.0)
-		slashes.append({
-			"a": start, 
-			"b": finish, 
-			"life": rng.randf_range(0.24, 0.44), 
-			"max": 0.44, 
-			"color": Color.from_hsv(hue, 0.72, 1.0, 0.88), 
-			"width": rng.randf_range(4.0, 10.0)
-		})
-	for spark_index in range(28):
-		var dir: = Vector2.from_angle(rng.randf_range(0.0, TAU))
-		var hue: = fposmod(0.46 + rng.randf_range(0.0, 0.55), 1.0)
-		effects.append({
-			"text": "", 
-			"pos": center + dir * rng.randf_range(4.0, 28.0), 
-			"life": rng.randf_range(0.28, 0.62), 
-			"max": 0.62, 
-			"color": Color.from_hsv(hue, 0.62, 1.0, 0.98), 
-			"size": rng.randi_range(4, 9), 
-			"vel": dir * rng.randf_range(120.0, 260.0), 
-			"kind": "spark"
-		})
+	CombatVfxRuntime._spawn_prismatica_ultimate_finish(self, center)
 
 
 func _draw_secondary_prismatica_zap(zap: Dictionary, camera: Vector2) -> void :
-	var life: = float(zap.get("life", 0.0))
-	var max_life: = maxf(0.01, float(zap.get("max", SECONDARY_PRISMATICA_ZAP_LIFE)))
-	var alpha: = clampf(life / max_life, 0.0, 1.0)
-	if alpha <= 0.0:
-		return
-	var start: = Vector2(zap.get("start", player_pos)) - camera
-	var target: = Vector2(zap.get("target", player_pos)) - camera
-	var hue: = float(zap.get("hue", 0.0))
-	var color: = Color.from_hsv(hue, 0.72, 1.0, alpha)
-	_draw_prismatica_colored_bolt(start, target, int(zap.get("seed", 0)), color, alpha, 3.6)
+	CombatEffectsPresentation._draw_secondary_prismatica_zap(self, zap, camera)
 
 
 func _draw_prismatica_colored_bolt(start: Vector2, finish: Vector2, seed: int, color: Color, alpha: float, width: float) -> void :
-	var delta: = finish - start
-	var length: = delta.length()
-	if length <= 4.0:
-		return
-	var dir: = delta / length
-	var normal: = dir.orthogonal()
-	var points: = PackedVector2Array()
-	var segments: = 7
-	for i in range(segments + 1):
-		var t: = float(i) / float(segments)
-		var taper: = sin(t * PI)
-		var jitter: = sin(float(seed) * 0.37 + float(i) * 2.83 + time_alive * 38.0) * 14.0 * taper
-		var small: = cos(float(seed) * 1.11 + float(i) * 4.41 + time_alive * 23.0) * 5.0 * taper
-		points.append(start + delta * t + normal * jitter + dir.rotated(PI * 0.5) * small)
-	draw_polyline(points, Color(color.r, color.g, color.b, 0.26 * alpha), width + 6.0, true)
-	draw_polyline(points, Color(color.r, color.g, color.b, 0.78 * alpha), width, true)
-	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.92 * alpha), maxf(1.0, width * 0.33), true)
-	for branch in range(2):
-		var branch_t: = 0.34 + float(branch) * 0.24 + 0.05 * sin(time_alive * 9.0 + float(seed + branch))
-		var base: = start + delta * branch_t
-		var branch_dir: = dir.rotated((0.52 if branch == 0 else -0.52) + sin(time_alive * 8.0 + float(seed)) * 0.18)
-		draw_line(base, base + branch_dir * 24.0, Color(color.r, color.g, color.b, 0.42 * alpha), maxf(1.0, width * 0.38), true)
+	CombatEffectsPresentation._draw_prismatica_colored_bolt(self, start, finish, seed, color, alpha, width)
 
 
 func _draw_secondary_retornante(secondary: Dictionary, camera: Vector2) -> void :
-	var center_world: = Vector2(secondary.get("center", player_pos))
-	var center = center_world - camera
-	draw_arc(center, 34.0 + sin(time_alive * 5.4) * 4.0, 0.0, TAU, 28, Color(0.72, 0.48, 1.0, 0.58), 2.0)
-	for bullet in return_bullets:
-		if float(bullet.get("paradox_until", 0.0)) < time_alive:
-			continue
-		var pos = Vector2(bullet["pos"]) - camera
-		var phase = float(bullet.get("phase", 0.0))
-		draw_line(center, pos, Color(0.8, 0.6, 1.0, 0.42), 3.0)
-		draw_line(center, pos, Color(1.0, 1.0, 1.0, 0.78), 1.0)
-		draw_arc(pos, 18.0 + sin(phase * 2.0) * 4.0, phase, phase + PI * 1.45, 22, Color(1.0, 0.5, 0.84, 0.86), 2.0)
-	for ghost in secondary.get("ghosts", []):
-		var ang = float(ghost.get("base_angle", 0.0)) + float(secondary.get("ghost_tick", 0.0)) * 0.9
-		var endpoint = center_world + Vector2(cos(ang) * float(ghost.get("radius_x", 260.0)), sin(ang + float(ghost.get("phase", 0.0)) * 0.18) * float(ghost.get("radius_y", 210.0)))
-		var draw_end = endpoint - camera
-		draw_line(center, draw_end, Color(0.66, 0.42, 1.0, 0.28), 2.5)
-		draw_circle(draw_end, 8.0, Color(0.94, 0.76, 1.0, 0.82))
-		draw_circle(draw_end, 14.0, Color(0.52, 0.3, 0.92, 0.22))
+	CombatEffectsPresentation._draw_secondary_retornante(self, secondary, camera)
 
 
 func _draw_secondary_parasitica(secondary: Dictionary, camera: Vector2) -> void :
-	for target in secondary.get("targets", []):
-		if bool(target.get("done", false)):
-			continue
-		var target_world = _parasite_ultimate_target_pos(target)
-		if target_world == Vector2.ZERO:
-			continue
-		var age = float(target.get("age", 0.0))
-		if not bool(target.get("arrived", false)):
-			for worm in target.get("worms", []):
-				var travel = clamp((age - float(worm.get("delay", 0.0))) / max(0.01, float(worm.get("duration", 1.2))), 0.0, 1.0)
-				if age < float(worm.get("delay", 0.0)):
-					continue
-				_draw_parasite_burrow(worm, target_world + Vector2(0, 26), travel, camera)
-			var warning = clamp(age / max(0.01, float(target.get("arrival", 1.95))), 0.0, 1.0)
-			_draw_parasite_emergence(target_world + Vector2(0, 26) - camera, warning, int(target.get("seed", 0)))
-		else:
-			_draw_parasite_feast_ground(target, target_world, camera)
+	CombatEffectsPresentation._draw_secondary_parasitica(self, secondary, camera)
 
 
 func _parasite_curve_point(start: Vector2, finish: Vector2, t: float, bend: float) -> Vector2:
@@ -46560,87 +39561,15 @@ func _parasite_curve_point(start: Vector2, finish: Vector2, t: float, bend: floa
 
 
 func _draw_parasite_burrow(worm: Dictionary, finish: Vector2, t: float, camera: Vector2) -> void :
-	var start = Vector2(worm.get("start", finish))
-	var bend = float(worm.get("bend", 0.0))
-	var phase = float(worm.get("phase", 0.0))
-	var scale = float(worm.get("scale", 1.0))
-	var trail = PackedVector2Array()
-	var trail_start = max(0.0, t - 0.11)
-	for sample in range(9):
-		var sample_t = lerp(trail_start, t, float(sample) / 8.0)
-		trail.append(_parasite_curve_point(start, finish, sample_t, bend) - camera)
-	if trail.size() >= 2:
-		draw_polyline(trail, Color(0.07, 0.055, 0.025, 0.52), 8.0 * scale, true)
-		draw_polyline(trail, Color(0.34, 0.28, 0.1, 0.6), 3.5 * scale, true)
-		draw_polyline(trail, Color(0.64, 0.74, 0.18, 0.18), 1.0 * scale, true)
-		for groove_index in range(1, trail.size(), 2):
-			var groove = trail[groove_index]
-			var groove_side = Vector2.from_angle(phase + groove_index * 1.7) * 6.0 * scale
-			draw_line(groove - groove_side, groove + groove_side, Color(0.22, 0.15, 0.05, 0.48), 1.5)
-	for break_index in range(1, 9):
-		var break_t = float(break_index) / 9.0
-		if break_t > t:
-			continue
-		var break_world = _parasite_curve_point(start, finish, break_t, bend)
-		var before = _parasite_curve_point(start, finish, max(0.0, break_t - 0.015), bend)
-		var after = _parasite_curve_point(start, finish, min(1.0, break_t + 0.015), bend)
-		var break_heading = (after - before).angle()
-		var break_fade = clamp(1.0 - (t - break_t) * 1.15, 0.18, 1.0)
-		_draw_parasite_ground_break(break_world - camera, break_heading, scale, phase + break_index * 1.73, break_fade)
-	var mound = _parasite_curve_point(start, finish, t, bend) - camera
-	var next_t = min(1.0, t + 0.02)
-	var heading = (_parasite_curve_point(start, finish, next_t, bend) - _parasite_curve_point(start, finish, max(0.0, t - 0.02), bend)).normalized()
-	draw_set_transform(mound, heading.angle(), Vector2(1.0, 0.42))
-	draw_circle(Vector2.ZERO, 15.0 * scale, Color(0.08, 0.055, 0.025, 0.72))
-	draw_circle(Vector2.ZERO, 10.5 * scale, Color(0.42, 0.31, 0.1, 0.72))
-	draw_arc(Vector2.ZERO, 18.0 * scale, 0.0, TAU, 28, Color(0.72, 0.82, 0.22, 0.3), 1.6)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	for dirt_index in range(5):
-		var dirt_angle = phase + dirt_index * 2.3 + t * 10.0
-		var dirt_pos = mound + Vector2.from_angle(dirt_angle) * (10.0 + dirt_index * 2.1) * scale
-		draw_circle(dirt_pos, (2.6 - dirt_index * 0.24) * scale, Color(0.38, 0.27, 0.08, 0.72))
-	if t > 0.76:
-		var emerge = smoothstep(0.76, 1.0, t)
-		var worm_pos = finish - camera + Vector2(0, 12.0 - emerge * 26.0)
-		_draw_parasite_worm(worm_pos, - PI * 0.5 + sin(phase + t * 8.0) * 0.18, scale, phase + t * 12.0, emerge)
+	CombatEffectsPresentation._draw_parasite_burrow(self, worm, finish, t, camera)
 
 
 func _draw_parasite_ground_break(center: Vector2, heading: float, scale: float, seed: float, fade: float) -> void :
-	var forward = Vector2.from_angle(heading)
-	var side = forward.orthogonal()
-	draw_set_transform(center, heading, Vector2(1.0, 0.42))
-	draw_circle(Vector2.ZERO, 13.0 * scale, Color(0.045, 0.032, 0.014, 0.46 * fade))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	for branch_index in range(5):
-		var branch_angle = heading + (branch_index - 2) * 0.48 + sin(seed + branch_index * 2.2) * 0.16
-		var inner = center + forward * sin(seed + branch_index) * 3.0 * scale
-		var joint = inner + Vector2.from_angle(branch_angle) * (7.0 + branch_index % 2 * 3.0) * scale
-		var outer = joint + Vector2.from_angle(branch_angle + sin(seed * 1.7 + branch_index) * 0.34) * (6.0 + branch_index % 3 * 2.0) * scale
-		draw_line(inner, joint, Color(0.035, 0.025, 0.01, 0.86 * fade), 2.4 * scale)
-		draw_line(joint, outer, Color(0.12, 0.075, 0.018, 0.72 * fade), 1.5 * scale)
-	var chunk_center = center + side * sin(seed * 2.4) * 8.0 * scale - Vector2(0, 3.0 * scale)
-	var chunk = PackedVector2Array([
-		chunk_center + Vector2(-5.0, 3.0) * scale, 
-		chunk_center + Vector2(-1.0, -5.0) * scale, 
-		chunk_center + Vector2(6.0, 1.0) * scale
-	])
-	draw_polygon(chunk, PackedColorArray([Color(0.34, 0.24, 0.075, 0.72 * fade)]))
-	draw_polyline(PackedVector2Array([chunk[0], chunk[1], chunk[2], chunk[0]]), Color(0.09, 0.055, 0.016, 0.82 * fade), 1.2, true)
+	CombatEffectsPresentation._draw_parasite_ground_break(self, center, heading, scale, seed, fade)
 
 
 func _draw_parasite_emergence(foot: Vector2, progress: float, seed: int) -> void :
-	if progress < 0.58:
-		return
-	var reveal = smoothstep(0.58, 1.0, progress)
-	draw_set_transform(foot, 0.0, Vector2(1.0, 0.38))
-	draw_circle(Vector2.ZERO, 34.0 * reveal, Color(0.1, 0.07, 0.025, 0.34 * reveal))
-	draw_arc(Vector2.ZERO, 37.0 * reveal, 0.0, TAU, 36, Color(0.58, 0.72, 0.16, 0.52 * reveal), 2.0)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	for crack_index in range(7):
-		var angle = seed * 0.001 + crack_index * TAU / 7.0
-		var inner = foot + Vector2.from_angle(angle) * 8.0 * reveal
-		var outer = foot + Vector2.from_angle(angle + sin(seed + crack_index) * 0.08) * (24.0 + (crack_index % 3) * 7.0) * reveal
-		draw_line(inner, outer, Color(0.16, 0.1, 0.03, 0.78 * reveal), 2.2)
+	CombatEffectsPresentation._draw_parasite_emergence(self, foot, progress, seed)
 
 
 func _draw_parasite_feast_ground(target: Dictionary, target_world: Vector2, camera: Vector2) -> void :
@@ -46653,210 +39582,23 @@ func _draw_parasite_feast_ground(target: Dictionary, target_world: Vector2, came
 
 
 func _draw_parasite_feast_foreground(target: Dictionary, target_world: Vector2, camera: Vector2) -> void :
-	var center = target_world - camera
-	var scale = 1.45 if bool(target.get("boss", false)) else 1.0
-	var seed = int(target.get("seed", 0))
-	for worm_index in range(4):
-		var angle = time_alive * (0.84 + worm_index * 0.05) + worm_index * TAU / 4.0 + seed * 0.002
-		var orbit = (31.0 + worm_index * 5.0 + sin(time_alive * 3.0 + worm_index) * 4.0) * scale
-		var worm_pos = center + Vector2.from_angle(angle) * orbit + Vector2(0, 5.0 * sin(angle * 2.0))
-		var facing = (center - worm_pos).angle()
-		_draw_parasite_worm(worm_pos, facing, (0.78 + worm_index * 0.07) * scale, time_alive * 7.0 + worm_index, 1.0)
-	for drip_index in range(5):
-		var cycle = fposmod(time_alive * (0.72 + drip_index * 0.035) + drip_index * 0.19 + seed * 0.0003, 1.0)
-		var drip = center + Vector2(sin(seed * 0.03 + drip_index * 1.8) * 30.0 * scale, 14.0 * scale + cycle * 54.0 * scale)
-		_draw_parasite_larva_drop(drip, (0.58 + drip_index * 0.045) * scale, sin(cycle * PI))
-	var feed_left = float(target.get("feed_left", 0.0))
-	_draw_centered("DEVORANDO %.1fs" % feed_left, center + Vector2(0, -68.0 * scale), 13, Color(0.74, 1.0, 0.38, 0.88))
+	CombatEffectsPresentation._draw_parasite_feast_foreground(self, target, target_world, camera)
 
 
 func _draw_parasite_foreground(camera: Vector2) -> void :
-	for secondary in manifestation_secondaries:
-		if String(secondary.get("kind", "")) != "parasitica":
-			continue
-		for target in secondary.get("targets", []):
-			if bool(target.get("done", false)) or not bool(target.get("arrived", false)):
-				continue
-			var target_world = _parasite_ultimate_target_pos(target)
-			if target_world != Vector2.ZERO:
-				_draw_parasite_feast_foreground(target, target_world, camera)
+	CombatEffectsPresentation._draw_parasite_foreground(self, camera)
 
 
 func _draw_secondary_gravitante(secondary: Dictionary, camera: Vector2) -> void :
-	var center_world: Vector2 = secondary.get("center", player_pos)
-	var center = center_world - camera
-	var progress = 1.0 - float(secondary.get("life", 0.0)) / max(0.01, float(secondary.get("max", SECONDARY_GRAVITANTE_DURATION)))
-	var radius = _gravitante_radius(progress)
-	var captured = int(secondary.get("captured", 0))
-	var orbital_bonus = int(secondary.get("orbital_bonus", 0))
-	var capture_power = float(secondary.get("capture_power", 0.0))
-	var spin_speed = float(secondary.get("spin_speed", 250.0))
-	var intensity = clamp(float(captured + orbital_bonus) / 10.0 + capture_power * 0.34 + progress * 0.25, 0.25, 2.3)
-	var t = time_alive
-	var spin = t * (0.72 + spin_speed * 0.006)
-
-	_draw_gravitante_map_distortion(center_world, camera, radius, progress, intensity, spin)
-	draw_circle(center, radius * 1.04, Color(0.02, 0.03, 0.08, 0.08 + 0.05 * intensity))
-	for lens_index in range(11):
-		var ring = radius * (0.18 + lens_index * 0.075) + sin(t * 2.0 + lens_index) * (5.0 + intensity * 3.0)
-		var rot = spin * (0.18 + lens_index * 0.012) + lens_index * 0.27
-		var stretch = Vector2(1.0 + sin(lens_index * 1.7) * 0.1, 0.58 + cos(t + lens_index) * 0.07)
-		var alpha = clamp(0.2 - lens_index * 0.01 + intensity * 0.03, 0.04, 0.3)
-		draw_set_transform(center, rot, stretch)
-		draw_arc(Vector2.ZERO, ring, - PI * 0.78, PI * 1.22, 64, Color(0.54, 0.74, 1.0, alpha), 1.1 + intensity * 0.22)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	for lane in range(18):
-		var ang = spin * (1.0 + lane % 3 * 0.08) + lane * TAU / 18.0
-		var edge = center + Vector2.from_angle(ang) * radius * (0.76 + 0.12 * sin(t * 3.0 + lane))
-		var inner = center + Vector2.from_angle(ang + 0.36 + intensity * 0.08) * radius * (0.18 + 0.04 * (lane % 4))
-		var lane_alpha = 0.07 + intensity * 0.028
-		draw_line(edge, inner, Color(0.44, 0.7, 1.0, lane_alpha), 1.2)
-		if lane % 3 == 0:
-			draw_circle(edge, 2.2 + intensity, Color(0.76, 0.9, 1.0, 0.28))
-
-	draw_arc(center, radius, spin * 0.55, spin * 0.55 + TAU, 96, Color(0.56, 0.82, 1.0, 0.62 + min(0.24, intensity * 0.1)), 2.2 + intensity * 0.45)
-	draw_arc(center, radius * 0.72, - spin * 0.95, - spin * 0.95 + PI * 1.65, 86, Color(0.96, 0.36, 1.0, 0.26 + intensity * 0.05), 3.0)
-
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var dist = Vector2(enemy["pos"]).distance_to(center_world)
-		if dist <= radius:
-			var draw_pos = enemy["pos"] - camera
-			var edge_ratio = _gravitante_edge_ratio(dist, radius)
-			var beam_alpha = 0.1 + edge_ratio * 0.16 + min(0.12, intensity * 0.04)
-			draw_line(draw_pos, center, Color(0.58, 0.82, 1.0, beam_alpha), 1.2 + edge_ratio * 1.8)
-			_draw_gravitante_enemy_distortion(enemy, center_world, camera, radius, progress, intensity)
-
-	var core_r = 40.0 + progress * 42.0 + intensity * 5.0
-	for glow_index in range(5):
-		draw_circle(center, core_r + 56.0 - glow_index * 10.0, Color(0.26, 0.08, 0.46, 0.035 + glow_index * 0.012))
-	draw_circle(center, core_r * 1.18, Color(0.01, 0.0, 0.03, 0.82))
-	draw_circle(center, core_r * 0.74, Color(0.0, 0.0, 0.0, 0.96))
-	draw_arc(center, core_r * 1.28, spin * 1.55, spin * 1.55 + PI * 1.72, 76, Color(0.82, 0.94, 1.0, 0.9), 3.0 + intensity * 0.55)
-	draw_arc(center, core_r * 1.56, - spin * 1.18, - spin * 1.18 + PI * 1.38, 72, Color(0.54, 0.22, 1.0, 0.54), 5.0)
-	draw_arc(center, core_r * 0.96, spin * 2.25, spin * 2.25 + TAU * 0.72, 52, Color(0.18, 0.88, 1.0, 0.64), 2.0)
+	CombatEffectsPresentation._draw_secondary_gravitante(self, secondary, camera)
 
 
 func _draw_gravitante_map_distortion(center_world: Vector2, camera: Vector2, radius: float, progress: float, intensity: float, spin: float) -> void :
-	var map_texture = _current_map_texture()
-	if map_texture == null:
-		return
-	var center = center_world - camera
-	var map_rect = _desktop_stage_draw_rect(camera)
-	var tex_size = map_texture.get_size()
-	var t = time_alive
-	var event_radius = 64.0 + progress * 44.0 + intensity * 7.0
-
-	_draw_gravitante_map_mask(map_texture, map_rect, tex_size, center, radius, event_radius, progress, intensity, spin)
-
-	for ring_index in range(5):
-		var ring_ratio = 0.24 + float(ring_index) * 0.145
-		var sample_radius = radius * ring_ratio
-		var pieces = 12 + ring_index * 5
-		for piece_index in range(pieces):
-			if piece_index % 2 == 1 and ring_index >= 3:
-				continue
-			var seed = float(piece_index * 37 + ring_index * 113)
-			var angle = spin * (0.22 + ring_index * 0.065) + piece_index * TAU / float(pieces) + sin(t * 1.7 + seed) * 0.035
-			var radial = Vector2.from_angle(angle)
-			var tangent = radial.orthogonal()
-			var source_center = center + radial * sample_radius + tangent * sin(t * 2.4 + seed) * (8.0 + intensity * 5.0)
-			if not map_rect.has_point(source_center):
-				continue
-			var source_size = 34.0 - ring_index * 2.4 + intensity * 4.0
-			var source_rect = Rect2(source_center - Vector2(source_size, source_size) * 0.5, Vector2(source_size, source_size))
-			var src = _map_screen_rect_to_source(map_rect, tex_size, source_rect)
-			if src.size.x <= 1.0 or src.size.y <= 1.0:
-				continue
-			var pull = 0.18 + progress * 0.16 + intensity * 0.045 + float(4 - ring_index) * 0.018
-			var sink = source_center.lerp(center, pull)
-			sink += tangent * (22.0 + ring_index * 4.0) * sin(spin * 0.8 + seed)
-			var stretch = 1.1 + ring_ratio * 1.45 + intensity * 0.14
-			var crush = 0.4 + ring_index * 0.035
-			var dest_size = Vector2(source_size * stretch, source_size * crush)
-			var alpha = clamp(0.28 + intensity * 0.08 - ring_index * 0.025, 0.18, 0.58)
-			draw_set_transform(sink, angle + PI * 0.5 + sin(t + seed) * 0.22, Vector2.ONE)
-			draw_texture_rect_region(map_texture, Rect2( - dest_size * 0.5, dest_size), src, Color(1.0, 1.0, 1.0, alpha))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	for shard_index in range(34):
-		var shard_seed = float(shard_index) * 19.73
-		var cycle = fposmod(t * (0.1 + intensity * 0.025) + shard_seed * 0.017, 1.0)
-		var start_radius = radius * (0.96 - float(shard_index % 5) * 0.055)
-		var end_radius = event_radius * (1.02 + float(shard_index % 3) * 0.16)
-		var shard_radius = lerp(start_radius, end_radius, pow(cycle, 0.72))
-		var angle = spin * (0.52 + float(shard_index % 4) * 0.055) + shard_seed + cycle * TAU * (0.18 + intensity * 0.04)
-		var dir = Vector2.from_angle(angle)
-		var tangent = dir.orthogonal()
-		var pos = center + dir * shard_radius + tangent * sin(t * 3.1 + shard_seed) * 14.0
-		var shard_alpha = sin(cycle * PI) * clamp(0.26 + intensity * 0.1, 0.22, 0.52)
-		var shard_len = lerp(26.0, 8.0, cycle) + intensity * 3.0
-		var shard_w = 5.0 + float(shard_index % 4) * 1.4
-		var shard = PackedVector2Array([
-			pos + dir * shard_len, 
-			pos + tangent * shard_w, 
-			pos - dir * shard_len * 0.62, 
-			pos - tangent * shard_w * 0.72
-		])
-		draw_polygon(shard, PackedColorArray([Color(0.7, 0.74, 0.68, shard_alpha), Color(0.42, 0.38, 0.46, shard_alpha * 0.92), Color(0.16, 0.12, 0.2, shard_alpha), Color(0.86, 0.82, 0.72, shard_alpha * 0.78)]))
-		draw_polyline(PackedVector2Array([shard[0], shard[1], shard[2], shard[3], shard[0]]), Color(0.02, 0.01, 0.04, shard_alpha * 0.6), 1.0, true)
-
-	for beam_index in range(22):
-		var beam_seed = float(beam_index) * 41.0
-		var angle = - spin * (0.34 + float(beam_index % 3) * 0.035) + beam_index * TAU / 22.0
-		var outer = center + Vector2.from_angle(angle) * radius * (0.86 + 0.08 * sin(t * 1.4 + beam_seed))
-		var mid = center + Vector2.from_angle(angle + 0.34 + intensity * 0.03) * radius * (0.45 + 0.04 * sin(beam_seed))
-		var inner = center + Vector2.from_angle(angle + 0.68) * event_radius * (1.04 + 0.08 * sin(t * 4.0 + beam_seed))
-		var beam_alpha = 0.08 + intensity * 0.035
-		draw_polyline(PackedVector2Array([outer, mid, inner]), Color(0.92, 0.98, 1.0, beam_alpha), 2.0 + intensity * 0.32, true)
-		draw_polyline(PackedVector2Array([outer, mid, inner]), Color(0.48, 0.18, 1.0, beam_alpha * 0.7), 5.0 + intensity * 0.7, true)
-
-	for crack_index in range(18):
-		var crack_angle = spin * 0.12 + crack_index * TAU / 18.0 + sin(t + crack_index) * 0.045
-		var dir = Vector2.from_angle(crack_angle)
-		var start = center + dir * (event_radius + 24.0)
-		var finish = center + dir * radius * (0.58 + float(crack_index % 4) * 0.055)
-		draw_line(start, finish, Color(0.0, 0.0, 0.02, 0.2 + intensity * 0.035), 2.4)
-		draw_line(start.lerp(finish, 0.54), finish, Color(0.62, 0.82, 1.0, 0.08 + intensity * 0.025), 1.0)
+	CombatEffectsPresentation._draw_gravitante_map_distortion(self, center_world, camera, radius, progress, intensity, spin)
 
 
 func _draw_gravitante_map_mask(map_texture: Texture2D, map_rect: Rect2, tex_size: Vector2, center: Vector2, radius: float, event_radius: float, progress: float, intensity: float, spin: float) -> void :
-	var outer_radius = radius * 0.82
-	var inner_radius = max(28.0, event_radius * 0.48)
-	var rings = 5
-	var segments = 28
-	for ring_index in range(rings):
-		var ring_a = float(ring_index) / float(rings)
-		var ring_b = float(ring_index + 1) / float(rings)
-		var r0 = lerp(inner_radius, outer_radius, ring_a)
-		var r1 = lerp(inner_radius, outer_radius, ring_b)
-		for segment in range(segments):
-			var a0 = float(segment) * TAU / float(segments)
-			var a1 = float(segment + 1) * TAU / float(segments)
-			var p0 = center + Vector2.from_angle(a0) * r0
-			var p1 = center + Vector2.from_angle(a1) * r0
-			var p2 = center + Vector2.from_angle(a1) * r1
-			var p3 = center + Vector2.from_angle(a0) * r1
-			var uv0 = _gravitante_distorted_map_uv(p0, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var uv1 = _gravitante_distorted_map_uv(p1, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var uv2 = _gravitante_distorted_map_uv(p2, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var uv3 = _gravitante_distorted_map_uv(p3, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var edge = clamp((r0 + r1) * 0.5 / max(1.0, outer_radius), 0.0, 1.0)
-			var horizon = 1.0 - clamp((r0 - inner_radius) / max(1.0, outer_radius - inner_radius), 0.0, 1.0)
-			var light = 0.82 - horizon * 0.48 + edge * 0.18
-			var alpha = clamp(0.54 + intensity * 0.08 - horizon * 0.1, 0.36, 0.78)
-			var color = Color(light * 0.8, light * 0.86, light, alpha)
-			var colors = PackedColorArray([color, color, color, color])
-			draw_polygon(PackedVector2Array([p0, p1, p2, p3]), colors, PackedVector2Array([uv0, uv1, uv2, uv3]), map_texture)
-
-	draw_circle(center, outer_radius, Color(0.02, 0.0, 0.04, 0.15 + intensity * 0.04))
-	for veil_index in range(6):
-		var r = lerp(inner_radius * 1.15, outer_radius, float(veil_index) / 5.0)
-		var alpha = 0.12 + intensity * 0.018 - veil_index * 0.01
-		draw_arc(center, r, spin * (0.48 + veil_index * 0.05), spin * (0.48 + veil_index * 0.05) + TAU * 0.72, 80, Color(0.02, 0.0, 0.08, alpha), 9.0 - veil_index * 0.8)
-		draw_arc(center, r * 0.98, - spin * (0.36 + veil_index * 0.04), - spin * (0.36 + veil_index * 0.04) + TAU * 0.46, 72, Color(0.72, 0.88, 1.0, 0.055 + intensity * 0.01), 2.0)
+	CombatEffectsPresentation._draw_gravitante_map_mask(self, map_texture, map_rect, tex_size, center, radius, event_radius, progress, intensity, spin)
 
 
 func _gravitante_distorted_map_uv(screen_point: Vector2, center: Vector2, map_rect: Rect2, tex_size: Vector2, radius: float, progress: float, intensity: float, spin: float) -> Vector2:
@@ -46888,72 +39630,11 @@ func _map_screen_rect_to_source(map_rect: Rect2, tex_size: Vector2, screen_rect:
 
 
 func _draw_gravitante_enemy_distortion(enemy: Dictionary, center_world: Vector2, camera: Vector2, radius: float, progress: float, intensity: float) -> void :
-	var enemy_pos: Vector2 = enemy["pos"]
-	var dist = enemy_pos.distance_to(center_world)
-	var edge_ratio = _gravitante_edge_ratio(dist, radius)
-	var dir = (enemy_pos - center_world).normalized()
-	if dir.length() <= 0.01:
-		dir = Vector2.RIGHT
-	var tangent = dir.orthogonal()
-	var tex = _enemy_texture(enemy)
-	var size = _enemy_draw_size(enemy)
-	var swirl = time_alive * (3.4 + intensity * 1.2) + float(enemy.get("uid", 0)) * 0.021
-	var bend = tangent * sin(swirl) * (10.0 + edge_ratio * 22.0) - dir * (6.0 + (1.0 - edge_ratio) * 10.0)
-	var ghost_pos = enemy_pos + bend
-	var stretch = 1.0 + edge_ratio * 0.65 + intensity * 0.1
-	var compress = 0.82 - edge_ratio * 0.18
-	var ghost_size = Vector2(size.x * stretch, size.y * compress)
-	var alpha = clamp(0.1 + edge_ratio * 0.22 + intensity * 0.04, 0.1, 0.42)
-	_draw_enemy_texture_raw(tex, ghost_pos - camera, ghost_size, dir.angle() + PI * 0.5 + sin(swirl) * 0.18, Color(0.46, 0.72, 1.0, alpha), _enemy_should_flip(enemy))
-	var smear_pos = enemy_pos + tangent * sin(swirl + 1.2) * (18.0 + edge_ratio * 18.0) - dir * 14.0
-	_draw_enemy_texture_raw(tex, smear_pos - camera, Vector2(size.x * (0.82 + edge_ratio * 0.35), size.y * 0.64), dir.angle() + PI * 0.5, Color(0.96, 0.42, 1.0, alpha * 0.42), _enemy_should_flip(enemy))
+	EntitiesPresentation._draw_gravitante_enemy_distortion(self, enemy, center_world, camera, radius, progress, intensity)
 
 
 func _enemy_draw_size(enemy: Dictionary) -> Vector2:
-	match String(enemy.get("type", ENEMY_COMMON)):
-		ENEMY_AGGLOMERATOR:
-			return Vector2(86, 86)
-		ENEMY_LARAPIO:
-			return Vector2(78, 78)
-		ENEMY_ATIRADOR:
-			return Vector2(82, 82)
-		ENEMY_KAMIKAZE:
-			return Vector2(78, 100)
-		ENEMY_DEVOTO:
-			return Vector2(62, 62)
-		ENEMY_COUT_ATTACK_SPEED:
-			return Vector2(82, 82)
-		ENEMY_SHIELD_REFLECTOR:
-			return Vector2(92, 92)
-		ENEMY_GUARDIAO:
-			return Vector2(98, 98)
-		ENEMY_NEXUS_CHRONOPHAGE:
-			return Vector2(94, 94)
-		ENEMY_NEXUS_ECHO:
-			return Vector2(76, 76)
-		ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_REFRACTOR, ENEMY_NEXUS_WEAVER:
-			return Vector2(84, 84)
-		ENEMY_PYRO_PENGUIN:
-			return Vector2(96, 137)
-		ENEMY_MIASMA_EEL:
-			return Vector2(92, 82)
-		ENEMY_LODARIO:
-			return Vector2(112, 60)
-		ENEMY_FOSSIL_PUSTULE:
-			return Vector2(92, 102)
-		ENEMY_CHRONAL_LEECH:
-			return Vector2(98, 62)
-		ENEMY_CINERIDO:
-			return Vector2(115, 52.5)
-		ENEMY_PANGOLIRO:
-			return Vector2(144, 90)
-		ENEMY_CORVOL:
-			return Vector2(86, 74)
-	if current_phase == 4:
-		return Vector2(84, 84)
-	if current_phase == 6:
-		return Vector2(88, 82)
-	return Vector2(72, 72)
+	return EntityVisualProfiles._enemy_draw_size(self, enemy)
 
 
 func _draw_enemy_texture_raw(texture: Texture2D, center: Vector2, size: Vector2, rotation: float, modulate: Color, flip_h: = false) -> void :
@@ -46966,110 +39647,15 @@ func _draw_enemy_texture_raw(texture: Texture2D, center: Vector2, size: Vector2,
 
 
 func _draw_ancorada_spinning_anchors(camera: Vector2) -> void :
-	for spin in ancorada_spinning:
-		if float(spin.get("life", 0.0)) <= 0.0:
-			continue
-		var center: Vector2 = player_pos - camera
-		var alpha: float = clampf(float(spin.get("life", 0.0)) / maxf(0.01, float(spin.get("max", 5.0))), 0.0, 1.0)
-		var arm_count: = 4
-		for arm_i in range(arm_count):
-			var arm_angle: float = float(spin.get("angle", 0.0)) + float(arm_i) * TAU / float(arm_count)
-			var arm_start: Vector2 = center + Vector2.from_angle(arm_angle) * 22.0
-			var arm_end: Vector2 = center + Vector2.from_angle(arm_angle) * 92.0
-			draw_line(arm_start, arm_end, Color(0.02, 0.08, 0.03, 0.58 * alpha), 6.0)
-			draw_line(arm_start, arm_end, Color(0.24, 1.0, 0.38, 0.72 * alpha), 2.4)
-			_draw_ancorada_anchor_icon(arm_end, 32.0, arm_angle + PI * 0.5, alpha, 0.82)
-		draw_arc(center, 92.0, 0.0, TAU, 48, Color(0.3, 1.0, 0.42, 0.28 * alpha), 1.8)
+	CombatEffectsPresentation._draw_ancorada_spinning_anchors(self, camera)
 
 
 func _draw_ancorada_anchor_icon(center: Vector2, size: = 32.0, draw_rotation: = 0.0, alpha: = 1.0, energy: = 1.0) -> void :
-	var s: = size / 32.0
-	var outline: = Color(0.01, 0.03, 0.015, 0.92 * alpha)
-	var body: = Color(0.07, 0.43, 0.16, 0.96 * alpha)
-	var edge: = Color(0.32, 1.0, 0.38, 0.98 * alpha)
-	var core: = Color(0.84, 1.0, 0.72, 0.92 * alpha)
-	draw_set_transform(center, draw_rotation, Vector2.ONE)
-	draw_arc(Vector2(0.0, -9.8) * s, 6.2 * s, 0.0, TAU, 26, outline, 4.8 * s, true)
-	draw_arc(Vector2(0.0, -9.8) * s, 6.2 * s, 0.0, TAU, 26, edge, 2.2 * s, true)
-	draw_line(Vector2(0.0, -4.0) * s, Vector2(0.0, 11.5) * s, outline, 6.2 * s, true)
-	draw_line(Vector2(0.0, -4.0) * s, Vector2(0.0, 11.5) * s, body, 3.6 * s, true)
-	draw_line(Vector2(-7.0, 1.5) * s, Vector2(7.0, 1.5) * s, outline, 5.4 * s, true)
-	draw_line(Vector2(-7.0, 1.5) * s, Vector2(7.0, 1.5) * s, edge, 2.5 * s, true)
-	var left_fluke: = PackedVector2Array([
-		Vector2(0.0, 9.0) * s, 
-		Vector2(-9.0, 14.0) * s, 
-		Vector2(-13.0, 7.2) * s, 
-		Vector2(-9.4, 8.3) * s, 
-		Vector2(-4.4, 5.7) * s
-	])
-	var right_fluke: = PackedVector2Array([
-		Vector2(0.0, 9.0) * s, 
-		Vector2(9.0, 14.0) * s, 
-		Vector2(13.0, 7.2) * s, 
-		Vector2(9.4, 8.3) * s, 
-		Vector2(4.4, 5.7) * s
-	])
-	draw_polyline(left_fluke, outline, 5.4 * s, true)
-	draw_polyline(right_fluke, outline, 5.4 * s, true)
-	draw_polyline(left_fluke, edge, 2.5 * s, true)
-	draw_polyline(right_fluke, edge, 2.5 * s, true)
-	draw_circle(Vector2.ZERO, 2.2 * s, core)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	if energy > 0.0:
-		var pulse: = 0.5 + 0.5 * sin(time_alive * 14.0 + center.x * 0.01)
-		draw_arc(center, (size * 0.58) + pulse * 3.0, time_alive * 6.0, time_alive * 6.0 + PI * 1.35, 22, Color(0.38, 1.0, 0.42, 0.34 * alpha * energy), 1.5)
-		draw_circle(center + Vector2(cos(time_alive * 18.0), sin(time_alive * 13.0)) * size * 0.42, 2.0 * s, Color(0.76, 1.0, 0.48, 0.72 * alpha * energy))
+	CombatEffectsPresentation._draw_ancorada_anchor_icon(self, center, size, draw_rotation, alpha, energy)
 
 
 func _draw_secondary_ancorada(secondary: Dictionary, camera: Vector2) -> void :
-	var center_world: Vector2 = secondary.get("center", player_pos)
-	var center: Vector2 = center_world - camera
-	var radius: float = float(secondary.get("radius", ANCORADA_ULTIMATE_RADIUS))
-	var charge: float = clampf(float(secondary.get("charge", 0.0)) / SECONDARY_ANCORADA_DURATION, 0.0, 1.0)
-	var life_ratio: float = clampf(float(secondary.get("life", 0.0)) / maxf(0.01, float(secondary.get("max", SECONDARY_ANCORADA_DURATION))), 0.0, 1.0)
-	var ring_alpha: float = 0.2 + 0.4 * life_ratio
-	draw_arc(center, radius, 0.0, TAU, 80, Color(0.01, 0.04, 0.02, 0.72 * ring_alpha), 5.0)
-	draw_arc(center, radius, 0.0, TAU, 80, Color(0.28, 1.0, 0.36, 0.86 * ring_alpha), 2.2)
-	draw_arc(center, radius * (0.22 + 0.12 * sin(time_alive * 2.5 + charge * 3.0)), 0.0, TAU, 44, Color(0.7, 1.0, 0.44, 0.34 * life_ratio), 1.6)
-	for i in range(16):
-		var ang: float = time_alive * 0.48 + float(i) * TAU / 16.0
-		var inner: Vector2 = center + Vector2.from_angle(ang) * (radius - 18.0)
-		var outer: Vector2 = center + Vector2.from_angle(ang + 0.05) * (radius + 12.0)
-		draw_line(inner, outer, Color(0.32, 1.0, 0.42, 0.13 * life_ratio), 1.2)
-	var drops: Array = secondary.get("drops", [])
-	for drop in drops:
-		var fall: float = maxf(0.05, float(drop.get("fall", ANCORADA_ULTIMATE_FALL_TIME)))
-		var p: float = clampf(float(drop.get("age", 0.0)) / fall, 0.0, 1.0)
-		var eased: float = 1.0 - pow(1.0 - p, 2.2)
-		var start: Vector2 = Vector2(drop.get("start", center_world)) - camera
-		var target: Vector2 = Vector2(drop.get("target", center_world)) - camera
-		var pos: Vector2 = start.lerp(target, eased)
-		var drop_seed: float = float(drop.get("seed", 0.0))
-		var drop_alpha: float = 1.0 if not bool(drop.get("hit", false)) else clampf(1.0 - (float(drop.get("age", 0.0)) - fall) / 0.42, 0.0, 1.0)
-		for spark_i in range(5):
-			var spark_phase: float = drop_seed + float(spark_i) * 1.9 + time_alive * (8.0 + float(spark_i))
-			var offset: Vector2 = Vector2(sin(spark_phase) * (5.0 + float(spark_i)), - float(spark_i) * 8.0 - 12.0)
-			draw_line(pos + offset, pos + offset + Vector2(sin(spark_phase * 0.7) * 4.0, -22.0), Color(0.38, 1.0, 0.36, 0.4 * drop_alpha), 1.6)
-		draw_line(pos + Vector2(0.0, -46.0), pos + Vector2(0.0, -10.0), Color(0.22, 1.0, 0.38, 0.24 * drop_alpha), 5.0)
-		_draw_ancorada_anchor_icon(pos, 46.0, 0.0, drop_alpha, 1.0)
-	var impacts: Array = secondary.get("impacts", [])
-	for impact in impacts:
-		var impact_pos: Vector2 = Vector2(impact.get("pos", center_world)) - camera
-		var max_life: float = maxf(0.01, float(impact.get("max", 0.58)))
-		var impact_progress: float = 1.0 - clampf(float(impact.get("life", 0.0)) / max_life, 0.0, 1.0)
-		var impact_alpha: float = 1.0 - impact_progress
-		var ripple_radius: float = 18.0 + float(impact.get("radius", ANCORADA_ULTIMATE_IMPACT_RADIUS)) * (0.48 + impact_progress * 0.72)
-		draw_circle(impact_pos, ripple_radius * 0.95, Color(0.16, 1.0, 0.25, 0.1 * impact_alpha))
-		draw_circle(impact_pos, 18.0 + 28.0 * impact_progress, Color(0.62, 1.0, 0.12, 0.32 * impact_alpha))
-		draw_arc(impact_pos, ripple_radius, 0.0, TAU, 64, Color(0.0, 0.015, 0.0, 0.96 * impact_alpha), 10.0)
-		draw_arc(impact_pos, ripple_radius, 0.0, TAU, 64, Color(0.88, 1.0, 0.16, 1.0 * impact_alpha), 4.8)
-		draw_arc(impact_pos, ripple_radius * 0.68, 0.0, TAU, 52, Color(0.26, 1.0, 0.26, 0.94 * impact_alpha), 3.4)
-		draw_arc(impact_pos, ripple_radius * 0.38, 0.0, TAU, 42, Color(0.96, 1.0, 0.54, 0.82 * impact_alpha), 2.4)
-		for ray_i in range(8):
-			var ray_angle: float = time_alive * 0.12 + float(ray_i) * TAU / 8.0
-			var ray_a: Vector2 = impact_pos + Vector2.from_angle(ray_angle) * (ripple_radius * 0.28)
-			var ray_b: Vector2 = impact_pos + Vector2.from_angle(ray_angle) * (ripple_radius * 0.92)
-			draw_line(ray_a, ray_b, Color(0.44, 1.0, 0.36, 0.22 * impact_alpha), 1.8)
+	CombatEffectsPresentation._draw_secondary_ancorada(self, secondary, camera)
 
 
 func _texture_frame(key: String, index: int) -> Texture2D:
@@ -47103,77 +39689,7 @@ func _boss6_form_key() -> String:
 
 
 func _enemy_texture(enemy: Dictionary) -> Texture2D:
-	var idx: int = int(enemy["phase"]) % 2
-	var kind7: String = String(enemy.get("type", ENEMY_COMMON))
-	if kind7 == ENEMY_CINERIDO:
-		var cinerido_key: String = "enemy_phase_7_cinerido_atk" if String(enemy.get("phase7_state", "walk")) in ["windup", "active"] else "enemy_phase_7_cinerido_mov"
-		var cinerido_frames: Array = textures.get(cinerido_key, [])
-		var cinerido_idx: int = int(floor(float(enemy.get("phase", 0.0)))) % max(1, cinerido_frames.size())
-		var cinerido_texture: Texture2D = _texture_frame(cinerido_key, cinerido_idx)
-		return cinerido_texture if cinerido_texture != null else _texture_frame("enemy_common_phase_1", idx)
-	if kind7 == ENEMY_PANGOLIRO:
-		var pangoliro_key: String = "enemy_phase_7_pangoliro_atk" if String(enemy.get("phase7_state", "walk")) in ["windup", "roll"] else "enemy_phase_7_pangoliro"
-		var pangoliro_frames: Array = textures.get(pangoliro_key, [])
-		var pangoliro_idx: int = int(floor(float(enemy.get("phase", 0.0)))) % max(1, pangoliro_frames.size())
-		var pangoliro_texture: Texture2D = _texture_frame(pangoliro_key, pangoliro_idx)
-		return pangoliro_texture if pangoliro_texture != null else _texture_frame("enemy_common_phase_1", idx)
-	if kind7 == ENEMY_CORVOL:
-		var corvol_frames: Array = textures.get("enemy_phase_7_corvol", [])
-		var corvol_idx: int = int(floor(float(enemy.get("phase", 0.0)))) % max(1, corvol_frames.size())
-		var corvol_texture: Texture2D = _texture_frame("enemy_phase_7_corvol", corvol_idx)
-		return corvol_texture if corvol_texture != null else _texture_frame("enemy_common_phase_1", idx)
-	if current_phase == 6:
-		var kind6: = String(enemy.get("type", ENEMY_MIASMA_EEL))
-		if kind6 == ENEMY_MIASMA_EEL:
-			idx = 1 if float(enemy.get("eel_attack_flash", 0.0)) > 0.0 else 0
-		elif kind6 == ENEMY_LODARIO:
-			idx = 1 if float(enemy.get("lodario_jump_progress", 0.0)) > 0.0 else 0
-		elif kind6 == ENEMY_FOSSIL_PUSTULE:
-			idx = 1 if float(enemy.get("pustule_spit_flash", 0.0)) > 0.0 else (int(floor(time_alive / 0.5)) % 2)
-		elif kind6 == ENEMY_CHRONAL_LEECH:
-			var leech_state: = String(enemy.get("leech_state", SANGUESSUGA_STATE_FALL_WARNING))
-			idx = 1 if leech_state in [SANGUESSUGA_STATE_LEAPING, SANGUESSUGA_STATE_ATTACHED] else 0
-		var phase6_texture: = _texture_frame(_phase6_enemy_texture_key(kind6), idx)
-		return phase6_texture if phase6_texture != null else _texture_frame("enemy_common_phase_1", idx)
-	if current_phase == 4:
-		var moving_right4 = Vector2(enemy.get("facing_dir", Vector2.LEFT)).x >= 0.0
-		var phase4_key = "enemy_phase_4_right" if moving_right4 else "enemy_phase_4_left"
-		var phase4_texture: = _texture_frame(phase4_key, idx)
-		return phase4_texture if phase4_texture != null else _texture_frame("enemy_common_phase_1", idx)
-	if current_phase == 3:
-		var moving_right = Vector2(enemy.get("facing_dir", Vector2.LEFT)).x >= 0.0
-		var phase3_key = "enemy_phase_3_right" if moving_right else "enemy_phase_3_left"
-		var phase3_texture: = _texture_frame(phase3_key, idx)
-		return phase3_texture if phase3_texture != null else _texture_frame("enemy_common_phase_1", idx)
-	var type_key: = ""
-	match enemy["type"]:
-		ENEMY_AGGLOMERATOR: type_key = "agglomerator"
-		ENEMY_STALKER: type_key = "stalker"
-		ENEMY_PROJECTOR: type_key = "projector"
-		ENEMY_CRYSTAL: type_key = "crystal"
-		ENEMY_CURATER: type_key = "curater"
-		ENEMY_LARAPIO: type_key = "larapio"
-	if type_key != "":
-		var type_texture: = _texture_frame(type_key, idx)
-		if type_texture != null:
-			return type_texture
-	if current_phase == 2:
-		var phase2_kind: = String(enemy.get("type", ENEMY_COMMON))
-		if phase2_kind == ENEMY_KAMIKAZE:
-			var kamikaze_texture: = _texture_frame("enemy_phase_2_kamikaze", idx)
-			if kamikaze_texture != null:
-				return kamikaze_texture
-		if phase2_kind == ENEMY_PYRO_PENGUIN:
-			var pyro_texture: = _texture_frame("enemy_phase_2_pyro", idx)
-			if pyro_texture != null:
-				return pyro_texture
-		var player_is_right = player_pos.x >= float(enemy["pos"].x)
-		var phase2_key = "enemy_common_phase_2_right" if player_is_right else "enemy_common_phase_2_left"
-		var phase2_texture: = _texture_frame(phase2_key, idx)
-		if phase2_texture != null:
-			return phase2_texture
-	var common_texture: = _texture_frame("enemy_common_phase_1", idx)
-	return common_texture if common_texture != null else _texture_frame("enemy_left", idx)
+	return EntityVisualProfiles._enemy_texture(self, enemy)
 
 
 func _enemy_default_facing(kind: String) -> Vector2:
@@ -47192,36 +39708,7 @@ func _enemy_default_facing(kind: String) -> Vector2:
 
 
 func _enemy_should_flip(enemy: Dictionary) -> bool:
-	if current_phase == 6:
-		var phase6_kind: = String(enemy.get("type", ENEMY_COMMON))
-		var phase6_dir: Vector2 = Vector2(enemy.get("facing_dir", _enemy_default_facing(phase6_kind)))
-		if phase6_kind == ENEMY_LODARIO:
-			return phase6_dir.x > 0.05
-		return false
-	if current_phase == 3 or current_phase == 4:
-		return false
-	var dir: Vector2 = Vector2(enemy.get("facing_dir", _enemy_default_facing(String(enemy.get("type", ENEMY_COMMON)))))
-	var moving_right = dir.x >= 0.0
-	match String(enemy.get("type", ENEMY_COMMON)):
-		ENEMY_COMMON:
-			return moving_right
-		ENEMY_KAMIKAZE, ENEMY_PYRO_PENGUIN:
-			return moving_right
-		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL:
-			return moving_right
-		ENEMY_STALKER:
-			return not moving_right
-		ENEMY_PROJECTOR:
-			return not moving_right
-		ENEMY_CRYSTAL:
-			return moving_right
-		ENEMY_LARAPIO:
-			return not moving_right
-		ENEMY_COUT_ATTACK_SPEED:
-			return not moving_right
-		ENEMY_SHIELD_REFLECTOR:
-			return moving_right
-	return false
+	return EntityVisualProfiles._enemy_should_flip(self, enemy)
 
 
 func _enemy_type_count(kind: String) -> int:
@@ -47233,774 +39720,87 @@ func _enemy_type_count(kind: String) -> int:
 
 
 func _enemy_visual_offset(enemy: Dictionary) -> Vector2:
-	if String(enemy.get("type", "")) == ENEMY_LODARIO:
-		return Vector2(0.0, - float(enemy.get("lodario_hop_arc", 0.0)))
-	if String(enemy.get("type", "")) == ENEMY_CORVOL:
-		return Vector2(0.0, -float(enemy.get("phase7_height", 22.0)))
-	if String(enemy.get("type", "")) != ENEMY_LARAPIO:
-		return Vector2.ZERO
-	var move_dir: Vector2 = Vector2(enemy.get("last_move_dir", Vector2.ZERO))
-	if move_dir.length() <= 0.05:
-		return Vector2.ZERO
-	var cycle = fmod(time_alive + float(enemy.get("phase", 0.0)) * 0.07, 1.0)
-	var hop = 0.0
-	var happy = float(enemy.get("happy_timer", 0.0)) > 0.0 or int(enemy.get("stolen", 0)) > 0
-	var hop_window = 0.32 if happy else 0.22
-	var hop_height = 24.0 if happy else 14.0
-	if cycle < hop_window:
-		hop = - sin(cycle / hop_window * PI) * hop_height
-	return Vector2(0.0, hop)
+	return EntityVisualProfiles._enemy_visual_offset(self, enemy)
 
 
 func _boss_texture() -> Texture2D:
-	if current_phase == 7:
-		var key7: = "boss7_dive" if boss7_state == BOSS7_STATE_DIVE else "boss7_fly"
-		var frames7: Array = textures.get(key7, [])
-		if not frames7.is_empty() and frames7[int(boss_phase) % frames7.size()] != null:
-			return frames7[int(boss_phase) % frames7.size()]
-		return textures["boss"]
-	if current_phase == 6:
-		var form_key: = _boss6_form_key()
-		var frames6: Array = textures.get(form_key, [])
-		if not frames6.is_empty() and frames6[int(boss_phase) % frames6.size()] != null:
-			return frames6[int(boss_phase) % frames6.size()]
-		return textures["boss"]
-	if current_phase == 5:
-		if boss5_siphon_timer > 0.0:
-			var shield_frames: Array = textures.get("boss5_shield", [])
-			if not shield_frames.is_empty() and shield_frames[int(boss_phase) % shield_frames.size()] != null:
-				return shield_frames[int(boss_phase) % shield_frames.size()]
-		if damage_flash_timer > 0.0:
-			var damage_frames: Array = textures.get("boss5_damage", [])
-			if not damage_frames.is_empty() and damage_frames[int(boss_phase) % damage_frames.size()] != null:
-				return damage_frames[int(boss_phase) % damage_frames.size()]
-		var frames5: Array = textures.get("boss5", [])
-		if not frames5.is_empty() and frames5[int(boss_phase) % frames5.size()] != null:
-			return frames5[int(boss_phase) % frames5.size()]
-		return textures["boss"]
-	if current_phase == 4:
-		if boss4_attack_pose_timer > 0.0 and textures.get("boss4_attack") != null:
-			return textures["boss4_attack"]
-		var frames4: Array = textures.get("boss4", [])
-		if not frames4.is_empty():
-			return frames4[int(boss4_anim_time) % frames4.size()]
-		return textures["boss"]
-	if current_phase == 3:
-		var idx3 = int(boss_phase) % 2
-		var use_walk_frames = boss3_is_moving and textures.has("boss_walk")
-		return textures["boss_walk"][idx3] if use_walk_frames else textures["boss3"][idx3]
-	if current_phase == 2:
-		return _boss2_texture()
-	var pct = boss_hp / max(1.0, boss_hp_max)
-	var idx = int(boss_phase) % 2
-	if pct >= 0.6:
-		return textures["boss_stage1"][idx] if textures["boss_stage1"][idx] else textures["boss"]
-	if pct >= 0.4:
-		return textures["boss_stage2"][idx] if textures["boss_stage2"][idx] else textures["boss"]
-	return textures["boss_stage3"][idx] if textures["boss_stage3"][idx] else textures["boss"]
+	return EntityVisualProfiles._boss_texture(self)
 
 
 func _boss2_texture() -> Texture2D:
-	var boss2_frames = textures.get("boss2", [])
-	if not boss2_frames is Array or boss2_frames.is_empty():
-		return textures["boss"]
-	var frames: Array = boss2_frames
-	var frame_count: = 2 if boss2_state == BOSS2_STATE_REPOSITION else frames.size()
-	var idx = boss2_anim_frame % max(1, min(frame_count, frames.size()))
-	return frames[idx] if frames[idx] else textures["boss"]
+	return EntityVisualProfiles._boss2_texture(self)
 
 
 func _boss_draw_position() -> Vector2:
-	if current_phase == 7:
-		var hover: = -18.0 + sin(boss_phase * 0.9) * 5.0
-		if boss7_state == BOSS7_STATE_DIVE:
-			hover = -8.0
-		return boss_pos + Vector2(0, hover)
-	if current_phase == 6:
-		return boss_pos
-	if current_phase == 5:
-		return boss_pos + Vector2(sin(boss_phase * 0.65) * 4.0, sin(boss_phase * 1.1) * 5.0)
-	if current_phase == 4:
-		return boss_pos + Vector2(0, sin(boss4_anim_time * 2.0) * 4.0)
-	if current_phase == 3:
-		return boss_pos
-	if current_phase == 2:
-		var bob: = 0.0
-		if boss2_state == BOSS2_STATE_REPOSITION:
-			bob = abs(sin((float(boss2_anim_frame) + boss2_anim_timer * 3.0) * PI)) * 9.0
-		elif boss2_state != BOSS2_STATE_IDLE:
-			bob = sin(time_alive * 6.0) * 3.0
-		else:
-			bob = sin(time_alive * 2.2) * 2.0
-		return boss_pos + Vector2(0, - bob)
-	if boss_stage_timer <= 0.0:
-		return boss_pos
-	var elapsed = BOSS_STAGE_JUMP_TIME - boss_stage_timer
-	var hop = 0.0
-	if elapsed <= BOSS_STAGE_SLAM_TIME:
-		var jump_progress = clamp(elapsed / BOSS_STAGE_SLAM_TIME, 0.0, 1.0)
-		hop = sin(jump_progress * PI) * 188.0
-	else:
-		var rebound_time = elapsed - BOSS_STAGE_SLAM_TIME
-		hop = abs(sin(rebound_time * PI * 2.2)) * 28.0 * exp( - rebound_time * 2.6)
-	return boss_pos + Vector2(0, - hop)
+	return EntityVisualProfiles._boss_draw_position(self)
 
 
 func _draw_boss6_amber_heart(center: Vector2, size: Vector2) -> void :
-	var hp_ratio: float = boss_hp / max(1.0, boss_hp_max)
-	if hp_ratio > 0.2:
-		return
-	var intensity: float = clamp(1.0 - hp_ratio / 0.2, 0.0, 1.0)
-	var t: float = time_alive * (4.0 + intensity * 3.0)
-	var heart: Vector2 = center + Vector2(0.0, - size.y * 0.09)
-	var pulse: float = 1.0 + sin(t) * 0.1 + intensity * 0.18
-	draw_circle(heart, 14.0 * pulse, Color(1.0, 0.48, 0.08, 0.24 + intensity * 0.18))
-	draw_circle(heart, 8.0 * pulse, Color(1.0, 0.68, 0.18, 0.56 + intensity * 0.24))
-	draw_arc(heart, 23.0 + sin(t * 1.3) * 4.0, t, t + PI * 1.42, 36, Color(1.0, 0.78, 0.24, 0.7), 2.6)
-	draw_arc(heart, 35.0 + intensity * 10.0, - t * 0.72, - t * 0.72 + PI * 1.12, 42, Color(1.0, 0.24, 0.08, 0.34 + intensity * 0.22), 2.0)
-	for i in range(6):
-		var angle: float = t * 0.8 + float(i) * TAU / 6.0
-		var start: Vector2 = heart + Vector2.from_angle(angle) * (18.0 + intensity * 5.0)
-		var finish: Vector2 = heart + Vector2.from_angle(angle) * (34.0 + sin(t + float(i)) * 4.0 + intensity * 14.0)
-		draw_line(start, finish, Color(1.0, 0.54, 0.12, 0.26 + intensity * 0.22), 1.8)
+	WorldEnvironmentPresentation._draw_boss6_amber_heart(self, center, size)
 
 
 func _draw_projectiles(camera: Vector2) -> void :
-	if not boss1_rewind_sequence.is_empty():
-		return
-	var all_bullets = bullets + remote_bullets
-	for bullet in all_bullets:
-		if not _world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
-			continue
-		var kind = String(bullet.get("kind", ""))
-		var palette = _projectile_palette(kind)
-		var pos = bullet["pos"] - camera
-		var dir: Vector2 = bullet["dir"]
-		var side = dir.orthogonal().normalized()
-		var age = float(bullet.get("age", 0.0))
-		var phase = float(bullet.get("phase", 0.0))
-		match kind:
-			"shuriken_eclipsado", "eclipsada", "eclipsada_lua", "eclipsada_sol":
-				var spin_angle: float = age * 28.0 + phase
-				var shadow_trail = pos - dir * 18.0
-				var shuriken_color: Color = palette["glow"]
-				var edge_color: = Color(1.0, 0.86, 0.38, 0.92) if kind == "eclipsada_sol" else Color(0.88, 0.72, 1.0, 0.92)
-				draw_line(shadow_trail, pos, Color(shuriken_color.r, shuriken_color.g, shuriken_color.b, 0.45), 6.0)
-				draw_line(shadow_trail, pos, Color(1.0, 0.95, 0.78, 0.85) if kind == "eclipsada_sol" else Color(0.85, 0.5, 1.0, 0.85), 2.0)
-				draw_circle(pos, 14.0, Color(shuriken_color.r, shuriken_color.g, shuriken_color.b, 0.28))
-				var star_pts = PackedVector2Array()
-				for i in range(10):
-					var a_rad: = spin_angle + i * (TAU / 10.0)
-					var r_dist: = 16.0 if i % 2 == 0 else 5.5
-					star_pts.append(pos + Vector2.from_angle(a_rad) * r_dist)
-				draw_polygon(star_pts, PackedColorArray([Color(1.0, 0.66, 0.18) if kind == "eclipsada_sol" else Color(0.82, 0.42, 1.0)]))
-				star_pts.append(star_pts[0])
-				draw_polyline(star_pts, edge_color, 1.8, true)
-				draw_circle(pos, 3.5, Color(1.0, 0.95, 0.65))
-			"retornante":
-				var state: = String(bullet.get("state", "ida"))
-				var c: = Color(1.0, 0.42, 0.92) if state == "volta" else Color(0.64, 0.42, 1.0)
-				var outer: = 13.0 + sin(age * 16.0) * 2.0
-				draw_circle(pos, 6.5, c)
-				draw_arc(pos, outer, age * 7.0, age * 7.0 + PI * 1.55, 28, Color(c.r, c.g, c.b, 0.88), 2.2)
-				draw_line(pos - dir * 10.0, pos + dir * 10.0, Color(1.0, 1.0, 1.0, 0.68), 1.2)
-			"prismatica":
-				var start = pos - dir * 30.0
-				var end = pos + dir * 8.0
-				draw_line(start, end, Color(1.0, 1.0, 1.0, 0.95), 2.2)
-				draw_line(start, end, Color(0.32, 1.0, 0.96, 0.42), 7.0)
-				var diamond = PackedVector2Array([
-					pos + dir * 10.0, 
-					pos + side * 7.0, 
-					pos - dir * 10.0, 
-					pos - side * 7.0
-				])
-				draw_polygon(diamond, PackedColorArray([Color(0.9, 1.0, 1.0, 0.96)]))
-				draw_polyline(PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]]), Color(1.0, 0.62, 0.86, 0.72), 1.5, true)
-			"parasitica":
-				var wobble = side * sin(age * 13.0 + phase) * 5.0
-				var draw_pos = pos + wobble
-				draw_circle(draw_pos, 9.0, palette["glow"])
-				draw_circle(draw_pos, 5.2, palette["core"])
-				for i in range(3):
-					var ang = age * 7.0 + phase + i * TAU / 3.0
-					draw_circle(draw_pos + Vector2.from_angle(ang) * 7.0, 2.2, Color(0.72, 1.0, 0.4, 0.82))
-			"necronada_dust":
-				var dust_alpha: = clampf(float(bullet.get("life", 0.0)) / maxf(0.01, float(bullet.get("max_life", 0.8))), 0.0, 1.0)
-				for i in range(10):
-					var local: Vector2 = - dir * (float(i) * 5.0 + sin(age * 9.0 + float(i)) * 2.0) + side * sin(age * 11.0 + phase + float(i) * 0.7) * (4.0 + float(i) * 0.65)
-					var grain_pos: Vector2 = pos + local
-					var size: = 4.5 + sin(age * 14.0 + float(i)) * 1.2
-					draw_circle(grain_pos, size, Color(0.05, 0.025, 0.08, 0.4 * dust_alpha))
-					draw_circle(grain_pos + dir * 1.5, maxf(1.5, size * 0.45), Color(0.66, 0.35, 1.0, 0.54 * dust_alpha))
-				draw_arc(pos, 20.0 + sin(age * 16.0) * 3.0, phase + age * 5.0, phase + age * 5.0 + PI * 1.25, 24, Color(0.78, 0.58, 1.0, 0.62 * dust_alpha), 2.0)
-			"gravitante":
-				draw_circle(pos, 10.0, palette["glow"])
-				draw_circle(pos, 4.5, palette["core"])
-				var orb_ang = age * 9.0 + phase
-				draw_arc(pos, 14.0, orb_ang, orb_ang + PI * 1.35, 24, Color(0.82, 0.88, 1.0, 0.82), 2)
-				draw_circle(pos + Vector2.from_angle(orb_ang) * 12.0, 2.8, Color(0.86, 0.92, 1.0, 0.9))
-			"bombastica":
-				var fuse_tip: Vector2 = pos - dir * 15.0 + side * sin(age * 18.0 + phase) * 5.0
-				var head: Vector2 = pos + dir * 9.0
-				draw_line(fuse_tip, head, Color(0.18, 0.88, 1.0, 0.52), 3.2, true)
-				draw_circle(head, 16.0, Color(1.0, 0.48, 0.08, 0.18))
-				draw_circle(head, 10.0, Color(1.0, 0.42, 0.06, 0.92))
-				draw_circle(head, 5.0, Color(1.0, 0.94, 0.48, 0.95))
-				draw_arc(head, 16.0, age * 8.0, age * 8.0 + PI * 1.4, 28, Color(1.0, 0.84, 0.28, 0.76), 2.0)
-				draw_circle(fuse_tip, 4.5 + sin(age * 24.0) * 1.5, Color(1.0, 0.96, 0.62, 0.9))
-			"ancorada":
-				var rot_angle = dir.angle() - PI * 0.5 + deg_to_rad(620.0 * age)
-				draw_line(pos - dir * 20.0, pos - dir * 8.0, Color(0.24, 1.0, 0.38, 0.26), 5.0)
-				_draw_ancorada_anchor_icon(pos, 28.0, rot_angle, 1.0, 0.9)
-			"eletrica", "eletrica_charged":
-				var charge_mult = 1.45 if kind == "eletrica_charged" else 1.0
-				var a = pos - dir * (16.0 * charge_mult)
-				var b = pos - dir * (6.0 * charge_mult) + side * sin(age * 28.0 + phase) * 5.0 * charge_mult
-				var c = pos + dir * (7.0 * charge_mult)
-				draw_polyline(PackedVector2Array([a, b, c]), Color(0.86, 0.28, 1.0, 0.54), 7.0 * charge_mult, true)
-				draw_polyline(PackedVector2Array([a, b, c]), Color(0.74, 1.0, 1.0, 0.96), 3.0 * charge_mult, true)
-				draw_circle(pos, 7.0 * charge_mult, palette["glow"])
-				draw_circle(pos, 3.8 * charge_mult, Color.WHITE)
-				if kind == "eletrica_charged":
-					draw_arc(pos, 18.0, 0, TAU, 28, Color(1.0, 1.0, 1.0, 0.68), 2)
-			"petro":
-				var body = PackedVector2Array([
-					pos + dir * 9.0, 
-					pos + side * 5.0, 
-					pos - dir * 9.0, 
-					pos - side * 5.0
-				])
-				draw_polygon(body, PackedColorArray([Color(0.24, 1.0, 1.0, 0.92)]))
-				draw_polyline(PackedVector2Array([body[0], body[1], body[2], body[3], body[0]]), Color.WHITE, 1.2, true)
-			_:
-				var c: Color = bullet["color"]
-				draw_circle(pos, 7, c)
-				c.a = 0.22
-				draw_circle(pos, 15, c)
-	for bullet in return_bullets:
-		if not _world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
-			continue
-		var pos = bullet["pos"] - camera
-		var dir = Vector2(bullet.get("dir", Vector2.RIGHT))
-		var age = float(bullet.get("age", 0.0))
-		var state = String(bullet.get("state", "volta" if bool(bullet.get("returning", false)) else "ida"))
-		var c = _manifestation_color()
-		if state == "instavel":
-			c = Color(1.0, 0.28, 0.76)
-		elif state == "volta":
-			c = Color(1.0, 0.42, 0.92)
-		var boosted = float(bullet.get("paradox_until", 0.0)) > time_alive or state == "instavel"
-		var core_radius = 13.0 if boosted else 6.5
-		var outer = 34.0 + sin(age * 16.0) * 6.0 if boosted else (17.0 + sin(age * 16.0) * 3.0 if state == "instavel" else 13.0 + sin(age * 16.0) * 2.0)
-		draw_circle(pos, core_radius, c)
-		draw_arc(pos, outer, age * 7.0, age * 7.0 + PI * 1.55, 28, Color(c.r, c.g, c.b, 0.88), 2.2)
-		draw_line(pos - dir * 10.0, pos + dir * 10.0, Color(1.0, 1.0, 1.0, 0.68), 1.2)
-		if state == "instavel":
-			draw_arc(pos, outer + 8.0, age * 4.5, age * 4.5 + PI * 1.15, 22, Color(1.0, 0.76, 0.92, 0.56), 1.6)
-	for bullet in enemy_bullets:
-		if not _world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
-			continue
-		if bullet.get("type") == "boss4_comet":
-			var comet_pos: Vector2 = Vector2(bullet["pos"]) - camera
-			var comet_dir: Vector2 = Vector2(bullet.get("dir", Vector2.LEFT)).normalized()
-			var comet_side: Vector2 = comet_dir.orthogonal()
-			var comet_phase: float = float(bullet.get("phase", 0.0))
-			var comet_radius: float = BOSS4_COMET_RADIUS
-			var tail := PackedVector2Array()
-			for i in range(7):
-				var tail_t: float = float(i) / 6.0
-				var curve: float = sin(comet_phase * 0.7 + time_alive * 6.0 + tail_t * 5.0) * (1.0 - tail_t) * 12.0
-				tail.append(comet_pos - comet_dir * (comet_radius * (0.3 + tail_t * 2.1)) + comet_side * curve)
-			draw_polyline(tail, Color(0.2, 0.56, 1.0, 0.18), 18.0, true)
-			draw_polyline(tail, Color(0.72, 0.9, 1.0, 0.62), 5.0, true)
-			var rock := PackedVector2Array()
-			for i in range(8):
-				var rock_angle: float = float(i) * TAU / 8.0 + comet_phase * 0.08
-				rock.append(comet_pos + Vector2.from_angle(rock_angle) * comet_radius * (0.82 + 0.16 * sin(comet_phase + i * 2.3)))
-			draw_circle(comet_pos, comet_radius * 1.45, Color(0.16, 0.52, 1.0, 0.16))
-			draw_colored_polygon(rock, Color(0.2, 0.18, 0.22, 0.98))
-			var rock_outline: PackedVector2Array = rock.duplicate()
-			rock_outline.append(rock[0])
-			draw_polyline(rock_outline, Color(1.0, 0.7, 0.22, 0.96), 3.2, true)
-			draw_circle(comet_pos - comet_dir * 7.0 - comet_side * 7.0, 7.0, Color(0.44, 0.76, 0.96, 0.72))
-			draw_arc(comet_pos, comet_radius * 1.18, comet_phase, comet_phase + PI * 1.4, 32, Color(0.42, 0.92, 1.0, 0.78), 2.4)
-		elif bullet.get("type") == "boss7_dive_fireball":
-			var pos: Vector2 = Vector2(bullet["pos"]) - camera
-			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.DOWN)).normalized()
-			var phase: float = float(bullet.get("phase", 0.0))
-			var radius: float = float(bullet.get("radius", BOSS7_DIVE_FIREBALL_RADIUS))
-			PhoenixFire.draw_projectile(self, pos, dir, radius, time_alive, phase, _phase7_visual_budget_enabled())
-		elif bullet.get("type") == "phase7_fireball":
-			var pos: Vector2 = Vector2(bullet["pos"]) - camera
-			var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-			PhoenixFire.draw_projectile(self, pos, dir, float(bullet.get("radius", 14.0)), time_alive, float(bullet.get("phase", 0.0)), _phase7_visual_budget_enabled())
-		elif bullet.get("type") == "pyro_wall_seed":
-			var pos: = Vector2(bullet["pos"]) - camera
-			var dir: = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-			var side: = dir.orthogonal()
-			var flame: = PackedVector2Array([pos + dir * 19.0, pos + side * 10.0, pos - dir * 14.0, pos - side * 10.0])
-			draw_circle(pos, 22.0, Color(1.0, 0.1, 0.02, 0.2))
-			draw_colored_polygon(flame, Color(1.0, 0.24, 0.04, 0.96))
-			draw_polyline(PackedVector2Array([flame[0], flame[1], flame[2], flame[3], flame[0]]), Color(1.0, 0.86, 0.28, 0.95), 2.4, true)
-		elif bullet.get("type") == "miasma_cheese_spit":
-			var pos: = Vector2(bullet["pos"]) - camera
-			var cheese_tex: Texture2D = textures.get("boss3_cheese")
-			draw_circle(pos, 31.0, Color(0.34, 0.48, 0.02, 0.38))
-			draw_arc(pos, 30.0, 0.0, TAU, 30, Color(0.88, 1.0, 0.28, 0.94), 3.0)
-			_draw_entity_fit(cheese_tex, pos, Vector2(48, 42), Color(0.88, 1.0, 0.42))
-		elif bullet.get("type") == "miasma_eel_spit":
-			var pos: = Vector2(bullet["pos"]) - camera
-			var dir: = Vector2(bullet.get("dir", Vector2.LEFT)).normalized()
-			var side: = dir.orthogonal()
-			var phase: = float(bullet.get("phase", 0.0))
-			var glob: = PackedVector2Array([
-				pos + dir * 20.0, 
-				pos + side * (11.0 + sin(phase) * 2.0), 
-				pos - dir * 15.0, 
-				pos - side * (10.0 + cos(phase) * 2.0)
-			])
-			draw_circle(pos, 30.0, Color(0.1, 0.78, 0.1, 0.22))
-			draw_colored_polygon(glob, Color(0.28, 1.0, 0.16, 0.92))
-			draw_polyline(PackedVector2Array([glob[0], glob[1], glob[2], glob[3], glob[0]]), Color(0.9, 1.0, 0.38, 0.92), 2.2, true)
-			draw_arc(pos, 24.0, phase + time_alive * 6.0, phase + time_alive * 6.0 + PI * 1.4, 24, Color(0.64, 1.0, 0.2, 0.72), 2.0)
-		elif bullet.get("type") == "pustula_fossil_spit":
-			var pos: = Vector2(bullet["pos"]) - camera
-			var dir: = Vector2(bullet.get("dir", Vector2.LEFT)).normalized()
-			var side: = dir.orthogonal()
-			var phase: = float(bullet.get("phase", 0.0))
-			var glob: = PackedVector2Array([
-				pos + dir * 17.0, 
-				pos + side * (9.0 + sin(phase) * 2.0), 
-				pos - dir * 13.0, 
-				pos - side * (8.0 + cos(phase) * 2.0)
-			])
-			draw_circle(pos, 22.0, Color(0.16, 0.22, 0.06, 0.28))
-			draw_colored_polygon(glob, Color(0.58, 0.9, 0.16, 0.92))
-			draw_polyline(PackedVector2Array([glob[0], glob[1], glob[2], glob[3], glob[0]]), Color(0.92, 1.0, 0.42, 0.88), 1.8, true)
-			draw_line(pos - dir * 18.0, pos - dir * 34.0 + side * sin(phase * 1.7) * 4.0, Color(0.56, 0.78, 0.22, 0.45), 3.0, true)
-		elif bullet.get("type") == "rat_flask" or bullet.get("type") == "rat_spit":
-			var pos = Vector2(bullet["pos"]) - camera
-			var tex: Texture2D = textures.get("boss3_flask")
-			draw_circle(pos, 31.0, Color(0.14, 0.01, 0.24, 0.72))
-			draw_arc(pos, 31.0, 0.0, TAU, 30, Color(0.92, 0.58, 1.0, 0.96), 3.2)
-			_draw_entity_fit(tex, pos, Vector2(48, 60), Color(0.72, 1.0, 0.3) if bullet.get("type") == "rat_spit" else Color.WHITE)
-			draw_circle(pos, 34.0, Color(0.5, 0.88, 0.12, 0.14))
-		elif bullet.get("type") == "rat_shot":
-			var idx = int(float(bullet.get("phase", 0.0))) % 2
-			var rat_tex: Texture2D = textures["enemy_phase_3_bullet"][idx]
-			var pos: = Vector2(bullet["pos"]) - camera
-			draw_circle(pos, 25.0, Color(0.1, 0.01, 0.2, 0.76))
-			draw_arc(pos, 25.0, 0.0, TAU, 28, Color(0.94, 0.64, 1.0, 0.98), 3.0)
-			_draw_entity_fit(rat_tex, pos, Vector2(52, 38), Color.WHITE)
-		elif bullet.get("type") == "phase4_magic":
-			var idx: = int(float(bullet.get("phase", 0.0))) % 2
-			var magic_frames: Array = textures.get("enemy_phase_4_bullet", [])
-			var magic_tex: Texture2D = magic_frames[idx] if magic_frames.size() > idx else null
-			var pos: = Vector2(bullet["pos"]) - camera
-			var phase: = float(bullet.get("phase", 0.0))
-			draw_circle(pos, 27.0, Color(0.52, 0.08, 0.94, 0.26))
-			draw_arc(pos, 24.0, phase, phase + PI * 1.7, 28, Color(1.0, 0.7, 0.22, 0.92), 3.0)
-			_draw_entity_fit(magic_tex, pos, Vector2(42, 42), Color(0.92, 0.72, 1.0))
-		elif bullet.get("type") == "umbra_plasma":
-			var pos: = Vector2(bullet["pos"]) - camera
-			var dir: = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-			var side: = dir.orthogonal()
-			var phase: = float(bullet.get("phase", 0.0))
-			var core: = PackedVector2Array([pos + dir * 22.0, pos + side * 10.0, pos - dir * 16.0, pos - side * 10.0])
-			draw_circle(pos, 31.0, Color(0.05, 0.72, 0.18, 0.22))
-			draw_colored_polygon(core, Color(0.25, 1.0, 0.34, 0.96))
-			draw_polyline(PackedVector2Array([core[0], core[1], core[2], core[3], core[0]]), Color(0.86, 1.0, 0.74, 0.95), 2.2, true)
-			draw_arc(pos, 30.0, phase + time_alive * 7.5, phase + time_alive * 7.5 + PI * 1.55, 32, Color(0.58, 1.0, 0.64, 0.8), 2.5)
-		elif bullet.get("type") == "nexus_refracted":
-			var pos: = Vector2(bullet["pos"]) - camera
-			var dir: = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-			var side: = dir.orthogonal()
-			var shard: = PackedVector2Array([pos + dir * 18.0, pos + side * 8.0, pos - dir * 14.0, pos - side * 8.0])
-			draw_circle(pos, 22.0, Color(0.18, 0.76, 1.0, 0.18))
-			draw_colored_polygon(shard, Color(1.0, 0.26, 0.72, 0.92))
-			draw_polyline(PackedVector2Array([shard[0], shard[1], shard[2], shard[3], shard[0]]), Color(0.62, 1.0, 1.0, 0.94), 2.0, true)
-		elif bullet.get("type") == "arauto_shot":
-			var pos: = Vector2(bullet["pos"]) - camera
-			var dir: = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-			var side: = dir.orthogonal()
-			var phase: = float(bullet.get("phase", 0.0))
-			var core: = PackedVector2Array([pos + dir * 20.0, pos + side * 8.0, pos - dir * 18.0, pos - side * 8.0])
-			draw_circle(pos, 28.0, Color(0.7, 0.18, 1.0, 0.2))
-			draw_colored_polygon(core, Color(0.82, 0.34, 1.0, 0.94))
-			draw_polyline(PackedVector2Array([core[0], core[1], core[2], core[3], core[0]]), Color(0.72, 0.94, 1.0, 0.92), 2.2, true)
-			draw_arc(pos, 28.0, phase + time_alive * 5.0, phase + time_alive * 5.0 + PI * 1.45, 32, Color(1.0, 0.72, 1.0, 0.76), 2.2)
-		elif bullet.get("type") == "larapio_coin" or bullet.get("type") == "larapio_stone":
-			var pos = Vector2(bullet["pos"]) - camera
-			var phase = float(bullet.get("phase", 0.0))
-			var is_coin = bullet.get("type") == "larapio_coin"
-			if is_coin:
-				var body = Color(1.0, 0.78, 0.14)
-				var rim = Color(0.52, 0.28, 0.04)
-				draw_circle(pos, 10.0, Color(body.r, body.g, body.b, 0.82))
-				draw_arc(pos, 12.5, phase, phase + TAU * 0.92, 28, rim, 2.0)
-				draw_line(pos + Vector2(cos(phase), sin(phase)) * -6.0, pos + Vector2(cos(phase), sin(phase)) * 6.0, Color(1.0, 1.0, 0.72, 0.75), 1.6)
-			else:
-				var spin: float = float(bullet.get("spin", 1.0))
-				var angle: float = phase * (0.72 + absf(spin) * 0.42) * signf(spin if spin != 0.0 else 1.0)
-				var forward: Vector2 = Vector2.from_angle(angle)
-				var side: Vector2 = forward.orthogonal()
-				var wobble: float = sin(phase * 1.8)
-				var rock: = PackedVector2Array([
-					pos + forward * (15.0 + wobble * 2.0) - side * 2.0,
-					pos + forward * 4.0 + side * (13.0 + cos(phase) * 2.0),
-					pos - forward * (10.0 + sin(phase * 0.7) * 2.0) + side * 9.0,
-					pos - forward * (15.0 + cos(phase * 1.1) * 2.0) - side * 4.0,
-					pos - forward * 2.0 - side * (12.0 + wobble * 2.0)
-				])
-				var crack_col: Color = Color(0.72, 0.16, 1.0, 0.88).lerp(Color(1.0, 0.28, 0.72, 0.94), 0.5 + 0.5 * sin(phase * 2.3))
-				draw_circle(pos, 20.0, Color(0.42, 0.14, 0.68, 0.2))
-				draw_colored_polygon(rock, Color(0.54, 0.5, 0.56, 0.96))
-				draw_polyline(PackedVector2Array([rock[0], rock[1], rock[2], rock[3], rock[4], rock[0]]), Color(0.06, 0.045, 0.065, 0.9), 2.2, true)
-				draw_line(pos - forward * 9.0 - side * 4.0, pos + forward * 7.0 + side * 3.0, crack_col, 1.8, true)
-				draw_line(pos - forward * 2.0 + side * 8.0, pos + forward * 4.0 + side * 1.0, crack_col, 1.4, true)
-				draw_circle(pos + forward * 6.0 - side * 7.0, 2.5, Color(0.02, 0.015, 0.02, 0.92))
-				draw_circle(pos - forward * 7.0 + side * 2.0, 2.0, Color(0.02, 0.015, 0.02, 0.86))
-		elif bullet.get("type") == "atirador":
-			var c = Color(0.65, 0.85, 1.0)
-			draw_circle(bullet["pos"] - camera, 14, c)
-			draw_circle(bullet["pos"] - camera, 24, Color(0.3, 0.7, 1.0, 0.3))
-		elif bullet.get("type") == "boss_pressure_bubble":
-			var pos = Vector2(bullet["pos"]) - camera
-			var phase = float(bullet.get("phase", 0.0))
-			var radius = float(bullet.get("radius", 18.0)) * (1.0 + sin(time_alive * 15.0 + phase) * 0.07)
-			Boss1VFX.streak(self, pos - Vector2(bullet.get("dir", Vector2.LEFT)) * radius * 3.6, pos, Color(0.2, 0.86, 1.0, 0.62), radius * 0.8)
-			Boss1VFX.bubble(self, pos, radius, time_alive + phase, Boss1VFX.CYAN, _get_boss_wave_quality_profile() == "LOW")
-		elif bullet.get("type") == "cout_attack_speed":
-			var pos = Vector2(bullet["pos"]) - camera
-			var phase = float(bullet.get("phase", 0.0))
-			var radius = float(bullet.get("radius", 14.0))
-			draw_circle(pos, radius + 12.0, Color(1.0, 0.52, 0.08, 0.18))
-			draw_arc(pos, radius + 8.0, phase + time_alive * 8.0, phase + time_alive * 8.0 + PI * 1.65, 28, Color(1.0, 0.8, 0.22, 0.9), 3.0)
-			draw_line(pos - Vector2(bullet.get("dir", Vector2.RIGHT)) * 16.0, pos + Vector2(bullet.get("dir", Vector2.RIGHT)) * 10.0, Color(1.0, 0.95, 0.7, 0.84), 3.0)
-		elif bullet.get("type") == "reflected_player":
-			var pos = Vector2(bullet["pos"]) - camera
-			var phase = float(bullet.get("phase", 0.0))
-			var radius = float(bullet.get("radius", 11.0))
-			draw_circle(pos, radius + 12.0, Color(0.54, 0.92, 1.0, 0.18))
-			draw_circle(pos, radius, Color(0.82, 1.0, 1.0, 0.42))
-			draw_arc(pos, radius + 6.0, - phase - time_alive * 9.0, - phase - time_alive * 9.0 + TAU * 0.7, 24, Color(0.96, 1.0, 1.0, 0.94), 2.6)
-		elif bullet.get("type") == "frost_shard":
-			var pos: Vector2 = bullet["pos"] - camera
-			var dir: Vector2 = bullet["dir"]
-			draw_line(pos - dir * 44.0, pos, Color(0.04, 0.13, 0.24, 0.64), 9.0)
-			draw_line(pos - dir * 34.0, pos, Color(0.35, 0.88, 1.0, 0.56), 4.0)
-			Boss2VFX.crystal(self, pos, dir, 15.0)
-		else:
-			var t = 0.5 + sin(float(bullet["phase"])) * 0.5
-			var c = Color(0.45 + t * 0.28, 0.42, 0.5 + t * 0.5)
-			draw_circle(bullet["pos"] - camera, 9, c)
-			draw_circle(bullet["pos"] - camera, 16, Color(0.54, 0.16, 0.9, 0.22))
-	for orbital in orbitals:
-		var anchor = Vector2(orbital.get("origin_pos", player_pos))
-		if String(orbital.get("target_kind", "enemy")) == "enemy":
-			var enemy = _enemy_by_uid(int(orbital["enemy_uid"]))
-			if enemy:
-				anchor = Vector2(enemy["pos"])
-		elif boss_active and boss_hp > 0.0:
-			anchor = boss_pos
-		var orbit_radius = 62.0 if String(orbital.get("target_kind", "enemy")) == "boss" else 42.0
-		var p = anchor + Vector2.from_angle(float(orbital["angle"])) * orbit_radius
-		if not _world_point_in_view(p, camera, 120.0):
-			continue
-		draw_circle(p - camera, 8, Color(0.55, 0.82, 1.0))
-		draw_arc(anchor - camera, orbit_radius, float(orbital["angle"]) - 0.7, float(orbital["angle"]) + 0.35, 18, Color(0.46, 0.78, 1.0, 0.42), 1.6)
+	CombatEffectsPresentation._draw_projectiles(self, camera)
 
 
 func _draw_boss6_fossil_echo(camera: Vector2) -> void :
-	if boss6_fossil_echo.is_empty() or float(boss6_fossil_echo.get("timer", 0.0)) <= 0.0:
-		return
-	var pos: Vector2 = boss6_fossil_echo.get("pos", player_pos)
-	var center: Vector2 = pos - camera
-	var tex = _player_texture()
-	var profile: Dictionary = _player_draw_profile()
-	var echo_modulate: Color = Color(0.72, 0.48, 1.0, 0.65 + sin(time_alive * 8.0) * 0.12)
-	var pulse: float = 0.5 + 0.5 * sin(time_alive * 12.0)
-	var hp_ratio: float = float(boss6_fossil_echo.get("hp", 280.0)) / float(boss6_fossil_echo.get("hp_max", 280.0))
-	draw_circle(center, 38.0 + pulse * 6.0, Color(0.72, 0.48, 1.0, 0.08))
-	draw_arc(center, 38.0 + pulse * 6.0, 0.0, TAU, 48, Color(0.85, 0.62, 1.0, 0.48), 2.2)
-	_draw_bar(center + Vector2(-30, -58), 60.0, hp_ratio, Color(0.72, 0.48, 1.0))
-	if tex != null:
-		var flip_h: bool = _should_flip_player_sprite()
-		if bool(profile.get("preserve_height", false)):
-			_draw_entity_by_height_rotated(tex, center + profile.get("offset", Vector2.ZERO), float(profile.get("height", PLAYER_DRAW_LACERAR_HEIGHT)), 0.0, echo_modulate, flip_h)
-		elif bool(profile.get("fit_aspect", false)):
-			_draw_entity_fit_flipped(tex, center + profile.get("offset", Vector2.ZERO), profile.get("size", Vector2(64, 64)), flip_h, echo_modulate, true)
-		else:
-			_draw_entity_stretched_rotated(tex, center + profile.get("offset", Vector2.ZERO), profile.get("size", Vector2(64, 64)), 0.0, echo_modulate, flip_h)
+	WorldEnvironmentPresentation._draw_boss6_fossil_echo(self, camera)
 
 
 func _draw_boss6_necro_erosion(camera: Vector2) -> void :
-	if current_phase != 6 or not boss6_necro_erosion_active or boss6_necro_erosion_timer <= 0.0:
-		return
-	var center: Vector2 = boss_pos - camera
-	var radius: float = boss6_necro_erosion_radius
-	var color: Color = Color(0.9, 0.15, 0.25, 0.52 + 0.18 * sin(time_alive * 9.0))
-	draw_arc(center, radius, 0.0, TAU, 128, color, 4.0)
-	draw_arc(center, radius + 15.0, 0.0, TAU, 128, Color(color.r, color.g, color.b, 0.22), 8.0)
-	if _is_player_calcified():
-		var viewport_size: Vector2 = get_viewport_rect().size
-		var pulse: float = 0.5 + 0.5 * sin(time_alive * 12.0)
-		draw_rect(Rect2(Vector2.ZERO, viewport_size), Color(0.9, 0.15, 0.25, 0.08 + pulse * 0.06), false, 12.0)
-		_draw_centered("CALCIFICADO - SAIA DO NEVOEIRO", Vector2(viewport_size.x * 0.5, viewport_size.y * 0.35), 24, Color(0.9, 0.15, 0.25))
+	WorldEnvironmentPresentation._draw_boss6_necro_erosion(self, camera)
 
 
 func _draw_phase5_transmute_particles(camera: Vector2) -> void :
-	if not phase5_transmute_active:
-		return
-	var count: int = phase5_transmute_particles.size()
-	for i in range(count):
-		var p: Dictionary = phase5_transmute_particles[i]
-		var life_ratio: float = clampf(float(p["life"]) / maxf(0.01, float(p["max_life"])), 0.0, 1.0)
-		var p_pos: Vector2 = Vector2(p["pos"]) - camera
-		var p_size: float = float(p["size"]) * life_ratio
-		var col: Color = phase5_transmute_color
-		col.a = life_ratio * 0.8
-		draw_circle(p_pos, p_size, col)
-		draw_arc(p_pos, p_size * 1.3, 0.0, TAU, 12, Color(1.0, 1.0, 1.0, col.a * 0.5), 1.5)
+	WorldEnvironmentPresentation._draw_phase5_transmute_particles(self, camera)
 
 
 func _draw_player(camera: Vector2) -> void :
-	if is_dead:
-		return
-	if not _active_lacerante_secondary().is_empty():
-		return
-	if _draw_player_start_down(camera):
-		return
-	if attack_dragging:
-		var p = player_pos - camera
-		var color = _manifestation_color()
-		color.a = 0.65
-		draw_arc(p, 68.0, 0, TAU, 36, color, 2.5)
-		var ball_p = p + attack_drag_direction * 68.0
-		color.a = 1.0
-		draw_circle(ball_p, 8.0, color)
-		draw_circle(ball_p, 14.0, Color(color.r, color.g, color.b, 0.26))
-	var tex = _player_texture()
-	var center = player_pos - camera
-	var profile = _player_draw_profile()
-	var move = _read_move()
-	var rotation = 0.0
-	var flip_h = _should_flip_player_sprite()
-	if move.y < -0.2 and abs(move.x) > 0.2:
-		rotation = deg_to_rad(15.0) if move.x > 0.0 else deg_to_rad(-15.0)
-	if _shadows_enabled() and tex != null:
-		var s_rot = rotation + deg_to_rad(-10.0 if flip_h else 10.0)
-		var s_scale = Vector2(-1.0 if flip_h else 1.0, -0.35)
-		draw_set_transform(center + profile.get("offset", Vector2.ZERO) + Vector2(0, 38.0), s_rot, s_scale)
-		var shadow_color = Color(0.0, 0.0, 0.0, 0.42)
-		if bool(profile.get("preserve_height", false)):
-			var tex_size = tex.get_size()
-			if tex_size.y > 0.0:
-				var target_height = float(profile.get("height", PLAYER_DRAW_LACERAR_HEIGHT))
-				var draw_size = tex_size * (target_height / tex_size.y)
-				var pos = Vector2( - draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
-				draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
-		else:
-			var draw_size = profile["size"]
-			var pos = Vector2( - draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
-			if bool(profile.get("fit_aspect", false)):
-				var tex_size = tex.get_size()
-				if tex_size.x > 0.0 and tex_size.y > 0.0:
-					var fit_scale = min(draw_size.x / tex_size.x, draw_size.y / tex_size.y)
-					draw_size = tex_size * fit_scale
-					pos = Vector2( - draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
-			draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	var player_modulate: = Color.WHITE
-	if _eclipsada_is_stealthed():
-		player_modulate = Color(0.54, 0.82, 1.0, 0.46 + sin(time_alive * 9.0) * 0.07)
-	if bool(profile.get("preserve_height", false)):
-		_draw_entity_by_height_rotated(tex, center + profile["offset"], float(profile.get("height", PLAYER_DRAW_LACERAR_HEIGHT)), rotation, player_modulate, flip_h)
-	else:
-		if bool(profile.get("fit_aspect", false)):
-			_draw_entity_fit_flipped(tex, center + profile["offset"], profile["size"], flip_h, player_modulate, true)
-		else:
-			_draw_entity_stretched_rotated(tex, center + profile["offset"], profile["size"], rotation, player_modulate, flip_h)
-	if is_multiplayer and _is_local_run_leader():
-		_draw_leader_crown(center + Vector2(0.0, -62.0), 0.82, Color(1.0, 0.86, 0.18, 0.95))
+	EntitiesPresentation._draw_player(self, camera)
 
 
 func _draw_player_start_down(camera: Vector2) -> bool:
-	if not _player_start_down_active():
-		return false
-	if _cancel_player_start_down_landing_on_move():
-		return false
-	var frames: Array = textures.get("player_lacerante_start_down" if manifestation_key == "lacerante" else "player_start_down", [])
-	if frames.is_empty():
-		return false
-	var center: Vector2 = player_pos - camera
-	var tex: Texture2D = null
-	var draw_size := Vector2(66.0, 92.0)
-	var air_offset := Vector2.ZERO
-	if player_start_down_fall_timer > 0.0:
-		var progress: float = clampf(1.0 - player_start_down_fall_timer / PLAYER_START_DOWN_FALL_TIME, 0.0, 1.0)
-		var eased: float = 1.0 - pow(1.0 - progress, 3.0)
-		var frame_idx: int = 2 if progress >= 0.78 else (int(floor(progress / PLAYER_START_DOWN_FRAME_TIME)) % 2)
-		tex = frames[clampi(frame_idx, 0, frames.size() - 1)]
-		air_offset = Vector2(0.0, -lerpf(PLAYER_START_DOWN_HEIGHT, 0.0, eased))
-		var shadow_alpha: float = lerpf(0.12, 0.38, eased)
-		draw_set_transform(center + Vector2(0.0, 40.0), 0.0, Vector2(1.0 + eased * 0.55, 0.26 + eased * 0.12))
-		draw_circle(Vector2.ZERO, lerpf(18.0, 42.0, eased), Color(0.0, 0.0, 0.0, shadow_alpha))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	else:
-		var elapsed: float = PLAYER_START_DOWN_LAND_TIME - player_start_down_landing_timer
-		var landing_frame: int = int(floor(elapsed / PLAYER_START_DOWN_FRAME_TIME))
-		var land_idx: int = 3 + (clampi(landing_frame, 0, 2) if manifestation_key == "lacerante" else landing_frame % 3)
-		tex = frames[clampi(land_idx, 0, frames.size() - 1)]
-		var squash: float = sin(clampf(elapsed / 0.32, 0.0, 1.0) * PI)
-		draw_size = Vector2(70.0 + squash * 10.0, 86.0 - squash * 8.0)
-		draw_set_transform(center + Vector2(0.0, 40.0), 0.0, Vector2(1.35, 0.32))
-		draw_circle(Vector2.ZERO, 40.0, Color(0.0, 0.0, 0.0, 0.36))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	if tex == null:
-		return false
-	if manifestation_key == "lacerante":
-		_draw_entity_by_height_rotated(tex, center + air_offset, LaceranteSprites.DRAW_HEIGHT, 0.0)
-	else:
-		_draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, _should_flip_player_sprite())
-	return true
+	return EntitiesPresentation._draw_player_start_down(self, camera)
 
 
 func _should_flip_player_sprite() -> bool:
-	if manifestation_key == "lacerante":
-		# Dedicated left poses preserve the anatomical side of the eyepatch.
-		return false
-	var move = _read_move()
-	if lacerante_preparing and move.length() <= 0.12:
-		return lacerante_prepare_dir.x < -0.1
-	if _player_attack_pose_active():
-		if manifestation_key != "lacerante":
-			return bool(_player_fire_animation_info().get("flip_h", false))
-		return _aim_direction().x < -0.1
-	if move.x < -0.1:
-		return true
-	if move.x > 0.1:
-		return false
-	return last_facing.x < -0.1
+	return EntityVisualProfiles._should_flip_player_sprite(self)
 
 
 func _player_is_moving_for_animation() -> bool:
-	var move = _read_move()
-	return move.length() > 0.12
+	return EntityVisualProfiles._player_is_moving_for_animation(self)
 
 
 func _player_can_show_attack_sprite() -> bool:
-	return not _player_is_moving_for_animation()
+	return EntityVisualProfiles._player_can_show_attack_sprite(self)
 
 
 func _player_attack_pose_active() -> bool:
-	var elapsed: float = time_alive - last_attack_time
-	var duration: float = 0.5 if manifestation_key == "lacerante" else PLAYER_FIRE_FRAME_SECONDS * 2.0
-	return elapsed >= 0.0 and elapsed < duration and _player_can_show_attack_sprite()
+	return EntityVisualProfiles._player_attack_pose_active(self)
 
 
 func _player_fire_animation_info(direction: Vector2 = Vector2.ZERO) -> Dictionary:
-	var source: = direction if direction.length() > 0.05 else player_attack_visual_dir
-	var dir: = source.normalized() if source.length() > 0.05 else Vector2.RIGHT
-	# Eight equal sectors: preserve E/W, provide real art for N/S and diagonals.
-	var sector: int = posmod(roundi(dir.angle() / (PI / 4.0)), 8)
-	var columns: Array[int] = [-1, 5, 0, 4, -1, 3, 1, 2]
-	var column: int = columns[sector]
-	if column < 0:
-		return {"key": "player_fire", "flip_h": sector == 4, "network_offset": 0}
-	return {"key": "player_fire_" + PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": 2 + column * 2}
+	return EntityVisualProfiles._player_fire_animation_info(self, direction)
 
 
 func _player_fire_frame_index(elapsed_time: float) -> int:
-	return clampi(int(elapsed_time / PLAYER_FIRE_FRAME_SECONDS), 0, 1)
+	return EntityVisualProfiles._player_fire_frame_index(self, elapsed_time)
 
 
 func _player_fire_texture_for_current_attack(elapsed_time: float) -> Texture2D:
-	var info: = _player_fire_animation_info()
-	var frames: Array = textures.get(String(info["key"]), [])
-	return frames[_player_fire_frame_index(elapsed_time)] if frames.size() == 2 else null
+	return EntityVisualProfiles._player_fire_texture_for_current_attack(self, elapsed_time)
 
 
 func _player_fire_draw_profile() -> Dictionary:
-	if int(_player_fire_animation_info()["network_offset"]) > 0:
-		return {"preserve_height": true, "height": PLAYER_FIRE_CANVAS_HEIGHT, "offset": Vector2.ZERO}
-	return {"size": PLAYER_DRAW_SHOT_SIZE, "offset": Vector2.ZERO}
+	return EntityVisualProfiles._player_fire_draw_profile(self)
 
 
 func _player_draw_profile() -> Dictionary:
-	var move = _read_move()
-	if manifestation_key == "lacerante":
-		return {"preserve_height": true, "height": LaceranteSprites.DRAW_HEIGHT, "offset": Vector2.ZERO}
-	if player_freeze_visual_timer > 0.0:
-		return {
-			"size": PLAYER_DRAW_FROZEN_SIZE, 
-			"offset": Vector2.ZERO
-		}
-	if time_alive - last_damage_time < 0.35:
-		return {
-			"size": PLAYER_DRAW_DAMAGE_SIZE, 
-			"offset": Vector2.ZERO
-		}
-	if lacerante_preparing and move.length() <= 0.12:
-		return {
-			"preserve_height": true, 
-			"height": PLAYER_DRAW_LACERAR_HEIGHT, 
-			"offset": Vector2.ZERO
-		}
-	if not _active_prismatica_secondary().is_empty():
-		return {
-			"preserve_height": true, 
-			"height": 84.0, 
-			"offset": Vector2.ZERO
-		}
-	if _player_attack_pose_active():
-		if manifestation_key == "lacerante":
-			return {
-				"preserve_height": true, 
-				"height": PLAYER_DRAW_LACERAR_HEIGHT, 
-				"offset": Vector2.ZERO
-			}
-		if not _player_is_moving_for_animation():
-			return _player_fire_draw_profile()
-	if move.y < -0.1:
-		return {
-			"size": PLAYER_DRAW_UP_SIZE, 
-			"offset": Vector2.ZERO
-		}
-	if move.y > 0.1:
-		return {
-			"size": PLAYER_DRAW_DOWN_SIZE, 
-			"offset": Vector2.ZERO
-		}
-	if abs(move.x) > 0.1:
-		return {
-			"size": PLAYER_DRAW_SIDE_SIZE, 
-			"offset": Vector2.ZERO
-		}
-	return {
-		"size": PLAYER_DRAW_STOP_SIZE, 
-		"offset": Vector2.ZERO
-	}
+	return EntityVisualProfiles._player_draw_profile(self)
 
 
 func _draw_boss3_miasma_clones(camera: Vector2) -> void :
-	if not _boss3_miasma_active() or boss3_miasma_variant != 1:
-		return
-	var frames = textures.get("boss3", [])
-	if not frames is Array or frames.is_empty():
-		return
-	var texture: Texture2D = frames[int(boss_phase) % frames.size()]
-	var cycle: float = 1.0 - clamp(boss3_miasma_clone_timer / BOSS3_MIASMA_CLONE_SWAP, 0.0, 1.0)
-	var base_alpha: float = 0.18 + sin(cycle * PI) * 0.72
-	for i in range(boss3_miasma_clone_positions.size()):
-		var world_pos: = Vector2(boss3_miasma_clone_positions[i])
-		var screen_pos: = world_pos - camera
-		var flicker: float = clamp(base_alpha + sin(time_alive * 9.0 + i * 1.8) * 0.1, 0.08, 0.88)
-		_draw_dynamic_shadow_fit(texture, screen_pos, Vector2(184, 170), false, true, 0.22 * flicker)
-		_draw_entity_fit(texture, screen_pos, Vector2(184, 170), Color(0.92, 1.0, 0.28, flicker), true)
-		draw_arc(screen_pos, 70.0 + sin(time_alive * 4.0 + i) * 5.0, 0.0, TAU, 38, Color(0.78, 1.0, 0.16, 0.24 * flicker), 2.0)
+	WorldEnvironmentPresentation._draw_boss3_miasma_clones(self, camera)
 
 
 func _miasma_eye_curves(viewport: Vector2, openness: float) -> Dictionary:
@@ -48021,1350 +39821,99 @@ func _miasma_eye_curves(viewport: Vector2, openness: float) -> Dictionary:
 
 
 func _draw_miasma_eye_mask(viewport: Vector2, openness: float) -> void :
-	var curves: = _miasma_eye_curves(viewport, openness)
-	var upper: PackedVector2Array = curves["upper"]
-	var lower: PackedVector2Array = curves["lower"]
-	var top: = PackedVector2Array([Vector2(-30, -30), Vector2(viewport.x + 30, -30)])
-	var bottom: = PackedVector2Array([Vector2(-30, viewport.y + 30), Vector2(viewport.x + 30, viewport.y + 30)])
-	for i in range(upper.size() - 1, -1, -1):
-		top.append(upper[i])
-	for i in range(lower.size() - 1, -1, -1):
-		bottom.append(lower[i])
-	draw_colored_polygon(top, Color(0.005, 0.008, 0.006, 0.965))
-	draw_colored_polygon(bottom, Color(0.005, 0.008, 0.006, 0.965))
-	for width in [86.0, 64.0, 44.0, 26.0, 12.0]:
-		var alpha: float = lerp(0.055, 0.5, 1.0 - width / 86.0)
-		draw_polyline(upper, Color(0.0, 0.0, 0.0, alpha), width, true)
-		draw_polyline(lower, Color(0.0, 0.0, 0.0, alpha), width, true)
-	for mist_pass in range(4):
-		var mist: = PackedVector2Array()
-		var mirrored: = PackedVector2Array()
-		for i in range(upper.size()):
-			var p: = Vector2(upper[i])
-			var wave: = sin(float(i) * 0.64 + time_alive * 1.2 + mist_pass * 1.7) * (5.0 + mist_pass * 2.0)
-			mist.append(p + Vector2(0.0, wave - mist_pass * 5.0))
-			mirrored.append(Vector2(lower[i]) + Vector2(0.0, - wave + mist_pass * 5.0))
-		draw_polyline(mist, Color(0.44, 0.62, 0.1, 0.1 - mist_pass * 0.014), 18.0 - mist_pass * 3.2, true)
-		draw_polyline(mirrored, Color(0.44, 0.62, 0.1, 0.1 - mist_pass * 0.014), 18.0 - mist_pass * 3.2, true)
-	draw_polyline(upper, Color(0.54, 0.72, 0.1, 0.18), 3.0, true)
-	draw_polyline(lower, Color(0.54, 0.72, 0.1, 0.18), 3.0, true)
+	CombatEffectsPresentation._draw_miasma_eye_mask(self, viewport, openness)
 
 
 func _draw_miasma_darkness_fog(player_screen: Vector2, viewport: Vector2) -> void :
-	var radius: = BOSS3_MIASMA_DARK_RADIUS
-	var left: = maxf(0.0, player_screen.x - radius)
-	var right: = minf(viewport.x, player_screen.x + radius)
-	var top: = maxf(0.0, player_screen.y - radius)
-	var bottom: = minf(viewport.y, player_screen.y + radius)
-
-	var dark_col: = Color(0.01, 0.02, 0.01, 0.97)
-	draw_rect(Rect2(0, 0, viewport.x, top), dark_col, true)
-	draw_rect(Rect2(0, bottom, viewport.x, maxf(0.0, viewport.y - bottom)), dark_col, true)
-	draw_rect(Rect2(0, top, left, maxf(0.0, bottom - top)), dark_col, true)
-	draw_rect(Rect2(right, top, maxf(0.0, viewport.x - right), maxf(0.0, bottom - top)), dark_col, true)
-
-	for i in range(24):
-		var angle: float = float(i) * TAU / 24.0 + sin(time_alive * 0.3 + i) * 0.04
-		var p: = player_screen + Vector2.from_angle(angle) * radius
-		var fog_size: float = 24.0 + 12.0 * sin(time_alive * 1.2 + float(i))
-		draw_circle(p, fog_size, Color(0.01, 0.03, 0.01, 0.45))
-
-	draw_arc(player_screen, radius, 0.0, TAU, 64, Color(0.28, 0.65, 0.18, 0.4), 2.5, true)
+	CombatEffectsPresentation._draw_miasma_darkness_fog(self, player_screen, viewport)
 
 
 func _draw_miasma_qte_cheese_gunk(viewport: Vector2, openness: float) -> void :
-	var curves: = _miasma_eye_curves(viewport, openness)
-	var upper: PackedVector2Array = curves["upper"]
-	var lower: PackedVector2Array = curves["lower"]
-	var progress: float = float(boss3_miasma_qte_taps) / max(1.0, float(boss3_miasma_qte_required))
-	var glue_strength: float = clamp(1.0 - progress, 0.12, 1.0)
-	for width in [24.0, 13.0, 5.0]:
-		var alpha: float = 0.06 + glue_strength * (0.12 if width > 20.0 else 0.24)
-		draw_polyline(upper, Color(0.78, 0.48, 0.04, alpha), width, true)
-		draw_polyline(lower, Color(0.58, 0.36, 0.02, alpha * 0.95), width, true)
-	for i in range(11):
-		var t: float = lerp(0.18, 0.82, float(i) / 10.0)
-		var idx: int = clampi(int(t * float(upper.size() - 1)), 0, upper.size() - 1)
-		var top_p: = Vector2(upper[idx])
-		var bottom_p: = Vector2(lower[idx])
-		var gap: float = max(1.0, bottom_p.y - top_p.y)
-		var length_ratio: float = clamp(0.32 + glue_strength * 0.52 + sin(time_alive * 1.1 + i * 1.9) * 0.08, 0.18, 0.92)
-		var end_p: = top_p.lerp(bottom_p, length_ratio)
-		var sag: float = sin(time_alive * 2.0 + i) * 7.0
-		var strand: = PackedVector2Array([top_p + Vector2(0, 3), top_p.lerp(end_p, 0.5) + Vector2(sag, 0), end_p])
-		draw_polyline(strand, Color(0.64, 0.4, 0.02, 0.3 + glue_strength * 0.24), 8.0 + glue_strength * 5.0, true)
-		draw_polyline(strand, Color(1.0, 0.82, 0.18, 0.26), 2.4, true)
-		if gap > 22.0:
-			var blob_p: = end_p + Vector2(sin(time_alive * 1.8 + i) * 2.0, 4.0)
-			draw_circle(blob_p, 6.0 + glue_strength * 6.0, Color(0.36, 0.23, 0.015, 0.52))
-			draw_circle(blob_p, 4.0 + glue_strength * 4.5, Color(0.92, 0.58, 0.05, 0.72))
-			draw_circle(blob_p + Vector2(-2, -2), 2.0 + glue_strength * 1.8, Color(1.0, 0.91, 0.32, 0.42))
-	for i in range(24):
-		var t2: float = lerp(0.06, 0.94, float(i) / 23.0)
-		var idx2: int = clampi(int(t2 * float(upper.size() - 1)), 0, upper.size() - 1)
-		var edge_p: = Vector2(upper[idx2]) if i % 2 == 0 else Vector2(lower[idx2])
-		var edge_sign: = 1.0 if i % 2 == 0 else -1.0
-		var crawl: = edge_p + Vector2(sin(time_alive * 1.4 + i) * 7.0, edge_sign * (8.0 + sin(i * 0.8) * 5.0))
-		draw_circle(crawl, 5.0 + glue_strength * 6.5, Color(0.42, 0.28, 0.02, 0.34))
-		draw_circle(crawl + Vector2(-1.5, -1.5), 2.4 + glue_strength * 2.8, Color(0.98, 0.7, 0.1, 0.42))
-	for i in range(8):
-		var angle: float = i * TAU / 8.0 + time_alive * 0.35
-		var p: = viewport * 0.5 + Vector2.from_angle(angle) * (72.0 + sin(time_alive * 2.1 + i) * 12.0)
-		draw_circle(p, 6.0 + glue_strength * 5.0, Color(0.54, 0.34, 0.02, 0.24 * glue_strength))
+	CombatEffectsPresentation._draw_miasma_qte_cheese_gunk(self, viewport, openness)
 
 
 func _draw_miasma_faith_link(camera: Vector2) -> void :
-	var player_screen: Vector2 = player_pos - camera + Vector2(0, -18.0 + sin(boss3_miasma_qte_elapsed * 4.0) * 9.0)
-	var boss_screen: Vector2 = boss_pos - camera + Vector2(0, -58.0 + sin(boss3_miasma_qte_elapsed * 3.2 + 1.4) * 11.0)
-	var dir: Vector2 = boss_screen - player_screen
-	if dir.length() <= 1.0:
-		return
-	var side: = dir.normalized().orthogonal()
-	var strand_a: = PackedVector2Array()
-	var strand_b: = PackedVector2Array()
-	for i in range(24):
-		var t: float = float(i) / 23.0
-		var base: = player_screen.lerp(boss_screen, t)
-		var wave: float = sin(t * TAU * 3.0 + boss3_miasma_qte_elapsed * 5.0) * 14.0
-		var pulse: float = sin(t * TAU * 7.0 - boss3_miasma_qte_elapsed * 8.0) * 5.0
-		strand_a.append(base + side * (wave + pulse))
-		strand_b.append(base - side * (wave * 0.62 - pulse))
-	draw_polyline(strand_a, Color(0.0, 0.0, 0.0, 0.78), 14.0, true)
-	draw_polyline(strand_b, Color(0.0, 0.0, 0.0, 0.7), 11.0, true)
-	draw_polyline(strand_a, Color(0.92, 1.0, 0.16, 0.8), 5.0, true)
-	draw_polyline(strand_b, Color(0.18, 1.0, 0.24, 0.64), 4.0, true)
-	draw_polyline(strand_a, Color(1.0, 0.84, 0.05, 0.72), 1.6, true)
-	for i in range(9):
-		var t2: float = fposmod(boss3_miasma_qte_elapsed * 0.55 + i / 9.0, 1.0)
-		var p: = player_screen.lerp(boss_screen, t2) + side * sin(t2 * TAU * 3.0 + boss3_miasma_qte_elapsed * 5.0) * 14.0
-		draw_circle(p, 5.5, Color(0.02, 0.02, 0.0, 0.55))
-		draw_circle(p, 3.2, Color(1.0, 0.82, 0.06, 0.8))
-	for anchor in [player_screen, boss_screen]:
-		var lift: float = 1.0 + 0.08 * sin(boss3_miasma_qte_elapsed * 5.0 + anchor.x)
-		draw_arc(anchor + Vector2(0, 30), 32.0 * lift, 0.0, TAU, 48, Color(0.86, 1.0, 0.16, 0.28), 4.0, true)
-		draw_arc(anchor + Vector2(0, 42), 46.0 * lift, - boss3_miasma_qte_elapsed * 2.0, TAU - boss3_miasma_qte_elapsed * 2.0, 48, Color(0.1, 1.0, 0.3, 0.2), 3.0, true)
+	CombatEffectsPresentation._draw_miasma_faith_link(self, camera)
 
 
 func _draw_boss3_miasma_clouds(camera: Vector2) -> void :
-	for cloud in boss3_miasma_clouds:
-		var pos: = Vector2(cloud.get("pos", boss_pos)) - camera
-		var radius: float = float(cloud.get("radius", BOSS3_MIASMA_CLOUD_RADIUS))
-		var life_ratio: float = clampf(float(cloud.get("life", 0.0)) / max(0.01, float(cloud.get("max", BOSS3_MIASMA_CLOUD_DURATION))), 0.0, 1.0)
-		var phase: float = float(cloud.get("phase", 0.0))
-		var pulse: float = 0.5 + 0.5 * sin(phase * 1.8)
-		var alpha: float = (0.2 + life_ratio * 0.35)
-		draw_circle(pos, radius * (0.95 + pulse * 0.1), Color(0.06, 0.22, 0.08, alpha * 0.35))
-		draw_circle(pos, radius * 0.72, Color(0.14, 0.44, 0.16, alpha * 0.45))
-		draw_circle(pos + Vector2(sin(phase) * 6.0, cos(phase * 0.7) * 4.0), radius * 0.45, Color(0.32, 0.78, 0.28, alpha * 0.5))
-		draw_arc(pos, radius, 0.0, TAU, 48, Color(0.38, 0.84, 0.26, alpha * 0.55), 2.0, true)
-		for i in range(4):
-			var angle: = phase + float(i) * TAU / 4.0
-			var mote: = pos + Vector2.from_angle(angle) * (radius * (0.3 + pulse * 0.2))
-			draw_circle(mote, 3.5, Color(0.68, 0.98, 0.42, alpha * 0.75))
+	WorldEnvironmentPresentation._draw_boss3_miasma_clouds(self, camera)
 
 
 func _draw_umbra_miasma_overlay(viewport: Vector2, camera: Vector2) -> void :
-	if not _is_umbra_miasma_active():
-		return
-	var center: Vector2 = player_pos - camera
-	var inner_r: float = 120.0 + sin(time_alive * 3.2) * 6.0
-
-
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.02, 0.07, 0.03, 0.32), true)
-
-
-	for i in range(12):
-		var ang: float = time_alive * 0.45 + float(i) * (TAU / 12.0)
-		var dist: float = inner_r + 45.0 + sin(time_alive * 1.8 + float(i) * 1.3) * 22.0
-		var mist_pos: Vector2 = center + Vector2.from_angle(ang) * dist
-		var mist_radius: float = 34.0 + sin(time_alive * 2.2 + float(i)) * 10.0
-		draw_circle(mist_pos, mist_radius, Color(0.04, 0.16, 0.06, 0.14))
-		draw_circle(mist_pos + Vector2(sin(ang) * 6.0, cos(ang) * 6.0), mist_radius * 0.6, Color(0.14, 0.42, 0.12, 0.1))
-
-
-	var pulse: float = 0.5 + 0.5 * sin(time_alive * 4.0)
-	draw_arc(center, inner_r, 0.0, TAU, 72, Color(0.18, 0.52, 0.16, 0.35 + pulse * 0.15), 3.0, true)
-	draw_arc(center, inner_r + 14.0, - time_alive * 0.8, TAU - time_alive * 0.8, 64, Color(0.38, 0.82, 0.26, 0.22 + pulse * 0.12), 1.5, true)
-	draw_arc(center, inner_r - 12.0, time_alive * 1.1, time_alive * 1.1 + PI * 1.4, 48, Color(0.58, 0.95, 0.32, 0.28), 2.0, true)
-
-
-	for i in range(20):
-		var ang: float = time_alive * (0.8 + float(i % 5) * 0.2) + float(i) * (TAU / 20.0)
-		var orbit_dist: float = inner_r * (0.35 + 0.58 * fposmod(float(i) * 0.17 + time_alive * 0.12, 1.0))
-		var particle_pos: Vector2 = center + Vector2(cos(ang), sin(ang)) * orbit_dist
-		var spore_size: float = 3.0 + sin(time_alive * 3.0 + i) * 1.2
-		draw_circle(particle_pos, spore_size * 2.0, Color(0.12, 0.45, 0.1, 0.3))
-		draw_circle(particle_pos, spore_size, Color(0.48, 0.92, 0.28, 0.85))
-		draw_circle(particle_pos + Vector2(-0.8, -0.8), spore_size * 0.4, Color(0.85, 1.0, 0.65, 0.95))
+	CombatEffectsPresentation._draw_umbra_miasma_overlay(self, viewport, camera)
 
 
 func _draw_boss3_miasma_overlay(viewport: Vector2, camera: Vector2) -> void :
-	if not _boss3_miasma_active():
-		return
-	var openness: = 0.74
-	if boss3_miasma_variant == 1:
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.72, 0.62, 0.02, 0.2), true)
-	elif boss3_miasma_variant == 4:
-		var progress: float = float(boss3_miasma_qte_taps) / max(1.0, float(boss3_miasma_qte_required))
-		openness = lerp(0.035, 0.96, smoothstep(0.0, 1.0, progress))
-		var elapsed: float = boss3_miasma_qte_elapsed
-		var blink_phase: float = fmod(max(0.0, elapsed), 1.5)
-		if blink_phase < 0.22:
-			var blink: float = abs(blink_phase - 0.11) / 0.11
-			openness *= clamp(blink, 0.04, 1.0)
-	_draw_miasma_eye_mask(viewport, openness)
-	if boss3_miasma_variant == 2:
-		var player_screen: Vector2 = player_pos - camera
-		_draw_miasma_darkness_fog(player_screen, viewport)
-	if boss3_miasma_variant == 4:
-		var center: = viewport * 0.5
-		var qte_progress: float = float(boss3_miasma_qte_taps) / max(1.0, float(boss3_miasma_qte_required))
-		var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
-		var radius: float = 42.0 + pulse * 18.0 + qte_progress * 18.0
-		_draw_miasma_faith_link(camera)
-		_draw_miasma_qte_cheese_gunk(viewport, openness)
-		draw_circle(center, radius - 4.0, Color(0.015, 0.025, 0.006, 0.82))
-		draw_circle(center, radius, Color(0.64, 0.92, 0.1, 0.1 + pulse * 0.08))
-		draw_arc(center, radius, - PI * 0.5, - PI * 0.5 + TAU * qte_progress, 64, Color(0.82, 1.0, 0.2, 0.96), 6.0, true)
-		draw_arc(center, radius + 9.0, 0.0, TAU, 64, Color(0.74, 0.9, 0.14, 0.34 + pulse * 0.28), 2.0, true)
-		_draw_centered("ESPACO" if _uses_desktop_ui() else "TOQUE", center + Vector2(0, 7), 18, Color(0.94, 1.0, 0.68))
-		_draw_centered("%d / %d" % [boss3_miasma_qte_taps, boss3_miasma_qte_required], center + Vector2(0, 88), 22, Color(0.88, 1.0, 0.34))
-		if boss3_miasma_qte_time_left > 0.0:
-			_draw_centered("%.1fs" % boss3_miasma_qte_time_left, center + Vector2(0, 116), 18, Color(1.0, 0.46, 0.2))
-		else:
-			var overtime: float = max(0.0, boss3_miasma_qte_elapsed - BOSS3_MIASMA_QTE_DURATION)
-			_draw_centered("FE CORROMPIDA +%.0fs" % overtime, center + Vector2(0, 116), 18, Color(0.74, 1.0, 0.16))
-		if boss3_miasma_tutorial_seen and boss3_miasma_qte_tutorial > 0.0:
-			_draw_centered(("APERTE ESPACO PARA ABRIR OS OLHOS" if _uses_desktop_ui() else "APERTE COMO SE SUA VIDA DEPENDESSE"), center + Vector2(0, -112), 24, Color(1.0, 0.92, 0.3))
-	else:
-		_draw_centered("MIASMA DA VIDA  %.0fs" % ceil(boss3_miasma_timer), Vector2(viewport.x * 0.5, 116), 18, Color(0.82, 1.0, 0.3, 0.92))
+	WorldEnvironmentPresentation._draw_boss3_miasma_overlay(self, viewport, camera)
 
 
 func _draw_phase3_environment(camera: Vector2) -> void :
-	if current_phase != 3:
-		return
-	for zone in phase3_miasma_zones:
-		var fade = clamp(float(zone["life"]) / max(0.01, float(zone["max"])), 0.0, 1.0)
-		var p = Vector2(zone["pos"]) - camera
-		var radius = float(zone["radius"])
-		draw_circle(p, radius, Color(0.06, 0.22, 0.08, 0.18 * fade))
-		draw_circle(p, radius * 0.65, Color(0.14, 0.44, 0.16, 0.22 * fade))
-		draw_arc(p, radius, 0, TAU, 48, Color(0.38, 0.84, 0.26, 0.48 * fade), 2.0, true)
-		for i in range(5):
-			var ang = time_alive * 0.7 + float(zone["phase"]) + i * TAU / 5.0
-			draw_circle(p + Vector2.from_angle(ang) * radius * 0.55, 3.5, Color(0.68, 0.98, 0.38, 0.65 * fade))
-	for cheese in phase3_cheeses:
-		var p = Vector2(cheese["pos"]) - camera
-		var pulse = 1.0 + sin(time_alive * 7.0 + int(cheese["uid"]) % 5) * 0.08
-		var tex: Texture2D = textures.get("boss3_cheese")
-		_draw_dynamic_shadow_fit(tex, p, Vector2(58, 48) * pulse, false, false, 0.38)
-		_draw_entity_fit(tex, p, Vector2(58, 48) * pulse, Color.WHITE)
-		var cheese_selected = (attack_lock_selecting and attack_lock_candidate_kind == "cheese" and attack_lock_candidate_uid == int(cheese["uid"])) or (locked_target_kind == "cheese" and locked_target_uid == int(cheese["uid"]))
-		if cheese_selected:
-			_draw_attack_target_marker(p + Vector2(0, 16), 30.0, locked_target_kind == "cheese")
-		var c = Color(1.0, 0.88, 0.2) if bool(cheese["true"]) else Color(0.66, 1.0, 0.24)
-		draw_arc(p, 35.0, 0, TAU, 32, Color(c.r, c.g, c.b, 0.76), 2.0)
-		_draw_bar(p + Vector2(-27, -38), 54, float(cheese["hp"]) / float(cheese["max_hp"]), c)
-		if bool(cheese.get("ritual", false)):
-			_draw_centered("RITUAL", p + Vector2(0, -50), 13, Color(1.0, 0.42, 0.2))
+	WorldEnvironmentPresentation._draw_phase3_environment(self, camera)
 
 
 func _draw_phase4_environment(camera: Vector2) -> void :
-	if current_phase != 4:
-		return
-	var viewport: = get_viewport_rect().size
-	if boss4_instability > 0.0:
-		var unstable_alpha: = clampf(boss4_instability / 100.0, 0.0, 1.0)
-		draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.42, 0.02, 0.64, 0.035 * unstable_alpha), true)
-		for i in range(int(4 + unstable_alpha * 8.0)):
-			var seed: = float(i) * 41.7
-			var a: = Vector2(fposmod(seed * 5.0 + time_alive * 42.0, viewport.x), fposmod(seed * 2.7 + sin(time_alive + seed) * 90.0, viewport.y))
-			var b: = a + Vector2.from_angle(seed + time_alive * 0.8) * (42.0 + unstable_alpha * 82.0)
-			draw_line(a, b, Color(0.86, 0.34, 1.0, 0.1 + unstable_alpha * 0.18), 1.4 + unstable_alpha * 1.8, true)
-	_draw_phase4_enemy_hazards(camera)
-	_draw_boss4_specials(camera)
-	for zone in phase4_null_zones:
-		var life_ratio: float = clamp(float(zone.get("life", 0.0)) / max(0.01, float(zone.get("max", BOSS4_NULL_ZONE_DURATION))), 0.0, 1.0)
-		var pos: = Vector2(zone["pos"]) - camera
-		var radius: = float(zone.get("radius", 92.0))
-		var phase: = float(zone.get("phase", 0.0))
-		var vortex_frames: Array = textures.get("boss4_vortex", [])
-		var vortex: Texture2D = vortex_frames[int(phase) % vortex_frames.size()] if not vortex_frames.is_empty() else null
-		draw_circle(pos, radius * 1.18, Color(0.08, 0.0, 0.16, 0.24 * life_ratio))
-		_draw_entity_fit(vortex, pos, Vector2.ONE * radius * 2.25, Color(0.76, 0.58, 1.0, 0.82 * life_ratio))
-		draw_arc(pos, radius, - phase, TAU - phase, 60, Color(0.92, 0.7, 1.0, 0.88 * life_ratio), 3.0)
-		for i in range(8):
-			var angle: = phase * 0.7 + i * TAU / 8.0
-			var outer: = pos + Vector2.from_angle(angle) * radius * 1.15
-			draw_line(outer, pos + Vector2.from_angle(angle + 0.38) * radius * 0.36, Color(0.76, 0.36, 1.0, 0.24 * life_ratio), 2.0)
-	for planet in phase4_planets:
-		var pos: = Vector2(planet["pos"]) - camera
-		var phase: = float(planet.get("phase", 0.0))
-		var frames: Array = textures.get("boss4_planet", [])
-		var texture: Texture2D = frames[int(phase) % frames.size()] if not frames.is_empty() else null
-		var pulse: = 1.0 + sin(phase * 1.8) * 0.06
-		_draw_dynamic_shadow_fit(texture, pos + Vector2(0, 15), Vector2(104, 104) * pulse, false, true, 0.34)
-		draw_circle(pos, 62.0, Color(0.72, 0.18, 1.0, 0.16))
-		_draw_entity_fit(texture, pos, Vector2(104, 104) * pulse, Color.WHITE, true)
-		draw_arc(pos, 58.0 + sin(phase * 2.4) * 4.0, phase, phase + PI * 1.55, 42, Color(1.0, 0.74, 0.22, 0.86), 3.0)
-		_draw_bar(pos + Vector2(-45, -64), 90.0, float(planet.get("hp", 0.0)) / max(1.0, float(planet.get("max_hp", BOSS4_PLANET_HP))), Color(0.88, 0.34, 1.0))
-	for meteor in boss4_meteorites:
-		var meteor_world: Vector2 = Vector2(meteor.get("pos", Vector2.ZERO))
-		if not _world_point_in_view(meteor_world, camera, 180.0):
-			continue
-		var pos: Vector2 = meteor_world - camera
-		var phase: float = float(meteor.get("phase", 0.0))
-		var radius: float = BOSS4_METEOR_RADIUS * (1.0 + 0.05 * sin(phase))
-		var impact_progress: float = clampf(float(meteor.get("age", 0.0)) / maxf(0.1, float(meteor.get("warning", BOSS4_METEOR_WARNING))), 0.0, 1.0)
-		if not bool(meteor.get("impacted", false)):
-			draw_circle(pos, radius * (1.2 + impact_progress), Color(1.0, 0.54, 0.12, 0.2))
-			draw_line(pos - Vector2(0, 240), pos, Color(1.0, 0.86, 0.36, 0.44), 8.0, true)
-		else:
-			var rock := PackedVector2Array()
-			for i in range(9):
-				var angle: float = float(i) * TAU / 9.0 + phase * 0.08
-				rock.append(pos + Vector2.from_angle(angle) * radius * (0.84 + 0.18 * sin(phase + i * 1.9)))
-			draw_circle(pos, radius * 1.32, Color(1.0, 0.32, 0.08, 0.16))
-			draw_colored_polygon(rock, Color(0.22, 0.14, 0.16, 0.98))
-			var rock_outline: PackedVector2Array = rock.duplicate()
-			rock_outline.append(rock[0])
-			draw_polyline(rock_outline, Color(1.0, 0.68, 0.22, 0.9), 3.0, true)
-			for crater in range(3):
-				var crater_pos: Vector2 = pos + Vector2.from_angle(phase + crater * 2.1) * radius * 0.42
-				draw_circle(crater_pos, 7.0 + crater * 2.0, Color(0.06, 0.04, 0.08, 0.76))
-			if bool(meteor.get("draining", false)):
-				_draw_boss4_lightning_link(boss_pos, meteor_world, camera, Color(1.0, 0.84, 0.24, 0.92), 3.0)
-				draw_arc(pos, radius * 1.3, phase, phase + PI * 1.35, 36, Color(1.0, 0.2, 0.64, 0.8), 4.0)
-			else:
-				draw_arc(pos, radius * 1.24, -PI * 0.5, -PI * 0.5 + TAU * clampf(float(meteor.get("ground_age", 0.0)) / BOSS4_METEOR_ARM_TIME, 0.0, 1.0), 42, Color(1.0, 0.76, 0.24, 0.92), 3.0)
-			_draw_bar(pos + Vector2(-radius, -radius - 18.0), radius * 2.0, float(meteor.get("hp", 0.0)) / maxf(1.0, float(meteor.get("max_hp", BOSS4_METEOR_HP))), Color(0.32, 0.9, 1.0) if not bool(meteor.get("draining", false)) else Color(1.0, 0.28, 0.58))
+	WorldEnvironmentPresentation._draw_phase4_environment(self, camera)
 
 
 func _draw_procedural_lightning_bolt(from: Vector2, to_angle: float, max_dist: float, color: Color, thickness: float, b_seed: int) -> void :
-	var l_rng: = RandomNumberGenerator.new()
-	l_rng.seed = b_seed
-	var curr: Vector2 = from
-	var main_dir: Vector2 = Vector2.from_angle(to_angle)
-	var perp: Vector2 = main_dir.orthogonal()
-	var dist_traveled: float = 0.0
-
-	while dist_traveled < max_dist:
-		var step_len: float = l_rng.randf_range(25.0, 60.0)
-		dist_traveled += step_len
-		var clamped_dist: float = minf(dist_traveled, max_dist)
-		var jitter: float = l_rng.randf_range(-18.0, 18.0) + sin(time_alive * 25.0 + float(b_seed % 7)) * 10.0
-		var nxt: Vector2 = from + main_dir * clamped_dist + perp * jitter
-		draw_line(curr, nxt, color, thickness)
-
-		if l_rng.randf() < 0.38 and dist_traveled < max_dist * 0.8:
-			var branch_dir: Vector2 = (main_dir + perp * l_rng.randf_range(-0.8, 0.8)).normalized()
-			var branch_end: Vector2 = nxt + branch_dir * l_rng.randf_range(30.0, 70.0)
-			draw_line(nxt, branch_end, color * Color(1, 1, 1, 0.7), maxf(1.0, thickness - 1.5))
-
-		curr = nxt
+	CombatEffectsPresentation._draw_procedural_lightning_bolt(self, from, to_angle, max_dist, color, thickness, b_seed)
 
 
 func _draw_phase5_environment(camera: Vector2) -> void :
-	if current_phase != 5:
-		return
-	for tele in phase5_telegraphs:
-		var to: = Vector2(tele.get("to", boss_pos)) - camera
-		var arrived: = bool(tele.get("arrived", false))
-		var c: = Color(0.28, 1.0, 0.5, 0.85 if bool(tele.get("real", true)) else 0.35)
-
-		if not arrived:
-			var curr_pos: = Vector2(tele.get("pos", boss_pos)) - camera
-			var pulse: = 0.5 + 0.5 * sin(time_alive * 12.0 + float(tele.get("phase", 0.0)))
-
-
-			draw_circle(curr_pos, 18.0 + pulse * 6.0, Color(0.06, 0.28, 0.12, 0.35))
-			draw_arc(curr_pos, 22.0 + pulse * 4.0, time_alive * 6.0, time_alive * 6.0 + PI * 1.4, 32, c, 2.5, true)
-			draw_arc(curr_pos, 14.0 - pulse * 3.0, - time_alive * 8.0, - time_alive * 8.0 + PI * 1.2, 24, Color(0.72, 1.0, 0.45, 0.65), 2.0, true)
-
-
-			draw_circle(curr_pos, 10.0, Color(0.12, 0.48, 0.18, 0.8))
-			draw_circle(curr_pos, 6.0, Color(0.55, 1.0, 0.38, 0.95))
-			draw_circle(curr_pos + Vector2(-1, -1), 2.5, Color(0.9, 1.0, 0.75, 0.95))
-
-
-			draw_arc(to, 24.0 + pulse * 6.0, 0.0, TAU, 36, Color(c.r, c.g, c.b, 0.4), 1.8, true)
-			draw_circle(to, 6.0, Color(c.r, c.g, c.b, 0.2))
-		else:
-
-			var p_life: = float(tele.get("portal_life", 0.0))
-			var p_max: = maxf(0.01, float(tele.get("portal_max", 0.35)))
-			var p_ratio: = 1.0 - clampf(p_life / p_max, 0.0, 1.0)
-			var portal_r: = 16.0 + p_ratio * 48.0
-			var alpha: = clampf(1.0 - p_ratio, 0.0, 1.0)
-
-			draw_circle(to, portal_r, Color(0.03, 0.12, 0.05, 0.5 * alpha))
-			draw_arc(to, portal_r, p_ratio * TAU * 2.0, p_ratio * TAU * 2.0 + PI * 1.5, 48, Color(0.35, 1.0, 0.48, 0.85 * alpha), 4.0, true)
-			draw_arc(to, portal_r * 0.65, - p_ratio * TAU * 2.5, - p_ratio * TAU * 2.5 + PI * 1.3, 36, Color(0.75, 1.0, 0.6, 0.7 * alpha), 2.5, true)
-			draw_circle(to, portal_r * 0.3, Color(0.85, 1.0, 0.7, 0.9 * alpha))
-	for hazard in phase5_hazards:
-		var kind: = String(hazard.get("kind", ""))
-		match kind:
-			"vortex":
-				var pos: = Vector2(hazard["pos"]) - camera
-				var max_life: = float(hazard.get("max", BOSS5_VORTEX_DURATION))
-				var life: = float(hazard.get("life", max_life))
-				var elapsed: = max_life - life
-				var warning_dur: = float(hazard.get("warning", BOSS5_VORTEX_WARNING))
-				var radius_aviso: = float(hazard.get("radius_aviso", 150.0))
-				var radius_succao: = float(hazard.get("radius_succao", 850.0))
-				var radius_dano: = float(hazard.get("radius_dano", 150.0))
-				if elapsed < warning_dur:
-					var prog: float = elapsed / maxf(0.01, warning_dur)
-					var pulse_alpha: float = 0.2 + sin(time_alive * 10.0) * 0.1
-					draw_circle(pos, radius_aviso, Color(0.54, 0.17, 0.89, pulse_alpha))
-					draw_arc(pos, radius_aviso, 0, TAU, 64, Color(1.0, 0.0, 0.5, 0.85), 3.0)
-					var ring_radius: float = radius_aviso * (1.0 - prog)
-					if ring_radius > 2.0:
-						draw_arc(pos, ring_radius, 0, TAU, 48, Color(1.0, 1.0, 1.0, 0.9), 2.0)
-						draw_circle(pos, ring_radius, Color(1.0, 1.0, 1.0, 0.08 * prog))
-				else:
-					var fade: float = clampf(life / 0.5, 0.0, 1.0)
-					var spin: float = time_alive * 2.5
-					draw_arc(pos, radius_succao * 0.4, spin * 0.5, spin * 0.5 + TAU, 64, Color(0.4, 0.15, 0.7, 0.12 * fade), 1.5)
-					for i in range(6):
-						var r: float = radius_dano + (radius_succao * 0.35 - radius_dano) * (float(i) / 5.0)
-						var angle_offset: float = spin * (1.2 + float(i) * 0.2)
-						draw_arc(pos, r, angle_offset, angle_offset + TAU * 0.65, 48, Color(0.58, 0.2, 0.9, 0.35 * fade), 2.0)
-						var inward_r: float = r * (1.0 - fmod(time_alive * 0.8 + float(i) * 0.15, 1.0))
-						if inward_r > 10.0:
-							draw_arc(pos, inward_r, - angle_offset, - angle_offset + PI * 0.5, 32, Color(0.35, 0.85, 1.0, 0.45 * fade), 1.5)
-					draw_circle(pos, radius_dano, Color(0.18, 0.04, 0.32, 0.35 * fade))
-					draw_arc(pos, radius_dano, - spin * 1.5, TAU - spin * 1.5, 64, Color(1.0, 0.1, 0.6, 0.9 * fade), 3.5)
-					draw_circle(pos, 45.0, Color(0.05, 0.02, 0.1, 0.95 * fade))
-					draw_circle(pos, 22.0, Color(0.0, 0.0, 0.0, 1.0 * fade))
-					var core_pulse: float = 8.0 + sin(time_alive * 12.0) * 4.0
-					draw_circle(pos, core_pulse, Color(0.4, 0.95, 1.0, 0.9 * fade))
-					draw_arc(pos, 55.0, spin * 3.0, spin * 3.0 + PI * 1.2, 36, Color(0.3, 0.9, 1.0, 0.8 * fade), 2.5)
-			"prison":
-				var pos: = Vector2(hazard["pos"]) - camera
-				var max_life: float = float(hazard.get("max", BOSS5_PRISON_DURATION))
-				var life: float = float(hazard.get("life", max_life))
-				var elapsed: float = max_life - life
-				var warning_dur: float = float(hazard.get("warning", BOSS5_PRISON_WARNING))
-				var r_max: float = float(hazard.get("radius_max", 180.0))
-				if elapsed < warning_dur:
-					var prog: float = elapsed / maxf(0.01, warning_dur)
-					var pulse_alpha: float = 0.22 + sin(time_alive * 9.0) * 0.1
-					draw_circle(pos, r_max, Color(0.0, 0.47, 1.0, pulse_alpha))
-					draw_arc(pos, r_max, 0, TAU, 64, Color(0.0, 1.0, 1.0, 0.85), 3.0)
-					var ring_radius: float = r_max * (1.0 - prog)
-					if ring_radius > 2.0:
-						draw_arc(pos, ring_radius, 0, TAU, 48, Color(1.0, 1.0, 1.0, 0.95), 2.0)
-						draw_circle(pos, ring_radius, Color(0.7, 0.95, 1.0, 0.12 * prog))
-					for i in range(12):
-						var flake_angle: float = float(i) * (TAU / 12.0) + time_alive * 0.6
-						var flake_dist: float = r_max * (0.25 + 0.65 * fmod(time_alive * 0.35 + float(i) * 0.083, 1.0))
-						var flake_pos: Vector2 = pos + Vector2(cos(flake_angle), sin(flake_angle)) * flake_dist
-						draw_rect(Rect2(flake_pos - Vector2(2, 2), Vector2(4, 4)), Color(0.8, 0.95, 1.0, 0.8), true)
-				else:
-					var radius_atual: float = float(hazard.get("radius_atual", 45.0))
-					var fade: float = clampf(life / 0.5, 0.0, 1.0)
-					var spin: float = time_alive * 2.2
-					draw_circle(pos, radius_atual, Color(0.05, 0.3, 0.8, 0.28 * fade))
-					var r_core: float = radius_atual * 0.6 + sin(time_alive * 8.0) * 6.0
-					draw_circle(pos, r_core, Color(0.0, 0.31, 1.0, 0.45 * fade))
-					draw_circle(pos, r_core * 0.7, Color(0.0, 0.62, 1.0, 0.65 * fade))
-					draw_circle(pos, r_core * 0.3, Color(0.58, 0.94, 1.0, 0.9 * fade))
-					var num_segments: int = 20
-					var step_ang: float = TAU / float(num_segments)
-					for i in range(num_segments):
-						var seg_ang: float = spin + float(i) * step_ang
-						var seg_r: float = radius_atual + sin(time_alive * 12.0 + float(i)) * 3.0
-						var seg_pos: Vector2 = pos + Vector2(cos(seg_ang), sin(seg_ang)) * seg_r
-						draw_circle(seg_pos, 3.0, Color(0.78, 0.98, 1.0, 0.85 * fade))
-					for i in range(16):
-						var p_angle: float = - spin * 1.5 + float(i) * (TAU / 16.0)
-						var p_r: float = radius_atual * (0.2 + 0.75 * fmod(time_alive * 0.5 + float(i) * 0.0625, 1.0))
-						var p_pos: Vector2 = pos + Vector2(cos(p_angle), sin(p_angle)) * p_r
-						if i % 3 == 0:
-							draw_rect(Rect2(p_pos - Vector2(2, 2), Vector2(4, 4)), Color(1.0, 1.0, 1.0, 0.9 * fade), true)
-						else:
-							draw_rect(Rect2(p_pos - Vector2(3, 3), Vector2(6, 6)), Color(0.6, 0.92, 1.0, 0.85 * fade), true)
-							draw_rect(Rect2(p_pos - Vector2(1, 4), Vector2(2, 8)), Color(1.0, 1.0, 1.0, 0.95 * fade), true)
-			"miasma", "siphon":
-				var pos: = Vector2(hazard.get("pos", boss_pos)) - camera
-				var radius: = float(hazard.get("radius", 160.0))
-				var color: = Color(0.22, 1.0, 0.34, 0.18) if kind == "siphon" else Color(0.16, 0.92, 0.18, 0.16)
-				draw_circle(pos, radius, color)
-				draw_arc(pos, radius * (0.92 + sin(time_alive * 5.0) * 0.04), 0, TAU, 60, Color(0.34, 1.0, 0.44, 0.65), 3.0)
-			"discharge":
-				var start: Vector2 = Vector2(hazard.get("pos", boss_pos)) - camera
-				var dir: Vector2 = Vector2(hazard.get("dir", Vector2.RIGHT)).normalized()
-				var base_angle: float = dir.angle()
-				var max_radius: float = float(hazard.get("radius", 380.0))
-				var half_abertura: float = float(hazard.get("abertura", 0.9)) * 0.5
-				var max_life: float = float(hazard.get("max", 2.4))
-				var life: float = float(hazard.get("life", 0.0))
-				var elapsed: float = max_life - life
-				var warning_dur: float = float(hazard.get("warning", 0.6))
-				var is_active: bool = elapsed >= warning_dur
-
-				if not is_active:
-					var pts: Array[Vector2] = [start]
-					for k in range(16):
-						var a: float = base_angle - half_abertura + (float(k) / 15.0) * (half_abertura * 2.0)
-						pts.append(start + Vector2.from_angle(a) * max_radius)
-					draw_polygon(pts, [Color(1.0, 0.8, 0.15, 0.18)])
-					draw_arc(start, max_radius, base_angle - half_abertura, base_angle + half_abertura, 24, Color(1.0, 0.9, 0.25, 0.7), 3.0)
-					draw_line(start, start + Vector2.from_angle(base_angle - half_abertura) * max_radius, Color(1.0, 0.9, 0.25, 0.6), 2.0)
-					draw_line(start, start + Vector2.from_angle(base_angle + half_abertura) * max_radius, Color(1.0, 0.9, 0.25, 0.6), 2.0)
-				else:
-					var base_seed: int = int(hazard.get("seed", 12345)) + int(time_alive * 24.0)
-					var colors: Array[Color] = [
-						Color(1.0, 0.92, 0.2), 
-						Color(0.75, 0.35, 1.0), 
-						Color(1.0, 1.0, 1.0), 
-						Color(1.0, 0.85, 0.1), 
-						Color(0.65, 0.25, 0.95), 
-						Color(1.0, 1.0, 1.0)
-					]
-
-					var fill_pts: Array[Vector2] = [start]
-					for k in range(16):
-						var a: float = base_angle - half_abertura + (float(k) / 15.0) * (half_abertura * 2.0)
-						fill_pts.append(start + Vector2.from_angle(a) * max_radius)
-					draw_polygon(fill_pts, [Color(0.55, 0.2, 0.9, 0.12)])
-
-					for b in range(6):
-						var t_angle: float = lerpf(base_angle - half_abertura + 0.04, base_angle + half_abertura - 0.04, float(b) / 5.0)
-						var bolt_color: Color = colors[b % colors.size()]
-						var thickness: float = 2.0 + float((b * 3 + int(time_alive * 10.0)) % 6)
-						var bolt_seed: int = base_seed + b * 1337
-						_draw_procedural_lightning_bolt(start, t_angle, max_radius, bolt_color, thickness, bolt_seed)
-			"thorns":
-				var segs: Array = hazard.get("segments", [])
-				var phase_str: String = String(hazard.get("phase", "crescimento"))
-				var curr_w: float = float(hazard.get("current_width", 10.0))
-				var growth_progress: float = clampf(float(hazard.get("growth_progress", 1.0)), 0.0, 1.0)
-
-				for seg in segs:
-					var world_a: Vector2 = Vector2(seg["a"])
-					var world_b: Vector2 = Vector2(seg["b"])
-					var world_tip: Vector2 = world_a.lerp(world_b, growth_progress)
-					var a: Vector2 = world_a - camera
-					var b: Vector2 = world_tip - camera
-					var seg_vec: Vector2 = b - a
-					var seg_len: float = seg_vec.length()
-					if seg_len <= 1.0:
-						continue
-					var seg_dir: Vector2 = seg_vec.normalized()
-					var perp: Vector2 = seg_dir.orthogonal()
-					var num_seg: int = max(2, int(seg_len / 15.0))
-					var points1: Array[Vector2] = []
-					var points2: Array[Vector2] = []
-
-					for i in range(num_seg + 1):
-						var dist: float = minf(float(i) * 15.0, seg_len)
-						var base_pt: Vector2 = a + seg_dir * dist
-						var wave1: float = sin(float(i) * 0.5 + time_alive * 3.0) * (curr_w * 0.35)
-						var wave2: float = cos(float(i) * 0.7 - time_alive * 2.0) * (curr_w * 0.35)
-						points1.append(base_pt + perp * wave1)
-						points2.append(base_pt + perp * wave2)
-
-					for i in range(1, points1.size()):
-						var fade: float = 1.0 - float(i) / float(num_seg)
-						var vine_w: float = maxf(2.0, floor(curr_w * 0.15 * fade))
-						draw_line(points1[i - 1] + Vector2(2.0, 2.0), points1[i] + Vector2(2.0, 2.0), Color(0.02, 0.04, 0.02, 0.92), vine_w + 2.0)
-						draw_line(points1[i - 1], points1[i], Color(0.08, 0.30, 0.08, 0.98), vine_w + 1.0)
-						draw_line(points2[i - 1], points2[i], Color(0.20, 0.48, 0.14, 0.94), maxf(1.5, vine_w))
-						draw_line(points1[i - 1], points1[i], Color(0.40, 0.70, 0.24, 0.36), 1.5)
-
-						if phase_str == "expansao":
-							var hash_v: int = (i * 37) % 100
-							if hash_v < 35:
-								var side: float = 1.0 if hash_v < 17 else -1.0
-								var thorn_angle: float = seg_dir.angle() + (PI / 2.5 * side)
-								var thorn_size: float = 9.0 + curr_w * 0.20
-								var thorn_base: Vector2 = points1[i]
-								var tip: Vector2 = thorn_base + Vector2.from_angle(thorn_angle) * thorn_size
-								var base1: Vector2 = thorn_base + Vector2.from_angle(thorn_angle + 1.2) * vine_w
-								var base2: Vector2 = thorn_base + Vector2.from_angle(thorn_angle - 1.2) * vine_w
-								draw_polygon([tip, base1, base2], [Color(0.82, 0.92, 0.52, 0.96)])
-			"sopro_artico":
-				var spears: Array = hazard.get("spears", [])
-				for s_item in spears:
-					if not s_item is Dictionary:
-						continue
-					var sp: Dictionary = s_item
-					if bool(sp.get("hit", false)):
-						continue
-					var s_pos: Vector2 = Vector2(sp.get("pos", boss_pos)) - camera
-					var s_ang: float = float(sp.get("angle", 0.0))
-					var dir: Vector2 = Vector2.from_angle(s_ang)
-					var perp: Vector2 = dir.orthogonal()
-					var tip: Vector2 = s_pos + dir * 18.0
-					var tail: Vector2 = s_pos - dir * 10.0
-					var p1: Vector2 = tail + perp * 4.0
-					var p2: Vector2 = tail - perp * 4.0
-					draw_polygon([tip, p1, p2], [Color(0.35, 0.85, 1.0, 0.85)])
-					draw_line(s_pos - dir * 8.0, tip, Color(1.0, 1.0, 1.0, 0.95), 2.0)
-			"umbra_overload_laser":
-				var start: Vector2 = (WORLD_SIZE * 0.5) - camera
-				var fase_str: String = String(hazard.get("fase", "caminhando"))
-				var curr_ang: float = float(hazard.get("angle", 0.0))
-				var num_beams: int = int(hazard.get("num_beams", 2))
-
-				if fase_str in ["esfera_carga_1", "esfera_recolher_1", "esfera_recolher_2"]:
-					var st: float = float(hazard.get("stage_timer", 1.0))
-					var r_sphere: float = 50.0 + sin(time_alive * 20.0) * 8.0
-					if fase_str == "esfera_carga_1":
-						r_sphere = lerpf(65.0, 25.0, clampf(st / 1.2, 0.0, 1.0))
-					draw_circle(start, r_sphere, Color(0.95, 0.1, 0.15, 0.6))
-					draw_arc(start, r_sphere + 8.0, 0, TAU, 48, Color(1.0, 0.8, 0.2, 0.85), 3.0)
-				elif fase_str in ["laser_4_aviso", "laser_6_aviso"]:
-					draw_circle(start, 35.0, Color(0.95, 0.1, 0.15, 0.4))
-					var step_ang: float = TAU / float(num_beams)
-					var warn_pulse: float = 0.4 + sin(time_alive * 25.0) * 0.35
-					for b in range(num_beams):
-						var b_ang: float = curr_ang + float(b) * step_ang
-						var b_dir: Vector2 = Vector2.from_angle(b_ang)
-						draw_line(start, start + b_dir * 1400.0, Color(1.0, 0.2, 0.15, warn_pulse), 3.0)
-				elif fase_str in ["laser_2", "laser_4", "laser_6_ccw", "laser_6_cw"]:
-					var width: float = 38.0 if num_beams == 2 else (32.0 if num_beams == 4 else 26.0)
-					var step_ang: float = TAU / float(num_beams)
-
-					draw_circle(start, 50.0 + sin(time_alive * 20.0) * 8.0, Color(1.0, 0.3, 0.1, 0.7))
-
-					for b in range(num_beams):
-						var b_ang: float = curr_ang + float(b) * step_ang
-						var b_dir: Vector2 = Vector2.from_angle(b_ang)
-						var end_pt: Vector2 = start + b_dir * 1400.0
-
-						draw_line(start, end_pt, Color(0.4, 0.02, 0.05, 0.85), width)
-						draw_line(start, end_pt, Color(0.95, 0.1, 0.15, 0.95), width * 0.6)
-						draw_line(start, end_pt, Color(1.0, 0.5, 0.1, 0.95), width * 0.35)
-						draw_line(start, end_pt, Color(1.0, 0.98, 0.92, 1.0), width * 0.15)
-
-						for s in range(5):
-							var t_spark: float = fmod(float(s) * 0.2 + time_alive * 3.0, 1.0)
-							var spark_pos: Vector2 = start.lerp(end_pt, t_spark)
-							var offset: Vector2 = b_dir.orthogonal() * (sin(time_alive * 30.0 + float(s) * 4.0) * width * 0.35)
-							draw_circle(spark_pos + offset, 3.5, Color(1.0, 0.85, 0.2, 0.9))
-	for rat in phase5_rats:
-		var pos: Vector2 = Vector2(rat.get("pos", boss_pos)) - camera
-		var life: float = float(rat.get("life", 5.0))
-		var max_life: float = float(rat.get("max_life", 5.0))
-		var is_flashing: bool = life <= 2.0 and fmod(time_alive * 12.0, 0.4) < 0.2
-		var body_color: Color = Color(1.0, 0.2, 0.25, 0.95) if is_flashing else Color(0.18, 0.58, 0.95, 0.95)
-		var outline_color: Color = Color(1.0, 0.7, 0.7, 0.95) if is_flashing else Color(0.6, 0.88, 1.0, 0.95)
-
-		var pulse: float = 1.0 + sin(float(rat.get("phase", 0.0))) * 0.1
-
-		draw_circle(pos + Vector2(0, 10), 14.0 * pulse, Color(0.0, 0.0, 0.0, 0.35))
-
-		draw_circle(pos, 15.0 * pulse, body_color)
-		draw_arc(pos, 15.0 * pulse, 0, TAU, 24, outline_color, 2.5)
-
-		draw_circle(pos + Vector2(4, -3), 2.5, Color(1.0, 0.95, 0.8, 0.95))
-
-
-		var bar_w: float = 24.0
-		var bar_h: float = 4.0
-		var bar_pos: Vector2 = pos + Vector2(-12.0, -22.0)
-		draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.08, 0.08, 0.12, 0.75), true)
-		var fill_w: float = bar_w * clampf(life / maxf(0.01, max_life), 0.0, 1.0)
-		draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.2, 0.8, 1.0, 0.9), true)
-	if boss_active and boss_hp > 0.0:
-		_draw_centered("MENTE: %s" % boss5_mental_state, Vector2(get_viewport_rect().size.x * 0.5, 128.0), 17, Color(0.58, 1.0, 0.66, 0.92))
+	WorldEnvironmentPresentation._draw_phase5_environment(self, camera)
 
 
 func _draw_boss4_specials(camera: Vector2) -> void :
-	if boss4_gravity_timer > 0.0 and boss4_gravity_dir.length() > 0.01:
-		var viewport: Vector2 = get_viewport_rect().size
-		var dir: Vector2 = boss4_gravity_dir.normalized()
-		var side: Vector2 = dir.orthogonal()
-		for i in range(12):
-			var lane: float = (float(i) - 5.5) * 72.0
-			var center: Vector2 = viewport * 0.5 + side * lane
-			draw_line(center - dir * 500.0, center + dir * 500.0, Color(0.42, 1.0, 0.82, 0.07), 10.0, true)
-			var tip: Vector2 = center + dir * (80.0 + sin(time_alive * 4.0 + i) * 40.0)
-			draw_polyline(PackedVector2Array([tip - dir * 26.0 + side * 14.0, tip, tip - dir * 26.0 - side * 14.0]), Color(0.6, 1.0, 0.88, 0.46), 2.0, false)
-		_draw_centered("GRAVIDADE %.0fs" % ceil(boss4_gravity_timer), Vector2(viewport.x * 0.5, 174.0), 16, Color(0.66, 1.0, 0.88, 0.9))
-	if boss4_vampire_timer > 0.0 and petro_active:
-		var p: Vector2 = petro_pos - camera
-		var b: Vector2 = boss_pos - camera
-		draw_line(p, b, Color(0.12, 0.0, 0.22, 0.48), 16.0, true)
-		draw_line(p, b, Color(0.88, 0.2, 1.0, 0.8), 4.0, true)
-		for i in range(5):
-			var t: = fposmod(time_alive * 0.85 + float(i) * 0.2, 1.0)
-			draw_circle(p.lerp(b, t), 5.0 + sin(time_alive * 9.0 + i) * 2.0, Color(1.0, 0.54, 1.0, 0.76))
-	if not boss4_prison.is_empty():
-		var center: = Vector2(boss4_prison.get("pos", player_pos)) - camera
-		var phase: = float(boss4_prison.get("phase", 0.0))
-		var fragments: = int(boss4_prison.get("fragments", 0))
-		draw_circle(center, 82.0, Color(0.18, 0.0, 0.3, 0.22))
-		draw_arc(center, 82.0, - phase, TAU - phase, 72, Color(0.9, 0.52, 1.0, 0.9), 3.2)
-		for i in range(max(0, fragments)):
-			var ang: float = phase + float(i) * TAU / max(1.0, float(fragments))
-			var fp: Vector2 = center + Vector2.from_angle(ang) * 78.0
-			draw_circle(fp, 10.0, Color(0.82, 0.58, 1.0, 0.84))
-			draw_arc(fp, 15.0, - time_alive * 3.0, TAU - time_alive * 3.0, 24, Color(1.0, 0.82, 1.0, 0.86), 2.0)
-	if not boss4_clone.is_empty():
-		var pos: = Vector2(boss4_clone.get("pos", player_pos)) - camera
-		var tex: = _player_texture()
-		_draw_dynamic_shadow_fit(tex, pos + Vector2(0, 10), Vector2(82, 92), false, true, 0.28)
-		_draw_entity_fit(tex, pos, Vector2(82, 92), Color(0.36, 1.0, 0.9, 0.66), true)
-		_draw_bar(pos + Vector2(-40, -58), 80.0, clampf(float(boss4_clone.get("hp", 0.0)) / max(1.0, 260.0 + player_damage * 0.75), 0.0, 1.0), Color(0.28, 1.0, 0.88))
-	if boss4_ultimate_active:
-		_draw_boss4_ultimate(camera)
-	var viewport2: = get_viewport_rect().size
-	var bar_w: = 240.0
-	var origin: = Vector2(viewport2.x * 0.5 - bar_w * 0.5, 44.0)
-	draw_rect(Rect2(origin - Vector2(4, 4), Vector2(bar_w + 8, 18)), Color(0.03, 0.0, 0.08, 0.56), true)
-	draw_rect(Rect2(origin, Vector2(bar_w * clampf(boss4_instability / 100.0, 0.0, 1.0), 10.0)), Color(0.82, 0.24, 1.0, 0.82), true)
-	draw_rect(Rect2(origin, Vector2(bar_w, 10.0)), Color(1.0, 0.7, 0.18, 0.72), false, 1.5)
-	_draw_centered("INSTABILIDADE DA RUPTURA %.0f%%" % boss4_instability, origin + Vector2(bar_w * 0.5, -11.0), 13, Color(1.0, 0.86, 0.42, 0.92))
+	WorldEnvironmentPresentation._draw_boss4_specials(self, camera)
 
 
 func _draw_boss4_ultimate(camera: Vector2) -> void :
-	var viewport: = get_viewport_rect().size
-	var center: = WORLD_SIZE * 0.5 - camera
-	var progress: float = 1.0 - boss4_ultimate_timer / max(0.01, BOSS4_ULTIMATE_DURATION)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.06, 0.2 + progress * 0.14), true)
-	for i in range(8):
-		var radius: float = 120.0 + progress * 420.0 + float(i) * 44.0 + sin(time_alive * 2.4 + i) * 12.0
-		draw_arc(center, radius, - time_alive * (1.0 + i * 0.08), TAU - time_alive * (1.0 + i * 0.08), 128, Color(0.32, 1.0, 0.92, 0.24 - i * 0.018), 4.0)
-		draw_arc(center, radius * 0.72, time_alive * (1.4 + i * 0.05), TAU + time_alive * (1.4 + i * 0.05), 96, Color(0.92, 0.24, 1.0, 0.18 - i * 0.012), 2.6)
-	if boss4_gravity_dir.length() > 0.01:
-		var dir: = boss4_gravity_dir.normalized()
-		for i in range(5):
-			var p: = center - dir * (220.0 + float(i) * 92.0) + dir.orthogonal() * sin(time_alive * 3.0 + float(i)) * 54.0
-			draw_polyline(PackedVector2Array([p - dir * 22.0 + dir.orthogonal() * 14.0, p + dir * 18.0, p - dir * 22.0 - dir.orthogonal() * 14.0]), Color(0.7, 1.0, 0.9, 0.66), 3.0, false)
-		_draw_centered("GRAVIDADE: %s" % _boss4_gravity_dir_label(dir), Vector2(viewport.x * 0.5, 122.0), 16, Color(0.7, 1.0, 0.9, 0.92))
-	_draw_centered("TEMPESTADE DE RAIOS %.0fs" % ceil(boss4_ultimate_timer), Vector2(viewport.x * 0.5, 92.0), 22, Color(1.0, 0.86, 0.28, 0.98))
+	WorldEnvironmentPresentation._draw_boss4_ultimate(self, camera)
 
 
 func _draw_phase4_enemy_hazards(camera: Vector2) -> void :
-	var viewport: Vector2 = get_viewport_rect().size
-	for hazard in phase4_enemy_hazards:
-		var kind: = String(hazard.get("kind", ""))
-		var age: float = float(hazard.get("age", 0.0))
-		var fade: float = clampf(float(hazard.get("life", 0.0)) / max(0.01, float(hazard.get("max", 1.0))), 0.0, 1.0)
-		match kind:
-			"rift":
-				var a: Vector2 = Vector2(hazard["a"]) - camera
-				var b: Vector2 = Vector2(hazard["b"]) - camera
-				var rift_warning: = float(hazard.get("warning", PHASE4_RIFT_WARNING))
-				var active: = age >= rift_warning
-				var color: = Color(1.0, 0.18, 0.72, 0.92 * fade) if active else Color(0.76, 0.48, 1.0, 0.46)
-				draw_line(a, b, Color(0.16, 0.0, 0.24, 0.62 * fade), 18.0 if active else 8.0, true)
-				draw_line(a, b, color, 5.0 if active else 2.0, true)
-				for i in range(9):
-					var t: = float(i) / 8.0
-					var p: = a.lerp(b, t) + (b - a).normalized().orthogonal() * sin(time_alive * 13.0 + i * 2.2) * (7.0 if active else 3.0)
-					draw_circle(p, 3.5 if active else 2.0, color)
-			"chrono":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var radius: float = float(hazard["radius"])
-				var chrono_warning: = float(hazard.get("warning", PHASE4_CHRONO_WARNING))
-				var progress: = clampf(age / maxf(0.01, chrono_warning), 0.0, 1.0)
-				draw_circle(pos, radius * progress, Color(1.0, 0.54, 0.08, 0.06 + progress * 0.08))
-				draw_arc(pos, radius * progress, 0.0, TAU, 64, Color(1.0, 0.78, 0.2, 0.82 * fade), 3.0)
-				for i in range(8):
-					var angle: float = - time_alive * 1.8 + float(i) * TAU / 8.0
-					draw_line(pos + Vector2.from_angle(angle) * radius * progress * 0.74, pos + Vector2.from_angle(angle) * radius * progress, Color(1.0, 0.86, 0.38, 0.58 * fade), 2.0)
-			"hostile_prism":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var size: = 38.0 + sin(time_alive * 7.0 + float(hazard.get("phase", 0.0))) * 5.0
-				var points: = PackedVector2Array([pos + Vector2(0, - size), pos + Vector2(size * 0.72, 0), pos + Vector2(0, size), pos + Vector2( - size * 0.72, 0), pos + Vector2(0, - size)])
-				draw_colored_polygon(PackedVector2Array([points[0], points[1], points[2], points[3]]), Color(0.12, 0.82, 1.0, 0.16 * fade))
-				draw_polyline(points, Color(1.0, 0.3, 0.74, 0.9 * fade), 3.0, true)
-				draw_arc(pos, size + 12.0, time_alive * 2.0, time_alive * 2.0 + PI * 1.5, 30, Color(0.38, 0.94, 1.0, 0.72 * fade), 2.0)
-			"vector":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var radius: float = float(hazard["radius"])
-				draw_circle(pos, radius, Color(0.08, 0.72, 0.52, 0.075 * fade))
-				draw_arc(pos, radius, 0.0, TAU, 72, Color(0.24, 1.0, 0.72, 0.62 * fade), 2.0)
-				for i in range(12):
-					var angle: float = float(i) * TAU / 12.0 + time_alive * 0.22 * float(hazard.get("spin", 1.0))
-					var p: = pos + Vector2.from_angle(angle) * radius * 0.68
-					var arrow: = Vector2.from_angle(angle + deg_to_rad(38.0) * float(hazard.get("spin", 1.0)))
-					draw_line(p - arrow * 10.0, p + arrow * 10.0, Color(0.54, 1.0, 0.82, 0.72 * fade), 2.4, true)
-			"echo":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var radius: float = float(hazard["radius"])
-				var warning: float = float(hazard["warning"])
-				var progress: = clampf(age / warning, 0.0, 1.0)
-				draw_circle(pos, radius * progress, Color(1.0, 0.12, 0.56, 0.08 + progress * 0.1))
-				draw_arc(pos, radius, - PI * 0.5, - PI * 0.5 + TAU * progress, 42, Color(1.0, 0.42, 0.76, 0.88 * fade), 3.0)
-				if bool(hazard.get("triggered", false)):
-					draw_circle(pos, radius * 1.16, Color(1.0, 0.72, 0.24, 0.26 * fade))
-			"boss4_pulse":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var radius: float = float(hazard.get("radius", BOSS4_PULSE_RADIUS))
-				var pulse_warning: = float(hazard.get("warning", BOSS4_PULSE_WARNING))
-				var progress: = clampf(age / maxf(0.01, pulse_warning), 0.0, 1.0)
-				draw_circle(pos, radius * progress, Color(1.0, 0.64, 0.14, 0.07))
-				draw_arc(pos, radius * progress, 0.0, TAU, 96, Color(1.0, 0.72, 0.22, 0.88 * fade), 5.0)
-				draw_arc(pos, radius * progress * 0.72, - time_alive * 2.0, TAU - time_alive * 2.0, 80, Color(0.76, 0.3, 1.0, 0.52 * fade), 3.0)
-			"boss4_fissure":
-				var a: Vector2 = Vector2(hazard["a"]) - camera
-				var b: Vector2 = Vector2(hazard["b"]) - camera
-				var fissure_warning: = float(hazard.get("warning", PHASE4_RIFT_WARNING))
-				var active: = age >= fissure_warning
-				var color: = Color(1.0, 0.22, 0.72, 0.92 * fade) if active else Color(0.92, 0.66, 1.0, 0.44)
-				draw_line(a, b, Color(0.1, 0.0, 0.2, 0.72 * fade), 20.0 if active else 8.0, true)
-				draw_line(a, b, color, 5.5 if active else 2.2, true)
-				if bool(hazard.get("teleport", false)):
-					for i in range(5):
-						var t: = float(i) / 4.0
-						draw_circle(a.lerp(b, t), 4.0 + sin(time_alive * 6.0 + i) * 1.6, Color(0.36, 1.0, 0.92, 0.72 * fade))
-			"boss4_vector":
-				var center: Vector2 = Vector2(hazard["pos"]) - camera
-				var dir: Vector2 = Vector2(hazard["dir"]).normalized()
-				var side: = dir.orthogonal()
-				var vector_warning: = float(hazard.get("warning", BOSS4_VECTOR_WARNING))
-				var active: = age >= vector_warning
-				var width: = 22.0 if bool(hazard.get("elite", false)) else 16.0
-				var a: = center - dir * 760.0
-				var b: = center + dir * 760.0
-				draw_line(a, b, Color(0.0, 0.08, 0.12, 0.62 * fade), width + 12.0, true)
-				draw_line(a, b, Color(0.28, 1.0, 0.82, (0.84 if active else 0.38) * fade), width if active else 4.0, true)
-				for i in range(7):
-					var p: = center + dir * (float(i) - 3.0) * 150.0
-					draw_polyline(PackedVector2Array([p - dir * 24.0 + side * 14.0, p, p - dir * 24.0 - side * 14.0]), Color(1.0, 0.84, 0.28, 0.72 * fade), 2.0, false)
-			"boss4_fragment":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var radius: float = float(hazard.get("radius", 58.0))
-				var fragment_warning: = float(hazard.get("warning", BOSS4_FRAGMENT_WARNING))
-				var progress: = clampf(age / maxf(0.01, fragment_warning), 0.0, 1.0)
-				draw_circle(pos, radius, Color(1.0, 0.52, 0.18, 0.08 + progress * 0.1))
-				draw_arc(pos, radius, - PI * 0.5, - PI * 0.5 + TAU * progress, 54, Color(1.0, 0.76, 0.24, 0.9 * fade), 3.0)
-				if bool(hazard.get("triggered", false)):
-					var fall: = pos + Vector2(0, -220.0 * max(0.0, fade - 0.2))
-					draw_line(fall, pos, Color(1.0, 0.84, 0.36, 0.58 * fade), 8.0, true)
-					draw_circle(pos, radius * 0.72, Color(1.0, 0.66, 0.22, 0.24 * fade))
-					if bool(hazard.get("barrier", false)):
-						draw_rect(Rect2(pos - Vector2(radius * 0.62, radius * 0.32), Vector2(radius * 1.24, radius * 0.64)), Color(0.32, 0.18, 0.05, 0.46 * fade), true)
-			"boss4_collapse":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var radius: float = float(hazard.get("radius", 110.0))
-				draw_circle(pos, radius, Color(0.22, 0.0, 0.3, 0.18 * fade))
-				for i in range(11):
-					var angle: = float(i) * TAU / 11.0 + sin(time_alive * 2.0 + i) * 0.18
-					var inner: = pos + Vector2.from_angle(angle) * radius * 0.15
-					var outer: = pos + Vector2.from_angle(angle + sin(i) * 0.16) * radius
-					draw_line(inner, outer, Color(0.94, 0.34, 1.0, 0.3 * fade), 2.0 + fposmod(float(i), 3.0), true)
-			"boss4_gravity_well":
-				var pos: Vector2 = Vector2(hazard.get("pos", boss_pos)) - camera
-				var radius: float = float(hazard.get("radius", BOSS4_GRAVITY_WELL_RADIUS))
-				var warning: float = float(hazard.get("warning", BOSS4_GRAVITY_WELL_WARNING))
-				var active: = age >= warning
-				var progress: = clampf(age / maxf(0.01, warning), 0.0, 1.0)
-				var vortex_alpha: = (0.18 if active else 0.08 + progress * 0.08) * fade
-				draw_circle(pos, radius * (0.5 + progress * 0.5), Color(0.08, 0.04, 0.2, vortex_alpha))
-				draw_arc(pos, radius, time_alive * 2.4, TAU + time_alive * 2.4, 96, Color(0.46, 1.0, 0.9, (0.78 if active else 0.44) * fade), 4.0)
-				draw_arc(pos, radius * 0.62, - time_alive * 3.2, TAU - time_alive * 3.2, 72, Color(1.0, 0.42, 1.0, (0.46 if active else 0.26) * fade), 3.0)
-				for i in range(10):
-					var angle: float = time_alive * (1.8 + float(i) * 0.06) + float(i) * TAU / 10.0 + float(hazard.get("phase", 0.0))
-					var p: = pos + Vector2.from_angle(angle) * radius * (0.24 + 0.55 * fposmod(float(i) * 0.17 + progress, 1.0))
-					draw_circle(p, 3.5 + sin(time_alive * 5.0 + float(i)) * 1.0, Color(0.86, 1.0, 0.92, 0.56 * fade))
-			"boss4_gravity_laser":
-				var segment: = _boss4_gravity_laser_segment(hazard)
-				var a: Vector2 = Vector2(segment[0]) - camera
-				var b: Vector2 = Vector2(segment[1]) - camera
-				var warning: float = float(hazard.get("warning", BOSS4_GRAVITY_LASER_WARNING))
-				var progress: = clampf(age / maxf(0.01, warning), 0.0, 1.0)
-				var active: = age >= warning
-				var width: float = float(hazard.get("width", BOSS4_GRAVITY_LASER_WIDTH))
-				var glow: = width * (1.6 if active else 0.76)
-				draw_line(a, b, Color(0.02, 0.0, 0.12, 0.7 * fade), glow + 12.0, true)
-				draw_line(a, b, Color(0.86, 0.24, 1.0, (0.2 + progress * 0.22) * fade), glow, true)
-				draw_line(a, b, Color(0.4, 1.0, 0.94, (0.42 if active else 0.26 + progress * 0.28) * fade), 4.0 + progress * 7.0, true)
-				if active:
-					draw_line(a, b, Color(1.0, 0.96, 0.62, 0.82 * fade), maxf(5.0, width * 0.34), true)
-					for i in range(8):
-						var p: = a.lerp(b, fposmod(time_alive * 0.92 + float(i) * 0.13, 1.0))
-						draw_circle(p, 3.0 + float(i % 3), Color(0.92, 1.0, 1.0, 0.62 * fade))
-			"boss4_bubble":
-				var bubble_world: Vector2 = Vector2(hazard.get("pos", hazard.get("start", player_pos)))
-				var bubble_pos: Vector2 = bubble_world - camera
-				var delay: float = float(hazard.get("delay", 0.0))
-				var warning: float = float(hazard.get("warning", BOSS4_SECONDARY_WARNING))
-				var bubble_age: float = age - delay
-				var bubble_phase: float = float(hazard.get("phase", 0.0))
-				if bubble_age < 0.0:
-					var lane_start: Vector2 = Vector2(hazard.get("start", bubble_world)) - camera
-					draw_line(lane_start - Vector2(26, 0), lane_start + Vector2(26, 0), Color(0.38, 0.86, 1.0, 0.24 * fade), 3.0, true)
-				elif bubble_age < warning:
-					var lane_start: Vector2 = Vector2(hazard.get("start", bubble_world)) - camera
-					var lane_end: Vector2 = Vector2(hazard.get("end", bubble_world)) - camera
-					var lane_progress: float = clampf(bubble_age / maxf(0.01, warning), 0.0, 1.0)
-					var telegraph_pos: Vector2 = lane_start.lerp(lane_end, lane_progress)
-					draw_arc(telegraph_pos, 34.0 + sin(time_alive * 16.0) * 4.0, 0.0, TAU, 28, Color(1.0, 0.34, 0.28, 0.8 * fade), 3.0)
-					_draw_centered("!", telegraph_pos, 26, Color(1.0, 0.78, 0.48, 0.92 * fade))
-				else:
-					draw_circle(bubble_pos, 38.0 + sin(time_alive * 8.0 + bubble_phase) * 3.0, Color(0.22, 0.74, 1.0, 0.16 * fade))
-					draw_circle(bubble_pos, 27.0, Color(0.24, 0.72, 1.0, 0.72 * fade))
-					draw_arc(bubble_pos, 30.0, bubble_phase, bubble_phase + PI * 1.45, 34, Color(0.86, 1.0, 1.0, 0.92 * fade), 3.0)
-					draw_circle(bubble_pos - Vector2(8, 9), 7.0, Color(0.92, 1.0, 1.0, 0.56 * fade))
-			"boss4_ultimate_ray":
-				var ray_pos: Vector2 = Vector2(hazard.get("pos", player_pos)) - camera
-				var ray_warning: float = float(hazard.get("warning", BOSS4_ULTIMATE_RAY_WARNING))
-				var ray_active: bool = age >= ray_warning
-				var ray_progress: float = clampf(age / maxf(0.01, ray_warning), 0.0, 1.0)
-				if not ray_active:
-					draw_circle(ray_pos, BOSS4_ULTIMATE_RAY_RADIUS * (0.82 + ray_progress * 0.24), Color(0.96, 0.08, 0.18, 0.18 * fade))
-					draw_arc(ray_pos, BOSS4_ULTIMATE_RAY_RADIUS * (0.9 + ray_progress * 0.22), 0.0, TAU, 42, Color(1.0, 0.16, 0.2, 0.95 * fade), 4.0)
-					_draw_centered("!", ray_pos + Vector2(0, 8), 32, Color(1.0, 0.9, 0.72, 0.98 * fade))
-				else:
-					var pulse: float = 0.5 + 0.5 * sin(time_alive * 18.0 + float(hazard.get("phase", 0.0)))
-					draw_line(ray_pos + Vector2(0, -720), ray_pos, Color(1.0, 0.72, 0.12, 0.18 * fade), 26.0 + pulse * 10.0, true)
-					draw_line(ray_pos + Vector2(0, -720), ray_pos, Color(1.0, 0.94, 0.38, 0.72 * fade), 7.0 + pulse * 4.0, true)
-					draw_circle(ray_pos, BOSS4_ULTIMATE_RAY_RADIUS * (1.0 + pulse * 0.18), Color(1.0, 0.84, 0.2, 0.3 * fade))
-			"boss4_meteor_shockwave":
-				var shock_pos: Vector2 = Vector2(hazard.get("pos", player_pos)) - camera
-				var shock_progress: float = clampf(age / maxf(0.01, float(hazard.get("max", 0.9))), 0.0, 1.0)
-				draw_circle(shock_pos, BOSS4_METEOR_SHOCKWAVE_RADIUS * shock_progress, Color(1.0, 0.5, 0.12, 0.12 * fade))
-				draw_arc(shock_pos, BOSS4_METEOR_SHOCKWAVE_RADIUS * (0.3 + 0.7 * shock_progress), 0.0, TAU, 54, Color(1.0, 0.78, 0.26, 0.84 * fade), 4.0)
-			"boss4_column_barrage":
-				var width: float = float(hazard.get("width", BOSS4_COLUMN_BARRAGE_WIDTH))
-				var step: float = maxf(0.1, float(hazard.get("step", BOSS4_COLUMN_BARRAGE_STEP)))
-				var columns: int = maxi(1, int(hazard.get("columns", 1)))
-				var index: int = clampi(int(floor(age / step)), 0, columns - 1)
-				var local_age: float = fposmod(age, step)
-				var warning: float = float(hazard.get("warning", BOSS4_COLUMN_BARRAGE_WARNING))
-				var active: = local_age >= warning
-				var x: float = float(hazard.get("start_x", WORLD_SIZE.x * 0.5)) - float(index) * width
-				var top_left: = Vector2(x - width * 0.5, 0.0) - camera
-				var charge: = clampf(local_age / maxf(0.01, warning), 0.0, 1.0)
-				var blast: = clampf((local_age - warning) / maxf(0.01, step - warning), 0.0, 1.0)
-				var column_color: = Color(1.0, 0.32, 0.08, (0.34 + 0.18 * sin(time_alive * 18.0)) * fade) if active else Color(1.0, 0.78, 0.16, (0.1 + charge * 0.18) * fade)
-				draw_rect(Rect2(top_left, Vector2(width, WORLD_SIZE.y)), column_color, true)
-				draw_rect(Rect2(top_left, Vector2(width, WORLD_SIZE.y)), Color(1.0, 0.86, 0.24, (0.7 + charge * 0.28) * fade), false, 3.0)
-				draw_line(Vector2(x, 0.0) - camera, Vector2(x, WORLD_SIZE.y) - camera, Color(1.0, 0.96, 0.54, (0.32 + charge * 0.36) * fade), 3.0 + charge * 4.0, true)
-				var cell_h: = 64.0
-				for y_index in range(int(ceil(WORLD_SIZE.y / cell_h))):
-					var square_pos: = Vector2(x - width * 0.5, float(y_index) * cell_h) - camera
-					var pulse: = 0.5 + 0.5 * sin(time_alive * 10.0 + float(y_index) * 0.8)
-					var alpha: = (0.32 + pulse * 0.42 + blast * 0.24) * fade if active else (0.08 + charge * 0.14) * fade
-					draw_rect(Rect2(square_pos + Vector2(4, 3), Vector2(width - 8.0, cell_h - 6.0)), Color(1.0, 0.62, 0.1, alpha), false, 1.4)
-					if active:
-						var y_mid: = square_pos.y + cell_h * 0.5
-						draw_line(Vector2(square_pos.x + 10.0, y_mid), Vector2(square_pos.x + width - 10.0, y_mid), Color(1.0, 0.92, 0.38, 0.46 * fade), 2.3, true)
-						draw_circle(Vector2(x, y_mid), 12.0 + pulse * 22.0, Color(1.0, 0.88, 0.36, (0.2 + blast * 0.22) * fade))
-				if active:
-					for spark in range(9):
-						var y: = fposmod(time_alive * 260.0 + float(spark) * 91.0, WORLD_SIZE.y) - camera.y
-						var sx: = x - camera.x + sin(time_alive * 4.0 + float(spark)) * width * 0.34
-						draw_circle(Vector2(sx, y), 3.0 + float(spark % 3), Color(1.0, 0.95, 0.44, (0.46 + blast * 0.34) * fade))
-				_draw_centered("COLUNA %d" % (index + 1), Vector2(x, 72.0) - camera, 15, Color(1.0, 0.9, 0.42, 0.92 * fade))
-			"boss4_column_laser":
-				var origin: Vector2 = Vector2(hazard.get("origin", boss_pos)) - camera
-				var target: Vector2 = Vector2(hazard.get("target", player_pos)) - camera
-				var laser_warning: float = float(hazard.get("warning", BOSS4_COLUMN_LASER_WARNING))
-				var charge: = clampf(age / maxf(0.01, laser_warning), 0.0, 1.0)
-				var dir: Vector2 = (target - origin).normalized()
-				if dir.length() <= 0.01:
-					dir = Vector2.LEFT
-				var end: = origin + dir * 1260.0
-				draw_line(origin, end, Color(0.0, 0.16, 0.18, 0.64 * fade), 13.0 + charge * 5.0, true)
-				draw_line(origin, end, Color(0.36, 1.0, 0.92, (0.32 + charge * 0.52) * fade), 2.4 + charge * 4.4, true)
-				draw_arc(target, 34.0 + charge * 26.0, - PI * 0.5, - PI * 0.5 + TAU * charge, 48, Color(1.0, 0.8, 0.28, 0.88 * fade), 2.5)
-				if bool(hazard.get("triggered", false)):
-					draw_line(origin, end, Color(1.0, 0.94, 0.62, 0.95 * fade), 10.0, true)
-			"boss4_drag_wave":
-				var x: float = float(hazard.get("x", float(hazard.get("start_x", WORLD_SIZE.x + 80.0)) - float(hazard.get("speed", BOSS4_DRAG_WAVE_SPEED)) * age))
-				var width: float = float(hazard.get("width", BOSS4_DRAG_WAVE_WIDTH))
-				var rect: = Rect2(Vector2(x - width * 0.5, 0.0) - camera, Vector2(width, WORLD_SIZE.y))
-				var grabbed: = bool(hazard.get("hit", false))
-				draw_rect(rect, Color(0.22, 1.0, 0.74, (0.18 if grabbed else 0.1) * fade), true)
-				draw_rect(rect, Color(0.54, 1.0, 0.86, (0.84 if grabbed else 0.58) * fade), false, 2.0)
-				for y_index in range(8):
-					var y: = float(y_index) * WORLD_SIZE.y / 7.0 - camera.y
-					var p: = Vector2(x, y) - Vector2(camera.x, 0)
-					draw_polyline(PackedVector2Array([p + Vector2(18, -10), p - Vector2(14, 0), p + Vector2(18, 10)]), Color(0.84, 1.0, 0.72, 0.7 * fade), 2.2, false)
-				if grabbed:
-					_draw_centered("ARRASTO %.0fs" % ceil(float(hazard.get("drag_timer", 0.0))), Vector2(viewport.x * 0.5, 124.0), 17, Color(0.76, 1.0, 0.82, 0.92 * fade))
-			"boss4_sonic_wave":
-				var a: Vector2 = Vector2(hazard.get("a", boss_pos)) - camera
-				var b: Vector2 = Vector2(hazard.get("b", boss_pos + Vector2.LEFT * 900.0)) - camera
-				var sonic_warning: float = float(hazard.get("warning", BOSS4_SONIC_WARNING))
-				var progress: = clampf(age / maxf(0.01, sonic_warning), 0.0, 1.0)
-				var sonic_width: float = float(hazard.get("width", BOSS4_SONIC_WIDTH))
-				var dir: Vector2 = (b - a).normalized()
-				if dir.length() <= 0.01:
-					dir = Vector2.LEFT
-				var side: = dir.orthogonal()
-				draw_line(a, b, Color(0.02, 0.04, 0.1, 0.74 * fade), sonic_width * 1.15, true)
-				draw_line(a, b, Color(0.98, 0.18, 1.0, (0.3 + progress * 0.28) * fade), sonic_width * 0.72, true)
-				draw_line(a, b, Color(0.18, 1.0, 1.0, (0.58 + progress * 0.3) * fade), 7.0 + progress * 8.0, true)
-				draw_line(a + side * sonic_width * 0.52, b + side * sonic_width * 0.52, Color(1.0, 0.86, 0.28, 0.62 * fade), 2.8, true)
-				draw_line(a - side * sonic_width * 0.52, b - side * sonic_width * 0.52, Color(1.0, 0.86, 0.28, 0.62 * fade), 2.8, true)
-				for i in range(10):
-					var offset: = sin(time_alive * 9.0 + float(i)) * sonic_width * 0.34
-					var t: = float(i) / 9.0
-					var p: = a.lerp(b, t)
-					draw_circle(p + side * offset, 7.0 + progress * 7.0, Color(0.9, 1.0, 1.0, 0.54 * fade))
-					draw_arc(p, sonic_width * (0.24 + 0.22 * progress), - time_alive * 3.0 + float(i), TAU - time_alive * 3.0 + float(i), 24, Color(1.0, 0.26, 1.0, 0.34 * fade), 2.0)
-				if bool(hazard.get("grabbed", false)):
-					var player_screen: Vector2 = player_pos - camera
-					for i in range(5):
-						var wobble: = Vector2(sin(time_alive * 8.0 + i) * 26.0, cos(time_alive * 5.0 + i) * 16.0)
-						draw_line(boss_pos - camera + wobble * 0.2, player_screen + wobble, Color(0.58, 1.0, 0.96, 0.28 * fade), 2.4, true)
-					draw_arc(player_screen, 52.0, - time_alive * 2.0, TAU - time_alive * 2.0, 52, Color(0.5, 1.0, 0.92, 0.72 * fade), 3.0)
-			"safe_zone":
-				var pos: Vector2 = Vector2(hazard["pos"]) - camera
-				var radius: float = float(hazard.get("radius", 112.0))
-				draw_circle(pos, radius, Color(0.34, 1.0, 0.72, 0.1 * fade))
-				draw_arc(pos, radius, - time_alive, TAU - time_alive, 64, Color(0.56, 1.0, 0.86, 0.58 * fade), 2.4)
+	WorldEnvironmentPresentation._draw_phase4_enemy_hazards(self, camera)
 
 
 func _draw_boss2_environment(camera: Vector2) -> void :
-	if current_phase != 2:
-		return
-	_draw_boss2_ultimate_environment(camera)
-	for zone in boss2_snow_zones:
-		if not _world_point_in_view(Vector2(zone.get("pos", Vector2.ZERO)), camera, float(zone.get("radius", 96.0)) + 90.0):
-			continue
-		var fade = clamp(float(zone.get("life", 0.0)) / max(0.01, float(zone.get("max", BOSS2_SLOW_ZONE_TIME))), 0.0, 1.0)
-		var pos = Vector2(zone["pos"]) - camera
-		var radius = float(zone["radius"])
-		draw_circle(pos, radius, Color(0.62, 0.92, 1.0, 0.1 * fade))
-		draw_arc(pos, radius, 0, TAU, 36, Color(0.02, 0.12, 0.22, 0.6 * fade), 5.0)
-		draw_arc(pos, radius, 0, TAU, 36, Color(0.4, 0.85, 1.0, 0.62 * fade), 2.0)
-		for i in range(5):
-			var ang = float(zone.get("phase", 0.0)) + time_alive * 0.8 + i * TAU / 5.0
-			draw_circle(pos + Vector2.from_angle(ang) * radius * 0.52, 2.4, Color(1.0, 1.0, 1.0, 0.46 * fade))
-	for shard in boss2_ice_shards:
-		if not _world_point_in_view(Vector2(shard.get("pos", Vector2.ZERO)), camera, 120.0):
-			continue
-		var fade = clamp(float(shard.get("life", 0.0)) / max(0.01, float(shard.get("max", 1.2))), 0.0, 1.0)
-		var pos = Vector2(shard["pos"]) - camera
-		var angle = float(shard.get("angle", 0.0))
-		var size = float(shard.get("size", 8.0)) * (0.7 + fade * 0.5)
-		var tip = Vector2.from_angle(angle) * size * 1.45
-		var side = Vector2.from_angle(angle + PI * 0.5) * size * 0.62
-		var points = PackedVector2Array([pos + tip, pos + side, pos - tip, pos - side])
-		draw_polygon(points, PackedColorArray([Color(0.72, 0.94, 1.0, 0.78 * fade)]))
-		draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, 0.62 * fade), 1.2, true)
-	var frost_drawn: int = 0
-	var frost_draw_cap: int = 28 if _memory_saver_active() else (52 if _runtime_visual_budget_active() else 999999)
-	for particle in boss2_frost_particles:
-		if frost_drawn >= frost_draw_cap:
-			break
-		if not _world_point_in_view(Vector2(particle.get("pos", Vector2.ZERO)), camera, 100.0):
-			continue
-		frost_drawn += 1
-		var fade = clamp(float(particle.get("life", 0.0)) / max(0.01, float(particle.get("max", 0.58))), 0.0, 1.0)
-		var pos = Vector2(particle["pos"]) - camera
-		var radius = float(particle.get("size", 12.0)) * fade
-		draw_circle(pos, radius, Color(0.74, 0.92, 1.0, 0.18 * fade))
-		draw_circle(pos, radius * 0.42, Color(1.0, 1.0, 1.0, 0.6 * fade))
-	_draw_phase2_fire_walls(camera)
+	WorldEnvironmentPresentation._draw_boss2_environment(self, camera)
 
 
 func _draw_phase2_fire_walls(camera: Vector2) -> void :
-	for tile in phase2_fire_walls:
-		if not _world_point_in_view(Vector2(tile.get("pos", Vector2.ZERO)), camera, PYRO_WALL_TILE_SIZE + 90.0):
-			continue
-		var fade: float = clamp(float(tile.get("life", 0.0)) / min(1.2, float(tile.get("max", PYRO_WALL_DURATION))), 0.0, 1.0)
-		var pos: = Vector2(tile["pos"]) - camera
-		var phase: = float(tile.get("phase", 0.0))
-		var rect: = Rect2(pos - Vector2.ONE * PYRO_WALL_TILE_SIZE * 0.5, Vector2.ONE * PYRO_WALL_TILE_SIZE)
-		draw_rect(rect, Color(0.28, 0.015, 0.01, 0.58 * fade), true)
-		draw_rect(rect, Color(1.0, 0.22, 0.04, 0.82 * fade), false, 2.0)
-		for i in range(3):
-			var x: = pos.x - 10.0 + i * 10.0
-			var flame_h: = 13.0 + sin(time_alive * 12.0 + phase + i * 1.7) * 5.0
-			var flame: = PackedVector2Array([Vector2(x - 5.0, pos.y + 12.0), Vector2(x, pos.y + 12.0 - flame_h), Vector2(x + 5.0, pos.y + 12.0)])
-			draw_colored_polygon(flame, Color(1.0, 0.18 + i * 0.09, 0.02, 0.82 * fade))
+	WorldEnvironmentPresentation._draw_phase2_fire_walls(self, camera)
 
 
 func _draw_phase7_ember_patches(camera: Vector2) -> void:
-	var lean_visuals: bool = _phase7_visual_budget_enabled()
-	var arc_segments: int = 22 if lean_visuals else 40
-	var ember_count: int = 3 if lean_visuals else 5
-	for patch in phase7_ember_patches:
-		var world_pos: Vector2 = Vector2(patch.get("pos", Vector2.ZERO))
-		if not _world_point_in_view(world_pos, camera, PHASE7_DRAW_MARGIN):
-			continue
-		var life_ratio: float = clampf(float(patch.get("life", 0.0)) / maxf(0.01, float(patch.get("max", PHASE7_PANGOLIRO_EMBER_LIFE))), 0.0, 1.0)
-		var age: float = float(patch.get("age", 0.0))
-		var appear: float = clampf(age / maxf(0.01, PHASE7_PANGOLIRO_EMBER_DELAY), 0.0, 1.0)
-		var fade: float = min(life_ratio, appear)
-		var pos: Vector2 = world_pos - camera
-		var phase: float = float(patch.get("phase", 0.0))
-		var radius: float = PHASE7_PANGOLIRO_EMBER_RADIUS * (0.74 + 0.16 * sin(time_alive * 5.0 + phase))
-		draw_circle(pos, radius, Color(0.22, 0.06, 0.015, 0.34 * fade))
-		draw_circle(pos, radius * 0.62, Color(0.92, 0.2, 0.03, 0.14 * fade))
-		draw_arc(pos, radius, time_alive * 1.8 + phase, time_alive * 1.8 + phase + PI * 1.35, arc_segments, Color(1.0, 0.5, 0.08, 0.66 * fade), 2.6)
-		for i in range(ember_count):
-			var a: float = phase + float(i) * TAU / maxf(1.0, float(ember_count)) + sin(time_alive * 2.4 + i) * 0.18
-			var ember_pos: Vector2 = pos + Vector2.from_angle(a) * (radius * (0.2 + 0.12 * float(i)))
-			draw_circle(ember_pos, 2.2 + float(i % 2), Color(1.0, 0.62, 0.12, 0.72 * fade))
+	WorldEnvironmentPresentation._draw_phase7_ember_patches(self, camera)
 
 
 func _draw_phase7_enemy_vfx(enemy: Dictionary, camera: Vector2, ground_pos: Vector2, draw_pos: Vector2, size: Vector2) -> void:
-	if not _world_point_in_view(Vector2(enemy.get("pos", ground_pos + camera)), camera, PHASE7_DRAW_MARGIN):
-		return
-	var lean_visuals: bool = _phase7_visual_budget_enabled()
-	var kind: String = String(enemy.get("type", ""))
-	if kind == ENEMY_CINERIDO:
-		var state: String = String(enemy.get("phase7_state", "walk"))
-		if state == "windup" or state == "active":
-			var dir: Vector2 = Vector2(enemy.get("phase7_target_dir", enemy.get("facing_dir", Vector2.LEFT))).normalized()
-			var progress: float = clampf(float(enemy.get("phase7_timer", 0.0)) / PHASE7_CINERIDO_WINDUP, 0.0, 1.0)
-			var origin: Vector2 = ground_pos + dir * 20.0
-			var left: Vector2 = origin + dir.rotated(-PHASE7_CINERIDO_CONE_HALF_ANGLE) * (PHASE7_CINERIDO_CONE_RANGE * (0.55 + 0.45 * progress))
-			var right: Vector2 = origin + dir.rotated(PHASE7_CINERIDO_CONE_HALF_ANGLE) * (PHASE7_CINERIDO_CONE_RANGE * (0.55 + 0.45 * progress))
-			draw_colored_polygon(PackedVector2Array([origin, left, right]), Color(0.44, 0.17, 0.04, 0.22 + progress * 0.16))
-			draw_line(origin, left, Color(1.0, 0.52, 0.16, 0.58), 2.0)
-			draw_line(origin, right, Color(1.0, 0.52, 0.16, 0.58), 2.0)
-	if kind == ENEMY_PANGOLIRO:
-		var state_p: String = String(enemy.get("phase7_state", "walk"))
-		var dir_p: Vector2 = Vector2(enemy.get("phase7_roll_dir", enemy.get("facing_dir", Vector2.LEFT))).normalized()
-		if state_p == "align" or state_p == "windup":
-			var telegraph_len: float = 118.0 + 72.0 * clampf(float(enemy.get("phase7_timer", 0.0)) / PHASE7_PANGOLIRO_WINDUP, 0.0, 1.0)
-			draw_line(ground_pos + dir_p * 18.0, ground_pos + dir_p * telegraph_len, Color(1.0, 0.45, 0.08, 0.45), 5.0, true)
-			draw_line(ground_pos + dir_p * 18.0, ground_pos + dir_p * telegraph_len, Color(0.28, 0.08, 0.02, 0.62), 2.0, true)
-		elif state_p == "roll":
-			draw_arc(ground_pos, size.x * 0.42, time_alive * 12.0, time_alive * 12.0 + PI * 1.55, 24 if lean_visuals else 36, Color(1.0, 0.48, 0.06, 0.82), 3.0)
-	if kind == ENEMY_CORVOL:
-		var target_world: Vector2 = Vector2(enemy.get("phase7_target", enemy.get("pos", Vector2.ZERO)))
-		var target: Vector2 = target_world - camera
-		var state_c: String = String(enemy.get("phase7_state", "orbit"))
-		if (state_c == "prepare" or state_c == "ascend" or state_c == "dive") and _world_point_in_view(target_world, camera, PHASE7_DRAW_MARGIN):
-			var pulse: float = 0.5 + 0.5 * sin(time_alive * 16.0)
-			draw_circle(target, PHASE7_CORVOL_IMPACT_RADIUS, Color(0.22, 0.08, 0.02, 0.18))
-			draw_arc(target, PHASE7_CORVOL_IMPACT_RADIUS + pulse * 5.0, -time_alive * 4.0, TAU - time_alive * 4.0, 28 if lean_visuals else 48, Color(1.0, 0.62, 0.22, 0.78), 2.0)
-			draw_line(draw_pos, target, Color(0.9, 0.8, 0.62, 0.22), 1.5, true)
+	WorldEnvironmentPresentation._draw_phase7_enemy_vfx(self, enemy, camera, ground_pos, draw_pos, size)
 
 
 func _draw_boss2_ultimate_environment(camera: Vector2) -> void :
-	if boss2_ultimate_timer <= 0.0:
-		return
-	var viewport: Vector2 = get_viewport_rect().size
-	var center: Vector2 = boss2_ultimate_center - camera
-	var safe_radius: float = BOSS2_ULTIMATE_SAFE_RADIUS
-	var low: bool = _memory_saver_active() or _runtime_visual_budget_active() or gfx_low_resource
-	var segments: int = 48 if low else 96
-	# Put the storm outside the exact safe boundary, leaving combat readable inside.
-	for ring in range(5 if low else 8):
-		var radius: float = safe_radius + 30.0 + ring * 58.0
-		var start: float = time_alive * (0.38 + ring * 0.035) + ring * 1.9
-		draw_arc(center, radius, start, start + PI * 1.35, segments, Color(0.04, 0.14, 0.26, 0.28), 38.0)
-		draw_arc(center, radius + 6.0, start, start + PI * 1.35, segments, Color(0.64, 0.85, 0.95, 0.3), 13.0)
-		draw_arc(center, radius + 14.0, start + 0.4, start + PI, segments, Color(0.94, 1.0, 1.0, 0.34), 2.0)
-	for i in range(65 if low else 150):
-		var seed_value: float = float(i)
-		var angle: float = time_alive * (1.15 + fposmod(seed_value * 0.13, 0.7)) + seed_value * 2.4
-		var radius: float = safe_radius + 24.0 + fposmod(seed_value * 37.0, 570.0)
-		var point: Vector2 = center + Vector2.from_angle(angle) * radius
-		if not _screen_point_in_view(point, 50.0):
-			continue
-		var tangent: Vector2 = Vector2.from_angle(angle + PI * 0.5)
-		var length: float = 7.0 + fposmod(seed_value * 1.61, 16.0)
-		draw_line(point - tangent * length, point, Color(0.8, 0.94, 1.0, 0.42), 2.0)
-		draw_rect(Rect2(point.floor(), Vector2(2, 2)), Color(1.0, 1.0, 1.0, 0.72))
-	Boss2VFX.rim(self, center, safe_radius, Color(0.5, 1.0, 0.88, 0.96), low)
-	for i in range(24):
-		var dir: Vector2 = Vector2.from_angle(i * TAU / 24.0)
-		draw_line(center + dir * (safe_radius - 10.0), center + dir * (safe_radius - 18.0), Color(0.5, 1.0, 0.88, 0.72), 2.0)
-	_draw_boss2_ultimate_warning(camera)
-	var banner: = Rect2(Vector2(viewport.x * 0.5 - 145.0, 158.0), Vector2(290.0, 42.0))
-	draw_rect(banner, Color(0.02, 0.06, 0.1, 0.88))
-	_draw_centered("NEVASCA %.0fs" % ceil(boss2_ultimate_timer), Vector2(viewport.x * 0.5, 175.0), 17, Color(0.9, 1.0, 1.0))
-	_draw_centered("PROTEJA-SE DENTRO DO ANEL", Vector2(viewport.x * 0.5, 192.0), 12, Color(0.5, 1.0, 0.88))
+	WorldEnvironmentPresentation._draw_boss2_ultimate_environment(self, camera)
 
 
 func _draw_boss2_ultimate_warning(camera: Vector2) -> void :
-	var boss_screen: Vector2 = boss_pos - camera
-	var ultimate_warning: = _telegraph_window(BOSS2_ULTIMATE_WARNING_TIME)
-	if boss2_ultimate_spit_timer > 0.0 and boss2_ultimate_spit_timer <= ultimate_warning:
-		var progress: float = 1.0 - boss2_ultimate_spit_timer / ultimate_warning
-		var dir: Vector2 = (player_pos - boss_pos).normalized()
-		if dir.length() <= 0.01:
-			dir = Vector2.DOWN
-		for offset in [-0.25, 0.0, 0.25]:
-			var shot_dir: Vector2 = dir.rotated(offset)
-			Boss2VFX.trajectory(self, boss_screen + shot_dir * 64.0, shot_dir, 620.0, time_alive, 0.5 + progress * 0.4)
-		Boss2VFX.crystal(self, boss_screen + dir * 64.0, dir, 14.0 + progress * 10.0)
-	if boss2_ultimate_fan_timer > 0.0 and boss2_ultimate_fan_timer <= ultimate_warning:
-		var fan_origin: Vector2 = boss2_ultimate_center + Vector2.from_angle(boss2_ultimate_orbit_angle + PI * 0.45) * (BOSS2_ULTIMATE_SAFE_RADIUS + 250.0)
-		fan_origin = fan_origin.clamp(Vector2(100, 100), WORLD_SIZE - Vector2(100, 100))
-		var fan_dir: Vector2 = (player_pos - fan_origin).normalized()
-		var screen_origin: Vector2 = fan_origin - camera
-		for offset in [-0.52, -0.26, 0.0, 0.26, 0.52]:
-			var ray: Vector2 = fan_dir.rotated(offset)
-			Boss2VFX.trajectory(self, screen_origin, ray, 780.0, time_alive, 0.66)
-	if boss2_ultimate_wind_active > 0.0:
-		_draw_boss2_wind_stream(camera, boss2_ultimate_wind_dir, boss2_ultimate_wind_active / BOSS2_ULTIMATE_WIND_DURATION, true)
-	elif boss2_ultimate_wind_timer > 0.0 and boss2_ultimate_wind_timer <= ultimate_warning:
-		var dir_warn: Vector2 = (WORLD_SIZE * 0.5 - player_pos).normalized()
-		if dir_warn.length() <= 0.01:
-			dir_warn = Vector2.RIGHT
-		var progress_wind: float = 1.0 - boss2_ultimate_wind_timer / ultimate_warning
-		_draw_boss2_wind_stream(camera, dir_warn, progress_wind, false)
+	WorldEnvironmentPresentation._draw_boss2_ultimate_warning(self, camera)
 
 
 func _draw_boss2_wind_stream(camera: Vector2, dir: Vector2, intensity: float, active: bool) -> void :
-	if dir.length() <= 0.01:
-		return
-	var center: Vector2 = player_pos - camera
-	var side: Vector2 = dir.orthogonal()
-	var base_alpha: float = 0.18 + intensity * 0.28
-	var width: float = 68.0 if active else 42.0
-	for i in range(9):
-		var lane: float = float(i) - 4.0
-		var offset: Vector2 = side * lane * 23.0
-		var wobble: Vector2 = side * sin(time_alive * 8.0 + i) * 8.0
-		var a: Vector2 = center - dir * (360.0 + i * 12.0) + offset + wobble
-		var b: Vector2 = center + dir * (250.0 + intensity * 120.0) + offset - wobble
-		draw_line(a, b, Color(0.66, 0.92, 1.0, base_alpha * (0.55 + i % 3 * 0.12)), max(2.0, width * (0.08 + intensity * 0.02)))
-	if active:
-		var resist_dir: Vector2 = - dir
-		var arrow_center: Vector2 = center + resist_dir * 82.0
-		var tip: Vector2 = arrow_center + resist_dir * 38.0
-		var left: Vector2 = arrow_center - resist_dir * 22.0 + side * 22.0
-		var right: Vector2 = arrow_center - resist_dir * 22.0 - side * 22.0
-		draw_polygon(PackedVector2Array([tip, left, right]), PackedColorArray([Color(0.18, 0.9, 1.0, 0.32 + intensity * 0.18)]))
-		_draw_centered("RESISTA", center + Vector2(0, -88), 15, Color(0.86, 1.0, 1.0, 0.88))
-	else:
-		_draw_centered("VENTO", center - dir * 116.0 + Vector2(0, -54), 16, Color(0.86, 1.0, 1.0, 0.9))
+	WorldEnvironmentPresentation._draw_boss2_wind_stream(self, camera, dir, intensity, active)
 
 
 func _draw_boss6_particle_swarm(camera: Vector2, progress: float, label: = true) -> void :
-	progress = clampf(progress, 0.0, 1.0)
-	var target_world: Vector2 = boss6_relocate_to if boss6_relocating else WORLD_SIZE * 0.5
-	var target_screen: Vector2 = target_world - camera
-	if boss6_entry_particles.is_empty():
-		draw_circle(target_screen, 82.0 + progress * 36.0, Color(0.18, 0.42, 0.08, 0.18))
-		draw_arc(target_screen, 96.0 + progress * 72.0, - time_alive * 2.0, TAU - time_alive * 2.0, 70, Color(0.62, 1.0, 0.24, 0.62), 4.0)
-		if label:
-			_draw_centered("MATRIARCA DA CHAGA", target_screen + Vector2(0, -168), 31, Color(0.76, 1.0, 0.36, 0.95))
-		return
-	var stride: = 2 if not gfx_low_resource else 5
-	for i in range(0, boss6_entry_particles.size(), stride):
-		var particle: Dictionary = boss6_entry_particles[i]
-		var delay: = float(particle.get("delay", 0.0)) / BOSS6_ENTRY_TIME
-		var duration: = maxf(0.08, float(particle.get("duration", BOSS6_ENTRY_TIME)) / BOSS6_ENTRY_TIME)
-		var local: = clampf((progress - delay) / duration, 0.0, 1.0)
-		var eased: = local * local * (3.0 - 2.0 * local)
-		var start: = Vector2(particle.get("start", boss6_relocate_from))
-		var target: = Vector2(particle.get("target", boss6_relocate_to))
-		var pos: = _parasite_curve_point(start, target, eased, float(particle.get("bend", 0.0))) - camera
-		var phase: = float(particle.get("phase", 0.0))
-		var size: = float(particle.get("size", 2.0)) * (1.0 + sin(time_alive * 8.0 + phase) * 0.22)
-		var alpha: = clampf(sin(local * PI) * 0.88 + 0.12, 0.0, 0.95)
-		var gray: = Color(0.62, 0.64, 0.52, alpha * 0.76)
-		var green: = Color(0.38, 0.92, 0.2, alpha * 0.55)
-		draw_circle(pos, size + 1.6, Color(0.03, 0.06, 0.02, alpha * 0.24))
-		draw_circle(pos, size, gray if i % 4 != 0 else green)
-	if progress > 0.72:
-		var pulse: = (progress - 0.72) / 0.28
-		draw_circle(target_screen, 120.0 * pulse, Color(0.24, 0.72, 0.1, 0.13 * (1.0 - pulse)))
-		draw_arc(target_screen, 72.0 + pulse * 88.0, - time_alive * 2.0, TAU - time_alive * 2.0, 72, Color(0.62, 1.0, 0.22, 0.62 * (1.0 - pulse * 0.3)), 4.0)
-	if label:
-		_draw_centered("MATRIARCA DA CHAGA", target_screen + Vector2(0, -168), 31, Color(0.76, 1.0, 0.36, 0.95))
+	WorldEnvironmentPresentation._draw_boss6_particle_swarm(self, camera, progress, label)
 
 
 func _draw_boss6_smoke_shield(center: Vector2, size: Vector2) -> void :
-	var has_carapace: = not boss6_carapace_plates.is_empty()
-	var has_fossil: bool = boss6_fossil_shield > 0.0
-	var exposed: = boss6_core_exposed_timer > 0.0 or boss6_vulnerability_timer > 0.0
-	if not has_carapace and not has_fossil and not exposed and boss6_organs.is_empty():
-		return
-	var radius: = maxf(size.x, size.y) * 0.62
-	var pulse: = 0.5 + 0.5 * sin(time_alive * 5.0)
-	if has_carapace or has_fossil:
-		var plate_count: = boss6_carapace_plates.size()
-		var color: = Color(0.54, 1.0, 0.18, 0.58) if has_carapace else Color(0.68, 0.72, 0.5, 0.44)
-		draw_circle(center, radius + 18.0, Color(0.08, 0.18, 0.05, 0.13))
-		for i in range(maxi(1, plate_count)):
-			var start: = - PI * 0.5 + float(i) * TAU / maxf(1.0, float(maxi(1, plate_count)))
-			draw_arc(center, radius + 12.0 + pulse * 5.0, start, start + TAU / maxf(1.0, float(maxi(1, plate_count))) * 0.74, 30, color, 5.0)
-	if exposed:
-		draw_circle(center, radius * 0.34 + pulse * 8.0, Color(1.0, 0.46, 0.12, 0.18))
-		draw_arc(center, radius * 0.42 + pulse * 10.0, - time_alive * 2.0, TAU - time_alive * 2.0, 64, Color(1.0, 0.74, 0.24, 0.7), 3.0)
-	for organ in boss6_organs:
-		var organ_data: Dictionary = organ
-		if not bool(organ_data.get("alive", true)):
-			continue
-		var organ_pos: = Vector2(organ_data.get("pos", boss_pos)) - _camera(get_viewport_rect().size)
-		var organ_color: = Color(0.58, 1.0, 0.18, 0.56)
-		draw_circle(organ_pos, 24.0 + sin(time_alive * 5.0 + float(organ_data.get("pulse", 0.0))) * 4.0, Color(0.06, 0.16, 0.04, 0.42))
-		draw_arc(organ_pos, 34.0, - time_alive, TAU - time_alive, 36, organ_color, 3.0)
+	WorldEnvironmentPresentation._draw_boss6_smoke_shield(self, center, size)
 
 
 func _draw_boss_entry(camera: Vector2) -> void :
-	var target = WORLD_SIZE * 0.5 - camera
-	if current_phase == 6:
-		var progress6: = 0.0
-		if boss6_relocating:
-			progress6 = clampf(boss6_relocate_age / maxf(0.01, boss6_relocate_duration), 0.0, 1.0)
-		else:
-			progress6 = clampf(1.0 - boss_entry_timer / maxf(0.01, BOSS6_ENTRY_TIME), 0.0, 1.0)
-		_draw_boss6_particle_swarm(camera, progress6)
-		return
-	if current_phase == 5:
-		var progress5: float = clamp(1.0 - boss_entry_timer / BOSS5_ENTRY_TIME, 0.0, 1.0)
-		var anchor5: = Vector2(WORLD_SIZE.x * 0.68, WORLD_SIZE.y * 0.48) - camera
-		draw_circle(anchor5, 90.0 + sin(time_alive * 6.0) * 8.0, Color(0.08, 0.28, 0.12, 0.24))
-		draw_arc(anchor5, 128.0 * progress5, 0, TAU, 72, Color(0.3, 1.0, 0.52, 0.75), 5.0)
-		draw_line(boss_pos - camera, anchor5, Color(0.2, 1.0, 0.44, 0.32), 18.0)
-		draw_line(boss_pos - camera, anchor5, Color(0.86, 1.0, 0.74, 0.72), 3.0)
-		_draw_centered("UMBRA", anchor5 + Vector2(0, -128), 30, Color(0.56, 1.0, 0.68, 0.95))
-		return
-	if current_phase == 4:
-		var progress4: float = clamp(1.0 - boss_entry_timer / BOSS4_ENTRY_TIME, 0.0, 1.0)
-		var anchor: Vector2 = boss4_entry_target - camera
-		for i in range(5):
-			var radius: = 54.0 + i * 31.0 + sin(time_alive * 5.0 + i) * 8.0
-			draw_arc(anchor, radius, - time_alive * (0.7 + i * 0.08), TAU - time_alive * (0.7 + i * 0.08), 64, Color(1.0, 0.68 - i * 0.06, 0.14 + i * 0.12, (0.72 - i * 0.1) * (1.0 - progress4 * 0.35)), 3.0)
-		draw_line(boss_pos - camera, anchor, Color(0.76, 0.34, 1.0, 0.32), 18.0)
-		draw_line(boss_pos - camera, anchor, Color(1.0, 0.78, 0.24, 0.72), 3.0)
-		_draw_centered("NEXO DA RUPTURA", anchor + Vector2(0, -174), 32, Color(1.0, 0.82, 0.34))
-		return
-	if current_phase == 3:
-		var progress3 = clamp(1.0 - boss_entry_timer / BOSS3_ENTRY_TIME, 0.0, 1.0)
-		for i in range(3):
-			var radius = 70.0 + i * 32.0 + progress3 * 120.0
-			draw_arc(target, radius, 0, TAU, 64, Color(0.54, 0.92, 0.16, (1.0 - progress3) * (0.72 - i * 0.14)), 4.0)
-		_draw_centered("PAI-RATO", target + Vector2(0, -142), 34, Color(0.82, 1.0, 0.42))
-		return
-	if current_phase == 2:
-		var progress2 = clamp(1.0 - boss_entry_timer / BOSS2_ENTRY_TIME, 0.0, 1.0)
-		var boss_draw = boss_pos - camera
-		if progress2 < 0.8:
-			var crystal_h = 220.0
-			var crystal_w = 120.0
-			var points = PackedVector2Array([
-				boss_draw + Vector2(0, - crystal_h * 0.52), 
-				boss_draw + Vector2(crystal_w * 0.45, - crystal_h * 0.18), 
-				boss_draw + Vector2(crystal_w * 0.34, crystal_h * 0.34), 
-				boss_draw + Vector2(0, crystal_h * 0.52), 
-				boss_draw + Vector2( - crystal_w * 0.34, crystal_h * 0.34), 
-				boss_draw + Vector2( - crystal_w * 0.45, - crystal_h * 0.18)
-			])
-			draw_polygon(points, PackedColorArray([Color(0.46, 0.88, 1.0, 0.34)]))
-			draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[4], points[5], points[0]]), Color(0.82, 0.96, 1.0, 0.92), 3.0, true)
-			draw_line(points[0], points[3], Color(1.0, 1.0, 1.0, 0.58), 2.0)
-		else:
-			var impact = (progress2 - 0.8) / 0.2
-			for i in range(3):
-				draw_arc(target, 82.0 + impact * 520.0 + i * 32.0, 0, TAU, 96, Color(0.62, 0.92, 1.0, (1.0 - impact) * (0.7 - i * 0.16)), 4.0)
-		if int(time_alive * 7.0) % 2 == 0:
-			_draw_centered("A NEVASCA EMITE UM GRITO", target + Vector2(0, -142), 30, Color(0.72, 0.96, 1.0))
-		return
-	var progress = 1.0 - boss_entry_timer / BOSS_ENTRY_TIME
-	var radius = 115.0 * (1.0 + 0.1 * sin(time_alive * 10.0))
-	draw_circle(target, radius, Color(0.08, 0.0, 0.16, 0.44))
-	draw_arc(target, radius * 0.82, 0, TAU, 64, Color(0.62, 0.0, 1.0, 0.88), 5)
-	draw_arc(target, radius * 0.52, 0, TAU, 64, Color(0.0, 0.8, 1.0, 0.82), 3)
-	for i in range(8):
-		var a = time_alive * 4.0 + i * TAU / 8.0
-		draw_line(target + Vector2.from_angle(a) * radius * 0.25, target + Vector2.from_angle(a) * radius * 0.92, Color(1.0, 0.35, 1.0, 0.72), 4)
-	if progress >= 0.8:
-		var impact = (progress - 0.8) / 0.2
-		draw_arc(target, 90 + impact * 600.0, 0, TAU, 96, Color(1.0, 1.0, 1.0, 1.0 - impact), 6)
-		draw_arc(target, 70 + impact * 520.0, 0, TAU, 96, Color(0.0, 0.75, 1.0, 0.7 * (1.0 - impact)), 4)
-	_draw_centered("CARANGUEJO COSMICO GIGANTE", target + Vector2(0, -150), 34, Color.WHITE)
+	WorldEnvironmentPresentation._draw_boss_entry(self, camera)
 
 
 func _boss1_visual_prediction() -> float:
@@ -49374,187 +39923,19 @@ func _boss1_visual_prediction() -> float:
 
 
 func _draw_boss1_time_wave(camera: Vector2) -> void :
-	if boss1_time_wave.is_empty():
-		return
-	var center = Vector2(boss1_time_wave["origin"]) - camera
-	var radius = float(boss1_time_wave["radius"])
-	var returning = float(boss1_time_wave.get("direction", 1.0)) < 0.0
-	var visual_age: float = float(boss1_time_wave.get("age", 0.0)) + _boss1_visual_prediction()
-	if float(boss1_time_wave.get("age", 0.0)) >= BOSS1_TIME_WAVE_WARNING:
-		radius = clampf(radius + (-1.0 if returning else 1.0) * BOSS1_TIME_WAVE_SPEED * _boss1_visual_prediction(), 34.0, float(boss1_time_wave.get("max_radius", radius)))
-	var pulse = 0.5 + 0.5 * sin(visual_age * 11.0)
-	var variant = int(boss1_time_wave.get("variant", 0))
-	var variant_color = _chrono_variant_color(variant)
-	var primary = Color(1.0, 0.24, 0.66, 0.88) if returning else Color(variant_color.r, variant_color.g, variant_color.b, 0.88)
-	Boss1VFX.chrono_wave(self, center, radius, visual_age, primary, BOSS1_TIME_WAVE_WIDTH, returning, _get_boss_wave_quality_profile() == "LOW")
-	match variant:
-		1:
-			draw_arc(center, max(24.0, radius - 44.0), PI * 0.15, PI * 1.15, 86, Color(1.0, 0.42, 0.86, 0.46), 5.0)
-			draw_arc(center, radius + 44.0, PI * 1.15, PI * 2.15, 86, Color(1.0, 0.42, 0.86, 0.34), 4.0)
-		2:
-			for spiral in range(4):
-				var a0 = float(boss1_time_wave.get("age", 0.0)) * 1.9 + spiral * TAU / 4.0
-				draw_line(center + Vector2.from_angle(a0) * radius * 0.28, center + Vector2.from_angle(a0 + 0.75) * radius, Color(0.74, 0.52, 1.0, 0.38), 3.0)
-		3:
-			for shard in range(10):
-				var a = shard * TAU / 10.0 + float(boss1_time_wave.get("age", 0.0)) * 0.42
-				var p0 = center + Vector2.from_angle(a) * (radius - 18.0)
-				var p1 = center + Vector2.from_angle(a + 0.08) * (radius + 26.0)
-				draw_line(p0, p1, Color(1.0, 0.78, 0.3, 0.54), 3.0)
-	for tick_index in range(24):
-		var angle = tick_index * TAU / 24.0 + float(boss1_time_wave.get("age", 0.0)) * (-0.9 if returning else 0.9)
-		var tick_length = 17.0 if tick_index % 3 == 0 else 9.0
-		var inner = center + Vector2.from_angle(angle) * (radius - tick_length)
-		var outer = center + Vector2.from_angle(angle) * (radius + tick_length * 0.35)
-		draw_line(inner, outer, Color(primary.r, primary.g, primary.b, 0.82), 2.5 if tick_index % 3 == 0 else 1.4)
-	draw_circle(center, 42.0 + pulse * 5.0, Color(0.04, 0.1, 0.18, 0.42))
-	draw_arc(center, 44.0 + pulse * 5.0, 0.0, TAU, 40, primary, 3.0)
-	var hand_angle = - PI * 0.5 + float(boss1_time_wave.get("age", 0.0)) * (-2.8 if returning else 2.8)
-	draw_line(center, center + Vector2.from_angle(hand_angle) * 28.0, Color.WHITE, 3.0)
-	draw_circle(center, 4.0, Color.WHITE)
+	WorldEnvironmentPresentation._draw_boss1_time_wave(self, camera)
 
 
 func _draw_boss1_rewind_world(camera: Vector2) -> void :
-	if boss1_rewind_sequence.is_empty() or boss1_rewind_history.is_empty():
-		return
-	var elapsed = float(boss1_rewind_sequence.get("elapsed", 0.0))
-	var playback_start = BOSS1_CLOCK_TRAVEL_TIME
-	var progress = clamp((elapsed - playback_start) / BOSS1_REWIND_PLAYBACK_TIME, 0.0, 1.0) if elapsed >= playback_start else 0.0
-	var cursor = int(round(lerp(float(boss1_rewind_history.size() - 1), 0.0, progress)))
-	var variant = int(boss1_rewind_sequence.get("variant", 0))
-	var variant_color = _chrono_variant_color(variant)
-	var player_path = PackedVector2Array()
-	var boss_path = PackedVector2Array()
-	var step = max(1, int(ceil(float(cursor + 1) / 70.0)))
-	for history_index in range(0, cursor + 1, step):
-		var snapshot: Dictionary = boss1_rewind_history[history_index]
-		player_path.append(Vector2(snapshot["player_pos"]) - camera)
-		boss_path.append(Vector2(snapshot["boss_pos"]) - camera)
-	if player_path.size() >= 2:
-		draw_polyline(player_path, Color(0.02, 0.06, 0.12, 0.72), 9.0, true)
-		draw_polyline(player_path, Color(0.16, 0.82, 1.0, 0.76), 5.0, true)
-		draw_polyline(player_path, Color(0.88, 1.0, 1.0, 0.86), 1.6, true)
-	if boss_path.size() >= 2:
-		draw_polyline(boss_path, Color(0.02, 0.04, 0.1, 0.62), 9.0, true)
-		draw_polyline(boss_path, Color(variant_color, 0.64), 4.0, true)
-	for marker_index in range(0, player_path.size(), max(1, int(player_path.size() / 8.0))):
-		draw_circle(player_path[marker_index], 4.0, Color(0.82, 1.0, 1.0, 0.72))
-	for echo_offset in [5, 12, 22, 34]:
-		var echo_index = min(boss1_rewind_history.size() - 1, cursor + echo_offset)
-		if echo_index == cursor:
-			continue
-		var echo: Dictionary = boss1_rewind_history[echo_index]
-		var alpha = max(0.06, 0.26 - float(echo_offset) * 0.0045)
-		_draw_entity_fit(_player_texture(), Vector2(echo["player_pos"]) - camera, Vector2(74, 88), Color(0.42, 0.92, 1.0, alpha), _should_flip_player_sprite())
-		_draw_entity_fit(_boss_texture(), Vector2(echo["boss_pos"]) - camera, Vector2(184, 170), Color(variant_color.r, variant_color.g, variant_color.b, alpha * 0.86), true)
-	for visual in boss1_rewind_visual_projectiles:
-		var pos = Vector2(visual.get("pos", player_pos)) - camera
-		var visual_kind = String(visual.get("visual", "player"))
-		match visual_kind:
-			"player":
-				var palette = _projectile_palette(String(visual.get("kind", "eletrica")))
-				var direction = Vector2(visual.get("dir", Vector2.RIGHT)).normalized()
-				draw_line(pos - direction * 18.0, pos + direction * 5.0, Color(palette["glow"].r, palette["glow"].g, palette["glow"].b, 0.82), 5.0)
-				draw_circle(pos, 4.5, Color.WHITE)
-			"returning":
-				draw_circle(pos, 10.0, Color(0.84, 0.32, 1.0, 0.42))
-				draw_arc(pos, 12.0, 0.0, TAU, 18, Color(1.0, 0.54, 0.96, 0.92), 2.4)
-			"enemy":
-				draw_circle(pos, 7.0, Color(1.0, 0.24, 0.52, 0.72))
-				draw_arc(pos, 10.0, 0.0, TAU, 16, Color(0.64, 0.28, 1.0, 0.7), 2.0)
-			"shockwave", "boss_wave":
-				draw_arc(pos, float(visual.get("radius", 0.0)), 0.0, TAU, 64, Color(0.34, 0.92, 1.0, 0.56), 3.0)
-			"prism":
-				var diamond = PackedVector2Array([pos + Vector2(0, -16), pos + Vector2(16, 0), pos + Vector2(0, 16), pos + Vector2(-16, 0), pos + Vector2(0, -16)])
-				draw_polyline(diamond, Color(0.42, 1.0, 0.94, 0.86), 3.0)
+	WorldEnvironmentPresentation._draw_boss1_rewind_world(self, camera)
 
 
 func _draw_network_rewind_visuals(camera: Vector2) -> void :
-	for visual in net_remote_rewind_visuals:
-		var duration: = maxf(0.01, float(visual.get("duration", BOSS1_CLOCK_TRAVEL_TIME + BOSS1_CLOCK_TURN_TIME)))
-		var elapsed: = float(visual.get("elapsed", 0.0))
-		var progress: = clampf(elapsed / duration, 0.0, 1.0)
-		var fade: = clampf(minf(progress * 4.0, float(visual.get("life", 0.0)) / duration * 3.0), 0.0, 1.0)
-		var from_pos: = Vector2(visual.get("from", Vector2.ZERO))
-		var to_pos: = Vector2(visual.get("to", from_pos))
-		var boss_screen: = Vector2(visual.get("boss_pos", boss_pos)) - camera
-		var color: = _chrono_variant_color(int(visual.get("variant", 0)))
-		var current: = from_pos.lerp(to_pos, smoothstep(0.0, 1.0, progress))
-		var from_screen: = from_pos - camera
-		var to_screen: = to_pos - camera
-		var current_screen: = current - camera
-		draw_line(from_screen, to_screen, Color(0.04, 0.11, 0.18, 0.46 * fade), 12.0, true)
-		draw_line(from_screen, to_screen, Color(color.r, color.g, color.b, 0.62 * fade), 4.0, true)
-		draw_line(boss_screen, current_screen, Color(0.32, 0.88, 1.0, 0.22 * fade), 2.0, true)
-		for echo_index in range(5):
-			var echo_t: = clampf(progress - float(echo_index) * 0.1, 0.0, 1.0)
-			var echo_pos: = from_pos.lerp(to_pos, smoothstep(0.0, 1.0, echo_t)) - camera
-			var alpha: = (0.3 - float(echo_index) * 0.045) * fade
-			_draw_entity_fit(_player_texture(), echo_pos, Vector2(74, 88), Color(0.42, 0.92, 1.0, alpha), _should_flip_player_sprite())
-		draw_circle(current_screen, 44.0 + sin(time_alive * 9.0) * 4.0, Color(color.r, color.g, color.b, 0.09 * fade))
-		draw_arc(current_screen, 47.0, - time_alive * 3.0, TAU - time_alive * 3.0, 48, Color(color.r, color.g, color.b, 0.72 * fade), 3.0)
-		draw_arc(current_screen, 58.0, time_alive * 2.0, TAU + time_alive * 2.0, 54, Color(0.82, 1.0, 1.0, 0.36 * fade), 2.0)
-		_draw_centered("REWIND", current_screen + Vector2(0, -64), 13, Color(0.82, 1.0, 1.0, 0.9 * fade))
+	CombatEffectsPresentation._draw_network_rewind_visuals(self, camera)
 
 
 func _draw_boss1_rewind_overlay(viewport: Vector2, camera: Vector2) -> void :
-	if boss1_rewind_sequence.is_empty():
-		return
-	var elapsed = float(boss1_rewind_sequence.get("elapsed", 0.0))
-	var center_target = viewport * 0.5
-	var travel_progress = clamp(elapsed / BOSS1_CLOCK_TRAVEL_TIME, 0.0, 1.0)
-	var smooth_travel = smoothstep(0.0, 1.0, travel_progress)
-	var clock_origin = boss_pos - camera + Vector2(0, -36)
-	var clock_center = clock_origin.lerp(center_target, smooth_travel)
-	var clock_scale = lerp(0.34, 1.0, smooth_travel)
-	var turn_progress = clamp((elapsed - BOSS1_CLOCK_TRAVEL_TIME) / BOSS1_CLOCK_TURN_TIME, 0.0, 1.0)
-	var variant = int(boss1_rewind_sequence.get("variant", 0))
-	var variant_color = _chrono_variant_color(variant)
-	var overlay_alpha = 0.06 + 0.09 * smooth_travel
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.01, 0.04, 0.1, overlay_alpha), true)
-	for scan_index in range(7):
-		var scan_y = fposmod(elapsed * -180.0 + scan_index * viewport.y / 7.0, viewport.y)
-		draw_line(Vector2(0, scan_y), Vector2(viewport.x, scan_y), Color(0.22, 0.86, 1.0, 0.06), 2.0)
-	var radius = 106.0 * clock_scale
-	Boss1VFX.clock_shell(self, clock_center, radius, elapsed, variant_color, _get_boss_wave_quality_profile() == "LOW")
-	draw_arc(clock_center, radius * 0.88, 0.0, TAU, 80, Color(1.0, 0.42, 0.78, 0.52), 2.0 * clock_scale)
-	match variant:
-		1:
-			draw_arc(clock_center + Vector2( - radius * 0.16, 0), radius * 0.72, PI * 0.2, PI * 1.2, 54, Color(1.0, 0.48, 0.82, 0.34), 3.0)
-			draw_arc(clock_center + Vector2(radius * 0.16, 0), radius * 0.72, PI * 1.2, PI * 2.2, 54, Color(0.42, 0.92, 1.0, 0.34), 3.0)
-		2:
-			for spiral in range(3):
-				var spiral_angle = - turn_progress * TAU * 2.0 + spiral * TAU / 3.0
-				draw_arc(clock_center, radius * (0.35 + spiral * 0.16), spiral_angle, spiral_angle + PI * 1.25, 42, Color(0.72, 0.52, 1.0, 0.3), 2.0)
-		3:
-			for fracture in range(8):
-				var fracture_angle = fracture * TAU / 8.0 + turn_progress * 0.4
-				draw_line(clock_center + Vector2.from_angle(fracture_angle) * radius * 0.3, clock_center + Vector2.from_angle(fracture_angle + 0.08) * radius * 0.78, Color(1.0, 0.78, 0.3, 0.34), 2.0)
-	for tick_index in range(60):
-		var angle = - PI * 0.5 + tick_index * TAU / 60.0
-		var major = tick_index % 5 == 0
-		var outer = clock_center + Vector2.from_angle(angle) * radius * 0.82
-		var inner = clock_center + Vector2.from_angle(angle) * radius * (0.68 if major else 0.75)
-		draw_line(inner, outer, Color(0.82, 0.98, 1.0, 0.92 if major else 0.54), (3.2 if major else 1.4) * clock_scale)
-	var shown_minutes = lerp(10.0, 0.0, turn_progress)
-	var minute_angle = - PI * 0.5 + shown_minutes * TAU / 60.0
-	var hour_angle = - PI * 0.5 + (11.0 + shown_minutes / 60.0) * TAU / 12.0
-	if turn_progress > 0.0 and turn_progress < 1.0:
-		for trail_index in range(1, 5):
-			var trail_minutes = min(10.0, shown_minutes + trail_index * 0.65)
-			var trail_angle = - PI * 0.5 + trail_minutes * TAU / 60.0
-			draw_line(clock_center, clock_center + Vector2.from_angle(trail_angle) * radius * 0.62, Color(0.32, 0.88, 1.0, 0.13), 3.0 * clock_scale)
-	Boss1VFX.streak(self, clock_center, clock_center + Vector2.from_angle(hour_angle) * radius * 0.44, Color(1.0, 0.35, 0.72), 10.0 * clock_scale)
-	Boss1VFX.streak(self, clock_center, clock_center + Vector2.from_angle(minute_angle) * radius * 0.64, Color(0.62, 0.98, 1.0), 7.0 * clock_scale)
-	draw_circle(clock_center, 8.0 * clock_scale, Color.WHITE)
-	var minute_label = int(round(shown_minutes))
-	_draw_centered("11:%02d PM" % minute_label, clock_center + Vector2(0, radius * 0.46), int(18 * clock_scale), Color(0.82, 0.98, 1.0))
-	if elapsed < BOSS1_CLOCK_TRAVEL_TIME:
-		_draw_centered("CRONO-RUPTURA", clock_center + Vector2(0, radius + 34.0), 20, Color(0.42, 0.92, 1.0))
-	elif turn_progress < 1.0:
-		_draw_centered("TEMPO -%.1fs" % (turn_progress * BOSS1_REWIND_SECONDS), clock_center + Vector2(0, radius + 40.0), 22, Color(1.0, 0.42, 0.76))
-	else:
-		_draw_centered("LINHA RESTAURADA", clock_center + Vector2(0, radius + 40.0), 22, Color(0.48, 0.94, 1.0))
+	WorldEnvironmentPresentation._draw_boss1_rewind_overlay(self, viewport, camera)
 
 
 func _get_boss_wave_quality_profile() -> String :
@@ -49566,155 +39947,23 @@ func _get_boss_wave_quality_profile() -> String :
 
 
 func _draw_boss1_oceanic_slam_impact(camera: Vector2) -> void :
-	if not boss_active or current_phase != 1:
-		return
-	if boss_stage_timer <= 0.0 or boss_stage_timer > (BOSS_STAGE_JUMP_TIME - BOSS_STAGE_SLAM_TIME):
-		return
-	var time_since_slam: float = (BOSS_STAGE_JUMP_TIME - BOSS_STAGE_SLAM_TIME) - boss_stage_timer
-	if time_since_slam > 0.85:
-		return
-	var center: Vector2 = boss_pos - camera
-	var progress: float = clamp(time_since_slam / 0.85, 0.0, 1.0)
-	var radius: float = lerpf(20.0, 280.0, progress)
-	var alpha: float = (1.0 - progress) * 0.75
-	var profile: String = _get_boss_wave_quality_profile()
-
-	Boss1VFX.arc(self, center, radius, 0.0, TAU, Color(0.28, 0.86, 1.0, alpha), 10.0 * (1.0 - progress) + 2.0, profile == "LOW")
-	draw_arc(center, radius * 0.7, 0.0, TAU, 48, Color(0.08, 0.62, 0.92, alpha * 0.6), 8.0)
-	draw_arc(center, radius, 0.0, TAU, 64, Color(0.32, 0.88, 1.0, alpha), 5.0)
-	draw_arc(center, radius + 3.0, 0.0, TAU, 64, Color(0.9, 0.98, 1.0, alpha * 0.85), 2.0)
-
-	if profile != "LOW":
-		var ray_count: int = 12 if profile == "HIGH" else 8
-		for i in range(ray_count):
-			var ray_angle: float = float(i) * TAU / float(ray_count) + time_since_slam * 0.5
-			var r_inner: Vector2 = center + Vector2.from_angle(ray_angle) * (radius * 0.4)
-			var r_outer: Vector2 = center + Vector2.from_angle(ray_angle) * (radius * 1.1)
-			draw_line(r_inner, r_outer, Color(0.5, 0.95, 1.0, alpha * 0.5), 2.0)
+	WorldEnvironmentPresentation._draw_boss1_oceanic_slam_impact(self, camera)
 
 
 func _draw_boss_wave_safe_sector(center: Vector2, angle: float, size: float, radius: float, alpha: float, enraged: bool = false) -> void :
-	var profile: String = _get_boss_wave_quality_profile()
-	var points = PackedVector2Array([center])
-	var segments = 14
-	for segment in range(segments + 1):
-		var sector_angle = angle - size * 0.5 + size * float(segment) / float(segments)
-		points.append(center + Vector2.from_angle(sector_angle) * radius)
-
-	var fill_color: Color = Color(0.04, 0.78, 0.72, alpha) if not enraged else Color(0.02, 0.85, 0.82, alpha * 1.1)
-	draw_polygon(points, PackedColorArray([fill_color]))
-
-	var left = center + Vector2.from_angle(angle - size * 0.5) * radius
-	var right = center + Vector2.from_angle(angle + size * 0.5) * radius
-	var border_color: Color = Color(0.32, 1.0, 0.84, min(0.82, alpha * 2.6))
-	draw_line(center, left, border_color, 2.2)
-	draw_line(center, right, border_color, 2.2)
-
-	if profile != "LOW" and alpha > 0.06:
-		var line_step: float = 140.0
-		var max_r: float = min(radius, 600.0)
-		var step_r: float = 120.0
-		while step_r < max_r:
-			var arc_left: Vector2 = center + Vector2.from_angle(angle - size * 0.35) * step_r
-			var arc_right: Vector2 = center + Vector2.from_angle(angle + size * 0.35) * step_r
-			draw_line(arc_left, arc_right, Color(0.4, 0.98, 0.9, alpha * 0.45), 1.2)
-			step_r += line_step
+	WorldEnvironmentPresentation._draw_boss_wave_safe_sector(self, center, angle, size, radius, alpha, enraged)
 
 
 func _draw_boss_wave_water_body(center: Vector2, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
-	var c_base: Color = Color(0.02, 0.22, 0.58, 0.52) if enraged else Color(0.04, 0.28, 0.68, 0.48)
-	var c_core: Color = Color(0.0, 0.65, 0.92, 0.82) if enraged else Color(0.08, 0.58, 0.88, 0.78)
-	var c_upper: Color = Color(0.45, 0.92, 1.0, 0.88) if enraged else Color(0.32, 0.84, 0.96, 0.82)
-
-	for arc in arc_ranges:
-		var a1: float = float(arc.x)
-		var a2: float = float(arc.y)
-
-		if current_phase == 1:
-			Boss1VFX.arc(self, center, radius, a1, a2, c_core, width, profile == "LOW")
-			continue
-		draw_arc(center, radius, a1, a2, 58, c_base, width + 7.0)
-		draw_arc(center, radius, a1, a2, 58, c_core, width + 1.0)
-
-		if profile != "LOW":
-			draw_arc(center, radius + width * 0.15, a1, a2, 58, c_upper, max(2.0, width * 0.4))
+	WorldEnvironmentPresentation._draw_boss_wave_water_body(self, center, radius, arc_ranges, width, enraged, profile)
 
 
 func _draw_boss_wave_crest_and_foam(center: Vector2, wave: Dictionary, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
-	var age: float = float(wave.get("age", 0.0))
-	var wave_idx: int = int(wave.get("idx", 0))
-
-	var crest_color: Color = Color(0.94, 0.99, 1.0, 0.95)
-	var undertone_color: Color = Color(0.45, 0.92, 1.0, 0.86) if enraged else Color(0.38, 0.88, 0.98, 0.80)
-
-	var crest_r: float = radius + width * 0.45
-
-	for arc in arc_ranges:
-		var a1: float = float(arc.x)
-		var a2: float = float(arc.y)
-
-		if profile == "LOW":
-			draw_arc(center, crest_r, a1, a2, 58, undertone_color, 4.0)
-			draw_arc(center, crest_r + 1.0, a1, a2, 58, crest_color, 2.0)
-		else:
-			var segments: int = 42
-			var arc_len: float = a2 - a1
-			var pts_undertone: PackedVector2Array = PackedVector2Array()
-			var pts_crest: PackedVector2Array = PackedVector2Array()
-
-			for s in range(segments + 1):
-				var frac: float = float(s) / float(segments)
-				var angle: float = a1 + frac * arc_len
-				var jitter: float = sin(angle * 16.0 + age * 14.0 + float(wave_idx) * 2.5) * (2.2 if enraged else 1.5)
-				var cur_r: float = crest_r + jitter
-				pts_crest.append(center + Vector2.from_angle(angle) * cur_r)
-				pts_undertone.append(center + Vector2.from_angle(angle) * (cur_r - 1.5))
-
-			if pts_undertone.size() > 1:
-				draw_polyline(pts_undertone, undertone_color, 4.0, true)
-			if pts_crest.size() > 1:
-				draw_polyline(pts_crest, crest_color, 2.0, true)
-
-		var foam_step: float = 0.08 if enraged else 0.12
-		if profile == "LOW":
-			foam_step = 0.24
-
-		var angle_curr: float = a1
-		var step_i: int = 0
-		while angle_curr < a2:
-			step_i += 1
-			var foam_time: float = age * 2.4 if current_phase == 1 else floor(age * 8.0) * 0.3
-			var h1: float = sin(float(wave_idx) * 17.3 + float(step_i) * 9.1 + foam_time)
-			var h2: float = cos(float(step_i) * 13.7 + float(wave_idx) * 5.2)
-
-			if h1 > (0.1 if profile == "HIGH" else 0.35):
-				var f_angle: float = angle_curr + h2 * 0.03
-				var f_dist: float = crest_r + h1 * (3.5 if enraged else 2.5)
-				var foam_pos: Vector2 = center + Vector2.from_angle(f_angle) * f_dist
-				var foam_size: float = 2.0 + abs(h2) * (2.4 if enraged else 1.8)
-				var foam_col: Color = Color(0.96, 1.0, 1.0, 0.85 + h1 * 0.15) if h2 > 0.0 else Color(0.6, 0.95, 1.0, 0.78)
-
-				draw_circle(foam_pos, foam_size, foam_col)
-
-				if profile == "HIGH" and h1 > 0.65:
-					var spray_pos: Vector2 = center + Vector2.from_angle(f_angle + 0.015) * (f_dist + 4.5)
-					draw_circle(spray_pos, 1.2, Color(0.9, 0.98, 1.0, 0.7))
-
-			angle_curr += foam_step
+	WorldEnvironmentPresentation._draw_boss_wave_crest_and_foam(self, center, wave, radius, arc_ranges, width, enraged, profile)
 
 
 func _draw_boss_wave_trail(center: Vector2, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
-	if profile == "LOW":
-		return
-
-	var trail_r: float = radius - width * 0.55
-	var trail_width: float = width * 0.7
-	var trail_color: Color = Color(0.02, 0.35, 0.75, 0.32) if not enraged else Color(0.01, 0.45, 0.85, 0.42)
-
-	for arc in arc_ranges:
-		var a1: float = float(arc.x)
-		var a2: float = float(arc.y)
-		draw_arc(center, trail_r, a1, a2, 48, trail_color, trail_width)
+	WorldEnvironmentPresentation._draw_boss_wave_trail(self, center, radius, arc_ranges, width, enraged, profile)
 
 
 func _draw_boss_wave_gate_markers(center: Vector2, radius: float, opening: float, opening_size: float, enraged: bool) -> void :
@@ -49736,657 +39985,35 @@ func _draw_boss1_absorb(camera: Vector2) -> void :
 
 
 func _draw_boss_attacks(camera: Vector2) -> void :
-	_draw_boss1_time_wave(camera)
-	_draw_boss1_absorb(camera)
-	_draw_boss1_oceanic_slam_impact(camera)
-	var profile: String = _get_boss_wave_quality_profile()
-	for wave_data in boss_transition_waves:
-		var wave: Dictionary = wave_data
-		if current_phase == 1 and _is_world_replica():
-			wave = wave.duplicate()
-			var prediction: float = _boss1_visual_prediction()
-			var old_age: float = float(wave.get("age", 0.0))
-			var moving_time: float = maxf(0.0, old_age + prediction - maxf(old_age, float(wave.get("warning", BOSS_STAGE_WAVE_WARNING))))
-			wave["age"] = old_age + prediction
-			wave["radius"] = float(wave.get("radius", 0.0)) + float(wave.get("speed", 0.0)) * moving_time
-		var center = Vector2(wave["pos"]) - camera
-		var enraged = bool(wave.get("enraged", false))
-		if String(wave.get("kind", "")) == "dupla_abertura":
-			var age = float(wave.get("age", 0.0))
-			var warning = float(wave.get("warning", BOSS_STAGE_WAVE_WARNING))
-			var opening = float(wave["open_angle"])
-			var opening_size = float(wave["open_size"])
-			var warning_progress = clamp(age / max(0.01, warning), 0.0, 1.0)
-			var sector_alpha = (0.18 + warning_progress * 0.12) if age < warning else 0.08
-			_draw_boss_wave_safe_sector(center, opening, opening_size, 780.0, sector_alpha, enraged)
-			_draw_boss_wave_safe_sector(center, opening + PI, opening_size, 780.0, sector_alpha, enraged)
-			if age < warning:
-				draw_circle(center, 44.0 + warning_progress * 28.0, Color(0.08, 0.65, 0.92, 0.12 + warning_progress * 0.15))
-				draw_arc(center, 48.0 + warning_progress * 30.0, 0.0, TAU, 52, Color(0.4, 0.95, 1.0, 0.8), 3.0)
-				continue
-			var radius = float(wave["radius"])
-			var width = float(wave.get("width", 20.0))
-			var half_gap = opening_size * 0.5
-			var dangerous_arcs = [
-				Vector2(opening + half_gap, opening + PI - half_gap), 
-				Vector2(opening + PI + half_gap, opening + TAU - half_gap)
-			]
-			_draw_boss_wave_trail(center, radius, dangerous_arcs, width, enraged, profile)
-			_draw_boss_wave_water_body(center, radius, dangerous_arcs, width, enraged, profile)
-			_draw_boss_wave_crest_and_foam(center, wave, radius, dangerous_arcs, width, enraged, profile)
-			_draw_boss_wave_gate_markers(center, radius, opening, opening_size, enraged)
-			continue
-		var start = float(wave.get("open_angle", 0.0)) + float(wave.get("open_size", 0.0)) * 0.5
-		var end = start + TAU - float(wave.get("open_size", 0.0))
-		var fallback_arcs = [Vector2(start, end)]
-		var fallback_width = float(wave.get("width", 20.0))
-		var fallback_radius = float(wave.get("radius", 0.0))
-		_draw_boss_wave_water_body(center, fallback_radius, fallback_arcs, fallback_width, enraged, profile)
-		_draw_boss_wave_crest_and_foam(center, wave, fallback_radius, fallback_arcs, fallback_width, enraged, profile)
-	for attack in boss_attacks:
-		var age = float(attack.get("age", 0.0))
-		if age < 0.0:
-			continue
-		if current_phase == 1:
-			age += _boss1_visual_prediction()
-			if Boss1VFX.attack(self, attack, boss_pos - camera, Vector2(attack.get("target", boss_pos)) - camera, time_alive, age, profile == "LOW"):
-				continue
-		var kind = String(attack["kind"])
-		if kind.ends_with("_telegraph") and kind.begins_with("boss6_"):
-			var target: = Vector2(attack.get("target", boss_pos)) - camera
-			var origin: = Vector2(attack.get("origin", boss_pos)) - camera
-			var duration: = maxf(0.01, float(attack.get("duration", 1.0)))
-			var p: = clampf(age / duration, 0.0, 1.0)
-			draw_line(origin, target, Color(0.64, 1.0, 0.2, 0.2 + p * 0.38), 3.0, true)
-			draw_arc(target, 52.0 + p * 18.0, - time_alive * 2.0, TAU - time_alive * 2.0, 52, Color(0.72, 1.0, 0.24, 0.56), 2.4)
-			_draw_centered("CHAGA", target + Vector2(0, -62), 13, Color(0.82, 1.0, 0.34, 0.86))
-			continue
-		match kind:
-			BOSS7_ATTACK_FEATHER:
-				var pos7: = Vector2(attack.get("pos", boss_pos)) - camera
-				var dir7: = Vector2(attack.get("dir", Vector2.LEFT)).normalized()
-				PhoenixFire.draw_flame(self, pos7, 12.0, 39.0, time_alive, float(attack.get("phase", 0.0)), 0.76, -dir7, _phase7_visual_budget_enabled())
-				var side7: = dir7.orthogonal()
-				var feather_tip: = pos7 + dir7 * 14.0
-				var feather_tail: = pos7 - dir7 * 13.0
-				draw_line(feather_tail - side7 * 3.0, feather_tip, Color(0.18, 0.04, 0.02, 0.78), 7.0, true)
-				draw_line(feather_tail, feather_tip, Color(1.0, 0.52, 0.08, 0.92), 4.0, true)
-				draw_line(feather_tail + side7 * 4.0, feather_tip - dir7 * 4.0, Color(1.0, 0.88, 0.28, 0.72), 2.0, true)
-			BOSS7_ATTACK_WING:
-				var origin7: = Vector2(attack.get("origin", boss_pos)) - camera
-				var dir_wing: = Vector2(attack.get("dir", Vector2.LEFT)).normalized()
-				var p_wing: = clampf(age / maxf(0.01, float(attack.get("duration", 1.0))), 0.0, 1.0)
-				var facing7: = dir_wing.angle()
-				var flame_count: int = 8 if _phase7_visual_budget_enabled() else 16
-				for flame_index in range(flame_count):
-					var angle: float = lerpf(facing7 - BOSS7_WING_HALF_ANGLE, facing7 + BOSS7_WING_HALF_ANGLE, float(flame_index) / (flame_count - 1))
-					var flame_pos: Vector2 = origin7 + Vector2.from_angle(angle) * BOSS7_WING_RANGE * (0.25 + p_wing * 0.7)
-					PhoenixFire.draw_flame(self, flame_pos, 24.0, 52.0, time_alive, float(flame_index), 1.0 - p_wing * 0.8, Vector2.UP, _phase7_visual_budget_enabled())
-				draw_arc(origin7, BOSS7_WING_RANGE * (0.75 + p_wing * 0.25), facing7 - BOSS7_WING_HALF_ANGLE, facing7 + BOSS7_WING_HALF_ANGLE, 46, Color(1.0, 0.62, 0.12, 0.52 * (1.0 - p_wing * 0.4)), 14.0, true)
-				draw_arc(origin7, BOSS7_WING_RANGE * 0.55, facing7 - BOSS7_WING_HALF_ANGLE * 0.72, facing7 + BOSS7_WING_HALF_ANGLE * 0.72, 38, Color(1.0, 0.94, 0.36, 0.42), 4.0, true)
-			BOSS7_ATTACK_DIVE_TRAIL:
-				var a7: = Vector2(attack.get("a", boss_pos)) - camera
-				var b7: = Vector2(attack.get("b", boss_pos)) - camera
-				var fade7: = 1.0 - clampf(age / maxf(0.01, float(attack.get("duration", 1.0))), 0.0, 1.0)
-				PhoenixFire.draw_strip(self, a7, b7, 34.0, time_alive, fade7, _phase7_visual_budget_enabled())
-			BOSS7_ATTACK_THERMAL:
-				var p_thermal: = clampf(age / BOSS7_THERMAL_WARNING, 0.0, 1.0)
-				for spot in Array(attack.get("spots", [])):
-					var thermal_screen: = Vector2(spot) - camera
-					draw_circle(thermal_screen, BOSS7_THERMAL_RADIUS * (0.25 + p_thermal * 0.75), Color(1.0, 0.22, 0.04, 0.08 + p_thermal * 0.08))
-					draw_arc(thermal_screen, BOSS7_THERMAL_RADIUS * (0.3 + p_thermal * 0.7), -time_alive * 3.0, TAU - time_alive * 3.0, 64, Color(1.0, 0.6, 0.12, 0.72), 3.0, true)
-					if not bool(attack.get("fired", false)):
-						draw_line(boss_pos - camera, thermal_screen, Color(1.0, 0.44, 0.08, 0.16 + p_thermal * 0.28), 3.0, true)
-						PhoenixFire.draw_flame(self, thermal_screen, 16.0, 8.0 + 22.0 * p_thermal, time_alive, float(thermal_screen.x), 0.35 * p_thermal, Vector2.UP, true)
-					else:
-						var burst_fade: float = 1.0 - clampf((age - BOSS7_THERMAL_WARNING) / maxf(0.01, float(attack.get("duration", 1.25)) - BOSS7_THERMAL_WARNING), 0.0, 1.0)
-						PhoenixFire.draw_burst(self, thermal_screen, BOSS7_THERMAL_RADIUS * 0.72, time_alive, burst_fade, _phase7_visual_budget_enabled())
-			BOSS7_ATTACK_ASH_RAIN:
-				for drop in Array(attack.get("drops", [])):
-					var drop_data: Dictionary = drop
-					var ground: = Vector2(drop_data.get("pos", player_pos)) - camera
-					var drop_age: = float(drop_data.get("age", 0.0))
-					var warn: = maxf(0.01, float(drop_data.get("warn", 0.52)))
-					var p_drop: = clampf(drop_age / warn, 0.0, 1.0)
-					if not bool(drop_data.get("hit", false)):
-						draw_circle(ground, 42.0 * (0.45 + p_drop * 0.55), Color(0.95, 0.38, 0.08, 0.1 + p_drop * 0.16))
-						draw_arc(ground, 42.0, -time_alive * 2.8, TAU - time_alive * 2.8, 42, Color(1.0, 0.62, 0.16, 0.76), 2.0)
-						var sky: = ground + Vector2(0, -180.0 + p_drop * 180.0)
-						PhoenixFire.draw_projectile(self, sky, Vector2.DOWN, 8.0 + p_drop * 4.0, time_alive, float(drop_data.get("phase", 0.0)), _phase7_visual_budget_enabled())
-					else:
-						var fade_drop: = 1.0 - clampf((drop_age - warn) / 0.52, 0.0, 1.0)
-						draw_circle(ground, 38.0 + 16.0 * (1.0 - fade_drop), Color(0.38, 0.28, 0.22, 0.16 * fade_drop))
-						PhoenixFire.draw_burst(self, ground, 35.0, time_alive, fade_drop, _phase7_visual_budget_enabled())
-			BOSS7_ATTACK_CROWN:
-				var crown_alpha: = 0.35 + 0.25 * sin(time_alive * 9.0)
-				for lane in range(6):
-					var angle7: = deg_to_rad(float(lane * 60))
-					var fired: = (lane % 2 == 0 and age >= 1.1) or (lane % 2 == 1 and age >= 1.58)
-					var line_color: = Color(1.0, 0.8, 0.18, 0.64 if fired else crown_alpha)
-					var a_crown: Vector2 = boss_pos - Vector2.from_angle(angle7) * 360.0 - camera
-					var b_crown: Vector2 = boss_pos + Vector2.from_angle(angle7) * 360.0 - camera
-					draw_line(a_crown, b_crown, Color(0.24, 0.04, 0.01, 0.22), 64.0, true)
-					draw_line(a_crown, b_crown, line_color, 8.0 if fired else 3.0, true)
-					if fired:
-						var fire_age: float = age - (1.1 if lane % 2 == 0 else 1.58)
-						PhoenixFire.draw_strip(self, a_crown, b_crown, 26.0, time_alive, clampf(1.0 - fire_age / 0.6, 0.0, 1.0), _phase7_visual_budget_enabled())
-			BOSS6_ABILITY_ACID_BLOOM, BOSS6_ABILITY_INCUBATION:
-				var warn_time: = BOSS6_ACID_BLOOM_FALL_TIME if kind == BOSS6_ABILITY_ACID_BLOOM else 0.9
-				var p: = clampf(age / warn_time, 0.0, 1.0)
-				for spot in Array(attack.get("spots", [])):
-					var screen: = Vector2(spot) - camera
-					var color: = Color(0.42, 1.0, 0.12, 0.7) if kind == BOSS6_ABILITY_ACID_BLOOM else Color(1.0, 0.62, 0.28, 0.64)
-					var radius: = BOSS6_ACID_BLOOM_RADIUS if kind == BOSS6_ABILITY_ACID_BLOOM else 42.0
-					draw_circle(screen, radius * (0.18 + p * 0.82), Color(color.r, color.g, color.b, 0.05 + p * 0.1))
-					draw_arc(screen, radius * (0.22 + p * 0.78), - time_alive * 2.2, TAU - time_alive * 2.2, 72, color, 2.4)
-					if kind == BOSS6_ABILITY_ACID_BLOOM and not bool(attack.get("spawned", false)):
-						var high: Vector2 = (boss_pos - camera) + Vector2(0, -170.0 - sin(p * PI) * 80.0)
-						var spit_pos: Vector2 = high.lerp(screen, p)
-						draw_line(boss_pos - camera, spit_pos, Color(0.42, 1.0, 0.12, 0.24), 3.0, true)
-						draw_circle(spit_pos, 9.0 + p * 5.0, Color(0.58, 1.0, 0.16, 0.84))
-			BOSS6_ABILITY_SCYTHES:
-				var origin: = Vector2(attack.get("origin", boss_pos))
-				var duration: = float(attack.get("duration", 2.85))
-				for bone in attack.get("bones", []):
-					var bone_dict: Dictionary = bone
-					var pos: = _boss6_vertebral_scythe_pos(origin, bone_dict, age, duration) - camera
-					var dir: = Vector2(bone_dict.get("dir", Vector2.RIGHT)).normalized()
-					if dir.length() <= 0.05:
-						dir = Vector2.RIGHT
-					var spin: float = time_alive * 10.0 + float(bone_dict.get("phase", 0.0))
-					var bone_axis: = dir.rotated(sin(spin) * 0.62)
-					var side: = bone_axis.orthogonal()
-					var p0: = pos - bone_axis * 18.0
-					var p1: = pos + bone_axis * 18.0
-					draw_line(p0, p1, Color(0.1, 0.08, 0.05, 0.62), 10.0, true)
-					draw_line(p0, p1, Color(0.78, 0.74, 0.58, 0.92), 5.0, true)
-					draw_circle(p0 + side * 3.8, 4.4, Color(0.92, 0.86, 0.68, 0.88))
-					draw_circle(p0 - side * 3.8, 4.4, Color(0.92, 0.86, 0.68, 0.88))
-					draw_circle(p1 + side * 3.8, 4.0, Color(0.92, 0.86, 0.68, 0.88))
-					draw_circle(p1 - side * 3.8, 4.0, Color(0.92, 0.86, 0.68, 0.88))
-			BOSS6_ABILITY_CHASING_CRACK:
-				for trail in Array(attack.get("trail", [])):
-					var trail_data: Dictionary = trail
-					var fade: = clampf(float(trail_data.get("life", 0.0)) / maxf(0.01, float(trail_data.get("max", 0.72))), 0.0, 1.0)
-					var pos: = Vector2(trail_data.get("pos", boss_pos)) - camera
-					draw_circle(pos, BOSS6_CHASING_CRACK_RADIUS * (0.78 + (1.0 - fade) * 0.28), Color(0.08, 0.36, 0.05, 0.1 * fade))
-					draw_arc(pos, BOSS6_CHASING_CRACK_RADIUS * 0.78, time_alive * 1.4, time_alive * 1.4 + TAU, 50, Color(0.54, 1.0, 0.14, 0.42 * fade), 2.0)
-				var current: = Vector2(attack.get("pos", boss_pos)) - camera
-				var pulse: = 0.5 + 0.5 * sin(time_alive * 14.0 + float(attack.get("phase", 0.0)))
-				draw_circle(current, BOSS6_CHASING_CRACK_RADIUS, Color(0.12, 0.46, 0.04, 0.18))
-				draw_arc(current, BOSS6_CHASING_CRACK_RADIUS + pulse * 7.0, - time_alive * 3.6, TAU - time_alive * 3.6, 64, Color(0.66, 1.0, 0.18, 0.72), 3.0)
-				draw_line(current + Vector2(-36, 0).rotated(time_alive), current + Vector2(36, 0).rotated(time_alive), Color(0.76, 1.0, 0.24, 0.66), 3.0, true)
-			BOSS6_ABILITY_TAIL:
-				for channel in Array(attack.get("channels", [])):
-					var channel_data: Dictionary = channel
-					var angle: = float(channel_data.get("angle", 0.0))
-					var start: Vector2 = boss_pos - camera
-					var end: Vector2 = boss_pos + Vector2.from_angle(angle) * 980.0 - camera
-					var active: = bool(channel_data.get("fired", false))
-					draw_line(start, end, Color(0.62, 1.0, 0.22, 0.22 if not active else 0.56), 18.0 if not active else 28.0, true)
-					draw_line(start, end, Color(0.96, 1.0, 0.72, 0.7), 2.0, true)
-			BOSS6_ABILITY_CARNAGE_TIDE:
-				for drop in Array(attack.get("drops", [])):
-					var drop_data: Dictionary = drop
-					var fall: = clampf(float(drop_data.get("fall", 0.0)) / maxf(0.01, float(drop_data.get("max", 0.68))), 0.0, 1.0)
-					var ground: = Vector2(drop_data.get("pos", player_pos)) - camera
-					var high: Vector2 = (boss_pos - camera) + Vector2(0, -180.0)
-					var pos: Vector2 = high.lerp(ground, 1.0 - fall)
-					draw_line(high, pos, Color(0.62, 1.0, 0.16, 0.18 + 0.22 * (1.0 - fall)), 3.0, true)
-					draw_circle(ground, BOSS6_CARNAGE_POOL_RADIUS * (0.3 + (1.0 - fall) * 0.7), Color(0.5, 1.0, 0.1, 0.09 + 0.08 * (1.0 - fall)))
-					draw_circle(pos, 10.0 + (1.0 - fall) * 5.0, Color(0.58, 1.0, 0.16, 0.84))
-			BOSS6_ABILITY_REFLUX:
-				var p: = clampf(age / 2.2, 0.0, 1.0)
-				for object in Array(attack.get("objects", [])):
-					var object_data: Dictionary = object
-					var pos: = Vector2(object_data.get("pos", boss_pos)).lerp(boss_pos, p) - camera
-					draw_line(pos, boss_pos - camera, Color(0.42, 1.0, 0.18, 0.2 + p * 0.3), 3.0, true)
-					draw_circle(pos, 7.0, Color(0.62, 1.0, 0.18, 0.6))
-				draw_arc(boss_pos - camera, 70.0 + p * 160.0, - time_alive, TAU - time_alive, 90, Color(0.58, 1.0, 0.22, 0.42), 4.0)
-			"boss6_cracked_heart_wave":
-				var center: = Vector2(attack.get("origin", boss_pos)) - camera
-				var p: = clampf(age / maxf(0.01, float(attack.get("duration", 1.35))), 0.0, 1.0)
-				var radius: = lerpf(40.0, 660.0, p)
-				var opening: = float(attack.get("opening", 0.0))
-				var open_size: = float(attack.get("open_size", 0.78))
-				var start: = opening + open_size
-				draw_arc(center, radius, start, start + PI - open_size * 2.0, 96, Color(1.0, 0.28, 0.2, 0.7 * (1.0 - p * 0.2)), 9.0)
-				draw_arc(center, radius, start + PI, start + TAU - open_size * 2.0, 96, Color(1.0, 0.28, 0.2, 0.7 * (1.0 - p * 0.2)), 9.0)
-			"rat_rain":
-				var safe = int(attack.get("safe", 0))
-				for lane in range(4):
-					var y = WORLD_SIZE.y * (0.18 + lane * 0.215) - camera.y
-					var c = Color(0.48, 1.0, 0.2, 0.12) if lane == safe else Color(1.0, 0.3, 0.12, 0.22)
-					draw_rect(Rect2( - camera.x, y - 34.0, WORLD_SIZE.x, 68.0), c, true)
-					draw_line(Vector2( - camera.x, y), Vector2(WORLD_SIZE.x - camera.x, y), Color(c.r, c.g, c.b, 0.86), 2.0)
-			"rat_spit":
-				var dir = Vector2(attack.get("dir", Vector2.RIGHT))
-				draw_line(boss_pos - camera, boss_pos - camera + dir * 620.0, Color(0.64, 1.0, 0.18, 0.72), 4.0)
-			"miasma_cheese_spit":
-				var dir: = Vector2(attack.get("dir", Vector2.RIGHT)).normalized()
-				var warning_progress: float = clamp(age / max(0.01, float(attack.get("warn", BOSS3_MIASMA_SPIT_WARNING))), 0.0, 1.0)
-				var mouth: Vector2 = boss_pos - camera + dir * 52.0
-				draw_circle(mouth, 12.0 + warning_progress * 20.0, Color(0.68, 0.9, 0.08, 0.12 + warning_progress * 0.2))
-				draw_arc(mouth, 16.0 + warning_progress * 22.0, 0.0, TAU, 28, Color(0.9, 1.0, 0.3, 0.82), 3.0)
-				draw_line(mouth, mouth + dir * (120.0 + warning_progress * 150.0), Color(0.78, 1.0, 0.22, 0.34 + warning_progress * 0.42), 3.0)
-			"rat_tail":
-				var pulse = clamp(age / 0.52, 0.0, 1.0)
-				draw_circle(boss_pos - camera, 155.0, Color(1.0, 0.48, 0.12, 0.08 + pulse * 0.08))
-				draw_arc(boss_pos - camera, 155.0, 0, TAU, 64, Color(1.0, 0.72, 0.22, 0.78), 4.0)
-			"faith_pulse":
-				var pos = Vector2(attack.get("pos", boss_pos)) - camera
-				var dir = Vector2(attack.get("dir", Vector2.RIGHT)).normalized()
-				var side = dir.orthogonal()
-				var pulse = 0.5 + sin(time_alive * 18.0) * 0.5
-				var facing: = dir.angle()
-				var arc_start: = facing - PI * 0.25
-				var arc_end: = facing + PI * 0.25
-				draw_arc(pos, 78.0 + pulse * 5.0, arc_start, arc_end, 20, Color(0.02, 0.0, 0.03, 0.58), 14.0, true)
-				draw_arc(pos, 73.0 + pulse * 5.0, arc_start, arc_end, 20, Color(0.82, 1.0, 0.18, 0.76), 7.0, true)
-				draw_arc(pos, 56.0 + pulse * 4.0, arc_start, arc_end, 18, Color(1.0, 0.88, 0.2, 0.84), 4.0, true)
-				draw_arc(pos, 39.0 + pulse * 3.0, arc_start, arc_end, 16, Color(0.14, 0.96, 0.3, 0.66), 3.0, true)
-				draw_line(pos, pos + dir * 78.0 + side * 54.0, Color(0.68, 1.0, 0.16, 0.24), 2.0)
-				draw_line(pos, pos + dir * 78.0 - side * 54.0, Color(1.0, 0.86, 0.18, 0.24), 2.0)
-				for i in range(4):
-					var fork = pos - dir * (18.0 + i * 18.0) + side * sin(time_alive * 9.0 + i) * 18.0
-					draw_line(fork, fork + dir * 32.0 + side * rng.randf_range(-7.0, 7.0), Color(0.12, 0.95, 0.34, 0.42), 1.6)
-			"bubble":
-				var progress = clamp(age / float(attack["duration"]), 0.0, 1.0)
-				var r = 15.0
-				var color = Color(0.0, 1.0, 0.8, 0.45)
-				if progress < 0.25:
-					r = 15.0 + sin(time_alive * 20.0) * 3.0
-				elif progress < 0.5:
-					r = 50.0 + sin(time_alive * 10.0) * 5.0
-				elif progress < 0.75:
-					r = 65.0 + sin(time_alive * 50.0) * 8.0
-					color = Color(1.0, 0.0, 0.5, 0.48)
-				else:
-					r = 90.0 + (progress - 0.75) * 180.0
-					color = Color(0.65, 0.15, 1.0, 0.35)
-				var p = attack["target"] - camera
-				draw_circle(p, r, Color(color.r, color.g, color.b, 0.12))
-				draw_arc(p, r, 0, TAU, 64, color, 4)
-				draw_line(boss_pos - camera, p, Color(0.0, 1.0, 0.8, 0.22), 2)
-			"rain":
-				var p = attack["target"] - camera
-				var local = age
-				if local < 2.2:
-					var shadow_r = clamp(local / 2.2, 0.0, 1.0) * 35.0
-					draw_circle(p, shadow_r, Color(0.0, 0.45, 1.0, 0.18))
-					draw_arc(p, shadow_r, 0, TAU, 32, Color(0.0, 0.75, 1.0, 0.72), 2)
-				else:
-					draw_line(p + Vector2(0, -180 + (local - 2.2) * 360.0), p, Color(0.0, 0.78, 1.0, 0.88), 8)
-					draw_circle(p, 28.0 + sin(time_alive * 16.0) * 4.0, Color(0.0, 0.55, 1.0, 0.22))
-			"boiling_bubbles":
-				for drop in attack.get("drops", []):
-					var drop_age = float(drop.get("age", 0.0)) + (_boss1_visual_prediction() if current_phase == 1 else 0.0)
-					var launch = Vector2(drop.get("launch", boss_pos))
-					var apex = Vector2(drop.get("apex", Vector2(launch.x, -120.0)))
-					var target = Vector2(drop.get("target", player_pos))
-					var phase = float(drop.get("phase", 0.0))
-					var pos_world = launch
-					var warning = clamp(drop_age / 1.36, 0.0, 1.0)
-					var target_screen = target - camera
-					var warn_r = 22.0 + warning * 42.0
-					draw_circle(target_screen, warn_r, Color(0.12, 0.62, 1.0, 0.08 + warning * 0.1))
-					draw_arc(target_screen, warn_r, 0.0, TAU, 42, Color(0.35, 0.92, 1.0, 0.58 + warning * 0.25), 2.2)
-					if drop_age < 0.48:
-						var up = smoothstep(0.0, 1.0, drop_age / 0.48)
-						pos_world = launch.lerp(apex, up)
-						draw_line(launch - camera, pos_world - camera, Color(0.28, 0.88, 1.0, 0.38), 5.0)
-					elif drop_age < 1.18:
-						pos_world = apex
-						var glint = apex - camera + Vector2(sin(time_alive * 7.0 + phase) * 10.0, 0)
-						draw_circle(glint, 13.0, Color(0.58, 1.0, 1.0, 0.58))
-					else:
-						var fall = clamp((drop_age - 1.18) / 0.45, 0.0, 1.0)
-						pos_world = apex.lerp(target, fall)
-						draw_line(pos_world - camera + Vector2(0, -42), target_screen, Color(0.3, 0.86, 1.0, 0.7), 7.0)
-					var bubble_pos = pos_world - camera
-					var wobble = 1.0 + sin(time_alive * 13.0 + phase) * 0.08
-					Boss1VFX.bubble(self, bubble_pos, 18.0 * wobble, time_alive + phase, Boss1VFX.CYAN, profile == "LOW")
-					if drop_age >= 1.58:
-						var splash = clamp((drop_age - 1.58) / 0.42, 0.0, 1.0)
-						draw_circle(target_screen, 28.0 + splash * 42.0, Color(0.18, 0.78, 1.0, 0.22 * (1.0 - splash)))
-						for i in range(8):
-							var a = phase + i * TAU / 8.0
-							draw_line(target_screen, target_screen + Vector2.from_angle(a) * (22.0 + splash * 46.0), Color(0.7, 1.0, 1.0, 0.44 * (1.0 - splash)), 1.8)
-			"pressure_bubbles":
-				var dir = Vector2(attack.get("dir", Vector2.LEFT)).normalized()
-				var origin = boss_pos - camera
-				var pulse = 0.5 + sin(time_alive * 12.0) * 0.5
-				for i in range(4):
-					var p = origin + dir * (42.0 + i * 34.0)
-					draw_circle(p, 10.0 + i * 3.0, Color(0.22, 0.84, 1.0, 0.08 + pulse * 0.06))
-					draw_arc(p, 12.0 + i * 3.0, time_alive * 5.0, time_alive * 5.0 + PI * 1.2, 22, Color(0.88, 1.0, 1.0, 0.3 + pulse * 0.22), 1.7)
-			"absorb_retaliation":
-				var center = boss_pos - camera
-				var fired_ratio = float(attack.get("fired", 0)) / max(1.0, float(attack.get("bursts", BOSS1_ABSORB_RETALIATE_BURSTS)))
-				Boss1VFX.arc(self, center, 118.0 + sin(time_alive * 9.0) * 5.0, 0.0, TAU, Color(1.0, 0.62, 0.18, 0.94), 6.0, profile == "LOW")
-				for spoke in range(8):
-					var spoke_dir = Vector2.from_angle(time_alive * 1.7 + spoke * TAU / 8.0)
-					draw_line(center + spoke_dir * 54.0, center + spoke_dir * (170.0 + fired_ratio * 80.0), Color(1.0, 0.82, 0.34, 0.13), 3.0)
-			"tide":
-				var tide_visual: Dictionary = attack.duplicate()
-				tide_visual["age"] = age
-				var line_pos = _boss_tide_line(tide_visual)
-				if bool(attack["horizontal"]):
-					Boss1VFX.tide(self, Vector2(-camera.x, line_pos - camera.y), Vector2(WORLD_SIZE.x - camera.x, line_pos - camera.y), time_alive, profile == "LOW")
-				else:
-					Boss1VFX.tide(self, Vector2(line_pos - camera.x, -camera.y), Vector2(line_pos - camera.x, WORLD_SIZE.y - camera.y), time_alive, profile == "LOW")
-			"sand":
-				var p = attack["target"] - camera
-				var r = 48.0 + sin(time_alive * 8.0) * 8.0
-				draw_arc(p, r, 0, TAU, 48, Color(0.78, 0.64, 0.42, 0.72), 5)
-				for i in range(8):
-					draw_circle(p + Vector2.from_angle(time_alive * 5.0 + i) * (r * 0.65), 3, Color(0.9, 0.82, 0.62, 0.75))
-			"pincer":
-				var p = attack["target"] - camera
-				var alpha = 0.32 if age < 1.55 else 0.76
-				draw_line(Vector2(p.x, - camera.y), Vector2(p.x, WORLD_SIZE.y - camera.y), Color(1.0, 0.15, 0.55, alpha), 8)
-				draw_line(Vector2( - camera.x, p.y), Vector2(WORLD_SIZE.x - camera.x, p.y), Color(1.0, 0.15, 0.55, alpha), 8)
-			"rush":
-				var dir = Vector2(attack.get("dir", Vector2.LEFT)).normalized()
-				var state = String(attack.get("state", "telegraph"))
-				var origin = boss_pos - camera
-				if state == "telegraph":
-					var flash = 0.45 + 0.55 * sin(time_alive * 16.0)
-					var arrow_center = origin + dir * 118.0
-					var side = dir.orthogonal()
-					var tip = arrow_center + dir * 42.0
-					var left = arrow_center - dir * 24.0 + side * 30.0
-					var right = arrow_center - dir * 24.0 - side * 30.0
-					draw_polygon(PackedVector2Array([tip, left, right]), PackedColorArray([Color(1.0, 0.04, 0.02, 0.38 + flash * 0.32)]))
-					draw_polyline(PackedVector2Array([left, tip, right]), Color(1.0, 0.88, 0.78, 0.72 + flash * 0.2), 4.0, false)
-					draw_line(origin + dir * 38.0, origin + dir * 210.0, Color(1.0, 0.06, 0.02, 0.18 + flash * 0.2), 10.0)
-				elif state == "dash":
-					for trail_index in range(5):
-						var side_offset: Vector2 = dir.orthogonal() * (trail_index - 2) * 28.0
-						Boss1VFX.streak(self, origin - dir * (230.0 - abs(trail_index - 2) * 24.0) + side_offset, origin + dir * 48.0 + side_offset * 0.95, Color(1.0, 0.38, 0.1, 0.85 - abs(trail_index - 2) * 0.15), 13.0)
-				elif state == "grab":
-					draw_arc(origin, 82.0, 0.0, TAU, 54, Color(1.0, 0.3, 0.1, 0.78), 4.0)
-				elif state == "throw":
-					draw_line(player_pos - camera - dir * 90.0, player_pos - camera + dir * 20.0, Color(1.0, 0.66, 0.16, 0.62), 8.0)
-			"blizzard", "frost_breath", "avalanche", "spin_spit_up", "glacial_stomp", "ice_prison", "flash_freeze", "shield", "ice_pillar":
-				Boss2VFX.attack(self, attack, camera, profile == "LOW")
+	WorldEnvironmentPresentation._draw_boss_attacks(self, camera)
 
 
 func _draw_boss3_faith_link(camera: Vector2) -> void :
-	if current_phase != 3 or boss3_faith_link_timer <= 0.0:
-		return
-	var a = boss_pos - camera + Vector2(0, -8)
-	var b = player_pos - camera + Vector2(0, -12)
-	var dir = (b - a).normalized()
-	if dir.length() <= 0.01:
-		dir = Vector2.RIGHT
-	var side = dir.orthogonal()
-	var points: = PackedVector2Array()
-	for i in range(9):
-		var t = float(i) / 8.0
-		var wobble = sin(time_alive * 10.0 + i * 1.7) * 18.0
-		points.append(a.lerp(b, t) + side * wobble)
-	draw_polyline(points, Color(0.02, 0.0, 0.03, 0.86), 13.0, false)
-	draw_polyline(points, Color(0.94, 0.88, 0.16, 0.82), 6.0, false)
-	draw_polyline(points, Color(0.3, 1.0, 0.24, 0.62), 2.4, false)
-	draw_circle(a, 30.0 + sin(time_alive * 8.0) * 4.0, Color(0.74, 1.0, 0.16, 0.2))
-	draw_circle(b, 26.0 + sin(time_alive * 8.0 + 1.0) * 4.0, Color(1.0, 0.86, 0.12, 0.2))
+	WorldEnvironmentPresentation._draw_boss3_faith_link(self, camera)
 
 
 func _draw_effects(camera: Vector2) -> void :
-	var draw_cap: int = MEMORY_EFFECT_DRAW_CAP if _memory_saver_active() else (MOBILE_EFFECT_DRAW_CAP if _runtime_visual_budget_active() else 999999)
-	var drawn: int = 0
-	for effect in (effects + net_effects):
-		if drawn >= draw_cap:
-			break
-		var effect_world_pos: Vector2 = Vector2(effect.get("pos", Vector2.ZERO))
-		if not _world_point_in_view(effect_world_pos, camera, 160.0):
-			continue
-		drawn += 1
-		var alpha = clamp(float(effect["life"]) / float(effect["max"]), 0.0, 1.0)
-		var color: Color = effect["color"]
-		color.a = alpha
-		var kind = String(effect.get("kind", ""))
-		if String(effect.get("text", "")) != "":
-			_draw_centered(effect["text"], effect["pos"] - camera, int(effect["size"]), color)
-		elif kind == "enemy_shard":
-			var pos = effect["pos"] - camera
-			var size = float(effect["size"]) * (0.72 + alpha * 0.65)
-			var phase = float(effect.get("phase", 0.0))
-			var tip = Vector2.from_angle(phase) * size
-			var side = Vector2.from_angle(phase + PI * 0.5) * size * 0.62
-			var points = PackedVector2Array([
-				pos + tip, 
-				pos + side, 
-				pos - tip, 
-				pos - side
-			])
-			draw_polygon(points, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.92)]))
-			draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, alpha * 0.75), 1.5, true)
-			draw_circle(pos, size * 0.34, Color(1.0, 1.0, 1.0, alpha * 0.85))
-		elif kind == "trail":
-			var p = effect["pos"] - camera
-			var radius = float(effect["size"]) * alpha
-			draw_circle(p, radius, color)
-			draw_circle(p, radius * 1.8, Color(color.r, color.g, color.b, alpha * 0.2))
-			if effect.has("vel"):
-				var vel: Vector2 = effect["vel"]
-				if vel.length() > 4.0:
-					draw_line(p - vel.normalized() * radius * 1.6, p, Color(1.0, 1.0, 1.0, alpha * 0.7), max(1.0, radius * 0.34))
-		elif kind == "spark":
-			var p = effect["pos"] - camera
-			var r = float(effect["size"]) * alpha
-			draw_line(p - effect["vel"].normalized() * r * 2.0, p + effect["vel"].normalized() * r * 2.0, color, r)
-			draw_circle(p, r * 1.5, Color(1, 1, 1, alpha))
-		elif kind == "slash_mark":
-			var p = effect["pos"] - camera
-			var r = float(effect["size"]) * alpha
-			var a = float(effect.get("angle", 0.0))
-			draw_line(p - Vector2.from_angle(a) * r * 3.0, p + Vector2.from_angle(a) * r * 3.0, color, r * 0.8)
-			draw_line(p - Vector2.from_angle(a) * r * 1.5, p + Vector2.from_angle(a) * r * 1.5, Color(1, 1, 1, alpha), r * 0.4)
-		elif kind == "shard":
-			var p = effect["pos"] - camera
-			var r = float(effect["size"]) * alpha
-			var rot = float(effect.get("rot", 0.0))
-			draw_set_transform(p, rot * (1.0 - alpha), Vector2.ONE)
-			draw_rect(Rect2(Vector2( - r, - r), Vector2(r * 2, r * 2)), color, true)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		elif kind == "bullet_fragment":
-			var p: Vector2 = Vector2(effect["pos"]) - camera
-			var r: float = maxf(1.0, float(effect["size"]) * (0.45 + alpha))
-			var angle: float = float(effect.get("phase", 0.0))
-			var forward: Vector2 = Vector2.from_angle(angle) * r * 2.2
-			var side: Vector2 = Vector2.from_angle(angle + PI * 0.5) * r * 0.62
-			var points := PackedVector2Array([p + forward, p + side, p - forward * 0.48, p - side])
-			draw_circle(p, r * 2.4, Color(color.r, color.g, color.b, alpha * 0.18))
-			draw_polygon(points, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.92)]))
-			draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, alpha * 0.78), 1.2, true)
-		elif kind == "landing_smoke":
-			var p: Vector2 = Vector2(effect["pos"]) - camera
-			var growth: float = 1.0 - alpha
-			var r: float = float(effect["size"]) * (0.72 + growth * 1.85)
-			draw_set_transform(p, float(effect.get("phase", 0.0)) * 0.08, Vector2(1.0, 0.34))
-			draw_circle(Vector2.ZERO, r, Color(color.r, color.g, color.b, alpha * 0.46))
-			draw_arc(Vector2.ZERO, r * 1.08, PI * 0.08, PI * 1.72, 14, Color(0.95, 1.0, 0.96, alpha * 0.28), 1.4)
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		elif kind == "bit":
-			var p = effect["pos"] - camera
-			var r = float(effect["size"]) * alpha
-			draw_rect(Rect2(p - Vector2(r, r), Vector2(r * 2, r * 2)), color, false, max(1.0, r * 0.5))
-			draw_rect(Rect2(p - Vector2(r * 0.5, r * 0.5), Vector2(r, r)), Color(1, 1, 1, alpha), true)
-		else:
-			draw_circle(effect["pos"] - camera, float(effect["size"]) * alpha, color)
+	MenusPresentation._draw_effects(self, camera)
 
 
 func _draw_hud(viewport: Vector2) -> void :
-	if _spectator_controls_locked():
-		_draw_spectator_hud(viewport)
-		return
-	if _uses_desktop_ui():
-		_draw_desktop_hud(viewport)
-		return
-	var portrait = _is_portrait(viewport)
-	var sm = 1.25 if is_gamepad_active and not portrait else 1.0
-	var left_w = (236.0 * sm) if not portrait else min(236.0, viewport.x * 0.46)
-	var left_h = 76.0 * sm
-	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, left_h))
-	var left_alpha: float = _hud_rect_player_alpha(left_rect, viewport, 84.0)
-	hud_feedback.health_panel(self, left_rect, left_alpha)
-
-	var right_w = (220.0 * sm) if not portrait else min(220.0, viewport.x * 0.44)
-	var right_rect = Rect2(_right_panel_pos(viewport), Vector2(right_w, left_h))
-	if buttons.has("pause") and right_rect.intersects(buttons["pause"]):
-		right_rect.position.x = maxf(left_rect.end.x + 12.0, Rect2(buttons["pause"]).position.x - right_w - 12.0)
-	var right_alpha: float = _hud_rect_player_alpha(right_rect, viewport, 84.0)
-	hud_feedback.stats_panel(self, right_rect, right_alpha)
-
-	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
-		var boss_rect = Rect2(_boss_panel_pos(viewport), Vector2(380 * sm, 30 * sm))
-		_draw_combat_panel(boss_rect, Color(1.0, 0.16, 0.3), 0.62)
-		_draw_hud_bar(boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, 8.0 * sm, boss_hp / boss_hp_max, Color(1.0, 0.16, 0.28))
-		if _boss_execute_threshold() > 0.0:
-			_draw_collector_threshold(boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, _boss_execute_threshold(), boss_hp / boss_hp_max, 8.0 * sm)
-		if current_phase == 1 and boss_hp / max(1.0, boss_hp_max) < BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown > 0.0:
-			var chrono_text = "CRONO %.0fs" % ceil(boss1_rewind_cooldown)
-			draw_string(font, boss_rect.position + Vector2(boss_rect.size.x - 94.0 * sm, 28.0 * sm), chrono_text, HORIZONTAL_ALIGNMENT_LEFT, 82.0 * sm, int(11 * sm), Color(0.48, 0.94, 1.0, 0.92))
-		if current_phase == 3:
-			var faith_rect = Rect2(boss_rect.position + Vector2(64 * sm, 34 * sm), Vector2(252 * sm, 24 * sm))
-			_draw_combat_panel(faith_rect, Color(0.62, 0.94, 0.18), 0.48)
-			_draw_hud_bar(faith_rect.position + Vector2(54 * sm, 8 * sm), 184.0 * sm, 7.0 * sm, boss3_faith / 100.0, Color(0.66, 1.0, 0.22))
-			draw_string(font, faith_rect.position + Vector2(8 * sm, 17 * sm), "FE %d" % int(boss3_faith), HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * sm), Color(0.86, 1.0, 0.58))
-			if boss3_ritual_timer > 0.0:
-				_draw_centered("RITUAL %.1fs  %d/2" % [boss3_ritual_timer, boss3_ritual_destroyed], Vector2(viewport.x * 0.5, 112 * sm), int(20 * sm), Color(1.0, 0.42, 0.18))
-	if is_multiplayer and online_connected:
-		var ping_text: = "PING %sms" % (str(net_ping_ms) if net_ping_ms >= 0 else "--")
-		if net_remote_ping_ms >= 0:
-			ping_text += "  PAR %dms" % net_remote_ping_ms
-		if _is_world_replica():
-			ping_text += "  JIT %.0fms" % net_world_jitter_ms
-		draw_string(font, Vector2(viewport.x * 0.5 - 118.0 * sm, 28.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
-	_draw_card_mechanic_huds(viewport, left_rect)
-	_draw_ancorada_hud(viewport, left_rect)
-	_draw_acorrentada_hud(viewport, left_rect)
-	_draw_bombastica_hud(viewport, left_rect)
-	_draw_necronada_hud(viewport, left_rect)
-	_draw_aura_hud(viewport, left_rect)
-	_draw_revive_heal_penalty_hud(viewport, left_rect)
-	_draw_lacerante_coagulum_hud(viewport)
-	_draw_contractual_order_hud(viewport)
-	_draw_unlock_notifications(viewport)
+	HudPresentation._draw_hud(self, viewport)
 
 
 func _draw_unlock_notifications(viewport: Vector2) -> void :
-	if unlock_notifications.is_empty():
-		return
-	var base_width: float = min(680.0, max(360.0, viewport.x * 0.58))
-	var panel_height: float = 88.0
-	var t: float = float(Time.get_ticks_msec()) * 0.001
-	for i in range(unlock_notifications.size()):
-		var notice: Dictionary = unlock_notifications[i]
-		var life: float = float(notice.get("life", 0.0))
-		var max_life: float = max(0.01, float(notice.get("max", UNLOCK_NOTIFICATION_LIFETIME)))
-		var age: float = float(notice.get("age", max_life - life))
-		var enter: float = smoothstep(0.0, UNLOCK_NOTIFICATION_ENTER_TIME, age)
-		var exit: float = smoothstep(0.0, UNLOCK_NOTIFICATION_EXIT_TIME, UNLOCK_NOTIFICATION_EXIT_TIME - life)
-		var visibility: float = clampf(enter * (1.0 - exit), 0.0, 1.0)
-		if visibility <= 0.01:
-			continue
-		var rect: = Rect2(Vector2((viewport.x - base_width) * 0.5, lerpf(-panel_height - 24.0, 26.0 + float(i) * (panel_height + 10.0), visibility)), Vector2(base_width, panel_height))
-		var accent: Color = notice.get("accent", Color(0.12, 0.82, 1.0))
-		var alpha: float = visibility
-		var glow: Rect2 = rect.grow(10.0 + sin(t * 8.0 + float(i)) * 2.0)
-		draw_rect(glow, Color(accent.r, accent.g, accent.b, 0.045 * alpha), true)
-		draw_rect(rect, Color(0.006, 0.018, 0.034, 0.56 * alpha), true)
-		draw_rect(rect.grow(-4.0), Color(accent.r, accent.g, accent.b, 0.035 * alpha), true)
-		draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.9 * alpha), false, 2.5)
-		draw_rect(rect.grow(-5.0), Color(0.72, 0.95, 1.0, 0.18 * alpha), false, 1.0)
-		var icon_rect: = Rect2(rect.position + Vector2(16.0, 14.0), Vector2(60.0, 60.0))
-		draw_rect(icon_rect.grow(5.0), Color(0.0, 0.12, 0.18, 0.5 * alpha), true)
-		draw_rect(icon_rect.grow(5.0), Color(accent.r, accent.g, accent.b, 0.75 * alpha), false, 1.5)
-		var icon_texture: Texture2D = notice.get("icon", null)
-		_draw_texture_contain(icon_texture, icon_rect, Color(1.0, 1.0, 1.0, alpha))
-		var text_x: float = icon_rect.end.x + 18.0
-		var title_color: Color = Color(0.58, 0.94, 1.0, 0.86 * alpha)
-		var name_color: Color = Color(1.0, 1.0, 1.0, alpha)
-		var challenge_color: Color = Color(0.24, 0.94, 1.0, 0.92 * alpha)
-		draw_string(font, Vector2(text_x, rect.position.y + 24.0), String(notice.get("title", "DESBLOQUEIO CONCLUIDO")), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 110.0, _readable_text_size(12), title_color)
-		draw_string(font, Vector2(text_x, rect.position.y + 51.0), String(notice.get("name", "NOVO ITEM")), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 116.0, _readable_text_size(21), name_color)
-		draw_string(font, Vector2(text_x, rect.position.y + 75.0), String(notice.get("challenge", "Desafio concluido")), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 124.0, _readable_text_size(13), challenge_color)
-		var tag_rect: = Rect2(rect.end - Vector2(134.0, 29.0), Vector2(114.0, 18.0))
-		draw_rect(tag_rect, Color(0.0, 0.12, 0.2, 0.58 * alpha), true)
-		draw_rect(tag_rect, Color(0.58, 0.94, 1.0, 0.48 * alpha), false, 1.0)
-		_draw_centered("NOVO", tag_rect.get_center() + Vector2(0.0, 4.0), _readable_text_size(10), Color(0.76, 0.98, 1.0, alpha))
-		_draw_unlock_electric_border(rect, accent, alpha, t + float(notice.get("seed", 0)) * 0.001)
+	MenusPresentation._draw_unlock_notifications(self, viewport)
 
 
 func _draw_unlock_electric_border(rect: Rect2, accent: Color, alpha: float, phase: float) -> void :
-	var points: Array = [
-		rect.position,
-		Vector2(rect.end.x, rect.position.y),
-		rect.end,
-		Vector2(rect.position.x, rect.end.y),
-		rect.position
-	]
-	for edge in range(4):
-		var a: Vector2 = points[edge]
-		var b: Vector2 = points[edge + 1]
-		var dir: Vector2 = (b - a).normalized()
-		var normal: Vector2 = Vector2(-dir.y, dir.x)
-		var last: Vector2 = a
-		var steps: int = 7
-		for s in range(1, steps + 1):
-			var ratio: float = float(s) / float(steps)
-			var jitter: float = sin(phase * 11.0 + float(edge * 19 + s * 7)) * 4.0
-			var p: Vector2 = a.lerp(b, ratio) + normal * jitter
-			var bolt_alpha: float = alpha * (0.22 + 0.34 * max(0.0, sin(phase * 7.0 + float(s + edge))))
-			draw_line(last, p, Color(0.46, 0.96, 1.0, bolt_alpha), 1.4)
-			if s % 3 == 0:
-				var branch: Vector2 = p + normal * (8.0 + abs(jitter)) + dir * sin(phase * 5.0 + s) * 12.0
-				draw_line(p, branch, Color(0.82, 0.98, 1.0, bolt_alpha * 0.72), 1.0)
-			last = p
+	MenusPresentation._draw_unlock_electric_border(self, rect, accent, alpha, phase)
 
 
 func _draw_revive_heal_penalty_hud(viewport: Vector2, anchor: Rect2) -> void :
-	if revive_heal_penalty_timer <= 0.0:
-		return
-	var width: float = min(318.0, max(220.0, viewport.x * 0.35))
-	var rect: = Rect2(anchor.position + Vector2(0.0, anchor.size.y + 88.0), Vector2(width, 30.0))
-	var accent: = Color(1.0, 0.26, 0.36, 0.92)
-	draw_rect(rect, Color(0.04, 0.02, 0.025, 0.72), true)
-	draw_rect(rect, accent, false, 1.5)
-	draw_string(font, rect.position + Vector2(10.0, 20.0), "SACRIFICIO: CURAS -50%%  %.0fs" % ceil(revive_heal_penalty_timer), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, _readable_text_size(11), accent)
+	HudPresentation._draw_revive_heal_penalty_hud(self, viewport, anchor)
 
 
 func _draw_contractual_order_hud(viewport: Vector2) -> void :
-	if not contractual_order.is_empty():
-		var age: = float(contractual_order.get("real_age", contractual_order.get("age", 0.0)))
-		var goal: int = max(1, int(contractual_order.get("goal", 1)))
-		var progress: int = clampi(int(contractual_order.get("progress", 0)), 0, goal)
-		var time_left: = float(contractual_order.get("time_left", 0.0))
-		if age < CONTRACT_ORDER_EXECUTION_START_TIME:
-			var panel_size: = Vector2(min(560.0, viewport.x * 0.74), 246.0)
-			var center: = viewport * 0.5
-			var shrink: = 1.0
-			if age < CONTRACT_ORDER_SLOW_IN_TIME:
-				shrink = lerpf(0.78, 1.0, clampf(age / CONTRACT_ORDER_SLOW_IN_TIME, 0.0, 1.0))
-			elif age >= CONTRACT_ORDER_READ_END_TIME:
-				shrink = lerpf(1.0, 0.58, clampf((age - CONTRACT_ORDER_READ_END_TIME) / CONTRACT_ORDER_SLOW_OUT_TIME, 0.0, 1.0))
-			var reveal_rect: = Rect2(center - panel_size * shrink * 0.5, panel_size * shrink)
-			var read_left: = maxf(0.0, CONTRACT_ORDER_READ_END_TIME - maxf(age, CONTRACT_ORDER_SLOW_IN_TIME))
-			var phase_label: = "DESACELERANDO O MUNDO" if age < CONTRACT_ORDER_SLOW_IN_TIME else ("LEITURA %.0fs" % ceil(read_left) if age < CONTRACT_ORDER_READ_END_TIME else "PROTOCOLANDO ORDEM")
-			_draw_judicial_order_paper(reveal_rect, String(contractual_order.get("label", "")), String(contractual_order.get("desc", "")), "%d/%d" % [progress, goal], phase_label, false)
-		else:
-			var compact_rect: = Rect2(18.0, 238.0, min(330.0, viewport.x * 0.36), 104.0)
-			_draw_judicial_order_paper(compact_rect, String(contractual_order.get("label", "")), "", "%d/%d" % [progress, goal], "%.0fs" % ceil(time_left), true)
-			var ratio: = float(progress) / float(goal)
-			_draw_hud_bar(compact_rect.position + Vector2(18, 76), compact_rect.size.x - 36.0, 8.0, ratio, Color(0.54, 0.12, 0.04))
-	var y: = 334.0
-	for key in contractual_order_rewards.keys():
-		_draw_contractual_status_line(Vector2(18.0, y), "BENCAO %s %.0fs" % [String(key).to_upper(), ceil(float(contractual_order_rewards[key]))], Color(0.38, 1.0, 0.58))
-		y += 28.0
-	for key in contractual_order_penalties.keys():
-		_draw_contractual_status_line(Vector2(18.0, y), "CONFISCO %s %.0fs" % [String(key).to_upper(), ceil(float(contractual_order_penalties[key]))], Color(1.0, 0.3, 0.18))
-		y += 28.0
+	HudPresentation._draw_contractual_order_hud(self, viewport)
 
 
 func _draw_contractual_status_line(pos: Vector2, label: String, color: Color) -> void :
@@ -50397,43 +40024,7 @@ func _draw_contractual_status_line(pos: Vector2, label: String, color: Color) ->
 
 
 func _draw_judicial_order_paper(rect: Rect2, label: String, desc: String, progress_text: String, timer_text: String, compact: = false) -> void :
-	var paper: = Color(0.94, 0.79, 0.42, 0.96)
-	var paper_dark: = Color(0.52, 0.25, 0.07, 0.88)
-	var ink: = Color(0.19, 0.09, 0.035, 0.96)
-	var seal: = Color(0.62, 0.05, 0.035, 0.82)
-	draw_rect(rect.grow(8.0), Color(0.0, 0.0, 0.0, 0.36), true)
-	draw_rect(rect, paper, true)
-	draw_rect(rect, paper_dark, false, 3.0)
-	draw_rect(rect.grow(-8.0), Color(1.0, 0.93, 0.62, 0.28), false, 1.4)
-	var fold: = minf(rect.size.x, rect.size.y) * (0.16 if compact else 0.11)
-	var fold_points: = PackedVector2Array([
-		Vector2(rect.end.x - fold, rect.position.y), 
-		Vector2(rect.end.x, rect.position.y), 
-		Vector2(rect.end.x, rect.position.y + fold)
-	])
-	draw_polygon(fold_points, PackedColorArray([Color(0.72, 0.48, 0.2, 0.88), Color(0.72, 0.48, 0.2, 0.88), Color(0.72, 0.48, 0.2, 0.88)]))
-	draw_line(Vector2(rect.end.x - fold, rect.position.y), Vector2(rect.end.x, rect.position.y + fold), Color(0.34, 0.14, 0.035, 0.7), 1.5)
-	if compact:
-		draw_string(font, rect.position + Vector2(16.0, 25.0), "ORDEM JUDICIAL", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 86.0, _readable_text_size(13), ink)
-		draw_string(font, rect.position + Vector2(16.0, 49.0), label.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 86.0, _readable_text_size(11), Color(0.3, 0.12, 0.03, 0.94))
-		draw_string(font, rect.position + Vector2(rect.size.x - 74.0, 52.0), timer_text, HORIZONTAL_ALIGNMENT_CENTER, 58.0, _readable_text_size(13), seal)
-		draw_string(font, rect.position + Vector2(18.0, 96.0), progress_text, HORIZONTAL_ALIGNMENT_LEFT, 74.0, _readable_text_size(12), ink)
-		_draw_judicial_stamp(rect.position + Vector2(rect.size.x - 48.0, 28.0), 21.0, "LEI")
-		return
-	var header: = Rect2(rect.position + Vector2(26.0, 20.0), Vector2(rect.size.x - 52.0, 42.0))
-	draw_rect(header, Color(0.43, 0.16, 0.04, 0.88), true)
-	draw_rect(header, Color(1.0, 0.83, 0.38, 0.38), false, 1.2)
-	_draw_centered("TRIBUNAL DA RUPTURA TEMPORAL", header.get_center() + Vector2(0, 5), _readable_text_size(13), Color(1.0, 0.86, 0.48, 0.96))
-	_draw_centered("ORDEM JUDICIAL", rect.position + Vector2(rect.size.x * 0.5, 91.0), _readable_text_size(26), ink)
-	draw_line(rect.position + Vector2(62.0, 108.0), rect.position + Vector2(rect.size.x - 62.0, 108.0), paper_dark, 2.0)
-	_draw_wrapped(desc, Rect2(rect.position + Vector2(54.0, 126.0), Vector2(rect.size.x - 168.0, 56.0)), _readable_text_size(16), ink)
-	draw_string(font, rect.position + Vector2(54.0, rect.size.y - 46.0), "PROCESSO: %s" % label.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 190.0, _readable_text_size(12), Color(0.34, 0.14, 0.04, 0.94))
-	draw_string(font, rect.position + Vector2(54.0, rect.size.y - 22.0), "PROGRESSO: %s" % progress_text, HORIZONTAL_ALIGNMENT_LEFT, 160.0, _readable_text_size(12), Color(0.34, 0.14, 0.04, 0.94))
-	var deadline_rect: = Rect2(rect.end - Vector2(176.0, 62.0), Vector2(142.0, 34.0))
-	draw_rect(deadline_rect, Color(0.36, 0.12, 0.035, 0.16), true)
-	draw_rect(deadline_rect, paper_dark, false, 1.2)
-	_draw_centered(timer_text, deadline_rect.get_center() + Vector2(0, 5), _readable_text_size(13), ink)
-	_draw_judicial_stamp(rect.position + Vector2(rect.size.x - 86.0, 143.0), 42.0, "DEFERIDO")
+	MenusPresentation._draw_judicial_order_paper(self, rect, label, desc, progress_text, timer_text, compact)
 
 
 func _draw_judicial_stamp(center: Vector2, radius: float, label: String) -> void :
@@ -50447,41 +40038,11 @@ func _draw_judicial_stamp(center: Vector2, radius: float, label: String) -> void
 
 
 func _draw_spectator_hud(viewport: Vector2) -> void :
-	var sm: = 1.25 if is_gamepad_active and not _is_portrait(viewport) else 1.0
-	var panel_size: = Vector2(minf(440.0 * sm, viewport.x - 48.0), 54.0 * sm)
-	var panel: = Rect2(Vector2((viewport.x - panel_size.x) * 0.5, 18.0 * sm), panel_size)
-	_draw_combat_panel(panel, Color(0.36, 0.86, 1.0), 0.42)
-	_draw_centered("ESPECTADOR", panel.position + Vector2(panel.size.x * 0.5, 22.0 * sm), int(16 * sm), Color(0.78, 1.0, 1.0))
-	var ping_text: = "PING %sms" % (str(net_ping_ms) if net_ping_ms >= 0 else "--")
-	if net_remote_ping_ms >= 0:
-		ping_text += "  PAR %dms" % net_remote_ping_ms
-	if _is_world_replica():
-		ping_text += "  JIT %.0fms" % net_world_jitter_ms
-	draw_string(font, panel.position + Vector2(14.0 * sm, 43.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x - 28.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.88))
+	HudPresentation._draw_spectator_hud(self, viewport)
 
 
 func _draw_lacerante_coagulum_hud(viewport: Vector2) -> void :
-	if manifestation_key != "lacerante":
-		return
-	var hud_scale: = hud_coagulum_scale
-	var center_y = viewport.y - (42.0 if not _is_portrait(viewport) else 58.0)
-	var pulse = clamp(lacerante_coagulum_pulse, 0.0, 1.0)
-	var orb_radius = 13.0 + pulse * 4.0 + sin(time_alive * 4.0) * 1.2
-	var count_text = "(+%d)" % lacerante_coagula
-	var count_width = font.get_string_size(count_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
-	var group_width = orb_radius * 2.0 + 10.0 + count_width
-	var center = _coagulum_hud_center(viewport, group_width, orb_radius, center_y)
-	draw_set_transform(center * (1.0 - hud_scale), 0.0, Vector2.ONE * hud_scale)
-	draw_circle(center, orb_radius + 7.0, Color(0.2, 0.0, 0.03, 0.64))
-	draw_circle(center, orb_radius + 2.0, Color(0.72, 0.01, 0.1, 0.34 + pulse * 0.24))
-	draw_circle(center, orb_radius, Color(0.94, 0.04, 0.15, 0.92))
-	draw_circle(center - Vector2(4.0, 4.0), orb_radius * 0.34, Color(1.0, 0.7, 0.72, 0.82))
-	draw_arc(center, orb_radius + 3.0, - time_alive * 1.8, TAU - time_alive * 1.8, 32, Color(1.0, 0.28, 0.36, 0.78), 1.8)
-	draw_string(font, center + Vector2(orb_radius + 10.0, 6.0), count_text, HORIZONTAL_ALIGNMENT_LEFT, count_width, 16, Color(1.0, 0.88, 0.88))
-	var label = "COAGULO TEMPORAL"
-	var label_width = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
-	draw_string(font, Vector2(viewport.x * 0.5 - label_width * 0.5, center.y + 27.0), label, HORIZONTAL_ALIGNMENT_LEFT, label_width, 9, Color(1.0, 0.46, 0.52, 0.78))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	HudPresentation._draw_lacerante_coagulum_hud(self, viewport)
 
 
 func _trigger_hab1_ancorada(target_world = null) -> void :
@@ -50574,349 +40135,31 @@ func _apply_hab1_ancorada_impact(cast_pos: Vector2, L: int) -> void :
 
 
 func _spawn_ancorada_counterweight_vfx(pos: Vector2, L: int) -> void :
-	var vfx_scene: PackedScene = load("res://vfx/ancorada/AncoradaCounterweightVFX.tscn")
-	if vfx_scene:
-		var inst = vfx_scene.instantiate()
-		add_child(inst)
-		inst.global_position = pos
-		var profile: String = _get_boss_wave_quality_profile()
-		inst.setup(L, profile, false)
+	CombatVfxRuntime._spawn_ancorada_counterweight_vfx(self, pos, L)
 
 
 func _draw_ancorada_hud(viewport: Vector2, anchor: Rect2) -> void :
-	if manifestation_key != "ancorada":
-		return
-	var width: float = minf(224.0, viewport.x * 0.46)
-	var origin: Vector2 = _cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect: Rect2 = Rect2(origin, Vector2(width, 52.0))
-	var hud_color: Color = Color(0.28, 1.0, 0.36)
-	if lastro_stacks == 5:
-		hud_color = Color(0.85, 1.0, 0.88)
-	_draw_combat_panel(rect, hud_color, 0.58)
-
-	var title_text: String = "LASTRO"
-	if lastro_stacks == 5:
-		title_text = "CONTRAPESO TOTAL"
-	draw_string(font, rect.position + Vector2(10, 17), title_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, hud_color)
-	draw_string(font, rect.position + Vector2(width - 64, 17), "%d/5" % lastro_stacks, HORIZONTAL_ALIGNMENT_RIGHT, 56, 12, Color.WHITE)
-
-	var module_width: float = (width - 24.0 - 16.0) / 5.0
-	var start_x: float = rect.position.x + 12.0
-	var y_pos: float = rect.position.y + 26.0
-
-	for m in range(5):
-		var m_x: float = start_x + float(m) * (module_width + 4.0)
-		var m_rect: Rect2 = Rect2(m_x, y_pos, module_width, 18.0)
-		var is_stack_active: bool = m < lastro_stacks
-		var is_current_stack: bool = m == lastro_stacks
-
-		draw_rect(m_rect, Color(0.04, 0.08, 0.05, 0.85), true)
-		draw_rect(m_rect, Color(0.12, 0.32, 0.16, 0.7), false, 1.0)
-
-		var sub_w: float = (module_width - 5.0) / 4.0
-		for sub in range(4):
-			var sub_x: float = m_x + 1.0 + float(sub) * (sub_w + 1.0)
-			var sub_rect: Rect2 = Rect2(sub_x, y_pos + 2.0, sub_w, 14.0)
-			var point_filled: bool = false
-			if is_stack_active:
-				point_filled = true
-			elif is_current_stack and sub < lastro_points:
-				point_filled = true
-
-			if point_filled:
-				var col: Color
-				match m:
-					0: col = Color(0.2, 0.65, 0.3, 0.9)
-					1: col = Color(0.25, 0.85, 0.35, 0.92)
-					2: col = Color(0.3, 0.95, 0.4, 0.95)
-					3: col = Color(0.35, 1.0, 0.5, 0.98)
-					4: col = Color(0.85, 1.0, 0.88, 1.0)
-					_: col = Color(0.3, 0.95, 0.4, 0.95)
-				draw_rect(sub_rect, col, true)
+	HudPresentation._draw_ancorada_hud(self, viewport, anchor)
 
 
 func _draw_acorrentada_hud(viewport: Vector2, anchor: Rect2) -> void :
-	if manifestation_key != "acorrentada":
-		return
-	var width = min(224.0, viewport.x * 0.46)
-	var origin = _cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect: = Rect2(origin, Vector2(width, 48.0))
-	_draw_combat_panel(rect, _acorrentada_color_hot(), 0.6)
-	var ratio: = clampf(acorrentada_tension / 100.0, 0.0, 1.0)
-	draw_string(font, rect.position + Vector2(10, 17), "TENSAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _acorrentada_color_hot())
-	draw_string(font, rect.position + Vector2(width - 64, 17), "%d%%" % int(round(acorrentada_tension)), HORIZONTAL_ALIGNMENT_RIGHT, 56, 12, Color.WHITE)
-	draw_rect(Rect2(rect.position + Vector2(12, 29), Vector2(width - 24, 7)), Color(0.05, 0.05, 0.06, 0.84), true)
-	draw_rect(Rect2(rect.position + Vector2(12, 29), Vector2((width - 24) * ratio, 7)), _acorrentada_color_hot(), true)
-	for i in range(3):
-		var p: = rect.position + Vector2(18 + i * 22, 42)
-		var filled: bool = i < acorrentada_combo_step
-		draw_arc(p, 6.0, 0.0, TAU, 16, Color(0.18, 0.86, 1.0, 0.86 if filled else 0.24), 2.0)
-	if acorrentada_tension >= 100.0:
-		_draw_centered("SOBRETENSAO", rect.get_center() + Vector2(0, -1), 11, Color(1.0, 0.96, 0.88))
+	HudPresentation._draw_acorrentada_hud(self, viewport, anchor)
 
 
 func _draw_bombastica_hud(viewport: Vector2, anchor: Rect2) -> void :
-	if manifestation_key != "bombastica":
-		return
-	var width = min(224.0, viewport.x * 0.46)
-	var origin = _cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect: = Rect2(origin, Vector2(width, 58.0))
-	_draw_combat_panel(rect, Color(1.0, 0.48, 0.12), 0.58)
-	var ready_charges: = _bombastica_ready_charges()
-	draw_string(font, rect.position + Vector2(10, 17), "ESTOPIM", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.7, 0.28))
-	draw_string(font, rect.position + Vector2(width - 94, 17), "%d/%d Q" % [ready_charges, BOMBASTICA_Q_CHARGES], HORIZONTAL_ALIGNMENT_RIGHT, 86, 12, Color.WHITE)
-	for i in range(BOMBASTICA_Q_CHARGES):
-		var p: = rect.position + Vector2(17 + i * 24, 34)
-		var timer: = float(bombastica_q_recharges[i])
-		var charge_ready: = timer <= 0.0
-		draw_circle(p, 7.0, Color(1.0, 0.54, 0.1, 0.94) if charge_ready else Color(0.12, 0.08, 0.04, 0.84))
-		draw_arc(p, 9.5, 0, TAU, 18, Color(1.0, 0.86, 0.32, 0.76), 1.4)
-		if not charge_ready:
-			var ratio: = 1.0 - clampf(timer / BOMBASTICA_Q_RECHARGE, 0.0, 1.0)
-			draw_arc(p, 11.5, - PI * 0.5, - PI * 0.5 + TAU * ratio, 18, Color(0.18, 0.88, 1.0, 0.86), 2.0)
-	var powder_targets: = bombastica_powder_marks.size()
-	draw_string(font, rect.position + Vector2(92, 36), "BOMBAS %d" % bombastica_bombs.size(), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.88, 0.54))
-	draw_string(font, rect.position + Vector2(92, 51), "POLVORA %d" % powder_targets, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.78, 1.0, 1.0))
+	HudPresentation._draw_bombastica_hud(self, viewport, anchor)
 
 
 func _draw_necronada_hud(viewport: Vector2, anchor: Rect2) -> void :
-	if manifestation_key != "necronada":
-		return
-	var width: = minf(262.0, viewport.x * 0.48)
-	var origin: = _cards_panel_pos(viewport, anchor) + Vector2(0.0, 54.0)
-	var rect: = Rect2(origin, Vector2(width, 64.0))
-	_draw_combat_panel(rect, _necronada_color(), 0.58)
-	draw_string(font, rect.position + Vector2(10, 18), "JARDIM OSSUARIO", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, _readable_text_size(11), _necronada_accent())
-	var start: = rect.position + Vector2(18.0, 42.0)
-	for i in range(NECRONADA_ROSE_MAX):
-		var rose_pos: = start + Vector2(i * 22.0, 0.0)
-		var filled: = i < necronada_vestiges.size()
-		draw_circle(rose_pos + Vector2(0, 6), 7.0, Color(0.03, 0.04, 0.08, 0.78))
-		if filled:
-			draw_line(rose_pos + Vector2(0, 6), rose_pos + Vector2(0, -7), Color(0.22, 0.62, 0.32, 0.95), 1.7)
-			for p_i in range(5):
-				draw_circle(rose_pos + Vector2.from_angle(float(p_i) * TAU / 5.0) * 3.4 + Vector2(0, -9), 2.9, Color(0.34, 0.82, 1.0, 0.94))
-		else:
-			draw_arc(rose_pos, 7.0, 0.0, TAU, 18, Color(0.25, 0.32, 0.42, 0.58), 1.0)
-	var progress: = clampf(float(necronada_horde_progress) / float(NECRONADA_ULTIMATE_REQUIRED_REVIVES), 0.0, 1.0)
-	var bar: = Rect2(rect.position + Vector2(136.0, 34.0), Vector2(maxf(52.0, rect.size.x - 150.0), 8.0))
-	draw_rect(bar, Color(0.04, 0.05, 0.09, 0.82), true)
-	draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), Color(0.66, 0.34, 1.0, 0.92), true)
-	draw_rect(bar, _necronada_accent(), false, 1.0)
-	draw_string(font, rect.position + Vector2(132.0, 58.0), "ONDA %d/%d" % [necronada_horde_progress, NECRONADA_ULTIMATE_REQUIRED_REVIVES], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 142.0, _readable_text_size(10), Color(0.92, 0.96, 1.0))
+	HudPresentation._draw_necronada_hud(self, viewport, anchor)
 
 
 func _draw_card_mechanic_huds(viewport: Vector2, anchor: Rect2) -> void :
-	var width = min(224.0, viewport.x * 0.46)
-	var origin = _cards_panel_pos(viewport, anchor)
-	draw_set_transform(origin * (1.0 - hud_cards_panel_scale), 0.0, Vector2.ONE * hud_cards_panel_scale)
-	var y = origin.y
-	if int(cards_bought.get("Mercenaria", 0)) > 0:
-		var pulse = clamp(mercenary_hud_pulse, 0.0, 1.0)
-		var rect = Rect2(origin.x, y, width, 46.0)
-		_draw_combat_panel(rect, Color(1.0, 0.58 + pulse * 0.22, 0.1), 0.62)
-		draw_string(font, rect.position + Vector2(10, 17), "CONTRATO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.8, 0.3))
-		draw_string(font, rect.position + Vector2(width - 74, 17), "+%d" % mercenary_bonus_points, HORIZONTAL_ALIGNMENT_RIGHT, 64, 13, Color.WHITE)
-		var progress = combo_kills % 5
-		for i in range(5):
-			var pip_pos = rect.position + Vector2(16 + i * 24, 32)
-			var filled = i < progress
-			draw_circle(pip_pos, 6.0, Color(1.0, 0.65, 0.12, 0.95) if filled else Color(0.22, 0.16, 0.08, 0.86))
-			draw_arc(pip_pos, 7.5, 0, TAU, 18, Color(1.0, 0.82, 0.34, 0.72), 1.2)
-		draw_string(font, rect.position + Vector2(138, 37), "%d ABATES" % combo_kills, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.92, 0.86, 0.72))
-		y += 52.0
-	if execute_threshold > 0.0:
-		var pulse = clamp(collector_hud_pulse, 0.0, 1.0)
-		var rect = Rect2(origin.x, y, width, 42.0)
-		_draw_combat_panel(rect, Color(1.0, 0.05, 0.2), 0.62)
-		draw_string(font, rect.position + Vector2(10, 17), "COLETORA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.32 + pulse * 0.28, 0.38))
-		draw_string(font, rect.position + Vector2(10, 34), "COMUM %.1f%%" % (execute_threshold * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(116, 34), "BOSS %.1f%%" % (_boss_execute_threshold() * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.76, 0.4))
-		y += 48.0
-	if _support_card_count(CARD_TREGUA_ID) > 0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.38, 1.0, 0.72), 0.52)
-		var ratio: float = 1.0 if tregua_regenerativa_active else clamp(tregua_regenerativa_timer / max(0.01, _tregua_delay()), 0.0, 1.0)
-		draw_string(font, rect.position + Vector2(10, 17), "TREGUA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.52, 1.0, 0.76))
-		draw_string(font, rect.position + Vector2(width - 84, 17), "ATIVA" if tregua_regenerativa_active else "%.0f%%" % (ratio * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 76, 11, Color.WHITE)
-		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2(width - 20, 5)), Color(0.04, 0.1, 0.08, 0.8), true)
-		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2((width - 20) * ratio, 5)), Color(0.38, 1.0, 0.72, 0.9), true)
-		y += 44.0
-	if _support_card_count(CARD_RESERVA_ID) > 0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.44, 0.92, 1.0), 0.52)
-		draw_string(font, rect.position + Vector2(10, 17), "RESERVA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.58, 0.96, 1.0))
-		draw_string(font, rect.position + Vector2(width - 92, 17), "%.0f HP" % reserva_pulso_stored, HORIZONTAL_ALIGNMENT_RIGHT, 84, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 32), "LIBERANDO" if reserva_pulso_releasing else "ARMAZENADA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.78, 0.92, 0.96))
-		y += 44.0
-	if _support_card_count(CARD_ESTASE_ID) > 0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.52, 1.0, 0.86), 0.52)
-		var ratio: = 1.0 if estase_reparadora_active else clampf(estase_reparadora_timer / 5.0, 0.0, 1.0)
-		draw_string(font, rect.position + Vector2(10, 17), "ESTASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.66, 1.0, 0.9))
-		draw_string(font, rect.position + Vector2(width - 84, 17), "ATIVA" if estase_reparadora_active else "%.0f%%" % (ratio * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 76, 11, Color.WHITE)
-		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2(width - 20, 5)), Color(0.04, 0.1, 0.09, 0.8), true)
-		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2((width - 20) * ratio, 5)), Color(0.52, 1.0, 0.86, 0.9), true)
-		y += 44.0
-	if _rare_card_count(CARD_EGIDE_ID) > 0 and egide_hemofaga_shield > 0.0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(1.0, 0.72, 0.22), 0.56)
-		draw_string(font, rect.position + Vector2(10, 17), "EGIDE", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.82, 0.36))
-		draw_string(font, rect.position + Vector2(width - 84, 17), "%.0f HP" % egide_hemofaga_shield, HORIZONTAL_ALIGNMENT_RIGHT, 76, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 32), "INTEGRA" if egide_hemofaga_full_timer > 0.0 else "DECAINDO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.88, 0.7))
-		y += 44.0
-	if _support_card_count(CARD_CASULO_ID) > 0 and (casulo_reativo_timer > 0.0 or casulo_reativo_cooldown > 0.0):
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.54, 1.0, 0.86), 0.52)
-		draw_string(font, rect.position + Vector2(10, 17), "CASULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.68, 1.0, 0.9))
-		var casulo_text: = "%.1fs" % casulo_reativo_timer if casulo_reativo_timer > 0.0 else "CD %.0f" % casulo_reativo_cooldown
-		draw_string(font, rect.position + Vector2(width - 86, 17), casulo_text, HORIZONTAL_ALIGNMENT_RIGHT, 78, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 32), "-%.0f%% DANO" % (_casulo_reduction() * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.82, 0.96, 0.92))
-		y += 44.0
-	if _support_card_count(CARD_PASSAGEM_ID) > 0 and passagem_intangivel_timer > 0.0:
-		var rect = Rect2(origin.x, y, width, 36.0)
-		_draw_combat_panel(rect, Color(0.72, 0.9, 1.0), 0.52)
-		draw_string(font, rect.position + Vector2(10, 17), "PASSAGEM", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.78, 0.94, 1.0))
-		draw_string(font, rect.position + Vector2(width - 72, 17), "%.1fs" % passagem_intangivel_timer, HORIZONTAL_ALIGNMENT_RIGHT, 64, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 31), "SEM CONTATO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 0.92, 0.98))
-		y += 42.0
-	if not ancora_vital_state.is_empty():
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.34, 1.0, 0.66), 0.52)
-		draw_string(font, rect.position + Vector2(10, 17), "ANCORA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.46, 1.0, 0.72))
-		draw_string(font, rect.position + Vector2(width - 82, 17), "%.0f HP" % float(ancora_vital_state.get("remaining", 0.0)), HORIZONTAL_ALIGNMENT_RIGHT, 74, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 32), "%.1fs" % float(ancora_vital_state.get("life", 0.0)), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.8, 0.96, 0.86))
-		y += 44.0
-	if _mandamento_count() > 0:
-		var rect = Rect2(origin.x, y, width, 42.0)
-		var pulse = clamp(mandamento_break_flash, 0.0, 1.0)
-		_draw_combat_panel(rect, Color(1.0, 0.78 + pulse * 0.12, 0.2), 0.6)
-		draw_string(font, rect.position + Vector2(10, 17), "MANDAMENTO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.86, 0.34))
-		for i in range(3):
-			var pip_pos = rect.position + Vector2(width - 58 + i * 17, 16)
-			var filled = i < mandamento_skill_uses
-			draw_circle(pip_pos, 5.3, Color(1.0, 0.82, 0.22, 0.96) if filled else Color(0.18, 0.14, 0.05, 0.82))
-			draw_arc(pip_pos, 6.8, 0, TAU, 16, Color(1.0, 0.92, 0.54, 0.68), 1.0)
-		draw_string(font, rect.position + Vector2(10, 34), "+%.0f%% TERCEIRA" % (_mandamento_power_bonus() * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
-		y += 48.0
-	if _new_common_card_count(CARD_IMPULSO_ID) > 0 and impulso_charges > 0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.42, 0.78, 1.0), 0.52)
-		draw_string(font, rect.position + Vector2(10, 17), "IMPULSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.62, 0.9, 1.0))
-		draw_string(font, rect.position + Vector2(width - 76, 17), "x%d" % impulso_charges, HORIZONTAL_ALIGNMENT_RIGHT, 68, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 32), "+%.0f%% ATK" % (impulso_bonus * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.86, 0.42))
-		y += 44.0
-	if _new_common_card_count(CARD_ZONA_ID) > 0 and (zona_charge > 0.0 or zona_cooldown > 0.0):
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.44, 1.0, 0.7), 0.52)
-		var label: = "%.0f%%" % (zona_charge * 100.0) if zona_cooldown <= 0.0 else "CD %.1f" % zona_cooldown
-		draw_string(font, rect.position + Vector2(10, 17), "ZONA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.58, 1.0, 0.78))
-		draw_string(font, rect.position + Vector2(width - 88, 17), label, HORIZONTAL_ALIGNMENT_RIGHT, 80, 11, Color.WHITE)
-		draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2((width - 20) * clampf(zona_charge, 0.0, 1.0), 5)), Color(0.44, 1.0, 0.7, 0.92), true)
-		y += 44.0
-	if _new_common_card_count(CARD_FOLEGO_ID) > 0 and folego_charge > 0.0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(1.0, 0.56, 0.22), 0.52)
-		draw_string(font, rect.position + Vector2(10, 17), "FOLEGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.74, 0.34))
-		draw_string(font, rect.position + Vector2(width - 76, 17), "%.0f%%" % (folego_charge * 100.0), HORIZONTAL_ALIGNMENT_RIGHT, 68, 11, Color.WHITE)
-		y += 44.0
-	if _new_common_card_count(CARD_MARGEM_ID) > 0 and (margem_window_timer > 0.0 or margem_debt > 0.0):
-		var rect = Rect2(origin.x, y, width, 42.0)
-		_draw_combat_panel(rect, Color(1.0, 0.36, 0.46), 0.54)
-		draw_string(font, rect.position + Vector2(10, 17), "MARGEM", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.54, 0.62))
-		var label: = "%.0f HP" % margem_debt if margem_debt > 0.0 else "%.1fs" % margem_window_timer
-		draw_string(font, rect.position + Vector2(width - 92, 17), label, HORIZONTAL_ALIGNMENT_RIGHT, 84, 11, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 34), "DIVIDA" if margem_debt > 0.0 else "JANELA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.82, 0.86))
-		y += 48.0
-	if _new_common_card_count(CARD_RESSONANCIA_ID) > 0 and ( not ressonancia_symbols.is_empty() or ressonancia_ready_timer > 0.0):
-		var rect = Rect2(origin.x, y, width, 40.0)
-		_draw_combat_panel(rect, Color(0.58, 1.0, 0.96), 0.52)
-		draw_string(font, rect.position + Vector2(10, 17), "RESSONANCIA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.66, 1.0, 0.98))
-		var label: = "PRONTA" if ressonancia_ready_timer > 0.0 else "%d/4" % ressonancia_symbols.size()
-		draw_string(font, rect.position + Vector2(width - 86, 17), label, HORIZONTAL_ALIGNMENT_RIGHT, 78, 11, Color.WHITE)
-		y += 46.0
-	if _rare_card_count("carta_zero") > 0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		_draw_combat_panel(rect, Color(0.88, 0.96, 1.0), 0.56)
-		draw_string(font, rect.position + Vector2(10, 17), "CARTA ZERO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.92, 0.98, 1.0))
-		draw_string(font, rect.position + Vector2(width - 84, 17), "x%.2f" % _carta_zero_multiplier(), HORIZONTAL_ALIGNMENT_RIGHT, 76, 12, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 32), "COMUNS NUMERICAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.76, 0.88, 0.94))
-		y += 44.0
-	if _rare_card_count("necrocronismo") > 0:
-		var rect = Rect2(origin.x, y, width, 42.0)
-		_draw_combat_panel(rect, Color(0.46, 1.0, 0.94), 0.56)
-		draw_string(font, rect.position + Vector2(10, 17), "NECROCRONISMO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.58, 1.0, 0.96))
-		draw_string(font, rect.position + Vector2(width - 86, 17), "%d ATIVOS" % active_necro_specters.size(), HORIZONTAL_ALIGNMENT_RIGHT, 80, 11, Color.WHITE)
-		var progress: float = clamp(float(necro_kill_counter) / float(max(1, _necro_kills_required())), 0.0, 1.0)
-		draw_rect(Rect2(rect.position + Vector2(10, 30), Vector2(width - 20, 5)), Color(0.04, 0.1, 0.12, 0.8), true)
-		draw_rect(Rect2(rect.position + Vector2(10, 30), Vector2((width - 20) * progress, 5)), Color(0.46, 1.0, 0.94, 0.92), true)
-		y += 48.0
-	if _rare_card_count("coracao_antimateria") > 0:
-		var rect = Rect2(origin.x, y, width, 42.0)
-		var pulse: float = clamp(antimatter_flash, 0.0, 1.0)
-		_draw_combat_panel(rect, Color(0.82, 0.28 + pulse * 0.18, 1.0), 0.56)
-		draw_string(font, rect.position + Vector2(10, 17), "ANTIMATERIA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.88, 0.52, 1.0))
-		draw_string(font, rect.position + Vector2(width - 74, 17), "ARMADA" if antimatter_armed else "%.0f%%" % (100.0 * antimatter_charge / max(1.0, _antimatter_required_charge())), HORIZONTAL_ALIGNMENT_RIGHT, 68, 11, Color.WHITE)
-		var progress: float = 1.0 if antimatter_armed else clamp(antimatter_charge / max(1.0, _antimatter_required_charge()), 0.0, 1.0)
-		draw_rect(Rect2(rect.position + Vector2(10, 30), Vector2(width - 20, 5)), Color(0.08, 0.02, 0.14, 0.82), true)
-		draw_rect(Rect2(rect.position + Vector2(10, 30), Vector2((width - 20) * progress, 5)), Color(0.82, 0.28, 1.0, 0.94), true)
-		y += 48.0
-	if _rare_card_count("cofre_excesso") > 0:
-		var rect = Rect2(origin.x, y, width, 38.0)
-		var pulse = clamp(excess_discharge_flash, 0.0, 1.0)
-		_draw_combat_panel(rect, Color(1.0, 0.68 + pulse * 0.2, 0.16), 0.56)
-		draw_string(font, rect.position + Vector2(10, 17), "COFRE", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.76, 0.28))
-		draw_string(font, rect.position + Vector2(width - 92, 17), "%.0f DANO" % stored_excess, HORIZONTAL_ALIGNMENT_RIGHT, 84, 12, Color.WHITE)
-		draw_string(font, rect.position + Vector2(10, 32), String(excess_discharge_kind).to_upper() if excess_discharge_kind != "" else "AGUARDANDO ELITE", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.94, 0.84, 0.62))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	HudPresentation._draw_card_mechanic_huds(self, viewport, anchor)
 
 
 func _draw_aura_hud(viewport: Vector2, anchor: Rect2) -> void :
-	if aura_state.is_empty():
-		return
-	var name: = String(aura_state.get("name", "Racional"))
-	var color: = _aura_color()
-	var rect: = Rect2(_aura_panel_pos(viewport, anchor), Vector2(min(224.0, viewport.x * 0.46), 48.0))
-	draw_set_transform(rect.position * (1.0 - hud_aura_panel_scale), 0.0, Vector2.ONE * hud_aura_panel_scale)
-	_draw_combat_panel(rect, color, 0.58)
-	var ratio: = _aura_hud_ratio()
-	var pulse: = 0.5 + sin(time_alive * 6.0) * 0.5
-	match name:
-		"Racional":
-			for i in range(7):
-				var x: = rect.position.x + 14.0 + i * 18.0
-				draw_line(Vector2(x, rect.end.y - 12), Vector2(x + 10, rect.position.y + 12), Color(color.r, color.g, color.b, 0.85 if float(i) / 7.0 <= ratio else 0.18), 2.0)
-		"Impulsiva":
-			for i in range(5): draw_circle(rect.position + Vector2(18 + i * 22, 32), 6.0 + (pulse * 2.0 if i < int(aura_state.get("impulsive_kills", 0)) else 0.0), color if i < int(aura_state.get("impulsive_kills", 0)) else Color(color.r, color.g, color.b, 0.18))
-		"Devota":
-			for i in range(3): _draw_hex(rect.position + Vector2(22 + i * 30, 30), 10.0, color if i < int(aura_state.get("devoted_charges", 0)) else Color(color.r, color.g, color.b, 0.18))
-		"Vanguarda":
-			for i in range(9):
-				var h: = 7.0 + sin(time_alive * 8.0 + i) * 5.0
-				draw_line(rect.position + Vector2(14 + i * 13, 38), rect.position + Vector2(14 + i * 13, 38 - h), Color(1.0, 0.34 + i * 0.03, 0.08, 0.82), 3.0)
-		"Insana":
-			for i in range(5):
-				var p: = rect.position + Vector2(18 + i * 23, 31 + sin(time_alive * 5.0 + i) * 3.0)
-				draw_circle(p, 7.0, Color(0.26, 1.0, 0.45, 0.72) if i < int(aura_state.get("insane_echoes", 0)) else Color(color.r, color.g, color.b, 0.2))
-		"Voraz":
-			draw_arc(rect.position + Vector2(28, 27), 16.0, - PI * 0.82, PI * 0.82, 24, color, 5.0)
-			draw_line(rect.position + Vector2(52, 32), rect.position + Vector2(52 + ratio * 108.0, 32), Color(1.0, 0.18, 0.08), 7.0)
-		"Nula":
-			draw_circle(rect.position + Vector2(28, 27), 16.0, Color(0.0, 0.02, 0.05, 0.94))
-			draw_arc(rect.position + Vector2(28, 27), 11.0 + ratio * 5.0, time_alive, time_alive + TAU * ratio, 32, color, 2.0)
-		"Abissal":
-			for i in range(4): draw_arc(rect.position + Vector2(28, 27), 6.0 + i * 5.0, PI * ratio, TAU, 30, Color(color.r, color.g, color.b, 0.85 - i * 0.14), 2.0)
-		"Profetica":
-			for i in range(7):
-				var p: = rect.position + Vector2(18 + i * 17, 31 + sin(i * 1.4) * 7.0)
-				draw_circle(p, 3.0 + (pulse * 2.0 if float(i) / 7.0 <= ratio else 0.0), color if float(i) / 7.0 <= ratio else Color(color.r, color.g, color.b, 0.18))
-		"Sanguinaria":
-			for i in range(6):
-				var x: = rect.position.x + 17 + i * 19
-				draw_line(Vector2(x - 4, rect.position.y + 36), Vector2(x + 7, rect.position.y + 15), Color(color.r, color.g, color.b, 0.9 if float(i) / 6.0 <= ratio else 0.18), 3.0)
-	draw_string(font, rect.position + Vector2(126, 20), name.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, 88.0, 12, color)
-	draw_string(font, rect.position + Vector2(126, 38), _aura_status_text(), HORIZONTAL_ALIGNMENT_LEFT, 88.0, 10, Color.WHITE)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	HudPresentation._draw_aura_hud(self, viewport, anchor)
 
 
 func _aura_hud_ratio() -> float:
@@ -51003,231 +40246,47 @@ func _draw_collector_threshold(pos: Vector2, width: float, threshold: float, hp_
 
 
 func _draw_teleport_preview(viewport: Vector2, camera: Vector2) -> void :
-	var dest = _desktop_dash_target() if desktop_aim_action == "dash" else _teleport_destination_from_drag(teleport_drag_screen, viewport)
-	var a = player_pos - camera
-	var b = dest - camera
-	if manifestation_key == "lacerante":
-		draw_line(a, b, Color(0.25, 0.95, 1.0, 0.72), 8)
-		draw_line(a, b, Color(1.0, 0.14, 0.95, 0.42), 3)
-	else:
-		draw_arc(a, 18.0, - time_alive * 3.0, TAU - time_alive * 3.0, 36, Color(0.25, 0.95, 1.0, 0.44), 2.0)
-	draw_circle(b, 28, Color(0.05, 0.85, 1.0, 0.22))
-	draw_arc(b, 34, 0, TAU, 48, Color(0.8, 0.15, 1.0, 0.88), 4)
+	CombatEffectsPresentation._draw_teleport_preview(self, viewport, camera)
 
 
 func _draw_ground_target_preview(viewport: Vector2, camera: Vector2) -> void :
-	var secondary = false
-	var touch_pos = Vector2.ZERO
-	if skill_touch_index != -1 and not _ground_target_profile(false).is_empty():
-		touch_pos = skill_touch_pos
-	elif secondary_touch_index != -1 and not _ground_target_profile(true).is_empty():
-		secondary = true
-		touch_pos = secondary_touch_pos
-	else:
-		return
-	if _ability_cancel_has_point(touch_pos, viewport):
-		return
-	var profile = _ground_target_profile(secondary)
-	var target_world = _desktop_cursor_ground_target(secondary) if desktop_aim_action in ["skill", "secondary"] else _ground_target_world(touch_pos, viewport, secondary)
-	var start = player_pos - camera
-	var target = target_world - camera
-	var color: Color = profile["color"]
-	var radius = float(profile["radius"])
-	var pulse = 0.5 + sin(Time.get_ticks_msec() * 0.01) * 0.5
-	draw_arc(start, float(profile["range"]), 0.0, TAU, 96, Color(color.r, color.g, color.b, 0.18), 2.0)
-	draw_line(start, target, Color(color.r, color.g, color.b, 0.24), 10.0)
-	draw_line(start, target, Color(color.r, color.g, color.b, 0.86), 2.0)
-	draw_circle(target, radius, Color(color.r, color.g, color.b, 0.1 + pulse * 0.04))
-	draw_arc(target, radius + pulse * 5.0, 0.0, TAU, 64, Color(color.r, color.g, color.b, 0.94), 3.0)
-	draw_arc(target, radius * 0.68, - Time.get_ticks_msec() * 0.002, TAU - Time.get_ticks_msec() * 0.002, 48, Color(1.0, 1.0, 1.0, 0.54), 1.5)
-	draw_line(target + Vector2(-14.0, 0.0), target + Vector2(14.0, 0.0), Color.WHITE, 2.0)
-	draw_line(target + Vector2(0.0, -14.0), target + Vector2(0.0, 14.0), Color.WHITE, 2.0)
+	MenusPresentation._draw_ground_target_preview(self, viewport, camera)
 
 
 func _draw_scifi_frame(rect: Rect2, accent: Color = Color(0.0, 0.85, 1.0), corner_cut: float = 8.0, bg_alpha: float = 0.88) -> void:
-	var x: float = rect.position.x
-	var y: float = rect.position.y
-	var w: float = rect.size.x
-	var h: float = rect.size.y
-	var cut: float = minf(corner_cut, minf(w, h) * 0.4)
-
-	var points := PackedVector2Array([
-		Vector2(x + cut, y),
-		Vector2(x + w - cut, y),
-		Vector2(x + w, y + cut),
-		Vector2(x + w, y + h - cut),
-		Vector2(x + w - cut, y + h),
-		Vector2(x + cut, y + h),
-		Vector2(x, y + h - cut),
-		Vector2(x, y + cut)
-	])
-
-	draw_colored_polygon(points, Color(0.04, 0.07, 0.11, bg_alpha))
-
-	var inner_points := PackedVector2Array([
-		Vector2(x + cut + 2, y + 2),
-		Vector2(x + w - cut - 2, y + 2),
-		Vector2(x + w - 2, y + cut + 2),
-		Vector2(x + w - 2, y + h - cut - 2),
-		Vector2(x + w - cut - 2, y + h - 2),
-		Vector2(x + cut + 2, y + h - 2),
-		Vector2(x + 2, y + h - cut - 2),
-		Vector2(x + 2, y + cut + 2)
-	])
-	draw_polyline(inner_points, Color(0.12, 0.17, 0.23, 0.70 * bg_alpha), 1.5)
-
-	var border_pts := points.duplicate()
-	border_pts.append(points[0])
-	draw_polyline(border_pts, Color(0.20, 0.28, 0.36, 0.95 * bg_alpha), 2.0)
-
-	draw_line(Vector2(x, y + cut), Vector2(x + cut, y), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
-	draw_line(Vector2(x + w - cut, y), Vector2(x + w, y + cut), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
-	draw_line(Vector2(x + w, y + h - cut), Vector2(x + w - cut, y + h), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
-	draw_line(Vector2(x + w - cut, y + h), Vector2(x, y + h - cut), Color(accent.r, accent.g, accent.b, 0.85 * bg_alpha), 2.0)
-
-	var rivet_col := Color(0.25, 0.35, 0.44, 0.85 * bg_alpha)
-	var rivet_r := 1.8
-	draw_circle(Vector2(x + cut + 4.0, y + 5.0), rivet_r, rivet_col)
-	draw_circle(Vector2(x + w - cut - 4.0, y + 5.0), rivet_r, rivet_col)
-	draw_circle(Vector2(x + w - cut - 4.0, y + h - 5.0), rivet_r, rivet_col)
-	draw_circle(Vector2(x + cut + 4.0, y + h - 5.0), rivet_r, rivet_col)
+	MenusPresentation._draw_scifi_frame(self, rect, accent, corner_cut, bg_alpha)
 
 
 func _draw_icon_sword(center: Vector2, size: float, color: Color) -> void:
-	var half: float = size * 0.5
-	var blade_top := center + Vector2(0, -half * 0.85)
-	var blade_bot := center + Vector2(0, half * 0.4)
-	draw_line(blade_top, blade_bot, color, 3.0)
-	var tip := PackedVector2Array([
-		blade_top,
-		center + Vector2(-3.0, -half * 0.5),
-		blade_bot,
-		center + Vector2(3.0, -half * 0.5)
-	])
-	draw_colored_polygon(tip, Color(color.r, color.g, color.b, 0.35))
-	draw_line(center + Vector2(-half * 0.5, half * 0.2), center + Vector2(half * 0.5, half * 0.2), color, 2.5)
-	draw_line(center + Vector2(0, half * 0.2), center + Vector2(0, half * 0.75), Color(0.7, 0.8, 0.9), 2.0)
-	draw_circle(center + Vector2(0, half * 0.8), 2.5, color)
+	MenusPresentation._draw_icon_sword(self, center, size, color)
 
 
 func _draw_icon_star(center: Vector2, size: float, color: Color) -> void:
-	var r_outer: float = size * 0.5
-	var r_inner: float = size * 0.22
-	var pts := PackedVector2Array()
-	for i in range(8):
-		var angle: float = i * PI * 0.25 - PI * 0.5
-		var r: float = r_outer if (i % 2 == 0) else r_inner
-		pts.append(center + Vector2(cos(angle), sin(angle)) * r)
-	draw_colored_polygon(pts, Color(color.r, color.g, color.b, 0.4))
-	pts.append(pts[0])
-	draw_polyline(pts, color, 2.0)
+	MenusPresentation._draw_icon_star(self, center, size, color)
 
 
 func _draw_icon_trident(center: Vector2, size: float, color: Color) -> void:
-	var half: float = size * 0.5
-	draw_line(center + Vector2(0, -half * 0.85), center + Vector2(0, half * 0.8), color, 2.5)
-	draw_line(center + Vector2(-half * 0.6, -half * 0.1), center + Vector2(half * 0.6, -half * 0.1), color, 2.0)
-	draw_line(center + Vector2(-half * 0.6, -half * 0.1), center + Vector2(-half * 0.6, -half * 0.75), color, 2.0)
-	draw_line(center + Vector2(-half * 0.6, -half * 0.75), center + Vector2(-half * 0.5, -half * 0.85), color, 2.0)
-	draw_line(center + Vector2(half * 0.6, -half * 0.1), center + Vector2(half * 0.6, -half * 0.75), color, 2.0)
-	draw_line(center + Vector2(half * 0.6, -half * 0.75), center + Vector2(half * 0.5, -half * 0.85), color, 2.0)
-	var tip := PackedVector2Array([
-		center + Vector2(0, -half * 0.95),
-		center + Vector2(-3.0, -half * 0.65),
-		center + Vector2(3.0, -half * 0.65)
-	])
-	draw_colored_polygon(tip, color)
+	MenusPresentation._draw_icon_trident(self, center, size, color)
 
 
 func _draw_icon_portal(center: Vector2, size: float, color: Color) -> void:
-	var rx: float = size * 0.42
-	var ry: float = size * 0.5
-	var pts := PackedVector2Array()
-	for i in range(24):
-		var angle: float = i * TAU / 24.0
-		pts.append(center + Vector2(cos(angle) * rx, sin(angle) * ry))
-	draw_colored_polygon(pts, Color(color.r, color.g, color.b, 0.25))
-	pts.append(pts[0])
-	draw_polyline(pts, color, 2.0)
-	var inner_pts := PackedVector2Array()
-	for i in range(16):
-		var angle: float = i * TAU / 16.0
-		inner_pts.append(center + Vector2(cos(angle) * rx * 0.55, sin(angle) * ry * 0.55))
-	inner_pts.append(inner_pts[0])
-	draw_polyline(inner_pts, Color(1.0, 1.0, 1.0, 0.85), 1.5)
-	draw_circle(center, 2.5, Color.WHITE)
+	MenusPresentation._draw_icon_portal(self, center, size, color)
 
 
 func _draw_icon_hourglass(center: Vector2, size: float, color: Color) -> void:
-	var half: float = size * 0.5
-	draw_line(center + Vector2(-half * 0.7, -half * 0.8), center + Vector2(half * 0.7, -half * 0.8), color, 2.0)
-	draw_line(center + Vector2(-half * 0.7, half * 0.8), center + Vector2(half * 0.7, half * 0.8), color, 2.0)
-	var top_tri := PackedVector2Array([
-		center + Vector2(-half * 0.65, -half * 0.75),
-		center + Vector2(half * 0.65, -half * 0.75),
-		center + Vector2(0, 0)
-	])
-	var bot_tri := PackedVector2Array([
-		center + Vector2(0, 0),
-		center + Vector2(half * 0.65, half * 0.75),
-		center + Vector2(-half * 0.65, half * 0.75)
-	])
-	draw_colored_polygon(top_tri, Color(color.r, color.g, color.b, 0.35))
-	draw_colored_polygon(bot_tri, Color(color.r, color.g, color.b, 0.55))
-	top_tri.append(top_tri[0])
-	bot_tri.append(bot_tri[0])
-	draw_polyline(top_tri, color, 1.8)
-	draw_polyline(bot_tri, color, 1.8)
+	MenusPresentation._draw_icon_hourglass(self, center, size, color)
 
 
 func _draw_icon_cart(center: Vector2, size: float, color: Color) -> void:
-	var half: float = size * 0.5
-	draw_line(center + Vector2(-half * 0.8, -half * 0.6), center + Vector2(-half * 0.5, -half * 0.6), color, 2.0)
-	draw_line(center + Vector2(-half * 0.5, -half * 0.6), center + Vector2(-half * 0.3, half * 0.3), color, 2.0)
-	var basket := PackedVector2Array([
-		center + Vector2(-half * 0.45, -half * 0.4),
-		center + Vector2(half * 0.7, -half * 0.4),
-		center + Vector2(half * 0.45, half * 0.3),
-		center + Vector2(-half * 0.3, half * 0.3)
-	])
-	draw_colored_polygon(basket, Color(color.r, color.g, color.b, 0.30))
-	basket.append(basket[0])
-	draw_polyline(basket, color, 2.0)
-	draw_circle(center + Vector2(-half * 0.2, half * 0.6), 3.0, color)
-	draw_circle(center + Vector2(half * 0.35, half * 0.6), 3.0, color)
+	MenusPresentation._draw_icon_cart(self, center, size, color)
 
 
 func _draw_icon_skull(center: Vector2, size: float, color: Color) -> void:
-	var half: float = size * 0.5
-	var head_pts := PackedVector2Array()
-	for i in range(16):
-		var a: float = PI + i * PI / 15.0
-		head_pts.append(center + Vector2(cos(a) * half * 0.65, sin(a) * half * 0.65 - half * 0.1))
-	head_pts.append(center + Vector2(half * 0.4, half * 0.45))
-	head_pts.append(center + Vector2(-half * 0.4, half * 0.45))
-	draw_colored_polygon(head_pts, Color(color.r, color.g, color.b, 0.35))
-	head_pts.append(head_pts[0])
-	draw_polyline(head_pts, color, 2.0)
-	draw_circle(center + Vector2(-half * 0.28, -half * 0.1), 3.2, Color(0.04, 0.06, 0.1))
-	draw_circle(center + Vector2(half * 0.28, -half * 0.1), 3.2, Color(0.04, 0.06, 0.1))
-	draw_line(center + Vector2(-half * 0.15, half * 0.25), center + Vector2(-half * 0.15, half * 0.45), color, 1.5)
-	draw_line(center + Vector2(0, half * 0.2), center + Vector2(0, half * 0.45), color, 1.5)
-	draw_line(center + Vector2(half * 0.15, half * 0.25), center + Vector2(half * 0.15, half * 0.45), color, 1.5)
+	MenusPresentation._draw_icon_skull(self, center, size, color)
 
 
 func _draw_icon_ecg(center: Vector2, size: float, color: Color) -> void:
-	var half: float = size * 0.5
-	var pts := PackedVector2Array([
-		center + Vector2(-half * 0.9, 0),
-		center + Vector2(-half * 0.4, 0),
-		center + Vector2(-half * 0.2, half * 0.3),
-		center + Vector2(0, -half * 0.75),
-		center + Vector2(half * 0.2, half * 0.5),
-		center + Vector2(half * 0.45, -half * 0.2),
-		center + Vector2(half * 0.6, 0),
-		center + Vector2(half * 0.9, 0)
-	])
-	draw_polyline(pts, color, 2.0)
+	MenusPresentation._draw_icon_ecg(self, center, size, color)
 
 
 func _draw_icon_cards(center: Vector2, size: float, color: Color) -> void:
@@ -51241,17 +40300,7 @@ func _draw_icon_cards(center: Vector2, size: float, color: Color) -> void:
 
 
 func _draw_icon_gem(center: Vector2, size: float, color: Color) -> void:
-	var half: float = size * 0.5
-	var pts := PackedVector2Array([
-		center + Vector2(0, -half * 0.85),
-		center + Vector2(half * 0.7, 0),
-		center + Vector2(0, half * 0.85),
-		center + Vector2(-half * 0.7, 0)
-	])
-	draw_colored_polygon(pts, Color(color.r, color.g, color.b, 0.35))
-	pts.append(pts[0])
-	draw_polyline(pts, color, 2.0)
-	draw_line(center + Vector2(0, -half * 0.85), center + Vector2(0, half * 0.85), Color(1.0, 1.0, 1.0, 0.6), 1.2)
+	MenusPresentation._draw_icon_gem(self, center, size, color)
 
 
 func _draw_desktop_fps_hud(viewport: Vector2) -> void:
@@ -51263,138 +40312,15 @@ func _draw_desktop_fps_hud(viewport: Vector2) -> void:
 
 
 func _draw_desktop_hud(viewport: Vector2) -> void:
-	var life_rect := Rect2(18.0, 16.0, 276.0, 76.0)
-	var life_alpha: float = _hud_rect_player_alpha(life_rect, viewport, 84.0)
-	hud_feedback.health_panel(self, life_rect, life_alpha)
-	var right_rect := Rect2(viewport.x - 300.0, 16.0, 220.0, 76.0)
-	var right_alpha: float = _hud_rect_player_alpha(right_rect, viewport, 84.0)
-	hud_feedback.stats_panel(self, right_rect, right_alpha)
-
-	if boss_active and boss_hp > 0.0 and not _boss3_miasma_hides_boss_bar() and not _umbra_miasma_hides_boss_bar():
-		var boss_rect := Rect2(_boss_panel_pos(viewport), Vector2(380.0, 30.0))
-		_draw_scifi_frame(boss_rect, Color(1.0, 0.16, 0.3), 6.0, 0.88)
-		_draw_hud_bar(boss_rect.position + Vector2(14.0, 11.0), boss_rect.size.x - 28.0, 8.0, boss_hp / boss_hp_max, Color(1.0, 0.16, 0.28))
-		if _boss_execute_threshold() > 0.0:
-			_draw_collector_threshold(boss_rect.position + Vector2(14.0, 11.0), boss_rect.size.x - 28.0, _boss_execute_threshold(), boss_hp / boss_hp_max, 8.0)
-		if current_phase == 1 and boss_hp / maxf(1.0, boss_hp_max) < BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown > 0.0:
-			var chrono_text := "CRONO %.0fs" % ceil(boss1_rewind_cooldown)
-			draw_string(font, boss_rect.position + Vector2(boss_rect.size.x - 94.0, 28.0), chrono_text, HORIZONTAL_ALIGNMENT_LEFT, 82.0, 11, Color(0.48, 0.94, 1.0, 0.92))
-
-	if is_multiplayer and online_connected:
-		var ping_text: = "PING %sms" % (str(net_ping_ms) if net_ping_ms >= 0 else "--")
-		if net_remote_ping_ms >= 0:
-			ping_text += "  PAR %dms" % net_remote_ping_ms
-		if _is_world_replica():
-			ping_text += "  JIT %.0fms" % net_world_jitter_ms
-		draw_string(font, Vector2(viewport.x * 0.5 - 118.0, 28.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
-
-	_draw_card_mechanic_huds(viewport, life_rect)
-	_draw_ancorada_hud(viewport, life_rect)
-	_draw_acorrentada_hud(viewport, life_rect)
-	_draw_bombastica_hud(viewport, life_rect)
-	_draw_necronada_hud(viewport, life_rect)
-	_draw_aura_hud(viewport, life_rect)
-	_draw_revive_heal_penalty_hud(viewport, life_rect)
-	_draw_lacerante_coagulum_hud(viewport)
-	_draw_contractual_order_hud(viewport)
-	_draw_unlock_notifications(viewport)
+	HudPresentation._draw_desktop_hud(self, viewport)
 
 
 func _draw_desktop_combat_hud(viewport: Vector2) -> void :
-	var icons := []
-
-	var active_eletrica_secondary = _active_eletrica_secondary()
-	var toggle_ultimate_active = (manifestation_key == "prismatica" and time_alive - last_secondary_time < SECONDARY_PRISMATICA_DURATION) or (manifestation_key == "eletrica" and active_eletrica_secondary)
-	var tp_visual_active: = tp_cooldown_pending and not tp_effects.is_empty()
-	var dash_label: = "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
-
-	var q_charges: = 0
-	if manifestation_key == "bombastica":
-		q_charges = bombastica_bombs.size()
-
-	var tp_charges: = 0
-	if manifestation_key == "lacerante":
-		tp_charges = lacerante_tp_charges
-
-	var ult_color: = Color(1.0, 0.78, 0.2, 0.95)
-	var ult_label: = "ULT"
-	var ult_sub: = "ULTIMATE"
-
-	if not active_eletrica_secondary.is_empty():
-		var tesla_t: = float(active_eletrica_secondary.get("active_time", 0.0))
-		ult_label = "CANCELAR"
-		if tesla_t >= 15.0:
-			ult_sub = "SOBRECARGA"
-			ult_color = Color(1.0, 0.0, 0.15, 0.98)
-		elif tesla_t >= 13.0:
-			ult_sub = "ALERTA!"
-			ult_color = Color(1.0, 0.4, 0.0, 0.95)
-		elif tesla_t >= 10.0:
-			ult_sub = "INSTAVEL"
-			ult_color = Color(1.0, 0.85, 0.0, 0.9)
-		else:
-			ult_sub = "ATIVO"
-			ult_color = Color(0.0, 0.8, 1.0, 0.9)
-	elif toggle_ultimate_active:
-		ult_label = "CANCELAR"
-		ult_sub = "CANCELAR"
-		ult_color = Color(1.0, 0.02, 0.06, 0.98)
-
-	icons.append({"id": "attack", "label": "ATK", "sub": "Ataque", "charges": 0, "bind": _compact_key_binding_name("attack") if _uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.28), "cd_elapsed": 100.0, "cd_max": 1.0, "icon_type": "sword"})
-	icons.append({"id": "skill", "label": "HAB 1", "sub": "Hab 1", "charges": q_charges, "bind": _compact_key_binding_name("skill") if _uses_desktop_ui() else _compact_binding_name("skill"), "color": Color(0.2, 0.75, 1.0), "cd_elapsed": time_alive - last_skill_time, "cd_max": _skill_cooldown(), "icon_type": "star"})
-	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "active": toggle_ultimate_active, "charges": 0, "bind": _compact_key_binding_name("secondary") if _uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": time_alive - last_secondary_time, "cd_max": _secondary_skill_cooldown(), "icon_type": "trident"})
-	icons.append({"id": "dash", "label": dash_label, "active": dash_label != "TP", "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": _compact_key_binding_name("dash") if _uses_desktop_ui() else "", "color": Color(0.2, 0.9, 1.0), "cd_elapsed": time_alive - last_dash_time, "cd_max": _current_dash_cooldown(), "icon_type": "portal"})
-
-	if manifestation_key == "lacerante":
-		icons.append({"id": "lacerante_empower", "label": "REFORÇO" if lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68), "cd_elapsed": time_alive - last_lacerante_empower_time, "cd_max": LACERANTE_EMPOWER_COOLDOWN, "icon_type": "star"})
-	if manifestation_key == "eclipsada":
-		var form_color: = _eclipsada_color()
-		icons.append({"id": "lacerante_empower", "label": _eclipsada_form_label(), "sub": "Forma", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(form_color.r, form_color.g, form_color.b, 0.86), "cd_elapsed": 1.0, "cd_max": 1.0, "icon_type": "star"})
-	if manifestation_key == "necronada":
-		var necr_cd_elapsed: = NECRONADA_EMPOWER_COOLDOWN if necronada_empowered_ready else NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, necronada_empower_cooldown_until - time_alive)
-		icons.append({"id": "lacerante_empower", "label": "PO" if necronada_empowered_ready else "+", "sub": "Poeira", "charges": 0, "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(0.52, 0.34, 0.92, 0.94 if necronada_empowered_ready else 0.7), "cd_elapsed": necr_cd_elapsed, "cd_max": NECRONADA_EMPOWER_COOLDOWN, "icon_type": "star"})
-	if manifestation_key == "bombastica":
-		var det_ready: = 1.0 if bombastica_bombs.size() > 0 else 0.0
-		icons.append({"id": "bombastica_detonator", "label": "DET", "sub": "Detonar", "charges": bombastica_bombs.size(), "bind": _compact_key_binding_name("lacerante_empower") if _uses_desktop_ui() else "", "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0, "icon_type": "star"})
-
-	var desktop_scale: float = _sanitize_desktop_hud_scale(desktop_hud_scale)
-	var card_w := 92.0
-	var card_h := 96.0
-	var gap := 12.0 * desktop_scale
-	var visual_card_w: float = card_w * desktop_scale
-	var visual_card_h: float = card_h * desktop_scale
-	var total_w := visual_card_w * float(icons.size()) + gap * float(icons.size() - 1)
-	var start_x := viewport.x * 0.5 - total_w * 0.5
-	var start_y := viewport.y - visual_card_h - 24.0
-
-	for i in range(icons.size()):
-		var card_rect := Rect2(start_x + i * (visual_card_w + gap), start_y, card_w, card_h)
-		draw_set_transform(card_rect.position * (1.0 - desktop_scale), 0.0, Vector2.ONE * desktop_scale)
-		hud_feedback.ability(self, card_rect, icons[i])
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	_draw_desktop_fps_hud(viewport)
+	HudPresentation._draw_desktop_combat_hud(self, viewport)
 
 
 func _draw_desktop_session_buttons(_viewport: Vector2) -> void :
-	if buttons.has("pause"):
-		var pause_rect: Rect2 = buttons["pause"]
-		_draw_hud_rect_button(pause_rect, "II", CombatHud.CYAN)
-		_draw_centered(_compact_key_binding_name("pause"), pause_rect.get_center() + Vector2(0, -24), 10, Color(0.72, 1.0, 0.94, 0.9))
-
-	if buttons.has("shop_manual"):
-		var shop_rect: Rect2 = buttons["shop_manual"]
-		var shop_accent := Color(0.0, 0.88, 1.0) if _affordable_card_count() > 0 and mode == "game" else Color(0.38, 0.42, 0.46)
-		hud_feedback.surface(self, shop_rect, shop_accent)
-		_draw_icon_cart(Vector2(shop_rect.position.x + 26.0, shop_rect.position.y + 22.0), 22.0, shop_accent)
-		_draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 4.0), 16, shop_accent)
-
-	if boss_ready and not boss_active and not boss_dead and buttons.has("boss"):
-		var boss_rect: Rect2 = buttons["boss"]
-		var boss_accent := Color(1.0, 0.22, 0.28)
-		hud_feedback.surface(self, boss_rect, boss_accent)
-		_draw_icon_skull(Vector2(boss_rect.position.x + 26.0, boss_rect.position.y + 22.0), 22.0, boss_accent)
-		_draw_centered("BOSS", boss_rect.get_center() + Vector2(14.0, 4.0), 16, boss_accent)
+	MenusPresentation._draw_desktop_session_buttons(self, _viewport)
 
 
 
@@ -51412,186 +40338,7 @@ func _draw_desktop_session_buttons(_viewport: Vector2) -> void :
 
 
 func _draw_touch_controls(viewport: Vector2) -> void :
-	if _uses_desktop_ui():
-		_draw_desktop_combat_hud(viewport)
-		_draw_desktop_session_buttons(viewport)
-		if _ability_cancel_active():
-			_draw_ability_cancel_button(viewport)
-		_draw_player_dance_emote(_camera(viewport))
-		return
-	if is_gamepad_active:
-		_draw_desktop_combat_hud(viewport)
-	if is_dead or player_hp <= 0.0 or online_local_spectator:
-		buttons.erase("revival_mobile")
-		_draw_player_dance_emote(_camera(viewport))
-		return
-	var joy = _active_joy_center(viewport)
-	var joy_r = 76.0 * _joy_scale()
-	var joy_alpha: float = _hud_rect_player_alpha(Rect2(joy - Vector2(joy_r, joy_r), Vector2(joy_r * 2.0, joy_r * 2.0)), viewport)
-	if not is_gamepad_active:
-		_draw_virtual_stick(joy, joy_r, joy_alpha)
-
-	var atk_c = buttons["attack"].position + buttons["attack"].size * 0.5
-	var atk_r: float = minf(54.0 * _attack_scale(), float(buttons["attack"].size.x) * 0.5)
-	var atk_alpha: float = _hud_rect_player_alpha(Rect2(atk_c - Vector2(atk_r, atk_r), Vector2(atk_r * 2.0, atk_r * 2.0)), viewport)
-	var revival_method: String = _local_revival_altar_method()
-	if not is_gamepad_active:
-		if revival_method != "":
-			var revive_color: Color = Color(1.0, 0.18, 0.26, 0.82 * atk_alpha) if revival_method == REVIVE_PAY_LIFE else Color(0.08, 0.62, 1.0, 0.82 * atk_alpha)
-			buttons["revival_mobile"] = buttons["attack"]
-			_draw_button(atk_c, atk_r, "REVIVE", revive_color)
-			_draw_centered("2 TOQUES", atk_c + Vector2(0, atk_r + 18.0), 10, Color(0.94, 1.0, 0.98, atk_alpha))
-		else:
-			buttons.erase("revival_mobile")
-			_draw_button(atk_c, atk_r, "ATK", Color(1.0, 0.24, 0.26, 0.7 * atk_alpha))
-	if attack_holding and not attack_dragging:
-		var hold_ratio = clamp(attack_hold_timer / ATTACK_LOCK_HOLD_TIME, 0.0, 1.0)
-		draw_arc(atk_c, atk_r + 7.0, - PI * 0.5, - PI * 0.5 + TAU * hold_ratio, 48, Color(1.0, 0.86, 0.24, 0.96), 4.0)
-		if attack_lock_selecting:
-			_draw_attack_lock_preview(viewport)
-
-	var skill_c = buttons["skill"].position + buttons["skill"].size * 0.5
-	var skill_r: float = minf(46.0 * _skill_scale(), float(buttons["skill"].size.x) * 0.5)
-	var skill_alpha: float = _hud_rect_player_alpha(Rect2(skill_c - Vector2(skill_r, skill_r), Vector2(skill_r * 2.0, skill_r * 2.0)), viewport)
-	if not is_gamepad_active:
-		_draw_button(skill_c, skill_r, "HAB1", Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.7 * skill_alpha))
-	if manifestation_key == "bombastica" and bombastica_bombs.size() > 0:
-		var q_badge_center: Vector2 = skill_c + Vector2(skill_r * 0.66, - skill_r * 0.68)
-		draw_circle(q_badge_center, 14.0, Color(0.16, 0.0, 0.025, 0.96))
-		draw_arc(q_badge_center, 14.0, 0.0, TAU, 24, Color(1.0, 0.78, 0.18, 0.98), 2.0)
-		_draw_centered("x%d" % bombastica_bombs.size(), q_badge_center + Vector2(0, 1), 12, Color.WHITE)
-	var secondary_c = buttons["secondary"].position + buttons["secondary"].size * 0.5
-	var secondary_r: float = minf(43.0 * _secondary_scale(), float(buttons["secondary"].size.x) * 0.5)
-	var secondary_alpha: float = _hud_rect_player_alpha(Rect2(secondary_c - Vector2(secondary_r, secondary_r), Vector2(secondary_r * 2.0, secondary_r * 2.0)), viewport)
-	var active_eletrica_secondary = _active_eletrica_secondary()
-	var toggle_ultimate_active = not active_eletrica_secondary.is_empty() or not _active_prismatica_secondary().is_empty()
-	var cancel_danger = not active_eletrica_secondary.is_empty() and float(active_eletrica_secondary.get("active_time", 0.0)) >= SECONDARY_ELETRICA_DRAIN_DELAY
-	var cancel_pulse = 0.5 + sin(time_alive * (10.0 if cancel_danger else 7.0)) * 0.5
-	if toggle_ultimate_active:
-		var outer_alpha = 0.28 + cancel_pulse * (0.24 if cancel_danger else 0.14)
-		draw_circle(secondary_c, secondary_r + 9.0 + cancel_pulse * 5.0, Color(1.0, 0.0, 0.05, outer_alpha * secondary_alpha))
-		draw_circle(secondary_c, secondary_r * 0.96, Color(0.4, 0.0, 0.02, 0.92 * secondary_alpha))
-	if not is_gamepad_active:
-		_draw_button(secondary_c, secondary_r, "CANCELAR" if toggle_ultimate_active else "ULT", _with_alpha(Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), secondary_alpha))
-	if manifestation_key == "eletrica" and not toggle_ultimate_active:
-		var cd_total: float = _secondary_skill_cooldown()
-		var cd_elapsed: float = clampf(time_alive - last_secondary_time, 0.0, cd_total)
-		if cd_elapsed < cd_total:
-			var cd_ratio: float = cd_elapsed / maxf(0.01, cd_total)
-			var cd_phase: float = time_alive * 7.0
-			var cd_col: Color = Color(0.14, 0.72, 1.0, 0.42).lerp(Color(0.9, 0.12, 1.0, 0.76), 1.0 - cd_ratio)
-			draw_arc(secondary_c, secondary_r + 11.0, -PI * 0.5, -PI * 0.5 + TAU * cd_ratio, 58, cd_col, 4.0, true)
-			draw_arc(secondary_c, secondary_r + 17.0, cd_phase, cd_phase + PI * 0.8, 26, Color(0.58, 0.96, 1.0, 0.28 + 0.3 * (1.0 - cd_ratio)), 2.0, true)
-			for spark in range(3):
-				var a: float = cd_phase + float(spark) * TAU / 3.0
-				var start: Vector2 = secondary_c + Vector2.from_angle(a) * (secondary_r + 15.0)
-				draw_line(start, start + Vector2.from_angle(a + 0.8) * 7.0, Color(0.86, 0.98, 1.0, 0.42), 1.4, true)
-	if toggle_ultimate_active:
-		draw_arc(secondary_c, secondary_r + 7.0 + cancel_pulse * 4.0, 0.0, TAU, 54, Color(1.0, 0.1, 0.13, 1.0), 4.0)
-	if not active_eletrica_secondary.is_empty():
-		var tesla_t: = float(active_eletrica_secondary.get("active_time", 0.0))
-		var status_text: = "ATIVO"
-		var status_col: = Color(0.34, 0.9, 1.0)
-		if tesla_t >= 15.0:
-			status_text = "SOBRECARGA"
-			status_col = Color(1.0, 0.15, 0.25)
-		elif tesla_t >= 13.0:
-			status_text = "ALERTA!"
-			status_col = Color(1.0, 0.45, 0.1)
-		elif tesla_t >= 10.0:
-			status_text = "INSTAVEL"
-			status_col = Color(1.0, 0.85, 0.15)
-		_draw_centered(status_text, secondary_c + Vector2(0, - secondary_r - 18.0), 10, status_col)
-		_draw_centered("CANCELAR", secondary_c + Vector2(0, secondary_r + 17.0), 11, Color(1.0, 0.92, 0.92))
-	elif toggle_ultimate_active:
-		if cancel_danger:
-			draw_arc(secondary_c, secondary_r + 15.0 + cancel_pulse * 5.0, - PI * 0.5, PI * 1.5, 54, Color(0.34, 0.9, 1.0, 0.82), 2.0)
-			_draw_centered("DRENANDO", secondary_c + Vector2(0, - secondary_r - 18.0), 10, Color(1.0, 0.28, 0.32))
-		_draw_centered("CANCELAR", secondary_c + Vector2(0, secondary_r + 17.0), 11, Color(1.0, 0.92, 0.92))
-
-	var dash_c = buttons["dash"].position + buttons["dash"].size * 0.5
-	var dash_r: float = minf(46.0 * _dash_scale(), float(buttons["dash"].size.x) * 0.5)
-	var dash_alpha: float = _hud_rect_player_alpha(Rect2(dash_c - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0)), viewport)
-	var tp_visual_active: = tp_cooldown_pending and not tp_effects.is_empty()
-	var dash_label: = "VOLTAR" if manifestation_key == "retornante" and retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
-	if not is_gamepad_active:
-		_draw_button(dash_c, dash_r, dash_label, _with_alpha(Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.2, 0.85, 1.0, 0.72), dash_alpha))
-	if manifestation_key == "lacerante":
-		var charge_center: Vector2 = dash_c + Vector2(dash_r * 0.66, - dash_r * 0.68)
-		draw_circle(charge_center, 14.0, Color(0.16, 0.0, 0.025, 0.96))
-		draw_arc(charge_center, 14.0, 0.0, TAU, 24, Color(1.0, 0.16, 0.24, 0.98), 2.0)
-		_draw_centered(str(lacerante_tp_charges), charge_center + Vector2(0, 1), 14, Color.WHITE)
-		if lacerante_tp_chain_timer > 0.0 and lacerante_tp_charges > 0:
-			var chain_ratio: float = clampf(lacerante_tp_chain_timer / LACERANTE_TP_CHAIN_WINDOW, 0.0, 1.0)
-			draw_arc(dash_c, dash_r + 8.0, - PI * 0.5, - PI * 0.5 + TAU * chain_ratio, 42, Color(1.0, 0.12, 0.2, 0.96), 4.0)
-	if buttons.has("lacerante_empower"):
-		var empower_rect: Rect2 = buttons["lacerante_empower"]
-		var empower_c = empower_rect.get_center()
-		var empower_r = empower_rect.size.x * 0.5
-		var armed_pulse = 0.5 + sin(time_alive * 10.0) * 0.5
-		if manifestation_key == "eclipsada":
-			var form_color: = _eclipsada_color()
-			draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(form_color.r, form_color.g, form_color.b, 0.14 + armed_pulse * 0.12))
-			if not is_gamepad_active:
-				_draw_button(empower_c, empower_r, _eclipsada_form_label(), Color(form_color.r, form_color.g, form_color.b, 0.78))
-				_draw_centered("FORMA", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.9, 0.72, 0.92))
-		elif manifestation_key == "necronada":
-			if necronada_empowered_ready:
-				draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(0.52, 0.34, 0.92, 0.18 + armed_pulse * 0.16))
-			if not is_gamepad_active:
-				_draw_button(empower_c, empower_r, "PO" if necronada_empowered_ready else "+", Color(0.52, 0.34, 0.92, 0.92 if necronada_empowered_ready else 0.68))
-				_draw_centered("POEIRA", empower_c + Vector2(0, empower_r + 13.0), 9, _necronada_accent())
-			if not necronada_empowered_ready:
-				_draw_cooldown_overlay(empower_c, empower_r, NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, necronada_empower_cooldown_until - time_alive), NECRONADA_EMPOWER_COOLDOWN)
-		else:
-			if lacerante_empowered_ready:
-				draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(1.0, 0.02, 0.1, 0.18 + armed_pulse * 0.18))
-			if not is_gamepad_active:
-				_draw_button(empower_c, empower_r, "R" if lacerante_empowered_ready else "+", Color(0.92, 0.03, 0.12, 0.92 if lacerante_empowered_ready else 0.68))
-				_draw_centered("REFORCO", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.72, 0.74, 0.92))
-			if not lacerante_empowered_ready:
-				_draw_cooldown_overlay(empower_c, empower_r, time_alive - last_lacerante_empower_time, LACERANTE_EMPOWER_COOLDOWN)
-	if buttons.has("bombastica_detonator"):
-		var det_rect: Rect2 = buttons["bombastica_detonator"]
-		var det_c = det_rect.get_center()
-		var det_r = det_rect.size.x * 0.5
-		var detonator_ready: = bombastica_bombs.size() > 0
-		var hold_ratio: = clampf(bombastica_detonator_hold / 0.62, 0.0, 1.0) if bombastica_detonator_touch_index != -1 else 0.0
-		var pulse = 0.5 + sin(time_alive * 11.0) * 0.5
-		if detonator_ready:
-			draw_circle(det_c, det_r + 7.0 + pulse * 4.0, Color(1.0, 0.48, 0.08, 0.16 + pulse * 0.12))
-		if not is_gamepad_active:
-			_draw_button(det_c, det_r, "DET", Color(1.0, 0.48, 0.12, 0.88 if detonator_ready else 0.42))
-			_draw_centered("DETONAR", det_c + Vector2(0, det_r + 13.0), 9, Color(1.0, 0.78, 0.46, 0.92))
-		if hold_ratio > 0.0:
-			draw_arc(det_c, det_r + 8.0, - PI * 0.5, - PI * 0.5 + TAU * hold_ratio, 42, Color(0.18, 0.88, 1.0, 0.96), 4.0)
-			_draw_centered("TODAS", det_c + Vector2(0, - det_r - 14.0), 9, Color(0.7, 1.0, 1.0))
-
-	_draw_cooldown_overlay(atk_c, atk_r, time_alive - last_attack_time, _current_attack_interval())
-	_draw_cooldown_overlay(skill_c, skill_r, time_alive - last_skill_time, _skill_cooldown())
-	if not toggle_ultimate_active:
-		_draw_cooldown_overlay(secondary_c, secondary_r, time_alive - last_secondary_time, _secondary_skill_cooldown())
-	if tp_cooldown_pending and tp_cooldown_release_time <= 0.0 and not tp_effects.is_empty():
-		var active_tp: Dictionary = tp_effects[0]
-		_draw_cooldown_overlay(dash_c, dash_r, float(active_tp.get("max", 1.0)) - float(active_tp.get("life", 0.0)), float(active_tp.get("max", 1.0)))
-	else:
-		_draw_cooldown_overlay(dash_c, dash_r, time_alive - last_dash_time, _current_dash_cooldown())
-	_draw_hud_rect_button(buttons["pause"], "II", _with_alpha(Color(0.0, 1.0, 0.82), _hud_rect_player_alpha(buttons["pause"], viewport, 72.0)))
-	if buttons.has("shop_manual"):
-		var shop_rect: Rect2 = buttons["shop_manual"]
-		var shop_accent = Color(0.0, 1.0, 0.82) if _affordable_card_count() > 0 and mode == "game" else Color(0.38, 0.42, 0.46)
-		var shop_alpha: float = _hud_rect_player_alpha(shop_rect, viewport, 82.0)
-		_draw_centered("LOJA %d" % card_cost, shop_rect.get_center() + Vector2(0, -29), 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.92 * shop_alpha))
-		_draw_hud_rect_button(shop_rect, "LOJA", _with_alpha(shop_accent, shop_alpha))
-	if boss_ready and not boss_active and not boss_dead:
-		var boss_rect: Rect2 = buttons["boss"]
-		var boss_alpha: float = _hud_rect_player_alpha(boss_rect, viewport, 82.0)
-		_draw_centered("BOSS PRONTO", boss_rect.get_center() + Vector2(0, -31), 16, Color(1.0, 0.82, 0.24, boss_alpha))
-		_draw_hud_rect_button(boss_rect, "BOSS", Color(1.0, 0.52, 0.16, boss_alpha))
-	if _ability_cancel_active():
-		_draw_ability_cancel_button(viewport)
-	_draw_dance_wheel(viewport)
-	_draw_player_dance_emote(_camera(viewport))
+	HudPresentation._draw_touch_controls(self, viewport)
 
 func _edit_layout_uses_virtual_controls() -> bool:
 	return _uses_touch_ui()
@@ -51622,24 +40369,7 @@ func _clamp_layout_center(target: Vector2, radius: float, viewport: Vector2, pad
 
 
 func _draw_edit_layout_safe_guides(viewport: Vector2) -> void:
-	var safe_rect: Rect2 = _edit_layout_safe_rect(viewport)
-	var accent: = Color(0.0, 1.0, 0.82, 0.42)
-	var warn: = Color(1.0, 0.72, 0.22, 0.32)
-	draw_rect(safe_rect, Color(0.0, 0.8, 0.7, 0.035), false, 1.0)
-	var corner_len: = 42.0
-	var points: = [
-		safe_rect.position,
-		Vector2(safe_rect.end.x, safe_rect.position.y),
-		Vector2(safe_rect.position.x, safe_rect.end.y),
-		safe_rect.end
-	]
-	for p in points:
-		var sx: = 1.0 if p.x <= safe_rect.position.x + 1.0 else -1.0
-		var sy: = 1.0 if p.y <= safe_rect.position.y + 1.0 else -1.0
-		draw_line(p, p + Vector2(corner_len * sx, 0.0), accent, 2.0)
-		draw_line(p, p + Vector2(0.0, corner_len * sy), accent, 2.0)
-		draw_circle(p, 3.0, warn)
-	_draw_centered("AREA SEGURA DAS QUINAS", Vector2(viewport.x * 0.5, viewport.y - 118.0), 13, Color(0.7, 0.92, 1.0, 0.72))
+	HudPresentation._draw_edit_layout_safe_guides(self, viewport)
 
 
 func _edit_layout_scale_controls_visible(key: String) -> bool:
@@ -51647,138 +40377,7 @@ func _edit_layout_scale_controls_visible(key: String) -> bool:
 
 
 func _draw_edit_layout(viewport: Vector2) -> void :
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.05, 0.05, 0.08, 0.9))
-	_draw_edit_layout_safe_guides(viewport)
-	_draw_centered(_edit_layout_title(), Vector2(viewport.x * 0.5, 40), 28, Color(0.0, 1.0, 0.82))
-	if not _edit_layout_uses_virtual_controls():
-		_draw_centered("Desktop: mova paineis, loja, boss e avisos. Controles ficam em TECLAS.", Vector2(viewport.x * 0.5, viewport.y - 142.0), 14, Color(0.72, 0.92, 1.0, 0.82))
-
-	if _edit_layout_uses_virtual_controls():
-		var joy = _joy_center(viewport)
-		var joy_r = 76.0 * _joy_scale()
-		draw_circle(joy, joy_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "joy" else Color(0.0, 0.8, 0.8, 0.4))
-		draw_arc(joy, joy_r, 0, TAU, 64, Color(1.0, 1.0, 0.0) if edit_layout_selected == "joy" else Color(0.0, 1.0, 0.85), 3)
-		_draw_centered("JOY", joy, 20, Color.WHITE)
-		if _edit_layout_scale_controls_visible("joy"):
-			var joy_scale_controls: = _circle_scale_control_rects(joy, joy_r, viewport)
-			_draw_small_rect_button(joy_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-			_draw_small_rect_button(joy_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-
-		var atk_c = buttons["attack"].position + buttons["attack"].size * 0.5
-		var atk_r = 54.0 * _attack_scale()
-		draw_circle(atk_c, atk_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28, 0.4))
-		draw_arc(atk_c, atk_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "attack" else Color(1.0, 0.16, 0.28), 3)
-		_draw_centered("ATK", atk_c, 20, Color.WHITE)
-		if _edit_layout_scale_controls_visible("attack"):
-			var atk_scale_controls: = _circle_scale_control_rects(atk_c, atk_r, viewport)
-			_draw_small_rect_button(atk_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-			_draw_small_rect_button(atk_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-
-		var secondary_c = buttons["secondary"].position + buttons["secondary"].size * 0.5
-		var secondary_r = 43.0 * _secondary_scale()
-		draw_circle(secondary_c, secondary_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "secondary" else Color(1.0, 0.72, 0.22, 0.4))
-		draw_arc(secondary_c, secondary_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "secondary" else Color(1.0, 0.72, 0.22), 3)
-		_draw_centered("E", secondary_c + Vector2(0, -6), 20, Color.WHITE)
-		_draw_centered("ULT", secondary_c + Vector2(0, 13), 12, Color.WHITE)
-		if _edit_layout_scale_controls_visible("secondary"):
-			var secondary_scale_controls: = _circle_scale_control_rects(secondary_c, secondary_r, viewport)
-			_draw_small_rect_button(secondary_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-			_draw_small_rect_button(secondary_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-
-		var dash_c = buttons["dash"].position + buttons["dash"].size * 0.5
-		var dash_r = 46.0 * _dash_scale()
-		draw_circle(dash_c, dash_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0, 0.4))
-		draw_arc(dash_c, dash_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "dash" else Color(0.2, 0.85, 1.0), 3)
-		_draw_centered("TP", dash_c, 20, Color.WHITE)
-		if _edit_layout_scale_controls_visible("dash"):
-			var dash_scale_controls: = _circle_scale_control_rects(dash_c, dash_r, viewport)
-			_draw_small_rect_button(dash_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-			_draw_small_rect_button(dash_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-
-		var empower_r = 32.0 * _lacerante_empower_scale()
-		var empower_c = _lacerante_empower_center(viewport)
-		buttons["lacerante_empower"] = Rect2(empower_c - Vector2(empower_r, empower_r), Vector2(empower_r * 2.0, empower_r * 2.0))
-		var is_empower_selected = (edit_layout_selected == "lacerante_empower")
-		draw_circle(empower_c, empower_r, Color(0.8, 0.8, 0.0, 0.4) if is_empower_selected else Color(0.92, 0.03, 0.12, 0.4))
-		draw_arc(empower_c, empower_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if is_empower_selected else Color(0.92, 0.03, 0.12), 3)
-		_draw_centered("+", empower_c, 24, Color.WHITE)
-		if _edit_layout_scale_controls_visible("lacerante_empower"):
-			var empower_scale_controls: = _circle_scale_control_rects(empower_c, empower_r, viewport)
-			_draw_small_rect_button(empower_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-			_draw_small_rect_button(empower_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-	else:
-		buttons.erase("lacerante_empower")
-
-	var portrait = _is_portrait(viewport)
-	var left_w = 236.0 if not portrait else min(236.0, viewport.x * 0.46)
-	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
-	var c_left = Color(1, 1, 0, 0.6) if edit_layout_selected == "left_panel" else Color(0, 1, 0.8, 0.3)
-	draw_rect(left_rect, c_left, false, 2)
-	_draw_centered("VIDA", left_rect.get_center(), 16, Color.WHITE)
-
-	var right_w = 220.0 if not portrait else min(220.0, viewport.x * 0.44)
-	var right_rect = Rect2(_right_panel_pos(viewport), Vector2(right_w, 76))
-	var c_right = Color(1, 1, 0, 0.6) if edit_layout_selected == "right_panel" else Color(1, 0.8, 0.2, 0.3)
-	draw_rect(right_rect, c_right, false, 2)
-	_draw_centered("PONTOS", right_rect.get_center(), 16, Color.WHITE)
-
-	var boss_rect = Rect2(_boss_panel_pos(viewport), Vector2(380, 30))
-	var c_boss = Color(1, 1, 0, 0.6) if edit_layout_selected == "boss_panel" else Color(1, 0.16, 0.3, 0.3)
-	draw_rect(boss_rect, c_boss, false, 2)
-	_draw_centered("BOSS HP", boss_rect.get_center(), 14, Color.WHITE)
-
-	var shop_rect = Rect2(_manual_shop_pos(viewport), Vector2(104, 42))
-	buttons["shop_manual"] = shop_rect
-	var c_shop = Color(1, 1, 0, 0.6) if edit_layout_selected == "shop_manual" else Color(0.0, 1.0, 0.82, 0.3)
-	draw_rect(shop_rect, c_shop, false, 2)
-	_draw_centered("LOJA", shop_rect.get_center(), 14, Color.WHITE)
-
-	var aura_rect = Rect2(_aura_panel_pos(viewport, left_rect), Vector2(min(224.0, viewport.x * 0.46), 48.0) * hud_aura_panel_scale)
-	var c_aura = Color(1, 1, 0, 0.6) if edit_layout_selected == "aura_panel" else Color(0.54, 0.82, 1.0, 0.3)
-	draw_rect(aura_rect, c_aura, false, 2)
-	_draw_centered("AUREA", aura_rect.get_center(), 13, Color.WHITE)
-	if _edit_layout_scale_controls_visible("aura_panel"):
-		_draw_layout_scale_controls(aura_rect)
-
-	var cards_rect = Rect2(_cards_panel_pos(viewport, left_rect), Vector2(min(224.0, viewport.x * 0.46), 94.0) * hud_cards_panel_scale)
-	var c_cards = Color(1, 1, 0, 0.6) if edit_layout_selected == "cards_panel" else Color(1.0, 0.64, 0.18, 0.3)
-	draw_rect(cards_rect, c_cards, false, 2)
-	_draw_centered("CARTAS HUD", cards_rect.get_center(), 13, Color.WHITE)
-	if _edit_layout_scale_controls_visible("cards_panel"):
-		_draw_layout_scale_controls(cards_rect)
-
-	var coag_center = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
-	var coag_size: = Vector2(160, 48) * hud_coagulum_scale
-	var coag_rect = Rect2(coag_center - coag_size * 0.5, coag_size)
-	var c_coag = Color(1, 1, 0, 0.6) if edit_layout_selected == "coagulum" else Color(1.0, 0.12, 0.22, 0.3)
-	draw_rect(coag_rect, c_coag, false, 2)
-	_draw_centered("COAGULO", coag_rect.get_center(), 13, Color.WHITE)
-	if _edit_layout_scale_controls_visible("coagulum"):
-		_draw_layout_scale_controls(coag_rect)
-
-	if _edit_layout_uses_virtual_controls():
-		var skill_r = 46.0 * _skill_scale()
-		var skill_rect = Rect2(_skill_pos(viewport), Vector2(skill_r * 2.0, skill_r * 2.0))
-		var skill_c = skill_rect.get_center()
-		draw_circle(skill_c, skill_r, Color(0.8, 0.8, 0.0, 0.4) if edit_layout_selected == "skill" else Color(_manifestation_color().r, _manifestation_color().g, _manifestation_color().b, 0.4))
-		draw_arc(skill_c, skill_r, 0, TAU, 32, Color(1.0, 1.0, 0.0) if edit_layout_selected == "skill" else _manifestation_color(), 3)
-		_draw_centered("HAB1", skill_c, 18, Color.WHITE)
-		if _edit_layout_scale_controls_visible("skill"):
-			var skill_scale_controls: = _circle_scale_control_rects(skill_c, skill_r, viewport)
-			_draw_small_rect_button(skill_scale_controls[0], "-", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-			_draw_small_rect_button(skill_scale_controls[1], "+", Color(0.2, 0.2, 0.2), Color(0.5, 0.5, 0.5))
-
-	var pause_rect = Rect2(_pause_pos(viewport), Vector2(52, 42))
-	var c_pause = Color(1, 1, 0, 0.6) if edit_layout_selected == "pause" else Color(1, 1, 1, 0.3)
-	draw_rect(pause_rect, c_pause, false, 2)
-	_draw_centered("||", pause_rect.get_center(), 14, Color.WHITE)
-
-	var call_rect = Rect2(_boss_call_pos(viewport), Vector2(96, 42))
-	var c_call = Color(1, 1, 0, 0.6) if edit_layout_selected == "boss_call" else Color(1, 0.5, 0, 0.3)
-	draw_rect(call_rect, c_call, false, 2)
-	_draw_centered("CALL", call_rect.get_center(), 14, Color.WHITE)
-
-	_draw_big_button(Rect2(viewport.x * 0.5 - 150, viewport.y - 80, 300, 60), "SALVAR & VOLTAR", Color(0.1, 0.3, 0.1), Color(0.2, 1.0, 0.4))
+	HudPresentation._draw_edit_layout(self, viewport)
 
 
 func _draw_layout_scale_controls(rect: Rect2) -> void :
@@ -51828,107 +40427,19 @@ func _draw_cooldown_overlay(center: Vector2, radius: float, elapsed: float, cool
 
 
 func _draw_shop_mp_request(viewport: Vector2) -> void :
-	var panel_w: float = min(440.0, viewport.x * 0.86)
-	var panel_h: = 122.0 if shop_mp_request_incoming else 78.0
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, 26.0, panel_w, panel_h)
-	var accent: = Color(0.0, 1.0, 0.82) if shop_mp_request_incoming else Color(1.0, 0.76, 0.25)
-	_draw_holo_panel(panel, accent, true, 0.86)
-	var remaining: = int(ceil(max(0.0, shop_mp_request_timer)))
-	var title: = "PARCEIRO PEDIU LOJA" if shop_mp_request_incoming else "PEDIDO DE LOJA ENVIADO"
-	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
-	var status: = "aguardando confirmacao %ds" % remaining
-	if shop_mp_request_incoming:
-		status = "clique ou enter/espaco em %ds" % remaining
-	_draw_centered(status.to_upper(), Vector2(panel.get_center().x, panel.position.y + 56.0), _readable_text_size(12), Color(0.92, 0.96, 1.0))
-	buttons.erase("shop_mp_accept")
-	if shop_mp_request_incoming:
-		buttons["shop_mp_accept"] = Rect2(panel.get_center().x - 94.0, panel.end.y - 42.0, 188.0, 32.0)
-		_draw_small_rect_button(buttons["shop_mp_accept"], "ACEITAR  ENTER", Color(0.03, 0.18, 0.12, 0.92), Color(0.0, 1.0, 0.82))
+	MenusPresentation._draw_shop_mp_request(self, viewport)
 
 
 func _draw_team_revival_world(camera: Vector2) -> void:
-	if not revival_active or mode != "game":
-		return
-	var t: float = Time.get_ticks_msec() * 0.001
-	for fragment in revival_fragments:
-		var data: Dictionary = fragment
-		if bool(data.get("collected", false)):
-			continue
-		var pos: Vector2 = Vector2(data.get("pos", Vector2.ZERO)) - camera
-		var phase: float = float(data.get("phase", 0.0)) + t * 3.0
-		var pulse: float = 0.5 + sin(phase) * 0.5
-		var shard_size: float = 16.0 + pulse * 6.0
-		var hue: float = fposmod(0.52 + sin(phase * 0.7) * 0.08, 1.0)
-		var cyan := Color.from_hsv(hue, 0.55 + pulse * 0.35, 1.0, 0.94)
-		var core := Color(1.0, 1.0, 1.0, 0.86)
-		var diamond := PackedVector2Array([pos + Vector2(0, -shard_size), pos + Vector2(shard_size * 0.72, 0), pos + Vector2(0, shard_size), pos + Vector2(-shard_size * 0.72, 0)])
-		var outline := PackedVector2Array([diamond[0], diamond[1], diamond[2], diamond[3], diamond[0]])
-		draw_circle(pos, shard_size * (1.65 + pulse * 0.35), Color(cyan.r, cyan.g, cyan.b, 0.13 + pulse * 0.09), true)
-		draw_colored_polygon(diamond, Color(cyan.r * 0.11, cyan.g * 0.2, cyan.b * 0.24, 0.92))
-		draw_polyline(outline, cyan, 3.0, true)
-		draw_polyline(outline, Color(1.0, 1.0, 1.0, 0.5), 1.1, true)
-		draw_line(pos + Vector2(-shard_size * 0.55, -shard_size * 0.12), pos + Vector2(shard_size * 0.54, shard_size * 0.18), core, 2.0, true)
-		draw_circle(pos, 4.2 + pulse * 1.6, core)
-	if revival_altars_active:
-		_draw_team_revival_altar(revival_altar_life_pos - camera, Color(1.0, 0.18, 0.26), "VIDA", t)
-		_draw_team_revival_altar(revival_altar_points_pos - camera, Color(0.08, 0.62, 1.0), "4 CARTAS", t + 1.4)
-		_draw_revival_altar_talkbox(camera)
+	MenusPresentation._draw_team_revival_world(self, camera)
 
 
 func _draw_team_revival_altar(center: Vector2, color: Color, label: String, phase: float) -> void:
-	var pulse: float = 0.5 + sin(phase * 4.0) * 0.5
-	var ground_alpha: float = 0.11 + pulse * 0.05
-	draw_circle(center + Vector2(0, 20), REVIVAL_ALTAR_RADIUS * 0.86, Color(color.r, color.g, color.b, ground_alpha))
-	draw_arc(center + Vector2(0, 20), REVIVAL_ALTAR_RADIUS * 0.84, phase, phase + TAU, 80, Color(color.r, color.g, color.b, 0.72), 3.0, true)
-	var base_top := PackedVector2Array([
-		center + Vector2(-42, 12),
-		center + Vector2(42, 12),
-		center + Vector2(56, 28),
-		center + Vector2(0, 44),
-		center + Vector2(-56, 28)
-	])
-	var base_face := PackedVector2Array([
-		center + Vector2(-56, 28),
-		center + Vector2(0, 44),
-		center + Vector2(56, 28),
-		center + Vector2(42, 50),
-		center + Vector2(-42, 50)
-	])
-	draw_colored_polygon(base_face, Color(0.03, 0.05, 0.07, 0.94))
-	draw_colored_polygon(base_top, Color(0.05, 0.13, 0.15, 0.96))
-	draw_polyline(PackedVector2Array([base_top[0], base_top[1], base_top[2], base_top[3], base_top[4], base_top[0]]), Color(color.r, color.g, color.b, 0.9), 2.0, true)
-	draw_line(center + Vector2(-42, 50), center + Vector2(42, 50), Color(color.r, color.g, color.b, 0.56), 2.0, true)
-	var crystal_y: float = sin(phase * 3.0) * 4.0 - 14.0
-	var crystal := PackedVector2Array([
-		center + Vector2(0, crystal_y - 38),
-		center + Vector2(22, crystal_y - 10),
-		center + Vector2(14, crystal_y + 22),
-		center + Vector2(-14, crystal_y + 22),
-		center + Vector2(-22, crystal_y - 10)
-	])
-	draw_colored_polygon(crystal, Color(color.r * 0.22, color.g * 0.22, color.b * 0.22, 0.92))
-	draw_polyline(PackedVector2Array([crystal[0], crystal[1], crystal[2], crystal[3], crystal[4], crystal[0]]), Color(color.r, color.g, color.b, 0.98), 2.4, true)
-	draw_line(center + Vector2(0, crystal_y - 34), center + Vector2(0, crystal_y + 18), Color(1.0, 1.0, 1.0, 0.42), 1.2, true)
-	draw_circle(center + Vector2(0, crystal_y - 8), 28.0 + pulse * 6.0, Color(color.r, color.g, color.b, 0.08), true)
-	_draw_centered(label, center + Vector2(0, 72), 13, Color(1.0, 1.0, 1.0, 0.94))
+	MenusPresentation._draw_team_revival_altar(self, center, color, label, phase)
 
 
 func _draw_revival_altar_talkbox(camera: Vector2) -> void:
-	var method: String = _local_revival_altar_method()
-	if method == "":
-		return
-	var altar_world: Vector2 = revival_altar_life_pos if method == REVIVE_PAY_LIFE else revival_altar_points_pos
-	var center: Vector2 = altar_world - camera
-	var key_name: String = _compact_key_binding_name("interact")
-	var cost_text: String = "%.0f%% DA VIDA" % (_revival_life_sacrifice_rate() * 100.0)
-	var detail: String = "divide entre %d caido(s)" % _team_revival_dead_count()
-	if method == REVIVE_PAY_POINTS:
-		cost_text = "%d PONTOS" % _revival_points_cost()
-		detail = "gasto individual"
-	var rect: Rect2 = Rect2(center.x - 172.0, center.y - 132.0, 344.0, 72.0)
-	_draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
-	_draw_centered("ALTAR " + _revival_method_label(method), Vector2(rect.get_center().x, rect.position.y + 23.0), _readable_text_size(12), Color(0.0, 1.0, 0.82))
-	_draw_centered("%s  %s  |  %s" % [key_name, cost_text, detail], Vector2(rect.get_center().x, rect.position.y + 49.0), _readable_text_size(10), Color(0.94, 1.0, 0.98))
+	MenusPresentation._draw_revival_altar_talkbox(self, camera)
 
 
 func _team_revival_hud_visible() -> bool:
@@ -51940,96 +40451,15 @@ func _revive_request_visible() -> bool:
 
 
 func _draw_team_revival_hud(viewport: Vector2) -> void:
-	buttons.erase("revival_mobile")
-	var panel_w: float = min(620.0, viewport.x * 0.78)
-	var panel_h: float = 104.0
-	var panel: Rect2 = Rect2(viewport.x * 0.5 - panel_w * 0.5, 76.0, panel_w, panel_h)
-	var accent: Color = Color(0.0, 1.0, 0.82) if not is_dead else Color(1.0, 0.24, 0.3)
-	_draw_holo_panel(panel, accent, true, 0.82)
-	var remaining: int = int(ceil(maxf(0.0, revival_timer)))
-	var total: int = maxi(1, revival_fragments.size())
-	var title: String = "VOCE FOI ELIMINADO" if is_dead else ("ALTARES DE REVIVE ATIVOS" if revival_altars_active else "RECONSTITUA O ALIADO")
-	if revival_fragments_suspended:
-		title = "FRAGMENTOS DISSIPADOS"
-	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 25.0), _readable_text_size(15), accent)
-	if revival_fragments_suspended:
-		var wait_info: String = "RETORNAM EM %ds  |  colete de novo para invocar os altares" % int(ceil(maxf(0.0, revival_fragment_respawn_timer)))
-		_draw_wrapped_clamped(wait_info, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
-	elif revival_altars_active:
-		var rate: float = _revival_life_sacrifice_rate() * 100.0
-		var cost: int = _revival_points_cost()
-		var info: String = "VERMELHO: sacrifica %.0f%% da vida e divide entre %d caido(s)  |  AZUL: %d pontos" % [rate, _team_revival_dead_count(), cost]
-		_draw_wrapped_clamped(info, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
-	else:
-		var multi_rate: float = REVIVAL_MULTI_LIFE_SACRIFICE_RATE * (1.0 - REVIVE_LIFE_SACRIFICE_REDUCTION) * 100.0
-		var info2: String = "FRAGMENTOS %d/%d  |  %ds  |  mais de um caido: 50s e sacrificio sobe para %.0f%%" % [revival_fragments_collected, total, remaining, multi_rate]
-		_draw_wrapped_clamped(info2, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), _readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
-	_draw_centered(revival_notice.to_upper(), Vector2(panel.get_center().x, panel.end.y - 18.0), _readable_text_size(10), Color(1.0, 0.86, 0.24, 0.92))
+	HudPresentation._draw_team_revival_hud(self, viewport)
 
 
 func _draw_revival_interaction_prompt(viewport: Vector2) -> void:
-	var method: String = _local_revival_altar_method()
-	if method == "":
-		return
-	var key_name: String = _compact_key_binding_name("interact")
-	var cost_text: String = "%.0f%% DA VIDA" % (_revival_life_sacrifice_rate() * 100.0)
-	if method == REVIVE_PAY_POINTS:
-		cost_text = "%d PONTOS" % _revival_points_cost()
-	var text: String = "%s INTERAGIR - ALTAR %s (%s)" % [key_name, _revival_method_label(method), cost_text]
-	var rect: Rect2 = Rect2(viewport.x * 0.5 - 230.0, viewport.y * 0.58, 460.0, 38.0)
-	_draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
-	_draw_centered(text, rect.get_center() + Vector2(0, 4), _readable_text_size(12), Color(0.94, 1.0, 0.98))
+	MenusPresentation._draw_revival_interaction_prompt(self, viewport)
 
 
 func _draw_revive_request(viewport: Vector2) -> void :
-	if not _revive_request_visible():
-		return
-	if _team_revival_hud_visible():
-		_draw_team_revival_hud(viewport)
-		return
-	var panel_w: float = min(620.0, viewport.x * 0.88)
-	var panel_h: = 218.0 if revive_request_incoming else 164.0
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.5, panel_w, panel_h)
-	var accent: = Color(0.2, 1.0, 0.5)
-	_draw_holo_panel(panel, accent, true, 0.88)
-	buttons.erase("revive_request")
-	buttons.erase("revive_accept")
-	buttons.erase("revive_accept_points")
-	buttons.erase("revive_accept_life")
-	buttons.erase("revive_reject")
-	var cost: = _revive_cost() if revive_request_cost <= 0 else revive_request_cost
-	if revive_request_incoming:
-		var remaining: = int(ceil(max(0.0, revive_request_timer)))
-		_draw_centered("ALIADO CAIDO PEDE REVIVE", Vector2(panel.get_center().x, panel.position.y + 34.0), _readable_text_size(15), accent)
-		_draw_centered("ESCOLHA COMO REERGUER O ALIADO  |  %ds" % remaining, Vector2(panel.get_center().x, panel.position.y + 66.0), _readable_text_size(12), Color(0.92, 0.96, 1.0))
-		_draw_centered("PONTOS: %d  OU  VIDA: -50%% HP" % cost, Vector2(panel.get_center().x, panel.position.y + 96.0), _readable_text_size(13), Color(1.0, 0.86, 0.26))
-		var sacrifice_rect: = Rect2(panel.position.x + 28.0, panel.position.y + 112.0, panel.size.x - 56.0, 28.0)
-		_draw_wrapped_clamped("SACRIFICIO: SUAS CURAS FICAM 50% MAIS FRACAS POR 1 MINUTO", sacrifice_rect, _readable_text_size(10), Color(1.0, 0.58, 0.62), 1)
-		var gap: = 10.0
-		var bw: = (panel_w - 56.0 - gap * 2.0) / 3.0
-		var by: = panel.end.y - 46.0
-		buttons["revive_accept_points"] = Rect2(panel.position.x + 18.0, by, bw, 34.0)
-		buttons["revive_accept_life"] = Rect2(buttons["revive_accept_points"].end.x + gap, by, bw, 34.0)
-		buttons["revive_reject"] = Rect2(buttons["revive_accept_life"].end.x + gap, by, bw, 34.0)
-		var points_enabled: bool = score >= cost
-		_draw_small_rect_button(buttons["revive_accept_points"], "PONTOS", Color(0.03, 0.18, 0.12, 0.92) if points_enabled else Color(0.09, 0.1, 0.11, 0.86), accent if points_enabled else Color(0.48, 0.52, 0.56))
-		_draw_small_rect_button(buttons["revive_accept_life"], "VIDA", Color(0.18, 0.08, 0.08, 0.92), Color(1.0, 0.34, 0.42))
-		_draw_small_rect_button(buttons["revive_reject"], "RECUSAR", Color(0.18, 0.04, 0.06, 0.92), Color(1.0, 0.2, 0.3))
-		return
-	if is_dead:
-		var title: = "VOCE FOI ELIMINADO"
-		var detail: = "ALIADO PODE PAGAR %d PONTOS OU DOAR VIDA" % cost
-		var enabled: bool = revive_request_cooldown <= 0.0 and not revive_request_outgoing
-		if revive_request_outgoing:
-			detail = "PEDIDO ENVIADO %.0fs" % ceil(max(0.0, revive_request_timer))
-		elif revive_request_cooldown > 0.0:
-			detail = "AGUARDE %.0fs PARA PEDIR" % ceil(revive_request_cooldown)
-		_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 34.0), _readable_text_size(15), accent)
-		_draw_centered(detail, Vector2(panel.get_center().x, panel.position.y + 68.0), _readable_text_size(13), Color(0.92, 0.96, 1.0))
-		var sacrifice_rect: = Rect2(panel.position.x + 30.0, panel.position.y + 88.0, panel.size.x - 60.0, 28.0)
-		_draw_wrapped_clamped("DOACAO DE VIDA REDUZ CURAS DO ALIADO POR 1 MINUTO", sacrifice_rect, _readable_text_size(10), Color(1.0, 0.58, 0.62), 1)
-		buttons["revive_request"] = Rect2(panel.get_center().x - 112.0, panel.end.y - 42.0, 224.0, 32.0)
-		_draw_small_rect_button(buttons["revive_request"], "PEDIR REVIVE", Color(0.03, 0.18, 0.12, 0.92) if enabled else Color(0.09, 0.1, 0.11, 0.86), accent if enabled else Color(0.48, 0.52, 0.56))
+	MenusPresentation._draw_revive_request(self, viewport)
 
 
 func _draw_shop_mp_waiting(viewport: Vector2) -> void:
@@ -52037,16 +40467,7 @@ func _draw_shop_mp_waiting(viewport: Vector2) -> void:
 
 
 func _draw_shop_mp_waiting_legacy(viewport: Vector2) -> void :
-	var panel_w: float = min(500.0, viewport.x * 0.84)
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - 92.0, panel_w, 184.0)
-	_draw_holo_background(viewport, null, Color(0.0, 0.0, 0.0, 0.58))
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.88)
-	_draw_glitch_title("AGUARDANDO EQUIPE", Vector2(panel.get_center().x, panel.position.y + 52.0), 24, Color(0.0, 1.0, 0.82))
-	var detail: = "VOCE JA TERMINOU SUAS COMPRAS"
-	if _affordable_card_count() <= 0:
-		detail = "SEM PONTOS PARA NOVAS CARTAS"
-	_draw_centered(detail, panel.get_center() + Vector2(0, 10), _readable_text_size(17), Color(1.0, 0.86, 0.26))
-	_draw_centered("PRONTOS %d/%d - A PARTIDA VOLTA COM TODA A EQUIPE" % [shop_mp_ready_count, shop_mp_expected_count], panel.get_center() + Vector2(0, 48), _readable_text_size(13), Color(0.9, 0.96, 1.0, 0.92))
+	MenusPresentation._draw_shop_mp_waiting_legacy(self, viewport)
 
 
 func _shop_mp_accept_rect(viewport: Vector2) -> Rect2:
@@ -52085,22 +40506,7 @@ func _handle_revive_overlay_press(pos: Vector2) -> bool:
 
 
 func _draw_boss_mp_request(viewport: Vector2) -> void :
-	var panel_w: float = min(460.0, viewport.x * 0.86)
-	var panel_h: = 122.0 if boss_mp_request_incoming else 78.0
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, 146.0, panel_w, panel_h)
-	var accent: = Color(1.0, 0.52, 0.16) if boss_mp_request_incoming else Color(1.0, 0.82, 0.24)
-	_draw_holo_panel(panel, accent, true, 0.86)
-	var remaining: = int(ceil(max(0.0, boss_mp_request_timer)))
-	var title: = "PARCEIRO QUER CHAMAR O BOSS" if boss_mp_request_incoming else "CHAMADO DO BOSS ENVIADO"
-	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
-	var status: = "aguardando confirmacao %ds" % remaining
-	if boss_mp_request_incoming:
-		status = "clique ou enter/espaco em %ds" % remaining
-	_draw_centered(status.to_upper(), Vector2(panel.get_center().x, panel.position.y + 56.0), _readable_text_size(12), Color(0.98, 0.94, 0.86))
-	buttons.erase("boss_mp_accept")
-	if boss_mp_request_incoming:
-		buttons["boss_mp_accept"] = Rect2(panel.get_center().x - 94.0, panel.end.y - 42.0, 188.0, 32.0)
-		_draw_small_rect_button(buttons["boss_mp_accept"], "ACEITAR  ENTER", Color(0.22, 0.09, 0.03, 0.92), Color(1.0, 0.52, 0.16))
+	WorldEnvironmentPresentation._draw_boss_mp_request(self, viewport)
 
 
 func _boss_mp_accept_rect(viewport: Vector2) -> Rect2:
@@ -52119,20 +40525,7 @@ func _handle_boss_mp_overlay_press(pos: Vector2, viewport: Vector2) -> bool:
 
 
 func _draw_phase_mp_request(viewport: Vector2) -> void :
-	var panel_w: float = minf(500.0, viewport.x * 0.88)
-	var panel_h: float = 126.0 if phase_mp_request_incoming else 84.0
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, 252.0, panel_w, panel_h)
-	var accent: = Color(0.0, 1.0, 0.82) if phase_mp_request_incoming else Color(1.0, 0.82, 0.24)
-	_draw_holo_panel(panel, accent, true, 0.86)
-	var remaining: int = int(ceil(maxf(0.0, phase_mp_request_timer)))
-	var action_label: String = "EXTRACAO" if phase_mp_action == "extract" else ("ROTA FARM" if phase_mp_action == "farm" else "FASE %d" % phase_mp_target)
-	var title: String = "EQUIPE QUER TRANSFERIR: %s" % action_label if phase_mp_request_incoming else "PEDIDO DE TRANSFERENCIA ENVIADO"
-	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), _readable_text_size(15), accent)
-	_draw_centered("CONFIRMACOES %d/%d - %ds" % [phase_mp_vote_count, phase_mp_expected_count, remaining], Vector2(panel.get_center().x, panel.position.y + 58.0), _readable_text_size(12), Color(0.98, 0.94, 0.86))
-	buttons.erase("phase_mp_accept")
-	if phase_mp_request_incoming:
-		buttons["phase_mp_accept"] = _phase_mp_accept_rect(viewport)
-		_draw_small_rect_button(buttons["phase_mp_accept"], "ACEITAR  ENTER", Color(0.03, 0.18, 0.14, 0.92), accent)
+	WorldEnvironmentPresentation._draw_phase_mp_request(self, viewport)
 
 
 func _phase_mp_accept_rect(viewport: Vector2) -> Rect2:
@@ -52154,52 +40547,15 @@ func _handle_phase_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZE
 
 
 func _shop_purchase_stage(progress: float) -> String:
-	if progress < 0.2:
-		return "CONFIRMANDO COMPRA"
-	if progress < 0.78:
-		return "TRANSFERINDO PARA O DECK"
-	return "DECK ATUALIZADO"
+	return shop_presentation.purchase_stage(progress)
 
 
 func _draw_shop_purchase_transfer_fx(origin: Vector2, target: Vector2, progress: float, accent: Color) -> void:
-	var burst_progress: float = clampf(progress / 0.22, 0.0, 1.0)
-	var burst_alpha: float = 1.0 - burst_progress
-	if burst_alpha > 0.0:
-		draw_circle(origin, lerpf(12.0, 46.0, burst_progress), Color(accent.r, accent.g, accent.b, 0.08 * burst_alpha))
-		draw_arc(origin, lerpf(16.0, 52.0, burst_progress), -PI * 0.5, TAU - PI * 0.5, 32, Color(accent.r, accent.g, accent.b, 0.78 * burst_alpha), 2.2)
-		for shard_index in range(8):
-			var shard_angle: float = float(shard_index) * TAU / 8.0 - PI * 0.5
-			var shard_from: Vector2 = origin + Vector2.from_angle(shard_angle) * lerpf(10.0, 26.0, burst_progress)
-			var shard_to: Vector2 = origin + Vector2.from_angle(shard_angle) * lerpf(24.0, 62.0, burst_progress)
-			draw_line(shard_from, shard_to, Color(1.0, 0.92, 0.42, 0.72 * burst_alpha), 1.8, true)
-
-	var transfer_progress: float = clampf((progress - 0.14) / 0.72, 0.0, 1.0)
-	if transfer_progress <= 0.0:
-		return
-	transfer_progress = smoothstep(0.0, 1.0, transfer_progress)
-	var previous: Vector2 = origin
-	for trail_index in range(1, 10):
-		var trail_t: float = float(trail_index) / 9.0 * transfer_progress
-		var point: Vector2 = origin.lerp(target, trail_t) + Vector2(0.0, -sin(trail_t * PI) * 74.0)
-		var trail_alpha: float = 0.52 * (1.0 - float(trail_index) / 12.0)
-		draw_line(previous, point, Color(accent.r, accent.g, accent.b, trail_alpha), 2.0, true)
-		previous = point
-	var target_pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.018)
-	draw_circle(target, 10.0 + target_pulse * 6.0, Color(accent.r, accent.g, accent.b, 0.12 + target_pulse * 0.1))
-	draw_arc(target, 18.0 + target_pulse * 5.0, -PI * 0.5, TAU - PI * 0.5, 32, Color(0.78, 1.0, 0.86, 0.76), 2.0)
-	_draw_centered("+1", target + Vector2(0.0, 34.0), 11, Color(0.76, 1.0, 0.84, 0.86))
+	shop_presentation.draw_purchase_transfer_fx(self, origin, target, progress, accent)
 
 
 func _draw_shop_spend_anim(center: Vector2) -> void:
-	if shop_spend_anim_timer <= 0.0 or shop_spend_anim_amount <= 0:
-		return
-	var progress: float = 1.0 - clampf(shop_spend_anim_timer / maxf(0.01, SHOP_SPEND_ANIM_TIME), 0.0, 1.0)
-	var alpha: float = 1.0 - smoothstep(0.62, 1.0, progress)
-	var pos: Vector2 = center + Vector2(0.0, -sin(progress * PI) * 18.0)
-	var rect := Rect2(pos - Vector2(64.0, 16.0), Vector2(128.0, 32.0))
-	draw_rect(rect, Color(0.16, 0.035, 0.02, 0.78 * alpha), true)
-	draw_rect(rect, Color(1.0, 0.42, 0.16, 0.86 * alpha), false, 2)
-	_draw_centered("-%d PTS" % shop_spend_anim_amount, rect.get_center() + Vector2(0.0, 5.0), _readable_text_size(14), Color(1.0, 0.58, 0.24, alpha))
+	shop_presentation.draw_spend_anim(self, center)
 
 
 func _draw_shop(viewport: Vector2) -> void:
@@ -52210,402 +40566,14 @@ func _draw_shop(viewport: Vector2) -> void:
 
 
 func _draw_shop_legacy(viewport: Vector2) -> void :
-	for key in buttons.keys():
-		if String(key).begins_with("shop_burn_") or String(key).begins_with("shop_reserve_"):
-			buttons.erase(key)
-
-	_draw_holo_background(viewport, textures["cards_back"], Color(0.0, 1.0, 0.82))
-
-	var portrait = _is_portrait(viewport)
-	var purchase_animating = _shop_purchase_animating()
-	var purchase_progress = 0.0
-	if purchase_animating:
-		purchase_progress = 1.0 - clamp(shop_purchase_anim_timer / SHOP_PURCHASE_ANIM_TIME, 0.0, 1.0)
-	var purchase_index = shop_select_pulse_index if purchase_animating else -1
-	if shop_cards.is_empty():
-		var empty_w: float = min(480.0, viewport.x * 0.86)
-		var empty_panel: = Rect2(viewport.x * 0.5 - empty_w * 0.5, viewport.y * 0.5 - 84.0, empty_w, 168.0)
-		_draw_holo_panel(empty_panel, Color(0.0, 1.0, 0.82), true, 0.8)
-		_draw_glitch_title("LOJA SINCRONIZADA", Vector2(empty_panel.get_center().x, empty_panel.position.y + 50.0), 24, Color(0.0, 1.0, 0.82))
-		var wait_text: = "AGUARDANDO PARCEIRO"
-		if not is_multiplayer:
-			wait_text = "SEM CARTAS DISPONIVEIS"
-		_draw_centered(wait_text, empty_panel.get_center() + Vector2(0, 22), _readable_text_size(17), Color(1.0, 0.88, 0.32))
-		return
-
-	if portrait:
-		var header = Rect2(viewport.x * 0.06, 24, viewport.x * 0.88, 124)
-		_draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-		_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 60), 30, Color(0.0, 1.0, 0.82))
-		var header_text = "Pontos %d  |  Custo %d  |  Rerolls %d" % [score, card_cost, shop_rerolls]
-		if shop_endurance_discount > 0.0:
-			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
-		if purchase_animating:
-			header_text = _shop_purchase_stage(purchase_progress)
-		_draw_centered(header_text, Vector2(viewport.x * 0.5, 96), _readable_text_size(16), Color(1.0, 0.85, 0.24))
-		_draw_shop_spend_anim(Vector2(viewport.x * 0.5, 132.0))
-		_draw_shop_tutorial_line(Rect2(header.position + Vector2(20.0, 90.0), Vector2(header.size.x - 40.0, 28.0)), true)
-		_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
-		_draw_shop_round_button(_shop_deck_center(viewport), _shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), _deck_total_cards() > 0 and not purchase_animating, "deck")
-
-		var w = viewport.x * 0.74
-		var h = min(242.0, viewport.y * 0.19)
-		for i in range(shop_cards.size()):
-			var card: Dictionary = shop_cards[i]
-			var rarity_color: = _card_rarity_color(card)
-			var cinzas_buffed: = bool(card.get("cinzas_return_buff", false))
-			var x = viewport.x * 0.5 - w * 0.5
-			var y = 188.0 + i * (h + 22.0)
-			var rect = Rect2(x, y, w, h)
-			var card_alpha = 1.0
-			var content_alpha: float = card_alpha
-			var icon_alpha: float = card_alpha
-			if purchase_animating:
-				card_alpha = 0.18 if i != purchase_index else 1.0
-			if i == shop_selected:
-				var select_pulse = 0.0
-				if shop_select_pulse_index == i and shop_select_pulse_timer > 0.0:
-					select_pulse = sin((1.0 - shop_select_pulse_timer / 0.26) * PI)
-				rect = rect.grow(12 + select_pulse * 12.0)
-			var purchase_origin: Vector2 = rect.get_center()
-			if purchase_animating and i == purchase_index:
-				_draw_shop_purchase_transfer_fx(purchase_origin, _shop_deck_center(viewport), purchase_progress, rarity_color)
-				var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
-				var flight_center: Vector2 = purchase_origin.lerp(_shop_deck_center(viewport), transfer_t)
-				var card_scale: float = lerpf(1.0, 0.46, transfer_t)
-				rect.size = rect.size * card_scale
-				rect.position = flight_center - rect.size * 0.5
-				var burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
-				rect = rect.grow(10.0 + burst * 16.0)
-				card_alpha = lerpf(1.0, 0.34, transfer_t)
-				content_alpha = card_alpha * (1.0 - clampf((transfer_t - 0.08) / 0.18, 0.0, 1.0))
-				icon_alpha = card_alpha * lerpf(1.0, 0.72, transfer_t)
-			var bg_color = Color(0.035, 0.045, 0.06)
-			bg_color = bg_color.lerp(card["color"], 0.14 if i == shop_selected else 0.05)
-			if cinzas_buffed:
-				bg_color = Color(0.03, 0.022, 0.018).lerp(card["color"], 0.05 if i == shop_selected else 0.02)
-			bg_color.a = 0.94 * card_alpha
-			if cinzas_buffed:
-				_draw_cinzas_burn_glow(rect, card_alpha, i == shop_selected)
-			else:
-				draw_rect(rect, bg_color, true)
-			var border_color = rarity_color if i == shop_selected else Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.58)
-			if not cinzas_buffed:
-				border_color.a = max(0.16, card_alpha)
-				draw_rect(rect, border_color, false, 5 if i == shop_selected else 2)
-			if purchase_animating and i == purchase_index:
-				var glow = (0.35 + sin(Time.get_ticks_msec() * 0.01) * 0.15) * (1.0 - purchase_progress * 0.35)
-				for g in range(1, 4):
-					var glow_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, glow / float(g))
-					draw_rect(rect.grow(g * 7.0), glow_color, false, 2)
-			var icon: Texture2D = _card_texture(card)
-			if icon:
-				var icon_rect = Rect2(rect.position + Vector2(18, 18), Vector2(94, rect.size.y - 36))
-				if not _draw_cinzas_shader_card(card, icon_rect, icon, icon_alpha, false):
-					_draw_texture_contain(icon, icon_rect, Color(1.0, 1.0, 1.0, icon_alpha))
-			_draw_centered(card["name"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 48), _readable_text_size(19), Color(1.0, 1.0, 1.0, content_alpha))
-			_draw_centered(_card_rarity_label(card), Vector2(rect.end.x - 52.0, rect.position.y + 24.0), _readable_text_size(10), Color(rarity_color.r, rarity_color.g, rarity_color.b, content_alpha))
-			var nick_color = Color(card["color"].r, card["color"].g, card["color"].b, content_alpha)
-			_draw_centered(card["nick"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 80), _readable_text_size(15), nick_color)
-			_draw_wrapped(card["desc"], Rect2(rect.position + Vector2(128, 102), Vector2(rect.size.x - 150, rect.size.y - 118)), _readable_text_size(12), Color(0.84, 0.89, 0.93, max(0.0, content_alpha)))
-			var price_rect = Rect2(rect.end.x - 118.0, rect.end.y - 44.0, 94.0, 28.0)
-			draw_rect(price_rect, Color(0.0, 0.0, 0.0, 0.52 * content_alpha), true)
-			draw_rect(price_rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.7 * content_alpha), false, 1)
-			var price_label: = "VAZIA" if _is_empty_shop_slot(card) else "%d pts" % _effective_card_price(card)
-			_draw_centered(price_label, price_rect.get_center() + Vector2(0, 4), _readable_text_size(11), Color(1.0, 0.9, 0.35, content_alpha))
-			if _can_toggle_shop_reserve(i):
-				var reserve_rect = Rect2(rect.position.x + 18.0, rect.end.y - 44.0, 96.0, 28.0)
-				buttons["shop_reserve_%d" % i] = reserve_rect
-				var reserve_color: = Color(0.04, 0.14, 0.2, 0.86 * content_alpha)
-				if _shop_slot_locked(i):
-					reserve_color = Color(0.12, 0.28, 0.08, 0.9 * content_alpha)
-				draw_rect(reserve_rect, reserve_color, true)
-				draw_rect(reserve_rect, Color(0.4, 0.94, 1.0, 0.82 * content_alpha), false, 1)
-				_draw_centered("SOLTAR" if _shop_slot_locked(i) else "TRAVAR", reserve_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color(1.0, 1.0, 1.0, content_alpha))
-			if _can_burn_shop_card(card):
-				var burn_rect = Rect2(rect.position.x + 18.0, rect.end.y - 78.0, 96.0, 28.0)
-				buttons["shop_burn_%d" % i] = burn_rect
-				draw_rect(burn_rect, Color(0.2, 0.08, 0.04, 0.88 * content_alpha), true)
-				draw_rect(burn_rect, Color(1.0, 0.58, 0.28, 0.82 * content_alpha), false, 1)
-				_draw_centered("QUEIMAR", burn_rect.get_center() + Vector2(0, 4), _readable_text_size(10), Color(1.0, 1.0, 1.0, content_alpha))
-			if i == shop_selected:
-				_draw_card_stat_chips(_card_stat_chips(String(card["name"])), rect.position + Vector2(128, rect.size.y - 76), rect.size.x - 150, Color(card["color"].r, card["color"].g, card["color"].b, content_alpha), _readable_text_size(11))
-				var conf_rect = Rect2(rect.position.x + 128, rect.position.y + rect.size.y - 45, rect.size.x - 140, 35)
-				draw_rect(conf_rect, Color(0.05, 0.35, 0.15, 0.9 * content_alpha), true)
-				draw_rect(conf_rect, Color(0.2, 1.0, 0.45, max(0.0, content_alpha)), false, 1)
-				var confirm_label = "VAZIA" if _is_empty_shop_slot(card) else ("CONFIRMADA" if purchase_animating and i == purchase_index else "SELECIONADA")
-				_draw_centered(confirm_label, Vector2(conf_rect.position.x + conf_rect.size.x * 0.5, conf_rect.position.y + 22), _readable_text_size(16), Color(1.0, 1.0, 1.0, content_alpha))
-
-		var btn_h = 44.0
-		var btn_w = viewport.x * 0.4
-		var btn_y = viewport.y - btn_h - 24
-
-
-		var btn_buy_rect = Rect2(viewport.x * 0.25 - btn_w * 0.5, btn_y, btn_w, btn_h)
-		var selected_empty_portrait: bool = shop_cards.size() > shop_selected and _is_empty_shop_slot(shop_cards[shop_selected])
-		var selected_price_portrait: int = _effective_card_price(shop_cards[shop_selected]) if shop_cards.size() > shop_selected and not selected_empty_portrait else card_cost
-		var buy_bg_portrait: Color = Color(0.03, 0.12, 0.05) if score >= selected_price_portrait and not selected_empty_portrait else Color(0.08, 0.08, 0.08)
-		var buy_border_portrait: Color = Color(0.2, 1.0, 0.45) if score >= selected_price_portrait and not selected_empty_portrait else Color(0.3, 0.3, 0.3)
-		if purchase_animating:
-			buy_bg_portrait = Color(0.08, 0.08, 0.08, 0.55)
-			buy_border_portrait = Color(0.36, 0.36, 0.36, 0.55)
-		var buy_label_portrait: String = "VAZIA" if selected_empty_portrait else ("CONFIRMANDO..." if purchase_animating else "COMPRAR %d" % selected_price_portrait)
-		_draw_small_rect_button(btn_buy_rect, buy_label_portrait, buy_bg_portrait, buy_border_portrait)
-
-
-		var btn_sair_rect = Rect2(viewport.x * 0.75 - btn_w * 0.5, btn_y, btn_w, btn_h)
-		var can_exit = _shop_can_exit()
-
-		if not can_exit:
-			_draw_small_rect_button(btn_sair_rect, "GASTE SEUS PONTOS", Color(0.15, 0.03, 0.05, 0.9), Color(0.5, 0.25, 0.28, 1.0))
-		elif shop_mp_ready_to_leave:
-			_draw_small_rect_button(btn_sair_rect, "AGUARDANDO PARCEIRO", Color(0.05, 0.15, 0.05, 0.9), Color(0.2, 1.0, 0.45, 1.0))
-		else:
-			_draw_small_rect_button(btn_sair_rect, "AGUARDE" if purchase_animating else "FECHAR LOJA", Color(0.12, 0.03, 0.05, 0.55 if purchase_animating else 1.0), Color(1.0, 0.25, 0.28, 0.55 if purchase_animating else 1.0))
-		return
-
-
-
-	var header = Rect2(viewport.x * 0.05, 16, viewport.x * 0.9, 98)
-	_draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
-	_draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 46), 26, Color(0.0, 1.0, 0.82))
-
-
-	var hud_text = "Pontos: %d  |  Custo: %d  |  Rerolls: %d" % [score, card_cost, shop_rerolls]
-	if shop_endurance_discount > 0.0:
-		hud_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
-	_draw_centered(hud_text, Vector2(viewport.x * 0.5, 73), _readable_text_size(16), Color(1.0, 0.85, 0.24))
-	_draw_shop_spend_anim(Vector2(viewport.x * 0.5, 116.0))
-	_draw_shop_tutorial_line(Rect2(header.position + Vector2(22.0, 74.0), Vector2(header.size.x - 44.0, 22.0)), false)
-	_draw_shop_round_button(_shop_reroll_center(viewport), _shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
-	_draw_shop_round_button(_shop_deck_center(viewport), _shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), _deck_total_cards() > 0 and not purchase_animating, "deck")
-	if purchase_animating and shop_cards.size() > purchase_index:
-		_draw_centered(_shop_purchase_stage(purchase_progress), Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[purchase_index]["color"])
-	elif shop_select_pulse_timer > 0.0 and shop_cards.size() > shop_selected:
-		_draw_centered("CARTA SELECIONADA", Vector2(viewport.x * 0.5, 124), _readable_text_size(14), shop_cards[shop_selected]["color"])
-
-
-	var w = 150.0
-	var h = 200.0
-	var y = 158.0
-
-
-	for i in range(shop_cards.size()):
-		var card: Dictionary = shop_cards[i]
-		var rarity_color: = _card_rarity_color(card)
-		var cinzas_buffed: = bool(card.get("cinzas_return_buff", false))
-
-
-		var is_sel = (i == shop_selected)
-		var scale = 1.15 if is_sel else 0.85
-		if is_sel and shop_select_pulse_index == i and shop_select_pulse_timer > 0.0:
-			scale += sin((1.0 - shop_select_pulse_timer / 0.26) * PI) * 0.1
-		var alpha = 1.0 if is_sel else 0.5
-		var content_alpha: float = alpha
-		var icon_alpha: float = alpha
-		if purchase_animating:
-			alpha = 0.18 if i != purchase_index else 1.0
-		if purchase_animating and i == purchase_index:
-			var burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
-			scale += burst * 0.18
-			var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
-			alpha = lerpf(1.0, 0.34, transfer_t)
-		var curr_w = w * scale
-		var curr_h = h * scale
-		var x = viewport.x * 0.5 + (i - 1) * 200 - curr_w * 0.5
-		var curr_y = y - 10 if is_sel else y + 15
-		var rect = Rect2(x, curr_y, curr_w, curr_h)
-		var purchase_origin: Vector2 = rect.get_center()
-		if purchase_animating and i == purchase_index:
-			_draw_shop_purchase_transfer_fx(purchase_origin, _shop_deck_center(viewport), purchase_progress, rarity_color)
-			var transfer_t: float = smoothstep(0.0, 1.0, clampf((purchase_progress - 0.14) / 0.72, 0.0, 1.0))
-			var flight_center: Vector2 = purchase_origin.lerp(_shop_deck_center(viewport), transfer_t)
-			var card_scale: float = lerpf(1.0, 0.46, transfer_t)
-			rect.size = rect.size * card_scale
-			rect.position = flight_center - rect.size * 0.5
-			var rect_burst: float = sin(clampf(purchase_progress / 0.28, 0.0, 1.0) * PI)
-			rect = rect.grow(10.0 + rect_burst * 16.0)
-			content_alpha = alpha * (1.0 - clampf((transfer_t - 0.08) / 0.18, 0.0, 1.0))
-			icon_alpha = alpha * lerpf(1.0, 0.72, transfer_t)
-
-
-		var bg_color = Color(0.04, 0.05, 0.07, 0.85 * alpha)
-		bg_color = bg_color.lerp(card["color"], 0.14 if is_sel else 0.05)
-		if cinzas_buffed:
-			bg_color = Color(0.028, 0.022, 0.018, 0.88 * alpha).lerp(card["color"], 0.045 if is_sel else 0.02)
-		if cinzas_buffed:
-			_draw_cinzas_burn_glow(rect, alpha, is_sel)
-		else:
-			draw_rect(rect, bg_color, true)
-
-
-		if is_sel and not cinzas_buffed:
-			var pulsar = (sin(Time.get_ticks_msec() * 0.005) + 1.0) * 0.5
-			for g in range(1, 5):
-				var glow_alpha = (1.0 - float(g) / 5.0) * (0.3 + pulsar * 0.15)
-				if purchase_animating and i == purchase_index:
-					glow_alpha += 0.16
-				var glow_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, glow_alpha)
-				draw_rect(rect.grow(g * 3), glow_color, false, 1)
-
-
-		var border_color = Color(rarity_color.r, rarity_color.g, rarity_color.b, alpha if is_sel else 0.55 * alpha)
-		if not cinzas_buffed:
-			draw_rect(rect, border_color, false, 4 if is_sel else 2)
-		if is_sel and not cinzas_buffed:
-			var scan_y = rect.position.y + 12.0 + fposmod(Time.get_ticks_msec() * 0.065, max(1.0, rect.size.y - 24.0))
-			draw_line(Vector2(rect.position.x + 10.0, scan_y), Vector2(rect.end.x - 10.0, scan_y), Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.72), 2.0)
-			var ribbon = Rect2(rect.position.x + 10.0, rect.position.y + 10.0, rect.size.x - 20.0, 25.0)
-			draw_rect(ribbon, Color(0.0, 0.0, 0.0, 0.68 * content_alpha), true)
-			draw_rect(ribbon, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.88 * content_alpha), false, 1)
-			_draw_centered("%s | PRE-SELECIONADA" % _card_rarity_label(card), ribbon.get_center() + Vector2(0, 5), _readable_text_size(9), Color(1.0, 1.0, 1.0, content_alpha))
-
-
-		var icon: Texture2D = _card_texture(card)
-		if icon:
-			var icon_rect = Rect2(rect.position + Vector2(6, 6), rect.size - Vector2(12, 12))
-			if not _draw_cinzas_shader_card(card, icon_rect, icon, icon_alpha, true):
-				_draw_texture_contain(icon, icon_rect, Color(1, 1, 1, icon_alpha))
-
-
-		if not cinzas_buffed:
-			var text_color = Color(1.0, 1.0, 1.0, content_alpha)
-			_draw_centered(card["nick"].to_upper(), Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y - 18), _readable_text_size(12 if is_sel else 10), text_color)
-
-		if is_sel and purchase_animating and i == purchase_index:
-			var overlay_rect = Rect2(rect.position.x, rect.position.y + rect.size.y * 0.5 - 18, rect.size.x, 36)
-			draw_rect(overlay_rect, Color(0.05, 0.35, 0.15, 0.95 * content_alpha), true)
-			draw_rect(overlay_rect, Color(0.2, 1.0, 0.45, 0.9 * content_alpha), false, 2)
-			_draw_centered("CONFIRMADA", Vector2(rect.position.x + rect.size.x * 0.5, rect.position.y + rect.size.y * 0.5 + 5), _readable_text_size(16), Color(1.0, 1.0, 1.0, content_alpha))
-
-
-	if shop_cards.size() > shop_selected and shop_selected >= 0:
-		var sel_card = shop_cards[shop_selected]
-		var sel_rarity_color: = _card_rarity_color(sel_card)
-		var panel_w = viewport.x * 0.9
-		var panel_h = 180.0
-		var panel_x = viewport.x * 0.05
-		var panel_y = viewport.y - panel_h - 96.0
-		var panel_rect = Rect2(panel_x, panel_y, panel_w, panel_h)
-
-
-		draw_rect(panel_rect, Color(0.03, 0.04, 0.06, 0.92), true)
-
-
-		var border_p_color = Color(sel_rarity_color.r, sel_rarity_color.g, sel_rarity_color.b, 0.8)
-		draw_rect(panel_rect, border_p_color, false, 2)
-
-
-		var sep_x = panel_x + panel_w * 0.5 + 30.0
-		draw_line(Vector2(sep_x, panel_y + 16), Vector2(sep_x, panel_y + panel_h - 16), Color(0.2, 0.2, 0.25, 0.6), 1)
-
-
-
-		var title_pos = Vector2(panel_x + 24, panel_y + 30)
-		draw_string(font, title_pos, sel_card["name"].to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(22), sel_card["color"])
-
-
-		var nick_pos = Vector2(panel_x + 24, panel_y + 60)
-		draw_string(font, nick_pos, "\"" + sel_card["nick"].to_upper() + "\"", HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(15), Color(1, 1, 1, 0.9))
-
-
-		var desc_rect = Rect2(panel_x + 24, panel_y + 82, (sep_x - panel_x) - 48, panel_h - 94)
-		_draw_wrapped(sel_card["desc"], desc_rect, _readable_text_size(13), Color(0.88, 0.92, 0.96))
-
-
-		var cat_name = _card_category(sel_card["name"])
-
-
-		var cat_pos = Vector2(sep_x + 24, panel_y + 30)
-		draw_string(font, cat_pos, "%s | %s" % [_card_rarity_label(sel_card), cat_name], HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(14), sel_rarity_color)
-
-
-		_draw_card_stat_chips(_card_stat_chips(String(sel_card["name"])), Vector2(sep_x + 24, panel_y + 56), (panel_x + panel_w - sep_x) - 48, Color(sel_card["color"]), _readable_text_size(13))
-
-		var projection_lines: = _card_projection_lines(sel_card)
-		_draw_wrapped("\n".join(projection_lines), Rect2(sep_x + 24, panel_y + 98, (panel_x + panel_w - sep_x) - 196, 54), _readable_text_size(11), Color(0.84, 0.92, 0.96))
-
-
-		var owned_count = _card_count(sel_card)
-		var owned_text = "POSSUIDO NO DECK: %d" % owned_count
-		var owned_pos = Vector2(sep_x + 24, panel_y + panel_h - 18)
-		draw_string(font, owned_pos, owned_text, HORIZONTAL_ALIGNMENT_LEFT, -1, _readable_text_size(13), sel_card["color"])
-		if _can_toggle_shop_reserve(shop_selected):
-			var reserve_rect = Rect2(panel_x + panel_w - 164.0, panel_y + panel_h - 44.0, 138.0, 30.0)
-			buttons["shop_reserve_%d" % shop_selected] = reserve_rect
-			var reserve_bg: = Color(0.04, 0.14, 0.2, 0.92)
-			if _shop_slot_locked(shop_selected):
-				reserve_bg = Color(0.12, 0.28, 0.08, 0.94)
-			draw_rect(reserve_rect, reserve_bg, true)
-			draw_rect(reserve_rect, Color(0.4, 0.94, 1.0, 0.92), false, 1)
-			_draw_centered("DESTRAVAR" if _shop_slot_locked(shop_selected) else "TRAVAR", reserve_rect.get_center() + Vector2(0, 5), _readable_text_size(12), Color.WHITE)
-		if _can_burn_shop_card(sel_card):
-			var burn_rect = Rect2(panel_x + panel_w - 164.0, panel_y + panel_h - 80.0, 138.0, 30.0)
-			buttons["shop_burn_%d" % shop_selected] = burn_rect
-			draw_rect(burn_rect, Color(0.2, 0.08, 0.04, 0.92), true)
-			draw_rect(burn_rect, Color(1.0, 0.58, 0.28, 0.92), false, 1)
-			_draw_centered("QUEIMAR", burn_rect.get_center() + Vector2(0, 5), _readable_text_size(12), Color.WHITE)
-
-
-	var btn_w = 220.0
-	var btn_h = 42.0
-	var btn_y = viewport.y - btn_h - 24.0
-
-
-	var btn_buy_rect = Rect2(viewport.x * 0.38 - btn_w * 0.5, btn_y, btn_w, btn_h)
-	var selected_empty: bool = shop_cards.size() > shop_selected and _is_empty_shop_slot(shop_cards[shop_selected])
-	var selected_price: int = _effective_card_price(shop_cards[shop_selected]) if shop_cards.size() > shop_selected and not selected_empty else card_cost
-	var buy_enabled: bool = score >= selected_price and not purchase_animating and not selected_empty
-	var buy_bg: Color = Color(0.03, 0.16, 0.08, 0.9) if buy_enabled else Color(0.08, 0.08, 0.08, 0.6)
-	var buy_border: Color = Color(0.2, 1.0, 0.45) if buy_enabled else Color(0.3, 0.3, 0.3)
-	var buy_text_color: Color = Color(1.0, 1.0, 1.0) if buy_enabled else Color(0.5, 0.5, 0.5)
-	draw_rect(btn_buy_rect, buy_bg, true)
-	draw_rect(btn_buy_rect, buy_border, false, 2)
-	var buy_label: String = "VAZIA" if selected_empty else ("CONFIRMANDO..." if purchase_animating else "COMPRAR (%d pts)" % selected_price)
-	_draw_centered(buy_label, btn_buy_rect.get_center() + Vector2(0, 7), 15, buy_text_color)
-
-
-	var btn_sair_rect = Rect2(viewport.x * 0.62 - btn_w * 0.5, btn_y, btn_w, btn_h)
-	var can_exit = _shop_can_exit()
-
-	if not can_exit:
-		draw_rect(btn_sair_rect, Color(0.15, 0.03, 0.05, 0.9), true)
-		draw_rect(btn_sair_rect, Color(0.5, 0.25, 0.28, 1.0), false, 2)
-		_draw_centered("GASTE SEUS PONTOS", btn_sair_rect.get_center() + Vector2(0, 7), 15, Color(1.0, 0.5, 0.5, 1.0))
-	elif shop_mp_ready_to_leave:
-		draw_rect(btn_sair_rect, Color(0.05, 0.15, 0.05, 0.9), true)
-		draw_rect(btn_sair_rect, Color(0.2, 1.0, 0.45, 1.0), false, 2)
-		_draw_centered("AGUARDANDO PARCEIRO", btn_sair_rect.get_center() + Vector2(0, 7), 13, Color(0.5, 1.0, 0.7, 1.0))
-	else:
-		draw_rect(btn_sair_rect, Color(0.15, 0.03, 0.05, 0.5 if purchase_animating else 0.9), true)
-		draw_rect(btn_sair_rect, Color(1.0, 0.25, 0.28, 0.55 if purchase_animating else 1.0), false, 2)
-		_draw_centered("AGUARDE" if purchase_animating else "FECHAR LOJA", btn_sair_rect.get_center() + Vector2(0, 7), 15, Color(1.0, 1.0, 1.0, 0.75 if purchase_animating else 1.0))
-
-
+	shop_presentation.draw_legacy(self, viewport)
 
 func _draw_manual_shop_reopen_warning(viewport: Vector2) -> void:
-	var portrait: = _is_portrait(viewport)
-	var w: float = minf(viewport.x * (0.84 if portrait else 0.52), 680.0)
-	var h: float = 76.0 if not portrait else 88.0
-	var rect: = Rect2(viewport.x * 0.5 - w * 0.5, viewport.y * (0.17 if not portrait else 0.14), w, h)
-	var pulse: = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
-	_draw_holo_panel(rect, Color(1.0, 0.62, 0.16), true, 0.82)
-	draw_rect(rect.grow(-7.0), Color(0.05, 0.016, 0.006, 0.54 + pulse * 0.12), true)
-	_draw_centered("AVISO DA LOJA", Vector2(rect.get_center().x, rect.position.y + 27.0), 17 if not portrait else 15, Color(1.0, 0.78, 0.26))
-	_draw_wrapped_clamped(shop_manual_reopen_warning_text, Rect2(rect.position.x + 22.0, rect.position.y + 42.0, rect.size.x - 44.0, rect.size.y - 48.0), 13 if not portrait else 11, Color(0.96, 0.98, 1.0, 0.95), 2)
+	shop_presentation.draw_manual_reopen_warning(self, viewport)
 
 
 func _draw_shop_tutorial_line(rect: Rect2, portrait: bool) -> void:
-	draw_rect(rect, Color(0.0, 0.0, 0.0, 0.22), true)
-	draw_line(Vector2(rect.position.x + 8.0, rect.end.y), Vector2(rect.end.x - 8.0, rect.end.y), Color(0.0, 1.0, 0.82, 0.34), 1.0)
-	var gap: float = 14.0 if not portrait else 8.0
-	var inner: Rect2 = rect.grow(-4.0)
-	var half_w: float = (inner.size.x - gap) * 0.5
-	var left: Rect2 = Rect2(inner.position, Vector2(half_w, inner.size.y))
-	var right: Rect2 = Rect2(Vector2(inner.position.x + half_w + gap, inner.position.y), Vector2(half_w, inner.size.y))
-	var text_size: int = 13 if not portrait else 11
-	_draw_wrapped_clamped("REROLL: troca ofertas.", left, text_size, Color(0.78, 0.94, 1.0, 0.94), 1)
-	_draw_wrapped_clamped("COMPRAR: entra no deck; custo sobe.", right, text_size, Color(0.98, 0.88, 0.28, 0.94), 1)
+	shop_presentation.draw_tutorial_line(self, rect, portrait)
 
 
 func _prepare_cinzas_burn_shader_nodes(count: int) -> void :
@@ -52811,24 +40779,7 @@ func _configure_cinzas_ember_nodes(holder: Control, card: Dictionary, size: Vect
 
 
 func _draw_cinzas_shader_card(card: Dictionary, rect: Rect2, texture: Texture2D, alpha: float = 1.0, _show_title: bool = true) -> bool:
-	if texture == null or _is_empty_shop_slot(card) or not bool(card.get("cinzas_return_buff", false)):
-		return false
-	if alpha <= 0.01 or rect.size.x <= 4.0 or rect.size.y <= 4.0:
-		return false
-	var holder: = _ensure_cinzas_burn_shader_node(cinzas_burn_texture_index)
-	cinzas_burn_texture_index += 1
-	holder.visible = true
-	holder.position = rect.position
-	holder.size = rect.size
-	holder.modulate = Color(1.0, 1.0, 1.0, alpha)
-
-	var texture_rect: = holder.get_node("Texture") as TextureRect
-	texture_rect.position = Vector2.ZERO
-	texture_rect.size = rect.size
-	texture_rect.texture = texture
-	texture_rect.material = _pixel_card_burn_material(card, rect)
-	_configure_cinzas_ember_nodes(holder, card, rect.size, alpha)
-	return true
+	return MenusPresentation._draw_cinzas_shader_card(self, card, rect, texture, alpha, _show_title)
 
 
 func _move_pause_selection(direction: int) -> void:
@@ -52859,48 +40810,7 @@ func _draw_pause(viewport: Vector2) -> void :
 
 
 func _draw_pause_deck(viewport: Vector2) -> void :
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.66), true)
-	var portrait = _is_portrait(viewport)
-	var panel = Rect2(viewport.x * 0.08 if not portrait else viewport.x * 0.05, viewport.y * 0.08, viewport.x * 0.84 if not portrait else viewport.x * 0.9, viewport.y * 0.8)
-	_draw_holo_panel(panel, Color(0.44, 0.84, 1.0), true, 0.84)
-	var view_counts: = _deck_view_counts()
-	var view_name: = _deck_view_name()
-	_draw_glitch_title("DECK DE %s" % view_name.to_upper(), Vector2(viewport.x * 0.5, panel.position.y + 44), 30 if not portrait else 26, Color(0.44, 0.84, 1.0))
-	_draw_centered("TOTAL DE CARTAS: %d" % _deck_total_cards_from_counts(view_counts), Vector2(viewport.x * 0.5, panel.position.y + 84), 18, Color.WHITE)
-
-	var owned = _owned_deck_cards_from_counts(view_counts)
-	if owned.is_empty():
-		_draw_centered("Nenhuma carta comprada nesta run.", panel.get_center(), 18, Color(0.72, 0.88, 0.94))
-	else:
-		_clamp_deck_selection(owned.size())
-		var center = Vector2(viewport.x * 0.5, panel.position.y + (245.0 if not portrait else 260.0))
-		var spacing = _deck_carousel_spacing(viewport)
-		var card_w = 154.0 if not portrait else min(160.0, viewport.x * 0.34)
-		var card_h = 214.0 if not portrait else 224.0
-		for i in range(owned.size()):
-			var diff = _carousel_diff(float(i), deck_scroll_pos, owned.size())
-			if abs(diff) > 2.15:
-				continue
-			var selected = abs(diff) < 0.45
-			var scale = clamp(1.0 - abs(diff) * 0.16, 0.66, 1.0)
-			var rect = Rect2(center.x + diff * spacing - card_w * scale * 0.5, center.y - card_h * scale * 0.5 + abs(diff) * 18.0, card_w * scale, card_h * scale)
-			var alpha = clamp(1.0 - abs(diff) * 0.26, 0.36, 1.0)
-			_draw_card_surface(owned[i]["card"], rect, selected, alpha, int(owned[i]["count"]))
-
-		var selected_entry: Dictionary = owned[deck_selected]
-		var detail = Rect2(panel.position.x + 26.0, panel.end.y - 190.0, panel.size.x - 52.0, 126.0)
-		_draw_card_detail_panel(selected_entry["card"], detail, int(selected_entry["count"]), true)
-
-	var back_rect = Rect2(panel.get_center().x - 112.0, panel.end.y - 50.0, 224.0, 36.0)
-	buttons["pause_deck_back"] = back_rect
-	_draw_small_rect_button(back_rect, "VOLTAR", Color(0.03, 0.1, 0.14, 0.9), Color(0.44, 0.84, 1.0))
-	buttons.erase("pause_deck_prev_player")
-	buttons.erase("pause_deck_next_player")
-	if is_multiplayer and not net_decks_by_peer.is_empty():
-		buttons["pause_deck_prev_player"] = Rect2(panel.position.x + 24.0, panel.position.y + 28.0, 42.0, 34.0)
-		buttons["pause_deck_next_player"] = Rect2(panel.end.x - 66.0, panel.position.y + 28.0, 42.0, 34.0)
-		_draw_small_rect_button(buttons["pause_deck_prev_player"], "<", Color(0.03, 0.1, 0.14, 0.9), Color(0.44, 0.84, 1.0))
-		_draw_small_rect_button(buttons["pause_deck_next_player"], ">", Color(0.03, 0.1, 0.14, 0.9), Color(0.44, 0.84, 1.0))
+	MENU_PRESENTATION.draw_pause_deck(self, viewport)
 
 
 func _deck_total_cards() -> int:
@@ -53017,305 +40927,43 @@ func _carousel_diff(index: float, scroll: float, count: int) -> float:
 
 
 func _card_stat_chips(card_name: String) -> Array:
-	match card_name:
-		"Speed Boost":
-			return ["+6.5% VEL"]
-		"Porcao":
-			return ["+45% CURA", "+HP MAX"]
-		"Disparo crescente":
-			return ["+15% DANO"]
-		"Tempestade":
-			return ["+5 DANO", "+2% CRIT"]
-		"Trembo":
-			return ["+1 REVIVER"]
-		"Roubo de Vida":
-			return ["+0.1% ROUBO"]
-		"Speed Atack":
-			return ["-0.026s ATK"]
-		"Teleporte":
-			return ["-0.30s TP"]
-		"Petro":
-			return ["+PETRO", "+2 DANO"]
-		"Defesa":
-			return ["+3.5 DEF"]
-		"Sorte":
-			return ["+0.3% SORTE"]
-		"Poison":
-			return ["+0.9% VENENO"]
-		"Coletora":
-			return ["+0.8% EXEC"]
-		"Mercenaria":
-			return ["+40 CONTRATO"]
-		"Devorador de Destinos":
-			return ["20s MARCA", "RAIZ/LOG"]
-		"Escolha Adiada":
-			return ["RESERVA 1"]
-		"TrÃ©gua Regenerativa":
-			return ["6s SEM DANO", "+REGEN"]
-		"Cinzas da Escolha":
-			return ["QUEIMAR", "+PESO FUTURO"]
-		"Reserva de Pulso":
-			return ["OVERHEAL", "<35% LIBERA"]
-		"Casulo Reativo":
-			return ["3 HITS/2.2s", "-DANO"]
-		"Passagem IntangÃ­vel":
-			return ["POS-TP", "SEM CONTATO"]
-		"Ã‚ncora Vital":
-			return ["POS-DANO", "CURA EM AREA"]
-		"Inercia Cronal":
-			return ["-8% CONTROLE", "-18% EMPURRO"]
-		"Leitura do Instante":
-			return ["+7% AVISO"]
-		"Margem Segura":
-			return ["+35px SPAWN"]
-		"Moeda Estavel":
-			return ["-6 CUSTO+"]
-		"Orbita Coletora":
-			return ["+22% COLETA"]
-		"Pacto das Possibilidades":
-			return ["-4% COMUM"]
-		"Solo Consolidado":
-			return ["-8% ZONA"]
-		"Fratura Cronal":
-			return ["7s ARMAR", "+4/12% FRAG"]
-		"Pulso Desestabilizador":
-			return ["8s ARMAR", "40/100% DANO"]
-		"Pressao de Cerco":
-			return ["+5/15% CERCO"]
-		"Choque de Fontes":
-			return ["2 FONTES", "4s/ALVO"]
-		"Ferrolho de Ruptura":
-			return ["10s ARMAR", "ROOT/SLOW"]
-		"Limiar de Colapso":
-			return ["70/40/15%", "SEM LOOP"]
-		"Desvio de Probabilidade":
-			return ["QUASE HIT", "+CARGA"]
-		"Ponto Cego":
-			return ["CONE TRAS", "+DANO"]
-		"Mandamento da Ruptura":
-			return ["3 Q/E", "+RUPTURA"]
-		"Carta Zero":
-			return ["+6% COMUNS", "RETROATIVA"]
-		"Necrocronismo":
-			return ["12 ABATES", "COPIA CURTA"]
-		"CoraÃ§Ã£o de AntimatÃ©ria":
-			return ["CARGA DANO", "IMPLOSAO"]
-		"Cofre do Excesso":
-			return ["OVERKILL", "ELITE/BOSS"]
-		"Intervalo Fraturado":
-			return ["-HAB1 CD", "-ULT CD"]
-		"Nucleo Revigorante":
-			return ["+ORBE CURA"]
-		"Limiar de Ruina":
-			return [">90% VIDA", "+DANO"]
-		"Estase Reparadora":
-			return ["5s PARADO", "+VIDA PERDIDA"]
-		"Egide Hemofaga":
-			return ["OVERHEAL", "+ESCUDO"]
-	return ["MELHORIA"]
+	return shop_presentation.card_stat_chips(card_name)
 
 
 func _draw_card_surface(card: Dictionary, rect: Rect2, selected: bool, alpha: = 1.0, count: = 0) -> void :
-	var color: Color = card["color"]
-	var rarity_color: = _card_rarity_color(card)
-	var pulse = 0.5 + sin(Time.get_ticks_msec() * 0.007) * 0.5
-	var bg = Color(0.025, 0.03, 0.046, 0.92 * alpha).lerp(color, 0.12 if selected else 0.05)
-	draw_rect(rect, bg, true)
-	if selected:
-		for g in range(1, 5):
-			draw_rect(rect.grow(g * (3.0 + pulse * 1.8)), Color(rarity_color.r, rarity_color.g, rarity_color.b, (0.22 + pulse * 0.1) / float(g)), false, 2)
-	draw_rect(rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, (0.96 if selected else 0.58) * alpha), false, 4 if selected else 2)
-	var icon: Texture2D = _card_texture(card)
-	if icon:
-		_draw_texture_contain(icon, rect.grow(-8.0), Color(1.0, 1.0, 1.0, alpha))
-	var rarity_badge = Rect2(rect.position + Vector2(8.0, 8.0), Vector2(56.0, 24.0))
-	draw_rect(rarity_badge, Color(0.0, 0.0, 0.0, 0.74 * alpha), true)
-	draw_rect(rarity_badge, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.92 * alpha), false, 1)
-	_draw_centered(_card_rarity_label(card), rarity_badge.get_center() + Vector2(0, 4), 10, rarity_color)
-	draw_rect(Rect2(rect.position.x, rect.end.y - 44.0, rect.size.x, 44.0), Color(0.0, 0.0, 0.0, 0.58 * alpha), true)
-	_draw_centered(String(card["nick"]).to_upper(), Vector2(rect.get_center().x, rect.end.y - 18.0), 11 if not selected else 13, Color(1.0, 1.0, 1.0, alpha))
-	if count > 0:
-		var badge = Rect2(rect.end.x - 44.0, rect.position.y + 8.0, 34.0, 28.0)
-		draw_rect(badge, Color(0.0, 0.0, 0.0, 0.76 * alpha), true)
-		draw_rect(badge, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.92 * alpha), false, 2)
-		_draw_centered("x%d" % count, badge.get_center() + Vector2(0, 5), 14, Color.WHITE)
+	MenusPresentation._draw_card_surface(self, card, rect, selected, alpha, count)
 
 
 func _draw_card_stat_chips(chips: Array, origin: Vector2, max_width: float, accent: Color, size: = 13) -> float:
-	var x = origin.x
-	var y = origin.y
-	var chip_h = max(22.0, float(size) + 10.0)
-	for chip in chips:
-		var text = String(chip)
-		var chip_w = clamp(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 22.0, 58.0, max_width)
-		if x + chip_w > origin.x + max_width:
-			x = origin.x
-			y += chip_h + 6.0
-		var rect = Rect2(x, y, chip_w, chip_h)
-		draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.18), true)
-		draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.82), false, 1)
-		_draw_centered(text, rect.get_center() + Vector2(0, float(size) * 0.16), size, Color.WHITE)
-		x += chip_w + 8.0
-	return y + chip_h + 2.0 - origin.y
+	return shop_presentation.draw_card_stat_chips(self, chips, origin, max_width, accent, size)
 
 
 func _draw_card_detail_panel(card: Dictionary, rect: Rect2, owned_count: = 0, compact: = false) -> void :
-	var color: Color = card["color"]
-	var rarity_color: = _card_rarity_color(card)
-	draw_rect(rect, Color(0.02, 0.025, 0.04, 0.92), true)
-	draw_rect(rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.78), false, 2)
-	draw_string(font, rect.position + Vector2(18, 26), String(card["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 18 if compact else 22, color)
-	var count_text = "x%d NO DECK" % owned_count if owned_count > 0 else "AINDA NAO POSSUI"
-	draw_string(font, rect.position + Vector2(18, 48), "%s | %s" % [_card_rarity_label(card), count_text], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, rarity_color)
-	_draw_card_stat_chips(_card_stat_chips(String(card["name"])), rect.position + Vector2(rect.size.x * 0.42, 17.0), rect.size.x * 0.54, color, 12)
-	var desc_y = 60.0 if compact else 72.0
-	var desc_rect = Rect2(rect.position + Vector2(18, desc_y), Vector2(rect.size.x - 36, max(24.0, rect.size.y - desc_y - 10.0)))
-	var detail_lines: = [String(card["desc"])]
-	for line in _card_projection_lines(card):
-		detail_lines.append(String(line))
-	_draw_wrapped("\n".join(detail_lines), desc_rect, 11 if compact else 13, Color(0.84, 0.88, 0.92))
+	MenusPresentation._draw_card_detail_panel(self, card, rect, owned_count, compact)
 
 
 func _shop_round_button_radius(viewport: Vector2) -> float:
-	return 32.0 if not _is_portrait(viewport) else 28.0
+	return shop_presentation.round_button_radius(self, viewport)
 
 
 func _shop_reroll_center(viewport: Vector2) -> Vector2:
-	if not _is_portrait(viewport):
-		return shop_controller.layout(viewport).reroll.get_center()
-	return Vector2(viewport.x * (0.09 if not _is_portrait(viewport) else 0.13), 58.0 if not _is_portrait(viewport) else 76.0)
+	return shop_presentation.reroll_center(self, viewport)
 
 
 func _shop_deck_center(viewport: Vector2) -> Vector2:
-	if not _is_portrait(viewport):
-		return shop_controller.layout(viewport).deck.get_center()
-	return Vector2(viewport.x * (0.91 if not _is_portrait(viewport) else 0.87), 58.0 if not _is_portrait(viewport) else 76.0)
+	return shop_presentation.deck_center(self, viewport)
 
 
 func _draw_shop_round_button(center: Vector2, radius: float, label: String, accent: Color, enabled: bool, kind: String) -> void :
-	var alpha = 1.0 if enabled else 0.42
-	draw_circle(center, radius + 7.0, Color(accent.r, accent.g, accent.b, 0.1 * alpha))
-	draw_circle(center, radius, Color(0.015, 0.025, 0.04, 0.92 * alpha))
-	draw_arc(center, radius, 0, TAU, 48, Color(accent.r, accent.g, accent.b, 0.92 * alpha), 2.4)
-	if kind == "reroll":
-		var rot = time_alive * 3.2
-		for i in range(2):
-			var start = rot + i * PI
-			draw_arc(center, radius * 0.48, start, start + PI * 0.74, 24, Color.WHITE, 2.8)
-			var tip = center + Vector2.from_angle(start + PI * 0.74) * radius * 0.48
-			var side = Vector2.from_angle(start + PI * 0.74 + PI * 0.68)
-			var tri = PackedVector2Array([tip, tip - Vector2.from_angle(start + PI * 0.74) * 8.0 + side * 4.0, tip - Vector2.from_angle(start + PI * 0.74) * 8.0 - side * 4.0])
-			draw_polygon(tri, PackedColorArray([Color.WHITE]))
-		_draw_centered(str(shop_rerolls), center + Vector2(0, 5), 13, accent if enabled else Color(0.6, 0.6, 0.6))
-	else:
-		var w = radius * 0.72
-		var h = radius * 0.92
-		for offset in [-7.0, 0.0, 7.0]:
-			var rect = Rect2(center.x - w * 0.5 + offset, center.y - h * 0.5 - abs(offset) * 0.25, w, h)
-			draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.16 * alpha), true)
-			draw_rect(rect, Color.WHITE, false, 1)
-	_draw_centered(label, center + Vector2(0, radius + 18.0), 10, Color(0.82, 0.92, 0.96, alpha))
+	shop_presentation.draw_round_button(self, center, radius, label, accent, enabled, kind)
 
 
 func _draw_end_overlay(viewport: Vector2, title: String, color: Color) -> void :
-	if title == "GAME OVER":
-		_draw_game_over_overlay(viewport)
-		return
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.64), true)
-	var portrait = _is_portrait(viewport)
-	var panel = Rect2(viewport.x * 0.18 if not portrait else viewport.x * 0.08, viewport.y * 0.22, viewport.x * 0.64 if not portrait else viewport.x * 0.84, viewport.y * 0.56)
-	_draw_holo_panel(panel, color, true, 0.82)
-	_draw_glitch_title(title, Vector2(viewport.x * 0.5, panel.position.y + 64.0), 36 if not portrait else 42, color)
-	var summary = Rect2(panel.position.x + 24.0, panel.position.y + 104.0, panel.size.x - 48.0, panel.size.y - 196.0)
-	_draw_run_summary(summary, color, false)
-	if run_report_status != "":
-		_draw_centered(run_report_status.to_upper(), Vector2(viewport.x * 0.5, panel.end.y - 92.0), 12, Color(0.74, 0.92, 1.0, 0.82))
-	var btn_w = 260.0 if not portrait else 340.0
-	var btn_h = 52.0 if not portrait else 68.0
-	var gap = 14.0
-	var ranking_rect: Rect2
-	var menu_rect: Rect2
-	if portrait:
-		ranking_rect = Rect2(viewport.x * 0.5 - btn_w * 0.5, panel.end.y - btn_h * 2.0 - gap - 20.0, btn_w, btn_h)
-		menu_rect = Rect2(viewport.x * 0.5 - btn_w * 0.5, panel.end.y - btn_h - 20.0, btn_w, btn_h)
-	else:
-		var total_w = btn_w * 2.0 + gap
-		ranking_rect = Rect2(viewport.x * 0.5 - total_w * 0.5, panel.end.y - btn_h - 24.0, btn_w, btn_h)
-		menu_rect = Rect2(ranking_rect.end.x + gap, ranking_rect.position.y, btn_w, btn_h)
-	_draw_big_button(ranking_rect, "RANKING", Color(0.1, 0.04, 0.16, 0.92), Color(1.0, 0.28, 0.78))
-	_draw_big_button(menu_rect, "MENU", Color(0.04, 0.13, 0.17, 0.92), Color(0.0, 1.0, 0.82))
-	buttons["end_ranking"] = ranking_rect
-	buttons["end_menu"] = menu_rect
+	MenusPresentation._draw_end_overlay(self, viewport, title, color)
 
 
 func _draw_specter_upgrade(viewport: Vector2) -> void:
-	buttons.erase("specter_upgrade_prev")
-	buttons.erase("specter_upgrade_next")
-	buttons.erase("specter_upgrade_confirm")
-	buttons.erase("specter_upgrade_continue")
-	var portrait: = _is_portrait(viewport)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.68), true)
-	var panel_w: = viewport.x * (0.82 if not portrait else 0.9)
-	var panel_h: = viewport.y * (0.68 if not portrait else 0.76)
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.5, panel_w, panel_h)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.86)
-	_draw_glitch_title("UPGRADE DE ESPECTRO", Vector2(panel.get_center().x, panel.position.y + 44.0), 30 if not portrait else 24, Color(0.0, 1.0, 0.82))
-	_draw_centered("Nucleos instaveis coletados nas runs: %d" % spectral_coins, Vector2(panel.get_center().x, panel.position.y + 78.0), 15 if not portrait else 12, Color(0.76, 0.94, 1.0, 0.92))
-
-	var key: = _current_specter_key()
-	var name: = _current_specter_name()
-	var level: = _specter_level(key)
-	var unlocked: = _spectrum_unlocked(specter_upgrade_selected_index)
-	var maxed: = level >= AuraSystem.RUN_MAX_LEVEL
-	var cost: = _specter_upgrade_cost_for_key(key)
-	var accent: = Color(0.0, 1.0, 0.82) if unlocked else Color(1.0, 0.22, 0.42)
-	var body_top: = panel.position.y + 108.0
-	var icon_box: = Rect2(panel.position.x + panel.size.x * 0.08, body_top + 18.0, panel.size.x * 0.26, panel.size.y * 0.42)
-	draw_rect(icon_box, Color(0.015, 0.026, 0.04, 0.88), true)
-	draw_rect(icon_box, Color(accent.r, accent.g, accent.b, 0.8), false, 2)
-	if textures.has("aura_" + key) and textures["aura_" + key] != null:
-		_draw_texture_contain(textures["aura_" + key], icon_box.grow(-22.0), Color(1.0, 1.0, 1.0, 0.98 if unlocked else 0.28))
-	else:
-		draw_circle(icon_box.get_center(), min(icon_box.size.x, icon_box.size.y) * 0.24, Color(accent.r, accent.g, accent.b, 0.38))
-	_draw_centered(name.to_upper() if unlocked else "???", Vector2(icon_box.get_center().x, icon_box.end.y + 28.0), 22 if not portrait else 17, accent)
-	_draw_centered("NIVEL %d/%d" % [level, AuraSystem.RUN_MAX_LEVEL], Vector2(icon_box.get_center().x, icon_box.end.y + 56.0), 15, Color.WHITE)
-
-	var info: = Rect2(panel.position.x + panel.size.x * 0.39, body_top + 18.0, panel.size.x * 0.53, panel.size.y * 0.43)
-	draw_rect(info, Color(0.01, 0.016, 0.028, 0.82), true)
-	draw_rect(info, Color(accent.r, accent.g, accent.b, 0.64), false, 2)
-	var headline: = "PROXIMO NIVEL" if unlocked and not maxed else ("NIVEL MAXIMO" if maxed else "ESPECTRO BLOQUEADO")
-	_draw_centered(headline, Vector2(info.get_center().x, info.position.y + 30.0), 18, accent)
-	var text_rect: = Rect2(info.position + Vector2(24.0, 58.0), info.size - Vector2(48.0, 118.0))
-	var lines: Array = []
-	if not unlocked:
-		var rule: Dictionary = _spectrum_unlock_rule(key)
-		lines.append("Desbloqueie este espectro antes de investir nucleos nele.")
-		if not rule.is_empty():
-			lines.append(_spectrum_unlock_objective_text(key, true))
-	elif maxed:
-		lines.append("Este espectro ja atingiu o limite maximo da run.")
-	else:
-		lines = _specter_upgrade_effect_lines()
-		lines.append("Custo do upgrade: %d nucleos." % cost)
-	_draw_wrapped("\n".join(lines), text_rect, 14 if not portrait else 12, Color(0.86, 0.94, 1.0, 0.94))
-	var status_text: = specter_upgrade_message
-	if status_text == "":
-		status_text = "Saldo suficiente." if _specter_can_upgrade() else ("Colete mais nucleos instaveis nas proximas runs." if unlocked and not maxed else "")
-	_draw_centered(status_text, Vector2(info.get_center().x, info.end.y - 34.0), 13 if not portrait else 11, Color(1.0, 0.86, 0.28, 0.96))
-
-	var nav_y: = panel.end.y - 92.0
-	var nav_w: = 76.0
-	buttons["specter_upgrade_prev"] = Rect2(panel.position.x + 28.0, nav_y, nav_w, 46.0)
-	buttons["specter_upgrade_next"] = Rect2(panel.end.x - 28.0 - nav_w, nav_y, nav_w, 46.0)
-	var confirm_w: float = min(300.0, panel.size.x * 0.34)
-	var continue_w: float = min(260.0, panel.size.x * 0.28)
-	buttons["specter_upgrade_confirm"] = Rect2(panel.get_center().x - confirm_w - 8.0, nav_y, confirm_w, 46.0)
-	buttons["specter_upgrade_continue"] = Rect2(panel.get_center().x + 8.0, nav_y, continue_w, 46.0)
-	_draw_big_button(buttons["specter_upgrade_prev"], "<", Color(0.02, 0.08, 0.12, 0.88), Color(0.5, 0.94, 1.0))
-	_draw_big_button(buttons["specter_upgrade_next"], ">", Color(0.02, 0.08, 0.12, 0.88), Color(0.5, 0.94, 1.0))
-	var confirm_label: = "EVOLUIR (%d)" % cost if unlocked and not maxed else "INDISPONIVEL"
-	_draw_big_button(buttons["specter_upgrade_confirm"], confirm_label, Color(0.02, 0.16, 0.14, 0.88) if _specter_can_upgrade() else Color(0.09, 0.09, 0.11, 0.72), Color(0.0, 1.0, 0.82) if _specter_can_upgrade() else Color(0.42, 0.48, 0.54))
-	_draw_big_button(buttons["specter_upgrade_continue"], "CONTINUAR", Color(0.12, 0.04, 0.08, 0.88), Color(1.0, 0.24, 0.42))
+	MenusPresentation._draw_specter_upgrade(self, viewport)
 
 
 func _local_dead_overlay_active() -> bool:
@@ -53334,93 +40982,11 @@ func _draw_local_dead_overlay(viewport: Vector2) -> void:
 
 
 func _draw_game_over_overlay(viewport: Vector2) -> void :
-	var t = float(Time.get_ticks_msec()) * 0.001
-	var end_buttons = _game_over_button_layout(viewport)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.015, 0.01, 0.02, 0.88), true)
-	for gx in range(0, int(viewport.x) + 80, 80):
-		for gy in range(0, int(viewport.y) + 80, 80):
-			draw_circle(Vector2(gx, gy), 1.2, Color(1.0, 0.1, 0.28, 0.13))
-
-	var center = viewport * 0.5
-	var crack = PackedVector2Array()
-	var crack_w = min(viewport.x * 0.62, 720.0)
-	for i in range(18):
-		var k = float(i) / 17.0
-		var x = center.x - crack_w * 0.5 + crack_w * k
-		var y = center.y - 58.0 + (k - 0.5) * 150.0 + sin(t * 6.0 + i * 1.77) * (10.0 + float(i % 3) * 7.0)
-		crack.append(Vector2(x, y))
-	for width_alpha in [[14.0, 0.08], [8.0, 0.18], [4.0, 0.52], [1.6, 0.94]]:
-		var c = Color(1.0, 0.18, 0.42, float(width_alpha[1]))
-		if float(width_alpha[0]) <= 4.0:
-			c = Color(0.35, 1.0, 0.88, float(width_alpha[1]))
-		draw_polyline(crack, c, float(width_alpha[0]), false)
-
-	for i in range(38):
-		var seed = float(i) * 19.17
-		var x = fposmod(seed * 31.0 + sin(t * 0.8 + seed) * 140.0, viewport.x + 80.0) - 40.0
-		var y = fposmod(viewport.y - t * (24.0 + float(i % 5) * 7.0) + seed * 23.0, viewport.y + 80.0) - 40.0
-		var sz = 4.0 + float(i % 5)
-		var rot = t * (0.8 + float(i % 4) * 0.22) + seed
-		var shard = PackedVector2Array([
-			Vector2(x, y) + Vector2.from_angle(rot) * sz, 
-			Vector2(x, y) + Vector2.from_angle(rot + TAU / 3.0) * sz, 
-			Vector2(x, y) + Vector2.from_angle(rot + TAU * 2.0 / 3.0) * sz
-		])
-		var sc = [Color(0.0, 1.0, 0.82, 0.3), Color(0.7, 0.34, 1.0, 0.28), Color(1.0, 0.12, 0.34, 0.3)][i % 3]
-		draw_polygon(shard, PackedColorArray([sc]))
-
-	var glitch = 3.0 if int(Time.get_ticks_msec() / 90) % 7 == 0 else 1.0
-	_draw_centered("FLUXO TEMPORAL ROMPIDO", Vector2(center.x - glitch, viewport.y * 0.2), 42 if not _is_portrait(viewport) else 34, Color(0.0, 1.0, 0.82, 0.78))
-	_draw_centered("FLUXO TEMPORAL ROMPIDO", Vector2(center.x + glitch, viewport.y * 0.2), 42 if not _is_portrait(viewport) else 34, Color(1.0, 0.0, 0.45, 0.78))
-	_draw_centered_outlined("FLUXO TEMPORAL ROMPIDO", Vector2(center.x, viewport.y * 0.2), 42 if not _is_portrait(viewport) else 34, Color.WHITE, Color(0, 0, 0, 0.9), 3)
-	_draw_centered("A fenda colapsou o espaco-tempo. Sua jornada foi fragmentada.", Vector2(center.x, viewport.y * 0.29), 18 if not _is_portrait(viewport) else 14, Color(0.74, 0.76, 0.84, 0.9))
-	var summary = Rect2(viewport.x * (0.12 if not _is_portrait(viewport) else 0.08), viewport.y * (0.32 if not _is_portrait(viewport) else 0.3), viewport.x * (0.76 if not _is_portrait(viewport) else 0.84), viewport.y * (0.18 if not _is_portrait(viewport) else 0.27))
-	_draw_run_summary(summary, Color(1.0, 0.12, 0.28), true)
-	if run_report_status != "":
-		_draw_centered(run_report_status.to_upper(), Vector2(center.x, summary.end.y + 22.0), 12, Color(0.82, 0.92, 1.0, 0.8))
-
-	var retry_label: = "TENTAR NOVAMENTE %d/%d" % [retry_charges_used + 1, RUN_RETRY_MAX_CHARGES] if _retry_available() else "NOVA RUN"
-	var labels = [
-		["end_retry", retry_label, Color(0.0, 1.0, 0.82) if _retry_available() else Color(0.72, 0.88, 0.96)], 
-		["end_ranking", "ABRIR RANKING", Color(1.0, 0.28, 0.78)], 
-		["end_menu", "VOLTAR AO MENU", Color(0.72, 0.34, 1.0)]
-	]
-	buttons.erase("end_exit")
-	for i in range(labels.size()):
-		var rect: Rect2 = end_buttons[String(labels[i][0])]
-		buttons[String(labels[i][0])] = rect
-		var accent: Color = labels[i][2]
-		if is_gamepad_active and gameover_selected == i:
-			accent = Color(1.0, 1.0, 1.0)
-		var pulse = 0.18 + 0.08 * sin(t * 4.0 + i)
-		_draw_holo_panel(rect, accent, false, 0.68)
-		draw_rect(rect.grow(-8), Color(0.02, 0.014, 0.025, 0.54 + pulse), true)
-		_draw_centered(String(labels[i][1]), rect.get_center() + Vector2(0, 4), 19 if not _is_portrait(viewport) else 17, Color.WHITE)
-	if retry_confirm_visible:
-		_draw_retry_confirm_popup(viewport)
+	MenusPresentation._draw_game_over_overlay(self, viewport)
 
 
 func _draw_retry_confirm_popup(viewport: Vector2) -> void:
-	var portrait: = _is_portrait(viewport)
-	var panel_w: float = minf(viewport.x * (0.82 if not portrait else 0.9), 720.0)
-	var panel_h: float = 270.0 if not portrait else 310.0
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.5, panel_w, panel_h)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.42), true)
-	_draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.9)
-	_draw_glitch_title("CONFIRMAR RETORNO", Vector2(panel.get_center().x, panel.position.y + 46.0), 26 if not portrait else 21, Color(0.0, 1.0, 0.82))
-	var body_rect: = Rect2(panel.position.x + 34.0, panel.position.y + 78.0, panel.size.x - 68.0, panel.size.y - 154.0)
-	var lines: Array[String] = _retry_confirm_lines()
-	_draw_wrapped_clamped("\n".join(lines), body_rect, 15 if not portrait else 13, Color(0.84, 0.94, 0.98, 0.96), 6)
-	var btn_h: float = 46.0 if not portrait else 50.0
-	var gap: float = 18.0
-	var btn_w: float = minf(220.0, (panel.size.x - 82.0 - gap) * 0.5)
-	var y: float = panel.end.y - btn_h - 28.0
-	var no_rect: = Rect2(panel.get_center().x - btn_w - gap * 0.5, y, btn_w, btn_h)
-	var yes_rect: = Rect2(panel.get_center().x + gap * 0.5, y, btn_w, btn_h)
-	buttons["retry_confirm_no"] = no_rect
-	buttons["retry_confirm_yes"] = yes_rect
-	_draw_big_button(no_rect, "NAO", Color(0.13, 0.04, 0.08, 0.94), Color(1.0, 0.24, 0.42))
-	_draw_big_button(yes_rect, "SIM", Color(0.02, 0.14, 0.12, 0.94), Color(0.0, 1.0, 0.82))
+	MenusPresentation._draw_retry_confirm_popup(self, viewport)
 
 
 func _draw_shop_return_transition(viewport: Vector2) -> void:
@@ -53428,19 +40994,7 @@ func _draw_shop_return_transition(viewport: Vector2) -> void:
 
 
 func _draw_shop_return_transition_legacy(viewport: Vector2) -> void:
-	var progress: float = clampf(1.0 - shop_return_visual_timer / maxf(0.01, SHOP_RETURN_VISUAL_TIME), 0.0, 1.0)
-	var center: = viewport * 0.5
-	var accent: = Color(0.0, 1.0, 0.82)
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, lerpf(0.18, 0.035, progress)), true)
-	for i in range(4):
-		var radius: float = lerpf(38.0 + i * 34.0, 260.0 + i * 46.0, progress)
-		var ring_alpha: float = (0.34 - i * 0.045) * (1.0 - progress * 0.78)
-		draw_arc(center, radius, -progress * TAU + i * 0.42, TAU - progress * TAU + i * 0.42, 72, Color(accent.r, accent.g, accent.b, ring_alpha), 2.0)
-	var return_panel: = Rect2(viewport.x * 0.5 - 230.0, 34.0, 460.0, 70.0)
-	_draw_holo_panel(return_panel, Color(0.72, 1.0, 1.0), true, 0.72)
-	var title: String = "SAINDO DA LOJA" if progress < 0.72 else "CAMPO ESTABILIZADO"
-	_draw_centered(title, return_panel.get_center() + Vector2(0, -7), 20, Color(0.72, 1.0, 1.0))
-	_draw_centered("RETOMANDO EM %.0fs" % max(0.0, ceil(shop_return_timer)), return_panel.get_center() + Vector2(0, 19), 13, Color(1.0, 0.88, 0.32))
+	MenusPresentation._draw_shop_return_transition_legacy(self, viewport)
 
 
 func _draw_death_slow_transition(viewport: Vector2) -> void:
@@ -53454,20 +41008,7 @@ func _draw_death_slow_transition(viewport: Vector2) -> void:
 
 
 func _draw_retry_return_transition(viewport: Vector2) -> void:
-	var progress: float = clampf(1.0 - retry_return_timer / maxf(0.01, RETRY_RETURN_ANIM_TIME), 0.0, 1.0)
-	var center: = viewport * 0.5
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.012, 0.03, 0.94), true)
-	for i in range(5):
-		var radius: float = lerpf(260.0 - i * 38.0, 48.0 + i * 18.0, progress)
-		var color: = Color(0.0, 1.0, 0.82, 0.14 + progress * 0.16)
-		draw_arc(center, radius, progress * TAU + i * 0.5, progress * TAU + TAU * 0.78 + i * 0.5, 80, color, 3.0)
-	var frames: Array = textures.get("player_idle", [])
-	if not frames.is_empty() and frames[0] is Texture2D:
-		var rise: float = (1.0 - progress) * 110.0
-		var alpha: float = clampf(progress * 1.4, 0.0, 1.0)
-		_draw_entity_fit(frames[0], center + Vector2(0.0, 44.0 - rise), Vector2(82.0, 118.0), Color(1.0, 1.0, 1.0, alpha), false)
-	_draw_glitch_title("GEOVANA RETORNANDO", Vector2(center.x, center.y - 126.0), 28 if not _is_portrait(viewport) else 22, Color(0.0, 1.0, 0.82))
-	_draw_centered("recompondo a run salva...", Vector2(center.x, center.y + 130.0), 15, Color(0.82, 0.94, 1.0, 0.88))
+	MenusPresentation._draw_retry_return_transition(self, viewport)
 
 
 func _game_over_button_layout(viewport: Vector2) -> Dictionary:
@@ -53489,125 +41030,19 @@ func _run_time_text() -> String:
 
 
 func _draw_run_summary(area: Rect2, accent: Color, lost: bool) -> void :
-	var entries = [
-		["JOGADOR", player_nickname if player_nickname != "" else "SEM NICK"], 
-		["RESULTADO", "EXTRACAO" if run_extracted else ("DERROTA" if lost else "VITORIA")], 
-		["TEMPO", _run_time_text()], 
-		["INIMIGOS", str(enemies_killed)], 
-		["DANO INIMIGOS", str(int(round(run_damage_to_enemies)))], 
-		["PONTOS GANHOS", str(run_points_earned)], 
-		["PONTOS GASTOS", str(run_points_spent)], 
-		["CARTAS", str(_deck_total_cards())], 
-		["FASE DA QUEDA" if lost else "FASE CONCLUIDA", str(current_phase)]
-	]
-	var columns = 2 if _is_portrait(get_viewport_rect().size) else 3
-	var rows = int(ceil(float(entries.size()) / float(columns)))
-	var gap = 8.0
-	var cell_size = Vector2((area.size.x - gap * float(columns - 1)) / float(columns), (area.size.y - gap * float(rows - 1)) / float(rows))
-	for i in range(entries.size()):
-		var column = i % columns
-		var row = int(i / columns)
-		var rect = Rect2(area.position + Vector2(column * (cell_size.x + gap), row * (cell_size.y + gap)), cell_size)
-		draw_rect(rect, Color(0.01, 0.015, 0.025, 0.82), true)
-		draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.5), false, 1.4)
-		var label_size = _fit_text_size(String(entries[i][0]), rect.size.x - 14.0, 11, 8)
-		_draw_centered(String(entries[i][0]), Vector2(rect.get_center().x, rect.position.y + min(18.0, rect.size.y * 0.36)), label_size, Color(accent.r, accent.g, accent.b, 0.86))
-		var value_size = _fit_text_size(String(entries[i][1]), rect.size.x - 14.0, 22, 14)
-		_draw_centered(String(entries[i][1]), Vector2(rect.get_center().x, rect.end.y - min(12.0, rect.size.y * 0.24)), value_size, Color.WHITE)
+	MenusPresentation._draw_run_summary(self, area, accent, lost)
 
 
 func _draw_shop_countdown_alert(viewport: Vector2) -> void :
-	var portrait = _is_portrait(viewport)
-	var center = Vector2(viewport.x * 0.5, viewport.y * (0.17 if portrait else 0.18) + 20.0)
-	var seconds_left = _shop_countdown_visible_second()
-	var slow_phase = forced_shop_timer <= FORCED_SHOP_SLOW_START
-	var danger = clamp(1.0 - forced_shop_timer / FORCED_SHOP_WARNING, 0.0, 1.0)
-	var pulse = 1.0 + sin(Time.get_ticks_msec() * (0.008 if slow_phase else 0.006)) * (0.035 if slow_phase else 0.025)
-	var base_size = 70 if not portrait else 62
-	var number_size = int(base_size * pulse)
-	var number_color = Color(1.0, lerp(0.68, 0.04, danger), lerp(0.44, 0.02, danger))
-	_draw_centered_outlined(str(seconds_left), center, number_size, number_color, Color(0.0, 0.0, 0.0, 1.0), 6)
-	var label_y = center.y + (46.0 if portrait else 52.0)
-	_draw_centered_outlined("Afaste-se dos inimigos", Vector2(center.x, label_y), 13 if portrait else 15, Color(1.0, 0.86, 0.8, 0.94), Color(0.0, 0.0, 0.0, 0.9), 2)
+	shop_presentation.draw_countdown_alert(self, viewport)
 
 
 func _draw_shop_opening_upgrade(viewport: Vector2) -> void :
-	var progress = 1.0 - clamp(shop_opening_timer / SHOP_OPENING_ANIM_TIME, 0.0, 1.0)
-	var camera = _camera(viewport) + _screen_shake_offset()
-	var player_screen = (player_pos - camera).clamp(Vector2(58, 80), viewport - Vector2(58, 70))
-	var ground = player_screen + Vector2(0, 34)
-	var strike = smoothstep(0.0, 0.32, progress)
-	var absorb = smoothstep(0.22, 0.62, progress)
-	var spread = smoothstep(0.48, 1.0, progress)
-	var fade = 1.0 - smoothstep(0.82, 1.0, progress)
-	var flash = sin(progress * PI) * 0.28 + 0.08
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.06, 0.1, 0.13, flash * fade), true)
-
-	var bolt_alpha = (1.0 - smoothstep(0.5, 0.88, progress)) * max(0.18, strike)
-	var seed = float(Time.get_ticks_msec() % 100000) * 0.001
-	for bolt in range(3):
-		var previous = Vector2(player_screen.x + sin(seed * 7.0 + bolt) * 18.0, -26.0)
-		var segments = 7
-		for i in range(1, segments + 1):
-			var t = float(i) / float(segments)
-			var jitter = sin(seed * (9.0 + bolt) + i * 2.31 + bolt * 5.7) * (18.0 + bolt * 7.0) * (1.0 - t * 0.42)
-			var next = Vector2(lerp(previous.x, player_screen.x, 0.36) + jitter, lerp(-26.0, player_screen.y - 18.0, t))
-			var main_color = Color(0.68, 0.98, 1.0, 0.88 * bolt_alpha)
-			var core_color = Color(1.0, 1.0, 1.0, 0.94 * bolt_alpha)
-			draw_line(previous, next, main_color, 8.0 - bolt * 2.0)
-			draw_line(previous, next, core_color, 3.0)
-			if i in [2, 4, 6]:
-				var branch_dir = Vector2.from_angle( - PI * 0.5 + sin(seed + i + bolt) * 1.8)
-				draw_line(next, next + branch_dir * (34.0 + bolt * 12.0), Color(0.42, 0.92, 1.0, 0.34 * bolt_alpha), 2.0)
-			previous = next
-
-	var body_glow = sin(progress * PI) * fade
-	for i in range(5):
-		var radius = 30.0 + i * 15.0 + absorb * 18.0
-		draw_circle(player_screen, radius, Color(0.15, 0.95, 1.0, body_glow * (0.11 - i * 0.015)))
-	draw_circle(player_screen, 18.0 + 10.0 * absorb, Color(1.0, 1.0, 1.0, 0.24 * body_glow))
-
-	for ring in range(4):
-		var ring_t = clamp(spread - ring * 0.14, 0.0, 1.0)
-		if ring_t <= 0.0:
-			continue
-		var radius = lerp(26.0 + ring * 12.0, 220.0 + ring * 26.0, ring_t)
-		var alpha = (1.0 - ring_t) * 0.62 * fade
-		draw_arc(ground, radius, 0.0, TAU, 96, Color(0.08, 0.92, 1.0, alpha), 4.0)
-		draw_arc(ground, radius * 0.74, - progress * TAU, TAU * 0.62 - progress * TAU, 64, Color(1.0, 0.86, 0.3, alpha * 0.62), 2.0)
-
-	for crack in range(12):
-		var crack_t = clamp(spread - float(crack % 4) * 0.06, 0.0, 1.0)
-		if crack_t <= 0.0:
-			continue
-		var angle = float(crack) * TAU / 12.0 + sin(seed + crack) * 0.14
-		var length = lerp(22.0, 145.0 + float(crack % 3) * 34.0, crack_t)
-		var start = ground + Vector2.from_angle(angle) * 18.0
-		var mid = ground + Vector2.from_angle(angle + sin(seed * 1.7 + crack) * 0.16) * length * 0.58
-		var end = ground + Vector2.from_angle(angle + cos(seed * 1.3 + crack) * 0.12) * length
-		var alpha = (1.0 - crack_t * 0.62) * fade
-		draw_line(start, mid, Color(0.0, 0.8, 1.0, alpha * 0.5), 3.0)
-		draw_line(mid, end, Color(1.0, 0.9, 0.34, alpha * 0.38), 2.0)
-
-	if progress > 0.72:
-		var bloom = smoothstep(0.72, 1.0, progress)
-		draw_circle(player_screen, 60.0 + bloom * 140.0, Color(1.0, 1.0, 1.0, 0.24 * (1.0 - bloom)))
+	MenusPresentation._draw_shop_opening_upgrade(self, viewport)
 
 
 func _draw_big_button(rect: Rect2, label: String, bg: Color, border: Color, selected: bool = false) -> void :
-	_draw_holo_panel(rect, border, selected, max(0.56, bg.a))
-	draw_rect(rect.grow(-9), Color(bg.r, bg.g, bg.b, 0.42), true)
-
-
-	var font_size = int(rect.size.y * 0.45)
-	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-	while text_size.x > rect.size.x - 24 and font_size > 12:
-		font_size -= 1
-		text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-
-
-	var y_offset = text_size.y * 0.16
-	_draw_centered(label, rect.get_center() + Vector2(0, y_offset), font_size, Color.WHITE)
+	MenusPresentation._draw_big_button(self, rect, label, bg, border, selected)
 
 
 func _draw_combat_panel(rect: Rect2, accent: Color, alpha: = 0.58) -> void :
@@ -53628,70 +41063,15 @@ func _draw_hud_bar(pos: Vector2, width: float, height: float, ratio: float, colo
 
 
 func _draw_health_tube_bar(pos: Vector2, width: float, height: float, ratio: float, color: Color, hit_flash: float, alpha: float) -> void:
-	ratio = clampf(ratio, 0.0, 1.0)
-	alpha = clampf(alpha, 0.0, 1.0)
-	var rect := Rect2(pos, Vector2(width, height))
-	var fill_color: Color = Color(0.98, 0.12, 0.16).lerp(color, ratio)
-	if hit_flash > 0.0:
-		fill_color = fill_color.lerp(Color(1.0, 0.05, 0.04), hit_flash * 0.72)
-	draw_rect(rect.grow(4.0), Color(0.0, 0.0, 0.0, 0.48 * alpha), true)
-	draw_rect(rect, Color(0.01, 0.018, 0.024, 0.94 * alpha), true)
-	draw_rect(rect.grow(-2.0), Color(0.08, 0.18, 0.2, 0.26 * alpha), true)
-	if ratio > 0.0:
-		var liquid_rect := Rect2(rect.position + Vector2(3.0, 3.0), Vector2(maxf(0.0, (width - 6.0) * ratio), maxf(1.0, height - 6.0)))
-		draw_rect(liquid_rect, Color(fill_color.r, fill_color.g, fill_color.b, 0.9 * alpha), true)
-		draw_line(liquid_rect.position + Vector2(2.0, 2.0), liquid_rect.position + Vector2(maxf(2.0, liquid_rect.size.x - 3.0), 2.0), Color(1.0, 1.0, 1.0, 0.22 * alpha), 1.2)
-	draw_line(rect.position + Vector2(4.0, 3.0), rect.position + Vector2(width - 5.0, 3.0), Color(1.0, 1.0, 1.0, 0.24 * alpha), 1.2)
-	draw_line(rect.position + Vector2(2.0, height - 2.0), rect.position + Vector2(width - 3.0, height - 2.0), Color(0.22, 0.94, 1.0, 0.18 * alpha), 1.0)
-	draw_rect(rect, Color(0.52, 0.96, 1.0, 0.72 * alpha), false, 1.8)
-	draw_rect(rect.grow(-3.0), Color(1.0, 1.0, 1.0, 0.14 * alpha), false, 1.0)
-	var danger: float = clampf((0.7 - ratio) / 0.7, 0.0, 1.0)
-	if danger > 0.0:
-		var crack_count: int = 1 + int(floor(danger * 6.0))
-		for i in range(crack_count):
-			var crack_seed: float = float(i + 1) * 17.23
-			var cx: float = pos.x + width * fposmod(0.18 + crack_seed * 0.137, 0.76)
-			var cy: float = pos.y + height * fposmod(0.2 + crack_seed * 0.091, 0.6)
-			var crack_len: float = lerpf(5.0, 16.0, danger)
-			var a: float = -0.75 + fposmod(crack_seed, 1.0) * 1.5
-			var start := Vector2(cx, cy)
-			var end := start + Vector2.from_angle(a) * crack_len
-			draw_line(start, end, Color(0.84, 1.0, 1.0, 0.18 + danger * 0.52), 1.0)
-			draw_line(start + Vector2(1.0, -1.0), start + Vector2.from_angle(a - 0.75) * crack_len * 0.44, Color(0.84, 1.0, 1.0, 0.14 + danger * 0.36), 1.0)
+	HudPresentation._draw_health_tube_bar(self, pos, width, height, ratio, color, hit_flash, alpha)
 
 
 func _draw_virtual_stick(center: Vector2, radius: float, alpha: float = 1.0) -> void :
-	var accent = Color(0.0, 1.0, 0.82)
-	draw_circle(center, radius, Color(0.0, 0.72, 0.72, 0.055 * alpha))
-	draw_arc(center, radius, - PI * 0.82, PI * 0.82, 42, Color(accent.r, accent.g, accent.b, 0.72 * alpha), 2.3)
-	draw_arc(center, radius * 0.7, PI * 0.18, PI * 1.32, 34, Color(1.0, 1.0, 1.0, 0.22 * alpha), 1.4)
-	for i in range(4):
-		var a = i * PI * 0.5 + PI * 0.25
-		draw_line(center + Vector2.from_angle(a) * radius * 0.78, center + Vector2.from_angle(a) * radius * 0.95, Color(accent.r, accent.g, accent.b, 0.38 * alpha), 1.5)
-	var knob = center + touch_move * (radius * 0.46)
-	draw_circle(knob, max(18.0, radius * 0.22), Color(accent.r, accent.g, accent.b, 0.26 * alpha))
-	draw_circle(knob, max(9.0, radius * 0.11), Color(accent.r, accent.g, accent.b, 0.62 * alpha))
-	draw_arc(knob, max(22.0, radius * 0.27), 0, TAU, 34, Color(1.0, 1.0, 1.0, 0.38 * alpha), 1.5)
+	HudPresentation._draw_virtual_stick(self, center, radius, alpha)
 
 
 func _draw_button(center: Vector2, radius: float, label: String, color: Color) -> void :
-	var c = color
-	var alpha: float = clampf(c.a, 0.0, 1.0)
-	draw_circle(center, radius, Color(0.02, 0.03, 0.04, 0.3 * alpha))
-	draw_circle(center, radius * 0.84, Color(c.r, c.g, c.b, 0.18 * alpha))
-	draw_arc(center, radius, - PI * 0.28, PI * 1.24, 48, Color(c.r, c.g, c.b, 0.92 * alpha), 2.6)
-	draw_arc(center, radius * 0.72, PI * 0.58, PI * 1.66, 32, Color(1.0, 1.0, 1.0, 0.34 * alpha), 1.4)
-	var sweep: float = fposmod(time_alive * 1.7, TAU)
-	draw_arc(center, radius * 0.9, sweep, sweep + 0.52, 18, Color(1.0, 1.0, 1.0, 0.34 * alpha), 1.8)
-	for tick_index in range(4):
-		var tick_angle: float = -PI * 0.7 + float(tick_index) * PI * 0.46
-		var tick_from: Vector2 = center + Vector2.from_angle(tick_angle) * (radius * 0.88)
-		var tick_to: Vector2 = center + Vector2.from_angle(tick_angle) * (radius * 0.98)
-		draw_line(tick_from, tick_to, Color(c.r, c.g, c.b, 0.5 * alpha), 1.2, true)
-	draw_circle(center, radius * 0.34, Color(c.r, c.g, c.b, 0.18 * alpha))
-	draw_arc(center, radius * 0.44, -PI * 0.92, -PI * 0.2, 18, Color(1.0, 1.0, 1.0, 0.26 * alpha), 1.2)
-	var font_size = int(clamp(radius * 0.34, 15.0, 22.0))
-	draw_string(menu_ui_font, center + Vector2(-radius, font_size * 0.3), label, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, font_size, Color(1.0, 1.0, 1.0, alpha))
+	MenusPresentation._draw_button(self, center, radius, label, color)
 
 
 func _draw_attack_target_marker(center: Vector2, radius: float, confirmed: bool) -> void :
@@ -53722,16 +41102,7 @@ func _attack_lock_preview_screen(viewport: Vector2) -> Vector2:
 
 
 func _draw_attack_lock_preview(viewport: Vector2) -> void :
-	var center = _attack_lock_preview_screen(viewport)
-	var has_candidate = not attack_lock_candidate_kind.is_empty()
-	var color = Color(1.0, 0.86, 0.18, 0.96) if has_candidate else Color(1.0, 0.34, 0.24, 0.72)
-	var radius = 24.0 + sin(time_alive * 8.0) * 2.0
-	draw_circle(center, radius, Color(color.r, color.g, color.b, 0.08))
-	draw_arc(center, radius, 0.0, TAU, 36, color, 2.5)
-	draw_line(center + Vector2( - radius - 8, 0), center + Vector2(-8, 0), color, 2.0)
-	draw_line(center + Vector2(radius + 8, 0), center + Vector2(8, 0), color, 2.0)
-	draw_line(center + Vector2(0, - radius - 8), center + Vector2(0, -8), color, 2.0)
-	draw_line(center + Vector2(0, radius + 8), center + Vector2(0, 8), color, 2.0)
+	HudPresentation._draw_attack_lock_preview(self, viewport)
 
 
 func _ability_cancel_center(viewport: Vector2) -> Vector2:
@@ -53755,16 +41126,7 @@ func _active_ability_touch_pos() -> Vector2:
 
 
 func _draw_ability_cancel_button(viewport: Vector2) -> void :
-	var center = _ability_cancel_center(viewport)
-	var hovered = _ability_cancel_has_point(_active_ability_touch_pos(), viewport)
-	var pulse = 1.0 + sin(time_alive * 9.0) * (0.06 if hovered else 0.025)
-	var radius = ABILITY_CANCEL_RADIUS * pulse
-	draw_circle(center, radius, Color(0.22, 0.01, 0.02, 0.84))
-	draw_circle(center, radius * 0.78, Color(1.0, 0.06, 0.1, 0.34 if hovered else 0.18))
-	draw_arc(center, radius, 0.0, TAU, 48, Color(1.0, 0.16, 0.18, 1.0), 4.0 if hovered else 2.5)
-	var arm = radius * 0.3
-	draw_line(center + Vector2( - arm, - arm), center + Vector2(arm, arm), Color.WHITE, 6.0, true)
-	draw_line(center + Vector2(arm, - arm), center + Vector2( - arm, arm), Color.WHITE, 6.0, true)
+	HudPresentation._draw_ability_cancel_button(self, viewport)
 
 
 func _draw_hud_rect_button(rect: Rect2, label: String, accent: Color) -> void :
@@ -53774,61 +41136,19 @@ func _draw_hud_rect_button(rect: Rect2, label: String, accent: Color) -> void :
 
 
 func _draw_small_rect_button(rect: Rect2, label: String, bg: = Color(0.03, 0.1, 0.12), border: = Color(0.0, 1.0, 0.82)) -> void :
-	if mode.begins_with("settings"):
-		_draw_settings_surface(rect, rect.has_point(get_global_mouse_position()))
-		_draw_centered_with_font(menu_ui_font, label, rect.get_center(), 16, Color(0.73, 0.85, 0.84))
-		return
-	draw_rect(rect, bg, true)
-	draw_rect(rect, border, false, 2)
-	var font_size = int(rect.size.y * 0.4)
-	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-	while text_size.x > rect.size.x - 12 and font_size > 10:
-		font_size -= 1
-		text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
-	var y_offset = text_size.y * 0.16
-	_draw_centered(label, rect.get_center() + Vector2(0, y_offset), font_size, Color.WHITE)
+	shop_presentation.draw_small_rect_button(self, rect, label, bg, border)
 
 
 func _draw_toggle_switch(rect: Rect2, enabled: bool, accent: Color) -> void :
-	var track = accent if enabled else Color(0.28, 0.32, 0.36)
-	if mode.begins_with("settings"):
-		track = Color(0.36, 0.72, 0.72) if enabled else Color(0.28, 0.32, 0.36)
-	draw_rect(rect, Color(track.r, track.g, track.b, 0.3), true)
-	draw_rect(rect, Color(track.r, track.g, track.b, 0.92), false, 2.0)
-	var knob_radius = rect.size.y * 0.34
-	var knob_x = rect.end.x - rect.size.y * 0.5 if enabled else rect.position.x + rect.size.y * 0.5
-	draw_circle(Vector2(knob_x, rect.get_center().y), knob_radius, Color.WHITE)
+	MenusPresentation._draw_toggle_switch(self, rect, enabled, accent)
 
 
 func _draw_dynamic_shadow(texture: Texture2D, center: Vector2, size: Vector2, flip_h: = false, alpha: = 0.42) -> void :
-	if not _shadows_enabled() or texture == null or alpha <= 0.0:
-		return
-	var foot = center + Vector2(0.0, size.y * 0.5)
-	var light_sway = sin(time_alive * 0.72) * 2.0
-	var cast_rotation = deg_to_rad(9.0) + sin(time_alive * 0.45) * 0.018
-	var horizontal = -1.0 if flip_h else 1.0
-	var rect = Rect2(Vector2( - size.x * 0.5, - size.y), size)
-	draw_set_transform(foot + Vector2(10.0 + light_sway, 5.0), cast_rotation, Vector2(horizontal * 1.03, -0.3))
-	draw_texture_rect(texture, rect, false, Color(0.0, 0.0, 0.0, alpha * 0.25))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	draw_set_transform(foot + Vector2(6.0 + light_sway * 0.45, 2.0), cast_rotation, Vector2(horizontal, -0.27))
-	draw_texture_rect(texture, rect, false, Color(0.0, 0.0, 0.0, alpha))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	EntitiesPresentation._draw_dynamic_shadow(self, texture, center, size, flip_h, alpha)
 
 
 func _draw_dynamic_shadow_fit(texture: Texture2D, center: Vector2, max_size: Vector2, flip_h: = false, align_bottom: = false, alpha: = 0.42) -> void :
-	if not _shadows_enabled() or texture == null:
-		return
-	var texture_size = texture.get_size()
-	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
-		return
-	var fit_scale = min(max_size.x / texture_size.x, max_size.y / texture_size.y)
-	var draw_size = texture_size * fit_scale
-	var visual_center = center
-	if align_bottom:
-		var top = center.y + max_size.y * 0.5 - draw_size.y
-		visual_center.y = top + draw_size.y * 0.5
-	_draw_dynamic_shadow(texture, visual_center, draw_size, flip_h, alpha)
+	EntitiesPresentation._draw_dynamic_shadow_fit(self, texture, center, max_size, flip_h, align_bottom, alpha)
 
 
 func _draw_entity(texture: Texture2D, center: Vector2, size: Vector2, modulate: = Color.WHITE, flip_h: = false) -> void :
@@ -53841,36 +41161,11 @@ func _draw_entity(texture: Texture2D, center: Vector2, size: Vector2, modulate: 
 
 
 func _draw_entity_fit(texture: Texture2D, center: Vector2, max_size: Vector2, modulate: = Color.WHITE, align_bottom: = false) -> void :
-	if texture == null:
-		draw_circle(center, min(max_size.x, max_size.y) * 0.34, Color(1.0, 0.2, 0.4))
-		return
-	var tex_size = texture.get_size()
-	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
-		_draw_entity(texture, center, max_size, modulate)
-		return
-	var scale = min(max_size.x / tex_size.x, max_size.y / tex_size.y)
-	var draw_size = tex_size * scale
-	var pos = center - draw_size * 0.5
-	if align_bottom:
-		pos.y = center.y + max_size.y * 0.5 - draw_size.y
-	draw_texture_rect(texture, Rect2(pos, draw_size), false, modulate)
+	EntitiesPresentation._draw_entity_fit(self, texture, center, max_size, modulate, align_bottom)
 
 
 func _draw_entity_fit_flipped(texture: Texture2D, center: Vector2, max_size: Vector2, flip_h: = false, modulate: = Color.WHITE, align_bottom: = false) -> void :
-	if texture == null:
-		draw_circle(center, min(max_size.x, max_size.y) * 0.34, Color(1.0, 0.2, 0.4))
-		return
-	var tex_size = texture.get_size()
-	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
-		return
-	var scale = min(max_size.x / tex_size.x, max_size.y / tex_size.y)
-	var draw_size = tex_size * scale
-	var local_pos = - draw_size * 0.5
-	if align_bottom:
-		local_pos.y = max_size.y * 0.5 - draw_size.y
-	draw_set_transform(center, 0.0, Vector2(-1.0, 1.0) if flip_h else Vector2.ONE)
-	draw_texture_rect(texture, Rect2(local_pos, draw_size), false, modulate)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	EntitiesPresentation._draw_entity_fit_flipped(self, texture, center, max_size, flip_h, modulate, align_bottom)
 
 
 func _draw_entity_fit_rotated(texture: Texture2D, center: Vector2, max_size: Vector2, rotation: float, modulate: = Color.WHITE, align_bottom: = false) -> void :
@@ -53889,17 +41184,7 @@ func _draw_entity_stretched_rotated(texture: Texture2D, center: Vector2, draw_si
 
 
 func _draw_entity_by_height_rotated(texture: Texture2D, center: Vector2, target_height: float, rotation: float, modulate: = Color.WHITE, flip_h: = false) -> void :
-	if texture == null:
-		return
-	var tex_size = texture.get_size()
-	if tex_size.y <= 0.0:
-		return
-	var scale = target_height / tex_size.y
-	var draw_size = tex_size * scale
-	draw_set_transform(center, rotation, Vector2(-1.0, 1.0) if flip_h else Vector2.ONE)
-	var pos = Vector2( - draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
-	draw_texture_rect(texture, Rect2(pos, draw_size), false, modulate)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	EntitiesPresentation._draw_entity_by_height_rotated(self, texture, center, target_height, rotation, modulate, flip_h)
 
 
 func _draw_hex(center: Vector2, radius: float, color: Color) -> void :
@@ -53961,120 +41246,11 @@ func _enemy_health_bar_style(enemy: Dictionary) -> Dictionary:
 
 
 func _draw_enemy_health_bar(enemy: Dictionary, pos: Vector2, width: float, ratio: float) -> void :
-	var style: = _enemy_health_bar_style(enemy)
-	var health_ratio: float = clamp(ratio, 0.0, 1.0)
-	var height: float = float(style.get("height", 7.0))
-	var fill: = Color(style.get("fill", Color(0.3, 1.0, 0.42)))
-	var back: = Color(style.get("back", Color(0.04, 0.06, 0.06, 0.9)))
-	var border: = Color(style.get("border", Color(0.7, 1.0, 0.7)))
-	var accent: = Color(style.get("accent", fill.darkened(0.35)))
-	if bool(enemy.get("sanguinaria_hunt", false)):
-		fill = Color(1.0, 0.04, 0.08)
-		back = Color(0.12, 0.0, 0.015, 0.94)
-		border = Color(1.0, 0.18, 0.18)
-		accent = Color(0.42, 0.0, 0.04)
-	elif float(enemy.get("crepuscular_ocaso_mark", 0.0)) > 0.0:
-		fill = fill.lerp(Color(0.18, 0.01, 0.035), 0.42)
-		border = border.lerp(Color(0.02, 0.0, 0.0), 0.55)
-		accent = Color(0.0, 0.0, 0.0, 0.82)
-	var shape: = String(style.get("shape", "common"))
-	var outer: = Rect2(pos + Vector2(-2.0, -2.0), Vector2(width + 4.0, height + 4.0))
-	var inner: = Rect2(pos, Vector2(width, height))
-	draw_rect(outer, Color(0.0, 0.0, 0.0, 0.62), true)
-	draw_rect(inner, back, true)
-	if health_ratio > 0.0:
-		draw_rect(Rect2(pos, Vector2(width * health_ratio, height)), fill, true)
-	draw_rect(inner, border, false, 1.2)
-	match shape:
-		"swift":
-			draw_line(pos + Vector2(width * 0.18, -2.0), pos + Vector2(width * 0.06, height + 3.0), accent, 1.4, true)
-			draw_line(pos + Vector2(width * 0.88, -2.0), pos + Vector2(width * 0.76, height + 3.0), accent, 1.4, true)
-		"projector":
-			draw_circle(pos + Vector2(width + 4.0, height * 0.5), 3.0, border)
-			draw_line(pos + Vector2(width * 0.72, height * 0.5), pos + Vector2(width + 3.0, height * 0.5), accent, 1.2, true)
-		"crystal":
-			var crystal: = PackedVector2Array([
-				pos + Vector2(width + 2.0, height * 0.5), 
-				pos + Vector2(width - 4.0, -4.0), 
-				pos + Vector2(width - 10.0, height * 0.5), 
-				pos + Vector2(width - 4.0, height + 4.0)
-			])
-			draw_polygon(crystal, PackedColorArray([Color(border.r, border.g, border.b, 0.54)]))
-			draw_polyline(crystal, border, 1.1, true)
-		"curater":
-			draw_line(pos + Vector2(width + 3.0, 1.0), pos + Vector2(width + 3.0, height + 5.0), border, 1.4)
-			draw_line(pos + Vector2(width - 1.0, height * 0.5), pos + Vector2(width + 7.0, height * 0.5), border, 1.4)
-		"stone":
-			for i in range(3):
-				var x: = pos.x + width * (0.25 + i * 0.22)
-				draw_line(Vector2(x, pos.y - 1.0), Vector2(x - 5.0, pos.y + height + 2.0), accent, 1.0, true)
-		"thief":
-			draw_circle(pos + Vector2(width + 5.0, height * 0.5), 3.8, Color(1.0, 0.82, 0.25, 0.92))
-			draw_circle(pos + Vector2(width + 5.0, height * 0.5), 1.5, Color(0.35, 0.18, 0.04, 0.92))
-		"ice":
-			var cap: = PackedVector2Array([
-				pos + Vector2(-1.0, -3.0), 
-				pos + Vector2(width * 0.22, -5.0), 
-				pos + Vector2(width * 0.38, -2.0), 
-				pos + Vector2(width * 0.56, -5.0), 
-				pos + Vector2(width * 0.78, -2.0), 
-				pos + Vector2(width + 1.0, -4.0)
-			])
-			draw_polyline(cap, Color(border.r, border.g, border.b, 0.72), 1.2, true)
-		"shield":
-			draw_arc(pos + Vector2(width + 3.0, height * 0.5), 5.0, - PI * 0.45, PI * 0.45, 8, border, 1.6, true)
-		"nexus":
-			var core: = pos + Vector2(width + 4.0, height * 0.5)
-			draw_circle(core, 5.0, Color(accent.r, accent.g, accent.b, 0.72))
-			draw_arc(core, 8.0, time_alive * 2.0, time_alive * 2.0 + PI * 1.45, 14, border, 1.5, true)
+	EntitiesPresentation._draw_enemy_health_bar(self, enemy, pos, width, ratio)
 
 
 func _draw_tesla_health_bar_fx(pos: Vector2, width: float, ratio: float, shock_time: float, uid: int) -> void :
-	var power: float = clamp(shock_time / 0.42, 0.0, 1.0)
-	var filled_width: float = max(10.0, width * clamp(ratio, 0.0, 1.0))
-	var base_y: float = pos.y + 3.5
-	var bolt_points: = PackedVector2Array([
-		Vector2(pos.x, base_y - 6.0), 
-		Vector2(pos.x + filled_width * 0.3, base_y - 6.0), 
-		Vector2(pos.x + filled_width * 0.2, base_y - 15.0), 
-		Vector2(pos.x + filled_width * 0.62, base_y + 1.0), 
-		Vector2(pos.x + filled_width * 0.44, base_y + 1.0), 
-		Vector2(pos.x + filled_width * 0.6, base_y + 11.0), 
-		Vector2(pos.x + filled_width, base_y - 4.0), 
-		Vector2(pos.x + filled_width * 0.64, base_y + 5.0), 
-		Vector2(pos.x + filled_width * 0.78, base_y + 15.0), 
-		Vector2(pos.x + filled_width * 0.36, base_y - 1.0), 
-		Vector2(pos.x + filled_width * 0.52, base_y - 1.0), 
-		Vector2(pos.x + filled_width * 0.34, base_y - 10.0)
-	])
-	var jitter: = Vector2(sin(time_alive * 82.0 + uid) * 1.8, cos(time_alive * 71.0 + uid) * 1.4) * power
-	for i in range(bolt_points.size()):
-		var local_jitter: = Vector2(sin(time_alive * 92.0 + float(uid) * 0.2 + i) * 1.2, cos(time_alive * 88.0 + i * 1.7) * 1.0) * power
-		bolt_points[i] += jitter + local_jitter
-	var full_outline: = PackedVector2Array([
-		Vector2(pos.x - 3.0, base_y - 8.5), 
-		Vector2(pos.x + width * 0.34, base_y - 8.5), 
-		Vector2(pos.x + width * 0.24, base_y - 18.0), 
-		Vector2(pos.x + width * 0.68, base_y - 0.5), 
-		Vector2(pos.x + width * 0.5, base_y - 0.5), 
-		Vector2(pos.x + width * 0.66, base_y + 10.5), 
-		Vector2(pos.x + width + 4.0, base_y - 5.5), 
-		Vector2(pos.x + width * 0.68, base_y + 7.5), 
-		Vector2(pos.x + width * 0.83, base_y + 18.0), 
-		Vector2(pos.x + width * 0.34, base_y + 1.5), 
-		Vector2(pos.x + width * 0.48, base_y + 1.5), 
-		Vector2(pos.x + width * 0.29, base_y - 8.5)
-	])
-	draw_polyline(full_outline, Color(0.05, 0.0, 0.1, 0.88 * power), 8.0, true)
-	draw_polyline(full_outline, Color(0.78, 0.14, 1.0, 0.96 * power), 4.0, true)
-	draw_polyline(bolt_points, Color(1.0, 0.86, 0.1, 0.88 * power), 5.0, true)
-	draw_polyline(bolt_points, Color(0.32, 0.98, 1.0, 0.82 * power), 2.0, true)
-	draw_polyline(bolt_points, Color(1.0, 1.0, 1.0, 0.58 * power), 0.9, true)
-	for spark in range(3):
-		var t: float = 0.18 + spark * 0.27 + sin(time_alive * 24.0 + spark + uid) * 0.04
-		var a: = Vector2(pos.x + filled_width * t, base_y - 9.0 + sin(time_alive * 60.0 + spark) * 3.0)
-		var b: = a + Vector2(7.0 + spark * 2.0, 10.0 + sin(time_alive * 42.0 + uid + spark) * 5.0)
-		draw_line(a, b, Color(0.93, 0.52, 1.0, 0.7 * power), 1.4, true)
+	MenusPresentation._draw_tesla_health_bar_fx(self, pos, width, ratio, shock_time, uid)
 
 
 func _draw_centered(text: String, pos: Vector2, size: int, color: Color) -> void :
@@ -54105,68 +41281,15 @@ func _draw_centered_with_font(font_resource: Font, text: String, pos: Vector2, s
 
 
 func _draw_centered_outlined(text: String, pos: Vector2, size: int, color: Color, outline: Color, thickness: int) -> void :
-	var offsets = [
-		Vector2( - thickness, 0), 
-		Vector2(thickness, 0), 
-		Vector2(0, - thickness), 
-		Vector2(0, thickness), 
-		Vector2( - thickness, - thickness), 
-		Vector2(thickness, - thickness), 
-		Vector2( - thickness, thickness), 
-		Vector2(thickness, thickness)
-	]
-	for offset in offsets:
-		_draw_centered(text, pos + offset, size, outline)
-	_draw_centered(text, pos + Vector2(0, thickness * 0.45), size, Color(0.0, 0.0, 0.0, min(0.55, outline.a)))
-	_draw_centered(text, pos, size, color)
+	MenusPresentation._draw_centered_outlined(self, text, pos, size, color, outline, thickness)
 
 
 func _draw_wrapped(text: String, rect: Rect2, size: int, color: Color) -> void :
-	var words = text.split(" ")
-	var line = ""
-	var y = rect.position.y + size
-	for word in words:
-		var test = line + (" " if line != "" else "") + word
-		if font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and line != "":
-			draw_string(font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
-			line = word
-			y += size + 4
-			if y > rect.end.y:
-				return
-		else:
-			line = test
-	if line != "" and y <= rect.end.y:
-		draw_string(font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+	MenusPresentation._draw_wrapped(self, text, rect, size, color)
 
 
 func _draw_wrapped_clamped(text: String, rect: Rect2, size: int, color: Color, max_lines: int) -> void:
-	if max_lines <= 0:
-		_draw_wrapped(text, rect, size, color)
-		return
-	var words: = text.replace("\n", " ").split(" ")
-	var line: = ""
-	var y: = rect.position.y + size
-	var lines_drawn: = 0
-	for word in words:
-		var clean_word: = String(word).strip_edges()
-		if clean_word == "":
-			continue
-		var test: = line + (" " if line != "" else "") + clean_word
-		if font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and line != "":
-			lines_drawn += 1
-			if lines_drawn >= max_lines or y > rect.end.y:
-				var final_line: = line
-				while final_line.length() > 3 and font.get_string_size(final_line + "...", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x:
-					final_line = final_line.substr(0, final_line.length() - 1).strip_edges()
-				draw_string(font, Vector2(rect.position.x, y), final_line + "...", HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
-				return
-			draw_string(font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
-			line = clean_word
-			y += size + 4
-		else:
-			line = test
-	if line != "" and y <= rect.end.y and lines_drawn < max_lines:
-		draw_string(font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+	MenusPresentation._draw_wrapped_clamped(self, text, rect, size, color, max_lines)
 
 
 func _player_texture() -> Texture2D:
@@ -54270,41 +41393,7 @@ func _limbo_hash(hash_seed: int) -> float:
 
 
 func _draw_corner_limbo(camera: Vector2, viewport: Vector2) -> void:
-	var rects: Array[Rect2] = _corner_limbo_rects(camera, viewport)
-	if rects.is_empty():
-		return
-	var pulse: float = 0.5 + 0.5 * sin(time_alive * 1.7)
-	for idx in range(rects.size()):
-		var rect: Rect2 = rects[idx]
-		draw_rect(rect, Color(0.005, 0.008, 0.026, 0.96), true)
-		draw_rect(rect, Color(0.0, 0.72, 0.78, 0.1), false, 1.0)
-		var grid_start_x: float = floor(rect.position.x / CORNER_LIMBO_GRID_STEP) * CORNER_LIMBO_GRID_STEP
-		var grid_start_y: float = floor(rect.position.y / CORNER_LIMBO_GRID_STEP) * CORNER_LIMBO_GRID_STEP
-		var x: float = grid_start_x
-		while x <= rect.end.x:
-			draw_line(Vector2(x, rect.position.y), Vector2(x, rect.end.y), Color(0.0, 0.72, 0.78, 0.055), 1.0)
-			x += CORNER_LIMBO_GRID_STEP
-		var y: float = grid_start_y
-		while y <= rect.end.y:
-			draw_line(Vector2(rect.position.x, y), Vector2(rect.end.x, y), Color(0.36, 0.12, 0.8, 0.045), 1.0)
-			y += CORNER_LIMBO_GRID_STEP
-		for i in range(CORNER_LIMBO_STAR_COUNT):
-			var star_seed: int = idx * 1000 + i * 17
-			var pos: Vector2 = rect.position + Vector2(_limbo_hash(star_seed) * rect.size.x, _limbo_hash(star_seed + 7) * rect.size.y)
-			var size: float = 1.0 + _limbo_hash(star_seed + 13) * 1.8
-			var alpha: float = 0.42 + _limbo_hash(star_seed + 19) * 0.38 + pulse * 0.12
-			draw_circle(pos, size, Color(0.74, 0.94, 1.0, alpha))
-			if i % 9 == 0:
-				draw_line(pos + Vector2(-4.0, 0.0), pos + Vector2(4.0, 0.0), Color(0.0, 0.95, 1.0, alpha * 0.35), 1.0)
-				draw_line(pos + Vector2(0.0, -4.0), pos + Vector2(0.0, 4.0), Color(0.7, 0.32, 1.0, alpha * 0.25), 1.0)
-		if rect.position.x <= 0.0 and rect.end.x < viewport.x:
-			draw_line(Vector2(rect.end.x, rect.position.y), Vector2(rect.end.x, rect.end.y), Color(0.0, 0.95, 1.0, 0.38), 2.0)
-		if rect.position.y <= 0.0 and rect.end.y < viewport.y:
-			draw_line(Vector2(rect.position.x, rect.end.y), Vector2(rect.end.x, rect.end.y), Color(0.0, 0.95, 1.0, 0.34), 2.0)
-		if rect.end.x >= viewport.x and rect.position.x > 0.0:
-			draw_line(Vector2(rect.position.x, rect.position.y), Vector2(rect.position.x, rect.end.y), Color(0.0, 0.95, 1.0, 0.38), 2.0)
-		if rect.end.y >= viewport.y and rect.position.y > 0.0:
-			draw_line(Vector2(rect.position.x, rect.position.y), Vector2(rect.end.x, rect.position.y), Color(0.0, 0.95, 1.0, 0.34), 2.0)
+	MenusPresentation._draw_corner_limbo(self, camera, viewport)
 
 
 func _clamp_player_world(pos: Vector2) -> Vector2:
@@ -55034,21 +42123,19 @@ func _open_edit_layout(viewport: Vector2) -> void :
 	edit_layout_touch_index = -1
 	edit_layout_selected = ""
 	edit_layout_resize_visible = false
-	hud_joy_pos = _joy_center(viewport)
-	hud_attack_pos = _attack_center(viewport)
-	hud_secondary_pos = _secondary_center(viewport)
-	hud_dash_pos = _dash_center(viewport)
-	hud_lacerante_empower_pos = _lacerante_empower_center(viewport)
-	hud_skill_pos = _skill_pos(viewport)
-	hud_shop_pos = _manual_shop_pos(viewport)
+	# Keep saved positions intact; the layout helpers already provide defaults for unset fields.
 	if hud_boss_panel_pos == Vector2(-1, -1):
 		hud_boss_panel_pos = RTHudLayoutScript.default_edit_layout_boss_panel_pos(viewport)
-	var portrait = _is_portrait(viewport)
-	var left_w = RTHudLayoutScript.left_panel_width(viewport)
-	var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
-	hud_aura_panel_pos = _aura_panel_pos(viewport, left_rect)
-	hud_cards_panel_pos = _cards_panel_pos(viewport, left_rect)
-	hud_coagulum_pos = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
+	if hud_aura_panel_pos == Vector2(-1, -1) or hud_cards_panel_pos == Vector2(-1, -1) or hud_coagulum_pos == Vector2(-1, -1):
+		var portrait = _is_portrait(viewport)
+		var left_w = RTHudLayoutScript.left_panel_width(viewport)
+		var left_rect = Rect2(_left_panel_pos(viewport), Vector2(left_w, 76))
+		if hud_aura_panel_pos == Vector2(-1, -1):
+			hud_aura_panel_pos = _aura_panel_pos(viewport, left_rect)
+		if hud_cards_panel_pos == Vector2(-1, -1):
+			hud_cards_panel_pos = _cards_panel_pos(viewport, left_rect)
+		if hud_coagulum_pos == Vector2(-1, -1):
+			hud_coagulum_pos = _coagulum_hud_center(viewport, 120.0, 13.0, viewport.y - (42.0 if not portrait else 58.0))
 
 
 func _return_from_settings() -> void :
@@ -55101,184 +42188,22 @@ func _activate_settings_option(index: int, viewport: Vector2) -> void :
 
 
 func _handle_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	settings_buttons = _settings_rects(viewport)
-	var option_keys: = _settings_option_keys()
-	for i in range(option_keys.size()):
-		var key: = String(option_keys[i])
-		if settings_buttons.has(key) and settings_buttons[key].has_point(pos):
-			settings_selected = i
-			_activate_settings_option(i, viewport)
-			return
+	SettingsController._handle_settings_touch(self, pos, viewport)
 
 
 func _handle_keyboard_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	settings_buttons = _keyboard_settings_rects(viewport)
-	var actions = _keyboard_action_order()
-	for i in range(actions.size()):
-		var action: = String(actions[i])
-		if settings_buttons.has(action) and settings_buttons[action].has_point(pos):
-			settings_selected = i
-			keyboard_mapping_action = action
-			return
-	if settings_buttons.has("reset") and settings_buttons["reset"].has_point(pos):
-		settings_selected = actions.size()
-		_reset_keyboard_bindings()
-		_save_config()
-		return
-	if settings_buttons.has("back") and settings_buttons["back"].has_point(pos):
-		keyboard_mapping_action = ""
-		_save_config()
-		mode = "settings"
-		_block_ui_input()
+	SettingsController._handle_keyboard_settings_touch(self, pos, viewport)
 
 
 func _handle_gamepad_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	if gamepad_mapping_action != "":
-		return
-	settings_buttons = _gamepad_settings_rects(viewport)
-	for action in _gamepad_action_order():
-		if settings_buttons.has(action) and settings_buttons[action].has_point(pos):
-			gamepad_mapping_action = action
-			return
-	if settings_buttons["back"].has_point(pos):
-		gamepad_mapping_action = ""
-		mode = "settings"
-		_block_ui_input()
+	SettingsController._handle_gamepad_settings_touch(self, pos, viewport)
 
 func _handle_gameplay_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	settings_buttons = _gameplay_preferences_rects(viewport)
-	if gameplay_cheat_focused:
-		settings_buttons["cheat_ok"] = Rect2()
-		settings_buttons["cheat_cancel"] = Rect2()
-		var panel: = _cheat_popup_rect(viewport)
-		settings_buttons["cheat_ok"] = Rect2(panel.position.x + panel.size.x * 0.5 - 168.0, panel.end.y - 62.0, 152.0, 44.0)
-		settings_buttons["cheat_cancel"] = Rect2(panel.position.x + panel.size.x * 0.5 + 16.0, panel.end.y - 62.0, 152.0, 44.0)
-		if settings_buttons["cheat_ok"].has_point(pos):
-			_submit_gameplay_cheat()
-		elif settings_buttons["cheat_cancel"].has_point(pos):
-			_close_gameplay_cheat_popup()
-			_save_config()
-		elif cheat_edit != null:
-			cheat_edit.grab_focus()
-		return
-	if settings_buttons["analog"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		analog_fixed = not analog_fixed
-		_save_config()
-	elif settings_buttons["shop_mode"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_set_shop_auto_enabled( not shop_auto_enabled)
-		_save_config()
-	elif settings_buttons["shop_interval"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		if not shop_auto_enabled:
-			return
-		var interval_panel: Rect2 = settings_buttons["shop_interval"]
-		if _shop_interval_minus_rect(interval_panel).has_point(pos):
-			shop_auto_interval = max(180.0, shop_auto_interval - 60.0)
-		elif _shop_interval_plus_rect(interval_panel).has_point(pos):
-			shop_auto_interval = min(480.0, shop_auto_interval + 60.0)
-		else:
-			return
-		shop_auto_elapsed = 0.0
-		next_forced_shop_time = shop_auto_interval
-		_save_config()
-	elif settings_buttons["target_priority"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		auto_target_priority = _next_target_priority(auto_target_priority)
-		_save_config()
-	elif settings_buttons.has("desktop_aim") and settings_buttons["desktop_aim"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_cycle_desktop_aim_mode()
-		_save_config()
-	elif settings_buttons.has("desktop_teleport") and settings_buttons["desktop_teleport"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_cycle_desktop_teleport_mode()
-		_save_config()
-	elif settings_buttons.has("desktop_attack_aim") and settings_buttons["desktop_attack_aim"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_cycle_desktop_attack_aim_mode()
-		_save_config()
-	elif settings_buttons.has("desktop_hud_scale") and settings_buttons["desktop_hud_scale"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		var hud_panel: Rect2 = settings_buttons["desktop_hud_scale"]
-		if _desktop_hud_scale_minus_rect(hud_panel).has_point(pos):
-			_cycle_desktop_hud_scale(-1)
-		elif _desktop_hud_scale_plus_rect(hud_panel).has_point(pos):
-			_cycle_desktop_hud_scale(1)
-		else:
-			_cycle_desktop_hud_scale(1)
-		_save_config()
-	elif settings_buttons["damage_text"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		var damage_panel: Rect2 = settings_buttons["damage_text"]
-		if _damage_text_minus_rect(damage_panel).has_point(pos):
-			damage_text_scale = max(0.7, damage_text_scale - 0.1)
-			_save_config()
-		elif _damage_text_plus_rect(damage_panel).has_point(pos):
-			damage_text_scale = min(1.8, damage_text_scale + 0.1)
-			_save_config()
-	elif settings_buttons["interface_text"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		var interface_panel: Rect2 = settings_buttons["interface_text"]
-		if _interface_text_minus_rect(interface_panel).has_point(pos):
-			interface_text_scale = max(0.9, snapped(interface_text_scale - 0.1, 0.1))
-			_save_config()
-		elif _interface_text_plus_rect(interface_panel).has_point(pos):
-			interface_text_scale = min(1.6, snapped(interface_text_scale + 0.1, 0.1))
-			_save_config()
-	elif settings_buttons["fps"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		show_fps_counter = not show_fps_counter
-		_save_config()
-	elif settings_buttons["tutorial"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_set_run_tutorial_enabled(not run_tutorial_enabled)
-	elif settings_buttons["retornante_cheat"].has_point(pos):
-		if not retornante_unlocked or not qa_data_unlocked:
-			_open_gameplay_cheat_popup()
-	elif settings_buttons["haptics"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		haptics_enabled = not haptics_enabled
-		if haptics_enabled:
-			_vibrate(55, 0.25)
-		_save_config()
-	elif settings_buttons.has("ui_platform_profile") and settings_buttons["ui_platform_profile"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_cycle_ui_platform_override()
-		_save_config()
-	elif QA_STREAMING_FEATURE_ENABLED and settings_buttons.has("qa_stream_quality") and settings_buttons["qa_stream_quality"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_cycle_qa_stream_quality_mode()
-		_save_config()
-	elif settings_buttons["back"].has_point(pos):
-		_close_gameplay_cheat_popup()
-		_save_config()
-		mode = "settings"
-		_block_ui_input()
+	SettingsController._handle_gameplay_settings_touch(self, pos, viewport)
 
 
 func _handle_audio_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	settings_buttons = _audio_settings_rects(viewport)
-	var panel: Rect2 = settings_buttons["panel"]
-	for i in range(4):
-		if _audio_minus_rect(panel, i).has_point(pos):
-			settings_selected = i
-			_set_audio_volume_index(i, _audio_volume_index(i) - 0.1)
-			return
-		if _audio_plus_rect(panel, i).has_point(pos):
-			settings_selected = i
-			_set_audio_volume_index(i, _audio_volume_index(i) + 0.1)
-			return
-		if _audio_slider_hit_rect(panel, i).has_point(pos):
-			settings_selected = i
-			audio_slider_drag_index = i
-			_update_audio_slider_from_pos(pos, viewport)
-			return
-	if settings_buttons["back"].has_point(pos):
-		_save_config()
-		mode = "settings"
-		_block_ui_input()
+	SettingsController._handle_audio_settings_touch(self, pos, viewport)
 
 
 func _audio_volume_index(index: int) -> float:
@@ -55314,17 +42239,7 @@ func _update_audio_slider_from_pos(pos: Vector2, viewport: Vector2) -> void:
 
 
 func _handle_data_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	_sync_webhook_input_rect(viewport)
-	if settings_buttons.get("data_save", Rect2()).has_point(pos):
-		_save_webhook_from_input()
-	elif settings_buttons.get("data_clear", Rect2()).has_point(pos):
-		_clear_run_report_webhook()
-	elif settings_buttons.get("data_back", Rect2()).has_point(pos):
-		mode = "settings"
-		_update_webhook_input_visibility()
-		_block_ui_input()
-	elif webhook_edit != null:
-		webhook_edit.grab_focus()
+	SettingsController._handle_data_settings_touch(self, pos, viewport)
 
 
 func _active_joy_center(viewport: Vector2) -> Vector2:
@@ -56912,20 +43827,7 @@ func _try_unlock_retornante_cheat() -> bool:
 
 
 func _draw_pause_mp_request(viewport: Vector2) -> void :
-	var panel_w: = minf(460.0, viewport.x * 0.86)
-	var panel_h: = 132.0 if pause_mp_request_incoming else 82.0
-	var panel: = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y - panel_h - 24.0, panel_w, panel_h)
-	var accent: = Color(0.38, 0.84, 1.0) if pause_mp_target_paused else Color(0.34, 1.0, 0.58)
-	_draw_holo_panel(panel, accent, true, 0.88)
-	var action_text: = "PAUSAR" if pause_mp_target_paused else "RETOMAR"
-	var title: = "EQUIPE QUER %s" % action_text if pause_mp_request_incoming else "PEDIDO PARA %s ENVIADO" % action_text
-	_draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), 15, accent)
-	_draw_centered("CONFIRMACOES %d/%d" % [pause_mp_vote_count, pause_mp_expected_count], Vector2(panel.get_center().x, panel.position.y + 56.0), 12, Color.WHITE)
-	buttons.erase("pause_mp_accept")
-	if pause_mp_request_incoming:
-		_draw_centered("CLIQUE OU ENTER/ESPACO", Vector2(panel.get_center().x, panel.position.y + 78.0), 11, Color(0.88, 0.96, 1.0))
-		buttons["pause_mp_accept"] = _pause_mp_accept_rect(viewport)
-		_draw_small_rect_button(buttons["pause_mp_accept"], "CONCORDAR  ENTER", Color(0.03, 0.14, 0.18, 0.94), accent)
+	MenusPresentation._draw_pause_mp_request(self, viewport)
 
 
 func _pause_mp_accept_rect(viewport: Vector2) -> Rect2:
@@ -57971,325 +44873,10 @@ func _lacerante_stage_points(origin: Vector2, dir: Vector2, stage: int) -> Array
 
 
 func _aura_details(name: String) -> Dictionary:
-	match name:
-		"Racional":
-			return {
-				"funcao": "Controle e leitura. Recompensa ficar calma, parar por instantes e usar o tempo contra a fase.", 
-				"disparo": "Fique imovel para gerar Analise; use Teleporte para ativar Dilatacao.", 
-				"habilidade": "Dilatacao", 
-				"desc_hab": "Desacelera o mundo por 8s e cria Rebote por 3s.", 
-				"traco": "Controle, leitura e reposicionamento seguro.", 
-				"risco": "Perde valor se voce nunca para ou teleporta sem plano."
-			}
-		"Impulsiva":
-			return {
-				"funcao": "Ritmo agressivo. Quanto mais abates sem tomar dano, maior a pressao ofensiva.", 
-				"disparo": "A cada 5 abates sem dano, ativa Frenesi.", 
-				"habilidade": "Frenesi", 
-				"desc_hab": "Acelera o ritmo ofensivo e premia sequencias limpas.", 
-				"traco": "Explosiva, rapida e focada em limpar ondas.", 
-				"risco": "Tomar dano quebra a sequencia e reduz o pico."
-			}
-		"Devota":
-			return {
-				"funcao": "Sobrevivencia por fe. Cria margem para errar e abre pequenas janelas de recuperacao.", 
-				"disparo": "Comeca com 3 cargas de protecao.", 
-				"habilidade": "Fe Restaurada", 
-				"desc_hab": "Anula impactos, cura parte da vida perdida e recarrega depois.", 
-				"traco": "Defensiva, estavel e boa para sobrevivencia.", 
-				"risco": "Gastar cargas em dano fraco deixa voce exposta."
-			}
-		"Vanguarda":
-			return {
-				"funcao": "Transforma dano recebido em area perigosa para inimigos.", 
-				"disparo": "Sofrer dano acende fogo ao redor de Geovana.", 
-				"habilidade": "Incendio Cronal", 
-				"desc_hab": "Queimaduras causam dano por vida maxima nos inimigos.", 
-				"traco": "Combate de contato, punicao e controle de cerco.", 
-				"risco": "Depende de tomar dano; force troca apenas com vida."
-			}
-		"Insana":
-			return {
-				"funcao": "Eco e repeticao. Cria copias atrasadas dos disparos e bagunca o campo.", 
-				"disparo": "Quando pronta, seus tiros criam ecos atrasados.", 
-				"habilidade": "Eco Insano", 
-				"desc_hab": "Ecos repetem disparos apos 1s e multiplicam pressao.", 
-				"traco": "Caotica, forte em corredores e tiros bem mirados.", 
-				"risco": "Mira ruim desperdiÃ§a os ecos."
-			}
-		"Voraz":
-			return {
-				"funcao": "Fome crescente. Coleta coagulos, cura vida perdida e fortalece o combate com ciclos.", 
-				"disparo": "Coagulos alimentam Fome e curam vida perdida.", 
-				"habilidade": "Mordida Voraz", 
-				"desc_hab": "Fome alta fortalece disparos, recargas e mordidas.", 
-				"traco": "Cresce em lutas longas e mapas cheios.", 
-				"risco": "Sem coleta, a Fome demora a virar poder."
-			}
-		"Nula":
-			return {
-				"funcao": "Precisao e paciencia. Carrega Vazio quando Geovana fica sem atacar.", 
-				"disparo": "Ficar sem atacar carrega Nulo.", 
-				"habilidade": "Nulificacao", 
-				"desc_hab": "O proximo tiro enfraquece alvo robusto e aumenta o dano.", 
-				"traco": "Precisao, paciencia e alto valor contra elites.", 
-				"risco": "Atirar sem pensar consome a janela carregada."
-			}
-		"Abissal":
-			return {
-				"funcao": "Escala com cerco. Quanto mais inimigos perto, mais Profundidade acumula.", 
-				"disparo": "Cerco e inimigos proximos carregam Profundidade.", 
-				"habilidade": "Mare Negra", 
-				"desc_hab": "Com 100%, invoca Mare Negra que puxa e fere alvos.", 
-				"traco": "Forte contra hordas e cercos densos.", 
-				"risco": "Posicionamento ruim pode prender Geovana no cerco."
-			}
-		"Profetica":
-			return {
-				"funcao": "Destino marcado. Escolhe pressagios e recompensa cumprir o alvo correto.", 
-				"disparo": "Marca um alvo por tempo limitado.", 
-				"habilidade": "Pressagio", 
-				"desc_hab": "Acertar o alvo marcado aumenta dano e sequencia.", 
-				"traco": "Foco, prioridade e leitura limpa de alvo.", 
-				"risco": "Ignorar o alvo marcado desperdiÃ§a a recompensa."
-			}
-		"Sanguinaria":
-			return {
-				"funcao": "Feridas e sede. Dano repetido no mesmo alvo cria Feridas e alimenta Sede.", 
-				"disparo": "Acertos repetidos no mesmo alvo abrem Feridas.", 
-				"habilidade": "Carnificina Controlada", 
-				"desc_hab": "Feridas alimentam Sede e preparam Carnificina.", 
-				"traco": "Foco constante e pico contra alvos resistentes.", 
-				"risco": "Trocar muito de alvo derruba Feridas e Sede."
-			}
-		"Crepuscular":
-			return {
-				"funcao": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Se carregar a fase ate 100%, ativa Eclipse.", 
-				"disparo": "Ocaso carrega com dano direto e abates; Alvorada carrega com cura real e tempo sem dano.", 
-				"habilidade": "Eclipse", 
-				"desc_hab": "Combina parte da defesa da Alvorada com parte do dano e cadencia do Ocaso.", 
-				"traco": "Controle de transicao, leitura de risco e janela perfeita de teleporte.", 
-				"risco": "Tomar dano reduz carga; usar TP fora da janela nao acelera o Eclipse."
-			}
-		"Peregrino":
-			return {
-				"funcao": "Explora setores diferentes da arena para iniciar Jornada e marcar um Refugio.", 
-				"disparo": "Cada setor novo concede Passos; repetir os ultimos setores nao conta.", 
-				"habilidade": "Jornada", 
-				"desc_hab": "Aumenta velocidade, coleta e regeneracao por vida perdida ate voltar ao Refugio.", 
-				"traco": "Mobilidade planejada, rotas e reposicionamento constante.", 
-				"risco": "Ficar parado ou pingar entre os mesmos setores perde Passos."
-			}
-		"Equilibrista":
-			return {
-				"funcao": "Fica mais forte mantendo a vida entre 35% e 80%.", 
-				"disparo": "Dentro da faixa, carrega Equilibrio; fora dela, a barra cai.", 
-				"habilidade": "Equilibrio", 
-				"desc_hab": "Concede dano e reducao de dano. Overheal acima de 80% vira escudo temporario.", 
-				"traco": "Jogo fino de vida, risco controlado e sobrevivencia ativa.", 
-				"risco": "Dano que cruza 35% vira Divida e pode matar se ignorada."
-			}
-		"Avarento":
-			return {
-				"funcao": "Pontos guardados viram Lastro: defesa e resistencia a impacto em troca de peso.", 
-				"disparo": "Quanto mais pontos em relacao ao custo da loja, maior o Lastro.", 
-				"habilidade": "Rompimento do Cofre", 
-				"desc_hab": "Ao comprar carta, suspende o peso, concede velocidade e escudo.", 
-				"traco": "Economia defensiva, timing de compra e explosao curta apos gastar.", 
-				"risco": "Guardar muito pesa a movimentacao; fragmentos de TP nao dao pontos."
-			}
-		"Oportunista":
-			return {
-				"funcao": "Procura Aberturas durante preparacao, recuperacao, stun ou janela de ataque inimiga.", 
-				"disparo": "Acertos diretos em Abertura carregam o proximo Golpe de Oportunidade.", 
-				"habilidade": "Golpe de Oportunidade", 
-				"desc_hab": "O proximo dano direto recebe bonus, atrasa o inimigo e recupera parte de Q ou E.", 
-				"traco": "Precisao, leitura de telegraph e punicao de ataques inimigos.", 
-				"risco": "Dano de cartas, areas persistentes e aliados nao carregam Aberturas."
-			}
-	return {
-		"funcao": "Estado espectral em leitura.", 
-		"disparo": "Gatilho ainda instavel.", 
-		"habilidade": "Indefinida", 
-		"desc_hab": "A aurea ainda nao estabilizou.", 
-		"traco": "Espectro desconhecido.", 
-		"risco": "Instavel demais para combate."
-	}
-
+	return CatalogDetails.aura_details(name)
 
 func _manifestation_details(key: String) -> Dictionary:
-	var catalog_details: = CatalogDetails.manifestation_details(self, key)
-	if String(catalog_details.get("funcao", "")) != "Forma em leitura.":
-		return catalog_details
-	match key:
-		"eletrica":
-			return {
-				"funcao": "Mais facil de entender e jogar. Boa para primeira partida, fase cheia e troca rapida de alvo.", 
-				"disparo": "ATK: tiro eletrico reto. A passiva marca Sobrecarga apenas enquanto Eletrica esta ativa; a cada 4 tiros, sai um disparo mais forte que explode em area pequena.", 
-				"habilidade": "Q - Onda Cinetica", 
-				"desc_hab": "Empurra inimigos proximos, causa dano em area e abre espaco quando a tela fecha.", 
-				"traco": "E - Bobina de Tesla: recarga de 10s. Cria uma zona eletrica; inimigos dentro do raio tomam choque a cada 0,4s e ficam levemente atordoados.", 
-				"risco": "E drena vida depois de 2 minutos. TP: vira eletricidade por 3s e causa 0,5% da vida maxima a cada 300ms nos alvos atravessados; so entao recarrega."
-			}
-		"lacerante":
-			return {
-				"funcao": "Cacadora de alto risco e recompensa. Eliminar qualquer inimigo incomum concede 50% mais pontos.", 
-				"disparo": "ATK: sequencia de 3 laminas espaciais. A cada 20 Coagulos, o alcance do corte aumenta +5px.", 
-				"habilidade": "Q - Circulo Lacerante", 
-				"desc_hab": "A lamina gira 5 voltas em 1,5s. Cada volta causa dano e cura 0,25% da vida perdida por alvo atingido. Ganha +1 volta a cada 10 Coagulos.", 
-				"traco": "REFORCO (3s): arma o proximo ATK. Se executar um alvo, gera +1 Coagulo. Cada Coagulo concede +0,30% dano e +0,25% velocidade de ataque.", 
-				"risco": "TP: possui 2 cargas. Apos a primeira, ha 800ms para usar a segunda. Ao atravessar ate 3 alvos, fica invulneravel e aplica 10 cortes em 3s; a recarga de 2s inicia depois dos cortes.", 
-				"info_rows": [
-					{"label": "ATK", "text": "3 laminas com +15px base. +5px de alcance a cada 20 Coagulos. Corpos grandes recebem dano maior."}, 
-					{"label": "Q", "text": "5 voltas em 1,5s, cada uma com dano e cura. +1 volta a cada 10 Coagulos."}, 
-					{"label": "REFORCO", "text": "Recarga de 3s. Arma o proximo ATK; executar um alvo com ele gera +1 Coagulo."}, 
-					{"label": "PASSIVAS", "text": "Incomuns valem +50% pontos. Cada Coagulo concede +0,30% dano e +0,25% velocidade de ataque."}, 
-					{"label": "E / TP", "text": "TP tem 2 cargas e janela de 800ms. Carnificina e TP ganham +2 cortes a cada 20 Coagulos."}
-				]
-			}
-		"prismatica":
-			return {
-				"funcao": "Tecnica de mira. Recompensa angulo, ricochete e preparo antes de apertar os botoes.", 
-				"disparo": "ATK: feixe rapido e fino. Ricocheteia em parede ou inimigo e pode acertar mais de uma vez.", 
-				"habilidade": "Q - Prisma de Refracao", 
-				"desc_hab": "Coloca um prisma na posicao da Geovana. Tiros que atravessam o prisma se dividem em 5 feixes.", 
-				"traco": "E - Coroa Espectral: Geovana fica invulneravel; linhas de luz giram e causam dano. Aperte E novamente para cancelar.", 
-				"risco": "TP: cria no destino um prisma maior, atravessavel por disparos. A recarga comeca quando o prisma termina."
-			}
-		"retornante":
-			return {
-				"funcao": "Dano atrasado. O tiro vai mais fraco e volta mais perigoso para perto da Geovana.", 
-				"disparo": "ATK: pulso que sai, atravessa o campo e depois retorna. A volta causa mais dano que a ida.", 
-				"habilidade": "Q - Memoria Instavel", 
-				"desc_hab": "Marca um pulso ativo para procurar alvos e voltar fortalecido. Se nao houver pulso, o proximo tiro recebe a memoria.", 
-				"traco": "E - Paradoxo de Retorno: prolonga os retornos ativos e cria linhas temporais que causam dano entre Geovana e os pulsos.", 
-				"risco": "TP: durante 850ms, toque novamente para voltar a origem. Usando ou nao o retorno, a recarga de 1,2s comeca depois da janela."
-			}
-		"parasitica":
-			return {
-				"funcao": "Infestacao com janela curta. Cada acerto mantem larvas visiveis no alvo por 6 segundos.", 
-				"disparo": "ATK: verme parasita reforcado. Causa dano e adiciona larvas; novos acertos renovam a marca de 6s.", 
-				"habilidade": "Q - Cuspe Infestante", 
-				"desc_hab": "Cospe um bolo de vermes na direcao da mira. O impacto cria uma area viva que causa dano e contamina inimigos dentro dela.", 
-				"traco": "E - Enxame Subterraneo: vermes entram pelas bordas, escavam ate cada alvo marcado e devoram por 8s, causando 5% da vida atual por segundo.", 
-				"risco": "TP: deixa 3 ovos na origem; os vermes perseguem e atordoam por 1,8s. Chefes usando habilidade resistem ao atordoamento."
-			}
-		"gravitante":
-			return {
-				"funcao": "Controle automatico. Ajuda quando a tela esta cheia porque parte do dano segue os alvos sozinho.", 
-				"disparo": "ATK: orbe gravitante. Ao acertar, cria uma orbita no alvo e causa pequenos ticks de dano.", 
-				"habilidade": "Q - Colisao Gravitacional", 
-				"desc_hab": "Colide todos os alvos marcados pelos ATKs, causa dano e empurra inimigos nao marcados que estiverem proximos.", 
-				"traco": "E - Nucleo Gravitante: prende e gira inimigos e chefes, causando dano crescente perto da borda antes do colapso.", 
-				"risco": "TP: a origem libera uma onda de 230px que empurra inimigos comuns e elites, mas nao move chefes."
-			}
-		"ancorada":
-			return {
-				"funcao": "Controle de territorio. Escolha uma area boa e lute perto das ancoras.", 
-				"disparo": "ATK: planta uma ancora e dispara. Perto das ancoras, seus tiros ficam mais fortes.", 
-				"habilidade": "Q - Onda Ancorada", 
-				"desc_hab": "Solta uma onda a partir da Geovana, causando dano nos inimigos ao redor.", 
-				"traco": "E - Dominio Fixo: cria uma area fixa. Dentro dela, sua cadencia melhora e projeteis inimigos ficam mais lentos.", 
-				"risco": "Perde forca se voce for obrigada a fugir o tempo todo ou sair do territorio preparado."
-			}
-		"cartografica":
-			return {
-				"funcao": "Controle espacial sem roubar sua mira. Marca ate 3 coordenadas e transforma tiros que atravessam essas rotas em golpes mais fortes.", 
-				"disparo": "ATK - Agulha de Levantamento: sempre nasce na Geovana e segue sua mira. Ao expirar cria coordenada no chao; ao acertar alvo cria coordenada nele.", 
-				"habilidade": "Q - Dobra Cartografica", 
-				"desc_hab": "Fixa coordenada no alvo ou na direcao da mira e ativa rotas. Com 3 coordenadas abre Mapa Completo, ampliando o triangulo de controle.", 
-				"traco": "E - Mapa Rasgado: por alguns segundos dispara agulhas de leitura a partir da Geovana contra alvos importantes e reforca as rotas ja preparadas.", 
-				"risco": "TP: Passo Cartografico respeita o destino escolhido e deixa uma coordenada no ponto final. Tiros que cruzam 1/2/3 coordenadas ganham dano, perfuracao e explosao."
-			}
-		"mnesica":
-			return {
-				"funcao": "Punicao de padroes. Registra lembrancas de dor, ataque ou perseguicao e transforma a memoria do inimigo contra ele.", 
-				"disparo": "ATK - Estilhaco de Lembranca: dano baixo que grava ate 3 lembrancas no alvo. Com 3, ativa Deja-vu.", 
-				"habilidade": "Q - Revivencia", 
-				"desc_hab": "Detona lembrancas proximas. Dor repete dano, ataque atrasa e erra alvo, perseguicao forca trajetoria instavel.", 
-				"traco": "E - Arquivo Vivo: por alguns segundos, ataques proximos gravam memorias rapidamente para preparar uma punicao maior.", 
-				"risco": "TP: Apagao Mnemico faz inimigos mirarem a posicao antiga e o proximo golpe contra enganados causa mais dano. Chefes abrem janela curta de vulnerabilidade."
-			}
-		"ressonante":
-			return {
-				"funcao": "Manifestacao de timing. Um compasso visual de 4 batidas recompensa ataques no ritmo certo.", 
-				"disparo": "ATK - Nota Curta: fora do tempo causa dano normal; no tempo perfeito causa mais dano e aplica Grave, Aguda ou Quebrada.", 
-				"habilidade": "Q - Silencio Absoluto", 
-				"desc_hab": "Detona notas aplicadas, atrasa ataques inimigos e usa sua sequencia perfeita para aumentar o efeito.", 
-				"traco": "E - Crescendo: garante proxima Nota Perfeita, gera acordes ao redor e melhora o ritmo ofensivo por poucos segundos.", 
-				"risco": "TP: Contratempo. Se usado na janela perfeita, ganha invulnerabilidade maior, velocidade curta e proxima nota garantida."
-			}
-		"contratual":
-			return {
-				"funcao": "Regras e sentencas. Marca inimigos com clausulas e pune quem quebra agressao, aproximacao ou fuga. Letras: A = agressao, P = aproximacao, F = fuga.", 
-				"disparo": "ATK - Selo de Clausula: aplica regra conforme comportamento do alvo. O dano direto e baixo, mas prepara execucao e infracoes.", 
-				"habilidade": "Q - Execucao de Contrato", 
-				"desc_hab": "Executa contratos ativos. Mais infracoes aumentam dano, postura quebrada, stun curto e vulnerabilidade.", 
-				"traco": "E - Ordem Judicial: sorteia uma ordem de 15s, mostra o contrato no centro e depois fixa o progresso no canto. Cumprir concede uma bencao poderosa por 60s; falhar ativa Confisco por 2min.", 
-				"risco": "TP: Notificacao Judicial deixa uma armadilha na origem. Quebras de contrato reduzem um pouco a recarga da Ordem Judicial. Usar Q em muitos contratos sem infracao ainda ativa Multa de Ruptura."
-			}
-		"acorrentada":
-			return {
-				"funcao": "Controle e ruptura. Prende inimigos, acumula Tensao e transforma Elos em golpes pesados.", 
-				"disparo": "ATK - Ciclo dos Tres Elos: golpe 1 aplica Elo em linha, golpe 2 varre em arco e golpe 3 rompe os Elos com duas correntes cruzadas.", 
-				"habilidade": "Q - Prisao Geminada", 
-				"desc_hab": "Liga dois inimigos, prende um alvo ao chao ou contem boss sem puxar. Parte do dano direto em um alvo ligado passa para o outro.", 
-				"traco": "E - Sentenca dos Grilhoes: aperta alvos com Elo, ligados pelo Q ou dentro da area; dano cresce por Elo e consome as marcas.", 
-				"risco": "Tensao chega a 100 e fortalece o proximo Q ou E, depois volta para 35. TP deixa uma corrente que aplica Elo e pode avancar o combo.", 
-				"info_rows": [
-					{"label": "ELOS", "text": "Cada alvo acumula ate 3 Elos por 6s. O terceiro ATK consome tudo para aumentar o dano."}, 
-					{"label": "TENSAO", "text": "40+ aumenta alcance; 70+ aumenta dano/area; 100 fortalece o proximo Q ou E."}, 
-					{"label": "Q", "text": "Dois alvos compartilham 18% do dano direto. Com Sobretensao prende ate 3 e sobe para 24%."}, 
-					{"label": "E", "text": "Raio de 420px, preparo curto e dano por Elo. Em boss aplica Rachadura para reforcar o proximo golpe 3."}, 
-					{"label": "TP", "text": "Troca de Elo deixa rastro de corrente por 1,2s, aplica 1 Elo por alvo e nao consome Sobretensao."}
-				]
-			}
-		"eclipsada":
-			var trait_status: = "Passiva pronta para copiar um traco no proximo abate." if eclipsada_passive_timer <= 0.0 else "Passiva recarrega em %.0fs." % eclipsada_passive_timer
-			if eclipsada_trait_timer > 0.0:
-				trait_status = "Traco ativo: %s por %.0fs. Cor e comportamento das habilidades mudam enquanto durar." % [eclipsada_trait_name, eclipsada_trait_timer]
-			var form_status: = "Forma atual: SOL. Shurikens explodem, HAB1 dispara rajada solar e ULT cria uma coroa de dano em area." if _eclipsada_is_sol() else "Forma atual: LUA. ATK usa duas laminas de 180px, HAB1 liga/desliga furtividade com drenagem progressiva e ULT cria um eclipse de cortes proximos."
-			return {
-				"funcao": "Duelista hibrida de curto alcance. O botao REFORCO alterna entre Lua e Sol a qualquer momento, mudando ATK, HAB1 e ULT.", 
-				"disparo": "ATK - Lua usa duas laminas proximas em tres direcoes, com o terceiro corte sempre critico. Sol usa shuriken de 280px; aos 285px a lamina perde forca e cai.", 
-				"habilidade": "Q - Lua Rasante / Estilhaco Solar", 
-				"desc_hab": "Lua: liga/desliga furtividade. Depois de 3s invisivel, perde vida a cada segundo e o custo aumenta a cada 3s. Sol: dispara 3 shurikens solares em leque com explosao no impacto.", 
-				"traco": "E - Eclipse Laminar / Coroa Solar: Lua cria um campo movel de cortes ao redor da Geovana; Sol cria uma zona pulsante de cortes no ponto mirado.", 
-				"risco": form_status + " " + trait_status, 
-				"info_rows": [
-					{"label": "FORMA", "text": "REFORCO troca Lua/Sol sem recarga e cria um anel visual ao redor da Geovana."}, 
-					{"label": "ATK LUA", "text": "Duas laminas de 180px. O combo corta esquerda, direita e centro; o terceiro hit sempre crita e escala com critico."}, 
-					{"label": "ATK SOL", "text": "Shuriken curto mais forte, nao perfura, mas explode em raio pequeno no impacto."}, 
-					{"label": "Q", "text": "Lua e uma ativacao: invisivel ate desligar, com cooldown de 10s apos revelar. Sol foca rajada direta e area curta."}, 
-					{"label": "E", "text": "Lua invoca um eclipse que pulsa cortes em ate 3 alvos proximos; Sol coloca uma coroa pulsante ate 260px."}, 
-					{"label": "PASSIVA", "text": "Lua ganha dano nas laminas enquanto segue oculta. Sol deixa queimadura curta nas explosoes. A cada 80s, um abate ainda copia traco inimigo por 60s."}
-				]
-			}
-		"bombastica":
-			return {
-				"funcao": "Especialista em armadilhas e reacao em cadeia. Fraca se atira sem preparar terreno, muito forte quando controla onde a luta acontece.", 
-				"disparo": "ATK - Estopim Instavel: tiro mais lento que aplica Polvora Instavel. Cada alvo segura ate 3 cargas por 5s.", 
-				"habilidade": "Q - Triade de Demolicao", 
-				"desc_hab": "Possui 3 cargas independentes. Cada Q planta ou arremessa uma bomba com fusivel entre 3s e 6s, raio de 105px e dano alto. Bombas proximas podem acionar cadeia.", 
-				"traco": "E - Bomba-Cometario: lança uma bomba viva que anda pelo mapa, quica periodicamente causando explosão e absorve tiros para redirecionar.", 
-				"risco": "Aos 3 acumulos de Polvora, a proxima explosao consome as cargas e causa Ignicao. Segure DET para detonar todas; toque curto detona a bomba mais antiga.", 
-				"info_rows": [
-					{"label": "ATK", "text": "0,62x dano atual, 92% da velocidade padrao e cadencia de 0,58s. Serve para preparar Polvora, nao para ser a unica fonte de dano."}, 
-					{"label": "POLVORA", "text": "Ate 3 cargas por alvo, 5s. Cada carga aumenta em 6% o dano explosivo Bombastica recebido."}, 
-					{"label": "Q", "text": "3 cargas, cada uma recarrega em 7s. Bomba perto da Geovana e plantada; alvo distante vira arremesso."}, 
-					{"label": "DETONADOR", "text": "Toque curto detona uma bomba. Segurar por 0,62s aciona Detonacao Total com penalidade de controle."}, 
-					{"label": "E", "text": "Campo por 7s com 5 minas, recarga de 13,5s. Bom para segurar corredores e preparar cadeia."}
-				]
-			}
-	return {
-		"funcao": "Forma em leitura.", 
-		"disparo": "Sinal incompleto.", 
-		"habilidade": "Indefinida", 
-		"desc_hab": "Eco ainda nao dominado.", 
-		"traco": "Aguardando dominio.", 
-		"risco": "Instavel demais para combate."
-	}
-
+	return CatalogDetails.manifestation_details(self, key)
 
 func _current_map_texture() -> Texture2D:
 	var key: = "map_phase_1"
@@ -58533,13 +45120,14 @@ func _spawn_rain_splash(pos: Vector2) -> void :
 		var angle = rng.randf_range( - PI * 0.92, - PI * 0.08)
 		droplets.append({
 			"pos": pos, 
-			"vel": Vector2.from_angle(angle) * rng.randf_range(28.0, 72.0), 
-			"size": rng.randf_range(1.0, 2.0)
+			"vel": Vector2.from_angle(angle) * rng.randf_range(40.0, 85.0), 
+			"size": rng.randf_range(1.5, 2.8)
 		})
+	var lifetime: float = rng.randf_range(0.38, 0.52)
 	rain_splashes.append({
 		"pos": pos, 
-		"life": rng.randf_range(0.16, 0.28), 
-		"max_life": 0.28, 
+		"life": lifetime, 
+		"max_life": lifetime, 
 		"radius": rng.randf_range(5.0, 12.0), 
 		"droplets": droplets
 	})
@@ -58593,28 +45181,7 @@ func _update_snow(delta: float) -> void :
 
 
 func _draw_rain_puddles(camera: Vector2) -> void :
-	var t = float(Time.get_ticks_msec()) * 0.001
-	for puddle in puddles:
-		if not _world_point_in_view(Vector2(puddle.get("pos", Vector2.ZERO)), camera, float(puddle.get("r", WEATHER_PUDDLE_MAX_SIZE)) + 90.0):
-			continue
-		var life_alpha = clamp(float(puddle["life"]) / max(0.01, float(puddle["max_life"])), 0.0, 1.0)
-		var grow_alpha = clamp(float(puddle.get("grow", 0.0)) / max(0.01, float(puddle.get("grow_time", 1.4))), 0.0, 1.0)
-		var alpha = min(life_alpha, grow_alpha)
-		var center = Vector2(puddle["pos"]) - camera
-		var radius = float(puddle["r"])
-		var phase = float(puddle["phase"])
-		var shine = float(puddle["shine"])
-		var glow = 0.52 + sin(t * 2.4 + phase) * 0.18
-		draw_set_transform(center, float(puddle["tilt"]), Vector2(1.0 + sin(phase) * 0.08, 0.38 + cos(phase * 0.7) * 0.05))
-		draw_circle(Vector2.ZERO, radius + 4.0, Color(0.02, 0.05, 0.08, 0.22 * alpha))
-		draw_circle(Vector2.ZERO, radius, Color(0.28, 0.52, 0.68, 0.2 * alpha))
-		draw_circle(Vector2.ZERO, radius * 0.72, Color(0.74, 0.92, 1.0, 0.13 * alpha * shine))
-		draw_arc(Vector2.ZERO, radius * 0.86, - PI * 0.78, - PI * 0.16, 18, Color(0.96, 1.0, 1.0, 0.35 * alpha * glow), 1.6)
-		draw_arc(Vector2.ZERO, radius * 0.54, PI * 0.1, PI * 0.62, 14, Color(0.88, 0.36, 1.0, 0.16 * alpha), 1.2)
-		draw_line(Vector2( - radius * 0.44, - radius * 0.08), Vector2(radius * 0.38, - radius * 0.2), Color(0.92, 1.0, 1.0, 0.26 * alpha * shine), 1.5)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		if player_pos.distance_to(Vector2(puddle["pos"])) <= radius:
-			draw_arc(center, radius + 7.0, 0.0, TAU, 34, Color(0.7, 0.94, 1.0, 0.42), 1.8)
+	WorldEnvironmentPresentation._draw_rain_puddles(self, camera)
 
 
 func _draw_weather_precipitation(camera: Vector2) -> void :
@@ -58626,71 +45193,22 @@ func _draw_weather_precipitation(camera: Vector2) -> void :
 
 
 func _draw_raindrops(camera: Vector2) -> void :
-	var draw_cap: int = _low_resource_cap(WEATHER_MAX_RAIN_DROPS, LOW_RESOURCE_RAIN_DROP_CAP)
-	var drawn: int = 0
-	for drop in raindrops:
-		if drawn >= draw_cap:
-			break
-		var ground = Vector2(drop["ground"])
-		var pos = Vector2(ground.x, ground.y - float(drop["height"])) - camera
-		if not _screen_point_in_view(pos, 120.0):
-			continue
-		drawn += 1
-		WeatherVFX.rain(self, pos, drop, _rain_intensity())
+	WorldEnvironmentPresentation._draw_raindrops(self, camera)
 
 
 func _draw_rain_splashes(camera: Vector2) -> void :
-	var draw_cap: int = 16 if _memory_saver_active() else (26 if _runtime_visual_budget_active() else 90)
-	var drawn: int = 0
-	for splash in rain_splashes:
-		if drawn >= draw_cap:
-			break
-		var alpha = clamp(float(splash["life"]) / max(0.01, float(splash["max_life"])), 0.0, 1.0)
-		var center = Vector2(splash["pos"]) - camera
-		if not _screen_point_in_view(center, 96.0):
-			continue
-		drawn += 1
-		var radius = float(splash["radius"]) * (1.0 + (1.0 - alpha) * 1.4)
-		draw_set_transform(center, 0.0, Vector2(1.0, 0.36))
-		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, Color(0.02, 0.12, 0.2, 0.55 * alpha), 3.0)
-		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 20, Color(0.86, 0.96, 1.0, 0.64 * alpha), 1.3)
-		draw_arc(Vector2.ZERO, radius * 0.55, PI, TAU, 12, Color(0.56, 0.85, 1.0, 0.36 * alpha), 1.0)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		for bit in Array(splash.get("droplets", [])):
-			draw_circle(Vector2(bit["pos"]) - camera, float(bit["size"]) * alpha, Color(0.9, 0.98, 1.0, 0.64 * alpha))
+	WorldEnvironmentPresentation._draw_rain_splashes(self, camera)
 
 
 func _draw_snowflakes(camera: Vector2) -> void :
-	var draw_cap: int = _low_resource_cap(WEATHER_MAX_SNOW_FLAKES, LOW_RESOURCE_SNOW_FLAKE_CAP)
-	var drawn: int = 0
-	for flake in snowflakes:
-		if drawn >= draw_cap:
-			break
-		var pos = Vector2(flake["pos"]) - camera
-		if not _screen_point_in_view(pos, 120.0):
-			continue
-		drawn += 1
-		WeatherVFX.snow(self, pos, flake, boss2_ultimate_timer > 0.0, gfx_low_resource or _memory_saver_active())
+	WorldEnvironmentPresentation._draw_snowflakes(self, camera)
 
 
 func _draw_graphics_settings(viewport: Vector2) -> void :
-	_draw_settings_shell(viewport, "Gráficos", "Ajuste a atmosfera e encontre o melhor desempenho.")
-	settings_buttons = _graphics_settings_rects(viewport)
-	var keys: = _graphics_setting_keys()
-	for i in range(keys.size()):
-		var key: = String(keys[i])
-		if key == "back":
-			_draw_settings_card(settings_buttons[key], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), settings_selected == i)
-			continue
-		_draw_gameplay_preference(settings_buttons[key], _graphics_setting_title(key), _graphics_setting_subtitle(key), _graphics_setting_value(key), _graphics_setting_color(key), settings_selected == i)
+	MenusPresentation._draw_graphics_settings(self, viewport)
 
 func _handle_graphics_settings_touch(pos: Vector2, viewport: Vector2) -> void :
-	settings_buttons = _graphics_settings_rects(viewport)
-	for key in _graphics_setting_keys():
-		var option: = String(key)
-		if settings_buttons.has(option) and settings_buttons[option].has_point(pos):
-			_activate_graphics_setting(option)
-			return
+	SettingsController._handle_graphics_settings_touch(self, pos, viewport)
 
 
 func _graphics_setting_keys() -> Array:
@@ -58702,39 +45220,7 @@ func _graphics_setting_keys() -> Array:
 
 
 func _graphics_settings_rects(viewport: Vector2) -> Dictionary:
-	var portrait = _is_portrait(viewport)
-	var keys: = _graphics_setting_keys()
-	if not portrait:
-		var outer_w: float = min(1120.0, viewport.x * 0.88)
-		var x: float = viewport.x * 0.5 - outer_w * 0.5
-		var y: float = maxf(100.0, viewport.y * 0.18)
-		var gap: float = 12.0
-		var col_gap: float = 18.0
-		var col_w: float = (outer_w - col_gap) * 0.5
-		var option_count: int = maxi(1, keys.size() - 1)
-		var rows: int = int(ceil(float(option_count) / 2.0))
-		var back_h: float = 54.0
-		var row_h: float = clamp((viewport.y - y - back_h - 64.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 64.0, 108.0)
-		var wide_rects: Dictionary = {}
-		var option_index: int = 0
-		for key in keys:
-			if key == "back":
-				continue
-			var col: int = option_index % 2
-			var row: int = int(option_index / 2)
-			wide_rects[String(key)] = Rect2(x + float(col) * (col_w + col_gap), y + float(row) * (row_h + gap), col_w, row_h)
-			option_index += 1
-		wide_rects["back"] = Rect2(x, y + float(rows) * (row_h + gap) + 8.0, outer_w, back_h)
-		return wide_rects
-	var w = min(760.0, viewport.x * (0.86 if portrait else 0.66))
-	var x = viewport.x * 0.5 - w * 0.5
-	var y = viewport.y * (0.14 if portrait else 0.15)
-	var gap = 9.0
-	var row_h = clamp((viewport.y - y - 42.0 - gap * float(keys.size() - 1)) / float(keys.size()), 42.0, 58.0)
-	var rects: = {}
-	for i in range(keys.size()):
-		rects[String(keys[i])] = Rect2(x, y + (row_h + gap) * float(i), w, row_h)
-	return rects
+	return MENU_PRESENTATION.graphics_settings_rects(self, viewport)
 
 
 func _graphics_setting_title(key: String) -> String:
@@ -60488,68 +46974,11 @@ func _draw_online_header(viewport: Vector2, title: String, accent: Color, subtit
 
 
 func _draw_online_create_room(viewport: Vector2) -> void:
-	var accent: = Color(1.0, 0.44, 0.88)
-	_draw_online_header(viewport, "CRIAR SALA ONLINE", accent, "defina nome, senha e convide a equipe")
-	_sync_online_room_input_rects(viewport)
-	var panel: = _online_create_panel_rect(viewport)
-	_draw_holo_panel(panel, accent, true, 0.68)
-	var status: = online_status if online_status != "" else "CONFIGURE SUA SALA"
-	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 54.0), 18, Color.WHITE)
-
-	var name_rect: = _online_create_name_input_rect(viewport)
-	var password_rect: = _online_create_password_input_rect(viewport)
-	_draw_online_input_backing(name_rect, "NOME DA SALA", accent)
-	_draw_online_input_backing(password_rect, "SENHA", accent)
-	var visibility_label: = "PUBLICA" if online_room_password.strip_edges() == "" else "PRIVADA"
-	var info_rect: = Rect2(panel.position.x + 44.0, panel.position.y + 294.0, panel.size.x - 88.0, 56.0)
-	_draw_holo_panel(info_rect, Color(0.0, 1.0, 0.82), false, 0.32)
-	_draw_centered("VISIBILIDADE: " + visibility_label, info_rect.position + Vector2(info_rect.size.x * 0.5, 24.0), 14, Color(0.0, 1.0, 0.82))
-	_draw_centered("sem senha aparece aberta; com senha exige confirmacao ao entrar", info_rect.position + Vector2(info_rect.size.x * 0.5, 44.0), 11, Color(0.76, 0.94, 1.0, 0.82))
-
-	var button_y: = panel.end.y - 76.0
-	buttons["online_create_submit"] = Rect2(panel.position.x + 44.0, button_y, panel.size.x * 0.52, 48.0)
-	buttons["online_create_back"] = Rect2(panel.end.x - panel.size.x * 0.34 - 44.0, button_y, panel.size.x * 0.34, 48.0)
-	_draw_big_button(buttons["online_create_submit"], "CRIAR SALA", Color(0.05, 0.12, 0.12, 0.92), Color(0.0, 1.0, 0.82))
-	_draw_big_button(buttons["online_create_back"], "VOLTAR", Color(0.1, 0.05, 0.07, 0.92), Color(1.0, 0.24, 0.34))
+	MenusPresentation._draw_online_create_room(self, viewport)
 
 
 func _draw_online_find_room(viewport: Vector2) -> void:
-	var accent: = Color(0.0, 1.0, 0.82)
-	_draw_online_header(viewport, "PROCURAR SALA", accent, "entre por lista publica ou codigo privado")
-	_sync_online_room_input_rects(viewport)
-	for key in buttons.keys():
-		var button_key: = String(key)
-		if button_key.begins_with("room_select_"):
-			buttons.erase(button_key)
-	var panel: = _online_find_panel_rect(viewport)
-	_draw_holo_panel(panel, accent, true, 0.64)
-	var status: = online_status if online_status != "" else "BUSCANDO SALAS ONLINE..."
-	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 48.0), 18, Color.WHITE)
-
-	var list_rect: = Rect2(panel.position.x + 36.0, panel.position.y + 80.0, panel.size.x - 72.0, panel.size.y - 260.0)
-	_draw_holo_panel(list_rect, accent, false, 0.22)
-	if online_room_list.is_empty():
-		_draw_centered("NENHUMA SALA ABERTA", list_rect.get_center() + Vector2(0.0, -12.0), 18, Color(1.0, 0.82, 0.24))
-		_draw_centered("use um codigo privado ou atualize a lista", list_rect.get_center() + Vector2(0.0, 18.0), 12, Color(0.76, 0.94, 1.0, 0.82))
-	else:
-		var row_h: float = min(58.0, (list_rect.size.y - 18.0) / float(mini(5, online_room_list.size())))
-		var visible_count: int = mini(5, online_room_list.size())
-		for i in range(visible_count):
-			var room: Dictionary = Dictionary(online_room_list[i])
-			var row: = Rect2(list_rect.position.x + 16.0, list_rect.position.y + 12.0 + float(i) * (row_h + 8.0), list_rect.size.x - 32.0, row_h)
-			buttons["room_select_" + str(i)] = row
-			_draw_online_room_row(row, room, i == lobby_client_selected)
-
-	var code_rect: = _online_find_code_input_rect(viewport)
-	var password_rect: = _online_find_password_input_rect(viewport)
-	_draw_online_input_backing(code_rect, "CODIGO", accent)
-	_draw_online_input_backing(password_rect, "SENHA", accent)
-	buttons["online_find_join"] = Rect2(panel.end.x - 176.0, panel.end.y - 150.0, 132.0, 44.0)
-	buttons["room_refresh"] = Rect2(panel.position.x + 44.0, panel.end.y - 74.0, 190.0, 44.0)
-	buttons["lobby_cancel"] = Rect2(panel.end.x - 234.0, panel.end.y - 74.0, 190.0, 44.0)
-	_draw_big_button(buttons["online_find_join"], "ENTRAR", Color(0.04, 0.14, 0.13, 0.92), accent)
-	_draw_big_button(buttons["room_refresh"], "ATUALIZAR", Color(0.04, 0.14, 0.13, 0.92), Color(0.72, 1.0, 0.94))
-	_draw_big_button(buttons["lobby_cancel"], "VOLTAR", Color(0.1, 0.05, 0.05, 0.92), Color(1.0, 0.24, 0.34))
+	MenusPresentation._draw_online_find_room(self, viewport)
 
 
 func _draw_online_input_backing(rect: Rect2, label: String, accent: Color) -> void:
@@ -60559,17 +46988,7 @@ func _draw_online_input_backing(rect: Rect2, label: String, accent: Color) -> vo
 
 
 func _draw_online_room_row(rect: Rect2, room: Dictionary, selected: bool) -> void:
-	var accent: = Color(0.0, 1.0, 0.82) if not bool(room.get("locked", false)) else Color(1.0, 0.82, 0.24)
-	_draw_holo_panel(rect, accent, selected, 0.34 if not selected else 0.52)
-	var code: = String(room.get("code", "------"))
-	var name: = String(room.get("name", "Sala " + code))
-	var players: = int(room.get("players", 1))
-	var max_players: = int(room.get("maxPlayers", ONLINE_MAX_PLAYERS))
-	var lock_text: = "COM SENHA" if bool(room.get("locked", false)) else "PUBLICA"
-	draw_string(font, rect.position + Vector2(18.0, 24.0), name.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, rect.size.x * 0.52, _fit_text_size(name.to_upper(), rect.size.x * 0.52, 16, 11), Color.WHITE)
-	draw_string(font, rect.position + Vector2(18.0, 45.0), "CODIGO " + code, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x * 0.36, 11, Color(0.72, 0.94, 1.0, 0.86))
-	_draw_centered("%d/%d" % [players, max_players], rect.position + Vector2(rect.size.x * 0.72, rect.size.y * 0.5 + 5.0), 16, accent)
-	_draw_centered(lock_text, rect.position + Vector2(rect.size.x * 0.9, rect.size.y * 0.5 + 5.0), 12, accent)
+	MenusPresentation._draw_online_room_row(self, rect, room, selected)
 
 
 func _handle_online_create_room_touch(pos: Vector2, viewport: Vector2) -> void:
@@ -60617,23 +47036,7 @@ func _handle_online_find_room_touch(pos: Vector2, viewport: Vector2) -> void:
 
 
 func _draw_multiplayer_menu(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(1.0, 0.44, 0.88))
-	_draw_glitch_title("MULTIPLAYER ONLINE", Vector2(viewport.x * 0.5, 64), 34, Color(1.0, 0.44, 0.88))
-
-	var panel = Rect2(viewport.x * 0.5 - 180, viewport.y * 0.5 - 120, 360, 240)
-	if multiplayer_notice != "":
-		var notice_rect: = Rect2(panel.position.x, panel.position.y - 50.0, panel.size.x, 38.0)
-		_draw_holo_panel(notice_rect, Color(1.0, 0.24, 0.34), false, 0.78)
-		_draw_centered(multiplayer_notice, notice_rect.get_center() + Vector2(0, 5), 13, Color(1.0, 0.88, 0.9))
-	_draw_holo_panel(panel, Color(1.0, 0.44, 0.88), true, 0.6)
-
-	buttons["mp_host"] = Rect2(panel.position.x + 20, panel.position.y + 40, panel.size.x - 40, 50)
-	buttons["mp_client"] = Rect2(panel.position.x + 20, panel.position.y + 110, panel.size.x - 40, 50)
-	buttons["mp_back"] = Rect2(panel.position.x + 20, panel.position.y + 180, panel.size.x - 40, 40)
-
-	_draw_big_button(buttons["mp_host"], "CRIAR SALA ONLINE", Color(0.1, 0.05, 0.1, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and multiplayer_menu_selected == 0) else Color(1.0, 0.44, 0.88))
-	_draw_big_button(buttons["mp_client"], "ENTRAR ONLINE", Color(0.05, 0.1, 0.1, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and multiplayer_menu_selected == 1) else Color(0.0, 1.0, 0.82))
-	_draw_big_button(buttons["mp_back"], "VOLTAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and multiplayer_menu_selected == 2) else Color(1.0, 0.2, 0.2))
+	EntitiesPresentation._draw_multiplayer_menu(self, viewport)
 
 func _handle_multiplayer_menu_touch(pos: Vector2, viewport: Vector2) -> void :
 	if buttons.get("mp_host", Rect2()).has_point(pos):
@@ -60715,73 +47118,11 @@ func _network_player_animation_snapshot(now_ms: int) -> Vector2i:
 	return Vector2i(state, int(now_ms / maxi(1, period_ms)) % maxi(1, frames.size()))
 
 func _draw_phantom_player(camera: Vector2) -> void :
-	if not is_multiplayer:
-		return
-	if net_players_by_peer.is_empty():
-		if not net_player_dead and net_player_has_snapshot:
-			_draw_remote_player_state(camera, net_player_peer_id, {
-				"render_pos": net_player_render_pos, "dead": net_player_dead, "has_snapshot": net_player_has_snapshot, 
-				"anim_state": net_player_anim_state, "frame_idx": net_player_frame_idx, "flip_h": net_player_flip_h, 
-				"move": net_player_move, "name": net_player_name, "stealthed": false, 
-				"manifestation": net_player_manifestation,
-				"hp": net_player_hp, "hp_max": net_player_hp_max
-			})
-		return
-	var peer_ids: = net_players_by_peer.keys()
-	peer_ids.sort()
-	for peer_key in peer_ids:
-		_draw_remote_player_state(camera, int(peer_key), net_players_by_peer[peer_key])
+	EntitiesPresentation._draw_phantom_player(self, camera)
 
 
 func _draw_remote_player_state(camera: Vector2, peer_id: int, state: Dictionary) -> void :
-	if bool(state.get("dead", false)) or not bool(state.get("has_snapshot", false)):
-		return
-	var p: = Vector2(state.get("render_pos", state.get("pos", Vector2.ZERO))) - camera
-	var anim_state: = int(state.get("anim_state", NET_ANIM_IDLE))
-	var frame_idx: = int(state.get("frame_idx", 0))
-	var flip_h: = bool(state.get("flip_h", false))
-	var size = PLAYER_DRAW_FROZEN_SIZE if anim_state == NET_ANIM_FROZEN else (PLAYER_DRAW_DAMAGE_SIZE if anim_state == NET_ANIM_DAMAGE else PLAYER_DRAW_BOX_SIZE)
-	var rect = Rect2(p - size * 0.5, size)
-	var accent: = Color(1.0, 0.44, 0.88) if peer_id % 2 == 0 else Color(0.0, 1.0, 0.82)
-	var is_leader: bool = is_multiplayer and peer_id == run_leader_peer_id
-	if is_leader:
-		accent = Color(1.0, 0.86, 0.18)
-	_draw_centered(String(state.get("name", "Player %d" % peer_id)), p + Vector2(0, -58), 12, accent)
-	_draw_ally_health_bar(p + Vector2(0, -44), 62.0, _remote_player_health_ratio(state), accent)
-	if is_leader:
-		_draw_leader_crown(p + Vector2(0, -62), 0.72, accent)
-	_draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], p + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
-	var tex: = _net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)))
-	var is_lacerante: bool = LaceranteSprites.is_manifestation(self, int(state.get("manifestation", -1)))
-	if is_lacerante:
-		flip_h = false
-		if tex != null:
-			size = tex.get_size() * (LaceranteSprites.DRAW_HEIGHT / tex.get_height())
-			rect = Rect2(p - size * 0.5, size)
-	var directional_fire: bool = anim_state == NET_ANIM_FIRE and frame_idx >= 2 and frame_idx < 14
-	if directional_fire and tex != null:
-		size = tex.get_size() * (PLAYER_FIRE_CANVAS_HEIGHT / tex.get_height())
-		rect = Rect2(p + Vector2(-size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
-
-	var rotation = 0.0
-	var move: = Vector2(state.get("move", Vector2.ZERO)).normalized()
-	if move.y < -0.2 and abs(move.x) > 0.2:
-		rotation = deg_to_rad(15.0) if move.x > 0.0 else deg_to_rad(-15.0)
-
-	if _shadows_enabled() and tex != null:
-		var s_rot = rotation + deg_to_rad(-10.0 if flip_h else 10.0)
-		var s_scale = Vector2(-1.0 if flip_h else 1.0, -0.35)
-		draw_set_transform(rect.get_center() + Vector2(0, 38.0), s_rot, s_scale)
-		var shadow_color = Color(0.0, 0.0, 0.0, 0.42)
-		var draw_size = size
-		var pos = Vector2( - draw_size.x * 0.5, PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
-		draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	var alpha: = 0.34 if bool(state.get("stealthed", false)) else 0.86
-	if is_lacerante:
-		_draw_entity_by_height_rotated(tex, p, LaceranteSprites.DRAW_HEIGHT, rotation, Color(1.0, 1.0, 1.0, alpha))
-	else:
-		_draw_entity_fit_flipped(tex, rect.get_center(), size, flip_h, Color(accent.r, accent.g, accent.b, alpha))
+	EntitiesPresentation._draw_remote_player_state(self, camera, peer_id, state)
 
 
 func _remote_player_health_ratio(state: Dictionary) -> float:
@@ -60792,31 +47133,11 @@ func _remote_player_health_ratio(state: Dictionary) -> float:
 
 
 func _draw_leader_crown(center: Vector2, scale: float, color: Color) -> void:
-	var s: float = maxf(0.45, scale)
-	var base: = PackedVector2Array([
-		center + Vector2(-14.0, 7.0) * s,
-		center + Vector2(14.0, 7.0) * s,
-		center + Vector2(12.0, -3.0) * s,
-		center + Vector2(5.0, 3.0) * s,
-		center + Vector2(0.0, -12.0) * s,
-		center + Vector2(-5.0, 3.0) * s,
-		center + Vector2(-12.0, -3.0) * s
-	])
-	draw_polygon(base, PackedColorArray([Color(color.r, color.g, color.b, color.a * 0.92)]))
-	draw_polyline(PackedVector2Array([base[0], base[1], base[2], base[3], base[4], base[5], base[6], base[0]]), Color(1.0, 1.0, 0.78, color.a), 1.4 * s, true)
-	draw_line(center + Vector2(-10.0, 9.0) * s, center + Vector2(10.0, 9.0) * s, Color(0.08, 0.05, 0.01, color.a * 0.72), 2.0 * s, true)
+	EntitiesPresentation._draw_leader_crown(self, center, scale, color)
 
 
 func _draw_ally_health_bar(center: Vector2, width: float, ratio: float, accent: Color) -> void :
-	var height: float = 6.0
-	var pos: Vector2 = center + Vector2( - width * 0.5, - height * 0.5)
-	var health_ratio: float = clampf(ratio, 0.0, 1.0)
-	var fill: Color = Color(1.0, 0.18, 0.2).lerp(Color(0.22, 1.0, 0.42), health_ratio)
-	draw_rect(Rect2(pos + Vector2(-2.0, -2.0), Vector2(width + 4.0, height + 4.0)), Color(0.0, 0.0, 0.0, 0.64), true)
-	draw_rect(Rect2(pos, Vector2(width, height)), Color(0.02, 0.06, 0.05, 0.86), true)
-	if health_ratio > 0.0:
-		draw_rect(Rect2(pos, Vector2(width * health_ratio, height)), fill, true)
-	draw_rect(Rect2(pos, Vector2(width, height)), Color(accent.r, accent.g, accent.b, 0.82), false, 1.2)
+	EntitiesPresentation._draw_ally_health_bar(self, center, width, ratio, accent)
 
 
 func _net_player_texture_for_state(anim_state: int, frame_idx: int, _manifestation_index: int = -1) -> Texture2D:
@@ -62971,125 +49292,17 @@ func _apply_temporal_rewind_result(rewind_pos: Vector2, rewind_hp: float) -> voi
 	_spawn_radial_particles(player_pos, Color(0.3, 0.78, 1.0), 34)
 
 func _draw_online_lobby_roster(rect: Rect2, accent: Color) -> void:
-	_draw_online_label("TRIPULACAO", Rect2(rect.position + Vector2(14, 0), Vector2(rect.size.x - 28, 32)), 18, Color.WHITE)
-	var roster: Array = online_lobby_roster.duplicate()
-	if roster.is_empty():
-		roster.append({"peer_id": _mp_unique_id(), "name": player_nickname if player_nickname != "" else "Voce", "owner": online_room_owner, "ready": online_room_owner, "spectator": false})
-	var row_h: float = minf(72.0, (rect.size.y - 44.0) / float(maxi(1, mini(4, roster.size()))))
-	var visible_count: int = mini(4, roster.size())
-	for i in range(visible_count):
-		var entry: Dictionary = Dictionary(roster[i])
-		var y: float = rect.position.y + 40.0 + float(i) * row_h
-		var row: = Rect2(rect.position.x + 14.0, y, rect.size.x - 28.0, row_h - 8.0)
-		var is_owner_entry: bool = bool(entry.get("owner", false))
-		var is_ready_entry: bool = bool(entry.get("ready", false))
-		var spectator: = bool(entry.get("spectator", false))
-		var row_color: = Color(1.0, 0.82, 0.24) if is_owner_entry else (Color(0.62, 0.42, 1.0) if spectator else accent)
-		draw_rect(row, Color(0.025, 0.05, 0.055, 0.96))
-		draw_rect(Rect2(row.position, Vector2(3, row.size.y)), row_color)
-		_draw_online_label("%02d" % (i + 1), Rect2(row.position + Vector2(14, 0), Vector2(38, row.size.y)), 20, row_color)
-		_draw_online_label(String(entry.get("name", "Player")), Rect2(row.position + Vector2(62, 0), Vector2(row.size.x * 0.48 - 62, row.size.y)), 20, Color.WHITE)
-		var role: = "HOST / LIDER" if is_owner_entry else ("ESPECTADOR" if spectator else "ALIADO")
-		_draw_online_label(role, Rect2(row.position + Vector2(row.size.x * 0.52, 0), Vector2(row.size.x * 0.23, row.size.y)), 15, row_color)
-		var status: String = "ASSISTINDO" if spectator else ("PRONTO" if is_ready_entry or is_owner_entry else "AGUARDANDO")
-		_draw_online_label(status, Rect2(row.position + Vector2(row.size.x * 0.78, 0), Vector2(row.size.x * 0.22 - 12, row.size.y)), 15, Color(0.2, 1.0, 0.52) if is_ready_entry or is_owner_entry else Color(1.0, 0.82, 0.24))
+	MenusPresentation._draw_online_lobby_roster(self, rect, accent)
 
 
 func _draw_lobby_online_host(viewport: Vector2) -> void :
-	var accent: = Color(0.18, 0.86, 0.78)
-	_draw_online_header(viewport, "SALA ONLINE", accent, "HOST / LIDER DA EQUIPE")
-
-	var panel = Rect2(viewport.x * 0.5 - min(1040.0, viewport.x * 0.86) * 0.5, viewport.y * 0.17, min(1040.0, viewport.x * 0.86), viewport.y * 0.68)
-	draw_rect(panel, Color(0.015, 0.025, 0.028, 0.94))
-	draw_line(panel.position, Vector2(panel.end.x, panel.position.y), accent, 2.0)
-
-	var room_title: = online_room_name if online_room_name != "" else "Sala " + (online_room_code if online_room_code != "" else "Online")
-	draw_string(font, panel.position + Vector2(34.0, 44.0), room_title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, panel.size.x * 0.56, _fit_text_size(room_title.to_upper(), panel.size.x * 0.56, 22, 14), Color.WHITE)
-	var code_text: = "CODIGO " + (online_room_code if online_room_code != "" else "------")
-	var lock_text: = "PRIVADA" if online_room_locked else "PUBLICA"
-	_draw_centered(code_text, panel.position + Vector2(panel.size.x * 0.72, 39.0), 15, Color(0.0, 1.0, 0.82))
-	_draw_centered(lock_text, panel.position + Vector2(panel.size.x * 0.9, 39.0), 13, Color(1.0, 0.82, 0.24) if online_room_locked else Color(0.0, 1.0, 0.82))
-
-	var status = online_status
-	if status == "":
-		status = "CONECTADO AO SERVIDOR" if online_connected else "INICIANDO SERVIDOR..."
-	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
-
-	var roster_rect: = Rect2(panel.position.x + 34.0, panel.position.y + 112.0, panel.size.x - 68.0, panel.size.y - 226.0)
-	_draw_online_lobby_roster(roster_rect, accent)
-
-	var client_ready = _online_client_ready()
-	var active_players: = online_lobby_active_player_count if online_lobby_active_player_count > 0 else online_lobby_connected_count
-	var spectators: = online_lobby_spectator_count
-	var info_text = "AGUARDANDO JOGADOR (%d/%d)" % [online_lobby_connected_count, ONLINE_MAX_PLAYERS] if online_lobby_connected_count < ONLINE_MIN_PLAYERS else ("EQUIPE PRONTA! %d JOG. / %d ESP." % [active_players, spectators] if client_ready else "AGUARDANDO EQUIPE: %d/%d PRONTOS" % [online_lobby_ready_count, maxi(0, active_players - 1)])
-	_draw_centered(info_text, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 86.0), 14, Color(0.0, 1.0, 0.82) if client_ready else Color(1.0, 0.82, 0.24))
-
-	buttons["lobby_start"] = Rect2(panel.position.x + 34.0, panel.end.y - 66.0, panel.size.x * 0.56, 46.0)
-	buttons["lobby_cancel"] = Rect2(panel.end.x - panel.size.x * 0.32 - 34.0, panel.end.y - 66.0, panel.size.x * 0.32, 46.0)
-
-	var can_start = online_lobby_connected_count >= ONLINE_MIN_PLAYERS and client_ready
-	var start_color = Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 0) else (Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5))
-	_draw_big_button(buttons["lobby_start"], "ESCOLHER HABILIDADES", Color(0.1, 0.1, 0.1, 0.9), start_color)
-	_draw_big_button(buttons["lobby_cancel"], "CANCELAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (is_gamepad_active and lobby_host_selected == 1) else Color(1.0, 0.2, 0.2))
+	MenusPresentation._draw_lobby_online_host(self, viewport)
 
 func _draw_lobby_online_client(viewport: Vector2) -> void :
-	var accent: = Color(0.0, 1.0, 0.82)
-	_draw_online_header(viewport, "SALA ONLINE", accent, "EQUIPE / AGUARDANDO O HOST")
-	if not online_connected and online_room_code == "":
-		_draw_online_find_room(viewport)
-		return
-
-	var panel = Rect2(viewport.x * 0.5 - min(980.0, viewport.x * 0.86) * 0.5, viewport.y * 0.17, min(980.0, viewport.x * 0.86), viewport.y * 0.68)
-	draw_rect(panel, Color(0.015, 0.025, 0.028, 0.94))
-	draw_line(panel.position, Vector2(panel.end.x, panel.position.y), accent, 2.0)
-
-	var room_title: = online_room_name if online_room_name != "" else "Sala " + (online_room_code if online_room_code != "" else "Online")
-	draw_string(font, panel.position + Vector2(34.0, 44.0), room_title.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, panel.size.x * 0.56, _fit_text_size(room_title.to_upper(), panel.size.x * 0.56, 22, 14), Color.WHITE)
-	if online_room_code != "":
-		_draw_centered("CODIGO " + online_room_code, panel.position + Vector2(panel.size.x * 0.76, 39.0), 15, accent)
-	var status = online_status
-	if status == "":
-		status = "CONECTADO" if online_connected else "BUSCANDO SALA..."
-	_draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
-
-	var roster_rect: = Rect2(panel.position.x + 34.0, panel.position.y + 112.0, panel.size.x - 68.0, panel.size.y - 228.0)
-	_draw_online_lobby_roster(roster_rect, accent)
-
-	var active_players: = online_lobby_active_player_count if online_lobby_active_player_count > 0 else online_lobby_connected_count
-	var info_text = "AGUARDANDO CONEXAO (%d/%d JOGADORES)" % [online_lobby_connected_count, ONLINE_MAX_PLAYERS] if online_lobby_connected_count < ONLINE_MIN_PLAYERS else "SALA ONLINE: %d JOG. / %d ESP." % [active_players, online_lobby_spectator_count]
-	_draw_centered(info_text, panel.position + Vector2(panel.size.x * 0.5, panel.size.y - 90.0), 14, Color.WHITE)
-
-	buttons["lobby_ready"] = Rect2(panel.position.x + 34.0, panel.end.y - 66.0, panel.size.x * 0.42, 46.0)
-	buttons["lobby_spectator"] = Rect2(panel.position.x + panel.size.x * 0.49, panel.end.y - 66.0, panel.size.x * 0.24, 46.0)
-	buttons["lobby_cancel"] = Rect2(panel.end.x - panel.size.x * 0.2 - 34.0, panel.end.y - 66.0, panel.size.x * 0.2, 46.0)
-
-	var ready_bg = Color(0.05, 0.2, 0.1, 0.9) if local_player_ready else Color(0.1, 0.1, 0.1, 0.9)
-	var ready_border = accent if online_connected else Color(0.5, 0.5, 0.5)
-	var ready_text = "ESPECTADOR" if online_local_spectator else ("PRONTO CONFIRMADO" if online_local_ready_confirmed else ("CONFIRMANDO..." if online_lobby_ready_pending else ("ESTOU PRONTO" if local_player_ready else "MARCAR PRONTO")))
-	var spectator_text: = "JOGAR" if online_local_spectator else "ASSISTIR"
-
-	_draw_big_button(buttons["lobby_ready"], ready_text, ready_bg, ready_border if not online_local_spectator else Color(0.45, 0.62, 0.7))
-	_draw_big_button(buttons["lobby_spectator"], spectator_text, Color(0.04, 0.12, 0.18, 0.9), Color.WHITE if (is_gamepad_active and lobby_client_selected == 1) else Color(0.35, 0.85, 1.0))
-	_draw_big_button(buttons["lobby_cancel"], "SAIR", Color(0.1, 0.05, 0.05, 0.9), Color.WHITE if (is_gamepad_active and lobby_client_selected == 2) else Color(1.0, 0.2, 0.2))
+	MenusPresentation._draw_lobby_online_client(self, viewport)
 
 func _draw_multiplayer_preload(viewport: Vector2) -> void :
-	_draw_holo_background(viewport, null, Color(0.2, 0.82, 1.0))
-	_draw_glitch_title("PREPARANDO ONLINE", Vector2(viewport.x * 0.5, 64), 34, Color(0.2, 0.82, 1.0))
-	var panel: = Rect2(viewport.x * 0.5 - 220, viewport.y * 0.5 - 112, 440, 224)
-	_draw_holo_panel(panel, Color(0.2, 0.82, 1.0), true, 0.66)
-	var stage: = online_preload_stage if online_preload_stage != "" else "AGUARDANDO..."
-	_draw_centered(stage, panel.position + Vector2(220, 52), 18, Color.WHITE)
-	var bar: = Rect2(panel.position.x + 38, panel.position.y + 88, panel.size.x - 76, 18)
-	draw_rect(bar, Color(0.02, 0.08, 0.12, 0.88), true)
-	draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(online_preload_progress, 0.0, 1.0), bar.size.y)), Color(0.2, 0.82, 1.0, 0.92), true)
-	draw_rect(bar, Color(0.78, 1.0, 1.0, 0.76), false, 2.0)
-	var local_text: = "LOCAL PRONTO" if online_preload_local_ready else "CARREGANDO LOCAL"
-	var remote_text: = online_preload_remote_stage if online_preload_remote_stage != "" else "AGUARDANDO PARES"
-	_draw_centered(local_text, panel.position + Vector2(220, 132), 14, Color(0.0, 1.0, 0.82) if online_preload_local_ready else Color(1.0, 0.82, 0.24))
-	_draw_centered(remote_text, panel.position + Vector2(220, 162), 14, Color(0.0, 1.0, 0.82) if online_preload_remote_ready else Color(0.72, 0.9, 1.0))
-	if online_preload_started_ms > 0:
-		var elapsed: = float(Time.get_ticks_msec() - online_preload_started_ms) / 1000.0
-		_draw_centered("%.1fs" % elapsed, panel.position + Vector2(220, 194), 12, Color(0.74, 0.92, 1.0, 0.86))
+	EntitiesPresentation._draw_multiplayer_preload(self, viewport)
 
 func _draw_multiplayer_syncing(viewport: Vector2) -> void :
 	var overlay: = Rect2(Vector2.ZERO, viewport)

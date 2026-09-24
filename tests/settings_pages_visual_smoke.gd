@@ -75,6 +75,8 @@ func _run() -> void:
 
 
 func _capture_mode(target_mode: String, viewport: Vector2i, file_name: String) -> void:
+	root.mode = Window.MODE_WINDOWED
+	await process_frame
 	root.size = viewport
 	game.mode = target_mode
 	game.settings_selected = 0

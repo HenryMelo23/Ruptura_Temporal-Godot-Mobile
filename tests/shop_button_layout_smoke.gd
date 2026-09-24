@@ -35,4 +35,10 @@ func _run() -> void:
 	_check(game._manual_shop_pos(viewport).distance_to(drag_to) < 0.1, "manual shop position did not use saved HUD position")
 
 	print("SHOP_BUTTON_LAYOUT_SMOKE_OK editable_when_auto=true moved=true")
+	root.remove_child(game)
+	game._cleanup_runtime_resources()
+	await process_frame
+	game.queue_free()
+	for i in range(3):
+		await process_frame
 	quit(0)

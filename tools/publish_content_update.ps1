@@ -16,7 +16,7 @@ foreach ($path in $PackPaths) {
     $file = Get-Item -LiteralPath $path
     $entry = Get-Content -LiteralPath ($file.FullName + '.json') -Raw | ConvertFrom-Json
     if ($entry.filename -ne $file.Name -or $file.Name -notmatch '^[A-Za-z0-9_.-]+\.pck$') { throw 'Invalid pack filename.' }
-    if ($entry.required_game_version_code -ne 23700 -or $entry.platform -notin @('android','windows')) { throw 'Invalid base or platform.' }
+    if ($entry.required_game_version_code -ne 23800 -or $entry.platform -notin @('android','windows')) { throw 'Invalid base or platform.' }
     if ($entry.sha256 -ne (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -or $entry.size -ne $file.Length) { throw 'Pack integrity mismatch.' }
     if ($entry.signature -ne (Get-Content -LiteralPath ($file.FullName + '.sig') -Raw).Trim()) { throw 'Signature metadata mismatch.' }
     & $GodotBin --headless --path $root --script res://tools/content_sign.gd -- verify (Join-Path $root 'assets/updates/content_public.pem') $file.FullName
@@ -46,7 +46,7 @@ try {
     if ($result.ExitStatus -ne 0) { throw 'Cannot activate manifest.' }
 } finally { Remove-SSHSession -SessionId $session.SessionId | Out-Null }
 foreach ($platform in @('android','windows')) {
-    $reply = Invoke-RestMethod "http://${Server}:8090/updates/content/latest?version_code=23700&platform=$platform"
+    $reply = Invoke-RestMethod "http://${Server}:8090/updates/content/latest?version_code=23800&platform=$platform"
     if (-not $reply.available -or $reply.content_version_code -ne $ContentVersionCode) { throw 'Public content endpoint verification failed.' }
 }
 Write-Output "CONTENT_PUBLISHED $ContentVersion"

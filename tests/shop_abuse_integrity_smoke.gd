@@ -86,4 +86,10 @@ func _run() -> void:
 	_check(signature.length() == 64 and signature.is_valid_hex_number(false), "signature is not a sha256 hex")
 	_check(signature == game._run_report_signature(payload), "signature is not deterministic")
 	print("SHOP_ABUSE_INTEGRITY_SMOKE_OK penalties=true warning=true integrity=true")
+	root.remove_child(game)
+	game._cleanup_runtime_resources()
+	await process_frame
+	game.queue_free()
+	for i in range(3):
+		await process_frame
 	quit(0)

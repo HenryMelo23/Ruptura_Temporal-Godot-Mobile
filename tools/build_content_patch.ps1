@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Patch signing failed.' }
     size = (Get-Item -LiteralPath $output).Length
     sha256 = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
     signature = (Get-Content -LiteralPath ($output + '.sig') -Raw).Trim()
-    required_game_version_code = 23700
+    required_game_version_code = 23800
     platform = $(if ($Preset -eq 'Android') { 'android' } else { 'windows' })
 } | ConvertTo-Json | Set-Content -LiteralPath ($output + '.json') -Encoding UTF8
 Write-Output "CONTENT_PATCH_READY $output"

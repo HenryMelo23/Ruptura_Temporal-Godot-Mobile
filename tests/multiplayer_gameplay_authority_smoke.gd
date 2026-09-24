@@ -96,10 +96,11 @@ func _start_role() -> void:
 
 func _run_server_loop() -> void:
 	var total_time := 0.0
+	var started_ms := Time.get_ticks_msec()
 	var results_seen := false
 	while true:
 		await process_frame
-		total_time += 0.016
+		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
 		if game.mode == "game" and server_game_seen_at < 0.0:
 			server_game_seen_at = total_time
 		if server_game_seen_at >= 0.0 and total_time - server_game_seen_at > 1.0:
@@ -117,9 +118,10 @@ func _run_server_loop() -> void:
 
 func _run_host_loop() -> void:
 	var total_time := 0.0
+	var started_ms := Time.get_ticks_msec()
 	while true:
 		await process_frame
-		total_time += 0.016
+		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
 		if total_time > 15.0:
 			var timeout_enemy := _host_enemy_by_uid(enemy_uid)
 			print("[HOST] TIMEOUT enemy_hp=%.2f expected=%.2f remote_hp=%d peer=%d" % [float(timeout_enemy.get("hp", -1.0)), enemy_initial_hp - EXPECTED_TOTAL_DAMAGE, int(game.net_player_hp), game.net_player_peer_id])
@@ -193,10 +195,11 @@ func _run_host_loop() -> void:
 
 func _run_client_loop() -> void:
 	var total_time := 0.0
+	var started_ms := Time.get_ticks_msec()
 	var hp_before := 0
 	while true:
 		await process_frame
-		total_time += 0.016
+		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
 		if total_time > 15.0:
 			_check(false, "timeout waiting for client gameplay authority checks")
 			return
