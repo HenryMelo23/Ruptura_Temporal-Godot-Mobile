@@ -72,6 +72,12 @@ func _initialize() -> void:
 
 
 func _start_role() -> void:
+	game.startup_thanks_done = true
+	game.run_tutorial_enabled = false
+	for index in [1, 2]:
+		game.unlocked_manifestation_ids[game.MANIFESTATIONS[index]["key"]] = true
+	for index in [1, 3]:
+		game.unlocked_spectrum_ids[game.AURAS[index]["key"]] = true
 	if role == "server":
 		game.dedicated_room_code = "GAMEPLAY_AUTHORITY"
 		game._start_dedicated_room_server(port)
@@ -142,6 +148,7 @@ func _run_host_loop() -> void:
 			game.boss_dead = true
 			game.enemies.clear()
 			game.enemy_bullets.clear()
+			game._apply_shared_kill_progress(100)
 			print("[HOST] game reached; waiting remote player sync")
 		if game.net_player_peer_id == 0 or game.net_player_pos.distance_to(CLIENT_TEST_POS) > 90.0:
 			continue
@@ -249,6 +256,9 @@ func _run_client_loop() -> void:
 			continue
 
 		if client_hit_sent and int(game.player_hp) < hp_before:
+			if game.enemies_killed < 100:
+				continue
+			_check(game.player_damage >= game._manifestation_base_damage() + game._kill_damage_growth(100), "client did not receive shared damage progression")
 			if client_damage_seen_at < 0.0:
 				client_damage_seen_at = total_time
 				continue

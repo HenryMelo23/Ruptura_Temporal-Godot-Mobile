@@ -40,8 +40,11 @@ static func discover_shared_phase_music_tracks(phase_music_dir: String) -> Array
 	dir.list_dir_begin()
 	var file_name: = dir.get_next()
 	while file_name != "":
-		if not dir.current_is_dir() and is_shared_phase_music_name(file_name):
-			tracks.append(file_name)
+		# Exported packs may expose remap/import entries instead of source MP3s.
+		var track: String = file_name.trim_suffix(".remap").trim_suffix(".import")
+		if not dir.current_is_dir() and is_shared_phase_music_name(track) and not tracks.has(track):
+			if ResourceLoader.exists(phase_music_dir + "/" + track) or FileAccess.file_exists(phase_music_dir + "/" + track):
+				tracks.append(track)
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	tracks.sort_custom(Callable(RTAudioLifecycle, "shared_phase_music_less"))
@@ -111,7 +114,12 @@ static func play_phase_music(game: Node) -> void:
 
 
 static func shared_phase_music_tracks(game: Node) -> Array:
-	var tracks: Array = discover_shared_phase_music_tracks(game.PHASE_MUSIC_DIR)
+	var tracks: Array = []
+	for key in game.audio_stream_paths:
+		if is_shared_phase_music_name(String(key)) and String(game.audio_stream_paths[key]).begins_with(game.PHASE_MUSIC_DIR + "/"):
+			tracks.append(String(key))
+	if tracks.is_empty():
+		tracks = discover_shared_phase_music_tracks(game.PHASE_MUSIC_DIR)
 	tracks.sort_custom(Callable(RTAudioLifecycle, "shared_phase_music_less"))
 	return tracks
 

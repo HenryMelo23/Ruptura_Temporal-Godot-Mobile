@@ -1,14 +1,14 @@
 {
-  "version": "2.0.39",
-  "version_code": 23900,
-  "filename": "ruptura_temporal_mobile_2.0.39.apk",
-  "sha256": "11229c885fcc4dfe1773f693658c5b55fecf96b94bab3f61772894c32da470c7",
-  "size": 1302039164,
+  "version": "2.0.40",
+  "version_code": 24000,
+  "filename": "ruptura_temporal_mobile_2.0.40.apk",
+  "sha256": "e2c81c52b16a72f1594461dd357e056599499653803c807a1c519588f1a68953",
+  "size": 1296124537,
   "notes": [
+    "Corrige a identificacao da versao do jogo e do atualizador.",
     "Corrige a ordem da tela de nome apos a cutscene inicial.",
-    "Reduz uso de memoria durante a cutscene inicial.",
-    "Otimiza carregamento de mapas sem reduzir a qualidade visual."
+    "Reduz uso de memoria durante a cutscene inicial."
   ],
   "mandatory": false,
-  "published_at": "2026-09-23T01:02:25.7584379Z"
+  "published_at": "2026-09-24T19:36:44.9242841Z"
 }

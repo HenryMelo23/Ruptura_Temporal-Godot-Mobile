@@ -976,7 +976,6 @@ static func _draw_edit_layout(game: Node2D, viewport: Vector2) -> void :
 
 
 static func _draw_team_revival_hud(game: Node2D, viewport: Vector2) -> void:
-	game.buttons.erase("revival_mobile")
 	var panel_w: float = min(620.0, viewport.x * 0.78)
 	var panel_h: float = 104.0
 	var panel: Rect2 = Rect2(viewport.x * 0.5 - panel_w * 0.5, 76.0, panel_w, panel_h)

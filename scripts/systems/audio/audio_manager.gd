@@ -19,6 +19,8 @@ func play_sfx(name: String, pitch_variance: float = 0.0, volume_scale: float = 1
 		return
 	if game._is_silent_manifestation_shot_sfx(name):
 		return
+	if name in ["Inimigo1_hit.wav", "Inimigo3_hit.mp3", "Hit_Boss1.mp3", "eletrica_hit"] or name.begins_with("acorrentada_hit_"):
+		return
 	if name in ["Disparo_Geo.wav", "Disparo.MP3"]:
 		name = "player_shot"
 	elif name in ["skill_acorrentada", "ult_acorrentada", "atk_acorrentada_light", "atk_acorrentada_heavy"]:

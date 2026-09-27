@@ -1,0 +1,3409 @@
+extends Node2D
+
+# Shared declarations and resources for the main runtime.
+
+func _safe_load(path: String) -> Texture2D:
+	if not ResourceLoader.exists(path):
+		return null
+	var resource = load(path)
+	return resource if resource is Texture2D else null
+
+const CombatVfxRuntime = preload("res://scripts/vfx/combat_vfx_runtime.gd")
+const BombasticaSceneVfx = preload("res://scripts/vfx/bombastica_scene_vfx.gd")
+const ChainVisualPhysics = preload("res://scripts/vfx/chain_visual_physics.gd")
+const EntityVisualProfiles = preload("res://scripts/vfx/entity_visual_profiles.gd")
+const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
+const HudPresentation = preload("res://scripts/presentation/hud_presentation.gd")
+const CombatEffectsPresentation = preload("res://scripts/presentation/combat_effects_presentation.gd")
+const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
+const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
+const SettingsController = preload("res://scripts/ui/settings_controller.gd")
+
+const MENU_PRESENTATION = preload("res://scripts/ui/menu_presentation.gd")
+
+const AuraSystem = preload("res://scripts/aura_system.gd")
+const CatalogInterface = preload("res://scripts/catalog/catalog_interface.gd")
+const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
+const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
+const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
+const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
+const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
+const RTNetContractScript = preload("res://scripts/systems/online/net_contract.gd")
+const RTTransportStateScript = preload("res://scripts/systems/online/transport_state.gd")
+const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
+const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
+const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
+const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
+const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
+
+const WORLD_SIZE: = Vector2(1600, 900)
+const GAME_VERSION: = "2.0.40"
+const GAME_VERSION_CODE: = 24000
+const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
+const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
+const STARTUP_THANKS_FRAME_COUNT: int = 500
+const STARTUP_THANKS_FRAME_PATH_FORMAT: String = "res://assets/videos/startup_teaser_frames/frame_%04d.webp"
+const STARTUP_THANKS_AUDIO_PATH: String = "res://assets/videos/startup_teaser_audio.ogg"
+const AURA_SANGUINARIA_ICON_PATH: = "res://Game Base/Ruptura_Temporal-APOLO2.0/Sprites/aurea_sanguinaria.png"
+const AURA_SANGUINARIA_EXPORT_FALLBACK_PATH: = "res://assets/sprites/aurea_sanguinaria.png"
+const STARTUP_THANKS_VIDEO_PATH: String = "res://assets/videos/startup_teaser.ogv"
+const STARTUP_THANKS_HOLD_TIME: float = 28.5
+const STARTUP_THANKS_FADE_TIME: float = 0.5
+const STARTUP_THANKS_SKIP_HOLD_TIME: float = 3.0
+const STARTUP_THANKS_MAX_SKIPS: int = 3
+const STARTUP_THANKS_CONFIG_PATH: String = "user://startup_video_config.save"
+const MULTIPLAYER_MENU_ENABLED: = false
+const UI_PLATFORM_AUTO: = "auto"
+const UI_PLATFORM_ANDROID: = "android"
+const UI_PLATFORM_DESKTOP: = "desktop"
+const DESKTOP_WINDOW_FULLSCREEN: = "fullscreen"
+const DESKTOP_WINDOW_WINDOWED: = "windowed"
+const DESKTOP_WINDOW_BORDERLESS: = "borderless"
+const DESKTOP_AIM_QUICK: = "quick"
+const DESKTOP_AIM_HOLD: = "hold"
+const DESKTOP_AIM_CONFIRM: = "confirm"
+const DESKTOP_TELEPORT_CURSOR: = "cursor"
+const DESKTOP_TELEPORT_AUTO: = "auto"
+const DESKTOP_HUD_SCALE_MIN: = 0.50
+const DESKTOP_HUD_SCALE_MAX: = 0.75
+const DESKTOP_HUD_SCALE_STEP: = 0.05
+const DESKTOP_STAGE_SIZE: = Vector2(1088, 768)
+const MAP_SAFE_OVERSCAN: = Vector2(170.0, 118.0)
+const CORNER_LIMBO_STAR_COUNT: = 30
+const CORNER_LIMBO_GRID_STEP: = 34.0
+const PLAYER_START: = Vector2(420, 500)
+const PLAYER_BASE_HP: = 450
+const PLAYER_BASE_SPEED: = 280.0
+const PLAYER_BASE_DAMAGE: = 32.0
+const PLAYER_BASE_ATTACK_INTERVAL: = 0.68
+const PLAYER_BASE_SKILL_COOLDOWN: = 7.5
+const PLAYER_BASE_DASH_COOLDOWN: = 2.2
+const PLAYER_DASH_DISTANCE: = 350.0
+const PLAYER_DRAW_BOX_SIZE: = Vector2(54, 80)
+const PLAYER_DRAW_STOP_SIZE: = Vector2(54, 80)
+const PLAYER_DRAW_UP_SIZE: = Vector2(51, 77)
+const PLAYER_DRAW_DOWN_SIZE: = Vector2(51, 77)
+const PLAYER_DRAW_SIDE_SIZE: = Vector2(52, 76)
+const PLAYER_DRAW_SHOT_SIZE: = Vector2(52, 77)
+const PLAYER_FIRE_DIRECTIONS: = ["south", "north", "northeast", "northwest", "southwest", "southeast"]
+const CombatHud = preload("res://scripts/ui/combat_hud.gd")
+const PauseMenu = preload("res://scripts/ui/pause_menu.gd")
+const LaceranteSprites = preload("res://scripts/lacerante_sprites.gd")
+const PhoenixFire = preload("res://scripts/vfx/phoenix_fire.gd")
+const Boss1VFX = preload("res://scripts/vfx/boss1_vfx.gd")
+const Boss2VFX = preload("res://scripts/vfx/boss2_vfx.gd")
+const WeatherVFX = preload("res://scripts/vfx/weather_vfx.gd")
+const PLAYER_FIRE_FRAME_SECONDS: float = 0.09
+# Directional canvases include headroom for the raised hand; body height stays 80.
+const PLAYER_FIRE_CANVAS_HEIGHT: float = 430.0 * 80.0 / 370.0
+const PLAYER_DRAW_DAMAGE_SIZE: = Vector2(54, 80)
+const PLAYER_DRAW_LACERAR_HEIGHT: = 77.0
+const PLAYER_DRAW_FROZEN_SIZE: = Vector2(58.8, 84.0)
+const PLAYER_START_DOWN_FALL_TIME: float = 0.82
+const PLAYER_START_DOWN_LAND_TIME: float = 1.0
+const PLAYER_START_DOWN_HEIGHT: float = 360.0
+const PLAYER_START_DOWN_FRAME_TIME: float = 0.11
+const PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND: float = 0.5
+const PLAYER_WORLD_MARGIN: = Vector2.ZERO
+const HUD_PLAYER_FADE_RADIUS: = 96.0
+const HUD_PLAYER_MIN_ALPHA: = 0.26
+const PLAYER_ATTACK_PREP_FRAME_TIME: = 0.085
+const ATTACK_LOCK_HOLD_TIME: = 0.8
+const ATTACK_LOCK_MIN_DRAG: = 18.0
+const ATTACK_LOCK_CONE_COS: = 0.9
+const ABILITY_CANCEL_RADIUS: = 54.0
+const ABILITY_TARGET_DRAG_DEADZONE: = 14.0
+const ABILITY_TARGET_FULL_DRAG: = 118.0
+const UI_TRANSITION_BLOCK_MS: = 180
+const MANIFEST_DRAG_DEADZONE: = 8.0
+const MANIFEST_STAGE_MANIFESTATION: = "manifestation"
+const MANIFEST_STAGE_TRANSITION: = "transition"
+const MANIFEST_STAGE_AURA: = "aura"
+const MANIFEST_SPECTRUM_TRANSITION_TIME: = 0.85
+const MANIFEST_PREVIEW_FRAME_COUNT: = 24
+const MANIFEST_PREVIEW_ATLAS_COLS: = 4
+const MANIFEST_PREVIEW_SECONDS: = 7.0
+const MANIFEST_PREVIEW_FPS: = 24.0 / MANIFEST_PREVIEW_SECONDS
+const MANIFEST_PREVIEW_KINDS: = ["atk", "skill", "ultimate"]
+const TUTORIAL_STATE_NONE: = ""
+const TUTORIAL_STATE_OFFER: = "offer"
+const TUTORIAL_STATE_ATTACK: = "attack"
+const TUTORIAL_STATE_SKILL: = "skill"
+const TUTORIAL_STATE_SECONDARY: = "secondary"
+const TUTORIAL_STATE_DASH: = "dash"
+const TUTORIAL_STATE_MANIFESTATION: = "manifestation"
+const TUTORIAL_STATE_AURA: = "aura"
+const TUTORIAL_STATE_ESSENCE: = "essence"
+const TUTORIAL_STATE_FINISH: = "finish"
+const TUTORIAL_STATE_SHOP: = "shop_context"
+const TUTORIAL_STATE_BOSS_CALL: = "boss_call_context"
+const TUTORIAL_STEP_TEXTS: = {
+	TUTORIAL_STATE_ATTACK: {
+		"title": "DISPARO CONTRA INIMIGOS",
+		"body": "Derrube o alvo instavel. A mira escolhe ameacas proximas, mas voce ainda decide quando pressionar o ataque.",
+		"hint": "Use ATK para eliminar o alvo."
+	},
+	TUTORIAL_STATE_SKILL: {
+		"title": "HAB1",
+		"body": "Cada Manifestacao expressa uma primeira tecnica diferente. Use-a para sentir o ritmo antes que a run fique caotica.",
+		"hint": "Use HAB1 uma vez."
+	},
+	TUTORIAL_STATE_SECONDARY: {
+		"title": "SEGUNDA HABILIDADE",
+		"body": "A segunda habilidade e mais rara e muda bastante de uma Manifestacao para outra. Ela existe para virar momentos perigosos.",
+		"hint": "Use ULT uma vez."
+	},
+	TUTORIAL_STATE_DASH: {
+		"title": "DASH / TELEPORTE",
+		"body": "Reposicionamento salva vidas. A Ruptura quase sempre pune quem fica parado no centro do caos.",
+		"hint": "Use TP para sair da zona marcada."
+	},
+	TUTORIAL_STATE_MANIFESTATION: {
+		"title": "MANIFESTACAO",
+		"body": "Manifestacoes sao formas instaveis da anomalia se expressando atraves da Geovana. Ninguem entende tudo ainda, nem ela.",
+		"hint": "Avance para entender a Aurea."
+	},
+	TUTORIAL_STATE_AURA: {
+		"title": "AUREA",
+		"body": "A Aurea e o rastro emocional e temporal que envolve Geovana. Ela altera a jornada, nao e so um poder: e uma leitura do universo.",
+		"hint": "Avance para falar sobre essencia."
+	},
+	TUTORIAL_STATE_ESSENCE: {
+		"title": "ESSENCIA",
+		"body": "Ao eliminar inimigos, Geovana absorve essencia e fica mais forte. E isso que empurra a jornada ate o fim.",
+		"hint": "Cada partida abre quase outro universo, com ameacas e oportunidades diferentes."
+	},
+	TUTORIAL_STATE_FINISH: {
+		"title": "JORNADA LIBERADA",
+		"body": "Voce e Geovana estao descobrindo o que esta acontecendo ao mesmo tempo. Sobreviva, adapte-se e leia cada universo.",
+		"hint": "Comecar run normal."
+	},
+	TUTORIAL_STATE_SHOP: {
+		"title": "LOJA TEMPORAL",
+		"body": "A loja pausa a run e oferece cartas para mudar sua build. Comprar fortalece Geovana, mas tambem aumenta o custo das proximas compras.",
+		"hint": "Use a loja quando tiver pontos e quiser ajustar sua estrategia."
+	},
+	TUTORIAL_STATE_BOSS_CALL: {
+		"title": "CHAMAR O BOSS",
+		"body": "Neste jogo voce escolhe quando esta pronto para enfrentar o chefe. Pode chamar agora ou continuar no mapa para farmar, mas a pressao da run continua crescendo.",
+		"hint": "O botao BOSS fica disponivel; chamar e uma decisao sua."
+	}
+}
+const TUTORIAL_TRAINING_DAMAGE_MULT: = 0.16
+const TUTORIAL_TRAINING_SPEED_MULT: = 0.38
+const TUTORIAL_STAGE_ACTION_GRACE: = 0.65
+const UNLOCK_NOTIFICATION_LIFETIME: = 6.0
+const UNLOCK_NOTIFICATION_ENTER_TIME: = 0.45
+const UNLOCK_NOTIFICATION_EXIT_TIME: = 0.55
+const UNLOCK_NOTIFICATION_MAX_VISIBLE: = 2
+const BOSS_REWARD_CARD_COUNT: = 8
+const BOSS_REWARD_RARE_COUNT: = 1
+const PLAYER_PROFILE_PATH: = "user://player_profile.save"
+const CARD_UNLOCK_SAVE_PATH: = "user://card_unlocks.save"
+const DISCORD_WEBHOOK_CONFIG_PATHS: = ["user://run_reporter.cfg", "res://discord_webhook.local.cfg"]
+const DEFAULT_DISCORD_WEBHOOK_URL: = "https://discord.com/api/webhooks/1526689695688298518/gqeI6uzw0yC6LLAVe4v1PqICJIMHos1tgq9g288HQQ31Y2CaBNd_oc0NdZG3Tf-hY7IU"
+const INTERRUPTED_RUN_SAVE_PATH: = "user://interrupted_run.save"
+const INTERRUPTED_RUN_AUTOSAVE_INTERVAL: = 4.0
+const ONLINE_RELAY_BASE_URL: = "http://72.61.217.238:8090"
+const APP_UPDATE_ANDROID_LATEST_PATH: = "/updates/android/latest"
+const APP_UPDATE_ANDROID_DOWNLOAD_PREFIX: = "/updates/android/download/"
+const APP_UPDATE_WINDOWS_LATEST_PATH: = "/updates/windows/latest"
+const APP_UPDATE_WINDOWS_DOWNLOAD_PREFIX: = "/updates/windows/download/"
+const APP_UPDATE_VETERAN_UNLOCKS_PATH: = "/updates/unlocks/veteran"
+const APP_UPDATE_LATEST_PATH: = APP_UPDATE_ANDROID_LATEST_PATH
+const APP_UPDATE_DOWNLOAD_PREFIX: = APP_UPDATE_ANDROID_DOWNLOAD_PREFIX
+const APP_UPDATE_CHECK_DELAY: = 1.0
+const CONTENT_UPDATE_LATEST_PATH: = "/updates/content/latest"
+const CONTENT_UPDATE_DOWNLOAD_PREFIX: = "/updates/content/download/"
+const CONTENT_UPDATE_CHECK_DELAY: = 1.45
+const CONTENT_UPDATE_STORAGE_DIR: = "user://updates/content"
+const CONTENT_UPDATE_STATE_PATH: = "user://updates/content_state.json"
+const APP_UPDATE_VETERAN_UNLOCK_DELAY: = 2.5
+const APP_UPDATE_DOWNLOAD_TIMEOUT: = 1800.0
+const APP_UPDATE_HASH_CHUNK_BYTES: = 1024 * 1024
+const APP_UPDATE_PLUGIN_NAME: = "RupturaStreamer"
+const APP_UPDATE_STORAGE_DIR: = "user://updates"
+var APP_UPDATE_CACHED_EXTENSIONS: = ["apk", "idsig", "exe", "tmp", "part"]
+const INPUT_BIND_NONE: = ""
+const INPUT_BIND_KEY_PREFIX: = "KEY:"
+const INPUT_BIND_MOUSE_PREFIX: = "MOUSE:"
+const RUN_LEADERBOARD_PATH: = "/runs"
+const RUN_LEADERBOARD_START_PATH: = "/runs/start"
+const RUN_LEADERBOARD_CHECKPOINT_PATH: = "/runs/checkpoint"
+const RUN_LEADERBOARD_VIEW_PATH: = "/leaderboard"
+const UMBRA_MIND_LATEST_PATH: = "/umbra/mind/latest"
+const UMBRA_MIND_STORAGE_DIR: = "user://umbra_mind"
+const UMBRA_MIND_STATE_PATH: = "user://umbra_mind/state.json"
+const UMBRA_MIND_CHECK_INTERVAL_SECONDS: int = 7 * 24 * 60 * 60
+const RUN_REPORT_INTEGRITY_VERSION: = 1
+const RUN_REPORT_INTEGRITY_SALT: = "ruptura-temporal-run-integrity-v1-2.0.30c"
+const RUN_SECURITY_CHECKPOINT_INTERVAL: = 120.0
+const RUN_TELEMETRY_SAMPLE_INTERVAL: = 0.5
+const RUN_TELEMETRY_GRID: = Vector2i(16, 9)
+const RUN_TELEMETRY_MAX_DAMAGE_EVENTS: = 240
+const ONLINE_RELAY_DEFAULT_HOST: = "72.61.217.238"
+const QA_STREAMING_FEATURE_ENABLED: = true
+const QA_STREAM_PLUGIN_NAME: = "RupturaStreamer"
+const QA_DESKTOP_STREAM_FFMPEG_ENV: = "RUPTURA_FFMPEG_BIN"
+const QA_STREAM_WIDTH: = 1280
+const QA_STREAM_HEIGHT: = 720
+const QA_STREAM_FPS: = 60
+const QA_STREAM_BITRATE: = 4500000
+const QA_FRAME_STREAM_MODES: = ["360p", "720p"]
+const QA_FRAME_STREAM_MODE_SIZES: = {
+	"720p": Vector2i(1280, 720), 
+	"360p": Vector2i(640, 360)
+}
+const QA_NATIVE_STREAM_MODE_FPS: = {
+	"720p": 30.0, 
+	"360p": 60.0
+}
+const QA_NATIVE_STREAM_MODE_BITRATE: = {
+	"720p": 3200000, 
+	"360p": 1600000
+}
+const QA_FRAME_STREAM_MODE_FPS: = {
+	"720p": 60.0, 
+	"360p": 60.0
+}
+const QA_FRAME_STREAM_MODE_QUALITY: = {
+	"720p": 0.66, 
+	"360p": 0.58
+}
+const QA_FRAME_STREAM_MODE_BITRATE: = {
+	"720p": 8000000, 
+	"360p": 3600000
+}
+const QA_FRAME_STREAM_MODE_MAX_IN_FLIGHT: = {
+	"720p": 8, 
+	"360p": 8
+}
+const QA_FRAME_STREAM_REQUEST_POOL: = 10
+const QA_FRAME_STREAM_BUFFER_MS: = 60
+const BULLET_SPEED: = 780.0
+const MAX_BULLETS: = 56
+const ENEMY_BASE_HP: = 30.0
+const ENEMY_BASE_SPEED: = 108.0
+const ENEMY_MAX_BASE: = 6
+const ENEMY_SPAWN_INTERVAL: = 0.82
+const ENEMY_SPAWN_INTERVAL_EARLY: = 1.34
+const ENEMY_SPAWN_INTERVAL_LATE: = 0.72
+const ENEMY_RAMP_START_TIME: = 1200.0
+const ENEMY_RAMP_PEAK_TIME: = 1800.0
+const ENEMY_LIMIT_STEP_TIME: = 90.0
+const ENEMY_MIN_SPAWN_DISTANCE: = 72.0
+const INITIAL_PHASE_ROLL_POOL: = [1, 6]
+const INITIAL_PHASE_ALTERNATE_BIAS: = 0.68
+const INITIAL_PHASE_QUICK_EXIT_BIAS: = 0.82
+const INITIAL_PHASE_QUICK_EXIT_TIME: = 45.0
+const PHASE1_STALKER_UNLOCK_TIME: = 300.0
+const PHASE1_PROJECTOR_UNLOCK_TIME: = 420.0
+const PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME: = 540.0
+const PHASE1_CURATER_UNLOCK_TIME: = 720.0
+const PHASE1_REVIVATOR_UNLOCK_TIME: = 900.0
+const PHASE1_LIMIT_BREAK_TIME: = 960.0
+const PHASE1_LIMIT_KILLS_PER_EXTRA: = 30
+const PHASE1_SECONDARY_LARAPIO_SPAWN_TIME: = 240.0
+const PHASE1_SECONDARY_LARAPIO_HP_MULT: = 1.28
+const PHASE1_SECONDARY_LARAPIO_DAMAGE_MULT: = 1.18
+const ANOMALIA_ESPREITADOR_TIME: = PHASE1_STALKER_UNLOCK_TIME
+const ANOMALIA_PROJETADOR_TIME: = PHASE1_PROJECTOR_UNLOCK_TIME
+const ANOMALIA_CRISTALIZADOR_TIME: = PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME
+const ANOMALIA_AGLOMERADOR_TIME: = 330.0
+const ANOMALIA_CURATER_TIME: = PHASE1_CURATER_UNLOCK_TIME
+const PHASE2_COMMON_ONLY_TIME: = 240.0
+const PHASE2_KAMIKAZE_UNLOCK_TIME: = 360.0
+const PHASE2_PYRO_UNLOCK_TIME: = 600.0
+const PHASE2_COMMON_LIMIT: = 6
+const PHASE2_KAMIKAZE_LIMIT: = 2
+const PHASE2_PYRO_LIMIT: = 1
+const PHASE3_COMMON_ONLY_TIME: = 180.0
+const PHASE3_INCENSARIO_UNLOCK_TIME: = 360.0
+const PHASE3_GUARDIAO_UNLOCK_TIME: = 540.0
+const PHASE3_LIMIT_EARLY: = 5
+const PHASE3_LIMIT_MID: = 6
+const PHASE3_LIMIT_FULL: = 7
+const PHASE4_ADAPT_TIME: = 180.0
+const PHASE4_LIMIT_EARLY: = 3
+const PHASE4_LIMIT_FULL: = 4
+const ARAUTO_SPAWN_TIME: = 480.0
+const ARAUTO_ENTRY_TIME: = 2.5
+const ARAUTO_SIZE: = Vector2(112, 132)
+const ARAUTO_VARIANT_CONDUTOR: = "condutor"
+const ARAUTO_VARIANT_AGUILHAO: = "aguilhao"
+const ARAUTO_ECHO_MIN: = 5
+const ARAUTO_ECHO_MAX: = 8
+const ARAUTO_ECHO_RADIUS: = 175.0
+const ARAUTO_ECHO_DAMAGE_REDUCTION: = 0.2
+const ARAUTO_MAX_DAMAGE_REDUCTION: = 0.8
+const ARAUTO_DAMAGE_MULT: = 1.72
+const ARAUTO_SHOT_COOLDOWN: = 2.3
+const ARAUTO_SHOT_COOLDOWN_PHASE2: = 1.75
+const ARAUTO_SHOT_SPEED_MULT: = 1.314
+const ARAUTO_SILENCE_COOLDOWN: = 11.5
+const ARAUTO_SILENCE_COOLDOWN_PHASE2: = 8.4
+const ARAUTO_SILENCE_WARNING: = 0.85
+const ARAUTO_SILENCE_DURATION: = 2.6
+const ARAUTO_SILENCE_RADIUS: = 62.0
+const ARAUTO_ECHO_PULSE_COOLDOWN: = 9.8
+const ARAUTO_ECHO_PULSE_COOLDOWN_PHASE2: = 7.2
+const ARAUTO_ECHO_PULSE_RADIUS: = 230.0
+const ARAUTO_GAZE_COOLDOWN: = 8.5
+const ARAUTO_GAZE_COOLDOWN_PHASE2: = 6.2
+const ARAUTO_GAZE_FIRST_DELAY: = 4.2
+const ARAUTO_GAZE_CHARGE: = 1.35
+const ARAUTO_GAZE_CHARGE_PHASE2: = 1.05
+const ARAUTO_GAZE_LOCK_RATIO: = 0.58
+const ARAUTO_GAZE_HIT_RADIUS: = 42.0
+const ARAUTO_SPEED: = 87.0
+const ARAUTO_DISTANCE_MIN: = 230.0
+const ARAUTO_DISTANCE_MAX: = 390.0
+const ARAUTO_CARD_REWARD_COUNT: = 4
+const AGUILHAO_SIZE: = Vector2(154, 96)
+const AGUILHAO_NODE_COUNT: = 2
+const AGUILHAO_NODE_DAMAGE_REDUCTION: = 0.2
+const AGUILHAO_MAX_NODE_REDUCTION: = 0.4
+const AGUILHAO_NODE_HP_RATIO: = 0.21
+const AGUILHAO_MOVE_SPEED: = 72.0
+const AGUILHAO_PHASE2_MOVE_MULT: = 1.14
+const AGUILHAO_CHARGE_COOLDOWN: = 5.4
+const AGUILHAO_CHARGE_COOLDOWN_PHASE2: = 4.4
+const AGUILHAO_CHARGE_WINDUP: = 0.98
+const AGUILHAO_CHARGE_WINDUP_PHASE2: = 0.78
+const AGUILHAO_CHARGE_SPEED: = 560.0
+const AGUILHAO_CHARGE_DURATION: = 0.72
+const AGUILHAO_CHARGE_HIT_WIDTH: = 56.0
+const AGUILHAO_CHARGE_DAMAGE_RATE: = 0.13
+const AGUILHAO_CHARGE_NODE_STUN: = 1.65
+const AGUILHAO_BOUNDARY_RECOVERY: = 0.82
+const AGUILHAO_STUN_VULNERABILITY_MULT: = 1.25
+const AGUILHAO_SEED_COOLDOWN: = 8.0
+const AGUILHAO_SEED_LIMIT: = 2
+const AGUILHAO_SEED_LIMIT_PHASE2: = 3
+const AGUILHAO_SEED_WARNING: = 0.72
+const AGUILHAO_PULSE_COOLDOWN: = 7.0
+const AGUILHAO_PULSE_WARNING: = 0.84
+const AGUILHAO_PULSE_RADIUS: = 155.0
+const AGUILHAO_PULSE_DAMAGE_RATE: = 0.085
+const CURATER_HEAL_INTERVAL: = 1.0
+const CURATER_HEAL_LOST_PERCENT: = 0.2
+const CURATER_MITIGATION: = 0.42
+const FUSION_CHECK_INTERVAL: = 1.0
+const FUSION_RADIUS: = 90.0
+const FUSION_REQUIRED: = 3
+const FUSION_TIME: = 120.0
+const CARD_COST_BASE: = 500
+const FORCED_SHOP_CARDS: = 6
+const FORCED_SHOP_WARNING: = 15.0
+const FORCED_SHOP_SLOW_START: = 3.0
+const FORCED_SHOP_MIN_TIME_SCALE: = 0.12
+const FORCED_SHOP_INTERVAL: = 180.0
+const SHOP_OPENING_ANIM_TIME: = 1.3
+const SHOP_RETURN_TIME: = 3.0
+const SHOP_RETURN_VISUAL_TIME: = 0.72
+const SHOP_PURCHASE_ANIM_TIME: = 0.62
+const SHOP_MANUAL_REOPEN_CONFIRM_MS: int = 520
+const SHOP_FAIRNESS_V2: = true
+const SHOP_VERSION_V1: = "legacy_v1"
+const SHOP_VERSION_V2: = "fairness_v2"
+const SHOP_INTENT_DISCOVERY: = "discovery"
+const SHOP_INTENT_CONSOLIDATION: = "consolidation"
+const SHOP_INTENT_FREE: = "free"
+const SHOP_BUILD_UNIQUE_THRESHOLD: = 6
+const SHOP_STRUCTURED_PROFILE_CHANCE: = 0.7
+const SHOP_DISCOVERY_UNOWNED_MULT: = 1.6
+const SHOP_DISCOVERY_OWNED_MULT: = 0.55
+const SHOP_CONSOLIDATION_OWNED_MULT: = 5.5
+const SHOP_CONSOLIDATION_UNOWNED_MULT: = 0.22
+const SHOP_FREE_UNOWNED_MULT: = 0.7
+const SHOP_FREE_OWNED_MULT: = 1.4
+const SHOP_COPY_PENALTY_RATE: = 0.18
+const SHOP_RECENT_UNOWNED_MULT: = [0.45, 0.65, 0.82]
+const SHOP_RECENT_OWNED_MULT: = [0.65, 0.8, 0.92]
+const SHOP_ASHES_BASE_MULT: = 2.0
+const SHOP_ASHES_STACK_MULT: = 1.1
+const SHOP_ASHES_GUARANTEE_VISITS: = 3
+const SHOP_ASHES_MIN_RECENT_MULT: = 0.9
+const SHOP_RECENT_GENERATION_LIMIT: = 3
+const SHOP_TELEMETRY_ENABLED: = true
+const SHOP_TELEMETRY_DIR: = "user://shop_telemetry"
+const SHOP_MP_REQUEST_TIME: = 10.0
+const BOSS_MP_REQUEST_TIME: = 10.0
+const PAUSE_MP_REQUEST_TIME: = 10.0
+const PHASE_MP_REQUEST_TIME: = 10.0
+const ONLINE_MIN_PLAYERS: = 2
+const ONLINE_MAX_PLAYERS: = 3
+const ONLINE_READY_RESEND_INTERVAL_MS: = 180
+const ONLINE_READY_PENDING_TIMEOUT_MS: = 3500
+const ONLINE_READY_MAX_PENDING_MS: = 12000
+const MULTIPLAYER_ENEMY_HP_SCALE_2P: = 1.55
+const MULTIPLAYER_ENEMY_HP_SCALE_3P: = 1.95
+const MULTIPLAYER_BOSS_HP_SCALE_2P: = 1.35
+const MULTIPLAYER_BOSS_HP_SCALE_3P: = 1.7
+const MULTIPLAYER_BOSS_DAMAGE_SCALE_2P: = 0.92
+const MULTIPLAYER_BOSS_DAMAGE_SCALE_3P: = 0.88
+const MULTIPLAYER_BOSS_TARGET_SWITCH_2P: = 2.15
+const MULTIPLAYER_BOSS_TARGET_SWITCH_3P: = 1.85
+const MULTIPLAYER_ENEMY_LIMIT_BONUS_2P: = 1
+const MULTIPLAYER_ENEMY_LIMIT_BONUS_3P: = 2
+const SECONDARY_SKILL_COOLDOWN: = 75.0
+const SECONDARY_ELETRICA_DRAIN_DELAY: = 15.0
+const SECONDARY_ELETRICA_DRAIN_INTERVAL: = 1.0
+const SECONDARY_ELETRICA_DRAIN_RATE: = 0.01
+const SECONDARY_ELETRICA_DRAIN_TIER_SECONDS: = 4.0
+const SECONDARY_ELETRICA_SHOCK_INTERVAL: = 0.4
+const SECONDARY_ELETRICA_SHOCK_STUN: = 0.2
+const SECONDARY_ELETRICA_SHOCK_MAX_HP_RATE: = 0.005
+const SECONDARY_ELETRICA_SHOCK_DAMAGE_RATE: = 0.5
+const TESLA_BASE_TERM_MAX_MULTIPLIER: = 2.25
+const TESLA_HEALTH_TERM_MAX_MULTIPLIER: = 1.6
+const SECONDARY_ELETRICA_DURATION: = 8.0
+const ELETRICA_WAVE_SIZE: = Vector2(90, 90)
+const ELETRICA_WAVE_RADIUS: = 45.0
+const ELETRICA_WAVE_SPEED: = 720.0
+const ELETRICA_WAVE_CHAIN_RADIUS: = 250.0
+const ELETRICA_WAVE_CHAIN_DURATION: = 5.0
+const ELETRICA_WAVE_CHAIN_TICK: = 1.0
+const ELETRICA_WAVE_CHAIN_LEVEL_DELAY: = 0.15
+const ELETRICA_WAVE_CHAIN_STUN: = 0.5
+const ELETRICA_WAVE_BOSS_HIT_COOLDOWN: = 0.5
+const ELETRICA_WAVE_BOSS_DAMAGE_MULT: = 5.0
+const ELETRICA_WAVE_RECOIL_SPEED: = 288.0
+const ELETRICA_WAVE_RECOIL_FRICTION: = 0.68
+const ELETRICA_WAVE_RECOIL_MIN_SPEED: = 4.8
+const SECONDARY_LACERANTE_DURATION: = 3.0
+const LACERANTE_ATTACK_REACH_BONUS: = 15.0
+const LACERANTE_REACH_PER_20_COAGULA: = 5.0
+const LACERANTE_ULT_EXTRA_CUTS_PER_20_COAGULA: = 2
+const LACERANTE_COAGULUM_DAMAGE_RATE: = 0.003
+const LACERANTE_COAGULUM_ATTACK_SPEED_RATE: = 0.0025
+const LACERANTE_EMPOWER_COOLDOWN: = 3.0
+const LACERANTE_EMPOWER_DAMAGE_MULT: = 1.45
+const LACERANTE_UNCOMMON_POINTS_MULT: = 1.5
+const LACERANTE_Q_DURATION: = 1.5
+const LACERANTE_Q_ROTATIONS: = 5.0
+const LACERANTE_Q_ROTATIONS_PER_10_COAGULA: = 1.0
+const LACERANTE_Q_HEAL_LOST_HP_PER_HIT: = 0.0025
+const LACERANTE_Q_DAMAGE_PER_HIT_RATE: = 0.005
+const LACERANTE_Q_BOSS_DAMAGE_MULT: = 0.7
+const LACERANTE_Q_BOSS_TOTAL_DAMAGE_MULT: = 4.5
+const LACERANTE_Q_BOSS_TOTAL_HP_CAP: = 0.075
+const LACERANTE_DAMAGE_TAKEN_MULT: = 0.78
+const LACERANTE_TP_CHAIN_WINDOW: = 2.5
+const LACERANTE_TP_CHAIN_COOLDOWN: = 2.0
+const LACERANTE_TP_INITIAL_COOLDOWN: = 2.0
+const LACERANTE_TP_MAX_CHARGES: = 2
+const TP_RETURN_WINDOW: = 0.85
+const TP_RETURN_COOLDOWN: = 1.2
+const TP_PRISM_DURATION: = 10.0
+const TP_PRISM_DASH_COOLDOWN: = 4.0
+const TP_PARASITE_DURATION: = 1.35
+const TP_PARASITE_STUN: = 1.8
+const TP_GRAVITY_RADIUS: = 230.0
+const TP_LACERANTE_DURATION: = 3.0
+const TP_LACERANTE_BASE_CUTS: = 10
+const TP_ELECTRIC_DURATION: = 3.0
+const TP_ELECTRIC_DASH_COOLDOWN: = 4.0
+const TP_ELECTRIC_TICK: = 0.3
+const TP_ELECTRIC_MAX_HP_RATE: = 0.005
+const SECONDARY_PRISMATICA_DURATION: = 10.0
+const SECONDARY_PRISMATICA_BEAM_RANGE: = 350.0
+const SECONDARY_PRISMATICA_BEAM_WIDTH: = 24.0
+const SECONDARY_PRISMATICA_BEAM_SPIN_SPEED: = TAU / 1.25
+const SECONDARY_PRISMATICA_HIT_INTERVAL: = 0.16
+const SECONDARY_PRISMATICA_DANCE_FRAME_INTERVAL: = 0.5
+const SECONDARY_PRISMATICA_FINAL_FRAME_TIME: = 1.0
+const SECONDARY_PRISMATICA_ZAP_RADIUS: = 430.0
+const SECONDARY_PRISMATICA_ZAP_INTERVAL: = 0.24
+const SECONDARY_PRISMATICA_ZAP_LIFE: = 0.18
+const SECONDARY_PRISMATICA_ZAP_MAX_PER_TICK: = 4
+const SECONDARY_RETORNANTE_DURATION: = 8.0
+const SECONDARY_PARASITICA_DURATION: = 8.0
+const PARASITE_MARK_DURATION: = 6.0
+const PARASITE_FEAST_DURATION: = 8.0
+const PARASITE_ULTIMATE_MAX_DURATION: = 11.5
+const PARASITE_SPIT_RADIUS: = 155.0
+const PARASITE_SPIT_DURATION: = 4.8
+const PARASITE_SPIT_TRAVEL: = 0.46
+const SECONDARY_GRAVITANTE_DURATION: = 8.0
+const SECONDARY_ANCORADA_DURATION: = 10.0
+const SECONDARY_ANCORADA_COOLDOWN: = 65.0
+const ANCORADA_ULTIMATE_RADIUS: = 350.0
+const ANCORADA_ULTIMATE_DROP_INTERVAL: = 1.5
+const ANCORADA_ULTIMATE_FALL_TIME: = 0.62
+const ANCORADA_ULTIMATE_IMPACT_RADIUS: = 78.0
+const ANCORADA_ULTIMATE_DAMAGE_MULT: = 1.85
+const ANCORADA_ULTIMATE_BOSS_DAMAGE_MULT: = 1.15
+const ANCORADA_ULTIMATE_SLOW_DURATION: = 2.2
+const ANCORADA_ULTIMATE_SLOW_MULT: = 0.35
+
+const ANCORADA_LASTRO_MAX_STACKS: int = 5
+const ANCORADA_LASTRO_POINTS_PER_STACK: int = 4
+const ANCORADA_LASTRO_BASIC_MAX_POINTS_PER_PROJECTILE: int = 2
+const ANCORADA_LASTRO_E_MAX_POINTS_PER_DROP_CYCLE: int = 4
+const ANCORADA_LASTRO_DECAY_DELAY: float = 8.0
+const ANCORADA_LASTRO_DECAY_INTERVAL: float = 2.0
+const ANCORADA_LASTRO_KNOCKBACK_RESIST_PER_STACK: float = 0.04
+
+const ANCORADA_HAB1_COOLDOWN: float = 11.0
+const ANCORADA_HAB1_TELEGRAPH_TIME: float = 0.10
+const ANCORADA_HAB1_FALL_TIME: float = 0.28
+const ANCORADA_HAB1_IMPACT_TIME: float = 0.38
+const ANCORADA_HAB1_CRACK_DURATION: float = 2.4
+
+const ANCORADA_BASIC_PROJECTILE_SPEED: float = 720.0
+const ANCORADA_BASIC_PROJECTILE_RANGE: float = 760.0
+const BOSS_READY_TIME: = 0.0
+const BOSS_CALL_COUNTDOWN: = 1.2
+const BOSS_BASE_HP: = 4860.0
+const BOSS_ARMOR: = 0.528
+const BOSS_ARMOR_TIME_PER_MIN: = 0.00055
+const BOSS_ARMOR_KILL_RATE: = 0.000025
+const BOSS_ARMOR_COLETORA_RATE: = 0.0025
+const BOSS_FARM_DAMAGE_MAX_MULT: = 1.85
+const BOSS_FARM_DAMAGE_TIME_CAP: = 3600.0
+const BOSS_FARM_DAMAGE_SCORE_CAP: = 250000.0
+const BOSS_FARM_DAMAGE_KILL_CAP: = 3600.0
+const BOSS_ENTRY_TIME: = 1.2
+const BOSS_STAGE_JUMP_TIME: = 6.0
+const BOSS_STAGE_SLAM_TIME: = 1.35
+const BOSS_STAGE_WAVE_WARNING: = 0.78
+const BOSS_STAGE_WAVE_INTERVAL: = 1.15
+const BOSS_STAGE_WAVE_SPEED: = 230.0
+const BOSS_STAGE_WAVE_COUNT: = 4
+const BOSS_STAGE_WAVE_HAPTIC_MS: = 85
+const BOSS_STAGE_WAVE_OPENING: = PI * 0.38
+const BOSS_STAGE_WAVE_DAMAGE_RATE: = 0.072
+const BOSS_STAGE_WAVE_DAMAGE_FLAT: = 34.0
+const BOSS_STAGE_ENRAGED_THRESHOLD: = 0.3
+const BOSS_STAGE_ENRAGED_WAVE_INTERVAL: = 0.72
+const BOSS_STAGE_ENRAGED_WAVE_COUNT: = 5
+const BOSS_STAGE_ENRAGED_OPENING: = PI * 0.22
+const BOSS_STAGE_ENRAGED_DAMAGE_RATE: = 0.038
+const BOSS_STAGE_ENRAGED_DAMAGE_FLAT: = 16.0
+const BOSS_STAGE_ENRAGED_SLOW_TIME: = 1.65
+const BOSS1_REWIND_THRESHOLD: = 0.3
+const BOSS1_REWIND_SECONDS: = 8.0
+const BOSS1_REWIND_COOLDOWN: = 45.0
+const BOSS1_REWIND_BOSS_HEAL: = 0.4
+const BOSS1_REWIND_PLAYER_HEAL: = 0.25
+const BOSS1_REWIND_SAMPLE_INTERVAL: = 0.08
+const BOSS1_TIME_WAVE_SPEED: = 360.0
+const BOSS1_TIME_WAVE_WIDTH: = 22.0
+const BOSS1_TIME_WAVE_WARNING: = 0.65
+const BOSS1_CLOCK_TRAVEL_TIME: = 0.7
+const BOSS1_CLOCK_TURN_TIME: = 3.0
+const BOSS1_REWIND_PLAYBACK_TIME: = 3.0
+const BOSS1_RAIN_THRESHOLD: = 0.3
+const BOSS1_ABSORB_COOLDOWN: = 40.0
+const BOSS1_ABSORB_DURATION: = 6.0
+const BOSS1_ABSORB_DAMAGE_TAKEN_MULT: = 0.4
+const BOSS1_ABSORB_RETALIATE_INTERVAL: = 0.18
+const BOSS1_ABSORB_RETALIATE_BURSTS: = 18
+const BOSS1_ABSORB_PROJECTILE_DAMAGE_BASE: = 10.0
+const BOSS1_ABSORB_PROJECTILE_DAMAGE_RATE: = 0.9
+const BOSS1_BUBBLE_WARNING_LEAD: = 5.0
+const BOSS1_DASH_SFX_DELAY: = 0.2
+const BOSS1_TIDE_NEAR_SFX_DISTANCE: = 200.0
+const BOSS1_ENTRY_FALL_SFX_LEAD: = 0.5
+const BOSS1_STOP_PRE_LEAD: = 2.0
+const BOSS1_STOP_END_LEAD: = 0.5
+const BOSS1_STOP_MUSIC_FADE_TIME: = 2.0
+const BOSS1_STOP_AUDIO_VOLUME: = 0.82
+const WEATHER_RAIN_DROP_RATE: = 185.0
+const WEATHER_SNOW_DROP_RATE: = 72.0
+const WEATHER_MAX_RAIN_DROPS: = 260
+const WEATHER_MAX_SNOW_FLAKES: = 170
+const WEATHER_MAX_PUDDLES: = 28
+const LOW_RESOURCE_FPS: = 60
+const MEMORY_SAVER_FPS: = 60
+const LOW_RESOURCE_EFFECT_CAP: = 96
+const MEMORY_SAVER_EFFECT_CAP: = 72
+const LOW_RESOURCE_RAIN_DROP_CAP: = 64
+const LOW_RESOURCE_SNOW_FLAKE_CAP: = 44
+const LOW_RESOURCE_PUDDLE_CAP: = 8
+const MEMORY_SAVER_RAIN_DROP_CAP: = 42
+const MEMORY_SAVER_SNOW_FLAKE_CAP: = 28
+const MEMORY_SAVER_PUDDLE_CAP: = 6
+const MOBILE_ADAPTIVE_FPS_FLOOR: = 46.0
+const MOBILE_ADAPTIVE_FPS_RECOVER: = 56.0
+const MOBILE_ADAPTIVE_TRIGGER_TIME: = 3.5
+const MOBILE_ADAPTIVE_RECOVER_TIME: = 10.0
+const MOBILE_EFFECT_DRAW_CAP: = 76
+const MEMORY_EFFECT_DRAW_CAP: = 44
+const LOW_RESOURCE_MAP_KEYS: = ["map_phase_1", "map_phase_2", "map_phase_3", "map_phase_4", "map_phase_5", "map_phase_6", "map_phase_7", "map_phase_9"]
+const WEATHER_PUDDLE_MIN_SIZE: = 10.0
+const WEATHER_PUDDLE_MAX_SIZE: = 30.0
+const WEATHER_PUDDLE_SLOW_MULT: = 0.9
+const WEATHER_RAIN_FADE_TIME: = 3.0
+const WEATHER_RAIN_AUDIO_VOLUME: = 0.4
+const GRAVITANTE_ORBITAL_TRANSFER_RADIUS: = 185.0
+const TREMBO_HEAL_INTERVAL_BASE: = 2.5
+const TREMBO_HEAL_RATIO_BASE: = 0.005
+const TREMBO_REVIVE_INVULNERABILITY: = 10.0
+const PETRO_BASE_HP: = 500.0
+const PETRO_BASE_DEFENSE: = 20.0
+const PETRO_BASE_DAMAGE: = 25.0
+const PETRO_ATTACK_INTERVAL: = 1.0
+const PETRO_ATTACK_RANGE: = 58.0
+const PETRO_MOVE_SPEED: = 235.0
+const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso", "Egide Hemofaga"]
+const CARD_RARITY_COMMON_COLOR: = Color(0.96, 0.97, 1.0)
+const CARD_RARITY_RARE_COLOR: = Color(1.0, 0.76, 0.12)
+const BOSS_ATTACK_BASE_COOLDOWN: = 3.8
+const BOSS1_STAGE_APPROACH_SPEED: = 260.0
+const BOSS2_ENTRY_TIME: = 2.5
+const BOSS2_WARNING_TIME: = 2.45
+const BOSS2_ATTACK_INTERVAL: = 5.2
+const BOSS2_WAVE_SPEED_MULT: = 0.82
+const BOSS2_WAVE_WIDTH_MULT: = 0.88
+const BOSS2_WAVE_WIDTH: = 70.0
+const BOSS2_BREATH_TIME: = 2.6
+const BOSS2_SHIELD_TIME: = 10.0
+const BOSS2_SHIELD_PILLAR_MIN: = 10
+const BOSS2_SHIELD_PILLAR_MAX: = 20
+const BOSS2_SLOW_ZONE_TIME: = 4.0
+const BOSS2_SLOW_MULT: = 0.58
+const BOSS2_STATE_IDLE: = "boss2_idle"
+const BOSS2_STATE_REPOSITION: = "boss2_reposition"
+const BOSS2_STATE_FREEZING_BREATH: = "boss2_freezing_breath"
+const BOSS2_STATE_SPIN_SPIT_UP: = "boss2_spin_spit_up"
+const BOSS2_STATE_GLACIAL_STOMP: = "boss2_glacial_stomp"
+const BOSS2_STATE_ICE_PRISON: = "boss2_ice_prison"
+const BOSS2_STATE_CRYSTAL_SHIELD: = "boss2_crystal_shield"
+const BOSS2_STATE_DOUBLE_BLIZZARD: = "boss2_double_blizzard"
+const BOSS2_STATE_FLASH_FREEZE: = "boss2_flash_freeze"
+const NET_BOSS2_STATES: = [
+	BOSS2_STATE_IDLE, 
+	BOSS2_STATE_REPOSITION, 
+	BOSS2_STATE_FREEZING_BREATH, 
+	BOSS2_STATE_SPIN_SPIT_UP, 
+	BOSS2_STATE_GLACIAL_STOMP, 
+	BOSS2_STATE_ICE_PRISON, 
+	BOSS2_STATE_CRYSTAL_SHIELD, 
+	BOSS2_STATE_DOUBLE_BLIZZARD, 
+	BOSS2_STATE_FLASH_FREEZE
+]
+const NET_BOSS2_ATTACKS: = [
+	"", 
+	"freezing_breath", 
+	"spin_spit_up", 
+	"glacial_stomp", 
+	"ice_prison", 
+	"crystal_shield", 
+	"double_blizzard", 
+	"flash_freeze", 
+	"reposition"
+]
+const BOSS2_WALK_SPEED: = 112.0
+const BOSS2_REPOSITION_MIN_DISTANCE: = 150.0
+const BOSS2_REPOSITION_MAX_DISTANCE: = 290.0
+const BOSS2_IDLE_MIN_TIME: = 0.55
+const BOSS2_IDLE_MAX_TIME: = 1.05
+const BOSS2_STOMP_WARN: = 1.55
+const BOSS2_STOMP_ACTIVE: = 0.42
+const BOSS2_PRISON_WARN: = 1.85
+const BOSS2_PRISON_HOLD: = 2.35
+const BOSS2_ULTIMATE_DURATION: = 40.0
+const BOSS2_ULTIMATE_HP_THRESHOLD: = 0.4
+const BOSS2_ULTIMATE_SAFE_RADIUS: = 480.0
+const BOSS2_ULTIMATE_ORBIT_RADIUS: = 640.0
+const BOSS2_ULTIMATE_WARNING_TIME: = 2.1
+const BOSS2_ULTIMATE_SPIT_INTERVAL: = 5.0
+const BOSS2_ULTIMATE_WIND_INTERVAL: = 8.5
+const BOSS2_ULTIMATE_WIND_DURATION: = 3.0
+const BOSS2_ULTIMATE_BLIZZARD_BASE_TICK: = 2.0
+const BOSS2_ULTIMATE_HAIL_INTERVAL: = 4.0
+const BOSS2_ULTIMATE_FAN_INTERVAL: = 6.0
+const BOSS2_FLASH_FREEZE_WARNING: = 1.95
+const BOSS2_FLASH_FREEZE_RADIUS: = 138.0
+const BOSS2_FLASH_FREEZE_STUN: = 2.6
+const PHASE2_FREEZE_VISUAL_MIN_TIME: = 2.3
+const BOSS1_WALK_AUDIO_VOLUME: = 0.13
+const PHASE_TRANSITION_HOLD_TIME: = 1.7
+const PHASE_TRANSITION_WIPE_TIME: = 2.0
+const PHASE_TRANSITION_TIME: = 3.7
+const DEATH_SCREEN_SLOW_TIME: = 0.85
+const RETRY_RETURN_ANIM_TIME: = 1.05
+const BOSS_FRAGMENT_PICKUP_RADIUS: = 42.0
+const MUSIC_PAUSE_FADE_TIME: = 3.0
+const MUSIC_CROSSFADE_TIME: = 5.0
+const PHASE_MUSIC_DIR: = "res://Sounds"
+const LARAPIO_SPAWN_TIME: = 180.0
+const LARAPIO_PORTAL_TIME: = 10.0
+const LARAPIO_PORTAL_HIT_PAUSE: = 2.0
+const LARAPIO_STEAL_RADIUS: = 72.0
+const LARAPIO_STEAL_RATIO: = 0.6
+const LARAPIO_LOOT_RETURN_RATIO: = 0.9
+const LARAPIO_LOOT_BONUS_RATIO: = 0.15
+const LARAPIO_STUN_TIME: = 1.4
+const LARAPIO_THROW_INTERVAL: = 4.0
+const LARAPIO_DAMAGE_TAKEN_MULT: = 0.34
+const LARAPIO_AGGRESSIVE_AFTER: = 120.0
+const LARAPIO_AGGRESSIVE_THROW_INTERVAL: = 3.0
+const LARAPIO_AGGRESSIVE_STONE_SPEED_MULT: = 1.4
+const LARAPIO_DESPERATE_AFTER: = 90.0
+const LARAPIO_DESPERATE_HP_RATIO: = 0.38
+const LARAPIO_DESPERATE_THROW_INTERVAL: = 1.35
+const LARAPIO_DESPERATE_STONE_SPEED_MULT: = 1.45
+const LARAPIO_DESPERATE_STONE_DAMAGE_MULT: = 1.45
+const LARAPIO_DESPERATE_KEEP_DISTANCE: = 720.0
+const LARAPIO_IRRITATED_RADIUS: = 280.0
+const LARAPIO_IRRITATED_COIN_INTERVAL: = 2.55
+const LARAPIO_ULTIMATE_HP_RATIO: = 0.7
+const LARAPIO_ULTIMATE_DURATION: = 10.0
+const LARAPIO_ULTIMATE_COOLDOWN: = 20.0
+const LARAPIO_ULTIMATE_PORTAL_COUNT: = 4
+const LARAPIO_ULTIMATE_PORTAL_RADIUS: = 48.0
+const LARAPIO_ULTIMATE_JUMP_INTERVAL: = 1.1
+const LARAPIO_COIN_DROP_LIFE: = 2.4
+const LARAPIO_COIN_DROP_INTERVAL: = 0.16
+const LARAPIO_CORNER_MARGIN: = 118.0
+const LARAPIO_CORNER_TRAP_TIME: = 4.0
+const LARAPIO_PATROL_MARGIN: = 150.0
+const LARAPIO_PATROL_RETARGET_TIME: = 2.4
+const LARAPIO_IDLE_LAUGH_INTERVAL: = 7.0
+const LARAPIO_MONEY_LAUGH_INTERVAL: = 5.0
+const LARAPIO_COOLDOWN_STEP_TIME: = 180.0
+const LARAPIO_COOLDOWN_STEP_BONUS: = 18.0
+const LARAPIO_COOLDOWN_MAX_BONUS: = 150.0
+const LARAPIO_CARD_DROP_BASE: = 4
+const LARAPIO_CARD_DROP_CLEAN: = 5
+const LARAPIO_CARD_RARE_CHANCE: = 0.3
+const VORAZ_BITE_RADIUS: = 100.0
+const VORAZ_BOSS_BITE_RADIUS: = 152.0
+const VORAZ_BITE_INTERVAL: = 0.95
+const RATIONAL_TRAIL_SAMPLE_TIME: = 0.035
+const RATIONAL_TRAIL_LIFE: = 0.46
+const ECLIPSADA_ATTACK_HIT_INTERVAL: = 0.3
+const ECLIPSADA_ATTACK_CHAIN_COOLDOWN: = 1.2
+const ECLIPSADA_ATTACK_REACH: = 20.0
+const ECLIPSADA_ATTACK_AREA_RADIUS: = 80.0
+const ECLIPSADA_ATTACK_AREA_REACH: = 80.0
+const ECLIPSADA_ATTACK_SLASH_RADIUS: = 80.0
+const ECLIPSADA_LUA_BLADE_REACH: = 180.0
+const ECLIPSADA_LUA_BLADE_WIDTH: = 34.0
+const ECLIPSADA_LUA_BLADE_DAMAGE_MULT: = 0.78
+const ECLIPSADA_LUA_BLADE_CRIT_MULT: = 1.85
+const ECLIPSADA_FORM_LUA: = "lua"
+const ECLIPSADA_FORM_SOL: = "sol"
+const ECLIPSADA_SHURIKEN_RANGE: = 280.0
+const ECLIPSADA_SHURIKEN_FALL_RANGE: = 285.0
+const ECLIPSADA_LUA_SHURIKEN_SPEED: = 520.0
+const ECLIPSADA_SOL_SHURIKEN_SPEED: = 600.0
+const ECLIPSADA_LUA_SHURIKEN_DAMAGE_MULT: = 0.64
+const ECLIPSADA_SOL_SHURIKEN_DAMAGE_MULT: = 0.78
+const ECLIPSADA_SOL_SPLASH_RADIUS: = 54.0
+const ECLIPSADA_SOL_Q_RANGE: = 340.0
+const ECLIPSADA_SOL_E_RANGE: = 260.0
+const ECLIPSADA_SOL_E_RADIUS: = 170.0
+const ECLIPSADA_SOL_E_DURATION: = 3.2
+const ECLIPSADA_SOL_E_TICK: = 0.34
+const ECLIPSADA_Q_DASH_DISTANCE: = 20.0
+const ECLIPSADA_Q_SPEED_MULT: = 1.2
+const ECLIPSADA_Q_SPEED_TIME: = 6.0
+const ECLIPSADA_Q_STEALTH_TIME: = 5.0
+const ECLIPSADA_LUA_STEALTH_COOLDOWN: = 10.0
+const ECLIPSADA_LUA_STEALTH_SAFE_TIME: = 3.0
+const ECLIPSADA_LUA_STEALTH_DRAIN_BASE: = 0.0005
+const ECLIPSADA_LUA_STEALTH_DRAIN_STEP: = 0.0001
+const ECLIPSADA_Q_WEAKPOINT_TIME: = 5.0
+const ECLIPSADA_WEAKPOINT_RADIUS: = 18.0
+const ECLIPSADA_WEAKPOINT_DAMAGE_MULT: = 1.75
+const ECLIPSADA_E_AIM_RANGE: = 150.0
+const ECLIPSADA_E_CHAIN_RADIUS: = 90.0
+const ECLIPSADA_E_BASE_CUTS: = 6
+const ECLIPSADA_E_CUT_INTERVAL_BASE: = 0.18
+const ECLIPSADA_E_DAMAGE_SCALE: = 1.15
+const ECLIPSADA_E_MAX_TARGET_TIME: = 2.35
+const ECLIPSADA_LUA_E_DURATION: = 5.2
+const ECLIPSADA_LUA_E_RADIUS: = 172.0
+const ECLIPSADA_LUA_E_TICK: = 0.22
+const ECLIPSADA_LUA_E_MAX_TARGETS: = 3
+const ECLIPSADA_E_COOLDOWN: = 50.0
+const ECLIPSADA_PASSIVE_READY_TIME: = 80.0
+const ECLIPSADA_TRAIT_DURATION: = 60.0
+
+const ENEMY_COMMON: = "comum"
+const ENEMY_ATIRADOR: = "atirador"
+const ENEMY_KAMIKAZE: = "kamikaze"
+const ENEMY_AGGLOMERATOR: = "aglomerador"
+const ENEMY_STALKER: = "espreitador"
+const ENEMY_PROJECTOR: = "projetador"
+const ENEMY_CRYSTAL: = "cristalizador"
+const ENEMY_CURATER: = "curater"
+const ENEMY_LARAPIO: = "larapio"
+const ENEMY_COUT_ATTACK_SPEED: = "cout_attack_speed"
+const ENEMY_SHIELD_REFLECTOR: = "escudeiro_refletor"
+const ENEMY_DEVOTO: = "devoto_febril"
+const ENEMY_INCENSARIO: = "incensario"
+const ENEMY_GUARDIAO: = "guardiao_sucata"
+const ENEMY_PYRO_PENGUIN: = "pinguim_incendiario"
+const ENEMY_NEXUS_CARTOGRAPHER: = "cartografo_vazio"
+const ENEMY_NEXUS_CHRONOPHAGE: = "cronofago"
+const ENEMY_NEXUS_REFRACTOR: = "refrator_hostil"
+const ENEMY_NEXUS_WEAVER: = "tecelao_vetorial"
+const ENEMY_NEXUS_ECHO: = "eco_entropico"
+const ENEMY_MIASMA_EEL: = "enguia_miasma"
+const ENEMY_LODARIO: = "lodario"
+const ENEMY_FOSSIL_PUSTULE: = "pustula_fossil"
+const ENEMY_CHRONAL_LEECH: = "sanguessuga_cronal"
+const ENEMY_CINERIDO: = "cinerido"
+const ENEMY_PANGOLIRO: = "carapaca_brasa_pangoliro"
+const ENEMY_CORVOL: = "fuligarra_corvol"
+const LODARIO_HOP_INTERVAL: = 0.7
+const LODARIO_HOP_DISTANCE: = 35.0
+const LODARIO_HOP_DURATION: = 0.3
+const LODARIO_HOP_HEIGHT: = 18.0
+const LODARIO_PHEROMONE_HOP_INTERVAL: = 0.55
+const LODARIO_PHEROMONE_HOP_DISTANCE: = 90.0
+const LODARIO_PHEROMONE_HOP_DURATION: = 0.25
+const LODARIO_LUNGE_TRIGGER_DISTANCE: = 150.0
+const LODARIO_LUNGE_DISTANCE: = 220.0
+const LODARIO_LUNGE_DURATION: = 0.44
+const LODARIO_LUNGE_COOLDOWN: = 20.0
+const LODARIO_CLOSE_REACTION_TIME: = 0.06
+const LODARIO_DAMAGE_BASE_MULT: = 1.14
+const LODARIO_DAMAGE_RAMP_TIME: = 720.0
+const LODARIO_DAMAGE_RAMP_MAX: = 0.16
+const LODARIO_HOP_DAMAGE_REDUCTION: = 0.88
+const LODARIO_LUNGE_DAMAGE_REDUCTION: = 0.78
+const LODARIO_SFX_CLOSE_DISTANCE: = 24.0
+const LODARIO_SFX_FAR_DISTANCE: = 280.0
+const LODARIO_SFX_VOLUME_MIN: = 0.0
+const LODARIO_SFX_VOLUME_MAX: = 0.2
+const PUSTULE_PHEROMONE_TIME: = 5.0
+const BOSS6_PUSTULE_PHEROMONE_TIME: = 7.0
+const BOSS6_HUNGRY_LODARIO_COUNT: = 2
+const MIASMA_EEL_RELOCATE_COOLDOWN: = 30.0
+const MIASMA_EEL_MIN_RELOCATE: = MIASMA_EEL_RELOCATE_COOLDOWN
+const MIASMA_EEL_MAX_RELOCATE: = MIASMA_EEL_RELOCATE_COOLDOWN
+const MIASMA_EEL_RELOCATE_MIN_DURATION: = 1.35
+const MIASMA_EEL_RELOCATE_MAX_DURATION: = 3.0
+const MIASMA_EEL_RELOCATE_SPEED: = 320.0
+const MIASMA_EEL_SAFE_DISTANCE: = 430.0
+const MIASMA_EEL_SPIT_INTERVAL: = 2.7
+const MIASMA_EEL_ATTACK_FLASH_TIME: = 0.8
+const MIASMA_EEL_SLOW_DURATION: = 4.2
+const MIASMA_EEL_SLOW_PER_STACK: = 0.1
+const MIASMA_EEL_SLOW_MAX_STACKS: = 5
+const PHASE7_ENEMY_LIMIT_BASE: = 7
+const PHASE7_LIMIT_BREAK_TIME: = 960.0
+const PHASE7_LIMIT_KILLS_PER_EXTRA: = 50
+const PHASE7_CINERIDO_ATTACK_COOLDOWN: = 1.6
+const PHASE7_CINERIDO_WINDUP: = 0.34
+const PHASE7_CINERIDO_ACTIVE: = 0.16
+const PHASE7_CINERIDO_RECOVERY: = 0.42
+const PHASE7_CINERIDO_CONE_RANGE: = 102.0
+const PHASE7_CINERIDO_ATTACK_MAX_DISTANCE: = PHASE7_CINERIDO_CONE_RANGE + 18.0
+const PHASE7_CINERIDO_CONE_HALF_ANGLE: = deg_to_rad(32.0)
+const PHASE7_PANGOLIRO_LIMIT: = 4
+const PHASE7_PANGOLIRO_ROLL_COOLDOWN: = 3.4
+const PHASE7_PANGOLIRO_ALIGN_TIME: = 0.55
+const PHASE7_PANGOLIRO_WINDUP: = 0.62
+const PHASE7_PANGOLIRO_ROLL_TIME: = 1.45
+const PHASE7_PANGOLIRO_ROLL_VISUAL_TURNS: = 4.2
+const PHASE7_PANGOLIRO_ROLL_VISUAL_SCALE: = 0.8
+const PHASE7_PANGOLIRO_RECOVERY: = 0.62
+const PHASE7_PANGOLIRO_CRASH_STUN: = 1.0
+const PHASE7_PANGOLIRO_VULNERABLE: = 1.2
+const PHASE7_PANGOLIRO_EMBER_RADIUS: = 44.0
+const PHASE7_PANGOLIRO_EMBER_LIFE: = 1.45
+const PHASE7_PANGOLIRO_EMBER_DELAY: = 0.18
+const PHASE7_PANGOLIRO_EMBER_TICK: = 0.35
+const PHASE7_PANGOLIRO_EMBER_SPACING: = 42.0
+const PHASE7_EMBER_PATCH_CAP: = 24
+const PHASE7_EMBER_PATCH_LOW_CAP: = 12
+const PHASE7_EMBER_PATCH_MEMORY_CAP: = 7
+const PHASE7_EMBER_MERGE_DISTANCE: = 24.0
+const PHASE7_EMBER_MERGE_LOW_DISTANCE: = 34.0
+const PHASE7_DRAW_MARGIN: = 160.0
+const PHASE7_CORVOL_LIMIT: = 5
+const PHASE7_CORVOL_DIVE_COOLDOWN: = 2.65
+const PHASE7_CORVOL_PREPARE: = 0.22
+const PHASE7_CORVOL_ASCEND: = 0.30
+const PHASE7_CORVOL_DIVE_TIME: = 0.70
+const PHASE7_CORVOL_RECOVER: = 0.65
+const PHASE7_CORVOL_IMPACT_RADIUS: = 42.0
+const BOSS7_ENTRY_TIME: = 1.65
+const BOSS7_VISUAL_SIZE: = Vector2(367.2, 334.8)
+const BOSS7_HIT_RADIUS: = 164.0
+const BOSS7_HP_SCALE: = 1.75
+const BOSS7_STATE_INTRO: = "intro"
+const BOSS7_STATE_FLY: = "fly"
+const BOSS7_STATE_FEATHER: = "feather_volley"
+const BOSS7_STATE_WING: = "wing_blast"
+const BOSS7_STATE_DIVE_PREP: = "dive_prepare"
+const BOSS7_STATE_DIVE_WAIT: = "dive_wait"
+const BOSS7_STATE_DIVE_MARK: = "dive_mark"
+const BOSS7_STATE_DIVE_FAKE: = "dive_fake"
+const BOSS7_STATE_DIVE: = "dive"
+const BOSS7_STATE_RECOVERY: = "recovery"
+const BOSS7_STATE_REBIRTH_START: = "rebirth_start"
+const BOSS7_STATE_ASH_CORE: = "ash_core"
+const BOSS7_STATE_REBIRTH: = "rebirth"
+const BOSS7_ATTACK_FEATHER: = "boss7_feather"
+const BOSS7_ATTACK_WING: = "boss7_wing_blast"
+const BOSS7_ATTACK_DIVE_TRAIL: = "boss7_dive_trail"
+const BOSS7_ATTACK_THERMAL: = "boss7_thermal"
+const BOSS7_ATTACK_ASH_RAIN: = "boss7_ash_rain"
+const BOSS7_ATTACK_CROWN: = "boss7_crown"
+const BOSS7_ATTACK_SKY_FIREBALLS: = "boss7_sky_fireballs"
+const BOSS7_ATTACK_WHIRLWIND: = "boss7_whirlwind"
+const BOSS7_FEATHER_WINDUP: = 0.44
+const BOSS7_FEATHER_SPEED: = 360.0
+const BOSS7_FEATHER_REBORN_SPEED: = 395.0
+const BOSS7_WING_WINDUP: = 0.58
+const BOSS7_WING_RANGE: = 260.0
+const BOSS7_WING_HALF_ANGLE: = deg_to_rad(46.0)
+const BOSS7_DIVE_PREPARE: = 0.72
+const BOSS7_DIVE_SPEED: = 760.0
+const BOSS7_DIVE_REBORN_SPEED: = 840.0
+const BOSS7_DIVE_WIDTH: = 86.0
+const BOSS7_THERMAL_WARNING: = 0.88
+const BOSS7_THERMAL_RADIUS: = 74.0
+const BOSS7_DIVE_FIREBALL_RADIUS: = 34.0
+const BOSS7_DIVE_FIREBALL_SPEED: = 520.0
+const BOSS7_DIVE_FIREBALL_DAMAGE_RATIO: = 0.32
+const BOSS7_DIVE_FIREBALL_DAMAGE_FLAT: = 95.0
+const BOSS7_DIVE_FIREBALL_WAVE_RADIUS_MULT: = 1.5
+const BOSS7_ASH_CORE_TIME: = 6.0
+const BOSS7_CORE_HP_RATIO: = 0.18
+const BOSS7_REBIRTH_MIN_RATIO: = 0.18
+const BOSS7_REBIRTH_MAX_RATIO: = 0.42
+const BOSS7_REBIRTH_ANIM_TIME: = 1.15
+const BOSS7_CROWN_COOLDOWN: = 6.0
+const PUSTULE_EXPLODE_DISTANCE: = 90.0
+const PUSTULE_SPIT_MIN_INTERVAL: = 3.0
+const PUSTULE_SPIT_MAX_INTERVAL: = 6.0
+const PUSTULE_SPIT_NEAR_DISTANCE: = 240.0
+const PUSTULE_SPIT_FAR_DISTANCE: = 620.0
+const PUSTULE_SPIT_SPEED_MULT: = 1.38
+const PUSTULE_SPIT_DAMAGE_RATE: = 0.012
+const PUSTULE_SPIT_DAMAGE_FLAT: = 4.0
+const PUSTULE_SPIT_SLOW_TIME: = 0.8
+const PUSTULE_SPIT_SLOW_MULT: = 0.1
+const PUSTULE_SPIT_SLOW_GRACE: = 2.0
+const PUSTULE_POOL_DURATION: = 5.0
+const PUSTULE_POOL_RADIUS: = 112.0
+const PUSTULE_POOL_DAMAGE_RATE: = 0.018
+const PUSTULE_POOL_TICK: = 0.55
+const PUSTULE_FRAGMENT_COUNT: = 30
+const PUSTULE_FRAGMENT_MAX_DISTANCE: = 96.0
+const BOSS6_ENTRY_TIME: = 2.8
+const BOSS6_ENTRY_PARTICLES: = 420
+const BOSS6_STATE_IDLE: = "idle"
+const BOSS6_STATE_TELEGRAPH: = "telegraph"
+const BOSS6_STATE_EXECUTING: = "executing"
+const BOSS6_STATE_RECOVERY: = "recovery"
+const BOSS6_STATE_TRANSITION: = "transition"
+const BOSS6_STATE_STUNNED: = "stunned"
+const BOSS6_STATE_SPECIAL: = "special_event"
+const BOSS6_ABILITY_SCYTHES: = "boss6_vertebral_scythes"
+const BOSS6_ABILITY_INCUBATION: = "boss6_incubation_pustules"
+const BOSS6_ABILITY_SWARM: = "boss6_swarm_dissolution"
+const BOSS6_ABILITY_CARAPACE: = "boss6_chaga_carapace"
+const BOSS6_ABILITY_ACID_BLOOM: = "boss6_acid_bloom"
+const BOSS6_ABILITY_CHASING_CRACK: = "boss6_chasing_crack"
+const BOSS6_ABILITY_TAIL: = "boss6_conductive_tail"
+const BOSS6_ABILITY_CARNAGE_TIDE: = "boss6_carnage_tide"
+const BOSS6_ABILITY_REFLUX: = "boss6_organic_reflux"
+const BOSS6_ABILITY_MIASMA_ULTIMATE: = "boss6_miasma_spiral"
+const BOSS6_ABILITY_FOSSIL_ECHO: = "boss6_fossil_echo"
+const BOSS6_ABILITY_NECRO_EROSION: = "boss6_necro_erosion"
+const BOSS6_LEECH_MAX: = 6
+const BOSS6_PUSTULE_MAX: = 7
+const BOSS6_POOL_MAX: = 12
+const BOSS6_CARAPACE_PLATES: = 3
+const BOSS6_CARAPACE_PLATE_HP_RATE: = 0.045
+const BOSS6_CARAPACE_REDUCTION_PER_PLATE: = 0.18
+const BOSS6_CARAPACE_VULNERABILITY: = 3.0
+const BOSS6_CARAPACE_DURATION: = 11.0
+const BOSS6_FINAL_BIRTH_DURATION: = 14.0
+const BOSS6_CRACKED_HEART_BEATS: = 3
+const BOSS6_MIASMA_ULT_DURATION: = 40.0
+const BOSS6_MIASMA_ULT_COOLDOWN: = 60.0
+const BOSS6_MIASMA_ULT_UNLOCK_PCT: = 0.4
+const BOSS6_MIASMA_ULT_INNER_RADIUS: = 150.0
+const BOSS6_MIASMA_ULT_THICKNESS: = 300.0
+const BOSS6_MIASMA_ULT_FRONT_COUNT: = 3
+const BOSS6_MIASMA_ULT_ARC: = 0.84
+const BOSS6_MIASMA_ULT_ROT_SPEED: = 1.05
+const BOSS6_MIASMA_ULT_SLOW_TICK: = 0.4
+const BOSS6_MIASMA_ULT_SLOW_PER_STACK: = 0.07
+const BOSS6_MIASMA_ULT_SLOW_MAX_STACKS: = 7
+const BOSS6_MIASMA_ULT_PUSTULE_INTERVAL: = 10.0
+const BOSS6_MIASMA_ULT_PUSTULE_COUNT: = 3
+const BOSS6_ACID_BLOOM_COUNT: = 5
+const BOSS6_ACID_BLOOM_RADIUS: = 200.0
+const BOSS6_ACID_BLOOM_DURATION: = 20.0
+const BOSS6_ACID_BLOOM_COOLDOWN: = 50.0
+const BOSS6_ACID_BLOOM_UNLOCK_PCT: = 0.6
+const BOSS6_ACID_BLOOM_FALL_TIME: = 1.15
+const BOSS6_CHASING_CRACK_DURATION: = 7.0
+const BOSS6_CHASING_CRACK_SPEED_MULT: = 1.2
+const BOSS6_CHASING_CRACK_RADIUS: = 54.0
+const BOSS6_CHASING_CRACK_TICK: = 0.42
+const BOSS6_CARNAGE_TIDE_DURATION: = 30.0
+const BOSS6_CARNAGE_TIDE_COOLDOWN: = 40.0
+const BOSS6_CARNAGE_TIDE_UNLOCK_PCT: = 0.2
+const BOSS6_CARNAGE_TIDE_INTERVAL: = 2.0
+const BOSS6_CARNAGE_POOL_RADIUS: = 96.0
+const BOSS6_CARNAGE_POOL_DURATION: = 7.0
+const BOSS6_CARNAGE_SLOW_TIME: = 5.0
+const BOSS6_CARNAGE_SLOW_MULT: = 0.5
+const BOSS6_BARRIER_RADIUS: = 176.0
+const BOSS6_BARRIER_GAP_COUNT: = 3
+const BOSS6_BARRIER_GAP_ARC: = 0.46
+const BOSS6_BARRIER_ROT_SPEED: = 0.36
+const SANGUESSUGA_STATE_FALL_WARNING: = "fall_warning"
+const SANGUESSUGA_STATE_FALLING: = "falling"
+const SANGUESSUGA_STATE_DORMANT: = "dormant"
+const SANGUESSUGA_STATE_TRIGGERED: = "triggered"
+const SANGUESSUGA_STATE_LEAPING: = "leaping"
+const SANGUESSUGA_STATE_ATTACHED: = "attached"
+const SANGUESSUGA_STATE_MISSED: = "missed"
+const SANGUESSUGA_STATE_EXPIRING: = "expiring"
+const SANGUESSUGA_FALL_WARNING_TIME: = 0.7
+const SANGUESSUGA_FALL_TIME_MIN: = 0.35
+const SANGUESSUGA_FALL_TIME_MAX: = 0.5
+const SANGUESSUGA_DORMANT_TIME: = 20.0
+const SANGUESSUGA_DETECTION_RADIUS: = 200.0
+const SANGUESSUGA_ATTACK_ARM_TIME: = 2.0
+const SANGUESSUGA_CONTACT_GRACE_TIME: = 0.5
+const SANGUESSUGA_SOLITARY_RADIUS: = 220.0
+const SANGUESSUGA_TRIGGER_TIME: = 0.28
+const SANGUESSUGA_LEAP_TIME_MIN: = 0.4
+const SANGUESSUGA_LEAP_TIME_MAX: = 0.55
+const SANGUESSUGA_MISS_TIME: = 0.45
+const SANGUESSUGA_PARASITE_TIME: = 5.0
+const SANGUESSUGA_PARASITE_MAX_TIME: = 6.0
+const SANGUESSUGA_PARASITE_SLOW: = 0.18
+const SANGUESSUGA_BLEED_TICK: = 0.5
+const SANGUESSUGA_BLEED_HP_RATE: = 0.004
+
+const BOSS3_ENTRY_TIME: = 1.8
+const BOSS3_MIASMA_TICK: = 0.65
+const BOSS3_CHEESE_INTERVAL: = 18.0
+const BOSS3_MIASMA_DURATION: = 15.0
+const BOSS3_MIASMA_COOLDOWN: = 24.0
+const BOSS3_MIASMA_VARIANT_COUNT: = 4
+const BOSS3_MIASMA_CLONE_SWAP: = 1.5
+const BOSS3_MIASMA_DARK_RADIUS: = 250.0
+const BOSS3_MIASMA_SPIT_WARNING: = 0.8
+const BOSS3_MIASMA_QTE_DURATION: = 7.0
+const BOSS3_MIASMA_QTE_REQUIRED: = 18
+const BOSS3_MIASMA_QTE_BLINK_INTERVAL: = 1.5
+const BOSS3_MIASMA_QTE_TOUCH_DAMAGE: = 100
+const BOSS3_MIASMA_QTE_TOUCH_MAX_HP_RATE: = 0.05
+const BOSS3_MIASMA_QTE_OVERTIME_TICK: = 3.0
+const BOSS3_MIASMA_QTE_OVERTIME_RATE: = 0.008
+const BOSS3_MIASMA_QTE_OVERTIME_GROWTH: = 1.75
+const BOSS3_MIASMA_CLOUD_DURATION: = 8.0
+const BOSS3_MIASMA_CLOUD_COUNT: = 9
+const BOSS3_MIASMA_CLOUD_RADIUS: = 46.0
+const BOSS3_MIASMA_CLOUD_SPEED_MULT: = 1.2
+const BOSS3_MIASMA_CLOUD_TURN_RATE: = 3.9
+const BOSS3_FAITH_TEST_COOLDOWN: = 30.0
+const BOSS3_FAITH_TEST_INTERVAL: = 2.0
+const BOSS3_FAITH_TEST_PULSES: = 15
+const BOSS3_FAITH_TEST_DAMAGE: = 150
+const BOSS3_FAITH_TEST_MAX_HP_RATE: = 0.1
+const BOSS3_FAITH_LINK_DURATION: = 5.0
+const BOSS4_ENTRY_TIME: = 1.6
+const BOSS4_ATTACK_INTERVAL: = 2.8
+const BOSS4_COMET_LIFETIME: = 3.0
+const BOSS4_COMET_SPEED: = 214.0
+const BOSS4_COMET_RADIUS: = 32.0
+const BOSS4_SECONDARY_COOLDOWN: = 15.0
+const BOSS4_SECONDARY_DURATION: = 8.0
+const BOSS4_SECONDARY_WARNING: = 0.5
+const BOSS4_SECONDARY_UP_COUNT: = 4
+const BOSS4_SECONDARY_DOWN_COUNT: = 3
+const BOSS4_ULTIMATE_COOLDOWN: = 54.0
+const BOSS4_ULTIMATE_RAY_INTERVAL: = 1.35
+const BOSS4_ULTIMATE_RAY_WARNING: = 0.45
+const BOSS4_ULTIMATE_RAY_DURATION: = 1.15
+const BOSS4_ULTIMATE_RAY_RADIUS: = 48.0
+const BOSS4_ULTIMATE_DURATION: = 20.0
+const BOSS4_STRIKE_TELEPORT_TIME: = 0.18
+const BOSS4_STRIKE_LIFT_TIME: = 0.34
+const BOSS4_STRIKE_SLAM_TIME: = 0.22
+const BOSS4_STRIKE_THROW_TIME: = 0.56
+const BOSS4_METEOR_COUNT: = 3
+const BOSS4_METEOR_WARNING: = 0.8
+const BOSS4_METEOR_ARM_TIME: = 3.0
+const BOSS4_METEOR_LIFETIME: = 15.0
+const BOSS4_METEOR_HP: = 440.0
+const BOSS4_METEOR_RADIUS: = 58.0
+const BOSS4_METEOR_SHOCKWAVE_RADIUS: = 154.0
+const BOSS4_METEOR_DRAIN_DAMAGE_RATE: = 0.055
+const BOSS4_METEOR_DRAIN_HP_RATE: = 0.004
+const BOSS4_METEOR_DAMAGE_CAP: = 0.75
+const BOSS4_PLANET_LIFETIME: = 7.0
+const BOSS4_PLANET_SPEED: = 170.0
+const BOSS4_PLANET_HP: = 150.0
+const BOSS4_NULL_ZONE_DURATION: = 4.0
+const BOSS4_NULL_ZONE_TICK: = 0.5
+const BOSS4_NULL_ZONE_DAMAGE_RATE: = 0.1
+const BOSS4_PULSE_WARNING: = 0.85
+const BOSS4_PULSE_RADIUS: = 310.0
+const BOSS4_VECTOR_WARNING: = 0.75
+const BOSS4_VECTOR_ACTIVE_TIME: = 1.9
+const BOSS4_GRAVITY_DURATION: = 4.5
+const BOSS4_VAMPIRE_DURATION: = 5.5
+const BOSS4_PRISON_DURATION: = 5.2
+const BOSS4_FRAGMENT_WARNING: = 0.9
+const BOSS4_COLLAPSE_DURATION: = 4.2
+const BOSS4_ULTIMATE_THRESHOLD: = 0.35
+const BOSS4_ULTIMATE_ANCHOR_HP: = 420.0
+const BOSS4_ULTIMATE_REQUIRED_ANCHORS: = 3
+const BOSS4_ULTIMATE_STUN_TIME: = 2.8
+const BOSS4_ULTIMATE_VULNERABLE_TIME: = 4.5
+const BOSS4_ULTIMATE_LASER_INTERVAL: = 1.28
+const BOSS4_ULTIMATE_GRAVITY_SWAP: = 1.65
+const BOSS4_GRAVITY_LASER_WARNING: = 0.78
+const BOSS4_GRAVITY_LASER_ACTIVE: = 0.3
+const BOSS4_GRAVITY_LASER_WIDTH: = 34.0
+const BOSS4_GRAVITY_WELL_WARNING: = 0.82
+const BOSS4_GRAVITY_WELL_DURATION: = 4.2
+const BOSS4_GRAVITY_WELL_RADIUS: = 168.0
+const BOSS4_ENEMY_SHOT_MIN_INTERVAL: = 1.5
+const BOSS4_ENEMY_SHOT_MAX_INTERVAL: = 3.4
+const BOSS4_ENEMY_PROJECTILE_SPEED: = 180.0
+const BOSS4_COLUMN_BARRAGE_COOLDOWN: = 40.0
+const BOSS4_COLUMN_BARRAGE_FIRST_DELAY: = 4.0
+const BOSS4_COLUMN_BARRAGE_WIDTH: = 256.0
+const BOSS4_COLUMN_BARRAGE_WARNING: = 1.0
+const BOSS4_COLUMN_BARRAGE_TRANSITION: = 0.5
+const BOSS4_COLUMN_BARRAGE_STEP: = BOSS4_COLUMN_BARRAGE_WARNING + BOSS4_COLUMN_BARRAGE_TRANSITION
+const BOSS4_COLUMN_BARRAGE_SLOW_TIME: = 2.0
+const BOSS4_COLUMN_LASER_WARNING: = 2.0
+const BOSS4_DRAG_WAVE_COOLDOWN: = 15.0
+const BOSS4_DRAG_WAVE_FIRST_DELAY: = 6.5
+const BOSS4_DRAG_WAVE_WIDTH: = 40.0
+const BOSS4_DRAG_WAVE_SPEED: = 460.0
+const BOSS4_DRAG_WAVE_TIME: = 5.0
+const BOSS4_DRAG_WAVE_FORCE: = 310.0
+const BOSS4_SONIC_TRIGGER_RATIO: = 0.7
+const BOSS4_SONIC_WARNING: = 0.78
+const BOSS4_SONIC_WIDTH: = 76.0
+const BOSS4_SONIC_GRAB_TIME: = 2.35
+const BOSS4_SONIC_SLAMS: = 3
+const BOSS5_ENTRY_TIME: = 2.0
+const BOSS5_ACTION_INTERVAL: = 2.4
+const BOSS5_DECISION_MIN_TIME: = 1.15
+const BOSS5_PROJECTILE_SPEED: = 372.0
+const BOSS5_PROJECTILE_DAMAGE_RATE: = 0.075
+const BOSS5_PROJECTILE_DAMAGE_FLAT: = 42.0
+const BOSS5_TELEPORT_DELAY: = 0.72
+const BOSS5_TELEPORT_COOLDOWN: = 9.0
+const BOSS5_TRANSMUTE_COOLDOWN: = 60.0
+const BOSS5_TRANSMUTE_VFX_DURATION: = 1.5
+const BOSS5_SIPHON_DURATION: = 4.6
+const BOSS5_SIPHON_COOLDOWN: = 18.0
+const BOSS5_SIPHON_HEAL_RATE: = 0.015
+const BOSS5_VORTEX_DURATION: = 8.0
+const BOSS5_VORTEX_WARNING: = 1.5
+const BOSS5_PRISON_DURATION: = 3.5
+const BOSS5_PRISON_WARNING: = 1.5
+const BOSS5_MIASMA_DURATION: = 4.5
+const BOSS5_DISCHARGE_WARNING: = 0.85
+const BOSS5_DISCHARGE_DURATION: = 1.25
+const BOSS5_THORNS_DURATION: = 3.4
+const BOSS5_OVERLOAD_LASER_ROTATION_FAST: = PI * 0.25
+const BOSS5_OVERLOAD_LASER_ROTATION_SLOW: = PI * 0.10
+const BOSS5_RAT_DURATION: = 8.0
+const BOSS5_RAT_SPEED: = 212.0
+const BOSS5_RAT_DAMAGE: = 24
+const BOSS5_MEMORY_RESOURCE: = "res://assets/data/memoria_predatoria_umbra.json"
+const BOSS5_DQN_WEIGHTS_PATH: = "res://assets/weights/umbra_dqn_weights.json"
+const BOSS5_MEMORY_USER: = "user://memoria_predatoria_umbra_mobile.json"
+const BOSS5_ACTIONS: = ["FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE", "TELEPORTE_JUKE", "TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO", "VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "PRAGA_RATOS", "LASER_SOBRECARGA", "CAMINHO_ESPINHOS", "NENHUMA"]
+const APOLO_PHASE5_ARCH_PATH: = "res://assets/data/apolo_arq.json"
+const APOLO_PHASE5_CARD_MEMORY_PATH: = "res://assets/data/memoria_cartas_apolo.json"
+const APOLO_PHASE5_MANIFEST_PROFILES: = {
+	"eletrica": {"speed": 10.0, "lead": 0.70, "ideal": 330.0},
+	"lacerante": {"speed": 18.0, "lead": 0.34, "ideal": 230.0},
+	"prismatica": {"speed": 24.0, "lead": 0.95, "ideal": 390.0},
+	"retornante": {"speed": 12.0, "lead": 0.55, "ideal": 310.0},
+	"parasitica": {"speed": 10.0, "lead": 0.62, "ideal": 360.0},
+	"condutora": {"speed": 14.0, "lead": 0.78, "ideal": 340.0},
+	"gravitante": {"speed": 8.0, "lead": 0.45, "ideal": 300.0},
+	"ancorada": {"speed": 11.0, "lead": 0.38, "ideal": 260.0},
+	"cartografica": {"speed": 16.0, "lead": 0.72, "ideal": 350.0},
+	"mnesica": {"speed": 13.0, "lead": 0.66, "ideal": 320.0},
+	"ressonante": {"speed": 15.0, "lead": 0.58, "ideal": 315.0},
+	"contratual": {"speed": 12.0, "lead": 0.50, "ideal": 300.0},
+	"acorrentada": {"speed": 13.0, "lead": 0.42, "ideal": 250.0},
+	"eclipsada": {"speed": 17.0, "lead": 0.46, "ideal": 270.0},
+	"bombastica": {"speed": 11.0, "lead": 0.52, "ideal": 285.0},
+	"necronada": {"speed": 12.0, "lead": 0.48, "ideal": 300.0}
+}
+const PHASE4_RIFT_WARNING: = 0.85
+const PHASE4_RIFT_ACTIVE_TIME: = 2.8
+const PHASE4_CHRONO_WARNING: = 1.25
+const PHASE4_VECTOR_FIELD_TIME: = 4.0
+const PHASE4_VECTOR_FIELD_RADIUS: = 190.0
+const PHASE4_ECHO_WARNING: = 1.35
+const PYRO_WALL_TILE_SIZE: = 32.0
+const PYRO_WALL_DURATION: = 15.0
+const PYRO_WALL_SHOT_INTERVAL: = 5.6
+const PYRO_WALL_BURN_INTERVAL: = 0.65
+const CARTO_COORD_MAX: = 3
+const CARTO_COORD_LIFE: = 12.0
+const CARTO_ROUTE_ACTIVE_TIME: = 5.0
+const CARTO_ROUTE_WIDTH: = 34.0
+const CARTO_ROUTE_SHOT_WIDTH: = 46.0
+const CARTO_ROUTE_SHOT_MAX_DISTANCE: = 980.0
+const CARTO_TRACE_TIME: = 5.0
+const CARTO_POINT_TIME: = 3.8
+const CARTO_COMPLETE_MAP_TIME: = 5.2
+const CARTO_BOSS_DISPLACEMENT_REQUIRED: = 3
+const MNESIC_MEMORY_MAX: = 3
+const MNESIC_REENACT_RADIUS: = 380.0
+const MNESIC_TRICK_TIME: = 2.1
+const RESONANT_BEAT_INTERVAL: = 0.58
+const RESONANT_PERFECT_WINDOW: = 0.125
+const RESONANT_NOISE_LIMIT: = 3
+const CONTRACT_TRAP_LIFE: = 5.2
+const CONTRACT_MAX_INFRACTIONS: = 3
+const CONTRACT_ORDER_DURATION: = 30.0
+const CONTRACT_ORDER_SLOW_IN_TIME: = 3.0
+const CONTRACT_ORDER_REVEAL_TIME: = 1.5
+const CONTRACT_ORDER_SLOW_OUT_TIME: = 3.0
+const CONTRACT_ORDER_READ_END_TIME: = CONTRACT_ORDER_SLOW_IN_TIME + CONTRACT_ORDER_REVEAL_TIME
+const CONTRACT_ORDER_EXECUTION_START_TIME: = CONTRACT_ORDER_READ_END_TIME + CONTRACT_ORDER_SLOW_OUT_TIME
+const CONTRACT_ORDER_COOLDOWN: = 180.0
+const CONTRACT_ORDER_REWARD_TIME: = 60.0
+const CONTRACT_ORDER_PENALTY_TIME: = 120.0
+const COUT_AS_SPAWN_TIME: = PHASE1_REVIVATOR_UNLOCK_TIME
+const COUT_AS_AURA_RADIUS: = 215.0
+const COUT_AS_RECONSTITUTE_HP_RATIO: = 0.25
+const COUT_AS_RECONSTITUTE_SPEED_MULT: = 1.9
+const COUT_AS_RECONSTITUTE_TIME: = 1.5
+const COUT_AS_RECONSTITUTE_IMMUNITY_TIME: = 1.0
+const COUT_AS_RAPID_INTERVAL: = 0.46
+const COUT_AS_STACK_TIME: = 2.4
+const COUT_AS_MAX_STACKS: = 5
+const COUT_AS_PUNISH_COOLDOWN: = 0.95
+const SHIELD_REFLECTOR_SPAWN_TIME: = PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME
+const SHIELD_REFLECTOR_FRONT_DOT: = 0.5
+const SHIELD_REFLECTOR_BACK_DOT: = -0.42
+const SHIELD_REFLECTOR_DAMAGE_REDUCTION: = 0.22
+const SHIELD_REFLECTOR_BACK_DAMAGE_MULT: = 1.18
+const SHIELD_REFLECTOR_REFLECT_DAMAGE_MULT: = 0.7
+const SHIELD_REFLECTOR_ACTIVE_TIME: = 15.0
+const SHIELD_REFLECTOR_DOWN_TIME: = 20.0
+const SHIELD_REFLECTOR_UNBURDENED_SPEED_MULT: = 2.4
+const SHIELD_REFLECTOR_UNBURDENED_DAMAGE_MULT: = 1.35
+const HUD_CONTROL_SCALE_MIN: = 0.5
+const HUD_CONTROL_SCALE_MAX: = 2.5
+const HUD_ATTACK_SCALE_MAX: = 3.0
+const HUD_PANEL_SCALE_MIN: = 0.6
+const HUD_PANEL_SCALE_MAX: = 2.5
+const ACORRENTADA_MAX_ELOS: = 3
+const ACORRENTADA_ELO_TIME: = 6.0
+const ACORRENTADA_COMBO_RESET_TIME: = 2.8
+const ACORRENTADA_TENSION_DECAY_DELAY: = 3.0
+const ACORRENTADA_Q_DURATION: = 3.5
+const ACORRENTADA_Q_OVERCHARGE_DURATION: = 4.4
+const ACORRENTADA_Q_LINK_DISTANCE: = 180.0
+const ACORRENTADA_Q_LINE_CD: = 0.45
+const ACORRENTADA_E_RADIUS: = 420.0
+const ACORRENTADA_E_OVERCHARGE_RADIUS: = 500.0
+const ACORRENTADA_E_DURATION: = 5.0
+const ACORRENTADA_E_TICK_INTERVAL: = 0.45
+const ACORRENTADA_E_PULL_SPEED: = 105.0
+const ACORRENTADA_E_TICK_DAMAGE_SCALE: = 0.11
+const ACORRENTADA_WALK_FADE_TIME: = 0.8
+const ACORRENTADA_WALK_VOLUME: = 0.42
+const ACORRENTADA_TP_LINE_TIME: = 1.2
+const ACORRENTADA_TP_OVERHEAT_LINE_BONUS: = 0.25
+const ACORRENTADA_ATTACK_WINDUP_TIMES: = [0.09, 0.11, 0.12]
+const ACORRENTADA_ATTACK_OUT_TIMES: = [0.26, 0.32, 0.36]
+const ACORRENTADA_ATTACK_HOLD_TIME: = 0.045
+const ACORRENTADA_ATTACK_RETURN_TIMES: = [0.22, 0.25, 0.28]
+const ACORRENTADA_ATTACK_WINDUP_BACK_DISTANCES: = [52.0, 72.0, 64.0]
+const ACORRENTADA_CHAINED_DAMAGE_BONUS: = 0.16
+const BOMBASTICA_Q_CHARGES: = 3
+const BOMBASTICA_Q_RECHARGE: = 7.0
+const BOMBASTICA_Q_FUSE_MIN: = 3.0
+const BOMBASTICA_Q_FUSE_MAX: = 6.0
+const BOMBASTICA_Q_DAMAGE_MULT: = 1.9375
+const BOMBASTICA_Q_RADIUS: = 105.0
+const BOMBASTICA_Q_PLACE_DISTANCE: = 70.0
+const BOMBASTICA_Q_THROW_RANGE: = 430.0
+const BOMBASTICA_E_COOLDOWN: = 13.5
+const BOMBASTICA_E_DURATION: = 10.0
+const BOMBASTICA_E_MINE_COUNT: = 5
+const BOMBASTICA_E_MINE_DAMAGE_MULT: = 0.60
+const BOMBASTICA_E_MINE_RADIUS: = 65.0
+const BOMBASTICA_E_ARM_TIME: = 0.26
+const BOMBASTICA_POWDER_DURATION: = 5.0
+const BOMBASTICA_POWDER_MAX_STACKS: = 3
+const BOMBASTICA_POWDER_DAMAGE_BONUS: = 0.06
+const BOMBASTICA_IGNITION_DAMAGE_MULT: = 0.38
+const BOMBASTICA_IGNITION_RADIUS: = 55.0
+const BOMBASTICA_CHAIN_DEPTH_MAX: = 5
+const BOMBASTICA_CHAIN_TOUCH_MARGIN: = 8.0
+const BOMBASTICA_MANUAL_DAMAGE_MULT: = 0.86
+const BOMBASTICA_ULT_TRAIL_DURATION: float = 5.0
+const BOMBASTICA_ULT_BLAST_SPACING: float = 64.0
+const BOMBASTICA_ULT_MAX_BLASTS: int = 24
+const BOMBASTICA_ULT_BLAST_INTERVAL: float = 0.085
+const BOMBASTICA_ULT_BLAST_RADIUS: float = 110.0
+const BOMBASTICA_ULT_BLAST_DAMAGE_MULT: float = 1.30
+const BOMBASTICA_ULT_FINALE_RADIUS: float = 155.0
+const BOMBASTICA_ULT_FINALE_DAMAGE_MULT: float = 2.80
+const BOMBASTICA_ULT_FINALE_REPEAT_FLOOR: float = 0.75
+const BOMBASTICA_ULTIMATE_RADIUS: float = 280.0
+const BOMBASTICA_ULTIMATE_DURATION: float = 10.0
+const BOMBASTICA_ULTIMATE_SPEED: float = 85.0
+const BOMBASTICA_ULTIMATE_BOUNCE_PERIOD: float = 1.5
+const BOMBASTICA_ULTIMATE_DAMAGE_MULT: float = 3.65
+const BOMBASTICA_ULTIMATE_SHOT_DAMAGE_MULT: float = 0.82
+const BOMBASTICA_ULTIMATE_GROUNDED_WINDOW: float = 0.22
+const NECRONADA_EPITAPH_DURATION: = 8.0
+const NECRONADA_EPITAPH_MAX_DEPTH: = 5
+const NECRONADA_VESTIGE_DURATION: = 12.0
+const NECRONADA_ROSE_MAX: = 7
+const NECRONADA_ROSE_SUMMON_RADIUS: = 350.0
+const NECRONADA_PASSIVE_ATTACKS: = 4
+const NECRONADA_PASSIVE_HEAL_RATE: = 0.025
+const NECRONADA_OSSUARY_SLOTS: = 4
+const NECRONADA_MAX_ACTIVE_REMNANTS: = 7
+const NECRONADA_REMNANT_HEALTH_MULT: = 0.8
+const NECRONADA_REMNANT_BASE_DURATION: = 18.0
+const NECRONADA_REMNANT_SUMMON_TIME: = 1.2
+const NECRONADA_REMNANT_TARGET_INTERVAL: = 0.22
+const NECRONADA_REMNANT_ATTACK_INTERVAL: = 0.62
+const NECRONADA_REMNANT_MELEE_RANGE_MIN: = 128.0
+const NECRONADA_REMNANT_SUPPORT_RANGE_MIN: = 230.0
+const NECRONADA_REMNANT_RANGED_RANGE_MIN: = 340.0
+const NECRONADA_REQUIEM_DURATION: = 15.0
+const NECRONADA_REQUIEM_TICK: = 0.38
+const NECRONADA_REQUIEM_MAX_ECHOES: = 10
+const NECRONADA_SUPREME_HORDE_COUNT: = 4
+const NECRONADA_TOTAL_TAUNT_DURATION: = 15.0
+const NECRONADA_EMPOWER_DURATION: = 3.0
+const NECRONADA_EMPOWER_COOLDOWN: = 3.0
+const NECRONADA_EMPOWER_RANGE: = 300.0
+const NECRONADA_EMPOWER_DAMAGE_MULT: = 0.22
+const NECRONADA_EMPOWER_ALLY_BUFF_DURATION: = 3.0
+const NECRONADA_EMPOWER_ALLY_DAMAGE_MULT: = 1.35
+const NECRONADA_EMPOWER_ALLY_SPEED_MULT: = 1.38
+const NECRONADA_ULTIMATE_REQUIRED_REVIVES: = 30
+const NECRONADA_ULTIMATE_RADIUS: = 420.0
+const NECRONADA_ULTIMATE_FULL_RADIUS: = 180.0
+const NECRONADA_ULTIMATE_DAMAGE_MAX: = 1.2
+const NECRONADA_ULTIMATE_DAMAGE_MIN: = 0.6
+const NECRONADA_ULTIMATE_SLOW_MULT: = 0.55
+const NECRONADA_ULTIMATE_CRIT_CHANCE: = 0.45
+const NECRONADA_ULTIMATE_MARK_DURATION: = 4.0
+const NECRONADA_ULTIMATE_COOLDOWN: = 10.0
+const NECRONADA_EMPOWER_ROSE_WINDOW: = 6.0
+const NECRONADA_EMPOWER_ROSE_REQUIRED_HITS: = 4
+const NECRONADA_TP_DUST_RADIUS: = 210.0
+const NECRONADA_TP_DUST_HALF_ANGLE: = 0.62
+const NECRONADA_TP_DUST_DAMAGE_MULT: = 0.3
+const NECRONADA_TP_DUST_PUSH: = 115.0
+
+const MANIFESTATIONS: = [
+	{
+		"key": "eletrica", 
+		"name": "Eletrica", 
+		"desc": "Simples e segura: tiro reto, explosao eletrica, Q empurra e E cria anel de dano.", 
+		"icon": "manifestacao_eletrica.png", 
+		"color": Color(0.0, 0.88, 1.0), 
+		"accent": Color(0.62, 0.38, 1.0)
+	}, 
+	{
+		"key": "lacerante", 
+		"name": "Lacerante", 
+		"desc": "Cacadora de risco: tres cortes laceram, presas incomuns valem +50% e execucoes reforcadas criam Coagulos que aumentam dano e cadencia.", 
+		"icon": "manifestacao_lacerante.png", 
+		"color": Color(1.0, 0.12, 0.18), 
+		"accent": Color(1.0, 0.58, 0.64)
+	}, 
+	{
+		"key": "prismatica", 
+		"name": "Prismatica", 
+		"desc": "Mira e angulo: feixe ricocheteia, Q divide tiros em prismas e E deixa Geovana invulneravel com linhas de luz.", 
+		"icon": "manifestacao_prismatica.png", 
+		"color": Color(0.32, 1.0, 0.96), 
+		"accent": Color(1.0, 0.42, 0.72)
+	}, 
+	{
+		"key": "retornante", 
+		"name": "Retornante", 
+		"desc": "Dano no retorno: o tiro vai fraco, volta forte, Q fortalece um pulso e E cria paradoxos de retorno.", 
+		"icon": "manifestacao_retornante.png", 
+		"color": Color(0.58, 0.38, 1.0), 
+		"accent": Color(1.0, 0.35, 0.68)
+	}, 
+	{
+		"key": "parasitica", 
+		"name": "Parasitica", 
+		"desc": "Larvas vivas: tiros marcam por 6s, Q cospe um viveiro contaminante e E chama vermes subterraneos que devoram os marcados.", 
+		"icon": "manifestacao_parasitica.png", 
+		"color": Color(0.38, 1.0, 0.5), 
+		"accent": Color(0.86, 1.0, 0.28)
+	}, 
+	{
+		"key": "gravitante", 
+		"name": "Gravitante", 
+		"desc": "Controle gravitacional: ATKs marcam, Q colide os marcados e E prende inimigos e chefes no nucleo.", 
+		"icon": "manifestacao_gravitante.png", 
+		"color": Color(0.46, 0.78, 1.0), 
+		"accent": Color(0.86, 0.96, 1.0)
+	}, 
+	{
+		"key": "ancorada", 
+		"name": "Ancorada", 
+		"desc": "Defesa de territorio: tiros plantam ancoras, Q solta uma onda e E fortalece a area escolhida.", 
+		"icon": "manifestacao_ancorada.png", 
+		"color": Color(0.3, 0.88, 1.0), 
+		"accent": Color(1.0, 0.78, 0.26)
+	}, 
+	{
+		"key": "cartografica", 
+		"name": "Cartografica", 
+		"desc": "Mapa de combate: ATK cria coordenadas, Q liga rotas perigosas e E rasga o mapa para tiros reposicionados.", 
+		"icon": "manifestacao_cartografica.png", 
+		"color": Color(0.15, 0.95, 0.78), 
+		"accent": Color(1.0, 0.82, 0.26)
+	}, 
+	{
+		"key": "mnesica", 
+		"name": "Mnesica", 
+		"desc": "Memoria punitiva: ATK grava lembrancas, Q detona padroes e E acelera arquivos para punir grupos.", 
+		"icon": "manifestacao_mnesica.png", 
+		"color": Color(0.78, 0.52, 1.0), 
+		"accent": Color(1.0, 0.56, 0.86)
+	}, 
+	{
+		"key": "ressonante", 
+		"name": "Ressonante", 
+		"desc": "Ritmo e timing: ATK no compasso aplica notas, Q detona acordes e E garante janelas perfeitas.", 
+		"icon": "manifestacao_ressonante.png", 
+		"color": Color(1.0, 0.74, 0.2), 
+		"accent": Color(0.38, 0.92, 1.0)
+	}, 
+	{
+		"key": "contratual", 
+		"name": "Contratual", 
+		"desc": "Regras e sentencas: ATK aplica clausulas, Q executa infracoes e E transforma a arena em audiencia.", 
+		"icon": "manifestacao_contratual.png", 
+		"color": Color(1.0, 0.54, 0.22), 
+		"accent": Color(0.96, 0.96, 0.86)
+	}, 
+	{
+		"key": "acorrentada", 
+		"name": "Acorrentada", 
+		"desc": "Correntes e Elos: ATK marca e rompe, Q prende alvos ligados e E puxa tudo para uma sentenca.", 
+		"icon": "manifestacao_acorrentada.png", 
+		"color": Color(0.88, 0.16, 0.18), 
+		"accent": Color(0.16, 0.86, 1.0)
+	}, 
+	{
+		"key": "eclipsada", 
+		"name": "Eclipsada", 
+		"desc": "Duelista Sol/Lua: REFORCO troca forma, ATK arremessa shurikens curtos e Q/E mudam de estilo.", 
+		"icon": "res://assets/sprites/manifestacao-eclipsada.png", 
+		"color": Color(0.58, 0.42, 1.0), 
+		"accent": Color(1.0, 0.86, 0.32)
+	}, 
+	{
+		"key": "bombastica", 
+		"name": "Bombastica", 
+		"desc": "Prepare explosivos, controle seus fuseis e provoque reacoes em cadeia devastadoras.", 
+		"icon": "res://assets/sprites/manifestacao_bombastica.png", 
+		"color": Color(1.0, 0.48, 0.12), 
+		"accent": Color(0.18, 0.88, 1.0)
+	}, 
+	{
+		"key": "necronada", 
+		"name": "Necronada", 
+		"desc": "Marca epitafios, captura vestigios no Ossuario Temporal e ergue Remanescentes por tempo limitado.", 
+		"icon": "res://assets/sprites/manifestacao-necronada.png", 
+		"color": Color(0.64, 0.3, 1.0), 
+		"accent": Color(0.38, 1.0, 0.86)
+	}
+]
+
+const MANIFEST_EVOLUTION_FAMILIES: = [
+	{"key": "eco", "title": "Eco", "verb": "repete", "summary": "Alguns ataques criam ecos menores do proprio disparo."}, 
+	{"key": "perfuracao", "title": "Perfuracao", "verb": "atravessa", "summary": "O disparo ganha alvos extras antes de se desfazer."}, 
+	{"key": "caca", "title": "Caca", "verb": "persegue", "summary": "O disparo corrige rota suavemente ate o alvo mais proximo."}, 
+	{"key": "elo", "title": "Elo", "verb": "vincula", "summary": "Impactos conectam alvos proximos e reduzem o ritmo deles."}, 
+	{"key": "pulso", "title": "Pulso", "verb": "repele", "summary": "Impactos carregados expulsam a horda ao redor do alvo."}, 
+	{"key": "vortice", "title": "Vortice", "verb": "puxa", "summary": "Impactos carregados juntam inimigos no ponto atingido."}, 
+	{"key": "selo", "title": "Selo", "verb": "fixa", "summary": "Acertos repetidos prendem o mesmo alvo por um instante."}, 
+	{"key": "campo", "title": "Campo", "verb": "marca", "summary": "A habilidade Q deixa uma zona persistente com identidade da manifestacao."}, 
+	{"key": "passo", "title": "Passo", "verb": "rasga", "summary": "O teleporte libera pressao temporal na origem e no destino."}
+]
+
+const MANIFEST_EVOLUTION_NAMES: = {
+	"eletrica": ["Arco Bifasico", "Fio Condutor", "Raio Teleguiado", "Rede Ionica", "Estouro Galvanico", "Polo Magnetico", "Selo de Voltagem", "Campo Tesla", "Passo Fulminante"], 
+	"lacerante": ["Cicatriz Ecoante", "Corte Vazado", "Faro de Sangue", "Costura Cruel", "Ruptura Hematica", "Vortice de Laminas", "Selo de Hemorragia", "Zona de Talho", "Passo Serrilhado"], 
+	"prismatica": ["Reflexo Menor", "Raio Lapidado", "Mira Refratada", "Elo Cromatico", "Estouro Espectral", "Foco Convergente", "Selo de Cor", "Campo de Cristal", "Passo Arco-Iris"], 
+	"retornante": ["Eco Reverso", "Ida Vazante", "Memoria de Alvo", "Laco Temporal", "Pulso de Retorno", "Vortice Retrogrado", "Selo de Volta", "Campo de Reprise", "Passo Paradoxal"], 
+	"parasitica": ["Ninhada Ecoante", "Espinho Larval", "Hospedeiro Guiado", "Rede Micelial", "Espasmo Coletivo", "Vortice de Larvas", "Selo de Infestacao", "Viveiro Persistente", "Passo de Ovos"], 
+	"gravitante": ["Satelite Menor", "Orbita Perfurante", "Atrator Balistico", "Elo Orbital", "Pulso de Massa", "Singularidade Curta", "Selo de Peso", "Campo Gravitico", "Passo de Mare"], 
+	"ancorada": ["Replica Fixa", "Prego Profundo", "Trava de Mira", "Elo de Territorio", "Onda de Contencao", "Nucleo de Amarra", "Selo de Solo", "Campo Ancorado", "Passo Estacado"], 
+	"cartografica": ["Rota Duplicada", "Linha Meridiana", "Bussola Agressiva", "Mapa Vinculado", "Marco de Repulsao", "Dobra de Coordenada", "Selo de Latitude", "Campo de Rota", "Passo Cartografado"], 
+	"mnesica": ["Lembranca Ecoada", "Agulha de Engrama", "Recordacao Predatoria", "Elo de Memoria", "Surto Mnemonico", "Arquivo Convergente", "Selo de Trauma", "Campo Mnemonico", "Passo Esquecido"], 
+	"ressonante": ["Oitava Ecoante", "Nota Perfurante", "Tom Perseguidor", "Acorde Ligado", "Pulso Percussivo", "Caixa de Ressonancia", "Selo de Compasso", "Campo Harmonico", "Passo Sincopado"], 
+	"contratual": ["Clausula Duplicada", "Artigo Perfurante", "Mandado de Busca", "Elo Jurado", "Quebra de Termo", "Audiencia Forcada", "Selo de Sentenca", "Campo de Clausula", "Passo Notificado"], 
+	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"], 
+	"eclipsada": ["Umbra Ecoante", "Raio Penumbral", "Sombra Guiada", "Elo de Eclipse", "Pulso do Crepusculo", "Vortice de Penumbra", "Selo do Ocaso", "Campo Eclipsado", "Passo Sem Luz"], 
+	"bombastica": ["Estopim Gemeo", "Furo de Granada", "Fagulha Guiada", "Elo de Detonacao", "Pulso de Estouro", "Vortice de Estilhacos", "Selo de Polvora", "Campo Minado", "Passo de Retaguarda"], 
+	"necronada": ["Epitafio Ecoante", "Agulha Funeraria", "Vestigio Guiado", "Elo Ossuario", "Pulso Mortuario", "Vortice de Remanescentes", "Selo do Ossuario", "Campo Sepulcral", "Passo Funebre"]
+}
+
+const MANIFEST_EVOLUTION_PROFILES: = {
+	"eletrica": {"eco": {"every": 4, "scale": 0.44, "spread": 0.26}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.18, "range": 360.0}, "elo": {"radius": 148.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 138.0, "force": 92.0, "damage": 0.18}, "vortice": {"every": 5, "radius": 150.0, "force": 88.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 150.0, "duration": 3.2, "slow": 0.7, "damage": 0.055}, "passo": {"radius": 145.0, "force": 122.0, "damage": 0.12}}, 
+	"lacerante": {"eco": {"every": 3, "scale": 0.36, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.12, "range": 280.0}, "elo": {"radius": 118.0, "slow": 0.82}, "pulso": {"every": 3, "radius": 112.0, "force": 72.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 122.0, "force": 68.0, "damage": 0.18}, "selo": {"hits": 2, "duration": 0.48}, "campo": {"radius": 126.0, "duration": 2.6, "slow": 0.76, "damage": 0.09}, "passo": {"radius": 118.0, "force": 78.0, "damage": 0.18}}, 
+	"prismatica": {"eco": {"every": 5, "scale": 0.34, "spread": 0.36}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.14, "range": 330.0}, "elo": {"radius": 170.0, "slow": 0.8}, "pulso": {"every": 5, "radius": 150.0, "force": 78.0, "damage": 0.14}, "vortice": {"every": 5, "radius": 180.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.58}, "campo": {"radius": 180.0, "duration": 3.0, "slow": 0.76, "damage": 0.05}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.11}}, 
+	"retornante": {"eco": {"every": 3, "scale": 0.3, "spread": 0.22}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 340.0}, "elo": {"radius": 136.0, "slow": 0.78}, "pulso": {"every": 4, "radius": 130.0, "force": 86.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 150.0, "force": 84.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.66}, "campo": {"radius": 148.0, "duration": 3.4, "slow": 0.74, "damage": 0.05}, "passo": {"radius": 156.0, "force": 94.0, "damage": 0.12}}, 
+	"parasitica": {"eco": {"every": 4, "scale": 0.32, "spread": 0.3}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.13, "range": 310.0}, "elo": {"radius": 150.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 132.0, "force": 58.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 152.0, "force": 72.0, "damage": 0.13}, "selo": {"hits": 3, "duration": 0.78}, "campo": {"radius": 158.0, "duration": 4.0, "slow": 0.68, "damage": 0.075}, "passo": {"radius": 132.0, "force": 66.0, "damage": 0.14}}, 
+	"gravitante": {"eco": {"every": 4, "scale": 0.38, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.22, "range": 390.0}, "elo": {"radius": 176.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 170.0, "force": 108.0, "damage": 0.12}, "vortice": {"every": 3, "radius": 210.0, "force": 128.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.82}, "campo": {"radius": 210.0, "duration": 3.6, "slow": 0.62, "damage": 0.045}, "passo": {"radius": 182.0, "force": 114.0, "damage": 0.1}}, 
+	"ancorada": {"eco": {"every": 4, "scale": 0.42, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.1, "range": 260.0}, "elo": {"radius": 150.0, "slow": 0.66}, "pulso": {"every": 4, "radius": 160.0, "force": 96.0, "damage": 0.12}, "vortice": {"every": 5, "radius": 170.0, "force": 82.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 190.0, "duration": 4.4, "slow": 0.6, "damage": 0.045}, "passo": {"radius": 154.0, "force": 92.0, "damage": 0.12}}, 
+	"cartografica": {"eco": {"every": 4, "scale": 0.36, "spread": 0.24}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.2, "range": 360.0}, "elo": {"radius": 164.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 150.0, "force": 80.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 178.0, "force": 98.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.62}, "campo": {"radius": 182.0, "duration": 3.8, "slow": 0.68, "damage": 0.05}, "passo": {"radius": 168.0, "force": 86.0, "damage": 0.1}}, 
+	"mnesica": {"eco": {"every": 3, "scale": 0.34, "spread": 0.16}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 330.0}, "elo": {"radius": 150.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 142.0, "force": 72.0, "damage": 0.13}, "vortice": {"every": 5, "radius": 164.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.88}, "campo": {"radius": 166.0, "duration": 3.8, "slow": 0.7, "damage": 0.06}, "passo": {"radius": 150.0, "force": 78.0, "damage": 0.12}}, 
+	"ressonante": {"eco": {"every": 4, "scale": 0.4, "spread": 0.28}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 320.0}, "elo": {"radius": 172.0, "slow": 0.74}, "pulso": {"every": 3, "radius": 164.0, "force": 94.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 174.0, "force": 84.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 188.0, "duration": 3.2, "slow": 0.72, "damage": 0.055}, "passo": {"radius": 160.0, "force": 90.0, "damage": 0.11}}, 
+	"contratual": {"eco": {"every": 4, "scale": 0.36, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 310.0}, "elo": {"radius": 156.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 138.0, "force": 76.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 160.0, "force": 78.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 172.0, "duration": 4.0, "slow": 0.66, "damage": 0.055}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.12}}, 
+	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.1}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}}, 
+	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.7}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}}, 
+	"necronada": {"eco": {"every": 4, "scale": 0.34, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 320.0}, "elo": {"radius": 154.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 144.0, "force": 76.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 172.0, "force": 82.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.76}, "campo": {"radius": 170.0, "duration": 3.8, "slow": 0.66, "damage": 0.052}, "passo": {"radius": 150.0, "force": 84.0, "damage": 0.11}}
+}
+
+const CARDS: = [
+	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)}, 
+	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)}, 
+	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+15% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)}, 
+	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +2% chance critica.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)}, 
+	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)}, 
+	{"name": "Roubo de Vida", "nick": "Hemofluxo", "desc": "Projeteis curam uma fracao da vida perdida ao acertar.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)}, 
+	{"name": "Speed Atack", "nick": "Fluidez Letal", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)}, 
+	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)}, 
+	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)}, 
+	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)}, 
+	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% sorte para drops. A chance rara escala de forma mais gradual.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)}, 
+	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)}, 
+	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)}, 
+	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)}, 
+	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)}, 
+	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.4, 0.94, 1.0)}, 
+	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)}, 
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada com um bonus unico acumulavel; o bonus so acaba ao comprar a carta marcada.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)}, 
+	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)}, 
+	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)}, 
+	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)}, 
+	{"id": "ancora_vital", "name": "Ã‚ncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)}, 
+	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)}, 
+	{"id": "leitura_instante", "name": "Leitura do Instante", "nick": "Previsao Clara", "desc": "Aumenta a antecedencia visual de ataques inimigos e de chefes.", "icon": "Deck/carta-LeituraInstante1.png", "frame_2": "Deck/carta-LeituraInstante2.png", "color": Color(1.0, 0.84, 0.3)}, 
+	{"id": "margem_segura", "name": "Margem Segura", "nick": "Distancia Certa", "desc": "Inimigos comuns surgem mais longe do jogador.", "icon": "Deck/carta-MargenSegura1.png", "frame_2": "Deck/carta-MargenSegura2.png", "color": Color(0.26, 0.9, 0.96)}, 
+	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)}, 
+	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio de coleta de moedas, cartas soltas e orbes neutros.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)}, 
+	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)}, 
+	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)}, 
+	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "desc": "Periodicamente deixa um vestigio no caminho. Retornar a ele concede velocidade e recupera parte do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.34, 1.0, 0.86)}, 
+	{"id": "municao_de_rebate", "name": "Municao de Rebate", "nick": "Fragmento Teimoso", "desc": "Projeteis basicos que somem sem acertar podem gerar um fragmento que busca o alvo mais proximo.", "icon": "Deck/carta-municaorebatente1.png", "frame_2": "Deck/carta-municaorebatente2.png", "color": Color(1.0, 0.76, 0.24)}, 
+	{"id": "impulso_de_sobras", "name": "Impulso de Sobras", "nick": "Energia Guardada", "desc": "Q, E ou teleporte prontos por tempo suficiente fortalecem os proximos ataques basicos.", "icon": "Deck/carta-impulsodesobras1.png", "frame_2": "Deck/carta-impulsodesobras2.png", "color": Color(0.42, 0.78, 1.0)}, 
+	{"id": "eco_de_impacto", "name": "Eco de Impacto", "nick": "Repeticao Brutal", "desc": "Acertar o mesmo alvo varias vezes cria um eco que repete parte do ultimo dano real.", "icon": "Deck/carta-ecodeimpacto1.png", "frame_2": "Deck/carta-ecodeimpacto2.png", "color": Color(0.86, 0.64, 1.0)}, 
+	{"id": "zona_de_descompressao", "name": "Zona de Descompressao", "nick": "Respiro de Cerco", "desc": "Ficar cercado carrega uma onda que repele inimigos proximos e aplica lentidao.", "icon": "Deck/carta-zonadedescompressao1.png", "frame_2": "Deck/carta-zonadedescompressao2.png", "color": Color(0.44, 1.0, 0.7)}, 
+	{"id": "folego_de_perseguicao", "name": "Folego de Perseguicao", "nick": "Caca Persistente", "desc": "Avancar contra um alvo distante acumula velocidade e fortalece o primeiro impacto ao alcanca-lo.", "icon": "Deck/carta-folegodeperseguicao1.png", "frame_2": "Deck/carta-folegodeperseguicao2.png", "color": Color(1.0, 0.56, 0.22)}, 
+	{"id": "margem_de_erro", "name": "Margem de Erro", "nick": "Erro Parcelado", "desc": "Depois de sofrer dano, o proximo impacto rapido tem parte adiada e pode ser reduzido com abates.", "icon": "Deck/carta-margemdeerro1.png", "frame_2": "Deck/carta-margemdeerro2.png", "color": Color(1.0, 0.36, 0.46)}, 
+	{"id": "ressonancia_de_alternancia", "name": "Ressonancia de Alternancia", "nick": "Kit Completo", "desc": "Usar ataque, Q, E e teleporte em alternancia prepara um bonus para a proxima acao.", "icon": "Deck/carta-ressonanciadealternancia1.png", "frame_2": "Deck/carta-ressonanciadealternancia2.png", "color": Color(0.58, 1.0, 0.96)}, 
+	{"id": "intervalo_fraturado", "name": "Intervalo Fraturado", "nick": "Recarga Fraturada", "desc": "Reduz o tempo de recarga da Hab1 e da Ultimate. A reducao da Ultimate e menor.", "icon": "Deck/carta-Intervalo_Fraturado1.png", "frame_2": "Deck/carta-Intervalo_Fraturado2.png", "color": Color(0.58, 0.84, 1.0)}, 
+	{"id": "nucleo_revigorante", "name": "Nucleo Revigorante", "nick": "Orbe Revigorado", "desc": "As orbes de cura encontradas no mapa restauram mais vida.", "icon": "Deck/carta-N_cleo_Revigorante1.png", "frame_2": "Deck/carta-N_cleo_Revigorante2.png", "color": Color(0.44, 1.0, 0.62)}, 
+	{"id": "limiar_de_ruina", "name": "Limiar de Ruina", "nick": "Primeira Fenda", "desc": "Causa dano adicional a inimigos que estejam acima de 90% da vida maxima.", "icon": "Deck/carta-Limiar_de_Ru_na1.png", "frame_2": "Deck/carta-Limiar_de_Ru_na2.png", "color": Color(1.0, 0.45, 0.22)}, 
+	{"id": "estase_reparadora", "name": "Estase Reparadora", "nick": "Quietude Tecidual", "desc": "Apos permanecer imovel por 5 segundos, recupera continuamente uma parte da vida perdida.", "icon": "Deck/carta-Estase_Reparadora1.png", "frame_2": "Deck/carta-Estase_Reparadora2.png", "color": Color(0.52, 1.0, 0.86)}, 
+	{"id": "egide_hemofaga", "name": "Egide Hemofaga", "nick": "Escudo Hematico", "desc": "Parte do roubo de vida que ultrapassaria sua vida maxima e convertida em escudo temporario.", "icon": "Deck/carta-gide_Hem_faga1.png", "frame_2": "Deck/carta-gide_Hem_faga2.png", "color": Color(1.0, 0.72, 0.22)}, 
+	{"id": "fratura_cronal", "name": "Fratura Cronal", "nick": "Fragilidade Temporal", "desc": "Proximo acerto a cada 7s aplica Fragilidade por 4s.", "icon": "Deck/carta-Fratura_Cronal1.png", "frame_2": "Deck/carta-Fratura_Cronal2.png", "color": Color(0.74, 0.62, 1.0)}, 
+	{"id": "pulso_desestabilizador", "name": "Pulso Desestabilizador", "nick": "Explosao Instavel", "desc": "Proximo acerto a cada 8s gera uma explosao no alvo.", "icon": "Deck/carta-Pulso_Desestabilizador1.png", "frame_2": "Deck/carta-Pulso_Desestabilizador2.png", "color": Color(1.0, 0.42, 0.32)}, 
+	{"id": "pressao_cerco", "name": "Pressao de Cerco", "nick": "Alvo Cercado", "desc": "+dano em alvos cercados por 3 inimigos proximos.", "icon": "Deck/carta-Press_o_de_Cerco1.png", "frame_2": "Deck/carta-Press_o_de_Cerco2.png", "color": Color(1.0, 0.78, 0.28)}, 
+	{"id": "choque_fontes", "name": "Choque de Fontes", "nick": "Interferencia Temporal", "desc": "Fontes diferentes de dano no mesmo alvo provocam uma descarga.", "icon": "Deck/carta-Choque_de_Fontes1.png", "frame_2": "Deck/carta-Choque_de_Fontes2.png", "color": Color(0.72, 0.96, 1.0)}, 
+	{"id": "ferrolho_ruptura", "name": "Ferrolho de Ruptura", "nick": "Prego Espacial", "desc": "O proximo acerto direto a cada 10s fixa o alvo no espaco.", "icon": "Deck/carta-Ferrolho_de_Ruptura1.png", "frame_2": "Deck/carta-Ferrolho_de_Ruptura2.png", "color": Color(0.92, 0.58, 1.0)}, 
+	{"id": "limiar_colapso", "name": "Limiar de Colapso", "nick": "Ruptura Vital", "desc": "Rompe inimigos ao cruzarem 70%, 40% e 15% de vida.", "icon": "Deck/carta-Limiar_de_Colapso1.png", "frame_2": "Deck/carta-Limiar_de_Colapso2.png", "color": Color(1.0, 0.42, 0.18)}, 
+	{"id": "desvio_probabilidade", "name": "Desvio de Probabilidade", "nick": "Quase Acerto", "desc": "Quase acertos hostis fortalecem o proximo golpe direto.", "icon": "Deck/carta-Desvio_de_Probabilidade1.png", "frame_2": "Deck/carta-Desvio_de_Probabilidade2.png", "color": Color(0.74, 0.48, 1.0)}, 
+	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)}, 
+	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)}, 
+	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)}, 
+	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "Inimigos derrotados retornam temporariamente como aliados.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)}, 
+	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)}, 
+	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)}
+]
+
+const CARD_MAX_COUNTS: = {
+	"fratura_cronal": 5, 
+	"pulso_desestabilizador": 5, 
+	"pressao_cerco": 3
+}
+
+const FRATURA_CRONAL_COOLDOWN: = 7.0
+const FRATURA_CRONAL_DURATION: = 4.0
+const PULSO_DESESTABILIZADOR_COOLDOWN: = 8.0
+const PULSO_DESESTABILIZADOR_BASE_RADIUS: = 64.0
+const PRESSAO_CERCO_RADIUS: = 118.0
+const PRESSAO_CERCO_REQUIRED_NEIGHBORS: = 3
+const CARD_SOURCE_PULSO: = "card_pulso_desestabilizador"
+const DEVORADOR_CARD_ID: = "devorador_destinos"
+const DEVORADOR_SOURCE: = "card_devorador_destinos"
+const DEVORADOR_FIRST_MARK_DELAY: = 1.0
+const DEVORADOR_MARK_INTERVAL: = 20.0
+const DEVORADOR_BOSS_HP_LOSS_RATIO: = 0.07
+const DEVORADOR_SHIELD_DURATION: = 8.0
+const CARD_SOURCE_CHOQUE: = "card_choque_fontes"
+const CARD_SOURCE_LIMIAR: = "card_limiar_colapso"
+const CARD_SOURCE_DESVIO: = "card_desvio_probabilidade"
+const CARD_SOURCE_PONTO_CEGO: = "card_ponto_cego"
+const CARD_UNLIMITED_COUNT: = 999999
+const PORCAO_MAX_HP_GAIN_RATIO: = 0.1
+const PORCAO_HEAL_OLD_MAX_RATIO: = 0.05
+const CARD_RASTRO_ID: = "rastro_de_retorno"
+const CARD_REBATE_ID: = "municao_de_rebate"
+const CARD_IMPULSO_ID: = "impulso_de_sobras"
+const CARD_ECO_ID: = "eco_de_impacto"
+const CARD_ZONA_ID: = "zona_de_descompressao"
+const CARD_FOLEGO_ID: = "folego_de_perseguicao"
+const CARD_MARGEM_ID: = "margem_de_erro"
+const CARD_RESSONANCIA_ID: = "ressonancia_de_alternancia"
+const CARD_SOURCE_REBATE: = "card_municao_de_rebate"
+const CARD_SOURCE_ECO: = "card_eco_de_impacto"
+const CARD_SOURCE_ZONA: = "card_zona_de_descompressao"
+const CARD_SOURCE_MARGEM: = "card_margem_de_erro"
+const RARE_SOURCE_NECRO: = "rare_necrocronismo"
+const RARE_SOURCE_ANTIMATTER: = "rare_coracao_antimateria"
+const RARE_SOURCE_COFRE: = "rare_cofre_excesso"
+const FERROLHO_RUPTURA_COOLDOWN: = 10.0
+const CHOQUE_FONTES_TARGET_COOLDOWN: = 4.0
+const CARD_TREGUA_ID: = "tregua_regenerativa"
+const CARD_CINZAS_ID: = "cinzas_escolha"
+const CARD_ESCOLHA_ADIADA_ID: = "escolha_adiada"
+const CARD_RESERVA_ID: = "reserva_pulso"
+const CARD_CASULO_ID: = "casulo_reativo"
+const CARD_PASSAGEM_ID: = "passagem_intangivel"
+const CARD_ANCORA_ID: = "ancora_vital"
+const CARD_INTERVALO_ID: = "intervalo_fraturado"
+const CARD_NUCLEO_ID: = "nucleo_revigorante"
+const CARD_LIMIAR_RUINA_ID: = "limiar_de_ruina"
+const CARD_ESTASE_ID: = "estase_reparadora"
+const CARD_EGIDE_ID: = "egide_hemofaga"
+const CARD_SOURCE_ESTASE: = "card_estase_reparadora"
+const CARD_SOURCE_LIMIAR_RUINA: = "card_limiar_de_ruina"
+const POINT_REWARD_BASE_MULT: = 1.35
+const POINT_REWARD_PER_MINUTE: = 0.19
+const POINT_REWARD_LATE_START_MINUTES: = 30.0
+const POINT_REWARD_LATE_PER_MINUTE: = 0.34
+const POINT_REWARD_MAX_MULT: = 14.0
+const SHOP_SPEND_ANIM_TIME: = 0.72
+const CARD_UNLOCK_ALWAYS_AVAILABLE: = [
+	"Speed Boost", "Porcao", "Disparo crescente", "Tempestade", "Roubo de Vida",
+	"Speed Atack", "Teleporte", "Defesa", "Sorte", "orbita_coletora"
+]
+const CARD_UNLOCK_RULES: = {
+	"Trembo": {"metric": "survive_seconds", "target": 1800.0, "challenge": "Sobreviver 30:00 em uma run"},
+	"Petro": {"metric": "survive_seconds", "target": 1200.0, "challenge": "Sobreviver 20:00 em uma run"},
+	"Poison": {"metric": "enemy_kills", "target": 180.0, "challenge": "Eliminar 180/180 inimigos"},
+	"Coletora": {"metric": "enemy_kills", "target": 280.0, "challenge": "Eliminar 280/280 inimigos"},
+	"Mercenaria": {"metric": "enemy_kills", "target": 420.0, "challenge": "Eliminar 420/420 inimigos"},
+	"devorador_destinos": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
+	CARD_ESCOLHA_ADIADA_ID: {"metric": "shop_rerolls", "target": 18.0, "challenge": "Rerollar 18/18 vezes e comprar 12 cartas", "all": [{"metric": "shop_purchases", "target": 12.0}]},
+	CARD_TREGUA_ID: {"metric": "survive_seconds", "target": 1500.0, "challenge": "Sobreviver 25:00 em uma run"},
+	CARD_CINZAS_ID: {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 cartas e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	CARD_RESERVA_ID: {"metric": "healing_events", "target": 24.0, "challenge": "Receber cura 24/24 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	CARD_CASULO_ID: {"metric": "damage_taken_events", "target": 45.0, "challenge": "Sobreviver a 45/45 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
+	CARD_PASSAGEM_ID: {"metric": "teleports_used", "target": 90.0, "challenge": "Usar teleporte 90/90 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	CARD_ANCORA_ID: {"metric": "damage_taken_events", "target": 65.0, "challenge": "Sobreviver a 65/65 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
+	"inercia_cronal": {"metric": "damage_taken_events", "target": 80.0, "challenge": "Sobreviver a 80/80 impactos"},
+	"leitura_instante": {"metric": "survive_seconds", "target": 1800.0, "challenge": "Sobreviver 30:00 em uma run"},
+	"margem_segura": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
+	"moeda_estavel": {"metric": "shop_purchases", "target": 18.0, "challenge": "Comprar 18/18 cartas"},
+	"pacto_possibilidades": {"metric": "unique_cards_bought", "target": 18.0, "challenge": "Comprar 18/18 cartas diferentes"},
+	"solo_consolidado": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
+	CARD_RASTRO_ID: {"metric": "teleports_used", "target": 140.0, "challenge": "Usar teleporte 140/140 vezes"},
+	CARD_REBATE_ID: {"metric": "shots_fired", "target": 750.0, "challenge": "Disparar 750/750 vezes"},
+	CARD_IMPULSO_ID: {"metric": "abilities_used", "target": 140.0, "challenge": "Usar habilidades 140/140 vezes"},
+	CARD_ECO_ID: {"metric": "enemy_kills", "target": 520.0, "challenge": "Eliminar 520/520 inimigos"},
+	CARD_ZONA_ID: {"metric": "survive_seconds", "target": 2400.0, "challenge": "Sobreviver 40:00 em uma run"},
+	CARD_FOLEGO_ID: {"metric": "enemy_kills", "target": 650.0, "challenge": "Eliminar 650/650 inimigos"},
+	CARD_MARGEM_ID: {"metric": "damage_taken_events", "target": 105.0, "challenge": "Sobreviver a 105/105 impactos"},
+	CARD_RESSONANCIA_ID: {"metric": "abilities_used", "target": 220.0, "challenge": "Usar habilidades 220/220 vezes"},
+	CARD_INTERVALO_ID: {"metric": "abilities_used", "target": 280.0, "challenge": "Usar habilidades 280/280 vezes"},
+	CARD_NUCLEO_ID: {"metric": "healing_events", "target": 45.0, "challenge": "Receber cura 45/45 vezes"},
+	CARD_LIMIAR_RUINA_ID: {"metric": "enemy_kills", "target": 760.0, "challenge": "Eliminar 760/760 inimigos"},
+	CARD_ESTASE_ID: {"metric": "stationary_seconds", "target": 240.0, "challenge": "Ficar parado por 240s acumulados e sobreviver 20:00", "all": [{"metric": "survive_seconds", "target": 1200.0}]},
+	CARD_EGIDE_ID: {"metric": "healing_events", "target": 70.0, "challenge": "Receber cura 70/70 vezes"},
+	"fratura_cronal": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
+	"pulso_desestabilizador": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
+	"pressao_cerco": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
+	"choque_fontes": {"metric": "boss_kills", "target": 3.0, "challenge": "Eliminar 3/3 chefes"},
+	"ferrolho_ruptura": {"metric": "boss_kills", "target": 3.0, "challenge": "Eliminar 3/3 chefes"},
+	"limiar_colapso": {"metric": "boss_kills", "target": 3.0, "challenge": "Eliminar 3/3 chefes"},
+	"desvio_probabilidade": {"metric": "damage_taken_events", "target": 140.0, "challenge": "Sobreviver a 140/140 impactos"},
+	"ponto_cego": {"metric": "teleports_used", "target": 220.0, "challenge": "Usar teleporte 220/220 vezes"},
+	"mandamento_ruptura": {"metric": "boss_kills", "target": 4.0, "challenge": "Eliminar 4/4 chefes"},
+	"carta_zero": {"metric": "unique_cards_bought", "target": 26.0, "challenge": "Comprar 26/26 cartas diferentes"},
+	"necrocronismo": {"metric": "enemy_kills", "target": 980.0, "challenge": "Eliminar 980/980 inimigos"},
+	"coracao_antimateria": {"metric": "boss_kills", "target": 4.0, "challenge": "Eliminar 4/4 chefes"},
+	"cofre_excesso": {"metric": "boss_kills", "target": 4.0, "challenge": "Eliminar 4/4 chefes"}
+}
+const MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE: = ["eletrica"]
+const MANIFESTATION_UNLOCK_RULES: = {
+	"lacerante": {"metric": "enemy_kills", "target": 250.0, "challenge": "Eliminar 250/250 inimigos"},
+	"prismatica": {"metric": "boss_kills", "target": 1.0, "challenge": "Eliminar 1/1 chefe"},
+	"retornante": {"metric": "teleports_used", "target": 100.0, "challenge": "Usar teleporte 100/100 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	"parasitica": {"metric": "phase_reached", "target": 6.0, "challenge": "Chegar na Fase 6"},
+	"gravitante": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
+	"ancorada": {"metric": "stationary_seconds", "target": 180.0, "challenge": "Ficar parado por 180s acumulados e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	"cartografica": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
+	"mnesica": {"metric": "boss_kills", "target": 3.0, "challenge": "Eliminar 3/3 chefes"},
+	"ressonante": {"metric": "abilities_used", "target": 180.0, "challenge": "Usar habilidades 180/180 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	"contratual": {"metric": "shop_purchases", "target": 35.0, "challenge": "Comprar 35/35 cartas"},
+	"acorrentada": {"metric": "damage_taken_events", "target": 55.0, "challenge": "Sobreviver a 55/55 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
+	"eclipsada": {"metric": "phase_reached", "target": 7.0, "challenge": "Chegar na Fase 7"},
+	"bombastica": {"metric": "enemy_kills", "target": 550.0, "challenge": "Eliminar 550/550 inimigos"},
+	"necronada": {"metric": "enemy_kills", "target": 700.0, "challenge": "Eliminar 700/700 inimigos e chegar na Fase 3", "all": [{"metric": "phase_reached", "target": 3.0}]}
+}
+const SPECTRUM_UNLOCK_ALWAYS_AVAILABLE: = ["impulsiva"]
+const SPECTRUM_UNLOCK_RULES: = {
+	"racional": {"metric": "stationary_seconds", "target": 150.0, "challenge": "Ficar parado por 150s acumulados e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	"devota": {"metric": "healing_events", "target": 25.0, "challenge": "Receber cura 25/25 vezes"},
+	"vanguarda": {"metric": "damage_taken_events", "target": 45.0, "challenge": "Sobreviver a 45/45 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
+	"insana": {"metric": "shots_fired", "target": 650.0, "challenge": "Disparar 650/650 vezes"},
+	"voraz": {"metric": "enemy_kills", "target": 420.0, "challenge": "Eliminar 420/420 inimigos"},
+	"nula": {"metric": "survive_seconds", "target": 1800.0, "challenge": "Sobreviver 30:00 em uma run"},
+	"abissal": {"metric": "phase_reached", "target": 6.0, "challenge": "Chegar na Fase 6"},
+	"profetica": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
+	"sanguinaria": {"metric": "damage_taken_events", "target": 70.0, "challenge": "Sobreviver a 70/70 impactos"},
+	"crepuscular": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
+	"peregrino": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
+	"equilibrista": {"metric": "survive_seconds", "target": 2400.0, "challenge": "Sobreviver 40:00 em uma run"},
+	"avarento": {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 cartas"},
+	"oportunista": {"metric": "abilities_used", "target": 220.0, "challenge": "Usar habilidades 220/220 vezes"}
+}
+const SPECTRAL_CORE_ENEMY_CHANCE: = 0.055
+const SPECTRAL_CORE_UNCOMMON_CHANCE: = 0.11
+const SPECTRAL_CORE_BOSS_REWARD: = 3
+const RUN_RETRY_MAX_CHARGES: = 3
+const RUN_RETRY_INVULNERABILITY: = 5.0
+const RUN_RETRY_HP_RATIOS: = [0.70, 0.50, 0.35]
+const CASULO_HIT_WINDOW: = 2.2
+const CASULO_INTERNAL_COOLDOWN: = 12.0
+const ANCORA_VITAL_LIFE: = 4.0
+const ANCORA_VITAL_HEAL_DURATION: = 3.0
+
+const CATALOG_TABS: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Cartas"]
+
+const AURAS: = [
+	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."}, 
+	{"key": "impulsiva", "name": "Impulsiva", "icon": "aurea_impulsiva.png", "desc": "Cinco abates sem dano ativam Frenesi. Um hit quebra a sequencia e arma Panico."}, 
+	{"key": "devota", "name": "Devota", "icon": "aurea_devota.png", "desc": "Tres cargas anulam impactos, curam vida perdida e abrem janelas de dano."}, 
+	{"key": "vanguarda", "name": "Vanguarda", "icon": "aurea_vanguarda.png", "desc": "Sofrer dano cria fogo; queimaduras ferem por vida maxima e pesam o Teleporte."}, 
+	{"key": "insana", "name": "Insana", "icon": "aurea_insana.png", "desc": "Ecos parados atraem inimigos e repetem seus tiros com 1s de atraso."}, 
+	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Coagulos alimentam Fome, curam vida perdida e fortalecem disparos e recargas."}, 
+	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."}, 
+	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."}, 
+	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."}, 
+	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."}, 
+	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."}, 
+	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."}, 
+	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://assets/sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."}, 
+	{"key": "avarento", "name": "Avarento", "icon": "res://assets/sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Ao gastar, rompa o Cofre para ganhar velocidade e escudo."}, 
+	{"key": "oportunista", "name": "Oportunista", "icon": "res://assets/sprites/aurea-oportunista.png", "desc": "Ataque durante preparacao ou recuperacao inimiga para armar um Golpe de Oportunidade."}
+]
+
+var mode = "menu"
+var previous_mode = "game"
+var font: Font
+var menu_title_font: Font
+var menu_button_font: Font
+var textures = {}
+var startup_thanks_timer: float = 0.0
+var startup_thanks_fading: bool = false
+var startup_thanks_done: bool = false
+var startup_thanks_frame_index: int = 1
+var startup_thanks_frame_view: TextureRect = null
+var startup_thanks_teaser_available: bool = false
+var startup_thanks_audio_player: AudioStreamPlayer = null
+var startup_thanks_holding: bool = false
+var startup_thanks_hold_timer: float = 0.0
+var startup_thanks_hold_pos: Vector2 = Vector2.ZERO
+var startup_thanks_skip_count: int = 0
+var startup_video_disabled: bool = false
+var startup_thanks_frame_cache: Dictionary = {}
+var pixel_card_burn_shader: Shader = null
+var pixel_card_burn_palette: GradientTexture1D = null
+var pixel_card_burn_noise_cache: Dictionary = {}
+var pixel_card_burn_material_cache: Dictionary = {}
+var cinzas_burn_texture_nodes: Array[Control] = []
+var cinzas_burn_texture_index: = 0
+var lazy_texture_paths: Dictionary = {}
+var current_lazy_map_key: String = ""
+var player_nickname: String = ""
+var player_profile_id: String = ""
+var nickname_error: String = ""
+var nickname_edit: LineEdit = null
+var cheat_edit: LineEdit = null
+var webhook_edit: LineEdit = null
+var online_room_name_edit: LineEdit = null
+var online_room_password_edit: LineEdit = null
+var online_search_code_edit: LineEdit = null
+var online_join_password_edit: LineEdit = null
+var webhook_error: String = ""
+var run_report_request: HTTPRequest = null
+var run_leaderboard_request: HTTPRequest = null
+var run_security_start_request: HTTPRequest = null
+var run_security_checkpoint_request: HTTPRequest = null
+var rt_integrity: RefCounted = null
+var last_run_leaderboard_url: String = ""
+var app_update_check_request: HTTPRequest = null
+var app_update_download_request: HTTPRequest = null
+var content_update_check_request: HTTPRequest = null
+var content_update_download_request: HTTPRequest = null
+var veteran_unlock_request: HTTPRequest = null
+var app_update_checked: = false
+var app_update_check_timer: = APP_UPDATE_CHECK_DELAY
+var content_update_checked: = false
+var content_update_check_timer: = CONTENT_UPDATE_CHECK_DELAY
+var veteran_unlock_checked: = false
+var veteran_unlock_check_timer: = APP_UPDATE_VETERAN_UNLOCK_DELAY
+var app_update_popup_visible: = false
+var app_update_manifest: Dictionary = {}
+var app_update_status: = "idle"
+var app_update_error: = ""
+var app_update_download_path: = ""
+var app_update_selected: = 0
+var content_update_manifest: Dictionary = {}
+var content_update_status: = "idle"
+var content_update_error: = ""
+var content_update_queue: Array = []
+var content_update_current_pack: Dictionary = {}
+var content_update_download_path: = ""
+var content_update_loaded_packs: Array[String] = []
+var content_update_version_code: = 0
+var umbra_mind_check_request: HTTPRequest = null
+var umbra_mind_checked: bool = false
+var umbra_mind_status: String = "idle"
+var umbra_mind_version: String = ""
+var card_unlock_veteran_synced_version_code: = 0
+var qa_stream_session_request: HTTPRequest = null
+var qa_stream_discord_request: HTTPRequest = null
+var qa_stream_stop_request: HTTPRequest = null
+var qa_stream_frame_request: HTTPRequest = null
+var qa_stream_frame_requests: Array = []
+var qa_stream_frame_request_busy: Array = []
+
+
+var is_multiplayer: bool = false
+var is_host: bool = false
+var multiplayer_peer: ENetMultiplayerPeer = null
+var net_player_ready: bool = false
+var local_player_ready: bool = false
+var online_relay_request: HTTPRequest = null
+var online_heartbeat_request: HTTPRequest = null
+var online_relay_action: String = ""
+var online_room_code: String = ""
+var online_room_name: String = ""
+var online_room_password: String = ""
+var online_room_locked: bool = false
+var online_join_code: String = ""
+var online_join_password: String = ""
+var online_room_host: String = ONLINE_RELAY_DEFAULT_HOST
+var online_room_port: int = 0
+var online_connected: bool = false
+var online_status: String = ""
+var online_room_owner: bool = false
+var online_lobby_roster: Array = []
+var online_lobby_connected_count: int = 0
+var online_lobby_active_player_count: int = 0
+var online_lobby_spectator_count: int = 0
+var online_lobby_ready_count: int = 0
+var online_lobby_owner_ready: bool = false
+var online_lobby_client_ready: bool = false
+var online_local_ready_confirmed: bool = false
+var online_room_list: Array = []
+var online_room_list_selected: int = 0
+var online_joining_room_code: String = ""
+var online_ready_last_sent_ms: int = 0
+var online_ready_pending_started_ms: int = 0
+var online_ready_request_seq: int = 0
+var online_ready_confirmed_seq: int = 0
+var online_lobby_ready_pending: bool = false
+var online_lobby_server_confirmed_ready: bool = false
+var online_start_request_seq: int = 0
+var online_start_confirmed_seq: int = 0
+var online_local_spectator: bool = false
+var online_local_spectator_confirmed: bool = false
+var online_spectator_request_pending: bool = false
+var online_spectator_last_sent_ms: int = 0
+var online_heartbeat_last_sent_ms: int = 0
+var online_heartbeat_last_ok_ms: int = 0
+var online_heartbeat_in_flight: bool = false
+var online_heartbeat_fail_count: int = 0
+var online_heartbeat_last_expires_ms: int = -1
+var online_heartbeat_last_error: String = ""
+var dedicated_server_mode: bool = false
+var dedicated_room_code: String = ""
+var dedicated_ready_by_peer: Dictionary = {}
+var dedicated_ready_seq_by_peer: Dictionary = {}
+var dedicated_names_by_peer: Dictionary = {}
+var dedicated_spectator_by_peer: Dictionary = {}
+var dedicated_manifest_ready_by_peer: Dictionary = {}
+var dedicated_manifest_selection_by_peer: Dictionary = {}
+var dedicated_preload_ready_by_peer: Dictionary = {}
+var dedicated_player_state_by_peer: Dictionary = {}
+var dedicated_shop_votes_by_peer: Dictionary = {}
+var dedicated_shop_exit_by_peer: Dictionary = {}
+var dedicated_boss_votes_by_peer: Dictionary = {}
+var dedicated_phase_votes_by_peer: Dictionary = {}
+var dedicated_pause_votes_by_peer: Dictionary = {}
+var dedicated_pause_target: = false
+var dedicated_pause_vote_started_ms: = 0
+var dedicated_shop_vote_started_ms: = 0
+var dedicated_boss_vote_started_ms: = 0
+var dedicated_boss_vote_phase: = 0
+var dedicated_phase_vote_started_ms: = 0
+var dedicated_phase_vote_target: = 0
+var dedicated_phase_vote_action: = "phase"
+var dedicated_room_owner_peer_id: int = 0
+var net_player_peer_id: int = 0
+var net_player_sync_last_ms: int = 0
+var net_world_sync_last_ms: int = 0
+var net_world_visual_sync_last_ms: int = 0
+var net_world_visual_payload_bytes: int = 0
+var net_world_sequence: int = 0
+var net_world_last_sequence: int = -1
+var net_world_visual_last_sequence: int = -1
+var net_ping_last_sent_ms: int = 0
+var net_ping_ms: int = -1
+var net_remote_ping_ms: int = -1
+var net_report_file: FileAccess = null
+var net_report_path: String = ""
+var net_report_started_ms: int = 0
+var net_report_last_flush_ms: int = 0
+var net_report_events: Array[String] = []
+var net_report_interval_bytes_in: int = 0
+var net_report_interval_bytes_out: int = 0
+var net_report_total_bytes_in: int = 0
+var net_report_total_bytes_out: int = 0
+var net_report_interval_packets_in: int = 0
+var net_report_interval_packets_out: int = 0
+var net_report_total_packets_in: int = 0
+var net_report_total_packets_out: int = 0
+var net_report_interval_world_in: int = 0
+var net_report_interval_world_out: int = 0
+var net_report_interval_player_in: int = 0
+var net_report_interval_player_out: int = 0
+var net_report_interval_control_in: int = 0
+var net_report_interval_control_out: int = 0
+var net_report_ping_min: int = 999999
+var net_report_ping_max: int = -1
+var net_report_ping_sum: int = 0
+var net_report_ping_count: int = 0
+var net_report_remote_ping_min: int = 999999
+var net_report_remote_ping_max: int = -1
+var net_report_remote_ping_sum: int = 0
+var net_report_remote_ping_count: int = 0
+var net_report_last_world_in_ms: int = 0
+var net_report_last_player_in_ms: int = 0
+var net_report_interval_world_gap_max_ms: int = 0
+var net_report_interval_player_gap_max_ms: int = 0
+var net_report_interval_world_drop_gaps: int = 0
+var net_report_interval_player_drop_gaps: int = 0
+var net_report_last_mode: String = ""
+var net_report_last_online_connected: bool = false
+var net_report_last_dead: bool = false
+var net_report_last_remote_dead: bool = false
+var net_report_last_connected_count: int = -1
+var net_report_last_ready_count: int = -1
+var net_report_last_role: String = ""
+var net_player_snapshot_last_ms: int = 0
+var net_world_snapshot_last_ms: int = 0
+var net_world_jitter_ms: float = 0.0
+var net_world_arrival_interval_ms: float = 0.0
+var net_world_visual_sequence: int = 0
+var net_transport_last_activity_ms: int = 0
+var net_transport_health: String = RTTransportStateScript.HEALTH_WARMING
+var net_transport_health_last: String = RTTransportStateScript.HEALTH_WARMING
+var net_enemy_bullet_next_uid: int = 1
+var net_ability_sequence: int = 0
+var net_event_sequence: int = 0
+var net_projectile_sequence: int = 0
+var net_ability_seen: Dictionary = {}
+var net_ability_visuals: Array = []
+var net_rewind_seen: Dictionary = {}
+var net_remote_rewind_visuals: Array = []
+var dedicated_started_ms: int = 0
+var dedicated_room_shutdown_pending: bool = false
+var dedicated_warm_standby: bool = false
+var multiplayer_notice: String = ""
+var online_preload_started_ms: int = 0
+var online_preload_finished_ms: int = 0
+var online_preload_stage: String = ""
+var online_preload_progress: float = 0.0
+var online_preload_local_ready: bool = false
+var online_preload_remote_ready: bool = false
+var online_preload_remote_progress: float = 0.0
+var online_preload_remote_stage: String = ""
+var online_first_world_snapshot_received: bool = false
+var online_first_player_snapshot_received: bool = false
+var online_game_started_ms: int = 0
+var perf_ready_started_ms: int = 0
+const NET_PLAYER_SYNC_INTERVAL_MS: = RTNetContractScript.PLAYER_SYNC_INTERVAL_MS
+const NET_WORLD_SYNC_INTERVAL_MS: = RTNetContractScript.WORLD_SYNC_INTERVAL_MS
+const NET_WORLD_VISUAL_SYNC_INTERVAL_MS: = RTNetContractScript.WORLD_VISUAL_SYNC_INTERVAL_MS
+const NET_PING_INTERVAL_MS: = RTNetContractScript.PING_INTERVAL_MS
+const NET_CHANNEL_COUNT: = RTNetContractScript.CHANNEL_COUNT
+const NET_PLAYER_CHANNEL: = RTNetContractScript.PLAYER_CHANNEL
+const NET_WORLD_CHANNEL: = RTNetContractScript.WORLD_CHANNEL
+const NET_CONTROL_CHANNEL: = RTNetContractScript.CONTROL_CHANNEL
+const NET_VISUAL_CHANNEL: = RTNetContractScript.VISUAL_CHANNEL
+const DEDICATED_SERVER_NET_FPS: = RTNetContractScript.DEDICATED_SERVER_NET_FPS
+const NET_INTERPOLATION_SHARPNESS: = RTNetContractScript.INTERPOLATION_SHARPNESS
+const NET_EXTRAPOLATION_LIMIT: = RTNetContractScript.EXTRAPOLATION_LIMIT
+const NET_SNAP_DISTANCE: = RTNetContractScript.SNAP_DISTANCE
+const NET_ENEMY_STRIDE: = RTNetContractScript.ENEMY_STRIDE
+const NET_UID_CHUNK_MASK: = RTNetContractScript.UID_CHUNK_MASK
+const NET_BULLET_STRIDE: = RTNetContractScript.BULLET_STRIDE
+const NET_LEECH_STATES: = [
+	SANGUESSUGA_STATE_FALL_WARNING, 
+	SANGUESSUGA_STATE_FALLING, 
+	SANGUESSUGA_STATE_DORMANT, 
+	SANGUESSUGA_STATE_TRIGGERED, 
+	SANGUESSUGA_STATE_LEAPING, 
+	SANGUESSUGA_STATE_ATTACHED, 
+	SANGUESSUGA_STATE_MISSED, 
+	SANGUESSUGA_STATE_EXPIRING
+]
+const NET_OWNER_CONNECT_TIMEOUT_MS: = RTNetContractScript.OWNER_CONNECT_TIMEOUT_MS
+const NET_PRELOAD_TIMEOUT_MS: = RTNetContractScript.PRELOAD_TIMEOUT_MS
+const NET_MANIFEST_SYNC_INTERVAL_MS: = RTNetContractScript.MANIFEST_SYNC_INTERVAL_MS
+const NET_REPORT_INTERVAL_MS: = RTNetContractScript.REPORT_INTERVAL_MS
+const NET_REPORT_EVENT_LIMIT: = RTNetContractScript.REPORT_EVENT_LIMIT
+const NET_PEER_TIMEOUT_MS: = 4000
+const NET_PEER_TIMEOUT_MIN_MS: = 6000
+const NET_PEER_TIMEOUT_MAX_MS: = 12000
+const NET_TRANSPORT_DEGRADED_AFTER_MS: = 750
+const NET_TRANSPORT_STALLED_AFTER_MS: = 5000
+const NET_WORLD_BUDGET_BYTES_PER_SEC: = 300000
+const NET_VISUAL_BUDGET_BYTES_PER_SEC: = 180000
+const ONLINE_ROOM_HEARTBEAT_INTERVAL_MS: = 20000
+const ONLINE_ROOM_HEARTBEAT_WARN_MS: = 70000
+const ONLINE_ROOM_HEARTBEAT_TIMEOUT: = 6.0
+const NET_ABILITY_ATTACK: = RTNetContractScript.ABILITY_ATTACK
+const NET_ABILITY_SKILL: = RTNetContractScript.ABILITY_SKILL
+const NET_ABILITY_SECONDARY: = RTNetContractScript.ABILITY_SECONDARY
+const NET_ABILITY_TELEPORT: = RTNetContractScript.ABILITY_TELEPORT
+const NET_ABILITY_SECONDARY_END: = RTNetContractScript.ABILITY_SECONDARY_END
+const NET_ABILITY_VISUAL_LIMIT: = RTNetContractScript.ABILITY_VISUAL_LIMIT
+const NET_REWIND_VISUAL_LIMIT: = RTNetContractScript.REWIND_VISUAL_LIMIT
+const REVIVE_CARD_COST_MULT: = 4
+const REVIVE_REQUEST_COOLDOWN: = 15.0
+const REVIVE_REQUEST_TIMEOUT: = 10.0
+const REVIVE_PAY_POINTS: = "points"
+const REVIVE_PAY_LIFE: = "life"
+const REVIVE_LIFE_SACRIFICE_RATE: = 0.5
+const REVIVE_LIFE_SACRIFICE_REDUCTION: = 0.28
+const REVIVE_HEAL_PENALTY_MULT: = 0.5
+const REVIVE_HEAL_PENALTY_DURATION: = 60.0
+const REVIVAL_SINGLE_TIME: = 30.0
+const REVIVAL_MULTI_TIME: = 50.0
+const REVIVAL_FRAGMENTS_PER_DEAD: = 5
+const REVIVAL_FRAGMENT_PICKUP_RADIUS: = 58.0
+const REVIVAL_ALTAR_RADIUS: = 68.0
+const REVIVAL_ALTAR_SPACING: = 132.0
+const REVIVAL_MULTI_LIFE_SACRIFICE_RATE: = 0.75
+const REVIVAL_MOBILE_DOUBLE_TAP_MS: = 650
+const REVIVAL_FRAGMENT_RESPAWN_TIME: = 180.0
+const REVIVAL_FRAGMENT_DRIFT_SPEED: = 46.0
+const REVIVAL_FRAGMENT_SYNC_INTERVAL: = 0.45
+const NET_ANIM_IDLE: = RTNetContractScript.ANIM_IDLE
+const NET_ANIM_UP: = RTNetContractScript.ANIM_UP
+const NET_ANIM_DOWN: = RTNetContractScript.ANIM_DOWN
+const NET_ANIM_RIGHT: = RTNetContractScript.ANIM_RIGHT
+const NET_ANIM_FIRE: = RTNetContractScript.ANIM_FIRE
+const NET_ANIM_DAMAGE: = RTNetContractScript.ANIM_DAMAGE
+const NET_ANIM_LACERANTE: = RTNetContractScript.ANIM_LACERANTE
+const NET_ANIM_FROZEN: = RTNetContractScript.ANIM_FROZEN
+const NET_DAMAGE_ENEMY: = RTNetContractScript.DAMAGE_ENEMY
+const NET_DAMAGE_BOSS: = RTNetContractScript.DAMAGE_BOSS
+const NET_DAMAGE_ARAUTO: = RTNetContractScript.DAMAGE_ARAUTO
+const NET_ENEMY_TYPES: = [
+	ENEMY_COMMON, ENEMY_ATIRADOR, ENEMY_KAMIKAZE, ENEMY_AGGLOMERATOR, 
+	ENEMY_STALKER, ENEMY_PROJECTOR, ENEMY_CRYSTAL, ENEMY_CURATER, 
+	ENEMY_LARAPIO, ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR, 
+	ENEMY_DEVOTO, ENEMY_INCENSARIO, ENEMY_GUARDIAO, ENEMY_PYRO_PENGUIN, 
+	ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_REFRACTOR, 
+	ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO, 
+	ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH, 
+	ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL
+]
+const NET_BULLET_TYPES: = [
+	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed", 
+	"frost_shard", "larapio_coin", "larapio_stone", "miasma_cheese_spit", 
+	"miasma_eel_spit", "nexus_refracted", "phase4_magic", "pyro_wall_seed", "rat_flask", 
+	"pustula_fossil_spit", "rat_shot", "rat_spit", "reflected_player", "umbra_plasma", "boss4_comet"
+]
+
+
+var net_player_pos = Vector2(-1000, -1000)
+var net_player_render_pos = Vector2(-1000, -1000)
+var net_player_velocity = Vector2.ZERO
+var net_player_has_snapshot: = false
+var net_player_last_pos = Vector2(-1000, -1000)
+var net_player_move = Vector2.ZERO
+var net_player_hp = 100.0
+var net_player_hp_max = 100.0
+var net_player_dead = false
+var net_player_manifestation = 0
+var net_player_secondary_manifestation = 0
+var net_player_target_angle = 0.0
+var net_player_attack_timer = 0.0
+var net_player_color = Color.WHITE
+var net_player_name = "Player 2"
+var net_player_last_dash_time = 0.0
+var net_player_dash_start = Vector2()
+var net_player_dash_end = Vector2()
+var net_player_is_dashing = false
+var net_player_frame_idx = 0
+var net_player_flip_h = false
+var net_player_anim_state: = NET_ANIM_IDLE
+var net_players_by_peer: Dictionary = {}
+var net_player_history_by_peer: Dictionary = {}
+var net_boss_target_pos = Vector2(1240, 410)
+var net_boss_velocity = Vector2.ZERO
+var net_boss_snapshot_last_ms: int = 0
+var net_boss_has_snapshot: = false
+var run_report_webhook_url: String = ""
+var run_report_status: String = ""
+var run_report_sent: bool = false
+var run_report_in_flight: bool = false
+var run_finalized_result: String = ""
+var run_started_at: String = ""
+var run_started_unix: int = 0
+var run_security_session_id: String = ""
+var run_security_session_token: String = ""
+var run_security_session_ready: bool = false
+var run_security_session_failed: bool = false
+var run_security_checkpoint_timer: float = 0.0
+var run_security_checkpoint_interval: float = RUN_SECURITY_CHECKPOINT_INTERVAL
+var run_security_checkpoint_count: int = 0
+var run_security_last_error: String = ""
+var run_start_damage: float = PLAYER_BASE_DAMAGE
+var run_damage_to_enemies: float = 0.0
+var run_damage_by_enemy: Dictionary = {}
+var run_damage_to_boss_by_phase: Dictionary = {}
+var run_boss_reached: Dictionary = {}
+var run_boss_started_at: Dictionary = {}
+var run_boss_duration: Dictionary = {}
+var run_damage_taken_total: int = 0
+var run_damage_taken_by_source: Dictionary = {}
+var run_damage_hits_by_source: Dictionary = {}
+var run_damage_source_meta: Dictionary = {}
+var run_damage_events: Array = []
+var run_heatmap_cells: Dictionary = {}
+var run_heatmap_sample_timer: float = 0.0
+var run_phase_seconds: Dictionary = {}
+var run_behavior_distance: float = 0.0
+var run_behavior_edge_seconds: float = 0.0
+var run_behavior_corner_seconds: float = 0.0
+var run_behavior_center_seconds: float = 0.0
+var run_behavior_dash_count: int = 0
+var run_behavior_shots_fired: int = 0
+var run_behavior_hits: int = 0
+var run_behavior_boss_hits: int = 0
+var run_behavior_player_last_pos: Vector2 = PLAYER_START
+var run_behavior_player_last_sample_pos: Vector2 = PLAYER_START
+var run_behavior_move_samples: int = 0
+var run_behavior_stationary_samples: int = 0
+var run_end_payload: Dictionary = {}
+var qa_data_unlocked: bool = false
+var online_mode_unlocked: bool = false
+var qa_streaming_unlocked: bool = false
+var qa_streaming_enabled: bool = false
+var qa_streaming_quality_mode: String = "360p"
+var qa_streaming_status: String = ""
+var qa_streaming_in_flight: bool = false
+var qa_streaming_native_active: bool = false
+var qa_streaming_desktop_ffmpeg_active: bool = false
+var qa_streaming_desktop_ffmpeg_pid: int = -1
+var qa_streaming_desktop_ffmpeg_path: String = ""
+var qa_streaming_desktop_gfxcapture_probe: int = -1
+var qa_streaming_session_id: String = ""
+var qa_streaming_publish_url: String = ""
+var qa_streaming_native_publish_url: String = ""
+var qa_streaming_desktop_publish_url: String = ""
+var qa_streaming_watch_url: String = ""
+var qa_streaming_viewer_url: String = ""
+var qa_streaming_poll_timer: float = 0.0
+var qa_streaming_publish_wait: float = 0.0
+var qa_streaming_link_sent: bool = false
+var qa_streaming_permission_pending: bool = false
+var qa_streaming_frame_active: bool = false
+var qa_streaming_frame_in_flight: bool = false
+var qa_streaming_frame_in_flight_count: int = 0
+var qa_streaming_frame_url: String = ""
+var qa_streaming_frame_timer: float = 0.0
+var qa_streaming_frame_seq: int = 0
+var qa_streaming_frame_count: int = 0
+var qa_streaming_last_frame_size: int = 0
+var qa_streaming_sent_this_second: int = 0
+var qa_streaming_sent_per_second: int = 0
+var qa_streaming_fps_timer: float = 0.0
+var qa_streaming_frame_content_type: String = "image/jpeg"
+var qa_stream_base_url: String = ONLINE_RELAY_BASE_URL
+var current_phase = 1
+var pending_phase = 0
+var phase_started_at: float = 0.0
+var selected_manifestation = 0
+var selected_aura = 1
+var aura_state: Dictionary = {}
+var rational_dilation_flash: float = 0.0
+var rational_trail_points: Array = []
+var rational_trail_sample_timer: float = 0.0
+var rational_rebound_active: bool = false
+var crepuscular_last_phase: String = ""
+var crepuscular_phase_flash_timer: float = 0.0
+var crepuscular_spotlight_timer: float = 0.0
+var boss_crepuscular_ocaso_mark_timer: float = 0.0
+var sanguinaria_blood_drop_timer: float = 0.0
+var sanguinaria_blood_drop_pos: Vector2 = Vector2.ZERO
+var sanguinaria_hunt_notice_timer: float = 0.0
+var pause_selected = 0
+var multiplayer_menu_selected = 0
+var lobby_host_selected = 0
+var lobby_client_selected = 0
+var gameover_selected = 0
+var menu_selected = 0
+var menu_ui_font: Font = ThemeDB.fallback_font
+var menu_focus_weights: Dictionary = {}
+var menu_motion_mode: String = ""
+var menu_page_age: float = 0.0
+var menu_selection_age: float = 0.0
+var menu_motion_selection: int = -1
+var interrupted_run_available: = false
+var interrupted_run_summary: Dictionary = {}
+var interrupted_run_autosave_timer: = 0.0
+var manifest_drag_start_x = 0.0
+var manifest_drag_start_scroll = 0.0
+var manifest_drag_touch_index = -999
+var manifest_drag_moved = false
+var manifest_is_dragging = false
+var manifest_scroll_pos = 0.0
+var manifest_last_vibrated_index = 0
+var manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
+
+var mp_local_ready = false
+var mp_remote_ready = false
+var mp_ready_last_sent_ms: int = 0
+var mp_remote_manifest_stage = MANIFEST_STAGE_MANIFESTATION
+var mp_remote_manifestation = 0
+var mp_remote_aura = 0
+var mp_remote_scroll = 0.0
+var mp_manifest_state_by_peer: Dictionary = {}
+var mp_manifest_rejection_message: = ""
+var mp_manifest_rejection_timer: = 0.0
+var mp_manifest_sync_last_ms: int = 0
+var mp_manifest_sync_last_signature: String = ""
+var mp_manifest_start_pending: bool = false
+var manifest_transition_elapsed = 0.0
+var manifest_transition_seed = 0
+var manifest_preview_open = false
+var manifest_preview_time = 0.0
+var manifest_preview_kind = "atk"
+var manifest_preview_consumed_touch_index = -999
+var manifest_preview_drag_touch_index = -999
+var manifest_preview_drag_start_x = 0.0
+var manifest_preview_drag_moved = false
+var manifest_preview_atlases: Dictionary = {}
+var manifest_details_open = false
+var preview_capture_mode = false
+var aura_scroll_pos = 0.0
+var aura_last_vibrated_index = 0
+var deck_selected = 0
+var deck_scroll_pos = 0.0
+var deck_drag_start_x = 0.0
+var deck_drag_start_scroll = 0.0
+var deck_drag_touch_index = -999
+var deck_drag_moved = false
+var deck_is_dragging = false
+var deck_previous_mode = "paused"
+var deck_view_peer_id: = 0
+var net_decks_by_peer: Dictionary = {}
+var manifestation_key = "eletrica"
+var manifest_evolution_state: Dictionary = {}
+var manifest_evolution_options: Array = []
+var manifest_evolution_selected: int = 0
+var manifest_evolution_previous_mode: String = "game"
+var manifest_evolution_focus_timer: float = 0.0
+var player_pos = PLAYER_START
+var player_hp = PLAYER_BASE_HP
+var player_hp_max = PLAYER_BASE_HP
+var player_speed = PLAYER_BASE_SPEED
+var player_damage = PLAYER_BASE_DAMAGE
+var player_attack_interval = PLAYER_BASE_ATTACK_INTERVAL
+var player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
+var player_start_down_fall_timer: float = 0.0
+var player_start_down_landing_timer: float = 0.0
+var player_start_down_smoke_spawned: bool = false
+var player_defense = 0.0
+var player_crit_chance = 0.0
+var ancorada_still_timer: = 0.0
+var ancorada_crit_bonus: = 0.0
+var ancorada_weight_timer: = 0.0
+var ancorada_weight_knockback: = 5.0
+var ancorada_prev_pos: = Vector2.ZERO
+var ancorada_spinning: = []
+var lastro_stacks: int = 0
+var lastro_points: int = 0
+var lastro_decay_timer: float = 0.0
+var lastro_decay_interval_timer: float = 0.0
+var lastro_hud_drain_timer: float = 0.0
+var lastro_hud_drain_prev_stacks: int = 0
+var lastro_5_callout_triggered: bool = false
+var hab1_ancorada_active: bool = false
+var hab1_ancorada_timer: float = 0.0
+var hab1_ancorada_cast_lastro: int = 0
+var hab1_ancorada_cast_pos: Vector2 = Vector2.ZERO
+var hab1_ancorada_impact_done: bool = false
+var player_lifesteal = 0.0
+var poison_damage = 0.0
+var execute_threshold = 0.0
+var luck = 0.0
+var trembo_charges = 0
+var trembo_pos = PLAYER_START + Vector2(64, 20)
+var trembo_side = 1.0
+var trembo_heal_timer = 0.0
+var trembo_anim_time = 0.0
+var trembo_facing = "stop"
+var trembo_invulnerability = 0.0
+var petro_active = false
+var petro_pos = PLAYER_START + Vector2(-64, 32)
+var petro_fire_timer = 0.0
+var petro_hp = PETRO_BASE_HP
+var petro_hp_max = PETRO_BASE_HP
+var petro_defense = PETRO_BASE_DEFENSE
+var petro_damage = PETRO_BASE_DAMAGE
+var petro_evolution = 1
+var petro_anim_time = 0.0
+var petro_facing = "left"
+var boss_poison_timer = 0.0
+var boss_poison_tick = 0.0
+var boss_parasite_seeds = 0
+var boss_parasite_mark_time = 0.0
+var miasma_eel_slow_timer = 0.0
+var miasma_eel_slow_stacks = 0
+var pustule_spit_slow_timer = 0.0
+var pustule_spit_slow_grace_timer = 0.0
+var sanguessuga_parasite_timer = 0.0
+var sanguessuga_bleed_tick_timer = 0.0
+var sanguessuga_parasite_visual_timer = 0.0
+var phase6_pustule_pheromone_timer = 0.0
+var mercenary_bonus_points = 0
+var mercenary_hud_pulse = 0.0
+var collector_hud_pulse = 0.0
+var score = 0
+var score_total = 0
+var run_points_earned = 0
+var run_points_spent = 0
+var card_cost = CARD_COST_BASE
+var cards_bought = {}
+var combo_kills = 0
+var enemies_killed = 0
+var phase1_limit_break_kills_start = -1
+var enemy_base_hp = ENEMY_BASE_HP
+var enemy_speed_base = ENEMY_BASE_SPEED
+var enemy_close_damage = 0.0
+var enemy_far_damage = 0.0
+var game_time = 0.0
+var time_alive = 0.0
+var elapsed_unpaused = 0.0
+var spawn_timer = 0.0
+var tutorial_state: = TUTORIAL_STATE_NONE
+var tutorial_previous_phase: = 1
+var tutorial_elapsed: = 0.0
+var tutorial_action_grace: = 0.0
+var tutorial_prompt_selected: = 0
+var tutorial_targets_spawned: Dictionary = {}
+var tutorial_offer_available: = false
+var tutorial_finish_hold: = 0.0
+var last_attack_time = -10.0
+var player_attack_visual_dir: Vector2 = Vector2.RIGHT
+var last_dash_time = -10.0
+var last_skill_time = -10.0
+var last_secondary_time = -999.0
+var secondary_key_was_pressed = false
+var last_damage_time = -10.0
+var retornante_memoria_pending = false
+var forced_shop_timer = -1.0
+var forced_shop_triggered = false
+var forced_shop_enabled = true
+var shop_countdown_last_second = -1
+var next_forced_shop_time = FORCED_SHOP_INTERVAL
+var shop_auto_elapsed = 0.0
+var shop_opening_timer = 0.0
+var shop_opening_forced = false
+var shop_opening_manual_already_tracked: bool = false
+var shop_return_timer = 0.0
+var shop_return_visual_timer: float = 0.0
+var shop_mp_request_timer: = 0.0
+var shop_mp_request_incoming: = false
+var shop_mp_request_outgoing: = false
+var shop_mp_ready_to_leave: = false
+var shop_mp_partner_ready: = false
+var shop_mp_ready_count: = 0
+var shop_mp_expected_count: = 1
+var is_dead: = false
+var partner_is_dead: = false
+var pause_mp_request_timer: = 0.0
+var pause_mp_request_incoming: = false
+var pause_mp_request_outgoing: = false
+var pause_mp_target_paused: = true
+var pause_mp_vote_count: = 0
+var pause_mp_expected_count: = 1
+var phase_mp_request_timer: = 0.0
+var phase_mp_request_incoming: = false
+var phase_mp_request_outgoing: = false
+var phase_mp_target: = 0
+var phase_mp_action: = "phase"
+var phase_mp_vote_count: = 0
+var phase_mp_expected_count: = 1
+var revive_request_cooldown: = 0.0
+var revive_request_timer: = 0.0
+var revive_request_outgoing: = false
+var revive_request_incoming: = false
+var revive_request_from_peer: = 0
+var revive_request_target_peer: = 0
+var revive_request_cost: = 0
+var revive_request_method: = REVIVE_PAY_POINTS
+var revive_request_notice: = ""
+var revive_heal_penalty_timer: = 0.0
+var score_event_sequence: int = 0
+var applied_score_event_ids: Dictionary = {}
+var revival_active: bool = false
+var revival_dead_peers: Array = []
+var revival_dead_names: Dictionary = {}
+var revival_dead_positions: Dictionary = {}
+var revival_fragments: Array = []
+var revival_fragments_collected: int = 0
+var revival_timer: float = 0.0
+var revival_total_time: float = 0.0
+var revival_altars_active: bool = false
+var revival_altar_life_pos: Vector2 = Vector2.ZERO
+var revival_altar_points_pos: Vector2 = Vector2.ZERO
+var revival_notice: String = ""
+var revival_fragments_suspended: bool = false
+var revival_fragment_respawn_timer: float = 0.0
+var revival_state_sync_timer: float = 0.0
+var revival_mobile_confirm_method: String = ""
+var revival_mobile_confirm_until_ms: int = 0
+var team_revival_state = RTTeamRevivalStateScript.new()
+var enemy_manager: Node = EnemyManagerScript.new()
+var early_boss_controller: Node = EarlyBossControllerScript.new()
+var modern_boss_controller: Node = ModernBossControllerScript.new()
+var shop_cards = []
+var shop_selected = 0
+var shop_rerolls = 3
+var shop_controller = preload("res://scripts/ui/shop_controller.gd").new()
+var shop_presentation = shop_controller.presentation
+var shop_purchase_anim_timer = 0.0
+var shop_purchase_pending_card = {}
+var shop_purchase_pending_can_continue = false
+var shop_purchase_pending_price = 0
+var shop_spend_anim_timer = 0.0
+var shop_spend_anim_amount = 0
+var shop_reserved_card_id = ""
+var shop_locked_slots: Dictionary = {}
+var shop_recent_common_ids: Array = []
+var shop_slot_intents: Array = []
+var shop_generation_profile: = ""
+var shop_generation_index: = 0
+var shop_visit_index: = 0
+var shop_reroll_index: = 0
+var shop_recent_generation_ids: Array = []
+var shop_current_visit_eligible_cinzas: Dictionary = {}
+var shop_last_generation_telemetry: Dictionary = {}
+var shop_telemetry_enabled: = SHOP_TELEMETRY_ENABLED
+var shop_seed: int = 0
+var shop_rng = RandomNumberGenerator.new()
+var shop_endurance_discount = 0.0
+var shop_last_manual_open_time = -999.0
+var shop_recent_manual_open_count = 0
+var shop_purchases_this_visit = 0
+var shop_last_exit_had_purchase = false
+var shop_last_exit_time = -999.0
+var shop_abuse_penalty_count = 0
+var shop_manual_reopen_warning_until_ms: int = 0
+var shop_manual_reopen_warning_text: String = ""
+var fratura_cronal_cooldown = 0.0
+var fratura_cronal_armed = false
+var pulso_desestabilizador_cooldown = 0.0
+var pulso_desestabilizador_armed = false
+var boss_fragilidade_cronal_timer = 0.0
+var boss_fragilidade_cronal_bonus = 0.0
+var ferrolho_ruptura_cooldown = 0.0
+var ferrolho_ruptura_armed = false
+var desvio_probabilidade_charges = 0
+var boss_ferrolho_slow_timer = 0.0
+var boss_ferrolho_slow_ratio = 0.0
+var boss_choque_source_category = ""
+var boss_choque_source_until = 0.0
+var boss_choque_cooldown_until = 0.0
+var boss_limiar_mask = 0
+var boss_limiar_phase = 0
+var common_card_effects = []
+var tregua_regenerativa_timer: = 0.0
+var tregua_regenerativa_active: = false
+var tregua_regenerativa_pulse: = 0.0
+var cinzas_burn_marks: Array = []
+var reserva_pulso_stored: = 0.0
+var reserva_pulso_releasing: = false
+var reserva_pulso_pulse: = 0.0
+var casulo_hit_times: Array = []
+var casulo_reativo_timer: = 0.0
+var casulo_reativo_cooldown: = 0.0
+var passagem_intangivel_timer: = 0.0
+var ancora_vital_state: Dictionary = {}
+var estase_reparadora_timer: = 0.0
+var estase_reparadora_tick: = 0.0
+var estase_reparadora_pause: = 0.0
+var estase_reparadora_anchor: = PLAYER_START
+var estase_reparadora_active: = false
+var estase_reparadora_pulse: = 0.0
+var egide_hemofaga_shield: = 0.0
+var egide_hemofaga_full_timer: = 0.0
+var egide_hemofaga_pulse: = 0.0
+var mandamento_skill_uses = 0
+var mandamento_empowered_until = 0.0
+var mandamento_empowered_scale = 1.0
+var mandamento_invulnerability = 0.0
+var mandamento_break_flash = 0.0
+var carta_zero_applied_multiplier = 1.0
+var common_card_stat_cache: Dictionary = {}
+var rastro_vestiges: Array = []
+var rastro_spawn_timer: = 0.0
+var rastro_last_spawn_pos: = PLAYER_START
+var rastro_speed_timer: = 0.0
+var rastro_speed_bonus: = 0.0
+var impulso_ready_times: Dictionary = {}
+var impulso_charges: = 0
+var impulso_bonus: = 0.0
+var impulso_timer: = 0.0
+var impulso_size_bonus: = 0.0
+var eco_counters: Dictionary = {}
+var zona_charge: = 0.0
+var zona_cooldown: = 0.0
+var zona_flash: = 0.0
+var folego_target_key: = ""
+var folego_charge: = 0.0
+var folego_prev_distance: = 0.0
+var folego_damage_window: = 0.0
+var folego_damage_bonus: = 0.0
+var folego_last_move_dir: = Vector2.ZERO
+var margem_window_timer: = 0.0
+var margem_debt: = 0.0
+var margem_debt_total: = 0.0
+var margem_debt_timer: = 0.0
+var margem_debt_duration: = 0.0
+var margem_debt_tick: = 0.0
+var margem_safety_timer: = 0.0
+var ressonancia_symbols: Array = []
+var ressonancia_window_timer: = 0.0
+var ressonancia_ready_timer: = 0.0
+var ressonancia_ready_action: = ""
+var ressonancia_speed_timer: = 0.0
+var ressonancia_speed_bonus: = 0.0
+var ressonancia_preresonance_used: = false
+var necro_kill_counter = 0
+var active_necro_specters = []
+var antimatter_charge = 0.0
+var antimatter_armed = false
+var antimatter_flash = 0.0
+var stored_excess = 0.0
+var excess_discharge_kind = ""
+var excess_discharge_uid = 0
+var excess_discharge_flash = 0.0
+var rare_card_effects = []
+var acorrentada_combo_step = 1
+var acorrentada_combo_reset_timer = 0.0
+var acorrentada_tension = 0.0
+var acorrentada_last_hit_timer = 0.0
+var acorrentada_overcharge_ready = false
+var acorrentada_force_next_attack_3 = false
+var acorrentada_links = []
+var acorrentada_visuals = []
+var acorrentada_worn_chains = []
+var acorrentada_last_player_pos = PLAYER_START
+var acorrentada_boss_elos = 0
+var acorrentada_boss_elo_timer = 0.0
+var acorrentada_boss_crack_timer = 0.0
+var acorrentada_boss_containment_charges = 0
+var eclipsada_attack_step = 0
+var eclipsada_next_attack_time = 0.0
+var eclipsada_q_speed_timer = 0.0
+var eclipsada_stealth_timer = 0.0
+var eclipsada_lua_stealth_active = false
+var eclipsada_lua_stealth_elapsed = 0.0
+var eclipsada_lua_stealth_damage_timer = 0.0
+var eclipsada_lua_last_skill_time = -999.0
+var eclipsada_sol_last_skill_time = -999.0
+var eclipsada_lua_last_secondary_time = -999.0
+var eclipsada_sol_last_secondary_time = -999.0
+var eclipsada_passive_timer = ECLIPSADA_PASSIVE_READY_TIME
+var eclipsada_trait_timer = 0.0
+var eclipsada_trait_key = ""
+var eclipsada_trait_name = ""
+var eclipsada_trait_color = Color(0.58, 0.42, 1.0)
+var eclipsada_form = ECLIPSADA_FORM_LUA
+var eclipsada_vfx = []
+var bombastica_bombs: Array = []
+var bombastica_powder_marks: Dictionary = {}
+var bombastica_vfx: Array = []
+var bombastica_q_recharges: Array = [0.0, 0.0, 0.0]
+var bombastica_next_id: = 1
+var bombastica_detonator_touch_index: = -1
+var bombastica_detonator_hold: = 0.0
+var bombastica_total_detonation_flash: = 0.0
+var bombastica_explosion_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaExplosionVFX.tscn") else null)
+var bombastica_mine_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") else null)
+var bombastica_ignition_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") else null)
+var bombastica_world_vfx_root: Node2D = null
+var bombastica_explosion_pool: Array = []
+var bombastica_mine_pool: Array = []
+var bombastica_ignition_pool: Array = []
+var bombastica_use_old_vfx: bool = false
+var bombastica_ult_state: String = "IDLE"
+var bombastica_ult_timer: float = 0.0
+var bombastica_ult_visual_path: Array = []
+var bombastica_ult_blast_anchors: Array = []
+var bombastica_ult_reverse_anchors: Array = []
+var bombastica_ult_start_pos: Vector2 = Vector2.ZERO
+var bombastica_ult_detonation_index: int = 0
+var bombastica_ult_detonation_timer: float = 0.0
+var bombastica_ult_target_hits: Dictionary = {}
+var bombastica_ult_fuse_pos: Vector2 = Vector2.ZERO
+var bombastica_ult_seed: int = 0
+var bombastica_powder_trail_tex: Texture2D = _safe_load("res://vfx/bombastica/textures/powder_trail_texture.png")
+var necronada_vestiges: Array = []
+var necronada_ossuary: Array = []
+var necronada_remnants: Array = []
+var necronada_requiem: Dictionary = {}
+var necronada_pente_history: Array = []
+var necronada_selected_slot: = 0
+var necronada_next_id: = 1
+var necronada_vfx: Array = []
+var necronada_attack_counter: = 0
+var necronada_empowered_ready: = false
+var necronada_empower_until: = 0.0
+var necronada_empower_cooldown_until: = 0.0
+var necronada_horde_progress: = 0
+var necronada_boss_empower_rose_window: = 0.0
+var necronada_boss_empower_rose_hits: = 0
+var devorador_mark_timer = 0.0
+var devorador_mark_kind = ""
+var devorador_mark_uid = 0
+var devorador_marked_max_hp = 0.0
+var devorador_mark_pos = Vector2.ZERO
+var devorador_boss_mark_start_hp = 0.0
+var devorador_boss_mark_max_hp = 0.0
+var devorador_destiny_shield = 0.0
+var devorador_shield_timer = 0.0
+var devorador_effects = []
+var boss_ready = false
+var boss_call_timer = -1.0
+var boss_mp_request_timer: = 0.0
+var boss_mp_request_incoming: = false
+var boss_mp_request_outgoing: = false
+var boss_mp_vote_count: = 0
+var boss_mp_expected_count: = 1
+var boss_active = false
+var boss_dead = false
+var boss_hp = BOSS_BASE_HP
+var boss_hp_max = BOSS_BASE_HP
+var boss_pos = Vector2(1240, 410)
+var boss_phase = 0.0
+var boss_attack_timer = 0.0
+var boss_entry_timer = 0.0
+var boss_stage_timer = 0.0
+var boss_stage_approaching = false
+var boss_stage_60_done = false
+var boss_stage_40_done = false
+var boss_stage_30_done = false
+var boss_stage_safe_angle = 0.0
+var boss_attacks = []
+var boss_transition_waves = []
+var boss1_rewind_cooldown = 0.0
+var boss1_rewind_history = []
+var boss1_rewind_sample_timer = 0.0
+var boss1_time_wave = {}
+var boss1_visual_snapshot_ms: int = 0
+var boss1_rewind_sequence = {}
+var boss1_rewind_visual_projectiles = []
+var boss1_rewind_vibration_timer = 0.0
+var boss1_rewind_clock_tick = -1
+var boss1_absorb_cooldown = BOSS1_ABSORB_COOLDOWN
+var boss1_absorb_timer = 0.0
+var boss1_absorb_damage = 0.0
+var boss1_absorb_retaliate_timer = 0.0
+var boss1_absorb_bursts_fired = 0
+var boss_empurrou_player = false
+var boss_target_cursor: = -1
+var boss_target_peer_id: = 0
+var boss_target_switch_timer: = 0.0
+var boss_threat_by_peer: Dictionary = {}
+var boss_target_pressure_by_peer: Dictionary = {}
+var run_leader_peer_id: int = 0
+var run_leader_notice_timer: float = 0.0
+var boss_name = "CARANGUEJO COSMICO GIGANTE"
+var boss_title_color = Color(1.0, 0.52, 0.16)
+var phase_transition_timer = 0.0
+var phase_fragment = {}
+var larapio_spawned = false
+var next_larapio_spawn_time = LARAPIO_SPAWN_TIME
+var larapio_coin_drops = []
+var fusion_check_timer = 0.0
+var event_alert_text = ""
+var event_alert_color = Color.WHITE
+var event_alert_timer = 0.0
+var event_alert_seed: int = 0
+var screen_shake_timer = 0.0
+var screen_shake_strength = 0.0
+var screen_shake_frame_offset: Vector2 = Vector2.ZERO
+var damage_flash_timer = 0.0
+var hud_feedback: RefCounted = CombatHud.new()
+var low_health_heartbeat_timer = 0.0
+var low_health_heartbeat_double = false
+var secondary_drain_flash_timer = 0.0
+var orientation_poll_timer = 0.0
+var last_manual_orientation = DisplayServer.SCREEN_SENSOR_LANDSCAPE
+var alert_stalker_done = false
+var alert_projector_done = false
+var alert_crystal_done = false
+var alert_agglomerator_done = false
+var alert_curater_done = false
+var touch_move = Vector2.ZERO
+var pointer_down = false
+var active_screen_touches: Dictionary = {}
+var ignore_mouse_until_msec: int = 0
+var ui_input_block_until_msec: int = 0
+var player_stun_timer = 0.0
+var player_control_immunity_timer = 0.0
+var player_silence_timer = 0.0
+var player_freeze_visual_timer = 0.0
+var player_freeze_visual_duration = 0.0
+var boss_wave_slow_timer = 0.0
+var move_touch_index = -1
+var attack_touch_index = -1
+var attack_dragging = false
+var attack_holding = false
+var attack_hold_timer = 0.0
+var attack_drag_touch_index = -1
+var attack_drag_direction = Vector2.ZERO
+var attack_drag_start_pos = Vector2.ZERO
+var attack_touch_pos = Vector2.ZERO
+var attack_lock_selecting = false
+var attack_lock_candidate_kind = ""
+var attack_lock_candidate_uid = -1
+var locked_target_kind = ""
+var locked_target_uid = -1
+var skill_touch_index = -1
+var secondary_touch_index = -1
+var dash_touch_index = -1
+var skill_touch_pos = Vector2.ZERO
+var secondary_touch_pos = Vector2.ZERO
+var teleport_dragging = false
+var teleport_drag_screen = Vector2.ZERO
+var teleport_drag_origin = Vector2.ZERO
+var joystick_origin = Vector2.ZERO
+var hud_joy_pos: Vector2 = Vector2.ZERO
+var hud_joy_scale: float = 1.0
+var hud_attack_pos: Vector2 = Vector2.ZERO
+var hud_attack_scale: float = 1.0
+var hud_skill_scale: float = 1.0
+var hud_secondary_pos: Vector2 = Vector2.ZERO
+var hud_secondary_scale: float = 1.0
+var hud_dash_pos: Vector2 = Vector2.ZERO
+var hud_dash_scale: float = 1.0
+var hud_lacerante_empower_pos: Vector2 = Vector2(-1, -1)
+var hud_lacerante_empower_scale: float = 1.0
+
+var edit_layout_offset = Vector2.ZERO
+var edit_layout_resize_visible: bool = false
+
+var settings_previous_mode: String = "menu"
+
+var hud_left_panel_pos = Vector2(-1, -1)
+var hud_right_panel_pos = Vector2(-1, -1)
+var hud_boss_panel_pos = Vector2(-1, -1)
+var hud_skill_pos = Vector2(-1, -1)
+var hud_pause_pos = Vector2(-1, -1)
+var hud_boss_call_pos = Vector2(-1, -1)
+var hud_aura_panel_pos = Vector2(-1, -1)
+var hud_cards_panel_pos = Vector2(-1, -1)
+var hud_coagulum_pos = Vector2(-1, -1)
+var hud_aura_panel_scale: float = 1.0
+var hud_cards_panel_scale: float = 1.0
+var hud_coagulum_scale: float = 1.0
+var edit_layout_start_scale = 1.0
+
+var vol_master: float = 1.0
+var vol_music: float = 1.0
+var vol_sfx: float = 1.0
+var vol_shots: float = 1.0
+
+var gfx_particles: bool = true
+var vfx_director: RefCounted = VFXDirectorScript.new(true)
+var hit_freeze_timer: float = 0.0
+var boss_hp_lag: float = -1.0
+var gfx_shadows: bool = true
+var gfx_screen_shake: bool = true
+var gfx_health_warning_start: float = 0.55
+var gfx_health_warning_strength: float = 1.0
+var gfx_low_resource: bool = false
+var gfx_memory_saver: bool = false
+var mobile_low_resource_defaulted: bool = false
+var mobile_adaptive_visual_budget: bool = false
+var mobile_low_fps_seconds: float = 0.0
+var mobile_recovered_fps_seconds: float = 0.0
+var ui_platform_override: String = UI_PLATFORM_AUTO
+var ui_platform_override_unlocked: bool = false
+var desktop_window_mode: String = DESKTOP_WINDOW_FULLSCREEN
+var desktop_aim_mode: String = DESKTOP_AIM_QUICK
+var desktop_teleport_mode: String = DESKTOP_TELEPORT_CURSOR
+const DESKTOP_ATTACK_AIM_AUTO: = "auto"
+const DESKTOP_ATTACK_AIM_CURSOR: = "cursor"
+var desktop_attack_aim_mode: String = DESKTOP_ATTACK_AIM_AUTO
+var desktop_hud_scale: float = DESKTOP_HUD_SCALE_MIN
+var desktop_aim_action: String = ""
+var desktop_aim_event_binding: String = ""
+var desktop_aim_is_hold: bool = false
+var damage_text_scale: float = 1.0
+var show_fps_counter: bool = false
+var run_tutorial_enabled: bool = true
+var shop_tutorial_seen: bool = false
+var boss_call_tutorial_seen: bool = false
+var retornante_unlocked: bool = false
+var gameplay_cheat_text: String = ""
+var gameplay_cheat_focused: bool = false
+var force_phase6_start: bool = false
+var forced_initial_phase: int = 0
+var initial_phase_bias_target: int = 0
+var initial_phase_bias_strength: float = 0.0
+var initial_phase_current_run: int = 0
+var initial_phase_current_recorded: bool = true
+var run_initial_phase: int = 0
+var run_phase6_completed: bool = false
+const DIMENSION_FINAL_PHASE: int = 5
+const DIMENSION_FIRST_FARM_PHASE: int = 7
+const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 4, 6, 7]
+const DIMENSION_FIRST_FARM_TAIL_COUNT: int = 3
+const DIMENSION_REPEAT_FARM_TOTAL_COUNT: int = 4
+const DIMENSION_EXTRACTION_INTERVAL: int = 10
+var dimension_route_queue: Array = []
+var dimension_route_farm_cycles: int = 0
+var dimension_route_completed_count: int = 0
+var dimension_route_last_phase: int = 0
+var run_extracted: bool = false
+var interface_text_scale: float = 1.25
+var analog_fixed: bool = true
+var shop_auto_enabled: bool = true
+var shop_auto_interval: float = 180.0
+var hud_shop_pos: = Vector2(-1, -1)
+var auto_target_priority: String = "nearest"
+var haptics_enabled: bool = true
+var is_gamepad_active: bool = false
+var pause_keyboard_active: bool = false
+var gamepad_bindings: Dictionary = {
+	"attack": JOY_BUTTON_X, 
+	"skill": JOY_BUTTON_Y, 
+	"secondary": JOY_BUTTON_B, 
+	"dash": JOY_BUTTON_A, 
+	"lacerante_empower": JOY_BUTTON_LEFT_SHOULDER, 
+	"pause": JOY_BUTTON_START, 
+	"shop": JOY_BUTTON_RIGHT_SHOULDER, 
+	"boss": JOY_BUTTON_BACK
+}
+var gamepad_mapping_action: String = ""
+var keyboard_bindings: Dictionary = {
+	"attack": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_LEFT), 
+	"skill": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_RIGHT), 
+	"secondary": INPUT_BIND_KEY_PREFIX + str(KEY_Q), 
+	"dash": INPUT_BIND_KEY_PREFIX + str(KEY_SHIFT), 
+	"lacerante_empower": INPUT_BIND_KEY_PREFIX + str(KEY_R), 
+	"dance": INPUT_BIND_KEY_PREFIX + str(KEY_O),
+	"interact": INPUT_BIND_KEY_PREFIX + str(KEY_E),
+	"pause": INPUT_BIND_KEY_PREFIX + str(KEY_ESCAPE), 
+	"shop": INPUT_BIND_KEY_PREFIX + str(KEY_P), 
+	"boss": INPUT_BIND_KEY_PREFIX + str(KEY_B)
+}
+var keyboard_mapping_action: String = ""
+var desktop_action_gate_msec: Dictionary = {}
+var menu_analog_cooldown: float = 0.0
+var trigger_states: Dictionary = {JOY_AXIS_TRIGGER_LEFT: false, JOY_AXIS_TRIGGER_RIGHT: false}
+var edit_layout_selected: String = ""
+var edit_layout_touch_index: int = -1
+var settings_selected = 0
+var audio_slider_drag_index: int = -1
+var buttons = {}
+var menu_buttons = {}
+var settings_buttons = {}
+var catalog_tab = 0
+var catalog_selected = 0
+var catalog_scroll_index = 0
+var catalog_detail_open = false
+var catalog_touch_index: int = -1
+var catalog_touch_start: Vector2 = Vector2.ZERO
+var catalog_detail_section: int = 0
+var catalog_detail_text: RichTextLabel
+var catalog_detail_signature: String = ""
+var catalog_search_query: = ""
+var catalog_filter_mode: = "all"
+var eletrica_shot_counter = 0
+var boss_eletrica_static_stacks: = 0
+var boss_eletrica_static_timer: = 0.0
+var boss_eletrica_static_last_source: = ""
+var shop_select_pulse_timer = 0.0
+var shop_select_pulse_index = -1
+var shop_last_tap_index = -1
+var shop_last_tap_msec = 0
+var enemies = []
+var bullets = []
+var remote_bullets = []
+var enemy_bullets = []
+var eletrica_waves = []
+var eletrica_chains = []
+var eletrica_recoil_velocity: = Vector2.ZERO
+
+var net_slashes = []
+var net_prisms = []
+var net_anchors = []
+var net_seed_links = []
+var net_effects = []
+var arauto: Dictionary = {}
+var arauto_spawned = false
+var arauto_rays = []
+var arauto_echo_breaks = []
+var arauto_card_drops = []
+var arauto_evolution_fragment: Dictionary = {}
+var arauto_evolution_fragments: Array = []
+var manifest_evolution_fragment_claimed_this_run: bool = false
+var manifest_evolution_fragment_claim_source: String = ""
+var arauto_target_cursor: = -1
+var arauto_target_peer_id: = 0
+var arauto_target_switch_timer: = 0.0
+var net_collected_drop_ids: Dictionary = {}
+var net_collected_fragment_ids: Dictionary = {}
+var net_reward_sequence: int = 0
+var shockwaves = []
+var effects = []
+var heal_orbs = []
+var slashes = []
+var boss2_ice_shards = []
+var boss2_snow_zones = []
+var boss2_frost_particles = []
+var phase2_fire_walls = []
+var phase2_fire_wall_hit_cd = 0.0
+var phase7_ember_patches = []
+var phase7_ember_hit_gate = 0.0
+var boss7_state: String = BOSS7_STATE_FLY
+var boss7_state_timer: float = 0.0
+var boss7_dive_fake_count: int = 0
+var boss7_velocity: Vector2 = Vector2.ZERO
+var boss7_attack_dir: Vector2 = Vector2.LEFT
+var boss7_target_pos: Vector2 = Vector2.ZERO
+var boss7_original_hp_max: float = 0.0
+var boss7_phase2_triggered: bool = false
+var boss7_reborn: bool = false
+var boss7_core_active: bool = false
+var boss7_core_pos: Vector2 = Vector2.ZERO
+var boss7_core_hp: float = 0.0
+var boss7_core_hp_max: float = 0.0
+var boss7_core_damage: float = 0.0
+var boss7_core_timer: float = 0.0
+var boss7_cooldowns: Dictionary = {}
+var boss7_whirlwind_active: bool = false
+var boss7_whirlwind_shots_left: int = 0
+var boss7_whirlwind_timer: float = 0.0
+var boss7_whirlwind_spawn_timer: float = 0.0
+var boss7_whirlwind_angle: float = 0.0
+var boss7_ultimate_active: bool = false
+var boss7_ultimate_used: bool = false
+var boss7_ultimate_timer: float = 0.0
+var boss7_ultimate_cooldown: float = 0.0
+var boss7_ultimate_quadrants: Array = []
+var boss7_ultimate_tick_timer: float = 0.0
+var boss2_state = BOSS2_STATE_IDLE
+var boss2_action_timer = 0.0
+var boss2_target_position = WORLD_SIZE * 0.5
+var boss2_last_attack = ""
+var boss2_repeat_count = 0
+var boss2_facing_dir = 1.0
+var boss2_walk_speed = BOSS2_WALK_SPEED
+var boss2_anim_timer = 0.0
+var boss2_anim_frame = 0
+var boss2_breath_dir = Vector2.DOWN
+var boss2_ultimate_cooldown = 0.0
+var boss2_ultimate_timer = 0.0
+var boss2_ultimate_center = WORLD_SIZE * 0.5
+var boss2_ultimate_orbit_angle = 0.0
+var boss2_ultimate_spit_timer = BOSS2_ULTIMATE_SPIT_INTERVAL
+var boss2_ultimate_wind_timer = BOSS2_ULTIMATE_WIND_INTERVAL
+var boss2_ultimate_wind_active = 0.0
+var boss2_ultimate_wind_dir = Vector2.RIGHT
+var boss2_ultimate_hail_timer = BOSS2_ULTIMATE_HAIL_INTERVAL
+var boss2_ultimate_fan_timer = BOSS2_ULTIMATE_FAN_INTERVAL
+var boss2_ultimate_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
+var boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
+var boss2_ultimate_blizzard_exposure = 0.0
+var boss2_ultimate_hit_gate = 0.0
+var boss2_ultimate_used = false
+var phase3_miasma_zones = []
+var phase3_cheeses = []
+var phase6_pustule_pools = []
+var boss6_state = BOSS6_STATE_IDLE
+var boss6_current_ability = ""
+var boss6_state_timer = 0.0
+var boss6_global_recovery = 0.0
+var boss6_ability_cooldowns = {}
+var boss6_last_abilities = []
+var boss6_wait_timer = 0.0
+var boss6_shielded = false
+var boss6_carapace_plates = []
+var boss6_carapace_timer = 0.0
+var boss6_vulnerability_timer = 0.0
+var boss6_core_exposed_timer = 0.0
+var boss6_core_pulse_timer = 0.0
+var boss6_core_permanent_bonus = 0.0
+var boss6_event_80_triggered = false
+var boss6_event_60_triggered = false
+var boss6_event_40_triggered = false
+var boss6_event_30_triggered = false
+var boss6_event_15_triggered = false
+var boss6_special_event_id = ""
+var boss6_special_timer = 0.0
+var boss6_organs = []
+var boss6_final_mutation = ""
+var boss6_final_birth_timer = 0.0
+var boss6_fossil_era_timer = 0.0
+var boss6_fossil_shield = 0.0
+var boss6_lodarian_pools = []
+var boss6_rib_prison = {}
+var boss6_tail_channels = []
+var boss6_reflux_objects = []
+var boss6_cracked_heart = {}
+var boss6_entry_particles = []
+var boss6_relocating = false
+var boss6_relocate_from = Vector2.ZERO
+var boss6_relocate_to = Vector2.ZERO
+var boss6_relocate_age = 0.0
+var boss6_relocate_duration = 0.0
+var boss6_miasma_ult_timer = 0.0
+var boss6_miasma_ult_cooldown = 0.0
+var boss6_miasma_ult_angle = 0.0
+var boss6_miasma_ult_pustule_timer = 0.0
+var boss6_miasma_slow_timer = 0.0
+var boss6_miasma_slow_stacks = 0
+var boss6_miasma_slow_tick = 0.0
+var boss6_carnage_slow_timer = 0.0
+var boss6_player_history = []
+var boss6_history_sample_timer = 0.0
+var boss6_fossil_echo = {}
+var boss6_fossil_echo_slow_timer = 0.0
+var boss6_necro_erosion_active = false
+var boss6_necro_erosion_radius = 9999.0
+var boss6_necro_erosion_timer = 0.0
+var boss6_necro_erosion_duration = 10.0
+var boss6_necro_erosion_damage_timer = 0.0
+var insane_echo_visuals = []
+var boss3_faith = 50.0
+var boss3_stage = 1
+var boss3_stun_timer = 0.0
+var boss3_rain_timer = 4.3
+var boss3_spit_timer = 4.2
+var boss3_tail_timer = 3.2
+var boss3_charge_timer = 6.8
+var boss3_cheese_timer = BOSS3_CHEESE_INTERVAL
+var boss3_dialogue_timer = 8.0
+var boss3_events = {}
+var boss3_consume_uid = -1
+var boss3_consume_timer = 0.0
+var boss3_ritual_timer = 0.0
+var boss3_ritual_destroyed = 0
+var boss3_is_moving = false
+var boss3_miasma_cooldown = BOSS3_MIASMA_COOLDOWN
+var boss3_miasma_timer = 0.0
+var boss3_miasma_variant = 0
+var boss3_miasma_variant_bag = []
+var boss3_miasma_target_peer_id: = 0
+var boss3_miasma_clone_timer = 0.0
+var boss3_miasma_clone_positions = []
+var boss3_miasma_spit_timer = 0.0
+var boss3_miasma_qte_required = 0
+var boss3_miasma_qte_taps = 0
+var boss3_miasma_qte_time_left = 0.0
+var boss3_miasma_qte_idle = 0.0
+var boss3_miasma_qte_tutorial = 0.0
+var boss3_miasma_qte_elapsed = 0.0
+var boss3_miasma_qte_lid_contacts = 0
+var boss3_miasma_qte_lids_touching = false
+var boss3_miasma_qte_overtime_timer = BOSS3_MIASMA_QTE_OVERTIME_TICK
+var boss3_miasma_qte_overtime_stage = 0
+var boss3_miasma_tutorial_seen = false
+var boss3_miasma_clouds = []
+var boss3_faith_test_cooldown = BOSS3_FAITH_TEST_COOLDOWN
+var boss3_faith_test_active = false
+var boss3_faith_test_pulses_left = 0
+var boss3_faith_test_pulse_timer = 0.0
+var boss3_faith_link_timer = 0.0
+var boss3_faith_link_damage_done = false
+var controls_inverted_timer = 0.0
+var phase4_planets = []
+var phase4_null_zones = []
+var phase4_enemy_hazards = []
+var phase4_player_history = []
+var phase4_history_sample_timer = 0.0
+var boss4_attack_timer = BOSS4_ATTACK_INTERVAL
+var boss4_attack_pose_timer = 0.0
+var boss4_anim_time = 0.0
+var boss4_entry_target = Vector2(WORLD_SIZE.x * 0.78, WORLD_SIZE.y * 0.5)
+var boss4_instability = 0.0
+var boss4_stage = 1
+var boss4_no_hit_timer = 0.0
+var boss4_gravity_timer = 0.0
+var boss4_gravity_dir = Vector2.ZERO
+var boss4_vampire_timer = 0.0
+var boss4_prison = {}
+var boss4_clone = {}
+var boss4_fragment_timer = 0.0
+var boss4_ultimate_active = false
+var boss4_ultimate_timer = 0.0
+var boss4_ultimate_used = false
+var boss4_ultimate_laser_timer = 0.0
+var boss4_ultimate_gravity_timer = 0.0
+var boss4_rupture_anchors = []
+var boss4_ultimate_destroyed = 0
+var boss4_secondary_timer = BOSS4_SECONDARY_COOLDOWN
+var boss4_secondary_active = false
+var boss4_secondary_elapsed = 0.0
+var boss4_ultimate_cooldown = BOSS4_ULTIMATE_COOLDOWN
+var boss4_ultimate_ray_index = 0
+var boss4_strike_sequence: Dictionary = {}
+var boss4_meteorites: Array = []
+var boss4_meteor_event_timer = 5.0
+var boss4_meteor_event_started = false
+var boss4_meteor_damage_bonus = 0.0
+var boss4_stun_timer = 0.0
+var boss4_vulnerable_timer = 0.0
+var boss4_column_barrage_timer = BOSS4_COLUMN_BARRAGE_FIRST_DELAY
+var boss4_drag_wave_timer = BOSS4_DRAG_WAVE_FIRST_DELAY
+var boss4_sonic_used = false
+var phase5_player_history = []
+var phase5_history_sample_timer = 0.0
+var phase5_hazards = []
+var phase5_rats = []
+var phase5_telegraphs = []
+var boss5_action_timer = BOSS5_ACTION_INTERVAL
+var boss5_decision_timer = 0.0
+var boss5_current_action = "NENHUMA"
+var boss5_dimension = "base"
+var boss5_last_dimension = ""
+var boss5_dimension_timer: float = 0.0
+var boss5_transmute_hangover: float = 0.0
+var phase5_transmute_active: bool = false
+var phase5_transmute_timer: float = 0.0
+var phase5_transmute_duration: float = 4.0
+var phase5_transmute_center: Vector2 = Vector2.ZERO
+var phase5_transmute_old_tex: Texture2D = null
+var phase5_transmute_new_tex: Texture2D = null
+var phase5_transmute_color: Color = Color(0.36, 1.0, 0.56)
+var phase5_transmute_particles: Array = []
+var boss5_thorns_pattern: String = "X"
+var boss5_bonus_shots: int = 0
+var boss5_rat_extras: int = 0
+var player_burn_stacks: int = 0
+var player_burn_timer: float = 0.0
+var player_burn_tick_timer: float = 0.0
+var player_burn_vfx_timer: float = 0.0
+var boss7_flame_waves: Array = []
+var dance_wheel_active: bool = false
+var dance_wheel_touch_index: int = -1
+var dance_wheel_start_pos: Vector2 = Vector2.ZERO
+var dance_wheel_hold_timer: float = 0.0
+var player_dancing: bool = false
+var player_dance_timer: float = 0.0
+var boss5_mental_state = "OBSERVANDO"
+var boss5_velocity = Vector2.ZERO
+var boss5_target = WORLD_SIZE * 0.5
+var boss5_siphon_timer = 0.0
+var boss5_siphon_cooldown = 0.0
+var boss5_teleport_cooldown = 0.0
+var boss5_transmute_cooldown = 0.0
+var boss5_cadence_bonus: float = 0.0
+var boss5_ability_cooldowns: Dictionary = {}
+var boss5_memory_loaded = false
+var boss5_memory: Dictionary = {}
+var boss5_mobile_weights: Dictionary = {}
+var boss5_dqn_weights: Dictionary = {}
+var boss5_predatory_mods: Array = []
+var boss5_profile_confidence = 0.0
+var boss5_last_reward_action = ""
+var boss5_save_timer = 0.0
+var apolo_phase5_exhibition_enabled: bool = false
+var apolo_phase5_exhibition_move: Vector2 = Vector2.ZERO
+var apolo_phase5_exhibition_aim: Vector2 = Vector2.RIGHT
+var apolo_phase5_exhibition_target: Vector2 = Vector2.ZERO
+var apolo_phase5_exhibition_dash_target: Vector2 = Vector2.ZERO
+var apolo_phase5_exhibition_state: String = ""
+var apolo_phase5_exhibition_timer: float = 0.0
+var apolo_phase5_exhibition_safe_grid: Dictionary = {}
+var apolo_phase5_exhibition_survival_frames: int = 0
+var apolo_phase5_exhibition_hits_taken: int = 0
+var apolo_phase5_exhibition_damage_done: float = 0.0
+var apolo_phase5_exhibition_last_hp: int = 0
+var apolo_phase5_exhibition_last_boss_hp: float = 0.0
+var apolo_phase5_exhibition_arch: Dictionary = {}
+var apolo_phase5_exhibition_card_memory: Dictionary = {}
+var anchors = []
+var prisms = []
+var orbitals = []
+var seed_links = []
+var parasite_spit_zones = []
+var return_bullets = []
+var manifestation_secondaries = []
+var cartographic_coords = []
+var cartographic_route_timer = 0.0
+var cartographic_boss_displacement = 0
+var cartographic_coord_sequence = 0
+var cartographic_complete_map_timer = 0.0
+var cartographic_trace_flash = 0.0
+var carto_tp_origin = Vector2.ZERO
+var carto_tp_pin = Vector2.ZERO
+var carto_tp_window = 0.0
+var lacerante_attack_lock_timer = 0.0
+var mnesic_trick_timer = 0.0
+var mnesic_trick_origin = Vector2.ZERO
+var mnesic_boss_vulnerability = 0.0
+var resonant_perfect_streak = 0
+var resonant_noise = 0
+var resonant_next_perfect = false
+var resonant_speed_timer = 0.0
+var resonant_sinfonia_buff_timer = 0.0
+var resonant_note_index = 0
+var boss_resonant_notes = {}
+var boss_contract_clause = ""
+var boss_contract_infractions = 0
+var boss_contract_vulnerability = 0.0
+var contractual_notifications = []
+var unlock_notifications = []
+var retry_run_snapshot: Dictionary = {}
+var retry_charges_used: int = 0
+var run_retry_invulnerability_timer: float = 0.0
+var retry_confirm_visible: bool = false
+var retry_confirm_new_run: bool = false
+var retry_return_timer: float = 0.0
+var death_screen_delay_timer: float = 0.0
+var death_screen_pending_result: String = ""
+var death_screen_pending_specter_upgrade: bool = false
+var unlocked_card_ids: Dictionary = {}
+var unlocked_manifestation_ids: Dictionary = {}
+var unlocked_spectrum_ids: Dictionary = {}
+var specter_levels: Dictionary = {}
+var spectral_coins: int = 0
+var spectral_coins_collected: int = 0
+var spectral_coins_spent: int = 0
+var persistent_spectral_coins: int = 0
+var specter_upgrade_previous_mode: String = "game_over"
+var specter_upgrade_selected_index: int = 1
+var specter_upgrade_message: String = ""
+var card_unlock_progress: Dictionary = {}
+var card_unlock_runtime_accumulator: float = 0.0
+var card_unlock_last_player_pos: Vector2 = PLAYER_START
+var card_unlock_stationary_tick: float = 0.0
+var card_unlocks_dirty: bool = false
+var card_unlock_save_timer: float = 0.0
+var contractual_vfx = []
+var contractual_penalty_timer = 0.0
+var contractual_order: Dictionary = {}
+var contractual_order_rewards: Dictionary = {}
+var contractual_order_penalties: Dictionary = {}
+var contractual_order_real_delta: = 0.0
+var last_facing = Vector2.RIGHT
+var lacerante_combo = 0
+var lacerante_combo_visual = 0
+var lacerante_preparing = false
+var lacerante_prepare_stage = 0
+var lacerante_prepare_frame = 0
+var lacerante_prepare_timer = 0.0
+var lacerante_prepare_dir = Vector2.RIGHT
+var lacerante_coagula = 0
+var lacerante_empowered_ready = false
+var last_lacerante_empower_time = - LACERANTE_EMPOWER_COOLDOWN
+var lacerante_empower_key_was_pressed = false
+var lacerante_coagulum_pulse = 0.0
+var lacerante_tp_charges = LACERANTE_TP_MAX_CHARGES
+var lacerante_tp_chain_timer = 0.0
+var lacerante_tp_cooldown_until = 0.0
+var tp_effects = []
+var tp_cooldown_pending = false
+var tp_cooldown_override = -1.0
+var tp_cooldown_release_time = -1.0
+var retornante_tp_origin = Vector2.ZERO
+var retornante_tp_window = 0.0
+var boss_tp_stun_timer = 0.0
+var rng = RandomNumberGenerator.new()
+
+var sfx_players = []
+var music_player = null
+var music_crossfade_player: AudioStreamPlayer = null
+var current_music = ""
+var test_audio_disabled: bool = false
+var audio_streams = {}
+var audio_stream_paths: Dictionary = {}
+var audio_stream_loops: Dictionary = {}
+var audio_music_keys: Dictionary = {}
+var phase_music_bag: Array[String] = []
+var music_pause_fade_mode = ""
+var music_pause_fade_timer = 0.0
+var music_pause_resume_volume = 1.0
+var music_paused_by_pause = false
+var music_crossfade_active: bool = false
+var music_crossfade_from_volume: float = 1.0
+var music_crossfade_to_volume: float = 1.0
+var prismatica_music_duck_active: = false
+var prismatica_music_restore_volume: = 1.0
+var rain_audio_player = null
+var boss1_walk_audio_player = null
+var boss1_stop_audio_player = null
+var acorrentada_walk_audio_player = null
+var prismatica_ultimate_audio_player = null
+var nevasca_audio_player = null
+var acorrentada_walk_current_volume: = 0.0
+var acorrentada_walk_previous_pos = PLAYER_START
+var boss1_walk_previous_pos = Vector2.ZERO
+var boss1_stop_music_duck_active: = false
+var boss1_stop_music_duck_mode: = ""
+var boss1_stop_music_duck_timer: = 0.0
+var boss1_stop_music_duck_from: = 1.0
+var boss1_stop_pre_played: = false
+var boss1_absorb_stop_started: = false
+var music_crossfade_target_track: String = ""
+var music_crossfade_timer: float = 0.0
+var music_crossfade_duration: float = MUSIC_CROSSFADE_TIME
+var boss1_absorb_end_sfx_played: = false
+var boss1_entry_fall_sfx_played: = false
+var rain_audio_fade_timer = 0.0
+var rain_audio_fade_mode = ""
+var rain_audio_current_volume = 0.0
+var boss1_rain_active = false
+var weather_kind = ""
+var weather_rain_intro_timer = 0.0
+var raindrops = []
+var puddles = []
+var rain_splashes = []
+var snowflakes = []
+
+

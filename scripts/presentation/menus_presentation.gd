@@ -2187,7 +2187,7 @@ static func _draw_revival_altar_talkbox(game: Node2D, camera: Vector2) -> void:
 		return
 	var altar_world: Vector2 = game.revival_altar_life_pos if method == game.REVIVE_PAY_LIFE else game.revival_altar_points_pos
 	var center: Vector2 = altar_world - camera
-	var key_name: String = game._compact_key_binding_name("interact")
+	var key_name: String = "REVIVE" if game._uses_touch_ui() else game._compact_key_binding_name("interact")
 	var cost_text: String = "%.0f%% DA VIDA" % (game._revival_life_sacrifice_rate() * 100.0)
 	var detail: String = "divide entre %d caido(s)" % game._team_revival_dead_count()
 	if method == game.REVIVE_PAY_POINTS:
@@ -2203,7 +2203,7 @@ static func _draw_revival_interaction_prompt(game: Node2D, viewport: Vector2) ->
 	var method: String = game._local_revival_altar_method()
 	if method == "":
 		return
-	var key_name: String = game._compact_key_binding_name("interact")
+	var key_name: String = "REVIVE" if game._uses_touch_ui() else game._compact_key_binding_name("interact")
 	var cost_text: String = "%.0f%% DA VIDA" % (game._revival_life_sacrifice_rate() * 100.0)
 	if method == game.REVIVE_PAY_POINTS:
 		cost_text = "%d PONTOS" % game._revival_points_cost()

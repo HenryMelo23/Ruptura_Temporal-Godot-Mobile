@@ -14,6 +14,8 @@ const ROOM_PORT_END = numberEnv("ROOM_PORT_END", 4599);
 const GODOT_BIN = process.env.GODOT_BIN || "/opt/godot/Godot_v4.7-stable_linux.x86_64";
 const PROJECT_PATH = process.env.PROJECT_PATH || "/opt/ruptura/Ruptura_Temporal-Godot-Mobile";
 const ROOM_IDLE_MS = numberEnv("ROOM_IDLE_MS", 30 * 60 * 1000);
+const ROOM_OWNER_CONNECT_TIMEOUT_MS = numberEnv("ROOM_OWNER_CONNECT_TIMEOUT_MS", 45 * 1000);
+const ROOM_OWNER_HEARTBEAT_TIMEOUT_MS = numberEnv("ROOM_OWNER_HEARTBEAT_TIMEOUT_MS", 75 * 1000);
 const ROOM_EVENT_LIMIT = numberEnv("ROOM_EVENT_LIMIT", 80);
 const WARM_STANDBY_ROOMS = numberEnv("WARM_STANDBY_ROOMS", 2, true);
 const WARM_STANDBY_REFILL_MS = numberEnv("WARM_STANDBY_REFILL_MS", 1500);
@@ -618,6 +620,37 @@ function touchRoom(room, reason, detail = {}) {
   });
 }
 
+function roomOwnerIsJoinable(room) {
+  if (!room || room.standby || room.stopping) {
+    return false;
+  }
+  if (!room.ownerHeartbeatAt || room.ownerHeartbeatAt <= 0) {
+    return false;
+  }
+  return Date.now() - room.ownerHeartbeatAt < ROOM_OWNER_HEARTBEAT_TIMEOUT_MS;
+}
+
+function scheduleRoomOwnerWatchdog(room) {
+  if (!room || room.standby || room.stopping || !rooms.has(room.code)) {
+    return;
+  }
+  clearTimeout(room.ownerWatchdogTimer);
+  const ownerActivityAt = room.ownerHeartbeatAt || room.createdAt;
+  const timeoutMs = room.ownerHeartbeatAt > 0 ? ROOM_OWNER_HEARTBEAT_TIMEOUT_MS : ROOM_OWNER_CONNECT_TIMEOUT_MS;
+  const delayMs = Math.max(1000, ownerActivityAt + timeoutMs - Date.now());
+  room.ownerWatchdogTimer = setTimeout(() => {
+    if (!rooms.has(room.code) || room.stopping) {
+      return;
+    }
+    if (!roomOwnerIsJoinable(room)) {
+      stopRoom(room.code, room.ownerHeartbeatAt > 0 ? "owner heartbeat timeout" : "owner connect timeout");
+      return;
+    }
+    scheduleRoomOwnerWatchdog(room);
+  }, delayMs);
+  room.ownerWatchdogTimer.unref();
+}
+
 function createStreamId() {
   return `rtm_${crypto.randomBytes(6).toString("hex")}`;
 }
@@ -1054,6 +1087,8 @@ function startRoom(ownerName, options = {}) {
     ready: false,
     heartbeatCount: 0,
     lastHeartbeatAt: 0,
+    ownerHeartbeatAt: 0,
+    ownerWatchdogTimer: null,
     events: []
   };
   rooms.set(code, room);
@@ -1069,6 +1104,7 @@ function startRoom(ownerName, options = {}) {
   child.stderr.on("data", (chunk) => process.stderr.write(`[${code}] ${chunk}`));
   child.on("error", (error) => {
     clearTimeout(room.idleTimer);
+    clearTimeout(room.ownerWatchdogTimer);
     rooms.delete(code);
     console.error(`room ${code}${room.standby ? " standby" : ""} failed to start: ${error.message}`);
     if (room.standby && !room.stopping) {
@@ -1077,6 +1113,7 @@ function startRoom(ownerName, options = {}) {
   });
   child.on("exit", (status, signal) => {
     clearTimeout(room.idleTimer);
+    clearTimeout(room.ownerWatchdogTimer);
     rooms.delete(code);
     const uptimeMs = Date.now() - room.createdAt;
     const idleForMs = Date.now() - room.lastSeen;
@@ -1088,6 +1125,7 @@ function startRoom(ownerName, options = {}) {
 
   if (!standby) {
     scheduleRoomStop(room);
+    scheduleRoomOwnerWatchdog(room);
   }
   console.log(`room ${code}${standby ? " warmed" : " started"} on ${ROOM_HOST}:${port}`);
   return room;
@@ -1112,6 +1150,7 @@ function stopRoom(code, reason) {
   console.log(`stopping room ${code}: ${reason} players=${room.players} uptimeMs=${uptimeMs} idleForMs=${idleForMs}`);
   room.stopping = true;
   clearTimeout(room.idleTimer);
+  clearTimeout(room.ownerWatchdogTimer);
   rooms.delete(code);
   let exited = false;
   room.child.once("exit", () => {
@@ -1179,7 +1218,9 @@ function claimWarmStandby(ownerName, options = {}) {
   room.lastSeen = Date.now();
   room.heartbeatCount = 0;
   room.lastHeartbeatAt = 0;
+  room.ownerHeartbeatAt = 0;
   scheduleRoomStop(room);
+  scheduleRoomOwnerWatchdog(room);
   logRoomEvent(room, "standby_claimed", { owner: room.ownerName, port: room.port });
   console.log(`room ${room.code} claimed from warm standby by ${room.ownerName}`);
   scheduleWarmStandbyRefill();
@@ -1188,7 +1229,7 @@ function claimWarmStandby(ownerName, options = {}) {
 
 function availableRoom() {
   const candidates = activeRooms()
-    .filter((room) => room.players < MAX_PLAYERS && !room.passwordHash)
+    .filter((room) => room.players < MAX_PLAYERS && !room.passwordHash && roomOwnerIsJoinable(room))
     .sort((left, right) => right.createdAt - left.createdAt);
   if (candidates.length === 0) {
     return null;
@@ -1198,13 +1239,13 @@ function availableRoom() {
 
 function listAvailableRooms() {
   return activeRooms()
-    .filter((room) => room.players < MAX_PLAYERS)
+    .filter((room) => room.players < MAX_PLAYERS && roomOwnerIsJoinable(room))
     .sort((left, right) => right.createdAt - left.createdAt)
     .map(roomPublic);
 }
 
 function reserveRoom(room, payload = {}) {
-  if (!room || room.players >= MAX_PLAYERS) {
+  if (!room || room.players >= MAX_PLAYERS || !roomOwnerIsJoinable(room)) {
     return null;
   }
   if (!roomPasswordMatches(room, payload.password || "")) {
@@ -2787,6 +2828,10 @@ async function route(req, res) {
     const role = String(payload.role || "unknown").slice(0, 24);
     const mode = String(payload.mode || "unknown").slice(0, 48);
     const peerId = Number.isFinite(Number(payload.peer_id)) ? Number(payload.peer_id) : 0;
+    if (role.toLowerCase() === "owner") {
+      room.ownerHeartbeatAt = Date.now();
+      scheduleRoomOwnerWatchdog(room);
+    }
     touchRoom(room, "heartbeat", {
       count: room.heartbeatCount,
       role,

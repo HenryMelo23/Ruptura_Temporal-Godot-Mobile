@@ -65,6 +65,8 @@ async function run() {
       PORT: String(port),
       ROOM_HOST: "127.0.0.1",
       ROOM_IDLE_MS: "600",
+      ROOM_OWNER_CONNECT_TIMEOUT_MS: "650",
+      ROOM_OWNER_HEARTBEAT_TIMEOUT_MS: "700",
       ROOM_PORT_START: "19192",
       ROOM_PORT_END: "19195",
       ROOM_READY_TIMEOUT_MS: "2500",
@@ -87,6 +89,13 @@ async function run() {
     assert(room.code && room.port, "room creation did not return code/port");
     assert.strictEqual(room.name, "Sala QA", "room name was not preserved");
     assert.strictEqual(room.locked, true, "password room should be marked as locked");
+    const unclaimedListed = await request("GET", "/rooms");
+    const unclaimedListedBody = JSON.parse(unclaimedListed.body.toString("utf8"));
+    assert(!unclaimedListedBody.rooms.some((entry) => entry.code === room.code), "unclaimed room leaked into discovery");
+    const unclaimedJoin = await request("POST", `/rooms/${room.code}/join`, { name: "Intruso", password: "d37" });
+    assert.strictEqual(unclaimedJoin.status, 404, "unclaimed room accepted a guest before the owner connected");
+    const hb0 = await request("POST", `/rooms/${room.code}/heartbeat`, { role: "owner", mode: "lobby", peer_id: 1 });
+    assert.strictEqual(hb0.status, 200, output);
     const listed = await request("GET", "/rooms");
     assert.strictEqual(listed.status, 200, output);
     const listedBody = JSON.parse(listed.body.toString("utf8"));
