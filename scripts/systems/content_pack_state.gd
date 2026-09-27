@@ -1,12 +1,47 @@
 extends RefCounted
 
-const BASE_CODE := 23600
+const BASE_CONFIG := "res://assets/updates/content_base.json"
 const STATE_PATH := "user://updates/content_state.json"
 const STORAGE := "user://updates/content"
 const PUBLIC_KEY := "res://assets/updates/content_public.pem"
 
+static func base_contract(path: String = BASE_CONFIG) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		push_error("Content update base contract missing: " + path)
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not parsed is Dictionary:
+		push_error("Content update base contract is not valid JSON: " + path)
+		return {}
+	var contract: Dictionary = parsed
+	var version := String(contract.get("base_version", ""))
+	var code := int(contract.get("base_version_code", 0))
+	if version == "" or code <= 0:
+		push_error("Content update base contract is incomplete: " + path)
+		return {}
+	return {"base_version": version, "base_version_code": code}
+
+static func base_version() -> String:
+	return String(base_contract().get("base_version", ""))
+
+static func base_version_code() -> int:
+	return int(base_contract().get("base_version_code", 0))
+
+static func project_contract_valid() -> bool:
+	var contract := base_contract()
+	if contract.is_empty():
+		return false
+	var configured_version := String(ProjectSettings.get_setting("application/config/version", ""))
+	if configured_version != String(contract.get("base_version", "")):
+		push_error("Project version %s does not match content base %s." % [configured_version, String(contract.get("base_version", ""))])
+		return false
+	return true
+
 static func compatible(pack: Dictionary) -> bool:
-	return int(pack.get("required_game_version_code", 0)) == BASE_CODE and String(pack.get("platform", "")) == OS.get_name().to_lower()
+	var contract := base_contract()
+	if contract.is_empty():
+		return false
+	return int(pack.get("required_game_version_code", 0)) == int(contract.get("base_version_code", 0)) and String(pack.get("platform", "")) == OS.get_name().to_lower()
 
 static func authentic(pack: Dictionary, public_key_path: String = PUBLIC_KEY) -> bool:
 	var key := CryptoKey.new()
@@ -18,6 +53,8 @@ static func authentic(pack: Dictionary, public_key_path: String = PUBLIC_KEY) ->
 	return Crypto.new().verify(HashingContext.HASH_SHA256, digest.hex_decode(), Marshalls.base64_to_raw(String(pack.get("signature", ""))), key)
 
 static func mount_installed(state_path: String = STATE_PATH, public_key_path: String = PUBLIC_KEY) -> Dictionary:
+	if not project_contract_valid():
+		return {}
 	if not FileAccess.file_exists(state_path):
 		return {}
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(state_path))

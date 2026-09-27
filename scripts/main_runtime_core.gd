@@ -2657,6 +2657,15 @@ func _write_json_file(path: String, payload: Dictionary) -> bool:
 	return true
 
 
+func _file_size(path: String) -> int:
+	var file: = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return 0
+	var length: = file.get_length()
+	file.close()
+	return length
+
+
 func _load_installed_content_packs() -> void:
 	content_update_loaded_packs.clear()
 	var state: Dictionary = _read_json_file(CONTENT_UPDATE_STATE_PATH)
@@ -2811,6 +2820,9 @@ func _start_next_content_update_download() -> void:
 	content_update_current_pack = Dictionary(content_update_queue.pop_front())
 	var filename: String = String(content_update_current_pack.get("filename", ""))
 	content_update_download_path = _content_update_pack_path(filename)
+	content_update_download_part_path = content_update_download_path + ".part"
+	content_update_download_resume_path = content_update_download_part_path + ".resume"
+	content_update_download_resume_offset = 0
 	var verification: Dictionary = _verify_update_file(
 		content_update_download_path,
 		int(content_update_current_pack.get("size", 0)),
@@ -2820,12 +2832,22 @@ func _start_next_content_update_download() -> void:
 	if bool(verification.get("ok", false)):
 		_start_next_content_update_download()
 		return
-	var absolute_path: String = ProjectSettings.globalize_path(content_update_download_path)
-	if FileAccess.file_exists(content_update_download_path):
-		DirAccess.remove_absolute(absolute_path)
-	content_update_download_request.download_file = content_update_download_path
+	if FileAccess.file_exists(content_update_download_resume_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_resume_path))
+	var headers := ["Cache-Control: no-cache"]
+	var expected_size: int = int(content_update_current_pack.get("size", 0))
+	if FileAccess.file_exists(content_update_download_part_path):
+		var partial_size := _file_size(content_update_download_part_path)
+		if partial_size > 0 and partial_size < expected_size:
+			content_update_download_resume_offset = partial_size
+			content_update_download_request.download_file = content_update_download_resume_path
+			headers.append("Range: bytes=%d-" % partial_size)
+		else:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_part_path))
+	if content_update_download_request.download_file == "":
+		content_update_download_request.download_file = content_update_download_part_path
 	content_update_status = "downloading"
-	var err: = content_update_download_request.request(String(content_update_current_pack.get("download_url", "")), ["Cache-Control: no-cache"])
+	var err: = content_update_download_request.request(String(content_update_current_pack.get("download_url", "")), headers)
 	if err != OK:
 		content_update_download_request.download_file = ""
 		content_update_status = "error"
@@ -2837,29 +2859,78 @@ func _on_content_update_download_completed(result: int, response_code: int, _hea
 	if content_update_download_request != null:
 		content_update_download_request.download_file = ""
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
-		if content_update_download_path != "" and FileAccess.file_exists(content_update_download_path):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_path))
+		if content_update_download_resume_path != "" and FileAccess.file_exists(content_update_download_resume_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_resume_path))
 		content_update_status = "error"
 		content_update_error = "download_http_%d" % response_code
 		print("Atualizacao de conteudo: download interrompido HTTP ", response_code)
+		return
+	if not _merge_content_update_download(response_code):
+		content_update_status = "error"
+		content_update_error = "download_resume_failed"
 		return
 	content_update_status = "verifying"
 	call_deferred("_finish_content_update_download")
 
 
+func _merge_content_update_download(response_code: int) -> bool:
+	if content_update_download_part_path == "":
+		return false
+	if content_update_download_resume_offset <= 0:
+		return FileAccess.file_exists(content_update_download_part_path)
+	if response_code == 200:
+		if FileAccess.file_exists(content_update_download_part_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_part_path))
+		if FileAccess.file_exists(content_update_download_resume_path):
+			return DirAccess.rename_absolute(ProjectSettings.globalize_path(content_update_download_resume_path), ProjectSettings.globalize_path(content_update_download_part_path)) == OK
+		return false
+	if response_code != 206 or not FileAccess.file_exists(content_update_download_resume_path):
+		if FileAccess.file_exists(content_update_download_resume_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_resume_path))
+		return false
+	var target: = FileAccess.open(content_update_download_part_path, FileAccess.READ_WRITE)
+	var source: = FileAccess.open(content_update_download_resume_path, FileAccess.READ)
+	if target == null or source == null:
+		if target != null:
+			target.close()
+		if source != null:
+			source.close()
+		return false
+	target.seek_end()
+	while source.get_position() < source.get_length():
+		var remaining: = source.get_length() - source.get_position()
+		var chunk: = source.get_buffer(mini(APP_UPDATE_HASH_CHUNK_BYTES, remaining))
+		if chunk.is_empty():
+			target.close()
+			source.close()
+			return false
+		target.store_buffer(chunk)
+	target.close()
+	source.close()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_resume_path))
+	return true
+
+
 func _finish_content_update_download() -> void:
 	var verification: Dictionary = _verify_update_file(
-		content_update_download_path,
+		content_update_download_part_path,
 		int(content_update_current_pack.get("size", 0)),
 		String(content_update_current_pack.get("sha256", "")),
 		"PCK"
 	)
 	if not bool(verification.get("ok", false)):
-		if content_update_download_path != "" and FileAccess.file_exists(content_update_download_path):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_path))
+		if content_update_download_resume_path != "" and FileAccess.file_exists(content_update_download_resume_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_resume_path))
 		content_update_status = "error"
 		content_update_error = String(verification.get("error", "content_verification_failed"))
 		print("Atualizacao de conteudo: ", content_update_error)
+		return
+	if FileAccess.file_exists(content_update_download_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(content_update_download_path))
+	var rename_err := DirAccess.rename_absolute(ProjectSettings.globalize_path(content_update_download_part_path), ProjectSettings.globalize_path(content_update_download_path))
+	if rename_err != OK:
+		content_update_status = "error"
+		content_update_error = "content_promote_failed"
 		return
 	# Mount only at next boot, before Main and its preloaded resources are cached.
 	_start_next_content_update_download()

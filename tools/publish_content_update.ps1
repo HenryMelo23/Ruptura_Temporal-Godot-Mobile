@@ -10,20 +10,25 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$baseContractPath = Join-Path $root 'assets/updates/content_base.json'
+$baseContract = Get-Content -LiteralPath $baseContractPath -Raw | ConvertFrom-Json
+$baseVersionCode = [int]$baseContract.base_version_code
+if ($baseVersionCode -le 0) { throw 'Invalid content baseline contract.' }
 $remote = '/opt/ruptura/Ruptura_Temporal-Godot-Mobile/server/updates/content'
 $packs = @()
 foreach ($path in $PackPaths) {
     $file = Get-Item -LiteralPath $path
     $entry = Get-Content -LiteralPath ($file.FullName + '.json') -Raw | ConvertFrom-Json
     if ($entry.filename -ne $file.Name -or $file.Name -notmatch '^[A-Za-z0-9_.-]+\.pck$') { throw 'Invalid pack filename.' }
-    if ($entry.required_game_version_code -ne 23800 -or $entry.platform -notin @('android','windows')) { throw 'Invalid base or platform.' }
+    if ($entry.required_game_version_code -ne $baseVersionCode -or $entry.platform -notin @('android','windows')) { throw 'Invalid base or platform.' }
     if ($entry.sha256 -ne (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -or $entry.size -ne $file.Length) { throw 'Pack integrity mismatch.' }
     if ($entry.signature -ne (Get-Content -LiteralPath ($file.FullName + '.sig') -Raw).Trim()) { throw 'Signature metadata mismatch.' }
     & $GodotBin --headless --path $root --script res://tools/content_sign.gd -- verify (Join-Path $root 'assets/updates/content_public.pem') $file.FullName
     if ($LASTEXITCODE -ne 0) { throw 'Signature verification failed.' }
     $packs += $entry
 }
-if ($packs.Count -ne 2 -or @($packs.platform | Select-Object -Unique).Count -ne 2) { throw 'Provide one cumulative pack per platform.' }
+if ($packs.Count -le 0) { throw 'Provide at least one cumulative pack.' }
+if (@($packs.platform | Select-Object -Unique).Count -ne $packs.Count) { throw 'Duplicate platform entries are not allowed.' }
 $manifest = [ordered]@{ content_version=$ContentVersion; content_version_code=$ContentVersionCode; packs=$packs; notes=$Notes; published_at=[DateTime]::UtcNow.ToString('o') }
 $stage = Join-Path $root '.agent_logs/content_publish'
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -45,8 +50,8 @@ try {
     $result = Invoke-SSHCommand -SessionId $session.SessionId -Command "mv '$remote/staging/latest.json.next' '$remote/latest.json'; chmod 644 '$remote/latest.json'"
     if ($result.ExitStatus -ne 0) { throw 'Cannot activate manifest.' }
 } finally { Remove-SSHSession -SessionId $session.SessionId | Out-Null }
-foreach ($platform in @('android','windows')) {
-    $reply = Invoke-RestMethod "http://${Server}:8090/updates/content/latest?version_code=23800&platform=$platform"
+foreach ($platform in @($packs.platform)) {
+    $reply = Invoke-RestMethod "http://${Server}:8090/updates/content/latest?version_code=$baseVersionCode&platform=$platform"
     if (-not $reply.available -or $reply.content_version_code -ne $ContentVersionCode) { throw 'Public content endpoint verification failed.' }
 }
 Write-Output "CONTENT_PUBLISHED $ContentVersion"

@@ -224,11 +224,12 @@ function readContentUpdateManifest() {
     const packs = Array.isArray(parsed.packs) ? parsed.packs : [];
     const normalizedPacks = [];
     for (const pack of packs) {
-      const filename = path.basename(String(pack && pack.filename || ""));
+      const rawFilename = String(pack && pack.filename || "");
+      const filename = path.basename(rawFilename);
       const sha256 = String(pack && pack.sha256 || "").toLowerCase();
       const filePath = filename ? path.join(CONTENT_UPDATE_ROOT, filename) : "";
       const requiredGameVersionCode = Math.max(0, Math.floor(Number(pack && pack.required_game_version_code) || 0));
-      if (!filename.endsWith(".pck") || !/^[a-f0-9]{64}$/.test(sha256) || !filePath || !fs.existsSync(filePath)) {
+      if (filename !== rawFilename || !/^[A-Za-z0-9_.-]+\.pck$/.test(filename) || !/^[a-f0-9]{64}$/.test(sha256) || !filePath || !fs.existsSync(filePath)) {
         return null;
       }
       const stat = fs.statSync(filePath);
@@ -383,18 +384,43 @@ function sendContentPack(req, res, filename) {
     sendJson(res, 404, { error: "content update not found" });
     return;
   }
-  res.writeHead(200, {
+  const total = pack.size;
+  const range = String(req.headers.range || "");
+  let start = 0;
+  let end = total - 1;
+  let status = 200;
+  if (range) {
+    const match = range.match(/^bytes=(\d+)-(\d*)$/);
+    if (!match) {
+      res.writeHead(416, { "Content-Range": `bytes */${total}` });
+      res.end();
+      return;
+    }
+    start = Number(match[1]);
+    end = match[2] === "" ? end : Math.min(end, Number(match[2]));
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= total) {
+      res.writeHead(416, { "Content-Range": `bytes */${total}` });
+      res.end();
+      return;
+    }
+    status = 206;
+  }
+  const headers = {
     "Accept-Ranges": "bytes",
     "Cache-Control": "public, max-age=31536000, immutable",
     "Content-Type": "application/octet-stream",
     "Content-Disposition": `attachment; filename="${pack.filename.replace(/"/g, "")}"`,
-    "Content-Length": pack.size
-  });
+    "Content-Length": end - start + 1
+  };
+  if (status === 206) {
+    headers["Content-Range"] = `bytes ${start}-${end}/${total}`;
+  }
+  res.writeHead(status, headers);
   if (req.method === "HEAD") {
     res.end();
     return;
   }
-  const stream = fs.createReadStream(pack.filePath);
+  const stream = fs.createReadStream(pack.filePath, { start, end });
   stream.on("error", () => res.destroy());
   stream.pipe(res);
 }

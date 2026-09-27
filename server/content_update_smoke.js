@@ -11,7 +11,7 @@ async function run() {
   const packs = ["android", "windows"].map(platform => {
     const filename = `${platform}.pck`;
     fs.writeFileSync(path.join(directory, filename), "fixture");
-    return { filename, platform, required_game_version_code: 23600, sha256: "a".repeat(64), signature: "fixture" };
+    return { filename, platform, required_game_version_code: 24100, sha256: "a".repeat(64), signature: "fixture" };
   });
   fs.writeFileSync(path.join(directory, "latest.json"), JSON.stringify({ content_version_code: 1, packs }));
   const port = 18196;
@@ -33,17 +33,26 @@ async function run() {
     }
     assert(healthy, output);
     for (const platform of ["android", "windows"]) {
-      const data = await (await fetch(`${endpoint}?version_code=23600&platform=${platform}`)).json();
+      const data = await (await fetch(`${endpoint}?version_code=24100&platform=${platform}`)).json();
       assert.equal(data.available, true);
       assert.equal(data.packs.length, 1);
       assert.equal(data.packs[0].platform, platform);
       assert.equal(data.packs[0].signature, "fixture");
     }
-    for (const query of ["version_code=23500&platform=android", "version_code=23700&platform=android", "version_code=23600", "version_code=23600&platform=android&content_version_code=1"]) {
+    for (const query of ["version_code=24099&platform=android", "version_code=24101&platform=android", "version_code=24100", "version_code=24100&platform=android&content_version_code=1"]) {
       const data = await (await fetch(`${endpoint}?${query}`)).json();
       assert.equal(data.available, false);
     }
-    console.log("CONTENT_SERVER_OK platform=true base=true current=true signature=true");
+    const partial = await fetch(`http://127.0.0.1:${port}/updates/content/download/android.pck`, { headers: { Range: "bytes=3-" } });
+    assert.equal(partial.status, 206);
+    assert.equal(partial.headers.get("accept-ranges"), "bytes");
+    assert.equal(partial.headers.get("content-range"), "bytes 3-6/7");
+    assert.equal(partial.headers.get("content-length"), "4");
+    assert.equal(await partial.text(), "ture");
+    const invalidRange = await fetch(`http://127.0.0.1:${port}/updates/content/download/android.pck`, { headers: { Range: "bytes=99-" } });
+    assert.equal(invalidRange.status, 416);
+    assert.equal(invalidRange.headers.get("content-range"), "bytes */7");
+    console.log("CONTENT_SERVER_OK platform=true base=true current=true signature=true range=true");
   } finally {
     child.kill();
     await closed;

@@ -39,6 +39,15 @@ func _run() -> void:
 	}
 	var normalized: Dictionary = game._normalize_content_update_manifest(payload)
 	_check(bool(normalized.get("ok", false)), "valid content manifest was rejected")
+	var wrong_base: Dictionary = payload.duplicate(true)
+	wrong_base.packs[0].required_game_version_code = game.GAME_VERSION_CODE - 1
+	_check(not bool(game._normalize_content_update_manifest(wrong_base).get("ok", true)), "wrong base version accepted")
+	var corrupted_sha: Dictionary = payload.duplicate(true)
+	corrupted_sha.packs[0].sha256 = "0".repeat(64)
+	_check(not bool(game._normalize_content_update_manifest(corrupted_sha).get("ok", true)), "corrupted SHA accepted")
+	var invalid_signature: Dictionary = payload.duplicate(true)
+	invalid_signature.packs[0].signature = "AA=="
+	_check(not bool(game._normalize_content_update_manifest(invalid_signature).get("ok", true)), "invalid signature accepted")
 	var unsigned: Dictionary = payload.duplicate(true)
 	unsigned.packs[0].erase("signature")
 	_check(not bool(game._normalize_content_update_manifest(unsigned).get("ok", true)), "unsigned pack accepted")
@@ -56,8 +65,68 @@ func _run() -> void:
 	file.close()
 	var verified: Dictionary = game._verify_update_file(pack_path, CONTENT_BYTES.to_utf8_buffer().size(), CONTENT_SHA256, "PCK")
 	_check(bool(verified.get("ok", false)), "valid content pack fixture failed verification")
+	_check(_failed_partial_download_does_not_activate(pack_path), "failed partial download activated or replaced final pack")
+	_check(_resumed_partial_download_promotes(pack_path), "resumed partial download did not promote verified pack")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(pack_path))
 	print("CONTENT_UPDATE_OK manifest_validation=true sha256=true")
-	game.queue_free()
+	if game.get_parent() != null:
+		game.get_parent().remove_child(game)
+	if game.has_method("_cleanup_runtime_resources"):
+		game.call("_cleanup_runtime_resources")
+	game.free()
+	await process_frame
 	await process_frame
 	quit(0)
+
+
+func _failed_partial_download_does_not_activate(pack_path: String) -> bool:
+	var part_path: String = pack_path + ".part"
+	var final_marker := "ACTIVE_OK"
+	var final_file := FileAccess.open(pack_path, FileAccess.WRITE)
+	if final_file == null:
+		return false
+	final_file.store_string(final_marker)
+	final_file.close()
+	var part_file := FileAccess.open(part_path, FileAccess.WRITE)
+	if part_file == null:
+		return false
+	part_file.store_string("broken")
+	part_file.close()
+	game.content_update_download_path = pack_path
+	game.content_update_download_part_path = part_path
+	game.content_update_download_resume_path = part_path + ".resume"
+	game.content_update_current_pack = {"size": CONTENT_BYTES.to_utf8_buffer().size(), "sha256": CONTENT_SHA256}
+	game._finish_content_update_download()
+	var preserved := FileAccess.get_file_as_string(pack_path) == final_marker
+	if FileAccess.file_exists(part_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(part_path))
+	return preserved and game.content_update_status == "error"
+
+
+func _resumed_partial_download_promotes(pack_path: String) -> bool:
+	if FileAccess.file_exists(pack_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(pack_path))
+	var part_path: String = pack_path + ".part"
+	var resume_path: String = part_path + ".resume"
+	var split_at := 8
+	var part_file := FileAccess.open(part_path, FileAccess.WRITE)
+	if part_file == null:
+		return false
+	part_file.store_string(CONTENT_BYTES.substr(0, split_at))
+	part_file.close()
+	var resume_file := FileAccess.open(resume_path, FileAccess.WRITE)
+	if resume_file == null:
+		return false
+	resume_file.store_string(CONTENT_BYTES.substr(split_at))
+	resume_file.close()
+	game.content_update_download_path = pack_path
+	game.content_update_download_part_path = part_path
+	game.content_update_download_resume_path = resume_path
+	game.content_update_download_resume_offset = split_at
+	game.content_update_current_pack = {"size": CONTENT_BYTES.to_utf8_buffer().size(), "sha256": CONTENT_SHA256}
+	game.content_update_manifest = {"content_version": "resume-smoke", "content_version_code": 2, "packs": []}
+	game.content_update_queue.clear()
+	if not game._merge_content_update_download(206):
+		return false
+	game._finish_content_update_download()
+	return FileAccess.file_exists(pack_path) and FileAccess.get_file_as_string(pack_path) == CONTENT_BYTES and game.content_update_status != "error"

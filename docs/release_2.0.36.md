@@ -1,5 +1,9 @@
 # Release 2.0.36 and incremental content
 
+Historical note: this document describes the original 2.0.36 content-update
+boundary. The current authoritative incremental-update instructions are in
+`docs/content_updates.md`.
+
 ## Migration boundary
 
 2.0.35 downloaded PCKs after Main was already loaded. It cannot reliably replace
