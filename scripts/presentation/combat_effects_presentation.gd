@@ -189,7 +189,13 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		if game.current_phase == 5 and game.phase5_transmute_active:
 			game._draw_phase5_transmute_map_reveal(map_texture, game._desktop_stage_draw_rect(camera))
 		else:
-			game.draw_texture_rect(map_texture, game._desktop_stage_draw_rect(camera), false)
+			if not is_instance_valid(game.phase_map_layer):
+				game.phase_map_layer = game.PhaseMapPresentation.new()
+				game.phase_map_layer.name = "PhaseMapLayer"
+				game.add_child(game.phase_map_layer)
+			var surface: int = game.PhaseMapPresentation.surface_for(game)
+			game.phase_map_layer.present(map_texture, game._desktop_stage_draw_rect(camera), surface, game.time_alive, game.gfx_low_resource or game._memory_saver_active())
+			game.PhaseMapPresentation.draw_ambient(game, camera, surface)
 	else:
 		game.draw_rect(Rect2( - camera, game.WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
 	game._draw_event_alert_world(camera, viewport)

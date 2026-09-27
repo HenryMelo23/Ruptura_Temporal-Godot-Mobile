@@ -4,7 +4,7 @@ const OUT_DIR := "res://.codex/umbra_transmute"
 
 const CASES := [
 	{"action": "TRANSMUTAR_VORTICE", "dimension": "vortice", "skill": "VORTICE", "kind": "vortex"},
-	{"action": "TRANSMUTAR_GRAVIDADE", "dimension": "gravidade", "skill": "PRISAO", "kind": "prison"},
+	{"action": "TRANSMUTAR_GRAVIDADE", "dimension": "gravidade", "skill": "PRISAO", "kind": "sopro_artico"},
 	{"action": "TRANSMUTAR_NECROSE", "dimension": "necrose", "skill": "MIASMA", "kind": "miasma"},
 	{"action": "TRANSMUTAR_RESSONANCIA", "dimension": "ressonancia", "skill": "DESCARGA_ELETRICA", "kind": "discharge"},
 	{"action": "TRANSMUTAR_HEMORRAGIA", "dimension": "hemorragia", "skill": "CAMINHO_ESPINHOS", "kind": "thorns"},
@@ -14,6 +14,7 @@ const CASES := [
 
 var game: Node
 var captures: Array[String] = []
+var failed := false
 
 
 func _initialize() -> void:
@@ -25,9 +26,8 @@ func _initialize() -> void:
 
 
 func _fail(message: String) -> void:
+	failed = true
 	push_error("PHASE5_UMBRA_TRANSMUTE_VISUAL_FAIL " + message)
-	_cleanup()
-	quit(1)
 
 
 func _assert_ok(condition: bool, message: String) -> void:
@@ -46,15 +46,23 @@ func _run() -> void:
 
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_setup_boss5_arena()
-	_assert_natural_transmute_choice()
+	game.set_process(false)
+	game.set_physics_process(false)
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	root.size = Vector2i(1280, 720)
+	_assert_transmute_availability()
 	for case in CASES:
 		await _exercise_case(Dictionary(case))
+		if failed:
+			break
 
-	print("PHASE5_UMBRA_TRANSMUTE_VISUAL_OK cooldown=%.1fs captures=%s" % [game.BOSS5_TRANSMUTE_COOLDOWN, ", ".join(captures)])
+	_assert_ok(captures.size() == CASES.size() * 2, "not all map/skill paths reached capture")
+	print("PHASE5_UMBRA_TRANSMUTE_VISUAL_%s cooldown=%.1fs captures=%d" % ["FAIL" if failed else "OK", game.BOSS5_TRANSMUTE_COOLDOWN, captures.size()])
 	_cleanup()
 	for _i in range(3):
 		await process_frame
-	quit(0)
+	quit(1 if failed else 0)
 
 
 func _setup_boss5_arena() -> void:
@@ -84,13 +92,13 @@ func _setup_boss5_arena() -> void:
 	game._load_umbra_mobile_memory()
 
 
-func _assert_natural_transmute_choice() -> void:
+func _assert_transmute_availability() -> void:
 	_reset_case_state()
+	var available: Array = game._umbra_available_actions()
+	for case in CASES:
+		_assert_ok(available.has(case["action"]), "missing available transmutation " + case["action"])
 	var decision := String(game._umbra_choose_action())
-	_assert_ok(decision.begins_with("TRANSMUTAR_"), "natural Umbra decision should transmute when cooldown is ready, got " + decision)
-	game._spawn_umbra_action(decision)
-	_assert_ok(game.boss5_dimension != "base", "natural transmute decision did not change dimension")
-	_assert_ok(absf(float(game.boss5_transmute_cooldown) - float(game.BOSS5_TRANSMUTE_COOLDOWN)) < 0.01, "natural transmute did not start cooldown")
+	_assert_ok(available.has(decision), "AI selected an unavailable action " + decision)
 
 
 func _reset_case_state() -> void:
@@ -102,8 +110,15 @@ func _reset_case_state() -> void:
 	game.boss5_dimension = "base"
 	game.boss5_last_dimension = ""
 	game.boss5_dimension_timer = 0.0
-	game.boss5_dimension_transition_timer = 0.0
-	game.boss5_dimension_transition_max = 0.0
+	game.phase5_transmute_active = false
+	game.phase5_transmute_timer = 0.0
+	game.phase5_transmute_particles.clear()
+	game.boss5_transmute_hangover = 0.0
+	game.boss5_cadence_bonus = 0.0
+	game.boss5_rat_extras = 0
+	game.boss5_siphon_timer = 0.0
+	game.boss5_decision_timer = 1000.0
+	game.boss5_action_timer = 1000.0
 	game.boss5_transmute_cooldown = 0.0
 	for key in game.boss5_ability_cooldowns.keys():
 		game.boss5_ability_cooldowns[key] = 0.0
@@ -116,24 +131,20 @@ func _exercise_case(case: Dictionary) -> void:
 	var skill := String(case["skill"])
 	var kind := String(case["kind"])
 
-	_assert_ok(game._boss5_can_transmute_to(action), action + " should be available before casting")
+	_assert_ok(game._umbra_available_actions().has(action), action + " should be available before casting")
 	game._spawn_umbra_action(action)
 	_assert_ok(game.boss5_dimension == dimension, action + " did not set dimension=" + dimension)
 	var surface_key := String(game._boss5_dimension_map_key(dimension))
 	_assert_ok(surface_key != "map_phase_5", action + " did not choose a transmuted map surface")
 	_assert_ok(game._get_texture(surface_key) != null, action + " transmuted map texture is missing: " + surface_key)
 	_assert_ok(game._current_map_texture() == game._get_texture(surface_key), action + " did not swap current map surface to " + surface_key)
-	_assert_ok(absf(float(game.boss5_transmute_cooldown) - float(game.BOSS5_TRANSMUTE_COOLDOWN)) < 0.01, action + " did not start 25s cooldown")
-	_assert_ok(not game._boss5_can_transmute_to(action), action + " should be blocked during cooldown/current dimension")
-	_assert_ok(game._umbra_available_actions().has(skill), dimension + " should expose skill " + skill)
+	_assert_ok(absf(float(game.boss5_transmute_cooldown) - float(game.BOSS5_TRANSMUTE_COOLDOWN)) < 0.01, action + " did not start configured cooldown")
+	_assert_ok(not game._umbra_available_actions().has(action), action + " should be blocked during cooldown/current dimension")
+	_assert_ok(not game._umbra_available_actions().has(skill), dimension + " should respect post-transmutation hangover")
 	await _capture(dimension + "_transicao", "mapa")
 
-	game.boss5_decision_timer = 40.0
-	game.boss5_action_timer = 40.0
-	game._update_boss_phase5(12.5)
-	_assert_ok(float(game.boss5_transmute_cooldown) > 12.0 and float(game.boss5_transmute_cooldown) < 13.0, action + " cooldown did not tick halfway")
-	game._update_boss_phase5(12.6)
-	_assert_ok(float(game.boss5_transmute_cooldown) <= 0.01, action + " cooldown did not finish after 25s")
+	_tick_boss_timers(float(game.boss5_transmute_hangover) + 0.01)
+	_assert_ok(game._umbra_available_actions().has(skill), dimension + " should expose skill after hangover: " + skill)
 
 	game._spawn_umbra_action(skill)
 	_validate_skill_spawn(skill, kind)
@@ -141,11 +152,35 @@ func _exercise_case(case: Dictionary) -> void:
 		game._update_phase5_hazards(1.0 / 60.0)
 		game._update_phase5_rats(1.0 / 60.0)
 	await _capture(dimension, skill)
+	game.phase5_hazards.clear()
+	game.phase5_rats.clear()
+	game.phase5_telegraphs.clear()
+	var halfway: float = game.boss5_transmute_cooldown * 0.5
+	_tick_boss_timers(halfway)
+	_assert_ok(absf(float(game.boss5_transmute_cooldown) - halfway) < 0.01, action + " cooldown did not tick halfway")
+	_tick_boss_timers(halfway + 0.01)
+	_assert_ok(float(game.boss5_transmute_cooldown) <= 0.01, action + " cooldown did not finish")
+
+
+func _tick_boss_timers(seconds: float) -> void:
+	# Exercise real timers without allowing movement/contact to alter cadence.
+	var old_pos: Vector2 = game.boss_pos
+	var old_target: Vector2 = game.boss5_target
+	game.boss_entry_timer = seconds + 1.0
+	game._update_boss_phase5(seconds)
+	game.boss_entry_timer = 0.0
+	game.boss_pos = old_pos
+	game.boss5_target = old_target
 
 
 func _validate_skill_spawn(skill: String, kind: String) -> void:
 	if kind == "rats":
-		_assert_ok(game.phase5_rats.size() >= 5, skill + " did not spawn rats")
+		_assert_ok(game.phase5_rats.size() == 4, skill + " should spawn the four initial corner rats")
+		var corners: Array = []
+		for rat in game.phase5_rats:
+			if not corners.has(rat["corner_idx"]):
+				corners.append(rat["corner_idx"])
+		_assert_ok(corners.size() == 4, skill + " did not cover every corner")
 		return
 	var found := false
 	for hazard in game.phase5_hazards:

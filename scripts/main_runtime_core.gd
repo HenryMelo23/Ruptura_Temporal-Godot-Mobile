@@ -4059,14 +4059,8 @@ func _is_keyboard_binding_pressed(action: String) -> bool:
 func _load_textures() -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
 	var base = "res://assets/sprites/"
-	_register_texture("map_phase_1", base + "Fase1.png", true)
-	_register_texture("map_phase_2", base + "Fase2.png", true)
-	_register_texture("map_phase_3", base + "Fase3.png", true)
-	_register_texture("map_phase_4", base + "Fase4.png", true)
-	_register_texture("map_phase_5", base + "Fase5-1.png", true)
-	_register_texture("map_phase_6", base + "Fase6.png", true)
-	_register_texture("map_phase_7", base + "Fase7.jpg", true)
-	_register_texture("map_phase_9", base + "Fase9.png", true)
+	for phase in [1, 2, 3, 4, 5, 6, 7, 9]:
+		_register_texture("map_phase_%d" % phase, "res://assets/maps/calm/phase_%d.png" % phase, true)
 	textures["startup_thanks"] = _safe_load(STARTUP_THANKS_TEXTURE_PATH)
 	textures["menu"] = _safe_load(base + "Menu_intro.png.png")
 	textures["choice_bg"] = _safe_load(base + "Escolha.png")
@@ -33430,6 +33424,8 @@ func _draw_phase_transition(viewport: Vector2) -> void :
 
 
 func _draw() -> void :
+	if is_instance_valid(phase_map_layer):
+		phase_map_layer.hide()
 	var viewport = get_viewport_rect().size
 	_reset_cinzas_burn_shader_nodes()
 	if mode != "phase_transition":
