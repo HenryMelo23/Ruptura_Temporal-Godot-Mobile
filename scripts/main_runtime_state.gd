@@ -35,6 +35,8 @@ const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
 const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
+const RuntimeSaveControllerScript = preload("res://scripts/systems/save/runtime_save_controller.gd")
+const PlayerControlControllerScript = preload("res://scripts/systems/player/player_control_controller.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
 const GAME_VERSION: = "2.0.41"
@@ -2508,6 +2510,8 @@ var team_revival_state = RTTeamRevivalStateScript.new()
 var enemy_manager: Node = EnemyManagerScript.new()
 var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
+var save_controller = RuntimeSaveControllerScript.new()
+var player_control_controller = PlayerControlControllerScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3

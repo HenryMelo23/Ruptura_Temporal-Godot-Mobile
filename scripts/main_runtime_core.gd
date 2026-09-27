@@ -8,6 +8,8 @@ func _configure_dedicated_server_timing() -> void :
 
 
 func _ready() -> void :
+	save_controller.configure(self)
+	player_control_controller.configure(self)
 	perf_ready_started_ms = Time.get_ticks_msec()
 	var args: Array = OS.get_cmdline_args()
 	args.append_array(OS.get_cmdline_user_args())
@@ -767,142 +769,25 @@ func _setup_online_room_inputs() -> void :
 
 
 func _load_player_profile() -> void :
-	player_nickname = ""
-	player_profile_id = ""
-	if not FileAccess.file_exists(PLAYER_PROFILE_PATH):
-		_ensure_player_profile_id()
-		return
-	var file = FileAccess.open(PLAYER_PROFILE_PATH, FileAccess.READ)
-	if file == null:
-		_ensure_player_profile_id()
-		return
-	for line in file.get_as_text().split("\n"):
-		var parts = line.split("=", false, 1)
-		if parts.size() != 2:
-			continue
-		var key: = parts[0].strip_edges()
-		var value: = parts[1].strip_edges()
-		if key == "nickname":
-			player_nickname = _sanitize_player_nickname(value)
-		elif key == "profile_id":
-			player_profile_id = _sanitize_profile_id(value)
-	file.close()
-	_ensure_player_profile_id()
-
+	save_controller._load_player_profile()
 
 func _save_player_profile() -> void :
-	_ensure_player_profile_id()
-	var file = FileAccess.open(PLAYER_PROFILE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string("nickname=" + player_nickname + "\n")
-	file.store_string("profile_id=" + player_profile_id + "\n")
-	file.close()
-
+	save_controller._save_player_profile()
 
 func _ensure_card_unlock_defaults() -> void :
-	for card_id in CARD_UNLOCK_ALWAYS_AVAILABLE:
-		unlocked_card_ids[String(card_id)] = true
-	for card in CARDS:
-		var card_id: = _card_id(card)
-		if not CARD_UNLOCK_RULES.has(card_id) and not unlocked_card_ids.has(card_id):
-			unlocked_card_ids[card_id] = true
-	for key in MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE:
-		unlocked_manifestation_ids[String(key)] = true
-	if retornante_unlocked:
-		unlocked_manifestation_ids["retornante"] = true
-	for key in SPECTRUM_UNLOCK_ALWAYS_AVAILABLE:
-		unlocked_spectrum_ids[String(key)] = true
-	for aura in AURAS:
-		var spectrum_key: = String(aura.get("key", ""))
-		if spectrum_key != "" and not specter_levels.has(spectrum_key):
-			specter_levels[spectrum_key] = 1
-
+	save_controller._ensure_card_unlock_defaults()
 
 func _load_card_unlocks() -> void :
-	unlocked_card_ids.clear()
-	unlocked_manifestation_ids.clear()
-	unlocked_spectrum_ids.clear()
-	card_unlock_progress.clear()
-	card_unlock_veteran_synced_version_code = 0
-	if FileAccess.file_exists(CARD_UNLOCK_SAVE_PATH):
-		var file = FileAccess.open(CARD_UNLOCK_SAVE_PATH, FileAccess.READ)
-		if file != null:
-			var parsed = JSON.parse_string(file.get_as_text())
-			file.close()
-			if parsed is Dictionary:
-				var data: Dictionary = parsed
-				for card_id in data.get("unlocked", []):
-					unlocked_card_ids[String(card_id)] = true
-				for manifestation_id in data.get("unlocked_manifestations", []):
-					unlocked_manifestation_ids[String(manifestation_id)] = true
-				for spectrum_id in data.get("unlocked_specters", data.get("unlocked_spectrums", [])):
-					unlocked_spectrum_ids[String(spectrum_id)] = true
-				var loaded_levels: Dictionary = data.get("specter_levels", {})
-				for key in loaded_levels.keys():
-					specter_levels[String(key)] = clampi(int(loaded_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
-				persistent_spectral_coins = maxi(0, int(data.get("spectral_coins", data.get("persistent_spectral_coins", 0))))
-				spectral_coins = persistent_spectral_coins
-				var progress: Dictionary = data.get("progress", {})
-				for key in progress.keys():
-					card_unlock_progress[String(key)] = float(progress[key])
-				card_unlock_veteran_synced_version_code = maxi(0, int(data.get("veteran_unlock_sync_version_code", 0)))
-	_ensure_card_unlock_defaults()
-	card_unlocks_dirty = false
-	card_unlock_save_timer = 0.0
-
+	save_controller._load_card_unlocks()
 
 func _save_card_unlocks() -> void :
-	_ensure_card_unlock_defaults()
-	var unlocked: Array = []
-	for card_id in unlocked_card_ids.keys():
-		if bool(unlocked_card_ids[card_id]):
-			unlocked.append(String(card_id))
-	unlocked.sort()
-	var unlocked_manifestations: Array = []
-	for key in unlocked_manifestation_ids.keys():
-		if bool(unlocked_manifestation_ids[key]):
-			unlocked_manifestations.append(String(key))
-	unlocked_manifestations.sort()
-	var unlocked_specters: Array = []
-	for key in unlocked_spectrum_ids.keys():
-		if bool(unlocked_spectrum_ids[key]):
-			unlocked_specters.append(String(key))
-	unlocked_specters.sort()
-	var progress: Dictionary = {}
-	for key in card_unlock_progress.keys():
-		progress[String(key)] = float(card_unlock_progress[key])
-	var saved_specter_levels: Dictionary = {}
-	for key in specter_levels.keys():
-		saved_specter_levels[String(key)] = clampi(int(specter_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
-	var file = FileAccess.open(CARD_UNLOCK_SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string(JSON.stringify({
-		"version": 2,
-		"unlocked": unlocked,
-		"unlocked_manifestations": unlocked_manifestations,
-		"unlocked_specters": unlocked_specters,
-		"specter_levels": saved_specter_levels,
-		"spectral_coins": maxi(0, persistent_spectral_coins),
-		"progress": progress,
-		"veteran_unlock_sync_version_code": card_unlock_veteran_synced_version_code
-	}, "\t"))
-	file.close()
-	card_unlocks_dirty = false
-	card_unlock_save_timer = 0.0
-
+	save_controller._save_card_unlocks()
 
 func _mark_card_unlocks_dirty() -> void :
-	card_unlocks_dirty = true
-	if card_unlock_save_timer <= 0.0:
-		card_unlock_save_timer = 3.0
-
+	save_controller._mark_card_unlocks_dirty()
 
 func _flush_card_unlocks_if_dirty() -> void :
-	if card_unlocks_dirty:
-		_save_card_unlocks()
-
+	save_controller._flush_card_unlocks_if_dirty()
 
 func _known_manifestation_key(key: String) -> bool:
 	for item in MANIFESTATIONS:
@@ -3930,559 +3815,79 @@ func _online_menu_available() -> bool:
 
 
 func _load_config() -> void :
-
-	retornante_unlocked = false
-	online_mode_unlocked = false
-	qa_streaming_unlocked = false
-	qa_streaming_enabled = false
-	qa_streaming_status = ""
-	if not FileAccess.file_exists("user://hud_config.save"):
-		return
-	var file = FileAccess.open("user://hud_config.save", FileAccess.READ)
-	if file:
-		var content = file.get_as_text()
-		var lines = content.split("\n")
-		for line in lines:
-			var parts = line.split("=")
-			if parts.size() == 2:
-				var k = parts[0].strip_edges()
-				var v = parts[1].strip_edges()
-				var coords = v.split(",")
-				if k == "joy_pos" and coords.size() == 2: hud_joy_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "joy_scale": hud_joy_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "attack_pos" and coords.size() == 2: hud_attack_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "attack_scale": hud_attack_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_ATTACK_SCALE_MAX)
-				elif k == "skill_scale": hud_skill_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "secondary_pos" and coords.size() == 2: hud_secondary_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "secondary_scale": hud_secondary_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "dash_pos" and coords.size() == 2: hud_dash_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "dash_scale": hud_dash_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "lacerante_empower_pos" and coords.size() == 2: hud_lacerante_empower_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "lacerante_empower_scale": hud_lacerante_empower_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "hud_left_panel_pos" and coords.size() == 2: hud_left_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_right_panel_pos" and coords.size() == 2: hud_right_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_boss_panel_pos" and coords.size() == 2: hud_boss_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_skill_pos" and coords.size() == 2: hud_skill_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_pause_pos" and coords.size() == 2: hud_pause_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_boss_call_pos" and coords.size() == 2: hud_boss_call_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_shop_pos" and coords.size() == 2: hud_shop_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_aura_panel_pos" and coords.size() == 2: hud_aura_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_cards_panel_pos" and coords.size() == 2: hud_cards_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_coagulum_pos" and coords.size() == 2: hud_coagulum_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_aura_panel_scale": hud_aura_panel_scale = clamp(float(v), HUD_PANEL_SCALE_MIN, HUD_PANEL_SCALE_MAX)
-				elif k == "hud_cards_panel_scale": hud_cards_panel_scale = clamp(float(v), HUD_PANEL_SCALE_MIN, HUD_PANEL_SCALE_MAX)
-				elif k == "hud_coagulum_scale": hud_coagulum_scale = clamp(float(v), HUD_PANEL_SCALE_MIN, HUD_PANEL_SCALE_MAX)
-				elif k == "analog_fixed": analog_fixed = v != "false"
-				elif k == "analog_mode": analog_fixed = v != "dinamico"
-				elif k == "shop_auto_enabled": shop_auto_enabled = v != "false"
-				elif k == "shop_auto_interval": shop_auto_interval = clamp(float(v), 180.0, 480.0)
-				elif k == "auto_target_priority": auto_target_priority = _sanitize_target_priority(v)
-				elif k == "haptics_enabled": haptics_enabled = v != "false"
-				elif k == "show_fps_counter": show_fps_counter = v == "true"
-				elif k == "run_tutorial_enabled": run_tutorial_enabled = v == "true"
-				elif k == "shop_tutorial_seen": shop_tutorial_seen = v == "true"
-				elif k == "boss_call_tutorial_seen": boss_call_tutorial_seen = v == "true"
-				elif k == "online_mode_unlocked": online_mode_unlocked = v == "true"
-				elif k == "qa_streaming_enabled": qa_streaming_enabled = false
-				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = v == "true"
-				elif k == "qa_streaming_quality": qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(v)
-				elif k == "qa_data_unlocked": qa_data_unlocked = v == "true"
-				elif k == "force_phase6_start":
-					force_phase6_start = v == "true"
-					if force_phase6_start:
-						forced_initial_phase = 6
-				elif k == "forced_initial_phase": forced_initial_phase = _sanitize_forced_initial_phase(int(v))
-				elif k == "initial_phase_bias_target": initial_phase_bias_target = _sanitize_initial_phase_bias_target(int(v))
-				elif k == "initial_phase_bias_strength": initial_phase_bias_strength = clampf(float(v), 0.0, 1.0)
-				elif k == "ui_platform_override": ui_platform_override = _sanitize_ui_platform_override(v)
-				elif k == "ui_platform_override_unlocked": ui_platform_override_unlocked = v == "true"
-				elif k == "desktop_window_mode": desktop_window_mode = _sanitize_desktop_window_mode(v)
-				elif k == "desktop_aim_mode": desktop_aim_mode = _sanitize_desktop_aim_mode(v)
-				elif k == "desktop_teleport_mode": desktop_teleport_mode = _sanitize_desktop_teleport_mode(v)
-				elif k == "desktop_attack_aim_mode": desktop_attack_aim_mode = _sanitize_desktop_attack_aim_mode(v)
-				elif k == "desktop_hud_scale": desktop_hud_scale = _sanitize_desktop_hud_scale(float(v))
-				elif k == "gamepad_bindings":
-					_load_gamepad_bindings(coords)
-				elif k == "keyboard_bindings":
-					_load_keyboard_bindings(coords)
-
-				elif k == "vol_master": vol_master = float(v)
-
-				elif k == "vol_music": vol_music = float(v)
-
-				elif k == "vol_sfx": vol_sfx = float(v)
-				elif k == "vol_shots": vol_shots = clamp(float(v), 0.0, 1.0)
-
-				elif k == "gfx_particles": gfx_particles = v == "true"
-
-				elif k == "gfx_shadows": gfx_shadows = v == "true"
-
-				elif k == "gfx_screen_shake": gfx_screen_shake = v == "true"
-				elif k == "gfx_health_warning_start": gfx_health_warning_start = clampf(float(v), 0.35, 0.7)
-				elif k == "gfx_health_warning_strength": gfx_health_warning_strength = clampf(float(v), 0.0, 1.35)
-				elif k == "gfx_low_resource": gfx_low_resource = v == "true"
-				elif k == "gfx_memory_saver": gfx_memory_saver = v == "true"
-				elif k == "damage_text_scale": damage_text_scale = clamp(float(v), 0.7, 1.8)
-				elif k == "interface_text_scale": interface_text_scale = clamp(float(v), 0.9, 1.6)
-				elif k == "vol_master": vol_master = float(v)
-				elif k == "vol_music": vol_music = float(v)
-				elif k == "vol_sfx": vol_sfx = float(v)
-				elif k == "vol_shots": vol_shots = clamp(float(v), 0.0, 1.0)
-				elif k == "gfx_particles": gfx_particles = v == "true"
-				elif k == "gfx_shadows": gfx_shadows = v == "true"
-				elif k == "gfx_screen_shake": gfx_screen_shake = v == "true"
-				elif k == "gfx_low_resource": gfx_low_resource = v == "true"
-				elif k == "gfx_memory_saver": gfx_memory_saver = v == "true"
-				elif k == "damage_text_scale": damage_text_scale = clamp(float(v), 0.7, 1.8)
-		file.close()
-	ui_platform_override = _sanitize_ui_platform_override(ui_platform_override)
-	desktop_window_mode = _sanitize_desktop_window_mode(desktop_window_mode)
-	desktop_aim_mode = _sanitize_desktop_aim_mode(desktop_aim_mode)
-	desktop_teleport_mode = _sanitize_desktop_teleport_mode(desktop_teleport_mode)
-	desktop_attack_aim_mode = _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode)
-	desktop_hud_scale = _sanitize_desktop_hud_scale(desktop_hud_scale)
-	forced_initial_phase = _sanitize_forced_initial_phase(forced_initial_phase)
-	force_phase6_start = forced_initial_phase == 6
-	forced_shop_enabled = shop_auto_enabled
-	if gfx_memory_saver:
-		gfx_low_resource = true
-	qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode)
-	if not QA_STREAMING_FEATURE_ENABLED:
-		qa_streaming_enabled = false
-		qa_streaming_unlocked = false
-		qa_streaming_status = ""
-	else:
-		qa_streaming_enabled = false
-
+	save_controller._load_config()
 
 func _save_config() -> void :
-	var file = FileAccess.open("user://hud_config.save", FileAccess.WRITE)
-	if file:
-		file.store_string("joy_pos=" + str(hud_joy_pos.x) + "," + str(hud_joy_pos.y) + "\n")
-		file.store_string("joy_scale=" + str(hud_joy_scale) + "\n")
-		file.store_string("attack_pos=" + str(hud_attack_pos.x) + "," + str(hud_attack_pos.y) + "\n")
-		file.store_string("attack_scale=" + str(hud_attack_scale) + "\n")
-		file.store_string("skill_scale=" + str(hud_skill_scale) + "\n")
-		file.store_string("secondary_pos=" + str(hud_secondary_pos.x) + "," + str(hud_secondary_pos.y) + "\n")
-		file.store_string("secondary_scale=" + str(hud_secondary_scale) + "\n")
-		file.store_string("dash_pos=" + str(hud_dash_pos.x) + "," + str(hud_dash_pos.y) + "\n")
-		file.store_string("dash_scale=" + str(hud_dash_scale) + "\n")
-		file.store_string("lacerante_empower_pos=" + str(hud_lacerante_empower_pos.x) + "," + str(hud_lacerante_empower_pos.y) + "\n")
-		file.store_string("lacerante_empower_scale=" + str(hud_lacerante_empower_scale) + "\n")
-		file.store_string("hud_left_panel_pos=" + str(hud_left_panel_pos.x) + "," + str(hud_left_panel_pos.y) + "\n")
-		file.store_string("hud_right_panel_pos=" + str(hud_right_panel_pos.x) + "," + str(hud_right_panel_pos.y) + "\n")
-		file.store_string("hud_boss_panel_pos=" + str(hud_boss_panel_pos.x) + "," + str(hud_boss_panel_pos.y) + "\n")
-		file.store_string("hud_skill_pos=" + str(hud_skill_pos.x) + "," + str(hud_skill_pos.y) + "\n")
-		file.store_string("hud_pause_pos=" + str(hud_pause_pos.x) + "," + str(hud_pause_pos.y) + "\n")
-		file.store_string("hud_boss_call_pos=" + str(hud_boss_call_pos.x) + "," + str(hud_boss_call_pos.y) + "\n")
-		file.store_string("hud_shop_pos=" + str(hud_shop_pos.x) + "," + str(hud_shop_pos.y) + "\n")
-		file.store_string("hud_aura_panel_pos=" + str(hud_aura_panel_pos.x) + "," + str(hud_aura_panel_pos.y) + "\n")
-		file.store_string("hud_cards_panel_pos=" + str(hud_cards_panel_pos.x) + "," + str(hud_cards_panel_pos.y) + "\n")
-		file.store_string("hud_coagulum_pos=" + str(hud_coagulum_pos.x) + "," + str(hud_coagulum_pos.y) + "\n")
-		file.store_string("hud_aura_panel_scale=" + str(hud_aura_panel_scale) + "\n")
-		file.store_string("hud_cards_panel_scale=" + str(hud_cards_panel_scale) + "\n")
-		file.store_string("hud_coagulum_scale=" + str(hud_coagulum_scale) + "\n")
-		file.store_string("analog_mode=" + ("fixo" if analog_fixed else "dinamico") + "\n")
-		file.store_string("analog_fixed=" + ("true" if analog_fixed else "false") + "\n")
-		file.store_string("shop_auto_enabled=" + ("true" if shop_auto_enabled else "false") + "\n")
-		file.store_string("shop_auto_interval=" + str(shop_auto_interval) + "\n")
-		file.store_string("auto_target_priority=" + auto_target_priority + "\n")
-		file.store_string("haptics_enabled=" + ("true" if haptics_enabled else "false") + "\n")
-		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
-		file.store_string("run_tutorial_enabled=" + ("true" if run_tutorial_enabled else "false") + "\n")
-		file.store_string("shop_tutorial_seen=" + ("true" if shop_tutorial_seen else "false") + "\n")
-		file.store_string("boss_call_tutorial_seen=" + ("true" if boss_call_tutorial_seen else "false") + "\n")
-		file.store_string("online_mode_unlocked=" + ("true" if online_mode_unlocked else "false") + "\n")
-		file.store_string("qa_streaming_enabled=false\n")
-		file.store_string("qa_streaming_unlocked=" + ("true" if qa_streaming_unlocked else "false") + "\n")
-		file.store_string("qa_streaming_quality=" + _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode) + "\n")
-		file.store_string("qa_data_unlocked=" + ("true" if qa_data_unlocked else "false") + "\n")
-		file.store_string("force_phase6_start=" + ("true" if force_phase6_start else "false") + "\n")
-		file.store_string("forced_initial_phase=" + str(_sanitize_forced_initial_phase(forced_initial_phase)) + "\n")
-		file.store_string("initial_phase_bias_target=" + str(_sanitize_initial_phase_bias_target(initial_phase_bias_target)) + "\n")
-		file.store_string("initial_phase_bias_strength=" + str(clampf(initial_phase_bias_strength, 0.0, 1.0)) + "\n")
-		file.store_string("ui_platform_override=" + _sanitize_ui_platform_override(ui_platform_override) + "\n")
-		file.store_string("ui_platform_override_unlocked=" + ("true" if ui_platform_override_unlocked else "false") + "\n")
-		file.store_string("desktop_window_mode=" + _sanitize_desktop_window_mode(desktop_window_mode) + "\n")
-		file.store_string("desktop_aim_mode=" + _sanitize_desktop_aim_mode(desktop_aim_mode) + "\n")
-		file.store_string("desktop_teleport_mode=" + _sanitize_desktop_teleport_mode(desktop_teleport_mode) + "\n")
-		file.store_string("desktop_attack_aim_mode=" + _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) + "\n")
-		file.store_string("desktop_hud_scale=" + str(_sanitize_desktop_hud_scale(desktop_hud_scale)) + "\n")
-		file.store_string("gamepad_bindings=" + _serialize_gamepad_bindings() + "\n")
-		file.store_string("keyboard_bindings=" + _serialize_keyboard_bindings() + "\n")
-
-		file.store_string("vol_master=" + str(vol_master) + "\n")
-
-		file.store_string("vol_music=" + str(vol_music) + "\n")
-
-		file.store_string("vol_sfx=" + str(vol_sfx) + "\n")
-		file.store_string("vol_shots=" + str(vol_shots) + "\n")
-
-		file.store_string("gfx_particles=" + ("true" if gfx_particles else "false") + "\n")
-
-		file.store_string("gfx_shadows=" + ("true" if gfx_shadows else "false") + "\n")
-
-		file.store_string("gfx_screen_shake=" + ("true" if gfx_screen_shake else "false") + "\n")
-		file.store_string("gfx_health_warning_start=" + str(gfx_health_warning_start) + "\n")
-		file.store_string("gfx_health_warning_strength=" + str(gfx_health_warning_strength) + "\n")
-		file.store_string("gfx_low_resource=" + ("true" if gfx_low_resource else "false") + "\n")
-		file.store_string("gfx_memory_saver=" + ("true" if gfx_memory_saver else "false") + "\n")
-		file.store_string("damage_text_scale=" + str(damage_text_scale) + "\n")
-		file.store_string("interface_text_scale=" + str(interface_text_scale) + "\n")
-		file.store_string("vol_master=" + str(vol_master) + "\n")
-		file.store_string("vol_music=" + str(vol_music) + "\n")
-		file.store_string("vol_sfx=" + str(vol_sfx) + "\n")
-		file.store_string("vol_shots=" + str(vol_shots) + "\n")
-		file.store_string("gfx_particles=" + ("true" if gfx_particles else "false") + "\n")
-		file.store_string("gfx_shadows=" + ("true" if gfx_shadows else "false") + "\n")
-		file.store_string("gfx_screen_shake=" + ("true" if gfx_screen_shake else "false") + "\n")
-		file.store_string("gfx_low_resource=" + ("true" if gfx_low_resource else "false") + "\n")
-		file.store_string("gfx_memory_saver=" + ("true" if gfx_memory_saver else "false") + "\n")
-		file.store_string("damage_text_scale=" + str(damage_text_scale) + "\n")
-		file.close()
-
+	save_controller._save_config()
 
 func _interrupted_run_field_names() -> Array:
-	return [
-		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted", 
-		"selected_manifestation", "selected_aura", "manifestation_key", "aura_state", "manifest_evolution_state", 
-		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal", 
-		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer", 
-		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
-		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", 
-		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", 
-		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing", 
-		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player", 
-		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "miasma_eel_slow_timer", "miasma_eel_slow_stacks", "pustule_spit_slow_timer", "pustule_spit_slow_grace_timer", "boss_tp_stun_timer", "boss_wave_slow_timer", "player_stun_timer", "player_silence_timer", "revive_heal_penalty_timer", "player_freeze_visual_timer", "player_freeze_visual_duration", 
-		"boss1_rewind_cooldown", "boss1_rewind_history", "boss1_rewind_sample_timer", "boss1_rewind_sequence", "boss1_rewind_visual_projectiles", "boss1_rewind_vibration_timer", "boss1_rewind_clock_tick", "boss1_absorb_cooldown", "boss1_absorb_timer", "boss1_absorb_damage", "boss1_absorb_retaliate_timer", "boss1_absorb_bursts_fired", "boss1_time_wave", 
-		"arauto", "arauto_spawned", "arauto_rays", "arauto_echo_breaks", "arauto_card_drops", "arauto_evolution_fragment", "manifest_evolution_fragment_claimed_this_run", "manifest_evolution_fragment_claim_source", 
-		"boss2_ice_shards", "boss2_snow_zones", "boss2_frost_particles", "phase2_fire_walls", "phase2_fire_wall_hit_cd", "boss2_state", "boss2_action_timer", "boss2_target_position", "boss2_last_attack", "boss2_repeat_count", "boss2_facing_dir", "boss2_walk_speed", "boss2_anim_timer", "boss2_anim_frame", "boss2_breath_dir", "boss2_ultimate_cooldown", "boss2_ultimate_timer", "boss2_ultimate_center", "boss2_ultimate_orbit_angle", "boss2_ultimate_spit_timer", "boss2_ultimate_wind_timer", "boss2_ultimate_wind_active", "boss2_ultimate_wind_dir", "boss2_ultimate_hail_timer", "boss2_ultimate_fan_timer", "boss2_ultimate_blizzard_tick", "boss2_ultimate_blizzard_exposure", "boss2_ultimate_hit_gate", "boss2_ultimate_used", 
-		"phase3_miasma_zones", "phase3_cheeses", "phase6_pustule_pools", "phase6_pustule_pheromone_timer", "boss6_lodarian_pools", "boss6_state", "boss6_current_ability", "boss6_state_timer", "boss6_wait_timer", "boss6_ability_cooldowns", "boss6_last_abilities", "boss6_carapace_plates", "boss6_carapace_timer", "boss6_vulnerability_timer", "boss6_core_exposed_timer", "boss6_core_permanent_bonus", "boss6_event_80_triggered", "boss6_event_60_triggered", "boss6_event_40_triggered", "boss6_event_30_triggered", "boss6_event_15_triggered", "boss6_special_event_id", "boss6_special_timer", "boss6_organs", "boss6_final_mutation", "boss6_final_birth_timer", "boss6_fossil_era_timer", "boss6_fossil_shield", "boss6_rib_prison", "boss6_tail_channels", "boss6_reflux_objects", "boss6_cracked_heart", "sanguessuga_parasite_timer", "sanguessuga_bleed_tick_timer", "boss6_shielded", "boss6_entry_particles", "boss6_relocating", "boss6_relocate_from", "boss6_relocate_to", "boss6_relocate_age", "boss6_relocate_duration", "boss6_miasma_ult_timer", "boss6_miasma_ult_cooldown", "boss6_miasma_ult_angle", "boss6_miasma_ult_pustule_timer", "boss6_miasma_slow_timer", "boss6_miasma_slow_stacks", "boss6_miasma_slow_tick", "boss6_carnage_slow_timer", "boss3_faith", "boss3_stage", "boss3_stun_timer", "boss3_rain_timer", "boss3_spit_timer", "boss3_tail_timer", "boss3_charge_timer", "boss3_cheese_timer", "boss3_dialogue_timer", "boss3_events", "boss3_consume_uid", "boss3_consume_timer", "boss3_ritual_timer", "boss3_ritual_destroyed", "boss3_is_moving", "boss3_miasma_cooldown", "boss3_miasma_timer", "boss3_miasma_variant", "boss3_miasma_clone_timer", "boss3_miasma_clone_positions", "boss3_miasma_spit_timer", "boss3_miasma_qte_required", "boss3_miasma_qte_taps", "boss3_miasma_qte_time_left", "boss3_miasma_qte_idle", "boss3_miasma_qte_tutorial", "boss3_miasma_qte_elapsed", "boss3_miasma_qte_lid_contacts", "boss3_miasma_qte_lids_touching", "boss3_miasma_qte_overtime_timer", "boss3_miasma_qte_overtime_stage", "boss3_miasma_tutorial_seen", "boss3_miasma_clouds", "boss3_faith_test_cooldown", "boss3_faith_test_active", "boss3_faith_test_pulses_left", "boss3_faith_test_pulse_timer", "boss3_faith_link_timer", "boss3_faith_link_damage_done", 
-		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_ultimate_laser_timer", "boss4_ultimate_gravity_timer", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_secondary_timer", "boss4_secondary_active", "boss4_secondary_elapsed", "boss4_ultimate_cooldown", "boss4_ultimate_ray_index", "boss4_strike_sequence", "boss4_meteorites", "boss4_meteor_event_timer", "boss4_meteor_event_started", "boss4_meteor_damage_bonus", "boss4_stun_timer", "boss4_vulnerable_timer", "boss4_column_barrage_timer", "boss4_drag_wave_timer", "boss4_sonic_used",
-		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action", 
-		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done", 
-		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes", 
-		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "estase_reparadora_timer", "estase_reparadora_tick", "estase_reparadora_pause", "estase_reparadora_anchor", "estase_reparadora_active", "estase_reparadora_pulse", "egide_hemofaga_shield", "egide_hemofaga_full_timer", "egide_hemofaga_pulse", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects", 
-		"cartographic_coords", "cartographic_route_timer", "cartographic_boss_displacement", "mnesic_trick_timer", "mnesic_trick_origin", "mnesic_boss_vulnerability", "resonant_perfect_streak", "resonant_noise", "resonant_next_perfect", "resonant_speed_timer", "resonant_sinfonia_buff_timer", "resonant_note_index", "boss_resonant_notes", "boss_contract_clause", "boss_contract_infractions", "boss_contract_vulnerability", "contractual_notifications", "contractual_penalty_timer", "contractual_order", "contractual_order_rewards", "contractual_order_penalties", 
-		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects", "necronada_vestiges", "necronada_remnants", "necronada_requiem", "necronada_pente_history", "necronada_attack_counter", "necronada_empowered_ready", "necronada_empower_until", "necronada_empower_cooldown_until", "necronada_horde_progress", 
-		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
-	]
-
+	return save_controller._interrupted_run_field_names()
 
 func _run_report_state_field_names() -> Array:
-	return [
-		"run_started_at", "run_started_unix", "run_start_damage",
-		"run_damage_to_enemies", "run_damage_by_enemy", "run_damage_to_boss_by_phase",
-		"run_boss_reached", "run_boss_started_at", "run_boss_duration",
-		"run_damage_taken_total", "run_damage_taken_by_source", "run_damage_hits_by_source",
-		"run_damage_source_meta", "run_damage_events", "run_heatmap_cells",
-		"run_phase_seconds", "run_behavior_distance", "run_behavior_edge_seconds",
-		"run_behavior_corner_seconds", "run_behavior_center_seconds", "run_behavior_dash_count",
-		"run_behavior_shots_fired", "run_behavior_hits", "run_behavior_boss_hits",
-		"run_behavior_player_last_pos", "run_behavior_player_last_sample_pos",
-		"run_behavior_move_samples", "run_behavior_stationary_samples"
-	]
-
+	return save_controller._run_report_state_field_names()
 
 func _snapshot_field_value(value: Variant) -> Variant:
-	if value is Dictionary or value is Array:
-		return value.duplicate(true)
-	return value
-
+	return save_controller._snapshot_field_value(value)
 
 func _run_can_be_saved() -> bool:
-	if is_multiplayer or dedicated_server_mode or online_connected:
-		return false
-	if is_dead or player_hp <= 0:
-		return false
-	return _interrupted_run_saved_mode() != ""
-
+	return save_controller._run_can_be_saved()
 
 func _interrupted_run_saved_mode() -> String:
-	if mode in ["game", "paused", "shop", "shop_opening", "shop_countdown", "boss_call", "phase_transition", "manifest_evolution"]:
-		return mode
-	if mode == "pause_deck":
-		return "paused"
-	if mode in ["settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data"] and settings_previous_mode != "menu":
-		return "paused" if settings_previous_mode == "paused" else "game"
-	return ""
-
+	return save_controller._interrupted_run_saved_mode()
 
 func _build_interrupted_run_snapshot() -> Dictionary:
-	var fields: = {}
-	for field in _interrupted_run_field_names() + _run_report_state_field_names():
-		fields[String(field)] = _snapshot_field_value(get(String(field)))
-	fields["mode"] = _interrupted_run_saved_mode()
-	return {
-		"schema": 1, 
-		"game_version": GAME_VERSION, 
-		"saved_at": _datetime_text(), 
-		"saved_unix": int(Time.get_unix_time_from_system()), 
-		"fields": fields
-	}
-
+	return save_controller._build_interrupted_run_snapshot()
 
 func _save_interrupted_run(force: = false) -> void :
-	if not _run_can_be_saved():
-		return
-	if not force:
-		interrupted_run_autosave_timer -= get_process_delta_time()
-		if interrupted_run_autosave_timer > 0.0:
-			return
-	interrupted_run_autosave_timer = INTERRUPTED_RUN_AUTOSAVE_INTERVAL
-	var snapshot: = _build_interrupted_run_snapshot()
-	var file: = FileAccess.open(INTERRUPTED_RUN_SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string(var_to_str(snapshot))
-	file.close()
-	interrupted_run_available = true
-	interrupted_run_summary = _interrupted_run_summary_from_snapshot(snapshot)
-
+	save_controller._save_interrupted_run(force)
 
 func _clear_interrupted_run_save() -> void :
-	interrupted_run_available = false
-	interrupted_run_summary.clear()
-	interrupted_run_autosave_timer = INTERRUPTED_RUN_AUTOSAVE_INTERVAL
-	if FileAccess.file_exists(INTERRUPTED_RUN_SAVE_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(INTERRUPTED_RUN_SAVE_PATH))
-
+	save_controller._clear_interrupted_run_save()
 
 func _load_interrupted_run_snapshot() -> Dictionary:
-	if not FileAccess.file_exists(INTERRUPTED_RUN_SAVE_PATH):
-		return {}
-	var file: = FileAccess.open(INTERRUPTED_RUN_SAVE_PATH, FileAccess.READ)
-	if file == null:
-		return {}
-	var raw: = file.get_as_text()
-	file.close()
-	var parsed = str_to_var(raw)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		return {}
-	var snapshot: Dictionary = parsed
-	if int(snapshot.get("schema", 0)) != 1 or typeof(snapshot.get("fields", {})) != TYPE_DICTIONARY:
-		return {}
-	return snapshot
-
+	return save_controller._load_interrupted_run_snapshot()
 
 func _load_interrupted_run_summary() -> void :
-	var snapshot: = _load_interrupted_run_snapshot()
-	interrupted_run_available = not snapshot.is_empty()
-	interrupted_run_summary = _interrupted_run_summary_from_snapshot(snapshot) if interrupted_run_available else {}
-
+	save_controller._load_interrupted_run_summary()
 
 func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
-	if snapshot.is_empty():
-		return {}
-	var fields: Dictionary = snapshot.get("fields", {})
-	var phase: = int(fields.get("current_phase", 1))
-	var total_seconds: = int(max(0.0, float(fields.get("time_alive", 0.0))))
-	var manifestation_index: = clampi(int(fields.get("selected_manifestation", 0)), 0, MANIFESTATIONS.size() - 1)
-	var aura_index: = clampi(int(fields.get("selected_aura", 0)), 0, AURAS.size() - 1)
-
-	var date_str: = ""
-	var saved_unix: = int(snapshot.get("saved_unix", 0))
-	if saved_unix > 0:
-		var dt: = Time.get_datetime_dict_from_unix_time(saved_unix)
-		date_str = "%02d/%02d/%04d" % [int(dt["day"]), int(dt["month"]), int(dt["year"])]
-	else:
-		var raw_saved: = String(snapshot.get("saved_at", ""))
-		if raw_saved.length() >= 10:
-			var parts: = raw_saved.split(" ")[0].split("-")
-			if parts.size() == 3:
-				date_str = "%02d/%02d/%04d" % [int(parts[2]), int(parts[1]), int(parts[0])]
-	if date_str == "":
-		var dt_now: = Time.get_datetime_dict_from_system()
-		date_str = "%02d/%02d/%04d" % [int(dt_now["day"]), int(dt_now["month"]), int(dt_now["year"])]
-
-	return {
-		"phase": phase, 
-		"time": "%02d:%02d" % [int(total_seconds / 60), total_seconds % 60], 
-		"date": date_str, 
-		"manifestation": String(MANIFESTATIONS[manifestation_index].get("name", "Manifestacao")), 
-		"aura": String(AURAS[aura_index].get("name", "Aura")).to_upper(), 
-		"saved_at": String(snapshot.get("saved_at", ""))
-	}
-
+	return save_controller._interrupted_run_summary_from_snapshot(snapshot)
 
 func _interrupted_run_detail_text() -> String:
-	if not interrupted_run_available:
-		return "SEM RUN SALVA"
-	var t_str: = String(interrupted_run_summary.get("time", "00:00"))
-	var d_str: = String(interrupted_run_summary.get("date", "01/08/2026"))
-	return "%s  |  %s" % [t_str, d_str]
-
+	return save_controller._interrupted_run_detail_text()
 
 func _resume_interrupted_run() -> bool:
-	var snapshot: = _load_interrupted_run_snapshot()
-	if snapshot.is_empty():
-		_clear_interrupted_run_save()
-		return false
-	var fields: Dictionary = snapshot.get("fields", {})
-	selected_manifestation = clampi(int(fields.get("selected_manifestation", selected_manifestation)), 0, MANIFESTATIONS.size() - 1)
-	selected_aura = clampi(int(fields.get("selected_aura", selected_aura)), 0, AURAS.size() - 1)
-	_start_game(false)
-	for field in _interrupted_run_field_names() + _run_report_state_field_names():
-		var key: = String(field)
-		if fields.has(key):
-			set(key, fields[key])
-	_post_resume_interrupted_run()
-	return true
-
+	return save_controller._resume_interrupted_run()
 
 func _post_resume_interrupted_run() -> void :
-	mode = _interrupted_run_saved_mode() if _interrupted_run_saved_mode() != "" else "game"
-	if mode in ["settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "pause_deck"]:
-		mode = "paused"
-	is_dead = false
-	partner_is_dead = false
-	player_hp = max(1.0, min(float(player_hp), float(player_hp_max)))
-	touch_move = Vector2.ZERO
-	pointer_down = false
-	active_screen_touches.clear()
-	move_touch_index = -1
-	attack_touch_index = -1
-	attack_dragging = false
-	attack_holding = false
-	attack_touch_pos = Vector2.ZERO
-	attack_lock_selecting = false
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	teleport_dragging = false
-	manifest_preview_open = false
-	interrupted_run_available = true
-	interrupted_run_summary = _interrupted_run_summary_from_snapshot(_build_interrupted_run_snapshot())
-	interrupted_run_autosave_timer = INTERRUPTED_RUN_AUTOSAVE_INTERVAL
-	_play_phase_music()
-	_update_audio_volumes()
-	_add_text("RUN RESTAURADA", player_pos + Vector2(0, -84), Color(0.0, 1.0, 0.82), 1.8, 26)
-	_block_ui_input()
-
+	save_controller._post_resume_interrupted_run()
 
 func _capture_retry_run_snapshot() -> void:
-	if is_multiplayer or dedicated_server_mode:
-		return
-	var saved_mode: String = mode
-	mode = "game"
-	retry_run_snapshot = _build_interrupted_run_snapshot()
-	mode = saved_mode
-
+	save_controller._capture_retry_run_snapshot()
 
 func _retry_available() -> bool:
-	return not is_multiplayer and not dedicated_server_mode and not retry_run_snapshot.is_empty() and retry_charges_used < RUN_RETRY_MAX_CHARGES
-
+	return save_controller._retry_available()
 
 func _retry_penalty_cost(attempt: int) -> int:
-	if attempt <= 1:
-		return score
-	if attempt == 2:
-		return card_cost * 2
-	return card_cost * 5
-
+	return save_controller._retry_penalty_cost(attempt)
 
 func _use_run_retry() -> bool:
-	if not _retry_available():
-		return false
-	var fields: Dictionary = retry_run_snapshot.get("fields", {})
-	if fields.is_empty():
-		return false
-	retry_charges_used += 1
-	selected_manifestation = clampi(int(fields.get("selected_manifestation", selected_manifestation)), 0, MANIFESTATIONS.size() - 1)
-	selected_aura = clampi(int(fields.get("selected_aura", selected_aura)), 0, AURAS.size() - 1)
-	_start_game(false)
-	for field in _interrupted_run_field_names() + _run_report_state_field_names():
-		var key: = String(field)
-		if fields.has(key):
-			set(key, fields[key])
-	is_dead = false
-	partner_is_dead = false
-	retry_confirm_visible = false
-	retry_confirm_new_run = false
-	retry_return_timer = 0.0
-	death_screen_delay_timer = 0.0
-	death_screen_pending_result = ""
-	death_screen_pending_specter_upgrade = false
-	mode = "game"
-	var ratio: float = float(RUN_RETRY_HP_RATIOS[clampi(retry_charges_used - 1, 0, RUN_RETRY_HP_RATIOS.size() - 1)])
-	player_hp = max(1.0, player_hp_max * ratio)
-	run_retry_invulnerability_timer = RUN_RETRY_INVULNERABILITY
-	var penalty: = _retry_penalty_cost(retry_charges_used)
-	if penalty > 0:
-		score = max(0, score - penalty)
-		run_points_spent += penalty
-		if retry_charges_used == 1:
-			_add_text("RETORNO: PONTOS ZERADOS", player_pos + Vector2(0, -104), Color(0.0, 1.0, 0.82), 1.8, 22)
-		else:
-			_add_text("RETORNO: MULTA %d" % penalty, player_pos + Vector2(0, -104), Color(1.0, 0.72, 0.18), 1.8, 22)
-	if boss_dead:
-		_clear_boss_runtime_hazards()
-		spawn_timer = 0.0
-	touch_move = Vector2.ZERO
-	pointer_down = false
-	active_screen_touches.clear()
-	move_touch_index = -1
-	attack_touch_index = -1
-	attack_dragging = false
-	attack_holding = false
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	teleport_dragging = false
-	_play_phase_music()
-	_update_audio_volumes()
-	_add_text("TENTE NOVAMENTE %d/%d" % [retry_charges_used, RUN_RETRY_MAX_CHARGES], player_pos + Vector2(0, -72), Color(0.48, 1.0, 1.0), 1.8, 24)
-	_block_ui_input()
-	return true
-
+	return save_controller._use_run_retry()
 
 func _open_retry_confirm_popup() -> void:
-	retry_confirm_visible = true
-	retry_confirm_new_run = not _retry_available()
-	_block_ui_input()
-
+	save_controller._open_retry_confirm_popup()
 
 func _confirm_retry_choice() -> void:
-	if retry_confirm_new_run or not _retry_available():
-		retry_confirm_visible = false
-		retry_confirm_new_run = false
-		_reset_multiplayer_session_for_solo()
-		_start_game()
-		return
-	_start_retry_return_animation()
-
+	save_controller._confirm_retry_choice()
 
 func _cancel_retry_choice() -> void:
-	retry_confirm_visible = false
-	retry_confirm_new_run = false
-	_block_ui_input()
-
+	save_controller._cancel_retry_choice()
 
 func _retry_confirm_lines() -> Array[String]:
-	if retry_confirm_new_run or not _retry_available():
-		return [
-			"A run atual foi encerrada.",
-			"Uma nova jornada reinicia mapa, pontos, cartas e progressao da partida."
-		]
-	var attempt: int = retry_charges_used + 1
-	var hp_ratio: float = float(RUN_RETRY_HP_RATIOS[clampi(attempt - 1, 0, RUN_RETRY_HP_RATIOS.size() - 1)])
-	var penalty: int = _retry_penalty_cost(attempt)
-	var cost_text: String = "pontos atuais zerados" if attempt == 1 else "multa de %d pontos" % penalty
-	return [
-		"Geovana retorna ao ponto salvo antes da ruptura final.",
-		"Vida de retorno: %d%%. Janela segura: %.0fs." % [int(round(hp_ratio * 100.0)), RUN_RETRY_INVULNERABILITY],
-		"Custo deste retorno: %s." % cost_text
-	]
-
+	return save_controller._retry_confirm_lines()
 
 func _update_interrupted_run_autosave(delta: float) -> void :
-	if _run_can_be_saved():
-		interrupted_run_autosave_timer -= delta
-		if interrupted_run_autosave_timer <= 0.0:
-			_save_interrupted_run(true)
-	else:
-		interrupted_run_autosave_timer = min(interrupted_run_autosave_timer, INTERRUPTED_RUN_AUTOSAVE_INTERVAL)
-
+	save_controller._update_interrupted_run_autosave(delta)
 
 func _load_gamepad_bindings(coords: PackedStringArray) -> void :
 	var actions = _gamepad_action_order()
@@ -7651,47 +7056,13 @@ func _reset_boss1_rewind_state() -> void :
 
 
 func _cancel_combat_aim_state(clear_movement: = false) -> void :
-	attack_touch_index = -1
-	attack_drag_touch_index = -1
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	attack_holding = false
-	attack_dragging = false
-	attack_hold_timer = 0.0
-	attack_lock_selecting = false
-	attack_lock_candidate_kind = ""
-	attack_lock_candidate_uid = -1
-	attack_drag_direction = Vector2.ZERO
-	teleport_dragging = false
-	teleport_drag_screen = Vector2.ZERO
-	teleport_drag_origin = Vector2.ZERO
-	_clear_desktop_aim_state()
-	skill_touch_pos = Vector2.ZERO
-	secondary_touch_pos = Vector2.ZERO
-	if clear_movement:
-		pointer_down = false
-		active_screen_touches.clear()
-		move_touch_index = -1
-		touch_move = Vector2.ZERO
-
-
+	player_control_controller._cancel_combat_aim_state(clear_movement)
 func _spectator_controls_locked() -> bool:
-	return is_multiplayer and online_local_spectator
-
-
+	return player_control_controller._spectator_controls_locked()
 func _player_start_down_controls_locked() -> bool:
-	if player_start_down_fall_timer > 0.0:
-		return true
-	if player_start_down_landing_timer <= 0.0:
-		return false
-	return player_start_down_landing_timer > PLAYER_START_DOWN_LAND_TIME - PLAYER_START_DOWN_CONTROL_LOCK_AFTER_LAND
-
-
+	return player_control_controller._player_start_down_controls_locked()
 func _local_player_controls_locked() -> bool:
-	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked()
-
-
+	return player_control_controller._local_player_controls_locked()
 func _spectator_combat_mode() -> bool:
 	return _spectator_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown")
 
@@ -7785,9 +7156,7 @@ func _gamepad_navigation_mode() -> bool:
 
 
 func _combat_controls_active() -> bool:
-	return not _local_player_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown")
-
-
+	return player_control_controller._combat_controls_active()
 func _reset_arauto_state(reset_spawn_flag: = false) -> void :
 	arauto.clear()
 	arauto_rays.clear()
@@ -9431,40 +8800,9 @@ func _apolo_phase5_laser_danger_at(pos: Vector2, hazard: Dictionary, forecast: f
 
 
 func _read_move() -> Vector2:
-	if _apolo_phase5_exhibition_active():
-		return apolo_phase5_exhibition_move.normalized() if apolo_phase5_exhibition_move.length() > 1.0 else apolo_phase5_exhibition_move
-	var move = Vector2.ZERO
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		move.x -= 1
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		move.x += 1
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		move.y -= 1
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		move.y += 1
-	if move_touch_index != -1 and touch_move.length() > 0.05:
-		move = touch_move
-	if is_gamepad_active:
-		var joy_x = Input.get_joy_axis(0, JOY_AXIS_LEFT_X)
-		var joy_y = Input.get_joy_axis(0, JOY_AXIS_LEFT_Y)
-		var joy_vec = Vector2(joy_x, joy_y)
-		if joy_vec.length() > 0.15:
-			move = joy_vec
-	if controls_inverted_timer > 0.0:
-		move = - move
-	var vector_rotation: = _phase4_vector_rotation()
-	if not is_zero_approx(vector_rotation) and move.length() > 0.05:
-		move = move.rotated(vector_rotation)
-	return move.normalized() if move.length() > 1.0 else move
-
-
+	return player_control_controller._read_move()
 func _right_aim_vector() -> Vector2:
-	if not is_gamepad_active:
-		return Vector2.ZERO
-	var r_vec = Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
-	return r_vec.normalized() if r_vec.length() > 0.15 else Vector2.ZERO
-
-
+	return player_control_controller._right_aim_vector()
 func _try_attack() -> void :
 	if _local_player_controls_locked():
 		return
@@ -9833,37 +9171,9 @@ func _place_anchor() -> void :
 
 
 func _aim_direction() -> Vector2:
-	if _apolo_phase5_exhibition_active():
-		if apolo_phase5_exhibition_aim.length() > 0.05:
-			return apolo_phase5_exhibition_aim.normalized()
-		if boss_active and boss_hp > 0.0:
-			return (boss_pos - player_pos).normalized()
-	var right_aim: = _right_aim_vector()
-	if right_aim.length() > 0.05:
-		return right_aim
-	if lacerante_preparing and lacerante_prepare_dir.length() > 0.05:
-		return lacerante_prepare_dir.normalized()
-	if attack_dragging and attack_drag_direction.length() > 0.05:
-		return attack_drag_direction.normalized()
-	if _uses_desktop_ui() and _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) == DESKTOP_ATTACK_AIM_CURSOR:
-		var cursor_dir: = (_desktop_aim_target_world() - player_pos).normalized()
-		if cursor_dir.length() > 0.05:
-			return cursor_dir
-	var target = _nearest_target()
-	if target != Vector2.ZERO:
-		return (target - player_pos).normalized()
-	return last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT
-
-
+	return player_control_controller._aim_direction()
 func _set_player_attack_visual_dir(direction: Vector2) -> void:
-	if direction.length() > 0.05:
-		player_attack_visual_dir = direction.normalized()
-	elif last_facing.length() > 0.05:
-		player_attack_visual_dir = last_facing.normalized()
-	else:
-		player_attack_visual_dir = Vector2.RIGHT
-
-
+	player_control_controller._set_player_attack_visual_dir(direction)
 func _nearest_target() -> Vector2:
 	var locked_pos = _locked_attack_target_pos()
 	if locked_pos != Vector2.ZERO:
@@ -38088,9 +37398,7 @@ func _draw_corner_limbo(camera: Vector2, viewport: Vector2) -> void:
 
 
 func _clamp_player_world(pos: Vector2) -> Vector2:
-	return pos.clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN)
-
-
+	return player_control_controller._clamp_player_world(pos)
 func _distance_to_rect(point: Vector2, rect: Rect2) -> float:
 	var nearest: = Vector2(
 		clampf(point.x, rect.position.x, rect.end.x),
@@ -38563,51 +37871,15 @@ func _unhandled_input(event: InputEvent) -> void :
 
 
 func _should_ignore_emulated_mouse() -> bool:
-	return not active_screen_touches.is_empty() or Time.get_ticks_msec() <= ignore_mouse_until_msec
-
-
+	return player_control_controller._should_ignore_emulated_mouse()
 func _mouse_release_has_active_action() -> bool:
-	return move_touch_index == -2 or attack_drag_touch_index == -2 or skill_touch_index == -2 or secondary_touch_index == -2 or dash_touch_index == -2 or bombastica_detonator_touch_index == -2 or manifest_drag_touch_index == -2 or deck_drag_touch_index == -2
-
-
+	return player_control_controller._mouse_release_has_active_action()
 func _block_ui_input(duration_ms: = UI_TRANSITION_BLOCK_MS) -> void :
-	ui_input_block_until_msec = max(ui_input_block_until_msec, Time.get_ticks_msec() + duration_ms)
-
-
+	player_control_controller._block_ui_input(duration_ms)
 func _ui_input_blocked() -> bool:
-	return Time.get_ticks_msec() <= ui_input_block_until_msec
-
-
+	return player_control_controller._ui_input_blocked()
 func _sync_touch_state() -> void :
-	if move_touch_index >= 0 and not active_screen_touches.has(move_touch_index):
-		_stop_move_touch()
-	elif move_touch_index == -2 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		_stop_move_touch()
-	if attack_drag_touch_index >= 0 and not active_screen_touches.has(attack_drag_touch_index):
-		attack_drag_touch_index = -1
-		attack_dragging = false
-		attack_holding = false
-		attack_hold_timer = 0.0
-		attack_lock_selecting = false
-		attack_lock_candidate_kind = ""
-		attack_lock_candidate_uid = -1
-	if skill_touch_index >= 0 and not active_screen_touches.has(skill_touch_index):
-		skill_touch_index = -1
-	if secondary_touch_index >= 0 and not active_screen_touches.has(secondary_touch_index):
-		secondary_touch_index = -1
-	if dash_touch_index >= 0 and not active_screen_touches.has(dash_touch_index):
-		dash_touch_index = -1
-		teleport_dragging = false
-	if bombastica_detonator_touch_index >= 0 and not active_screen_touches.has(bombastica_detonator_touch_index):
-		bombastica_detonator_touch_index = -1
-		bombastica_detonator_hold = 0.0
-	elif bombastica_detonator_touch_index == -2 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		bombastica_detonator_touch_index = -1
-		bombastica_detonator_hold = 0.0
-	if active_screen_touches.is_empty() and move_touch_index == -1:
-		pointer_down = false
-
-
+	player_control_controller._sync_touch_state()
 func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if Rect2(viewport.x * 0.5 - 150, viewport.y - 80, 300, 60).has_point(pos):
 		_save_config()
@@ -38941,120 +38213,23 @@ func _active_joy_center(viewport: Vector2) -> Vector2:
 
 
 func _stop_move_touch() -> void :
-	move_touch_index = -1
-	touch_move = Vector2.ZERO
-	pointer_down = false
-
-
+	player_control_controller._stop_move_touch()
 func _touch_record(pos: Vector2) -> Dictionary:
-	return {"pos": pos, "last_ms": Time.get_ticks_msec()}
-
-
+	return player_control_controller._touch_record(pos)
 func _touch_last_ms(index: int) -> int:
-	if not active_screen_touches.has(index):
-		return 0
-	var record = active_screen_touches[index]
-	if record is Dictionary:
-		return int(record.get("last_ms", 0))
-	return Time.get_ticks_msec()
-
-
+	return player_control_controller._touch_last_ms(index)
 func _move_touch_is_stale(timeout_ms: int) -> bool:
-	if move_touch_index < 0:
-		return false
-	var last_ms: = _touch_last_ms(move_touch_index)
-	return last_ms > 0 and Time.get_ticks_msec() - last_ms >= timeout_ms
-
-
+	return player_control_controller._move_touch_is_stale(timeout_ms)
 func _cancel_touch_index(index: int) -> void :
-	active_screen_touches.erase(index)
-	if index == move_touch_index:
-		_stop_move_touch()
-	if index == attack_touch_index:
-		attack_touch_index = -1
-	if index == attack_drag_touch_index:
-		attack_drag_touch_index = -1
-		attack_dragging = false
-		attack_holding = false
-		attack_hold_timer = 0.0
-		attack_lock_selecting = false
-		attack_lock_candidate_kind = ""
-		attack_lock_candidate_uid = -1
-	if index == skill_touch_index:
-		skill_touch_index = -1
-	if index == secondary_touch_index:
-		secondary_touch_index = -1
-	if index == dash_touch_index:
-		dash_touch_index = -1
-		teleport_dragging = false
-	if index == edit_layout_touch_index:
-		edit_layout_touch_index = -1
-	if index == manifest_drag_touch_index:
-		manifest_drag_touch_index = -999
-		manifest_is_dragging = false
-		manifest_drag_moved = false
-	if index == manifest_preview_drag_touch_index:
-		manifest_preview_drag_touch_index = -999
-	if index == manifest_preview_consumed_touch_index:
-		manifest_preview_consumed_touch_index = -999
-	if index == deck_drag_touch_index:
-		deck_drag_touch_index = -999
-		deck_is_dragging = false
-		deck_drag_moved = false
-	if active_screen_touches.is_empty() and move_touch_index == -1:
-		pointer_down = false
-
-
+	player_control_controller._cancel_touch_index(index)
 func _cancel_all_touch_state() -> void :
-	active_screen_touches.clear()
-	_cancel_combat_aim_state(true)
-	edit_layout_touch_index = -1
-	edit_layout_selected = ""
-	edit_layout_resize_visible = false
-	manifest_drag_touch_index = -999
-	manifest_preview_drag_touch_index = -999
-	manifest_preview_consumed_touch_index = -999
-	manifest_is_dragging = false
-	manifest_drag_moved = false
-	deck_drag_touch_index = -999
-	deck_is_dragging = false
-	deck_drag_moved = false
-
-
+	player_control_controller._cancel_all_touch_state()
 func _claim_action_touch(index: int) -> void :
-	if move_touch_index == index:
-		_stop_move_touch()
-	elif index >= 0 and move_touch_index != -1 and not active_screen_touches.has(move_touch_index):
-		_stop_move_touch()
-
-
+	player_control_controller._claim_action_touch(index)
 func _touch_index_has_action(index: int) -> bool:
-	return index == attack_drag_touch_index or index == skill_touch_index or index == secondary_touch_index or index == dash_touch_index or index == bombastica_detonator_touch_index or index == dance_wheel_touch_index
-
-
+	return player_control_controller._touch_index_has_action(index)
 func _try_start_move_touch(index: int, pos: Vector2, viewport: Vector2) -> bool:
-	if _local_player_controls_locked():
-		return false
-	if move_touch_index != -1:
-		if index != move_touch_index and _move_touch_is_stale(900):
-			_stop_move_touch()
-		else:
-			return false
-	if _touch_index_has_action(index):
-		return false
-	var joy = _joy_center(viewport)
-	var joy_radius = 116.0 * _joy_scale()
-	var fixed_hit = pos.distance_to(joy) < joy_radius
-	var dynamic_hit = not analog_fixed and pos.x <= viewport.x * 0.48
-	if not fixed_hit and not dynamic_hit:
-		return false
-	move_touch_index = index
-	pointer_down = true
-	joystick_origin = joy if analog_fixed or fixed_hit else pos
-	touch_move = ((pos - joystick_origin) / (76.0 * _joy_scale())).limit_length(1.0)
-	return true
-
-
+	return player_control_controller._try_start_move_touch(index, pos, viewport)
 func _handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void :
 	if _handle_revive_overlay_press(pos):
 		return
@@ -39410,11 +38585,7 @@ func _desktop_action_allowed(action: String, cooldown_ms: = 160) -> bool:
 
 
 func _clear_desktop_aim_state() -> void :
-	desktop_aim_action = ""
-	desktop_aim_event_binding = ""
-	desktop_aim_is_hold = false
-
-
+	player_control_controller._clear_desktop_aim_state()
 func _desktop_action_binding(action: String) -> String:
 	return _normalize_input_binding(keyboard_bindings.get(action, INPUT_BIND_NONE))
 
@@ -39432,15 +38603,9 @@ func _desktop_skill_mode() -> String:
 
 
 func _desktop_dash_mode() -> String:
-	return _sanitize_desktop_teleport_mode(desktop_teleport_mode)
-
-
+	return player_control_controller._desktop_dash_mode()
 func _desktop_aim_target_world() -> Vector2:
-	var viewport: = get_viewport_rect().size
-	var mouse_pos: = get_viewport().get_mouse_position()
-	return (mouse_pos + _camera(viewport)).clamp(Vector2.ZERO, WORLD_SIZE)
-
-
+	return player_control_controller._desktop_aim_target_world()
 func _desktop_cursor_ground_target(secondary: bool) -> Variant:
 	if _ground_target_profile(secondary).is_empty():
 		return null
@@ -39456,32 +38621,9 @@ func _desktop_cursor_ground_target(secondary: bool) -> Variant:
 
 
 func _desktop_auto_teleport_target() -> Vector2:
-	var target: = _nearest_target()
-	if target != Vector2.ZERO:
-		var offset: Vector2 = target - player_pos
-		if offset.length() > 0.05:
-			return player_pos + offset.limit_length(PLAYER_DASH_DISTANCE)
-	var dir: = _aim_direction()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT
-	return player_pos + dir.normalized() * PLAYER_DASH_DISTANCE
-
-
+	return player_control_controller._desktop_auto_teleport_target()
 func _desktop_dash_target() -> Vector2:
-	if _desktop_dash_mode() == DESKTOP_TELEPORT_AUTO:
-		return _desktop_auto_teleport_target()
-	var viewport: = get_viewport_rect().size
-	var screen_pos: = get_viewport().get_mouse_position()
-	var camera: = _camera(viewport)
-	var world: = (screen_pos + camera).clamp(Vector2.ZERO, WORLD_SIZE)
-	var offset: Vector2 = world - player_pos
-	if offset.length() <= 8.0:
-		offset = _aim_direction() * PLAYER_DASH_DISTANCE
-	if offset.length() <= 0.05:
-		offset = (last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT) * PLAYER_DASH_DISTANCE
-	return player_pos + offset.limit_length(PLAYER_DASH_DISTANCE)
-
-
+	return player_control_controller._desktop_dash_target()
 func _use_desktop_skill(secondary: bool) -> void :
 	var target = _desktop_cursor_ground_target(secondary)
 	if secondary:
@@ -39540,110 +38682,23 @@ func _toggle_player_dance() -> void:
 
 
 func _desktop_action_uses_aim(action: String) -> bool:
-	return action in ["skill", "secondary", "dash"]
-
-
+	return player_control_controller._desktop_action_uses_aim(action)
 func _desktop_action_aim_mode(action: String) -> String:
-	if action == "dash":
-		var dash_mode: = _desktop_dash_mode()
-		if dash_mode in [DESKTOP_AIM_HOLD, DESKTOP_AIM_CONFIRM]:
-			return dash_mode
-		return DESKTOP_AIM_QUICK
-	return _desktop_skill_mode()
-
-
+	return player_control_controller._desktop_action_aim_mode(action)
 func _begin_desktop_aim(action: String, binding: String, hold: bool) -> void :
-	desktop_aim_action = action
-	desktop_aim_event_binding = binding
-	desktop_aim_is_hold = hold
-	if action == "dash":
-		teleport_dragging = true
-		teleport_drag_origin = get_viewport().get_mouse_position()
-		teleport_drag_screen = teleport_drag_origin
-	elif action == "skill":
-		skill_touch_index = -20
-		skill_touch_pos = get_viewport().get_mouse_position()
-	elif action == "secondary":
-		secondary_touch_index = -20
-		secondary_touch_pos = get_viewport().get_mouse_position()
-
-
+	player_control_controller._begin_desktop_aim(action, binding, hold)
 func _confirm_desktop_aim() -> void :
-	var action: = desktop_aim_action
-	_clear_desktop_aim_state()
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	teleport_dragging = false
-	if action != "":
-		_execute_desktop_action(action)
-
-
+	player_control_controller._confirm_desktop_aim()
 func _cancel_desktop_aim_feedback() -> void :
-	if desktop_aim_action == "":
-		return
-	_add_text("CANCELADO", player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
-	_clear_desktop_aim_state()
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	teleport_dragging = false
-
-
+	player_control_controller._cancel_desktop_aim_feedback()
 func _handle_desktop_aim_press(action: String, binding: String) -> bool:
-	if not _desktop_action_uses_aim(action):
-		_execute_desktop_action(action)
-		return true
-	var mode_selected: = _desktop_action_aim_mode(action)
-	if mode_selected == DESKTOP_AIM_QUICK:
-		_execute_desktop_action(action)
-		return true
-	if mode_selected == DESKTOP_AIM_CONFIRM:
-		if desktop_aim_action == action:
-			_confirm_desktop_aim()
-		else:
-			_begin_desktop_aim(action, binding, false)
-		return true
-	_begin_desktop_aim(action, binding, true)
-	return true
-
-
+	return player_control_controller._handle_desktop_aim_press(action, binding)
 func _handle_desktop_aim_release(event: InputEvent) -> bool:
-	if desktop_aim_action == "" or not desktop_aim_is_hold:
-		return false
-	if _desktop_event_binding(event) != desktop_aim_event_binding:
-		return false
-	_confirm_desktop_aim()
-	return true
-
-
+	return player_control_controller._handle_desktop_aim_release(event)
 func _handle_desktop_combat_key(event: InputEventKey) -> bool:
-	if not _uses_desktop_ui() or not _combat_controls_active() or event.echo:
-		return false
-	for action in _keyboard_action_order():
-		if not _event_matches_keyboard_action(event, String(action)):
-			continue
-		if not _desktop_action_allowed(String(action)):
-			return true
-		return _handle_desktop_aim_press(String(action), _desktop_event_binding(event))
-	return false
-
-
+	return player_control_controller._handle_desktop_combat_key(event)
 func _handle_desktop_combat_mouse(event: InputEventMouseButton, viewport: Vector2) -> bool:
-	if not _uses_desktop_ui() or not _combat_controls_active() or not event.pressed:
-		return false
-	if desktop_aim_action != "" and event.button_index == MOUSE_BUTTON_RIGHT:
-		_cancel_desktop_aim_feedback()
-		return true
-	for action in _keyboard_action_order():
-		if not _event_matches_keyboard_action(event, action):
-			continue
-		if not _desktop_action_allowed(action):
-			return true
-		return _handle_desktop_aim_press(action, _desktop_event_binding(event))
-	return false
-
-
+	return player_control_controller._handle_desktop_combat_mouse(event, viewport)
 func _handle_multiplayer_request_key(event: InputEventKey) -> bool:
 	if not event.pressed or event.echo or not (event.keycode in [KEY_ENTER, KEY_SPACE]):
 		return false
