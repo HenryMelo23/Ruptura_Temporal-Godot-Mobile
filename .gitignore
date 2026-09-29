@@ -54,6 +54,11 @@ toolchain/*
 !toolchain/.gdignore
 *.apk
 *.idsig
+*.jks
+*.keystore
+*.p12
+*.pfx
+android_signing.local.ps1
 
 # Local QA logs and temporary migration scripts
 *.log

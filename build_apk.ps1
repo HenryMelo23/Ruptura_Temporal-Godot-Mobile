@@ -175,6 +175,43 @@ function Ensure-AndroidLocalProperties {
 	Write-Host "Android SDK fixado em android/local.properties: $sdkPath"
 }
 
+function Import-AndroidSigningConfig {
+	param([bool]$RequireReleaseSigning)
+
+	$localSigningFile = Join-Path $ProjectRoot "android_signing.local.ps1"
+	if (Test-Path -LiteralPath $localSigningFile) {
+		. $localSigningFile
+	}
+
+	if (-not $RequireReleaseSigning) {
+		return
+	}
+
+	$requiredNames = @(
+		"GODOT_ANDROID_KEYSTORE_RELEASE_PATH",
+		"GODOT_ANDROID_KEYSTORE_RELEASE_USER",
+		"GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD"
+	)
+	$missingNames = @()
+	foreach ($name in $requiredNames) {
+		$value = [Environment]::GetEnvironmentVariable($name)
+		if ([string]::IsNullOrWhiteSpace($value)) {
+			$missingNames += $name
+		}
+	}
+
+	if ($missingNames.Count -gt 0) {
+		throw ("Exportacao release requer assinatura Android local. Defina {0} como variaveis de ambiente ou crie android_signing.local.ps1, que nao deve ser versionado." -f ($missingNames -join ", "))
+	}
+
+	$keystorePath = [Environment]::GetEnvironmentVariable("GODOT_ANDROID_KEYSTORE_RELEASE_PATH")
+	if (-not (Test-Path -LiteralPath $keystorePath -PathType Leaf)) {
+		throw "O arquivo informado em GODOT_ANDROID_KEYSTORE_RELEASE_PATH nao foi encontrado."
+	}
+
+	Write-Host "Assinatura Android release carregada por configuracao local; caminho e credenciais omitidos."
+}
+
 function Test-ApkLooksComplete {
 	param([string]$Path)
 
@@ -323,6 +360,7 @@ $VersionCode = Get-VersionCode -VersionName $Version
 New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 Ensure-AndroidLocalProperties
+Import-AndroidSigningConfig -RequireReleaseSigning ([bool]$Release)
 Update-AndroidPreset -VersionName $Version -RelativeExportPath $RelativeApkPath -VersionCode $VersionCode
 
 Write-Host "Projeto: $ProjectRoot"

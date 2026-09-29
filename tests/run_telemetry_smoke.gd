@@ -42,4 +42,7 @@ func _run() -> void:
 	_check(Array(heatmap.get("cells", [])).size() == 1, "position sample was not aggregated")
 	_check(int(payload.get("ended_unix", 0)) > 0 and String(payload.get("date", "")) != "", "run date and time are missing")
 	print("RUN_TELEMETRY_SMOKE_OK heatmap=true damage_points=true threats=true datetime=true")
+	game.queue_free()
+	await process_frame
+	await process_frame
 	quit(0)

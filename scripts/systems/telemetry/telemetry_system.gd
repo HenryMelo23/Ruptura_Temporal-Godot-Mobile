@@ -1,7 +1,20 @@
 class_name RTTelemetrySystem
 extends Node
 
+const MINIMAL_SCHEMA: String = "ruptura.college_run_telemetry"
+const MINIMAL_SCHEMA_VERSION: int = 1
+const MAX_SCORE_EVENTS: int = 160
+const MAX_SHOP_EVENTS: int = 80
+const MAX_ABILITY_EVENTS: int = 180
+
 var _game: Node
+var _score_events: Array = []
+var _shop_opens: Array = []
+var _shop_offers: Array = []
+var _shop_rerolls: Array = []
+var _shop_purchases: Array = []
+var _ability_events: Array = []
+var _ability_counts: Dictionary = {}
 
 
 func bind_game(game: Node) -> void:
@@ -17,6 +30,7 @@ func start_report() -> void:
 	var game: Node = _game
 	if game == null or not is_instance_valid(game):
 		return
+	_reset_minimal_session()
 	game.run_report_sent = false
 	game.run_report_in_flight = false
 	game.run_finalized_result = ""
@@ -66,6 +80,143 @@ func start_report() -> void:
 		game.run_boss_duration[phase] = -1.0
 
 
+func _reset_minimal_session() -> void:
+	_score_events.clear()
+	_shop_opens.clear()
+	_shop_offers.clear()
+	_shop_rerolls.clear()
+	_shop_purchases.clear()
+	_ability_events.clear()
+	_ability_counts.clear()
+
+
+func _run_time() -> float:
+	var game: Node = _game
+	if game == null or not is_instance_valid(game):
+		return 0.0
+	return snappedf(float(game.time_alive), 0.1)
+
+
+func _run_phase() -> int:
+	var game: Node = _game
+	if game == null or not is_instance_valid(game):
+		return 0
+	return int(game.current_phase)
+
+
+func _append_limited(target: Array, item: Dictionary, max_count: int) -> void:
+	target.append(item)
+	while target.size() > max_count:
+		target.pop_front()
+
+
+func _safe_card_id(card: Dictionary) -> String:
+	var game: Node = _game
+	if game != null and is_instance_valid(game) and game.has_method("_card_id"):
+		return String(game._card_id(card))
+	return String(card.get("id", String(card.get("name", ""))))
+
+
+func _safe_card_rarity(card: Dictionary) -> String:
+	var game: Node = _game
+	if game != null and is_instance_valid(game) and game.has_method("_card_rarity_label") and not card.is_empty():
+		return String(game._card_rarity_label(card))
+	return String(card.get("rarity", ""))
+
+
+func _minimal_card_row(card: Dictionary, count: int = 0) -> Dictionary:
+	return {
+		"id": _safe_card_id(card),
+		"rarity": _safe_card_rarity(card),
+		"count": count
+	}
+
+
+func _compact_shop_slots(slots: Array) -> Array:
+	var compact: Array = []
+	for slot in slots:
+		var row: Dictionary = Dictionary(slot)
+		compact.append({
+			"slot": int(row.get("slot", compact.size())),
+			"card_id": String(row.get("card_id", "")),
+			"rarity": String(row.get("rarity", "")),
+			"price": int(row.get("price", 0)),
+			"affordable": bool(row.get("affordable", false)),
+			"owned_count": int(row.get("owned_count", 0))
+		})
+	return compact
+
+
+func record_score_delta(amount: int, reason: String = "") -> void:
+	if amount == 0:
+		return
+	_append_limited(_score_events, {
+		"t": _run_time(),
+		"phase": _run_phase(),
+		"amount": amount,
+		"kind": "earned" if amount > 0 else "spent",
+		"reason": reason
+	}, MAX_SCORE_EVENTS)
+
+
+func record_shop_open(forced: bool, visit_index: int, rerolls: int) -> void:
+	_append_limited(_shop_opens, {
+		"t": _run_time(),
+		"phase": _run_phase(),
+		"forced": forced,
+		"visit": visit_index,
+		"rerolls": rerolls
+	}, MAX_SHOP_EVENTS)
+
+
+func record_shop_offer(event: Dictionary) -> void:
+	_append_limited(_shop_offers, {
+		"t": snappedf(float(event.get("time_alive", _run_time())), 0.1),
+		"phase": int(event.get("phase", _run_phase())),
+		"visit": int(event.get("visit_index", 0)),
+		"generation": int(event.get("generation_index", 0)),
+		"type": String(event.get("generation_type", "")),
+		"profile": String(event.get("profile", "")),
+		"reroll_index": int(event.get("reroll_index", 0)),
+		"rare_chance": snappedf(float(event.get("rare_chance", 0.0)), 0.0001),
+		"rare_success": bool(event.get("rare_success", false)),
+		"rare_selected": String(event.get("rare_selected", "")),
+		"slots": _compact_shop_slots(Array(event.get("slots", [])))
+	}, MAX_SHOP_EVENTS)
+
+
+func record_shop_reroll(reroll_index: int, rerolls_left: int) -> void:
+	_append_limited(_shop_rerolls, {
+		"t": _run_time(),
+		"phase": _run_phase(),
+		"reroll_index": reroll_index,
+		"rerolls_left": rerolls_left
+	}, MAX_SHOP_EVENTS)
+
+
+func record_shop_purchase(card: Dictionary, paid_price: int, visit_index: int) -> void:
+	_append_limited(_shop_purchases, {
+		"t": _run_time(),
+		"phase": _run_phase(),
+		"visit": visit_index,
+		"card_id": _safe_card_id(card),
+		"rarity": _safe_card_rarity(card),
+		"price": paid_price
+	}, MAX_SHOP_EVENTS)
+
+
+func record_ability_use(kind: String, cooldown_total: float = 0.0) -> void:
+	if kind == "":
+		return
+	_ability_counts[kind] = int(_ability_counts.get(kind, 0)) + 1
+	_append_limited(_ability_events, {
+		"t": _run_time(),
+		"phase": _run_phase(),
+		"kind": kind,
+		"cooldown": snappedf(cooldown_total, 0.01)
+	}, MAX_ABILITY_EVENTS)
+
+
 func update_run(delta: float) -> void:
 	var game: Node = _game
 	if game == null or not is_instance_valid(game) or game.is_dead:
@@ -95,6 +246,130 @@ func update_run(delta: float) -> void:
 	var cell_y: int = clampi(int(floor(normalized.y * game.RUN_TELEMETRY_GRID.y)), 0, game.RUN_TELEMETRY_GRID.y - 1)
 	var cell_key: String = "%d:%d:%d" % [game.current_phase, cell_x, cell_y]
 	game.run_heatmap_cells[cell_key] = int(game.run_heatmap_cells.get(cell_key, 0)) + 1
+
+
+func build_minimal_session_payload(result: String) -> Dictionary:
+	var game: Node = _game
+	if game == null or not is_instance_valid(game):
+		return {}
+	var behavior: Dictionary = game._run_behavior_report()
+	var cards: Array = []
+	for row in game._cards_report_rows():
+		var card_row: Dictionary = Dictionary(row)
+		cards.append({
+			"id": String(card_row.get("id", "")),
+			"rarity": String(card_row.get("rarity", "")),
+			"count": int(card_row.get("count", 0))
+		})
+	var temporary_event: Dictionary = {
+		"active": game.event_alert_timer > 0.0 or game.boss6_special_event_id != "" or not game.manifestation_secondaries.is_empty(),
+		"alert": String(game.event_alert_text) if game.event_alert_timer > 0.0 else "",
+		"boss6_special": String(game.boss6_special_event_id),
+		"secondary_active": game.manifestation_secondaries.size(),
+		"status": {
+			"stunned": snappedf(float(game.player_stun_timer), 0.1),
+			"silenced": snappedf(float(game.player_silence_timer), 0.1),
+			"frozen": snappedf(float(game.player_freeze_visual_timer), 0.1)
+		}
+	}
+	var boss_hp_ratio: float = 0.0
+	if game.boss_hp_max > 0.0:
+		boss_hp_ratio = clampf(float(game.boss_hp) / float(game.boss_hp_max), 0.0, 1.0)
+	var payload: Dictionary = {
+		"schema": MINIMAL_SCHEMA,
+		"schema_version": MINIMAL_SCHEMA_VERSION,
+		"privacy": {
+			"personal_data": false,
+			"player_name": false,
+			"profile_id": false,
+			"network_room": false
+		},
+		"run": {
+			"result": result,
+			"role": game._run_role_text(),
+			"started_unix": int(game.run_started_unix),
+			"ended_unix": int(Time.get_unix_time_from_system()),
+			"duration_seconds": int(round(game.time_alive)),
+			"phase": int(game.current_phase),
+			"phase_seconds": game._run_phase_seconds_report()
+		},
+		"build": {
+			"version": String(game.GAME_VERSION),
+			"version_code": int(game.GAME_VERSION_CODE),
+			"platform": OS.get_name()
+		},
+		"progress": {
+			"kills": int(game.enemies_killed),
+			"points_earned": int(game.run_points_earned),
+			"points_spent": int(game.run_points_spent),
+			"score_current": int(game.score),
+			"score_total": int(game.score_total),
+			"score_events": _score_events.duplicate(true)
+		},
+		"shop": {
+			"opens": _shop_opens.duplicate(true),
+			"offers": _shop_offers.duplicate(true),
+			"rerolls": _shop_rerolls.duplicate(true),
+			"purchases": _shop_purchases.duplicate(true),
+			"open_count": _shop_opens.size(),
+			"offer_count": _shop_offers.size(),
+			"reroll_count": _shop_rerolls.size(),
+			"purchase_count": _shop_purchases.size()
+		},
+		"build_cards": {
+			"cards_total": int(game._deck_total_cards()),
+			"cards": cards
+		},
+		"damage": {
+			"dealt_total": int(round(float(game.run_damage_to_enemies))) + int(game._total_boss_damage_report()),
+			"enemy_total": int(round(float(game.run_damage_to_enemies))),
+			"enemy_detail": game._enemy_damage_report_rows(),
+			"boss_total": int(game._total_boss_damage_report()),
+			"boss_detail": game._boss_report_rows(),
+			"taken_total": int(game.run_damage_taken_total),
+			"taken_detail": game._run_damage_taken_report_rows(),
+			"taken_events": game.run_damage_events.duplicate(true)
+		},
+		"movement": {
+			"heatmap": {
+				"columns": game.RUN_TELEMETRY_GRID.x,
+				"rows": game.RUN_TELEMETRY_GRID.y,
+				"sample_interval": game.RUN_TELEMETRY_SAMPLE_INTERVAL,
+				"cells": game._run_heatmap_report_rows()
+			},
+			"distance": int(behavior.get("distance_traveled", 0)),
+			"dash_count": int(behavior.get("dash_count", 0)),
+			"stationary_ratio": float(behavior.get("stationary_ratio", 0.0)),
+			"edge_ratio": float(behavior.get("edge_ratio", 0.0)),
+			"center_ratio": float(behavior.get("center_ratio", 0.0))
+		},
+		"attack_cadence": {
+			"attack_interval": snappedf(float(game.player_attack_interval), 0.001),
+			"shots_fired": int(behavior.get("shots_fired", 0)),
+			"shots_per_minute": float(behavior.get("shots_per_minute", 0.0)),
+			"hits": int(behavior.get("hits", 0)),
+			"hit_rate": float(behavior.get("hit_rate", 0.0))
+		},
+		"abilities": {
+			"counts": _ability_counts.duplicate(true),
+			"events": _ability_events.duplicate(true)
+		},
+		"temporary_event": temporary_event,
+		"boss": {
+			"active": bool(game.boss_active),
+			"phase": int(game.current_phase),
+			"name": String(game.boss_name),
+			"hp_ratio": snappedf(boss_hp_ratio, 0.0001),
+			"stage": float(game.boss_phase)
+		},
+		"umbra": {
+			"phase5_context": int(game.current_phase) == 5,
+			"mind_status": String(game.umbra_mind_status),
+			"mind_version": String(game.umbra_mind_version),
+			"apolo_exhibition": bool(game.apolo_phase5_exhibition_enabled)
+		}
+	}
+	return payload
 
 
 func build_run_report_payload(result: String) -> Dictionary:

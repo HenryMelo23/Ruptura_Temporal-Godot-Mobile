@@ -2017,9 +2017,38 @@ func _update_run_telemetry(delta: float) -> void :
 	get_node("/root/TelemetrySystem").update_run(delta)
 
 
+func _build_minimal_telemetry_payload(result: String) -> Dictionary:
+	return get_node("/root/TelemetrySystem").build_minimal_session_payload(result)
+
+
+func _record_telemetry_score_delta(amount: int, reason: String = "") -> void:
+	get_node("/root/TelemetrySystem").record_score_delta(amount, reason)
+
+
+func _record_telemetry_shop_open(forced: bool) -> void:
+	get_node("/root/TelemetrySystem").record_shop_open(forced, shop_visit_index, shop_rerolls)
+
+
+func _record_telemetry_shop_offer(event: Dictionary) -> void:
+	get_node("/root/TelemetrySystem").record_shop_offer(event)
+
+
+func _record_telemetry_shop_reroll() -> void:
+	get_node("/root/TelemetrySystem").record_shop_reroll(shop_reroll_index, shop_rerolls)
+
+
+func _record_telemetry_shop_purchase(card: Dictionary, paid_price: int) -> void:
+	get_node("/root/TelemetrySystem").record_shop_purchase(card, paid_price, shop_visit_index)
+
+
+func _record_telemetry_ability_use(kind: String, cooldown_total: float = 0.0) -> void:
+	get_node("/root/TelemetrySystem").record_ability_use(kind, cooldown_total)
+
+
 func _track_behavior_dash(origin: Vector2, destination: Vector2) -> void:
 	run_behavior_dash_count += 1
 	run_behavior_distance += origin.distance_to(destination)
+	_record_telemetry_ability_use("teleport", _current_dash_cooldown())
 
 
 func _track_behavior_shot() -> void:
@@ -21388,6 +21417,7 @@ func _apply_score_delta(amount: int, broadcast: = true, event_id: String = "") -
 		run_points_earned += amount
 	else:
 		run_points_spent += abs(amount)
+	_record_telemetry_score_delta(amount, "score_delta")
 	if amount > 0 and broadcast and is_multiplayer and _is_world_authority() and _shop_rpc_available():
 		rpc("_rpc_add_score", amount, event_id if event_id != "" else _next_score_event_id())
 
@@ -29825,6 +29855,7 @@ func _record_shop_generation_telemetry(generation_type: String, picks: Array, ra
 		event["ashes_guarantee_card"] = String(shop_last_generation_telemetry.get("ashes_guarantee_card", ""))
 		event["ashes_guarantee_slot"] = int(shop_last_generation_telemetry.get("ashes_guarantee_slot", -1))
 	shop_last_generation_telemetry = event.duplicate(true)
+	_record_telemetry_shop_offer(event)
 	_write_shop_telemetry_event(event)
 
 
@@ -31890,6 +31921,7 @@ func _mandamento_invulnerability_duration() -> float:
 
 func _register_manual_skill_use(skill_type: String, cooldown_total: float) -> float:
 	_add_card_unlock_progress("abilities_used", 1.0)
+	_record_telemetry_ability_use(skill_type, cooldown_total)
 	var action: String = ""
 	if skill_type == "skill_q":
 		action = "Q"

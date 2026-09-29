@@ -227,6 +227,7 @@ func open_shop(forced: bool) -> void:
 	game._begin_shop_visit()
 	game.shop_cards = game._roll_shop_cards("open")
 	game.shop_selected = 0
+	game._record_telemetry_shop_open(forced)
 	game.shop_select_pulse_index = 0
 	game.shop_select_pulse_timer = 0.2
 	game.shop_last_tap_index = -1
@@ -256,6 +257,7 @@ func apply_abuse_penalty(reason: String) -> void:
 	var penalty: int = min(game.score, max(game.CARD_COST_BASE, game.card_cost))
 	game.score = max(0, game.score - penalty)
 	game.run_points_spent += penalty
+	game._record_telemetry_score_delta(-penalty, "shop_penalty")
 	game.shop_abuse_penalty_count += 1
 	game._add_text("TAXA DA LOJA -%d" % penalty, game.player_pos + Vector2(0, -116), Color(1.0, 0.38, 0.18), 1.35, 22)
 	if game.shop_abuse_penalty_count <= 2:
@@ -376,6 +378,7 @@ func reroll() -> void:
 		begin("reroll", game.shop_cards)
 		game.shop_rerolls -= 1
 		game.shop_reroll_index += 1
+		game._record_telemetry_shop_reroll()
 		game._add_card_unlock_progress("shop_rerolls", 1.0)
 		game.shop_cards = game._roll_shop_cards("reroll")
 		game.shop_selected = 0
@@ -515,6 +518,8 @@ func update(delta: float) -> void:
 	game.shop_purchase_pending_price = 0
 	game.shop_purchases_this_visit += 1
 	game.run_points_spent += paid_price
+	game._record_telemetry_score_delta(-paid_price, "shop_purchase")
+	game._record_telemetry_shop_purchase(card, paid_price)
 	game._apply_aura_events(AuraSystem.on_points_spent(game.aura_state, paid_price, game.player_hp_max))
 	game.score -= paid_price
 	game.shop_spend_anim_amount = paid_price
