@@ -6,6 +6,7 @@ const MINIMAL_SCHEMA_VERSION: int = 1
 const MAX_SCORE_EVENTS: int = 160
 const MAX_SHOP_EVENTS: int = 80
 const MAX_ABILITY_EVENTS: int = 180
+const MAX_RUNTIME_EVENTS: int = 96
 
 var _game: Node
 var _score_events: Array = []
@@ -15,6 +16,7 @@ var _shop_rerolls: Array = []
 var _shop_purchases: Array = []
 var _ability_events: Array = []
 var _ability_counts: Dictionary = {}
+var _runtime_events: Array = []
 
 
 func bind_game(game: Node) -> void:
@@ -88,6 +90,7 @@ func _reset_minimal_session() -> void:
 	_shop_purchases.clear()
 	_ability_events.clear()
 	_ability_counts.clear()
+	_runtime_events.clear()
 
 
 func _run_time() -> float:
@@ -185,12 +188,18 @@ func record_shop_offer(event: Dictionary) -> void:
 	}, MAX_SHOP_EVENTS)
 
 
-func record_shop_reroll(reroll_index: int, rerolls_left: int) -> void:
+func record_shop_reroll(reroll_index: int, rerolls_left: int, free: bool = true, cost: int = 0, paid_index: int = 0, visit_index: int = 0) -> void:
 	_append_limited(_shop_rerolls, {
 		"t": _run_time(),
 		"phase": _run_phase(),
+		"visit": visit_index,
 		"reroll_index": reroll_index,
-		"rerolls_left": rerolls_left
+		"rerolls_left": rerolls_left,
+		"kind": "free" if free else "paid",
+		"free": free,
+		"paid": not free,
+		"cost": cost,
+		"paid_index": paid_index
 	}, MAX_SHOP_EVENTS)
 
 
@@ -203,6 +212,19 @@ func record_shop_purchase(card: Dictionary, paid_price: int, visit_index: int) -
 		"rarity": _safe_card_rarity(card),
 		"price": paid_price
 	}, MAX_SHOP_EVENTS)
+
+
+func record_runtime_event(kind: String, event: Dictionary, context: Dictionary) -> void:
+	var event_context: Dictionary = Dictionary(event.get("context", {}))
+	var row: Dictionary = {
+		"t": _run_time(), "phase": _run_phase(), "kind": kind,
+		"type": String(event.get("type", "")), "stat": String(event.get("stat", "")), "sequence": int(event.get("sequence", 0)), "multiplier": snappedf(float(event.get("multiplier", 1.0)), 0.001),
+		"started_at": snappedf(float(event.get("started_at", _run_time())), 0.1), "duration": snappedf(float(event.get("duration", 0.0)), 0.1), "ended_at": snappedf(float(event.get("ended_at", 0.0)), 0.1), "end_reason": String(event.get("end_reason", "")),
+		"context": {
+			"phase": int(event_context.get("phase", context.get("phase", _run_phase()))), "kills": int(event_context.get("kills", context.get("kills", 0))), "boss_active": bool(event_context.get("boss_active", context.get("boss_active", false))), "boss_name": String(event_context.get("boss_name", context.get("boss_name", ""))), "umbra": bool(event_context.get("umbra", context.get("umbra", false)))
+		}
+	}
+	_append_limited(_runtime_events, row, MAX_RUNTIME_EVENTS)
 
 
 func record_ability_use(kind: String, cooldown_total: float = 0.0) -> void:
@@ -262,9 +284,9 @@ func build_minimal_session_payload(result: String) -> Dictionary:
 			"count": int(card_row.get("count", 0))
 		})
 	var temporary_event: Dictionary = {
-		"active": game.event_alert_timer > 0.0 or game.boss6_special_event_id != "" or not game.manifestation_secondaries.is_empty(),
+		"active": game.event_alert_timer > 0.0 or game.boss6_special_event_id != "" or not game.manifestation_secondaries.is_empty() or bool(game.runtime_event_director.active_snapshot().get("active", false)),
 		"alert": String(game.event_alert_text) if game.event_alert_timer > 0.0 else "",
-		"boss6_special": String(game.boss6_special_event_id),
+		"boss6_special": String(game.boss6_special_event_id), "runtime": game.runtime_event_director.active_snapshot(), "events": _runtime_events.duplicate(true),
 		"secondary_active": game.manifestation_secondaries.size(),
 		"status": {
 			"stunned": snappedf(float(game.player_stun_timer), 0.1),
@@ -366,7 +388,8 @@ func build_minimal_session_payload(result: String) -> Dictionary:
 			"phase5_context": int(game.current_phase) == 5,
 			"mind_status": String(game.umbra_mind_status),
 			"mind_version": String(game.umbra_mind_version),
-			"apolo_exhibition": bool(game.apolo_phase5_exhibition_enabled)
+			"apolo_exhibition": bool(game.apolo_phase5_exhibition_enabled),
+			"runtime_event_context": game.runtime_event_director.umbra_observation_context()
 		}
 	}
 	return payload

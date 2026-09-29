@@ -54,7 +54,7 @@ func _run() -> void:
 	_check(not game.shop_cards.is_empty(), "shop did not generate offers")
 	game.shop_reroll_index += 1
 	game.shop_rerolls -= 1
-	game._record_telemetry_shop_reroll()
+	game._record_telemetry_shop_reroll(true, 0)
 	game.shop_cards = game._roll_shop_cards("reroll")
 	if not game.shop_cards.is_empty():
 		var card: Dictionary = game.shop_cards[0]
@@ -99,8 +99,9 @@ func _run() -> void:
 	_check(bool(Dictionary(payload["boss"]).get("active", false)), "boss active missing")
 	_check(bool(Dictionary(payload["umbra"]).get("phase5_context", false)), "umbra context missing")
 	print("MINIMAL_TELEMETRY_SCHEMA_SMOKE_OK schema=v1 sections=true session=true privacy=true")
+	game._cleanup_runtime_resources()
 	root.remove_child(game)
-	game.free()
+	game.queue_free()
 	game = null
 	await process_frame
 	quit(0)

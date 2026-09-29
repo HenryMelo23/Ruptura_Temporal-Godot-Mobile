@@ -17,6 +17,7 @@ func _ready() -> void :
 	early_boss_controller.bind_game(self)
 	add_child(modern_boss_controller)
 	modern_boss_controller.bind_game(self)
+	add_child(runtime_event_director); runtime_event_director.bind_game(self)
 	add_child(shop_controller)
 	shop_controller.configure(self)
 	get_node("/root/AudioManager").bind_game(self)
@@ -2033,8 +2034,8 @@ func _record_telemetry_shop_offer(event: Dictionary) -> void:
 	get_node("/root/TelemetrySystem").record_shop_offer(event)
 
 
-func _record_telemetry_shop_reroll() -> void:
-	get_node("/root/TelemetrySystem").record_shop_reroll(shop_reroll_index, shop_rerolls)
+func _record_telemetry_shop_reroll(free: bool = true, cost: int = 0) -> void:
+	get_node("/root/TelemetrySystem").record_shop_reroll(shop_reroll_index, shop_rerolls, free, cost, shop_paid_rerolls_this_visit, shop_visit_index)
 
 
 func _record_telemetry_shop_purchase(card: Dictionary, paid_price: int) -> void:
@@ -4178,7 +4179,7 @@ func _interrupted_run_field_names() -> Array:
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal", 
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer", 
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
-		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", 
+		"shop_cards", "shop_selected", "shop_rerolls", "shop_paid_rerolls_this_visit", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count",
 		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", 
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing", 
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player", 
@@ -6172,6 +6173,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	_reset_run_report_stats()
 	_start_run_security_session()
 	_reset_card_proc_state()
+	runtime_event_director.reset()
 	player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 	player_defense = 0.0
 	player_crit_chance = 0.0
@@ -6215,6 +6217,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	shop_last_manual_open_time = -999.0
 	shop_recent_manual_open_count = 0
 	shop_purchases_this_visit = 0
+	shop_paid_rerolls_this_visit = 0
 	shop_last_exit_had_purchase = false
 	shop_last_exit_time = -999.0
 	shop_abuse_penalty_count = 0
@@ -8511,6 +8514,7 @@ func _update_game(delta: float) -> void :
 	elapsed_unpaused += delta
 	_update_card_unlock_runtime(delta)
 	_update_run_telemetry(delta)
+	runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
 	if shop_auto_enabled and not forced_shop_triggered:
 		shop_auto_elapsed += delta
 		next_forced_shop_time = max(0.0, shop_auto_interval - shop_auto_elapsed)
@@ -8584,7 +8588,7 @@ func _update_game(delta: float) -> void :
 					player_dancing = false
 					player_dance_timer = 0.0
 				last_facing = move.normalized()
-				var desired_pos: Vector2 = player_pos + last_facing * player_speed * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _pustule_spit_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * _new_common_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
+				var desired_pos: Vector2 = player_pos + last_facing * player_speed * runtime_event_director.move_speed_multiplier() * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _pustule_spit_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * _new_common_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
 				player_pos = _resolve_phase2_fire_wall_movement(player_pos, desired_pos)
 			_update_eletrica_recoil(delta)
 		player_pos = _clamp_player_world(player_pos)
@@ -20687,6 +20691,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		if show_text:
 			_tutorial_wrong_damage_feedback(enemy)
 		return false
+	if _is_direct_player_damage_source(source, effective_source_category): amount *= runtime_event_director.damage_multiplier()
 	if is_multiplayer and not _is_world_authority():
 		amount = _outgoing_damage_amount(amount, source)
 		_send_client_damage_request(NET_DAMAGE_ENEMY, str(enemy.get("uid", "")), amount, source, player_pos, show_text, effective_source_category)
@@ -21294,6 +21299,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 			mercenary_bonus_points = min(500, mercenary_bonus_points + contract_value)
 			mercenary_hud_pulse = 1.0
 			_add_text("MERCENARIA +%d" % mercenary_bonus_points, kill_pos + Vector2(0, -96), Color(1.0, 0.62, 0.16), 0.9, 19)
+	runtime_event_director.on_enemy_killed(enemy, runtime_event_director.context_from_game(self), _is_world_authority()); gain = int(round(float(gain) * runtime_event_director.point_multiplier()))
 	_apply_score_delta(gain)
 	_add_text("+%d" % gain, kill_pos + Vector2(0, -64), Color(1.0, 0.85, 0.18), 0.8, 18)
 	_spawn_enemy_desfragmentation(kill_pos, shard_color, 14 + int(clamp(float(enemy.get("max_hp", 0.0)) / 18.0, 0.0, 12.0)))
@@ -29287,6 +29293,14 @@ func _locked_shop_card(index: int) -> Dictionary:
 	return locked
 
 
+func _locked_shop_card_still_valid(card: Dictionary) -> bool:
+	if card.is_empty() or _card_at_max(card):
+		return false
+	if _is_rare_card(card):
+		return _rare_cards_unlocked()
+	return _card_unlocked(card)
+
+
 func _apply_locked_shop_slots(picks: Array) -> Array:
 	var result: = picks.duplicate(true)
 	var locked_ids: = {}
@@ -29307,7 +29321,7 @@ func _apply_locked_shop_slots(picks: Array) -> Array:
 		while result.size() <= index:
 			result.append(_make_empty_shop_slot("Vaga Livre"))
 		var locked: = _locked_shop_card(index)
-		if not locked.is_empty() and not _card_at_max(locked) and _card_unlocked(locked):
+		if _locked_shop_card_still_valid(locked):
 			result[index] = locked
 		else:
 			shop_locked_slots.erase(key)
@@ -29376,6 +29390,7 @@ func _shop_shuffle(values: Array) -> Array:
 func _begin_shop_visit() -> void :
 	shop_visit_index += 1
 	shop_reroll_index = 0
+	shop_paid_rerolls_this_visit = 0
 	shop_current_visit_eligible_cinzas.clear()
 	_count_cinzas_eligible_visit_once()
 
@@ -41249,7 +41264,7 @@ func _current_attack_interval() -> float:
 		interval *= 1.22
 	if manifestation_key == "acorrentada" and acorrentada_tension >= 70.0:
 		interval *= 0.96
-	return max(0.14, interval * AuraSystem.attack_interval_multiplier(aura_state))
+	return max(0.14, interval * AuraSystem.attack_interval_multiplier(aura_state) * runtime_event_director.attack_interval_multiplier())
 
 
 func _current_dash_cooldown() -> float:
@@ -43973,7 +43988,8 @@ func _pack_net_boss_visuals() -> Dictionary:
 		"arauto_card_drops": arauto_card_drops.duplicate(true),
 		"arauto_evolution_fragments": arauto_evolution_fragments.duplicate(true), 
 		"boss_attacks": boss_attacks.duplicate(true), 
-		"boss_transition_waves": boss_transition_waves.duplicate(true)
+		"boss_transition_waves": boss_transition_waves.duplicate(true),
+		"runtime_event": runtime_event_director.active_snapshot()
 	}
 	if current_phase == 7:
 		# One clock reproduces the whole heat field; flames stay local to each client.
@@ -44380,6 +44396,8 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	var data: Dictionary = snapshot_data
 	if _is_world_replica() and data.has("team_kills"):
 		_apply_shared_kill_progress(maxi(0, int(data["team_kills"])))
+	if _is_world_replica() and data.has("runtime_event"):
+		runtime_event_director.apply_remote_snapshot(Dictionary(data["runtime_event"]))
 	boss1_visual_snapshot_ms = Time.get_ticks_msec()
 	# Entry simulation runs only on the host; replicas render its remaining time.
 	boss_entry_timer = maxf(0.0, float(data.get("boss_entry_timer", 0.0)))

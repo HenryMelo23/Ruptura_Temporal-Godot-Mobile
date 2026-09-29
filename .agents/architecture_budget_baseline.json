@@ -1,0 +1,143 @@
+{
+  "description": "Architecture budget baseline for runtime refactor work. Counts are streamed and exclude blank/comment-only lines from code_loc.",
+  "files": {
+    "scripts/main_runtime_core.gd": {
+      "classes": 0,
+      "code_loc": 39717,
+      "functions": 3093,
+      "largest_function": "_handle_key",
+      "max_function_code_loc": 456,
+      "physical_loc": 46115,
+      "signals": 0
+    },
+    "scripts/main_runtime_state.gd": {
+      "classes": 0,
+      "code_loc": 3380,
+      "functions": 1,
+      "largest_function": "_safe_load",
+      "max_function_code_loc": 5,
+      "physical_loc": 3416,
+      "signals": 0
+    },
+    "scripts/presentation/combat_effects_presentation.gd": {
+      "classes": 0,
+      "code_loc": 3881,
+      "functions": 101,
+      "largest_function": "_draw_projectiles",
+      "max_function_code_loc": 345,
+      "physical_loc": 4239,
+      "signals": 0
+    },
+    "scripts/presentation/menus_presentation.gd": {
+      "classes": 0,
+      "code_loc": 2722,
+      "functions": 102,
+      "largest_function": "_draw_manifest_select",
+      "max_function_code_loc": 176,
+      "physical_loc": 3066,
+      "signals": 0
+    },
+    "scripts/presentation/world_environment_presentation.gd": {
+      "classes": 0,
+      "code_loc": 2471,
+      "functions": 56,
+      "largest_function": "_draw_boss_attacks",
+      "max_function_code_loc": 375,
+      "physical_loc": 2649,
+      "signals": 0
+    },
+    "scripts/systems/audio/audio_lifecycle.gd": {
+      "classes": 1,
+      "code_loc": 292,
+      "functions": 32,
+      "largest_function": "on_music_finished",
+      "max_function_code_loc": 20,
+      "physical_loc": 357,
+      "signals": 0
+    },
+    "scripts/systems/enemy_manager.gd": {
+      "classes": 1,
+      "code_loc": 231,
+      "functions": 11,
+      "largest_function": "update_enemies",
+      "max_function_code_loc": 115,
+      "physical_loc": 257,
+      "signals": 0
+    },
+    "scripts/systems/modern_boss_controller.gd": {
+      "classes": 1,
+      "code_loc": 453,
+      "functions": 30,
+      "largest_function": "update_boss7_state",
+      "max_function_code_loc": 70,
+      "physical_loc": 520,
+      "signals": 0
+    },
+    "scripts/systems/online/net_contract.gd": {
+      "classes": 1,
+      "code_loc": 299,
+      "functions": 11,
+      "largest_function": "unpack_enemy_snapshot",
+      "max_function_code_loc": 55,
+      "physical_loc": 322,
+      "signals": 0
+    },
+    "scripts/systems/telemetry/telemetry_system.gd": {
+      "classes": 1,
+      "code_loc": 467,
+      "functions": 21,
+      "largest_function": "build_minimal_session_payload",
+      "max_function_code_loc": 122,
+      "physical_loc": 511,
+      "signals": 0
+    },
+    "scripts/ui/shop_controller.gd": {
+      "classes": 1,
+      "code_loc": 584,
+      "functions": 51,
+      "largest_function": "handle_touch",
+      "max_function_code_loc": 82,
+      "physical_loc": 699,
+      "signals": 2
+    },
+    "scripts/ui/shop_presentation.gd": {
+      "classes": 0,
+      "code_loc": 814,
+      "functions": 28,
+      "largest_function": "draw_legacy",
+      "max_function_code_loc": 326,
+      "physical_loc": 938,
+      "signals": 0
+    }
+  },
+  "ratchet_allowance": {
+    "classes": 0,
+    "code_loc": 15,
+    "functions": 1,
+    "max_function_code_loc": 8,
+    "physical_loc": 25,
+    "signals": 0
+  },
+  "schema": 1,
+  "targets": [
+    "scripts/main_runtime_core.gd",
+    "scripts/main_runtime_state.gd",
+    "scripts/ui/shop_controller.gd",
+    "scripts/ui/shop_presentation.gd",
+    "scripts/systems/telemetry/telemetry_system.gd",
+    "scripts/systems/online/net_contract.gd",
+    "scripts/systems/audio/audio_lifecycle.gd",
+    "scripts/systems/enemy_manager.gd",
+    "scripts/systems/modern_boss_controller.gd",
+    "scripts/presentation/combat_effects_presentation.gd",
+    "scripts/presentation/menus_presentation.gd",
+    "scripts/presentation/world_environment_presentation.gd"
+  ],
+  "totals": {
+    "classes": 6,
+    "code_loc": 55311,
+    "functions": 3537,
+    "physical_loc": 63089,
+    "signals": 2
+  }
+}

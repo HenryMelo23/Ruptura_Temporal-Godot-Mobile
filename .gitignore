@@ -86,8 +86,13 @@ Game Base/**/SIGMon/
 
 # Ferramentas IA e Agents
 .agents/*
+!.agents/REFRACTOR_CAMPAIGN.md
+!.agents/architecture_budget_baseline.json
+!.agents/runtime_symbol_index.md
 !.agents/skills/
 .agents/skills/*
+!.agents/skills/ruptura-runtime-navigation/
+!.agents/skills/ruptura-runtime-navigation/SKILL.md
 !.agents/skills/ruptura-project-context/
 !.agents/skills/ruptura-project-context/SKILL.md
 !.agents/skills/ruptura-visual-direction/
