@@ -14,8 +14,10 @@ over 100 KB.
 | Online flow and UI | `scripts/main_runtime_core.gd` facade plus `scripts/ui/shop_controller.gd` | `_net_report_*`, online room input helpers, shop MP helpers | `tests/online_lobby_smoke.gd`, `tests/multiplayer_lobby_integration_smoke.gd`, `tests/multiplayer_shop_flow_smoke.gd` |
 | Audio lifecycle | `scripts/systems/audio/audio_lifecycle.gd` | `RTAudioLifecycle` methods | `tests/audio_lifecycle_smoke.gd`, `tests/menu_to_phase_music_smoke.gd`, `tests/rain_audio_lifecycle_smoke.gd` |
 | Enemy waves | `scripts/systems/enemy_manager.gd` | `update_enemies`, `spawn_wave`, limit/interval helpers | `tests/enemy_escalation_reconstitution_smoke.gd`, `tests/phase4_enemy_ecosystem_smoke.gd`, `tests/phase7_enemy_behaviour_smoke.gd` |
+| Manifest evolutions | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd` plus thin hooks in `scripts/main_runtime_core.gd` | `RTManifestEvolutionCatalog.all_entries`, `_manifest_evolution_entries`, `_apply_manifest_evolution_to_bullet`, `_manifest_evolution_on_projectile_hit` | `tests/manifest_evolution_catalog_smoke.gd`, `tests/manifest_evolution_540_combinations_smoke.gd`, `tests/manifest_evolution_functional_matrix_smoke.gd`, `tests/manifest_evolution_smoke.gd` |
 | Boss runtime | `scripts/systems/modern_boss_controller.gd` plus boss sections in `scripts/main_runtime_core.gd` | `update_boss7_state`, `start_boss7_*`, `check_boss7_ultimate` | `tests/boss7_fenix_smoke.gd`, `tests/boss7_fire_progression_smoke.gd`, `tests/boss4_nexus_mechanics_smoke.gd` |
 | Combat visuals | `scripts/presentation/combat_effects_presentation.gd` | `_draw_projectiles`, impact/trail drawing helpers | `tests/player_attack_animation_movement_smoke.gd`, `tests/bombastica_vfx_origin_visual_smoke.gd`, `tests/presentation_extraction_visual_smoke.gd` |
+| Gravitante visuals | `scripts/presentation/gravitante_vfx_presentation.gd` | `RTGravitanteVfx.projectile`, `orbitals`, `ultimate`, `collision`, `teleport`; cosmetic state only | `tests/gravitante_vfx_contract_smoke.gd`, `tests/gravitante_visual_smoke.gd`, `tests/gravitante_vfx_performance_smoke.gd`, `tests/gravitante_smoke.gd` |
 | Menus and catalog UI | `scripts/presentation/menus_presentation.gd`, `scripts/catalog/*` | menu draw helpers, catalog repository/interface classes | `tests/main_menu_visual_smoke.gd`, `tests/catalog_repository_smoke.gd`, `tests/catalog_interface_visual_smoke.gd` |
 | World presentation | `scripts/presentation/world_environment_presentation.gd` | `_draw_boss_attacks`, environment and phase drawing helpers | `tests/phase_transition_visual_smoke.gd`, `tests/dynamic_shadows_visual_smoke.gd`, `tests/readability_visual_smoke.gd` |
 | Runtime state/constants | `scripts/main_runtime_state.gd` | state constants and shared variables | nearest domain test plus `python3 tools/check_architecture_budget.py` |
@@ -29,6 +31,9 @@ over 100 KB.
 - Put temporary runtime event rules, cooldowns, thresholds, and active-state
   ownership in `scripts/systems/events/runtime_event_director.gd` and
   `runtime_event_catalog.gd`; keep core as bind/tick/facade only.
+- Put manifestation evolution IDs, labels, descriptions, tags, and tunable
+  profile data in `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd`;
+  keep `main_runtime_core.gd` limited to save-compatible hook dispatch.
 - Put online serialization in `scripts/systems/online/net_contract.gd`; keep UI
   and state transitions outside the contract.
 - Put drawing-only changes in presentation files. Do not mix balance or gameplay

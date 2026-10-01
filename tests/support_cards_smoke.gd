@@ -91,10 +91,11 @@ func _run() -> void:
 	var stacked_return := [common_card.duplicate(true)]
 	game._update_burned_card_marks_after_shop(stacked_return)
 	_check(int(stacked_return[0].get("cinzas_buff_stacks", 0)) == 2, "Cinzas stacked return did not expose its buff count")
-	var hp_max_before_cinzas_return: int = game.player_hp_max
+	var regen_before: float = game._tregua_regen_per_second()
 	game._apply_card(stacked_return[0])
 	_check(game.cinzas_burn_marks.is_empty(), "Cinzas mark was not consumed when the buffed card was bought")
-	_check(game.player_hp_max > hp_max_before_cinzas_return, "Cinzas stacked return did not apply its one-time buff")
+	_check(game._tregua_regen_per_second() > regen_before, "Cinzas stacked return did not increase Tregua regen")
+	_check(game._cinzas_bonus_stacks(game.CARD_TREGUA_ID) == 2, "Cinzas stacked bonus count was not recorded")
 
 	game.player_hp = 1000
 	game.reserva_pulso_stored = 0.0

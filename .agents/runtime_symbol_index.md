@@ -23,6 +23,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/online/net_contract.gd` | 322 | 299 | 11 | `unpack_enemy_snapshot` 55 code LOC |
 | `scripts/systems/audio/audio_lifecycle.gd` | 357 | 292 | 32 | `on_music_finished` 20 code LOC |
 | `scripts/systems/enemy_manager.gd` | 257 | 231 | 11 | `update_enemies` 115 code LOC |
+| `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd` | owner | owner | owner | `all_entries`, `entries_for_manifestation`, `validate_catalog` |
+| `scripts/presentation/gravitante_vfx_presentation.gd` | owner | owner | owner | `lod`, `projectile`, `orbitals`, `collision`, `teleport`, `ultimate` |
 | `scripts/systems/modern_boss_controller.gd` | 520 | 453 | 30 | `update_boss7_state` 70 code LOC |
 
 ## Runtime Lookup
@@ -54,6 +56,10 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Audio lifecycle | `class_name RTAudioLifecycle` | `scripts/systems/audio/audio_lifecycle.gd:1` |
 | Enemy updates | `update_enemies` | `scripts/systems/enemy_manager.gd:19` |
 | Enemy spawning | `spawn_wave` | `scripts/systems/enemy_manager.gd:139` |
+| Manifest evolution catalog | `class_name RTManifestEvolutionCatalog` | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd:2` |
+| Manifest evolution option source | `_manifest_evolution_entries` | `scripts/main_runtime_core.gd:7921` |
+| Manifest evolution projectile hook | `_apply_manifest_evolution_to_bullet` | `scripts/main_runtime_core.gd:8036` |
+| Manifest evolution impact hook | `_manifest_evolution_on_projectile_hit` | `scripts/main_runtime_core.gd:8126` |
 | Boss 7 state | `update_boss7_state` | `scripts/systems/modern_boss_controller.gd:35` |
 | Boss 7 ultimate | `check_boss7_ultimate` | `scripts/systems/modern_boss_controller.gd:427` |
 

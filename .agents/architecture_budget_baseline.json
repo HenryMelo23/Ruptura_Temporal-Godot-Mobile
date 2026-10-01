@@ -3,38 +3,38 @@
   "files": {
     "scripts/main_runtime_core.gd": {
       "classes": 0,
-      "code_loc": 39717,
-      "functions": 3093,
+      "code_loc": 39864,
+      "functions": 3099,
       "largest_function": "_handle_key",
       "max_function_code_loc": 456,
-      "physical_loc": 46115,
+      "physical_loc": 46276,
       "signals": 0
     },
     "scripts/main_runtime_state.gd": {
       "classes": 0,
-      "code_loc": 3380,
+      "code_loc": 3387,
       "functions": 1,
       "largest_function": "_safe_load",
       "max_function_code_loc": 5,
-      "physical_loc": 3416,
+      "physical_loc": 3422,
       "signals": 0
     },
     "scripts/presentation/combat_effects_presentation.gd": {
       "classes": 0,
-      "code_loc": 3881,
-      "functions": 101,
+      "code_loc": 3706,
+      "functions": 99,
       "largest_function": "_draw_projectiles",
-      "max_function_code_loc": 345,
-      "physical_loc": 4239,
+      "max_function_code_loc": 327,
+      "physical_loc": 4050,
       "signals": 0
     },
     "scripts/presentation/menus_presentation.gd": {
       "classes": 0,
-      "code_loc": 2722,
+      "code_loc": 2720,
       "functions": 102,
       "largest_function": "_draw_manifest_select",
       "max_function_code_loc": 176,
-      "physical_loc": 3066,
+      "physical_loc": 3064,
       "signals": 0
     },
     "scripts/presentation/world_environment_presentation.gd": {
@@ -75,20 +75,20 @@
     },
     "scripts/systems/online/net_contract.gd": {
       "classes": 1,
-      "code_loc": 299,
+      "code_loc": 338,
       "functions": 11,
       "largest_function": "unpack_enemy_snapshot",
-      "max_function_code_loc": 55,
-      "physical_loc": 322,
+      "max_function_code_loc": 74,
+      "physical_loc": 361,
       "signals": 0
     },
     "scripts/systems/telemetry/telemetry_system.gd": {
       "classes": 1,
-      "code_loc": 467,
-      "functions": 21,
+      "code_loc": 482,
+      "functions": 22,
       "largest_function": "build_minimal_session_payload",
-      "max_function_code_loc": 122,
-      "physical_loc": 511,
+      "max_function_code_loc": 123,
+      "physical_loc": 528,
       "signals": 0
     },
     "scripts/ui/shop_controller.gd": {
@@ -135,9 +135,9 @@
   ],
   "totals": {
     "classes": 6,
-    "code_loc": 55311,
-    "functions": 3537,
-    "physical_loc": 63089,
+    "code_loc": 55342,
+    "functions": 3542,
+    "physical_loc": 63121,
     "signals": 2
   }
 }

@@ -203,6 +203,9 @@ static func _spawn_radial_particles(game: Node2D, pos: Vector2, color: Color, co
 
 
 static func _spawn_bullet_hit_fragments(game: Node2D, pos: Vector2, bullet: Dictionary) -> void :
+	if String(bullet.get("kind", "")) == "gravitante":
+		game.GravitanteVfx.push_event(game, {"kind": "gravity_impact", "pos": pos, "life": 0.18, "max": 0.18})
+		return
 	if not game.gfx_particles or not game._particle_budget_available():
 		return
 	var color: Color = bullet.get("color", game._projectile_palette(String(bullet.get("kind", ""))).get("core", Color(0.36, 1.0, 0.94)))
@@ -428,6 +431,8 @@ static func _spawn_projectile_muzzle(game: Node2D, kind: String, pos: Vector2, d
 
 
 static func _emit_projectile_trail(game: Node2D, bullet: Dictionary) -> void :
+	if String(bullet.get("kind", "")) == "gravitante":
+		return # Short curved arcs are drawn with the projectile, without particle allocations.
 	if game.gfx_low_resource and (game.effects.size() >= game.LOW_RESOURCE_EFFECT_CAP or game.rng.randf() < 0.45):
 		return
 	var palette = game._projectile_palette(String(bullet.get("kind", "")))
