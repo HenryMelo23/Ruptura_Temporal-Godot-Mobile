@@ -303,8 +303,14 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_boss1_rewind_world(camera)
 	game._draw_network_rewind_visuals(camera)
 	for orb in game.heal_orbs:
-		game.draw_circle(orb["pos"] - camera, 15, Color(0.25, 1.0, 0.42, 0.78))
-		game.draw_arc(orb["pos"] - camera, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
+		var orb_pos: Vector2 = Vector2(orb.get("pos", Vector2.ZERO)) - camera
+		if String(orb.get("kind", "heal")) == "voraz_hunger":
+			var pulse: float = 0.5 + sin(game.time_alive * 8.0 + orb_pos.x) * 0.5
+			game.draw_circle(orb_pos, 8.0 + pulse * 3.0, Color(0.68, 0.02, 0.03, 0.84))
+			game.draw_arc(orb_pos, 13.0 + pulse * 3.0, - game.time_alive * 2.8, TAU - game.time_alive * 2.8, 20, Color(1.0, 0.34, 0.08, 0.56), 2.0)
+		else:
+			game.draw_circle(orb_pos, 15, Color(0.25, 1.0, 0.42, 0.78))
+			game.draw_arc(orb_pos, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
 	game._draw_larapio_ultimate_portals(camera)
 	game._draw_larapio_coin_drops(camera)
 	game._draw_arauto_card_drops(camera)

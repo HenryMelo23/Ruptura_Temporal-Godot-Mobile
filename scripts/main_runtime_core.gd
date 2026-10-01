@@ -6381,6 +6381,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	shockwaves.clear()
 	effects.clear()
 	heal_orbs.clear()
+	net_collected_gameplay_orb_ids.clear()
 	slashes.clear()
 	anchors.clear()
 	prisms.clear()
@@ -7832,6 +7833,7 @@ func _reset_arauto_state(reset_spawn_flag: = false) -> void :
 	arauto_target_switch_timer = 0.0
 	net_collected_drop_ids.clear()
 	net_collected_fragment_ids.clear()
+	net_collected_gameplay_orb_ids.clear()
 	if reset_spawn_flag:
 		arauto_spawned = false
 
@@ -17609,6 +17611,16 @@ func _local_player_damageable_by_contact() -> bool:
 	return _local_counts_as_player() and player_hp > 0.0 and not is_dead
 
 
+func _remote_player_state_targetable(state: Dictionary) -> bool:
+	if not bool(state.get("has_snapshot", false)):
+		return false
+	if bool(state.get("dead", false)) or bool(state.get("eliminated", false)):
+		return false
+	if state.has("alive") and not bool(state.get("alive", true)):
+		return false
+	return float(state.get("hp", 0.0)) > 0.0
+
+
 func _remote_player_targetable() -> bool:
 	return not _targetable_remote_peer_ids().is_empty()
 
@@ -17618,7 +17630,7 @@ func _targetable_remote_peer_ids(include_stealthed: bool = false) -> Array[int]:
 	for peer_key in net_players_by_peer.keys():
 		var peer_id: = int(peer_key)
 		var state: Dictionary = net_players_by_peer[peer_key]
-		if not bool(state.get("has_snapshot", false)) or bool(state.get("dead", false)) or float(state.get("hp", 0.0)) <= 0.0:
+		if not _remote_player_state_targetable(state):
 			continue
 		if not include_stealthed and bool(state.get("stealthed", false)):
 			continue
@@ -17666,7 +17678,7 @@ func _peer_is_living_runner(peer_id: int) -> bool:
 	if peer_id == _mp_unique_id():
 		return _local_player_targetable()
 	var state: Dictionary = net_players_by_peer.get(peer_id, {})
-	return bool(state.get("has_snapshot", false)) and not bool(state.get("dead", false)) and float(state.get("hp", 0.0)) > 0.0
+	return _remote_player_state_targetable(state)
 
 
 func _refresh_run_leader() -> void:
@@ -20681,7 +20693,7 @@ func _element_from_source(source: String) -> String:
 	return "physical"
 
 
-func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: = true, apply_aura_multiplier: = true, attack_origin: = Vector2.ZERO, source_category: = "") -> bool:
+func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: = true, apply_aura_multiplier: = true, attack_origin: = Vector2.ZERO, source_category: = "", source_peer_id: int = 0) -> bool:
 	if _is_player_calcified():
 		amount *= 2.0
 	var effective_source_category: = source_category
@@ -20694,7 +20706,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	if _is_direct_player_damage_source(source, effective_source_category): amount *= runtime_event_director.damage_multiplier()
 	if is_multiplayer and not _is_world_authority():
 		amount = _outgoing_damage_amount(amount, source)
-		_send_client_damage_request(NET_DAMAGE_ENEMY, str(enemy.get("uid", "")), amount, source, player_pos, show_text, effective_source_category)
+		_send_client_damage_request(NET_DAMAGE_ENEMY, str(enemy.get("uid", "")), amount, source, player_pos, show_text, effective_source_category, _mp_unique_id())
 		if show_text:
 			_add_text("-%d" % int(amount), Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), _damage_color(source), 0.35, _damage_text_size(16))
 		return false
@@ -20770,6 +20782,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	if float(enemy["hp"]) <= 0.0:
 		enemy["killed_by_source"] = source
 		enemy["killed_by_category"] = effective_source_category
+		enemy["killed_by_peer_id"] = source_peer_id if source_peer_id > 0 else _mp_unique_id()
 		enemy["overkill_damage"] = max(0.0, incoming_damage - hp_before)
 	enemy["last_damage_time"] = time_alive
 	enemy["last_damage_amount"] = incoming_damage
@@ -21250,6 +21263,31 @@ func _try_reconstitute_enemy(enemy: Dictionary) -> bool:
 	return true
 
 
+func _peer_aura_name(peer_id: int) -> String:
+	if peer_id == _mp_unique_id() or not is_multiplayer:
+		return String(aura_state.get("name", ""))
+	var state: Dictionary = net_players_by_peer.get(peer_id, {})
+	var aura_index: int = int(state.get("aura", -1))
+	if aura_index < 0 or aura_index >= AURAS.size():
+		return ""
+	return String(AURAS[aura_index].get("name", ""))
+
+
+func _peer_has_voraz(peer_id: int) -> bool:
+	return _peer_aura_name(peer_id) == "Voraz"
+
+
+func _spawn_multiplayer_voraz_enemy_orb(enemy: Dictionary, kill_pos: Vector2) -> void:
+	if not is_multiplayer or not _is_world_authority():
+		return
+	var owner_peer: int = int(enemy.get("killed_by_peer_id", _mp_unique_id()))
+	if owner_peer <= 0:
+		owner_peer = _mp_unique_id()
+	if not _peer_has_voraz(owner_peer):
+		return
+	_spawn_gameplay_orb("voraz_hunger", kill_pos, {"value": 28.0}, owner_peer, 6.8)
+
+
 func _kill_enemy(enemy: Dictionary) -> void :
 	if not enemies.has(enemy):
 		return
@@ -21272,7 +21310,12 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	_sanguinaria_handle_enemy_kill(enemy)
 	if String(enemy.get("killed_by_source", "")).begins_with("lacerante") or (manifestation_key == "lacerante" and not is_multiplayer):
 		_play_sfx("lacerante_kill", 0.025, 0.94, rng.randf_range(0.94, 1.04))
-	_apply_aura_events(AuraSystem.on_enemy_killed(aura_state, enemy))
+	if is_multiplayer:
+		_spawn_multiplayer_voraz_enemy_orb(enemy, kill_pos)
+		if String(aura_state.get("name", "")) != "Voraz":
+			_apply_aura_events(AuraSystem.on_enemy_killed(aura_state, enemy))
+	else:
+		_apply_aura_events(AuraSystem.on_enemy_killed(aura_state, enemy))
 	var shard_color = _enemy_shard_color(enemy)
 	if bool(enemy.get("eco_vinculado", false)):
 		arauto_echo_breaks.append({"pos": kill_pos, "life": 0.5, "max": 0.5, "phase": rng.randf_range(0.0, TAU)})
@@ -23273,20 +23316,158 @@ func _apply_ancorada_ultimate_impact(drop: Dictionary, secondary: Dictionary, ce
 
 
 func _update_heal_orbs(delta: float) -> void :
+	if is_multiplayer:
+		_update_multiplayer_gameplay_orbs(delta)
+		return
 	for orb in heal_orbs:
 		orb["life"] = float(orb["life"]) - delta
-		if orb["pos"].distance_to(player_pos) < _neutral_pickup_radius(58.0):
-			var base_heal: = float(player_hp_max - player_hp) * float(orb["fraction"])
-			var heal = int(round(_nucleo_orb_heal_amount(base_heal)))
-			if heal > 0:
-				_heal_player(heal, "heal_orb", _support_card_count(CARD_NUCLEO_ID) <= 0)
-				_add_text("+%d" % heal, player_pos + Vector2(0, -64), Color(0.36, 1.0, 0.46), 0.8, 18)
+		if _local_can_collect_gameplay_orb(orb):
+			_apply_gameplay_orb_collect_local(orb)
 			orb["life"] = 0.0
 	heal_orbs = heal_orbs.filter( func(o): return float(o["life"]) > 0.0)
 
 
 func _spawn_heal_orb(pos: Vector2, fraction: float) -> void :
-	heal_orbs.append({"pos": pos, "fraction": fraction, "life": 12.0, "phase": rng.randf_range(0.0, TAU)})
+	_spawn_gameplay_orb("heal", pos, {"fraction": fraction}, 0, 12.0)
+
+
+func _next_gameplay_orb_uid(kind: String) -> String:
+	net_gameplay_orb_sequence += 1
+	return "%s_%d_%d" % [kind, _mp_unique_id(), net_gameplay_orb_sequence]
+
+
+func _spawn_gameplay_orb(kind: String, pos: Vector2, data: Dictionary, owner_peer: int = 0, life: float = 12.0) -> Dictionary:
+	if is_multiplayer and not _is_world_authority():
+		return {}
+	var orb: Dictionary = {
+		"uid": _next_gameplay_orb_uid(kind),
+		"kind": kind,
+		"pos": pos.clamp(Vector2(40, 50), WORLD_SIZE - Vector2(40, 50)),
+		"owner_peer": owner_peer,
+		"life": life,
+		"max_life": life,
+		"phase": rng.randf_range(0.0, TAU)
+	}
+	for key in data.keys():
+		orb[key] = data[key]
+	heal_orbs.append(orb)
+	if is_multiplayer and _shop_rpc_available():
+		rpc("_rpc_gameplay_orb_spawned", orb.duplicate(true))
+	return orb
+
+
+func _gameplay_orb_by_uid(uid: String) -> Dictionary:
+	for orb in heal_orbs:
+		if String(orb.get("uid", "")) == uid:
+			return orb
+	return {}
+
+
+func _remove_gameplay_orb(uid: String) -> void:
+	if uid == "":
+		return
+	for orb in heal_orbs:
+		if String(orb.get("uid", "")) == uid:
+			orb["life"] = 0.0
+	heal_orbs = heal_orbs.filter(func(orb): return String(orb.get("uid", "")) != uid and float(orb.get("life", 0.0)) > 0.0)
+
+
+func _local_can_collect_gameplay_orb(orb: Dictionary) -> bool:
+	if online_local_spectator or is_dead or player_hp <= 0.0:
+		return false
+	var owner_peer: int = int(orb.get("owner_peer", 0))
+	if owner_peer != 0 and owner_peer != _mp_unique_id():
+		return false
+	return Vector2(orb.get("pos", player_pos)).distance_to(player_pos) < _neutral_pickup_radius(58.0)
+
+
+func _remote_can_collect_gameplay_orb(peer_id: int, orb: Dictionary) -> bool:
+	if peer_id <= 0:
+		return false
+	var owner_peer: int = int(orb.get("owner_peer", 0))
+	if owner_peer != 0 and owner_peer != peer_id:
+		return false
+	var state: Dictionary = net_players_by_peer.get(peer_id, {})
+	if not _remote_player_state_targetable(state):
+		return false
+	var pos: Vector2 = Vector2(state.get("pos", Vector2.ZERO))
+	return pos.distance_to(Vector2(orb.get("pos", pos))) < _neutral_pickup_radius(58.0)
+
+
+func _gameplay_orb_collecting_peer(orb: Dictionary) -> int:
+	if _local_can_collect_gameplay_orb(orb):
+		return _mp_unique_id()
+	for peer_key in net_players_by_peer.keys():
+		var peer_id: = int(peer_key)
+		if _remote_can_collect_gameplay_orb(peer_id, orb):
+			return peer_id
+	return 0
+
+
+func _update_multiplayer_gameplay_orbs(delta: float) -> void:
+	if _is_world_authority():
+		for orb in heal_orbs.duplicate():
+			var uid: String = String(orb.get("uid", ""))
+			if uid == "":
+				orb["uid"] = _next_gameplay_orb_uid(String(orb.get("kind", "heal")))
+				uid = String(orb["uid"])
+			orb["life"] = float(orb.get("life", 0.0)) - delta
+			if float(orb["life"]) <= 0.0:
+				_confirm_gameplay_orb_removed(uid, "expired", 0, orb)
+				continue
+			var collector_peer_id: int = _gameplay_orb_collecting_peer(orb)
+			if collector_peer_id != 0:
+				_confirm_gameplay_orb_removed(uid, "collected", collector_peer_id, orb)
+		heal_orbs = heal_orbs.filter(func(orb): return float(orb.get("life", 0.0)) > 0.0)
+		return
+	for orb in heal_orbs:
+		orb["life"] = float(orb.get("life", 0.0)) - delta
+		if float(orb["life"]) <= 0.0:
+			continue
+		if _local_can_collect_gameplay_orb(orb) and not bool(orb.get("collect_requested", false)):
+			orb["collect_requested"] = true
+			if _shop_rpc_available():
+				rpc_id(1, "_rpc_request_gameplay_orb_collect", String(orb.get("uid", "")), _mp_unique_id())
+	heal_orbs = heal_orbs.filter(func(orb): return float(orb.get("life", 0.0)) > 0.0)
+
+
+func _apply_gameplay_orb_collect_local(orb: Dictionary) -> void:
+	match String(orb.get("kind", "heal")):
+		"voraz_hunger":
+			_collect_voraz_hunger_orb(orb)
+		_:
+			var base_heal: = float(player_hp_max - player_hp) * float(orb.get("fraction", 0.0))
+			var heal = int(round(_nucleo_orb_heal_amount(base_heal)))
+			if heal > 0:
+				_heal_player(heal, "heal_orb", _support_card_count(CARD_NUCLEO_ID) <= 0)
+				_add_text("+%d" % heal, player_pos + Vector2(0, -64), Color(0.36, 1.0, 0.46), 0.8, 18)
+
+
+func _collect_voraz_hunger_orb(orb: Dictionary) -> void:
+	if String(aura_state.get("name", "")) != "Voraz":
+		return
+	var cycles: = int(aura_state.get("voracious_cycles", 0))
+	aura_state["voracious_hunger"] = float(aura_state.get("voracious_hunger", 0.0)) + float(orb.get("value", 28.0)) * pow(0.94, cycles)
+	aura_state["voracious_last_collect"] = 0.0
+	aura_state["voracious_drain_tick"] = 1.5
+	while float(aura_state.get("voracious_hunger", 0.0)) >= AuraSystem.hunger_max(aura_state):
+		aura_state["voracious_hunger"] = float(aura_state.get("voracious_hunger", 0.0)) - AuraSystem.hunger_max(aura_state)
+		aura_state["voracious_cycles"] = int(aura_state.get("voracious_cycles", 0)) + 1
+	var heal: = int((player_hp_max - player_hp) * minf(0.145, 0.02 + int(aura_state.get("voracious_cycles", 0)) * 0.025))
+	if heal > 0:
+		_heal_player(heal, "aura", true)
+		_add_text("COAGULO +%d" % heal, player_pos + Vector2(0, -78), _aura_color(), 0.7, 18)
+
+
+func _confirm_gameplay_orb_removed(uid: String, reason: String, collector_peer_id: int, orb: Dictionary) -> void:
+	if uid == "" or net_collected_gameplay_orb_ids.has(uid):
+		return
+	net_collected_gameplay_orb_ids[uid] = true
+	if reason == "collected" and collector_peer_id == _mp_unique_id():
+		_apply_gameplay_orb_collect_local(orb)
+	_remove_gameplay_orb(uid)
+	if is_multiplayer and _shop_rpc_available():
+		rpc("_rpc_gameplay_orb_removed", uid, reason, collector_peer_id, orb.duplicate(true))
 
 
 func _capture_boss1_rewind_projectiles() -> Array:
@@ -45931,12 +46112,77 @@ func _client_damage_request(target_kind: int, target_uid: String, amount: float,
 		NET_DAMAGE_ENEMY:
 			for enemy in enemies:
 				if str(enemy.get("uid", "")) == target_uid:
-					_damage_enemy(enemy, amount, source, show_text, false, attack_origin, source_category)
+					_damage_enemy(enemy, amount, source, show_text, false, attack_origin, source_category, attacker_peer_id)
 					return
 		NET_DAMAGE_BOSS:
 			_damage_boss(amount, source, false, false, source_category, attack_origin, attacker_peer_id)
 		NET_DAMAGE_ARAUTO:
 			_damage_arauto(amount, source, show_text, false)
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_gameplay_orb_spawned(orb: Dictionary) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _mp_peer_ids():
+				if peer_id != sender and _mp_peer_connected(int(peer_id)):
+					rpc_id(peer_id, "_rpc_gameplay_orb_spawned", orb)
+		return
+	if _mp_sender_is_self():
+		return
+	var uid: String = String(orb.get("uid", ""))
+	if uid == "" or net_collected_gameplay_orb_ids.has(uid):
+		return
+	if not _gameplay_orb_by_uid(uid).is_empty():
+		return
+	var incoming: Dictionary = orb.duplicate(true)
+	incoming["collect_requested"] = false
+	heal_orbs.append(incoming)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_gameplay_orb_removed(uid: String, reason: String, collector_peer_id: int, orb: Dictionary) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id:
+			for peer_id in _mp_peer_ids():
+				if peer_id != sender and _mp_peer_connected(int(peer_id)):
+					rpc_id(peer_id, "_rpc_gameplay_orb_removed", uid, reason, collector_peer_id, orb)
+		return
+	if _mp_sender_is_self():
+		return
+	if net_collected_gameplay_orb_ids.has(uid):
+		return
+	net_collected_gameplay_orb_ids[uid] = true
+	if reason == "collected" and collector_peer_id == _mp_unique_id():
+		_apply_gameplay_orb_collect_local(orb)
+	_remove_gameplay_orb(uid)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_request_gameplay_orb_collect(uid: String, collector_peer_id: int) -> void:
+	var sender: = _mp_sender_id()
+	if dedicated_server_mode:
+		if sender == 0 or sender != collector_peer_id:
+			return
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
+			return
+		if dedicated_room_owner_peer_id != 0:
+			rpc_id(dedicated_room_owner_peer_id, "_rpc_request_gameplay_orb_collect", uid, collector_peer_id)
+		return
+	if not _is_world_authority() or uid == "":
+		return
+	if sender != 0 and sender != collector_peer_id and dedicated_room_owner_peer_id == 0:
+		return
+	if net_collected_gameplay_orb_ids.has(uid):
+		return
+	var orb: Dictionary = _gameplay_orb_by_uid(uid)
+	if orb.is_empty():
+		return
+	var valid: bool = _local_can_collect_gameplay_orb(orb) if collector_peer_id == _mp_unique_id() else _remote_can_collect_gameplay_orb(collector_peer_id, orb)
+	if not valid:
+		return
+	_confirm_gameplay_orb_removed(uid, "collected", collector_peer_id, orb)
 
 @rpc("any_peer", "reliable")
 func _request_peer_damage(peer_id: int, amount: int, source: String, silent_hit_sfx: bool = false) -> void :
