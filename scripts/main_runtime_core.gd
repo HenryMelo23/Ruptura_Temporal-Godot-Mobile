@@ -102,6 +102,16 @@ func _ready() -> void :
 	run_security_checkpoint_request.timeout = 8.0
 	run_security_checkpoint_request.request_completed.connect(_on_run_security_checkpoint_completed)
 
+	player_progress_identity_request = HTTPRequest.new()
+	add_child(player_progress_identity_request)
+	player_progress_identity_request.timeout = 8.0
+	player_progress_identity_request.request_completed.connect(_on_player_progress_identity_completed)
+
+	player_progress_sync_request = HTTPRequest.new()
+	add_child(player_progress_sync_request)
+	player_progress_sync_request.timeout = 8.0
+	player_progress_sync_request.request_completed.connect(_on_player_progress_sync_completed)
+
 	app_update_check_request = HTTPRequest.new()
 	app_update_check_request.timeout = 8.0
 	add_child(app_update_check_request)
@@ -234,6 +244,12 @@ func _cleanup_runtime_resources() -> void :
 		online_heartbeat_in_flight = false
 	if run_report_request != null:
 		run_report_request.cancel_request()
+	if player_progress_identity_request != null:
+		player_progress_identity_request.cancel_request()
+		player_progress_identity_in_flight = false
+	if player_progress_sync_request != null:
+		player_progress_sync_request.cancel_request()
+		player_progress_sync_in_flight = false
 	if umbra_mind_check_request != null:
 		umbra_mind_check_request.cancel_request()
 	if veteran_unlock_request != null:
@@ -787,6 +803,10 @@ func _load_player_profile() -> void :
 			player_nickname = _sanitize_player_nickname(value)
 		elif key == "profile_id":
 			player_profile_id = _sanitize_profile_id(value)
+		elif key == "auth_token":
+			player_identity_auth_token = _sanitize_profile_secret(value)
+		elif key == "recovery_code":
+			player_identity_recovery_code = _sanitize_profile_secret(value)
 	file.close()
 	_ensure_player_profile_id()
 
@@ -798,6 +818,8 @@ func _save_player_profile() -> void :
 		return
 	file.store_string("nickname=" + player_nickname + "\n")
 	file.store_string("profile_id=" + player_profile_id + "\n")
+	file.store_string("auth_token=" + player_identity_auth_token + "\n")
+	file.store_string("recovery_code=" + player_identity_recovery_code + "\n")
 	file.close()
 
 
@@ -824,37 +846,48 @@ func _load_card_unlocks() -> void :
 	unlocked_card_ids.clear()
 	unlocked_manifestation_ids.clear()
 	unlocked_spectrum_ids.clear()
+	specter_levels.clear()
 	card_unlock_progress.clear()
 	card_unlock_veteran_synced_version_code = 0
-	if FileAccess.file_exists(CARD_UNLOCK_SAVE_PATH):
-		var file = FileAccess.open(CARD_UNLOCK_SAVE_PATH, FileAccess.READ)
-		if file != null:
-			var parsed = JSON.parse_string(file.get_as_text())
-			file.close()
-			if parsed is Dictionary:
-				var data: Dictionary = parsed
-				for card_id in data.get("unlocked", []):
-					unlocked_card_ids[String(card_id)] = true
-				for manifestation_id in data.get("unlocked_manifestations", []):
-					unlocked_manifestation_ids[String(manifestation_id)] = true
-				for spectrum_id in data.get("unlocked_specters", data.get("unlocked_spectrums", [])):
-					unlocked_spectrum_ids[String(spectrum_id)] = true
-				var loaded_levels: Dictionary = data.get("specter_levels", {})
-				for key in loaded_levels.keys():
-					specter_levels[String(key)] = clampi(int(loaded_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
-				persistent_spectral_coins = maxi(0, int(data.get("spectral_coins", data.get("persistent_spectral_coins", 0))))
-				spectral_coins = persistent_spectral_coins
-				var progress: Dictionary = data.get("progress", {})
-				for key in progress.keys():
-					card_unlock_progress[String(key)] = float(progress[key])
-				card_unlock_veteran_synced_version_code = maxi(0, int(data.get("veteran_unlock_sync_version_code", 0)))
 	_ensure_card_unlock_defaults()
+	player_progress_install_secret = _load_or_create_player_progress_install_secret()
+	player_progress_pending_events.clear()
+	player_progress_event_sequence = 0
+	player_progress_cache_trusted = false
+	var cached := _read_trusted_player_progress_cache()
+	if not cached.is_empty():
+		player_progress_cache_trusted = true
+		player_progress_event_sequence = maxi(0, int(cached.get("event_sequence", 0)))
+		var cached_events: Array = cached.get("pending_events", [])
+		for event in cached_events:
+			if event is Dictionary:
+				player_progress_pending_events.append(event.duplicate(true))
+		_apply_player_progress_snapshot(cached.get("snapshot", {}), false)
 	card_unlocks_dirty = false
 	card_unlock_save_timer = 0.0
 
 
 func _save_card_unlocks() -> void :
 	_ensure_card_unlock_defaults()
+	var payload := RTPlayerProgressSync.build_cache_payload(
+		player_profile_id,
+		player_identity_auth_token,
+		player_identity_recovery_code,
+		_card_unlock_snapshot(),
+		player_progress_pending_events,
+		player_progress_event_sequence
+	)
+	var signed_payload: Dictionary = RTPlayerProgressSync.signed_cache(payload, _player_progress_install_secret())
+	var file = FileAccess.open(PLAYER_PROGRESS_CACHE_PATH, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify(signed_payload, "\t"))
+	file.close()
+	card_unlocks_dirty = false
+	card_unlock_save_timer = 0.0
+
+
+func _card_unlock_snapshot() -> Dictionary:
 	var unlocked: Array = []
 	for card_id in unlocked_card_ids.keys():
 		if bool(unlocked_card_ids[card_id]):
@@ -876,10 +909,7 @@ func _save_card_unlocks() -> void :
 	var saved_specter_levels: Dictionary = {}
 	for key in specter_levels.keys():
 		saved_specter_levels[String(key)] = clampi(int(specter_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
-	var file = FileAccess.open(CARD_UNLOCK_SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string(JSON.stringify({
+	return RTPlayerProgressSync.compact_snapshot({
 		"version": 2,
 		"unlocked": unlocked,
 		"unlocked_manifestations": unlocked_manifestations,
@@ -888,16 +918,145 @@ func _save_card_unlocks() -> void :
 		"spectral_coins": maxi(0, persistent_spectral_coins),
 		"progress": progress,
 		"veteran_unlock_sync_version_code": card_unlock_veteran_synced_version_code
-	}, "\t"))
+	})
+
+
+func _load_or_create_player_progress_install_secret() -> String:
+	if FileAccess.file_exists(PLAYER_PROGRESS_INSTALL_SECRET_PATH):
+		var existing = FileAccess.open(PLAYER_PROGRESS_INSTALL_SECRET_PATH, FileAccess.READ)
+		if existing != null:
+			var value: = _sanitize_profile_secret(existing.get_as_text())
+			existing.close()
+			if value != "":
+				return value
+	var seed := "%d:%d:%s" % [int(Time.get_unix_time_from_system()), Time.get_ticks_msec(), str(rng.randi())]
+	var secret := RTPlayerProgressSync.cache_signature({"seed": seed}, "ruptura-local-progress-secret").substr(0, 64)
+	var file = FileAccess.open(PLAYER_PROGRESS_INSTALL_SECRET_PATH, FileAccess.WRITE)
+	if file != null:
+		file.store_string(secret)
+		file.close()
+	return secret
+
+
+func _player_progress_install_secret() -> String:
+	if player_progress_install_secret == "":
+		player_progress_install_secret = _load_or_create_player_progress_install_secret()
+	return player_progress_install_secret
+
+
+func _read_trusted_player_progress_cache() -> Dictionary:
+	if not FileAccess.file_exists(PLAYER_PROGRESS_CACHE_PATH):
+		return {}
+	var file = FileAccess.open(PLAYER_PROGRESS_CACHE_PATH, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
 	file.close()
-	card_unlocks_dirty = false
-	card_unlock_save_timer = 0.0
+	return RTPlayerProgressSync.validate_cache(parsed, _player_progress_install_secret())
+
+
+func _apply_player_progress_snapshot(snapshot: Variant, notify_unlocks: bool, replace_existing: bool = false) -> void:
+	if not snapshot is Dictionary:
+		return
+	var data: Dictionary = snapshot
+	player_progress_applying_snapshot = true
+	if replace_existing:
+		unlocked_card_ids.clear()
+		unlocked_manifestation_ids.clear()
+		unlocked_spectrum_ids.clear()
+		specter_levels.clear()
+		card_unlock_progress.clear()
+		persistent_spectral_coins = 0
+		spectral_coins = 0
+		_ensure_card_unlock_defaults()
+	for card_id in data.get("unlocked", []):
+		var key := String(card_id)
+		if key != "":
+			unlocked_card_ids[key] = true
+	for manifestation_id in data.get("unlocked_manifestations", []):
+		var key := String(manifestation_id)
+		if key != "":
+			unlocked_manifestation_ids[key] = true
+	for spectrum_id in data.get("unlocked_specters", data.get("unlocked_spectrums", [])):
+		var key := String(spectrum_id)
+		if key != "":
+			unlocked_spectrum_ids[key] = true
+	var loaded_levels: Dictionary = data.get("specter_levels", {})
+	for key in loaded_levels.keys():
+		specter_levels[String(key)] = clampi(int(loaded_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
+	persistent_spectral_coins = maxi(0, int(data.get("spectral_coins", data.get("persistent_spectral_coins", persistent_spectral_coins))))
+	spectral_coins = persistent_spectral_coins
+	var progress: Dictionary = data.get("progress", {})
+	for key in progress.keys():
+		card_unlock_progress[String(key)] = maxf(float(card_unlock_progress.get(String(key), 0.0)), float(progress[key]))
+	card_unlock_veteran_synced_version_code = maxi(card_unlock_veteran_synced_version_code, int(data.get("veteran_unlock_sync_version_code", 0)))
+	_ensure_card_unlock_defaults()
+	_check_card_unlock_rules(notify_unlocks)
+	player_progress_applying_snapshot = false
 
 
 func _mark_card_unlocks_dirty() -> void :
 	card_unlocks_dirty = true
 	if card_unlock_save_timer <= 0.0:
 		card_unlock_save_timer = 3.0
+
+
+func _queue_player_progress_event(event: Dictionary) -> void:
+	if event.is_empty() or dedicated_server_mode:
+		return
+	player_progress_pending_events.append(event.duplicate(true))
+	if player_progress_pending_events.size() > RTPlayerProgressSync.MAX_PENDING_EVENTS:
+		var overflow: int = player_progress_pending_events.size() - RTPlayerProgressSync.MAX_PENDING_EVENTS
+		player_progress_pending_events = player_progress_pending_events.slice(overflow)
+	player_progress_sync_timer = 0.35
+	_mark_card_unlocks_dirty()
+
+
+func _next_player_progress_event_sequence() -> int:
+	player_progress_event_sequence += 1
+	return player_progress_event_sequence
+
+
+func _queue_player_progress_unlock_event(metric: String, amount: float, max_mode: bool) -> void:
+	if metric == "" or amount <= 0.0:
+		return
+	var event := RTPlayerProgressSync.unlock_progress_event(
+		player_profile_id,
+		_next_player_progress_event_sequence(),
+		metric,
+		amount,
+		max_mode,
+		GAME_VERSION_CODE
+	)
+	_queue_player_progress_event(event)
+
+
+func _queue_player_progress_spectral_core_event(amount: int, source_type: String) -> void:
+	if amount <= 0:
+		return
+	var event := RTPlayerProgressSync.spectral_core_event(
+		player_profile_id,
+		_next_player_progress_event_sequence(),
+		amount,
+		source_type,
+		current_phase,
+		GAME_VERSION_CODE
+	)
+	_queue_player_progress_event(event)
+
+
+func _queue_player_progress_specter_upgrade_event(specter_key: String, target_level: int, cost: int) -> void:
+	if specter_key == "" or target_level <= 1:
+		return
+	var event := RTPlayerProgressSync.specter_upgrade_event(
+		player_profile_id,
+		_next_player_progress_event_sequence(),
+		specter_key,
+		target_level,
+		cost,
+		GAME_VERSION_CODE
+	)
+	_queue_player_progress_event(event)
 
 
 func _flush_card_unlocks_if_dirty() -> void :
@@ -1155,6 +1314,7 @@ func _confirm_specter_upgrade() -> void:
 	spectral_coins_spent += cost
 	var new_level: = current_level + 1
 	_set_specter_level(key, new_level)
+	_queue_player_progress_specter_upgrade_event(key, new_level, cost)
 	if _spectrum_key(selected_aura) == key:
 		var previous_last_pos: Vector2 = Vector2(aura_state.get("last_pos", player_pos))
 		aura_state = AuraSystem.create(String(AURAS[selected_aura]["name"]), current_level)
@@ -1177,6 +1337,7 @@ func _grant_spectral_core(amount: int, pos: Vector2, source_type: String) -> voi
 	spectral_coins += amount
 	persistent_spectral_coins = spectral_coins
 	spectral_coins_collected += amount
+	_queue_player_progress_spectral_core_event(amount, source_type)
 	_mark_card_unlocks_dirty()
 	var coin_id: int = int(Time.get_ticks_msec()) + spectral_coins_collected * 97
 	if has_method("_rt_adopt_current_state"):
@@ -1397,46 +1558,174 @@ func _unlock_spectrum_by_key_state(key: String, notify: = true) -> bool:
 	return true
 
 
-func _check_card_unlock_rules() -> void :
+func _check_card_unlock_rules(notify_unlocks: bool = true) -> void :
 	for card_id in CARD_UNLOCK_RULES.keys():
 		var id: = String(card_id)
 		if bool(unlocked_card_ids.get(id, false)):
 			continue
 		var rule: Dictionary = CARD_UNLOCK_RULES[id]
 		if _unlock_rule_completed(rule):
-			_unlock_card_by_id(id, true)
+			_unlock_card_by_id(id, notify_unlocks)
 	for manifestation_key_value in MANIFESTATION_UNLOCK_RULES.keys():
 		var manifestation_key_id: = String(manifestation_key_value)
 		if bool(unlocked_manifestation_ids.get(manifestation_key_id, false)):
 			continue
 		var rule: Dictionary = MANIFESTATION_UNLOCK_RULES[manifestation_key_id]
 		if _unlock_rule_completed(rule):
-			_unlock_manifestation_by_key_state(manifestation_key_id, true)
+			_unlock_manifestation_by_key_state(manifestation_key_id, notify_unlocks)
 	for spectrum_key_value in SPECTRUM_UNLOCK_RULES.keys():
 		var spectrum_key_id: = String(spectrum_key_value)
 		if bool(unlocked_spectrum_ids.get(spectrum_key_id, false)):
 			continue
 		var spectrum_rule: Dictionary = SPECTRUM_UNLOCK_RULES[spectrum_key_id]
 		if _unlock_rule_completed(spectrum_rule):
-			_unlock_spectrum_by_key_state(spectrum_key_id, true)
+			_unlock_spectrum_by_key_state(spectrum_key_id, notify_unlocks)
 
 
-func _add_card_unlock_progress(metric: String, amount: float) -> void :
+func _card_unlock_rule_metrics(rule: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	var primary: String = String(rule.get("metric", ""))
+	if primary != "":
+		result.append(primary)
+	for extra in Array(rule.get("all", [])):
+		if extra is Dictionary:
+			var extra_metric: String = String(Dictionary(extra).get("metric", ""))
+			if extra_metric != "" and not result.has(extra_metric):
+				result.append(extra_metric)
+	return result
+
+
+func _card_unlock_metric_known(metric: String) -> bool:
+	if metric == "":
+		return false
+	for source in [CARD_UNLOCK_RULES, MANIFESTATION_UNLOCK_RULES, SPECTRUM_UNLOCK_RULES]:
+		for key in source.keys():
+			if _card_unlock_rule_metrics(Dictionary(source[key])).has(metric):
+				return true
+	return false
+
+
+func _card_unlock_metric_client_allowed(metric: String, max_mode: bool) -> bool:
+	if max_mode:
+		return metric in ["survive_seconds", "unique_cards_bought"]
+	return metric in ["shop_purchases", "shop_rerolls", "stationary_seconds", "shots_fired", "teleports_used", "abilities_used", "healing_events", "damage_taken_events"]
+
+
+func _card_unlock_metric_max_delta(metric: String, max_mode: bool) -> float:
+	if max_mode:
+		match metric:
+			"phase_reached":
+				return 16.0
+			"survive_seconds":
+				return maxf(time_alive + 10.0, 10.0)
+			"unique_cards_bought":
+				return 128.0
+			_:
+				return 0.0
+	match metric:
+		"stationary_seconds":
+			return 5.0
+		_:
+			return 1.0
+
+
+func _card_unlock_source_peer_eligible(peer_id: int) -> bool:
+	if peer_id <= 0:
+		return false
+	if dedicated_server_mode:
+		return _dedicated_peer_alive_for_leadership(peer_id)
+	if peer_id == _mp_unique_id():
+		return _local_player_targetable()
+	return _peer_is_living_runner(peer_id)
+
+
+func _next_card_unlock_event_id(metric: String, peer_id: int) -> String:
+	net_card_unlock_event_sequence += 1
+	return "unlock:%d:%d:%s:%d" % [peer_id, net_card_unlock_event_sequence, metric, Time.get_ticks_msec()]
+
+
+func _apply_card_unlock_progress_local(metric: String, amount: float, max_mode: bool) -> void:
 	if metric == "" or amount <= 0.0:
 		return
-	card_unlock_progress[metric] = maxf(0.0, float(card_unlock_progress.get(metric, 0.0)) + amount)
+	var applied := false
+	if max_mode:
+		if amount <= float(card_unlock_progress.get(metric, 0.0)):
+			return
+		card_unlock_progress[metric] = amount
+		applied = true
+	else:
+		card_unlock_progress[metric] = maxf(0.0, float(card_unlock_progress.get(metric, 0.0)) + amount)
+		applied = true
 	_check_card_unlock_rules()
+	if applied and not player_progress_applying_snapshot:
+		_queue_player_progress_unlock_event(metric, amount, max_mode)
 	_mark_card_unlocks_dirty()
 
 
-func _set_card_unlock_progress_max(metric: String, value: float) -> void :
-	if metric == "":
+func _apply_confirmed_card_unlock_progress(event_id: String, metric: String, amount: float, max_mode: bool) -> void:
+	if event_id != "":
+		if net_confirmed_card_unlock_event_ids.has(event_id):
+			return
+		net_confirmed_card_unlock_event_ids[event_id] = true
+	_apply_card_unlock_progress_local(metric, amount, max_mode)
+
+
+func _confirm_card_unlock_progress_for_peer(peer_id: int, metric: String, amount: float, max_mode: bool, event_id: String = "") -> void:
+	if metric == "" or amount <= 0.0:
 		return
-	if value <= float(card_unlock_progress.get(metric, 0.0)):
+	var target_peer: int = peer_id if peer_id > 0 else _mp_unique_id()
+	var confirmed_event_id: String = event_id if event_id != "" else _next_card_unlock_event_id(metric, target_peer)
+	if target_peer == _mp_unique_id() or not is_multiplayer:
+		_apply_confirmed_card_unlock_progress(confirmed_event_id, metric, amount, max_mode)
 		return
-	card_unlock_progress[metric] = value
-	_check_card_unlock_rules()
-	_mark_card_unlocks_dirty()
+	if _multiplayer_peer_active():
+		rpc_id(target_peer, "_rpc_confirm_card_unlock_progress", confirmed_event_id, target_peer, metric, amount, max_mode)
+
+
+func _confirm_card_unlock_progress_for_active_players(metric: String, amount: float, max_mode: bool) -> void:
+	if not is_multiplayer:
+		_confirm_card_unlock_progress_for_peer(_mp_unique_id(), metric, amount, max_mode)
+		return
+	for peer_id in _living_run_player_peer_ids():
+		_confirm_card_unlock_progress_for_peer(peer_id, metric, amount, max_mode)
+
+
+func _request_card_unlock_progress_from_authority(metric: String, amount: float, max_mode: bool, event_id: String) -> void:
+	if event_id == "" or net_seen_card_unlock_request_ids.has(event_id):
+		return
+	net_seen_card_unlock_request_ids[event_id] = true
+	if _multiplayer_peer_active():
+		rpc_id(1, "_rpc_request_card_unlock_progress", event_id, metric, amount, max_mode, _mp_unique_id())
+
+
+func _record_card_unlock_progress(metric: String, amount: float, max_mode: bool, peer_id: int = 0, event_id: String = "") -> void:
+	if metric == "" or amount <= 0.0:
+		return
+	if not is_multiplayer:
+		_apply_card_unlock_progress_local(metric, amount, max_mode)
+		return
+	if dedicated_server_mode:
+		return
+	var target_peer: int = peer_id if peer_id > 0 else _mp_unique_id()
+	if _is_world_authority():
+		if not _card_unlock_source_peer_eligible(target_peer):
+			return
+		_confirm_card_unlock_progress_for_peer(target_peer, metric, amount, max_mode, event_id)
+		return
+	if target_peer != _mp_unique_id() or not _card_unlock_source_peer_eligible(_mp_unique_id()):
+		return
+	if not _card_unlock_metric_client_allowed(metric, max_mode):
+		return
+	var request_event_id: String = event_id if event_id != "" else _next_card_unlock_event_id(metric, _mp_unique_id())
+	_request_card_unlock_progress_from_authority(metric, amount, max_mode, request_event_id)
+
+
+func _add_card_unlock_progress(metric: String, amount: float, peer_id: int = 0, event_id: String = "") -> void :
+	_record_card_unlock_progress(metric, amount, false, peer_id, event_id)
+
+
+func _set_card_unlock_progress_max(metric: String, value: float, peer_id: int = 0, event_id: String = "") -> void :
+	_record_card_unlock_progress(metric, value, true, peer_id, event_id)
 
 
 func _register_card_purchase_unlock_progress(card: Dictionary) -> void :
@@ -1485,7 +1774,25 @@ func _sanitize_profile_id(raw_text: String) -> String:
 	return allowed.substr(0, 48)
 
 
+func _sanitize_profile_secret(raw_text: String) -> String:
+	var clean: = raw_text.strip_edges()
+	var allowed: = ""
+	for i in range(clean.length()):
+		var ch: = clean.substr(i, 1)
+		var code: = ch.unicode_at(0)
+		var is_number: = code >= 48 and code <= 57
+		var is_upper: = code >= 65 and code <= 90
+		var is_lower: = code >= 97 and code <= 122
+		var is_safe_symbol: = ch in ["_", "-", "."]
+		if is_number or is_upper or is_lower or is_safe_symbol:
+			allowed += ch
+	return allowed.substr(0, 96)
+
+
 func _ensure_player_profile_id() -> void :
+	if player_identity_auth_token != "" and _sanitize_profile_id(player_profile_id) != "":
+		player_profile_id = _sanitize_profile_id(player_profile_id)
+		return
 	var device_profile: = _device_profile_id()
 	if device_profile != "":
 		player_profile_id = device_profile
@@ -3115,6 +3422,141 @@ func _on_veteran_unlock_request_completed(result: int, response_code: int, _head
 	var total: int = int(applied.get("manifestations", 0)) + int(applied.get("specters", 0))
 	if total > 0:
 		print("Desbloqueios antigos restaurados: ", applied)
+
+
+func recover_player_progress_with_code(recovery_code: String) -> bool:
+	player_progress_claim_recovery_code = _sanitize_profile_secret(recovery_code)
+	if player_progress_claim_recovery_code == "":
+		return false
+	return _start_player_progress_identity_request("claim")
+
+
+func _update_player_progress_sync(delta: float) -> void:
+	if dedicated_server_mode or not _app_update_supported() or mode == "nick_setup":
+		return
+	if player_identity_auth_token == "":
+		if not player_progress_identity_in_flight:
+			_start_player_progress_identity_request("create")
+		return
+	player_progress_sync_timer = maxf(0.0, player_progress_sync_timer - delta)
+	if player_progress_pending_events.is_empty() and player_progress_sync_timer > 0.0:
+		return
+	if player_progress_sync_in_flight or player_progress_sync_request == null or _http_request_busy(player_progress_sync_request):
+		return
+	_start_player_progress_event_sync()
+
+
+func _start_player_progress_identity_request(kind: String) -> bool:
+	if player_progress_identity_request == null or _http_request_busy(player_progress_identity_request):
+		return false
+	player_progress_identity_request_kind = kind
+	player_progress_identity_in_flight = true
+	var path := PLAYER_IDENTITY_CREATE_PATH
+	var payload := {
+		"nickname": player_nickname,
+		"profile_id": player_profile_id,
+		"version_code": GAME_VERSION_CODE,
+		"platform": OS.get_name()
+	}
+	if kind == "claim":
+		path = PLAYER_IDENTITY_CLAIM_PATH
+		payload["recovery_code"] = player_progress_claim_recovery_code
+	var url := ONLINE_RELAY_BASE_URL + path
+	var err := player_progress_identity_request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if err != OK:
+		player_progress_identity_in_flight = false
+		player_progress_identity_request_kind = ""
+		player_progress_sync_status = "identity_request_failed"
+		print("Progresso online: falha ao iniciar identidade: ", error_string(err))
+		return false
+	return true
+
+
+func _start_player_progress_event_sync() -> bool:
+	if player_progress_sync_request == null or _http_request_busy(player_progress_sync_request):
+		return false
+	if player_identity_auth_token == "":
+		return false
+	player_progress_sync_in_flight = true
+	var payload := {
+		"player_id": player_profile_id,
+		"auth_token": player_identity_auth_token,
+		"schema_version": RTPlayerProgressSync.EVENT_SCHEMA_VERSION,
+		"version_code": GAME_VERSION_CODE,
+		"events": player_progress_pending_events
+	}
+	var url := ONLINE_RELAY_BASE_URL + PLAYER_UNLOCK_EVENTS_PATH
+	var err := player_progress_sync_request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if err != OK:
+		player_progress_sync_in_flight = false
+		player_progress_sync_status = "sync_request_failed"
+		print("Progresso online: falha ao sincronizar: ", error_string(err))
+		return false
+	return true
+
+
+func _on_player_progress_identity_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	player_progress_identity_in_flight = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		player_progress_sync_status = "identity_unavailable"
+		print("Progresso online: identidade indisponivel HTTP ", response_code)
+		return
+	var payload = JSON.parse_string(body.get_string_from_utf8())
+	if not payload is Dictionary or not bool(payload.get("ok", false)):
+		player_progress_sync_status = "identity_invalid"
+		print("Progresso online: resposta de identidade invalida")
+		return
+	var player_id := _sanitize_profile_id(String(payload.get("player_id", "")))
+	var auth_token := _sanitize_profile_secret(String(payload.get("auth_token", "")))
+	if player_id == "" or auth_token == "":
+		player_progress_sync_status = "identity_missing_fields"
+		return
+	player_profile_id = player_id
+	player_identity_auth_token = auth_token
+	var recovery_code := _sanitize_profile_secret(String(payload.get("recovery_code", "")))
+	if recovery_code == "" and player_progress_identity_request_kind == "claim":
+		recovery_code = player_progress_claim_recovery_code
+	if recovery_code != "":
+		player_identity_recovery_code = recovery_code
+	player_progress_claim_recovery_code = ""
+	player_progress_identity_request_kind = ""
+	_apply_player_progress_snapshot(payload.get("unlocks", {}), false, true)
+	_save_player_profile()
+	_save_card_unlocks()
+	player_progress_sync_timer = 0.25
+	player_progress_sync_status = "identity_ready"
+
+
+func _on_player_progress_sync_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	player_progress_sync_in_flight = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		player_progress_sync_status = "sync_unavailable"
+		print("Progresso online: sync indisponivel HTTP ", response_code)
+		return
+	var payload = JSON.parse_string(body.get_string_from_utf8())
+	if not payload is Dictionary or not bool(payload.get("ok", false)):
+		player_progress_sync_status = "sync_invalid"
+		print("Progresso online: resposta de sync invalida")
+		return
+	var accepted_ids := {}
+	for event_id in payload.get("accepted_event_ids", []):
+		accepted_ids[String(event_id)] = true
+	for event_id in payload.get("duplicate_event_ids", []):
+		accepted_ids[String(event_id)] = true
+	for event_id in payload.get("rejected_event_ids", []):
+		accepted_ids[String(event_id)] = true
+	if not accepted_ids.is_empty():
+		var remaining: Array = []
+		for event in player_progress_pending_events:
+			if not event is Dictionary:
+				continue
+			if not accepted_ids.has(String(Dictionary(event).get("event_id", ""))):
+				remaining.append(event)
+		player_progress_pending_events = remaining
+	_apply_player_progress_snapshot(payload.get("unlocks", {}), false, true)
+	_save_card_unlocks()
+	player_progress_sync_timer = PLAYER_PROGRESS_SYNC_INTERVAL
+	player_progress_sync_status = "synced"
 
 
 func _on_app_update_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void :
@@ -6292,6 +6734,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	boss_call_timer = -1.0
 	boss_active = false
 	boss_dead = false
+	_reset_boss_party_scaling_context(1)
 	boss_hp_max = BOSS_BASE_HP
 	boss_hp = boss_hp_max
 	if is_multiplayer:
@@ -6385,6 +6828,8 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	effects.clear()
 	heal_orbs.clear()
 	net_collected_gameplay_orb_ids.clear()
+	net_seen_card_unlock_request_ids.clear()
+	net_confirmed_card_unlock_event_ids.clear()
 	slashes.clear()
 	anchors.clear()
 	prisms.clear()
@@ -7007,6 +7452,7 @@ func _phase1_is_after_phase6() -> bool:
 
 func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 1.0) -> void :
 	var scaled_enemy_hp: = ENEMY_BASE_HP * (multiplayer_enemy_hp_scale if is_multiplayer else 1.0)
+	_reset_boss_party_scaling_context(phase)
 	if phase == 7:
 		enemy_base_hp = scaled_enemy_hp * 1.18
 		enemy_speed_base = ENEMY_BASE_SPEED * 1.08
@@ -7097,10 +7543,15 @@ func _advance_to_phase(phase: int) -> void :
 	var rain_should_become_snow = phase == 2 and boss1_rain_active and weather_kind == "rain"
 	var carried_enemy_hp: float = max(float(enemy_base_hp), ENEMY_BASE_HP)
 	var carried_enemy_speed: float = max(float(enemy_speed_base), ENEMY_BASE_SPEED)
+	var previous_enemy_cap: int = _enemy_limit()
 	current_phase = phase
 	pending_phase = 0
 	phase_started_at = time_alive
-	_set_card_unlock_progress_max("phase_reached", float(phase))
+	enemy_manager.prepare_phase_density_carry(previous_enemy_cap)
+	if is_multiplayer and _is_world_authority():
+		_confirm_card_unlock_progress_for_active_players("phase_reached", float(phase), true)
+	else:
+		_set_card_unlock_progress_max("phase_reached", float(phase))
 	if mode != "phase_transition":
 		mode = "game"
 	_play_phase_music()
@@ -7145,6 +7596,7 @@ func _advance_to_phase(phase: int) -> void :
 	boss_call_timer = -1.0
 	boss_active = false
 	boss_dead = false
+	_reset_boss_party_scaling_context(phase)
 	boss_phase = 0.0
 	boss_attack_timer = 0.0
 	boss_entry_timer = 0.0
@@ -7281,7 +7733,8 @@ func _advance_to_phase(phase: int) -> void :
 
 
 func _boss_hp_for_phase(phase: int) -> float:
-	var mp_mult: = _multiplayer_boss_hp_scale()
+	_ensure_boss_party_scaling_context(phase)
+	var mp_mult: = boss_party_scaling_hp_coeff
 	match phase:
 		7:
 			return (BOSS_BASE_HP * BOSS7_HP_SCALE + _boss_farm_hp_bonus(10.0, 32.0)) * mp_mult
@@ -7296,6 +7749,37 @@ func _boss_hp_for_phase(phase: int) -> float:
 		2:
 			return (8910.0 + _boss_farm_hp_bonus(8.0, 30.0)) * mp_mult
 	return (BOSS_BASE_HP + _boss_farm_hp_bonus(6.0, 24.0)) * mp_mult
+
+
+func _reset_boss_party_scaling_context(phase: int = 0) -> void:
+	boss_party_scaling_phase = phase
+	boss_party_scaling_size = 0
+	boss_party_scaling_hp_coeff = 1.0
+	boss_party_scaling_pressure_coeff = 1.0
+
+
+func _ensure_boss_party_scaling_context(phase: int) -> void:
+	if boss_party_scaling_size > 0 and boss_party_scaling_phase == phase:
+		return
+	var party_size: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS) if is_multiplayer else 1
+	var profile: Dictionary = RTBossPartyScaling.profile_for_party_size(party_size, ONLINE_MAX_PLAYERS)
+	boss_party_scaling_phase = phase
+	boss_party_scaling_size = int(profile.get("party_size", 1))
+	boss_party_scaling_hp_coeff = float(profile.get("hp", 1.0))
+	boss_party_scaling_pressure_coeff = float(profile.get("pressure", 1.0))
+
+
+func _boss_party_scaling_report() -> Dictionary:
+	var report_phase: int = current_phase if current_phase > 0 else boss_party_scaling_phase
+	if boss_party_scaling_size <= 0:
+		_ensure_boss_party_scaling_context(maxi(1, report_phase))
+	return {
+		"model": RTBossPartyScaling.MODEL_VERSION,
+		"phase": boss_party_scaling_phase,
+		"party_size": boss_party_scaling_size,
+		"hp_coeff": snappedf(boss_party_scaling_hp_coeff, 0.001),
+		"pressure_coeff": snappedf(boss_party_scaling_pressure_coeff, 0.001)
+	}
 
 
 func _boss_farm_hp_bonus(score_rate: float, kill_rate: float) -> float:
@@ -7550,7 +8034,12 @@ func _load_umbra_mobile_memory() -> void :
 	if boss5_dqn_weights.is_empty():
 		print("UMBRA_MIND: DQN weights NOT found or empty at: ", BOSS5_DQN_WEIGHTS_PATH)
 	else:
-		print("UMBRA_MIND: DQN weights loaded successfully. Layers: ", boss5_dqn_weights.keys())
+		var dqn_contract_error: String = _umbra_dqn_contract_error(boss5_dqn_weights)
+		if dqn_contract_error != "":
+			push_error("UMBRA_MIND: rejected DQN weights at %s: %s" % [BOSS5_DQN_WEIGHTS_PATH, dqn_contract_error])
+			boss5_dqn_weights.clear()
+		else:
+			print("UMBRA_MIND: DQN weights loaded successfully. model=%s inputs=%d outputs=%d" % [String(boss5_dqn_weights.get("model_version", "")), BOSS5_DQN_FEATURES.size(), BOSS5_ACTIONS.size()])
 	var learned: = _read_json_dict(BOSS5_MEMORY_USER)
 	if learned.has("weights") and learned["weights"] is Dictionary:
 		for action in learned["weights"].keys():
@@ -7572,6 +8061,19 @@ func _read_json_dict(path: String) -> Dictionary:
 	if parsed is Dictionary:
 		return parsed
 	return {}
+
+
+func _umbra_dqn_contract_error(weights: Dictionary) -> String:
+	return UmbraDqnContract.contract_error(
+		weights,
+		BOSS5_ACTIONS,
+		BOSS5_DQN_FEATURES,
+		BOSS5_DQN_MODEL_VERSION,
+		BOSS5_DQN_ACTION_SCHEMA_VERSION,
+		BOSS5_DQN_FEATURE_SCHEMA_VERSION,
+		BOSS5_DQN_HIDDEN1_SIZE,
+		BOSS5_DQN_HIDDEN2_SIZE
+	)
 
 
 func _apply_remote_umbra_mind() -> void:
@@ -8483,6 +8985,7 @@ func _process(delta: float) -> void :
 	_update_content_update_check(delta)
 	_update_umbra_mind_check(delta)
 	_update_veteran_unlock_sync(delta)
+	_update_player_progress_sync(delta)
 	_update_qa_streaming(delta)
 	_update_run_security_checkpoint(delta)
 	_update_mouse_cursor_mode()
@@ -21404,7 +21907,10 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		collector_hud_pulse = 1.2
 		_add_text("COLETORA", boss_pos + Vector2(0, -116), Color(0.95, 0.08, 0.24), 1.4, 26)
 	if boss_hp <= 0.0 and not boss_dead:
-		_add_card_unlock_progress("boss_kills", 1.0)
+		if is_multiplayer and _is_world_authority():
+			_confirm_card_unlock_progress_for_active_players("boss_kills", 1.0, false)
+		else:
+			_add_card_unlock_progress("boss_kills", 1.0)
 		if current_phase == 3 and _boss3_miasma_active():
 			_end_boss3_miasma(true)
 		_finish_boss_timer(current_phase)
@@ -21634,7 +22140,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
 	_maybe_grant_enemy_spectral_core(enemy, kill_pos)
-	_add_card_unlock_progress("enemy_kills", 1.0)
+	_add_card_unlock_progress("enemy_kills", 1.0, int(enemy.get("killed_by_peer_id", _mp_unique_id())))
 	_contractual_order_progress("kill", 1)
 	var gain = _points_for_enemy(enemy)
 	if manifestation_key == "lacerante" and _is_uncommon_enemy(enemy):
@@ -24420,6 +24926,9 @@ func _umbra_discretizar_estado() -> Array:
 func _umbra_dqn_forward(features: Array) -> Array:
 	if boss5_dqn_weights.is_empty():
 		return []
+	if features.size() != BOSS5_DQN_FEATURES.size():
+		push_error("UMBRA_MIND: rejected DQN inference: feature size expected=%d actual=%d" % [BOSS5_DQN_FEATURES.size(), features.size()])
+		return []
 
 	var w1 = boss5_dqn_weights.get("net.0.weight", [])
 	var b1 = boss5_dqn_weights.get("net.0.bias", [])
@@ -24433,11 +24942,11 @@ func _umbra_dqn_forward(features: Array) -> Array:
 
 
 	var out1: = []
-	out1.resize(128)
-	for j in range(128):
+	out1.resize(BOSS5_DQN_HIDDEN1_SIZE)
+	for j in range(BOSS5_DQN_HIDDEN1_SIZE):
 		var sum_val: float = b1[j]
 		var w_row: Array = w1[j]
-		for i in range(24):
+		for i in range(BOSS5_DQN_FEATURES.size()):
 			sum_val += float(features[i]) * float(w_row[i])
 		if sum_val < 0.0:
 			sum_val *= 0.01
@@ -24445,11 +24954,11 @@ func _umbra_dqn_forward(features: Array) -> Array:
 
 
 	var out2: Array = []
-	out2.resize(64)
-	for j in range(64):
+	out2.resize(BOSS5_DQN_HIDDEN2_SIZE)
+	for j in range(BOSS5_DQN_HIDDEN2_SIZE):
 		var sum_val: float = b2[j]
 		var w_row: Array = w2[j]
-		for i in range(128):
+		for i in range(BOSS5_DQN_HIDDEN1_SIZE):
 			sum_val += float(out1[i]) * float(w_row[i])
 		if sum_val < 0.0:
 			sum_val *= 0.01
@@ -24457,11 +24966,11 @@ func _umbra_dqn_forward(features: Array) -> Array:
 
 
 	var out3: Array = []
-	out3.resize(22)
-	for j in range(22):
+	out3.resize(BOSS5_ACTIONS.size())
+	for j in range(BOSS5_ACTIONS.size()):
 		var sum_val: float = b3[j]
 		var w_row: Array = w3[j]
-		for i in range(64):
+		for i in range(BOSS5_DQN_HIDDEN2_SIZE):
 			sum_val += float(out2[i]) * float(w_row[i])
 		out3[j] = sum_val
 
@@ -24479,7 +24988,7 @@ func _umbra_choose_action() -> String:
 	if not boss5_dqn_weights.is_empty():
 		var features: Array = _umbra_discretizar_estado()
 		var q_values: Array = _umbra_dqn_forward(features)
-		var acoes_base: Array = boss5_dqn_weights.get("acoes_base", [])
+		var acoes_base: Array = boss5_dqn_weights.get("action_schema", boss5_dqn_weights.get("acoes_base", []))
 		for action in available:
 			var score: float = 0.0
 			if acoes_base.has(action):
@@ -43312,25 +43821,13 @@ func _multiplayer_enemy_hp_scale() -> float:
 
 
 func _multiplayer_boss_hp_scale() -> float:
-	if not is_multiplayer:
-		return 1.0
-	var active_players: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS)
-	if active_players >= 3:
-		return MULTIPLAYER_BOSS_HP_SCALE_3P
-	if active_players == 2:
-		return MULTIPLAYER_BOSS_HP_SCALE_2P
-	return 1.0
+	_ensure_boss_party_scaling_context(maxi(1, current_phase))
+	return boss_party_scaling_hp_coeff
 
 
 func _multiplayer_boss_damage_scale() -> float:
-	if not is_multiplayer:
-		return 1.0
-	var active_players: int = clampi(_active_run_player_count(), 1, ONLINE_MAX_PLAYERS)
-	if active_players >= 3:
-		return MULTIPLAYER_BOSS_DAMAGE_SCALE_3P
-	if active_players == 2:
-		return MULTIPLAYER_BOSS_DAMAGE_SCALE_2P
-	return 1.0
+	_ensure_boss_party_scaling_context(maxi(1, current_phase))
+	return boss_party_scaling_pressure_coeff
 
 
 func _multiplayer_boss_target_switch_time() -> float:
@@ -46641,6 +47138,51 @@ func _client_damage_request(target_kind: int, target_uid: String, amount: float,
 			_damage_boss(amount, source, false, false, source_category, attack_origin, attacker_peer_id)
 		NET_DAMAGE_ARAUTO:
 			_damage_arauto(amount, source, show_text, false)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_request_card_unlock_progress(event_id: String, metric: String, amount: float, max_mode: bool, source_peer_id: int) -> void:
+	if event_id == "" or metric == "" or not is_finite(amount) or amount <= 0.0:
+		return
+	var sender: = _mp_sender_id()
+	if dedicated_server_mode:
+		if sender == 0 or sender != source_peer_id:
+			return
+		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
+			return
+		if dedicated_room_owner_peer_id != 0:
+			rpc_id(dedicated_room_owner_peer_id, "_rpc_request_card_unlock_progress", event_id, metric, amount, max_mode, source_peer_id)
+		return
+	if not _is_world_authority():
+		return
+	if sender != 0 and sender != source_peer_id and dedicated_room_owner_peer_id == 0:
+		return
+	if net_seen_card_unlock_request_ids.has(event_id):
+		return
+	if not _card_unlock_metric_known(metric) or not _card_unlock_metric_client_allowed(metric, max_mode):
+		return
+	if amount > _card_unlock_metric_max_delta(metric, max_mode):
+		return
+	if not _card_unlock_source_peer_eligible(source_peer_id):
+		return
+	net_seen_card_unlock_request_ids[event_id] = true
+	_confirm_card_unlock_progress_for_peer(source_peer_id, metric, amount, max_mode, event_id)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_confirm_card_unlock_progress(event_id: String, target_peer_id: int, metric: String, amount: float, max_mode: bool) -> void:
+	if dedicated_server_mode:
+		var sender: = _mp_sender_id()
+		if sender == dedicated_room_owner_peer_id and target_peer_id > 0 and _mp_peer_connected(target_peer_id):
+			rpc_id(target_peer_id, "_rpc_confirm_card_unlock_progress", event_id, target_peer_id, metric, amount, max_mode)
+		return
+	if _mp_sender_is_self():
+		return
+	if target_peer_id != _mp_unique_id():
+		return
+	if not _card_unlock_metric_known(metric) or amount <= 0.0:
+		return
+	_apply_confirmed_card_unlock_progress(event_id, metric, amount, max_mode)
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)

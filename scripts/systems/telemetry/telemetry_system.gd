@@ -297,6 +297,7 @@ func build_minimal_session_payload(result: String) -> Dictionary:
 	var boss_hp_ratio: float = 0.0
 	if game.boss_hp_max > 0.0:
 		boss_hp_ratio = clampf(float(game.boss_hp) / float(game.boss_hp_max), 0.0, 1.0)
+	var boss_scaling: Dictionary = game._boss_party_scaling_report() if game.has_method("_boss_party_scaling_report") else {}
 	var payload: Dictionary = {
 		"schema": MINIMAL_SCHEMA,
 		"schema_version": MINIMAL_SCHEMA_VERSION,
@@ -382,7 +383,10 @@ func build_minimal_session_payload(result: String) -> Dictionary:
 			"phase": int(game.current_phase),
 			"name": String(game.boss_name),
 			"hp_ratio": snappedf(boss_hp_ratio, 0.0001),
-			"stage": float(game.boss_phase)
+			"stage": float(game.boss_phase),
+			"party_size": int(boss_scaling.get("party_size", 1)),
+			"hp_coeff": float(boss_scaling.get("hp_coeff", 1.0)),
+			"pressure_coeff": float(boss_scaling.get("pressure_coeff", 1.0))
 		},
 		"umbra": {
 			"phase5_context": int(game.current_phase) == 5,
@@ -401,6 +405,7 @@ func build_run_report_payload(result: String) -> Dictionary:
 		return {}
 	var manifest_name: String = String(game.MANIFESTATIONS[game.selected_manifestation]["name"]) if game.selected_manifestation >= 0 and game.selected_manifestation < game.MANIFESTATIONS.size() else game.manifestation_key
 	var aura_name: String = String(game.AURAS[game.selected_aura]["name"]) if game.selected_aura >= 0 and game.selected_aura < game.AURAS.size() else String(game.aura_state.get("name", "N/A"))
+	var boss_scaling: Dictionary = game._boss_party_scaling_report() if game.has_method("_boss_party_scaling_report") else {}
 	game._ensure_player_profile_id()
 	var payload: Dictionary = {
 		"player": game.player_nickname,
@@ -473,6 +478,7 @@ func build_run_report_payload(result: String) -> Dictionary:
 		"boss_damage_total": game._total_boss_damage_report(),
 		"boss_report": game._boss_report_text(),
 		"boss_detail": game._boss_report_rows(),
+		"boss_scaling": boss_scaling,
 		"dimension_route": {
 			"initial_phase": game.run_initial_phase,
 			"farm_cycles": game.dimension_route_farm_cycles,

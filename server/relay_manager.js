@@ -38,6 +38,10 @@ const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 100);
 const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
+const PLAYER_PROGRESS_PATH = process.env.PLAYER_PROGRESS_PATH || path.join(__dirname, "player_progress.json");
+const PLAYER_PROGRESS_SCHEMA_VERSION = 1;
+const PLAYER_PROGRESS_EVENT_VERSION = 1;
+const PLAYER_PROGRESS_EVENT_LIMIT = 120;
 const RUN_REPORT_INTEGRITY_VERSION = 1;
 const RUN_REPORT_INTEGRITY_MIN_VERSION_CODE = 23002;
 const RUN_REPORT_INTEGRITY_SALT = "ruptura-temporal-run-integrity-v1-2.0.30c";
@@ -1321,6 +1325,296 @@ function saveLeaderboardStore(store) {
   fs.writeFileSync(LEADERBOARD_PATH, JSON.stringify(store, null, 2));
 }
 
+function defaultPlayerProgressStore() {
+  return { schemaVersion: PLAYER_PROGRESS_SCHEMA_VERSION, identities: {}, recoveryIndex: {} };
+}
+
+function loadPlayerProgressStore() {
+  try {
+    if (!fs.existsSync(PLAYER_PROGRESS_PATH)) {
+      return defaultPlayerProgressStore();
+    }
+    const parsed = JSON.parse(fs.readFileSync(PLAYER_PROGRESS_PATH, "utf8"));
+    return {
+      schemaVersion: Math.max(1, Math.floor(Number(parsed.schemaVersion) || PLAYER_PROGRESS_SCHEMA_VERSION)),
+      identities: parsed.identities && typeof parsed.identities === "object" ? parsed.identities : {},
+      recoveryIndex: parsed.recoveryIndex && typeof parsed.recoveryIndex === "object" ? parsed.recoveryIndex : {}
+    };
+  } catch (error) {
+    console.error(`failed to read player progress: ${error.message}`);
+    return defaultPlayerProgressStore();
+  }
+}
+
+function savePlayerProgressStore(store) {
+  fs.mkdirSync(path.dirname(PLAYER_PROGRESS_PATH), { recursive: true });
+  fs.writeFileSync(PLAYER_PROGRESS_PATH, JSON.stringify(store, null, 2));
+}
+
+function sha256Hex(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+function randomToken(prefix, bytes = 18) {
+  return `${prefix}_${crypto.randomBytes(bytes).toString("hex")}`;
+}
+
+function recoveryCode() {
+  return crypto.randomBytes(9).toString("base64url").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+}
+
+function cleanProgressString(value, limit = 96) {
+  return String(value || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, limit);
+}
+
+const PLAYER_PROGRESS_ALWAYS_CARDS = [
+  "Speed Boost", "Porcao", "Disparo crescente", "Tempestade", "Roubo de Vida",
+  "Speed Atack", "Teleporte", "Defesa", "Sorte", "orbita_coletora"
+];
+const PLAYER_PROGRESS_ALWAYS_MANIFESTATIONS = ["eletrica"];
+const PLAYER_PROGRESS_ALWAYS_SPECTERS = ["impulsiva"];
+const PLAYER_PROGRESS_RULES = {
+  cards: {
+    "Trembo": { metric: "survive_seconds", target: 1800 },
+    "Petro": { metric: "survive_seconds", target: 1200 },
+    "Poison": { metric: "enemy_kills", target: 180 },
+    "Coletora": { metric: "enemy_kills", target: 280 },
+    "Mercenaria": { metric: "enemy_kills", target: 420 },
+    "devorador_destinos": { metric: "boss_kills", target: 2 },
+    "escolha_adiada": { metric: "shop_rerolls", target: 18, all: [{ metric: "shop_purchases", target: 12 }] },
+    "tregua": { metric: "survive_seconds", target: 1500 },
+    "cinzas": { metric: "shop_purchases", target: 30, all: [{ metric: "survive_seconds", target: 900 }] },
+    "reserva_pulso": { metric: "healing_events", target: 24, all: [{ metric: "survive_seconds", target: 900 }] },
+    "casulo_reativo": { metric: "damage_taken_events", target: 45, all: [{ metric: "phase_reached", target: 2 }] },
+    "passagem_intangivel": { metric: "teleports_used", target: 90, all: [{ metric: "survive_seconds", target: 900 }] },
+    "ancora_vital": { metric: "damage_taken_events", target: 65, all: [{ metric: "phase_reached", target: 2 }] },
+    "inercia_cronal": { metric: "damage_taken_events", target: 80 },
+    "leitura_instante": { metric: "survive_seconds", target: 1800 },
+    "margem_segura": { metric: "phase_reached", target: 3 },
+    "moeda_estavel": { metric: "shop_purchases", target: 18 },
+    "pacto_possibilidades": { metric: "unique_cards_bought", target: 18 },
+    "solo_consolidado": { metric: "phase_reached", target: 3 },
+    "rastro_previsto": { metric: "teleports_used", target: 140 },
+    "rebate_temporal": { metric: "shots_fired", target: 750 },
+    "impulso_instavel": { metric: "abilities_used", target: 140 },
+    "eco_colateral": { metric: "enemy_kills", target: 520 },
+    "zona_repetida": { metric: "survive_seconds", target: 2400 },
+    "folego_final": { metric: "enemy_kills", target: 650 },
+    "margem_sangrenta": { metric: "damage_taken_events", target: 105 },
+    "ressonancia_vital": { metric: "abilities_used", target: 220 },
+    "intervalo_fraturado": { metric: "abilities_used", target: 280 },
+    "nucleo_revigorante": { metric: "healing_events", target: 45 },
+    "limiar_de_ruina": { metric: "enemy_kills", target: 760 },
+    "estase_reparadora": { metric: "stationary_seconds", target: 240, all: [{ metric: "survive_seconds", target: 1200 }] },
+    "egide_hemofaga": { metric: "healing_events", target: 70 },
+    "fratura_cronal": { metric: "boss_kills", target: 2 },
+    "pulso_desestabilizador": { metric: "boss_kills", target: 2 },
+    "pressao_cerco": { metric: "boss_kills", target: 2 },
+    "choque_fontes": { metric: "boss_kills", target: 3 },
+    "ferrolho_ruptura": { metric: "boss_kills", target: 3 },
+    "limiar_colapso": { metric: "boss_kills", target: 3 },
+    "desvio_probabilidade": { metric: "damage_taken_events", target: 140 },
+    "ponto_cego": { metric: "teleports_used", target: 220 },
+    "mandamento_ruptura": { metric: "boss_kills", target: 4 },
+    "carta_zero": { metric: "unique_cards_bought", target: 26 },
+    "necrocronismo": { metric: "enemy_kills", target: 980 },
+    "coracao_antimateria": { metric: "boss_kills", target: 4 },
+    "cofre_excesso": { metric: "boss_kills", target: 4 }
+  },
+  manifestations: {
+    lacerante: { metric: "enemy_kills", target: 250 },
+    prismatica: { metric: "boss_kills", target: 1 },
+    retornante: { metric: "teleports_used", target: 100, all: [{ metric: "survive_seconds", target: 900 }] },
+    parasitica: { metric: "phase_reached", target: 6 },
+    gravitante: { metric: "phase_reached", target: 4 },
+    ancorada: { metric: "stationary_seconds", target: 180, all: [{ metric: "survive_seconds", target: 900 }] },
+    cartografica: { metric: "phase_reached", target: 4 },
+    mnesica: { metric: "boss_kills", target: 3 },
+    ressonante: { metric: "abilities_used", target: 180, all: [{ metric: "survive_seconds", target: 900 }] },
+    contratual: { metric: "shop_purchases", target: 35 },
+    acorrentada: { metric: "damage_taken_events", target: 55, all: [{ metric: "phase_reached", target: 2 }] },
+    eclipsada: { metric: "phase_reached", target: 7 },
+    bombastica: { metric: "enemy_kills", target: 550 },
+    necronada: { metric: "enemy_kills", target: 700, all: [{ metric: "phase_reached", target: 3 }] }
+  },
+  specters: {
+    racional: { metric: "stationary_seconds", target: 150, all: [{ metric: "survive_seconds", target: 900 }] },
+    devota: { metric: "healing_events", target: 25 },
+    vanguarda: { metric: "damage_taken_events", target: 45, all: [{ metric: "phase_reached", target: 2 }] },
+    insana: { metric: "shots_fired", target: 650 },
+    voraz: { metric: "enemy_kills", target: 420 },
+    nula: { metric: "survive_seconds", target: 1800 },
+    abissal: { metric: "phase_reached", target: 6 },
+    profetica: { metric: "boss_kills", target: 2 },
+    sanguinaria: { metric: "damage_taken_events", target: 70 },
+    crepuscular: { metric: "phase_reached", target: 4 },
+    peregrino: { metric: "phase_reached", target: 3 },
+    equilibrista: { metric: "survive_seconds", target: 2400 },
+    avarento: { metric: "shop_purchases", target: 30 },
+    oportunista: { metric: "abilities_used", target: 220 }
+  }
+};
+const PLAYER_PROGRESS_KNOWN_SPECTERS = new Set([
+  ...PLAYER_PROGRESS_ALWAYS_SPECTERS,
+  ...Object.keys(PLAYER_PROGRESS_RULES.specters)
+]);
+
+function newPlayerProgressIdentity(payload = {}) {
+  const recovery = recoveryCode();
+  const now = Date.now();
+  return {
+    playerId: randomToken("rtp", 12),
+    nickname: String(payload.nickname || "").trim().slice(0, 32),
+    previousProfileIds: cleanProgressString(payload.profile_id, 64) ? [cleanProgressString(payload.profile_id, 64)] : [],
+    tokenHash: "",
+    recoveryHash: sha256Hex(recovery),
+    recoveryCode: recovery,
+    createdAt: new Date(now).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+    progress: {},
+    unlocked: { cards: [], manifestations: [], specters: [] },
+    specterLevels: {},
+    spectralCoins: 0,
+    appliedEvents: {}
+  };
+}
+
+function defaultProgressSnapshot(identity) {
+  const unlocked = recomputePlayerUnlocks(identity.progress || {});
+  return {
+    schema_version: PLAYER_PROGRESS_SCHEMA_VERSION,
+    version: Math.max(1, Math.floor(Number(identity.version || 1))),
+    player_id: identity.playerId,
+    progress: identity.progress || {},
+    unlocked: Array.from(new Set([...(identity.unlocked && identity.unlocked.cards || []), ...unlocked.cards])).sort(),
+    unlocked_manifestations: Array.from(new Set([...(identity.unlocked && identity.unlocked.manifestations || []), ...unlocked.manifestations])).sort(),
+    unlocked_specters: Array.from(new Set([...(identity.unlocked && identity.unlocked.specters || []), ...unlocked.specters])).sort(),
+    specter_levels: identity.specterLevels || {},
+    spectral_coins: Math.max(0, Math.floor(Number(identity.spectralCoins) || 0)),
+    updated_at: identity.updatedAt || new Date().toISOString()
+  };
+}
+
+function ruleComplete(rule, progress) {
+  if (!rule || typeof rule !== "object") return false;
+  if (safeNumber(progress[rule.metric]) < safeNumber(rule.target)) return false;
+  const all = Array.isArray(rule.all) ? rule.all : [];
+  for (const extra of all) {
+    if (safeNumber(progress[extra.metric]) < safeNumber(extra.target)) return false;
+  }
+  return true;
+}
+
+function recomputePlayerUnlocks(progress) {
+  const cards = new Set(PLAYER_PROGRESS_ALWAYS_CARDS);
+  const manifestations = new Set(PLAYER_PROGRESS_ALWAYS_MANIFESTATIONS);
+  const specters = new Set(PLAYER_PROGRESS_ALWAYS_SPECTERS);
+  for (const [key, rule] of Object.entries(PLAYER_PROGRESS_RULES.cards)) if (ruleComplete(rule, progress)) cards.add(key);
+  for (const [key, rule] of Object.entries(PLAYER_PROGRESS_RULES.manifestations)) if (ruleComplete(rule, progress)) manifestations.add(key);
+  for (const [key, rule] of Object.entries(PLAYER_PROGRESS_RULES.specters)) if (ruleComplete(rule, progress)) specters.add(key);
+  return { cards: Array.from(cards).sort(), manifestations: Array.from(manifestations).sort(), specters: Array.from(specters).sort() };
+}
+
+function issueIdentityToken(identity) {
+  const token = randomToken("rtt", 24);
+  identity.tokenHash = sha256Hex(token);
+  identity.updatedAt = new Date().toISOString();
+  return token;
+}
+
+function authenticatePlayerProgress(store, playerId, authToken) {
+  const id = cleanProgressString(playerId, 64);
+  const identity = id ? store.identities[id] : null;
+  if (!identity || !authToken || sha256Hex(authToken) !== identity.tokenHash) {
+    return null;
+  }
+  return identity;
+}
+
+function findIdentityByRecovery(store, recovery) {
+  const hash = sha256Hex(cleanProgressString(recovery, 64));
+  const playerId = store.recoveryIndex[hash];
+  return playerId ? store.identities[playerId] : null;
+}
+
+function metricLimit(metric, maxMode) {
+  if (maxMode) {
+    if (metric === "survive_seconds") return 21600;
+    if (metric === "phase_reached") return 16;
+    if (metric === "unique_cards_bought") return 128;
+    return 0;
+  }
+  return {
+    enemy_kills: 20000,
+    boss_kills: 32,
+    shop_purchases: 200,
+    shop_rerolls: 400,
+    stationary_seconds: 20,
+    shots_fired: 5000,
+    teleports_used: 800,
+    abilities_used: 1000,
+    healing_events: 300,
+    damage_taken_events: 500
+  }[metric] || 0;
+}
+
+function knownProgressMetric(metric) {
+  for (const group of Object.values(PLAYER_PROGRESS_RULES)) {
+    for (const rule of Object.values(group)) {
+      if (rule.metric === metric) return true;
+      for (const extra of Array.isArray(rule.all) ? rule.all : []) {
+        if (extra.metric === metric) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function applyPlayerProgressEvent(identity, event) {
+  if (!event || typeof event !== "object") return { ok: false, reason: "event_not_object" };
+  if (Math.floor(Number(event.schema_version) || 0) !== PLAYER_PROGRESS_SCHEMA_VERSION) return { ok: false, reason: "schema_mismatch" };
+  if (Math.floor(Number(event.event_version) || 0) !== PLAYER_PROGRESS_EVENT_VERSION) return { ok: false, reason: "event_version_mismatch" };
+  const eventId = cleanProgressString(event.event_id, 128);
+  if (!eventId) return { ok: false, reason: "missing_event_id" };
+  identity.appliedEvents = identity.appliedEvents && typeof identity.appliedEvents === "object" ? identity.appliedEvents : {};
+  if (identity.appliedEvents[eventId]) return { ok: true, duplicate: true, eventId };
+  const type = String(event.type || "");
+  if (type === "unlock_progress") {
+    const metric = cleanProgressString(event.metric, 64);
+    const maxMode = Boolean(event.max_mode);
+    const amount = Math.max(0, safeNumber(event.amount));
+    const limit = metricLimit(metric, maxMode);
+    if (!knownProgressMetric(metric) || amount <= 0 || amount > limit) return { ok: false, reason: "invalid_metric_amount", eventId };
+    identity.progress = identity.progress && typeof identity.progress === "object" ? identity.progress : {};
+    const current = Math.max(0, safeNumber(identity.progress[metric]));
+    identity.progress[metric] = maxMode ? Math.max(current, amount) : current + amount;
+  } else if (type === "spectral_core") {
+    const amount = Math.max(0, Math.floor(safeNumber(event.amount)));
+    if (amount <= 0 || amount > 50) return { ok: false, reason: "invalid_spectral_core", eventId };
+    identity.spectralCoins = Math.max(0, Math.floor(safeNumber(identity.spectralCoins))) + amount;
+  } else if (type === "specter_upgrade") {
+    const key = cleanProgressString(event.specter_key, 64);
+    const targetLevel = Math.max(1, Math.floor(safeNumber(event.target_level)));
+    const cost = Math.max(0, Math.floor(safeNumber(event.cost)));
+    identity.specterLevels = identity.specterLevels && typeof identity.specterLevels === "object" ? identity.specterLevels : {};
+    const currentLevel = Math.max(1, Math.floor(safeNumber(identity.specterLevels[key], 1)));
+    if (!PLAYER_PROGRESS_KNOWN_SPECTERS.has(key) || targetLevel !== currentLevel + 1 || targetLevel > 10 || cost < 0) {
+      return { ok: false, reason: "invalid_specter_upgrade", eventId };
+    }
+    if (Math.max(0, Math.floor(safeNumber(identity.spectralCoins))) < cost) {
+      return { ok: false, reason: "insufficient_spectral_coins", eventId };
+    }
+    identity.spectralCoins = Math.max(0, Math.floor(safeNumber(identity.spectralCoins))) - cost;
+    identity.specterLevels[key] = targetLevel;
+  } else {
+    return { ok: false, reason: "unknown_event_type", eventId };
+  }
+  identity.appliedEvents[eventId] = new Date().toISOString();
+  identity.updatedAt = new Date().toISOString();
+  identity.unlocked = recomputePlayerUnlocks(identity.progress || {});
+  return { ok: true, eventId };
+}
+
 function defaultSecurityStore() {
   return { ips: {}, sessions: {}, audit: [] };
 }
@@ -2488,6 +2782,94 @@ async function route(req, res) {
       protocols: STREAMING_ENABLED ? ["rtmp-hls", "frame-mjpeg", "http-mjpeg"] : [],
       streaming: STREAMING_ENABLED,
       project: projectIdentity()
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/players/identity/create") {
+    let payload;
+    try {
+      payload = await readJson(req, 32 * 1024);
+    } catch (_error) {
+      sendJson(res, 400, { ok: false, error: "invalid identity payload" });
+      return;
+    }
+    const store = loadPlayerProgressStore();
+    const identity = newPlayerProgressIdentity(payload);
+    const authToken = issueIdentityToken(identity);
+    const recovery = identity.recoveryCode;
+    delete identity.recoveryCode;
+    store.identities[identity.playerId] = identity;
+    store.recoveryIndex[identity.recoveryHash] = identity.playerId;
+    savePlayerProgressStore(store);
+    sendJson(res, 201, {
+      ok: true,
+      player_id: identity.playerId,
+      auth_token: authToken,
+      recovery_code: recovery,
+      unlocks: defaultProgressSnapshot(identity)
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/players/identity/claim") {
+    let payload;
+    try {
+      payload = await readJson(req, 32 * 1024);
+    } catch (_error) {
+      sendJson(res, 400, { ok: false, error: "invalid identity claim" });
+      return;
+    }
+    const store = loadPlayerProgressStore();
+    const identity = findIdentityByRecovery(store, payload && payload.recovery_code);
+    if (!identity) {
+      sendJson(res, 404, { ok: false, error: "identity not found" });
+      return;
+    }
+    const authToken = issueIdentityToken(identity);
+    const nickname = String(payload.nickname || "").trim().slice(0, 32);
+    if (nickname) identity.nickname = nickname;
+    savePlayerProgressStore(store);
+    sendJson(res, 200, {
+      ok: true,
+      player_id: identity.playerId,
+      auth_token: authToken,
+      unlocks: defaultProgressSnapshot(identity)
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/players/unlocks/events") {
+    let payload;
+    try {
+      payload = await readJson(req, 128 * 1024);
+    } catch (_error) {
+      sendJson(res, 400, { ok: false, error: "invalid progress events" });
+      return;
+    }
+    const store = loadPlayerProgressStore();
+    const identity = authenticatePlayerProgress(store, payload && payload.player_id, payload && payload.auth_token);
+    if (!identity) {
+      sendJson(res, 401, { ok: false, error: "invalid identity token" });
+      return;
+    }
+    const accepted = [];
+    const duplicates = [];
+    const rejected = [];
+    const events = Array.isArray(payload.events) ? payload.events.slice(0, PLAYER_PROGRESS_EVENT_LIMIT) : [];
+    for (const event of events) {
+      const result = applyPlayerProgressEvent(identity, event);
+      if (result.ok && result.duplicate) duplicates.push(result.eventId);
+      else if (result.ok) accepted.push(result.eventId);
+      else if (result.eventId) rejected.push(result.eventId);
+    }
+    savePlayerProgressStore(store);
+    sendJson(res, 200, {
+      ok: true,
+      accepted_event_ids: accepted,
+      duplicate_event_ids: duplicates,
+      rejected_event_ids: rejected,
+      unlocks: defaultProgressSnapshot(identity)
     });
     return;
   }
