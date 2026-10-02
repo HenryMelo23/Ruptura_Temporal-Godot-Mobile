@@ -5574,6 +5574,9 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	mercenary_bonus_points = 0
 	mercenary_hud_pulse = 0.0
 	collector_hud_pulse = 0.0
+	score_boost_pickups.clear()
+	score_boost_timer = 0.0
+	score_boost_flash = 0.0
 	score = 0
 	score_total = 0
 	run_points_earned = 0
@@ -5588,6 +5591,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	shop_last_exit_had_purchase = false
 	shop_last_exit_time = -999.0
 	shop_abuse_penalty_count = 0
+	shop_paid_rerolls = 0
 	shop_opening_manual_already_tracked = false
 	shop_manual_reopen_warning_until_ms = 0
 	shop_manual_reopen_warning_text = ""
@@ -6276,7 +6280,7 @@ func _core_next_phase_after_boss(phase: int) -> int:
 	if phase == 6:
 		_record_initial_phase_completed(phase)
 		run_phase6_completed = true
-		return 2
+		return 1
 	if phase == 1:
 		_record_initial_phase_completed(phase)
 		return 2
@@ -6487,6 +6491,9 @@ func _advance_to_phase(phase: int) -> void :
 	boss_parasite_mark_time = 0.0
 	retornante_memoria_pending = false
 	damage_flash_timer = 0.0
+	score_boost_pickups.clear()
+	score_boost_timer = 0.0
+	score_boost_flash = 0.0
 	hud_feedback.reset(self)
 	low_health_heartbeat_timer = 0.0
 	low_health_heartbeat_double = false
@@ -7992,6 +7999,7 @@ func _update_game(delta: float) -> void :
 	_update_larapio_coin_drops(delta)
 	_update_arauto_card_drops(delta)
 	_update_arauto_evolution_fragment(delta)
+	_update_score_boost_pickups(delta)
 	_update_orbitals(delta)
 	_update_trembo(delta)
 	_update_petrov(delta)
@@ -8339,6 +8347,8 @@ func _trigger_rational_dilation_fx() -> void :
 
 func _update_voracious_contact(delta: float) -> void :
 	if String(aura_state.get("name", "")) != "Voraz":
+		return
+	if _is_world_replica():
 		return
 	var intensity: = AuraSystem.voracious_intensity(aura_state)
 	var bite_active: = intensity >= 0.28 or float(aura_state.get("voracious_last_collect", 99.0)) <= 9.0
@@ -20560,6 +20570,10 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		var base_gain = gain
 		gain = int(round(float(gain) * LACERANTE_UNCOMMON_POINTS_MULT))
 		_add_text("CACADA +%d" % (gain - base_gain), kill_pos + Vector2(0, -88), Color(1.0, 0.36, 0.3), 0.85, 17)
+	if score_boost_timer > 0.0:
+		var boosted_gain: int = int(round(float(gain) * SCORE_BOOST_MULTIPLIER))
+		_add_text("DOBRO +%d" % (boosted_gain - gain), kill_pos + Vector2(0, -112), Color(0.3, 1.0, 0.86), 0.85, 17)
+		gain = boosted_gain
 	var mercenary_level = int(cards_bought.get("Mercenaria", 0))
 	if mercenary_level > 0:
 		combo_kills += 1
@@ -20617,6 +20631,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 			_add_text("ESPALHOU x%d" % spreads, kill_pos + Vector2(0, -96), Color(0.58, 1.0, 0.46), 0.8, 18)
 	if rng.randf() < _card_drop_chance():
 		_spawn_heal_orb(kill_pos, 0.08)
+	_maybe_spawn_score_boost_pickup(kill_pos)
 	var threat = int(enemies_killed / 10)
 	var mult = 1.0 + threat * 0.1
 	enemy_base_hp += 0.62 * mult
@@ -22555,6 +22570,55 @@ func _update_heal_orbs(delta: float) -> void :
 
 func _spawn_heal_orb(pos: Vector2, fraction: float) -> void :
 	heal_orbs.append({"pos": pos, "fraction": fraction, "life": 12.0, "phase": rng.randf_range(0.0, TAU)})
+
+
+func _maybe_spawn_score_boost_pickup(pos: Vector2) -> void:
+	if not _is_world_authority():
+		return
+	if rng.randf() > SCORE_BOOST_DROP_CHANCE:
+		return
+	score_boost_pickups.append({
+		"pos": pos,
+		"life": SCORE_BOOST_PICKUP_LIFE,
+		"phase": rng.randf_range(0.0, TAU)
+	})
+
+
+func _update_score_boost_pickups(delta: float) -> void:
+	score_boost_timer = maxf(0.0, score_boost_timer - delta)
+	score_boost_flash = maxf(0.0, score_boost_flash - delta)
+	if _is_world_replica():
+		return
+	for pickup in score_boost_pickups:
+		pickup["life"] = float(pickup.get("life", 0.0)) - delta
+		if _score_boost_pickup_collected(Vector2(pickup.get("pos", Vector2.ZERO))):
+			_activate_score_boost(Vector2(pickup.get("pos", player_pos)))
+			pickup["life"] = 0.0
+	score_boost_pickups = score_boost_pickups.filter(func(pickup): return float(pickup.get("life", 0.0)) > 0.0)
+
+
+func _score_boost_pickup_collected(pos: Vector2) -> bool:
+	var radius: float = _neutral_pickup_radius(SCORE_BOOST_PICKUP_RADIUS)
+	if not is_dead and player_pos.distance_to(pos) <= radius:
+		return true
+	if not is_multiplayer:
+		return false
+	for peer_id in net_players_by_peer.keys():
+		var state: Dictionary = net_players_by_peer[peer_id]
+		if bool(state.get("dead", false)) or float(state.get("hp", 0.0)) <= 0.0:
+			continue
+		var remote_pos: Vector2 = Vector2(state.get("pos", state.get("render_pos", Vector2.ZERO)))
+		if remote_pos.distance_to(pos) <= radius:
+			return true
+	return false
+
+
+func _activate_score_boost(pos: Vector2) -> void:
+	score_boost_timer = SCORE_BOOST_DURATION
+	score_boost_flash = 0.7
+	_add_text("PONTOS x2 - 10s", pos + Vector2(0, -72), Color(0.28, 1.0, 0.82), 1.25, 21)
+	_spawn_radial_particles(pos, Color(0.22, 1.0, 0.82), 24)
+	_vibrate(80, 0.35)
 
 
 func _capture_boss1_rewind_projectiles() -> Array:
@@ -32015,6 +32079,20 @@ func _reroll_shop() -> void :
 	shop_controller.reroll()
 
 
+func _shop_paid_reroll_cost() -> int:
+	return SHOP_PAID_REROLL_BASE_COST + maxi(0, shop_paid_rerolls) * SHOP_PAID_REROLL_INTEREST
+
+
+func _shop_reroll_enabled() -> bool:
+	return shop_rerolls > 0 or score >= _shop_paid_reroll_cost()
+
+
+func _shop_reroll_label() -> String:
+	if shop_rerolls > 0:
+		return "RERROL %d" % shop_rerolls
+	return "RERROL %d PTS" % _shop_paid_reroll_cost()
+
+
 func _card_category(card_name: String) -> String:
 	match card_name:
 		"Speed Boost": return "MOBILIDADE TEMPORAL"
@@ -41367,7 +41445,6 @@ func _send_lobby_ready_state() -> void :
 	_net_report_count_out("control", 40)
 	_net_report_event("toggle_ready_v2_out", "ready=%s seq=%d" % [str(local_player_ready), online_ready_request_seq])
 	rpc_id(1, "_toggle_ready_v2", local_player_ready, online_ready_request_seq)
-	rpc_id(1, "_toggle_ready", local_player_ready)
 
 func _set_lobby_ready(value: bool) -> void :
 	if online_local_spectator:
@@ -41391,7 +41468,7 @@ func _update_lobby_ready_resend() -> void :
 		local_player_ready = online_local_ready_confirmed
 		online_ready_pending_started_ms = 0
 		online_status = "HOST NAO CONFIRMOU - TENTE NOVAMENTE"
-	elif online_lobby_ready_pending and now_ms - online_ready_last_sent_ms >= ONLINE_READY_RESEND_INTERVAL_MS:
+	elif online_lobby_ready_pending and now_ms - online_ready_last_sent_ms >= ONLINE_LOBBY_READY_RESEND_INTERVAL_MS:
 		_send_lobby_ready_state()
 		if online_ready_pending_started_ms != 0 and now_ms - online_ready_pending_started_ms >= ONLINE_READY_PENDING_TIMEOUT_MS:
 			online_status = "REENVIANDO CONFIRMACAO AO HOST..."
@@ -42075,20 +42152,21 @@ func _apply_lobby_ready_request(ready: bool, sequence: int) -> void:
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if sender != 0:
-			if _is_dedicated_spectator(sender):
-				dedicated_ready_by_peer[sender] = true
-				dedicated_ready_seq_by_peer[sender] = maxi(sequence, int(dedicated_ready_seq_by_peer.get(sender, 0)))
-				if sequence > 0:
-					_net_report_count_out("control", 40)
-					rpc_id(sender, "_online_lobby_ready_ack", sequence, true, true, dedicated_room_code)
-				_sync_dedicated_lobby_state()
+			var previous_ready: bool = bool(dedicated_ready_by_peer.get(sender, false))
+			var previous_sequence: int = int(dedicated_ready_seq_by_peer.get(sender, 0))
+			if sequence > 0 and sequence < previous_sequence:
 				return
-			dedicated_ready_by_peer[sender] = ready
-			dedicated_ready_seq_by_peer[sender] = maxi(sequence, int(dedicated_ready_seq_by_peer.get(sender, 0)))
+			var confirmed_ready: bool = true if _is_dedicated_spectator(sender) else ready
+			if sequence > 0 and sequence == previous_sequence:
+				confirmed_ready = previous_ready
+			var state_changed: bool = confirmed_ready != previous_ready
+			dedicated_ready_by_peer[sender] = confirmed_ready
 			if sequence > 0:
+				dedicated_ready_seq_by_peer[sender] = sequence
 				_net_report_count_out("control", 40)
-				rpc_id(sender, "_online_lobby_ready_ack", sequence, ready, true, dedicated_room_code)
-			_sync_dedicated_lobby_state()
+				rpc_id(sender, "_online_lobby_ready_ack", sequence, confirmed_ready, true, dedicated_room_code)
+			if state_changed:
+				_sync_dedicated_lobby_state()
 		return
 	net_player_ready = ready
 
@@ -42992,7 +43070,9 @@ func _pack_net_boss_visuals() -> Dictionary:
 		"arauto_card_drops": arauto_card_drops.duplicate(true),
 		"arauto_evolution_fragments": arauto_evolution_fragments.duplicate(true), 
 		"boss_attacks": boss_attacks.duplicate(true), 
-		"boss_transition_waves": boss_transition_waves.duplicate(true)
+		"boss_transition_waves": boss_transition_waves.duplicate(true),
+		"score_boost_pickups": score_boost_pickups.duplicate(true),
+		"score_boost_timer": score_boost_timer
 	}
 	if current_phase == 7:
 		# One clock reproduces the whole heat field; flames stay local to each client.
@@ -43332,11 +43412,13 @@ func _apply_remote_world_snapshot(enemies_data, boss_data, bullets_data) -> void
 	var now_ms: = Time.get_ticks_msec()
 	net_transport_last_activity_ms = now_ms
 	_net_report_note_world_snapshot()
+	if mode == "multiplayer_syncing":
+		mode = "game"
+		_play_phase_music()
+		_ensure_run_phase_music_audible()
 	if not online_first_world_snapshot_received:
 		online_first_world_snapshot_received = true
 		_perf_mark("first_world_snapshot", online_game_started_ms if online_game_started_ms > 0 else now_ms)
-		if mode == "multiplayer_syncing":
-			mode = "game"
 	if net_world_snapshot_last_ms > 0:
 		var interval: = float(now_ms - net_world_snapshot_last_ms)
 		var timing: Vector2 = RTTransportStateScript.arrival_timing(interval, net_world_arrival_interval_ms, net_world_jitter_ms)
@@ -43415,6 +43497,8 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	arauto_evolution_fragments = Array(data.get("arauto_evolution_fragments", arauto_evolution_fragments)).duplicate(true)
 	boss_attacks = Array(data.get("boss_attacks", boss_attacks)).duplicate(true)
 	boss_transition_waves = Array(data.get("boss_transition_waves", boss_transition_waves)).duplicate(true)
+	score_boost_pickups = Array(data.get("score_boost_pickups", score_boost_pickups)).duplicate(true)
+	score_boost_timer = float(data.get("score_boost_timer", score_boost_timer))
 	var incoming_time_wave = data.get("boss1_time_wave", boss1_time_wave)
 	boss1_time_wave = incoming_time_wave.duplicate(true) if incoming_time_wave is Dictionary else {}
 	boss1_absorb_timer = float(data.get("boss1_absorb_timer", boss1_absorb_timer))

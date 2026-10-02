@@ -400,7 +400,7 @@ func draw(g, viewport: Vector2) -> void:
 		g.draw_rect(spend_rect, Color(0.16, 0.035, 0.02, 0.78 * alpha), true)
 		g.draw_line(spend_rect.position + Vector2(8.0, 2.0), spend_rect.position + Vector2(spend_rect.size.x - 8.0, 2.0), Color(1.0, 0.42, 0.16, 0.92 * alpha), 2.0)
 		text(g, "-%d PTS" % int(g.shop_spend_anim_amount), spend_rect.grow(-5), 16, Color(1.0, 0.56, 0.22, alpha), true)
-	button(g, areas.reroll, "RERROL %d" % g.shop_rerolls, CYAN, g.shop_rerolls > 0 and not busy() and not g._shop_purchase_animating())
+	button(g, areas.reroll, g._shop_reroll_label(), CYAN, g._shop_reroll_enabled() and not busy() and not g._shop_purchase_animating())
 	button(g, areas.deck, "MEU DECK", GOLD, g._deck_total_cards() > 0 and not busy() and not g._shop_purchase_animating())
 	var team := "ESCOLHA UMA CARTA"
 	if g.is_multiplayer:
@@ -541,7 +541,8 @@ func draw_legacy(g, viewport: Vector2) -> void:
 		var header = Rect2(viewport.x * 0.06, 24, viewport.x * 0.88, 124)
 		g._draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
 		g._draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 60), 30, Color(0.0, 1.0, 0.82))
-		var header_text = "Pontos %d  |  Custo %d  |  Rerolls %d" % [score, card_cost, shop_rerolls]
+		var reroll_text: String = str(shop_rerolls) if shop_rerolls > 0 else "%d pts" % g._shop_paid_reroll_cost()
+		var header_text = "Pontos %d  |  Custo %d  |  Rerolls %s" % [score, card_cost, reroll_text]
 		if shop_endurance_discount > 0.0:
 			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 		if purchase_animating:
@@ -549,7 +550,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 		g._draw_centered(header_text, Vector2(viewport.x * 0.5, 96), g._readable_text_size(16), Color(1.0, 0.85, 0.24))
 		g._draw_shop_spend_anim(Vector2(viewport.x * 0.5, 132.0))
 		g._draw_shop_tutorial_line(Rect2(header.position + Vector2(20.0, 90.0), Vector2(header.size.x - 40.0, 28.0)), true)
-		g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
+		g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), g._shop_reroll_enabled() and not purchase_animating, "reroll")
 		g._draw_shop_round_button(g._shop_deck_center(viewport), g._shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), g._deck_total_cards() > 0 and not purchase_animating, "deck")
 
 		var w = viewport.x * 0.74
@@ -675,13 +676,14 @@ func draw_legacy(g, viewport: Vector2) -> void:
 	g._draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 46), 26, Color(0.0, 1.0, 0.82))
 
 
-	var hud_text = "Pontos: %d  |  Custo: %d  |  Rerolls: %d" % [score, card_cost, shop_rerolls]
+	var reroll_hud_text: String = str(shop_rerolls) if shop_rerolls > 0 else "%d pts" % g._shop_paid_reroll_cost()
+	var hud_text = "Pontos: %d  |  Custo: %d  |  Rerolls: %s" % [score, card_cost, reroll_hud_text]
 	if shop_endurance_discount > 0.0:
 		hud_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 	g._draw_centered(hud_text, Vector2(viewport.x * 0.5, 73), g._readable_text_size(16), Color(1.0, 0.85, 0.24))
 	g._draw_shop_spend_anim(Vector2(viewport.x * 0.5, 116.0))
 	g._draw_shop_tutorial_line(Rect2(header.position + Vector2(22.0, 74.0), Vector2(header.size.x - 44.0, 22.0)), false)
-	g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), shop_rerolls > 0 and not purchase_animating, "reroll")
+	g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), g._shop_reroll_enabled() and not purchase_animating, "reroll")
 	g._draw_shop_round_button(g._shop_deck_center(viewport), g._shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), g._deck_total_cards() > 0 and not purchase_animating, "deck")
 	if purchase_animating and shop_cards.size() > purchase_index:
 		g._draw_centered(g._shop_purchase_stage(purchase_progress), Vector2(viewport.x * 0.5, 124), g._readable_text_size(14), shop_cards[purchase_index]["color"])

@@ -79,7 +79,7 @@ func _run() -> void:
 	game.mode = "lobby_online_client"
 	game.online_connected = true
 	game.online_ready_pending_started_ms = Time.get_ticks_msec() - game.ONLINE_READY_PENDING_TIMEOUT_MS - 1
-	game.online_ready_last_sent_ms = Time.get_ticks_msec() - game.ONLINE_READY_RESEND_INTERVAL_MS - 1
+	game.online_ready_last_sent_ms = Time.get_ticks_msec() - game.ONLINE_LOBBY_READY_RESEND_INTERVAL_MS - 1
 	game._update_lobby_ready_resend()
 	_check(game.online_lobby_ready_pending and game.local_player_ready, "Ready soft timeout should resend without cancelling the pending request")
 	_check(game.online_status == "REENVIANDO CONFIRMACAO AO HOST...", "Ready soft timeout should show resend status")

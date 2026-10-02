@@ -1,14 +1,13 @@
 {
-  "version": "2.0.40",
-  "version_code": 24000,
-  "filename": "Ruptura_Temporal_2.0.40.exe",
-  "sha256": "76ba322df3421bdd7ced730613428c0873b4e6f5ffb4bdcec88cfc53c42191e8",
-  "size": 1380154976,
+  "version": "2.0.42",
+  "version_code": 24200,
+  "filename": "Ruptura_Temporal_2.0.42.exe",
+  "sha256": "2def203773903e944c69dfabfe8bd0f59b0a1463da12bb3366be9b73e345dff5",
+  "size": 1384681872,
   "notes": [
-    "Corrige a identificacao da versao do jogo e do atualizador.",
-    "Corrige a ordem da tela de nome apos a cutscene inicial.",
-    "Reduz uso de memoria durante a cutscene inicial."
+    "Correção da confirmação de pronto no multiplayer",
+    "Atualização do relay e estabilidade online"
   ],
   "mandatory": false,
-  "published_at": "2026-09-24T19:38:54.1603459Z"
+  "published_at": "2026-10-02T16:29:26.5559785Z"
 }

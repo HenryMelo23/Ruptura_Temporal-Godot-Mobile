@@ -142,6 +142,8 @@ foreach ($file in $files) {
 
 Compress-Archive -Path (Join-Path $payloadRoot '*') -DestinationPath $archivePath -Force
 $hash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'scripts\main.gd') -Algorithm SHA256).Hash.ToLowerInvariant()
+$runtimeCoreHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'scripts\main_runtime_core.gd') -Algorithm SHA256).Hash.ToLowerInvariant()
+$runtimeStateHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'scripts\main_runtime_state.gd') -Algorithm SHA256).Hash.ToLowerInvariant()
 $archive = Get-Item -LiteralPath $archivePath
 
 if ($DryRun) {
@@ -150,6 +152,8 @@ if ($DryRun) {
         SizeMB = [math]::Round($archive.Length / 1MB, 2)
         Files = $files.Count
         MainGdSha256 = $hash
+        RuntimeCoreSha256 = $runtimeCoreHash
+        RuntimeStateSha256 = $runtimeStateHash
         RemoteProjectPath = $RemoteProjectPath
         ServiceName = $ServiceName
         WithAssets = [bool]$WithAssets
@@ -184,7 +188,7 @@ sleep 2
 systemctl is-active --quiet '$ServiceName'
 rm -f '$remoteArchive'
 "@
-    $result = Invoke-SSHCommand -SessionId $session.SessionId -Command $command
+    $result = Invoke-SSHCommand -SessionId $session.SessionId -Command $command.Replace("`r`n", "`n")
     if ($result.ExitStatus -ne 0) {
         throw "Falha ao publicar relay: $($result.Error -join [Environment]::NewLine)"
     }
@@ -200,11 +204,17 @@ if ($health.PSObject.Properties.Name -contains 'project' -and $health.project) {
 if ($remoteHash -ne $hash) {
     throw "O relay reiniciou, mas o hash remoto nao bate. local=$hash remoto=$remoteHash"
 }
+if ([string]$health.project.runtimeCoreSha256 -ne $runtimeCoreHash -or
+    [string]$health.project.runtimeStateSha256 -ne $runtimeStateHash) {
+    throw 'O relay reiniciou, mas os scripts do runtime na VPS nao correspondem aos scripts locais.'
+}
 
 [pscustomobject]@{
     Published = $true
     Server = $Server
     RemoteProjectPath = $RemoteProjectPath
     MainGdSha256 = $hash
+    RuntimeCoreSha256 = $runtimeCoreHash
+    RuntimeStateSha256 = $runtimeStateHash
     ServiceName = $ServiceName
 } | Format-List

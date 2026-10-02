@@ -20,7 +20,9 @@ var game: Node
 var role: String = ""
 var host: String = "127.0.0.1"
 var port: int = 4591
+var room_code: String = ""
 var ping_budget_ms: int = 30
+var flow_timeout_seconds: float = 15.0
 
 var manifest_reveal_requested := false
 var spectrum_ready_sent := false
@@ -62,8 +64,12 @@ func _initialize() -> void:
 			host = arg.substr("--host=".length())
 		elif arg.begins_with("--port="):
 			port = int(arg.substr("--port=".length()))
+		elif arg.begins_with("--room-code="):
+			room_code = arg.substr("--room-code=".length())
 		elif arg.begins_with("--ping-budget="):
 			ping_budget_ms = maxi(1, int(arg.substr("--ping-budget=".length())))
+		elif arg.begins_with("--flow-timeout="):
+			flow_timeout_seconds = maxf(15.0, float(arg.substr("--flow-timeout=".length())))
 
 	_check(role in ["server", "host", "client"], "missing or invalid --role")
 	game = load("res://scenes/Main.tscn").instantiate()
@@ -84,6 +90,7 @@ func _start_role() -> void:
 		_run_server_loop()
 	elif role == "host":
 		game.player_nickname = "SmokeHost"
+		game.online_room_code = room_code
 		game.is_multiplayer = true
 		game.is_host = false
 		game.online_room_owner = true
@@ -92,6 +99,7 @@ func _start_role() -> void:
 		_run_host_loop()
 	else:
 		game.player_nickname = "SmokeClient"
+		game.online_room_code = room_code
 		game.is_multiplayer = true
 		game.is_host = false
 		game.online_room_owner = false
@@ -117,7 +125,7 @@ func _run_server_loop() -> void:
 			print("[SERVER] GAMEPLAY_AUTHORITY_OK server relay stayed clean")
 		if results_seen and game.dedicated_room_shutdown_pending:
 			return
-		if total_time > 15.0:
+		if total_time > flow_timeout_seconds:
 			_check(false, "timeout waiting for host/client gameplay authority result")
 			return
 
@@ -128,9 +136,9 @@ func _run_host_loop() -> void:
 	while true:
 		await process_frame
 		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
-		if total_time > 15.0:
+		if total_time > flow_timeout_seconds:
 			var timeout_enemy := _host_enemy_by_uid(enemy_uid)
-			print("[HOST] TIMEOUT enemy_hp=%.2f expected=%.2f remote_hp=%d peer=%d" % [float(timeout_enemy.get("hp", -1.0)), enemy_initial_hp - EXPECTED_TOTAL_DAMAGE, int(game.net_player_hp), game.net_player_peer_id])
+			print("[HOST] TIMEOUT mode=%s ready=%s/%s manifest_start=%s enemy_hp=%.2f expected=%.2f remote_hp=%d peer=%d" % [game.mode, str(game.mp_local_ready), str(game.mp_remote_ready), str(game.mp_manifest_start_pending), float(timeout_enemy.get("hp", -1.0)), enemy_initial_hp - EXPECTED_TOTAL_DAMAGE, int(game.net_player_hp), game.net_player_peer_id])
 			_check(false, "timeout waiting for host gameplay authority checks")
 			return
 
@@ -207,7 +215,7 @@ func _run_client_loop() -> void:
 	while true:
 		await process_frame
 		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
-		if total_time > 15.0:
+		if total_time > flow_timeout_seconds:
 			_check(false, "timeout waiting for client gameplay authority checks")
 			return
 

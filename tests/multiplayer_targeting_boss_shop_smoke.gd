@@ -76,6 +76,34 @@ func _run() -> void:
 	_check(replica.boss_attacks.size() == 1, "replica did not receive boss attack visual state")
 	_check(replica.phase4_enemy_hazards.size() == 1, "replica did not receive boss hazard visual state")
 
+	replica.mode = "multiplayer_syncing"
+	replica.music_player.stop()
+	replica.music_player.stream = null
+	replica.current_music = ""
+	game.current_phase = 6
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp_max = 1200.0
+	game.boss_hp = 900.0
+	game.boss_pos = Vector2(920, 410)
+	game.boss6_state = game.BOSS6_STATE_IDLE
+	game.boss6_current_ability = ""
+	game.boss6_lodarian_pools = [{"pos": Vector2(760, 480), "radius": 80.0, "life": 2.5}]
+	replica._apply_remote_world_snapshot(game._pack_net_enemies(), game._pack_net_boss(), game._pack_net_enemy_bullets())
+	replica._apply_remote_boss_visual_snapshot(game._pack_net_boss_visuals())
+	_check(replica.mode == "game", "replica did not leave syncing after world snapshot")
+	_check(replica.music_player.stream != null and replica.music_player.playing, "replica did not start multiplayer phase music")
+	_check(replica.boss_active and replica.current_phase == 6, "replica did not accept boss 6 authoritative state")
+	_check(replica._boss_texture() != null, "replica boss 6 texture missing")
+	_check(replica.boss6_lodarian_pools.size() == 1, "replica did not receive boss 6 visual state")
+
+	replica.aura_state = replica.AuraSystem.create("Voraz", 3)
+	replica.aura_state["voracious_hunger"] = 100.0
+	replica.player_pos = Vector2(300, 300)
+	replica.enemies = [{"uid": 9001, "type": replica.ENEMY_COMMON, "pos": replica.player_pos + Vector2(20, 0), "hp": 300.0, "max_hp": 300.0}]
+	replica._update_voracious_contact(1.0)
+	_check(is_equal_approx(float(replica.enemies[0].get("hp", 0.0)), 300.0), "replica Voraz applied unconfirmed multiplayer damage")
+
 	game.mode = "shop"
 	game.previous_mode = "game"
 	game.shop_mp_ready_to_leave = false

@@ -1,14 +1,13 @@
 {
-  "version": "2.0.40",
-  "version_code": 24000,
-  "filename": "ruptura_temporal_mobile_2.0.40.apk",
-  "sha256": "e2c81c52b16a72f1594461dd357e056599499653803c807a1c519588f1a68953",
-  "size": 1296124537,
+  "version": "2.0.42",
+  "version_code": 24200,
+  "filename": "ruptura_temporal_mobile_2.0.42.apk",
+  "sha256": "9a80658c2118777eda76e62e3e602270d62a542fca5c9d78fa947b9b062ddea5",
+  "size": 1300390917,
   "notes": [
-    "Corrige a identificacao da versao do jogo e do atualizador.",
-    "Corrige a ordem da tela de nome apos a cutscene inicial.",
-    "Reduz uso de memoria durante a cutscene inicial."
+    "Correção da confirmação de pronto no multiplayer",
+    "Atualização do relay e estabilidade online"
   ],
   "mandatory": false,
-  "published_at": "2026-09-24T19:36:44.9242841Z"
+  "published_at": "2026-10-02T16:29:26.4935069Z"
 }

@@ -311,6 +311,14 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	for orb in game.heal_orbs:
 		game.draw_circle(orb["pos"] - camera, 15, Color(0.25, 1.0, 0.42, 0.78))
 		game.draw_arc(orb["pos"] - camera, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
+	for pickup in game.score_boost_pickups:
+		var p: Vector2 = Vector2(pickup.get("pos", Vector2.ZERO)) - camera
+		var phase: float = float(pickup.get("phase", 0.0)) + game.time_alive * 4.6
+		var pulse: float = 1.0 + sin(phase) * 0.12
+		game.draw_circle(p, 18.0 * pulse, Color(0.0, 1.0, 0.78, 0.28))
+		game.draw_arc(p, 25.0 * pulse, phase, phase + TAU * 0.82, 38, Color(0.24, 1.0, 0.82, 0.82), 3.0)
+		game.draw_rect(Rect2(p - Vector2(7, 7), Vector2(14, 14)), Color(1.0, 0.86, 0.24, 0.92), true)
+		game.draw_rect(Rect2(p - Vector2(11, 11), Vector2(22, 22)), Color(0.0, 1.0, 0.78, 0.82), false, 2.0)
 	game._draw_larapio_ultimate_portals(camera)
 	game._draw_larapio_coin_drops(camera)
 	game._draw_arauto_card_drops(camera)

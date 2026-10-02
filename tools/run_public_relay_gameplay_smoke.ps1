@@ -31,6 +31,27 @@ function Assert-RelayProjectMatches {
     if ($remoteHash -ne $localHash) {
         throw "Relay publico esta com scripts/main.gd diferente. local=$localHash remoto=$remoteHash. Rode tools/publish_relay_project.ps1 antes do gameplay smoke publico."
     }
+    foreach ($scriptName in @('main_runtime_core.gd', 'main_runtime_state.gd')) {
+        $propertyName = if ($scriptName -eq 'main_runtime_core.gd') { 'runtimeCoreSha256' } else { 'runtimeStateSha256' }
+        $localRuntimeHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot "scripts\$scriptName") -Algorithm SHA256).Hash.ToLowerInvariant()
+        $remoteRuntimeHash = [string]$Health.project.$propertyName
+        if ($remoteRuntimeHash -ne $localRuntimeHash) {
+            throw "Relay publico esta com $scriptName diferente. Publique o projeto na VPS antes do gameplay smoke publico."
+        }
+    }
+}
+
+function Wait-PublicRoomJoinable {
+    param([string]$RoomCode)
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        $listing = Invoke-RestMethod -Uri "$ManagerUrl/rooms" -TimeoutSec 10
+        if (@($listing.rooms | Where-Object { [string]$_.code -eq $RoomCode }).Count -gt 0) {
+            return
+        }
+        Start-Sleep -Milliseconds 300
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Host nao publicou heartbeat para a sala $RoomCode."
 }
 
 Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Filter 'gameplay_authority_*result.txt' -File -ErrorAction SilentlyContinue |
@@ -53,12 +74,14 @@ try {
     $roomCode = [string]$room.code
     $relayHost = [string]$room.host
     $relayPort = [int]$room.port
-    Invoke-RestMethod -Method Post -Uri "$ManagerUrl/rooms/$roomCode/join" `
-        -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
-
     Write-Host "PUBLIC_GAMEPLAY_ROOM code=$roomCode host=$relayHost port=$relayPort"
 
     foreach ($role in @('host', 'client')) {
+        if ($role -eq 'client') {
+            Wait-PublicRoomJoinable -RoomCode $roomCode
+            Invoke-RestMethod -Method Post -Uri "$ManagerUrl/rooms/$roomCode/join" `
+                -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
+        }
         $stdout = Join-Path $logDir "$role.out.log"
         $stderr = Join-Path $logDir "$role.err.log"
         $arguments = @(
@@ -69,7 +92,9 @@ try {
             "--role=$role",
             "--host=$relayHost",
             "--port=$relayPort",
-            "--ping-budget=$PingBudgetMs"
+            "--room-code=$roomCode",
+            "--ping-budget=$PingBudgetMs",
+            '--flow-timeout=40'
         )
         $processes += Start-Process -FilePath $GodotBin -ArgumentList $arguments `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
@@ -133,7 +158,9 @@ try {
         try {
             $process.Refresh()
             if (-not $process.HasExited) {
-                Stop-Process -Id $process.Id -Force
+                    if (-not $process.WaitForExit(8000)) {
+                        Stop-Process -Id $process.Id -Force
+                    }
             }
         } catch {
         }

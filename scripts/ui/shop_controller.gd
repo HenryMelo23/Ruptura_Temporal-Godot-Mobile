@@ -210,7 +210,8 @@ func open_shop(forced: bool) -> void:
 	game.previous_mode = "game"
 	game.mode = "shop"
 	game._update_audio_volumes()
-	game.shop_rerolls = 3
+	game.shop_rerolls = game.SHOP_FREE_REROLLS_PER_VISIT
+	game.shop_paid_rerolls = 0
 	reset()
 	game.shop_mp_ready_count = 0
 	game.shop_mp_expected_count = maxi(1, game._living_run_player_peer_ids().size())
@@ -372,17 +373,27 @@ func reserve_card(index: int) -> void:
 func reroll() -> void:
 	if purchase_animating() or busy():
 		return
+	if game.shop_rerolls <= 0 and game.score < game._shop_paid_reroll_cost():
+		game._add_text("REROLL: %d PONTOS" % game._shop_paid_reroll_cost(), game.player_pos + Vector2(0, -92), Color(1.0, 0.68, 0.22), 0.8, 18)
+		return
+	begin("reroll", game.shop_cards)
 	if game.shop_rerolls > 0:
-		begin("reroll", game.shop_cards)
 		game.shop_rerolls -= 1
-		game.shop_reroll_index += 1
-		game._add_card_unlock_progress("shop_rerolls", 1.0)
-		game.shop_cards = game._roll_shop_cards("reroll")
-		game.shop_selected = 0
-		game.shop_select_pulse_index = 0
-		game.shop_select_pulse_timer = 0.2
-		game.shop_last_tap_index = -1
-		game.shop_last_tap_msec = 0
+	else:
+		var cost: int = game._shop_paid_reroll_cost()
+		game._apply_score_delta(-cost, false)
+		game.shop_paid_rerolls += 1
+		game.shop_spend_anim_amount = cost
+		game.shop_spend_anim_timer = game.SHOP_SPEND_ANIM_TIME
+		game._add_text("REROLL -%d" % cost, game.player_pos + Vector2(0, -92), Color(1.0, 0.64, 0.24), 0.8, 18)
+	game.shop_reroll_index += 1
+	game._add_card_unlock_progress("shop_rerolls", 1.0)
+	game.shop_cards = game._roll_shop_cards("reroll")
+	game.shop_selected = 0
+	game.shop_select_pulse_index = 0
+	game.shop_select_pulse_timer = 0.2
+	game.shop_last_tap_index = -1
+	game.shop_last_tap_msec = 0
 
 
 func finish() -> void:

@@ -154,20 +154,28 @@ function updateConfig(platform) {
 function projectIdentity() {
   const projectFile = path.join(PROJECT_PATH, "project.godot");
   const mainScript = path.join(PROJECT_PATH, "scripts", "main.gd");
+  const runtimeCoreScript = path.join(PROJECT_PATH, "scripts", "main_runtime_core.gd");
+  const runtimeStateScript = path.join(PROJECT_PATH, "scripts", "main_runtime_state.gd");
   try {
     const projectStat = fs.statSync(projectFile);
     const mainStat = fs.statSync(mainScript);
-    const cacheKey = `${projectStat.mtimeMs}:${projectStat.size}:${mainStat.mtimeMs}:${mainStat.size}`;
+    const coreStat = fs.existsSync(runtimeCoreScript) ? fs.statSync(runtimeCoreScript) : null;
+    const stateStat = fs.existsSync(runtimeStateScript) ? fs.statSync(runtimeStateScript) : null;
+    const cacheKey = `${projectStat.mtimeMs}:${projectStat.size}:${mainStat.mtimeMs}:${mainStat.size}:${coreStat?.mtimeMs}:${coreStat?.size}:${stateStat?.mtimeMs}:${stateStat?.size}`;
     if (projectIdentityCache && projectIdentityCache.cacheKey === cacheKey) {
       return projectIdentityCache.payload;
     }
     const projectSource = fs.readFileSync(projectFile, "utf8");
     const mainSource = fs.readFileSync(mainScript, "utf8");
+    const coreSource = coreStat ? fs.readFileSync(runtimeCoreScript, "utf8") : "";
+    const stateSource = stateStat ? fs.readFileSync(runtimeStateScript, "utf8") : "";
     const versionMatch = projectSource.match(/^\s*config\/version="([^"]+)"/m);
-    const rpcMatches = mainSource.match(/^\s*@rpc\(/gm) || [];
+    const rpcMatches = (coreSource || mainSource).match(/^\s*@rpc\(/gm) || [];
     const payload = {
       version: versionMatch ? versionMatch[1] : "",
       mainGdSha256: crypto.createHash("sha256").update(mainSource).digest("hex"),
+      runtimeCoreSha256: coreSource ? crypto.createHash("sha256").update(coreSource).digest("hex") : "",
+      runtimeStateSha256: stateSource ? crypto.createHash("sha256").update(stateSource).digest("hex") : "",
       rpcDeclarationCount: rpcMatches.length,
       projectPath: PROJECT_PATH
     };
@@ -177,6 +185,8 @@ function projectIdentity() {
     return {
       version: "",
       mainGdSha256: "",
+      runtimeCoreSha256: "",
+      runtimeStateSha256: "",
       rpcDeclarationCount: 0,
       projectPath: PROJECT_PATH,
       error: error.message

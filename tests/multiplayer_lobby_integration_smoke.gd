@@ -7,6 +7,7 @@ var role := ""
 var scenario := "ready"
 var relay_host := "127.0.0.1"
 var port := 4591
+var room_code := ""
 var external_server := false
 var started_ms := 0
 var action_sent := false
@@ -23,6 +24,8 @@ func _initialize() -> void:
 			port = int(arg.trim_prefix("--port="))
 		elif arg.begins_with("--host="):
 			relay_host = arg.trim_prefix("--host=")
+		elif arg.begins_with("--room-code="):
+			room_code = arg.trim_prefix("--room-code=")
 		elif arg == "--external-server":
 			external_server = true
 	if role not in ["server", "host", "client"] or scenario not in ["ready", "spectator"]:
@@ -40,6 +43,7 @@ func _start_role() -> void:
 		game._start_dedicated_room_server(port)
 	else:
 		game.player_nickname = role.to_upper() + "_" + scenario.to_upper()
+		game.online_room_code = room_code
 		game.online_room_owner = role == "host"
 		game.mode = "lobby_online_host" if role == "host" else "lobby_online_client"
 		game._connect_to_online_host(relay_host, port)

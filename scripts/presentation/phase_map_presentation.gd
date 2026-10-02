@@ -1,6 +1,31 @@
 extends Node2D
 
-const LIFE_SHADER = preload("res://shaders/phase_map_life.gdshader")
+const LIFE_SHADER_CODE := """shader_type canvas_item;
+render_mode unshaded;
+
+uniform float elapsed = 0.0;
+uniform float motion_scale = 1.0;
+uniform bool fluid_surface = true;
+
+void fragment() {
+	vec4 base = texture(TEXTURE, UV);
+	float highest = max(base.r, max(base.g, base.b));
+	float lowest = min(base.r, min(base.g, base.b));
+	float pigment = smoothstep(0.10, 0.27, highest - lowest);
+	float perimeter = smoothstep(0.18, 0.32, length(UV - vec2(0.5)));
+	float mask = pigment * perimeter;
+	vec4 flowing = base;
+	if (fluid_surface) {
+		vec2 drift = vec2(sin(UV.y * 47.0 + elapsed * 0.65),
+			cos(UV.x * 39.0 - elapsed * 0.48));
+		vec2 offset = drift * TEXTURE_PIXEL_SIZE * 0.85 * mask * motion_scale;
+		flowing = texture(TEXTURE, clamp(UV + offset, TEXTURE_PIXEL_SIZE, vec2(1.0) - TEXTURE_PIXEL_SIZE));
+	}
+	float ripple = sin(UV.x * 68.0 + UV.y * 43.0 - elapsed * 0.72);
+	vec3 color = mix(base.rgb, flowing.rgb, mask);
+	color *= 1.0 + ripple * mask * 0.045 * motion_scale;
+	COLOR = vec4(color, base.a);
+}"""
 const MAX_MOTES := 18
 const LOW_RESOURCE_MOTES := 8
 const TINTS := {
@@ -19,7 +44,9 @@ func _init() -> void:
 	show_behind_parent = true
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	life_material = ShaderMaterial.new()
-	life_material.shader = LIFE_SHADER
+	var life_shader := Shader.new()
+	life_shader.code = LIFE_SHADER_CODE
+	life_material.shader = life_shader
 	material = life_material
 
 

@@ -30,6 +30,27 @@ function Assert-RelayProjectMatches {
     if ($remoteHash -ne $localHash) {
         throw "Relay publico esta com scripts/main.gd diferente. local=$localHash remoto=$remoteHash. Rode tools/publish_relay_project.ps1 antes do smoke publico."
     }
+    foreach ($scriptName in @('main_runtime_core.gd', 'main_runtime_state.gd')) {
+        $propertyName = if ($scriptName -eq 'main_runtime_core.gd') { 'runtimeCoreSha256' } else { 'runtimeStateSha256' }
+        $localRuntimeHash = (Get-FileHash -LiteralPath (Join-Path $projectRoot "scripts\$scriptName") -Algorithm SHA256).Hash.ToLowerInvariant()
+        $remoteRuntimeHash = [string]$Health.project.$propertyName
+        if ($remoteRuntimeHash -ne $localRuntimeHash) {
+            throw "Relay publico esta com $scriptName diferente. Publique o projeto na VPS antes do smoke publico."
+        }
+    }
+}
+
+function Wait-PublicRoomJoinable {
+    param([string]$RoomCode)
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        $listing = Invoke-RestMethod -Uri "$ManagerUrl/rooms" -TimeoutSec 10
+        if (@($listing.rooms | Where-Object { [string]$_.code -eq $RoomCode }).Count -gt 0) {
+            return
+        }
+        Start-Sleep -Milliseconds 300
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Host nao publicou heartbeat para a sala $RoomCode."
 }
 
 function Invoke-PublicLobbyScenario {
@@ -51,6 +72,7 @@ function Invoke-PublicLobbyScenario {
     try {
         foreach ($role in @('host', 'client')) {
             if ($role -eq 'client') {
+                Wait-PublicRoomJoinable -RoomCode $roomCode
                 Invoke-RestMethod -Method Post -Uri "$ManagerUrl/rooms/$roomCode/join" `
                     -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
             }
@@ -65,6 +87,7 @@ function Invoke-PublicLobbyScenario {
                 "--scenario=$Scenario",
                 "--host=$relayHost",
                 "--port=$relayPort",
+                "--room-code=$roomCode",
                 '--external-server'
             )
             $processes += Start-Process -FilePath $GodotBin -ArgumentList $arguments `
@@ -106,7 +129,9 @@ function Invoke-PublicLobbyScenario {
             try {
                 $process.Refresh()
                 if (-not $process.HasExited) {
-                    Stop-Process -Id $process.Id -Force
+                    if (-not $process.WaitForExit(8000)) {
+                        Stop-Process -Id $process.Id -Force
+                    }
                 }
             } catch {
             }
