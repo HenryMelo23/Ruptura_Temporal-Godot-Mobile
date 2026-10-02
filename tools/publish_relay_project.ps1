@@ -119,8 +119,13 @@ function Get-RelativePathCompat {
         [string]$BasePath,
         [string]$FullPath
     )
-    $baseUri = [Uri]((Resolve-Path -LiteralPath $BasePath).Path.TrimEnd('\') + '\')
-    $fullUri = [Uri](Resolve-Path -LiteralPath $FullPath).Path
+    $resolvedBase = (Resolve-Path -LiteralPath $BasePath).Path
+    $resolvedFull = (Resolve-Path -LiteralPath $FullPath).Path
+    if ([IO.Path].GetMethod('GetRelativePath', [type[]]@([string], [string]))) {
+        return [IO.Path]::GetRelativePath($resolvedBase, $resolvedFull).Replace('/', '\')
+    }
+    $baseUri = [Uri]($resolvedBase.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar)
+    $fullUri = [Uri]$resolvedFull
     return [Uri]::UnescapeDataString($baseUri.MakeRelativeUri($fullUri).ToString()).Replace('/', '\')
 }
 
@@ -135,13 +140,26 @@ $files = Get-ChildItem -LiteralPath $projectRoot -Recurse -File | Where-Object {
 
 foreach ($file in $files) {
     $relative = Get-RelativePathCompat -BasePath $projectRoot -FullPath $file.FullName
-    $target = Join-Path $payloadRoot $relative
+    $target = Join-Path $payloadRoot ($relative.Replace('\', [IO.Path]::DirectorySeparatorChar))
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $target -Force
 }
 
-Compress-Archive -Path (Join-Path $payloadRoot '*') -DestinationPath $archivePath -Force
-$hash = (Get-FileHash -LiteralPath (Join-Path $projectRoot 'scripts\main.gd') -Algorithm SHA256).Hash.ToLowerInvariant()
+if (Get-Command zip -ErrorAction SilentlyContinue) {
+    Push-Location $payloadRoot
+    try {
+        & zip -qr $archivePath .
+        if ($LASTEXITCODE -ne 0) {
+            throw "zip retornou codigo $LASTEXITCODE ao compactar o projeto do relay."
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Compress-Archive -Path (Join-Path $payloadRoot '*') -DestinationPath $archivePath -Force
+}
+$mainScriptPath = Join-Path (Join-Path $projectRoot 'scripts') 'main.gd'
+$hash = (Get-FileHash -LiteralPath $mainScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $archive = Get-Item -LiteralPath $archivePath
 
 if ($DryRun) {

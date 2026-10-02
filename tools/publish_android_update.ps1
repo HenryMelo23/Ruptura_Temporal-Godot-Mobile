@@ -59,7 +59,7 @@ if ($null -eq $Credential) {
     $Credential = Get-Credential -UserName 'root' -Message 'Credencial do servidor Ruptura'
 }
 
-$tempRoot = Join-Path $projectRoot '.agent_logs\android_update_publish'
+$tempRoot = Join-Path (Join-Path $projectRoot '.agent_logs') 'android_update_publish'
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 $manifestPath = Join-Path $tempRoot 'latest.json.next'
 $manifestJson = $manifest | ConvertTo-Json -Depth 5
@@ -100,7 +100,7 @@ if (-not $published.available -or [int]$published.version_code -ne $VersionCode 
     throw 'O endpoint publico nao confirmou a versao publicada.'
 }
 
-$trackedManifest = Join-Path $projectRoot 'server\updates\android\latest.json'
+$trackedManifest = Join-Path (Join-Path (Join-Path (Join-Path $projectRoot 'server') 'updates') 'android') 'latest.json'
 [IO.File]::WriteAllText($trackedManifest, $manifestJson, [Text.UTF8Encoding]::new($false))
 
 [pscustomobject]@{

@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$MainScript = Join-Path $ProjectRoot "scripts\main.gd"
+$MainScript = Join-Path (Join-Path $ProjectRoot "scripts") "main.gd"
 $PresetFile = Join-Path $ProjectRoot "export_presets.cfg"
 $PresetName = "Android"
 $LogsDir = Join-Path $ProjectRoot ".agent_logs"
@@ -153,7 +153,7 @@ function ConvertTo-GradlePropertiesPath {
 
 function Ensure-AndroidLocalProperties {
 	$candidates = @(@(
-		(Join-Path $ProjectRoot "toolchain\android-sdk"),
+		(Join-Path (Join-Path $ProjectRoot "toolchain") "android-sdk"),
 		$env:ANDROID_SDK_ROOT,
 		$env:ANDROID_HOME,
 		"$env:LOCALAPPDATA\Android\Sdk"
@@ -351,7 +351,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+[A-Za-z]?$') {
 }
 
 $GodotPath = Resolve-GodotExe -RequestedPath $GodotExe
-$BuildDir = Join-Path $ProjectRoot ("builds\" + $Version)
+$BuildDir = Join-Path (Join-Path $ProjectRoot "builds") $Version
 $ApkName = "ruptura_temporal_mobile_$Version.apk"
 $ApkPath = Join-Path $BuildDir $ApkName
 $RelativeApkPath = "builds/$Version/$ApkName"
