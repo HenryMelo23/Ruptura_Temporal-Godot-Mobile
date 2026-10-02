@@ -281,7 +281,18 @@ function Invoke-GodotExportWithWatchdog {
 	Write-Host ("Comando: {0} {1}" -f $GodotPath, ($Arguments -join " "))
 	Write-Host "Log: $outPath"
 
-	$process = Start-Process -FilePath $GodotPath -ArgumentList $Arguments -WorkingDirectory $ProjectRoot -RedirectStandardOutput $outPath -RedirectStandardError $errPath -PassThru -WindowStyle Hidden
+	$startArgs = @{
+		FilePath = $GodotPath
+		ArgumentList = $Arguments
+		WorkingDirectory = $ProjectRoot
+		RedirectStandardOutput = $outPath
+		RedirectStandardError = $errPath
+		PassThru = $true
+	}
+	if ($IsWindows) {
+		$startArgs.WindowStyle = 'Hidden'
+	}
+	$process = Start-Process @startArgs
 	$started = Get-Date
 	$lastSize = -1
 	$lastArtifactSize = -1

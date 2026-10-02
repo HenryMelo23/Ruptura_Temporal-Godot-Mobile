@@ -1,12 +1,13 @@
 {
-  "version": "2.0.41",
-  "version_code": 24100,
-  "filename": "Ruptura_Temporal_2.0.41.exe",
-  "sha256": "537b1804f98ca38e21e2fc5d78fe729f74a44712d262f0ea7d5d8a944b168082",
-  "size": 1382540536,
+  "version": "2.0.43",
+  "version_code": 24300,
+  "filename": "Ruptura_Temporal_2.0.43.exe",
+  "sha256": "f36e3c31850dda9462fcb9b690622ea4313704fb7ee0ea3a9029e48798c44bac",
+  "size": 1386995248,
   "notes": [
-    "Atualiza a build Windows para 2.0.41."
+    "Atualizacao 2.0.43 com mapas de fase integrados.",
+    "Preserva correcoes de multiplayer, DQN, Larapio, conquistas e scaling."
   ],
   "mandatory": false,
-  "published_at": "2026-10-02T04:48:52.1138235Z"
+  "published_at": "2026-10-02T22:27:44.2286314Z"
 }

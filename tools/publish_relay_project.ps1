@@ -83,6 +83,9 @@ if ($WithAssets) {
 function Test-ExcludedPath {
     param([string]$RelativePath)
     $normalized = $RelativePath.Replace('/', '\').TrimStart('\')
+    if ($normalized -eq '.godot\global_script_class_cache.cfg') {
+        return $false
+    }
     if ($normalized -eq 'Game Base\memoria_predatoria_umbra.json') {
         return $false
     }
@@ -100,6 +103,9 @@ function Test-ExcludedPath {
 function Test-IncludedPath {
     param([string]$RelativePath)
     $normalized = $RelativePath.Replace('/', '\').TrimStart('\')
+    if ($normalized -eq '.godot\global_script_class_cache.cfg') {
+        return $true
+    }
     if ($normalized -eq 'Game Base\memoria_predatoria_umbra.json') {
         return $true
     }

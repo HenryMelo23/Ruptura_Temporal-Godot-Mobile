@@ -46,6 +46,10 @@ function Invoke-PublicLobbyScenario {
     $roomCode = [string]$room.code
     $relayHost = [string]$room.host
     $relayPort = [int]$room.port
+    Invoke-RestMethod -Method Post -Uri "$ManagerUrl/rooms/$roomCode/heartbeat" `
+        -ContentType 'application/json' `
+        -Body '{"role":"owner","mode":"lobby_online_host","peer_id":1}' `
+        -TimeoutSec 10 | Out-Null
     $processes = @()
 
     try {
@@ -67,9 +71,17 @@ function Invoke-PublicLobbyScenario {
                 "--port=$relayPort",
                 '--external-server'
             )
-            $processes += Start-Process -FilePath $GodotBin -ArgumentList $arguments `
-                -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-                -WindowStyle Hidden -PassThru
+            $startArgs = @{
+                FilePath = $GodotBin
+                ArgumentList = $arguments
+                RedirectStandardOutput = $stdout
+                RedirectStandardError = $stderr
+                PassThru = $true
+            }
+            if ($IsWindows) {
+                $startArgs.WindowStyle = 'Hidden'
+            }
+            $processes += Start-Process @startArgs
             Start-Sleep -Milliseconds 650
         }
 
