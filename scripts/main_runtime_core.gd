@@ -5126,14 +5126,20 @@ func _is_keyboard_binding_pressed(action: String) -> bool:
 func _load_textures() -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
 	var base = "res://assets/sprites/"
-	_register_texture("map_phase_1", base + "Fase1.png", true)
-	_register_texture("map_phase_2", base + "Fase2.png", true)
-	_register_texture("map_phase_3", base + "Fase3.png", true)
-	_register_texture("map_phase_4", base + "Fase4.png", true)
-	_register_texture("map_phase_5", base + "Fase5-1.png", true)
-	_register_texture("map_phase_6", base + "Fase6.png", true)
-	_register_texture("map_phase_7", base + "Fase7.jpg", true)
-	_register_texture("map_phase_9", base + "Fase9.png", true)
+	var legacy_map_paths := {
+		1: base + "Fase1.png",
+		2: base + "Fase2.png",
+		3: base + "Fase3.png",
+		4: base + "Fase4.png",
+		5: base + "Fase5-1.png",
+		6: base + "Fase6.png",
+		7: base + "Fase7.jpg",
+		9: base + "Fase9.png",
+	}
+	for phase in [1, 2, 3, 4, 5, 6, 7, 9]:
+		var calm_path := "res://assets/maps/calm/phase_%d.png" % phase
+		var map_path: String = calm_path if ResourceLoader.exists(calm_path) else String(legacy_map_paths[phase])
+		_register_texture("map_phase_%d" % phase, map_path, true)
 	textures["startup_thanks"] = _safe_load(STARTUP_THANKS_TEXTURE_PATH)
 	textures["menu"] = _safe_load(base + "Menu_intro.png.png")
 	textures["choice_bg"] = _safe_load(base + "Escolha.png")
@@ -35194,6 +35200,8 @@ func _draw_phase_transition(viewport: Vector2) -> void :
 
 func _draw() -> void :
 	var viewport = get_viewport_rect().size
+	if is_instance_valid(phase_map_layer):
+		phase_map_layer.hide()
 	_reset_cinzas_burn_shader_nodes()
 	if mode != "phase_transition":
 		_reset_phase_transition_nodes()

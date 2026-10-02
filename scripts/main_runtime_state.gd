@@ -17,6 +17,8 @@ const MenusPresentation = preload("res://scripts/presentation/menus_presentation
 const HudPresentation = preload("res://scripts/presentation/hud_presentation.gd")
 const CombatEffectsPresentation = preload("res://scripts/presentation/combat_effects_presentation.gd")
 const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
+const PhaseMapPresentation = preload("res://scripts/presentation/phase_map_presentation.gd")
+var phase_map_layer: Node2D
 const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
 const SettingsController = preload("res://scripts/ui/settings_controller.gd")
 
