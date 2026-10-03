@@ -20423,7 +20423,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		_spawn_heal_orb(kill_pos, 0.08)
 	var threat = int(enemies_killed / 10)
 	var mult = 1.0 + threat * 0.1
-	enemy_base_hp += 0.62 * mult
+	enemy_base_hp += 0.62 * mult * _long_run_enemy_hp_growth_multiplier()
 	enemy_close_damage += 0.07 * mult
 	enemy_far_damage += 0.022 * mult
 	enemy_speed_base = min(300.0, enemy_speed_base + 0.009)
@@ -20459,6 +20459,40 @@ func _long_run_point_multiplier() -> float:
 	if minutes > POINT_REWARD_LATE_START_MINUTES:
 		mult += (minutes - POINT_REWARD_LATE_START_MINUTES) * POINT_REWARD_LATE_PER_MINUTE
 	return clampf(mult, POINT_REWARD_BASE_MULT, POINT_REWARD_MAX_MULT)
+
+
+func _long_run_curve_progress(start_time: float, end_time: float) -> float:
+	return clampf((time_alive - start_time) / maxf(1.0, end_time - start_time), 0.0, 1.0)
+
+
+func _long_run_enemy_hp_growth_multiplier() -> float:
+	if time_alive <= LONG_RUN_RUPTURE_TIME:
+		return 1.0
+	if time_alive < LONG_RUN_BROKEN_BUILD_TIME:
+		return lerpf(1.0, LONG_RUN_ENEMY_HP_GROWTH_BROKEN_MULT, _long_run_curve_progress(LONG_RUN_RUPTURE_TIME, LONG_RUN_BROKEN_BUILD_TIME))
+	if time_alive < LONG_RUN_ENDLESS_TIME:
+		return lerpf(LONG_RUN_ENEMY_HP_GROWTH_BROKEN_MULT, LONG_RUN_ENEMY_HP_GROWTH_ENDLESS_MULT, _long_run_curve_progress(LONG_RUN_BROKEN_BUILD_TIME, LONG_RUN_ENDLESS_TIME))
+	return LONG_RUN_ENEMY_HP_GROWTH_ENDLESS_MULT
+
+
+func _long_run_spawn_interval_multiplier() -> float:
+	if time_alive <= LONG_RUN_RUPTURE_TIME:
+		return 1.0
+	if time_alive < LONG_RUN_BROKEN_BUILD_TIME:
+		return lerpf(1.0, LONG_RUN_SPAWN_INTERVAL_BROKEN_MULT, _long_run_curve_progress(LONG_RUN_RUPTURE_TIME, LONG_RUN_BROKEN_BUILD_TIME))
+	if time_alive < LONG_RUN_ENDLESS_TIME:
+		return lerpf(LONG_RUN_SPAWN_INTERVAL_BROKEN_MULT, LONG_RUN_SPAWN_INTERVAL_ENDLESS_MULT, _long_run_curve_progress(LONG_RUN_BROKEN_BUILD_TIME, LONG_RUN_ENDLESS_TIME))
+	return LONG_RUN_SPAWN_INTERVAL_ENDLESS_MULT
+
+
+func _long_run_enemy_limit_bonus() -> int:
+	if time_alive < LONG_RUN_RUPTURE_TIME:
+		return 0
+	if time_alive < LONG_RUN_BROKEN_BUILD_TIME:
+		return int(floor(lerpf(0.0, float(LONG_RUN_ENEMY_LIMIT_BROKEN_BONUS), _long_run_curve_progress(LONG_RUN_RUPTURE_TIME, LONG_RUN_BROKEN_BUILD_TIME))))
+	if time_alive < LONG_RUN_ENDLESS_TIME:
+		return int(floor(lerpf(float(LONG_RUN_ENEMY_LIMIT_BROKEN_BONUS), float(LONG_RUN_ENEMY_LIMIT_ENDLESS_BONUS), _long_run_curve_progress(LONG_RUN_BROKEN_BUILD_TIME, LONG_RUN_ENDLESS_TIME))))
+	return LONG_RUN_ENEMY_LIMIT_ENDLESS_BONUS
 
 
 func _next_score_event_id() -> String:

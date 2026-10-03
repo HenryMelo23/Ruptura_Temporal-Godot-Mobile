@@ -27,4 +27,18 @@ func _run() -> void:
 	var discount: float = game._shop_endurance_discount_from_elapsed(game.time_alive)
 	_check(discount >= 0.50, "50 minute shop endurance discount too low")
 	print("LONG_RUN_ECONOMY_SMOKE_OK points=%d mult=%.2f discount=%.2f" % [points, game._long_run_point_multiplier(), discount])
+	game.mode = "menu"
+	game.enemies.clear()
+	game.enemy_bullets.clear()
+	game.visible = false
+	game.set_process(false)
+	game.set_physics_process(false)
+	game._cleanup_runtime_resources()
+	for i in range(4):
+		await process_frame
+	root.remove_child(game)
+	game.free()
+	game = null
+	await process_frame
+	await process_frame
 	quit(0)

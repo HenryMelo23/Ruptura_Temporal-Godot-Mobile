@@ -14,6 +14,14 @@ Quando o pedido for algo como "liberar atualização na VPS, criar APK e EXE da 
 - Parte da apresentação visual de ondas/bosses foi separada do núcleo de gameplay, mantendo o comportamento e o visual atuais.
 - Adicionamos validações automatizadas cobrindo save/configuração, transição de fases, portais/fragmentos, multiplayer de transferência de fase, UMBRA/Fase 5 e Boss 1.
 
+### Balanceamento de runs longas
+
+- Ajustamos a fantasia de poder em runs longas para manter a construção entre 0–15 min, acelerar entre 15–30 min e deixar builds boas realmente fortes por volta de 40–45 min.
+- A economia late-game agora entrega mais recompensa por inimigo depois da ruptura, ajudando builds avançadas a comprarem mais cartas sem mudar o começo da run.
+- O perigo de 40+ min foi deslocado mais para densidade e ritmo de spawn, em vez de transformar todos os inimigos em esponjas de HP.
+- O crescimento de HP dos inimigos por abate passa a aliviar gradualmente depois dos 30 min, preservando dano, bosses, padrões e hits relevantes.
+- Adicionamos smoke test específico para os marcos de 15, 30, 45 e 60 min, cobrindo economia, densidade, ritmo de spawn e taper de HP.
+
 ### Observação para release
 
 - Antes de publicar, transformar estes itens em texto final de atualização para players.
