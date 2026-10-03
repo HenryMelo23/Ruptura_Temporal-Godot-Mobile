@@ -103,4 +103,11 @@ func _run() -> void:
 	assert(game.specter_upgrade_previous_mode == "victory")
 
 	print("PHASE5_UMBRA_SMOKE_OK map=true assets=true memory=true decisions=true skills=true victory=true")
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	root.remove_child(game)
+	game.free()
+	for i in range(4):
+		await process_frame
 	quit(0)

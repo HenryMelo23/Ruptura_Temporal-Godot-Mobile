@@ -7,10 +7,25 @@ func _configure_dedicated_server_timing() -> void :
 	Engine.physics_ticks_per_second = DEDICATED_SERVER_NET_FPS
 
 
+func _ensure_runtime_controllers_bound() -> void:
+	if save_controller.core != self:
+		save_controller.configure(self)
+	if phase_flow_controller.core != self:
+		phase_flow_controller.configure(self)
+	if shop_controller.game != self:
+		shop_controller.configure(self)
+
+
+func _phase_flow():
+	_ensure_runtime_controllers_bound()
+	return phase_flow_controller
+
+
 func _ready() -> void :
 	perf_ready_started_ms = Time.get_ticks_msec()
 	var args: Array = OS.get_cmdline_args()
 	args.append_array(OS.get_cmdline_user_args())
+	_ensure_runtime_controllers_bound()
 	add_child(enemy_manager)
 	enemy_manager.bind_game(self)
 	add_child(early_boss_controller)
@@ -201,6 +216,8 @@ func _ready() -> void :
 		call_deferred("_join_multiplayer_game")
 
 func _exit_tree() -> void :
+	if runtime_resources_cleaned:
+		return
 	_save_interrupted_run(true)
 	_flush_card_unlocks_if_dirty()
 	_cleanup_runtime_resources()
@@ -218,6 +235,8 @@ func _notification(what: int) -> void :
 		_cancel_all_touch_state()
 
 func _cleanup_runtime_resources() -> void :
+	if runtime_resources_cleaned:
+		return
 	_net_report_close()
 	if dedicated_server_mode:
 		dedicated_room_shutdown_pending = true
@@ -287,6 +306,11 @@ func _cleanup_runtime_resources() -> void :
 	if startup_thanks_frame_view != null:
 		startup_thanks_frame_view.texture = null
 	startup_thanks_frame_cache.clear()
+	if phase_transition_overlay_node != null and is_instance_valid(phase_transition_overlay_node):
+		phase_transition_overlay_node.queue_free()
+	phase_transition_overlay_node = null
+	phase_transition_title_label = null
+	phase_transition_materials_cache.clear()
 	audio_streams.clear()
 	textures.clear()
 	if is_inside_tree():
@@ -296,6 +320,10 @@ func _cleanup_runtime_resources() -> void :
 		var telemetry_system := get_node_or_null("/root/TelemetrySystem")
 		if telemetry_system != null:
 			telemetry_system.unbind_game(self)
+	save_controller.configure(null)
+	phase_flow_controller.configure(null)
+	shop_controller.configure(null)
+	runtime_resources_cleaned = true
 
 func _cmd_arg_value(args: Array, prefix: String, fallback: String) -> String:
 	for arg in args:
@@ -767,141 +795,31 @@ func _setup_online_room_inputs() -> void :
 
 
 func _load_player_profile() -> void :
-	player_nickname = ""
-	player_profile_id = ""
-	if not FileAccess.file_exists(PLAYER_PROFILE_PATH):
-		_ensure_player_profile_id()
-		return
-	var file = FileAccess.open(PLAYER_PROFILE_PATH, FileAccess.READ)
-	if file == null:
-		_ensure_player_profile_id()
-		return
-	for line in file.get_as_text().split("\n"):
-		var parts = line.split("=", false, 1)
-		if parts.size() != 2:
-			continue
-		var key: = parts[0].strip_edges()
-		var value: = parts[1].strip_edges()
-		if key == "nickname":
-			player_nickname = _sanitize_player_nickname(value)
-		elif key == "profile_id":
-			player_profile_id = _sanitize_profile_id(value)
-	file.close()
-	_ensure_player_profile_id()
+	save_controller._load_player_profile()
 
 
 func _save_player_profile() -> void :
-	_ensure_player_profile_id()
-	var file = FileAccess.open(PLAYER_PROFILE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string("nickname=" + player_nickname + "\n")
-	file.store_string("profile_id=" + player_profile_id + "\n")
-	file.close()
+	save_controller._save_player_profile()
 
 
 func _ensure_card_unlock_defaults() -> void :
-	for card_id in CARD_UNLOCK_ALWAYS_AVAILABLE:
-		unlocked_card_ids[String(card_id)] = true
-	for card in CARDS:
-		var card_id: = _card_id(card)
-		if not CARD_UNLOCK_RULES.has(card_id) and not unlocked_card_ids.has(card_id):
-			unlocked_card_ids[card_id] = true
-	for key in MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE:
-		unlocked_manifestation_ids[String(key)] = true
-	if retornante_unlocked:
-		unlocked_manifestation_ids["retornante"] = true
-	for key in SPECTRUM_UNLOCK_ALWAYS_AVAILABLE:
-		unlocked_spectrum_ids[String(key)] = true
-	for aura in AURAS:
-		var spectrum_key: = String(aura.get("key", ""))
-		if spectrum_key != "" and not specter_levels.has(spectrum_key):
-			specter_levels[spectrum_key] = 1
+	save_controller._ensure_card_unlock_defaults()
 
 
 func _load_card_unlocks() -> void :
-	unlocked_card_ids.clear()
-	unlocked_manifestation_ids.clear()
-	unlocked_spectrum_ids.clear()
-	card_unlock_progress.clear()
-	card_unlock_veteran_synced_version_code = 0
-	if FileAccess.file_exists(CARD_UNLOCK_SAVE_PATH):
-		var file = FileAccess.open(CARD_UNLOCK_SAVE_PATH, FileAccess.READ)
-		if file != null:
-			var parsed = JSON.parse_string(file.get_as_text())
-			file.close()
-			if parsed is Dictionary:
-				var data: Dictionary = parsed
-				for card_id in data.get("unlocked", []):
-					unlocked_card_ids[String(card_id)] = true
-				for manifestation_id in data.get("unlocked_manifestations", []):
-					unlocked_manifestation_ids[String(manifestation_id)] = true
-				for spectrum_id in data.get("unlocked_specters", data.get("unlocked_spectrums", [])):
-					unlocked_spectrum_ids[String(spectrum_id)] = true
-				var loaded_levels: Dictionary = data.get("specter_levels", {})
-				for key in loaded_levels.keys():
-					specter_levels[String(key)] = clampi(int(loaded_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
-				persistent_spectral_coins = maxi(0, int(data.get("spectral_coins", data.get("persistent_spectral_coins", 0))))
-				spectral_coins = persistent_spectral_coins
-				var progress: Dictionary = data.get("progress", {})
-				for key in progress.keys():
-					card_unlock_progress[String(key)] = float(progress[key])
-				card_unlock_veteran_synced_version_code = maxi(0, int(data.get("veteran_unlock_sync_version_code", 0)))
-	_ensure_card_unlock_defaults()
-	card_unlocks_dirty = false
-	card_unlock_save_timer = 0.0
+	save_controller._load_card_unlocks()
 
 
 func _save_card_unlocks() -> void :
-	_ensure_card_unlock_defaults()
-	var unlocked: Array = []
-	for card_id in unlocked_card_ids.keys():
-		if bool(unlocked_card_ids[card_id]):
-			unlocked.append(String(card_id))
-	unlocked.sort()
-	var unlocked_manifestations: Array = []
-	for key in unlocked_manifestation_ids.keys():
-		if bool(unlocked_manifestation_ids[key]):
-			unlocked_manifestations.append(String(key))
-	unlocked_manifestations.sort()
-	var unlocked_specters: Array = []
-	for key in unlocked_spectrum_ids.keys():
-		if bool(unlocked_spectrum_ids[key]):
-			unlocked_specters.append(String(key))
-	unlocked_specters.sort()
-	var progress: Dictionary = {}
-	for key in card_unlock_progress.keys():
-		progress[String(key)] = float(card_unlock_progress[key])
-	var saved_specter_levels: Dictionary = {}
-	for key in specter_levels.keys():
-		saved_specter_levels[String(key)] = clampi(int(specter_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
-	var file = FileAccess.open(CARD_UNLOCK_SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string(JSON.stringify({
-		"version": 2,
-		"unlocked": unlocked,
-		"unlocked_manifestations": unlocked_manifestations,
-		"unlocked_specters": unlocked_specters,
-		"specter_levels": saved_specter_levels,
-		"spectral_coins": maxi(0, persistent_spectral_coins),
-		"progress": progress,
-		"veteran_unlock_sync_version_code": card_unlock_veteran_synced_version_code
-	}, "\t"))
-	file.close()
-	card_unlocks_dirty = false
-	card_unlock_save_timer = 0.0
+	save_controller._save_card_unlocks()
 
 
 func _mark_card_unlocks_dirty() -> void :
-	card_unlocks_dirty = true
-	if card_unlock_save_timer <= 0.0:
-		card_unlock_save_timer = 3.0
+	save_controller._mark_card_unlocks_dirty()
 
 
 func _flush_card_unlocks_if_dirty() -> void :
-	if card_unlocks_dirty:
-		_save_card_unlocks()
+	save_controller._flush_card_unlocks_if_dirty()
 
 
 func _known_manifestation_key(key: String) -> bool:
@@ -3930,558 +3848,103 @@ func _online_menu_available() -> bool:
 
 
 func _load_config() -> void :
-
-	retornante_unlocked = false
-	online_mode_unlocked = false
-	qa_streaming_unlocked = false
-	qa_streaming_enabled = false
-	qa_streaming_status = ""
-	if not FileAccess.file_exists("user://hud_config.save"):
-		return
-	var file = FileAccess.open("user://hud_config.save", FileAccess.READ)
-	if file:
-		var content = file.get_as_text()
-		var lines = content.split("\n")
-		for line in lines:
-			var parts = line.split("=")
-			if parts.size() == 2:
-				var k = parts[0].strip_edges()
-				var v = parts[1].strip_edges()
-				var coords = v.split(",")
-				if k == "joy_pos" and coords.size() == 2: hud_joy_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "joy_scale": hud_joy_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "attack_pos" and coords.size() == 2: hud_attack_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "attack_scale": hud_attack_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_ATTACK_SCALE_MAX)
-				elif k == "skill_scale": hud_skill_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "secondary_pos" and coords.size() == 2: hud_secondary_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "secondary_scale": hud_secondary_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "dash_pos" and coords.size() == 2: hud_dash_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "dash_scale": hud_dash_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "lacerante_empower_pos" and coords.size() == 2: hud_lacerante_empower_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "lacerante_empower_scale": hud_lacerante_empower_scale = clamp(float(v), HUD_CONTROL_SCALE_MIN, HUD_CONTROL_SCALE_MAX)
-				elif k == "hud_left_panel_pos" and coords.size() == 2: hud_left_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_right_panel_pos" and coords.size() == 2: hud_right_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_boss_panel_pos" and coords.size() == 2: hud_boss_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_skill_pos" and coords.size() == 2: hud_skill_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_pause_pos" and coords.size() == 2: hud_pause_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_boss_call_pos" and coords.size() == 2: hud_boss_call_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_shop_pos" and coords.size() == 2: hud_shop_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_aura_panel_pos" and coords.size() == 2: hud_aura_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_cards_panel_pos" and coords.size() == 2: hud_cards_panel_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_coagulum_pos" and coords.size() == 2: hud_coagulum_pos = Vector2(float(coords[0]), float(coords[1]))
-				elif k == "hud_aura_panel_scale": hud_aura_panel_scale = clamp(float(v), HUD_PANEL_SCALE_MIN, HUD_PANEL_SCALE_MAX)
-				elif k == "hud_cards_panel_scale": hud_cards_panel_scale = clamp(float(v), HUD_PANEL_SCALE_MIN, HUD_PANEL_SCALE_MAX)
-				elif k == "hud_coagulum_scale": hud_coagulum_scale = clamp(float(v), HUD_PANEL_SCALE_MIN, HUD_PANEL_SCALE_MAX)
-				elif k == "analog_fixed": analog_fixed = v != "false"
-				elif k == "analog_mode": analog_fixed = v != "dinamico"
-				elif k == "shop_auto_enabled": shop_auto_enabled = v != "false"
-				elif k == "shop_auto_interval": shop_auto_interval = clamp(float(v), 180.0, 480.0)
-				elif k == "auto_target_priority": auto_target_priority = _sanitize_target_priority(v)
-				elif k == "haptics_enabled": haptics_enabled = v != "false"
-				elif k == "show_fps_counter": show_fps_counter = v == "true"
-				elif k == "run_tutorial_enabled": run_tutorial_enabled = v == "true"
-				elif k == "shop_tutorial_seen": shop_tutorial_seen = v == "true"
-				elif k == "boss_call_tutorial_seen": boss_call_tutorial_seen = v == "true"
-				elif k == "online_mode_unlocked": online_mode_unlocked = v == "true"
-				elif k == "qa_streaming_enabled": qa_streaming_enabled = false
-				elif k == "qa_streaming_unlocked": qa_streaming_unlocked = v == "true"
-				elif k == "qa_streaming_quality": qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(v)
-				elif k == "qa_data_unlocked": qa_data_unlocked = v == "true"
-				elif k == "force_phase6_start":
-					force_phase6_start = v == "true"
-					if force_phase6_start:
-						forced_initial_phase = 6
-				elif k == "forced_initial_phase": forced_initial_phase = _sanitize_forced_initial_phase(int(v))
-				elif k == "initial_phase_bias_target": initial_phase_bias_target = _sanitize_initial_phase_bias_target(int(v))
-				elif k == "initial_phase_bias_strength": initial_phase_bias_strength = clampf(float(v), 0.0, 1.0)
-				elif k == "ui_platform_override": ui_platform_override = _sanitize_ui_platform_override(v)
-				elif k == "ui_platform_override_unlocked": ui_platform_override_unlocked = v == "true"
-				elif k == "desktop_window_mode": desktop_window_mode = _sanitize_desktop_window_mode(v)
-				elif k == "desktop_aim_mode": desktop_aim_mode = _sanitize_desktop_aim_mode(v)
-				elif k == "desktop_teleport_mode": desktop_teleport_mode = _sanitize_desktop_teleport_mode(v)
-				elif k == "desktop_attack_aim_mode": desktop_attack_aim_mode = _sanitize_desktop_attack_aim_mode(v)
-				elif k == "desktop_hud_scale": desktop_hud_scale = _sanitize_desktop_hud_scale(float(v))
-				elif k == "gamepad_bindings":
-					_load_gamepad_bindings(coords)
-				elif k == "keyboard_bindings":
-					_load_keyboard_bindings(coords)
-
-				elif k == "vol_master": vol_master = float(v)
-
-				elif k == "vol_music": vol_music = float(v)
-
-				elif k == "vol_sfx": vol_sfx = float(v)
-				elif k == "vol_shots": vol_shots = clamp(float(v), 0.0, 1.0)
-
-				elif k == "gfx_particles": gfx_particles = v == "true"
-
-				elif k == "gfx_shadows": gfx_shadows = v == "true"
-
-				elif k == "gfx_screen_shake": gfx_screen_shake = v == "true"
-				elif k == "gfx_health_warning_start": gfx_health_warning_start = clampf(float(v), 0.35, 0.7)
-				elif k == "gfx_health_warning_strength": gfx_health_warning_strength = clampf(float(v), 0.0, 1.35)
-				elif k == "gfx_low_resource": gfx_low_resource = v == "true"
-				elif k == "gfx_memory_saver": gfx_memory_saver = v == "true"
-				elif k == "damage_text_scale": damage_text_scale = clamp(float(v), 0.7, 1.8)
-				elif k == "interface_text_scale": interface_text_scale = clamp(float(v), 0.9, 1.6)
-				elif k == "vol_master": vol_master = float(v)
-				elif k == "vol_music": vol_music = float(v)
-				elif k == "vol_sfx": vol_sfx = float(v)
-				elif k == "vol_shots": vol_shots = clamp(float(v), 0.0, 1.0)
-				elif k == "gfx_particles": gfx_particles = v == "true"
-				elif k == "gfx_shadows": gfx_shadows = v == "true"
-				elif k == "gfx_screen_shake": gfx_screen_shake = v == "true"
-				elif k == "gfx_low_resource": gfx_low_resource = v == "true"
-				elif k == "gfx_memory_saver": gfx_memory_saver = v == "true"
-				elif k == "damage_text_scale": damage_text_scale = clamp(float(v), 0.7, 1.8)
-		file.close()
-	ui_platform_override = _sanitize_ui_platform_override(ui_platform_override)
-	desktop_window_mode = _sanitize_desktop_window_mode(desktop_window_mode)
-	desktop_aim_mode = _sanitize_desktop_aim_mode(desktop_aim_mode)
-	desktop_teleport_mode = _sanitize_desktop_teleport_mode(desktop_teleport_mode)
-	desktop_attack_aim_mode = _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode)
-	desktop_hud_scale = _sanitize_desktop_hud_scale(desktop_hud_scale)
-	forced_initial_phase = _sanitize_forced_initial_phase(forced_initial_phase)
-	force_phase6_start = forced_initial_phase == 6
-	forced_shop_enabled = shop_auto_enabled
-	if gfx_memory_saver:
-		gfx_low_resource = true
-	qa_streaming_quality_mode = _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode)
-	if not QA_STREAMING_FEATURE_ENABLED:
-		qa_streaming_enabled = false
-		qa_streaming_unlocked = false
-		qa_streaming_status = ""
-	else:
-		qa_streaming_enabled = false
+	save_controller._load_config()
 
 
 func _save_config() -> void :
-	var file = FileAccess.open("user://hud_config.save", FileAccess.WRITE)
-	if file:
-		file.store_string("joy_pos=" + str(hud_joy_pos.x) + "," + str(hud_joy_pos.y) + "\n")
-		file.store_string("joy_scale=" + str(hud_joy_scale) + "\n")
-		file.store_string("attack_pos=" + str(hud_attack_pos.x) + "," + str(hud_attack_pos.y) + "\n")
-		file.store_string("attack_scale=" + str(hud_attack_scale) + "\n")
-		file.store_string("skill_scale=" + str(hud_skill_scale) + "\n")
-		file.store_string("secondary_pos=" + str(hud_secondary_pos.x) + "," + str(hud_secondary_pos.y) + "\n")
-		file.store_string("secondary_scale=" + str(hud_secondary_scale) + "\n")
-		file.store_string("dash_pos=" + str(hud_dash_pos.x) + "," + str(hud_dash_pos.y) + "\n")
-		file.store_string("dash_scale=" + str(hud_dash_scale) + "\n")
-		file.store_string("lacerante_empower_pos=" + str(hud_lacerante_empower_pos.x) + "," + str(hud_lacerante_empower_pos.y) + "\n")
-		file.store_string("lacerante_empower_scale=" + str(hud_lacerante_empower_scale) + "\n")
-		file.store_string("hud_left_panel_pos=" + str(hud_left_panel_pos.x) + "," + str(hud_left_panel_pos.y) + "\n")
-		file.store_string("hud_right_panel_pos=" + str(hud_right_panel_pos.x) + "," + str(hud_right_panel_pos.y) + "\n")
-		file.store_string("hud_boss_panel_pos=" + str(hud_boss_panel_pos.x) + "," + str(hud_boss_panel_pos.y) + "\n")
-		file.store_string("hud_skill_pos=" + str(hud_skill_pos.x) + "," + str(hud_skill_pos.y) + "\n")
-		file.store_string("hud_pause_pos=" + str(hud_pause_pos.x) + "," + str(hud_pause_pos.y) + "\n")
-		file.store_string("hud_boss_call_pos=" + str(hud_boss_call_pos.x) + "," + str(hud_boss_call_pos.y) + "\n")
-		file.store_string("hud_shop_pos=" + str(hud_shop_pos.x) + "," + str(hud_shop_pos.y) + "\n")
-		file.store_string("hud_aura_panel_pos=" + str(hud_aura_panel_pos.x) + "," + str(hud_aura_panel_pos.y) + "\n")
-		file.store_string("hud_cards_panel_pos=" + str(hud_cards_panel_pos.x) + "," + str(hud_cards_panel_pos.y) + "\n")
-		file.store_string("hud_coagulum_pos=" + str(hud_coagulum_pos.x) + "," + str(hud_coagulum_pos.y) + "\n")
-		file.store_string("hud_aura_panel_scale=" + str(hud_aura_panel_scale) + "\n")
-		file.store_string("hud_cards_panel_scale=" + str(hud_cards_panel_scale) + "\n")
-		file.store_string("hud_coagulum_scale=" + str(hud_coagulum_scale) + "\n")
-		file.store_string("analog_mode=" + ("fixo" if analog_fixed else "dinamico") + "\n")
-		file.store_string("analog_fixed=" + ("true" if analog_fixed else "false") + "\n")
-		file.store_string("shop_auto_enabled=" + ("true" if shop_auto_enabled else "false") + "\n")
-		file.store_string("shop_auto_interval=" + str(shop_auto_interval) + "\n")
-		file.store_string("auto_target_priority=" + auto_target_priority + "\n")
-		file.store_string("haptics_enabled=" + ("true" if haptics_enabled else "false") + "\n")
-		file.store_string("show_fps_counter=" + ("true" if show_fps_counter else "false") + "\n")
-		file.store_string("run_tutorial_enabled=" + ("true" if run_tutorial_enabled else "false") + "\n")
-		file.store_string("shop_tutorial_seen=" + ("true" if shop_tutorial_seen else "false") + "\n")
-		file.store_string("boss_call_tutorial_seen=" + ("true" if boss_call_tutorial_seen else "false") + "\n")
-		file.store_string("online_mode_unlocked=" + ("true" if online_mode_unlocked else "false") + "\n")
-		file.store_string("qa_streaming_enabled=false\n")
-		file.store_string("qa_streaming_unlocked=" + ("true" if qa_streaming_unlocked else "false") + "\n")
-		file.store_string("qa_streaming_quality=" + _sanitize_qa_stream_quality_mode(qa_streaming_quality_mode) + "\n")
-		file.store_string("qa_data_unlocked=" + ("true" if qa_data_unlocked else "false") + "\n")
-		file.store_string("force_phase6_start=" + ("true" if force_phase6_start else "false") + "\n")
-		file.store_string("forced_initial_phase=" + str(_sanitize_forced_initial_phase(forced_initial_phase)) + "\n")
-		file.store_string("initial_phase_bias_target=" + str(_sanitize_initial_phase_bias_target(initial_phase_bias_target)) + "\n")
-		file.store_string("initial_phase_bias_strength=" + str(clampf(initial_phase_bias_strength, 0.0, 1.0)) + "\n")
-		file.store_string("ui_platform_override=" + _sanitize_ui_platform_override(ui_platform_override) + "\n")
-		file.store_string("ui_platform_override_unlocked=" + ("true" if ui_platform_override_unlocked else "false") + "\n")
-		file.store_string("desktop_window_mode=" + _sanitize_desktop_window_mode(desktop_window_mode) + "\n")
-		file.store_string("desktop_aim_mode=" + _sanitize_desktop_aim_mode(desktop_aim_mode) + "\n")
-		file.store_string("desktop_teleport_mode=" + _sanitize_desktop_teleport_mode(desktop_teleport_mode) + "\n")
-		file.store_string("desktop_attack_aim_mode=" + _sanitize_desktop_attack_aim_mode(desktop_attack_aim_mode) + "\n")
-		file.store_string("desktop_hud_scale=" + str(_sanitize_desktop_hud_scale(desktop_hud_scale)) + "\n")
-		file.store_string("gamepad_bindings=" + _serialize_gamepad_bindings() + "\n")
-		file.store_string("keyboard_bindings=" + _serialize_keyboard_bindings() + "\n")
-
-		file.store_string("vol_master=" + str(vol_master) + "\n")
-
-		file.store_string("vol_music=" + str(vol_music) + "\n")
-
-		file.store_string("vol_sfx=" + str(vol_sfx) + "\n")
-		file.store_string("vol_shots=" + str(vol_shots) + "\n")
-
-		file.store_string("gfx_particles=" + ("true" if gfx_particles else "false") + "\n")
-
-		file.store_string("gfx_shadows=" + ("true" if gfx_shadows else "false") + "\n")
-
-		file.store_string("gfx_screen_shake=" + ("true" if gfx_screen_shake else "false") + "\n")
-		file.store_string("gfx_health_warning_start=" + str(gfx_health_warning_start) + "\n")
-		file.store_string("gfx_health_warning_strength=" + str(gfx_health_warning_strength) + "\n")
-		file.store_string("gfx_low_resource=" + ("true" if gfx_low_resource else "false") + "\n")
-		file.store_string("gfx_memory_saver=" + ("true" if gfx_memory_saver else "false") + "\n")
-		file.store_string("damage_text_scale=" + str(damage_text_scale) + "\n")
-		file.store_string("interface_text_scale=" + str(interface_text_scale) + "\n")
-		file.store_string("vol_master=" + str(vol_master) + "\n")
-		file.store_string("vol_music=" + str(vol_music) + "\n")
-		file.store_string("vol_sfx=" + str(vol_sfx) + "\n")
-		file.store_string("vol_shots=" + str(vol_shots) + "\n")
-		file.store_string("gfx_particles=" + ("true" if gfx_particles else "false") + "\n")
-		file.store_string("gfx_shadows=" + ("true" if gfx_shadows else "false") + "\n")
-		file.store_string("gfx_screen_shake=" + ("true" if gfx_screen_shake else "false") + "\n")
-		file.store_string("gfx_low_resource=" + ("true" if gfx_low_resource else "false") + "\n")
-		file.store_string("gfx_memory_saver=" + ("true" if gfx_memory_saver else "false") + "\n")
-		file.store_string("damage_text_scale=" + str(damage_text_scale) + "\n")
-		file.close()
+	save_controller._save_config()
 
 
 func _interrupted_run_field_names() -> Array:
-	return [
-		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted", 
-		"selected_manifestation", "selected_aura", "manifestation_key", "aura_state", "manifest_evolution_state", 
-		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal", 
-		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer", 
-		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
-		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", 
-		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", 
-		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing", 
-		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player", 
-		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "miasma_eel_slow_timer", "miasma_eel_slow_stacks", "pustule_spit_slow_timer", "pustule_spit_slow_grace_timer", "boss_tp_stun_timer", "boss_wave_slow_timer", "player_stun_timer", "player_silence_timer", "revive_heal_penalty_timer", "player_freeze_visual_timer", "player_freeze_visual_duration", 
-		"boss1_rewind_cooldown", "boss1_rewind_history", "boss1_rewind_sample_timer", "boss1_rewind_sequence", "boss1_rewind_visual_projectiles", "boss1_rewind_vibration_timer", "boss1_rewind_clock_tick", "boss1_absorb_cooldown", "boss1_absorb_timer", "boss1_absorb_damage", "boss1_absorb_retaliate_timer", "boss1_absorb_bursts_fired", "boss1_time_wave", 
-		"arauto", "arauto_spawned", "arauto_rays", "arauto_echo_breaks", "arauto_card_drops", "arauto_evolution_fragment", "manifest_evolution_fragment_claimed_this_run", "manifest_evolution_fragment_claim_source", 
-		"boss2_ice_shards", "boss2_snow_zones", "boss2_frost_particles", "phase2_fire_walls", "phase2_fire_wall_hit_cd", "boss2_state", "boss2_action_timer", "boss2_target_position", "boss2_last_attack", "boss2_repeat_count", "boss2_facing_dir", "boss2_walk_speed", "boss2_anim_timer", "boss2_anim_frame", "boss2_breath_dir", "boss2_ultimate_cooldown", "boss2_ultimate_timer", "boss2_ultimate_center", "boss2_ultimate_orbit_angle", "boss2_ultimate_spit_timer", "boss2_ultimate_wind_timer", "boss2_ultimate_wind_active", "boss2_ultimate_wind_dir", "boss2_ultimate_hail_timer", "boss2_ultimate_fan_timer", "boss2_ultimate_blizzard_tick", "boss2_ultimate_blizzard_exposure", "boss2_ultimate_hit_gate", "boss2_ultimate_used", 
-		"phase3_miasma_zones", "phase3_cheeses", "phase6_pustule_pools", "phase6_pustule_pheromone_timer", "boss6_lodarian_pools", "boss6_state", "boss6_current_ability", "boss6_state_timer", "boss6_wait_timer", "boss6_ability_cooldowns", "boss6_last_abilities", "boss6_carapace_plates", "boss6_carapace_timer", "boss6_vulnerability_timer", "boss6_core_exposed_timer", "boss6_core_permanent_bonus", "boss6_event_80_triggered", "boss6_event_60_triggered", "boss6_event_40_triggered", "boss6_event_30_triggered", "boss6_event_15_triggered", "boss6_special_event_id", "boss6_special_timer", "boss6_organs", "boss6_final_mutation", "boss6_final_birth_timer", "boss6_fossil_era_timer", "boss6_fossil_shield", "boss6_rib_prison", "boss6_tail_channels", "boss6_reflux_objects", "boss6_cracked_heart", "sanguessuga_parasite_timer", "sanguessuga_bleed_tick_timer", "boss6_shielded", "boss6_entry_particles", "boss6_relocating", "boss6_relocate_from", "boss6_relocate_to", "boss6_relocate_age", "boss6_relocate_duration", "boss6_miasma_ult_timer", "boss6_miasma_ult_cooldown", "boss6_miasma_ult_angle", "boss6_miasma_ult_pustule_timer", "boss6_miasma_slow_timer", "boss6_miasma_slow_stacks", "boss6_miasma_slow_tick", "boss6_carnage_slow_timer", "boss3_faith", "boss3_stage", "boss3_stun_timer", "boss3_rain_timer", "boss3_spit_timer", "boss3_tail_timer", "boss3_charge_timer", "boss3_cheese_timer", "boss3_dialogue_timer", "boss3_events", "boss3_consume_uid", "boss3_consume_timer", "boss3_ritual_timer", "boss3_ritual_destroyed", "boss3_is_moving", "boss3_miasma_cooldown", "boss3_miasma_timer", "boss3_miasma_variant", "boss3_miasma_clone_timer", "boss3_miasma_clone_positions", "boss3_miasma_spit_timer", "boss3_miasma_qte_required", "boss3_miasma_qte_taps", "boss3_miasma_qte_time_left", "boss3_miasma_qte_idle", "boss3_miasma_qte_tutorial", "boss3_miasma_qte_elapsed", "boss3_miasma_qte_lid_contacts", "boss3_miasma_qte_lids_touching", "boss3_miasma_qte_overtime_timer", "boss3_miasma_qte_overtime_stage", "boss3_miasma_tutorial_seen", "boss3_miasma_clouds", "boss3_faith_test_cooldown", "boss3_faith_test_active", "boss3_faith_test_pulses_left", "boss3_faith_test_pulse_timer", "boss3_faith_link_timer", "boss3_faith_link_damage_done", 
-		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_ultimate_laser_timer", "boss4_ultimate_gravity_timer", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_secondary_timer", "boss4_secondary_active", "boss4_secondary_elapsed", "boss4_ultimate_cooldown", "boss4_ultimate_ray_index", "boss4_strike_sequence", "boss4_meteorites", "boss4_meteor_event_timer", "boss4_meteor_event_started", "boss4_meteor_damage_bonus", "boss4_stun_timer", "boss4_vulnerable_timer", "boss4_column_barrage_timer", "boss4_drag_wave_timer", "boss4_sonic_used",
-		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action", 
-		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done", 
-		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes", 
-		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "estase_reparadora_timer", "estase_reparadora_tick", "estase_reparadora_pause", "estase_reparadora_anchor", "estase_reparadora_active", "estase_reparadora_pulse", "egide_hemofaga_shield", "egide_hemofaga_full_timer", "egide_hemofaga_pulse", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects", 
-		"cartographic_coords", "cartographic_route_timer", "cartographic_boss_displacement", "mnesic_trick_timer", "mnesic_trick_origin", "mnesic_boss_vulnerability", "resonant_perfect_streak", "resonant_noise", "resonant_next_perfect", "resonant_speed_timer", "resonant_sinfonia_buff_timer", "resonant_note_index", "boss_resonant_notes", "boss_contract_clause", "boss_contract_infractions", "boss_contract_vulnerability", "contractual_notifications", "contractual_penalty_timer", "contractual_order", "contractual_order_rewards", "contractual_order_penalties", 
-		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects", "necronada_vestiges", "necronada_remnants", "necronada_requiem", "necronada_pente_history", "necronada_attack_counter", "necronada_empowered_ready", "necronada_empower_until", "necronada_empower_cooldown_until", "necronada_horde_progress", 
-		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
-	]
+	return save_controller._interrupted_run_field_names()
 
 
 func _run_report_state_field_names() -> Array:
-	return [
-		"run_started_at", "run_started_unix", "run_start_damage",
-		"run_damage_to_enemies", "run_damage_by_enemy", "run_damage_to_boss_by_phase",
-		"run_boss_reached", "run_boss_started_at", "run_boss_duration",
-		"run_damage_taken_total", "run_damage_taken_by_source", "run_damage_hits_by_source",
-		"run_damage_source_meta", "run_damage_events", "run_heatmap_cells",
-		"run_phase_seconds", "run_behavior_distance", "run_behavior_edge_seconds",
-		"run_behavior_corner_seconds", "run_behavior_center_seconds", "run_behavior_dash_count",
-		"run_behavior_shots_fired", "run_behavior_hits", "run_behavior_boss_hits",
-		"run_behavior_player_last_pos", "run_behavior_player_last_sample_pos",
-		"run_behavior_move_samples", "run_behavior_stationary_samples"
-	]
+	return save_controller._run_report_state_field_names()
 
 
 func _snapshot_field_value(value: Variant) -> Variant:
-	if value is Dictionary or value is Array:
-		return value.duplicate(true)
-	return value
+	return save_controller._snapshot_field_value(value)
 
 
 func _run_can_be_saved() -> bool:
-	if is_multiplayer or dedicated_server_mode or online_connected:
-		return false
-	if is_dead or player_hp <= 0:
-		return false
-	return _interrupted_run_saved_mode() != ""
+	return save_controller._run_can_be_saved()
 
 
 func _interrupted_run_saved_mode() -> String:
-	if mode in ["game", "paused", "shop", "shop_opening", "shop_countdown", "boss_call", "phase_transition", "manifest_evolution"]:
-		return mode
-	if mode == "pause_deck":
-		return "paused"
-	if mode in ["settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data"] and settings_previous_mode != "menu":
-		return "paused" if settings_previous_mode == "paused" else "game"
-	return ""
+	return save_controller._interrupted_run_saved_mode()
 
 
 func _build_interrupted_run_snapshot() -> Dictionary:
-	var fields: = {}
-	for field in _interrupted_run_field_names() + _run_report_state_field_names():
-		fields[String(field)] = _snapshot_field_value(get(String(field)))
-	fields["mode"] = _interrupted_run_saved_mode()
-	return {
-		"schema": 1, 
-		"game_version": GAME_VERSION, 
-		"saved_at": _datetime_text(), 
-		"saved_unix": int(Time.get_unix_time_from_system()), 
-		"fields": fields
-	}
+	return save_controller._build_interrupted_run_snapshot()
 
 
 func _save_interrupted_run(force: = false) -> void :
-	if not _run_can_be_saved():
-		return
-	if not force:
-		interrupted_run_autosave_timer -= get_process_delta_time()
-		if interrupted_run_autosave_timer > 0.0:
-			return
-	interrupted_run_autosave_timer = INTERRUPTED_RUN_AUTOSAVE_INTERVAL
-	var snapshot: = _build_interrupted_run_snapshot()
-	var file: = FileAccess.open(INTERRUPTED_RUN_SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	file.store_string(var_to_str(snapshot))
-	file.close()
-	interrupted_run_available = true
-	interrupted_run_summary = _interrupted_run_summary_from_snapshot(snapshot)
+	save_controller._save_interrupted_run(force)
 
 
 func _clear_interrupted_run_save() -> void :
-	interrupted_run_available = false
-	interrupted_run_summary.clear()
-	interrupted_run_autosave_timer = INTERRUPTED_RUN_AUTOSAVE_INTERVAL
-	if FileAccess.file_exists(INTERRUPTED_RUN_SAVE_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(INTERRUPTED_RUN_SAVE_PATH))
+	save_controller._clear_interrupted_run_save()
 
 
 func _load_interrupted_run_snapshot() -> Dictionary:
-	if not FileAccess.file_exists(INTERRUPTED_RUN_SAVE_PATH):
-		return {}
-	var file: = FileAccess.open(INTERRUPTED_RUN_SAVE_PATH, FileAccess.READ)
-	if file == null:
-		return {}
-	var raw: = file.get_as_text()
-	file.close()
-	var parsed = str_to_var(raw)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		return {}
-	var snapshot: Dictionary = parsed
-	if int(snapshot.get("schema", 0)) != 1 or typeof(snapshot.get("fields", {})) != TYPE_DICTIONARY:
-		return {}
-	return snapshot
+	return save_controller._load_interrupted_run_snapshot()
 
 
 func _load_interrupted_run_summary() -> void :
-	var snapshot: = _load_interrupted_run_snapshot()
-	interrupted_run_available = not snapshot.is_empty()
-	interrupted_run_summary = _interrupted_run_summary_from_snapshot(snapshot) if interrupted_run_available else {}
+	save_controller._load_interrupted_run_summary()
 
 
 func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
-	if snapshot.is_empty():
-		return {}
-	var fields: Dictionary = snapshot.get("fields", {})
-	var phase: = int(fields.get("current_phase", 1))
-	var total_seconds: = int(max(0.0, float(fields.get("time_alive", 0.0))))
-	var manifestation_index: = clampi(int(fields.get("selected_manifestation", 0)), 0, MANIFESTATIONS.size() - 1)
-	var aura_index: = clampi(int(fields.get("selected_aura", 0)), 0, AURAS.size() - 1)
-
-	var date_str: = ""
-	var saved_unix: = int(snapshot.get("saved_unix", 0))
-	if saved_unix > 0:
-		var dt: = Time.get_datetime_dict_from_unix_time(saved_unix)
-		date_str = "%02d/%02d/%04d" % [int(dt["day"]), int(dt["month"]), int(dt["year"])]
-	else:
-		var raw_saved: = String(snapshot.get("saved_at", ""))
-		if raw_saved.length() >= 10:
-			var parts: = raw_saved.split(" ")[0].split("-")
-			if parts.size() == 3:
-				date_str = "%02d/%02d/%04d" % [int(parts[2]), int(parts[1]), int(parts[0])]
-	if date_str == "":
-		var dt_now: = Time.get_datetime_dict_from_system()
-		date_str = "%02d/%02d/%04d" % [int(dt_now["day"]), int(dt_now["month"]), int(dt_now["year"])]
-
-	return {
-		"phase": phase, 
-		"time": "%02d:%02d" % [int(total_seconds / 60), total_seconds % 60], 
-		"date": date_str, 
-		"manifestation": String(MANIFESTATIONS[manifestation_index].get("name", "Manifestacao")), 
-		"aura": String(AURAS[aura_index].get("name", "Aura")).to_upper(), 
-		"saved_at": String(snapshot.get("saved_at", ""))
-	}
+	return save_controller._interrupted_run_summary_from_snapshot(snapshot)
 
 
 func _interrupted_run_detail_text() -> String:
-	if not interrupted_run_available:
-		return "SEM RUN SALVA"
-	var t_str: = String(interrupted_run_summary.get("time", "00:00"))
-	var d_str: = String(interrupted_run_summary.get("date", "01/08/2026"))
-	return "%s  |  %s" % [t_str, d_str]
+	return save_controller._interrupted_run_detail_text()
 
 
 func _resume_interrupted_run() -> bool:
-	var snapshot: = _load_interrupted_run_snapshot()
-	if snapshot.is_empty():
-		_clear_interrupted_run_save()
-		return false
-	var fields: Dictionary = snapshot.get("fields", {})
-	selected_manifestation = clampi(int(fields.get("selected_manifestation", selected_manifestation)), 0, MANIFESTATIONS.size() - 1)
-	selected_aura = clampi(int(fields.get("selected_aura", selected_aura)), 0, AURAS.size() - 1)
-	_start_game(false)
-	for field in _interrupted_run_field_names() + _run_report_state_field_names():
-		var key: = String(field)
-		if fields.has(key):
-			set(key, fields[key])
-	_post_resume_interrupted_run()
-	return true
+	return save_controller._resume_interrupted_run()
 
 
 func _post_resume_interrupted_run() -> void :
-	mode = _interrupted_run_saved_mode() if _interrupted_run_saved_mode() != "" else "game"
-	if mode in ["settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "pause_deck"]:
-		mode = "paused"
-	is_dead = false
-	partner_is_dead = false
-	player_hp = max(1.0, min(float(player_hp), float(player_hp_max)))
-	touch_move = Vector2.ZERO
-	pointer_down = false
-	active_screen_touches.clear()
-	move_touch_index = -1
-	attack_touch_index = -1
-	attack_dragging = false
-	attack_holding = false
-	attack_touch_pos = Vector2.ZERO
-	attack_lock_selecting = false
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	teleport_dragging = false
-	manifest_preview_open = false
-	interrupted_run_available = true
-	interrupted_run_summary = _interrupted_run_summary_from_snapshot(_build_interrupted_run_snapshot())
-	interrupted_run_autosave_timer = INTERRUPTED_RUN_AUTOSAVE_INTERVAL
-	_play_phase_music()
-	_update_audio_volumes()
-	_add_text("RUN RESTAURADA", player_pos + Vector2(0, -84), Color(0.0, 1.0, 0.82), 1.8, 26)
-	_block_ui_input()
+	save_controller._post_resume_interrupted_run()
 
 
 func _capture_retry_run_snapshot() -> void:
-	if is_multiplayer or dedicated_server_mode:
-		return
-	var saved_mode: String = mode
-	mode = "game"
-	retry_run_snapshot = _build_interrupted_run_snapshot()
-	mode = saved_mode
+	save_controller._capture_retry_run_snapshot()
 
 
 func _retry_available() -> bool:
-	return not is_multiplayer and not dedicated_server_mode and not retry_run_snapshot.is_empty() and retry_charges_used < RUN_RETRY_MAX_CHARGES
+	return save_controller._retry_available()
 
 
 func _retry_penalty_cost(attempt: int) -> int:
-	if attempt <= 1:
-		return score
-	if attempt == 2:
-		return card_cost * 2
-	return card_cost * 5
+	return save_controller._retry_penalty_cost(attempt)
 
 
 func _use_run_retry() -> bool:
-	if not _retry_available():
-		return false
-	var fields: Dictionary = retry_run_snapshot.get("fields", {})
-	if fields.is_empty():
-		return false
-	retry_charges_used += 1
-	selected_manifestation = clampi(int(fields.get("selected_manifestation", selected_manifestation)), 0, MANIFESTATIONS.size() - 1)
-	selected_aura = clampi(int(fields.get("selected_aura", selected_aura)), 0, AURAS.size() - 1)
-	_start_game(false)
-	for field in _interrupted_run_field_names() + _run_report_state_field_names():
-		var key: = String(field)
-		if fields.has(key):
-			set(key, fields[key])
-	is_dead = false
-	partner_is_dead = false
-	retry_confirm_visible = false
-	retry_confirm_new_run = false
-	retry_return_timer = 0.0
-	death_screen_delay_timer = 0.0
-	death_screen_pending_result = ""
-	death_screen_pending_specter_upgrade = false
-	mode = "game"
-	var ratio: float = float(RUN_RETRY_HP_RATIOS[clampi(retry_charges_used - 1, 0, RUN_RETRY_HP_RATIOS.size() - 1)])
-	player_hp = max(1.0, player_hp_max * ratio)
-	run_retry_invulnerability_timer = RUN_RETRY_INVULNERABILITY
-	var penalty: = _retry_penalty_cost(retry_charges_used)
-	if penalty > 0:
-		score = max(0, score - penalty)
-		run_points_spent += penalty
-		if retry_charges_used == 1:
-			_add_text("RETORNO: PONTOS ZERADOS", player_pos + Vector2(0, -104), Color(0.0, 1.0, 0.82), 1.8, 22)
-		else:
-			_add_text("RETORNO: MULTA %d" % penalty, player_pos + Vector2(0, -104), Color(1.0, 0.72, 0.18), 1.8, 22)
-	if boss_dead:
-		_clear_boss_runtime_hazards()
-		spawn_timer = 0.0
-	touch_move = Vector2.ZERO
-	pointer_down = false
-	active_screen_touches.clear()
-	move_touch_index = -1
-	attack_touch_index = -1
-	attack_dragging = false
-	attack_holding = false
-	skill_touch_index = -1
-	secondary_touch_index = -1
-	dash_touch_index = -1
-	teleport_dragging = false
-	_play_phase_music()
-	_update_audio_volumes()
-	_add_text("TENTE NOVAMENTE %d/%d" % [retry_charges_used, RUN_RETRY_MAX_CHARGES], player_pos + Vector2(0, -72), Color(0.48, 1.0, 1.0), 1.8, 24)
-	_block_ui_input()
-	return true
+	return save_controller._use_run_retry()
 
 
 func _open_retry_confirm_popup() -> void:
-	retry_confirm_visible = true
-	retry_confirm_new_run = not _retry_available()
-	_block_ui_input()
+	save_controller._open_retry_confirm_popup()
 
 
 func _confirm_retry_choice() -> void:
-	if retry_confirm_new_run or not _retry_available():
-		retry_confirm_visible = false
-		retry_confirm_new_run = false
-		_reset_multiplayer_session_for_solo()
-		_start_game()
-		return
-	_start_retry_return_animation()
+	save_controller._confirm_retry_choice()
 
 
 func _cancel_retry_choice() -> void:
-	retry_confirm_visible = false
-	retry_confirm_new_run = false
-	_block_ui_input()
+	save_controller._cancel_retry_choice()
 
 
 func _retry_confirm_lines() -> Array[String]:
-	if retry_confirm_new_run or not _retry_available():
-		return [
-			"A run atual foi encerrada.",
-			"Uma nova jornada reinicia mapa, pontos, cartas e progressao da partida."
-		]
-	var attempt: int = retry_charges_used + 1
-	var hp_ratio: float = float(RUN_RETRY_HP_RATIOS[clampi(attempt - 1, 0, RUN_RETRY_HP_RATIOS.size() - 1)])
-	var penalty: int = _retry_penalty_cost(attempt)
-	var cost_text: String = "pontos atuais zerados" if attempt == 1 else "multa de %d pontos" % penalty
-	return [
-		"Geovana retorna ao ponto salvo antes da ruptura final.",
-		"Vida de retorno: %d%%. Janela segura: %.0fs." % [int(round(hp_ratio * 100.0)), RUN_RETRY_INVULNERABILITY],
-		"Custo deste retorno: %s." % cost_text
-	]
+	return save_controller._retry_confirm_lines()
 
 
 func _update_interrupted_run_autosave(delta: float) -> void :
-	if _run_can_be_saved():
-		interrupted_run_autosave_timer -= delta
-		if interrupted_run_autosave_timer <= 0.0:
-			_save_interrupted_run(true)
-	else:
-		interrupted_run_autosave_timer = min(interrupted_run_autosave_timer, INTERRUPTED_RUN_AUTOSAVE_INTERVAL)
+	save_controller._update_interrupted_run_autosave(delta)
 
 
 func _load_gamepad_bindings(coords: PackedStringArray) -> void :
@@ -5497,7 +4960,12 @@ func _update_projectile_travel_sfx(bullet: Dictionary, delta: float) -> void :
 		_play_sfx("eletrica_travel", 0.018, 0.34 if kind == "eletrica" else 0.46, 1.0)
 
 func _play_music(name: String) -> void :
-	get_node("/root/AudioManager").play_music(name)
+	if not is_inside_tree():
+		return
+	var audio_manager = get_node_or_null("/root/AudioManager")
+	if audio_manager == null:
+		return
+	audio_manager.play_music(name)
 
 
 func _is_menu_music_name(name: String) -> bool:
@@ -6798,448 +6266,87 @@ func _draw_tutorial_context_button_hint(t: float) -> void:
 
 
 func _pick_initial_phase() -> int:
-	var forced_phase: = _sanitize_forced_initial_phase(forced_initial_phase)
-	if force_phase6_start and forced_phase == 0:
-		forced_phase = 6
-	if forced_phase > 0:
-		return forced_phase
-	if INITIAL_PHASE_ROLL_POOL.is_empty():
-		return 1
-	var bias_target: = _sanitize_initial_phase_bias_target(initial_phase_bias_target)
-	if bias_target > 0 and rng.randf() <= clampf(initial_phase_bias_strength, 0.0, 1.0):
-		return bias_target
-	var index: = rng.randi_range(0, INITIAL_PHASE_ROLL_POOL.size() - 1)
-	return int(INITIAL_PHASE_ROLL_POOL[index])
+	return _phase_flow()._pick_initial_phase()
 
 
 func _sanitize_initial_phase_bias_target(phase: int) -> int:
-	return phase if phase in INITIAL_PHASE_ROLL_POOL else 0
+	return _phase_flow()._sanitize_initial_phase_bias_target(phase)
 
 
 func _sanitize_forced_initial_phase(phase: int) -> int:
-	return phase if phase >= 1 and phase <= 7 else 0
+	return _phase_flow()._sanitize_forced_initial_phase(phase)
 
 
 func _forced_initial_phase_label() -> String:
-	var phase: = _sanitize_forced_initial_phase(forced_initial_phase)
-	return "AUTO" if phase == 0 else "FASE %d" % phase
+	return _phase_flow()._forced_initial_phase_label()
 
 
 func _begin_initial_phase_tracking(phase: int) -> void :
-	var initial_phase: = _sanitize_initial_phase_bias_target(phase)
-	run_initial_phase = initial_phase
-	run_phase6_completed = false
-	_reset_dimension_route_state()
-	initial_phase_current_run = initial_phase
-	initial_phase_current_recorded = initial_phase == 0
+	_phase_flow()._begin_initial_phase_tracking(phase)
 
 
 func _reset_dimension_route_state() -> void:
-	dimension_route_queue.clear()
-	dimension_route_farm_cycles = 0
-	dimension_route_completed_count = 0
-	dimension_route_last_phase = 0
-	run_extracted = false
+	_phase_flow()._reset_dimension_route_state()
 
 
 func _set_initial_phase_bias(target_phase: int, strength: float, persist: = true) -> void :
-	initial_phase_bias_target = _sanitize_initial_phase_bias_target(target_phase)
-	initial_phase_bias_strength = clampf(strength, 0.0, 1.0) if initial_phase_bias_target > 0 else 0.0
-	if persist:
-		_save_config()
+	_phase_flow()._set_initial_phase_bias(target_phase, strength, persist)
 
 
 func _record_initial_phase_attempt_before_new_run() -> void :
-	if initial_phase_current_recorded:
-		return
-	var phase: = _sanitize_initial_phase_bias_target(initial_phase_current_run)
-	if phase == 0:
-		initial_phase_current_recorded = true
-		return
-	if run_finalized_result != "":
-		initial_phase_current_recorded = true
-		return
-	if time_alive > 0.0 and time_alive <= INITIAL_PHASE_QUICK_EXIT_TIME and not boss_dead:
-		_set_initial_phase_bias(phase, INITIAL_PHASE_QUICK_EXIT_BIAS)
-	initial_phase_current_recorded = true
+	_phase_flow()._record_initial_phase_attempt_before_new_run()
 
 
 func _record_initial_phase_completed(phase: int) -> void :
-	var completed_phase: = _sanitize_initial_phase_bias_target(phase)
-	if completed_phase == 0 or completed_phase != _sanitize_initial_phase_bias_target(run_initial_phase):
-		return
-	var next_preferred: = 6 if completed_phase == 1 else 1
-	_set_initial_phase_bias(next_preferred, INITIAL_PHASE_ALTERNATE_BIAS)
-	initial_phase_current_recorded = true
+	_phase_flow()._record_initial_phase_completed(phase)
 
 
 func _core_next_phase_after_boss(phase: int) -> int:
-	if phase == 6:
-		_record_initial_phase_completed(phase)
-		run_phase6_completed = true
-		return 2
-	if phase == 1:
-		_record_initial_phase_completed(phase)
-		return 2
-	if phase == 2:
-		return 3
-	if phase == 3:
-		return 4
-	return 0
+	return _phase_flow()._core_next_phase_after_boss(phase)
 
 
 func _next_phase_after_boss(phase: int) -> int:
-	var core_next: int = _core_next_phase_after_boss(phase)
-	if core_next > 0:
-		return core_next
-	if not dimension_route_queue.is_empty():
-		return int(dimension_route_queue[0])
-	return 0
+	return _phase_flow()._next_phase_after_boss(phase)
 
 
 func _consume_next_phase_after_boss(phase: int) -> int:
-	var core_next: int = _core_next_phase_after_boss(phase)
-	if core_next > 0:
-		return core_next
-	if not dimension_route_queue.is_empty():
-		return int(dimension_route_queue.pop_front())
-	return 0
+	return _phase_flow()._consume_next_phase_after_boss(phase)
 
 
 func _register_dimension_phase_completed(phase: int) -> void:
-	if phase == DIMENSION_FINAL_PHASE:
-		return
-	dimension_route_completed_count += 1
-	dimension_route_last_phase = phase
+	_phase_flow()._register_dimension_phase_completed(phase)
 
 
 func _should_offer_dimension_choice_after_boss(phase: int) -> bool:
-	if phase == DIMENSION_FINAL_PHASE:
-		return false
-	if phase == 4:
-		return true
-	return dimension_route_farm_cycles > 0 and dimension_route_queue.is_empty()
+	return _phase_flow()._should_offer_dimension_choice_after_boss(phase)
 
 
 func _dimension_extraction_available() -> bool:
-	return dimension_route_completed_count > 0 and dimension_route_completed_count % DIMENSION_EXTRACTION_INTERVAL == 0
+	return _phase_flow()._dimension_extraction_available()
 
 
 func _roll_dimension_route(count: int, last_phase: int) -> Array[int]:
-	var route: Array[int] = []
-	var previous: int = last_phase
-	for i in range(maxi(0, count)):
-		var candidates: Array[int] = []
-		for phase in DIMENSION_ROUTE_POOL:
-			if phase == DIMENSION_FINAL_PHASE or phase == previous:
-				continue
-			candidates.append(phase)
-		if candidates.is_empty():
-			break
-		var chosen: int = candidates[rng.randi_range(0, candidates.size() - 1)]
-		route.append(chosen)
-		previous = chosen
-	return route
+	return _phase_flow()._roll_dimension_route(count, last_phase)
 
 
 func _begin_farm_dimension_cycle() -> int:
-	dimension_route_farm_cycles += 1
-	var entry_phase: int = DIMENSION_FIRST_FARM_PHASE
-	var tail_count: int = DIMENSION_FIRST_FARM_TAIL_COUNT
-	if dimension_route_farm_cycles > 1:
-		var rolled: Array[int] = _roll_dimension_route(1, current_phase)
-		entry_phase = int(rolled[0]) if not rolled.is_empty() else DIMENSION_FIRST_FARM_PHASE
-		tail_count = maxi(0, DIMENSION_REPEAT_FARM_TOTAL_COUNT - 1)
-	dimension_route_queue = _roll_dimension_route(tail_count, entry_phase)
-	return entry_phase
+	return _phase_flow()._begin_farm_dimension_cycle()
 
 
 func _complete_dimension_extraction() -> void:
-	phase_fragment.clear()
-	run_extracted = true
-	_stop_battle_music_for_screen_transition()
-	_add_text("EXTRACAO TEMPORAL", player_pos + Vector2(0, -118), Color(0.88, 1.0, 0.92), 2.4, 30)
-	_add_text("LINHA DO TEMPO ROMPIDA", player_pos + Vector2(0, -154), Color(1.0, 0.65, 0.22), 2.8, 24)
-	_finalize_run_report("Extracao")
-	mode = "victory"
+	_phase_flow()._complete_dimension_extraction()
 
 
 func _phase1_is_after_phase6() -> bool:
-	return current_phase == 1 and int(run_initial_phase) == 6 and bool(run_phase6_completed)
+	return _phase_flow()._phase1_is_after_phase6()
 
 
 func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 1.0) -> void :
-	var scaled_enemy_hp: = ENEMY_BASE_HP * (multiplayer_enemy_hp_scale if is_multiplayer else 1.0)
-	if phase == 7:
-		enemy_base_hp = scaled_enemy_hp * 1.18
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.08
-		boss_ready = false
-		boss_hp_max = 0.0
-		boss_hp = 0.0
-		boss_name = "FENIX"
-		boss_title_color = Color(1.0, 0.38, 0.18)
-		next_larapio_spawn_time = INF
-		_spawn_enemy(ENEMY_CINERIDO, _spawn_point_on_edge())
-		_add_text("CHEAT: FASE 7", player_pos + Vector2(0, -112), boss_title_color, 2.2, 28)
-		return
-	if phase == 6:
-		enemy_base_hp = scaled_enemy_hp
-		enemy_speed_base = ENEMY_BASE_SPEED
-		boss_hp_max = _boss_hp_for_phase(6)
-		boss_hp = boss_hp_max
-		boss_pos = Vector2(WORLD_SIZE.x + 220.0, WORLD_SIZE.y * 0.36)
-		boss1_walk_previous_pos = boss_pos
-		boss_name = "MATRIARCA DA CHAGA"
-		boss_title_color = Color(1.0, 0.64, 0.18)
-		next_larapio_spawn_time = INF
-		_spawn_enemy(ENEMY_LODARIO, _spawn_point_on_edge())
-		_add_text("INICIO SORTEADO: FASE 6-1", player_pos + Vector2(0, -112), boss_title_color, 2.2, 28)
-		return
-	if phase == 5:
-		enemy_base_hp = scaled_enemy_hp * 4.15
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.24
-		boss_hp_max = _boss_hp_for_phase(5)
-		boss_hp = boss_hp_max
-		boss_name = "UMBRA"
-		boss_title_color = Color(0.42, 1.0, 0.55)
-		next_larapio_spawn_time = LARAPIO_SPAWN_TIME
-		_load_umbra_mobile_memory()
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_add_text("CHEAT: FASE 5", player_pos + Vector2(0, -112), boss_title_color, 2.2, 28)
-		return
-	if phase == 4:
-		enemy_base_hp = scaled_enemy_hp * 2.75
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.18
-		boss_hp_max = _boss_hp_for_phase(4)
-		boss_hp = boss_hp_max
-		boss_name = "NEXO DA RUPTURA"
-		boss_title_color = Color(1.0, 0.76, 0.18)
-		next_larapio_spawn_time = LARAPIO_SPAWN_TIME
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_add_text("CHEAT: FASE 4", player_pos + Vector2(0, -112), boss_title_color, 2.2, 28)
-		return
-	if phase == 3:
-		enemy_base_hp = scaled_enemy_hp * 2.05
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.12
-		boss_hp_max = _boss_hp_for_phase(3)
-		boss_hp = boss_hp_max
-		boss_name = "PAI-RATO"
-		boss_title_color = Color(0.72, 0.92, 0.24)
-		next_larapio_spawn_time = LARAPIO_SPAWN_TIME
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_add_text("CHEAT: FASE 3", player_pos + Vector2(0, -112), boss_title_color, 2.2, 28)
-		return
-	if phase == 2:
-		enemy_base_hp = scaled_enemy_hp * 1.65
-		enemy_speed_base = ENEMY_BASE_SPEED * 1.08
-		boss_hp_max = _boss_hp_for_phase(2)
-		boss_hp = boss_hp_max
-		boss_name = "SENTINELA GLACIAL"
-		boss_title_color = Color(0.5, 0.86, 1.0)
-		next_larapio_spawn_time = LARAPIO_SPAWN_TIME
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_add_text("CHEAT: FASE 2", player_pos + Vector2(0, -112), boss_title_color, 2.2, 28)
-		return
-	enemy_base_hp = scaled_enemy_hp
-	enemy_speed_base = ENEMY_BASE_SPEED
-	boss_hp_max = BOSS_BASE_HP
-	boss_hp = boss_hp_max
-	boss_pos = Vector2(1240, 410)
-	boss1_walk_previous_pos = boss_pos
-	boss_name = "CARANGUEJO COSMICO GIGANTE"
-	boss_title_color = Color(1.0, 0.52, 0.16)
-	next_larapio_spawn_time = time_alive + _larapio_spawn_delay()
-	_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
+	_phase_flow()._apply_initial_phase_setup(phase, multiplayer_enemy_hp_scale)
 
 
 func _advance_to_phase(phase: int) -> void :
-	var rain_should_become_snow = phase == 2 and boss1_rain_active and weather_kind == "rain"
-	var carried_enemy_hp: float = max(float(enemy_base_hp), ENEMY_BASE_HP)
-	var carried_enemy_speed: float = max(float(enemy_speed_base), ENEMY_BASE_SPEED)
-	current_phase = phase
-	pending_phase = 0
-	phase_started_at = time_alive
-	_set_card_unlock_progress_max("phase_reached", float(phase))
-	if mode != "phase_transition":
-		mode = "game"
-	_play_phase_music()
-	if mode != "phase_transition":
-		phase_transition_timer = 0.0
-	phase_fragment.clear()
-	player_pos = PLAYER_START
-	petro_pos = player_pos + Vector2(-64, 32)
-	spawn_timer = 0.0
-	last_attack_time = -10.0
-	last_skill_time = -10.0
-	last_dash_time = -10.0
-	last_secondary_time = -999.0
-	last_damage_time = -10.0
-	boss_wave_slow_timer = 0.0
-	miasma_eel_slow_timer = 0.0
-	miasma_eel_slow_stacks = 0
-	pustule_spit_slow_timer = 0.0
-	pustule_spit_slow_grace_timer = 0.0
-	player_silence_timer = 0.0
-	boss_parasite_seeds = 0
-	boss_parasite_mark_time = 0.0
-	retornante_memoria_pending = false
-	damage_flash_timer = 0.0
-	hud_feedback.reset(self)
-	low_health_heartbeat_timer = 0.0
-	low_health_heartbeat_double = false
-	secondary_drain_flash_timer = 0.0
-	screen_shake_timer = 0.0
-	screen_shake_strength = 0.0
-	lacerante_preparing = false
-	lacerante_prepare_stage = 0
-	lacerante_prepare_frame = 0
-	lacerante_prepare_timer = 0.0
-	lacerante_prepare_dir = last_facing if last_facing.length() > 0.05 else Vector2.RIGHT
-	forced_shop_timer = -1.0
-	forced_shop_triggered = false
-	next_forced_shop_time = max(0.0, shop_auto_interval - shop_auto_elapsed) if shop_auto_enabled else INF
-	shop_opening_timer = 0.0
-	shop_opening_forced = false
-	boss_ready = true
-	boss_call_timer = -1.0
-	boss_active = false
-	boss_dead = false
-	boss_phase = 0.0
-	boss_attack_timer = 0.0
-	boss_entry_timer = 0.0
-	boss_stage_timer = 0.0
-	boss_stage_approaching = false
-	boss_stage_60_done = false
-	boss_stage_40_done = false
-	boss_stage_30_done = false
-	boss_attacks.clear()
-	boss_transition_waves.clear()
-	_reset_boss1_rewind_state()
-	boss_empurrou_player = false
-	larapio_spawned = false
-	next_larapio_spawn_time = LARAPIO_SPAWN_TIME
-	alert_stalker_done = false
-	alert_projector_done = false
-	alert_crystal_done = false
-	alert_agglomerator_done = false
-	alert_curater_done = false
-	event_alert_text = ""
-	event_alert_timer = 0.0
-	event_alert_seed = 0
-	insane_echo_visuals.clear()
-	rational_trail_points.clear()
-	rational_trail_sample_timer = 0.0
-	rational_dilation_flash = 0.0
-	_clear_attack_lock()
-	enemies.clear()
-	bullets.clear()
-	remote_bullets.clear()
-	enemy_bullets.clear()
-	eletrica_waves.clear()
-	eletrica_chains.clear()
-	eletrica_recoil_velocity = Vector2.ZERO
-	larapio_coin_drops.clear()
-	shockwaves.clear()
-	effects.clear()
-	heal_orbs.clear()
-	slashes.clear()
-	anchors.clear()
-	prisms.clear()
-	orbitals.clear()
-	seed_links.clear()
-	parasite_spit_zones.clear()
-	return_bullets.clear()
-	manifestation_secondaries.clear()
-	_reset_advanced_manifestation_state()
-	_reset_arauto_state(true)
-	_reset_phase3_state()
-	_reset_phase4_state()
-	_reset_phase5_state()
-	_reset_phase6_state()
-	if phase == 1:
-		_clear_environment_weather(true)
-	elif rain_should_become_snow:
-		_convert_rain_to_snow()
-	elif phase != 2:
-		_clear_environment_weather(true)
-	if current_phase == 6:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP)
-		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED)
-		boss_hp_max = _boss_hp_for_phase(6)
-		boss_hp = boss_hp_max
-		boss_name = "MATRIARCA DA CHAGA"
-		boss_title_color = Color(1.0, 0.64, 0.18)
-		_spawn_enemy(ENEMY_LODARIO, _spawn_point_on_edge())
-		_spawn_enemy(ENEMY_LODARIO, _spawn_point_on_edge())
-		_add_text("FASE 6: CHAGA DE AMBAR", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
-	elif current_phase == 7:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 1.18)
-		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.08)
-		boss_ready = false
-		boss_hp_max = 0.0
-		boss_hp = 0.0
-		boss_name = "FENIX"
-		boss_title_color = Color(1.0, 0.38, 0.18)
-		next_larapio_spawn_time = INF
-		_spawn_enemy(ENEMY_CINERIDO, _spawn_point_on_edge())
-		_spawn_enemy(ENEMY_CINERIDO, _spawn_point_on_edge())
-		_add_text("FASE 7: CINZAS DA RUPTURA", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
-	elif current_phase == 5:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 4.15)
-		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.24)
-		boss_hp_max = _boss_hp_for_phase(5)
-		boss_hp = boss_hp_max
-		boss_name = "UMBRA"
-		boss_title_color = Color(0.42, 1.0, 0.55)
-		_load_umbra_mobile_memory()
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_add_text("FASE 5: MENTE DA UMBRA", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
-	elif current_phase == 4:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 2.75)
-		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.18)
-		boss_hp_max = _boss_hp_for_phase(4)
-		boss_hp = boss_hp_max
-		boss_name = "NEXO DA RUPTURA"
-		boss_title_color = Color(1.0, 0.76, 0.18)
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_spawn_enemy(_choose_phase4_enemy_type(), _spawn_point_on_edge())
-		_add_text("FASE 4: CORACAO DO NEXO", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
-	elif current_phase == 3:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 2.05)
-		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.12)
-		boss_hp_max = _boss_hp_for_phase(3)
-		boss_hp = boss_hp_max
-		boss_name = "PAI-RATO"
-		boss_title_color = Color(0.72, 0.92, 0.24)
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_add_text("FASE 3: CATEDRAL DO ESGOTO", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
-	elif current_phase == 2:
-		enemy_base_hp = max(carried_enemy_hp, ENEMY_BASE_HP * 1.65)
-		enemy_speed_base = max(carried_enemy_speed, ENEMY_BASE_SPEED * 1.08)
-		boss_hp_max = _boss_hp_for_phase(2)
-		boss_hp = boss_hp_max
-		boss_name = "SENTINELA GLACIAL"
-		boss_title_color = Color(0.5, 0.86, 1.0)
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_add_text("FASE 2: FENDA GLACIAL", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
-	else:
-		var secondary_phase1: = _phase1_is_after_phase6()
-		enemy_base_hp = ENEMY_BASE_HP * (1.12 if secondary_phase1 else 1.0)
-		enemy_speed_base = ENEMY_BASE_SPEED * (1.03 if secondary_phase1 else 1.0)
-		boss_hp_max = BOSS_BASE_HP
-		boss_hp = boss_hp_max
-		boss_name = "CARANGUEJO COSMICO GIGANTE"
-		boss_title_color = Color(1.0, 0.52, 0.16)
-		next_larapio_spawn_time = time_alive + _larapio_spawn_delay()
-		_spawn_enemy(ENEMY_COMMON, _spawn_point_on_edge())
-		_add_text("FASE 1: RUINAS COSMICAS" if not secondary_phase1 else "FASE 1-2: RUINAS REABERTAS", player_pos + Vector2(0, -110), boss_title_color, 2.4, 30)
+	_phase_flow()._advance_to_phase(phase)
 
 
 func _boss_hp_for_phase(phase: int) -> float:
@@ -8148,6 +7255,7 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 
 
 func _process(delta: float) -> void :
+	_ensure_runtime_controllers_bound()
 	hud_feedback.update(self, delta)
 	CatalogInterface.sync(self, delta)
 	_update_menu_presentation(delta)
@@ -8167,7 +7275,7 @@ func _process(delta: float) -> void :
 		return
 	_update_interrupted_run_autosave(delta)
 	_update_startup_thanks(delta)
-	if _startup_thanks_active():
+	if _startup_thanks_active() and mode != "phase_transition":
 		queue_redraw()
 		return
 	_update_app_update_check(delta)
@@ -33347,70 +32455,31 @@ func _accept_pause_mp_request() -> void :
 
 
 func _clear_phase_mp_request() -> void :
-	phase_mp_request_timer = 0.0
-	phase_mp_request_incoming = false
-	phase_mp_request_outgoing = false
-	phase_mp_target = 0
-	phase_mp_action = "phase"
-	phase_mp_vote_count = 0
-	phase_mp_expected_count = 1
-	buttons.erase("phase_mp_accept")
+	_phase_flow()._clear_phase_mp_request()
 
 
 func _start_phase_mp_request_overlay(incoming: bool, target_phase: int, action: String = "phase", vote_count: int = 1, expected_count: int = 2) -> void :
-	phase_mp_request_timer = PHASE_MP_REQUEST_TIME
-	phase_mp_request_incoming = incoming
-	phase_mp_request_outgoing = not incoming
-	phase_mp_target = target_phase
-	phase_mp_action = action
-	phase_mp_vote_count = vote_count
-	phase_mp_expected_count = maxi(1, expected_count)
+	_phase_flow()._start_phase_mp_request_overlay(incoming, target_phase, action, vote_count, expected_count)
 
 
 func _phase_mp_request_visible() -> bool:
-	return is_multiplayer and mode == "game" and phase_mp_request_timer > 0.0 and (phase_mp_request_incoming or phase_mp_request_outgoing)
+	return _phase_flow()._phase_mp_request_visible()
 
 
 func _update_phase_mp_request(delta: float) -> void :
-	if not _phase_mp_request_visible():
-		return
-	phase_mp_request_timer = maxf(0.0, phase_mp_request_timer - delta)
-	if phase_mp_request_timer <= 0.0:
-		_clear_phase_mp_request()
+	_phase_flow()._update_phase_mp_request(delta)
 
 
 func _request_phase_mp_consensus(target_phase: int, action: String = "phase") -> void :
-	if target_phase <= 0 and action == "phase":
-		return
-	if phase_mp_request_outgoing and phase_mp_target == target_phase and phase_mp_action == action:
-		return
-	_start_phase_mp_request_overlay(false, target_phase, action, 1, _active_run_player_count())
-	if _shop_rpc_available():
-		rpc("_rpc_request_phase_transfer", target_phase, action)
+	_phase_flow()._request_phase_mp_consensus(target_phase, action)
 
 
 func _accept_phase_mp_request() -> void :
-	if not phase_mp_request_incoming:
-		return
-	var target_phase: int = phase_mp_target
-	var action: String = phase_mp_action
-	phase_mp_request_incoming = false
-	phase_mp_request_outgoing = true
-	if _shop_rpc_available():
-		rpc("_rpc_accept_phase_transfer", target_phase, action)
+	_phase_flow()._accept_phase_mp_request()
 
 
 func _commit_phase_mp_transfer(target_phase: int, action: String = "phase") -> void :
-	_clear_phase_mp_request()
-	phase_fragment.clear()
-	if action == "extract":
-		_complete_dimension_extraction()
-		return
-	var next_phase: int = target_phase
-	if action == "farm":
-		next_phase = _begin_farm_dimension_cycle()
-	if next_phase > 0:
-		_start_phase_transition(next_phase)
+	_phase_flow()._commit_phase_mp_transfer(target_phase, action)
 
 
 func _warn_if_damage_visual_missing(source: String) -> void :
@@ -33693,99 +32762,23 @@ func _finish_multiplayer_defeat_if_all_dead() -> bool:
 
 
 func _update_phase_transition(delta: float) -> void :
-	phase_transition_timer -= delta
-	_update_environment_weather(delta)
-	_update_effects(delta)
-	if phase_transition_timer <= PHASE_TRANSITION_WIPE_TIME and pending_phase > 0:
-		var target_phase: int = pending_phase
-		pending_phase = 0
-		_advance_to_phase(target_phase)
-		mode = "phase_transition"
-	elif phase_transition_timer <= 0.0:
-		mode = "game"
-		_reset_phase_transition_nodes()
+	_phase_flow()._update_phase_transition(delta)
 
 
 func _spawn_phase_fragment(pos: Vector2, next_phase: int) -> void :
-	phase_fragment = {
-		"pos": pos, 
-		"next_phase": next_phase, 
-		"pulse": 0.0, 
-		"life": 0.0
-	}
+	_phase_flow()._spawn_phase_fragment(pos, next_phase)
 
 
 func _spawn_phase_choice_portals(pos: Vector2) -> void:
-	var center: Vector2 = pos.clamp(Vector2(180.0, 140.0), WORLD_SIZE - Vector2(180.0, 140.0))
-	var farm_pos: Vector2 = (center + Vector2(-96.0, 18.0)).clamp(Vector2(90.0, 90.0), WORLD_SIZE - Vector2(90.0, 90.0))
-	var umbra_pos: Vector2 = (center + Vector2(96.0, 18.0)).clamp(Vector2(90.0, 90.0), WORLD_SIZE - Vector2(90.0, 90.0))
-	var choices: Array[Dictionary] = [
-		{"pos": farm_pos, "next_phase": 0, "kind": "farm", "action": "farm", "label": ""}, 
-		{"pos": umbra_pos, "next_phase": DIMENSION_FINAL_PHASE, "kind": "umbra", "action": "phase", "label": ""}
-	]
-	if _dimension_extraction_available():
-		var extraction_pos: Vector2 = (center + Vector2(0.0, -92.0)).clamp(Vector2(90.0, 90.0), WORLD_SIZE - Vector2(90.0, 90.0))
-		choices.append({"pos": extraction_pos, "next_phase": 0, "kind": "extract", "action": "extract", "label": "EXTRACAO"})
-	phase_fragment = {
-		"pos": center, 
-		"next_phase": 0, 
-		"pulse": 0.0, 
-		"life": 0.0, 
-		"choices": choices
-	}
-	_add_text("DUAS ROTAS ABERTAS", center + Vector2(-132, -132), Color(0.62, 1.0, 0.92), 2.1, 25)
+	_phase_flow()._spawn_phase_choice_portals(pos)
 
 
 func _start_phase_transition(next_phase: int) -> void :
-	pending_phase = next_phase
-	mode = "phase_transition"
-	phase_transition_timer = PHASE_TRANSITION_TIME
-	_add_text("FRATURA DIMENSIONAL", player_pos + Vector2(0, -120), Color(0.64, 0.92, 1.0), 1.8, 30)
+	_phase_flow()._start_phase_transition(next_phase)
 
 
 func _update_phase_fragment(delta: float) -> void :
-	if phase_fragment.is_empty():
-		return
-	phase_fragment["life"] = float(phase_fragment.get("life", 0.0)) + delta
-	phase_fragment["pulse"] = float(phase_fragment.get("pulse", 0.0)) + delta * 4.0
-	var choices: Array = Array(phase_fragment.get("choices", []))
-	if not choices.is_empty():
-		for choice in choices:
-			var choice_pos: Vector2 = Vector2(choice.get("pos", phase_fragment.get("pos", player_pos)))
-			if player_pos.distance_to(choice_pos) <= BOSS_FRAGMENT_PICKUP_RADIUS * 1.15:
-				if is_multiplayer and not _is_local_run_leader():
-					var warn_cd: float = maxf(0.0, float(phase_fragment.get("leader_warn_cd", 0.0)) - delta)
-					if warn_cd <= 0.0:
-						phase_fragment["leader_warn_cd"] = 1.2
-						_add_text("LIDER DA RUN: %s" % _run_leader_name(), choice_pos + Vector2(0, -86), Color(1.0, 0.86, 0.18), 0.95, 16)
-					else:
-						phase_fragment["leader_warn_cd"] = warn_cd
-					return
-				var action: String = String(choice.get("action", "phase"))
-				var choice_phase: int = int(choice.get("next_phase", 0))
-				if is_multiplayer:
-					_request_phase_mp_consensus(choice_phase, action)
-					return
-				if action == "farm":
-					choice_phase = _begin_farm_dimension_cycle()
-				phase_fragment.clear()
-				if action == "extract":
-					_complete_dimension_extraction()
-				elif choice_phase > 0:
-					_start_phase_transition(choice_phase)
-				return
-		return
-	if player_pos.distance_to(phase_fragment["pos"]) <= BOSS_FRAGMENT_PICKUP_RADIUS:
-		var next_phase = int(phase_fragment.get("next_phase", 0))
-		if is_multiplayer:
-			if not _is_local_run_leader():
-				_add_text("APENAS O LIDER ATRAVESSA", Vector2(phase_fragment["pos"]) + Vector2(0, -72), Color(1.0, 0.86, 0.18), 0.9, 16)
-				return
-			_request_phase_mp_consensus(next_phase, "phase")
-			return
-		phase_fragment.clear()
-		if next_phase > 0:
-			_start_phase_transition(next_phase)
+	_phase_flow()._update_phase_fragment(delta)
 
 
 func _update_effects(delta: float) -> void :

@@ -62,6 +62,7 @@ fix_*.py
 scratch_*.gd
 scratch_*.gd.uid
 discord_webhook.local.cfg
+android_signing.local.ps1
 .leaderboard_admin.local.json
 .leaderboard_admin_backups/
 

@@ -32,6 +32,8 @@ const RTNetContractScript = preload("res://scripts/systems/online/net_contract.g
 const RTTransportStateScript = preload("res://scripts/systems/online/transport_state.gd")
 const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
 const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
+const RuntimeSaveControllerScript = preload("res://scripts/systems/save/runtime_save_controller.gd")
+const PhaseFlowControllerScript = preload("res://scripts/systems/phase/phase_flow_controller.gd")
 const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
@@ -2259,6 +2261,7 @@ var qa_streaming_sent_per_second: int = 0
 var qa_streaming_fps_timer: float = 0.0
 var qa_streaming_frame_content_type: String = "image/jpeg"
 var qa_stream_base_url: String = ONLINE_RELAY_BASE_URL
+var runtime_resources_cleaned: bool = false
 var current_phase = 1
 var pending_phase = 0
 var phase_started_at: float = 0.0
@@ -2288,9 +2291,23 @@ var menu_motion_mode: String = ""
 var menu_page_age: float = 0.0
 var menu_selection_age: float = 0.0
 var menu_motion_selection: int = -1
-var interrupted_run_available: = false
-var interrupted_run_summary: Dictionary = {}
-var interrupted_run_autosave_timer: = 0.0
+var save_controller = RuntimeSaveControllerScript.new()
+var phase_flow_controller = PhaseFlowControllerScript.new()
+var interrupted_run_available: bool:
+	get:
+		return save_controller.interrupted_run_available
+	set(value):
+		save_controller.interrupted_run_available = value
+var interrupted_run_summary: Dictionary:
+	get:
+		return save_controller.interrupted_run_summary
+	set(value):
+		save_controller.interrupted_run_summary = value
+var interrupted_run_autosave_timer: float:
+	get:
+		return save_controller.interrupted_run_autosave_timer
+	set(value):
+		save_controller.interrupted_run_autosave_timer = value
 var manifest_drag_start_x = 0.0
 var manifest_drag_start_scroll = 0.0
 var manifest_drag_touch_index = -999
@@ -3302,12 +3319,36 @@ var boss_contract_infractions = 0
 var boss_contract_vulnerability = 0.0
 var contractual_notifications = []
 var unlock_notifications = []
-var retry_run_snapshot: Dictionary = {}
-var retry_charges_used: int = 0
-var run_retry_invulnerability_timer: float = 0.0
-var retry_confirm_visible: bool = false
-var retry_confirm_new_run: bool = false
-var retry_return_timer: float = 0.0
+var retry_run_snapshot: Dictionary:
+	get:
+		return save_controller.retry_run_snapshot
+	set(value):
+		save_controller.retry_run_snapshot = value
+var retry_charges_used: int:
+	get:
+		return save_controller.retry_charges_used
+	set(value):
+		save_controller.retry_charges_used = value
+var run_retry_invulnerability_timer: float:
+	get:
+		return save_controller.run_retry_invulnerability_timer
+	set(value):
+		save_controller.run_retry_invulnerability_timer = value
+var retry_confirm_visible: bool:
+	get:
+		return save_controller.retry_confirm_visible
+	set(value):
+		save_controller.retry_confirm_visible = value
+var retry_confirm_new_run: bool:
+	get:
+		return save_controller.retry_confirm_new_run
+	set(value):
+		save_controller.retry_confirm_new_run = value
+var retry_return_timer: float:
+	get:
+		return save_controller.retry_return_timer
+	set(value):
+		save_controller.retry_return_timer = value
 var death_screen_delay_timer: float = 0.0
 var death_screen_pending_result: String = ""
 var death_screen_pending_specter_upgrade: bool = false
@@ -3408,5 +3449,3 @@ var raindrops = []
 var puddles = []
 var rain_splashes = []
 var snowflakes = []
-
-
