@@ -12,6 +12,8 @@ func _ensure_runtime_controllers_bound() -> void:
 		save_controller.configure(self)
 	if phase_flow_controller.core != self:
 		phase_flow_controller.configure(self)
+	if progression_controller.core != self:
+		progression_controller.configure(self)
 	if shop_controller.game != self:
 		shop_controller.configure(self)
 
@@ -19,6 +21,11 @@ func _ensure_runtime_controllers_bound() -> void:
 func _phase_flow():
 	_ensure_runtime_controllers_bound()
 	return phase_flow_controller
+
+
+func _progression():
+	_ensure_runtime_controllers_bound()
+	return progression_controller
 
 
 func _ready() -> void :
@@ -20448,111 +20455,43 @@ func _apply_shared_kill_progress(total_kills: int) -> void:
 
 
 func _points_for_enemy(enemy: Dictionary) -> int:
-	var mult = _long_run_point_multiplier()
-	var base_points: = float(enemy.get("points", 20)) * _elite_point_multiplier(enemy)
-	return max(int(enemy.get("points", 20)), int(round(base_points * mult)))
+	return _progression().points_for_enemy(enemy)
 
 
 func _long_run_point_multiplier() -> float:
-	var minutes: float = maxf(0.0, time_alive / 60.0)
-	var mult: float = POINT_REWARD_BASE_MULT + minutes * POINT_REWARD_PER_MINUTE
-	if minutes > POINT_REWARD_LATE_START_MINUTES:
-		mult += (minutes - POINT_REWARD_LATE_START_MINUTES) * POINT_REWARD_LATE_PER_MINUTE
-	return clampf(mult, POINT_REWARD_BASE_MULT, POINT_REWARD_MAX_MULT)
+	return _progression().long_run_point_multiplier()
 
 
 func _long_run_curve_progress(start_time: float, end_time: float) -> float:
-	return clampf((time_alive - start_time) / maxf(1.0, end_time - start_time), 0.0, 1.0)
+	return _progression().long_run_curve_progress(start_time, end_time)
 
 
 func _long_run_enemy_hp_growth_multiplier() -> float:
-	if time_alive <= LONG_RUN_RUPTURE_TIME:
-		return 1.0
-	if time_alive < LONG_RUN_BROKEN_BUILD_TIME:
-		return lerpf(1.0, LONG_RUN_ENEMY_HP_GROWTH_BROKEN_MULT, _long_run_curve_progress(LONG_RUN_RUPTURE_TIME, LONG_RUN_BROKEN_BUILD_TIME))
-	if time_alive < LONG_RUN_ENDLESS_TIME:
-		return lerpf(LONG_RUN_ENEMY_HP_GROWTH_BROKEN_MULT, LONG_RUN_ENEMY_HP_GROWTH_ENDLESS_MULT, _long_run_curve_progress(LONG_RUN_BROKEN_BUILD_TIME, LONG_RUN_ENDLESS_TIME))
-	return LONG_RUN_ENEMY_HP_GROWTH_ENDLESS_MULT
+	return _progression().long_run_enemy_hp_growth_multiplier()
 
 
 func _long_run_spawn_interval_multiplier() -> float:
-	if time_alive <= LONG_RUN_RUPTURE_TIME:
-		return 1.0
-	if time_alive < LONG_RUN_BROKEN_BUILD_TIME:
-		return lerpf(1.0, LONG_RUN_SPAWN_INTERVAL_BROKEN_MULT, _long_run_curve_progress(LONG_RUN_RUPTURE_TIME, LONG_RUN_BROKEN_BUILD_TIME))
-	if time_alive < LONG_RUN_ENDLESS_TIME:
-		return lerpf(LONG_RUN_SPAWN_INTERVAL_BROKEN_MULT, LONG_RUN_SPAWN_INTERVAL_ENDLESS_MULT, _long_run_curve_progress(LONG_RUN_BROKEN_BUILD_TIME, LONG_RUN_ENDLESS_TIME))
-	return LONG_RUN_SPAWN_INTERVAL_ENDLESS_MULT
+	return _progression().long_run_spawn_interval_multiplier()
 
 
 func _long_run_enemy_limit_bonus() -> int:
-	if time_alive < LONG_RUN_RUPTURE_TIME:
-		return 0
-	if time_alive < LONG_RUN_BROKEN_BUILD_TIME:
-		return int(floor(lerpf(0.0, float(LONG_RUN_ENEMY_LIMIT_BROKEN_BONUS), _long_run_curve_progress(LONG_RUN_RUPTURE_TIME, LONG_RUN_BROKEN_BUILD_TIME))))
-	if time_alive < LONG_RUN_ENDLESS_TIME:
-		return int(floor(lerpf(float(LONG_RUN_ENEMY_LIMIT_BROKEN_BONUS), float(LONG_RUN_ENEMY_LIMIT_ENDLESS_BONUS), _long_run_curve_progress(LONG_RUN_BROKEN_BUILD_TIME, LONG_RUN_ENDLESS_TIME))))
-	return LONG_RUN_ENEMY_LIMIT_ENDLESS_BONUS
+	return _progression().long_run_enemy_limit_bonus()
 
 
 func _next_score_event_id() -> String:
-	score_event_sequence += 1
-	return "%d:%d" % [_mp_unique_id(), score_event_sequence]
+	return _progression().next_score_event_id()
 
 
 func _mark_score_event_applied(event_id: String) -> bool:
-	if event_id == "":
-		return true
-	if applied_score_event_ids.has(event_id):
-		return false
-	applied_score_event_ids[event_id] = Time.get_ticks_msec()
-	if applied_score_event_ids.size() > 256:
-		var keys: Array = applied_score_event_ids.keys()
-		keys.sort()
-		while applied_score_event_ids.size() > 192 and not keys.is_empty():
-			applied_score_event_ids.erase(keys.pop_front())
-	return true
+	return _progression().mark_score_event_applied(event_id)
 
 
 func _apply_score_delta(amount: int, broadcast: = true, event_id: String = "") -> void :
-	if amount == 0:
-		return
-	# Replicas request local rewards; confirmed RPC credits apply without rebroadcast.
-	if is_multiplayer and _is_world_replica() and broadcast:
-		if amount > 0 and broadcast and _shop_rpc_available():
-			rpc("_rpc_request_score_delta", amount, event_id if event_id != "" else _next_score_event_id())
-		return
-	if not _mark_score_event_applied(event_id):
-		return
-	score = max(0, score + amount)
-	score_total = max(0, score_total + amount)
-	if amount > 0:
-		run_points_earned += amount
-	else:
-		run_points_spent += abs(amount)
-	if amount > 0 and broadcast and is_multiplayer and _is_world_authority() and _shop_rpc_available():
-		rpc("_rpc_add_score", amount, event_id if event_id != "" else _next_score_event_id())
+	_progression().apply_score_delta(amount, broadcast, event_id)
 
 
 func _elite_point_multiplier(enemy: Dictionary) -> float:
-	match String(enemy.get("type", ENEMY_COMMON)):
-		ENEMY_AGGLOMERATOR:
-			return 1.55
-		ENEMY_CURATER:
-			return 1.38
-		ENEMY_CRYSTAL:
-			return 1.32
-		ENEMY_PROJECTOR:
-			return 1.26
-		ENEMY_STALKER:
-			return 1.18
-		ENEMY_LARAPIO:
-			return 1.45
-		ENEMY_KAMIKAZE, ENEMY_ATIRADOR:
-			return 1.12
-	if _is_uncommon_enemy(enemy):
-		return 1.22
-	return 1.0
+	return _progression().elite_point_multiplier(enemy)
 
 
 func _is_uncommon_enemy(enemy: Dictionary) -> bool:
@@ -28999,50 +28938,39 @@ func _rare_cards_unlocked() -> bool:
 
 
 func _card_id(card: Dictionary) -> String:
-	return String(card.get("id", String(card.get("name", ""))))
+	return _progression().card_id(card)
 
 
 func _card_counter_key(card: Dictionary) -> String:
-	return _card_id(card)
+	return _progression().card_counter_key(card)
 
 
 func _card_count(card: Dictionary) -> int:
-	return int(cards_bought.get(_card_counter_key(card), 0))
+	return _progression().card_count(card)
 
 
 func _card_count_by_id(card_id: String) -> int:
-	return int(cards_bought.get(card_id, 0))
+	return _progression().card_count_by_id(card_id)
 
 
 func _consume_card_count(card_id: String, amount: = 1) -> bool:
-	if amount <= 0:
-		return true
-	var current: = _card_count_by_id(card_id)
-	if current < amount:
-		return false
-	cards_bought[card_id] = current - amount
-	_recalculate_common_card_stat_bonuses()
-	_sync_deck_network()
-	return true
+	return _progression().consume_card_count(card_id, amount)
 
 
 func _card_max_count(card: Dictionary) -> int:
-	return CARD_UNLIMITED_COUNT
+	return _progression().card_max_count(card)
 
 
 func _card_at_max(card: Dictionary) -> bool:
-	return false
+	return _progression().card_at_max(card)
 
 
 func _find_card_by_id(card_id: String) -> Dictionary:
-	for card in CARDS:
-		if _card_id(card) == card_id:
-			return card
-	return {}
+	return _progression().find_card_by_id(card_id)
 
 
 func _is_common_card(card: Dictionary) -> bool:
-	return not _is_rare_card(card)
+	return _progression().is_common_card(card)
 
 
 func _card_texture(card: Dictionary) -> Texture2D:
@@ -29060,26 +28988,23 @@ func _card_drop_texture_available(card: Dictionary) -> bool:
 
 
 func _new_common_card_count(card_id: String) -> int:
-	return _card_count_by_id(card_id)
+	return _progression().new_common_card_count(card_id)
 
 
 func _rare_card_count(card_id: String) -> int:
-	return _card_count_by_id(card_id)
+	return _progression().rare_card_count(card_id)
 
 
 func _rare_sqrt_extra(card_id: String) -> float:
-	return sqrt(float(max(0, _rare_card_count(card_id) - 1)))
+	return _progression().rare_sqrt_extra(card_id)
 
 
 func _rare_log_count(card_id: String) -> float:
-	return log(float(max(2, _rare_card_count(card_id) + 1))) / log(2.0)
+	return _progression().rare_log_count(card_id)
 
 
 func _carta_zero_multiplier() -> float:
-	var count: int = _rare_card_count("carta_zero")
-	if count <= 0:
-		return 1.0
-	return 1.0 + 0.06 * sqrt(float(count))
+	return _progression().carta_zero_multiplier()
 
 
 func _is_common_card_value_scalable(card_id: String, stat_id: = "") -> bool:
@@ -29256,36 +29181,19 @@ func _hostile_ground_hazard_duration(base: float) -> float:
 
 
 func _shop_price_increment_after_purchase() -> int:
-	return max(64, 100 - int(round(_apply_carta_zero_to_common_value("moeda_estavel", "economy", _new_common_card_count("moeda_estavel") * 6.0))))
+	return _progression().shop_price_increment_after_purchase()
 
 
 func _card_discount_rate(card: Dictionary) -> float:
-	if _is_empty_shop_slot(card):
-		return 0.0
-	if not _is_common_card(card):
-		return shop_endurance_discount
-	var pacto_discount: = 0.0
-	if _card_count(card) <= 0:
-		pacto_discount = min(0.2, _apply_carta_zero_to_common_value("pacto_possibilidades", "discount", _new_common_card_count("pacto_possibilidades") * 0.04))
-	return min(0.45, shop_endurance_discount + pacto_discount)
+	return _progression().card_discount_rate(card)
 
 
 func _shop_endurance_discount_from_elapsed(elapsed: float) -> float:
-	if elapsed < 180.0:
-		return 0.0
-	var steps: = int(elapsed / 180.0)
-	var base_discount: float = min(0.36, float(steps) * 0.06)
-	var late_minutes: float = maxf(0.0, elapsed / 60.0 - 30.0)
-	return min(0.55, base_discount + late_minutes * 0.008)
+	return _progression().shop_endurance_discount_from_elapsed(elapsed)
 
 
 func _effective_card_price(card: Dictionary, base_cost: = -1) -> int:
-	if _is_empty_shop_slot(card):
-		return 999999999
-	if base_cost < 0 and card.has("locked_price"):
-		return int(card.get("locked_price", card_cost))
-	var cost: int = card_cost if base_cost < 0 else base_cost
-	return max(1, int(round(float(cost) * (1.0 - _card_discount_rate(card)))))
+	return _progression().effective_card_price(card, base_cost)
 
 
 func _can_reserve_shop_card(card: Dictionary) -> bool:
@@ -29301,15 +29209,15 @@ func _can_toggle_shop_reserve(index: int) -> bool:
 
 
 func _support_card_count(card_id: String) -> int:
-	return _new_common_card_count(card_id)
+	return _progression().support_card_count(card_id)
 
 
 func _support_sqrt_extra(card_id: String) -> float:
-	return sqrt(float(max(0, _support_card_count(card_id) - 1)))
+	return _progression().support_sqrt_extra(card_id)
 
 
 func _support_log2_count(card_id: String) -> float:
-	return log(float(max(2, _support_card_count(card_id) + 1))) / log(2.0)
+	return _progression().support_log2_count(card_id)
 
 
 func _diminishing_count_value(count: int, base: float, gain: float, curve: float) -> float:
@@ -32369,21 +32277,7 @@ func _update_shop_mp_waiting(delta: float) -> void :
 
 
 func _affordable_card_count() -> int:
-	var temp_score = score
-	var temp_cost = card_cost
-	var count = 0
-	while temp_score > 0:
-		var cheapest: = INF
-		for card in CARDS:
-			if _card_at_max(card):
-				continue
-			cheapest = min(cheapest, float(_effective_card_price(card, temp_cost)))
-		if cheapest == INF or float(temp_score) < cheapest:
-			break
-		temp_score -= int(cheapest)
-		temp_cost += _shop_price_increment_after_purchase()
-		count += 1
-	return count
+	return _progression().affordable_card_count()
 
 
 func _should_trigger_forced_shop() -> bool:

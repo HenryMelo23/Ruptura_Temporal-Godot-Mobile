@@ -341,7 +341,7 @@ func touch_card(index: int) -> void:
 
 
 func reserve_card(index: int) -> void:
-	if purchase_animating() or busy() or index < 0 or index >= game.shop_cards.size():
+	if purchase_animating() or index < 0 or index >= game.shop_cards.size():
 		return
 	var card: Dictionary = game.shop_cards[index]
 	if game._shop_slot_locked(index):
@@ -352,6 +352,8 @@ func reserve_card(index: int) -> void:
 			game.shop_cards[index].erase("locked_price")
 		game._add_text("RESERVA SOLTA", game.player_pos + Vector2(-90, -92), Color(0.4, 0.94, 1.0), 0.9, 17)
 		game._vibrate(32, 0.14)
+		return
+	if busy():
 		return
 	if not game._can_reserve_shop_card(card):
 		return
