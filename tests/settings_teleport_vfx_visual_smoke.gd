@@ -21,6 +21,15 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await process_frame
+	game.set_process(false)
+	game.set_physics_process(false)
+	if DisplayServer.get_name() != "headless":
+		# Window decorations consume 39px on a 720px desktop; keep the capture viewport exact.
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true)
+		DisplayServer.window_set_size(Vector2i(1280, 720))
+	root.size = Vector2i(1280, 720)
+	root.content_scale_size = Vector2i(1280, 720)
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	game.startup_thanks_done = true
 	game.vol_master = 0.0
@@ -54,7 +63,7 @@ func _run() -> void:
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
-	game.queue_free()
+	game.free()
 	for i in range(4):
 		await process_frame
 	quit(0)
@@ -86,13 +95,14 @@ func _prepare_tp_effects(keys: Array) -> void:
 
 
 func _capture(file_name: String) -> void:
-	game.queue_redraw()
-	await process_frame
-	await process_frame
+	for frame in range(20):
+		game.queue_redraw()
+		await process_frame
 	if DisplayServer.get_name() == "headless":
 		print("SETTINGS_TELEPORT_VFX_CAPTURE logic_only=true file=", file_name)
 		return
+	await RenderingServer.frame_post_draw
 	var image: Image = root.get_texture().get_image()
-	_check(image != null and image.get_width() == 1280 and image.get_height() == 720, "invalid capture " + file_name)
+	_check(image != null and image.get_width() == 1280 and image.get_height() == 720, "invalid capture %s actual=%s" % [file_name, str(image.get_size()) if image != null else "null"])
 	_check(image.get_used_rect().size.x > 1000 and image.get_used_rect().size.y > 600, "blank capture " + file_name)
 	_check(image.save_png(OUT_DIR + "/" + file_name) == OK, "could not save " + file_name)

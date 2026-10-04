@@ -1,5 +1,7 @@
 extends RefCounted
 
+const Gravity = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
+
 # Draws through the main CanvasItem; state stays on the host during migration.
 
 
@@ -102,12 +104,7 @@ static func _draw_manifest_preview_ultimate(game: Node2D, rect: Rect2, key: Stri
 				game._draw_preview_worm_path(edge, target, t + i * 0.1, accent)
 			game.draw_circle(c, 58.0, Color(0.22, 0.72, 0.12, 0.2))
 		"gravitante":
-			game.draw_circle(c, 42.0, Color(0.0, 0.0, 0.0, 0.84))
-			for i in range(5):
-				game.draw_arc(c, 52.0 + i * 14.0 + pulse * 4.0, t * TAU + i, t * TAU + i + PI * 1.42, 78, Color(0.54, 0.78, 1.0, 0.34 - i * 0.04), 2.5)
-			for i in range(8):
-				var frag = c + Vector2.from_angle( - t * TAU + i) * (82.0 - pulse * 18.0)
-				game.draw_rect(Rect2(frag - Vector2(4, 4), Vector2(8, 8)), Color(0.78, 0.9, 1.0, 0.38), true)
+			Gravity.singularity(game, c, minf(40.0, rect.size.y * 0.18), t * TAU, 0.8, Gravity.lod(game))
 		"acorrentada":
 			for i in range(3):
 				var enemy_pos: Vector2 = c + Vector2.from_angle(i * TAU / 3.0 + 0.35) * rect.size.y * 0.3
@@ -189,7 +186,14 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		if game.current_phase == 5 and game.phase5_transmute_active:
 			game._draw_phase5_transmute_map_reveal(map_texture, game._desktop_stage_draw_rect(camera))
 		else:
-			game.draw_texture_rect(map_texture, game._desktop_stage_draw_rect(camera), false)
+			if not is_instance_valid(game.phase_map_layer):
+				game.phase_map_layer = game.PhaseMapPresentation.new()
+				game.phase_map_layer.name = "PhaseMapLayer"
+				game.phase_map_layer.show_behind_parent = true
+				game.add_child(game.phase_map_layer)
+			var surface: int = game.PhaseMapPresentation.surface_for(game)
+			game.phase_map_layer.present(map_texture, game._desktop_stage_draw_rect(camera), surface, game.time_alive, game.gfx_low_resource or game._memory_saver_active())
+			game.PhaseMapPresentation.draw_ambient(game, camera, surface)
 	else:
 		game.draw_rect(Rect2( - camera, game.WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
 	game._draw_event_alert_world(camera, viewport)
@@ -303,8 +307,14 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_boss1_rewind_world(camera)
 	game._draw_network_rewind_visuals(camera)
 	for orb in game.heal_orbs:
-		game.draw_circle(orb["pos"] - camera, 15, Color(0.25, 1.0, 0.42, 0.78))
-		game.draw_arc(orb["pos"] - camera, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
+		var orb_pos: Vector2 = Vector2(orb.get("pos", Vector2.ZERO)) - camera
+		if String(orb.get("kind", "heal")) == "voraz_hunger":
+			var pulse: float = 0.5 + sin(game.time_alive * 8.0 + orb_pos.x) * 0.5
+			game.draw_circle(orb_pos, 8.0 + pulse * 3.0, Color(0.68, 0.02, 0.03, 0.84))
+			game.draw_arc(orb_pos, 13.0 + pulse * 3.0, - game.time_alive * 2.8, TAU - game.time_alive * 2.8, 20, Color(1.0, 0.34, 0.08, 0.56), 2.0)
+		else:
+			game.draw_circle(orb_pos, 15, Color(0.25, 1.0, 0.42, 0.78))
+			game.draw_arc(orb_pos, 22, 0, TAU, 32, Color(0.65, 1.0, 0.75, 0.65), 2)
 	game._draw_larapio_ultimate_portals(camera)
 	game._draw_larapio_coin_drops(camera)
 	game._draw_arauto_card_drops(camera)
@@ -317,12 +327,16 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_acorrentada_world(camera)
 	game._draw_arauto(camera)
 	game._draw_crepuscular_arauto_cracks(camera)
+	Gravity.orbitals(game, camera, true)
 	game._draw_enemies(camera)
 	game._draw_projectiles(camera)
 	game._draw_boss3_miasma_clones(camera)
 	if game.current_phase != 6:
 		game._draw_boss_world(camera)
 		game._draw_crepuscular_boss_cracks(camera)
+	for gravity_secondary in game.manifestation_secondaries:
+		if String(gravity_secondary.get("kind", "")) == "gravitante":
+			Gravity.ultimate(game, gravity_secondary, camera)
 	game._draw_parasite_marks(camera)
 	game._draw_parasite_foreground(camera)
 	if not game.phase_fragment.is_empty():
@@ -336,6 +350,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		game._draw_boss_world(camera)
 		game._draw_crepuscular_boss_cracks(camera)
 	game._draw_phantom_player(camera)
+	Gravity.orbitals(game, camera, false)
+	Gravity.systems(game, camera)
 	game._draw_effects(camera)
 	game._draw_eclipsada_vfx(camera)
 	game._draw_eclipsada_stealth_overlay(viewport, camera)
@@ -1838,6 +1854,9 @@ static func _draw_manifest_evolution_fields(game: Node2D, camera: Vector2) -> vo
 	if game.manifest_evolution_state.is_empty():
 		return
 	for field in Array(game.manifest_evolution_state.get("fields", [])):
+		if game.manifestation_key == "gravitante":
+			Gravity.field(game, field, camera)
+			continue
 		var center = Vector2(field.get("pos", game.player_pos)) - camera
 		var radius = float(field.get("radius", 150.0))
 		var max_life = maxf(0.01, float(field.get("max", 1.0)))
@@ -1862,7 +1881,7 @@ static func _draw_manifestation_secondaries(game: Node2D, camera: Vector2) -> vo
 			"parasitica":
 				game._draw_secondary_parasitica(secondary, camera)
 			"gravitante":
-				game._draw_secondary_gravitante(secondary, camera)
+				pass # Drawn after entities so the horizon occludes captured matter.
 			"ancorada":
 				game._draw_secondary_ancorada(secondary, camera)
 			"acorrentada":
@@ -2896,6 +2915,8 @@ static func _draw_lacerante_spin(game: Node2D, slash: Dictionary, camera: Vector
 
 
 static func _draw_teleport_effects(game: Node2D, camera: Vector2) -> void :
+	for effect in game.gravitante_vfx_events:
+		Gravity.event(game, effect, camera)
 	for effect in game.tp_effects:
 		var kind = String(effect.get("kind", ""))
 		var fade: float = clampf(float(effect.get("life", 0.0)) / max(0.01, float(effect.get("max", 1.0))), 0.0, 1.0)
@@ -2964,13 +2985,7 @@ static func _draw_teleport_effects(game: Node2D, camera: Vector2) -> void :
 			game.draw_circle(a, 26.0, Color(0.1, 0.05, 0.02, 0.38 * fade))
 			game.draw_circle(b, 30.0, Color(0.18, 0.1, 0.04, 0.42 * fade))
 		elif kind == "gravitante":
-			var a: Vector2 = Vector2(effect.get("a", effect.get("center", game.player_pos))) - camera
-			var b: Vector2 = Vector2(effect.get("b", game.player_pos)) - camera
-			for endpoint in [a, b]:
-				game.draw_circle(endpoint, 42.0 + 24.0 * progress, Color(0.02, 0.04, 0.12, 0.55 * fade))
-				game.draw_arc(endpoint, 44.0 + 18.0 * progress, game.time_alive * 3.4, TAU * 0.88 + game.time_alive * 3.4, 64, Color(0.52, 0.78, 1.0, 0.78 * fade), 4.0)
-				game.draw_arc(endpoint, 25.0 + 12.0 * progress, -game.time_alive * 5.0, TAU - game.time_alive * 5.0, 48, Color(0.9, 0.96, 1.0, 0.48 * fade), 2.0)
-			game.draw_line(a, b, Color(0.34, 0.68, 1.0, 0.18 * fade), 16.0, true)
+			Gravity.teleport(game, effect, camera)
 		elif kind == "cartografica_pin":
 			var pos: Vector2 = Vector2(effect.get("pos", game.player_pos)) - camera
 			var pin_tip: Vector2 = pos
@@ -3384,180 +3399,7 @@ static func _draw_parasite_foreground(game: Node2D, camera: Vector2) -> void :
 
 
 static func _draw_secondary_gravitante(game: Node2D, secondary: Dictionary, camera: Vector2) -> void :
-	var center_world: Vector2 = secondary.get("center", game.player_pos)
-	var center = center_world - camera
-	var progress = 1.0 - float(secondary.get("life", 0.0)) / max(0.01, float(secondary.get("max", game.SECONDARY_GRAVITANTE_DURATION)))
-	var radius = game._gravitante_radius(progress)
-	var captured = int(secondary.get("captured", 0))
-	var orbital_bonus = int(secondary.get("orbital_bonus", 0))
-	var capture_power = float(secondary.get("capture_power", 0.0))
-	var spin_speed = float(secondary.get("spin_speed", 250.0))
-	var intensity = clamp(float(captured + orbital_bonus) / 10.0 + capture_power * 0.34 + progress * 0.25, 0.25, 2.3)
-	var t = game.time_alive
-	var spin = t * (0.72 + spin_speed * 0.006)
-
-	game._draw_gravitante_map_distortion(center_world, camera, radius, progress, intensity, spin)
-	game.draw_circle(center, radius * 1.04, Color(0.02, 0.03, 0.08, 0.08 + 0.05 * intensity))
-	for lens_index in range(11):
-		var ring = radius * (0.18 + lens_index * 0.075) + sin(t * 2.0 + lens_index) * (5.0 + intensity * 3.0)
-		var rot = spin * (0.18 + lens_index * 0.012) + lens_index * 0.27
-		var stretch = Vector2(1.0 + sin(lens_index * 1.7) * 0.1, 0.58 + cos(t + lens_index) * 0.07)
-		var alpha = clamp(0.2 - lens_index * 0.01 + intensity * 0.03, 0.04, 0.3)
-		game.draw_set_transform(center, rot, stretch)
-		game.draw_arc(Vector2.ZERO, ring, - PI * 0.78, PI * 1.22, 64, Color(0.54, 0.74, 1.0, alpha), 1.1 + intensity * 0.22)
-		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	for lane in range(18):
-		var ang = spin * (1.0 + lane % 3 * 0.08) + lane * TAU / 18.0
-		var edge = center + Vector2.from_angle(ang) * radius * (0.76 + 0.12 * sin(t * 3.0 + lane))
-		var inner = center + Vector2.from_angle(ang + 0.36 + intensity * 0.08) * radius * (0.18 + 0.04 * (lane % 4))
-		var lane_alpha = 0.07 + intensity * 0.028
-		game.draw_line(edge, inner, Color(0.44, 0.7, 1.0, lane_alpha), 1.2)
-		if lane % 3 == 0:
-			game.draw_circle(edge, 2.2 + intensity, Color(0.76, 0.9, 1.0, 0.28))
-
-	game.draw_arc(center, radius, spin * 0.55, spin * 0.55 + TAU, 96, Color(0.56, 0.82, 1.0, 0.62 + min(0.24, intensity * 0.1)), 2.2 + intensity * 0.45)
-	game.draw_arc(center, radius * 0.72, - spin * 0.95, - spin * 0.95 + PI * 1.65, 86, Color(0.96, 0.36, 1.0, 0.26 + intensity * 0.05), 3.0)
-
-	for enemy in game.enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var dist = Vector2(enemy["pos"]).distance_to(center_world)
-		if dist <= radius:
-			var draw_pos = enemy["pos"] - camera
-			var edge_ratio = game._gravitante_edge_ratio(dist, radius)
-			var beam_alpha = 0.1 + edge_ratio * 0.16 + min(0.12, intensity * 0.04)
-			game.draw_line(draw_pos, center, Color(0.58, 0.82, 1.0, beam_alpha), 1.2 + edge_ratio * 1.8)
-			game._draw_gravitante_enemy_distortion(enemy, center_world, camera, radius, progress, intensity)
-
-	var core_r = 40.0 + progress * 42.0 + intensity * 5.0
-	for glow_index in range(5):
-		game.draw_circle(center, core_r + 56.0 - glow_index * 10.0, Color(0.26, 0.08, 0.46, 0.035 + glow_index * 0.012))
-	game.draw_circle(center, core_r * 1.18, Color(0.01, 0.0, 0.03, 0.82))
-	game.draw_circle(center, core_r * 0.74, Color(0.0, 0.0, 0.0, 0.96))
-	game.draw_arc(center, core_r * 1.28, spin * 1.55, spin * 1.55 + PI * 1.72, 76, Color(0.82, 0.94, 1.0, 0.9), 3.0 + intensity * 0.55)
-	game.draw_arc(center, core_r * 1.56, - spin * 1.18, - spin * 1.18 + PI * 1.38, 72, Color(0.54, 0.22, 1.0, 0.54), 5.0)
-	game.draw_arc(center, core_r * 0.96, spin * 2.25, spin * 2.25 + TAU * 0.72, 52, Color(0.18, 0.88, 1.0, 0.64), 2.0)
-
-
-static func _draw_gravitante_map_distortion(game: Node2D, center_world: Vector2, camera: Vector2, radius: float, progress: float, intensity: float, spin: float) -> void :
-	var map_texture = game._current_map_texture()
-	if map_texture == null:
-		return
-	var center = center_world - camera
-	var map_rect = game._desktop_stage_draw_rect(camera)
-	var tex_size = map_texture.get_size()
-	var t = game.time_alive
-	var event_radius = 64.0 + progress * 44.0 + intensity * 7.0
-
-	game._draw_gravitante_map_mask(map_texture, map_rect, tex_size, center, radius, event_radius, progress, intensity, spin)
-
-	for ring_index in range(5):
-		var ring_ratio = 0.24 + float(ring_index) * 0.145
-		var sample_radius = radius * ring_ratio
-		var pieces = 12 + ring_index * 5
-		for piece_index in range(pieces):
-			if piece_index % 2 == 1 and ring_index >= 3:
-				continue
-			var seed = float(piece_index * 37 + ring_index * 113)
-			var angle = spin * (0.22 + ring_index * 0.065) + piece_index * TAU / float(pieces) + sin(t * 1.7 + seed) * 0.035
-			var radial = Vector2.from_angle(angle)
-			var tangent = radial.orthogonal()
-			var source_center = center + radial * sample_radius + tangent * sin(t * 2.4 + seed) * (8.0 + intensity * 5.0)
-			if not map_rect.has_point(source_center):
-				continue
-			var source_size = 34.0 - ring_index * 2.4 + intensity * 4.0
-			var source_rect = Rect2(source_center - Vector2(source_size, source_size) * 0.5, Vector2(source_size, source_size))
-			var src = game._map_screen_rect_to_source(map_rect, tex_size, source_rect)
-			if src.size.x <= 1.0 or src.size.y <= 1.0:
-				continue
-			var pull = 0.18 + progress * 0.16 + intensity * 0.045 + float(4 - ring_index) * 0.018
-			var sink = source_center.lerp(center, pull)
-			sink += tangent * (22.0 + ring_index * 4.0) * sin(spin * 0.8 + seed)
-			var stretch = 1.1 + ring_ratio * 1.45 + intensity * 0.14
-			var crush = 0.4 + ring_index * 0.035
-			var dest_size = Vector2(source_size * stretch, source_size * crush)
-			var alpha = clamp(0.28 + intensity * 0.08 - ring_index * 0.025, 0.18, 0.58)
-			game.draw_set_transform(sink, angle + PI * 0.5 + sin(t + seed) * 0.22, Vector2.ONE)
-			game.draw_texture_rect_region(map_texture, Rect2( - dest_size * 0.5, dest_size), src, Color(1.0, 1.0, 1.0, alpha))
-			game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	for shard_index in range(34):
-		var shard_seed = float(shard_index) * 19.73
-		var cycle = fposmod(t * (0.1 + intensity * 0.025) + shard_seed * 0.017, 1.0)
-		var start_radius = radius * (0.96 - float(shard_index % 5) * 0.055)
-		var end_radius = event_radius * (1.02 + float(shard_index % 3) * 0.16)
-		var shard_radius = lerp(start_radius, end_radius, pow(cycle, 0.72))
-		var angle = spin * (0.52 + float(shard_index % 4) * 0.055) + shard_seed + cycle * TAU * (0.18 + intensity * 0.04)
-		var dir = Vector2.from_angle(angle)
-		var tangent = dir.orthogonal()
-		var pos = center + dir * shard_radius + tangent * sin(t * 3.1 + shard_seed) * 14.0
-		var shard_alpha = sin(cycle * PI) * clamp(0.26 + intensity * 0.1, 0.22, 0.52)
-		var shard_len = lerp(26.0, 8.0, cycle) + intensity * 3.0
-		var shard_w = 5.0 + float(shard_index % 4) * 1.4
-		var shard = PackedVector2Array([
-			pos + dir * shard_len, 
-			pos + tangent * shard_w, 
-			pos - dir * shard_len * 0.62, 
-			pos - tangent * shard_w * 0.72
-		])
-		game.draw_polygon(shard, PackedColorArray([Color(0.7, 0.74, 0.68, shard_alpha), Color(0.42, 0.38, 0.46, shard_alpha * 0.92), Color(0.16, 0.12, 0.2, shard_alpha), Color(0.86, 0.82, 0.72, shard_alpha * 0.78)]))
-		game.draw_polyline(PackedVector2Array([shard[0], shard[1], shard[2], shard[3], shard[0]]), Color(0.02, 0.01, 0.04, shard_alpha * 0.6), 1.0, true)
-
-	for beam_index in range(22):
-		var beam_seed = float(beam_index) * 41.0
-		var angle = - spin * (0.34 + float(beam_index % 3) * 0.035) + beam_index * TAU / 22.0
-		var outer = center + Vector2.from_angle(angle) * radius * (0.86 + 0.08 * sin(t * 1.4 + beam_seed))
-		var mid = center + Vector2.from_angle(angle + 0.34 + intensity * 0.03) * radius * (0.45 + 0.04 * sin(beam_seed))
-		var inner = center + Vector2.from_angle(angle + 0.68) * event_radius * (1.04 + 0.08 * sin(t * 4.0 + beam_seed))
-		var beam_alpha = 0.08 + intensity * 0.035
-		game.draw_polyline(PackedVector2Array([outer, mid, inner]), Color(0.92, 0.98, 1.0, beam_alpha), 2.0 + intensity * 0.32, true)
-		game.draw_polyline(PackedVector2Array([outer, mid, inner]), Color(0.48, 0.18, 1.0, beam_alpha * 0.7), 5.0 + intensity * 0.7, true)
-
-	for crack_index in range(18):
-		var crack_angle = spin * 0.12 + crack_index * TAU / 18.0 + sin(t + crack_index) * 0.045
-		var dir = Vector2.from_angle(crack_angle)
-		var start = center + dir * (event_radius + 24.0)
-		var finish = center + dir * radius * (0.58 + float(crack_index % 4) * 0.055)
-		game.draw_line(start, finish, Color(0.0, 0.0, 0.02, 0.2 + intensity * 0.035), 2.4)
-		game.draw_line(start.lerp(finish, 0.54), finish, Color(0.62, 0.82, 1.0, 0.08 + intensity * 0.025), 1.0)
-
-
-static func _draw_gravitante_map_mask(game: Node2D, map_texture: Texture2D, map_rect: Rect2, tex_size: Vector2, center: Vector2, radius: float, event_radius: float, progress: float, intensity: float, spin: float) -> void :
-	var outer_radius = radius * 0.82
-	var inner_radius = max(28.0, event_radius * 0.48)
-	var rings = 5
-	var segments = 28
-	for ring_index in range(rings):
-		var ring_a = float(ring_index) / float(rings)
-		var ring_b = float(ring_index + 1) / float(rings)
-		var r0 = lerp(inner_radius, outer_radius, ring_a)
-		var r1 = lerp(inner_radius, outer_radius, ring_b)
-		for segment in range(segments):
-			var a0 = float(segment) * TAU / float(segments)
-			var a1 = float(segment + 1) * TAU / float(segments)
-			var p0 = center + Vector2.from_angle(a0) * r0
-			var p1 = center + Vector2.from_angle(a1) * r0
-			var p2 = center + Vector2.from_angle(a1) * r1
-			var p3 = center + Vector2.from_angle(a0) * r1
-			var uv0 = game._gravitante_distorted_map_uv(p0, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var uv1 = game._gravitante_distorted_map_uv(p1, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var uv2 = game._gravitante_distorted_map_uv(p2, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var uv3 = game._gravitante_distorted_map_uv(p3, center, map_rect, tex_size, radius, progress, intensity, spin)
-			var edge = clamp((r0 + r1) * 0.5 / max(1.0, outer_radius), 0.0, 1.0)
-			var horizon = 1.0 - clamp((r0 - inner_radius) / max(1.0, outer_radius - inner_radius), 0.0, 1.0)
-			var light = 0.82 - horizon * 0.48 + edge * 0.18
-			var alpha = clamp(0.54 + intensity * 0.08 - horizon * 0.1, 0.36, 0.78)
-			var color = Color(light * 0.8, light * 0.86, light, alpha)
-			var colors = PackedColorArray([color, color, color, color])
-			game.draw_polygon(PackedVector2Array([p0, p1, p2, p3]), colors, PackedVector2Array([uv0, uv1, uv2, uv3]), map_texture)
-
-	game.draw_circle(center, outer_radius, Color(0.02, 0.0, 0.04, 0.15 + intensity * 0.04))
-	for veil_index in range(6):
-		var r = lerp(inner_radius * 1.15, outer_radius, float(veil_index) / 5.0)
-		var alpha = 0.12 + intensity * 0.018 - veil_index * 0.01
-		game.draw_arc(center, r, spin * (0.48 + veil_index * 0.05), spin * (0.48 + veil_index * 0.05) + TAU * 0.72, 80, Color(0.02, 0.0, 0.08, alpha), 9.0 - veil_index * 0.8)
-		game.draw_arc(center, r * 0.98, - spin * (0.36 + veil_index * 0.04), - spin * (0.36 + veil_index * 0.04) + TAU * 0.46, 72, Color(0.72, 0.88, 1.0, 0.055 + intensity * 0.01), 2.0)
+	Gravity.ultimate(game, secondary, camera)
 
 
 static func _draw_ancorada_spinning_anchors(game: Node2D, camera: Vector2) -> void :
@@ -3737,11 +3579,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 					game.draw_circle(grain_pos + dir * 1.5, maxf(1.5, size * 0.45), Color(0.66, 0.35, 1.0, 0.54 * dust_alpha))
 				game.draw_arc(pos, 20.0 + sin(age * 16.0) * 3.0, phase + age * 5.0, phase + age * 5.0 + PI * 1.25, 24, Color(0.78, 0.58, 1.0, 0.62 * dust_alpha), 2.0)
 			"gravitante":
-				game.draw_circle(pos, 10.0, palette["glow"])
-				game.draw_circle(pos, 4.5, palette["core"])
-				var orb_ang = age * 9.0 + phase
-				game.draw_arc(pos, 14.0, orb_ang, orb_ang + PI * 1.35, 24, Color(0.82, 0.88, 1.0, 0.82), 2)
-				game.draw_circle(pos + Vector2.from_angle(orb_ang) * 12.0, 2.8, Color(0.86, 0.92, 1.0, 0.9))
+				Gravity.projectile(game, pos, dir, age)
 			"bombastica":
 				var fuse_tip: Vector2 = pos - dir * 15.0 + side * sin(age * 18.0 + phase) * 5.0
 				var head: Vector2 = pos + dir * 9.0
@@ -3998,20 +3836,6 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 			var c = Color(0.45 + t * 0.28, 0.42, 0.5 + t * 0.5)
 			game.draw_circle(bullet["pos"] - camera, 9, c)
 			game.draw_circle(bullet["pos"] - camera, 16, Color(0.54, 0.16, 0.9, 0.22))
-	for orbital in game.orbitals:
-		var anchor = Vector2(orbital.get("origin_pos", game.player_pos))
-		if String(orbital.get("target_kind", "enemy")) == "enemy":
-			var enemy = game._enemy_by_uid(int(orbital["enemy_uid"]))
-			if enemy:
-				anchor = Vector2(enemy["pos"])
-		elif game.boss_active and game.boss_hp > 0.0:
-			anchor = game.boss_pos
-		var orbit_radius = 62.0 if String(orbital.get("target_kind", "enemy")) == "boss" else 42.0
-		var p = anchor + Vector2.from_angle(float(orbital["angle"])) * orbit_radius
-		if not game._world_point_in_view(p, camera, 120.0):
-			continue
-		game.draw_circle(p - camera, 8, Color(0.55, 0.82, 1.0))
-		game.draw_arc(anchor - camera, orbit_radius, float(orbital["angle"]) - 0.7, float(orbital["angle"]) + 0.35, 18, Color(0.46, 0.78, 1.0, 0.42), 1.6)
 
 
 static func _draw_miasma_eye_mask(game: Node2D, viewport: Vector2, openness: float) -> void :

@@ -14,7 +14,8 @@ const DEDICATED_SERVER_NET_FPS: = 120
 const INTERPOLATION_SHARPNESS: = 30.0
 const EXTRAPOLATION_LIMIT: = 0.06
 const SNAP_DISTANCE: = 360.0
-const ENEMY_STRIDE: = 34
+const ENEMY_STRIDE: = 53
+const LEGACY_ENEMY_STRIDE: = 34
 const UID_CHUNK_MASK: = 65535
 const BULLET_STRIDE: = 11
 const OWNER_CONNECT_TIMEOUT_MS: = 30000
@@ -175,6 +176,26 @@ static func pack_enemies(enemies: Array, enemy_types: Array, default_enemy_type:
 		packed[offset + 31] = leech_to.y
 		packed[offset + 32] = float(enemy.get("leech_target_peer", 0))
 		packed[offset + 33] = 1.0 if bool(enemy.get("boss6_summoned", false)) else 0.0
+		packed[offset + 34] = float(enemy.get("stolen", 0))
+		packed[offset + 35] = float(enemy.get("portal", 0.0))
+		packed[offset + 36] = float(enemy.get("portal_pause", 0.0))
+		packed[offset + 37] = float(enemy.get("steal_cd", 0.0))
+		packed[offset + 38] = float(enemy.get("throw_cd", 0.0))
+		packed[offset + 39] = float(enemy.get("happy_timer", 0.0))
+		packed[offset + 40] = float(enemy.get("coin_drop_cd", 0.0))
+		packed[offset + 41] = 1.0 if bool(enemy.get("alerted", false)) else 0.0
+		packed[offset + 42] = 1.0 if bool(enemy.get("direct_steal", false)) else 0.0
+		packed[offset + 43] = float(enemy.get("spawned_at", 0.0))
+		packed[offset + 44] = float(enemy.get("larapio_corner_time", 0.0))
+		packed[offset + 45] = float(enemy.get("larapio_escape_timer", 0.0))
+		packed[offset + 46] = float(enemy.get("larapio_patrol_timer", 0.0))
+		var larapio_target: = Vector2(enemy.get("larapio_patrol_target", pos))
+		packed[offset + 47] = larapio_target.x
+		packed[offset + 48] = larapio_target.y
+		packed[offset + 49] = float(enemy.get("larapio_ult_timer", 0.0))
+		packed[offset + 50] = float(enemy.get("larapio_ult_cd", 0.0))
+		packed[offset + 51] = float(enemy.get("larapio_ult_jump_cd", 0.0))
+		packed[offset + 52] = float(enemy.get("target_peer_id", 0))
 		offset += ENEMY_STRIDE
 	return packed
 
@@ -183,7 +204,10 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 	var next_enemies: Array = []
 	if snapshot_data is PackedFloat32Array:
 		var packed: PackedFloat32Array = snapshot_data
-		for offset in range(0, packed.size() - ENEMY_STRIDE + 1, ENEMY_STRIDE):
+		var stride: int = ENEMY_STRIDE
+		if packed.size() % ENEMY_STRIDE != 0 and packed.size() % LEGACY_ENEMY_STRIDE == 0:
+			stride = LEGACY_ENEMY_STRIDE
+		for offset in range(0, packed.size() - stride + 1, stride):
 			var uid: = int(packed[offset]) | (int(packed[offset + 1]) << 16)
 			var incoming_pos: = Vector2(packed[offset + 3], packed[offset + 4])
 			var enemy: Dictionary = existing_by_uid.get(uid, {})
@@ -219,6 +243,25 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 				enemy["leech_leap_to"] = Vector2(packed[offset + 30], packed[offset + 31])
 				enemy["leech_target_peer"] = int(packed[offset + 32])
 				enemy["boss6_summoned"] = packed[offset + 33] > 0.5
+			if stride >= ENEMY_STRIDE and offset + 52 < packed.size():
+				enemy["stolen"] = int(packed[offset + 34])
+				enemy["portal"] = packed[offset + 35]
+				enemy["portal_pause"] = packed[offset + 36]
+				enemy["steal_cd"] = packed[offset + 37]
+				enemy["throw_cd"] = packed[offset + 38]
+				enemy["happy_timer"] = packed[offset + 39]
+				enemy["coin_drop_cd"] = packed[offset + 40]
+				enemy["alerted"] = packed[offset + 41] > 0.5
+				enemy["direct_steal"] = packed[offset + 42] > 0.5
+				enemy["spawned_at"] = packed[offset + 43]
+				enemy["larapio_corner_time"] = packed[offset + 44]
+				enemy["larapio_escape_timer"] = packed[offset + 45]
+				enemy["larapio_patrol_timer"] = packed[offset + 46]
+				enemy["larapio_patrol_target"] = Vector2(packed[offset + 47], packed[offset + 48])
+				enemy["larapio_ult_timer"] = packed[offset + 49]
+				enemy["larapio_ult_cd"] = packed[offset + 50]
+				enemy["larapio_ult_jump_cd"] = packed[offset + 51]
+				enemy["target_peer_id"] = int(packed[offset + 52])
 			next_enemies.append(enemy)
 		return next_enemies
 	if snapshot_data is Array:

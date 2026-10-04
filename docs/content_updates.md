@@ -9,19 +9,19 @@ Do not replace this with APK/EXE binary diffs.
 The authoritative baseline contract is:
 
 - file: `assets/updates/content_base.json`
-- base version: `2.0.41`
-- base version code: `24100`
+- base version: `2.0.43`
+- base version code: `24300`
 
 The previous shipped `2.0.40` binaries cannot be used as a safe content-update
 baseline in this checkout because the exact immutable Android and Windows base
 PCK files for that release are not available here. The next full release,
-`2.0.41`, is therefore the clean incremental-update boundary.
+`2.0.43`, is therefore the clean incremental-update boundary.
 
 When preparing that full release, export and preserve the immutable base PCKs:
 
 ```powershell
-& $GodotBin --headless --path . --export-pack "Android" "builds/2.0.41/base/android.pck"
-& $GodotBin --headless --path . --export-pack "Windows Desktop" "builds/2.0.41/base/windows.pck"
+& $GodotBin --headless --path . --export-pack "Android" "builds/2.0.43/base/android.pck"
+& $GodotBin --headless --path . --export-pack "Windows Desktop" "builds/2.0.43/base/windows.pck"
 ```
 
 Those base PCKs must match the released APK/EXE. Do not regenerate them later
@@ -38,8 +38,8 @@ Android:
 powershell -ExecutionPolicy Bypass -File .\tools\build_content_patch.ps1 `
   -GodotBin $GodotBin `
   -Preset "Android" `
-  -BasePack "builds/2.0.41/base/android.pck" `
-  -OutputPack "builds/content/ruptura_content_2.0.41_c001_android.pck" `
+  -BasePack "builds/2.0.43/base/android.pck" `
+  -OutputPack "builds/content/ruptura_content_2.0.43_c001_android.pck" `
   -PrivateKey $PrivateKey
 ```
 
@@ -49,8 +49,8 @@ Windows:
 powershell -ExecutionPolicy Bypass -File .\tools\build_content_patch.ps1 `
   -GodotBin $GodotBin `
   -Preset "Windows Desktop" `
-  -BasePack "builds/2.0.41/base/windows.pck" `
-  -OutputPack "builds/content/ruptura_content_2.0.41_c001_windows.pck" `
+  -BasePack "builds/2.0.43/base/windows.pck" `
+  -OutputPack "builds/content/ruptura_content_2.0.43_c001_windows.pck" `
   -PrivateKey $PrivateKey
 ```
 
@@ -69,9 +69,9 @@ Android only:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\publish_content_update.ps1 `
   -GodotBin $GodotBin `
-  -ContentVersion "2.0.41-content.1" `
+  -ContentVersion "2.0.43-content.1" `
   -ContentVersionCode 1 `
-  -PackPaths "builds/content/ruptura_content_2.0.41_c001_android.pck" `
+  -PackPaths "builds/content/ruptura_content_2.0.43_c001_android.pck" `
   -Credential $Credential
 ```
 
@@ -80,9 +80,9 @@ Both platforms:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\publish_content_update.ps1 `
   -GodotBin $GodotBin `
-  -ContentVersion "2.0.41-content.1" `
+  -ContentVersion "2.0.43-content.1" `
   -ContentVersionCode 1 `
-  -PackPaths "builds/content/ruptura_content_2.0.41_c001_android.pck","builds/content/ruptura_content_2.0.41_c001_windows.pck" `
+  -PackPaths "builds/content/ruptura_content_2.0.43_c001_android.pck","builds/content/ruptura_content_2.0.43_c001_windows.pck" `
   -Credential $Credential
 ```
 

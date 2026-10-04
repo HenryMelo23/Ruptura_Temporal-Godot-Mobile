@@ -39,6 +39,9 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(_globalize_output_dir(output_dir))
 	var clip_count := 0
 	await process_frame
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	root.size = FRAME_SIZE
+	root.content_scale_size = FRAME_SIZE
 	game.startup_thanks_done = true
 	game.startup_thanks_fading = false
 	game.startup_thanks_timer = 0.0
@@ -51,7 +54,10 @@ func _run() -> void:
 			clip_count += 1
 	_check(clip_count > 0, "no manifestation matched preview capture filter: " + only_key)
 	print("MANIFEST_PREVIEW_CAPTURE_SMOKE_OK clips=%d frames=%d frame_size=%dx%d webp=true key=%s" % [clip_count, FRAME_COUNT, FRAME_SIZE.x, FRAME_SIZE.y, only_key if only_key != "" else "all"])
-	game.queue_free()
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	game.free()
 	await process_frame
 	quit(0)
 
@@ -63,6 +69,9 @@ func _capture_clip(index: int, key: String, kind: String) -> void:
 	for frame in range(FRAME_COUNT):
 		_drive_clip_frame(key, kind, frame)
 		await process_frame
+		if key == "gravitante":
+			await process_frame
+			await RenderingServer.frame_post_draw
 		var viewport_texture := root.get_texture()
 		_check(viewport_texture != null, "viewport texture is null; run without --headless so Godot can render preview frames")
 		var image: Image = viewport_texture.get_image()
@@ -94,6 +103,14 @@ func _setup_clip(index: int, key: String, kind: String) -> void:
 	game.selected_manifestation = index
 	game.selected_aura = 0
 	game._start_game()
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
+	game.set_process(key != "gravitante")
+	game.set_physics_process(key != "gravitante")
+	if key == "gravitante":
+		game.gfx_low_resource = false
+		game.gfx_memory_saver = false
+		game.mobile_adaptive_visual_budget = false
 	game.startup_thanks_done = true
 	game.startup_thanks_fading = false
 	game.startup_thanks_timer = 0.0
@@ -125,6 +142,7 @@ func _setup_clip(index: int, key: String, kind: String) -> void:
 	game.return_bullets.clear()
 	game.enemy_bullets.clear()
 	game.effects.clear()
+	game.gravitante_vfx_events.clear()
 	game.shockwaves.clear()
 	game.slashes.clear()
 	game.prisms.clear()
@@ -190,6 +208,7 @@ func _prepare_skill_clip(key: String) -> void:
 		for enemy in game.enemies:
 			game.orbitals.append({
 				"enemy_uid": int(enemy["uid"]),
+				"origin_pos": Vector2(enemy["pos"]),
 				"target_kind": "enemy",
 				"life": 4.0,
 				"max": 4.0,
@@ -238,6 +257,8 @@ func _prepare_ultimate_clip(key: String) -> void:
 				game._apply_contract_clause(enemy)
 			enemy["contract_infractions"] = 3
 	game._use_secondary_skill(game.player_pos + Vector2(165, 0))
+	if key == "gravitante":
+		_check(not game.manifestation_secondaries.is_empty(), "Gravitante ultimate did not activate")
 
 
 func _drive_clip_frame(key: String, kind: String, frame: int) -> void:
@@ -251,3 +272,11 @@ func _drive_clip_frame(key: String, kind: String, frame: int) -> void:
 		game.manifestation_secondaries.clear()
 		game.last_secondary_time = -999.0
 		game._use_secondary_skill(game.player_pos + Vector2(165, 0))
+	if key == "gravitante":
+		# Fixed simulation steps: PNG/WebP encoding time must not determine the clip.
+		game.time_alive = 35.0 + (frame + 1) * DT
+		game._update_bullets(DT)
+		game._update_orbitals(DT)
+		game._update_manifestation_secondaries(DT)
+		game._update_effects(DT)
+		game.queue_redraw()

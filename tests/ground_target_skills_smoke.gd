@@ -18,6 +18,9 @@ func _initialize() -> void:
 func _run() -> void:
 	var viewport = Vector2(1280, 720)
 	game._start_game()
+	# This test exercises combat gestures after the spawn/landing input lock.
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game._update_button_layout(viewport)
 	game.time_alive = 100.0
 
@@ -112,4 +115,10 @@ func _run() -> void:
 	_check(Vector2(game.manifestation_secondaries.back()["center"]).distance_to(game.player_pos) < 0.1, "anchored ultimate should be centered on the player")
 
 	print("GROUND_TARGET_SKILLS_SMOKE_OK parasitic_q=true prismatic_q=true tp_aim=true gravitante_e=true ancorada_e=true cancel=true")
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	game.free()
+	for i in range(4):
+		await process_frame
 	quit(0)

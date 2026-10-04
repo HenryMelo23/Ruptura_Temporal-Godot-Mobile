@@ -8,6 +8,9 @@ Quando o pedido for algo como "liberar atualização na VPS, criar APK e EXE da 
 
 ### Estabilidade e manutenção
 
+- Unificamos a base de desenvolvimento com a versão de segurança para preservar mapas, efeitos da Gravitante, evoluções e melhorias já existentes no jogo.
+- Corrigimos a leitura do cache local de progresso após reiniciar, mantendo compatibilidade com o cache anterior e a sincronização com o servidor.
+- Garantimos que os rerolls pagos, os bônus de atributos de Queimar e as escolhas de evolução sejam preservados ao retomar uma run ou usar retry.
 - Reorganizamos partes internas importantes do runtime para deixar o jogo mais estável e mais fácil de evoluir.
 - O sistema de save/configuração foi separado do núcleo principal, preservando compatibilidade com saves existentes.
 - A lógica de transição/progressão de fases foi isolada em um controlador dedicado, reduzindo risco de conflitos e regressões no arquivo principal.

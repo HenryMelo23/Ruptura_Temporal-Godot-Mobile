@@ -47,6 +47,7 @@ func _run() -> void:
 	game.arauto.clear()
 	game.arauto_evolution_fragment.clear()
 	game.manifest_evolution_fragment_claimed_this_run = false
+	game.manifest_evolution_fragment_claim_count = 0
 	game.manifest_evolution_fragment_claim_source = ""
 	game._spawn_arauto_evolution_fragment(Vector2(420, 360), game.ARAUTO_VARIANT_AGUILHAO)
 	_check(not game.arauto_evolution_fragment.is_empty(), "Aguilhao should drop jewel when no jewel was collected")
@@ -56,7 +57,11 @@ func _run() -> void:
 	game._mark_manifest_evolution_fragment_collected(game.ARAUTO_VARIANT_AGUILHAO)
 	game.arauto_evolution_fragment.clear()
 	game._spawn_arauto_evolution_fragment(Vector2(460, 360), game.ARAUTO_VARIANT_CONDUTOR)
-	_check(game.arauto_evolution_fragment.is_empty(), "Arauto should not drop jewel after Aguilhao jewel was collected")
+	_check(not game.arauto_evolution_fragment.is_empty(), "Arauto should provide the second evolution jewel")
+	game._mark_manifest_evolution_fragment_collected(game.ARAUTO_VARIANT_CONDUTOR)
+	game.arauto_evolution_fragment.clear()
+	game._spawn_arauto_evolution_fragment(Vector2(480, 360), game.ARAUTO_VARIANT_CONDUTOR)
+	_check(game.arauto_evolution_fragment.is_empty(), "Arauto should stop dropping jewels after both evolution choices")
 
 	game.mode = "game"
 	game.pending_phase = 0

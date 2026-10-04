@@ -11,6 +11,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	game._start_game()
+	var previous_cap: int = game._enemy_limit()
 	game._advance_to_phase(5)
 	assert(game.current_phase == 5)
 	assert(game._current_map_texture() != null)
@@ -18,7 +19,7 @@ func _run() -> void:
 	assert(game.textures.get("boss5_shield", []).size() >= 2)
 	assert(game.textures.get("boss5_damage", []).size() >= 5)
 	assert(game.boss_name == "UMBRA")
-	assert(game._enemy_limit() == 5)
+	assert(game._enemy_limit() == maxi(1, int(floor(previous_cap * 0.70))))
 	assert(game.enemies.size() == 2)
 
 	game.boss_active = true

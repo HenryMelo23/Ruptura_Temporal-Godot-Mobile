@@ -1,12 +1,13 @@
 extends SceneTree
 
 var game: Node
+var failed := false
 
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		push_error(message)
-		quit(1)
+		failed = true
 
 
 func _initialize() -> void:
@@ -16,8 +17,10 @@ func _initialize() -> void:
 
 
 func _finish_ok(message: String) -> void:
-	print(message)
+	if not failed:
+		print(message)
 	if is_instance_valid(game):
+		game.set_process(false)
 		game._cleanup_runtime_resources()
 		game.textures.clear()
 		game.audio_streams.clear()
@@ -26,7 +29,7 @@ func _finish_ok(message: String) -> void:
 		game = null
 	for i in range(4):
 		await process_frame
-	quit(0)
+	quit(1 if failed else 0)
 
 
 func _advance_manifest(seconds: float) -> void:
@@ -38,6 +41,10 @@ func _advance_manifest(seconds: float) -> void:
 
 
 func _run() -> void:
+	game._finish_startup_thanks()
+	# This flow exercises an account which has unlocked the chosen loadout.
+	game.unlocked_manifestation_ids[String(game.MANIFESTATIONS[2]["key"])] = true
+	game.unlocked_spectrum_ids[String(game.AURAS[3]["key"])] = true
 	game.is_multiplayer = true
 	game.is_host = true
 	game._start_multiplayer_manifest()

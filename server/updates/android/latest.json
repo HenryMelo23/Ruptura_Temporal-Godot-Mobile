@@ -1,14 +1,14 @@
 {
-  "version": "2.0.40",
-  "version_code": 24000,
-  "filename": "ruptura_temporal_mobile_2.0.40.apk",
-  "sha256": "e2c81c52b16a72f1594461dd357e056599499653803c807a1c519588f1a68953",
-  "size": 1296124537,
+  "version": "2.0.43",
+  "version_code": 24300,
+  "filename": "ruptura_temporal_mobile_2.0.43.apk",
+  "sha256": "4224dada42f3e44a98c10478c062a2984415fffad6b1f347ee483c451d48e140",
+  "size": 1303363235,
   "notes": [
-    "Corrige a identificacao da versao do jogo e do atualizador.",
-    "Corrige a ordem da tela de nome apos a cutscene inicial.",
-    "Reduz uso de memoria durante a cutscene inicial."
+    "IMPORTANTE: nova assinatura Android. A versao antiga precisa ser desinstalada antes de instalar esta; dados locais podem ser apagados. Preserve sua identidade recuperavel antes de desinstalar.",
+    "Versao 2.0.43 com mapas integrados, melhorias de efeitos e correcoes de gameplay.",
+    "Correcoes de multiplayer, Larapio, contrato DQN, conquistas, escala de bosses e densidade entre fases."
   ],
   "mandatory": false,
-  "published_at": "2026-09-24T19:36:44.9242841Z"
+  "published_at": "2026-10-02T22:46:25.9158606Z"
 }

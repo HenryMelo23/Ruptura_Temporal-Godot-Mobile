@@ -53,6 +53,10 @@ try {
     $roomCode = [string]$room.code
     $relayHost = [string]$room.host
     $relayPort = [int]$room.port
+    Invoke-RestMethod -Method Post -Uri "$ManagerUrl/rooms/$roomCode/heartbeat" `
+        -ContentType 'application/json' `
+        -Body '{"role":"owner","mode":"lobby_online_host","peer_id":1}' `
+        -TimeoutSec 10 | Out-Null
     Invoke-RestMethod -Method Post -Uri "$ManagerUrl/rooms/$roomCode/join" `
         -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
 
@@ -71,9 +75,17 @@ try {
             "--port=$relayPort",
             "--ping-budget=$PingBudgetMs"
         )
-        $processes += Start-Process -FilePath $GodotBin -ArgumentList $arguments `
-            -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-            -WindowStyle Hidden -PassThru
+        $startArgs = @{
+            FilePath = $GodotBin
+            ArgumentList = $arguments
+            RedirectStandardOutput = $stdout
+            RedirectStandardError = $stderr
+            PassThru = $true
+        }
+        if ($IsWindows) {
+            $startArgs.WindowStyle = 'Hidden'
+        }
+        $processes += Start-Process @startArgs
         Start-Sleep -Milliseconds 650
     }
 

@@ -1,0 +1,183 @@
+{
+  "description": "Architecture budget baseline for runtime refactor work. Counts are streamed and exclude blank/comment-only lines from code_loc.",
+  "files": {
+    "scripts/main_runtime_core.gd": {
+      "classes": 0,
+      "code_loc": 39807,
+      "functions": 3185,
+      "largest_function": "_handle_key",
+      "max_function_code_loc": 456,
+      "physical_loc": 46378,
+      "signals": 0
+    },
+    "scripts/main_runtime_state.gd": {
+      "classes": 0,
+      "code_loc": 3488,
+      "functions": 1,
+      "largest_function": "_safe_load",
+      "max_function_code_loc": 5,
+      "physical_loc": 3524,
+      "signals": 0
+    },
+    "scripts/presentation/boss_wave_presentation.gd": {
+      "classes": 0,
+      "code_loc": 97,
+      "functions": 4,
+      "largest_function": "_draw_boss_wave_crest_and_foam",
+      "max_function_code_loc": 49,
+      "physical_loc": 127,
+      "signals": 0
+    },
+    "scripts/presentation/combat_effects_presentation.gd": {
+      "classes": 0,
+      "code_loc": 3719,
+      "functions": 99,
+      "largest_function": "_draw_projectiles",
+      "max_function_code_loc": 327,
+      "physical_loc": 4063,
+      "signals": 0
+    },
+    "scripts/presentation/menus_presentation.gd": {
+      "classes": 0,
+      "code_loc": 2729,
+      "functions": 102,
+      "largest_function": "_draw_manifest_select",
+      "max_function_code_loc": 176,
+      "physical_loc": 3073,
+      "signals": 0
+    },
+    "scripts/presentation/world_environment_presentation.gd": {
+      "classes": 0,
+      "code_loc": 2384,
+      "functions": 56,
+      "largest_function": "_draw_boss_attacks",
+      "max_function_code_loc": 375,
+      "physical_loc": 2543,
+      "signals": 0
+    },
+    "scripts/systems/audio/audio_lifecycle.gd": {
+      "classes": 1,
+      "code_loc": 292,
+      "functions": 32,
+      "largest_function": "on_music_finished",
+      "max_function_code_loc": 20,
+      "physical_loc": 357,
+      "signals": 0
+    },
+    "scripts/systems/enemy_manager.gd": {
+      "classes": 1,
+      "code_loc": 246,
+      "functions": 13,
+      "largest_function": "update_enemies",
+      "max_function_code_loc": 115,
+      "physical_loc": 277,
+      "signals": 0
+    },
+    "scripts/systems/modern_boss_controller.gd": {
+      "classes": 1,
+      "code_loc": 453,
+      "functions": 30,
+      "largest_function": "update_boss7_state",
+      "max_function_code_loc": 70,
+      "physical_loc": 520,
+      "signals": 0
+    },
+    "scripts/systems/online/net_contract.gd": {
+      "classes": 1,
+      "code_loc": 342,
+      "functions": 11,
+      "largest_function": "unpack_enemy_snapshot",
+      "max_function_code_loc": 77,
+      "physical_loc": 365,
+      "signals": 0
+    },
+    "scripts/systems/phase/phase_flow_controller.gd": {
+      "classes": 0,
+      "code_loc": 555,
+      "functions": 34,
+      "largest_function": "_advance_to_phase",
+      "max_function_code_loc": 191,
+      "physical_loc": 624,
+      "signals": 0
+    },
+    "scripts/systems/progression/runtime_progression_controller.gd": {
+      "classes": 0,
+      "code_loc": 181,
+      "functions": 33,
+      "largest_function": "elite_point_multiplier",
+      "max_function_code_loc": 19,
+      "physical_loc": 249,
+      "signals": 0
+    },
+    "scripts/systems/save/runtime_save_controller.gd": {
+      "classes": 0,
+      "code_loc": 605,
+      "functions": 33,
+      "largest_function": "_load_config",
+      "max_function_code_loc": 117,
+      "physical_loc": 654,
+      "signals": 0
+    },
+    "scripts/systems/telemetry/telemetry_system.gd": {
+      "classes": 1,
+      "code_loc": 488,
+      "functions": 22,
+      "largest_function": "build_minimal_session_payload",
+      "max_function_code_loc": 127,
+      "physical_loc": 534,
+      "signals": 0
+    },
+    "scripts/ui/shop_controller.gd": {
+      "classes": 1,
+      "code_loc": 586,
+      "functions": 51,
+      "largest_function": "handle_touch",
+      "max_function_code_loc": 82,
+      "physical_loc": 701,
+      "signals": 2
+    },
+    "scripts/ui/shop_presentation.gd": {
+      "classes": 0,
+      "code_loc": 814,
+      "functions": 28,
+      "largest_function": "draw_legacy",
+      "max_function_code_loc": 326,
+      "physical_loc": 938,
+      "signals": 0
+    }
+  },
+  "ratchet_allowance": {
+    "classes": 0,
+    "code_loc": 15,
+    "functions": 1,
+    "max_function_code_loc": 8,
+    "physical_loc": 25,
+    "signals": 0
+  },
+  "schema": 1,
+  "targets": [
+    "scripts/main_runtime_core.gd",
+    "scripts/main_runtime_state.gd",
+    "scripts/ui/shop_controller.gd",
+    "scripts/ui/shop_presentation.gd",
+    "scripts/systems/telemetry/telemetry_system.gd",
+    "scripts/systems/online/net_contract.gd",
+    "scripts/systems/audio/audio_lifecycle.gd",
+    "scripts/systems/enemy_manager.gd",
+    "scripts/systems/modern_boss_controller.gd",
+    "scripts/presentation/combat_effects_presentation.gd",
+    "scripts/presentation/menus_presentation.gd",
+    "scripts/presentation/world_environment_presentation.gd",
+    "scripts/systems/save/runtime_save_controller.gd",
+    "scripts/systems/phase/phase_flow_controller.gd",
+    "scripts/systems/progression/runtime_progression_controller.gd",
+    "scripts/presentation/boss_wave_presentation.gd"
+  ],
+  "totals": {
+    "classes": 6,
+    "code_loc": 56786,
+    "functions": 3734,
+    "physical_loc": 64927,
+    "signals": 2
+  }
+}

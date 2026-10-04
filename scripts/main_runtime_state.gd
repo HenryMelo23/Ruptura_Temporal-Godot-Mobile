@@ -9,6 +9,7 @@ func _safe_load(path: String) -> Texture2D:
 	return resource if resource is Texture2D else null
 
 const CombatVfxRuntime = preload("res://scripts/vfx/combat_vfx_runtime.gd")
+const GravitanteVfx = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
 const BombasticaSceneVfx = preload("res://scripts/vfx/bombastica_scene_vfx.gd")
 const ChainVisualPhysics = preload("res://scripts/vfx/chain_visual_physics.gd")
 const EntityVisualProfiles = preload("res://scripts/vfx/entity_visual_profiles.gd")
@@ -16,6 +17,8 @@ const MenusPresentation = preload("res://scripts/presentation/menus_presentation
 const HudPresentation = preload("res://scripts/presentation/hud_presentation.gd")
 const CombatEffectsPresentation = preload("res://scripts/presentation/combat_effects_presentation.gd")
 const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
+const PhaseMapPresentation = preload("res://scripts/presentation/phase_map_presentation.gd")
+var phase_map_layer: Node2D
 const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
 const SettingsController = preload("res://scripts/ui/settings_controller.gd")
 
@@ -38,10 +41,15 @@ const RuntimeProgressionControllerScript = preload("res://scripts/systems/progre
 const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
+const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
+const RTPlayerProgressSync = preload("res://scripts/systems/player_progress_sync.gd")
+const RTManifestEvolutionCatalog = preload("res://scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd")
+const UmbraDqnContract = preload("res://scripts/systems/umbra_dqn_contract.gd")
+const RTBossPartyScaling = preload("res://scripts/systems/boss_party_scaling.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.41"
-const GAME_VERSION_CODE: = 24100
+const GAME_VERSION: = "2.0.43"
+const GAME_VERSION_CODE: = 24300
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
@@ -203,6 +211,8 @@ const BOSS_REWARD_CARD_COUNT: = 8
 const BOSS_REWARD_RARE_COUNT: = 1
 const PLAYER_PROFILE_PATH: = "user://player_profile.save"
 const CARD_UNLOCK_SAVE_PATH: = "user://card_unlocks.save"
+const PLAYER_PROGRESS_CACHE_PATH: = "user://player_progress_cache.json"
+const PLAYER_PROGRESS_INSTALL_SECRET_PATH: = "user://player_progress_secret.save"
 const DISCORD_WEBHOOK_CONFIG_PATHS: = ["user://run_reporter.cfg", "res://discord_webhook.local.cfg"]
 const DEFAULT_DISCORD_WEBHOOK_URL: = "https://discord.com/api/webhooks/1526689695688298518/gqeI6uzw0yC6LLAVe4v1PqICJIMHos1tgq9g288HQQ31Y2CaBNd_oc0NdZG3Tf-hY7IU"
 const INTERRUPTED_RUN_SAVE_PATH: = "user://interrupted_run.save"
@@ -233,6 +243,10 @@ const INPUT_BIND_MOUSE_PREFIX: = "MOUSE:"
 const RUN_LEADERBOARD_PATH: = "/runs"
 const RUN_LEADERBOARD_START_PATH: = "/runs/start"
 const RUN_LEADERBOARD_CHECKPOINT_PATH: = "/runs/checkpoint"
+const PLAYER_IDENTITY_CREATE_PATH: = "/players/identity/create"
+const PLAYER_IDENTITY_CLAIM_PATH: = "/players/identity/claim"
+const PLAYER_UNLOCK_EVENTS_PATH: = "/players/unlocks/events"
+const PLAYER_PROGRESS_SYNC_INTERVAL: = 8.0
 const RUN_LEADERBOARD_VIEW_PATH: = "/leaderboard"
 const UMBRA_MIND_LATEST_PATH: = "/umbra/mind/latest"
 const UMBRA_MIND_STORAGE_DIR: = "user://umbra_mind"
@@ -254,31 +268,31 @@ const QA_STREAM_FPS: = 60
 const QA_STREAM_BITRATE: = 4500000
 const QA_FRAME_STREAM_MODES: = ["360p", "720p"]
 const QA_FRAME_STREAM_MODE_SIZES: = {
-	"720p": Vector2i(1280, 720), 
+	"720p": Vector2i(1280, 720),
 	"360p": Vector2i(640, 360)
 }
 const QA_NATIVE_STREAM_MODE_FPS: = {
-	"720p": 30.0, 
+	"720p": 30.0,
 	"360p": 60.0
 }
 const QA_NATIVE_STREAM_MODE_BITRATE: = {
-	"720p": 3200000, 
+	"720p": 3200000,
 	"360p": 1600000
 }
 const QA_FRAME_STREAM_MODE_FPS: = {
-	"720p": 60.0, 
+	"720p": 60.0,
 	"360p": 60.0
 }
 const QA_FRAME_STREAM_MODE_QUALITY: = {
-	"720p": 0.66, 
+	"720p": 0.66,
 	"360p": 0.58
 }
 const QA_FRAME_STREAM_MODE_BITRATE: = {
-	"720p": 8000000, 
+	"720p": 8000000,
 	"360p": 3600000
 }
 const QA_FRAME_STREAM_MODE_MAX_IN_FLIGHT: = {
-	"720p": 8, 
+	"720p": 8,
 	"360p": 8
 }
 const QA_FRAME_STREAM_REQUEST_POOL: = 10
@@ -415,6 +429,10 @@ const SHOP_RETURN_TIME: = 3.0
 const SHOP_RETURN_VISUAL_TIME: = 0.72
 const SHOP_PURCHASE_ANIM_TIME: = 0.62
 const SHOP_MANUAL_REOPEN_CONFIRM_MS: int = 520
+const SHOP_FREE_REROLLS_PER_VISIT: int = 3
+const SHOP_PAID_REROLL_FIRST_COST_RATIO: float = 0.2
+const SHOP_PAID_REROLL_MULTIPLIER: float = 1.6
+const SHOP_PAID_REROLL_CAP_CARD_COST_MULT: float = 3.0
 const SHOP_FAIRNESS_V2: = true
 const SHOP_VERSION_V1: = "legacy_v1"
 const SHOP_VERSION_V2: = "fairness_v2"
@@ -686,25 +704,25 @@ const BOSS2_STATE_CRYSTAL_SHIELD: = "boss2_crystal_shield"
 const BOSS2_STATE_DOUBLE_BLIZZARD: = "boss2_double_blizzard"
 const BOSS2_STATE_FLASH_FREEZE: = "boss2_flash_freeze"
 const NET_BOSS2_STATES: = [
-	BOSS2_STATE_IDLE, 
-	BOSS2_STATE_REPOSITION, 
-	BOSS2_STATE_FREEZING_BREATH, 
-	BOSS2_STATE_SPIN_SPIT_UP, 
-	BOSS2_STATE_GLACIAL_STOMP, 
-	BOSS2_STATE_ICE_PRISON, 
-	BOSS2_STATE_CRYSTAL_SHIELD, 
-	BOSS2_STATE_DOUBLE_BLIZZARD, 
+	BOSS2_STATE_IDLE,
+	BOSS2_STATE_REPOSITION,
+	BOSS2_STATE_FREEZING_BREATH,
+	BOSS2_STATE_SPIN_SPIT_UP,
+	BOSS2_STATE_GLACIAL_STOMP,
+	BOSS2_STATE_ICE_PRISON,
+	BOSS2_STATE_CRYSTAL_SHIELD,
+	BOSS2_STATE_DOUBLE_BLIZZARD,
 	BOSS2_STATE_FLASH_FREEZE
 ]
 const NET_BOSS2_ATTACKS: = [
-	"", 
-	"freezing_breath", 
-	"spin_spit_up", 
-	"glacial_stomp", 
-	"ice_prison", 
-	"crystal_shield", 
-	"double_blizzard", 
-	"flash_freeze", 
+	"",
+	"freezing_breath",
+	"spin_spit_up",
+	"glacial_stomp",
+	"ice_prison",
+	"crystal_shield",
+	"double_blizzard",
+	"flash_freeze",
 	"reposition"
 ]
 const BOSS2_WALK_SPEED: = 112.0
@@ -1229,9 +1247,16 @@ const BOSS5_RAT_DURATION: = 8.0
 const BOSS5_RAT_SPEED: = 212.0
 const BOSS5_RAT_DAMAGE: = 24
 const BOSS5_MEMORY_RESOURCE: = "res://assets/data/memoria_predatoria_umbra.json"
-const BOSS5_DQN_WEIGHTS_PATH: = "res://assets/weights/umbra_dqn_weights.json"
+# The unversioned export is a preserved legacy 22-output artifact, not a v2 model.
+const BOSS5_DQN_WEIGHTS_PATH: = "res://assets/weights/umbra_dqn_2_0_actions_23.json"
 const BOSS5_MEMORY_USER: = "user://memoria_predatoria_umbra_mobile.json"
 const BOSS5_ACTIONS: = ["FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE", "TELEPORTE_JUKE", "TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO", "VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "PRAGA_RATOS", "LASER_SOBRECARGA", "CAMINHO_ESPINHOS", "NENHUMA"]
+const BOSS5_DQN_MODEL_VERSION: = "umbra_dqn_2_0_actions_23"
+const BOSS5_DQN_ACTION_SCHEMA_VERSION: int = 2
+const BOSS5_DQN_FEATURE_SCHEMA_VERSION: int = 1
+const BOSS5_DQN_HIDDEN1_SIZE: int = 128
+const BOSS5_DQN_HIDDEN2_SIZE: int = 64
+const BOSS5_DQN_FEATURES: = ["boss_hp_ratio", "distance_to_player", "under_fire", "player_velocity_x", "player_velocity_y", "boss_player_dx", "boss_player_dy", "hazard_vortex", "hazard_prison", "hazard_thorns", "hazard_overload_laser", "hazard_discharge", "hazard_miasma", "rats_active", "siphon_active", "dimension_map", "threat_x", "threat_y", "player_edge_x", "player_edge_y", "boss_edge_x", "boss_edge_y", "player_corner_pressure", "player_center_distance"]
 const APOLO_PHASE5_ARCH_PATH: = "res://assets/data/apolo_arq.json"
 const APOLO_PHASE5_CARD_MEMORY_PATH: = "res://assets/data/memoria_cartas_apolo.json"
 const APOLO_PHASE5_MANIFEST_PROFILES: = {
@@ -1423,235 +1448,235 @@ const NECRONADA_TP_DUST_PUSH: = 115.0
 
 const MANIFESTATIONS: = [
 	{
-		"key": "eletrica", 
-		"name": "Eletrica", 
-		"desc": "Simples e segura: tiro reto, explosao eletrica, Q empurra e E cria anel de dano.", 
-		"icon": "manifestacao_eletrica.png", 
-		"color": Color(0.0, 0.88, 1.0), 
+		"key": "eletrica",
+		"name": "Eletrica",
+		"desc": "Simples e segura: tiro reto, explosao eletrica, Q empurra e E cria anel de dano.",
+		"icon": "manifestacao_eletrica.png",
+		"color": Color(0.0, 0.88, 1.0),
 		"accent": Color(0.62, 0.38, 1.0)
-	}, 
+	},
 	{
-		"key": "lacerante", 
-		"name": "Lacerante", 
-		"desc": "Cacadora de risco: tres cortes laceram, presas incomuns valem +50% e execucoes reforcadas criam Coagulos que aumentam dano e cadencia.", 
-		"icon": "manifestacao_lacerante.png", 
-		"color": Color(1.0, 0.12, 0.18), 
+		"key": "lacerante",
+		"name": "Lacerante",
+		"desc": "Cacadora de risco: tres cortes laceram, presas incomuns valem +50% e execucoes reforcadas criam Coagulos que aumentam dano e cadencia.",
+		"icon": "manifestacao_lacerante.png",
+		"color": Color(1.0, 0.12, 0.18),
 		"accent": Color(1.0, 0.58, 0.64)
-	}, 
+	},
 	{
-		"key": "prismatica", 
-		"name": "Prismatica", 
-		"desc": "Mira e angulo: feixe ricocheteia, Q divide tiros em prismas e E deixa Geovana invulneravel com linhas de luz.", 
-		"icon": "manifestacao_prismatica.png", 
-		"color": Color(0.32, 1.0, 0.96), 
+		"key": "prismatica",
+		"name": "Prismatica",
+		"desc": "Mira e angulo: feixe ricocheteia, Q divide tiros em prismas e E deixa Geovana invulneravel com linhas de luz.",
+		"icon": "manifestacao_prismatica.png",
+		"color": Color(0.32, 1.0, 0.96),
 		"accent": Color(1.0, 0.42, 0.72)
-	}, 
+	},
 	{
-		"key": "retornante", 
-		"name": "Retornante", 
-		"desc": "Dano no retorno: o tiro vai fraco, volta forte, Q fortalece um pulso e E cria paradoxos de retorno.", 
-		"icon": "manifestacao_retornante.png", 
-		"color": Color(0.58, 0.38, 1.0), 
+		"key": "retornante",
+		"name": "Retornante",
+		"desc": "Dano no retorno: o tiro vai fraco, volta forte, Q fortalece um pulso e E cria paradoxos de retorno.",
+		"icon": "manifestacao_retornante.png",
+		"color": Color(0.58, 0.38, 1.0),
 		"accent": Color(1.0, 0.35, 0.68)
-	}, 
+	},
 	{
-		"key": "parasitica", 
-		"name": "Parasitica", 
-		"desc": "Larvas vivas: tiros marcam por 6s, Q cospe um viveiro contaminante e E chama vermes subterraneos que devoram os marcados.", 
-		"icon": "manifestacao_parasitica.png", 
-		"color": Color(0.38, 1.0, 0.5), 
+		"key": "parasitica",
+		"name": "Parasitica",
+		"desc": "Larvas vivas: tiros marcam por 6s, Q cospe um viveiro contaminante e E chama vermes subterraneos que devoram os marcados.",
+		"icon": "manifestacao_parasitica.png",
+		"color": Color(0.38, 1.0, 0.5),
 		"accent": Color(0.86, 1.0, 0.28)
-	}, 
+	},
 	{
-		"key": "gravitante", 
-		"name": "Gravitante", 
-		"desc": "Controle gravitacional: ATKs marcam, Q colide os marcados e E prende inimigos e chefes no nucleo.", 
-		"icon": "manifestacao_gravitante.png", 
-		"color": Color(0.46, 0.78, 1.0), 
+		"key": "gravitante",
+		"name": "Gravitante",
+		"desc": "Controle gravitacional: ATKs marcam, Q colide os marcados e E prende inimigos e chefes no nucleo.",
+		"icon": "manifestacao_gravitante.png",
+		"color": Color(0.46, 0.78, 1.0),
 		"accent": Color(0.86, 0.96, 1.0)
-	}, 
+	},
 	{
-		"key": "ancorada", 
-		"name": "Ancorada", 
-		"desc": "Defesa de territorio: tiros plantam ancoras, Q solta uma onda e E fortalece a area escolhida.", 
-		"icon": "manifestacao_ancorada.png", 
-		"color": Color(0.3, 0.88, 1.0), 
+		"key": "ancorada",
+		"name": "Ancorada",
+		"desc": "Defesa de territorio: tiros plantam ancoras, Q solta uma onda e E fortalece a area escolhida.",
+		"icon": "manifestacao_ancorada.png",
+		"color": Color(0.3, 0.88, 1.0),
 		"accent": Color(1.0, 0.78, 0.26)
-	}, 
+	},
 	{
-		"key": "cartografica", 
-		"name": "Cartografica", 
-		"desc": "Mapa de combate: ATK cria coordenadas, Q liga rotas perigosas e E rasga o mapa para tiros reposicionados.", 
-		"icon": "manifestacao_cartografica.png", 
-		"color": Color(0.15, 0.95, 0.78), 
+		"key": "cartografica",
+		"name": "Cartografica",
+		"desc": "Mapa de combate: ATK cria coordenadas, Q liga rotas perigosas e E rasga o mapa para tiros reposicionados.",
+		"icon": "manifestacao_cartografica.png",
+		"color": Color(0.15, 0.95, 0.78),
 		"accent": Color(1.0, 0.82, 0.26)
-	}, 
+	},
 	{
-		"key": "mnesica", 
-		"name": "Mnesica", 
-		"desc": "Memoria punitiva: ATK grava lembrancas, Q detona padroes e E acelera arquivos para punir grupos.", 
-		"icon": "manifestacao_mnesica.png", 
-		"color": Color(0.78, 0.52, 1.0), 
+		"key": "mnesica",
+		"name": "Mnesica",
+		"desc": "Memoria punitiva: ATK grava lembrancas, Q detona padroes e E acelera arquivos para punir grupos.",
+		"icon": "manifestacao_mnesica.png",
+		"color": Color(0.78, 0.52, 1.0),
 		"accent": Color(1.0, 0.56, 0.86)
-	}, 
+	},
 	{
-		"key": "ressonante", 
-		"name": "Ressonante", 
-		"desc": "Ritmo e timing: ATK no compasso aplica notas, Q detona acordes e E garante janelas perfeitas.", 
-		"icon": "manifestacao_ressonante.png", 
-		"color": Color(1.0, 0.74, 0.2), 
+		"key": "ressonante",
+		"name": "Ressonante",
+		"desc": "Ritmo e timing: ATK no compasso aplica notas, Q detona acordes e E garante janelas perfeitas.",
+		"icon": "manifestacao_ressonante.png",
+		"color": Color(1.0, 0.74, 0.2),
 		"accent": Color(0.38, 0.92, 1.0)
-	}, 
+	},
 	{
-		"key": "contratual", 
-		"name": "Contratual", 
-		"desc": "Regras e sentencas: ATK aplica clausulas, Q executa infracoes e E transforma a arena em audiencia.", 
-		"icon": "manifestacao_contratual.png", 
-		"color": Color(1.0, 0.54, 0.22), 
+		"key": "contratual",
+		"name": "Contratual",
+		"desc": "Regras e sentencas: ATK aplica clausulas, Q executa infracoes e E transforma a arena em audiencia.",
+		"icon": "manifestacao_contratual.png",
+		"color": Color(1.0, 0.54, 0.22),
 		"accent": Color(0.96, 0.96, 0.86)
-	}, 
+	},
 	{
-		"key": "acorrentada", 
-		"name": "Acorrentada", 
-		"desc": "Correntes e Elos: ATK marca e rompe, Q prende alvos ligados e E puxa tudo para uma sentenca.", 
-		"icon": "manifestacao_acorrentada.png", 
-		"color": Color(0.88, 0.16, 0.18), 
+		"key": "acorrentada",
+		"name": "Acorrentada",
+		"desc": "Correntes e Elos: ATK marca e rompe, Q prende alvos ligados e E puxa tudo para uma sentenca.",
+		"icon": "manifestacao_acorrentada.png",
+		"color": Color(0.88, 0.16, 0.18),
 		"accent": Color(0.16, 0.86, 1.0)
-	}, 
+	},
 	{
-		"key": "eclipsada", 
-		"name": "Eclipsada", 
-		"desc": "Duelista Sol/Lua: REFORCO troca forma, ATK arremessa shurikens curtos e Q/E mudam de estilo.", 
-		"icon": "res://assets/sprites/manifestacao-eclipsada.png", 
-		"color": Color(0.58, 0.42, 1.0), 
+		"key": "eclipsada",
+		"name": "Eclipsada",
+		"desc": "Duelista Sol/Lua: REFORCO troca forma, ATK arremessa shurikens curtos e Q/E mudam de estilo.",
+		"icon": "res://assets/sprites/manifestacao-eclipsada.png",
+		"color": Color(0.58, 0.42, 1.0),
 		"accent": Color(1.0, 0.86, 0.32)
-	}, 
+	},
 	{
-		"key": "bombastica", 
-		"name": "Bombastica", 
-		"desc": "Prepare explosivos, controle seus fuseis e provoque reacoes em cadeia devastadoras.", 
-		"icon": "res://assets/sprites/manifestacao_bombastica.png", 
-		"color": Color(1.0, 0.48, 0.12), 
+		"key": "bombastica",
+		"name": "Bombastica",
+		"desc": "Prepare explosivos, controle seus fuseis e provoque reacoes em cadeia devastadoras.",
+		"icon": "res://assets/sprites/manifestacao_bombastica.png",
+		"color": Color(1.0, 0.48, 0.12),
 		"accent": Color(0.18, 0.88, 1.0)
-	}, 
+	},
 	{
-		"key": "necronada", 
-		"name": "Necronada", 
-		"desc": "Marca epitafios, captura vestigios no Ossuario Temporal e ergue Remanescentes por tempo limitado.", 
-		"icon": "res://assets/sprites/manifestacao-necronada.png", 
-		"color": Color(0.64, 0.3, 1.0), 
+		"key": "necronada",
+		"name": "Necronada",
+		"desc": "Marca epitafios, captura vestigios no Ossuario Temporal e ergue Remanescentes por tempo limitado.",
+		"icon": "res://assets/sprites/manifestacao-necronada.png",
+		"color": Color(0.64, 0.3, 1.0),
 		"accent": Color(0.38, 1.0, 0.86)
 	}
 ]
 
 const MANIFEST_EVOLUTION_FAMILIES: = [
-	{"key": "eco", "title": "Eco", "verb": "repete", "summary": "Alguns ataques criam ecos menores do proprio disparo."}, 
-	{"key": "perfuracao", "title": "Perfuracao", "verb": "atravessa", "summary": "O disparo ganha alvos extras antes de se desfazer."}, 
-	{"key": "caca", "title": "Caca", "verb": "persegue", "summary": "O disparo corrige rota suavemente ate o alvo mais proximo."}, 
-	{"key": "elo", "title": "Elo", "verb": "vincula", "summary": "Impactos conectam alvos proximos e reduzem o ritmo deles."}, 
-	{"key": "pulso", "title": "Pulso", "verb": "repele", "summary": "Impactos carregados expulsam a horda ao redor do alvo."}, 
-	{"key": "vortice", "title": "Vortice", "verb": "puxa", "summary": "Impactos carregados juntam inimigos no ponto atingido."}, 
-	{"key": "selo", "title": "Selo", "verb": "fixa", "summary": "Acertos repetidos prendem o mesmo alvo por um instante."}, 
-	{"key": "campo", "title": "Campo", "verb": "marca", "summary": "A habilidade Q deixa uma zona persistente com identidade da manifestacao."}, 
+	{"key": "eco", "title": "Eco", "verb": "repete", "summary": "Alguns ataques criam ecos menores do proprio disparo."},
+	{"key": "perfuracao", "title": "Perfuracao", "verb": "atravessa", "summary": "O disparo ganha alvos extras antes de se desfazer."},
+	{"key": "caca", "title": "Caca", "verb": "persegue", "summary": "O disparo corrige rota suavemente ate o alvo mais proximo."},
+	{"key": "elo", "title": "Elo", "verb": "vincula", "summary": "Impactos conectam alvos proximos e reduzem o ritmo deles."},
+	{"key": "pulso", "title": "Pulso", "verb": "repele", "summary": "Impactos carregados expulsam a horda ao redor do alvo."},
+	{"key": "vortice", "title": "Vortice", "verb": "puxa", "summary": "Impactos carregados juntam inimigos no ponto atingido."},
+	{"key": "selo", "title": "Selo", "verb": "fixa", "summary": "Acertos repetidos prendem o mesmo alvo por um instante."},
+	{"key": "campo", "title": "Campo", "verb": "marca", "summary": "A habilidade Q deixa uma zona persistente com identidade da manifestacao."},
 	{"key": "passo", "title": "Passo", "verb": "rasga", "summary": "O teleporte libera pressao temporal na origem e no destino."}
 ]
 
 const MANIFEST_EVOLUTION_NAMES: = {
-	"eletrica": ["Arco Bifasico", "Fio Condutor", "Raio Teleguiado", "Rede Ionica", "Estouro Galvanico", "Polo Magnetico", "Selo de Voltagem", "Campo Tesla", "Passo Fulminante"], 
-	"lacerante": ["Cicatriz Ecoante", "Corte Vazado", "Faro de Sangue", "Costura Cruel", "Ruptura Hematica", "Vortice de Laminas", "Selo de Hemorragia", "Zona de Talho", "Passo Serrilhado"], 
-	"prismatica": ["Reflexo Menor", "Raio Lapidado", "Mira Refratada", "Elo Cromatico", "Estouro Espectral", "Foco Convergente", "Selo de Cor", "Campo de Cristal", "Passo Arco-Iris"], 
-	"retornante": ["Eco Reverso", "Ida Vazante", "Memoria de Alvo", "Laco Temporal", "Pulso de Retorno", "Vortice Retrogrado", "Selo de Volta", "Campo de Reprise", "Passo Paradoxal"], 
-	"parasitica": ["Ninhada Ecoante", "Espinho Larval", "Hospedeiro Guiado", "Rede Micelial", "Espasmo Coletivo", "Vortice de Larvas", "Selo de Infestacao", "Viveiro Persistente", "Passo de Ovos"], 
-	"gravitante": ["Satelite Menor", "Orbita Perfurante", "Atrator Balistico", "Elo Orbital", "Pulso de Massa", "Singularidade Curta", "Selo de Peso", "Campo Gravitico", "Passo de Mare"], 
-	"ancorada": ["Replica Fixa", "Prego Profundo", "Trava de Mira", "Elo de Territorio", "Onda de Contencao", "Nucleo de Amarra", "Selo de Solo", "Campo Ancorado", "Passo Estacado"], 
-	"cartografica": ["Rota Duplicada", "Linha Meridiana", "Bussola Agressiva", "Mapa Vinculado", "Marco de Repulsao", "Dobra de Coordenada", "Selo de Latitude", "Campo de Rota", "Passo Cartografado"], 
-	"mnesica": ["Lembranca Ecoada", "Agulha de Engrama", "Recordacao Predatoria", "Elo de Memoria", "Surto Mnemonico", "Arquivo Convergente", "Selo de Trauma", "Campo Mnemonico", "Passo Esquecido"], 
-	"ressonante": ["Oitava Ecoante", "Nota Perfurante", "Tom Perseguidor", "Acorde Ligado", "Pulso Percussivo", "Caixa de Ressonancia", "Selo de Compasso", "Campo Harmonico", "Passo Sincopado"], 
-	"contratual": ["Clausula Duplicada", "Artigo Perfurante", "Mandado de Busca", "Elo Jurado", "Quebra de Termo", "Audiencia Forcada", "Selo de Sentenca", "Campo de Clausula", "Passo Notificado"], 
-	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"], 
-	"eclipsada": ["Umbra Ecoante", "Raio Penumbral", "Sombra Guiada", "Elo de Eclipse", "Pulso do Crepusculo", "Vortice de Penumbra", "Selo do Ocaso", "Campo Eclipsado", "Passo Sem Luz"], 
-	"bombastica": ["Estopim Gemeo", "Furo de Granada", "Fagulha Guiada", "Elo de Detonacao", "Pulso de Estouro", "Vortice de Estilhacos", "Selo de Polvora", "Campo Minado", "Passo de Retaguarda"], 
+	"eletrica": ["Arco Bifasico", "Fio Condutor", "Raio Teleguiado", "Rede Ionica", "Estouro Galvanico", "Polo Magnetico", "Selo de Voltagem", "Campo Tesla", "Passo Fulminante"],
+	"lacerante": ["Cicatriz Ecoante", "Corte Vazado", "Faro de Sangue", "Costura Cruel", "Ruptura Hematica", "Vortice de Laminas", "Selo de Hemorragia", "Zona de Talho", "Passo Serrilhado"],
+	"prismatica": ["Reflexo Menor", "Raio Lapidado", "Mira Refratada", "Elo Cromatico", "Estouro Espectral", "Foco Convergente", "Selo de Cor", "Campo de Cristal", "Passo Arco-Iris"],
+	"retornante": ["Eco Reverso", "Ida Vazante", "Memoria de Alvo", "Laco Temporal", "Pulso de Retorno", "Vortice Retrogrado", "Selo de Volta", "Campo de Reprise", "Passo Paradoxal"],
+	"parasitica": ["Ninhada Ecoante", "Espinho Larval", "Hospedeiro Guiado", "Rede Micelial", "Espasmo Coletivo", "Vortice de Larvas", "Selo de Infestacao", "Viveiro Persistente", "Passo de Ovos"],
+	"gravitante": ["Satelite Menor", "Orbita Perfurante", "Atrator Balistico", "Elo Orbital", "Pulso de Massa", "Singularidade Curta", "Selo de Peso", "Campo Gravitico", "Passo de Mare"],
+	"ancorada": ["Replica Fixa", "Prego Profundo", "Trava de Mira", "Elo de Territorio", "Onda de Contencao", "Nucleo de Amarra", "Selo de Solo", "Campo Ancorado", "Passo Estacado"],
+	"cartografica": ["Rota Duplicada", "Linha Meridiana", "Bussola Agressiva", "Mapa Vinculado", "Marco de Repulsao", "Dobra de Coordenada", "Selo de Latitude", "Campo de Rota", "Passo Cartografado"],
+	"mnesica": ["Lembranca Ecoada", "Agulha de Engrama", "Recordacao Predatoria", "Elo de Memoria", "Surto Mnemonico", "Arquivo Convergente", "Selo de Trauma", "Campo Mnemonico", "Passo Esquecido"],
+	"ressonante": ["Oitava Ecoante", "Nota Perfurante", "Tom Perseguidor", "Acorde Ligado", "Pulso Percussivo", "Caixa de Ressonancia", "Selo de Compasso", "Campo Harmonico", "Passo Sincopado"],
+	"contratual": ["Clausula Duplicada", "Artigo Perfurante", "Mandado de Busca", "Elo Jurado", "Quebra de Termo", "Audiencia Forcada", "Selo de Sentenca", "Campo de Clausula", "Passo Notificado"],
+	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"],
+	"eclipsada": ["Umbra Ecoante", "Raio Penumbral", "Sombra Guiada", "Elo de Eclipse", "Pulso do Crepusculo", "Vortice de Penumbra", "Selo do Ocaso", "Campo Eclipsado", "Passo Sem Luz"],
+	"bombastica": ["Estopim Gemeo", "Furo de Granada", "Fagulha Guiada", "Elo de Detonacao", "Pulso de Estouro", "Vortice de Estilhacos", "Selo de Polvora", "Campo Minado", "Passo de Retaguarda"],
 	"necronada": ["Epitafio Ecoante", "Agulha Funeraria", "Vestigio Guiado", "Elo Ossuario", "Pulso Mortuario", "Vortice de Remanescentes", "Selo do Ossuario", "Campo Sepulcral", "Passo Funebre"]
 }
 
 const MANIFEST_EVOLUTION_PROFILES: = {
-	"eletrica": {"eco": {"every": 4, "scale": 0.44, "spread": 0.26}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.18, "range": 360.0}, "elo": {"radius": 148.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 138.0, "force": 92.0, "damage": 0.18}, "vortice": {"every": 5, "radius": 150.0, "force": 88.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 150.0, "duration": 3.2, "slow": 0.7, "damage": 0.055}, "passo": {"radius": 145.0, "force": 122.0, "damage": 0.12}}, 
-	"lacerante": {"eco": {"every": 3, "scale": 0.36, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.12, "range": 280.0}, "elo": {"radius": 118.0, "slow": 0.82}, "pulso": {"every": 3, "radius": 112.0, "force": 72.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 122.0, "force": 68.0, "damage": 0.18}, "selo": {"hits": 2, "duration": 0.48}, "campo": {"radius": 126.0, "duration": 2.6, "slow": 0.76, "damage": 0.09}, "passo": {"radius": 118.0, "force": 78.0, "damage": 0.18}}, 
-	"prismatica": {"eco": {"every": 5, "scale": 0.34, "spread": 0.36}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.14, "range": 330.0}, "elo": {"radius": 170.0, "slow": 0.8}, "pulso": {"every": 5, "radius": 150.0, "force": 78.0, "damage": 0.14}, "vortice": {"every": 5, "radius": 180.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.58}, "campo": {"radius": 180.0, "duration": 3.0, "slow": 0.76, "damage": 0.05}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.11}}, 
-	"retornante": {"eco": {"every": 3, "scale": 0.3, "spread": 0.22}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 340.0}, "elo": {"radius": 136.0, "slow": 0.78}, "pulso": {"every": 4, "radius": 130.0, "force": 86.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 150.0, "force": 84.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.66}, "campo": {"radius": 148.0, "duration": 3.4, "slow": 0.74, "damage": 0.05}, "passo": {"radius": 156.0, "force": 94.0, "damage": 0.12}}, 
-	"parasitica": {"eco": {"every": 4, "scale": 0.32, "spread": 0.3}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.13, "range": 310.0}, "elo": {"radius": 150.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 132.0, "force": 58.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 152.0, "force": 72.0, "damage": 0.13}, "selo": {"hits": 3, "duration": 0.78}, "campo": {"radius": 158.0, "duration": 4.0, "slow": 0.68, "damage": 0.075}, "passo": {"radius": 132.0, "force": 66.0, "damage": 0.14}}, 
-	"gravitante": {"eco": {"every": 4, "scale": 0.38, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.22, "range": 390.0}, "elo": {"radius": 176.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 170.0, "force": 108.0, "damage": 0.12}, "vortice": {"every": 3, "radius": 210.0, "force": 128.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.82}, "campo": {"radius": 210.0, "duration": 3.6, "slow": 0.62, "damage": 0.045}, "passo": {"radius": 182.0, "force": 114.0, "damage": 0.1}}, 
-	"ancorada": {"eco": {"every": 4, "scale": 0.42, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.1, "range": 260.0}, "elo": {"radius": 150.0, "slow": 0.66}, "pulso": {"every": 4, "radius": 160.0, "force": 96.0, "damage": 0.12}, "vortice": {"every": 5, "radius": 170.0, "force": 82.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 190.0, "duration": 4.4, "slow": 0.6, "damage": 0.045}, "passo": {"radius": 154.0, "force": 92.0, "damage": 0.12}}, 
-	"cartografica": {"eco": {"every": 4, "scale": 0.36, "spread": 0.24}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.2, "range": 360.0}, "elo": {"radius": 164.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 150.0, "force": 80.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 178.0, "force": 98.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.62}, "campo": {"radius": 182.0, "duration": 3.8, "slow": 0.68, "damage": 0.05}, "passo": {"radius": 168.0, "force": 86.0, "damage": 0.1}}, 
-	"mnesica": {"eco": {"every": 3, "scale": 0.34, "spread": 0.16}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 330.0}, "elo": {"radius": 150.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 142.0, "force": 72.0, "damage": 0.13}, "vortice": {"every": 5, "radius": 164.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.88}, "campo": {"radius": 166.0, "duration": 3.8, "slow": 0.7, "damage": 0.06}, "passo": {"radius": 150.0, "force": 78.0, "damage": 0.12}}, 
-	"ressonante": {"eco": {"every": 4, "scale": 0.4, "spread": 0.28}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 320.0}, "elo": {"radius": 172.0, "slow": 0.74}, "pulso": {"every": 3, "radius": 164.0, "force": 94.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 174.0, "force": 84.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 188.0, "duration": 3.2, "slow": 0.72, "damage": 0.055}, "passo": {"radius": 160.0, "force": 90.0, "damage": 0.11}}, 
-	"contratual": {"eco": {"every": 4, "scale": 0.36, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 310.0}, "elo": {"radius": 156.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 138.0, "force": 76.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 160.0, "force": 78.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 172.0, "duration": 4.0, "slow": 0.66, "damage": 0.055}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.12}}, 
-	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.1}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}}, 
-	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.7}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}}, 
+	"eletrica": {"eco": {"every": 4, "scale": 0.44, "spread": 0.26}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.18, "range": 360.0}, "elo": {"radius": 148.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 138.0, "force": 92.0, "damage": 0.18}, "vortice": {"every": 5, "radius": 150.0, "force": 88.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 150.0, "duration": 3.2, "slow": 0.7, "damage": 0.055}, "passo": {"radius": 145.0, "force": 122.0, "damage": 0.12}},
+	"lacerante": {"eco": {"every": 3, "scale": 0.36, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.12, "range": 280.0}, "elo": {"radius": 118.0, "slow": 0.82}, "pulso": {"every": 3, "radius": 112.0, "force": 72.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 122.0, "force": 68.0, "damage": 0.18}, "selo": {"hits": 2, "duration": 0.48}, "campo": {"radius": 126.0, "duration": 2.6, "slow": 0.76, "damage": 0.09}, "passo": {"radius": 118.0, "force": 78.0, "damage": 0.18}},
+	"prismatica": {"eco": {"every": 5, "scale": 0.34, "spread": 0.36}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.14, "range": 330.0}, "elo": {"radius": 170.0, "slow": 0.8}, "pulso": {"every": 5, "radius": 150.0, "force": 78.0, "damage": 0.14}, "vortice": {"every": 5, "radius": 180.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.58}, "campo": {"radius": 180.0, "duration": 3.0, "slow": 0.76, "damage": 0.05}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.11}},
+	"retornante": {"eco": {"every": 3, "scale": 0.3, "spread": 0.22}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 340.0}, "elo": {"radius": 136.0, "slow": 0.78}, "pulso": {"every": 4, "radius": 130.0, "force": 86.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 150.0, "force": 84.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.66}, "campo": {"radius": 148.0, "duration": 3.4, "slow": 0.74, "damage": 0.05}, "passo": {"radius": 156.0, "force": 94.0, "damage": 0.12}},
+	"parasitica": {"eco": {"every": 4, "scale": 0.32, "spread": 0.3}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.13, "range": 310.0}, "elo": {"radius": 150.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 132.0, "force": 58.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 152.0, "force": 72.0, "damage": 0.13}, "selo": {"hits": 3, "duration": 0.78}, "campo": {"radius": 158.0, "duration": 4.0, "slow": 0.68, "damage": 0.075}, "passo": {"radius": 132.0, "force": 66.0, "damage": 0.14}},
+	"gravitante": {"eco": {"every": 4, "scale": 0.38, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.22, "range": 390.0}, "elo": {"radius": 176.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 170.0, "force": 108.0, "damage": 0.12}, "vortice": {"every": 3, "radius": 210.0, "force": 128.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.82}, "campo": {"radius": 210.0, "duration": 3.6, "slow": 0.62, "damage": 0.045}, "passo": {"radius": 182.0, "force": 114.0, "damage": 0.1}},
+	"ancorada": {"eco": {"every": 4, "scale": 0.42, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.1, "range": 260.0}, "elo": {"radius": 150.0, "slow": 0.66}, "pulso": {"every": 4, "radius": 160.0, "force": 96.0, "damage": 0.12}, "vortice": {"every": 5, "radius": 170.0, "force": 82.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 190.0, "duration": 4.4, "slow": 0.6, "damage": 0.045}, "passo": {"radius": 154.0, "force": 92.0, "damage": 0.12}},
+	"cartografica": {"eco": {"every": 4, "scale": 0.36, "spread": 0.24}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.2, "range": 360.0}, "elo": {"radius": 164.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 150.0, "force": 80.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 178.0, "force": 98.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.62}, "campo": {"radius": 182.0, "duration": 3.8, "slow": 0.68, "damage": 0.05}, "passo": {"radius": 168.0, "force": 86.0, "damage": 0.1}},
+	"mnesica": {"eco": {"every": 3, "scale": 0.34, "spread": 0.16}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 330.0}, "elo": {"radius": 150.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 142.0, "force": 72.0, "damage": 0.13}, "vortice": {"every": 5, "radius": 164.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.88}, "campo": {"radius": 166.0, "duration": 3.8, "slow": 0.7, "damage": 0.06}, "passo": {"radius": 150.0, "force": 78.0, "damage": 0.12}},
+	"ressonante": {"eco": {"every": 4, "scale": 0.4, "spread": 0.28}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 320.0}, "elo": {"radius": 172.0, "slow": 0.74}, "pulso": {"every": 3, "radius": 164.0, "force": 94.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 174.0, "force": 84.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 188.0, "duration": 3.2, "slow": 0.72, "damage": 0.055}, "passo": {"radius": 160.0, "force": 90.0, "damage": 0.11}},
+	"contratual": {"eco": {"every": 4, "scale": 0.36, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 310.0}, "elo": {"radius": 156.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 138.0, "force": 76.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 160.0, "force": 78.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 172.0, "duration": 4.0, "slow": 0.66, "damage": 0.055}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.12}},
+	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.1}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}},
+	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.7}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}},
 	"necronada": {"eco": {"every": 4, "scale": 0.34, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 320.0}, "elo": {"radius": 154.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 144.0, "force": 76.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 172.0, "force": 82.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.76}, "campo": {"radius": 170.0, "duration": 3.8, "slow": 0.66, "damage": 0.052}, "passo": {"radius": 150.0, "force": 84.0, "damage": 0.11}}
 }
 
 const CARDS: = [
-	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)}, 
-	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)}, 
-	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+15% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)}, 
-	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +2% chance critica.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)}, 
-	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)}, 
-	{"name": "Roubo de Vida", "nick": "Hemofluxo", "desc": "Projeteis curam uma fracao da vida perdida ao acertar.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)}, 
-	{"name": "Speed Atack", "nick": "Fluidez Letal", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)}, 
-	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)}, 
-	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)}, 
-	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)}, 
-	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% sorte para drops. A chance rara escala de forma mais gradual.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)}, 
-	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)}, 
-	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)}, 
-	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)}, 
-	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)}, 
-	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.4, 0.94, 1.0)}, 
-	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)}, 
-	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada com um bonus unico acumulavel; o bonus so acaba ao comprar a carta marcada.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)}, 
-	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)}, 
-	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)}, 
-	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)}, 
-	{"id": "ancora_vital", "name": "Ã‚ncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)}, 
-	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)}, 
-	{"id": "leitura_instante", "name": "Leitura do Instante", "nick": "Previsao Clara", "desc": "Aumenta a antecedencia visual de ataques inimigos e de chefes.", "icon": "Deck/carta-LeituraInstante1.png", "frame_2": "Deck/carta-LeituraInstante2.png", "color": Color(1.0, 0.84, 0.3)}, 
-	{"id": "margem_segura", "name": "Margem Segura", "nick": "Distancia Certa", "desc": "Inimigos comuns surgem mais longe do jogador.", "icon": "Deck/carta-MargenSegura1.png", "frame_2": "Deck/carta-MargenSegura2.png", "color": Color(0.26, 0.9, 0.96)}, 
-	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)}, 
-	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio de coleta de moedas, cartas soltas e orbes neutros.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)}, 
-	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)}, 
-	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)}, 
-	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "desc": "Periodicamente deixa um vestigio no caminho. Retornar a ele concede velocidade e recupera parte do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.34, 1.0, 0.86)}, 
-	{"id": "municao_de_rebate", "name": "Municao de Rebate", "nick": "Fragmento Teimoso", "desc": "Projeteis basicos que somem sem acertar podem gerar um fragmento que busca o alvo mais proximo.", "icon": "Deck/carta-municaorebatente1.png", "frame_2": "Deck/carta-municaorebatente2.png", "color": Color(1.0, 0.76, 0.24)}, 
-	{"id": "impulso_de_sobras", "name": "Impulso de Sobras", "nick": "Energia Guardada", "desc": "Q, E ou teleporte prontos por tempo suficiente fortalecem os proximos ataques basicos.", "icon": "Deck/carta-impulsodesobras1.png", "frame_2": "Deck/carta-impulsodesobras2.png", "color": Color(0.42, 0.78, 1.0)}, 
-	{"id": "eco_de_impacto", "name": "Eco de Impacto", "nick": "Repeticao Brutal", "desc": "Acertar o mesmo alvo varias vezes cria um eco que repete parte do ultimo dano real.", "icon": "Deck/carta-ecodeimpacto1.png", "frame_2": "Deck/carta-ecodeimpacto2.png", "color": Color(0.86, 0.64, 1.0)}, 
-	{"id": "zona_de_descompressao", "name": "Zona de Descompressao", "nick": "Respiro de Cerco", "desc": "Ficar cercado carrega uma onda que repele inimigos proximos e aplica lentidao.", "icon": "Deck/carta-zonadedescompressao1.png", "frame_2": "Deck/carta-zonadedescompressao2.png", "color": Color(0.44, 1.0, 0.7)}, 
-	{"id": "folego_de_perseguicao", "name": "Folego de Perseguicao", "nick": "Caca Persistente", "desc": "Avancar contra um alvo distante acumula velocidade e fortalece o primeiro impacto ao alcanca-lo.", "icon": "Deck/carta-folegodeperseguicao1.png", "frame_2": "Deck/carta-folegodeperseguicao2.png", "color": Color(1.0, 0.56, 0.22)}, 
-	{"id": "margem_de_erro", "name": "Margem de Erro", "nick": "Erro Parcelado", "desc": "Depois de sofrer dano, o proximo impacto rapido tem parte adiada e pode ser reduzido com abates.", "icon": "Deck/carta-margemdeerro1.png", "frame_2": "Deck/carta-margemdeerro2.png", "color": Color(1.0, 0.36, 0.46)}, 
-	{"id": "ressonancia_de_alternancia", "name": "Ressonancia de Alternancia", "nick": "Kit Completo", "desc": "Usar ataque, Q, E e teleporte em alternancia prepara um bonus para a proxima acao.", "icon": "Deck/carta-ressonanciadealternancia1.png", "frame_2": "Deck/carta-ressonanciadealternancia2.png", "color": Color(0.58, 1.0, 0.96)}, 
-	{"id": "intervalo_fraturado", "name": "Intervalo Fraturado", "nick": "Recarga Fraturada", "desc": "Reduz o tempo de recarga da Hab1 e da Ultimate. A reducao da Ultimate e menor.", "icon": "Deck/carta-Intervalo_Fraturado1.png", "frame_2": "Deck/carta-Intervalo_Fraturado2.png", "color": Color(0.58, 0.84, 1.0)}, 
-	{"id": "nucleo_revigorante", "name": "Nucleo Revigorante", "nick": "Orbe Revigorado", "desc": "As orbes de cura encontradas no mapa restauram mais vida.", "icon": "Deck/carta-N_cleo_Revigorante1.png", "frame_2": "Deck/carta-N_cleo_Revigorante2.png", "color": Color(0.44, 1.0, 0.62)}, 
-	{"id": "limiar_de_ruina", "name": "Limiar de Ruina", "nick": "Primeira Fenda", "desc": "Causa dano adicional a inimigos que estejam acima de 90% da vida maxima.", "icon": "Deck/carta-Limiar_de_Ru_na1.png", "frame_2": "Deck/carta-Limiar_de_Ru_na2.png", "color": Color(1.0, 0.45, 0.22)}, 
-	{"id": "estase_reparadora", "name": "Estase Reparadora", "nick": "Quietude Tecidual", "desc": "Apos permanecer imovel por 5 segundos, recupera continuamente uma parte da vida perdida.", "icon": "Deck/carta-Estase_Reparadora1.png", "frame_2": "Deck/carta-Estase_Reparadora2.png", "color": Color(0.52, 1.0, 0.86)}, 
-	{"id": "egide_hemofaga", "name": "Egide Hemofaga", "nick": "Escudo Hematico", "desc": "Parte do roubo de vida que ultrapassaria sua vida maxima e convertida em escudo temporario.", "icon": "Deck/carta-gide_Hem_faga1.png", "frame_2": "Deck/carta-gide_Hem_faga2.png", "color": Color(1.0, 0.72, 0.22)}, 
-	{"id": "fratura_cronal", "name": "Fratura Cronal", "nick": "Fragilidade Temporal", "desc": "Proximo acerto a cada 7s aplica Fragilidade por 4s.", "icon": "Deck/carta-Fratura_Cronal1.png", "frame_2": "Deck/carta-Fratura_Cronal2.png", "color": Color(0.74, 0.62, 1.0)}, 
-	{"id": "pulso_desestabilizador", "name": "Pulso Desestabilizador", "nick": "Explosao Instavel", "desc": "Proximo acerto a cada 8s gera uma explosao no alvo.", "icon": "Deck/carta-Pulso_Desestabilizador1.png", "frame_2": "Deck/carta-Pulso_Desestabilizador2.png", "color": Color(1.0, 0.42, 0.32)}, 
-	{"id": "pressao_cerco", "name": "Pressao de Cerco", "nick": "Alvo Cercado", "desc": "+dano em alvos cercados por 3 inimigos proximos.", "icon": "Deck/carta-Press_o_de_Cerco1.png", "frame_2": "Deck/carta-Press_o_de_Cerco2.png", "color": Color(1.0, 0.78, 0.28)}, 
-	{"id": "choque_fontes", "name": "Choque de Fontes", "nick": "Interferencia Temporal", "desc": "Fontes diferentes de dano no mesmo alvo provocam uma descarga.", "icon": "Deck/carta-Choque_de_Fontes1.png", "frame_2": "Deck/carta-Choque_de_Fontes2.png", "color": Color(0.72, 0.96, 1.0)}, 
-	{"id": "ferrolho_ruptura", "name": "Ferrolho de Ruptura", "nick": "Prego Espacial", "desc": "O proximo acerto direto a cada 10s fixa o alvo no espaco.", "icon": "Deck/carta-Ferrolho_de_Ruptura1.png", "frame_2": "Deck/carta-Ferrolho_de_Ruptura2.png", "color": Color(0.92, 0.58, 1.0)}, 
-	{"id": "limiar_colapso", "name": "Limiar de Colapso", "nick": "Ruptura Vital", "desc": "Rompe inimigos ao cruzarem 70%, 40% e 15% de vida.", "icon": "Deck/carta-Limiar_de_Colapso1.png", "frame_2": "Deck/carta-Limiar_de_Colapso2.png", "color": Color(1.0, 0.42, 0.18)}, 
-	{"id": "desvio_probabilidade", "name": "Desvio de Probabilidade", "nick": "Quase Acerto", "desc": "Quase acertos hostis fortalecem o proximo golpe direto.", "icon": "Deck/carta-Desvio_de_Probabilidade1.png", "frame_2": "Deck/carta-Desvio_de_Probabilidade2.png", "color": Color(0.74, 0.48, 1.0)}, 
-	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)}, 
-	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)}, 
-	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)}, 
-	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "Inimigos derrotados retornam temporariamente como aliados.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)}, 
-	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)}, 
+	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)},
+	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)},
+	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+15% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)},
+	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +2% chance critica.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
+	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)},
+	{"name": "Roubo de Vida", "nick": "Hemofluxo", "desc": "Projeteis curam uma fracao da vida perdida ao acertar.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
+	{"name": "Speed Atack", "nick": "Fluidez Letal", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)},
+	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
+	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
+	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
+	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% sorte para drops. A chance rara escala de forma mais gradual.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
+	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
+	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
+	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
+	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
+	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.4, 0.94, 1.0)},
+	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
+	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
+	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
+	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
+	{"id": "ancora_vital", "name": "Ã‚ncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
+	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)},
+	{"id": "leitura_instante", "name": "Leitura do Instante", "nick": "Previsao Clara", "desc": "Aumenta a antecedencia visual de ataques inimigos e de chefes.", "icon": "Deck/carta-LeituraInstante1.png", "frame_2": "Deck/carta-LeituraInstante2.png", "color": Color(1.0, 0.84, 0.3)},
+	{"id": "margem_segura", "name": "Margem Segura", "nick": "Distancia Certa", "desc": "Inimigos comuns surgem mais longe do jogador.", "icon": "Deck/carta-MargenSegura1.png", "frame_2": "Deck/carta-MargenSegura2.png", "color": Color(0.26, 0.9, 0.96)},
+	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)},
+	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio de coleta de moedas, cartas soltas e orbes neutros.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
+	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
+	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)},
+	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "desc": "Periodicamente deixa um vestigio no caminho. Retornar a ele concede velocidade e recupera parte do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.34, 1.0, 0.86)},
+	{"id": "municao_de_rebate", "name": "Municao de Rebate", "nick": "Fragmento Teimoso", "desc": "Projeteis basicos que somem sem acertar podem gerar um fragmento que busca o alvo mais proximo.", "icon": "Deck/carta-municaorebatente1.png", "frame_2": "Deck/carta-municaorebatente2.png", "color": Color(1.0, 0.76, 0.24)},
+	{"id": "impulso_de_sobras", "name": "Impulso de Sobras", "nick": "Energia Guardada", "desc": "Q, E ou teleporte prontos por tempo suficiente fortalecem os proximos ataques basicos.", "icon": "Deck/carta-impulsodesobras1.png", "frame_2": "Deck/carta-impulsodesobras2.png", "color": Color(0.42, 0.78, 1.0)},
+	{"id": "eco_de_impacto", "name": "Eco de Impacto", "nick": "Repeticao Brutal", "desc": "Acertar o mesmo alvo varias vezes cria um eco que repete parte do ultimo dano real.", "icon": "Deck/carta-ecodeimpacto1.png", "frame_2": "Deck/carta-ecodeimpacto2.png", "color": Color(0.86, 0.64, 1.0)},
+	{"id": "zona_de_descompressao", "name": "Zona de Descompressao", "nick": "Respiro de Cerco", "desc": "Ficar cercado carrega uma onda que repele inimigos proximos e aplica lentidao.", "icon": "Deck/carta-zonadedescompressao1.png", "frame_2": "Deck/carta-zonadedescompressao2.png", "color": Color(0.44, 1.0, 0.7)},
+	{"id": "folego_de_perseguicao", "name": "Folego de Perseguicao", "nick": "Caca Persistente", "desc": "Avancar contra um alvo distante acumula velocidade e fortalece o primeiro impacto ao alcanca-lo.", "icon": "Deck/carta-folegodeperseguicao1.png", "frame_2": "Deck/carta-folegodeperseguicao2.png", "color": Color(1.0, 0.56, 0.22)},
+	{"id": "margem_de_erro", "name": "Margem de Erro", "nick": "Erro Parcelado", "desc": "Depois de sofrer dano, o proximo impacto rapido tem parte adiada e pode ser reduzido com abates.", "icon": "Deck/carta-margemdeerro1.png", "frame_2": "Deck/carta-margemdeerro2.png", "color": Color(1.0, 0.36, 0.46)},
+	{"id": "ressonancia_de_alternancia", "name": "Ressonancia de Alternancia", "nick": "Kit Completo", "desc": "Usar ataque, Q, E e teleporte em alternancia prepara um bonus para a proxima acao.", "icon": "Deck/carta-ressonanciadealternancia1.png", "frame_2": "Deck/carta-ressonanciadealternancia2.png", "color": Color(0.58, 1.0, 0.96)},
+	{"id": "intervalo_fraturado", "name": "Intervalo Fraturado", "nick": "Recarga Fraturada", "desc": "Reduz o tempo de recarga da Hab1 e da Ultimate. A reducao da Ultimate e menor.", "icon": "Deck/carta-Intervalo_Fraturado1.png", "frame_2": "Deck/carta-Intervalo_Fraturado2.png", "color": Color(0.58, 0.84, 1.0)},
+	{"id": "nucleo_revigorante", "name": "Nucleo Revigorante", "nick": "Orbe Revigorado", "desc": "As orbes de cura encontradas no mapa restauram mais vida.", "icon": "Deck/carta-N_cleo_Revigorante1.png", "frame_2": "Deck/carta-N_cleo_Revigorante2.png", "color": Color(0.44, 1.0, 0.62)},
+	{"id": "limiar_de_ruina", "name": "Limiar de Ruina", "nick": "Primeira Fenda", "desc": "Causa dano adicional a inimigos que estejam acima de 90% da vida maxima.", "icon": "Deck/carta-Limiar_de_Ru_na1.png", "frame_2": "Deck/carta-Limiar_de_Ru_na2.png", "color": Color(1.0, 0.45, 0.22)},
+	{"id": "estase_reparadora", "name": "Estase Reparadora", "nick": "Quietude Tecidual", "desc": "Apos permanecer imovel por 5 segundos, recupera continuamente uma parte da vida perdida.", "icon": "Deck/carta-Estase_Reparadora1.png", "frame_2": "Deck/carta-Estase_Reparadora2.png", "color": Color(0.52, 1.0, 0.86)},
+	{"id": "egide_hemofaga", "name": "Egide Hemofaga", "nick": "Escudo Hematico", "desc": "Parte do roubo de vida que ultrapassaria sua vida maxima e convertida em escudo temporario.", "icon": "Deck/carta-gide_Hem_faga1.png", "frame_2": "Deck/carta-gide_Hem_faga2.png", "color": Color(1.0, 0.72, 0.22)},
+	{"id": "fratura_cronal", "name": "Fratura Cronal", "nick": "Fragilidade Temporal", "desc": "Proximo acerto a cada 7s aplica Fragilidade por 4s.", "icon": "Deck/carta-Fratura_Cronal1.png", "frame_2": "Deck/carta-Fratura_Cronal2.png", "color": Color(0.74, 0.62, 1.0)},
+	{"id": "pulso_desestabilizador", "name": "Pulso Desestabilizador", "nick": "Explosao Instavel", "desc": "Proximo acerto a cada 8s gera uma explosao no alvo.", "icon": "Deck/carta-Pulso_Desestabilizador1.png", "frame_2": "Deck/carta-Pulso_Desestabilizador2.png", "color": Color(1.0, 0.42, 0.32)},
+	{"id": "pressao_cerco", "name": "Pressao de Cerco", "nick": "Alvo Cercado", "desc": "+dano em alvos cercados por 3 inimigos proximos.", "icon": "Deck/carta-Press_o_de_Cerco1.png", "frame_2": "Deck/carta-Press_o_de_Cerco2.png", "color": Color(1.0, 0.78, 0.28)},
+	{"id": "choque_fontes", "name": "Choque de Fontes", "nick": "Interferencia Temporal", "desc": "Fontes diferentes de dano no mesmo alvo provocam uma descarga.", "icon": "Deck/carta-Choque_de_Fontes1.png", "frame_2": "Deck/carta-Choque_de_Fontes2.png", "color": Color(0.72, 0.96, 1.0)},
+	{"id": "ferrolho_ruptura", "name": "Ferrolho de Ruptura", "nick": "Prego Espacial", "desc": "O proximo acerto direto a cada 10s fixa o alvo no espaco.", "icon": "Deck/carta-Ferrolho_de_Ruptura1.png", "frame_2": "Deck/carta-Ferrolho_de_Ruptura2.png", "color": Color(0.92, 0.58, 1.0)},
+	{"id": "limiar_colapso", "name": "Limiar de Colapso", "nick": "Ruptura Vital", "desc": "Rompe inimigos ao cruzarem 70%, 40% e 15% de vida.", "icon": "Deck/carta-Limiar_de_Colapso1.png", "frame_2": "Deck/carta-Limiar_de_Colapso2.png", "color": Color(1.0, 0.42, 0.18)},
+	{"id": "desvio_probabilidade", "name": "Desvio de Probabilidade", "nick": "Quase Acerto", "desc": "Quase acertos hostis fortalecem o proximo golpe direto.", "icon": "Deck/carta-Desvio_de_Probabilidade1.png", "frame_2": "Deck/carta-Desvio_de_Probabilidade2.png", "color": Color(0.74, 0.48, 1.0)},
+	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)},
+	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)},
+	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)},
+	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "Inimigos derrotados retornam temporariamente como aliados.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
+	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
 	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)}
 ]
 
 const CARD_MAX_COUNTS: = {
-	"fratura_cronal": 5, 
-	"pulso_desestabilizador": 5, 
+	"fratura_cronal": 5,
+	"pulso_desestabilizador": 5,
 	"pressao_cerco": 3
 }
 
@@ -1811,20 +1836,20 @@ const ANCORA_VITAL_HEAL_DURATION: = 3.0
 const CATALOG_TABS: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Cartas"]
 
 const AURAS: = [
-	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."}, 
-	{"key": "impulsiva", "name": "Impulsiva", "icon": "aurea_impulsiva.png", "desc": "Cinco abates sem dano ativam Frenesi. Um hit quebra a sequencia e arma Panico."}, 
-	{"key": "devota", "name": "Devota", "icon": "aurea_devota.png", "desc": "Tres cargas anulam impactos, curam vida perdida e abrem janelas de dano."}, 
-	{"key": "vanguarda", "name": "Vanguarda", "icon": "aurea_vanguarda.png", "desc": "Sofrer dano cria fogo; queimaduras ferem por vida maxima e pesam o Teleporte."}, 
-	{"key": "insana", "name": "Insana", "icon": "aurea_insana.png", "desc": "Ecos parados atraem inimigos e repetem seus tiros com 1s de atraso."}, 
-	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Coagulos alimentam Fome, curam vida perdida e fortalecem disparos e recargas."}, 
-	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."}, 
-	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."}, 
-	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."}, 
-	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."}, 
-	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."}, 
-	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."}, 
-	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://assets/sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."}, 
-	{"key": "avarento", "name": "Avarento", "icon": "res://assets/sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Ao gastar, rompa o Cofre para ganhar velocidade e escudo."}, 
+	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."},
+	{"key": "impulsiva", "name": "Impulsiva", "icon": "aurea_impulsiva.png", "desc": "Cinco abates sem dano ativam Frenesi. Um hit quebra a sequencia e arma Panico."},
+	{"key": "devota", "name": "Devota", "icon": "aurea_devota.png", "desc": "Tres cargas anulam impactos, curam vida perdida e abrem janelas de dano."},
+	{"key": "vanguarda", "name": "Vanguarda", "icon": "aurea_vanguarda.png", "desc": "Sofrer dano cria fogo; queimaduras ferem por vida maxima e pesam o Teleporte."},
+	{"key": "insana", "name": "Insana", "icon": "aurea_insana.png", "desc": "Ecos parados atraem inimigos e repetem seus tiros com 1s de atraso."},
+	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Coagulos alimentam Fome, curam vida perdida e fortalecem disparos e recargas."},
+	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."},
+	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."},
+	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."},
+	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
+	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."},
+	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."},
+	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://assets/sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."},
+	{"key": "avarento", "name": "Avarento", "icon": "res://assets/sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Ao gastar, rompa o Cofre para ganhar velocidade e escudo."},
 	{"key": "oportunista", "name": "Oportunista", "icon": "res://assets/sprites/aurea-oportunista.png", "desc": "Ataque durante preparacao ou recuperacao inimiga para armar um Golpe de Oportunidade."}
 ]
 
@@ -1857,6 +1882,8 @@ var lazy_texture_paths: Dictionary = {}
 var current_lazy_map_key: String = ""
 var player_nickname: String = ""
 var player_profile_id: String = ""
+var player_identity_auth_token: String = ""
+var player_identity_recovery_code: String = ""
 var nickname_error: String = ""
 var nickname_edit: LineEdit = null
 var cheat_edit: LineEdit = null
@@ -1870,6 +1897,8 @@ var run_report_request: HTTPRequest = null
 var run_leaderboard_request: HTTPRequest = null
 var run_security_start_request: HTTPRequest = null
 var run_security_checkpoint_request: HTTPRequest = null
+var player_progress_identity_request: HTTPRequest = null
+var player_progress_sync_request: HTTPRequest = null
 var rt_integrity: RefCounted = null
 var last_run_leaderboard_url: String = ""
 var app_update_check_request: HTTPRequest = null
@@ -1969,6 +1998,9 @@ var dedicated_names_by_peer: Dictionary = {}
 var dedicated_spectator_by_peer: Dictionary = {}
 var dedicated_manifest_ready_by_peer: Dictionary = {}
 var dedicated_manifest_selection_by_peer: Dictionary = {}
+var dedicated_manifest_evolution_barrier_id: int = 0
+var dedicated_manifest_evolution_expected_peers: Array = []
+var dedicated_manifest_evolution_ready_by_peer: Dictionary = {}
 var dedicated_preload_ready_by_peer: Dictionary = {}
 var dedicated_player_state_by_peer: Dictionary = {}
 var dedicated_shop_votes_by_peer: Dictionary = {}
@@ -2048,6 +2080,8 @@ var net_enemy_bullet_next_uid: int = 1
 var net_ability_sequence: int = 0
 var net_event_sequence: int = 0
 var net_projectile_sequence: int = 0
+var net_gameplay_orb_sequence: int = 0
+var net_card_unlock_event_sequence: int = 0
 var net_ability_seen: Dictionary = {}
 var net_ability_visuals: Array = []
 var net_rewind_seen: Dictionary = {}
@@ -2085,13 +2119,13 @@ const NET_ENEMY_STRIDE: = RTNetContractScript.ENEMY_STRIDE
 const NET_UID_CHUNK_MASK: = RTNetContractScript.UID_CHUNK_MASK
 const NET_BULLET_STRIDE: = RTNetContractScript.BULLET_STRIDE
 const NET_LEECH_STATES: = [
-	SANGUESSUGA_STATE_FALL_WARNING, 
-	SANGUESSUGA_STATE_FALLING, 
-	SANGUESSUGA_STATE_DORMANT, 
-	SANGUESSUGA_STATE_TRIGGERED, 
-	SANGUESSUGA_STATE_LEAPING, 
-	SANGUESSUGA_STATE_ATTACHED, 
-	SANGUESSUGA_STATE_MISSED, 
+	SANGUESSUGA_STATE_FALL_WARNING,
+	SANGUESSUGA_STATE_FALLING,
+	SANGUESSUGA_STATE_DORMANT,
+	SANGUESSUGA_STATE_TRIGGERED,
+	SANGUESSUGA_STATE_LEAPING,
+	SANGUESSUGA_STATE_ATTACHED,
+	SANGUESSUGA_STATE_MISSED,
 	SANGUESSUGA_STATE_EXPIRING
 ]
 const NET_OWNER_CONNECT_TIMEOUT_MS: = RTNetContractScript.OWNER_CONNECT_TIMEOUT_MS
@@ -2148,19 +2182,19 @@ const NET_DAMAGE_ENEMY: = RTNetContractScript.DAMAGE_ENEMY
 const NET_DAMAGE_BOSS: = RTNetContractScript.DAMAGE_BOSS
 const NET_DAMAGE_ARAUTO: = RTNetContractScript.DAMAGE_ARAUTO
 const NET_ENEMY_TYPES: = [
-	ENEMY_COMMON, ENEMY_ATIRADOR, ENEMY_KAMIKAZE, ENEMY_AGGLOMERATOR, 
-	ENEMY_STALKER, ENEMY_PROJECTOR, ENEMY_CRYSTAL, ENEMY_CURATER, 
-	ENEMY_LARAPIO, ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR, 
-	ENEMY_DEVOTO, ENEMY_INCENSARIO, ENEMY_GUARDIAO, ENEMY_PYRO_PENGUIN, 
-	ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_REFRACTOR, 
-	ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO, 
-	ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH, 
+	ENEMY_COMMON, ENEMY_ATIRADOR, ENEMY_KAMIKAZE, ENEMY_AGGLOMERATOR,
+	ENEMY_STALKER, ENEMY_PROJECTOR, ENEMY_CRYSTAL, ENEMY_CURATER,
+	ENEMY_LARAPIO, ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR,
+	ENEMY_DEVOTO, ENEMY_INCENSARIO, ENEMY_GUARDIAO, ENEMY_PYRO_PENGUIN,
+	ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_REFRACTOR,
+	ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO,
+	ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH,
 	ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL
 ]
 const NET_BULLET_TYPES: = [
-	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed", 
-	"frost_shard", "larapio_coin", "larapio_stone", "miasma_cheese_spit", 
-	"miasma_eel_spit", "nexus_refracted", "phase4_magic", "pyro_wall_seed", "rat_flask", 
+	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",
+	"frost_shard", "larapio_coin", "larapio_stone", "miasma_cheese_spit",
+	"miasma_eel_spit", "nexus_refracted", "phase4_magic", "pyro_wall_seed", "rat_flask",
 	"pustula_fossil_spit", "rat_shot", "rat_spit", "reflected_player", "umbra_plasma", "boss4_comet"
 ]
 
@@ -2370,6 +2404,11 @@ var manifest_evolution_options: Array = []
 var manifest_evolution_selected: int = 0
 var manifest_evolution_previous_mode: String = "game"
 var manifest_evolution_focus_timer: float = 0.0
+var manifest_evolution_barrier_active: bool = false
+var manifest_evolution_barrier_id: int = 0
+var manifest_evolution_barrier_expected_peers: Array = []
+var manifest_evolution_barrier_ready_by_peer: Dictionary = {}
+var manifest_evolution_barrier_opening: bool = false
 var player_pos = PLAYER_START
 var player_hp = PLAYER_BASE_HP
 var player_hp_max = PLAYER_BASE_HP
@@ -2536,11 +2575,13 @@ var progression_controller = RuntimeProgressionControllerScript.new()
 var enemy_manager: Node = EnemyManagerScript.new()
 var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
+var runtime_event_director: Node = RuntimeEventDirectorScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
 var shop_controller = preload("res://scripts/ui/shop_controller.gd").new()
 var shop_presentation = shop_controller.presentation
+var shop_paid_rerolls_this_visit: int = 0
 var shop_purchase_anim_timer = 0.0
 var shop_purchase_pending_card = {}
 var shop_purchase_pending_can_continue = false
@@ -2591,6 +2632,7 @@ var tregua_regenerativa_timer: = 0.0
 var tregua_regenerativa_active: = false
 var tregua_regenerativa_pulse: = 0.0
 var cinzas_burn_marks: Array = []
+var cinzas_card_bonuses: Dictionary = {}
 var reserva_pulso_stored: = 0.0
 var reserva_pulso_releasing: = false
 var reserva_pulso_pulse: = 0.0
@@ -2755,6 +2797,10 @@ var boss_active = false
 var boss_dead = false
 var boss_hp = BOSS_BASE_HP
 var boss_hp_max = BOSS_BASE_HP
+var boss_party_scaling_phase: int = 0
+var boss_party_scaling_size: int = 0
+var boss_party_scaling_hp_coeff: float = 1.0
+var boss_party_scaling_pressure_coeff: float = 1.0
 var boss_pos = Vector2(1240, 410)
 var boss_phase = 0.0
 var boss_attack_timer = 0.0
@@ -2949,26 +2995,26 @@ var haptics_enabled: bool = true
 var is_gamepad_active: bool = false
 var pause_keyboard_active: bool = false
 var gamepad_bindings: Dictionary = {
-	"attack": JOY_BUTTON_X, 
-	"skill": JOY_BUTTON_Y, 
-	"secondary": JOY_BUTTON_B, 
-	"dash": JOY_BUTTON_A, 
-	"lacerante_empower": JOY_BUTTON_LEFT_SHOULDER, 
-	"pause": JOY_BUTTON_START, 
-	"shop": JOY_BUTTON_RIGHT_SHOULDER, 
+	"attack": JOY_BUTTON_X,
+	"skill": JOY_BUTTON_Y,
+	"secondary": JOY_BUTTON_B,
+	"dash": JOY_BUTTON_A,
+	"lacerante_empower": JOY_BUTTON_LEFT_SHOULDER,
+	"pause": JOY_BUTTON_START,
+	"shop": JOY_BUTTON_RIGHT_SHOULDER,
 	"boss": JOY_BUTTON_BACK
 }
 var gamepad_mapping_action: String = ""
 var keyboard_bindings: Dictionary = {
-	"attack": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_LEFT), 
-	"skill": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_RIGHT), 
-	"secondary": INPUT_BIND_KEY_PREFIX + str(KEY_Q), 
-	"dash": INPUT_BIND_KEY_PREFIX + str(KEY_SHIFT), 
-	"lacerante_empower": INPUT_BIND_KEY_PREFIX + str(KEY_R), 
+	"attack": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_LEFT),
+	"skill": INPUT_BIND_MOUSE_PREFIX + str(MOUSE_BUTTON_RIGHT),
+	"secondary": INPUT_BIND_KEY_PREFIX + str(KEY_Q),
+	"dash": INPUT_BIND_KEY_PREFIX + str(KEY_SHIFT),
+	"lacerante_empower": INPUT_BIND_KEY_PREFIX + str(KEY_R),
 	"dance": INPUT_BIND_KEY_PREFIX + str(KEY_O),
 	"interact": INPUT_BIND_KEY_PREFIX + str(KEY_E),
-	"pause": INPUT_BIND_KEY_PREFIX + str(KEY_ESCAPE), 
-	"shop": INPUT_BIND_KEY_PREFIX + str(KEY_P), 
+	"pause": INPUT_BIND_KEY_PREFIX + str(KEY_ESCAPE),
+	"shop": INPUT_BIND_KEY_PREFIX + str(KEY_P),
 	"boss": INPUT_BIND_KEY_PREFIX + str(KEY_B)
 }
 var keyboard_mapping_action: String = ""
@@ -3022,12 +3068,16 @@ var arauto_card_drops = []
 var arauto_evolution_fragment: Dictionary = {}
 var arauto_evolution_fragments: Array = []
 var manifest_evolution_fragment_claimed_this_run: bool = false
+var manifest_evolution_fragment_claim_count: int = 0
 var manifest_evolution_fragment_claim_source: String = ""
 var arauto_target_cursor: = -1
 var arauto_target_peer_id: = 0
 var arauto_target_switch_timer: = 0.0
 var net_collected_drop_ids: Dictionary = {}
 var net_collected_fragment_ids: Dictionary = {}
+var net_collected_gameplay_orb_ids: Dictionary = {}
+var net_seen_card_unlock_request_ids: Dictionary = {}
+var net_confirmed_card_unlock_event_ids: Dictionary = {}
 var net_reward_sequence: int = 0
 var shockwaves = []
 var effects = []
@@ -3301,6 +3351,7 @@ var apolo_phase5_exhibition_card_memory: Dictionary = {}
 var anchors = []
 var prisms = []
 var orbitals = []
+var gravitante_vfx_events: Array = []
 var seed_links = []
 var parasite_spit_zones = []
 var return_bullets = []
@@ -3380,6 +3431,17 @@ var card_unlock_last_player_pos: Vector2 = PLAYER_START
 var card_unlock_stationary_tick: float = 0.0
 var card_unlocks_dirty: bool = false
 var card_unlock_save_timer: float = 0.0
+var player_progress_install_secret: String = ""
+var player_progress_pending_events: Array = []
+var player_progress_event_sequence: int = 0
+var player_progress_sync_timer: float = 2.0
+var player_progress_sync_in_flight: bool = false
+var player_progress_identity_in_flight: bool = false
+var player_progress_cache_trusted: bool = false
+var player_progress_applying_snapshot: bool = false
+var player_progress_sync_status: String = ""
+var player_progress_identity_request_kind: String = ""
+var player_progress_claim_recovery_code: String = ""
 var contractual_vfx = []
 var contractual_penalty_timer = 0.0
 var contractual_order: Dictionary = {}

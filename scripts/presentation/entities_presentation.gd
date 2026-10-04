@@ -269,26 +269,18 @@ static func _draw_tesla_enemy_crown(game: Node2D, center: Vector2, shock_time: f
 		game.draw_line(a, b, Color(1.0, 1.0, 1.0, 0.44 * alpha), 1.5, true)
 
 
-static func _draw_gravitante_enemy_distortion(game: Node2D, enemy: Dictionary, center_world: Vector2, camera: Vector2, radius: float, progress: float, intensity: float) -> void :
-	var enemy_pos: Vector2 = enemy["pos"]
-	var dist = enemy_pos.distance_to(center_world)
-	var edge_ratio = game._gravitante_edge_ratio(dist, radius)
-	var dir = (enemy_pos - center_world).normalized()
-	if dir.length() <= 0.01:
-		dir = Vector2.RIGHT
-	var tangent = dir.orthogonal()
-	var tex = game._enemy_texture(enemy)
-	var size = game._enemy_draw_size(enemy)
-	var swirl = game.time_alive * (3.4 + intensity * 1.2) + float(enemy.get("uid", 0)) * 0.021
-	var bend = tangent * sin(swirl) * (10.0 + edge_ratio * 22.0) - dir * (6.0 + (1.0 - edge_ratio) * 10.0)
-	var ghost_pos = enemy_pos + bend
-	var stretch = 1.0 + edge_ratio * 0.65 + intensity * 0.1
-	var compress = 0.82 - edge_ratio * 0.18
-	var ghost_size = Vector2(size.x * stretch, size.y * compress)
-	var alpha = clamp(0.1 + edge_ratio * 0.22 + intensity * 0.04, 0.1, 0.42)
-	game._draw_enemy_texture_raw(tex, ghost_pos - camera, ghost_size, dir.angle() + PI * 0.5 + sin(swirl) * 0.18, Color(0.46, 0.72, 1.0, alpha), game._enemy_should_flip(enemy))
-	var smear_pos = enemy_pos + tangent * sin(swirl + 1.2) * (18.0 + edge_ratio * 18.0) - dir * 14.0
-	game._draw_enemy_texture_raw(tex, smear_pos - camera, Vector2(size.x * (0.82 + edge_ratio * 0.35), size.y * 0.64), dir.angle() + PI * 0.5, Color(0.96, 0.42, 1.0, alpha * 0.42), game._enemy_should_flip(enemy))
+static func _draw_gravitante_enemy_distortion(game: Node2D, enemy: Dictionary, center_world: Vector2, camera: Vector2, radius: float, _progress: float, intensity: float) -> void :
+	var pos: Vector2 = enemy["pos"]
+	if not game._world_point_in_view(pos, camera, 100.0):
+		return
+	var radial := (pos - center_world).normalized()
+	var proximity := 1.0 - clampf(pos.distance_to(center_world) / maxf(1.0, radius), 0.0, 1.0)
+	var tangent := radial.orthogonal()
+	var size: Vector2 = game._enemy_draw_size(enemy)
+	var ghost_size := Vector2(size.x * (1.04 + proximity * 0.18), size.y * 0.94)
+	# A single subtle echo. The real sprite/HP stay at the authoritative position.
+	game._draw_enemy_texture_raw(game._enemy_texture(enemy), pos - camera - tangent * (5.0 + proximity * 10.0),
+		ghost_size, 0.0, Color(0.48, 0.8, 0.94, 0.09 + minf(intensity, 1.0) * 0.07), game._enemy_should_flip(enemy))
 
 
 static func _draw_player(game: Node2D, camera: Vector2) -> void :

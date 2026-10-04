@@ -34,6 +34,10 @@ func _load_player_profile() -> void :
 			core.player_nickname = core._sanitize_player_nickname(value)
 		elif key == "profile_id":
 			core.player_profile_id = core._sanitize_profile_id(value)
+		elif key == "auth_token":
+			core.player_identity_auth_token = core._sanitize_profile_secret(value)
+		elif key == "recovery_code":
+			core.player_identity_recovery_code = core._sanitize_profile_secret(value)
 	file.close()
 	core._ensure_player_profile_id()
 
@@ -44,6 +48,8 @@ func _save_player_profile() -> void :
 		return
 	file.store_string("nickname=" + core.player_nickname + "\n")
 	file.store_string("profile_id=" + core.player_profile_id + "\n")
+	file.store_string("auth_token=" + core.player_identity_auth_token + "\n")
+	file.store_string("recovery_code=" + core.player_identity_recovery_code + "\n")
 	file.close()
 
 func _ensure_card_unlock_defaults() -> void :
@@ -68,70 +74,41 @@ func _load_card_unlocks() -> void :
 	core.unlocked_card_ids.clear()
 	core.unlocked_manifestation_ids.clear()
 	core.unlocked_spectrum_ids.clear()
+	core.specter_levels.clear()
 	core.card_unlock_progress.clear()
 	core.card_unlock_veteran_synced_version_code = 0
-	if FileAccess.file_exists(core.CARD_UNLOCK_SAVE_PATH):
-		var file = FileAccess.open(core.CARD_UNLOCK_SAVE_PATH, FileAccess.READ)
-		if file != null:
-			var parsed = JSON.parse_string(file.get_as_text())
-			file.close()
-			if parsed is Dictionary:
-				var data: Dictionary = parsed
-				for card_id in data.get("unlocked", []):
-					core.unlocked_card_ids[String(card_id)] = true
-				for manifestation_id in data.get("unlocked_manifestations", []):
-					core.unlocked_manifestation_ids[String(manifestation_id)] = true
-				for spectrum_id in data.get("unlocked_specters", data.get("unlocked_spectrums", [])):
-					core.unlocked_spectrum_ids[String(spectrum_id)] = true
-				var loaded_levels: Dictionary = data.get("specter_levels", {})
-				for key in loaded_levels.keys():
-					core.specter_levels[String(key)] = clampi(int(loaded_levels[key]), 1, core.AuraSystem.RUN_MAX_LEVEL)
-				core.persistent_spectral_coins = maxi(0, int(data.get("spectral_coins", data.get("persistent_spectral_coins", 0))))
-				core.spectral_coins = core.persistent_spectral_coins
-				var progress: Dictionary = data.get("progress", {})
-				for key in progress.keys():
-					core.card_unlock_progress[String(key)] = float(progress[key])
-				core.card_unlock_veteran_synced_version_code = maxi(0, int(data.get("veteran_unlock_sync_version_code", 0)))
-	_ensure_card_unlock_defaults()
+	core._ensure_card_unlock_defaults()
+	core.player_progress_install_secret = core._load_or_create_player_progress_install_secret()
+	core.player_progress_pending_events.clear()
+	core.player_progress_event_sequence = 0
+	core.player_progress_cache_trusted = false
+	var cached: Dictionary = core._read_trusted_player_progress_cache()
+	if not cached.is_empty():
+		core.player_progress_cache_trusted = true
+		core.player_progress_event_sequence = maxi(0, int(cached.get("event_sequence", 0)))
+		var cached_events: Array = cached.get("pending_events", [])
+		for event in cached_events:
+			if event is Dictionary:
+				core.player_progress_pending_events.append(event.duplicate(true))
+		core._apply_player_progress_snapshot(cached.get("snapshot", {}), false)
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
 
 func _save_card_unlocks() -> void :
-	_ensure_card_unlock_defaults()
-	var unlocked: Array = []
-	for card_id in core.unlocked_card_ids.keys():
-		if bool(core.unlocked_card_ids[card_id]):
-			unlocked.append(String(card_id))
-	unlocked.sort()
-	var unlocked_manifestations: Array = []
-	for key in core.unlocked_manifestation_ids.keys():
-		if bool(core.unlocked_manifestation_ids[key]):
-			unlocked_manifestations.append(String(key))
-	unlocked_manifestations.sort()
-	var unlocked_specters: Array = []
-	for key in core.unlocked_spectrum_ids.keys():
-		if bool(core.unlocked_spectrum_ids[key]):
-			unlocked_specters.append(String(key))
-	unlocked_specters.sort()
-	var progress: Dictionary = {}
-	for key in core.card_unlock_progress.keys():
-		progress[String(key)] = float(core.card_unlock_progress[key])
-	var saved_specter_levels: Dictionary = {}
-	for key in core.specter_levels.keys():
-		saved_specter_levels[String(key)] = clampi(int(core.specter_levels[key]), 1, core.AuraSystem.RUN_MAX_LEVEL)
-	var file = FileAccess.open(core.CARD_UNLOCK_SAVE_PATH, FileAccess.WRITE)
+	core._ensure_card_unlock_defaults()
+	var payload: Dictionary = core.RTPlayerProgressSync.build_cache_payload(
+		core.player_profile_id,
+		core.player_identity_auth_token,
+		core.player_identity_recovery_code,
+		core._card_unlock_snapshot(),
+		core.player_progress_pending_events,
+		core.player_progress_event_sequence
+	)
+	var signed_payload: Dictionary = core.RTPlayerProgressSync.signed_cache(payload, core._player_progress_install_secret())
+	var file = FileAccess.open(core.PLAYER_PROGRESS_CACHE_PATH, FileAccess.WRITE)
 	if file == null:
 		return
-	file.store_string(JSON.stringify({
-		"version": 2,
-		"unlocked": unlocked,
-		"unlocked_manifestations": unlocked_manifestations,
-		"unlocked_specters": unlocked_specters,
-		"specter_levels": saved_specter_levels,
-		"spectral_coins": maxi(0, core.persistent_spectral_coins),
-		"progress": progress,
-		"veteran_unlock_sync_version_code": core.card_unlock_veteran_synced_version_code
-	}, "\t"))
+	file.store_string(JSON.stringify(signed_payload, "\t"))
 	file.close()
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
@@ -358,6 +335,7 @@ func _save_config() -> void :
 
 func _interrupted_run_field_names() -> Array:
 	return [
+		"shop_paid_rerolls_this_visit", "manifest_evolution_fragment_claim_count", "cinzas_card_bonuses",
 		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted",
 		"selected_manifestation", "selected_aura", "manifestation_key", "aura_state", "manifest_evolution_state",
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
@@ -409,7 +387,7 @@ func _run_can_be_saved() -> bool:
 	return _interrupted_run_saved_mode() != ""
 
 func _interrupted_run_saved_mode() -> String:
-	if core.mode in ["game", "paused", "shop", "shop_opening", "shop_countdown", "boss_call", "phase_transition", "manifest_evolution"]:
+	if core.mode in ["game", "paused", "shop", "shop_opening", "shop_countdown", "boss_call", "phase_transition", "manifest_evolution", "manifest_evolution_waiting"]:
 		return core.mode
 	if core.mode == "pause_deck":
 		return "paused"

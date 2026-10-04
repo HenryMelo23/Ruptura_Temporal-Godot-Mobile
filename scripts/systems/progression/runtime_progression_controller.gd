@@ -90,6 +90,7 @@ func apply_score_delta(amount: int, broadcast: = true, event_id: String = "") ->
 		core.run_points_earned += amount
 	else:
 		core.run_points_spent += abs(amount)
+	core._record_telemetry_score_delta(amount, "score_delta")
 	if amount > 0 and broadcast and core.is_multiplayer and core._is_world_authority() and core._shop_rpc_available():
 		core.rpc("_rpc_add_score", amount, event_id if event_id != "" else next_score_event_id())
 
@@ -162,8 +163,8 @@ func is_common_card(card: Dictionary) -> bool:
 	return not core._is_rare_card(card)
 
 
-func new_common_card_count(card_id: String) -> int:
-	return card_count_by_id(card_id)
+func new_common_card_count(card_id: String) -> float:
+	return core._effective_card_count(card_id)
 
 
 func rare_card_count(card_id: String) -> int:

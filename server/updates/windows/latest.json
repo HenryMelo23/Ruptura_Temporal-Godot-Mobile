@@ -1,14 +1,13 @@
 {
-  "version": "2.0.40",
-  "version_code": 24000,
-  "filename": "Ruptura_Temporal_2.0.40.exe",
-  "sha256": "76ba322df3421bdd7ced730613428c0873b4e6f5ffb4bdcec88cfc53c42191e8",
-  "size": 1380154976,
+  "version": "2.0.43",
+  "version_code": 24300,
+  "filename": "Ruptura_Temporal_2.0.43.exe",
+  "sha256": "f36e3c31850dda9462fcb9b690622ea4313704fb7ee0ea3a9029e48798c44bac",
+  "size": 1386995248,
   "notes": [
-    "Corrige a identificacao da versao do jogo e do atualizador.",
-    "Corrige a ordem da tela de nome apos a cutscene inicial.",
-    "Reduz uso de memoria durante a cutscene inicial."
+    "Atualizacao 2.0.43 com mapas de fase integrados.",
+    "Preserva correcoes de multiplayer, DQN, Larapio, conquistas e scaling."
   ],
   "mandatory": false,
-  "published_at": "2026-09-24T19:38:54.1603459Z"
+  "published_at": "2026-10-02T22:27:44.2286314Z"
 }
