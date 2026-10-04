@@ -21,6 +21,13 @@ var role: String = ""
 var host: String = "127.0.0.1"
 var port: int = 4591
 var ping_budget_ms: int = 30
+var result_dir := ""
+
+
+func _result_path(result_role: String) -> String:
+	if result_dir != "":
+		return result_dir.path_join("gameplay_authority_" + result_role + "_result.txt")
+	return RESULT_PREFIX + result_role + "_result.txt"
 
 var manifest_reveal_requested := false
 var spectrum_ready_sent := false
@@ -45,7 +52,8 @@ func _check(condition: bool, message: String) -> void:
 		return
 	var err_msg := "[%s] %s" % [role.to_upper(), message]
 	push_error(err_msg)
-	var file := FileAccess.open(ERROR_FILE, FileAccess.WRITE)
+	var error_path: String = result_dir.path_join("gameplay_authority_error.txt") if result_dir != "" else ERROR_FILE
+	var file := FileAccess.open(error_path, FileAccess.WRITE)
 	if file:
 		file.store_string(err_msg)
 		file.close()
@@ -64,6 +72,8 @@ func _initialize() -> void:
 			port = int(arg.substr("--port=".length()))
 		elif arg.begins_with("--ping-budget="):
 			ping_budget_ms = maxi(1, int(arg.substr("--ping-budget=".length())))
+		elif arg.begins_with("--result-dir="):
+			result_dir = arg.trim_prefix("--result-dir=")
 
 	_check(role in ["server", "host", "client"], "missing or invalid --role")
 	game = load("res://scenes/Main.tscn").instantiate()
@@ -315,7 +325,7 @@ func _client_enemy_by_uid(uid: String) -> Dictionary:
 
 
 func _result_exists(result_role: String) -> bool:
-	return FileAccess.file_exists(RESULT_PREFIX + result_role + "_result.txt")
+	return FileAccess.file_exists(_result_path(result_role))
 
 
 func _wait_for_ping_budget(budget_ms: int, max_wait: float) -> void:
@@ -331,7 +341,7 @@ func _wait_for_ping_budget(budget_ms: int, max_wait: float) -> void:
 func _finish_ok(message: String) -> void:
 	var best_ping: int = int(game.net_report_ping_min) if game.net_report_ping_count > 0 else -1
 	print("[%s] GAMEPLAY_AUTHORITY_OK ping_ms=%d ping_min_ms=%d remote_ping_ms=%d %s" % [role.to_upper(), int(game.net_ping_ms), int(best_ping), int(game.net_remote_ping_ms), message])
-	var file := FileAccess.open(RESULT_PREFIX + role + "_result.txt", FileAccess.WRITE)
+	var file := FileAccess.open(_result_path(role), FileAccess.WRITE)
 	if file:
 		file.store_string("OK")
 		file.close()

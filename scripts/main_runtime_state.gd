@@ -48,8 +48,8 @@ const UmbraDqnContract = preload("res://scripts/systems/umbra_dqn_contract.gd")
 const RTBossPartyScaling = preload("res://scripts/systems/boss_party_scaling.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.43"
-const GAME_VERSION_CODE: = 24300
+const GAME_VERSION: = "2.0.44"
+const GAME_VERSION_CODE: = 24400
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500

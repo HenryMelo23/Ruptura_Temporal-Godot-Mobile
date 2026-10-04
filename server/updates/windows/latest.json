@@ -1,13 +1,17 @@
 {
-  "version": "2.0.43",
-  "version_code": 24300,
-  "filename": "Ruptura_Temporal_2.0.43.exe",
-  "sha256": "f36e3c31850dda9462fcb9b690622ea4313704fb7ee0ea3a9029e48798c44bac",
-  "size": 1386995248,
+  "version": "2.0.44",
+  "version_code": 24400,
+  "filename": "Ruptura_Temporal_2.0.44.exe",
+  "sha256": "31899b263020c61ac2fac66ab134a4c180e8ec07117db01f9d09d5f0b734fc7f",
+  "size": 1387017800,
   "notes": [
-    "Atualizacao 2.0.43 com mapas de fase integrados.",
-    "Preserva correcoes de multiplayer, DQN, Larapio, conquistas e scaling."
+    "Runs longas: mais aceleracao da build e recompensas apos 30 minutos, preservando o inicio e o perigo dos combates.",
+    "Corrigida a leitura do cache de progresso apos reiniciar, com compatibilidade com o cache anterior.",
+    "Retomar a run e usar retry preservam rerolls pagos, bonus de Queimar e progresso das evolucoes.",
+    "Melhorias internas em save, fases, pontuacao e loja, preservando mapas, efeitos e conteudo existente.",
+    "Revisao multiplayer: confirmacao no lobby, manifestacao/espectro, loja, pontuacao, revive e transicoes.",
+    "Android mantem a assinatura da 2.0.43; nao e necessario desinstalar essa versao para atualizar."
   ],
   "mandatory": false,
-  "published_at": "2026-10-02T22:27:44.2286314Z"
+  "published_at": "2026-10-04T22:20:21.2386425Z"
 }
