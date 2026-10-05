@@ -432,11 +432,12 @@ func _sanitize_desktop_hud_scale(value: float) -> float:
 func _prime_resource_mode_defaults() -> void :
 	if _is_mobile_runtime():
 		gfx_low_resource = true
+		gfx_memory_saver = true
 		mobile_low_resource_defaulted = true
 
 
 func _memory_saver_active() -> bool:
-	return gfx_memory_saver
+	return gfx_memory_saver or _is_mobile_runtime()
 
 
 func _shadows_enabled() -> bool:
@@ -4916,6 +4917,8 @@ func _get_startup_thanks_frame_texture(index: int) -> Texture2D:
 
 func _startup_thanks_reset() -> void :
 	_load_startup_video_config()
+	if _is_mobile_runtime():
+		startup_video_disabled = true
 	startup_thanks_timer = 0.0
 	startup_thanks_fading = false
 	startup_thanks_holding = false
@@ -35582,11 +35585,26 @@ func _draw_manifest_preview_scene(rect: Rect2, item: Dictionary, label: String, 
 func _manifest_preview_atlas(key: String, kind: String) -> Texture2D:
 	var cache_key = key + "_" + kind
 	if manifest_preview_atlases.has(cache_key):
+		_touch_manifest_preview_atlas(cache_key)
 		return manifest_preview_atlases[cache_key]
 	var path = "res://assets/previews/manifestations/" + cache_key + ".webp"
 	var texture: Texture2D = _safe_load(path)
-	manifest_preview_atlases[cache_key] = texture
+	if texture != null:
+		manifest_preview_atlases[cache_key] = texture
+		_touch_manifest_preview_atlas(cache_key)
+		_trim_manifest_preview_atlas_cache()
 	return texture
+
+
+func _touch_manifest_preview_atlas(cache_key: String) -> void:
+	manifest_preview_atlas_lru.erase(cache_key)
+	manifest_preview_atlas_lru.append(cache_key)
+
+
+func _trim_manifest_preview_atlas_cache() -> void:
+	while manifest_preview_atlas_lru.size() > MANIFEST_PREVIEW_ATLAS_CACHE_LIMIT:
+		var old_key: String = String(manifest_preview_atlas_lru.pop_front())
+		manifest_preview_atlases.erase(old_key)
 
 
 func _draw_manifest_preview_atlas(rect: Rect2, key: String, kind: String, t: float) -> bool:
@@ -41956,7 +41974,7 @@ func _graphics_setting_value(key: String) -> String:
 		"health_warning_start": return "%d%%" % roundi(gfx_health_warning_start * 100.0)
 		"health_warning_strength": return "DESLIGADO" if gfx_health_warning_strength == 0.0 else ("SUAVE" if gfx_health_warning_strength < 1.0 else ("FORTE" if gfx_health_warning_strength > 1.0 else "PADRÃO"))
 		"low_resource": return "ON" if gfx_low_resource else "OFF"
-		"memory_saver": return "ON" if gfx_memory_saver else "OFF"
+		"memory_saver": return "ON" if _memory_saver_active() else "OFF"
 		"window_mode":
 			match _sanitize_desktop_window_mode(desktop_window_mode):
 				DESKTOP_WINDOW_FULLSCREEN: return "FULLSCREEN"
@@ -41972,7 +41990,7 @@ func _graphics_setting_color(key: String) -> Color:
 		"screen_shake": return Color(0.6, 0.8, 1.0) if gfx_screen_shake else Color(0.46, 0.5, 0.56)
 		"health_warning_start", "health_warning_strength": return Color(1.0, 0.48, 0.42)
 		"low_resource": return Color(1.0, 0.72, 0.28) if gfx_low_resource else Color(0.46, 0.5, 0.56)
-		"memory_saver": return Color(1.0, 0.42, 0.34) if gfx_memory_saver else Color(0.46, 0.5, 0.56)
+		"memory_saver": return Color(1.0, 0.42, 0.34) if _memory_saver_active() else Color(0.46, 0.5, 0.56)
 		"window_mode": return Color(0.32, 1.0, 0.82)
 	return Color.WHITE
 
@@ -46020,7 +46038,7 @@ func _apply_desktop_window_mode() -> void :
 
 
 func _apply_graphics_settings() -> void :
-	if gfx_memory_saver:
+	if _memory_saver_active():
 		gfx_low_resource = true
 		gfx_particles = false
 		gfx_shadows = false
@@ -46039,7 +46057,7 @@ func _apply_graphics_settings() -> void :
 	_release_unused_lazy_maps(current_lazy_map_key)
 	print("GRAFICOS modo_leve=%s desempenho=%s fps=%d particulas=%s sombras=%s tremor=%s" % [
 		str(gfx_low_resource),
-		str(gfx_memory_saver),
+		str(_memory_saver_active()),
 		Engine.max_fps,
 		str(gfx_particles),
 		str(_shadows_enabled()),
