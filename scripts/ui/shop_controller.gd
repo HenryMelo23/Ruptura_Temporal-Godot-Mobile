@@ -160,10 +160,10 @@ func can_reroll() -> bool:
 
 func reroll_button_label() -> String:
 	if game == null:
-		return "RERROL"
+		return "REROLL"
 	if int(game.shop_rerolls) > 0:
-		return "RERROL %d" % int(game.shop_rerolls)
-	return "RERROL %d" % next_paid_reroll_cost()
+		return "REROLL %d" % int(game.shop_rerolls)
+	return "REROLL %d" % next_paid_reroll_cost()
 
 
 func start_mp_request_overlay(incoming: bool) -> void:

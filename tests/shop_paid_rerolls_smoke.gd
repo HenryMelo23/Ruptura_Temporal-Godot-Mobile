@@ -49,6 +49,28 @@ func _consume_free_rerolls() -> void:
 	_check(game.shop_paid_rerolls_this_visit == 0, "free rerolls changed paid counter")
 
 
+func _check_reroll_visual_contract() -> void:
+	var free_state: Dictionary = game.shop_presentation.reroll_visual_state(game)
+	_check(bool(free_state.get("free", false)), "visual state did not mark free reroll")
+	_check(String(free_state.get("detail", "")).find("GRATUITO") >= 0, "free reroll visual detail missing GRATUITO")
+	_check(String(free_state.get("detail", "")).find("restantes") >= 0, "free reroll visual detail missing remaining count")
+	game.shop_rerolls = 0
+	game.shop_paid_rerolls_this_visit = 0
+	var paid_state: Dictionary = game.shop_presentation.reroll_visual_state(game)
+	_check(not bool(paid_state.get("free", true)), "visual state did not switch to paid reroll")
+	_check(int(paid_state.get("cost", 0)) == 100, "paid reroll visual cost drifted")
+	_check(String(paid_state.get("detail", "")).find("100") >= 0, "paid reroll visual detail missing cost text")
+	game.shop_paid_rerolls_this_visit = 10
+	var red_state: Dictionary = game.shop_presentation.reroll_visual_state(game)
+	var red_color: Color = Color(red_state.get("accent", Color.WHITE))
+	_check(float(red_state.get("ratio", 0.0)) >= 1.0, "max paid reroll visual ratio did not reach card cost")
+	_check(red_color.r >= 0.9 and red_color.g <= 0.25, "max paid reroll visual color was not red")
+	game.score = int(red_state.get("cost", 0)) - 1
+	var blocked_state: Dictionary = game.shop_presentation.reroll_visual_state(game)
+	_check(not bool(blocked_state.get("enabled", true)), "insufficient score visual state stayed enabled")
+	_check(String(blocked_state.get("detail", "")).to_lower().find("saldo") >= 0, "insufficient score visual detail missing text")
+
+
 func _run() -> void:
 	await process_frame
 	game._start_game()
@@ -71,6 +93,8 @@ func _run() -> void:
 	game.shop_paid_rerolls_this_visit = 10
 	_check(game.shop_controller.next_paid_reroll_cost() == 1500, "paid reroll cap drifted")
 
+	_open_test_shop(1600, 500)
+	_check_reroll_visual_contract()
 	_open_test_shop(1600, 500)
 	_consume_free_rerolls()
 	var spent_before: int = game.run_points_spent

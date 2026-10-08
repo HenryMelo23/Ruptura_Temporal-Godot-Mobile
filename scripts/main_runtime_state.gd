@@ -420,6 +420,15 @@ const FUSION_RADIUS: = 90.0
 const FUSION_REQUIRED: = 3
 const FUSION_TIME: = 120.0
 const CARD_COST_BASE: = 500
+const PHASE_POINT_CRYSTAL_KIND: = "phase_point_crystal"
+const PHASE_POINT_CRYSTAL_MIN_COUNT: = 4
+const PHASE_POINT_CRYSTAL_MAX_COUNT: = 6
+const PHASE_POINT_CRYSTAL_CARD_COST_RATIO: = 0.25
+const PHASE_POINT_CRYSTAL_LIFE: = 900.0
+const PHASE_POINT_CRYSTAL_PICKUP_RADIUS: = 50.0
+const PHASE_POINT_CRYSTAL_MARGIN: = Vector2(120.0, 96.0)
+const PHASE_POINT_CRYSTAL_MIN_RADIUS: = 185.0
+const PHASE_POINT_CRYSTAL_MAX_RADIUS: = 470.0
 const FORCED_SHOP_CARDS: = 6
 const FORCED_SHOP_WARNING: = 15.0
 const FORCED_SHOP_SLOW_START: = 3.0
@@ -704,6 +713,7 @@ const BOSS2_STATE_ICE_PRISON: = "boss2_ice_prison"
 const BOSS2_STATE_CRYSTAL_SHIELD: = "boss2_crystal_shield"
 const BOSS2_STATE_DOUBLE_BLIZZARD: = "boss2_double_blizzard"
 const BOSS2_STATE_FLASH_FREEZE: = "boss2_flash_freeze"
+const BOSS2_STATE_HUNT_MARK: = "boss2_hunt_mark"
 const NET_BOSS2_STATES: = [
 	BOSS2_STATE_IDLE,
 	BOSS2_STATE_REPOSITION,
@@ -713,7 +723,8 @@ const NET_BOSS2_STATES: = [
 	BOSS2_STATE_ICE_PRISON,
 	BOSS2_STATE_CRYSTAL_SHIELD,
 	BOSS2_STATE_DOUBLE_BLIZZARD,
-	BOSS2_STATE_FLASH_FREEZE
+	BOSS2_STATE_FLASH_FREEZE,
+	BOSS2_STATE_HUNT_MARK
 ]
 const NET_BOSS2_ATTACKS: = [
 	"",
@@ -724,6 +735,7 @@ const NET_BOSS2_ATTACKS: = [
 	"crystal_shield",
 	"double_blizzard",
 	"flash_freeze",
+	"hunt_mark",
 	"reposition"
 ]
 const BOSS2_WALK_SPEED: = 112.0
@@ -749,6 +761,12 @@ const BOSS2_ULTIMATE_FAN_INTERVAL: = 6.0
 const BOSS2_FLASH_FREEZE_WARNING: = 1.95
 const BOSS2_FLASH_FREEZE_RADIUS: = 138.0
 const BOSS2_FLASH_FREEZE_STUN: = 2.6
+const BOSS2_HUNT_WARN: = 1.82
+const BOSS2_HUNT_LOCK_LEAD: = 0.48
+const BOSS2_HUNT_ACTIVE: = 0.38
+const BOSS2_HUNT_RADIUS: = 72.0
+const BOSS2_HUNT_WIDTH: = 42.0
+const BOSS2_HUNT_GRACE: = 9.5
 const PHASE2_FREEZE_VISUAL_MIN_TIME: = 2.3
 const BOSS1_WALK_AUDIO_VOLUME: = 0.13
 const PHASE_TRANSITION_HOLD_TIME: = 1.7
@@ -1118,7 +1136,7 @@ const BOSS3_MIASMA_TICK: = 0.65
 const BOSS3_CHEESE_INTERVAL: = 18.0
 const BOSS3_MIASMA_DURATION: = 15.0
 const BOSS3_MIASMA_COOLDOWN: = 24.0
-const BOSS3_MIASMA_VARIANT_COUNT: = 4
+const BOSS3_MIASMA_VALID_VARIANTS: = [1, 2, 4]
 const BOSS3_MIASMA_CLONE_SWAP: = 1.5
 const BOSS3_MIASMA_DARK_RADIUS: = 250.0
 const BOSS3_MIASMA_SPIT_WARNING: = 0.8
@@ -1130,11 +1148,6 @@ const BOSS3_MIASMA_QTE_TOUCH_MAX_HP_RATE: = 0.05
 const BOSS3_MIASMA_QTE_OVERTIME_TICK: = 3.0
 const BOSS3_MIASMA_QTE_OVERTIME_RATE: = 0.008
 const BOSS3_MIASMA_QTE_OVERTIME_GROWTH: = 1.75
-const BOSS3_MIASMA_CLOUD_DURATION: = 8.0
-const BOSS3_MIASMA_CLOUD_COUNT: = 9
-const BOSS3_MIASMA_CLOUD_RADIUS: = 46.0
-const BOSS3_MIASMA_CLOUD_SPEED_MULT: = 1.2
-const BOSS3_MIASMA_CLOUD_TURN_RATE: = 3.9
 const BOSS3_FAITH_TEST_COOLDOWN: = 30.0
 const BOSS3_FAITH_TEST_INTERVAL: = 2.0
 const BOSS3_FAITH_TEST_PULSES: = 15
@@ -3144,6 +3157,9 @@ var boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
 var boss2_ultimate_blizzard_exposure = 0.0
 var boss2_ultimate_hit_gate = 0.0
 var boss2_ultimate_used = false
+var boss2_hunt_sequence: int = 0
+var boss2_hunt_last_target_peer_id: int = 0
+var boss2_hunt_target_grace: Dictionary = {}
 var phase3_miasma_zones = []
 var phase3_cheeses = []
 var phase6_pustule_pools = []
@@ -3236,7 +3252,6 @@ var boss3_miasma_qte_lids_touching = false
 var boss3_miasma_qte_overtime_timer = BOSS3_MIASMA_QTE_OVERTIME_TICK
 var boss3_miasma_qte_overtime_stage = 0
 var boss3_miasma_tutorial_seen = false
-var boss3_miasma_clouds = []
 var boss3_faith_test_cooldown = BOSS3_FAITH_TEST_COOLDOWN
 var boss3_faith_test_active = false
 var boss3_faith_test_pulses_left = 0

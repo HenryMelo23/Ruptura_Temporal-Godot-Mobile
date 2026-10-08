@@ -6361,6 +6361,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	_reset_phase6_state()
 	var offer_run_tutorial: = _should_offer_run_tutorial(clear_interrupted_save)
 	_apply_initial_phase_setup(current_phase, _multiplayer_enemy_hp_scale())
+	_spawn_phase_point_crystals_for_phase(current_phase)
 	effects.clear()
 	if offer_run_tutorial:
 		_begin_tutorial_offer()
@@ -7006,7 +7007,6 @@ func _reset_phase3_state() -> void :
 	boss3_miasma_qte_overtime_timer = BOSS3_MIASMA_QTE_OVERTIME_TICK
 	boss3_miasma_qte_overtime_stage = 0
 	boss3_miasma_tutorial_seen = false
-	boss3_miasma_clouds.clear()
 	boss3_faith_test_cooldown = BOSS3_FAITH_TEST_COOLDOWN * 0.45
 	boss3_faith_test_active = false
 	boss3_faith_test_pulses_left = 0
@@ -7307,6 +7307,9 @@ func _reset_boss2_state() -> void :
 	boss2_ultimate_blizzard_exposure = 0.0
 	boss2_ultimate_hit_gate = 0.0
 	boss2_ultimate_used = false
+	boss2_hunt_sequence = 0
+	boss2_hunt_last_target_peer_id = 0
+	boss2_hunt_target_grace.clear()
 
 
 func _reset_boss1_rewind_state() -> void :
@@ -7662,6 +7665,8 @@ func _begin_manifest_evolution_barrier(stage: String, options: Array, pos: Vecto
 	if not is_multiplayer:
 		_apply_manifest_evolution_choice_local(stage, options, pos, previous_mode)
 		return
+	if _is_world_authority() and manifest_evolution_barrier_active:
+		return
 	var expected_peers: Array = requested_expected_peers if not requested_expected_peers.is_empty() else _manifest_evolution_expected_peer_ids()
 	expected_peers = _sanitize_manifest_evolution_expected_peers(expected_peers)
 	if expected_peers.is_empty() and _local_manifest_evolution_eligible():
@@ -7682,11 +7687,6 @@ func _request_manifest_evolution_barrier(stage: String, options: Array, pos: Vec
 	if _is_world_authority() or not _shop_rpc_available():
 		_begin_manifest_evolution_barrier(stage, options, pos, previous_mode)
 		return
-	manifest_evolution_barrier_id += 1
-	manifest_evolution_barrier_active = true
-	manifest_evolution_barrier_expected_peers = _manifest_evolution_expected_peer_ids()
-	manifest_evolution_barrier_ready_by_peer.clear()
-	_apply_manifest_evolution_choice_local(stage, options, pos, previous_mode)
 	rpc_id(1, "_rpc_manifest_evolution_barrier_request", stage, options, pos, previous_mode)
 
 
@@ -10568,7 +10568,6 @@ func _damage_source_is_boss_ultimate(source: String) -> bool:
 		"boss2_ultimate_blizzard",
 		"boss2_ice_pillar",
 		"boss2_flash_freeze",
-		"boss3_miasma_cloud",
 		"boss3_miasma_link",
 		"singularidade",
 		"prisao_nexo",
@@ -21110,7 +21109,6 @@ func _clear_boss_runtime_hazards() -> void:
 	if current_phase == 3:
 		if _boss3_miasma_active():
 			_end_boss3_miasma(true)
-		boss3_miasma_clouds.clear()
 		phase3_miasma_zones.clear()
 		boss3_faith_test_active = false
 	if current_phase == 4:
@@ -23277,6 +23275,69 @@ func _spawn_gameplay_orb(kind: String, pos: Vector2, data: Dictionary, owner_pee
 	return orb
 
 
+func _phase_point_crystal_total_value() -> int:
+	return max(PHASE_POINT_CRYSTAL_MIN_COUNT, int(round(float(card_cost) * PHASE_POINT_CRYSTAL_CARD_COST_RATIO)))
+
+
+func _phase_point_crystal_count_for_phase(_phase: int) -> int:
+	return rng.randi_range(PHASE_POINT_CRYSTAL_MIN_COUNT, PHASE_POINT_CRYSTAL_MAX_COUNT)
+
+
+func _phase_point_crystal_values(count: int) -> Array[int]:
+	var values: Array[int] = []
+	if count <= 0:
+		return values
+	var total: int = _phase_point_crystal_total_value()
+	var base_value: int = maxi(1, int(floor(float(total) / float(count))))
+	var remainder: int = maxi(0, total - base_value * count)
+	for i in range(count):
+		values.append(base_value + (1 if i < remainder else 0))
+	return values
+
+
+func _phase_point_crystal_position(index: int, count: int, base_angle: float) -> Vector2:
+	var center: Vector2 = PLAYER_START
+	var angle_step: float = TAU / float(maxi(1, count))
+	var angle: float = base_angle + angle_step * float(index) + rng.randf_range(-0.28, 0.28)
+	var radius: float = rng.randf_range(PHASE_POINT_CRYSTAL_MIN_RADIUS, PHASE_POINT_CRYSTAL_MAX_RADIUS)
+	var offset: Vector2 = Vector2.from_angle(angle) * radius
+	offset += Vector2(rng.randf_range(-44.0, 44.0), rng.randf_range(-34.0, 34.0))
+	return (center + offset).clamp(PHASE_POINT_CRYSTAL_MARGIN, WORLD_SIZE - PHASE_POINT_CRYSTAL_MARGIN)
+
+
+func _spawn_phase_point_crystals_for_phase(phase: int) -> void:
+	if phase <= 0:
+		return
+	if is_multiplayer and not _is_world_authority():
+		return
+	_cleanup_phase_point_crystals()
+	var count: int = _phase_point_crystal_count_for_phase(phase)
+	var values: Array[int] = _phase_point_crystal_values(count)
+	var base_angle: float = rng.randf_range(0.0, TAU)
+	for i in range(count):
+		_spawn_gameplay_orb(PHASE_POINT_CRYSTAL_KIND, _phase_point_crystal_position(i, count, base_angle), {
+			"score_value": values[i],
+			"spawn_phase": phase,
+			"collect_radius": PHASE_POINT_CRYSTAL_PICKUP_RADIUS,
+			"pulse": rng.randf_range(0.0, TAU)
+		}, 0, PHASE_POINT_CRYSTAL_LIFE)
+
+
+func _phase_point_crystal_orbs() -> Array:
+	return heal_orbs.filter(func(orb): return String(orb.get("kind", "")) == PHASE_POINT_CRYSTAL_KIND)
+
+
+func _cleanup_phase_point_crystals() -> void:
+	for orb in _phase_point_crystal_orbs():
+		var uid: String = String(orb.get("uid", ""))
+		if uid == "":
+			continue
+		if is_multiplayer and _is_world_authority() and _shop_rpc_available():
+			_confirm_gameplay_orb_removed(uid, "cleanup", 0, orb)
+		else:
+			_remove_gameplay_orb(uid)
+
+
 func _gameplay_orb_by_uid(uid: String) -> Dictionary:
 	for orb in heal_orbs:
 		if String(orb.get("uid", "")) == uid:
@@ -23299,7 +23360,8 @@ func _local_can_collect_gameplay_orb(orb: Dictionary) -> bool:
 	var owner_peer: int = int(orb.get("owner_peer", 0))
 	if owner_peer != 0 and owner_peer != _mp_unique_id():
 		return false
-	return Vector2(orb.get("pos", player_pos)).distance_to(player_pos) < _neutral_pickup_radius(58.0)
+	var pickup_radius: float = float(orb.get("collect_radius", 58.0))
+	return Vector2(orb.get("pos", player_pos)).distance_to(player_pos) < _neutral_pickup_radius(pickup_radius)
 
 
 func _remote_can_collect_gameplay_orb(peer_id: int, orb: Dictionary) -> bool:
@@ -23312,7 +23374,8 @@ func _remote_can_collect_gameplay_orb(peer_id: int, orb: Dictionary) -> bool:
 	if not _remote_player_state_targetable(state):
 		return false
 	var pos: Vector2 = Vector2(state.get("pos", Vector2.ZERO))
-	return pos.distance_to(Vector2(orb.get("pos", pos))) < _neutral_pickup_radius(58.0)
+	var pickup_radius: float = float(orb.get("collect_radius", 58.0))
+	return pos.distance_to(Vector2(orb.get("pos", pos))) < _neutral_pickup_radius(pickup_radius)
 
 
 func _gameplay_orb_collecting_peer(orb: Dictionary) -> int:
@@ -23354,6 +23417,8 @@ func _update_multiplayer_gameplay_orbs(delta: float) -> void:
 
 func _apply_gameplay_orb_collect_local(orb: Dictionary) -> void:
 	match String(orb.get("kind", "heal")):
+		PHASE_POINT_CRYSTAL_KIND:
+			_collect_phase_point_crystal_orb(orb)
 		"voraz_hunger":
 			_collect_voraz_hunger_orb(orb)
 		_:
@@ -23362,6 +23427,24 @@ func _apply_gameplay_orb_collect_local(orb: Dictionary) -> void:
 			if heal > 0:
 				_heal_player(heal, "heal_orb", _support_card_count(CARD_NUCLEO_ID) <= 0)
 				_add_text("+%d" % heal, player_pos + Vector2(0, -64), Color(0.36, 1.0, 0.46), 0.8, 18)
+
+
+func _collect_phase_point_crystal_orb(orb: Dictionary) -> void:
+	var value: int = int(orb.get("score_value", orb.get("value", 0)))
+	if value <= 0:
+		return
+	if not is_multiplayer:
+		_play_phase_point_crystal_collect_vfx(orb)
+	var uid: String = String(orb.get("uid", ""))
+	_apply_score_delta(value, true, "phase_crystal:%s" % uid)
+	_add_text("+%d CRISTAL" % value, player_pos + Vector2(0, -70), Color(0.62, 1.0, 0.96), 0.72, 16)
+	_play_sfx("Moeda.mp3", 0.04, 0.32, 1.32)
+
+
+func _play_phase_point_crystal_collect_vfx(orb: Dictionary) -> void:
+	var pos: Vector2 = Vector2(orb.get("pos", player_pos))
+	var count: int = 6 if _memory_saver_active() else 11
+	_spawn_radial_particles(pos, Color(0.58, 1.0, 0.94), count)
 
 
 func _collect_voraz_hunger_orb(orb: Dictionary) -> void:
@@ -23384,6 +23467,8 @@ func _confirm_gameplay_orb_removed(uid: String, reason: String, collector_peer_i
 	if uid == "" or net_collected_gameplay_orb_ids.has(uid):
 		return
 	net_collected_gameplay_orb_ids[uid] = true
+	if reason == "collected" and String(orb.get("kind", "")) == PHASE_POINT_CRYSTAL_KIND:
+		_play_phase_point_crystal_collect_vfx(orb)
 	if reason == "collected" and collector_peer_id == _mp_unique_id():
 		_apply_gameplay_orb_collect_local(orb)
 	_remove_gameplay_orb(uid)
@@ -23488,9 +23573,19 @@ func _boss3_miasma_hides_boss_bar() -> bool:
 
 func _choose_boss3_miasma_variant() -> int:
 	if boss3_miasma_variant_bag.is_empty():
-		boss3_miasma_variant_bag = range(1, BOSS3_MIASMA_VARIANT_COUNT + 1)
+		boss3_miasma_variant_bag = BOSS3_MIASMA_VALID_VARIANTS.duplicate()
 		boss3_miasma_variant_bag.shuffle()
-	return int(boss3_miasma_variant_bag.pop_back())
+	while not boss3_miasma_variant_bag.is_empty():
+		var variant: int = int(boss3_miasma_variant_bag.pop_back())
+		if BOSS3_MIASMA_VALID_VARIANTS.has(variant):
+			return variant
+	return _choose_boss3_miasma_variant()
+
+
+func _coerce_boss3_miasma_variant(variant: int, fallback_to_roll: bool = false) -> int:
+	if BOSS3_MIASMA_VALID_VARIANTS.has(variant):
+		return variant
+	return _choose_boss3_miasma_variant() if fallback_to_roll else 0
 
 
 func _is_umbra_miasma_active() -> bool:
@@ -23539,7 +23634,9 @@ func _boss5_dimension_map_key(dim: String) -> String:
 func _start_boss3_miasma(forced_variant: = 0) -> void :
 	if current_phase != 3 or not boss_active or boss_hp <= 0.0 or _boss3_miasma_active():
 		return
-	boss3_miasma_variant = clampi(forced_variant, 1, BOSS3_MIASMA_VARIANT_COUNT) if forced_variant > 0 else _choose_boss3_miasma_variant()
+	boss3_miasma_variant = _coerce_boss3_miasma_variant(forced_variant, true) if forced_variant > 0 else _choose_boss3_miasma_variant()
+	if boss3_miasma_variant <= 0:
+		return
 	boss3_miasma_timer = BOSS3_MIASMA_DURATION
 	boss3_miasma_cooldown = 0.0
 	boss3_miasma_clone_timer = BOSS3_MIASMA_CLONE_SWAP
@@ -23554,18 +23651,6 @@ func _start_boss3_miasma(forced_variant: = 0) -> void :
 			boss3_miasma_clone_positions.append((player_pos + Vector2.from_angle(angle) * distance).clamp(Vector2(100, 100), WORLD_SIZE - Vector2(100, 100)))
 	elif boss3_miasma_variant == 2:
 		enemy_bullets = enemy_bullets.filter( func(b): return String(b.get("type", "")) != "rat_flask")
-	elif boss3_miasma_variant == 3:
-		boss3_miasma_timer = BOSS3_MIASMA_CLOUD_DURATION
-		boss3_miasma_qte_required = 0
-		boss3_miasma_qte_taps = 0
-		boss3_miasma_qte_time_left = 0.0
-		boss3_miasma_qte_idle = 0.0
-		boss3_miasma_qte_elapsed = 0.0
-		boss3_miasma_qte_lid_contacts = 0
-		boss3_miasma_qte_lids_touching = false
-		boss3_miasma_qte_overtime_timer = BOSS3_MIASMA_QTE_OVERTIME_TICK
-		boss3_miasma_qte_overtime_stage = 0
-		_spawn_boss3_miasma_clouds()
 	elif boss3_miasma_variant == 4:
 		boss3_miasma_qte_required = BOSS3_MIASMA_QTE_REQUIRED
 		boss3_miasma_qte_taps = 0
@@ -23591,13 +23676,6 @@ func _update_boss3_miasma(delta: float) -> bool:
 	if boss3_miasma_variant == 4:
 		_update_boss3_miasma_qte(delta)
 		return _boss3_miasma_active()
-	if boss3_miasma_variant == 3:
-		boss3_miasma_timer = max(0.0, boss3_miasma_timer - delta)
-		_update_boss3_miasma_clouds(delta)
-		if boss3_miasma_timer <= 0.0 or boss3_miasma_clouds.is_empty():
-			_end_boss3_miasma(true)
-			return false
-		return true
 	boss3_miasma_timer = max(0.0, boss3_miasma_timer - delta)
 	if boss3_miasma_timer <= 0.0:
 		_end_boss3_miasma(true)
@@ -23622,113 +23700,12 @@ func _update_boss3_miasma(delta: float) -> bool:
 	return true
 
 
-func _spawn_boss3_miasma_clouds() -> void :
-	boss3_miasma_clouds.clear()
-	var cloud_speed: float = maxf(120.0, player_speed * BOSS3_MIASMA_CLOUD_SPEED_MULT)
-	var targets: = _combat_targets()
-	for i in range(BOSS3_MIASMA_CLOUD_COUNT):
-		var angle: float = TAU * float(i) / float(BOSS3_MIASMA_CLOUD_COUNT) + rng.randf_range(-0.18, 0.18)
-		var start_distance: float = rng.randf_range(72.0, 132.0)
-		var start_pos: Vector2 = (boss_pos + Vector2.from_angle(angle) * start_distance).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
-		var target: Dictionary = targets[i % targets.size()] if not targets.is_empty() else {"peer_id": _mp_unique_id(), "local": true}
-		boss3_miasma_clouds.append({
-			"pos": start_pos,
-			"vel": Vector2.from_angle(angle) * cloud_speed,
-			"life": BOSS3_MIASMA_CLOUD_DURATION,
-			"max": BOSS3_MIASMA_CLOUD_DURATION,
-			"radius": BOSS3_MIASMA_CLOUD_RADIUS,
-			"speed": cloud_speed,
-			"phase": rng.randf_range(0.0, TAU),
-			"effect": i % 3,
-			"target_peer": int(target.get("peer_id", _mp_unique_id())),
-			"hit": false
-		})
-	_add_text("NUVENS DO MIASMA", boss_pos + Vector2(0, -166), Color(0.58, 1.0, 0.3), 1.55, 24)
-
-
-func _update_boss3_miasma_clouds(delta: float) -> void :
-	var kept: Array = []
-	for cloud in boss3_miasma_clouds:
-		cloud["life"] = float(cloud.get("life", 0.0)) - delta
-		if float(cloud["life"]) <= 0.0 or bool(cloud.get("hit", false)):
-			continue
-		var pos: = Vector2(cloud.get("pos", boss_pos))
-		var speed: float = maxf(float(cloud.get("speed", player_speed * BOSS3_MIASMA_CLOUD_SPEED_MULT)), player_speed * BOSS3_MIASMA_CLOUD_SPEED_MULT)
-		var target_peer: = int(cloud.get("target_peer", _mp_unique_id()))
-		var target_pos: Vector2 = player_pos
-		var target_local: = target_peer == _mp_unique_id()
-		if not target_local:
-			var remote_state: Dictionary = net_players_by_peer.get(target_peer, {})
-			if remote_state.is_empty() or bool(remote_state.get("dead", false)) or bool(remote_state.get("stealthed", false)):
-				var replacement: = _boss_target_entry(true)
-				target_peer = int(replacement.get("peer_id", _mp_unique_id()))
-				target_local = bool(replacement.get("local", true))
-				cloud["target_peer"] = target_peer
-				target_pos = Vector2(replacement.get("pos", player_pos))
-			else:
-				target_pos = Vector2(remote_state.get("pos", player_pos))
-		var desired: Vector2 = target_pos - pos
-		if desired.length() <= 0.01:
-			desired = last_facing.normalized()
-		if desired.length() <= 0.01:
-			desired = Vector2.RIGHT
-		var current_vel: = Vector2(cloud.get("vel", desired.normalized() * speed))
-		var next_vel: = current_vel.lerp(desired.normalized() * speed, clampf(BOSS3_MIASMA_CLOUD_TURN_RATE * delta, 0.0, 1.0))
-		if next_vel.length() <= 0.01:
-			next_vel = desired.normalized() * speed
-		pos = (pos + next_vel * delta).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
-		cloud["pos"] = pos
-		cloud["vel"] = next_vel
-		cloud["phase"] = float(cloud.get("phase", 0.0)) + delta * 4.2
-		var hit_radius: float = float(cloud.get("radius", BOSS3_MIASMA_CLOUD_RADIUS)) + 20.0
-		if target_local and player_hp > 0 and pos.distance_to(player_pos) <= hit_radius:
-			cloud["hit"] = true
-			_apply_boss3_miasma_cloud_effect(cloud)
-			continue
-		if not target_local and pos.distance_to(target_pos) <= hit_radius:
-			cloud["hit"] = true
-			_apply_boss3_miasma_cloud_effect_to_peer(target_peer, cloud)
-			continue
-		kept.append(cloud)
-	boss3_miasma_clouds = kept
-
-
-func _apply_boss3_miasma_cloud_effect(cloud: Dictionary) -> void :
-	var effect: = int(cloud.get("effect", 0))
-	var damage: = int(player_hp_max * 0.07 + 42.0 + enemy_far_damage * 0.36)
-	_damage_player(damage, "boss3_miasma_cloud")
-	match effect:
-		0:
-			player_silence_timer = max(player_silence_timer, 1.65)
-			_add_text("SILENCIO DO MIASMA", player_pos + Vector2(0, -96), Color(0.66, 1.0, 0.3), 0.85, 18)
-		1:
-			player_stun_timer = max(player_stun_timer, 0.48)
-			_add_text("PESO DO MIASMA", player_pos + Vector2(0, -96), Color(0.82, 1.0, 0.28), 0.85, 18)
-		_:
-			boss_wave_slow_timer = max(boss_wave_slow_timer, 1.75)
-			_add_text("FOME DA FE", player_pos + Vector2(0, -96), Color(1.0, 0.72, 0.16), 0.85, 18)
-	_spawn_radial_particles(player_pos, Color(0.62, 1.0, 0.24), 14)
-	_vibrate(210, 0.72)
-
-
-func _apply_boss3_miasma_cloud_effect_to_peer(peer_id: int, cloud: Dictionary) -> void :
-	var state: Dictionary = net_players_by_peer.get(peer_id, {})
-	var remote_hp_max: = float(state.get("hp_max", player_hp_max))
-	var damage: = int(remote_hp_max * 0.07 + 42.0 + enemy_far_damage * 0.36)
-	_send_peer_damage(peer_id, damage, "boss3_miasma_cloud")
-	var effect: = int(cloud.get("effect", 0))
-	var effect_name: = "silence" if effect == 0 else ("stun" if effect == 1 else "slow")
-	var duration: = 1.65 if effect == 0 else (0.48 if effect == 1 else 1.75)
-	_request_peer_status(peer_id, effect_name, duration)
-
-
 func _end_boss3_miasma(success: bool) -> void :
 	var old_variant: int = boss3_miasma_variant
 	boss3_miasma_timer = 0.0
 	boss3_miasma_variant = 0
 	boss3_miasma_cooldown = BOSS3_MIASMA_COOLDOWN
 	boss3_miasma_clone_positions.clear()
-	boss3_miasma_clouds.clear()
 	boss3_miasma_qte_required = 0
 	boss3_miasma_qte_time_left = 0.0
 	boss3_miasma_qte_tutorial = 0.0
@@ -27449,6 +27426,7 @@ func _finish_boss3_ritual() -> void :
 
 func _update_boss_phase2(delta: float) -> void :
 	_update_boss2_animation(delta)
+	_update_boss2_hunt_grace(delta)
 	boss_attack_timer = max(0.0, boss_attack_timer - delta)
 	if boss_entry_timer > 0.0:
 		boss_entry_timer -= delta
@@ -27503,7 +27481,7 @@ func _update_boss2_state(delta: float) -> void :
 			_boss2_update_idle(delta)
 		BOSS2_STATE_REPOSITION:
 			_boss2_update_reposition(delta)
-		BOSS2_STATE_FREEZING_BREATH, BOSS2_STATE_SPIN_SPIT_UP, BOSS2_STATE_GLACIAL_STOMP, BOSS2_STATE_ICE_PRISON, BOSS2_STATE_CRYSTAL_SHIELD, BOSS2_STATE_DOUBLE_BLIZZARD, BOSS2_STATE_FLASH_FREEZE:
+		BOSS2_STATE_FREEZING_BREATH, BOSS2_STATE_SPIN_SPIT_UP, BOSS2_STATE_GLACIAL_STOMP, BOSS2_STATE_ICE_PRISON, BOSS2_STATE_CRYSTAL_SHIELD, BOSS2_STATE_DOUBLE_BLIZZARD, BOSS2_STATE_FLASH_FREEZE, BOSS2_STATE_HUNT_MARK:
 			boss2_action_timer -= delta
 			if boss2_action_timer <= 0.0:
 				_boss2_finish_action()
@@ -27589,6 +27567,8 @@ func _boss2_pick_weighted_attack() -> String:
 		options = [["freezing_breath", 25.0], ["spin_spit_up", 22.0], ["glacial_stomp", 13.0], ["ice_prison", 13.0], ["flash_freeze", 17.0], ["crystal_shield", 7.0], ["reposition", 3.0]]
 	else:
 		options = [["freezing_breath", 20.0], ["spin_spit_up", 20.0], ["ice_prison", 13.0], ["flash_freeze", 20.0], ["double_blizzard", 17.0], ["glacial_stomp", 7.0], ["crystal_shield", 3.0]]
+	if _boss2_hunt_can_start():
+		options.append(["hunt_mark", 12.0 if pct > 0.4 else 15.0])
 	var total: = 0.0
 	for option in options:
 		var weight: = float(option[1])
@@ -27631,6 +27611,8 @@ func _boss2_start_attack(action: String) -> void :
 			_boss2_start_crystal_shield()
 		"flash_freeze":
 			_boss2_start_flash_freeze()
+		"hunt_mark":
+			_boss2_start_hunt_mark()
 		_:
 			_boss2_start_freezing_breath()
 
@@ -27915,6 +27897,126 @@ func _boss2_start_flash_freeze() -> void :
 	_add_text("CONGELAMENTO SUBITO", target + Vector2(0, - BOSS2_FLASH_FREEZE_RADIUS - 28.0), Color(0.72, 0.96, 1.0), 1.05, 22)
 
 
+func _boss2_hunt_params() -> Dictionary:
+	_ensure_boss_party_scaling_context(2)
+	var party_size: int = clampi(boss_party_scaling_size if boss_party_scaling_size > 0 else 1, 1, ONLINE_MAX_PLAYERS)
+	var pressure: float = boss_party_scaling_pressure_coeff
+	return {
+		"party_size": party_size,
+		"warn": BOSS2_HUNT_WARN + 0.12 * float(party_size - 1),
+		"lock_lead": BOSS2_HUNT_LOCK_LEAD + 0.04 * float(party_size - 1),
+		"active": BOSS2_HUNT_ACTIVE,
+		"radius": maxf(60.0, BOSS2_HUNT_RADIUS - 4.0 * float(party_size - 1)),
+		"width": maxf(34.0, BOSS2_HUNT_WIDTH - 3.0 * float(party_size - 1)),
+		"grace": BOSS2_HUNT_GRACE + 2.0 * float(party_size - 1),
+		"damage_scale": pressure
+	}
+
+
+func _update_boss2_hunt_grace(delta: float) -> void:
+	if boss2_hunt_target_grace.is_empty():
+		return
+	var expired: Array = []
+	for peer_key in boss2_hunt_target_grace.keys():
+		var next_value: float = maxf(0.0, float(boss2_hunt_target_grace[peer_key]) - delta)
+		if next_value <= 0.0:
+			expired.append(peer_key)
+		else:
+			boss2_hunt_target_grace[peer_key] = next_value
+	for peer_key in expired:
+		boss2_hunt_target_grace.erase(peer_key)
+
+
+func _boss2_hunt_can_start() -> bool:
+	return not _boss2_pick_hunt_target_entry(false).is_empty()
+
+
+func _boss2_pick_hunt_target_entry(apply_grace: bool) -> Dictionary:
+	var targets: Array = _combat_targets()
+	if targets.is_empty():
+		return {}
+	var open_targets: Array = []
+	for target_value in targets:
+		var target: Dictionary = target_value
+		var peer_id: int = int(target.get("peer_id", 0))
+		if float(boss2_hunt_target_grace.get(peer_id, 0.0)) > 0.0:
+			continue
+		open_targets.append(target)
+	if open_targets.is_empty():
+		return {}
+	var preferred: Array = []
+	if open_targets.size() > 1:
+		for target_value in open_targets:
+			var target: Dictionary = target_value
+			if int(target.get("peer_id", 0)) != boss2_hunt_last_target_peer_id:
+				preferred.append(target)
+	else:
+		preferred = open_targets
+	var pool: Array = preferred if not preferred.is_empty() else open_targets
+	pool.sort_custom(func(a, b): return int(Dictionary(a).get("peer_id", 0)) < int(Dictionary(b).get("peer_id", 0)))
+	var offset: int = posmod(boss2_hunt_sequence, pool.size())
+	var chosen: Dictionary = Dictionary(pool[offset])
+	if apply_grace:
+		var peer_id: int = int(chosen.get("peer_id", 0))
+		var params: Dictionary = _boss2_hunt_params()
+		boss2_hunt_last_target_peer_id = peer_id
+		boss2_hunt_target_grace[peer_id] = float(params.get("grace", BOSS2_HUNT_GRACE))
+	return chosen
+
+
+func _boss2_hunt_target_pos(peer_id: int, fallback: Vector2) -> Vector2:
+	if peer_id == _mp_unique_id():
+		return player_pos
+	var state: Dictionary = net_players_by_peer.get(peer_id, {})
+	if _remote_player_state_targetable(state):
+		return Vector2(state.get("pos", fallback))
+	if not is_multiplayer and peer_id == 1:
+		return player_pos
+	return fallback
+
+
+func _boss2_start_hunt_mark() -> void :
+	var target: Dictionary = _boss2_pick_hunt_target_entry(true)
+	if target.is_empty():
+		_boss2_start_reposition()
+		return
+	var params: Dictionary = _boss2_hunt_params()
+	var target_peer: int = int(target.get("peer_id", _mp_unique_id()))
+	var target_pos: Vector2 = Vector2(target.get("pos", player_pos)).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
+	var warn: float = float(params.get("warn", BOSS2_HUNT_WARN))
+	var active: float = float(params.get("active", BOSS2_HUNT_ACTIVE))
+	var lock_lead: float = float(params.get("lock_lead", BOSS2_HUNT_LOCK_LEAD))
+	boss2_state = BOSS2_STATE_HUNT_MARK
+	boss2_hunt_sequence += 1
+	var event_id: String = "b2_hunt_%d_%d" % [boss2_hunt_sequence, int(Time.get_ticks_msec())]
+	boss2_facing_dir = 1.0 if target_pos.x >= boss_pos.x else -1.0
+	_add_boss_attack({
+		"kind": "hunt_mark",
+		"event_id": event_id,
+		"seed": rng.randi(),
+		"target_peer": target_peer,
+		"target_pos": target_pos,
+		"locked_pos": target_pos,
+		"origin": boss_pos,
+		"age": 0.0,
+		"duration": warn + active + 0.55,
+		"warn": warn,
+		"lock_at": maxf(0.35, warn - lock_lead),
+		"active": active,
+		"radius": float(params.get("radius", BOSS2_HUNT_RADIUS)),
+		"width": float(params.get("width", BOSS2_HUNT_WIDTH)),
+		"damage_scale": float(params.get("damage_scale", 1.0)),
+		"party_size": int(params.get("party_size", 1)),
+		"hit": {},
+		"locked": false,
+		"impact": false,
+		"finished": false
+	})
+	boss2_action_timer = warn + active + 0.68
+	_add_text("MARCA DE CACADA", target_pos + Vector2(0, -104), Color(0.62, 0.96, 1.0), 1.15, 22)
+	_play_sfx("boss_impact", 0.025, 0.36, 1.28)
+
+
 func _add_boss2_blizzard(vertical: bool) -> void :
 	var waves = []
 	var speed_scale = _boss2_speed_scale()
@@ -28134,6 +28236,8 @@ func _update_boss2_animation(delta: float) -> void :
 			frame_time = 0.34
 		BOSS2_STATE_FLASH_FREEZE:
 			frame_time = 0.18
+		BOSS2_STATE_HUNT_MARK:
+			frame_time = 0.2
 		_:
 			frame_time = 1.0
 	boss2_anim_timer += delta
@@ -28171,6 +28275,58 @@ func _update_boss2_attacks(delta: float) -> void :
 		attack["age"] = float(attack.get("age", 0.0)) + delta
 		var age = float(attack["age"])
 		match String(attack["kind"]):
+			"hunt_mark":
+				var warn_hunt: float = float(attack.get("warn", BOSS2_HUNT_WARN))
+				var active_hunt: float = float(attack.get("active", BOSS2_HUNT_ACTIVE))
+				var target_peer: int = int(attack.get("target_peer", _mp_unique_id()))
+				var target_pos_hunt: Vector2 = Vector2(attack.get("target_pos", player_pos))
+				if age < float(attack.get("lock_at", warn_hunt - BOSS2_HUNT_LOCK_LEAD)):
+					if not _peer_is_living_runner(target_peer):
+						attack["finished"] = true
+						attack["duration"] = minf(float(attack.get("duration", warn_hunt + active_hunt)), age + 0.35)
+						_add_text("MARCA DISSIPOU", target_pos_hunt + Vector2(0, -82), Color(0.78, 0.96, 1.0), 0.65, 16)
+						continue
+					target_pos_hunt = _boss2_hunt_target_pos(target_peer, target_pos_hunt).clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
+					attack["target_pos"] = target_pos_hunt
+					attack["locked_pos"] = target_pos_hunt
+				elif not bool(attack.get("locked", false)):
+					attack["locked"] = true
+					attack["origin"] = boss_pos
+					attack["locked_pos"] = target_pos_hunt
+					_play_sfx("boss_impact", 0.02, 0.32, 1.45)
+				if age < warn_hunt or bool(attack.get("impact", false)):
+					continue
+				attack["impact"] = true
+				var origin_hunt: Vector2 = Vector2(attack.get("origin", boss_pos))
+				var locked_hunt: Vector2 = Vector2(attack.get("locked_pos", target_pos_hunt))
+				var width_hunt: float = float(attack.get("width", BOSS2_HUNT_WIDTH))
+				var radius_hunt: float = float(attack.get("radius", BOSS2_HUNT_RADIUS))
+				var scale_hunt: float = float(attack.get("damage_scale", 1.0))
+				var damage_hunt: int = int((player_hp_max * 0.052 + 42 + enemy_far_damage * 0.46) * scale_hunt)
+				var hit_dict: Dictionary = Dictionary(attack.get("hit", {}))
+				var local_key: String = "peer_%d" % _mp_unique_id()
+				var local_hit: bool = _local_player_targetable() and not bool(hit_dict.get(local_key, false)) and (_distance_to_segment(player_pos, origin_hunt, locked_hunt) <= width_hunt or player_pos.distance_to(locked_hunt) <= radius_hunt)
+				if local_hit:
+					hit_dict[local_key] = true
+					_damage_player(maxi(1, damage_hunt), "boss2_hunt_mark")
+					_spawn_boss2_slow_zone(player_pos, 46.0, 1.55)
+				if _remote_player_damage_ready():
+					for peer_id in _targetable_remote_peer_ids():
+						var state: Dictionary = net_players_by_peer.get(peer_id, {})
+						var peer_key: String = "peer_%d" % peer_id
+						if bool(hit_dict.get(peer_key, false)):
+							continue
+						var peer_pos: Vector2 = Vector2(state.get("pos", Vector2(-10000, -10000)))
+						if _distance_to_segment(peer_pos, origin_hunt, locked_hunt) > width_hunt and peer_pos.distance_to(locked_hunt) > radius_hunt:
+							continue
+						hit_dict[peer_key] = true
+						_send_peer_damage(peer_id, maxi(1, damage_hunt), "boss2_hunt_mark")
+				attack["hit"] = hit_dict
+				screen_shake_timer = max(screen_shake_timer, 0.16)
+				screen_shake_strength = max(screen_shake_strength, 7.5)
+				_spawn_boss2_ice_burst(locked_hunt, 12, 0.82)
+				_spawn_boss2_slow_zone(locked_hunt, radius_hunt, 1.9)
+				_play_sfx("boss_impact", 0.025, 0.48, 0.9)
 			"blizzard":
 				if age < float(attack["warn"]):
 					continue
@@ -29141,6 +29297,7 @@ func _start_boss_call_local() -> void :
 	if not _boss_call_can_start(true):
 		return
 	_clear_boss_mp_request()
+	_cleanup_phase_point_crystals()
 	boss_call_timer = BOSS_CALL_COUNTDOWN
 	_despawn_enemies_for_boss_call()
 	mode = "boss_call"
@@ -36540,10 +36697,6 @@ func _draw_miasma_qte_cheese_gunk(viewport: Vector2, openness: float) -> void :
 
 func _draw_miasma_faith_link(camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_miasma_faith_link(self, camera)
-
-
-func _draw_boss3_miasma_clouds(camera: Vector2) -> void :
-	WorldEnvironmentPresentation._draw_boss3_miasma_clouds(self, camera)
 
 
 func _draw_umbra_miasma_overlay(viewport: Vector2, camera: Vector2) -> void :
@@ -43962,6 +44115,7 @@ func _pack_net_boss_visuals() -> Dictionary:
 		"arauto_evolution_fragments": arauto_evolution_fragments.duplicate(true),
 		"boss_attacks": boss_attacks.duplicate(true),
 		"boss_transition_waves": boss_transition_waves.duplicate(true),
+		"weather": _pack_net_weather_visuals(),
 		"runtime_event": runtime_event_director.active_snapshot()
 	}
 	if current_phase == 7:
@@ -44033,7 +44187,6 @@ func _pack_net_boss_visuals() -> Dictionary:
 				"boss3_miasma_qte_taps": boss3_miasma_qte_taps,
 				"boss3_miasma_qte_time_left": boss3_miasma_qte_time_left,
 				"boss3_miasma_qte_elapsed": boss3_miasma_qte_elapsed,
-				"boss3_miasma_clouds": boss3_miasma_clouds.duplicate(true),
 				"boss3_faith_test_active": boss3_faith_test_active,
 				"boss3_faith_test_pulses_left": boss3_faith_test_pulses_left,
 				"boss3_faith_test_pulse_timer": boss3_faith_test_pulse_timer,
@@ -44085,6 +44238,47 @@ func _pack_net_boss_visuals() -> Dictionary:
 				"boss6_miasma_ult_pustule_timer": boss6_miasma_ult_pustule_timer
 			})
 	return packet
+
+
+func _pack_net_weather_visuals() -> Dictionary:
+	return {
+		"boss1_rain_active": boss1_rain_active,
+		"kind": weather_kind,
+		"intro": weather_rain_intro_timer,
+		"puddles": puddles.duplicate(true)
+	}
+
+
+func _apply_remote_weather_visual_snapshot(snapshot_data) -> void:
+	if not snapshot_data is Dictionary:
+		return
+	var data: Dictionary = snapshot_data
+	var remote_active: bool = bool(data.get("boss1_rain_active", false))
+	var remote_kind: String = String(data.get("kind", ""))
+	if not remote_active or remote_kind == "":
+		if boss1_rain_active or weather_kind != "":
+			_clear_environment_weather(true)
+		return
+	var previous_kind: String = weather_kind
+	boss1_rain_active = true
+	weather_kind = remote_kind
+	weather_rain_intro_timer = clampf(float(data.get("intro", weather_rain_intro_timer)), 0.0, WEATHER_RAIN_FADE_TIME)
+	if data.has("puddles"):
+		puddles = Array(data.get("puddles", puddles)).duplicate(true)
+	if remote_kind == "rain":
+		snowflakes.clear()
+		if previous_kind != "rain":
+			raindrops.clear()
+			rain_splashes.clear()
+			_start_rain_audio()
+		if puddles.is_empty():
+			_seed_rain_puddles()
+	else:
+		raindrops.clear()
+		rain_splashes.clear()
+		puddles.clear()
+		if previous_kind == "rain":
+			_stop_rain_audio_immediate()
 
 
 func _pack_net_enemies() -> PackedFloat32Array:
@@ -44431,6 +44625,7 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	arauto_evolution_fragments = Array(data.get("arauto_evolution_fragments", arauto_evolution_fragments)).duplicate(true)
 	boss_attacks = Array(data.get("boss_attacks", boss_attacks)).duplicate(true)
 	boss_transition_waves = Array(data.get("boss_transition_waves", boss_transition_waves)).duplicate(true)
+	_apply_remote_weather_visual_snapshot(data.get("weather", {}))
 	var incoming_time_wave = data.get("boss1_time_wave", boss1_time_wave)
 	boss1_time_wave = incoming_time_wave.duplicate(true) if incoming_time_wave is Dictionary else {}
 	boss1_absorb_timer = float(data.get("boss1_absorb_timer", boss1_absorb_timer))
@@ -44498,7 +44693,7 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	boss3_ritual_destroyed = int(data.get("boss3_ritual_destroyed", boss3_ritual_destroyed))
 	boss3_is_moving = bool(data.get("boss3_is_moving", boss3_is_moving))
 	boss3_miasma_timer = float(data.get("boss3_miasma_timer", boss3_miasma_timer))
-	boss3_miasma_variant = int(data.get("boss3_miasma_variant", boss3_miasma_variant))
+	boss3_miasma_variant = _coerce_boss3_miasma_variant(int(data.get("boss3_miasma_variant", boss3_miasma_variant)))
 	boss3_miasma_target_peer_id = int(data.get("boss3_miasma_target_peer_id", boss3_miasma_target_peer_id))
 	boss3_miasma_clone_timer = float(data.get("boss3_miasma_clone_timer", boss3_miasma_clone_timer))
 	boss3_miasma_clone_positions = Array(data.get("boss3_miasma_clone_positions", boss3_miasma_clone_positions)).duplicate(true)
@@ -44506,7 +44701,6 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	boss3_miasma_qte_taps = int(data.get("boss3_miasma_qte_taps", boss3_miasma_qte_taps))
 	boss3_miasma_qte_time_left = float(data.get("boss3_miasma_qte_time_left", boss3_miasma_qte_time_left))
 	boss3_miasma_qte_elapsed = float(data.get("boss3_miasma_qte_elapsed", boss3_miasma_qte_elapsed))
-	boss3_miasma_clouds = Array(data.get("boss3_miasma_clouds", boss3_miasma_clouds)).duplicate(true)
 	boss3_faith_test_active = bool(data.get("boss3_faith_test_active", boss3_faith_test_active))
 	boss3_faith_test_pulses_left = int(data.get("boss3_faith_test_pulses_left", boss3_faith_test_pulses_left))
 	boss3_faith_test_pulse_timer = float(data.get("boss3_faith_test_pulse_timer", boss3_faith_test_pulse_timer))
@@ -45054,6 +45248,14 @@ func _rpc_manifest_evolution_barrier_request(stage: String, options: Array, pos:
 	var expected: Array = _manifest_evolution_expected_peer_ids()
 	if sender != 0 and not expected.has(sender):
 		return
+	if manifest_evolution_barrier_active:
+		if sender != 0 and _shop_rpc_available():
+			var current_options: Array = options
+			if not manifest_evolution_options.is_empty():
+				current_options = manifest_evolution_options.duplicate(true)
+			var current_previous_mode: String = manifest_evolution_previous_mode if manifest_evolution_previous_mode != "" else previous_mode
+			rpc_id(sender, "_rpc_manifest_evolution_barrier_open", manifest_evolution_barrier_id, manifest_evolution_barrier_expected_peers.duplicate(), stage, current_options, pos, current_previous_mode)
+		return
 	_begin_manifest_evolution_barrier(stage, options, pos, previous_mode, expected)
 
 
@@ -45066,8 +45268,11 @@ func _rpc_manifest_evolution_barrier_open(barrier_id: int, expected_peers: Array
 	var local_peer: int = _mp_unique_id()
 	if barrier_id == manifest_evolution_barrier_id and bool(manifest_evolution_barrier_ready_by_peer.get(local_peer, false)):
 		return
+	var is_new_barrier: bool = barrier_id > manifest_evolution_barrier_id or not manifest_evolution_barrier_active
 	manifest_evolution_barrier_id = barrier_id
 	manifest_evolution_barrier_active = true
+	if is_new_barrier:
+		manifest_evolution_barrier_ready_by_peer.clear()
 	manifest_evolution_barrier_expected_peers = expected_peers.duplicate()
 	if not manifest_evolution_barrier_expected_peers.has(local_peer) or not _local_manifest_evolution_eligible():
 		return
@@ -46181,6 +46386,8 @@ func _rpc_gameplay_orb_removed(uid: String, reason: String, collector_peer_id: i
 	if net_collected_gameplay_orb_ids.has(uid):
 		return
 	net_collected_gameplay_orb_ids[uid] = true
+	if reason == "collected" and String(orb.get("kind", "")) == PHASE_POINT_CRYSTAL_KIND:
+		_play_phase_point_crystal_collect_vfx(orb)
 	if reason == "collected" and collector_peer_id == _mp_unique_id():
 		_apply_gameplay_orb_collect_local(orb)
 	_remove_gameplay_orb(uid)

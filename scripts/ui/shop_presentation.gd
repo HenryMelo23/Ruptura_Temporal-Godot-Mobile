@@ -59,7 +59,7 @@ func layout(viewport: Vector2) -> Dictionary:
 		"cards": cards, "detail": detail,
 		"buy": Rect2(detail.position.x, footer_y, detail_width, 48),
 		"exit": Rect2(margin, footer_y, 190, 48),
-		"reroll": Rect2(viewport.x - margin - 240, 28, 112, 48),
+		"reroll": Rect2(viewport.x - margin - 318, 28, 190, 56),
 		"deck": Rect2(viewport.x - margin - 112, 28, 112, 48),
 		"burn": Rect2(detail.position.x, detail.end.y - 48, (detail_width - 12) * 0.5, 44),
 		"reserve": Rect2(detail.position.x + (detail_width + 12) * 0.5, detail.end.y - 48, (detail_width - 12) * 0.5, 44)
@@ -113,6 +113,75 @@ func button(g, rect: Rect2, label: String, accent: Color, enabled: bool = true) 
 	var hovered: bool = enabled and rect.has_point(g.get_local_mouse_position())
 	g.draw_style_box(_style(accent.darkened(0.8 if hovered else 0.91), accent if enabled else MUTED.darkened(0.55), 4), rect)
 	text(g, label, rect.grow(-8), 17, PAPER if enabled else MUTED.darkened(0.2), true)
+
+
+func reroll_visual_state(g) -> Dictionary:
+	var free_left: int = maxi(0, int(g.shop_rerolls))
+	var card_cost: int = maxi(1, int(g.card_cost))
+	var enabled: bool = g.shop_controller.can_reroll()
+	if free_left > 0:
+		return {
+			"free": true,
+			"cost": 0,
+			"ratio": 0.0,
+			"accent": Color(0.24, 1.0, 0.46),
+			"title": "REROLL",
+			"detail": "GRATUITO · %d restantes" % free_left,
+			"short": "GRATIS %d" % free_left,
+			"enabled": enabled
+		}
+	var cost: int = maxi(0, int(g.shop_controller.next_paid_reroll_cost()))
+	var ratio: float = float(cost) / float(card_cost)
+	var accent: Color
+	if ratio >= 1.0:
+		accent = Color(1.0, 0.18, 0.14)
+	elif ratio >= 0.72:
+		accent = Color(1.0, 0.43, 0.12).lerp(Color(1.0, 0.18, 0.14), clampf((ratio - 0.72) / 0.28, 0.0, 1.0))
+	elif ratio >= 0.42:
+		accent = Color(1.0, 0.84, 0.22).lerp(Color(1.0, 0.43, 0.12), clampf((ratio - 0.42) / 0.3, 0.0, 1.0))
+	else:
+		accent = Color(0.24, 1.0, 0.46).lerp(Color(1.0, 0.84, 0.22), clampf(ratio / 0.42, 0.0, 1.0))
+	var detail: String = "%d pts / carta %d" % [cost, card_cost]
+	if not enabled:
+		detail = "saldo insuficiente - %d pts" % cost
+	return {
+		"free": false,
+		"cost": cost,
+		"ratio": ratio,
+		"accent": accent,
+		"title": "REROLL PAGO",
+		"detail": detail,
+		"short": "%d PTS" % cost,
+		"enabled": enabled
+	}
+
+
+func reroll_status_line(g) -> String:
+	var state: Dictionary = reroll_visual_state(g)
+	if bool(state.get("free", false)):
+		return "Reroll GRATUITO: %d restantes" % int(g.shop_rerolls)
+	return "Reroll PAGO: %d pts" % int(state.get("cost", 0))
+
+
+func draw_reroll_button(g, rect: Rect2) -> void:
+	var state: Dictionary = reroll_visual_state(g)
+	var accent: Color = Color(state.get("accent", CYAN))
+	var enabled: bool = bool(state.get("enabled", false))
+	var alpha: float = 1.0 if enabled else 0.48
+	var hovered: bool = enabled and rect.has_point(g.get_local_mouse_position())
+	var fill: Color = Color(0.018, 0.032, 0.035, 0.94 * alpha).lerp(accent, 0.12 if hovered else 0.07)
+	g.draw_style_box(_style(fill, Color(accent.r, accent.g, accent.b, (0.95 if enabled else 0.42)), 5), rect)
+	var stripe: Rect2 = Rect2(rect.position.x + 7.0, rect.position.y + 7.0, 5.0, rect.size.y - 14.0)
+	g.draw_rect(stripe, Color(accent.r, accent.g, accent.b, 0.86 * alpha), true)
+	var title_rect: Rect2 = Rect2(rect.position.x + 20.0, rect.position.y + 6.0, rect.size.x - 28.0, 22.0)
+	var detail_rect: Rect2 = Rect2(rect.position.x + 20.0, rect.position.y + 29.0, rect.size.x - 28.0, 18.0)
+	text(g, String(state.get("title", "REROLL")), title_rect, 15, PAPER if enabled else MUTED, false)
+	text(g, String(state.get("detail", "")), detail_rect, 12, Color(accent.r, accent.g, accent.b, 0.96 * alpha), false)
+	if bool(state.get("free", false)):
+		var pill: Rect2 = Rect2(rect.end.x - 72.0, rect.position.y + 8.0, 58.0, 20.0)
+		g.draw_rect(pill, Color(0.04, 0.22, 0.08, 0.84 * alpha), true)
+		g.draw_rect(pill, Color(accent.r, accent.g, accent.b, 0.72 * alpha), false, 1)
+		text(g, "GRATUITO", pill.grow(-4.0), 10, Color(0.9, 1.0, 0.9, alpha), true)
 
 
 func draw_manual_reopen_warning(g, viewport: Vector2) -> void:
@@ -274,6 +343,11 @@ func deck_center(g, viewport: Vector2) -> Vector2:
 
 
 func draw_round_button(g, center: Vector2, radius: float, label: String, accent: Color, enabled: bool, kind: String) -> void:
+	var state: Dictionary = {}
+	if kind == "reroll":
+		state = reroll_visual_state(g)
+		accent = Color(state.get("accent", accent))
+		enabled = bool(state.get("enabled", enabled))
 	var alpha: float = 1.0 if enabled else 0.42
 	g.draw_circle(center, radius + 7.0, Color(accent.r, accent.g, accent.b, 0.1 * alpha))
 	g.draw_circle(center, radius, Color(0.015, 0.025, 0.04, 0.92 * alpha))
@@ -287,8 +361,8 @@ func draw_round_button(g, center: Vector2, radius: float, label: String, accent:
 			var side: Vector2 = Vector2.from_angle(start + PI * 0.74 + PI * 0.68)
 			var tri: PackedVector2Array = PackedVector2Array([tip, tip - Vector2.from_angle(start + PI * 0.74) * 8.0 + side * 4.0, tip - Vector2.from_angle(start + PI * 0.74) * 8.0 - side * 4.0])
 			g.draw_polygon(tri, PackedColorArray([Color.WHITE]))
-		var reroll_text: String = str(g.shop_rerolls) if int(g.shop_rerolls) > 0 else str(g.shop_controller.next_paid_reroll_cost())
-		g._draw_centered(reroll_text, center + Vector2(0, 5), 13, accent if enabled else Color(0.6, 0.6, 0.6))
+		g._draw_centered(String(state.get("short", "")), center + Vector2(0, 2), 11, accent if enabled else Color(0.6, 0.6, 0.6))
+		g._draw_centered("GRATUITO" if bool(state.get("free", false)) else "CUSTO", center + Vector2(0, 16), 8, Color(0.88, 0.94, 0.96, alpha))
 	else:
 		var w: float = radius * 0.72
 		var h: float = radius * 0.92
@@ -392,7 +466,7 @@ func draw(g, viewport: Vector2) -> void:
 	g.draw_rect(Rect2(0, 0, viewport.x, 110), Color(0.02, 0.04, 0.048, 0.96))
 	text(g, "ARQUIVO TEMPORAL", Rect2(margin, 15, 340, 18), 13, CYAN)
 	text(g, "LOJA DE CARTAS", Rect2(margin, 37, viewport.x - 310, 36), 30, PAPER)
-	text(g, "%d PONTOS    /    %d CARTAS NO DECK" % [g.score, g._deck_total_cards()], Rect2(margin, 80, 540, 24), 17, GOLD)
+	text(g, "%d PONTOS    /    CUSTO BASE %d    /    %d CARTAS NO DECK" % [g.score, g.card_cost, g._deck_total_cards()], Rect2(margin, 80, 650, 24), 17, GOLD)
 	if g.shop_spend_anim_timer > 0.0 and g.shop_spend_anim_amount > 0:
 		var spend_progress: float = 1.0 - clampf(g.shop_spend_anim_timer / maxf(0.01, g.SHOP_SPEND_ANIM_TIME), 0.0, 1.0)
 		var rise: float = sin(spend_progress * PI) * 16.0
@@ -401,7 +475,7 @@ func draw(g, viewport: Vector2) -> void:
 		g.draw_rect(spend_rect, Color(0.16, 0.035, 0.02, 0.78 * alpha), true)
 		g.draw_line(spend_rect.position + Vector2(8.0, 2.0), spend_rect.position + Vector2(spend_rect.size.x - 8.0, 2.0), Color(1.0, 0.42, 0.16, 0.92 * alpha), 2.0)
 		text(g, "-%d PTS" % int(g.shop_spend_anim_amount), spend_rect.grow(-5), 16, Color(1.0, 0.56, 0.22, alpha), true)
-	button(g, areas.reroll, g.shop_controller.reroll_button_label(), CYAN, g.shop_controller.can_reroll())
+	draw_reroll_button(g, areas.reroll)
 	button(g, areas.deck, "MEU DECK", GOLD, g._deck_total_cards() > 0 and not busy() and not g._shop_purchase_animating())
 	var team := "ESCOLHA UMA CARTA"
 	if g.is_multiplayer:
@@ -513,10 +587,8 @@ func draw_legacy(g, viewport: Vector2) -> void:
 	var shop_endurance_discount: float = g.shop_endurance_discount
 	var score: int = g.score
 	var card_cost: int = g.card_cost
-	var shop_rerolls: int = g.shop_rerolls
-	var reroll_status: String = "Rerolls %d" % shop_rerolls
-	if shop_rerolls <= 0:
-		reroll_status = "Reroll pago %d" % g.shop_controller.next_paid_reroll_cost()
+	var reroll_status: String = reroll_status_line(g)
+	var reroll_accent: Color = Color(reroll_visual_state(g).get("accent", CYAN))
 	var shop_mp_ready_to_leave: bool = g.shop_mp_ready_to_leave
 	for key in buttons.keys():
 		if String(key).begins_with("shop_burn_") or String(key).begins_with("shop_reserve_"):
@@ -553,7 +625,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 		g._draw_centered(header_text, Vector2(viewport.x * 0.5, 96), g._readable_text_size(16), Color(1.0, 0.85, 0.24))
 		g._draw_shop_spend_anim(Vector2(viewport.x * 0.5, 132.0))
 		g._draw_shop_tutorial_line(Rect2(header.position + Vector2(20.0, 90.0), Vector2(header.size.x - 40.0, 28.0)), true)
-		g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), g.shop_controller.can_reroll(), "reroll")
+		g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", reroll_accent, g.shop_controller.can_reroll(), "reroll")
 		g._draw_shop_round_button(g._shop_deck_center(viewport), g._shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), g._deck_total_cards() > 0 and not purchase_animating, "deck")
 
 		var w = viewport.x * 0.74
@@ -685,7 +757,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 	g._draw_centered(hud_text, Vector2(viewport.x * 0.5, 73), g._readable_text_size(16), Color(1.0, 0.85, 0.24))
 	g._draw_shop_spend_anim(Vector2(viewport.x * 0.5, 116.0))
 	g._draw_shop_tutorial_line(Rect2(header.position + Vector2(22.0, 74.0), Vector2(header.size.x - 44.0, 22.0)), false)
-	g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", Color(0.0, 0.86, 1.0), g.shop_controller.can_reroll(), "reroll")
+	g._draw_shop_round_button(g._shop_reroll_center(viewport), g._shop_round_button_radius(viewport), "REROLL", reroll_accent, g.shop_controller.can_reroll(), "reroll")
 	g._draw_shop_round_button(g._shop_deck_center(viewport), g._shop_round_button_radius(viewport), "DECK", Color(0.64, 0.88, 1.0), g._deck_total_cards() > 0 and not purchase_animating, "deck")
 	if purchase_animating and shop_cards.size() > purchase_index:
 		g._draw_centered(g._shop_purchase_stage(purchase_progress), Vector2(viewport.x * 0.5, 124), g._readable_text_size(14), shop_cards[purchase_index]["color"])

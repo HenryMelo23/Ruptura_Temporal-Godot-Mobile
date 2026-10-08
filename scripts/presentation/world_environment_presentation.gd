@@ -692,24 +692,6 @@ static func _draw_boss3_miasma_clones(game: Node2D, camera: Vector2) -> void :
 		game.draw_arc(screen_pos, 70.0 + sin(game.time_alive * 4.0 + i) * 5.0, 0.0, TAU, 38, Color(0.78, 1.0, 0.16, 0.24 * flicker), 2.0)
 
 
-static func _draw_boss3_miasma_clouds(game: Node2D, camera: Vector2) -> void :
-	for cloud in game.boss3_miasma_clouds:
-		var pos = Vector2(cloud.get("pos", game.boss_pos)) - camera
-		var radius: float = float(cloud.get("radius", game.BOSS3_MIASMA_CLOUD_RADIUS))
-		var life_ratio: float = clampf(float(cloud.get("life", 0.0)) / max(0.01, float(cloud.get("max", game.BOSS3_MIASMA_CLOUD_DURATION))), 0.0, 1.0)
-		var phase: float = float(cloud.get("phase", 0.0))
-		var pulse: float = 0.5 + 0.5 * sin(phase * 1.8)
-		var alpha: float = (0.2 + life_ratio * 0.35)
-		game.draw_circle(pos, radius * (0.95 + pulse * 0.1), Color(0.06, 0.22, 0.08, alpha * 0.35))
-		game.draw_circle(pos, radius * 0.72, Color(0.14, 0.44, 0.16, alpha * 0.45))
-		game.draw_circle(pos + Vector2(sin(phase) * 6.0, cos(phase * 0.7) * 4.0), radius * 0.45, Color(0.32, 0.78, 0.28, alpha * 0.5))
-		game.draw_arc(pos, radius, 0.0, TAU, 48, Color(0.38, 0.84, 0.26, alpha * 0.55), 2.0, true)
-		for i in range(4):
-			var angle = phase + float(i) * TAU / 4.0
-			var mote = pos + Vector2.from_angle(angle) * (radius * (0.3 + pulse * 0.2))
-			game.draw_circle(mote, 3.5, Color(0.68, 0.98, 0.42, alpha * 0.75))
-
-
 static func _draw_boss3_miasma_overlay(game: Node2D, viewport: Vector2, camera: Vector2) -> void :
 	if not game._boss3_miasma_active():
 		return
@@ -2428,7 +2410,7 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 					game.draw_arc(origin, 82.0, 0.0, TAU, 54, Color(1.0, 0.3, 0.1, 0.78), 4.0)
 				elif state == "throw":
 					game.draw_line(game.player_pos - camera - dir * 90.0, game.player_pos - camera + dir * 20.0, Color(1.0, 0.66, 0.16, 0.62), 8.0)
-			"blizzard", "frost_breath", "avalanche", "spin_spit_up", "glacial_stomp", "ice_prison", "flash_freeze", "shield", "ice_pillar":
+			"blizzard", "frost_breath", "avalanche", "spin_spit_up", "glacial_stomp", "ice_prison", "flash_freeze", "hunt_mark", "shield", "ice_pillar":
 				game.Boss2VFX.attack(game, attack, camera, profile == "LOW")
 
 

@@ -124,6 +124,19 @@ func _run_two_clients_and_duplicate_ready() -> void:
 	_check(game.mode == "game", "two-client barrier did not resume after all ready")
 
 
+func _run_authority_request_does_not_reset_ready() -> void:
+	_setup_multiplayer([42])
+	var barrier_id := _open_barrier()
+	game._choose_manifest_evolution(0)
+	_check(game.mode == "manifest_evolution_waiting", "host should wait after choosing first")
+	_check(_ready_count() == 1, "host ready was not recorded before late request")
+	game._rpc_manifest_evolution_barrier_request("ev1", game.manifest_evolution_options, Vector2(720, 420), "game")
+	_check(int(game.manifest_evolution_barrier_id) == barrier_id, "late barrier request created a new barrier id")
+	_check(_ready_count() == 1, "late barrier request reset ready state")
+	_remote_ready(42, barrier_id)
+	_check(game.mode == "game", "barrier did not resume after late request and remote ready")
+
+
 func _run_latency_reordering() -> void:
 	_setup_multiplayer([42])
 	var barrier_id := _open_barrier()
@@ -167,8 +180,9 @@ func _run() -> void:
 	_run_host_ready_first()
 	_run_client_ready_first()
 	_run_two_clients_and_duplicate_ready()
+	_run_authority_request_does_not_reset_ready()
 	_run_latency_reordering()
 	_run_disconnect_during_barrier()
 	_run_new_evolution_after_previous_barrier()
-	print("MULTIPLAYER_MANIFEST_EVOLUTION_BARRIER_SMOKE_OK host_first client_first two_clients duplicate_ready reordering disconnect repeat")
+	print("MULTIPLAYER_MANIFEST_EVOLUTION_BARRIER_SMOKE_OK host_first client_first simultaneous_request two_clients duplicate_ready reordering disconnect repeat")
 	quit(0)

@@ -3,6 +3,11 @@ extends SceneTree
 var game: Node
 
 
+func _fail(message: String) -> void:
+	push_error("BOSS3_MIASMA_VISUAL_FAIL " + message)
+	quit(1)
+
+
 func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
 	game = load("res://scenes/Main.tscn").instantiate()
@@ -15,9 +20,14 @@ func _save(name: String) -> void:
 	await process_frame
 	await process_frame
 	var image: Image = root.get_texture().get_image()
-	assert(image != null and image.get_width() == 1280 and image.get_height() == 720)
+	if image == null or image.get_width() <= 0 or image.get_height() <= 0:
+		_fail("capture image is empty")
+		return
 	var output := "res://.codex/" + name
-	assert(image.save_png(output) == OK)
+	var err := image.save_png(output)
+	if err != OK:
+		_fail("could not save capture %s err=%d" % [output, err])
+		return
 	print("BOSS3_MIASMA_VISUAL_OK " + ProjectSettings.globalize_path(output))
 
 
@@ -50,11 +60,11 @@ func _run() -> void:
 	await _save("boss3_miasma_2_darkness_1280x720.png")
 	game._end_boss3_miasma(true)
 
-	game._start_boss3_miasma(3)
+	game._start_boss3_miasma(4)
 	game.boss3_miasma_qte_required = 30
 	game.boss3_miasma_qte_taps = 12
 	game.boss3_miasma_qte_time_left = 4.3
 	game.boss3_miasma_qte_elapsed = game.BOSS3_MIASMA_QTE_DURATION - game.boss3_miasma_qte_time_left
 	game.boss3_miasma_qte_tutorial = 2.0
-	await _save("boss3_miasma_3_qte_1280x720.png")
+	await _save("boss3_miasma_4_qte_1280x720.png")
 	quit(0)

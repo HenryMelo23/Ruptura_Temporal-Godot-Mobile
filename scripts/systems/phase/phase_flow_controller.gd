@@ -458,6 +458,7 @@ func _advance_to_phase(phase: int) -> void:
 		core.next_larapio_spawn_time = core.time_alive + core._larapio_spawn_delay()
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._add_text("FASE 1: RUINAS COSMICAS" if not secondary_phase1 else "FASE 1-2: RUINAS REABERTAS", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+	core._spawn_phase_point_crystals_for_phase(phase)
 
 
 func _clear_phase_mp_request() -> void:
@@ -572,6 +573,7 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 
 
 func _start_phase_transition(next_phase: int) -> void:
+	core._cleanup_phase_point_crystals()
 	core.pending_phase = next_phase
 	core.mode = "phase_transition"
 	core.phase_transition_timer = core.PHASE_TRANSITION_TIME

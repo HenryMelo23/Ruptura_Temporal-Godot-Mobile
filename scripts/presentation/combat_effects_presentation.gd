@@ -307,6 +307,9 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_boss1_rewind_world(camera)
 	game._draw_network_rewind_visuals(camera)
 	for orb in game.heal_orbs:
+		if String(orb.get("kind", "heal")) == game.PHASE_POINT_CRYSTAL_KIND:
+			_draw_phase_point_crystal(game, orb, camera)
+			continue
 		var orb_pos: Vector2 = Vector2(orb.get("pos", Vector2.ZERO)) - camera
 		if String(orb.get("kind", "heal")) == "voraz_hunger":
 			var pulse: float = 0.5 + sin(game.time_alive * 8.0 + orb_pos.x) * 0.5
@@ -359,9 +362,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		game._draw_weather_precipitation(camera)
 	if game.boss1_rewind_sequence.is_empty() and (game.mode == "game" or game.mode == "shop_countdown" or game.mode == "boss_call" or game.mode == "pause_countdown"):
 		game._draw_ground_target_preview(viewport, camera)
-	if game._boss3_miasma_active() and game.boss3_miasma_variant == 3:
-		game._draw_boss3_miasma_clouds(camera)
-	if game._boss3_miasma_active() and game.boss3_miasma_variant != 3 and not game._boss3_miasma_qte_active():
+	if game._boss3_miasma_active() and not game._boss3_miasma_qte_active():
 		game._draw_boss3_miasma_overlay(viewport, camera)
 	if game._is_umbra_miasma_active():
 		game._draw_umbra_miasma_overlay(viewport, camera)
@@ -1192,6 +1193,27 @@ static func _draw_larapio_coin_drops(game: Node2D, camera: Vector2) -> void :
 		game.draw_line(pos + Vector2( - radius * 0.35, - radius * 0.35), pos + Vector2(radius * 0.35, radius * 0.35), Color(1.0, 1.0, 0.72, 0.55 * alpha), 1.2)
 		if collectable:
 			game.draw_arc(pos, radius + 7.0 + shine * 2.0, 0, TAU, 24, Color(1.0, 0.82, 0.2, 0.36), 1.4)
+
+
+static func _draw_phase_point_crystal(game: Node2D, orb: Dictionary, camera: Vector2) -> void:
+	var pos: Vector2 = Vector2(orb.get("pos", Vector2.ZERO)) - camera
+	var phase: float = game.time_alive * 4.0 + float(orb.get("pulse", 0.0))
+	var pulse: float = 0.5 + 0.5 * sin(phase)
+	var bob: float = sin(phase * 0.7) * 2.6
+	var center: Vector2 = pos + Vector2(0.0, bob)
+	var radius: float = 8.0 + pulse * 2.2
+	var alpha: float = 0.84 + pulse * 0.14
+	var points := PackedVector2Array([
+		center + Vector2(0.0, -radius * 1.55),
+		center + Vector2(radius * 0.86, -radius * 0.1),
+		center + Vector2(0.0, radius * 1.42),
+		center + Vector2(-radius * 0.86, -radius * 0.1)
+	])
+	game.draw_circle(pos + Vector2(0.0, 10.0), 12.0 + pulse * 2.5, Color(0.02, 0.08, 0.09, 0.20))
+	game.draw_arc(center, radius + 9.0 + pulse * 2.4, phase * 0.8, phase * 0.8 + TAU * 0.72, 26, Color(0.28, 1.0, 0.92, 0.30), 1.4, true)
+	game.draw_colored_polygon(points, Color(0.22, 0.96, 0.9, alpha))
+	game.draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(0.88, 1.0, 0.96, 0.80), 1.5, true)
+	game.draw_line(center + Vector2(-radius * 0.22, -radius * 0.82), center + Vector2(radius * 0.18, radius * 0.68), Color(1.0, 1.0, 1.0, 0.52), 1.2, true)
 
 
 static func _draw_larapio_ultimate_portals(game: Node2D, camera: Vector2) -> void :
