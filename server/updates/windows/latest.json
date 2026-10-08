@@ -1,14 +1,17 @@
 {
-  "version": "2.0.40",
-  "version_code": 24000,
-  "filename": "Ruptura_Temporal_2.0.40.exe",
-  "sha256": "76ba322df3421bdd7ced730613428c0873b4e6f5ffb4bdcec88cfc53c42191e8",
-  "size": 1380154976,
+  "version": "2.0.44",
+  "version_code": 24400,
+  "filename": "Ruptura_Temporal_2.0.44.exe",
+  "sha256": "31899b263020c61ac2fac66ab134a4c180e8ec07117db01f9d09d5f0b734fc7f",
+  "size": 1387017800,
   "notes": [
-    "Corrige a identificacao da versao do jogo e do atualizador.",
-    "Corrige a ordem da tela de nome apos a cutscene inicial.",
-    "Reduz uso de memoria durante a cutscene inicial."
+    "Runs longas: mais aceleracao da build e recompensas apos 30 minutos, preservando o inicio e o perigo dos combates.",
+    "Corrigida a leitura do cache de progresso apos reiniciar, com compatibilidade com o cache anterior.",
+    "Retomar a run e usar retry preservam rerolls pagos, bonus de Queimar e progresso das evolucoes.",
+    "Melhorias internas em save, fases, pontuacao e loja, preservando mapas, efeitos e conteudo existente.",
+    "Revisao multiplayer: confirmacao no lobby, manifestacao/espectro, loja, pontuacao, revive e transicoes.",
+    "Android mantem a assinatura da 2.0.43; nao e necessario desinstalar essa versao para atualizar."
   ],
   "mandatory": false,
-  "published_at": "2026-09-24T19:38:54.1603459Z"
+  "published_at": "2026-10-04T22:20:21.2386425Z"
 }

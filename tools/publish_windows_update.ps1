@@ -56,7 +56,7 @@ if ($null -eq $Credential) {
     $Credential = Get-Credential -UserName 'root' -Message 'Credencial do servidor Ruptura'
 }
 
-$tempRoot = Join-Path $projectRoot '.agent_logs\windows_update_publish'
+$tempRoot = Join-Path (Join-Path $projectRoot '.agent_logs') 'windows_update_publish'
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 $manifestPath = Join-Path $tempRoot 'latest.json.next'
 $manifestJson = $manifest | ConvertTo-Json -Depth 5
@@ -97,7 +97,7 @@ if (-not $published.available -or [int]$published.version_code -ne $VersionCode 
     throw 'O endpoint publico nao confirmou a versao Windows publicada.'
 }
 
-$trackedDir = Join-Path $projectRoot 'server\updates\windows'
+$trackedDir = Join-Path (Join-Path (Join-Path $projectRoot 'server') 'updates') 'windows'
 New-Item -ItemType Directory -Force -Path $trackedDir | Out-Null
 $trackedManifest = Join-Path $trackedDir 'latest.json'
 [IO.File]::WriteAllText($trackedManifest, $manifestJson, [Text.UTF8Encoding]::new($false))

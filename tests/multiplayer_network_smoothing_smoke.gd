@@ -54,9 +54,10 @@ func _run() -> void:
 	host_game.boss2_snow_zones = [{"pos": Vector2(330, 300), "radius": 120.0, "life": 1.4, "max": 1.8, "phase": 0.4}]
 	host_game.boss2_ultimate_timer = 12.0
 	host_game.boss2_ultimate_center = Vector2(340, 300)
-	host_game.boss3_miasma_variant = 3
+	host_game.boss3_miasma_variant = 4
 	host_game.boss3_miasma_timer = 7.5
-	host_game.boss3_miasma_clouds = [{"pos": Vector2(370, 310), "dir": Vector2.LEFT, "life": 3.0, "max": 8.0, "radius": 42.0, "phase": 0.8, "hit": {}}]
+	host_game.boss3_miasma_qte_required = 18
+	host_game.boss3_miasma_qte_taps = 6
 	host_game.boss3_faith_link_timer = 2.0
 	host_game.phase4_enemy_hazards = [{"kind": "boss4_pulse", "pos": Vector2(360, 320), "age": 0.10, "life": 1.0, "max": 1.0, "radius": 180.0}]
 	client_game._apply_remote_world_snapshot(
@@ -75,7 +76,7 @@ func _run() -> void:
 	_check(is_equal_approx(client_game.boss2_ultimate_timer, 12.0) and client_game.boss2_ultimate_center == Vector2(340, 300), "boss2 ultimate visual state was not synchronized")
 	host_game.current_phase = 3
 	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
-	_check(client_game.boss3_miasma_variant == 3 and client_game.boss3_miasma_clouds.size() == 1, "boss3 miasma visuals were not synchronized to replica")
+	_check(client_game.boss3_miasma_variant == 4 and client_game.boss3_miasma_qte_required == 18 and client_game.boss3_miasma_qte_taps == 6, "boss3 miasma QTE visuals were not synchronized to replica")
 	_check(is_equal_approx(client_game.boss3_faith_link_timer, 2.0), "boss3 faith link visual timer was not synchronized")
 	host_game.current_phase = 4
 	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())

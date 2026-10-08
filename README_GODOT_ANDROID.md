@@ -17,16 +17,19 @@ Portar o jogo por camadas para Godot, com exportacao Android nativa:
 ## Como abrir
 
 1. Instale Godot 4.x.
-2. Abra a pasta `C:\Users\luish\Documents\GitHub\Ruptura_Temporal-Godot-Mobile`.
+2. Abra a pasta local deste repositorio.
 3. Rode a cena principal `scenes/Main.tscn`.
 
 ## Como exportar Android
 
 1. No Godot, abra `Editor > Manage Export Templates` e instale os templates.
-2. Abra `Project > Export`.
-3. Adicione preset `Android`.
-4. Configure um keystore debug ou use o debug keystore do Godot.
-5. Exporte o APK.
+2. Para builds locais de teste, use `build_apk.ps1`.
+3. Para release, nao gere outro keystore. Use o mesmo keystore, alias e certificado ja publicados, configurados apenas fora do Git:
+   - `GODOT_ANDROID_KEYSTORE_RELEASE_PATH`
+   - `GODOT_ANDROID_KEYSTORE_RELEASE_USER`
+   - `GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD`
+4. Como alternativa local, crie `android_signing.local.ps1` na raiz do projeto com essas mesmas variaveis de ambiente. Esse arquivo e ignorado pelo Git e nao deve ser enviado.
+5. Se senha ou caminho de keystore ja entrou no historico da branch, trate como comprometido: altere a senha do mesmo keystore/chave sem trocar o certificado, atualize a configuracao local, e reescreva ou emende o commit antes do merge.
 
 ## Estrategia
 

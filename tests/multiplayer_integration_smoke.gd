@@ -9,13 +9,18 @@ var step: int = 0
 var manifest_reveal_requested: bool = false
 var spectrum_ready_sent: bool = false
 var manifest_start_requested: bool = false
+var result_dir := "res://tests"
+
+
+func _result_path(result_role: String) -> String:
+	return result_dir.path_join(result_role + "_result.txt")
 
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		var err_msg = "[%s] ERROR: %s" % [role.to_upper(), message]
 		push_error(err_msg)
-		var file = FileAccess.open("res://tests/integration_error.txt", FileAccess.WRITE)
+		var file = FileAccess.open(result_dir.path_join("integration_error.txt"), FileAccess.WRITE)
 		if file:
 			file.store_string(err_msg)
 			file.close()
@@ -33,6 +38,8 @@ func _initialize() -> void:
 			host = arg.substr("--host=".length())
 		elif arg.begins_with("--port="):
 			port = int(arg.substr("--port=".length()))
+		elif arg.begins_with("--result-dir="):
+			result_dir = arg.trim_prefix("--result-dir=")
 
 	if role == "":
 		push_error("Missing --role argument (server/host/client/client2)")
@@ -48,6 +55,15 @@ func _initialize() -> void:
 
 
 func _start_role() -> void:
+	game._finish_startup_thanks()
+	# Apply after _ready loads the isolated account, not before it resets state.
+	for index in [1, 2, 3]:
+		game.unlocked_manifestation_ids[String(game.MANIFESTATIONS[index]["key"])] = true
+		game.unlocked_spectrum_ids[String(game.AURAS[index]["key"])] = true
+	# The local ENet server has no public HTTP room to heartbeat.
+	if host == "127.0.0.1" and game.online_heartbeat_request != null:
+		game.online_heartbeat_request.queue_free()
+		game.online_heartbeat_request = null
 	print("[%s] Starting role at port %d..." % [role.to_upper(), port])
 	
 	if role == "server":
@@ -78,7 +94,7 @@ func _start_role() -> void:
 func _finish_ok(message: String) -> void:
 	print("[%s] SUCCESS: %s" % [role.to_upper(), message])
 	
-	var file = FileAccess.open("res://tests/" + role + "_result.txt", FileAccess.WRITE)
+	var file = FileAccess.open(_result_path(role), FileAccess.WRITE)
 	if file:
 		file.store_string("OK")
 		file.close()
@@ -86,7 +102,7 @@ func _finish_ok(message: String) -> void:
 	if role != "server":
 		var barrier_deadline := Time.get_ticks_msec() + 8000
 		while Time.get_ticks_msec() < barrier_deadline:
-			if FileAccess.file_exists("res://tests/host_result.txt") and FileAccess.file_exists("res://tests/client_result.txt") and FileAccess.file_exists("res://tests/client2_result.txt"):
+			if FileAccess.file_exists(_result_path("host")) and FileAccess.file_exists(_result_path("client")) and FileAccess.file_exists(_result_path("client2")):
 				break
 			await process_frame
 		var settle_frames := 12 if role == "client" else (30 if role == "client2" else 54)
@@ -137,7 +153,7 @@ func _run_server_loop() -> void:
 		if game.mode == "game" and not game_announced:
 			game_announced = true
 			print("[SERVER] SUCCESS: Dedicated server successfully transitioned to game state")
-			var result_file := FileAccess.open("res://tests/server_result.txt", FileAccess.WRITE)
+			var result_file := FileAccess.open(_result_path("server"), FileAccess.WRITE)
 			if result_file:
 				result_file.store_string("OK")
 				result_file.close()

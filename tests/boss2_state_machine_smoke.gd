@@ -99,7 +99,16 @@ func _run() -> void:
 	_expect(float(game.boss_attacks[0].get("warn", 0.0)) >= 1.4, "flash_freeze_warning_too_short")
 	_expect(game.BOSS2_ULTIMATE_WARNING_TIME >= 1.55, "ultimate_warning_too_short")
 
-	print("BOSS2_STATE_MACHINE_SMOKE_OK reposition=true breath=true spin=true stomp=true prison=true double_blizzard=true flash_freeze=true warnings_balanced=true")
+	game.boss_attacks.clear()
+	game.boss2_hunt_target_grace.clear()
+	game._boss2_start_hunt_mark()
+	_expect(game.boss2_state == game.BOSS2_STATE_HUNT_MARK, "hunt_mark_state_missing")
+	_expect(game.boss_attacks.size() == 1 and String(game.boss_attacks[0].get("kind", "")) == "hunt_mark", "hunt_mark_attack_missing")
+	_expect(float(game.boss_attacks[0].get("warn", 0.0)) >= 1.6, "hunt_mark_warning_too_short")
+	_expect(float(game.boss_attacks[0].get("lock_at", 0.0)) < float(game.boss_attacks[0].get("warn", 0.0)), "hunt_mark_does_not_lock_before_damage")
+	_expect(int(game.boss_attacks[0].get("target_peer", 0)) == game._mp_unique_id(), "solo_hunt_mark_target_not_local")
+
+	print("BOSS2_STATE_MACHINE_SMOKE_OK reposition=true breath=true spin=true stomp=true prison=true double_blizzard=true flash_freeze=true hunt_mark=true warnings_balanced=true")
 	_cleanup_game()
 	for i in range(4):
 		await process_frame

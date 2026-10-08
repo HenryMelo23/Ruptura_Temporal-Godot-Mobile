@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$MainScript = Join-Path $ProjectRoot "scripts\main.gd"
+$MainScript = Join-Path (Join-Path $ProjectRoot "scripts") "main.gd"
 $PresetFile = Join-Path $ProjectRoot "export_presets.cfg"
 $PresetName = "Android"
 $LogsDir = Join-Path $ProjectRoot ".agent_logs"
@@ -153,7 +153,7 @@ function ConvertTo-GradlePropertiesPath {
 
 function Ensure-AndroidLocalProperties {
 	$candidates = @(@(
-		(Join-Path $ProjectRoot "toolchain\android-sdk"),
+		(Join-Path (Join-Path $ProjectRoot "toolchain") "android-sdk"),
 		$env:ANDROID_SDK_ROOT,
 		$env:ANDROID_HOME,
 		"$env:LOCALAPPDATA\Android\Sdk"
@@ -173,6 +173,43 @@ function Ensure-AndroidLocalProperties {
 	$utf8NoBom = New-Object System.Text.UTF8Encoding $False
 	[System.IO.File]::WriteAllText($localProperties, $content, $utf8NoBom)
 	Write-Host "Android SDK fixado em android/local.properties: $sdkPath"
+}
+
+function Import-AndroidSigningConfig {
+	param([bool]$RequireReleaseSigning)
+
+	$localSigningFile = Join-Path $ProjectRoot "android_signing.local.ps1"
+	if (Test-Path -LiteralPath $localSigningFile) {
+		. $localSigningFile
+	}
+
+	if (-not $RequireReleaseSigning) {
+		return
+	}
+
+	$requiredNames = @(
+		"GODOT_ANDROID_KEYSTORE_RELEASE_PATH",
+		"GODOT_ANDROID_KEYSTORE_RELEASE_USER",
+		"GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD"
+	)
+	$missingNames = @()
+	foreach ($name in $requiredNames) {
+		$value = [Environment]::GetEnvironmentVariable($name)
+		if ([string]::IsNullOrWhiteSpace($value)) {
+			$missingNames += $name
+		}
+	}
+
+	if ($missingNames.Count -gt 0) {
+		throw ("Exportacao release requer assinatura Android local. Defina {0} como variaveis de ambiente ou crie android_signing.local.ps1, que nao deve ser versionado." -f ($missingNames -join ", "))
+	}
+
+	$keystorePath = [Environment]::GetEnvironmentVariable("GODOT_ANDROID_KEYSTORE_RELEASE_PATH")
+	if (-not (Test-Path -LiteralPath $keystorePath -PathType Leaf)) {
+		throw "O arquivo informado em GODOT_ANDROID_KEYSTORE_RELEASE_PATH nao foi encontrado."
+	}
+
+	Write-Host "Assinatura Android release carregada por configuracao local; caminho e credenciais omitidos."
 }
 
 function Test-ApkLooksComplete {
@@ -244,7 +281,18 @@ function Invoke-GodotExportWithWatchdog {
 	Write-Host ("Comando: {0} {1}" -f $GodotPath, ($Arguments -join " "))
 	Write-Host "Log: $outPath"
 
-	$process = Start-Process -FilePath $GodotPath -ArgumentList $Arguments -WorkingDirectory $ProjectRoot -RedirectStandardOutput $outPath -RedirectStandardError $errPath -PassThru -WindowStyle Hidden
+	$startArgs = @{
+		FilePath = $GodotPath
+		ArgumentList = $Arguments
+		WorkingDirectory = $ProjectRoot
+		RedirectStandardOutput = $outPath
+		RedirectStandardError = $errPath
+		PassThru = $true
+	}
+	if ($IsWindows) {
+		$startArgs.WindowStyle = 'Hidden'
+	}
+	$process = Start-Process @startArgs
 	$started = Get-Date
 	$lastSize = -1
 	$lastArtifactSize = -1
@@ -314,7 +362,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+[A-Za-z]?$') {
 }
 
 $GodotPath = Resolve-GodotExe -RequestedPath $GodotExe
-$BuildDir = Join-Path $ProjectRoot ("builds\" + $Version)
+$BuildDir = Join-Path (Join-Path $ProjectRoot "builds") $Version
 $ApkName = "ruptura_temporal_mobile_$Version.apk"
 $ApkPath = Join-Path $BuildDir $ApkName
 $RelativeApkPath = "builds/$Version/$ApkName"
@@ -323,6 +371,7 @@ $VersionCode = Get-VersionCode -VersionName $Version
 New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 Ensure-AndroidLocalProperties
+Import-AndroidSigningConfig -RequireReleaseSigning ([bool]$Release)
 Update-AndroidPreset -VersionName $Version -RelativeExportPath $RelativeApkPath -VersionCode $VersionCode
 
 Write-Host "Projeto: $ProjectRoot"

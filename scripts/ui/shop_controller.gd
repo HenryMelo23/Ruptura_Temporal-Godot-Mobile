@@ -132,6 +132,40 @@ func clear_mp_request() -> void:
 	game.buttons.erase("shop_mp_accept")
 
 
+func next_paid_reroll_cost() -> int:
+	if game == null:
+		return 0
+	var base_cost: int = maxi(1, int(ceil(float(maxi(1, game.card_cost)) * game.SHOP_PAID_REROLL_FIRST_COST_RATIO)))
+	var capped_cost: int = maxi(base_cost, int(ceil(float(maxi(1, game.card_cost)) * game.SHOP_PAID_REROLL_CAP_CARD_COST_MULT)))
+	var paid_index: int = maxi(0, int(game.shop_paid_rerolls_this_visit))
+	var scaled_cost: int = int(ceil(float(base_cost) * pow(maxf(1.0, game.SHOP_PAID_REROLL_MULTIPLIER), float(paid_index))))
+	return clampi(scaled_cost, base_cost, capped_cost)
+
+
+func next_reroll_cost() -> int:
+	if game == null or int(game.shop_rerolls) > 0:
+		return 0
+	return next_paid_reroll_cost()
+
+
+func can_reroll() -> bool:
+	if game == null:
+		return false
+	if purchase_animating() or busy():
+		return false
+	if int(game.shop_rerolls) > 0:
+		return true
+	return int(game.score) >= next_paid_reroll_cost()
+
+
+func reroll_button_label() -> String:
+	if game == null:
+		return "REROLL"
+	if int(game.shop_rerolls) > 0:
+		return "REROLL %d" % int(game.shop_rerolls)
+	return "REROLL %d" % next_paid_reroll_cost()
+
+
 func start_mp_request_overlay(incoming: bool) -> void:
 	if not game.is_multiplayer:
 		return
@@ -210,7 +244,8 @@ func open_shop(forced: bool) -> void:
 	game.previous_mode = "game"
 	game.mode = "shop"
 	game._update_audio_volumes()
-	game.shop_rerolls = 3
+	game.shop_rerolls = game.SHOP_FREE_REROLLS_PER_VISIT
+	game.shop_paid_rerolls_this_visit = 0
 	reset()
 	game.shop_mp_ready_count = 0
 	game.shop_mp_expected_count = maxi(1, game._living_run_player_peer_ids().size())
@@ -227,6 +262,7 @@ func open_shop(forced: bool) -> void:
 	game._begin_shop_visit()
 	game.shop_cards = game._roll_shop_cards("open")
 	game.shop_selected = 0
+	game._record_telemetry_shop_open(forced)
 	game.shop_select_pulse_index = 0
 	game.shop_select_pulse_timer = 0.2
 	game.shop_last_tap_index = -1
@@ -256,6 +292,7 @@ func apply_abuse_penalty(reason: String) -> void:
 	var penalty: int = min(game.score, max(game.CARD_COST_BASE, game.card_cost))
 	game.score = max(0, game.score - penalty)
 	game.run_points_spent += penalty
+	game._record_telemetry_score_delta(-penalty, "shop_penalty")
 	game.shop_abuse_penalty_count += 1
 	game._add_text("TAXA DA LOJA -%d" % penalty, game.player_pos + Vector2(0, -116), Color(1.0, 0.38, 0.18), 1.35, 22)
 	if game.shop_abuse_penalty_count <= 2:
@@ -341,7 +378,7 @@ func touch_card(index: int) -> void:
 
 
 func reserve_card(index: int) -> void:
-	if purchase_animating() or busy() or index < 0 or index >= game.shop_cards.size():
+	if purchase_animating() or index < 0 or index >= game.shop_cards.size():
 		return
 	var card: Dictionary = game.shop_cards[index]
 	if game._shop_slot_locked(index):
@@ -352,6 +389,8 @@ func reserve_card(index: int) -> void:
 			game.shop_cards[index].erase("locked_price")
 		game._add_text("RESERVA SOLTA", game.player_pos + Vector2(-90, -92), Color(0.4, 0.94, 1.0), 0.9, 17)
 		game._vibrate(32, 0.14)
+		return
+	if busy():
 		return
 	if not game._can_reserve_shop_card(card):
 		return
@@ -372,10 +411,27 @@ func reserve_card(index: int) -> void:
 func reroll() -> void:
 	if purchase_animating() or busy():
 		return
-	if game.shop_rerolls > 0:
-		begin("reroll", game.shop_cards)
+	var paid_cost: int = 0
+	var is_free: bool = game.shop_rerolls > 0
+	if is_free:
 		game.shop_rerolls -= 1
+	else:
+		paid_cost = next_paid_reroll_cost()
+		if game.score < paid_cost:
+			game._add_text("PONTOS INSUFICIENTES", game.player_pos + Vector2(0, -92), Color(1.0, 0.56, 0.28), 0.8, 18)
+			game._vibrate(28, 0.16)
+			return
+		game.score -= paid_cost
+		game.run_points_spent += paid_cost
+		game.shop_paid_rerolls_this_visit += 1
+		game.shop_spend_anim_amount = paid_cost
+		game.shop_spend_anim_timer = SHOP_SPEND_ANIM_TIME
+		game._record_telemetry_score_delta(-paid_cost, "shop_reroll")
+		game._add_text("REROLL -%d" % paid_cost, game.player_pos + Vector2(0, -104), Color(0.0, 0.86, 1.0), 0.8, 18)
+	begin("reroll", game.shop_cards)
+	if is_free or paid_cost > 0:
 		game.shop_reroll_index += 1
+		game._record_telemetry_shop_reroll(is_free, paid_cost)
 		game._add_card_unlock_progress("shop_rerolls", 1.0)
 		game.shop_cards = game._roll_shop_cards("reroll")
 		game.shop_selected = 0
@@ -515,6 +571,8 @@ func update(delta: float) -> void:
 	game.shop_purchase_pending_price = 0
 	game.shop_purchases_this_visit += 1
 	game.run_points_spent += paid_price
+	game._record_telemetry_score_delta(-paid_price, "shop_purchase")
+	game._record_telemetry_shop_purchase(card, paid_price)
 	game._apply_aura_events(AuraSystem.on_points_spent(game.aura_state, paid_price, game.player_hp_max))
 	game.score -= paid_price
 	game.shop_spend_anim_amount = paid_price

@@ -1,14 +1,17 @@
 {
-  "version": "2.0.40",
-  "version_code": 24000,
-  "filename": "ruptura_temporal_mobile_2.0.40.apk",
-  "sha256": "e2c81c52b16a72f1594461dd357e056599499653803c807a1c519588f1a68953",
-  "size": 1296124537,
+  "version": "2.0.44",
+  "version_code": 24400,
+  "filename": "ruptura_temporal_mobile_2.0.44.apk",
+  "sha256": "7480c9d82b30d2b7ee67ef8d963c6e68ecbb6e1d558cf78741f131f044d2185f",
+  "size": 1303385775,
   "notes": [
-    "Corrige a identificacao da versao do jogo e do atualizador.",
-    "Corrige a ordem da tela de nome apos a cutscene inicial.",
-    "Reduz uso de memoria durante a cutscene inicial."
+    "Runs longas: mais aceleracao da build e recompensas apos 30 minutos, preservando o inicio e o perigo dos combates.",
+    "Corrigida a leitura do cache de progresso apos reiniciar, com compatibilidade com o cache anterior.",
+    "Retomar a run e usar retry preservam rerolls pagos, bonus de Queimar e progresso das evolucoes.",
+    "Melhorias internas em save, fases, pontuacao e loja, preservando mapas, efeitos e conteudo existente.",
+    "Revisao multiplayer: confirmacao no lobby, manifestacao/espectro, loja, pontuacao, revive e transicoes.",
+    "Android mantem a assinatura da 2.0.43; nao e necessario desinstalar essa versao para atualizar."
   ],
   "mandatory": false,
-  "published_at": "2026-09-24T19:36:44.9242841Z"
+  "published_at": "2026-10-04T22:21:40.0204183Z"
 }

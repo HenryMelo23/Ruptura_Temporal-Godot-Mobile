@@ -1,7 +1,11 @@
 class_name EnemyManager
 extends Node
 
+const PHASE_DENSITY_CARRY_RATIO := 0.70
+
 var game: Node = null
+var phase_density_carry_cap: int = 0
+var phase_density_native_entry_cap: int = 0
 
 
 func bind_game(p_game: Node) -> void:
@@ -149,38 +153,47 @@ func spawn_wave() -> void:
 	game._spawn_enemy(kind, game._spawn_point_for_type(kind))
 
 
-func get_enemy_limit() -> int:
+func get_enemy_limit(native_only: bool = false) -> int:
 	var mp_bonus: int = game._multiplayer_enemy_limit_bonus()
+	var native_limit: int = 0
 	if game.current_phase == 7:
-		return _phase7_enemy_limit() + mp_bonus
-	if game.current_phase == 6:
-		return _phase6_enemy_limit() + mp_bonus
-	if game.current_phase == 5:
-		return 5 + mp_bonus
-	if game.current_phase == 4:
-		return (game.PHASE4_LIMIT_EARLY if game._phase_elapsed_time() < game.PHASE4_ADAPT_TIME else game.PHASE4_LIMIT_FULL) + mp_bonus
-	if game.current_phase == 3:
+		native_limit = _phase7_enemy_limit() + mp_bonus
+	elif game.current_phase == 6:
+		native_limit = _phase6_enemy_limit() + mp_bonus
+	elif game.current_phase == 5:
+		native_limit = 5 + mp_bonus
+	elif game.current_phase == 4:
+		native_limit = (game.PHASE4_LIMIT_EARLY if game._phase_elapsed_time() < game.PHASE4_ADAPT_TIME else game.PHASE4_LIMIT_FULL) + mp_bonus
+	elif game.current_phase == 3:
 		var elapsed3: float = game._phase_elapsed_time()
-		if elapsed3 < game.PHASE3_COMMON_ONLY_TIME:
-			return game.PHASE3_LIMIT_EARLY + mp_bonus
-		if elapsed3 < game.PHASE3_GUARDIAO_UNLOCK_TIME:
-			return game.PHASE3_LIMIT_MID + mp_bonus
-		return game.PHASE3_LIMIT_FULL + mp_bonus
-	if game.current_phase == 2:
+		native_limit = (game.PHASE3_LIMIT_EARLY if elapsed3 < game.PHASE3_COMMON_ONLY_TIME else (game.PHASE3_LIMIT_MID if elapsed3 < game.PHASE3_GUARDIAO_UNLOCK_TIME else game.PHASE3_LIMIT_FULL)) + mp_bonus
+	elif game.current_phase == 2:
 		var elapsed: float = game._phase_elapsed_time()
-		if elapsed >= game.PHASE2_PYRO_UNLOCK_TIME:
-			return game.PHASE2_COMMON_LIMIT + game.PHASE2_KAMIKAZE_LIMIT + game.PHASE2_PYRO_LIMIT + mp_bonus
-		if elapsed >= game.PHASE2_KAMIKAZE_UNLOCK_TIME:
-			return game.PHASE2_COMMON_LIMIT + game.PHASE2_KAMIKAZE_LIMIT + mp_bonus
-		return game.PHASE2_COMMON_LIMIT + mp_bonus
-	var elapsed1: float = game._phase_elapsed_time()
-	if elapsed1 >= game.PHASE1_LIMIT_BREAK_TIME:
-		if game.phase1_limit_break_kills_start < 0:
-			game.phase1_limit_break_kills_start = game.enemies_killed
-		var kills_after_break = max(0, game.enemies_killed - game.phase1_limit_break_kills_start)
-		return game.ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(game.PHASE1_LIMIT_KILLS_PER_EXTRA))) + mp_bonus
-	game.phase1_limit_break_kills_start = -1
-	return game.ENEMY_MAX_BASE + mp_bonus
+		native_limit = game.PHASE2_COMMON_LIMIT + (game.PHASE2_KAMIKAZE_LIMIT if elapsed >= game.PHASE2_KAMIKAZE_UNLOCK_TIME else 0) + (game.PHASE2_PYRO_LIMIT if elapsed >= game.PHASE2_PYRO_UNLOCK_TIME else 0) + mp_bonus
+	else:
+		var elapsed1: float = game._phase_elapsed_time()
+		if elapsed1 >= game.PHASE1_LIMIT_BREAK_TIME:
+			if game.phase1_limit_break_kills_start < 0:
+				game.phase1_limit_break_kills_start = game.enemies_killed
+			var kills_after_break = max(0, game.enemies_killed - game.phase1_limit_break_kills_start)
+			native_limit = game.ENEMY_MAX_BASE + int(floor(float(kills_after_break) / float(game.PHASE1_LIMIT_KILLS_PER_EXTRA))) + mp_bonus
+		else:
+			game.phase1_limit_break_kills_start = -1
+			native_limit = game.ENEMY_MAX_BASE + mp_bonus
+	native_limit += game._long_run_enemy_limit_bonus()
+	if native_only or game.current_phase <= 1 or phase_density_carry_cap <= 0:
+		return native_limit
+	var growth_after_entry: int = maxi(0, native_limit - phase_density_native_entry_cap)
+	return phase_density_carry_cap + growth_after_entry
+
+
+func prepare_phase_density_carry(previous_effective_cap: int) -> void:
+	if game == null or game.current_phase <= 1:
+		phase_density_carry_cap = 0
+		phase_density_native_entry_cap = 0
+		return
+	phase_density_carry_cap = maxi(1, int(floor(float(maxi(1, previous_effective_cap)) * PHASE_DENSITY_CARRY_RATIO)))
+	phase_density_native_entry_cap = get_enemy_limit(true)
 
 
 func get_enemy_spawn_interval() -> float:
@@ -189,19 +202,21 @@ func get_enemy_spawn_interval() -> float:
 	if game.current_phase == 6:
 		return _phase6_spawn_interval()
 	if game.current_phase == 5:
-		return 1.1
+		return _long_run_spawn_interval(1.1)
 	if game.current_phase == 4:
-		return 1.42 if game._phase_elapsed_time() < game.PHASE4_ADAPT_TIME else 1.24
+		return _long_run_spawn_interval(1.42 if game._phase_elapsed_time() < game.PHASE4_ADAPT_TIME else 1.24)
 	var interval = game.ENEMY_SPAWN_INTERVAL
 	if game.current_phase == 3:
 		var elapsed3: float = game._phase_elapsed_time()
 		interval = 1.3 if elapsed3 < game.PHASE3_COMMON_ONLY_TIME else (1.16 if elapsed3 < game.PHASE3_GUARDIAO_UNLOCK_TIME else 1.02)
+		interval = _long_run_spawn_interval(interval)
 		if not game._active_prismatica_secondary().is_empty():
 			interval *= 0.5
 		return interval
 	if game.current_phase == 2:
 		var elapsed: float = game._phase_elapsed_time()
 		interval = 1.32 if elapsed < game.PHASE2_KAMIKAZE_UNLOCK_TIME else (1.12 if elapsed < game.PHASE2_PYRO_UNLOCK_TIME else 0.98)
+		interval = _long_run_spawn_interval(interval)
 		if not game._active_prismatica_secondary().is_empty():
 			interval *= 0.5
 		return interval
@@ -209,9 +224,14 @@ func get_enemy_spawn_interval() -> float:
 		var ramp_window = max(1.0, game.ENEMY_RAMP_PEAK_TIME - game.ENEMY_RAMP_START_TIME)
 		var progress = clamp((game._phase_elapsed_time() - game.ENEMY_RAMP_START_TIME) / ramp_window, 0.0, 1.0)
 		interval = lerp(game.ENEMY_SPAWN_INTERVAL_EARLY, game.ENEMY_SPAWN_INTERVAL_LATE, progress)
+	interval = _long_run_spawn_interval(interval)
 	if not game._active_prismatica_secondary().is_empty():
 		interval *= 0.5
 	return interval
+
+
+func _long_run_spawn_interval(interval: float) -> float:
+	return maxf(0.36, interval * game._long_run_spawn_interval_multiplier())
 
 
 func get_curater_limit() -> int:
@@ -243,7 +263,7 @@ func _phase7_enemy_limit() -> int:
 func _phase6_spawn_interval() -> float:
 	var ramp_window = max(1.0, game.ENEMY_RAMP_PEAK_TIME - game.ENEMY_RAMP_START_TIME)
 	var progress = clamp((game._phase_elapsed_time() - game.ENEMY_RAMP_START_TIME) / ramp_window, 0.0, 1.0)
-	var interval = lerp(game.ENEMY_SPAWN_INTERVAL_EARLY, game.ENEMY_SPAWN_INTERVAL_LATE, progress)
+	var interval = _long_run_spawn_interval(lerp(game.ENEMY_SPAWN_INTERVAL_EARLY, game.ENEMY_SPAWN_INTERVAL_LATE, progress))
 	if not game._active_prismatica_secondary().is_empty():
 		interval *= 0.5
 	return interval
@@ -251,7 +271,7 @@ func _phase6_spawn_interval() -> float:
 
 func _phase7_spawn_interval() -> float:
 	var progress: float = clampf(game._phase_elapsed_time() / 300.0, 0.0, 1.0)
-	var interval: float = lerpf(1.22, 0.92, progress)
+	var interval: float = _long_run_spawn_interval(lerpf(1.22, 0.92, progress))
 	if not game._active_prismatica_secondary().is_empty():
 		interval *= 0.5
 	return interval

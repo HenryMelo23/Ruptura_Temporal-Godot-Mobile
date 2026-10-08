@@ -180,6 +180,7 @@ func _phase1_is_after_phase6() -> bool:
 
 func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 1.0) -> void:
 	var scaled_enemy_hp: float = core.ENEMY_BASE_HP * (multiplayer_enemy_hp_scale if core.is_multiplayer else 1.0)
+	core._reset_boss_party_scaling_context(phase)
 	if phase == 7:
 		core.enemy_base_hp = scaled_enemy_hp * 1.18
 		core.enemy_speed_base = core.ENEMY_BASE_SPEED * 1.08
@@ -270,10 +271,15 @@ func _advance_to_phase(phase: int) -> void:
 	var rain_should_become_snow = phase == 2 and core.boss1_rain_active and core.weather_kind == "rain"
 	var carried_enemy_hp: float = max(float(core.enemy_base_hp), core.ENEMY_BASE_HP)
 	var carried_enemy_speed: float = max(float(core.enemy_speed_base), core.ENEMY_BASE_SPEED)
+	var previous_enemy_cap: int = core._enemy_limit()
 	core.current_phase = phase
 	core.pending_phase = 0
 	core.phase_started_at = core.time_alive
-	core._set_card_unlock_progress_max("phase_reached", float(phase))
+	core.enemy_manager.prepare_phase_density_carry(previous_enemy_cap)
+	if core.is_multiplayer and core._is_world_authority():
+		core._confirm_card_unlock_progress_for_active_players("phase_reached", float(phase), true)
+	else:
+		core._set_card_unlock_progress_max("phase_reached", float(phase))
 	if core.mode != "phase_transition":
 		core.mode = "game"
 	core._play_phase_music()
@@ -318,6 +324,7 @@ func _advance_to_phase(phase: int) -> void:
 	core.boss_call_timer = -1.0
 	core.boss_active = false
 	core.boss_dead = false
+	core._reset_boss_party_scaling_context(phase)
 	core.boss_phase = 0.0
 	core.boss_attack_timer = 0.0
 	core.boss_entry_timer = 0.0
@@ -360,6 +367,7 @@ func _advance_to_phase(phase: int) -> void:
 	core.anchors.clear()
 	core.prisms.clear()
 	core.orbitals.clear()
+	core.gravitante_vfx_events.clear()
 	core.seed_links.clear()
 	core.parasite_spit_zones.clear()
 	core.return_bullets.clear()
@@ -450,6 +458,7 @@ func _advance_to_phase(phase: int) -> void:
 		core.next_larapio_spawn_time = core.time_alive + core._larapio_spawn_delay()
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._add_text("FASE 1: RUINAS COSMICAS" if not secondary_phase1 else "FASE 1-2: RUINAS REABERTAS", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+	core._spawn_phase_point_crystals_for_phase(phase)
 
 
 func _clear_phase_mp_request() -> void:
@@ -564,6 +573,7 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 
 
 func _start_phase_transition(next_phase: int) -> void:
+	core._cleanup_phase_point_crystals()
 	core.pending_phase = next_phase
 	core.mode = "phase_transition"
 	core.phase_transition_timer = core.PHASE_TRANSITION_TIME

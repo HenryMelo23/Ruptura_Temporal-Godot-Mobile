@@ -67,20 +67,18 @@ func _run() -> void:
 
 	game.player_hp = game.player_hp_max
 	game._start_boss3_miasma(3)
-	_check(game.boss3_miasma_qte_required == 0, "cloud rework unexpectedly restored the removed QTE")
-	_check(game.boss3_miasma_clouds.size() == game.BOSS3_MIASMA_CLOUD_COUNT, "cloud symptom did not create the configured cloud count")
-	var cloud_before: Vector2 = Vector2(game.boss3_miasma_clouds[0]["pos"])
-	var cloud_speed: float = float(game.boss3_miasma_clouds[0].get("speed", 0.0))
-	_check(cloud_speed >= game.player_speed * game.BOSS3_MIASMA_CLOUD_SPEED_MULT, "cloud speed did not scale from player speed")
-	game._update_boss3_miasma_clouds(0.10)
-	_check(Vector2(game.boss3_miasma_clouds[0]["pos"]) != cloud_before, "cloud did not pursue its target")
-	game.boss3_miasma_clouds[0]["pos"] = game.player_pos
-	var hp_before_cloud: int = game.player_hp
-	game._update_boss3_miasma_clouds(0.01)
-	_check(game.player_hp < hp_before_cloud, "cloud contact did not damage the selected player")
+	_check(game.boss3_miasma_variant != 3, "removed cloud variant was still accepted when forced")
+	_check(game.BOSS3_MIASMA_VALID_VARIANTS.has(game.boss3_miasma_variant), "removed cloud variant did not fall back to a valid symptom")
 	game._end_boss3_miasma(true)
-	_check(not game._boss3_miasma_active(), "cloud symptom did not end")
-	_check(is_equal_approx(game.boss3_miasma_cooldown, game.BOSS3_MIASMA_COOLDOWN), "cloud symptom did not start cooldown")
+
+	var seen_variants := {}
+	for i in range(12):
+		game._start_boss3_miasma()
+		_check(game.boss3_miasma_variant != 3, "removed cloud variant appeared in automatic rotation")
+		_check(game.BOSS3_MIASMA_VALID_VARIANTS.has(game.boss3_miasma_variant), "automatic rotation picked an invalid miasma variant")
+		seen_variants[game.boss3_miasma_variant] = true
+		game._end_boss3_miasma(true)
+	_check(seen_variants.has(1) and seen_variants.has(2) and seen_variants.has(4), "remaining miasma variants were not all reachable")
 
 	game.boss3_miasma_cooldown = game.BOSS3_MIASMA_COOLDOWN
 	game._update_boss3_miasma(game.BOSS3_MIASMA_COOLDOWN - 1.0)
@@ -88,7 +86,7 @@ func _run() -> void:
 	game._update_boss3_miasma(1.1)
 	_check(game._boss3_miasma_active(), "ultimate did not return after 30-second cooldown")
 
-	print("BOSS3_MIASMA_SMOKE_OK duration=15 cooldown=%ds clones=true darkness=250 warning=800ms stun=900ms clouds=pursuit" % int(game.BOSS3_MIASMA_COOLDOWN))
+	print("BOSS3_MIASMA_SMOKE_OK duration=15 cooldown=%ds clones=true darkness=250 warning=800ms variants=1,2,4" % int(game.BOSS3_MIASMA_COOLDOWN))
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

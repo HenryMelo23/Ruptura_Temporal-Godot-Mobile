@@ -98,4 +98,10 @@ func _run() -> void:
 	_check(game.boss_hp < boss_hp_before, "gravitante orbital passive should damage the boss")
 
 	print("GRAVITANTE_SMOKE_OK captured=%d spin=%.2f edge_damage_stronger=true transfer_radius=%.0f boss_passive=true" % [int(secondary["captured"]), float(secondary["spin_speed"]), game.GRAVITANTE_ORBITAL_TRANSFER_RADIUS])
+	game._cleanup_runtime_resources()
+	game.textures.clear()
+	game.audio_streams.clear()
+	game.free()
+	for i in range(4):
+		await process_frame
 	quit(0)

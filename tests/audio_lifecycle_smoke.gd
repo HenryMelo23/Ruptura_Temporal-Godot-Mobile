@@ -59,4 +59,11 @@ func _run() -> void:
 	_check(not game.music_player.playing, "battle music kept playing after screen transition")
 	
 	print("AUDIO_LIFECYCLE_SMOKE_PASS pause_resume_and_transition_stop")
+	game.set_process(false)
+	game._cleanup_runtime_resources()
+	game.queue_free()
+	game = null
+	test_stream = null
+	for _frame in range(4):
+		await process_frame
 	quit(0)

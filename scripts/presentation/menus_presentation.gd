@@ -209,18 +209,37 @@ static func _draw_custom_mouse_cursor(game: Node2D, _viewport: Vector2) -> void 
 static func _draw_manifest_evolution_choice(game: Node2D, viewport: Vector2) -> void :
 	game.manifest_evolution_focus_timer += 0.016
 	var accent = game._manifestation_color()
-	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.46), true)
-	var panel_w: float = min(980.0, viewport.x * 0.88)
-	var panel_h: float = min(520.0, viewport.y * 0.72)
+	var mobile_landscape: bool = viewport.x < 980.0 and viewport.x >= viewport.y
+	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.56), true)
+	var panel_w: float = min(1040.0, viewport.x * (0.92 if mobile_landscape else 0.88))
+	var panel_h: float = min(548.0, viewport.y * (0.82 if mobile_landscape else 0.76))
 	var panel = Rect2(viewport * 0.5 - Vector2(panel_w, panel_h) * 0.5, Vector2(panel_w, panel_h))
 	game._draw_holo_panel(panel, accent, true, 0.88)
-	game._draw_glitch_title("EVOLUCAO DO ARAUTO", Vector2(panel.get_center().x, panel.position.y + 54.0), 30, accent)
-	game._draw_centered(game._manifestation_display_name(game.manifestation_key), Vector2(panel.get_center().x, panel.position.y + 92.0), 17, Color(0.86, 0.96, 1.0, 0.9))
-	var gap = 18.0
+	var header_rect := Rect2(panel.position.x + 24.0, panel.position.y + 18.0, panel.size.x - 48.0, 86.0)
+	game.draw_rect(header_rect, Color(0.015, 0.025, 0.032, 0.78), true)
+	game.draw_line(header_rect.position + Vector2(12.0, header_rect.size.y), header_rect.end - Vector2(12.0, 0.0), Color(accent.r, accent.g, accent.b, 0.42), 1.0)
+	game._draw_glitch_title("EVOLUCAO DA MANIFESTACAO", Vector2(header_rect.get_center().x, header_rect.position.y + 32.0), 27 if not mobile_landscape else 22, accent)
+	game._draw_centered(game._manifestation_display_name(game.manifestation_key), Vector2(header_rect.get_center().x, header_rect.position.y + 63.0), 16 if not mobile_landscape else 13, Color(0.86, 0.96, 1.0, 0.9))
+	if game.mode == "manifest_evolution_waiting":
+		var ready_count := 0
+		for peer_id in game.manifest_evolution_barrier_expected_peers:
+			if bool(game.manifest_evolution_barrier_ready_by_peer.get(peer_id, false)):
+				ready_count += 1
+		var expected_count: int = max(1, game.manifest_evolution_barrier_expected_peers.size())
+		var wait_rect := Rect2(panel.get_center().x - panel.size.x * 0.28, panel.get_center().y - 58.0, panel.size.x * 0.56, 116.0)
+		game.draw_rect(wait_rect, Color(0.015, 0.025, 0.03, 0.88), true)
+		game.draw_rect(wait_rect, Color(accent.r, accent.g, accent.b, 0.72), false, 2)
+		game._draw_centered("AGUARDANDO EQUIPE", Vector2(wait_rect.get_center().x, wait_rect.position.y + 36.0), 26 if not mobile_landscape else 21, Color.WHITE)
+		game._draw_centered("%d/%d prontos" % [ready_count, expected_count], Vector2(wait_rect.get_center().x, wait_rect.position.y + 68.0), 18 if not mobile_landscape else 15, Color(0.86, 0.96, 1.0, 0.86))
+		var bar_rect := Rect2(wait_rect.position.x + 26.0, wait_rect.end.y - 28.0, wait_rect.size.x - 52.0, 8.0)
+		game.draw_rect(bar_rect, Color(0.02, 0.04, 0.05, 0.92), true)
+		game.draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * float(ready_count) / float(expected_count), bar_rect.size.y)), Color(accent.r, accent.g, accent.b, 0.88), true)
+		return
+	var gap = 18.0 if not mobile_landscape else 12.0
 	var card_w = (panel.size.x - 72.0 - gap * 2.0) / 3.0
-	var card_h = panel.size.y - 164.0
+	var card_h = panel.size.y - (178.0 if not mobile_landscape else 150.0)
 	var start_x = panel.position.x + 36.0
-	var start_y = panel.position.y + 126.0
+	var start_y = panel.position.y + (124.0 if not mobile_landscape else 112.0)
 	for i in range(game.manifest_evolution_options.size()):
 		var entry: Dictionary = game.manifest_evolution_options[i]
 		var rect = Rect2(start_x + i * (card_w + gap), start_y, card_w, card_h)
@@ -228,14 +247,20 @@ static func _draw_manifest_evolution_choice(game: Node2D, viewport: Vector2) -> 
 		var selected = i == game.manifest_evolution_selected
 		var pulse = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008 + i)
 		var border = Color(1.0, 1.0, 1.0, 0.92) if selected else accent
-		var fill = Color(accent.r * 0.12, accent.g * 0.12, accent.b * 0.12, 0.88)
+		var fill = Color(0.02, 0.028, 0.036, 0.93).lerp(accent, 0.11 if selected else 0.055)
 		game.draw_rect(rect, fill, true)
-		game.draw_rect(rect.grow(4.0 if selected else 2.0), Color(border.r, border.g, border.b, (0.72 + pulse * 0.18) if selected else 0.42), false, 2.4 if selected else 1.4)
-		game.draw_circle(rect.get_center() + Vector2(0, - card_h * 0.24), 34.0 + pulse * 4.0, Color(accent.r, accent.g, accent.b, 0.16))
-		game._draw_centered(String(entry.get("name", "")), Vector2(rect.get_center().x, rect.position.y + 72.0), 18, Color.WHITE)
-		game._draw_centered(String(entry.get("family", "")).to_upper(), Vector2(rect.get_center().x, rect.position.y + 104.0), 12, accent)
-		game._draw_wrapped(String(entry.get("summary", "")), Rect2(rect.position.x + 18.0, rect.position.y + 132.0, rect.size.x - 36.0, rect.size.y - 176.0), 14, Color(0.84, 0.92, 1.0, 0.88))
-		game._draw_centered("ESCOLHER", Vector2(rect.get_center().x, rect.end.y - 28.0), 15, Color(1.0, 0.92, 0.52, 0.95) if selected else Color(0.78, 0.86, 0.9, 0.75))
+		game.draw_rect(rect.grow(5.0 if selected else 2.0), Color(border.r, border.g, border.b, (0.72 + pulse * 0.12) if selected else 0.36), false, 2.4 if selected else 1.4)
+		var stripe := Rect2(rect.position.x + 10.0, rect.position.y + 10.0, rect.size.x - 20.0, 4.0)
+		game.draw_rect(stripe, Color(accent.r, accent.g, accent.b, 0.68 if selected else 0.36), true)
+		game.draw_circle(rect.get_center() + Vector2(0, - card_h * 0.26), 30.0 + pulse * 2.0, Color(accent.r, accent.g, accent.b, 0.12))
+		game._draw_centered(String(entry.get("name", "")), Vector2(rect.get_center().x, rect.position.y + (66.0 if not mobile_landscape else 54.0)), 18 if not mobile_landscape else 14, Color.WHITE)
+		var stage_label: String = game._manifest_evolution_stage_label(String(entry.get("stage", "")))
+		game._draw_centered("%s / %s" % [stage_label, String(entry.get("effect_label", "manifestacao")).to_upper()], Vector2(rect.get_center().x, rect.position.y + (96.0 if not mobile_landscape else 80.0)), 12 if not mobile_landscape else 10, accent)
+		game._draw_wrapped(String(entry.get("summary", "")), Rect2(rect.position.x + 18.0, rect.position.y + (126.0 if not mobile_landscape else 104.0), rect.size.x - 36.0, rect.size.y - (172.0 if not mobile_landscape else 144.0)), 14 if not mobile_landscape else 11, Color(0.84, 0.92, 1.0, 0.88))
+		var action_rect := Rect2(rect.position.x + 18.0, rect.end.y - 46.0, rect.size.x - 36.0, 30.0)
+		game.draw_rect(action_rect, Color(0.05, 0.04, 0.018, 0.62) if selected else Color(0.02, 0.03, 0.035, 0.62), true)
+		game.draw_rect(action_rect, Color(1.0, 0.92, 0.52, 0.72) if selected else Color(0.78, 0.86, 0.9, 0.34), false, 1)
+		game._draw_centered("ESCOLHER", action_rect.get_center() + Vector2(0, 4), 14 if not mobile_landscape else 11, Color(1.0, 0.92, 0.52, 0.95) if selected else Color(0.78, 0.86, 0.9, 0.75))
 
 
 static func _draw_nickname_setup(game: Node2D, viewport: Vector2) -> void :
@@ -1432,8 +1457,8 @@ static func _draw_manifest_preview_popup(game: Node2D, viewport: Vector2, item: 
 	var tab_total = tab_w * 3.0 + tab_gap * 2.0
 	var tab_x = popup.position.x + popup.size.x * 0.5 - tab_total * 0.5
 	var tabs = [
-		{"label": "ATK", "kind": "atk"}, 
-		{"label": "Q", "kind": "skill"}, 
+		{"label": "ATK", "kind": "atk"},
+		{"label": "Q", "kind": "skill"},
 		{"label": "E", "kind": "ultimate"}
 	]
 	for i in range(tabs.size()):
@@ -1564,9 +1589,7 @@ static func _draw_manifest_preview_atk(game: Node2D, rect: Rect2, key: String, t
 			game.draw_circle(e + Vector2(0, 14), 16.0, Color(0.2, 0.92, 0.22, 0.18))
 		"gravitante":
 			var orb = p.lerp(e, fposmod(t * 0.55, 1.0))
-			game.draw_circle(orb, 12.0, Color(0.15, 0.45, 1.0, 0.34))
-			game.draw_arc(orb, 18.0, - t * TAU, - t * TAU + PI * 1.3, 32, accent, 2.0)
-			game.draw_line(orb, e, Color(0.66, 0.88, 1.0, 0.26), 2.0)
+			game.GravitanteVfx.projectile(game, orb, (e - p).normalized(), t)
 		"acorrentada":
 			var step = int(fposmod(floor(t * 3.0), 3.0)) + 1
 			if step == 1:
@@ -1628,10 +1651,9 @@ static func _draw_manifest_preview_skill(game: Node2D, rect: Rect2, key: String,
 				var worm = c + Vector2(cos(a) * 44.0, sin(a * 1.7) * 18.0 + 10.0)
 				game.draw_circle(worm, 5.0 + float(i % 2), Color(0.75, 1.0, 0.28, 0.82))
 		"gravitante":
-			game._draw_preview_enemy(e1 + (c - e1).normalized() * pulse * 28.0, rect.size.y * 0.1, accent)
-			game._draw_preview_enemy(e2 + (c - e2).normalized() * pulse * 28.0, rect.size.y * 0.1, accent)
-			game.draw_line(e1, e2, Color(0.64, 0.88, 1.0, 0.46), 3.0)
-			game.draw_circle(c, 24.0 + pulse * 12.0, Color(0.12, 0.28, 0.72, 0.24))
+			game.GravitanteVfx.event(game, {"kind": "gravity_q", "pos": c,
+				"points": PackedVector2Array([e1, e2]), "max": 0.55,
+				"life": 0.55 * (1.0 - fposmod(t, 1.0))}, Vector2.ZERO)
 		"acorrentada":
 			game._draw_acorrentada_chain(e1, e2, Color(0.18, 0.86, 1.0, 0.82), 6.0, 1.0, true)
 			game._draw_acorrentada_chain(p + Vector2(10, -4), e1, Color(0.92, 0.12, 0.1, 0.7), 7.0, 1.0, false)
@@ -1672,9 +1694,9 @@ static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 			var tip = Vector2.from_angle(phase) * size
 			var side = Vector2.from_angle(phase + PI * 0.5) * size * 0.62
 			var points = PackedVector2Array([
-				pos + tip, 
-				pos + side, 
-				pos - tip, 
+				pos + tip,
+				pos + side,
+				pos - tip,
 				pos - side
 			])
 			game.draw_polygon(points, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.92)]))
@@ -1816,8 +1838,8 @@ static func _draw_judicial_order_paper(game: Node2D, rect: Rect2, label: String,
 	game.draw_rect(rect.grow(-8.0), Color(1.0, 0.93, 0.62, 0.28), false, 1.4)
 	var fold = minf(rect.size.x, rect.size.y) * (0.16 if compact else 0.11)
 	var fold_points = PackedVector2Array([
-		Vector2(rect.end.x - fold, rect.position.y), 
-		Vector2(rect.end.x, rect.position.y), 
+		Vector2(rect.end.x - fold, rect.position.y),
+		Vector2(rect.end.x, rect.position.y),
 		Vector2(rect.end.x, rect.position.y + fold)
 	])
 	game.draw_polygon(fold_points, PackedColorArray([Color(0.72, 0.48, 0.2, 0.88), Color(0.72, 0.48, 0.2, 0.88), Color(0.72, 0.48, 0.2, 0.88)]))
@@ -2471,8 +2493,8 @@ static func _draw_game_over_overlay(game: Node2D, viewport: Vector2) -> void :
 		var sz = 4.0 + float(i % 5)
 		var rot = t * (0.8 + float(i % 4) * 0.22) + seed
 		var shard = PackedVector2Array([
-			Vector2(x, y) + Vector2.from_angle(rot) * sz, 
-			Vector2(x, y) + Vector2.from_angle(rot + TAU / 3.0) * sz, 
+			Vector2(x, y) + Vector2.from_angle(rot) * sz,
+			Vector2(x, y) + Vector2.from_angle(rot + TAU / 3.0) * sz,
 			Vector2(x, y) + Vector2.from_angle(rot + TAU * 2.0 / 3.0) * sz
 		])
 		var sc = [Color(0.0, 1.0, 0.82, 0.3), Color(0.7, 0.34, 1.0, 0.28), Color(1.0, 0.12, 0.34, 0.3)][i % 3]
@@ -2490,8 +2512,8 @@ static func _draw_game_over_overlay(game: Node2D, viewport: Vector2) -> void :
 
 	var retry_label = "TENTAR NOVAMENTE %d/%d" % [game.retry_charges_used + 1, game.RUN_RETRY_MAX_CHARGES] if game._retry_available() else "NOVA RUN"
 	var labels = [
-		["end_retry", retry_label, Color(0.0, 1.0, 0.82) if game._retry_available() else Color(0.72, 0.88, 0.96)], 
-		["end_ranking", "ABRIR RANKING", Color(1.0, 0.28, 0.78)], 
+		["end_retry", retry_label, Color(0.0, 1.0, 0.82) if game._retry_available() else Color(0.72, 0.88, 0.96)],
+		["end_ranking", "ABRIR RANKING", Color(1.0, 0.28, 0.78)],
 		["end_menu", "VOLTAR AO MENU", Color(0.72, 0.34, 1.0)]
 	]
 	game.buttons.erase("end_exit")
@@ -2567,14 +2589,14 @@ static func _draw_retry_return_transition(game: Node2D, viewport: Vector2) -> vo
 
 static func _draw_run_summary(game: Node2D, area: Rect2, accent: Color, lost: bool) -> void :
 	var entries = [
-		["JOGADOR", game.player_nickname if game.player_nickname != "" else "SEM NICK"], 
-		["RESULTADO", "EXTRACAO" if game.run_extracted else ("DERROTA" if lost else "VITORIA")], 
-		["TEMPO", game._run_time_text()], 
-		["INIMIGOS", str(game.enemies_killed)], 
-		["DANO INIMIGOS", str(int(round(game.run_damage_to_enemies)))], 
-		["PONTOS GANHOS", str(game.run_points_earned)], 
-		["PONTOS GASTOS", str(game.run_points_spent)], 
-		["CARTAS", str(game._deck_total_cards())], 
+		["JOGADOR", game.player_nickname if game.player_nickname != "" else "SEM NICK"],
+		["RESULTADO", "EXTRACAO" if game.run_extracted else ("DERROTA" if lost else "VITORIA")],
+		["TEMPO", game._run_time_text()],
+		["INIMIGOS", str(game.enemies_killed)],
+		["DANO INIMIGOS", str(int(round(game.run_damage_to_enemies)))],
+		["PONTOS GANHOS", str(game.run_points_earned)],
+		["PONTOS GASTOS", str(game.run_points_spent)],
+		["CARTAS", str(game._deck_total_cards())],
 		["FASE DA QUEDA" if lost else "FASE CONCLUIDA", str(game.current_phase)]
 	]
 	var columns = 2 if game._is_portrait(game.get_viewport_rect().size) else 3
@@ -2708,17 +2730,17 @@ static func _draw_tesla_health_bar_fx(game: Node2D, pos: Vector2, width: float, 
 	var filled_width: float = max(10.0, width * clamp(ratio, 0.0, 1.0))
 	var base_y: float = pos.y + 3.5
 	var bolt_points = PackedVector2Array([
-		Vector2(pos.x, base_y - 6.0), 
-		Vector2(pos.x + filled_width * 0.3, base_y - 6.0), 
-		Vector2(pos.x + filled_width * 0.2, base_y - 15.0), 
-		Vector2(pos.x + filled_width * 0.62, base_y + 1.0), 
-		Vector2(pos.x + filled_width * 0.44, base_y + 1.0), 
-		Vector2(pos.x + filled_width * 0.6, base_y + 11.0), 
-		Vector2(pos.x + filled_width, base_y - 4.0), 
-		Vector2(pos.x + filled_width * 0.64, base_y + 5.0), 
-		Vector2(pos.x + filled_width * 0.78, base_y + 15.0), 
-		Vector2(pos.x + filled_width * 0.36, base_y - 1.0), 
-		Vector2(pos.x + filled_width * 0.52, base_y - 1.0), 
+		Vector2(pos.x, base_y - 6.0),
+		Vector2(pos.x + filled_width * 0.3, base_y - 6.0),
+		Vector2(pos.x + filled_width * 0.2, base_y - 15.0),
+		Vector2(pos.x + filled_width * 0.62, base_y + 1.0),
+		Vector2(pos.x + filled_width * 0.44, base_y + 1.0),
+		Vector2(pos.x + filled_width * 0.6, base_y + 11.0),
+		Vector2(pos.x + filled_width, base_y - 4.0),
+		Vector2(pos.x + filled_width * 0.64, base_y + 5.0),
+		Vector2(pos.x + filled_width * 0.78, base_y + 15.0),
+		Vector2(pos.x + filled_width * 0.36, base_y - 1.0),
+		Vector2(pos.x + filled_width * 0.52, base_y - 1.0),
 		Vector2(pos.x + filled_width * 0.34, base_y - 10.0)
 	])
 	var jitter = Vector2(sin(game.time_alive * 82.0 + uid) * 1.8, cos(game.time_alive * 71.0 + uid) * 1.4) * power
@@ -2726,17 +2748,17 @@ static func _draw_tesla_health_bar_fx(game: Node2D, pos: Vector2, width: float, 
 		var local_jitter = Vector2(sin(game.time_alive * 92.0 + float(uid) * 0.2 + i) * 1.2, cos(game.time_alive * 88.0 + i * 1.7) * 1.0) * power
 		bolt_points[i] += jitter + local_jitter
 	var full_outline = PackedVector2Array([
-		Vector2(pos.x - 3.0, base_y - 8.5), 
-		Vector2(pos.x + width * 0.34, base_y - 8.5), 
-		Vector2(pos.x + width * 0.24, base_y - 18.0), 
-		Vector2(pos.x + width * 0.68, base_y - 0.5), 
-		Vector2(pos.x + width * 0.5, base_y - 0.5), 
-		Vector2(pos.x + width * 0.66, base_y + 10.5), 
-		Vector2(pos.x + width + 4.0, base_y - 5.5), 
-		Vector2(pos.x + width * 0.68, base_y + 7.5), 
-		Vector2(pos.x + width * 0.83, base_y + 18.0), 
-		Vector2(pos.x + width * 0.34, base_y + 1.5), 
-		Vector2(pos.x + width * 0.48, base_y + 1.5), 
+		Vector2(pos.x - 3.0, base_y - 8.5),
+		Vector2(pos.x + width * 0.34, base_y - 8.5),
+		Vector2(pos.x + width * 0.24, base_y - 18.0),
+		Vector2(pos.x + width * 0.68, base_y - 0.5),
+		Vector2(pos.x + width * 0.5, base_y - 0.5),
+		Vector2(pos.x + width * 0.66, base_y + 10.5),
+		Vector2(pos.x + width + 4.0, base_y - 5.5),
+		Vector2(pos.x + width * 0.68, base_y + 7.5),
+		Vector2(pos.x + width * 0.83, base_y + 18.0),
+		Vector2(pos.x + width * 0.34, base_y + 1.5),
+		Vector2(pos.x + width * 0.48, base_y + 1.5),
 		Vector2(pos.x + width * 0.29, base_y - 8.5)
 	])
 	game.draw_polyline(full_outline, Color(0.05, 0.0, 0.1, 0.88 * power), 8.0, true)
@@ -2753,13 +2775,13 @@ static func _draw_tesla_health_bar_fx(game: Node2D, pos: Vector2, width: float, 
 
 static func _draw_centered_outlined(game: Node2D, text: String, pos: Vector2, size: int, color: Color, outline: Color, thickness: int) -> void :
 	var offsets = [
-		Vector2( - thickness, 0), 
-		Vector2(thickness, 0), 
-		Vector2(0, - thickness), 
-		Vector2(0, thickness), 
-		Vector2( - thickness, - thickness), 
-		Vector2(thickness, - thickness), 
-		Vector2( - thickness, thickness), 
+		Vector2( - thickness, 0),
+		Vector2(thickness, 0),
+		Vector2(0, - thickness),
+		Vector2(0, thickness),
+		Vector2( - thickness, - thickness),
+		Vector2(thickness, - thickness),
+		Vector2( - thickness, thickness),
 		Vector2(thickness, thickness)
 	]
 	for offset in offsets:

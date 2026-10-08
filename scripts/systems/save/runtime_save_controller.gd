@@ -34,6 +34,10 @@ func _load_player_profile() -> void :
 			core.player_nickname = core._sanitize_player_nickname(value)
 		elif key == "profile_id":
 			core.player_profile_id = core._sanitize_profile_id(value)
+		elif key == "auth_token":
+			core.player_identity_auth_token = core._sanitize_profile_secret(value)
+		elif key == "recovery_code":
+			core.player_identity_recovery_code = core._sanitize_profile_secret(value)
 	file.close()
 	core._ensure_player_profile_id()
 
@@ -44,6 +48,8 @@ func _save_player_profile() -> void :
 		return
 	file.store_string("nickname=" + core.player_nickname + "\n")
 	file.store_string("profile_id=" + core.player_profile_id + "\n")
+	file.store_string("auth_token=" + core.player_identity_auth_token + "\n")
+	file.store_string("recovery_code=" + core.player_identity_recovery_code + "\n")
 	file.close()
 
 func _ensure_card_unlock_defaults() -> void :
@@ -68,70 +74,41 @@ func _load_card_unlocks() -> void :
 	core.unlocked_card_ids.clear()
 	core.unlocked_manifestation_ids.clear()
 	core.unlocked_spectrum_ids.clear()
+	core.specter_levels.clear()
 	core.card_unlock_progress.clear()
 	core.card_unlock_veteran_synced_version_code = 0
-	if FileAccess.file_exists(core.CARD_UNLOCK_SAVE_PATH):
-		var file = FileAccess.open(core.CARD_UNLOCK_SAVE_PATH, FileAccess.READ)
-		if file != null:
-			var parsed = JSON.parse_string(file.get_as_text())
-			file.close()
-			if parsed is Dictionary:
-				var data: Dictionary = parsed
-				for card_id in data.get("unlocked", []):
-					core.unlocked_card_ids[String(card_id)] = true
-				for manifestation_id in data.get("unlocked_manifestations", []):
-					core.unlocked_manifestation_ids[String(manifestation_id)] = true
-				for spectrum_id in data.get("unlocked_specters", data.get("unlocked_spectrums", [])):
-					core.unlocked_spectrum_ids[String(spectrum_id)] = true
-				var loaded_levels: Dictionary = data.get("specter_levels", {})
-				for key in loaded_levels.keys():
-					core.specter_levels[String(key)] = clampi(int(loaded_levels[key]), 1, core.AuraSystem.RUN_MAX_LEVEL)
-				core.persistent_spectral_coins = maxi(0, int(data.get("spectral_coins", data.get("persistent_spectral_coins", 0))))
-				core.spectral_coins = core.persistent_spectral_coins
-				var progress: Dictionary = data.get("progress", {})
-				for key in progress.keys():
-					core.card_unlock_progress[String(key)] = float(progress[key])
-				core.card_unlock_veteran_synced_version_code = maxi(0, int(data.get("veteran_unlock_sync_version_code", 0)))
-	_ensure_card_unlock_defaults()
+	core._ensure_card_unlock_defaults()
+	core.player_progress_install_secret = core._load_or_create_player_progress_install_secret()
+	core.player_progress_pending_events.clear()
+	core.player_progress_event_sequence = 0
+	core.player_progress_cache_trusted = false
+	var cached: Dictionary = core._read_trusted_player_progress_cache()
+	if not cached.is_empty():
+		core.player_progress_cache_trusted = true
+		core.player_progress_event_sequence = maxi(0, int(cached.get("event_sequence", 0)))
+		var cached_events: Array = cached.get("pending_events", [])
+		for event in cached_events:
+			if event is Dictionary:
+				core.player_progress_pending_events.append(event.duplicate(true))
+		core._apply_player_progress_snapshot(cached.get("snapshot", {}), false)
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
 
 func _save_card_unlocks() -> void :
-	_ensure_card_unlock_defaults()
-	var unlocked: Array = []
-	for card_id in core.unlocked_card_ids.keys():
-		if bool(core.unlocked_card_ids[card_id]):
-			unlocked.append(String(card_id))
-	unlocked.sort()
-	var unlocked_manifestations: Array = []
-	for key in core.unlocked_manifestation_ids.keys():
-		if bool(core.unlocked_manifestation_ids[key]):
-			unlocked_manifestations.append(String(key))
-	unlocked_manifestations.sort()
-	var unlocked_specters: Array = []
-	for key in core.unlocked_spectrum_ids.keys():
-		if bool(core.unlocked_spectrum_ids[key]):
-			unlocked_specters.append(String(key))
-	unlocked_specters.sort()
-	var progress: Dictionary = {}
-	for key in core.card_unlock_progress.keys():
-		progress[String(key)] = float(core.card_unlock_progress[key])
-	var saved_specter_levels: Dictionary = {}
-	for key in core.specter_levels.keys():
-		saved_specter_levels[String(key)] = clampi(int(core.specter_levels[key]), 1, core.AuraSystem.RUN_MAX_LEVEL)
-	var file = FileAccess.open(core.CARD_UNLOCK_SAVE_PATH, FileAccess.WRITE)
+	core._ensure_card_unlock_defaults()
+	var payload: Dictionary = core.RTPlayerProgressSync.build_cache_payload(
+		core.player_profile_id,
+		core.player_identity_auth_token,
+		core.player_identity_recovery_code,
+		core._card_unlock_snapshot(),
+		core.player_progress_pending_events,
+		core.player_progress_event_sequence
+	)
+	var signed_payload: Dictionary = core.RTPlayerProgressSync.signed_cache(payload, core._player_progress_install_secret())
+	var file = FileAccess.open(core.PLAYER_PROGRESS_CACHE_PATH, FileAccess.WRITE)
 	if file == null:
 		return
-	file.store_string(JSON.stringify({
-		"version": 2,
-		"unlocked": unlocked,
-		"unlocked_manifestations": unlocked_manifestations,
-		"unlocked_specters": unlocked_specters,
-		"specter_levels": saved_specter_levels,
-		"spectral_coins": maxi(0, core.persistent_spectral_coins),
-		"progress": progress,
-		"veteran_unlock_sync_version_code": core.card_unlock_veteran_synced_version_code
-	}, "\t"))
+	file.store_string(JSON.stringify(signed_payload, "\t"))
 	file.close()
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
@@ -358,6 +335,7 @@ func _save_config() -> void :
 
 func _interrupted_run_field_names() -> Array:
 	return [
+		"shop_paid_rerolls_this_visit", "manifest_evolution_fragment_claim_count", "cinzas_card_bonuses",
 		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted",
 		"selected_manifestation", "selected_aura", "manifestation_key", "aura_state", "manifest_evolution_state",
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
@@ -370,8 +348,8 @@ func _interrupted_run_field_names() -> Array:
 		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "miasma_eel_slow_timer", "miasma_eel_slow_stacks", "pustule_spit_slow_timer", "pustule_spit_slow_grace_timer", "boss_tp_stun_timer", "boss_wave_slow_timer", "player_stun_timer", "player_silence_timer", "revive_heal_penalty_timer", "player_freeze_visual_timer", "player_freeze_visual_duration",
 		"boss1_rewind_cooldown", "boss1_rewind_history", "boss1_rewind_sample_timer", "boss1_rewind_sequence", "boss1_rewind_visual_projectiles", "boss1_rewind_vibration_timer", "boss1_rewind_clock_tick", "boss1_absorb_cooldown", "boss1_absorb_timer", "boss1_absorb_damage", "boss1_absorb_retaliate_timer", "boss1_absorb_bursts_fired", "boss1_time_wave",
 		"arauto", "arauto_spawned", "arauto_rays", "arauto_echo_breaks", "arauto_card_drops", "arauto_evolution_fragment", "manifest_evolution_fragment_claimed_this_run", "manifest_evolution_fragment_claim_source",
-		"boss2_ice_shards", "boss2_snow_zones", "boss2_frost_particles", "phase2_fire_walls", "phase2_fire_wall_hit_cd", "boss2_state", "boss2_action_timer", "boss2_target_position", "boss2_last_attack", "boss2_repeat_count", "boss2_facing_dir", "boss2_walk_speed", "boss2_anim_timer", "boss2_anim_frame", "boss2_breath_dir", "boss2_ultimate_cooldown", "boss2_ultimate_timer", "boss2_ultimate_center", "boss2_ultimate_orbit_angle", "boss2_ultimate_spit_timer", "boss2_ultimate_wind_timer", "boss2_ultimate_wind_active", "boss2_ultimate_wind_dir", "boss2_ultimate_hail_timer", "boss2_ultimate_fan_timer", "boss2_ultimate_blizzard_tick", "boss2_ultimate_blizzard_exposure", "boss2_ultimate_hit_gate", "boss2_ultimate_used",
-		"phase3_miasma_zones", "phase3_cheeses", "phase6_pustule_pools", "phase6_pustule_pheromone_timer", "boss6_lodarian_pools", "boss6_state", "boss6_current_ability", "boss6_state_timer", "boss6_wait_timer", "boss6_ability_cooldowns", "boss6_last_abilities", "boss6_carapace_plates", "boss6_carapace_timer", "boss6_vulnerability_timer", "boss6_core_exposed_timer", "boss6_core_permanent_bonus", "boss6_event_80_triggered", "boss6_event_60_triggered", "boss6_event_40_triggered", "boss6_event_30_triggered", "boss6_event_15_triggered", "boss6_special_event_id", "boss6_special_timer", "boss6_organs", "boss6_final_mutation", "boss6_final_birth_timer", "boss6_fossil_era_timer", "boss6_fossil_shield", "boss6_rib_prison", "boss6_tail_channels", "boss6_reflux_objects", "boss6_cracked_heart", "sanguessuga_parasite_timer", "sanguessuga_bleed_tick_timer", "boss6_shielded", "boss6_entry_particles", "boss6_relocating", "boss6_relocate_from", "boss6_relocate_to", "boss6_relocate_age", "boss6_relocate_duration", "boss6_miasma_ult_timer", "boss6_miasma_ult_cooldown", "boss6_miasma_ult_angle", "boss6_miasma_ult_pustule_timer", "boss6_miasma_slow_timer", "boss6_miasma_slow_stacks", "boss6_miasma_slow_tick", "boss6_carnage_slow_timer", "boss3_faith", "boss3_stage", "boss3_stun_timer", "boss3_rain_timer", "boss3_spit_timer", "boss3_tail_timer", "boss3_charge_timer", "boss3_cheese_timer", "boss3_dialogue_timer", "boss3_events", "boss3_consume_uid", "boss3_consume_timer", "boss3_ritual_timer", "boss3_ritual_destroyed", "boss3_is_moving", "boss3_miasma_cooldown", "boss3_miasma_timer", "boss3_miasma_variant", "boss3_miasma_clone_timer", "boss3_miasma_clone_positions", "boss3_miasma_spit_timer", "boss3_miasma_qte_required", "boss3_miasma_qte_taps", "boss3_miasma_qte_time_left", "boss3_miasma_qte_idle", "boss3_miasma_qte_tutorial", "boss3_miasma_qte_elapsed", "boss3_miasma_qte_lid_contacts", "boss3_miasma_qte_lids_touching", "boss3_miasma_qte_overtime_timer", "boss3_miasma_qte_overtime_stage", "boss3_miasma_tutorial_seen", "boss3_miasma_clouds", "boss3_faith_test_cooldown", "boss3_faith_test_active", "boss3_faith_test_pulses_left", "boss3_faith_test_pulse_timer", "boss3_faith_link_timer", "boss3_faith_link_damage_done",
+		"boss2_ice_shards", "boss2_snow_zones", "boss2_frost_particles", "phase2_fire_walls", "phase2_fire_wall_hit_cd", "boss2_state", "boss2_action_timer", "boss2_target_position", "boss2_last_attack", "boss2_repeat_count", "boss2_facing_dir", "boss2_walk_speed", "boss2_anim_timer", "boss2_anim_frame", "boss2_breath_dir", "boss2_ultimate_cooldown", "boss2_ultimate_timer", "boss2_ultimate_center", "boss2_ultimate_orbit_angle", "boss2_ultimate_spit_timer", "boss2_ultimate_wind_timer", "boss2_ultimate_wind_active", "boss2_ultimate_wind_dir", "boss2_ultimate_hail_timer", "boss2_ultimate_fan_timer", "boss2_ultimate_blizzard_tick", "boss2_ultimate_blizzard_exposure", "boss2_ultimate_hit_gate", "boss2_ultimate_used", "boss2_hunt_sequence", "boss2_hunt_last_target_peer_id", "boss2_hunt_target_grace",
+		"phase3_miasma_zones", "phase3_cheeses", "phase6_pustule_pools", "phase6_pustule_pheromone_timer", "boss6_lodarian_pools", "boss6_state", "boss6_current_ability", "boss6_state_timer", "boss6_wait_timer", "boss6_ability_cooldowns", "boss6_last_abilities", "boss6_carapace_plates", "boss6_carapace_timer", "boss6_vulnerability_timer", "boss6_core_exposed_timer", "boss6_core_permanent_bonus", "boss6_event_80_triggered", "boss6_event_60_triggered", "boss6_event_40_triggered", "boss6_event_30_triggered", "boss6_event_15_triggered", "boss6_special_event_id", "boss6_special_timer", "boss6_organs", "boss6_final_mutation", "boss6_final_birth_timer", "boss6_fossil_era_timer", "boss6_fossil_shield", "boss6_rib_prison", "boss6_tail_channels", "boss6_reflux_objects", "boss6_cracked_heart", "sanguessuga_parasite_timer", "sanguessuga_bleed_tick_timer", "boss6_shielded", "boss6_entry_particles", "boss6_relocating", "boss6_relocate_from", "boss6_relocate_to", "boss6_relocate_age", "boss6_relocate_duration", "boss6_miasma_ult_timer", "boss6_miasma_ult_cooldown", "boss6_miasma_ult_angle", "boss6_miasma_ult_pustule_timer", "boss6_miasma_slow_timer", "boss6_miasma_slow_stacks", "boss6_miasma_slow_tick", "boss6_carnage_slow_timer", "boss3_faith", "boss3_stage", "boss3_stun_timer", "boss3_rain_timer", "boss3_spit_timer", "boss3_tail_timer", "boss3_charge_timer", "boss3_cheese_timer", "boss3_dialogue_timer", "boss3_events", "boss3_consume_uid", "boss3_consume_timer", "boss3_ritual_timer", "boss3_ritual_destroyed", "boss3_is_moving", "boss3_miasma_cooldown", "boss3_miasma_timer", "boss3_miasma_variant", "boss3_miasma_clone_timer", "boss3_miasma_clone_positions", "boss3_miasma_spit_timer", "boss3_miasma_qte_required", "boss3_miasma_qte_taps", "boss3_miasma_qte_time_left", "boss3_miasma_qte_idle", "boss3_miasma_qte_tutorial", "boss3_miasma_qte_elapsed", "boss3_miasma_qte_lid_contacts", "boss3_miasma_qte_lids_touching", "boss3_miasma_qte_overtime_timer", "boss3_miasma_qte_overtime_stage", "boss3_miasma_tutorial_seen", "boss3_faith_test_cooldown", "boss3_faith_test_active", "boss3_faith_test_pulses_left", "boss3_faith_test_pulse_timer", "boss3_faith_link_timer", "boss3_faith_link_damage_done",
 		"phase4_planets", "phase4_null_zones", "phase4_enemy_hazards", "phase4_player_history", "phase4_history_sample_timer", "boss4_attack_timer", "boss4_attack_pose_timer", "boss4_anim_time", "boss4_entry_target", "boss4_instability", "boss4_stage", "boss4_no_hit_timer", "boss4_gravity_timer", "boss4_gravity_dir", "boss4_vampire_timer", "boss4_prison", "boss4_clone", "boss4_fragment_timer", "boss4_ultimate_active", "boss4_ultimate_timer", "boss4_ultimate_used", "boss4_ultimate_laser_timer", "boss4_ultimate_gravity_timer", "boss4_rupture_anchors", "boss4_ultimate_destroyed", "boss4_secondary_timer", "boss4_secondary_active", "boss4_secondary_elapsed", "boss4_ultimate_cooldown", "boss4_ultimate_ray_index", "boss4_strike_sequence", "boss4_meteorites", "boss4_meteor_event_timer", "boss4_meteor_event_started", "boss4_meteor_damage_bonus", "boss4_stun_timer", "boss4_vulnerable_timer", "boss4_column_barrage_timer", "boss4_drag_wave_timer", "boss4_sonic_used",
 		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action",
 		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done",
@@ -409,7 +387,7 @@ func _run_can_be_saved() -> bool:
 	return _interrupted_run_saved_mode() != ""
 
 func _interrupted_run_saved_mode() -> String:
-	if core.mode in ["game", "paused", "shop", "shop_opening", "shop_countdown", "boss_call", "phase_transition", "manifest_evolution"]:
+	if core.mode in ["game", "paused", "shop", "shop_opening", "shop_countdown", "boss_call", "phase_transition", "manifest_evolution", "manifest_evolution_waiting"]:
 		return core.mode
 	if core.mode == "pause_deck":
 		return "paused"

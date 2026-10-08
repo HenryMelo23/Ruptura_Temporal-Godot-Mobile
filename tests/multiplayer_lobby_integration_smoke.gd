@@ -11,6 +11,7 @@ var external_server := false
 var started_ms := 0
 var action_sent := false
 var server_state_valid := false
+var result_dir := ""
 
 
 func _initialize() -> void:
@@ -25,6 +26,8 @@ func _initialize() -> void:
 			relay_host = arg.trim_prefix("--host=")
 		elif arg == "--external-server":
 			external_server = true
+		elif arg.begins_with("--result-dir="):
+			result_dir = arg.trim_prefix("--result-dir=")
 	if role not in ["server", "host", "client"] or scenario not in ["ready", "spectator"]:
 		_fail("invalid arguments")
 		return
@@ -35,6 +38,10 @@ func _initialize() -> void:
 
 
 func _start_role() -> void:
+	game._finish_startup_thanks()
+	if relay_host == "127.0.0.1" and game.online_heartbeat_request != null:
+		game.online_heartbeat_request.queue_free()
+		game.online_heartbeat_request = null
 	if role == "server":
 		game.dedicated_room_code = "LOBBY_TEST"
 		game._start_dedicated_room_server(port)
@@ -100,6 +107,8 @@ func _run_server_step() -> void:
 
 
 func _result_path(result_role: String) -> String:
+	if result_dir != "":
+		return result_dir.path_join("%s_result.txt" % result_role)
 	return "res://tests/lobby_%s_%s_result.txt" % [scenario, result_role]
 
 

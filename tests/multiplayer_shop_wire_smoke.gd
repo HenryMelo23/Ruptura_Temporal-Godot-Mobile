@@ -7,6 +7,8 @@ var purchase_started := false
 
 
 func _result_path(result_role: String) -> String:
+	if result_dir != "":
+		return result_dir.path_join("%s_result.txt" % result_role)
 	return "res://.codex/shop_wire_%s.txt" % result_role
 
 
@@ -32,10 +34,10 @@ func _run() -> void:
 			game.score = 5000
 			game.card_cost = 500
 			opened_ms = Time.get_ticks_msec()
-		if role == "host" and not purchase_started:
-			purchase_started = true
+		if role == "host" and not purchase_started and not game.shop_controller.busy():
 			game._buy_selected_card()
-		if not requested_exit and not game._shop_purchase_animating():
+			purchase_started = game._shop_purchase_animating()
+		if not requested_exit and game.shop_controller.can_exit() and (role != "host" or purchase_started):
 			if role == "host" or Time.get_ticks_msec() - opened_ms >= 2200:
 				requested_exit = true
 				game._request_shop_exit_or_finish()

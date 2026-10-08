@@ -11,6 +11,7 @@
 !assets/sprites/manifestacao_bombastica.png.import
 !assets/sprites/manifestacao-necronada.png.import
 !assets/sprites/Fase6.png.import
+!assets/previews/manifestations/*.webp.import
 .agent_logs/
 # Generated Android/export artifacts
 android/
@@ -54,6 +55,11 @@ toolchain/*
 !toolchain/.gdignore
 *.apk
 *.idsig
+*.jks
+*.keystore
+*.p12
+*.pfx
+android_signing.local.ps1
 
 # Local QA logs and temporary migration scripts
 *.log
@@ -82,8 +88,13 @@ Game Base/**/SIGMon/
 
 # Ferramentas IA e Agents
 .agents/*
+!.agents/REFRACTOR_CAMPAIGN.md
+!.agents/architecture_budget_baseline.json
+!.agents/runtime_symbol_index.md
 !.agents/skills/
 .agents/skills/*
+!.agents/skills/ruptura-runtime-navigation/
+!.agents/skills/ruptura-runtime-navigation/SKILL.md
 !.agents/skills/ruptura-project-context/
 !.agents/skills/ruptura-project-context/SKILL.md
 !.agents/skills/ruptura-visual-direction/

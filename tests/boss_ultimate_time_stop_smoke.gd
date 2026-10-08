@@ -25,10 +25,9 @@ func _run() -> void:
 	game.player_pos = Vector2(720, 420)
 	game.boss_pos = Vector2(560, 420)
 	game.player_speed = 250.0
-	game._start_boss3_miasma(3)
-	_check(game.boss3_miasma_variant == 3, "third miasma variant did not start")
-	_check(game.boss3_miasma_clouds.size() == game.BOSS3_MIASMA_CLOUD_COUNT, "miasma cloud count is wrong")
-	_check(float(game.boss3_miasma_clouds[0]["speed"]) >= game.player_speed * game.BOSS3_MIASMA_CLOUD_SPEED_MULT, "miasma cloud speed does not track player speed")
+	game._start_boss3_miasma(4)
+	_check(game.boss3_miasma_variant == 4, "boss3 eye miasma variant did not start")
+	_check(game._boss3_miasma_qte_active(), "boss3 eye miasma QTE is not active")
 
 	game.aura_state = game.AuraSystem.create("Devota", 1)
 	game.aura_state["devoted_charges"] = 3
@@ -36,7 +35,7 @@ func _run() -> void:
 	game.passagem_intangivel_timer = 4.0
 	game.player_hp_max = 450
 	game.player_hp = 450
-	game._damage_player(70, "boss3_miasma_cloud")
+	game._damage_player(70, "boss3_miasma_link")
 	_check(game.player_hp < 450, "boss ultimate damage was blocked by card/aura invulnerability")
 	_check(int(game.aura_state["devoted_charges"]) == 3, "Devota consumed a charge against a boss ultimate")
 
@@ -93,5 +92,5 @@ func _run() -> void:
 	game._start_boss1_absorb()
 	_check(game.boss1_absorb_timer <= 0.0 and game.boss1_absorb_cooldown > 0.0, "boss started absorb while player was low HP")
 
-	print("BOSS_ULTIMATE_TIME_STOP_SMOKE_OK clouds=%d devota_bypass=true time_stop=true voraz_gated=true" % game.boss3_miasma_clouds.size())
+	print("BOSS_ULTIMATE_TIME_STOP_SMOKE_OK boss3_eye=true devota_bypass=true time_stop=true voraz_gated=true")
 	quit(0)

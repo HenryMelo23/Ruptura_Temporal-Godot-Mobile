@@ -66,6 +66,53 @@ static func target(c: CanvasItem, p: Vector2, radius: float, age: float, hit_tim
 		crystal(c, head, Vector2.DOWN, 24.0)
 
 
+static func hunt_mark(c: CanvasItem, origin: Vector2, target_pos: Vector2, locked_pos: Vector2, radius: float, width: float, age: float, warn: float, active: float, t: float, low: bool) -> void:
+	var lock_progress := clampf(age / maxf(0.01, warn), 0.0, 1.0)
+	var impact_elapsed := age - warn
+	var endpoint := locked_pos if age >= warn else target_pos
+	var dir := origin.direction_to(endpoint)
+	if dir.length() <= 0.01:
+		dir = Vector2.DOWN
+	var flash := 0.55 + 0.45 * sin(t * 12.0)
+	var danger := Color(0.48, 0.92, 1.0, 0.82)
+	var signal_color := Color(1.0, 0.75, 0.28, 0.88)
+	var active_color := Color(0.9, 1.0, 1.0, 0.92)
+	if age < warn:
+		var line_alpha := 0.22 + 0.32 * lock_progress
+		c.draw_line(origin, endpoint, Color(INK, line_alpha), maxf(8.0, width * 0.55))
+		c.draw_line(origin, endpoint, Color(WARNING, line_alpha + 0.1), 2.2)
+		trajectory(c, origin, dir, minf(origin.distance_to(endpoint), 760.0), t, 0.55 + 0.25 * flash)
+		c.draw_circle(target_pos, radius, Color(0.02, 0.08, 0.13, 0.22))
+		rim(c, target_pos, radius, signal_color, low)
+		rim(c, target_pos, maxf(8.0, radius * (0.28 + 0.58 * lock_progress)), danger, low, TAU * maxf(0.08, lock_progress))
+		var icon_y := target_pos.y - radius - 30.0 - sin(t * 7.0) * 3.0
+		var diamond := PackedVector2Array([
+			Vector2(target_pos.x, icon_y - 13.0),
+			Vector2(target_pos.x + 12.0, icon_y),
+			Vector2(target_pos.x, icon_y + 13.0),
+			Vector2(target_pos.x - 12.0, icon_y),
+			Vector2(target_pos.x, icon_y - 13.0)
+		])
+		c.draw_colored_polygon(diamond, Color(0.08, 0.23, 0.34, 0.74))
+		c.draw_polyline(diamond, Color(INK, 0.9), 4.0)
+		c.draw_polyline(diamond, Color(LIGHT, 0.86), 1.8)
+		for i in range(2 if low else 4):
+			var shard_dir := Vector2.from_angle(t * 1.5 + i * TAU / 4.0)
+			crystal(c, target_pos + shard_dir * (radius + 8.0), shard_dir, 7.0 + 2.0 * flash, 0.62)
+		return
+	var fade := clampf(1.0 - impact_elapsed / maxf(0.01, active + 0.34), 0.0, 1.0)
+	if fade <= 0.0:
+		return
+	c.draw_line(origin, locked_pos, Color(INK, 0.32 * fade), maxf(10.0, width * 0.9))
+	c.draw_line(origin, locked_pos, Color(ICE, 0.55 * fade), maxf(3.0, width * 0.18))
+	var burst_radius := radius * (0.7 + clampf(impact_elapsed / maxf(0.01, active), 0.0, 1.0) * 0.45)
+	c.draw_circle(locked_pos, burst_radius, Color(0.16, 0.72, 1.0, 0.15 * fade))
+	rim(c, locked_pos, burst_radius, active_color, low)
+	for i in range(4 if low else 8):
+		var shard_dir := Vector2.from_angle(i * TAU / float(4 if low else 8) + t * 0.45)
+		crystal(c, locked_pos + shard_dir * burst_radius * 0.55, shard_dir, 8.0 * fade, fade)
+
+
 static func lane(c: CanvasItem, a: Vector2, b: Vector2, half_width: float, progress: float, active: bool, t: float, low: bool) -> void:
 	var dir := a.direction_to(b)
 	var side := dir.orthogonal() * half_width
@@ -93,6 +140,20 @@ static func attack(g: Node2D, data: Dictionary, camera: Vector2, low: bool) -> v
 	match String(data["kind"]):
 		"ice_pillar", "flash_freeze":
 			target(g, Vector2(data["target"]) - camera, float(data["radius"]), age, warn, low, data["kind"] == "ice_pillar")
+		"hunt_mark":
+			hunt_mark(
+				g,
+				Vector2(data.get("origin", g.boss_pos)) - camera,
+				Vector2(data.get("target_pos", g.player_pos)) - camera,
+				Vector2(data.get("locked_pos", data.get("target_pos", g.player_pos))) - camera,
+				float(data.get("radius", g.BOSS2_HUNT_RADIUS)),
+				float(data.get("width", g.BOSS2_HUNT_WIDTH)),
+				age,
+				warn,
+				float(data.get("active", g.BOSS2_HUNT_ACTIVE)),
+				t,
+				low
+			)
 		"avalanche":
 			for pos in data["targets"]:
 				target(g, Vector2(pos) - camera, 58.0, age, warn + 1.0, low)
