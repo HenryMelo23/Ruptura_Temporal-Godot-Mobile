@@ -804,10 +804,28 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 	game._draw_hud_rect_button(game.buttons["pause"], "II", game._with_alpha(Color(0.0, 1.0, 0.82), game._hud_rect_player_alpha(game.buttons["pause"], viewport, 72.0)))
 	if game.buttons.has("shop_manual"):
 		var shop_rect: Rect2 = game.buttons["shop_manual"]
-		var shop_accent = Color(0.0, 1.0, 0.82) if game._affordable_card_count() > 0 and game.mode == "game" else Color(0.38, 0.42, 0.46)
+		var shop_ready: bool = game._affordable_card_count() > 0 and game.mode == "game" and game._manual_shop_available()
+		var shop_grace: bool = game._manual_shop_grace_active()
+		var shop_cooldown: float = game._manual_shop_cooldown_remaining()
+		var shop_accent = Color(0.3, 1.0, 0.62) if shop_grace else Color(0.0, 1.0, 0.82) if shop_ready else Color(0.38, 0.42, 0.46)
 		var shop_alpha: float = game._hud_rect_player_alpha(shop_rect, viewport, 82.0)
-		game._draw_centered("LOJA %d" % game.card_cost, shop_rect.get_center() + Vector2(0, -29), 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.92 * shop_alpha))
-		game._draw_hud_rect_button(shop_rect, "LOJA", game._with_alpha(shop_accent, shop_alpha))
+		var shop_label: String = "REABRIR" if shop_grace else "LOJA"
+		var shop_top: String = game._manual_shop_status_text()
+		if shop_top == "":
+			shop_top = "LOJA %d" % game.card_cost
+		game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.92 * shop_alpha))
+		game._draw_hud_rect_button(shop_rect, shop_label, game._with_alpha(shop_accent, shop_alpha))
+		if shop_cooldown > 0.0:
+			var cooldown_total: float = maxf(0.01, game.SHOP_MANUAL_REOPEN_COOLDOWN)
+			var progress: float = clampf(1.0 - shop_cooldown / cooldown_total, 0.0, 1.0)
+			var ring_rect: Rect2 = shop_rect.grow(4.0)
+			game.draw_arc(ring_rect.get_center(), maxf(ring_rect.size.x, ring_rect.size.y) * 0.5, -PI * 0.5, -PI * 0.5 + TAU * progress, 48, Color(0.72, 0.9, 1.0, 0.78 * shop_alpha), 3.0, true)
+		elif shop_grace:
+			var grace_progress: float = clampf(game._manual_shop_grace_remaining() / maxf(0.01, game.SHOP_MANUAL_ACCIDENTAL_CLOSE_GRACE), 0.0, 1.0)
+			game.draw_arc(shop_rect.get_center(), maxf(shop_rect.size.x, shop_rect.size.y) * 0.56, -PI * 0.5, -PI * 0.5 + TAU * grace_progress, 48, Color(0.46, 1.0, 0.62, 0.86 * shop_alpha), 3.0, true)
+		elif game.shop_manual_cooldown_pulse > 0.0:
+			var pulse_alpha: float = clampf(game.shop_manual_cooldown_pulse, 0.0, 1.0) * shop_alpha
+			game.draw_rect(shop_rect.grow(5.0), Color(0.0, 1.0, 0.82, 0.22 * pulse_alpha), false, 2.0)
 	if game.boss_ready and not game.boss_active and not game.boss_dead:
 		var boss_rect: Rect2 = game.buttons["boss"]
 		var boss_alpha: float = game._hud_rect_player_alpha(boss_rect, viewport, 82.0)

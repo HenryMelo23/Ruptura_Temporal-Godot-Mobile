@@ -125,3 +125,48 @@ static func _draw_boss_wave_trail(game: Node2D, center: Vector2, radius: float, 
 		var a1: float = float(arc.x)
 		var a2: float = float(arc.y)
 		game.draw_arc(center, trail_r, a1, a2, 48, trail_color, trail_width)
+
+
+static func _draw_boss_siege_tide(game: Node2D, center: Vector2, wave: Dictionary, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void:
+	var age: float = float(wave.get("age", 0.0))
+	var warning: float = maxf(0.01, float(wave.get("warning", game.BOSS1_SIEGE_TIDE_WARNING)))
+	var idx: int = int(wave.get("idx", 0))
+	var seed_value: float = float(int(wave.get("seed", idx)) % 997) * 0.017
+	var warn_progress: float = clampf(age / warning, 0.0, 1.0)
+	var pulse: float = 0.5 + 0.5 * sin(game.time_alive * 9.0 + seed_value)
+	var amber: Color = Color(1.0, 0.48, 0.08, 0.8)
+	var sand: Color = Color(0.86, 0.26, 0.05, 0.58)
+	var fissure: Color = Color(1.0, 0.8, 0.28, 0.72)
+	var low: bool = profile == "LOW"
+
+	for arc in arc_ranges:
+		var a1: float = float(arc.x)
+		var a2: float = float(arc.y)
+		if age < warning:
+			game.draw_arc(center, maxf(18.0, radius), a1, a2, 42, Color(0.78, 0.22, 0.03, 0.18 + warn_progress * 0.18), maxf(3.0, width * 0.45))
+			continue
+		game.draw_arc(center, radius, a1, a2, 48, Color(0.48, 0.12, 0.02, 0.46), width + 7.0)
+		game.draw_arc(center, radius, a1, a2, 48, sand, width + 1.0)
+		game.draw_arc(center, radius + width * 0.18, a1, a2, 48, amber, maxf(2.0, width * 0.4))
+		if not low:
+			var crack_count: int = 5 if profile == "HIGH" else 3
+			for crack in range(crack_count):
+				var crack_t: float = (float(crack) + 0.5) / float(crack_count)
+				var crack_angle: float = lerpf(a1, a2, crack_t) + sin(seed_value + float(crack) * 3.1) * 0.025
+				var inner: Vector2 = center + Vector2.from_angle(crack_angle) * maxf(8.0, radius - width * 0.2)
+				var outer: Vector2 = center + Vector2.from_angle(crack_angle + sin(seed_value + crack) * 0.018) * (radius + width * 0.9)
+				game.draw_line(inner, outer, fissure, 1.2 if profile == "MEDIUM" else 1.8, true)
+
+	var impact_progress: float = clampf((age - warning) / 0.24, 0.0, 1.0)
+	if age >= warning and impact_progress < 1.0:
+		var impact_alpha: float = (1.0 - impact_progress) * (0.36 + pulse * 0.16)
+		game.draw_arc(center, radius + width * 1.8 + impact_progress * 18.0, 0.0, TAU, 56, Color(1.0, 0.68, 0.16, impact_alpha), 2.0)
+		if not low:
+			for particle in range(6 if profile == "HIGH" else 3):
+				var particle_angle: float = seed_value + float(particle) * TAU / 6.0
+				var particle_pos: Vector2 = center + Vector2.from_angle(particle_angle) * (radius + width + impact_progress * 20.0)
+				game.draw_circle(particle_pos, 1.5 + impact_progress * 1.8, Color(1.0, 0.72, 0.24, impact_alpha))
+
+	if age >= warning and age < warning + 0.52:
+		var fade: float = 1.0 - clampf((age - warning) / 0.52, 0.0, 1.0)
+		game.draw_arc(center, radius + width * 1.5, 0.0, TAU, 56, Color(1.0, 0.56, 0.12, fade * 0.24), 2.0)

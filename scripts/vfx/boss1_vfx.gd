@@ -104,6 +104,53 @@ static func tide(canvas: CanvasItem, start: Vector2, end: Vector2, time: float, 
 		streak(canvas, pos - tangent * 12.0, pos, Color(0.72, 0.97, 1.0, 0.75), 3.0)
 
 
+static func pincer_tenaz(canvas: CanvasItem, data: Dictionary, center: Vector2, time: float, low: bool) -> void:
+	var state: String = String(data.get("state", "telegraph_first"))
+	var strike_index: int = int(data.get("strike_index", 0))
+	var prefix: String = "second" if state.ends_with("second") or strike_index >= 2 else "first"
+	var direction: Vector2 = Vector2(data.get("%s_dir" % prefix, Vector2.RIGHT)).normalized()
+	if direction.length() <= 0.01:
+		direction = Vector2.RIGHT
+	var side: Vector2 = direction.orthogonal()
+	var warning: float = maxf(0.01, float(data.get("warning", 0.82)))
+	var state_age: float = float(data.get("state_age", 0.0))
+	var accent: Color = Color(1.0, 0.52, 0.12, 0.9) if prefix == "first" else Color(1.0, 0.2, 0.16, 0.92)
+	var accent_soft: Color = Color(accent, 0.22)
+	var line_width: float = 5.0 if not low else 3.0
+
+	if state == "telegraph_first" or state == "telegraph_second":
+		var pulse: float = 0.5 + 0.5 * sin(time * 12.0 + (0.0 if prefix == "first" else 1.4))
+		var tip: Vector2 = center + direction * 270.0
+		var arrow_center: Vector2 = center + direction * 138.0
+		var left: Vector2 = arrow_center - direction * 30.0 + side * 34.0
+		var right: Vector2 = arrow_center - direction * 30.0 - side * 34.0
+		canvas.draw_line(center + direction * 34.0, tip, Color(INK, 0.74), 16.0, true)
+		canvas.draw_line(center + direction * 34.0, tip, Color(accent, 0.26 + pulse * 0.18), 8.0, true)
+		canvas.draw_polygon(PackedVector2Array([tip, left, right]), PackedColorArray([Color(accent, 0.2 + pulse * 0.16)]))
+		canvas.draw_polyline(PackedVector2Array([left, tip, right]), Color(1.0, 0.86, 0.52, 0.86), line_width, true)
+		arc(canvas, center, 48.0 + pulse * 8.0, direction.angle() - 1.0, direction.angle() - 0.18, accent, 4.0, low)
+		arc(canvas, center, 48.0 + pulse * 8.0, direction.angle() + 0.18, direction.angle() + 1.0, accent, 4.0, low)
+		canvas.draw_line(center + side * 28.0, center + side * 54.0, Color(1.0, 0.86, 0.52, 0.78), line_width, true)
+		canvas.draw_line(center - side * 28.0, center - side * 54.0, Color(1.0, 0.86, 0.52, 0.78), line_width, true)
+		return
+
+	if state == "dash_first" or state == "dash_second":
+		var back: Vector2 = center - direction * 250.0
+		streak(canvas, back, center + direction * 54.0, accent, 16.0 if not low else 11.0)
+		canvas.draw_line(center - side * 28.0, center + side * 34.0, Color(1.0, 0.88, 0.5, 0.74), line_width, true)
+		canvas.draw_line(center + side * 28.0, center - side * 34.0, Color(1.0, 0.88, 0.5, 0.74), line_width, true)
+		for particle in range(4 if low else 8):
+			var phase: float = fposmod(time * 0.8 + float(particle) * 0.173 + state_age * 0.6, 1.0)
+			var particle_pos: Vector2 = center - direction * (40.0 + phase * 220.0) + side * sin(phase * 11.0 + particle) * 18.0
+			canvas.draw_circle(particle_pos, 2.0 + (particle % 2), Color(0.92, 0.62, 0.24, 0.68 * (1.0 - phase)))
+		return
+
+	if state == "recovery":
+		var fade: float = 1.0 - clampf(state_age / 0.42, 0.0, 1.0)
+		canvas.draw_circle(center, 42.0, Color(0.28, 0.08, 0.02, 0.18 * fade))
+		arc(canvas, center, 52.0 + (1.0 - fade) * 48.0, 0.0, TAU, Color(1.0, 0.68, 0.22, 0.76 * fade), 5.0, low)
+
+
 static func attack(canvas: CanvasItem, data: Dictionary, center: Vector2, target: Vector2, time: float, age: float, low: bool) -> bool:
 	var kind := String(data.get("kind", ""))
 	match kind:
@@ -136,5 +183,8 @@ static func attack(canvas: CanvasItem, data: Dictionary, center: Vector2, target
 			for i in range(3):
 				var p := fposmod(age * 2.5 + i / 3.0, 1.0)
 				arc(canvas, center + dir * (45.0 + p * 70.0), 12.0 + p * 16.0, dir.angle() - PI * 0.5, dir.angle() + PI * 0.5, Color(CYAN, (1.0 - p) * 0.75), 3.0, low)
+			return true
+		"pincer_tenaz":
+			pincer_tenaz(canvas, data, center, time, low)
 			return true
 	return false

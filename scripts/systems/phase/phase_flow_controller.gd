@@ -213,7 +213,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "UMBRA"
 		core.boss_title_color = Color(0.42, 1.0, 0.55)
-		core.next_larapio_spawn_time = core.LARAPIO_SPAWN_TIME
+		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._load_umbra_mobile_memory()
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
@@ -226,7 +226,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "NEXO DA RUPTURA"
 		core.boss_title_color = Color(1.0, 0.76, 0.18)
-		core.next_larapio_spawn_time = core.LARAPIO_SPAWN_TIME
+		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._add_text("CHEAT: FASE 4", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
@@ -238,7 +238,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "PAI-RATO"
 		core.boss_title_color = Color(0.72, 0.92, 0.24)
-		core.next_larapio_spawn_time = core.LARAPIO_SPAWN_TIME
+		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._add_text("CHEAT: FASE 3", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
@@ -250,7 +250,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "SENTINELA GLACIAL"
 		core.boss_title_color = Color(0.5, 0.86, 1.0)
-		core.next_larapio_spawn_time = core.LARAPIO_SPAWN_TIME
+		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._add_text("CHEAT: FASE 2", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
@@ -276,6 +276,7 @@ func _advance_to_phase(phase: int) -> void:
 	core.pending_phase = 0
 	core.phase_started_at = core.time_alive
 	core.enemy_manager.prepare_phase_density_carry(previous_enemy_cap)
+	core.enemy_manager.prepare_phase_special_pacing()
 	if core.is_multiplayer and core._is_world_authority():
 		core._confirm_card_unlock_progress_for_active_players("phase_reached", float(phase), true)
 	else:
@@ -338,7 +339,7 @@ func _advance_to_phase(phase: int) -> void:
 	core._reset_boss1_rewind_state()
 	core.boss_empurrou_player = false
 	core.larapio_spawned = false
-	core.next_larapio_spawn_time = core.LARAPIO_SPAWN_TIME
+	core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 	core.alert_stalker_done = false
 	core.alert_projector_done = false
 	core.alert_crystal_done = false

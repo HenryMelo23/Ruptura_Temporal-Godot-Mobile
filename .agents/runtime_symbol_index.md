@@ -74,6 +74,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 
 Use exact symbol search in these owners; core keeps compatible wrappers.
 
+- Boss 3 Miasma presentation: `scripts/presentation/boss3_miasma_presentation.gd` (`clones`, `darkness`, `overlay`, `qte_openness`); world/combat wrappers and core unchanged APIs. No gameplay state ownership.
 - Save/config/resume/retry: `scripts/systems/save/runtime_save_controller.gd`.
 - Phase setup/transition/portals: `scripts/systems/phase/phase_flow_controller.gd`.
 - Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`.

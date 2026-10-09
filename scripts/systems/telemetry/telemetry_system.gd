@@ -314,7 +314,8 @@ func build_minimal_session_payload(result: String) -> Dictionary:
 			"ended_unix": int(Time.get_unix_time_from_system()),
 			"duration_seconds": int(round(game.time_alive)),
 			"phase": int(game.current_phase),
-			"phase_seconds": game._run_phase_seconds_report()
+			"phase_seconds": game._run_phase_seconds_report(),
+			"pacing": game._pacing_report() if game.has_method("_pacing_report") else {}
 		},
 		"build": {
 			"version": String(game.GAME_VERSION),
@@ -386,7 +387,9 @@ func build_minimal_session_payload(result: String) -> Dictionary:
 			"stage": float(game.boss_phase),
 			"party_size": int(boss_scaling.get("party_size", 1)),
 			"hp_coeff": float(boss_scaling.get("hp_coeff", 1.0)),
-			"pressure_coeff": float(boss_scaling.get("pressure_coeff", 1.0))
+			"pressure_coeff": float(boss_scaling.get("pressure_coeff", 1.0)),
+			"tempo_coeff": float(boss_scaling.get("tempo_coeff", 1.0)),
+			"hazard_bonus": int(boss_scaling.get("hazard_bonus", 0))
 		},
 		"umbra": {
 			"phase5_context": int(game.current_phase) == 5,
@@ -428,6 +431,7 @@ func build_run_report_payload(result: String) -> Dictionary:
 		"duration": game._run_time_text(),
 		"duration_seconds": int(round(game.time_alive)),
 		"phase": game.current_phase,
+		"pacing": game._pacing_report() if game.has_method("_pacing_report") else {},
 		"kills": game.enemies_killed,
 		"points_earned": game.run_points_earned,
 		"points_spent": game.run_points_spent,

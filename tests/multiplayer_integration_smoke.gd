@@ -10,6 +10,21 @@ var manifest_reveal_requested: bool = false
 var spectrum_ready_sent: bool = false
 var manifest_start_requested: bool = false
 var result_dir := "res://tests"
+var last_selection_attempt_ms := 0
+
+
+func _retry_rejected_selection() -> void:
+	if game.mode != "manifest_mp" or game.mp_local_ready or game.mp_manifest_rejection_message == "":
+		return
+	if Time.get_ticks_msec() - last_selection_attempt_ms < 400:
+		return
+	last_selection_attempt_ms = Time.get_ticks_msec()
+	# Simulate reselecting after a legitimate conflict, without changing ready state.
+	if game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION:
+		manifest_reveal_requested = false
+		spectrum_ready_sent = false
+	elif game.manifest_select_stage == game.MANIFEST_STAGE_AURA:
+		spectrum_ready_sent = false
 
 
 func _result_path(result_role: String) -> String:
@@ -18,6 +33,7 @@ func _result_path(result_role: String) -> String:
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:
+		print("FLOW_DIAGNOSTIC mode=%s stage=%s manifestation=%d aura=%d ready=%s rejection=%s roster=%s dedicated=%s" % [game.mode, game.manifest_select_stage, game.selected_manifestation, game.selected_aura, game.mp_local_ready, game.mp_manifest_rejection_message, game.mp_manifest_state_by_peer, game.dedicated_manifest_selection_by_peer])
 		var err_msg = "[%s] ERROR: %s" % [role.to_upper(), message]
 		push_error(err_msg)
 		var file = FileAccess.open(result_dir.path_join("integration_error.txt"), FileAccess.WRITE)
@@ -56,6 +72,13 @@ func _initialize() -> void:
 
 func _start_role() -> void:
 	game._finish_startup_thanks()
+	# Synthetic unlocked accounts must not be overwritten by the public backend.
+	for request_name in ["player_progress_identity_request", "player_progress_sync_request", "veteran_unlock_request"]:
+		var request: HTTPRequest = game.get(request_name)
+		if request != null:
+			request.cancel_request()
+			request.queue_free()
+			game.set(request_name, null)
 	# Apply after _ready loads the isolated account, not before it resets state.
 	for index in [1, 2, 3]:
 		game.unlocked_manifestation_ids[String(game.MANIFESTATIONS[index]["key"])] = true
@@ -174,6 +197,7 @@ func _run_host_loop() -> void:
 			return
 
 		# Simular clique do Host para iniciar quando o client estiver pronto
+		_retry_rejected_selection()
 		if not requested_start and game.online_lobby_connected_count == 3 and game.online_lobby_ready_count >= 2:
 			print("[HOST] Both clients are ready. Requesting start game...")
 			requested_start = true
@@ -216,6 +240,7 @@ func _run_client_loop() -> void:
 			return
 
 		# Conectado e no lobby: marcar pronto
+		_retry_rejected_selection()
 		if not marked_ready and game.online_connected and game.mode == "lobby_online_client":
 			print("[CLIENT] Connected. Marking ready...")
 			marked_ready = true

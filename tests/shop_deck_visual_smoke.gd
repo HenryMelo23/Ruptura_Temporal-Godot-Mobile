@@ -17,7 +17,9 @@ func _save_view(path: String) -> void:
 
 
 func _run() -> void:
+	game._finish_startup_thanks()
 	game._start_game()
+	game.run_tutorial_enabled = false
 	game.score = 2400
 	game.card_cost = 500
 	game.cards_bought["Disparo crescente"] = 2
@@ -43,4 +45,9 @@ func _run() -> void:
 	_save_view("res://.codex/deck_ui_qa_1280x720.png")
 
 	print("SHOP_DECK_VISUAL_OK " + ProjectSettings.globalize_path("res://.codex/shop_ui_qa_1280x720.png") + " " + ProjectSettings.globalize_path("res://.codex/deck_ui_qa_1280x720.png"))
+	game._cleanup_runtime_resources()
+	root.remove_child(game)
+	game.free()
+	for i in range(4):
+		await process_frame
 	quit(0)

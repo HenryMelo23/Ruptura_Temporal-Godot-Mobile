@@ -115,6 +115,46 @@ func button(g, rect: Rect2, label: String, accent: Color, enabled: bool = true) 
 	text(g, label, rect.grow(-8), 17, PAPER if enabled else MUTED.darkened(0.2), true)
 
 
+func bargain_discount_rate(card: Dictionary) -> float:
+	return clampf(float(card.get("bargain_discount_rate", 0.0)), 0.0, 0.75)
+
+
+func bargain_base_price(g, card: Dictionary) -> int:
+	var stored: int = int(card.get("bargain_base_price", 0))
+	if stored > 0:
+		return stored
+	if g.has_method("_bargain_base_card_price"):
+		return g._bargain_base_card_price(card)
+	return g._effective_card_price(card)
+
+
+func draw_bargain_price_tag(g, card: Dictionary, rect: Rect2, selected: bool, alpha: float = 1.0) -> void:
+	var rate: float = bargain_discount_rate(card)
+	if rate <= 0.0 or g._is_empty_shop_slot(card):
+		text(g, "VAZIA" if g._is_empty_shop_slot(card) else "%d PTS" % g._effective_card_price(card), rect, 18, GOLD if selected else MUTED, true)
+		return
+	var price: int = g._effective_card_price(card)
+	var base_price: int = bargain_base_price(g, card)
+	var inner := rect.grow(-2.0)
+	g.draw_rect(rect, Color(0.18, 0.11, 0.0, 0.82 * alpha), true)
+	g.draw_rect(rect, Color(1.0, 0.78, 0.22, 0.82 * alpha), false, 1.0)
+	var left := Rect2(inner.position, Vector2(inner.size.x * 0.44, inner.size.y))
+	var right := Rect2(Vector2(inner.position.x + inner.size.x * 0.42, inner.position.y), Vector2(inner.size.x * 0.58, inner.size.y))
+	text(g, "%d" % base_price, left, 12, Color(1.0, 0.74, 0.38, 0.66 * alpha), true)
+	g.draw_line(left.position + Vector2(7.0, left.size.y * 0.52), Vector2(left.end.x - 7.0, left.position.y + left.size.y * 0.52), Color(1.0, 0.34, 0.16, 0.84 * alpha), 1.4)
+	text(g, "%d PTS" % price, right, 15, Color(1.0, 0.94, 0.42, alpha), true)
+
+
+func draw_bargain_banner(g, card: Dictionary, rect: Rect2, alpha: float = 1.0) -> void:
+	var rate: float = bargain_discount_rate(card)
+	if rate <= 0.0 or g._is_empty_shop_slot(card):
+		return
+	var banner := Rect2(rect.position + Vector2(8.0, 8.0), Vector2(minf(128.0, rect.size.x - 16.0), 24.0))
+	g.draw_rect(banner, Color(0.2, 0.12, 0.0, 0.88 * alpha), true)
+	g.draw_rect(banner, Color(1.0, 0.78, 0.18, 0.9 * alpha), false, 1.0)
+	text(g, "DESCONTAO -%d%%" % int(round(rate * 100.0)), banner.grow(-4.0), 10, Color(1.0, 0.96, 0.62, alpha), true)
+
+
 func reroll_visual_state(g) -> Dictionary:
 	var free_left: int = maxi(0, int(g.shop_rerolls))
 	var card_cost: int = maxi(1, int(g.card_cost))
@@ -192,7 +232,8 @@ func draw_manual_reopen_warning(g, viewport: Vector2) -> void:
 	var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
 	g._draw_holo_panel(rect, Color(1.0, 0.62, 0.16), true, 0.82)
 	g.draw_rect(rect.grow(-7.0), Color(0.05, 0.016, 0.006, 0.54 + pulse * 0.12), true)
-	g._draw_centered("AVISO DA LOJA", Vector2(rect.get_center().x, rect.position.y + 27.0), 17 if not portrait else 15, Color(1.0, 0.78, 0.26))
+	var title: String = "REABERTURA GRATIS" if g._manual_shop_grace_active() else "LOJA MANUAL"
+	g._draw_centered(title, Vector2(rect.get_center().x, rect.position.y + 27.0), 17 if not portrait else 15, Color(1.0, 0.78, 0.26))
 	g._draw_wrapped_clamped(g.shop_manual_reopen_warning_text, Rect2(rect.position.x + 22.0, rect.position.y + 42.0, rect.size.x - 44.0, rect.size.y - 48.0), 13 if not portrait else 11, Color(0.96, 0.98, 1.0, 0.95), 2)
 
 
@@ -524,6 +565,7 @@ func draw(g, viewport: Vector2) -> void:
 			g.draw_line(caption.position, Vector2(caption.end.x, caption.position.y), accent.darkened(0.2), 2)
 			paragraph(g, String(card.get("name", "Vaga vazia")), Rect2(caption.position + Vector2(6, 4), Vector2(caption.size.x - 12, 36)), 16, true)
 			text(g, g._card_rarity_label(card), Rect2(caption.position + Vector2(6, 40), Vector2(caption.size.x - 12, 22)), 13, accent, true)
+			draw_bargain_banner(g, card, rect, 1.0)
 		if g._shop_slot_locked(i):
 			var lock_t := smoothstep(0, 1, t) if action == "lock" and slot == i else 1.0
 			var strip := Rect2(rect.position.x + 8, rect.get_center().y - 17, rect.size.x - 16, 34)
@@ -532,7 +574,7 @@ func draw(g, viewport: Vector2) -> void:
 			text(g, "RESERVADA", strip.grow(-4), 15, CYAN, true)
 			g.draw_line(strip.position, Vector2(strip.end.x, strip.position.y), CYAN, 2)
 		if not purchase:
-			text(g, "VAZIA" if g._is_empty_shop_slot(card) else "%d PTS" % g._effective_card_price(card), Rect2(price_rect.position.x, price_rect.end.y + 12, price_rect.size.x, 26), 18, GOLD if selected else MUTED, true)
+			draw_bargain_price_tag(g, card, Rect2(price_rect.position.x, price_rect.end.y + 12, price_rect.size.x, 26), selected, 1.0)
 		g.buttons["shop_card_%d" % i] = areas.cards[i]
 	if not g.shop_cards.is_empty():
 		var card: Dictionary = g.shop_cards[g.shop_selected]
@@ -544,6 +586,8 @@ func draw(g, viewport: Vector2) -> void:
 		text(g, String(card.get("name", "Vaga vazia")).to_upper(), Rect2(detail.position + Vector2(0, 32), Vector2(detail.size.x, 34)), 25, PAPER)
 		if not compact:
 			text(g, String(card.get("nick", "")), Rect2(detail.position + Vector2(0, 70), Vector2(detail.size.x, 24)), 16, CYAN)
+		if bargain_discount_rate(card) > 0.0:
+			text(g, "CAPSULA DA BARGANHA: %d -> %d PTS" % [bargain_base_price(g, card), g._effective_card_price(card)], Rect2(detail.position + Vector2(0, 94 if not compact else 72), Vector2(detail.size.x, 22)), 14, GOLD)
 		var copy := String(card.get("desc", ""))
 		if card.has("cinzas_bonus_summary"):
 			copy += "\n\n" + String(card.cinzas_bonus_summary)
@@ -689,10 +733,8 @@ func draw_legacy(g, viewport: Vector2) -> void:
 			g._draw_centered(card["nick"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 80), g._readable_text_size(15), nick_color)
 			g._draw_wrapped(card["desc"], Rect2(rect.position + Vector2(128, 102), Vector2(rect.size.x - 150, rect.size.y - 118)), g._readable_text_size(12), Color(0.84, 0.89, 0.93, max(0.0, content_alpha)))
 			var price_rect = Rect2(rect.end.x - 118.0, rect.end.y - 44.0, 94.0, 28.0)
-			g.draw_rect(price_rect, Color(0.0, 0.0, 0.0, 0.52 * content_alpha), true)
-			g.draw_rect(price_rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.7 * content_alpha), false, 1)
-			var price_label: = "VAZIA" if g._is_empty_shop_slot(card) else "%d pts" % g._effective_card_price(card)
-			g._draw_centered(price_label, price_rect.get_center() + Vector2(0, 4), g._readable_text_size(11), Color(1.0, 0.9, 0.35, content_alpha))
+			draw_bargain_price_tag(g, card, price_rect, i == shop_selected, content_alpha)
+			draw_bargain_banner(g, card, rect, content_alpha)
 			if g._can_toggle_shop_reserve(i):
 				var reserve_rect = Rect2(rect.position.x + 18.0, rect.end.y - 44.0, 96.0, 28.0)
 				buttons["shop_reserve_%d" % i] = reserve_rect

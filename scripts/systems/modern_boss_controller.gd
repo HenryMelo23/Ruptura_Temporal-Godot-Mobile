@@ -264,7 +264,7 @@ func start_boss7_feather_volley() -> void:
 	game.boss7_attack_dir = (game._boss_target_pos(true, 0.14) - game.boss_pos).normalized()
 	if game.boss7_attack_dir.length() <= 0.05:
 		game.boss7_attack_dir = Vector2.LEFT
-	game.boss7_cooldowns[game.BOSS7_ATTACK_FEATHER] = 1.4
+	game.boss7_cooldowns[game.BOSS7_ATTACK_FEATHER] = game._boss_party_scaled_interval(1.4, 1.05)
 
 
 func fire_boss7_feathers() -> void:
@@ -285,7 +285,7 @@ func start_boss7_wing_blast() -> void:
 	game.boss7_attack_dir = (game._boss_target_pos(true, 0.12) - game.boss_pos).normalized()
 	if game.boss7_attack_dir.length() <= 0.05:
 		game.boss7_attack_dir = Vector2.LEFT
-	game.boss7_cooldowns[game.BOSS7_ATTACK_WING] = 2.4
+	game.boss7_cooldowns[game.BOSS7_ATTACK_WING] = game._boss_party_scaled_interval(2.4, 1.8)
 
 
 func fire_boss7_wing_blast() -> void:
@@ -299,7 +299,7 @@ func start_boss7_dive() -> void:
 	game.boss7_target_pos = (game._boss_target_pos(true, 0.32)).clamp(Vector2(90, 90), game.WORLD_SIZE - Vector2(90, 90))
 	game.boss7_attack_dir = Vector2.UP
 	game.boss7_dive_fake_count = 0
-	game.boss7_cooldowns[game.BOSS7_ATTACK_DIVE_TRAIL] = 20.0
+	game.boss7_cooldowns[game.BOSS7_ATTACK_DIVE_TRAIL] = game._boss_party_scaled_interval(20.0, 14.0)
 
 
 func add_boss7_dive_trail(a: Vector2, b: Vector2) -> void:
@@ -310,24 +310,24 @@ func start_boss7_thermal() -> void:
 	var spots: Array = []
 	var base_target: Vector2 = game._boss_target_pos(true, 0.18)
 	spots.append(base_target.clamp(Vector2(80, 80), game.WORLD_SIZE - Vector2(80, 80)))
-	var count := 4 if game.boss7_reborn else 3
+	var count := (4 if game.boss7_reborn else 3) + mini(1, game._boss_party_hazard_bonus(2))
 	for i in range(count - 1):
 		var offset: Vector2 = Vector2.from_angle(game.rng.randf_range(0.0, TAU)) * game.rng.randf_range(90.0, 180.0)
 		spots.append((base_target + offset).clamp(Vector2(80, 80), game.WORLD_SIZE - Vector2(80, 80)))
 	game._add_boss_attack({"kind": game.BOSS7_ATTACK_THERMAL, "age": 0.0, "duration": 1.25, "spots": spots, "hit": {}})
-	game.boss7_cooldowns[game.BOSS7_ATTACK_THERMAL] = 3.4
+	game.boss7_cooldowns[game.BOSS7_ATTACK_THERMAL] = game._boss_party_scaled_interval(3.4, 2.55)
 	game.boss_attack_timer = game._boss7_attack_delay()
 
 
 func start_boss7_ash_rain() -> void:
 	game._add_boss_attack({"kind": game.BOSS7_ATTACK_ASH_RAIN, "age": 0.0, "duration": 3.6, "spawn_cd": 0.0, "spawned": 0, "drops": []})
-	game.boss7_cooldowns[game.BOSS7_ATTACK_ASH_RAIN] = 5.2
+	game.boss7_cooldowns[game.BOSS7_ATTACK_ASH_RAIN] = game._boss_party_scaled_interval(5.2, 3.9)
 	game.boss_attack_timer = game._boss7_attack_delay()
 
 
 func start_boss7_crown() -> void:
 	game._add_boss_attack({"kind": game.BOSS7_ATTACK_CROWN, "age": 0.0, "duration": 2.1, "hit": {}})
-	game.boss7_cooldowns[game.BOSS7_ATTACK_CROWN] = game.BOSS7_CROWN_COOLDOWN
+	game.boss7_cooldowns[game.BOSS7_ATTACK_CROWN] = game._boss_party_scaled_interval(game.BOSS7_CROWN_COOLDOWN, 4.5)
 	game.boss_attack_timer = game._boss7_attack_delay()
 
 
@@ -371,8 +371,8 @@ func start_boss7_whirlwind() -> void:
 	game.boss7_whirlwind_timer = 2.5
 	game.boss7_whirlwind_angle = 0.0
 	game.boss7_whirlwind_spawn_timer = 0.0
-	game.boss7_whirlwind_shots_left = 60
-	game.boss7_cooldowns[game.BOSS7_ATTACK_WHIRLWIND] = 40.0
+	game.boss7_whirlwind_shots_left = 60 + game._boss_party_hazard_bonus(2) * 10
+	game.boss7_cooldowns[game.BOSS7_ATTACK_WHIRLWIND] = game._boss_party_scaled_interval(40.0, 28.0)
 	game.boss_attack_timer = game._boss7_attack_delay() + 2.5
 	game._add_text("REDEMOINHO DE FOGO", game.boss_pos + Vector2(0, -110), Color(1.0, 0.4, 0.1), 1.2, 24)
 
@@ -383,9 +383,9 @@ func update_boss7_whirlwind(delta: float) -> void:
 	game.boss7_whirlwind_timer = maxf(0.0, game.boss7_whirlwind_timer - delta)
 	game.boss7_whirlwind_spawn_timer -= delta
 	if game.boss7_whirlwind_spawn_timer <= 0.0 and game.boss7_whirlwind_shots_left > 0:
-		game.boss7_whirlwind_spawn_timer = 0.04
+		game.boss7_whirlwind_spawn_timer = game._boss_party_scaled_interval(0.04, 0.035)
 		game.boss7_whirlwind_shots_left -= 1
-		game.boss7_whirlwind_angle += TAU / 60.0
+		game.boss7_whirlwind_angle += TAU / float(maxi(1, 60 + game._boss_party_hazard_bonus(2) * 10))
 		var dir: Vector2 = Vector2.from_angle(game.boss7_whirlwind_angle)
 		var speed := 170.0
 		game.enemy_bullets.append({
@@ -404,8 +404,8 @@ func update_boss7_whirlwind(delta: float) -> void:
 
 
 func start_boss7_sky_fireballs() -> void:
-	game.boss7_cooldowns[game.BOSS7_ATTACK_SKY_FIREBALLS] = 9.0
-	var count: int = 15 if game.boss7_reborn else 12
+	game.boss7_cooldowns[game.BOSS7_ATTACK_SKY_FIREBALLS] = game._boss_party_scaled_interval(9.0, 6.8)
+	var count: int = (15 if game.boss7_reborn else 12) + game._boss_party_hazard_bonus(2) * 2
 	var spots: Array = []
 	var base_target: Vector2 = game._boss_target_pos(true, 0.2)
 	spots.append(base_target.clamp(Vector2(90, 90), game.WORLD_SIZE - Vector2(90, 90)))

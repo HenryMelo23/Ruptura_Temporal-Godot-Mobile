@@ -103,6 +103,9 @@ function Test-ExcludedPath {
 function Test-IncludedPath {
     param([string]$RelativePath)
     $normalized = $RelativePath.Replace('/', '\').TrimStart('\')
+    if ($normalized -eq 'assets\updates\content_base.json') {
+        return $true
+    }
     if ($normalized -eq '.godot\global_script_class_cache.cfg') {
         return $true
     }

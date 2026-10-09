@@ -11,10 +11,10 @@ class FakeGame:
 	const PHASE2_COMMON_LIMIT := 6
 	const PHASE2_KAMIKAZE_LIMIT := 2
 	const PHASE2_PYRO_LIMIT := 1
-	const PHASE2_KAMIKAZE_UNLOCK_TIME := 120.0
-	const PHASE2_PYRO_UNLOCK_TIME := 300.0
-	const PHASE3_COMMON_ONLY_TIME := 80.0
-	const PHASE3_GUARDIAO_UNLOCK_TIME := 180.0
+	const PHASE2_KAMIKAZE_UNLOCK_TIME := 60.0
+	const PHASE2_PYRO_UNLOCK_TIME := 240.0
+	const PHASE3_COMMON_ONLY_TIME := 120.0
+	const PHASE3_GUARDIAO_UNLOCK_TIME := 360.0
 	const PHASE3_LIMIT_EARLY := 5
 	const PHASE3_LIMIT_MID := 6
 	const PHASE3_LIMIT_FULL := 7
@@ -40,6 +40,21 @@ class FakeGame:
 
 	func _phase_elapsed_time() -> float:
 		return phase_elapsed
+
+	func _phase2_kamikaze_unlock_time() -> float:
+		return PHASE2_KAMIKAZE_UNLOCK_TIME
+
+	func _phase2_pyro_unlock_time() -> float:
+		return PHASE2_PYRO_UNLOCK_TIME
+
+	func _phase3_common_only_time() -> float:
+		return PHASE3_COMMON_ONLY_TIME
+
+	func _phase3_guardiao_unlock_time() -> float:
+		return PHASE3_GUARDIAO_UNLOCK_TIME
+
+	func _phase4_adapt_time() -> float:
+		return PHASE4_ADAPT_TIME
 
 
 var manager: EnemyManager

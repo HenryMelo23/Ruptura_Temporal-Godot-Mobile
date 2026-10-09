@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Gravity = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
+const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -306,6 +307,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_boss3_faith_link(camera)
 	game._draw_boss1_rewind_world(camera)
 	game._draw_network_rewind_visuals(camera)
+	_draw_bargain_capsule(game, camera)
 	for orb in game.heal_orbs:
 		if String(orb.get("kind", "heal")) == game.PHASE_POINT_CRYSTAL_KIND:
 			_draw_phase_point_crystal(game, orb, camera)
@@ -362,7 +364,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		game._draw_weather_precipitation(camera)
 	if game.boss1_rewind_sequence.is_empty() and (game.mode == "game" or game.mode == "shop_countdown" or game.mode == "boss_call" or game.mode == "pause_countdown"):
 		game._draw_ground_target_preview(viewport, camera)
-	if game._boss3_miasma_active() and not game._boss3_miasma_qte_active():
+	if not game._boss3_miasma_qte_active():
 		game._draw_boss3_miasma_overlay(viewport, camera)
 	if game._is_umbra_miasma_active():
 		game._draw_umbra_miasma_overlay(viewport, camera)
@@ -1214,6 +1216,57 @@ static func _draw_phase_point_crystal(game: Node2D, orb: Dictionary, camera: Vec
 	game.draw_colored_polygon(points, Color(0.22, 0.96, 0.9, alpha))
 	game.draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(0.88, 1.0, 0.96, 0.80), 1.5, true)
 	game.draw_line(center + Vector2(-radius * 0.22, -radius * 0.82), center + Vector2(radius * 0.18, radius * 0.68), Color(1.0, 1.0, 1.0, 0.52), 1.2, true)
+
+
+static func _draw_bargain_capsule(game: Node2D, camera: Vector2) -> void:
+	if game.bargain_capsule.is_empty():
+		return
+	var state: String = String(game.bargain_capsule.get("state", ""))
+	if state == game.BARGAIN_CAPSULE_STATE_NONE:
+		return
+	var world_pos: Vector2 = Vector2(game.bargain_capsule.get("pos", game.player_pos))
+	if not game._world_point_in_view(world_pos, camera, 180.0):
+		return
+	var pos: Vector2 = world_pos - camera
+	var pulse: float = 0.5 + 0.5 * sin(game.time_alive * 7.0 + float(game.bargain_capsule.get("seed", 0)) * 0.01)
+	var radius: float = game.BARGAIN_CAPSULE_RADIUS
+	if state == game.BARGAIN_CAPSULE_STATE_PREPARING:
+		var t_prepare: float = 1.0 - clampf(float(game.bargain_capsule.get("timer", 0.0)) / maxf(0.01, game.BARGAIN_CAPSULE_PREPARE_TIME), 0.0, 1.0)
+		game.draw_circle(pos, radius * (1.2 + t_prepare * 0.65), Color(1.0, 0.78, 0.16, 0.12 + t_prepare * 0.16))
+		game.draw_arc(pos, radius * (1.55 - t_prepare * 0.25), -PI * 0.5, -PI * 0.5 + TAU * t_prepare, 42, Color(1.0, 0.88, 0.24, 0.84), 3.0, true)
+		game.draw_line(pos + Vector2(-28, 0), pos + Vector2(28, 0), Color(1.0, 0.94, 0.38, 0.72), 2.0)
+		game.draw_line(pos + Vector2(0, -28), pos + Vector2(0, 28), Color(1.0, 0.94, 0.38, 0.72), 2.0)
+		return
+	var fall_t: float = 1.0
+	if state == game.BARGAIN_CAPSULE_STATE_FALLING:
+		fall_t = 1.0 - clampf(float(game.bargain_capsule.get("timer", 0.0)) / maxf(0.01, game.BARGAIN_CAPSULE_FALL_TIME), 0.0, 1.0)
+		pos.y -= (1.0 - fall_t) * 180.0
+	game.draw_circle(world_pos - camera + Vector2(0, 28), 35.0 + pulse * 4.0, Color(0.04, 0.025, 0.0, 0.26))
+	if state == game.BARGAIN_CAPSULE_SUCCESS:
+		game.draw_circle(pos, radius * (1.15 + pulse * 0.12), Color(1.0, 0.78, 0.14, 0.20))
+	elif state == game.BARGAIN_CAPSULE_FAIL:
+		game.draw_circle(pos, radius * (1.2 + pulse * 0.22), Color(1.0, 0.18, 0.08, 0.22))
+	var body := Rect2(pos - Vector2(30, 34), Vector2(60, 68))
+	game.draw_rect(body.grow(5.0), Color(0.06, 0.035, 0.0, 0.54), true)
+	game.draw_rect(body, Color(0.22, 0.14, 0.02, 0.94), true)
+	game.draw_rect(body, Color(1.0, 0.76, 0.18, 0.92), false, 3.0)
+	game.draw_line(body.position + Vector2(8, 15), body.end - Vector2(9, 16), Color(1.0, 0.92, 0.48, 0.62), 2.0)
+	game.draw_line(Vector2(body.end.x - 12, body.position.y + 12), Vector2(body.position.x + 18, body.end.y - 10), Color(1.0, 0.38, 0.16, 0.58 + pulse * 0.28), 2.0)
+	game.draw_circle(pos, 15.0 + pulse * 2.5, Color(1.0, 0.86, 0.2, 0.42))
+	if state == game.BARGAIN_CAPSULE_FALLING:
+		game.draw_line(pos + Vector2(0, -90), pos + Vector2(0, -44), Color(1.0, 0.82, 0.2, 0.45), 4.0)
+	if state == game.BARGAIN_CAPSULE_ACTIVE:
+		var hp_ratio: float = clampf(float(game.bargain_capsule.get("hp", 0.0)) / maxf(1.0, float(game.bargain_capsule.get("max_hp", 1.0))), 0.0, 1.0)
+		var time_ratio: float = clampf(float(game.bargain_capsule.get("collapse_time", 0.0)) / maxf(1.0, float(game.bargain_capsule.get("collapse_max", 1.0))), 0.0, 1.0)
+		var bar_w: float = 86.0
+		var hp_rect := Rect2(pos + Vector2(-bar_w * 0.5, -72.0), Vector2(bar_w, 7.0))
+		var time_rect := Rect2(pos + Vector2(-bar_w * 0.5, -61.0), Vector2(bar_w, 6.0))
+		game.draw_rect(hp_rect, Color(0.04, 0.01, 0.0, 0.78), true)
+		game.draw_rect(Rect2(hp_rect.position, Vector2(hp_rect.size.x * hp_ratio, hp_rect.size.y)), Color(1.0, 0.58, 0.18, 0.96), true)
+		game.draw_rect(hp_rect, Color(1.0, 0.86, 0.24, 0.7), false, 1.0)
+		game.draw_rect(time_rect, Color(0.02, 0.02, 0.05, 0.78), true)
+		game.draw_rect(Rect2(time_rect.position, Vector2(time_rect.size.x * time_ratio, time_rect.size.y)), Color(0.35, 0.86, 1.0, 0.92), true)
+		game.draw_rect(time_rect, Color(0.64, 0.95, 1.0, 0.58), false, 1.0)
 
 
 static func _draw_larapio_ultimate_portals(game: Node2D, camera: Vector2) -> void :
@@ -3861,128 +3914,19 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 
 
 static func _draw_miasma_eye_mask(game: Node2D, viewport: Vector2, openness: float) -> void :
-	var curves = game._miasma_eye_curves(viewport, openness)
-	var upper: PackedVector2Array = curves["upper"]
-	var lower: PackedVector2Array = curves["lower"]
-	var top = PackedVector2Array([Vector2(-30, -30), Vector2(viewport.x + 30, -30)])
-	var bottom = PackedVector2Array([Vector2(-30, viewport.y + 30), Vector2(viewport.x + 30, viewport.y + 30)])
-	for i in range(upper.size() - 1, -1, -1):
-		top.append(upper[i])
-	for i in range(lower.size() - 1, -1, -1):
-		bottom.append(lower[i])
-	game.draw_colored_polygon(top, Color(0.005, 0.008, 0.006, 0.965))
-	game.draw_colored_polygon(bottom, Color(0.005, 0.008, 0.006, 0.965))
-	for width in [86.0, 64.0, 44.0, 26.0, 12.0]:
-		var alpha: float = lerp(0.055, 0.5, 1.0 - width / 86.0)
-		game.draw_polyline(upper, Color(0.0, 0.0, 0.0, alpha), width, true)
-		game.draw_polyline(lower, Color(0.0, 0.0, 0.0, alpha), width, true)
-	for mist_pass in range(4):
-		var mist = PackedVector2Array()
-		var mirrored = PackedVector2Array()
-		for i in range(upper.size()):
-			var p = Vector2(upper[i])
-			var wave = sin(float(i) * 0.64 + game.time_alive * 1.2 + mist_pass * 1.7) * (5.0 + mist_pass * 2.0)
-			mist.append(p + Vector2(0.0, wave - mist_pass * 5.0))
-			mirrored.append(Vector2(lower[i]) + Vector2(0.0, - wave + mist_pass * 5.0))
-		game.draw_polyline(mist, Color(0.44, 0.62, 0.1, 0.1 - mist_pass * 0.014), 18.0 - mist_pass * 3.2, true)
-		game.draw_polyline(mirrored, Color(0.44, 0.62, 0.1, 0.1 - mist_pass * 0.014), 18.0 - mist_pass * 3.2, true)
-	game.draw_polyline(upper, Color(0.54, 0.72, 0.1, 0.18), 3.0, true)
-	game.draw_polyline(lower, Color(0.54, 0.72, 0.1, 0.18), 3.0, true)
+	Miasma.eyelids(game, viewport, openness)
 
 
 static func _draw_miasma_darkness_fog(game: Node2D, player_screen: Vector2, viewport: Vector2) -> void :
-	var radius = game.BOSS3_MIASMA_DARK_RADIUS
-	var left = maxf(0.0, player_screen.x - radius)
-	var right = minf(viewport.x, player_screen.x + radius)
-	var top = maxf(0.0, player_screen.y - radius)
-	var bottom = minf(viewport.y, player_screen.y + radius)
-
-	var dark_col = Color(0.01, 0.02, 0.01, 0.97)
-	game.draw_rect(Rect2(0, 0, viewport.x, top), dark_col, true)
-	game.draw_rect(Rect2(0, bottom, viewport.x, maxf(0.0, viewport.y - bottom)), dark_col, true)
-	game.draw_rect(Rect2(0, top, left, maxf(0.0, bottom - top)), dark_col, true)
-	game.draw_rect(Rect2(right, top, maxf(0.0, viewport.x - right), maxf(0.0, bottom - top)), dark_col, true)
-
-	for i in range(24):
-		var angle: float = float(i) * TAU / 24.0 + sin(game.time_alive * 0.3 + i) * 0.04
-		var p = player_screen + Vector2.from_angle(angle) * radius
-		var fog_size: float = 24.0 + 12.0 * sin(game.time_alive * 1.2 + float(i))
-		game.draw_circle(p, fog_size, Color(0.01, 0.03, 0.01, 0.45))
-
-	game.draw_arc(player_screen, radius, 0.0, TAU, 64, Color(0.28, 0.65, 0.18, 0.4), 2.5, true)
+	Miasma.darkness(game, player_screen, viewport)
 
 
 static func _draw_miasma_qte_cheese_gunk(game: Node2D, viewport: Vector2, openness: float) -> void :
-	var curves = game._miasma_eye_curves(viewport, openness)
-	var upper: PackedVector2Array = curves["upper"]
-	var lower: PackedVector2Array = curves["lower"]
-	var progress: float = float(game.boss3_miasma_qte_taps) / max(1.0, float(game.boss3_miasma_qte_required))
-	var glue_strength: float = clamp(1.0 - progress, 0.12, 1.0)
-	for width in [24.0, 13.0, 5.0]:
-		var alpha: float = 0.06 + glue_strength * (0.12 if width > 20.0 else 0.24)
-		game.draw_polyline(upper, Color(0.78, 0.48, 0.04, alpha), width, true)
-		game.draw_polyline(lower, Color(0.58, 0.36, 0.02, alpha * 0.95), width, true)
-	for i in range(11):
-		var t: float = lerp(0.18, 0.82, float(i) / 10.0)
-		var idx: int = clampi(int(t * float(upper.size() - 1)), 0, upper.size() - 1)
-		var top_p = Vector2(upper[idx])
-		var bottom_p = Vector2(lower[idx])
-		var gap: float = max(1.0, bottom_p.y - top_p.y)
-		var length_ratio: float = clamp(0.32 + glue_strength * 0.52 + sin(game.time_alive * 1.1 + i * 1.9) * 0.08, 0.18, 0.92)
-		var end_p = top_p.lerp(bottom_p, length_ratio)
-		var sag: float = sin(game.time_alive * 2.0 + i) * 7.0
-		var strand = PackedVector2Array([top_p + Vector2(0, 3), top_p.lerp(end_p, 0.5) + Vector2(sag, 0), end_p])
-		game.draw_polyline(strand, Color(0.64, 0.4, 0.02, 0.3 + glue_strength * 0.24), 8.0 + glue_strength * 5.0, true)
-		game.draw_polyline(strand, Color(1.0, 0.82, 0.18, 0.26), 2.4, true)
-		if gap > 22.0:
-			var blob_p = end_p + Vector2(sin(game.time_alive * 1.8 + i) * 2.0, 4.0)
-			game.draw_circle(blob_p, 6.0 + glue_strength * 6.0, Color(0.36, 0.23, 0.015, 0.52))
-			game.draw_circle(blob_p, 4.0 + glue_strength * 4.5, Color(0.92, 0.58, 0.05, 0.72))
-			game.draw_circle(blob_p + Vector2(-2, -2), 2.0 + glue_strength * 1.8, Color(1.0, 0.91, 0.32, 0.42))
-	for i in range(24):
-		var t2: float = lerp(0.06, 0.94, float(i) / 23.0)
-		var idx2: int = clampi(int(t2 * float(upper.size() - 1)), 0, upper.size() - 1)
-		var edge_p = Vector2(upper[idx2]) if i % 2 == 0 else Vector2(lower[idx2])
-		var edge_sign = 1.0 if i % 2 == 0 else -1.0
-		var crawl = edge_p + Vector2(sin(game.time_alive * 1.4 + i) * 7.0, edge_sign * (8.0 + sin(i * 0.8) * 5.0))
-		game.draw_circle(crawl, 5.0 + glue_strength * 6.5, Color(0.42, 0.28, 0.02, 0.34))
-		game.draw_circle(crawl + Vector2(-1.5, -1.5), 2.4 + glue_strength * 2.8, Color(0.98, 0.7, 0.1, 0.42))
-	for i in range(8):
-		var angle: float = i * TAU / 8.0 + game.time_alive * 0.35
-		var p = viewport * 0.5 + Vector2.from_angle(angle) * (72.0 + sin(game.time_alive * 2.1 + i) * 12.0)
-		game.draw_circle(p, 6.0 + glue_strength * 5.0, Color(0.54, 0.34, 0.02, 0.24 * glue_strength))
+	Miasma.cheese(game, viewport, openness)
 
 
 static func _draw_miasma_faith_link(game: Node2D, camera: Vector2) -> void :
-	var player_screen: Vector2 = game.player_pos - camera + Vector2(0, -18.0 + sin(game.boss3_miasma_qte_elapsed * 4.0) * 9.0)
-	var boss_screen: Vector2 = game.boss_pos - camera + Vector2(0, -58.0 + sin(game.boss3_miasma_qte_elapsed * 3.2 + 1.4) * 11.0)
-	var dir: Vector2 = boss_screen - player_screen
-	if dir.length() <= 1.0:
-		return
-	var side = dir.normalized().orthogonal()
-	var strand_a = PackedVector2Array()
-	var strand_b = PackedVector2Array()
-	for i in range(24):
-		var t: float = float(i) / 23.0
-		var base = player_screen.lerp(boss_screen, t)
-		var wave: float = sin(t * TAU * 3.0 + game.boss3_miasma_qte_elapsed * 5.0) * 14.0
-		var pulse: float = sin(t * TAU * 7.0 - game.boss3_miasma_qte_elapsed * 8.0) * 5.0
-		strand_a.append(base + side * (wave + pulse))
-		strand_b.append(base - side * (wave * 0.62 - pulse))
-	game.draw_polyline(strand_a, Color(0.0, 0.0, 0.0, 0.78), 14.0, true)
-	game.draw_polyline(strand_b, Color(0.0, 0.0, 0.0, 0.7), 11.0, true)
-	game.draw_polyline(strand_a, Color(0.92, 1.0, 0.16, 0.8), 5.0, true)
-	game.draw_polyline(strand_b, Color(0.18, 1.0, 0.24, 0.64), 4.0, true)
-	game.draw_polyline(strand_a, Color(1.0, 0.84, 0.05, 0.72), 1.6, true)
-	for i in range(9):
-		var t2: float = fposmod(game.boss3_miasma_qte_elapsed * 0.55 + i / 9.0, 1.0)
-		var p = player_screen.lerp(boss_screen, t2) + side * sin(t2 * TAU * 3.0 + game.boss3_miasma_qte_elapsed * 5.0) * 14.0
-		game.draw_circle(p, 5.5, Color(0.02, 0.02, 0.0, 0.55))
-		game.draw_circle(p, 3.2, Color(1.0, 0.82, 0.06, 0.8))
-	for anchor in [player_screen, boss_screen]:
-		var lift: float = 1.0 + 0.08 * sin(game.boss3_miasma_qte_elapsed * 5.0 + anchor.x)
-		game.draw_arc(anchor + Vector2(0, 30), 32.0 * lift, 0.0, TAU, 48, Color(0.86, 1.0, 0.16, 0.28), 4.0, true)
-		game.draw_arc(anchor + Vector2(0, 42), 46.0 * lift, - game.boss3_miasma_qte_elapsed * 2.0, TAU - game.boss3_miasma_qte_elapsed * 2.0, 48, Color(0.1, 1.0, 0.3, 0.2), 3.0, true)
+	Miasma.faith_link(game, camera)
 
 
 static func _draw_umbra_miasma_overlay(game: Node2D, viewport: Vector2, camera: Vector2) -> void :

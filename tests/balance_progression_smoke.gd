@@ -18,6 +18,12 @@ func _assert_phase1_pool(at_time: float, allowed: Array, iterations := 80) -> vo
 		assert(allowed.has(kind), "unexpected phase1 enemy %s at %.1fs" % [kind, at_time])
 
 
+func _reset_enemy_limit_scaling_state() -> void:
+	game.enemy_manager.phase_density_carry_cap = 0
+	game.enemy_manager.phase_density_native_entry_cap = 0
+	game.phase1_limit_break_kills_start = -1
+
+
 func _run() -> void:
 	game.mode = "game"
 	game.is_multiplayer = false
@@ -37,46 +43,42 @@ func _run() -> void:
 	game.current_phase = 1
 	game.time_alive = game.PHASE1_LIMIT_BREAK_TIME - 1.0
 	game.enemies_killed = 80
-	game._reset_enemy_limit_scaling_state()
-	game._sync_enemy_limit_scaling_state()
+	_reset_enemy_limit_scaling_state()
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE)
 	game.time_alive = game.PHASE1_LIMIT_BREAK_TIME
 	game.enemies_killed = 40
-	game._sync_enemy_limit_scaling_state()
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE)
 	game.enemies_killed = 59
-	game._sync_enemy_limit_scaling_state()
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE)
-	game.enemies_killed = 60
-	game._sync_enemy_limit_scaling_state()
+	game.enemies_killed = 40 + game.PHASE1_LIMIT_KILLS_PER_EXTRA
 	assert(game._enemy_limit() == game.ENEMY_MAX_BASE + 1)
 
 	game.current_phase = 2
-	game._reset_enemy_limit_scaling_state()
+	_reset_enemy_limit_scaling_state()
 	game.phase_started_at = 100.0
-	game.time_alive = game.phase_started_at + 239.0
+	game.time_alive = game.phase_started_at + 59.0
 	assert(game._enemy_limit() == game.PHASE2_COMMON_LIMIT)
 	for i in range(30):
 		assert(game._choose_phase2_enemy_type() == game.ENEMY_COMMON)
-	game.time_alive = game.phase_started_at + game.PHASE2_KAMIKAZE_UNLOCK_TIME
+	game.time_alive = game.phase_started_at + 60.0
 	assert(game._enemy_limit() == game.PHASE2_COMMON_LIMIT + game.PHASE2_KAMIKAZE_LIMIT)
-	game.time_alive = game.phase_started_at + game.PHASE2_PYRO_UNLOCK_TIME
+	game.time_alive = game.phase_started_at + 240.0
 	assert(game._enemy_limit() == game.PHASE2_COMMON_LIMIT + game.PHASE2_KAMIKAZE_LIMIT + game.PHASE2_PYRO_LIMIT)
 
 	game.current_phase = 3
-	game._reset_enemy_limit_scaling_state()
+	_reset_enemy_limit_scaling_state()
 	game.phase_started_at = 200.0
-	game.time_alive = game.phase_started_at + 120.0
+	game.time_alive = game.phase_started_at + 119.0
 	assert(game._enemy_limit() == game.PHASE3_LIMIT_EARLY)
 	for i in range(30):
 		assert(game._choose_enemy_type() == game.ENEMY_COMMON)
-	game.time_alive = game.phase_started_at + game.PHASE3_INCENSARIO_UNLOCK_TIME
+	game.time_alive = game.phase_started_at + 240.0
 	assert(game._enemy_limit() == game.PHASE3_LIMIT_MID)
-	game.time_alive = game.phase_started_at + game.PHASE3_GUARDIAO_UNLOCK_TIME
+	game.time_alive = game.phase_started_at + 360.0
 	assert(game._enemy_limit() == game.PHASE3_LIMIT_FULL)
 
 	game.current_phase = 4
-	game._reset_enemy_limit_scaling_state()
+	_reset_enemy_limit_scaling_state()
 	game.phase_started_at = 300.0
 	game.time_alive = game.phase_started_at + 90.0
 	assert(game._enemy_limit() == game.PHASE4_LIMIT_EARLY)
@@ -84,7 +86,7 @@ func _run() -> void:
 	assert(game._enemy_limit() == game.PHASE4_LIMIT_FULL)
 
 	game.current_phase = 2
-	game._reset_enemy_limit_scaling_state()
+	_reset_enemy_limit_scaling_state()
 	game.phase_started_at = 100.0
 	game.enemies.clear()
 	for i in range(4):

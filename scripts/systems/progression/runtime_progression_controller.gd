@@ -216,7 +216,12 @@ func effective_card_price(card: Dictionary, base_cost: = -1) -> int:
 	if base_cost < 0 and card.has("locked_price"):
 		return int(card.get("locked_price", core.card_cost))
 	var cost: int = core.card_cost if base_cost < 0 else base_cost
-	return max(1, int(round(float(cost) * (1.0 - card_discount_rate(card)))))
+	var base_price: int = max(1, int(round(float(cost) * (1.0 - card_discount_rate(card)))))
+	if core.has_method("_bargain_card_discount_rate") and core.has_method("_bargain_discounted_price"):
+		var bargain_rate: float = core._bargain_card_discount_rate(card)
+		if bargain_rate > 0.0:
+			return core._bargain_discounted_price(base_price, bargain_rate)
+	return base_price
 
 
 func support_card_count(card_id: String) -> int:

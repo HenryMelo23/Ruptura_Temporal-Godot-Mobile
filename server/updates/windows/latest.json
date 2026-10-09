@@ -1,17 +1,16 @@
 {
-  "version": "2.0.44",
-  "version_code": 24400,
-  "filename": "Ruptura_Temporal_2.0.44.exe",
-  "sha256": "31899b263020c61ac2fac66ab134a4c180e8ec07117db01f9d09d5f0b734fc7f",
-  "size": 1387017800,
+  "version": "2.0.46",
+  "version_code": 24600,
+  "filename": "Ruptura_Temporal_2.0.46.exe",
+  "sha256": "8992adf42fe807ab7da7917b4233cd7c2689bb9142946744c00ec6395d461629",
+  "size": 908619832,
   "notes": [
-    "Runs longas: mais aceleracao da build e recompensas apos 30 minutos, preservando o inicio e o perigo dos combates.",
-    "Corrigida a leitura do cache de progresso apos reiniciar, com compatibilidade com o cache anterior.",
-    "Retomar a run e usar retry preservam rerolls pagos, bonus de Queimar e progresso das evolucoes.",
-    "Melhorias internas em save, fases, pontuacao e loja, preservando mapas, efeitos e conteudo existente.",
-    "Revisao multiplayer: confirmacao no lobby, manifestacao/espectro, loja, pontuacao, revive e transicoes.",
-    "Android mantem a assinatura da 2.0.43; nao e necessario desinstalar essa versao para atualizar."
+    "Deck e efeitos de cartas alinhados a build real, incluindo bonus de Cinzas e Carta Zero.",
+    "Fluxo multiplayer de manifestacao e evolucao estabilizado para host e clientes.",
+    "Perfil experiente antecipa inimigos especiais sem alterar o onboarding das duas primeiras partidas.",
+    "Boss 1 e Pai-Rato preservam telegraphs e receberam melhorias de VFX leves.",
+    "Pacotes desktop iniciam com a fisica incluida e a referencia de conteudo alinhada."
   ],
   "mandatory": false,
-  "published_at": "2026-10-04T22:20:21.2386425Z"
+  "published_at": "2026-10-09T20:40:00.0000000Z"
 }

@@ -71,6 +71,13 @@ func _check_reroll_visual_contract() -> void:
 	_check(String(blocked_state.get("detail", "")).to_lower().find("saldo") >= 0, "insufficient score visual detail missing text")
 
 
+func _check_paid_reroll_curve(card_cost: int, expected: Array[int]) -> void:
+	game.card_cost = card_cost
+	for i in range(expected.size()):
+		game.shop_paid_rerolls_this_visit = i
+		_check(game.shop_controller.next_paid_reroll_cost() == expected[i], "paid reroll curve drifted at index %d" % i)
+
+
 func _run() -> void:
 	await process_frame
 	game._start_game()
@@ -92,6 +99,7 @@ func _run() -> void:
 	game.card_cost = 500
 	game.shop_paid_rerolls_this_visit = 10
 	_check(game.shop_controller.next_paid_reroll_cost() == 1500, "paid reroll cap drifted")
+	_check_paid_reroll_curve(500, [100, 135, 183, 247, 333, 449, 606, 818, 1104, 1490, 1500])
 
 	_open_test_shop(1600, 500)
 	_check_reroll_visual_contract()
@@ -104,7 +112,7 @@ func _run() -> void:
 	_check(game.shop_paid_rerolls_this_visit == 1, "first paid reroll did not increment paid count")
 	_settle_shop_animation()
 	game._reroll_shop()
-	_check(game.score == 1340, "second paid reroll did not apply growing 1.6x cost")
+	_check(game.score == 1365, "second paid reroll did not apply growing 1.35x cost")
 	_check(game.shop_paid_rerolls_this_visit == 2, "second paid reroll did not increment paid count")
 	_settle_shop_animation()
 	var blocked_score: int = game.score
@@ -123,6 +131,7 @@ func _run() -> void:
 	_check(bool(Dictionary(rerolls[0]).get("free", false)), "free reroll telemetry missing")
 	_check(not bool(Dictionary(rerolls[game.SHOP_FREE_REROLLS_PER_VISIT]).get("free", true)), "paid reroll telemetry missing paid flag")
 	_check(int(Dictionary(rerolls[game.SHOP_FREE_REROLLS_PER_VISIT]).get("cost", 0)) == 100, "paid reroll telemetry missing cost")
+	_check(int(Dictionary(rerolls[game.SHOP_FREE_REROLLS_PER_VISIT + 1]).get("cost", 0)) == 135, "second paid reroll telemetry missing rebalanced cost")
 
 	var visit_before: int = game.shop_visit_index
 	_open_test_shop(900, 500)
@@ -136,7 +145,7 @@ func _run() -> void:
 	_check(not game.shop_mp_ready_to_leave, "paid reroll touched multiplayer ready state")
 	_check(game.score == 800, "multiplayer paid reroll did not charge only local score")
 
-	print("SHOP_PAID_REROLLS_SMOKE_OK free=3 paid_costs=100,160 cap=1500 multiplayer=true")
+	print("SHOP_PAID_REROLLS_SMOKE_OK free=3 paid_costs=100,135,183,247,333,449,606,818,1104,1490,1500 multiplayer=true")
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.queue_free()

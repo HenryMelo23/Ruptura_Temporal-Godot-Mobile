@@ -42,6 +42,10 @@ func _run() -> void:
 		"sand": {"kind": "sand", "age": 1.4, "duration": 4.2, "target": target},
 		"rush": {"kind": "rush", "age": 0.4, "state": "telegraph", "dir": Vector2.LEFT, "warn": 0.62},
 		"rush_dash": {"kind": "rush", "age": 0.8, "state": "dash", "dir": Vector2.LEFT},
+		"pincer_first": {"kind": "pincer_tenaz", "age": 0.4, "state": "telegraph_first", "state_age": 0.4, "warning": game.BOSS1_PINCER_TENAZ_WARNING, "first_dir": Vector2.RIGHT, "second_dir": Vector2.LEFT, "strike_index": 0},
+		"pincer_second": {"kind": "pincer_tenaz", "age": 2.1, "state": "telegraph_second", "state_age": 0.4, "warning": game.BOSS1_PINCER_TENAZ_WARNING, "first_dir": Vector2.RIGHT, "second_dir": Vector2.LEFT, "strike_index": 2},
+		"pincer_dash": {"kind": "pincer_tenaz", "age": 1.1, "state": "dash_first", "state_age": 0.24, "warning": game.BOSS1_PINCER_TENAZ_WARNING, "first_dir": Vector2.RIGHT, "second_dir": Vector2.LEFT, "strike_index": 1},
+		"pincer_recovery": {"kind": "pincer_tenaz", "age": 3.8, "state": "recovery", "state_age": 0.16, "warning": game.BOSS1_PINCER_TENAZ_WARNING, "first_dir": Vector2.RIGHT, "second_dir": Vector2.LEFT, "strike_index": 2},
 		"retaliation": {"kind": "absorb_retaliation", "age": 0.4, "fired": 2, "bursts": 4}
 	}
 	for key in cases:

@@ -20,7 +20,7 @@ func _run() -> void:
 	game._start_game()
 	game.current_phase = 1
 	game.mode = "game"
-	game.time_alive = game.ARAUTO_SPAWN_TIME
+	game.time_alive = game._arauto_spawn_time() + 0.25
 	game.player_pos = Vector2(760, 450)
 	game.player_hp_max = 1000
 	game.player_hp = 1000

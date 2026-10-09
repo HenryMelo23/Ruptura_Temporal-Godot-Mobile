@@ -5,7 +5,7 @@ const State = preload("res://scripts/systems/content_pack_state.gd")
 func _initialize() -> void:
 	assert(State.project_contract_valid())
 	var base_code := State.base_version_code()
-	assert(base_code == 24100)
+	assert(base_code == preload("res://scripts/main_runtime_state.gd").GAME_VERSION_CODE)
 	var prefix := "user://content_boot_smoke_" + str(OS.get_process_id())
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(State.STORAGE))
 	var source := prefix + ".txt"

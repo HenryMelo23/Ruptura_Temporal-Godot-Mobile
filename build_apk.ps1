@@ -15,15 +15,21 @@ $LogsDir = Join-Path $ProjectRoot ".agent_logs"
 $ExpectedAndroidPackageName = "org.rupturatemporal.godotmobile"
 
 function Read-GameVersion {
-	if (-not (Test-Path -LiteralPath $MainScript)) {
-		throw "Nao encontrei scripts\main.gd para ler GAME_VERSION."
+	$candidates = @(
+		$MainScript,
+		(Join-Path (Join-Path $ProjectRoot "scripts") "main_runtime_state.gd")
+	)
+	foreach ($candidate in $candidates) {
+		if (-not (Test-Path -LiteralPath $candidate)) {
+			continue
+		}
+		$content = Get-Content -LiteralPath $candidate -Raw
+		$match = [regex]::Match($content, 'const\s+GAME_VERSION\s*(?::\s*[^=]+)?=\s*"([^"]+)"')
+		if ($match.Success) {
+			return $match.Groups[1].Value
+		}
 	}
-	$content = Get-Content -LiteralPath $MainScript -Raw
-	$match = [regex]::Match($content, 'const\s+GAME_VERSION\s*(?::\s*[^=]+)?=\s*"([^"]+)"')
-	if (-not $match.Success) {
-		throw "Nao consegui encontrar const GAME_VERSION em scripts\main.gd."
-	}
-	return $match.Groups[1].Value
+	throw "Nao consegui encontrar const GAME_VERSION nos scripts do runtime."
 }
 
 function Resolve-GodotExe {

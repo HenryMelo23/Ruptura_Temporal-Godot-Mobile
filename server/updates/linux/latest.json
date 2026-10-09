@@ -1,0 +1,16 @@
+{
+  "version": "2.0.46",
+  "version_code": 24600,
+  "filename": "Ruptura_Temporal_2.0.46.x86_64",
+  "sha256": "adc7aa6c3c0e8ca7ca36e9aebf614eb18fee7f42ebacb1ff14cef41f2bdc5447",
+  "size": 872745504,
+  "notes": [
+    "Deck e efeitos de cartas alinhados a build real, incluindo bonus de Cinzas e Carta Zero.",
+    "Fluxo multiplayer de manifestacao e evolucao estabilizado para host e clientes.",
+    "Perfil experiente antecipa inimigos especiais sem alterar o onboarding das duas primeiras partidas.",
+    "Boss 1 e Pai-Rato preservam telegraphs e receberam melhorias de VFX leves.",
+    "Pacotes desktop iniciam com a fisica incluida e a referencia de conteudo alinhada."
+  ],
+  "mandatory": false,
+  "published_at": "2026-10-09T20:40:00.0000000Z"
+}

@@ -43,14 +43,18 @@ func _run() -> void:
 	var solo_report: Dictionary = game._boss_party_scaling_report()
 	_check(int(solo_report.get("party_size", 0)) == 1, "solo telemetry party size mismatch")
 	_check(_approx(float(solo_report.get("hp_coeff", 0.0)), 1.0), "solo telemetry hp coeff mismatch")
+	_check(_approx(float(solo_report.get("tempo_coeff", 0.0)), 1.0), "solo telemetry tempo coeff mismatch")
+	_check(int(solo_report.get("hazard_bonus", -1)) == 0, "solo hazard bonus changed")
 
 	_set_party_size(2)
 	game.current_phase = 1
 	game._reset_boss_party_scaling_context(1)
 	var two_player_hp: float = game._boss_hp_for_phase(1)
-	_check(_approx(two_player_hp, game.BOSS_BASE_HP * 1.35), "2p boss hp coeff mismatch")
+	_check(_approx(two_player_hp, game.BOSS_BASE_HP * 2.0), "2p boss hp coeff mismatch")
 	_check(int(game._boss_party_scaling_report().get("party_size", 0)) == 2, "2p party size was not snapshotted")
 	_check(_approx(game._multiplayer_boss_damage_scale(), 0.92), "2p pressure coeff mismatch")
+	_check(_approx(game._boss_party_tempo_multiplier(), 1.12), "2p tempo coeff mismatch")
+	_check(game._boss_party_hazard_bonus(2) == 1, "2p hazard bonus mismatch")
 
 	game.boss_active = true
 	game.boss_hp_max = two_player_hp
@@ -59,28 +63,35 @@ func _run() -> void:
 	_set_party_size(1)
 	_check(_approx(game._boss_hp_for_phase(1), two_player_hp), "boss hp scale decreased after elimination")
 	_check(_approx(game._multiplayer_boss_damage_scale(), 0.92), "pressure coeff decreased after elimination")
+	_check(_approx(game._boss_party_tempo_multiplier(), 1.12), "tempo coeff decreased after elimination")
 
 	game.is_dead = false
 	_set_party_size(3)
 	_check(_approx(game._boss_hp_for_phase(1), two_player_hp), "revive/rejoin reapplied boss hp multiplier during encounter")
 	_check(_approx(game._multiplayer_boss_damage_scale(), 0.92), "revive/rejoin reapplied pressure multiplier during encounter")
+	_check(_approx(game._boss_party_tempo_multiplier(), 1.12), "revive/rejoin reapplied tempo multiplier during encounter")
 
 	game.current_phase = 2
 	game._reset_boss_party_scaling_context(2)
 	var phase2_hp: float = game._boss_hp_for_phase(2)
-	_check(_approx(phase2_hp, 8910.0 * 1.70), "new boss/fase did not recalculate 3p hp coeff")
+	_check(_approx(phase2_hp, 8910.0 * 3.0), "new boss/fase did not recalculate 3p hp coeff")
 	_check(_approx(game._multiplayer_boss_damage_scale(), 0.88), "new boss/fase did not recalculate 3p pressure coeff")
+	_check(_approx(game._boss_party_tempo_multiplier(), 1.22), "new boss/fase did not recalculate 3p tempo coeff")
+	_check(game._boss_party_hazard_bonus(2) == 2, "new boss/fase did not recalculate 3p hazard bonus")
 
 	var minimal_payload: Dictionary = get_root().get_node("/root/TelemetrySystem").build_minimal_session_payload("Teste")
 	var minimal_boss: Dictionary = Dictionary(minimal_payload.get("boss", {}))
 	_check(int(minimal_boss.get("party_size", 0)) == 3, "minimal telemetry missing boss party size")
-	_check(_approx(float(minimal_boss.get("hp_coeff", 0.0)), 1.70), "minimal telemetry missing boss hp coeff")
+	_check(_approx(float(minimal_boss.get("hp_coeff", 0.0)), 3.0), "minimal telemetry missing boss hp coeff")
 	_check(_approx(float(minimal_boss.get("pressure_coeff", 0.0)), 0.88), "minimal telemetry missing boss pressure coeff")
+	_check(_approx(float(minimal_boss.get("tempo_coeff", 0.0)), 1.22), "minimal telemetry missing boss tempo coeff")
+	_check(int(minimal_boss.get("hazard_bonus", 0)) == 2, "minimal telemetry missing boss hazard bonus")
 	var report_payload: Dictionary = get_root().get_node("/root/TelemetrySystem").build_run_report_payload("Teste")
 	var report_scaling: Dictionary = Dictionary(report_payload.get("boss_scaling", {}))
 	_check(int(report_scaling.get("party_size", 0)) == 3, "run telemetry missing boss party size")
+	_check(_approx(float(report_scaling.get("tempo_coeff", 0.0)), 1.22), "run telemetry missing tempo coeff")
 
-	print("BOSS_PARTY_SCALING_SMOKE_OK solo=1.0 two_hp=1.35 two_pressure=0.92 three_hp=1.70 three_pressure=0.88")
+	print("BOSS_PARTY_SCALING_SMOKE_OK solo=1.0 two_hp=2.0 two_pressure=0.92 two_tempo=1.12 three_hp=3.0 three_pressure=0.88 three_tempo=1.22")
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.queue_free()

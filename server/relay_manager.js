@@ -75,9 +75,11 @@ const RUN_AUDIT_BENIGN_REASONS = new Set([
 ]);
 const ANDROID_UPDATE_ROOT = path.resolve(process.env.ANDROID_UPDATE_ROOT || path.join(__dirname, "updates", "android"));
 const WINDOWS_UPDATE_ROOT = path.resolve(process.env.WINDOWS_UPDATE_ROOT || path.join(__dirname, "updates", "windows"));
+const LINUX_UPDATE_ROOT = path.resolve(process.env.LINUX_UPDATE_ROOT || path.join(__dirname, "updates", "linux"));
 const CONTENT_UPDATE_ROOT = path.resolve(process.env.CONTENT_UPDATE_ROOT || path.join(__dirname, "updates", "content"));
 const ANDROID_UPDATE_MANIFEST = path.join(ANDROID_UPDATE_ROOT, "latest.json");
 const WINDOWS_UPDATE_MANIFEST = path.join(WINDOWS_UPDATE_ROOT, "latest.json");
+const LINUX_UPDATE_MANIFEST = path.join(LINUX_UPDATE_ROOT, "latest.json");
 const CONTENT_UPDATE_MANIFEST = path.join(CONTENT_UPDATE_ROOT, "latest.json");
 
 const rooms = new Map();
@@ -145,6 +147,16 @@ function updateConfig(platform) {
       downloadPath: "/updates/windows/download/"
     };
   }
+  if (platform === "linux") {
+    return {
+      platform: "linux",
+      root: LINUX_UPDATE_ROOT,
+      manifest: LINUX_UPDATE_MANIFEST,
+      extension: ".x86_64",
+      urlField: "linux_url",
+      downloadPath: "/updates/linux/download/"
+    };
+  }
   return {
     platform: "android",
     root: ANDROID_UPDATE_ROOT,
@@ -153,6 +165,16 @@ function updateConfig(platform) {
     urlField: "apk_url",
     downloadPath: "/updates/android/download/"
   };
+}
+
+function updateDownloadContentType(platform) {
+  if (platform === "windows") {
+    return "application/vnd.microsoft.portable-executable";
+  }
+  if (platform === "android") {
+    return "application/vnd.android.package-archive";
+  }
+  return "application/octet-stream";
 }
 
 function projectIdentity() {
@@ -359,7 +381,7 @@ function sendUpdateFile(req, res, platform, filename) {
   const headers = {
     "Accept-Ranges": "bytes",
     "Cache-Control": "public, max-age=31536000, immutable",
-    "Content-Type": platform === "windows" ? "application/vnd.microsoft.portable-executable" : "application/vnd.android.package-archive",
+    "Content-Type": updateDownloadContentType(platform),
     "Content-Disposition": `attachment; filename="${update.filename.replace(/"/g, "")}"`,
     "Content-Length": end - start + 1
   };
@@ -2888,6 +2910,13 @@ async function route(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/updates/linux/latest") {
+    const currentVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("version_code")) || 0));
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, updatePublic("linux", currentVersionCode));
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/updates/content/latest") {
     const currentContentVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("content_version_code")) || 0));
     const gameVersionCode = Math.max(0, Math.floor(Number(url.searchParams.get("version_code")) || 0));
@@ -2917,6 +2946,12 @@ async function route(req, res) {
   const windowsExeMatch = url.pathname.match(/^\/updates\/windows\/download\/([^/]+)$/);
   if ((req.method === "GET" || req.method === "HEAD") && windowsExeMatch) {
     sendUpdateFile(req, res, "windows", windowsExeMatch[1]);
+    return;
+  }
+
+  const linuxExeMatch = url.pathname.match(/^\/updates\/linux\/download\/([^/]+)$/);
+  if ((req.method === "GET" || req.method === "HEAD") && linuxExeMatch) {
+    sendUpdateFile(req, res, "linux", linuxExeMatch[1]);
     return;
   }
 

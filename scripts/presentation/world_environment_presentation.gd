@@ -3,6 +3,7 @@ extends RefCounted
 # Draws through the main CanvasItem; state stays on the host during migration.
 
 const BossWavePresentation = preload("res://scripts/presentation/boss_wave_presentation.gd")
+const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 
 
 static func _draw_phase5_transmute_map_reveal(game: Node2D, map_texture: Texture2D, stage_rect: Rect2) -> void :
@@ -305,6 +306,9 @@ static func _draw_boss6_rotating_barrier(game: Node2D, screen_pos: Vector2) -> v
 
 static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 	if not (game.boss_active and game.boss_hp > 0.0) and not (game.current_phase == 7 and game.boss7_core_active):
+		return
+	if game._boss3_miasma_active() and game.boss3_miasma_variant == 1:
+		# Already drawn among its decoys with the same depth/material policy.
 		return
 	if game.current_phase == 7 and game.boss7_core_active:
 		var core_frames: Array = game.textures.get("boss7_core", [])
@@ -675,63 +679,11 @@ static func _draw_phase5_transmute_particles(game: Node2D, camera: Vector2) -> v
 
 
 static func _draw_boss3_miasma_clones(game: Node2D, camera: Vector2) -> void :
-	if not game._boss3_miasma_active() or game.boss3_miasma_variant != 1:
-		return
-	var frames = game.textures.get("boss3", [])
-	if not frames is Array or frames.is_empty():
-		return
-	var texture: Texture2D = frames[int(game.boss_phase) % frames.size()]
-	var cycle: float = 1.0 - clamp(game.boss3_miasma_clone_timer / game.BOSS3_MIASMA_CLONE_SWAP, 0.0, 1.0)
-	var base_alpha: float = 0.18 + sin(cycle * PI) * 0.72
-	for i in range(game.boss3_miasma_clone_positions.size()):
-		var world_pos = Vector2(game.boss3_miasma_clone_positions[i])
-		var screen_pos = world_pos - camera
-		var flicker: float = clamp(base_alpha + sin(game.time_alive * 9.0 + i * 1.8) * 0.1, 0.08, 0.88)
-		game._draw_dynamic_shadow_fit(texture, screen_pos, Vector2(184, 170), false, true, 0.22 * flicker)
-		game._draw_entity_fit(texture, screen_pos, Vector2(184, 170), Color(0.92, 1.0, 0.28, flicker), true)
-		game.draw_arc(screen_pos, 70.0 + sin(game.time_alive * 4.0 + i) * 5.0, 0.0, TAU, 38, Color(0.78, 1.0, 0.16, 0.24 * flicker), 2.0)
+	Miasma.clones(game, camera)
 
 
 static func _draw_boss3_miasma_overlay(game: Node2D, viewport: Vector2, camera: Vector2) -> void :
-	if not game._boss3_miasma_active():
-		return
-	var openness = 0.74
-	if game.boss3_miasma_variant == 1:
-		game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.72, 0.62, 0.02, 0.2), true)
-	elif game.boss3_miasma_variant == 4:
-		var progress: float = float(game.boss3_miasma_qte_taps) / max(1.0, float(game.boss3_miasma_qte_required))
-		openness = lerp(0.035, 0.96, smoothstep(0.0, 1.0, progress))
-		var elapsed: float = game.boss3_miasma_qte_elapsed
-		var blink_phase: float = fmod(max(0.0, elapsed), 1.5)
-		if blink_phase < 0.22:
-			var blink: float = abs(blink_phase - 0.11) / 0.11
-			openness *= clamp(blink, 0.04, 1.0)
-	game._draw_miasma_eye_mask(viewport, openness)
-	if game.boss3_miasma_variant == 2:
-		var player_screen: Vector2 = game.player_pos - camera
-		game._draw_miasma_darkness_fog(player_screen, viewport)
-	if game.boss3_miasma_variant == 4:
-		var center = viewport * 0.5
-		var qte_progress: float = float(game.boss3_miasma_qte_taps) / max(1.0, float(game.boss3_miasma_qte_required))
-		var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
-		var radius: float = 42.0 + pulse * 18.0 + qte_progress * 18.0
-		game._draw_miasma_faith_link(camera)
-		game._draw_miasma_qte_cheese_gunk(viewport, openness)
-		game.draw_circle(center, radius - 4.0, Color(0.015, 0.025, 0.006, 0.82))
-		game.draw_circle(center, radius, Color(0.64, 0.92, 0.1, 0.1 + pulse * 0.08))
-		game.draw_arc(center, radius, - PI * 0.5, - PI * 0.5 + TAU * qte_progress, 64, Color(0.82, 1.0, 0.2, 0.96), 6.0, true)
-		game.draw_arc(center, radius + 9.0, 0.0, TAU, 64, Color(0.74, 0.9, 0.14, 0.34 + pulse * 0.28), 2.0, true)
-		game._draw_centered("ESPACO" if game._uses_desktop_ui() else "TOQUE", center + Vector2(0, 7), 18, Color(0.94, 1.0, 0.68))
-		game._draw_centered("%d / %d" % [game.boss3_miasma_qte_taps, game.boss3_miasma_qte_required], center + Vector2(0, 88), 22, Color(0.88, 1.0, 0.34))
-		if game.boss3_miasma_qte_time_left > 0.0:
-			game._draw_centered("%.1fs" % game.boss3_miasma_qte_time_left, center + Vector2(0, 116), 18, Color(1.0, 0.46, 0.2))
-		else:
-			var overtime: float = max(0.0, game.boss3_miasma_qte_elapsed - game.BOSS3_MIASMA_QTE_DURATION)
-			game._draw_centered("FE CORROMPIDA +%.0fs" % overtime, center + Vector2(0, 116), 18, Color(0.74, 1.0, 0.16))
-		if game.boss3_miasma_tutorial_seen and game.boss3_miasma_qte_tutorial > 0.0:
-			game._draw_centered(("APERTE ESPACO PARA ABRIR OS OLHOS" if game._uses_desktop_ui() else "APERTE COMO SE SUA VIDA DEPENDESSE"), center + Vector2(0, -112), 24, Color(1.0, 0.92, 0.3))
-	else:
-		game._draw_centered("MIASMA DA VIDA  %.0fs" % ceil(game.boss3_miasma_timer), Vector2(viewport.x * 0.5, 116), 18, Color(0.82, 1.0, 0.3, 0.92))
+	Miasma.overlay(game, viewport, camera)
 
 
 static func _draw_phase3_environment(game: Node2D, camera: Vector2) -> void :
@@ -2037,6 +1989,64 @@ static func _draw_boss_wave_trail(game: Node2D, center: Vector2, radius: float, 
 	BossWavePresentation._draw_boss_wave_trail(game, center, radius, arc_ranges, width, enraged, profile)
 
 
+static func _draw_boss_siege_tide(game: Node2D, center: Vector2, wave: Dictionary, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
+	BossWavePresentation._draw_boss_siege_tide(game, center, wave, radius, arc_ranges, width, enraged, profile)
+
+
+static func _boss3_sector_polygon(center: Vector2, radius: float, start_angle: float, end_angle: float) -> PackedVector2Array:
+	var points: = PackedVector2Array()
+	points.append(center)
+	var segments: = 10
+	for i in range(segments + 1):
+		var t: float = float(i) / float(segments)
+		points.append(center + Vector2.from_angle(lerpf(start_angle, end_angle, t)) * radius)
+	return points
+
+
+static func _draw_boss3_sector_ritual(game: Node2D, camera: Vector2, attack: Dictionary) -> void:
+	var age: float = float(attack.get("age", 0.0))
+	var warning: float = float(attack.get("warning", game.BOSS3_SECTOR_RITUAL_WARNING))
+	var active: float = float(attack.get("active", game.BOSS3_SECTOR_RITUAL_ACTIVE))
+	var step_window: float = maxf(0.01, warning + active)
+	var steps: int = int(attack.get("steps", game.BOSS3_SECTOR_RITUAL_BASE_STEPS))
+	var lanes: int = maxi(1, int(attack.get("lanes", game.BOSS3_SECTOR_RITUAL_LANES)))
+	var center_world: Vector2 = Vector2(attack.get("center", game.WORLD_SIZE * 0.5))
+	var center: Vector2 = center_world - camera
+	var radius: float = float(attack.get("radius", game.BOSS3_SECTOR_RITUAL_RADIUS))
+	var lane_width: float = TAU / float(lanes)
+	var step: int = int(floor(age / step_window))
+	if step >= steps:
+		var fade: float = clampf(1.0 - ((age - step_window * float(steps)) / maxf(0.01, float(attack.get("dissipate", game.BOSS3_SECTOR_RITUAL_DISSIPATE)))), 0.0, 1.0)
+		game.draw_circle(center, radius * 0.55, Color(0.55, 0.55, 0.58, 0.05 * fade))
+		game.draw_arc(center, radius * 0.6, - game.time_alive * 0.4, TAU - game.time_alive * 0.4, 84, Color(0.58, 0.56, 0.62, 0.32 * fade), 3.0)
+		return
+	var safe_lane: int = game._boss3_sector_ritual_safe_lane(attack, step)
+	var step_age: float = age - step_window * float(step)
+	var is_active: bool = step_age >= warning
+	var pulse: float = 0.5 + sin(game.time_alive * 12.0) * 0.5
+	var warn_p: float = clampf(step_age / maxf(0.01, warning), 0.0, 1.0)
+	for lane in range(lanes):
+		var start_angle: float = -PI + lane_width * float(lane)
+		var end_angle: float = start_angle + lane_width
+		if lane == safe_lane:
+			game.draw_arc(center, radius * 0.74, start_angle + 0.05, end_angle - 0.05, 18, Color(0.38, 1.0, 0.28, 0.36 + pulse * 0.14), 4.0, true)
+			game.draw_line(center, center + Vector2.from_angle((start_angle + end_angle) * 0.5) * radius * 0.88, Color(0.38, 1.0, 0.26, 0.22), 2.0, true)
+			continue
+		var fill_alpha: float = 0.12 + warn_p * 0.12
+		var border_alpha: float = 0.4 + warn_p * 0.34
+		if is_active:
+			fill_alpha = 0.26 + pulse * 0.06
+			border_alpha = 0.86
+		var fill_color: Color = Color(0.44, 0.05, 0.62, fill_alpha)
+		var edge_color: Color = Color(0.72, 1.0, 0.18, border_alpha)
+		game.draw_colored_polygon(_boss3_sector_polygon(center, radius, start_angle, end_angle), fill_color)
+		game.draw_arc(center, radius * (0.78 + pulse * 0.03), start_angle + 0.04, end_angle - 0.04, 18, edge_color, 3.2, true)
+		var rune_pos: Vector2 = center + Vector2.from_angle((start_angle + end_angle) * 0.5) * radius * 0.42
+		game.draw_arc(rune_pos, 18.0 + warn_p * 10.0, - game.time_alive * 1.4, TAU - game.time_alive * 1.4, 20, Color(0.78, 0.24, 1.0, 0.48 + pulse * 0.2), 2.2)
+		game.draw_line(rune_pos + Vector2(-12, 0).rotated(game.time_alive), rune_pos + Vector2(12, 0).rotated(game.time_alive), Color(0.62, 1.0, 0.22, 0.48), 2.0, true)
+	game.draw_arc(center, radius * 0.22, game.time_alive * 0.8, game.time_alive * 0.8 + TAU, 44, Color(0.2, 1.0, 0.24, 0.22), 2.0)
+
+
 static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 	game._draw_boss1_time_wave(camera)
 	game._draw_boss1_absorb(camera)
@@ -2073,6 +2083,9 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 				Vector2(opening + half_gap, opening + PI - half_gap), 
 				Vector2(opening + PI + half_gap, opening + TAU - half_gap)
 			]
+			if bool(wave.get("siege_tide", false)):
+				game._draw_boss_siege_tide(center, wave, radius, dangerous_arcs, width, enraged, profile)
+				continue
 			game._draw_boss_wave_trail(center, radius, dangerous_arcs, width, enraged, profile)
 			game._draw_boss_wave_water_body(center, radius, dangerous_arcs, width, enraged, profile)
 			game._draw_boss_wave_crest_and_foam(center, wave, radius, dangerous_arcs, width, enraged, profile)
@@ -2087,13 +2100,17 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 		game._draw_boss_wave_crest_and_foam(center, wave, fallback_radius, fallback_arcs, fallback_width, enraged, profile)
 	for attack in game.boss_attacks:
 		var age = float(attack.get("age", 0.0))
+		var kind = String(attack.get("kind", ""))
 		if age < 0.0:
 			continue
 		if game.current_phase == 1:
 			age += game._boss1_visual_prediction()
-			if game.Boss1VFX.attack(game, attack, game.boss_pos - camera, Vector2(attack.get("target", game.boss_pos)) - camera, game.time_alive, age, profile == "LOW"):
+			var visual_attack: Dictionary = attack
+			if kind == "pincer_tenaz":
+				visual_attack = attack.duplicate()
+				visual_attack["state_age"] = float(attack.get("state_age", 0.0)) + game._boss1_visual_prediction()
+			if game.Boss1VFX.attack(game, visual_attack, game.boss_pos - camera, Vector2(attack.get("target", game.boss_pos)) - camera, game.time_alive, age, profile == "LOW"):
 				continue
-		var kind = String(attack["kind"])
 		if kind.ends_with("_telegraph") and kind.begins_with("boss6_"):
 			var target = Vector2(attack.get("target", game.boss_pos)) - camera
 			var origin = Vector2(attack.get("origin", game.boss_pos)) - camera
@@ -2254,6 +2271,8 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 				var start = opening + open_size
 				game.draw_arc(center, radius, start, start + PI - open_size * 2.0, 96, Color(1.0, 0.28, 0.2, 0.7 * (1.0 - p * 0.2)), 9.0)
 				game.draw_arc(center, radius, start + PI, start + TAU - open_size * 2.0, 96, Color(1.0, 0.28, 0.2, 0.7 * (1.0 - p * 0.2)), 9.0)
+			"boss3_sector_ritual":
+				_draw_boss3_sector_ritual(game, camera, attack)
 			"rat_rain":
 				var safe = int(attack.get("safe", 0))
 				for lane in range(4):

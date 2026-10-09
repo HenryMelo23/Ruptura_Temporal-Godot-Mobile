@@ -238,6 +238,8 @@ func open_shop(forced: bool) -> void:
 			track_manual_opening()
 	else:
 		game.shop_opening_manual_already_tracked = false
+		game.shop_manual_visit_active = false
+		game.shop_manual_visit_grace_on_close = false
 	game.shop_manual_reopen_warning_until_ms = 0
 	game.shop_manual_reopen_warning_text = ""
 	game.shop_endurance_discount = game._shop_endurance_discount_from_elapsed(game.shop_auto_elapsed)
@@ -271,59 +273,100 @@ func open_shop(forced: bool) -> void:
 		game._add_text("Loja forcada", game.player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 1.4, 26)
 	if game.shop_endurance_discount > 0.0:
 		game._add_text("RESISTENCIA: -%d%%" % int(round(game.shop_endurance_discount * 100.0)), game.player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
+	if game.has_method("_bargain_discount_active_for_shop") and game._bargain_discount_active_for_shop():
+		game._add_text("DESCONTAO DA CAPSULA -%d%%" % int(round(float(game.shop_bargain_discount_session.get("rate", 0.0)) * 100.0)), game.player_pos + Vector2(-120, -156), Color(1.0, 0.86, 0.24), 1.8, 22)
 
 
 func track_manual_opening() -> void:
-	var rapid: bool = game.time_alive - game.shop_last_manual_open_time <= 12.0
+	var grace_reopen: bool = manual_grace_active()
+	var rapid: bool = game.time_alive - game.shop_last_manual_open_time <= game.SHOP_MANUAL_REOPEN_COOLDOWN
 	if rapid:
 		game.shop_recent_manual_open_count += 1
 	else:
 		game.shop_recent_manual_open_count = 1
 	game.shop_last_manual_open_time = game.time_alive
-	if game.shop_recent_manual_open_count > 2:
-		apply_abuse_penalty("abertura rapida")
-	if game.shop_last_exit_had_purchase and game.time_alive - game.shop_last_exit_time <= 35.0:
-		apply_abuse_penalty("reroll por saida")
+	game.shop_manual_visit_active = true
+	game.shop_manual_visit_grace_on_close = not grace_reopen
+	if grace_reopen:
+		game.shop_manual_grace_reopen_available = false
+		game.shop_manual_grace_until = -999.0
+		game.shop_manual_reopen_warning_until_ms = 0
+		game.shop_manual_reopen_warning_text = ""
 
 
 func apply_abuse_penalty(reason: String) -> void:
-	if game.score <= 0:
-		return
-	var penalty: int = min(game.score, max(game.CARD_COST_BASE, game.card_cost))
-	game.score = max(0, game.score - penalty)
-	game.run_points_spent += penalty
-	game._record_telemetry_score_delta(-penalty, "shop_penalty")
-	game.shop_abuse_penalty_count += 1
-	game._add_text("TAXA DA LOJA -%d" % penalty, game.player_pos + Vector2(0, -116), Color(1.0, 0.38, 0.18), 1.35, 22)
-	if game.shop_abuse_penalty_count <= 2:
-		game._add_text(reason.to_upper(), game.player_pos + Vector2(0, -146), Color(1.0, 0.78, 0.24), 1.2, 17)
-	game._vibrate(95, 0.4)
+	# Legacy facade kept for older callers/tests. Manual shop spam no longer
+	# removes score; the explicit grace/cooldown state handles this flow.
+	game._add_text(reason.to_upper(), game.player_pos + Vector2(0, -116), Color(0.0, 1.0, 0.82), 0.9, 18)
+	game._vibrate(28, 0.14)
 
 
 func manual_reopen_would_penalize() -> bool:
-	if game.score <= 0:
-		return false
-	var rapid: bool = game.time_alive - game.shop_last_manual_open_time <= 12.0
-	if rapid and game.shop_recent_manual_open_count >= 2:
-		return true
-	return game.shop_last_exit_had_purchase and game.time_alive - game.shop_last_exit_time <= 35.0
+	return manual_cooldown_remaining() > 0.0 and not manual_grace_active()
 
 
 func manual_penalty_value() -> int:
-	return min(game.score, max(game.CARD_COST_BASE, game.card_cost))
+	return 0
 
 
 func manual_reopen_warning_active() -> bool:
-	return game.shop_manual_reopen_warning_until_ms > Time.get_ticks_msec()
+	return manual_grace_active() or game.shop_manual_reopen_warning_until_ms > Time.get_ticks_msec()
 
 
 func warn_manual_reopen_penalty() -> void:
-	var penalty: int = manual_penalty_value()
 	game.shop_manual_reopen_warning_until_ms = Time.get_ticks_msec() + game.SHOP_MANUAL_REOPEN_CONFIRM_MS
-	game.shop_manual_reopen_warning_text = "ABRIR AGORA COBRA TAXA DE %d PONTOS. TOQUE DE NOVO PARA CONFIRMAR." % penalty
-	game._add_text("LOJA PUNITIVA -%d" % penalty, game.player_pos + Vector2(0, -112), Color(1.0, 0.72, 0.16), 1.0, 20)
-	game._add_text("TOQUE DE NOVO PARA ABRIR", game.player_pos + Vector2(0, -140), Color(0.0, 1.0, 0.82), 0.9, 17)
-	game._vibrate(45, 0.22)
+	game.shop_manual_reopen_warning_text = "Loja disponivel em %.0fs. Pontos preservados." % ceil(manual_cooldown_remaining())
+	game._add_text("LOJA EM COOLDOWN %.0fs" % ceil(manual_cooldown_remaining()), game.player_pos + Vector2(0, -112), Color(0.72, 0.9, 1.0), 0.9, 18)
+	game._vibrate(32, 0.16)
+
+
+func manual_grace_remaining() -> float:
+	if not game.shop_manual_grace_reopen_available:
+		return 0.0
+	return maxf(0.0, float(game.shop_manual_grace_until) - float(game.time_alive))
+
+
+func manual_grace_active() -> bool:
+	return manual_grace_remaining() > 0.0
+
+
+func manual_cooldown_remaining() -> float:
+	if manual_grace_active():
+		return 0.0
+	return maxf(0.0, float(game.shop_manual_cooldown_until) - float(game.time_alive))
+
+
+func manual_available() -> bool:
+	return manual_grace_active() or manual_cooldown_remaining() <= 0.0
+
+
+func manual_status_text() -> String:
+	if manual_grace_active():
+		return "Reabra em %.0fs" % ceil(manual_grace_remaining())
+	var remaining: float = manual_cooldown_remaining()
+	if remaining > 0.0:
+		return "Loja disponivel em %.0fs" % ceil(remaining)
+	return ""
+
+
+func finish_manual_visit() -> void:
+	if not game.shop_manual_visit_active:
+		return
+	var closed_at: float = float(game.time_alive)
+	game.shop_manual_cooldown_until = closed_at + game.SHOP_MANUAL_REOPEN_COOLDOWN
+	if game.shop_manual_visit_grace_on_close:
+		game.shop_manual_grace_until = closed_at + game.SHOP_MANUAL_ACCIDENTAL_CLOSE_GRACE
+		game.shop_manual_grace_reopen_available = true
+		game.shop_manual_reopen_warning_until_ms = Time.get_ticks_msec() + int(game.SHOP_MANUAL_ACCIDENTAL_CLOSE_GRACE * 1000.0)
+		game.shop_manual_reopen_warning_text = "Fechou sem querer? Reabra em ate %.0fs sem perder pontos." % game.SHOP_MANUAL_ACCIDENTAL_CLOSE_GRACE
+	else:
+		game.shop_manual_grace_until = -999.0
+		game.shop_manual_grace_reopen_available = false
+		game.shop_manual_reopen_warning_until_ms = 0
+		game.shop_manual_reopen_warning_text = ""
+	game.shop_manual_cooldown_pulse = 1.0
+	game.shop_manual_visit_active = false
+	game.shop_manual_visit_grace_on_close = false
 
 
 func buy_selected_card() -> void:
@@ -444,8 +487,7 @@ func reroll() -> void:
 func finish() -> void:
 	game.shop_last_exit_had_purchase = game.shop_purchases_this_visit > 0
 	game.shop_last_exit_time = game.time_alive
-	game.shop_manual_reopen_warning_until_ms = 0
-	game.shop_manual_reopen_warning_text = ""
+	finish_manual_visit()
 	game.shop_purchase_anim_timer = 0.0
 	game.shop_purchase_pending_card = {}
 	game.shop_purchase_pending_can_continue = false
@@ -466,7 +508,11 @@ func finish() -> void:
 	game.shop_last_tap_msec = 0
 	game.shop_auto_elapsed = 0.0
 	game.shop_endurance_discount = 0.0
+	if game.has_method("_consume_bargain_discount_shop_session"):
+		game._consume_bargain_discount_shop_session()
 	game.next_forced_shop_time = game.shop_auto_interval if game.shop_auto_enabled else INF
+	if game.has_method("_geovana_bark") and game.shop_purchases_this_visit > 0:
+		game._geovana_bark("shop_exit", {"purchases": game.shop_purchases_this_visit})
 	game._update_audio_volumes()
 	game._block_ui_input()
 
@@ -474,6 +520,7 @@ func finish() -> void:
 func update_return(delta: float) -> void:
 	game.shop_return_timer -= delta
 	game.shop_return_visual_timer = maxf(0.0, game.shop_return_visual_timer - delta)
+	game.shop_manual_cooldown_pulse = maxf(0.0, game.shop_manual_cooldown_pulse - delta * 1.8)
 	game._update_effects(delta)
 	if game.shop_return_timer <= 0.0:
 		game.mode = game.previous_mode if game.previous_mode != "" else "game"
@@ -517,13 +564,13 @@ func try_open_manual() -> void:
 		return
 	if game.shop_auto_enabled or game.mode != "game":
 		return
+	if not manual_available():
+		warn_manual_reopen_penalty()
+		return
 	if game._affordable_card_count() <= 0:
 		game._add_text("FALTAM PONTOS", game.player_pos + Vector2(0, -96), Color(1.0, 0.56, 0.28), 0.9, 20)
 		return
-	if manual_reopen_would_penalize() and not manual_reopen_warning_active():
-		warn_manual_reopen_penalty()
-		return
-	if not manual_reopen_warning_active() and game._maybe_start_context_tutorial(game.TUTORIAL_STATE_SHOP):
+	if not manual_grace_active() and game._maybe_start_context_tutorial(game.TUTORIAL_STATE_SHOP):
 		return
 	if game.is_multiplayer:
 		if mp_request_visible():
@@ -532,9 +579,6 @@ func try_open_manual() -> void:
 		if rpc_available():
 			game.rpc("_rpc_request_shop")
 		return
-	if manual_reopen_would_penalize() and manual_reopen_warning_active():
-		track_manual_opening()
-		game.shop_opening_manual_already_tracked = true
 	start_opening_animation(false)
 
 
@@ -559,6 +603,7 @@ func update(delta: float) -> void:
 	presentation.update(delta)
 	game.shop_select_pulse_timer = max(0.0, game.shop_select_pulse_timer - delta)
 	game.shop_spend_anim_timer = max(0.0, game.shop_spend_anim_timer - delta)
+	game.shop_manual_cooldown_pulse = maxf(0.0, game.shop_manual_cooldown_pulse - delta * 1.8)
 	game._update_effects(delta)
 	if not game._shop_purchase_animating():
 		return

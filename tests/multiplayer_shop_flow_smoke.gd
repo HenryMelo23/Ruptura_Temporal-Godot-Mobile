@@ -20,6 +20,15 @@ func _run() -> void:
 	game.mode = "game"
 	game.score = 1200
 	game.card_cost = 120
+	game.time_alive = 40.0
+
+	game.shop_manual_cooldown_until = game.time_alive + 12.0
+	var score_before_cooldown_try: int = game.score
+	game._try_open_manual_shop()
+	assert(game.mode == "game")
+	assert(not game.shop_mp_request_outgoing)
+	assert(game.score == score_before_cooldown_try)
+	game.shop_manual_cooldown_until = -999.0
 
 	game._try_open_manual_shop()
 	assert(game.mode == "game")

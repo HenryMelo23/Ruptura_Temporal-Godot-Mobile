@@ -2358,8 +2358,11 @@ static func _draw_card_detail_panel(game: Node2D, card: Dictionary, rect: Rect2,
 	var desc_y = 60.0 if compact else 72.0
 	var desc_rect = Rect2(rect.position + Vector2(18, desc_y), Vector2(rect.size.x - 36, max(24.0, rect.size.y - desc_y - 10.0)))
 	var detail_lines = [String(card["desc"])]
-	for line in game._card_projection_lines(card):
-		detail_lines.append(String(line))
+	if game.mode == "pause_deck":
+		detail_lines = ["EFEITO ATUAL: " + game._deck_effect_text(card)]
+	else:
+		for line in game._card_projection_lines(card):
+			detail_lines.append(String(line))
 	game._draw_wrapped("\n".join(detail_lines), desc_rect, 11 if compact else 13, Color(0.84, 0.88, 0.92))
 
 

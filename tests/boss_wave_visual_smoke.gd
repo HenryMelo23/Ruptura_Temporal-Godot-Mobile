@@ -37,10 +37,13 @@ func _run() -> void:
 		"speed": game.BOSS_STAGE_WAVE_SPEED,
 		"width": 16.0,
 		"kind": "dupla_abertura",
+		"siege_tide": true,
+		"event_id": "boss1-siege-tide-visual-0",
+		"seed": 17,
 		"open_angle": 0.0,
 		"open_size": PI * 0.48,
 		"age": game.BOSS_STAGE_WAVE_WARNING + 0.7,
-		"warning": game.BOSS_STAGE_WAVE_WARNING,
+		"warning": game.BOSS1_SIEGE_TIDE_WARNING,
 		"hit": false
 	}, {
 		"idx": 1,
@@ -49,10 +52,13 @@ func _run() -> void:
 		"speed": game.BOSS_STAGE_WAVE_SPEED,
 		"width": 16.0,
 		"kind": "dupla_abertura",
+		"siege_tide": true,
+		"event_id": "boss1-siege-tide-visual-1",
+		"seed": 31,
 		"open_angle": PI / 8.0,
 		"open_size": PI * 0.48,
 		"age": game.BOSS_STAGE_WAVE_WARNING * 0.55,
-		"warning": game.BOSS_STAGE_WAVE_WARNING,
+		"warning": game.BOSS1_SIEGE_TIDE_WARNING,
 		"hit": false
 	}]
 	game.queue_redraw()
