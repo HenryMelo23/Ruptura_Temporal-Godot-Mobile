@@ -14,3 +14,4 @@ Quando o pedido for algo como "liberar atualização na VPS, criar APK e EXE da 
 - Corrigida a passiva da manifestação Elétrica no multiplayer: golpes de clientes agora acumulam Estática corretamente nos inimigos e bosses, com os indicadores visíveis para toda a equipe.
 - A música da run agora é escolhida pela autoridade e sincronizada com os demais jogadores, evitando que host e clientes escutem faixas diferentes durante a mesma fase ou boss.
 - Corrigida a apresentação dos Lôdarios no multiplayer: seus saltos agora são interpolados, com arco, avanço e troca de sprite sincronizados, em vez de parecerem teleportar entre posições.
+- Adicionada a opção “Última Direção” para o teleporte no PC: quem joga sem mouse pode teleportar na última direção de movimento pressionada, mantendo o alcance normal da habilidade.

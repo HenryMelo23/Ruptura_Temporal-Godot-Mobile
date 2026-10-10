@@ -536,7 +536,7 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", game._desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_aim"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_teleport"):
-		game._draw_gameplay_preference(game.settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", "Cursor, alvo automatico ou confirmacao visual.", game._desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_teleport"))
+		game._draw_gameplay_preference(game.settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", "Cursor, alvo automatico, ultima direcao ou confirmacao.", game._desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_teleport"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_attack_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_attack_aim"], "MIRA DO ATAQUE BASICO", "Alvo automatico ou direcao do cursor.", game._desktop_attack_aim_mode_label(), Color(0.48, 0.88, 0.64), game.settings_selected == game._gameplay_preference_index("desktop_attack_aim"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_hud_scale"):

@@ -73,6 +73,21 @@ func _run() -> void:
 	_check(game.player_pos.distance_to(before_pos) > 20.0, "auto teleport did not move the player")
 	_check(game.player_pos.x > before_pos.x, "auto teleport did not aim toward nearest enemy")
 
+	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_LAST_DIRECTION
+	game.player_pos = Vector2(640, 360)
+	game.last_facing = Vector2(0, -1)
+	game.get_viewport().warp_mouse(Vector2(900, 600))
+	game._release_direct_teleport_cooldown()
+	game.tp_effects.clear()
+	game.last_dash_time = -999.0
+	game.desktop_action_gate_msec.clear()
+	var direction_before: Vector2 = game.player_pos
+	_check(game._handle_desktop_combat_key(_key_event(KEY_F)), "last-direction teleport key was not consumed")
+	_check(game.player_pos.y < direction_before.y - 20.0, "last-direction teleport did not follow the last movement direction")
+	_check(absf(game.player_pos.x - direction_before.x) < 1.0, "last-direction teleport was influenced by the mouse cursor")
+	_check(game._desktop_teleport_mode_label() == "ULTIMA DIRECAO", "last-direction teleport label is not exposed in settings")
+	_check(game._sanitize_desktop_teleport_mode("last_direction") == game.DESKTOP_TELEPORT_LAST_DIRECTION, "last-direction teleport mode was not accepted by config sanitization")
+
 	game.desktop_teleport_mode = game.DESKTOP_AIM_CONFIRM
 	game.last_dash_time = -999.0
 	game.desktop_action_gate_msec.clear()
@@ -83,7 +98,7 @@ func _run() -> void:
 	game._cancel_desktop_aim_feedback()
 	_check(game.desktop_aim_action == "" and not game.teleport_dragging, "right-click style cancel did not clear teleport aim")
 
-	print("DESKTOP_AIM_MODES_SMOKE_OK bombastica_single=true aim_confirm=true aim_hold=true teleport_auto=true")
+	print("DESKTOP_AIM_MODES_SMOKE_OK bombastica_single=true aim_confirm=true aim_hold=true teleport_auto=true teleport_last_direction=true")
 	game.boss_active = false
 	game.boss_hp = 0.0
 	game.manifestation_secondaries.clear()

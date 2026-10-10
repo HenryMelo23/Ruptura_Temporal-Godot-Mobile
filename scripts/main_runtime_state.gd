@@ -76,6 +76,7 @@ const DESKTOP_AIM_HOLD: = "hold"
 const DESKTOP_AIM_CONFIRM: = "confirm"
 const DESKTOP_TELEPORT_CURSOR: = "cursor"
 const DESKTOP_TELEPORT_AUTO: = "auto"
+const DESKTOP_TELEPORT_LAST_DIRECTION: = "last_direction"
 const DESKTOP_HUD_SCALE_MIN: = 0.50
 const DESKTOP_HUD_SCALE_MAX: = 0.75
 const DESKTOP_HUD_SCALE_STEP: = 0.05

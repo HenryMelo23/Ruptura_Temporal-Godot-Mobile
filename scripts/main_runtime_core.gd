@@ -416,7 +416,7 @@ func _sanitize_desktop_aim_mode(value: String) -> String:
 
 func _sanitize_desktop_teleport_mode(value: String) -> String:
 	var normalized: = value.strip_edges().to_lower()
-	if normalized in [DESKTOP_TELEPORT_CURSOR, DESKTOP_AIM_HOLD, DESKTOP_AIM_CONFIRM, DESKTOP_TELEPORT_AUTO]:
+	if normalized in [DESKTOP_TELEPORT_CURSOR, DESKTOP_AIM_HOLD, DESKTOP_AIM_CONFIRM, DESKTOP_TELEPORT_AUTO, DESKTOP_TELEPORT_LAST_DIRECTION]:
 		return normalized
 	return DESKTOP_TELEPORT_CURSOR
 
@@ -40675,9 +40675,18 @@ func _desktop_auto_teleport_target() -> Vector2:
 	return player_pos + dir.normalized() * PLAYER_DASH_DISTANCE
 
 
+func _desktop_last_direction_teleport_target() -> Vector2:
+	var direction: Vector2 = last_facing.normalized()
+	if direction.length() <= 0.05:
+		direction = Vector2.RIGHT
+	return player_pos + direction * PLAYER_DASH_DISTANCE
+
+
 func _desktop_dash_target() -> Vector2:
 	if _desktop_dash_mode() == DESKTOP_TELEPORT_AUTO:
 		return _desktop_auto_teleport_target()
+	if _desktop_dash_mode() == DESKTOP_TELEPORT_LAST_DIRECTION:
+		return _desktop_last_direction_teleport_target()
 	var viewport: = get_viewport_rect().size
 	var screen_pos: = get_viewport().get_mouse_position()
 	var camera: = _camera(viewport)
@@ -40715,6 +40724,8 @@ func _execute_desktop_action(action: String) -> void :
 		"dash":
 			if _desktop_dash_mode() == DESKTOP_TELEPORT_AUTO:
 				_try_dash_to_world(_desktop_auto_teleport_target())
+			elif _desktop_dash_mode() == DESKTOP_TELEPORT_LAST_DIRECTION:
+				_try_dash_to_world(_desktop_last_direction_teleport_target())
 			else:
 				_try_dash_to_world(_desktop_dash_target())
 		"lacerante_empower":
@@ -42586,6 +42597,8 @@ func _desktop_teleport_mode_label() -> String:
 			return "CONFIRMAR"
 		DESKTOP_TELEPORT_AUTO:
 			return "ALVO PROXIMO"
+		DESKTOP_TELEPORT_LAST_DIRECTION:
+			return "ULTIMA DIRECAO"
 	return "CURSOR"
 
 
@@ -47272,7 +47285,7 @@ func _cycle_desktop_aim_mode(direction: = 1) -> void :
 
 
 func _cycle_desktop_teleport_mode(direction: = 1) -> void :
-	var modes: = [DESKTOP_TELEPORT_CURSOR, DESKTOP_AIM_HOLD, DESKTOP_AIM_CONFIRM, DESKTOP_TELEPORT_AUTO]
+	var modes: = [DESKTOP_TELEPORT_CURSOR, DESKTOP_AIM_HOLD, DESKTOP_AIM_CONFIRM, DESKTOP_TELEPORT_AUTO, DESKTOP_TELEPORT_LAST_DIRECTION]
 	var current: = modes.find(_sanitize_desktop_teleport_mode(desktop_teleport_mode))
 	if current < 0:
 		current = 0

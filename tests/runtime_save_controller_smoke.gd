@@ -79,16 +79,19 @@ func _run() -> void:
 	game.hud_attack_pos = Vector2(303, 404)
 	game.vol_master = 0.42
 	game.online_mode_unlocked = true
+	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_LAST_DIRECTION
 	game._save_config()
 	game.hud_joy_pos = Vector2.ZERO
 	game.hud_attack_pos = Vector2.ZERO
 	game.vol_master = 1.0
 	game.online_mode_unlocked = false
+	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_CURSOR
 	game._load_config()
 	_check(game.hud_joy_pos == Vector2(101, 202), "config joy_pos was not restored")
 	_check(game.hud_attack_pos == Vector2(303, 404), "config attack_pos was not restored")
 	_check(is_equal_approx(game.vol_master, 0.42), "config volume was not restored")
 	_check(game.online_mode_unlocked, "config unlock flag was not restored")
+	_check(game.desktop_teleport_mode == game.DESKTOP_TELEPORT_LAST_DIRECTION, "last-direction teleport config was not restored")
 
 	_write_user_text("user://hud_config.save", "not_config\nbad=line=with=extra\n")
 	game.online_mode_unlocked = true
