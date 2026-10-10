@@ -84,6 +84,12 @@ func _initialize() -> void:
 func _start_role() -> void:
 	game.startup_thanks_done = true
 	game.run_tutorial_enabled = false
+	# Keep this network contract smoke isolated from the durable public profile.
+	# A newly-created backend identity may legitimately replace local unlocks.
+	game.player_profile_id = "multiplayer-authority-smoke"
+	game.player_identity_auth_token = "local-smoke-token"
+	game.player_progress_sync_timer = INF
+	game.player_progress_pending_events.clear()
 	for index in [1, 2]:
 		game.unlocked_manifestation_ids[game.MANIFESTATIONS[index]["key"]] = true
 	for index in [1, 3]:

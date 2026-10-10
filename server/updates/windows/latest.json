@@ -2,15 +2,18 @@
   "version": "2.0.46",
   "version_code": 24600,
   "filename": "Ruptura_Temporal_2.0.46.exe",
-  "sha256": "8992adf42fe807ab7da7917b4233cd7c2689bb9142946744c00ec6395d461629",
-  "size": 908619832,
+  "sha256": "99bd1343a143867a3599cd71ce87beb8f7ac48d8cf09da8254c4758d141ff930",
+  "size": 908570864,
   "notes": [
-    "Deck e efeitos de cartas alinhados a build real, incluindo bonus de Cinzas e Carta Zero.",
-    "Fluxo multiplayer de manifestacao e evolucao estabilizado para host e clientes.",
-    "Perfil experiente antecipa inimigos especiais sem alterar o onboarding das duas primeiras partidas.",
-    "Boss 1 e Pai-Rato preservam telegraphs e receberam melhorias de VFX leves.",
-    "Pacotes desktop iniciam com a fisica incluida e a referencia de conteudo alinhada."
+    "Novo teleporte Ultima Direcao para jogar no PC sem mouse.",
+    "Passiva Eletrica, musica da run e movimento dos Lodarios corrigidos no multiplayer.",
+    "Geovana ganhou falas contextuais em baloes de quadrinhos.",
+    "Nova Capsula da Barganha Temporal com risco e desconto na loja.",
+    "Boss 1 ganhou Mare de Cerco e Pincas em Tenaz.",
+    "Miasmas da Vida do Pai-Rato receberam novos efeitos e leitura visual.",
+    "Deck e efeitos das cartas foram alinhados no multiplayer.",
+    "Pacing e estabilidade online receberam ajustes."
   ],
   "mandatory": false,
-  "published_at": "2026-10-09T20:40:00.0000000Z"
+  "published_at": "2026-10-10T19:19:08.2024749Z"
 }
