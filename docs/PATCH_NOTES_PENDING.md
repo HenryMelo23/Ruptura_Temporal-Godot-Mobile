@@ -11,3 +11,6 @@ Quando o pedido for algo como "liberar atualização na VPS, criar APK e EXE da 
 - Adicionado evento raro “Cápsula da Barganha Temporal”: uma cápsula pode cair durante a fase e abrir uma microdecisão de risco/recompensa. Se destruída a tempo, libera um desconto temporário para a próxima loja; se ignorada ou falhar, colapsa e chama uma pequena onda de inimigos sem recompensa extra.
 - A promoção da cápsula aparece na loja como “Descontão”, com preço original riscado e preço final destacado, sem alterar rerolls, custo base das cartas ou economia normal.
 - O Boss 1 agora conduz a “Maré de Cerco”: ondas concêntricas de areia com corredores de escape visíveis, fissuras e impacto âmbar. Em equipes maiores surgem ondas adicionais com pequenos desfases, sem aumentar o dano individual do golpe.
+- Corrigida a passiva da manifestação Elétrica no multiplayer: golpes de clientes agora acumulam Estática corretamente nos inimigos e bosses, com os indicadores visíveis para toda a equipe.
+- A música da run agora é escolhida pela autoridade e sincronizada com os demais jogadores, evitando que host e clientes escutem faixas diferentes durante a mesma fase ou boss.
+- Corrigida a apresentação dos Lôdarios no multiplayer: seus saltos agora são interpolados, com arco, avanço e troca de sprite sincronizados, em vez de parecerem teleportar entre posições.

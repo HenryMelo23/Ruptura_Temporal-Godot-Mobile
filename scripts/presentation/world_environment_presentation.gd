@@ -356,7 +356,7 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		var boss_bar_width = 168.0 if game.current_phase == 7 else (232.0 if game.current_phase == 6 else (220.0 if game.current_phase == 4 else (66.0 if game.current_phase == 5 else 148.0)))
 		var bar_color = Color(1.0, 0.46, 0.08) if game.current_phase == 7 else (Color(1.0, 0.58, 0.16) if game.current_phase == 6 else (Color(0.24, 1.0, 0.42) if game.current_phase == 5 else (Color(1.0, 0.62, 0.08) if game.current_phase == 4 else Color(1.0, 0.12, 0.22))))
 		game._draw_bar(boss_draw_pos - camera + Vector2( - boss_bar_width * 0.5, - boss_draw_size.y * 0.54), boss_bar_width, game.boss_hp / game.boss_hp_max, bar_color)
-		if game.manifestation_key == "eletrica" and game.boss_eletrica_static_stacks > 0 and game.boss_eletrica_static_timer > 0.0:
+		if game.boss_eletrica_static_stacks > 0 and game.boss_eletrica_static_timer > 0.0:
 			game._draw_eletrica_static_indicator(game, boss_draw_pos - camera + Vector2(0, - boss_draw_size.y * 0.54 - 12), game.boss_eletrica_static_stacks, game.boss_eletrica_static_timer, -1)
 
 

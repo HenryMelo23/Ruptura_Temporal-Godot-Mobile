@@ -5702,6 +5702,48 @@ func _phase_music_available_tracks(phase: int) -> Array:
 	return RTAudioLifecycleScript.phase_music_available_tracks(self, phase)
 
 
+func _run_music_track_valid(name: String) -> bool:
+	if name == "":
+		return false
+	if name in _shared_phase_music_tracks():
+		return true
+	return _is_boss_music(name)
+
+
+func _net_music_track_index(name: String) -> int:
+	if RTAudioLifecycleScript.is_shared_phase_music_name(name):
+		return RTAudioLifecycleScript.shared_phase_music_index(name)
+	var boss_code: int = 1000
+	for phase_index in range(1, 8):
+		for track in _boss_music_tracks(phase_index):
+			if String(track) == name:
+				return boss_code
+			boss_code += 1
+	return -1
+
+
+func _net_music_track_name(index: int) -> String:
+	if index > 0 and index < 1000:
+		return "Fases%d.mp3" % index
+	var boss_code: int = 1000
+	for phase_index in range(1, 8):
+		for track in _boss_music_tracks(phase_index):
+			if boss_code == index:
+				return String(track)
+			boss_code += 1
+	return ""
+
+
+func _apply_authoritative_music_track(name: String) -> void:
+	if not _is_world_replica() or name == "":
+		return
+	if current_music == name:
+		return
+	if not _run_music_track_valid(name):
+		return
+	_play_music(name)
+
+
 func _phase_music_bag_matches_available(available: Array) -> bool:
 	return RTAudioLifecycleScript.phase_music_bag_matches_available(self, available)
 
@@ -8342,7 +8384,23 @@ func _update_network_interpolation(delta: float) -> void :
 		var velocity: = Vector2(enemy.get("_net_velocity", Vector2.ZERO))
 		var snapshot_ms: = int(enemy.get("_net_snapshot_ms", now_ms))
 		var age: = minf(NET_EXTRAPOLATION_LIMIT, maxf(0.0, float(now_ms - snapshot_ms) / 1000.0))
-		enemy["pos"] = _smooth_network_position(Vector2(enemy.get("pos", target)), target + velocity * age, delta)
+		var render_target: Vector2 = target + velocity * age
+		if String(enemy.get("type", "")) == ENEMY_LODARIO:
+			var snapshot_progress: float = float(enemy.get("_net_lodario_jump_progress", enemy.get("lodario_jump_progress", 0.0)))
+			if snapshot_progress > 0.0:
+				var jump_duration: float = maxf(0.01, float(enemy.get("lodario_jump_duration", LODARIO_HOP_DURATION)))
+				var render_progress: float = minf(1.0, snapshot_progress + age / jump_duration)
+				var eased_progress: float = render_progress * render_progress * (3.0 - 2.0 * render_progress)
+				var jump_from: Vector2 = Vector2(enemy.get("lodario_jump_from", target))
+				var jump_to: Vector2 = Vector2(enemy.get("lodario_jump_to", target))
+				render_target = jump_from.lerp(jump_to, eased_progress)
+				enemy["lodario_jump_progress"] = render_progress
+				var arc_mult: float = 1.42 if bool(enemy.get("lodario_lunge_active", false)) else 1.0
+				enemy["lodario_hop_arc"] = sin(render_progress * PI) * LODARIO_HOP_HEIGHT * arc_mult
+			else:
+				enemy["lodario_jump_progress"] = 0.0
+				enemy["lodario_hop_arc"] = 0.0
+		enemy["pos"] = _smooth_network_position(Vector2(enemy.get("pos", target)), render_target, delta)
 
 	if net_boss_has_snapshot:
 		var boss_age: = minf(NET_EXTRAPOLATION_LIMIT, maxf(0.0, float(now_ms - net_boss_snapshot_last_ms) / 1000.0))
@@ -10554,8 +10612,17 @@ func _eletrica_damage_source_category(source: String, source_cat: String) -> Str
 	return "atk"
 
 
-func _apply_eletrica_static_stack(target: Dictionary, source_tag: String) -> void :
-	if manifestation_key != "eletrica":
+func _damage_source_manifestation_key(source_peer_id: int, fallback_index: int = -1) -> String:
+	if source_peer_id <= 0 or source_peer_id == _mp_unique_id():
+		return manifestation_key
+	var remote_state: Dictionary = net_players_by_peer.get(source_peer_id, {})
+	var manifestation_index: int = int(remote_state.get("manifestation", fallback_index))
+	return _manifestation_key(manifestation_index)
+
+
+func _apply_eletrica_static_stack(target: Dictionary, source_tag: String, source_manifestation: String = "", source_peer_id: int = 0) -> void :
+	var effective_manifestation: String = source_manifestation if source_manifestation != "" else manifestation_key
+	if effective_manifestation != "eletrica":
 		return
 
 	var last_source: = String(target.get("eletrica_static_last_source", ""))
@@ -10581,10 +10648,10 @@ func _apply_eletrica_static_stack(target: Dictionary, source_tag: String) -> voi
 	elif curr_stacks == 2:
 		_add_text("ESTÁTICA 2", target_pos + Vector2(0, -52), Color(0.95, 0.92, 0.22), 0.5, 17)
 	elif curr_stacks >= 3:
-		_trigger_eletrica_static_lightning(target, target_pos)
+		_trigger_eletrica_static_lightning(target, target_pos, source_peer_id)
 
 
-func _trigger_eletrica_static_lightning(target: Dictionary, target_pos: Vector2) -> void :
+func _trigger_eletrica_static_lightning(target: Dictionary, target_pos: Vector2, source_peer_id: int = 0) -> void :
 	target["eletrica_static_stacks"] = 0
 	target["eletrica_static_last_source"] = ""
 	target["eletrica_static_timer"] = 0.0
@@ -10616,16 +10683,16 @@ func _trigger_eletrica_static_lightning(target: Dictionary, target_pos: Vector2)
 		_add_text("⚡ RAIO GALVÂNICO! %d" % int(strike_damage), target_pos + Vector2(0, -72), Color(0.4, 1.0, 1.0), 0.65, 21)
 
 	if bool(target.get("is_boss", false)):
-		_damage_boss(strike_damage, "eletrica_static_lightning", false, true, "skill_q")
+		_damage_boss(strike_damage, "eletrica_static_lightning", false, true, "skill_q", Vector2.ZERO, source_peer_id, "eletrica")
 	else:
-		_damage_enemy(target, strike_damage, "eletrica_static_lightning", true, true, player_pos, "skill_q")
+		_damage_enemy(target, strike_damage, "eletrica_static_lightning", true, true, player_pos, "skill_q", source_peer_id, "eletrica")
 
 	for other in enemies:
 		if other == target or float(other.get("hp", 0.0)) <= 0.0:
 			continue
 		var dist: = target_pos.distance_to(Vector2(other["pos"]))
 		if dist <= 140.0:
-			_damage_enemy(other, strike_damage * 0.5, "eletrica_static_lightning", false, true, target_pos, "skill_q")
+			_damage_enemy(other, strike_damage * 0.5, "eletrica_static_lightning", false, true, target_pos, "skill_q", source_peer_id, "eletrica")
 
 
 func _draw_eletrica_static_indicator(ci: CanvasItem, pos: Vector2, stacks: int, timer: float, uid: int) -> void :
@@ -20897,7 +20964,7 @@ func _element_from_source(source: String) -> String:
 	return "physical"
 
 
-func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: = true, apply_aura_multiplier: = true, attack_origin: = Vector2.ZERO, source_category: = "", source_peer_id: int = 0) -> bool:
+func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: = true, apply_aura_multiplier: = true, attack_origin: = Vector2.ZERO, source_category: = "", source_peer_id: int = 0, source_manifestation: String = "") -> bool:
 	if _is_player_calcified():
 		amount *= 2.0
 	var effective_source_category: = source_category
@@ -20910,7 +20977,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	if _is_direct_player_damage_source(source, effective_source_category): amount *= runtime_event_director.damage_multiplier()
 	if is_multiplayer and not _is_world_authority():
 		amount = _outgoing_damage_amount(amount, source)
-		_send_client_damage_request(NET_DAMAGE_ENEMY, str(enemy.get("uid", "")), amount, source, player_pos, show_text, effective_source_category, _mp_unique_id())
+		_send_client_damage_request(NET_DAMAGE_ENEMY, str(enemy.get("uid", "")), amount, source, player_pos, show_text, effective_source_category, _mp_unique_id(), selected_manifestation)
 		if show_text:
 			_add_text("-%d" % int(amount), Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), _damage_color(source), 0.35, _damage_text_size(16))
 		return false
@@ -20975,9 +21042,10 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
 	amount *= _acorrentada_chained_damage_multiplier(enemy)
 	amount *= _cartographic_trace_damage_multiplier(enemy, source)
-	if manifestation_key == "eletrica" and source != "eletrica_static_lightning":
+	var damage_manifestation: String = source_manifestation if source_manifestation != "" else _damage_source_manifestation_key(source_peer_id)
+	if damage_manifestation == "eletrica" and source != "eletrica_static_lightning":
 		var source_tag: = _eletrica_damage_source_category(source, effective_source_category)
-		_apply_eletrica_static_stack(enemy, source_tag)
+		_apply_eletrica_static_stack(enemy, source_tag, damage_manifestation, source_peer_id)
 	var hp_before: = float(enemy["hp"])
 	amount = _apply_limiar_ruina_damage(amount, hp_before, float(enemy.get("max_hp", hp_before)), source, effective_source_category, Vector2(enemy.get("pos", damage_origin)))
 	var incoming_damage: float = max(1.0, amount)
@@ -21106,7 +21174,7 @@ func _voraz_boss_feed_allowed(damage: float, source: String, source_category: = 
 	return category in ["basic_attack", "skill_q", "skill_e", "manifestation_secondary", "teleport"] or source_category == ""
 
 
-func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, release_boss_feed: = true, source_category: = "", attack_origin: = Vector2.ZERO, source_peer_id: int = 0) -> void :
+func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, release_boss_feed: = true, source_category: = "", attack_origin: = Vector2.ZERO, source_peer_id: int = 0, source_manifestation: String = "") -> void :
 	var boss5_siphon_absorbed_pending: float = 0.0
 	if _is_player_calcified():
 		amount *= 2.0
@@ -21119,7 +21187,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		amount = _outgoing_damage_amount(amount, source)
 		if release_boss_feed and _voraz_boss_feed_allowed(amount, source, effective_source_category):
 			AuraSystem.on_boss_hit(aura_state, boss_pos, amount)
-		_send_client_damage_request(NET_DAMAGE_BOSS, "", amount, source, attack_origin if attack_origin != Vector2.ZERO else player_pos, true, effective_source_category, _mp_unique_id())
+		_send_client_damage_request(NET_DAMAGE_BOSS, "", amount, source, attack_origin if attack_origin != Vector2.ZERO else player_pos, true, effective_source_category, _mp_unique_id(), selected_manifestation)
 		return
 	if current_phase == 7 and boss7_core_active:
 		if apply_aura_multiplier and not source.begins_with("aura_"):
@@ -21139,7 +21207,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if _is_direct_player_damage_source(source, effective_source_category):
 		amount *= _contractual_damage_multiplier()
 	amount *= _mandamento_damage_multiplier(effective_source_category)
-	if manifestation_key == "eletrica" and source != "eletrica_static_lightning":
+	var damage_manifestation: String = source_manifestation if source_manifestation != "" else _damage_source_manifestation_key(source_peer_id)
+	if damage_manifestation == "eletrica" and source != "eletrica_static_lightning":
 		var source_tag: = _eletrica_damage_source_category(source, effective_source_category)
 		var boss_proxy: = {
 			"is_boss": true,
@@ -21148,7 +21217,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			"eletrica_static_timer": boss_eletrica_static_timer,
 			"eletrica_static_last_source": boss_eletrica_static_last_source
 		}
-		_apply_eletrica_static_stack(boss_proxy, source_tag)
+		_apply_eletrica_static_stack(boss_proxy, source_tag, damage_manifestation, source_peer_id)
 		boss_eletrica_static_stacks = int(boss_proxy["eletrica_static_stacks"])
 		boss_eletrica_static_timer = float(boss_proxy["eletrica_static_timer"])
 		boss_eletrica_static_last_source = String(boss_proxy["eletrica_static_last_source"])
@@ -45094,7 +45163,20 @@ func _sync_multiplayer_state() -> void :
 			rpc("_update_remote_world_visuals", net_world_visual_sequence, visuals_packet)
 
 func _pack_net_boss() -> PackedFloat32Array:
-	return RTNetContractScript.pack_boss(boss_pos, boss_hp, boss_dead, boss_active, current_phase, boss_hp_max, boss_phase)
+	var electric_source_index: int = maxi(0, RTNetContractScript.ELECTRIC_SOURCE_TAGS.find(boss_eletrica_static_last_source))
+	return RTNetContractScript.pack_boss(
+		boss_pos,
+		boss_hp,
+		boss_dead,
+		boss_active,
+		current_phase,
+		boss_hp_max,
+		boss_phase,
+		_net_music_track_index(current_music),
+		boss_eletrica_static_stacks,
+		boss_eletrica_static_timer,
+		electric_source_index
+	)
 
 
 func _pack_net_boss_visuals() -> Dictionary:
@@ -45577,6 +45659,12 @@ func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void :
 	current_phase = int(boss_snapshot.get("phase_index", current_phase))
 	boss_hp_max = float(boss_snapshot.get("hp_max", boss_hp_max))
 	boss_phase = float(boss_snapshot.get("boss_phase", boss_phase))
+	if _is_world_replica():
+		_apply_authoritative_music_track(_net_music_track_name(int(boss_snapshot.get("music_track_index", -1))))
+		boss_eletrica_static_stacks = int(boss_snapshot.get("electric_stacks", boss_eletrica_static_stacks))
+		boss_eletrica_static_timer = float(boss_snapshot.get("electric_timer", boss_eletrica_static_timer))
+		var electric_source_index: int = clampi(int(boss_snapshot.get("electric_source_index", 0)), 0, RTNetContractScript.ELECTRIC_SOURCE_TAGS.size() - 1)
+		boss_eletrica_static_last_source = String(RTNetContractScript.ELECTRIC_SOURCE_TAGS[electric_source_index])
 	if boss_dead:
 		boss_active = false
 	if boss_active and mode == "boss_call":
@@ -47283,32 +47371,34 @@ func _outgoing_damage_amount(amount: float, source: String) -> float:
 	return maxf(0.0, amount)
 
 
-func _send_client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "", source_peer_id: int = 0) -> void :
+func _send_client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "", source_peer_id: int = 0, source_manifestation_index: int = -1) -> void :
 	if online_local_spectator or multiplayer_peer == null or not is_multiplayer or _is_world_authority():
 		return
-	rpc_id(1, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category, source_peer_id if source_peer_id > 0 else _mp_unique_id())
+	var manifestation_index: int = selected_manifestation if source_manifestation_index < 0 else source_manifestation_index
+	rpc_id(1, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category, source_peer_id if source_peer_id > 0 else _mp_unique_id(), manifestation_index)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "", source_peer_id: int = 0) -> void :
+func _client_damage_request(target_kind: int, target_uid: String, amount: float, source: String, attack_origin: Vector2, show_text: bool, source_category: = "", source_peer_id: int = 0, source_manifestation_index: int = -1) -> void :
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
 			return
 		if dedicated_room_owner_peer_id != 0 and sender != 0 and sender != dedicated_room_owner_peer_id:
-			rpc_id(dedicated_room_owner_peer_id, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category, sender)
-		return
+			rpc_id(dedicated_room_owner_peer_id, "_client_damage_request", target_kind, target_uid, amount, source, attack_origin, show_text, source_category, sender, source_manifestation_index)
+			return
 	if not _is_world_authority() or not is_finite(amount) or amount <= 0.0:
 		return
 	var attacker_peer_id: int = source_peer_id if source_peer_id > 0 else _mp_sender_id()
+	var attacker_manifestation: String = _damage_source_manifestation_key(attacker_peer_id, source_manifestation_index)
 	match target_kind:
 		NET_DAMAGE_ENEMY:
 			for enemy in enemies:
 				if str(enemy.get("uid", "")) == target_uid:
-					_damage_enemy(enemy, amount, source, show_text, false, attack_origin, source_category, attacker_peer_id)
+					_damage_enemy(enemy, amount, source, show_text, false, attack_origin, source_category, attacker_peer_id, attacker_manifestation)
 					return
 		NET_DAMAGE_BOSS:
-			_damage_boss(amount, source, false, false, source_category, attack_origin, attacker_peer_id)
+			_damage_boss(amount, source, false, false, source_category, attack_origin, attacker_peer_id, attacker_manifestation)
 		NET_DAMAGE_ARAUTO:
 			_damage_arauto(amount, source, show_text, false)
 		NET_DAMAGE_BARGAIN_CAPSULE:

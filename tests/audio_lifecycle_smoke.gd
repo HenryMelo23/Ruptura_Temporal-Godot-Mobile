@@ -18,7 +18,8 @@ func _initialize() -> void:
 func _run() -> void:
 	await process_frame
 	game.mode = "game"
-	game.current_music = "Fase2.mp3"
+	var phase_track: String = String(game._shared_phase_music_tracks()[0])
+	game.current_music = phase_track
 	var test_stream := AudioStreamWAV.new()
 	test_stream.mix_rate = 44100
 	test_stream.format = AudioStreamWAV.FORMAT_16_BITS
@@ -42,14 +43,14 @@ func _run() -> void:
 	game._apply_pause_state(true)
 	_check(game.mode == "paused", "pause state was not entered")
 	_check(game.music_player.stream_paused, "pause did not pause music stream")
-	_check(game.current_music == "Fase2.mp3", "pause changed current music")
+	_check(game.current_music == phase_track, "pause changed current music")
 	
 	game._apply_pause_state(false)
 	_check(not game.music_player.stream_paused, "resume did not unpause music stream")
 	_check(game.music_player.playing, "resume did not keep music playing")
-	_check(game.current_music == "Fase2.mp3", "resume restarted or swapped music")
+	_check(game.current_music == phase_track, "resume restarted or swapped music")
 	
-	game.current_music = "Fase2.mp3"
+	game.current_music = phase_track
 	game.music_player.stream = test_stream
 	game.music_player.stream_paused = false
 	game.music_player.play()

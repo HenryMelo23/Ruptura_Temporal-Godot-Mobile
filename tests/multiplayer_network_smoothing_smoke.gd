@@ -29,6 +29,9 @@ func _run() -> void:
 		"hp": 100.0,
 		"max_hp": 100.0,
 		"phase": 0.0,
+		"eletrica_static_stacks": 2,
+		"eletrica_static_timer": 2.4,
+		"eletrica_static_last_source": "skill_e",
 		"last_move_dir": Vector2.RIGHT
 	}]
 	host_game.enemy_bullets = [{
@@ -47,6 +50,9 @@ func _run() -> void:
 	host_game.boss_hp = 1000.0
 	host_game.boss_hp_max = 1400.0
 	host_game.boss_phase = 1.0
+	host_game.boss_eletrica_static_stacks = 2
+	host_game.boss_eletrica_static_timer = 2.2
+	host_game.boss_eletrica_static_last_source = "skill_q"
 	host_game.boss_attacks = [{"kind": "bubble", "age": 0.20, "duration": 1.0, "target": Vector2(340, 280)}]
 	host_game.boss2_state = host_game.BOSS2_STATE_FLASH_FREEZE
 	host_game.boss2_anim_frame = 2
@@ -60,6 +66,7 @@ func _run() -> void:
 	host_game.boss3_miasma_qte_taps = 6
 	host_game.boss3_faith_link_timer = 2.0
 	host_game.phase4_enemy_hazards = [{"kind": "boss4_pulse", "pos": Vector2(360, 320), "age": 0.10, "life": 1.0, "max": 1.0, "radius": 180.0}]
+	host_game.current_music = "Fases1.mp3"
 	client_game._apply_remote_world_snapshot(
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),
@@ -67,7 +74,15 @@ func _run() -> void:
 	)
 	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
 	_check(Vector2(client_game.enemies[0]["pos"]).is_equal_approx(Vector2(100, 200)), "initial enemy snapshot did not snap into place")
+	_check(int(client_game.enemies[0].get("eletrica_static_stacks", 0)) == 2, "electric static stacks were not synchronized to replica")
+	_check(is_equal_approx(float(client_game.enemies[0].get("eletrica_static_timer", 0.0)), 2.4), "electric static timer was not synchronized to replica")
+	_check(String(client_game.enemies[0].get("eletrica_static_last_source", "")) == "skill_e", "electric static source was not synchronized to replica")
+	_check(client_game.current_music == host_game.current_music, "replica did not adopt the authority music track")
+	var synced_music: String = client_game.current_music
+	client_game._play_phase_music_random(client_game.current_phase)
+	_check(client_game.current_music == synced_music, "replica selected a different phase track locally")
 	_check(client_game.boss_active, "boss active state was not synchronized to replica")
+	_check(client_game.boss_eletrica_static_stacks == 2 and is_equal_approx(client_game.boss_eletrica_static_timer, 2.2), "boss electric static state was not synchronized to replica")
 	_check(client_game.current_phase == 2, "boss phase index was not synchronized to replica")
 	_check(is_equal_approx(client_game.boss_hp_max, 1400.0), "boss max HP was not synchronized to replica")
 	_check(client_game.boss_attacks.size() == 1 and String(client_game.boss_attacks[0].get("kind", "")) == "bubble", "boss attack visuals were not synchronized to replica")
@@ -100,6 +115,49 @@ func _run() -> void:
 	client_game._update_network_interpolation(1.0 / 60.0)
 	var enemy_after_one_frame := Vector2(client_game.enemies[0]["pos"]).x
 	_check(enemy_after_one_frame > 100.0 and enemy_after_one_frame < 220.0, "enemy was not smoothly advanced between snapshots")
+
+	var electric_index: int = -1
+	for manifest_index in range(host_game.MANIFESTATIONS.size()):
+		if String(host_game.MANIFESTATIONS[manifest_index].get("key", "")) == "eletrica":
+			electric_index = manifest_index
+			break
+	_check(electric_index >= 0, "electric manifestation index was not found")
+	host_game.manifestation_key = "gravitante"
+	host_game.net_players_by_peer[42] = {"manifestation": electric_index, "pos": Vector2(500, 300), "hp": 100, "hp_max": 100, "dead": false}
+	var remote_electric_target: Dictionary = {
+		"uid": 7020, "type": host_game.ENEMY_COMMON, "pos": Vector2(260, 200),
+		"hp": 1000.0, "max_hp": 1000.0, "phase": 0.0
+	}
+	host_game.enemies.append(remote_electric_target)
+	host_game._damage_enemy(remote_electric_target, 10.0, "eletrica", false, false, Vector2(220, 200), "atk", 42)
+	_check(int(remote_electric_target.get("eletrica_static_stacks", 0)) == 1, "remote electric player did not create the first static stack on authority")
+	host_game._damage_enemy(remote_electric_target, 10.0, "tesla", false, false, Vector2(220, 200), "skill_e", 42)
+	_check(int(remote_electric_target.get("eletrica_static_stacks", 0)) == 2, "remote electric player did not stack a second damage source on authority")
+
+	host_game.current_phase = 6
+	client_game.current_phase = 6
+	host_game.enemies = [{
+		"uid": 7601, "type": host_game.ENEMY_LODARIO, "pos": Vector2(385.4, 310),
+		"hp": 500.0, "max_hp": 500.0, "phase": 1.0,
+		"facing_dir": Vector2.RIGHT, "last_move_dir": Vector2.RIGHT,
+		"lodario_jump_progress": 0.35, "lodario_hop_arc": 24.0,
+		"lodario_jump_from": Vector2(360, 310), "lodario_jump_to": Vector2(450, 310),
+		"lodario_jump_duration": 0.55, "lodario_lunge_active": true
+	}]
+	client_game.enemies.clear()
+	client_game._apply_remote_enemy_snapshot(host_game._pack_net_enemies(), Time.get_ticks_msec())
+	var remote_lodario: Dictionary = client_game.enemies[0]
+	_check(float(remote_lodario.get("lodario_jump_progress", 0.0)) > 0.0, "Lodario airborne state was not synchronized")
+	_check(float(remote_lodario.get("lodario_hop_arc", 0.0)) > 0.0, "Lodario jump arc was not synchronized")
+	_check(bool(remote_lodario.get("lodario_lunge_active", false)), "Lodario lunge pose was not synchronized")
+	var lodario_start: Vector2 = Vector2(remote_lodario["pos"])
+	await create_timer(0.03).timeout
+	client_game._update_network_interpolation(1.0 / 60.0)
+	var lodario_after: Vector2 = Vector2(remote_lodario["pos"])
+	_check(lodario_after.x > lodario_start.x and lodario_after.x < Vector2(remote_lodario["lodario_jump_to"]).x, "Lodario replica did not advance smoothly along the authoritative jump")
+	_check(client_game._enemy_texture(remote_lodario) == client_game._texture_frame("enemy_phase_6_lodario", 1), "Lodario replica did not switch to its airborne sprite")
+	host_game.current_phase = 2
+	client_game.current_phase = 2
 
 	client_game._accept_remote_player_position(42, Vector2(500, 300))
 	await create_timer(0.04).timeout
@@ -190,6 +248,7 @@ func _run() -> void:
 	client_game._update_network_ability_replica(prismatica_visual, 1.0 / 60.0)
 	_check(Vector2(prismatica_visual.get("center", Vector2.ZERO)).is_equal_approx(Vector2(620, 340)), "prismatica remote ultimate did not follow remote player position")
 
+	host_game.current_phase = 2
 	var core_payload_bytes := var_to_bytes([
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),

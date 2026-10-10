@@ -116,7 +116,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			game._draw_sanguinaria_hunt_mark(enemy_bar_draw_pos, 60.0)
 		var static_stacks = int(enemy.get("eletrica_static_stacks", 0))
 		var static_timer = float(enemy.get("eletrica_static_timer", 0.0))
-		if game.manifestation_key == "eletrica" and static_stacks > 0 and static_timer > 0.0:
+		if static_stacks > 0 and static_timer > 0.0:
 			game._draw_eletrica_static_indicator(game, enemy_bar_draw_pos + Vector2(30, -10), static_stacks, static_timer, int(enemy["uid"]))
 		if game.execute_threshold > 0.0:
 			game._draw_collector_threshold(enemy_bar_draw_pos, 60.0, game.execute_threshold, enemy_hp_ratio)

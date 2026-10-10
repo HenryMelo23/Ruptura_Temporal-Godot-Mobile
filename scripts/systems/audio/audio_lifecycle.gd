@@ -172,8 +172,14 @@ static func next_phase_music_track(game: Node, phase: int) -> String:
 	return String(game.phase_music_bag.pop_back())
 
 
+static func can_choose_run_music(game: Node) -> bool:
+	return not game.is_multiplayer or game._is_world_authority()
+
+
 static func play_phase_music_random(game: Node, phase: int) -> void:
 	stop_menu_music_for_gameplay(game)
+	if not can_choose_run_music(game):
+		return
 	var chosen: String = next_phase_music_track(game, phase)
 	if chosen == "":
 		return
@@ -201,6 +207,8 @@ static func boss_music_tracks(phase: int) -> Array:
 
 
 static func play_boss_music_random(game: Node) -> void:
+	if not can_choose_run_music(game):
+		return
 	var available: Array = []
 	for track in boss_music_tracks(game.current_phase):
 		if game._audio_key_available(track):
@@ -233,9 +241,13 @@ static func on_music_finished(game: Node) -> void:
 			play_menu_music_random(game)
 		return
 	if game.current_music in phase_music_tracks(game, game.current_phase):
+		if not can_choose_run_music(game):
+			return
 		play_phase_music_random(game, game.current_phase)
 		return
 	if is_boss_music(game.current_music):
+		if not can_choose_run_music(game):
+			return
 		if game.boss_active and not game.boss_dead:
 			play_boss_music_random(game)
 		else:
