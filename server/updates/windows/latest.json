@@ -1,19 +1,15 @@
 {
-  "version": "2.0.46",
-  "version_code": 24600,
-  "filename": "Ruptura_Temporal_2.0.46.exe",
-  "sha256": "99bd1343a143867a3599cd71ce87beb8f7ac48d8cf09da8254c4758d141ff930",
-  "size": 908570864,
+  "version": "2.0.47",
+  "version_code": 24700,
+  "filename": "Ruptura_Temporal_2.0.47.exe",
+  "sha256": "cf7674ae9a39d7d6ec1103a134f53c4b74dcf609e1112debd36ef218f8d91be0",
+  "size": 908579056,
   "notes": [
-    "Novo teleporte Ultima Direcao para jogar no PC sem mouse.",
-    "Passiva Eletrica, musica da run e movimento dos Lodarios corrigidos no multiplayer.",
-    "Geovana ganhou falas contextuais em baloes de quadrinhos.",
-    "Nova Capsula da Barganha Temporal com risco e desconto na loja.",
-    "Boss 1 ganhou Mare de Cerco e Pincas em Tenaz.",
-    "Miasmas da Vida do Pai-Rato receberam novos efeitos e leitura visual.",
-    "Deck e efeitos das cartas foram alinhados no multiplayer.",
-    "Pacing e estabilidade online receberam ajustes."
+    "Corrigido o jogador fantasma após reviver ou eliminar a equipe no multiplayer.",
+    "A Cápsula da Barganha agora mantém descontos individuais e consistentes por carta.",
+    "Adicionado aviso antes de sair da loja e perder uma promoção ativa.",
+    "Ajustes de sincronização e segurança da loja em partidas multiplayer."
   ],
   "mandatory": false,
-  "published_at": "2026-10-10T19:19:08.2024749Z"
+  "published_at": "2026-10-11T13:26:00.4965360Z"
 }
