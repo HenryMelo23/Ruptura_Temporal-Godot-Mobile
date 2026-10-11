@@ -131,6 +131,52 @@ func _revive_local_host_from_client(death_pos: Vector2, revive_pos: Vector2) -> 
 	_check(game._get_enemy_target_pos(revived_enemy).is_equal_approx(revive_pos), "local host did not become targetable after revive")
 
 
+func _dedicated_relay_revive_does_not_create_phantom() -> void:
+	game._clear_team_revival_state()
+	game.dedicated_room_owner_peer_id = 42
+	var peer_id: int = 43
+	var death_pos := Vector2(760.0, 410.0)
+	var revive_pos := Vector2(640.0, 360.0)
+	var dead_state: Dictionary = _remote_state(death_pos, "CLIENTE REAL")
+	dead_state["hp"] = 0.0
+	dead_state["dead"] = true
+	dead_state["eliminated"] = true
+	dead_state["alive"] = false
+	game.net_players_by_peer = {peer_id: dead_state}
+	game._rpc_revival_player_down(peer_id, death_pos, "CLIENTE REAL")
+	_check(game.revival_dead_peers.has(peer_id), "dedicated relay lost the real dead peer id")
+	_check(not game.revival_dead_peers.has(1), "dedicated relay registered the server as a dead player")
+	game._activate_team_revival_altars()
+	game._complete_team_revival(game.REVIVE_PAY_POINTS, 225.0, 42)
+	_check(not game.net_players_by_peer.has(1), "revive created a phantom server replica")
+	_check(game._remote_player_state_targetable(game.net_players_by_peer[peer_id]), "real client was not revived")
+
+	game.dedicated_ready_by_peer = {42: true, 43: true}
+	game.dedicated_spectator_by_peer = {42: false, 43: false}
+	game.dedicated_player_state_by_peer = {43: dead_state.duplicate(true)}
+	_check(game._dedicated_apply_team_revive(peer_id, revive_pos), "dedicated canonical revive was rejected")
+	var canonical: Dictionary = game.dedicated_player_state_by_peer[peer_id]
+	_check(not bool(canonical.get("dead", true)) and bool(canonical.get("alive", false)), "dedicated state stayed dead after revive")
+	_check(Vector2(canonical.get("pos", Vector2.ZERO)).is_equal_approx(revive_pos), "dedicated revive position drifted")
+	_check(not game._dedicated_apply_team_revive(peer_id, revive_pos), "duplicate dedicated revive was not idempotent")
+	_check(not game._dedicated_apply_team_revive(999, revive_pos), "dedicated server accepted a nonexistent peer revive")
+
+	game.is_dead = true
+	game.player_hp = 0.0
+	game.net_players_by_peer[peer_id]["hp"] = 0.0
+	game.net_players_by_peer[peer_id]["dead"] = true
+	game.net_players_by_peer[peer_id]["eliminated"] = true
+	game.net_players_by_peer[peer_id]["alive"] = false
+	_check(game._all_multiplayer_players_dead(), "phantom state kept a defeated room alive")
+	game.is_dead = false
+	game.player_hp = game.player_hp_max
+	game.dedicated_room_owner_peer_id = 0
+	game.dedicated_ready_by_peer.clear()
+	game.dedicated_spectator_by_peer.clear()
+	game.dedicated_player_state_by_peer.clear()
+	game.net_players_by_peer = {42: _remote_state(Vector2(880.0, 420.0), "CLIENTE")}
+
+
 func _run() -> void:
 	await process_frame
 	_prepare_game()
@@ -139,6 +185,7 @@ func _run() -> void:
 	var revive_positions := [Vector2(920.0, 470.0), Vector2(530.0, 520.0), Vector2(1040.0, 620.0)]
 	for index in range(death_positions.size()):
 		_revive_remote_from_host(42, death_positions[index], revive_positions[index], 180.0 + float(index) * 25.0)
+	_dedicated_relay_revive_does_not_create_phantom()
 
 	var eliminated_only: Dictionary = _remote_state(Vector2(900.0, 280.0), "ELIMINADO")
 	eliminated_only["eliminated"] = true
@@ -148,7 +195,7 @@ func _run() -> void:
 
 	_revive_local_host_from_client(Vector2(260.0, 220.0), Vector2(340.0, 380.0))
 
-	print("MULTIPLAYER_REVIVE_TARGETING_REGRESSION_OK cycles=3 host_client=true target_filter=true stale_rpc=true")
+	print("MULTIPLAYER_REVIVE_TARGETING_REGRESSION_OK cycles=3 host_client=true dedicated_relay=true phantom=false all_dead=true stale_rpc=true")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

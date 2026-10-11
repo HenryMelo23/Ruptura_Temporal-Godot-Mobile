@@ -155,6 +155,31 @@ func draw_bargain_banner(g, card: Dictionary, rect: Rect2, alpha: float = 1.0) -
 	text(g, "DESCONTAO -%d%%" % int(round(rate * 100.0)), banner.grow(-4.0), 10, Color(1.0, 0.96, 0.62, alpha), true)
 
 
+func bargain_exit_confirmation_layout(viewport: Vector2) -> Dictionary:
+	var panel_width: float = minf(620.0, viewport.x - 48.0)
+	var panel_height: float = 196.0
+	var panel := Rect2(viewport * 0.5 - Vector2(panel_width, panel_height) * 0.5, Vector2(panel_width, panel_height))
+	var button_width: float = minf(210.0, (panel_width - 60.0) * 0.5)
+	var button_y: float = panel.end.y - 62.0
+	return {
+		"panel": panel,
+		"cancel": Rect2(panel.get_center().x - button_width - 8.0, button_y, button_width, 42.0),
+		"confirm": Rect2(panel.get_center().x + 8.0, button_y, button_width, 42.0)
+	}
+
+
+func draw_bargain_exit_confirmation(g, viewport: Vector2) -> void:
+	var layout_data: Dictionary = bargain_exit_confirmation_layout(viewport)
+	var panel: Rect2 = layout_data.panel
+	g.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.01, 0.02, 0.025, 0.76), true)
+	g.draw_rect(panel, Color(0.055, 0.045, 0.025, 0.98), true)
+	g.draw_rect(panel, Color(1.0, 0.78, 0.2, 0.92), false, 2.0)
+	text(g, "ENCERRAR DESCONTAO?", Rect2(panel.position + Vector2(24.0, 24.0), Vector2(panel.size.x - 48.0, 30.0)), 22, GOLD, true)
+	text(g, "Ao sair, você perderá o Descontão desta visita", Rect2(panel.position + Vector2(24.0, 67.0), Vector2(panel.size.x - 48.0, 36.0)), 17, PAPER, true)
+	button(g, Rect2(layout_data.cancel), "CANCELAR", CYAN, true)
+	button(g, Rect2(layout_data.confirm), "CONFIRMAR SAIDA", Color(1.0, 0.42, 0.18), true)
+
+
 func reroll_visual_state(g) -> Dictionary:
 	var free_left: int = maxi(0, int(g.shop_rerolls))
 	var card_cost: int = maxi(1, int(g.card_cost))

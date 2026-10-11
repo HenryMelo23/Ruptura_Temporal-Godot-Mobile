@@ -23868,6 +23868,7 @@ func _roll_bargain_discount() -> Dictionary:
 	var rate: float = snappedf(rng.randf_range(min_rate, max_rate), 0.01)
 	return {
 		"id": String(picked.get("id", "bom")),
+		"category_id": String(picked.get("id", "bom")),
 		"rate": clampf(rate, 0.01, 0.75),
 		"min": min_rate,
 		"max": max_rate,
@@ -23888,7 +23889,9 @@ func _apply_bargain_capsule_discount(discount: Dictionary) -> void:
 		"discount": discount.duplicate(true),
 		"time": time_alive
 	}
-	_add_text("DESCONTAO TEMPORAL -%d%%" % int(round(float(discount.get("rate", 0.0)) * 100.0)), player_pos + Vector2(-120, -120), Color(1.0, 0.86, 0.22), 2.0, 22)
+	var min_percent: int = int(round(float(discount.get("min", discount.get("rate", 0.0))) * 100.0))
+	var max_percent: int = int(round(float(discount.get("max", discount.get("rate", 0.0))) * 100.0))
+	_add_text("DESCONTAO TEMPORAL %d%%-%d%%" % [min_percent, max_percent], player_pos + Vector2(-120, -120), Color(1.0, 0.86, 0.22), 2.0, 22)
 
 
 func _resolve_bargain_capsule_success() -> void:
@@ -23971,7 +23974,24 @@ func _consume_bargain_discount_shop_session() -> void:
 func _bargain_card_discount_rate(card: Dictionary) -> float:
 	if card.is_empty() or not card.has("bargain_discount_rate"):
 		return 0.0
-	return clampf(float(card.get("bargain_discount_rate", 0.0)), 0.0, 0.75)
+	if not _bargain_discount_active_for_shop():
+		return 0.0
+	if String(card.get("bargain_discount_id", "")) != String(shop_bargain_discount_session.get("event_id", "")):
+		return 0.0
+	if int(card.get("bargain_discount_visit", -1)) != int(shop_bargain_discount_session.get("visit_index", -2)):
+		return 0.0
+	var stored_rate: float = clampf(float(card.get("bargain_discount_rate", 0.0)), 0.0, 0.75)
+	if not card.has("bargain_discount_generation") or not card.has("bargain_discount_slot"):
+		var legacy_min: float = clampf(float(shop_bargain_discount_session.get("min", stored_rate)), 0.0, 0.75)
+		var legacy_max: float = clampf(float(shop_bargain_discount_session.get("max", stored_rate)), legacy_min, 0.75)
+		return stored_rate if stored_rate >= legacy_min and stored_rate <= legacy_max else 0.0
+	var expected_rate: float = _bargain_discount_rate_for_offer(
+		int(card.get("bargain_discount_slot", -1)),
+		String(card.get("bargain_discount_generation_type", "")),
+		int(card.get("bargain_discount_generation", -1)),
+		_card_id(card)
+	)
+	return expected_rate if is_equal_approx(stored_rate, expected_rate) else 0.0
 
 
 func _bargain_base_card_price(card: Dictionary, base_cost: = -1) -> int:
@@ -23985,39 +24005,12 @@ func _bargain_discounted_price(base_price: int, rate: float) -> int:
 	return max(1, int(round(float(base_price) * (1.0 - clampf(rate, 0.0, 0.75)))))
 
 
-func _apply_bargain_discount_to_shop_picks(picks: Array, generation_type: = "open") -> Array:
-	if not _bargain_discount_active_for_shop() or picks.is_empty():
-		return picks
-	var rate: float = clampf(float(shop_bargain_discount_session.get("rate", 0.0)), 0.0, 0.75)
-	if rate <= 0.0:
-		return picks
-	var seed: int = int(shop_bargain_discount_session.get("seed", 0))
-	var candidates: Array = []
-	for i in range(picks.size()):
-		var card: Dictionary = picks[i]
-		if _is_empty_shop_slot(card) or bool(card.get("locked_slot", false)) or bool(card.get("burned", false)):
-			continue
-		var card_id: String = _card_id(card)
-		var hash_value: int = abs(("%d:%d:%d:%s:%s" % [seed, shop_visit_index, shop_generation_index, generation_type, card_id]).hash())
-		candidates.append({"index": i, "score": hash_value})
-	if candidates.is_empty():
-		return picks
-	candidates.sort_custom(func(a, b): return int(Dictionary(a).get("score", 0)) < int(Dictionary(b).get("score", 0)))
-	var discounted_count: int = mini(candidates.size(), 2)
-	var result: Array = picks.duplicate(true)
-	for i in range(discounted_count):
-		var slot_index: int = int(Dictionary(candidates[i]).get("index", -1))
-		if slot_index < 0 or slot_index >= result.size():
-			continue
-		var discounted: Dictionary = Dictionary(result[slot_index]).duplicate(true)
-		var base_price: int = _bargain_base_card_price(discounted)
-		discounted["bargain_discount_rate"] = rate
-		discounted["bargain_base_price"] = base_price
-		discounted["bargain_discount_id"] = String(shop_bargain_discount_session.get("event_id", ""))
-		discounted["bargain_discount_visit"] = shop_visit_index
-		discounted["bargain_discount_label"] = "DESCONTAO -%d%%" % int(round(rate * 100.0))
-		result[slot_index] = discounted
-	return result
+func _bargain_discount_rate_for_offer(slot_index: int, generation_type: String, generation_index: int, card_id: String) -> float:
+	return shop_controller.bargain_discount_rate_for_offer(slot_index, generation_type, generation_index, card_id)
+
+
+func _apply_bargain_discount_to_shop_picks(picks: Array, generation_type: = "open", source_slots: Array = []) -> Array:
+	return shop_controller.apply_bargain_discount_to_shop_picks(picks, generation_type, source_slots)
 
 
 func _gameplay_orb_by_uid(uid: String) -> Dictionary:
@@ -30926,7 +30919,7 @@ func _refill_shop_slot_after_purchase(index: int) -> void :
 	var picks: = [shop_cards[index]]
 	_update_burned_card_marks_after_shop(picks)
 	shop_cards[index] = picks[0]
-	var discounted_refill: Array = _apply_bargain_discount_to_shop_picks([shop_cards[index]], "refill")
+	var discounted_refill: Array = _apply_bargain_discount_to_shop_picks([shop_cards[index]], "refill", [index])
 	if not discounted_refill.is_empty():
 		shop_cards[index] = discounted_refill[0]
 	_register_shop_common_rolls([shop_cards[index]], "refill")
@@ -31098,7 +31091,11 @@ func _record_shop_generation_telemetry(generation_type: String, picks: Array, ra
 			"rarity": _card_rarity_label(card) if not _is_empty_shop_slot(card) else "VAZIA",
 			"price": _effective_card_price(card) if not _is_empty_shop_slot(card) else 0,
 			"bargain_discount_rate": _bargain_card_discount_rate(card),
+			"bargain_discount_category_id": String(card.get("bargain_discount_category_id", "")),
+			"bargain_discount_min": float(card.get("bargain_discount_min", 0.0)),
+			"bargain_discount_max": float(card.get("bargain_discount_max", 0.0)),
 			"bargain_base_price": int(card.get("bargain_base_price", 0)),
+			"bargain_final_price": int(card.get("bargain_final_price", 0)),
 			"affordable": score >= _effective_card_price(card) if not _is_empty_shop_slot(card) else false,
 			"owned_count": _card_count(card) if not _is_empty_shop_slot(card) else 0,
 			"reserved": bool(card.get("locked_slot", false)),
@@ -41294,6 +41291,8 @@ func _handle_key(event: InputEventKey) -> void :
 		elif event.keycode == KEY_TAB:
 			_return_from_specter_upgrade()
 	elif mode == "shop":
+		if shop_controller.handle_key(event):
+			return
 		if _shop_purchase_animating() or shop_controller.busy():
 			return
 		if event.keycode == KEY_RIGHT or event.keycode == KEY_D or event.keycode == KEY_DOWN or event.keycode == KEY_S:
@@ -46665,6 +46664,14 @@ func _start_team_revival_for_dead(dead_peer_id: int, dead_pos: Vector2, dead_nam
 		_broadcast_team_revival_state()
 
 
+func _revival_rpc_source_peer_id(claimed_peer_id: int) -> int:
+	var sender_id: int = _mp_sender_id()
+	var relayed_by_dedicated: bool = sender_id == 1 and dedicated_room_owner_peer_id != 0
+	if relayed_by_dedicated:
+		return claimed_peer_id
+	return sender_id if sender_id != 0 else claimed_peer_id
+
+
 func _reset_revival_fragments_for_active_dead() -> void:
 	_sync_team_revival_from_legacy()
 	team_revival_state.reset_fragments_for_active_dead(WORLD_SIZE, REVIVAL_FRAGMENTS_PER_DEAD, REVIVAL_SINGLE_TIME, REVIVAL_MULTI_TIME, time_alive, rng)
@@ -46948,8 +46955,9 @@ func _rpc_revival_player_down(dead_peer_id: int, dead_pos: Vector2, dead_name: S
 		return
 	if not _is_world_authority():
 		return
-	var sender_id: = _mp_sender_id()
-	var target_id: int = sender_id if sender_id != 0 and dead_peer_id != sender_id else dead_peer_id
+	var target_id: int = _revival_rpc_source_peer_id(dead_peer_id)
+	if target_id <= 0:
+		return
 	_start_team_revival_for_dead(target_id, dead_pos, dead_name, true)
 
 
@@ -46978,8 +46986,7 @@ func _rpc_collect_revival_fragment(fragment_id: int, collector_peer_id: int = 0)
 		return
 	if not _is_world_authority():
 		return
-	var sender_id: = _mp_sender_id()
-	var collector_id: int = sender_id if sender_id != 0 else collector_peer_id
+	var collector_id: int = _revival_rpc_source_peer_id(collector_peer_id)
 	_collect_revival_fragment(fragment_id, collector_id)
 
 
@@ -46994,8 +47001,7 @@ func _rpc_complete_team_revival_request(method: String, revive_hp: float, actor_
 		return
 	if not _is_world_authority():
 		return
-	var sender_id: = _mp_sender_id()
-	var actor_id: int = sender_id if sender_id != 0 else actor_peer_id
+	var actor_id: int = _revival_rpc_source_peer_id(actor_peer_id)
 	_complete_team_revival(_revive_payment_method(method), revive_hp, actor_id)
 
 
@@ -47182,13 +47188,32 @@ func _rpc_request_team_revive(dead_peer_id: int, cost: int) -> void :
 	revive_request_notice = "Aliado pediu revive"
 
 
+func _dedicated_apply_team_revive(dead_peer_id: int, revive_pos: Vector2) -> bool:
+	if not _dedicated_active_peer_ids().has(dead_peer_id) or not dedicated_player_state_by_peer.has(dead_peer_id):
+		return false
+	var dedicated_state: Dictionary = dedicated_player_state_by_peer.get(dead_peer_id, {}).duplicate()
+	if not bool(dedicated_state.get("dead", false)) and not bool(dedicated_state.get("eliminated", false)) and float(dedicated_state.get("hp", 1.0)) > 0.0:
+		return false
+	var dedicated_hp_max: float = maxf(1.0, float(dedicated_state.get("hp_max", 1.0)))
+	var resolved_pos: Vector2 = revive_pos if revive_pos != Vector2.INF else Vector2(dedicated_state.get("pos", Vector2.ZERO))
+	dedicated_state["pos"] = resolved_pos
+	dedicated_state["hp"] = maxf(1.0, dedicated_hp_max * 0.5)
+	dedicated_state["dead"] = false
+	dedicated_state["eliminated"] = false
+	dedicated_state["alive"] = true
+	_dedicated_store_player_state(dead_peer_id, dedicated_state)
+	return true
+
+
 @rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_accept_team_revive(dead_peer_id: int, _cost: int, payment_method: = REVIVE_PAY_POINTS, revive_pos: Vector2 = Vector2.INF) -> void :
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if sender == 0:
 			return
-		if _is_dedicated_spectator(sender):
+		if _is_dedicated_spectator(sender) or not _dedicated_living_peer_ids().has(sender):
+			return
+		if not _dedicated_apply_team_revive(dead_peer_id, revive_pos):
 			return
 		for peer_id in _dedicated_active_peer_ids():
 			rpc_id(peer_id, "_rpc_accept_team_revive", dead_peer_id, _cost, payment_method, revive_pos)
@@ -47199,7 +47224,7 @@ func _rpc_accept_team_revive(dead_peer_id: int, _cost: int, payment_method: = RE
 		_handle_revive_with_hp(max(1.0, player_hp_max * 0.5), resolved_pos)
 	else:
 		var state: Dictionary = net_players_by_peer.get(dead_peer_id, {})
-		if not state.is_empty():
+		if not state.is_empty() and not _remote_player_state_targetable(state):
 			_apply_remote_player_revive(dead_peer_id, max(1.0, float(state.get("hp_max", 1.0)) * 0.5), resolved_pos)
 	_clear_revive_request()
 	var label: = "REVIVE POR SACRIFICIO" if method == REVIVE_PAY_LIFE else "REVIVE POR PONTOS"

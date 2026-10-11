@@ -1242,9 +1242,9 @@ static func _draw_bargain_capsule(game: Node2D, camera: Vector2) -> void:
 		fall_t = 1.0 - clampf(float(game.bargain_capsule.get("timer", 0.0)) / maxf(0.01, game.BARGAIN_CAPSULE_FALL_TIME), 0.0, 1.0)
 		pos.y -= (1.0 - fall_t) * 180.0
 	game.draw_circle(world_pos - camera + Vector2(0, 28), 35.0 + pulse * 4.0, Color(0.04, 0.025, 0.0, 0.26))
-	if state == game.BARGAIN_CAPSULE_SUCCESS:
+	if state == game.BARGAIN_CAPSULE_STATE_SUCCESS:
 		game.draw_circle(pos, radius * (1.15 + pulse * 0.12), Color(1.0, 0.78, 0.14, 0.20))
-	elif state == game.BARGAIN_CAPSULE_FAIL:
+	elif state == game.BARGAIN_CAPSULE_STATE_FAIL:
 		game.draw_circle(pos, radius * (1.2 + pulse * 0.22), Color(1.0, 0.18, 0.08, 0.22))
 	var body := Rect2(pos - Vector2(30, 34), Vector2(60, 68))
 	game.draw_rect(body.grow(5.0), Color(0.06, 0.035, 0.0, 0.54), true)
@@ -1253,9 +1253,9 @@ static func _draw_bargain_capsule(game: Node2D, camera: Vector2) -> void:
 	game.draw_line(body.position + Vector2(8, 15), body.end - Vector2(9, 16), Color(1.0, 0.92, 0.48, 0.62), 2.0)
 	game.draw_line(Vector2(body.end.x - 12, body.position.y + 12), Vector2(body.position.x + 18, body.end.y - 10), Color(1.0, 0.38, 0.16, 0.58 + pulse * 0.28), 2.0)
 	game.draw_circle(pos, 15.0 + pulse * 2.5, Color(1.0, 0.86, 0.2, 0.42))
-	if state == game.BARGAIN_CAPSULE_FALLING:
+	if state == game.BARGAIN_CAPSULE_STATE_FALLING:
 		game.draw_line(pos + Vector2(0, -90), pos + Vector2(0, -44), Color(1.0, 0.82, 0.2, 0.45), 4.0)
-	if state == game.BARGAIN_CAPSULE_ACTIVE:
+	if state == game.BARGAIN_CAPSULE_STATE_ACTIVE:
 		var hp_ratio: float = clampf(float(game.bargain_capsule.get("hp", 0.0)) / maxf(1.0, float(game.bargain_capsule.get("max_hp", 1.0))), 0.0, 1.0)
 		var time_ratio: float = clampf(float(game.bargain_capsule.get("collapse_time", 0.0)) / maxf(1.0, float(game.bargain_capsule.get("collapse_max", 1.0))), 0.0, 1.0)
 		var bar_w: float = 86.0

@@ -573,7 +573,7 @@ static func _draw_phantom_player(game: Node2D, camera: Vector2) -> void :
 
 
 static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: int, state: Dictionary) -> void :
-	if bool(state.get("dead", false)) or not bool(state.get("has_snapshot", false)):
+	if not game._remote_player_state_targetable(state):
 		return
 	var p = Vector2(state.get("render_pos", state.get("pos", Vector2.ZERO))) - camera
 	var anim_state = int(state.get("anim_state", game.NET_ANIM_IDLE))

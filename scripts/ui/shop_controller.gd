@@ -16,6 +16,7 @@ const SHOP_SPEND_ANIM_TIME: float = 0.72
 
 var game: Object
 var presentation = preload("res://scripts/ui/shop_presentation.gd").new()
+var bargain_exit_confirmation_pending: bool = false
 
 
 func configure(game_owner: Object) -> void:
@@ -24,6 +25,7 @@ func configure(game_owner: Object) -> void:
 
 func reset() -> void:
 	presentation.reset()
+	bargain_exit_confirmation_pending = false
 
 
 func begin(kind: String, cards: Array, index: int = -1) -> void:
@@ -39,6 +41,73 @@ func can_exit() -> bool:
 	if game == null:
 		return not presentation.busy()
 	return not purchase_animating() and not presentation.busy()
+
+
+func bargain_discount_rate_for_offer(slot_index: int, generation_type: String, generation_index: int, card_id: String) -> float:
+	if not game._bargain_discount_active_for_shop() or slot_index < 0 or card_id == "":
+		return 0.0
+	var session: Dictionary = game.shop_bargain_discount_session
+	var min_rate: float = clampf(float(session.get("min", session.get("rate", 0.0))), 0.0, 0.75)
+	var max_rate: float = clampf(float(session.get("max", min_rate)), min_rate, 0.75)
+	var min_percent: int = clampi(int(ceil(min_rate * 100.0)), 0, 75)
+	var max_percent: int = clampi(int(floor(max_rate * 100.0)), min_percent, 75)
+	var offer_key: String = "%s:%d:%d:%d:%s:%d:%s" % [
+		String(session.get("event_id", "")), int(session.get("seed", 0)),
+		int(session.get("visit_index", game.shop_visit_index)), generation_index,
+		generation_type, slot_index, card_id
+	]
+	var percent_span: int = maxi(1, max_percent - min_percent + 1)
+	return float(min_percent + posmod(offer_key.hash(), percent_span)) / 100.0
+
+
+func apply_bargain_discount_to_shop_picks(picks: Array, generation_type: String = "open", source_slots: Array = []) -> Array:
+	if not game._bargain_discount_active_for_shop() or picks.is_empty():
+		return picks
+	var session: Dictionary = game.shop_bargain_discount_session
+	var min_rate: float = clampf(float(session.get("min", session.get("rate", 0.0))), 0.0, 0.75)
+	var max_rate: float = clampf(float(session.get("max", min_rate)), min_rate, 0.75)
+	if max_rate <= 0.0:
+		return picks
+	var seed: int = int(session.get("seed", 0))
+	var candidates: Array = []
+	for i in range(picks.size()):
+		var card: Dictionary = picks[i]
+		if game._is_empty_shop_slot(card) or bool(card.get("locked_slot", false)) or bool(card.get("burned", false)):
+			continue
+		var card_id: String = game._card_id(card)
+		var offer_slot: int = int(source_slots[i]) if i < source_slots.size() else i
+		var score: int = abs(("%d:%d:%d:%s:%d:%s" % [seed, game.shop_visit_index, game.shop_generation_index, generation_type, offer_slot, card_id]).hash())
+		candidates.append({"index": i, "slot": offer_slot, "score": score})
+	if candidates.is_empty():
+		return picks
+	candidates.sort_custom(func(a, b): return int(Dictionary(a).get("score", 0)) < int(Dictionary(b).get("score", 0)))
+	var result: Array = picks.duplicate(true)
+	for candidate_index in range(mini(candidates.size(), 2)):
+		var slot_index: int = int(Dictionary(candidates[candidate_index]).get("index", -1))
+		if slot_index < 0 or slot_index >= result.size():
+			continue
+		var offer_slot: int = int(Dictionary(candidates[candidate_index]).get("slot", slot_index))
+		var discounted: Dictionary = Dictionary(result[slot_index]).duplicate(true)
+		var base_price: int = game._bargain_base_card_price(discounted)
+		var card_id: String = game._card_id(discounted)
+		var rate: float = bargain_discount_rate_for_offer(offer_slot, generation_type, game.shop_generation_index, card_id)
+		discounted.merge({
+			"bargain_discount_rate": rate,
+			"bargain_base_price": base_price,
+			"bargain_final_price": game._bargain_discounted_price(base_price, rate),
+			"bargain_discount_id": String(session.get("event_id", "")),
+			"bargain_discount_category_id": String(session.get("category_id", session.get("id", ""))),
+			"bargain_discount_min": min_rate,
+			"bargain_discount_max": max_rate,
+			"bargain_discount_visit": game.shop_visit_index,
+			"bargain_discount_generation": game.shop_generation_index,
+			"bargain_discount_generation_type": generation_type,
+			"bargain_discount_slot": offer_slot,
+			"bargain_discount_offer_key": "%s:%d:%d:%d" % [card_id, game.shop_visit_index, game.shop_generation_index, offer_slot],
+			"bargain_discount_label": "DESCONTAO -%d%%" % int(round(rate * 100.0))
+		}, true)
+		result[slot_index] = discounted
+	return result
 
 
 func update_countdown(delta: float) -> void:
@@ -213,6 +282,15 @@ func accept_mp_request() -> void:
 func request_exit_or_finish() -> void:
 	if not can_exit():
 		return
+	if not game.is_dead and not game.online_local_spectator and game.has_method("_bargain_discount_active_for_shop") and game._bargain_discount_active_for_shop():
+		bargain_exit_confirmation_pending = true
+		interaction_changed.emit("bargain_exit_confirmation")
+		game._block_ui_input()
+		return
+	_commit_exit_or_finish()
+
+
+func _commit_exit_or_finish() -> void:
 	if game.is_multiplayer:
 		if game.is_dead or game.online_local_spectator:
 			game.mode = "shop_mp_waiting"
@@ -226,6 +304,35 @@ func request_exit_or_finish() -> void:
 			game._update_audio_volumes()
 	else:
 		finish()
+
+
+func bargain_exit_confirmation_active() -> bool:
+	return bargain_exit_confirmation_pending
+
+
+func confirm_bargain_exit() -> void:
+	if not bargain_exit_confirmation_pending:
+		return
+	bargain_exit_confirmation_pending = false
+	_commit_exit_or_finish()
+
+
+func cancel_bargain_exit() -> void:
+	if not bargain_exit_confirmation_pending:
+		return
+	bargain_exit_confirmation_pending = false
+	game.shop_mp_ready_to_leave = false
+	interaction_changed.emit("bargain_exit_cancelled")
+
+
+func handle_key(event: InputEventKey) -> bool:
+	if not bargain_exit_confirmation_pending:
+		return false
+	if event.keycode in [KEY_ENTER, KEY_SPACE]:
+		confirm_bargain_exit()
+	elif event.keycode == KEY_ESCAPE:
+		cancel_bargain_exit()
+	return true
 
 
 func open_shop(forced: bool) -> void:
@@ -274,7 +381,9 @@ func open_shop(forced: bool) -> void:
 	if game.shop_endurance_discount > 0.0:
 		game._add_text("RESISTENCIA: -%d%%" % int(round(game.shop_endurance_discount * 100.0)), game.player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
 	if game.has_method("_bargain_discount_active_for_shop") and game._bargain_discount_active_for_shop():
-		game._add_text("DESCONTAO DA CAPSULA -%d%%" % int(round(float(game.shop_bargain_discount_session.get("rate", 0.0)) * 100.0)), game.player_pos + Vector2(-120, -156), Color(1.0, 0.86, 0.24), 1.8, 22)
+		var bargain_min: int = int(round(float(game.shop_bargain_discount_session.get("min", game.shop_bargain_discount_session.get("rate", 0.0))) * 100.0))
+		var bargain_max: int = int(round(float(game.shop_bargain_discount_session.get("max", game.shop_bargain_discount_session.get("rate", 0.0))) * 100.0))
+		game._add_text("DESCONTAO DA CAPSULA %d%%-%d%%" % [bargain_min, bargain_max], game.player_pos + Vector2(-120, -156), Color(1.0, 0.86, 0.24), 1.8, 22)
 
 
 func track_manual_opening() -> void:
@@ -485,6 +594,7 @@ func reroll() -> void:
 
 
 func finish() -> void:
+	bargain_exit_confirmation_pending = false
 	game.shop_last_exit_had_purchase = game.shop_purchases_this_visit > 0
 	game.shop_last_exit_time = game.time_alive
 	finish_manual_visit()
@@ -641,6 +751,8 @@ func draw(viewport: Vector2) -> void:
 	if game == null:
 		return
 	presentation.draw(game, viewport)
+	if bargain_exit_confirmation_pending:
+		presentation.draw_bargain_exit_confirmation(game, viewport)
 
 
 func draw_exit(viewport: Vector2) -> void:
@@ -661,6 +773,13 @@ func layout(viewport: Vector2) -> Dictionary:
 
 func handle_touch(pos: Vector2, viewport: Vector2) -> void:
 	if game == null or game._shop_purchase_animating() or presentation.busy():
+		return
+	if bargain_exit_confirmation_pending:
+		var confirmation: Dictionary = presentation.bargain_exit_confirmation_layout(viewport)
+		if Rect2(confirmation.get("confirm", Rect2())).has_point(pos):
+			confirm_bargain_exit()
+		elif Rect2(confirmation.get("cancel", Rect2())).has_point(pos):
+			cancel_bargain_exit()
 		return
 	if not game._is_portrait(viewport):
 		var areas: Dictionary = presentation.layout(viewport)

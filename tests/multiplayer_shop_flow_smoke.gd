@@ -57,12 +57,31 @@ func _run() -> void:
 	game._open_shop(false)
 	assert(game.mode == "shop")
 	assert(game.shop_cards.size() > 0)
+	game.shop_bargain_discount_session = {
+		"active": true,
+		"id": "otimo",
+		"rate": 0.32,
+		"min": 0.25,
+		"max": 0.40,
+		"seed": 771,
+		"event_id": "shop_flow_discount",
+		"visit_index": game.shop_visit_index
+	}
+	game.shop_cards = game._apply_bargain_discount_to_shop_picks(game.shop_cards, "open")
 	var selected_price: int = game._effective_card_price(game.shop_cards[game.shop_selected])
 	game.score = selected_price
 	game._buy_selected_card()
 	assert(game._shop_purchase_animating())
 	game._update_shop(game.SHOP_PURCHASE_ANIM_TIME + 0.05)
 	game._request_shop_exit_or_finish()
+	assert(game.mode == "shop")
+	assert(game.shop_controller.bargain_exit_confirmation_active())
+	assert(not game.shop_mp_ready_to_leave)
+	game.shop_controller.cancel_bargain_exit()
+	assert(game.mode == "shop")
+	assert(not game.shop_mp_ready_to_leave)
+	game._request_shop_exit_or_finish()
+	game.shop_controller.confirm_bargain_exit()
 	assert(game.mode == "shop_mp_waiting")
 	assert(game.shop_mp_ready_to_leave)
 	assert(not game.shop_mp_partner_ready)
@@ -72,15 +91,20 @@ func _run() -> void:
 	game.shop_mp_partner_ready = true
 	game._check_shop_mp_exit()
 	assert(game.mode == "shop_return")
+	assert(game.shop_bargain_discount_session.is_empty())
 	assert(not game.shop_mp_ready_to_leave)
 	assert(game.shop_return_timer > 0.0)
 	game._update_shop_return(game.SHOP_RETURN_TIME + 0.05)
 	assert(game.mode == "game")
 
 	# Eliminated peers follow the same return; they never block the living player.
-	game.mode = "shop_mp_waiting"
+	game.mode = "shop"
 	game.is_dead = true
 	game.shop_mp_ready_to_leave = false
+	game.shop_bargain_discount_session = {"active": true, "event_id": "observer_discount"}
+	game._request_shop_exit_or_finish()
+	assert(game.mode == "shop_mp_waiting")
+	assert(not game.shop_controller.bargain_exit_confirmation_active())
 	game._rpc_shop_ready_state(1, 1)
 	assert(game.mode == "shop_return")
 	game.mode = "shop_mp_waiting"
