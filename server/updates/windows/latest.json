@@ -1,15 +1,19 @@
 {
-  "version": "2.0.47",
-  "version_code": 24700,
-  "filename": "Ruptura_Temporal_2.0.47.exe",
-  "sha256": "cf7674ae9a39d7d6ec1103a134f53c4b74dcf609e1112debd36ef218f8d91be0",
-  "size": 908579056,
+  "version": "2.0.48",
+  "version_code": 24800,
+  "filename": "Ruptura_Temporal_2.0.48.exe",
+  "sha256": "cf2f77e18ebc82afe9543b08633b9bc08655de8bd48428fe48a8f7099bfde117",
+  "size": 922312256,
   "notes": [
-    "Corrigido o jogador fantasma após reviver ou eliminar a equipe no multiplayer.",
-    "A Cápsula da Barganha agora mantém descontos individuais e consistentes por carta.",
-    "Adicionado aviso antes de sair da loja e perder uma promoção ativa.",
-    "Ajustes de sincronização e segurança da loja em partidas multiplayer."
+    "Dez novas músicas ampliam a variedade da trilha durante as fases.",
+    "Uso de memória e carregamento de visuais foram otimizados para aparelhos mais modestos.",
+    "Novo miniboss Sineiro Boreal e novas apresentações de bosses e eventos.",
+    "Cápsula da Barganha Temporal adiciona uma decisão rara de risco e recompensa.",
+    "Evolução, música, passiva Elétrica e Lôdarios receberam correções no multiplayer.",
+    "Snapshots de combate foram divididos para reduzir lentidão e quedas em partidas online.",
+    "Rotas de fases e encerramento da Umbra foram corrigidos.",
+    "Maré de Cerco e áudio da Nevasca voltaram a encerrar e aparecer corretamente."
   ],
   "mandatory": false,
-  "published_at": "2026-10-11T13:26:00.4965360Z"
+  "published_at": "2026-10-12T13:53:39.7520440Z"
 }

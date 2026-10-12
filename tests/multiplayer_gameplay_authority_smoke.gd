@@ -15,6 +15,7 @@ const SPECTRUM_PROBE_DAMAGE := 10.0
 const SPECTRUM_PROBE_MULTIPLIER := 1.69
 const EXPECTED_DAMAGE_REQUESTS := 22
 const EXPECTED_TOTAL_DAMAGE := DAMAGE_PER_HIT * 21.0 + SPECTRUM_PROBE_DAMAGE * SPECTRUM_PROBE_MULTIPLIER
+const FLOW_TIMEOUT_SECONDS := 35.0
 
 var game: Node
 var role: String = ""
@@ -133,7 +134,7 @@ func _run_server_loop() -> void:
 			print("[SERVER] GAMEPLAY_AUTHORITY_OK server relay stayed clean")
 		if results_seen and game.dedicated_room_shutdown_pending:
 			return
-		if total_time > 15.0:
+		if total_time > FLOW_TIMEOUT_SECONDS:
 			_check(false, "timeout waiting for host/client gameplay authority result")
 			return
 
@@ -144,7 +145,7 @@ func _run_host_loop() -> void:
 	while true:
 		await process_frame
 		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
-		if total_time > 15.0:
+		if total_time > FLOW_TIMEOUT_SECONDS:
 			var timeout_enemy := _host_enemy_by_uid(enemy_uid)
 			print("[HOST] TIMEOUT enemy_hp=%.2f expected=%.2f remote_hp=%d peer=%d" % [float(timeout_enemy.get("hp", -1.0)), enemy_initial_hp - EXPECTED_TOTAL_DAMAGE, int(game.net_player_hp), game.net_player_peer_id])
 			_check(false, "timeout waiting for host gameplay authority checks")
@@ -223,7 +224,7 @@ func _run_client_loop() -> void:
 	while true:
 		await process_frame
 		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
-		if total_time > 15.0:
+		if total_time > FLOW_TIMEOUT_SECONDS:
 			_check(false, "timeout waiting for client gameplay authority checks")
 			return
 

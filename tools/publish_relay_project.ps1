@@ -2,6 +2,7 @@
 param(
     [string]$Server = '72.61.217.238',
     [string]$RemoteProjectPath = '/opt/ruptura/Ruptura_Temporal-Godot-Mobile',
+    [string]$RemoteGodotBin = '/opt/godot/Godot_v4.7-stable_linux.x86_64',
     [string]$ServiceName = 'ruptura-relay',
     [PSCredential]$Credential,
     [switch]$WithAssets,
@@ -225,6 +226,8 @@ if [ -f server/package.json ]; then
   cd ..
 fi
 chown -R ruptura:ruptura '$RemoteProjectPath'
+test -x '$RemoteGodotBin'
+runuser -u ruptura -- '$RemoteGodotBin' --headless --path '$RemoteProjectPath' --import
 systemctl restart '$ServiceName'
 sleep 2
 systemctl is-active --quiet '$ServiceName'
