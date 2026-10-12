@@ -37,12 +37,13 @@ func _run() -> void:
 	game.time_alive = game.phase_started_at + 30.0
 	for i in range(24):
 		_check(game._choose_enemy_type() != game.ENEMY_COUT_ATTACK_SPEED, "phase 1 after phase 6 should use local phase time, not global run time")
-	game.time_alive = game.phase_started_at + game.ARAUTO_SPAWN_TIME
+	var arauto_spawn_time: float = game._arauto_spawn_time()
+	game.time_alive = game.phase_started_at + arauto_spawn_time
 	game._try_spawn_arauto()
-	_check(game.arauto.is_empty(), "Arauto should not spawn exactly at the 8 minute mark")
-	game.time_alive = game.phase_started_at + game.ARAUTO_SPAWN_TIME + 0.25
+	_check(game.arauto.is_empty(), "Arauto should not spawn exactly at the active pacing threshold")
+	game.time_alive = game.phase_started_at + arauto_spawn_time + 0.25
 	game._try_spawn_arauto()
-	_check(not game.arauto.is_empty(), "Arauto should spawn after 8 minutes of phase 1")
+	_check(not game.arauto.is_empty(), "Arauto should spawn after the active phase 1 pacing threshold")
 
 	game.arauto.clear()
 	game.arauto_evolution_fragment.clear()
@@ -82,10 +83,14 @@ func _run() -> void:
 	game._update_phase_fragment(0.016)
 	_check(int(game.pending_phase) == 7 and String(game.mode) == "phase_transition", "red portal did not start transition to phase 7")
 	_check(int(game.dimension_route_farm_cycles) == 1, "first farm portal should register one farm cycle")
-	_check(Array(game.dimension_route_queue).size() == 3, "first farm cycle should queue three rolled dimensions after phase 7")
+	_check(Array(game.dimension_route_queue).size() == 3, "first farm cycle should queue two random dimensions and phase 4 after phase 7")
 	var previous_phase := 7
-	for queued_phase in game.dimension_route_queue:
-		_check(int(queued_phase) != 5, "farm queue should never include phase 5")
+	for queue_index in range(game.dimension_route_queue.size()):
+		var queued_phase: int = int(game.dimension_route_queue[queue_index])
+		if queue_index < 2:
+			_check(queued_phase in game.DIMENSION_ROUTE_POOL, "farm random slot selected a reserved phase")
+		else:
+			_check(queued_phase == 4, "farm route should return to phase 4 for the next choice")
 		_check(int(queued_phase) != previous_phase, "farm queue should not repeat the last played phase")
 		previous_phase = int(queued_phase)
 	game.pending_phase = 0
@@ -101,7 +106,7 @@ func _run() -> void:
 
 	game.pending_phase = 0
 	game.mode = "game"
-	game.current_phase = 2
+	game.current_phase = 4
 	game.dimension_route_queue.clear()
 	game.dimension_route_farm_cycles = 1
 	game.dimension_route_completed_count = 10

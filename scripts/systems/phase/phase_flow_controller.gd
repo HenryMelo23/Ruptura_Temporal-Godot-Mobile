@@ -87,18 +87,20 @@ func _core_next_phase_after_boss(phase: int) -> int:
 	if phase == 6:
 		_record_initial_phase_completed(phase)
 		core.run_phase6_completed = true
-		return 2
+		return 1 if int(core.run_initial_phase) == 6 else 4
 	if phase == 1:
 		_record_initial_phase_completed(phase)
 		return 2
 	if phase == 2:
 		return 3
 	if phase == 3:
-		return 4
+		return 6 if int(core.run_initial_phase) == 1 and not bool(core.run_phase6_completed) else 4
 	return 0
 
 
 func _next_phase_after_boss(phase: int) -> int:
+	if phase == core.DIMENSION_FINAL_PHASE:
+		return 0
 	var core_next: int = _core_next_phase_after_boss(phase)
 	if core_next > 0:
 		return core_next
@@ -108,12 +110,24 @@ func _next_phase_after_boss(phase: int) -> int:
 
 
 func _consume_next_phase_after_boss(phase: int) -> int:
+	if phase == core.DIMENSION_FINAL_PHASE:
+		return 0
 	var core_next: int = _core_next_phase_after_boss(phase)
 	if core_next > 0:
 		return core_next
 	if not core.dimension_route_queue.is_empty():
 		return int(core.dimension_route_queue.pop_front())
 	return 0
+
+
+func _commit_final_phase_victory_cleanup(phase: int) -> bool:
+	if phase != core.DIMENSION_FINAL_PHASE or core.run_finalized_result != "Vitoria":
+		return false
+	core.phase_fragment.clear()
+	core.pending_phase = 0
+	core.phase_transition_timer = 0.0
+	core.dimension_route_queue.clear()
+	return true
 
 
 func _register_dimension_phase_completed(phase: int) -> void:
@@ -126,9 +140,7 @@ func _register_dimension_phase_completed(phase: int) -> void:
 func _should_offer_dimension_choice_after_boss(phase: int) -> bool:
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return false
-	if phase == 4:
-		return true
-	return core.dimension_route_farm_cycles > 0 and core.dimension_route_queue.is_empty()
+	return phase == core.DIMENSION_FARM_RETURN_PHASE
 
 
 func _dimension_extraction_available() -> bool:
@@ -155,12 +167,8 @@ func _roll_dimension_route(count: int, last_phase: int) -> Array[int]:
 func _begin_farm_dimension_cycle() -> int:
 	core.dimension_route_farm_cycles += 1
 	var entry_phase: int = core.DIMENSION_FIRST_FARM_PHASE
-	var tail_count: int = core.DIMENSION_FIRST_FARM_TAIL_COUNT
-	if core.dimension_route_farm_cycles > 1:
-		var rolled: Array[int] = _roll_dimension_route(1, core.current_phase)
-		entry_phase = int(rolled[0]) if not rolled.is_empty() else core.DIMENSION_FIRST_FARM_PHASE
-		tail_count = maxi(0, core.DIMENSION_REPEAT_FARM_TOTAL_COUNT - 1)
-	core.dimension_route_queue = _roll_dimension_route(tail_count, entry_phase)
+	core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_FARM_RANDOM_COUNT, entry_phase)
+	core.dimension_route_queue.append(core.DIMENSION_FARM_RETURN_PHASE)
 	return entry_phase
 
 
@@ -273,6 +281,7 @@ func _advance_to_phase(phase: int) -> void:
 	var carried_enemy_speed: float = max(float(core.enemy_speed_base), core.ENEMY_BASE_SPEED)
 	var previous_enemy_cap: int = core._enemy_limit()
 	core.current_phase = phase
+	core._prepare_phase_texture_assets(phase)
 	core.pending_phase = 0
 	core.phase_started_at = core.time_alive
 	core.enemy_manager.prepare_phase_density_carry(previous_enemy_cap)
@@ -353,6 +362,8 @@ func _advance_to_phase(phase: int) -> void:
 	core.rational_trail_sample_timer = 0.0
 	core.rational_dilation_flash = 0.0
 	core._clear_attack_lock()
+	if bool(core.sineiro_boreal_state.get("active", false)):
+		core.sineiro_boreal_controller.cleanup("phase_transition")
 	core.enemies.clear()
 	core.bullets.clear()
 	core.remote_bullets.clear()

@@ -8,6 +8,7 @@ over 100 KB.
 | --- | --- | --- | --- |
 | Save/config/resume/retry | `scripts/systems/save/runtime_save_controller.gd` | `_load_player_profile`, `_load_card_unlocks`, `_build_interrupted_run_snapshot`, `_resume_interrupted_run`, `_use_run_retry`; core wrappers remain public | `tests/runtime_save_controller_smoke.gd`, `tests/runtime_backup_reconciliation_smoke.gd`, `tests/player_progress_cache_smoke.gd` |
 | Phase orchestration | `scripts/systems/phase/phase_flow_controller.gd` | `_setup_initial_phase_state`, `_advance_to_phase`, phase timers/portals/fragment helpers | `tests/phase_transition_smoke.gd`, `tests/runtime_backup_reconciliation_smoke.gd`, `tests/phase_density_carry_smoke.gd` |
+| Runtime asset residency | `scripts/systems/assets/runtime_asset_controller.gd` | `preload_all`, `prepare_phase`, `ensure_key`; core wrappers preserve catalog and phase entry behavior | `tests/runtime_asset_controller_smoke.gd`, `tests/catalog_manifest_spectrum_icons_smoke.gd`, `tests/phase_transition_smoke.gd` |
 | Progression/rewards/card math | `scripts/systems/progression/runtime_progression_controller.gd` | `points_for_enemy`, `apply_score_delta`, `new_common_card_count`, `effective_card_price`, long-run helpers | `tests/runtime_progression_controller_smoke.gd`, `tests/long_run_power_fantasy_smoke.gd`, `tests/long_run_economy_smoke.gd`, `tests/cinzas_attribute_burn_system_smoke.gd` |
 | Boss wave drawing | `scripts/presentation/boss_wave_presentation.gd` | `_draw_boss_wave_safe_sector`, `_draw_boss_wave_water_body`, crest/foam/trail helpers | `tests/boss_wave_smoke.gd`, `tests/boss_wave_visual_smoke.gd` |
 | Shop and economy | `scripts/ui/shop_controller.gd` | `RTShopController.open_shop`, `buy_selected_card`, `reroll`, `reserve_card` | `tests/shop_paid_rerolls_smoke.gd`, `tests/shop_fairness_v2_smoke.gd`, `tests/shop_abuse_integrity_smoke.gd`, `tests/multiplayer_shop_flow_smoke.gd` |
@@ -18,6 +19,7 @@ over 100 KB.
 | Online flow and UI | `scripts/main_runtime_core.gd` facade plus `scripts/ui/shop_controller.gd` | `_net_report_*`, online room input helpers, shop MP helpers | `tests/online_lobby_smoke.gd`, `tests/multiplayer_lobby_integration_smoke.gd`, `tests/multiplayer_shop_flow_smoke.gd` |
 | Audio lifecycle | `scripts/systems/audio/audio_lifecycle.gd` | `RTAudioLifecycle` methods | `tests/audio_lifecycle_smoke.gd`, `tests/menu_to_phase_music_smoke.gd`, `tests/rain_audio_lifecycle_smoke.gd` |
 | Enemy waves | `scripts/systems/enemy_manager.gd` | `update_enemies`, `spawn_wave`, limit/interval helpers | `tests/enemy_escalation_reconstitution_smoke.gd`, `tests/phase4_enemy_ecosystem_smoke.gd`, `tests/phase7_enemy_behaviour_smoke.gd` |
+| Phase 2 Sineiro Boreal | `scripts/systems/enemies/phase2_sineiro_boreal_controller.gd`, `scripts/presentation/phase2_sineiro_presentation.gd` | `spawn_now`, `update_enemy`, `build_echo_positions`, `on_enemy_defeated`, `draw_world` | `tests/phase2_sineiro_boreal_smoke.gd`, `tests/phase2_sineiro_visual_smoke.gd` |
 | Manifest evolutions | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd` plus thin hooks in `scripts/main_runtime_core.gd` | `RTManifestEvolutionCatalog.all_entries`, `_manifest_evolution_entries`, `_apply_manifest_evolution_to_bullet`, `_manifest_evolution_on_projectile_hit` | `tests/manifest_evolution_catalog_smoke.gd`, `tests/manifest_evolution_540_combinations_smoke.gd`, `tests/manifest_evolution_functional_matrix_smoke.gd`, `tests/manifest_evolution_smoke.gd` |
 | Boss runtime | `scripts/systems/modern_boss_controller.gd` plus boss sections in `scripts/main_runtime_core.gd` | `update_boss7_state`, `start_boss7_*`, `check_boss7_ultimate` | `tests/boss7_fenix_smoke.gd`, `tests/boss7_fire_progression_smoke.gd`, `tests/boss4_nexus_mechanics_smoke.gd` |
 | Boss party scaling | `scripts/systems/boss_party_scaling.gd` plus thin hooks in `scripts/main_runtime_core.gd` | `RTBossPartyScaling.profile_for_party_size`, `_ensure_boss_party_scaling_context`, `_boss_party_scaling_report` | `tests/boss_party_scaling_smoke.gd`, `tests/multiplayer_three_player_contract_smoke.gd` |
@@ -34,6 +36,8 @@ over 100 KB.
   do not restore duplicated implementations from old core history.
 - Phase flow stays in the phase owner; preserve density-carry, party-scaling,
   authoritative unlock and VFX cleanup hooks at phase boundaries.
+- Phase-scoped texture residency stays in the runtime asset owner; catalog
+  access must remain on-demand and desktop keeps eager preload behavior.
 - Score/card math stays in the progression owner; retain telemetry and burned
   attribute hooks alongside the approved long-run baseline.
 - Put new shop/economy behavior in `scripts/ui/shop_controller.gd` unless it is

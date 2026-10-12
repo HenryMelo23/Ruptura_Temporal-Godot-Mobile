@@ -2,6 +2,7 @@ extends RefCounted
 
 const Gravity = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
+const BargainCapsule = preload("res://scripts/presentation/bargain_capsule_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -1219,54 +1220,7 @@ static func _draw_phase_point_crystal(game: Node2D, orb: Dictionary, camera: Vec
 
 
 static func _draw_bargain_capsule(game: Node2D, camera: Vector2) -> void:
-	if game.bargain_capsule.is_empty():
-		return
-	var state: String = String(game.bargain_capsule.get("state", ""))
-	if state == game.BARGAIN_CAPSULE_STATE_NONE:
-		return
-	var world_pos: Vector2 = Vector2(game.bargain_capsule.get("pos", game.player_pos))
-	if not game._world_point_in_view(world_pos, camera, 180.0):
-		return
-	var pos: Vector2 = world_pos - camera
-	var pulse: float = 0.5 + 0.5 * sin(game.time_alive * 7.0 + float(game.bargain_capsule.get("seed", 0)) * 0.01)
-	var radius: float = game.BARGAIN_CAPSULE_RADIUS
-	if state == game.BARGAIN_CAPSULE_STATE_PREPARING:
-		var t_prepare: float = 1.0 - clampf(float(game.bargain_capsule.get("timer", 0.0)) / maxf(0.01, game.BARGAIN_CAPSULE_PREPARE_TIME), 0.0, 1.0)
-		game.draw_circle(pos, radius * (1.2 + t_prepare * 0.65), Color(1.0, 0.78, 0.16, 0.12 + t_prepare * 0.16))
-		game.draw_arc(pos, radius * (1.55 - t_prepare * 0.25), -PI * 0.5, -PI * 0.5 + TAU * t_prepare, 42, Color(1.0, 0.88, 0.24, 0.84), 3.0, true)
-		game.draw_line(pos + Vector2(-28, 0), pos + Vector2(28, 0), Color(1.0, 0.94, 0.38, 0.72), 2.0)
-		game.draw_line(pos + Vector2(0, -28), pos + Vector2(0, 28), Color(1.0, 0.94, 0.38, 0.72), 2.0)
-		return
-	var fall_t: float = 1.0
-	if state == game.BARGAIN_CAPSULE_STATE_FALLING:
-		fall_t = 1.0 - clampf(float(game.bargain_capsule.get("timer", 0.0)) / maxf(0.01, game.BARGAIN_CAPSULE_FALL_TIME), 0.0, 1.0)
-		pos.y -= (1.0 - fall_t) * 180.0
-	game.draw_circle(world_pos - camera + Vector2(0, 28), 35.0 + pulse * 4.0, Color(0.04, 0.025, 0.0, 0.26))
-	if state == game.BARGAIN_CAPSULE_STATE_SUCCESS:
-		game.draw_circle(pos, radius * (1.15 + pulse * 0.12), Color(1.0, 0.78, 0.14, 0.20))
-	elif state == game.BARGAIN_CAPSULE_STATE_FAIL:
-		game.draw_circle(pos, radius * (1.2 + pulse * 0.22), Color(1.0, 0.18, 0.08, 0.22))
-	var body := Rect2(pos - Vector2(30, 34), Vector2(60, 68))
-	game.draw_rect(body.grow(5.0), Color(0.06, 0.035, 0.0, 0.54), true)
-	game.draw_rect(body, Color(0.22, 0.14, 0.02, 0.94), true)
-	game.draw_rect(body, Color(1.0, 0.76, 0.18, 0.92), false, 3.0)
-	game.draw_line(body.position + Vector2(8, 15), body.end - Vector2(9, 16), Color(1.0, 0.92, 0.48, 0.62), 2.0)
-	game.draw_line(Vector2(body.end.x - 12, body.position.y + 12), Vector2(body.position.x + 18, body.end.y - 10), Color(1.0, 0.38, 0.16, 0.58 + pulse * 0.28), 2.0)
-	game.draw_circle(pos, 15.0 + pulse * 2.5, Color(1.0, 0.86, 0.2, 0.42))
-	if state == game.BARGAIN_CAPSULE_STATE_FALLING:
-		game.draw_line(pos + Vector2(0, -90), pos + Vector2(0, -44), Color(1.0, 0.82, 0.2, 0.45), 4.0)
-	if state == game.BARGAIN_CAPSULE_STATE_ACTIVE:
-		var hp_ratio: float = clampf(float(game.bargain_capsule.get("hp", 0.0)) / maxf(1.0, float(game.bargain_capsule.get("max_hp", 1.0))), 0.0, 1.0)
-		var time_ratio: float = clampf(float(game.bargain_capsule.get("collapse_time", 0.0)) / maxf(1.0, float(game.bargain_capsule.get("collapse_max", 1.0))), 0.0, 1.0)
-		var bar_w: float = 86.0
-		var hp_rect := Rect2(pos + Vector2(-bar_w * 0.5, -72.0), Vector2(bar_w, 7.0))
-		var time_rect := Rect2(pos + Vector2(-bar_w * 0.5, -61.0), Vector2(bar_w, 6.0))
-		game.draw_rect(hp_rect, Color(0.04, 0.01, 0.0, 0.78), true)
-		game.draw_rect(Rect2(hp_rect.position, Vector2(hp_rect.size.x * hp_ratio, hp_rect.size.y)), Color(1.0, 0.58, 0.18, 0.96), true)
-		game.draw_rect(hp_rect, Color(1.0, 0.86, 0.24, 0.7), false, 1.0)
-		game.draw_rect(time_rect, Color(0.02, 0.02, 0.05, 0.78), true)
-		game.draw_rect(Rect2(time_rect.position, Vector2(time_rect.size.x * time_ratio, time_rect.size.y)), Color(0.35, 0.86, 1.0, 0.92), true)
-		game.draw_rect(time_rect, Color(0.64, 0.95, 1.0, 0.58), false, 1.0)
+	BargainCapsule.draw(game, camera)
 
 
 static func _draw_larapio_ultimate_portals(game: Node2D, camera: Vector2) -> void :
@@ -3715,6 +3669,8 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 			game.draw_arc(pos, outer + 8.0, age * 4.5, age * 4.5 + PI * 1.15, 22, Color(1.0, 0.76, 0.92, 0.56), 1.6)
 	for bullet in game.enemy_bullets:
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
+			continue
+		if String(bullet.get("type", "")) == "sineiro_shard":
 			continue
 		if bullet.get("type") == "boss4_comet":
 			var comet_pos: Vector2 = Vector2(bullet["pos"]) - camera

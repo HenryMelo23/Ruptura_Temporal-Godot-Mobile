@@ -39,6 +39,14 @@ func _run() -> void:
 	var expected_count := _sounds_dir_track_count()
 	_check(expected_count >= 2, "expected at least two mp3 tracks in Sounds")
 	_check(tracks.size() == expected_count, "registered track count does not match Sounds directory")
+	for track_number in range(25, 35):
+		var expected_path := "res://Sounds/Fases%d.mp3" % track_number
+		var found := false
+		for track in tracks:
+			if String(game.audio_stream_paths.get(String(track), "")) == expected_path:
+				found = true
+				break
+		_check(found, "new playlist track missing: " + expected_path)
 	for track in tracks:
 		var path := String(game.audio_stream_paths.get(String(track), ""))
 		_check(path.begins_with("res://Sounds/"), "track does not come from Sounds: " + String(track) + " path=" + path)

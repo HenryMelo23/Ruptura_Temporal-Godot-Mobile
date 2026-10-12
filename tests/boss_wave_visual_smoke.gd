@@ -11,8 +11,13 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	game.run_tutorial_enabled = false
 	game._start_game()
+	game.tutorial_state = game.TUTORIAL_STATE_NONE
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.current_phase = 1
+	assert(game.has_method("_draw_boss_siege_tide"))
 	game.gfx_shadows = true
 	game.boss_ready = true
 	game.boss_active = true

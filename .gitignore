@@ -2,6 +2,9 @@
 .godot/
 .codex/
 *.import
+!manifestacao_*.png.import
+!assets/sprites/manifestacao*.png.import
+!assets/sprites/aurea*.png.import
 !assets/sprites/aurea-avarenta.png.import
 !assets/sprites/aurea-eclipsa.png.import
 !assets/sprites/aurea-equilibrista.png.import

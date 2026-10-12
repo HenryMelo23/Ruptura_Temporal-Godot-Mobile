@@ -326,6 +326,8 @@ static func item_texture(host: Node, item: Dictionary) -> Texture2D:
 	if item.has("key") and host.textures.has("manifestation_" + String(item["key"])):
 		return host.textures["manifestation_" + String(item["key"])]
 	var texture_key: = String(item.get("texture", ""))
+	if texture_key != "" and not host.textures.has(texture_key) and host.has_method("_ensure_runtime_texture"):
+		host._ensure_runtime_texture(texture_key)
 	if texture_key != "" and host.textures.has(texture_key):
 		var value = host.textures[texture_key]
 		if value is Array:

@@ -16,6 +16,7 @@ const EntityVisualProfiles = preload("res://scripts/vfx/entity_visual_profiles.g
 const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
 const HudPresentation = preload("res://scripts/presentation/hud_presentation.gd")
 const CombatEffectsPresentation = preload("res://scripts/presentation/combat_effects_presentation.gd")
+const SineiroBorealPresentation = preload("res://scripts/presentation/phase2_sineiro_presentation.gd")
 const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
 const PhaseMapPresentation = preload("res://scripts/presentation/phase_map_presentation.gd")
 const GeovanaBarkControllerScript = preload("res://scripts/presentation/geovana_bark_controller.gd")
@@ -33,6 +34,7 @@ const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
 const RTNetContractScript = preload("res://scripts/systems/online/net_contract.gd")
+const RTWorldSnapshotChunkerScript = preload("res://scripts/systems/online/world_snapshot_chunker.gd")
 const RTTransportStateScript = preload("res://scripts/systems/online/transport_state.gd")
 const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
 const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
@@ -40,6 +42,7 @@ const RuntimeSaveControllerScript = preload("res://scripts/systems/save/runtime_
 const PhaseFlowControllerScript = preload("res://scripts/systems/phase/phase_flow_controller.gd")
 const RuntimeProgressionControllerScript = preload("res://scripts/systems/progression/runtime_progression_controller.gd")
 const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
+const Phase2SineiroBorealControllerScript = preload("res://scripts/systems/enemies/phase2_sineiro_boreal_controller.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
 const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
@@ -47,10 +50,11 @@ const RTPlayerProgressSync = preload("res://scripts/systems/player_progress_sync
 const RTManifestEvolutionCatalog = preload("res://scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd")
 const UmbraDqnContract = preload("res://scripts/systems/umbra_dqn_contract.gd")
 const RTBossPartyScaling = preload("res://scripts/systems/boss_party_scaling.gd")
+const RuntimeAssetController = preload("res://scripts/systems/assets/runtime_asset_controller.gd")
 
 const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.47"
-const GAME_VERSION_CODE: = 24700
+const GAME_VERSION: = "2.0.48"
+const GAME_VERSION_CODE: = 24800
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
@@ -939,6 +943,7 @@ const ENEMY_DEVOTO: = "devoto_febril"
 const ENEMY_INCENSARIO: = "incensario"
 const ENEMY_GUARDIAO: = "guardiao_sucata"
 const ENEMY_PYRO_PENGUIN: = "pinguim_incendiario"
+const ENEMY_SINEIRO_BOREAL: = "sineiro_boreal"
 const ENEMY_NEXUS_CARTOGRAPHER: = "cartografo_vazio"
 const ENEMY_NEXUS_CHRONOPHAGE: = "cronofago"
 const ENEMY_NEXUS_REFRACTOR: = "refrator_hostil"
@@ -2082,6 +2087,7 @@ var dedicated_manifest_selection_by_peer: Dictionary = {}
 var dedicated_manifest_evolution_barrier_id: int = 0
 var dedicated_manifest_evolution_expected_peers: Array = []
 var dedicated_manifest_evolution_ready_by_peer: Dictionary = {}
+var dedicated_manifest_evolution_payload: Dictionary = {}
 var dedicated_preload_ready_by_peer: Dictionary = {}
 var dedicated_player_state_by_peer: Dictionary = {}
 var dedicated_shop_votes_by_peer: Dictionary = {}
@@ -2105,6 +2111,9 @@ var net_world_visual_sync_last_ms: int = 0
 var net_world_visual_payload_bytes: int = 0
 var net_world_sequence: int = 0
 var net_world_last_sequence: int = -1
+var net_world_pending_sequence: int = -1
+var net_world_pending_chunk_count: int = 0
+var net_world_pending_chunks: Dictionary = {}
 var net_world_visual_last_sequence: int = -1
 var net_ping_last_sent_ms: int = 0
 var net_ping_ms: int = -1
@@ -2199,6 +2208,8 @@ const NET_SNAP_DISTANCE: = RTNetContractScript.SNAP_DISTANCE
 const NET_ENEMY_STRIDE: = RTNetContractScript.ENEMY_STRIDE
 const NET_UID_CHUNK_MASK: = RTNetContractScript.UID_CHUNK_MASK
 const NET_BULLET_STRIDE: = RTNetContractScript.BULLET_STRIDE
+const NET_WORLD_CHUNK_PAYLOAD_BYTES: = RTNetContractScript.WORLD_CHUNK_PAYLOAD_BYTES
+const NET_WORLD_CHUNK_MAX_COUNT: = RTNetContractScript.WORLD_CHUNK_MAX_COUNT
 const NET_LEECH_STATES: = [
 	SANGUESSUGA_STATE_FALL_WARNING,
 	SANGUESSUGA_STATE_FALLING,
@@ -2268,6 +2279,7 @@ const NET_ENEMY_TYPES: = [
 	ENEMY_STALKER, ENEMY_PROJECTOR, ENEMY_CRYSTAL, ENEMY_CURATER,
 	ENEMY_LARAPIO, ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR,
 	ENEMY_DEVOTO, ENEMY_INCENSARIO, ENEMY_GUARDIAO, ENEMY_PYRO_PENGUIN,
+	ENEMY_SINEIRO_BOREAL,
 	ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_REFRACTOR,
 	ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO,
 	ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH,
@@ -2277,7 +2289,7 @@ const NET_BULLET_TYPES: = [
 	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",
 	"frost_shard", "larapio_coin", "larapio_stone", "miasma_cheese_spit",
 	"miasma_eel_spit", "nexus_refracted", "phase4_magic", "pyro_wall_seed", "rat_flask",
-	"pustula_fossil_spit", "rat_shot", "rat_spit", "reflected_player", "umbra_plasma", "boss4_comet"
+	"pustula_fossil_spit", "rat_shot", "rat_spit", "reflected_player", "umbra_plasma", "boss4_comet", "sineiro_shard"
 ]
 
 
@@ -2500,6 +2512,7 @@ var manifest_evolution_barrier_id: int = 0
 var manifest_evolution_barrier_expected_peers: Array = []
 var manifest_evolution_barrier_ready_by_peer: Dictionary = {}
 var manifest_evolution_barrier_opening: bool = false
+var manifest_evolution_barrier_payload: Dictionary = {}
 var player_pos = PLAYER_START
 var player_hp = PLAYER_BASE_HP
 var player_hp_max = PLAYER_BASE_HP
@@ -2664,6 +2677,7 @@ var revival_mobile_confirm_until_ms: int = 0
 var team_revival_state = RTTeamRevivalStateScript.new()
 var progression_controller = RuntimeProgressionControllerScript.new()
 var enemy_manager: Node = EnemyManagerScript.new()
+var sineiro_boreal_controller: Node = Phase2SineiroBorealControllerScript.new()
 var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
 var runtime_event_director: Node = RuntimeEventDirectorScript.new()
@@ -3084,9 +3098,9 @@ var run_initial_phase: int = 0
 var run_phase6_completed: bool = false
 const DIMENSION_FINAL_PHASE: int = 5
 const DIMENSION_FIRST_FARM_PHASE: int = 7
-const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 4, 6, 7]
-const DIMENSION_FIRST_FARM_TAIL_COUNT: int = 3
-const DIMENSION_REPEAT_FARM_TOTAL_COUNT: int = 4
+const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 6]
+const DIMENSION_FARM_RANDOM_COUNT: int = 2
+const DIMENSION_FARM_RETURN_PHASE: int = 4
 const DIMENSION_EXTRACTION_INTERVAL: int = 10
 var dimension_route_queue: Array = []
 var dimension_route_farm_cycles: int = 0
@@ -3196,6 +3210,9 @@ var boss2_snow_zones = []
 var boss2_frost_particles = []
 var phase2_fire_walls = []
 var phase2_fire_wall_hit_cd = 0.0
+var sineiro_boreal_state: Dictionary = {}
+var sineiro_echo_marks: Array = []
+var sineiro_visual_events: Array = []
 var phase7_ember_patches = []
 var phase7_ember_hit_gate = 0.0
 var boss7_state: String = BOSS7_STATE_FLY

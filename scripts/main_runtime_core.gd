@@ -35,6 +35,9 @@ func _ready() -> void :
 	_ensure_runtime_controllers_bound()
 	add_child(enemy_manager)
 	enemy_manager.bind_game(self)
+	sineiro_boreal_controller.name = "SineiroBorealController"
+	add_child(sineiro_boreal_controller)
+	sineiro_boreal_controller.bind_game(self)
 	add_child(early_boss_controller)
 	early_boss_controller.bind_game(self)
 	add_child(modern_boss_controller)
@@ -4712,44 +4715,10 @@ func _load_textures() -> void :
 	for level in [2, 3]:
 		textures["petro_%d_left" % level] = [_safe_load(companion_base + "Petro_nivel%d_esq1.png" % level), _safe_load(companion_base + "Petro_nivel%d_esq2.png" % level)]
 		textures["petro_%d_right" % level] = [_safe_load(companion_base + "Petro_nivel%d_dir1.png" % level), _safe_load(companion_base + "Petro_nivel%d_dir2.png" % level)]
-	textures["enemy_common_phase_1"] = [_safe_load(base + "Inimig1.png"), _safe_load(base + "Inimig2.png")]
-	textures["enemy_common_phase_2_left"] = [_safe_load(base + "inimigo_direita2-1.png"), _safe_load(base + "inimigo_direita2-2.png")]
-	textures["enemy_common_phase_2_right"] = [_safe_load(base + "inimigo_esquerda2-1.png"), _safe_load(base + "inimigo_esquerda2-2.png")]
-	textures["enemy_phase_2_kamikaze"] = [_safe_load(base + "pinguim_kamikaze_01.png"), _safe_load(base + "pinguim_kamikaze_02.png")]
-	textures["enemy_phase_2_pyro"] = [_safe_load(base + "pinguim_incendiario_01.png"), _safe_load(base + "pinguim_incendiario_02.png")]
-	textures["enemy_phase_3_left"] = [_safe_load(base + "inimigo_esquerda3-1.png"), _safe_load(base + "inimigo_esquerda3-2.png")]
-	textures["enemy_phase_3_right"] = [_safe_load(base + "inimigo_direita3-1.png"), _safe_load(base + "inimigo_direita3-2.png")]
-	textures["enemy_phase_3_bullet"] = [_safe_load(base + "Disp_inimigo3_1.png"), _safe_load(base + "Disp_inimigo3_2.png")]
-	textures["enemy_phase_4_left"] = [_safe_load(base + "inimigo_direita4-1.png"), _safe_load(base + "inimigo_direita4-2.png")]
-	textures["enemy_phase_4_right"] = [_safe_load(base + "inimigo_esquerda4-1.png"), _safe_load(base + "inimigo_esquerda4-2.png")]
-	textures["enemy_phase_4_bullet"] = [_safe_load(base + "Magia_inimigo1.png"), _safe_load(base + "Magia_inimigo2.png")]
-	textures["enemy_phase_6_enguia_miasma"] = [_safe_load(base + "enquiadomiasma1.png"), _safe_load(base + "enquiadomiasma2.png")]
-	textures["enemy_phase_6_lodario"] = [_safe_load(base + "lodario1.png"), _safe_load(base + "lodario2.png")]
-	textures["enemy_phase_6_pustula_fossil"] = [_safe_load(base + "pustulafossil1.png"), _safe_load(base + "pustulafossil2.png")]
-	textures["enemy_phase_6_sanguessuga_cronal"] = [_safe_load(base + "sanguesugacronal1.png"), _safe_load(base + "sanguesugacronal2.png")]
-	textures["enemy_phase_7_cinerido_mov"] = [
-		_safe_load(base + "cinerido-mov-1.png"),
-		_safe_load(base + "cinerido-mov-2.png"),
-		_safe_load(base + "cinerido-mov-3.png"),
-		_safe_load(base + "cinerido-mov-4.png")
-	]
-	textures["enemy_phase_7_cinerido_atk"] = [
-		_safe_load(base + "cinerido-atk-1.png"),
-		_safe_load(base + "cinerido-atk-2.png")
-	]
-	textures["enemy_phase_7_pangoliro"] = [
-		_safe_load(base + "Pangoliro.png"),
-		_safe_load(base + "Pangoliro2.png"),
-		_safe_load(base + "Pangoliro3.png"),
-		_safe_load(base + "Pangoliro4.png")
-	]
-	textures["enemy_phase_7_pangoliro_atk"] = [_safe_load(base + "Pangoliro-ATK.png")]
-	textures["enemy_phase_7_corvol"] = [
-		_safe_load(base + "Corvol1.png"),
-		_safe_load(base + "Corvol2.png"),
-		_safe_load(base + "Corvol3.png"),
-		_safe_load(base + "Corvol4.png")
-	]
+	if _memory_saver_active():
+		RuntimeAssetController.prepare_phase(self, 0, base, true)
+	else:
+		RuntimeAssetController.preload_all(self, base)
 	textures["enemy_right"] = [_safe_load(base + "inimigo_direita2-1.png"), _safe_load(base + "inimigo_direita2-2.png")]
 	textures["enemy_left"] = [_safe_load(base + "inimigo_esquerda2-1.png"), _safe_load(base + "inimigo_esquerda2-2.png")]
 	textures["agglomerator"] = [_safe_load(base + "aglomerador1.png"), _safe_load(base + "aglomerador2.png")]
@@ -4760,38 +4729,6 @@ func _load_textures() -> void :
 	textures["larapio"] = [_safe_load(base + "larapio1.png"), _safe_load(base + "larapio2.png")]
 	textures["arauto"] = [_safe_load(base + "arauto1.png"), _safe_load(base + "arauto2.png")]
 	textures["aguilhao"] = [_safe_load(base + "aguilhao1.png"), _safe_load(base + "aguilhao2.png")]
-	textures["boss"] = _safe_load(base + "Boss1.png")
-	textures["boss_stage1"] = [_safe_load(base + "Boss1.png"), _safe_load(base + "Boss2.png")]
-	textures["boss_stage2"] = [_safe_load(base + "Boss3.png"), _safe_load(base + "Boss4.png")]
-	textures["boss_stage3"] = [_safe_load(base + "Boss5.png"), _safe_load(base + "Boss6.png")]
-	textures["boss_walk"] = [_safe_load(base + "Bossandando3_1.png"), _safe_load(base + "Bossandando3_2.png")]
-	textures["boss3"] = [_safe_load(base + "Boss3_1.png"), _safe_load(base + "Boss3_2.png")]
-	textures["boss3_cheese"] = _safe_load(base + "queijo.png")
-	textures["boss3_flask"] = _safe_load(base + "disparo_boss3.png")
-	textures["boss4"] = [_safe_load(base + "Boss4_1.png"), _safe_load(base + "Boss4_3.png")]
-	textures["boss4_attack"] = _safe_load(base + "Boss4_2.png")
-	textures["boss4_planet"] = [_safe_load(base + "Planet1_1.png"), _safe_load(base + "Planet1_2.png")]
-	textures["boss4_vortex"] = [_safe_load(base + "Vortex1_1.png"), _safe_load(base + "Vortex1_2.png")]
-	textures["boss5"] = [_safe_load(base + "Geo-Umbra-V2-1.png"), _safe_load(base + "Geo-Umbra-V2-2.png")]
-	textures["boss5_damage"] = [_safe_load(base + "Geo-Umbra-V2-1-dano.png"), _safe_load(base + "Geo-Umbra-V2-2-dano.png"), _safe_load(base + "Geo-Umbra-V2-3-dano.png"), _safe_load(base + "Geo-Umbra-V2-4-dano.png"), _safe_load(base + "Geo-Umbra-V2-5-dano.png")]
-	textures["boss5_shield"] = [_safe_load(base + "Geo_Umbra_Escudo-1.png"), _safe_load(base + "Geo_Umbra_Escudo-2.png")]
-	textures["boss6_form_1"] = [_safe_load(base + "Boss6-1-1.png"), _safe_load(base + "Boss6-1-2.png"), _safe_load(base + "Boss6-1-3.png"), _safe_load(base + "Boss6-1-4.png")]
-	textures["boss6_form_2"] = [_safe_load(base + "Boss6-2-1.png"), _safe_load(base + "Boss6-2-2.png"), _safe_load(base + "Boss6-2-3.png"), _safe_load(base + "Boss6-2-4.png")]
-	textures["boss6_form_3"] = [_safe_load(base + "Boss6-3-1.png"), _safe_load(base + "Boss6-3-2.png"), _safe_load(base + "Boss6-3-3.png"), _safe_load(base + "Boss6-3-4.png")]
-	var boss7_base: String = base + "boss7_fenix/"
-	textures["boss7_fly"] = [_safe_load(boss7_base + "fenix_fly_01.png"), _safe_load(boss7_base + "fenix_fly_02.png"), _safe_load(boss7_base + "fenix_fly_03.png"), _safe_load(boss7_base + "fenix_fly_04.png")]
-	textures["boss7_dive"] = [_safe_load(boss7_base + "fenix_down_01.png"), _safe_load(boss7_base + "fenix_down_02.png"), _safe_load(boss7_base + "fenix_down_03.png"), _safe_load(boss7_base + "fenix_down_04.png")]
-	textures["boss7_core"] = [_safe_load(boss7_base + "fenix_egg_01.png"), _safe_load(boss7_base + "fenix_egg_02.png"), _safe_load(boss7_base + "fenix_egg_03.png"), _safe_load(boss7_base + "fenix_egg_04.png")]
-	textures["boss2"] = [
-		_safe_load("res://Boss2-1.png"),
-		_safe_load("res://Boss2-2.png"),
-		_safe_load("res://Boss2-3.png"),
-		_safe_load("res://Boss2-4.png")
-	]
-	if textures["boss2"].any( func(frame): return frame == null):
-		textures["boss2"] = [_safe_load(base + "Boss2_1.png"), _safe_load(base + "Boss2_2.png")]
-	textures["boss2_orb"] = [_safe_load(base + "Bolha1.png"), _safe_load(base + "Bolha2.png"), _safe_load(base + "Bolha3.png"), _safe_load(base + "Bolha4.png"), _safe_load(base + "Bolha5.png")]
-	textures["boss2_wave"] = _safe_load(base + "Onda_Boss2.png")
 	textures["coin"] = _safe_load(base + "moeda.png")
 	for item in MANIFESTATIONS:
 		textures["manifestation_" + item["key"]] = _safe_load_manifestation_icon(String(item["icon"]), base)
@@ -4826,6 +4763,14 @@ func _get_texture(key: String) -> Texture2D:
 	if lazy_texture_paths.has(key):
 		textures[key] = _safe_load(String(lazy_texture_paths[key]))
 	return textures.get(key)
+
+
+func _ensure_runtime_texture(key: String) -> bool:
+	return RuntimeAssetController.ensure_key(self, key, "res://assets/sprites/")
+
+
+func _prepare_phase_texture_assets(phase: int) -> void:
+	RuntimeAssetController.prepare_phase(self, phase, "res://assets/sprites/", _memory_saver_active())
 
 
 func _release_unused_lazy_maps(active_key: String) -> void :
@@ -6138,6 +6083,7 @@ func _reset_card_proc_state() -> void :
 
 func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
+	sineiro_boreal_controller.reset_for_new_run()
 	_stop_boss1_stop_audio_context(true)
 	if clear_interrupted_save:
 		_record_initial_phase_attempt_before_new_run()
@@ -6169,6 +6115,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	death_screen_pending_specter_upgrade = false
 	mode = "game"
 	current_phase = _pick_initial_phase() if clear_interrupted_save else 1
+	_prepare_phase_texture_assets(current_phase)
 	if clear_interrupted_save:
 		_begin_initial_phase_tracking(current_phase)
 	_set_card_unlock_progress_max("phase_reached", float(current_phase))
@@ -6920,6 +6867,10 @@ func _next_phase_after_boss(phase: int) -> int:
 
 func _consume_next_phase_after_boss(phase: int) -> int:
 	return _phase_flow()._consume_next_phase_after_boss(phase)
+
+
+func _commit_final_phase_victory_cleanup(phase: int) -> bool:
+	return _phase_flow()._commit_final_phase_victory_cleanup(phase)
 
 
 func _register_dimension_phase_completed(phase: int) -> void:
@@ -7738,6 +7689,15 @@ func _clear_manifest_evolution_barrier() -> void:
 	manifest_evolution_barrier_expected_peers.clear()
 	manifest_evolution_barrier_ready_by_peer.clear()
 	manifest_evolution_barrier_opening = false
+	manifest_evolution_barrier_payload.clear()
+
+
+func _is_manifest_evolution_barrier_authority() -> bool:
+	if not is_multiplayer:
+		return true
+	if dedicated_server_mode:
+		return false
+	return _mp_unique_id() == 1 and _is_world_authority()
 
 
 func _local_manifest_evolution_eligible() -> bool:
@@ -7797,7 +7757,7 @@ func _begin_manifest_evolution_barrier(stage: String, options: Array, pos: Vecto
 	if not is_multiplayer:
 		_apply_manifest_evolution_choice_local(stage, options, pos, previous_mode)
 		return
-	if _is_world_authority() and manifest_evolution_barrier_active:
+	if _is_manifest_evolution_barrier_authority() and manifest_evolution_barrier_active:
 		return
 	var expected_peers: Array = requested_expected_peers if not requested_expected_peers.is_empty() else _manifest_evolution_expected_peer_ids()
 	expected_peers = _sanitize_manifest_evolution_expected_peers(expected_peers)
@@ -7809,6 +7769,12 @@ func _begin_manifest_evolution_barrier(stage: String, options: Array, pos: Vecto
 	manifest_evolution_barrier_active = true
 	manifest_evolution_barrier_expected_peers = expected_peers.duplicate()
 	manifest_evolution_barrier_ready_by_peer.clear()
+	manifest_evolution_barrier_payload = {
+		"stage": stage,
+		"options": options.duplicate(true),
+		"pos": pos,
+		"previous_mode": previous_mode
+	}
 	if expected_peers.has(_mp_unique_id()) and _local_manifest_evolution_eligible():
 		_apply_manifest_evolution_choice_local(stage, options, pos, previous_mode)
 	if _shop_rpc_available():
@@ -7816,13 +7782,15 @@ func _begin_manifest_evolution_barrier(stage: String, options: Array, pos: Vecto
 
 
 func _request_manifest_evolution_barrier(stage: String, options: Array, pos: Vector2, previous_mode: String) -> void:
-	if _is_world_authority() or not _shop_rpc_available():
+	if _is_manifest_evolution_barrier_authority() or not _shop_rpc_available():
 		_begin_manifest_evolution_barrier(stage, options, pos, previous_mode)
 		return
 	rpc_id(1, "_rpc_manifest_evolution_barrier_request", stage, options, pos, previous_mode)
 
 
 func _mark_manifest_evolution_barrier_ready(peer_id: int, barrier_id: int = -1) -> bool:
+	if is_multiplayer and not _is_manifest_evolution_barrier_authority():
+		return false
 	if barrier_id >= 0 and barrier_id != manifest_evolution_barrier_id:
 		return false
 	if not manifest_evolution_barrier_active:
@@ -7856,7 +7824,7 @@ func _finish_manifest_evolution_barrier() -> void:
 
 
 func _commit_manifest_evolution_barrier_if_ready() -> void:
-	if not _is_world_authority():
+	if not _is_manifest_evolution_barrier_authority():
 		return
 	if not _manifest_evolution_barrier_all_ready():
 		return
@@ -7869,19 +7837,37 @@ func _commit_manifest_evolution_barrier_if_ready() -> void:
 func _on_manifest_evolution_ready_confirmed() -> void:
 	if mode == "manifest_evolution":
 		mode = "manifest_evolution_waiting"
-	_mark_manifest_evolution_barrier_ready(_mp_unique_id())
-	if _is_world_authority():
+	if _is_manifest_evolution_barrier_authority():
+		_mark_manifest_evolution_barrier_ready(_mp_unique_id())
+		_broadcast_manifest_evolution_ready_state()
 		_commit_manifest_evolution_barrier_if_ready()
 	elif _shop_rpc_available():
 		rpc_id(1, "_rpc_manifest_evolution_barrier_ready", manifest_evolution_barrier_id)
 
 
 func _refresh_manifest_evolution_barrier_after_disconnect(peer_id: int) -> void:
-	if not manifest_evolution_barrier_active:
+	if not manifest_evolution_barrier_active or not _is_manifest_evolution_barrier_authority():
 		return
 	manifest_evolution_barrier_expected_peers.erase(peer_id)
 	manifest_evolution_barrier_ready_by_peer.erase(peer_id)
+	_broadcast_manifest_evolution_ready_state()
 	_commit_manifest_evolution_barrier_if_ready()
+
+
+func _manifest_evolution_ready_peer_ids() -> Array:
+	var ready_peers: Array = []
+	for peer_value in manifest_evolution_barrier_expected_peers:
+		var peer_id: int = int(peer_value)
+		if bool(manifest_evolution_barrier_ready_by_peer.get(peer_id, false)):
+			ready_peers.append(peer_id)
+	ready_peers.sort()
+	return ready_peers
+
+
+func _broadcast_manifest_evolution_ready_state() -> void:
+	if not _is_manifest_evolution_barrier_authority() or not _shop_rpc_available():
+		return
+	rpc("_rpc_manifest_evolution_barrier_ready_state", manifest_evolution_barrier_id, manifest_evolution_barrier_expected_peers.duplicate(), _manifest_evolution_ready_peer_ids())
 
 
 func _open_manifest_evolution_choice(pos: Vector2) -> void :
@@ -8585,6 +8571,7 @@ func _update_game(delta: float) -> void :
 	_update_run_telemetry(delta)
 	runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
 	_update_bargain_capsule(delta)
+	sineiro_boreal_controller.update(delta)
 	if shop_auto_enabled and not forced_shop_triggered:
 		shop_auto_elapsed += delta
 		next_forced_shop_time = max(0.0, shop_auto_interval - shop_auto_elapsed)
@@ -21038,6 +21025,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 				var facing_phase7: = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
 				if incoming_phase7.length() > 0.05 and facing_phase7.dot(incoming_phase7) > 0.342:
 					amount *= 0.58
+	amount *= sineiro_boreal_controller.damage_taken_multiplier(enemy)
 	amount *= _fragilidade_enemy_multiplier(enemy, source)
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
 	amount *= _acorrentada_chained_damage_multiplier(enemy)
@@ -21410,7 +21398,47 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			else:
 				_stop_battle_music_for_screen_transition()
 				_finalize_run_report("Vitoria")
+				_commit_final_phase_victory_cleanup(current_phase)
 				_open_specter_upgrade("victory", true)
+				_broadcast_final_phase_victory(current_phase)
+
+
+func _apply_final_phase_victory_from_authority(phase: int) -> bool:
+	if phase != DIMENSION_FINAL_PHASE or run_finalized_result != "":
+		return false
+	current_phase = phase
+	boss_hp = 0.0
+	boss_dead = true
+	boss_active = false
+	_clear_boss_runtime_hazards()
+	_stop_battle_music_for_screen_transition()
+	_finalize_run_report("Vitoria")
+	_commit_final_phase_victory_cleanup(phase)
+	_open_specter_upgrade("victory", true)
+	return true
+
+
+func _broadcast_final_phase_victory(phase: int) -> void:
+	if not is_multiplayer or not _is_world_authority() or phase != DIMENSION_FINAL_PHASE or not _shop_rpc_available():
+		return
+	rpc("_rpc_final_phase_victory", phase)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_final_phase_victory(phase: int) -> void:
+	var sender: int = _mp_sender_id()
+	if phase != DIMENSION_FINAL_PHASE:
+		return
+	if dedicated_server_mode:
+		if sender != dedicated_room_owner_peer_id:
+			return
+		for peer_id in _dedicated_active_peer_ids():
+			if peer_id != sender:
+				rpc_id(peer_id, "_rpc_final_phase_victory", phase)
+		return
+	if sender != 1:
+		return
+	_apply_final_phase_victory_from_authority(phase)
 
 
 func _clear_boss_runtime_hazards() -> void:
@@ -21430,6 +21458,7 @@ func _clear_boss_runtime_hazards() -> void:
 		boss1_time_wave.clear()
 		boss1_absorb_timer = 0.0
 	if current_phase == 2:
+		_stop_nevasca_sfx()
 		boss2_ice_shards.clear()
 		boss2_snow_zones.clear()
 		boss2_frost_particles.clear()
@@ -21603,6 +21632,8 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		_add_text("ECO ROMPIDO", kill_pos + Vector2(-48, -58), Color(0.58, 0.92, 1.0), 0.75, 16)
 	if String(enemy.get("type", "")) == ENEMY_DEVOTO:
 		_add_phase3_miasma(kill_pos, 52.0, 2.0, 0.018)
+	if String(enemy.get("type", "")) == ENEMY_SINEIRO_BOREAL:
+		sineiro_boreal_controller.on_enemy_defeated(enemy)
 	enemies.erase(enemy)
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
@@ -21846,7 +21877,7 @@ func _update_enemy_bullets(delta: float) -> void :
 				_increase_umbra_cadence(0.09)
 			if bullet_type == "pyro_wall_seed":
 				_add_phase2_fire_wall_tile(Vector2(bullet["pos"]))
-			elif current_phase == 2:
+			elif current_phase == 2 and bullet_type != "sineiro_shard":
 				_apply_phase2_projectile_freeze()
 			elif bullet_type == "miasma_cheese_spit":
 				player_stun_timer = max(player_stun_timer, _hostile_control_duration(0.9))
@@ -23761,7 +23792,9 @@ func _spawn_bargain_capsule(pos: Vector2 = Vector2.INF) -> Dictionary:
 		"party_size": party_size,
 		"seed": rng.randi(),
 		"phase": current_phase,
-		"result": ""
+		"result": "",
+		"visual_state_age": 0.0,
+		"hit_flash": 0.0
 	}
 	_show_event_alert("CAPSULA DA BARGANHA TEMPORAL!", Color(1.0, 0.8, 0.24))
 	_add_text("BARGANHA TEMPORAL", spawn_pos + Vector2(-96, -74), Color(1.0, 0.86, 0.28), 1.4, 20)
@@ -23772,6 +23805,8 @@ func _update_bargain_capsule(delta: float) -> void:
 	if not _is_world_authority():
 		return
 	if _bargain_capsule_active():
+		bargain_capsule["visual_state_age"] = maxf(0.0, float(bargain_capsule.get("visual_state_age", 0.0)) + delta)
+		bargain_capsule["hit_flash"] = maxf(0.0, float(bargain_capsule.get("hit_flash", 0.0)) - delta)
 		var state: String = String(bargain_capsule.get("state", ""))
 		match state:
 			BARGAIN_CAPSULE_STATE_PREPARING:
@@ -23779,6 +23814,7 @@ func _update_bargain_capsule(delta: float) -> void:
 				if float(bargain_capsule.get("timer", 0.0)) <= 0.0:
 					bargain_capsule["state"] = BARGAIN_CAPSULE_STATE_FALLING
 					bargain_capsule["timer"] = BARGAIN_CAPSULE_FALL_TIME
+					bargain_capsule["visual_state_age"] = 0.0
 					screen_shake_timer = maxf(screen_shake_timer, 0.16)
 					screen_shake_strength = maxf(screen_shake_strength, 3.5)
 			BARGAIN_CAPSULE_STATE_FALLING:
@@ -23786,6 +23822,7 @@ func _update_bargain_capsule(delta: float) -> void:
 				if float(bargain_capsule.get("timer", 0.0)) <= 0.0:
 					bargain_capsule["state"] = BARGAIN_CAPSULE_STATE_ACTIVE
 					bargain_capsule["timer"] = 0.0
+					bargain_capsule["visual_state_age"] = 0.0
 					_spawn_radial_particles(Vector2(bargain_capsule.get("pos", player_pos)), Color(1.0, 0.78, 0.22), 18)
 					_vibrate(130, 0.35)
 			BARGAIN_CAPSULE_STATE_ACTIVE:
@@ -23902,6 +23939,7 @@ func _resolve_bargain_capsule_success() -> void:
 	bargain_capsule["state"] = BARGAIN_CAPSULE_STATE_SUCCESS
 	bargain_capsule["result"] = "success"
 	bargain_capsule["cleanup_time"] = BARGAIN_CAPSULE_CLEANUP_TIME
+	bargain_capsule["visual_state_age"] = 0.0
 	bargain_capsule["discount"] = discount.duplicate(true)
 	_apply_bargain_capsule_discount(discount)
 	_spawn_radial_particles(pos, Color(1.0, 0.86, 0.2), 26)
@@ -23917,6 +23955,7 @@ func _resolve_bargain_capsule_failure() -> void:
 	bargain_capsule["state"] = BARGAIN_CAPSULE_STATE_FAIL
 	bargain_capsule["result"] = "fail"
 	bargain_capsule["cleanup_time"] = BARGAIN_CAPSULE_CLEANUP_TIME
+	bargain_capsule["visual_state_age"] = 0.0
 	bargain_capsule_last_result = {"result": "fail", "time": time_alive, "phase": current_phase}
 	_spawn_radial_particles(pos, Color(1.0, 0.28, 0.16), 20)
 	_add_text("BARGANHA COLAPSOU", pos + Vector2(-104, -72), Color(1.0, 0.34, 0.18), 1.4, 19)
@@ -30264,6 +30303,7 @@ func _begin_boss_call_for_all() -> void :
 func _start_boss_call_local() -> void :
 	if not _boss_call_can_start(true):
 		return
+	_prepare_phase_texture_assets(current_phase)
 	_clear_boss_mp_request()
 	_cleanup_phase_point_crystals()
 	_cleanup_bargain_capsule("boss_call")
@@ -30273,6 +30313,8 @@ func _start_boss_call_local() -> void :
 
 
 func _despawn_enemies_for_boss_call() -> void :
+	if bool(sineiro_boreal_state.get("active", false)):
+		sineiro_boreal_controller.cleanup("boss_call")
 	if current_phase == 5:
 		phase5_hazards.clear()
 		phase5_rats.clear()
@@ -36588,6 +36630,8 @@ func _catalog_item_texture(item: Dictionary) -> Texture2D:
 	if item.has("key") and textures.has("manifestation_" + String(item["key"])):
 		return textures["manifestation_" + String(item["key"])]
 	var texture_key = String(item.get("texture", ""))
+	if texture_key != "" and not textures.has(texture_key):
+		_ensure_runtime_texture(texture_key)
 	if texture_key != "" and textures.has(texture_key):
 		var value = textures[texture_key]
 		if value is Array:
@@ -36767,7 +36811,8 @@ func _touch_manifest_preview_atlas(cache_key: String) -> void:
 
 
 func _trim_manifest_preview_atlas_cache() -> void:
-	while manifest_preview_atlas_lru.size() > MANIFEST_PREVIEW_ATLAS_CACHE_LIMIT:
+	var cache_limit: int = 1 if _memory_saver_active() else MANIFEST_PREVIEW_ATLAS_CACHE_LIMIT
+	while manifest_preview_atlas_lru.size() > cache_limit:
 		var old_key: String = String(manifest_preview_atlas_lru.pop_front())
 		manifest_preview_atlases.erase(old_key)
 
@@ -36978,6 +37023,7 @@ func _init_link_chain_physics(link: Dictionary) -> void :
 
 
 func _draw_enemies(camera: Vector2) -> void :
+	SineiroBorealPresentation.draw_world(self, camera)
 	EntitiesPresentation._draw_enemies(self, camera)
 
 
@@ -37831,6 +37877,10 @@ func _draw_boss_wave_crest_and_foam(center: Vector2, wave: Dictionary, radius: f
 
 func _draw_boss_wave_trail(center: Vector2, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
 	WorldEnvironmentPresentation._draw_boss_wave_trail(self, center, radius, arc_ranges, width, enraged, profile)
+
+
+func _draw_boss_siege_tide(center: Vector2, wave: Dictionary, radius: float, arc_ranges: Array, width: float, enraged: bool, profile: String) -> void :
+	WorldEnvironmentPresentation._draw_boss_siege_tide(self, center, wave, radius, arc_ranges, width, enraged, profile)
 
 
 func _draw_boss_wave_gate_markers(center: Vector2, radius: float, opening: float, opening_size: float, enraged: bool) -> void :
@@ -43704,6 +43754,7 @@ func _start_dedicated_room_server(port: int) -> void :
 	dedicated_ready_seq_by_peer.clear()
 	dedicated_manifest_evolution_expected_peers.clear()
 	dedicated_manifest_evolution_ready_by_peer.clear()
+	dedicated_manifest_evolution_payload.clear()
 	multiplayer_peer = ENetMultiplayerPeer.new()
 	var err: = multiplayer_peer.create_server(port, ONLINE_MAX_PLAYERS, NET_CHANNEL_COUNT)
 	if err != OK:
@@ -43781,6 +43832,8 @@ func _refresh_dedicated_after_disconnect() -> void :
 	var counts := _dedicated_shop_exit_counts()
 	for peer_id in _mp_peer_ids():
 		rpc_id(peer_id, "_rpc_shop_ready_state", counts.x, counts.y)
+	if not dedicated_manifest_evolution_expected_peers.is_empty():
+		_dedicated_broadcast_manifest_evolution_ready_state()
 	_dedicated_commit_manifest_evolution_resume()
 
 func _on_connected_to_server() -> void :
@@ -43843,6 +43896,7 @@ func _leave_multiplayer(reason: String = "") -> void :
 	dedicated_manifest_selection_by_peer.clear()
 	dedicated_manifest_evolution_expected_peers.clear()
 	dedicated_manifest_evolution_ready_by_peer.clear()
+	dedicated_manifest_evolution_payload.clear()
 	dedicated_preload_ready_by_peer.clear()
 	dedicated_player_state_by_peer.clear()
 	dedicated_shop_votes_by_peer.clear()
@@ -44878,6 +44932,9 @@ func _start_multiplayer_game() -> void :
 	net_world_visual_sequence = 0
 	net_world_sequence = 0
 	net_world_last_sequence = -1
+	net_world_pending_sequence = -1
+	net_world_pending_chunk_count = 0
+	net_world_pending_chunks.clear()
 	net_world_visual_last_sequence = -1
 	mode = "game"
 	if dedicated_server_mode:
@@ -45160,8 +45217,12 @@ func _sync_multiplayer_state() -> void :
 			var enemies_packet: = _pack_net_enemies()
 			var boss_packet: = _pack_net_boss()
 			var bullets_packet: = _pack_net_enemy_bullets()
-			_net_report_count_out("world", _net_report_estimate_world_bytes(enemies_packet, boss_packet, bullets_packet))
-			rpc_id(1, "_update_remote_entities", sequence, enemies_packet, boss_packet, bullets_packet)
+			var world_payload: PackedByteArray = RTWorldSnapshotChunkerScript.encode(enemies_packet, boss_packet, bullets_packet)
+			var world_chunks: Array = RTWorldSnapshotChunkerScript.split(world_payload, NET_WORLD_CHUNK_PAYLOAD_BYTES)
+			for chunk_index in range(world_chunks.size()):
+				var chunk: PackedByteArray = world_chunks[chunk_index]
+				_net_report_count_out("world", chunk.size() + 64)
+				rpc_id(1, "_update_remote_entities_chunk", sequence, chunk_index, world_chunks.size(), chunk)
 		else:
 			_net_report_count_out("world", _net_report_estimate_world_bytes(enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets))
 			rpc("_update_remote_entities", sequence, enemies, {"pos": boss_pos, "hp": boss_hp, "dead": boss_dead}, enemy_bullets)
@@ -45612,6 +45673,51 @@ func _update_remote_entities(sequence: int, enemies_data, boss_data, bullets_dat
 		_apply_remote_world_snapshot(enemies_data, boss_data, bullets_data)
 
 
+@rpc("any_peer", "call_remote", "unreliable", 2)
+func _update_remote_entities_chunk(sequence: int, chunk_index: int, chunk_count: int, chunk: PackedByteArray) -> void:
+	if chunk_count <= 0 or chunk_count > NET_WORLD_CHUNK_MAX_COUNT:
+		return
+	if chunk_index < 0 or chunk_index >= chunk_count or chunk.size() > NET_WORLD_CHUNK_PAYLOAD_BYTES:
+		return
+	_net_report_count_in("world", chunk.size() + 64)
+	if dedicated_server_mode:
+		var sender: int = _mp_sender_id()
+		if sender != dedicated_room_owner_peer_id or sequence < net_world_last_sequence:
+			return
+		if sequence > net_world_last_sequence:
+			net_world_last_sequence = sequence
+		for peer_id in _mp_peer_ids():
+			if peer_id != sender and _mp_peer_connected(int(peer_id)):
+				_net_report_count_out("world", chunk.size() + 64)
+				rpc_id(peer_id, "_update_remote_entities_chunk", sequence, chunk_index, chunk_count, chunk)
+		return
+	if _mp_sender_is_self() or not _is_world_replica() or sequence <= net_world_last_sequence:
+		return
+	if sequence < net_world_pending_sequence:
+		return
+	if sequence != net_world_pending_sequence:
+		net_world_pending_sequence = sequence
+		net_world_pending_chunk_count = chunk_count
+		net_world_pending_chunks.clear()
+	elif chunk_count != net_world_pending_chunk_count:
+		net_world_pending_chunks.clear()
+		net_world_pending_chunk_count = chunk_count
+	if net_world_pending_chunks.has(chunk_index):
+		return
+	net_world_pending_chunks[chunk_index] = chunk.duplicate()
+	if net_world_pending_chunks.size() != net_world_pending_chunk_count:
+		return
+	var payload: PackedByteArray = RTWorldSnapshotChunkerScript.join(net_world_pending_chunks, net_world_pending_chunk_count, NET_WORLD_CHUNK_MAX_COUNT)
+	var decoded: Array = RTWorldSnapshotChunkerScript.decode(payload)
+	net_world_pending_chunks.clear()
+	net_world_pending_chunk_count = 0
+	net_world_pending_sequence = -1
+	if decoded.size() != 3:
+		return
+	net_world_last_sequence = sequence
+	_apply_remote_world_snapshot(decoded[0], decoded[1], decoded[2])
+
+
 @rpc("any_peer", "call_remote", "unreliable", 4)
 func _update_remote_world_visuals(sequence: int, boss_visuals_data: Dictionary) -> void :
 	if dedicated_server_mode:
@@ -45679,6 +45785,8 @@ func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void :
 		boss_eletrica_static_last_source = String(RTNetContractScript.ELECTRIC_SOURCE_TAGS[electric_source_index])
 	if boss_dead:
 		boss_active = false
+		if current_phase == 2:
+			_stop_nevasca_sfx()
 	if boss_active and mode == "boss_call":
 		mode = "game"
 	if boss_active:
@@ -46325,14 +46433,61 @@ func _dedicated_manifest_evolution_all_ready() -> bool:
 	return true
 
 
+func _dedicated_prepare_manifest_evolution_barrier(expected_peers: Array, stage: String, options: Array, pos: Vector2, previous_mode: String) -> bool:
+	if not dedicated_manifest_evolution_expected_peers.is_empty():
+		return false
+	var unique_expected: Array = []
+	for peer_value in expected_peers:
+		var peer_id: int = int(peer_value)
+		if peer_id > 0 and not unique_expected.has(peer_id):
+			unique_expected.append(peer_id)
+	unique_expected.sort()
+	if unique_expected.is_empty():
+		return false
+	dedicated_manifest_evolution_barrier_id += 1
+	dedicated_manifest_evolution_expected_peers = unique_expected
+	dedicated_manifest_evolution_ready_by_peer.clear()
+	dedicated_manifest_evolution_payload = {
+		"stage": stage,
+		"options": options.duplicate(true),
+		"pos": pos,
+		"previous_mode": previous_mode
+	}
+	return true
+
+
+func _dedicated_manifest_evolution_ready_peer_ids() -> Array:
+	var ready_peers: Array = []
+	for peer_value in dedicated_manifest_evolution_expected_peers:
+		var peer_id: int = int(peer_value)
+		if bool(dedicated_manifest_evolution_ready_by_peer.get(peer_id, false)):
+			ready_peers.append(peer_id)
+	ready_peers.sort()
+	return ready_peers
+
+
+func _dedicated_send_manifest_evolution_open(peer_id: int) -> void:
+	if dedicated_manifest_evolution_payload.is_empty():
+		return
+	rpc_id(peer_id, "_rpc_manifest_evolution_barrier_open", dedicated_manifest_evolution_barrier_id, dedicated_manifest_evolution_expected_peers.duplicate(), String(dedicated_manifest_evolution_payload.get("stage", "")), Array(dedicated_manifest_evolution_payload.get("options", [])).duplicate(true), Vector2(dedicated_manifest_evolution_payload.get("pos", Vector2.ZERO)), String(dedicated_manifest_evolution_payload.get("previous_mode", "game")))
+
+
+func _dedicated_broadcast_manifest_evolution_ready_state() -> void:
+	var ready_peers: Array = _dedicated_manifest_evolution_ready_peer_ids()
+	for peer_value in dedicated_manifest_evolution_expected_peers:
+		rpc_id(int(peer_value), "_rpc_manifest_evolution_barrier_ready_state", dedicated_manifest_evolution_barrier_id, dedicated_manifest_evolution_expected_peers.duplicate(), ready_peers)
+
+
 func _dedicated_commit_manifest_evolution_resume() -> void:
 	if not dedicated_server_mode or not _dedicated_manifest_evolution_all_ready():
 		return
 	var barrier_id: int = dedicated_manifest_evolution_barrier_id
+	_dedicated_broadcast_manifest_evolution_ready_state()
 	for peer_id in _dedicated_active_peer_ids():
 		rpc_id(peer_id, "_rpc_manifest_evolution_barrier_resume", barrier_id)
 	dedicated_manifest_evolution_expected_peers.clear()
 	dedicated_manifest_evolution_ready_by_peer.clear()
+	dedicated_manifest_evolution_payload.clear()
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
@@ -46344,24 +46499,27 @@ func _rpc_manifest_evolution_barrier_request(stage: String, options: Array, pos:
 		var sender_state: Dictionary = dedicated_player_state_by_peer.get(sender, {})
 		if bool(sender_state.get("eliminated", false)):
 			return
-		dedicated_manifest_evolution_barrier_id += 1
-		dedicated_manifest_evolution_expected_peers = _manifest_evolution_expected_peer_ids()
-		dedicated_manifest_evolution_ready_by_peer.clear()
-		for peer_id in dedicated_manifest_evolution_expected_peers:
-			rpc_id(peer_id, "_rpc_manifest_evolution_barrier_open", dedicated_manifest_evolution_barrier_id, dedicated_manifest_evolution_expected_peers, stage, options, pos, previous_mode)
+		var expected_peers: Array = _manifest_evolution_expected_peer_ids()
+		var created: bool = _dedicated_prepare_manifest_evolution_barrier(expected_peers, stage, options, pos, previous_mode)
+		if created:
+			_net_report_event("manifest_evolution_barrier_open", "id=%d requester=%d expected=%s" % [dedicated_manifest_evolution_barrier_id, sender, str(dedicated_manifest_evolution_expected_peers)])
+			for peer_id in dedicated_manifest_evolution_expected_peers:
+				_dedicated_send_manifest_evolution_open(int(peer_id))
+			_dedicated_broadcast_manifest_evolution_ready_state()
+		elif dedicated_manifest_evolution_expected_peers.has(sender):
+			_dedicated_send_manifest_evolution_open(sender)
+			rpc_id(sender, "_rpc_manifest_evolution_barrier_ready_state", dedicated_manifest_evolution_barrier_id, dedicated_manifest_evolution_expected_peers.duplicate(), _dedicated_manifest_evolution_ready_peer_ids())
 		return
-	if not _is_world_authority():
+	if not _is_manifest_evolution_barrier_authority():
 		return
 	var expected: Array = _manifest_evolution_expected_peer_ids()
 	if sender != 0 and not expected.has(sender):
 		return
 	if manifest_evolution_barrier_active:
 		if sender != 0 and _shop_rpc_available():
-			var current_options: Array = options
-			if not manifest_evolution_options.is_empty():
-				current_options = manifest_evolution_options.duplicate(true)
-			var current_previous_mode: String = manifest_evolution_previous_mode if manifest_evolution_previous_mode != "" else previous_mode
-			rpc_id(sender, "_rpc_manifest_evolution_barrier_open", manifest_evolution_barrier_id, manifest_evolution_barrier_expected_peers.duplicate(), stage, current_options, pos, current_previous_mode)
+			var payload: Dictionary = manifest_evolution_barrier_payload
+			rpc_id(sender, "_rpc_manifest_evolution_barrier_open", manifest_evolution_barrier_id, manifest_evolution_barrier_expected_peers.duplicate(), String(payload.get("stage", stage)), Array(payload.get("options", options)).duplicate(true), Vector2(payload.get("pos", pos)), String(payload.get("previous_mode", previous_mode)))
+			rpc_id(sender, "_rpc_manifest_evolution_barrier_ready_state", manifest_evolution_barrier_id, manifest_evolution_barrier_expected_peers.duplicate(), _manifest_evolution_ready_peer_ids())
 		return
 	_begin_manifest_evolution_barrier(stage, options, pos, previous_mode, expected)
 
@@ -46381,6 +46539,12 @@ func _rpc_manifest_evolution_barrier_open(barrier_id: int, expected_peers: Array
 	if is_new_barrier:
 		manifest_evolution_barrier_ready_by_peer.clear()
 	manifest_evolution_barrier_expected_peers = expected_peers.duplicate()
+	manifest_evolution_barrier_payload = {
+		"stage": stage,
+		"options": options.duplicate(true),
+		"pos": pos,
+		"previous_mode": previous_mode
+	}
 	if not manifest_evolution_barrier_expected_peers.has(local_peer) or not _local_manifest_evolution_eligible():
 		return
 	manifest_evolution_barrier_opening = true
@@ -46398,12 +46562,27 @@ func _rpc_manifest_evolution_barrier_ready(barrier_id: int) -> void:
 		if not dedicated_manifest_evolution_expected_peers.has(sender):
 			return
 		dedicated_manifest_evolution_ready_by_peer[sender] = true
+		_net_report_event("manifest_evolution_barrier_ready", "id=%d peer=%d ready=%s expected=%s" % [barrier_id, sender, str(_dedicated_manifest_evolution_ready_peer_ids()), str(dedicated_manifest_evolution_expected_peers)])
+		_dedicated_broadcast_manifest_evolution_ready_state()
 		_dedicated_commit_manifest_evolution_resume()
 		return
-	if not _is_world_authority() or sender == 0:
+	if not _is_manifest_evolution_barrier_authority() or sender == 0:
 		return
 	_mark_manifest_evolution_barrier_ready(sender, barrier_id)
+	_broadcast_manifest_evolution_ready_state()
 	_commit_manifest_evolution_barrier_if_ready()
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_manifest_evolution_barrier_ready_state(barrier_id: int, expected_peers: Array, ready_peers: Array) -> void:
+	if dedicated_server_mode or barrier_id != manifest_evolution_barrier_id or not manifest_evolution_barrier_active:
+		return
+	manifest_evolution_barrier_expected_peers = expected_peers.duplicate()
+	manifest_evolution_barrier_ready_by_peer.clear()
+	for peer_value in ready_peers:
+		var peer_id: int = int(peer_value)
+		if manifest_evolution_barrier_expected_peers.has(peer_id):
+			manifest_evolution_barrier_ready_by_peer[peer_id] = true
 
 
 @rpc("authority", "call_remote", "reliable", 3)

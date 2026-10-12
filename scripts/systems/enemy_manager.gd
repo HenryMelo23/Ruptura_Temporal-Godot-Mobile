@@ -316,6 +316,8 @@ func update_enemies(delta: float) -> void:
 			game._update_cout_attack_speed(enemy, delta)
 		if enemy["type"] == game.ENEMY_PYRO_PENGUIN:
 			game._update_pyro_penguin(enemy, delta)
+		if enemy["type"] == game.ENEMY_SINEIRO_BOREAL:
+			game.sineiro_boreal_controller.update_enemy(enemy, delta)
 		if game.current_phase == 2 and enemy["type"] == game.ENEMY_COMMON:
 			game._update_phase2_common_penguin(enemy, delta)
 		if game.current_phase == 3:
@@ -325,7 +327,8 @@ func update_enemies(delta: float) -> void:
 		var is_disco: bool = not game._active_prismatica_secondary().is_empty()
 		var custom_phase6_move: bool = String(enemy.get("type", "")) == game.ENEMY_LODARIO or String(enemy.get("type", "")) == game.ENEMY_MIASMA_EEL or String(enemy.get("type", "")) == game.ENEMY_CHRONAL_LEECH
 		var custom_phase7_move: bool = String(enemy.get("type", "")) == game.ENEMY_CINERIDO or String(enemy.get("type", "")) == game.ENEMY_PANGOLIRO or String(enemy.get("type", "")) == game.ENEMY_CORVOL
-		if not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or is_disco):
+		var custom_phase2_sineiro: bool = String(enemy.get("type", "")) == game.ENEMY_SINEIRO_BOREAL
+		if not custom_phase2_sineiro and not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or is_disco):
 			game._move_enemy(enemy, delta)
 
 		var t_pos: Vector2 = game._get_nearest_player_pos(Vector2(enemy["pos"]))

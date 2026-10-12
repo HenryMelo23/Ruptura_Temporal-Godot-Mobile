@@ -224,7 +224,23 @@ func _run_host_loop() -> void:
 			await create_timer(3.0).timeout
 			print("[HOST] FLOW ping=%dms world_jitter=%.2fms players=%d" % [game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size()])
 			_check(game.net_players_by_peer.size() == 2, "Host did not retain both remote player states")
-			await _finish_ok("Host transitioned to game state successfully")
+			game.current_phase = game.DIMENSION_FINAL_PHASE
+			game.dimension_route_queue = [6, 2, 7]
+			game.pending_phase = 6
+			game.phase_fragment = {"pos": game.boss_pos, "next_phase": 6, "life": 0.0, "pulse": 0.0}
+			game.boss_ready = true
+			game.boss_active = true
+			game.boss_dead = false
+			game.boss_entry_timer = 0.0
+			game.boss_hp_max = 100.0
+			game.boss_hp = 1.0
+			game.boss5_siphon_timer = 0.0
+			game._damage_boss(999999.0, "integration_final", false, false)
+			_check(game.run_finalized_result == "Vitoria", "Host did not finalize Umbra victory")
+			_check(game.mode == "specter_upgrade", "Host did not open Specter upgrade after Umbra")
+			_check(game.pending_phase == 0 and game.dimension_route_queue.is_empty() and game.phase_fragment.is_empty(), "Host retained stale farming route after Umbra")
+			await create_timer(1.0).timeout
+			await _finish_ok("Host and clients reached the authoritative Umbra victory state")
 			return
 
 
@@ -265,5 +281,11 @@ func _run_client_loop() -> void:
 			_check(game.net_players_by_peer.size() == 2, "%s did not retain both remote player states" % role)
 			_check(game.net_ping_ms >= 0 and game.net_ping_ms <= 100, "%s local smoke ping exceeded 100ms" % role)
 			_check(game.net_world_jitter_ms <= 15.0, "%s world snapshot jitter exceeded 15ms" % role)
-			await _finish_ok("Client transitioned to game state successfully")
+			var victory_deadline := Time.get_ticks_msec() + 6000
+			while game.mode != "specter_upgrade" and Time.get_ticks_msec() < victory_deadline:
+				await process_frame
+			_check(game.run_finalized_result == "Vitoria", "%s did not receive authoritative Umbra victory" % role)
+			_check(game.mode == "specter_upgrade" and game.specter_upgrade_previous_mode == "victory", "%s did not open Specter upgrade after Umbra" % role)
+			_check(game.pending_phase == 0 and game.phase_fragment.is_empty(), "%s retained a stale phase transition after Umbra" % role)
+			await _finish_ok("Client observed the authoritative Umbra victory state")
 			return

@@ -124,6 +124,35 @@ func _run_two_clients_and_duplicate_ready() -> void:
 	_check(game.mode == "game", "two-client barrier did not resume after all ready")
 
 
+func _run_authoritative_ready_snapshot() -> void:
+	_setup_multiplayer([42, 43])
+	var barrier_id := _open_barrier()
+	game._rpc_manifest_evolution_barrier_ready_state(barrier_id, [1, 42, 43], [42, 42])
+	_check(_ready_count() == 1, "duplicated authoritative ready snapshot was not idempotent")
+	game._rpc_manifest_evolution_barrier_ready_state(barrier_id, [1, 42, 43], [1, 42])
+	_check(_ready_count() == 2, "authoritative ready snapshot did not update the shared counter")
+	_check(not bool(game.manifest_evolution_barrier_ready_by_peer.get(43, false)), "authoritative snapshot marked an absent peer ready")
+
+
+func _run_dedicated_duplicate_request_is_idempotent() -> void:
+	game.dedicated_manifest_evolution_expected_peers.clear()
+	game.dedicated_manifest_evolution_ready_by_peer.clear()
+	game.dedicated_manifest_evolution_payload.clear()
+	var options: Array = [{"id": "first", "stage": "ev1"}]
+	var created: bool = game._dedicated_prepare_manifest_evolution_barrier([42, 43], "ev1", options, Vector2(700, 400), "game")
+	_check(created, "dedicated authority did not create the first barrier")
+	var barrier_id: int = game.dedicated_manifest_evolution_barrier_id
+	game.dedicated_manifest_evolution_ready_by_peer[42] = true
+	var duplicated: bool = game._dedicated_prepare_manifest_evolution_barrier([42, 43], "ev1", [{"id": "replacement"}], Vector2(900, 500), "game")
+	_check(not duplicated, "duplicate dedicated request created a second barrier")
+	_check(game.dedicated_manifest_evolution_barrier_id == barrier_id, "duplicate dedicated request changed barrier id")
+	_check(bool(game.dedicated_manifest_evolution_ready_by_peer.get(42, false)), "duplicate dedicated request erased an accepted ready")
+	_check(String(Array(game.dedicated_manifest_evolution_payload.get("options", []))[0].get("id", "")) == "first", "duplicate dedicated request replaced the canonical payload")
+	game.dedicated_manifest_evolution_expected_peers.clear()
+	game.dedicated_manifest_evolution_ready_by_peer.clear()
+	game.dedicated_manifest_evolution_payload.clear()
+
+
 func _run_authority_request_does_not_reset_ready() -> void:
 	_setup_multiplayer([42])
 	var barrier_id := _open_barrier()
@@ -180,9 +209,15 @@ func _run() -> void:
 	_run_host_ready_first()
 	_run_client_ready_first()
 	_run_two_clients_and_duplicate_ready()
+	_run_authoritative_ready_snapshot()
+	_run_dedicated_duplicate_request_is_idempotent()
 	_run_authority_request_does_not_reset_ready()
 	_run_latency_reordering()
 	_run_disconnect_during_barrier()
 	_run_new_evolution_after_previous_barrier()
-	print("MULTIPLAYER_MANIFEST_EVOLUTION_BARRIER_SMOKE_OK host_first client_first simultaneous_request two_clients duplicate_ready reordering disconnect repeat")
+	print("MULTIPLAYER_MANIFEST_EVOLUTION_BARRIER_SMOKE_OK host_first client_first simultaneous_request two_clients duplicate_ready authoritative_ready dedicated_idempotency reordering disconnect repeat")
+	game._cleanup_runtime_resources()
+	game.queue_free()
+	await process_frame
+	await process_frame
 	quit(0)

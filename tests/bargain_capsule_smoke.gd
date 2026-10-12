@@ -151,10 +151,13 @@ func _run() -> void:
 	var capsule: Dictionary = game._spawn_bargain_capsule(game.PLAYER_START + Vector2(180, 0))
 	_check(not capsule.is_empty(), "forced capsule did not spawn")
 	_check(String(game.bargain_capsule.get("state", "")) == game.BARGAIN_CAPSULE_STATE_PREPARING, "capsule did not start in preparing")
+	_check(is_zero_approx(float(game.bargain_capsule.get("visual_state_age", -1.0))), "capsule visual age did not start at zero")
 	game._update_bargain_capsule(game.BARGAIN_CAPSULE_PREPARE_TIME + 0.01)
 	_check(String(game.bargain_capsule.get("state", "")) == game.BARGAIN_CAPSULE_STATE_FALLING, "capsule did not enter falling")
+	_check(is_zero_approx(float(game.bargain_capsule.get("visual_state_age", -1.0))), "fall animation age was not reset")
 	game._update_bargain_capsule(game.BARGAIN_CAPSULE_FALL_TIME + 0.01)
 	_check(String(game.bargain_capsule.get("state", "")) == game.BARGAIN_CAPSULE_STATE_ACTIVE, "capsule did not become active")
+	_check(is_zero_approx(float(game.bargain_capsule.get("visual_state_age", -1.0))), "impact animation age was not reset")
 	_check(float(game.bargain_capsule.get("hp", 0.0)) > 0.0, "capsule active with no HP")
 	_check(float(game.bargain_capsule.get("collapse_time", 0.0)) > 0.0, "capsule active with no collapse timer")
 
@@ -264,6 +267,9 @@ func _run() -> void:
 	game._damage_bargain_capsule(17.0, "remote_smoke", false, 2)
 	_check(float(game.bargain_capsule.get("hp", 0.0)) == before_hp - 17.0, "host did not apply authoritative remote damage")
 	_check(int(game.bargain_capsule.get("last_hit_peer", 0)) == 2, "capsule did not preserve damage peer id")
+	_check(is_equal_approx(float(game.bargain_capsule.get("hit_flash", 0.0)), 0.22), "confirmed damage did not start hit reaction")
+	game._update_bargain_capsule(0.05)
+	_check(float(game.bargain_capsule.get("hit_flash", 0.0)) < 0.22, "hit reaction timer did not advance")
 
 	game._cleanup_bargain_capsule("test_cleanup")
 	_check(game.bargain_capsule.is_empty(), "cleanup did not clear active capsule")
