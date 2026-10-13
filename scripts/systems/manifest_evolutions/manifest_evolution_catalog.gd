@@ -4,6 +4,7 @@ class_name RTManifestEvolutionCatalog
 const MANIFESTATION_COUNT := 15
 const EVOLUTIONS_PER_STAGE := 6
 const TOTAL_EVOLUTIONS := 180
+const DEFINITION_SCHEMA_VERSION := 1
 
 const LEGACY_FAMILIES := {
 	"eco": true,
@@ -52,6 +53,30 @@ const STAGE_EFFECTS := {
 		{"effect": "impact_chain_burst", "label": "cadeia de impacto", "hook": "impact", "every": 3, "radius": 158.0, "force": 96.0, "damage": 0.17, "limit": 10},
 		{"effect": "grand_manifestation", "label": "estado supremo", "hook": "hybrid", "every": 4, "radius": 190.0, "force": 104.0, "damage": 0.13, "turn": 0.11, "range": 300.0, "pierces": 1, "limit": 8}
 	]
+}
+
+# Phase 1 registry migration: every legacy ID is explicitly bound to its
+# existing behavior.  Consumers resolve by stable ID; no mechanic is selected
+# from an offer position.  Reworks replace one binding at a time without
+# changing UI, save or network IDs.
+const EXPLICIT_LEGACY_DEFINITION_IDS_BY_EFFECT := {
+	"projectile_echo": "eletrica_ev1_arco_condutor|lacerante_ev1_hemorragia_crescente|retornante_ev1_retorno_duplo|parasitica_ev1_reproducao|gravitante_ev1_roche|ancorada_ev1_fundacao_profunda|cartografica_ev1_coordenada_fantasma|mnesica_ev1_memoria_dolorosa|ressonante_ev1_contraponto|contratual_ev1_clausula_dupla|acorrentada_ev1_corrente_tripla|eclipsada_ev1_dualidade_residual|bombastica_ev1_polvora_volatil|necronada_ev1_rosa_epitafio",
+	"projectile_pierce": "eletrica_ev1_carga_residual|lacerante_ev1_cicatriz_aberta|retornante_ev1_memoria_trajeto|parasitica_ev1_hospedeiro_alfa|gravitante_ev1_slingshot|ancorada_ev1_muralha_ruptura|cartografica_ev1_rota_interceptacao|mnesica_ev1_reflexo_comportamental|ressonante_ev1_acorde_crescente|contratual_ev1_jurisprudencia|acorrentada_ev1_tensao_residual|eclipsada_ev1_horizonte_eclipse|bombastica_ev1_estilhaco_persistente|necronada_ev1_ossuario_ambulante",
+	"projectile_homing": "eletrica_ev1_polarizacao|lacerante_ev1_predador_rubro|retornante_ev1_corte_cruzado|parasitica_ev1_necrofagia|gravitante_ev1_mass_growth|ancorada_ev1_peso_absoluto|cartografica_ev1_triangulacao_hostil|mnesica_ev1_falso_passado|ressonante_ev1_harmonia_compartilhada|contratual_ev1_agravante|acorrentada_ev1_grilhao_movel|eclipsada_ev1_orbita_celeste|bombastica_ev1_fusivel_compartilhado|necronada_ev1_memoria_morto",
+	"impact_link": "eletrica_ev1_bobina_ambulante|lacerante_ev1_carnificina_circular|retornante_ev1_cacador_reverso|parasitica_ev1_colonia|gravitante_ev1_binary|ancorada_ev1_territorio_jurado|cartografica_ev1_marco_movel|mnesica_ev1_lembranca_compartilhada|ressonante_ev1_nota_sustentada|contratual_ev1_notificacao_cadeia|acorrentada_ev1_elo_espelhado|eclipsada_ev1_crepusculo|bombastica_ev1_mina_improvisada|necronada_ev1_cortejo_funebre",
+	"impact_burst": "eletrica_ev1_relampago_critico|lacerante_ev1_coagulo_vivo|retornante_ev1_ancora_temporal|parasitica_ev1_ninho_ambulante|gravitante_ev1_captive_moon|ancorada_ev1_contra_impacto|cartografica_ev1_cartografia_residual|mnesica_ev1_arquivo_profundo|ressonante_ev1_improviso|contratual_ev1_testemunha|acorrentada_ev1_ancora_corrente|eclipsada_ev1_reflexo_celeste|bombastica_ev1_bomba_reativa|necronada_ev1_jardim_azul",
+	"impact_seal": "eletrica_ev1_condutor_vivo|lacerante_ev1_linha_abate|retornante_ev1_rastro_paradoxal|parasitica_ev1_metamorfose|gravitante_ev1_tidal_step|ancorada_ev1_linha_fundacao|cartografica_ev1_atalho_dimensional|mnesica_ev1_eco_dor|ressonante_ev1_sincope|contratual_ev1_processo_coletivo|acorrentada_ev1_sobretensao_continua|eclipsada_ev1_conjuncao|bombastica_ev1_barril_ruptura|necronada_ev1_epitafio_profundo",
+	"impact_vortex": "eletrica_ev2_tempestade_autonoma|lacerante_ev2_ruptura_arterial|retornante_ev2_repeticao_impossivel|parasitica_ev2_epidemia|gravitante_ev2_shared_singularity|ancorada_ev2_fortaleza_autoportante|cartografica_ev2_mapa_completo|mnesica_ev2_dejavu_coletivo|ressonante_ev2_orquestra_ruptura|contratual_ev2_precedente|acorrentada_ev2_teia_grilhoes|eclipsada_ev2_eclipse_parcial|bombastica_ev2_reacao_cadeia|necronada_ev2_jardim_mortos",
+	"skill_field": "eletrica_ev2_sobrecarga_cascata|lacerante_ev2_danca_laminas|retornante_ev2_convergencia|parasitica_ev2_colmeia_neural|gravitante_ev2_planetary_system|ancorada_ev2_coracao_fortaleza|cartografica_ev2_fronteira_proibida|mnesica_ev2_memoria_recursiva|ressonante_ev2_crescendo_absoluto|contratual_ev2_sentenca_coletiva|acorrentada_ev2_ruptura_sequencial|eclipsada_ev2_coroa_negra|bombastica_ev2_detonacao_fractal|necronada_ev2_procissao",
+	"teleport_burst": "eletrica_ev2_pararraios|lacerante_ev2_sangue_atrai_sangue|retornante_ev2_paradoxo_fechado|parasitica_ev2_super_hospedeiro|gravitante_ev2_tidal_event|ancorada_ev2_queda_monumental|cartografica_ev2_cartografia_recursiva|mnesica_ev2_arquivo_vivo|ressonante_ev2_refrao|contratual_ev2_tribunal_ruptura|acorrentada_ev2_corrente_arrasto|eclipsada_ev2_umbra_solar|bombastica_ev2_campo_minado|necronada_ev2_heranca_mortuaria",
+	"projectile_echo_plus": "eletrica_ev2_campo_ionizado|lacerante_ev2_cicatriz_persistente|retornante_ev2_rebobinamento_violento|parasitica_ev2_ciclo_biologico|gravitante_ev2_mass_collapse|ancorada_ev2_rede_fundacoes|cartografica_ev2_convergencia_meridianos|mnesica_ev2_reencenacao|ressonante_ev2_harmonico_superior|contratual_ev2_acumulo_provas|acorrentada_ev2_prisao_total|eclipsada_ev2_penumbra_viva|bombastica_ev2_estopim_errante|necronada_ev2_ossuario_recursivo",
+	"impact_chain_burst": "eletrica_ev2_ruptura_atmosferica|lacerante_ev2_coagulacao_violenta|retornante_ev2_passado_persistente|parasitica_ev2_eclosao_coletiva|gravitante_ev2_chaotic_orbit|ancorada_ev2_ultimo_bastiao|cartografica_ev2_rota_emergencia|mnesica_ev2_esquecimento_forcado|ressonante_ev2_batida_ruptura|contratual_ev2_mandado_automatico|acorrentada_ev2_sobrecarga_tensao|eclipsada_ev2_conjuncao_perfeita|bombastica_ev2_supernova_polvora|necronada_ev2_rei_vestigios",
+	"grand_manifestation": "eletrica_ev2_tempestade_ruptura|lacerante_ev2_execucao_cadeia|retornante_ev2_ciclo_temporal|parasitica_ev2_organismo_ruptura|gravitante_ev2_rupture_horizon|ancorada_ev2_continente_imovel|cartografica_ev2_atlas_ruptura|mnesica_ev2_trauma_temporal|ressonante_ev2_sinfonia_temporal|contratual_ev2_clausula_suprema|acorrentada_ev2_sentenca_ferro|eclipsada_ev2_totalidade|bombastica_ev2_demolicao_total|necronada_ev2_ressurreicao_massa"
+}
+
+const PRISMATICA_PROFILE_KEY_BY_ID := {
+	"prismatica_ev1_reflexao_dupla": "prismatica_reflexao_dupla", "prismatica_ev1_prisma_espelhado": "prismatica_prisma_espelhado", "prismatica_ev1_triangulacao": "prismatica_triangulacao", "prismatica_ev1_espectro_separado": "prismatica_espectro_separado", "prismatica_ev1_prisma_encadeado": "prismatica_prisma_encadeado", "prismatica_ev1_reflexo_fantasma": "prismatica_reflexo_fantasma",
+	"prismatica_ev2_geometria_perfeita": "prismatica_geometria_perfeita", "prismatica_ev2_luz_recursiva": "prismatica_luz_recursiva", "prismatica_ev2_prisma_harmonico": "prismatica_prisma_harmonico", "prismatica_ev2_foco_absoluto": "prismatica_foco_absoluto", "prismatica_ev2_rede_espectral": "prismatica_rede_espectral", "prismatica_ev2_colapso_cromatico": "prismatica_colapso_cromatico"
 }
 
 # Prismatica deliberately does not use STAGE_EFFECTS.  Its evolutions are a
@@ -261,17 +286,13 @@ const RAW_ROWS := [
 
 static func all_entries() -> Array:
 	var entries: Array = []
-	var stage_slots: Dictionary = {}
 	for raw in RAW_ROWS:
 		var parts := String(raw).split("|")
 		if parts.size() < 4:
 			continue
 		var manifestation := String(parts[0])
 		var stage := String(parts[1])
-		var slot_key := "%s|%s" % [manifestation, stage]
-		var slot := int(stage_slots.get(slot_key, 0))
-		stage_slots[slot_key] = slot + 1
-		entries.append(_build_entry(manifestation, stage, String(parts[2]), String(parts[3]), slot))
+		entries.append(_build_entry(manifestation, stage, String(parts[2]), String(parts[3])))
 	return entries
 
 
@@ -293,6 +314,33 @@ static func definition_by_id(evolution_id: String) -> Dictionary:
 	return {}
 
 
+static func normalize_saved_choice(choice: Dictionary) -> Dictionary:
+	# Saves before schema v1 only carry evolution/profile/family.  Keep their
+	# serialized profile intact, then attach metadata lazily so a load never
+	# mutates its mechanical result or requires a save migration.
+	var normalized := choice.duplicate(true)
+	var evolution_id := String(normalized.get("evolution", normalized.get("id", "")))
+	if evolution_id == "":
+		return normalized
+	var definition := definition_by_id(evolution_id)
+	if definition.is_empty():
+		normalized["definition_status"] = "unknown_legacy"
+		return normalized
+	normalized["definition_id"] = evolution_id
+	normalized["definition_schema_version"] = DEFINITION_SCHEMA_VERSION
+	normalized["definition_trigger"] = String(definition.get("trigger", ""))
+	normalized["definition_conditions"] = Array(definition.get("conditions", [])).duplicate(true)
+	normalized["definition_state_key"] = String(definition.get("state_key", ""))
+	normalized["definition_status"] = "known"
+	if String(normalized.get("effect", "")) == "":
+		normalized["effect"] = String(definition.get("effect", ""))
+	if String(normalized.get("family", "")) == "":
+		normalized["family"] = String(definition.get("family", ""))
+	if Dictionary(normalized.get("profile", {})).is_empty():
+		normalized["profile"] = Dictionary(definition.get("profile", {})).duplicate(true)
+	return normalized
+
+
 static func validate_catalog() -> Array:
 	var errors: Array = []
 	var seen: Dictionary = {}
@@ -305,14 +353,23 @@ static func validate_catalog() -> Array:
 		var description := String(entry.get("short_description", ""))
 		var manifestation := String(entry.get("manifestation", ""))
 		var stage := String(entry.get("stage", ""))
+		var definition := definition_by_id(id)
 		if id == "":
 			errors.append("empty id")
+		elif definition.is_empty():
+			errors.append("missing explicit definition for %s" % id)
 		if name == "":
 			errors.append("empty name for %s" % id)
 		if description == "":
 			errors.append("empty description for %s" % id)
 		if stage != "ev1" and stage != "ev2":
 			errors.append("invalid stage for %s" % id)
+		if String(definition.get("trigger", "")) == "":
+			errors.append("missing trigger for %s" % id)
+		if String(definition.get("state_key", "")) == "":
+			errors.append("missing state key for %s" % id)
+		if String(definition.get("test_target", "")) == "":
+			errors.append("missing test target for %s" % id)
 		if stage == "ev1" and not id.contains("_ev1_"):
 			errors.append("EV1 id mismatch %s" % id)
 		if stage == "ev2" and not id.contains("_ev2_"):
@@ -336,11 +393,14 @@ static func is_legacy_family(family: String) -> bool:
 	return LEGACY_FAMILIES.has(family)
 
 
-static func _build_entry(manifestation: String, stage: String, evolution_id: String, display_name: String, slot: int) -> Dictionary:
+static func _build_entry(manifestation: String, stage: String, evolution_id: String, display_name: String) -> Dictionary:
 	var theme: Dictionary = MANIFEST_THEMES.get(manifestation, {"label": manifestation.capitalize(), "essence": manifestation, "visual": "ruptura temporal", "tag": manifestation})
-	var profile := _profile_for(manifestation, stage, slot)
+	var profile := _profile_for_id(manifestation, stage, evolution_id)
+	var trigger := String(profile.get("hook", "hybrid"))
 	return {
 		"id": evolution_id,
+		"definition_id": evolution_id,
+		"definition_schema_version": DEFINITION_SCHEMA_VERSION,
 		"manifestation": manifestation,
 		"stage": stage,
 		"name": display_name,
@@ -349,36 +409,81 @@ static func _build_entry(manifestation: String, stage: String, evolution_id: Str
 		"effect_label": String(profile.get("label", "efeito próprio")),
 		"summary": _short_description(display_name, theme, profile, stage),
 		"short_description": _short_description(display_name, theme, profile, stage),
-		"tags": [String(theme.get("tag", manifestation)), stage, String(profile.get("hook", "hybrid"))],
+		"tags": [String(theme.get("tag", manifestation)), stage, trigger],
+		"trigger": trigger,
+		"conditions": _conditions_for_trigger(trigger),
+		"state_key": "manifest_evolution.choice.%s" % evolution_id,
+		"state_policy": "choice_scoped",
+		"visual_tag": String(profile.get("visual_tag", theme.get("tag", manifestation))),
+		"test_target": "manifest_evolution_public_contract_smoke:%s" % evolution_id,
 		"profile": profile
 	}
 
 
-static func _profile_for(manifestation: String, stage: String, slot: int) -> Dictionary:
+static func _profile_for_id(manifestation: String, stage: String, evolution_id: String) -> Dictionary:
+	var effect_key := _explicit_effect_key(evolution_id)
+	if effect_key == "":
+		return {}
 	if manifestation == "prismatica":
-		var prismatica_table: Array = PRISMATICA_PROFILES.get(stage, [])
-		var prismatica_profile: Dictionary = Dictionary(prismatica_table[slot % max(1, prismatica_table.size())]).duplicate(true)
-		prismatica_profile["slot"] = slot
-		prismatica_profile["manifestation"] = manifestation
-		prismatica_profile["signature"] = "prismatica_%s_%02d" % [stage, slot + 1]
-		prismatica_profile["visual_tag"] = "luz"
-		return prismatica_profile
-	var stage_table: Array = STAGE_EFFECTS.get(stage, [])
-	var base: Dictionary = Dictionary(stage_table[slot % max(1, stage_table.size())]).duplicate(true)
+		for candidate in Array(PRISMATICA_PROFILES.get(stage, [])):
+			var prismatica_profile := Dictionary(candidate)
+			if String(prismatica_profile.get("effect", "")) != effect_key:
+				continue
+			prismatica_profile = prismatica_profile.duplicate(true)
+			prismatica_profile["manifestation"] = manifestation
+			prismatica_profile["signature"] = evolution_id
+			prismatica_profile["visual_tag"] = "luz"
+			return prismatica_profile
+	var base := _shared_profile_for_effect(stage, effect_key)
+	if base.is_empty():
+		return {}
 	var manifest_index := MANIFEST_THEMES.keys().find(manifestation)
 	if manifest_index < 0:
 		manifest_index = 0
 	var m := float(manifest_index % 5)
-	base["slot"] = slot
 	base["manifestation"] = manifestation
-	base["signature"] = "%s_%s_%02d" % [manifestation, stage, slot + 1]
+	base["signature"] = evolution_id
 	base["visual_tag"] = String(MANIFEST_THEMES.get(manifestation, {}).get("tag", manifestation))
-	base["every"] = max(2, int(base.get("every", 4)) - int(slot == 4))
+	base["every"] = max(2, int(base.get("every", 4)) - int(effect_key == "impact_burst" or effect_key == "impact_chain_burst"))
 	base["radius"] = float(base.get("radius", 145.0)) + m * 6.0
 	base["force"] = float(base.get("force", 82.0)) + m * 5.0
 	base["range"] = float(base.get("range", 330.0)) + m * 12.0
-	base["spread"] = float(base.get("spread", 0.18)) + float(slot) * 0.012
+	base["spread"] = float(base.get("spread", 0.18)) + float(_legacy_tuning_index(effect_key)) * 0.012
 	return base
+
+
+static func _explicit_effect_key(evolution_id: String) -> String:
+	if PRISMATICA_PROFILE_KEY_BY_ID.has(evolution_id):
+		return String(PRISMATICA_PROFILE_KEY_BY_ID[evolution_id])
+	for effect_key in EXPLICIT_LEGACY_DEFINITION_IDS_BY_EFFECT:
+		if String(EXPLICIT_LEGACY_DEFINITION_IDS_BY_EFFECT[effect_key]).split("|").has(evolution_id):
+			return String(effect_key)
+	return ""
+
+
+static func _shared_profile_for_effect(stage: String, effect_key: String) -> Dictionary:
+	for candidate in Array(STAGE_EFFECTS.get(stage, [])):
+		var profile := Dictionary(candidate)
+		if String(profile.get("effect", "")) == effect_key:
+			return profile.duplicate(true)
+	return {}
+
+
+static func _legacy_tuning_index(effect_key: String) -> int:
+	var order := ["projectile_echo", "projectile_pierce", "projectile_homing", "impact_link", "impact_burst", "impact_seal", "impact_vortex", "skill_field", "teleport_burst", "projectile_echo_plus", "impact_chain_burst", "grand_manifestation"]
+	var index := order.find(effect_key)
+	if index < 0:
+		return 0
+	return index - EVOLUTIONS_PER_STAGE if index >= EVOLUTIONS_PER_STAGE else index
+
+
+static func _conditions_for_trigger(trigger: String) -> Array:
+	match trigger:
+		"projectile": return ["attack_emitted", "projectile_owned_by_peer"]
+		"impact": return ["hit_resolved", "valid_distinct_target"]
+		"skill": return ["skill_cast", "successful_skill"]
+		"teleport": return ["teleport", "successful_teleport"]
+		_: return ["attack_emitted", "hit_resolved"]
 
 
 static func _short_description(display_name: String, theme: Dictionary, profile: Dictionary, stage: String) -> String:

@@ -7598,9 +7598,7 @@ func _reset_manifest_evolution_state() -> void :
 		"family": "",
 		"stage": "ev1",
 		"choices": [],
-		"shot_counter": 0,
-		"impact_counter": 0,
-		"target_hits": {},
+		"shot_counter": 0, "impact_counter": 0, "target_hits": {},
 		"fields": [],
 		"bursts": []
 	}
@@ -7618,13 +7616,15 @@ func _manifest_evolution_choices() -> Array:
 	var choices: Array = []
 	var raw_choices = manifest_evolution_state.get("choices", [])
 	if raw_choices is Array:
-		choices = raw_choices
+		for raw_choice in raw_choices:
+			if raw_choice is Dictionary:
+				choices.append(RTManifestEvolutionCatalog.normalize_saved_choice(Dictionary(raw_choice)))
 	if choices.is_empty() and String(manifest_evolution_state.get("family", "")) != "":
 		var legacy_profile: Dictionary = Dictionary(manifest_evolution_state.get("profile", {}))
 		if not legacy_profile.has("effect"):
 			legacy_profile["effect"] = String(manifest_evolution_state.get("family", ""))
 			legacy_profile["legacy_family"] = true
-		choices.append({
+		choices.append(RTManifestEvolutionCatalog.normalize_saved_choice({
 			"stage": String(manifest_evolution_state.get("stage", "ev1")),
 			"evolution": String(manifest_evolution_state.get("evolution", "")),
 			"family": String(manifest_evolution_state.get("family", "")),
@@ -7632,7 +7632,7 @@ func _manifest_evolution_choices() -> Array:
 			"shot_counter": int(manifest_evolution_state.get("shot_counter", 0)),
 			"impact_counter": int(manifest_evolution_state.get("impact_counter", 0)),
 			"target_hits": Dictionary(manifest_evolution_state.get("target_hits", {}))
-		})
+		}))
 		manifest_evolution_state["choices"] = choices
 	return choices
 
@@ -7917,11 +7917,13 @@ func _choose_manifest_evolution(index: int) -> void :
 	manifest_evolution_state["family"] = String(entry.get("family", ""))
 	manifest_evolution_state["effect"] = String(entry.get("effect", entry.get("family", "")))
 	manifest_evolution_state["profile"] = Dictionary(entry.get("profile", {}))
+	manifest_evolution_state["definition_id"] = String(entry.get("definition_id", entry.get("id", "")))
+	manifest_evolution_state["definition_schema_version"] = int(entry.get("definition_schema_version", 0))
 	manifest_evolution_state["stage"] = entry_stage
 	manifest_evolution_state["shot_counter"] = 0
 	manifest_evolution_state["impact_counter"] = 0
 	manifest_evolution_state["target_hits"] = {}
-	choices.append({
+	choices.append(RTManifestEvolutionCatalog.normalize_saved_choice({
 		"stage": entry_stage,
 		"evolution": String(entry.get("id", "")),
 		"name": String(entry.get("name", "Manifestacao")),
@@ -7929,10 +7931,8 @@ func _choose_manifest_evolution(index: int) -> void :
 		"effect": String(entry.get("effect", entry.get("family", ""))),
 		"summary": String(entry.get("summary", entry.get("short_description", ""))),
 		"profile": Dictionary(entry.get("profile", {})),
-		"shot_counter": 0,
-		"impact_counter": 0,
-		"target_hits": {}
-	})
+		"shot_counter": 0, "impact_counter": 0, "target_hits": {}
+	}))
 	manifest_evolution_state["choices"] = choices
 	manifest_evolution_options.clear()
 	_add_text("%s: %s" % [_manifest_evolution_stage_label(entry_stage), String(entry.get("name", "Manifestacao"))], player_pos + Vector2(0, -112), _manifestation_color(), 1.5, 23)
