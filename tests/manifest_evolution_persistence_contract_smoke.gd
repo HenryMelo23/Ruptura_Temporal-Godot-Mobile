@@ -62,8 +62,16 @@ func _run() -> void:
 	game.dedicated_server_mode = false
 	game.online_connected = false
 	game.player_pos = Vector2(640, 360)
+	game.last_facing = Vector2.RIGHT
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	_choose_pair()
-	game._manifest_evolution_on_skill(game.player_pos + Vector2(40, 0))
+	# Persist state emitted through the real Q entry point rather than injecting a
+	# field through the evolution callback.
+	game.time_alive = 1000.0
+	game.last_skill_time = -1000.0
+	game._use_skill(game.player_pos + Vector2(40, 0))
+	game._update_manifest_evolution_effects(0.4)
 	_assert_pair("selection")
 	_check(Array(game.manifest_evolution_state.get("fields", [])).size() == 1, "skill field was not active before snapshot")
 

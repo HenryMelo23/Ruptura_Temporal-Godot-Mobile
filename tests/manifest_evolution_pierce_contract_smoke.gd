@@ -36,6 +36,7 @@ func _clear_combat() -> void:
 	game.boss_active = false
 	game.boss_dead = false
 	game.boss_hp = 0.0
+	game.manifest_evolution_combat_event_log.clear()
 
 
 func _spawn_aligned_targets(count: int, pos: Vector2) -> Array:
@@ -145,6 +146,45 @@ func _run_native_returning_case() -> void:
 	_check(int(returning.get("evolution_pierce_left", 0)) == 2, "Retornante consumed evolution charges despite native pierce")
 
 
+func _run_public_attack_case() -> void:
+	# This is the public-flow counterpart to the exact low-level collision
+	# cases above.  It proves a real input attack produces one additional hit,
+	# rather than only proving a hand-built bullet can hold a counter.
+	_clear_combat()
+	_activate_pierce(false)
+	var targets: Array = []
+	for index in range(3):
+		game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(112.0 + 46.0 * index, 0.0))
+		var target: Dictionary = game.enemies.back()
+		# Runtime spawn ids use a time-derived seed; a same-frame smoke spawn can
+		# otherwise legitimately collide before the actual projectile contract is
+		# exercised.  Give this three-target fixture the stable distinct ids a
+		# real authoritative spawn stream guarantees.
+		target["uid"] = 9100 + index
+		target["hp"] = 100000.0
+		target["max_hp"] = 100000.0
+		targets.append(target)
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
+	game.time_alive = 1000.0
+	game.last_attack_time = -1000.0
+	game._try_attack()
+	for _frame in range(24):
+		game._update_bullets(0.03)
+	_check(_damaged_target_count(targets) == 2, "public attack did not stop after one evolution pierce")
+	var hit_events := 0
+	var seen_ids: Dictionary = {}
+	for event_value in game.manifest_evolution_combat_event_log:
+		var event: Dictionary = Dictionary(event_value)
+		if String(event.get("type", "")) != "hit_resolved":
+			continue
+		var event_id := String(event.get("id", ""))
+		_check(not seen_ids.has(event_id), "public projectile emitted a duplicate hit event")
+		seen_ids[event_id] = true
+		hit_events += 1
+	_check(hit_events == 2, "public projectile must resolve exactly two hit events")
+
+
 func _run() -> void:
 	game._start_game()
 	game.mode = "game"
@@ -160,6 +200,7 @@ func _run() -> void:
 	_run_distinct_target_case()
 	_run_boss_and_arauto_case()
 	_run_native_returning_case()
+	_run_public_attack_case()
 
 	print("MANIFEST_EVOLUTION_PIERCE_CONTRACT_OK charges=0/1/2 boss_arauto=ok returning_native=ok")
 	game.set_process(false)
