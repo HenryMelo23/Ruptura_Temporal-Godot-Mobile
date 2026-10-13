@@ -7958,6 +7958,12 @@ func _apply_manifest_evolution_to_bullet(bullet: Dictionary) -> void :
 	var choices: Array = _manifest_evolution_choices()
 	if choices.is_empty():
 		return
+	# `pierce` predates evolutions and still means native, unlimited piercing for
+	# manifestations such as Retornante.  Evolution charges are deliberately
+	# tracked separately so a temporary evolution never turns a normal shot into
+	# a permanently piercing one.
+	if not bullet.has("native_pierce"):
+		bullet["native_pierce"] = bool(bullet.get("pierce", false))
 	var active_ids: Array = Array(bullet.get("manifest_evolution_ids", []))
 	for choice in choices:
 		var effect: = _manifest_evolution_effect(choice)
@@ -7973,8 +7979,7 @@ func _apply_manifest_evolution_to_bullet(bullet: Dictionary) -> void :
 				if int(choice["shot_counter"]) % every == 0:
 					_spawn_manifest_evolution_echoes(bullet, profile)
 			"perfuracao", "projectile_pierce":
-				bullet["evolution_pierce_left"] = max(int(bullet.get("evolution_pierce_left", 0)), int(profile.get("pierces", 1)))
-				bullet["pierce"] = true
+				_register_manifest_evolution_pierce_source(bullet, evolution_id, int(profile.get("pierces", 1)))
 			"caca", "projectile_homing":
 				bullet["evolution_homing"] = true
 				bullet["evolution_turn"] = max(float(bullet.get("evolution_turn", 0.0)), float(profile.get("turn", 0.15)))
@@ -7983,10 +7988,57 @@ func _apply_manifest_evolution_to_bullet(bullet: Dictionary) -> void :
 				bullet["evolution_homing"] = true
 				bullet["evolution_turn"] = max(float(bullet.get("evolution_turn", 0.0)), float(profile.get("turn", 0.11)))
 				bullet["evolution_range"] = max(float(bullet.get("evolution_range", 0.0)), float(profile.get("range", 300.0)))
-				bullet["evolution_pierce_left"] = max(int(bullet.get("evolution_pierce_left", 0)), int(profile.get("pierces", 1)))
-				bullet["pierce"] = true
+				_register_manifest_evolution_pierce_source(bullet, evolution_id, int(profile.get("pierces", 1)))
 	bullet["manifest_evolution_ids"] = active_ids
 	manifest_evolution_state["choices"] = choices
+
+
+func _register_manifest_evolution_pierce_source(bullet: Dictionary, evolution_id: String, charges: int) -> void:
+	var source_id := evolution_id
+	if source_id == "":
+		source_id = "legacy_projectile_pierce"
+	var sources: Dictionary = Dictionary(bullet.get("evolution_pierce_sources", {}))
+	sources[source_id] = max(int(sources.get(source_id, 0)), maxi(0, charges))
+	bullet["evolution_pierce_sources"] = sources
+	_refresh_manifest_evolution_pierce_state(bullet)
+
+
+func _refresh_manifest_evolution_pierce_state(bullet: Dictionary) -> void:
+	var charges := 0
+	for source_charges in Dictionary(bullet.get("evolution_pierce_sources", {})).values():
+		charges += maxi(0, int(source_charges))
+	bullet["evolution_pierce_left"] = charges
+	bullet["evolution_pierce_active"] = charges > 0
+	bullet["pierce"] = bool(bullet.get("native_pierce", false)) or charges > 0
+
+
+func _consume_manifest_evolution_pierce_on_hit(bullet: Dictionary, target: Dictionary) -> bool:
+	# Native pierce is never charged or limited by an evolution.  This preserves
+	# Retornante and the legacy native-pierce contract.
+	if bool(bullet.get("native_pierce", false)):
+		return true
+	var target_id := str(target.get("uid", ""))
+	if target_id == "":
+		return false
+	var consumed_targets: Dictionary = Dictionary(bullet.get("evolution_pierce_consumed_targets", {}))
+	if consumed_targets.has(target_id):
+		return false
+	var sources: Dictionary = Dictionary(bullet.get("evolution_pierce_sources", {}))
+	var source_ids: Array = sources.keys()
+	source_ids.sort()
+	for source_id_value in source_ids:
+		var source_id := String(source_id_value)
+		var left := int(sources.get(source_id, 0))
+		if left <= 0:
+			continue
+		sources[source_id] = left - 1
+		consumed_targets[target_id] = true
+		bullet["evolution_pierce_sources"] = sources
+		bullet["evolution_pierce_consumed_targets"] = consumed_targets
+		_refresh_manifest_evolution_pierce_state(bullet)
+		return true
+	_refresh_manifest_evolution_pierce_state(bullet)
+	return false
 
 
 func _spawn_manifest_evolution_echoes(source: Dictionary, profile: Dictionary) -> void :
@@ -8009,6 +8061,10 @@ func _spawn_manifest_evolution_echoes(source: Dictionary, profile: Dictionary) -
 		echo["pierce"] = false
 		echo["evolution_echo"] = true
 		echo.erase("evolution_pierce_left")
+		echo.erase("evolution_pierce_active")
+		echo.erase("evolution_pierce_sources")
+		echo.erase("evolution_pierce_consumed_targets")
+		echo.erase("native_pierce")
 		_add_bullet(echo)
 
 
@@ -8049,15 +8105,13 @@ func _manifest_evolution_on_projectile_hit(bullet: Dictionary, target: Dictionar
 	if choices.is_empty():
 		return false
 	var keep_projectile: = false
+	var has_evolution_pierce := false
 	for choice in choices:
 		var effect: = _manifest_evolution_effect(choice)
 		var profile: = Dictionary(choice.get("profile", {}))
 		match effect:
 			"perfuracao", "projectile_pierce", "grand_manifestation":
-				var left: = int(bullet.get("evolution_pierce_left", 0))
-				if left > 0:
-					bullet["evolution_pierce_left"] = left - 1
-					keep_projectile = true
+				has_evolution_pierce = true
 			"elo", "impact_link":
 				_apply_manifest_evolution_elo(target_pos, profile)
 			"pulso", "impact_burst", "impact_chain_burst":
@@ -8075,6 +8129,10 @@ func _manifest_evolution_on_projectile_hit(bullet: Dictionary, target: Dictionar
 			if int(choice["impact_counter"]) % maxi(1, int(profile.get("every", 4))) == 0:
 				_apply_manifest_evolution_burst(target_pos, profile, 0.85)
 				_apply_manifest_evolution_vortex(target_pos, profile)
+	if has_evolution_pierce:
+		# A collision is registered only once by _update_bullets; this extra
+		# target ledger also makes the hook idempotent for replayed callbacks.
+		keep_projectile = _consume_manifest_evolution_pierce_on_hit(bullet, target)
 	manifest_evolution_state["choices"] = choices
 	return keep_projectile
 
