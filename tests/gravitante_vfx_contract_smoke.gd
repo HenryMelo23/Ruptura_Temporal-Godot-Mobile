@@ -12,6 +12,23 @@ func check(ok: bool, reason: String) -> void:
 		failures += 1
 		push_error("GRAVITANTE_VFX_CONTRACT " + reason)
 
+
+func _entry(evolution_id: String) -> Dictionary:
+	for stage in ["ev1", "ev2"]:
+		for entry in game._manifest_evolution_entries("gravitante", stage):
+			if String(entry.get("id", "")) == evolution_id:
+				return entry
+	return {}
+
+
+func _choose_real_evolution(evolution_id: String) -> void:
+	var entry := _entry(evolution_id)
+	check(not entry.is_empty(), "catalog entry missing for " + evolution_id)
+	if entry.is_empty():
+		return
+	game.manifest_evolution_options = [entry]
+	game._choose_manifest_evolution(0)
+
 func _run() -> void:
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
@@ -63,11 +80,31 @@ func _run() -> void:
 	check(Gravity.lod(game) == 1, "LOW budget ignored")
 	game.gfx_memory_saver = true
 	check(Gravity.lod(game) == 0, "MEMORY budget ignored")
-	for ev1 in game._manifest_evolution_entries("gravitante", "ev1"):
-		for ev2 in game._manifest_evolution_entries("gravitante", "ev2"):
-			game.manifest_evolution_state = {"choices": [ev1, ev2]}
-			check(Gravity.evolved(game, String(ev1["id"]).trim_prefix("gravitante_")), "missing EV1 presentation")
-			check(Gravity.evolved(game, String(ev2["id"]).trim_prefix("gravitante_")), "missing EV2 presentation")
+	var ev1_entries: Array = game._manifest_evolution_entries("gravitante", "ev1")
+	var ev2_entries: Array = game._manifest_evolution_entries("gravitante", "ev2")
+	check(ev1_entries.size() == 6 and ev2_entries.size() == 6, "Gravitante must expose 12 catalog evolutions")
+	for entry in ev1_entries + ev2_entries:
+		var evolution_id := String(entry.get("id", ""))
+		var suffix := evolution_id.trim_prefix("gravitante_")
+		game._reset_manifest_evolution_state()
+		check(not Gravity.evolved(game, suffix), "presentation active before choice: " + evolution_id)
+		_choose_real_evolution(evolution_id)
+		var selected: Array = game._manifest_evolution_choices()
+		check(selected.size() == 1 and String(selected[0].get("evolution", "")) == evolution_id, "real choice did not store evolution: " + evolution_id)
+		check(Gravity.evolved(game, suffix), "real choice did not enable presentation: " + evolution_id)
+	# Fallback retains readability of saves/test fixtures produced before the
+	# runtime choice contract was standardized. Runtime data wins when both exist.
+	game.manifest_evolution_state = {"choices": [{"id": "gravitante_ev1_roche"}]}
+	check(Gravity.evolved(game, "ev1_roche"), "legacy id fallback lost")
+	game.manifest_evolution_state = {"choices": [{"evolution": "gravitante_ev1_roche", "id": "gravitante_ev2_chaotic_orbit"}]}
+	check(Gravity.evolved(game, "ev1_roche") and not Gravity.evolved(game, "ev2_chaotic_orbit"), "runtime evolution did not take precedence over legacy id")
+	for ev1 in ev1_entries:
+		for ev2 in ev2_entries:
+			game._reset_manifest_evolution_state()
+			_choose_real_evolution(String(ev1.get("id", "")))
+			_choose_real_evolution(String(ev2.get("id", "")))
+			check(Gravity.evolved(game, String(ev1["id"]).trim_prefix("gravitante_")), "missing real EV1 presentation")
+			check(Gravity.evolved(game, String(ev2["id"]).trim_prefix("gravitante_")), "missing real EV2 presentation")
 	Gravity.push_event(game, {"kind": "gravity_q", "pos": Vector2.ZERO, "life": 0.5, "max": 0.5})
 	game._start_game()
 	check(game.gravitante_vfx_events.is_empty(), "run restart retained VFX")

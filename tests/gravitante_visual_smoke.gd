@@ -160,7 +160,7 @@ func _setup_base(index: int) -> void:
 			orbital["vfx_transfer"] = index >= 8
 			Gravity.push_event(game, {"kind": "gravity_impact", "pos": center + Vector2(90, -50), "life": 0.12, "max": 0.18})
 		if index == 9:
-			game.manifest_evolution_state = {"choices": [{"id": "gravitante_ev1_slingshot"}]}
+			_choose_evolution("gravitante_ev1_slingshot")
 		orbital["tick"] = 0.61 if index == 7 else 0.3
 	elif index <= 12:
 		for offset in [Vector2(-130, -90), Vector2(160, -55), Vector2(110, 100)]:
@@ -186,28 +186,41 @@ func _setup_base(index: int) -> void:
 		_setup_evolution("gravitante_ev1_roche" if index == 21 else "gravitante_ev2_tidal_event")
 	elif index == 23:
 		_setup_evolution("gravitante_ev1_roche")
-		game.manifest_evolution_state["choices"].append({"id": "gravitante_ev2_chaotic_orbit"})
+		_choose_evolution("gravitante_ev2_chaotic_orbit")
 	else:
 		game.gfx_low_resource = index == 24
 		game.gfx_memory_saver = index == 25
 		_ultimate(4.0, 12)
 
-func _setup_evolution(id: String) -> void:
+func _choose_evolution(evolution_id: String) -> void:
+	for stage in ["ev1", "ev2"]:
+		for entry in game._manifest_evolution_entries("gravitante", stage):
+			if String(entry.get("id", "")) == evolution_id:
+				game.manifest_evolution_options = [entry]
+				game._choose_manifest_evolution(0)
+				# The real selection emits a UI toast. The gallery measures only
+				# Gravitante presentation, so discard that fixture-only residue.
+				game.effects.clear()
+				return
+	push_error("GRAVITANTE_VISUAL missing catalog evolution " + evolution_id)
+
+
+func _setup_evolution(evolution_id: String) -> void:
 	_clear()
-	game.manifest_evolution_state = {"choices": [{"id": id}]}
+	_choose_evolution(evolution_id)
 	_host(center + Vector2(-105, -65), 3)
 	_host(center + Vector2(110, -50), 2)
-	if id.ends_with("tidal_step"):
+	if evolution_id.ends_with("tidal_step"):
 		game._start_manifestation_teleport_effect(center - Vector2(170, 0), center + Vector2(170, 0))
 		game.tp_effects.back()["life"] = 0.36
-	elif id.ends_with("shared_singularity"):
+	elif evolution_id.ends_with("shared_singularity"):
 		game._trigger_gravitante_mark_collision()
 		game.gravitante_vfx_events.back()["life"] = 0.3
-	elif id.ends_with("tidal_event") or id.ends_with("rupture_horizon"):
+	elif evolution_id.ends_with("tidal_event") or evolution_id.ends_with("rupture_horizon"):
 		_ultimate(4.0, 18)
-	elif id.ends_with("mass_collapse"):
+	elif evolution_id.ends_with("mass_collapse"):
 		Gravity.push_event(game, {"kind": "gravity_residue", "pos": center + Vector2(0, -110), "life": 0.3, "max": 0.45})
-	elif id.ends_with("slingshot"):
+	elif evolution_id.ends_with("slingshot"):
 		var orbital: Dictionary = game.orbitals[0]
 		Gravity.capture(orbital, {"pos": center + Vector2(-180, 30), "dir": Vector2(0.9, -0.4)})
 		orbital["vfx_transfer"] = true

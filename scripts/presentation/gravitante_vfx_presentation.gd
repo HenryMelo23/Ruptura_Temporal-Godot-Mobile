@@ -68,7 +68,13 @@ static func lod(game: Node2D) -> int:
 
 static func evolved(game: Node2D, suffix: String) -> bool:
 	for choice in game.manifest_evolution_state.get("choices", []):
-		if String(choice.get("id", "")) == "gravitante_" + suffix:
+		# Runtime choices are authored by _choose_manifest_evolution with
+		# `evolution`; `id` remains a read-only compatibility fallback for saves
+		# and old visual fixtures.
+		var evolution_id := String(choice.get("evolution", ""))
+		if evolution_id == "":
+			evolution_id = String(choice.get("id", ""))
+		if evolution_id == "gravitante_" + suffix:
 			return true
 	return false
 

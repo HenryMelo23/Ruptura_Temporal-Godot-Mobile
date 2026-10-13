@@ -80,8 +80,10 @@ func _run() -> void:
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
-	game.free()
-	await process_frame
+	game.queue_free()
+	game = null
+	for _frame in range(4):
+		await process_frame
 	quit()
 
 func _mean(values: Array[float]) -> float:
@@ -132,6 +134,17 @@ func _setup(scenario: int) -> void:
 			"center": Vector2(800, 450), "captured": count, "orbital_bonus": orbital_count,
 			"capture_power": 1.0, "spin_speed": 420.0, "pulse_tick": 0.28, "boss_captured": scenario == 4})
 	if scenario == 5:
-		game.manifest_evolution_state = {"choices": [
-			{"id": "gravitante_ev1_roche", "stage": "ev1"},
-			{"id": "gravitante_ev2_chaotic_orbit", "stage": "ev2"}]}
+		_choose_evolution("gravitante_ev1_roche")
+		_choose_evolution("gravitante_ev2_chaotic_orbit")
+
+
+func _choose_evolution(evolution_id: String) -> void:
+	for stage in ["ev1", "ev2"]:
+		for entry in game._manifest_evolution_entries("gravitante", stage):
+			if String(entry.get("id", "")) == evolution_id:
+				game.manifest_evolution_options = [entry]
+				game._choose_manifest_evolution(0)
+				# Keep the benchmark on renderer workload, not the transient choice toast.
+				game.effects.clear()
+				return
+	push_error("GRAVITANTE_PERFORMANCE missing catalog evolution " + evolution_id)
