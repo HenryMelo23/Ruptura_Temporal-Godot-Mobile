@@ -30,6 +30,7 @@ over 100 KB.
 | Menus and catalog UI | `scripts/presentation/menus_presentation.gd`, `scripts/catalog/*` | menu draw helpers, catalog repository/interface classes | `tests/main_menu_visual_smoke.gd`, `tests/catalog_repository_smoke.gd`, `tests/catalog_interface_visual_smoke.gd` |
 | World presentation | `scripts/presentation/world_environment_presentation.gd` | `_draw_boss_attacks`, environment and phase drawing helpers | `tests/phase_transition_visual_smoke.gd`, `tests/dynamic_shadows_visual_smoke.gd`, `tests/readability_visual_smoke.gd` |
 | Runtime state/constants | `scripts/main_runtime_state.gd` | state constants and shared variables | nearest domain test plus `python3 tools/check_architecture_budget.py` |
+| UMBRA observation schema | `scripts/systems/umbra_observation_schema.gd` | `RTUmbraObservationSchema.build_from_runtime`, `build_from_snapshot`, `validate_observation` | `tests/umbra_observation_schema_v2_smoke.gd`, `tests/umbra_dqn_contract_smoke.gd` |
 
 ## Owner Rules
 
@@ -55,6 +56,9 @@ over 100 KB.
   and state transitions outside the contract.
 - Put boss party-size coefficients in `scripts/systems/boss_party_scaling.gd`;
   keep `main_runtime_core.gd` limited to encounter snapshot/reset hooks.
+- Keep UMBRA observation versions in `scripts/systems/umbra_observation_schema.gd`.
+  A new schema must not replace a policy ABI, weights, or fallback until a
+  separately trained artifact opts in through its own validated contract.
 - Put drawing-only changes in presentation files. Do not mix balance or gameplay
   mutations into presentation owners.
 - Use `scripts/main_runtime_core.gd` as a temporary integration surface only

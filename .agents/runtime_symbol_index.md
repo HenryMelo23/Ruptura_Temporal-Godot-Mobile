@@ -32,6 +32,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/assets/runtime_asset_controller.gd` | owner | owner | owner | `prepare_phase`, `ensure_key`, `phase_keys` |
 | `scripts/systems/progression/runtime_progression_controller.gd` | 249 | 181 | 33 | `elite_point_multiplier` 19 code LOC |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
+| `scripts/systems/umbra_observation_schema.gd` | owner | owner | owner | `build_from_runtime`, `build_from_snapshot`, `validate_observation` |
 
 ## Runtime Lookup
 
@@ -74,6 +75,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Boss 7 ultimate | `check_boss7_ultimate` | `scripts/systems/modern_boss_controller.gd:427` |
 | Boss party scaling contract | `profile_for_party_size` | `scripts/systems/boss_party_scaling.gd:13` |
 | Boss party scaling snapshot | `_ensure_boss_party_scaling_context` | `scripts/main_runtime_core.gd:6896` |
+| UMBRA Observation Schema 2.0 | `RTUmbraObservationSchema.build_from_runtime` | `scripts/systems/umbra_observation_schema.gd:96` |
+| UMBRA Observation fixtures | `build_from_snapshot` | `scripts/systems/umbra_observation_schema.gd:69` |
 
 ## Preserved extracted owners
 
