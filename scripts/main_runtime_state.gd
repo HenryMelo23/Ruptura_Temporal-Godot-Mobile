@@ -2503,6 +2503,11 @@ var deck_view_peer_id: = 0
 var net_decks_by_peer: Dictionary = {}
 var manifestation_key = "eletrica"
 var manifest_evolution_state: Dictionary = {}
+# This ledger is runtime-only. It deduplicates combat callbacks without
+# changing the serialized evolution/save contract.
+var manifest_evolution_combat_event_sequence: int = 0
+var manifest_evolution_combat_event_seen: Dictionary = {}
+var manifest_evolution_combat_event_log: Array = []
 var manifest_evolution_options: Array = []
 var manifest_evolution_selected: int = 0
 var manifest_evolution_previous_mode: String = "game"

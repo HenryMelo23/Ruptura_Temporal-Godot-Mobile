@@ -73,7 +73,11 @@ func _run_impact_behavior(key: String, entry: Dictionary, effect: String) -> voi
 			_check(game.shockwaves.size() > before, key + " impact wave inactive")
 		"impact_seal":
 			for i in range(maxi(1, int(profile.get("hits", 3)))):
-				game._manifest_evolution_on_projectile_hit(bullet, target, Vector2(target["pos"]))
+				# A seal needs separate successful impacts. Replaying one collision is
+				# intentionally ignored by the combat-event ledger.
+				var next_bullet := bullet.duplicate(true)
+				next_bullet["manifest_evolution_event_id"] = "functional_seal:%s:%d" % [key, i]
+				game._manifest_evolution_on_projectile_hit(next_bullet, target, Vector2(target["pos"]))
 			_check(float(target.get("stun", 0.0)) > 0.0, key + " seal inactive")
 
 

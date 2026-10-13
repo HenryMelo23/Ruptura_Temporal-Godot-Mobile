@@ -7575,6 +7575,9 @@ func _reset_manifest_evolution_state() -> void :
 	manifest_evolution_selected = 0
 	manifest_evolution_previous_mode = "game"
 	manifest_evolution_focus_timer = 0.0
+	manifest_evolution_combat_event_sequence = 0
+	manifest_evolution_combat_event_seen.clear()
+	manifest_evolution_combat_event_log.clear()
 	_clear_manifest_evolution_barrier()
 	manifest_evolution_state = {
 		"manifestation": manifestation_key,
@@ -7954,7 +7957,71 @@ func _manifest_evolution_effect(choice: Dictionary) -> String:
 	return effect
 
 
+func _manifest_evolution_new_combat_event_id(event_type: String, source: String) -> String:
+	manifest_evolution_combat_event_sequence += 1
+	return "%d:%s:%s:%d" % [_mp_unique_id(), event_type, source, manifest_evolution_combat_event_sequence]
+
+
+func _manifest_evolution_dispatch_combat_event(event: Dictionary) -> bool:
+	# Every evolution proc is consumed by the combat owner once. The transient
+	# ledger rejects replayed local/network callbacks, but stays out of saves.
+	var event_id := String(event.get("event_id", ""))
+	if event_id == "":
+		event_id = _manifest_evolution_new_combat_event_id(String(event.get("type", "combat")), String(event.get("source", "unknown")))
+	if manifest_evolution_combat_event_seen.has(event_id):
+		return false
+	manifest_evolution_combat_event_seen[event_id] = true
+	manifest_evolution_combat_event_log.append({
+		"id": event_id,
+		"type": String(event.get("type", "")),
+		"source": String(event.get("source", "")),
+		"author_peer_id": int(event.get("author_peer_id", _mp_unique_id())),
+		"target_uid": String(event.get("target_uid", ""))
+	})
+	if manifest_evolution_combat_event_log.size() > 96:
+		manifest_evolution_combat_event_log.pop_front()
+	match String(event.get("type", "")):
+		"attack_emitted":
+			return true
+		"hit_resolved":
+			var target: Dictionary = Dictionary(event.get("target", {}))
+			if target.is_empty():
+				return false
+			_manifest_evolution_apply_impact_effects(target, Vector2(event.get("target_pos", player_pos)))
+			return true
+		"skill_cast":
+			return _manifest_evolution_apply_skill_effects(Vector2(event.get("center", player_pos)))
+		"teleport":
+			_manifest_evolution_apply_teleport_effects(Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos)))
+			return true
+	return false
+
+
+func _manifest_evolution_on_combat_hit(event_id: String, source: String, target: Dictionary, target_pos: Vector2) -> void:
+	if target.is_empty():
+		return
+	_manifest_evolution_dispatch_combat_event({
+		"type": "hit_resolved",
+		"event_id": event_id,
+		"source": source,
+		"author_peer_id": _mp_unique_id(),
+		"target_uid": str(target.get("uid", target.get("kind", ""))),
+		"target": target,
+		"target_pos": target_pos
+	})
+
+
 func _apply_manifest_evolution_to_bullet(bullet: Dictionary) -> void :
+	var event_id := String(bullet.get("manifest_evolution_event_id", ""))
+	if event_id == "":
+		event_id = _manifest_evolution_new_combat_event_id("projectile", String(bullet.get("kind", "projectile")))
+		bullet["manifest_evolution_event_id"] = event_id
+	_manifest_evolution_dispatch_combat_event({
+		"type": "attack_emitted",
+		"event_id": event_id,
+		"source": String(bullet.get("kind", "projectile")),
+		"author_peer_id": _mp_unique_id()
+	})
 	var choices: Array = _manifest_evolution_choices()
 	if choices.is_empty():
 		return
@@ -8101,17 +8168,33 @@ func _update_manifest_evolution_projectile(bullet: Dictionary, delta: float) -> 
 
 
 func _manifest_evolution_on_projectile_hit(bullet: Dictionary, target: Dictionary, target_pos: Vector2) -> bool:
+	var event_id := String(bullet.get("manifest_evolution_event_id", ""))
+	if event_id == "":
+		event_id = _manifest_evolution_new_combat_event_id("projectile", String(bullet.get("kind", "projectile")))
+		bullet["manifest_evolution_event_id"] = event_id
+	var target_id := str(target.get("uid", target.get("kind", "")))
+	var hit_event_id := "%s:hit:%s" % [event_id, target_id]
+	if not _manifest_evolution_dispatch_combat_event({
+		"type": "hit_resolved",
+		"event_id": hit_event_id,
+		"source": String(bullet.get("kind", "projectile")),
+		"author_peer_id": _mp_unique_id(),
+		"target_uid": target_id,
+		"target": target,
+		"target_pos": target_pos
+	}):
+		return false
+	return _manifest_evolution_consume_projectile_pierce(bullet, target)
+
+
+func _manifest_evolution_apply_impact_effects(target: Dictionary, target_pos: Vector2) -> void:
 	var choices: Array = _manifest_evolution_choices()
 	if choices.is_empty():
-		return false
-	var keep_projectile: = false
-	var has_evolution_pierce := false
+		return
 	for choice in choices:
 		var effect: = _manifest_evolution_effect(choice)
 		var profile: = Dictionary(choice.get("profile", {}))
 		match effect:
-			"perfuracao", "projectile_pierce", "grand_manifestation":
-				has_evolution_pierce = true
 			"elo", "impact_link":
 				_apply_manifest_evolution_elo(target_pos, profile)
 			"pulso", "impact_burst", "impact_chain_burst":
@@ -8129,12 +8212,17 @@ func _manifest_evolution_on_projectile_hit(bullet: Dictionary, target: Dictionar
 			if int(choice["impact_counter"]) % maxi(1, int(profile.get("every", 4))) == 0:
 				_apply_manifest_evolution_burst(target_pos, profile, 0.85)
 				_apply_manifest_evolution_vortex(target_pos, profile)
-	if has_evolution_pierce:
-		# A collision is registered only once by _update_bullets; this extra
-		# target ledger also makes the hook idempotent for replayed callbacks.
-		keep_projectile = _consume_manifest_evolution_pierce_on_hit(bullet, target)
 	manifest_evolution_state["choices"] = choices
-	return keep_projectile
+
+
+func _manifest_evolution_consume_projectile_pierce(bullet: Dictionary, target: Dictionary) -> bool:
+	for choice in _manifest_evolution_choices():
+		var effect := _manifest_evolution_effect(choice)
+		if effect in ["perfuracao", "projectile_pierce", "grand_manifestation"]:
+			# A collision is registered once by the event ledger; this existing
+			# target ledger additionally preserves the distinct-target charge rule.
+			return _consume_manifest_evolution_pierce_on_hit(bullet, target)
+	return false
 
 
 func _apply_manifest_evolution_elo(center: Vector2, profile: Dictionary) -> void :
@@ -8209,6 +8297,15 @@ func _apply_manifest_evolution_seal(target: Dictionary, profile: Dictionary, cho
 
 
 func _manifest_evolution_on_skill(center: Vector2) -> void :
+	_manifest_evolution_dispatch_combat_event({
+		"type": "skill_cast",
+		"source": manifestation_key,
+		"author_peer_id": _mp_unique_id(),
+		"center": center
+	})
+
+
+func _manifest_evolution_apply_skill_effects(center: Vector2) -> bool:
 	var fields: Array = manifest_evolution_state.get("fields", [])
 	var created: = false
 	for choice in _manifest_evolution_choices():
@@ -8232,12 +8329,23 @@ func _manifest_evolution_on_skill(center: Vector2) -> void :
 		})
 		created = true
 	if not created:
-		return
+		return false
 	manifest_evolution_state["fields"] = fields
 	_add_text("CAMPO EVOLUIDO", center + Vector2(0, -86), _manifestation_color(), 0.85, 18)
+	return true
 
 
 func _manifest_evolution_on_teleport(origin: Vector2, destination: Vector2) -> void :
+	_manifest_evolution_dispatch_combat_event({
+		"type": "teleport",
+		"source": manifestation_key,
+		"author_peer_id": _mp_unique_id(),
+		"origin": origin,
+		"destination": destination
+	})
+
+
+func _manifest_evolution_apply_teleport_effects(origin: Vector2, destination: Vector2) -> void:
 	for choice in _manifest_evolution_choices():
 		var effect: = _manifest_evolution_effect(choice)
 		if effect != "passo" and effect != "teleport_burst" and effect != "grand_manifestation":
@@ -9923,6 +10031,8 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 		attack_dir = last_facing.normalized()
 	_set_player_attack_visual_dir(attack_dir)
 	last_attack_time = time_alive
+	var event_id := _manifest_evolution_new_combat_event_id("attack", "lacerante")
+	_manifest_evolution_dispatch_combat_event({"type": "attack_emitted", "event_id": event_id, "source": "lacerante", "author_peer_id": _mp_unique_id()})
 	_apply_aura_events(AuraSystem.on_attack(aura_state, {"pos": player_pos, "dir": attack_dir, "kind": "lacerante"}))
 
 	_play_sfx("atk_lacerante_%d" % (slash_stage + 1), 0.03, 1.04 + slash_stage * 0.16, 1.0)
@@ -9951,6 +10061,7 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 			if empowered:
 				base_damage *= LACERANTE_EMPOWER_DAMAGE_MULT
 			var killed = _damage_enemy(enemy, _lacerante_damage_for_enemy(base_damage, enemy), "lacerante_empowered" if empowered else "lacerante")
+			_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(enemy.get("uid", ""))], "lacerante", enemy, Vector2(enemy["pos"]))
 			enemy["laceracao"] = int(enemy.get("laceracao", 0)) + 1
 			enemy["bleed_timer"] = 4.0
 			if empowered and killed and executed_pos == Vector2.ZERO:
@@ -9965,11 +10076,13 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 		if empowered:
 			arauto_damage *= LACERANTE_EMPOWER_DAMAGE_MULT
 		_damage_arauto(arauto_damage, "lacerante_empowered" if empowered else "lacerante")
+		_manifest_evolution_on_combat_hit("%s:hit:arauto" % event_id, "lacerante", {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"])}, Vector2(arauto["pos"]))
 	if boss_active and boss_hp > 0.0 and _distance_to_polyline(boss_pos, points) <= width + 32.0:
 		var boss_damage = player_damage * 1.12 * _lacerante_coagulum_damage_multiplier() * _lacerante_boss_size_multiplier()
 		if empowered:
 			boss_damage *= LACERANTE_EMPOWER_DAMAGE_MULT
 		_damage_boss(boss_damage, "lacerante_empowered" if empowered else "lacerante")
+		_manifest_evolution_on_combat_hit("%s:hit:boss" % event_id, "lacerante", {"uid": "boss", "kind": "boss", "pos": boss_pos}, boss_pos)
 	if executed_pos != Vector2.ZERO:
 		_grant_lacerante_coagulum(executed_pos)
 
@@ -12013,7 +12126,7 @@ func _necronada_on_enemy_killed(enemy: Dictionary) -> void :
 	_drop_necronada_rose(enemy_type, Vector2(enemy.get("pos", player_pos)), depth)
 
 
-func _try_use_necronada_skill(target_world = null) -> void :
+func _try_use_necronada_skill(target_world = null) -> bool:
 	var center: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
 	var summoned: = 0
 	var remaining: Array = []
@@ -12039,8 +12152,13 @@ func _try_use_necronada_skill(target_world = null) -> void :
 		_add_text("LEVANTE x%d" % summoned, center + Vector2(0, -92), _necronada_accent(), 1.0, 20)
 		_spawn_radial_particles(center, _necronada_color(), 24)
 		necronada_vfx.append({"kind": "rose_summon_ring", "pos": center, "life": 0.48, "max": 0.48, "radius": NECRONADA_ROSE_SUMMON_RADIUS})
+		# Necronada has its own early return in _use_skill. Emit the generic
+		# skill event here only after a real summon, never for an empty/failing Q.
+		_manifest_evolution_on_skill(center)
+		return true
 	else:
 		_add_text("NENHUMA ALMA NO RAIO", player_pos + Vector2(0, -90), Color(0.72, 0.88, 1.0), 0.8, 17)
+	return false
 
 
 func _necronada_has_ossuary_entry() -> bool:
@@ -14163,6 +14281,8 @@ func _start_acorrentada_attack_motion(stage: int, dir: Vector2) -> Dictionary:
 		impact = _acorrentada_target_pos(target)
 	var duration: = _acorrentada_attack_duration(stage)
 	var primary_index: = 0 if stage != 2 else 1
+	var event_id := _manifest_evolution_new_combat_event_id("attack", "acorrentada")
+	_manifest_evolution_dispatch_combat_event({"type": "attack_emitted", "event_id": event_id, "source": "acorrentada", "author_peer_id": _mp_unique_id()})
 	var motion: = {
 		"stage": stage,
 		"elapsed": 0.0,
@@ -14180,7 +14300,8 @@ func _start_acorrentada_attack_motion(stage: int, dir: Vector2) -> Dictionary:
 		"arc": 26.0 if stage == 1 else (64.0 if stage == 2 else 42.0),
 		"arc_sign": -1.0 if primary_index % 2 == 0 else 1.0,
 		"resolve": true,
-		"hit_resolved": false
+		"hit_resolved": false,
+		"manifest_evolution_event_id": event_id
 	}
 	acorrentada_worn_chains[primary_index]["attack_motion"] = motion
 	if stage == 3 and acorrentada_worn_chains.size() > 1:
@@ -14201,16 +14322,20 @@ func _resolve_acorrentada_attack_motion(motion: Dictionary) -> void :
 	var dir: = Vector2(motion.get("dir", Vector2.RIGHT)).normalized()
 	var target: Dictionary = motion.get("target", {})
 	var impact: = Vector2(motion.get("damage_impact", player_pos))
+	var event_id := String(motion.get("manifest_evolution_event_id", ""))
+	if event_id == "":
+		event_id = _manifest_evolution_new_combat_event_id("attack", "acorrentada")
 	match stage:
 		1:
 			if not target.is_empty() and _acorrentada_target_alive(target):
 				_acorrentada_damage_target(target, player_damage * 0.82 * _acorrentada_damage_multiplier(), "acorrentada_attack_1", "basic_attack", player_pos)
+				_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(target.get("uid", target.get("kind", "")))], "acorrentada", target, _acorrentada_target_pos(target))
 				_acorrentada_apply_elo_to_target(target, 1)
 				_add_acorrentada_tension(3.0 if String(target.get("kind", "")) == "boss" else 6.0)
 		2:
-			_resolve_acorrentada_attack_2(dir, float(motion.get("reach", 295.0)))
+			_resolve_acorrentada_attack_2(dir, float(motion.get("reach", 295.0)), event_id)
 		_:
-			_resolve_acorrentada_attack_3(target, impact)
+			_resolve_acorrentada_attack_3(target, impact, event_id)
 	_play_acorrentada_hit_sfx(stage)
 	_spawn_radial_particles(impact, _acorrentada_color_hot(), 8 if stage < 3 else 14)
 
@@ -14220,7 +14345,7 @@ func _play_acorrentada_hit_sfx(stage: int) -> void :
 	_play_sfx("acorrentada_hit_%d" % idx, 0.025, 0.78 + float(idx) * 0.08, 0.96 + float(idx) * 0.04)
 
 
-func _resolve_acorrentada_attack_2(dir: Vector2, reach: float) -> void :
+func _resolve_acorrentada_attack_2(dir: Vector2, reach: float, event_id: String = "") -> void :
 	var hit_count: = 0
 	var center: Vector2 = player_pos + dir * (reach * 0.55)
 	acorrentada_visuals.append({"kind": "sweep", "pos": player_pos, "dir": dir, "life": 0.18, "max": 0.18, "radius": reach, "heavy": true})
@@ -14232,6 +14357,7 @@ func _resolve_acorrentada_attack_2(dir: Vector2, reach: float) -> void :
 			continue
 		var had_elos: = _acorrentada_enemy_elos(enemy) > 0
 		_acorrentada_damage_target({"kind": "enemy", "uid": int(enemy["uid"])}, player_damage * 1.04 * _acorrentada_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
+		_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(enemy.get("uid", ""))], "acorrentada", enemy, enemy_pos)
 		_add_acorrentada_elo_enemy(enemy, 1)
 		if had_elos:
 			enemy["acorrentada_slow"] = max(float(enemy.get("acorrentada_slow", 0.0)), 0.8)
@@ -14240,15 +14366,17 @@ func _resolve_acorrentada_attack_2(dir: Vector2, reach: float) -> void :
 		hit_count += 1
 	if boss_active and boss_hp > 0.0 and _acorrentada_target_in_front(boss_pos, player_pos, dir, reach + 42.0, deg_to_rad(58.0)):
 		_acorrentada_damage_target({"kind": "boss"}, player_damage * 0.48 * _acorrentada_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
+		_manifest_evolution_on_combat_hit("%s:hit:boss" % event_id, "acorrentada", {"uid": "boss", "kind": "boss", "pos": boss_pos}, boss_pos)
 		_add_acorrentada_elo_boss(1)
 		_add_acorrentada_tension(3.0)
 	if _arauto_active() and _acorrentada_target_in_front(Vector2(arauto["pos"]), player_pos, dir, reach + 38.0, deg_to_rad(58.0)):
 		_acorrentada_damage_target({"kind": "arauto"}, player_damage * 0.7 * _acorrentada_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
+		_manifest_evolution_on_combat_hit("%s:hit:arauto" % event_id, "acorrentada", {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"])}, Vector2(arauto["pos"]))
 		_acorrentada_apply_elo_to_target({"kind": "arauto"}, 1)
 		_add_acorrentada_tension(5.0)
 
 
-func _resolve_acorrentada_attack_3(target: Dictionary, impact: Vector2) -> void :
+func _resolve_acorrentada_attack_3(target: Dictionary, impact: Vector2, event_id: String = "") -> void :
 	var consumed: = 0
 	if not target.is_empty() and _acorrentada_target_alive(target):
 		if String(target.get("kind", "")) == "boss":
@@ -14256,12 +14384,14 @@ func _resolve_acorrentada_attack_3(target: Dictionary, impact: Vector2) -> void 
 			var boss_bonus: = 1.0 + float(consumed) * 0.11 + (0.25 if acorrentada_boss_crack_timer > 0.0 else 0.0)
 			acorrentada_boss_crack_timer = 0.0
 			_acorrentada_damage_target(target, player_damage * 1.52 * boss_bonus * _acorrentada_damage_multiplier(), "acorrentada_attack_3", "basic_attack", player_pos)
+			_manifest_evolution_on_combat_hit("%s:hit:boss" % event_id, "acorrentada", target, impact)
 			_add_acorrentada_tension(8.0 + consumed * 2.0)
 		else:
 			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
 			if enemy:
 				consumed = _consume_acorrentada_elos_enemy(enemy)
 			_acorrentada_damage_target(target, player_damage * (1.52 + float(consumed) * 0.2) * _acorrentada_damage_multiplier(), "acorrentada_attack_3", "basic_attack", player_pos)
+			_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(target.get("uid", ""))], "acorrentada", target, impact)
 			_add_acorrentada_tension(12.0 + consumed * 4.0)
 	_acorrentada_wave(impact, 115.0 + (20.0 if acorrentada_tension >= 40.0 else 0.0), player_damage * 0.36)
 
