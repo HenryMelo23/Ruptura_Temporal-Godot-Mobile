@@ -62,8 +62,13 @@ func _ready_count() -> int:
 
 
 func _open_barrier() -> int:
+	game.arauto_evolution_fragments = [
+		{"fragment_id": "host_reward", "owner_peer": 1},
+		{"fragment_id": "client_reward", "owner_peer": 42}
+	]
 	game._open_manifest_evolution_choice(Vector2(700, 400))
 	_check(game.manifest_evolution_barrier_active, "barrier did not start")
+	_check(game.arauto_evolution_fragments.is_empty(), "shared barrier left a second Arauto evolution trigger")
 	_check(game.mode == "manifest_evolution", "local player did not receive evolution choice")
 	_check(game.manifest_evolution_options.size() == 3, "evolution options were not opened")
 	return int(game.manifest_evolution_barrier_id)

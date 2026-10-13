@@ -54,6 +54,28 @@ const STAGE_EFFECTS := {
 	]
 }
 
+# Prismatica deliberately does not use STAGE_EFFECTS.  Its evolutions are a
+# small tactical grammar (surfaces, formations and light routes), not renamed
+# variants of the generic manifest presets used by the remaining catalog.
+const PRISMATICA_PROFILES := {
+	"ev1": [
+		{"effect": "prismatica_reflexao_dupla", "hook": "impact", "label": "dois ricochetes guiados", "summary": "Após acertar, o raio se reflete rumo a outro alvo; até 2 desvios por disparo.", "limit": 2},
+		{"effect": "prismatica_prisma_espelhado", "hook": "skill", "label": "espelhos posicionados", "summary": "A habilidade posiciona até 2 prismas-espelho que viram raios ao tocar suas faces.", "limit": 2, "duration": 7.0},
+		{"effect": "prismatica_triangulacao", "hook": "skill", "label": "triângulo de convergência", "summary": "A habilidade forma um triângulo; raios que atravessam sua área alinham a rota e explodem no próximo impacto.", "limit": 1, "duration": 6.5},
+		{"effect": "prismatica_espectro_separado", "hook": "impact", "label": "espectro por impacto", "summary": "O primeiro impacto de cada raio separa duas cores laterais, uma vez e com trajetória curta.", "limit": 1},
+		{"effect": "prismatica_prisma_encadeado", "hook": "impact", "label": "elos entre alvos", "summary": "Acertos ancoram prismas; o próximo acerto conecta dois nós e fere quem cruzar o elo luminoso.", "limit": 3, "duration": 5.5},
+		{"effect": "prismatica_reflexo_fantasma", "hook": "teleport", "label": "eco do deslocamento", "summary": "Depois de teleportar, um reflexo repete o disparo na direção da fuga após um breve atraso.", "limit": 2, "delay": 0.42}
+	],
+	"ev2": [
+		{"effect": "prismatica_geometria_perfeita", "hook": "skill", "label": "ângulos perfeitos", "summary": "Cria uma formação maior: raios dentro dela encontram uma linha direta e preservam um impacto perfurante.", "limit": 1, "duration": 7.5},
+		{"effect": "prismatica_luz_recursiva", "hook": "impact", "label": "retorno condicionado", "summary": "Um raio já refletido pode retornar uma única vez se atingir um alvo marcado pela luz.", "limit": 1},
+		{"effect": "prismatica_prisma_harmonico", "hook": "skill", "label": "pulsos de formação", "summary": "Três prismas harmônicos pulsam em compasso, ferindo e desacelerando a área entre eles.", "limit": 1, "duration": 6.0},
+		{"effect": "prismatica_foco_absoluto", "hook": "impact", "label": "foco por alvo", "summary": "Acertos consecutivos no mesmo alvo acumulam foco; o quarto dispara uma linha de precisão e interrompe a reação.", "limit": 4},
+		{"effect": "prismatica_rede_espectral", "hook": "skill", "label": "malha de interceptação", "summary": "Posiciona uma rede triangular; inimigos que cruzam seus segmentos recebem uma descarga limitada.", "limit": 1, "duration": 5.5},
+		{"effect": "prismatica_colapso_cromatico", "hook": "skill", "label": "colapso das formações", "summary": "A habilidade consome formações ativas em uma única explosão cromática; sem formação, prepara uma semente geométrica.", "limit": 1}
+	]
+}
+
 const RAW_ROWS := [
 	"eletrica|ev1|eletrica_ev1_arco_condutor|Arco Condutor",
 	"eletrica|ev1|eletrica_ev1_carga_residual|Carga Residual",
@@ -333,6 +355,14 @@ static func _build_entry(manifestation: String, stage: String, evolution_id: Str
 
 
 static func _profile_for(manifestation: String, stage: String, slot: int) -> Dictionary:
+	if manifestation == "prismatica":
+		var prismatica_table: Array = PRISMATICA_PROFILES.get(stage, [])
+		var prismatica_profile: Dictionary = Dictionary(prismatica_table[slot % max(1, prismatica_table.size())]).duplicate(true)
+		prismatica_profile["slot"] = slot
+		prismatica_profile["manifestation"] = manifestation
+		prismatica_profile["signature"] = "prismatica_%s_%02d" % [stage, slot + 1]
+		prismatica_profile["visual_tag"] = "luz"
+		return prismatica_profile
 	var stage_table: Array = STAGE_EFFECTS.get(stage, [])
 	var base: Dictionary = Dictionary(stage_table[slot % max(1, stage_table.size())]).duplicate(true)
 	var manifest_index := MANIFEST_THEMES.keys().find(manifestation)
@@ -352,5 +382,7 @@ static func _profile_for(manifestation: String, stage: String, slot: int) -> Dic
 
 
 static func _short_description(display_name: String, theme: Dictionary, profile: Dictionary, stage: String) -> String:
+	if String(profile.get("manifestation", "")) == "prismatica":
+		return String(profile.get("summary", "%s — efeito Prismática." % display_name))
 	var label := "EV1" if stage == "ev1" else "EV2"
 	return "%s — %s converte %s em %s, com leitura visual de %s." % [label, display_name.capitalize(), String(theme.get("essence", "ruptura")), String(profile.get("label", "efeito próprio")), String(theme.get("visual", "ruptura temporal"))]

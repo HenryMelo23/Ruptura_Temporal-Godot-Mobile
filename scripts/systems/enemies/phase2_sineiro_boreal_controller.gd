@@ -17,8 +17,8 @@ const STATE_DESPAWN := "despawn"
 const ATTACK_ECHO := "badalada_passado"
 const ATTACK_SHARDS := "estilhacos_ressonantes"
 
-const SPAWN_TIME_ONBOARDING := 300.0
-const SPAWN_TIME_EXPERIENCED := 240.0
+const SPAWN_TIME_ONBOARDING := 240.0
+const SPAWN_TIME_EXPERIENCED := 180.0
 const ACTIVE_LIFETIME := 110.0
 const ENTRY_TIME := 1.05
 const ECHO_TELEGRAPH_TIME := 1.10
@@ -132,8 +132,6 @@ func _try_spawn() -> void:
 	if game.mode != "game" or game.boss_active or game.boss_dead or game.boss_call_timer >= 0.0:
 		return
 	if game._arauto_active() or game._bargain_capsule_active() or game.runtime_event_director.is_active():
-		return
-	if game.fusion_check_timer > 0.0:
 		return
 	var spawn_time := spawn_time_for_profile(game._pacing_experienced_active())
 	if game._phase_elapsed_time() < spawn_time:

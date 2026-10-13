@@ -197,8 +197,8 @@ func card_discount_rate(card: Dictionary) -> float:
 		return core.shop_endurance_discount
 	var pacto_discount: = 0.0
 	if card_count(card) <= 0:
-		pacto_discount = min(0.2, core._apply_carta_zero_to_common_value("pacto_possibilidades", "discount", new_common_card_count("pacto_possibilidades") * 0.04))
-	return min(0.45, core.shop_endurance_discount + pacto_discount)
+		pacto_discount = min(core.SHOP_PACTO_DISCOUNT_CAP, core._apply_carta_zero_to_common_value("pacto_possibilidades", "discount", new_common_card_count("pacto_possibilidades") * core.SHOP_PACTO_DISCOUNT_PER_STACK))
+	return min(core.SHOP_TOTAL_DISCOUNT_CAP, core.shop_endurance_discount + pacto_discount)
 
 
 func shop_endurance_discount_from_elapsed(elapsed: float) -> float:

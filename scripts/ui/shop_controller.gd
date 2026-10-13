@@ -450,6 +450,10 @@ func manual_available() -> bool:
 
 
 func manual_status_text() -> String:
+	if game.has_method("_bargain_pending_discount_remaining"):
+		var bargain_remaining: float = game._bargain_pending_discount_remaining()
+		if bargain_remaining > 0.0 and not is_inf(bargain_remaining):
+			return "DESCONTAO %.0fs" % ceil(bargain_remaining)
 	if manual_grace_active():
 		return "Reabra em %.0fs" % ceil(manual_grace_remaining())
 	var remaining: float = manual_cooldown_remaining()

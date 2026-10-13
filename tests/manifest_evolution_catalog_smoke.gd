@@ -12,6 +12,11 @@ func _initialize() -> void:
 	var entries: Array = Catalog.all_entries()
 	var ids: Dictionary = {}
 	var counts: Dictionary = {}
+	var prismatica_effects: Dictionary = {}
+	var shared_effects: Dictionary = {}
+	for stage_profiles in Catalog.STAGE_EFFECTS.values():
+		for profile in Array(stage_profiles):
+			shared_effects[String(Dictionary(profile).get("effect", ""))] = true
 	for entry in entries:
 		var id := String(entry.get("id", ""))
 		var manifestation := String(entry.get("manifestation", ""))
@@ -30,6 +35,17 @@ func _initialize() -> void:
 			quit(1)
 			return
 		ids[id] = true
+		if manifestation == "prismatica":
+			var effect := String(Dictionary(entry).get("effect", ""))
+			if not effect.begins_with("prismatica_"):
+				push_error("MANIFEST_EVOLUTION_CATALOG_FAIL Prismatica retained shared effect " + id)
+				quit(1)
+				return
+			if prismatica_effects.has(effect) or shared_effects.has(effect):
+				push_error("MANIFEST_EVOLUTION_CATALOG_FAIL Prismatica effect is not exclusive " + effect)
+				quit(1)
+				return
+			prismatica_effects[effect] = true
 		var key := "%s|%s" % [manifestation, stage]
 		counts[key] = int(counts.get(key, 0)) + 1
 	if entries.size() != Catalog.TOTAL_EVOLUTIONS:
@@ -43,5 +59,9 @@ func _initialize() -> void:
 				push_error("MANIFEST_EVOLUTION_CATALOG_FAIL bad count " + key)
 				quit(1)
 				return
+	if prismatica_effects.size() != 12:
+		push_error("MANIFEST_EVOLUTION_CATALOG_FAIL Prismatica needs 12 exclusive effects")
+		quit(1)
+		return
 	print("MANIFEST_EVOLUTION_CATALOG_OK definitions=%d manifests=%d per_stage=%d" % [entries.size(), Catalog.MANIFESTATION_COUNT, Catalog.EVOLUTIONS_PER_STAGE])
 	quit(0)

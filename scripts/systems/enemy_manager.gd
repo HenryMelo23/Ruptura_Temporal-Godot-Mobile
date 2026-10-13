@@ -7,14 +7,14 @@ const PHASE_DENSITY_CARRY_RATIO := 0.70
 # destinos explicitos, nao multiplicadores aplicados em cima do baseline.
 const SPECIAL_SPAWN_PACING: Dictionary = {
 	2: {
-		"first_unlock": 60.0,
-		"experienced_first_unlock": 45.0,
-		"repeat_gap": 52.0,
-		"experienced_repeat_gap": 42.0,
-		"kamikaze_unlock": 60.0,
-		"experienced_kamikaze_unlock": 45.0,
-		"pyro_unlock": 240.0,
-		"experienced_pyro_unlock": 180.0
+		"first_unlock": 45.0,
+		"experienced_first_unlock": 30.0,
+		"repeat_gap": 48.0,
+		"experienced_repeat_gap": 38.0,
+		"kamikaze_unlock": 45.0,
+		"experienced_kamikaze_unlock": 30.0,
+		"pyro_unlock": 180.0,
+		"experienced_pyro_unlock": 120.0
 	},
 	3: {
 		"first_unlock": 120.0,
@@ -306,6 +306,10 @@ func update_enemies(delta: float) -> void:
 			if game._update_sanguessuga_cronal(enemy, delta):
 				dead.append(enemy)
 				continue
+		if enemy["type"] == game.ENEMY_AMBER_SUTURER:
+			game.amber_suturer_controller.update_enemy(enemy, delta)
+		if enemy["type"] == game.ENEMY_AMBER_SUTURE_NODE:
+			game.amber_suturer_controller.update_node(enemy, delta)
 		if enemy["type"] == game.ENEMY_CINERIDO:
 			game._update_cinerido(enemy, delta)
 		if enemy["type"] == game.ENEMY_PANGOLIRO:
@@ -325,7 +329,7 @@ func update_enemies(delta: float) -> void:
 		elif game.current_phase == 4:
 			game._update_phase4_enemy(enemy, delta)
 		var is_disco: bool = not game._active_prismatica_secondary().is_empty()
-		var custom_phase6_move: bool = String(enemy.get("type", "")) == game.ENEMY_LODARIO or String(enemy.get("type", "")) == game.ENEMY_MIASMA_EEL or String(enemy.get("type", "")) == game.ENEMY_CHRONAL_LEECH
+		var custom_phase6_move: bool = String(enemy.get("type", "")) in [game.ENEMY_LODARIO, game.ENEMY_MIASMA_EEL, game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURER, game.ENEMY_AMBER_SUTURE_NODE]
 		var custom_phase7_move: bool = String(enemy.get("type", "")) == game.ENEMY_CINERIDO or String(enemy.get("type", "")) == game.ENEMY_PANGOLIRO or String(enemy.get("type", "")) == game.ENEMY_CORVOL
 		var custom_phase2_sineiro: bool = String(enemy.get("type", "")) == game.ENEMY_SINEIRO_BOREAL
 		if not custom_phase2_sineiro and not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or is_disco):
@@ -346,7 +350,7 @@ func update_enemies(delta: float) -> void:
 			enemy["hp"] = -1.0
 			continue
 
-		var contact_blocked: bool = String(enemy.get("type", "")) == game.ENEMY_CHRONAL_LEECH
+		var contact_blocked: bool = String(enemy.get("type", "")) in [game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURE_NODE]
 		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
 			var remnant_hit: Dictionary = game._necronada_remnant_at_pos(Vector2(enemy.get("pos", game.player_pos)), 48.0)
 			if not remnant_hit.is_empty():

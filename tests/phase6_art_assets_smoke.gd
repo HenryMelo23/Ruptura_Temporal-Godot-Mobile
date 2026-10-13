@@ -49,7 +49,8 @@ func _run() -> void:
 		"res://assets/sprites/pustulafossil1.png",
 		"res://assets/sprites/pustulafossil2.png",
 		"res://assets/sprites/sanguesugacronal1.png",
-		"res://assets/sprites/sanguesugacronal2.png"
+		"res://assets/sprites/sanguesugacronal2.png",
+		"res://assets/sprites/suturador_ambar/suturador_ambar_motion.png"
 	]
 	for path in exact_paths:
 		_check(ResourceLoader.exists(path), "resource path does not resolve " + path)
@@ -61,6 +62,8 @@ func _run() -> void:
 	_check_texture_array("enemy_phase_6_lodario", 2)
 	_check_texture_array("enemy_phase_6_pustula_fossil", 2)
 	_check_texture_array("enemy_phase_6_sanguessuga_cronal", 2)
+	var suturador_atlas: Texture2D = game.textures.get("enemy_phase_6_suturador_ambar")
+	_check(suturador_atlas != null and suturador_atlas.get_size() == Vector2(724, 540), "Suturador atlas missing or malformed")
 
 	game.current_phase = 6
 	game.boss_hp_max = 1000.0
@@ -79,19 +82,24 @@ func _run() -> void:
 		game.ENEMY_MIASMA_EEL: "enemy_phase_6_enguia_miasma",
 		game.ENEMY_LODARIO: "enemy_phase_6_lodario",
 		game.ENEMY_FOSSIL_PUSTULE: "enemy_phase_6_pustula_fossil",
-		game.ENEMY_CHRONAL_LEECH: "enemy_phase_6_sanguessuga_cronal"
+		game.ENEMY_CHRONAL_LEECH: "enemy_phase_6_sanguessuga_cronal",
+		game.ENEMY_AMBER_SUTURER: "enemy_phase_6_suturador_ambar"
 	}
 	var enemy_report_icons := {
 		game.ENEMY_MIASMA_EEL: "enquiadomiasma1.png",
 		game.ENEMY_LODARIO: "lodario1.png",
 		game.ENEMY_FOSSIL_PUSTULE: "pustulafossil1.png",
-		game.ENEMY_CHRONAL_LEECH: "sanguesugacronal1.png"
+		game.ENEMY_CHRONAL_LEECH: "sanguesugacronal1.png",
+		game.ENEMY_AMBER_SUTURER: "suturador_ambar/suturador_ambar_motion.png"
 	}
 	for kind in enemy_texture_keys.keys():
 		var enemy := {"type": String(kind), "phase": 0.0, "pos": game.player_pos, "hp": 10.0, "max_hp": 10.0}
 		var key := String(enemy_texture_keys[kind])
 		_check(game._phase6_enemy_texture_key(String(kind)) == key, "phase6 texture key failed for " + String(kind))
-		_check(game._enemy_texture(enemy) == game.textures[key][0], "phase6 enemy texture failed for " + String(kind))
+		if String(kind) == game.ENEMY_AMBER_SUTURER:
+			_check(game._enemy_texture(enemy) != null, "phase6 enemy texture failed for " + String(kind))
+		else:
+			_check(game._enemy_texture(enemy) == game.textures[key][0], "phase6 enemy texture failed for " + String(kind))
 		_check(game.NET_ENEMY_TYPES.has(String(kind)), "network type missing for " + String(kind))
 		_check(game._enemy_report_icon(String(kind), 6) == String(enemy_report_icons[kind]), "report icon mismatch for " + String(kind))
 
@@ -102,13 +110,14 @@ func _run() -> void:
 	_check(catalog_names.has("Lodario"), "catalog missing Lodario")
 	_check(catalog_names.has("Pustula Fossil"), "catalog missing Pustula Fossil")
 	_check(catalog_names.has("Sanguessuga Cronal"), "catalog missing Sanguessuga Cronal")
+	_check(catalog_names.has("Suturador de Ambar"), "catalog missing Suturador de Ambar")
 
 	game.current_phase = 1
 	game._apply_remote_boss_snapshot(PackedFloat32Array([10.0, 20.0, 500.0, 0.0, 1.0, 6.0, 1000.0, 0.0]), Time.get_ticks_msec())
 	_check(game.current_phase == 6, "remote boss snapshot clamped phase 6")
 	_check(game._current_map_texture() == game.textures["map_phase_6"], "phase6 map texture failed")
 
-	print("PHASE6_ART_ASSETS_SMOKE_OK boss_forms=3 enemy_types=4 exact_paths=21 network_phase=6")
+	print("PHASE6_ART_ASSETS_SMOKE_OK boss_forms=3 enemy_types=5 exact_paths=22 network_phase=6")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

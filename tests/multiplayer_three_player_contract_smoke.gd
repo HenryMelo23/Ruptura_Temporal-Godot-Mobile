@@ -153,7 +153,7 @@ func _run() -> void:
 	game.previous_mode = "game"
 	game.mode = "shop"
 	game._finish_shop()
-	_check(game.mode == "shop_return" and is_equal_approx(game.shop_return_timer, 3.0), "shop return did not freeze the world for three seconds")
+	_check(game.mode == "shop_return" and is_equal_approx(game.shop_return_timer, 1.5), "shop return did not use the 1.5 second recovery")
 
 	game._start_pause_mp_request(true, true, 1, 3)
 	_check(game.pause_mp_expected_count == 3 and game.pause_mp_vote_count == 1, "pause consensus did not wait for all three votes")
@@ -202,17 +202,22 @@ func _run() -> void:
 		game._collect_revival_fragment(int(Dictionary(fragment).get("id", 0)), game._mp_unique_id())
 	game.player_hp = 400
 	game.player_pos = game.revival_altar_life_pos
+	var expected_life_rate: float = game._revival_life_sacrifice_rate_for_dead_count(2)
+	var expected_life_loss: float = maxf(1.0, 400.0 * expected_life_rate)
+	var expected_hp_after_sacrifice: float = maxf(1.0, 400.0 - expected_life_loss)
+	var expected_hp_per_revived_player: float = maxf(1.0, expected_life_loss / 2.0)
 	game._try_interact_revival_altar(game.REVIVE_PAY_LIFE)
-	_check(is_equal_approx(game.player_hp, 184.0) and not game.revival_active, "life altar did not apply reduced 54 percent sacrifice when two allies were down")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 108.0) and is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 108.0), "life altar did not split reduced sacrificed health between dead players")
+	_check(is_equal_approx(game.player_hp, expected_hp_after_sacrifice) and not game.revival_active, "life altar did not apply the configured progressive sacrifice when two allies were down")
+	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), expected_hp_per_revived_player) and is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), expected_hp_per_revived_player), "life altar did not split the configured sacrificed health between dead players")
 	var healed: float = game._heal_player(100.0, "revive_smoke", false)
-	_check(is_equal_approx(healed, 50.0) and is_equal_approx(game.player_hp, 234.0), "revive sacrifice did not reduce incoming healing by 50 percent")
+	var expected_heal: float = 100.0 * game.REVIVE_HEAL_PENALTY_MULT
+	_check(is_equal_approx(healed, expected_heal) and is_equal_approx(game.player_hp, expected_hp_after_sacrifice + expected_heal), "revive sacrifice did not reduce incoming healing by the configured penalty")
 	game.is_dead = true
 	game.player_hp = 0
 	game._handle_revive(true)
 	_check(not game.is_dead and is_equal_approx(game.player_hp, game.player_hp_max * 0.5), "revive did not return player with half hp")
 
-	print("MULTIPLAYER_THREE_PLAYER_CONTRACT_SMOKE_OK players=3 stealth=true rewards=collective_points_individual_spend choices=exclusive decks=shared shop_return=3s balance=scaled")
+	print("MULTIPLAYER_THREE_PLAYER_CONTRACT_SMOKE_OK players=3 stealth=true rewards=collective_points_individual_spend choices=exclusive decks=shared shop_return=1.5s balance=scaled")
 	game.queue_free()
 	await process_frame
 	quit(0)

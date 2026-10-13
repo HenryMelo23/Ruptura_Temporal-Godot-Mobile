@@ -88,29 +88,29 @@ func _assert_simulation(phase: int, profile: String, first_target: float, repeat
 func _run() -> void:
 	_check(is_equal_approx(game._phase1_stalker_unlock_time(), game.PHASE1_STALKER_UNLOCK_TIME), "phase 1 stalker unlock changed")
 	_check(is_equal_approx(game._phase1_projector_unlock_time(), game.PHASE1_PROJECTOR_UNLOCK_TIME), "phase 1 projector unlock changed")
-	_check(is_equal_approx(game.enemy_manager.special_first_unlock_time(2), 60.0), "phase 2 onboarding first unlock mismatch")
+	_check(is_equal_approx(game.enemy_manager.special_first_unlock_time(2), 45.0), "phase 2 onboarding first unlock mismatch")
 	_check(is_equal_approx(game.enemy_manager.special_first_unlock_time(3), 120.0), "phase 3 onboarding first unlock mismatch")
 	_check(is_equal_approx(game.enemy_manager.special_first_unlock_time(6), 120.0), "phase 6 onboarding first unlock mismatch")
 
 	game.run_pacing_profile = game.PACING_PROFILE_ONBOARDING
-	_check(is_equal_approx(game._phase2_kamikaze_unlock_time(), 60.0), "phase 2 onboarding kamikaze timing mismatch")
-	_check(is_equal_approx(game._phase2_pyro_unlock_time(), 240.0), "phase 2 onboarding pyro timing mismatch")
+	_check(is_equal_approx(game._phase2_kamikaze_unlock_time(), 45.0), "phase 2 onboarding kamikaze timing mismatch")
+	_check(is_equal_approx(game._phase2_pyro_unlock_time(), 180.0), "phase 2 onboarding pyro timing mismatch")
 	_check(is_equal_approx(game._phase3_common_only_time(), 120.0), "phase 3 onboarding first pressure timing mismatch")
 	_check(is_equal_approx(game._phase3_incensario_unlock_time(), 240.0), "phase 3 onboarding incensario timing mismatch")
 	_check(is_equal_approx(game._phase3_guardiao_unlock_time(), 360.0), "phase 3 onboarding guardiao timing mismatch")
 	_check(is_equal_approx(game._phase6_leech_unlock_time(), 120.0), "phase 6 onboarding leech timing mismatch")
 
 	game.run_pacing_profile = game.PACING_PROFILE_EXPERIENCED
-	_check(is_equal_approx(game._phase2_kamikaze_unlock_time(), 45.0), "phase 2 experienced timing was compounded")
-	_check(is_equal_approx(game._phase2_pyro_unlock_time(), 180.0), "phase 2 experienced pyro timing mismatch")
+	_check(is_equal_approx(game._phase2_kamikaze_unlock_time(), 30.0), "phase 2 experienced timing was compounded")
+	_check(is_equal_approx(game._phase2_pyro_unlock_time(), 120.0), "phase 2 experienced pyro timing mismatch")
 	_check(is_equal_approx(game._phase3_common_only_time(), 90.0), "phase 3 experienced first pressure timing mismatch")
 	_check(is_equal_approx(game._phase3_incensario_unlock_time(), 180.0), "phase 3 experienced incensario timing mismatch")
 	_check(is_equal_approx(game._phase6_leech_unlock_time(), 90.0), "phase 6 experienced timing mismatch")
 
-	_assert_simulation(2, game.PACING_PROFILE_ONBOARDING, 60.0, 52.0)
+	_assert_simulation(2, game.PACING_PROFILE_ONBOARDING, 45.0, 48.0)
 	_assert_simulation(3, game.PACING_PROFILE_ONBOARDING, 120.0, 54.0)
 	_assert_simulation(6, game.PACING_PROFILE_ONBOARDING, 120.0, 66.0)
-	_assert_simulation(2, game.PACING_PROFILE_EXPERIENCED, 45.0, 42.0)
+	_assert_simulation(2, game.PACING_PROFILE_EXPERIENCED, 30.0, 38.0)
 	_assert_simulation(3, game.PACING_PROFILE_EXPERIENCED, 90.0, 43.0)
 	_assert_simulation(6, game.PACING_PROFILE_EXPERIENCED, 90.0, 52.0)
 
@@ -119,7 +119,7 @@ func _run() -> void:
 	_check(game.enemy_manager.special_last_spawn_phase_time < 0.0, "phase transition carried a pending special")
 	game.is_multiplayer = true
 	game.run_pacing_profile = game.PACING_PROFILE_ONBOARDING
-	_check(is_equal_approx(game.enemy_manager.special_first_unlock_time(2), 60.0), "multiplayer changed phase 2 pacing")
+	_check(is_equal_approx(game.enemy_manager.special_first_unlock_time(2), 45.0), "multiplayer changed phase 2 pacing")
 	_check(is_equal_approx(game.enemy_manager.special_repeat_gap(3), 54.0), "multiplayer changed phase 3 pacing")
 
 	if not failures.is_empty():

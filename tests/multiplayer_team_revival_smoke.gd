@@ -100,10 +100,12 @@ func _run() -> void:
 	_check(is_equal_approx(game.revival_total_time, game.REVIVAL_MULTI_TIME), "multi player timer should be 50s")
 	_collect_all_fragments()
 	game.player_pos = game.revival_altar_life_pos
+	_check(is_equal_approx(game._revival_life_sacrifice_rate_for_dead_count(1), 0.1296), "first life altar sacrifice should be 13 percent")
+	_check(is_equal_approx(game._revival_life_sacrifice_rate(), 0.2016), "two fallen players should raise the life sacrifice to 20 percent")
 	game._try_interact_revival_altar(game.REVIVE_PAY_LIFE)
-	_check(is_equal_approx(game.player_hp, 184.0), "life altar should apply reduced 54 percent sacrifice with two dead")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 108.0), "life altar did not split reduced hp to first dead peer")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 108.0), "life altar did not split reduced hp to second dead peer")
+	_check(is_equal_approx(game.player_hp, 319.36), "life altar should apply the 20 percent two-player sacrifice")
+	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 40.32), "life altar did not split the canonical life payment to first dead peer")
+	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 40.32), "life altar did not split the canonical life payment to second dead peer")
 
 	print("MULTIPLAYER_TEAM_REVIVAL_SMOKE_OK score_dedup=true fragments=true altars=true life_split=true")
 	game.queue_free()

@@ -64,6 +64,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Enemy spawning | `spawn_wave` | `scripts/systems/enemy_manager.gd:143` |
 | Phase 2 Sineiro owner | `class_name RTPhase2SineiroBorealController` | `scripts/systems/enemies/phase2_sineiro_boreal_controller.gd:1` |
 | Phase 2 Sineiro VFX | `class_name RTPhase2SineiroPresentation` | `scripts/presentation/phase2_sineiro_presentation.gd:1` |
+| Phase 6 Suturador owner | `class_name RTPhase6AmberSuturerController` | `scripts/systems/enemies/phase6_amber_suturer_controller.gd:1` |
+| Phase 6 Suturador VFX | `class_name RTPhase6AmberSuturerPresentation` | `scripts/presentation/phase6_amber_suturer_presentation.gd:1` |
 | Manifest evolution catalog | `class_name RTManifestEvolutionCatalog` | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd:2` |
 | Manifest evolution option source | `_manifest_evolution_entries` | `scripts/main_runtime_core.gd:7566` |
 | Manifest evolution projectile hook | `_apply_manifest_evolution_to_bullet` | `scripts/main_runtime_core.gd:7836` |
@@ -82,6 +84,7 @@ Use exact symbol search in these owners; core keeps compatible wrappers.
 - Phase setup/transition/portals: `scripts/systems/phase/phase_flow_controller.gd`.
 - Phase-scoped texture residency/catalog lazy loading: `scripts/systems/assets/runtime_asset_controller.gd`.
 - Phase 2 Sineiro Boreal combat/reward authority: `scripts/systems/enemies/phase2_sineiro_boreal_controller.gd`; presentation: `scripts/presentation/phase2_sineiro_presentation.gd`.
+- Phase 6 Suturador de Âmbar event authority: `scripts/systems/enemies/phase6_amber_suturer_controller.gd`; presentation: `scripts/presentation/phase6_amber_suturer_presentation.gd`.
 - Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`.
 - Boss wave drawing: `scripts/presentation/boss_wave_presentation.gd`.
 - Cross-owner regression: `tests/runtime_backup_reconciliation_smoke.gd`.

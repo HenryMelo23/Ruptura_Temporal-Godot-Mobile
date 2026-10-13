@@ -155,6 +155,24 @@ func draw_bargain_banner(g, card: Dictionary, rect: Rect2, alpha: float = 1.0) -
 	text(g, "DESCONTAO -%d%%" % int(round(rate * 100.0)), banner.grow(-4.0), 10, Color(1.0, 0.96, 0.62, alpha), true)
 
 
+func draw_cinzas_bonus_callout(g, card: Dictionary, rect: Rect2, alpha: float = 1.0) -> void:
+	var summary: String = String(card.get("cinzas_bonus_summary", ""))
+	if summary.is_empty() or g._is_empty_shop_slot(card):
+		return
+	var flicker: float = 0.78 + sin(float(Time.get_ticks_msec()) * 0.012) * 0.16
+	g.draw_rect(rect, Color(0.20, 0.045, 0.012, 0.94 * alpha), true)
+	g.draw_rect(rect, Color(1.0, 0.30 + flicker * 0.16, 0.08, 0.92 * alpha), false, 1.5)
+	var ember_y: float = rect.position.y + 6.0
+	for ember_index in range(5):
+		var x: float = rect.position.x + 12.0 + float(ember_index) * (rect.size.x - 24.0) / 4.0
+		var height: float = 3.0 + fposmod(float(ember_index) * 4.0 + float(Time.get_ticks_msec()) * 0.006, 6.0)
+		g.draw_line(Vector2(x, ember_y + height), Vector2(x + 2.0, ember_y), Color(1.0, 0.72, 0.18, 0.72 * alpha), 1.4)
+	var title_rect := Rect2(rect.position + Vector2(8.0, 2.0), Vector2(rect.size.x - 16.0, 18.0))
+	text(g, "CINZAS DESPERTAS", Rect2(title_rect.position + Vector2(1.0, 1.0), title_rect.size), 12, Color(0.45, 0.04, 0.0, alpha), true)
+	text(g, "CINZAS DESPERTAS", title_rect, 12, Color(1.0, 0.84, 0.30, alpha), true)
+	paragraph(g, summary, Rect2(rect.position + Vector2(8.0, 20.0), Vector2(rect.size.x - 16.0, rect.size.y - 23.0)), 12, true)
+
+
 func bargain_exit_confirmation_layout(viewport: Vector2) -> Dictionary:
 	var panel_width: float = minf(620.0, viewport.x - 48.0)
 	var panel_height: float = 196.0
@@ -613,13 +631,16 @@ func draw(g, viewport: Vector2) -> void:
 			text(g, String(card.get("nick", "")), Rect2(detail.position + Vector2(0, 70), Vector2(detail.size.x, 24)), 16, CYAN)
 		if bargain_discount_rate(card) > 0.0:
 			text(g, "CAPSULA DA BARGANHA: %d -> %d PTS" % [bargain_base_price(g, card), g._effective_card_price(card)], Rect2(detail.position + Vector2(0, 94 if not compact else 72), Vector2(detail.size.x, 22)), 14, GOLD)
-		var copy := String(card.get("desc", ""))
+		var cinzas_callout_y: float = 120.0 if bargain_discount_rate(card) > 0.0 else (96.0 if not compact else 74.0)
 		if card.has("cinzas_bonus_summary"):
-			copy += "\n\n" + String(card.cinzas_bonus_summary)
+			draw_cinzas_bonus_callout(g, card, Rect2(detail.position + Vector2(0, cinzas_callout_y), Vector2(detail.size.x, 58.0)), 1.0)
+		var copy := String(card.get("desc", ""))
 		var projections: Array = [] if g._is_empty_shop_slot(card) or action == "burn" else g._card_projection_lines(card)
 		if not projections.is_empty() and detail.size.y >= 320:
 			copy += "\n\n" + "\n".join(projections)
 		var copy_y := 78.0 if compact else 110.0
+		if card.has("cinzas_bonus_summary"):
+			copy_y = cinzas_callout_y + 64.0
 		paragraph(g, copy, Rect2(detail.position + Vector2(0, copy_y), Vector2(detail.size.x, maxf(48, detail.size.y - copy_y - 64))))
 		var enabled: bool = not busy() and not g._shop_purchase_animating()
 		button(g, areas.burn, "QUEIMAR", Color(1, 0.38, 0.17), enabled and g._can_burn_shop_card(card))

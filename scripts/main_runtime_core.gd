@@ -1,5 +1,7 @@
 extends "res://scripts/main_runtime_state.gd"
 
+const PrismaticaEvolutionController = preload("res://scripts/systems/manifest_evolutions/prismatica_evolution_controller.gd")
+
 # Main runtime implementation extracted from the scene adapter.
 
 func _configure_dedicated_server_timing() -> void :
@@ -38,6 +40,9 @@ func _ready() -> void :
 	sineiro_boreal_controller.name = "SineiroBorealController"
 	add_child(sineiro_boreal_controller)
 	sineiro_boreal_controller.bind_game(self)
+	amber_suturer_controller.name = "AmberSuturerController"
+	add_child(amber_suturer_controller)
+	amber_suturer_controller.bind_game(self)
 	add_child(early_boss_controller)
 	early_boss_controller.bind_game(self)
 	add_child(modern_boss_controller)
@@ -433,14 +438,14 @@ func _sanitize_desktop_hud_scale(value: float) -> float:
 
 
 func _prime_resource_mode_defaults() -> void :
-	if _is_mobile_runtime():
-		gfx_low_resource = true
-		gfx_memory_saver = true
-		mobile_low_resource_defaulted = true
+	# Mobile starts with the regular visual profile. Players may opt into either
+	# lightweight profile themselves; the adaptive budget remains a temporary
+	# safety net while FPS is actually low.
+	mobile_low_resource_defaulted = false
 
 
 func _memory_saver_active() -> bool:
-	return gfx_memory_saver or _is_mobile_runtime()
+	return gfx_memory_saver
 
 
 func _shadows_enabled() -> bool:
@@ -496,7 +501,6 @@ func _update_mobile_performance_budget(delta: float) -> void:
 		mobile_recovered_fps_seconds = 0.0
 		if mobile_low_fps_seconds >= MOBILE_ADAPTIVE_TRIGGER_TIME and not mobile_adaptive_visual_budget:
 			mobile_adaptive_visual_budget = true
-			gfx_low_resource = true
 			_trim_visual_effect_arrays()
 	elif fps >= MOBILE_ADAPTIVE_FPS_RECOVER:
 		mobile_recovered_fps_seconds += delta
@@ -2199,6 +2203,7 @@ func _enemy_report_name(kind: String) -> String:
 		ENEMY_LODARIO: return "Lodario"
 		ENEMY_FOSSIL_PUSTULE: return "Pustula Fossil"
 		ENEMY_CHRONAL_LEECH: return "Sanguessuga Cronal"
+		ENEMY_AMBER_SUTURER: return "Suturador de Ambar"
 		ENEMY_CINERIDO: return "Cinerido"
 		ENEMY_PANGOLIRO: return "Carapaca-Brasa-Pangoliro"
 		ENEMY_CORVOL: return "Fuligarra-Corvol"
@@ -2220,6 +2225,7 @@ func _enemy_report_icon(kind: String, phase: = 1) -> String:
 		ENEMY_LODARIO: return "lodario1.png"
 		ENEMY_FOSSIL_PUSTULE: return "pustulafossil1.png"
 		ENEMY_CHRONAL_LEECH: return "sanguesugacronal1.png"
+		ENEMY_AMBER_SUTURER: return "suturador_ambar/suturador_ambar_motion.png"
 		ENEMY_CINERIDO: return "cinerido-mov-1.png"
 		ENEMY_PANGOLIRO: return "Pangoliro.png"
 		ENEMY_CORVOL: return "Corvol1.png"
@@ -6084,6 +6090,7 @@ func _reset_card_proc_state() -> void :
 func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
 	sineiro_boreal_controller.reset_for_new_run()
+	amber_suturer_controller.reset_for_new_run()
 	_stop_boss1_stop_audio_context(true)
 	if clear_interrupted_save:
 		_record_initial_phase_attempt_before_new_run()
@@ -7140,6 +7147,12 @@ func _reset_phase5_state() -> void :
 
 
 func _reset_phase6_state() -> void :
+	if amber_suturer_controller != null and amber_suturer_controller.game == self:
+		amber_suturer_controller.reset_for_phase()
+	else:
+		amber_suturer_state.clear()
+		amber_sutures.clear()
+		amber_suturer_visual_events.clear()
 	phase6_pustule_pools.clear()
 	boss6_lodarian_pools.clear()
 	boss6_state = BOSS6_STATE_IDLE
@@ -7778,6 +7791,7 @@ func _begin_manifest_evolution_barrier(stage: String, options: Array, pos: Vecto
 		"pos": pos,
 		"previous_mode": previous_mode
 	}
+	_consume_manifest_evolution_trigger(stage)
 	if expected_peers.has(_mp_unique_id()) and _local_manifest_evolution_eligible():
 		_apply_manifest_evolution_choice_local(stage, options, pos, previous_mode)
 	if _shop_rpc_available():
@@ -8022,6 +8036,9 @@ func _apply_manifest_evolution_to_bullet(bullet: Dictionary) -> void :
 		"source": String(bullet.get("kind", "projectile")),
 		"author_peer_id": _mp_unique_id()
 	})
+	if PrismaticaEvolutionController.is_active(self):
+		PrismaticaEvolutionController.apply_to_bullet(self, bullet)
+		return
 	var choices: Array = _manifest_evolution_choices()
 	if choices.is_empty():
 		return
@@ -8136,6 +8153,9 @@ func _spawn_manifest_evolution_echoes(source: Dictionary, profile: Dictionary) -
 
 
 func _update_manifest_evolution_projectile(bullet: Dictionary, delta: float) -> void :
+	if PrismaticaEvolutionController.is_active(self):
+		PrismaticaEvolutionController.update_projectile(self, bullet, delta)
+		return
 	if not bool(bullet.get("evolution_homing", false)):
 		return
 	var origin: = Vector2(bullet.get("pos", player_pos))
@@ -8168,6 +8188,8 @@ func _update_manifest_evolution_projectile(bullet: Dictionary, delta: float) -> 
 
 
 func _manifest_evolution_on_projectile_hit(bullet: Dictionary, target: Dictionary, target_pos: Vector2) -> bool:
+	if PrismaticaEvolutionController.is_active(self):
+		return PrismaticaEvolutionController.on_projectile_hit(self, bullet, target, target_pos)
 	var event_id := String(bullet.get("manifest_evolution_event_id", ""))
 	if event_id == "":
 		event_id = _manifest_evolution_new_combat_event_id("projectile", String(bullet.get("kind", "projectile")))
@@ -8297,6 +8319,9 @@ func _apply_manifest_evolution_seal(target: Dictionary, profile: Dictionary, cho
 
 
 func _manifest_evolution_on_skill(center: Vector2) -> void :
+	if PrismaticaEvolutionController.is_active(self):
+		PrismaticaEvolutionController.on_skill(self, center)
+		return
 	_manifest_evolution_dispatch_combat_event({
 		"type": "skill_cast",
 		"source": manifestation_key,
@@ -8336,6 +8361,9 @@ func _manifest_evolution_apply_skill_effects(center: Vector2) -> bool:
 
 
 func _manifest_evolution_on_teleport(origin: Vector2, destination: Vector2) -> void :
+	if PrismaticaEvolutionController.is_active(self):
+		PrismaticaEvolutionController.on_teleport(self, origin, destination)
+		return
 	_manifest_evolution_dispatch_combat_event({
 		"type": "teleport",
 		"source": manifestation_key,
@@ -8357,6 +8385,9 @@ func _manifest_evolution_apply_teleport_effects(origin: Vector2, destination: Ve
 
 func _update_manifest_evolution_effects(delta: float) -> void :
 	if manifest_evolution_state.is_empty():
+		return
+	if PrismaticaEvolutionController.is_active(self):
+		PrismaticaEvolutionController.update_effects(self, delta)
 		return
 	var fields: Array = manifest_evolution_state.get("fields", [])
 	for field in fields:
@@ -8738,6 +8769,7 @@ func _update_game(delta: float) -> void :
 	runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
 	_update_bargain_capsule(delta)
 	sineiro_boreal_controller.update(delta)
+	amber_suturer_controller.update(delta)
 	if shop_auto_enabled and not forced_shop_triggered:
 		shop_auto_elapsed += delta
 		next_forced_shop_time = max(0.0, shop_auto_interval - shop_auto_elapsed)
@@ -17268,6 +17300,16 @@ func _mark_manifest_evolution_fragment_collected(source: String) -> void:
 	manifest_evolution_fragment_claim_source = source
 
 
+func _consume_manifest_evolution_trigger(stage: String) -> void:
+	# One pickup opens the shared multiplayer barrier. Remove every local replica
+	# from that reward before another peer can trigger a second evolution.
+	arauto_evolution_fragment.clear()
+	arauto_evolution_fragments.clear()
+	var stage_claim_count: int = 2 if stage == "ev2" else 1
+	manifest_evolution_fragment_claim_count = maxi(manifest_evolution_fragment_claim_count, stage_claim_count)
+	manifest_evolution_fragment_claimed_this_run = manifest_evolution_fragment_claim_count >= _manifest_evolution_max_choices()
+
+
 func _spawn_arauto_evolution_fragment(pos: Vector2, source: String = "") -> void :
 	if not _manifest_evolution_fragment_available():
 		_add_text("JOIA JA COLETADA", pos + Vector2(-96, -182), Color(0.68, 0.72, 0.82), 1.45, 19)
@@ -17547,6 +17589,16 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 			speed *= float(_stalker_profile().get("base", 1.1))
 			damage *= 0.82
 			points = 94
+		ENEMY_AMBER_SUTURER:
+			hp_mult = 12.0
+			speed = amber_suturer_controller.MOVE_SPEED
+			damage *= 0.45
+			points = 190
+		ENEMY_AMBER_SUTURE_NODE:
+			hp_mult = 1.8
+			speed = 0.0
+			damage = 0.0
+			points = 0
 		ENEMY_CINERIDO:
 			hp_mult = 0.85
 			speed = 112.0
@@ -17696,6 +17748,18 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 		enemies.back()["leech_leap_to"] = pos
 		enemies.back()["leech_hit_done"] = false
 		enemies.back()["alpha"] = 0.45
+	elif kind == ENEMY_AMBER_SUTURER:
+		enemies.back()["shoot_cd"] = 999.0
+		enemies.back()["parado"] = true
+		enemies.back()["state"] = amber_suturer_controller.STATE_ENTRY
+		enemies.back()["suturer_state"] = amber_suturer_controller.STATE_ENTRY
+		enemies.back()["suturer_state_timer"] = amber_suturer_controller.ENTRY_TIME
+		enemies.back()["suturer_anim_time"] = 0.0
+	elif kind == ENEMY_AMBER_SUTURE_NODE:
+		enemies.back()["shoot_cd"] = 999.0
+		enemies.back()["parado"] = true
+		enemies.back()["skip_rewards"] = true
+		enemies.back()["contact_grace"] = 999.0
 	elif kind == ENEMY_CINERIDO:
 		enemies.back()["shoot_cd"] = 999.0
 		enemies.back()["parado"] = true
@@ -21790,6 +21854,8 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if not enemies.has(enemy):
 		return
 	var kill_pos: Vector2 = enemy["pos"]
+	if amber_suturer_controller.on_enemy_defeated(enemy):
+		return
 	if bool(enemy.get("aguilhao_nodule", false)):
 		_spawn_enemy_desfragmentation(kill_pos, Color(0.56, 1.0, 0.2), 18)
 		arauto_echo_breaks.append({"pos": kill_pos, "life": 0.5, "max": 0.5, "phase": rng.randf_range(0.0, TAU), "color": Color(0.56, 1.0, 0.2)})
@@ -23923,6 +23989,21 @@ func _bargain_capsule_active() -> bool:
 	return not bargain_capsule.is_empty() and String(bargain_capsule.get("state", BARGAIN_CAPSULE_STATE_NONE)) != BARGAIN_CAPSULE_STATE_NONE
 
 
+func _bargain_pending_discount_remaining() -> float:
+	if bargain_capsule_pending_discount.is_empty():
+		return 0.0
+	var deadline: float = float(bargain_capsule_pending_discount.get("claim_deadline", INF))
+	return INF if is_inf(deadline) else maxf(0.0, deadline - time_alive)
+
+
+func _expire_bargain_pending_discount_if_needed() -> void:
+	if bargain_capsule_pending_discount.is_empty() or _bargain_pending_discount_remaining() > 0.0:
+		return
+	bargain_capsule_pending_discount.clear()
+	bargain_capsule_last_result = {"result": "expired", "time": time_alive, "phase": current_phase}
+	_add_text("DESCONTAO EXPIROU", player_pos + Vector2(-92, -112), Color(1.0, 0.48, 0.18), 1.2, 19)
+
+
 func _bargain_capsule_vulnerable() -> bool:
 	return _bargain_capsule_active() and String(bargain_capsule.get("state", "")) == BARGAIN_CAPSULE_STATE_ACTIVE and float(bargain_capsule.get("hp", 0.0)) > 0.0
 
@@ -23990,6 +24071,7 @@ func _spawn_bargain_capsule(pos: Vector2 = Vector2.INF) -> Dictionary:
 
 
 func _update_bargain_capsule(delta: float) -> void:
+	_expire_bargain_pending_discount_if_needed()
 	if not _is_world_authority():
 		return
 	if _bargain_capsule_active():
@@ -24109,6 +24191,9 @@ func _apply_bargain_capsule_discount(discount: Dictionary) -> void:
 	if discount.is_empty():
 		return
 	bargain_capsule_pending_discount = discount.duplicate(true)
+	var guaranteed_window: float = maxf(BARGAIN_CAPSULE_SHOP_CLAIM_TIME, _manual_shop_cooldown_remaining() + BARGAIN_CAPSULE_SHOP_MIN_AVAILABLE_TIME)
+	bargain_capsule_pending_discount["claim_deadline"] = time_alive + guaranteed_window
+	bargain_capsule_pending_discount["claim_window"] = guaranteed_window
 	bargain_capsule_last_result = {
 		"result": "success",
 		"discount": discount.duplicate(true),
@@ -24183,6 +24268,7 @@ func _bargain_discount_active_for_shop() -> bool:
 
 func _activate_bargain_discount_for_shop_visit() -> void:
 	shop_bargain_discount_session.clear()
+	_expire_bargain_pending_discount_if_needed()
 	if bargain_capsule_pending_discount.is_empty():
 		return
 	shop_bargain_discount_session = bargain_capsule_pending_discount.duplicate(true)
@@ -29564,9 +29650,7 @@ func _start_boss_stage() -> void :
 	boss_stage_safe_angle = rng.randf_range( - PI, PI)
 	boss_transition_waves.clear()
 	boss_attacks.clear()
-	_vibrate(140, 0.42)
 	_add_text("MARÉ DE CERCO", boss_pos + Vector2(0, -120), Color(1.0, 0.64, 0.16), 1.5, 30)
-	_play_sfx("boss_impact", 0.025, 0.92, 0.96)
 
 
 func _boss_stage_enraged() -> bool:
@@ -29604,10 +29688,8 @@ func _update_boss_stage(delta: float) -> void :
 				already = true
 				break
 		if not already:
-			_vibrate(BOSS_STAGE_WAVE_HAPTIC_MS, 0.34 + float(wave_index) * 0.08)
 			if wave_index == 0:
-				screen_shake_timer = 0.32
-				screen_shake_strength = 18.0
+				_boss1_siege_tide_landing_feedback()
 				_spawn_radial_particles(boss_pos, Color(0.7, 0.24, 1.0), 34)
 				_add_text("ABERTURAS ESTREITAS" if enraged else "FIQUE NAS ABERTURAS", boss_pos + Vector2(0, -138), Color(0.34, 1.0, 0.92), 1.8, 24)
 				_play_sfx("boss_impact", 0.025, 1.0, 0.92 if enraged else 1.0)
@@ -29644,6 +29726,13 @@ func _update_boss_stage(delta: float) -> void :
 		boss_stage_duration = BOSS_STAGE_JUMP_TIME
 		boss_stage_approaching = false
 		boss_attack_timer = 1.0
+
+
+func _boss1_siege_tide_landing_feedback() -> void:
+	screen_shake_timer = maxf(screen_shake_timer, 0.32)
+	screen_shake_strength = maxf(screen_shake_strength, 18.0)
+	if _is_mobile_runtime():
+		_vibrate(BOSS_STAGE_WAVE_HAPTIC_MS, 0.42)
 
 
 func _start_boss1_absorb() -> void :
@@ -30503,6 +30592,8 @@ func _start_boss_call_local() -> void :
 func _despawn_enemies_for_boss_call() -> void :
 	if bool(sineiro_boreal_state.get("active", false)):
 		sineiro_boreal_controller.cleanup("boss_call")
+	if current_phase == 6 and amber_suturer_controller != null:
+		amber_suturer_controller.cleanup("boss_call")
 	if current_phase == 5:
 		phase5_hazards.clear()
 		phase5_rats.clear()
@@ -32471,7 +32562,7 @@ func _update_burned_card_marks_after_shop(picks: Array) -> void :
 				buffed["cinzas_buff_stacks"] = _cinzas_mark_stacks(_card_id(card))
 				buffed["cinzas_bonus_summary"] = _cinzas_return_bonus_summary(buffed)
 				buffed["cinzas_burn_seed"] = int(cinzas_burn_marks[mark_index].get("holes_seed", abs(_card_id(card).hash())))
-				buffed["desc"] = String(card.get("desc", "")) + "\nRetorno das Cinzas x%d: %s. Se voce rolar ou comprar outra carta, a brasa permanece ate esta carta ser comprada." % [int(buffed["cinzas_buff_stacks"]), String(buffed["cinzas_bonus_summary"])]
+				buffed["desc"] = String(card.get("desc", "")) + "\nRetorno das Cinzas x%d: bonus destacado em chamas. Se voce rolar ou comprar outra carta, a brasa permanece ate esta carta ser comprada." % int(buffed["cinzas_buff_stacks"])
 				picks[i] = buffed
 				cinzas_burn_marks[mark_index]["eligible_misses"] = 0
 				cinzas_burn_marks[mark_index]["last_seen_visit"] = shop_visit_index
@@ -36284,7 +36375,7 @@ func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 
 
 func _gameplay_preference_keys() -> Array:
-	var keys: = ["analog", "shop_mode", "shop_interval", "target_priority", "damage_text", "interface_text", "fps", "tutorial", "retornante_cheat", "haptics"]
+	var keys: = ["analog", "shop_mode", "shop_interval", "target_priority", "damage_text", "interface_text", "geovana_bark", "fps", "tutorial", "retornante_cheat", "haptics"]
 	if _uses_desktop_ui():
 		keys.insert(4, "desktop_aim")
 		keys.insert(5, "desktop_teleport")
@@ -36777,7 +36868,8 @@ func _catalog_enemy_items() -> Array:
 		{"kind": "enemy", "name": "Enguia do Miasma", "summary": "Uma febre que aprendeu a nadar na fenda.", "desc": "A Enguia do Miasma desliza como se o ar fosse lama. Ela nao ocupa muito espaco, mas deixa a leitura da arena mais venenosa e instavel.", "lore": "Registros do Ruptura tratam a Enguia como um sintoma da sexta ruptura: um corpo fino carregando o odor vivo de algo que apodreceu fora do tempo.", "mechanics": "Inimigo de pressao movel da fase 6. Forca reposicionamento constante e prepara o terreno para ameacas mais pesadas da Matriarca.", "color": Color(0.58, 1.0, 0.78), "texture": "enemy_phase_6_enguia_miasma"},
 		{"kind": "enemy", "name": "Lodario", "summary": "O peso mole da Chaga.", "desc": "O Lodario se arrasta como lama com vontade propria. Onde ele passa, a fase parece ficar mais espessa e menos generosa com erro.", "lore": "Ele e uma mistura de sedimento, memoria e carne cansada. A Matriarca nao o comanda como soldado; ela o derrama pelo mapa.", "mechanics": "Funciona como corpo de bloqueio: mais resistente e lento, bom para fechar caminhos e tornar a fuga menos limpa.", "color": Color(0.86, 0.7, 0.46), "texture": "enemy_phase_6_lodario"},
 		{"kind": "enemy", "name": "Pustula Fossil", "summary": "Uma ferida antiga que ainda pulsa.", "desc": "A Pustula Fossil parece parada demais para ser urgente, ate a arena obrigar Geovana a encostar naquilo que devia ter sido enterrado.", "lore": "A sexta ruptura conserva suas dores como reliquias. Cada Pustula e um fragmento fossilizado da Chaga tentando voltar a ser carne.", "mechanics": "Inimigo pesado de area e prioridade. Deve ser lido como obstaculo vivo que aumenta o custo de limpar a fase sem planejamento.", "color": Color(1.0, 0.62, 0.32), "texture": "enemy_phase_6_pustula_fossil"},
-		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Cai sobre o alvo, arma o bote por alguns segundos e so entao salta para grudar no presente de Geovana.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda, pousa perto do jogador, leva 2s para armar o ataque e evita dividir o proprio raio de bote com outra sanguessuga.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"}
+		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Cai sobre o alvo, arma o bote por alguns segundos e so entao salta para grudar no presente de Geovana.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda, pousa perto do jogador, leva 2s para armar o ataque e evita dividir o proprio raio de bote com outra sanguessuga.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"},
+		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele nao persegue o corpo: observa a rota e endurece a ferida da Chaga no caminho que Geovana esta prestes a usar.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente: telegrafa ate duas suturas por poucos segundos. Destrua os nos osseos nas pontas para abrir passagem ou elimine o nucleo.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
 	]
 
 
@@ -37212,6 +37304,7 @@ func _init_link_chain_physics(link: Dictionary) -> void :
 
 func _draw_enemies(camera: Vector2) -> void :
 	SineiroBorealPresentation.draw_world(self, camera)
+	AmberSuturerPresentation.draw_world(self, camera)
 	EntitiesPresentation._draw_enemies(self, camera)
 
 
@@ -37781,6 +37874,8 @@ func _phase6_enemy_texture_key(kind: String) -> String:
 			return "enemy_phase_6_pustula_fossil"
 		ENEMY_CHRONAL_LEECH:
 			return "enemy_phase_6_sanguessuga_cronal"
+		ENEMY_AMBER_SUTURER:
+			return "enemy_phase_6_suturador_ambar"
 	return "enemy_phase_6_enguia_miasma"
 
 
@@ -37803,7 +37898,7 @@ func _enemy_default_facing(kind: String) -> Vector2:
 			return Vector2.LEFT
 		ENEMY_STALKER, ENEMY_PROJECTOR, ENEMY_LARAPIO, ENEMY_COUT_ATTACK_SPEED:
 			return Vector2.RIGHT
-		ENEMY_LODARIO, ENEMY_MIASMA_EEL, ENEMY_CHRONAL_LEECH:
+		ENEMY_LODARIO, ENEMY_MIASMA_EEL, ENEMY_CHRONAL_LEECH, ENEMY_AMBER_SUTURER:
 			return Vector2.RIGHT
 		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL:
 			return Vector2.RIGHT
@@ -41255,6 +41350,7 @@ func _handle_key(event: InputEventKey) -> void :
 				"target_priority": _cycle_target_priority(-1)
 				"damage_text": damage_text_scale = max(0.5, damage_text_scale - 0.25)
 				"interface_text": interface_text_scale = max(0.5, interface_text_scale - 0.25)
+				"geovana_bark": geovana_bark_scale = max(0.5, snapped(geovana_bark_scale - 0.1, 0.1))
 				"desktop_aim": _cycle_desktop_aim_mode(-1)
 				"desktop_teleport": _cycle_desktop_teleport_mode(-1)
 				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(-1)
@@ -41269,6 +41365,7 @@ func _handle_key(event: InputEventKey) -> void :
 				"target_priority": _cycle_target_priority(1)
 				"damage_text": damage_text_scale = min(2.0, damage_text_scale + 0.25)
 				"interface_text": interface_text_scale = min(2.0, interface_text_scale + 0.25)
+				"geovana_bark": geovana_bark_scale = min(1.5, snapped(geovana_bark_scale + 0.1, 0.1))
 				"desktop_aim": _cycle_desktop_aim_mode(1)
 				"desktop_teleport": _cycle_desktop_teleport_mode(1)
 				"desktop_attack_aim": _cycle_desktop_attack_aim_mode(1)
@@ -42877,6 +42974,10 @@ func _enemy_radius(enemy: Dictionary) -> float:
 			return 34.0
 		ENEMY_CORVOL:
 			return 24.0
+		ENEMY_AMBER_SUTURER:
+			return 54.0
+		ENEMY_AMBER_SUTURE_NODE:
+			return amber_suturer_controller.NODE_RADIUS
 	return 40.0
 
 
@@ -43973,6 +44074,9 @@ func _on_peer_disconnected(id: int) -> void :
 	if dedicated_server_mode:
 		var shutdown_was_pending: = dedicated_room_shutdown_pending
 		var owner_left: = id == dedicated_room_owner_peer_id
+		for peer_id in _mp_peer_ids():
+			if int(peer_id) != id:
+				rpc_id(int(peer_id), "_rpc_remove_remote_player", id)
 		dedicated_ready_by_peer.erase(id)
 		dedicated_ready_seq_by_peer.erase(id)
 		dedicated_names_by_peer.erase(id)
@@ -45325,12 +45429,13 @@ func _draw_ally_health_bar(center: Vector2, width: float, ratio: float, accent: 
 	EntitiesPresentation._draw_ally_health_bar(self, center, width, ratio, accent)
 
 
-func _net_player_texture_for_state(anim_state: int, frame_idx: int, _manifestation_index: int = -1) -> Texture2D:
-	if LaceranteSprites.is_manifestation(self, _manifestation_index):
+func _net_player_texture_for_state(anim_state: int, frame_idx: int, _manifestation_index: int = -1, manifestation_key_hint: String = "") -> Texture2D:
+	var remote_is_lacerante: bool = manifestation_key_hint == "lacerante" or LaceranteSprites.is_manifestation(self, _manifestation_index)
+	if remote_is_lacerante:
 		var lacerante_frames: Array = textures.get(LaceranteSprites.remote_key(self, anim_state), [])
 		return lacerante_frames[posmod(frame_idx, lacerante_frames.size())] if not lacerante_frames.is_empty() else null
 	var key: = "player_idle"
-	var is_lacerante: bool = LaceranteSprites.is_manifestation(self, _manifestation_index)
+	var is_lacerante: bool = remote_is_lacerante
 	match anim_state:
 		NET_ANIM_FROZEN:
 			key = "player_lacerante_frozen" if is_lacerante else "player_frozen"
@@ -45367,7 +45472,7 @@ func _sync_multiplayer_state() -> void :
 	if online_connected:
 		if not online_local_spectator and _should_send_player_sync(now_ms):
 			var animation: = _network_player_animation_snapshot(now_ms)
-			rpc_id(1, "_rpc_client_player_state_light", player_pos, int(player_hp), int(player_hp_max), is_dead, selected_manifestation, selected_aura, animation.x, animation.y, _should_flip_player_sprite(), net_ping_ms, _eclipsada_is_stealthed())
+			rpc_id(1, "_rpc_client_player_state_light", player_pos, int(player_hp), int(player_hp_max), is_dead, selected_manifestation, selected_aura, animation.x, animation.y, _should_flip_player_sprite(), net_ping_ms, _eclipsada_is_stealthed(), manifestation_key)
 		if _is_world_replica():
 			return
 
@@ -45548,6 +45653,9 @@ func _pack_net_boss_visuals() -> Dictionary:
 		6:
 			packet.merge({
 				"phase6_pustule_pools": phase6_pustule_pools.duplicate(true),
+				"amber_suturer_state": amber_suturer_state.duplicate(true),
+				"amber_sutures": amber_sutures.duplicate(true),
+				"amber_suturer_visual_events": amber_suturer_visual_events.duplicate(true),
 				"boss6_lodarian_pools": boss6_lodarian_pools.duplicate(true),
 				"boss6_state": boss6_state,
 				"boss6_current_ability": boss6_current_ability,
@@ -45658,8 +45766,8 @@ func _rpc_client_player_state(state: Dictionary, p_slashes: Array, p_prisms: Arr
 			rpc_id(peer_id, "_rpc_remote_player_state", sender, state, p_slashes, p_prisms, p_anchors, p_seed_links, p_effects)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
-func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, anim_state: int, frame_idx: int, flip_h: bool, ping: int, stealthed: bool = false) -> void :
-	_net_report_count_in("player", 72)
+func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, anim_state: int, frame_idx: int, flip_h: bool, ping: int, stealthed: bool = false, manifestation_key_hint: String = "") -> void :
+	_net_report_count_in("player", 88)
 	if not dedicated_server_mode:
 		return
 	var sender: = _mp_sender_id()
@@ -45673,6 +45781,7 @@ func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bo
 		"hp_max": hp_max,
 		"dead": dead,
 		"manifestation": manifestation,
+		"manifestation_key": manifestation_key_hint,
 		"aura": aura,
 		"anim_state": anim_state,
 		"frame_idx": frame_idx,
@@ -45684,8 +45793,8 @@ func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bo
 	_dedicated_store_player_state(sender, state)
 	for peer_id in _mp_peer_ids():
 		if peer_id != sender:
-			_net_report_count_out("player", 72)
-			rpc_id(peer_id, "_rpc_remote_player_state_light", sender, pos, hp, hp_max, dead, manifestation, aura, anim_state, frame_idx, flip_h, ping, stealthed, String(dedicated_names_by_peer.get(sender, "Player %d" % sender)))
+			_net_report_count_out("player", 88)
+			rpc_id(peer_id, "_rpc_remote_player_state_light", sender, pos, hp, hp_max, dead, manifestation, aura, anim_state, frame_idx, flip_h, ping, stealthed, String(dedicated_names_by_peer.get(sender, "Player %d" % sender)), manifestation_key_hint)
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)
 func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void :
@@ -45702,8 +45811,8 @@ func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array,
 	net_effects = p_effects
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)
-func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, anim_state: int, frame_idx: int, flip_h: bool, ping: int, stealthed: bool = false, remote_name: String = "") -> void :
-	_net_report_count_in("player", 72)
+func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, anim_state: int, frame_idx: int, flip_h: bool, ping: int, stealthed: bool = false, remote_name: String = "", manifestation_key_hint: String = "") -> void :
+	_net_report_count_in("player", 88)
 	if peer_id == _mp_unique_id():
 		return
 	net_transport_last_activity_ms = Time.get_ticks_msec()
@@ -45713,6 +45822,7 @@ func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max:
 		"hp_max": hp_max,
 		"dead": dead,
 		"manifestation": manifestation,
+		"manifestation_key": manifestation_key_hint,
 		"aura": aura,
 		"anim_state": anim_state,
 		"frame_idx": frame_idx,
@@ -45781,6 +45891,17 @@ func _apply_remote_player_revive(peer_id: int, hp_amount: float, revive_pos: Vec
 	net_players_by_peer[peer_id] = state
 	net_player_history_by_peer[peer_id] = [{"time_ms": now_ms, "pos": revive_pos, "hp": maxf(1.0, hp_amount)}]
 	_sync_legacy_remote_player(peer_id)
+	partner_is_dead = _all_remote_players_dead()
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_remove_remote_player(peer_id: int) -> void:
+	if dedicated_server_mode or peer_id <= 0 or peer_id == _mp_unique_id():
+		return
+	net_players_by_peer.erase(peer_id)
+	net_player_history_by_peer.erase(peer_id)
+	_forget_targeting_peer(peer_id)
+	_sync_legacy_remote_player()
 	partner_is_dead = _all_remote_players_dead()
 
 
@@ -46109,6 +46230,11 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	boss3_sector_ritual_cooldown = float(data.get("boss3_sector_ritual_cooldown", boss3_sector_ritual_cooldown))
 	boss3_sector_ritual_sequence = int(data.get("boss3_sector_ritual_sequence", boss3_sector_ritual_sequence))
 	phase6_pustule_pools = Array(data.get("phase6_pustule_pools", phase6_pustule_pools)).duplicate(true)
+	if current_phase == 6 and _is_world_replica():
+		var incoming_suturer_state = data.get("amber_suturer_state", amber_suturer_state)
+		amber_suturer_state = incoming_suturer_state.duplicate(true) if incoming_suturer_state is Dictionary else {}
+		amber_sutures = Array(data.get("amber_sutures", amber_sutures)).duplicate(true)
+		amber_suturer_visual_events = Array(data.get("amber_suturer_visual_events", amber_suturer_visual_events)).duplicate(true)
 	boss6_lodarian_pools = Array(data.get("boss6_lodarian_pools", boss6_lodarian_pools)).duplicate(true)
 	boss6_state = String(data.get("boss6_state", boss6_state))
 	boss6_current_ability = String(data.get("boss6_current_ability", boss6_current_ability))
@@ -46733,6 +46859,7 @@ func _rpc_manifest_evolution_barrier_open(barrier_id: int, expected_peers: Array
 		"pos": pos,
 		"previous_mode": previous_mode
 	}
+	_consume_manifest_evolution_trigger(stage)
 	if not manifest_evolution_barrier_expected_peers.has(local_peer) or not _local_manifest_evolution_eligible():
 		return
 	manifest_evolution_barrier_opening = true
@@ -47089,7 +47216,11 @@ func _team_revival_dead_count() -> int:
 
 func _revival_life_sacrifice_rate() -> float:
 	_sync_team_revival_from_legacy()
-	return team_revival_state.life_sacrifice_rate(REVIVE_LIFE_SACRIFICE_RATE, REVIVAL_MULTI_LIFE_SACRIFICE_RATE, REVIVE_LIFE_SACRIFICE_REDUCTION)
+	return team_revival_state.life_sacrifice_rate(REVIVE_LIFE_SACRIFICE_BASE_RATE, REVIVE_LIFE_SACRIFICE_PER_ADDITIONAL_FALLEN_RATE, REVIVE_LIFE_SACRIFICE_MAX_RATE, REVIVE_LIFE_SACRIFICE_REDUCTION)
+
+
+func _revival_life_sacrifice_rate_for_dead_count(dead_count: int) -> float:
+	return team_revival_state.life_sacrifice_rate_for_dead_count(dead_count, REVIVE_LIFE_SACRIFICE_BASE_RATE, REVIVE_LIFE_SACRIFICE_PER_ADDITIONAL_FALLEN_RATE, REVIVE_LIFE_SACRIFICE_MAX_RATE, REVIVE_LIFE_SACRIFICE_REDUCTION)
 
 
 func _revival_points_cost() -> int:
@@ -47444,12 +47575,13 @@ func _revive_payment_method(method: String) -> String:
 
 
 func _apply_revive_life_sacrifice() -> void :
-	var loss: float = maxf(1.0, float(player_hp) * REVIVE_LIFE_SACRIFICE_RATE * (1.0 - REVIVE_LIFE_SACRIFICE_REDUCTION))
+	var rate: float = _revival_life_sacrifice_rate_for_dead_count(1)
+	var loss: float = maxf(1.0, float(player_hp) * rate)
 	player_hp = maxf(1.0, float(player_hp) - loss)
 	revive_heal_penalty_timer = maxf(revive_heal_penalty_timer, REVIVE_HEAL_PENALTY_DURATION)
 	damage_flash_timer = maxf(damage_flash_timer, 0.18)
 	_spawn_radial_particles(player_pos, Color(1.0, 0.18, 0.3), 24)
-	_add_text("SACRIFICIO: CURAS -50% POR 60s", player_pos + Vector2(0, -96), Color(1.0, 0.34, 0.42), 1.2, 18)
+	_add_text("SACRIFICIO %.0f%%: CURAS -50%% POR 60s" % (rate * 100.0), player_pos + Vector2(0, -96), Color(1.0, 0.34, 0.42), 1.2, 18)
 
 
 func _accept_team_revive_request(payment_method: = REVIVE_PAY_POINTS) -> void :
@@ -47504,6 +47636,8 @@ func _rpc_revive_player(half_health: = true, revive_positions: Dictionary = {}) 
 			_apply_remote_player_revive(peer_id, max(1.0, hp_max * (0.5 if half_health else 1.0)), Vector2(revive_positions.get(peer_key, player_pos)))
 	if is_dead:
 		_handle_revive_with_hp(max(1.0, player_hp_max * (0.5 if half_health else 1.0)), Vector2(revive_positions.get(_mp_unique_id(), player_pos)))
+	else:
+		_clear_team_revival_state()
 
 
 func _revive_multiplayer_team_after_boss_kill() -> void :
@@ -47527,6 +47661,8 @@ func _revive_multiplayer_team_after_boss_kill() -> void :
 		if dead_ids.has(peer_id):
 			var hp_max: float = float(Dictionary(net_players_by_peer.get(peer_id, {})).get("hp_max", player_hp_max))
 			_apply_remote_player_revive(peer_id, max(1.0, hp_max * 0.5), Vector2(revive_positions.get(peer_id, _revive_position_for_peer(peer_id, _mp_unique_id()))))
+	_clear_team_revival_state()
+	_broadcast_team_revival_state()
 	_add_text("EQUIPE REERGUIDA", boss_pos + Vector2(0, -176), Color(0.2, 1.0, 0.5), 1.4, 22)
 
 

@@ -76,7 +76,7 @@ func _run() -> void:
 
 	game.card_cost = 500
 	game.cards_bought["pacto_possibilidades"] = 5
-	assert(game._effective_card_price(speed) == 400)
+	assert(game._effective_card_price(speed) == 350)
 	assert(game._effective_card_price(_find_card("Trembo")) == 500)
 	game.cards_bought["moeda_estavel"] = 6
 	assert(game._shop_price_increment_after_purchase() == 64)

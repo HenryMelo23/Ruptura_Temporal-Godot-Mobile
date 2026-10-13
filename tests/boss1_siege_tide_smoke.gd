@@ -57,6 +57,12 @@ func _run() -> void:
 		for index in range(game.boss_transition_waves.size()):
 			assert(is_equal_approx(float(game.boss_transition_waves[index].get("open_angle", 0.0)), before_angles[index]))
 
+	_prepare_boss_stage(3)
+	game.boss_stage_timer = game.boss_stage_duration - game.BOSS_STAGE_SLAM_TIME * 0.5
+	assert(game._boss_draw_position().y < game.boss_pos.y - 150.0)
+	game.boss_stage_timer = game.boss_stage_duration - game.BOSS_STAGE_SLAM_TIME
+	assert(is_equal_approx(game._boss_draw_position().y, game.boss_pos.y))
+
 	_prepare_boss_stage(1)
 	var wave: Dictionary = game.boss_transition_waves[0]
 	wave["age"] = float(wave["warning"])
@@ -90,7 +96,7 @@ func _run() -> void:
 	assert(String(synced_waves[0].get("event_id", "")) == String(game.boss_transition_waves[0].get("event_id", "")))
 	assert(int(synced_waves[0].get("seed", -1)) == int(game.boss_transition_waves[0].get("seed", -2)))
 
-	print("BOSS1_SIEGE_TIDE_SMOKE_OK solo=4 duo=5 trio=6 enraged_trio=7 warning=%.2f damage=%d" % [
+	print("BOSS1_SIEGE_TIDE_SMOKE_OK solo=4 duo=5 trio=6 enraged_trio=7 synced_jump=true warning=%.2f damage=%d" % [
 		game.BOSS1_SIEGE_TIDE_WARNING,
 		expected_damage
 	])

@@ -103,6 +103,13 @@ func _run() -> void:
 	for item in game.MANIFESTATIONS:
 		var key := String(item.get("key", ""))
 		for entry in game._manifest_evolution_entries(key):
+			if key == "prismatica":
+				_activate_single(key, Dictionary(entry))
+				var prism_bullet := {"pos": game.player_pos, "dir": Vector2.RIGHT, "damage": 80.0, "life": 1.0, "max_life": 1.0, "hits": {}, "color": Color.WHITE, "kind": key}
+				game._apply_manifest_evolution_to_bullet(prism_bullet)
+				_check(bool(prism_bullet.get("prismatica_evolution", false)), "prismatica did not delegate " + String(Dictionary(entry).get("id", "")))
+				checked += 1
+				continue
 			var profile: Dictionary = Dictionary(Dictionary(entry).get("profile", {}))
 			var effect := String(profile.get("effect", ""))
 			match effect:

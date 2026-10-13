@@ -129,6 +129,15 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 		elif game._interface_text_plus_rect(interface_panel).has_point(pos):
 			game.interface_text_scale = min(1.6, snapped(game.interface_text_scale + 0.1, 0.1))
 			game._save_config()
+	elif game.settings_buttons["geovana_bark"].has_point(pos):
+		game._close_gameplay_cheat_popup()
+		var bark_panel: Rect2 = game.settings_buttons["geovana_bark"]
+		if game._interface_text_minus_rect(bark_panel).has_point(pos):
+			game.geovana_bark_scale = max(0.5, snapped(game.geovana_bark_scale - 0.1, 0.1))
+			game._save_config()
+		elif game._interface_text_plus_rect(bark_panel).has_point(pos):
+			game.geovana_bark_scale = min(1.5, snapped(game.geovana_bark_scale + 0.1, 0.1))
+			game._save_config()
 	elif game.settings_buttons["fps"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game.show_fps_counter = not game.show_fps_counter

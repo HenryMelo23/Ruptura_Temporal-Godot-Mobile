@@ -33,6 +33,16 @@ func _run() -> void:
 	game._spawn_enemy(game.ENEMY_ATIRADOR, game.boss_pos + Vector2(330, 210))
 	game.enemies[0]["facing_dir"] = Vector2.RIGHT
 	game.enemies[1]["facing_dir"] = Vector2.LEFT
+	game.boss_stage_duration = 8.0
+	game.boss_stage_timer = game.boss_stage_duration - game.BOSS_STAGE_SLAM_TIME * 0.5
+	game.boss_transition_waves.clear()
+	game.queue_redraw()
+	await process_frame
+	await process_frame
+	var jump_image = root.get_texture().get_image()
+	assert(jump_image != null and jump_image.get_width() == 1280 and jump_image.get_height() == 720)
+	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
+	assert(jump_image.save_png("res://.codex/boss_wave_jump_qa_1280x720.png") == OK)
 	game.boss_stage_timer = 3.8
 	game.boss_stage_safe_angle = 0.0
 	game.boss_transition_waves = [{
@@ -74,5 +84,5 @@ func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	var output = "res://.codex/boss_wave_qa_1280x720.png"
 	assert(image.save_png(output) == OK)
-	print("BOSS_WAVE_VISUAL_OK " + ProjectSettings.globalize_path(output))
+	print("BOSS_WAVE_VISUAL_OK jump=" + ProjectSettings.globalize_path("res://.codex/boss_wave_jump_qa_1280x720.png") + " wave=" + ProjectSettings.globalize_path(output))
 	quit(0)

@@ -3,6 +3,7 @@ extends RefCounted
 const Gravity = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 const BargainCapsule = preload("res://scripts/presentation/bargain_capsule_presentation.gd")
+const PrismaticaEvolution = preload("res://scripts/presentation/prismatica_evolution_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -1882,6 +1883,8 @@ static func _draw_contractual_notifications(game: Node2D, camera: Vector2) -> vo
 static func _draw_manifest_evolution_fields(game: Node2D, camera: Vector2) -> void :
 	if game.manifest_evolution_state.is_empty():
 		return
+	if game.manifestation_key == "prismatica":
+		PrismaticaEvolution.draw(game, camera)
 	for field in Array(game.manifest_evolution_state.get("fields", [])):
 		if game.manifestation_key == "gravitante":
 			Gravity.field(game, field, camera)

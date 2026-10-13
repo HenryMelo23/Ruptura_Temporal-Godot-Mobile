@@ -28,6 +28,7 @@ func _run() -> void:
 	game._start_boss3_miasma(4)
 	_check(game.boss3_miasma_variant == 4, "boss3 eye miasma variant did not start")
 	_check(game._boss3_miasma_qte_active(), "boss3 eye miasma QTE is not active")
+	_check(game.BOSS3_MIASMA_QTE_TOUCH_DAMAGE == 60 and is_equal_approx(game.BOSS3_MIASMA_QTE_TOUCH_MAX_HP_RATE, 0.03), "closed-eye damage tuning drifted")
 
 	game.aura_state = game.AuraSystem.create("Devota", 1)
 	game.aura_state["devoted_charges"] = 3

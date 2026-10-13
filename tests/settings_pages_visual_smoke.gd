@@ -58,6 +58,20 @@ func _run() -> void:
 	game.ui_platform_override = "android"
 	_check(game._settings_option_keys().has("controls"), "mobile settings lost layout controls")
 	_check(not game._gameplay_preference_keys().has("desktop_hud_scale"), "mobile gameplay exposed desktop HUD scale")
+	game.gfx_low_resource = false
+	game.gfx_memory_saver = false
+	_check(not game._memory_saver_active(), "mobile graphics started permanently locked in memory saver")
+	game._activate_graphics_setting("low_resource")
+	_check(game.gfx_low_resource and not game._memory_saver_active(), "mobile lightweight mode could not be selected independently")
+	game._activate_graphics_setting("memory_saver")
+	_check(game._memory_saver_active(), "mobile memory saver could not be enabled")
+	game._activate_graphics_setting("memory_saver")
+	_check(not game._memory_saver_active(), "mobile memory saver could not be disabled")
+	game.gfx_low_resource = false
+	game.gfx_particles = true
+	game.gfx_shadows = true
+	game.gfx_screen_shake = true
+	game._apply_graphics_settings()
 	await _capture_mode("settings", Vector2i(960, 540), "settings_hub_mobile.png")
 	await _capture_mode("settings_graphics", Vector2i(960, 540), "settings_graphics_mobile.png")
 	await _capture_mode("settings_gameplay", Vector2i(960, 540), "settings_gameplay_mobile.png")
@@ -66,7 +80,7 @@ func _run() -> void:
 	_check_audio_drag(Vector2(960, 540))
 	_check_settings_interactions(Vector2(1280, 720))
 
-	print("SETTINGS_PAGES_VISUAL_OK captures=13 hitboxes=true audio_drag=true mouse=true graphics=true pause_return=true persistence=true")
+	print("SETTINGS_PAGES_VISUAL_OK captures=13 hitboxes=true audio_drag=true mouse=true graphics=true mobile_choice=true pause_return=true persistence=true")
 	game.queue_free()
 	await process_frame
 	await process_frame
@@ -183,6 +197,12 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 	_check(game.mode == "settings_gameplay", "gameplay did not open")
 	var gameplay: Dictionary = game._gameplay_preferences_rects(viewport)
 	_check(gameplay.has("desktop_hud_scale"), "desktop HUD scale rect missing")
+	_check(gameplay.has("geovana_bark"), "Geovana bark scale rect missing")
+	game.geovana_bark_scale = 0.5
+	game._handle_gameplay_settings_touch(game._interface_text_plus_rect(gameplay["geovana_bark"]).get_center(), viewport)
+	_check(is_equal_approx(game.geovana_bark_scale, 0.6), "Geovana bark scale plus failed")
+	game._handle_gameplay_settings_touch(game._interface_text_minus_rect(gameplay["geovana_bark"]).get_center(), viewport)
+	_check(is_equal_approx(game.geovana_bark_scale, 0.5), "Geovana bark scale minus failed")
 	game.desktop_hud_scale = game.DESKTOP_HUD_SCALE_MIN
 	game._handle_gameplay_settings_touch(game._desktop_hud_scale_plus_rect(gameplay["desktop_hud_scale"]).get_center(), viewport)
 	_check(is_equal_approx(game.desktop_hud_scale, game.DESKTOP_HUD_SCALE_MIN + game.DESKTOP_HUD_SCALE_STEP), "desktop HUD scale plus failed")

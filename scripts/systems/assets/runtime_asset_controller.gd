@@ -51,6 +51,7 @@ const PHASE_TEXTURE_SPECS := {
 		"enemy_phase_6_lodario": ["lodario1.png", "lodario2.png"],
 		"enemy_phase_6_pustula_fossil": ["pustulafossil1.png", "pustulafossil2.png"],
 		"enemy_phase_6_sanguessuga_cronal": ["sanguesugacronal1.png", "sanguesugacronal2.png"],
+		"enemy_phase_6_suturador_ambar": "suturador_ambar/suturador_ambar_motion.png",
 		"boss6_form_1": ["Boss6-1-1.png", "Boss6-1-2.png", "Boss6-1-3.png", "Boss6-1-4.png"],
 		"boss6_form_2": ["Boss6-2-1.png", "Boss6-2-2.png", "Boss6-2-3.png", "Boss6-2-4.png"],
 		"boss6_form_3": ["Boss6-3-1.png", "Boss6-3-2.png", "Boss6-3-3.png", "Boss6-3-4.png"],

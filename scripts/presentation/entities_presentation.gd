@@ -7,6 +7,9 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 	for enemy in game.enemies:
 		if not game._world_point_in_view(Vector2(enemy.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue
+		if String(enemy.get("type", "")) == game.ENEMY_AMBER_SUTURE_NODE:
+			game.AmberSuturerPresentation.draw_node(game, enemy, camera)
+			continue
 		var pos: Vector2 = enemy["pos"] - camera
 		var tex = game._enemy_texture(enemy)
 		var size = game._enemy_draw_size(enemy)
@@ -49,6 +52,8 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			modulate_color = Color(1.0, 0.62, 0.32, alpha)
 		elif enemy["type"] == game.ENEMY_CHRONAL_LEECH:
 			modulate_color = Color(0.92, 0.42, 0.72, alpha)
+		elif enemy["type"] == game.ENEMY_AMBER_SUTURER:
+			modulate_color = Color(1.0, 0.96, 0.88, alpha)
 		elif enemy["type"] == game.ENEMY_CINERIDO:
 			modulate_color = Color(1.0, 0.7, 0.42, alpha)
 		elif enemy["type"] == game.ENEMY_PANGOLIRO:
@@ -590,8 +595,9 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	if is_leader:
 		game._draw_leader_crown(p + Vector2(0, -62), 0.72, accent)
 	game._draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], p + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
-	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)))
-	var is_lacerante: bool = game.LaceranteSprites.is_manifestation(game, int(state.get("manifestation", -1)))
+	var remote_manifestation_key: String = String(state.get("manifestation_key", ""))
+	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)), remote_manifestation_key)
+	var is_lacerante: bool = remote_manifestation_key == "lacerante" or game.LaceranteSprites.is_manifestation(game, int(state.get("manifestation", -1)))
 	if is_lacerante:
 		flip_h = false
 		if tex != null:

@@ -552,6 +552,10 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game._draw_gameplay_preference(interface_panel, "TEXTOS DA INTERFACE", "Escala de textos da loja e manifestações.", "%d%%" % int(round(game.interface_text_scale * 100.0)), Color(0.62, 0.88, 1.0), game.settings_selected == game._gameplay_preference_index("interface_text"))
 	game._draw_small_rect_button(game._interface_text_minus_rect(interface_panel), "-", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
 	game._draw_small_rect_button(game._interface_text_plus_rect(interface_panel), "+", Color(0.04, 0.1, 0.16), Color(0.62, 0.88, 1.0))
+	var bark_panel = game.settings_buttons["geovana_bark"]
+	game._draw_gameplay_preference(bark_panel, "FALAS DA GEOVANA", "Tamanho do balão de fala durante a partida.", "%d%%" % int(round(game.geovana_bark_scale * 100.0)), Color(1.0, 0.82, 0.42), game.settings_selected == game._gameplay_preference_index("geovana_bark"))
+	game._draw_small_rect_button(game._interface_text_minus_rect(bark_panel), "-", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
+	game._draw_small_rect_button(game._interface_text_plus_rect(bark_panel), "+", Color(0.16, 0.11, 0.04), Color(1.0, 0.82, 0.42))
 	var fps_accent = Color(0.0, 1.0, 0.82) if game.show_fps_counter else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["fps"], "CONTADOR DE FPS", "Mostra desempenho no canto da tela.", "ON" if game.show_fps_counter else "OFF", fps_accent, game.settings_selected == game._gameplay_preference_index("fps"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["fps"]), game.show_fps_counter, fps_accent)
@@ -2104,10 +2108,16 @@ static func _draw_desktop_session_buttons(game: Node2D, _viewport: Vector2) -> v
 
 	if game.buttons.has("shop_manual"):
 		var shop_rect: Rect2 = game.buttons["shop_manual"]
-		var shop_accent = Color(0.0, 0.88, 1.0) if game._affordable_card_count() > 0 and game.mode == "game" else Color(0.38, 0.42, 0.46)
+		var bargain_pending: bool = game.has_method("_bargain_pending_discount_remaining") and game._bargain_pending_discount_remaining() > 0.0
+		var shop_accent = Color(1.0, 0.78, 0.22) if bargain_pending else Color(0.0, 0.88, 1.0) if game._affordable_card_count() > 0 and game.mode == "game" else Color(0.38, 0.42, 0.46)
 		game.hud_feedback.surface(game, shop_rect, shop_accent)
 		game._draw_icon_cart(Vector2(shop_rect.position.x + 26.0, shop_rect.position.y + 22.0), 22.0, shop_accent)
-		game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 4.0), 16, shop_accent)
+		var shop_status: String = game._manual_shop_status_text()
+		if shop_status == "":
+			game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 4.0), 16, shop_accent)
+		else:
+			game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 10.0), 14, shop_accent)
+			game._draw_centered(shop_status, shop_rect.get_center() + Vector2(14.0, -10.0), 10, shop_accent)
 
 	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss"):
 		var boss_rect: Rect2 = game.buttons["boss"]

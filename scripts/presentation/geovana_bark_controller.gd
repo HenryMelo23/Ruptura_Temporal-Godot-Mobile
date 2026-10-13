@@ -1,21 +1,26 @@
 extends RefCounted
 
-const GLOBAL_COOLDOWN: float = 5.8
-const HIT_COOLDOWN: float = 12.0
-const KILL_COOLDOWN: float = 10.0
-const SHOP_EXIT_COOLDOWN: float = 7.0
-const LOW_HEALTH_COOLDOWN: float = 34.0
-const AFFORDABLE_CARDS_COOLDOWN: float = 58.0
-const SKILL_COOLDOWN_BARK_COOLDOWN: float = 9.0
-const BOSS_KILL_COOLDOWN: float = 3.0
-const AMBIENT_MIN_INTERVAL: float = 52.0
-const AMBIENT_MAX_INTERVAL: float = 92.0
+const GLOBAL_COOLDOWN: float = 14.0
+const HIT_COOLDOWN: float = 30.0
+const KILL_COOLDOWN: float = 34.0
+const SHOP_EXIT_COOLDOWN: float = 24.0
+const LOW_HEALTH_COOLDOWN: float = 60.0
+const AFFORDABLE_CARDS_COOLDOWN: float = 120.0
+const SKILL_COOLDOWN_BARK_COOLDOWN: float = 24.0
+const BOSS_KILL_COOLDOWN: float = 18.0
+const AMBIENT_MIN_INTERVAL: float = 120.0
+const AMBIENT_MAX_INTERVAL: float = 180.0
 const DISPLAY_TIME_BASE: float = 1.15
 const DISPLAY_TIME_PER_WORD: float = 0.34
 const DISPLAY_TIME_PER_CHAR: float = 0.012
 const DISPLAY_TIME_PUNCTUATION_PAUSE: float = 0.18
 const DISPLAY_TIME_MIN: float = 2.35
 const DISPLAY_TIME_MAX: float = 8.2
+const BUBBLE_ENEMY_NEAR_DISTANCE: float = 76.0
+const BUBBLE_ENEMY_OVERLAP_MARGIN: float = 26.0
+const BUBBLE_THREAT_ALPHA_MIN: float = 0.62
+const BUBBLE_THREAT_REMAINING_DURATION_RATIO: float = 0.40
+const BUBBLE_THREAT_MIN_REMAINING_DURATION: float = 0.72
 
 const PRIORITY_AMBIENT: int = 0
 const PRIORITY_HIT: int = 1
@@ -37,9 +42,14 @@ var affordable_notice_seen_this_shop_cycle: bool = false
 var low_health_armed: bool = true
 var next_ambient_at: float = 65.0
 var last_rng_seed_second: int = -1
+var active_threat_alpha: float = 0.0
+var active_threat_shortened: bool = false
 
 
 func update(game: Node2D, delta: float) -> void:
+	if not _barks_enabled(game):
+		_clear_active_bark()
+		return
 	active_timer = maxf(0.0, active_timer - delta)
 	global_cooldown = maxf(0.0, global_cooldown - delta)
 	for key in context_cooldowns.keys():
@@ -69,8 +79,9 @@ func request(game: Node2D, context: String, metadata: Dictionary = {}) -> bool:
 
 
 func draw(game: Node2D, viewport: Vector2) -> void:
-	if active_timer <= 0.0 or active_text == "":
+	if not _barks_enabled(game) or active_timer <= 0.0 or active_text == "":
 		return
+	var bubble_scale: float = clampf(float(game.geovana_bark_scale), 0.5, 1.5)
 	var camera: Vector2 = game._camera(viewport)
 	var player_screen: Vector2 = Vector2(game.player_pos) - camera
 	var elapsed: float = maxf(0.0, active_duration - active_timer)
@@ -79,20 +90,20 @@ func draw(game: Node2D, viewport: Vector2) -> void:
 	var alpha: float = minf(fade_in, fade_out)
 	var scale: float = 0.92 + 0.08 * fade_in
 	var bubble_font: Font = _bubble_font(game)
-	var font_size: int = maxi(10, game._readable_text_size(11))
-	var max_width: float = minf(310.0, viewport.x * 0.42)
+	var font_size: int = maxi(7, int(round(float(game._readable_text_size(11)) * bubble_scale)))
+	var max_width: float = minf(310.0 * bubble_scale, viewport.x * 0.42)
 	if viewport.x <= 1024.0:
 		max_width = minf(max_width, viewport.x * 0.32)
-	var padding_x: float = 18.0
-	var padding_y: float = 12.0
+	var padding_x: float = 18.0 * bubble_scale
+	var padding_y: float = 12.0 * bubble_scale
 	var text_area_width: float = max_width - padding_x * 2.0
 	var lines: Array = _wrap_lines(bubble_font, active_text, font_size, text_area_width, 4)
-	var line_height: float = float(font_size) + 4.0
+	var line_height: float = float(font_size) + maxf(2.0, 4.0 * bubble_scale)
 	var longest_line_width: float = _longest_line_width(bubble_font, lines, font_size)
-	var bubble_width: float = clampf(longest_line_width + padding_x * 2.0, 118.0, max_width)
-	var bubble_height: float = maxf(38.0, padding_y * 2.0 + line_height * float(lines.size()))
+	var bubble_width: float = clampf(longest_line_width + padding_x * 2.0, 118.0 * bubble_scale, max_width)
+	var bubble_height: float = maxf(38.0 * bubble_scale, padding_y * 2.0 + line_height * float(lines.size()))
 	var bubble_size: Vector2 = Vector2(bubble_width, bubble_height)
-	var desired: Vector2 = player_screen + Vector2(42.0, -132.0)
+	var desired: Vector2 = player_screen + Vector2(42.0, -132.0) * bubble_scale
 	if desired.x + bubble_size.x > viewport.x - 18.0:
 		desired.x = player_screen.x - bubble_size.x - 42.0
 	var right_margin: float = 16.0
@@ -101,6 +112,15 @@ func draw(game: Node2D, viewport: Vector2) -> void:
 	desired.x = clampf(desired.x, 16.0, maxf(16.0, viewport.x - bubble_size.x - right_margin))
 	desired.y = clampf(desired.y, 18.0, maxf(18.0, viewport.y - bubble_size.y - 104.0))
 	var rect := Rect2(desired + bubble_size * (1.0 - scale) * 0.5, bubble_size * scale)
+	var enemy_threat: float = _bubble_enemy_threat(game, camera, rect)
+	if enemy_threat > 0.0:
+		active_threat_alpha = maxf(active_threat_alpha, enemy_threat)
+		if not active_threat_shortened:
+			active_threat_shortened = true
+			var shortened_time: float = maxf(BUBBLE_THREAT_MIN_REMAINING_DURATION, active_duration * BUBBLE_THREAT_REMAINING_DURATION_RATIO)
+			active_timer = minf(active_timer, shortened_time)
+	var threat_alpha: float = maxf(enemy_threat, active_threat_alpha)
+	alpha *= lerpf(1.0, BUBBLE_THREAT_ALPHA_MIN, threat_alpha)
 	var tail_side: float = -1.0 if player_screen.x < rect.get_center().x else 1.0
 	var tail_tip: Vector2 = player_screen + Vector2(8.0 * -tail_side, -34.0)
 	var tail_root: Vector2
@@ -118,7 +138,7 @@ func draw(game: Node2D, viewport: Vector2) -> void:
 	var shadow := Color(0.0, 0.0, 0.0, 0.42 * alpha)
 	var cyan := Color(0.28, 0.95, 1.0, 0.54 * alpha)
 	var magenta := Color(1.0, 0.24, 0.56, 0.48 * alpha)
-	_draw_comic_bubble(game, rect, tail_root, tail_tip, fill, ink, shadow, cyan, magenta, alpha)
+	_draw_comic_bubble(game, rect, tail_root, tail_tip, fill, ink, shadow, cyan, magenta, alpha, bubble_scale)
 	var total_text_height: float = line_height * float(lines.size())
 	var text_top: float = rect.position.y + (rect.size.y - total_text_height) * 0.5
 	for i in range(lines.size()):
@@ -137,10 +157,24 @@ func _show_line(context: String, line: String, priority: int) -> void:
 	active_timer = active_duration
 	global_cooldown = GLOBAL_COOLDOWN
 	context_cooldowns[context] = _cooldown_for(context)
+	active_threat_alpha = 0.0
+	active_threat_shortened = false
+
+
+func _clear_active_bark() -> void:
+	active_text = ""
+	active_context = ""
+	active_priority = -1
+	active_timer = 0.0
+	active_duration = 0.0
+	active_threat_alpha = 0.0
+	active_threat_shortened = false
 
 
 func _barks_enabled(game: Node2D) -> bool:
 	if game.dedicated_server_mode:
+		return false
+	if game.is_multiplayer:
 		return false
 	if game.mode in ["menu", "settings", "settings_audio", "settings_keys", "settings_gamepad", "game_over", "victory", "nick_setup"]:
 		return false
@@ -197,14 +231,14 @@ func _chance_allows(game: Node2D, context: String, metadata: Dictionary) -> bool
 			var damage: float = float(metadata.get("damage", 0.0))
 			if damage < maxf(12.0, float(game.player_damage) * 0.38):
 				return false
-			return _roll(game, 0.11)
+			return _roll(game, 0.04)
 		"enemy_kill":
 			var kills: int = int(game.enemies_killed)
 			if kills < 2:
 				return false
-			return kills % 4 == 0 or _roll(game, 0.18)
+			return kills % 12 == 0 and _roll(game, 0.07)
 		"ambient":
-			return _roll(game, 0.62)
+			return _roll(game, 0.30)
 	return true
 
 
@@ -221,35 +255,35 @@ func _pick_line(game: Node2D, context: String, metadata: Dictionary) -> String:
 				"Droga, quanto tempo esse negocio carrega?"
 			]
 			if int(game.current_phase) == 1:
-				lines.append("VAI TEIA! ...nao, acho que nao e assim.")
+				lines.append("VAI, TEIA!... Nao, ainda nao e assim.")
 		"shop_exit":
 			lines = [
 				"Agora eu vou esbagacar voces.",
 				"Que tal agora?",
-				"Nada mal pra mim, hein.",
-				"Nossa, eu to com tudo.",
-				"Geovaninha, a imparavel?"
+				"Nada mal. Estou pronta.",
+				"Agora estou bem preparada.",
+				"Geovana, a imparavel?"
 			]
 		"enemy_kill":
 			lines = [
 				"Achei que iria aguentar mais.",
-				"Pensei que fosse maior.",
+				"Pensei que resistiria mais.",
 				"Toma essa.",
 				"Nada pode me parar... NADA."
 			]
 		"boss_kill":
 			lines = [
 				"Acham que vao me parar, mas eu preciso chegar la, por voce, meu amor.",
-				"Nossa, que cara parrudo.",
+				"Nossa, que adversario resistente.",
 				"Caraca, esse deu trabalho.",
 				"Tomara que o proximo seja mais facil."
 			]
 		"enemy_hit":
 			lines = [
-				"Eeeh, ta gostando?",
+				"E ai, sentiu o impacto?",
 				"Acho que vai precisar de mais do que isso.",
-				"Que tal uma pitada de dano marinada de critico?",
-				"Ta achando que e quem?",
+				"Que tal um critico bem calculado?",
+				"Voce nao vai me intimidar.",
 				"Vamo la, Geovana, a gente precisa ser forte."
 			]
 		"low_health":
@@ -307,7 +341,28 @@ func _update_ambient(game: Node2D) -> void:
 	request(game, "ambient")
 
 
-func _draw_comic_bubble(game: Node2D, rect: Rect2, tail_root: Vector2, tail_tip: Vector2, fill: Color, ink: Color, shadow: Color, accent: Color, pop: Color, alpha: float) -> void:
+func _bubble_enemy_threat(game: Node2D, camera: Vector2, rect: Rect2) -> float:
+	var expanded_rect: Rect2 = rect.grow(BUBBLE_ENEMY_OVERLAP_MARGIN)
+	var near_distance_sq: float = BUBBLE_ENEMY_NEAR_DISTANCE * BUBBLE_ENEMY_NEAR_DISTANCE
+	var nearest_distance_sq: float = INF
+	for enemy_value in game.enemies:
+		var enemy: Dictionary = enemy_value
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var screen_pos: Vector2 = Vector2(enemy.get("pos", game.player_pos)) - camera
+		if expanded_rect.has_point(screen_pos):
+			return 1.0
+		var closest: Vector2 = Vector2(
+			clampf(screen_pos.x, rect.position.x, rect.end.x),
+			clampf(screen_pos.y, rect.position.y, rect.end.y)
+		)
+		nearest_distance_sq = minf(nearest_distance_sq, screen_pos.distance_squared_to(closest))
+	if nearest_distance_sq >= near_distance_sq:
+		return 0.0
+	return clampf(1.0 - sqrt(nearest_distance_sq) / BUBBLE_ENEMY_NEAR_DISTANCE, 0.18, 0.72)
+
+
+func _draw_comic_bubble(game: Node2D, rect: Rect2, tail_root: Vector2, tail_tip: Vector2, fill: Color, ink: Color, shadow: Color, accent: Color, pop: Color, alpha: float, style_scale: float) -> void:
 	var bubble_points: PackedVector2Array = _comic_panel_points(rect)
 	var bubble_shadow: PackedVector2Array = _offset_points(bubble_points, Vector2(5.0, 6.0))
 	var tail := PackedVector2Array([tail_root + Vector2(-22.0, 3.0), tail_root + Vector2(24.0, -3.0), tail_tip])
@@ -316,8 +371,9 @@ func _draw_comic_bubble(game: Node2D, rect: Rect2, tail_root: Vector2, tail_tip:
 	game.draw_colored_polygon(bubble_shadow, shadow)
 	game.draw_colored_polygon(tail, fill)
 	game.draw_colored_polygon(bubble_points, fill)
-	game.draw_polyline(_closed_points(tail), ink, 5.0)
-	game.draw_polyline(_closed_points(bubble_points), ink, 5.0)
+	var outline_width: float = maxf(1.6, 5.0 * style_scale)
+	game.draw_polyline(_closed_points(tail), ink, outline_width)
+	game.draw_polyline(_closed_points(bubble_points), ink, outline_width)
 	game.draw_polyline(_closed_points(_shrink_points(bubble_points, rect.get_center(), 0.972)), Color(0.42, 0.34, 0.20, 0.26 * alpha), 1.4)
 	_draw_halftone(game, rect, Color(0.0, 0.0, 0.0, 0.13 * alpha))
 	_draw_comic_speed_marks(game, rect, ink, accent, pop, alpha)

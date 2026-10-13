@@ -7,7 +7,7 @@ const REQUIRED_ENEMY_IDS: = [
 	"pinguim_atirador", "pinguim_kamikaze", "pinguim_incendiario", 
 	"devoto", "incensario", "guardiao", "cartografo_vazio", 
 	"cronofago", "refrator_hostil", "tecelao_vetorial", "eco_entropico", 
-	"enguia_miasma", "lodario", "pustula_fossil", "sanguessuga_cronal"
+	"enguia_miasma", "lodario", "pustula_fossil", "sanguessuga_cronal", "suturador_ambar"
 ]
 const REQUIRED_BOSS_IDS: = [
 	"caranguejo_cosmico", "nevasca", "pai_rato", "nexo_ruptura", "umbra", "matriarca_chaga"

@@ -806,15 +806,16 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		var shop_rect: Rect2 = game.buttons["shop_manual"]
 		var shop_ready: bool = game._affordable_card_count() > 0 and game.mode == "game" and game._manual_shop_available()
 		var shop_grace: bool = game._manual_shop_grace_active()
+		var bargain_pending: bool = game.has_method("_bargain_pending_discount_remaining") and game._bargain_pending_discount_remaining() > 0.0
 		var shop_cooldown: float = game._manual_shop_cooldown_remaining()
-		var shop_accent = Color(0.3, 1.0, 0.62) if shop_grace else Color(0.0, 1.0, 0.82) if shop_ready else Color(0.38, 0.42, 0.46)
+		var shop_accent = Color(1.0, 0.78, 0.22) if bargain_pending else Color(0.3, 1.0, 0.62) if shop_grace else Color(0.0, 1.0, 0.82) if shop_ready else Color(0.38, 0.42, 0.46)
 		var shop_alpha: float = game._hud_rect_player_alpha(shop_rect, viewport, 82.0)
 		var shop_label: String = "REABRIR" if shop_grace else "LOJA"
 		var shop_top: String = game._manual_shop_status_text()
 		if shop_top == "":
 			shop_top = "LOJA %d" % game.card_cost
-		game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.92 * shop_alpha))
 		game._draw_hud_rect_button(shop_rect, shop_label, game._with_alpha(shop_accent, shop_alpha))
+		game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.96 * shop_alpha))
 		if shop_cooldown > 0.0:
 			var cooldown_total: float = maxf(0.01, game.SHOP_MANUAL_REOPEN_COOLDOWN)
 			var progress: float = clampf(1.0 - shop_cooldown / cooldown_total, 0.0, 1.0)
@@ -1014,8 +1015,8 @@ static func _draw_team_revival_hud(game: Node2D, viewport: Vector2) -> void:
 		var info: String = "VERMELHO: sacrifica %.0f%% da vida e divide entre %d caido(s)  |  AZUL: %d pontos" % [rate, game._team_revival_dead_count(), cost]
 		game._draw_wrapped_clamped(info, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), game._readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
 	else:
-		var multi_rate: float = game.REVIVAL_MULTI_LIFE_SACRIFICE_RATE * (1.0 - game.REVIVE_LIFE_SACRIFICE_REDUCTION) * 100.0
-		var info2: String = "FRAGMENTOS %d/%d  |  %ds  |  mais de um caido: 50s e sacrificio sobe para %.0f%%" % [game.revival_fragments_collected, total, remaining, multi_rate]
+		var next_rate: float = game._revival_life_sacrifice_rate_for_dead_count(game._team_revival_dead_count() + 1) * 100.0
+		var info2: String = "FRAGMENTOS %d/%d  |  %ds  |  cada caido adicional eleva o sacrificio para %.0f%%" % [game.revival_fragments_collected, total, remaining, next_rate]
 		game._draw_wrapped_clamped(info2, Rect2(panel.position.x + 24.0, panel.position.y + 48.0, panel.size.x - 48.0, 24.0), game._readable_text_size(12), Color(0.92, 0.96, 1.0), 1)
 	game._draw_centered(game.revival_notice.to_upper(), Vector2(panel.get_center().x, panel.end.y - 18.0), game._readable_text_size(10), Color(1.0, 0.86, 0.24, 0.92))
 

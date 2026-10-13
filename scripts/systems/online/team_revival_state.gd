@@ -220,9 +220,13 @@ func dead_count() -> int:
 	return maxi(1, dead_peers.size())
 
 
-func life_sacrifice_rate(single_rate: float, multi_rate: float, reduction: float) -> float:
-	var base_rate: float = multi_rate if dead_count() > 1 else single_rate
-	return base_rate * (1.0 - reduction)
+func life_sacrifice_rate(base_rate: float, per_additional_fallen_rate: float, max_rate: float, reduction: float) -> float:
+	return life_sacrifice_rate_for_dead_count(dead_count(), base_rate, per_additional_fallen_rate, max_rate, reduction)
+
+
+func life_sacrifice_rate_for_dead_count(fallen_count: int, base_rate: float, per_additional_fallen_rate: float, max_rate: float, reduction: float) -> float:
+	var raw_rate: float = base_rate + float(maxi(0, fallen_count - 1)) * per_additional_fallen_rate
+	return clampf(raw_rate, 0.0, max_rate) * (1.0 - clampf(reduction, 0.0, 0.95))
 
 
 func points_cost(base_cost: int) -> int:

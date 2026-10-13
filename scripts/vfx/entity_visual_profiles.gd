@@ -80,6 +80,10 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 			return Vector2(92, 102)
 		game.ENEMY_CHRONAL_LEECH:
 			return Vector2(98, 62)
+		game.ENEMY_AMBER_SUTURER:
+			return Vector2(136, 94)
+		game.ENEMY_AMBER_SUTURE_NODE:
+			return Vector2(48, 48)
 		game.ENEMY_CINERIDO:
 			return Vector2(115, 52.5)
 		game.ENEMY_PANGOLIRO:
@@ -100,6 +104,10 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 		var sineiro_texture: Texture2D = game.SineiroBorealPresentation.enemy_texture(game, enemy)
 		if sineiro_texture != null:
 			return sineiro_texture
+	if kind7 == game.ENEMY_AMBER_SUTURER:
+		var suturer_texture: Texture2D = game.AmberSuturerPresentation.enemy_texture(game, enemy)
+		if suturer_texture != null:
+			return suturer_texture
 	if kind7 == game.ENEMY_CINERIDO:
 		var cinerido_key: String = "enemy_phase_7_cinerido_atk" if String(enemy.get("phase7_state", "walk")) in ["windup", "active"] else "enemy_phase_7_cinerido_mov"
 		var cinerido_frames: Array = game.textures.get(cinerido_key, [])
@@ -177,7 +185,7 @@ static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
 	if game.current_phase == 6:
 		var phase6_kind: = String(enemy.get("type", game.ENEMY_COMMON))
 		var phase6_dir: Vector2 = Vector2(enemy.get("facing_dir", game._enemy_default_facing(phase6_kind)))
-		if phase6_kind == game.ENEMY_LODARIO:
+		if phase6_kind in [game.ENEMY_LODARIO, game.ENEMY_AMBER_SUTURER]:
 			return phase6_dir.x > 0.05
 		return false
 	if game.current_phase == 3 or game.current_phase == 4:
@@ -309,7 +317,7 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 		return game.boss_pos + Vector2(0, - bob)
 	if game.boss_stage_timer <= 0.0:
 		return game.boss_pos
-	var elapsed = game.BOSS_STAGE_JUMP_TIME - game.boss_stage_timer
+	var elapsed: float = maxf(0.0, game.boss_stage_duration - game.boss_stage_timer)
 	var hop = 0.0
 	if elapsed <= game.BOSS_STAGE_SLAM_TIME:
 		var jump_progress = clamp(elapsed / game.BOSS_STAGE_SLAM_TIME, 0.0, 1.0)

@@ -166,6 +166,7 @@ func _run() -> void:
 	_check(String(game.bargain_capsule.get("result", "")) == "success", "same-frame zero hp/timer should resolve success priority")
 	_check(not game.bargain_capsule_pending_discount.is_empty(), "success did not create pending discount")
 	_check(game.bargain_capsule_pending_discount.has("rate"), "pending discount missing rate")
+	_check(game._bargain_pending_discount_remaining() >= game.BARGAIN_CAPSULE_SHOP_CLAIM_TIME - 0.1, "discount did not preserve the minimum shop claim window")
 
 	var pending_rate: float = float(game.bargain_capsule_pending_discount.get("rate", 0.0))
 	var pending_min: float = float(game.bargain_capsule_pending_discount.get("min", 0.0))
@@ -233,6 +234,10 @@ func _run() -> void:
 	game.mode = "game"
 	game.bargain_capsule.clear()
 	game.bargain_capsule_pending_discount.clear()
+	game.bargain_capsule_pending_discount = {"rate": 0.2, "claim_deadline": game.time_alive + 1.0}
+	game.time_alive += 1.1
+	game._update_bargain_capsule(0.0)
+	_check(game.bargain_capsule_pending_discount.is_empty(), "expired discount remained available")
 	game.shop_bargain_discount_session.clear()
 	game.enemies.clear()
 	game._spawn_bargain_capsule(game.PLAYER_START + Vector2(220, 0))

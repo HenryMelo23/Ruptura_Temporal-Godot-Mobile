@@ -22,8 +22,11 @@ func _prepare_phase2() -> void:
 	game._start_game()
 	game.mode = "game"
 	game.current_phase = 2
-	game.phase_started_at = 0.0
-	game.time_alive = 0.0
+	# A real phase transition preserves the run clock and moves phase_started_at.
+	# Keep the fixture on that path so timing does not accidentally depend on phase 2
+	# being the first phase of a run.
+	game.phase_started_at = 91.0
+	game.time_alive = game.phase_started_at
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0
 	game.boss_active = false
@@ -38,8 +41,8 @@ func _prepare_phase2() -> void:
 
 func _test_spawn_and_combat() -> void:
 	var controller = game.sineiro_boreal_controller
-	_check(is_equal_approx(controller.SPAWN_TIME_ONBOARDING, 300.0), "onboarding spawn timing drifted")
-	_check(is_equal_approx(controller.SPAWN_TIME_EXPERIENCED, 240.0), "experienced spawn timing drifted")
+	_check(is_equal_approx(controller.SPAWN_TIME_ONBOARDING, 240.0), "onboarding spawn timing drifted")
+	_check(is_equal_approx(controller.SPAWN_TIME_EXPERIENCED, 180.0), "experienced spawn timing drifted")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[1]), 1.0), "solo HP multiplier drifted")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[2]), 1.70), "duo HP multiplier drifted")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[3]), 2.35), "trio HP multiplier drifted")
@@ -89,25 +92,27 @@ func _test_spawn_and_combat() -> void:
 func _test_spawn_timing() -> void:
 	var controller = game.sineiro_boreal_controller
 	game.run_pacing_profile = game.PACING_PROFILE_ONBOARDING
-	game.time_alive = controller.SPAWN_TIME_ONBOARDING - 0.1
+	game.fusion_check_timer = 0.75
+	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_ONBOARDING - 0.1
 	controller.update(0.0)
 	_check(controller.active_enemy().is_empty(), "onboarding encounter spawned early")
-	game.time_alive = controller.SPAWN_TIME_ONBOARDING + 0.1
+	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_ONBOARDING + 0.1
 	controller.update(0.0)
-	_check(not controller.active_enemy().is_empty(), "onboarding encounter did not spawn at 300s")
+	_check(not controller.active_enemy().is_empty(), "onboarding encounter did not spawn at 240s with the fusion timer active")
 	controller.cleanup("timing_fixture")
 	controller.reset_for_new_run()
 	game.run_pacing_profile = game.PACING_PROFILE_EXPERIENCED
-	game.time_alive = controller.SPAWN_TIME_EXPERIENCED - 0.1
+	game.fusion_check_timer = 0.75
+	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_EXPERIENCED - 0.1
 	controller.update(0.0)
 	_check(controller.active_enemy().is_empty(), "experienced encounter spawned early")
-	game.time_alive = controller.SPAWN_TIME_EXPERIENCED + 0.1
+	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_EXPERIENCED + 0.1
 	controller.update(0.0)
-	_check(not controller.active_enemy().is_empty(), "experienced encounter did not spawn at 240s")
+	_check(not controller.active_enemy().is_empty(), "experienced encounter did not spawn at 180s with the fusion timer active")
 	controller.cleanup("timing_fixture")
 	controller.reset_for_new_run()
 	game.run_pacing_profile = game.PACING_PROFILE_ONBOARDING
-	game.time_alive = 0.0
+	game.time_alive = game.phase_started_at
 
 
 func _test_multiplayer_targets_and_rewards() -> void:

@@ -177,6 +177,28 @@ func _dedicated_relay_revive_does_not_create_phantom() -> void:
 	game.net_players_by_peer = {42: _remote_state(Vector2(880.0, 420.0), "CLIENTE")}
 
 
+func _boss_revive_clears_altars_and_disconnected_ghosts() -> void:
+	var death_pos := Vector2(820.0, 410.0)
+	var dead_state: Dictionary = _remote_state(death_pos, "CLIENTE")
+	dead_state["hp"] = 0.0
+	dead_state["dead"] = true
+	dead_state["eliminated"] = true
+	dead_state["alive"] = false
+	game.net_players_by_peer = {42: dead_state}
+	game._start_team_revival_for_dead(42, death_pos, "CLIENTE", false)
+	game._activate_team_revival_altars()
+	_check(game.revival_altars_active, "boss revive fixture did not activate altars")
+	game._revive_multiplayer_team_after_boss_kill()
+	_check(not game.revival_active and not game.revival_altars_active, "boss revive left stale altars active")
+	_check(game._remote_player_state_targetable(game.net_players_by_peer[42]), "boss revive did not restore the real client")
+
+	game.net_players_by_peer[43] = _remote_state(Vector2(980.0, 460.0), "DESCONECTADO")
+	game.net_player_history_by_peer[43] = [{"time_ms": 1, "pos": Vector2(980.0, 460.0)}]
+	game._rpc_remove_remote_player(43)
+	_check(not game.net_players_by_peer.has(43), "disconnected peer remained as a visible ghost")
+	_check(not game.net_player_history_by_peer.has(43), "disconnected peer kept stale movement history")
+
+
 func _run() -> void:
 	await process_frame
 	_prepare_game()
@@ -186,6 +208,7 @@ func _run() -> void:
 	for index in range(death_positions.size()):
 		_revive_remote_from_host(42, death_positions[index], revive_positions[index], 180.0 + float(index) * 25.0)
 	_dedicated_relay_revive_does_not_create_phantom()
+	_boss_revive_clears_altars_and_disconnected_ghosts()
 
 	var eliminated_only: Dictionary = _remote_state(Vector2(900.0, 280.0), "ELIMINADO")
 	eliminated_only["eliminated"] = true
@@ -195,7 +218,7 @@ func _run() -> void:
 
 	_revive_local_host_from_client(Vector2(260.0, 220.0), Vector2(340.0, 380.0))
 
-	print("MULTIPLAYER_REVIVE_TARGETING_REGRESSION_OK cycles=3 host_client=true dedicated_relay=true phantom=false all_dead=true stale_rpc=true")
+	print("MULTIPLAYER_REVIVE_TARGETING_REGRESSION_OK cycles=3 host_client=true dedicated_relay=true phantom=false boss_altars=false disconnect_cleanup=true all_dead=true stale_rpc=true")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

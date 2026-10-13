@@ -37,10 +37,11 @@ func _capture(label: String) -> void:
 
 func _run() -> void:
 	await process_frame
+	game.run_tutorial_enabled = false
 	game._start_game()
 	game._finish_startup_thanks()
 	game.set_process(false)
-	game.run_tutorial_enabled = false
+	game._reset_tutorial_state()
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0
 	game.mode = "game"
@@ -48,6 +49,7 @@ func _run() -> void:
 	game.player_pos = Vector2(620.0, 420.0)
 	game.player_hp = game.player_hp_max
 	game.current_phase = 1
+	_check(is_equal_approx(game.geovana_bark_scale, 0.5), "Geovana bark default scale is not 50%")
 
 	_check(game._geovana_bark("skill_cooldown", {"ability": "Q"}), "skill cooldown bark rejected")
 	_check(game.geovana_bark_controller.active_text != "", "active text missing")
@@ -58,6 +60,39 @@ func _run() -> void:
 	var first_text: String = String(game.geovana_bark_controller.active_text)
 	_check(not game._geovana_bark("enemy_hit", {"damage": 999.0}), "low-priority hit replaced active cooldown bark")
 	_check(String(game.geovana_bark_controller.active_text) == first_text, "active bark changed despite lower priority")
+	var removed_ambiguous_lines: Array[String] = [
+		"Pensei que fosse maior.",
+		"Nossa, que cara parrudo.",
+		"Eeeh, ta gostando?",
+		"Que tal uma pitada de dano marinada de critico?"
+	]
+	for context in ["skill_cooldown", "shop_exit", "enemy_kill", "boss_kill", "enemy_hit"]:
+		for second in range(1, 96):
+			game.time_alive = float(second)
+			var line: String = game.geovana_bark_controller._pick_line(game, String(context), {"ability": "Q"})
+			_check(not removed_ambiguous_lines.has(line), "removed ambiguous line returned for " + String(context))
+	game.time_alive = 120.0
+
+	game.geovana_bark_controller._show_line("ambient", "Respira, Geovana. So mais um pouco.", 0)
+	game.is_multiplayer = true
+	_check(not game._geovana_bark("boss_kill", {"phase": 1}), "multiplayer accepted a Geovana bark")
+	game.geovana_bark_controller.update(game, 0.1)
+	_check(game.geovana_bark_controller.active_text == "", "multiplayer did not clear active bark")
+	game.is_multiplayer = false
+
+	game.geovana_bark_controller._show_line("ambient", "Respira, Geovana. So mais um pouco.", 0)
+	var timer_before_threat: float = game.geovana_bark_controller.active_timer
+	var camera: Vector2 = game._camera(Vector2(root.size))
+	var player_screen: Vector2 = Vector2(game.player_pos) - camera
+	game._spawn_enemy(game.ENEMY_COMMON, camera + player_screen + Vector2(72.0, -118.0))
+	game.queue_redraw()
+	await process_frame
+	await process_frame
+	_check(game.geovana_bark_controller.active_threat_shortened, "enemy overlapping bubble did not shorten bark")
+	_check(game.geovana_bark_controller.active_threat_alpha > 0.0, "enemy overlapping bubble did not fade bark")
+	_check(game.geovana_bark_controller.active_timer < timer_before_threat, "threatened bark duration was not shortened")
+	await _capture("threatened")
+	game.enemies.clear()
 
 	game.geovana_bark_controller.active_timer = 0.0
 	game.geovana_bark_controller.global_cooldown = 0.0
@@ -78,7 +113,7 @@ func _run() -> void:
 	root.content_scale_size = root.size
 	game.player_pos = Vector2(560.0, 390.0)
 	await _capture("active")
-	print("GEOVANA_BARK_CONTROLLER_SMOKE_OK contexts=skill_cooldown,low_health,boss_kill")
+	print("GEOVANA_BARK_CONTROLLER_SMOKE_OK scale=50 contexts=skill_cooldown,low_health,boss_kill")
 	root.remove_child(game)
 	game._cleanup_runtime_resources()
 	await process_frame

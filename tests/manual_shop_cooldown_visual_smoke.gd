@@ -59,8 +59,15 @@ func _run() -> void:
 	game._update_button_layout(Vector2(root.size))
 	await _capture("grace")
 
+	game.shop_manual_grace_reopen_available = false
+	game.shop_manual_grace_until = -999.0
+	game.bargain_capsule_pending_discount = {"rate": 0.2, "claim_deadline": game.time_alive + 31.0}
+	game._update_button_layout(Vector2(root.size))
+	await _capture("bargain_timer")
+	assert(game._manual_shop_status_text().begins_with("DESCONTAO"), "bargain countdown missing from shop HUD")
+
 	assert(game._manual_shop_status_text() != "", "manual shop status text missing")
-	print("MANUAL_SHOP_COOLDOWN_VISUAL_SMOKE_OK cooldown=true grace=true")
+	print("MANUAL_SHOP_COOLDOWN_VISUAL_SMOKE_OK cooldown=true grace=true bargain_timer=true")
 	root.remove_child(game)
 	game._cleanup_runtime_resources()
 	await process_frame

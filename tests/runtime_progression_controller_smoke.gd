@@ -71,7 +71,7 @@ func _run() -> void:
 	game.cards_bought["pacto_possibilidades"] = 5
 	game.card_cost = 500
 	_check(game._card_count_by_id("pacto_possibilidades") == 5, "card count wrapper changed")
-	_check(game._effective_card_price(speed) == 400, "common-card discount changed")
+	_check(game._effective_card_price(speed) == 350, "Pacto discount did not keep up with the shop curve")
 	game.cards_bought["moeda_estavel"] = 6
 	_check(game._shop_price_increment_after_purchase() == 64, "shop price increment changed")
 	_check(game._shop_endurance_discount_from_elapsed(50.0 * 60.0) >= 0.50, "long-run shop discount changed")

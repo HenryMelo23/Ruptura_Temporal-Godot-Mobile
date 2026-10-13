@@ -86,7 +86,7 @@ func _run() -> void:
 	_check(game.mode == "shop_mp_waiting", "multiplayer shop without money did not move to waiting screen")
 	game.shop_mp_partner_ready = true
 	_check(game._check_shop_mp_exit(), "shop exit did not finish when both players were ready")
-	_check(game.mode == "shop_return" and game.shop_return_timer > 0.0, "shop did not start the 3s return transition")
+	_check(game.mode == "shop_return" and is_equal_approx(game.shop_return_timer, 1.5), "shop did not start the 1.5s return transition")
 	game._update_shop_return(game.SHOP_RETURN_TIME + 0.1)
 	_check(game.mode == "game", "shop return transition did not end in game mode")
 
