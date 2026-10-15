@@ -1,9 +1,13 @@
 extends SceneTree
 
+const UserFileGuard = preload("res://tests/support/user_file_guard.gd")
+
 var game: Node
+var config_guard: RefCounted
 
 
 func _initialize() -> void:
+	config_guard = UserFileGuard.new("user://hud_config.save")
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	call_deferred("_run")
@@ -38,6 +42,8 @@ func _cleanup(code := 0) -> void:
 		root.remove_child(game)
 		game.free()
 		game = null
+	if config_guard != null:
+		config_guard.restore()
 	quit(code)
 
 
@@ -81,6 +87,8 @@ func _run() -> void:
 	game.online_mode_unlocked = true
 	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_LAST_DIRECTION
 	game.geovana_bark_scale = 1.3
+	game.keyboard_bindings["attack"] = game._key_input_binding(KEY_Z)
+	game.keyboard_bindings["shop"] = game._key_input_binding(KEY_L)
 	game._save_config()
 	game.hud_joy_pos = Vector2.ZERO
 	game.hud_attack_pos = Vector2.ZERO
@@ -88,6 +96,7 @@ func _run() -> void:
 	game.online_mode_unlocked = false
 	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_CURSOR
 	game.geovana_bark_scale = 0.5
+	game._reset_keyboard_bindings()
 	game._load_config()
 	_check(game.hud_joy_pos == Vector2(101, 202), "config joy_pos was not restored")
 	_check(game.hud_attack_pos == Vector2(303, 404), "config attack_pos was not restored")
@@ -95,6 +104,8 @@ func _run() -> void:
 	_check(game.online_mode_unlocked, "config unlock flag was not restored")
 	_check(game.desktop_teleport_mode == game.DESKTOP_TELEPORT_LAST_DIRECTION, "last-direction teleport config was not restored")
 	_check(is_equal_approx(game.geovana_bark_scale, 1.3), "Geovana bark scale config was not restored")
+	_check(game.keyboard_bindings.get("attack") == game._key_input_binding(KEY_Z), "custom attack binding was not restored")
+	_check(game.keyboard_bindings.get("shop") == game._key_input_binding(KEY_L), "custom shop binding was not restored")
 
 	_write_user_text("user://hud_config.save", "not_config\nbad=line=with=extra\n")
 	game.online_mode_unlocked = true

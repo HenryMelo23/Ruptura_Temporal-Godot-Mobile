@@ -1,5 +1,7 @@
 extends SceneTree
 
+const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
+
 var game: Node
 
 
@@ -66,19 +68,38 @@ func _run() -> void:
 		quit(1)
 		return
 
+	game.boss_pos += Vector2(-18.0, 0.0)
 	game.boss3_is_moving = true
-	game.boss_phase = 1.7
-	if not await _capture("res://.codex/boss3_walk_new_map_qa_1280x720.png"):
+	Boss3AnimationPresentation.update(game, 0.1)
+	assert(Boss3AnimationPresentation.visual_state(game) == "walk")
+	assert(not Boss3AnimationPresentation.should_flip_h(game))
+	if not await _capture("res://.codex/boss3_walk_left_new_map_qa_1280x720.png"):
+		quit(1)
+		return
+
+	game.boss_pos += Vector2(36.0, 0.0)
+	Boss3AnimationPresentation.update(game, 0.1)
+	assert(Boss3AnimationPresentation.should_flip_h(game))
+	if not await _capture("res://.codex/boss3_walk_right_new_map_qa_1280x720.png"):
+		quit(1)
+		return
+
+	game._damage_boss(45.0, "boss3_visual_walk_hit", false, false)
+	assert(Boss3AnimationPresentation.visual_state(game) == "walk")
+	if not await _capture("res://.codex/boss3_walk_hit_overlay_qa_1280x720.png"):
 		quit(1)
 		return
 
 	game.boss3_is_moving = false
+	Boss3AnimationPresentation.update(game, 0.1)
 	game.boss_attacks = [{"kind": "rat_tail", "age": 0.32, "duration": 0.52, "hit": false}]
+	Boss3AnimationPresentation.update(game, 0.016)
 	if not await _capture("res://.codex/boss3_tail_new_map_qa_1280x720.png"):
 		quit(1)
 		return
 
 	game.boss_attacks = [{"kind": "boss3_sector_ritual", "age": 0.72, "duration": 4.0, "center": game.WORLD_SIZE * 0.5, "radius": game.BOSS3_SECTOR_RITUAL_RADIUS, "lanes": game.BOSS3_SECTOR_RITUAL_LANES, "steps": 2, "warning": game.BOSS3_SECTOR_RITUAL_WARNING, "active": game.BOSS3_SECTOR_RITUAL_ACTIVE, "dissipate": game.BOSS3_SECTOR_RITUAL_DISSIPATE, "seed": 41, "hit": {}}]
+	Boss3AnimationPresentation.update(game, 0.016)
 	if not await _capture("res://.codex/boss3_sector_new_map_qa_1280x720.png"):
 		quit(1)
 		return
@@ -95,12 +116,27 @@ func _run() -> void:
 
 	root.size = Vector2i(960, 540)
 	game.gfx_low_resource = true
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp = game.boss_hp_max
+	Boss3AnimationPresentation.reset(game)
+	game.boss_pos += Vector2(20.0, 0.0)
+	game.boss3_is_moving = true
+	Boss3AnimationPresentation.update(game, 0.1)
+	assert(Boss3AnimationPresentation.should_flip_h(game))
+	if not await _capture("res://.codex/boss3_walk_right_low_qa_960x540.png"):
+		quit(1)
+		return
+	game.boss_active = false
+	game.boss_dead = true
+	game.boss3_death_animation_duration = 1.72
 	game.boss3_death_animation_timer = 0.44
+	game.boss3_death_animation_pos = game.boss_pos
 	if not await _capture("res://.codex/boss3_death_new_map_low_qa_960x540.png"):
 		quit(1)
 		return
 
-	print("BOSS3_ANIMATION_VISUAL_OK map=assets/maps/calm/phase_3.png before=legacy_on_active_map desktop=idle,walk,tail,sector,death low=death")
+	print("BOSS3_ANIMATION_VISUAL_OK map=assets/maps/calm/phase_3.png desktop=idle,walk_left,walk_right,walk_hit,tail,sector,death low=walk_right,death facing_visual_only=true")
 	if game.has_method("_cleanup_runtime_resources"):
 		game._cleanup_runtime_resources()
 	game.queue_free()

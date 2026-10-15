@@ -6647,7 +6647,8 @@ func _reset_tutorial_state() -> void :
 
 
 func _should_offer_run_tutorial(clear_interrupted_save: bool) -> bool:
-	return run_tutorial_enabled and clear_interrupted_save and not is_multiplayer and not dedicated_server_mode and not online_local_spectator
+	var development_tools_active: bool = qa_data_unlocked or _sanitize_forced_initial_phase(forced_initial_phase) > 0
+	return run_tutorial_enabled and clear_interrupted_save and not development_tools_active and not is_multiplayer and not dedicated_server_mode and not online_local_spectator
 
 
 func _set_run_tutorial_enabled(enabled: bool, persist: = true) -> void:
@@ -6818,6 +6819,8 @@ func _begin_tutorial_run() -> void :
 func _maybe_start_context_tutorial(state: String) -> bool:
 	if is_multiplayer or dedicated_server_mode or online_local_spectator:
 		return false
+	if qa_data_unlocked or _sanitize_forced_initial_phase(forced_initial_phase) > 0:
+		return false
 	if _tutorial_active():
 		return false
 	if state == TUTORIAL_STATE_SHOP:
@@ -6841,6 +6844,7 @@ func _maybe_start_context_tutorial(state: String) -> bool:
 
 
 func _finish_context_tutorial() -> void:
+	var finished_state: String = tutorial_state
 	match tutorial_state:
 		TUTORIAL_STATE_SHOP:
 			shop_tutorial_seen = true
@@ -6854,6 +6858,8 @@ func _finish_context_tutorial() -> void:
 	tutorial_finish_hold = 0.0
 	tutorial_targets_spawned.clear()
 	_save_config()
+	if finished_state == TUTORIAL_STATE_SHOP and mode == "game":
+		shop_controller.start_opening_animation(false)
 
 
 func _finish_tutorial(completed: bool) -> void :
@@ -9018,7 +9024,6 @@ func _update_game(delta: float) -> void :
 	screen_shake_timer = max(0.0, screen_shake_timer - delta)
 	damage_flash_timer = max(0.0, damage_flash_timer - delta)
 	Boss1AnimationPresentation.update(self, delta)
-	Boss3AnimationPresentation.update(self, delta)
 	_update_low_health_heartbeat(delta)
 	_update_player_start_down_intro(delta)
 	secondary_drain_flash_timer = max(0.0, secondary_drain_flash_timer - delta)
@@ -9174,6 +9179,9 @@ func _update_game(delta: float) -> void :
 	elif _is_world_replica() and current_phase == 2 and boss2_ultimate_wind_active > 0.0:
 		boss2_ultimate_wind_active = max(0.0, boss2_ultimate_wind_active - delta)
 		_apply_boss2_wind_force(delta)
+	# Resolve Pai-Rato presentation after authority/replica motion has advanced,
+	# so facing and locomotion reflect effective displacement from this frame.
+	Boss3AnimationPresentation.update(self, delta)
 	_update_boss1_walk_audio(delta)
 	_update_acorrentada_walk_audio(delta)
 	var active_lacerante = _active_lacerante_secondary()
@@ -36645,7 +36653,7 @@ func _settings_option_keys() -> Array:
 		keys.append("gamepad")
 	if _uses_desktop_ui():
 		keys.append("keys")
-	keys.append_array(["gameplay", "audio", "graphics"])
+	keys.append_array(["gameplay", "audio", "graphics", "account"])
 	if qa_data_unlocked:
 		keys.append("data")
 	keys.append("back")
@@ -36668,6 +36676,7 @@ func _settings_option_title(key: String) -> String:
 		"gameplay": return "JOGABILIDADE"
 		"audio": return "ÁUDIO"
 		"graphics": return "GRÁFICOS"
+		"account": return "CONTA E PROGRESSO"
 		"data": return "DADOS QA"
 		"back": return "VOLTAR"
 	return key.to_upper()
@@ -36681,6 +36690,7 @@ func _settings_option_summary(key: String) -> String:
 		"gameplay": return "mira, loja, tutorial e leitura"
 		"audio": return "volume, música e efeitos"
 		"graphics": return "desempenho e efeitos visuais"
+		"account": return "proteção e recuperação da conta"
 		"data": return "relatorio de balanceamento"
 		"back": return "retomar partida" if settings_previous_mode == "paused" else "retornar ao menu"
 	return ""
@@ -36702,6 +36712,8 @@ func _settings_option_help(key: String) -> String:
 			return "Encontre seu equilíbrio entre trilha sonora e combate. Ajuste o volume geral, a música, os efeitos e os disparos de forma independente."
 		"graphics":
 			return "Escolha a intensidade dos efeitos e a qualidade visual. Reduza a carga gráfica para buscar mais fluidez durante o combate."
+		"account":
+			return "Proteja ou recupere seu progresso. A sincronização trabalha em segundo plano e os detalhes técnicos ficam fora da experiência normal."
 		"data":
 			return "Area de QA para relatorios tecnicos e balanceamento. Nao altera dano, progresso ou dificuldade da run."
 		"back":
@@ -36717,6 +36729,7 @@ func _settings_option_color(key: String) -> Color:
 		"gameplay": return Color(0.36, 0.84, 1.0)
 		"audio": return Color(1.0, 0.42, 0.78)
 		"graphics": return Color(0.6, 0.8, 1.0)
+		"account": return Color(0.0, 0.92, 0.78)
 		"data": return Color(0.74, 1.0, 0.36)
 		"back": return Color(1.0, 0.26, 0.36)
 	return Color(0.72, 0.92, 1.0)
@@ -36734,6 +36747,7 @@ func _settings_impact_text(key: String) -> String:
 		"gameplay": return "Altera fluxo de mira, loja e leitura durante a run."
 		"audio": return "Afeta conforto auditivo e clareza de avisos sonoros."
 		"graphics": return "Pode aumentar FPS reduzindo carga visual."
+		"account": return "Mantém recuperação e proteção do progresso fora do fluxo da partida."
 		"data": return "Afeta somente envio de relatorios de QA."
 		"back": return "Salva e retorna para a tela anterior."
 	return ""
@@ -37115,7 +37129,7 @@ func _menu_option_keys() -> Array:
 	keys.append("start")
 	if _online_menu_available():
 		keys.append("multiplayer")
-	keys.append_array(["catalog", "progress", "settings"])
+	keys.append_array(["catalog", "settings"])
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
 		keys.append("stream")
 	keys.append("exit")
@@ -40129,7 +40143,7 @@ func _update_button_layout(viewport: Vector2) -> void :
 			viewport,
 			manifestation_key == "lacerante" or manifestation_key == "eclipsada" or manifestation_key == "necronada",
 			manifestation_key == "bombastica",
-			not shop_auto_enabled,
+			not shop_auto_enabled or qa_data_unlocked or _sanitize_forced_initial_phase(forced_initial_phase) > 0,
 			_sanitize_desktop_hud_scale(desktop_hud_scale)
 		)
 		buttons["attack"] = desktop_rects["attack"]
@@ -40167,7 +40181,7 @@ func _update_button_layout(viewport: Vector2) -> void :
 		_pause_pos(viewport),
 		_boss_call_pos(viewport),
 		_manual_shop_pos(viewport),
-		not (shop_auto_enabled and mode != "edit_layout")
+		not (shop_auto_enabled and not qa_data_unlocked and _sanitize_forced_initial_phase(forced_initial_phase) == 0 and mode != "edit_layout")
 	)
 	var custom_combat_layout: bool = hud_attack_pos != Vector2.ZERO or hud_secondary_pos != Vector2.ZERO or hud_dash_pos != Vector2.ZERO or hud_skill_pos != Vector2(-1, -1) or hud_lacerante_empower_pos != Vector2(-1, -1)
 	if mode != "edit_layout" and not custom_combat_layout and _touch_hub_has_overlap(touch_rects, viewport):
@@ -40880,6 +40894,10 @@ func _activate_settings_option(index: int, viewport: Vector2) -> void :
 			_block_ui_input()
 		"graphics":
 			mode = "settings_graphics"
+			_block_ui_input()
+		"account":
+			player_progress_recovery_revealed = false
+			mode = "progress_profile"
 			_block_ui_input()
 		"data":
 			mode = "settings_data"
@@ -41729,7 +41747,7 @@ func _handle_key(event: InputEventKey) -> void :
 				_activate_menu_option(String(keys[menu_selected]))
 	elif mode == "progress_profile":
 		if _is_escape_or_pause_key(event):
-			mode = "menu"
+			mode = "settings"
 		elif event.keycode in [KEY_ENTER, KEY_SPACE] and player_identity_auth_token == "":
 			_submit_player_progress_recovery()
 	elif mode == "settings":
@@ -42179,7 +42197,7 @@ func _handle_key(event: InputEventKey) -> void :
 
 func _handle_player_progress_profile_touch(pos: Vector2) -> void:
 	if player_progress_profile_buttons.get("back", Rect2()).has_point(pos):
-		mode = "menu"
+		mode = "settings"
 		return
 	if player_identity_auth_token == "":
 		if player_progress_profile_buttons.get("recover", Rect2()).has_point(pos):
@@ -46162,6 +46180,7 @@ func _pack_net_boss_visuals() -> Dictionary:
 				"boss3_consume_uid": boss3_consume_uid,
 				"boss3_consume_timer": boss3_consume_timer,
 				"boss3_is_moving": boss3_is_moving,
+				"boss3_facing_dir": boss3_facing_dir,
 				"boss3_miasma_timer": boss3_miasma_timer,
 				"boss3_miasma_variant": boss3_miasma_variant,
 				"boss3_miasma_target_peer_id": boss3_miasma_target_peer_id,
@@ -46782,6 +46801,7 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	boss3_consume_uid = int(data.get("boss3_consume_uid", boss3_consume_uid))
 	boss3_consume_timer = float(data.get("boss3_consume_timer", boss3_consume_timer))
 	boss3_is_moving = bool(data.get("boss3_is_moving", boss3_is_moving))
+	boss3_facing_dir = float(data.get("boss3_facing_dir", boss3_facing_dir))
 	boss3_miasma_timer = float(data.get("boss3_miasma_timer", boss3_miasma_timer))
 	boss3_miasma_variant = _coerce_boss3_miasma_variant(int(data.get("boss3_miasma_variant", boss3_miasma_variant)))
 	boss3_miasma_target_peer_id = int(data.get("boss3_miasma_target_peer_id", boss3_miasma_target_peer_id))

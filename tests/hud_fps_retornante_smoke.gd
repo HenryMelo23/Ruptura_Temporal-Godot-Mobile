@@ -1,9 +1,15 @@
 extends SceneTree
 
+const UserFileGuard = preload("res://tests/support/user_file_guard.gd")
+
 var game: Node
+var config_guard: RefCounted
+var unlocks_guard: RefCounted
 
 
 func _initialize() -> void:
+	config_guard = UserFileGuard.new("user://hud_config.save")
+	unlocks_guard = UserFileGuard.new("user://card_unlocks.save")
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	call_deferred("_run")
@@ -11,9 +17,11 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var previous_retornante: bool = game.retornante_unlocked
+	var previous_retornante_catalog: bool = bool(game.unlocked_manifestation_ids.get("retornante", false))
 	var previous_qa: bool = game.qa_data_unlocked
 	var previous_fps: bool = game.show_fps_counter
 	game.retornante_unlocked = false
+	game.unlocked_manifestation_ids["retornante"] = false
 	var retornante_index := -1
 	for i in range(game.MANIFESTATIONS.size()):
 		if String(game.MANIFESTATIONS[i].get("key", "")) == "retornante":
@@ -45,12 +53,15 @@ func _run() -> void:
 	assert(game.hud_cards_panel_scale > cards_scale)
 	assert(game.hud_coagulum_scale > coagulum_scale)
 	game.retornante_unlocked = previous_retornante
+	game.unlocked_manifestation_ids["retornante"] = previous_retornante_catalog
 	game.qa_data_unlocked = previous_qa
 	game.show_fps_counter = previous_fps
 	game.hud_aura_panel_scale = aura_scale
 	game.hud_cards_panel_scale = cards_scale
 	game.hud_coagulum_scale = coagulum_scale
 	game._save_config()
+	config_guard.restore()
+	unlocks_guard.restore()
 
 	print("HUD_FPS_RETORNANTE_SMOKE_OK fps=true cheat=true scalable_hud=true")
 	game.queue_free()

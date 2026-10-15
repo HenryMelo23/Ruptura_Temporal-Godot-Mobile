@@ -7,10 +7,20 @@ extends RefCounted
 const PHASE_TEXTURE_SPECS := {
 	1: {
 		"enemy_common_phase_1": ["Inimig1.png", "Inimig2.png"],
-		"boss": "Boss1.png",
-		"boss_stage1": ["Boss1.png", "Boss2.png"],
-		"boss_stage2": ["Boss3.png", "Boss4.png"],
-		"boss_stage3": ["Boss5.png", "Boss6.png"],
+		"boss": "boss1/idle/idle_01.png",
+		"boss_stage1": ["boss1/idle/idle_01.png", "boss1/idle/idle_02.png"],
+		"boss_stage2": ["boss1/idle/idle_03.png", "boss1/idle/idle_04.png"],
+		"boss_stage3": ["boss1/idle/idle_02.png", "boss1/idle/idle_04.png"],
+		"boss1_idle": ["boss1/idle/idle_01.png", "boss1/idle/idle_02.png", "boss1/idle/idle_03.png", "boss1/idle/idle_04.png"],
+		"boss1_walk": ["boss1/walk/walk_01.png", "boss1/walk/walk_02.png", "boss1/walk/walk_03.png", "boss1/walk/walk_04.png"],
+		"boss1_turn": ["boss1/turn/turn_01.png", "boss1/turn/turn_02.png", "boss1/turn/turn_03.png"],
+		"boss1_bubble": ["boss1/bubble/bubble_01.png", "boss1/bubble/bubble_02.png", "boss1/bubble/bubble_03.png", "boss1/bubble/bubble_04.png"],
+		"boss1_pincer": ["boss1/pincer/pincer_01.png", "boss1/pincer/pincer_02.png", "boss1/pincer/pincer_03.png", "boss1/pincer/pincer_04.png"],
+		"boss1_absorb": ["boss1/absorb/absorb_01.png", "boss1/absorb/absorb_02.png", "boss1/absorb/absorb_03.png", "boss1/absorb/absorb_04.png"],
+		"boss1_sand": ["boss1/sand/sand_01.png", "boss1/sand/sand_02.png", "boss1/sand/sand_03.png", "boss1/sand/sand_04.png"],
+		"boss1_tide": ["boss1/tide/tide_01.png", "boss1/tide/tide_02.png", "boss1/tide/tide_03.png", "boss1/tide/tide_04.png"],
+		"boss1_rain": ["boss1/rain/rain_01.png", "boss1/rain/rain_02.png", "boss1/rain/rain_03.png", "boss1/rain/rain_04.png"],
+		"boss1_rewind": ["boss1/rewind/rewind_01.png", "boss1/rewind/rewind_02.png", "boss1/rewind/rewind_03.png", "boss1/rewind/rewind_04.png"],
 		"boss1_hit": ["boss1/hit_01.png", "boss1/hit_02.png", "boss1/hit_03.png", "boss1/hit_04.png", "boss1/hit_05.png"],
 		"boss1_jump": ["boss1/jump_01.png", "boss1/jump_02.png", "boss1/jump_03.png", "boss1/jump_04.png", "boss1/jump_05.png"],
 		"boss1_death": ["boss1/death_01.png", "boss1/death_02.png", "boss1/death_03.png", "boss1/death_04.png", "boss1/death_05.png", "boss1/death_06.png"],
@@ -123,7 +133,18 @@ static func _load_phase(game: Node, phase: int, base_path: String, skip_optional
 		if skip_optional_animation_sets and texture_key.begins_with("boss3_anim_") and texture_key not in ["boss3_anim_idle", "boss3_anim_walk", "boss3_anim_entry"]:
 			continue
 		if not game.textures.has(key):
-			_load_key(game, texture_key, specs[key], base_path)
+			var texture_spec: Variant = specs[key]
+			if skip_optional_animation_sets and texture_key.begins_with("boss1_") and texture_spec is Array:
+				texture_spec = _compact_boss1_animation_spec(texture_key, texture_spec)
+			_load_key(game, texture_key, texture_spec, base_path)
+
+
+static func _compact_boss1_animation_spec(key: String, spec: Array) -> Array:
+	if spec.size() <= 2:
+		return spec
+	if key in ["boss1_jump", "boss1_hit", "boss1_death"]:
+		return [spec[0], spec[int(spec.size() / 2)], spec[-1]]
+	return [spec[0], spec[-1]]
 
 
 static func _load_key(game: Node, key: String, spec: Variant, base_path: String) -> void:

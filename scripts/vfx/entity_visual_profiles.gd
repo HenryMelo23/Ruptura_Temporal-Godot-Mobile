@@ -331,9 +331,9 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 		var tide_hop: float = sin(clampf(tide_jump_progress, 0.0, 1.0) * PI) * 188.0
 		return game.boss_pos + Vector2(0, - tide_hop)
 	if game.boss_stage_timer <= 0.0:
-		# A restrained breathing arc keeps all three damage stages alive without
-		# changing collision, movement, or their existing clock-crack progression.
-		return game.boss_pos + Vector2(0.0, sin(game.time_alive * 3.2) * 2.0)
+		# Respiração e transferência de peso agora pertencem aos frames. Manter o
+		# pivô no chão evita o antigo jitter vertical e não desloca o collider.
+		return game.boss_pos
 	var elapsed: float = maxf(0.0, game.boss_stage_duration - game.boss_stage_timer)
 	var hop = 0.0
 	if elapsed <= game.BOSS_STAGE_SLAM_TIME:
@@ -346,9 +346,8 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 
 
 static func _boss_draw_size(game: Node2D) -> Vector2:
-	if game.current_phase == 1 and game.boss_stage_timer <= 0.0:
-		var breath: float = sin(game.time_alive * 3.2)
-		return Vector2(184.0 + breath * 2.4, 170.0 - breath * 1.6)
+	if game.current_phase == 1:
+		return Vector2(184.0, 170.0)
 	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else (Vector2(59.4, 88.0) if game.current_phase == 5 else Vector2(184, 170))))
 
 

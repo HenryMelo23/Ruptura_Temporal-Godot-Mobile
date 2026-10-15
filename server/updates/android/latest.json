@@ -1,13 +1,15 @@
 {
-  "version": "2.0.50",
-  "version_code": 25000,
-  "filename": "ruptura_temporal_mobile_2.0.50.apk",
-  "sha256": "573216cd6cc4aaad9a2e502164bdc33507befbc4784cc0efef7034ab85d556f6",
-  "size": 837471694,
+  "version": "2.0.51",
+  "version_code": 25100,
+  "filename": "ruptura_temporal_mobile_2.0.51.apk",
+  "sha256": "bf71ba804811c1aa2a62f52a566d7cc30047e10f562dd7c0674759eb06640ee2",
+  "size": 848671007,
   "notes": [
-    "Atualizacao 2.0.50",
-    "Correcoes e melhorias acumuladas da branch de trabalho"
+    "Remake visual e animacoes completas dos Chefes 1 e 3",
+    "Melhorias de legibilidade nos ataques e estados dos chefes",
+    "Correcoes de tutorial, loja e configuracoes",
+    "Melhorias acumuladas de sincronizacao e estabilidade multiplayer"
   ],
   "mandatory": false,
-  "published_at": "2026-10-15T03:59:19.6247509Z"
+  "published_at": "2026-10-15T17:34:32.3709049Z"
 }

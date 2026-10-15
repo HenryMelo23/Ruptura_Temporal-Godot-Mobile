@@ -344,14 +344,22 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 	var boss_draw_size = game._boss_draw_size()
 	if game.current_phase == 2:
 		game._draw_dynamic_shadow_fit(boss_tex, boss_draw_pos - camera + Vector2(0, 10), Vector2(122, 82), game.boss2_facing_dir < 0.0, true, 0.34)
+	elif game.current_phase == 3:
+		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), true, 0.44)
 	else:
-		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, false, true, 0.44)
-	var boss_modulate: Color = Boss3AnimationPresentation.stage_modulate(game) if game.current_phase == 3 else Color.WHITE
+		var shadow_flip: bool = Boss1AnimationPresentation.should_flip_h(game) if game.current_phase == 1 else false
+		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, shadow_flip, true, 0.44)
+	var boss_modulate: Color = Boss3AnimationPresentation.stage_modulate(game) if game.current_phase == 3 else (Boss1AnimationPresentation.stage_modulate(game) if game.current_phase == 1 else Color.WHITE)
 	if game._attack_target_is_boss() and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		game._draw_attack_target_marker(boss_draw_pos - camera + Vector2(0, 55), 64.0, game.locked_target_kind == "boss")
 		boss_modulate = boss_modulate * Color(1.0, 0.93, 0.48, 1.0)
 	if game.current_phase == 2:
 		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, Vector2(184, 170), game.boss2_facing_dir < 0.0, boss_modulate, true)
+	elif game.current_phase == 3:
+		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), boss_modulate, true)
+	elif game.current_phase == 1:
+		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, Boss1AnimationPresentation.should_flip_h(game), boss_modulate, true)
+		Boss1AnimationPresentation.draw_damage_stage(game, boss_draw_pos - camera, boss_draw_size)
 	else:
 		if game.current_phase == 7:
 			game._draw_boss7_fire_aura(boss_tex, boss_draw_pos - camera, boss_draw_size)

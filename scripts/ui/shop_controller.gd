@@ -676,7 +676,8 @@ func set_auto_enabled(enabled: bool) -> void:
 func try_open_manual() -> void:
 	if game._local_player_controls_locked():
 		return
-	if game.shop_auto_enabled or game.mode != "game":
+	var development_tools_active: bool = game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0
+	if (game.shop_auto_enabled and not development_tools_active) or game.mode != "game":
 		return
 	if not manual_available():
 		warn_manual_reopen_penalty()

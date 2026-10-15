@@ -1,11 +1,14 @@
 extends SceneTree
 
 const OUTPUT := "res://.agent_logs/hud_after"
+const UserFileGuard = preload("res://tests/support/user_file_guard.gd")
 var game: Node
 var failed: bool = false
+var config_guard: RefCounted
 
 
 func _initialize() -> void:
+	config_guard = UserFileGuard.new("user://hud_config.save")
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	call_deferred("_run")
@@ -124,6 +127,7 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	await create_timer(0.5).timeout
+	config_guard.restore()
 	if not failed:
 		print("HUD_FEEDBACK_VISUAL_OK damage=true healing=true critical=true pulse=true recovery=true settings=true persistence=true desktop=true mobile=true")
 	quit(1 if failed else 0)

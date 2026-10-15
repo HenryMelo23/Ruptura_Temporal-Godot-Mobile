@@ -1,5 +1,7 @@
 extends SceneTree
 
+const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
+
 
 func _check(condition: bool, message: String) -> void:
 	if condition:
@@ -90,9 +92,23 @@ func _run() -> void:
 	_check(client_game.boss2_ice_shards.size() == 1 and client_game.boss2_snow_zones.size() == 1, "boss2 ice visuals were not synchronized to replica")
 	_check(is_equal_approx(client_game.boss2_ultimate_timer, 12.0) and client_game.boss2_ultimate_center == Vector2(340, 300), "boss2 ultimate visual state was not synchronized")
 	host_game.current_phase = 3
+	host_game.boss3_facing_dir = 1.0
+	host_game.boss3_is_moving = true
 	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
 	_check(client_game.boss3_miasma_variant == 4 and client_game.boss3_miasma_qte_required == 18 and client_game.boss3_miasma_qte_taps == 6, "boss3 miasma QTE visuals were not synchronized to replica")
 	_check(is_equal_approx(client_game.boss3_faith_link_timer, 2.0), "boss3 faith link visual timer was not synchronized")
+	_check(is_equal_approx(client_game.boss3_facing_dir, 1.0), "boss3 facing was not synchronized to replica")
+	client_game.current_phase = 3
+	client_game.boss_active = true
+	client_game.boss_dead = false
+	client_game.boss3_miasma_variant = 0
+	client_game.boss3_miasma_timer = 0.0
+	client_game.boss3_faith_link_timer = 0.0
+	client_game.boss3_is_moving = true
+	client_game.boss3_hit_animation_timer = 0.0
+	Boss3AnimationPresentation.trigger_hit(client_game, 35.0, "network_snapshot")
+	_check(client_game.boss3_hit_animation_timer == 0.0, "replica movement damage replaced walk with a static hit pose")
+	_check(client_game.boss3_hit_feedback_timer > 0.0, "replica movement damage lost non-blocking feedback")
 	host_game.current_phase = 4
 	client_game._apply_remote_boss_visual_snapshot(host_game._pack_net_boss_visuals())
 	_check(client_game.phase4_enemy_hazards.size() == 1, "boss/environment hazards were not synchronized to replica")

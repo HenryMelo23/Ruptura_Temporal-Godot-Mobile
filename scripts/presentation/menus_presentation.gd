@@ -315,7 +315,6 @@ static func _draw_menu(game: Node2D, viewport: Vector2) -> void :
 	game._draw_hub_button(game.menu_buttons["catalog"], "Catálogo temporal", "", accent, game.menu_selected == game._menu_index_for("catalog"), false, "catalog")
 	if game._content_section_has_unread("catalog_manifestation") or game._content_section_has_unread("catalog_spectrum"):
 		_draw_content_new_badge(game, game.menu_buttons["catalog"])
-	game._draw_hub_button(game.menu_buttons["progress"], "Progresso salvo", game._player_progress_menu_hint(), accent, game.menu_selected == game._menu_index_for("progress"), false, "progress")
 	game._draw_hub_button(game.menu_buttons["settings"], "Configurações", "", accent, game.menu_selected == game._menu_index_for("settings"), false, "settings")
 	if game.QA_STREAMING_FEATURE_ENABLED and game.qa_streaming_unlocked and game.menu_buttons.has("stream"):
 		game._draw_hub_button(game.menu_buttons["stream"], "Encerrar ao vivo" if game._qa_streaming_is_active() else "Transmitir partida", game._qa_stream_menu_subtitle(), accent, game.menu_selected == game._menu_index_for("stream"), false, "stream")
@@ -343,16 +342,14 @@ static func _draw_player_progress_profile(game: Node2D, viewport: Vector2) -> vo
 	game.player_progress_profile_buttons.clear()
 	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.015, 0.03, 0.82), true)
 	game._draw_holo_panel(panel, accent, true, 0.96)
-	game._draw_glitch_title("PROGRESSO SALVO", Vector2(panel.get_center().x, panel.position.y + 43.0), 26, accent)
+	game._draw_glitch_title("CONTA E PROGRESSO", Vector2(panel.get_center().x, panel.position.y + 43.0), 26, accent)
 	var content: Rect2 = panel.grow(-34.0)
-	var status: String = game._player_progress_status_label()
-	var status_color := Color(0.42, 1.0, 0.76) if game.player_identity_auth_token != "" and game.player_progress_sync_status in ["synced", "identity_ready"] else Color(1.0, 0.76, 0.28)
-	game._draw_ui_text("STATUS: " + status, content.position + Vector2(0, 30), 14, status_color, content.size.x)
-	game._draw_ui_text("Pendentes: %d   |   Em revisão: %d" % [game.player_progress_pending_events.size(), game.player_progress_quarantined_events.size()], content.position + Vector2(0, 58), 13, Color(0.78, 0.9, 0.92), content.size.x)
-	if game.player_progress_last_remote_confirmation != "":
-		game._draw_ui_text("Última confirmação remota: " + game.player_progress_last_remote_confirmation, content.position + Vector2(0, 78), 12, Color(0.58, 0.76, 0.78), content.size.x)
+	var protected_online: bool = game.player_identity_auth_token != "" and game.player_progress_sync_status in ["synced", "identity_ready"]
+	var status: String = "PROTEGIDO ONLINE" if protected_online else ("SALVO NESTE DISPOSITIVO" if game.player_identity_auth_token != "" else "PROTEÇÃO ONLINE NÃO CONFIGURADA")
+	var status_color := Color(0.42, 1.0, 0.76) if protected_online else Color(1.0, 0.76, 0.28)
+	game._draw_ui_text(status, content.position + Vector2(0, 34), 14, status_color, content.size.x)
 	if game.player_identity_auth_token == "":
-		var recovery_copy_y := content.position.y + (102.0 if game.player_progress_last_remote_confirmation != "" else 82.0)
+		var recovery_copy_y := content.position.y + 76.0
 		game._draw_ui_wrap("Recupere sua conta antes de criar um perfil novo. O código não é um nick, nem um UUID do aparelho.", Rect2(content.position.x, recovery_copy_y, content.size.x, 66.0), 14, Color(0.86, 0.95, 0.96), 3)
 		var recover := Rect2(content.position.x, panel.position.y + panel.size.y * 0.61, content.size.x * 0.58, 48.0)
 		var create := Rect2(recover.end.x + 12.0, recover.position.y, content.size.x - recover.size.x - 12.0, 48.0)
@@ -361,8 +358,8 @@ static func _draw_player_progress_profile(game: Node2D, viewport: Vector2) -> vo
 		game._draw_hub_button(recover, "RECUPERAR PROGRESSO", "", accent, false, false, "progress_recover")
 		game._draw_hub_button(create, "CRIAR PERFIL", "Sem recuperação", Color(1.0, 0.72, 0.25), false, false, "progress_create")
 	else:
-		var synced_copy_y := content.position.y + (102.0 if game.player_progress_last_remote_confirmation != "" else 82.0)
-		game._draw_ui_wrap("O servidor é a fonte de verdade. Este aparelho mantém apenas cache e uma fila offline para a experiência continuar quando a rede falhar.", Rect2(content.position.x, synced_copy_y, content.size.x, 66.0), 14, Color(0.86, 0.95, 0.96), 3)
+		var synced_copy_y := content.position.y + 76.0
+		game._draw_ui_wrap("Seu progresso continua disponível neste aparelho. A proteção online acontece automaticamente quando uma conexão segura está disponível.", Rect2(content.position.x, synced_copy_y, content.size.x, 66.0), 14, Color(0.86, 0.95, 0.96), 3)
 		if game.player_identity_recovery_code != "":
 			var show := Rect2(content.position.x, panel.position.y + panel.size.y * 0.57, content.size.x * 0.40, 46.0)
 			var copy := Rect2(show.end.x + 12.0, show.position.y, content.size.x - show.size.x - 12.0, 46.0)

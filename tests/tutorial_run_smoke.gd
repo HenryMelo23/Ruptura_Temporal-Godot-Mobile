@@ -1,9 +1,11 @@
 extends SceneTree
 
 const OUT_DIR := "res://.codex"
+const UserFileGuard = preload("res://tests/support/user_file_guard.gd")
 
 var game: Node
 var failed := false
+var config_guard: RefCounted
 
 
 func _check(condition: bool, message: String) -> void:
@@ -14,6 +16,7 @@ func _check(condition: bool, message: String) -> void:
 
 
 func _initialize() -> void:
+	config_guard = UserFileGuard.new("user://hud_config.save")
 	root.size = Vector2i(1280, 720)
 	game = load("res://scenes/Main.tscn").instantiate()
 	game.orientation_poll_timer = 9999.0
@@ -28,6 +31,21 @@ func _run() -> void:
 	game.startup_thanks_fading = false
 	game.startup_thanks_timer = 0.0
 	game._set_run_tutorial_enabled(true, false)
+	game.forced_initial_phase = 3
+	game._start_game()
+	game.set_process(false)
+	_check(game.current_phase == 3, "forced development phase was not selected")
+	_check(game.tutorial_state == game.TUTORIAL_STATE_NONE, "forced development phase reopened tutorial")
+	game.mode = "game"
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
+	game.shop_auto_enabled = true
+	game.score = game.card_cost * 2
+	game._update_button_layout(Vector2(1280, 720))
+	_check(game.buttons.has("shop_manual"), "development phase hid manual shop behind automatic mode")
+	game._try_open_manual_shop()
+	_check(game.mode == "shop_opening", "development phase manual shop did not open")
+	game.forced_initial_phase = 0
 	game._start_game()
 	game.set_process(false)
 	game.mode = "game"
@@ -152,3 +170,5 @@ func _cleanup() -> void:
 		root.remove_child(game)
 	game.free()
 	game = null
+	if config_guard != null:
+		config_guard.restore()

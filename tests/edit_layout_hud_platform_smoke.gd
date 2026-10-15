@@ -1,12 +1,16 @@
 extends SceneTree
 
 const OUT_DIR := "res://.codex"
+const UserFileGuard = preload("res://tests/support/user_file_guard.gd")
 
 var game: Node
+var config_guard: RefCounted
 
 
 func _fail(message: String) -> void:
 	push_error("EDIT_LAYOUT_HUD_PLATFORM_FAIL " + message)
+	if config_guard != null:
+		config_guard.restore()
 	quit(1)
 
 
@@ -16,6 +20,7 @@ func _check(condition: bool, message: String) -> void:
 
 
 func _initialize() -> void:
+	config_guard = UserFileGuard.new("user://hud_config.save")
 	root.size = Vector2i(1280, 720)
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
@@ -35,6 +40,7 @@ func _run() -> void:
 	_check_mobile_interaction(Vector2(1280, 720))
 
 	print("EDIT_LAYOUT_HUD_PLATFORM_OK captures=2 desktop_virtual_hidden=true mobile_virtual_visible=true safe_clamp=true")
+	config_guard.restore()
 	game.queue_free()
 	await process_frame
 	quit(0)

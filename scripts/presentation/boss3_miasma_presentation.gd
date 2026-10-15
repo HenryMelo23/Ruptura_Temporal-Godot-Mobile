@@ -54,13 +54,15 @@ static func clones(game: Node2D, camera: Vector2) -> void:
 	var exchange: float = 1.0 - clampf((game.BOSS3_MIASMA_CLONE_SWAP - game.boss3_miasma_clone_timer) / 0.2, 0.0, 1.0)
 	var slices := 6 if game.gfx_low_resource else 10
 	var stage_color: Color = Boss3AnimationPresentation.stage_modulate(game)
+	var flip_h: bool = Boss3AnimationPresentation.should_flip_h(game)
 	stage_color.a = 0.94
 	for world_pos in positions:
 		var is_real: bool = Vector2(world_pos).is_equal_approx(game.boss_pos)
 		var p: Vector2 = _pixel(Vector2(world_pos) - camera)
 		var phase: float = floorf(Vector2(world_pos).x * 0.07 + Vector2(world_pos).y * 0.03)
-		game._draw_dynamic_shadow_fit(texture, p, size, false, true, 0.34)
-		var rect := Rect2(p + Vector2(-fit.x * 0.5, size.y * 0.5 - fit.y), fit)
+		game._draw_dynamic_shadow_fit(texture, p, size, flip_h, true, 0.34)
+		var rect := Rect2(Vector2(-fit.x * 0.5, size.y * 0.5 - fit.y), fit)
+		game.draw_set_transform(p, 0.0, Vector2(-1.0, 1.0) if flip_h else Vector2.ONE)
 		if not game.gfx_low_resource:
 			game.draw_texture_rect(texture, Rect2(rect.position + Vector2(-4, 0), rect.size), false, _opacity(WAX, 0.12 + exchange * 0.14))
 			game.draw_texture_rect(texture, Rect2(rect.position + Vector2(4, -2), rect.size), false, _opacity(MOLD, 0.1 + exchange * 0.12))
@@ -69,6 +71,7 @@ static func clones(game: Node2D, camera: Vector2) -> void:
 			var dst := Rect2(rect.position + Vector2(0, fit.y * row / slices) + offset, Vector2(fit.x, fit.y / slices))
 			var src := Rect2(0, tex_size.y * row / slices, tex_size.x, tex_size.y / slices)
 			game.draw_texture_rect_region(texture, dst, src, stage_color)
+		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		var count := 2 if game.gfx_low_resource else 4
 		for i in range(count):
 			var breath: float = sin(game.time_alive * 1.3 + phase + i * 2.1)

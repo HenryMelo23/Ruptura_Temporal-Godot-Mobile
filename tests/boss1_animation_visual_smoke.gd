@@ -1,5 +1,7 @@
 extends SceneTree
 
+const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+
 var game: Node
 
 
@@ -47,6 +49,49 @@ func _capture(path: String) -> bool:
 func _run() -> void:
 	_prepare_boss()
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
+	Boss1AnimationPresentation.update(game, 0.01)
+	if not await _capture("res://.codex/boss1_idle_remake_qa_1280x720.png"):
+		quit(1)
+		return
+
+	game.boss1_animation_velocity = Vector2(90.0, 0.0)
+	game.boss1_animation_state = Boss1AnimationPresentation.STATE_WALK
+	game.boss1_animation_elapsed = 0.22
+	if not await _capture("res://.codex/boss1_walk_remake_qa_1280x720.png"):
+		quit(1)
+		return
+
+	game.boss1_animation_velocity = Vector2.ZERO
+	game.boss_attacks.clear()
+	game._add_boss_bubble(game.player_pos)
+	Boss1AnimationPresentation.update(game, 0.28)
+	if not await _capture("res://.codex/boss1_bubble_remake_qa_1280x720.png"):
+		quit(1)
+		return
+
+	game.boss_attacks.clear()
+	game._add_boss_pincer_tenaz()
+	game.boss_attacks[0]["state"] = "dash_first"
+	game.boss_attacks[0]["state_age"] = 0.12
+	Boss1AnimationPresentation.update(game, 0.01)
+	if not await _capture("res://.codex/boss1_tenaz_remake_qa_1280x720.png"):
+		quit(1)
+		return
+
+	game.boss_attacks.clear()
+	game._add_boss_tide()
+	Boss1AnimationPresentation.update(game, 0.42)
+	if not await _capture("res://.codex/boss1_tide_remake_qa_1280x720.png"):
+		quit(1)
+		return
+
+	game.boss_attacks.clear()
+	game.boss1_time_wave = {"radius": 120.0, "direction": 1.0, "age": 0.2, "max_radius": 620.0, "variant": 0, "origin": game.boss_pos}
+	Boss1AnimationPresentation.update(game, 0.20)
+	if not await _capture("res://.codex/boss1_rewind_remake_qa_1280x720.png"):
+		quit(1)
+		return
+	game.boss1_time_wave.clear()
 
 	game.boss1_hit_animation_duration = 0.24
 	game.boss1_hit_animation_timer = 0.14
@@ -78,7 +123,7 @@ func _run() -> void:
 		quit(1)
 		return
 
-	print("BOSS1_ANIMATION_VISUAL_OK hit=1280x720 jump=1280x720 death=1280x720 low=960x540")
+	print("BOSS1_ANIMATION_VISUAL_OK idle_walk_bubble_tenaz_tide_rewind=1280x720 hit_jump_death=1280x720 low=960x540")
 	game.queue_free()
 	await process_frame
 	quit(0)

@@ -56,6 +56,8 @@ func _run() -> void:
 	game.interrupted_run_available = false
 	await _capture("main_mobile", Vector2i(960, 540))
 	await _capture("main_ultrawide", Vector2i(1560, 720))
+	_check(not game._menu_option_keys().has("progress"), "technical progress button leaked into the player hub")
+	_check(game._settings_option_keys().has("account"), "account recovery was not moved into settings")
 	root.size = Vector2i(1280, 720)
 	await create_timer(0.1).timeout
 	var rects: Dictionary = game._menu_rects(Vector2(1280, 720))

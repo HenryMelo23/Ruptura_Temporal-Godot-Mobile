@@ -6,31 +6,60 @@ extends RefCounted
 
 const HIT_DURATION_MIN := 0.16
 const HIT_DURATION_MAX := 0.24
+const HIT_FEEDBACK_DURATION := 0.10
 const DEATH_DURATION := 1.72
 const DRAW_SIZE := Vector2(184.0, 170.0)
+const MOVE_SPEED_DEADZONE := 6.0
+const FACING_SPEED_DEADZONE := 10.0
+const TELEPORT_SAMPLE_DISTANCE := 160.0
+const ORIGINAL_ART_FACING := -1.0
 
 
 static func reset(game: Node2D) -> void:
 	game.boss3_hit_animation_timer = 0.0
 	game.boss3_hit_animation_duration = HIT_DURATION_MIN
+	game.boss3_hit_feedback_timer = 0.0
 	game.boss3_death_animation_timer = 0.0
 	game.boss3_death_animation_duration = DEATH_DURATION
 	game.boss3_death_animation_pos = Vector2.ZERO
+	game.boss3_visual_state = "idle"
+	game.boss3_visual_state_elapsed = 0.0
+	game.boss3_visual_previous_pos = game.boss_pos
+	game.boss3_visual_velocity = Vector2.ZERO
+	game.boss3_visual_motion_sample_valid = true
+	game.boss3_facing_dir = ORIGINAL_ART_FACING
 
 
 static func update(game: Node2D, delta: float) -> void:
 	game.boss3_hit_animation_timer = maxf(0.0, game.boss3_hit_animation_timer - delta)
+	game.boss3_hit_feedback_timer = maxf(0.0, game.boss3_hit_feedback_timer - delta)
 	game.boss3_death_animation_timer = maxf(0.0, game.boss3_death_animation_timer - delta)
+	_sample_motion(game, delta)
+	var next_state: String = _resolve_visual_state(game)
+	if next_state != game.boss3_visual_state:
+		game.boss3_visual_state = next_state
+		game.boss3_visual_state_elapsed = 0.0
+	else:
+		game.boss3_visual_state_elapsed += maxf(0.0, delta)
 
 
 static func trigger_hit(game: Node2D, damage: float, source: String = "") -> void:
 	if game.current_phase != 3 or damage <= 0.0 or game.boss3_death_animation_timer > 0.0:
 		return
+	game.boss3_hit_feedback_timer = maxf(game.boss3_hit_feedback_timer, HIT_FEEDBACK_DURATION)
 	# Persistent damage ticks keep their gameplay feedback without pinning the
 	# character in hit-stun animation every frame.
 	if source in ["veneno", "parasite_feast", "gravitante_orbital"] or source.begins_with("aura_"):
 		return
 	if game.boss3_hit_animation_timer > 0.0:
+		return
+	# Hit is a brief idle reaction, never a movement/cast interrupt. Damage and
+	# the overlay feedback above are independent from this optional pose.
+	# The authority movement flag also closes the snapshot-order gap before a
+	# replica has sampled the newly received position.
+	if game.boss3_is_moving:
+		return
+	if _resolve_visual_state(game, false) != "idle":
 		return
 	var severity: float = clampf(damage / maxf(1.0, game.boss_hp_max * 0.025), 0.0, 1.0)
 	game.boss3_hit_animation_duration = lerpf(HIT_DURATION_MIN, HIT_DURATION_MAX, severity)
@@ -41,41 +70,28 @@ static func trigger_death(game: Node2D, death_position: Vector2 = Vector2.INF) -
 	if game.current_phase != 3 or game.boss3_death_animation_timer > 0.0:
 		return
 	game.boss3_hit_animation_timer = 0.0
+	game.boss3_hit_feedback_timer = 0.0
 	game.boss3_death_animation_duration = DEATH_DURATION
 	game.boss3_death_animation_timer = DEATH_DURATION
 	game.boss3_death_animation_pos = game.boss_pos if not death_position.is_finite() else death_position
+	game.boss3_visual_state = "death"
+	game.boss3_visual_state_elapsed = 0.0
 
 
 static func visual_state(game: Node2D) -> String:
-	if death_active(game):
-		return "death"
-	if game.current_phase != 3:
-		return ""
-	if game.boss_entry_timer > 0.0:
-		return "entry"
-	if game.boss3_stun_timer > 0.0:
-		return "stun"
-	if game.boss3_consume_uid >= 0 and game.boss3_consume_timer > 0.0:
-		return "consume"
-	if game.boss3_ritual_timer > 0.0:
-		return "cheese_ritual"
-	if _has_attack(game, "boss3_sector_ritual"):
-		return "sector_ritual"
-	if game._boss3_miasma_active():
-		return "miasma"
-	if game.boss3_faith_test_active or game.boss3_faith_link_timer > 0.0:
-		return "faith"
-	if _has_attack(game, "rat_tail"):
-		return "rat_tail"
-	if _has_attack(game, "miasma_cheese_spit") or _has_attack(game, "rat_spit"):
-		return "rat_spit"
-	if _has_attack(game, "rat_rain"):
-		return "rat_rain"
-	if game.boss3_hit_animation_timer > 0.0:
-		return "hit"
-	if game.boss3_is_moving:
-		return "walk"
-	return "idle"
+	return _resolve_visual_state(game)
+
+
+static func should_flip_h(game: Node2D) -> bool:
+	# Source art faces left. Only the visual is mirrored for rightward facing;
+	# gameplay positions, hitboxes, attacks and child effects stay untouched.
+	return game.boss3_facing_dir > 0.0
+
+
+static func movement_active(game: Node2D) -> bool:
+	if game.boss3_visual_motion_sample_valid:
+		return game.boss3_visual_velocity.length() >= MOVE_SPEED_DEADZONE
+	return bool(game.boss3_is_moving)
 
 
 static func active_texture(game: Node2D) -> Texture2D:
@@ -94,12 +110,16 @@ static func active_texture(game: Node2D) -> Texture2D:
 
 
 static func stage_modulate(game: Node2D) -> Color:
+	var color := Color.WHITE
 	match clampi(int(game.boss3_stage), 1, 3):
 		2:
-			return Color(0.98, 1.0, 0.88, 1.0)
+			color = Color(0.98, 1.0, 0.88, 1.0)
 		3:
-			return Color(1.0, 0.91, 0.72, 1.0)
-	return Color.WHITE
+			color = Color(1.0, 0.91, 0.72, 1.0)
+	if game.boss3_hit_feedback_timer > 0.0:
+		var pulse: float = clampf(game.boss3_hit_feedback_timer / HIT_FEEDBACK_DURATION, 0.0, 1.0)
+		color = color.lerp(Color(1.0, 0.62, 0.42, 1.0), 0.34 * pulse)
+	return color
 
 
 static func death_active(game: Node2D) -> bool:
@@ -118,8 +138,8 @@ static func draw_death(game: Node2D, camera: Vector2) -> void:
 	var fade: float = 1.0 - clampf((progress - 0.9) / 0.1, 0.0, 1.0)
 	var shake: Vector2 = Vector2(sin(progress * 86.0), cos(progress * 71.0)) * (3.5 * (1.0 - progress))
 	if progress < 0.76:
-		game._draw_dynamic_shadow_fit(texture, center + Vector2(0.0, 8.0), DRAW_SIZE, false, true, 0.36 * fade)
-	game._draw_entity_fit(texture, center + shake, DRAW_SIZE, Color(1.0, 1.0, 1.0, fade), true)
+		game._draw_dynamic_shadow_fit(texture, center + Vector2(0.0, 8.0), DRAW_SIZE, should_flip_h(game), true, 0.36 * fade)
+	game._draw_entity_fit_flipped(texture, center + shake, DRAW_SIZE, should_flip_h(game), Color(1.0, 1.0, 1.0, fade), true)
 	if not game.gfx_low_resource and not game._memory_saver_active() and progress >= 0.42:
 		var shard_count: int = 8
 		for shard in range(shard_count):
@@ -149,11 +169,72 @@ static func _frame_index(game: Node2D, state: String, frame_count: int) -> int:
 		"miasma":
 			return int(game.time_alive * 6.0) % frame_count
 		"faith":
-			return int(game.time_alive * 6.5) % frame_count
+			return int(game.boss3_visual_state_elapsed * 6.5) % frame_count
 		"walk":
-			return int(game.boss_phase * 2.0) % frame_count
+			return int(game.boss3_visual_state_elapsed * 7.5) % frame_count
 		_:
-			return int(game.boss_phase * 1.35) % frame_count
+			return int(game.boss3_visual_state_elapsed * 4.5) % frame_count
+
+
+static func _sample_motion(game: Node2D, delta: float) -> void:
+	if game.current_phase != 3:
+		game.boss3_visual_motion_sample_valid = false
+		game.boss3_visual_velocity = Vector2.ZERO
+		return
+	if not game.boss3_visual_motion_sample_valid:
+		game.boss3_visual_previous_pos = game.boss_pos
+		game.boss3_visual_velocity = Vector2.ZERO
+		game.boss3_visual_motion_sample_valid = true
+		return
+	var displacement: Vector2 = game.boss_pos - game.boss3_visual_previous_pos
+	game.boss3_visual_previous_pos = game.boss_pos
+	if delta <= 0.0 or displacement.length() >= TELEPORT_SAMPLE_DISTANCE:
+		game.boss3_visual_velocity = Vector2.ZERO
+		return
+	game.boss3_visual_velocity = displacement / delta
+	if absf(game.boss3_visual_velocity.x) >= FACING_SPEED_DEADZONE:
+		game.boss3_facing_dir = 1.0 if game.boss3_visual_velocity.x > 0.0 else -1.0
+
+
+static func _resolve_visual_state(game: Node2D, allow_hit: bool = true) -> String:
+	# One resolver owns presentation priority. Gameplay state remains in the
+	# phase controller and is never cancelled by a visual transition.
+	if death_active(game):
+		return "death"
+	if game.current_phase != 3:
+		return ""
+	if game.boss_entry_timer > 0.0:
+		return "entry"
+	if game.boss3_stun_timer > 0.0:
+		return "stun"
+	var blocking_cast: String = _blocking_cast_state(game)
+	if not blocking_cast.is_empty():
+		return blocking_cast
+	if movement_active(game):
+		return "walk"
+	if game.boss3_consume_uid >= 0 and game.boss3_consume_timer > 0.0:
+		return "consume"
+	if game.boss3_faith_test_active or game.boss3_faith_link_timer > 0.0:
+		return "faith"
+	if allow_hit and game.boss3_hit_animation_timer > 0.0:
+		return "hit"
+	return "idle"
+
+
+static func _blocking_cast_state(game: Node2D) -> String:
+	if game.boss3_ritual_timer > 0.0:
+		return "cheese_ritual"
+	if _has_attack(game, "boss3_sector_ritual"):
+		return "sector_ritual"
+	if game._boss3_miasma_active():
+		return "miasma"
+	if _has_attack(game, "rat_tail"):
+		return "rat_tail"
+	if _has_attack(game, "miasma_cheese_spit") or _has_attack(game, "rat_spit"):
+		return "rat_spit"
+	if _has_attack(game, "rat_rain"):
+		return "rat_rain"
+	return ""
 
 
 static func _attack_for_state(game: Node2D, state: String) -> Dictionary:

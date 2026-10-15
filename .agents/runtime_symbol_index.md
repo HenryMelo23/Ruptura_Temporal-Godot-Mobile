@@ -77,6 +77,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Boss 7 ultimate | `check_boss7_ultimate` | `scripts/systems/modern_boss_controller.gd:427` |
 | Boss party scaling contract | `profile_for_party_size` | `scripts/systems/boss_party_scaling.gd:13` |
 | Boss party scaling snapshot | `_ensure_boss_party_scaling_context` | `scripts/main_runtime_core.gd:6896` |
+| Boss 1 animation state selection | `RTBoss1AnimationPresentation.active_texture` | `scripts/presentation/boss1_animation_presentation.gd` |
+| Boss 1 animation facing | `RTBoss1AnimationPresentation.should_flip_h` | `scripts/presentation/boss1_animation_presentation.gd` |
 | UMBRA Observation Schema 2.0 | `RTUmbraObservationSchema.build_from_runtime` | `scripts/systems/umbra_observation_schema.gd:96` |
 | UMBRA multiplayer authority | `RTUmbraAuthorityController.build_authoritative_decision` | `scripts/systems/online/umbra_authority_controller.gd` |
 | UMBRA Observation fixtures | `build_from_snapshot` | `scripts/systems/umbra_observation_schema.gd:69` |
@@ -100,6 +102,7 @@ Use exact symbol search in these owners; core keeps compatible wrappers.
 - Phase 6 Suturador de Âmbar event authority: `scripts/systems/enemies/phase6_amber_suturer_controller.gd`; presentation: `scripts/presentation/phase6_amber_suturer_presentation.gd`.
 - Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`.
 - Boss wave drawing: `scripts/presentation/boss_wave_presentation.gd`.
+- Boss 1 animation/facing/damage-stage presentation: `scripts/presentation/boss1_animation_presentation.gd`; combat timings, hitboxes and authority remain in core.
 - Cross-owner regression: `tests/runtime_backup_reconciliation_smoke.gd`.
 
 ## Search Recipes

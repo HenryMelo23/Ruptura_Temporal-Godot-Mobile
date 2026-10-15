@@ -23,6 +23,9 @@ func _run() -> void:
 		AssetController.prepare_phase(game, phase, "res://assets/sprites/", true)
 		for key_value in AssetController.phase_keys(phase):
 			var key: String = String(key_value)
+			if phase == 3 and key.begins_with("boss3_anim_") and key not in ["boss3_anim_idle", "boss3_anim_walk", "boss3_anim_entry"]:
+				_check(not game.textures.has(key), "memory saver retained optional %s" % key)
+				continue
 			_check(game.textures.has(key), "phase %d did not load %s" % [phase, key])
 			_check(_valid_texture_value(game.textures[key]), "phase %d loaded invalid %s" % [phase, key])
 		for other_phase in range(1, 8):
@@ -32,6 +35,9 @@ func _run() -> void:
 				_check(not game.textures.has(String(other_key_value)), "phase %d retained phase %d key %s" % [phase, other_phase, other_key_value])
 
 	AssetController.prepare_phase(game, 1, "res://assets/sprites/", true)
+	_check((game.textures.get("boss1_idle", []) as Array).size() == 2, "memory saver must retain compact Boss 1 idle")
+	_check((game.textures.get("boss1_bubble", []) as Array).size() == 2, "memory saver must retain compact Boss 1 attacks")
+	_check((game.textures.get("boss1_death", []) as Array).size() == 3, "memory saver must retain Boss 1 death endpoints")
 	_check(not game.textures.has("boss7_fly"), "phase transition must release inactive boss art")
 	_check(game._ensure_runtime_texture("boss7_fly"), "catalog on-demand load must resolve a future boss")
 	_check(_valid_texture_value(game.textures.get("boss7_fly")), "catalog on-demand texture must be valid")
@@ -57,7 +63,7 @@ func _run() -> void:
 	main_scene = null
 	for _frame in range(4):
 		await process_frame
-	print("RUNTIME_ASSET_CONTROLLER_SMOKE_OK phases=7 catalog_lazy=true preview_cache=1")
+	print("RUNTIME_ASSET_CONTROLLER_SMOKE_OK phases=7 compact_boss1=true catalog_lazy=true preview_cache=1")
 	quit(0)
 
 

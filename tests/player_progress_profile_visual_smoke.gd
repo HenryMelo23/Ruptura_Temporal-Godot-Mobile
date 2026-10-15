@@ -54,8 +54,12 @@ func _run() -> void:
 	await _capture(Vector2i(1280, 720), "identity_created_desktop")
 	_check(not game.player_progress_recovery_edit.visible, "recovery input remained visible after identity creation")
 	_check(game.player_progress_profile_buttons.has("show_code") and game.player_progress_profile_buttons.has("copy_code"), "recovery code actions missing")
+	game.player_progress_sync_status = "insecure_transport"
+	game.player_progress_pending_events = [{"event_id": "fixture"}]
+	game.player_progress_quarantined_events = [{"event_id": "fixture-review"}]
+	await _capture(Vector2i(960, 540), "offline_player_copy_mobile")
 
-	print("PLAYER_PROGRESS_PROFILE_VISUAL_OK captures=3 desktop=true mobile=true recovery=true code=true")
+	print("PLAYER_PROGRESS_PROFILE_VISUAL_OK captures=4 desktop=true mobile=true recovery=true code=true technical_status_hidden=true")
 	game.queue_free()
 	await process_frame
 	await process_frame
