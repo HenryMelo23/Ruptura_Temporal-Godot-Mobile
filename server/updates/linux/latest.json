@@ -2,7 +2,7 @@
   "version": "2.0.51",
   "version_code": 25100,
   "filename": "Ruptura_Temporal_2.0.51.x86_64",
-  "sha256": "652e1d4641224f1644def87438c36e63c5bf81042d336eec175b929b799c78c1",
+  "sha256": "94bc1e2b19a514d8214e249895ff6193d9682d5d20d722bd57b82bc38632e1c5",
   "size": 899065744,
   "notes": [
     "Remake visual e animacoes completas dos Chefes 1 e 3",
@@ -11,5 +11,5 @@
     "Melhorias acumuladas de sincronizacao e estabilidade multiplayer"
   ],
   "mandatory": false,
-  "published_at": "2026-10-15T17:40:30.4995160Z"
+  "published_at": "2026-10-15T18:01:23.9361510Z"
 }

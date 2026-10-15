@@ -2,7 +2,7 @@
   "version": "2.0.51",
   "version_code": 25100,
   "filename": "ruptura_temporal_mobile_2.0.51.apk",
-  "sha256": "bf71ba804811c1aa2a62f52a566d7cc30047e10f562dd7c0674759eb06640ee2",
+  "sha256": "e8f2c70bc9f38791867e849927f80ea394e8d983566388470553051239856509",
   "size": 848671007,
   "notes": [
     "Remake visual e animacoes completas dos Chefes 1 e 3",
@@ -11,5 +11,5 @@
     "Melhorias acumuladas de sincronizacao e estabilidade multiplayer"
   ],
   "mandatory": false,
-  "published_at": "2026-10-15T17:34:32.3709049Z"
+  "published_at": "2026-10-15T17:55:25.8201676Z"
 }
