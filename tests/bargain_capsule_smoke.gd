@@ -160,6 +160,16 @@ func _run() -> void:
 	_check(is_zero_approx(float(game.bargain_capsule.get("visual_state_age", -1.0))), "impact animation age was not reset")
 	_check(float(game.bargain_capsule.get("hp", 0.0)) > 0.0, "capsule active with no HP")
 	_check(float(game.bargain_capsule.get("collapse_time", 0.0)) > 0.0, "capsule active with no collapse timer")
+	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(36.0, 0.0))
+	game.boss_active = true
+	game.boss_hp = 1000.0
+	game.boss_pos = game.player_pos + Vector2(54.0, 0.0)
+	game.locked_target_kind = "boss"
+	game.locked_target_uid = -1
+	_check(game._nearest_target() == Vector2(game.bargain_capsule.get("pos", Vector2.ZERO)), "active capsule did not override enemies, boss and locked target")
+	game._clear_attack_lock()
+	game.boss_active = false
+	game.enemies.clear()
 
 	game.bargain_capsule["collapse_time"] = 0.0
 	game._damage_bargain_capsule(float(game.bargain_capsule.get("hp", 0.0)) + 10.0, "smoke", false)

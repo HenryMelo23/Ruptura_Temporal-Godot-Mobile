@@ -8,6 +8,22 @@ const CATEGORIES := ["Manifestações", "Inimigos", "Chefes", "Fases", "Fraçõe
 const SECTIONS := ["Identidade", "História", "Como funciona"]
 
 
+static func _draw_unread_badge(host: Node, rect: Rect2, label: String = "NOVO") -> void:
+	# Decorative only: this rect is never registered as a control or hit target.
+	var badge := Rect2(rect.end - Vector2(48.0, rect.size.y - 8.0), Vector2(40.0, 18.0))
+	host.draw_rect(badge, Color(0.42, 0.02, 0.06, 0.96), true)
+	host.draw_rect(badge, Color(1.0, 0.3, 0.34, 0.98), false, 1.0)
+	host.draw_circle(badge.position + Vector2(5.0, 5.0), 2.0, Color.WHITE)
+	host._draw_centered_with_font(host.menu_ui_font, label, badge.get_center() + Vector2(2.0, 4.0), 8, Color.WHITE)
+
+
+static func _item_unread(host: Node, item: Dictionary) -> bool:
+	var kind: String = String(host._catalog_item_kind(item))
+	if kind not in ["manifestation", "spectrum"]:
+		return false
+	return host._content_is_unread("catalog_" + kind, String(item.get("key", item.get("id", ""))))
+
+
 static func compact(host: Node, viewport: Vector2) -> bool:
 	return viewport.x < 1100.0 or viewport.y < 620.0 or not host._uses_desktop_ui()
 
@@ -127,6 +143,8 @@ static func draw(host: Node, viewport: Vector2) -> void:
 	for i in range(CATEGORIES.size()):
 		var category := category_rect(host, i, viewport)
 		button(host, category, CATEGORIES[i], i == host.catalog_tab)
+		if (i == 0 and host._content_section_has_unread("catalog_manifestation")) or (i == 5 and host._content_section_has_unread("catalog_spectrum")):
+			_draw_unread_badge(host, category, "!")
 	var items: Array = host._catalog_items()
 	host._catalog_ensure_selected_visible(viewport)
 	var end: int = mini(items.size(), host.catalog_scroll_index + visible_count(host, viewport))
@@ -147,6 +165,8 @@ static func draw(host: Node, viewport: Vector2) -> void:
 		draw_art(host, item, art.grow(-7.0))
 		host._draw_ui_text(host._catalog_display_title(item), Vector2(rect.position.x + 14.0, rect.end.y - 34.0), 16, TEXT, rect.size.x - 28.0)
 		host._draw_ui_text("Registro lacrado" if locked else "Abrir registro  →", Vector2(rect.position.x + 14.0, rect.end.y - 15.0), 11, MUTED, rect.size.x - 28.0)
+		if not locked and _item_unread(host, item):
+			_draw_unread_badge(host, rect)
 	if items.is_empty():
 		host._draw_ui_text("Nenhum registro nesta seleção.", gallery_rect(host, viewport).position + Vector2(20, 40), 18, MUTED)
 	elif not compact(host, viewport):
@@ -267,10 +287,12 @@ static func handle_touch(host: Node, pos: Vector2, viewport: Vector2) -> void:
 			host.catalog_selected = i
 			host.catalog_detail_section = 0
 			host.catalog_detail_open = true
+			host._catalog_mark_current_item_seen()
 			return
 	if not items.is_empty() and not compact(host, viewport) and preview_rect(viewport).has_point(pos):
 		host.catalog_detail_section = 0
 		host.catalog_detail_open = true
+		host._catalog_mark_current_item_seen()
 
 
 static func handle_event(host: Node, event: InputEvent, viewport: Vector2) -> bool:

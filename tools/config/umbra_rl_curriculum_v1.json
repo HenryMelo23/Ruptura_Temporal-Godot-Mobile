@@ -1,0 +1,94 @@
+{
+  "format": "ruptura_umbra_curriculum",
+  "curriculum_version": 1,
+  "reward_version": 1,
+  "multiplayer": "deferred",
+  "reward": {
+    "principal": {
+      "player_eliminated": 1.0,
+      "umbra_eliminated": -1.0,
+      "timeout": 0.0
+    },
+    "shaping": {
+      "player_damage_ratio": 0.18,
+      "umbra_damage_ratio": -0.06,
+      "step_cost": -0.001,
+      "repeat_without_effect": -0.015,
+      "passive_streak": -0.006,
+      "no_effect_damage_threshold": 0.5,
+      "repeat_window": 3,
+      "passive_window": 8,
+      "per_step_min": -0.04,
+      "per_step_max": 0.18,
+      "episode_min": -0.65,
+      "episode_max": 0.65
+    }
+  },
+  "stages": [
+    {"id": "foundation", "min_update": 0, "scenario_ids": ["eletrica_racional_orbit", "lacerante_sanguinaria_strafe"]},
+    {"id": "adaptation", "min_update": 20, "scenario_ids": ["gravitante_vanguarda_edge", "prismatica_devota_zigzag", "ancorada_impulsiva_anchor"]},
+    {"id": "pressure", "min_update": 60, "scenario_ids": ["cartografica_racional_feint", "necronada_devota_breakout", "parasitica_sanguinaria_orbit"]}
+  ],
+  "scenarios": [
+    {
+      "id": "eletrica_racional_orbit", "split": "train", "manifestation": "eletrica", "spectrum": "racional", "build_tag": "ranged_sustained",
+      "cards": {"Tempestade Crescente": 3, "Defesa": 2, "Porcao": 2}, "player": {"hp": 1120.0, "damage": 88.0, "speed": 245.0},
+      "movement": {"style": "orbit", "radius": 260.0, "angular_speed": 0.66}, "difficulty": {"boss_hp": 22000.0, "cadence_bonus": 0.0}
+    },
+    {
+      "id": "lacerante_sanguinaria_strafe", "split": "train", "manifestation": "lacerante", "spectrum": "sanguinaria", "build_tag": "melee_lifesteal",
+      "cards": {"Feridas": 4, "Roubo de Vida": 2, "Speed Boost": 1}, "player": {"hp": 980.0, "damage": 104.0, "speed": 255.0},
+      "movement": {"style": "strafe", "radius": 310.0, "angular_speed": 0.82}, "difficulty": {"boss_hp": 22600.0, "cadence_bonus": 0.02}
+    },
+    {
+      "id": "gravitante_vanguarda_edge", "split": "train", "manifestation": "gravitante", "spectrum": "vanguarda", "build_tag": "tank_control",
+      "cards": {"Resistencia": 3, "Teleporte": 2, "Onda": 2}, "player": {"hp": 1280.0, "damage": 76.0, "speed": 228.0},
+      "movement": {"style": "edge_weave", "radius": 340.0, "angular_speed": 0.55}, "difficulty": {"boss_hp": 23200.0, "cadence_bonus": 0.06}
+    },
+    {
+      "id": "prismatica_devota_zigzag", "split": "train", "manifestation": "prismatica", "spectrum": "devota", "build_tag": "precision_reflection",
+      "cards": {"Espelho": 2, "Defesa": 4, "Sorte": 2}, "player": {"hp": 1400.0, "damage": 68.0, "speed": 235.0},
+      "movement": {"style": "zigzag", "radius": 300.0, "angular_speed": 0.94}, "difficulty": {"boss_hp": 24000.0, "cadence_bonus": 0.09}
+    },
+    {
+      "id": "ancorada_impulsiva_anchor", "split": "train", "manifestation": "ancorada", "spectrum": "impulsiva", "build_tag": "territory_burst",
+      "cards": {"Ancora": 2, "Petro": 2, "Mercenaria": 2}, "player": {"hp": 1180.0, "damage": 92.0, "speed": 218.0},
+      "movement": {"style": "anchor_pulse", "radius": 220.0, "angular_speed": 0.42}, "difficulty": {"boss_hp": 23600.0, "cadence_bonus": 0.08}
+    },
+    {
+      "id": "cartografica_racional_feint", "split": "train", "manifestation": "cartografica", "spectrum": "racional", "build_tag": "teleport_control",
+      "cards": {"Teleporte": 3, "Cooldown": 2, "Defesa": 2}, "player": {"hp": 1060.0, "damage": 82.0, "speed": 268.0},
+      "movement": {"style": "feint", "radius": 360.0, "angular_speed": 0.74}, "difficulty": {"boss_hp": 24400.0, "cadence_bonus": 0.12}
+    },
+    {
+      "id": "necronada_devota_breakout", "split": "train", "manifestation": "necronada", "spectrum": "devota", "build_tag": "summon_survival",
+      "cards": {"Necro": 3, "Porcao": 2, "Resistencia": 2}, "player": {"hp": 1220.0, "damage": 79.0, "speed": 232.0},
+      "movement": {"style": "breakout", "radius": 285.0, "angular_speed": 1.02}, "difficulty": {"boss_hp": 25000.0, "cadence_bonus": 0.16}
+    },
+    {
+      "id": "parasitica_sanguinaria_orbit", "split": "train", "manifestation": "parasitica", "spectrum": "sanguinaria", "build_tag": "drain_pressure",
+      "cards": {"Veneno": 3, "Roubo de Vida": 2, "Velocidade": 2}, "player": {"hp": 1010.0, "damage": 98.0, "speed": 252.0},
+      "movement": {"style": "orbit", "radius": 390.0, "angular_speed": 1.06}, "difficulty": {"boss_hp": 25500.0, "cadence_bonus": 0.18}
+    },
+    {
+      "id": "retornante_sanguinaria_heldout", "split": "held_out", "manifestation": "retornante", "spectrum": "sanguinaria", "build_tag": "returning_projectile",
+      "cards": {"Retorno": 3, "Critico": 2, "Roubo de Vida": 2}, "player": {"hp": 1080.0, "damage": 93.0, "speed": 246.0},
+      "movement": {"style": "feint", "radius": 325.0, "angular_speed": 0.88}, "difficulty": {"boss_hp": 24600.0, "cadence_bonus": 0.1}
+    },
+    {
+      "id": "acorrentada_impulsiva_heldout", "split": "held_out", "manifestation": "acorrentada", "spectrum": "impulsiva", "build_tag": "chain_melee",
+      "cards": {"Corrente": 3, "Critico": 2, "Speed Boost": 2}, "player": {"hp": 1100.0, "damage": 96.0, "speed": 258.0},
+      "movement": {"style": "zigzag", "radius": 275.0, "angular_speed": 1.12}, "difficulty": {"boss_hp": 25200.0, "cadence_bonus": 0.15}
+    },
+    {
+      "id": "bombastica_vanguarda_heldout", "split": "held_out", "manifestation": "bombastica", "spectrum": "vanguarda", "build_tag": "area_burst",
+      "cards": {"Bomba": 3, "Raio": 2, "Resistencia": 3}, "player": {"hp": 1300.0, "damage": 84.0, "speed": 222.0},
+      "movement": {"style": "edge_weave", "radius": 370.0, "angular_speed": 0.61}, "difficulty": {"boss_hp": 25800.0, "cadence_bonus": 0.2}
+    },
+    {
+      "id": "eclipsada_devota_heldout", "split": "held_out", "manifestation": "eclipsada", "spectrum": "devota", "build_tag": "teleport_assassin",
+      "cards": {"Sombra": 3, "Teleporte": 2, "Porcao": 2}, "player": {"hp": 1040.0, "damage": 101.0, "speed": 270.0},
+      "movement": {"style": "breakout", "radius": 410.0, "angular_speed": 1.2}, "difficulty": {"boss_hp": 26400.0, "cadence_bonus": 0.22}
+    }
+  ]
+}

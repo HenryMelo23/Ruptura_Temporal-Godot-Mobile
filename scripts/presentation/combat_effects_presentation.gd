@@ -3,6 +3,7 @@ extends RefCounted
 const Gravity = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 const BargainCapsule = preload("res://scripts/presentation/bargain_capsule_presentation.gd")
+const BossReward = preload("res://scripts/presentation/boss_reward_presentation.gd")
 const PrismaticaEvolution = preload("res://scripts/presentation/prismatica_evolution_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
@@ -353,6 +354,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		game._draw_companions(camera)
 		game._draw_boss6_fossil_echo(camera)
 		game._draw_player(camera)
+	BossReward.draw(game, camera)
 	if game.current_phase == 6:
 		game._draw_boss_world(camera)
 		game._draw_crepuscular_boss_cracks(camera)
@@ -1401,23 +1403,39 @@ static func _draw_aguilhao_arauto(game: Node2D, camera: Vector2) -> void :
 	if state == "charge_windup":
 		var dir = Vector2(game.arauto.get("charge_dir", Vector2.RIGHT)).normalized()
 		var end = world_pos + dir * 780.0
-		var ratio: float = 1.0 - clamp(float(game.arauto.get("state_timer", 0.0)) / (game.AGUILHAO_CHARGE_WINDUP_PHASE2 if bool(game.arauto.get("phase2", false)) else game.AGUILHAO_CHARGE_WINDUP), 0.0, 1.0)
+		var leg: int = int(game.arauto.get("charge_leg", 1))
+		var windup: float = game.AGUILHAO_CHARGE_CHAIN_WINDUP if leg > 1 else game.AGUILHAO_CHARGE_WINDUP_PHASE2 if bool(game.arauto.get("phase2", false)) else game.AGUILHAO_CHARGE_WINDUP
+		var ratio: float = 1.0 - clamp(float(game.arauto.get("state_timer", 0.0)) / windup, 0.0, 1.0)
+		var lane_color: Color = Color(1.0, 0.78, 0.18, 0.82) if leg > 1 else Color(0.86, 1.0, 0.38, 0.76)
 		game.draw_line(pos, end - camera, Color(0.38, 1.0, 0.12, 0.18 + ratio * 0.32), 26.0, true)
-		game.draw_line(pos, end - camera, Color(0.86, 1.0, 0.38, 0.76), 3.0 + ratio * 3.0, true)
-		game.draw_arc(end - camera, game.AGUILHAO_CHARGE_HIT_WIDTH + ratio * 10.0, 0.0, TAU, 36, Color(0.7, 1.0, 0.22, 0.68), 2.0)
+		game.draw_line(pos, end - camera, lane_color, 3.0 + ratio * 3.0, true)
+		game.draw_arc(end - camera, game.AGUILHAO_CHARGE_HIT_WIDTH + ratio * 10.0, 0.0, TAU, 36, lane_color, 2.0)
+		for barb_index in range(5):
+			var barb_pos: Vector2 = pos.lerp(end - camera, 0.2 + float(barb_index) * 0.15)
+			var side: Vector2 = dir.orthogonal() * (10.0 + ratio * 7.0)
+			game.draw_line(barb_pos - side, barb_pos + side, Color(lane_color.r, lane_color.g, lane_color.b, 0.42), 1.5, true)
 	elif state == "pulse":
 		var stage = int(game.arauto.get("pulse_stage", 0))
-		var warn = game.AGUILHAO_PULSE_WARNING if stage == 0 else 0.42
+		var warn = game.AGUILHAO_PULSE_WARNING if stage == 0 else game.AGUILHAO_PULSE_PHASE2_DELAY
 		var ratio: float = 1.0 - clamp(float(game.arauto.get("state_timer", 0.0)) / maxf(0.01, warn), 0.0, 1.0)
 		var radius = game.AGUILHAO_PULSE_RADIUS * (1.22 if bool(game.arauto.get("phase2", false)) and stage > 0 else 1.0)
-		game.draw_circle(pos, radius, Color(0.26, 1.0, 0.1, 0.08 + ratio * 0.08))
-		game.draw_arc(pos, radius + ratio * 12.0, - PI * 0.5, TAU * ratio - PI * 0.5, 54, Color(0.7, 1.0, 0.22, 0.72), 3.0)
+		for target_value in Array(game.arauto.get("pulse_targets", [])):
+			var target: Dictionary = target_value if target_value is Dictionary else {"pos": Vector2(target_value)}
+			var target_pos: Vector2 = Vector2(target.get("pos", world_pos)) - camera
+			game.draw_line(pos, target_pos, Color(0.52, 1.0, 0.18, 0.16 + ratio * 0.18), 2.0, true)
+			game.draw_circle(target_pos, radius, Color(0.26, 1.0, 0.1, 0.06 + ratio * 0.08))
+			game.draw_arc(target_pos, radius + ratio * 12.0, - PI * 0.5, TAU * ratio - PI * 0.5, 54, Color(0.7, 1.0, 0.22, 0.72), 3.0)
+			game.draw_arc(target_pos, 24.0 + ratio * 8.0, game.time_alive * 2.2, game.time_alive * 2.2 + PI * 1.45, 28, Color(1.0, 0.86, 0.28, 0.74), 2.0)
 	elif state == "seed":
-		for spot in Array(game.arauto.get("seed_spots", [])):
-			var sp = Vector2(spot) - camera
+		for spot_value in Array(game.arauto.get("seed_spots", [])):
+			var spot: Vector2 = Vector2(spot_value.get("pos", world_pos)) if spot_value is Dictionary else Vector2(spot_value)
+			var sp = spot - camera
 			var ratio: float = 1.0 - clamp(float(game.arauto.get("state_timer", 0.0)) / game.AGUILHAO_SEED_WARNING, 0.0, 1.0)
 			game.draw_circle(sp, 26.0 + ratio * 12.0, Color(0.36, 1.0, 0.12, 0.1))
 			game.draw_arc(sp, 34.0, - game.time_alive * 2.0, TAU - game.time_alive * 2.0, 36, Color(0.74, 1.0, 0.24, 0.58), 2.2)
+			for thorn in range(6):
+				var thorn_dir: Vector2 = Vector2.from_angle(float(thorn) * TAU / 6.0 + game.time_alive * 0.4)
+				game.draw_line(sp + thorn_dir * 25.0, sp + thorn_dir * (37.0 + ratio * 7.0), Color(0.82, 1.0, 0.28, 0.62), 2.0)
 	var tex = game._arauto_texture()
 	var draw_size: Vector2 = game.AGUILHAO_SIZE * (0.82 + entry_ratio * 0.18)
 	var modulate = Color(0.82, 1.0, 0.64, 0.35 + entry_ratio * 0.65)

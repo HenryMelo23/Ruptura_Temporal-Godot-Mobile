@@ -82,7 +82,11 @@ static func build_from_snapshot(snapshot: Dictionary) -> Dictionary:
 	var values: Array = []
 	var mask: Array = []
 	for slot in range(MAX_PLAYER_SLOTS):
-		mask.append(1.0 if slot < players.size() and bool(Dictionary(players[slot]).get("valid", true)) else 0.0)
+		var player: Dictionary = Dictionary(players[slot]) if slot < players.size() else {}
+		# A slot stays present for deterministic feature ordering, but a downed or
+		# eliminated player must never become a policy target.
+		var targetable := slot < players.size() and bool(player.get("valid", true)) and bool(player.get("alive", true))
+		mask.append(1.0 if targetable else 0.0)
 	for spec_value in specs:
 		var spec: Dictionary = Dictionary(spec_value)
 		var raw: float = _raw_value(snapshot, players, spec)
@@ -101,12 +105,15 @@ static func build_from_runtime(runtime: Object) -> Dictionary:
 	var world := DEFAULT_WORLD_SIZE
 	var boss_pos: Vector2 = Vector2(runtime.get("boss_pos"))
 	var player_pos: Vector2 = Vector2(runtime.get("player_pos"))
+	# Slots are always local peer first, then peers sorted by stable peer id. A
+	# downed/eliminated slot remains in place but is masked out for targeting.
 	var players: Array = [_local_player_snapshot(runtime, boss_pos)]
 	var remotes: Array = []
 	for peer_value in Dictionary(runtime.get("net_players_by_peer")).keys():
 		var peer_id := int(peer_value)
 		var state: Dictionary = Dictionary(Dictionary(runtime.get("net_players_by_peer")).get(peer_id, {}))
-		remotes.append({"peer_id": peer_id, "valid": true, "alive": bool(state.get("alive", not bool(state.get("dead", false)))) and not bool(state.get("eliminated", false)), "pos": Vector2(state.get("pos", player_pos)), "velocity": Vector2(state.get("velocity", Vector2.ZERO)), "hp": float(state.get("hp", 0.0)), "hp_max": float(state.get("hp_max", 1.0)), "cards": float(state.get("cards_bought", 0.0)), "damage": float(state.get("damage", 0.0)), "manifestation": String(state.get("manifestation", "")), "stunned": bool(state.get("stunned", false)), "silenced": bool(state.get("silenced", false)), "action_recent": float(state.get("action_recent", 0.0))})
+		var alive := bool(state.get("alive", not bool(state.get("dead", false)))) and not bool(state.get("eliminated", false)) and float(state.get("hp", 0.0)) > 0.0
+		remotes.append({"peer_id": peer_id, "valid": alive, "alive": alive, "pos": Vector2(state.get("pos", player_pos)), "velocity": Vector2(state.get("velocity", Vector2.ZERO)), "hp": float(state.get("hp", 0.0)), "hp_max": float(state.get("hp_max", 1.0)), "cards": float(state.get("cards_bought", 0.0)), "damage": float(state.get("damage", 0.0)), "manifestation": String(state.get("manifestation", "")), "stunned": bool(state.get("stunned", false)), "silenced": bool(state.get("silenced", false)), "action_recent": float(state.get("action_recent", 0.0))})
 	remotes.sort_custom(func(a: Dictionary, b: Dictionary): return int(a["peer_id"]) < int(b["peer_id"]))
 	for remote in remotes:
 		if players.size() >= MAX_PLAYER_SLOTS:
@@ -207,7 +214,8 @@ static func _normalize(value: float, min_value: float, max_value: float) -> floa
 
 
 static func _local_player_snapshot(runtime: Object, boss_pos: Vector2) -> Dictionary:
-	return {"valid": true, "alive": not bool(runtime.get("is_dead")), "pos": Vector2(runtime.get("player_pos")), "velocity": Vector2.ZERO, "hp": _number(runtime.get("player_hp")), "hp_max": _number(runtime.get("player_hp_max")), "cards": _number(runtime.get("cards_bought")), "damage": _number(runtime.get("player_damage")), "manifestation": String(runtime.get("manifestation_key")), "stunned": _number(runtime.get("player_stun_timer")) > 0.0, "silenced": _number(runtime.get("player_silence_timer")) > 0.0, "action_recent": 0.0}
+	var alive := not bool(runtime.get("is_dead")) and _number(runtime.get("player_hp")) > 0.0
+	return {"valid": alive, "alive": alive, "pos": Vector2(runtime.get("player_pos")), "velocity": Vector2.ZERO, "hp": _number(runtime.get("player_hp")), "hp_max": _number(runtime.get("player_hp_max")), "cards": _number(runtime.get("cards_bought")), "damage": _number(runtime.get("player_damage")), "manifestation": String(runtime.get("manifestation_key")), "stunned": _number(runtime.get("player_stun_timer")) > 0.0, "silenced": _number(runtime.get("player_silence_timer")) > 0.0, "action_recent": 0.0}
 
 
 static func _number(value) -> float:

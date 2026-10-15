@@ -313,6 +313,9 @@ static func _draw_menu(game: Node2D, viewport: Vector2) -> void :
 	if game.menu_buttons.has("multiplayer"):
 		game._draw_hub_button(game.menu_buttons["multiplayer"], "Modo online", "", accent, game.menu_selected == game._menu_index_for("multiplayer"), false, "multiplayer")
 	game._draw_hub_button(game.menu_buttons["catalog"], "Catálogo temporal", "", accent, game.menu_selected == game._menu_index_for("catalog"), false, "catalog")
+	if game._content_section_has_unread("catalog_manifestation") or game._content_section_has_unread("catalog_spectrum"):
+		_draw_content_new_badge(game, game.menu_buttons["catalog"])
+	game._draw_hub_button(game.menu_buttons["progress"], "Progresso salvo", game._player_progress_menu_hint(), accent, game.menu_selected == game._menu_index_for("progress"), false, "progress")
 	game._draw_hub_button(game.menu_buttons["settings"], "Configurações", "", accent, game.menu_selected == game._menu_index_for("settings"), false, "settings")
 	if game.QA_STREAMING_FEATURE_ENABLED and game.qa_streaming_unlocked and game.menu_buttons.has("stream"):
 		game._draw_hub_button(game.menu_buttons["stream"], "Encerrar ao vivo" if game._qa_streaming_is_active() else "Transmitir partida", game._qa_stream_menu_subtitle(), accent, game.menu_selected == game._menu_index_for("stream"), false, "stream")
@@ -323,6 +326,61 @@ static func _draw_menu(game: Node2D, viewport: Vector2) -> void :
 	game._draw_ui_text("v" + game.GAME_VERSION, Vector2(viewport.x - x - 65.0, footer_y), 11, Color(0.67, 0.76, 0.78))
 	if game.content_update_status == "updated":
 		game._draw_centered("Conteudo atualizado. Feche e reabra o jogo para aplicar.", Vector2(viewport.x * 0.5, footer_y), 11, Color(0.4, 1.0, 0.8))
+
+
+static func _draw_content_new_badge(game: Node2D, rect: Rect2) -> void:
+	# Render-only mark; it intentionally does not add an input target on mobile.
+	var badge := Rect2(rect.end - Vector2(42.0, rect.size.y - 7.0), Vector2(34.0, 17.0))
+	game.draw_rect(badge, Color(0.48, 0.02, 0.07, 0.96), true)
+	game.draw_rect(badge, Color(1.0, 0.3, 0.34, 1.0), false, 1.0)
+	game.draw_circle(badge.position + Vector2(5.0, 5.0), 2.0, Color.WHITE)
+	game._draw_centered("NOVO", badge.get_center() + Vector2(2.0, 4.0), 8, Color.WHITE)
+
+
+static func _draw_player_progress_profile(game: Node2D, viewport: Vector2) -> void:
+	var accent := Color(0.0, 0.92, 0.78)
+	var panel: Rect2 = game._player_progress_profile_panel_rect(viewport)
+	game.player_progress_profile_buttons.clear()
+	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.015, 0.03, 0.82), true)
+	game._draw_holo_panel(panel, accent, true, 0.96)
+	game._draw_glitch_title("PROGRESSO SALVO", Vector2(panel.get_center().x, panel.position.y + 43.0), 26, accent)
+	var content: Rect2 = panel.grow(-34.0)
+	var status: String = game._player_progress_status_label()
+	var status_color := Color(0.42, 1.0, 0.76) if game.player_identity_auth_token != "" and game.player_progress_sync_status in ["synced", "identity_ready"] else Color(1.0, 0.76, 0.28)
+	game._draw_ui_text("STATUS: " + status, content.position + Vector2(0, 30), 14, status_color, content.size.x)
+	game._draw_ui_text("Pendentes: %d   |   Em revisão: %d" % [game.player_progress_pending_events.size(), game.player_progress_quarantined_events.size()], content.position + Vector2(0, 58), 13, Color(0.78, 0.9, 0.92), content.size.x)
+	if game.player_progress_last_remote_confirmation != "":
+		game._draw_ui_text("Última confirmação remota: " + game.player_progress_last_remote_confirmation, content.position + Vector2(0, 78), 12, Color(0.58, 0.76, 0.78), content.size.x)
+	if game.player_identity_auth_token == "":
+		var recovery_copy_y := content.position.y + (102.0 if game.player_progress_last_remote_confirmation != "" else 82.0)
+		game._draw_ui_wrap("Recupere sua conta antes de criar um perfil novo. O código não é um nick, nem um UUID do aparelho.", Rect2(content.position.x, recovery_copy_y, content.size.x, 66.0), 14, Color(0.86, 0.95, 0.96), 3)
+		var recover := Rect2(content.position.x, panel.position.y + panel.size.y * 0.61, content.size.x * 0.58, 48.0)
+		var create := Rect2(recover.end.x + 12.0, recover.position.y, content.size.x - recover.size.x - 12.0, 48.0)
+		game.player_progress_profile_buttons["recover"] = recover
+		game.player_progress_profile_buttons["create"] = create
+		game._draw_hub_button(recover, "RECUPERAR PROGRESSO", "", accent, false, false, "progress_recover")
+		game._draw_hub_button(create, "CRIAR PERFIL", "Sem recuperação", Color(1.0, 0.72, 0.25), false, false, "progress_create")
+	else:
+		var synced_copy_y := content.position.y + (102.0 if game.player_progress_last_remote_confirmation != "" else 82.0)
+		game._draw_ui_wrap("O servidor é a fonte de verdade. Este aparelho mantém apenas cache e uma fila offline para a experiência continuar quando a rede falhar.", Rect2(content.position.x, synced_copy_y, content.size.x, 66.0), 14, Color(0.86, 0.95, 0.96), 3)
+		if game.player_identity_recovery_code != "":
+			var show := Rect2(content.position.x, panel.position.y + panel.size.y * 0.57, content.size.x * 0.40, 46.0)
+			var copy := Rect2(show.end.x + 12.0, show.position.y, content.size.x - show.size.x - 12.0, 46.0)
+			game.player_progress_profile_buttons["show_code"] = show
+			game.player_progress_profile_buttons["copy_code"] = copy
+			game._draw_hub_button(show, "MOSTRAR CÓDIGO", "Confirmação local", accent, false, false, "progress_show")
+			game._draw_hub_button(copy, "COPIAR CÓDIGO", "Guarde fora do aparelho", accent, false, false, "progress_copy")
+			if game.player_progress_recovery_revealed:
+				var code_rect := Rect2(content.position.x, panel.position.y + panel.size.y * 0.715, content.size.x, 34.0)
+				game.draw_rect(code_rect, Color(0.0, 0.0, 0.0, 0.54), true)
+				game.draw_rect(code_rect, Color(1.0, 0.88, 0.42, 0.72), false, 1.0)
+				game._draw_centered_with_font(game.menu_ui_font, game.player_identity_recovery_code, code_rect.get_center(), 16, Color(1.0, 0.92, 0.54))
+				game._draw_centered_with_font(game.menu_ui_font, "Este código não será salvo neste aparelho.", Vector2(panel.get_center().x, panel.position.y + panel.size.y * 0.82), 12, Color(0.86, 0.95, 0.96))
+		else:
+			game._draw_ui_wrap("Você já tem uma identidade sincronizada. Guarde o código entregue ao criar o perfil; por segurança ele não é recuperado do aparelho.", Rect2(content.position.x, panel.position.y + panel.size.y * 0.56, content.size.x, 74.0), 13, Color(0.76, 0.87, 0.9), 3)
+	var back := Rect2(panel.position.x + panel.size.x * 0.5 - 100.0, panel.end.y - 58.0, 200.0, 38.0)
+	game.player_progress_profile_buttons["back"] = back
+	game._draw_hub_button(back, "VOLTAR", "", Color(0.68, 0.78, 0.82), false, false, "progress_back")
 
 
 static func _draw_ui_text(game: Node2D, text: String, draw_pos: Vector2, size: int, color: Color, width: float = -1.0) -> void:
@@ -1302,6 +1360,10 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 		var label_y = rect.end.y - (18 * scale)
 		var display_name = String(card_item["name"]).to_upper() if item_unlocked else "???"
 		game._draw_centered(display_name, Vector2(rect.get_center().x, label_y), game._readable_text_size(int(16 * scale)), name_color)
+		if item_unlocked:
+			var unread_section := "specter" if aura_view else "manifestation"
+			if game._content_is_unread(unread_section, String(card_item.get("key", ""))):
+				_draw_content_new_badge(game, rect)
 
 	if game.manifest_select_stage == game.MANIFEST_STAGE_TRANSITION:
 		game._draw_spectrum_reveal_fragments(center_x, center_y, card_w, card_h, spacing, transition_t)
@@ -2419,7 +2481,7 @@ static func _draw_specter_upgrade(game: Node2D, viewport: Vector2) -> void:
 	var panel = Rect2(viewport.x * 0.5 - panel_w * 0.5, viewport.y * 0.5 - panel_h * 0.5, panel_w, panel_h)
 	game._draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.86)
 	game._draw_glitch_title("UPGRADE DE ESPECTRO", Vector2(panel.get_center().x, panel.position.y + 44.0), 30 if not portrait else 24, Color(0.0, 1.0, 0.82))
-	game._draw_centered("Nucleos instaveis coletados nas runs: %d" % game.spectral_coins, Vector2(panel.get_center().x, panel.position.y + 78.0), 15 if not portrait else 12, Color(0.76, 0.94, 1.0, 0.92))
+	game._draw_centered("SALDO: %d NUCLEOS  //  NESTA RUN: +%d" % [game.spectral_coins, game.spectral_coins_collected], Vector2(panel.get_center().x, panel.position.y + 78.0), 15 if not portrait else 12, Color(0.76, 0.94, 1.0, 0.92))
 
 	var key = game._current_specter_key()
 	var name = game._current_specter_name()

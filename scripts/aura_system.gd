@@ -37,8 +37,17 @@ const PEREGRINO_SECTOR_SIZE: = 300.0
 const PEREGRINO_REFUGE_RADIUS: = 85.0
 const OPPORTUNITY_ENEMY_COOLDOWN: = 0.75
 
+# The first progression pilot intentionally lives beside the aura rules.  These
+# are not account-wide stat bonuses: each threshold changes how the respective
+# aura is operated during a run.
+const RATIONAL_FOCUS_EXTENSION := {2: 1.25, 5: 1.75, 9: 2.25}
+const RATIONAL_FOCUS_COOLDOWN_REFUND := {2: 2.0, 5: 4.0, 9: 6.0}
+const VANGUARD_RING_RADIUS := {1: 150.0, 5: 185.0, 9: 210.0}
+const VANGUARD_GUARD_REDUCTION := {2: 0.14, 5: 0.20, 9: 0.26}
+const VORACIOUS_SATIATION_TIME := {2: 3.0, 5: 4.5, 9: 6.0}
+
 static func create(aura: String, level: = 1) -> Dictionary:
-	return {
+	var state := {
 		"name": aura if aura in AURA_NAMES else "Racional", 
 		"level": clampi(level, 1, RUN_MAX_LEVEL), 
 		"ascended": false, 
@@ -49,6 +58,7 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"rational_dilation": 0.0, 
 		"rational_rebound": 0.0, 
 		"rational_cooldown": 0.0, 
+		"rational_focus": 0,
 		"impulsive_kills": 0, 
 		"impulsive_active": 0.0, 
 		"impulsive_rank": 0, 
@@ -59,6 +69,8 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"devoted_damage_mult": 1.0, 
 		"devoted_slow": 0.0, 
 		"vanguard_ring": 0.0, 
+		"vanguard_guard": 0.0,
+		"vanguard_cinder_ready": false,
 		"insane_ready": 20.0, 
 		"insane_echoes": 0, 
 		"insane_next_echoes": INSANE_ECHO_BASE, 
@@ -70,6 +82,9 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"voracious_drain_tick": 0.0, 
 		"voracious_boss_feed_cd": 0.0, 
 		"voracious_drops": [], 
+		"voracious_satiation": 0.0,
+		"voracious_clots_in_satiation": 0,
+		"voracious_feast_ready": false,
 		"null_charge": 0.0, 
 		"null_armed": false, 
 		"last_attack": 0.0, 
@@ -131,6 +146,12 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"oportunista_decay": 0.0, 
 		"oportunista_enemy_cd": {}, 
 	}
+	# Level 10 is permanent account progression.  A newly created run must not
+	# forget the ascended branch merely because no in-run purchase occurred.
+	if int(state["level"]) >= RUN_MAX_LEVEL:
+		state["ascended"] = true
+		state["ascension_name"] = ascension_title(String(state["name"]))
+	return state
 
 static func _rank(state: Dictionary) -> int:
 	return clampi(int(state.get("level", 1)), 1, RUN_MAX_LEVEL)
@@ -165,6 +186,74 @@ static func apply_run_upgrade(state: Dictionary, new_level: int) -> Array:
 	if int(state["level"]) >= RUN_MAX_LEVEL and not bool(state.get("ascended", false)):
 		events.append_array(ascend(state))
 	return events
+
+
+static func progression_tier(level: int) -> int:
+	if level >= 9:
+		return 9
+	if level >= 5:
+		return 5
+	return 2
+
+
+static func _pilot_value(values: Dictionary, level: int) -> float:
+	return float(values.get(progression_tier(level), values.values().front()))
+
+
+static func rational_focus_cap(state: Dictionary) -> int:
+	return 2 if _rank(state) >= 5 else 1
+
+
+static func vanguard_ring_radius(state: Dictionary) -> float:
+	return _pilot_value(VANGUARD_RING_RADIUS, _rank(state))
+
+
+static func progression_delta_lines(aura_key: String, current_level: int, next_level: int) -> Array:
+	var current := clampi(current_level, 1, RUN_MAX_LEVEL)
+	var next := clampi(next_level, 1, RUN_MAX_LEVEL)
+	match aura_key:
+		"racional":
+			if current < 2 and next >= 2:
+				return ["Assinatura: Analise parada guarda 1 FOCO.", "Teleporte consome Foco: +%.2fs de Dilatacao e -%.0fs de recarga." % [_pilot_value(RATIONAL_FOCUS_EXTENSION, next), _pilot_value(RATIONAL_FOCUS_COOLDOWN_REFUND, next)]]
+			if current < 5 and next >= 5:
+				return ["MARCO: reserva sobe de 1 para 2 FOCOS.", "Cada Foco passa a dar +%.2fs de Dilatacao e -%.0fs de recarga." % [_pilot_value(RATIONAL_FOCUS_EXTENSION, next), _pilot_value(RATIONAL_FOCUS_COOLDOWN_REFUND, next)]]
+			if current < 9 and next >= 9:
+				return ["PRE-ASCENSAO: Foco reduz mais a recarga temporal.", "Cada Foco: +%.2fs de Dilatacao e -%.0fs de recarga." % [_pilot_value(RATIONAL_FOCUS_EXTENSION, next), _pilot_value(RATIONAL_FOCUS_COOLDOWN_REFUND, next)]]
+			return ["Analise parada: +2 pontos (de %d para %d)." % [5 + current * 2, 5 + next * 2], "Foco analitico mantem a mesma regra de teleporte."]
+		"voraz":
+			if current < 2 and next >= 2:
+				return ["Assinatura: coletar Coagulo ativa SACIEDADE por %.1fs." % _pilot_value(VORACIOUS_SATIATION_TIME, next), "Saciedade aumenta deslocamento para buscar o proximo coagulo."]
+			if current < 5 and next >= 5:
+				return ["MARCO: 3 Coagulos durante Saciedade armam BANQUETE.", "O proximo acerto no chefe devolve 0.75s de recarga de habilidade."]
+			if current < 9 and next >= 9:
+				return ["PRE-ASCENSAO: Saciedade dura %.1fs." % _pilot_value(VORACIOUS_SATIATION_TIME, next), "Banquete devolve 1.25s de recarga ao acertar o chefe."]
+			return ["Coagulos: cura e Fome preservadas.", "Saciedade dura %.1fs neste nivel." % _pilot_value(VORACIOUS_SATIATION_TIME, next)]
+		"vanguarda":
+			if current < 2 and next >= 2:
+				return ["Assinatura: sofrer dano arma BRASA PROTETORA.", "O proximo impacto durante o Incendio sofre -%d%%." % int(_pilot_value(VANGUARD_GUARD_REDUCTION, next) * 100.0)]
+			if current < 5 and next >= 5:
+				return ["MARCO: Incendio ocupa %.0fpx (antes %.0fpx)." % [vanguard_ring_radius(create("Vanguarda", next)), vanguard_ring_radius(create("Vanguarda", current))], "Brasa Protetora reduz -%d%% no proximo impacto." % int(_pilot_value(VANGUARD_GUARD_REDUCTION, next) * 100.0)]
+			if current < 9 and next >= 9:
+				return ["PRE-ASCENSAO: primeira queima recupera habilidade.", "Incendio ocupa %.0fpx e a Brasa reduz -%d%%." % [vanguard_ring_radius(create("Vanguarda", next)), int(_pilot_value(VANGUARD_GUARD_REDUCTION, next) * 100.0)]]
+			return ["Incendio: %.0fpx de alcance e %.1fs de duracao." % [vanguard_ring_radius(create("Vanguarda", next)), 5.0 + next], "Queimadura preservada: %.1f%% da vida maxima por pulso." % ((0.01 + next * 0.002) * 100.0)]
+	return []
+
+
+static func progression_unlock_message(aura_key: String, new_level: int) -> String:
+	match aura_key:
+		"racional":
+			if new_level == 2: return "FOCO ANALITICO DESBLOQUEADO"
+			if new_level == 5: return "MARCO: RESERVA DE FOCO"
+			if new_level == 9: return "PRE-ASCENSAO: FOCO AMPLIADO"
+		"voraz":
+			if new_level == 2: return "SACIEDADE DESBLOQUEADA"
+			if new_level == 5: return "MARCO: BANQUETE ARMADO"
+			if new_level == 9: return "PRE-ASCENSAO: SACIEDADE AMPLA"
+		"vanguarda":
+			if new_level == 2: return "BRASA PROTETORA DESBLOQUEADA"
+			if new_level == 5: return "MARCO: CERCO AMPLIADO"
+			if new_level == 9: return "PRE-ASCENSAO: CINZAS DE GUERRA"
+	return "NIVEL %d ALCANCADO" % new_level
 
 
 static func ascend(state: Dictionary) -> Array:
@@ -313,7 +402,7 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 	var enemies: Array = context.get("enemies", [])
 	state["last_attack"] = float(state.get("last_attack", 0.0)) + delta
 	state["ascension_flash"] = maxf(0.0, float(state.get("ascension_flash", 0.0)) - delta)
-	for key in ["rational_dilation", "rational_rebound", "rational_cooldown", "impulsive_active", "devoted_damage", "devoted_slow", "vanguard_ring", "insane_ready", "abyss_tide", "prophecy_next", "prophecy_time", "prophecy_broken", "blood_slow"]:
+	for key in ["rational_dilation", "rational_rebound", "rational_cooldown", "impulsive_active", "devoted_damage", "devoted_slow", "vanguard_ring", "vanguard_guard", "insane_ready", "abyss_tide", "prophecy_next", "prophecy_time", "prophecy_broken", "blood_slow", "voracious_satiation"]:
 		state[key] = maxf(0.0, float(state.get(key, 0.0)) - delta)
 
 	match name:
@@ -420,6 +509,9 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 			if float(state["still"]) >= RATIONAL_STILL_TIME:
 				state["still"] = 0.0
 				events.append({"type": "score", "amount": 5 + level * 2, "text": "ANALISE +%d" % (5 + level * 2)})
+				if level >= 2 and int(state.get("rational_focus", 0)) < rational_focus_cap(state):
+					state["rational_focus"] = int(state.get("rational_focus", 0)) + 1
+					events.append({"type": "text", "text": "FOCO ANALITICO %d/%d" % [int(state["rational_focus"]), rational_focus_cap(state)]})
 		"Impulsiva":
 			if float(state["impulsive_active"]) <= 0.0 and int(state["impulsive_rank"]) > 0:
 				state["impulsive_rank"] = 0
@@ -438,6 +530,10 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 					if float(enemy["aura_burn_tick"]) <= 0.0:
 						enemy["aura_burn_tick"] = 1.0
 						events.append({"type": "enemy_damage", "uid": int(enemy.get("uid", -1)), "amount": maxf(1.0, float(enemy.get("max_hp", 1.0)) * (0.01 + level * 0.002)), "source": "aura_vanguarda"})
+						if level >= 9 and bool(state.get("vanguard_cinder_ready", false)):
+							state["vanguard_cinder_ready"] = false
+							events.append({"type": "cooldown_recovery", "amount": 0.6, "max_ratio": 0.3})
+							events.append({"type": "text", "text": "CINZAS DE GUERRA"})
 		"Insana":
 			var queue: Array = state.get("insane_queue", [])
 			for echo in queue:
@@ -609,8 +705,14 @@ static func on_boss_hit(state: Dictionary, boss_pos: Vector2, damage: float) -> 
 		_crepuscular_gain_charge(state, clampf(sqrt(damage) * 0.45, 2.0, 15.0))
 	if String(state.get("name", "")) != "Voraz":
 		return []
+	var events: Array = []
+	if bool(state.get("voracious_feast_ready", false)):
+		state["voracious_feast_ready"] = false
+		var recovery := 1.25 if _rank(state) >= 9 else 0.75
+		events.append({"type": "cooldown_recovery", "amount": recovery, "max_ratio": 0.3})
+		events.append({"type": "text", "text": "BANQUETE"})
 	if float(state.get("voracious_boss_feed_cd", 0.0)) > 0.0:
-		return []
+		return events
 	var level: = _rank(state)
 	var value: = clampf(3.2 + sqrt(damage) * 0.12 + level * 0.32, 4.0, 8.5)
 	var drops: Array = state.get("voracious_drops", [])
@@ -622,7 +724,7 @@ static func on_boss_hit(state: Dictionary, boss_pos: Vector2, damage: float) -> 
 	})
 	state["voracious_drops"] = drops
 	state["voracious_boss_feed_cd"] = maxf(0.85, 1.45 - level * 0.06)
-	return []
+	return events
 
 static func on_player_hit(state: Dictionary, amount: float, hp: float, hp_max: float) -> Dictionary:
 	var result: = {"blocked": false, "amount": amount, "heal": 0.0, "events": []}
@@ -686,7 +788,14 @@ static func on_player_hit(state: Dictionary, amount: float, hp: float, hp_max: f
 					state["devoted_slow"] = 4.5
 					state["devoted_recharge"] = maxf(9.5, 22.0 - int(state["level"]) * 2.5)
 		"Vanguarda":
+			if float(state.get("vanguard_guard", 0.0)) > 0.0 and amount > 0.0:
+				var reduction := _pilot_value(VANGUARD_GUARD_REDUCTION, level) if level >= 2 else 0.0
+				if reduction > 0.0:
+					result["amount"] = amount * (1.0 - reduction)
+					result["events"].append({"type": "text", "text": "BRASA PROTETORA"})
 			state["vanguard_ring"] = 5.0
+			state["vanguard_guard"] = 1.8 if level >= 2 else 0.0
+			state["vanguard_cinder_ready"] = level >= 9
 	return result
 
 static func on_dash(state: Dictionary, context: = {}) -> Array:
@@ -723,6 +832,12 @@ static func on_dash(state: Dictionary, context: = {}) -> Array:
 				state["rational_dilation"] = RATIONAL_DILATION_TIME
 				state["rational_rebound"] = RATIONAL_DILATION_TIME + RATIONAL_REBOUND_TIME
 				state["rational_cooldown"] = RATIONAL_DILATION_TIME + RATIONAL_COOLDOWN
+				if _rank(state) >= 2 and int(state.get("rational_focus", 0)) > 0:
+					state["rational_focus"] = int(state["rational_focus"]) - 1
+					state["rational_dilation"] = float(state["rational_dilation"]) + _pilot_value(RATIONAL_FOCUS_EXTENSION, _rank(state))
+					state["rational_rebound"] = float(state["rational_rebound"]) + _pilot_value(RATIONAL_FOCUS_EXTENSION, _rank(state))
+					state["rational_cooldown"] = maxf(0.0, float(state["rational_cooldown"]) - _pilot_value(RATIONAL_FOCUS_COOLDOWN_REFUND, _rank(state)))
+					events.append({"type": "text", "text": "FOCO TEMPORAL"})
 				events.append({"type": "text", "text": "DILATACAO TEMPORAL"})
 		"Insana":
 			if bool(state["insane_dash_penalty"]):
@@ -736,6 +851,9 @@ static func speed_multiplier(state: Dictionary) -> float:
 		"Racional": return (1.45 if ascended else 1.35) if float(state["rational_dilation"]) > 0.0 else 1.0
 		"Impulsiva": return 1.2 * (1.0 + 0.15 * int(state["impulsive_rank"])) if float(state["impulsive_active"]) > 0.0 else 1.0
 		"Devota": return 0.9 if float(state["devoted_slow"]) > 0.0 else 1.0
+		"Voraz":
+			var satiated_speed := 0.08 if _rank(state) >= 2 and float(state.get("voracious_satiation", 0.0)) > 0.0 else 0.0
+			return 1.0 + satiated_speed
 		"Crepuscular": return 1.0 + (0.1 + 0.02 * _rank(state) if ascended else 0.08 + 0.02 * _rank(state)) if _crepuscular_is_eclipse(state) else 1.0
 		"Peregrino":
 			var mult: = 1.0
@@ -880,6 +998,16 @@ static func _update_voracious(state: Dictionary, delta: float, context: Dictiona
 			state["voracious_hunger"] = float(state["voracious_hunger"]) + float(drop["value"]) * pow(0.94, cycles)
 			state["voracious_last_collect"] = 0.0
 			state["voracious_drain_tick"] = 1.5
+			if _rank(state) >= 2:
+				var had_satiation := float(state.get("voracious_satiation", 0.0)) > 0.0
+				state["voracious_satiation"] = _pilot_value(VORACIOUS_SATIATION_TIME, _rank(state))
+				state["voracious_clots_in_satiation"] = int(state.get("voracious_clots_in_satiation", 0)) + 1 if had_satiation else 1
+				if int(state["voracious_clots_in_satiation"]) >= 3 and _rank(state) >= 5:
+					state["voracious_clots_in_satiation"] = 0
+					state["voracious_feast_ready"] = true
+					events.append({"type": "text", "text": "BANQUETE ARMADO"})
+				else:
+					events.append({"type": "text", "text": "SACIEDADE"})
 			while float(state["voracious_hunger"]) >= hunger_max(state):
 				state["voracious_hunger"] = float(state["voracious_hunger"]) - hunger_max(state)
 				state["voracious_cycles"] = int(state["voracious_cycles"]) + 1

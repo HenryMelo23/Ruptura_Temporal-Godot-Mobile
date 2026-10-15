@@ -633,7 +633,8 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 		game.hud_feedback.ability(game, card_rect, icons[i])
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-	game._draw_desktop_fps_hud(viewport)
+	if game._should_draw_desktop_fps_counter():
+		game._draw_desktop_fps_hud(viewport)
 
 
 static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :

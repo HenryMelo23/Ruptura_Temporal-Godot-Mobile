@@ -68,16 +68,22 @@ func _run() -> void:
 	var attack: Dictionary = game.boss_attacks[0]
 	_check(String(attack.get("kind", "")) == "boss3_sector_ritual", "wrong attack kind")
 	_check(int(attack.get("steps", 0)) == 3, "solo ritual should use 3 sectors")
-	_check(float(attack.get("warning", 0.0)) >= 1.0, "ritual warning is too short")
+	_check(float(attack.get("warning", 0.0)) >= 0.85, "ritual warning is shorter than the accessibility floor")
 	var safe_lane: int = game._boss3_sector_ritual_safe_lane(attack, 0)
-	var danger_lane: int = (safe_lane + 1) % int(attack.get("lanes", 6))
+	var safe_span: int = int(attack.get("safe_lane_span", 1))
+	_check(safe_span == 2, "safe region did not expand to two contiguous lanes")
 	game.player_pos = _lane_pos(attack, safe_lane)
 	_check(not game._boss3_sector_ritual_position_in_danger(game.player_pos, attack, 0), "safe lane is damaging")
+	game.player_pos = _lane_pos(attack, (safe_lane + 1) % int(attack.get("lanes", 6)))
+	_check(not game._boss3_sector_ritual_position_in_danger(game.player_pos, attack, 0), "second half of the safe region is damaging")
+	var danger_lane: int = (safe_lane + safe_span) % int(attack.get("lanes", 6))
 	game.player_pos = _lane_pos(attack, danger_lane)
 	_check(game._boss3_sector_ritual_position_in_danger(game.player_pos, attack, 0), "danger lane is safe")
 
 	var hp_before: int = game.player_hp
-	game._update_boss3_attacks(float(attack.get("warning", game.BOSS3_SECTOR_RITUAL_WARNING)) + 0.05)
+	game._update_boss3_attacks(float(attack.get("warning", game.BOSS3_SECTOR_RITUAL_WARNING)) - 0.05)
+	_check(game.player_hp == hp_before, "ritual damaged before the warning completed")
+	game._update_boss3_attacks(0.1)
 	_check(game.player_hp < hp_before, "active ritual did not damage local player")
 	var hp_after_first_hit: int = game.player_hp
 	game._update_boss3_attacks(0.1)
@@ -110,7 +116,7 @@ func _run() -> void:
 	_check(game.boss_attacks.any(func(a): return String(a.get("kind", "")) == "boss3_sector_ritual"), "phase 3 update did not start ritual when off cooldown")
 	game._clear_boss_runtime_hazards()
 
-	print("BOSS3_SECTOR_RITUAL_SMOKE_OK steps=3/4/5 warning=%.2fs radius=%d clouds=false" % [game.BOSS3_SECTOR_RITUAL_WARNING, int(game.BOSS3_SECTOR_RITUAL_RADIUS)])
+	print("BOSS3_SECTOR_RITUAL_SMOKE_OK steps=3/4/5 warning=%.2fs safe_span=%d radius=%d clouds=false" % [game.BOSS3_SECTOR_RITUAL_WARNING, game.BOSS3_SECTOR_RITUAL_SAFE_LANE_SPAN, int(game.BOSS3_SECTOR_RITUAL_RADIUS)])
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

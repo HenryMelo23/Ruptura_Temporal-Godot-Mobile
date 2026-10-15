@@ -65,6 +65,9 @@ func _run() -> void:
 	game.vol_master = 0.0
 	game.mode = "catalog"
 	game.ui_platform_override_unlocked = true
+	# The badges are render-only; seed two stable entries to exercise desktop and
+	# mobile without changing unlock state or any touch target.
+	game.content_unread_ids = {"catalog_manifestation:eletrica": true, "catalog_spectrum:impulsiva": true}
 	for viewport in [Vector2i(1280, 720), Vector2i(960, 540)]:
 		root.size = viewport
 		game.ui_platform_override = "desktop" if viewport.x == 1280 else "android"
@@ -90,6 +93,8 @@ func _run() -> void:
 					var length: int = _expected(items[i], section).length()
 					if length > longest["length"]:
 						longest = {"length": length, "tab": tab, "index": i, "section": section}
+			if tab in [0, 5]:
+				_check(game._content_section_has_unread("catalog_manifestation") or game._content_section_has_unread("catalog_spectrum"), "badge state vanished before its record was opened")
 		game.catalog_detail_open = false
 		await process_frame
 		_check(not game.catalog_detail_text.visible, "reader leaked into index")
@@ -175,6 +180,18 @@ func _run() -> void:
 	game.ui_platform_override = "desktop"
 	_layout(Vector2(root.size))
 	await _capture("ultrawide_phases")
+	game._catalog_reset_tab(0)
+	var manifestation_items: Array = game._catalog_items()
+	for index in range(manifestation_items.size()):
+		if String(manifestation_items[index].get("key", "")) == "eletrica":
+			game.catalog_selected = index
+			break
+	game.catalog_detail_open = true
+	game._catalog_mark_current_item_seen()
+	_check(not game._content_is_unread("catalog_manifestation", "eletrica") and game._content_is_unread("catalog_spectrum", "impulsiva"), "reading one catalog entry cleared more than its stable ID")
+	await _capture("catalog_new_badge_consumed")
+	game.catalog_detail_open = false
+	await process_frame
 	game._go_to_menu()
 	await process_frame
 	_check(not game.catalog_detail_text.visible, "reader leaked into menu")

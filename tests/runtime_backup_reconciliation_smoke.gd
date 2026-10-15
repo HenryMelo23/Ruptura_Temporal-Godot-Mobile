@@ -26,7 +26,7 @@ func _run() -> void:
 	game.player_identity_recovery_code = ""
 	game._load_player_profile()
 	_check(game.player_identity_auth_token == "reconciliation_test_token", "profile auth lost by save owner")
-	_check(game.player_identity_recovery_code == "RECOVERYTEST001", "recovery identity lost by save owner")
+	_check(game.player_identity_recovery_code == "", "recovery code persisted on the device")
 
 	game.card_unlock_progress["enemy_kills"] = 123.0
 	game.player_progress_pending_events = [{"id": "fixture", "type": "unlock_progress"}]
@@ -44,6 +44,22 @@ func _run() -> void:
 	game._load_card_unlocks()
 	_check(not game.player_progress_cache_trusted, "unsigned cache accepted by owner")
 	_check(float(game.card_unlock_progress.get("enemy_kills", 0.0)) == 0.0, "unsigned cache elevated progress")
+	game.player_identity_auth_token = ""
+	game.player_progress_identity_creation_confirmed = false
+	game.mode = "menu"
+	game._update_player_progress_sync(1.0)
+	_check(game.player_progress_sync_status == "identity_choice_required", "profile was created without a recovery-or-create choice")
+	game.player_progress_pending_events.clear()
+	game.player_progress_quarantined_events.clear()
+	for index in range(game.RTPlayerProgressSync.MAX_PENDING_EVENTS):
+		game.player_progress_pending_events.append({"event_id": "pending_%d" % index})
+	game._queue_player_progress_event({"event_id": "must_not_replace_oldest"})
+	_check(game.player_progress_pending_events.size() == game.RTPlayerProgressSync.MAX_PENDING_EVENTS, "offline queue replaced durable events")
+	_check(String(game.player_progress_pending_events[0].get("event_id", "")) == "pending_0", "oldest offline event was silently discarded")
+	_check(game.player_progress_quarantined_events.size() == 1 and game.player_progress_sync_status == "queue_full", "queue overflow was not surfaced for review")
+	game.player_progress_remote_snapshot_version = 9
+	_check(not game._apply_remote_player_progress_snapshot({"version": 8, "progress": {"enemy_kills": 999999}}, false), "stale remote snapshot replaced newer state")
+	_check(game.player_progress_sync_status == "sync_stale_snapshot", "stale remote snapshot was not reported")
 
 	game._start_game()
 	game.mode = "shop"
@@ -89,5 +105,5 @@ func _run() -> void:
 	for _frame in range(4):
 		await process_frame
 	if not failed:
-		print("BACKUP_RECONCILIATION_OK identity cache tamper queue resume retry evolution density long_run")
+		print("BACKUP_RECONCILIATION_OK identity cache tamper queue recovery stale_snapshot resume retry evolution density long_run")
 	quit(1 if failed else 0)

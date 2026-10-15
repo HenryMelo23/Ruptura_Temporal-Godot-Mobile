@@ -39,6 +39,10 @@ func _run() -> void:
 		client._apply_remote_boss_visual_snapshot(host._pack_net_boss_visuals())
 		_check(client.boss3_miasma_variant == variant, "replica variant mismatch")
 		_check(client.boss3_miasma_clone_positions == host.boss3_miasma_clone_positions, "clone positions mismatch")
+		if variant == 1:
+			host.boss3_miasma_clone_reveal_timer = 1.2
+			client._apply_remote_boss_visual_snapshot(host._pack_net_boss_visuals())
+			_check(is_equal_approx(client.boss3_miasma_clone_reveal_timer, host.boss3_miasma_clone_reveal_timer), "clone reveal mismatch")
 	# Compare the real runtime's contact decision against rendering from the
 	# existing wire fields, including exact boundaries, progress and overtime.
 	for taps in [0, 9, 17]:

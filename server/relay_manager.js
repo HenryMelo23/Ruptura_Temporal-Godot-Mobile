@@ -39,9 +39,14 @@ const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
 const PLAYER_PROGRESS_PATH = process.env.PLAYER_PROGRESS_PATH || path.join(__dirname, "player_progress.json");
-const PLAYER_PROGRESS_SCHEMA_VERSION = 1;
-const PLAYER_PROGRESS_EVENT_VERSION = 1;
+const PLAYER_PROGRESS_SCHEMA_VERSION = 2;
+const PLAYER_PROGRESS_EVENT_VERSION = 2;
 const PLAYER_PROGRESS_EVENT_LIMIT = 120;
+const PLAYER_PROGRESS_RATE_WINDOW_MS = numberEnv("PLAYER_PROGRESS_RATE_WINDOW_MS", 10 * 60 * 1000);
+const PLAYER_PROGRESS_CREATE_LIMIT = numberEnv("PLAYER_PROGRESS_CREATE_LIMIT", 8);
+const PLAYER_PROGRESS_CLAIM_LIMIT = numberEnv("PLAYER_PROGRESS_CLAIM_LIMIT", 6);
+const PLAYER_PROGRESS_EVENTS_IP_LIMIT = numberEnv("PLAYER_PROGRESS_EVENTS_IP_LIMIT", 240);
+const PLAYER_PROGRESS_EVENTS_IDENTITY_LIMIT = numberEnv("PLAYER_PROGRESS_EVENTS_IDENTITY_LIMIT", 120);
 const RUN_REPORT_INTEGRITY_VERSION = 1;
 const RUN_REPORT_INTEGRITY_MIN_VERSION_CODE = 23002;
 const RUN_REPORT_INTEGRITY_SALT = "ruptura-temporal-run-integrity-v1-2.0.30c";
@@ -84,6 +89,8 @@ const CONTENT_UPDATE_MANIFEST = path.join(CONTENT_UPDATE_ROOT, "latest.json");
 
 const rooms = new Map();
 const streams = new Map();
+const playerProgressRateBuckets = new Map();
+let playerProgressStoreState = { mode: "healthy", error: "" };
 let warmRefillTimer = null;
 let projectIdentityCache = null;
 
@@ -1351,26 +1358,66 @@ function defaultPlayerProgressStore() {
   return { schemaVersion: PLAYER_PROGRESS_SCHEMA_VERSION, identities: {}, recoveryIndex: {} };
 }
 
+function parsePlayerProgressStore(filePath) {
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (!parsed || typeof parsed !== "object" || !parsed.identities || typeof parsed.identities !== "object" || !parsed.recoveryIndex || typeof parsed.recoveryIndex !== "object") {
+    throw new Error("invalid progress store shape");
+  }
+  const schemaVersion = Math.floor(Number(parsed.schemaVersion) || 0);
+  if (schemaVersion < 1 || schemaVersion > PLAYER_PROGRESS_SCHEMA_VERSION) {
+    throw new Error(`unsupported progress store schema ${schemaVersion}`);
+  }
+  return { schemaVersion: PLAYER_PROGRESS_SCHEMA_VERSION, identities: parsed.identities, recoveryIndex: parsed.recoveryIndex };
+}
+
 function loadPlayerProgressStore() {
-  try {
-    if (!fs.existsSync(PLAYER_PROGRESS_PATH)) {
-      return defaultPlayerProgressStore();
-    }
-    const parsed = JSON.parse(fs.readFileSync(PLAYER_PROGRESS_PATH, "utf8"));
-    return {
-      schemaVersion: Math.max(1, Math.floor(Number(parsed.schemaVersion) || PLAYER_PROGRESS_SCHEMA_VERSION)),
-      identities: parsed.identities && typeof parsed.identities === "object" ? parsed.identities : {},
-      recoveryIndex: parsed.recoveryIndex && typeof parsed.recoveryIndex === "object" ? parsed.recoveryIndex : {}
-    };
-  } catch (error) {
-    console.error(`failed to read player progress: ${error.message}`);
+  const backupPath = `${PLAYER_PROGRESS_PATH}.bak`;
+  if (!fs.existsSync(PLAYER_PROGRESS_PATH) && !fs.existsSync(backupPath)) {
+    playerProgressStoreState = { mode: "healthy", error: "" };
     return defaultPlayerProgressStore();
+  }
+  try {
+    const store = parsePlayerProgressStore(PLAYER_PROGRESS_PATH);
+    playerProgressStoreState = { mode: "healthy", error: "" };
+    return store;
+  } catch (primaryError) {
+    try {
+      const backup = parsePlayerProgressStore(backupPath);
+      playerProgressStoreState = { mode: "recovered_backup", error: String(primaryError.message || primaryError).slice(0, 160) };
+      console.error("player progress primary store is unreadable; using verified backup in protected recovery mode");
+      return backup;
+    } catch (_backupError) {
+      playerProgressStoreState = { mode: "protected_read_only", error: String(primaryError.message || primaryError).slice(0, 160) };
+      console.error("player progress store and backup are unreadable; refusing writes until restore");
+      return null;
+    }
   }
 }
 
 function savePlayerProgressStore(store) {
-  fs.mkdirSync(path.dirname(PLAYER_PROGRESS_PATH), { recursive: true });
-  fs.writeFileSync(PLAYER_PROGRESS_PATH, JSON.stringify(store, null, 2));
+  if (!store || playerProgressStoreState.mode === "protected_read_only") return false;
+  const directory = path.dirname(PLAYER_PROGRESS_PATH);
+  const tempPath = path.join(directory, `.${path.basename(PLAYER_PROGRESS_PATH)}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`);
+  const backupPath = `${PLAYER_PROGRESS_PATH}.bak`;
+  fs.mkdirSync(directory, { recursive: true });
+  try {
+    if (playerProgressStoreState.mode === "healthy" && fs.existsSync(PLAYER_PROGRESS_PATH)) fs.copyFileSync(PLAYER_PROGRESS_PATH, backupPath);
+    const descriptor = fs.openSync(tempPath, "w", 0o600);
+    try {
+      fs.writeFileSync(descriptor, JSON.stringify({ ...store, schemaVersion: PLAYER_PROGRESS_SCHEMA_VERSION }, null, 2), "utf8");
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    fs.renameSync(tempPath, PLAYER_PROGRESS_PATH);
+    playerProgressStoreState = { mode: "healthy", error: "" };
+    return true;
+  } catch (error) {
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+    console.error(`failed to save player progress atomically: ${error.message}`);
+    playerProgressStoreState = { mode: "protected_read_only", error: String(error.message || error).slice(0, 160) };
+    return false;
+  }
 }
 
 function sha256Hex(value) {
@@ -1382,7 +1429,12 @@ function randomToken(prefix, bytes = 18) {
 }
 
 function recoveryCode() {
-  return crypto.randomBytes(9).toString("base64url").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+  const compact = crypto.randomBytes(16).toString("hex").toUpperCase();
+  return compact.match(/.{1,4}/g).join("-");
+}
+
+function cleanRecoveryCode(value) {
+  return String(value || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 64);
 }
 
 function cleanProgressString(value, limit = 96) {
@@ -1489,7 +1541,10 @@ function newPlayerProgressIdentity(payload = {}) {
     nickname: String(payload.nickname || "").trim().slice(0, 32),
     previousProfileIds: cleanProgressString(payload.profile_id, 64) ? [cleanProgressString(payload.profile_id, 64)] : [],
     tokenHash: "",
-    recoveryHash: sha256Hex(recovery),
+    // The displayed recovery code is grouped for readability. Persist its
+    // canonical form so claiming works whether the player enters separators
+    // or not.
+    recoveryHash: sha256Hex(cleanRecoveryCode(recovery)),
     recoveryCode: recovery,
     createdAt: new Date(now).toISOString(),
     updatedAt: new Date(now).toISOString(),
@@ -1497,7 +1552,8 @@ function newPlayerProgressIdentity(payload = {}) {
     unlocked: { cards: [], manifestations: [], specters: [] },
     specterLevels: {},
     spectralCoins: 0,
-    appliedEvents: {}
+    appliedEvents: {},
+    lastEventSequenceByDevice: {}
   };
 }
 
@@ -1544,19 +1600,41 @@ function issueIdentityToken(identity) {
   return token;
 }
 
+function constantTimeDigestEquals(left, right) {
+  const a = Buffer.from(String(left || ""), "hex");
+  const b = Buffer.from(String(right || ""), "hex");
+  return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
+}
+
 function authenticatePlayerProgress(store, playerId, authToken) {
   const id = cleanProgressString(playerId, 64);
   const identity = id ? store.identities[id] : null;
-  if (!identity || !authToken || sha256Hex(authToken) !== identity.tokenHash) {
+  if (!identity || !authToken || !constantTimeDigestEquals(sha256Hex(authToken), identity.tokenHash)) {
     return null;
   }
   return identity;
 }
 
 function findIdentityByRecovery(store, recovery) {
-  const hash = sha256Hex(cleanProgressString(recovery, 64));
+  const hash = sha256Hex(cleanRecoveryCode(recovery));
   const playerId = store.recoveryIndex[hash];
   return playerId ? store.identities[playerId] : null;
+}
+
+function progressRateAllowed(ip, identityId, action, cost = 1) {
+  const now = Date.now();
+  const limits = { create: PLAYER_PROGRESS_CREATE_LIMIT, claim: PLAYER_PROGRESS_CLAIM_LIMIT, events_ip: PLAYER_PROGRESS_EVENTS_IP_LIMIT, events_identity: PLAYER_PROGRESS_EVENTS_IDENTITY_LIMIT };
+  const key = `${action}:${identityId || ip || "unknown"}`;
+  const previous = playerProgressRateBuckets.get(key) || { startedAt: now, count: 0 };
+  const bucket = now - previous.startedAt >= PLAYER_PROGRESS_RATE_WINDOW_MS ? { startedAt: now, count: 0 } : previous;
+  bucket.count += Math.max(1, Math.floor(cost));
+  playerProgressRateBuckets.set(key, bucket);
+  if (playerProgressRateBuckets.size > 4000) for (const [entry, state] of playerProgressRateBuckets) if (now - state.startedAt >= PLAYER_PROGRESS_RATE_WINDOW_MS) playerProgressRateBuckets.delete(entry);
+  return { allowed: bucket.count <= (limits[action] || 1), retryAfterSeconds: Math.max(1, Math.ceil((PLAYER_PROGRESS_RATE_WINDOW_MS - (now - bucket.startedAt)) / 1000)) };
+}
+
+function progressStoreUnavailable(res) {
+  sendJson(res, 503, { ok: false, error: "progress temporarily unavailable" });
 }
 
 function metricLimit(metric, maxMode) {
@@ -1594,25 +1672,34 @@ function knownProgressMetric(metric) {
 
 function applyPlayerProgressEvent(identity, event) {
   if (!event || typeof event !== "object") return { ok: false, reason: "event_not_object" };
-  if (Math.floor(Number(event.schema_version) || 0) !== PLAYER_PROGRESS_SCHEMA_VERSION) return { ok: false, reason: "schema_mismatch" };
-  if (Math.floor(Number(event.event_version) || 0) !== PLAYER_PROGRESS_EVENT_VERSION) return { ok: false, reason: "event_version_mismatch" };
+  const schemaVersion = Math.floor(Number(event.schema_version) || 0);
+  const eventVersion = Math.floor(Number(event.event_version) || 0);
+  if (![1, PLAYER_PROGRESS_SCHEMA_VERSION].includes(schemaVersion)) return { ok: false, reason: "schema_mismatch", permanent: true };
+  if (![1, PLAYER_PROGRESS_EVENT_VERSION].includes(eventVersion)) return { ok: false, reason: "event_version_mismatch", permanent: true };
   const eventId = cleanProgressString(event.event_id, 128);
-  if (!eventId) return { ok: false, reason: "missing_event_id" };
+  if (!eventId) return { ok: false, reason: "missing_event_id", permanent: true };
   identity.appliedEvents = identity.appliedEvents && typeof identity.appliedEvents === "object" ? identity.appliedEvents : {};
   if (identity.appliedEvents[eventId]) return { ok: true, duplicate: true, eventId };
+  const deviceId = cleanProgressString(event.device_id, 64);
+  const clientSequence = Math.max(0, Math.floor(safeNumber(event.client_sequence)));
+  if (eventVersion >= 2) {
+    identity.lastEventSequenceByDevice = identity.lastEventSequenceByDevice && typeof identity.lastEventSequenceByDevice === "object" ? identity.lastEventSequenceByDevice : {};
+    const previousSequence = Math.max(0, Math.floor(safeNumber(identity.lastEventSequenceByDevice[deviceId])));
+    if (!deviceId || clientSequence !== previousSequence + 1) return { ok: false, reason: "event_sequence_mismatch", eventId, permanent: true };
+  }
   const type = String(event.type || "");
   if (type === "unlock_progress") {
     const metric = cleanProgressString(event.metric, 64);
     const maxMode = Boolean(event.max_mode);
     const amount = Math.max(0, safeNumber(event.amount));
     const limit = metricLimit(metric, maxMode);
-    if (!knownProgressMetric(metric) || amount <= 0 || amount > limit) return { ok: false, reason: "invalid_metric_amount", eventId };
+    if (!knownProgressMetric(metric) || amount <= 0 || amount > limit) return { ok: false, reason: "invalid_metric_amount", eventId, permanent: true };
     identity.progress = identity.progress && typeof identity.progress === "object" ? identity.progress : {};
     const current = Math.max(0, safeNumber(identity.progress[metric]));
     identity.progress[metric] = maxMode ? Math.max(current, amount) : current + amount;
   } else if (type === "spectral_core") {
     const amount = Math.max(0, Math.floor(safeNumber(event.amount)));
-    if (amount <= 0 || amount > 50) return { ok: false, reason: "invalid_spectral_core", eventId };
+    if (amount <= 0 || amount > 50) return { ok: false, reason: "invalid_spectral_core", eventId, permanent: true };
     identity.spectralCoins = Math.max(0, Math.floor(safeNumber(identity.spectralCoins))) + amount;
   } else if (type === "specter_upgrade") {
     const key = cleanProgressString(event.specter_key, 64);
@@ -1621,17 +1708,19 @@ function applyPlayerProgressEvent(identity, event) {
     identity.specterLevels = identity.specterLevels && typeof identity.specterLevels === "object" ? identity.specterLevels : {};
     const currentLevel = Math.max(1, Math.floor(safeNumber(identity.specterLevels[key], 1)));
     if (!PLAYER_PROGRESS_KNOWN_SPECTERS.has(key) || targetLevel !== currentLevel + 1 || targetLevel > 10 || cost < 0) {
-      return { ok: false, reason: "invalid_specter_upgrade", eventId };
+      return { ok: false, reason: "invalid_specter_upgrade", eventId, permanent: true };
     }
     if (Math.max(0, Math.floor(safeNumber(identity.spectralCoins))) < cost) {
-      return { ok: false, reason: "insufficient_spectral_coins", eventId };
+      return { ok: false, reason: "insufficient_spectral_coins", eventId, permanent: true };
     }
     identity.spectralCoins = Math.max(0, Math.floor(safeNumber(identity.spectralCoins))) - cost;
     identity.specterLevels[key] = targetLevel;
   } else {
-    return { ok: false, reason: "unknown_event_type", eventId };
+    return { ok: false, reason: "unknown_event_type", eventId, permanent: true };
   }
   identity.appliedEvents[eventId] = new Date().toISOString();
+  if (eventVersion >= 2) identity.lastEventSequenceByDevice[deviceId] = clientSequence;
+  identity.version = Math.max(1, Math.floor(safeNumber(identity.version, 1))) + 1;
   identity.updatedAt = new Date().toISOString();
   identity.unlocked = recomputePlayerUnlocks(identity.progress || {});
   return { ok: true, eventId };
@@ -2803,6 +2892,7 @@ async function route(req, res) {
       runs: leaderboardSnapshot().recent.length,
       protocols: STREAMING_ENABLED ? ["rtmp-hls", "frame-mjpeg", "http-mjpeg"] : [],
       streaming: STREAMING_ENABLED,
+      playerProgressStore: playerProgressStoreState.mode,
       project: projectIdentity()
     });
     return;
@@ -2816,14 +2906,28 @@ async function route(req, res) {
       sendJson(res, 400, { ok: false, error: "invalid identity payload" });
       return;
     }
+    const ip = clientIp(req);
+    const rate = progressRateAllowed(ip, "", "create");
+    if (!rate.allowed) {
+      res.setHeader("Retry-After", String(rate.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "identity temporarily unavailable" });
+      return;
+    }
     const store = loadPlayerProgressStore();
+    if (!store) {
+      progressStoreUnavailable(res);
+      return;
+    }
     const identity = newPlayerProgressIdentity(payload);
     const authToken = issueIdentityToken(identity);
     const recovery = identity.recoveryCode;
     delete identity.recoveryCode;
     store.identities[identity.playerId] = identity;
     store.recoveryIndex[identity.recoveryHash] = identity.playerId;
-    savePlayerProgressStore(store);
+    if (!savePlayerProgressStore(store)) {
+      progressStoreUnavailable(res);
+      return;
+    }
     sendJson(res, 201, {
       ok: true,
       player_id: identity.playerId,
@@ -2842,16 +2946,30 @@ async function route(req, res) {
       sendJson(res, 400, { ok: false, error: "invalid identity claim" });
       return;
     }
+    const ip = clientIp(req);
+    const rate = progressRateAllowed(ip, "", "claim");
+    if (!rate.allowed) {
+      res.setHeader("Retry-After", String(rate.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "recovery temporarily unavailable" });
+      return;
+    }
     const store = loadPlayerProgressStore();
+    if (!store) {
+      progressStoreUnavailable(res);
+      return;
+    }
     const identity = findIdentityByRecovery(store, payload && payload.recovery_code);
     if (!identity) {
-      sendJson(res, 404, { ok: false, error: "identity not found" });
+      sendJson(res, 401, { ok: false, error: "recovery unavailable" });
       return;
     }
     const authToken = issueIdentityToken(identity);
     const nickname = String(payload.nickname || "").trim().slice(0, 32);
     if (nickname) identity.nickname = nickname;
-    savePlayerProgressStore(store);
+    if (!savePlayerProgressStore(store)) {
+      progressStoreUnavailable(res);
+      return;
+    }
     sendJson(res, 200, {
       ok: true,
       player_id: identity.playerId,
@@ -2869,28 +2987,54 @@ async function route(req, res) {
       sendJson(res, 400, { ok: false, error: "invalid progress events" });
       return;
     }
+    const ip = clientIp(req);
+    const requestedEvents = Array.isArray(payload && payload.events) ? payload.events : [];
+    const ipRate = progressRateAllowed(ip, "", "events_ip", requestedEvents.length);
+    if (!ipRate.allowed) {
+      res.setHeader("Retry-After", String(ipRate.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "progress temporarily unavailable" });
+      return;
+    }
     const store = loadPlayerProgressStore();
+    if (!store) {
+      progressStoreUnavailable(res);
+      return;
+    }
     const identity = authenticatePlayerProgress(store, payload && payload.player_id, payload && payload.auth_token);
     if (!identity) {
       sendJson(res, 401, { ok: false, error: "invalid identity token" });
       return;
     }
+    const identityRate = progressRateAllowed(ip, identity.playerId, "events_identity", requestedEvents.length);
+    if (!identityRate.allowed) {
+      res.setHeader("Retry-After", String(identityRate.retryAfterSeconds));
+      sendJson(res, 429, { ok: false, error: "progress temporarily unavailable" });
+      return;
+    }
     const accepted = [];
     const duplicates = [];
     const rejected = [];
-    const events = Array.isArray(payload.events) ? payload.events.slice(0, PLAYER_PROGRESS_EVENT_LIMIT) : [];
+    const rejectedDetails = [];
+    const events = requestedEvents.slice(0, PLAYER_PROGRESS_EVENT_LIMIT);
     for (const event of events) {
       const result = applyPlayerProgressEvent(identity, event);
       if (result.ok && result.duplicate) duplicates.push(result.eventId);
       else if (result.ok) accepted.push(result.eventId);
-      else if (result.eventId) rejected.push(result.eventId);
+      else if (result.eventId) {
+        rejected.push(result.eventId);
+        rejectedDetails.push({ event_id: result.eventId, reason: String(result.reason || "rejected").slice(0, 48), permanent: result.permanent !== false });
+      }
     }
-    savePlayerProgressStore(store);
+    if (!savePlayerProgressStore(store)) {
+      progressStoreUnavailable(res);
+      return;
+    }
     sendJson(res, 200, {
       ok: true,
       accepted_event_ids: accepted,
       duplicate_event_ids: duplicates,
       rejected_event_ids: rejected,
+      rejected_events: rejectedDetails,
       unlocks: defaultProgressSnapshot(identity)
     });
     return;

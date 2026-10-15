@@ -17,6 +17,9 @@ func configure(p_core: Node) -> void:
 func _load_player_profile() -> void :
 	core.player_nickname = ""
 	core.player_profile_id = ""
+	core.player_identity_auth_token = ""
+	core.player_identity_recovery_code = ""
+	core.player_progress_identity_creation_confirmed = false
 	core.player_valid_runs_completed = 0
 	if not FileAccess.file_exists(core.PLAYER_PROFILE_PATH):
 		core._ensure_player_profile_id()
@@ -43,6 +46,7 @@ func _load_player_profile() -> void :
 			core.player_valid_runs_completed = maxi(0, int(value))
 	file.close()
 	core._ensure_player_profile_id()
+	core.player_progress_identity_creation_confirmed = core.player_identity_auth_token != ""
 
 func _save_player_profile() -> void :
 	core._ensure_player_profile_id()
@@ -52,7 +56,9 @@ func _save_player_profile() -> void :
 	file.store_string("nickname=" + core.player_nickname + "\n")
 	file.store_string("profile_id=" + core.player_profile_id + "\n")
 	file.store_string("auth_token=" + core.player_identity_auth_token + "\n")
-	file.store_string("recovery_code=" + core.player_identity_recovery_code + "\n")
+	# Recovery codes are intentionally shown only during the current session.
+	# Persisting it beside the auth token made an uninstalled device a recovery
+	# credential rather than asking the player to keep the code elsewhere.
 	file.store_string("valid_runs_completed=" + str(maxi(0, int(core.player_valid_runs_completed))) + "\n")
 	file.close()
 
@@ -84,16 +90,23 @@ func _load_card_unlocks() -> void :
 	core._ensure_card_unlock_defaults()
 	core.player_progress_install_secret = core._load_or_create_player_progress_install_secret()
 	core.player_progress_pending_events.clear()
+	core.player_progress_quarantined_events.clear()
 	core.player_progress_event_sequence = 0
+	core.player_progress_last_remote_confirmation = ""
 	core.player_progress_cache_trusted = false
 	var cached: Dictionary = core._read_trusted_player_progress_cache()
 	if not cached.is_empty():
 		core.player_progress_cache_trusted = true
 		core.player_progress_event_sequence = maxi(0, int(cached.get("event_sequence", 0)))
+		core.player_progress_last_remote_confirmation = String(Dictionary(cached.get("snapshot", {})).get("updated_at", "")).strip_edges()
 		var cached_events: Array = cached.get("pending_events", [])
 		for event in cached_events:
 			if event is Dictionary:
 				core.player_progress_pending_events.append(event.duplicate(true))
+		var quarantined_events: Array = cached.get("quarantined_events", [])
+		for entry in quarantined_events:
+			if entry is Dictionary:
+				core.player_progress_quarantined_events.append(entry.duplicate(true))
 		core._apply_player_progress_snapshot(cached.get("snapshot", {}), false)
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
@@ -102,10 +115,9 @@ func _save_card_unlocks() -> void :
 	core._ensure_card_unlock_defaults()
 	var payload: Dictionary = core.RTPlayerProgressSync.build_cache_payload(
 		core.player_profile_id,
-		core.player_identity_auth_token,
-		core.player_identity_recovery_code,
 		core._card_unlock_snapshot(),
 		core.player_progress_pending_events,
+		core.player_progress_quarantined_events,
 		core.player_progress_event_sequence
 	)
 	var signed_payload: Dictionary = core.RTPlayerProgressSync.signed_cache(payload, core._player_progress_install_secret())
@@ -219,6 +231,7 @@ func _load_config() -> void :
 				elif k == "gfx_health_warning_strength": core.gfx_health_warning_strength = clampf(float(v), 0.0, 1.35)
 				elif k == "gfx_low_resource": core.gfx_low_resource = v == "true"
 				elif k == "gfx_memory_saver": core.gfx_memory_saver = v == "true"
+				elif k == "gfx_fps_limit": core.gfx_fps_limit = core._sanitize_graphics_fps_limit(int(v))
 				elif k == "damage_text_scale": core.damage_text_scale = clamp(float(v), 0.7, 1.8)
 				elif k == "interface_text_scale": core.interface_text_scale = clamp(float(v), 0.9, 1.6)
 				elif k == "geovana_bark_scale": core.geovana_bark_scale = clampf(float(v), 0.5, 1.5)
@@ -324,6 +337,7 @@ func _save_config() -> void :
 		file.store_string("gfx_health_warning_strength=" + str(core.gfx_health_warning_strength) + "\n")
 		file.store_string("gfx_low_resource=" + ("true" if core.gfx_low_resource else "false") + "\n")
 		file.store_string("gfx_memory_saver=" + ("true" if core.gfx_memory_saver else "false") + "\n")
+		file.store_string("gfx_fps_limit=" + str(core._sanitize_graphics_fps_limit(core.gfx_fps_limit)) + "\n")
 		file.store_string("damage_text_scale=" + str(core.damage_text_scale) + "\n")
 		file.store_string("interface_text_scale=" + str(core.interface_text_scale) + "\n")
 		file.store_string("geovana_bark_scale=" + str(core.geovana_bark_scale) + "\n")

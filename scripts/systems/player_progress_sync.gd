@@ -1,9 +1,9 @@
 extends RefCounted
 
-const CACHE_SCHEMA_VERSION := 1
+const CACHE_SCHEMA_VERSION := 2
 const CACHE_SIGNATURE_VERSION := 2
-const EVENT_SCHEMA_VERSION := 1
-const EVENT_VERSION := 1
+const EVENT_SCHEMA_VERSION := 2
+const EVENT_VERSION := 2
 const MAX_PENDING_EVENTS := 240
 
 
@@ -30,7 +30,7 @@ static func validate_cache(payload: Variant, install_secret: String) -> Dictiona
 	if not payload is Dictionary or install_secret == "":
 		return {}
 	var data: Dictionary = payload
-	if int(data.get("schema_version", 0)) != CACHE_SCHEMA_VERSION:
+	if int(data.get("schema_version", 0)) not in [1, CACHE_SCHEMA_VERSION]:
 		return {}
 	var signature_version := int(data.get("cache_signature_version", 1))
 	if signature_version not in [1, CACHE_SIGNATURE_VERSION]:
@@ -65,25 +65,26 @@ static func _restore_legacy_integer_fields(data: Dictionary, fields: Array) -> v
 			data[key] = int(value)
 
 
-static func build_cache_payload(player_id: String, auth_token: String, recovery_code: String, snapshot: Dictionary, pending_events: Array, event_sequence: int) -> Dictionary:
+static func build_cache_payload(player_id: String, snapshot: Dictionary, pending_events: Array, quarantined_events: Array, event_sequence: int) -> Dictionary:
 	return {
 		"schema_version": CACHE_SCHEMA_VERSION,
-		"cache_version": 1,
+		"cache_version": 2,
 		"player_id": player_id,
-		"auth_token": auth_token,
-		"recovery_code": recovery_code,
 		"snapshot": snapshot.duplicate(true),
 		"pending_events": _trim_pending_events(pending_events),
+		"quarantined_events": _trim_pending_events(quarantined_events),
 		"event_sequence": maxi(0, event_sequence),
 		"saved_unix": int(Time.get_unix_time_from_system())
 	}
 
 
-static func unlock_progress_event(player_id: String, event_sequence: int, metric: String, amount: float, max_mode: bool, version_code: int) -> Dictionary:
+static func unlock_progress_event(player_id: String, event_sequence: int, device_id: String, metric: String, amount: float, max_mode: bool, version_code: int) -> Dictionary:
 	return {
 		"schema_version": EVENT_SCHEMA_VERSION,
 		"event_version": EVENT_VERSION,
 		"event_id": _event_id(player_id, event_sequence, metric),
+		"client_sequence": maxi(1, event_sequence),
+		"device_id": device_id,
 		"type": "unlock_progress",
 		"metric": metric,
 		"amount": amount,
@@ -93,11 +94,13 @@ static func unlock_progress_event(player_id: String, event_sequence: int, metric
 	}
 
 
-static func spectral_core_event(player_id: String, event_sequence: int, amount: int, source_type: String, phase: int, version_code: int) -> Dictionary:
+static func spectral_core_event(player_id: String, event_sequence: int, device_id: String, amount: int, source_type: String, phase: int, version_code: int) -> Dictionary:
 	return {
 		"schema_version": EVENT_SCHEMA_VERSION,
 		"event_version": EVENT_VERSION,
 		"event_id": _event_id(player_id, event_sequence, "spectral_core"),
+		"client_sequence": maxi(1, event_sequence),
+		"device_id": device_id,
 		"type": "spectral_core",
 		"amount": maxi(0, amount),
 		"source_type": source_type,
@@ -107,11 +110,13 @@ static func spectral_core_event(player_id: String, event_sequence: int, amount: 
 	}
 
 
-static func specter_upgrade_event(player_id: String, event_sequence: int, specter_key: String, target_level: int, cost: int, version_code: int) -> Dictionary:
+static func specter_upgrade_event(player_id: String, event_sequence: int, device_id: String, specter_key: String, target_level: int, cost: int, version_code: int) -> Dictionary:
 	return {
 		"schema_version": EVENT_SCHEMA_VERSION,
 		"event_version": EVENT_VERSION,
 		"event_id": _event_id(player_id, event_sequence, "specter_upgrade_" + specter_key),
+		"client_sequence": maxi(1, event_sequence),
+		"device_id": device_id,
 		"type": "specter_upgrade",
 		"specter_key": specter_key,
 		"target_level": target_level,
@@ -148,13 +153,21 @@ static func _trim_pending_events(events: Array) -> Array:
 	for item in events:
 		if item is Dictionary:
 			clean.append(item.duplicate(true))
-	var overflow: int = maxi(0, clean.size() - MAX_PENDING_EVENTS)
-	return clean.slice(overflow)
+	# The runtime rejects a new event once the bounded queue is full and moves
+	# that event to review. Never silently discard the oldest durable event when
+	# serializing a cache: losing it would make an offline reward unverifiable.
+	return clean
 
 
 static func _event_id(player_id: String, event_sequence: int, kind: String) -> String:
 	var id_source := "%s:%d:%s:%d" % [player_id, event_sequence, kind, Time.get_ticks_msec()]
 	return "ppe_%s_%d" % [_sha256_text(id_source).substr(0, 20), event_sequence]
+
+
+static func device_id_from_install_secret(install_secret: String) -> String:
+	if install_secret == "":
+		return ""
+	return "ppd_" + _sha256_text("device\n" + install_secret).substr(0, 32)
 
 
 static func _sha256_text(text: String) -> String:

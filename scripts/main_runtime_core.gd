@@ -1,6 +1,9 @@
 extends "res://scripts/main_runtime_state.gd"
 
 const PrismaticaEvolutionController = preload("res://scripts/systems/manifest_evolutions/prismatica_evolution_controller.gd")
+const BossRewardPresentation = preload("res://scripts/presentation/boss_reward_presentation.gd")
+const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 
 # Main runtime implementation extracted from the scene adapter.
 
@@ -206,6 +209,7 @@ func _ready() -> void :
 	add_child(online_heartbeat_request)
 	online_heartbeat_request.request_completed.connect(_on_online_heartbeat_completed)
 	_setup_nickname_input()
+	_setup_player_progress_recovery_input()
 	_setup_cheat_input()
 	_setup_webhook_input()
 	_setup_online_room_inputs()
@@ -770,6 +774,66 @@ func _setup_nickname_input() -> void :
 	add_child(nickname_edit)
 
 
+func _setup_player_progress_recovery_input() -> void:
+	player_progress_recovery_edit = LineEdit.new()
+	player_progress_recovery_edit.placeholder_text = "Código de recuperação"
+	player_progress_recovery_edit.max_length = 48
+	player_progress_recovery_edit.visible = false
+	player_progress_recovery_edit.virtual_keyboard_enabled = true
+	player_progress_recovery_edit.text_submitted.connect(func(_text): _submit_player_progress_recovery())
+	add_child(player_progress_recovery_edit)
+
+
+func _player_progress_profile_panel_rect(viewport: Vector2) -> Rect2:
+	var width := minf(760.0, viewport.x * 0.84)
+	var height := minf(520.0, viewport.y * 0.80)
+	return Rect2(viewport.x * 0.5 - width * 0.5, viewport.y * 0.5 - height * 0.5, width, height)
+
+
+func _player_progress_recovery_input_rect(viewport: Vector2) -> Rect2:
+	var panel := _player_progress_profile_panel_rect(viewport)
+	return Rect2(panel.position.x + 34.0, panel.position.y + panel.size.y * 0.49, panel.size.x - 68.0, 46.0)
+
+
+func _sync_player_progress_recovery_input_rect(viewport: Vector2) -> void:
+	if player_progress_recovery_edit == null:
+		return
+	var rect := _player_progress_recovery_input_rect(viewport)
+	player_progress_recovery_edit.position = rect.position
+	player_progress_recovery_edit.size = rect.size
+
+
+func _update_player_progress_recovery_input_visibility() -> void:
+	if player_progress_recovery_edit == null:
+		return
+	var should_show := mode == "progress_profile" and player_identity_auth_token == ""
+	_sync_player_progress_recovery_input_rect(get_viewport_rect().size)
+	if player_progress_recovery_edit.visible == should_show:
+		return
+	player_progress_recovery_edit.visible = should_show
+	if should_show:
+		player_progress_recovery_edit.grab_focus()
+	else:
+		player_progress_recovery_edit.release_focus()
+
+
+func _submit_player_progress_recovery() -> void:
+	if player_progress_recovery_edit == null:
+		return
+	if recover_player_progress_with_code(player_progress_recovery_edit.text):
+		player_progress_sync_status = "recovering"
+		player_progress_recovery_edit.release_focus()
+	else:
+		player_progress_sync_status = "recovery_code_required"
+
+
+func _copy_player_progress_recovery_code() -> void:
+	if player_identity_recovery_code == "":
+		return
+	DisplayServer.clipboard_set(player_identity_recovery_code)
+	player_progress_sync_status = "recovery_code_copied"
+
+
 func _setup_cheat_input() -> void :
 	cheat_edit = LineEdit.new()
 	cheat_edit.placeholder_text = "Digite o codigo"
@@ -868,12 +932,18 @@ func _card_unlock_snapshot() -> Dictionary:
 	var saved_specter_levels: Dictionary = {}
 	for key in specter_levels.keys():
 		saved_specter_levels[String(key)] = clampi(int(specter_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
+	var unread_content: Array = []
+	for unread_id in content_unread_ids.keys():
+		if bool(content_unread_ids[unread_id]):
+			unread_content.append(String(unread_id))
+	unread_content.sort()
 	return RTPlayerProgressSync.compact_snapshot({
 		"version": 2,
 		"unlocked": unlocked,
 		"unlocked_manifestations": unlocked_manifestations,
 		"unlocked_specters": unlocked_specters,
 		"specter_levels": saved_specter_levels,
+		"content_unread": unread_content,
 		"spectral_coins": maxi(0, persistent_spectral_coins),
 		"progress": progress,
 		"veteran_unlock_sync_version_code": card_unlock_veteran_synced_version_code
@@ -901,6 +971,10 @@ func _player_progress_install_secret() -> String:
 	if player_progress_install_secret == "":
 		player_progress_install_secret = _load_or_create_player_progress_install_secret()
 	return player_progress_install_secret
+
+
+func _player_progress_device_id() -> String:
+	return RTPlayerProgressSync.device_id_from_install_secret(_player_progress_install_secret())
 
 
 func _read_trusted_player_progress_cache() -> Dictionary:
@@ -943,6 +1017,15 @@ func _apply_player_progress_snapshot(snapshot: Variant, notify_unlocks: bool, re
 	var loaded_levels: Dictionary = data.get("specter_levels", {})
 	for key in loaded_levels.keys():
 		specter_levels[String(key)] = clampi(int(loaded_levels[key]), 1, AuraSystem.RUN_MAX_LEVEL)
+	# Older profiles have no field and stay quiet: only fresh unlock/upgrade
+	# events create a badge.  Do not erase device-local unread state when an
+	# older relay snapshot cannot represent it yet.
+	if data.has("content_unread"):
+		content_unread_ids.clear()
+		for unread_id in data.get("content_unread", []):
+			var stable_id := String(unread_id).strip_edges()
+			if stable_id != "":
+				content_unread_ids[stable_id] = true
 	persistent_spectral_coins = maxi(0, int(data.get("spectral_coins", data.get("persistent_spectral_coins", persistent_spectral_coins))))
 	spectral_coins = persistent_spectral_coins
 	var progress: Dictionary = data.get("progress", {})
@@ -954,6 +1037,66 @@ func _apply_player_progress_snapshot(snapshot: Variant, notify_unlocks: bool, re
 	player_progress_applying_snapshot = false
 
 
+func _apply_remote_player_progress_snapshot(snapshot: Variant, notify_unlocks: bool) -> bool:
+	if not snapshot is Dictionary:
+		return false
+	var remote_version := maxi(0, int(Dictionary(snapshot).get("version", 0)))
+	if remote_version > 0 and remote_version < player_progress_remote_snapshot_version:
+		player_progress_sync_status = "sync_stale_snapshot"
+		return false
+	player_progress_remote_snapshot_version = maxi(player_progress_remote_snapshot_version, remote_version)
+	var remote_confirmed_at := String(Dictionary(snapshot).get("updated_at", "")).strip_edges()
+	if remote_confirmed_at != "":
+		player_progress_last_remote_confirmation = remote_confirmed_at
+	_apply_player_progress_snapshot(snapshot, notify_unlocks, true)
+	return true
+
+
+func _content_unread_id(section: String, key: String) -> String:
+	var safe_section := section.strip_edges().to_lower()
+	var safe_key := key.strip_edges().to_lower()
+	return "%s:%s" % [safe_section, safe_key] if safe_section != "" and safe_key != "" else ""
+
+
+func _queue_content_unread(section: String, key: String) -> void:
+	var stable_id := _content_unread_id(section, key)
+	if stable_id == "" or bool(content_unread_ids.get(stable_id, false)):
+		return
+	content_unread_ids[stable_id] = true
+	_mark_card_unlocks_dirty()
+
+
+func _content_is_unread(section: String, key: String) -> bool:
+	return bool(content_unread_ids.get(_content_unread_id(section, key), false))
+
+
+func _content_section_has_unread(section: String) -> bool:
+	var prefix := section.strip_edges().to_lower() + ":"
+	for stable_id in content_unread_ids.keys():
+		if bool(content_unread_ids[stable_id]) and String(stable_id).begins_with(prefix):
+			return true
+	return false
+
+
+func _mark_content_seen(section: String, key: String) -> void:
+	var stable_id := _content_unread_id(section, key)
+	if stable_id == "" or not bool(content_unread_ids.get(stable_id, false)):
+		return
+	content_unread_ids.erase(stable_id)
+	_mark_card_unlocks_dirty()
+
+
+func _catalog_mark_current_item_seen() -> void:
+	var items: Array = _catalog_items()
+	if items.is_empty():
+		return
+	var item: Dictionary = Dictionary(items[clampi(catalog_selected, 0, items.size() - 1)])
+	var kind := _catalog_item_kind(item)
+	if kind not in ["manifestation", "spectrum"] or _catalog_item_locked(item):
+		return
+	_mark_content_seen("catalog_" + kind, String(item.get("key", item.get("id", ""))))
+
+
 func _mark_card_unlocks_dirty() -> void :
 	save_controller._mark_card_unlocks_dirty()
 
@@ -961,10 +1104,12 @@ func _mark_card_unlocks_dirty() -> void :
 func _queue_player_progress_event(event: Dictionary) -> void:
 	if event.is_empty() or dedicated_server_mode:
 		return
+	if player_progress_pending_events.size() >= RTPlayerProgressSync.MAX_PENDING_EVENTS:
+		player_progress_quarantined_events.append({"event": event.duplicate(true), "reason": "queue_capacity", "at": int(Time.get_unix_time_from_system())})
+		player_progress_sync_status = "queue_full"
+		_mark_card_unlocks_dirty()
+		return
 	player_progress_pending_events.append(event.duplicate(true))
-	if player_progress_pending_events.size() > RTPlayerProgressSync.MAX_PENDING_EVENTS:
-		var overflow: int = player_progress_pending_events.size() - RTPlayerProgressSync.MAX_PENDING_EVENTS
-		player_progress_pending_events = player_progress_pending_events.slice(overflow)
 	player_progress_sync_timer = 0.35
 	_mark_card_unlocks_dirty()
 
@@ -980,6 +1125,7 @@ func _queue_player_progress_unlock_event(metric: String, amount: float, max_mode
 	var event := RTPlayerProgressSync.unlock_progress_event(
 		player_profile_id,
 		_next_player_progress_event_sequence(),
+		_player_progress_device_id(),
 		metric,
 		amount,
 		max_mode,
@@ -994,6 +1140,7 @@ func _queue_player_progress_spectral_core_event(amount: int, source_type: String
 	var event := RTPlayerProgressSync.spectral_core_event(
 		player_profile_id,
 		_next_player_progress_event_sequence(),
+		_player_progress_device_id(),
 		amount,
 		source_type,
 		current_phase,
@@ -1008,6 +1155,7 @@ func _queue_player_progress_specter_upgrade_event(specter_key: String, target_le
 	var event := RTPlayerProgressSync.specter_upgrade_event(
 		player_profile_id,
 		_next_player_progress_event_sequence(),
+		_player_progress_device_id(),
 		specter_key,
 		target_level,
 		cost,
@@ -1166,6 +1314,9 @@ func _specter_upgrade_effect_lines() -> Array:
 	var next_level: = mini(AuraSystem.RUN_MAX_LEVEL, current_level + 1)
 	if current_level >= AuraSystem.RUN_MAX_LEVEL:
 		return ["Ascensao completa: nivel 10 atingido.", "Este espectro ja esta no limite da run."]
+	var concrete_lines: Array = AuraSystem.progression_delta_lines(key, current_level, next_level)
+	if not concrete_lines.is_empty():
+		return concrete_lines
 	var lines: Array = []
 	match key:
 		"racional":
@@ -1270,6 +1421,8 @@ func _confirm_specter_upgrade() -> void:
 	spectral_coins_spent += cost
 	var new_level: = current_level + 1
 	_set_specter_level(key, new_level)
+	_queue_content_unread("specter", key)
+	_queue_content_unread("catalog_spectrum", key)
 	_queue_player_progress_specter_upgrade_event(key, new_level, cost)
 	if _spectrum_key(selected_aura) == key:
 		var previous_last_pos: Vector2 = Vector2(aura_state.get("last_pos", player_pos))
@@ -1278,7 +1431,7 @@ func _confirm_specter_upgrade() -> void:
 		_apply_aura_events(AuraSystem.apply_run_upgrade(aura_state, new_level))
 	_save_card_unlocks()
 	_rt_adopt_current_state("specter_upgrade")
-	specter_upgrade_message = "%s nivel %d." % [_current_specter_name(), new_level]
+	specter_upgrade_message = "%s // %s" % [_current_specter_name().to_upper(), AuraSystem.progression_unlock_message(key, new_level)]
 	_play_sfx("notion.mp3", 0.04, 0.62, 1.0)
 
 
@@ -1488,6 +1641,9 @@ func _unlock_manifestation_by_key_state(key: String, notify: = true) -> bool:
 	if manifestation.is_empty():
 		return false
 	unlocked_manifestation_ids[key] = true
+	if notify:
+		_queue_content_unread("manifestation", key)
+		_queue_content_unread("catalog_manifestation", key)
 	if key == "retornante":
 		retornante_unlocked = true
 		_save_config()
@@ -1508,6 +1664,9 @@ func _unlock_spectrum_by_key_state(key: String, notify: = true) -> bool:
 	if aura.is_empty():
 		return false
 	unlocked_spectrum_ids[key] = true
+	if notify:
+		_queue_content_unread("specter", key)
+		_queue_content_unread("catalog_spectrum", key)
 	if notify:
 		_queue_unlock_spectrum_notification(aura, _spectrum_unlock_challenge_text(key))
 	_mark_card_unlocks_dirty()
@@ -2547,6 +2706,7 @@ func _finalize_run_report(result: String) -> void :
 	if run_finalized_result != "":
 		return
 	run_finalized_result = result
+	umbra_memory_controller.finish_run(boss5_multihead_policy)
 	_stop_qa_streaming(result)
 	_clear_interrupted_run_save()
 	if run_report_sent or run_report_in_flight:
@@ -3404,13 +3564,24 @@ func recover_player_progress_with_code(recovery_code: String) -> bool:
 	player_progress_claim_recovery_code = _sanitize_profile_secret(recovery_code)
 	if player_progress_claim_recovery_code == "":
 		return false
+	player_progress_identity_creation_confirmed = true
 	return _start_player_progress_identity_request("claim")
+
+
+func create_new_player_progress_identity() -> bool:
+	if player_identity_auth_token != "":
+		return false
+	player_progress_identity_creation_confirmed = true
+	return _start_player_progress_identity_request("create")
 
 
 func _update_player_progress_sync(delta: float) -> void:
 	if dedicated_server_mode or not _app_update_supported() or mode == "nick_setup":
 		return
 	if player_identity_auth_token == "":
+		if not player_progress_identity_creation_confirmed:
+			player_progress_sync_status = "identity_choice_required"
+			return
 		if not player_progress_identity_in_flight:
 			_start_player_progress_identity_request("create")
 		return
@@ -3437,7 +3608,11 @@ func _start_player_progress_identity_request(kind: String) -> bool:
 	if kind == "claim":
 		path = PLAYER_IDENTITY_CLAIM_PATH
 		payload["recovery_code"] = player_progress_claim_recovery_code
-	var url := ONLINE_RELAY_BASE_URL + path
+	var url := _player_progress_api_url(path)
+	if url == "":
+		player_progress_identity_in_flight = false
+		player_progress_identity_request_kind = ""
+		return false
 	var err := player_progress_identity_request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(payload))
 	if err != OK:
 		player_progress_identity_in_flight = false
@@ -3461,7 +3636,10 @@ func _start_player_progress_event_sync() -> bool:
 		"version_code": GAME_VERSION_CODE,
 		"events": player_progress_pending_events
 	}
-	var url := ONLINE_RELAY_BASE_URL + PLAYER_UNLOCK_EVENTS_PATH
+	var url := _player_progress_api_url(PLAYER_UNLOCK_EVENTS_PATH)
+	if url == "":
+		player_progress_sync_in_flight = false
+		return false
 	var err := player_progress_sync_request.request(url, ["Content-Type: application/json"], HTTPClient.METHOD_POST, JSON.stringify(payload))
 	if err != OK:
 		player_progress_sync_in_flight = false
@@ -3489,14 +3667,14 @@ func _on_player_progress_identity_completed(result: int, response_code: int, _he
 		return
 	player_profile_id = player_id
 	player_identity_auth_token = auth_token
+	var identity_kind := player_progress_identity_request_kind
 	var recovery_code := _sanitize_profile_secret(String(payload.get("recovery_code", "")))
-	if recovery_code == "" and player_progress_identity_request_kind == "claim":
-		recovery_code = player_progress_claim_recovery_code
-	if recovery_code != "":
-		player_identity_recovery_code = recovery_code
+	# The code exists only long enough to show/copy after creation. A code from a
+	# claim is never retained in a profile/cache on the recovered device.
+	player_identity_recovery_code = recovery_code if identity_kind == "create" else ""
 	player_progress_claim_recovery_code = ""
 	player_progress_identity_request_kind = ""
-	_apply_player_progress_snapshot(payload.get("unlocks", {}), false, true)
+	_apply_remote_player_progress_snapshot(payload.get("unlocks", {}), false)
 	_save_player_profile()
 	_save_card_unlocks()
 	player_progress_sync_timer = 0.25
@@ -3519,20 +3697,63 @@ func _on_player_progress_sync_completed(result: int, response_code: int, _header
 		accepted_ids[String(event_id)] = true
 	for event_id in payload.get("duplicate_event_ids", []):
 		accepted_ids[String(event_id)] = true
-	for event_id in payload.get("rejected_event_ids", []):
-		accepted_ids[String(event_id)] = true
-	if not accepted_ids.is_empty():
+	var rejected_by_id := {}
+	for item in payload.get("rejected_events", []):
+		if item is Dictionary:
+			var rejected: Dictionary = item
+			rejected_by_id[String(rejected.get("event_id", ""))] = String(rejected.get("reason", "rejected"))
+	if not accepted_ids.is_empty() or not rejected_by_id.is_empty():
 		var remaining: Array = []
 		for event in player_progress_pending_events:
 			if not event is Dictionary:
 				continue
-			if not accepted_ids.has(String(Dictionary(event).get("event_id", ""))):
+			var pending: Dictionary = event
+			var event_id := String(pending.get("event_id", ""))
+			if rejected_by_id.has(event_id):
+				player_progress_quarantined_events.append({"event": pending.duplicate(true), "reason": rejected_by_id[event_id], "at": int(Time.get_unix_time_from_system())})
+			elif not accepted_ids.has(event_id):
 				remaining.append(event)
 		player_progress_pending_events = remaining
-	_apply_player_progress_snapshot(payload.get("unlocks", {}), false, true)
+	if not rejected_by_id.is_empty():
+		player_progress_sync_status = "sync_rejected"
+	_apply_remote_player_progress_snapshot(payload.get("unlocks", {}), false)
 	_save_card_unlocks()
 	player_progress_sync_timer = PLAYER_PROGRESS_SYNC_INTERVAL
-	player_progress_sync_status = "synced"
+	if rejected_by_id.is_empty():
+		player_progress_sync_status = "synced"
+
+
+func _player_progress_api_url(path: String) -> String:
+	var base := ONLINE_RELAY_BASE_URL.strip_edges().trim_suffix("/")
+	if not base.begins_with("https://"):
+		player_progress_sync_status = "insecure_transport"
+		return ""
+	return base + path
+
+
+func _player_progress_status_label() -> String:
+	match player_progress_sync_status:
+		"synced": return "SINCRONIZADO"
+		"identity_ready": return "IDENTIDADE CONFIRMADA"
+		"recovering": return "RECUPERANDO..."
+		"creating_identity": return "CRIANDO PERFIL..."
+		"identity_choice_required": return "ESCOLHA RECUPERAR OU CRIAR"
+		"queue_full": return "FILA OFFLINE CHEIA"
+		"sync_rejected": return "EVENTOS EM REVISÃO"
+		"sync_stale_snapshot": return "SNAPSHOT ANTIGO RECUSADO"
+		"insecure_transport": return "SERVIDOR AINDA SEM HTTPS"
+		"identity_unavailable", "sync_unavailable": return "OFFLINE — PENDENTE"
+		"recovery_code_copied": return "CÓDIGO COPIADO"
+		"recovery_code_required": return "INFORME O CÓDIGO"
+		_: return "PENDENTE" if player_identity_auth_token == "" else "CONECTANDO"
+
+
+func _player_progress_menu_hint() -> String:
+	if player_identity_auth_token == "":
+		return "Recupere ou proteja seu perfil"
+	if not player_progress_pending_events.is_empty():
+		return "%d evento(s) aguardando servidor" % player_progress_pending_events.size()
+	return _player_progress_status_label().capitalize()
 
 
 func _on_app_update_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void :
@@ -5762,6 +5983,7 @@ func _play_phase3_music_random() -> void :
 
 func _go_to_menu() -> void :
 	_save_interrupted_run(true)
+	_clear_boss_reward_reveal()
 	_stop_qa_streaming("menu")
 	_stop_battle_music_for_screen_transition()
 	mode = "menu"
@@ -6089,6 +6311,7 @@ func _reset_card_proc_state() -> void :
 
 func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
+	umbra_memory_controller.begin_run(is_multiplayer, multiplayer.get_unique_id(), boss5_multihead_policy)
 	sineiro_boreal_controller.reset_for_new_run()
 	amber_suturer_controller.reset_for_new_run()
 	_stop_boss1_stop_audio_context(true)
@@ -6103,6 +6326,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	spectral_coins = persistent_spectral_coins
 	game_time = 0.0
 	time_alive = 0.0
+	_clear_boss_reward_reveal()
 	score = 0
 	score_total = 0
 	unlock_notifications.clear()
@@ -6293,6 +6517,8 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	boss_entry_timer = 0.0
 	boss_stage_timer = 0.0
 	boss_stage_duration = BOSS_STAGE_JUMP_TIME
+	Boss1AnimationPresentation.reset(self)
+	Boss3AnimationPresentation.reset(self)
 	boss_stage_approaching = false
 	boss_stage_60_done = false
 	boss_stage_40_done = false
@@ -7025,6 +7251,7 @@ func _reset_boss7_state() -> void:
 func _reset_phase3_state() -> void :
 	phase3_miasma_zones.clear()
 	phase3_cheeses.clear()
+	Boss3AnimationPresentation.reset(self)
 	boss3_faith = 50.0
 	boss3_stage = 1
 	boss3_stun_timer = 0.0
@@ -7046,6 +7273,8 @@ func _reset_phase3_state() -> void :
 	boss3_miasma_variant_bag.clear()
 	boss3_miasma_clone_timer = 0.0
 	boss3_miasma_clone_positions.clear()
+	boss3_miasma_clone_reveal_timer = 0.0
+	boss3_miasma_clone_mislead_timer = 0.0
 	boss3_miasma_spit_timer = 0.0
 	boss3_miasma_qte_required = 0
 	boss3_miasma_qte_taps = 0
@@ -7103,6 +7332,10 @@ func _reset_phase4_state() -> void :
 
 
 func _reset_phase5_state() -> void :
+	if current_phase == 5:
+		umbra_memory_controller.begin_encounter(boss5_multihead_policy)
+	umbra_authority_controller.reset()
+	boss5_authoritative_decision.clear()
 	phase5_player_history.clear()
 	phase5_history_sample_timer = 0.0
 	phase5_hazards.clear()
@@ -7225,6 +7458,7 @@ func _load_umbra_mobile_memory() -> void :
 	if boss5_memory_loaded:
 		return
 	boss5_memory_loaded = true
+	boss5_neural_runtime = null
 	boss5_mobile_weights.clear()
 	for action in BOSS5_ACTIONS:
 		boss5_mobile_weights[action] = 0.0
@@ -7238,6 +7472,11 @@ func _load_umbra_mobile_memory() -> void :
 			push_error("UMBRA_MIND: rejected DQN weights at %s: %s" % [BOSS5_DQN_WEIGHTS_PATH, dqn_contract_error])
 			boss5_dqn_weights.clear()
 		else:
+			boss5_neural_runtime = UmbraNeuralRuntime.create(boss5_dqn_weights, BOSS5_ACTIONS, BOSS5_DQN_FEATURES, BOSS5_DQN_MODEL_VERSION, BOSS5_DQN_ACTION_SCHEMA_VERSION, BOSS5_DQN_FEATURE_SCHEMA_VERSION)
+			if boss5_neural_runtime == null:
+				push_error("UMBRA_MIND: rejected DQN runtime at %s" % BOSS5_DQN_WEIGHTS_PATH)
+				boss5_dqn_weights.clear()
+				return
 			print("UMBRA_MIND: DQN weights loaded successfully. model=%s inputs=%d outputs=%d" % [String(boss5_dqn_weights.get("model_version", "")), BOSS5_DQN_FEATURES.size(), BOSS5_ACTIONS.size()])
 	var learned: = _read_json_dict(BOSS5_MEMORY_USER)
 	if learned.has("weights") and learned["weights"] is Dictionary:
@@ -7263,6 +7502,8 @@ func _read_json_dict(path: String) -> Dictionary:
 
 
 func _umbra_dqn_contract_error(weights: Dictionary) -> String:
+	if weights.has("format"):
+		return UmbraNeuralRuntime.contract_error(weights, BOSS5_ACTIONS, BOSS5_DQN_FEATURES, BOSS5_DQN_MODEL_VERSION, BOSS5_DQN_ACTION_SCHEMA_VERSION, BOSS5_DQN_FEATURE_SCHEMA_VERSION)
 	return UmbraDqnContract.contract_error(
 		weights,
 		BOSS5_ACTIONS,
@@ -8420,6 +8661,7 @@ func _process(delta: float) -> void :
 	if vfx_director:
 		vfx_director.set_particles_enabled(gfx_particles)
 		vfx_director.update(delta)
+	_update_boss_reward_reveal(delta)
 	if boss_active:
 		if boss_hp_lag < 0.0:
 			boss_hp_lag = boss_hp
@@ -8775,6 +9017,8 @@ func _update_game(delta: float) -> void :
 		next_forced_shop_time = max(0.0, shop_auto_interval - shop_auto_elapsed)
 	screen_shake_timer = max(0.0, screen_shake_timer - delta)
 	damage_flash_timer = max(0.0, damage_flash_timer - delta)
+	Boss1AnimationPresentation.update(self, delta)
+	Boss3AnimationPresentation.update(self, delta)
 	_update_low_health_heartbeat(delta)
 	_update_player_start_down_intro(delta)
 	secondary_drain_flash_timer = max(0.0, secondary_drain_flash_timer - delta)
@@ -8950,7 +9194,7 @@ func _update_aura(delta: float) -> void :
 		for key in ["aura_null", "aura_wound", "aura_prophecy"]:
 			if float(enemy.get(key, 0.0)) > 0.0:
 				enemy[key] = max(0.0, float(enemy[key]) - delta)
-		if String(aura_state.get("name", "")) == "Vanguarda" and float(aura_state.get("vanguard_ring", 0.0)) > 0.0 and player_pos.distance_to(Vector2(enemy["pos"])) <= 150.0:
+		if String(aura_state.get("name", "")) == "Vanguarda" and float(aura_state.get("vanguard_ring", 0.0)) > 0.0 and player_pos.distance_to(Vector2(enemy["pos"])) <= AuraSystem.vanguard_ring_radius(aura_state):
 			enemy["aura_burn"] = 5.0 + int(aura_state.get("level", 0))
 			enemy["aura_burn_tick"] = min(float(enemy.get("aura_burn_tick", 0.0)), 0.12)
 	_update_voracious_contact(delta)
@@ -10158,11 +10402,18 @@ func _set_player_attack_visual_dir(direction: Vector2) -> void:
 
 
 func _nearest_target() -> Vector2:
+	if _bargain_capsule_vulnerable():
+		var capsule_pos: Vector2 = Vector2(bargain_capsule.get("pos", player_pos))
+		if _pos_in_auto_attack_range(capsule_pos):
+			return capsule_pos
 	var locked_pos = _locked_attack_target_pos()
 	if locked_pos != Vector2.ZERO:
 		return locked_pos
+	var clone_target: Vector2 = _boss3_auto_target_clone_pos()
 	var best_enemy = _auto_target_enemy()
 	if not best_enemy.is_empty():
+		if clone_target != Vector2.ZERO and auto_target_priority == "nearest" and player_pos.distance_squared_to(clone_target) < player_pos.distance_squared_to(best_enemy["pos"]):
+			return clone_target
 		if auto_target_priority == "nearest" and _boss_available_for_auto_target():
 			var enemy_distance = player_pos.distance_squared_to(best_enemy["pos"])
 			if _pos_in_auto_attack_range(boss_pos) and player_pos.distance_squared_to(boss_pos) < enemy_distance:
@@ -10172,6 +10423,8 @@ func _nearest_target() -> Vector2:
 			if player_pos.distance_squared_to(Vector2(arauto["pos"])) < enemy_distance:
 				return Vector2(arauto["pos"])
 		return best_enemy["pos"]
+	if clone_target != Vector2.ZERO:
+		return clone_target
 	if _boss_available_for_auto_target() and _pos_in_auto_attack_range(boss_pos):
 		return boss_pos
 	if _arauto_active() and _pos_in_auto_attack_range(Vector2(arauto["pos"])):
@@ -10185,8 +10438,24 @@ func _boss_available_for_auto_target() -> bool:
 	if current_phase == 2 and boss2_ultimate_timer > 0.0 and not _boss2_ultimate_boss_visible():
 		return false
 	if current_phase == 3 and _boss3_miasma_active():
-		return false
+		return boss3_miasma_variant == 1 and boss3_miasma_clone_reveal_timer > 0.0
 	return true
+
+
+func _boss3_auto_target_clone_pos() -> Vector2:
+	if current_phase != 3 or not _boss3_miasma_active() or boss3_miasma_variant != 1 or boss3_miasma_clone_reveal_timer > 0.0 or boss3_miasma_clone_mislead_timer > 0.0:
+		return Vector2.ZERO
+	var nearest: Vector2 = Vector2.ZERO
+	var nearest_distance: float = INF
+	for clone_pos_data in boss3_miasma_clone_positions:
+		var clone_pos: Vector2 = Vector2(clone_pos_data)
+		if not _pos_in_auto_attack_range(clone_pos):
+			continue
+		var distance: float = player_pos.distance_squared_to(clone_pos)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = clone_pos
+	return nearest
 
 
 func _locked_attack_target_pos() -> Vector2:
@@ -10196,7 +10465,7 @@ func _locked_attack_target_pos() -> Vector2:
 			return Vector2(enemy["pos"])
 	elif locked_target_kind == "arauto" and _arauto_active():
 		return Vector2(arauto["pos"])
-	elif locked_target_kind == "boss" and boss_active and boss_hp > 0.0:
+	elif locked_target_kind == "boss" and _boss_available_for_auto_target():
 		return boss_pos
 	elif locked_target_kind == "cheese":
 		var cheese = _boss3_cheese_by_uid(locked_target_uid)
@@ -10210,7 +10479,7 @@ func _validate_attack_lock() -> void :
 		_clear_attack_lock()
 	elif locked_target_kind == "arauto" and not _arauto_active():
 		_clear_attack_lock()
-	elif locked_target_kind == "boss" and ( not boss_active or boss_hp <= 0.0):
+	elif locked_target_kind == "boss" and not _boss_available_for_auto_target():
 		_clear_attack_lock()
 	elif locked_target_kind == "cheese" and _boss3_cheese_by_uid(locked_target_uid).is_empty():
 		_clear_attack_lock()
@@ -16565,7 +16834,8 @@ func _clear_enemies_for_arauto_entry() -> void:
 		if not (enemy is Dictionary):
 			continue
 		var enemy_data: Dictionary = enemy
-		if String(enemy_data.get("type", "")) == ENEMY_LARAPIO and float(enemy_data.get("hp", 0.0)) > 0.0:
+		var enemy_type: String = String(enemy_data.get("type", ""))
+		if enemy_type in [ENEMY_LARAPIO, ENEMY_AMBER_SUTURER, ENEMY_AMBER_SUTURE_NODE] and float(enemy_data.get("hp", 0.0)) > 0.0:
 			kept.append(enemy_data)
 			continue
 		_spawn_enemy_desfragmentation(Vector2(enemy_data.get("pos", player_pos)), _enemy_shard_color(enemy_data), 8)
@@ -16592,9 +16862,15 @@ func _spawn_aguilhao_arauto(pos: Vector2) -> void :
 		"last_ability": "",
 		"charge_dir": Vector2.RIGHT,
 		"charge_target": pos + Vector2.RIGHT * 420.0,
+		"charge_target_peer": 0,
+		"charge_leg": 1,
+		"charge_chain_remaining": 0,
 		"charge_hit_local": false,
+		"charge_hit_peers": {},
 		"pulse_stage": 0,
+		"pulse_targets": [],
 		"seed_spots": [],
+		"ability_sequence": 0,
 		"aguilhao_vulnerable": 0.0
 	}
 	arauto_spawned = true
@@ -16814,6 +17090,7 @@ func _update_aguilhao_arauto(delta: float) -> void :
 				arauto["state"] = "charge"
 				arauto["state_timer"] = AGUILHAO_CHARGE_DURATION
 				arauto["charge_hit_local"] = false
+				arauto["charge_hit_peers"] = {}
 			return
 		"charge":
 			_update_aguilhao_charge(delta, phase2)
@@ -16882,20 +17159,49 @@ func _choose_aguilhao_ability(phase2: bool) -> void :
 		_start_aguilhao_seed(phase2)
 
 
-func _start_aguilhao_charge(phase2: bool) -> void :
+func _aguilhao_charge_target(excluded_peer_id: int = -1) -> Dictionary:
+	var targets: Array = _combat_targets()
+	if targets.size() > 1 and excluded_peer_id >= 0:
+		for target_value in targets:
+			var target: Dictionary = target_value
+			if int(target.get("peer_id", -1)) != excluded_peer_id:
+				arauto_target_peer_id = int(target.get("peer_id", 0))
+				arauto_target_switch_timer = 2.0
+				return target
+	return _arauto_target_entry(true)
+
+
+func _start_aguilhao_charge(phase2: bool, chained: bool = false, excluded_peer_id: int = -1) -> void :
 	var pos: = Vector2(arauto.get("pos", player_pos))
-	var target: = _arauto_target_entry(true)
+	var target: = _aguilhao_charge_target(excluded_peer_id)
 	var target_pos: = Vector2(target.get("pos", player_pos))
 	var dir: = (target_pos - pos).normalized()
 	if dir.length() <= 0.05:
 		dir = Vector2.RIGHT * float(arauto.get("facing", 1.0))
 	arauto["state"] = "charge_windup"
-	arauto["state_timer"] = AGUILHAO_CHARGE_WINDUP_PHASE2 if phase2 else AGUILHAO_CHARGE_WINDUP
+	arauto["state_timer"] = AGUILHAO_CHARGE_CHAIN_WINDUP if chained else AGUILHAO_CHARGE_WINDUP_PHASE2 if phase2 else AGUILHAO_CHARGE_WINDUP
 	arauto["charge_dir"] = dir
 	arauto["charge_target"] = (pos + dir * 780.0).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+	arauto["charge_target_peer"] = int(target.get("peer_id", _mp_unique_id()))
+	arauto["charge_leg"] = 2 if chained else 1
+	if not chained:
+		arauto["charge_chain_remaining"] = 1 if phase2 else 0
+	arauto["charge_hit_local"] = false
+	arauto["charge_hit_peers"] = {}
+	arauto["ability_sequence"] = int(arauto.get("ability_sequence", 0)) + 1
 	arauto["charge_cd"] = AGUILHAO_CHARGE_COOLDOWN_PHASE2 if phase2 else AGUILHAO_CHARGE_COOLDOWN
 	arauto["last_ability"] = "charge"
 	arauto["facing"] = 1.0 if dir.x >= 0.0 else -1.0
+	_add_text("SEGUNDA PERFURACAO" if chained else "PERFURACAO MARCADA", pos + Vector2(-92, -104), Color(0.82, 1.0, 0.3), 0.72, 16)
+
+
+func _finish_aguilhao_charge(phase2: bool, recovery: float) -> void:
+	var remaining: int = int(arauto.get("charge_chain_remaining", 0))
+	if phase2 and remaining > 0:
+		arauto["charge_chain_remaining"] = remaining - 1
+		_start_aguilhao_charge(true, true, int(arauto.get("charge_target_peer", -1)))
+		return
+	_set_aguilhao_recovery(recovery)
 
 
 func _update_aguilhao_charge(delta: float, phase2: bool) -> void :
@@ -16916,14 +17222,16 @@ func _update_aguilhao_charge(delta: float, phase2: bool) -> void :
 		boss_wave_slow_timer = max(boss_wave_slow_timer, 1.15)
 		_damage_player(int(player_hp_max * AGUILHAO_CHARGE_DAMAGE_RATE + enemy_close_damage * 0.45), "aguilhao_charge")
 		_add_text("CHAGA PERFURANTE", player_pos + Vector2(-78, -82), Color(0.64, 1.0, 0.24), 0.85, 18)
-	_damage_remote_player_on_segment(pos, next, AGUILHAO_CHARGE_HIT_WIDTH, int(player_hp_max * AGUILHAO_CHARGE_DAMAGE_RATE + enemy_close_damage * 0.45), "aguilhao_charge", arauto, "aguilhao_charge")
+	var remote_hits: Dictionary = arauto.get("charge_hit_peers", {})
+	_damage_remote_player_on_segment(pos, next, AGUILHAO_CHARGE_HIT_WIDTH, int(player_hp_max * AGUILHAO_CHARGE_DAMAGE_RATE + enemy_close_damage * 0.45), "aguilhao_charge", remote_hits, "peer")
+	arauto["charge_hit_peers"] = remote_hits
 	if _aguilhao_charge_hit_nodule(pos, next):
 		return
 	if next != intended:
-		_set_aguilhao_recovery(AGUILHAO_BOUNDARY_RECOVERY)
+		_finish_aguilhao_charge(phase2, AGUILHAO_BOUNDARY_RECOVERY)
 		return
 	if float(arauto.get("state_timer", 0.0)) <= 0.0:
-		_set_aguilhao_recovery(0.55)
+		_finish_aguilhao_charge(phase2, 0.55)
 
 
 func _aguilhao_charge_hit_nodule(a: Vector2, b: Vector2) -> bool:
@@ -16938,6 +17246,8 @@ func _aguilhao_charge_hit_nodule(a: Vector2, b: Vector2) -> bool:
 		arauto_echo_breaks.append({"pos": hit_pos, "life": 0.62, "max": 0.62, "phase": rng.randf_range(0.0, TAU), "color": Color(0.56, 1.0, 0.2)})
 		arauto["stun"] = AGUILHAO_CHARGE_NODE_STUN
 		arauto["aguilhao_vulnerable"] = AGUILHAO_CHARGE_NODE_STUN
+		arauto["charge_chain_remaining"] = 0
+		arauto["charge_hit_peers"] = {}
 		arauto["state"] = "idle"
 		_add_text("NODULO RASGADO", hit_pos + Vector2(-70, -66), Color(0.7, 1.0, 0.26), 0.95, 17)
 		_add_text("AGUILHAO EXPOSTO", Vector2(arauto["pos"]) + Vector2(-86, -96), Color(1.0, 0.92, 0.26), 0.95, 18)
@@ -16948,14 +17258,19 @@ func _aguilhao_charge_hit_nodule(a: Vector2, b: Vector2) -> bool:
 
 func _start_aguilhao_seed(phase2: bool) -> void :
 	var spots: Array = []
-	var target: = _arauto_target_entry(true)
-	var target_pos: = Vector2(target.get("pos", player_pos))
 	var threat_limit: = AGUILHAO_SEED_LIMIT_PHASE2 if phase2 else AGUILHAO_SEED_LIMIT
-	var count: = mini(2, maxi(0, threat_limit - _count_aguilhao_threats()))
+	var targets: Array = _combat_targets()
+	if targets.is_empty():
+		targets.append({"peer_id": _mp_unique_id(), "pos": player_pos})
+	var available: int = maxi(0, threat_limit - _count_aguilhao_threats())
+	var count: int = mini(available, 2 if targets.size() == 1 else targets.size())
+	var start_index: int = posmod(arauto_target_cursor + 1, targets.size())
 	for i in range(count):
-		var angle: = rng.randf_range(0.0, TAU)
+		var target: Dictionary = targets[(start_index + i) % targets.size()]
+		var target_pos: Vector2 = Vector2(target.get("pos", player_pos))
+		var angle: float = rng.randf_range(0.0, TAU)
 		var spot: = (target_pos + Vector2.from_angle(angle) * rng.randf_range(96.0, 172.0)).clamp(Vector2(65, 65), WORLD_SIZE - Vector2(65, 65))
-		spots.append(spot)
+		spots.append({"pos": spot, "peer_id": int(target.get("peer_id", _mp_unique_id()))})
 	arauto["seed_spots"] = spots
 	arauto["state"] = "seed"
 	arauto["state_timer"] = AGUILHAO_SEED_WARNING
@@ -16965,11 +17280,12 @@ func _start_aguilhao_seed(phase2: bool) -> void :
 
 func _resolve_aguilhao_seed(phase2: bool) -> void :
 	var threat_limit: = AGUILHAO_SEED_LIMIT_PHASE2 if phase2 else AGUILHAO_SEED_LIMIT
-	for spot in Array(arauto.get("seed_spots", [])):
+	for spot_value in Array(arauto.get("seed_spots", [])):
 		if _count_aguilhao_threats() >= threat_limit:
 			break
+		var spot: Vector2 = Vector2(spot_value.get("pos", player_pos)) if spot_value is Dictionary else Vector2(spot_value)
 		var before: = enemies.size()
-		_spawn_enemy(ENEMY_CHRONAL_LEECH, Vector2(spot))
+		_spawn_enemy(ENEMY_CHRONAL_LEECH, spot)
 		if enemies.size() <= before:
 			continue
 		var leech: Dictionary = enemies[enemies.size() - 1]
@@ -16980,35 +17296,63 @@ func _resolve_aguilhao_seed(phase2: bool) -> void :
 		leech["max_hp"] = float(leech["hp"])
 		leech["leech_timer"] = min(float(leech.get("leech_timer", SANGUESSUGA_FALL_WARNING_TIME)), 0.42)
 		leech["leech_life"] = min(float(leech.get("leech_life", SANGUESSUGA_DORMANT_TIME)), 12.0)
-		_add_text("SEMEADURA", Vector2(spot) + Vector2(-42, -56), Color(0.62, 1.0, 0.22), 0.72, 15)
+		_add_text("SEMEADURA", spot + Vector2(-42, -56), Color(0.62, 1.0, 0.22), 0.72, 15)
 	arauto["seed_spots"] = []
 
 
 func _start_aguilhao_pulse() -> void :
+	var targets: Array = []
+	for target_value in _combat_targets():
+		var target: Dictionary = target_value
+		targets.append({"peer_id": int(target.get("peer_id", _mp_unique_id())), "pos": Vector2(target.get("pos", player_pos))})
+	if targets.is_empty():
+		targets.append({"peer_id": _mp_unique_id(), "pos": player_pos})
 	arauto["state"] = "pulse"
 	arauto["state_timer"] = AGUILHAO_PULSE_WARNING
 	arauto["pulse_stage"] = 0
+	arauto["pulse_targets"] = targets
+	arauto["ability_sequence"] = int(arauto.get("ability_sequence", 0)) + 1
 	arauto["pulse_cd"] = AGUILHAO_PULSE_COOLDOWN
 	arauto["last_ability"] = "pulse"
+	_add_text("PULSO DE CACADA", Vector2(arauto.get("pos", player_pos)) + Vector2(-78, -104), Color(0.72, 1.0, 0.24), 0.78, 17)
 
 
 func _resolve_aguilhao_pulse(phase2: bool, stage: int) -> void :
-	var center: = Vector2(arauto.get("pos", player_pos))
 	var radius: = AGUILHAO_PULSE_RADIUS * (1.22 if phase2 and stage > 0 else 1.0)
 	var damage: = int(player_hp_max * AGUILHAO_PULSE_DAMAGE_RATE + enemy_close_damage * 0.32)
-	if _local_player_damageable_by_contact() and player_pos.distance_to(center) <= radius:
-		var dir: = (player_pos - center).normalized()
-		if dir.length() <= 0.05:
-			dir = Vector2.RIGHT
-		player_pos = _clamp_player_world(player_pos + dir * (64.0 + float(stage) * 22.0))
-		boss_wave_slow_timer = max(boss_wave_slow_timer, 0.95)
-		_damage_player(damage, "aguilhao_pulse")
-	_damage_remote_player_in_radius(center, radius, damage, "aguilhao_pulse")
-	shockwaves.append({"pos": center, "radius": 14.0, "max": radius, "life": 0.46, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.54, 1.0, 0.18)})
-	_spawn_radial_particles(center, Color(0.56, 1.0, 0.18), 24 + stage * 8)
+	var targets: Array = Array(arauto.get("pulse_targets", []))
+	if targets.is_empty():
+		targets.append({"peer_id": _mp_unique_id(), "pos": Vector2(arauto.get("pos", player_pos))})
+	for target_value in targets:
+		var target: Dictionary = target_value if target_value is Dictionary else {"peer_id": _mp_unique_id(), "pos": Vector2(target_value)}
+		var peer_id: int = int(target.get("peer_id", _mp_unique_id()))
+		var center: Vector2 = Vector2(target.get("pos", player_pos))
+		if peer_id == _mp_unique_id():
+			if _local_player_damageable_by_contact() and player_pos.distance_to(center) <= radius:
+				var dir: Vector2 = (player_pos - center).normalized()
+				if dir.length() <= 0.05:
+					dir = (player_pos - Vector2(arauto.get("pos", player_pos))).normalized()
+				if dir.length() <= 0.05:
+					dir = Vector2.RIGHT
+				player_pos = _clamp_player_world(player_pos + dir * (64.0 + float(stage) * 22.0))
+				boss_wave_slow_timer = max(boss_wave_slow_timer, AGUILHAO_PULSE_SLOW_DURATION)
+				_damage_player(damage, "aguilhao_pulse")
+		elif _peer_is_living_runner(peer_id):
+			var remote_pos: Vector2 = _arauto_target_pos(peer_id, Vector2(-10000.0, -10000.0))
+			if remote_pos.distance_to(center) <= radius:
+				_send_peer_damage(peer_id, damage, "aguilhao_pulse")
+				_request_peer_status(peer_id, "slow", AGUILHAO_PULSE_SLOW_DURATION)
+		shockwaves.append({"pos": center, "radius": 14.0, "max": radius, "life": 0.46, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.54, 1.0, 0.18)})
+		_spawn_radial_particles(center, Color(0.56, 1.0, 0.18), 18 + stage * 6)
 	if phase2 and stage == 0:
 		arauto["pulse_stage"] = 1
-		arauto["state_timer"] = 0.42
+		arauto["state_timer"] = AGUILHAO_PULSE_PHASE2_DELAY
+		var refreshed: Array = []
+		for target_value in _combat_targets():
+			var target: Dictionary = target_value
+			refreshed.append({"peer_id": int(target.get("peer_id", _mp_unique_id())), "pos": Vector2(target.get("pos", player_pos))})
+		if not refreshed.is_empty():
+			arauto["pulse_targets"] = refreshed
 		return
 	_set_aguilhao_recovery(0.48)
 
@@ -17017,6 +17361,9 @@ func _set_aguilhao_recovery(duration: float) -> void :
 	arauto["state"] = "recovery"
 	arauto["state_timer"] = duration
 	arauto["seed_spots"] = []
+	arauto["pulse_targets"] = []
+	arauto["charge_chain_remaining"] = 0
+	arauto["charge_hit_peers"] = {}
 
 
 func _arauto_eye_pos() -> Vector2:
@@ -20633,6 +20980,11 @@ func _update_bullets(delta: float) -> void :
 		if float(bullet["life"]) > 0.0 and _damage_phase3_cheeses_at(Vector2(bullet["pos"]), float(bullet["damage"]), 30.0):
 			if not bool(bullet["pierce"]):
 				bullet["life"] = 0.0
+		if float(bullet["life"]) > 0.0 and _register_boss3_clone_hit(Vector2(bullet["pos"])):
+			_play_projectile_hit_sfx(String(bullet.get("kind", "")))
+			_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
+			bullet["life"] = 0.0
+			continue
 		if float(bullet["life"]) > 0.0 and boss_active and boss_hp > 0.0 and bullet["pos"].distance_to(boss_pos) < _boss_hit_radius():
 			if not bullet["hits"].has("boss"):
 				bullet["hits"]["boss"] = true
@@ -21147,6 +21499,9 @@ func _update_return_bullets(delta: float) -> void :
 					_manifest_evolution_on_projectile_hit(bullet, {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"])}, Vector2(arauto["pos"]))
 		if time_alive >= float(bullet.get("cheese_hit_at", 0.0)) and _damage_phase3_cheeses_at(Vector2(bullet["pos"]), damage, 30.0):
 			bullet["cheese_hit_at"] = time_alive + 0.35
+		if _register_boss3_clone_hit(Vector2(bullet["pos"]), BOSS3_MIASMA_CLONE_HIT_RADIUS + 14.0):
+			bullet["age"] = 99.0
+			continue
 		var boss_hit_bonus = 14.0 if float(bullet.get("paradox_until", 0.0)) > time_alive or state == "instavel" else 0.0
 		if boss_active and boss_hp > 0.0 and bullet["pos"].distance_to(boss_pos) < _boss_hit_radius() + boss_hit_bonus:
 			if state == "instavel":
@@ -21562,6 +21917,13 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if release_boss_feed and _voraz_boss_feed_allowed(boss_hp_before - boss_hp, source, effective_source_category):
 		AuraSystem.on_boss_hit(aura_state, boss_pos, boss_hp_before - boss_hp)
 	var actual_boss_damage: float = boss_hp_before - boss_hp
+	if current_phase == 1 and actual_boss_damage > 0.0:
+		Boss1AnimationPresentation.trigger_hit(self, actual_boss_damage)
+	if current_phase == 3 and actual_boss_damage > 0.0:
+		Boss3AnimationPresentation.trigger_hit(self, actual_boss_damage, source)
+		if boss3_miasma_variant == 1:
+			boss3_miasma_clone_reveal_timer = maxf(boss3_miasma_clone_reveal_timer, BOSS3_MIASMA_CLONE_REVEAL_TIME)
+			boss3_miasma_clone_mislead_timer = 0.0
 	if current_phase == 5 and boss5_siphon_absorbed_pending > 0.0 and actual_boss_damage > 0.0:
 		var confirmed_siphon_basis: float = minf(boss5_siphon_absorbed_pending, actual_boss_damage)
 		_apply_boss5_siphon_heal(confirmed_siphon_basis * BOSS5_SIPHON_DAMAGE_HEAL_RATIO, "damage")
@@ -21614,6 +21976,10 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		collector_hud_pulse = 1.2
 		_add_text("COLETORA", boss_pos + Vector2(0, -116), Color(0.95, 0.08, 0.24), 1.4, 26)
 	if boss_hp <= 0.0 and not boss_dead:
+		if current_phase == 1:
+			Boss1AnimationPresentation.trigger_death(self)
+		elif current_phase == 3:
+			Boss3AnimationPresentation.trigger_death(self)
 		if is_multiplayer and _is_world_authority():
 			_confirm_card_unlock_progress_for_active_players("boss_kills", 1.0, false)
 		else:
@@ -21629,6 +21995,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		boss_fragilidade_cronal_timer = 0.0
 		boss_fragilidade_cronal_bonus = 0.0
 		if current_phase == 5:
+			umbra_memory_controller.end_encounter(boss5_multihead_policy)
 			_save_umbra_mobile_memory(true)
 		var common_reward_reference: = _points_for_enemy({"points": 75})
 		var reward: = int(round(float(common_reward_reference) * 2.5))
@@ -22045,9 +22412,44 @@ func _maybe_spawn_late_heal_orb(enemy: Dictionary, pos: Vector2) -> void :
 
 func _grant_boss_reward_cards(count: int, rare_slots: = BOSS_REWARD_RARE_COUNT) -> int:
 	var picked: = _pick_boss_reward_cards(count, rare_slots)
+	var granted_card_ids: Array[String] = []
 	for card in picked:
+		var card_id: String = _card_id(card)
+		var before_count: int = _card_count(card)
 		_apply_card(card)
+		if _card_count(card) > before_count:
+			granted_card_ids.append(card_id)
+	_present_boss_reward_cards(granted_card_ids, boss_pos)
 	return picked.size()
+
+
+func _present_boss_reward_cards(card_ids: Array, origin: Vector2) -> void:
+	if card_ids.is_empty() or online_local_spectator:
+		return
+	boss_reward_reveal_sequence += 1
+	boss_reward_reveal = {
+		"event_id": "boss_reward_%d_%d_%d" % [current_phase, boss_reward_reveal_sequence, int(round(time_alive * 1000.0))],
+		"recipient_peer_id": _mp_unique_id(),
+		"phase": current_phase,
+		"origin": origin,
+		"card_ids": card_ids.duplicate(),
+		"elapsed": 0.0
+	}
+
+
+func _update_boss_reward_reveal(delta: float) -> void:
+	if boss_reward_reveal.is_empty():
+		return
+	if int(boss_reward_reveal.get("recipient_peer_id", 0)) != _mp_unique_id():
+		boss_reward_reveal.clear()
+		return
+	boss_reward_reveal["elapsed"] = float(boss_reward_reveal.get("elapsed", 0.0)) + maxf(0.0, delta)
+	if float(boss_reward_reveal["elapsed"]) >= BossRewardPresentation.total_duration(self, boss_reward_reveal):
+		boss_reward_reveal.clear()
+
+
+func _clear_boss_reward_reveal() -> void:
+	boss_reward_reveal.clear()
 
 
 func _pick_boss_reward_cards(count: int, rare_slots: = BOSS_REWARD_RARE_COUNT) -> Array:
@@ -24628,15 +25030,19 @@ func _start_boss3_miasma(forced_variant: = 0) -> void :
 	boss3_miasma_timer = BOSS3_MIASMA_DURATION
 	boss3_miasma_cooldown = 0.0
 	boss3_miasma_clone_timer = BOSS3_MIASMA_CLONE_SWAP
+	boss3_miasma_clone_reveal_timer = 0.0
+	boss3_miasma_clone_mislead_timer = 0.0
 	boss3_miasma_spit_timer = 0.25
 	boss3_miasma_clone_positions.clear()
 	boss_attacks.clear()
 	_add_text("MIASMA DA VIDA", boss_pos + Vector2(0, -138), Color(0.8, 1.0, 0.18), 2.2, 30)
 	if boss3_miasma_variant == 1:
+		var formation_center: Vector2 = WORLD_SIZE * 0.5
+		var formation_angle: float = rng.randf_range(0.0, TAU)
 		for i in range(4):
-			var angle: = rng.randf_range(0.0, TAU)
-			var distance: = rng.randf_range(180.0, 430.0)
-			boss3_miasma_clone_positions.append((player_pos + Vector2.from_angle(angle) * distance).clamp(Vector2(100, 100), WORLD_SIZE - Vector2(100, 100)))
+			var angle: float = formation_angle + float(i) * TAU / 4.0 + rng.randf_range(-0.1, 0.1)
+			var distance: float = rng.randf_range(320.0, 430.0)
+			boss3_miasma_clone_positions.append((formation_center + Vector2.from_angle(angle) * distance).clamp(Vector2(120, 120), WORLD_SIZE - Vector2(120, 120)))
 	elif boss3_miasma_variant == 2:
 		enemy_bullets = enemy_bullets.filter( func(b): return String(b.get("type", "")) != "rat_flask")
 	elif boss3_miasma_variant == 4:
@@ -24657,6 +25063,8 @@ func _start_boss3_miasma(forced_variant: = 0) -> void :
 
 func _update_boss3_miasma(delta: float) -> bool:
 	if not _boss3_miasma_active():
+		boss3_miasma_clone_reveal_timer = 0.0
+		boss3_miasma_clone_mislead_timer = 0.0
 		boss3_miasma_cooldown = max(0.0, boss3_miasma_cooldown - delta)
 		if boss3_miasma_cooldown <= 0.0:
 			_start_boss3_miasma()
@@ -24669,6 +25077,8 @@ func _update_boss3_miasma(delta: float) -> bool:
 		_end_boss3_miasma(true)
 		return false
 	if boss3_miasma_variant == 1:
+		boss3_miasma_clone_reveal_timer = maxf(0.0, boss3_miasma_clone_reveal_timer - delta)
+		boss3_miasma_clone_mislead_timer = maxf(0.0, boss3_miasma_clone_mislead_timer - delta)
 		boss3_miasma_clone_timer -= delta
 		if boss3_miasma_clone_timer <= 0.0 and not boss3_miasma_clone_positions.is_empty():
 			boss3_miasma_clone_timer += BOSS3_MIASMA_CLONE_SWAP
@@ -24688,12 +25098,32 @@ func _update_boss3_miasma(delta: float) -> bool:
 	return true
 
 
+func _register_boss3_clone_hit(hit_pos: Vector2, hit_radius: float = BOSS3_MIASMA_CLONE_HIT_RADIUS) -> bool:
+	if current_phase != 3 or not _boss3_miasma_active() or boss3_miasma_variant != 1:
+		return false
+	for clone_pos_data in boss3_miasma_clone_positions:
+		var clone_pos: Vector2 = Vector2(clone_pos_data)
+		if hit_pos.distance_to(clone_pos) > hit_radius:
+			continue
+		boss3_miasma_clone_mislead_timer = maxf(boss3_miasma_clone_mislead_timer, BOSS3_MIASMA_CLONE_MISLEAD_TIME)
+		_clear_attack_lock()
+		_add_text("ISCA DE MIASMA", clone_pos + Vector2(0, -86), Color(0.86, 0.72, 1.0), 0.65, 16)
+		_spawn_radial_particles(clone_pos, Color(0.62, 0.34, 0.82), 5 if gfx_low_resource else 9)
+		_play_sfx("Hit_Boss1.mp3", 0.025, 0.42, 0.76)
+		screen_shake_timer = maxf(screen_shake_timer, 0.06)
+		screen_shake_strength = maxf(screen_shake_strength, 2.0)
+		return true
+	return false
+
+
 func _end_boss3_miasma(success: bool) -> void :
 	var old_variant: int = boss3_miasma_variant
 	boss3_miasma_timer = 0.0
 	boss3_miasma_variant = 0
 	boss3_miasma_cooldown = BOSS3_MIASMA_COOLDOWN
 	boss3_miasma_clone_positions.clear()
+	boss3_miasma_clone_reveal_timer = 0.0
+	boss3_miasma_clone_mislead_timer = 0.0
 	boss3_miasma_qte_required = 0
 	boss3_miasma_qte_time_left = 0.0
 	boss3_miasma_qte_tutorial = 0.0
@@ -24777,6 +25207,11 @@ func _increase_umbra_cadence(step: float = 0.09) -> void :
 
 
 func _update_boss_phase5(delta: float) -> void :
+	# Replicas only consume the host's compact UMBRA decision and world visual
+	# snapshots. They never advance observation, GRU state, inference, action
+	# choice, cooldowns or damage locally.
+	if dedicated_server_mode or _is_world_replica():
+		return
 	_load_umbra_mobile_memory()
 	boss_phase += delta * (7.2 + boss5_profile_confidence * 2.0)
 	var cadence_rate: float = (1.0 + boss5_cadence_bonus) * _boss_party_tempo_multiplier()
@@ -24835,7 +25270,11 @@ func _update_boss_phase5(delta: float) -> void :
 	boss5_decision_timer = max(0.0, boss5_decision_timer - delta)
 	boss5_action_timer -= delta * cadence_rate
 	if boss5_action_timer <= 0.0 and boss5_decision_timer <= 0.0:
-		var action: String = _umbra_choose_action()
+		var fallback_action: String = _umbra_choose_action()
+		var decision := umbra_authority_controller.build_authoritative_decision(self, boss5_multihead_policy, _umbra_available_actions(), fallback_action)
+		decision = umbra_authority_controller.revalidate_before_execution(self, decision)
+		boss5_authoritative_decision = decision.duplicate(true)
+		var action: String = String(decision.get("action", fallback_action))
 		_spawn_umbra_action(action)
 		boss5_current_action = action
 		boss5_last_reward_action = action
@@ -24859,6 +25298,13 @@ func _sample_umbra_player_history(delta: float) -> void :
 	phase5_player_history.append(player_pos)
 	while phase5_player_history.size() > 28:
 		phase5_player_history.pop_front()
+	umbra_memory_controller.record_local_sample(multiplayer.get_unique_id(), {
+		"position": player_pos,
+		"target_distance": boss_pos.distance_to(player_pos),
+		"dash_marker": last_dash_time,
+		"attack_marker": last_attack_time,
+		"threat_active": not phase5_telegraphs.is_empty() or not phase5_hazards.is_empty()
+	})
 	var tendencias: Dictionary = boss5_memory.get("tendencias", {"TOTAL": 0, "ESQUERDA": 0, "DIREITA": 0, "CIMA": 0, "BAIXO": 0})
 	if phase5_player_history.size() >= 2:
 		var prev: Vector2 = Vector2(phase5_player_history[phase5_player_history.size() - 2])
@@ -24993,58 +25439,17 @@ func _umbra_discretizar_estado() -> Array:
 	]
 
 
-func _umbra_dqn_forward(features: Array) -> Array:
+func _umbra_dqn_forward(features: Array) -> PackedFloat32Array:
 	if boss5_dqn_weights.is_empty():
-		return []
+		return PackedFloat32Array()
 	if features.size() != BOSS5_DQN_FEATURES.size():
 		push_error("UMBRA_MIND: rejected DQN inference: feature size expected=%d actual=%d" % [BOSS5_DQN_FEATURES.size(), features.size()])
-		return []
-
-	var w1 = boss5_dqn_weights.get("net.0.weight", [])
-	var b1 = boss5_dqn_weights.get("net.0.bias", [])
-	var w2 = boss5_dqn_weights.get("net.2.weight", [])
-	var b2 = boss5_dqn_weights.get("net.2.bias", [])
-	var w3 = boss5_dqn_weights.get("net.4.weight", [])
-	var b3 = boss5_dqn_weights.get("net.4.bias", [])
-
-	if w1.is_empty() or b1.is_empty() or w2.is_empty() or b2.is_empty() or w3.is_empty() or b3.is_empty():
-		return []
-
-
-	var out1: = []
-	out1.resize(BOSS5_DQN_HIDDEN1_SIZE)
-	for j in range(BOSS5_DQN_HIDDEN1_SIZE):
-		var sum_val: float = b1[j]
-		var w_row: Array = w1[j]
-		for i in range(BOSS5_DQN_FEATURES.size()):
-			sum_val += float(features[i]) * float(w_row[i])
-		if sum_val < 0.0:
-			sum_val *= 0.01
-		out1[j] = sum_val
-
-
-	var out2: Array = []
-	out2.resize(BOSS5_DQN_HIDDEN2_SIZE)
-	for j in range(BOSS5_DQN_HIDDEN2_SIZE):
-		var sum_val: float = b2[j]
-		var w_row: Array = w2[j]
-		for i in range(BOSS5_DQN_HIDDEN1_SIZE):
-			sum_val += float(out1[i]) * float(w_row[i])
-		if sum_val < 0.0:
-			sum_val *= 0.01
-		out2[j] = sum_val
-
-
-	var out3: Array = []
-	out3.resize(BOSS5_ACTIONS.size())
-	for j in range(BOSS5_ACTIONS.size()):
-		var sum_val: float = b3[j]
-		var w_row: Array = w3[j]
-		for i in range(BOSS5_DQN_HIDDEN2_SIZE):
-			sum_val += float(out2[i]) * float(w_row[i])
-		out3[j] = sum_val
-
-	return out3
+		return PackedFloat32Array()
+	if boss5_neural_runtime == null:
+		boss5_neural_runtime = UmbraNeuralRuntime.create(boss5_dqn_weights, BOSS5_ACTIONS, BOSS5_DQN_FEATURES, BOSS5_DQN_MODEL_VERSION, BOSS5_DQN_ACTION_SCHEMA_VERSION, BOSS5_DQN_FEATURE_SCHEMA_VERSION)
+	if boss5_neural_runtime == null:
+		return PackedFloat32Array()
+	return boss5_neural_runtime.forward(features)
 
 
 func _umbra_choose_action() -> String:
@@ -25057,7 +25462,7 @@ func _umbra_choose_action() -> String:
 
 	if not boss5_dqn_weights.is_empty():
 		var features: Array = _umbra_discretizar_estado()
-		var q_values: Array = _umbra_dqn_forward(features)
+		var q_values := _umbra_dqn_forward(features)
 		var acoes_base: Array = boss5_dqn_weights.get("action_schema", boss5_dqn_weights.get("acoes_base", []))
 		for action in available:
 			var score: float = 0.0
@@ -25151,9 +25556,9 @@ func _spawn_umbra_action(action: String) -> void :
 			phase5_hazards.append({"kind": "siphon", "pos": boss_pos, "life": BOSS5_SIPHON_DURATION, "max": BOSS5_SIPHON_DURATION, "radius": 190.0, "tick": 0.0})
 			_add_text("SIFAO", boss_pos + Vector2(0, -120), Color(0.34, 1.0, 0.54), 1.0, 20)
 		"TELEPORTE":
-			_queue_umbra_teleport(_umbra_teleport_target(false), true)
+			_queue_umbra_teleport(_umbra_teleport_target(false, _umbra_decision_space_position(_umbra_decision_target_position())), true)
 		"TELEPORTE_JUKE":
-			_queue_umbra_teleport(_umbra_teleport_target(true), false)
+			_queue_umbra_teleport(_umbra_teleport_target(true, _umbra_decision_space_position(_umbra_decision_target_position())), false)
 		"VORTICE":
 			boss5_ability_cooldowns["VORTICE"] = 12.0
 			phase5_hazards.append({
@@ -25194,16 +25599,16 @@ func _spawn_umbra_action(action: String) -> void :
 			boss5_ability_cooldowns["MIASMA"] = 10.0
 			phase5_hazards.append({
 				"kind": "miasma",
-				"pos": player_pos,
+				"pos": _umbra_decision_space_position(_umbra_decision_target_position()),
 				"life": BOSS5_MIASMA_DURATION,
 				"max": BOSS5_MIASMA_DURATION,
 				"radius": 220.0,
 				"tick_timer": 0.0
 			})
-			_add_text("MIASMA TOXICO", player_pos + Vector2(0, -100), Color(0.25, 0.95, 0.3), 1.0, 20)
+			_add_text("MIASMA TOXICO", _umbra_decision_space_position(_umbra_decision_target_position()) + Vector2(0, -100), Color(0.25, 0.95, 0.3), 1.0, 20)
 		"DESCARGA_ELETRICA":
 			boss5_ability_cooldowns["DESCARGA_ELETRICA"] = 11.0
-			var dir: Vector2 = (_predict_player_pos(0.45) - boss_pos).normalized()
+			var dir: Vector2 = (_umbra_decision_space_position(_umbra_decision_target_position()) - boss_pos).normalized()
 			if dir.length() <= 0.01:
 				dir = Vector2.RIGHT
 			phase5_hazards.append({
@@ -25270,7 +25675,7 @@ func _spawn_umbra_action(action: String) -> void :
 				"fase": "caminhando",
 				"stage_timer": 0.0,
 				"walk_timeout": 0.0,
-				"angle": (player_pos - WORLD_SIZE * 0.5).angle(),
+				"angle": (_umbra_decision_space_position(_umbra_decision_target_position()) - WORLD_SIZE * 0.5).angle(),
 				"num_beams": 2,
 				"hit_cooldown": 0.0,
 				"life": 30.0,
@@ -25283,7 +25688,7 @@ func _spawn_umbra_action(action: String) -> void :
 
 
 func _fire_umbra_projectile() -> void :
-	var target: Vector2 = _predict_player_pos(0.34)
+	var target: Vector2 = _umbra_decision_space_position(_umbra_decision_target_position())
 	var dir: Vector2 = (target - boss_pos).normalized()
 	if dir.length() <= 0.01:
 		dir = Vector2.RIGHT
@@ -25297,6 +25702,24 @@ func _predict_player_pos(seconds: float) -> Vector2:
 	var older: Vector2 = Vector2(phase5_player_history[max(0, phase5_player_history.size() - 5)])
 	var velocity: Vector2 = (player_pos - older) / max(0.1, float(phase5_player_history.size()) * 0.1)
 	return player_pos + velocity * seconds
+
+
+func _umbra_decision_target_position() -> Vector2:
+	var peer_id: int = int(boss5_authoritative_decision.get("target_peer_id", _mp_unique_id()))
+	if peer_id == _mp_unique_id():
+		return player_pos
+	var state: Dictionary = Dictionary(net_players_by_peer.get(peer_id, {}))
+	return Vector2(state.get("pos", player_pos))
+
+
+func _umbra_decision_space_position(fallback: Vector2) -> Vector2:
+	var spatial: Dictionary = Dictionary(boss5_authoritative_decision.get("space", {}))
+	if spatial.is_empty():
+		return fallback
+	return Vector2(
+		clampf(float(spatial.get("x", fallback.x / maxf(1.0, WORLD_SIZE.x))), 0.0, 1.0) * WORLD_SIZE.x,
+		clampf(float(spatial.get("y", fallback.y / maxf(1.0, WORLD_SIZE.y))), 0.0, 1.0) * WORLD_SIZE.y
+	)
 
 
 func _predict_player_pos_prison() -> Vector2:
@@ -25330,13 +25753,14 @@ func _queue_umbra_teleport(target: Vector2, real: = true) -> void :
 	})
 
 
-func _umbra_teleport_target(juke: = false) -> Vector2:
-	var dir: Vector2 = (boss_pos - player_pos).normalized()
+func _umbra_teleport_target(juke: = false, target_position: Vector2 = Vector2.INF) -> Vector2:
+	var focus: Vector2 = _umbra_decision_space_position(_umbra_decision_target_position()) if target_position == Vector2.INF else target_position
+	var dir: Vector2 = (boss_pos - focus).normalized()
 	if dir.length() <= 0.01:
 		dir = Vector2.RIGHT
 	var tangent: Vector2 = dir.orthogonal() * (-1.0 if rng.randf() < 0.5 else 1.0)
-	var distance: float = 460.0 if juke else (560.0 if boss_pos.distance_to(player_pos) < 260.0 else 340.0)
-	var base: Vector2 = player_pos + (tangent if not juke else - dir) * distance
+	var distance: float = 460.0 if juke else (560.0 if boss_pos.distance_to(focus) < 260.0 else 340.0)
+	var base: Vector2 = focus + (tangent if not juke else - dir) * distance
 	return base.clamp(Vector2(90, 90), WORLD_SIZE - Vector2(90, 90))
 
 
@@ -28177,6 +28601,13 @@ func _boss3_sector_ritual_safe_lane(attack: Dictionary, step: int) -> int:
 	return posmod(seed + step * 2, lanes)
 
 
+func _boss3_sector_ritual_lane_is_safe(lane: int, attack: Dictionary, step: int) -> bool:
+	var lanes: int = maxi(1, int(attack.get("lanes", BOSS3_SECTOR_RITUAL_LANES)))
+	var safe_start: int = _boss3_sector_ritual_safe_lane(attack, step)
+	var safe_span: int = clampi(int(attack.get("safe_lane_span", BOSS3_SECTOR_RITUAL_SAFE_LANE_SPAN)), 1, lanes)
+	return posmod(lane - safe_start, lanes) < safe_span
+
+
 func _boss3_sector_ritual_lane_for_pos(pos: Vector2, attack: Dictionary) -> int:
 	var center: Vector2 = Vector2(attack.get("center", WORLD_SIZE * 0.5))
 	var lanes: int = maxi(1, int(attack.get("lanes", BOSS3_SECTOR_RITUAL_LANES)))
@@ -28190,7 +28621,7 @@ func _boss3_sector_ritual_position_in_danger(pos: Vector2, attack: Dictionary, s
 		return false
 	if pos.distance_to(center) <= 42.0:
 		return false
-	return _boss3_sector_ritual_lane_for_pos(pos, attack) != _boss3_sector_ritual_safe_lane(attack, step)
+	return not _boss3_sector_ritual_lane_is_safe(_boss3_sector_ritual_lane_for_pos(pos, attack), attack, step)
 
 
 func _boss3_sector_ritual_damage_amount(hp_max_value: float) -> int:
@@ -28212,6 +28643,7 @@ func _start_boss3_sector_ritual() -> void:
 		"center": WORLD_SIZE * 0.5,
 		"radius": BOSS3_SECTOR_RITUAL_RADIUS,
 		"lanes": BOSS3_SECTOR_RITUAL_LANES,
+		"safe_lane_span": BOSS3_SECTOR_RITUAL_SAFE_LANE_SPAN,
 		"steps": steps,
 		"warning": BOSS3_SECTOR_RITUAL_WARNING,
 		"active": BOSS3_SECTOR_RITUAL_ACTIVE,
@@ -29650,6 +30082,9 @@ func _start_boss_stage() -> void :
 	boss_stage_safe_angle = rng.randf_range( - PI, PI)
 	boss_transition_waves.clear()
 	boss_attacks.clear()
+	# The first ring is created by the opening jump.  Every later ring schedules
+	# its own leap below, keyed by the same event id sent to clients.
+	Boss1AnimationPresentation.trigger_siege_tide_jump(self, "%s-%d-0" % [BOSS1_SIEGE_TIDE_EVENT_PREFIX, boss1_siege_tide_sequence], BOSS_STAGE_SLAM_TIME)
 	_add_text("MARÉ DE CERCO", boss_pos + Vector2(0, -120), Color(1.0, 0.64, 0.16), 1.5, 30)
 
 
@@ -29688,6 +30123,8 @@ func _update_boss_stage(delta: float) -> void :
 				already = true
 				break
 		if not already:
+			var wave_event_id := "%s-%d-%d" % [BOSS1_SIEGE_TIDE_EVENT_PREFIX, boss1_siege_tide_sequence, wave_index]
+			var wave_warning: float = _telegraph_window(BOSS1_SIEGE_TIDE_WARNING)
 			if wave_index == 0:
 				_boss1_siege_tide_landing_feedback()
 				_spawn_radial_particles(boss_pos, Color(0.7, 0.24, 1.0), 34)
@@ -29700,9 +30137,14 @@ func _update_boss_stage(delta: float) -> void :
 				safe_angle = _next_boss_stage_safe_angle(previous_angle, enraged)
 			var party_size: int = clampi(boss_party_scaling_size, 1, ONLINE_MAX_PLAYERS)
 			var desync: float = float(BOSS1_SIEGE_TIDE_DESYNC_BY_PARTY.get(party_size, 0.0))
+			if wave_index > 0:
+				# Later rings used to spawn while the crab stood still.  The warning
+				# window is now also the leap's airtime, so impact and damaging ring
+				# still line up without changing the attack's original timing.
+				Boss1AnimationPresentation.trigger_siege_tide_jump(self, wave_event_id, wave_warning)
 			boss_transition_waves.append({
 				"idx": wave_index,
-				"event_id": "%s-%d-%d" % [BOSS1_SIEGE_TIDE_EVENT_PREFIX, boss1_siege_tide_sequence, wave_index],
+				"event_id": wave_event_id,
 				"pos": boss_pos,
 				"radius": 42.0,
 				"speed": BOSS_STAGE_WAVE_SPEED,
@@ -29715,7 +30157,7 @@ func _update_boss_stage(delta: float) -> void :
 				"open_angle": safe_angle,
 				"open_size": BOSS_STAGE_ENRAGED_OPENING if enraged else BOSS_STAGE_WAVE_OPENING,
 				"age": -desync * float(wave_index % 2),
-				"warning": _telegraph_window(BOSS1_SIEGE_TIDE_WARNING),
+				"warning": wave_warning,
 				"hit": false,
 				"hit_client": false,
 				"enraged": enraged
@@ -35283,6 +35725,7 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 
 func _start_phase_transition(next_phase: int) -> void :
 	_cleanup_bargain_capsule("phase_transition")
+	_clear_boss_reward_reveal()
 	_phase_flow()._start_phase_transition(next_phase)
 
 
@@ -35631,6 +36074,7 @@ func _draw() -> void :
 		_reset_phase_transition_nodes()
 	_update_button_layout(viewport)
 	_update_nickname_input_visibility()
+	_update_player_progress_recovery_input_visibility()
 	_update_cheat_input_visibility()
 	_update_webhook_input_visibility()
 	_update_online_room_input_visibility()
@@ -35645,6 +36089,8 @@ func _draw() -> void :
 			_draw_nickname_setup(viewport)
 		"menu":
 			_draw_menu(viewport)
+		"progress_profile":
+			_draw_player_progress_profile(viewport)
 		"settings":
 			_draw_settings(viewport)
 		"settings_gamepad":
@@ -35742,7 +36188,7 @@ func _draw() -> void :
 		_draw_pause_mp_request(viewport)
 	if manifestation_key == "ressonante" and mode in ["game", "shop_countdown", "shop_opening", "boss_call", "pause_countdown"]:
 		_draw_resonant_meter(viewport)
-	if show_fps_counter:
+	if _should_draw_compact_fps_counter():
 		_draw_fps_counter(viewport)
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_enabled and qa_streaming_status != "":
 		_draw_qa_streaming_status(viewport)
@@ -35757,7 +36203,7 @@ func _draw() -> void :
 func _should_show_os_mouse() -> bool:
 	if not _uses_desktop_ui():
 		return true
-	if mode in ["menu", "nick_setup", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
+	if mode in ["menu", "nick_setup", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
 		return true
 	if _shop_mp_request_visible() or _boss_mp_request_visible() or _phase_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
 		return true
@@ -35805,6 +36251,14 @@ func _draw_fps_counter(viewport: Vector2) -> void :
 	_draw_centered("%d FPS" % fps, rect.get_center() + Vector2(0, 5), 12, Color(0.72, 1.0, 0.86))
 
 
+func _should_draw_compact_fps_counter() -> bool:
+	return show_fps_counter and not _uses_desktop_ui()
+
+
+func _should_draw_desktop_fps_counter() -> bool:
+	return show_fps_counter and _uses_desktop_ui()
+
+
 func _draw_qa_streaming_status(viewport: Vector2) -> void :
 	var label: = qa_streaming_status.to_upper()
 	var rect: = Rect2(viewport.x * 0.5 - 190.0, 8.0, 380.0, 28.0)
@@ -35820,6 +36274,10 @@ func _draw_nickname_setup(viewport: Vector2) -> void :
 
 func _draw_menu(viewport: Vector2) -> void :
 	MenusPresentation._draw_menu(self, viewport)
+
+
+func _draw_player_progress_profile(viewport: Vector2) -> void:
+	MenusPresentation._draw_player_progress_profile(self, viewport)
 
 
 func _update_menu_presentation(delta: float) -> void:
@@ -36657,7 +37115,7 @@ func _menu_option_keys() -> Array:
 	keys.append("start")
 	if _online_menu_available():
 		keys.append("multiplayer")
-	keys.append_array(["catalog", "settings"])
+	keys.append_array(["catalog", "progress", "settings"])
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
 		keys.append("stream")
 	keys.append("exit")
@@ -36692,6 +37150,9 @@ func _activate_menu_option(key: String) -> void :
 			catalog_scroll_index = 0
 			catalog_detail_open = false
 			mode = "catalog"
+		"progress":
+			player_progress_recovery_revealed = false
+			mode = "progress_profile"
 		"settings":
 			settings_selected = 0
 			settings_previous_mode = "menu"
@@ -36955,6 +37416,7 @@ func _catalog_open_related(entry_id: String) -> bool:
 				catalog_selected = i
 				catalog_scroll_index = 0
 				catalog_detail_open = true
+				_catalog_mark_current_item_seen()
 				return true
 	return false
 
@@ -38405,12 +38867,22 @@ func _aura_status_text() -> String:
 			var still: = float(aura_state.get("still", 0.0))
 			if still > 0.0:
 				return "ANALISE %d%%" % int(still / 4.5 * 100.0)
+			if int(aura_state.get("rational_focus", 0)) > 0:
+				return "FOCO %d/%d" % [int(aura_state.get("rational_focus", 0)), AuraSystem.rational_focus_cap(aura_state)]
 			return "PRONTA"
 		"Impulsiva": return "FRENESI x%d" % int(aura_state.get("impulsive_rank", 0)) if float(aura_state.get("impulsive_active", 0.0)) > 0.0 else "%d/5 ABATES" % int(aura_state.get("impulsive_kills", 0))
 		"Devota": return "%d CARGAS" % int(aura_state.get("devoted_charges", 0))
-		"Vanguarda": return "INCENDIO %.1fs" % float(aura_state.get("vanguard_ring", 0.0))
+		"Vanguarda":
+			if float(aura_state.get("vanguard_guard", 0.0)) > 0.0:
+				return "BRASA %.1fs" % float(aura_state.get("vanguard_guard", 0.0))
+			return "INCENDIO %.1fs" % float(aura_state.get("vanguard_ring", 0.0))
 		"Insana": return "%d ECOS" % int(aura_state.get("insane_echoes", 0)) if int(aura_state.get("insane_echoes", 0)) > 0 else "PRONTA" if float(aura_state.get("insane_ready", 0.0)) <= 0.0 else "%.1fs" % float(aura_state.get("insane_ready", 0.0))
-		"Voraz": return "FOME X%d" % (int(aura_state.get("voracious_cycles", 0)) + 1)
+		"Voraz":
+			if bool(aura_state.get("voracious_feast_ready", false)):
+				return "BANQUETE"
+			if float(aura_state.get("voracious_satiation", 0.0)) > 0.0:
+				return "SACIEDADE %.1fs" % float(aura_state.get("voracious_satiation", 0.0))
+			return "FOME X%d" % (int(aura_state.get("voracious_cycles", 0)) + 1)
 		"Nula": return "NULO PRONTO" if bool(aura_state.get("null_armed", false)) else "%d%%" % int(aura_state.get("null_charge", 0.0))
 		"Abissal": return "MARE NEGRA" if float(aura_state.get("abyss_tide", 0.0)) > 0.0 else "%d%%" % int(aura_state.get("abyss_depth", 0.0))
 		"Profetica": return "PRESSAGIO" if int(aura_state.get("prophecy_uid", -1)) >= 0 else "ORACULO"
@@ -41255,6 +41727,11 @@ func _handle_key(event: InputEventKey) -> void :
 			var keys: = _menu_option_keys()
 			if menu_selected >= 0 and menu_selected < keys.size():
 				_activate_menu_option(String(keys[menu_selected]))
+	elif mode == "progress_profile":
+		if _is_escape_or_pause_key(event):
+			mode = "menu"
+		elif event.keycode in [KEY_ENTER, KEY_SPACE] and player_identity_auth_token == "":
+			_submit_player_progress_recovery()
 	elif mode == "settings":
 		if _is_escape_or_pause_key(event):
 			_return_from_settings()
@@ -41414,13 +41891,23 @@ func _handle_key(event: InputEventKey) -> void :
 			settings_selected = clampi(settings_selected, 0, graphics_count - 1)
 			_activate_graphics_setting(String(graphics_keys[settings_selected]))
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
-			if String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)]) == "window_mode":
+			var selected_graphics_key: String = String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)])
+			if selected_graphics_key == "window_mode":
 				_cycle_desktop_window_mode(-1)
 				_apply_graphics_settings()
 				_save_config()
+			elif selected_graphics_key == "fps_limit":
+				_cycle_graphics_fps_limit(-1)
+				_apply_graphics_settings()
+				_save_config()
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
-			if String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)]) == "window_mode":
+			var selected_graphics_key: String = String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)])
+			if selected_graphics_key == "window_mode":
 				_cycle_desktop_window_mode(1)
+				_apply_graphics_settings()
+				_save_config()
+			elif selected_graphics_key == "fps_limit":
+				_cycle_graphics_fps_limit(1)
 				_apply_graphics_settings()
 				_save_config()
 	elif mode == "settings_data":
@@ -41556,6 +42043,7 @@ func _handle_key(event: InputEventKey) -> void :
 		elif event.keycode in [KEY_ENTER, KEY_SPACE] and not _catalog_items().is_empty():
 			catalog_detail_section = 0
 			catalog_detail_open = true
+			_catalog_mark_current_item_seen()
 	elif mode == "manifest" or mode == "manifest_mp":
 		if manifest_select_stage == MANIFEST_STAGE_TRANSITION:
 			return
@@ -41689,8 +42177,28 @@ func _handle_key(event: InputEventKey) -> void :
 		_go_to_menu()
 
 
+func _handle_player_progress_profile_touch(pos: Vector2) -> void:
+	if player_progress_profile_buttons.get("back", Rect2()).has_point(pos):
+		mode = "menu"
+		return
+	if player_identity_auth_token == "":
+		if player_progress_profile_buttons.get("recover", Rect2()).has_point(pos):
+			_submit_player_progress_recovery()
+		elif player_progress_profile_buttons.get("create", Rect2()).has_point(pos):
+			if create_new_player_progress_identity():
+				player_progress_sync_status = "creating_identity"
+		elif player_progress_recovery_edit != null:
+			player_progress_recovery_edit.grab_focus()
+		return
+	if player_identity_recovery_code != "":
+		if player_progress_profile_buttons.get("show_code", Rect2()).has_point(pos):
+			player_progress_recovery_revealed = true
+		elif player_progress_profile_buttons.get("copy_code", Rect2()).has_point(pos):
+			_copy_player_progress_recovery_code()
+
+
 func _handle_press(pos: Vector2, viewport: Vector2) -> void :
-	if _ui_input_blocked() and (mode in ["menu", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "manifest_evolution", "specter_upgrade", "paused", "pause_deck", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "multiplayer_syncing"]):
+	if _ui_input_blocked() and (mode in ["menu", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "manifest", "manifest_evolution", "specter_upgrade", "paused", "pause_deck", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "multiplayer_syncing"]):
 		return
 	if mode == "nick_setup":
 		if buttons.get("nick_confirm", Rect2()).has_point(pos):
@@ -41708,6 +42216,9 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 				_activate_menu_option(key)
 				_block_ui_input()
 				break
+		return
+	if mode == "progress_profile":
+		_handle_player_progress_profile_touch(pos)
 		return
 	if mode == "settings":
 		_handle_settings_touch(pos, viewport)
@@ -41918,6 +42429,8 @@ func _set_selected_manifestation(index: int, vibrate: = true) -> void :
 		return
 	var changed = next_index != selected_manifestation
 	selected_manifestation = next_index
+	if _manifestation_unlocked(selected_manifestation):
+		_mark_content_seen("manifestation", String(MANIFESTATIONS[selected_manifestation].get("key", "")))
 	if changed and vibrate:
 		manifest_last_vibrated_index = selected_manifestation
 		_vibrate(36, 0.18)
@@ -42125,6 +42638,8 @@ func _set_selected_aura(index: int, vibrate: = true) -> void :
 		return
 	var changed = next_index != selected_aura
 	selected_aura = next_index
+	if _spectrum_unlocked(selected_aura):
+		_mark_content_seen("specter", String(AURAS[selected_aura].get("key", "")))
 	if changed and vibrate:
 		aura_last_vibrated_index = selected_aura
 		_vibrate(36, 0.2)
@@ -43463,7 +43978,7 @@ func _handle_graphics_settings_touch(pos: Vector2, viewport: Vector2) -> void :
 
 
 func _graphics_setting_keys() -> Array:
-	var keys: = ["particles", "shadows", "screen_shake", "health_warning_start", "health_warning_strength", "low_resource", "memory_saver"]
+	var keys: = ["particles", "shadows", "screen_shake", "fps_limit", "health_warning_start", "health_warning_strength", "low_resource", "memory_saver"]
 	if _uses_desktop_ui():
 		keys.append("window_mode")
 	keys.append("back")
@@ -43479,6 +43994,7 @@ func _graphics_setting_title(key: String) -> String:
 		"particles": return "PARTICULAS"
 		"shadows": return "SOMBRAS"
 		"screen_shake": return "TREMOR DE TELA"
+		"fps_limit": return "LIMITE DE FPS"
 		"health_warning_start": return "ALERTA DE VIDA"
 		"health_warning_strength": return "INTENSIDADE DO ALERTA"
 		"low_resource": return "MODO LEVE"
@@ -43492,6 +44008,7 @@ func _graphics_setting_subtitle(key: String) -> String:
 		"particles": return "Efeitos visuais e particulas de combate."
 		"shadows": return "Sombra dinamica quando o modo leve permite."
 		"screen_shake": return "Impacto de tela em explosoes e hits."
+		"fps_limit": return "30, 60, 120 FPS ou sem limite em PC e celular."
 		"health_warning_start": return "Vida em que o vermelho começa. Abaixo de 25%, as veias avançam."
 		"health_warning_strength": return "Intensidade do vermelho e das veias nas bordas da visão."
 		"low_resource": return "Reduz carga visual sem trocar a interface."
@@ -43505,6 +44022,7 @@ func _graphics_setting_value(key: String) -> String:
 		"particles": return "ON" if gfx_particles else "OFF"
 		"shadows": return "ON" if _shadows_enabled() else "OFF"
 		"screen_shake": return "ON" if gfx_screen_shake else "OFF"
+		"fps_limit": return "ILIMITADO" if _sanitize_graphics_fps_limit(gfx_fps_limit) == 0 else "%d FPS" % _sanitize_graphics_fps_limit(gfx_fps_limit)
 		"health_warning_start": return "%d%%" % roundi(gfx_health_warning_start * 100.0)
 		"health_warning_strength": return "DESLIGADO" if gfx_health_warning_strength == 0.0 else ("SUAVE" if gfx_health_warning_strength < 1.0 else ("FORTE" if gfx_health_warning_strength > 1.0 else "PADRÃO"))
 		"low_resource": return "ON" if gfx_low_resource else "OFF"
@@ -43522,6 +44040,7 @@ func _graphics_setting_color(key: String) -> Color:
 		"particles": return Color(0.6, 0.8, 1.0) if gfx_particles else Color(0.46, 0.5, 0.56)
 		"shadows": return Color(0.6, 0.8, 1.0) if _shadows_enabled() else Color(0.46, 0.5, 0.56)
 		"screen_shake": return Color(0.6, 0.8, 1.0) if gfx_screen_shake else Color(0.46, 0.5, 0.56)
+		"fps_limit": return Color(0.32, 1.0, 0.82)
 		"health_warning_start", "health_warning_strength": return Color(1.0, 0.48, 0.42)
 		"low_resource": return Color(1.0, 0.72, 0.28) if gfx_low_resource else Color(0.46, 0.5, 0.56)
 		"memory_saver": return Color(1.0, 0.42, 0.34) if _memory_saver_active() else Color(0.46, 0.5, 0.56)
@@ -43537,6 +44056,8 @@ func _activate_graphics_setting(key: String) -> void :
 			gfx_shadows = not gfx_shadows
 		"screen_shake":
 			gfx_screen_shake = not gfx_screen_shake
+		"fps_limit":
+			_cycle_graphics_fps_limit()
 		"health_warning_start":
 			gfx_health_warning_start = 0.55 if gfx_health_warning_start < 0.5 else (0.7 if gfx_health_warning_start < 0.6 else 0.35)
 		"health_warning_strength":
@@ -43556,6 +44077,17 @@ func _activate_graphics_setting(key: String) -> void :
 			return
 	_apply_graphics_settings()
 	_save_config()
+
+
+func _sanitize_graphics_fps_limit(value: int) -> int:
+	return value if value in GRAPHICS_FPS_LIMIT_OPTIONS else GRAPHICS_FPS_LIMIT_DEFAULT
+
+
+func _cycle_graphics_fps_limit(direction: int = 1) -> void:
+	var current: int = GRAPHICS_FPS_LIMIT_OPTIONS.find(_sanitize_graphics_fps_limit(gfx_fps_limit))
+	if current < 0:
+		current = GRAPHICS_FPS_LIMIT_OPTIONS.find(GRAPHICS_FPS_LIMIT_DEFAULT)
+	gfx_fps_limit = GRAPHICS_FPS_LIMIT_OPTIONS[posmod(current + direction, GRAPHICS_FPS_LIMIT_OPTIONS.size())]
 
 func _left_panel_pos(viewport: Vector2) -> Vector2:
 	return RTHudLayoutScript.left_panel_pos(viewport, hud_left_panel_pos)
@@ -45572,6 +46104,11 @@ func _pack_net_boss_visuals() -> Dictionary:
 				"boss1_absorb_timer": boss1_absorb_timer,
 				"boss1_stage_timer": boss_stage_timer,
 				"boss1_stage_duration": boss_stage_duration,
+				"boss1_siege_tide_jump": {
+					"event_id": boss1_siege_tide_jump_event_id,
+					"timer": boss1_siege_tide_jump_timer,
+					"duration": boss1_siege_tide_jump_duration
+				},
 				"boss1_rewind_sequence": {} if boss1_rewind_sequence.is_empty() else {
 					"event_id": String(boss1_rewind_sequence.get("event_id", "")),
 					"elapsed": float(boss1_rewind_sequence.get("elapsed", 0.0)),
@@ -45622,12 +46159,15 @@ func _pack_net_boss_visuals() -> Dictionary:
 				"boss3_stun_timer": boss3_stun_timer,
 				"boss3_ritual_timer": boss3_ritual_timer,
 				"boss3_ritual_destroyed": boss3_ritual_destroyed,
+				"boss3_consume_uid": boss3_consume_uid,
+				"boss3_consume_timer": boss3_consume_timer,
 				"boss3_is_moving": boss3_is_moving,
 				"boss3_miasma_timer": boss3_miasma_timer,
 				"boss3_miasma_variant": boss3_miasma_variant,
 				"boss3_miasma_target_peer_id": boss3_miasma_target_peer_id,
 				"boss3_miasma_clone_timer": boss3_miasma_clone_timer,
 				"boss3_miasma_clone_positions": boss3_miasma_clone_positions.duplicate(true),
+				"boss3_miasma_clone_reveal_timer": boss3_miasma_clone_reveal_timer,
 				"boss3_miasma_qte_required": boss3_miasma_qte_required,
 				"boss3_miasma_qte_taps": boss3_miasma_qte_taps,
 				"boss3_miasma_qte_time_left": boss3_miasma_qte_time_left,
@@ -45650,6 +46190,7 @@ func _pack_net_boss_visuals() -> Dictionary:
 		5:
 			packet["phase5_hazards"] = phase5_hazards.duplicate(true)
 			packet["phase5_telegraphs"] = phase5_telegraphs.duplicate(true)
+			packet["umbra_decision"] = umbra_authority_controller.public_event()
 		6:
 			packet.merge({
 				"phase6_pustule_pools": phase6_pustule_pools.duplicate(true),
@@ -46076,6 +46617,9 @@ func _update_remote_entity_motion(entity: Dictionary, incoming_pos: Vector2, now
 
 
 func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void :
+	var previous_hp: float = boss_hp
+	var previous_dead: bool = boss_dead
+	var previous_phase: int = current_phase
 	var boss_snapshot: Dictionary = RTNetContractScript.unpack_boss_snapshot(snapshot_data, boss_pos, boss_hp, boss_dead, boss_active, current_phase, boss_hp_max, boss_phase, net_boss_has_snapshot)
 	if not bool(boss_snapshot.get("valid", false)):
 		return
@@ -46086,6 +46630,17 @@ func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void :
 	current_phase = int(boss_snapshot.get("phase_index", current_phase))
 	boss_hp_max = float(boss_snapshot.get("hp_max", boss_hp_max))
 	boss_phase = float(boss_snapshot.get("boss_phase", boss_phase))
+	if _is_world_replica() and net_boss_has_snapshot and previous_phase == current_phase:
+		if previous_phase == 1:
+			if boss_hp < previous_hp and not boss_dead:
+				Boss1AnimationPresentation.trigger_hit(self, previous_hp - boss_hp)
+			if not previous_dead and boss_dead:
+				Boss1AnimationPresentation.trigger_death(self, incoming_pos)
+		elif previous_phase == 3:
+			if boss_hp < previous_hp and not boss_dead:
+				Boss3AnimationPresentation.trigger_hit(self, previous_hp - boss_hp, "network_snapshot")
+			if not previous_dead and boss_dead:
+				Boss3AnimationPresentation.trigger_death(self, incoming_pos)
 	if _is_world_replica():
 		_apply_authoritative_music_track(_net_music_track_name(int(boss_snapshot.get("music_track_index", -1))))
 		boss_eletrica_static_stacks = int(boss_snapshot.get("electric_stacks", boss_eletrica_static_stacks))
@@ -46153,6 +46708,17 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	if current_phase == 1:
 		boss_stage_timer = float(data.get("boss1_stage_timer", boss_stage_timer))
 		boss_stage_duration = float(data.get("boss1_stage_duration", boss_stage_duration))
+		var incoming_tide_jump = data.get("boss1_siege_tide_jump", {})
+		if data.has("boss1_siege_tide_jump") and incoming_tide_jump is Dictionary:
+			var incoming_tide_event_id := String(incoming_tide_jump.get("event_id", ""))
+			var incoming_tide_timer := maxf(0.0, float(incoming_tide_jump.get("timer", 0.0)))
+			var incoming_tide_duration := maxf(0.0, float(incoming_tide_jump.get("duration", 0.0)))
+			if incoming_tide_event_id.is_empty() or incoming_tide_timer <= 0.0 or incoming_tide_duration <= 0.0:
+				Boss1AnimationPresentation.clear_siege_tide_jump(self)
+			else:
+				boss1_siege_tide_jump_event_id = incoming_tide_event_id
+				boss1_siege_tide_jump_timer = incoming_tide_timer
+				boss1_siege_tide_jump_duration = incoming_tide_duration
 	var incoming_rewind = data.get("boss1_rewind_sequence", {})
 	if incoming_rewind is Dictionary and _is_world_replica():
 		_apply_boss1_rewind_sync(incoming_rewind)
@@ -46213,12 +46779,15 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	boss3_stun_timer = float(data.get("boss3_stun_timer", boss3_stun_timer))
 	boss3_ritual_timer = float(data.get("boss3_ritual_timer", boss3_ritual_timer))
 	boss3_ritual_destroyed = int(data.get("boss3_ritual_destroyed", boss3_ritual_destroyed))
+	boss3_consume_uid = int(data.get("boss3_consume_uid", boss3_consume_uid))
+	boss3_consume_timer = float(data.get("boss3_consume_timer", boss3_consume_timer))
 	boss3_is_moving = bool(data.get("boss3_is_moving", boss3_is_moving))
 	boss3_miasma_timer = float(data.get("boss3_miasma_timer", boss3_miasma_timer))
 	boss3_miasma_variant = _coerce_boss3_miasma_variant(int(data.get("boss3_miasma_variant", boss3_miasma_variant)))
 	boss3_miasma_target_peer_id = int(data.get("boss3_miasma_target_peer_id", boss3_miasma_target_peer_id))
 	boss3_miasma_clone_timer = float(data.get("boss3_miasma_clone_timer", boss3_miasma_clone_timer))
 	boss3_miasma_clone_positions = Array(data.get("boss3_miasma_clone_positions", boss3_miasma_clone_positions)).duplicate(true)
+	boss3_miasma_clone_reveal_timer = float(data.get("boss3_miasma_clone_reveal_timer", boss3_miasma_clone_reveal_timer))
 	boss3_miasma_qte_required = int(data.get("boss3_miasma_qte_required", boss3_miasma_qte_required))
 	boss3_miasma_qte_taps = int(data.get("boss3_miasma_qte_taps", boss3_miasma_qte_taps))
 	boss3_miasma_qte_time_left = float(data.get("boss3_miasma_qte_time_left", boss3_miasma_qte_time_left))
@@ -46276,6 +46845,11 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 	boss4_meteor_damage_bonus = float(data.get("boss4_meteor_damage_bonus", boss4_meteor_damage_bonus))
 	phase5_hazards = Array(data.get("phase5_hazards", phase5_hazards)).duplicate(true)
 	phase5_telegraphs = Array(data.get("phase5_telegraphs", phase5_telegraphs)).duplicate(true)
+	if current_phase == 5 and _is_world_replica() and data.has("umbra_decision"):
+		var incoming_umbra_decision = data.get("umbra_decision", {})
+		if umbra_authority_controller.accept_replica_event(incoming_umbra_decision):
+			boss5_authoritative_decision = umbra_authority_controller.public_event()
+			boss5_current_action = String(boss5_authoritative_decision.get("action", boss5_current_action))
 	if not (boss2_compact is PackedFloat32Array and boss2_compact.size() >= 27):
 		boss2_ultimate_wind_active = float(data.get("boss2_wind_active", boss2_ultimate_wind_active))
 		boss2_ultimate_wind_timer = float(data.get("boss2_wind_timer", boss2_ultimate_wind_timer))
@@ -47890,7 +48464,8 @@ func _apply_graphics_settings() -> void :
 		qa_streaming_enabled = false
 		qa_streaming_unlocked = false
 		qa_streaming_status = ""
-	Engine.max_fps = MEMORY_SAVER_FPS if _memory_saver_active() else (LOW_RESOURCE_FPS if gfx_low_resource else 60)
+	gfx_fps_limit = _sanitize_graphics_fps_limit(gfx_fps_limit)
+	Engine.max_fps = gfx_fps_limit
 	if gfx_low_resource or _memory_saver_active():
 		_trim_visual_effect_arrays()
 	_apply_desktop_window_mode()

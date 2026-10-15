@@ -3,6 +3,8 @@ extends RefCounted
 # Draws through the main CanvasItem; state stays on the host during migration.
 
 const BossWavePresentation = preload("res://scripts/presentation/boss_wave_presentation.gd")
+const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 
 
@@ -305,6 +307,12 @@ static func _draw_boss6_rotating_barrier(game: Node2D, screen_pos: Vector2) -> v
 
 
 static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
+	if Boss1AnimationPresentation.death_active(game):
+		Boss1AnimationPresentation.draw_death(game, camera)
+		return
+	if Boss3AnimationPresentation.death_active(game):
+		Boss3AnimationPresentation.draw_death(game, camera)
+		return
 	if not (game.boss_active and game.boss_hp > 0.0) and not (game.current_phase == 7 and game.boss7_core_active):
 		return
 	if game._boss3_miasma_active() and game.boss3_miasma_variant == 1:
@@ -338,10 +346,10 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_dynamic_shadow_fit(boss_tex, boss_draw_pos - camera + Vector2(0, 10), Vector2(122, 82), game.boss2_facing_dir < 0.0, true, 0.34)
 	else:
 		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, false, true, 0.44)
-	var boss_modulate = Color.WHITE
+	var boss_modulate: Color = Boss3AnimationPresentation.stage_modulate(game) if game.current_phase == 3 else Color.WHITE
 	if game._attack_target_is_boss() and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		game._draw_attack_target_marker(boss_draw_pos - camera + Vector2(0, 55), 64.0, game.locked_target_kind == "boss")
-		boss_modulate = Color(1.0, 0.93, 0.48, 1.0)
+		boss_modulate = boss_modulate * Color(1.0, 0.93, 0.48, 1.0)
 	if game.current_phase == 2:
 		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, Vector2(184, 170), game.boss2_facing_dir < 0.0, boss_modulate, true)
 	else:
@@ -2021,6 +2029,7 @@ static func _draw_boss3_sector_ritual(game: Node2D, camera: Vector2, attack: Dic
 		game.draw_arc(center, radius * 0.6, - game.time_alive * 0.4, TAU - game.time_alive * 0.4, 84, Color(0.58, 0.56, 0.62, 0.32 * fade), 3.0)
 		return
 	var safe_lane: int = game._boss3_sector_ritual_safe_lane(attack, step)
+	var safe_span: int = clampi(int(attack.get("safe_lane_span", game.BOSS3_SECTOR_RITUAL_SAFE_LANE_SPAN)), 1, lanes)
 	var step_age: float = age - step_window * float(step)
 	var is_active: bool = step_age >= warning
 	var pulse: float = 0.5 + sin(game.time_alive * 12.0) * 0.5
@@ -2028,9 +2037,10 @@ static func _draw_boss3_sector_ritual(game: Node2D, camera: Vector2, attack: Dic
 	for lane in range(lanes):
 		var start_angle: float = -PI + lane_width * float(lane)
 		var end_angle: float = start_angle + lane_width
-		if lane == safe_lane:
-			game.draw_arc(center, radius * 0.74, start_angle + 0.05, end_angle - 0.05, 18, Color(0.38, 1.0, 0.28, 0.36 + pulse * 0.14), 4.0, true)
-			game.draw_line(center, center + Vector2.from_angle((start_angle + end_angle) * 0.5) * radius * 0.88, Color(0.38, 1.0, 0.26, 0.22), 2.0, true)
+		if game._boss3_sector_ritual_lane_is_safe(lane, attack, step):
+			var safe_fill: Color = Color(0.72, 0.96, 0.88, 0.15 + pulse * 0.05)
+			game.draw_colored_polygon(_boss3_sector_polygon(center, radius, start_angle, end_angle), safe_fill)
+			game.draw_arc(center, radius * (0.76 + warn_p * 0.04), start_angle + 0.025, end_angle - 0.025, 18, Color(0.92, 1.0, 0.82, 0.72 + pulse * 0.2), 5.0, true)
 			continue
 		var fill_alpha: float = 0.12 + warn_p * 0.12
 		var border_alpha: float = 0.4 + warn_p * 0.34
@@ -2041,9 +2051,35 @@ static func _draw_boss3_sector_ritual(game: Node2D, camera: Vector2, attack: Dic
 		var edge_color: Color = Color(0.72, 1.0, 0.18, border_alpha)
 		game.draw_colored_polygon(_boss3_sector_polygon(center, radius, start_angle, end_angle), fill_color)
 		game.draw_arc(center, radius * (0.78 + pulse * 0.03), start_angle + 0.04, end_angle - 0.04, 18, edge_color, 3.2, true)
-		var rune_pos: Vector2 = center + Vector2.from_angle((start_angle + end_angle) * 0.5) * radius * 0.42
+		var rune_pos: Vector2 = center + Vector2.from_angle((start_angle + end_angle) * 0.5) * radius * 0.31
 		game.draw_arc(rune_pos, 18.0 + warn_p * 10.0, - game.time_alive * 1.4, TAU - game.time_alive * 1.4, 20, Color(0.78, 0.24, 1.0, 0.48 + pulse * 0.2), 2.2)
-		game.draw_line(rune_pos + Vector2(-12, 0).rotated(game.time_alive), rune_pos + Vector2(12, 0).rotated(game.time_alive), Color(0.62, 1.0, 0.22, 0.48), 2.0, true)
+		var cross_size: float = 10.0 + warn_p * 5.0
+		game.draw_line(rune_pos + Vector2(-cross_size, -cross_size), rune_pos + Vector2(cross_size, cross_size), Color(1.0, 0.78, 0.22, 0.68), 2.5, true)
+		game.draw_line(rune_pos + Vector2(-cross_size, cross_size), rune_pos + Vector2(cross_size, -cross_size), Color(1.0, 0.78, 0.22, 0.68), 2.5, true)
+	var safe_start_angle: float = -PI + lane_width * float(safe_lane)
+	var safe_end_angle: float = safe_start_angle + lane_width * float(safe_span)
+	var safe_mid_angle: float = (safe_start_angle + safe_end_angle) * 0.5
+	var safe_dir: Vector2 = Vector2.from_angle(safe_mid_angle)
+	var safe_tangent: Vector2 = safe_dir.rotated(PI * 0.5)
+	game.draw_line(center, center + Vector2.from_angle(safe_start_angle) * radius, Color(0.94, 1.0, 0.84, 0.8), 4.0, true)
+	game.draw_line(center, center + Vector2.from_angle(safe_end_angle) * radius, Color(0.94, 1.0, 0.84, 0.8), 4.0, true)
+	var chevron_count: int = 2 if game.gfx_low_resource else 3
+	for i in range(chevron_count):
+		var chevron_radius: float = radius * (0.34 + float(i) * 0.16)
+		var tip: Vector2 = center + safe_dir * (chevron_radius - 12.0)
+		var back: Vector2 = center + safe_dir * (chevron_radius + 16.0)
+		game.draw_line(back + safe_tangent * 11.0, tip, Color(0.98, 1.0, 0.9, 0.82), 3.0, true)
+		game.draw_line(back - safe_tangent * 11.0, tip, Color(0.98, 1.0, 0.9, 0.82), 3.0, true)
+	var badge_pos: Vector2 = center + safe_dir * radius * 0.3
+	var badge_size: float = 14.0 + pulse * 2.0
+	var badge := PackedVector2Array([badge_pos + Vector2(0, -badge_size), badge_pos + Vector2(badge_size, 0), badge_pos + Vector2(0, badge_size), badge_pos + Vector2(-badge_size, 0)])
+	game.draw_colored_polygon(badge, Color(0.94, 1.0, 0.84, 0.9))
+	game.draw_polyline(PackedVector2Array([badge[0], badge[1], badge[2], badge[3], badge[0]]), Color(0.16, 0.34, 0.28, 0.95), 2.0, true)
+	var label_pos: Vector2 = badge_pos + Vector2(-58.0, 36.0)
+	game.draw_rect(Rect2(label_pos + Vector2(-5.0, -17.0), Vector2(126.0, 22.0)), Color(0.05, 0.12, 0.12, 0.78), true)
+	game.draw_string(ThemeDB.fallback_font, label_pos, "AREA SEGURA", HORIZONTAL_ALIGNMENT_CENTER, 116.0, 15, Color(0.98, 1.0, 0.9, 0.94))
+	var scan_radius: float = radius * (0.24 + warn_p * 0.55)
+	game.draw_arc(center, scan_radius, safe_start_angle + 0.04, safe_end_angle - 0.04, 28, Color(0.94, 1.0, 0.86, 0.25 + pulse * 0.25), 2.0, true)
 	game.draw_arc(center, radius * 0.22, game.time_alive * 0.8, game.time_alive * 0.8 + TAU, 44, Color(0.2, 1.0, 0.24, 0.22), 2.0)
 
 

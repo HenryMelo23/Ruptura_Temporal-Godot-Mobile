@@ -35,6 +35,9 @@ func _run() -> void:
 	game.enemies[1]["facing_dir"] = Vector2.LEFT
 	game.boss_stage_duration = 8.0
 	game.boss_stage_timer = game.boss_stage_duration - game.BOSS_STAGE_SLAM_TIME * 0.5
+	game.boss1_siege_tide_jump_event_id = "boss1-siege-tide-visual-opening"
+	game.boss1_siege_tide_jump_duration = game.BOSS_STAGE_SLAM_TIME
+	game.boss1_siege_tide_jump_timer = game.BOSS_STAGE_SLAM_TIME * 0.5
 	game.boss_transition_waves.clear()
 	game.queue_redraw()
 	await process_frame
@@ -44,6 +47,9 @@ func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	assert(jump_image.save_png("res://.codex/boss_wave_jump_qa_1280x720.png") == OK)
 	game.boss_stage_timer = 3.8
+	game.boss1_siege_tide_jump_event_id = "boss1-siege-tide-visual-1"
+	game.boss1_siege_tide_jump_duration = game.BOSS1_SIEGE_TIDE_WARNING
+	game.boss1_siege_tide_jump_timer = game.BOSS1_SIEGE_TIDE_WARNING * 0.45
 	game.boss_stage_safe_angle = 0.0
 	game.boss_transition_waves = [{
 		"idx": 0,

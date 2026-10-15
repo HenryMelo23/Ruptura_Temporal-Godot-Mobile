@@ -60,7 +60,7 @@ func _run() -> void:
 	multiplayer_players.append({"valid": true, "alive": false, "pos": Vector2(900, 120), "velocity": Vector2.ZERO, "hp": 0.0, "hp_max": 100.0, "cards": 4.0, "damage": 150.0, "manifestation": "necronada", "stunned": false, "silenced": true, "action_recent": 0.0})
 	var multiplayer := Schema.build_from_snapshot(_snapshot(multiplayer_players))
 	_assert_normalized(multiplayer, "multiplayer")
-	_check(Array(multiplayer.get("valid_player_mask", [])) == [1.0, 1.0, 1.0], "multiplayer slot mask")
+	_check(Array(multiplayer.get("valid_player_mask", [])) == [1.0, 1.0, 0.0], "downed multiplayer slot was targetable")
 	_check(Array(multiplayer.get("feature_schema", [])).has("players.slot_2.alive"), "third ordered slot missing")
 	_check(Array(multiplayer.get("feature_schema", [])).has("multiplayer.slot_2_valid"), "third multiplayer mask missing")
 

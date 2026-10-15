@@ -2,6 +2,7 @@ extends RefCounted
 
 # Presentation only. Never advance timers, consume RNG or modify the replicated snapshot.
 # Palette sampled from Pai-Rato's vestments, wax face and Catedral masonry.
+const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 const INK := Color("100f17")
 const CLOTH := Color("272230")
 const MOLD := Color("68733a")
@@ -42,8 +43,8 @@ static func clones(game: Node2D, camera: Vector2) -> void:
 	var texture: Texture2D = game._boss_texture()
 	if texture == null:
 		return
-	# Render the real boss and all four decoys together, with identical material,
-	# size, shadow and depth policy. No index-dependent clue to the real identity.
+	# The silhouettes share size, shadow and material. The real body keeps one
+	# restrained wax tell; confirmed damage temporarily strengthens that clue.
 	var positions: Array = game.boss3_miasma_clone_positions.duplicate()
 	positions.append(game.boss_pos)
 	positions.sort_custom(func(a: Vector2, b: Vector2): return a.y < b.y)
@@ -52,7 +53,10 @@ static func clones(game: Node2D, camera: Vector2) -> void:
 	var fit: Vector2 = tex_size * minf(size.x / tex_size.x, size.y / tex_size.y)
 	var exchange: float = 1.0 - clampf((game.BOSS3_MIASMA_CLONE_SWAP - game.boss3_miasma_clone_timer) / 0.2, 0.0, 1.0)
 	var slices := 6 if game.gfx_low_resource else 10
+	var stage_color: Color = Boss3AnimationPresentation.stage_modulate(game)
+	stage_color.a = 0.94
 	for world_pos in positions:
+		var is_real: bool = Vector2(world_pos).is_equal_approx(game.boss_pos)
 		var p: Vector2 = _pixel(Vector2(world_pos) - camera)
 		var phase: float = floorf(Vector2(world_pos).x * 0.07 + Vector2(world_pos).y * 0.03)
 		game._draw_dynamic_shadow_fit(texture, p, size, false, true, 0.34)
@@ -64,12 +68,20 @@ static func clones(game: Node2D, camera: Vector2) -> void:
 			var offset := Vector2(roundf(sin(phase + row * 2.3) * 3.0 * exchange) * 2.0, 0)
 			var dst := Rect2(rect.position + Vector2(0, fit.y * row / slices) + offset, Vector2(fit.x, fit.y / slices))
 			var src := Rect2(0, tex_size.y * row / slices, tex_size.x, tex_size.y / slices)
-			game.draw_texture_rect_region(texture, dst, src, Color(0.94, 0.92, 0.72, 0.94))
+			game.draw_texture_rect_region(texture, dst, src, stage_color)
 		var count := 2 if game.gfx_low_resource else 4
 		for i in range(count):
 			var breath: float = sin(game.time_alive * 1.3 + phase + i * 2.1)
 			var foot := p + Vector2(-40 + i * 25 + breath * 6, size.y * 0.5 + i * 2)
 			_wisp(game, foot, 22 + exchange * 16, (0.13 + exchange * 0.16) * _envelope(game))
+		if is_real:
+			var reveal: float = clampf(game.boss3_miasma_clone_reveal_timer / maxf(0.01, game.BOSS3_MIASMA_CLONE_REVEAL_TIME), 0.0, 1.0)
+			var tell_alpha: float = 0.26 + reveal * 0.62
+			var tell_pos: Vector2 = p + Vector2(0, size.y * 0.5 + 7)
+			game.draw_line(tell_pos + Vector2(-9, 0), tell_pos + Vector2(9, 0), _opacity(IVORY, tell_alpha), 2.0, false)
+			game.draw_circle(p + Vector2(0, -size.y * 0.36), 2.0 + reveal * 2.0, _opacity(WAX, tell_alpha))
+			if reveal > 0.0:
+				game.draw_arc(p, size.x * (0.5 + reveal * 0.05), -PI * 0.82, -PI * 0.18, 18, _opacity(IVORY, 0.22 + reveal * 0.55), 3.0, true)
 
 
 static func darkness_boundary(angle: float, radius: float, clock: float) -> Vector2:

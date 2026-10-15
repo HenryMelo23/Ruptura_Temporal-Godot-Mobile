@@ -44,15 +44,20 @@ func _test_timing_and_authority() -> void:
 	_check(is_equal_approx(controller.hp_multiplier_for_party(1), 1.0), "solo HP multiplier drifted")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(2), 1.75), "duo HP multiplier drifted")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(3), 2.40), "trio HP multiplier drifted")
+	_check(not game.is_multiplayer, "singleplayer fixture unexpectedly entered multiplayer")
 
 	game.time_alive = controller.FIRST_SPAWN_TIME - 0.1
 	controller.update(0.0)
 	_check(controller.active_enemy().is_empty(), "Suturador appeared before 200s")
 	game.arauto = {"active": true, "hp": 1.0}
+	game.fusion_check_timer = 30.0
 	game.time_alive = controller.FIRST_SPAWN_TIME + 0.1
 	controller.update(0.0)
-	_check(controller.active_enemy().is_empty(), "Suturador spawned while Arauto was active")
+	_check(not controller.active_enemy().is_empty(), "Suturador failed to overlap the Arauto/event flow")
+	controller.cleanup("overlap_fixture", false)
+	controller.reset_for_new_run()
 	game.arauto.clear()
+	game.fusion_check_timer = 0.0
 	game.boss_active = true
 	game.time_alive = controller.FIRST_SPAWN_TIME + 0.1
 	controller.update(0.0)
@@ -60,11 +65,18 @@ func _test_timing_and_authority() -> void:
 	game.boss_active = false
 	controller.update(0.0)
 	var enemy: Dictionary = controller.active_enemy()
-	_check(not enemy.is_empty(), "Suturador did not spawn at 200s")
+	_check(not enemy.is_empty(), "Suturador did not spawn in singleplayer at 200s")
 	_check(String(enemy.get("type", "")) == game.ENEMY_AMBER_SUTURER, "spawned wrong event enemy")
 	_check(controller.spawn_now() == enemy, "second spawn created a duplicate Suturador")
 	_check(game.enemies.filter(func(value): return String(Dictionary(value).get("type", "")) == game.ENEMY_AMBER_SUTURER).size() == 1, "more than one Suturador exists")
 	_check(int(enemy.get("max_hp", 0)) >= 2200, "Suturador max HP was not configured")
+	game.arauto.clear()
+	game.arauto_spawned = false
+	game._spawn_arauto()
+	_check(not controller.active_enemy().is_empty(), "Arauto entry removed the active Suturador")
+	game.arauto.clear()
+	game.arauto_spawned = false
+	game.enemies = game.enemies.filter(func(value): return not bool(Dictionary(value).get("aguilhao_nodule", false)))
 
 
 func _test_sutures_nodes_and_damage_gate() -> void:

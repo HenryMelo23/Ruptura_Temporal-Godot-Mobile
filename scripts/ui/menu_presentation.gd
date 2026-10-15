@@ -105,7 +105,7 @@ static func graphics_settings_rects(g: CanvasItem, viewport: Vector2) -> Diction
 		var option_count: int = maxi(1, keys.size() - 1)
 		var rows: int = int(ceil(float(option_count) / 2.0))
 		var back_h: float = 54.0
-		var row_h: float = clamp((viewport.y - y - back_h - 64.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 64.0, 108.0)
+		var row_h: float = clamp((viewport.y - y - back_h - 64.0 - gap * float(maxi(0, rows - 1))) / float(maxi(1, rows)), 54.0, 108.0)
 		var wide_rects: Dictionary = {}
 		var option_index: int = 0
 		for key in keys:

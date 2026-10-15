@@ -124,10 +124,6 @@ func _event_incompatible() -> bool:
 		return true
 	if game.boss_active or game.boss_dead or game.boss_call_timer >= 0.0 or game.phase_transition_timer > 0.0:
 		return true
-	if game._arauto_active() or game._bargain_capsule_active() or game.runtime_event_director.is_active():
-		return true
-	if game.fusion_check_timer > 0.0 or game._tutorial_blocks_normal_spawn():
-		return true
 	return false
 
 

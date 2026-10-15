@@ -1,0 +1,91 @@
+{
+  "format": "ruptura_umbra_v1_v2_tcc_protocol",
+  "protocol_version": 1,
+  "evaluation_id": "umbra-v1-v2-tcc-v1",
+  "status": "awaiting_artifact_lock",
+  "purpose": "Comparacao experimental entre UMBRA v1 e UMBRA v2. Nao define vencedor por agregado de metricas.",
+  "hypotheses": [
+    {
+      "id": "H0",
+      "statement": "Sob a mesma dificuldade, nao ha diferenca estatisticamente clara entre v1 e v2 nas metricas primarias."
+    },
+    {
+      "id": "H1",
+      "statement": "A v2 muda a distribuicao de acoes apos uma troca controlada de padrao sem piorar de forma relevante a estabilidade ou a justica percebida."
+    },
+    {
+      "id": "H2",
+      "statement": "A v2 cabe no orcamento de CPU e memoria em PC e Android sem usar uma policy mobile diferente."
+    }
+  ],
+  "policies": {
+    "v1": {
+      "label": "UMBRA DQN v1",
+      "required_model_contract": "umbra_dqn_2_0_actions_23",
+      "required_action_count": 23
+    },
+    "v2": {
+      "label": "UMBRA recorrente multi-head v2",
+      "required_model_contract": "ruptura_umbra_multihead_policy",
+      "required_observation_schema": 2
+    }
+  },
+  "controls": {
+    "same_game_commit": true,
+    "same_godot_build": true,
+    "same_arena_and_boss_parameters": true,
+    "same_player_build_and_movement_per_case": true,
+    "same_seeds_per_policy": true,
+    "same_brain_hz": 10.0,
+    "no_designer_action_preference_mask": true,
+    "difficulty_note": "HP, dano, cooldown, cadence, arena, build e movimento sao idênticos dentro de cada caso pareado. Diferenca de forca nao e interpretada como inteligencia."
+  },
+  "scenario_groups": [
+    {
+      "id": "control",
+      "split": "control",
+      "scenario_ids": ["eletrica_racional_orbit", "lacerante_sanguinaria_strafe"],
+      "seeds": [41001, 41002, 41003, 41004, 41005, 41006, 41007, 41008],
+      "pattern_change": false
+    },
+    {
+      "id": "adaptation",
+      "split": "adaptation",
+      "scenario_ids": ["cartografica_racional_feint", "necronada_devota_breakout"],
+      "seeds": [42001, 42002, 42003, 42004, 42005, 42006, 42007, 42008],
+      "pattern_change": true,
+      "change_at_step": 48,
+      "change_description": "O movimento do jogador troca para um padrao deterministico diferente no mesmo episodio; o executor e os parametros de dificuldade nao mudam."
+    },
+    {
+      "id": "generalization",
+      "split": "held_out",
+      "scenario_ids": ["retornante_sanguinaria_heldout", "acorrentada_impulsiva_heldout", "bombastica_vanguarda_heldout", "eclipsada_devota_heldout"],
+      "seeds": [43001, 43002, 43003, 43004, 43005, 43006, 43007, 43008],
+      "pattern_change": false
+    }
+  ],
+  "raw_data_contract": {
+    "format": "ruptura_umbra_v1_v2_tcc_raw",
+    "version": 1,
+    "retain": "Guardar JSON bruto por policy, manifest congelado, logs do runner, hash SHA-256 de cada arquivo e CSV bruto do estudo humano. Nao sobrescrever uma rodada concluida.",
+    "episode_fields": ["scenario_id", "seed", "outcome", "duration_seconds", "damage_to_player", "damage_to_umbra", "actions", "decision_usec", "frame_usec", "peak_runtime_bytes", "invalid_action_count", "executor_reject_count", "crash"],
+    "adaptation_fields": ["pre_actions", "post_actions", "pre_damage_to_player", "post_damage_to_player", "window_seconds"]
+  },
+  "metrics": {
+    "primary": ["win_rate_wilson_95", "damage_to_player", "damage_to_umbra", "action_entropy_bits", "adjacent_action_repeat_rate", "adaptation_action_tvd", "held_out_win_rate_wilson_95"],
+    "systems": ["decision_usec_mean_p95", "frame_usec_mean_p95", "peak_runtime_bytes_max", "model_bytes", "invalid_action_count", "executor_reject_count", "crash_count", "determinism_mismatch_count"],
+    "human": ["perceived_intelligence_1_to_7", "perceived_fairness_1_to_7", "perceived_fun_1_to_7", "free_comment"],
+    "interpretation": "Relatar estimativas e intervalos por metrica; nao calcular placar unico. Resultado negativo, misto ou inconclusivo e valido."
+  },
+  "platforms": {
+    "pc": {"required": true, "brain_hz": 10.0},
+    "android": {"required": true, "brain_hz": 10.0, "device_identification_required": true},
+    "parity": {"required": true, "fixture_tolerance": 0.00001, "same_weights_required": true}
+  },
+  "human_study": {
+    "design": "ordem aleatoria e cega por codigo A/B; participante nao recebe a versao da policy; registrar plataforma e experiencia sem dados pessoais desnecessarios",
+    "minimum": "Exploratorio: declarar N, excluir desistencias antes da analise e nunca inferir preferencia com N insuficiente.",
+    "questions": ["intelligence", "fairness", "fun", "comment"]
+  }
+}

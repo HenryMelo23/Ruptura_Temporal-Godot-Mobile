@@ -1,5 +1,7 @@
 import os
 import json
+import hashlib
+import struct
 try:
     import torch
 except ImportError:
@@ -10,6 +12,8 @@ ACTION_SCHEMA_VERSION = 2
 FEATURE_SCHEMA_VERSION = 1
 HIDDEN1_SIZE = 128
 HIDDEN2_SIZE = 64
+MODEL_FORMAT = "ruptura_neural_model"
+MODEL_FORMAT_VERSION = 1
 
 ACTION_SCHEMA = [
     "FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE",
@@ -48,6 +52,24 @@ def _require_shape(weights_json, key, expected):
     return True
 
 
+def _flatten(value):
+    if not isinstance(value, list):
+        return [float(value)]
+    result = []
+    for item in value:
+        result.extend(_flatten(item))
+    return result
+
+
+def _tensor_digest(tensors, layer_count):
+    digest = hashlib.sha256()
+    for layer_index in range(layer_count):
+        for suffix in ("weight", "bias"):
+            for value in tensors[f"layers.{layer_index}.{suffix}"]["data"]:
+                digest.update(struct.pack("<f", float(value)))
+    return digest.hexdigest()
+
+
 def export_weights():
     if torch is None:
         print("ERROR: PyTorch is required to export Umbra DQN weights.")
@@ -79,10 +101,10 @@ def export_weights():
     # Keys in state_dict usually are:
     # 'net.0.weight', 'net.0.bias', 'net.2.weight', 'net.2.bias', 'net.4.weight', 'net.4.bias'
     
-    weights_json = {}
+    legacy_weights = {}
     for key, tensor in state_dict.items():
         # Convert torch tensor to nested lists
-        weights_json[key] = tensor.tolist()
+        legacy_weights[key] = tensor.tolist()
         print(f"Extracted {key} of shape {tensor.shape}")
 
     expected_shapes = {
@@ -94,17 +116,30 @@ def export_weights():
         "net.4.bias": [len(ACTION_SCHEMA)],
     }
     for key, expected in expected_shapes.items():
-        if not _require_shape(weights_json, key, expected):
+        if not _require_shape(legacy_weights, key, expected):
             return False
-
-    weights_json["model_version"] = MODEL_VERSION
-    weights_json["action_schema_version"] = ACTION_SCHEMA_VERSION
-    weights_json["feature_schema_version"] = FEATURE_SCHEMA_VERSION
-    weights_json["input_size"] = len(FEATURE_SCHEMA)
-    weights_json["output_size"] = len(ACTION_SCHEMA)
-    weights_json["feature_schema"] = FEATURE_SCHEMA
-    weights_json["action_schema"] = ACTION_SCHEMA
-    weights_json["acoes_base"] = ACTION_SCHEMA
+    layer_shapes = [[HIDDEN1_SIZE, len(FEATURE_SCHEMA)], [HIDDEN2_SIZE, HIDDEN1_SIZE], [len(ACTION_SCHEMA), HIDDEN2_SIZE]]
+    tensors = {}
+    for index, (weight_key, bias_key) in enumerate((("net.0.weight", "net.0.bias"), ("net.2.weight", "net.2.bias"), ("net.4.weight", "net.4.bias"))):
+        tensors[f"layers.{index}.weight"] = {"shape": layer_shapes[index], "data": _flatten(legacy_weights[weight_key])}
+        tensors[f"layers.{index}.bias"] = {"shape": [layer_shapes[index][0]], "data": _flatten(legacy_weights[bias_key])}
+    weights_json = {
+        "format": MODEL_FORMAT,
+        "format_version": MODEL_FORMAT_VERSION,
+        "precision": "fp32",
+        "model_version": MODEL_VERSION,
+        "action_schema_version": ACTION_SCHEMA_VERSION,
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "input_size": len(FEATURE_SCHEMA),
+        "output_size": len(ACTION_SCHEMA),
+        "feature_schema": FEATURE_SCHEMA,
+        "action_schema": ACTION_SCHEMA,
+        "normalization": {"kind": "legacy_runtime_v1"},
+        "architecture": {"activation": "leaky_relu_0.01", "layers": [{"input_size": shape[1], "output_size": shape[0]} for shape in layer_shapes]},
+        "runtime": {"brain_tick_seconds": 0.1},
+        "tensors": tensors,
+        "integrity": {"algorithm": "sha256-fp32le", "tensors_sha256": _tensor_digest(tensors, len(layer_shapes))},
+    }
 
     os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:

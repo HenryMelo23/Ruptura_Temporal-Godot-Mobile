@@ -1,19 +1,13 @@
 {
-  "version": "2.0.48",
-  "version_code": 24800,
-  "filename": "Ruptura_Temporal_2.0.48.exe",
-  "sha256": "cf2f77e18ebc82afe9543b08633b9bc08655de8bd48428fe48a8f7099bfde117",
-  "size": 922312256,
+  "version": "2.0.50",
+  "version_code": 25000,
+  "filename": "Ruptura_Temporal_2.0.50.exe",
+  "sha256": "bb9fe27d393fa8a1984d36f409d020aba7493c2aa4f75843e9cc450608e45129",
+  "size": 923716088,
   "notes": [
-    "Dez novas músicas ampliam a variedade da trilha durante as fases.",
-    "Uso de memória e carregamento de visuais foram otimizados para aparelhos mais modestos.",
-    "Novo miniboss Sineiro Boreal e novas apresentações de bosses e eventos.",
-    "Cápsula da Barganha Temporal adiciona uma decisão rara de risco e recompensa.",
-    "Evolução, música, passiva Elétrica e Lôdarios receberam correções no multiplayer.",
-    "Snapshots de combate foram divididos para reduzir lentidão e quedas em partidas online.",
-    "Rotas de fases e encerramento da Umbra foram corrigidos.",
-    "Maré de Cerco e áudio da Nevasca voltaram a encerrar e aparecer corretamente."
+    "Atualizacao 2.0.50",
+    "Correcoes e melhorias acumuladas da branch de trabalho"
   ],
   "mandatory": false,
-  "published_at": "2026-10-12T13:53:39.7520440Z"
+  "published_at": "2026-10-15T04:00:27.8649992Z"
 }

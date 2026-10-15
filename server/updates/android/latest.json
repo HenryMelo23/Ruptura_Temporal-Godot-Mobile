@@ -1,19 +1,13 @@
 {
-  "version": "2.0.48",
-  "version_code": 24800,
-  "filename": "ruptura_temporal_mobile_2.0.48.apk",
-  "sha256": "566d830f191709aa1e320f63dfbabaaceaa59c54d8366af37a81665c3e01659b",
-  "size": 836073269,
+  "version": "2.0.50",
+  "version_code": 25000,
+  "filename": "ruptura_temporal_mobile_2.0.50.apk",
+  "sha256": "573216cd6cc4aaad9a2e502164bdc33507befbc4784cc0efef7034ab85d556f6",
+  "size": 837471694,
   "notes": [
-    "Dez novas músicas ampliam a variedade da trilha durante as fases.",
-    "Uso de memória e carregamento de visuais foram otimizados para aparelhos mais modestos.",
-    "Novo miniboss Sineiro Boreal e novas apresentações de bosses e eventos.",
-    "Cápsula da Barganha Temporal adiciona uma decisão rara de risco e recompensa.",
-    "Evolução, música, passiva Elétrica e Lôdarios receberam correções no multiplayer.",
-    "Snapshots de combate foram divididos para reduzir lentidão e quedas em partidas online.",
-    "Rotas de fases e encerramento da Umbra foram corrigidos.",
-    "Maré de Cerco e áudio da Nevasca voltaram a encerrar e aparecer corretamente."
+    "Atualizacao 2.0.50",
+    "Correcoes e melhorias acumuladas da branch de trabalho"
   ],
   "mandatory": false,
-  "published_at": "2026-10-12T13:52:34.1834220Z"
+  "published_at": "2026-10-15T03:59:19.6247509Z"
 }

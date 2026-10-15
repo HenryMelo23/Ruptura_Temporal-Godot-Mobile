@@ -4,6 +4,8 @@ const OUT_DIR := "res://.agent_logs/menu_after"
 
 var game: Node
 var failed: bool = false
+var original_config_exists: bool = false
+var original_config: PackedByteArray
 
 
 func _fail(message: String) -> void:
@@ -18,6 +20,9 @@ func _check(condition: bool, message: String) -> void:
 
 func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
+	original_config_exists = FileAccess.file_exists("user://hud_config.save")
+	if original_config_exists:
+		original_config = FileAccess.get_file_as_bytes("user://hud_config.save")
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	call_deferred("_run")
@@ -38,6 +43,7 @@ func _run() -> void:
 	game.gfx_screen_shake = true
 	game.gfx_low_resource = false
 	game.gfx_memory_saver = false
+	game.gfx_fps_limit = 60
 	game._apply_graphics_settings()
 	game.vol_music = 0.65
 	game.vol_sfx = 0.8
@@ -60,6 +66,7 @@ func _run() -> void:
 	_check(not game._gameplay_preference_keys().has("desktop_hud_scale"), "mobile gameplay exposed desktop HUD scale")
 	game.gfx_low_resource = false
 	game.gfx_memory_saver = false
+	_check(game._graphics_setting_keys().has("fps_limit"), "mobile graphics lost FPS limit")
 	_check(not game._memory_saver_active(), "mobile graphics started permanently locked in memory saver")
 	game._activate_graphics_setting("low_resource")
 	_check(game.gfx_low_resource and not game._memory_saver_active(), "mobile lightweight mode could not be selected independently")
@@ -79,6 +86,7 @@ func _run() -> void:
 	_check_audio_drag(Vector2(1280, 720))
 	_check_audio_drag(Vector2(960, 540))
 	_check_settings_interactions(Vector2(1280, 720))
+	_restore_original_config()
 
 	print("SETTINGS_PAGES_VISUAL_OK captures=13 hitboxes=true audio_drag=true mouse=true graphics=true mobile_choice=true pause_return=true persistence=true")
 	game.queue_free()
@@ -86,6 +94,16 @@ func _run() -> void:
 	await process_frame
 	await create_timer(0.5).timeout
 	quit(1 if failed else 0)
+
+
+func _restore_original_config() -> void:
+	if original_config_exists:
+		var file := FileAccess.open("user://hud_config.save", FileAccess.WRITE)
+		if file:
+			file.store_buffer(original_config)
+			file.close()
+	else:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://hud_config.save"))
 
 
 func _capture_mode(target_mode: String, viewport: Vector2i, file_name: String) -> void:
@@ -186,6 +204,9 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 	game._handle_settings_touch(Rect2(hub["graphics"]).get_center(), viewport)
 	_check(game.mode == "settings_graphics", "graphics did not open")
 	var graphics: Dictionary = game._graphics_settings_rects(viewport)
+	game.gfx_fps_limit = 60
+	game._handle_graphics_settings_touch(Rect2(graphics["fps_limit"]).get_center(), viewport)
+	_check(game.gfx_fps_limit == 120 and Engine.max_fps == 120, "graphics FPS limit did not cycle to 120")
 	for key in ["particles", "shadows", "screen_shake", "low_resource", "memory_saver"]:
 		var before: bool = game.get("gfx_" + key)
 		game._handle_graphics_settings_touch(Rect2(graphics[key]).get_center(), viewport)

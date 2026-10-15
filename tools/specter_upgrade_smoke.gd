@@ -26,10 +26,11 @@ func _run() -> void:
 
 	instance.persistent_spectral_coins = 48
 	instance.spectral_coins = 48
+	instance.unlocked_spectrum_ids["racional"] = true
+	instance.specter_levels["racional"] = 1
 	instance.selected_aura = 0
 	instance.specter_upgrade_previous_mode = "game_over"
-	instance.specter_upgrade_selected = 0
-	instance.specter_upgrade_action_selected = 0
+	instance.specter_upgrade_selected_index = 0
 	instance.mode = "game_over"
 	if instance.has_method("_sync_current_aura_from_progress"):
 		instance.call("_sync_current_aura_from_progress")

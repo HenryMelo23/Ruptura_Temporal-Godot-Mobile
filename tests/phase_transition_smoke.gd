@@ -62,6 +62,22 @@ func _run() -> void:
 		_check(game.current_phase == 2, "Phase transition did not advance to phase 2")
 		_check(game.mode == "game", "Mode did not return to game after transition ended")
 
+	# Boss 6 death must reach the generic reward/route block and create its exit.
+	game.current_phase = 6
+	game.run_initial_phase = 1
+	game.run_phase6_completed = false
+	game.mode = "game"
+	game.phase_fragment.clear()
+	game.boss_active = true
+	game.boss_dead = false
+	game.boss_hp_max = 100.0
+	game.boss_hp = 1.0
+	game.boss6_special_event_id = ""
+	game._damage_boss(9999.0, "phase6_portal_smoke", false, false)
+	_check(game.boss_dead, "Boss 6 death was not committed")
+	_check(not game.phase_fragment.is_empty(), "Boss 6 death did not create the phase fragment")
+	_check(int(game.phase_fragment.get("next_phase", 0)) == 4, "Boss 6 exit did not point to phase 4 for a phase-1 route")
+
 	if game.has_method("_cleanup_runtime_resources"):
 		game._cleanup_runtime_resources()
 	game.textures.clear()
@@ -73,7 +89,7 @@ func _run() -> void:
 	shaders.clear()
 	for i in range(4):
 		await process_frame
-	print("PHASE_TRANSITION_SMOKE_OK shaders=7 transition=true smooth_wipe=true")
+	print("PHASE_TRANSITION_SMOKE_OK shaders=7 transition=true smooth_wipe=true boss6_exit=true")
 	quit(0)
 
 func _check(condition: bool, message: String) -> void:

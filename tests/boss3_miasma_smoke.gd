@@ -29,6 +29,7 @@ func _prepare_boss() -> void:
 	game.player_pos = Vector2(700, 430)
 	game.boss_attacks.clear()
 	game.enemy_bullets.clear()
+	game.enemies.clear()
 	game.phase3_cheeses.clear()
 
 
@@ -38,7 +39,20 @@ func _run() -> void:
 	_check(game.boss3_miasma_variant == 1, "yellow clone symptom did not start")
 	_check(is_equal_approx(game.boss3_miasma_timer, 15.0), "ultimate duration is not 15 seconds")
 	_check(game.boss3_miasma_clone_positions.size() == 4, "clone symptom did not create four decoys")
+	for i in range(game.boss3_miasma_clone_positions.size()):
+		for j in range(i + 1, game.boss3_miasma_clone_positions.size()):
+			_check(Vector2(game.boss3_miasma_clone_positions[i]).distance_to(Vector2(game.boss3_miasma_clone_positions[j])) >= game.BOSS3_MIASMA_CLONE_MIN_SEPARATION, "clone formation is too clustered")
 	_check(game._boss3_miasma_hides_boss_bar(), "clone symptom did not hide boss health bar")
+	var decoy_target: Vector2 = game._nearest_target()
+	_check(game.boss3_miasma_clone_positions.has(decoy_target), "auto aim revealed the real boss before identification")
+	_check(game._register_boss3_clone_hit(decoy_target), "projectile contact did not identify a decoy")
+	_check(game.boss3_miasma_clone_mislead_timer > 0.0, "decoy hit did not apply the short aim penalty")
+	_check(game._nearest_target() == Vector2.ZERO, "aim penalty did not release auto focus")
+	game.boss3_miasma_clone_mislead_timer = 0.0
+	game._damage_boss(100.0, "miasma_identification_test")
+	_check(game.boss3_miasma_clone_reveal_timer > 0.0, "valid boss hit did not reveal the real target")
+	_check(game._boss_available_for_auto_target(), "identified boss did not become available to auto aim")
+	_check(game._nearest_target() == game.boss_pos, "auto aim did not focus the identified boss")
 	var old_boss_pos: Vector2 = game.boss_pos
 	game.boss3_miasma_clone_timer = 0.0
 	game._update_boss3_miasma(0.01)
@@ -86,7 +100,7 @@ func _run() -> void:
 	game._update_boss3_miasma(1.1)
 	_check(game._boss3_miasma_active(), "ultimate did not return after 30-second cooldown")
 
-	print("BOSS3_MIASMA_SMOKE_OK duration=15 cooldown=%ds clones=true darkness=250 warning=800ms variants=1,2,4" % int(game.BOSS3_MIASMA_COOLDOWN))
+	print("BOSS3_MIASMA_SMOKE_OK duration=15 cooldown=%ds clone_swap=%.1fs reveal=%.1fs darkness=250 warning=800ms variants=1,2,4" % [int(game.BOSS3_MIASMA_COOLDOWN), game.BOSS3_MIASMA_CLONE_SWAP, game.BOSS3_MIASMA_CLONE_REVEAL_TIME])
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

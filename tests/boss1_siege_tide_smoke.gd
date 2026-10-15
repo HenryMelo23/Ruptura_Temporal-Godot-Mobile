@@ -58,10 +58,33 @@ func _run() -> void:
 			assert(is_equal_approx(float(game.boss_transition_waves[index].get("open_angle", 0.0)), before_angles[index]))
 
 	_prepare_boss_stage(3)
+	# The opening ring has its own full leap, while later rings each receive a
+	# fresh warning-length leap instead of being emitted by a stationary boss.
+	game.boss1_siege_tide_jump_timer = 0.0
+	game.boss1_siege_tide_jump_duration = 0.0
 	game.boss_stage_timer = game.boss_stage_duration - game.BOSS_STAGE_SLAM_TIME * 0.5
 	assert(game._boss_draw_position().y < game.boss_pos.y - 150.0)
 	game.boss_stage_timer = game.boss_stage_duration - game.BOSS_STAGE_SLAM_TIME
 	assert(is_equal_approx(game._boss_draw_position().y, game.boss_pos.y))
+	_prepare_boss_stage(1)
+	# Restart the setup without a catch-up delta: real gameplay schedules waves
+	# one after another, whereas the earlier fixture intentionally creates all
+	# waves in one step to validate their geometry.
+	game._start_boss_stage()
+	var first_event_id := String(game.boss1_siege_tide_jump_event_id)
+	assert(first_event_id.ends_with("-0"))
+	assert(game.boss1_siege_tide_jump_timer > 0.0)
+	game.boss1_siege_tide_jump_timer = 0.0
+	game._update_boss_stage(game.BOSS_STAGE_SLAM_TIME + game.BOSS_STAGE_WAVE_INTERVAL + 0.01)
+	var second_wave: Dictionary = game.boss_transition_waves.filter(func(item): return int(item.get("idx", -1)) == 1)[0]
+	assert(game.boss1_siege_tide_jump_event_id == String(second_wave.get("event_id", "")))
+	assert(is_equal_approx(game.boss1_siege_tide_jump_duration, float(second_wave.get("warning", 0.0))))
+	game.boss1_siege_tide_jump_timer = game.boss1_siege_tide_jump_duration * 0.5
+	assert(game._boss_draw_position().y < game.boss_pos.y - 50.0)
+	game.boss1_siege_tide_jump_timer = 0.0
+	game._update_boss_stage(game.BOSS_STAGE_WAVE_INTERVAL + 0.01)
+	var third_wave: Dictionary = game.boss_transition_waves.filter(func(item): return int(item.get("idx", -1)) == 2)[0]
+	assert(game.boss1_siege_tide_jump_event_id == String(third_wave.get("event_id", "")))
 
 	_prepare_boss_stage(1)
 	var wave: Dictionary = game.boss_transition_waves[0]
@@ -95,6 +118,16 @@ func _run() -> void:
 	assert(synced_waves.size() == game.boss_transition_waves.size())
 	assert(String(synced_waves[0].get("event_id", "")) == String(game.boss_transition_waves[0].get("event_id", "")))
 	assert(int(synced_waves[0].get("seed", -1)) == int(game.boss_transition_waves[0].get("seed", -2)))
+	var synced_jump: Dictionary = Dictionary(round_trip.get("boss1_siege_tide_jump", {}))
+	assert(String(synced_jump.get("event_id", "")) == game.boss1_siege_tide_jump_event_id)
+	assert(float(synced_jump.get("timer", 0.0)) > 0.0)
+	game.boss1_siege_tide_jump_event_id = ""
+	game.boss1_siege_tide_jump_timer = 0.0
+	game.boss1_siege_tide_jump_duration = 0.0
+	game._apply_remote_boss_visual_snapshot(round_trip)
+	assert(game.boss1_siege_tide_jump_event_id == String(synced_jump.get("event_id", "")))
+	assert(is_equal_approx(game.boss1_siege_tide_jump_timer, float(synced_jump.get("timer", 0.0))))
+	assert(is_equal_approx(game.boss1_siege_tide_jump_duration, float(synced_jump.get("duration", 0.0))))
 
 	print("BOSS1_SIEGE_TIDE_SMOKE_OK solo=4 duo=5 trio=6 enraged_trio=7 synced_jump=true warning=%.2f damage=%d" % [
 		game.BOSS1_SIEGE_TIDE_WARNING,

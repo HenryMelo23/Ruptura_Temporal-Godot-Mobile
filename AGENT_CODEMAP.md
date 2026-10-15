@@ -7,6 +7,7 @@ over 100 KB.
 | Domain | Owner / first file | Runtime entry symbols | Focused tests |
 | --- | --- | --- | --- |
 | Save/config/resume/retry | `scripts/systems/save/runtime_save_controller.gd` | `_load_player_profile`, `_load_card_unlocks`, `_build_interrupted_run_snapshot`, `_resume_interrupted_run`, `_use_run_retry`; core wrappers remain public | `tests/runtime_save_controller_smoke.gd`, `tests/runtime_backup_reconciliation_smoke.gd`, `tests/player_progress_cache_smoke.gd` |
+| Permanent progress recovery | `scripts/systems/player_progress_sync.gd`, `scripts/systems/save/runtime_save_controller.gd`, `server/relay_manager.js` | versioned cache/event builders, `_apply_remote_player_progress_snapshot`, identity create/claim and relay event validation; menu only presents status/recovery controls | `tests/player_progress_cache_smoke.gd`, `tests/runtime_backup_reconciliation_smoke.gd`, `tests/player_progress_profile_visual_smoke.gd`, `server/player_progress_smoke.js` |
 | Phase orchestration | `scripts/systems/phase/phase_flow_controller.gd` | `_setup_initial_phase_state`, `_advance_to_phase`, phase timers/portals/fragment helpers | `tests/phase_transition_smoke.gd`, `tests/runtime_backup_reconciliation_smoke.gd`, `tests/phase_density_carry_smoke.gd` |
 | Runtime asset residency | `scripts/systems/assets/runtime_asset_controller.gd` | `preload_all`, `prepare_phase`, `ensure_key`; core wrappers preserve catalog and phase entry behavior | `tests/runtime_asset_controller_smoke.gd`, `tests/catalog_manifest_spectrum_icons_smoke.gd`, `tests/phase_transition_smoke.gd` |
 | Progression/rewards/card math | `scripts/systems/progression/runtime_progression_controller.gd` | `points_for_enemy`, `apply_score_delta`, `new_common_card_count`, `effective_card_price`, long-run helpers | `tests/runtime_progression_controller_smoke.gd`, `tests/long_run_power_fantasy_smoke.gd`, `tests/long_run_economy_smoke.gd`, `tests/cinzas_attribute_burn_system_smoke.gd` |
@@ -30,7 +31,12 @@ over 100 KB.
 | Menus and catalog UI | `scripts/presentation/menus_presentation.gd`, `scripts/catalog/*` | menu draw helpers, catalog repository/interface classes | `tests/main_menu_visual_smoke.gd`, `tests/catalog_repository_smoke.gd`, `tests/catalog_interface_visual_smoke.gd` |
 | World presentation | `scripts/presentation/world_environment_presentation.gd` | `_draw_boss_attacks`, environment and phase drawing helpers | `tests/phase_transition_visual_smoke.gd`, `tests/dynamic_shadows_visual_smoke.gd`, `tests/readability_visual_smoke.gd` |
 | Runtime state/constants | `scripts/main_runtime_state.gd` | state constants and shared variables | nearest domain test plus `python3 tools/check_architecture_budget.py` |
+| UMBRA neural runtime | `scripts/systems/umbra_neural_runtime.gd` | `RTUmbraNeuralRuntime.create`, `forward`, `contract_error` | `tests/umbra_neural_runtime_smoke.gd`, `tests/umbra_dqn_contract_smoke.gd` |
 | UMBRA observation schema | `scripts/systems/umbra_observation_schema.gd` | `RTUmbraObservationSchema.build_from_runtime`, `build_from_snapshot`, `validate_observation` | `tests/umbra_observation_schema_v2_smoke.gd`, `tests/umbra_dqn_contract_smoke.gd` |
+| UMBRA multiplayer authority | `scripts/systems/online/umbra_authority_controller.gd` plus phase-5 facade hooks | `build_authoritative_decision`, `revalidate_before_execution`, `accept_replica_event`; compact event rides the world-visual snapshot | `tests/umbra_multiplayer_authority_smoke.gd`, `tests/multiplayer_gameplay_authority_smoke.gd` |
+| UMBRA multi-head policy | `scripts/systems/umbra_multihead_policy.gd` | `RTUmbraMultiheadPolicy.create`, `step`, `reset_recurrence`, `set_hidden_state`, `logits_to_probabilities`, `contract_error` | `tests/umbra_multihead_policy_smoke.gd`, `tests/umbra_multihead_parity_smoke.gd` |
+| UMBRA 2.0 memory lifecycle | `scripts/systems/umbra_memory_controller.gd` | `begin_run`, `begin_encounter`, `record_local_sample`, `finish_run` | `tests/umbra_memory_controller_smoke.gd` |
+| UMBRA external RL bridge | `tools/umbra_rl_contract.gd`, `tools/umbra_rl_rollout.gd`, `tools/train_umbra_ppo.py`, `tools/umbra_rl_curriculum.py` | protocol dump, authoritative headless rollout, versioned reward/curriculum, development-only recurrent PPO/export | `tools/umbra_rl_protocol_smoke.py`, `tools/umbra_rl_curriculum_smoke.py` |
 
 ## Owner Rules
 
@@ -59,6 +65,12 @@ over 100 KB.
 - Keep UMBRA observation versions in `scripts/systems/umbra_observation_schema.gd`.
   A new schema must not replace a policy ABI, weights, or fallback until a
   separately trained artifact opts in through its own validated contract.
+- Keep UMBRA model parsing, integrity validation and contiguous FP32 inference
+  in `scripts/systems/umbra_neural_runtime.gd`. Do not add platform-specific
+  inference paths without proving an equivalent model output contract.
+- Keep UMBRA training under `tools/`; the headless rollout owns the
+  observation -> action -> simulation -> reward/done/info boundary. Python and
+  PyTorch must never be added to game export dependencies.
 - Put drawing-only changes in presentation files. Do not mix balance or gameplay
   mutations into presentation owners.
 - Use `scripts/main_runtime_core.gd` as a temporary integration surface only

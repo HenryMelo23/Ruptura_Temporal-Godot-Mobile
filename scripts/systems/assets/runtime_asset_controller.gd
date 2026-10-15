@@ -11,6 +11,9 @@ const PHASE_TEXTURE_SPECS := {
 		"boss_stage1": ["Boss1.png", "Boss2.png"],
 		"boss_stage2": ["Boss3.png", "Boss4.png"],
 		"boss_stage3": ["Boss5.png", "Boss6.png"],
+		"boss1_hit": ["boss1/hit_01.png", "boss1/hit_02.png", "boss1/hit_03.png", "boss1/hit_04.png", "boss1/hit_05.png"],
+		"boss1_jump": ["boss1/jump_01.png", "boss1/jump_02.png", "boss1/jump_03.png", "boss1/jump_04.png", "boss1/jump_05.png"],
+		"boss1_death": ["boss1/death_01.png", "boss1/death_02.png", "boss1/death_03.png", "boss1/death_04.png", "boss1/death_05.png", "boss1/death_06.png"],
 	},
 	2: {
 		"enemy_common_phase_2_left": ["inimigo_direita2-1.png", "inimigo_direita2-2.png"],
@@ -29,6 +32,20 @@ const PHASE_TEXTURE_SPECS := {
 		"enemy_phase_3_bullet": ["Disp_inimigo3_1.png", "Disp_inimigo3_2.png"],
 		"boss_walk": ["Bossandando3_1.png", "Bossandando3_2.png"],
 		"boss3": ["Boss3_1.png", "Boss3_2.png"],
+		"boss3_anim_idle": ["boss3/remake/idle/idle_01.png", "boss3/remake/idle/idle_02.png", "boss3/remake/idle/idle_03.png", "boss3/remake/idle/idle_04.png", "boss3/remake/idle/idle_05.png", "boss3/remake/idle/idle_06.png"],
+		"boss3_anim_walk": ["boss3/remake/walk/walk_01.png", "boss3/remake/walk/walk_02.png", "boss3/remake/walk/walk_03.png", "boss3/remake/walk/walk_04.png", "boss3/remake/walk/walk_05.png", "boss3/remake/walk/walk_06.png", "boss3/remake/walk/walk_07.png", "boss3/remake/walk/walk_08.png"],
+		"boss3_anim_entry": ["boss3/remake/entry/entry_01.png", "boss3/remake/entry/entry_02.png", "boss3/remake/entry/entry_03.png", "boss3/remake/entry/entry_04.png", "boss3/remake/entry/entry_05.png", "boss3/remake/entry/entry_06.png", "boss3/remake/entry/entry_07.png", "boss3/remake/entry/entry_08.png"],
+		"boss3_anim_rat_spit": ["boss3/remake/rat_spit/rat_spit_01.png", "boss3/remake/rat_spit/rat_spit_02.png", "boss3/remake/rat_spit/rat_spit_03.png", "boss3/remake/rat_spit/rat_spit_04.png", "boss3/remake/rat_spit/rat_spit_05.png", "boss3/remake/rat_spit/rat_spit_06.png"],
+		"boss3_anim_rat_tail": ["boss3/remake/rat_tail/rat_tail_01.png", "boss3/remake/rat_tail/rat_tail_02.png", "boss3/remake/rat_tail/rat_tail_03.png", "boss3/remake/rat_tail/rat_tail_04.png", "boss3/remake/rat_tail/rat_tail_05.png", "boss3/remake/rat_tail/rat_tail_06.png"],
+		"boss3_anim_rat_rain": ["boss3/remake/rat_rain/rat_rain_01.png", "boss3/remake/rat_rain/rat_rain_02.png", "boss3/remake/rat_rain/rat_rain_03.png", "boss3/remake/rat_rain/rat_rain_04.png", "boss3/remake/rat_rain/rat_rain_05.png", "boss3/remake/rat_rain/rat_rain_06.png"],
+		"boss3_anim_cheese_ritual": ["boss3/remake/cheese_ritual/cheese_ritual_01.png", "boss3/remake/cheese_ritual/cheese_ritual_02.png", "boss3/remake/cheese_ritual/cheese_ritual_03.png", "boss3/remake/cheese_ritual/cheese_ritual_04.png", "boss3/remake/cheese_ritual/cheese_ritual_05.png", "boss3/remake/cheese_ritual/cheese_ritual_06.png", "boss3/remake/cheese_ritual/cheese_ritual_07.png", "boss3/remake/cheese_ritual/cheese_ritual_08.png"],
+		"boss3_anim_consume": ["boss3/remake/consume/consume_01.png", "boss3/remake/consume/consume_02.png", "boss3/remake/consume/consume_03.png", "boss3/remake/consume/consume_04.png", "boss3/remake/consume/consume_05.png", "boss3/remake/consume/consume_06.png"],
+		"boss3_anim_faith": ["boss3/remake/faith/faith_01.png", "boss3/remake/faith/faith_02.png", "boss3/remake/faith/faith_03.png", "boss3/remake/faith/faith_04.png", "boss3/remake/faith/faith_05.png", "boss3/remake/faith/faith_06.png", "boss3/remake/faith/faith_07.png"],
+		"boss3_anim_sector_ritual": ["boss3/remake/sector_ritual/sector_ritual_01.png", "boss3/remake/sector_ritual/sector_ritual_02.png", "boss3/remake/sector_ritual/sector_ritual_03.png", "boss3/remake/sector_ritual/sector_ritual_04.png", "boss3/remake/sector_ritual/sector_ritual_05.png", "boss3/remake/sector_ritual/sector_ritual_06.png", "boss3/remake/sector_ritual/sector_ritual_07.png", "boss3/remake/sector_ritual/sector_ritual_08.png"],
+		"boss3_anim_miasma": ["boss3/remake/miasma/miasma_01.png", "boss3/remake/miasma/miasma_02.png", "boss3/remake/miasma/miasma_03.png", "boss3/remake/miasma/miasma_04.png", "boss3/remake/miasma/miasma_05.png", "boss3/remake/miasma/miasma_06.png", "boss3/remake/miasma/miasma_07.png"],
+		"boss3_anim_hit": ["boss3/remake/hit/hit_01.png", "boss3/remake/hit/hit_02.png", "boss3/remake/hit/hit_03.png"],
+		"boss3_anim_stun": ["boss3/remake/stun/stun_01.png", "boss3/remake/stun/stun_02.png", "boss3/remake/stun/stun_03.png", "boss3/remake/stun/stun_04.png", "boss3/remake/stun/stun_05.png"],
+		"boss3_anim_death": ["boss3/remake/death/death_01.png", "boss3/remake/death/death_02.png", "boss3/remake/death/death_03.png", "boss3/remake/death/death_04.png", "boss3/remake/death/death_05.png", "boss3/remake/death/death_06.png", "boss3/remake/death/death_07.png", "boss3/remake/death/death_08.png", "boss3/remake/death/death_09.png", "boss3/remake/death/death_10.png"],
 		"boss3_cheese": "queijo.png",
 		"boss3_flask": "disparo_boss3.png",
 	},
@@ -71,13 +88,13 @@ const PHASE_TEXTURE_SPECS := {
 
 static func preload_all(game: Node, base_path: String) -> void:
 	for phase in PHASE_TEXTURE_SPECS:
-		_load_phase(game, int(phase), base_path)
+		_load_phase(game, int(phase), base_path, false)
 
 
 static func prepare_phase(game: Node, phase: int, base_path: String, release_inactive: bool) -> void:
 	if release_inactive:
 		_release_inactive(game, phase)
-	_load_phase(game, phase, base_path)
+	_load_phase(game, phase, base_path, release_inactive)
 
 
 static func ensure_key(game: Node, key: String, base_path: String) -> bool:
@@ -97,13 +114,16 @@ static func phase_keys(phase: int) -> Array:
 	return PHASE_TEXTURE_SPECS[phase].keys()
 
 
-static func _load_phase(game: Node, phase: int, base_path: String) -> void:
+static func _load_phase(game: Node, phase: int, base_path: String, skip_optional_animation_sets: bool = false) -> void:
 	if not PHASE_TEXTURE_SPECS.has(phase):
 		return
 	var specs: Dictionary = PHASE_TEXTURE_SPECS[phase]
 	for key in specs:
+		var texture_key := String(key)
+		if skip_optional_animation_sets and texture_key.begins_with("boss3_anim_") and texture_key not in ["boss3_anim_idle", "boss3_anim_walk", "boss3_anim_entry"]:
+			continue
 		if not game.textures.has(key):
-			_load_key(game, String(key), specs[key], base_path)
+			_load_key(game, texture_key, specs[key], base_path)
 
 
 static func _load_key(game: Node, key: String, spec: Variant, base_path: String) -> void:

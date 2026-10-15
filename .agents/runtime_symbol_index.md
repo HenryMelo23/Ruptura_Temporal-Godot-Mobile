@@ -33,6 +33,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/progression/runtime_progression_controller.gd` | 249 | 181 | 33 | `elite_point_multiplier` 19 code LOC |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
 | `scripts/systems/umbra_observation_schema.gd` | owner | owner | owner | `build_from_runtime`, `build_from_snapshot`, `validate_observation` |
+| `scripts/systems/online/umbra_authority_controller.gd` | owner | owner | owner | `build_authoritative_decision`, `revalidate_before_execution`, `accept_replica_event` |
+| `scripts/systems/umbra_neural_runtime.gd` | owner | owner | owner | `create`, `forward`, `contract_error` |
 
 ## Runtime Lookup
 
@@ -76,7 +78,15 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Boss party scaling contract | `profile_for_party_size` | `scripts/systems/boss_party_scaling.gd:13` |
 | Boss party scaling snapshot | `_ensure_boss_party_scaling_context` | `scripts/main_runtime_core.gd:6896` |
 | UMBRA Observation Schema 2.0 | `RTUmbraObservationSchema.build_from_runtime` | `scripts/systems/umbra_observation_schema.gd:96` |
+| UMBRA multiplayer authority | `RTUmbraAuthorityController.build_authoritative_decision` | `scripts/systems/online/umbra_authority_controller.gd` |
 | UMBRA Observation fixtures | `build_from_snapshot` | `scripts/systems/umbra_observation_schema.gd:69` |
+| UMBRA FP32 neural runtime | `RTUmbraNeuralRuntime.forward` | `scripts/systems/umbra_neural_runtime.gd:85` |
+| UMBRA 2.0 multi-head recurrent policy | `RTUmbraMultiheadPolicy.step` | `scripts/systems/umbra_multihead_policy.gd` |
+| UMBRA PC/Android fixture parity | `RTUmbraMultiheadPolicy.set_hidden_state` | `tests/umbra_multihead_parity_smoke.gd` |
+| UMBRA 2.0 memory lifecycle | `RTUmbraMemoryController.begin_run` | `scripts/systems/umbra_memory_controller.gd` |
+| UMBRA RL contract dump | `SceneTree._init` | `tools/umbra_rl_contract.gd` |
+| UMBRA RL authoritative rollout | `SceneTree._run` | `tools/umbra_rl_rollout.gd` |
+| UMBRA RL reward/curriculum | `_reward_for_transition` | `tools/umbra_rl_rollout.gd` |
 
 ## Preserved extracted owners
 

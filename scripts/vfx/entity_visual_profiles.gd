@@ -2,6 +2,9 @@ extends RefCounted
 
 # Host-owned state and compatibility wrappers are retained during extraction.
 
+const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
+
 
 static func _petro_frame(game: Node2D) -> Texture2D:
 	var direction: String = game.petro_facing
@@ -268,11 +271,19 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 			return frames4[int(game.boss4_anim_time) % frames4.size()]
 		return game.textures["boss"]
 	if game.current_phase == 3:
-		var idx3 = int(game.boss_phase) % 2
-		var use_walk_frames = game.boss3_is_moving and game.textures.has("boss_walk")
-		return game.textures["boss_walk"][idx3] if use_walk_frames else game.textures["boss3"][idx3]
+		var boss3_animation_texture: Texture2D = Boss3AnimationPresentation.active_texture(game)
+		if boss3_animation_texture != null:
+			return boss3_animation_texture
+		var fallback_key: String = "boss_walk" if game.boss3_is_moving else "boss3"
+		var fallback_frames: Array = game.textures.get(fallback_key, [])
+		if not fallback_frames.is_empty():
+			return fallback_frames[int(game.boss_phase) % fallback_frames.size()]
+		return game.textures.get("boss")
 	if game.current_phase == 2:
 		return game._boss2_texture()
+	var boss1_animation_texture: Texture2D = Boss1AnimationPresentation.active_texture(game)
+	if boss1_animation_texture != null:
+		return boss1_animation_texture
 	var pct = game.boss_hp / max(1.0, game.boss_hp_max)
 	var idx = int(game.boss_phase) % 2
 	if pct >= 0.6:
@@ -315,8 +326,14 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 		else:
 			bob = sin(game.time_alive * 2.2) * 2.0
 		return game.boss_pos + Vector2(0, - bob)
+	if Boss1AnimationPresentation.siege_tide_jump_active(game):
+		var tide_jump_progress: float = 1.0 - game.boss1_siege_tide_jump_timer / maxf(0.001, game.boss1_siege_tide_jump_duration)
+		var tide_hop: float = sin(clampf(tide_jump_progress, 0.0, 1.0) * PI) * 188.0
+		return game.boss_pos + Vector2(0, - tide_hop)
 	if game.boss_stage_timer <= 0.0:
-		return game.boss_pos
+		# A restrained breathing arc keeps all three damage stages alive without
+		# changing collision, movement, or their existing clock-crack progression.
+		return game.boss_pos + Vector2(0.0, sin(game.time_alive * 3.2) * 2.0)
 	var elapsed: float = maxf(0.0, game.boss_stage_duration - game.boss_stage_timer)
 	var hop = 0.0
 	if elapsed <= game.BOSS_STAGE_SLAM_TIME:
@@ -329,6 +346,9 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 
 
 static func _boss_draw_size(game: Node2D) -> Vector2:
+	if game.current_phase == 1 and game.boss_stage_timer <= 0.0:
+		var breath: float = sin(game.time_alive * 3.2)
+		return Vector2(184.0 + breath * 2.4, 170.0 - breath * 1.6)
 	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else (Vector2(59.4, 88.0) if game.current_phase == 5 else Vector2(184, 170))))
 
 
