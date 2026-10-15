@@ -16,6 +16,8 @@ const PHASE_TEXTURE_SPECS := {
 		"boss1_turn": ["boss1/turn/turn_01.png", "boss1/turn/turn_02.png", "boss1/turn/turn_03.png"],
 		"boss1_bubble": ["boss1/bubble/bubble_01.png", "boss1/bubble/bubble_02.png", "boss1/bubble/bubble_03.png", "boss1/bubble/bubble_04.png"],
 		"boss1_pincer": ["boss1/pincer/pincer_01.png", "boss1/pincer/pincer_02.png", "boss1/pincer/pincer_03.png", "boss1/pincer/pincer_04.png"],
+		"boss1_pincer_up": ["boss1/pincer_up/pincer_up_01.png", "boss1/pincer_up/pincer_up_02.png", "boss1/pincer_up/pincer_up_03.png", "boss1/pincer_up/pincer_up_04.png"],
+		"boss1_pincer_down": ["boss1/pincer_down/pincer_down_01.png", "boss1/pincer_down/pincer_down_02.png", "boss1/pincer_down/pincer_down_03.png", "boss1/pincer_down/pincer_down_04.png"],
 		"boss1_absorb": ["boss1/absorb/absorb_01.png", "boss1/absorb/absorb_02.png", "boss1/absorb/absorb_03.png", "boss1/absorb/absorb_04.png"],
 		"boss1_sand": ["boss1/sand/sand_01.png", "boss1/sand/sand_02.png", "boss1/sand/sand_03.png", "boss1/sand/sand_04.png"],
 		"boss1_tide": ["boss1/tide/tide_01.png", "boss1/tide/tide_02.png", "boss1/tide/tide_03.png", "boss1/tide/tide_04.png"],
@@ -142,7 +144,7 @@ static func _load_phase(game: Node, phase: int, base_path: String, skip_optional
 static func _compact_boss1_animation_spec(key: String, spec: Array) -> Array:
 	if spec.size() <= 2:
 		return spec
-	if key in ["boss1_jump", "boss1_hit", "boss1_death"]:
+	if key in ["boss1_jump", "boss1_hit", "boss1_death", "boss1_pincer", "boss1_pincer_up", "boss1_pincer_down"]:
 		return [spec[0], spec[int(spec.size() / 2)], spec[-1]]
 	return [spec[0], spec[-1]]
 

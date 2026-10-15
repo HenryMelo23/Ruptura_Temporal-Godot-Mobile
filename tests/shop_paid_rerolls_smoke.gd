@@ -20,6 +20,15 @@ func _settle_shop_animation() -> void:
 	game.shop_presentation.update(1.0)
 
 
+func _sfx_was_played(key: String) -> bool:
+	if not game.audio_streams.has(key):
+		return false
+	for player in game.sfx_players:
+		if player.stream == game.audio_streams[key]:
+			return true
+	return false
+
+
 func _open_test_shop(score: int, cost: int, multiplayer: bool = false) -> void:
 	game.mode = "game"
 	game.previous_mode = "game"
@@ -108,6 +117,7 @@ func _run() -> void:
 	var spent_before: int = game.run_points_spent
 	game._reroll_shop()
 	_check(game.score == 1500, "first paid reroll did not charge 20 percent of card_cost")
+	_check(_sfx_was_played("shop_spend"), "paid reroll did not play the score-spend SFX")
 	_check(game.run_points_spent == spent_before + 100, "first paid reroll did not count as spent points")
 	_check(game.shop_paid_rerolls_this_visit == 1, "first paid reroll did not increment paid count")
 	_settle_shop_animation()
@@ -137,6 +147,13 @@ func _run() -> void:
 	_open_test_shop(900, 500)
 	_check(game.shop_visit_index == visit_before + 1, "new visit did not advance")
 	_check(game.shop_rerolls == 3 and game.shop_paid_rerolls_this_visit == 0, "reroll counters did not reset per visit")
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
+	game._buy_selected_card()
+	_check(game.shop_purchase_anim_timer > 0.0, "card purchase did not enter its existing animation")
+	game.shop_controller.update(game.SHOP_PURCHASE_ANIM_TIME + 0.02)
+	_check(_sfx_was_played("shop_spend"), "card purchase did not play the score-spend SFX")
 
 	_open_test_shop(900, 500, true)
 	_consume_free_rerolls()

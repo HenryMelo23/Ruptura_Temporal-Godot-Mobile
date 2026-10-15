@@ -87,6 +87,26 @@ func _run() -> void:
 	assert(game.boss1_siege_tide_jump_event_id == String(third_wave.get("event_id", "")))
 
 	_prepare_boss_stage(1)
+	# Every visualized leap resolves one local landing event. This exercises the
+	# presentation-timer path used by host and replicas, not only wave creation.
+	game.boss1_siege_tide_landing_event_id = ""
+	game.boss1_siege_tide_jump_event_id = "boss1-siege-tide-1-0"
+	game.boss1_siege_tide_jump_duration = 0.8
+	game.boss1_siege_tide_jump_timer = 0.01
+	game.screen_shake_strength = 0.0
+	game._process(0.02)
+	assert(game.boss1_siege_tide_landing_event_id == "boss1-siege-tide-1-0")
+	var first_landing_strength: float = game.screen_shake_strength
+	game.boss1_siege_tide_landing_event_id = ""
+	game.boss1_siege_tide_jump_event_id = "boss1-siege-tide-1-3"
+	game.boss1_siege_tide_jump_duration = 0.8
+	game.boss1_siege_tide_jump_timer = 0.01
+	game.screen_shake_strength = 0.0
+	game._process(0.02)
+	assert(game.boss1_siege_tide_landing_event_id == "boss1-siege-tide-1-3")
+	assert(game.screen_shake_strength < first_landing_strength)
+
+	_prepare_boss_stage(1)
 	var wave: Dictionary = game.boss_transition_waves[0]
 	wave["age"] = float(wave["warning"])
 	wave["radius"] = 220.0

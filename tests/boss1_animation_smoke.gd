@@ -1,6 +1,17 @@
 extends SceneTree
 
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+const AssetController = preload("res://scripts/systems/assets/runtime_asset_controller.gd")
+
+
+func _opaque_area(texture: Texture2D) -> int:
+	var image := texture.get_image()
+	var area := 0
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			if image.get_pixel(x, y).a > 0.02:
+				area += 1
+	return area
 
 var game: Node
 
@@ -36,6 +47,20 @@ func _run() -> void:
 	assert(game.textures.get("boss1_hit", []).size() == 5)
 	assert(game.textures.get("boss1_jump", []).size() == 5)
 	assert(game.textures.get("boss1_death", []).size() == 6)
+	for key in ["boss1_idle", "boss1_walk", "boss1_turn", "boss1_bubble", "boss1_pincer", "boss1_pincer_up", "boss1_pincer_down", "boss1_absorb", "boss1_sand", "boss1_tide", "boss1_rain", "boss1_rewind", "boss1_hit", "boss1_jump", "boss1_death"]:
+		for frame in game.textures[key]:
+			var image: Image = frame.get_image()
+			assert(image != null and image.get_size() == Vector2i(256, 256), key)
+			var visible := image.get_used_rect()
+			assert(visible.position.x >= 10 and visible.position.y >= 10 and visible.end.x <= 246 and visible.end.y <= 246, "%s needs transparent safety margin" % key)
+			if key != "boss1_death":
+				assert(maxi(visible.size.x, visible.size.y) >= 230, "%s silhouette must retain the canonical visual extent" % key)
+				assert(visible.end.y >= 243 and visible.end.y <= 245, "%s feet must share the canonical ground anchor" % key)
+	assert(Boss1AnimationPresentation.DRAW_SIZE.is_equal_approx(Vector2(184.0, 170.0) * 1.8), "Cronoguejo base scale must remain 80 percent above the previous size")
+	var draw_scale := minf(Boss1AnimationPresentation.DRAW_SIZE.x / Boss1AnimationPresentation.FRAME_SIZE, Boss1AnimationPresentation.DRAW_SIZE.y / Boss1AnimationPresentation.FRAME_SIZE)
+	var expected_visible_foot := -Boss1AnimationPresentation.DRAW_SIZE.y * 0.5 + 244.0 * draw_scale
+	var shadow_foot := Boss1AnimationPresentation.SHADOW_CENTER_Y_OFFSET + Boss1AnimationPresentation.DRAW_SIZE.y * 0.5
+	assert(absf(expected_visible_foot - shadow_foot) <= 1.0, "boss shadow must meet the visible feet")
 	game.time_alive = 0.0
 	var idle_size_a: Vector2 = game._boss_draw_size()
 	game.time_alive = PI / 6.4
@@ -90,9 +115,56 @@ func _run() -> void:
 	for attack_case in attack_cases:
 		game.boss_attacks.clear()
 		attack_case[1].call()
+		# Advance scheduled attacks to their actual emission, not a negative delay.
+		for attack in game.boss_attacks:
+			attack["age"] = 0.0
 		Boss1AnimationPresentation.update(game, 0.01)
 		assert(Boss1AnimationPresentation.active_texture(game) in game.textures[String(attack_case[2])], "%s has no real animation" % String(attack_case[0]))
 
+	game.boss_attacks.clear()
+	# A lingering projectile cannot drag an attack pose through locomotion.
+	game.boss1_animation_motion_hold = 0.18
+	game.boss1_animation_turn_timer = 0.0
+	game.boss_attacks.append({"kind": "bubble", "age": 0.1, "duration": 2.0})
+	assert(Boss1AnimationPresentation.active_texture(game) in game.textures["boss1_walk"])
+	game.boss1_animation_motion_hold = 0.0
+	game.boss_attacks[0]["age"] = -0.2
+	game.boss1_hit_animation_timer = 0.0
+	assert(Boss1AnimationPresentation.active_texture(game) in game.textures["boss1_idle"])
+	var idle_texture: Texture2D = game.textures["boss1_idle"][0]
+	var idle_rendered_area := float(_opaque_area(idle_texture)) * pow(Boss1AnimationPresentation.DRAW_SIZE.y / Boss1AnimationPresentation.FRAME_SIZE, 2.0)
+	# Each leg follows its locked direction, independent of movement snapshots.
+	for direction in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+		game.boss_attacks.clear()
+		game.boss_attacks.append({"kind": "pincer_tenaz", "state": "dash_second", "age": 1.0, "state_age": 0.1, "first_dir": -direction, "second_dir": direction})
+		var key := "boss1_pincer"
+		if direction.y != 0.0:
+			key += "_up" if direction.y < 0.0 else "_down"
+		var directional_texture := Boss1AnimationPresentation.active_texture(game)
+		assert(directional_texture in game.textures[key])
+		var directional_size := Boss1AnimationPresentation.draw_size(game)
+		var directional_rendered_area := float(_opaque_area(directional_texture)) * pow(directional_size.y / Boss1AnimationPresentation.FRAME_SIZE, 2.0)
+		var perceived_area_ratio := directional_rendered_area / idle_rendered_area
+		assert(perceived_area_ratio >= 0.85 and perceived_area_ratio <= 1.15, "dash %s changed perceived boss size: %.3f" % [direction, perceived_area_ratio])
+		var directional_draw_scale := directional_size.y / Boss1AnimationPresentation.FRAME_SIZE
+		var directional_visible_foot := -directional_size.y * 0.5 + 244.0 * directional_draw_scale
+		var directional_shadow_foot := Boss1AnimationPresentation.shadow_center(Vector2.ZERO, directional_size).y + directional_size.y * 0.5
+		assert(absf(directional_visible_foot - directional_shadow_foot) <= 1.0, "dash %s shadow lost its ground anchor" % direction)
+		assert(Boss1AnimationPresentation.should_flip_h(game) == (direction == Vector2.LEFT))
+		var wire: Dictionary = bytes_to_var(var_to_bytes(game._pack_net_boss_visuals()))
+		game.boss_attacks = Array(wire["boss_attacks"])
+		assert(Boss1AnimationPresentation.active_texture(game) in game.textures[key], "replicated direction must select the same sprite")
+		game.boss_attacks[0] = {"kind": "rush", "state": "dash", "age": 0.7, "dir": direction}
+		assert(Boss1AnimationPresentation.active_texture(game) in game.textures[key])
+		var full_frames: Array = game.textures[key]
+		game.textures[key] = AssetController._compact_boss1_animation_spec(key, full_frames)
+		assert(game.textures[key].size() == 3)
+		assert(Boss1AnimationPresentation.active_texture(game) == full_frames[2], "LOW must retain the strike frame")
+		game.textures[key] = full_frames
+	game.boss_attacks[0]["state"] = "recovery"
+	game.boss1_animation_motion_hold = 0.18
+	assert(Boss1AnimationPresentation.active_texture(game) in game.textures["boss1_walk"])
+	game.boss1_animation_motion_hold = 0.0
 	game.boss_attacks.clear()
 	game.boss1_absorb_timer = game.BOSS1_ABSORB_DURATION
 	Boss1AnimationPresentation.update(game, 0.01)
@@ -124,7 +196,7 @@ func _run() -> void:
 	game.boss1_death_animation_timer = 0.0
 	assert(not Boss1AnimationPresentation.death_active(game))
 
-	print("BOSS1_ANIMATION_SMOKE_OK idle_walk_turn=true attacks=7 absorb_rewind=true hit_priority=true jump_frames=5 death_frames=6")
+	print("BOSS1_ANIMATION_SMOKE_OK idle_walk_turn=true attacks=7 absorb_rewind=true hit_priority=true jump_frames=5 death_frames=6 directions=4 wire=true low_dash=true safe_margins=true canonical_extent=true perceived_scale=true shadow_anchor=true")
 	if game.has_method("_cleanup_runtime_resources"):
 		game._cleanup_runtime_resources()
 	if game.music_player != null:

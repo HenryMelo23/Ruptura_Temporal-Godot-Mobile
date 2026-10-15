@@ -32,22 +32,32 @@ func _prepare_boss() -> void:
 
 
 func _capture(path: String) -> bool:
+	var capture_size := Vector2i(960, 540) if path.contains("960x540") else Vector2i(1280, 720)
+	root.mode = Window.MODE_WINDOWED
+	root.borderless = true
+	root.min_size = Vector2i.ZERO
+	root.content_scale_size = capture_size
+	root.size = capture_size
+	for _frame in range(4):
+		await process_frame
 	game.queue_redraw()
 	await process_frame
-	await process_frame
+	await RenderingServer.frame_post_draw
 	var viewport_texture := root.get_texture()
 	if viewport_texture == null:
 		push_error("BOSS1_ANIMATION_VISUAL_FAIL renderer did not expose a viewport texture")
 		return false
 	var image := viewport_texture.get_image()
-	if image == null or image.save_png(path) != OK:
-		push_error("BOSS1_ANIMATION_VISUAL_FAIL could not save " + path)
+	if image == null or image.get_size() != capture_size or image.save_png(path) != OK:
+		push_error("BOSS1_ANIMATION_VISUAL_FAIL expected=%s actual=%s path=%s" % [capture_size, image.get_size() if image != null else Vector2i.ZERO, path])
 		return false
 	return true
 
 
 func _run() -> void:
 	_prepare_boss()
+	game.set_process(false)
+	game.set_physics_process(false)
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	Boss1AnimationPresentation.update(game, 0.01)
 	if not await _capture("res://.codex/boss1_idle_remake_qa_1280x720.png"):
@@ -55,15 +65,20 @@ func _run() -> void:
 		return
 
 	game.boss1_animation_velocity = Vector2(90.0, 0.0)
+	game.boss1_animation_motion_hold = 0.18
+	game.boss1_animation_turn_timer = 0.0
 	game.boss1_animation_state = Boss1AnimationPresentation.STATE_WALK
 	game.boss1_animation_elapsed = 0.22
+	assert(Boss1AnimationPresentation.active_texture(game) in game.textures["boss1_walk"])
 	if not await _capture("res://.codex/boss1_walk_remake_qa_1280x720.png"):
 		quit(1)
 		return
 
 	game.boss1_animation_velocity = Vector2.ZERO
+	game.boss1_animation_motion_hold = 0.0
 	game.boss_attacks.clear()
 	game._add_boss_bubble(game.player_pos)
+	game.boss_attacks[0]["age"] = 0.28
 	Boss1AnimationPresentation.update(game, 0.28)
 	if not await _capture("res://.codex/boss1_bubble_remake_qa_1280x720.png"):
 		quit(1)
@@ -77,6 +92,24 @@ func _run() -> void:
 	if not await _capture("res://.codex/boss1_tenaz_remake_qa_1280x720.png"):
 		quit(1)
 		return
+	var dash_directions := {
+		"right": Vector2.RIGHT,
+		"left": Vector2.LEFT,
+		"up": Vector2.UP,
+		"down": Vector2.DOWN,
+	}
+	for facing: String in dash_directions:
+		game.boss_attacks[0]["first_dir"] = dash_directions[facing]
+		if not await _capture("res://.codex/boss1_dash_%s_qa_1280x720.png" % facing):
+			quit(1)
+			return
+		root.size = Vector2i(960, 540)
+		game.gfx_low_resource = true
+		if not await _capture("res://.codex/boss1_dash_%s_low_qa_960x540.png" % facing):
+			quit(1)
+			return
+		root.size = Vector2i(1280, 720)
+		game.gfx_low_resource = false
 
 	game.boss_attacks.clear()
 	game._add_boss_tide()
@@ -124,6 +157,9 @@ func _run() -> void:
 		return
 
 	print("BOSS1_ANIMATION_VISUAL_OK idle_walk_bubble_tenaz_tide_rewind=1280x720 hit_jump_death=1280x720 low=960x540")
+	game._cleanup_runtime_resources()
 	game.queue_free()
+	await process_frame
+	game = null
 	await process_frame
 	quit(0)

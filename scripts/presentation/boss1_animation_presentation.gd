@@ -8,7 +8,13 @@ const LANDING_FRAME_HOLD := 0.24
 const TURN_DURATION := 0.22
 const NETWORK_MOTION_HOLD := 0.18
 const MOVEMENT_DEADZONE := 5.0
-const DRAW_SIZE := Vector2(184.0, 170.0)
+# The Cronoguejo intentionally occupies more of the arena than the player.
+# Keep this single base size so idle, casts, jumps, death, shadow and HUD
+# anchoring all grow together instead of making individual frames drift.
+const DRAW_SIZE := Vector2(331.2, 306.0)
+const FRAME_SIZE := 256.0
+const FRAME_BOTTOM_MARGIN := 12.0
+const SHADOW_CENTER_Y_OFFSET := -(FRAME_BOTTOM_MARGIN / FRAME_SIZE) * DRAW_SIZE.y
 
 const STATE_IDLE := "idle"
 const STATE_WALK := "walk"
@@ -22,6 +28,25 @@ const STATE_SAND := "sand"
 const STATE_TIDE := "tide"
 const STATE_RAIN := "rain"
 const STATE_REWIND := "rewind"
+
+# Generated poses have deliberately different silhouettes (wide claws, rear
+# view, crouches). These restrained per-state factors keep the perceived body
+# mass equal to idle while preserving each pose's aspect ratio and pixel art.
+const DRAW_SCALE_BY_VISUAL := {
+	STATE_WALK: 1.15,
+	STATE_TURN: 1.01,
+	STATE_HIT: 1.02,
+	STATE_JUMP: 1.07,
+	STATE_BUBBLE: 1.04,
+	"pincer_horizontal": 1.20,
+	"pincer_up": 0.97,
+	"pincer_down": 1.05,
+	STATE_ABSORB: 1.05,
+	STATE_SAND: 1.11,
+	STATE_TIDE: 1.08,
+	STATE_RAIN: 1.02,
+	STATE_REWIND: 0.97,
+}
 
 const LOOP_FPS := {
 	STATE_IDLE: 5.0,
@@ -61,13 +86,21 @@ static func reset(game: Node2D) -> void:
 	game.boss1_animation_facing = 1.0
 	game.boss1_animation_turn_timer = 0.0
 	game.boss1_animation_motion_hold = 0.0
+	game.boss1_siege_tide_landing_event_id = ""
 	clear_siege_tide_jump(game)
 
 
 static func update(game: Node2D, delta: float) -> void:
 	game.boss1_hit_animation_timer = maxf(0.0, game.boss1_hit_animation_timer - delta)
 	game.boss1_death_animation_timer = maxf(0.0, game.boss1_death_animation_timer - delta)
-	game.boss1_siege_tide_jump_timer = maxf(0.0, game.boss1_siege_tide_jump_timer - delta)
+	var previous_tide_timer: float = game.boss1_siege_tide_jump_timer
+	game.boss1_siege_tide_jump_timer = maxf(0.0, previous_tide_timer - delta)
+	if previous_tide_timer > 0.0 and game.boss1_siege_tide_jump_timer <= 0.0:
+		var landing_event_id: String = game.boss1_siege_tide_jump_event_id
+		if not landing_event_id.is_empty() and game.boss1_siege_tide_landing_event_id != landing_event_id:
+			game.boss1_siege_tide_landing_event_id = landing_event_id
+			if game.has_method("_on_boss1_siege_tide_landed"):
+				game._on_boss1_siege_tide_landed(landing_event_id)
 	game.boss1_animation_turn_timer = maxf(0.0, game.boss1_animation_turn_timer - delta)
 	game.boss1_animation_motion_hold = maxf(0.0, game.boss1_animation_motion_hold - delta)
 	if game.current_phase != 1:
@@ -148,6 +181,8 @@ static func active_texture(game: Node2D) -> Texture2D:
 	if state == STATE_HIT:
 		return _timed_texture(game.textures.get("boss1_hit", []), game.boss1_hit_animation_timer, game.boss1_hit_animation_duration)
 	var key: String = String(TEXTURE_KEYS.get(state, "boss1_idle"))
+	if state == STATE_PINCER:
+		key = _pincer_texture_key(game)
 	var frames_value: Variant = game.textures.get(key, [])
 	if not frames_value is Array or frames_value.is_empty():
 		return null
@@ -164,6 +199,10 @@ static func _desired_state(game: Node2D) -> String:
 	if game.boss1_absorb_timer > 0.0:
 		return STATE_ABSORB
 	var attack_state := _active_attack_state(game)
+	# Dash owns locomotion only during its own windup/strike. Lingering hazards
+	# must not freeze a moving crab in a cast pose.
+	if attack_state != STATE_PINCER and game.boss1_animation_motion_hold > 0.0:
+		return STATE_TURN if game.boss1_animation_turn_timer > 0.0 else STATE_WALK
 	if not attack_state.is_empty():
 		return attack_state
 	if game.boss1_animation_turn_timer > 0.0:
@@ -180,8 +219,12 @@ static func _active_attack_state(game: Node2D) -> String:
 		var attack: Dictionary = game.boss_attacks[attack_index]
 		var kind := String(attack.get("kind", ""))
 		var age := float(attack.get("age", 0.0))
+		if age < 0.0 or age >= float(attack.get("duration", INF)):
+			continue
 		match kind:
 			"pincer_tenaz", "rush", "pincer":
+				if String(attack.get("state", "")) in ["recovery", "gap", "done"] and game.boss1_animation_motion_hold > 0.0:
+					continue
 				return STATE_PINCER
 			"bubble", "pressure_bubbles":
 				if age <= 0.92:
@@ -221,8 +264,10 @@ static func _state_frame_index(game: Node2D, state: String, frame_count: int) ->
 
 
 static func _matching_attack_age(game: Node2D, state: String) -> float:
-	for attack_value in game.boss_attacks:
-		var attack: Dictionary = attack_value
+	for index in range(game.boss_attacks.size() - 1, -1, -1):
+		var attack: Dictionary = game.boss_attacks[index]
+		if float(attack.get("age", 0.0)) < 0.0:
+			continue
 		var kind := String(attack.get("kind", ""))
 		if (state == STATE_BUBBLE and kind in ["bubble", "pressure_bubbles"]) or (state == STATE_RAIN and kind == "boiling_bubbles") or (state == STATE_SAND and kind == "sand") or (state == STATE_TIDE and kind == "tide"):
 			return float(attack.get("age", 0.0))
@@ -230,8 +275,10 @@ static func _matching_attack_age(game: Node2D, state: String) -> float:
 
 
 static func _pincer_frame(game: Node2D, frame_count: int) -> int:
-	for attack_value in game.boss_attacks:
-		var attack: Dictionary = attack_value
+	for index in range(game.boss_attacks.size() - 1, -1, -1):
+		var attack: Dictionary = game.boss_attacks[index]
+		if float(attack.get("age", 0.0)) < 0.0 or float(attack.get("age", 0.0)) >= float(attack.get("duration", INF)):
+			continue
 		var kind := String(attack.get("kind", ""))
 		if kind == "pincer_tenaz":
 			var attack_state := String(attack.get("state", "telegraph_first"))
@@ -250,8 +297,55 @@ static func _pincer_frame(game: Node2D, frame_count: int) -> int:
 	return int(floor(game.boss1_animation_elapsed * 10.0)) % frame_count
 
 
+static func _pincer_direction(game: Node2D) -> Vector2:
+	for index in range(game.boss_attacks.size() - 1, -1, -1):
+		var attack: Dictionary = game.boss_attacks[index]
+		if float(attack.get("age", 0.0)) < 0.0 or float(attack.get("age", 0.0)) >= float(attack.get("duration", INF)):
+			continue
+		var kind := String(attack.get("kind", ""))
+		if kind == "pincer_tenaz":
+			var state := String(attack.get("state", "telegraph_first"))
+			var leg := "second" if state in ["telegraph_second", "dash_second", "recovery"] else "first"
+			return Vector2(attack.get(leg + "_dir", Vector2.RIGHT))
+		if kind in ["rush", "pincer"]:
+			return Vector2(attack.get("dir", Vector2.RIGHT))
+	return Vector2(game.boss1_animation_facing, 0.0)
+
+
+static func _pincer_texture_key(game: Node2D) -> String:
+	var direction := _pincer_direction(game)
+	if absf(direction.y) > absf(direction.x):
+		return "boss1_pincer_up" if direction.y < 0.0 else "boss1_pincer_down"
+	return "boss1_pincer"
+
+
 static func should_flip_h(game: Node2D) -> bool:
-	return game.current_phase == 1 and game.boss1_animation_facing < 0.0
+	if game.current_phase != 1:
+		return false
+	if _desired_state(game) == STATE_PINCER:
+		var direction := _pincer_direction(game)
+		return absf(direction.x) >= absf(direction.y) and direction.x < 0.0
+	return game.boss1_animation_facing < 0.0
+
+
+static func draw_scale(game: Node2D) -> float:
+	var state := _desired_state(game)
+	var profile_key := state
+	if state == STATE_PINCER:
+		var texture_key := _pincer_texture_key(game)
+		profile_key = "pincer_horizontal" if texture_key == "boss1_pincer" else texture_key.trim_prefix("boss1_")
+	return float(DRAW_SCALE_BY_VISUAL.get(profile_key, 1.0))
+
+
+static func draw_size(game: Node2D) -> Vector2:
+	return DRAW_SIZE * draw_scale(game)
+
+
+static func shadow_center(world_ground: Vector2, visual_size: Vector2 = DRAW_SIZE) -> Vector2:
+	# Every accepted frame ends at y=244 on a 256px canvas. The generic shadow
+	# helper anchors to the canvas bottom, so compensate the transparent margin
+	# and place the projected silhouette exactly at the visible feet.
+	return world_ground + Vector2(0.0, -(FRAME_BOTTOM_MARGIN / FRAME_SIZE) * visual_size.y)
 
 
 static func stage_modulate(game: Node2D) -> Color:
@@ -292,7 +386,7 @@ static func draw_death(game: Node2D, camera: Vector2) -> void:
 	var center: Vector2 = game.boss1_death_animation_pos - camera
 	var fade: float = 1.0 - clampf((progress - 0.86) / 0.14, 0.0, 1.0)
 	if progress < 0.72:
-		game._draw_dynamic_shadow_fit(texture, center + Vector2(0.0, 8.0), DRAW_SIZE, should_flip_h(game), true, 0.34 * fade)
+		game._draw_dynamic_shadow_fit(texture, shadow_center(center), DRAW_SIZE, should_flip_h(game), true, 0.34 * fade)
 	game._draw_entity_fit_flipped(texture, center, DRAW_SIZE, should_flip_h(game), Color(1.0, 1.0, 1.0, fade), true)
 	if not game.gfx_low_resource and progress >= 0.16 and progress <= 0.88:
 		var ring_radius: float = lerpf(42.0, 82.0, progress)

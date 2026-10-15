@@ -1,6 +1,38 @@
 class_name RTAudioLifecycle
 extends RefCounted
 
+const BOSS1_TIME_STOP_MUSIC_BUS: StringName = &"Boss1TimeStopMusic"
+const BOSS1_TIME_STOP_LOW_PASS_HZ := 1450.0
+
+
+static func configure_boss1_time_stop_music_bus(game: Node) -> void:
+	if game.music_player == null or game.music_crossfade_player == null:
+		return
+	var bus_index := AudioServer.get_bus_index(BOSS1_TIME_STOP_MUSIC_BUS)
+	if bus_index < 0:
+		AudioServer.add_bus()
+		bus_index = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(bus_index, BOSS1_TIME_STOP_MUSIC_BUS)
+		AudioServer.set_bus_send(bus_index, &"Master")
+	if AudioServer.get_bus_effect_count(bus_index) <= 0 or not (AudioServer.get_bus_effect(bus_index, 0) is AudioEffectLowPassFilter):
+		AudioServer.add_bus_effect(bus_index, AudioEffectLowPassFilter.new(), 0)
+	var effect := AudioServer.get_bus_effect(bus_index, 0)
+	if effect is AudioEffectLowPassFilter:
+		effect.cutoff_hz = BOSS1_TIME_STOP_LOW_PASS_HZ
+	AudioServer.set_bus_effect_enabled(bus_index, 0, false)
+	game.music_player.bus = BOSS1_TIME_STOP_MUSIC_BUS
+	game.music_crossfade_player.bus = BOSS1_TIME_STOP_MUSIC_BUS
+
+
+static func set_boss1_time_stop_music_filter(enabled: bool) -> void:
+	var bus_index := AudioServer.get_bus_index(BOSS1_TIME_STOP_MUSIC_BUS)
+	if bus_index < 0 or AudioServer.get_bus_effect_count(bus_index) <= 0:
+		return
+	var effect := AudioServer.get_bus_effect(bus_index, 0)
+	if effect is AudioEffectLowPassFilter:
+		effect.cutoff_hz = BOSS1_TIME_STOP_LOW_PASS_HZ
+	AudioServer.set_bus_effect_enabled(bus_index, 0, enabled)
+
 
 static func is_shared_phase_music_name(name: String) -> bool:
 	if name.get_extension().to_lower() != "mp3":
@@ -101,6 +133,7 @@ static func stop_battle_music_for_screen_transition(game: Node) -> void:
 	game.music_paused_by_pause = false
 	game._cancel_music_crossfade()
 	game.boss1_stop_music_duck_active = false
+	set_boss1_time_stop_music_filter(false)
 	game.prismatica_music_duck_active = false
 	if game.current_music != "" and not game.current_music.begins_with("Menu"):
 		game.music_player.stream_paused = false
@@ -259,7 +292,7 @@ static func on_music_finished(game: Node) -> void:
 
 static func play_menu_music_random(game: Node) -> void:
 	var available = []
-	for track in ["Menu.mp3", "Menu1-2.mp3", "Menu1-3.MP3", "Menu1-4.mp3"]:
+	for track in ["Menu.mp3"]:
 		if game._audio_key_available(track):
 			available.append(track)
 	if available.is_empty():

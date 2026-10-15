@@ -6,4 +6,7 @@ Quando o pedido for algo como "liberar atualização na VPS, criar APK e EXE da 
 
 ## Próxima versão
 
-Nenhuma alteração registrada ainda.
+- Corrigidos os recortes do Cronoguejo: pinças e pernas completas, sem bordas disfarçadas por degradê.
+- Caminhada deixa de arrastar a pose de ataque quando ainda há projéteis na arena.
+- Investidas do Cronoguejo agora usam poses próprias para cima e para baixo, seguindo a direção de cada ataque.
+- O tamanho visual e a sombra do Cronoguejo permanecem estáveis ao alternar entre caminhada, ataques e investidas direcionais.

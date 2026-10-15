@@ -85,6 +85,7 @@ func _ready() -> void :
 	music_crossfade_player = AudioStreamPlayer.new()
 	music_crossfade_player.bus = "Master"
 	add_child(music_crossfade_player)
+	RTAudioLifecycleScript.configure_boss1_time_stop_music_bus(self)
 
 	rain_audio_player = AudioStreamPlayer.new()
 	rain_audio_player.bus = "Master"
@@ -5406,7 +5407,10 @@ func _load_audio_streams() -> void :
 		"boss1_bubble_hit": "res://Songs/Hit-Bolha.MP3",
 		"boss1_pre_stop": "res://Songs/Pre_Stop.mp3",
 		"boss1_entry_fall": "res://Songs/Queda_Cronoguejo.mp3",
-		"boss1_stop_loop": "res://Songs/Stop-Cronoguejo.MP3"
+		"boss1_stop_loop": "res://Songs/Stop-Cronoguejo.MP3",
+		"boss1_entry_announce": "res://Boss1-Tela.mp3",
+		"boss1_death": "res://Boss1-dead.mp3",
+		"shop_spend": "res://Gasto.mp3"
 	}
 
 	for name in root_sfx:
@@ -6042,6 +6046,7 @@ func _begin_boss1_stop_music_duck() -> void :
 	boss1_stop_music_duck_mode = "out"
 	boss1_stop_music_duck_timer = 0.0
 	boss1_stop_music_duck_from = max(0.001, _current_music_linear_volume())
+	RTAudioLifecycleScript.set_boss1_time_stop_music_filter(true)
 	music_pause_fade_mode = ""
 	music_paused_by_pause = false
 	music_player.stream_paused = false
@@ -6064,20 +6069,23 @@ func _update_boss1_stop_music_duck(delta: float) -> void :
 	if music_player == null or music_player.stream == null:
 		boss1_stop_music_duck_active = false
 		boss1_stop_music_duck_mode = ""
+		RTAudioLifecycleScript.set_boss1_time_stop_music_filter(false)
 		return
 	boss1_stop_music_duck_timer += delta
 	var progress: = clampf(boss1_stop_music_duck_timer / BOSS1_STOP_MUSIC_FADE_TIME, 0.0, 1.0)
+	var muted_target: float = max(0.001, _music_target_volume() * BOSS1_STOP_MUSIC_AUDIBLE_FLOOR)
 	if boss1_stop_music_duck_mode == "out":
-		_set_music_linear_volume(lerpf(max(0.001, boss1_stop_music_duck_from), 0.001, progress))
+		_set_music_linear_volume(lerpf(max(0.001, boss1_stop_music_duck_from), muted_target, progress))
 		if progress >= 1.0:
-			_set_music_linear_volume(0.001)
+			_set_music_linear_volume(muted_target)
 	elif boss1_stop_music_duck_mode == "in":
 		var target: float = max(0.001, _music_target_volume())
-		_set_music_linear_volume(lerpf(0.001, target, progress))
+		_set_music_linear_volume(lerpf(muted_target, target, progress))
 		if progress >= 1.0:
 			boss1_stop_music_duck_active = false
 			boss1_stop_music_duck_mode = ""
 			boss1_stop_music_duck_timer = 0.0
+			RTAudioLifecycleScript.set_boss1_time_stop_music_filter(false)
 			_update_audio_volumes()
 
 
@@ -6105,6 +6113,7 @@ func _stop_boss1_stop_audio_context(immediate_restore: = false) -> void :
 		boss1_stop_music_duck_active = false
 		boss1_stop_music_duck_mode = ""
 		boss1_stop_music_duck_timer = 0.0
+		RTAudioLifecycleScript.set_boss1_time_stop_music_filter(false)
 		if music_player != null and music_player.stream != null:
 			music_player.stream_paused = false
 			if not music_player.playing:
@@ -7671,6 +7680,7 @@ func _reset_boss1_rewind_state() -> void :
 	boss1_absorb_retaliate_timer = 0.0
 	boss1_absorb_bursts_fired = 0
 	boss1_entry_fall_sfx_played = false
+	boss1_entry_announce_sfx_played = false
 	_stop_boss1_stop_audio_context(true)
 
 
@@ -21986,6 +21996,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if boss_hp <= 0.0 and not boss_dead:
 		if current_phase == 1:
 			Boss1AnimationPresentation.trigger_death(self)
+			_play_sfx("boss1_death", 0.0, 0.92, 1.0)
 		elif current_phase == 3:
 			Boss3AnimationPresentation.trigger_death(self)
 		if is_multiplayer and _is_world_authority():
@@ -24954,6 +24965,7 @@ func _finish_boss1_rewind() -> void :
 func _boss_entry_impact_feedback(mult: = 1.0) -> void :
 	screen_shake_timer = max(screen_shake_timer, 0.42 * mult)
 	screen_shake_strength = max(screen_shake_strength, 24.0 * mult)
+	_play_sfx("boss_impact", 0.025, clampf(mult, 0.45, 1.0), 1.0)
 	_vibrate(int(520.0 * mult), 1.0)
 
 
@@ -27190,6 +27202,9 @@ func _update_boss1_uninterruptible_state(delta: float) -> bool:
 		boss_phase += delta * (6.0 + fury * 2.2)
 		var previous_entry_timer: float = boss_entry_timer
 		boss_entry_timer -= delta
+		if not boss1_entry_announce_sfx_played and previous_entry_timer > BOSS1_ENTRY_ANNOUNCE_SFX_LEAD and boss_entry_timer <= BOSS1_ENTRY_ANNOUNCE_SFX_LEAD:
+			boss1_entry_announce_sfx_played = true
+			_play_sfx("boss1_entry_announce", 0.02, 0.86, 1.0)
 		if not boss1_entry_fall_sfx_played and previous_entry_timer > BOSS1_ENTRY_FALL_SFX_LEAD and boss_entry_timer <= BOSS1_ENTRY_FALL_SFX_LEAD:
 			boss1_entry_fall_sfx_played = true
 			_play_sfx("boss1_entry_fall", 0.03, 0.76, 1.0)
@@ -30134,10 +30149,8 @@ func _update_boss_stage(delta: float) -> void :
 			var wave_event_id := "%s-%d-%d" % [BOSS1_SIEGE_TIDE_EVENT_PREFIX, boss1_siege_tide_sequence, wave_index]
 			var wave_warning: float = _telegraph_window(BOSS1_SIEGE_TIDE_WARNING)
 			if wave_index == 0:
-				_boss1_siege_tide_landing_feedback()
 				_spawn_radial_particles(boss_pos, Color(0.7, 0.24, 1.0), 34)
 				_add_text("ABERTURAS ESTREITAS" if enraged else "FIQUE NAS ABERTURAS", boss_pos + Vector2(0, -138), Color(0.34, 1.0, 0.92), 1.8, 24)
-				_play_sfx("boss_impact", 0.025, 1.0, 0.92 if enraged else 1.0)
 			var safe_angle: float = boss_stage_safe_angle
 			if wave_index > 0:
 				var previous_wave: Array = boss_transition_waves.filter( func(item): return int(item.get("idx", -1)) == wave_index - 1)
@@ -30178,11 +30191,22 @@ func _update_boss_stage(delta: float) -> void :
 		boss_attack_timer = 1.0
 
 
-func _boss1_siege_tide_landing_feedback() -> void:
-	screen_shake_timer = maxf(screen_shake_timer, 0.32)
-	screen_shake_strength = maxf(screen_shake_strength, 18.0)
+func _on_boss1_siege_tide_landed(event_id: String) -> void:
+	if event_id.is_empty():
+		return
+	var pieces: PackedStringArray = event_id.rsplit("-", true, 1)
+	var wave_index := int(pieces[pieces.size() - 1]) if not pieces.is_empty() else 0
+	var wave_count: int = (BOSS_STAGE_ENRAGED_WAVE_COUNT if _boss_stage_enraged() else BOSS_STAGE_WAVE_COUNT) + maxi(0, boss_party_scaling_hazard_bonus)
+	_boss1_siege_tide_landing_feedback(wave_index, wave_count)
+
+
+func _boss1_siege_tide_landing_feedback(wave_index: int = 0, wave_count: int = BOSS_STAGE_WAVE_COUNT) -> void:
+	var sequence_progress: float = clampf(float(wave_index) / maxf(1.0, float(wave_count - 1)), 0.0, 1.0)
+	screen_shake_timer = maxf(screen_shake_timer, lerpf(0.32, 0.22, sequence_progress))
+	screen_shake_strength = maxf(screen_shake_strength, lerpf(18.0, 12.0, sequence_progress))
+	_play_sfx("boss_impact", 0.025, lerpf(1.0, 0.46, sequence_progress), lerpf(1.0, 0.84, sequence_progress))
 	if _is_mobile_runtime():
-		_vibrate(BOSS_STAGE_WAVE_HAPTIC_MS, 0.42)
+		_vibrate(int(lerpf(float(BOSS_STAGE_WAVE_HAPTIC_MS), 48.0, sequence_progress)), lerpf(0.42, 0.26, sequence_progress))
 
 
 func _start_boss1_absorb() -> void :
@@ -46655,6 +46679,7 @@ func _apply_remote_boss_snapshot(snapshot_data, now_ms: int) -> void :
 				Boss1AnimationPresentation.trigger_hit(self, previous_hp - boss_hp)
 			if not previous_dead and boss_dead:
 				Boss1AnimationPresentation.trigger_death(self, incoming_pos)
+				_play_sfx("boss1_death", 0.0, 0.92, 1.0)
 		elif previous_phase == 3:
 			if boss_hp < previous_hp and not boss_dead:
 				Boss3AnimationPresentation.trigger_hit(self, previous_hp - boss_hp, "network_snapshot")
@@ -46703,7 +46728,11 @@ func _apply_remote_boss_visual_snapshot(snapshot_data) -> void :
 		run_pacing_profile = String(data.get("pacing_profile", run_pacing_profile))
 	boss1_visual_snapshot_ms = Time.get_ticks_msec()
 	# Entry simulation runs only on the host; replicas render its remaining time.
-	boss_entry_timer = maxf(0.0, float(data.get("boss_entry_timer", 0.0)))
+	var incoming_entry_timer: float = maxf(0.0, float(data.get("boss_entry_timer", 0.0)))
+	if _is_world_replica() and not boss1_entry_announce_sfx_played and incoming_entry_timer > 0.0 and incoming_entry_timer <= BOSS1_ENTRY_ANNOUNCE_SFX_LEAD:
+		boss1_entry_announce_sfx_played = true
+		_play_sfx("boss1_entry_announce", 0.02, 0.86, 1.0)
+	boss_entry_timer = incoming_entry_timer
 	var heat_timer: float = clampf(float(data.get("b7_heat", -1.0)), -1.0, PhoenixFire.DURATION)
 	boss7_ultimate_active = current_phase == 7 and heat_timer > 0.0
 	boss7_ultimate_timer = maxf(0.0, heat_timer) if boss7_ultimate_active else 0.0

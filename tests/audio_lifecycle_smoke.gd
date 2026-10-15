@@ -18,6 +18,11 @@ func _initialize() -> void:
 func _run() -> void:
 	await process_frame
 	game.mode = "game"
+	for _attempt in range(3):
+		RTAudioLifecycle.play_menu_music_random(game)
+		if game.music_crossfade_active:
+			game._finish_music_crossfade()
+		_check(game.current_music == "Menu.mp3", "menu playlist selected a retired track")
 	var phase_track: String = String(game._shared_phase_music_tracks()[0])
 	game.current_music = phase_track
 	var test_stream := AudioStreamWAV.new()

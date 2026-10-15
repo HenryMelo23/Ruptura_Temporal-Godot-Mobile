@@ -347,7 +347,7 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 
 static func _boss_draw_size(game: Node2D) -> Vector2:
 	if game.current_phase == 1:
-		return Vector2(184.0, 170.0)
+		return Boss1AnimationPresentation.draw_size(game)
 	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else (Vector2(59.4, 88.0) if game.current_phase == 5 else Vector2(184, 170))))
 
 

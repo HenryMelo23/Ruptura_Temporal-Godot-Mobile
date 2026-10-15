@@ -50,14 +50,45 @@ func _check_audio_keys() -> void:
 		"boss1_bubble_hit",
 		"boss1_pre_stop",
 		"boss1_entry_fall",
-		"boss1_stop_loop"
+		"boss1_stop_loop",
+		"boss1_entry_announce",
+		"boss1_death",
+		"shop_spend"
 	]:
 		_check(game._audio_key_available(key), "missing registered audio key " + key)
+
+
+func _sfx_was_played(key: String) -> bool:
+	if not game.audio_streams.has(key):
+		return false
+	for player in game.sfx_players:
+		if player.stream == game.audio_streams[key]:
+			return true
+	return false
 
 
 func _run() -> void:
 	_configure_phase1()
 	_check_audio_keys()
+	game.boss_entry_timer = game.BOSS_ENTRY_TIME
+	game.boss_empurrou_player = false
+	game.boss1_entry_announce_sfx_played = false
+	game._update_boss1_uninterruptible_state(0.24)
+	_check(game.boss1_entry_announce_sfx_played, "entry announce did not fire one second before landing")
+	_check(_sfx_was_played("boss1_entry_announce"), "entry announce sound was not emitted")
+	game._update_boss1_uninterruptible_state(game.BOSS_ENTRY_TIME)
+	_check(game.boss_empurrou_player, "entry landing did not resolve")
+	_check(game.screen_shake_strength >= 24.0, "entry landing did not apply impact shake")
+	_check(_sfx_was_played("boss_impact"), "entry landing did not emit the shared impact sound")
+
+	_configure_phase1()
+	for player in game.sfx_players:
+		player.stop()
+		player.stream = null
+	game.boss_hp = 1.0
+	game._damage_boss(10.0, "audio_smoke", false, false)
+	_check(game.boss_dead, "boss death setup did not resolve")
+	_check(_sfx_was_played("boss1_death"), "boss death sound was not emitted")
 
 	game._add_boss_bubble(game.player_pos)
 	_check(game.boss_attacks.size() == 1, "bubble attack was not queued")
@@ -81,9 +112,18 @@ func _run() -> void:
 	_check(bool(game.boss_attacks[0].get("dash_sfx_played", false)), "dash sfx did not trigger 200ms after dash")
 
 	_configure_phase1()
+	game._play_music("Boss1-Music-3.mp3")
+	if game.music_crossfade_active:
+		game._finish_music_crossfade()
 	game._play_boss1_pre_stop_warning()
 	_check(game.boss1_stop_pre_played, "pre-stop warning flag was not set")
 	_check(game.boss1_stop_music_duck_active, "pre-stop did not start music duck")
+	var music_bus: int = AudioServer.get_bus_index(RTAudioLifecycle.BOSS1_TIME_STOP_MUSIC_BUS)
+	_check(music_bus >= 0, "time-stop music bus was not configured")
+	_check(AudioServer.is_bus_effect_enabled(music_bus, 0), "time-stop low-pass filter was not enabled")
+	game._update_boss1_stop_music_duck(game.BOSS1_STOP_MUSIC_FADE_TIME + 0.02)
+	var expected_floor: float = game._music_target_volume() * game.BOSS1_STOP_MUSIC_AUDIBLE_FLOOR
+	_check(db_to_linear(game.music_player.volume_db) >= expected_floor - 0.01, "time-stop music became inaudible instead of using its audible floor")
 	game._start_boss1_absorb()
 	_check(game.boss1_absorb_stop_started, "absorb stop loop flag was not set")
 	_check(game.boss1_absorb_timer > 0.0, "absorb did not start")
@@ -94,6 +134,14 @@ func _run() -> void:
 	game._update_boss1_absorb(0.10)
 	_check(game.boss1_absorb_cooldown == game.BOSS1_ABSORB_COOLDOWN, "absorb cooldown did not reset after finish")
 	_check(game.boss1_stop_music_duck_mode == "in", "music duck did not switch to restore mode after absorb")
+	game._update_boss1_stop_music_duck(game.BOSS1_STOP_MUSIC_FADE_TIME + 0.02)
+	_check(not AudioServer.is_bus_effect_enabled(music_bus, 0), "time-stop low-pass filter stayed enabled after recovery")
 
-	print("BOSS1_CRONOGUEJO_AUDIO_SMOKE_OK keys=true bubble_warning=true tide=true dash=true absorb=true")
+	print("BOSS1_CRONOGUEJO_AUDIO_SMOKE_OK keys=true entry=true bubble_warning=true tide=true dash=true absorb=true muffled_music=true")
+	game._cleanup_runtime_resources()
+	root.remove_child(game)
+	game.queue_free()
+	game = null
+	await process_frame
+	await process_frame
 	quit(0)

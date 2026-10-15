@@ -578,6 +578,7 @@ func reroll() -> void:
 			game._vibrate(28, 0.16)
 			return
 		game.score -= paid_cost
+		game._play_sfx("shop_spend", 0.01, 0.72, 0.98)
 		game.run_points_spent += paid_cost
 		game.shop_paid_rerolls_this_visit += 1
 		game.shop_spend_anim_amount = paid_cost
@@ -735,6 +736,7 @@ func update(delta: float) -> void:
 	game._record_telemetry_shop_purchase(card, paid_price)
 	game._apply_aura_events(AuraSystem.on_points_spent(game.aura_state, paid_price, game.player_hp_max))
 	game.score -= paid_price
+	game._play_sfx("shop_spend", 0.01, 0.84, 1.0)
 	game.shop_spend_anim_amount = paid_price
 	game.shop_spend_anim_timer = SHOP_SPEND_ANIM_TIME
 	game._apply_card(card)
