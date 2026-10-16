@@ -62,6 +62,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Runtime event kill charge | `on_enemy_killed` | `scripts/systems/events/runtime_event_director.gd:53` |
 | Runtime event sync snapshot | `active_snapshot` | `scripts/systems/events/runtime_event_director.gd:89` |
 | Online packet contract | `class_name RTNetContract` | `scripts/systems/online/net_contract.gd:1` |
+| Boss visual packet owner | `RTBossVisualSyncController.pack`, `apply` | `scripts/systems/online/runtime_boss_visual_sync_controller.gd:1`; core retains `_pack_net_boss_visuals` and `_apply_remote_boss_visual_snapshot` compatibility facades while RPC dispatch remains on `Main` |
 | Audio lifecycle | `class_name RTAudioLifecycle` | `scripts/systems/audio/audio_lifecycle.gd:1` |
 | Enemy updates | `update_enemies` | `scripts/systems/enemy_manager.gd:23` |
 | Enemy spawning | `spawn_wave` | `scripts/systems/enemy_manager.gd:143` |
