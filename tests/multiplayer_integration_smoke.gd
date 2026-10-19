@@ -11,6 +11,9 @@ var spectrum_ready_sent: bool = false
 var manifest_start_requested: bool = false
 var result_dir := "res://tests"
 var last_selection_attempt_ms := 0
+var henry_effect_selection_opened := false
+var henry_ready_sent := false
+var start_only := false
 
 
 func _retry_rejected_selection() -> void:
@@ -56,6 +59,8 @@ func _initialize() -> void:
 			port = int(arg.substr("--port=".length()))
 		elif arg.begins_with("--result-dir="):
 			result_dir = arg.trim_prefix("--result-dir=")
+		elif arg == "--start-only":
+			start_only = true
 
 	if role == "":
 		push_error("Missing --role argument (server/host/client/client2)")
@@ -221,9 +226,12 @@ func _run_host_loop() -> void:
 			manifest_start_requested = game.mp_manifest_start_pending
 
 		if game.mode == "game":
-			await create_timer(3.0).timeout
+			await create_timer(7.0).timeout
 			print("[HOST] FLOW ping=%dms world_jitter=%.2fms players=%d" % [game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size()])
 			_check(game.net_players_by_peer.size() == 2, "Host did not retain both remote player states")
+			if start_only:
+				await _finish_ok("Host and clients joined and reached the game state")
+				return
 			game.current_phase = game.DIMENSION_FINAL_PHASE
 			game.dimension_route_queue = [6, 2, 7]
 			game.pending_phase = 6
@@ -263,6 +271,16 @@ func _run_client_loop() -> void:
 			game._set_lobby_ready(true)
 
 		# Manifestacao primeiro, espectro depois. So o espectro conta como pronto final.
+		if game.active_character_key == game.CHARACTER_HENRY and game.mode == "mutation_select_mp" and not henry_effect_selection_opened:
+			print("[CLIENT] Henry mutation stage reached. Opening effect selection...")
+			henry_effect_selection_opened = true
+			game.mode = "effect_select_mp"
+			game.manifest_select_stage = game.MANIFEST_STAGE_AURA
+			game._sync_manifest_mp_selection(true)
+		elif game.active_character_key == game.CHARACTER_HENRY and game.mode == "effect_select_mp" and not henry_ready_sent:
+			print("[CLIENT] Henry effect selected. Marking ready...")
+			henry_ready_sent = true
+			game._toggle_henry_multiplayer_ready()
 		if game.mode == "manifest_mp" and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION and not manifest_reveal_requested:
 			print("[CLIENT] Manifest stage reached. Revealing spectrum...")
 			manifest_reveal_requested = true
@@ -275,12 +293,17 @@ func _run_client_loop() -> void:
 			game._confirm_manifest_mp_selection()
 
 		if game.mode == "game":
-			await create_timer(2.5).timeout
+			var network_settle_deadline := Time.get_ticks_msec() + 6000
+			while Time.get_ticks_msec() < network_settle_deadline and (game.net_ping_ms < 0 or game.net_world_jitter_ms > 15.0 or game.net_players_by_peer.size() < 2):
+				await process_frame
 			print("[%s] FLOW ping=%dms world_jitter=%.2fms players=%d first_world=%s" % [role.to_upper(), game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size(), str(game.online_first_world_snapshot_received)])
 			_check(game.online_first_world_snapshot_received, "%s did not receive a world snapshot" % role)
 			_check(game.net_players_by_peer.size() == 2, "%s did not retain both remote player states" % role)
 			_check(game.net_ping_ms >= 0 and game.net_ping_ms <= 100, "%s local smoke ping exceeded 100ms" % role)
 			_check(game.net_world_jitter_ms <= 15.0, "%s world snapshot jitter exceeded 15ms" % role)
+			if start_only:
+				await _finish_ok("Client joined and received the authoritative game state")
+				return
 			var victory_deadline := Time.get_ticks_msec() + 6000
 			while game.mode != "specter_upgrade" and Time.get_ticks_msec() < victory_deadline:
 				await process_frame

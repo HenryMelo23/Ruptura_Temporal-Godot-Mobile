@@ -1,1 +1,1 @@
-OK connected=0 active=0 spectators=0 ready=0 local_ready=false spectator=false
+OK connected=0 active=0 spectators=0 ready=0 local_ready=false spectator=false character=geovana

@@ -37169,7 +37169,7 @@ func _activate_menu_option(key: String) -> void :
 			_open_character_select("solo")
 		"multiplayer":
 			if _online_menu_available():
-				_open_character_select("multiplayer")
+				_prepare_multiplayer_character_entry()
 			else:
 				_add_text("ONLINE EM MANUTENCAO", player_pos + Vector2(0, -92), Color(1.0, 0.74, 0.22), 0.9, 18)
 		"catalog":
@@ -41751,7 +41751,46 @@ func _henry_unlocked() -> bool:
 	return henry_cheat_unlocked or float(card_unlock_progress.get("umbra_victories", 0.0)) >= 1.0
 
 
+func _apply_character_identity(character_key: String, reset_henry_choices: bool = false) -> void:
+	if character_key == CHARACTER_HENRY:
+		active_character_key = CHARACTER_HENRY
+		selected_manifestation = HENRY_SELECTION_INDEX
+		selected_aura = HENRY_SELECTION_INDEX
+		selected_mutation = 0 if reset_henry_choices else clampi(selected_mutation, 0, HENRY_MUTATIONS.size() - 1)
+		selected_effect = 0 if reset_henry_choices else clampi(selected_effect, 0, HENRY_EFFECTS.size() - 1)
+		mutation_key = String(HENRY_MUTATIONS[selected_mutation].get("key", "incendiario"))
+		effect_key = String(HENRY_EFFECTS[selected_effect].get("key", "incandescencia"))
+		return
+	active_character_key = CHARACTER_GEOVANA
+	mutation_key = ""
+	effect_key = ""
+	if selected_manifestation == HENRY_SELECTION_INDEX:
+		selected_manifestation = 0
+	if selected_aura == HENRY_SELECTION_INDEX:
+		selected_aura = 1
+
+
+func _prepare_multiplayer_character_entry() -> void:
+	character_select_destination = "multiplayer"
+	_apply_character_identity(CHARACTER_GEOVANA)
+	mode = "multiplayer_menu"
+	_block_ui_input()
+
+
+func _apply_multiplayer_character_from_roster(roster: Array = online_lobby_roster) -> void:
+	if dedicated_server_mode or online_local_spectator:
+		return
+	var assignment: Dictionary = lobby_controller.character_assignment(roster, _mp_unique_id(), player_nickname, online_room_owner or is_host)
+	var previous_character := active_character_key
+	_apply_character_identity(String(assignment.get("character", CHARACTER_GEOVANA)))
+	if previous_character != active_character_key:
+		_net_report_event("multiplayer_character_assigned", "slot=%d character=%s" % [int(assignment.get("slot", 0)), active_character_key])
+
+
 func _open_character_select(destination: String) -> void:
+	if destination == "multiplayer":
+		_prepare_multiplayer_character_entry()
+		return
 	character_select_destination = destination
 	if not _henry_unlocked():
 		active_character_key = CHARACTER_GEOVANA
@@ -41770,18 +41809,10 @@ func _select_character(character_key: String) -> void:
 		if not _henry_unlocked():
 			_play_sfx("ui_error")
 			return
-		active_character_key = CHARACTER_HENRY
-		selected_manifestation = HENRY_SELECTION_INDEX
-		selected_aura = HENRY_SELECTION_INDEX
-		selected_mutation = 0
-		selected_effect = 0
-		mutation_key = "incendiario"
-		effect_key = "incandescencia"
+		_apply_character_identity(CHARACTER_HENRY, true)
 		mode = "multiplayer_menu" if character_select_destination == "multiplayer" else "mutation_select"
 	else:
-		active_character_key = CHARACTER_GEOVANA
-		mutation_key = ""
-		effect_key = ""
+		_apply_character_identity(CHARACTER_GEOVANA)
 		if character_select_destination == "multiplayer":
 			mode = "multiplayer_menu"
 		else:
@@ -44106,6 +44137,7 @@ func _start_dedicated_room_server(port: int) -> void :
 	dedicated_room_shutdown_pending = false
 	dedicated_ready_by_peer.clear()
 	dedicated_ready_seq_by_peer.clear()
+	dedicated_join_order.clear()
 	dedicated_manifest_evolution_expected_peers.clear()
 	dedicated_manifest_evolution_ready_by_peer.clear()
 	dedicated_manifest_evolution_payload.clear()
@@ -44127,6 +44159,8 @@ func _on_peer_connected(id: int) -> void :
 	_configure_online_peer_tuning(id)
 	_net_report_event("peer_connected", "id=%d peers=%s" % [id, str(_mp_peer_ids())])
 	if dedicated_server_mode:
+		if not dedicated_join_order.has(id):
+			dedicated_join_order.append(id)
 		dedicated_ready_by_peer[id] = false
 		dedicated_ready_seq_by_peer[id] = 0
 		dedicated_spectator_by_peer[id] = false
@@ -44146,6 +44180,7 @@ func _on_peer_disconnected(id: int) -> void :
 		dedicated_ready_seq_by_peer.erase(id)
 		dedicated_names_by_peer.erase(id)
 		dedicated_spectator_by_peer.erase(id)
+		dedicated_join_order.erase(id)
 		dedicated_manifest_ready_by_peer.erase(id)
 		dedicated_manifest_selection_by_peer.erase(id)
 		dedicated_manifest_evolution_expected_peers.erase(id)
@@ -44249,6 +44284,7 @@ func _leave_multiplayer(reason: String = "") -> void :
 	dedicated_ready_seq_by_peer.clear()
 	dedicated_names_by_peer.clear()
 	dedicated_spectator_by_peer.clear()
+	dedicated_join_order.clear()
 	dedicated_manifest_ready_by_peer.clear()
 	dedicated_manifest_selection_by_peer.clear()
 	dedicated_manifest_evolution_expected_peers.clear()
@@ -44355,6 +44391,25 @@ func _dedicated_active_client_peer_ids() -> Array:
 		if int(peer_id) != dedicated_room_owner_peer_id:
 			active.append(peer_id)
 	return active
+
+
+func _dedicated_multiplayer_slot_for_peer(peer_id: int) -> int:
+	if peer_id == dedicated_room_owner_peer_id:
+		return 1
+	var clients: Array = []
+	for joined_peer_value in dedicated_join_order:
+		var joined_peer := int(joined_peer_value)
+		if joined_peer == dedicated_room_owner_peer_id or _is_dedicated_spectator(joined_peer):
+			continue
+		if _dedicated_active_peer_ids().has(joined_peer) and not clients.has(joined_peer):
+			clients.append(joined_peer)
+	var fallback_clients := _dedicated_active_client_peer_ids()
+	fallback_clients.sort()
+	for fallback_peer in fallback_clients:
+		if not clients.has(fallback_peer):
+			clients.append(fallback_peer)
+	var client_index := clients.find(peer_id)
+	return client_index + 2 if client_index >= 0 else 0
 
 
 func _dedicated_spectator_count() -> int:
@@ -44736,6 +44791,7 @@ func _dedicated_lobby_roster() -> Array:
 			"peer_id": int(peer_id),
 			"name": String(dedicated_names_by_peer.get(peer_id, "Player %d" % int(peer_id))),
 			"owner": int(peer_id) == dedicated_room_owner_peer_id,
+			"slot": 0 if peer_spectator else _dedicated_multiplayer_slot_for_peer(int(peer_id)),
 			"ready": bool(dedicated_ready_by_peer.get(peer_id, false)) or peer_spectator,
 			"spectator": peer_spectator
 		})
@@ -44942,6 +44998,7 @@ func _start_multiplayer_manifest() -> void :
 		return
 	if mode in ["manifest_mp", "mutation_select_mp", "effect_select_mp", "multiplayer_syncing", "game"]:
 		return
+	_apply_multiplayer_character_from_roster()
 	_net_report_count_in("control", 48)
 	_net_report_event("start_multiplayer_manifest_in")
 	mode = "manifest_mp"

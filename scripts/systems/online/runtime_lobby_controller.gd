@@ -10,6 +10,56 @@ func bind_game(root: Node) -> void:
 	game = root
 
 
+func character_assignment(roster: Array, local_peer_id: int, local_name: String, room_owner: bool) -> Dictionary:
+	if room_owner:
+		return {"slot": 1, "character": game.CHARACTER_GEOVANA}
+	var normalized_name := local_name.strip_edges().to_lower()
+	var local_slot := 0
+	var peer_match_found := false
+	var name_match_count := 0
+	var matched_name_slot := 0
+	var fallback_entries: Array[Dictionary] = []
+	for entry_value in roster:
+		if typeof(entry_value) != TYPE_DICTIONARY:
+			continue
+		var entry := Dictionary(entry_value)
+		if bool(entry.get("spectator", false)):
+			continue
+		var entry_slot := int(entry.get("slot", 0))
+		var entry_peer := int(entry.get("peer_id", entry.get("id", 0)))
+		var entry_name := String(entry.get("name", "")).strip_edges().to_lower()
+		var matches_peer := local_peer_id > 0 and entry_peer == local_peer_id
+		var matches_name := normalized_name != "" and entry_name == normalized_name
+		if matches_peer:
+			local_slot = entry_slot
+			peer_match_found = true
+		if matches_name:
+			name_match_count += 1
+			matched_name_slot = entry_slot
+		fallback_entries.append({"peer_id": entry_peer, "owner": bool(entry.get("owner", false)), "name": entry_name})
+	if not peer_match_found and name_match_count == 1:
+		local_slot = matched_name_slot
+	if local_slot <= 0:
+		fallback_entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			if bool(a.get("owner", false)) != bool(b.get("owner", false)):
+				return bool(a.get("owner", false))
+			return int(a.get("peer_id", 0)) < int(b.get("peer_id", 0))
+		)
+		for index in range(fallback_entries.size()):
+			var fallback_entry := fallback_entries[index]
+			var matches_peer := local_peer_id > 0 and int(fallback_entry.get("peer_id", 0)) == local_peer_id
+			var matches_unique_name := not peer_match_found and name_match_count == 1 and String(fallback_entry.get("name", "")) == normalized_name
+			if matches_peer or matches_unique_name:
+				local_slot = index + 1
+				break
+	if local_slot <= 0:
+		local_slot = 2
+	return {
+		"slot": local_slot,
+		"character": game.CHARACTER_HENRY if local_slot == 2 else game.CHARACTER_GEOVANA
+	}
+
+
 func apply_lobby_ready_request(ready: bool, sequence: int) -> void:
 	game._net_report_count_in("control", 32)
 	game._net_report_event("toggle_ready_in", "ready=%s sender=%d dedicated=%s seq=%d" % [str(ready), game._mp_sender_id(), str(game.dedicated_server_mode), sequence])
@@ -106,10 +156,12 @@ func apply_online_lobby_roster(roster: Array) -> void:
 		var spectator: bool = bool(item.get("spectator", false))
 		var item_ready: bool = bool(item.get("ready", false))
 		var is_owner_entry: bool = bool(item.get("owner", false))
+		var player_slot: int = int(item.get("slot", 0))
 		game.online_lobby_roster.append({
 			"peer_id": peer_id,
 			"name": entry_name,
 			"owner": is_owner_entry,
+			"slot": player_slot,
 			"ready": item_ready,
 			"spectator": spectator
 		})
@@ -139,6 +191,7 @@ func apply_online_lobby_roster(roster: Array) -> void:
 		game.online_local_ready_confirmed = local_roster_ready
 		game.online_ready_pending_started_ms = 0
 	game.net_player_name = "%d jogadores / %d espectador%s" % [active_players, spectators, "" if spectators == 1 else "es"]
+	game._apply_multiplayer_character_from_roster(game.online_lobby_roster)
 
 
 func apply_online_lobby_state_v2(room_code: String, connected: int, ready: int, local_ready_confirmed: bool, remote_client_ready = null) -> void:

@@ -79,7 +79,7 @@ func _run_client_step() -> void:
 		else:
 			game._set_lobby_ready(true)
 	if scenario == "ready":
-		if game.local_player_ready and game.online_local_ready_confirmed and not game.online_lobby_ready_pending:
+		if game.online_lobby_active_player_count == 2 and game.local_player_ready and game.online_local_ready_confirmed and not game.online_lobby_ready_pending and game.active_character_key == game.CHARACTER_HENRY:
 			_write_result(role)
 	else:
 		if game.online_local_spectator and game.online_local_spectator_confirmed and not game.online_spectator_request_pending and game.online_lobby_active_player_count == 1 and game.online_lobby_spectator_count == 1:
@@ -90,7 +90,7 @@ func _run_host_step() -> void:
 	if not game.online_connected or game.online_lobby_connected_count != 2:
 		return
 	if scenario == "ready":
-		if game.online_lobby_active_player_count == 2 and game.online_lobby_ready_count == 1 and game.online_lobby_client_ready and game._online_client_ready():
+		if game.online_lobby_active_player_count == 2 and game.online_lobby_ready_count == 1 and game.online_lobby_client_ready and game._online_client_ready() and game.active_character_key == game.CHARACTER_GEOVANA:
 			_write_result(role)
 	else:
 		if game.online_lobby_active_player_count == 1 and game.online_lobby_spectator_count == 1 and game._online_client_ready():
@@ -126,13 +126,14 @@ func _write_result(result_role: String) -> void:
 
 
 func _state_summary() -> String:
-	return "connected=%d active=%d spectators=%d ready=%d local_ready=%s spectator=%s" % [
+	return "connected=%d active=%d spectators=%d ready=%d local_ready=%s spectator=%s character=%s" % [
 		game.online_lobby_connected_count,
 		game.online_lobby_active_player_count,
 		game.online_lobby_spectator_count,
 		game.online_lobby_ready_count,
 		str(game.local_player_ready),
-		str(game.online_local_spectator)
+		str(game.online_local_spectator),
+		game.active_character_key
 	]
 
 

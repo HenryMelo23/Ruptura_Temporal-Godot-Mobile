@@ -59,20 +59,22 @@ func _run() -> void:
 	_check(game.mode == "online_find_room", "Client flow should open find-room screen")
 
 	game._online_lobby_roster([
-		{"peer_id": 21, "name": "HostQA", "owner": true, "ready": true, "spectator": false},
-		{"peer_id": 22, "name": "ClientQA", "owner": false, "ready": false, "spectator": false}
+		{"peer_id": 21, "name": "HostQA", "owner": true, "slot": 1, "ready": true, "spectator": false},
+		{"peer_id": 22, "name": "ClientQA", "owner": false, "slot": 2, "ready": false, "spectator": false}
 	])
 	_check(game.online_lobby_roster.size() == 2, "Lobby roster should be stored")
+	_check(int(Dictionary(game.online_lobby_roster[1]).get("slot", 0)) == 2, "Lobby roster should preserve the authoritative player slot")
 	game.player_nickname = "ClientQA"
 	game.online_room_owner = false
 	game.local_player_ready = true
 	game.online_lobby_ready_pending = true
 	game.online_ready_pending_started_ms = Time.get_ticks_msec()
 	game._online_lobby_roster([
-		{"peer_id": 21, "name": "HostQA", "owner": true, "ready": true, "spectator": false},
-		{"peer_id": 22, "name": "ClientQA", "owner": false, "ready": true, "spectator": false}
+		{"peer_id": 21, "name": "HostQA", "owner": true, "slot": 1, "ready": true, "spectator": false},
+		{"peer_id": 22, "name": "ClientQA", "owner": false, "slot": 2, "ready": true, "spectator": false}
 	])
 	_check(game.online_local_ready_confirmed and not game.online_lobby_ready_pending, "Local roster ready should clear confirming state")
+	_check(game.active_character_key == game.CHARACTER_HENRY, "Second lobby player should be assigned Henry")
 	game.online_local_ready_confirmed = false
 	game.local_player_ready = true
 	game.online_lobby_ready_pending = true

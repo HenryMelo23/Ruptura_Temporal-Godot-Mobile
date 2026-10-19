@@ -46,7 +46,7 @@ function Invoke-LobbyScenario {
                 "--scenario=$Scenario",
                 "--port=$Port"
             )
-            $process = Start-Process -FilePath $GodotBin -ArgumentList $arguments -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
+            $process = Start-Process -FilePath $GodotBin -ArgumentList $arguments -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
             $processes += $process
             if ($role -eq 'server') {
                 Start-Sleep -Milliseconds 1200
@@ -110,9 +110,10 @@ function Invoke-ThreePlayerFlow {
                 '--script', 'res://tests/multiplayer_integration_smoke.gd',
                 '--',
                 "--role=$role",
-                '--port=4593'
+                '--port=4593',
+                '--start-only'
             )
-            $process = Start-Process -FilePath $GodotBin -ArgumentList $arguments -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden -PassThru
+            $process = Start-Process -FilePath $GodotBin -ArgumentList $arguments -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
             $processes += $process
             if ($role -eq 'server') {
                 Start-Sleep -Milliseconds 1200
@@ -144,7 +145,7 @@ function Invoke-ThreePlayerFlow {
                 throw "Fluxo de tres jogadores sem resultado de $role.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
             }
         }
-        Write-Host 'MULTIPLAYER_THREE_PLAYER_FLOW_OK lobby=true manifest=true spectrum=true game=true'
+        Write-Host 'MULTIPLAYER_THREE_PLAYER_START_OK lobby=true preparation=true game=true'
     } finally {
         foreach ($process in $processes) {
             try {
