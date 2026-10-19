@@ -5,7 +5,7 @@ const REQUIRED_ENEMY_IDS: = [
 	"comum", "espreitador", "projetador", "aglomerador", "cristalizado", 
 	"curater", "larapio", "rebobinador", "briguer_escudeiro", 
 	"pinguim_atirador", "pinguim_kamikaze", "pinguim_incendiario", 
-	"devoto", "incensario", "guardiao", "cartografo_vazio", 
+	"devoto", "incensario", "guardiao", "flagelante", "salmodiante", "portador_relicario", "cartografo_vazio",
 	"cronofago", "refrator_hostil", "tecelao_vetorial", "eco_entropico", 
 	"enguia_miasma", "lodario", "pustula_fossil", "sanguessuga_cronal", "suturador_ambar"
 ]

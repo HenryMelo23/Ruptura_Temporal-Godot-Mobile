@@ -1,5 +1,6 @@
 class_name VFXDirector
 extends RefCounted
+const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 
 
 const ELEMENT_COLORS: = {
@@ -119,40 +120,19 @@ func request_squash_stretch(target_id: String, scale_vec: Vector2, recovery_spd:
 	}
 
 func request_sky_lightning_strike(pos: Vector2, element: = "eletrica") -> void :
-	if not particles_enabled:
-		return
+	# The discharge is combat feedback, even with decorative particles off.
+	if sky_lightning_bolts.size() >= 24:
+		sky_lightning_bolts.pop_front()
 	var base_col: Color = ELEMENT_COLORS.get(element, ELEMENT_COLORS["eletrica"])
-	var sky_start: = pos + Vector2(randf_range(-40.0, 40.0), -680.0)
-	var segments: = 12
-	var points: PackedVector2Array = []
-	points.append(sky_start)
-	var current: = sky_start
-	for i in range(1, segments):
-		var t: = float(i) / float(segments)
-		var target: = sky_start.lerp(pos, t)
-		var jitter: = Vector2(randf_range(-26.0, 26.0), randf_range(-8.0, 8.0))
-		current = target + jitter
-		points.append(current)
-	points.append(pos)
-
-	var branches: Array = []
-	for b in range(3):
-		var idx: = randi_range(3, segments - 3)
-		var branch_start: Vector2 = points[idx]
-		var branch_dir: = Vector2(randf_range(-1.0, 1.0), randf_range(0.4, 1.0)).normalized()
-		branches.append({
-			"start": branch_start, 
-			"end": branch_start + branch_dir * randf_range(40.0, 85.0)
-		})
-
 	sky_lightning_bolts.append({
-		"points": points, 
-		"branches": branches, 
+		"seed": int(pos.x * 19.0 + pos.y * 31.0),
 		"impact": pos, 
 		"life": 0.26, 
 		"max": 0.26, 
 		"color": base_col
 	})
+	if not particles_enabled:
+		return
 
 	impact_rings.append({
 		"pos": pos, 
@@ -277,12 +257,14 @@ func update(delta: float) -> void :
 		if curr_scale.distance_squared_to(Vector2.ONE) < 0.0001:
 			squash_stretch.erase(k)
 
+	for bolt in sky_lightning_bolts:
+		bolt["life"] = float(bolt["life"]) - delta
+	sky_lightning_bolts = sky_lightning_bolts.filter(func(b): return float(b["life"]) > 0.0)
 	if not particles_enabled:
 		impact_sparks.clear()
 		impact_rings.clear()
 		floor_cracks.clear()
 		card_burns.clear()
-		sky_lightning_bolts.clear()
 		ground_scorches.clear()
 		return
 
@@ -306,9 +288,6 @@ func update(delta: float) -> void :
 	floor_cracks = floor_cracks.filter( func(c): return float(c["life"]) > 0.0)
 
 
-	for bolt in sky_lightning_bolts:
-		bolt["life"] = float(bolt["life"]) - delta
-	sky_lightning_bolts = sky_lightning_bolts.filter( func(b): return float(b["life"]) > 0.0)
 
 
 	for scorch in ground_scorches:
@@ -393,33 +372,17 @@ func draw_floor_effects(ci: CanvasItem, camera: Vector2) -> void :
 				ci.draw_line(p1, p2, draw_col, width, true)
 
 func draw_world_vfx(ci: CanvasItem, camera: Vector2) -> void :
-	if not particles_enabled:
-		return
-
-
 	for bolt in sky_lightning_bolts:
 		var life: = float(bolt["life"])
 		var max_l: = float(bolt["max"])
 		var alpha: = clampf(life / max_l, 0.0, 1.0)
 		var col: Color = bolt["color"]
-		var pts: Array = bolt["points"]
-		var screen_pts: = PackedVector2Array()
-		for p in pts:
-			screen_pts.append(Vector2(p) - camera)
-
-
-		ci.draw_polyline(screen_pts, Color(col.r, col.g, col.b, alpha * 0.5), 12.0, true)
-
-		ci.draw_polyline(screen_pts, Color(0.55, 0.96, 1.0, alpha * 0.85), 6.0, true)
-
-		ci.draw_polyline(screen_pts, Color(1.0, 1.0, 1.0, alpha * 0.95), 2.5, true)
-
-		var branches: Array = bolt["branches"]
-		for br in branches:
-			var b_start: Vector2 = Vector2(br["start"]) - camera
-			var b_end: Vector2 = Vector2(br["end"]) - camera
-			ci.draw_line(b_start, b_end, Color(col.r, col.g, col.b, alpha * 0.7), 2.5, true)
-			ci.draw_line(b_start, b_end, Color(1.0, 1.0, 1.0, alpha * 0.85), 1.0, true)
+		var target: Vector2 = Vector2(bolt["impact"]) - camera
+		var tier := Lightning.quality(ci) if particles_enabled else Lightning.PERFORMANCE
+		Lightning.bolt(ci, target + Vector2(0, -680), target, int(bolt.get("seed", 17)), max_l - life, col, alpha, 5.5, tier)
+		Lightning.contact(ci, target, int(bolt.get("seed", 17)), max_l - life, col, alpha, tier)
+	if not particles_enabled:
+		return
 
 
 	for mote in ambient_motes:

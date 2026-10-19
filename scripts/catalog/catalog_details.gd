@@ -213,17 +213,18 @@ static func manifestation_details(host: Node, key: String) -> Dictionary:
 			}
 		"ancorada":
 			return {
-				"funcao": "Manifestacao de firmeza. Ficar parada por 3s inicia acumulo de critico: +2% a cada 3s ate +50%. Ao mover, o bonus some imediatamente.", 
-				"disparo": "ATK - Bala Ancorada: quanto mais tempo Geovana fica parada, mais pesado o disparo fica. O empurrao comeca em 5px e cresce +2px a cada 2s, ate 50px.", 
-				"habilidade": "Q - Modo Ancorado", 
-				"desc_hab": "Liga/desliga o estado ancorado. Enquanto ativo, Geovana fica travada no lugar, recebe mais armadura, toma menos dano, ganha +20% velocidade de ataque, +35% dano base e disparos 45% maiores.", 
-				"traco": "E - Queda das Ancoras: todos os inimigos em 380px recebem ancoras do ceu, sofrem 120% do dano atual e ficam enraizados por 3s. Funciona tambem em chefes.", 
-				"risco": "A forca vem de escolher quando parar. Se mover cedo demais, perde critico e peso; ao sair do Modo Ancorado, Q entra em recarga de 5s.", 
+				"funcao": "Fortaleza em marcha. Acertos e travessias por ancoras erguem LASTRO, reforcando dano, cadencia e resistencia a empurrao sem obrigar Geovana a parar.",
+				"disparo": "ATK - Arpao de Fundacao: finca uma ancora no primeiro alvo e estende uma linha desde o disparo. Cada inimigo que cruza essa linha sofre dano e lentidao uma vez.",
+				"habilidade": "Q - Arranco de Fundacao",
+				"desc_hab": "Arremessa um contrapeso no ponto escolhido, puxa inimigos comuns para o centro, freia projeteis e deixa uma nova linha de territorio. Consome LASTRO para ampliar impacto e controle.",
+				"traco": "E - Marcha da Fortaleza: uma zona de cerco acompanha Geovana. Movimento gera Impeto, acelera disparos e a chuva de ancoras enquanto ela avanca.",
+				"risco": "As linhas duram pouco: avance por elas para firmar territorio e renovar LASTRO. Ficar parada nao concede bonus.",
 				"info_rows": [
-					{"label": "PASSIVA", "text": "3s parada inicia carga. +2% critico a cada 3s, maximo +50%. Critico acima de 100% vira dano critico extra."}, 
-					{"label": "PESO", "text": "Disparo ganha empurrao enquanto parada: 5px base, +2px a cada 2s, maximo 50px."}, 
-					{"label": "Q", "text": "Ativacao manual. Trava Geovana, aumenta defesa, cadencia, dano base e tamanho do disparo. Desativar inicia cooldown de 5s."}, 
-					{"label": "E", "text": "Raio 380px. Ancoras caem do ceu, causam 120% do dano atual e enraizam por 3s, inclusive bosses."}
+					{"label": "PASSIVA", "text": "4 pontos formam 1 LASTRO, ate 5. Acertos dao pontos; alcancar a ancora fincada concede 2. LASTRO decai apenas apos 8s sem renovacao."},
+					{"label": "ATK", "text": "O arpao cria uma linha temporaria de controle. LASTRO aumenta o dano do proprio disparo e sua cadencia."},
+					{"label": "Q", "text": "Impacto mirado que puxa inimigos, reduz projeteis hostis e transforma todo LASTRO em alcance, dano e controle."},
+					{"label": "E", "text": "A zona acompanha Geovana por 10s. Distancia percorrida gera Impeto; ancoras caem nos alvos dentro da marcha."},
+					{"label": "TP", "text": "Mantem o teleporte atual, mas finca ancoras na origem e chegada, criando uma nova linha de avancada."}
 				]
 			}
 		"cartografica":

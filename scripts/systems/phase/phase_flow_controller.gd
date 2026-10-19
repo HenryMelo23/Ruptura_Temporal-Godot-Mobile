@@ -8,6 +8,8 @@ func configure(p_core: Node) -> void:
 
 
 func _pick_initial_phase() -> int:
+	if core.experimental_phase_active:
+		return 1
 	var forced_phase: = _sanitize_forced_initial_phase(core.forced_initial_phase)
 	if core.force_phase6_start and forced_phase == 0:
 		forced_phase = 6
@@ -36,6 +38,13 @@ func _forced_initial_phase_label() -> String:
 
 
 func _begin_initial_phase_tracking(phase: int) -> void:
+	if core.experimental_phase_active:
+		core.run_initial_phase = 0
+		core.run_phase6_completed = false
+		_reset_dimension_route_state()
+		core.initial_phase_current_run = 0
+		core.initial_phase_current_recorded = true
+		return
 	var initial_phase: = _sanitize_initial_phase_bias_target(phase)
 	core.run_initial_phase = initial_phase
 	core.run_phase6_completed = false
@@ -99,6 +108,8 @@ func _core_next_phase_after_boss(phase: int) -> int:
 
 
 func _next_phase_after_boss(phase: int) -> int:
+	if core.experimental_phase_active:
+		return 0
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return 0
 	var core_next: int = _core_next_phase_after_boss(phase)
@@ -110,6 +121,8 @@ func _next_phase_after_boss(phase: int) -> int:
 
 
 func _consume_next_phase_after_boss(phase: int) -> int:
+	if core.experimental_phase_active:
+		return 0
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return 0
 	var core_next: int = _core_next_phase_after_boss(phase)
@@ -121,6 +134,11 @@ func _consume_next_phase_after_boss(phase: int) -> int:
 
 
 func _commit_final_phase_victory_cleanup(phase: int) -> bool:
+	if core.experimental_phase_active and core.run_finalized_result == "Vitoria":
+		core.phase_fragment.clear()
+		core.pending_phase = 0
+		core.phase_transition_timer = 0.0
+		return true
 	if phase != core.DIMENSION_FINAL_PHASE or core.run_finalized_result != "Vitoria":
 		return false
 	core.phase_fragment.clear()
@@ -138,6 +156,8 @@ func _register_dimension_phase_completed(phase: int) -> void:
 
 
 func _should_offer_dimension_choice_after_boss(phase: int) -> bool:
+	if core.experimental_phase_active:
+		return false
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return false
 	return phase == core.DIMENSION_FARM_RETURN_PHASE

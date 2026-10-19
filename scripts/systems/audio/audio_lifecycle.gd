@@ -225,7 +225,7 @@ static func play_phase_music_random(game: Node, phase: int) -> void:
 static func boss_music_tracks(phase: int) -> Array:
 	match phase:
 		1:
-			return ["Boss1-Music-3.mp3"]
+			return ["Pendulum_of_Resolve.mp3", "The_Weight_of_the_Aftermath.mp3"]
 		2:
 			return ["Boss2-Music-2.mp3", "Boss2-Music-3.mp3", "Boss2-Music-4.mp3", "Boss2-Music-5.mp3"]
 		3:

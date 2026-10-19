@@ -49,6 +49,21 @@ func _run() -> void:
 	_check(decoded_world[0] == packed_enemies and decoded_world[1] == packed_boss and decoded_world[2] == packed_bullets, "fragmentation changed world snapshot data")
 	chunks_by_index.erase(0)
 	_check(game.RTWorldSnapshotChunkerScript.join(chunks_by_index, world_chunks.size(), game.NET_WORLD_CHUNK_MAX_COUNT).is_empty(), "incomplete world snapshot was accepted")
+	var oversized_visual := {"boss_name": "MATRIARCA DA CHAGA", "events": []}
+	for visual_index in range(96):
+		oversized_visual["events"].append({"event_id": visual_index, "pos": Vector2(visual_index * 17, visual_index * 31), "kind": "boss6_contract_%d" % visual_index})
+	var encoded_visual: PackedByteArray = game.RTWorldSnapshotChunkerScript.encode_variant(oversized_visual)
+	var visual_chunks: Array = game.RTWorldSnapshotChunkerScript.split(encoded_visual, game.NET_WORLD_CHUNK_PAYLOAD_BYTES)
+	_check(visual_chunks.size() > 1, "oversized boss visual snapshot was not fragmented")
+	var visual_chunks_by_index: Dictionary = {}
+	for chunk_index in range(visual_chunks.size()):
+		visual_chunks_by_index[chunk_index] = visual_chunks[chunk_index]
+		_check(var_to_bytes([1, chunk_index, visual_chunks.size(), visual_chunks[chunk_index]]).size() < 1392, "serialized visual chunk exceeded ENet MTU")
+	var rebuilt_visual: PackedByteArray = game.RTWorldSnapshotChunkerScript.join(visual_chunks_by_index, visual_chunks.size(), game.NET_WORLD_CHUNK_MAX_COUNT)
+	_check(game.RTWorldSnapshotChunkerScript.decode_variant(rebuilt_visual) == oversized_visual, "fragmentation changed boss visual snapshot data")
+	var phase7_packet: PackedFloat32Array = game.RTNetContractScript.pack_boss(Vector2(800, 220), 700.0, false, true, 7, 900.0, 1.0)
+	var phase7_decoded: Dictionary = game.RTNetContractScript.unpack_boss_snapshot(phase7_packet, Vector2.ZERO, 0.0, false, false, 1, 1.0, 0.0, false)
+	_check(int(phase7_decoded.get("phase_index", 0)) == 7, "boss phase 7 was truncated to phase 6")
 	game.enemies.clear()
 	game.enemy_bullets.clear()
 	game.is_multiplayer = true
@@ -56,6 +71,15 @@ func _run() -> void:
 	game.is_host = false
 	game.online_room_owner = false
 	game.net_world_last_sequence = -1
+	game.net_world_visual_last_sequence = -1
+	game.net_boss_identity_last_sequence = -1
+	game._update_remote_boss_identity(76, phase7_packet, "FENIX", Color(1.0, 0.42, 0.08))
+	_check(game.current_phase == 7 and game.boss_active and game.boss_name == "FENIX", "dedicated boss identity lane did not restore phase 7")
+	for chunk_index in range(visual_chunks.size() - 1):
+		game._update_remote_world_visuals_chunk(77, chunk_index, visual_chunks.size(), visual_chunks[chunk_index])
+	_check(game.net_world_visual_last_sequence == -1, "partial visual snapshot was applied to the replica")
+	game._update_remote_world_visuals_chunk(77, visual_chunks.size() - 1, visual_chunks.size(), visual_chunks[visual_chunks.size() - 1])
+	_check(game.net_world_visual_last_sequence == 77, "complete visual snapshot was not committed atomically")
 	for chunk_index in range(1, world_chunks.size()):
 		game._update_remote_entities_chunk(77, chunk_index, world_chunks.size(), world_chunks[chunk_index])
 	_check(game.net_world_last_sequence == -1 and game.enemies.is_empty(), "partial world snapshot was applied to the replica")
@@ -73,7 +97,7 @@ func _run() -> void:
 	_check(game.net_transport_health == "degraded", "transport degradation was not detected")
 	game._update_network_transport_health(now_ms + game.NET_TRANSPORT_STALLED_AFTER_MS)
 	_check(game.net_transport_health == "stalled", "transport stall was not detected")
-	print("MULTIPLAYER_TRANSPORT_SMOKE_OK adaptive=true mtu_chunks=%d lossless=true health=ok,degraded,stalled" % world_chunks.size())
+	print("MULTIPLAYER_TRANSPORT_SMOKE_OK adaptive=true mtu_chunks=%d visual_chunks=%d lossless=true boss_phase_7=true health=ok,degraded,stalled" % [world_chunks.size(), visual_chunks.size()])
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

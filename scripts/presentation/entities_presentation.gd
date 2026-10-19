@@ -1,9 +1,39 @@
 extends RefCounted
+const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
 
 static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
+	# Frame-local, keyed by kind: these profiles depend on phase/kind only.
+	# Keep per-entity animation, health and status overrides live below.
+	var sizes: Dictionary = {}
+	var styles: Dictionary = {}
+	var prismatica_active: bool = not game._active_prismatica_secondary().is_empty()
+	var tints := {
+		game.ENEMY_ATIRADOR: Color(0.7, 0.86, 1.0),
+		game.ENEMY_DEVOTO: Color(0.76, 1.0, 0.56),
+		game.ENEMY_INCENSARIO: Color(0.88, 0.72, 1.0),
+		game.ENEMY_GUARDIAO: Color(0.7, 0.76, 0.62),
+		game.ENEMY_FLAGELANTE: Color(1.0, 0.9, 0.76),
+		game.ENEMY_SALMODIANTE: Color(0.94, 0.8, 1.0),
+		game.ENEMY_RELICARIO: Color(0.9, 0.96, 0.72),
+		game.ENEMY_COUT_ATTACK_SPEED: Color(1.0, 0.66, 0.18),
+		game.ENEMY_SHIELD_REFLECTOR: Color(0.62, 0.92, 1.0),
+		game.ENEMY_NEXUS_CARTOGRAPHER: Color(0.92, 0.24, 0.78),
+		game.ENEMY_NEXUS_CHRONOPHAGE: Color(1.0, 0.68, 0.16),
+		game.ENEMY_NEXUS_REFRACTOR: Color(0.24, 0.88, 1.0),
+		game.ENEMY_NEXUS_WEAVER: Color(0.2, 1.0, 0.64),
+		game.ENEMY_NEXUS_ECHO: Color(1.0, 0.34, 0.68, 0.82),
+		game.ENEMY_MIASMA_EEL: Color(0.58, 1.0, 0.78),
+		game.ENEMY_LODARIO: Color(0.86, 0.7, 0.46),
+		game.ENEMY_FOSSIL_PUSTULE: Color(1.0, 0.62, 0.32),
+		game.ENEMY_CHRONAL_LEECH: Color(0.92, 0.42, 0.72),
+		game.ENEMY_AMBER_SUTURER: Color(1.0, 0.96, 0.88),
+		game.ENEMY_CINERIDO: Color(1.0, 0.7, 0.42),
+		game.ENEMY_PANGOLIRO: Color(1.0, 0.82, 0.48),
+		game.ENEMY_CORVOL: Color(0.82, 0.82, 0.76),
+	}
 	for enemy in game.enemies:
 		if not game._world_point_in_view(Vector2(enemy.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue
@@ -12,56 +42,21 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			continue
 		var pos: Vector2 = enemy["pos"] - camera
 		var tex = game._enemy_texture(enemy)
-		var size = game._enemy_draw_size(enemy)
+		var kind: String = enemy["type"]
+		if not sizes.has(kind):
+			sizes[kind] = game._enemy_draw_size(enemy)
+			styles[kind] = game._enemy_health_bar_style(enemy)
+		var size: Vector2 = sizes[kind]
 		var draw_pos = pos + game._enemy_visual_offset(enemy)
 		var alpha = float(enemy.get("alpha", 1.0))
-		var modulate_color = Color(1, 1, 1, alpha)
-		if enemy["type"] == game.ENEMY_ATIRADOR:
-			modulate_color = Color(0.7, 0.86, 1.0, alpha)
-		elif enemy["type"] == game.ENEMY_KAMIKAZE:
-			modulate_color = Color(1.0, 1.0, 1.0, alpha)
+		var modulate_color: Color = tints.get(kind, Color.WHITE)
+		modulate_color.a *= alpha
+		if kind == game.ENEMY_KAMIKAZE:
 			if sin(game.time_alive * 12.0) > 0.0:
 				modulate_color = Color(1.0, 0.92, 0.9, alpha)
-		elif enemy["type"] == game.ENEMY_DEVOTO:
-			modulate_color = Color(0.76, 1.0, 0.56, alpha)
-		elif enemy["type"] == game.ENEMY_INCENSARIO:
-			modulate_color = Color(0.88, 0.72, 1.0, alpha)
-		elif enemy["type"] == game.ENEMY_GUARDIAO:
-			modulate_color = Color(0.7, 0.76, 0.62, alpha)
-		elif enemy["type"] == game.ENEMY_COUT_ATTACK_SPEED:
-			modulate_color = Color(1.0, 0.66, 0.18, alpha)
-		elif enemy["type"] == game.ENEMY_SHIELD_REFLECTOR:
-			modulate_color = Color(0.62, 0.92, 1.0, alpha)
-		elif enemy["type"] == game.ENEMY_PYRO_PENGUIN:
-			modulate_color = Color(1.0, 1.0, 1.0, alpha)
-		elif enemy["type"] == game.ENEMY_NEXUS_CARTOGRAPHER:
-			modulate_color = Color(0.92, 0.24, 0.78, alpha)
-		elif enemy["type"] == game.ENEMY_NEXUS_CHRONOPHAGE:
-			modulate_color = Color(1.0, 0.68, 0.16, alpha)
-		elif enemy["type"] == game.ENEMY_NEXUS_REFRACTOR:
-			modulate_color = Color(0.24, 0.88, 1.0, alpha)
-		elif enemy["type"] == game.ENEMY_NEXUS_WEAVER:
-			modulate_color = Color(0.2, 1.0, 0.64, alpha)
-		elif enemy["type"] == game.ENEMY_NEXUS_ECHO:
-			modulate_color = Color(1.0, 0.34, 0.68, alpha * 0.82)
-		elif enemy["type"] == game.ENEMY_MIASMA_EEL:
-			modulate_color = Color(0.58, 1.0, 0.78, alpha)
-		elif enemy["type"] == game.ENEMY_LODARIO:
-			modulate_color = Color(0.86, 0.7, 0.46, alpha)
-		elif enemy["type"] == game.ENEMY_FOSSIL_PUSTULE:
-			modulate_color = Color(1.0, 0.62, 0.32, alpha)
-		elif enemy["type"] == game.ENEMY_CHRONAL_LEECH:
-			modulate_color = Color(0.92, 0.42, 0.72, alpha)
-		elif enemy["type"] == game.ENEMY_AMBER_SUTURER:
-			modulate_color = Color(1.0, 0.96, 0.88, alpha)
-		elif enemy["type"] == game.ENEMY_CINERIDO:
-			modulate_color = Color(1.0, 0.7, 0.42, alpha)
-		elif enemy["type"] == game.ENEMY_PANGOLIRO:
-			modulate_color = Color(1.0, 0.82, 0.48, alpha)
+		elif kind == game.ENEMY_PANGOLIRO:
 			if float(enemy.get("phase7_vulnerable", 0.0)) > 0.0:
 				modulate_color = Color(1.0, 0.52, 0.22, alpha)
-		elif enemy["type"] == game.ENEMY_CORVOL:
-			modulate_color = Color(0.82, 0.82, 0.76, alpha)
 		if enemy["type"] == game.ENEMY_MIASMA_EEL and float(enemy.get("eel_relocating", 0.0)) > 0.0:
 			game._draw_miasma_eel_relocation_path(enemy, camera)
 			continue
@@ -86,7 +81,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 		if is_attack_target:
 			game._draw_attack_target_marker(draw_pos + Vector2(0, visual_size.y * 0.3), visual_size.x * 0.43, game.locked_target_kind == "enemy" and game.locked_target_uid == int(enemy["uid"]))
 
-		if not game._active_prismatica_secondary().is_empty() and enemy["pos"].distance_to(game.player_pos) < 900.0:
+		if prismatica_active and enemy["pos"].distance_to(game.player_pos) < 900.0:
 			var t = float(Time.get_ticks_msec()) * 0.001
 			var hue = fmod(t * 0.8 + int(enemy["uid"]) * 0.15, 1.0)
 			var c = Color.from_hsv(hue, 1.0, 1.0, 0.5)
@@ -116,7 +111,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			enemy_bar_draw_pos += Vector2(sin(game.time_alive * 90.0 + int(enemy["uid"])) * 2.8, cos(game.time_alive * 76.0 + int(enemy["uid"]) * 0.37) * 1.8) * shake_power
 			game._draw_tesla_health_bar_fx(enemy_bar_draw_pos, 60.0, enemy_hp_ratio, tesla_bar_shock, int(enemy["uid"]))
 		else:
-			game._draw_enemy_health_bar(enemy, enemy_bar_draw_pos, 60.0, enemy_hp_ratio)
+			_draw_enemy_health_bar(game, enemy, enemy_bar_draw_pos, 60.0, enemy_hp_ratio, styles[kind])
 		if bool(enemy.get("sanguinaria_hunt", false)):
 			game._draw_sanguinaria_hunt_mark(enemy_bar_draw_pos, 60.0)
 		var static_stacks = int(enemy.get("eletrica_static_stacks", 0))
@@ -175,6 +170,20 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 		if enemy["type"] == game.ENEMY_GUARDIAO:
 			var shield_dir = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
 			game.draw_arc(pos + shield_dir * 26.0, 42.0, shield_dir.angle() - PI * 0.45, shield_dir.angle() + PI * 0.45, 24, Color(0.78, 0.92, 0.56, 0.82), 5.0)
+		if enemy["type"] == game.ENEMY_FLAGELANTE and float(enemy.get("phase3_surge_timer", 0.0)) > 0.0:
+			var trail_dir := -Vector2(enemy.get("last_move_dir", Vector2.RIGHT)).normalized()
+			game.draw_line(pos + trail_dir * 18.0, pos + trail_dir * 54.0, Color(0.72, 1.0, 0.3, 0.58), 4.0)
+		if enemy["type"] == game.ENEMY_SALMODIANTE and float(enemy.get("phase3_chant_prepare", 0.0)) > 0.0:
+			var chant_target := Vector2(enemy.get("phase3_chant_target", game.player_pos)) - camera
+			var chant_dir := (chant_target - pos).normalized()
+			for fan_angle in [-game.PHASE3_SALMODIANTE_FAN_ANGLE, 0.0, game.PHASE3_SALMODIANTE_FAN_ANGLE]:
+				game.draw_line(pos, pos + chant_dir.rotated(float(fan_angle)) * 92.0, Color(0.82, 0.4, 1.0, 0.42), 2.0)
+		if enemy["type"] == game.ENEMY_RELICARIO and float(enemy.get("phase3_relic_pulse", 0.0)) > 0.0:
+			var relic_ratio := clampf(float(enemy.get("phase3_relic_pulse", 0.0)) / 0.7, 0.0, 1.0)
+			game.draw_arc(pos, game.PHASE3_RELIC_RADIUS * (1.0 - relic_ratio * 0.55), 0.0, TAU, 48, Color(0.7, 0.92, 0.3, 0.42 * relic_ratio), 3.0)
+		if float(enemy.get("phase3_fervor_timer", 0.0)) > 0.0:
+			var fervor_pulse := 0.5 + 0.5 * sin(game.time_alive * 8.0 + float(int(enemy.get("uid", 0)) % 17))
+			game.draw_arc(pos, visual_size.x * (0.42 + fervor_pulse * 0.05), 0.0, TAU, 24, Color(0.68, 1.0, 0.28, 0.46), 2.0)
 		if enemy["type"] == game.ENEMY_SHIELD_REFLECTOR:
 			var shield_dir = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
 			if game._shield_reflector_active(enemy):
@@ -267,11 +276,11 @@ static func _draw_tesla_enemy_crown(game: Node2D, center: Vector2, shock_time: f
 	var alpha: float = clamp(shock_time / 0.42, 0.18, 1.0)
 	var radius: float = 34.0 + sin(game.time_alive * 12.0 + uid) * 3.0
 	game.draw_arc(center, radius, game.time_alive * 2.2, game.time_alive * 2.2 + TAU * 0.72, 42, Color(0.35, 1.0, 1.0, 0.44 * alpha), 2.2)
-	for i in range(5):
+	for i in range(3 if Lightning.quality(game) == Lightning.PERFORMANCE else 5):
 		var ang: float = game.time_alive * 4.6 + float(i) * TAU / 5.0 + float(uid) * 0.017
 		var a: Vector2 = center + Vector2.from_angle(ang) * (radius * 0.55)
 		var b: Vector2 = center + Vector2.from_angle(ang + 0.36) * (radius + 8.0)
-		game.draw_line(a, b, Color(1.0, 1.0, 1.0, 0.44 * alpha), 1.5, true)
+		Lightning.bolt(game, a, b, uid + i, game.time_alive, Color(0.35, 0.9, 1.0), alpha * 0.6, 1.5, Lightning.PERFORMANCE)
 
 
 static func _draw_gravitante_enemy_distortion(game: Node2D, enemy: Dictionary, center_world: Vector2, camera: Vector2, radius: float, _progress: float, intensity: float) -> void :
@@ -289,6 +298,8 @@ static func _draw_gravitante_enemy_distortion(game: Node2D, enemy: Dictionary, c
 
 
 static func _draw_player(game: Node2D, camera: Vector2) -> void :
+	if game.henry_incendiary_ability_controller.entrance_active and game.active_character_key == game.CHARACTER_HENRY:
+		return # Drawn after the temporal world tint, unaffected by it.
 	if game.is_dead:
 		return
 	if not game._active_lacerante_secondary().is_empty():
@@ -353,9 +364,12 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 	if not game._player_start_down_active():
 		return false
+	if game.active_character_key == game.CHARACTER_HENRY:
+		return _draw_henry_entry(game, camera)
 	if game._cancel_player_start_down_landing_on_move():
 		return false
-	var frames: Array = game.textures.get("player_lacerante_start_down" if game.manifestation_key == "lacerante" else "player_start_down", [])
+	var intro_key := "henry_down" if game.active_character_key == game.CHARACTER_HENRY else ("player_lacerante_start_down" if game.manifestation_key == "lacerante" else "player_start_down")
+	var frames: Array = game.textures.get(intro_key, [])
 	if frames.is_empty():
 		return false
 	var center: Vector2 = game.player_pos - camera
@@ -389,6 +403,47 @@ static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 	else:
 		game._draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, game._should_flip_player_sprite())
 	return true
+
+
+static func _draw_henry_entry(game: Node2D, camera: Vector2) -> bool:
+	return _draw_henry_entry_pose(game, camera, game.player_pos, game.henry_entry_timer)
+
+
+static func _draw_henry_entry_pose(game: Node2D, camera: Vector2, position: Vector2, remaining: float) -> bool:
+	var frames: Array = game.textures.get("henry_intro", [])
+	if frames.size() < game.HENRY_ENTRY_FRAME_COUNT or remaining <= 0.0:
+		return false
+	var progress := clampf(1.0 - remaining / game.HENRY_ENTRY_DURATION, 0.0, 1.0)
+	var frame_idx := clampi(int(floor(progress * float(game.HENRY_ENTRY_FRAME_COUNT))), 0, game.HENRY_ENTRY_FRAME_COUNT - 1)
+	var tex: Texture2D = frames[frame_idx]
+	if tex == null:
+		return false
+	var arrival_progress := smoothstep(0.0, 0.48, progress)
+	var center: Vector2 = position - camera + Vector2(lerpf(-176.0, 0.0, arrival_progress), 0.0)
+	var materialize_alpha := clampf(progress * 4.5 + 0.18, 0.18, 1.0)
+	var shadow_alpha := lerpf(0.08, 0.36, arrival_progress)
+	game.draw_set_transform(center + Vector2(0.0, 41.0), 0.0, Vector2(1.0 + arrival_progress * 0.28, 0.24 + arrival_progress * 0.08))
+	game.draw_circle(Vector2.ZERO, 34.0, Color(0.0, 0.0, 0.0, shadow_alpha))
+	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if progress < 0.46:
+		var fragment_count := 7 if game.gfx_low_resource else 15
+		for index in range(fragment_count):
+			var phase := float(index) * 2.417 + progress * 11.0
+			var fragment_pos: Vector2 = center + Vector2(sin(phase) * (52.0 - arrival_progress * 18.0), -42.0 + fmod(float(index * 23), 86.0))
+			var fragment_size := 2.0 + float(index % 3) * 1.5
+			var fragment_alpha := clampf((0.52 - progress) * 1.8, 0.0, 0.72)
+			var fragment_color := Color(0.02, 0.82 if index % 2 == 0 else 0.48, 1.0, fragment_alpha)
+			game.draw_rect(Rect2(fragment_pos, Vector2(fragment_size, fragment_size)), fragment_color)
+	game._draw_entity_by_height_rotated(tex, center, _henry_entry_draw_height(game, frame_idx), 0.0, Color(1.0, 1.0, 1.0, materialize_alpha))
+	if progress >= 0.72 and progress <= 0.92:
+		var glint := sin((progress - 0.72) / 0.2 * PI)
+		game.draw_line(center + Vector2(-13.0, -29.0), center + Vector2(15.0, -24.0), Color(0.7, 0.96, 1.0, glint * 0.82), 1.6, true)
+	return true
+
+
+static func _henry_entry_draw_height(game: Node2D, frame_idx: int) -> float:
+	var measured_height := float(game.HENRY_ENTRY_VISIBLE_HEIGHTS[clampi(frame_idx, 0, game.HENRY_ENTRY_VISIBLE_HEIGHTS.size() - 1)])
+	return game.HENRY_IDLE_DRAW_HEIGHT * game.HENRY_IDLE_VISIBLE_HEIGHT / maxf(1.0, measured_height)
 
 
 static func _draw_dynamic_shadow(game: Node2D, texture: Texture2D, center: Vector2, size: Vector2, flip_h: = false, alpha: = 0.42) -> void :
@@ -469,8 +524,8 @@ static func _draw_entity_by_height_rotated(game: Node2D, texture: Texture2D, cen
 	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
-static func _draw_enemy_health_bar(game: Node2D, enemy: Dictionary, pos: Vector2, width: float, ratio: float) -> void :
-	var style = game._enemy_health_bar_style(enemy)
+static func _draw_enemy_health_bar(game: Node2D, enemy: Dictionary, pos: Vector2, width: float, ratio: float, shared_style: Dictionary = {}) -> void :
+	var style: Dictionary = shared_style if not shared_style.is_empty() else game._enemy_health_bar_style(enemy)
 	var health_ratio: float = clamp(ratio, 0.0, 1.0)
 	var height: float = float(style.get("height", 7.0))
 	var fill = Color(style.get("fill", Color(0.3, 1.0, 0.42)))
@@ -578,6 +633,8 @@ static func _draw_phantom_player(game: Node2D, camera: Vector2) -> void :
 
 
 static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: int, state: Dictionary) -> void :
+	if game.henry_incendiary_ability_controller.entrance_active and game.henry_incendiary_ability_controller.entrance_peers.has(peer_id):
+		return
 	if not game._remote_player_state_targetable(state):
 		return
 	var p = Vector2(state.get("render_pos", state.get("pos", Vector2.ZERO))) - camera
@@ -598,6 +655,14 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	var remote_manifestation_key: String = String(state.get("manifestation_key", ""))
 	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)), remote_manifestation_key)
 	var is_lacerante: bool = remote_manifestation_key == "lacerante" or game.LaceranteSprites.is_manifestation(game, int(state.get("manifestation", -1)))
+	var prismatica_secondary := _remote_prismatica_secondary(game, peer_id) if remote_manifestation_key == "prismatica" else {}
+	var is_prismatica_dancing := not prismatica_secondary.is_empty()
+	if is_prismatica_dancing:
+		var dance_texture: Texture2D = game._prismatica_ultimate_frame_texture(prismatica_secondary)
+		if dance_texture != null:
+			tex = dance_texture
+			size = dance_texture.get_size() * (84.0 / maxf(1.0, dance_texture.get_height()))
+			rect = Rect2(p - size * 0.5, size)
 	if is_lacerante:
 		flip_h = false
 		if tex != null:
@@ -609,7 +674,9 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 		rect = Rect2(p + Vector2(-size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
 
 	var rotation = 0.0
-	var move = Vector2(state.get("move", Vector2.ZERO)).normalized()
+	# Input intent comes from the compact visual snapshot. Positional velocity is
+	# only a fallback, because interpolation can briefly point opposite to a dash.
+	var move = Vector2(state.get("input_move", state.get("move", Vector2.ZERO))).normalized()
 	if move.y < -0.2 and abs(move.x) > 0.2:
 		rotation = deg_to_rad(15.0) if move.x > 0.0 else deg_to_rad(-15.0)
 
@@ -625,8 +692,40 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	var alpha = 0.34 if bool(state.get("stealthed", false)) else 0.86
 	if is_lacerante:
 		game._draw_entity_by_height_rotated(tex, p, game.LaceranteSprites.DRAW_HEIGHT, rotation, Color(1.0, 1.0, 1.0, alpha))
+	elif is_prismatica_dancing:
+		game._draw_entity_by_height_rotated(tex, p, 84.0, rotation, Color(accent.r, accent.g, accent.b, alpha), flip_h)
 	else:
 		game._draw_entity_fit_flipped(tex, rect.get_center(), size, flip_h, Color(accent.r, accent.g, accent.b, alpha))
+
+
+static func _remote_prismatica_secondary(game: Node2D, peer_id: int) -> Dictionary:
+	for index in range(game.net_ability_visuals.size() - 1, -1, -1):
+		var visual_value = game.net_ability_visuals[index]
+		if not visual_value is Dictionary:
+			continue
+		var visual: Dictionary = visual_value
+		if int(visual.get("source", 0)) != peer_id:
+			continue
+		if int(visual.get("action", -1)) != game.NET_ABILITY_SECONDARY:
+			continue
+		if String(visual.get("manifestation_key", visual.get("kind", ""))) != "prismatica":
+			continue
+		if float(visual.get("life", 0.0)) <= 0.0:
+			continue
+		var canonical_state = visual.get("canonical_state", {})
+		if not canonical_state is Dictionary:
+			continue
+		var secondary_value = Dictionary(canonical_state).get("secondary", {})
+		if not secondary_value is Dictionary or Dictionary(secondary_value).is_empty():
+			continue
+		var secondary := Dictionary(secondary_value).duplicate(true)
+		var event_elapsed := maxf(0.0, float(visual.get("max", 0.0)) - float(visual.get("life", 0.0)))
+		var elapsed := maxf(0.0, event_elapsed - float(visual.get("canonical_base_elapsed", 0.0)))
+		if secondary.has("life"):
+			secondary["life"] = maxf(0.0, float(secondary.get("life", 0.0)) - elapsed)
+		secondary["active_time"] = float(secondary.get("active_time", 0.0)) + elapsed
+		return secondary
+	return {}
 
 
 static func _draw_leader_crown(game: Node2D, center: Vector2, scale: float, color: Color) -> void:

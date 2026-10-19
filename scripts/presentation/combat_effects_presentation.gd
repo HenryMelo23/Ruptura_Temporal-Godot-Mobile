@@ -1,10 +1,12 @@
 extends RefCounted
 
 const Gravity = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
+const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 const BargainCapsule = preload("res://scripts/presentation/bargain_capsule_presentation.gd")
 const BossReward = preload("res://scripts/presentation/boss_reward_presentation.gd")
 const PrismaticaEvolution = preload("res://scripts/presentation/prismatica_evolution_presentation.gd")
+const HenryFire = preload("res://scripts/presentation/henry_fire_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -130,17 +132,7 @@ static func _draw_manifest_preview_ultimate(game: Node2D, rect: Rect2, key: Stri
 
 
 static func _draw_preview_bolt(game: Node2D, start: Vector2, end: Vector2, color: Color, t: float, width: float) -> void :
-	var points = PackedVector2Array()
-	var dir = end - start
-	var normal = dir.orthogonal().normalized()
-	points.append(start)
-	for i in range(1, 7):
-		var k = float(i) / 7.0
-		var jitter = sin(t * 18.0 + i * 2.17) * 9.0 + cos(t * 11.0 + i) * 4.0
-		points.append(start.lerp(end, k) + normal * jitter)
-	points.append(end)
-	game.draw_polyline(points, Color(color.r, color.g, color.b, 0.42), width + 3.0, true)
-	game.draw_polyline(points, Color(1.0, 1.0, 1.0, 0.84), max(1.0, width), true)
+	Lightning.bolt(game, start, end, 113, t, color, 0.9, width, -1, false)
 
 
 static func _draw_preview_diamond(game: Node2D, center: Vector2, radius: float, color: Color) -> void :
@@ -185,6 +177,7 @@ static func _draw_event_alert_world(game: Node2D, camera: Vector2, viewport: Vec
 static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	var camera = game._camera(viewport)
 	camera += game._screen_shake_offset()
+	Lightning.begin_frame(game, camera)
 	var map_texture = game._current_map_texture()
 	if map_texture:
 		if game.current_phase == 5 and game.phase5_transmute_active:
@@ -196,8 +189,12 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 				game.phase_map_layer.show_behind_parent = true
 				game.add_child(game.phase_map_layer)
 			var surface: int = game.PhaseMapPresentation.surface_for(game)
-			game.phase_map_layer.present(map_texture, game._desktop_stage_draw_rect(camera), surface, game.time_alive, game.gfx_low_resource or game._memory_saver_active())
+			if game.experimental_phase_active:
+				game.phase_map_layer.present_tiled(map_texture, game.experimental_phase_controller.map_tile_rects(camera), surface, game.time_alive, game._runtime_visual_budget_active())
+			else:
+				game.phase_map_layer.present(map_texture, game._desktop_stage_draw_rect(camera), surface, game.time_alive, game._runtime_visual_budget_active())
 			game.PhaseMapPresentation.draw_ambient(game, camera, surface)
+			game.ExperimentalPhasePresentation.draw_world(game, camera, viewport)
 	else:
 		game.draw_rect(Rect2( - camera, game.WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
 	game._draw_event_alert_world(camera, viewport)
@@ -247,9 +244,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game.boss1_rain_active and game.weather_kind == "rain":
 		game._draw_rain_puddles(camera)
 	for anchor in (game.anchors + game.net_anchors):
-		var p: Vector2 = anchor["pos"] - camera
-		game.draw_circle(p, 52, Color(0.2, 0.86, 1.0, 0.1))
-		game.draw_arc(p, 52, 0, TAU, 48, Color(0.4, 0.95, 1.0, 0.55), 2)
+		_draw_anchor_visual(game, anchor, camera)
 	for prism in (game.prisms + game.net_prisms):
 		game._draw_prismatica_prism(prism, camera)
 	game._draw_advanced_manifestation_world(camera)
@@ -260,36 +255,13 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		if enemy:
 			game.draw_arc(enemy["pos"] - camera, 34, 0, TAU, 32, Color(0.4, 1.0, 0.36, 0.66), 3)
 	for slash in (game.slashes + game.net_slashes):
-		var alpha = clamp(float(slash["life"]) / float(slash["max"]), 0.0, 1.0)
-		var slash_kind = String(slash.get("kind", ""))
-		if slash_kind == "lacerante_spin":
-			game._draw_lacerante_spin(slash, camera, alpha)
-		elif slash_kind == "lacerante_blade":
-			game._draw_lacerante_blade(slash, camera, alpha)
-		elif slash.has("points"):
-			var c: Color = slash["color"]
-			c.a = 0.22 + alpha * 0.55
-			var packed = PackedVector2Array()
-			for point in slash["points"]:
-				packed.append(point - camera)
-			game.draw_polyline(packed, c, float(slash["width"]) * alpha, true)
-		else:
-			var c: Color = slash["color"]
-			c.a = 0.22 + alpha * 0.55
-			game.draw_line(slash["a"] - camera, slash["b"] - camera, c, float(slash["width"]) * alpha)
+		_draw_slash_visual(game, slash, camera)
 	for wave in game.shockwaves:
-		var w_kind = String(wave.get("kind", ""))
-		var w_max = float(wave.get("max_life", 1.0))
-		var w_life = float(wave.get("life", 0.0))
-		var w_alpha = clamp(w_life / max(0.01, w_max), 0.0, 1.0)
-		if w_kind == "sinfonia_silencio":
-			game.draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(1.0, 0.84, 0.2, w_alpha * 0.8), 6)
-			game.draw_arc(wave["pos"] - camera, max(0.0, float(wave["radius"]) - 10.0), 0, TAU, 60, Color(1.0, 0.6, 0.1, w_alpha * 0.4), 2)
-		else:
-			game.draw_arc(wave["pos"] - camera, float(wave["radius"]), 0, TAU, 80, Color(0.2, 1.0, 1.0, 0.6), 4)
+		_draw_shockwave_visual(game, wave, camera)
 	game._draw_eletrica_kinetic_waves(camera)
 	game._draw_eletrica_chains(camera)
 	game._draw_manifestation_secondaries(camera)
+	_draw_henry_ability_vfx(game, camera)
 	game._draw_network_ability_visuals(camera)
 	if game.vfx_director:
 		game.vfx_director.draw_world_vfx(game, camera)
@@ -345,6 +317,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	for gravity_secondary in game.manifestation_secondaries:
 		if String(gravity_secondary.get("kind", "")) == "gravitante":
 			Gravity.ultimate(game, gravity_secondary, camera)
+	_draw_network_ability_visuals(game, camera, "foreground")
 	game._draw_parasite_marks(camera)
 	game._draw_parasite_foreground(camera)
 	if not game.phase_fragment.is_empty():
@@ -373,6 +346,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game._is_umbra_miasma_active():
 		game._draw_umbra_miasma_overlay(viewport, camera)
 	game._draw_apolo_phase5_exhibition_world(camera)
+	Lightning.end_frame(game)
+	HenryFire.draw_entrance(game, camera, viewport)
 	if game.preview_capture_mode:
 		return
 	game.hud_feedback.overlay(game, viewport)
@@ -471,9 +446,19 @@ static func _draw_common_card_world(game: Node2D, camera: Vector2) -> void :
 				game.draw_arc(pos, radius * 0.62, - t * 4.6, - t * 4.6 + PI * 1.1, 44, Color(0.42, 1.0, 1.0, 0.5 * ratio), 3.0)
 			"choque_seed":
 				game.draw_arc(pos, radius, 0.0, TAU, 20, Color(0.7, 0.92, 1.0, 0.26 * ratio), 2.0)
+			"ferrolho_ready":
+				game.draw_arc(pos, radius, - t * 2.8, - t * 2.8 + PI * 1.55, 52, Color(0.18, 0.62, 1.0, 0.62 * ratio), 3.0)
+				game.draw_arc(pos, radius * 0.68, t * 3.4, t * 3.4 + PI * 1.35, 40, Color(0.72, 0.9, 1.0, 0.5 * ratio), 2.0)
+				game.draw_line(pos + Vector2(0, - radius * 0.58), pos + Vector2(0, radius * 0.48), Color(0.82, 0.94, 1.0, 0.68 * ratio), 3.0, true)
 			"ferrolho":
-				game.draw_arc(pos, radius, 0.0, TAU, 48, Color(0.92, 0.58, 1.0, 0.58 * ratio), 4.0)
-				game.draw_line(pos + Vector2(0, - radius * 0.75), pos + Vector2(0, radius * 0.34), Color(0.96, 0.78, 1.0, 0.72 * ratio), 5.0, true)
+				game.draw_circle(pos, radius * 0.72, Color(0.08, 0.2, 0.52, 0.12 * ratio))
+				game.draw_arc(pos, radius, t * 1.8, TAU + t * 1.8, 64, Color(0.18, 0.62, 1.0, 0.72 * ratio), 4.5)
+				game.draw_arc(pos, radius * 0.7, - t * 2.4, TAU - t * 2.4, 48, Color(0.76, 0.58, 1.0, 0.58 * ratio), 2.5)
+				game.draw_line(pos + Vector2(0, - radius * 0.92), pos + Vector2(0, radius * 0.44), Color(0.9, 0.97, 1.0, 0.86 * ratio), 6.0, true)
+				for i in range(4):
+					var pin_angle: float = PI * 0.25 + float(i) * PI * 0.5
+					var pin_outer: Vector2 = pos + Vector2.from_angle(pin_angle) * radius * 0.92
+					game.draw_line(pin_outer, pos + Vector2.from_angle(pin_angle) * radius * 0.48, Color(0.26, 0.72, 1.0, 0.62 * ratio), 2.5, true)
 			"limiar":
 				game.draw_arc(pos, radius, 0.0, TAU * 0.7, 52, Color(color.r, color.g, color.b, 0.64 * ratio), 5.0)
 				game.draw_arc(pos, radius * 0.58, PI, PI + TAU * 0.55, 38, Color(color.r, color.g, color.b, 0.4 * ratio), 3.0)
@@ -505,20 +490,39 @@ static func _draw_common_card_world(game: Node2D, camera: Vector2) -> void :
 				game.draw_line(pos + Vector2(0, -18), pos + Vector2(0, 18), Color(0.34, 1.0, 0.66, 0.62 * ratio), 3.0, true)
 				game.draw_line(pos + Vector2(-14, 8), pos + Vector2(14, 8), Color(0.34, 1.0, 0.66, 0.5 * ratio), 2.0, true)
 			"rastro_spawn":
-				game.draw_circle(pos, radius * 0.35, Color(0.34, 1.0, 0.86, 0.16 * ratio))
-				game.draw_arc(pos, radius, t * 2.2, t * 2.2 + PI * 1.55, 44, Color(0.34, 1.0, 0.86, 0.58 * ratio), 2.3)
+				game.draw_circle(pos, radius * 0.35, Color(0.12, 0.46, 1.0, 0.16 * ratio))
+				game.draw_arc(pos, radius, t * 2.2, t * 2.2 + PI * 1.55, 44, Color(0.18, 0.68, 1.0, 0.68 * ratio), 2.8)
+				game.draw_arc(pos, radius * 0.68, - t * 2.8, - t * 2.8 + PI * 1.35, 34, Color(0.72, 0.92, 1.0, 0.52 * ratio), 1.8)
+			"rastro_return":
+				game.draw_circle(pos, radius * 0.52, Color(0.08, 0.28, 0.74, 0.12 * ratio))
+				for i in range(3):
+					var return_radius: float = radius * (0.46 + float(i) * 0.24)
+					game.draw_arc(pos, return_radius, - t * (2.0 + i), TAU - t * (2.0 + i), 52, Color(0.24 + i * 0.14, 0.66 + i * 0.1, 1.0, (0.72 - i * 0.14) * ratio), 3.2 - i * 0.5)
 			"rebate", "rebate_fail":
 				game.draw_arc(pos, radius, - t * 4.0, - t * 4.0 + PI * 1.7, 42, Color(1.0, 0.76, 0.24, 0.62 * ratio), 2.8)
 				game.draw_line(pos + Vector2( - radius * 0.35, 0), pos + Vector2(radius * 0.35, 0), Color(1.0, 0.92, 0.5, 0.5 * ratio), 2.0, true)
 			"impulso":
 				game.draw_arc(pos, radius, - PI * 0.45, PI * 1.45, 48, Color(0.42, 0.78, 1.0, 0.6 * ratio), 3.0)
 				game.draw_arc(pos, radius * 0.65, PI * 0.35, PI * 1.65, 34, Color(1.0, 0.78, 0.24, 0.48 * ratio), 2.0)
+			"eco_charge":
+				var charge_progress: float = clampf(float(effect.get("progress", 0.0)), 0.0, 1.0)
+				game.draw_arc(pos, radius, - PI * 0.5, - PI * 0.5 + TAU * charge_progress, 36, Color(0.18, 0.62, 1.0, 0.78 * ratio), 3.0)
+				game.draw_circle(pos, 4.0 + charge_progress * 4.0, Color(0.82, 0.94, 1.0, 0.48 * ratio))
 			"eco":
-				for i in range(3):
-					game.draw_arc(pos, radius * (0.55 + float(i) * 0.22), t * (1.0 + i), TAU + t * (1.0 + i), 48, Color(0.86, 0.64, 1.0, 0.34 * ratio), 1.6 + i)
+				game.draw_circle(pos, radius * 0.2, Color(0.88, 0.96, 1.0, 0.34 * ratio))
+				for i in range(4):
+					var eco_ring: float = radius * (0.4 + float(i) * 0.2)
+					game.draw_arc(pos, eco_ring, t * (1.0 + i * 0.55), TAU + t * (1.0 + i * 0.55), 52, Color(0.18 + i * 0.08, 0.58 + i * 0.07, 1.0, (0.64 - i * 0.1) * ratio), 3.2 - i * 0.42)
+				for i in range(6):
+					var shard_dir: Vector2 = Vector2.from_angle(float(i) * TAU / 6.0 + t * 0.35)
+					game.draw_line(pos + shard_dir * radius * 0.28, pos + shard_dir * radius * 0.72, Color(0.72, 0.9, 1.0, 0.48 * ratio), 2.0, true)
 			"zona":
-				game.draw_circle(pos, radius, Color(0.44, 1.0, 0.7, 0.045 * ratio))
-				game.draw_arc(pos, radius, 0.0, TAU, 72, Color(0.44, 1.0, 0.7, 0.46 * ratio), 3.0)
+				game.draw_circle(pos, radius, Color(0.08, 0.36, 0.86, 0.065 * ratio))
+				game.draw_arc(pos, radius, 0.0, TAU, 72, Color(0.18, 0.66, 1.0, 0.68 * ratio), 4.0)
+				game.draw_arc(pos, radius * 0.72, - t * 1.8, PI * 1.4 - t * 1.8, 54, Color(0.78, 0.92, 1.0, 0.4 * ratio), 2.2)
+				for i in range(8):
+					var wave_dir: Vector2 = Vector2.from_angle(float(i) * TAU / 8.0)
+					game.draw_line(pos + wave_dir * radius * 0.76, pos + wave_dir * radius * (0.94 + 0.12 * ratio), Color(0.3, 0.76, 1.0, 0.5 * ratio), 2.2, true)
 			"folego":
 				var dir = game.last_facing.normalized()
 				if dir.length() <= 0.05:
@@ -562,8 +566,19 @@ static func _draw_common_card_world(game: Node2D, camera: Vector2) -> void :
 		var vestige_ratio: float = clamp(float(vestige.get("life", 0.0)) / maxf(0.01, float(vestige.get("max", 1.0))), 0.0, 1.0)
 		var arm = float(vestige.get("arm", 0.0))
 		var vestige_radius = game._rastro_activation_radius() * (0.62 + sin(t * 4.0 + float(vestige.get("phase", 0.0))) * 0.05)
-		game.draw_circle(vestige_pos, vestige_radius, Color(0.34, 1.0, 0.86, 0.035 * vestige_ratio))
-		game.draw_arc(vestige_pos, vestige_radius, t * 1.5, t * 1.5 + PI * 1.65, 56, Color(0.34, 1.0, 0.86, (0.22 if arm <= 0.0 else 0.1) * vestige_ratio), 2.0)
+		game.draw_circle(vestige_pos, vestige_radius, Color(0.08, 0.34, 0.82, 0.05 * vestige_ratio))
+		game.draw_circle(vestige_pos, 7.0 + sin(t * 5.0) * 1.5, Color(0.72, 0.94, 1.0, 0.54 * vestige_ratio))
+		game.draw_arc(vestige_pos, vestige_radius, t * 1.5, t * 1.5 + PI * 1.65, 56, Color(0.18, 0.66, 1.0, (0.42 if arm <= 0.0 else 0.16) * vestige_ratio), 2.6)
+		game.draw_arc(vestige_pos, vestige_radius * 0.72, - t * 1.9, - t * 1.9 + PI * 1.35, 42, Color(0.7, 0.9, 1.0, (0.28 if arm <= 0.0 else 0.12) * vestige_ratio), 1.8)
+	if game.ferrolho_ruptura_armed and game._new_common_card_count("ferrolho_ruptura") > 0:
+		var ready_radius: float = 58.0 + sin(t * 4.5) * 4.0
+		game.draw_arc(support_player_screen, ready_radius, - t * 1.9, - t * 1.9 + PI * 1.5, 48, Color(0.18, 0.62, 1.0, 0.42), 2.4)
+		game.draw_line(support_player_screen + Vector2(0, - ready_radius * 0.72), support_player_screen + Vector2(0, ready_radius * 0.34), Color(0.76, 0.92, 1.0, 0.52), 2.4, true)
+	if game.zona_charge > 0.0:
+		var zona_ratio: float = clampf(game.zona_charge, 0.0, 1.0)
+		var zona_preview_radius: float = 64.0 + zona_ratio * 26.0
+		game.draw_circle(support_player_screen, zona_preview_radius, Color(0.08, 0.34, 0.86, 0.035 + zona_ratio * 0.055))
+		game.draw_arc(support_player_screen, zona_preview_radius, - PI * 0.5, - PI * 0.5 + TAU * zona_ratio, 64, Color(0.18, 0.66, 1.0, 0.42 + zona_ratio * 0.3), 3.0)
 	if game.tregua_regenerativa_active:
 		var pulse: float = 0.5 + sin(t * 5.0) * 0.5
 		game.draw_circle(support_player_screen, 48.0 + pulse * 5.0, Color(0.38, 1.0, 0.72, 0.08 + pulse * 0.04))
@@ -814,13 +829,15 @@ static func _draw_physical_chain(game: Node2D, chain: Dictionary, camera: Vector
 
 	var backing_points: PackedVector2Array = PackedVector2Array()
 	for i in range(num_nodes):
-		var p: Dictionary = points[i]
-		backing_points.append(Vector2(p.get("pos", Vector2.ZERO)) - camera)
+		var point_value = points[i]
+		backing_points.append((Vector2(Dictionary(point_value).get("pos", Vector2.ZERO)) if point_value is Dictionary else Vector2(point_value)) - camera)
 	game._draw_acorrentada_chain_glow(backing_points, color, width, fade)
 
 	for i in range(num_nodes - 1):
-		var p1: Vector2 = Vector2(points[i].get("pos", Vector2.ZERO)) - camera
-		var p2: Vector2 = Vector2(points[i + 1].get("pos", Vector2.ZERO)) - camera
+		var point_a = points[i]
+		var point_b = points[i + 1]
+		var p1: Vector2 = (Vector2(Dictionary(point_a).get("pos", Vector2.ZERO)) if point_a is Dictionary else Vector2(point_a)) - camera
+		var p2: Vector2 = (Vector2(Dictionary(point_b).get("pos", Vector2.ZERO)) if point_b is Dictionary else Vector2(point_b)) - camera
 		var segment: Vector2 = p2 - p1
 		var dist: float = segment.length()
 		if dist < 1.0:
@@ -2185,12 +2202,77 @@ static func _draw_eletrica_chains(game: Node2D, camera: Vector2) -> void :
 					game._draw_tesla_enemy_crown(Vector2(enemy["pos"]) - camera, clampf(t_shock / 0.42, 0.0, 1.0), uid)
 
 
-static func _draw_network_ability_visuals(game: Node2D, camera: Vector2) -> void :
+static func _draw_anchor_visual(game: Node2D, anchor: Dictionary, camera: Vector2) -> void:
+	var p: Vector2 = Vector2(anchor.get("pos", game.player_pos)) - camera
+	var source := String(anchor.get("source", ""))
+	if source.begins_with("ancorada_"):
+		var maximum := maxf(0.01, float(anchor.get("max", game.ANCORADA_ANCHOR_LIFE)))
+		var alpha := clampf(float(anchor.get("life", maximum)) / maximum, 0.0, 1.0)
+		var linked: Vector2 = Vector2(anchor.get("link_from", anchor.get("pos", game.player_pos))) - camera
+		if linked.distance_squared_to(p) > 225.0:
+			game.draw_line(linked, p, Color(0.01, 0.05, 0.02, 0.72 * alpha), 10.0, true)
+			game.draw_line(linked, p, Color(0.28, 1.0, 0.38, 0.62 * alpha), 3.0, true)
+			var segment_count := 5 if game.gfx_low_resource else 9
+			for segment in range(1, segment_count):
+				var t := float(segment) / float(segment_count)
+				game.draw_circle(linked.lerp(p, t), 2.2, Color(0.8, 1.0, 0.66, 0.72 * alpha))
+		var claimed := bool(anchor.get("claimed", false))
+		var pulse := 0.5 + 0.5 * sin(game.time_alive * (8.0 if claimed else 4.0))
+		game.draw_circle(p, 50.0 + pulse * 5.0, Color(0.18, 1.0, 0.26, (0.06 if claimed else 0.11) * alpha))
+		game.draw_arc(p, 50.0 + pulse * 3.0, 0, TAU, 48, Color(0.38, 1.0, 0.32, (0.45 if claimed else 0.78) * alpha), 2.2)
+		game._draw_ancorada_anchor_icon(p, 30.0, 0.0, alpha, 0.65 if claimed else 1.0)
+	else:
+		game.draw_circle(p, 52, Color(0.2, 0.86, 1.0, 0.1))
+		game.draw_arc(p, 52, 0, TAU, 48, Color(0.4, 0.95, 1.0, 0.55), 2)
+
+
+static func _draw_slash_visual(game: Node2D, slash: Dictionary, camera: Vector2) -> void:
+	var maximum := maxf(0.01, float(slash.get("max", 1.0)))
+	var alpha := clampf(float(slash.get("life", 0.0)) / maximum, 0.0, 1.0)
+	var slash_kind := String(slash.get("kind", ""))
+	if slash_kind == "lacerante_spin":
+		game._draw_lacerante_spin(slash, camera, alpha)
+	elif slash_kind == "lacerante_blade":
+		game._draw_lacerante_blade(slash, camera, alpha)
+	elif slash.has("points"):
+		var color: Color = slash.get("color", Color.WHITE)
+		color.a = 0.22 + alpha * 0.55
+		var packed := PackedVector2Array()
+		for point in slash.get("points", []):
+			packed.append(Vector2(point) - camera)
+		if packed.size() >= 2:
+			game.draw_polyline(packed, color, float(slash.get("width", 2.0)) * alpha, true)
+	elif slash.has("a") and slash.has("b"):
+		var color: Color = slash.get("color", Color.WHITE)
+		color.a = 0.22 + alpha * 0.55
+		game.draw_line(Vector2(slash["a"]) - camera, Vector2(slash["b"]) - camera, color, float(slash.get("width", 2.0)) * alpha)
+
+
+static func _draw_shockwave_visual(game: Node2D, wave: Dictionary, camera: Vector2) -> void:
+	var kind := String(wave.get("kind", ""))
+	var maximum := maxf(0.01, float(wave.get("max_life", wave.get("max", 1.0))))
+	var alpha := clampf(float(wave.get("life", 0.0)) / maximum, 0.0, 1.0)
+	var center := Vector2(wave.get("pos", game.player_pos)) - camera
+	var radius := float(wave.get("radius", 0.0))
+	if kind == "sinfonia_silencio":
+		game.draw_arc(center, radius, 0, TAU, 80, Color(1.0, 0.84, 0.2, alpha * 0.8), 6)
+		game.draw_arc(center, maxf(0.0, radius - 10.0), 0, TAU, 60, Color(1.0, 0.6, 0.1, alpha * 0.4), 2)
+	else:
+		var color: Color = wave.get("color", Color(0.2, 1.0, 1.0))
+		game.draw_arc(center, radius, 0, TAU, 80, Color(color.r, color.g, color.b, 0.6 * alpha), 4)
+
+
+static func _draw_network_ability_visuals(game: Node2D, camera: Vector2, layer: String = "world") -> void :
 	for visual in game.net_ability_visuals:
+		if int(visual.get("schema", 1)) >= 3 and visual.get("canonical_state", null) is Dictionary:
+			_draw_canonical_network_ability(game, visual, camera, layer)
+			continue
+		if layer != "world":
+			continue
 		var action = int(visual.get("action", game.NET_ABILITY_SKILL))
-		var manifestation = clampi(int(visual.get("manifestation", 0)), 0, game.MANIFESTATIONS.size() - 1)
-		var kind = String(game.MANIFESTATIONS[manifestation].get("key", "eletrica"))
-		var color: Color = game.MANIFESTATIONS[manifestation].get("color", Color.WHITE)
+		var manifestation = int(visual.get("manifestation", 0))
+		var kind = String(visual.get("manifestation_key", visual.get("kind", game._manifestation_key(manifestation))))
+		var color: Color = Color(1.0, 0.42, 0.08) if kind == "incendiario" else Color(game.MANIFESTATIONS[clampi(manifestation, 0, game.MANIFESTATIONS.size() - 1)].get("color", Color.WHITE))
 		var origin = Vector2(visual.get("origin", game.net_player_render_pos)) - camera
 		var target = Vector2(visual.get("target", game.net_player_render_pos)) - camera
 		var maximum = maxf(0.01, float(visual.get("max", 1.0)))
@@ -2204,7 +2286,9 @@ static func _draw_network_ability_visuals(game: Node2D, camera: Vector2) -> void
 					direction = Vector2.RIGHT
 				var reach = minf(origin.distance_to(target), 260.0)
 				var tip = origin + direction * reach * minf(1.0, progress * 3.0)
-				if kind == "lacerante":
+				if kind == "incendiario" and float(visual.get("extra", 0.0)) >= game.HENRY_INCANDESCENCE_NET_SENTINEL:
+					_draw_henry_network_ability(game, visual, camera, action, progress, fade)
+				elif kind == "lacerante":
 					var side = direction.orthogonal() * (24.0 + float(visual.get("extra", 0.0)) * 8.0)
 					var world_origin = Vector2(visual.get("origin", game.net_player_render_pos))
 					var world_tip = Vector2(visual.get("target", game.net_player_render_pos))
@@ -2245,6 +2329,8 @@ static func _draw_network_ability_visuals(game: Node2D, camera: Vector2) -> void
 					game.draw_circle(orb, 5.0, Color(1.0, 1.0, 1.0, 0.92 * fade))
 			game.NET_ABILITY_SKILL:
 				match kind:
+					"incendiario":
+						_draw_henry_network_ability(game, visual, camera, action, progress, fade)
 					"eletrica":
 						var wave_dir = (target - origin).normalized()
 						if wave_dir.length() <= 0.01:
@@ -2287,14 +2373,274 @@ static func _draw_network_ability_visuals(game: Node2D, camera: Vector2) -> void
 						game.draw_circle(bomb_p, 8.0, Color(1.0, 0.7, 0.18, 0.9 * fade))
 						game.draw_line(origin, bomb_p, Color(0.18, 0.88, 1.0, 0.28 * fade), 5.0, true)
 					_:
-						var skill_center = origin if kind in ["eletrica", "ancorada", "retornante", "cartografica", "mnesica", "ressonante", "contratual"] else target
-						var radius = lerpf(24.0, 170.0, minf(1.0, progress * 2.0))
-						game.draw_circle(skill_center, radius, Color(color.r, color.g, color.b, 0.055 * fade))
-						game.draw_arc(skill_center, radius, - game.time_alive * 1.8, TAU - game.time_alive * 1.8, 64, Color(color.r, color.g, color.b, 0.72 * fade), 4.0)
+						_draw_network_manifestation_skill(game, visual, camera, kind, color, progress, fade)
 			game.NET_ABILITY_SECONDARY:
-				game._draw_network_secondary_replica(visual, camera)
+				if kind == "incendiario":
+					_draw_henry_network_ability(game, visual, camera, action, progress, fade)
+				else:
+					game._draw_network_secondary_replica(visual, camera)
 			game.NET_ABILITY_TELEPORT:
 				game._draw_network_teleport_replica(visual, camera, kind, color, progress, fade)
+
+
+static func _draw_canonical_network_ability(game: Node2D, visual: Dictionary, camera: Vector2, layer: String) -> void:
+	var raw_state = visual.get("canonical_state", {})
+	if not raw_state is Dictionary:
+		return
+	var event_elapsed := maxf(0.0, float(visual.get("max", 0.0)) - float(visual.get("life", 0.0)))
+	var elapsed := maxf(0.0, event_elapsed - float(visual.get("canonical_base_elapsed", 0.0)))
+	var state: Dictionary = _advance_canonical_visual_value(Dictionary(raw_state).duplicate(true), elapsed)
+	var kind := String(state.get("manifestation_key", visual.get("manifestation_key", visual.get("kind", "eletrica"))))
+	var action := int(visual.get("action", game.NET_ABILITY_SKILL))
+	if kind == "incendiario":
+		if layer == "world":
+			var max_time := maxf(0.01, float(visual.get("max", 1.0)))
+			var life_time := maxf(0.0, float(visual.get("life", 0.0)))
+			var progress := clampf(1.0 - life_time / max_time, 0.0, 1.0)
+			_draw_henry_network_ability(game, visual, camera, action, progress, clampf(minf(progress * 5.0, life_time * 4.0), 0.0, 1.0))
+		return
+	var source_peer := int(visual.get("source", 0))
+	var source_state: Dictionary = game.net_players_by_peer.get(source_peer, {})
+	var source_pos := Vector2(source_state.get("render_pos", source_state.get("pos", visual.get("origin", game.net_player_render_pos))))
+	var overrides := {
+		"manifestation_key": kind,
+		"selected_manifestation": int(visual.get("manifestation", 0)),
+		"player_pos": source_pos,
+		"time_alive": float(state.get("source_time", game.time_alive)) + elapsed,
+		"manifest_evolution_state": _canonical_evolution_state(Array(state.get("evolution_ids", [])))
+	}
+	for property_name in [
+		"eletrica_waves", "slashes", "prisms", "return_bullets", "parasite_spit_zones",
+		"gravitante_vfx_events", "orbitals", "anchors", "shockwaves", "cartographic_coords",
+		"contractual_notifications", "acorrentada_links", "eclipsada_vfx", "bombastica_bombs",
+		"bombastica_vfx", "necronada_vestiges", "necronada_remnants", "necronada_vfx",
+		"necronada_requiem", "acorrentada_worn_chains", "acorrentada_visuals", "acorrentada_tension", "cartographic_route_timer",
+		"cartographic_trace_flash", "cartographic_complete_map_timer"
+	]:
+		if state.has(property_name):
+			overrides[property_name] = state[property_name]
+	if state.has("enemy_markers"):
+		overrides["enemies"] = state["enemy_markers"]
+	var previous := {}
+	for property_name in overrides.keys():
+		previous[property_name] = game.get(property_name)
+		game.set(property_name, overrides[property_name])
+
+	if layer == "foreground":
+		if action == game.NET_ABILITY_SECONDARY and kind == "gravitante":
+			var gravity_secondary := _canonical_secondary_state(visual, state)
+			Gravity.ultimate(game, gravity_secondary, camera)
+			Gravity.orbitals(game, camera, false)
+		elif action == game.NET_ABILITY_SECONDARY and kind == "parasitica":
+			var parasite_secondary := _canonical_secondary_state(visual, state)
+			var saved_secondaries = game.manifestation_secondaries
+			game.manifestation_secondaries = [parasite_secondary]
+			game._draw_parasite_foreground(camera)
+			game.manifestation_secondaries = saved_secondaries
+		_restore_canonical_context(game, previous)
+		return
+
+	for slash_value in state.get("slashes", []):
+		if slash_value is Dictionary:
+			_draw_slash_visual(game, slash_value, camera)
+	for prism_value in state.get("prisms", []):
+		if prism_value is Dictionary:
+			_draw_prismatica_prism(game, prism_value, camera)
+	for anchor_value in state.get("anchors", []):
+		if anchor_value is Dictionary:
+			_draw_anchor_visual(game, anchor_value, camera)
+	for shockwave_value in state.get("shockwaves", []):
+		if shockwave_value is Dictionary:
+			_draw_shockwave_visual(game, shockwave_value, camera)
+
+	match action:
+		game.NET_ABILITY_ATTACK:
+			if kind == "acorrentada":
+				game._draw_acorrentada_world(camera)
+			elif kind == "eclipsada":
+				game._draw_eclipsada_vfx(camera)
+		game.NET_ABILITY_SKILL:
+			_draw_canonical_manifestation_skill(game, state, camera, kind)
+		game.NET_ABILITY_SECONDARY:
+			if kind not in ["gravitante", "necronada"]:
+				game._draw_network_secondary_replica(_canonical_secondary_state(visual, state), camera)
+			_draw_canonical_manifestation_supplement(game, state, camera, kind)
+		game.NET_ABILITY_TELEPORT:
+			game._draw_teleport_effects(camera)
+			_draw_canonical_manifestation_supplement(game, state, camera, kind)
+
+	_restore_canonical_context(game, previous)
+
+
+static func _draw_henry_ability_vfx(game: Node2D, camera: Vector2) -> void:
+	if game.henry_ultimate_cast_active:
+		var charge_progress := clampf(game.henry_ultimate_cast_elapsed / maxf(0.01, game.HENRY_ULTIMATE_CAST_DURATION), 0.0, 1.0)
+		_draw_henry_ultimate_charge(game, game.henry_ultimate_center - camera, charge_progress, 1.0)
+	for cone_value in game.henry_flame_cones:
+		if not cone_value is Dictionary:
+			continue
+		var cone: Dictionary = cone_value
+		var maximum := maxf(0.01, float(cone.get("max", game.HENRY_SKILL_CAST_DURATION)))
+		var progress := clampf(1.0 - float(cone.get("life", 0.0)) / maximum, 0.0, 1.0)
+		_draw_henry_cone(game, Vector2(cone.get("origin", game.player_pos)) - camera, Vector2(cone.get("dir", Vector2.RIGHT)), progress, 1.0)
+	for wave_value in game.henry_heat_waves:
+		if not wave_value is Dictionary:
+			continue
+		var wave: Dictionary = wave_value
+		_draw_henry_heat_wave(game, Vector2(wave.get("center", game.player_pos)) - camera, float(wave.get("radius", 0.0)), float(wave.get("max_radius", game.HENRY_ULTIMATE_RADIUS)), 1.0)
+	for zone_value in game.henry_incandescence_zones:
+		if not zone_value is Dictionary:
+			continue
+		var zone: Dictionary = zone_value
+		var maximum := maxf(0.01, float(zone.get("max", game.HENRY_INCANDESCENCE_DURATION)))
+		var progress := clampf(1.0 - float(zone.get("life", 0.0)) / maximum, 0.0, 1.0)
+		_draw_henry_incandescence_zone(game, Vector2(zone.get("center", game.player_pos)) - camera, progress, float(zone.get("intensity", 0.35)), 1.0)
+	for enemy_value in game.enemies:
+		if not enemy_value is Dictionary:
+			continue
+		var enemy: Dictionary = enemy_value
+		var heat := float(enemy.get("henry_incandescence_heat", 0.0))
+		if heat <= 0.0 or float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var enemy_center := Vector2(enemy.get("pos", game.player_pos)) - camera
+		var flame_count := 2 if game.gfx_low_resource else 4
+		for flame_index in range(flame_count):
+			var phase: float = game.time_alive * 8.0 + float(flame_index) * 1.9
+			var base: Vector2 = enemy_center + Vector2(sin(phase) * 13.0, 12.0 - float(flame_index) * 8.0)
+			game.draw_line(base, base + Vector2(sin(phase * 1.37) * 4.0, -10.0 - float(flame_index % 2) * 4.0), Color(1.0, 0.28 + float(flame_index) * 0.1, 0.04, clampf(heat * 2.0, 0.0, 0.82)), 3.0, true)
+
+
+static func _draw_henry_network_ability(game: Node2D, visual: Dictionary, camera: Vector2, action: int, progress: float, fade: float) -> void:
+	var origin := Vector2(visual.get("origin", game.net_player_render_pos)) - camera
+	var target := Vector2(visual.get("target", game.net_player_render_pos)) - camera
+	var extra := float(visual.get("extra", 0.0))
+	if action == game.NET_ABILITY_ATTACK and extra >= game.HENRY_INCANDESCENCE_NET_SENTINEL:
+		var source_peer := int(visual.get("source", 0))
+		var source_state: Dictionary = game.net_players_by_peer.get(source_peer, {})
+		var center := Vector2(source_state.get("render_pos", source_state.get("pos", visual.get("origin", game.net_player_render_pos)))) - camera
+		_draw_henry_incandescence_zone(game, center, progress, clampf(extra - game.HENRY_INCANDESCENCE_NET_SENTINEL, 0.08, 1.0), fade)
+	elif action == game.NET_ABILITY_SKILL:
+		_draw_henry_cone(game, origin, (target - origin).normalized(), progress, fade)
+	elif action == game.NET_ABILITY_SECONDARY:
+		var maximum := maxf(0.01, float(visual.get("max", game.HENRY_ULTIMATE_CAST_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION)))
+		var charge_duration := clampf(float(visual.get("extra", game.HENRY_ULTIMATE_CAST_DURATION)), 0.0, maximum)
+		var elapsed := progress * maximum
+		if elapsed < charge_duration:
+			_draw_henry_ultimate_charge(game, origin, elapsed / maxf(0.01, charge_duration), fade)
+		else:
+			var wave_progress := clampf((elapsed - charge_duration) / maxf(0.01, maximum - charge_duration), 0.0, 1.0)
+			_draw_henry_heat_wave(game, origin, game.HENRY_ULTIMATE_RADIUS * wave_progress, game.HENRY_ULTIMATE_RADIUS, fade)
+
+
+static func _draw_henry_cone(game: Node2D, origin: Vector2, direction: Vector2, progress: float, alpha: float) -> void:
+	HenryFire.cone(game, origin, direction, progress, alpha)
+
+
+static func _draw_henry_heat_wave(game: Node2D, center: Vector2, radius: float, max_radius: float, alpha: float) -> void:
+	HenryFire.wave(game, center, radius, max_radius, alpha)
+
+
+static func _draw_henry_ultimate_charge(game: Node2D, center: Vector2, progress: float, alpha: float) -> void:
+	HenryFire.charge(game, center, progress, alpha)
+
+
+static func _draw_henry_incandescence_zone(game: Node2D, center: Vector2, progress: float, intensity: float, alpha: float) -> void:
+	var enter := smoothstep(0.0, 0.12, progress)
+	var exit := 1.0 - smoothstep(0.82, 1.0, progress)
+	var fade := clampf(enter * exit * alpha, 0.0, 1.0)
+	var pulse := 0.5 + 0.5 * sin(game.time_alive * 7.4)
+	var radius: float = game.HENRY_INCANDESCENCE_RADIUS * (0.92 + pulse * 0.025)
+	game.draw_circle(center, radius, Color(0.95, 0.1, 0.015, (0.025 + intensity * 0.035) * fade))
+	game.draw_arc(center, radius, -game.time_alive * 0.7, TAU - game.time_alive * 0.7, 42 if game.gfx_low_resource else 76, Color(1.0, 0.32, 0.04, (0.52 + intensity * 0.2) * fade), 4.0 if game.gfx_low_resource else 6.0, true)
+	game.draw_arc(center, radius - 11.0, game.time_alive * 0.9, TAU + game.time_alive * 0.9, 34 if game.gfx_low_resource else 64, Color(1.0, 0.82, 0.22, (0.26 + intensity * 0.24) * fade), 1.7, true)
+	var flame_count := 8 if game.gfx_low_resource else 16
+	for index in range(flame_count):
+		var angle: float = TAU * float(index) / float(flame_count) + game.time_alive * (0.18 if index % 2 == 0 else -0.14)
+		var base: Vector2 = center + Vector2.RIGHT.rotated(angle) * (radius - 7.0)
+		var height := 8.0 + intensity * 12.0 + sin(game.time_alive * 9.0 + float(index) * 1.7) * 4.0
+		var inward: Vector2 = (center - base).normalized()
+		game.draw_line(base, base + inward.rotated(sin(angle * 3.0) * 0.22) * height, Color(1.0, 0.36, 0.04, 0.64 * fade), 3.0, true)
+		if not game.gfx_low_resource:
+			game.draw_circle(base + inward * (height + 3.0), 2.2, Color(1.0, 0.9, 0.34, 0.78 * fade))
+
+
+static func _draw_canonical_manifestation_skill(game: Node2D, state: Dictionary, camera: Vector2, kind: String) -> void:
+	match kind:
+		"eletrica": game._draw_eletrica_kinetic_waves(camera)
+		"parasitica": game._draw_parasite_spit_zones(camera)
+		"gravitante": game._draw_teleport_effects(camera)
+		"retornante":
+			for bullet_value in state.get("return_bullets", []):
+				if bullet_value is Dictionary:
+					_draw_return_bullet_visual(game, bullet_value, camera)
+		"cartografica": game._draw_cartographic_marks(camera)
+		"mnesica": game._draw_mnesic_marks(camera)
+		"ressonante": game._draw_resonant_world_marks(camera)
+		"contratual": game._draw_contractual_notifications(camera)
+		"acorrentada": game._draw_acorrentada_world(camera)
+		"eclipsada": game._draw_eclipsada_vfx(camera)
+		"bombastica": game._draw_bombastica_world(camera)
+		"necronada": game._draw_necronada_world(camera)
+		_:
+			pass # Lacerante, Prismatica and Ancorada use the shared canonical collections above.
+
+
+static func _draw_canonical_manifestation_supplement(game: Node2D, _state: Dictionary, camera: Vector2, kind: String) -> void:
+	match kind:
+		"cartografica": game._draw_cartographic_marks(camera)
+		"mnesica": game._draw_mnesic_marks(camera)
+		"ressonante": game._draw_resonant_world_marks(camera)
+		"contratual": game._draw_contractual_notifications(camera)
+		"acorrentada": game._draw_acorrentada_world(camera)
+		"eclipsada": game._draw_eclipsada_vfx(camera)
+		"bombastica": game._draw_bombastica_world(camera)
+		"necronada": game._draw_necronada_world(camera)
+		_:
+			pass
+
+
+static func _canonical_secondary_state(visual: Dictionary, state: Dictionary) -> Dictionary:
+	var secondary := Dictionary(state.get("secondary", {})).duplicate(true)
+	if secondary.is_empty():
+		secondary = visual.duplicate(true)
+	for key in ["life", "max", "active_time", "angle", "charge", "cuts", "cut_timer", "cut_index", "ghost_tick", "ghosts", "zaps", "zap_tick", "trail", "drops", "impacts", "targets", "center", "seed", "final_frame"]:
+		if not secondary.has(key) and visual.has(key):
+			secondary[key] = visual[key]
+	secondary["network_replica"] = true
+	return secondary
+
+
+static func _canonical_evolution_state(evolution_ids: Array) -> Dictionary:
+	var choices: Array = []
+	for evolution_id in evolution_ids:
+		choices.append({"evolution": String(evolution_id)})
+	return {"choices": choices, "fields": []}
+
+
+static func _restore_canonical_context(game: Node2D, previous: Dictionary) -> void:
+	for property_name in previous.keys():
+		game.set(property_name, previous[property_name])
+
+
+static func _advance_canonical_visual_value(value, elapsed: float):
+	if value is Dictionary:
+		var result: Dictionary = Dictionary(value).duplicate(true)
+		if result.has("life"):
+			result["life"] = maxf(0.0, float(result["life"]) - elapsed)
+		if result.has("age"):
+			result["age"] = float(result["age"]) + elapsed
+		if result.has("active_time"):
+			result["active_time"] = float(result["active_time"]) + elapsed
+		for key in result.keys():
+			if result[key] is Dictionary or result[key] is Array:
+				result[key] = _advance_canonical_visual_value(result[key], elapsed)
+		return result
+	if value is Array:
+		var result: Array = []
+		for item in value:
+			result.append(_advance_canonical_visual_value(item, elapsed))
+		return result
+	return value
 
 
 static func _draw_prismatica_prism(game: Node2D, prism: Dictionary, camera: Vector2) -> void :
@@ -2325,10 +2671,112 @@ static func _draw_network_secondary_replica(game: Node2D, visual: Dictionary, ca
 		"gravitante": game._draw_secondary_gravitante(visual, camera)
 		"ancorada": game._draw_secondary_ancorada(visual, camera)
 		"acorrentada": game._draw_secondary_acorrentada(visual, camera)
-		"eclipsada": game._draw_secondary_eclipsada(visual, camera)
+		"eclipsada", "eclipsada_sol", "eclipsada_lua_eclipse": game._draw_secondary_eclipsada(visual, camera)
 		"bombastica": game._draw_secondary_bombastica(visual, camera)
+		"necronada": _draw_network_necronada_requiem(game, visual, camera)
 		"cartografica", "mnesica", "ressonante", "contratual": game._draw_secondary_advanced(visual, camera)
 	game._draw_ancorada_spinning_anchors(camera)
+
+
+static func _draw_network_manifestation_skill(game: Node2D, visual: Dictionary, camera: Vector2, kind: String, color: Color, progress: float, fade: float) -> void:
+	var origin := Vector2(visual.get("origin", game.net_player_render_pos)) - camera
+	var target := Vector2(visual.get("target", game.net_player_render_pos)) - camera
+	var seed := int(visual.get("seed", 0))
+	match kind:
+		"retornante":
+			var direction := (target - origin).normalized()
+			if direction.length_squared() <= 0.001:
+				direction = Vector2.RIGHT
+			var side := direction.orthogonal()
+			var head := origin.lerp(target, minf(1.0, progress * 1.8))
+			var return_head := target.lerp(origin, clampf((progress - 0.42) * 1.72, 0.0, 1.0))
+			var route := PackedVector2Array([origin, origin.lerp(target, 0.5) + side * 36.0, head])
+			game.draw_polyline(route, Color(color.r, color.g, color.b, 0.82 * fade), 5.0, true)
+			if progress > 0.42:
+				game.draw_line(target, return_head, Color(1.0, 0.42, 0.74, 0.9 * fade), 7.0, true)
+			game.draw_arc(head if progress <= 0.42 else return_head, 24.0, game.time_alive * 5.0, game.time_alive * 5.0 + PI * 1.55, 32, Color(0.9, 0.78, 1.0, 0.88 * fade), 3.0)
+		"gravitante":
+			var points: Array = visual.get("marked_points", [])
+			var center := target if not points.is_empty() else origin
+			game.draw_circle(center, 34.0 + progress * 58.0, Color(0.12, 0.22, 0.5, 0.16 * fade))
+			game.draw_arc(center, 48.0 + progress * 72.0, -game.time_alive * 2.4, TAU - game.time_alive * 2.4, 56, Color(color.r, color.g, color.b, 0.84 * fade), 4.0)
+			for point_value in points:
+				var point := Vector2(point_value) - camera
+				game.draw_line(point, center, Color(0.66, 0.86, 1.0, 0.55 * fade), 3.0, true)
+				game.draw_circle(point.lerp(center, minf(1.0, progress * 1.8)), 7.0, Color(0.9, 0.96, 1.0, 0.78 * fade))
+		"ancorada":
+			var anchor_points: Array = visual.get("anchor_points", [])
+			var radius := lerpf(28.0, 176.0, minf(1.0, progress * 1.7))
+			game.draw_arc(origin, radius, 0.0, TAU, 64, Color(color.r, color.g, color.b, 0.82 * fade), 5.0)
+			for point_value in anchor_points:
+				var point := Vector2(point_value) - camera
+				game.draw_line(origin, point, Color(1.0, 0.76, 0.22, 0.62 * fade), 3.0, true)
+				game.draw_rect(Rect2(point - Vector2(7, 7), Vector2(14, 14)), Color(0.18, 0.84, 1.0, 0.72 * fade), false, 2.0)
+		"cartografica":
+			var route_points: Array = visual.get("route_points", [])
+			var path := PackedVector2Array()
+			for point_value in route_points:
+				path.append(Vector2(point_value) - camera)
+			if path.size() < 2:
+				path = PackedVector2Array([origin, target])
+			elif path.size() >= 3:
+				path.append(path[0])
+			game.draw_polyline(path, Color(0.06, 0.18, 0.16, 0.72 * fade), 13.0, true)
+			game.draw_polyline(path, Color(color.r, color.g, color.b, 0.92 * fade), 3.0, true)
+			for point in path:
+				game.draw_rect(Rect2(point - Vector2(6, 6), Vector2(12, 12)), Color(0.72, 1.0, 0.88, 0.78 * fade), false, 2.0)
+		"mnesica":
+			for echo in range(4):
+				var echo_progress := clampf(progress - echo * 0.11, 0.0, 1.0)
+				var radius := 34.0 + echo_progress * 122.0
+				game.draw_arc(origin, radius, -game.time_alive * (1.0 + echo * 0.18), TAU - game.time_alive * (1.0 + echo * 0.18), 48, Color(color.r, color.g, color.b, (0.7 - echo * 0.12) * fade), 2.6)
+				game.draw_line(origin + Vector2(-radius * 0.48, 0), origin + Vector2(radius * 0.48, 0), Color(1.0, 0.64, 0.9, 0.18 * fade), 2.0)
+		"ressonante":
+			for ring in range(4):
+				var radius: float = 30.0 + fposmod(progress * 190.0 + ring * 44.0, 180.0)
+				game.draw_arc(origin, radius, 0.0, TAU, 56, Color(color.r, color.g, color.b, (0.68 - ring * 0.1) * fade), 3.0)
+			for note in range(6):
+				var angle: float = float(note) * TAU / 6.0 + float(game.time_alive) * 0.8
+				var note_pos: Vector2 = origin + Vector2.from_angle(angle) * (72.0 + 18.0 * sin(seed + note))
+				game.draw_circle(note_pos, 5.0, Color(1.0, 0.82, 0.22, 0.86 * fade))
+				game.draw_line(note_pos, note_pos + Vector2(0, -15), Color(1.0, 0.9, 0.46, 0.78 * fade), 2.0)
+		"contratual":
+			var panel := Rect2(origin - Vector2(82, 54), Vector2(164, 108)).grow(progress * 18.0)
+			game.draw_rect(panel, Color(0.08, 0.045, 0.02, 0.28 * fade), true)
+			game.draw_rect(panel, Color(color.r, color.g, color.b, 0.88 * fade), false, 3.0)
+			for clause in range(4):
+				var y := panel.position.y + 22.0 + clause * 18.0
+				game.draw_line(Vector2(panel.position.x + 18, y), Vector2(panel.end.x - 18 - clause * 9, y), Color(1.0, 0.9, 0.64, 0.58 * fade), 2.0)
+			game.draw_arc(panel.get_center(), 28.0 + progress * 12.0, 0.0, TAU, 36, Color(1.0, 0.4, 0.18, 0.76 * fade), 4.0)
+		"necronada":
+			var positions: Array = visual.get("remnant_positions", [])
+			var types: Array = visual.get("remnant_types", [])
+			game.draw_arc(target, 92.0 + progress * 72.0, 0.0, TAU, 72, Color(0.68, 0.38, 1.0, 0.72 * fade), 4.0)
+			for index in range(positions.size()):
+				var point := Vector2(positions[index]) - camera
+				var enemy_type: String = String(types[index]) if index < types.size() else String(game.ENEMY_COMMON)
+				var mock_enemy := {"type": enemy_type, "phase": seed * 0.001 + index, "facing_dir": Vector2.LEFT, "pos": Vector2(positions[index])}
+				var texture = game._enemy_texture(mock_enemy)
+				var size: Vector2 = Vector2(game._enemy_draw_size(mock_enemy)) * (0.35 + 0.65 * minf(1.0, progress * 2.0))
+				game._draw_entity(texture, point + game._enemy_visual_offset(mock_enemy), size, Color(0.68, 0.88, 1.0, 0.82 * fade), false)
+		_:
+			var radius := lerpf(24.0, 170.0, minf(1.0, progress * 2.0))
+			game.draw_circle(origin, radius, Color(color.r, color.g, color.b, 0.055 * fade))
+			game.draw_arc(origin, radius, -game.time_alive * 1.8, TAU - game.time_alive * 1.8, 64, Color(color.r, color.g, color.b, 0.72 * fade), 4.0)
+
+
+static func _draw_network_necronada_requiem(game: Node2D, visual: Dictionary, camera: Vector2) -> void:
+	var origin := Vector2(visual.get("origin", visual.get("center", game.net_player_render_pos))) - camera
+	var maximum := maxf(0.01, float(visual.get("max", 1.18)))
+	var progress := clampf(1.0 - float(visual.get("life", maximum)) / maximum, 0.0, 1.0)
+	var fade := clampf(float(visual.get("life", 0.0)) / maximum, 0.0, 1.0)
+	var radius := lerpf(42.0, game.NECRONADA_ULTIMATE_RADIUS, progress)
+	game.draw_circle(origin, radius, Color(0.035, 0.015, 0.055, 0.18 * fade))
+	game.draw_arc(origin, radius, -game.time_alive * 1.2, TAU - game.time_alive * 1.2, 88, Color(0.72, 0.42, 1.0, 0.72 * fade), 4.0)
+	for dust in range(12):
+		var angle := float(dust) * TAU / 12.0 + float(visual.get("requiem_phase", 0.0))
+		var point := origin + Vector2.from_angle(angle) * radius * (0.72 + 0.2 * sin(game.time_alive * 2.4 + dust))
+		game.draw_circle(point, 4.0 + 3.0 * sin(progress * PI), Color(0.46, 0.2, 0.72, 0.42 * fade))
 
 
 static func _draw_network_parasite_spit_replica(game: Node2D, visual: Dictionary, camera: Vector2) -> void :
@@ -2402,8 +2850,10 @@ static func _draw_secondary_eclipsada(game: Node2D, secondary: Dictionary, camer
 	var maximum = maxf(0.01, float(secondary.get("max", game.ECLIPSADA_E_MAX_TARGET_TIME)))
 	var alpha = clampf(life / maximum, 0.0, 1.0)
 	var color: Color = secondary.get("color", game._eclipsada_color())
-	var target: Dictionary = secondary.get("target", {})
-	var center: Vector2 = Vector2(secondary.get("last_pos", game.player_pos))
+	var target_value = secondary.get("target", {})
+	var target: Dictionary = target_value if target_value is Dictionary else {}
+	var center_fallback: Vector2 = Vector2(target_value) if target_value is Vector2 else game.player_pos
+	var center: Vector2 = Vector2(secondary.get("last_pos", secondary.get("center", center_fallback)))
 	if not target.is_empty() and game._eclipsada_target_alive(target):
 		center = game._eclipsada_target_pos(target)
 	var p: Vector2 = center - camera
@@ -2870,31 +3320,7 @@ static func _draw_tesla_bar(game: Node2D, secondary: Dictionary, camera: Vector2
 
 
 static func _draw_tesla_bolt(game: Node2D, start: Vector2, finish: Vector2, seed: int, alpha: float, width: float) -> void :
-	var delta = finish - start
-	var length = delta.length()
-	if length <= 4.0:
-		return
-	var dir = delta / length
-	var normal = dir.orthogonal()
-	var points = PackedVector2Array()
-	var segments = 9
-	for i in range(segments + 1):
-		var t = float(i) / float(segments)
-		var taper = sin(t * PI)
-		var jitter = sin(float(seed) * 0.73 + float(i) * 2.41 + game.time_alive * 31.0) * 18.0 * taper
-		var small = cos(float(seed) * 1.19 + float(i) * 5.17 + game.time_alive * 19.0) * 6.0 * taper
-		points.append(start + delta * t + normal * jitter + dir.rotated(PI * 0.5) * small)
-	if points.size() < 2:
-		return
-	game.draw_polyline(points, Color(0.1, 0.92, 1.0, 0.2 * alpha), width + 7.0, true)
-	game.draw_polyline(points, Color(0.54, 0.96, 1.0, 0.72 * alpha), width, true)
-	game.draw_polyline(points, Color(1.0, 1.0, 1.0, 0.92 * alpha), maxf(1.0, width * 0.34), true)
-	for branch in range(2):
-		var branch_t = 0.28 + float(branch) * 0.28 + 0.08 * sin(float(seed + branch) + game.time_alive * 9.0)
-		var base = start + delta * branch_t
-		var branch_dir = dir.rotated((0.65 if branch == 0 else -0.65) + sin(game.time_alive * 7.0 + branch + seed) * 0.28)
-		var branch_end = base + branch_dir * (26.0 + 14.0 * sin(game.time_alive * 11.0 + seed + branch))
-		game.draw_line(base, branch_end, Color(0.42, 0.92, 1.0, 0.38 * alpha), maxf(1.0, width * 0.42), true)
+	Lightning.bolt(game, start, finish, seed, game.time_alive, Color(0.23, 0.86, 1.0), alpha, width)
 
 
 static func _draw_lacerante_blade(game: Node2D, slash: Dictionary, camera: Vector2, alpha: float) -> void :
@@ -3269,28 +3695,7 @@ static func _draw_secondary_prismatica_zap(game: Node2D, zap: Dictionary, camera
 
 
 static func _draw_prismatica_colored_bolt(game: Node2D, start: Vector2, finish: Vector2, seed: int, color: Color, alpha: float, width: float) -> void :
-	var delta = finish - start
-	var length = delta.length()
-	if length <= 4.0:
-		return
-	var dir = delta / length
-	var normal = dir.orthogonal()
-	var points = PackedVector2Array()
-	var segments = 7
-	for i in range(segments + 1):
-		var t = float(i) / float(segments)
-		var taper = sin(t * PI)
-		var jitter = sin(float(seed) * 0.37 + float(i) * 2.83 + game.time_alive * 38.0) * 14.0 * taper
-		var small = cos(float(seed) * 1.11 + float(i) * 4.41 + game.time_alive * 23.0) * 5.0 * taper
-		points.append(start + delta * t + normal * jitter + dir.rotated(PI * 0.5) * small)
-	game.draw_polyline(points, Color(color.r, color.g, color.b, 0.26 * alpha), width + 6.0, true)
-	game.draw_polyline(points, Color(color.r, color.g, color.b, 0.78 * alpha), width, true)
-	game.draw_polyline(points, Color(1.0, 1.0, 1.0, 0.92 * alpha), maxf(1.0, width * 0.33), true)
-	for branch in range(2):
-		var branch_t = 0.34 + float(branch) * 0.24 + 0.05 * sin(game.time_alive * 9.0 + float(seed + branch))
-		var base = start + delta * branch_t
-		var branch_dir = dir.rotated((0.52 if branch == 0 else -0.52) + sin(game.time_alive * 8.0 + float(seed)) * 0.18)
-		game.draw_line(base, base + branch_dir * 24.0, Color(color.r, color.g, color.b, 0.42 * alpha), maxf(1.0, width * 0.38), true)
+	Lightning.bolt(game, start, finish, seed, game.time_alive, color, alpha, width)
 
 
 static func _draw_secondary_retornante(game: Node2D, secondary: Dictionary, camera: Vector2) -> void :
@@ -3512,17 +3917,33 @@ static func _draw_secondary_ancorada(game: Node2D, secondary: Dictionary, camera
 	var center_world: Vector2 = secondary.get("center", game.player_pos)
 	var center: Vector2 = center_world - camera
 	var radius: float = float(secondary.get("radius", game.ANCORADA_ULTIMATE_RADIUS))
-	var charge: float = clampf(float(secondary.get("charge", 0.0)) / game.SECONDARY_ANCORADA_DURATION, 0.0, 1.0)
+	var charge: float = clampf(float(secondary.get("momentum", float(secondary.get("charge", 0.0)) / game.SECONDARY_ANCORADA_DURATION)), 0.0, 1.0)
 	var life_ratio: float = clampf(float(secondary.get("life", 0.0)) / maxf(0.01, float(secondary.get("max", game.SECONDARY_ANCORADA_DURATION))), 0.0, 1.0)
 	var ring_alpha: float = 0.2 + 0.4 * life_ratio
+	var trail: Array = secondary.get("trail", [])
+	if trail.size() > 1:
+		var trail_points := PackedVector2Array()
+		for trail_pos in trail:
+			trail_points.append(Vector2(trail_pos) - camera)
+		game.draw_polyline(trail_points, Color(0.01, 0.05, 0.02, 0.52 * life_ratio), 13.0, true)
+		game.draw_polyline(trail_points, Color(0.3, 1.0, 0.38, (0.25 + charge * 0.42) * life_ratio), 3.5, true)
+		var stride := 2 if game.gfx_low_resource else 1
+		for trail_index in range(0, trail_points.size() - 1, stride):
+			var from_point := trail_points[trail_index]
+			var to_point := trail_points[mini(trail_index + 1, trail_points.size() - 1)]
+			var trail_dir := (to_point - from_point).normalized()
+			if trail_dir.length_squared() > 0.01:
+				var trail_side := trail_dir.orthogonal()
+				game.draw_polyline(PackedVector2Array([to_point - trail_dir * 10.0 + trail_side * 5.0, to_point, to_point - trail_dir * 10.0 - trail_side * 5.0]), Color(0.78, 1.0, 0.6, 0.52 * life_ratio), 1.8, true)
 	game.draw_arc(center, radius, 0.0, TAU, 80, Color(0.01, 0.04, 0.02, 0.72 * ring_alpha), 5.0)
 	game.draw_arc(center, radius, 0.0, TAU, 80, Color(0.28, 1.0, 0.36, 0.86 * ring_alpha), 2.2)
 	game.draw_arc(center, radius * (0.22 + 0.12 * sin(game.time_alive * 2.5 + charge * 3.0)), 0.0, TAU, 44, Color(0.7, 1.0, 0.44, 0.34 * life_ratio), 1.6)
-	for i in range(16):
-		var ang: float = game.time_alive * 0.48 + float(i) * TAU / 16.0
+	var spoke_count := 10 if game.gfx_low_resource else 16
+	for i in range(spoke_count):
+		var ang: float = game.time_alive * (0.48 + charge * 0.6) + float(i) * TAU / float(spoke_count)
 		var inner: Vector2 = center + Vector2.from_angle(ang) * (radius - 18.0)
 		var outer: Vector2 = center + Vector2.from_angle(ang + 0.05) * (radius + 12.0)
-		game.draw_line(inner, outer, Color(0.32, 1.0, 0.42, 0.13 * life_ratio), 1.2)
+		game.draw_line(inner, outer, Color(0.32, 1.0, 0.42, (0.13 + charge * 0.15) * life_ratio), 1.2)
 	var drops: Array = secondary.get("drops", [])
 	for drop in drops:
 		var fall: float = maxf(0.05, float(drop.get("fall", game.ANCORADA_ULTIMATE_FALL_TIME)))
@@ -3557,6 +3978,28 @@ static func _draw_secondary_ancorada(game: Node2D, secondary: Dictionary, camera
 			var ray_a: Vector2 = impact_pos + Vector2.from_angle(ray_angle) * (ripple_radius * 0.28)
 			var ray_b: Vector2 = impact_pos + Vector2.from_angle(ray_angle) * (ripple_radius * 0.92)
 			game.draw_line(ray_a, ray_b, Color(0.44, 1.0, 0.36, 0.22 * impact_alpha), 1.8)
+
+
+static func _draw_return_bullet_visual(game: Node2D, bullet: Dictionary, camera: Vector2) -> void:
+	if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
+		return
+	var pos := Vector2(bullet.get("pos", Vector2.ZERO)) - camera
+	var direction := Vector2(bullet.get("dir", Vector2.RIGHT))
+	var age := float(bullet.get("age", 0.0))
+	var state := String(bullet.get("state", "volta" if bool(bullet.get("returning", false)) else "ida"))
+	var color: Color = game._manifestation_color()
+	if state == "instavel":
+		color = Color(1.0, 0.28, 0.76)
+	elif state == "volta":
+		color = Color(1.0, 0.42, 0.92)
+	var boosted: bool = float(bullet.get("paradox_until", 0.0)) > game.time_alive or state == "instavel"
+	var core_radius := 13.0 if boosted else 6.5
+	var outer := 34.0 + sin(age * 16.0) * 6.0 if boosted else (17.0 + sin(age * 16.0) * 3.0 if state == "instavel" else 13.0 + sin(age * 16.0) * 2.0)
+	game.draw_circle(pos, core_radius, color)
+	game.draw_arc(pos, outer, age * 7.0, age * 7.0 + PI * 1.55, 28, Color(color.r, color.g, color.b, 0.88), 2.2)
+	game.draw_line(pos - direction * 10.0, pos + direction * 10.0, Color(1.0, 1.0, 1.0, 0.68), 1.2)
+	if state == "instavel":
+		game.draw_arc(pos, outer + 8.0, age * 4.5, age * 4.5 + PI * 1.15, 22, Color(1.0, 0.76, 0.92, 0.56), 1.6)
 
 
 static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
@@ -3641,17 +4084,17 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 				game.draw_circle(fuse_tip, 4.5 + sin(age * 24.0) * 1.5, Color(1.0, 0.96, 0.62, 0.9))
 			"ancorada":
 				var rot_angle = dir.angle() - PI * 0.5 + deg_to_rad(620.0 * age)
-				game.draw_line(pos - dir * 20.0, pos - dir * 8.0, Color(0.24, 1.0, 0.38, 0.26), 5.0)
-				game._draw_ancorada_anchor_icon(pos, 28.0, rot_angle, 1.0, 0.9)
+				game.draw_line(pos - dir * 38.0, pos - dir * 8.0, Color(0.01, 0.04, 0.02, 0.74), 8.0, true)
+				game.draw_line(pos - dir * 38.0, pos - dir * 8.0, Color(0.24, 1.0, 0.38, 0.58), 2.8, true)
+				for chain_index in range(3):
+					var chain_pos: Vector2 = pos - dir * (13.0 + float(chain_index) * 10.0) + side * sin(age * 18.0 + float(chain_index)) * 2.0
+					game.draw_arc(chain_pos, 3.8, dir.angle(), dir.angle() + PI, 10, Color(0.78, 1.0, 0.64, 0.78), 1.4)
+				game._draw_ancorada_anchor_icon(pos, 32.0, rot_angle, 1.0, 1.0)
 			"eletrica", "eletrica_charged":
 				var charge_mult = 1.45 if kind == "eletrica_charged" else 1.0
 				var a = pos - dir * (16.0 * charge_mult)
-				var b = pos - dir * (6.0 * charge_mult) + side * sin(age * 28.0 + phase) * 5.0 * charge_mult
 				var c = pos + dir * (7.0 * charge_mult)
-				game.draw_polyline(PackedVector2Array([a, b, c]), Color(0.86, 0.28, 1.0, 0.54), 7.0 * charge_mult, true)
-				game.draw_polyline(PackedVector2Array([a, b, c]), Color(0.74, 1.0, 1.0, 0.96), 3.0 * charge_mult, true)
-				game.draw_circle(pos, 7.0 * charge_mult, palette["glow"])
-				game.draw_circle(pos, 3.8 * charge_mult, Color.WHITE)
+				Lightning.bolt(game, a, c, int(phase * 100.0), game.time_alive, Color(0.38, 0.84, 1.0), 0.96, 3.0 * charge_mult)
 				if kind == "eletrica_charged":
 					game.draw_arc(pos, 18.0, 0, TAU, 28, Color(1.0, 1.0, 1.0, 0.68), 2)
 			"petro":
@@ -3669,25 +4112,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 				c.a = 0.22
 				game.draw_circle(pos, 15, c)
 	for bullet in game.return_bullets:
-		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
-			continue
-		var pos = bullet["pos"] - camera
-		var dir = Vector2(bullet.get("dir", Vector2.RIGHT))
-		var age = float(bullet.get("age", 0.0))
-		var state = String(bullet.get("state", "volta" if bool(bullet.get("returning", false)) else "ida"))
-		var c = game._manifestation_color()
-		if state == "instavel":
-			c = Color(1.0, 0.28, 0.76)
-		elif state == "volta":
-			c = Color(1.0, 0.42, 0.92)
-		var boosted = float(bullet.get("paradox_until", 0.0)) > game.time_alive or state == "instavel"
-		var core_radius = 13.0 if boosted else 6.5
-		var outer = 34.0 + sin(age * 16.0) * 6.0 if boosted else (17.0 + sin(age * 16.0) * 3.0 if state == "instavel" else 13.0 + sin(age * 16.0) * 2.0)
-		game.draw_circle(pos, core_radius, c)
-		game.draw_arc(pos, outer, age * 7.0, age * 7.0 + PI * 1.55, 28, Color(c.r, c.g, c.b, 0.88), 2.2)
-		game.draw_line(pos - dir * 10.0, pos + dir * 10.0, Color(1.0, 1.0, 1.0, 0.68), 1.2)
-		if state == "instavel":
-			game.draw_arc(pos, outer + 8.0, age * 4.5, age * 4.5 + PI * 1.15, 22, Color(1.0, 0.76, 0.92, 0.56), 1.6)
+		_draw_return_bullet_visual(game, bullet, camera)
 	for bullet in game.enemy_bullets:
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue
@@ -3942,27 +4367,7 @@ static func _draw_umbra_miasma_overlay(game: Node2D, viewport: Vector2, camera: 
 
 
 static func _draw_procedural_lightning_bolt(game: Node2D, from: Vector2, to_angle: float, max_dist: float, color: Color, thickness: float, b_seed: int) -> void :
-	var l_rng = RandomNumberGenerator.new()
-	l_rng.seed = b_seed
-	var curr: Vector2 = from
-	var main_dir: Vector2 = Vector2.from_angle(to_angle)
-	var perp: Vector2 = main_dir.orthogonal()
-	var dist_traveled: float = 0.0
-
-	while dist_traveled < max_dist:
-		var step_len: float = l_rng.randf_range(25.0, 60.0)
-		dist_traveled += step_len
-		var clamped_dist: float = minf(dist_traveled, max_dist)
-		var jitter: float = l_rng.randf_range(-18.0, 18.0) + sin(game.time_alive * 25.0 + float(b_seed % 7)) * 10.0
-		var nxt: Vector2 = from + main_dir * clamped_dist + perp * jitter
-		game.draw_line(curr, nxt, color, thickness)
-
-		if l_rng.randf() < 0.38 and dist_traveled < max_dist * 0.8:
-			var branch_dir: Vector2 = (main_dir + perp * l_rng.randf_range(-0.8, 0.8)).normalized()
-			var branch_end: Vector2 = nxt + branch_dir * l_rng.randf_range(30.0, 70.0)
-			game.draw_line(nxt, branch_end, color * Color(1, 1, 1, 0.7), maxf(1.0, thickness - 1.5))
-
-		curr = nxt
+	Lightning.bolt(game, from, from + Vector2.from_angle(to_angle) * max_dist, b_seed, game.time_alive, color, color.a, thickness)
 
 
 static func _draw_network_rewind_visuals(game: Node2D, camera: Vector2) -> void :

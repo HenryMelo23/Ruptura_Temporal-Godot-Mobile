@@ -8,6 +8,10 @@ const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_ani
 
 func pack(game: Node) -> Dictionary:
 	var packet: = {
+		"henry_entrance": game.henry_incendiary_ability_controller.entrance_snapshot(),
+		"boss_core": game._pack_net_boss(),
+		"boss_name": game.boss_name,
+		"boss_title_color": game.boss_title_color,
 		"team_kills": game.enemies_killed,
 		"boss_entry_timer": game.boss_entry_timer,
 		"pacing_profile": game.run_pacing_profile,
@@ -83,6 +87,7 @@ func pack(game: Node) -> Dictionary:
 			})
 		3:
 			packet.merge({
+				"phase3_ritual_pulse": game.phase3_ritual_pulse_controller.active_snapshot(),
 				"phase3_miasma_zones": game.phase3_miasma_zones.duplicate(true),
 				"boss3_faith": game.boss3_faith,
 				"boss3_stage": game.boss3_stage,
@@ -111,7 +116,18 @@ func pack(game: Node) -> Dictionary:
 				"boss3_sector_ritual_sequence": game.boss3_sector_ritual_sequence
 			})
 		4:
+			packet["phase4_instability_pulse"] = game.phase4_instability_pulse_controller.active_snapshot()
 			packet["phase4_enemy_hazards"] = game.phase4_enemy_hazards.duplicate(true)
+			packet["boss4_attack_pose_timer"] = game.boss4_attack_pose_timer
+			packet["boss4_anim_time"] = game.boss4_anim_time
+			packet["boss4_instability"] = game.boss4_instability
+			packet["boss4_gravity_timer"] = game.boss4_gravity_timer
+			packet["boss4_gravity_dir"] = game.boss4_gravity_dir
+			packet["boss4_vampire_timer"] = game.boss4_vampire_timer
+			packet["boss4_prison"] = game.boss4_prison.duplicate(true)
+			packet["boss4_clone"] = game.boss4_clone.duplicate(true)
+			packet["boss4_strike_sequence"] = game.boss4_strike_sequence.duplicate(true)
+			packet["boss4_rupture_anchors"] = game.boss4_rupture_anchors.duplicate(true)
 			packet["boss4_secondary_active"] = game.boss4_secondary_active
 			packet["boss4_secondary_elapsed"] = game.boss4_secondary_elapsed
 			packet["boss4_ultimate_active"] = game.boss4_ultimate_active
@@ -121,6 +137,10 @@ func pack(game: Node) -> Dictionary:
 		5:
 			packet["phase5_hazards"] = game.phase5_hazards.duplicate(true)
 			packet["phase5_telegraphs"] = game.phase5_telegraphs.duplicate(true)
+			packet["boss5_current_action"] = game.boss5_current_action
+			packet["boss5_dimension"] = game.boss5_dimension
+			packet["boss5_mental_state"] = game.boss5_mental_state
+			packet["boss5_siphon_timer"] = game.boss5_siphon_timer
 			packet["umbra_decision"] = game.umbra_authority_controller.public_event()
 		6:
 			packet.merge({
@@ -148,7 +168,7 @@ func pack(game: Node) -> Dictionary:
 				"boss6_reflux_objects": game.boss6_reflux_objects.duplicate(true),
 				"boss6_cracked_heart": game.boss6_cracked_heart.duplicate(true),
 				"boss6_shielded": game.boss6_shielded,
-				"boss6_entry_particles": game.boss6_entry_particles.duplicate(true),
+				"boss6_entry_particle_seed": game.boss6_entry_particle_seed,
 				"boss6_relocating": game.boss6_relocating,
 				"boss6_relocate_from": game.boss6_relocate_from,
 				"boss6_relocate_to": game.boss6_relocate_to,
@@ -157,7 +177,24 @@ func pack(game: Node) -> Dictionary:
 				"boss6_miasma_ult_timer": game.boss6_miasma_ult_timer,
 				"boss6_miasma_ult_cooldown": game.boss6_miasma_ult_cooldown,
 				"boss6_miasma_ult_angle": game.boss6_miasma_ult_angle,
-				"boss6_miasma_ult_pustule_timer": game.boss6_miasma_ult_pustule_timer
+				"boss6_miasma_ult_pustule_timer": game.boss6_miasma_ult_pustule_timer,
+				"boss6_fossil_echo": game.boss6_fossil_echo.duplicate(true),
+				"boss6_necro_erosion_active": game.boss6_necro_erosion_active,
+				"boss6_necro_erosion_radius": game.boss6_necro_erosion_radius,
+				"boss6_necro_erosion_timer": game.boss6_necro_erosion_timer
+			})
+		7:
+			packet.merge({
+				"boss7_state": game.boss7_state,
+				"boss7_state_timer": game.boss7_state_timer,
+				"boss7_target_pos": game.boss7_target_pos,
+				"boss7_reborn": game.boss7_reborn,
+				"boss7_core_active": game.boss7_core_active,
+				"boss7_core_pos": game.boss7_core_pos,
+				"boss7_core_hp": game.boss7_core_hp,
+				"boss7_core_hp_max": game.boss7_core_hp_max,
+				"boss7_core_timer": game.boss7_core_timer,
+				"boss7_flame_waves": game.boss7_flame_waves.duplicate(true)
 			})
 	return packet
 
@@ -167,6 +204,14 @@ func apply(game: Node, snapshot_data) -> void:
 	if not snapshot_data is Dictionary:
 		return
 	var data: Dictionary = snapshot_data
+	if game._is_world_replica() and data.has("henry_entrance"):
+		game.henry_incendiary_ability_controller.apply_entrance_snapshot(Dictionary(data["henry_entrance"]))
+	if game._is_world_replica() and data.has("boss_core"):
+		game._apply_remote_boss_snapshot(data.get("boss_core"), Time.get_ticks_msec())
+		game.boss_name = String(data.get("boss_name", game.boss_name))
+		var incoming_title_color = data.get("boss_title_color", game.boss_title_color)
+		if incoming_title_color is Color:
+			game.boss_title_color = incoming_title_color
 	if game._is_world_replica() and data.has("team_kills"):
 		game._apply_shared_kill_progress(maxi(0, int(data["team_kills"])))
 	if game._is_world_replica() and data.has("runtime_event"):
@@ -274,6 +319,9 @@ func apply(game: Node, snapshot_data) -> void:
 		game.boss2_ultimate_hit_gate = float(data.get("boss2_ultimate_hit_gate", game.boss2_ultimate_hit_gate))
 		game.boss2_ultimate_used = bool(data.get("boss2_ultimate_used", game.boss2_ultimate_used))
 	game.phase3_miasma_zones = Array(data.get("phase3_miasma_zones", game.phase3_miasma_zones)).duplicate(true)
+	if game.current_phase == 3 and game._is_world_replica() and data.has("phase3_ritual_pulse"):
+		var ritual_snapshot = data.get("phase3_ritual_pulse", {})
+		game.phase3_ritual_pulse_controller.apply_remote_snapshot(Dictionary(ritual_snapshot) if ritual_snapshot is Dictionary else {})
 	game.boss3_faith = float(data.get("boss3_faith", game.boss3_faith))
 	game.boss3_stage = int(data.get("boss3_stage", game.boss3_stage))
 	game.boss3_stun_timer = float(data.get("boss3_stun_timer", game.boss3_stun_timer))
@@ -327,17 +375,41 @@ func apply(game: Node, snapshot_data) -> void:
 	var incoming_cracked = data.get("boss6_cracked_heart", game.boss6_cracked_heart)
 	game.boss6_cracked_heart = incoming_cracked.duplicate(true) if incoming_cracked is Dictionary else {}
 	game.boss6_shielded = bool(data.get("boss6_shielded", game.boss6_shielded))
-	game.boss6_entry_particles = Array(data.get("boss6_entry_particles", game.boss6_entry_particles)).duplicate(true)
+	var previous_entry_seed: int = game.boss6_entry_particle_seed
 	game.boss6_relocating = bool(data.get("boss6_relocating", game.boss6_relocating))
 	game.boss6_relocate_from = Vector2(data.get("boss6_relocate_from", game.boss6_relocate_from))
 	game.boss6_relocate_to = Vector2(data.get("boss6_relocate_to", game.boss6_relocate_to))
 	game.boss6_relocate_age = float(data.get("boss6_relocate_age", game.boss6_relocate_age))
 	game.boss6_relocate_duration = float(data.get("boss6_relocate_duration", game.boss6_relocate_duration))
+	if data.has("boss6_entry_particles"):
+		# Backward-compatible reader for snapshots recorded before the seeded VFX contract.
+		game.boss6_entry_particles = Array(data.get("boss6_entry_particles", [])).duplicate(true)
+	elif data.has("boss6_entry_particle_seed"):
+		var incoming_entry_seed: int = int(data.get("boss6_entry_particle_seed", -1))
+		if incoming_entry_seed >= 0 and (incoming_entry_seed != previous_entry_seed or game.boss6_entry_particles.is_empty()):
+			var entry_source: Vector2 = game.boss6_relocate_from if game.boss6_relocating else Vector2.ZERO
+			game._spawn_boss6_entry_particles(game.boss6_relocate_to, entry_source, incoming_entry_seed)
 	game.boss6_miasma_ult_timer = float(data.get("boss6_miasma_ult_timer", game.boss6_miasma_ult_timer))
 	game.boss6_miasma_ult_cooldown = float(data.get("boss6_miasma_ult_cooldown", game.boss6_miasma_ult_cooldown))
 	game.boss6_miasma_ult_angle = float(data.get("boss6_miasma_ult_angle", game.boss6_miasma_ult_angle))
 	game.boss6_miasma_ult_pustule_timer = float(data.get("boss6_miasma_ult_pustule_timer", game.boss6_miasma_ult_pustule_timer))
 	game.phase4_enemy_hazards = Array(data.get("phase4_enemy_hazards", game.phase4_enemy_hazards)).duplicate(true)
+	if game.current_phase == 4 and game._is_world_replica() and data.has("phase4_instability_pulse"):
+		var pulse_snapshot = data.get("phase4_instability_pulse", {})
+		game.phase4_instability_pulse_controller.apply_remote_snapshot(Dictionary(pulse_snapshot) if pulse_snapshot is Dictionary else {})
+	game.boss4_attack_pose_timer = float(data.get("boss4_attack_pose_timer", game.boss4_attack_pose_timer))
+	game.boss4_anim_time = float(data.get("boss4_anim_time", game.boss4_anim_time))
+	game.boss4_instability = float(data.get("boss4_instability", game.boss4_instability))
+	game.boss4_gravity_timer = float(data.get("boss4_gravity_timer", game.boss4_gravity_timer))
+	game.boss4_gravity_dir = Vector2(data.get("boss4_gravity_dir", game.boss4_gravity_dir))
+	game.boss4_vampire_timer = float(data.get("boss4_vampire_timer", game.boss4_vampire_timer))
+	var incoming_prison = data.get("boss4_prison", game.boss4_prison)
+	game.boss4_prison = incoming_prison.duplicate(true) if incoming_prison is Dictionary else {}
+	var incoming_clone = data.get("boss4_clone", game.boss4_clone)
+	game.boss4_clone = incoming_clone.duplicate(true) if incoming_clone is Dictionary else {}
+	var incoming_strike = data.get("boss4_strike_sequence", game.boss4_strike_sequence)
+	game.boss4_strike_sequence = incoming_strike.duplicate(true) if incoming_strike is Dictionary else {}
+	game.boss4_rupture_anchors = Array(data.get("boss4_rupture_anchors", game.boss4_rupture_anchors)).duplicate(true)
 	game.boss4_secondary_active = bool(data.get("boss4_secondary_active", game.boss4_secondary_active))
 	game.boss4_secondary_elapsed = float(data.get("boss4_secondary_elapsed", game.boss4_secondary_elapsed))
 	game.boss4_ultimate_active = bool(data.get("boss4_ultimate_active", game.boss4_ultimate_active))
@@ -346,11 +418,30 @@ func apply(game: Node, snapshot_data) -> void:
 	game.boss4_meteor_damage_bonus = float(data.get("boss4_meteor_damage_bonus", game.boss4_meteor_damage_bonus))
 	game.phase5_hazards = Array(data.get("phase5_hazards", game.phase5_hazards)).duplicate(true)
 	game.phase5_telegraphs = Array(data.get("phase5_telegraphs", game.phase5_telegraphs)).duplicate(true)
+	game.boss5_current_action = String(data.get("boss5_current_action", game.boss5_current_action))
+	game.boss5_dimension = String(data.get("boss5_dimension", game.boss5_dimension))
+	game.boss5_mental_state = String(data.get("boss5_mental_state", game.boss5_mental_state))
+	game.boss5_siphon_timer = float(data.get("boss5_siphon_timer", game.boss5_siphon_timer))
 	if game.current_phase == 5 and game._is_world_replica() and data.has("umbra_decision"):
 		var incoming_umbra_decision = data.get("umbra_decision", {})
 		if game.umbra_authority_controller.accept_replica_event(incoming_umbra_decision):
 			game.boss5_authoritative_decision = game.umbra_authority_controller.public_event()
 			game.boss5_current_action = String(game.boss5_authoritative_decision.get("action", game.boss5_current_action))
+	var incoming_fossil_echo = data.get("boss6_fossil_echo", game.boss6_fossil_echo)
+	game.boss6_fossil_echo = incoming_fossil_echo.duplicate(true) if incoming_fossil_echo is Dictionary else {}
+	game.boss6_necro_erosion_active = bool(data.get("boss6_necro_erosion_active", game.boss6_necro_erosion_active))
+	game.boss6_necro_erosion_radius = float(data.get("boss6_necro_erosion_radius", game.boss6_necro_erosion_radius))
+	game.boss6_necro_erosion_timer = float(data.get("boss6_necro_erosion_timer", game.boss6_necro_erosion_timer))
+	game.boss7_state = String(data.get("boss7_state", game.boss7_state))
+	game.boss7_state_timer = float(data.get("boss7_state_timer", game.boss7_state_timer))
+	game.boss7_target_pos = Vector2(data.get("boss7_target_pos", game.boss7_target_pos))
+	game.boss7_reborn = bool(data.get("boss7_reborn", game.boss7_reborn))
+	game.boss7_core_active = bool(data.get("boss7_core_active", game.boss7_core_active))
+	game.boss7_core_pos = Vector2(data.get("boss7_core_pos", game.boss7_core_pos))
+	game.boss7_core_hp = float(data.get("boss7_core_hp", game.boss7_core_hp))
+	game.boss7_core_hp_max = float(data.get("boss7_core_hp_max", game.boss7_core_hp_max))
+	game.boss7_core_timer = float(data.get("boss7_core_timer", game.boss7_core_timer))
+	game.boss7_flame_waves = Array(data.get("boss7_flame_waves", game.boss7_flame_waves)).duplicate(true)
 	if not (boss2_compact is PackedFloat32Array and boss2_compact.size() >= 27):
 		game.boss2_ultimate_wind_active = float(data.get("boss2_wind_active", game.boss2_ultimate_wind_active))
 		game.boss2_ultimate_wind_timer = float(data.get("boss2_wind_timer", game.boss2_ultimate_wind_timer))

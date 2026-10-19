@@ -53,11 +53,17 @@ static func disk(game: Node2D, center: Vector2, radius: float, detail: int, fron
 					var energy: float = 0.45 + 0.55 * pow(absf(cos(angle - 0.4)), 2.0)
 					var col := CYAN.lerp(ICE, energy) if layer == 0 else (BLUE.lerp(CYAN, energy) if layer == 1 else VIOLET.lerp(BLUE, energy))
 					colors.append(tint(col, (0.96 - layer * 0.16) * (1.0 if front else 0.5)))
-			disk_geometry[key] = [points, colors]
-		var geometry: Array = disk_geometry[key]
-		game.draw_set_transform(center, -0.22, Vector2.ONE * radius)
-		game.draw_polygon(geometry[0], geometry[1])
-		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			# draw_polygon triangulated the same concave ribbon on every frame.
+			# Upload its exact vertices/colors/indices once for each bounded LOD.
+			var arrays := []
+			arrays.resize(Mesh.ARRAY_MAX)
+			arrays[Mesh.ARRAY_VERTEX] = points
+			arrays[Mesh.ARRAY_COLOR] = colors
+			arrays[Mesh.ARRAY_INDEX] = Geometry2D.triangulate_polygon(points)
+			var mesh := ArrayMesh.new()
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			disk_geometry[key] = mesh
+		game.draw_mesh(disk_geometry[key], null, Transform2D(-0.22, Vector2.ONE * radius, 0.0, center))
 
 static func lod(game: Node2D) -> int:
 	if game._memory_saver_active():

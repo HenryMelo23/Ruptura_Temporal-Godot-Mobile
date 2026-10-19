@@ -160,7 +160,7 @@ func find_card_by_id(target_card_id: String) -> Dictionary:
 
 
 func is_common_card(card: Dictionary) -> bool:
-	return not core._is_rare_card(card)
+	return core._card_rarity_key(card) == core.CARD_RARITY_COMMON
 
 
 func new_common_card_count(card_id: String) -> float:

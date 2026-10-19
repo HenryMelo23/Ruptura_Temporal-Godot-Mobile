@@ -1,6 +1,7 @@
 extends SceneTree
 
 const OUT_DIR := "res://.codex"
+const HudPresentation = preload("res://scripts/presentation/hud_presentation.gd")
 
 var game: Node
 var captures: Array[String] = []
@@ -44,7 +45,18 @@ func _run() -> void:
 	game.ui_platform_override = game.UI_PLATFORM_ANDROID
 	await _capture_profile(Vector2i(800, 450), "hud_hub_mobile_800x450.png")
 
-	print("HUD_LAYOUT_VISUAL_OK captures=%d desktop=true mobile=true no_overlap=true basic_fire_frames=2" % captures.size())
+	game.boss_active = true
+	game.boss_hp = 820.0
+	game.boss_hp_max = 1200.0
+	game.current_phase = 6
+	game.boss_name = "MATRIARCA DA CHAGA"
+	game.boss_title_color = Color(1.0, 0.64, 0.18)
+	game.ui_platform_override = game.UI_PLATFORM_DESKTOP
+	await _capture_profile(Vector2i(1280, 720), "hud_boss_name_desktop_1280x720.png")
+	game.ui_platform_override = game.UI_PLATFORM_ANDROID
+	await _capture_profile(Vector2i(800, 450), "hud_boss_name_mobile_800x450.png")
+
+	print("HUD_LAYOUT_VISUAL_OK captures=%d desktop=true mobile=true boss_name=true no_overlap=true basic_fire_frames=2" % captures.size())
 	game.queue_free()
 	await process_frame
 	await create_timer(0.6).timeout
@@ -55,6 +67,10 @@ func _capture_profile(size: Vector2i, file_name: String) -> void:
 	root.size = size
 	game.buttons.clear()
 	game._update_button_layout(Vector2(size))
+	var wrapper_rects: Dictionary = game.buttons.duplicate()
+	game.buttons.clear()
+	HudPresentation.update_button_layout(game, Vector2(size))
+	_check(game.buttons == wrapper_rects, "HUD owner diverged from the public layout wrapper for " + file_name)
 	_check_no_overlap(Vector2(size))
 	game.queue_redraw()
 	await process_frame

@@ -48,6 +48,105 @@ static func _draw_resonant_meter(game: Node2D, viewport: Vector2) -> void :
 	game._draw_centered("COMBO %d  x%.2f" % [game.resonant_perfect_streak, game._resonant_combo_multiplier()], rect.get_center() + Vector2(0, 22), 10, Color(1.0, 0.9, 0.62, 0.86))
 
 
+static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
+	if game._uses_desktop_ui() and game.mode != "edit_layout":
+		var desktop_rects: Dictionary = RTHudLayout.desktop_button_rects(
+			viewport,
+			game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada",
+			game.manifestation_key == "bombastica",
+			not game.shop_auto_enabled or game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0,
+			game._sanitize_desktop_hud_scale(game.desktop_hud_scale)
+		)
+		for key in ["attack", "skill", "secondary", "dash", "pause", "boss"]:
+			game.buttons[key] = desktop_rects[key]
+		for optional_key in ["lacerante_empower", "bombastica_detonator", "shop_manual"]:
+			if desktop_rects.has(optional_key):
+				game.buttons[optional_key] = desktop_rects[optional_key]
+			else:
+				game.buttons.erase(optional_key)
+		return
+	var touch_rects: Dictionary = RTHudLayout.touch_button_rects(
+		game._attack_center(viewport), game._attack_scale(), game._skill_pos(viewport), game._skill_scale(),
+		game._secondary_center(viewport), game._secondary_scale(), game._dash_center(viewport), game._dash_scale(),
+		game._lacerante_empower_center(viewport), game._lacerante_empower_scale(),
+		game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.mode == "edit_layout",
+		game.manifestation_key == "bombastica" and game.mode != "edit_layout", game._pause_pos(viewport), game._boss_call_pos(viewport), game._manual_shop_pos(viewport),
+		not (game.shop_auto_enabled and not game.qa_data_unlocked and game._sanitize_forced_initial_phase(game.forced_initial_phase) == 0 and game.mode != "edit_layout")
+	)
+	var custom_combat_layout: bool = game.hud_attack_pos != Vector2.ZERO or game.hud_secondary_pos != Vector2.ZERO or game.hud_dash_pos != Vector2.ZERO or game.hud_skill_pos != Vector2(-1, -1) or game.hud_lacerante_empower_pos != Vector2(-1, -1)
+	if game.mode != "edit_layout" and not custom_combat_layout and _touch_hub_has_overlap(touch_rects, viewport):
+		var organized: Dictionary = RTHudLayout.organized_touch_button_rects(viewport, game._attack_scale(), game._skill_scale(), game._secondary_scale(), game._dash_scale(), game._lacerante_empower_scale(), game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.manifestation_key == "bombastica")
+		for key in ["attack", "skill", "secondary", "dash"]:
+			if organized.has(key):
+				touch_rects[key] = organized[key]
+		if organized.has("extra"):
+			if game.manifestation_key == "bombastica":
+				touch_rects["bombastica_detonator"] = organized["extra"]
+			else:
+				touch_rects["lacerante_empower"] = organized["extra"]
+	for key in ["attack", "skill", "secondary", "dash", "pause", "boss"]:
+		game.buttons[key] = touch_rects[key]
+	for optional_key in ["lacerante_empower", "bombastica_detonator", "shop_manual"]:
+		if touch_rects.has(optional_key):
+			game.buttons[optional_key] = touch_rects[optional_key]
+		else:
+			game.buttons.erase(optional_key)
+
+
+static func _touch_hub_has_overlap(rects: Dictionary, viewport: Vector2) -> bool:
+	var keys: Array[String] = ["attack", "skill", "secondary", "dash"]
+	if rects.has("lacerante_empower"):
+		keys.append("lacerante_empower")
+	if rects.has("bombastica_detonator"):
+		keys.append("bombastica_detonator")
+	for i in range(keys.size()):
+		var base_rect: Rect2 = rects[keys[i]]
+		if base_rect.position.x < 0.0 or base_rect.position.y < 0.0 or base_rect.end.x > viewport.x or base_rect.end.y > viewport.y:
+			return true
+		var first: Rect2 = base_rect.grow(5.0)
+		for j in range(i + 1, keys.size()):
+			if first.intersects(rects[keys[j]].grow(5.0)):
+				return true
+	return false
+
+
+static func _hud_rect_player_alpha(game: Node2D, rect: Rect2, viewport: Vector2, padding: float = 84.0) -> float:
+	if game.is_dead or game.mode != "game":
+		return 1.0
+	var player_screen: Vector2 = game.player_pos - game._camera(viewport)
+	var distance: float = game._distance_to_rect(player_screen, rect)
+	if distance >= padding:
+		return 1.0
+	return lerpf(game.HUD_PLAYER_MIN_ALPHA, 1.0, clampf(distance / maxf(1.0, padding), 0.0, 1.0))
+
+
+static func _with_alpha(color: Color, alpha_multiplier: float) -> Color:
+	return Color(color.r, color.g, color.b, clampf(color.a * alpha_multiplier, 0.0, 1.0))
+
+
+static func _draw_hud_bar(game: Node2D, pos: Vector2, width: float, height: float, ratio: float, color: Color) -> void:
+	ratio = clampf(ratio, 0.0, 1.0)
+	var rect := Rect2(pos, Vector2(width, height))
+	game.draw_rect(rect, Color(0.02, 0.03, 0.04, 0.86), true)
+	game.draw_rect(Rect2(pos, Vector2(width * ratio, height)), Color(color.r, color.g, color.b, 0.94), true)
+	game.draw_line(pos + Vector2(0, height + 3), pos + Vector2(width * ratio, height + 3), Color(color.r, color.g, color.b, 0.5), 2)
+
+
+static func _draw_contractual_status_line(game: Node2D, pos: Vector2, label: String, color: Color) -> void:
+	var rect := Rect2(pos, Vector2(252.0, 24.0))
+	game.draw_rect(rect, Color(0.02, 0.03, 0.04, 0.72), true)
+	game.draw_rect(rect, color, false, 1)
+	game.draw_string(game.font, pos + Vector2(10.0, 17.0), label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20.0, game._readable_text_size(11), color)
+
+
+static func _draw_desktop_fps_hud(game: Node2D, viewport: Vector2) -> void:
+	var fps := Engine.get_frames_per_second()
+	var fps_rect := Rect2(viewport.x - 116.0, viewport.y - 48.0, 100.0, 32.0)
+	game._draw_scifi_frame(fps_rect, Color(0.0, 0.85, 1.0), 6.0, 0.88)
+	game._draw_icon_ecg(Vector2(fps_rect.position.x + 20.0, fps_rect.position.y + 16.0), 18.0, Color(0.0, 0.88, 1.0))
+	game._draw_centered("%d FPS" % fps, fps_rect.get_center() + Vector2(12.0, 1.0), 13, Color(0.2, 0.92, 1.0))
+
+
 static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	if game._spectator_controls_locked():
 		game._draw_spectator_hud(viewport)
@@ -60,29 +159,30 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	var left_w = (236.0 * sm) if not portrait else min(236.0, viewport.x * 0.46)
 	var left_h = 76.0 * sm
 	var left_rect = Rect2(game._left_panel_pos(viewport), Vector2(left_w, left_h))
-	var left_alpha: float = game._hud_rect_player_alpha(left_rect, viewport, 84.0)
+	var left_alpha: float = _hud_rect_player_alpha(game, left_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, left_rect, left_alpha)
 
 	var right_w = (220.0 * sm) if not portrait else min(220.0, viewport.x * 0.44)
 	var right_rect = Rect2(game._right_panel_pos(viewport), Vector2(right_w, left_h))
 	if game.buttons.has("pause") and right_rect.intersects(game.buttons["pause"]):
 		right_rect.position.x = maxf(left_rect.end.x + 12.0, Rect2(game.buttons["pause"]).position.x - right_w - 12.0)
-	var right_alpha: float = game._hud_rect_player_alpha(right_rect, viewport, 84.0)
+	var right_alpha: float = _hud_rect_player_alpha(game, right_rect, viewport, 84.0)
 	game.hud_feedback.stats_panel(game, right_rect, right_alpha)
 
 	if game.boss_active and game.boss_hp > 0.0 and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		var boss_rect = Rect2(game._boss_panel_pos(viewport), Vector2(380 * sm, 30 * sm))
 		game._draw_combat_panel(boss_rect, Color(1.0, 0.16, 0.3), 0.62)
-		game._draw_hud_bar(boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, 8.0 * sm, game.boss_hp / game.boss_hp_max, Color(1.0, 0.16, 0.28))
+		_draw_hud_bar(game, boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, 8.0 * sm, game.boss_hp / game.boss_hp_max, Color(1.0, 0.16, 0.28))
+		game._draw_centered_outlined(String(game.boss_name), Vector2(boss_rect.get_center().x, boss_rect.end.y + 9.0 * sm), int(13 * sm), game.boss_title_color, Color(0.01, 0.02, 0.025, 0.96), maxi(1, int(2 * sm)))
 		if game._boss_execute_threshold() > 0.0:
 			game._draw_collector_threshold(boss_rect.position + Vector2(14 * sm, 11 * sm), boss_rect.size.x - 28.0 * sm, game._boss_execute_threshold(), game.boss_hp / game.boss_hp_max, 8.0 * sm)
 		if game.current_phase == 1 and game.boss_hp / max(1.0, game.boss_hp_max) < game.BOSS1_REWIND_THRESHOLD and game.boss1_rewind_cooldown > 0.0:
 			var chrono_text = "CRONO %.0fs" % ceil(game.boss1_rewind_cooldown)
 			game.draw_string(game.font, boss_rect.position + Vector2(boss_rect.size.x - 94.0 * sm, 28.0 * sm), chrono_text, HORIZONTAL_ALIGNMENT_LEFT, 82.0 * sm, int(11 * sm), Color(0.48, 0.94, 1.0, 0.92))
 		if game.current_phase == 3:
-			var faith_rect = Rect2(boss_rect.position + Vector2(64 * sm, 34 * sm), Vector2(252 * sm, 24 * sm))
+			var faith_rect = Rect2(boss_rect.position + Vector2(64 * sm, 48 * sm), Vector2(252 * sm, 24 * sm))
 			game._draw_combat_panel(faith_rect, Color(0.62, 0.94, 0.18), 0.48)
-			game._draw_hud_bar(faith_rect.position + Vector2(54 * sm, 8 * sm), 184.0 * sm, 7.0 * sm, game.boss3_faith / 100.0, Color(0.66, 1.0, 0.22))
+			_draw_hud_bar(game, faith_rect.position + Vector2(54 * sm, 8 * sm), 184.0 * sm, 7.0 * sm, game.boss3_faith / 100.0, Color(0.66, 1.0, 0.22))
 			game.draw_string(game.font, faith_rect.position + Vector2(8 * sm, 17 * sm), "FE %d" % int(game.boss3_faith), HORIZONTAL_ALIGNMENT_LEFT, -1, int(13 * sm), Color(0.86, 1.0, 0.58))
 			if game.boss3_ritual_timer > 0.0:
 				game._draw_centered("RITUAL %.1fs  %d/2" % [game.boss3_ritual_timer, game.boss3_ritual_destroyed], Vector2(viewport.x * 0.5, 112 * sm), int(20 * sm), Color(1.0, 0.42, 0.18))
@@ -138,13 +238,13 @@ static func _draw_contractual_order_hud(game: Node2D, viewport: Vector2) -> void
 			var compact_rect = Rect2(18.0, 238.0, min(330.0, viewport.x * 0.36), 104.0)
 			game._draw_judicial_order_paper(compact_rect, String(game.contractual_order.get("label", "")), "", "%d/%d" % [progress, goal], "%.0fs" % ceil(time_left), true)
 			var ratio = float(progress) / float(goal)
-			game._draw_hud_bar(compact_rect.position + Vector2(18, 76), compact_rect.size.x - 36.0, 8.0, ratio, Color(0.54, 0.12, 0.04))
+			_draw_hud_bar(game, compact_rect.position + Vector2(18, 76), compact_rect.size.x - 36.0, 8.0, ratio, Color(0.54, 0.12, 0.04))
 	var y = 334.0
 	for key in game.contractual_order_rewards.keys():
-		game._draw_contractual_status_line(Vector2(18.0, y), "BENCAO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_rewards[key]))], Color(0.38, 1.0, 0.58))
+		_draw_contractual_status_line(game, Vector2(18.0, y), "BENCAO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_rewards[key]))], Color(0.38, 1.0, 0.58))
 		y += 28.0
 	for key in game.contractual_order_penalties.keys():
-		game._draw_contractual_status_line(Vector2(18.0, y), "CONFISCO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_penalties[key]))], Color(1.0, 0.3, 0.18))
+		_draw_contractual_status_line(game, Vector2(18.0, y), "CONFISCO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_penalties[key]))], Color(1.0, 0.3, 0.18))
 		y += 28.0
 
 
@@ -197,9 +297,9 @@ static func _draw_ancorada_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -
 		hud_color = Color(0.85, 1.0, 0.88)
 	game._draw_combat_panel(rect, hud_color, 0.58)
 
-	var title_text: String = "LASTRO"
+	var title_text: String = "LASTRO MOVEL"
 	if game.lastro_stacks == 5:
-		title_text = "CONTRAPESO TOTAL"
+		title_text = "MARCHA TOTAL"
 	game.draw_string(game.font, rect.position + Vector2(10, 17), title_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, hud_color)
 	game.draw_string(game.font, rect.position + Vector2(width - 64, 17), "%d/5" % game.lastro_stacks, HORIZONTAL_ALIGNMENT_RIGHT, 56, 12, Color.WHITE)
 
@@ -485,6 +585,13 @@ static func _draw_aura_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> vo
 	var ratio = game._aura_hud_ratio()
 	var pulse = 0.5 + sin(game.time_alive * 6.0) * 0.5
 	match name:
+		"Incandescência":
+			for i in range(8):
+				var heat_ratio: float = float(i + 1) / 8.0
+				var x: float = rect.position.x + 14.0 + float(i) * 14.0
+				var height: float = 8.0 + sin(game.time_alive * 7.0 + float(i) * 1.2) * 3.0
+				var heat_color := Color(1.0, 0.32 + heat_ratio * 0.42, 0.04, 0.9 if heat_ratio <= ratio else 0.16)
+				game.draw_line(Vector2(x, rect.end.y - 8.0), Vector2(x + sin(float(i)) * 3.0, rect.end.y - 8.0 - height), heat_color, 3.0, true)
 		"Racional":
 			for i in range(7):
 				var x = rect.position.x + 14.0 + i * 18.0
@@ -524,16 +631,17 @@ static func _draw_aura_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> vo
 
 static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 	var life_rect = Rect2(18.0, 16.0, 276.0, 76.0)
-	var life_alpha: float = game._hud_rect_player_alpha(life_rect, viewport, 84.0)
+	var life_alpha: float = _hud_rect_player_alpha(game, life_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, life_rect, life_alpha)
 	var right_rect = Rect2(viewport.x - 300.0, 16.0, 220.0, 76.0)
-	var right_alpha: float = game._hud_rect_player_alpha(right_rect, viewport, 84.0)
+	var right_alpha: float = _hud_rect_player_alpha(game, right_rect, viewport, 84.0)
 	game.hud_feedback.stats_panel(game, right_rect, right_alpha)
 
 	if game.boss_active and game.boss_hp > 0.0 and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		var boss_rect = Rect2(game._boss_panel_pos(viewport), Vector2(380.0, 30.0))
 		game._draw_scifi_frame(boss_rect, Color(1.0, 0.16, 0.3), 6.0, 0.88)
-		game._draw_hud_bar(boss_rect.position + Vector2(14.0, 11.0), boss_rect.size.x - 28.0, 8.0, game.boss_hp / game.boss_hp_max, Color(1.0, 0.16, 0.28))
+		_draw_hud_bar(game, boss_rect.position + Vector2(14.0, 11.0), boss_rect.size.x - 28.0, 8.0, game.boss_hp / game.boss_hp_max, Color(1.0, 0.16, 0.28))
+		game._draw_centered_outlined(String(game.boss_name), Vector2(boss_rect.get_center().x, boss_rect.end.y + 9.0), 13, game.boss_title_color, Color(0.01, 0.02, 0.025, 0.96), 2)
 		if game._boss_execute_threshold() > 0.0:
 			game._draw_collector_threshold(boss_rect.position + Vector2(14.0, 11.0), boss_rect.size.x - 28.0, game._boss_execute_threshold(), game.boss_hp / game.boss_hp_max, 8.0)
 		if game.current_phase == 1 and game.boss_hp / maxf(1.0, game.boss_hp_max) < game.BOSS1_REWIND_THRESHOLD and game.boss1_rewind_cooldown > 0.0:
@@ -634,7 +742,7 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	if game._should_draw_desktop_fps_counter():
-		game._draw_desktop_fps_hud(viewport)
+		_draw_desktop_fps_hud(game, viewport)
 
 
 static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
@@ -653,13 +761,13 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		return
 	var joy = game._active_joy_center(viewport)
 	var joy_r = 76.0 * game._joy_scale()
-	var joy_alpha: float = game._hud_rect_player_alpha(Rect2(joy - Vector2(joy_r, joy_r), Vector2(joy_r * 2.0, joy_r * 2.0)), viewport)
+	var joy_alpha: float = _hud_rect_player_alpha(game, Rect2(joy - Vector2(joy_r, joy_r), Vector2(joy_r * 2.0, joy_r * 2.0)), viewport)
 	if not game.is_gamepad_active:
 		game._draw_virtual_stick(joy, joy_r, joy_alpha)
 
 	var atk_c = game.buttons["attack"].position + game.buttons["attack"].size * 0.5
 	var atk_r: float = minf(54.0 * game._attack_scale(), float(game.buttons["attack"].size.x) * 0.5)
-	var atk_alpha: float = game._hud_rect_player_alpha(Rect2(atk_c - Vector2(atk_r, atk_r), Vector2(atk_r * 2.0, atk_r * 2.0)), viewport)
+	var atk_alpha: float = _hud_rect_player_alpha(game, Rect2(atk_c - Vector2(atk_r, atk_r), Vector2(atk_r * 2.0, atk_r * 2.0)), viewport)
 	var revival_method: String = game._local_revival_altar_method()
 	if not game.is_gamepad_active:
 		if revival_method != "":
@@ -678,7 +786,7 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 
 	var skill_c = game.buttons["skill"].position + game.buttons["skill"].size * 0.5
 	var skill_r: float = minf(46.0 * game._skill_scale(), float(game.buttons["skill"].size.x) * 0.5)
-	var skill_alpha: float = game._hud_rect_player_alpha(Rect2(skill_c - Vector2(skill_r, skill_r), Vector2(skill_r * 2.0, skill_r * 2.0)), viewport)
+	var skill_alpha: float = _hud_rect_player_alpha(game, Rect2(skill_c - Vector2(skill_r, skill_r), Vector2(skill_r * 2.0, skill_r * 2.0)), viewport)
 	if not game.is_gamepad_active:
 		game._draw_button(skill_c, skill_r, "HAB1", Color(game._manifestation_color().r, game._manifestation_color().g, game._manifestation_color().b, 0.7 * skill_alpha))
 	if game.manifestation_key == "bombastica" and game.bombastica_bombs.size() > 0:
@@ -688,7 +796,7 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		game._draw_centered("x%d" % game.bombastica_bombs.size(), q_badge_center + Vector2(0, 1), 12, Color.WHITE)
 	var secondary_c = game.buttons["secondary"].position + game.buttons["secondary"].size * 0.5
 	var secondary_r: float = minf(43.0 * game._secondary_scale(), float(game.buttons["secondary"].size.x) * 0.5)
-	var secondary_alpha: float = game._hud_rect_player_alpha(Rect2(secondary_c - Vector2(secondary_r, secondary_r), Vector2(secondary_r * 2.0, secondary_r * 2.0)), viewport)
+	var secondary_alpha: float = _hud_rect_player_alpha(game, Rect2(secondary_c - Vector2(secondary_r, secondary_r), Vector2(secondary_r * 2.0, secondary_r * 2.0)), viewport)
 	var active_eletrica_secondary = game._active_eletrica_secondary()
 	var toggle_ultimate_active = not active_eletrica_secondary.is_empty() or not game._active_prismatica_secondary().is_empty()
 	var cancel_danger = not active_eletrica_secondary.is_empty() and float(active_eletrica_secondary.get("active_time", 0.0)) >= game.SECONDARY_ELETRICA_DRAIN_DELAY
@@ -698,7 +806,7 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		game.draw_circle(secondary_c, secondary_r + 9.0 + cancel_pulse * 5.0, Color(1.0, 0.0, 0.05, outer_alpha * secondary_alpha))
 		game.draw_circle(secondary_c, secondary_r * 0.96, Color(0.4, 0.0, 0.02, 0.92 * secondary_alpha))
 	if not game.is_gamepad_active:
-		game._draw_button(secondary_c, secondary_r, "CANCELAR" if toggle_ultimate_active else "ULT", game._with_alpha(Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), secondary_alpha))
+		game._draw_button(secondary_c, secondary_r, "CANCELAR" if toggle_ultimate_active else "ULT", _with_alpha(Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), secondary_alpha))
 	if game.manifestation_key == "eletrica" and not toggle_ultimate_active:
 		var cd_total: float = game._secondary_skill_cooldown()
 		var cd_elapsed: float = clampf(game.time_alive - game.last_secondary_time, 0.0, cd_total)
@@ -737,11 +845,11 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 
 	var dash_c = game.buttons["dash"].position + game.buttons["dash"].size * 0.5
 	var dash_r: float = minf(46.0 * game._dash_scale(), float(game.buttons["dash"].size.x) * 0.5)
-	var dash_alpha: float = game._hud_rect_player_alpha(Rect2(dash_c - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0)), viewport)
+	var dash_alpha: float = _hud_rect_player_alpha(game, Rect2(dash_c - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0)), viewport)
 	var tp_visual_active = game.tp_cooldown_pending and not game.tp_effects.is_empty()
 	var dash_label = "VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
 	if not game.is_gamepad_active:
-		game._draw_button(dash_c, dash_r, dash_label, game._with_alpha(Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.2, 0.85, 1.0, 0.72), dash_alpha))
+		game._draw_button(dash_c, dash_r, dash_label, _with_alpha(Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.2, 0.85, 1.0, 0.72), dash_alpha))
 	if game.manifestation_key == "lacerante":
 		var charge_center: Vector2 = dash_c + Vector2(dash_r * 0.66, - dash_r * 0.68)
 		game.draw_circle(charge_center, 14.0, Color(0.16, 0.0, 0.025, 0.96))
@@ -802,7 +910,7 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		game._draw_cooldown_overlay(dash_c, dash_r, float(active_tp.get("max", 1.0)) - float(active_tp.get("life", 0.0)), float(active_tp.get("max", 1.0)))
 	else:
 		game._draw_cooldown_overlay(dash_c, dash_r, game.time_alive - game.last_dash_time, game._current_dash_cooldown())
-	game._draw_hud_rect_button(game.buttons["pause"], "II", game._with_alpha(Color(0.0, 1.0, 0.82), game._hud_rect_player_alpha(game.buttons["pause"], viewport, 72.0)))
+	game._draw_hud_rect_button(game.buttons["pause"], "II", _with_alpha(Color(0.0, 1.0, 0.82), _hud_rect_player_alpha(game, game.buttons["pause"], viewport, 72.0)))
 	if game.buttons.has("shop_manual"):
 		var shop_rect: Rect2 = game.buttons["shop_manual"]
 		var shop_ready: bool = game._affordable_card_count() > 0 and game.mode == "game" and game._manual_shop_available()
@@ -810,12 +918,12 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		var bargain_pending: bool = game.has_method("_bargain_pending_discount_remaining") and game._bargain_pending_discount_remaining() > 0.0
 		var shop_cooldown: float = game._manual_shop_cooldown_remaining()
 		var shop_accent = Color(1.0, 0.78, 0.22) if bargain_pending else Color(0.3, 1.0, 0.62) if shop_grace else Color(0.0, 1.0, 0.82) if shop_ready else Color(0.38, 0.42, 0.46)
-		var shop_alpha: float = game._hud_rect_player_alpha(shop_rect, viewport, 82.0)
+		var shop_alpha: float = _hud_rect_player_alpha(game, shop_rect, viewport, 82.0)
 		var shop_label: String = "REABRIR" if shop_grace else "LOJA"
 		var shop_top: String = game._manual_shop_status_text()
 		if shop_top == "":
 			shop_top = "LOJA %d" % game.card_cost
-		game._draw_hud_rect_button(shop_rect, shop_label, game._with_alpha(shop_accent, shop_alpha))
+		game._draw_hud_rect_button(shop_rect, shop_label, _with_alpha(shop_accent, shop_alpha))
 		game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.96 * shop_alpha))
 		if shop_cooldown > 0.0:
 			var cooldown_total: float = maxf(0.01, game.SHOP_MANUAL_REOPEN_COOLDOWN)
@@ -828,9 +936,9 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		elif game.shop_manual_cooldown_pulse > 0.0:
 			var pulse_alpha: float = clampf(game.shop_manual_cooldown_pulse, 0.0, 1.0) * shop_alpha
 			game.draw_rect(shop_rect.grow(5.0), Color(0.0, 1.0, 0.82, 0.22 * pulse_alpha), false, 2.0)
-	if game.boss_ready and not game.boss_active and not game.boss_dead:
+	if game.boss_ready and not game.boss_active and not game.boss_dead and game.experimental_phase_controller.should_show_boss_button():
 		var boss_rect: Rect2 = game.buttons["boss"]
-		var boss_alpha: float = game._hud_rect_player_alpha(boss_rect, viewport, 82.0)
+		var boss_alpha: float = _hud_rect_player_alpha(game, boss_rect, viewport, 82.0)
 		game._draw_centered("BOSS PRONTO", boss_rect.get_center() + Vector2(0, -31), 16, Color(1.0, 0.82, 0.24, boss_alpha))
 		game._draw_hud_rect_button(boss_rect, "BOSS", Color(1.0, 0.52, 0.16, boss_alpha))
 	if game._ability_cancel_active():

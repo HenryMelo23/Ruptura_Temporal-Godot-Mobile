@@ -1,8 +1,12 @@
 extends RefCounted
 
-const MOTION_RESULTS: Texture2D = preload("res://assets/sprites/bargain_capsule/bargain_capsule_motion_results.png")
-const IDLE_DAMAGE: Texture2D = preload("res://assets/sprites/bargain_capsule/bargain_capsule_idle_damage.png")
-const HIT_REACTION: Texture2D = preload("res://assets/sprites/bargain_capsule/bargain_capsule_hit.png")
+const MOTION_RESULTS_PATH := "res://assets/sprites/bargain_capsule/bargain_capsule_motion_results.png"
+const IDLE_DAMAGE_PATH := "res://assets/sprites/bargain_capsule/bargain_capsule_idle_damage.png"
+const HIT_REACTION_PATH := "res://assets/sprites/bargain_capsule/bargain_capsule_hit.png"
+
+static var _motion_results: Texture2D
+static var _idle_damage: Texture2D
+static var _hit_reaction: Texture2D
 
 const MOTION_FRAME_SIZE := Vector2(96.0, 96.0)
 const IDLE_FRAME_SIZE := Vector2(96.0, 128.0)
@@ -31,6 +35,13 @@ static func _state_age(capsule: Dictionary) -> float:
 
 static func _frame_for_progress(progress: float, frame_count: int = FRAME_COUNT) -> int:
 	return clampi(int(floor(clampf(progress, 0.0, 0.9999) * float(frame_count))), 0, frame_count - 1)
+
+
+static func _texture(path: String, cached: Texture2D) -> Texture2D:
+	if cached != null:
+		return cached
+	var resource := ResourceLoader.load(path)
+	return resource as Texture2D
 
 
 static func _draw_frame(game: Node2D, texture: Texture2D, frame_size: Vector2, row: int, frame: int, center: Vector2, modulate: Color = Color.WHITE) -> void:
@@ -75,6 +86,11 @@ static func _draw_bars(game: Node2D, pos: Vector2, capsule: Dictionary) -> void:
 
 
 static func draw(game: Node2D, camera: Vector2) -> void:
+	_motion_results = _texture(MOTION_RESULTS_PATH, _motion_results)
+	_idle_damage = _texture(IDLE_DAMAGE_PATH, _idle_damage)
+	_hit_reaction = _texture(HIT_REACTION_PATH, _hit_reaction)
+	if _motion_results == null or _idle_damage == null or _hit_reaction == null:
+		return
 	var capsule: Dictionary = game.bargain_capsule
 	if capsule.is_empty():
 		return
@@ -99,7 +115,7 @@ static func draw(game: Node2D, camera: Vector2) -> void:
 		var gravity_progress: float = fall_progress * fall_progress
 		var sprite_pos: Vector2 = ground_pos + Vector2(sin(fall_progress * TAU * 1.25 + float(seed % 11)) * 2.5, -(1.0 - gravity_progress) * 180.0)
 		_draw_shadow(game, ground_pos, lerpf(0.48, 1.0, gravity_progress), lerpf(0.10, 0.30, gravity_progress))
-		_draw_frame(game, MOTION_RESULTS, MOTION_FRAME_SIZE, 0, _frame_for_progress(fall_progress), sprite_pos)
+		_draw_frame(game, _motion_results, MOTION_FRAME_SIZE, 0, _frame_for_progress(fall_progress), sprite_pos)
 		return
 
 	if state == game.BARGAIN_CAPSULE_STATE_SUCCESS or state == game.BARGAIN_CAPSULE_STATE_FAIL:
@@ -107,7 +123,7 @@ static func draw(game: Node2D, camera: Vector2) -> void:
 		var result_row: int = 2 if state == game.BARGAIN_CAPSULE_STATE_SUCCESS else 3
 		var result_alpha: float = 1.0 - maxf(0.0, (result_progress - 0.78) / 0.22)
 		_draw_shadow(game, ground_pos, lerpf(1.0, 0.54, result_progress), 0.24 * result_alpha)
-		_draw_frame(game, MOTION_RESULTS, MOTION_FRAME_SIZE, result_row, _frame_for_progress(result_progress), ground_pos, Color(1.0, 1.0, 1.0, result_alpha))
+		_draw_frame(game, _motion_results, MOTION_FRAME_SIZE, result_row, _frame_for_progress(result_progress), ground_pos, Color(1.0, 1.0, 1.0, result_alpha))
 		return
 
 	if state == game.BARGAIN_CAPSULE_STATE_CLEANUP:
@@ -115,12 +131,12 @@ static func draw(game: Node2D, camera: Vector2) -> void:
 
 	_draw_shadow(game, ground_pos, 1.0, 0.28)
 	if state_age < IMPACT_DURATION:
-		_draw_frame(game, MOTION_RESULTS, MOTION_FRAME_SIZE, 1, _frame_for_progress(state_age / IMPACT_DURATION), ground_pos)
+		_draw_frame(game, _motion_results, MOTION_FRAME_SIZE, 1, _frame_for_progress(state_age / IMPACT_DURATION), ground_pos)
 	else:
 		var hit_flash: float = clampf(float(capsule.get("hit_flash", 0.0)), 0.0, HIT_DURATION)
 		if hit_flash > 0.0:
 			var hit_progress: float = 1.0 - hit_flash / HIT_DURATION
-			_draw_frame(game, HIT_REACTION, HIT_FRAME_SIZE, 0, _frame_for_progress(hit_progress, 4), ground_pos)
+			_draw_frame(game, _hit_reaction, HIT_FRAME_SIZE, 0, _frame_for_progress(hit_progress, 4), ground_pos)
 		else:
 			var hp_ratio: float = clampf(float(capsule.get("hp", 0.0)) / maxf(1.0, float(capsule.get("max_hp", 1.0))), 0.0, 1.0)
 			var damage_row: int = 0
@@ -130,5 +146,5 @@ static func draw(game: Node2D, camera: Vector2) -> void:
 				damage_row = 1
 			var idle_rate: float = 3.2 if bool(game.gfx_low_resource) else 5.0
 			var idle_frame: int = posmod(int(floor((game.time_alive + float(seed % 23) * 0.03) * idle_rate)), FRAME_COUNT)
-			_draw_frame(game, IDLE_DAMAGE, IDLE_FRAME_SIZE, damage_row, idle_frame, ground_pos)
+			_draw_frame(game, _idle_damage, IDLE_FRAME_SIZE, damage_row, idle_frame, ground_pos)
 	_draw_bars(game, ground_pos, capsule)

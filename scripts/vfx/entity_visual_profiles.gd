@@ -3,6 +3,7 @@ extends RefCounted
 # Host-owned state and compatibility wrappers are retained during extraction.
 
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 
 
@@ -59,12 +60,20 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 			return Vector2(78, 100)
 		game.ENEMY_DEVOTO:
 			return Vector2(62, 62)
+		game.ENEMY_INCENSARIO:
+			return Vector2(78, 78)
 		game.ENEMY_COUT_ATTACK_SPEED:
 			return Vector2(82, 82)
 		game.ENEMY_SHIELD_REFLECTOR:
 			return Vector2(92, 92)
 		game.ENEMY_GUARDIAO:
 			return Vector2(98, 98)
+		game.ENEMY_FLAGELANTE:
+			return Vector2(70, 70)
+		game.ENEMY_SALMODIANTE:
+			return Vector2(76, 76)
+		game.ENEMY_RELICARIO:
+			return Vector2(84, 84)
 		game.ENEMY_NEXUS_CHRONOPHAGE:
 			return Vector2(94, 94)
 		game.ENEMY_NEXUS_ECHO:
@@ -147,6 +156,25 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 		var phase4_texture: Texture2D = game._texture_frame(phase4_key, idx)
 		return phase4_texture if phase4_texture != null else game._texture_frame("enemy_common_phase_1", idx)
 	if game.current_phase == 3:
+		var phase3_kind := String(enemy.get("type", game.ENEMY_COMMON))
+		var phase3_type_key := ""
+		match phase3_kind:
+			game.ENEMY_DEVOTO:
+				phase3_type_key = "enemy_phase_3_devoto"
+			game.ENEMY_INCENSARIO:
+				phase3_type_key = "enemy_phase_3_incensario"
+			game.ENEMY_GUARDIAO:
+				phase3_type_key = "enemy_phase_3_guardiao"
+			game.ENEMY_FLAGELANTE:
+				phase3_type_key = "enemy_phase_3_flagelante"
+			game.ENEMY_SALMODIANTE:
+				phase3_type_key = "enemy_phase_3_salmodiante"
+			game.ENEMY_RELICARIO:
+				phase3_type_key = "enemy_phase_3_relicario"
+		if phase3_type_key != "":
+			var typed_phase3_texture: Texture2D = game._texture_frame(phase3_type_key, idx)
+			if typed_phase3_texture != null:
+				return typed_phase3_texture
 		var moving_right = Vector2(enemy.get("facing_dir", Vector2.LEFT)).x >= 0.0
 		var phase3_key = "enemy_phase_3_right" if moving_right else "enemy_phase_3_left"
 		var phase3_texture: Texture2D = game._texture_frame(phase3_key, idx)
@@ -191,7 +219,12 @@ static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
 		if phase6_kind in [game.ENEMY_LODARIO, game.ENEMY_AMBER_SUTURER]:
 			return phase6_dir.x > 0.05
 		return false
-	if game.current_phase == 3 or game.current_phase == 4:
+	if game.current_phase == 3:
+		var phase3_kind := String(enemy.get("type", game.ENEMY_COMMON))
+		if phase3_kind != game.ENEMY_COMMON:
+			return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
+		return false
+	if game.current_phase == 4:
 		return false
 	var dir: Vector2 = Vector2(enemy.get("facing_dir", game._enemy_default_facing(String(enemy.get("type", game.ENEMY_COMMON)))))
 	var moving_right = dir.x >= 0.0
@@ -294,6 +327,9 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 
 
 static func _boss2_texture(game: Node2D) -> Texture2D:
+	var remaster_texture: Texture2D = Boss2AnimationPresentation.active_texture(game)
+	if remaster_texture != null:
+		return remaster_texture
 	var boss2_frames = game.textures.get("boss2", [])
 	if not boss2_frames is Array or boss2_frames.is_empty():
 		return game.textures["boss"]
@@ -318,14 +354,7 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 	if game.current_phase == 3:
 		return game.boss_pos
 	if game.current_phase == 2:
-		var bob: = 0.0
-		if game.boss2_state == game.BOSS2_STATE_REPOSITION:
-			bob = abs(sin((float(game.boss2_anim_frame) + game.boss2_anim_timer * 3.0) * PI)) * 9.0
-		elif game.boss2_state != game.BOSS2_STATE_IDLE:
-			bob = sin(game.time_alive * 6.0) * 3.0
-		else:
-			bob = sin(game.time_alive * 2.2) * 2.0
-		return game.boss_pos + Vector2(0, - bob)
+		return Boss2AnimationPresentation.draw_position(game)
 	if Boss1AnimationPresentation.siege_tide_jump_active(game):
 		var tide_jump_progress: float = 1.0 - game.boss1_siege_tide_jump_timer / maxf(0.001, game.boss1_siege_tide_jump_duration)
 		var tide_hop: float = sin(clampf(tide_jump_progress, 0.0, 1.0) * PI) * 188.0
@@ -348,10 +377,19 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 static func _boss_draw_size(game: Node2D) -> Vector2:
 	if game.current_phase == 1:
 		return Boss1AnimationPresentation.draw_size(game)
+	if game.current_phase == 2:
+		return Boss2AnimationPresentation.draw_size()
 	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else (Vector2(59.4, 88.0) if game.current_phase == 5 else Vector2(184, 170))))
 
 
 static func _should_flip_player_sprite(game: Node2D) -> bool:
+	if game.active_character_key == game.CHARACTER_HENRY:
+		if game.henry_ultimate_cast_active or game.henry_skill_cast_active or game._player_attack_pose_active():
+			return false
+		var henry_move: Vector2 = game._read_move()
+		if absf(henry_move.x) > 0.1:
+			return henry_move.x < 0.0
+		return game.last_facing.x < -0.1
 	if game.manifestation_key == "lacerante":
 		# Dedicated left poses preserve the anatomical side of the eyepatch.
 		return false
@@ -414,6 +452,8 @@ static func _player_fire_draw_profile(game: Node2D) -> Dictionary:
 
 static func _player_draw_profile(game: Node2D) -> Dictionary:
 	var move = game._read_move()
+	if game.active_character_key == game.CHARACTER_HENRY:
+		return {"preserve_height": true, "height": game.HENRY_IDLE_DRAW_HEIGHT, "offset": Vector2.ZERO}
 	if game.manifestation_key == "lacerante":
 		return {"preserve_height": true, "height": game.LaceranteSprites.DRAW_HEIGHT, "offset": Vector2.ZERO}
 	if game.player_freeze_visual_timer > 0.0:

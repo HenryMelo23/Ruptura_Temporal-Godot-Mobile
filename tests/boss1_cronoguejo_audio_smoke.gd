@@ -70,6 +70,20 @@ func _sfx_was_played(key: String) -> bool:
 func _run() -> void:
 	_configure_phase1()
 	_check_audio_keys()
+	var boss1_playlist: Array = game._boss_music_tracks(1)
+	var expected_boss1_playlist := ["Pendulum_of_Resolve.mp3", "The_Weight_of_the_Aftermath.mp3"]
+	_check(boss1_playlist == expected_boss1_playlist, "Boss 1 playlist did not replace the retired track")
+	for track in expected_boss1_playlist:
+		_check(game._audio_key_available(track), "Boss 1 loop track was not registered: " + track)
+	game._play_music(expected_boss1_playlist[0])
+	if game.music_crossfade_active:
+		game._finish_music_crossfade()
+	game.boss_active = true
+	game.boss_dead = false
+	game._on_music_finished()
+	if game.music_crossfade_active:
+		game._finish_music_crossfade()
+	_check(game.current_music in expected_boss1_playlist, "Boss 1 loop did not remain in its two-track playlist")
 	game.boss_entry_timer = game.BOSS_ENTRY_TIME
 	game.boss_empurrou_player = false
 	game.boss1_entry_announce_sfx_played = false
@@ -112,7 +126,7 @@ func _run() -> void:
 	_check(bool(game.boss_attacks[0].get("dash_sfx_played", false)), "dash sfx did not trigger 200ms after dash")
 
 	_configure_phase1()
-	game._play_music("Boss1-Music-3.mp3")
+	game._play_music(expected_boss1_playlist[0])
 	if game.music_crossfade_active:
 		game._finish_music_crossfade()
 	game._play_boss1_pre_stop_warning()
@@ -138,6 +152,7 @@ func _run() -> void:
 	_check(not AudioServer.is_bus_effect_enabled(music_bus, 0), "time-stop low-pass filter stayed enabled after recovery")
 
 	print("BOSS1_CRONOGUEJO_AUDIO_SMOKE_OK keys=true entry=true bubble_warning=true tide=true dash=true absorb=true muffled_music=true")
+	game._stop_battle_music_for_screen_transition()
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.queue_free()

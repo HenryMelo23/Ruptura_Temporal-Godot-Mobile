@@ -62,11 +62,13 @@ func _run() -> void:
 	_check(game._get_texture("map_phase_1") != null, "lazy map available")
 	game._release_unused_lazy_maps("map_phase_2")
 	_check(not game.textures.has("map_phase_1"), "inactive map released at full quality")
+	_check(game.RuntimeAssetController.should_stream_phase_assets(true, false), "mobile full quality must stream phase assets")
+	_check(not game.RuntimeAssetController.should_stream_phase_assets(false, false), "desktop full quality should preserve eager phase preload")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()
 	game.free()
 	await process_frame
 	if not failed:
-		print("STARTUP_MEMORY_ORDER_OK natural=true skip=true cache_max=2 maps_full_quality=true")
+		print("STARTUP_MEMORY_ORDER_OK natural=true skip=true cache_max=2 maps_full_quality=true mobile_phase_streaming=true")
 	quit(1 if failed else 0)

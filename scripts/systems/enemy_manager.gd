@@ -2,6 +2,8 @@ class_name EnemyManager
 extends Node
 
 const PHASE_DENSITY_CARRY_RATIO := 0.70
+const SPATIAL_CELL_SIZE := 128.0
+const MAX_ENTITY_PHYSICAL_RADIUS := 36.0
 
 # Cadencia de especiais pertence ao owner de spawn. Os valores experientes sao
 # destinos explicitos, nao multiplicadores aplicados em cima do baseline.
@@ -21,10 +23,16 @@ const SPECIAL_SPAWN_PACING: Dictionary = {
 		"experienced_first_unlock": 90.0,
 		"repeat_gap": 54.0,
 		"experienced_repeat_gap": 43.0,
+		"flagelante_unlock": 150.0,
+		"experienced_flagelante_unlock": 110.0,
 		"incensario_unlock": 240.0,
 		"experienced_incensario_unlock": 180.0,
+		"salmodiante_unlock": 210.0,
+		"experienced_salmodiante_unlock": 160.0,
 		"guardiao_unlock": 360.0,
-		"experienced_guardiao_unlock": 270.0
+		"experienced_guardiao_unlock": 270.0,
+		"relicario_unlock": 300.0,
+		"experienced_relicario_unlock": 225.0
 	},
 	4: {
 		"first_unlock": 0.0,
@@ -63,11 +71,119 @@ var phase_density_carry_cap: int = 0
 var phase_density_native_entry_cap: int = 0
 var special_last_spawn_phase_time: float = -1.0
 var special_spawn_history: Array[Dictionary] = []
+var spatial_entities: Array = []
+var spatial_cells: Dictionary = {}
+var spatial_remnant_start: int = 0
+var spatial_index_query: Array[int] = []
+var spatial_entity_query: Array = []
 
 
 func bind_game(p_game: Node) -> void:
 	game = p_game
 	reset_special_pacing(true)
+	clear_spatial_index()
+
+
+func clear_spatial_index() -> void:
+	spatial_entities.clear()
+	spatial_cells.clear()
+	spatial_index_query.clear()
+	spatial_entity_query.clear()
+	spatial_remnant_start = 0
+
+
+func rebuild_spatial_index() -> void:
+	clear_spatial_index()
+	if game == null:
+		return
+	for enemy in game.enemies:
+		if float(enemy.get("hp", 0.0)) > 0.0:
+			_add_spatial_entity(enemy)
+	spatial_remnant_start = spatial_entities.size()
+	for remnant in game.necronada_remnants:
+		if float(remnant.get("hp", 0.0)) > 0.0:
+			_add_spatial_entity(remnant)
+
+
+func _add_spatial_entity(entity: Dictionary) -> void:
+	var index: int = spatial_entities.size()
+	spatial_entities.append(entity)
+	var cell := _spatial_cell(Vector2(entity.get("pos", Vector2.ZERO)))
+	if not spatial_cells.has(cell):
+		spatial_cells[cell] = []
+	spatial_cells[cell].append(index)
+
+
+func _spatial_cell(pos: Vector2) -> Vector2i:
+	return Vector2i(floori(pos.x / SPATIAL_CELL_SIZE), floori(pos.y / SPATIAL_CELL_SIZE))
+
+
+func nearby_entity_indices(pos: Vector2, radius: float, include_remnants: bool = true) -> Array[int]:
+	spatial_index_query.clear()
+	var min_cell := _spatial_cell(pos - Vector2.ONE * radius)
+	var max_cell := _spatial_cell(pos + Vector2.ONE * radius)
+	for cell_y in range(min_cell.y, max_cell.y + 1):
+		for cell_x in range(min_cell.x, max_cell.x + 1):
+			var cell := Vector2i(cell_x, cell_y)
+			for raw_index in spatial_cells.get(cell, []):
+				var index := int(raw_index)
+				if include_remnants or index < spatial_remnant_start:
+					spatial_index_query.append(index)
+	spatial_index_query.sort()
+	return spatial_index_query
+
+
+func avoidance_neighbors(pos: Vector2, my_radius: float) -> Array:
+	var search_radius: float = my_radius * 3.2 + MAX_ENTITY_PHYSICAL_RADIUS
+	spatial_entity_query.clear()
+	for index in nearby_entity_indices(pos, search_radius, false):
+		spatial_entity_query.append(spatial_entities[index])
+	return spatial_entity_query
+
+
+func apply_entity_separation(delta: float) -> void:
+	if game == null or delta <= 0.0:
+		return
+	rebuild_spatial_index()
+	var count: int = spatial_entities.size()
+	for i in range(count):
+		var a: Dictionary = spatial_entities[i]
+		var pos_a := Vector2(a.get("pos", Vector2.ZERO))
+		var r_a: float = game._entity_physical_radius(a)
+
+		if game.boss_active and game.boss_hp > 0.0:
+			var d_boss: float = pos_a.distance_to(game.boss_pos)
+			var min_boss_d: float = r_a + 64.0
+			if d_boss < min_boss_d:
+				var push_b: Vector2 = (pos_a - game.boss_pos).normalized() if d_boss > 0.01 else Vector2.RIGHT.rotated(float(i))
+				a["pos"] = (game.boss_pos + push_b * min_boss_d).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
+				pos_a = Vector2(a["pos"])
+
+		if game._local_player_targetable():
+			var d_player: float = pos_a.distance_to(game.player_pos)
+			var min_player_d: float = r_a + 24.0
+			if d_player < min_player_d:
+				var push_p: Vector2 = (pos_a - game.player_pos).normalized() if d_player > 0.01 else Vector2.UP.rotated(float(i))
+				a["pos"] = (game.player_pos + push_p * min_player_d).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
+				pos_a = Vector2(a["pos"])
+
+		var search_radius: float = maxf(r_a + MAX_ENTITY_PHYSICAL_RADIUS, 50.0)
+		for j in nearby_entity_indices(pos_a, search_radius, true):
+			if j <= i:
+				continue
+			var b: Dictionary = spatial_entities[j]
+			var pos_b := Vector2(b.get("pos", Vector2.ZERO))
+			var r_b: float = game._entity_physical_radius(b)
+			var dist: float = pos_a.distance_to(pos_b)
+			var is_both_remnants: bool = i >= spatial_remnant_start and j >= spatial_remnant_start
+			var min_dist: float = 50.0 if is_both_remnants else (r_a + r_b)
+			if dist < min_dist:
+				var overlap: float = min_dist - dist
+				var push_dir: Vector2 = (pos_a - pos_b).normalized() if dist > 0.01 else Vector2.RIGHT.rotated(float(i * 3 + j * 7))
+				var push_amount: Vector2 = push_dir * (maxf(overlap, 4.0) * 0.55)
+				a["pos"] = (pos_a + push_amount).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
+				b["pos"] = (pos_b - push_amount).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
+				pos_a = Vector2(a["pos"])
 
 
 func reset_special_pacing(clear_history: bool = false) -> void:
@@ -112,12 +228,21 @@ func special_kind_unlock_time(phase: int, kind: String) -> float:
 			onboarding_key = "pyro_unlock"
 			experienced_key = "experienced_pyro_unlock"
 	elif phase == 3:
-		if kind == game.ENEMY_INCENSARIO:
+		if kind == game.ENEMY_FLAGELANTE:
+			onboarding_key = "flagelante_unlock"
+			experienced_key = "experienced_flagelante_unlock"
+		elif kind == game.ENEMY_INCENSARIO:
 			onboarding_key = "incensario_unlock"
 			experienced_key = "experienced_incensario_unlock"
+		elif kind == game.ENEMY_SALMODIANTE:
+			onboarding_key = "salmodiante_unlock"
+			experienced_key = "experienced_salmodiante_unlock"
 		elif kind == game.ENEMY_GUARDIAO:
 			onboarding_key = "guardiao_unlock"
 			experienced_key = "experienced_guardiao_unlock"
+		elif kind == game.ENEMY_RELICARIO:
+			onboarding_key = "relicario_unlock"
+			experienced_key = "experienced_relicario_unlock"
 	elif phase == 6:
 		if kind == game.ENEMY_CHRONAL_LEECH:
 			onboarding_key = "leech_unlock"
@@ -138,7 +263,7 @@ func is_phase_special_kind(phase: int, kind: String) -> bool:
 		2:
 			return kind == game.ENEMY_KAMIKAZE or kind == game.ENEMY_PYRO_PENGUIN
 		3:
-			return kind == game.ENEMY_DEVOTO or kind == game.ENEMY_INCENSARIO or kind == game.ENEMY_GUARDIAO
+			return kind in [game.ENEMY_DEVOTO, game.ENEMY_INCENSARIO, game.ENEMY_GUARDIAO, game.ENEMY_FLAGELANTE, game.ENEMY_SALMODIANTE, game.ENEMY_RELICARIO]
 		4, 5:
 			return kind in [game.ENEMY_NEXUS_CARTOGRAPHER, game.ENEMY_NEXUS_CHRONOPHAGE, game.ENEMY_NEXUS_REFRACTOR, game.ENEMY_NEXUS_WEAVER, game.ENEMY_NEXUS_ECHO]
 		6:
@@ -174,10 +299,16 @@ func paced_special_type() -> String:
 			var candidates: Array[String] = []
 			if elapsed >= special_first_unlock_time(phase) and game._enemy_type_count(game.ENEMY_DEVOTO) < 3:
 				candidates.append(game.ENEMY_DEVOTO)
+			if elapsed >= special_kind_unlock_time(phase, game.ENEMY_FLAGELANTE) and game._enemy_type_count(game.ENEMY_FLAGELANTE) < 2:
+				candidates.append(game.ENEMY_FLAGELANTE)
 			if elapsed >= special_kind_unlock_time(phase, game.ENEMY_INCENSARIO) and game._enemy_type_count(game.ENEMY_INCENSARIO) < 2:
 				candidates.append(game.ENEMY_INCENSARIO)
+			if elapsed >= special_kind_unlock_time(phase, game.ENEMY_SALMODIANTE) and game._enemy_type_count(game.ENEMY_SALMODIANTE) < 2:
+				candidates.append(game.ENEMY_SALMODIANTE)
 			if elapsed >= special_kind_unlock_time(phase, game.ENEMY_GUARDIAO) and game._enemy_type_count(game.ENEMY_GUARDIAO) < 1:
 				candidates.append(game.ENEMY_GUARDIAO)
+			if elapsed >= special_kind_unlock_time(phase, game.ENEMY_RELICARIO) and game._enemy_type_count(game.ENEMY_RELICARIO) < 1:
+				candidates.append(game.ENEMY_RELICARIO)
 			if not candidates.is_empty():
 				return candidates[game.rng.randi_range(0, candidates.size() - 1)]
 		4, 5:

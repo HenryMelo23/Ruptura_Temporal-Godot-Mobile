@@ -37,12 +37,16 @@ const TINTS := {
 
 var map_texture: Texture2D
 var map_rect := Rect2()
+var map_tile_rects: Array[Rect2] = []
 var life_material: ShaderMaterial
+var presented_surface: int = -1
+var presented_low_resource: bool = false
 
 
 func _init() -> void:
 	show_behind_parent = true
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	life_material = ShaderMaterial.new()
 	var life_shader := Shader.new()
 	life_shader.code = LIFE_SHADER_CODE
@@ -51,18 +55,46 @@ func _init() -> void:
 
 
 func present(texture: Texture2D, rect: Rect2, surface: int, elapsed: float, low_resource: bool) -> void:
-	map_texture = texture
-	map_rect = rect
+	var geometry_changed: bool = texture != map_texture or not rect.is_equal_approx(map_rect) or not map_tile_rects.is_empty()
+	var material_mode_changed: bool = surface != presented_surface or low_resource != presented_low_resource
+	if geometry_changed:
+		map_texture = texture
+		map_rect = rect
+		map_tile_rects.clear()
+	_apply_presentation(surface, elapsed, low_resource, geometry_changed, material_mode_changed)
+
+
+func present_tiled(texture: Texture2D, rects: Array[Rect2], surface: int, elapsed: float, low_resource: bool) -> void:
+	var geometry_changed: bool = texture != map_texture or rects != map_tile_rects
+	var material_mode_changed: bool = surface != presented_surface or low_resource != presented_low_resource
+	if geometry_changed:
+		map_texture = texture
+		map_rect = Rect2()
+		map_tile_rects = rects.duplicate()
+	_apply_presentation(surface, elapsed, low_resource, geometry_changed, material_mode_changed)
+
+
+func _apply_presentation(surface: int, elapsed: float, low_resource: bool, geometry_changed: bool, material_mode_changed: bool) -> void:
 	life_material.set_shader_parameter("elapsed", elapsed)
-	life_material.set_shader_parameter("fluid_surface", not low_resource and surface not in [1, 4])
-	life_material.set_shader_parameter("motion_scale", 0.65 if low_resource else 1.0)
-	show()
-	queue_redraw()
+	if material_mode_changed:
+		presented_surface = surface
+		presented_low_resource = low_resource
+		life_material.set_shader_parameter("fluid_surface", not low_resource and surface not in [1, 4])
+		life_material.set_shader_parameter("motion_scale", 0.65 if low_resource else 1.0)
+	if not visible:
+		show()
+	if geometry_changed:
+		queue_redraw()
 
 
 func _draw() -> void:
-	if map_texture != null:
+	if map_texture == null:
+		return
+	if map_tile_rects.is_empty():
 		draw_texture_rect(map_texture, map_rect, false)
+		return
+	for tile_rect in map_tile_rects:
+		draw_texture_rect(map_texture, tile_rect, true, Color(0.78, 0.80, 0.88))
 
 
 static func surface_for(game: Node2D) -> int:
@@ -74,7 +106,7 @@ static func surface_for(game: Node2D) -> int:
 static func draw_ambient(game: Node2D, camera: Vector2, surface: int) -> void:
 	if not game.gfx_particles:
 		return
-	var count: int = LOW_RESOURCE_MOTES if game.gfx_low_resource or game._memory_saver_active() else MAX_MOTES
+	var count: int = LOW_RESOURCE_MOTES if game._runtime_visual_budget_active() else MAX_MOTES
 	var elapsed: float = game.time_alive
 	var viewport: Rect2 = game.get_viewport_rect().grow(12.0)
 	var tint: Color = TINTS.get(surface, TINTS[1])

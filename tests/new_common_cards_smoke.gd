@@ -41,10 +41,15 @@ func _run() -> void:
 		"margem_de_erro",
 		"ressonancia_de_alternancia"
 	]
+	var uncommon_ids := ["rastro_de_retorno", "eco_de_impacto", "zona_de_descompressao", "ferrolho_ruptura"]
 	for card_id in expected_ids:
 		var card := _find_card(card_id)
 		assert(not card.is_empty())
-		assert(not game._is_rare_card(card))
+		if card_id in uncommon_ids:
+			assert(game._is_uncommon_card(card))
+			assert(not game._is_common_card(card))
+		else:
+			assert(game._is_common_card(card))
 		assert(game._card_max_count(card) >= 999999)
 		assert(game.cards_bought.has(card_id))
 		assert(game.textures.has("card_" + String(card["name"])))
@@ -119,5 +124,5 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	await process_frame
-	print("NEW_COMMON_CARDS_SMOKE_OK cards=16 unlimited=true reserve=true prices=true effects=true assets=true")
+	print("NEW_COMMON_CARDS_SMOKE_OK cards=16 uncommon=3 migrated=true unlimited=true reserve=true prices=true effects=true assets=true")
 	quit(0)

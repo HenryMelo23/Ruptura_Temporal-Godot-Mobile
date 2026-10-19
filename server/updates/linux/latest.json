@@ -1,15 +1,14 @@
 {
-  "version": "2.0.51",
-  "version_code": 25100,
-  "filename": "Ruptura_Temporal_2.0.51.x86_64",
-  "sha256": "94bc1e2b19a514d8214e249895ff6193d9682d5d20d722bd57b82bc38632e1c5",
-  "size": 899065744,
+  "version": "2.0.52",
+  "version_code": 25200,
+  "filename": "Ruptura_Temporal_2.0.52.x86_64",
+  "sha256": "36ecc8cb12b52bd07403dbd425dc7bce8b982dc24c074136a3d2e1876dbf485e",
+  "size": 903941576,
   "notes": [
-    "Remake visual e animacoes completas dos Chefes 1 e 3",
-    "Melhorias de legibilidade nos ataques e estados dos chefes",
-    "Correcoes de tutorial, loja e configuracoes",
-    "Melhorias acumuladas de sincronizacao e estabilidade multiplayer"
+    "Novo Pulso da Fase 3: Ritual da Catedral.",
+    "Melhorias de apresentacao, animacao e leitura dos confrontos.",
+    "Correcoes e estabilizacao multiplayer."
   ],
   "mandatory": false,
-  "published_at": "2026-10-15T18:01:23.9361510Z"
+  "published_at": "2026-10-16T19:50:47.3978153Z"
 }

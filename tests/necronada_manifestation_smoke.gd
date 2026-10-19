@@ -86,6 +86,10 @@ func _run() -> void:
 	game.last_attack_time = -999.0
 	game.last_skill_time = -999.0
 	game.last_secondary_time = -999.0
+	# This smoke calls public combat methods directly, so it must represent the
+	# post-landing gameplay state rather than the intentional start-of-run lock.
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	_reset_necronada_runtime()
 
 	_check(is_equal_approx(game._manifestation_base_damage(), game.PLAYER_BASE_DAMAGE * 0.84), "base damage is not normalized")
@@ -140,6 +144,7 @@ func _run() -> void:
 	game.necronada_vestiges.append(_make_vestige(game.ENEMY_STALKER, game.player_pos + Vector2(118, 0), 3))
 	game.necronada_vestiges.append(_make_vestige(game.ENEMY_COMMON, game.player_pos + Vector2(520, 0), 1))
 	game._try_use_necronada_skill(game.player_pos)
+	_check(game.necronada_ability_controller.core == game, "HAB1 controller was not bound to runtime")
 	_check(game.necronada_remnants.size() == 3, "HAB1 did not summon all roses inside radius")
 	_check(game.necronada_vestiges.size() == 1, "HAB1 consumed roses outside radius")
 	_check(game.necronada_horde_progress == 3, "HAB1 did not add horde progress")
@@ -217,7 +222,9 @@ func _run() -> void:
 	game.boss_pos = game.player_pos + Vector2(220, 0)
 	game.boss2_ultimate_timer = 10.0
 	game.boss2_ultimate_wind_active = 0.0
-	game.boss2_ultimate_spit_timer = 2.0
+	# The boss is visible only during wind or the current spit telegraph. Keep
+	# this fixture outside that telegraph regardless of its tuned duration.
+	game.boss2_ultimate_spit_timer = game.BOSS2_ULTIMATE_WARNING_TIME + 0.1
 	_check(not game._boss2_ultimate_boss_visible(), "boss2 should be hidden during calm blizzard window")
 	_check(game._necronada_find_target(game.player_pos).is_empty(), "necro-ally targeted hidden boss2")
 	game.necronada_remnants[0]["target_kind"] = "boss"

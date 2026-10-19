@@ -42,12 +42,24 @@ func _run() -> void:
 
 	var common_card: Dictionary = game.CARDS[0]
 	var rare_card: Dictionary = game.CARDS[4]
+	var uncommon_card: Dictionary = game._find_card_by_id("rastro_de_retorno")
+	var legendary_probe: Dictionary = {"name": "Espaco Lendario", "rarity": game.CARD_RARITY_LEGENDARY}
 	_check(game._card_rarity_label(common_card) == "COMUM", "common card rarity label is incorrect")
+	_check(game._card_rarity_label(uncommon_card) == "INCOMUM", "uncommon card rarity label is incorrect")
 	_check(game._card_rarity_label(rare_card) == "RARA", "rare card rarity label is incorrect")
+	_check(game._card_rarity_label(legendary_probe) == "LENDARIA", "legendary card rarity label is incorrect")
 	_check(game._card_rarity_color(common_card).is_equal_approx(game.CARD_RARITY_COMMON_COLOR), "common card color is not white")
+	_check(game._card_rarity_color(uncommon_card).is_equal_approx(game.CARD_RARITY_UNCOMMON_COLOR), "uncommon card color is not blue")
 	_check(game._card_rarity_color(rare_card).is_equal_approx(game.CARD_RARITY_RARE_COLOR), "rare card color is not golden yellow")
+	_check(game._card_rarity_color(legendary_probe).is_equal_approx(game.CARD_RARITY_LEGENDARY_COLOR), "legendary card color is not reserved")
+	var base_uncommon_chance: float = game._chance_carta_incomum()
+	_check(base_uncommon_chance > 0.0, "uncommon cards require luck to appear")
+	_check(is_equal_approx(game._chance_carta_rara(), 0.0), "rare cards appeared before luck unlock")
+	game.cards_bought["Sorte"] = 1
+	_check(game._chance_carta_incomum() > base_uncommon_chance, "luck did not increase uncommon chance")
+	_check(game._chance_carta_incomum() > game._chance_carta_rara(), "uncommon cards are not easier than rare cards")
 
-	print("SHOP_SCHEDULE_RARITY_SMOKE_OK cadence=180 phase_persistent=true opening_anim=true common=white rare=gold")
+	print("SHOP_SCHEDULE_RARITY_SMOKE_OK cadence=180 phase_persistent=true common=white uncommon=blue rare=gold legendary=reserved")
 	root.remove_child(game)
 	game._cleanup_runtime_resources()
 	await process_frame

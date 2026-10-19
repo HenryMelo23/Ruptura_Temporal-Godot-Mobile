@@ -19,6 +19,12 @@ const CATEGORY_UTILITY: = "utility"
 const CATEGORY_CONSUMABLE: = "consumable"
 const CATEGORY_RARE: = "rare"
 
+## Rarity tiers are independent from the mechanical categories above.
+const RARITY_COMMON: = "common"
+const RARITY_UNCOMMON: = "uncommon"
+const RARITY_RARE: = "rare"
+const RARITY_LEGENDARY: = "legendary"
+
 ## Central Default Burn Scaling Factor (+50% of original card attributes per burn stack)
 const DEFAULT_BURN_FACTOR: float = 0.50
 
@@ -375,8 +381,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "rastro_de_retorno",
 		"name": "Rastro de Retorno",
 		"category": CATEGORY_SPEED,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["speed", "tp_recovery", "duration", "interval"],
 		"burn_factor": 0.50,
 		"stat_label": "vestigio e velocidade",
@@ -408,8 +415,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "eco_de_impacto",
 		"name": "Eco de Impacto",
 		"category": CATEGORY_DAMAGE,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["damage", "radius"],
 		"burn_factor": 0.50,
 		"stat_label": "eco de dano",
@@ -419,8 +427,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "zona_de_descompressao",
 		"name": "Zona de Descompressao",
 		"category": CATEGORY_AREA,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["radius", "slow", "knockback"],
 		"burn_factor": 0.50,
 		"stat_label": "onda de descompressao",
@@ -562,8 +571,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "ferrolho_ruptura",
 		"name": "Ferrolho de Ruptura",
 		"category": CATEGORY_CROWD_CONTROL,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["root_duration", "boss_slow"],
 		"burn_factor": 0.50,
 		"stat_label": "fixacao espacial e lentidao",

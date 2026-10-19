@@ -13,6 +13,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/main_runtime_core.gd` | 46378 | 39807 | 3185 | `_handle_key` 456 code LOC |
 | `scripts/main_runtime_state.gd` | 3524 | 3488 | 1 | `_safe_load` 5 code LOC |
 | `scripts/presentation/combat_effects_presentation.gd` | 4063 | 3719 | 99 | `_draw_projectiles` 327 code LOC |
+| `scripts/presentation/lightning_presentation.gd` | owner | owner | owner | `bolt`, `contact`, `channel`, `visible_segments`; shared render-only electrical geometry and silhouette protection |
 | `scripts/presentation/menus_presentation.gd` | 3073 | 2729 | 102 | `_draw_manifest_select` 176 code LOC |
 | `scripts/presentation/world_environment_presentation.gd` | 2543 | 2384 | 56 | `_draw_boss_attacks` 375 code LOC |
 | `scripts/ui/shop_controller.gd` | 701 | 586 | 51 | `handle_touch` 82 code LOC |
@@ -20,18 +21,27 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/telemetry/telemetry_system.gd` | 534 | 488 | 22 | `build_minimal_session_payload` 127 code LOC |
 | `scripts/systems/events/runtime_event_director.gd` | owner | owner | owner | `on_enemy_killed`, `active_snapshot` |
 | `scripts/systems/events/runtime_event_catalog.gd` | owner | owner | owner | `CONFIG`, `EVENTS` |
+| `scripts/systems/enemies/phase3_enemy_controller.gd` | owner | owner | owner | `update_enemy`, `movement_speed_multiplier`; Phase 3 enemy family behavior |
+| `scripts/systems/events/phase3_ritual_pulse_controller.gd` | owner | owner | owner | `update`, `update_devotee`, `on_enemy_defeated`, `active_snapshot` |
+| `scripts/presentation/phase3_ritual_pulse_presentation.gd` | owner | owner | owner | `draw` |
+| `scripts/systems/events/phase4_instability_pulse_controller.gd` | owner | owner | owner | `update`, `active_snapshot`, `apply_remote_snapshot` |
+| `scripts/presentation/phase4_instability_pulse_presentation.gd` | owner | owner | owner | `draw` |
+| `scripts/systems/bosses/boss4_instability_fissure_controller.gd` | owner | owner | owner | `update`, `cast_now`, `force_cast_for_test` |
+| `scripts/presentation/boss4_instability_fissure_presentation.gd` | owner | owner | owner | `draw` |
 | `scripts/systems/online/net_contract.gd` | 365 | 342 | 11 | `unpack_enemy_snapshot` 77 code LOC |
 | `scripts/systems/audio/audio_lifecycle.gd` | 357 | 292 | 32 | `on_music_finished` 20 code LOC |
-| `scripts/systems/enemy_manager.gd` | 277 | 246 | 13 | `update_enemies` 115 code LOC |
+| `scripts/systems/enemy_manager.gd` | owner | owner | owner | `update_enemies`, `rebuild_spatial_index`, `avoidance_neighbors`, `apply_entity_separation` |
 | `scripts/systems/boss_party_scaling.gd` | owner | owner | owner | `profile_for_party_size` |
 | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd` | owner | owner | owner | `all_entries`, `entries_for_manifestation`, `validate_catalog` |
 | `scripts/presentation/gravitante_vfx_presentation.gd` | owner | owner | owner | `lod`, `projectile`, `orbitals`, `collision`, `teleport`, `ultimate` |
 | `scripts/systems/modern_boss_controller.gd` | 520 | 453 | 30 | `update_boss7_state` 70 code LOC |
 | `scripts/presentation/boss_wave_presentation.gd` | 127 | 97 | 4 | `_draw_boss_wave_crest_and_foam` 49 code LOC |
 | `scripts/systems/phase/phase_flow_controller.gd` | 624 | 555 | 34 | `_advance_to_phase` 191 code LOC |
-| `scripts/systems/assets/runtime_asset_controller.gd` | owner | owner | owner | `prepare_phase`, `ensure_key`, `phase_keys` |
+| `scripts/systems/phase/experimental_phase_controller.gd` | owner | owner | owner | `prepare_new_run`, `activate_after_phase_setup`, `update`; isolated FaseEX exploration and altar contract |
+| `scripts/systems/assets/runtime_asset_controller.gd` | owner | owner | owner | `should_stream_phase_assets`, `should_lazy_gallery_assets`, `release_transient_gallery_assets`, `prepare_phase`, `ensure_key`, `phase_keys` |
 | `scripts/systems/progression/runtime_progression_controller.gd` | 249 | 181 | 33 | `elite_point_multiplier` 19 code LOC |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
+| `scripts/systems/player/player_control_controller.gd` | owner | owner | owner | `read_move`, `aim_direction`, touch/gamepad/desktop input routing |
 | `scripts/systems/umbra_observation_schema.gd` | owner | owner | owner | `build_from_runtime`, `build_from_snapshot`, `validate_observation` |
 | `scripts/systems/online/umbra_authority_controller.gd` | owner | owner | owner | `build_authoritative_decision`, `revalidate_before_execution`, `accept_replica_event` |
 | `scripts/systems/umbra_neural_runtime.gd` | owner | owner | owner | `create`, `forward`, `contract_error` |
@@ -53,6 +63,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Shop paid reroll cost | `next_paid_reroll_cost` | `scripts/ui/shop_controller.gd:135` |
 | Shop drawing | `func draw` | `scripts/ui/shop_presentation.gd:382` |
 | Legacy shop drawing | `func draw_legacy` | `scripts/ui/shop_presentation.gd:502` |
+| HUD render and responsive layout | `HudPresentation._draw_hud`, `HudPresentation.update_button_layout` | `scripts/presentation/hud_presentation.gd`; core keeps `_draw_hud` / `_update_button_layout` wrappers |
 | Telemetry facade | `_record_telemetry_shop_reroll` | `scripts/main_runtime_core.gd:2292` |
 | Telemetry owner | `class_name RTTelemetrySystem` | `scripts/systems/telemetry/telemetry_system.gd:1` |
 | Shop reroll telemetry | `record_shop_reroll` | `scripts/systems/telemetry/telemetry_system.gd:191` |
@@ -61,10 +72,26 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Runtime event config | `const CONFIG` | `scripts/systems/events/runtime_event_catalog.gd:6` |
 | Runtime event kill charge | `on_enemy_killed` | `scripts/systems/events/runtime_event_director.gd:53` |
 | Runtime event sync snapshot | `active_snapshot` | `scripts/systems/events/runtime_event_director.gd:89` |
+| Phase 3 enemy family behavior | `Phase3EnemyController.update_enemy` | `scripts/systems/enemies/phase3_enemy_controller.gd`; authority-only behavior for Devoto, Incensário, Flagelante, Salmodiante and Portador de Relicário |
+| Phase 3 enemy family cadence | `EnemyManager.special_kind_unlock_time`, `paced_special_type` | `scripts/systems/enemy_manager.gd`; onboarding/experienced unlocks and bounded simultaneous counts |
+| Phase 3 ritual pulse owner | `class_name RTPhase3RitualPulseController` | `scripts/systems/events/phase3_ritual_pulse_controller.gd:1` |
+| Phase 3 ritual devotee routing | `update_devotee`, `on_enemy_defeated` | `scripts/systems/events/phase3_ritual_pulse_controller.gd` |
+| Phase 3 ritual visual snapshot | `active_snapshot`, `apply_remote_snapshot` | `scripts/systems/events/phase3_ritual_pulse_controller.gd`; transported by `runtime_boss_visual_sync_controller.gd` |
+| Phase 3 ritual presentation | `Phase3RitualPulsePresentation.draw` | `scripts/presentation/phase3_ritual_pulse_presentation.gd`; world environment keeps only the phase routing call |
+| Phase 4 instability pulse owner | `class_name RTPhase4InstabilityPulseController` | `scripts/systems/events/phase4_instability_pulse_controller.gd`; owns cadence, fragments, collection, reward, failure pressure and snapshots without writing `boss4_instability` |
+| Phase 4 instability pulse presentation | `Phase4InstabilityPulsePresentation.draw` | `scripts/presentation/phase4_instability_pulse_presentation.gd`; renders immutable controller snapshots |
+| Boss 4 instability fissure owner | `RTBoss4InstabilityFissureController.update`, `cast_now` | `scripts/systems/bosses/boss4_instability_fissure_controller.gd`; owns cadence, recent-position history, living-target rotation, fixed-party coverage, event IDs and safe-corridor geometry |
+| Boss 4 instability fissure damage | `RTBoss4InstabilityFissureController.resolve_hazard` | `scripts/systems/bosses/boss4_instability_fissure_controller.gd`; authority-only hit resolution, safe-corridor exclusion and one hit per stable peer ID; core wrapper only routes |
+| Boss 4 instability fissure presentation | `RTBoss4InstabilityFissurePresentation.draw` | `scripts/presentation/boss4_instability_fissure_presentation.gd`; renders warning, active fracture, safe corridor and dissipation from replicated hazard snapshots |
 | Online packet contract | `class_name RTNetContract` | `scripts/systems/online/net_contract.gd:1` |
+| Player visual snapshot | `RTVisualSyncContract.pack_player_visual`, `unpack_player_visual` | `scripts/systems/online/runtime_visual_sync_contract.gd`; fixed-stride schema on unreliable ordered player channel; movement/aim/action intent complements authoritative position and animation frame |
+| Ability visual event | `RTManifestationVisualSnapshot.capture`, `RTVisualSyncContract.sanitize_ability_payload`, `_send_network_ability_visual`, `_rpc_ability_visual`, `_rpc_ability_visual_patch` | schema 3 replays canonical local presentation state through the same renderers; reliable start plus bounded 250 ms unreliable-ordered corrections for long Q/E effects; stable event ID and peer sequence; presentation only, never damage authority |
 | Boss visual packet owner | `RTBossVisualSyncController.pack`, `apply` | `scripts/systems/online/runtime_boss_visual_sync_controller.gd:1`; core retains `_pack_net_boss_visuals` and `_apply_remote_boss_visual_snapshot` compatibility facades while RPC dispatch remains on `Main` |
+| Online lobby handshake owner | `class_name RTLobbyController` | `scripts/systems/online/runtime_lobby_controller.gd`; RPC node path/configuration remains on `Main` |
+| Revive lifecycle owner | `class_name RTRuntimeReviveController` | `scripts/systems/online/runtime_revive_controller.gd`; core keeps `_update_team_revival`, altar and RPC facades |
+| Team revive state snapshot | `class_name RTTeamRevivalState` | `scripts/systems/online/team_revival_state.gd` |
 | Audio lifecycle | `class_name RTAudioLifecycle` | `scripts/systems/audio/audio_lifecycle.gd:1` |
-| Enemy updates | `update_enemies` | `scripts/systems/enemy_manager.gd:23` |
+| Enemy updates and spatial separation | `update_enemies`, `rebuild_spatial_index`, `apply_entity_separation` | `scripts/systems/enemy_manager.gd` |
 | Enemy spawning | `spawn_wave` | `scripts/systems/enemy_manager.gd:143` |
 | Phase 2 Sineiro owner | `class_name RTPhase2SineiroBorealController` | `scripts/systems/enemies/phase2_sineiro_boreal_controller.gd:1` |
 | Phase 2 Sineiro VFX | `class_name RTPhase2SineiroPresentation` | `scripts/presentation/phase2_sineiro_presentation.gd:1` |
@@ -77,9 +104,19 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Boss 7 state | `update_boss7_state` | `scripts/systems/modern_boss_controller.gd:35` |
 | Boss 7 ultimate | `check_boss7_ultimate` | `scripts/systems/modern_boss_controller.gd:427` |
 | Boss party scaling contract | `profile_for_party_size` | `scripts/systems/boss_party_scaling.gd:13` |
+| Shared boss attack contract | `RTSharedBossAttackContract` | `scripts/systems/bosses/shared_boss_attack_contract.gd:1`; Boss 2 Hunt Mark delegates target rotation, event metadata and idempotent hit/visual claims |
+| Ability controller base | `RTAbilityControllerBase` | `scripts/systems/abilities/ability_controller_base.gd:1`; runtime binding bridge for incremental manifestation extraction |
+| Necronada ability owner | `RTNecronadaAbilityController.try_use_skill`, `update_remnants` | `scripts/systems/abilities/necronada_ability_controller.gd:1`; core retains `_try_use_necronada_skill` and `_update_necronada_remnants` compatibility facades |
+| Ancorada ability owner | `RTAncoradaAbilityController.update`, `trigger_hab1`, `spawn_ultimate`, `on_projectile_hit`, `on_teleport` | `scripts/systems/abilities/ancorada_ability_controller.gd:1`; owns the mobile-territory rework while core retains public compatibility facades and shared save/network fields |
+| Henry Incendiário owner | `RTHenryIncendiaryAbilityController.on_player_damaged`, `fire_auto_attack`, `begin_skill`, `cast_ultimate` | `scripts/systems/abilities/henry_incendiary_ability_controller.gd`; owns friction accumulation, periodic Incandescência release, per-target dwell scaling and existing burn kit while runtime fields remain save/network compatible |
+| Henry unlock cheat | `_try_unlock_henry_cheat` | `scripts/main_runtime_core.gd`; `HENRYP` sets only the local persisted test unlock and does not award an UMBRA victory |
+| Henry temporal entrance / flame VFX | `RTHenryIncendiaryAbilityController.begin_entrance`, `update_entrance`, `apply_entrance_snapshot`; `HenryFire.cone`, `wave`, `charge` | Entry runs before combat, authority owns wander/brake/freeze/release; existing world visual packet carries `henry_entrance`. `scripts/presentation/henry_fire_presentation.gd` shares bounded mesh-based fire across local/remote casts. Tests: `henry_cinematic_fire_smoke`, `henry_entrance_transport_smoke`, `henry_fire_visual_smoke`, `henry_fire_budget_smoke`. |
+| Henry entrance and idle presentation | `EntitiesPresentation._draw_henry_entry`, `_henry_entry_draw_height`, `_update_henry_idle_animation`, `_henry_idle_frame_index` | entrance frames use measured alpha heights to match the 237 px idle silhouette; pocket/foot-tap is the normal idle and beard gesture chooses a side every 7 stationary seconds; exact frame index reuses the existing player animation snapshot |
 | Boss party scaling snapshot | `_ensure_boss_party_scaling_context` | `scripts/main_runtime_core.gd:6896` |
 | Boss 1 animation state selection | `RTBoss1AnimationPresentation.active_texture` | `scripts/presentation/boss1_animation_presentation.gd` |
 | Boss 1 animation facing | `RTBoss1AnimationPresentation.should_flip_h` | `scripts/presentation/boss1_animation_presentation.gd` |
+| Boss 2 animation state selection | `RTBoss2AnimationPresentation.active_texture` | `scripts/presentation/boss2_animation_presentation.gd`; resolves the existing FSM without owning gameplay |
+| Boss 2 hit/death visual lifecycle | `RTBoss2AnimationPresentation.trigger_hit`, `trigger_death`, `draw_death` | `scripts/presentation/boss2_animation_presentation.gd`; runtime keeps authoritative HP/death transitions |
 | UMBRA Observation Schema 2.0 | `RTUmbraObservationSchema.build_from_runtime` | `scripts/systems/umbra_observation_schema.gd:96` |
 | UMBRA multiplayer authority | `RTUmbraAuthorityController.build_authoritative_decision` | `scripts/systems/online/umbra_authority_controller.gd` |
 | UMBRA Observation fixtures | `build_from_snapshot` | `scripts/systems/umbra_observation_schema.gd:69` |
@@ -97,13 +134,17 @@ Use exact symbol search in these owners; core keeps compatible wrappers.
 
 - Boss 3 Miasma presentation: `scripts/presentation/boss3_miasma_presentation.gd` (`clones`, `darkness`, `overlay`, `qte_openness`); world/combat wrappers and core unchanged APIs. No gameplay state ownership.
 - Save/config/resume/retry: `scripts/systems/save/runtime_save_controller.gd`.
+- Player/input interpretation: `scripts/systems/player/player_control_controller.gd`; shared runtime state and public core wrappers remain compatible while attack, skill and dash execution stay in the core.
 - Phase setup/transition/portals: `scripts/systems/phase/phase_flow_controller.gd`.
+- Experimental FaseEX world, randomized hidden altar and discovery lifecycle: `scripts/systems/phase/experimental_phase_controller.gd`; integrated altar, post-discovery guidance and map presentation: `scripts/presentation/experimental_phase_presentation.gd` and `scripts/presentation/phase_map_presentation.gd`.
 - Phase-scoped texture residency/catalog lazy loading: `scripts/systems/assets/runtime_asset_controller.gd`.
+- Revive lifecycle authority and transition rules: `scripts/systems/online/runtime_revive_controller.gd`; serialized fragment/altar state stays in `scripts/systems/online/team_revival_state.gd`.
+- Lobby ready/session snapshot application: `scripts/systems/online/runtime_lobby_controller.gd`; public RPC entrypoints remain on `Main`, preserving names, payload order and Godot RPC configuration.
 - Phase 2 Sineiro Boreal combat/reward authority: `scripts/systems/enemies/phase2_sineiro_boreal_controller.gd`; presentation: `scripts/presentation/phase2_sineiro_presentation.gd`.
 - Phase 6 Suturador de Âmbar event authority: `scripts/systems/enemies/phase6_amber_suturer_controller.gd`; presentation: `scripts/presentation/phase6_amber_suturer_presentation.gd`.
 - Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`.
 - Boss wave drawing: `scripts/presentation/boss_wave_presentation.gd`.
-- Boss 1 animation/facing/damage-stage presentation: `scripts/presentation/boss1_animation_presentation.gd`; combat timings, hitboxes and authority remain in core.
+- Boss 1 animation/facing/damage-stage presentation: `scripts/presentation/boss1_animation_presentation.gd`; rewind plus Pinças em Tenaz targeting, sequence construction and state-machine updates live in `scripts/systems/early_boss_controller.gd`. Shared state, public wrappers and authority/RPC boundary remain in core.
 - Cross-owner regression: `tests/runtime_backup_reconciliation_smoke.gd`.
 
 ## Search Recipes

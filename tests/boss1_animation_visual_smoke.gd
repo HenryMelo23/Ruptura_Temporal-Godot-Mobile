@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+const AssetController = preload("res://scripts/systems/assets/runtime_asset_controller.gd")
 
 var game: Node
 
@@ -41,8 +42,11 @@ func _capture(path: String) -> bool:
 	for _frame in range(4):
 		await process_frame
 	game.queue_redraw()
+	# Waiting on frame_post_draw can stall indefinitely under the headless
+	# renderer. Two processed frames after queue_redraw are sufficient for the
+	# viewport texture and keep this visual smoke bounded.
 	await process_frame
-	await RenderingServer.frame_post_draw
+	await process_frame
 	var viewport_texture := root.get_texture()
 	if viewport_texture == null:
 		push_error("BOSS1_ANIMATION_VISUAL_FAIL renderer did not expose a viewport texture")
@@ -83,6 +87,31 @@ func _run() -> void:
 	if not await _capture("res://.codex/boss1_bubble_remake_qa_1280x720.png"):
 		quit(1)
 		return
+	var windup_captures := [
+		["bubble", "boss1_bubble"],
+		["rain", "boss1_rain"],
+		["sand", "boss1_sand"],
+		["tide", "boss1_tide"],
+	]
+	game.boss1_absorb_cooldown = 999.0
+	game.boss1_rewind_cooldown = 999.0
+	for windup_capture in windup_captures:
+		game.boss_attacks.clear()
+		game.boss1_attack_windup.clear()
+		game.boss_attack_timer = 99.0
+		game.boss1_animation_velocity = Vector2(90.0, 0.0)
+		game.boss1_animation_motion_hold = 0.18
+		game.boss1_animation_turn_timer = 0.0
+		game._start_boss1_attack_windup(String(windup_capture[0]), game.player_pos)
+		var frozen_position: Vector2 = game.boss_pos
+		game._update_boss(0.10)
+		Boss1AnimationPresentation.update(game, 0.10)
+		assert(game.boss_pos.is_equal_approx(frozen_position), "%s moved during visual pre-cast" % String(windup_capture[0]))
+		assert(Boss1AnimationPresentation.active_texture(game) in game.textures[String(windup_capture[1])], "%s rendered locomotion instead of its pre-cast" % String(windup_capture[0]))
+		if not await _capture("res://.codex/boss1_precast_%s_qa_1280x720.png" % String(windup_capture[0])):
+			quit(1)
+			return
+	game.boss1_attack_windup.clear()
 
 	game.boss_attacks.clear()
 	game._add_boss_pincer_tenaz()
@@ -110,13 +139,38 @@ func _run() -> void:
 			return
 		root.size = Vector2i(1280, 720)
 		game.gfx_low_resource = false
-
-	game.boss_attacks.clear()
-	game._add_boss_tide()
-	Boss1AnimationPresentation.update(game, 0.42)
-	if not await _capture("res://.codex/boss1_tide_remake_qa_1280x720.png"):
+	game.boss_attacks[0]["state"] = "recovery"
+	game.boss1_animation_motion_hold = 0.0
+	Boss1AnimationPresentation.update(game, 0.01)
+	if not await _capture("res://.codex/boss1_dash_recovery_qa_1280x720.png"):
 		quit(1)
 		return
+
+	var cast_captures := [
+		["rain", Callable(game, "_add_boss_rain").bind(7), "boss1_rain", 3, 0.38],
+		["sand", Callable(game, "_add_boss_sand").bind(1), "boss1_sand", 5, 0.70],
+		["tide", Callable(game, "_add_boss_tide"), "boss1_tide", 3, 0.38],
+	]
+	for cast_capture in cast_captures:
+		game.boss_attacks.clear()
+		cast_capture[1].call()
+		game.boss_attacks[-1]["age"] = float(cast_capture[4])
+		Boss1AnimationPresentation.update(game, 0.01)
+		assert(Boss1AnimationPresentation.active_texture(game) == game.textures[String(cast_capture[2])][int(cast_capture[3])])
+		if not await _capture("res://.codex/boss1_%s_release_qa_1280x720.png" % String(cast_capture[0])):
+			quit(1)
+			return
+		root.size = Vector2i(960, 540)
+		game.gfx_low_resource = true
+		var texture_key := String(cast_capture[2])
+		var full_frames: Array = game.textures[texture_key]
+		game.textures[texture_key] = AssetController._compact_boss1_animation_spec(texture_key, full_frames)
+		if not await _capture("res://.codex/boss1_%s_release_low_qa_960x540.png" % String(cast_capture[0])):
+			quit(1)
+			return
+		game.textures[texture_key] = full_frames
+		root.size = Vector2i(1280, 720)
+		game.gfx_low_resource = false
 
 	game.boss_attacks.clear()
 	game.boss1_time_wave = {"radius": 120.0, "direction": 1.0, "age": 0.2, "max_radius": 620.0, "variant": 0, "origin": game.boss_pos}
@@ -156,7 +210,7 @@ func _run() -> void:
 		quit(1)
 		return
 
-	print("BOSS1_ANIMATION_VISUAL_OK idle_walk_bubble_tenaz_tide_rewind=1280x720 hit_jump_death=1280x720 low=960x540")
+	print("BOSS1_ANIMATION_VISUAL_OK idle_walk_bubble_precast_tenaz_dash_recovery_rain_sand_tide_rewind=1280x720 hit_jump_death=1280x720 low=960x540")
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

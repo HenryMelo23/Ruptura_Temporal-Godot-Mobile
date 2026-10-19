@@ -111,7 +111,7 @@ func health_panel(host: Node2D, rect: Rect2, alpha: float) -> void:
 	health_bar(host, bar, ratio, accent, alpha)
 	var footer_y: float = top + 67
 	text(host, "%02d:%02d" % [int(host.time_alive) / 60, int(host.time_alive) % 60], Vector2(x, footer_y), 12, Color(MUTED, alpha), 52)
-	var footer: String = String(host.MANIFESTATIONS[host.selected_manifestation]["name"])
+	var footer: String = String(host.HENRY_MUTATIONS[host.selected_mutation].get("name", "Incendiário")) if host.active_character_key == host.CHARACTER_HENRY else String(host.MANIFESTATIONS[host.selected_manifestation]["name"])
 	var footer_color := MUTED
 	if healing > 0.0:
 		footer = "+%d  RECUPERANDO" % change

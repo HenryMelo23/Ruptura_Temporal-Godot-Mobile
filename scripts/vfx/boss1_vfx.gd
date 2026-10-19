@@ -1,4 +1,5 @@
 extends RefCounted
+const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 ## Render-only layers. No RNG, hit tests, timers or gameplay state are mutated.
 
 const CYAN := Color(0.18, 0.85, 1.0)
@@ -120,12 +121,37 @@ static func pincer_tenaz(canvas: CanvasItem, data: Dictionary, center: Vector2, 
 
 	if state == "telegraph_first" or state == "telegraph_second":
 		var pulse: float = 0.5 + 0.5 * sin(time * 12.0 + (0.0 if prefix == "first" else 1.4))
-		var tip: Vector2 = center + direction * 270.0
-		var arrow_center: Vector2 = center + direction * 138.0
+		var origin_world: Vector2 = Vector2(data.get("%s_origin" % prefix, Vector2.ZERO))
+		var end_world: Vector2 = Vector2(data.get("%s_end" % prefix, Vector2.ZERO))
+		var path_vector: Vector2 = end_world - origin_world
+		if path_vector.length() <= 1.0:
+			path_vector = direction * 540.0
+		var tip: Vector2 = center + path_vector
+		var corridor_half_width: float = maxf(34.0, float(data.get("width", 92.0)) * 0.5)
+		var lane_start: Vector2 = center + direction * 34.0
+		var lane_points := PackedVector2Array([
+			lane_start + side * corridor_half_width,
+			tip + side * corridor_half_width,
+			tip - side * corridor_half_width,
+			lane_start - side * corridor_half_width
+		])
+		canvas.draw_polygon(lane_points, PackedColorArray([Color(accent, 0.08 + pulse * 0.04)]))
+		canvas.draw_line(lane_start + side * corridor_half_width, tip + side * corridor_half_width, Color(INK, 0.68), 5.0, true)
+		canvas.draw_line(lane_start - side * corridor_half_width, tip - side * corridor_half_width, Color(INK, 0.68), 5.0, true)
+		canvas.draw_line(lane_start + side * corridor_half_width, tip + side * corridor_half_width, Color(accent, 0.42 + pulse * 0.18), 2.0, true)
+		canvas.draw_line(lane_start - side * corridor_half_width, tip - side * corridor_half_width, Color(accent, 0.42 + pulse * 0.18), 2.0, true)
+		canvas.draw_line(lane_start, tip, Color(INK, 0.74), 12.0, true)
+		canvas.draw_line(lane_start, tip, Color(accent, 0.22 + pulse * 0.16), 5.0, true)
+		var marker_count: int = 2 if low else 4
+		for marker_index in range(marker_count):
+			var marker_progress: float = float(marker_index + 1) / float(marker_count + 1)
+			var marker_center: Vector2 = lane_start.lerp(tip, marker_progress)
+			var marker_back: Vector2 = marker_center - direction * 18.0
+			canvas.draw_line(marker_back + side * 13.0, marker_center, Color(1.0, 0.88, 0.52, 0.72), line_width, true)
+			canvas.draw_line(marker_back - side * 13.0, marker_center, Color(1.0, 0.88, 0.52, 0.72), line_width, true)
+		var arrow_center: Vector2 = tip - direction * 34.0
 		var left: Vector2 = arrow_center - direction * 30.0 + side * 34.0
 		var right: Vector2 = arrow_center - direction * 30.0 - side * 34.0
-		canvas.draw_line(center + direction * 34.0, tip, Color(INK, 0.74), 16.0, true)
-		canvas.draw_line(center + direction * 34.0, tip, Color(accent, 0.26 + pulse * 0.18), 8.0, true)
 		canvas.draw_polygon(PackedVector2Array([tip, left, right]), PackedColorArray([Color(accent, 0.2 + pulse * 0.16)]))
 		canvas.draw_polyline(PackedVector2Array([left, tip, right]), Color(1.0, 0.86, 0.52, 0.86), line_width, true)
 		arc(canvas, center, 48.0 + pulse * 8.0, direction.angle() - 1.0, direction.angle() - 0.18, accent, 4.0, low)
@@ -151,9 +177,96 @@ static func pincer_tenaz(canvas: CanvasItem, data: Dictionary, center: Vector2, 
 		arc(canvas, center, 52.0 + (1.0 - fade) * 48.0, 0.0, TAU, Color(1.0, 0.68, 0.22, 0.76 * fade), 5.0, low)
 
 
+static func whirlpool(canvas: CanvasItem, data: Dictionary, center: Vector2, time: float, low: bool) -> void:
+	var state := String(data.get("state", "approach"))
+	var state_age := maxf(0.0, float(data.get("state_age", 0.0)))
+	var direction := float(data.get("spin_direction", 1.0))
+	var opacity := 0.0
+	match state:
+		"approach":
+			opacity = clampf(state_age / 1.1, 0.0, 1.0) * 0.7
+		"active":
+			opacity = 1.0
+		"drying":
+			opacity = 1.0 - clampf(state_age / 1.8, 0.0, 1.0)
+	if opacity <= 0.001:
+		return
+
+	# One translucent arena-sized layer replaces hundreds of water sprites.
+	var world_radius := maxf(1080.0, float(data.get("world_radius", 1080.0)))
+	canvas.draw_circle(center, world_radius, Color(0.02, 0.24, 0.38, 0.18 * opacity))
+	canvas.draw_circle(center, world_radius * 0.70, Color(0.04, 0.48, 0.68, 0.075 * opacity))
+	var spiral_count := 3 if low else 6
+	for spiral_index in range(spiral_count):
+		var base_angle := time * direction * (0.72 + spiral_index * 0.035) + float(spiral_index) * TAU / float(spiral_count)
+		var radius := lerpf(128.0, world_radius * 0.68, float(spiral_index) / float(maxi(1, spiral_count - 1)))
+		var spiral_color := Color(0.22, 0.88, 1.0, opacity * (0.3 + float(spiral_index % 2) * 0.12))
+		arc(canvas, center, radius, base_angle, base_angle + direction * PI * 1.25 if direction > 0.0 else base_angle + PI * 1.25, spiral_color, 5.0 if low else 7.0, low)
+
+	var streak_count := 7 if low else 15
+	for streak_index in range(streak_count):
+		var phase := fposmod(time * 0.24 + float(streak_index) * 0.618, 1.0)
+		var angle := float(streak_index) * 2.39996 + time * direction * 0.64 + phase * direction
+		var distance := lerpf(world_radius * 0.88, 92.0, phase)
+		var radial := Vector2.from_angle(angle)
+		var tangent := radial.orthogonal() * direction
+		var streak_end := center + radial * distance
+		var streak_start := streak_end + radial * (28.0 + phase * 28.0) - tangent * 18.0
+		streak(canvas, streak_start, streak_end, Color(0.52, 0.94, 1.0, sin(phase * PI) * 0.68 * opacity), 4.0 if low else 6.0)
+
+	canvas.draw_circle(center, 72.0, Color(0.01, 0.055, 0.11, 0.58 * opacity))
+	arc(canvas, center, 86.0 + sin(time * 5.0) * 4.0, 0.0, TAU, Color(0.55, 0.96, 1.0, 0.84 * opacity), 5.0, low)
+	arc(canvas, center, 112.0, time * direction * 1.6, time * direction * 1.6 + PI * 1.35, Color(0.34, 0.72, 1.0, 0.58 * opacity), 4.0, true)
+
+
+static func lightning(canvas: CanvasItem, data: Dictionary, target: Vector2, time: float, age: float, low: bool) -> void:
+	var tier := Lightning.PERFORMANCE if low else Lightning.quality(canvas)
+	var warning := maxf(0.01, float(data.get("warning", 1.2)))
+	var radius := maxf(20.0, float(data.get("radius", 82.0)))
+	var seed: int = absi(int(data.get("seed", 1)))
+	if age < warning:
+		var progress := clampf(age / warning, 0.0, 1.0)
+		var pulse := 0.5 + 0.5 * sin(time * 15.0 + float(seed % 17))
+		canvas.draw_circle(target, radius, Color(0.12, 0.46, 0.92, 0.1 + progress * 0.11))
+		canvas.draw_arc(target, radius, 0.0, TAU, 48, Color(0.01, 0.04, 0.1, 0.82), 6.0, true)
+		canvas.draw_arc(target, radius, 0.0, TAU, 48, Color(0.46, 0.86, 1.0, 0.5 + pulse * 0.35), 2.8, true)
+		var tick_count := 6 if low else 10
+		for tick_index in range(tick_count):
+			var angle := float(tick_index) * TAU / float(tick_count) + float(seed % 31) * 0.03
+			var outer := target + Vector2.from_angle(angle) * (radius + 6.0 + pulse * 5.0)
+			var inner := target + Vector2.from_angle(angle) * (radius - 9.0)
+			canvas.draw_line(outer, inner, Color(0.72, 0.94, 1.0, 0.5 + progress * 0.4), 2.0, true)
+		var orb_radius := lerpf(5.0, 18.0, progress)
+		# Filaments visibly converge into the charge instead of a static dot.
+		for i in range(2 if tier == Lightning.PERFORMANCE else 5):
+			var angle := float(i) * 2.39996 + time * 0.9 + seed % 13
+			var direction := Vector2.from_angle(angle)
+			Lightning.bolt(canvas, target + direction * radius * 0.78, target + direction * orb_radius, seed + i, time, CYAN, 0.35 + progress * 0.35, 1.3, tier)
+		canvas.draw_circle(target, orb_radius + 7.0, Color(0.18, 0.58, 1.0, 0.16 + progress * 0.2))
+		canvas.draw_circle(target, orb_radius, Color(0.72, 0.95, 1.0, 0.72 + progress * 0.25))
+		canvas.draw_circle(target, maxf(2.0, orb_radius * 0.35), Color.WHITE)
+		return
+
+	var impact_age := age - warning
+	var fade := 1.0 - clampf(impact_age / 0.48, 0.0, 1.0)
+	if fade <= 0.001:
+		return
+	Lightning.bolt(canvas, target + Vector2(0, -520), target, seed, age, CYAN, fade, 6.0 if low else 8.0, tier)
+	Lightning.contact(canvas, target, seed, age, CYAN, fade, tier)
+	canvas.draw_circle(target, radius, Color(0.32, 0.78, 1.0, 0.15 * fade))
+	arc(canvas, target, radius + impact_age * 110.0, 0.0, TAU, Color(0.74, 0.96, 1.0, 0.86 * fade), 7.0, low)
+	Lightning.bolt(canvas, target - Vector2(radius * 0.72, 0.0), target + Vector2(radius * 0.72, 0.0), seed + 37, age, CYAN, 0.68 * fade, 2.0, tier)
+
+
 static func attack(canvas: CanvasItem, data: Dictionary, center: Vector2, target: Vector2, time: float, age: float, low: bool) -> bool:
 	var kind := String(data.get("kind", ""))
 	match kind:
+		"boss1_whirlpool":
+			whirlpool(canvas, data, center, time, low)
+			return true
+		"boss1_lightning":
+			lightning(canvas, data, target, time, age, low)
+			return true
 		"bubble":
 			var p := clampf(age / maxf(0.01, float(data.get("duration", 3.2))), 0.0, 1.0)
 			var radius := lerpf(15.0, 65.0, smoothstep(0.0, 0.5, p))

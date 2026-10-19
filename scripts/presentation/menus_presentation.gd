@@ -1,4 +1,5 @@
 extends RefCounted
+const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -527,11 +528,12 @@ static func _draw_hub_button(game: Node2D, rect: Rect2, label: String, detail: S
 
 
 static func _draw_hub_manifest_card(game: Node2D, rect: Rect2) -> void :
-	var item: Dictionary = game.MANIFESTATIONS[game.selected_manifestation]
+	var item: Dictionary = game._selection_manifest_item(game.selected_manifestation)
 	var color: Color = item["color"]
 	game._draw_holo_panel(rect, color, false, 0.5)
 	var icon_rect = Rect2(rect.position + Vector2(12.0, 10.0), Vector2(rect.size.y - 20.0, rect.size.y - 20.0))
-	game._draw_texture_contain(game.textures.get("manifestation_" + item["key"]), icon_rect, Color.WHITE)
+	var icon: Texture2D = game._frame_texture("henry_idle", 175, "player_idle") if game.selected_manifestation == game.HENRY_SELECTION_INDEX else game._get_texture("manifestation_" + item["key"])
+	game._draw_texture_contain(icon, icon_rect, Color.WHITE)
 	var text_x = icon_rect.end.x + 14.0
 	game.draw_string(game.font, Vector2(text_x, rect.position.y + rect.size.y * 0.36), String(item["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, color)
 	game._draw_wrapped(String(item["desc"]), Rect2(Vector2(text_x, rect.position.y + rect.size.y * 0.48), Vector2(rect.end.x - text_x - 12.0, rect.size.y * 0.44)), 12, Color(0.8, 0.9, 0.92, 0.86))
@@ -617,8 +619,8 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	var tutorial_accent = Color(0.0, 1.0, 0.82) if game.run_tutorial_enabled else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["tutorial"], "TUTORIAL INICIAL", "Pergunta ao iniciar a proxima partida.", "ON" if game.run_tutorial_enabled else "OFF", tutorial_accent, game.settings_selected == game._gameplay_preference_index("tutorial"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["tutorial"]), game.run_tutorial_enabled, tutorial_accent)
-	var cheat_value = "QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else ("RETORNANTE OK" if game.retornante_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE")))
-	var cheat_accent = Color(0.74, 1.0, 0.36) if game.qa_data_unlocked else (Color(0.0, 1.0, 0.82) if game.online_mode_unlocked else (Color(0.86, 0.48, 1.0) if game.retornante_unlocked else Color(0.64, 0.44, 1.0)))
+	var cheat_value = "FASE EX ARMADA" if game.experimental_phase_requested else ("QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else ("RETORNANTE OK" if game.retornante_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE"))))
+	var cheat_accent = Color(0.34, 0.94, 1.0) if game.experimental_phase_requested else (Color(0.74, 1.0, 0.36) if game.qa_data_unlocked else (Color(0.0, 1.0, 0.82) if game.online_mode_unlocked else (Color(0.86, 0.48, 1.0) if game.retornante_unlocked else Color(0.64, 0.44, 1.0))))
 	if game.gameplay_cheat_focused:
 		cheat_value = "DIGITANDO..."
 	game._draw_gameplay_preference(game.settings_buttons["retornante_cheat"], "CHEAT SECRETO", "Campo reservado para codigos de QA e dev.", cheat_value, cheat_accent, game.settings_selected == game._gameplay_preference_index("retornante_cheat"))
@@ -1146,10 +1148,10 @@ static func _draw_manifest_mp_team_panel(game: Node2D, rect: Rect2, accent: Colo
 static func _draw_manifest_peer_summary_row(game: Node2D, rect: Rect2, peer_id: int, state: Dictionary, is_local: = false) -> void :
 	var stage = String(state.get("stage", game.MANIFEST_STAGE_MANIFESTATION))
 	var aura_view = stage == game.MANIFEST_STAGE_AURA
-	var manifest_idx: int = clampi(int(state.get("manifestation", 0)), 0, game.MANIFESTATIONS.size() - 1)
-	var aura_idx: int = clampi(int(state.get("aura", 0)), 0, game.AURAS.size() - 1)
-	var manifest_item: Dictionary = game.MANIFESTATIONS[manifest_idx]
-	var aura_item: Dictionary = game.AURAS[aura_idx]
+	var manifest_idx: int = int(state.get("manifestation", 0))
+	var aura_idx: int = int(state.get("aura", 0))
+	var manifest_item: Dictionary = game._selection_manifest_item(manifest_idx)
+	var aura_item: Dictionary = game._selection_aura_item(aura_idx)
 	var color: Color = game._manifest_select_item_color(aura_item, true) if aura_view else game._manifest_select_item_color(manifest_item, false)
 	var manifest_color: Color = game._manifest_select_item_color(manifest_item, false)
 	var aura_color: Color = game._manifest_select_item_color(aura_item, true)
@@ -1157,8 +1159,9 @@ static func _draw_manifest_peer_summary_row(game: Node2D, rect: Rect2, peer_id: 
 	game.draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), color)
 	var icon_size: float = minf(rect.size.y - 28.0, 42.0)
 	var icon_rect: Rect2 = Rect2(rect.position + Vector2(12, 10), Vector2(icon_size, icon_size))
-	var manifest_icon: Texture2D = game._manifest_select_item_texture(manifest_item, false)
-	var aura_icon: Texture2D = game._manifest_select_item_texture(aura_item, true)
+	var henry_selection: bool = manifest_idx == game.HENRY_SELECTION_INDEX
+	var manifest_icon: Texture2D = game._frame_texture("henry_idle", 175, "player_idle") if henry_selection else game._manifest_select_item_texture(manifest_item, false)
+	var aura_icon: Texture2D = null if henry_selection else game._manifest_select_item_texture(aura_item, true)
 	if manifest_icon != null:
 		game._draw_texture_contain(manifest_icon, icon_rect, Color(1.0, 1.0, 1.0, 0.88))
 	if aura_view and aura_icon != null:
@@ -1180,6 +1183,15 @@ static func _draw_manifest_peer_summary_row(game: Node2D, rect: Rect2, peer_id: 
 
 static func _draw_manifest_mp_half(game: Node2D, rect: Rect2, stage: String, selected_manif: int, selected_aur: int, scroll: float, is_remote: bool, is_ready: bool) -> void :
 	var aura_view = stage == game.MANIFEST_STAGE_AURA
+	if selected_manif == game.HENRY_SELECTION_INDEX:
+		var henry_item: Dictionary = game._selection_aura_item(selected_aur) if aura_view else game._selection_manifest_item(selected_manif)
+		var henry_color: Color = Color(henry_item.get("color", Color(1.0, 0.42, 0.08)))
+		game._draw_holo_panel(rect.grow(-10.0), henry_color, is_ready, 0.58)
+		var henry_tex: Texture2D = game._frame_texture("henry_idle", 175, "player_idle")
+		game._draw_texture_contain(henry_tex, Rect2(rect.get_center() - Vector2(64.0, 110.0), Vector2(128.0, 160.0)), Color.WHITE)
+		game._draw_centered(String(henry_item.get("name", "Henry")), rect.get_center() + Vector2(0.0, 88.0), 24, henry_color)
+		game._draw_centered("PRONTO" if is_ready else ("EFEITO" if aura_view else "MUTACAO"), rect.get_center() + Vector2(0.0, 118.0), 14, Color(0.88, 0.96, 1.0))
+		return
 	var active_items: Array = game.AURAS if aura_view else game.MANIFESTATIONS
 	var active_selected = selected_aur if aura_view else selected_manif
 
@@ -2178,7 +2190,7 @@ static func _draw_desktop_session_buttons(game: Node2D, _viewport: Vector2) -> v
 			game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 10.0), 14, shop_accent)
 			game._draw_centered(shop_status, shop_rect.get_center() + Vector2(14.0, -10.0), 10, shop_accent)
 
-	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss"):
+	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss") and game.experimental_phase_controller.should_show_boss_button():
 		var boss_rect: Rect2 = game.buttons["boss"]
 		var boss_accent = Color(1.0, 0.22, 0.28)
 		game.hud_feedback.surface(game, boss_rect, boss_accent)
@@ -2491,8 +2503,9 @@ static func _draw_specter_upgrade(game: Node2D, viewport: Vector2) -> void:
 	var icon_box = Rect2(panel.position.x + panel.size.x * 0.08, body_top + 18.0, panel.size.x * 0.26, panel.size.y * 0.42)
 	game.draw_rect(icon_box, Color(0.015, 0.026, 0.04, 0.88), true)
 	game.draw_rect(icon_box, Color(accent.r, accent.g, accent.b, 0.8), false, 2)
-	if game.textures.has("aura_" + key) and game.textures["aura_" + key] != null:
-		game._draw_texture_contain(game.textures["aura_" + key], icon_box.grow(-22.0), Color(1.0, 1.0, 1.0, 0.98 if unlocked else 0.28))
+	var aura_texture: Texture2D = game._get_texture("aura_" + key)
+	if aura_texture != null:
+		game._draw_texture_contain(aura_texture, icon_box.grow(-22.0), Color(1.0, 1.0, 1.0, 0.98 if unlocked else 0.28))
 	else:
 		game.draw_circle(icon_box.get_center(), min(icon_box.size.x, icon_box.size.y) * 0.24, Color(accent.r, accent.g, accent.b, 0.38))
 	game._draw_centered(name.to_upper() if unlocked else "???", Vector2(icon_box.get_center().x, icon_box.end.y + 28.0), 22 if not portrait else 17, accent)
@@ -2701,21 +2714,12 @@ static func _draw_shop_opening_upgrade(game: Node2D, viewport: Vector2) -> void 
 
 	var bolt_alpha = (1.0 - smoothstep(0.5, 0.88, progress)) * max(0.18, strike)
 	var seed = float(Time.get_ticks_msec() % 100000) * 0.001
-	for bolt in range(3):
-		var previous = Vector2(player_screen.x + sin(seed * 7.0 + bolt) * 18.0, -26.0)
-		var segments = 7
-		for i in range(1, segments + 1):
-			var t = float(i) / float(segments)
-			var jitter = sin(seed * (9.0 + bolt) + i * 2.31 + bolt * 5.7) * (18.0 + bolt * 7.0) * (1.0 - t * 0.42)
-			var next = Vector2(lerp(previous.x, player_screen.x, 0.36) + jitter, lerp(-26.0, player_screen.y - 18.0, t))
-			var main_color = Color(0.68, 0.98, 1.0, 0.88 * bolt_alpha)
-			var core_color = Color(1.0, 1.0, 1.0, 0.94 * bolt_alpha)
-			game.draw_line(previous, next, main_color, 8.0 - bolt * 2.0)
-			game.draw_line(previous, next, core_color, 3.0)
-			if i in [2, 4, 6]:
-				var branch_dir = Vector2.from_angle( - PI * 0.5 + sin(seed + i + bolt) * 1.8)
-				game.draw_line(next, next + branch_dir * (34.0 + bolt * 12.0), Color(0.42, 0.92, 1.0, 0.34 * bolt_alpha), 2.0)
-			previous = next
+	# This overlay runs after sprites: explicitly reuse the same protection.
+	Lightning.begin_frame(game, camera)
+	var tier := Lightning.quality(game)
+	Lightning.bolt(game, Vector2(player_screen.x - 15.0, -26.0), player_screen + Vector2(0, -42), 7301, progress, Color(0.34, 0.9, 1.0), bolt_alpha, 6.0, tier)
+	Lightning.contact(game, ground, 7301, progress, Color(0.34, 0.9, 1.0), bolt_alpha, tier)
+	Lightning.end_frame(game)
 
 	var body_glow = sin(progress * PI) * fade
 	for i in range(5):

@@ -1,11 +1,16 @@
 extends RefCounted
+const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
 const BossWavePresentation = preload("res://scripts/presentation/boss_wave_presentation.gd")
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
+const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
+const Phase3RitualPulsePresentation = preload("res://scripts/presentation/phase3_ritual_pulse_presentation.gd")
+const Phase4InstabilityPulsePresentation = preload("res://scripts/presentation/phase4_instability_pulse_presentation.gd")
+const Boss4InstabilityFissurePresentation = preload("res://scripts/presentation/boss4_instability_fissure_presentation.gd")
 
 
 static func _draw_phase5_transmute_map_reveal(game: Node2D, map_texture: Texture2D, stage_rect: Rect2) -> void :
@@ -56,17 +61,7 @@ static func _draw_phase5_transmute_map_reveal(game: Node2D, map_texture: Texture
 
 
 static func _draw_boss4_lightning_link(game: Node2D, from_world: Vector2, to_world: Vector2, camera: Vector2, color: Color, thickness: float) -> void:
-	var direction: Vector2 = to_world - from_world
-	if direction.length() <= 0.01:
-		return
-	var side: Vector2 = direction.normalized().orthogonal()
-	var points = PackedVector2Array()
-	for i in range(9):
-		var t: float = float(i) / 8.0
-		var wobble: float = sin(game.time_alive * 19.0 + float(i) * 2.7) * 10.0 * sin(t * PI)
-		points.append(from_world.lerp(to_world, t) + side * wobble - camera)
-	game.draw_polyline(points, Color(0.18, 0.1, 0.02, 0.65), thickness + 6.0, true)
-	game.draw_polyline(points, color, thickness, true)
+	Lightning.bolt(game, from_world - camera, to_world - camera, int(to_world.x * 7.0 + to_world.y), game.time_alive, color, color.a, thickness)
 
 
 static func _draw_boss7_flame_waves(game: Node2D, camera: Vector2) -> void:
@@ -234,7 +229,7 @@ static func _draw_apolo_phase5_exhibition_overlay(game: Node2D, viewport: Vector
 	game.draw_rect(rect, Color(0.015, 0.025, 0.02, 0.72), true)
 	game.draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.55), false, 2.0)
 	var title: String = "APOLO VS UMBRA"
-	var manifest_label: String = String(game.MANIFESTATIONS[game.selected_manifestation].get("name", game.manifestation_key)).to_upper()
+	var manifest_label: String = String(game._selection_manifest_item(game.selected_manifestation).get("name", game.manifestation_key)).to_upper()
 	var arch_label: String = "ARQ " + str(game.apolo_phase5_exhibition_arch.get("version", "?")) + " H" + str(game.apolo_phase5_exhibition_arch.get("hidden", "?"))
 	var damage_ratio: float = clampf(game.apolo_phase5_exhibition_damage_done / maxf(1.0, game.boss_hp_max), 0.0, 1.0)
 	game.draw_string(game.font, rect.position + Vector2(14.0, 22.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 28.0, game._readable_text_size(13), Color(0.86, 1.0, 0.92, 0.95))
@@ -310,6 +305,9 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 	if Boss1AnimationPresentation.death_active(game):
 		Boss1AnimationPresentation.draw_death(game, camera)
 		return
+	if Boss2AnimationPresentation.death_active(game):
+		Boss2AnimationPresentation.draw_death(game, camera)
+		return
 	if Boss3AnimationPresentation.death_active(game):
 		Boss3AnimationPresentation.draw_death(game, camera)
 		return
@@ -343,7 +341,7 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 	var boss_draw_pos = game._boss_draw_position()
 	var boss_draw_size = game._boss_draw_size()
 	if game.current_phase == 2:
-		game._draw_dynamic_shadow_fit(boss_tex, boss_draw_pos - camera + Vector2(0, 10), Vector2(122, 82), game.boss2_facing_dir < 0.0, true, 0.34)
+		game._draw_dynamic_shadow_fit(boss_tex, Boss2AnimationPresentation.shadow_center(game) - camera, Vector2(122, 82), game.boss2_facing_dir < 0.0, true, 0.34)
 	elif game.current_phase == 3:
 		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), true, 0.44)
 	elif game.current_phase == 1:
@@ -355,7 +353,7 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_attack_target_marker(boss_draw_pos - camera + Vector2(0, 55), 64.0, game.locked_target_kind == "boss")
 		boss_modulate = boss_modulate * Color(1.0, 0.93, 0.48, 1.0)
 	if game.current_phase == 2:
-		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, Vector2(184, 170), game.boss2_facing_dir < 0.0, boss_modulate, true)
+		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, game.boss2_facing_dir < 0.0, boss_modulate, true)
 	elif game.current_phase == 3:
 		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), boss_modulate, true)
 	elif game.current_phase == 1:
@@ -706,6 +704,7 @@ static func _draw_boss3_miasma_overlay(game: Node2D, viewport: Vector2, camera: 
 static func _draw_phase3_environment(game: Node2D, camera: Vector2) -> void :
 	if game.current_phase != 3:
 		return
+	Phase3RitualPulsePresentation.draw(game, camera)
 	for zone in game.phase3_miasma_zones:
 		var fade = clamp(float(zone["life"]) / max(0.01, float(zone["max"])), 0.0, 1.0)
 		var p = Vector2(zone["pos"]) - camera
@@ -735,6 +734,7 @@ static func _draw_phase3_environment(game: Node2D, camera: Vector2) -> void :
 static func _draw_phase4_environment(game: Node2D, camera: Vector2) -> void :
 	if game.current_phase != 4:
 		return
+	Phase4InstabilityPulsePresentation.draw(game, camera)
 	var viewport = game.get_viewport_rect().size
 	if game.boss4_instability > 0.0:
 		var unstable_alpha = clampf(game.boss4_instability / 100.0, 0.0, 1.0)
@@ -1242,17 +1242,7 @@ static func _draw_phase4_enemy_hazards(game: Node2D, camera: Vector2) -> void :
 				game.draw_arc(pos, radius * progress, 0.0, TAU, 96, Color(1.0, 0.72, 0.22, 0.88 * fade), 5.0)
 				game.draw_arc(pos, radius * progress * 0.72, - game.time_alive * 2.0, TAU - game.time_alive * 2.0, 80, Color(0.76, 0.3, 1.0, 0.52 * fade), 3.0)
 			"boss4_fissure":
-				var a: Vector2 = Vector2(hazard["a"]) - camera
-				var b: Vector2 = Vector2(hazard["b"]) - camera
-				var fissure_warning = float(hazard.get("warning", game.PHASE4_RIFT_WARNING))
-				var active = age >= fissure_warning
-				var color = Color(1.0, 0.22, 0.72, 0.92 * fade) if active else Color(0.92, 0.66, 1.0, 0.44)
-				game.draw_line(a, b, Color(0.1, 0.0, 0.2, 0.72 * fade), 20.0 if active else 8.0, true)
-				game.draw_line(a, b, color, 5.5 if active else 2.2, true)
-				if bool(hazard.get("teleport", false)):
-					for i in range(5):
-						var t = float(i) / 4.0
-						game.draw_circle(a.lerp(b, t), 4.0 + sin(game.time_alive * 6.0 + i) * 1.6, Color(0.36, 1.0, 0.92, 0.72 * fade))
+				Boss4InstabilityFissurePresentation.draw(game, hazard, camera)
 			"boss4_vector":
 				var center: Vector2 = Vector2(hazard["pos"]) - camera
 				var dir: Vector2 = Vector2(hazard["dir"]).normalized()
@@ -1353,8 +1343,10 @@ static func _draw_phase4_enemy_hazards(game: Node2D, camera: Vector2) -> void :
 					game._draw_centered("!", ray_pos + Vector2(0, 8), 32, Color(1.0, 0.9, 0.72, 0.98 * fade))
 				else:
 					var pulse: float = 0.5 + 0.5 * sin(game.time_alive * 18.0 + float(hazard.get("phase", 0.0)))
-					game.draw_line(ray_pos + Vector2(0, -720), ray_pos, Color(1.0, 0.72, 0.12, 0.18 * fade), 26.0 + pulse * 10.0, true)
-					game.draw_line(ray_pos + Vector2(0, -720), ray_pos, Color(1.0, 0.94, 0.38, 0.72 * fade), 7.0 + pulse * 4.0, true)
+					var ray_seed: int = int(Vector2(hazard.get("pos", Vector2.ZERO)).x * 17.0 + float(hazard.get("phase", 0.0)) * 113.0)
+					var ray_tier: int = Lightning.quality(game)
+					Lightning.bolt(game, ray_pos + Vector2(0, -720), ray_pos, ray_seed, age - ray_warning, Color(1.0, 0.84, 0.2), 0.85 * fade, 5.0 + pulse * 2.0, ray_tier)
+					Lightning.contact(game, ray_pos, ray_seed, age - ray_warning, Color(1.0, 0.84, 0.2), fade, ray_tier)
 					game.draw_circle(ray_pos, game.BOSS4_ULTIMATE_RAY_RADIUS * (1.0 + pulse * 0.18), Color(1.0, 0.84, 0.2, 0.3 * fade))
 			"boss4_meteor_shockwave":
 				var shock_pos: Vector2 = Vector2(hazard.get("pos", game.player_pos)) - camera
@@ -2149,7 +2141,10 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 		if age < 0.0:
 			continue
 		if game.current_phase == 1:
-			age += game._boss1_visual_prediction()
+			# Lightning promises a full 1.2 s warning. Do not consume any of that
+			# window with the movement-interpolation prediction used by projectiles.
+			if kind != "boss1_lightning":
+				age += game._boss1_visual_prediction()
 			var visual_attack: Dictionary = attack
 			if kind == "pincer_tenaz":
 				visual_attack = attack.duplicate()

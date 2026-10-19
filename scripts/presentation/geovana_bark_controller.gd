@@ -174,6 +174,8 @@ func _clear_active_bark() -> void:
 func _barks_enabled(game: Node2D) -> bool:
 	if game.dedicated_server_mode:
 		return false
+	if game.active_character_key != game.CHARACTER_GEOVANA:
+		return false
 	if game.is_multiplayer:
 		return false
 	if game.mode in ["menu", "settings", "settings_audio", "settings_keys", "settings_gamepad", "game_over", "victory", "nick_setup"]:

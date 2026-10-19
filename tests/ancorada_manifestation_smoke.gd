@@ -21,66 +21,66 @@ func _run() -> void:
 	game._start_game()
 	game.mode = "game"
 	game.manifestation_key = "ancorada"
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.player_pos = Vector2(640, 360)
 	game.ancorada_prev_pos = game.player_pos
 	game.player_damage = 100.0
-	game.player_crit_chance = 0.10
-	game.ancorada_crit_bonus = 0.0
-	game.ancorada_weight_knockback = 5.0
-	game.ancorada_weight_timer = 0.0
-	game.ancorada_still_timer = 0.0
+	game.lastro_stacks = 0
+	game.lastro_points = 0
+	game._update_ancorada_standing_still(20.0)
+	_check(is_zero_approx(float(game.ancorada_crit_bonus)), "standing still must not grant crit after the mobile rework")
+	_check(is_equal_approx(float(game.ancorada_weight_knockback), 5.0), "legacy stationary weight must stay neutral")
 
-	game._update_ancorada_standing_still(3.05)
-	_check(is_equal_approx(float(game.ancorada_crit_bonus), 0.02), "standing still did not add the first 2% crit bonus")
-	game._update_ancorada_standing_still(90.0)
-	_check(is_equal_approx(float(game.ancorada_crit_bonus), 0.50), "standing still crit bonus did not cap at 50%")
-	_check(float(game.ancorada_weight_knockback) <= 50.0 and float(game.ancorada_weight_knockback) >= 49.0, "weighted shot knockback did not build toward 50px")
-
-	game.player_pos += Vector2(12, 0)
-	game._update_ancorada_standing_still(0.016)
-	_check(is_zero_approx(float(game.ancorada_crit_bonus)), "moving did not reset crit bonus")
-	_check(is_equal_approx(float(game.ancorada_weight_knockback), 5.0), "moving did not reset shot weight")
-
-	game.player_crit_chance = 1.20
-	game.ancorada_crit_bonus = 0.0
-	var overcap_damage: float = game._critical_damage(10.0)
-	_check(is_equal_approx(overcap_damage, 36.0), "crit overcap did not convert 20% overflow into crit damage")
-
-	game.enemies = [
-		{"uid": 1, "type": game.ENEMY_COMMON, "pos": game.player_pos + Vector2(80, 0), "hp": 200.0, "max_hp": 200.0, "speed": 80.0, "shoot_cd": 9.0, "ferrolho_root": 0.0, "stun": 0.0}
-	]
-	game.ancorada_weight_knockback = 31.0
-	var before_push: Vector2 = Vector2(game.enemies[0]["pos"])
-	game._apply_bullet_effect({
-		"kind": "ancorada",
-		"damage": 10.0,
-		"pos": before_push,
-		"origin": game.player_pos,
-		"dir": Vector2.RIGHT,
-		"always_crit": false,
-		"source_category": "basic_attack"
-	}, game.enemies[0])
-	_check(Vector2(game.enemies[0]["pos"]).x > before_push.x + 28.0, "weighted anchored projectile did not push the enemy back")
-
-	game.ancorada_anchored_active = false
-	game.last_skill_time = -999.0
+	game.lastro_stacks = 5
+	_check(is_equal_approx(game._anchor_bonus(), 1.20), "five LASTRO stacks must grant 20% attack damage")
+	var fast_interval: float = game._current_attack_interval()
+	game.lastro_stacks = 0
 	var base_interval: float = game._current_attack_interval()
-	game._use_skill()
-	_check(game.ancorada_anchored_active, "Ancorada HAB1 did not enable anchored mode")
-	_check(game.last_skill_time == -999.0, "Ancorada should not start cooldown while anchoring")
-	_check(game._read_move() == Vector2.ZERO, "Ancorada anchored mode did not lock movement")
-	_check(game._current_attack_interval() < base_interval, "Ancorada anchored mode did not increase attack speed")
-	game.player_hp = 1000
-	game._damage_player(100, "smoke_ancorada")
-	_check(game.player_hp == 935, "Ancorada anchored mode did not reduce incoming damage by 35%")
-	game._fire_projectile("ancorada", 100.0, game.BULLET_SPEED, 1.0, false)
-	var anchored_bullet: Dictionary = game.bullets.back()
-	_check(float(anchored_bullet.get("damage", 0.0)) >= 135.0, "Ancorada anchored shot did not gain 35% base damage")
-	_check(float(anchored_bullet.get("visual_scale", 1.0)) >= 1.45, "Ancorada anchored shot did not grow 45%")
-	game._use_skill()
-	_check(not game.ancorada_anchored_active, "Ancorada HAB1 did not leave anchored mode")
-	_check(is_equal_approx(game.last_skill_time, game.time_alive), "Ancorada cooldown did not start after leaving anchored mode")
-	_check(is_equal_approx(game._skill_cooldown(), 5.0), "Ancorada HAB1 cooldown is not 5s after leaving")
+	_check(fast_interval < base_interval, "LASTRO must improve attack cadence without locking movement")
+
+	game.enemies = [{"uid": 1, "type": game.ENEMY_COMMON, "pos": game.player_pos + Vector2(180, 0), "hp": 1200.0, "max_hp": 1200.0, "speed": 80.0, "shoot_cd": 9.0, "ferrolho_root": 0.0, "stun": 0.0}]
+	var bullet := {"kind": "ancorada", "damage": 10.0, "pos": game.enemies[0]["pos"], "origin": game.player_pos, "dir": Vector2.RIGHT, "always_crit": false, "source_category": "basic_attack"}
+	game._apply_bullet_effect(bullet, game.enemies[0])
+	_check(game.anchors.size() == 1, "Ancorada projectile hit must deploy exactly one territory anchor")
+	_check(Vector2(game.anchors[0].get("link_from", Vector2.ZERO)) == game.player_pos, "territory line must begin at the shot origin")
+	_check(game.lastro_points == 1, "projectile hit must grant one LASTRO point")
+	game.player_pos = Vector2(game.anchors[0]["pos"])
+	game._update_ancorada_standing_still(0.1)
+	_check(game.lastro_points == 3, "crossing the deployed anchor must grant two LASTRO points")
+	_check(bool(game.anchors[0].get("claimed", false)), "crossed anchor must be idempotently marked as claimed")
+	var tether_target := {"uid": 2, "type": game.ENEMY_COMMON, "pos": Vector2(game.anchors[0]["link_from"]).lerp(Vector2(game.anchors[0]["pos"]), 0.5), "hp": 1000.0, "max_hp": 1000.0, "speed": 80.0, "shoot_cd": 9.0, "ferrolho_root": 0.0, "stun": 0.0}
+	game.enemies.append(tether_target)
+	game.anchors[0]["tether_tick"] = 0.0
+	game._update_ancorada_standing_still(0.13)
+	var tether_hp_after_first: float = float(tether_target["hp"])
+	_check(tether_hp_after_first < 1000.0, "territory line must damage an enemy crossing it")
+	game._update_ancorada_standing_still(0.13)
+	_check(is_equal_approx(float(tether_target["hp"]), tether_hp_after_first), "one territory line must not damage the same target twice")
+
+	game.anchors.clear()
+	var teleport_origin: Vector2 = game.player_pos
+	var teleport_destination: Vector2 = teleport_origin + Vector2(180, 90)
+	game._execute_teleport(teleport_destination)
+	_check(game.anchors.size() == 2, "Ancorada teleport must place origin and arrival anchors")
+	_check(String(game.anchors[1].get("source", "")) == "ancorada_tp_arrival", "arrival anchor source must remain explicit for replication")
+	_check(Vector2(game.anchors[1].get("link_from", Vector2.ZERO)) == teleport_origin, "teleport arrival must link back to its origin")
+	game._finish_teleport_effect_cooldown()
+
+	game.lastro_stacks = 4
+	game.lastro_points = 0
+	game.last_skill_time = -999.0
+	game.player_pos = Vector2(500, 500)
+	var q_target := Vector2(700, 500)
+	game.enemies[0]["pos"] = q_target + Vector2(90, 0)
+	var enemy_before_q := Vector2(game.enemies[0]["pos"])
+	game._use_skill(q_target)
+	_check(game.hab1_ancorada_active, "Q must start Arranco de Fundacao")
+	_check(game.last_skill_time == game.time_alive, "Q cooldown must start on a valid cast")
+	game._update_hab1_ancorada(game.ANCORADA_HAB1_IMPACT_TIME + 0.01)
+	_check(Vector2(game.enemies[0]["pos"]).distance_to(q_target) < enemy_before_q.distance_to(q_target), "Q must pull a common enemy toward the foundation")
+	_check(game.lastro_stacks == 0, "Q must consume captured LASTRO")
+	_check(game.anchors.any(func(anchor): return String(anchor.get("source", "")) == "ancorada_q"), "Q must leave a territory line")
 
 	game.enemies = [
 		{"uid": 3, "type": game.ENEMY_COMMON, "pos": game.player_pos + Vector2(140, 0), "hp": 300.0, "max_hp": 300.0, "speed": 80.0, "shoot_cd": 9.0, "ferrolho_root": 0.0, "stun": 0.0}
@@ -97,7 +97,15 @@ func _run() -> void:
 	var secondary: Dictionary = game.manifestation_secondaries.back()
 	_check(is_equal_approx(float(secondary.get("radius", 0.0)), 350.0), "Ancorada ultimate radius is not 350px")
 	_check(is_equal_approx(float(secondary.get("max", 0.0)), 10.0), "Ancorada ultimate duration is not 10s")
+	var march_origin: Vector2 = game.player_pos
+	game.player_pos += Vector2(280, 0)
+	game.enemies[0]["pos"] = game.player_pos + Vector2(140, 0)
+	game.boss_pos = game.player_pos + Vector2(160, 0)
+	game.arauto["pos"] = game.player_pos + Vector2(-160, 0)
 	game._update_secondary_ancorada(secondary, 0.01)
+	_check(Vector2(secondary.get("center", Vector2.ZERO)) == game.player_pos, "Marcha da Fortaleza must follow the player")
+	_check(float(secondary.get("momentum", 0.0)) > 0.45, "moving during the ultimate must generate momentum")
+	_check(Vector2(secondary.get("center", Vector2.ZERO)) != march_origin, "ultimate must not remain fixed at its cast point")
 	_check(Array(secondary.get("drops", [])).size() >= 3, "Ancorada ultimate did not spawn falling anchors for targets in radius")
 	game._update_secondary_ancorada(secondary, 0.70)
 	_check(float(game.enemies[0]["hp"]) <= 115.0, "Ancorada ultimate did not apply high scaling damage to enemies on impact")
@@ -112,5 +120,6 @@ func _run() -> void:
 	game._cleanup_runtime_resources()
 	game.free()
 	await process_frame
-	print("ANCORADA_MANIFESTATION_SMOKE_OK passive=true overcap=true weighted_shot=true anchored_hab1=true ultimate=true")
+	await process_frame
+	print("ANCORADA_MANIFESTATION_SMOKE_OK passive=mobile_territory attack=tether q=pull ultimate=marching")
 	quit(0)

@@ -81,8 +81,9 @@ func _run() -> void:
 	game.boss_dead = false
 	game.boss_active = true
 	game.boss_hp = 1.0
+	var expected_phase_after_three: int = game._next_phase_after_boss(3)
 	game._damage_boss(999999.0, "eletrica")
-	assert(int(game.phase_fragment.get("next_phase", 0)) == 4)
+	assert(int(game.phase_fragment.get("next_phase", 0)) == expected_phase_after_three)
 
 	print("PHASE3_SMOKE_OK enemies=%d cheeses=%d projectiles=%d faith=%d" % [game.enemies.size(), game.phase3_cheeses.size(), game.enemy_bullets.size(), int(game.boss3_faith)])
 	game.mode = "menu"

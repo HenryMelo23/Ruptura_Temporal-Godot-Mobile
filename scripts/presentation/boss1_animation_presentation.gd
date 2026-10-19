@@ -199,6 +199,12 @@ static func _desired_state(game: Node2D) -> String:
 	if game.boss1_absorb_timer > 0.0:
 		return STATE_ABSORB
 	var attack_state := _active_attack_state(game)
+	var windup_active: bool = not game.boss1_attack_windup.is_empty() and float(game.boss1_attack_windup.get("remaining", 0.0)) > 0.0
+	# The authoritative windup already freezes the boss. It must also override
+	# the short movement interpolation hold left by the preceding pursuit, or
+	# almost the whole 200 ms cast is rendered as a frozen walk frame.
+	if windup_active and not attack_state.is_empty():
+		return attack_state
 	# Dash owns locomotion only during its own windup/strike. Lingering hazards
 	# must not freeze a moving crab in a cast pose.
 	if attack_state != STATE_PINCER and game.boss1_animation_motion_hold > 0.0:
@@ -215,6 +221,19 @@ static func _desired_state(game: Node2D) -> String:
 
 
 static func _active_attack_state(game: Node2D) -> String:
+	var windup: Dictionary = game.boss1_attack_windup
+	if not windup.is_empty() and float(windup.get("remaining", 0.0)) > 0.0:
+		match String(windup.get("choice", "")):
+			"bubble", "pressure_bubbles", "pressure_barrage", "bubble_combo":
+				return STATE_BUBBLE
+			"rain":
+				return STATE_RAIN
+			"tide", "tide_combo":
+				return STATE_TIDE
+			"sand":
+				return STATE_SAND
+			"rush", "rush_combo", "pincer_tenaz":
+				return STATE_PINCER
 	for attack_index in range(game.boss_attacks.size() - 1, -1, -1):
 		var attack: Dictionary = game.boss_attacks[attack_index]
 		var kind := String(attack.get("kind", ""))
@@ -222,8 +241,17 @@ static func _active_attack_state(game: Node2D) -> String:
 		if age < 0.0 or age >= float(attack.get("duration", INF)):
 			continue
 		match kind:
+			"boss1_whirlpool":
+				# The approach keeps the locomotion frames. Once centered, the
+				# repeated tide frames and facing alternation sell the full spin.
+				if String(attack.get("state", "approach")) == "approach":
+					continue
+				return STATE_TIDE
 			"pincer_tenaz", "rush", "pincer":
-				if String(attack.get("state", "")) in ["recovery", "gap", "done"] and game.boss1_animation_motion_hold > 0.0:
+				# Recovery and the inter-dash gap are locomotion again, regardless
+				# of packet interpolation. Keeping this pose until expiration was
+				# the one-second stale dash reported by players.
+				if String(attack.get("state", "")) in ["recovery", "gap", "done", "final"]:
 					continue
 				return STATE_PINCER
 			"bubble", "pressure_bubbles":
@@ -252,6 +280,11 @@ static func _state_frame_index(game: Node2D, state: String, frame_count: int) ->
 		return clampi(int(floor(turn_progress * float(frame_count))), 0, frame_count - 1)
 	if state == STATE_PINCER:
 		return _pincer_frame(game, frame_count)
+	if state == STATE_TIDE:
+		for attack_value in game.boss_attacks:
+			var tide_attack := Dictionary(attack_value)
+			if String(tide_attack.get("kind", "")) == "boss1_whirlpool" and String(tide_attack.get("state", "")) in ["active", "drying"]:
+				return int(floor(float(tide_attack.get("state_age", 0.0)) * 9.0)) % frame_count
 	if state in [STATE_BUBBLE, STATE_SAND, STATE_TIDE, STATE_RAIN]:
 		var attack_age := _matching_attack_age(game, state)
 		var cast_progress := clampf((attack_age + 0.18) / 0.94, 0.0, 0.999)
@@ -264,17 +297,26 @@ static func _state_frame_index(game: Node2D, state: String, frame_count: int) ->
 
 
 static func _matching_attack_age(game: Node2D, state: String) -> float:
+	var windup: Dictionary = game.boss1_attack_windup
+	if not windup.is_empty():
+		var choice := String(windup.get("choice", ""))
+		var elapsed := maxf(0.0, float(windup.get("duration", 0.0)) - float(windup.get("remaining", 0.0)))
+		if (state == STATE_BUBBLE and choice in ["bubble", "pressure_bubbles", "pressure_barrage", "bubble_combo"]) or (state == STATE_RAIN and choice == "rain") or (state == STATE_SAND and choice == "sand") or (state == STATE_TIDE and choice in ["tide", "tide_combo"]):
+			return elapsed
 	for index in range(game.boss_attacks.size() - 1, -1, -1):
 		var attack: Dictionary = game.boss_attacks[index]
 		if float(attack.get("age", 0.0)) < 0.0:
 			continue
 		var kind := String(attack.get("kind", ""))
-		if (state == STATE_BUBBLE and kind in ["bubble", "pressure_bubbles"]) or (state == STATE_RAIN and kind == "boiling_bubbles") or (state == STATE_SAND and kind == "sand") or (state == STATE_TIDE and kind == "tide"):
+		if (state == STATE_BUBBLE and kind in ["bubble", "pressure_bubbles"]) or (state == STATE_RAIN and kind == "boiling_bubbles") or (state == STATE_SAND and kind == "sand") or (state == STATE_TIDE and kind in ["tide", "boss1_whirlpool"]):
 			return float(attack.get("age", 0.0))
 	return 0.0
 
 
 static func _pincer_frame(game: Node2D, frame_count: int) -> int:
+	var windup: Dictionary = game.boss1_attack_windup
+	if not windup.is_empty() and String(windup.get("choice", "")) in ["rush", "rush_combo", "pincer_tenaz"]:
+		return 0
 	for index in range(game.boss_attacks.size() - 1, -1, -1):
 		var attack: Dictionary = game.boss_attacks[index]
 		if float(attack.get("age", 0.0)) < 0.0 or float(attack.get("age", 0.0)) >= float(attack.get("duration", INF)):
@@ -322,6 +364,10 @@ static func _pincer_texture_key(game: Node2D) -> String:
 static func should_flip_h(game: Node2D) -> bool:
 	if game.current_phase != 1:
 		return false
+	for attack_value in game.boss_attacks:
+		var attack := Dictionary(attack_value)
+		if String(attack.get("kind", "")) == "boss1_whirlpool" and String(attack.get("state", "")) == "active":
+			return int(floor(float(attack.get("state_age", 0.0)) * 7.0)) % 2 == 1
 	if _desired_state(game) == STATE_PINCER:
 		var direction := _pincer_direction(game)
 		return absf(direction.x) >= absf(direction.y) and direction.x < 0.0

@@ -23,7 +23,15 @@ func _run() -> void:
 	game.mode = "game"
 	game.gfx_low_resource = false
 	game.gfx_memory_saver = false
+	game.gfx_shadows = true
 	game.mobile_adaptive_visual_budget = true
+	_check(is_equal_approx(game._mobile_adaptive_trigger_time(12.0), game.MOBILE_ADAPTIVE_CRITICAL_TRIGGER_TIME), "critical FPS did not select the emergency trigger")
+	_check(is_equal_approx(game._mobile_adaptive_trigger_time(38.0), game.MOBILE_ADAPTIVE_TRIGGER_TIME), "ordinary low FPS lost the debounce window")
+	var phase_map = game.PhaseMapPresentation.new()
+	game.add_child(phase_map)
+	phase_map.present(null, Rect2(0, 0, 592, 592), 2, 5.0, game._runtime_visual_budget_active())
+	_check(not bool(phase_map.life_material.get_shader_parameter("fluid_surface")), "adaptive budget left the animated map shader enabled")
+	_check(not game._shadows_enabled(), "adaptive budget left dynamic shadows enabled during recovery")
 
 	game.effects.clear()
 	for i in range(game.LOW_RESOURCE_EFFECT_CAP + 80):
@@ -85,6 +93,7 @@ func _run() -> void:
 	_check(game.puddles.size() <= game._low_resource_cap(game.WEATHER_MAX_PUDDLES, game.LOW_RESOURCE_PUDDLE_CAP), "adaptive puddle cap was not enforced")
 	_check(game.boss7_flame_waves.size() <= 4, "adaptive boss7 flame wave cap was not enforced")
 	_check(game._adaptive_particle_count(40) <= 12, "adaptive particle count is too high for mobile recovery mode")
+	_check(not game.gfx_low_resource, "adaptive recovery must not overwrite the player's quality preference")
 
 	game.boss7_flame_waves.clear()
 	game._spawn_boss7_flame_wave(Vector2(640, 420), 250.0)
@@ -106,6 +115,7 @@ func _run() -> void:
 		game.puddles.size(),
 		flames.size()
 	])
+	phase_map.free()
 	_cleanup()
 	quit(0)
 

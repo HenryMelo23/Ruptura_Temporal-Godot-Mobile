@@ -83,7 +83,7 @@
         "id": "sorte",
         "nome": "Sorte",
         "subtitulo": "Anomalia Favoravel",
-        "descricao_loja": "+0.3% sorte para drops. A chance rara escala de forma mais gradual.",
+        "descricao_loja": "+0.3% sorte para drops. Incomuns aparecem sem Sorte e ficam mais frequentes; raras exigem Sorte.",
         "icone": "Deck/carta_sorte1.png",
         "frame_secundario": "Deck/carta_sorte2.png"
     },
@@ -235,7 +235,8 @@
         "id": "rastro_de_retorno",
         "nome": "Rastro de Retorno",
         "subtitulo": "Vestigio Vivo",
-        "descricao_loja": "Periodicamente deixa um vestigio no caminho. Retornar a ele concede velocidade e recupera parte do teleporte.",
+        "raridade": "incomum",
+        "descricao_loja": "Deixa vestigios com mais frequencia. Retornar a eles concede um impulso forte e recupera parte relevante do teleporte.",
         "icone": "Deck/carta-RastrodeRetorno1.png",
         "frame_secundario": "Deck/carta-RastrodeRetorno2.png"
     },
@@ -259,7 +260,8 @@
         "id": "eco_de_impacto",
         "nome": "Eco de Impacto",
         "subtitulo": "Repeticao Brutal",
-        "descricao_loja": "Acertar o mesmo alvo varias vezes cria um eco que repete parte do ultimo dano real.",
+        "raridade": "incomum",
+        "descricao_loja": "Impactos sucessivos carregam um eco visivel que repete o ultimo dano e reverbera nos inimigos proximos.",
         "icone": "Deck/carta-ecodeimpacto1.png",
         "frame_secundario": "Deck/carta-ecodeimpacto2.png"
     },
@@ -267,7 +269,8 @@
         "id": "zona_de_descompressao",
         "nome": "Zona de Descompressao",
         "subtitulo": "Respiro de Cerco",
-        "descricao_loja": "Ficar cercado carrega uma onda que repele inimigos proximos e aplica lentidao.",
+        "raridade": "incomum",
+        "descricao_loja": "Ficar cercado carrega rapidamente uma onda ampla que repele inimigos e aplica lentidao intensa.",
         "icone": "Deck/carta-zonadedescompressao1.png",
         "frame_secundario": "Deck/carta-zonadedescompressao2.png"
     },
@@ -331,7 +334,8 @@
         "id": "ferrolho_ruptura",
         "nome": "Ferrolho de Ruptura",
         "subtitulo": "Prego Espacial",
-        "descricao_loja": "O proximo acerto direto a cada 10s fixa o alvo no espaco.",
+        "raridade": "incomum",
+        "descricao_loja": "O proximo acerto direto a cada 8s fixa o alvo no espaco; elites e chefes sofrem controle reforcado.",
         "icone": "Deck/carta-Ferrolho_de_Ruptura1.png",
         "frame_secundario": "Deck/carta-Ferrolho_de_Ruptura2.png"
     },

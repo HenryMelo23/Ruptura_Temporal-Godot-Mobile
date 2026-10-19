@@ -34,7 +34,7 @@ func _run() -> void:
 			game.run_points_earned = 0
 			game.time_alive = 0.0
 			game.mode = "game"
-			game.current_phase = 1
+			game.current_phase = 6 if role == "host" else 1
 			game.boss_ready = true
 			game._start_boss_call_local()
 			game._update_boss_call(game.BOSS_CALL_COUNTDOWN + 0.01)
@@ -54,7 +54,15 @@ func _run() -> void:
 				last_snapshot_ms = Time.get_ticks_msec()
 				sequence += 1
 				game.rpc_id(1, "_update_remote_entities", sequence, game._pack_net_enemies(), game._pack_net_boss(), game._pack_net_enemy_bullets())
-				game.rpc_id(1, "_update_remote_world_visuals", sequence, game._pack_net_boss_visuals())
+				game.rpc_id(1, "_update_remote_boss_identity", sequence, game._pack_net_boss(), game.boss_name, game.boss_title_color)
+				var visual_packet: Dictionary = game._pack_net_boss_visuals()
+				var encoded_visuals: PackedByteArray = game.RTWorldSnapshotChunkerScript.encode_variant(visual_packet)
+				if encoded_visuals.size() > game.NET_WORLD_CHUNK_PAYLOAD_BYTES:
+					var visual_chunks: Array = game.RTWorldSnapshotChunkerScript.split(encoded_visuals, game.NET_WORLD_CHUNK_PAYLOAD_BYTES)
+					for chunk_index in range(visual_chunks.size()):
+						game.rpc_id(1, "_update_remote_world_visuals_chunk", sequence, chunk_index, visual_chunks.size(), visual_chunks[chunk_index])
+				else:
+					game.rpc_id(1, "_update_remote_world_visuals", sequence, visual_packet)
 			if game.score == kill_reward + 75 and game.boss_entry_timer == 0.0:
 				_write_result(role)
 		elif role == "client":
@@ -67,6 +75,6 @@ func _run() -> void:
 				if game.score != kill_reward + 50:
 					_fail("client credited its own request before host confirmation")
 					return
-			if requested_reward and game.score == kill_reward + 75 and game.run_points_earned == game.score and game.boss_entry_timer == 0.0:
+			if requested_reward and game.score == kill_reward + 75 and game.run_points_earned == game.score and game.boss_entry_timer == 0.0 and game.current_phase == 6 and game.boss_active and game.boss_name == "MATRIARCA DA CHAGA":
 				_write_result(role)
 	_fail("score/boss wire timeout role=%s score=%d entry=%.2f" % [role, game.score, game.boss_entry_timer])

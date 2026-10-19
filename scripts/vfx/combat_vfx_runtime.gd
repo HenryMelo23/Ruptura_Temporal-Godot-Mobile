@@ -70,30 +70,36 @@ static func _trim_visual_effect_arrays(game: Node2D) -> void :
 		game.boss7_flame_waves.pop_front()
 
 
-static func _spawn_boss6_entry_particles(game: Node2D, target: Vector2, source: = Vector2.ZERO) -> void :
+static func _spawn_boss6_entry_particles(game: Node2D, target: Vector2, source: = Vector2.ZERO, seed_override: int = -1) -> void :
 	game.boss6_entry_particles.clear()
+	var particle_rng := RandomNumberGenerator.new()
+	var particle_seed: int = seed_override
+	if particle_seed < 0:
+		particle_seed = int(game.rng.randi())
+	particle_rng.seed = particle_seed
+	game.boss6_entry_particle_seed = particle_seed
 	for i in range(game.BOSS6_ENTRY_PARTICLES):
-		var edge: = posmod(i + game.rng.randi_range(0, 3), 4)
+		var edge: = posmod(i + particle_rng.randi_range(0, 3), 4)
 		var start: Vector2 = Vector2.ZERO
 		match edge:
 			0:
-				start = Vector2(game.rng.randf_range(-140.0, game.WORLD_SIZE.x + 140.0), -120.0)
+				start = Vector2(particle_rng.randf_range(-140.0, game.WORLD_SIZE.x + 140.0), -120.0)
 			1:
-				start = Vector2(game.WORLD_SIZE.x + 140.0, game.rng.randf_range(-120.0, game.WORLD_SIZE.y + 120.0))
+				start = Vector2(game.WORLD_SIZE.x + 140.0, particle_rng.randf_range(-120.0, game.WORLD_SIZE.y + 120.0))
 			2:
-				start = Vector2(game.rng.randf_range(-140.0, game.WORLD_SIZE.x + 140.0), game.WORLD_SIZE.y + 120.0)
+				start = Vector2(particle_rng.randf_range(-140.0, game.WORLD_SIZE.x + 140.0), game.WORLD_SIZE.y + 120.0)
 			_:
-				start = Vector2(-140.0, game.rng.randf_range(-120.0, game.WORLD_SIZE.y + 120.0))
+				start = Vector2(-140.0, particle_rng.randf_range(-120.0, game.WORLD_SIZE.y + 120.0))
 		if source != Vector2.ZERO:
-			start = source + Vector2.from_angle(game.rng.randf_range(0.0, TAU)) * game.rng.randf_range(20.0, 220.0)
+			start = source + Vector2.from_angle(particle_rng.randf_range(0.0, TAU)) * particle_rng.randf_range(20.0, 220.0)
 		game.boss6_entry_particles.append({
 			"start": start, 
-			"target": target + Vector2.from_angle(game.rng.randf_range(0.0, TAU)) * game.rng.randf_range(0.0, 74.0), 
-			"delay": game.rng.randf_range(0.0, 0.7), 
-			"duration": game.rng.randf_range(1.45, game.BOSS6_ENTRY_TIME), 
-			"bend": game.rng.randf_range(-260.0, 260.0), 
-			"size": game.rng.randf_range(1.4, 3.8), 
-			"phase": game.rng.randf_range(0.0, TAU)
+			"target": target + Vector2.from_angle(particle_rng.randf_range(0.0, TAU)) * particle_rng.randf_range(0.0, 74.0),
+			"delay": particle_rng.randf_range(0.0, 0.7),
+			"duration": particle_rng.randf_range(1.45, game.BOSS6_ENTRY_TIME),
+			"bend": particle_rng.randf_range(-260.0, 260.0),
+			"size": particle_rng.randf_range(1.4, 3.8),
+			"phase": particle_rng.randf_range(0.0, TAU)
 		})
 
 
@@ -369,6 +375,8 @@ static func _spawn_enemy_desfragmentation(game: Node2D, pos: Vector2, color: Col
 
 static func _projectile_palette(game: Node2D, kind: String) -> Dictionary:
 	match kind:
+		"henry_spark":
+			return {"core": Color(1.0, 0.96, 0.64), "glow": Color(1.0, 0.38, 0.04, 0.96), "trail": Color(1.0, 0.12, 0.02, 0.46), "size": 7.0, "trail_size": 7.0}
 		"eletrica":
 			return {"core": Color(0.76, 1.0, 1.0), "glow": Color(0.1, 0.95, 1.0, 0.92), "trail": Color(0.82, 0.22, 1.0, 0.46), "size": 8.0, "trail_size": 7.0}
 		"eletrica_charged":

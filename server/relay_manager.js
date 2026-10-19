@@ -1647,6 +1647,7 @@ function metricLimit(metric, maxMode) {
   return {
     enemy_kills: 20000,
     boss_kills: 32,
+    umbra_victories: 1,
     shop_purchases: 200,
     shop_rerolls: 400,
     stationary_seconds: 20,
@@ -1659,6 +1660,7 @@ function metricLimit(metric, maxMode) {
 }
 
 function knownProgressMetric(metric) {
+  if (metric === "umbra_victories") return true;
   for (const group of Object.values(PLAYER_PROGRESS_RULES)) {
     for (const rule of Object.values(group)) {
       if (rule.metric === metric) return true;

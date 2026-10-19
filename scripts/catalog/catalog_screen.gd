@@ -321,10 +321,13 @@ static func draw_related_entries(host: Node, item: Dictionary, area: Rect2, colo
 
 
 static func item_texture(host: Node, item: Dictionary) -> Texture2D:
-	if item.has("key") and host.textures.has("aura_" + String(item["key"])):
-		return host.textures["aura_" + String(item["key"])]
-	if item.has("key") and host.textures.has("manifestation_" + String(item["key"])):
-		return host.textures["manifestation_" + String(item["key"])]
+	if item.has("key"):
+		var aura_texture: Texture2D = host._get_texture("aura_" + String(item["key"]))
+		if aura_texture != null:
+			return aura_texture
+		var manifestation_texture: Texture2D = host._get_texture("manifestation_" + String(item["key"]))
+		if manifestation_texture != null:
+			return manifestation_texture
 	var texture_key: = String(item.get("texture", ""))
 	if texture_key != "" and not host.textures.has(texture_key) and host.has_method("_ensure_runtime_texture"):
 		host._ensure_runtime_texture(texture_key)
@@ -338,7 +341,7 @@ static func item_texture(host: Node, item: Dictionary) -> Texture2D:
 		if value is Texture2D:
 			return value
 	if item.has("icon"):
-		var card_texture = host.textures.get("card_" + String(item["name"]), null)
+		var card_texture = host._get_texture("card_" + String(item["name"]))
 		if card_texture is Texture2D:
 			return card_texture
 		if card_texture == null:

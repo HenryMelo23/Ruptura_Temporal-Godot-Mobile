@@ -81,19 +81,28 @@ func _run() -> void:
 	})
 	await _capture("ancorada_projectile_1280x720.png")
 	game.bullets.clear()
+	game._place_anchor(game.player_pos + Vector2(230, 70), game.player_pos - Vector2(170, 45), "ancorada_hit_visual", true)
+	await _capture("ancorada_territory_1280x720.png")
 
 	game._spawn_secondary_ancorada()
 	var secondary: Dictionary = game.manifestation_secondaries.back()
 	game._update_secondary_ancorada(secondary, 0.01)
+	game.player_pos += Vector2(210, 55)
 	game._update_secondary_ancorada(secondary, 0.28)
 	await _capture("ancorada_ultimate_falling_1280x720.png")
 
 	game.time_alive += 0.48
 	game._update_secondary_ancorada(secondary, 0.48)
 	await _capture("ancorada_ultimate_impact_1280x720.png")
+	game.gfx_low_resource = true
+	root.size = Vector2i(960, 540)
+	await process_frame
+	await _capture("ancorada_ultimate_low_960x540.png")
 
 	print("ANCORADA_VISUAL_OK " + ProjectSettings.globalize_path(OUT_DIR))
+	game._cleanup_runtime_resources()
 	game.queue_free()
+	await process_frame
 	await process_frame
 	quit(0)
 
@@ -103,7 +112,8 @@ func _capture(file_name: String) -> void:
 	await process_frame
 	await process_frame
 	var image: Image = root.get_texture().get_image()
-	_check(image != null and image.get_width() >= 1280 and image.get_height() >= 720, "invalid capture " + file_name)
+	var expected_size := Vector2i(960, 540) if file_name.contains("960x540") else Vector2i(1280, 720)
+	_check(image != null and image.get_width() >= expected_size.x and image.get_height() >= expected_size.y, "invalid capture " + file_name)
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var output := OUT_DIR.path_join(file_name)
 	_check(image.save_png(output) == OK, "could not save " + file_name)

@@ -14,10 +14,12 @@ const DEDICATED_SERVER_NET_FPS: = 120
 const INTERPOLATION_SHARPNESS: = 30.0
 const EXTRAPOLATION_LIMIT: = 0.06
 const SNAP_DISTANCE: = 360.0
-const ENEMY_STRIDE: = 65
-const PREVIOUS_ENEMY_STRIDE: = 53
+const ENEMY_STRIDE: = 71
+const PREVIOUS_ENEMY_STRIDE: = 65
+const PREVIOUS_LARAPIO_ENEMY_STRIDE: = 53
 const LEGACY_ENEMY_STRIDE: = 34
-const ENEMY_SNAPSHOT_SCHEMA: = 2.0
+const ENEMY_SNAPSHOT_SCHEMA: = 3.0
+const PREVIOUS_ENEMY_SNAPSHOT_SCHEMA: = 2.0
 const ELECTRIC_SOURCE_TAGS: = ["", "atk", "skill_q", "skill_e", "skill_shift"]
 const UID_CHUNK_MASK: = 65535
 const BULLET_STRIDE: = 11
@@ -46,8 +48,6 @@ const ANIM_FROZEN: = 7
 const DAMAGE_ENEMY: = 0
 const DAMAGE_BOSS: = 1
 const DAMAGE_ARAUTO: = 2
-
-
 static func estimate_packed_bytes(value) -> int:
 	if value is PackedFloat32Array:
 		return value.size() * 4
@@ -121,7 +121,7 @@ static func unpack_boss_snapshot(
 		elif float(result["hp"]) > 0.0 and not bool(result["dead"]) and has_previous_snapshot:
 			result["active"] = true
 		if packed.size() >= 6:
-			result["phase_index"] = clampi(int(packed[5]), 1, 6)
+			result["phase_index"] = clampi(int(packed[5]), 1, 7)
 		if packed.size() >= 7:
 			result["hp_max"] = max(1.0, packed[6])
 		if packed.size() >= 8:
@@ -231,6 +231,13 @@ static func pack_enemies(enemies: Array, enemy_types: Array, default_enemy_type:
 		packed[offset + 62] = lodario_to.y
 		packed[offset + 63] = float(enemy.get("lodario_jump_duration", 0.0))
 		packed[offset + 64] = 1.0 if bool(enemy.get("lodario_lunge_active", false)) else 0.0
+		packed[offset + 65] = float(enemy.get("phase3_surge_timer", 0.0))
+		packed[offset + 66] = float(enemy.get("phase3_chant_prepare", 0.0))
+		var chant_target: = Vector2(enemy.get("phase3_chant_target", pos))
+		packed[offset + 67] = chant_target.x
+		packed[offset + 68] = chant_target.y
+		packed[offset + 69] = float(enemy.get("phase3_relic_pulse", 0.0))
+		packed[offset + 70] = float(enemy.get("phase3_fervor_timer", 0.0))
 		offset += ENEMY_STRIDE
 	return packed
 
@@ -241,10 +248,13 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 		var packed: PackedFloat32Array = snapshot_data
 		var stride: int = 0
 		var has_current_schema: bool = packed.size() >= ENEMY_STRIDE and packed.size() % ENEMY_STRIDE == 0 and is_equal_approx(packed[53], ENEMY_SNAPSHOT_SCHEMA)
+		var has_previous_schema: bool = packed.size() >= PREVIOUS_ENEMY_STRIDE and packed.size() % PREVIOUS_ENEMY_STRIDE == 0 and is_equal_approx(packed[53], PREVIOUS_ENEMY_SNAPSHOT_SCHEMA)
 		if has_current_schema:
 			stride = ENEMY_STRIDE
-		elif packed.size() % PREVIOUS_ENEMY_STRIDE == 0:
+		elif has_previous_schema:
 			stride = PREVIOUS_ENEMY_STRIDE
+		elif packed.size() % PREVIOUS_LARAPIO_ENEMY_STRIDE == 0:
+			stride = PREVIOUS_LARAPIO_ENEMY_STRIDE
 		elif packed.size() % LEGACY_ENEMY_STRIDE == 0:
 			stride = LEGACY_ENEMY_STRIDE
 		if stride <= 0:
@@ -285,7 +295,7 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 				enemy["leech_leap_to"] = Vector2(packed[offset + 30], packed[offset + 31])
 				enemy["leech_target_peer"] = int(packed[offset + 32])
 				enemy["boss6_summoned"] = packed[offset + 33] > 0.5
-			if stride >= PREVIOUS_ENEMY_STRIDE and offset + 52 < packed.size():
+			if stride >= PREVIOUS_LARAPIO_ENEMY_STRIDE and offset + 52 < packed.size():
 				enemy["stolen"] = int(packed[offset + 34])
 				enemy["portal"] = packed[offset + 35]
 				enemy["portal_pause"] = packed[offset + 36]
@@ -304,7 +314,7 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 				enemy["larapio_ult_cd"] = packed[offset + 50]
 				enemy["larapio_ult_jump_cd"] = packed[offset + 51]
 				enemy["target_peer_id"] = int(packed[offset + 52])
-			if stride == ENEMY_STRIDE and offset + 64 < packed.size():
+			if stride >= PREVIOUS_ENEMY_STRIDE and offset + 64 < packed.size():
 				enemy["eletrica_static_stacks"] = int(packed[offset + 54])
 				enemy["eletrica_static_timer"] = packed[offset + 55]
 				var electric_source_index: int = clampi(int(packed[offset + 56]), 0, ELECTRIC_SOURCE_TAGS.size() - 1)
@@ -316,6 +326,12 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 				enemy["lodario_jump_to"] = Vector2(packed[offset + 61], packed[offset + 62])
 				enemy["lodario_jump_duration"] = packed[offset + 63]
 				enemy["lodario_lunge_active"] = packed[offset + 64] > 0.5
+			if stride == ENEMY_STRIDE and offset + 70 < packed.size():
+				enemy["phase3_surge_timer"] = packed[offset + 65]
+				enemy["phase3_chant_prepare"] = packed[offset + 66]
+				enemy["phase3_chant_target"] = Vector2(packed[offset + 67], packed[offset + 68])
+				enemy["phase3_relic_pulse"] = packed[offset + 69]
+				enemy["phase3_fervor_timer"] = packed[offset + 70]
 			next_enemies.append(enemy)
 		return next_enemies
 	if snapshot_data is Array:

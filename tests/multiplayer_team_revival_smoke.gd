@@ -51,6 +51,7 @@ func _run() -> void:
 	game.online_lobby_active_player_count = 3
 	game._start_game()
 	game.mode = "game"
+	_check(game.revive_controller != null, "runtime revive controller was not composed")
 	game.player_hp_max = 500.0
 	game.player_hp = 500.0
 	game.card_cost = 100
@@ -107,7 +108,39 @@ func _run() -> void:
 	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 40.32), "life altar did not split the canonical life payment to first dead peer")
 	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 40.32), "life altar did not split the canonical life payment to second dead peer")
 
-	print("MULTIPLAYER_TEAM_REVIVAL_SMOKE_OK score_dedup=true fragments=true altars=true life_split=true")
+	# Request flow: an unavailable spectator cannot open a request, and an
+	# insufficient payer does not spend points or accept it accidentally.
+	game.is_dead = true
+	game.online_local_spectator = true
+	game._request_team_revive()
+	_check(not game.revive_request_outgoing, "spectator opened an unavailable revive request")
+	game.online_local_spectator = false
+	game.is_dead = false
+	game.revive_request_incoming = true
+	game.revive_request_target_peer = 42
+	game.revive_request_cost = 999
+	game.score = 0
+	game._accept_team_revive_request(game.REVIVE_PAY_POINTS)
+	_check(game.revive_request_incoming and game.revive_request_target_peer == 42, "insufficient score accepted the revive request")
+	game._reject_team_revive_request()
+	_check(not game.revive_request_incoming, "rejected request remained active")
+
+	# Solo must not retain a team-revival state, while a fully dead room still
+	# reports defeat through the unchanged public facade.
+	game.revival_active = true
+	game.is_multiplayer = false
+	game._update_team_revival(0.1)
+	_check(not game.revival_active, "solo retained multiplayer revival state")
+	game.is_multiplayer = true
+	game.is_dead = true
+	for peer_id in game.net_players_by_peer.keys():
+		game.net_players_by_peer[peer_id]["dead"] = true
+		game.net_players_by_peer[peer_id]["eliminated"] = true
+		game.net_players_by_peer[peer_id]["alive"] = false
+		game.net_players_by_peer[peer_id]["hp"] = 0.0
+	_check(game._all_multiplayer_players_dead(), "fully dead multiplayer room did not report game over")
+
+	print("MULTIPLAYER_TEAM_REVIVAL_SMOKE_OK owner=true unavailable=true failure=true solo=true game_over=true score_dedup=true fragments=true altars=true life_split=true")
 	game.queue_free()
 	await process_frame
 	quit(0)

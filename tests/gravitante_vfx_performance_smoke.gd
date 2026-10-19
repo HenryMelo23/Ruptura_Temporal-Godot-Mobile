@@ -6,6 +6,7 @@ var game: Node2D
 var label := "after"
 var only: PackedStringArray = []
 var results: Array = []
+var profile_render := false
 const OUT := "res://.codex/gravitante_vfx/"
 
 func _initialize() -> void:
@@ -14,10 +15,28 @@ func _initialize() -> void:
 			label = arg.trim_prefix("--label=")
 		elif arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=").split(",")
+		elif arg == "--profile-render":
+			profile_render = true
 	call_deferred("_run")
 
 func _run() -> void:
-	game = load("res://scenes/Main.tscn").instantiate()
+	if DisplayServer.get_name() == "headless":
+		push_error("Render benchmark requires a display; frame_post_draw is unavailable headless")
+		quit(1)
+		return
+	if profile_render:
+		game = load("res://tests/runtime_render_profile_probe.gd").new()
+		game.name = "Main"
+		var players := Node2D.new()
+		players.name = "PlayersContainer"
+		game.add_child(players)
+		var spawner := MultiplayerSpawner.new()
+		spawner.name = "MultiplayerSpawner"
+		spawner.spawn_path = NodePath("../PlayersContainer")
+		spawner.add_spawnable_scene("res://scenes/Player.tscn")
+		game.add_child(spawner)
+	else:
+		game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	game._start_game()
 	game.current_phase = 1 # _start_game can randomize the starting phase from local progression.
@@ -46,6 +65,7 @@ func _run() -> void:
 			_setup(scenario)
 			var times: Array[float] = []
 			var calls: Array[float] = []
+			var render_profile: Dictionary = {}
 			for frame in range(100):
 				game.time_alive = 15.0 + frame / 60.0
 				for i in range(game.orbitals.size()):
@@ -56,6 +76,9 @@ func _run() -> void:
 				if frame >= 20:
 					times.append((Time.get_ticks_usec() - start) / 1000.0)
 					calls.append(float(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
+					if profile_render:
+						for key in game.render_profile_us:
+							render_profile[key] = float(render_profile.get(key, 0.0)) + float(game.render_profile_us[key]) / 80.0
 				await process_frame
 			times.sort()
 			var mean := _mean(times)
@@ -64,7 +87,7 @@ func _run() -> void:
 				"draw_calls": _mean(calls), "enemies": game.enemies.size(),
 				"orbitals": game.orbitals.size(), "effects": game.effects.size(),
 				"secondaries": game.manifestation_secondaries.size(), "bullets": game.bullets.size(),
-				"phase": game.current_phase})
+				"phase": game.current_phase, "render_cpu_mean_us": render_profile})
 			if scenario == 3 or scenario == 5:
 				var capture := root.get_texture().get_image()
 				if capture == null or capture.get_size() != Vector2i(1280, 720):

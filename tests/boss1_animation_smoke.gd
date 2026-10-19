@@ -41,8 +41,15 @@ func _prepare_boss() -> void:
 
 func _run() -> void:
 	_prepare_boss()
-	for key in ["boss1_idle", "boss1_walk", "boss1_bubble", "boss1_pincer", "boss1_absorb", "boss1_sand", "boss1_tide", "boss1_rain", "boss1_rewind"]:
+	for key in ["boss1_idle", "boss1_walk", "boss1_bubble", "boss1_pincer", "boss1_absorb", "boss1_rewind"]:
 		assert(game.textures.get(key, []).size() == 4, "%s must expose four final remake frames" % key)
+	for key in ["boss1_sand", "boss1_tide", "boss1_rain"]:
+		assert(game.textures.get(key, []).size() == 6, "%s must expose anticipation, action and release frames" % key)
+		var compact_frames: Array = AssetController._compact_boss1_animation_spec(key, game.textures[key])
+		assert(compact_frames.size() == 4, "%s LOW must retain a readable cast sequence" % key)
+	assert(AssetController._compact_boss1_animation_spec("boss1_rain", game.textures["boss1_rain"])[2] == game.textures["boss1_rain"][3])
+	assert(AssetController._compact_boss1_animation_spec("boss1_tide", game.textures["boss1_tide"])[2] == game.textures["boss1_tide"][3])
+	assert(AssetController._compact_boss1_animation_spec("boss1_sand", game.textures["boss1_sand"])[3] == game.textures["boss1_sand"][5])
 	assert(game.textures.get("boss1_turn", []).size() == 3)
 	assert(game.textures.get("boss1_hit", []).size() == 5)
 	assert(game.textures.get("boss1_jump", []).size() == 5)
@@ -121,6 +128,73 @@ func _run() -> void:
 		Boss1AnimationPresentation.update(game, 0.01)
 		assert(Boss1AnimationPresentation.active_texture(game) in game.textures[String(attack_case[2])], "%s has no real animation" % String(attack_case[0]))
 
+	# The three sustained casts must reach their new action-specific keyframes,
+	# not merely cycle through the old generic claw poses.
+	var sequence_cases := [
+		["rain", Callable(game, "_add_boss_rain").bind(7), "boss1_rain", 2, 3, 0.20, 0.38],
+		["sand", Callable(game, "_add_boss_sand").bind(1), "boss1_sand", 4, 5, 0.50, 0.70],
+		["tide", Callable(game, "_add_boss_tide"), "boss1_tide", 2, 3, 0.20, 0.38],
+	]
+	for sequence_case in sequence_cases:
+		game.boss_attacks.clear()
+		sequence_case[1].call()
+		game.boss_attacks[-1]["age"] = float(sequence_case[5])
+		Boss1AnimationPresentation.update(game, 0.01)
+		assert(Boss1AnimationPresentation.active_texture(game) == game.textures[String(sequence_case[2])][int(sequence_case[3])], "%s never reaches its charge/action keyframe" % String(sequence_case[0]))
+		game.boss_attacks[-1]["age"] = float(sequence_case[6])
+		Boss1AnimationPresentation.update(game, 0.01)
+		assert(Boss1AnimationPresentation.active_texture(game) == game.textures[String(sequence_case[2])][int(sequence_case[4])], "%s never reaches its release keyframe" % String(sequence_case[0]))
+
+	# Every attack now has a short stationary pre-cast. It must show the same
+	# family sprite before emitting any authoritative hazard, then release both
+	# movement and the exact selected attack after 200 ms.
+	var windup_cases := [
+		["bubble", "boss1_bubble"],
+		["pressure_bubbles", "boss1_bubble"],
+		["rain", "boss1_rain"],
+		["tide", "boss1_tide"],
+		["sand", "boss1_sand"],
+		["rush", "boss1_pincer"],
+		["pincer_tenaz", "boss1_pincer"],
+	]
+	for windup_case in windup_cases:
+		game.boss_attacks.clear()
+		game.boss1_attack_windup.clear()
+		game.boss_attack_timer = 99.0
+		# Reproduce the real transition from pursuit into the stationary cast.
+		# The movement interpolation hold must not hide the ability animation.
+		game.boss1_animation_velocity = Vector2(90.0, 0.0)
+		game.boss1_animation_motion_hold = 0.18
+		game.boss1_animation_turn_timer = 0.0
+		game._start_boss1_attack_windup(String(windup_case[0]), game.player_pos)
+		Boss1AnimationPresentation.update(game, 0.01)
+		assert(Boss1AnimationPresentation.active_texture(game) in game.textures[String(windup_case[1])], "%s pre-cast has no matching animation" % String(windup_case[0]))
+		var frozen_position: Vector2 = game.boss_pos
+		game._update_boss(0.10)
+		assert(game.boss_pos.is_equal_approx(frozen_position), "%s moved during the pre-cast" % String(windup_case[0]))
+		assert(not game.boss1_attack_windup.is_empty())
+		game._update_boss(0.11)
+		assert(game.boss1_attack_windup.is_empty())
+		assert(not game.boss_attacks.is_empty(), "%s did not emit after the pre-cast" % String(windup_case[0]))
+
+	# The 20 percent mitigation applies only while the pre-cast state is active.
+	game.boss_attacks.clear()
+	game.boss1_attack_windup.clear()
+	game.boss_hp = game.boss_hp_max
+	game._damage_boss(1000.0, "boss1_animation_smoke", false, false)
+	var baseline_damage: float = game.boss_hp_max - game.boss_hp
+	game.boss_hp = game.boss_hp_max
+	game._start_boss1_attack_windup("bubble", game.player_pos)
+	game._damage_boss(1000.0, "boss1_animation_smoke", false, false)
+	var windup_damage: float = game.boss_hp_max - game.boss_hp
+	assert(is_equal_approx(windup_damage, baseline_damage * game.BOSS1_ATTACK_WINDUP_DAMAGE_TAKEN_MULT))
+	var windup_wire: Dictionary = bytes_to_var(var_to_bytes(game._pack_net_boss_visuals()))
+	assert(windup_wire.get("boss1_attack_windup", {}) is Dictionary)
+	game.boss1_attack_windup.clear()
+	game._apply_remote_boss_visual_snapshot(windup_wire)
+	assert(String(game.boss1_attack_windup.get("choice", "")) == "bubble")
+	game.boss1_attack_windup.clear()
+
 	game.boss_attacks.clear()
 	# A lingering projectile cannot drag an attack pose through locomotion.
 	game.boss1_animation_motion_hold = 0.18
@@ -165,6 +239,9 @@ func _run() -> void:
 	game.boss1_animation_motion_hold = 0.18
 	assert(Boss1AnimationPresentation.active_texture(game) in game.textures["boss1_walk"])
 	game.boss1_animation_motion_hold = 0.0
+	assert(Boss1AnimationPresentation.active_texture(game) not in game.textures["boss1_pincer"], "dash recovery must release its sprite immediately")
+	game.boss_attacks[0]["state"] = "final"
+	assert(Boss1AnimationPresentation.active_texture(game) not in game.textures["boss1_pincer"], "rush final state must release its sprite immediately")
 	game.boss_attacks.clear()
 	game.boss1_absorb_timer = game.BOSS1_ABSORB_DURATION
 	Boss1AnimationPresentation.update(game, 0.01)
@@ -196,7 +273,7 @@ func _run() -> void:
 	game.boss1_death_animation_timer = 0.0
 	assert(not Boss1AnimationPresentation.death_active(game))
 
-	print("BOSS1_ANIMATION_SMOKE_OK idle_walk_turn=true attacks=7 absorb_rewind=true hit_priority=true jump_frames=5 death_frames=6 directions=4 wire=true low_dash=true safe_margins=true canonical_extent=true perceived_scale=true shadow_anchor=true")
+	print("BOSS1_ANIMATION_SMOKE_OK idle_walk_turn=true attacks=7 precast=7 windup_damage=80pct snapshot=true absorb_rewind=true hit_priority=true jump_frames=5 death_frames=6 directions=4 wire=true low_dash=true recovery_release=true safe_margins=true canonical_extent=true perceived_scale=true shadow_anchor=true")
 	if game.has_method("_cleanup_runtime_resources"):
 		game._cleanup_runtime_resources()
 	if game.music_player != null:

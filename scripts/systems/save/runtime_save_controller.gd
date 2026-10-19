@@ -196,6 +196,7 @@ func _load_config() -> void :
 				elif k == "qa_streaming_unlocked": core.qa_streaming_unlocked = v == "true"
 				elif k == "qa_streaming_quality": core.qa_streaming_quality_mode = core._sanitize_qa_stream_quality_mode(v)
 				elif k == "qa_data_unlocked": core.qa_data_unlocked = v == "true"
+				elif k == "henry_cheat_unlocked": core.henry_cheat_unlocked = v == "true"
 				elif k == "force_phase6_start":
 					core.force_phase6_start = v == "true"
 					if core.force_phase6_start:
@@ -307,6 +308,7 @@ func _save_config() -> void :
 		file.store_string("qa_streaming_unlocked=" + ("true" if core.qa_streaming_unlocked else "false") + "\n")
 		file.store_string("qa_streaming_quality=" + core._sanitize_qa_stream_quality_mode(core.qa_streaming_quality_mode) + "\n")
 		file.store_string("qa_data_unlocked=" + ("true" if core.qa_data_unlocked else "false") + "\n")
+		file.store_string("henry_cheat_unlocked=" + ("true" if core.henry_cheat_unlocked else "false") + "\n")
 		file.store_string("force_phase6_start=" + ("true" if core.force_phase6_start else "false") + "\n")
 		file.store_string("forced_initial_phase=" + str(core._sanitize_forced_initial_phase(core.forced_initial_phase)) + "\n")
 		file.store_string("initial_phase_bias_target=" + str(core._sanitize_initial_phase_bias_target(core.initial_phase_bias_target)) + "\n")
@@ -358,12 +360,12 @@ func _interrupted_run_field_names() -> Array:
 		"shop_paid_rerolls_this_visit", "manifest_evolution_fragment_claim_count", "cinzas_card_bonuses",
 		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted",
 		"run_pacing_profile", "run_pacing_valid_runs_at_start", "run_valid_duration_recorded", "run_pacing_larapio_first_time", "run_pacing_arauto_first_time", "run_pacing_first_special_enemy_time", "run_pacing_first_special_enemy_kind",
-		"selected_manifestation", "selected_aura", "manifestation_key", "aura_state", "manifest_evolution_state",
+		"active_character_key", "selected_manifestation", "selected_aura", "selected_mutation", "selected_effect", "manifestation_key", "mutation_key", "effect_key", "aura_state", "manifest_evolution_state",
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer",
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
 		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "bargain_capsule", "bargain_capsule_next_check_time", "bargain_capsule_event_sequence", "bargain_capsule_pending_discount", "bargain_capsule_last_result", "shop_bargain_discount_session", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", "shop_manual_cooldown_until", "shop_manual_grace_until", "shop_manual_grace_reopen_available", "shop_manual_visit_active", "shop_manual_visit_grace_on_close", "shop_manual_cooldown_pulse",
-		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries",
+		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", "henry_attack_combo", "henry_attack_visual_stage", "henry_skill_cast_active", "henry_skill_cast_elapsed", "henry_skill_cast_direction", "henry_skill_damage_applied", "henry_flame_cones", "henry_ultimate_cast_active", "henry_ultimate_cast_elapsed", "henry_ultimate_center", "henry_ultimate_event_id", "henry_heat_waves", "henry_boss_burn_state", "henry_friction", "henry_friction_release_timer", "henry_incandescence_active_timer", "henry_incandescence_tick_timer", "henry_incandescence_intensity", "henry_incandescence_target_dwell", "henry_incandescence_zones",
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing",
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player",
 		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "miasma_eel_slow_timer", "miasma_eel_slow_stacks", "pustule_spit_slow_timer", "pustule_spit_slow_grace_timer", "boss_tp_stun_timer", "boss_wave_slow_timer", "player_stun_timer", "player_silence_timer", "revive_heal_penalty_timer", "player_freeze_visual_timer", "player_freeze_visual_duration",
@@ -401,6 +403,10 @@ func _snapshot_field_value(value: Variant) -> Variant:
 	return value
 
 func _run_can_be_saved() -> bool:
+	if core.henry_incendiary_ability_controller.entrance_active:
+		return false # Intro is transient; never resume a half-frozen world.
+	if core.experimental_phase_active:
+		return false
 	if core.is_multiplayer or core.dedicated_server_mode or core.online_connected:
 		return false
 	if core.is_dead or core.player_hp <= 0:
@@ -480,8 +486,9 @@ func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
 	var fields: Dictionary = snapshot.get("fields", {})
 	var phase: = int(fields.get("current_phase", 1))
 	var total_seconds: = int(max(0.0, float(fields.get("time_alive", 0.0))))
-	var manifestation_index: = clampi(int(fields.get("selected_manifestation", 0)), 0, core.MANIFESTATIONS.size() - 1)
-	var aura_index: = clampi(int(fields.get("selected_aura", 0)), 0, core.AURAS.size() - 1)
+	var is_henry: bool = String(fields.get("active_character_key", core.CHARACTER_GEOVANA)) == core.CHARACTER_HENRY
+	var manifestation_index: int = core.HENRY_SELECTION_INDEX if is_henry else clampi(int(fields.get("selected_manifestation", 0)), 0, core.MANIFESTATIONS.size() - 1)
+	var aura_index: int = core.HENRY_SELECTION_INDEX if is_henry else clampi(int(fields.get("selected_aura", 0)), 0, core.AURAS.size() - 1)
 
 	var date_str: = ""
 	var saved_unix: = int(snapshot.get("saved_unix", 0))
@@ -502,8 +509,8 @@ func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
 		"phase": phase,
 		"time": "%02d:%02d" % [int(total_seconds / 60), total_seconds % 60],
 		"date": date_str,
-		"manifestation": String(core.MANIFESTATIONS[manifestation_index].get("name", "Manifestacao")),
-		"aura": String(core.AURAS[aura_index].get("name", "Aura")).to_upper(),
+		"manifestation": String(core._selection_manifest_item(manifestation_index).get("name", "Manifestacao")),
+		"aura": String(core._selection_aura_item(aura_index).get("name", "Aura")).to_upper(),
 		"saved_at": String(snapshot.get("saved_at", ""))
 	}
 
@@ -520,8 +527,11 @@ func _resume_interrupted_run() -> bool:
 		_clear_interrupted_run_save()
 		return false
 	var fields: Dictionary = snapshot.get("fields", {})
-	core.selected_manifestation = clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
-	core.selected_aura = clampi(int(fields.get("selected_aura", core.selected_aura)), 0, core.AURAS.size() - 1)
+	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
+	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
+	core.selected_aura = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_aura", core.selected_aura)), 0, core.AURAS.size() - 1)
+	core.selected_mutation = clampi(int(fields.get("selected_mutation", 0)), 0, core.HENRY_MUTATIONS.size() - 1)
+	core.selected_effect = clampi(int(fields.get("selected_effect", 0)), 0, core.HENRY_EFFECTS.size() - 1)
 	core._start_game(false)
 	for field in _interrupted_run_field_names() + _run_report_state_field_names():
 		var key: = String(field)
@@ -584,8 +594,9 @@ func _use_run_retry() -> bool:
 	if fields.is_empty():
 		return false
 	retry_charges_used += 1
-	core.selected_manifestation = clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
-	core.selected_aura = clampi(int(fields.get("selected_aura", core.selected_aura)), 0, core.AURAS.size() - 1)
+	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
+	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
+	core.selected_aura = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_aura", core.selected_aura)), 0, core.AURAS.size() - 1)
 	core._start_game(false)
 	for field in _interrupted_run_field_names() + _run_report_state_field_names():
 		var key: = String(field)

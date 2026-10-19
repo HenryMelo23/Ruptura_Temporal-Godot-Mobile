@@ -19,9 +19,9 @@ const PHASE_TEXTURE_SPECS := {
 		"boss1_pincer_up": ["boss1/pincer_up/pincer_up_01.png", "boss1/pincer_up/pincer_up_02.png", "boss1/pincer_up/pincer_up_03.png", "boss1/pincer_up/pincer_up_04.png"],
 		"boss1_pincer_down": ["boss1/pincer_down/pincer_down_01.png", "boss1/pincer_down/pincer_down_02.png", "boss1/pincer_down/pincer_down_03.png", "boss1/pincer_down/pincer_down_04.png"],
 		"boss1_absorb": ["boss1/absorb/absorb_01.png", "boss1/absorb/absorb_02.png", "boss1/absorb/absorb_03.png", "boss1/absorb/absorb_04.png"],
-		"boss1_sand": ["boss1/sand/sand_01.png", "boss1/sand/sand_02.png", "boss1/sand/sand_03.png", "boss1/sand/sand_04.png"],
-		"boss1_tide": ["boss1/tide/tide_01.png", "boss1/tide/tide_02.png", "boss1/tide/tide_03.png", "boss1/tide/tide_04.png"],
-		"boss1_rain": ["boss1/rain/rain_01.png", "boss1/rain/rain_02.png", "boss1/rain/rain_03.png", "boss1/rain/rain_04.png"],
+		"boss1_sand": ["boss1/sand/sand_01.png", "boss1/sand/sand_02.png", "boss1/sand/sand_03.png", "boss1/sand/sand_04.png", "boss1/sand/sand_sweep.png", "boss1/sand/sand_follow.png"],
+		"boss1_tide": ["boss1/tide/tide_01.png", "boss1/tide/tide_02.png", "boss1/tide/tide_charge.png", "boss1/tide/tide_release.png", "boss1/tide/tide_03.png", "boss1/tide/tide_04.png"],
+		"boss1_rain": ["boss1/rain/rain_01.png", "boss1/rain/rain_02.png", "boss1/rain/rain_charge.png", "boss1/rain/rain_release.png", "boss1/rain/rain_03.png", "boss1/rain/rain_04.png"],
 		"boss1_rewind": ["boss1/rewind/rewind_01.png", "boss1/rewind/rewind_02.png", "boss1/rewind/rewind_03.png", "boss1/rewind/rewind_04.png"],
 		"boss1_hit": ["boss1/hit_01.png", "boss1/hit_02.png", "boss1/hit_03.png", "boss1/hit_04.png", "boss1/hit_05.png"],
 		"boss1_jump": ["boss1/jump_01.png", "boss1/jump_02.png", "boss1/jump_03.png", "boss1/jump_04.png", "boss1/jump_05.png"],
@@ -33,6 +33,18 @@ const PHASE_TEXTURE_SPECS := {
 		"enemy_phase_2_kamikaze": ["pinguim_kamikaze_01.png", "pinguim_kamikaze_02.png"],
 		"enemy_phase_2_pyro": ["pinguim_incendiario_01.png", "pinguim_incendiario_02.png"],
 		"boss2": ["Boss2_1.png", "Boss2_2.png"],
+		"boss2_anim_idle": ["boss2_remaster/idle/idle_01.png", "boss2_remaster/idle/idle_02.png", "boss2_remaster/idle/idle_03.png", "boss2_remaster/idle/idle_04.png"],
+		"boss2_anim_walk": ["boss2_remaster/walk/walk_01.png", "boss2_remaster/walk/walk_02.png", "boss2_remaster/walk/walk_03.png", "boss2_remaster/walk/walk_04.png"],
+		"boss2_anim_breath": ["boss2_remaster/breath/breath_01.png", "boss2_remaster/breath/breath_02.png", "boss2_remaster/breath/breath_03.png", "boss2_remaster/breath/breath_04.png"],
+		"boss2_anim_spin": ["boss2_remaster/spin/spin_01.png", "boss2_remaster/spin/spin_02.png"],
+		"boss2_anim_stomp": ["boss2_remaster/stomp/stomp_01.png", "boss2_remaster/stomp/stomp_02.png"],
+		"boss2_anim_prison": ["boss2_remaster/prison/prison_01.png", "boss2_remaster/prison/prison_02.png"],
+		"boss2_anim_shield": ["boss2_remaster/shield/shield_01.png", "boss2_remaster/shield/shield_02.png"],
+		"boss2_anim_blizzard": ["boss2_remaster/blizzard/blizzard_01.png", "boss2_remaster/blizzard/blizzard_02.png"],
+		"boss2_anim_flash": ["boss2_remaster/flash/flash_01.png", "boss2_remaster/flash/flash_02.png"],
+		"boss2_anim_hunt": ["boss2_remaster/hunt/hunt_01.png", "boss2_remaster/hunt/hunt_02.png"],
+		"boss2_anim_hit": ["boss2_remaster/hit/hit_01.png", "boss2_remaster/hit/hit_02.png", "boss2_remaster/hit/hit_03.png", "boss2_remaster/hit/hit_04.png"],
+		"boss2_anim_death": ["boss2_remaster/death/death_01.png", "boss2_remaster/death/death_02.png", "boss2_remaster/death/death_03.png", "boss2_remaster/death/death_04.png", "boss2_remaster/death/death_05.png", "boss2_remaster/death/death_06.png", "boss2_remaster/death/death_07.png", "boss2_remaster/death/death_08.png"],
 		"boss2_orb": ["Bolha1.png", "Bolha2.png", "Bolha3.png", "Bolha4.png", "Bolha5.png"],
 		"boss2_wave": "Onda_Boss2.png",
 		"sineiro_boreal_motion": "sineiro_boreal/sineiro_boreal_motion.png",
@@ -41,6 +53,12 @@ const PHASE_TEXTURE_SPECS := {
 	3: {
 		"enemy_phase_3_left": ["inimigo_esquerda3-1.png", "inimigo_esquerda3-2.png"],
 		"enemy_phase_3_right": ["inimigo_direita3-1.png", "inimigo_direita3-2.png"],
+		"enemy_phase_3_devoto": ["phase3_enemies/devoto_febril_01.png", "phase3_enemies/devoto_febril_02.png"],
+		"enemy_phase_3_incensario": ["phase3_enemies/incensario_01.png", "phase3_enemies/incensario_02.png"],
+		"enemy_phase_3_guardiao": ["phase3_enemies/guardiao_sucata_01.png", "phase3_enemies/guardiao_sucata_02.png"],
+		"enemy_phase_3_flagelante": ["phase3_enemies/flagelante_01.png", "phase3_enemies/flagelante_02.png"],
+		"enemy_phase_3_salmodiante": ["phase3_enemies/salmodiante_01.png", "phase3_enemies/salmodiante_02.png"],
+		"enemy_phase_3_relicario": ["phase3_enemies/portador_relicario_01.png", "phase3_enemies/portador_relicario_02.png"],
 		"enemy_phase_3_bullet": ["Disp_inimigo3_1.png", "Disp_inimigo3_2.png"],
 		"boss_walk": ["Bossandando3_1.png", "Bossandando3_2.png"],
 		"boss3": ["Boss3_1.png", "Boss3_2.png"],
@@ -98,15 +116,40 @@ const PHASE_TEXTURE_SPECS := {
 }
 
 
+static func should_stream_phase_assets(is_mobile_runtime: bool, memory_saver_active: bool) -> bool:
+	# Streaming is a memory policy, not a visual-quality policy. Mobile keeps the
+	# authored frames for the active phase while releasing assets from other phases.
+	return is_mobile_runtime or memory_saver_active
+
+
+static func should_lazy_gallery_assets(is_mobile_runtime: bool, memory_saver_active: bool) -> bool:
+	# Card/manifestation/aura art is presentation-only and can be restored from
+	# its registered path. Lazy residency keeps the authored texture untouched.
+	return is_mobile_runtime or memory_saver_active
+
+
+static func release_transient_gallery_assets(game: Node) -> int:
+	var released: int = 0
+	for raw_key in game.textures.keys():
+		var key := String(raw_key)
+		if key.begins_with("card_") or key.begins_with("manifestation_") or key.begins_with("aura_"):
+			game.textures.erase(raw_key)
+			released += 1
+	return released
+
+
 static func preload_all(game: Node, base_path: String) -> void:
 	for phase in PHASE_TEXTURE_SPECS:
 		_load_phase(game, int(phase), base_path, false)
 
 
-static func prepare_phase(game: Node, phase: int, base_path: String, release_inactive: bool) -> void:
+static func prepare_phase(game: Node, phase: int, base_path: String, release_inactive: bool, compact_animations = null) -> void:
+	# Four-argument callers historically coupled release with compaction. Keep
+	# that API behavior; mobile full-quality callers pass `false` explicitly.
+	var should_compact: bool = release_inactive if compact_animations == null else bool(compact_animations)
 	if release_inactive:
 		_release_inactive(game, phase)
-	_load_phase(game, phase, base_path, release_inactive)
+	_load_phase(game, phase, base_path, should_compact)
 
 
 static func ensure_key(game: Node, key: String, base_path: String) -> bool:
@@ -138,6 +181,8 @@ static func _load_phase(game: Node, phase: int, base_path: String, skip_optional
 			var texture_spec: Variant = specs[key]
 			if skip_optional_animation_sets and texture_key.begins_with("boss1_") and texture_spec is Array:
 				texture_spec = _compact_boss1_animation_spec(texture_key, texture_spec)
+			if skip_optional_animation_sets and texture_key.begins_with("boss2_anim_") and texture_spec is Array:
+				texture_spec = _compact_boss2_animation_spec(texture_key, texture_spec)
 			_load_key(game, texture_key, texture_spec, base_path)
 
 
@@ -145,6 +190,20 @@ static func _compact_boss1_animation_spec(key: String, spec: Array) -> Array:
 	if spec.size() <= 2:
 		return spec
 	if key in ["boss1_jump", "boss1_hit", "boss1_death", "boss1_pincer", "boss1_pincer_up", "boss1_pincer_down"]:
+		return [spec[0], spec[int(spec.size() / 2)], spec[-1]]
+	# Keep the authored action/release silhouettes on low-memory devices. The
+	# generic first/last reduction would erase the visual identity of these casts.
+	if key in ["boss1_rain", "boss1_tide"] and spec.size() >= 6:
+		return [spec[0], spec[2], spec[3], spec[-1]]
+	if key == "boss1_sand" and spec.size() >= 6:
+		return [spec[0], spec[3], spec[4], spec[-1]]
+	return [spec[0], spec[-1]]
+
+
+static func _compact_boss2_animation_spec(key: String, spec: Array) -> Array:
+	if spec.size() <= 2:
+		return spec
+	if key in ["boss2_anim_hit", "boss2_anim_death"]:
 		return [spec[0], spec[int(spec.size() / 2)], spec[-1]]
 	return [spec[0], spec[-1]]
 

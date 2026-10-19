@@ -14,12 +14,14 @@ const BombasticaSceneVfx = preload("res://scripts/vfx/bombastica_scene_vfx.gd")
 const ChainVisualPhysics = preload("res://scripts/vfx/chain_visual_physics.gd")
 const EntityVisualProfiles = preload("res://scripts/vfx/entity_visual_profiles.gd")
 const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
+const CharacterSelectPresentation = preload("res://scripts/presentation/character_select_presentation.gd")
 const HudPresentation = preload("res://scripts/presentation/hud_presentation.gd")
 const CombatEffectsPresentation = preload("res://scripts/presentation/combat_effects_presentation.gd")
 const SineiroBorealPresentation = preload("res://scripts/presentation/phase2_sineiro_presentation.gd")
 const AmberSuturerPresentation = preload("res://scripts/presentation/phase6_amber_suturer_presentation.gd")
 const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
 const PhaseMapPresentation = preload("res://scripts/presentation/phase_map_presentation.gd")
+const ExperimentalPhasePresentation = preload("res://scripts/presentation/experimental_phase_presentation.gd")
 const GeovanaBarkControllerScript = preload("res://scripts/presentation/geovana_bark_controller.gd")
 var phase_map_layer: Node2D
 const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
@@ -35,32 +37,47 @@ const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
 const VFXDirectorScript = preload("res://scripts/vfx_director.gd")
 const RTAudioLifecycleScript = preload("res://scripts/systems/audio/audio_lifecycle.gd")
 const RTNetContractScript = preload("res://scripts/systems/online/net_contract.gd")
+const RTVisualSyncContractScript = preload("res://scripts/systems/online/runtime_visual_sync_contract.gd")
+const RTManifestationVisualSnapshotScript = preload("res://scripts/systems/online/runtime_manifestation_visual_snapshot.gd")
 const RTWorldSnapshotChunkerScript = preload("res://scripts/systems/online/world_snapshot_chunker.gd")
 const UmbraMemoryController = preload("res://scripts/systems/umbra_memory_controller.gd")
 const UmbraAuthorityController = preload("res://scripts/systems/online/umbra_authority_controller.gd")
 const RTTransportStateScript = preload("res://scripts/systems/online/transport_state.gd")
 const RTTeamRevivalStateScript = preload("res://scripts/systems/online/team_revival_state.gd")
 const RTBossVisualSyncControllerScript = preload("res://scripts/systems/online/runtime_boss_visual_sync_controller.gd")
+const RTRuntimeReviveControllerScript = preload("res://scripts/systems/online/runtime_revive_controller.gd")
+const RTLobbyControllerScript = preload("res://scripts/systems/online/runtime_lobby_controller.gd")
 const RTHudLayoutScript = preload("res://scripts/ui/hud_layout.gd")
 const RuntimeSaveControllerScript = preload("res://scripts/systems/save/runtime_save_controller.gd")
 const PhaseFlowControllerScript = preload("res://scripts/systems/phase/phase_flow_controller.gd")
+const ExperimentalPhaseControllerScript = preload("res://scripts/systems/phase/experimental_phase_controller.gd")
 const RuntimeProgressionControllerScript = preload("res://scripts/systems/progression/runtime_progression_controller.gd")
 const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
 const Phase2SineiroBorealControllerScript = preload("res://scripts/systems/enemies/phase2_sineiro_boreal_controller.gd")
+const Phase3EnemyControllerScript = preload("res://scripts/systems/enemies/phase3_enemy_controller.gd")
 const Phase6AmberSuturerControllerScript = preload("res://scripts/systems/enemies/phase6_amber_suturer_controller.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
+const PlayerControlControllerScript = preload("res://scripts/systems/player/player_control_controller.gd")
+const NecronadaAbilityControllerScript = preload("res://scripts/systems/abilities/necronada_ability_controller.gd")
+const AncoradaAbilityControllerScript = preload("res://scripts/systems/abilities/ancorada_ability_controller.gd")
+const HenryIncendiaryAbilityControllerScript = preload("res://scripts/systems/abilities/henry_incendiary_ability_controller.gd")
 const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
+const Phase3RitualPulseControllerScript = preload("res://scripts/systems/events/phase3_ritual_pulse_controller.gd")
+const Phase4InstabilityPulseControllerScript = preload("res://scripts/systems/events/phase4_instability_pulse_controller.gd")
 const RTPlayerProgressSync = preload("res://scripts/systems/player_progress_sync.gd")
 const RTManifestEvolutionCatalog = preload("res://scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd")
 const UmbraDqnContract = preload("res://scripts/systems/umbra_dqn_contract.gd")
 const UmbraNeuralRuntime = preload("res://scripts/systems/umbra_neural_runtime.gd")
 const RTBossPartyScaling = preload("res://scripts/systems/boss_party_scaling.gd")
+const RTSharedBossAttackContractScript = preload("res://scripts/systems/bosses/shared_boss_attack_contract.gd")
+const RTBoss4InstabilityFissureControllerScript = preload("res://scripts/systems/bosses/boss4_instability_fissure_controller.gd")
 const RuntimeAssetController = preload("res://scripts/systems/assets/runtime_asset_controller.gd")
 
-const WORLD_SIZE: = Vector2(1600, 900)
-const GAME_VERSION: = "2.0.51"
-const GAME_VERSION_CODE: = 25100
+const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
+var WORLD_SIZE := DEFAULT_WORLD_SIZE
+const GAME_VERSION: = "2.0.52"
+const GAME_VERSION_CODE: = 25200
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
 const STARTUP_THANKS_TEXTURE_PATH: = "res://assets/sprites/startup_thanks_2_0_31.png"
 const STARTUP_THANKS_FRAME_COUNT: int = 500
@@ -142,6 +159,62 @@ const MANIFEST_DRAG_DEADZONE: = 8.0
 const MANIFEST_STAGE_MANIFESTATION: = "manifestation"
 const MANIFEST_STAGE_TRANSITION: = "transition"
 const MANIFEST_STAGE_AURA: = "aura"
+const CHARACTER_GEOVANA := "geovana"
+const CHARACTER_HENRY := "henry"
+# Outside both catalog ranges so the existing online payload identifies Henry
+# without changing any RPC signature or packet order.
+const HENRY_SELECTION_INDEX := 100
+const HENRY_MUTATIONS := [
+	{
+		"key": "incendiario",
+		"name": "Incendiário",
+		"desc": "Fagulhas, cone de chamas e uma onda de calor que intensifica a Incandescência.",
+		"color": Color(1.0, 0.28, 0.06),
+		"accent": Color(1.0, 0.78, 0.18),
+	}
+]
+const HENRY_EFFECTS := [
+	{
+		"key": "incandescencia",
+		"name": "Incandescência",
+		"desc": "Dano sofrido acumula Atrito. Periodicamente, Henry o libera em uma aura de fogo; inimigos próximos queimam mais quanto mais tempo permanecem nela.",
+		"color": Color(1.0, 0.42, 0.08),
+		"accent": Color(1.0, 0.9, 0.36),
+	}
+]
+const HENRY_BURN_DURATION := 1.5
+const HENRY_BURN_TICK_INTERVAL := 0.30
+const HENRY_BURN_DAMAGE_RATIO := 0.12
+const HENRY_BURN_OVERDRIVE_DURATION := 3.0
+const HENRY_BURN_OVERDRIVE_DAMAGE_MULT := 1.55
+const HENRY_BURN_OVERDRIVE_TICK_MULT := 0.58
+const HENRY_FRICTION_MAX := 100.0
+const HENRY_FRICTION_RELEASE_INTERVAL := 5.0
+const HENRY_FRICTION_MIN_RELEASE := 8.0
+const HENRY_INCANDESCENCE_DURATION := 3.2
+const HENRY_INCANDESCENCE_RADIUS := 205.0
+const HENRY_INCANDESCENCE_TICK_INTERVAL := 0.30
+const HENRY_INCANDESCENCE_BURN_RATIO := 0.055
+const HENRY_INCANDESCENCE_DWELL_MAX_MULT := 2.5
+const HENRY_INCANDESCENCE_NET_SENTINEL := 50.0
+const HENRY_SKILL_CAST_DURATION := 1.0
+const HENRY_SKILL_IMPACT_TIME := 0.46
+const HENRY_SKILL_RANGE := 360.0
+const HENRY_SKILL_HALF_ANGLE := 0.52
+const HENRY_ULTIMATE_RADIUS := 280.0
+const HENRY_ULTIMATE_CAST_DURATION := 0.8
+const HENRY_ULTIMATE_WAVE_DURATION := 0.72
+const HENRY_ULTIMATE_FRAME_COUNT := 8
+const HENRY_ENTRY_DURATION := 3.15
+const HENRY_ENTRY_FRAME_COUNT := 12
+const HENRY_IDLE_DRAW_HEIGHT := 88.0
+const HENRY_IDLE_VISIBLE_HEIGHT := 237.0
+const HENRY_ENTRY_VISIBLE_HEIGHTS := [217.0, 210.0, 208.0, 208.0, 227.0, 227.0, 225.0, 226.0, 217.0, 216.0, 215.0, 217.0]
+const HENRY_IDLE_POCKET_FRAME_COUNT := 5
+const HENRY_IDLE_BEARD_SEQUENCE_FRAME_COUNT := 4
+const HENRY_IDLE_BEARD_INTERVAL := 7.0
+const HENRY_IDLE_BEARD_DURATION := 1.05
+const HENRY_IDLE_FOOT_TAP_PERIOD := 2.8
 const MANIFEST_SPECTRUM_TRANSITION_TIME: = 0.85
 const MANIFEST_PREVIEW_FRAME_COUNT: = 24
 const MANIFEST_PREVIEW_ATLAS_COLS: = 4
@@ -369,6 +442,22 @@ const PHASE3_GUARDIAO_UNLOCK_TIME: = 540.0
 const PHASE3_LIMIT_EARLY: = 5
 const PHASE3_LIMIT_MID: = 6
 const PHASE3_LIMIT_FULL: = 7
+const PHASE3_FLAGELANTE_SURGE_MIN_INTERVAL: = 2.4
+const PHASE3_FLAGELANTE_SURGE_MAX_INTERVAL: = 3.2
+const PHASE3_FLAGELANTE_SURGE_TIME: = 0.62
+const PHASE3_FLAGELANTE_SURGE_SPEED_MULT: = 1.62
+const PHASE3_FLAGELANTE_WEAVE: = 0.42
+const PHASE3_SALMODIANTE_WINDUP: = 0.52
+const PHASE3_SALMODIANTE_FAN_ANGLE: = 0.19
+const PHASE3_SALMODIANTE_DAMAGE_RATIO: = 0.045
+const PHASE3_SALMODIANTE_MIN_INTERVAL: = 3.2
+const PHASE3_SALMODIANTE_MAX_INTERVAL: = 4.0
+const PHASE3_RELIC_RADIUS: = 230.0
+const PHASE3_RELIC_FERVOR_TIME: = 2.8
+const PHASE3_RELIC_FERVOR_SPEED_MULT: = 1.16
+const PHASE3_RELIC_MIN_INTERVAL: = 5.6
+const PHASE3_RELIC_MAX_INTERVAL: = 6.8
+const PHASE3_RELIC_MAX_TARGETS: = 5
 const PHASE4_ADAPT_TIME: = 180.0
 const PHASE4_LIMIT_EARLY: = 3
 const PHASE4_LIMIT_FULL: = 4
@@ -642,6 +731,12 @@ const ANCORADA_ULTIMATE_DAMAGE_MULT: = 1.85
 const ANCORADA_ULTIMATE_BOSS_DAMAGE_MULT: = 1.15
 const ANCORADA_ULTIMATE_SLOW_DURATION: = 2.2
 const ANCORADA_ULTIMATE_SLOW_MULT: = 0.35
+const ANCORADA_ULTIMATE_MOMENTUM_DISTANCE: float = 520.0
+const ANCORADA_ULTIMATE_MOMENTUM_DECAY: float = 0.06
+const ANCORADA_ULTIMATE_ATTACK_SPEED_BONUS: float = 0.18
+const ANCORADA_ULTIMATE_DROP_INTERVAL_BONUS: float = 0.42
+const ANCORADA_ULTIMATE_TRAIL_INTERVAL: float = 0.12
+const ANCORADA_ULTIMATE_TRAIL_POINTS: int = 9
 
 const ANCORADA_LASTRO_MAX_STACKS: int = 5
 const ANCORADA_LASTRO_POINTS_PER_STACK: int = 4
@@ -650,12 +745,27 @@ const ANCORADA_LASTRO_E_MAX_POINTS_PER_DROP_CYCLE: int = 4
 const ANCORADA_LASTRO_DECAY_DELAY: float = 8.0
 const ANCORADA_LASTRO_DECAY_INTERVAL: float = 2.0
 const ANCORADA_LASTRO_KNOCKBACK_RESIST_PER_STACK: float = 0.04
+const ANCORADA_LASTRO_DAMAGE_PER_STACK: float = 0.04
+const ANCORADA_LASTRO_ATTACK_SPEED_PER_STACK: float = 0.02
+
+const ANCORADA_ANCHOR_LIFE: float = 7.0
+const ANCORADA_ANCHOR_MAX_ACTIVE: int = 5
+const ANCORADA_ANCHOR_CLAIM_RADIUS: float = 74.0
+const ANCORADA_ANCHOR_CLAIM_LASTRO_POINTS: int = 2
+const ANCORADA_TETHER_WIDTH: float = 34.0
+const ANCORADA_TETHER_SCAN_INTERVAL: float = 0.12
+const ANCORADA_TETHER_DAMAGE_MULT: float = 0.22
+const ANCORADA_TETHER_BOSS_DAMAGE_MULT: float = 0.12
+const ANCORADA_TETHER_SLOW_DURATION: float = 0.7
+const ANCORADA_TETHER_SLOW_MULT: float = 0.78
 
 const ANCORADA_HAB1_COOLDOWN: float = 11.0
 const ANCORADA_HAB1_TELEGRAPH_TIME: float = 0.10
 const ANCORADA_HAB1_FALL_TIME: float = 0.28
 const ANCORADA_HAB1_IMPACT_TIME: float = 0.38
 const ANCORADA_HAB1_CRACK_DURATION: float = 2.4
+const ANCORADA_HAB1_PULL_BASE: float = 0.22
+const ANCORADA_HAB1_PULL_PER_LASTRO: float = 0.055
 
 const ANCORADA_BASIC_PROJECTILE_SPEED: float = 720.0
 const ANCORADA_BASIC_PROJECTILE_RANGE: float = 760.0
@@ -712,6 +822,8 @@ const BOSS1_ABSORB_RETALIATE_BURSTS: = 18
 const BOSS1_ABSORB_PROJECTILE_DAMAGE_BASE: = 10.0
 const BOSS1_ABSORB_PROJECTILE_DAMAGE_RATE: = 0.9
 const BOSS1_BUBBLE_WARNING_LEAD: = 5.0
+const BOSS1_ATTACK_WINDUP_DURATION: = 0.20
+const BOSS1_ATTACK_WINDUP_DAMAGE_TAKEN_MULT: = 0.80
 const BOSS1_DASH_SFX_DELAY: = 0.2
 const BOSS1_TIDE_NEAR_SFX_DISTANCE: = 200.0
 const BOSS1_PINCER_TENAZ_WARNING: = 0.82
@@ -719,6 +831,26 @@ const BOSS1_PINCER_TENAZ_DASH_TIME: = 0.74
 const BOSS1_PINCER_TENAZ_GAP: = 0.92
 const BOSS1_PINCER_TENAZ_WIDTH: = 92.0
 const BOSS1_PINCER_TENAZ_EVENT_PREFIX: String = "boss1-pincer-tenaz"
+const BOSS1_WHIRLPOOL_ACTIVE_DURATION: = 10.0
+const BOSS1_WHIRLPOOL_DRY_DURATION: = 1.8
+const BOSS1_WHIRLPOOL_APPROACH_SPEED: = 310.0
+const BOSS1_WHIRLPOOL_APPROACH_TIMEOUT: = 3.4
+const BOSS1_WHIRLPOOL_PULL_SPEED: = 154.0
+const BOSS1_WHIRLPOOL_TANGENT_SPEED: = 28.0
+const BOSS1_WHIRLPOOL_INITIAL_DELAY: = 18.0
+const BOSS1_WHIRLPOOL_COOLDOWN: = 38.0
+const BOSS1_WHIRLPOOL_EVENT_PREFIX: String = "boss1-whirlpool"
+const BOSS1_LIGHTNING_START_TIME: = 120.0
+const BOSS1_LIGHTNING_WARNING: = 1.2
+const BOSS1_LIGHTNING_RADIUS: = 82.0
+const BOSS1_LIGHTNING_LIFETIME: = 1.68
+const BOSS1_LIGHTNING_MIN_INTERVAL: = 1.25
+const BOSS1_LIGHTNING_MAX_INTERVAL: = 2.05
+const BOSS1_LIGHTNING_MAX_ACTIVE: = 2
+const BOSS1_LIGHTNING_PLAYER_DAMAGE_RATE: = 0.12
+const BOSS1_LIGHTNING_PLAYER_DAMAGE_FLAT: = 54.0
+const BOSS1_LIGHTNING_BOSS_DAMAGE_RATE: = 0.06
+const BOSS1_LIGHTNING_EVENT_PREFIX: String = "boss1-lightning"
 const BOSS1_ENTRY_FALL_SFX_LEAD: = 0.5
 const BOSS1_ENTRY_ANNOUNCE_SFX_LEAD: = 1.0
 const BOSS1_STOP_PRE_LEAD: = 2.0
@@ -746,10 +878,12 @@ const MEMORY_SAVER_PUDDLE_CAP: = 6
 const MOBILE_ADAPTIVE_FPS_FLOOR: = 46.0
 const MOBILE_ADAPTIVE_FPS_RECOVER: = 56.0
 const MOBILE_ADAPTIVE_TRIGGER_TIME: = 3.5
+const MOBILE_ADAPTIVE_CRITICAL_FPS: = 24.0
+const MOBILE_ADAPTIVE_CRITICAL_TRIGGER_TIME: = 0.75
 const MOBILE_ADAPTIVE_RECOVER_TIME: = 10.0
 const MOBILE_EFFECT_DRAW_CAP: = 76
 const MEMORY_EFFECT_DRAW_CAP: = 44
-const LOW_RESOURCE_MAP_KEYS: = ["map_phase_1", "map_phase_2", "map_phase_3", "map_phase_4", "map_phase_5", "map_phase_6", "map_phase_7", "map_phase_9"]
+const LOW_RESOURCE_MAP_KEYS: = ["map_phase_1", "map_phase_2", "map_phase_3", "map_phase_4", "map_phase_5", "map_phase_6", "map_phase_7", "map_phase_9", "map_phase_ex"]
 const WEATHER_PUDDLE_MIN_SIZE: = 10.0
 const WEATHER_PUDDLE_MAX_SIZE: = 30.0
 const WEATHER_PUDDLE_SLOW_MULT: = 0.9
@@ -765,9 +899,15 @@ const PETRO_BASE_DAMAGE: = 25.0
 const PETRO_ATTACK_INTERVAL: = 1.0
 const PETRO_ATTACK_RANGE: = 58.0
 const PETRO_MOVE_SPEED: = 235.0
+const CARD_RARITY_COMMON: = "common"
+const CARD_RARITY_UNCOMMON: = "uncommon"
+const CARD_RARITY_RARE: = "rare"
+const CARD_RARITY_LEGENDARY: = "legendary"
 const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso", "Egide Hemofaga"]
 const CARD_RARITY_COMMON_COLOR: = Color(0.96, 0.97, 1.0)
+const CARD_RARITY_UNCOMMON_COLOR: = Color(0.18, 0.62, 1.0)
 const CARD_RARITY_RARE_COLOR: = Color(1.0, 0.76, 0.12)
+const CARD_RARITY_LEGENDARY_COLOR: = Color(1.0, 0.36, 0.12)
 const BOSS_ATTACK_BASE_COOLDOWN: = 3.8
 const BOSS1_STAGE_APPROACH_SPEED: = 260.0
 const BOSS2_ENTRY_TIME: = 2.5
@@ -965,6 +1105,9 @@ const ENEMY_SHIELD_REFLECTOR: = "escudeiro_refletor"
 const ENEMY_DEVOTO: = "devoto_febril"
 const ENEMY_INCENSARIO: = "incensario"
 const ENEMY_GUARDIAO: = "guardiao_sucata"
+const ENEMY_FLAGELANTE: = "flagelante"
+const ENEMY_SALMODIANTE: = "salmodiante"
+const ENEMY_RELICARIO: = "portador_relicario"
 const ENEMY_PYRO_PENGUIN: = "pinguim_incendiario"
 const ENEMY_SINEIRO_BOREAL: = "sineiro_boreal"
 const ENEMY_NEXUS_CARTOGRAPHER: = "cartografo_vazio"
@@ -1742,7 +1885,7 @@ const CARDS: = [
 	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
 	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
 	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
-	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% sorte para drops. A chance rara escala de forma mais gradual.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
+	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% sorte para drops. Incomuns aparecem sem Sorte e ficam mais frequentes; raras exigem Sorte.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
 	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
@@ -1761,11 +1904,11 @@ const CARDS: = [
 	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio de coleta de moedas, cartas soltas e orbes neutros.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
 	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
 	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)},
-	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "desc": "Periodicamente deixa um vestigio no caminho. Retornar a ele concede velocidade e recupera parte do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.34, 1.0, 0.86)},
+	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "rarity": CARD_RARITY_UNCOMMON, "desc": "Deixa vestigios com mais frequencia. Retornar a eles concede um impulso forte e recupera parte relevante do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.2, 0.7, 1.0)},
 	{"id": "municao_de_rebate", "name": "Municao de Rebate", "nick": "Fragmento Teimoso", "desc": "Projeteis basicos que somem sem acertar podem gerar um fragmento que busca o alvo mais proximo.", "icon": "Deck/carta-municaorebatente1.png", "frame_2": "Deck/carta-municaorebatente2.png", "color": Color(1.0, 0.76, 0.24)},
 	{"id": "impulso_de_sobras", "name": "Impulso de Sobras", "nick": "Energia Guardada", "desc": "Q, E ou teleporte prontos por tempo suficiente fortalecem os proximos ataques basicos.", "icon": "Deck/carta-impulsodesobras1.png", "frame_2": "Deck/carta-impulsodesobras2.png", "color": Color(0.42, 0.78, 1.0)},
-	{"id": "eco_de_impacto", "name": "Eco de Impacto", "nick": "Repeticao Brutal", "desc": "Acertar o mesmo alvo varias vezes cria um eco que repete parte do ultimo dano real.", "icon": "Deck/carta-ecodeimpacto1.png", "frame_2": "Deck/carta-ecodeimpacto2.png", "color": Color(0.86, 0.64, 1.0)},
-	{"id": "zona_de_descompressao", "name": "Zona de Descompressao", "nick": "Respiro de Cerco", "desc": "Ficar cercado carrega uma onda que repele inimigos proximos e aplica lentidao.", "icon": "Deck/carta-zonadedescompressao1.png", "frame_2": "Deck/carta-zonadedescompressao2.png", "color": Color(0.44, 1.0, 0.7)},
+	{"id": "eco_de_impacto", "name": "Eco de Impacto", "nick": "Repeticao Brutal", "rarity": CARD_RARITY_UNCOMMON, "desc": "Impactos sucessivos carregam um eco visivel que repete o ultimo dano e reverbera nos inimigos proximos.", "icon": "Deck/carta-ecodeimpacto1.png", "frame_2": "Deck/carta-ecodeimpacto2.png", "color": Color(0.22, 0.64, 1.0)},
+	{"id": "zona_de_descompressao", "name": "Zona de Descompressao", "nick": "Respiro de Cerco", "rarity": CARD_RARITY_UNCOMMON, "desc": "Ficar cercado carrega rapidamente uma onda ampla que repele inimigos e aplica lentidao intensa.", "icon": "Deck/carta-zonadedescompressao1.png", "frame_2": "Deck/carta-zonadedescompressao2.png", "color": Color(0.16, 0.72, 1.0)},
 	{"id": "folego_de_perseguicao", "name": "Folego de Perseguicao", "nick": "Caca Persistente", "desc": "Avancar contra um alvo distante acumula velocidade e fortalece o primeiro impacto ao alcanca-lo.", "icon": "Deck/carta-folegodeperseguicao1.png", "frame_2": "Deck/carta-folegodeperseguicao2.png", "color": Color(1.0, 0.56, 0.22)},
 	{"id": "margem_de_erro", "name": "Margem de Erro", "nick": "Erro Parcelado", "desc": "Depois de sofrer dano, o proximo impacto rapido tem parte adiada e pode ser reduzido com abates.", "icon": "Deck/carta-margemdeerro1.png", "frame_2": "Deck/carta-margemdeerro2.png", "color": Color(1.0, 0.36, 0.46)},
 	{"id": "ressonancia_de_alternancia", "name": "Ressonancia de Alternancia", "nick": "Kit Completo", "desc": "Usar ataque, Q, E e teleporte em alternancia prepara um bonus para a proxima acao.", "icon": "Deck/carta-ressonanciadealternancia1.png", "frame_2": "Deck/carta-ressonanciadealternancia2.png", "color": Color(0.58, 1.0, 0.96)},
@@ -1778,7 +1921,7 @@ const CARDS: = [
 	{"id": "pulso_desestabilizador", "name": "Pulso Desestabilizador", "nick": "Explosao Instavel", "desc": "Proximo acerto a cada 8s gera uma explosao no alvo.", "icon": "Deck/carta-Pulso_Desestabilizador1.png", "frame_2": "Deck/carta-Pulso_Desestabilizador2.png", "color": Color(1.0, 0.42, 0.32)},
 	{"id": "pressao_cerco", "name": "Pressao de Cerco", "nick": "Alvo Cercado", "desc": "+dano em alvos cercados por 3 inimigos proximos.", "icon": "Deck/carta-Press_o_de_Cerco1.png", "frame_2": "Deck/carta-Press_o_de_Cerco2.png", "color": Color(1.0, 0.78, 0.28)},
 	{"id": "choque_fontes", "name": "Choque de Fontes", "nick": "Interferencia Temporal", "desc": "Fontes diferentes de dano no mesmo alvo provocam uma descarga.", "icon": "Deck/carta-Choque_de_Fontes1.png", "frame_2": "Deck/carta-Choque_de_Fontes2.png", "color": Color(0.72, 0.96, 1.0)},
-	{"id": "ferrolho_ruptura", "name": "Ferrolho de Ruptura", "nick": "Prego Espacial", "desc": "O proximo acerto direto a cada 10s fixa o alvo no espaco.", "icon": "Deck/carta-Ferrolho_de_Ruptura1.png", "frame_2": "Deck/carta-Ferrolho_de_Ruptura2.png", "color": Color(0.92, 0.58, 1.0)},
+	{"id": "ferrolho_ruptura", "name": "Ferrolho de Ruptura", "nick": "Prego Espacial", "rarity": CARD_RARITY_UNCOMMON, "desc": "O proximo acerto direto a cada 8s fixa o alvo no espaco; elites e chefes sofrem controle reforcado.", "icon": "Deck/carta-Ferrolho_de_Ruptura1.png", "frame_2": "Deck/carta-Ferrolho_de_Ruptura2.png", "color": Color(0.28, 0.58, 1.0)},
 	{"id": "limiar_colapso", "name": "Limiar de Colapso", "nick": "Ruptura Vital", "desc": "Rompe inimigos ao cruzarem 70%, 40% e 15% de vida.", "icon": "Deck/carta-Limiar_de_Colapso1.png", "frame_2": "Deck/carta-Limiar_de_Colapso2.png", "color": Color(1.0, 0.42, 0.18)},
 	{"id": "desvio_probabilidade", "name": "Desvio de Probabilidade", "nick": "Quase Acerto", "desc": "Quase acertos hostis fortalecem o proximo golpe direto.", "icon": "Deck/carta-Desvio_de_Probabilidade1.png", "frame_2": "Deck/carta-Desvio_de_Probabilidade2.png", "color": Color(0.74, 0.48, 1.0)},
 	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)},
@@ -1830,7 +1973,7 @@ const CARD_SOURCE_MARGEM: = "card_margem_de_erro"
 const RARE_SOURCE_NECRO: = "rare_necrocronismo"
 const RARE_SOURCE_ANTIMATTER: = "rare_coracao_antimateria"
 const RARE_SOURCE_COFRE: = "rare_cofre_excesso"
-const FERROLHO_RUPTURA_COOLDOWN: = 10.0
+const FERROLHO_RUPTURA_COOLDOWN: = 8.0
 const CHOQUE_FONTES_TARGET_COOLDOWN: = 4.0
 const CARD_TREGUA_ID: = "tregua_regenerativa"
 const CARD_CINZAS_ID: = "cinzas_escolha"
@@ -1910,7 +2053,7 @@ const MANIFESTATION_UNLOCK_RULES: = {
 	"retornante": {"metric": "teleports_used", "target": 100.0, "challenge": "Usar teleporte 100/100 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	"parasitica": {"metric": "phase_reached", "target": 6.0, "challenge": "Chegar na Fase 6"},
 	"gravitante": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
-	"ancorada": {"metric": "stationary_seconds", "target": 180.0, "challenge": "Ficar parado por 180s acumulados e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
+	"ancorada": {"metric": "teleports_used", "target": 90.0, "challenge": "Usar teleporte 90/90 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	"cartografica": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
 	"mnesica": {"metric": "boss_kills", "target": 3.0, "challenge": "Eliminar 3/3 chefes"},
 	"ressonante": {"metric": "abilities_used", "target": 180.0, "challenge": "Usar habilidades 180/180 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
@@ -2148,6 +2291,10 @@ var net_world_pending_sequence: int = -1
 var net_world_pending_chunk_count: int = 0
 var net_world_pending_chunks: Dictionary = {}
 var net_world_visual_last_sequence: int = -1
+var net_world_visual_pending_sequence: int = -1
+var net_world_visual_pending_chunk_count: int = 0
+var net_world_visual_pending_chunks: Dictionary = {}
+var net_boss_identity_last_sequence: int = -1
 var net_ping_last_sent_ms: int = 0
 var net_ping_ms: int = -1
 var net_remote_ping_ms: int = -1
@@ -2207,6 +2354,8 @@ var net_gameplay_orb_sequence: int = 0
 var net_card_unlock_event_sequence: int = 0
 var net_ability_seen: Dictionary = {}
 var net_ability_visuals: Array = []
+var net_local_ability_visuals: Dictionary = {}
+var net_ability_patch_last_sent_ms: int = 0
 var net_rewind_seen: Dictionary = {}
 var net_remote_rewind_visuals: Array = []
 var dedicated_started_ms: int = 0
@@ -2318,7 +2467,8 @@ const NET_ENEMY_TYPES: = [
 	ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO,
 	ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH,
 	ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL,
-	ENEMY_AMBER_SUTURER, ENEMY_AMBER_SUTURE_NODE
+	ENEMY_AMBER_SUTURER, ENEMY_AMBER_SUTURE_NODE,
+	ENEMY_FLAGELANTE, ENEMY_SALMODIANTE, ENEMY_RELICARIO
 ]
 const NET_BULLET_TYPES: = [
 	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",
@@ -2407,6 +2557,7 @@ var run_behavior_move_samples: int = 0
 var run_behavior_stationary_samples: int = 0
 var run_end_payload: Dictionary = {}
 var qa_data_unlocked: bool = false
+var henry_cheat_unlocked: bool = false
 var online_mode_unlocked: bool = false
 var qa_streaming_unlocked: bool = false
 var qa_streaming_enabled: bool = false
@@ -2447,6 +2598,11 @@ var pending_phase = 0
 var phase_started_at: float = 0.0
 var selected_manifestation = 0
 var selected_aura = 1
+var active_character_key: String = CHARACTER_GEOVANA
+var character_select_destination: String = "solo"
+var character_select_index: int = 0
+var selected_mutation: int = 0
+var selected_effect: int = 0
 var aura_state: Dictionary = {}
 var rational_dilation_flash: float = 0.0
 var rational_trail_points: Array = []
@@ -2474,6 +2630,7 @@ var menu_motion_selection: int = -1
 var geovana_bark_controller: RefCounted = GeovanaBarkControllerScript.new()
 var save_controller = RuntimeSaveControllerScript.new()
 var phase_flow_controller = PhaseFlowControllerScript.new()
+var experimental_phase_controller = ExperimentalPhaseControllerScript.new()
 var interrupted_run_available: bool:
 	get:
 		return save_controller.interrupted_run_available
@@ -2537,6 +2694,28 @@ var deck_previous_mode = "paused"
 var deck_view_peer_id: = 0
 var net_decks_by_peer: Dictionary = {}
 var manifestation_key = "eletrica"
+var mutation_key: String = ""
+var effect_key: String = ""
+var henry_attack_combo: int = 0
+var henry_attack_visual_stage: int = 0
+var henry_skill_cast_active: bool = false
+var henry_skill_cast_elapsed: float = 0.0
+var henry_skill_cast_direction: Vector2 = Vector2.RIGHT
+var henry_skill_damage_applied: bool = false
+var henry_flame_cones: Array = []
+var henry_ultimate_cast_active: bool = false
+var henry_ultimate_cast_elapsed: float = 0.0
+var henry_ultimate_center: Vector2 = Vector2.ZERO
+var henry_ultimate_event_id: String = ""
+var henry_heat_waves: Array = []
+var henry_boss_burn_state: Dictionary = {}
+var henry_friction: float = 0.0
+var henry_friction_release_timer: float = 0.0
+var henry_incandescence_active_timer: float = 0.0
+var henry_incandescence_tick_timer: float = 0.0
+var henry_incandescence_intensity: float = 0.0
+var henry_incandescence_target_dwell: Dictionary = {}
+var henry_incandescence_zones: Array = []
 var manifest_evolution_state: Dictionary = {}
 # This ledger is runtime-only. It deduplicates combat callbacks without
 # changing the serialized evolution/save contract.
@@ -2563,6 +2742,11 @@ var player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 var player_start_down_fall_timer: float = 0.0
 var player_start_down_landing_timer: float = 0.0
 var player_start_down_smoke_spawned: bool = false
+var henry_entry_timer: float = 0.0
+var henry_idle_elapsed: float = 0.0
+var henry_idle_beard_cooldown: float = HENRY_IDLE_BEARD_INTERVAL
+var henry_idle_beard_timer: float = 0.0
+var henry_idle_beard_side: int = 0
 var player_defense = 0.0
 var player_crit_chance = 0.0
 var ancorada_still_timer: = 0.0
@@ -2582,6 +2766,7 @@ var hab1_ancorada_active: bool = false
 var hab1_ancorada_timer: float = 0.0
 var hab1_ancorada_cast_lastro: int = 0
 var hab1_ancorada_cast_pos: Vector2 = Vector2.ZERO
+var hab1_ancorada_cast_origin: Vector2 = Vector2.ZERO
 var hab1_ancorada_impact_done: bool = false
 var player_lifesteal = 0.0
 var poison_damage = 0.0
@@ -2716,13 +2901,24 @@ var revival_mobile_confirm_method: String = ""
 var revival_mobile_confirm_until_ms: int = 0
 var team_revival_state = RTTeamRevivalStateScript.new()
 var boss_visual_sync_controller: RefCounted = RTBossVisualSyncControllerScript.new()
+var revive_controller = RTRuntimeReviveControllerScript.new()
+var lobby_controller: Node = RTLobbyControllerScript.new()
 var progression_controller = RuntimeProgressionControllerScript.new()
 var enemy_manager: Node = EnemyManagerScript.new()
 var sineiro_boreal_controller: Node = Phase2SineiroBorealControllerScript.new()
+var phase3_enemy_controller: Node = Phase3EnemyControllerScript.new()
 var amber_suturer_controller: Node = Phase6AmberSuturerControllerScript.new()
 var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
+var player_control_controller: RefCounted = PlayerControlControllerScript.new()
+var necronada_ability_controller: RefCounted = NecronadaAbilityControllerScript.new()
+var ancorada_ability_controller: RefCounted = AncoradaAbilityControllerScript.new()
+var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityControllerScript.new()
+var shared_boss_attack_contract: RefCounted = RTSharedBossAttackContractScript.new()
+var boss4_instability_fissure_controller: RefCounted = RTBoss4InstabilityFissureControllerScript.new()
 var runtime_event_director: Node = RuntimeEventDirectorScript.new()
+var phase3_ritual_pulse_controller: Node = Phase3RitualPulseControllerScript.new()
+var phase4_instability_pulse_controller: Node = Phase4InstabilityPulseControllerScript.new()
 var shop_cards = []
 var shop_selected = 0
 var shop_rerolls = 3
@@ -2982,6 +3178,9 @@ var boss1_animation_velocity: Vector2 = Vector2.ZERO
 var boss1_animation_facing: float = 1.0
 var boss1_animation_turn_timer: float = 0.0
 var boss1_animation_motion_hold: float = 0.0
+# The host owns this short pre-cast state. Replicas consume it only to present
+# the same stationary attack pose before the authoritative hazard is emitted.
+var boss1_attack_windup: Dictionary = {}
 # The active Maré leap is presentation-only.  Its event id lets replicas
 # replace an outdated packet without creating a second local jump.
 var boss1_siege_tide_jump_event_id: String = ""
@@ -2995,6 +3194,11 @@ var boss_stage_30_done = false
 var boss_stage_safe_angle = 0.0
 var boss1_siege_tide_sequence: int = 0
 var boss1_pincer_tenaz_sequence: int = 0
+var boss1_whirlpool_sequence: int = 0
+var boss1_whirlpool_cooldown: float = BOSS1_WHIRLPOOL_INITIAL_DELAY
+var boss1_lightning_storm_active: bool = false
+var boss1_lightning_spawn_timer: float = 0.0
+var boss1_lightning_sequence: int = 0
 var boss_attacks = []
 var boss_transition_waves = []
 var boss1_rewind_cooldown = 0.0
@@ -3151,6 +3355,15 @@ var boss_call_tutorial_seen: bool = false
 var retornante_unlocked: bool = false
 var gameplay_cheat_text: String = ""
 var gameplay_cheat_focused: bool = false
+var experimental_phase_requested: bool = false
+var experimental_phase_active: bool = false
+var experimental_phase_rejected_online: bool = false
+var experimental_boss_altar_pos := Vector2.ZERO
+var experimental_boss_altar_hold: float = 0.0
+var experimental_boss_altar_near: bool = false
+var experimental_boss_altar_discovered: bool = false
+var experimental_boss_altar_used: bool = false
+var experimental_boss_altar_authorized: bool = false
 var force_phase6_start: bool = false
 var forced_initial_phase: int = 0
 var initial_phase_bias_target: int = 0
@@ -3318,6 +3531,11 @@ var boss2_facing_dir = 1.0
 var boss2_walk_speed = BOSS2_WALK_SPEED
 var boss2_anim_timer = 0.0
 var boss2_anim_frame = 0
+var boss2_hit_animation_timer: float = 0.0
+var boss2_hit_animation_duration: float = 0.16
+var boss2_death_animation_timer: float = 0.0
+var boss2_death_animation_duration: float = 1.55
+var boss2_death_animation_pos: Vector2 = Vector2.ZERO
 var boss2_breath_dir = Vector2.DOWN
 var boss2_ultimate_cooldown = 0.0
 var boss2_ultimate_timer = 0.0
@@ -3372,6 +3590,7 @@ var boss6_tail_channels = []
 var boss6_reflux_objects = []
 var boss6_cracked_heart = {}
 var boss6_entry_particles = []
+var boss6_entry_particle_seed: int = -1
 var boss6_relocating = false
 var boss6_relocate_from = Vector2.ZERO
 var boss6_relocate_to = Vector2.ZERO

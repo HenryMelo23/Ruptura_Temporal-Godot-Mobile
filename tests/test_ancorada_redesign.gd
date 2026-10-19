@@ -13,6 +13,7 @@ func _check(condition: bool, msg: String) -> void:
 		assert(false, msg)
 
 func _run() -> void:
+	await process_frame
 	game._start_game()
 	game.manifestation_key = "ancorada"
 	print("[TEST] Testing ANCORADA Redesign Mechanics...")
@@ -61,7 +62,7 @@ func _run() -> void:
 	game._add_lastro_points(1, "basic_attack")
 	_check(game.lastro_decay_timer == 0.0, "Adding Lastro points should reset decay timer")
 
-	# 4. Test HAB1 QUEDA DE CONTRAPESO Execution
+	# 4. Test HAB1 ARRANCO DE FUNDACAO execution
 	game.lastro_stacks = 4
 	game.player_pos = Vector2(500, 500)
 	var aim_target = Vector2(750, 420)
@@ -85,5 +86,9 @@ func _run() -> void:
 	game._update_ancorada_standing_still(10.0)
 	_check(game.ancorada_crit_bonus == 0.0, "Old standing still crit bonus should be neutralized (0.0)")
 
+	game._cleanup_runtime_resources()
+	game.free()
+	await process_frame
+	await process_frame
 	print("ALL_ANCORADA_REDESIGN_TESTS_OK")
 	quit(0)

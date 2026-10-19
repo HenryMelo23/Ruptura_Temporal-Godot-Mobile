@@ -362,7 +362,7 @@ func card_stat_chips(card_name: String) -> Array:
 		"Choque de Fontes":
 			return ["2 FONTES", "4s/ALVO"]
 		"Ferrolho de Ruptura":
-			return ["10s ARMAR", "ROOT/SLOW"]
+			return ["8s ARMAR", "ROOT/SLOW+"]
 		"Limiar de Colapso":
 			return ["70/40/15%", "SEM LOOP"]
 		"Desvio de Probabilidade":
