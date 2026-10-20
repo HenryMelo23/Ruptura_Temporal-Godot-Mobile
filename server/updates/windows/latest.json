@@ -1,14 +1,15 @@
 {
-  "version": "2.0.52",
-  "version_code": 25200,
-  "filename": "Ruptura_Temporal_2.0.52.exe",
-  "sha256": "37bcf9ea335ca135e4542f43a7ec780132478881f89072a8a78e71d6c60a02c0",
-  "size": 939764376,
+  "version": "2.0.53",
+  "version_code": 25300,
+  "filename": "Ruptura_Temporal_2.0.53.exe",
+  "sha256": "5c2780400578abf611a386aad4b312ce52aa529a7137db6ca5188b0b0a8fedee",
+  "size": 960337264,
   "notes": [
-    "Novo Pulso da Fase 3: Ritual da Catedral.",
-    "Melhorias de apresentacao, animacao e leitura dos confrontos.",
-    "Correcoes e estabilizacao multiplayer."
+    "Nova categoria de cartas incomuns, com identidade azul e efeitos aprimorados.",
+    "Ferrolho de Ruptura, Rastro de Retorno, Eco de Impacto e Zona de Descompressao foram promovidas.",
+    "No multiplayer, host e terceiro jogador usam Geovana; o segundo jogador usa Henry.",
+    "Corrigidos a ordem de entrada, a preparacao e o inicio da partida multiplayer."
   ],
   "mandatory": false,
-  "published_at": "2026-10-16T19:49:40.0767403Z"
+  "published_at": "2026-10-19T23:54:57.6053562Z"
 }

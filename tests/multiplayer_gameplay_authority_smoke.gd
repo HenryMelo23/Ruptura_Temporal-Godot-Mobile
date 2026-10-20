@@ -32,6 +32,8 @@ func _result_path(result_role: String) -> String:
 
 var manifest_reveal_requested := false
 var spectrum_ready_sent := false
+var henry_effect_selection_opened := false
+var henry_ready_sent := false
 var manifest_start_requested := false
 var requested_start := false
 var client_marked_ready := false
@@ -307,6 +309,16 @@ func _client_lobby_and_manifest_flow() -> void:
 
 
 func _manifest_selection_flow(manifestation: int, aura: int) -> void:
+	if game.active_character_key == game.CHARACTER_HENRY:
+		if game.mode == "mutation_select_mp" and not henry_effect_selection_opened:
+			henry_effect_selection_opened = true
+			game.mode = "effect_select_mp"
+			game.manifest_select_stage = game.MANIFEST_STAGE_AURA
+			game._sync_manifest_mp_selection(true)
+		elif game.mode == "effect_select_mp" and not henry_ready_sent:
+			henry_ready_sent = true
+			game._toggle_henry_multiplayer_ready()
+		return
 	if game.mode == "manifest_mp" and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION and not manifest_reveal_requested:
 		manifest_reveal_requested = true
 		game._set_selected_manifestation(manifestation, false)
