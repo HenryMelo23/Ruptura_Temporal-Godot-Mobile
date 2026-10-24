@@ -37,9 +37,9 @@ func _prepare_phase6() -> void:
 
 func _test_timing_and_authority() -> void:
 	var controller = game.amber_suturer_controller
-	_check(is_equal_approx(controller.FIRST_SPAWN_TIME, 200.0), "first spawn timing drifted")
-	_check(is_equal_approx(controller.RESPAWN_MIN_TIME, 240.0), "minimum recurrence drifted")
-	_check(is_equal_approx(controller.RESPAWN_MAX_TIME, 300.0), "maximum recurrence drifted")
+	_check(is_equal_approx(controller.FIRST_SPAWN_TIME, 120.0), "first spawn timing drifted from recurring encounter cadence")
+	_check(is_equal_approx(controller.RESPAWN_MIN_TIME, 120.0), "minimum recurrence drifted")
+	_check(is_equal_approx(controller.RESPAWN_MAX_TIME, 150.0), "maximum recurrence drifted")
 	_check(is_equal_approx(controller.MAX_LIFETIME, 45.0), "maximum lifetime drifted")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(1), 1.0), "solo HP multiplier drifted")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(2), 1.75), "duo HP multiplier drifted")
@@ -48,12 +48,12 @@ func _test_timing_and_authority() -> void:
 
 	game.time_alive = controller.FIRST_SPAWN_TIME - 0.1
 	controller.update(0.0)
-	_check(controller.active_enemy().is_empty(), "Suturador appeared before 200s")
+	_check(controller.active_enemy().is_empty(), "Suturador appeared before two minutes")
 	game.arauto = {"active": true, "hp": 1.0}
 	game.fusion_check_timer = 30.0
 	game.time_alive = controller.FIRST_SPAWN_TIME + 0.1
 	controller.update(0.0)
-	_check(not controller.active_enemy().is_empty(), "Suturador failed to overlap the Arauto/event flow")
+	_check(not controller.active_enemy().is_empty(), "Suturador failed to appear at two minutes while Arauto/event flow was active")
 	controller.cleanup("overlap_fixture", false)
 	controller.reset_for_new_run()
 	game.arauto.clear()
@@ -65,7 +65,7 @@ func _test_timing_and_authority() -> void:
 	game.boss_active = false
 	controller.update(0.0)
 	var enemy: Dictionary = controller.active_enemy()
-	_check(not enemy.is_empty(), "Suturador did not spawn in singleplayer at 200s")
+	_check(not enemy.is_empty(), "Suturador did not spawn in singleplayer at two minutes")
 	_check(String(enemy.get("type", "")) == game.ENEMY_AMBER_SUTURER, "spawned wrong event enemy")
 	_check(controller.spawn_now() == enemy, "second spawn created a duplicate Suturador")
 	_check(game.enemies.filter(func(value): return String(Dictionary(value).get("type", "")) == game.ENEMY_AMBER_SUTURER).size() == 1, "more than one Suturador exists")
@@ -119,6 +119,40 @@ func _test_sutures_nodes_and_damage_gate() -> void:
 	controller.on_enemy_defeated(node)
 	_check(game.amber_sutures.size() == max(0, int(nodes.size() / 2) - 1), "destroying an endpoint did not break its suture")
 	_check(not game.enemies.any(func(value): return int(Dictionary(value).get("uid", -1)) == int(node.get("uid", -2))), "destroyed endpoint stayed in the world")
+
+
+func _test_three_attack_rotation() -> void:
+	var controller = game.amber_suturer_controller
+	var enemy: Dictionary = controller.active_enemy()
+	controller._clear_sutures("attack_rotation_fixture", false)
+	game.enemy_bullets.clear()
+	game.amber_suturer_state["ability_cycle"] = 0
+
+	controller._begin_attack_cycle(enemy)
+	_check(String(enemy.get("suturer_current_ability", "")) == "suture", "attack rotation did not start with route sutures")
+	_check(not game.amber_sutures.is_empty(), "route-suture ability did not build its arena hazard")
+	controller._clear_sutures("attack_rotation_fixture", false)
+
+	controller._begin_attack_cycle(enemy)
+	_check(String(enemy.get("suturer_current_ability", "")) == "needle_fan", "second attack was not the aimed needle fan")
+	_check(String(enemy.get("suturer_state", "")) == controller.STATE_NEEDLE_TELEGRAPH, "needle fan skipped its readable telegraph")
+	controller._fire_needle_attack(enemy)
+	var fan_bullets: Array = game.enemy_bullets.filter(func(value): return String(Dictionary(value).get("type", "")) == "suturer_needle")
+	_check(fan_bullets.size() == controller.NEEDLE_FAN_COUNT, "needle fan did not emit exactly five projectiles")
+	_check(fan_bullets.all(func(value): return is_equal_approx(Vector2(Dictionary(value).get("dir", Vector2.ZERO)).length(), 1.0)), "needle fan emitted a malformed direction")
+
+	game.enemy_bullets.clear()
+	controller._begin_attack_cycle(enemy)
+	_check(String(enemy.get("suturer_current_ability", "")) == "needle_burst", "third attack was not the radial needle crown")
+	controller._fire_needle_attack(enemy)
+	var radial_bullets: Array = game.enemy_bullets.filter(func(value): return String(Dictionary(value).get("type", "")) == "suturer_needle")
+	_check(radial_bullets.size() == controller.NEEDLE_RADIAL_COUNT, "needle crown did not emit its twelve-way burst")
+	var unique_directions: Dictionary = {}
+	for bullet_value in radial_bullets:
+		var direction := Vector2(Dictionary(bullet_value).get("dir", Vector2.ZERO))
+		unique_directions[Vector2i(roundi(direction.x * 1000.0), roundi(direction.y * 1000.0))] = true
+	_check(unique_directions.size() == controller.NEEDLE_RADIAL_COUNT, "needle crown repeated directions instead of covering the arena")
+	_check(String(game.amber_suturer_state.get("current_ability", "")) == "needle_burst", "public encounter state did not expose the active ability")
 
 
 func _test_multiplayer_cleanup_and_persistence() -> void:
@@ -175,7 +209,7 @@ func _test_multiplayer_cleanup_and_persistence() -> void:
 	_check(not game.enemies.any(func(value): return String(Dictionary(value).get("type", "")) == game.ENEMY_AMBER_SUTURE_NODE), "core death left orphan endpoints")
 	_check(not bool(game.amber_suturer_state.get("active", true)), "core death left the encounter active")
 	var next_time := float(game.amber_suturer_state.get("next_spawn_phase_time", 0.0))
-	_check(next_time >= game._phase_elapsed_time() + controller.RESPAWN_MIN_TIME and next_time <= game._phase_elapsed_time() + controller.RESPAWN_MAX_TIME, "recurrence is outside 240-300 seconds")
+	_check(next_time >= game._phase_elapsed_time() + controller.RESPAWN_MIN_TIME and next_time <= game._phase_elapsed_time() + controller.RESPAWN_MAX_TIME, "recurrence is outside 120-150 seconds")
 	game.time_alive = next_time - 0.1
 	controller.update(0.0)
 	_check(controller.active_enemy().is_empty(), "encounter respawned before its scheduled recurrence")
@@ -200,6 +234,7 @@ func _run() -> void:
 	_prepare_phase6()
 	_test_timing_and_authority()
 	_test_sutures_nodes_and_damage_gate()
+	_test_three_attack_rotation()
 	_test_multiplayer_cleanup_and_persistence()
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
@@ -211,5 +246,5 @@ func _run() -> void:
 			printerr("PHASE6_AMBER_SUTURER_SMOKE_FAIL " + failure)
 		quit(1)
 		return
-	print("PHASE6_AMBER_SUTURER_SMOKE_OK timing=true sutures=true endpoints=true gate=true multiplayer=true cleanup=true save=true")
+	print("PHASE6_AMBER_SUTURER_SMOKE_OK timing=true attacks=3 sutures=true needle_fan=5 needle_burst=12 endpoints=true gate=true multiplayer=true cleanup=true save=true")
 	quit(0)

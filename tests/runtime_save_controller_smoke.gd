@@ -118,10 +118,22 @@ func _run() -> void:
 	_check(not game._resume_interrupted_run(), "corrupt interrupted snapshot should not resume")
 	_check(not FileAccess.file_exists(game.INTERRUPTED_RUN_SAVE_PATH), "corrupt interrupted snapshot should be cleared on resume")
 
+	var legacy_snapshot := {
+		"schema": 1,
+		"saved_at": "2026-10-21 12:00:00",
+		"saved_unix": 1792580400,
+		"fields": {"mode": "game", "current_phase": 2, "time_alive": 75.0}
+	}
+	_write_user_text(game.INTERRUPTED_RUN_SAVE_PATH, var_to_str(legacy_snapshot))
+	var loaded_legacy: Dictionary = game._load_interrupted_run_snapshot()
+	_check(int(loaded_legacy.get("schema", 0)) == 1, "legacy text snapshot was not migrated by the binary reader")
+	_remove_user_file(game.INTERRUPTED_RUN_SAVE_PATH)
+
 	game._start_game()
 	game.mode = "game"
 	game.current_phase = 3
 	game.time_alive = 123.0
+	game._set_run_mode_local(game.RUN_MODE_DROP)
 	game.score = 987
 	game.player_pos = Vector2(555, 444)
 	game.pointer_down = true
@@ -133,10 +145,12 @@ func _run() -> void:
 	game.pointer_down = true
 	game.move_touch_index = 7
 	game.attack_touch_index = 8
+	game._set_run_mode_local(game.RUN_MODE_SHOP)
 	_check(game._resume_interrupted_run(), "interrupted run did not resume")
 	_check(game.current_phase == 3, "resume did not restore phase")
 	_check(game.score == 987, "resume did not restore score")
 	_check(game.player_pos == Vector2(555, 444), "resume did not restore player position")
+	_check(game.selected_run_mode == game.RUN_MODE_DROP, "resume did not restore Drop journey mode")
 	_check(not game.pointer_down and game.move_touch_index == -1 and game.attack_touch_index == -1, "resume did not reset transient input")
 
 	game._capture_retry_run_snapshot()
@@ -152,5 +166,5 @@ func _run() -> void:
 	_assert_interrupted_save_blocked("online_connected")
 
 	game._clear_interrupted_run_save()
-	print("RUNTIME_SAVE_CONTROLLER_SMOKE_OK config=true corrupt=true autosave=true resume=true retry=true blocks=true")
+	print("RUNTIME_SAVE_CONTROLLER_SMOKE_OK config=true corrupt=true legacy_text=true autosave=true resume=true retry=true blocks=true")
 	_cleanup(0)

@@ -53,10 +53,24 @@ func _run() -> void:
 	game.boss3_miasma_variant = 0
 	_check(game._nearest_target() == game.boss_pos, "automatic aim did not return after miasma")
 
+	game.current_phase = 1
+	for manifestation in ["eletrica", "prismatica", "parasitica", "ancorada", "bombastica", "necronada"]:
+		game.manifestation_key = manifestation
+		_check(is_equal_approx(game._auto_attack_range(), game.RangedAttackRange.BASE_RANGE), "automatic aim did not use the shared 300px range for " + manifestation)
+	game.manifestation_key = "eletrica"
+	game.boss_pos = game.player_pos + Vector2(game.RangedAttackRange.BASE_RANGE - 1.0, 0.0)
+	_check(game._nearest_target() == game.boss_pos, "automatic aim rejected a target inside the shared range")
+	game.boss_pos = game.player_pos + Vector2(game.RangedAttackRange.BASE_RANGE + 1.0, 0.0)
+	_check(game._nearest_target() == Vector2.ZERO, "automatic aim acquired a boss beyond the shared range")
+	game.locked_target_kind = "boss"
+	_check(game._locked_attack_target_pos() == game.boss_pos, "target lock was lost outside the shared range")
+	game._validate_attack_lock()
+	_check(game.locked_target_kind == "boss", "out-of-range target lock was cleared")
+
 	game.player_hp_max = 400
-	game.player_hp = 100
-	_check(is_zero_approx(game._low_health_red_alpha()), "red danger overlay started at or above 25 percent")
-	game.player_hp = 50
+	game.player_hp = int(round(game.player_hp_max * game.gfx_health_warning_start))
+	_check(is_zero_approx(game._low_health_red_alpha()), "red danger overlay started at or above the configured warning threshold")
+	game.player_hp = int(round(game.player_hp_max * game.gfx_health_warning_start * 0.5))
 	var half_danger: float = game._low_health_red_alpha()
 	game.player_hp = 10
 	_check(game._low_health_red_alpha() > half_danger, "red danger overlay did not intensify as health dropped")
@@ -106,7 +120,7 @@ func _run() -> void:
 	game.move_touch_index = -1
 	game.touch_move = Vector2.ZERO
 
-	print("GAMEPLAY_SAFETY_PACK_OK wall=solid low_hp=progressive hidden_boss=no_auto_target miasma=softer plus=moves")
+	print("GAMEPLAY_SAFETY_PACK_OK wall=solid auto_range=300 locked_outside_retained=true low_hp=progressive hidden_boss=no_auto_target miasma=softer plus=moves")
 	game.queue_free()
 	await process_frame
 	quit(0)

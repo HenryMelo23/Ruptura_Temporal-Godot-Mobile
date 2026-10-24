@@ -33,13 +33,6 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 
-func _collect_all_fragments() -> void:
-	for fragment in game.revival_fragments.duplicate(true):
-		var data: Dictionary = fragment
-		game.player_pos = Vector2(data.get("pos", game.player_pos))
-		game._collect_revival_fragment(int(data.get("id", 0)), game._mp_unique_id())
-
-
 func _run() -> void:
 	await process_frame
 	game.startup_thanks_done = true
@@ -68,45 +61,20 @@ func _run() -> void:
 		43: _remote_state(Vector2(1180, 560), "TRES")
 	}
 	game.net_players_by_peer[42]["dead"] = true
+	var score_before: int = game.score
+	var hp_before: float = game.player_hp
 	game._start_team_revival_for_dead(42, Vector2(900, 430), "DOIS", false)
-	_check(game.revival_fragments.size() == game.REVIVAL_FRAGMENTS_PER_DEAD, "single player fragments missing")
-	_check(is_equal_approx(game.revival_total_time, game.REVIVAL_SINGLE_TIME), "single player timer should be 30s")
-	var fragment_before: Vector2 = Vector2(Dictionary(game.revival_fragments[0]).get("pos", Vector2.ZERO))
-	game._update_team_revival(1.0)
-	var fragment_after: Vector2 = Vector2(Dictionary(game.revival_fragments[0]).get("pos", Vector2.ZERO))
-	_check(fragment_before.distance_to(fragment_after) > 0.5, "revival fragment did not drift")
-	game.revival_timer = 0.01
-	game._update_team_revival(0.02)
-	_check(game.revival_fragments_suspended and game.revival_fragments.is_empty(), "expired fragments should suspend before respawn")
-	game.revival_fragment_respawn_timer = 0.01
-	game._update_team_revival(0.02)
-	_check(not game.revival_fragments_suspended and game.revival_fragments.size() == game.REVIVAL_FRAGMENTS_PER_DEAD, "revival fragments did not respawn after the cooldown")
-	_collect_all_fragments()
-	_check(game.revival_altars_active, "single player altar did not activate")
-	game.score = game._revival_points_cost()
-	game.player_pos = game.revival_altar_points_pos
+	_check(not game.revive_controller.fragment_altar_revive_enabled(game), "fragment/altar revive unexpectedly enabled")
+	_check(not game.revival_active and game.revival_fragments.is_empty() and not game.revival_altars_active, "dead peer spawned removed fragment/altar flow")
+	game._activate_team_revival_altars()
+	game._collect_revival_fragment(1, game._mp_unique_id())
 	game._try_interact_revival_altar(game.REVIVE_PAY_POINTS)
-	_check(not game.revival_active and game.score == 0, "points altar did not spend exact four-card cost")
-	_check(not bool(Dictionary(game.net_players_by_peer[42]).get("dead", true)), "points altar did not revive dead peer")
-
-	game._clear_team_revival_state()
-	game.player_hp = 400.0
-	game.net_players_by_peer[42] = _remote_state(Vector2(900, 430), "DOIS")
-	game.net_players_by_peer[43] = _remote_state(Vector2(1180, 560), "TRES")
-	game.net_players_by_peer[42]["dead"] = true
-	game.net_players_by_peer[43]["dead"] = true
-	game._start_team_revival_for_dead(42, Vector2(900, 430), "DOIS", false)
-	game._start_team_revival_for_dead(43, Vector2(1180, 560), "TRES", false)
-	_check(game.revival_fragments.size() == game.REVIVAL_FRAGMENTS_PER_DEAD * 2, "multi player fragments missing")
-	_check(is_equal_approx(game.revival_total_time, game.REVIVAL_MULTI_TIME), "multi player timer should be 50s")
-	_collect_all_fragments()
-	game.player_pos = game.revival_altar_life_pos
-	_check(is_equal_approx(game._revival_life_sacrifice_rate_for_dead_count(1), 0.1296), "first life altar sacrifice should be 13 percent")
-	_check(is_equal_approx(game._revival_life_sacrifice_rate(), 0.2016), "two fallen players should raise the life sacrifice to 20 percent")
-	game._try_interact_revival_altar(game.REVIVE_PAY_LIFE)
-	_check(is_equal_approx(game.player_hp, 319.36), "life altar should apply the 20 percent two-player sacrifice")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), 40.32), "life altar did not split the canonical life payment to first dead peer")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), 40.32), "life altar did not split the canonical life payment to second dead peer")
+	_check(game.score == score_before and is_equal_approx(game.player_hp, hp_before), "removed altar flow still charged points or life")
+	_check(bool(Dictionary(game.net_players_by_peer[42]).get("dead", false)), "removed altar flow still revived a dead peer")
+	game._apply_team_revival_state([42], {42: "DOIS"}, {42: Vector2(900, 430)}, [{"id": 1, "pos": Vector2(700, 400)}], 20.0, true, "LEGACY")
+	_check(not game.revival_active and game.revival_fragments.is_empty() and not game.revival_altars_active, "legacy network state re-enabled fragments or altars")
+	game._rpc_team_revival_complete([42], 225.0, game.REVIVE_PAY_POINTS, game._mp_unique_id(), {42: Vector2(700, 400)})
+	_check(bool(Dictionary(game.net_players_by_peer[42]).get("dead", false)), "legacy altar completion packet revived a dead peer")
 
 	# Request flow: an unavailable spectator cannot open a request, and an
 	# insufficient payer does not spend points or accept it accidentally.
@@ -140,7 +108,7 @@ func _run() -> void:
 		game.net_players_by_peer[peer_id]["hp"] = 0.0
 	_check(game._all_multiplayer_players_dead(), "fully dead multiplayer room did not report game over")
 
-	print("MULTIPLAYER_TEAM_REVIVAL_SMOKE_OK owner=true unavailable=true failure=true solo=true game_over=true score_dedup=true fragments=true altars=true life_split=true")
+	print("MULTIPLAYER_TEAM_REVIVAL_SMOKE_OK owner=true requests=preserved solo=true game_over=true score_dedup=true fragments=false altars=false legacy_state=ignored")
 	game.queue_free()
 	await process_frame
 	quit(0)

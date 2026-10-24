@@ -1,5 +1,10 @@
 extends RefCounted
 
+# 663 px of authored body matches the 237 px idle body at an 88 px canvas.
+# The extra ice margin must not shrink Henry or move his feet while frozen.
+const HENRY_FROZEN_DRAW_HEIGHT := 103.2
+const HENRY_FROZEN_DRAW_OFFSET := Vector2(0.0, 4.0)
+
 # Host-owned state and compatibility wrappers are retained during extraction.
 
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
@@ -93,7 +98,8 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 		game.ENEMY_CHRONAL_LEECH:
 			return Vector2(98, 62)
 		game.ENEMY_AMBER_SUTURER:
-			return Vector2(136, 94)
+			# The repacked 224x144 cells are rendered at a uniform 0.75 scale.
+			return Vector2(168, 108)
 		game.ENEMY_AMBER_SUTURE_NODE:
 			return Vector2(48, 48)
 		game.ENEMY_CINERIDO:
@@ -384,6 +390,8 @@ static func _boss_draw_size(game: Node2D) -> Vector2:
 
 static func _should_flip_player_sprite(game: Node2D) -> bool:
 	if game.active_character_key == game.CHARACTER_HENRY:
+		if game.player_freeze_visual_timer > 0.0:
+			return false
 		if game.henry_ultimate_cast_active or game.henry_skill_cast_active or game._player_attack_pose_active():
 			return false
 		var henry_move: Vector2 = game._read_move()
@@ -425,13 +433,14 @@ static func _player_attack_pose_active(game: Node2D) -> bool:
 static func _player_fire_animation_info(game: Node2D, direction: Vector2 = Vector2.ZERO) -> Dictionary:
 	var source: Vector2 = direction if direction.length() > 0.05 else game.player_attack_visual_dir
 	var dir: Vector2 = source.normalized() if source.length() > 0.05 else Vector2.RIGHT
+	var fire_prefix := "player_prismatica_fire" if game.manifestation_key == "prismatica" else ("player_parasitica_fire" if game.manifestation_key == "parasitica" else "player_fire")
 	# Eight equal sectors: preserve E/W, provide real art for N/S and diagonals.
 	var sector: int = posmod(roundi(dir.angle() / (PI / 4.0)), 8)
 	var columns: Array[int] = [-1, 5, 0, 4, -1, 3, 1, 2]
 	var column: int = columns[sector]
 	if column < 0:
-		return {"key": "player_fire", "flip_h": sector == 4, "network_offset": 0}
-	return {"key": "player_fire_" + game.PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": 2 + column * 2}
+		return {"key": fire_prefix, "flip_h": sector == 4, "network_offset": 0}
+	return {"key": fire_prefix + "_" + game.PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": 2 + column * 2}
 
 
 static func _player_fire_frame_index(game: Node2D, elapsed_time: float) -> int:
@@ -445,7 +454,12 @@ static func _player_fire_texture_for_current_attack(game: Node2D, elapsed_time: 
 
 
 static func _player_fire_draw_profile(game: Node2D) -> Dictionary:
-	if int(game._player_fire_animation_info()["network_offset"]) > 0:
+	var fire_info: Dictionary = game._player_fire_animation_info()
+	if game.manifestation_key == "parasitica":
+		# Every authored firing frame is normalized to the idle silhouette and
+		# baseline, so one draw height preserves scale without direction pulses.
+		return {"preserve_height": true, "height": 84.0, "offset": Vector2.ZERO}
+	if int(fire_info["network_offset"]) > 0:
 		return {"preserve_height": true, "height": game.PLAYER_FIRE_CANVAS_HEIGHT, "offset": Vector2.ZERO}
 	return {"size": game.PLAYER_DRAW_SHOT_SIZE, "offset": Vector2.ZERO}
 
@@ -453,9 +467,18 @@ static func _player_fire_draw_profile(game: Node2D) -> Dictionary:
 static func _player_draw_profile(game: Node2D) -> Dictionary:
 	var move = game._read_move()
 	if game.active_character_key == game.CHARACTER_HENRY:
-		return {"preserve_height": true, "height": game.HENRY_IDLE_DRAW_HEIGHT, "offset": Vector2.ZERO}
+		if game.player_freeze_visual_timer > 0.0:
+			return {"preserve_height": true, "height": HENRY_FROZEN_DRAW_HEIGHT, "offset": HENRY_FROZEN_DRAW_OFFSET}
+		var henry_height: float = game.HENRY_IDLE_DRAW_HEIGHT
+		if game.mutation_key == "colosso":
+			henry_height *= game.henry_colossus_ability_controller.visual_height_multiplier()
+		return {"preserve_height": true, "height": henry_height, "offset": Vector2.ZERO}
 	if game.manifestation_key == "lacerante":
-		return {"preserve_height": true, "height": game.LaceranteSprites.DRAW_HEIGHT, "offset": Vector2.ZERO}
+		return {"preserve_height": true, "height": game.LaceranteSprites.draw_height(game, game._player_texture()), "offset": Vector2.ZERO}
+	if game.manifestation_key == "prismatica":
+		return {"preserve_height": true, "height": 84.0, "offset": Vector2.ZERO}
+	if game.manifestation_key == "parasitica":
+		return {"preserve_height": true, "height": 84.0, "offset": Vector2.ZERO}
 	if game.player_freeze_visual_timer > 0.0:
 		return {
 			"size": game.PLAYER_DRAW_FROZEN_SIZE, 
@@ -470,12 +493,6 @@ static func _player_draw_profile(game: Node2D) -> Dictionary:
 		return {
 			"preserve_height": true, 
 			"height": game.PLAYER_DRAW_LACERAR_HEIGHT, 
-			"offset": Vector2.ZERO
-		}
-	if not game._active_prismatica_secondary().is_empty():
-		return {
-			"preserve_height": true, 
-			"height": 84.0, 
 			"offset": Vector2.ZERO
 		}
 	if game._player_attack_pose_active():

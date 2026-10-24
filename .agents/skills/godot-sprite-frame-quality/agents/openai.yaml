@@ -1,0 +1,3 @@
+interface:
+  display_name: "Godot Sprite Frame Quality"
+  short_description: "Audit sprite scale, crops, identity, and animation flow"

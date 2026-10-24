@@ -31,6 +31,8 @@ func _initialize() -> void:
 func _run() -> void:
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	root.mode = Window.MODE_WINDOWED
+	root.borderless = true
+	root.min_size = Vector2i.ZERO
 	root.content_scale_size = Vector2i.ZERO
 	game.startup_thanks_done = true
 	game.vol_master = 0.0
@@ -81,6 +83,7 @@ func _run() -> void:
 	game._apply_graphics_settings()
 	await _capture_mode("settings", Vector2i(960, 540), "settings_hub_mobile.png")
 	await _capture_mode("settings_graphics", Vector2i(960, 540), "settings_graphics_mobile.png")
+	game.damage_text_scale = 0.0
 	await _capture_mode("settings_gameplay", Vector2i(960, 540), "settings_gameplay_mobile.png")
 	game.ui_platform_override = "desktop"
 	_check_audio_drag(Vector2(1280, 720))
@@ -108,8 +111,10 @@ func _restore_original_config() -> void:
 
 func _capture_mode(target_mode: String, viewport: Vector2i, file_name: String) -> void:
 	root.mode = Window.MODE_WINDOWED
+	root.borderless = true
 	await process_frame
 	root.size = viewport
+	await process_frame
 	game.mode = target_mode
 	game.settings_selected = 0
 	game.audio_slider_drag_index = -1
@@ -219,6 +224,12 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 	var gameplay: Dictionary = game._gameplay_preferences_rects(viewport)
 	_check(gameplay.has("desktop_hud_scale"), "desktop HUD scale rect missing")
 	_check(gameplay.has("geovana_bark"), "Geovana bark scale rect missing")
+	game.damage_text_scale = game.DAMAGE_TEXT_SCALE_MIN
+	game._handle_gameplay_settings_touch(game._damage_text_minus_rect(gameplay["damage_text"]).get_center(), viewport)
+	_check(is_zero_approx(game.damage_text_scale), "damage text did not turn off below the visible minimum")
+	_check(game._damage_text_scale_label() == "DESLIGADO", "disabled damage text label is wrong")
+	game._handle_gameplay_settings_touch(game._damage_text_plus_rect(gameplay["damage_text"]).get_center(), viewport)
+	_check(is_equal_approx(game.damage_text_scale, game.DAMAGE_TEXT_SCALE_MIN), "damage text did not return at the visible minimum")
 	game.geovana_bark_scale = 0.5
 	game._handle_gameplay_settings_touch(game._interface_text_plus_rect(gameplay["geovana_bark"]).get_center(), viewport)
 	_check(is_equal_approx(game.geovana_bark_scale, 0.6), "Geovana bark scale plus failed")

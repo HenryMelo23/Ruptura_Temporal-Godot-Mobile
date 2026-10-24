@@ -30,6 +30,7 @@ func _configure() -> void:
 	game.boss1_absorb_cooldown = 999.0
 	game.boss1_rewind_cooldown = 999.0
 	game.boss_stage_timer = 0.0
+	game.boss1_whirlpool_sequence = 0
 	game.boss1_whirlpool_cooldown = 0.0
 	game.boss1_lightning_storm_active = false
 	game.boss1_lightning_spawn_timer = 0.0
@@ -62,7 +63,7 @@ func _test_whirlpool() -> void:
 	assert(game.player_pos.distance_to(game.WORLD_SIZE * 0.5) < distance_before)
 	assert(game.boss1_attack_windup.is_empty())
 
-	# The active phase owns exactly ten seconds and then dries without pulling.
+	# The active phase includes the readable laser warning plus one full rotation.
 	assert(game._update_boss1_uninterruptible_state(game.BOSS1_WHIRLPOOL_ACTIVE_DURATION))
 	assert(String(attack.get("state", "")) == "drying")
 	var drying_position: Vector2 = game.player_pos
@@ -70,6 +71,43 @@ func _test_whirlpool() -> void:
 	assert(game.player_pos.is_equal_approx(drying_position))
 	game._update_boss1_uninterruptible_state(game.BOSS1_WHIRLPOOL_DRY_DURATION)
 	assert(_find_attack("boss1_whirlpool").is_empty())
+
+
+func _test_whirlpool_laser_progression() -> void:
+	var observed_counts: Array[int] = []
+	for cast_index in range(5):
+		game.boss_attacks.clear()
+		game.early_boss_controller.start_boss1_whirlpool()
+		var attack := _find_attack("boss1_whirlpool")
+		var expected_count: int = mini(cast_index + 1, 4)
+		observed_counts.append(int(attack.get("beam_count", 0)))
+		assert(int(attack.get("beam_count", 0)) == expected_count)
+		assert(is_equal_approx(float(attack.get("laser_warning", 0.0)), game.BOSS1_WHIRLPOOL_LASER_WARNING))
+		attack["state"] = "active"
+		attack["beam_start_angle"] = 0.0
+		attack["spin_direction"] = 1.0
+		attack["state_age"] = game.BOSS1_WHIRLPOOL_LASER_WARNING - 0.01
+		assert(game.early_boss_controller.boss1_whirlpool_laser_hit_index(attack, Vector2(attack["center"]) + Vector2.RIGHT * 340.0) == -1)
+		attack["state_age"] = game.BOSS1_WHIRLPOOL_LASER_WARNING
+		assert(game.early_boss_controller.boss1_whirlpool_laser_hit_index(attack, Vector2(attack["center"]) + Vector2.RIGHT * 340.0) == 0)
+		if cast_index == 0:
+			game.player_pos = Vector2(attack["center"]) + Vector2.RIGHT * 340.0
+			game.player_hp = game.player_hp_max
+			var hp_before: float = game.player_hp
+			game.early_boss_controller.apply_boss1_whirlpool_lasers(0.01, attack)
+			assert(game.player_hp < hp_before)
+			var hp_after: float = game.player_hp
+			game.early_boss_controller.apply_boss1_whirlpool_lasers(0.01, attack)
+			assert(is_equal_approx(game.player_hp, hp_after))
+		var start_angle: float = game.early_boss_controller.boss1_whirlpool_laser_angle(attack, 0)
+		attack["state_age"] = game.BOSS1_WHIRLPOOL_LASER_WARNING + game.BOSS1_WHIRLPOOL_LASER_ROTATION_DURATION
+		var end_angle: float = game.early_boss_controller.boss1_whirlpool_laser_angle(attack, 0)
+		assert(is_equal_approx(end_angle - start_angle, TAU))
+		var packet: Dictionary = game._pack_net_boss_visuals()
+		var synced: Dictionary = Dictionary(Array(packet.get("boss_attacks", []))[0])
+		assert(int(synced.get("beam_count", 0)) == expected_count)
+		assert(synced.has("beam_start_angle"))
+	assert(observed_counts == [1, 2, 3, 4, 4])
 
 
 func _test_large_world_whirlpool_radius() -> void:
@@ -192,6 +230,8 @@ func _run() -> void:
 	_configure()
 	_test_whirlpool()
 	_configure()
+	_test_whirlpool_laser_progression()
+	_configure()
 	_test_large_world_whirlpool_radius()
 	_configure()
 	_test_lightning_storm()
@@ -199,7 +239,7 @@ func _run() -> void:
 	_test_cleanup()
 	_configure()
 	_test_replica_contract()
-	print("BOSS1_WHIRLPOOL_LIGHTNING_SMOKE_OK whirlpool_10s=true world_radius=true outward_counterplay=true exclusive_state=true lightning_120s=true warning_1_2s=true max_two=true player_and_boss_damage=true idempotent=true snapshot=true replica_force=true authority_only=true cleanup=true")
+	print("BOSS1_WHIRLPOOL_LIGHTNING_SMOKE_OK whirlpool_rotation=360 beam_progression=1,2,3,4 laser_warning=true laser_damage_cooldown=true world_radius=true outward_counterplay=true exclusive_state=true lightning_120s=true warning_1_2s=true max_two=true player_and_boss_damage=true idempotent=true snapshot=true replica_force=true authority_only=true cleanup=true")
 	game._cleanup_runtime_resources()
 	game.free()
 	for _frame in range(4):

@@ -41,7 +41,16 @@ func _run() -> void:
 		"margem_de_erro",
 		"ressonancia_de_alternancia"
 	]
-	var uncommon_ids := ["rastro_de_retorno", "eco_de_impacto", "zona_de_descompressao", "ferrolho_ruptura"]
+	var uncommon_ids := [
+		"rastro_de_retorno",
+		"municao_de_rebate",
+		"impulso_de_sobras",
+		"eco_de_impacto",
+		"zona_de_descompressao",
+		"margem_de_erro",
+		"ressonancia_de_alternancia",
+		"ferrolho_ruptura",
+	]
 	for card_id in expected_ids:
 		var card := _find_card(card_id)
 		assert(not card.is_empty())
@@ -124,5 +133,5 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	await process_frame
-	print("NEW_COMMON_CARDS_SMOKE_OK cards=16 uncommon=3 migrated=true unlimited=true reserve=true prices=true effects=true assets=true")
+	print("NEW_COMMON_CARDS_SMOKE_OK cards=16 uncommon=7 migrated=true unlimited=true reserve=true prices=true effects=true assets=true")
 	quit(0)

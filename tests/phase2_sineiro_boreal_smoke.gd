@@ -41,8 +41,8 @@ func _prepare_phase2() -> void:
 
 func _test_spawn_and_combat() -> void:
 	var controller = game.sineiro_boreal_controller
-	_check(is_equal_approx(controller.SPAWN_TIME_ONBOARDING, 240.0), "onboarding spawn timing drifted")
-	_check(is_equal_approx(controller.SPAWN_TIME_EXPERIENCED, 180.0), "experienced spawn timing drifted")
+	_check(is_equal_approx(controller.SPAWN_TIME_ONBOARDING, 120.0), "onboarding spawn timing drifted from two minutes")
+	_check(is_equal_approx(controller.SPAWN_TIME_EXPERIENCED, 120.0), "experienced spawn timing drifted from two minutes")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[1]), 1.0), "solo HP multiplier drifted")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[2]), 1.70), "duo HP multiplier drifted")
 	_check(is_equal_approx(float(controller.PARTY_HP_MULTIPLIERS[3]), 2.35), "trio HP multiplier drifted")
@@ -98,7 +98,7 @@ func _test_spawn_timing() -> void:
 	_check(controller.active_enemy().is_empty(), "onboarding encounter spawned early")
 	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_ONBOARDING + 0.1
 	controller.update(0.0)
-	_check(not controller.active_enemy().is_empty(), "onboarding encounter did not spawn at 240s with the fusion timer active")
+	_check(not controller.active_enemy().is_empty(), "onboarding encounter did not spawn two minutes after phase 2 began")
 	controller.cleanup("timing_fixture")
 	controller.reset_for_new_run()
 	game.run_pacing_profile = game.PACING_PROFILE_EXPERIENCED
@@ -108,7 +108,7 @@ func _test_spawn_timing() -> void:
 	_check(controller.active_enemy().is_empty(), "experienced encounter spawned early")
 	game.time_alive = game.phase_started_at + controller.SPAWN_TIME_EXPERIENCED + 0.1
 	controller.update(0.0)
-	_check(not controller.active_enemy().is_empty(), "experienced encounter did not spawn at 180s with the fusion timer active")
+	_check(not controller.active_enemy().is_empty(), "experienced encounter did not spawn two minutes after phase 2 began")
 	controller.cleanup("timing_fixture")
 	controller.reset_for_new_run()
 	game.run_pacing_profile = game.PACING_PROFILE_ONBOARDING

@@ -157,7 +157,7 @@ func reset() -> void:
 
 
 func on_player_damaged(actual_damage: int) -> void:
-	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or actual_damage <= 0:
+	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or core.effect_key != "incandescencia" or actual_damage <= 0:
 		return
 	var hp_reference := maxf(1.0, float(core.player_hp_max))
 	var friction_gain: float = float(actual_damage) / hp_reference * core.HENRY_FRICTION_MAX
@@ -167,7 +167,7 @@ func on_player_damaged(actual_damage: int) -> void:
 
 
 func fire_auto_attack() -> bool:
-	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY:
+	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or core.mutation_key != "incendiario":
 		return false
 	core.henry_attack_visual_stage = core.henry_attack_combo
 	core.henry_attack_combo = (core.henry_attack_combo + 1) % 3
@@ -183,7 +183,7 @@ func fire_auto_attack() -> bool:
 
 
 func begin_skill(target_world = null) -> bool:
-	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or core._local_player_controls_locked():
+	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or core.mutation_key != "incendiario" or core._local_player_controls_locked():
 		return false
 	var direction := _target_direction(target_world)
 	core.henry_skill_cast_active = true
@@ -203,7 +203,7 @@ func begin_skill(target_world = null) -> bool:
 
 
 func cast_ultimate() -> bool:
-	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or core._local_player_controls_locked():
+	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or core.mutation_key != "incendiario" or core._local_player_controls_locked():
 		return false
 	core.henry_ultimate_cast_active = true
 	core.henry_ultimate_cast_elapsed = 0.0
@@ -239,8 +239,9 @@ func _release_ultimate() -> void:
 func update(delta: float) -> void:
 	if not is_configured():
 		return
-	_update_cast(delta)
-	_update_ultimate_cast(delta)
+	if core.mutation_key == "incendiario":
+		_update_cast(delta)
+		_update_ultimate_cast(delta)
 	_update_incandescence(delta)
 	for cone in core.henry_flame_cones:
 		cone["life"] = maxf(0.0, float(cone.get("life", 0.0)) - delta)
@@ -271,7 +272,7 @@ func _update_incandescence(delta: float) -> void:
 	for enemy in core.enemies:
 		if float(enemy.get("henry_incandescence_heat", 0.0)) > 0.0:
 			enemy["henry_incandescence_heat"] = maxf(0.0, float(enemy["henry_incandescence_heat"]) - delta)
-	if core.active_character_key != core.CHARACTER_HENRY or core.is_dead or core.player_hp <= 0.0:
+	if core.active_character_key != core.CHARACTER_HENRY or core.effect_key != "incandescencia" or core.is_dead or core.player_hp <= 0.0:
 		core.henry_incandescence_active_timer = 0.0
 		core.henry_incandescence_target_dwell.clear()
 		core.henry_incandescence_zones.clear()

@@ -44,6 +44,8 @@ static func _capture_attack(game: Node, key: String, snapshot: Dictionary) -> vo
 
 static func _capture_skill(game: Node, key: String, snapshot: Dictionary) -> void:
 	match key:
+		"barometrico":
+			snapshot["barometric"] = game.henry_barometric_ability_controller.visual_snapshot()
 		"eletrica":
 			snapshot["eletrica_waves"] = _tail(game.eletrica_waves, 1)
 		"lacerante":
@@ -93,6 +95,8 @@ static func _capture_secondary(game: Node, key: String, snapshot: Dictionary) ->
 	if not secondary.is_empty():
 		snapshot["secondary"] = secondary
 	match key:
+		"barometrico":
+			snapshot["barometric"] = game.henry_barometric_ability_controller.visual_snapshot()
 		"gravitante":
 			snapshot["orbitals"] = _tail(game.orbitals, MAX_PERSISTENT_ITEMS)
 		"ancorada":

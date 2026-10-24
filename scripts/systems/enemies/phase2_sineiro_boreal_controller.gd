@@ -17,8 +17,10 @@ const STATE_DESPAWN := "despawn"
 const ATTACK_ECHO := "badalada_passado"
 const ATTACK_SHARDS := "estilhacos_ressonantes"
 
-const SPAWN_TIME_ONBOARDING := 240.0
-const SPAWN_TIME_EXPERIENCED := 180.0
+# Counted from phase_started_at: every profile meets the Sineiro exactly two
+# minutes after phase 2 begins, unless a boss/transition is currently active.
+const SPAWN_TIME_ONBOARDING := 120.0
+const SPAWN_TIME_EXPERIENCED := 120.0
 const ACTIVE_LIFETIME := 110.0
 const ENTRY_TIME := 1.05
 const ECHO_TELEGRAPH_TIME := 1.10
@@ -193,7 +195,9 @@ func spawn_now() -> Dictionary:
 	game.event_alert_text = "O SINEIRO BOREAL DESPERTOU!"
 	game.event_alert_timer = 3.2
 	game.event_alert_seed = int(enemy.get("uid", 0))
-	game._add_text("O SINEIRO BOREAL DESPERTOU!", spawn_pos + Vector2(-190.0, -132.0), Color(0.58, 0.94, 1.0), 2.8, 27)
+	# Announce at the player instead of the random edge spawn so the invocation
+	# stays visible on desktop and landscape mobile cameras.
+	game._add_text("O SINEIRO BOREAL DESPERTOU!", game.player_pos + Vector2(0.0, -150.0), Color(0.58, 0.94, 1.0), 2.8, 27)
 	game._play_sfx("Congelando.mp3", 0.03, 0.78, 0.78)
 	_emit_visual_event("entry", {"pos": spawn_pos, "uid": int(enemy.get("uid", -1))})
 	return enemy

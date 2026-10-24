@@ -57,16 +57,23 @@ func _capture(path: String, capture_size: Vector2i) -> bool:
 
 func _whirlpool_snapshot() -> void:
 	game.boss_attacks.clear()
+	game.boss1_whirlpool_sequence = 3
 	game.early_boss_controller.start_boss1_whirlpool()
 	var attack: Dictionary = game.boss_attacks[0]
 	attack["state"] = "active"
-	attack["state_age"] = 4.2
-	attack["age"] = 4.2
+	attack["state_age"] = game.BOSS1_WHIRLPOOL_LASER_WARNING + game.BOSS1_WHIRLPOOL_LASER_ROTATION_DURATION * 0.38
+	attack["age"] = attack["state_age"]
 	game.boss_pos = game.WORLD_SIZE * 0.5
+	# Center the gameplay camera on the boss so the capture proves the beams
+	# originate at the sprite instead of merely crossing the middle of the view.
+	game.player_pos = game.boss_pos
+	game.online_local_spectator = true
 
 
 func _lightning_snapshot() -> void:
 	game.boss_attacks.clear()
+	game.online_local_spectator = false
+	game.player_pos = game.boss_pos + Vector2(330.0, 0.0)
 	game.early_boss_controller.spawn_boss1_lightning_strike()
 	game.early_boss_controller.spawn_boss1_lightning_strike()
 	var warning: Dictionary = game.boss_attacks[0]
@@ -100,7 +107,7 @@ func _run() -> void:
 		quit(1)
 		return
 
-	print("BOSS1_WHIRLPOOL_LIGHTNING_VISUAL_OK whirlpool=1280x720,960x540 lightning=1280x720,960x540")
+	print("BOSS1_WHIRLPOOL_LIGHTNING_VISUAL_OK whirlpool_lasers=4 whirlpool=1280x720,960x540 lightning=1280x720,960x540")
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

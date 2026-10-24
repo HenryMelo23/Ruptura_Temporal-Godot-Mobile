@@ -25,6 +25,13 @@ func _spawn_static_enemy(hp := 100.0) -> Dictionary:
 	return enemy
 
 
+func _collect_enemy_points() -> void:
+	for orb in game.heal_orbs:
+		if String(orb.get("kind", "")) == game.ENEMY_POINT_ORB_KIND:
+			game.player_pos = Vector2(orb.get("pos", game.player_pos))
+	game._update_heal_orbs(0.016)
+
+
 func _initialize() -> void:
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
@@ -36,12 +43,14 @@ func _run() -> void:
 	game._apply_card(_card("Mercenaria"))
 	for i in range(5):
 		game._kill_enemy(_spawn_static_enemy())
+		_collect_enemy_points()
 	_check(game.combo_kills == 5, "Mercenaria did not preserve the five-kill contract")
 	_check(game.mercenary_bonus_points == 65, "first contract should add base 25 plus 40 per card")
 	var score_before = game.score
 	var expected_base = game._points_for_enemy(_spawn_static_enemy())
 	var sixth = game.enemies.back()
 	game._kill_enemy(sixth)
+	_collect_enemy_points()
 	_check(game.score - score_before == expected_base + 65, "current Mercenaria bonus was not paid on the next kill")
 	game.enemies.clear()
 	game.spawn_timer = 999.0

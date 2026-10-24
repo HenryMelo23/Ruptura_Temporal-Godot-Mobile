@@ -75,6 +75,9 @@ func _run() -> void:
 	var enemy: Dictionary = game.enemies[0]
 	var expected_gain = game._points_for_enemy(enemy)
 	game._kill_enemy(enemy)
+	var point_orb: Dictionary = game.heal_orbs.filter(func(orb): return String(orb.get("kind", "")) == game.ENEMY_POINT_ORB_KIND).back()
+	game.player_pos = Vector2(point_orb.get("pos", game.player_pos))
+	game._update_heal_orbs(0.016)
 	_check(game.run_points_earned == expected_gain, "enemy reward was not counted as earned points")
 	game.time_alive = 754.0
 	game.current_phase = 2

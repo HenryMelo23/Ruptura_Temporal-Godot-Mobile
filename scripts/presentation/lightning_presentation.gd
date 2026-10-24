@@ -142,7 +142,7 @@ static func _stroke(canvas: CanvasItem, points: PackedVector2Array, context: Dic
 	canvas.draw_multiline(lines, Color(0.93, 0.99, 1.0, alpha * 0.92), maxf(0.8, width * 0.27), true)
 
 
-static func bolt(canvas: CanvasItem, start: Vector2, finish: Vector2, event_seed: int, elapsed: float, tint: Color, alpha: float, width: float, tier: int = -1, protect_sprites: bool = true) -> void:
+static func bolt(canvas: CanvasItem, start: Vector2, finish: Vector2, event_seed: int, elapsed: float, tint: Color, alpha: float, width: float, tier: int = -1, protect_sprites: bool = true, branch_limit: int = -1) -> void:
 	if alpha <= 0.005 or start.distance_squared_to(finish) < 4.0:
 		return
 	if tier < 0:
@@ -160,7 +160,8 @@ static func bolt(canvas: CanvasItem, start: Vector2, finish: Vector2, event_seed
 	var points := channel(start, finish, event_seed, elapsed, tier)
 	var pulse := 0.82 + 0.18 * sin(elapsed * 39.0 + event_seed % 31)
 	_stroke(canvas, points, context, tint, clampf(alpha, 0.0, 1.0) * pulse, width, tier)
-	for branch_index in range(BRANCHES[tier]):
+	var branch_count: int = BRANCHES[tier] if branch_limit < 0 else mini(BRANCHES[tier], branch_limit)
+	for branch_index in range(branch_count):
 		var index := 1 + (absi(event_seed + branch_index * 7) % maxi(1, points.size() - 2))
 		var origin := points[index]
 		var side := -1.0 if branch_index % 2 == 0 else 1.0

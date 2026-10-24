@@ -73,5 +73,54 @@ func _run() -> void:
 	var overflow_payload := RTPlayerProgressSync.build_cache_payload("rtp_fixture", snapshot, overflow_fixture, [], 1)
 	_check(Array(overflow_payload.get("pending_events", [])).size() == RTPlayerProgressSync.MAX_PENDING_EVENTS + 1, "cache serialization silently dropped offline events")
 
-	print("PLAYER_PROGRESS_CACHE_OK signed=true json_roundtrip=true legacy=true tampered=false corrupted=false pending=true no_silent_drop=true")
+	var shot_events: Array = []
+	var locked_ids: Dictionary = {}
+	var sequence := 0
+	for _shot_index in range(5000):
+		var remaining := RTPlayerProgressSync.merge_pending_unlock_progress(shot_events, locked_ids, "shots_fired", 1.0, false)
+		while remaining > 0.0:
+			sequence += 1
+			var event_amount := minf(remaining, RTPlayerProgressSync.unlock_progress_batch_limit("shots_fired", false, remaining))
+			shot_events.append(RTPlayerProgressSync.unlock_progress_event("rtp_fixture", sequence, "ppd_fixture", "shots_fired", event_amount, false, 24100))
+			remaining -= event_amount
+	_check(shot_events.size() == 1, "5000 shots were not compacted into the relay-safe durable batch")
+	var shot_total := 0.0
+	for event in shot_events:
+		shot_total += float(event.get("amount", 0.0))
+	_check(is_equal_approx(shot_total, 5000.0), "shot batching changed the durable progress total")
+	var batch_sign_started_usec := Time.get_ticks_usec()
+	var batched_cache := RTPlayerProgressSync.signed_cache(
+		RTPlayerProgressSync.build_cache_payload("rtp_fixture", snapshot, shot_events, [], sequence),
+		secret
+	)
+	var batch_sign_usec := Time.get_ticks_usec() - batch_sign_started_usec
+	var batched_cache_bytes := JSON.stringify(batched_cache).to_utf8_buffer().size()
+	_check(batched_cache_bytes < 32768, "batched shot cache exceeded its compact payload budget")
+	locked_ids[String(shot_events[-1].get("event_id", ""))] = true
+	var locked_remainder := RTPlayerProgressSync.merge_pending_unlock_progress(shot_events, locked_ids, "shots_fired", 1.0, false)
+	_check(is_equal_approx(locked_remainder, 1.0), "an in-flight progress batch was mutated")
+	var max_events := [RTPlayerProgressSync.unlock_progress_event("rtp_fixture", 100, "ppd_fixture", "survive_seconds", 20.0, true, 24100)]
+	_check(RTPlayerProgressSync.merge_pending_unlock_progress(max_events, {}, "survive_seconds", 45.0, true) == 0.0, "maximum progress event was not merged")
+	_check(is_equal_approx(float(max_events[0].get("amount", 0.0)), 45.0), "maximum progress merge lost the highest value")
+
+	var overflow_review: Array = []
+	for index in range(5000):
+		overflow_review.append({
+			"event": RTPlayerProgressSync.unlock_progress_event("rtp_fixture", index + 1, "ppd_fixture", "stationary_seconds", 1.0, false, 24100),
+			"reason": "queue_capacity",
+			"at": index,
+		})
+	var compacted_review := RTPlayerProgressSync.compact_quarantined_events(overflow_review)
+	_check(compacted_review.size() == 1, "overflow review queue was not compacted by metric")
+	var compacted_event: Dictionary = Dictionary(compacted_review[0]).get("event", {})
+	_check(is_equal_approx(float(compacted_event.get("amount", 0.0)), 5000.0), "overflow compaction changed the accumulated amount")
+	_check(int(compacted_event.get("aggregate_count", 0)) == 5000, "overflow compaction lost the original event count")
+	var compacted_payload := RTPlayerProgressSync.signed_cache(
+		RTPlayerProgressSync.build_cache_payload("rtp_fixture", snapshot, shot_events, compacted_review, sequence),
+		secret
+	)
+	var compacted_bytes := JSON.stringify(compacted_payload).to_utf8_buffer().size()
+	_check(compacted_bytes < 32768, "compacted overflow cache exceeded its payload budget")
+
+	print("PLAYER_PROGRESS_CACHE_OK signed=true json_roundtrip=true legacy=true tampered=false corrupted=false pending=true no_silent_drop=true shots=5000_batches_1 cache_bytes=%d sign_usec=%d overflow_events=5000 overflow_compacted=1 overflow_bytes=%d in_flight=immutable" % [batched_cache_bytes, batch_sign_usec, compacted_bytes])
 	quit(0)

@@ -67,6 +67,12 @@ func _run() -> void:
 	var enraged_wave: Dictionary = game.boss_transition_waves[0]
 	assert(bool(enraged_wave["enraged"]))
 	assert(is_equal_approx(float(enraged_wave["open_size"]), game.BOSS_STAGE_ENRAGED_OPENING))
+	assert(float(enraged_wave["open_size"]) >= PI * 0.30)
+	assert(float(enraged_wave["open_size"]) < game.BOSS_STAGE_WAVE_OPENING)
+	var normal_danger_arc: float = TAU - game.BOSS_STAGE_WAVE_OPENING * 2.0
+	var enraged_danger_arc: float = TAU - float(enraged_wave["open_size"]) * 2.0
+	assert(enraged_danger_arc < TAU - PI * 0.22 * 2.0)
+	assert(enraged_danger_arc > normal_danger_arc)
 	enraged_wave["age"] = float(enraged_wave["warning"])
 	enraged_wave["radius"] = 220.0
 	game.player_hp = 450.0
@@ -90,7 +96,7 @@ func _run() -> void:
 	assert(game.enemies.is_empty())
 	assert(game.enemy_bullets.is_empty())
 
-	print("BOSS_WAVE_SMOKE_OK waves=%d speed=%.0f enraged_opening=%.1fdeg" % [
+	print("BOSS_WAVE_SMOKE_OK waves=%d speed=%.0f enraged_opening=%.1fdeg enraged_danger_arc_shorter=true" % [
 		game.boss_transition_waves.size(),
 		game.BOSS_STAGE_WAVE_SPEED,
 		enraged_opening_degrees

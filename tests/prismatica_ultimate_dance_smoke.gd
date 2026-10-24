@@ -19,9 +19,12 @@ func _check(ok: bool, message: String) -> void:
 func _run() -> void:
 	game._start_game()
 	game.manifestation_key = "prismatica"
+	game.selected_manifestation = game._manifestation_index_for_key("prismatica", -1)
 	game.last_secondary_time = -999.0
 	game.time_alive = 20.0
 	game.player_pos = Vector2(620, 430)
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.enemies.clear()
 	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(120, 0))
 	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(250, 35))

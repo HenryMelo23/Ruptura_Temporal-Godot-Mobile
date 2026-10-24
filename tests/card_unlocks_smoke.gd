@@ -3,6 +3,8 @@ extends SceneTree
 var game: Node
 var unlock_save_existed: bool = false
 var unlock_save_text: String = ""
+var progress_cache_existed: bool = false
+var progress_cache_bytes: PackedByteArray = PackedByteArray()
 
 
 func _check(condition: bool, message: String) -> void:
@@ -21,6 +23,7 @@ func _initialize() -> void:
 func _run() -> void:
 	await process_frame
 	_backup_unlock_save()
+	_backup_progress_cache()
 	game.unlocked_card_ids.clear()
 	game.card_unlock_progress.clear()
 	game.unlock_notifications.clear()
@@ -29,6 +32,21 @@ func _run() -> void:
 	game.vol_shots = 1.0
 	game._ensure_card_unlock_defaults()
 	_check(game.audio_streams.has("unlock_notification"), "unlock notification sfx was not registered")
+	game.player_progress_pending_events.clear()
+	game.player_progress_sync_sent_event_ids.clear()
+	for _shot_index in range(1200):
+		game._queue_player_progress_unlock_event("shots_fired", 1.0, false)
+	_check(game.player_progress_pending_events.size() == 1, "runtime shot progress queue was not compacted")
+	var batched_shot_total := 0.0
+	for event in game.player_progress_pending_events:
+		batched_shot_total += float(event.get("amount", 0.0))
+	_check(is_equal_approx(batched_shot_total, 1200.0), "runtime shot batching changed the progress total")
+	var last_batch_id := String(game.player_progress_pending_events[-1].get("event_id", ""))
+	game.player_progress_sync_sent_event_ids[last_batch_id] = true
+	game._queue_player_progress_unlock_event("shots_fired", 1.0, false)
+	_check(game.player_progress_pending_events.size() == 2, "runtime mutated a shot batch already in flight")
+	game.player_progress_pending_events.clear()
+	game.player_progress_sync_sent_event_ids.clear()
 
 	var base_card: Dictionary = game._find_card_by_id("Speed Boost")
 	var locked_card: Dictionary = game._find_card_by_id("Poison")
@@ -71,8 +89,9 @@ func _run() -> void:
 	game._flush_card_unlocks_if_dirty()
 	_check(not game.card_unlocks_dirty, "card unlock save dirty flag did not flush")
 	_restore_unlock_save()
+	_restore_progress_cache()
 
-	print("CARD_UNLOCKS_SMOKE_OK base_unlocked=true locked_filter=true challenge_unlock=true notification=true save_flush=true")
+	print("CARD_UNLOCKS_SMOKE_OK base_unlocked=true locked_filter=true challenge_unlock=true notification=true save_flush=true shots=1200_batches_1 in_flight=immutable")
 	root.remove_child(game)
 	game._cleanup_runtime_resources()
 	await process_frame
@@ -100,3 +119,20 @@ func _restore_unlock_save() -> void:
 			file.close()
 		return
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(game.CARD_UNLOCK_SAVE_PATH))
+
+
+func _backup_progress_cache() -> void:
+	progress_cache_existed = FileAccess.file_exists(game.PLAYER_PROGRESS_CACHE_PATH)
+	progress_cache_bytes = FileAccess.get_file_as_bytes(game.PLAYER_PROGRESS_CACHE_PATH) if progress_cache_existed else PackedByteArray()
+
+
+func _restore_progress_cache() -> void:
+	game.save_controller._poll_card_unlock_save(true)
+	var absolute_path := ProjectSettings.globalize_path(game.PLAYER_PROGRESS_CACHE_PATH)
+	if progress_cache_existed:
+		var file := FileAccess.open(absolute_path, FileAccess.WRITE)
+		if file != null:
+			file.store_buffer(progress_cache_bytes)
+			file.close()
+		return
+	DirAccess.remove_absolute(absolute_path)

@@ -54,7 +54,7 @@ static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
 			viewport,
 			game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada",
 			game.manifestation_key == "bombastica",
-			not game.shop_auto_enabled or game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0,
+			not game._is_drop_game_mode() and (not game.shop_auto_enabled or game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0),
 			game._sanitize_desktop_hud_scale(game.desktop_hud_scale)
 		)
 		for key in ["attack", "skill", "secondary", "dash", "pause", "boss"]:
@@ -71,7 +71,7 @@ static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
 		game._lacerante_empower_center(viewport), game._lacerante_empower_scale(),
 		game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.mode == "edit_layout",
 		game.manifestation_key == "bombastica" and game.mode != "edit_layout", game._pause_pos(viewport), game._boss_call_pos(viewport), game._manual_shop_pos(viewport),
-		not (game.shop_auto_enabled and not game.qa_data_unlocked and game._sanitize_forced_initial_phase(game.forced_initial_phase) == 0 and game.mode != "edit_layout")
+		not game._is_drop_game_mode() and not (game.shop_auto_enabled and not game.qa_data_unlocked and game._sanitize_forced_initial_phase(game.forced_initial_phase) == 0 and game.mode != "edit_layout")
 	)
 	var custom_combat_layout: bool = game.hud_attack_pos != Vector2.ZERO or game.hud_secondary_pos != Vector2.ZERO or game.hud_dash_pos != Vector2.ZERO or game.hud_skill_pos != Vector2(-1, -1) or game.hud_lacerante_empower_pos != Vector2(-1, -1)
 	if game.mode != "edit_layout" and not custom_combat_layout and _touch_hub_has_overlap(touch_rects, viewport):
@@ -461,6 +461,20 @@ static func _draw_card_mechanic_huds(game: Node2D, viewport: Vector2, anchor: Re
 		game.draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2(width - 20, 5)), Color(0.04, 0.1, 0.09, 0.8), true)
 		game.draw_rect(Rect2(rect.position + Vector2(10, 29), Vector2((width - 20) * ratio, 5)), Color(0.52, 1.0, 0.86, 0.9), true)
 		y += 44.0
+	if game.manto_impulso_shield > 0.0 and game.manto_impulso_timer > 0.0:
+		var rect = Rect2(origin.x, y, width, 38.0)
+		game._draw_combat_panel(rect, Color(0.3, 0.88, 1.0), 0.54)
+		game.draw_string(game.font, rect.position + Vector2(10, 17), "MANTO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.46, 0.92, 1.0))
+		game.draw_string(game.font, rect.position + Vector2(width - 92, 17), "%.0f HP" % game.manto_impulso_shield, HORIZONTAL_ALIGNMENT_RIGHT, 84, 11, Color.WHITE)
+		game.draw_string(game.font, rect.position + Vector2(10, 32), "%.1fs" % game.manto_impulso_timer, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.78, 0.94, 1.0))
+		y += 44.0
+	if game.sutura_gradual_pending > 0.0 and game.sutura_gradual_timer > 0.0:
+		var rect = Rect2(origin.x, y, width, 38.0)
+		game._draw_combat_panel(rect, Color(0.52, 1.0, 0.62), 0.52)
+		game.draw_string(game.font, rect.position + Vector2(10, 17), "SUTURA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.64, 1.0, 0.7))
+		game.draw_string(game.font, rect.position + Vector2(width - 92, 17), "+%.0f HP" % game.sutura_gradual_pending, HORIZONTAL_ALIGNMENT_RIGHT, 84, 11, Color.WHITE)
+		game.draw_string(game.font, rect.position + Vector2(10, 32), "EM CORTES", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.82, 0.98, 0.86))
+		y += 44.0
 	if game._rare_card_count(game.CARD_EGIDE_ID) > 0 and game.egide_hemofaga_shield > 0.0:
 		var rect = Rect2(origin.x, y, width, 38.0)
 		game._draw_combat_panel(rect, Color(1.0, 0.72, 0.22), 0.56)
@@ -538,6 +552,18 @@ static func _draw_card_mechanic_huds(game: Node2D, viewport: Vector2, anchor: Re
 		var label = "PRONTA" if game.ressonancia_ready_timer > 0.0 else "%d/4" % game.ressonancia_symbols.size()
 		game.draw_string(game.font, rect.position + Vector2(width - 86, 17), label, HORIZONTAL_ALIGNMENT_RIGHT, 78, 11, Color.WHITE)
 		y += 46.0
+	if game._card_count_by_id(game.CARD_PARADOX_ID) > 0:
+		var rect = Rect2(origin.x, y, width, 42.0)
+		var pulse: float = clampf(game.paradox_flash, 0.0, 1.0)
+		game._draw_combat_panel(rect, Color(1.0, 0.34 + pulse * 0.12, 0.08), 0.62)
+		game.draw_string(game.font, rect.position + Vector2(10, 17), "PARADOXO", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.64, 0.24))
+		var state_label: String = "ATIVO %.1fs" % game.paradox_active_timer if game.paradox_active_timer > 0.0 else ("PRONTO" if game.paradox_ready else "%d/%d" % [game.paradox_charge_hits, game.PARADOX_HITS_REQUIRED])
+		game.draw_string(game.font, rect.position + Vector2(width - 88, 17), state_label, HORIZONTAL_ALIGNMENT_RIGHT, 80, 10, Color.WHITE)
+		var progress: float = 1.0 if game.paradox_ready or game.paradox_active_timer > 0.0 else clampf(float(game.paradox_charge_hits) / float(game.PARADOX_HITS_REQUIRED), 0.0, 1.0)
+		game.draw_rect(Rect2(rect.position + Vector2(10, 30), Vector2(width - 20, 5)), Color(0.08, 0.01, 0.01, 0.86), true)
+		game.draw_rect(Rect2(rect.position + Vector2(10, 30), Vector2((width - 20) * progress, 5)), Color(1.0, 0.38, 0.08, 0.94), true)
+		game.draw_rect(Rect2(rect.position + Vector2(10 + (width - 20) * progress - 2, 29), Vector2(4, 7)), Color(0.34, 0.94, 1.0, 0.84), true)
+		y += 48.0
 	if game._rare_card_count("carta_zero") > 0:
 		var rect = Rect2(origin.x, y, width, 38.0)
 		game._draw_combat_panel(rect, Color(0.88, 0.96, 1.0), 0.56)

@@ -129,19 +129,12 @@ func _run() -> void:
 	game.card_cost = 500
 	game._clear_team_revival_state()
 	game._start_team_revival_for_dead(game._mp_unique_id(), game.player_pos, "Geovana", false)
-	await _capture("online_revive_dead_1280x720.png")
-	_check(game.revival_active and game.revival_fragments.size() > 0, "revival fragments did not render for dead player")
+	await _capture("online_dead_without_fragment_altars_1280x720.png")
+	_check(not game.revival_active and game.revival_fragments.is_empty(), "removed revival fragments remained visible for dead player")
 	game.is_dead = false
 	game.player_hp = game.player_hp_max
-	for i in range(game.revival_fragments.size()):
-		var fragment_state: Dictionary = game.revival_fragments[i]
-		fragment_state["collected"] = true
-		game.revival_fragments[i] = fragment_state
-	game._refresh_revival_collection_state()
 	game._activate_team_revival_altars()
-	game.player_pos = game.revival_altar_life_pos
-	await _capture("online_revive_altars_1280x720.png")
-	_check(game.revival_altars_active and game._local_revival_altar_method() == game.REVIVE_PAY_LIFE, "revival altar prompt did not become available")
+	_check(not game.revival_altars_active and game._local_revival_altar_method().is_empty(), "removed revival altar prompt became available")
 
 	print("MULTIPLAYER_ONLINE_UI_VISUAL_OK captures=", ", ".join(captures))
 	game.queue_free()

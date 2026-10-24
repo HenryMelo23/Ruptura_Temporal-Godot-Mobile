@@ -39,15 +39,17 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://.agent_logs"))
 	game.run_tutorial_enabled = false
 	game._start_game()
+	game.set_process(false)
 	game.mode = "game"
 	game.boss_call_tutorial_seen = true
 	game.shop_tutorial_seen = true
 	game.tutorial_state = game.TUTORIAL_STATE_NONE
 	game.current_phase = 2
 	game.phase_started_at = 0.0
-	game.time_alive = 310.0
+	game.time_alive = 0.0
 	game.boss_ready = false
 	game.geovana_bark_controller.next_ambient_at = INF
+	game.unlock_notifications.clear()
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0
 	game.player_pos = Vector2(800, 450)
@@ -56,13 +58,19 @@ func _run() -> void:
 	game._prepare_phase_texture_assets(2)
 	var controller = game.sineiro_boreal_controller
 	controller.reset_for_new_run()
-	var enemy: Dictionary = controller.spawn_now()
-	_check(not enemy.is_empty(), "visual fixture could not spawn")
+	game.time_alive = controller.SPAWN_TIME_ONBOARDING - 0.1
+	controller.update(0.0)
+	_check(controller.active_enemy().is_empty(), "visual fixture spawned before two minutes")
+	game.time_alive = controller.SPAWN_TIME_ONBOARDING + 0.1
+	controller.update(0.0)
+	var enemy: Dictionary = controller.active_enemy()
+	_check(not enemy.is_empty(), "timed phase-2 path could not spawn Sineiro")
 	var motion: Texture2D = game.textures.get("sineiro_boreal_motion")
 	var death: Texture2D = game.textures.get("sineiro_boreal_death")
 	_check(motion != null and motion.get_size() == Vector2(1536, 1024), "motion atlas missing or malformed")
 	_check(death != null and death.get_size() == Vector2(1536, 256), "death atlas missing or malformed")
 	enemy["pos"] = Vector2(620, 430)
+	await _capture("timed_entry", Vector2i(1280, 720))
 	enemy["sineiro_state"] = controller.STATE_APPROACH
 	enemy["last_move_dir"] = Vector2.RIGHT
 	await _capture("idle_walk", Vector2i(1280, 720))
@@ -97,5 +105,5 @@ func _run() -> void:
 			printerr("PHASE2_SINEIRO_VISUAL_FAIL " + failure)
 		quit(1)
 		return
-	print("PHASE2_SINEIRO_VISUAL_OK captures=8 atlas=true telegraphs=true death=true")
+	print("PHASE2_SINEIRO_VISUAL_OK captures=9 timed_spawn=true atlas=true telegraphs=true death=true")
 	quit(0)

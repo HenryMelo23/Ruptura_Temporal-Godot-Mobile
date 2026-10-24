@@ -12,6 +12,8 @@ func _initialize() -> void:
 func _run() -> void:
 	game._start_game()
 	game.manifestation_key = "parasitica"
+	game.player_start_down_fall_timer = 0.0
+	game.player_start_down_landing_timer = 0.0
 	game.player_damage = 100.0
 	game.enemies.clear()
 	game._spawn_enemy(game.ENEMY_COMMON, Vector2(700, 430))

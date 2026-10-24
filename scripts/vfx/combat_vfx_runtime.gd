@@ -377,6 +377,10 @@ static func _projectile_palette(game: Node2D, kind: String) -> Dictionary:
 	match kind:
 		"henry_spark":
 			return {"core": Color(1.0, 0.96, 0.64), "glow": Color(1.0, 0.38, 0.04, 0.96), "trail": Color(1.0, 0.12, 0.02, 0.46), "size": 7.0, "trail_size": 7.0}
+		"henry_pressure":
+			return {"core": Color(0.92, 1.0, 0.98), "glow": Color(0.28, 0.84, 0.94, 0.94), "trail": Color(0.42, 0.92, 0.84, 0.38), "size": 8.0, "trail_size": 10.0}
+		"henry_nimbo_pressure":
+			return {"core": Color(1.0, 1.0, 1.0), "glow": Color(0.5, 0.9, 1.0, 0.96), "trail": Color(0.72, 0.96, 1.0, 0.42), "size": 6.0, "trail_size": 8.0}
 		"eletrica":
 			return {"core": Color(0.76, 1.0, 1.0), "glow": Color(0.1, 0.95, 1.0, 0.92), "trail": Color(0.82, 0.22, 1.0, 0.46), "size": 8.0, "trail_size": 7.0}
 		"eletrica_charged":

@@ -18,6 +18,7 @@ const CATEGORY_CROWD_CONTROL: = "crowd_control"
 const CATEGORY_UTILITY: = "utility"
 const CATEGORY_CONSUMABLE: = "consumable"
 const CATEGORY_RARE: = "rare"
+const CATEGORY_LEGENDARY: = "legendary"
 
 ## Rarity tiers are independent from the mechanical categories above.
 const RARITY_COMMON: = "common"
@@ -377,6 +378,42 @@ const CARD_DEFINITIONS: Dictionary = {
 		"float_text": "CINZAS: ESTABILIDADE",
 		"caps": {"max_reduction": 0.32},
 	},
+	"horizonte_ruptura": {
+		"id": "horizonte_ruptura",
+		"name": "Horizonte de Ruptura",
+		"category": CATEGORY_AREA,
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
+		"eligible_attributes": ["range", "damage"],
+		"burn_factor": 0.50,
+		"stat_label": "alcance de disparo e dano",
+		"float_text": "CINZAS: HORIZONTE",
+	},
+	"fragmentacao_reativa": {
+		"id": "fragmentacao_reativa",
+		"name": "Fragmentacao Reativa",
+		"category": CATEGORY_DAMAGE,
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
+		"eligible_attributes": ["radius", "damage"],
+		"burn_factor": 0.50,
+		"stat_label": "raio e dano dos fragmentos de revide",
+		"float_text": "CINZAS: FRAGMENTOS",
+	},
+	"bastiao_inercial": {
+		"id": "bastiao_inercial",
+		"name": "Bastiao Inercial",
+		"category": CATEGORY_DEFENSE,
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
+		"eligible_attributes": ["armor", "speed"],
+		"burn_factor": 0.50,
+		"stat_label": "armadura parada e velocidade",
+		"float_text": "CINZAS: BASTIAO",
+	},
 	"rastro_de_retorno": {
 		"id": "rastro_de_retorno",
 		"name": "Rastro de Retorno",
@@ -393,8 +430,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "municao_de_rebate",
 		"name": "Municao de Rebate",
 		"category": CATEGORY_DAMAGE,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["damage", "chance", "radius"],
 		"burn_factor": 0.50,
 		"stat_label": "rebate e fragmentos",
@@ -404,8 +442,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "impulso_de_sobras",
 		"name": "Impulso de Sobras",
 		"category": CATEGORY_DAMAGE,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["damage", "size", "charges"],
 		"burn_factor": 0.50,
 		"stat_label": "ataque fortalecido e area",
@@ -450,8 +489,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "margem_de_erro",
 		"name": "Margem de Erro",
 		"category": CATEGORY_DEFENSE,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["defer", "reduction"],
 		"burn_factor": 0.50,
 		"stat_label": "mitigacao e parcelamento de dano",
@@ -461,8 +501,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "ressonancia_de_alternancia",
 		"name": "Ressonancia de Alternancia",
 		"category": CATEGORY_DAMAGE,
-		"can_burn": true,
-		"policy": "multi_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["damage", "speed", "duration"],
 		"burn_factor": 0.50,
 		"stat_label": "ressonancia de acoes",
@@ -506,11 +547,55 @@ const CARD_DEFINITIONS: Dictionary = {
 		"name": "Estase Reparadora",
 		"category": CATEGORY_HEALING,
 		"can_burn": true,
-		"policy": "numeric_attribute",
-		"eligible_attributes": ["heal_rate"],
+		"policy": "multi_attribute",
+		"eligible_attributes": ["heal_rate", "radius"],
 		"burn_factor": 0.50,
-		"stat_label": "regeneracao em repouso",
+		"stat_label": "cura e raio do campo cooperativo",
 		"float_text": "CINZAS: ESTASE",
+	},
+	"manto_de_impulso": {
+		"id": "manto_de_impulso",
+		"name": "Manto de Impulso",
+		"category": CATEGORY_DEFENSE,
+		"can_burn": true,
+		"policy": "multi_attribute",
+		"eligible_attributes": ["shield", "capacity", "duration"],
+		"burn_factor": 0.50,
+		"stat_label": "escudo ao usar habilidades",
+		"float_text": "CINZAS: MANTO",
+	},
+	"recusa_do_dano": {
+		"id": "recusa_do_dano",
+		"name": "Recusa do Dano",
+		"category": CATEGORY_DEFENSE,
+		"can_burn": true,
+		"policy": "numeric_attribute",
+		"eligible_attributes": ["block_chance"],
+		"burn_factor": 0.50,
+		"stat_label": "chance de bloquear dano na vida",
+		"float_text": "CINZAS: RECUSA",
+	},
+	"carrasco_de_colossos": {
+		"id": "carrasco_de_colossos",
+		"name": "Carrasco de Colossos",
+		"category": CATEGORY_DAMAGE,
+		"can_burn": true,
+		"policy": "numeric_attribute",
+		"eligible_attributes": ["boss_damage"],
+		"burn_factor": 0.50,
+		"stat_label": "dano direto contra chefes",
+		"float_text": "CINZAS: COLOSSO",
+	},
+	"sutura_gradual": {
+		"id": "sutura_gradual",
+		"name": "Sutura Gradual",
+		"category": CATEGORY_HEALING,
+		"can_burn": true,
+		"policy": "numeric_attribute",
+		"eligible_attributes": ["recovery"],
+		"burn_factor": 0.50,
+		"stat_label": "cura parcelada apos dano",
+		"float_text": "CINZAS: SUTURA",
 	},
 	"egide_hemofaga": {
 		"id": "egide_hemofaga",
@@ -667,6 +752,18 @@ const CARD_DEFINITIONS: Dictionary = {
 		"stat_label": "reserva de overkill rara",
 		"float_text": "CINZAS: EXCESSO",
 	},
+	"coracao_paradoxo": {
+		"id": "coracao_paradoxo",
+		"name": "Coracao do Paradoxo",
+		"category": CATEGORY_LEGENDARY,
+		"rarity": RARITY_LEGENDARY,
+		"can_burn": false,
+		"policy": "legendary_unique_non_burnable",
+		"eligible_attributes": [],
+		"burn_factor": 0.0,
+		"stat_label": "eco impossivel",
+		"float_text": "",
+	},
 }
 
 
@@ -812,7 +909,15 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 		"limiar_de_ruina":
 			return "Ao comprar: +%d%% no bonus de dano de abertura contra alvos >90%% HP" % total_scale_pct
 		"estase_reparadora":
-			return "Ao comprar: +%d%% na taxa de regeneracao em repouso" % total_scale_pct
+			return "Ao comprar: +%d%% na cura e no raio do campo cooperativo" % total_scale_pct
+		"manto_de_impulso":
+			return "Ao comprar: +%d%% no escudo temporario gerado por habilidades" % total_scale_pct
+		"recusa_do_dano":
+			return "Ao comprar: +%d%% na chance de negar dano antes da vida" % total_scale_pct
+		"carrasco_de_colossos":
+			return "Ao comprar: +%d%% no dano direto contra chefes" % total_scale_pct
+		"sutura_gradual":
+			return "Ao comprar: +%d%% na recuperacao parcelada apos dano" % total_scale_pct
 		"fratura_cronal":
 			return "Ao comprar: +%d%% no dano de fragilidade temporal" % total_scale_pct
 		"pulso_desestabilizador":
@@ -829,7 +934,7 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			return "Ao comprar: +%d%% no contragolpe fortalecido por quase-acerto" % total_scale_pct
 		"ponto_cego":
 			return "Ao comprar: +%d%% no dano pelas costas e desorientacao" % total_scale_pct
-		"rastro_de_retorno", "municao_de_rebate", "impulso_de_sobras", "eco_de_impacto", "zona_de_descompressao", "folego_de_perseguicao", "margem_de_erro", "ressonancia_de_alternancia":
+		"fragmentacao_reativa", "bastiao_inercial", "rastro_de_retorno", "municao_de_rebate", "impulso_de_sobras", "eco_de_impacto", "zona_de_descompressao", "folego_de_perseguicao", "margem_de_erro", "ressonancia_de_alternancia":
 			var def: Dictionary = get_card_definition(card_id)
 			var label: String = String(def.get("stat_label", "atributos da carta"))
 			return "Ao comprar: +%d%% de eficacia em %s" % [total_scale_pct, label]

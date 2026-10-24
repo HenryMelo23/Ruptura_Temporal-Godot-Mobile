@@ -4,6 +4,9 @@ extends RefCounted
 # Runtime owner for the revive lifecycle. The main runtime intentionally keeps
 # public/RPC facades so existing callers and network method names remain stable.
 
+func fragment_altar_revive_enabled(_game) -> bool:
+	return false
+
 func sync_team_state_from_legacy(game) -> void:
 	game.team_revival_state.load_legacy_state(
 		game.revival_active, game.revival_dead_peers, game.revival_dead_names,
@@ -43,6 +46,9 @@ func clear_team_state(game) -> void:
 
 
 func register_team_dead(game, dead_peer_id: int, dead_pos: Vector2, dead_name: String) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	if not game.is_multiplayer or dead_peer_id <= 0 or game.online_local_spectator:
 		return
 	sync_team_state_from_legacy(game)
@@ -51,12 +57,20 @@ func register_team_dead(game, dead_peer_id: int, dead_pos: Vector2, dead_name: S
 
 
 func generate_fragments_for_dead(game, dead_peer_id: int, dead_pos: Vector2) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	sync_team_state_from_legacy(game)
 	game.team_revival_state.generate_fragments_for_dead(dead_peer_id, dead_pos, game.WORLD_SIZE, game.REVIVAL_FRAGMENTS_PER_DEAD, game.time_alive, game.rng)
 	sync_team_state_to_legacy(game)
 
 
 func start_team_revival_for_dead(game, dead_peer_id: int, dead_pos: Vector2, dead_name: String, broadcast: bool = true) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		if broadcast:
+			broadcast_team_state(game)
+		return
 	register_team_dead(game, dead_peer_id, dead_pos, dead_name)
 	sync_team_state_from_legacy(game)
 	if game.team_revival_state.has_fragments_for_dead(dead_peer_id):
@@ -71,18 +85,27 @@ func start_team_revival_for_dead(game, dead_peer_id: int, dead_pos: Vector2, dea
 
 
 func reset_fragments_for_active_dead(game) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	sync_team_state_from_legacy(game)
 	game.team_revival_state.reset_fragments_for_active_dead(game.WORLD_SIZE, game.REVIVAL_FRAGMENTS_PER_DEAD, game.REVIVAL_SINGLE_TIME, game.REVIVAL_MULTI_TIME, game.time_alive, game.rng)
 	sync_team_state_to_legacy(game)
 
 
 func suspend_fragments(game) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	sync_team_state_from_legacy(game)
 	game.team_revival_state.suspend_fragments(game.REVIVAL_FRAGMENT_RESPAWN_TIME)
 	sync_team_state_to_legacy(game)
 
 
 func update_fragment_drift(game, delta: float) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	if not game._is_world_authority() or game.revival_fragments_suspended or game.revival_altars_active:
 		return
 	sync_team_state_from_legacy(game)
@@ -102,12 +125,18 @@ func announce_team_death(game, dead_peer_id: int, dead_pos: Vector2, dead_name: 
 
 
 func refresh_collection_state(game) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	sync_team_state_from_legacy(game)
 	game.team_revival_state.refresh_collection_state(game.WORLD_SIZE, game.REVIVAL_ALTAR_SPACING)
 	sync_team_state_to_legacy(game)
 
 
 func activate_altars(game) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	sync_team_state_from_legacy(game)
 	game.team_revival_state.activate_altars(game.WORLD_SIZE, game.REVIVAL_ALTAR_SPACING)
 	sync_team_state_to_legacy(game)
@@ -137,6 +166,8 @@ func revive_cost(game) -> int:
 
 
 func local_altar_method(game) -> String:
+	if not fragment_altar_revive_enabled(game):
+		return ""
 	sync_team_state_from_legacy(game)
 	return game.team_revival_state.altar_method(game.player_pos, game.is_dead, game.online_local_spectator, game.REVIVAL_ALTAR_RADIUS, game.REVIVE_PAY_LIFE, game.REVIVE_PAY_POINTS)
 
@@ -156,6 +187,9 @@ func apply_team_life_sacrifice(game, rate: float) -> float:
 
 
 func try_interact_altar(game, method: String = "") -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	if not game.revival_active or not game.revival_altars_active or game.is_dead or game.online_local_spectator:
 		return
 	var selected_method: String = method if method != "" else local_altar_method(game)
@@ -197,6 +231,10 @@ func handle_mobile_altar_tap(game) -> bool:
 
 
 func update_team_revival(game, delta: float) -> void:
+	if not fragment_altar_revive_enabled(game):
+		if game.revival_active or not game.revival_fragments.is_empty() or game.revival_altars_active:
+			clear_team_state(game)
+		return
 	sync_team_state_from_legacy(game)
 	if not game.revival_active:
 		return
@@ -243,6 +281,9 @@ func update_team_revival(game, delta: float) -> void:
 
 
 func request_fragment_collect(game, fragment_id: int) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	if fragment_id == 0:
 		return
 	if game._is_world_authority():
@@ -259,6 +300,9 @@ func collector_world_pos(game, peer_id: int) -> Vector2:
 
 
 func collect_fragment(game, fragment_id: int, collector_peer_id: int) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	if not game._is_world_authority() or not game.revival_active or game.revival_altars_active or game.revival_fragments_suspended:
 		return
 	var collector_pos: Vector2 = collector_world_pos(game, collector_peer_id)
@@ -275,6 +319,9 @@ func collect_fragment(game, fragment_id: int, collector_peer_id: int) -> void:
 
 
 func apply_team_state(game, dead_ids: Array, names: Dictionary, positions: Dictionary, fragments: Array, timer: float, altars_active: bool, notice: String, suspended: bool = false, respawn_timer: float = 0.0) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	game.team_revival_state.apply_network_state(dead_ids, names, positions, fragments, timer, altars_active, notice, suspended, respawn_timer, game.REVIVAL_SINGLE_TIME, game.REVIVAL_MULTI_TIME, game.WORLD_SIZE, game.REVIVAL_ALTAR_SPACING)
 	sync_team_state_to_legacy(game)
 
@@ -320,6 +367,9 @@ func revive_positions_for_peers(game, dead_ids: Array, actor_peer_id: int) -> Di
 
 
 func complete_team_revival(game, method: String, revive_hp: float, actor_peer_id: int) -> void:
+	if not fragment_altar_revive_enabled(game):
+		clear_team_state(game)
+		return
 	if not game._is_world_authority() or not game.revival_active or not game.revival_altars_active:
 		return
 	sync_team_state_from_legacy(game)

@@ -35,6 +35,13 @@ func _run() -> void:
 	var encoded_world: PackedByteArray = game.RTWorldSnapshotChunkerScript.encode(packed_enemies, packed_boss, packed_bullets)
 	var world_chunks: Array = game.RTWorldSnapshotChunkerScript.split(encoded_world, game.NET_WORLD_CHUNK_PAYLOAD_BYTES)
 	_check(world_chunks.size() > 1, "oversized world snapshot was not fragmented")
+	_check(game._queue_online_world_snapshot(71, encoded_world), "world snapshot was not accepted by the paced tunnel queue")
+	_check(game.net_world_outgoing_chunk_count == world_chunks.size(), "paced tunnel queue changed world chunk cardinality")
+	_check(not game._queue_online_world_snapshot(72, encoded_world), "new world generation replaced one that was still in flight")
+	game.net_world_outgoing_payload = PackedByteArray()
+	game.net_world_outgoing_sequence = -1
+	game.net_world_outgoing_chunk_index = 0
+	game.net_world_outgoing_chunk_count = 0
 	for chunk_index in range(world_chunks.size()):
 		var chunk: PackedByteArray = world_chunks[chunk_index]
 		_check(chunk.size() <= game.NET_WORLD_CHUNK_PAYLOAD_BYTES, "world chunk exceeded the safe payload limit")
@@ -47,6 +54,27 @@ func _run() -> void:
 	var decoded_world: Array = game.RTWorldSnapshotChunkerScript.decode(rebuilt_world)
 	_check(decoded_world.size() == 3, "reassembled world snapshot did not decode")
 	_check(decoded_world[0] == packed_enemies and decoded_world[1] == packed_boss and decoded_world[2] == packed_bullets, "fragmentation changed world snapshot data")
+	var old_type: String = String(game.NET_ENEMY_TYPES[0])
+	var new_type: String = String(game.NET_ENEMY_TYPES[1])
+	var identity_packet: PackedFloat32Array = game.RTNetContractScript.pack_enemies(
+		[{"uid": 4242, "type": new_type, "pos": Vector2(120, 240), "hp": 10.0, "max_hp": 10.0}],
+		game.NET_ENEMY_TYPES,
+		game.ENEMY_COMMON,
+		game.NET_LEECH_STATES,
+		game.SANGUESSUGA_STATE_DORMANT
+	)
+	var stale_enemy := {"uid": 4242, "type": old_type, "pos": Vector2.ZERO, "old_type_ability": true}
+	var identity_result: Array = game.RTNetContractScript.unpack_enemy_snapshot(
+		identity_packet,
+		{4242: stale_enemy},
+		game.NET_ENEMY_TYPES,
+		game.ENEMY_COMMON,
+		game.NET_LEECH_STATES,
+		game.ENEMY_CHRONAL_LEECH,
+		Time.get_ticks_msec()
+	)
+	_check(identity_result.size() == 1 and String(identity_result[0].get("type", "")) == new_type, "enemy identity type did not update")
+	_check(not identity_result[0].has("old_type_ability"), "new enemy body inherited an ability from the previous type")
 	chunks_by_index.erase(0)
 	_check(game.RTWorldSnapshotChunkerScript.join(chunks_by_index, world_chunks.size(), game.NET_WORLD_CHUNK_MAX_COUNT).is_empty(), "incomplete world snapshot was accepted")
 	var oversized_visual := {"boss_name": "MATRIARCA DA CHAGA", "events": []}
@@ -73,6 +101,13 @@ func _run() -> void:
 	game.net_world_last_sequence = -1
 	game.net_world_visual_last_sequence = -1
 	game.net_boss_identity_last_sequence = -1
+	game.current_phase = 1
+	game.enemies = [{"uid": 4242, "type": new_type, "pos": Vector2.ZERO, "old_phase_ability": true}]
+	var phase2_packet: PackedFloat32Array = game.RTNetContractScript.pack_boss(Vector2(400, 220), 0.0, true, false, 2, 1.0, 0.0)
+	game._apply_remote_world_snapshot(identity_packet, phase2_packet, PackedFloat32Array())
+	_check(game.current_phase == 2, "authoritative phase was not applied before the enemy roster")
+	_check(game.enemies.size() == 1 and not game.enemies[0].has("old_phase_ability"), "phase boundary reused stale enemy ability state")
+	game.enemies.clear()
 	game._update_remote_boss_identity(76, phase7_packet, "FENIX", Color(1.0, 0.42, 0.08))
 	_check(game.current_phase == 7 and game.boss_active and game.boss_name == "FENIX", "dedicated boss identity lane did not restore phase 7")
 	for chunk_index in range(visual_chunks.size() - 1):
@@ -97,7 +132,7 @@ func _run() -> void:
 	_check(game.net_transport_health == "degraded", "transport degradation was not detected")
 	game._update_network_transport_health(now_ms + game.NET_TRANSPORT_STALLED_AFTER_MS)
 	_check(game.net_transport_health == "stalled", "transport stall was not detected")
-	print("MULTIPLAYER_TRANSPORT_SMOKE_OK adaptive=true mtu_chunks=%d visual_chunks=%d lossless=true boss_phase_7=true health=ok,degraded,stalled" % [world_chunks.size(), visual_chunks.size()])
+	print("MULTIPLAYER_TRANSPORT_SMOKE_OK adaptive=true mtu_chunks=%d visual_chunks=%d paced_queue=true identity_reset=true phase_reset=true lossless=true boss_phase_7=true health=ok,degraded,stalled" % [world_chunks.size(), visual_chunks.size()])
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

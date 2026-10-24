@@ -262,11 +262,17 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 		for offset in range(0, packed.size() - stride + 1, stride):
 			var uid: = int(packed[offset]) | (int(packed[offset + 1]) << 16)
 			var incoming_pos: = Vector2(packed[offset + 3], packed[offset + 4])
-			var enemy: Dictionary = existing_by_uid.get(uid, {})
+			var type_index: = clampi(int(packed[offset + 2]), 0, enemy_types.size() - 1)
+			var incoming_type: String = String(enemy_types[type_index]) if not enemy_types.is_empty() else default_enemy_type
+			var previous: Dictionary = existing_by_uid.get(uid, {})
+			# A UID is only the same render/gameplay identity while its type also
+			# matches. Reusing a dictionary after a type change leaves local-only
+			# ability keys from the old enemy attached to the new sprite.
+			var same_identity: bool = previous.is_empty() or not previous.has("type") or String(previous.get("type", default_enemy_type)) == incoming_type
+			var enemy: Dictionary = previous if same_identity else {}
 			apply_entity_motion(enemy, incoming_pos, now_ms)
 			enemy["uid"] = uid
-			var type_index: = clampi(int(packed[offset + 2]), 0, enemy_types.size() - 1)
-			enemy["type"] = enemy_types[type_index] if not enemy_types.is_empty() else default_enemy_type
+			enemy["type"] = incoming_type
 			enemy["hp"] = packed[offset + 5]
 			enemy["max_hp"] = packed[offset + 6]
 			enemy["phase"] = packed[offset + 7]
@@ -340,7 +346,10 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 				continue
 			var incoming: Dictionary = item
 			var uid: = int(incoming.get("uid", -1))
-			var enemy: Dictionary = existing_by_uid.get(uid, {})
+			var incoming_type: String = String(incoming.get("type", default_enemy_type))
+			var previous: Dictionary = existing_by_uid.get(uid, {})
+			var same_identity: bool = previous.is_empty() or not previous.has("type") or String(previous.get("type", default_enemy_type)) == incoming_type
+			var enemy: Dictionary = previous if same_identity else {}
 			apply_entity_motion(enemy, Vector2(incoming.get("pos", Vector2.ZERO)), now_ms)
 			for key in incoming.keys():
 				if key != "pos":

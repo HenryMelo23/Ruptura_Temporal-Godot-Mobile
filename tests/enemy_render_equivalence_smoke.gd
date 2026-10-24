@@ -2,6 +2,7 @@ extends SceneTree
 ## Paired old/new render workload, same process/snapshot/device. Requires a display.
 const Probe = preload("res://tests/runtime_render_profile_probe.gd")
 const Reference = preload("res://tests/fixtures/enemy_render_before_optimization.gd")
+const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
 const OUT := "res://.codex/render_optimization/"
 var game: Node2D
 var rows: Array = []
@@ -37,6 +38,10 @@ func _run() -> void:
 	game.gfx_low_resource = false
 	game.gfx_memory_saver = false
 	game.mobile_adaptive_visual_budget = false
+	_check(not EntitiesPresentation._enemy_health_bar_visible(game, {}, 1.0, false), "untargeted full-health bar was not culled")
+	_check(EntitiesPresentation._enemy_health_bar_visible(game, {}, 0.99, false), "damaged enemy lost its health bar")
+	_check(EntitiesPresentation._enemy_health_bar_visible(game, {}, 1.0, true), "targeted enemy lost its health bar")
+	_check(EntitiesPresentation._enemy_health_bar_visible(game, {"sanguinaria_hunt": true}, 1.0, false), "status-marked enemy lost its health bar")
 	Engine.max_fps = 0
 	root.mode = Window.MODE_WINDOWED
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
@@ -87,13 +92,21 @@ func _setup(phase: int, kinds: Array, count: int, size: Vector2i) -> void:
 		game._spawn_enemy(kinds[index % kinds.size()], pos)
 		var enemy: Dictionary = game.enemies.back()
 		enemy["phase"] = index % 2
-		enemy["hp"] = 100.0 - (index % 3) * 30.0
+		# Keep every gallery entry damaged so the paired pixel oracle still
+		# verifies that visible bars and enemy art are unchanged.
+		enemy["hp"] = 99.0 - (index % 3) * 30.0
 		enemy["max_hp"] = 100.0
 		enemy["alpha"] = 0.6 if index % 3 == 0 else 1.0
 		enemy["sanguinaria_hunt"] = index % 7 == 2
 		enemy["crepuscular_ocaso_mark"] = 0.5 if index % 7 == 3 else 0.0
 		enemy["phase7_vulnerable"] = 0.4 if index % 2 == 0 else 0.0
 		enemy["facing_dir"] = Vector2.LEFT if index % 2 == 0 else Vector2.RIGHT
+
+func _check(ok: bool, message: String) -> void:
+	if ok:
+		return
+	failed = true
+	push_error("ENEMY_RENDER_EQUIVALENCE " + message)
 
 func _compare(label: String, samples: int) -> void:
 	var captures: Array[Image] = []

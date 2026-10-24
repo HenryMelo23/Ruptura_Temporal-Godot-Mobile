@@ -1,8 +1,11 @@
 extends SceneTree
 
+const RTWorldSnapshotChunker = preload("res://scripts/systems/online/world_snapshot_chunker.gd")
+
 const ENEMY_COUNT := 120
 const BULLET_COUNT := 80
 const ITERATIONS := 400
+const ENCODE_ITERATIONS := 120
 
 
 func _initialize() -> void:
@@ -52,6 +55,11 @@ func _run() -> void:
 	for _warmup in range(20):
 		game._pack_net_enemies()
 		game._pack_net_enemy_bullets()
+		RTWorldSnapshotChunker.encode(
+			game._pack_net_enemies(),
+			game._pack_net_boss(),
+			game._pack_net_enemy_bullets()
+		)
 
 	var started_us := Time.get_ticks_usec()
 	var enemy_payload := PackedFloat32Array()
@@ -60,15 +68,33 @@ func _run() -> void:
 		enemy_payload = game._pack_net_enemies()
 		bullet_payload = game._pack_net_enemy_bullets()
 	var elapsed_us := Time.get_ticks_usec() - started_us
-	var payload_bytes := var_to_bytes([enemy_payload, bullet_payload]).size()
-	var average_ms := float(elapsed_us) / 1000.0 / float(ITERATIONS)
+	var pack_average_ms := float(elapsed_us) / 1000.0 / float(ITERATIONS)
+	var boss_payload: PackedFloat32Array = game._pack_net_boss()
+	var raw_payload_bytes := var_to_bytes([enemy_payload, boss_payload, bullet_payload]).size()
+	var encoded_payload := PackedByteArray()
+	var encode_started_us := Time.get_ticks_usec()
+	for _iteration in range(ENCODE_ITERATIONS):
+		encoded_payload = RTWorldSnapshotChunker.encode(enemy_payload, boss_payload, bullet_payload)
+	var encode_elapsed_us := Time.get_ticks_usec() - encode_started_us
+	var encode_average_ms := float(encode_elapsed_us) / 1000.0 / float(ENCODE_ITERATIONS)
 
-	print("MULTIPLAYER_SNAPSHOT_BENCHMARK enemies=%d bullets=%d iterations=%d avg_ms=%.4f payload_bytes=%d" % [
+	var decode_started_us := Time.get_ticks_usec()
+	for _iteration in range(ENCODE_ITERATIONS):
+		RTWorldSnapshotChunker.decode(encoded_payload)
+	var decode_elapsed_us := Time.get_ticks_usec() - decode_started_us
+	var decode_average_ms := float(decode_elapsed_us) / 1000.0 / float(ENCODE_ITERATIONS)
+
+	print("MULTIPLAYER_SNAPSHOT_BENCHMARK enemies=%d bullets=%d pack_iterations=%d encode_iterations=%d pack_avg_ms=%.4f encode_avg_ms=%.4f decode_avg_ms=%.4f raw_bytes=%d encoded_bytes=%d ratio=%.3f" % [
 		ENEMY_COUNT,
 		BULLET_COUNT,
 		ITERATIONS,
-		average_ms,
-		payload_bytes
+		ENCODE_ITERATIONS,
+		pack_average_ms,
+		encode_average_ms,
+		decode_average_ms,
+		raw_payload_bytes,
+		encoded_payload.size(),
+		float(encoded_payload.size()) / maxf(1.0, float(raw_payload_bytes))
 	])
 	game._cleanup_runtime_resources()
 	root.remove_child(game)

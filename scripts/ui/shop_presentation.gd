@@ -386,7 +386,15 @@ func card_stat_chips(card_name: String) -> Array:
 		"Limiar de Ruina":
 			return [">90% VIDA", "+DANO"]
 		"Estase Reparadora":
-			return ["5s PARADO", "+VIDA PERDIDA"]
+			return ["5s PARADO", "CURA ALIADOS", "+RAIO"]
+		"Manto de Impulso":
+			return ["Q/E/TP", "+ESCUDO"]
+		"Recusa do Dano":
+			return ["ROLL/DANO", "BLOQUEIO"]
+		"Carrasco de Colossos":
+			return ["+18%/COPIA", "SO CHEFE"]
+		"Sutura Gradual":
+			return ["POS-DANO", "CURA 3.2s"]
 		"Egide Hemofaga":
 			return ["OVERHEAL", "+ESCUDO"]
 	return ["MELHORIA"]

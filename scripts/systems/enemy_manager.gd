@@ -4,6 +4,14 @@ extends Node
 const PHASE_DENSITY_CARRY_RATIO := 0.70
 const SPATIAL_CELL_SIZE := 128.0
 const MAX_ENTITY_PHYSICAL_RADIUS := 36.0
+const PASSIVE_TIMER_KEYS: Array[StringName] = [
+	&"ferrolho_root",
+	&"blind_confusion",
+	&"resonant_stun_notes",
+	&"shield_flash",
+	&"reconstitute_time",
+	&"reconstitute_immunity",
+]
 
 # Cadencia de especiais pertence ao owner de spawn. Os valores experientes sao
 # destinos explicitos, nao multiplicadores aplicados em cima do baseline.
@@ -118,7 +126,7 @@ func _spatial_cell(pos: Vector2) -> Vector2i:
 	return Vector2i(floori(pos.x / SPATIAL_CELL_SIZE), floori(pos.y / SPATIAL_CELL_SIZE))
 
 
-func nearby_entity_indices(pos: Vector2, radius: float, include_remnants: bool = true) -> Array[int]:
+func nearby_entity_indices(pos: Vector2, radius: float, include_remnants: bool = true, sort_result: bool = true) -> Array[int]:
 	spatial_index_query.clear()
 	var min_cell := _spatial_cell(pos - Vector2.ONE * radius)
 	var max_cell := _spatial_cell(pos + Vector2.ONE * radius)
@@ -129,14 +137,17 @@ func nearby_entity_indices(pos: Vector2, radius: float, include_remnants: bool =
 				var index := int(raw_index)
 				if include_remnants or index < spatial_remnant_start:
 					spatial_index_query.append(index)
-	spatial_index_query.sort()
+	if sort_result:
+		spatial_index_query.sort()
 	return spatial_index_query
 
 
 func avoidance_neighbors(pos: Vector2, my_radius: float) -> Array:
 	var search_radius: float = my_radius * 3.2 + MAX_ENTITY_PHYSICAL_RADIUS
 	spatial_entity_query.clear()
-	for index in nearby_entity_indices(pos, search_radius, false):
+	# Avoidance only needs a deterministic nearby candidate, not globally sorted
+	# indices. Cell traversal and bucket insertion are already deterministic.
+	for index in nearby_entity_indices(pos, search_radius, false, false):
 		spatial_entity_query.append(spatial_entities[index])
 	return spatial_entity_query
 
@@ -380,33 +391,46 @@ func update_enemies(delta: float) -> void:
 		return
 	var dead: Array = []
 	var lacerante_storm: bool = not game._active_lacerante_secondary().is_empty()
+	var lacerante_secondary: Dictionary = game._active_lacerante_secondary()
+	var prismatica_active: bool = not game._active_prismatica_secondary().is_empty()
+	var combat_targets: Array = game._combat_targets()
+	var remote_target_peer_ids: Array[int] = game._targetable_remote_peer_ids()
 	var phase1_boss_freeze: bool = game._phase1_boss_freezes_enemies()
 	for enemy in game.enemies:
-		if String(enemy.get("type", "")) == game.ENEMY_FOSSIL_PUSTULE:
+		var kind := String(enemy.get("type", ""))
+		if kind == game.ENEMY_FOSSIL_PUSTULE:
 			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 2.0
 		else:
 			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
-		enemy["hit_cd"] = max(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
-		enemy["contact_grace"] = maxf(0.0, float(enemy.get("contact_grace", 0.0)) - delta)
-		enemy["stun"] = max(0.0, float(enemy.get("stun", 0.0)) - delta)
-		enemy["tesla_shock"] = maxf(0.0, float(enemy.get("tesla_shock", 0.0)) - delta)
+		if float(enemy.get("hit_cd", 0.0)) > 0.0:
+			enemy["hit_cd"] = maxf(0.0, float(enemy["hit_cd"]) - delta)
+		if float(enemy.get("contact_grace", 0.0)) > 0.0:
+			enemy["contact_grace"] = maxf(0.0, float(enemy["contact_grace"]) - delta)
+		if float(enemy.get("stun", 0.0)) > 0.0:
+			enemy["stun"] = maxf(0.0, float(enemy["stun"]) - delta)
+		if float(enemy.get("tesla_shock", 0.0)) > 0.0:
+			enemy["tesla_shock"] = maxf(0.0, float(enemy["tesla_shock"]) - delta)
 		if float(enemy.get("eletrica_static_timer", 0.0)) > 0.0:
 			enemy["eletrica_static_timer"] = maxf(0.0, float(enemy.get("eletrica_static_timer", 0.0)) - delta)
 			if float(enemy["eletrica_static_timer"]) <= 0.0:
 				enemy["eletrica_static_stacks"] = 0
 				enemy["eletrica_static_last_source"] = ""
-		enemy["ferrolho_root"] = max(0.0, float(enemy.get("ferrolho_root", 0.0)) - delta)
-		enemy["blind_confusion"] = max(0.0, float(enemy.get("blind_confusion", 0.0)) - delta)
-		enemy["resonant_stun_notes"] = max(0.0, float(enemy.get("resonant_stun_notes", 0.0)) - delta)
-		enemy["shield_flash"] = max(0.0, float(enemy.get("shield_flash", 0.0)) - delta)
-		enemy["reconstitute_time"] = max(0.0, float(enemy.get("reconstitute_time", 0.0)) - delta)
-		enemy["reconstitute_immunity"] = max(0.0, float(enemy.get("reconstitute_immunity", 0.0)) - delta)
-		enemy["evolution_slow"] = max(0.0, float(enemy.get("evolution_slow", 0.0)) - delta)
-		if float(enemy["evolution_slow"]) <= 0.0:
-			enemy["evolution_slow_mult"] = 1.0
-		enemy["fragilidade_cronal"] = max(0.0, float(enemy.get("fragilidade_cronal", 0.0)) - delta)
-		if float(enemy["fragilidade_cronal"]) <= 0.0:
-			enemy["fragilidade_cronal_bonus"] = 0.0
+		for timer_key in PASSIVE_TIMER_KEYS:
+			var timer_value := float(enemy.get(timer_key, 0.0))
+			if timer_value > 0.0:
+				enemy[timer_key] = maxf(0.0, timer_value - delta)
+		var evolution_slow := float(enemy.get("evolution_slow", 0.0))
+		if evolution_slow > 0.0:
+			evolution_slow = maxf(0.0, evolution_slow - delta)
+			enemy["evolution_slow"] = evolution_slow
+			if evolution_slow <= 0.0:
+				enemy["evolution_slow_mult"] = 1.0
+		var fragilidade_cronal := float(enemy.get("fragilidade_cronal", 0.0))
+		if fragilidade_cronal > 0.0:
+			fragilidade_cronal = maxf(0.0, fragilidade_cronal - delta)
+			enemy["fragilidade_cronal"] = fragilidade_cronal
+			if fragilidade_cronal <= 0.0:
+				enemy["fragilidade_cronal_bonus"] = 0.0
 		game._update_shield_reflector(enemy, delta)
 		game._update_enemy_dots(enemy, delta)
 		if float(enemy.get("hp", 0.0)) <= 0.0:
@@ -414,60 +438,59 @@ func update_enemies(delta: float) -> void:
 			continue
 		if phase1_boss_freeze:
 			continue
-		if enemy["type"] == game.ENEMY_CURATER:
+		if kind == game.ENEMY_CURATER:
 			game._update_curater(enemy, delta)
-		if enemy["type"] == game.ENEMY_STALKER:
+		if kind == game.ENEMY_STALKER:
 			game._update_stalker(enemy, delta)
-		if enemy["type"] == game.ENEMY_PROJECTOR:
+		if kind == game.ENEMY_PROJECTOR:
 			game._update_projector(enemy, delta)
-		if enemy["type"] == game.ENEMY_ATIRADOR:
+		if kind == game.ENEMY_ATIRADOR:
 			game._update_atirador(enemy, delta)
-		if enemy["type"] == game.ENEMY_KAMIKAZE:
+		if kind == game.ENEMY_KAMIKAZE:
 			game._update_kamikaze(enemy, delta)
-		if enemy["type"] == game.ENEMY_LARAPIO:
+		if kind == game.ENEMY_LARAPIO:
 			game._update_larapio(enemy, delta)
-		if enemy["type"] == game.ENEMY_FOSSIL_PUSTULE and game._update_fossil_pustule(enemy, delta):
+		if kind == game.ENEMY_FOSSIL_PUSTULE and game._update_fossil_pustule(enemy, delta):
 			dead.append(enemy)
 			continue
-		if enemy["type"] == game.ENEMY_LODARIO:
+		if kind == game.ENEMY_LODARIO:
 			game._update_lodario(enemy, delta)
-		if enemy["type"] == game.ENEMY_MIASMA_EEL:
+		if kind == game.ENEMY_MIASMA_EEL:
 			game._update_miasma_eel(enemy, delta)
-		if enemy["type"] == game.ENEMY_CHRONAL_LEECH:
+		if kind == game.ENEMY_CHRONAL_LEECH:
 			if game._update_sanguessuga_cronal(enemy, delta):
 				dead.append(enemy)
 				continue
-		if enemy["type"] == game.ENEMY_AMBER_SUTURER:
+		if kind == game.ENEMY_AMBER_SUTURER:
 			game.amber_suturer_controller.update_enemy(enemy, delta)
-		if enemy["type"] == game.ENEMY_AMBER_SUTURE_NODE:
+		if kind == game.ENEMY_AMBER_SUTURE_NODE:
 			game.amber_suturer_controller.update_node(enemy, delta)
-		if enemy["type"] == game.ENEMY_CINERIDO:
+		if kind == game.ENEMY_CINERIDO:
 			game._update_cinerido(enemy, delta)
-		if enemy["type"] == game.ENEMY_PANGOLIRO:
+		if kind == game.ENEMY_PANGOLIRO:
 			game._update_pangoliro(enemy, delta)
-		if enemy["type"] == game.ENEMY_CORVOL:
+		if kind == game.ENEMY_CORVOL:
 			game._update_corvol(enemy, delta)
-		if enemy["type"] == game.ENEMY_COUT_ATTACK_SPEED:
+		if kind == game.ENEMY_COUT_ATTACK_SPEED:
 			game._update_cout_attack_speed(enemy, delta)
-		if enemy["type"] == game.ENEMY_PYRO_PENGUIN:
+		if kind == game.ENEMY_PYRO_PENGUIN:
 			game._update_pyro_penguin(enemy, delta)
-		if enemy["type"] == game.ENEMY_SINEIRO_BOREAL:
+		if kind == game.ENEMY_SINEIRO_BOREAL:
 			game.sineiro_boreal_controller.update_enemy(enemy, delta)
-		if game.current_phase == 2 and enemy["type"] == game.ENEMY_COMMON:
+		if game.current_phase == 2 and kind == game.ENEMY_COMMON:
 			game._update_phase2_common_penguin(enemy, delta)
 		if game.current_phase == 3:
 			game._update_phase3_enemy(enemy, delta)
 		elif game.current_phase == 4:
 			game._update_phase4_enemy(enemy, delta)
-		var is_disco: bool = not game._active_prismatica_secondary().is_empty()
-		var custom_phase6_move: bool = String(enemy.get("type", "")) in [game.ENEMY_LODARIO, game.ENEMY_MIASMA_EEL, game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURER, game.ENEMY_AMBER_SUTURE_NODE]
-		var custom_phase7_move: bool = String(enemy.get("type", "")) == game.ENEMY_CINERIDO or String(enemy.get("type", "")) == game.ENEMY_PANGOLIRO or String(enemy.get("type", "")) == game.ENEMY_CORVOL
-		var custom_phase2_sineiro: bool = String(enemy.get("type", "")) == game.ENEMY_SINEIRO_BOREAL
-		if not custom_phase2_sineiro and not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or is_disco):
-			game._move_enemy(enemy, delta)
+		var custom_phase6_move: bool = kind in [game.ENEMY_LODARIO, game.ENEMY_MIASMA_EEL, game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURER, game.ENEMY_AMBER_SUTURE_NODE]
+		var custom_phase7_move: bool = kind in [game.ENEMY_CINERIDO, game.ENEMY_PANGOLIRO, game.ENEMY_CORVOL]
+		var custom_phase2_sineiro: bool = kind == game.ENEMY_SINEIRO_BOREAL
+		if not custom_phase2_sineiro and not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or prismatica_active):
+			game._move_enemy(enemy, delta, lacerante_secondary, prismatica_active, combat_targets)
 
-		var t_pos: Vector2 = game._get_nearest_player_pos(Vector2(enemy["pos"]))
-		if not lacerante_storm and enemy["type"] == game.ENEMY_KAMIKAZE and Vector2(enemy["pos"]).distance_to(t_pos) < 60.0:
+		var t_pos: Vector2 = game._get_nearest_player_pos(Vector2(enemy["pos"]), combat_targets)
+		if not lacerante_storm and kind == game.ENEMY_KAMIKAZE and Vector2(enemy["pos"]).distance_to(t_pos) < 60.0:
 			if game._target_pos_is_local_player(t_pos):
 				game._damage_player(game.player_hp_max * 0.15, game.ENEMY_KAMIKAZE)
 				if not game._player_invulnerable():
@@ -481,7 +504,7 @@ func update_enemies(delta: float) -> void:
 			enemy["hp"] = -1.0
 			continue
 
-		var contact_blocked: bool = String(enemy.get("type", "")) in [game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURE_NODE]
+		var contact_blocked: bool = kind in [game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURE_NODE]
 		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
 			var remnant_hit: Dictionary = game._necronada_remnant_at_pos(Vector2(enemy.get("pos", game.player_pos)), 48.0)
 			if not remnant_hit.is_empty():
@@ -491,11 +514,11 @@ func update_enemies(delta: float) -> void:
 				enemy["hit_cd"] = 0.55
 				game._damage_player(game._enemy_damage(enemy), enemy["type"])
 			else:
-				for peer_id in game._targetable_remote_peer_ids():
+				for peer_id in remote_target_peer_ids:
 					var remote_state: Dictionary = game.net_players_by_peer.get(peer_id, {})
 					if Vector2(enemy["pos"]).distance_to(Vector2(remote_state.get("pos", Vector2(-10000, -10000)))) < 46.0:
 						enemy["hit_cd"] = 0.55
-						game._send_peer_damage(peer_id, game._enemy_damage(enemy), enemy["type"])
+						game._send_peer_damage(peer_id, game._enemy_damage(enemy), kind)
 						break
 
 	for enemy in dead:

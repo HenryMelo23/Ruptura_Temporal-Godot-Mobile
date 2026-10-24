@@ -132,6 +132,8 @@ Game Base/**/SIGMon/
 # Scripts de Build Locais
 !.agents/skills/godot-pixel-art-animation/
 !.agents/skills/godot-pixel-art-animation/SKILL.md
+!.agents/skills/godot-sprite-frame-quality/
+!.agents/skills/godot-sprite-frame-quality/**
 !.agents/skills/godot-at-icons/
 !.agents/skills/godot-at-icons/SKILL.md
 !.agents/skills/godot-interaction-feedback/

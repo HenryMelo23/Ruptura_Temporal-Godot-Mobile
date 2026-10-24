@@ -6,6 +6,13 @@ extends RefCounted
 ## duplicates cooldowns, positions, touch indices, or multiplayer authority.
 
 var core: Node
+const PARASITICA_SKILL_HOLD_MSEC := 260
+const LACERANTE_ULTIMATE_HOLD_MSEC := 260
+
+var skill_press_started_msec: int = 0
+var skill_press_origin: Vector2 = Vector2.ZERO
+var secondary_press_started_msec: int = 0
+var secondary_press_origin: Vector2 = Vector2.ZERO
 
 
 func configure(runtime: Node) -> void:
@@ -89,6 +96,10 @@ func cancel_combat_aim_state(clear_movement := false) -> void:
 	clear_desktop_aim_state()
 	core.skill_touch_pos = Vector2.ZERO
 	core.secondary_touch_pos = Vector2.ZERO
+	skill_press_started_msec = 0
+	skill_press_origin = Vector2.ZERO
+	secondary_press_started_msec = 0
+	secondary_press_origin = Vector2.ZERO
 	if clear_movement:
 		core.pointer_down = false
 		core.active_screen_touches.clear()
@@ -115,6 +126,8 @@ func sync_touch_state() -> void:
 		core.skill_touch_index = -1
 	if core.secondary_touch_index >= 0 and not core.active_screen_touches.has(core.secondary_touch_index):
 		core.secondary_touch_index = -1
+		secondary_press_started_msec = 0
+		secondary_press_origin = Vector2.ZERO
 	if core.dash_touch_index >= 0 and not core.active_screen_touches.has(core.dash_touch_index):
 		core.dash_touch_index = -1
 		core.teleport_dragging = false
@@ -162,8 +175,12 @@ func cancel_touch_index(index: int) -> void:
 		_clear_attack_drag_state()
 	if index == core.skill_touch_index:
 		core.skill_touch_index = -1
+		skill_press_started_msec = 0
+		skill_press_origin = Vector2.ZERO
 	if index == core.secondary_touch_index:
 		core.secondary_touch_index = -1
+		secondary_press_started_msec = 0
+		secondary_press_origin = Vector2.ZERO
 	if index == core.dash_touch_index:
 		core.dash_touch_index = -1
 		core.teleport_dragging = false
@@ -257,9 +274,9 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 	if core.buttons["attack"].has_point(pos):
 		claim_action_touch(index); core.attack_drag_touch_index = index; core.attack_holding = true; core.attack_hold_timer = 0.0; core.attack_dragging = false; core.attack_drag_start_pos = pos; core.attack_touch_pos = pos; core.attack_drag_direction = aim_direction(); core._try_attack(); return
 	if core.buttons["skill"].has_point(pos):
-		claim_action_touch(index); core.skill_touch_index = index; core.skill_touch_pos = pos; return
+		claim_action_touch(index); core.skill_touch_index = index; core.skill_touch_pos = pos; skill_press_started_msec = Time.get_ticks_msec(); skill_press_origin = pos; return
 	if core.buttons["secondary"].has_point(pos):
-		claim_action_touch(index); core.secondary_touch_index = index; core.secondary_touch_pos = pos; return
+		claim_action_touch(index); core.secondary_touch_index = index; core.secondary_touch_pos = pos; secondary_press_started_msec = Time.get_ticks_msec(); secondary_press_origin = pos; return
 	if core.buttons["dash"].has_point(pos):
 		claim_action_touch(index); core.dash_touch_index = index; core.teleport_dragging = true; core.teleport_drag_origin = pos; core.teleport_drag_screen = pos; return
 	if core.buttons["pause"].has_point(pos): core._start_pause_countdown(); return
@@ -301,16 +318,24 @@ func handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active:
 			var profile = core._ground_target_profile(false)
-			if profile.is_empty(): core._use_skill()
+			if core.manifestation_key == "parasitica" and _parasitica_skill_quick_release(pos):
+				_use_parasitica_quick_skill(not core._uses_touch_ui())
+			elif profile.is_empty(): core._use_skill()
 			else: core._use_skill(core._ground_target_world(pos, viewport, false))
 		core.skill_touch_index = -1
+		skill_press_started_msec = 0
+		skill_press_origin = Vector2.ZERO
 	if index == core.secondary_touch_index:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active:
 			var profile = core._ground_target_profile(true)
-			if profile.is_empty(): core._use_secondary_skill()
+			if core.manifestation_key == "lacerante" and _lacerante_ultimate_quick_release(pos):
+				_use_lacerante_quick_ultimate(not core._uses_touch_ui())
+			elif profile.is_empty(): core._use_secondary_skill()
 			else: core._use_secondary_skill(core._ground_target_world(pos, viewport, true))
 		core.secondary_touch_index = -1
+		secondary_press_started_msec = 0
+		secondary_press_origin = Vector2.ZERO
 	if index == core.dash_touch_index:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active: core._try_dash_to_screen(pos, viewport)
@@ -467,13 +492,17 @@ func begin_desktop_aim(action: String, binding: String, hold: bool) -> void:
 	core.desktop_aim_action = action; core.desktop_aim_event_binding = binding; core.desktop_aim_is_hold = hold
 	if action == "dash":
 		core.teleport_dragging = true; core.teleport_drag_origin = core.get_viewport().get_mouse_position(); core.teleport_drag_screen = core.teleport_drag_origin
-	elif action == "skill": core.skill_touch_index = -20; core.skill_touch_pos = core.get_viewport().get_mouse_position()
-	elif action == "secondary": core.secondary_touch_index = -20; core.secondary_touch_pos = core.get_viewport().get_mouse_position()
+	elif action == "skill": core.skill_touch_index = -20; core.skill_touch_pos = core.get_viewport().get_mouse_position(); skill_press_started_msec = Time.get_ticks_msec(); skill_press_origin = core.skill_touch_pos
+	elif action == "secondary": core.secondary_touch_index = -20; core.secondary_touch_pos = core.get_viewport().get_mouse_position(); secondary_press_started_msec = Time.get_ticks_msec(); secondary_press_origin = core.secondary_touch_pos
 
 
 func confirm_desktop_aim() -> void:
 	var action: String = core.desktop_aim_action
 	clear_desktop_aim_state(); core.skill_touch_index = -1; core.secondary_touch_index = -1; core.dash_touch_index = -1; core.teleport_dragging = false
+	skill_press_started_msec = 0
+	skill_press_origin = Vector2.ZERO
+	secondary_press_started_msec = 0
+	secondary_press_origin = Vector2.ZERO
 	if action != "": execute_desktop_action(action)
 
 
@@ -481,10 +510,20 @@ func cancel_desktop_aim_feedback() -> void:
 	if core.desktop_aim_action == "": return
 	core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 	clear_desktop_aim_state(); core.skill_touch_index = -1; core.secondary_touch_index = -1; core.dash_touch_index = -1; core.teleport_dragging = false
+	skill_press_started_msec = 0
+	skill_press_origin = Vector2.ZERO
+	secondary_press_started_msec = 0
+	secondary_press_origin = Vector2.ZERO
 
 
 func handle_desktop_aim_press(action: String, binding: String) -> bool:
 	if not desktop_action_uses_aim(action): execute_desktop_action(action); return true
+	if action == "skill" and core.manifestation_key == "parasitica":
+		begin_desktop_aim(action, binding, true)
+		return true
+	if action == "secondary" and core.manifestation_key == "lacerante":
+		begin_desktop_aim(action, binding, true)
+		return true
 	var selected := desktop_action_aim_mode(action)
 	if selected == core.DESKTOP_AIM_QUICK: execute_desktop_action(action); return true
 	if selected == core.DESKTOP_AIM_CONFIRM:
@@ -497,7 +536,45 @@ func handle_desktop_aim_press(action: String, binding: String) -> bool:
 
 func handle_desktop_aim_release(event: InputEvent) -> bool:
 	if core.desktop_aim_action == "" or not core.desktop_aim_is_hold or desktop_event_binding(event) != core.desktop_aim_event_binding: return false
+	if core.desktop_aim_action == "skill" and core.manifestation_key == "parasitica":
+		var quick_release := _parasitica_skill_quick_release(core.get_viewport().get_mouse_position())
+		clear_desktop_aim_state(); core.skill_touch_index = -1
+		if quick_release: _use_parasitica_quick_skill(true)
+		else: use_desktop_skill(false)
+		skill_press_started_msec = 0
+		skill_press_origin = Vector2.ZERO
+		return true
+	if core.desktop_aim_action == "secondary" and core.manifestation_key == "lacerante":
+		var quick_release := _lacerante_ultimate_quick_release(core.get_viewport().get_mouse_position())
+		clear_desktop_aim_state(); core.secondary_touch_index = -1
+		if quick_release: _use_lacerante_quick_ultimate(true)
+		else: use_desktop_skill(true)
+		secondary_press_started_msec = 0
+		secondary_press_origin = Vector2.ZERO
+		return true
 	confirm_desktop_aim(); return true
+
+
+func _parasitica_skill_quick_release(release_pos: Vector2) -> bool:
+	var held_msec := maxi(0, Time.get_ticks_msec() - skill_press_started_msec)
+	return held_msec < PARASITICA_SKILL_HOLD_MSEC and release_pos.distance_to(skill_press_origin) <= core.ABILITY_TARGET_DRAG_DEADZONE
+
+
+func _use_parasitica_quick_skill(use_configured_priority: bool) -> void:
+	var target = core._parasitica_quick_skill_target(use_configured_priority)
+	if target is Vector2: core._use_skill(target)
+	else: core._use_skill()
+
+
+func _lacerante_ultimate_quick_release(release_pos: Vector2) -> bool:
+	var held_msec := maxi(0, Time.get_ticks_msec() - secondary_press_started_msec)
+	return held_msec < LACERANTE_ULTIMATE_HOLD_MSEC and release_pos.distance_to(secondary_press_origin) <= core.ABILITY_TARGET_DRAG_DEADZONE
+
+
+func _use_lacerante_quick_ultimate(use_configured_priority: bool) -> void:
+	var target = core._lacerante_quick_ultimate_target(use_configured_priority)
+	if target is Vector2: core._use_secondary_skill(target)
+	else: core._use_secondary_skill()
 
 
 func handle_desktop_combat_key(event: InputEventKey) -> bool:

@@ -1,4 +1,5 @@
 extends RefCounted
+const CombatTextPresentation = preload("res://scripts/presentation/combat_text_presentation.gd")
 const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
@@ -602,7 +603,8 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 		game._draw_small_rect_button(game._desktop_hud_scale_minus_rect(desktop_hud_panel), "-", Color(0.06, 0.14, 0.08), Color(0.72, 1.0, 0.48))
 		game._draw_small_rect_button(game._desktop_hud_scale_plus_rect(desktop_hud_panel), "+", Color(0.06, 0.14, 0.08), Color(0.72, 1.0, 0.48))
 	var damage_panel = game.settings_buttons["damage_text"]
-	game._draw_gameplay_preference(damage_panel, "TEXTO DE DANO", "Tamanho dos numeros exibidos nos inimigos.", "%d%%" % int(round(game.damage_text_scale * 100.0)), Color(1.0, 0.5, 0.28), game.settings_selected == game._gameplay_preference_index("damage_text"))
+	var damage_text_enabled: bool = game.damage_text_scale >= game.DAMAGE_TEXT_SCALE_MIN
+	game._draw_gameplay_preference(damage_panel, "TEXTO DE DANO", "Abaixo de 50%: desligado.", game._damage_text_scale_label(), Color(1.0, 0.5, 0.28) if damage_text_enabled else Color(0.48, 0.52, 0.58), game.settings_selected == game._gameplay_preference_index("damage_text"))
 	game._draw_small_rect_button(game._damage_text_minus_rect(damage_panel), "-", Color(0.2, 0.1, 0.08), Color(1.0, 0.5, 0.28))
 	game._draw_small_rect_button(game._damage_text_plus_rect(damage_panel), "+", Color(0.2, 0.1, 0.08), Color(1.0, 0.5, 0.28))
 	var interface_panel = game.settings_buttons["interface_text"]
@@ -1760,7 +1762,9 @@ static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 		var color: Color = effect["color"]
 		color.a = alpha
 		var kind = String(effect.get("kind", ""))
-		if String(effect.get("text", "")) != "":
+		if kind == CombatTextPresentation.KIND:
+			CombatTextPresentation.draw(game, effect, camera)
+		elif String(effect.get("text", "")) != "":
 			game._draw_centered(effect["text"], effect["pos"] - camera, int(effect["size"]), color)
 		elif kind == "enemy_shard":
 			var pos = effect["pos"] - camera
@@ -2749,6 +2753,13 @@ static func _draw_shop_opening_upgrade(game: Node2D, viewport: Vector2) -> void 
 		game.draw_line(start, mid, Color(0.0, 0.8, 1.0, alpha * 0.5), 3.0)
 		game.draw_line(mid, end, Color(1.0, 0.9, 0.34, alpha * 0.38), 2.0)
 
+	# Keep Henry's dedicated reaction readable above the expanding rupture rings.
+	# The regular world pass already owns position and shadow; this is only the
+	# crisp foreground silhouette for his shop-entry animation.
+	if game.active_character_key == game.CHARACTER_HENRY:
+		var henry_shop_texture: Texture2D = game._henry_player_texture(Vector2.ZERO)
+		game._draw_entity_by_height_rotated(henry_shop_texture, player_screen, game.HENRY_IDLE_DRAW_HEIGHT, 0.0, Color(1.0, 1.0, 1.0, 0.92), false)
+
 	if progress > 0.72:
 		var bloom = smoothstep(0.72, 1.0, progress)
 		game.draw_circle(player_screen, 60.0 + bloom * 140.0, Color(1.0, 1.0, 1.0, 0.24 * (1.0 - bloom)))
@@ -3103,7 +3114,10 @@ static func _draw_lobby_online_host(game: Node2D, viewport: Vector2) -> void :
 	var status = game.online_status
 	if status == "":
 		status = "CONECTADO AO SERVIDOR" if game.online_connected else "INICIANDO SERVIDOR..."
-	game._draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
+	game._draw_centered(status, panel.position + Vector2(panel.size.x * 0.38, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
+	game.buttons["lobby_mode"] = Rect2(panel.end.x - 268.0, panel.position.y + 62.0, 234.0, 38.0)
+	var mode_accent := Color(1.0, 0.68, 0.18) if game.selected_run_mode == game.RUN_MODE_DROP else Color(0.18, 0.86, 0.78)
+	game._draw_big_button(game.buttons["lobby_mode"], "MODO: " + game.selected_run_mode.to_upper(), Color(mode_accent.r, mode_accent.g, mode_accent.b, 0.12), mode_accent)
 
 	var roster_rect = Rect2(panel.position.x + 34.0, panel.position.y + 112.0, panel.size.x - 68.0, panel.size.y - 226.0)
 	game._draw_online_lobby_roster(roster_rect, accent)
@@ -3118,9 +3132,13 @@ static func _draw_lobby_online_host(game: Node2D, viewport: Vector2) -> void :
 	game.buttons["lobby_cancel"] = Rect2(panel.end.x - panel.size.x * 0.32 - 34.0, panel.end.y - 66.0, panel.size.x * 0.32, 46.0)
 
 	var can_start = game.online_lobby_connected_count >= game.ONLINE_MIN_PLAYERS and client_ready
-	var start_color = Color(1.0, 1.0, 1.0) if (game.is_gamepad_active and game.lobby_host_selected == 0) else (Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5))
+	var start_color = Color(1.0, 1.0, 1.0) if (game.is_gamepad_active and game.lobby_host_selected == 0 and not game.run_mode_popup_open) else (Color(0.0, 1.0, 0.82) if can_start else Color(0.5, 0.5, 0.5))
 	game._draw_big_button(game.buttons["lobby_start"], "ESCOLHER HABILIDADES", Color(0.1, 0.1, 0.1, 0.9), start_color)
-	game._draw_big_button(game.buttons["lobby_cancel"], "CANCELAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (game.is_gamepad_active and game.lobby_host_selected == 1) else Color(1.0, 0.2, 0.2))
+	game._draw_big_button(game.buttons["lobby_cancel"], "CANCELAR", Color(0.1, 0.05, 0.05, 0.9), Color(1.0, 1.0, 1.0) if (game.is_gamepad_active and game.lobby_host_selected == 2 and not game.run_mode_popup_open) else Color(1.0, 0.2, 0.2))
+	if game.is_gamepad_active and game.lobby_host_selected == 1 and not game.run_mode_popup_open:
+		game.draw_rect(game.buttons["lobby_mode"].grow(3.0), Color.WHITE, false, 2.0)
+	if game.run_mode_popup_open:
+		_draw_run_mode_popup(game, viewport)
 
 
 static func _draw_lobby_online_client(game: Node2D, viewport: Vector2) -> void :
@@ -3142,8 +3160,10 @@ static func _draw_lobby_online_client(game: Node2D, viewport: Vector2) -> void :
 	if status == "":
 		status = "CONECTADO" if game.online_connected else "BUSCANDO SALA..."
 	game._draw_centered(status, panel.position + Vector2(panel.size.x * 0.5, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
+	var client_mode_accent: Color = Color(1.0, 0.68, 0.18) if game.selected_run_mode == game.RUN_MODE_DROP else accent
+	game._draw_centered("MODO " + game.selected_run_mode.to_upper(), panel.position + Vector2(panel.size.x * 0.5, 105.0), 12, client_mode_accent)
 
-	var roster_rect = Rect2(panel.position.x + 34.0, panel.position.y + 112.0, panel.size.x - 68.0, panel.size.y - 228.0)
+	var roster_rect = Rect2(panel.position.x + 34.0, panel.position.y + 126.0, panel.size.x - 68.0, panel.size.y - 242.0)
 	game._draw_online_lobby_roster(roster_rect, accent)
 
 	var active_players = game.online_lobby_active_player_count if game.online_lobby_active_player_count > 0 else game.online_lobby_connected_count
@@ -3162,3 +3182,25 @@ static func _draw_lobby_online_client(game: Node2D, viewport: Vector2) -> void :
 	game._draw_big_button(game.buttons["lobby_ready"], ready_text, ready_bg, ready_border if not game.online_local_spectator else Color(0.45, 0.62, 0.7))
 	game._draw_big_button(game.buttons["lobby_spectator"], spectator_text, Color(0.04, 0.12, 0.18, 0.9), Color.WHITE if (game.is_gamepad_active and game.lobby_client_selected == 1) else Color(0.35, 0.85, 1.0))
 	game._draw_big_button(game.buttons["lobby_cancel"], "SAIR", Color(0.1, 0.05, 0.05, 0.9), Color.WHITE if (game.is_gamepad_active and game.lobby_client_selected == 2) else Color(1.0, 0.2, 0.2))
+
+
+static func _draw_run_mode_popup(game: Node2D, viewport: Vector2) -> void:
+	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.62), true)
+	var popup := Rect2(viewport * 0.5 - Vector2(230.0, 112.0), Vector2(460.0, 224.0))
+	game.draw_rect(popup, Color(0.012, 0.025, 0.035, 0.98), true)
+	game.draw_rect(popup, Color(0.62, 0.82, 0.9, 0.76), false, 2.0)
+	game._draw_centered("MODO DA JORNADA", popup.position + Vector2(230.0, 38.0), 21, Color.WHITE)
+	game._draw_centered("Somente o host pode alterar", popup.position + Vector2(230.0, 64.0), 12, Color(0.68, 0.8, 0.86))
+	game.buttons["lobby_mode_shop"] = Rect2(popup.position + Vector2(28.0, 88.0), Vector2(194.0, 92.0))
+	game.buttons["lobby_mode_drop"] = Rect2(popup.position + Vector2(238.0, 88.0), Vector2(194.0, 92.0))
+	_draw_run_mode_choice(game, game.buttons["lobby_mode_shop"], "LOJA", "Cartas compradas\nnas pausas", game.run_mode_popup_selection == 0, Color(0.18, 0.86, 0.78))
+	_draw_run_mode_choice(game, game.buttons["lobby_mode_drop"], "DROP", "Inimigos podem\ndropar cartas", game.run_mode_popup_selection == 1, Color(1.0, 0.68, 0.18))
+
+
+static func _draw_run_mode_choice(game: Node2D, rect: Rect2, title: String, subtitle: String, selected: bool, accent: Color) -> void:
+	game.draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.2 if selected else 0.06), true)
+	game.draw_rect(rect, Color(accent.r, accent.g, accent.b, 1.0 if selected else 0.4), false, 3.0 if selected else 1.0)
+	game._draw_centered(title, rect.position + Vector2(rect.size.x * 0.5, 28.0), 19, Color.WHITE)
+	var lines := subtitle.split("\n")
+	for index in range(lines.size()):
+		game._draw_centered(String(lines[index]), rect.position + Vector2(rect.size.x * 0.5, 57.0 + index * 17.0), 11, Color(accent.r, accent.g, accent.b, 0.92))

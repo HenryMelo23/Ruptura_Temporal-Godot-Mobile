@@ -115,10 +115,10 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 		game._close_gameplay_cheat_popup()
 		var damage_panel: Rect2 = game.settings_buttons["damage_text"]
 		if game._damage_text_minus_rect(damage_panel).has_point(pos):
-			game.damage_text_scale = max(0.7, game.damage_text_scale - 0.1)
+			game._adjust_damage_text_scale(-1)
 			game._save_config()
 		elif game._damage_text_plus_rect(damage_panel).has_point(pos):
-			game.damage_text_scale = min(1.8, game.damage_text_scale + 0.1)
+			game._adjust_damage_text_scale(1)
 			game._save_config()
 	elif game.settings_buttons["interface_text"].has_point(pos):
 		game._close_gameplay_cheat_popup()

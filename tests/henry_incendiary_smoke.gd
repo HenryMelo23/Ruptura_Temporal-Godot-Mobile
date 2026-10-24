@@ -48,6 +48,7 @@ func _henry_sprite_metrics(image: Image, row: int, column: int) -> Dictionary:
 				head_max_y = maxi(head_max_y, y)
 	return {
 		"height": max_y - min_y + 1,
+		"bottom": max_y,
 		"head_width": head_max_x - head_min_x + 1,
 		"head_height": head_max_y - head_min_y + 1,
 		"skin": skin_sum / maxf(1.0, float(skin_count)),
@@ -96,6 +97,7 @@ func _run() -> void:
 	_check(game.mode == "mutation_select" and game.selected_manifestation == game.HENRY_SELECTION_INDEX, "Henry selection did not continue to Mutations")
 	game.mode = "game"
 	_check(Array(game.textures.get("henry_intro", [])).size() == game.HENRY_ENTRY_FRAME_COUNT, "dedicated Henry entrance atlas is incomplete")
+	_check(Array(game.textures.get("henry_shop_entry", [])).size() == game.HENRY_SHOP_ENTRY_FRAME_COUNT, "dedicated Henry shop entrance atlas is incomplete")
 	_check(Array(game.textures.get("henry_idle_pocket", [])).size() == game.HENRY_IDLE_POCKET_FRAME_COUNT, "Henry pocket/tap idle atlas is incomplete")
 	_check(Array(game.textures.get("henry_idle", [])).size() == 13, "Henry network idle pool lost pocket or beard frames")
 	for frame_idx in range(game.HENRY_ENTRY_FRAME_COUNT):
@@ -103,6 +105,16 @@ func _run() -> void:
 		var intro_visible_height: float = float(game.HENRY_ENTRY_VISIBLE_HEIGHTS[frame_idx]) * draw_height / 256.0
 		var idle_visible_height: float = game.HENRY_IDLE_VISIBLE_HEIGHT * game.HENRY_IDLE_DRAW_HEIGHT / 256.0
 		_check(absf(intro_visible_height - idle_visible_height) < 0.01, "entrance frame %d changes Henry's visible height" % frame_idx)
+	game.mode = "shop_opening"
+	game.shop_opening_timer = game.SHOP_OPENING_ANIM_TIME
+	_check(game._henry_shop_entry_frame() == 0, "shop entrance did not begin on its first frame")
+	game.shop_opening_timer = game.SHOP_OPENING_ANIM_TIME * 0.49
+	_check(game._henry_shop_entry_frame() == 4, "shop entrance did not reach its recovery frames")
+	game.shop_opening_timer = 0.001
+	_check(game._henry_shop_entry_frame() == game.HENRY_SHOP_ENTRY_FRAME_COUNT - 1, "shop entrance did not finish on its composed frame")
+	var shop_entry_frames: Array = game.textures["henry_shop_entry"]
+	_check(game._henry_player_texture(Vector2.ZERO) == shop_entry_frames[shop_entry_frames.size() - 1], "shop opening did not select Henry's dedicated animation")
+	game.mode = "game"
 	game._begin_player_start_down_intro()
 	_check(game.henry_entry_timer == game.HENRY_ENTRY_DURATION and game._player_start_down_controls_locked(), "Henry entrance did not own its timer/control lock")
 	game.henry_incendiary_ability_controller.cancel_entrance()
@@ -231,6 +243,12 @@ func _run() -> void:
 	var ultimate_sheet := load("res://assets/sprites/player/player_2_suit/henry_ultimate_sheet_v1.png") as Texture2D
 	_check(ultimate_sheet != null and ultimate_sheet.get_width() == 2048 and ultimate_sheet.get_height() == 256, "Henry ultimate atlas dimensions changed")
 	var idle_image := (load("res://assets/sprites/player/player_2_suit/henry_idle_pocket_sheet_v1.png") as Texture2D).get_image()
+	var beard_sheet := load("res://assets/sprites/player/player_2_suit/henry_idle_beard_sheet_v2.png") as Texture2D
+	_check(beard_sheet != null and beard_sheet.get_width() == 512 and beard_sheet.get_height() == 256, "Henry corrected beard atlas dimensions changed")
+	var shop_entry_sheet := load("res://assets/sprites/player/player_2_suit/henry_shop_entry_sheet_v1.png") as Texture2D
+	_check(shop_entry_sheet != null and shop_entry_sheet.get_width() == 2048 and shop_entry_sheet.get_height() == 256, "Henry shop entrance atlas dimensions changed")
+	var beard_image := beard_sheet.get_image()
+	var shop_entry_image := shop_entry_sheet.get_image()
 	var fire_image := fire_sheet.get_image()
 	var walk_image := walk_sheet.get_image()
 	var basic_cast_image := basic_cast_sheet.get_image()
@@ -246,6 +264,25 @@ func _run() -> void:
 		var fire_skin: Vector3 = fire_metrics["skin"]
 		var idle_skin: Vector3 = idle_metrics["skin"]
 		_check(fire_skin.distance_to(idle_skin) <= 0.06, "front firing frame %d changed Henry's skin palette" % frame_idx)
+	var idle_reference := _henry_sprite_metrics(idle_image, 0, 0)
+	for frame_idx in range(2):
+		var beard_metrics := _henry_sprite_metrics(beard_image, 0, frame_idx)
+		_check(int(beard_metrics["height"]) == int(idle_reference["height"]), "beard frame %d changed Henry's visible height" % frame_idx)
+		_check(absi(int(beard_metrics["head_width"]) - int(idle_reference["head_width"])) <= 8, "beard frame %d changed Henry's head width" % frame_idx)
+		_check(absi(int(beard_metrics["head_height"]) - int(idle_reference["head_height"])) <= 8, "beard frame %d changed Henry's head height" % frame_idx)
+		var beard_skin: Vector3 = beard_metrics["skin"]
+		var idle_skin: Vector3 = idle_reference["skin"]
+		_check(beard_skin.distance_to(idle_skin) <= 0.06, "beard frame %d changed Henry's skin palette" % frame_idx)
+	for frame_idx in range(game.HENRY_SHOP_ENTRY_FRAME_COUNT):
+		var shop_metrics := _henry_sprite_metrics(shop_entry_image, 0, frame_idx)
+		_check(int(shop_metrics["bottom"]) >= 245, "shop entrance frame %d lost the common ground anchor" % frame_idx)
+		_check(int(shop_metrics["height"]) >= 195 and int(shop_metrics["height"]) <= 237, "shop entrance frame %d escaped its impact-to-idle scale envelope" % frame_idx)
+		var shop_skin: Vector3 = shop_metrics["skin"]
+		var idle_skin: Vector3 = idle_reference["skin"]
+		_check(shop_skin.distance_to(idle_skin) <= 0.08, "shop entrance frame %d changed Henry's skin palette" % frame_idx)
+	var shop_final_metrics := _henry_sprite_metrics(shop_entry_image, 0, game.HENRY_SHOP_ENTRY_FRAME_COUNT - 1)
+	_check(absi(int(shop_final_metrics["head_width"]) - int(idle_reference["head_width"])) <= 10, "shop entrance final frame changed Henry's head width")
+	_check(absi(int(shop_final_metrics["head_height"]) - int(idle_reference["head_height"])) <= 10, "shop entrance final frame changed Henry's head height")
 	for direction_row in range(8):
 		for frame_idx in range(5):
 			var metrics := _henry_sprite_metrics(fire_image, direction_row, frame_idx)

@@ -8,18 +8,26 @@ const STATE_ENTRY := "entry"
 const STATE_OBSERVE := "observe"
 const STATE_TELEGRAPH := "telegraph"
 const STATE_ACTIVE := "active"
+const STATE_NEEDLE_TELEGRAPH := "needle_telegraph"
+const STATE_NEEDLE_RECOVERY := "needle_recovery"
 const STATE_REPOSITION := "reposition"
 const STATE_DYING := "dying"
 
-const FIRST_SPAWN_TIME := 200.0
-const RESPAWN_MIN_TIME := 240.0
-const RESPAWN_MAX_TIME := 300.0
+# Phase-local cadence, matching the recurring pressure role used by Larápio
+# while leaving a short random window between Suturador encounters.
+const FIRST_SPAWN_TIME := 120.0
+const RESPAWN_MIN_TIME := 120.0
+const RESPAWN_MAX_TIME := 150.0
 const MAX_LIFETIME := 45.0
 const ENTRY_TIME := 1.0
 const OBSERVE_TIME := 2.1
 const TELEGRAPH_TIME := 1.5
 const ACTIVE_TIME := 7.0
 const REPOSITION_TIME := 1.15
+const NEEDLE_TELEGRAPH_TIME := 0.85
+const NEEDLE_RECOVERY_TIME := 0.72
+const NEEDLE_FAN_COUNT := 5
+const NEEDLE_RADIAL_COUNT := 12
 const HISTORY_SAMPLE_INTERVAL := 0.12
 const HISTORY_WINDOW := 2.8
 const DAMAGE_MAX_HP_RATIO := 0.05
@@ -61,6 +69,8 @@ func _default_state() -> Dictionary:
 		"last_end_phase_time": -1.0,
 		"event_sequence": 0,
 		"cycle": 0,
+		"ability_cycle": 0,
+		"current_ability": "suture",
 		"target_peer_id": 0,
 		"state": STATE_ENTRY,
 		"state_timer": 0.0,
@@ -164,6 +174,8 @@ func spawn_now() -> Dictionary:
 	enemy["suturer_anim_time"] = 0.0
 	enemy["suturer_target_peer"] = 0
 	enemy["suturer_reposition_dir"] = Vector2.ZERO
+	enemy["suturer_attack_dir"] = Vector2.LEFT
+	enemy["suturer_needle_pattern"] = "fan"
 	enemy["contact_grace"] = ENTRY_TIME
 	enemy["reconstituted_once"] = true
 	game.amber_suturer_state = _default_state()
@@ -181,7 +193,9 @@ func spawn_now() -> Dictionary:
 	game.event_alert_text = "O SUTURADOR DE AMBAR COSTURA A CHAGA!"
 	game.event_alert_timer = 3.2
 	game.event_alert_seed = int(enemy.get("uid", 0))
-	game._add_text("SUTURADOR DE AMBAR", spawn_pos + Vector2(-140.0, -118.0), Color(1.0, 0.66, 0.18), 2.5, 25)
+	# Match Larápio's readable arrival cue: edge spawns must not push the title
+	# outside the current camera view.
+	game._add_text("SUTURADOR DE AMBAR", game.player_pos + Vector2(0.0, -150.0), Color(1.0, 0.66, 0.18), 2.5, 25)
 	game._play_sfx("Lodario-mov.mp3", 0.03, 0.66, 0.74)
 	_emit_visual_event("entry", {"pos": spawn_pos})
 	return enemy
@@ -215,7 +229,7 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 			_update_observation_movement(enemy, delta)
 			_tick_state(enemy, delta)
 			if float(enemy.get("suturer_state_timer", 0.0)) <= 0.0:
-				_begin_suture_cycle(enemy)
+				_begin_attack_cycle(enemy)
 		STATE_TELEGRAPH:
 			enemy["last_move_dir"] = Vector2.ZERO
 			_tick_state(enemy, delta)
@@ -227,6 +241,16 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 			_tick_state(enemy, delta)
 			if float(enemy.get("suturer_state_timer", 0.0)) <= 0.0:
 				_clear_sutures("cycle_complete")
+				_begin_reposition(enemy)
+		STATE_NEEDLE_TELEGRAPH:
+			enemy["last_move_dir"] = Vector2.ZERO
+			_tick_state(enemy, delta)
+			if float(enemy.get("suturer_state_timer", 0.0)) <= 0.0:
+				_fire_needle_attack(enemy)
+		STATE_NEEDLE_RECOVERY:
+			enemy["last_move_dir"] = Vector2.ZERO
+			_tick_state(enemy, delta)
+			if float(enemy.get("suturer_state_timer", 0.0)) <= 0.0:
 				_begin_reposition(enemy)
 		STATE_REPOSITION:
 			_update_reposition(enemy, delta)
@@ -261,6 +285,7 @@ func _sync_public_enemy_state(enemy: Dictionary) -> void:
 	game.amber_suturer_state["anim_time"] = float(enemy.get("suturer_anim_time", 0.0))
 	game.amber_suturer_state["facing_dir"] = Vector2(enemy.get("facing_dir", Vector2.LEFT))
 	game.amber_suturer_state["last_move_dir"] = Vector2(enemy.get("last_move_dir", Vector2.ZERO))
+	game.amber_suturer_state["current_ability"] = String(enemy.get("suturer_current_ability", "suture"))
 
 
 func _update_observation_movement(enemy: Dictionary, delta: float) -> void:
@@ -290,6 +315,18 @@ func _update_observation_movement(enemy: Dictionary, delta: float) -> void:
 		enemy["facing_dir"] = Vector2(signf(move_dir.x), 0.0)
 
 
+func _begin_attack_cycle(enemy: Dictionary) -> void:
+	var ability_cycle := int(game.amber_suturer_state.get("ability_cycle", 0))
+	game.amber_suturer_state["ability_cycle"] = ability_cycle + 1
+	match posmod(ability_cycle, 3):
+		0:
+			_begin_suture_cycle(enemy)
+		1:
+			_begin_needle_cycle(enemy, false)
+		_:
+			_begin_needle_cycle(enemy, true)
+
+
 func _begin_suture_cycle(enemy: Dictionary) -> void:
 	var target := _select_next_target()
 	if target.is_empty():
@@ -305,6 +342,8 @@ func _begin_suture_cycle(enemy: Dictionary) -> void:
 	game.amber_suturer_state["cycle"] = int(game.amber_suturer_state.get("cycle", 0)) + 1
 	game.amber_suturer_state["target_peer_id"] = peer_id
 	enemy["suturer_target_peer"] = peer_id
+	enemy["suturer_current_ability"] = "suture"
+	game.amber_suturer_state["current_ability"] = "suture"
 	var cycle_id := _next_event_id("cycle")
 	for index in range(mini(MAX_ACTIVE_SUTURES, segments.size())):
 		var segment: Dictionary = segments[index]
@@ -327,6 +366,80 @@ func _begin_suture_cycle(enemy: Dictionary) -> void:
 	game.event_alert_timer = TELEGRAPH_TIME
 	game._play_sfx("Boss-Onda.mp3", 0.02, 0.52, 1.12)
 	_emit_visual_event("telegraph", {"event_id": cycle_id, "pos": Vector2(enemy.get("pos", target_pos))})
+
+
+func _begin_needle_cycle(enemy: Dictionary, radial: bool) -> void:
+	var target := _select_next_target()
+	if target.is_empty():
+		_set_state(enemy, STATE_OBSERVE, 0.8)
+		return
+	_clear_sutures("needle_cycle", false)
+	var origin := Vector2(enemy.get("pos", game.player_pos))
+	var target_pos := Vector2(target.get("pos", game.player_pos))
+	var direction := (target_pos - origin).normalized()
+	if direction.length_squared() <= 0.01:
+		direction = Vector2.LEFT
+	var pattern := "radial" if radial else "fan"
+	var ability := "needle_burst" if radial else "needle_fan"
+	var event_id := _next_event_id(ability)
+	enemy["suturer_target_peer"] = int(target.get("peer_id", 0))
+	enemy["suturer_attack_dir"] = direction
+	enemy["suturer_needle_pattern"] = pattern
+	enemy["suturer_attack_event_id"] = event_id
+	enemy["suturer_current_ability"] = ability
+	game.amber_suturer_state["target_peer_id"] = int(target.get("peer_id", 0))
+	game.amber_suturer_state["current_ability"] = ability
+	_set_state(enemy, STATE_NEEDLE_TELEGRAPH, NEEDLE_TELEGRAPH_TIME)
+	game.event_alert_text = "COROA DE AGULHAS — AFASTE-SE" if radial else "AGULHAS DE AMBAR — ROMPA O LEQUE"
+	game.event_alert_timer = NEEDLE_TELEGRAPH_TIME
+	game._play_sfx("Boss-Onda.mp3", 0.02, 0.62, 1.18 if radial else 1.05)
+	_emit_visual_event("needle_telegraph", {
+		"event_id": event_id,
+		"pos": origin,
+		"direction": direction,
+		"pattern": pattern,
+	})
+
+
+func _fire_needle_attack(enemy: Dictionary) -> void:
+	var origin := Vector2(enemy.get("pos", game.player_pos))
+	var base_direction := Vector2(enemy.get("suturer_attack_dir", Vector2.LEFT)).normalized()
+	if base_direction.length_squared() <= 0.01:
+		base_direction = Vector2.LEFT
+	var radial := String(enemy.get("suturer_needle_pattern", "fan")) == "radial"
+	var directions: Array[Vector2] = []
+	if radial:
+		var phase_offset := float(int(game.amber_suturer_state.get("ability_cycle", 0)) % 2) * PI / float(NEEDLE_RADIAL_COUNT)
+		for index in range(NEEDLE_RADIAL_COUNT):
+			directions.append(Vector2.from_angle(phase_offset + float(index) * TAU / float(NEEDLE_RADIAL_COUNT)))
+	else:
+		for angle in [-0.30, -0.15, 0.0, 0.15, 0.30]:
+			directions.append(base_direction.rotated(float(angle)))
+	var damage_ratio := 0.026 if radial else 0.034
+	var far_scale := 0.28 if radial else 0.38
+	var damage := maxi(1, int(game.player_hp_max * damage_ratio + game.enemy_far_damage * far_scale))
+	var encounter_id := String(game.amber_suturer_state.get("encounter_id", ""))
+	for direction in directions:
+		game.enemy_bullets.append({
+			"pos": origin + direction * 48.0,
+			"dir": direction,
+			"life": 4.0,
+			"damage": damage,
+			"phase": game.rng.randf_range(0.0, TAU),
+			"type": "suturer_needle",
+			"speed_mult": 0.90 if radial else 1.16,
+			"radius": 9.0,
+			"hit_radius": 15.0,
+			"suturer_encounter_id": encounter_id,
+		})
+	_emit_visual_event("needle_fire", {
+		"event_id": String(enemy.get("suturer_attack_event_id", _next_event_id("needle_fire"))),
+		"pos": origin,
+		"direction": base_direction,
+		"pattern": "radial" if radial else "fan",
+	})
+	game._play_sfx("Boss-Impacto.mp3", 0.022, 0.64, 1.2 if radial else 1.08)
+	_set_state(enemy, STATE_NEEDLE_RECOVERY, NEEDLE_RECOVERY_TIME)
 
 
 func build_suture_segments(peer_id: int, fallback_pos: Vector2) -> Array:
@@ -546,6 +659,11 @@ func cleanup(reason: String, schedule_next: bool = true) -> void:
 
 
 func _finish_event(reason: String, schedule_next: bool = true) -> void:
+	var encounter_id := String(game.amber_suturer_state.get("encounter_id", ""))
+	game.enemy_bullets = game.enemy_bullets.filter(func(value):
+		var bullet: Dictionary = value
+		return String(bullet.get("type", "")) != "suturer_needle" or String(bullet.get("suturer_encounter_id", "")) != encounter_id
+	)
 	game.amber_suturer_state["active"] = false
 	game.amber_suturer_state["enemy_uid"] = -1
 	game.amber_suturer_state["cleanup_reason"] = reason
@@ -629,7 +747,7 @@ func _emit_visual_event(kind: String, data: Dictionary) -> void:
 	var payload := data.duplicate(true)
 	payload["kind"] = kind
 	payload["age"] = 0.0
-	payload["life"] = 0.9 if kind in ["entry", "death"] else 0.55
+	payload["life"] = 0.9 if kind in ["entry", "death", "needle_telegraph"] else 0.55
 	payload["max_life"] = payload["life"]
 	if not payload.has("event_id"):
 		payload["event_id"] = _next_event_id(kind)

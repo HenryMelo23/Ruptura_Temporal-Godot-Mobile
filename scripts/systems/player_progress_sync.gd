@@ -5,6 +5,68 @@ const CACHE_SIGNATURE_VERSION := 2
 const EVENT_SCHEMA_VERSION := 2
 const EVENT_VERSION := 2
 const MAX_PENDING_EVENTS := 240
+const UNLOCK_PROGRESS_BATCH_LIMITS := {
+	# Match the relay's per-event validation limits. Keeping each metric in a
+	# bounded durable batch prevents an offline run from producing thousands of
+	# tiny signed JSON entries while retaining the exact accumulated amount.
+	"enemy_kills": 20000.0,
+	"boss_kills": 32.0,
+	"umbra_victories": 1.0,
+	"shop_purchases": 200.0,
+	"shop_rerolls": 400.0,
+	"stationary_seconds": 20.0,
+	"shots_fired": 5000.0,
+	"teleports_used": 800.0,
+	"abilities_used": 1000.0,
+	"healing_events": 300.0,
+	"damage_taken_events": 500.0,
+}
+
+
+static func merge_pending_unlock_progress(
+	pending_events: Array,
+	locked_event_ids: Dictionary,
+	metric: String,
+	amount: float,
+	max_mode: bool
+) -> float:
+	if metric == "" or amount <= 0.0:
+		return 0.0
+	var batch_limit: float = float(UNLOCK_PROGRESS_BATCH_LIMITS.get(metric, 0.0))
+	if not max_mode and batch_limit <= 0.0:
+		return amount
+	var remaining := amount
+	for index in range(pending_events.size() - 1, -1, -1):
+		var item: Variant = pending_events[index]
+		if not item is Dictionary:
+			continue
+		var event: Dictionary = item
+		if String(event.get("type", "")) != "unlock_progress" \
+			or String(event.get("metric", "")) != metric \
+			or bool(event.get("max_mode", false)) != max_mode:
+			continue
+		if locked_event_ids.has(String(event.get("event_id", ""))):
+			continue
+		if max_mode:
+			event["amount"] = maxf(float(event.get("amount", 0.0)), amount)
+			pending_events[index] = event
+			return 0.0
+		var available := maxf(0.0, batch_limit - float(event.get("amount", 0.0)))
+		if available <= 0.0:
+			continue
+		var merged := minf(remaining, available)
+		event["amount"] = float(event.get("amount", 0.0)) + merged
+		pending_events[index] = event
+		remaining -= merged
+		if remaining <= 0.0:
+			return 0.0
+	return remaining
+
+
+static func unlock_progress_batch_limit(metric: String, max_mode: bool, fallback: float) -> float:
+	if max_mode:
+		return maxf(0.0, fallback)
+	return maxf(0.0, float(UNLOCK_PROGRESS_BATCH_LIMITS.get(metric, fallback)))
 
 
 static func cache_signature(payload: Dictionary, install_secret: String) -> String:
@@ -72,10 +134,74 @@ static func build_cache_payload(player_id: String, snapshot: Dictionary, pending
 		"player_id": player_id,
 		"snapshot": snapshot.duplicate(true),
 		"pending_events": _trim_pending_events(pending_events),
-		"quarantined_events": _trim_pending_events(quarantined_events),
+		"quarantined_events": compact_quarantined_events(quarantined_events),
 		"event_sequence": maxi(0, event_sequence),
 		"saved_unix": int(Time.get_unix_time_from_system())
 	}
+
+
+static func compact_quarantined_events(events: Array) -> Array:
+	var compacted: Array = []
+	var aggregate_index_by_key: Dictionary = {}
+	for raw_entry in events:
+		if not raw_entry is Dictionary:
+			continue
+		var entry: Dictionary = raw_entry
+		var event_value: Variant = entry.get("event", {})
+		var reason := String(entry.get("reason", ""))
+		if not event_value is Dictionary or reason not in ["queue_capacity", "queue_capacity_compacted"]:
+			compacted.append(entry.duplicate(true))
+			continue
+		var event: Dictionary = event_value
+		if String(event.get("type", "")) != "unlock_progress":
+			compacted.append(entry.duplicate(true))
+			continue
+		var metric := String(event.get("metric", ""))
+		if metric == "":
+			compacted.append(entry.duplicate(true))
+			continue
+		var max_mode := bool(event.get("max_mode", false))
+		var aggregate_key := "%s|%s|%s" % [metric, str(max_mode), String(event.get("device_id", ""))]
+		var incoming_count := maxi(1, int(entry.get("aggregate_count", event.get("aggregate_count", 1))))
+		if not aggregate_index_by_key.has(aggregate_key):
+			var aggregate_event := event.duplicate(true)
+			aggregate_event["aggregate_count"] = incoming_count
+			aggregate_event["first_event_id"] = String(event.get("first_event_id", event.get("event_id", "")))
+			aggregate_event["last_event_id"] = String(event.get("last_event_id", event.get("event_id", "")))
+			aggregate_event["first_client_sequence"] = int(event.get("first_client_sequence", event.get("client_sequence", 0)))
+			aggregate_event["last_client_sequence"] = int(event.get("last_client_sequence", event.get("client_sequence", 0)))
+			var aggregate_entry := {
+				"event": aggregate_event,
+				"reason": "queue_capacity_compacted",
+				"at": int(entry.get("at", 0)),
+				"aggregate_count": incoming_count,
+			}
+			aggregate_index_by_key[aggregate_key] = compacted.size()
+			compacted.append(aggregate_entry)
+			continue
+		var aggregate_index := int(aggregate_index_by_key[aggregate_key])
+		var aggregate_entry: Dictionary = compacted[aggregate_index]
+		var aggregate_event: Dictionary = aggregate_entry.get("event", {})
+		var current_amount := float(aggregate_event.get("amount", 0.0))
+		var incoming_amount := float(event.get("amount", 0.0))
+		aggregate_event["amount"] = maxf(current_amount, incoming_amount) if max_mode else current_amount + incoming_amount
+		aggregate_event["aggregate_count"] = int(aggregate_event.get("aggregate_count", 1)) + incoming_count
+		aggregate_event["last_event_id"] = String(event.get("last_event_id", event.get("event_id", aggregate_event.get("last_event_id", ""))))
+		aggregate_event["last_client_sequence"] = maxi(
+			int(aggregate_event.get("last_client_sequence", 0)),
+			int(event.get("last_client_sequence", event.get("client_sequence", 0)))
+		)
+		aggregate_entry["event"] = aggregate_event
+		aggregate_entry["at"] = maxi(int(aggregate_entry.get("at", 0)), int(entry.get("at", 0)))
+		aggregate_entry["aggregate_count"] = int(aggregate_event["aggregate_count"])
+		compacted[aggregate_index] = aggregate_entry
+	return compacted
+
+
+static func append_quarantined_event(events: Array, entry: Dictionary) -> Array:
+	var updated := events.duplicate(true)
+	updated.append(entry.duplicate(true))
+	return compact_quarantined_events(updated)
 
 
 static func unlock_progress_event(player_id: String, event_sequence: int, device_id: String, metric: String, amount: float, max_mode: bool, version_code: int) -> Dictionary:

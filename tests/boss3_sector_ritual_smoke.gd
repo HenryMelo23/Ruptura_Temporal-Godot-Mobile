@@ -68,7 +68,10 @@ func _run() -> void:
 	var attack: Dictionary = game.boss_attacks[0]
 	_check(String(attack.get("kind", "")) == "boss3_sector_ritual", "wrong attack kind")
 	_check(int(attack.get("steps", 0)) == 3, "solo ritual should use 3 sectors")
-	_check(float(attack.get("warning", 0.0)) >= 0.85, "ritual warning is shorter than the accessibility floor")
+	_check(is_equal_approx(float(attack.get("warning", 0.0)), 1.45), "ritual warning did not use the balanced 1.45 second window")
+	_check(is_equal_approx(float(attack.get("active", 0.0)), 0.85), "ritual active window did not use the balanced 0.85 second duration")
+	_check(is_equal_approx(float(attack.get("warning", 0.0)) + float(attack.get("active", 0.0)), 2.30), "safe area changes faster than the balanced 2.30 second cadence")
+	_check(game._boss3_sector_ritual_damage_amount(1000.0) == 80, "ritual danger damage did not use 7 percent plus 10 flat")
 	var safe_lane: int = game._boss3_sector_ritual_safe_lane(attack, 0)
 	var safe_span: int = int(attack.get("safe_lane_span", 1))
 	_check(safe_span == 2, "safe region did not expand to two contiguous lanes")
@@ -116,7 +119,7 @@ func _run() -> void:
 	_check(game.boss_attacks.any(func(a): return String(a.get("kind", "")) == "boss3_sector_ritual"), "phase 3 update did not start ritual when off cooldown")
 	game._clear_boss_runtime_hazards()
 
-	print("BOSS3_SECTOR_RITUAL_SMOKE_OK steps=3/4/5 warning=%.2fs safe_span=%d radius=%d clouds=false" % [game.BOSS3_SECTOR_RITUAL_WARNING, game.BOSS3_SECTOR_RITUAL_SAFE_LANE_SPAN, int(game.BOSS3_SECTOR_RITUAL_RADIUS)])
+	print("BOSS3_SECTOR_RITUAL_SMOKE_OK steps=3/4/5 warning=%.2fs cadence=%.2fs damage=7pct+10 safe_span=%d radius=%d clouds=false" % [game.BOSS3_SECTOR_RITUAL_WARNING, game.BOSS3_SECTOR_RITUAL_WARNING + game.BOSS3_SECTOR_RITUAL_ACTIVE, game.BOSS3_SECTOR_RITUAL_SAFE_LANE_SPAN, int(game.BOSS3_SECTOR_RITUAL_RADIUS)])
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

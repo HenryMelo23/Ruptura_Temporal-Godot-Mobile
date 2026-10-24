@@ -1,5 +1,31 @@
 extends RefCounted
 const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
+const HenryQuimeraPresentation = preload("res://scripts/presentation/henry_quimera_presentation.gd")
+
+const ENEMY_TINTS := {
+	"atirador": Color(0.7, 0.86, 1.0),
+	"devoto_febril": Color(0.76, 1.0, 0.56),
+	"incensario": Color(0.88, 0.72, 1.0),
+	"guardiao_sucata": Color(0.7, 0.76, 0.62),
+	"flagelante": Color(1.0, 0.9, 0.76),
+	"salmodiante": Color(0.94, 0.8, 1.0),
+	"portador_relicario": Color(0.9, 0.96, 0.72),
+	"cout_attack_speed": Color(1.0, 0.66, 0.18),
+	"escudeiro_refletor": Color(0.62, 0.92, 1.0),
+	"cartografo_vazio": Color(0.92, 0.24, 0.78),
+	"cronofago": Color(1.0, 0.68, 0.16),
+	"refrator_hostil": Color(0.24, 0.88, 1.0),
+	"tecelao_vetorial": Color(0.2, 1.0, 0.64),
+	"eco_entropico": Color(1.0, 0.34, 0.68, 0.82),
+	"enguia_miasma": Color(0.58, 1.0, 0.78),
+	"lodario": Color(0.86, 0.7, 0.46),
+	"pustula_fossil": Color(1.0, 0.62, 0.32),
+	"sanguessuga_cronal": Color(0.92, 0.42, 0.72),
+	"suturador_ambar": Color(1.0, 0.96, 0.88),
+	"cinerido": Color(1.0, 0.7, 0.42),
+	"carapaca_brasa_pangoliro": Color(1.0, 0.82, 0.48),
+	"fuligarra_corvol": Color(0.82, 0.82, 0.76),
+}
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -10,30 +36,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 	var sizes: Dictionary = {}
 	var styles: Dictionary = {}
 	var prismatica_active: bool = not game._active_prismatica_secondary().is_empty()
-	var tints := {
-		game.ENEMY_ATIRADOR: Color(0.7, 0.86, 1.0),
-		game.ENEMY_DEVOTO: Color(0.76, 1.0, 0.56),
-		game.ENEMY_INCENSARIO: Color(0.88, 0.72, 1.0),
-		game.ENEMY_GUARDIAO: Color(0.7, 0.76, 0.62),
-		game.ENEMY_FLAGELANTE: Color(1.0, 0.9, 0.76),
-		game.ENEMY_SALMODIANTE: Color(0.94, 0.8, 1.0),
-		game.ENEMY_RELICARIO: Color(0.9, 0.96, 0.72),
-		game.ENEMY_COUT_ATTACK_SPEED: Color(1.0, 0.66, 0.18),
-		game.ENEMY_SHIELD_REFLECTOR: Color(0.62, 0.92, 1.0),
-		game.ENEMY_NEXUS_CARTOGRAPHER: Color(0.92, 0.24, 0.78),
-		game.ENEMY_NEXUS_CHRONOPHAGE: Color(1.0, 0.68, 0.16),
-		game.ENEMY_NEXUS_REFRACTOR: Color(0.24, 0.88, 1.0),
-		game.ENEMY_NEXUS_WEAVER: Color(0.2, 1.0, 0.64),
-		game.ENEMY_NEXUS_ECHO: Color(1.0, 0.34, 0.68, 0.82),
-		game.ENEMY_MIASMA_EEL: Color(0.58, 1.0, 0.78),
-		game.ENEMY_LODARIO: Color(0.86, 0.7, 0.46),
-		game.ENEMY_FOSSIL_PUSTULE: Color(1.0, 0.62, 0.32),
-		game.ENEMY_CHRONAL_LEECH: Color(0.92, 0.42, 0.72),
-		game.ENEMY_AMBER_SUTURER: Color(1.0, 0.96, 0.88),
-		game.ENEMY_CINERIDO: Color(1.0, 0.7, 0.42),
-		game.ENEMY_PANGOLIRO: Color(1.0, 0.82, 0.48),
-		game.ENEMY_CORVOL: Color(0.82, 0.82, 0.76),
-	}
+	var prismatica_time := float(Time.get_ticks_msec()) * 0.001 if prismatica_active else 0.0
 	for enemy in game.enemies:
 		if not game._world_point_in_view(Vector2(enemy.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue
@@ -49,7 +52,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 		var size: Vector2 = sizes[kind]
 		var draw_pos = pos + game._enemy_visual_offset(enemy)
 		var alpha = float(enemy.get("alpha", 1.0))
-		var modulate_color: Color = tints.get(kind, Color.WHITE)
+		var modulate_color: Color = ENEMY_TINTS.get(kind, Color.WHITE)
 		modulate_color.a *= alpha
 		if kind == game.ENEMY_KAMIKAZE:
 			if sin(game.time_alive * 12.0) > 0.0:
@@ -82,8 +85,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			game._draw_attack_target_marker(draw_pos + Vector2(0, visual_size.y * 0.3), visual_size.x * 0.43, game.locked_target_kind == "enemy" and game.locked_target_uid == int(enemy["uid"]))
 
 		if prismatica_active and enemy["pos"].distance_to(game.player_pos) < 900.0:
-			var t = float(Time.get_ticks_msec()) * 0.001
-			var hue = fmod(t * 0.8 + int(enemy["uid"]) * 0.15, 1.0)
+			var hue = fmod(prismatica_time * 0.8 + int(enemy["uid"]) * 0.15, 1.0)
 			var c = Color.from_hsv(hue, 1.0, 1.0, 0.5)
 
 			game.draw_circle(draw_pos + Vector2(0, 16), 46, Color(c.r, c.g, c.b, 0.18))
@@ -110,7 +112,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			var shake_power: float = clamp(tesla_bar_shock / 0.42, 0.0, 1.0)
 			enemy_bar_draw_pos += Vector2(sin(game.time_alive * 90.0 + int(enemy["uid"])) * 2.8, cos(game.time_alive * 76.0 + int(enemy["uid"]) * 0.37) * 1.8) * shake_power
 			game._draw_tesla_health_bar_fx(enemy_bar_draw_pos, 60.0, enemy_hp_ratio, tesla_bar_shock, int(enemy["uid"]))
-		else:
+		elif _enemy_health_bar_visible(game, enemy, enemy_hp_ratio, is_attack_target):
 			_draw_enemy_health_bar(game, enemy, enemy_bar_draw_pos, 60.0, enemy_hp_ratio, styles[kind])
 		if bool(enemy.get("sanguinaria_hunt", false)):
 			game._draw_sanguinaria_hunt_mark(enemy_bar_draw_pos, 60.0)
@@ -302,8 +304,6 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 		return # Drawn after the temporal world tint, unaffected by it.
 	if game.is_dead:
 		return
-	if not game._active_lacerante_secondary().is_empty():
-		return
 	if game._draw_player_start_down(camera):
 		return
 	if game.attack_dragging:
@@ -319,6 +319,8 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 	var center = game.player_pos - camera
 	var profile = game._player_draw_profile()
 	var move = game._read_move()
+	if game.active_character_key == game.CHARACTER_HENRY and game.player_freeze_visual_timer > 0.0:
+		move = Vector2.ZERO
 	var rotation = 0.0
 	var flip_h = game._should_flip_player_sprite()
 	if move.y < -0.2 and abs(move.x) > 0.2:
@@ -357,6 +359,7 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 			game._draw_entity_fit_flipped(tex, center + profile["offset"], profile["size"], flip_h, player_modulate, true)
 		else:
 			game._draw_entity_stretched_rotated(tex, center + profile["offset"], profile["size"], rotation, player_modulate, flip_h)
+	HenryQuimeraPresentation.draw_local(game, tex, center, profile, rotation, player_modulate, flip_h)
 	if game.is_multiplayer and game._is_local_run_leader():
 		game._draw_leader_crown(center + Vector2(0.0, -62.0), 0.82, Color(1.0, 0.86, 0.18, 0.95))
 
@@ -368,10 +371,20 @@ static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 		return _draw_henry_entry(game, camera)
 	if game._cancel_player_start_down_landing_on_move():
 		return false
-	var intro_key := "henry_down" if game.active_character_key == game.CHARACTER_HENRY else ("player_lacerante_start_down" if game.manifestation_key == "lacerante" else "player_start_down")
+	var intro_key := "player_start_down"
+	if game.manifestation_key == "lacerante":
+		intro_key = "player_lacerante_start_down"
+	elif game.manifestation_key == "prismatica":
+		intro_key = "player_prismatica_start_down"
+	elif game.manifestation_key == "parasitica":
+		intro_key = "player_parasitica_start_down"
 	var frames: Array = game.textures.get(intro_key, [])
 	if frames.is_empty():
 		return false
+	if game.manifestation_key == "lacerante":
+		return _draw_lacerante_start_down(game, camera, frames)
+	if game.manifestation_key == "parasitica":
+		return _draw_parasitica_start_down(game, camera, frames)
 	var center: Vector2 = game.player_pos - camera
 	var tex: Texture2D = null
 	var draw_size = Vector2(66.0, 92.0)
@@ -389,7 +402,7 @@ static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 	else:
 		var elapsed: float = game.PLAYER_START_DOWN_LAND_TIME - game.player_start_down_landing_timer
 		var landing_frame: int = int(floor(elapsed / game.PLAYER_START_DOWN_FRAME_TIME))
-		var land_idx: int = 3 + (clampi(landing_frame, 0, 2) if game.manifestation_key == "lacerante" else landing_frame % 3)
+		var land_idx: int = 3 + landing_frame % 3
 		tex = frames[clampi(land_idx, 0, frames.size() - 1)]
 		var squash: float = sin(clampf(elapsed / 0.32, 0.0, 1.0) * PI)
 		draw_size = Vector2(70.0 + squash * 10.0, 86.0 - squash * 8.0)
@@ -398,11 +411,180 @@ static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if tex == null:
 		return false
-	if game.manifestation_key == "lacerante":
-		game._draw_entity_by_height_rotated(tex, center + air_offset, game.LaceranteSprites.DRAW_HEIGHT, 0.0)
-	else:
-		game._draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, game._should_flip_player_sprite())
+	game._draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, game._should_flip_player_sprite())
 	return true
+
+
+static func _draw_lacerante_start_down(game: Node2D, camera: Vector2, frames: Array) -> bool:
+	if frames.size() < 6:
+		return false
+	var center: Vector2 = game.player_pos - camera
+	var frame_idx := 0
+	var sprite_offset := Vector2.ZERO
+	var impact_strength := 0.0
+	var smoke_strength := 0.0
+	var character_alpha := 1.0
+	if game.player_start_down_fall_timer > 0.0:
+		var progress := clampf(1.0 - game.player_start_down_fall_timer / game.PLAYER_START_DOWN_FALL_TIME, 0.0, 1.0)
+		var eased := 1.0 - pow(1.0 - progress, 3.0)
+		frame_idx = 0 if progress < 0.34 else (1 if progress < 0.70 else 2)
+		sprite_offset.y = -lerpf(196.0, 0.0, eased)
+		impact_strength = smoothstep(0.74, 1.0, progress)
+		smoke_strength = smoothstep(0.78, 1.0, progress)
+		# The smoke bomb falls slightly ahead of her and disappears in the burst.
+		if progress > 0.36 and progress < 0.88:
+			var bomb_progress := clampf((progress - 0.36) / 0.52, 0.0, 1.0)
+			var bomb_pos := center + Vector2(16.0 + sin(progress * 12.0) * 3.0, lerpf(-104.0, 34.0, bomb_progress * bomb_progress))
+			game.draw_circle(bomb_pos, 4.5, Color(0.035, 0.025, 0.045, 1.0))
+			game.draw_arc(bomb_pos + Vector2(2.5, -4.0), 3.5, PI, PI * 1.65, 7, Color(0.92, 0.22, 0.18, 0.9), 1.4)
+	else:
+		var elapsed: float = game.PLAYER_START_DOWN_LAND_TIME - game.player_start_down_landing_timer
+		var progress: float = clampf(elapsed / maxf(0.01, game.PLAYER_START_DOWN_LAND_TIME), 0.0, 1.0)
+		frame_idx = 3 if progress < 0.34 else (4 if progress < 0.68 else 5)
+		impact_strength = 1.0 - smoothstep(0.0, 0.44, progress)
+		smoke_strength = 1.0 - smoothstep(0.18, 1.0, progress)
+		character_alpha = lerpf(0.72, 1.0, smoothstep(0.06, 0.42, progress))
+
+	var ring_alpha := clampf(impact_strength * 0.52, 0.0, 0.52)
+	if ring_alpha > 0.01:
+		var ring_radius := 24.0 + (1.0 - impact_strength) * 58.0
+		game.draw_set_transform(center + Vector2(0.0, 39.0), 0.0, Vector2(1.65, 0.34))
+		game.draw_circle(Vector2.ZERO, 42.0, Color(0.025, 0.015, 0.025, 0.34))
+		game.draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 36, Color(0.52, 0.08, 0.13, ring_alpha), 3.0)
+		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_lacerante_smoke_layer(game, center, smoke_strength, false)
+	game._draw_entity_by_height_rotated(frames[frame_idx], center + sprite_offset, 112.0, 0.0, Color(1.0, 1.0, 1.0, character_alpha))
+	_draw_lacerante_smoke_layer(game, center, smoke_strength, true)
+	return true
+
+
+static func _draw_lacerante_smoke_layer(game: Node2D, center: Vector2, strength: float, foreground: bool) -> void:
+	if strength <= 0.01:
+		return
+	var expansion := smoothstep(0.0, 1.0, strength)
+	var count := 7 if game.gfx_low_resource else 12
+	for index in range(count):
+		if (index % 2 == 0) != foreground:
+			continue
+		var side := -1.0 if index % 4 < 2 else 1.0
+		var rank := float(index / 2)
+		var horizontal := side * (10.0 + rank * 8.5) * (0.55 + expansion * 0.85)
+		var rise := -6.0 - float(index % 5) * 5.0 - expansion * (4.0 + rank * 1.8)
+		var puff_center := center + Vector2(horizontal, 35.0 + rise)
+		var radius := (11.0 + float(index % 4) * 3.3) * (0.55 + expansion * 0.62)
+		var alpha := strength * (0.54 if foreground else 0.42)
+		var puff_color := Color(0.075, 0.055, 0.085, alpha)
+		if index % 3 == 0:
+			puff_color = Color(0.22, 0.055, 0.08, alpha * 0.82)
+		game.draw_circle(puff_center, radius, puff_color)
+		game.draw_arc(puff_center, radius * 0.78, PI * 0.12, PI * 1.34, 12, Color(0.64, 0.15, 0.18, alpha * 0.42), 1.4)
+	var wisp_alpha := strength * (0.48 if foreground else 0.34)
+	for wisp in range(3):
+		var wisp_side := -1.0 if wisp % 2 == 0 else 1.0
+		var start := center + Vector2(wisp_side * (19.0 + float(wisp) * 11.0), 32.0 - float(wisp) * 5.0)
+		var end := start + Vector2(wisp_side * (19.0 + expansion * 12.0), -12.0 - float(wisp) * 5.0)
+		game.draw_line(start, end, Color(0.50, 0.10, 0.14, wisp_alpha), 2.0 + expansion)
+
+
+static func _draw_parasitica_start_down(game: Node2D, camera: Vector2, frames: Array) -> bool:
+	const MONSTER_FRAME_COUNT := 5
+	const GEOVANA_FRAME_OFFSET := MONSTER_FRAME_COUNT
+	if frames.size() < GEOVANA_FRAME_OFFSET + 3:
+		return false
+	var center: Vector2 = game.player_pos - camera
+	var creature_box := Vector2(235.0, 360.0)
+	var creature_ground_center := center + Vector2(0.0, -120.0)
+	var creature_center := creature_ground_center
+	var creature_tex: Texture2D
+	var landing_progress := 0.0
+	var mouth_foreground := false
+	var impact_pulse := 0.0
+
+	if game.player_start_down_fall_timer > 0.0:
+		var fall_progress := clampf(1.0 - game.player_start_down_fall_timer / game.PLAYER_START_DOWN_FALL_TIME, 0.0, 1.0)
+		var fall_eased := 1.0 - pow(1.0 - fall_progress, 3.0)
+		var fall_frame := 0 if fall_progress < 0.34 else (1 if fall_progress < 0.58 else (2 if fall_progress < 0.78 else (3 if fall_progress < 0.90 else 4)))
+		creature_tex = frames[fall_frame]
+		# The complete silhouette starts above the viewport. Its authored scale
+		# never changes during the descent, so no part is revealed by clipping.
+		creature_center.y = lerpf(-creature_box.y * 0.56, creature_ground_center.y, fall_eased)
+		var shadow_alpha := lerpf(0.04, 0.40, fall_eased)
+		game.draw_set_transform(center + Vector2(0.0, 42.0), 0.0, Vector2(0.7 + fall_eased * 0.75, 0.18 + fall_eased * 0.16))
+		game.draw_circle(Vector2.ZERO, lerpf(12.0, 43.0, fall_eased), Color(0.0, 0.0, 0.0, shadow_alpha))
+		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if fall_progress > 0.58 and fall_progress < 0.94:
+			impact_pulse = sin((fall_progress - 0.58) / 0.36 * PI)
+	else:
+		landing_progress = clampf(1.0 - game.player_start_down_landing_timer / game.PLAYER_START_DOWN_LAND_TIME, 0.0, 1.0)
+		var reverse_frame := 4 if landing_progress < 0.40 else (3 if landing_progress < 0.55 else (2 if landing_progress < 0.68 else (1 if landing_progress < 0.84 else 0)))
+		creature_tex = frames[reverse_frame]
+		mouth_foreground = reverse_frame >= 3
+		# Hold the downward-facing mouth around the crouched Geovana first,
+		# then withdraw the creature through the same upper-screen path.
+		var retreat := smoothstep(0.22, 1.0, landing_progress)
+		creature_center.y = lerpf(creature_ground_center.y, -creature_box.y * 0.56, retreat)
+		impact_pulse = sin(clampf(landing_progress * 3.0, 0.0, 1.0) * PI)
+
+	game.draw_set_transform(center + Vector2(0.0, 43.0), 0.0, Vector2(1.0, 0.34))
+	game.draw_circle(Vector2.ZERO, 38.0 + impact_pulse * 18.0, Color(0.45, 0.52, 0.04, 0.20 + impact_pulse * 0.22))
+	game.draw_circle(Vector2.ZERO, 25.0 + impact_pulse * 9.0, Color(0.92, 0.18, 0.45, 0.14 + impact_pulse * 0.16))
+	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	game._draw_entity_fit(creature_tex, creature_center, creature_box, Color.WHITE, false)
+
+	# Geovana is a separate layer so the giant entrance creature never changes
+	# her scale. Frames 5-7 use the same 162x232 canvas and landing silhouettes
+	# as Eletrica's original entrance.
+	if game.player_start_down_fall_timer <= 0.0:
+		var geo_index := GEOVANA_FRAME_OFFSET + mini(int(floor(landing_progress * 3.0)), 2)
+		var geo_tex: Texture2D = frames[geo_index]
+		if geo_tex != null:
+			var geo_release := smoothstep(0.02, 0.58, landing_progress)
+			var geo_alpha := smoothstep(0.0, 0.12, landing_progress)
+			# Start inside the dark throat and settle onto the map as the jaw rises.
+			# The foreground teeth below keep the crouched body visually enclosed.
+			var geo_center := center + Vector2(0.0, lerpf(-34.0, 0.0, geo_release))
+			var landing_elapsed: float = float(game.PLAYER_START_DOWN_LAND_TIME - game.player_start_down_landing_timer)
+			var landing_squash: float = sin(clampf(landing_elapsed / 0.32, 0.0, 1.0) * PI)
+			var geo_box := Vector2(70.0 + landing_squash * 10.0, 86.0 - landing_squash * 8.0)
+			game._draw_entity_fit(geo_tex, geo_center, geo_box, Color(1.0, 1.0, 1.0, geo_alpha))
+			if mouth_foreground:
+				_draw_parasitica_mouth_foreground(game, creature_tex, creature_center, creature_box)
+
+	if impact_pulse > 0.02:
+		for streak_index in range(10):
+			var streak_side := -1.0 if streak_index % 2 == 0 else 1.0
+			var streak_rank := float(streak_index / 2)
+			var streak_start := center + Vector2(streak_side * (18.0 + streak_rank * 5.0), 41.0 - streak_rank)
+			var streak_end := streak_start + Vector2(streak_side * (20.0 + streak_rank * 7.0), -impact_pulse * (5.0 + streak_rank * 3.0))
+			game.draw_line(streak_start, streak_end, Color(0.72, 0.78, 0.06, 0.72 * impact_pulse), 2.0 + impact_pulse * 1.5)
+		for droplet_index in range(12):
+			var angle := TAU * float(droplet_index) / 12.0
+			var distance := 32.0 + impact_pulse * (22.0 + float(droplet_index % 3) * 7.0)
+			var droplet_pos := center + Vector2(cos(angle) * distance, 37.0 + sin(angle) * distance * 0.28 - impact_pulse * float(5 + droplet_index % 4))
+			game.draw_circle(droplet_pos, 2.0 + impact_pulse * 2.1, Color(0.72, 0.78, 0.06, 0.72 * impact_pulse))
+	return true
+
+
+static func _draw_parasitica_mouth_foreground(game: Node2D, texture: Texture2D, center: Vector2, max_size: Vector2) -> void:
+	if texture == null:
+		return
+	var texture_size: Vector2 = texture.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
+		return
+	var fit_scale: float = minf(max_size.x / texture_size.x, max_size.y / texture_size.y)
+	var draw_size: Vector2 = texture_size * fit_scale
+	var draw_top_left: Vector2 = center - draw_size * 0.5
+	draw_top_left.y = center.y + max_size.y * 0.5 - draw_size.y
+	# Repeat only the front/lower lip above Geovana. Including the upper teeth
+	# would hide her completely instead of showing her inside the dark throat.
+	var foreground_y: float = floorf(texture_size.y * 0.80)
+	var source_rect := Rect2(0.0, foreground_y, texture_size.x, texture_size.y - foreground_y)
+	var destination_rect := Rect2(
+		draw_top_left + Vector2(0.0, foreground_y * fit_scale),
+		Vector2(draw_size.x, source_rect.size.y * fit_scale)
+	)
+	game.draw_texture_rect_region(texture, destination_rect, source_rect)
 
 
 static func _draw_henry_entry(game: Node2D, camera: Vector2) -> bool:
@@ -524,6 +706,17 @@ static func _draw_entity_by_height_rotated(game: Node2D, texture: Texture2D, cen
 	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
+static func _enemy_health_bar_visible(game: Node2D, enemy: Dictionary, health_ratio: float, is_attack_target: bool) -> bool:
+	# Full-health bars repeat information already conveyed by the silhouette and
+	# become one of the largest procedural draw batches in dense waves. Damage,
+	# targeting and bar-dependent status effects reveal the bar immediately.
+	return health_ratio < 0.999 \
+		or is_attack_target \
+		or game.execute_threshold > 0.0 \
+		or bool(enemy.get("sanguinaria_hunt", false)) \
+		or float(enemy.get("crepuscular_ocaso_mark", 0.0)) > 0.0
+
+
 static func _draw_enemy_health_bar(game: Node2D, enemy: Dictionary, pos: Vector2, width: float, ratio: float, shared_style: Dictionary = {}) -> void :
 	var style: Dictionary = shared_style if not shared_style.is_empty() else game._enemy_health_bar_style(enemy)
 	var health_ratio: float = clamp(ratio, 0.0, 1.0)
@@ -641,19 +834,29 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	var anim_state = int(state.get("anim_state", game.NET_ANIM_IDLE))
 	var frame_idx = int(state.get("frame_idx", 0))
 	var flip_h = bool(state.get("flip_h", false))
+	var remote_manifestation_key: String = String(state.get("manifestation_key", ""))
+	var is_remote_henry: bool = int(state.get("manifestation", -1)) == game.HENRY_SELECTION_INDEX or remote_manifestation_key in ["incendiario", "barometrico", "colosso"]
+	var remote_colossus_giant: bool = remote_manifestation_key == "colosso" and (int(state.get("visual_flags", 0)) & 4) != 0
+	var is_frozen_henry: bool = anim_state == game.NET_ANIM_FROZEN and is_remote_henry
+	var overhead: Vector2 = p + Vector2(0.0, -66.0 if remote_colossus_giant else (-18.0 if is_frozen_henry else 0.0))
 	var size = game.PLAYER_DRAW_FROZEN_SIZE if anim_state == game.NET_ANIM_FROZEN else (game.PLAYER_DRAW_DAMAGE_SIZE if anim_state == game.NET_ANIM_DAMAGE else game.PLAYER_DRAW_BOX_SIZE)
+	if remote_colossus_giant and not is_frozen_henry:
+		size *= 1.78
 	var rect = Rect2(p - size * 0.5, size)
 	var accent = Color(1.0, 0.44, 0.88) if peer_id % 2 == 0 else Color(0.0, 1.0, 0.82)
 	var is_leader: bool = game.is_multiplayer and peer_id == game.run_leader_peer_id
 	if is_leader:
 		accent = Color(1.0, 0.86, 0.18)
-	game._draw_centered(String(state.get("name", "Player %d" % peer_id)), p + Vector2(0, -58), 12, accent)
-	game._draw_ally_health_bar(p + Vector2(0, -44), 62.0, game._remote_player_health_ratio(state), accent)
+	game._draw_centered(String(state.get("name", "Player %d" % peer_id)), overhead + Vector2(0, -58), 12, accent)
+	game._draw_ally_health_bar(overhead + Vector2(0, -44), 62.0, game._remote_player_health_ratio(state), accent)
 	if is_leader:
-		game._draw_leader_crown(p + Vector2(0, -62), 0.72, accent)
-	game._draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], p + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
-	var remote_manifestation_key: String = String(state.get("manifestation_key", ""))
-	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)), remote_manifestation_key)
+		game._draw_leader_crown(overhead + Vector2(0, -62), 0.72, accent)
+	game._draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], overhead + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
+	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)), remote_manifestation_key, remote_colossus_giant)
+	if is_frozen_henry and tex != null:
+		flip_h = false
+		size = tex.get_size() * (game.EntityVisualProfiles.HENRY_FROZEN_DRAW_HEIGHT / tex.get_height())
+		rect = Rect2(p + game.EntityVisualProfiles.HENRY_FROZEN_DRAW_OFFSET + Vector2(-size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
 	var is_lacerante: bool = remote_manifestation_key == "lacerante" or game.LaceranteSprites.is_manifestation(game, int(state.get("manifestation", -1)))
 	var prismatica_secondary := _remote_prismatica_secondary(game, peer_id) if remote_manifestation_key == "prismatica" else {}
 	var is_prismatica_dancing := not prismatica_secondary.is_empty()
@@ -666,7 +869,8 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	if is_lacerante:
 		flip_h = false
 		if tex != null:
-			size = tex.get_size() * (game.LaceranteSprites.DRAW_HEIGHT / tex.get_height())
+			var lacerante_height: float = float(game.LaceranteSprites.draw_height(game, tex))
+			size = tex.get_size() * (lacerante_height / tex.get_height())
 			rect = Rect2(p - size * 0.5, size)
 	var directional_fire: bool = anim_state == game.NET_ANIM_FIRE and frame_idx >= 2 and frame_idx < 14
 	if directional_fire and tex != null:
@@ -677,6 +881,8 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	# Input intent comes from the compact visual snapshot. Positional velocity is
 	# only a fallback, because interpolation can briefly point opposite to a dash.
 	var move = Vector2(state.get("input_move", state.get("move", Vector2.ZERO))).normalized()
+	if is_frozen_henry:
+		move = Vector2.ZERO
 	if move.y < -0.2 and abs(move.x) > 0.2:
 		rotation = deg_to_rad(15.0) if move.x > 0.0 else deg_to_rad(-15.0)
 
@@ -690,12 +896,16 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 		game.draw_texture_rect(tex, Rect2(pos, draw_size), false, shadow_color)
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var alpha = 0.34 if bool(state.get("stealthed", false)) else 0.86
-	if is_lacerante:
-		game._draw_entity_by_height_rotated(tex, p, game.LaceranteSprites.DRAW_HEIGHT, rotation, Color(1.0, 1.0, 1.0, alpha))
+	if is_frozen_henry:
+		game._draw_entity_by_height_rotated(tex, p + game.EntityVisualProfiles.HENRY_FROZEN_DRAW_OFFSET, game.EntityVisualProfiles.HENRY_FROZEN_DRAW_HEIGHT, 0.0, Color(1.0, 1.0, 1.0, alpha))
+	elif is_lacerante:
+		game._draw_entity_by_height_rotated(tex, p, size.y, rotation, Color(1.0, 1.0, 1.0, alpha))
 	elif is_prismatica_dancing:
 		game._draw_entity_by_height_rotated(tex, p, 84.0, rotation, Color(accent.r, accent.g, accent.b, alpha), flip_h)
 	else:
 		game._draw_entity_fit_flipped(tex, rect.get_center(), size, flip_h, Color(accent.r, accent.g, accent.b, alpha))
+	if is_remote_henry:
+		HenryQuimeraPresentation.draw_remote(game, state, tex, rect.get_center(), size, Color(accent.r, accent.g, accent.b, alpha), flip_h)
 
 
 static func _remote_prismatica_secondary(game: Node2D, peer_id: int) -> Dictionary:

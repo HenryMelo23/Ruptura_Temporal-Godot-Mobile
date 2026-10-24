@@ -1,5 +1,32 @@
 extends RefCounted
 
+const RTPlayerProgressSync = preload("res://scripts/systems/player_progress_sync.gd")
+const INTERRUPTED_RUN_BINARY_MAGIC := "RTS2"
+const AUTOSAVE_TRANSIENT_FIELDS := {
+	"bullets": true,
+	"enemy_bullets": true,
+	"shockwaves": true,
+	"effects": true,
+	"heal_orbs": true,
+	"slashes": true,
+	"return_bullets": true,
+	"boss1_rewind_visual_projectiles": true,
+	"boss2_frost_particles": true,
+	"sineiro_visual_events": true,
+	"amber_suturer_visual_events": true,
+	"boss6_entry_particles": true,
+	"raindrops": true,
+	"rain_splashes": true,
+	"snowflakes": true,
+	"tp_effects": true,
+	"acorrentada_visuals": true,
+	"devorador_effects": true,
+	"common_card_effects": true
+}
+const AUTOSAVE_TAIL_LIMITS := {
+	"run_damage_events": 256
+}
+
 var core: Node
 var interrupted_run_available: bool = false
 var interrupted_run_summary: Dictionary = {}
@@ -10,6 +37,7 @@ var run_retry_invulnerability_timer: float = 0.0
 var retry_confirm_visible: bool = false
 var retry_confirm_new_run: bool = false
 var retry_return_timer: float = 0.0
+var card_unlock_save_thread: Thread = null
 
 func configure(p_core: Node) -> void:
 	core = p_core
@@ -90,6 +118,7 @@ func _load_card_unlocks() -> void :
 	core._ensure_card_unlock_defaults()
 	core.player_progress_install_secret = core._load_or_create_player_progress_install_secret()
 	core.player_progress_pending_events.clear()
+	core.player_progress_sync_sent_event_ids.clear()
 	core.player_progress_quarantined_events.clear()
 	core.player_progress_event_sequence = 0
 	core.player_progress_last_remote_confirmation = ""
@@ -104,30 +133,82 @@ func _load_card_unlocks() -> void :
 			if event is Dictionary:
 				core.player_progress_pending_events.append(event.duplicate(true))
 		var quarantined_events: Array = cached.get("quarantined_events", [])
-		for entry in quarantined_events:
+		for entry in core.RTPlayerProgressSync.compact_quarantined_events(quarantined_events):
 			if entry is Dictionary:
 				core.player_progress_quarantined_events.append(entry.duplicate(true))
 		core._apply_player_progress_snapshot(cached.get("snapshot", {}), false)
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
 
-func _save_card_unlocks() -> void :
+func _build_card_unlock_cache_payload() -> Dictionary:
 	core._ensure_card_unlock_defaults()
-	var payload: Dictionary = core.RTPlayerProgressSync.build_cache_payload(
+	core.player_progress_quarantined_events = RTPlayerProgressSync.compact_quarantined_events(core.player_progress_quarantined_events)
+	return RTPlayerProgressSync.build_cache_payload(
 		core.player_profile_id,
 		core._card_unlock_snapshot(),
 		core.player_progress_pending_events,
 		core.player_progress_quarantined_events,
 		core.player_progress_event_sequence
 	)
-	var signed_payload: Dictionary = core.RTPlayerProgressSync.signed_cache(payload, core._player_progress_install_secret())
-	var file = FileAccess.open(core.PLAYER_PROGRESS_CACHE_PATH, FileAccess.WRITE)
+
+func _write_card_unlock_cache(payload: Dictionary, install_secret: String, final_path: String) -> bool:
+	var signed_payload: Dictionary = RTPlayerProgressSync.signed_cache(payload, install_secret)
+	var temporary_path := final_path + ".tmp"
+	var file = FileAccess.open(temporary_path, FileAccess.WRITE)
 	if file == null:
-		return
+		return false
 	file.store_string(JSON.stringify(signed_payload, "\t"))
 	file.close()
+	if FileAccess.file_exists(final_path):
+		var remove_error := DirAccess.remove_absolute(final_path)
+		if remove_error != OK:
+			DirAccess.remove_absolute(temporary_path)
+			return false
+	var rename_error := DirAccess.rename_absolute(temporary_path, final_path)
+	if rename_error != OK:
+		DirAccess.remove_absolute(temporary_path)
+		return false
+	return true
+
+func _poll_card_unlock_save(block := false) -> bool:
+	if card_unlock_save_thread == null:
+		return true
+	if card_unlock_save_thread.is_alive() and not block:
+		return false
+	var success := bool(card_unlock_save_thread.wait_to_finish())
+	card_unlock_save_thread = null
+	if not success:
+		core.card_unlocks_dirty = true
+		if core.card_unlock_save_timer <= 0.0:
+			core.card_unlock_save_timer = 1.0
+	return true
+
+func _save_card_unlocks_async() -> void:
+	if not _poll_card_unlock_save(false):
+		return
+	var payload: Dictionary = _build_card_unlock_cache_payload()
+	var install_secret: String = String(core._player_progress_install_secret())
+	var final_path: String = ProjectSettings.globalize_path(core.PLAYER_PROGRESS_CACHE_PATH)
+	card_unlock_save_thread = Thread.new()
+	var start_error := card_unlock_save_thread.start(_write_card_unlock_cache.bind(payload, install_secret, final_path))
+	if start_error != OK:
+		card_unlock_save_thread = null
+		core.card_unlocks_dirty = true
+		core.card_unlock_save_timer = 1.0
+		return
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
+
+func _save_card_unlocks() -> void :
+	_poll_card_unlock_save(true)
+	var payload: Dictionary = _build_card_unlock_cache_payload()
+	var success := _write_card_unlock_cache(
+		payload,
+		core._player_progress_install_secret(),
+		ProjectSettings.globalize_path(core.PLAYER_PROGRESS_CACHE_PATH)
+	)
+	core.card_unlocks_dirty = not success
+	core.card_unlock_save_timer = 0.0 if success else 1.0
 
 func _mark_card_unlocks_dirty() -> void :
 	core.card_unlocks_dirty = true
@@ -135,6 +216,7 @@ func _mark_card_unlocks_dirty() -> void :
 		core.card_unlock_save_timer = 3.0
 
 func _flush_card_unlocks_if_dirty() -> void :
+	_poll_card_unlock_save(true)
 	if core.card_unlocks_dirty:
 		_save_card_unlocks()
 
@@ -233,7 +315,7 @@ func _load_config() -> void :
 				elif k == "gfx_low_resource": core.gfx_low_resource = v == "true"
 				elif k == "gfx_memory_saver": core.gfx_memory_saver = v == "true"
 				elif k == "gfx_fps_limit": core.gfx_fps_limit = core._sanitize_graphics_fps_limit(int(v))
-				elif k == "damage_text_scale": core.damage_text_scale = clamp(float(v), 0.7, 1.8)
+				elif k == "damage_text_scale": core.damage_text_scale = core._sanitize_damage_text_scale(float(v))
 				elif k == "interface_text_scale": core.interface_text_scale = clamp(float(v), 0.9, 1.6)
 				elif k == "geovana_bark_scale": core.geovana_bark_scale = clampf(float(v), 0.5, 1.5)
 				elif k == "vol_master": core.vol_master = float(v)
@@ -245,7 +327,7 @@ func _load_config() -> void :
 				elif k == "gfx_screen_shake": core.gfx_screen_shake = v == "true"
 				elif k == "gfx_low_resource": core.gfx_low_resource = v == "true"
 				elif k == "gfx_memory_saver": core.gfx_memory_saver = v == "true"
-				elif k == "damage_text_scale": core.damage_text_scale = clamp(float(v), 0.7, 1.8)
+				elif k == "damage_text_scale": core.damage_text_scale = core._sanitize_damage_text_scale(float(v))
 		file.close()
 	core.ui_platform_override = core._sanitize_ui_platform_override(core.ui_platform_override)
 	core.desktop_window_mode = core._sanitize_desktop_window_mode(core.desktop_window_mode)
@@ -360,7 +442,7 @@ func _interrupted_run_field_names() -> Array:
 		"shop_paid_rerolls_this_visit", "manifest_evolution_fragment_claim_count", "cinzas_card_bonuses",
 		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted",
 		"run_pacing_profile", "run_pacing_valid_runs_at_start", "run_valid_duration_recorded", "run_pacing_larapio_first_time", "run_pacing_arauto_first_time", "run_pacing_first_special_enemy_time", "run_pacing_first_special_enemy_kind",
-		"active_character_key", "selected_manifestation", "selected_aura", "selected_mutation", "selected_effect", "manifestation_key", "mutation_key", "effect_key", "aura_state", "manifest_evolution_state",
+		"active_character_key", "selected_run_mode", "selected_manifestation", "selected_aura", "selected_mutation", "selected_effect", "manifestation_key", "mutation_key", "effect_key", "aura_state", "manifest_evolution_state",
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer",
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
@@ -377,7 +459,8 @@ func _interrupted_run_field_names() -> Array:
 		"phase5_player_history", "phase5_history_sample_timer", "phase5_hazards", "phase5_rats", "phase5_telegraphs", "boss5_action_timer", "boss5_decision_timer", "boss5_current_action", "boss5_dimension", "boss5_last_dimension", "boss5_mental_state", "boss5_velocity", "boss5_target", "boss5_siphon_timer", "boss5_siphon_cooldown", "boss5_teleport_cooldown", "boss5_transmute_cooldown", "boss5_ability_cooldowns", "boss5_mobile_weights", "boss5_predatory_mods", "boss5_profile_confidence", "boss5_last_reward_action",
 		"phase_transition_timer", "phase_fragment", "larapio_spawned", "next_larapio_spawn_time", "fusion_check_timer", "event_alert_text", "event_alert_timer", "alert_stalker_done", "alert_projector_done", "alert_crystal_done", "alert_agglomerator_done", "alert_curater_done",
 		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes",
-		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "estase_reparadora_timer", "estase_reparadora_tick", "estase_reparadora_pause", "estase_reparadora_anchor", "estase_reparadora_active", "estase_reparadora_pulse", "egide_hemofaga_shield", "egide_hemofaga_full_timer", "egide_hemofaga_pulse", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
+		"paradox_charge_hits", "paradox_ready", "paradox_active_timer", "paradox_echo_queue", "paradox_flash",
+		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "estase_reparadora_timer", "estase_reparadora_tick", "estase_reparadora_pause", "estase_reparadora_anchor", "estase_reparadora_active", "estase_reparadora_pulse", "manto_impulso_shield", "manto_impulso_timer", "manto_impulso_pulse", "recusa_dano_pulse", "sutura_gradual_pending", "sutura_gradual_timer", "sutura_gradual_tick", "sutura_gradual_pulse", "egide_hemofaga_shield", "egide_hemofaga_full_timer", "egide_hemofaga_pulse", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
 		"cartographic_coords", "cartographic_route_timer", "cartographic_boss_displacement", "mnesic_trick_timer", "mnesic_trick_origin", "mnesic_boss_vulnerability", "resonant_perfect_streak", "resonant_noise", "resonant_next_perfect", "resonant_speed_timer", "resonant_sinfonia_buff_timer", "resonant_note_index", "boss_resonant_notes", "boss_contract_clause", "boss_contract_infractions", "boss_contract_vulnerability", "contractual_notifications", "contractual_penalty_timer", "contractual_order", "contractual_order_rewards", "contractual_order_penalties",
 		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects", "necronada_vestiges", "necronada_remnants", "necronada_requiem", "necronada_pente_history", "necronada_attack_counter", "necronada_empowered_ready", "necronada_empower_until", "necronada_empower_cooldown_until", "necronada_horde_progress",
 		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
@@ -422,20 +505,55 @@ func _interrupted_run_saved_mode() -> String:
 		return "paused" if core.settings_previous_mode == "paused" else "game"
 	return ""
 
-func _build_interrupted_run_snapshot() -> Dictionary:
+func _autosave_field_value(field: String, value: Variant) -> Variant:
+	if AUTOSAVE_TRANSIENT_FIELDS.has(field):
+		return null
+	if AUTOSAVE_TAIL_LIMITS.has(field) and value is Array:
+		var limit := int(AUTOSAVE_TAIL_LIMITS[field])
+		var start := maxi(0, value.size() - limit)
+		return value.slice(start).duplicate(true)
+	return _snapshot_field_value(value)
+
+func _build_interrupted_run_snapshot(compact_autosave := false) -> Dictionary:
 	var fields: = {}
 	for field in _interrupted_run_field_names() + _run_report_state_field_names():
-		fields[String(field)] = _snapshot_field_value(core.get(String(field)))
+		var key := String(field)
+		var value = _autosave_field_value(key, core.get(key)) if compact_autosave else _snapshot_field_value(core.get(key))
+		if compact_autosave and value == null and AUTOSAVE_TRANSIENT_FIELDS.has(key):
+			continue
+		fields[key] = value
 	fields["mode"] = _interrupted_run_saved_mode()
 	return {
 		"schema": 1,
+		"compact_autosave": compact_autosave,
 		"game_version": core.GAME_VERSION,
 		"saved_at": core._datetime_text(),
 		"saved_unix": int(Time.get_unix_time_from_system()),
 		"fields": fields
 	}
 
-func _save_interrupted_run(force: = false) -> void :
+func _write_interrupted_run_snapshot(snapshot: Dictionary) -> bool:
+	var final_path := ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH)
+	var temporary_path := final_path + ".tmp"
+	var payload := var_to_bytes(snapshot)
+	var file := FileAccess.open(temporary_path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(INTERRUPTED_RUN_BINARY_MAGIC)
+	file.store_buffer(payload)
+	file.close()
+	if FileAccess.file_exists(final_path):
+		var remove_error := DirAccess.remove_absolute(final_path)
+		if remove_error != OK:
+			DirAccess.remove_absolute(temporary_path)
+			return false
+	var rename_error := DirAccess.rename_absolute(temporary_path, final_path)
+	if rename_error != OK:
+		DirAccess.remove_absolute(temporary_path)
+		return false
+	return true
+
+func _save_interrupted_run(force: = false, compact_autosave := false) -> void :
 	if not _run_can_be_saved():
 		return
 	if not force:
@@ -443,12 +561,9 @@ func _save_interrupted_run(force: = false) -> void :
 		if interrupted_run_autosave_timer > 0.0:
 			return
 	interrupted_run_autosave_timer = core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL
-	var snapshot: = _build_interrupted_run_snapshot()
-	var file: = FileAccess.open(core.INTERRUPTED_RUN_SAVE_PATH, FileAccess.WRITE)
-	if file == null:
+	var snapshot: = _build_interrupted_run_snapshot(compact_autosave)
+	if not _write_interrupted_run_snapshot(snapshot):
 		return
-	file.store_string(var_to_str(snapshot))
-	file.close()
 	interrupted_run_available = true
 	interrupted_run_summary = _interrupted_run_summary_from_snapshot(snapshot)
 
@@ -458,16 +573,21 @@ func _clear_interrupted_run_save() -> void :
 	interrupted_run_autosave_timer = core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL
 	if FileAccess.file_exists(core.INTERRUPTED_RUN_SAVE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH))
+	var temporary_path := ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH) + ".tmp"
+	if FileAccess.file_exists(temporary_path):
+		DirAccess.remove_absolute(temporary_path)
 
 func _load_interrupted_run_snapshot() -> Dictionary:
 	if not FileAccess.file_exists(core.INTERRUPTED_RUN_SAVE_PATH):
 		return {}
-	var file: = FileAccess.open(core.INTERRUPTED_RUN_SAVE_PATH, FileAccess.READ)
-	if file == null:
-		return {}
-	var raw: = file.get_as_text()
-	file.close()
-	var parsed = str_to_var(raw)
+	var raw := FileAccess.get_file_as_bytes(core.INTERRUPTED_RUN_SAVE_PATH)
+	var parsed: Variant = null
+	var magic_size := INTERRUPTED_RUN_BINARY_MAGIC.length()
+	if raw.size() >= magic_size and raw.slice(0, magic_size).get_string_from_ascii() == INTERRUPTED_RUN_BINARY_MAGIC:
+		parsed = bytes_to_var(raw.slice(magic_size))
+	else:
+		# Compatibility with text snapshots written by releases before RTS2.
+		parsed = str_to_var(raw.get_string_from_utf8())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}
 	var snapshot: Dictionary = parsed
@@ -527,6 +647,7 @@ func _resume_interrupted_run() -> bool:
 		_clear_interrupted_run_save()
 		return false
 	var fields: Dictionary = snapshot.get("fields", {})
+	core._set_run_mode_local(String(fields.get("selected_run_mode", core.RUN_MODE_SHOP)))
 	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
 	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
 	core.selected_aura = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_aura", core.selected_aura)), 0, core.AURAS.size() - 1)
@@ -562,7 +683,17 @@ func _post_resume_interrupted_run() -> void :
 	core.teleport_dragging = false
 	core.manifest_preview_open = false
 	interrupted_run_available = true
-	interrupted_run_summary = _interrupted_run_summary_from_snapshot(_build_interrupted_run_snapshot())
+	interrupted_run_summary = _interrupted_run_summary_from_snapshot({
+		"saved_at": core._datetime_text(),
+		"saved_unix": int(Time.get_unix_time_from_system()),
+		"fields": {
+			"current_phase": core.current_phase,
+			"time_alive": core.time_alive,
+			"active_character_key": core.active_character_key,
+			"selected_manifestation": core.selected_manifestation,
+			"selected_aura": core.selected_aura
+		}
+	})
 	interrupted_run_autosave_timer = core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL
 	core._play_phase_music()
 	core._update_audio_volumes()
@@ -597,6 +728,8 @@ func _use_run_retry() -> bool:
 	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
 	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
 	core.selected_aura = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_aura", core.selected_aura)), 0, core.AURAS.size() - 1)
+	core.selected_mutation = clampi(int(fields.get("selected_mutation", core.selected_mutation)), 0, core.HENRY_MUTATIONS.size() - 1)
+	core.selected_effect = clampi(int(fields.get("selected_effect", core.selected_effect)), 0, core.HENRY_EFFECTS.size() - 1)
 	core._start_game(false)
 	for field in _interrupted_run_field_names() + _run_report_state_field_names():
 		var key: = String(field)
@@ -681,6 +814,6 @@ func _update_interrupted_run_autosave(delta: float) -> void :
 	if _run_can_be_saved():
 		interrupted_run_autosave_timer -= delta
 		if interrupted_run_autosave_timer <= 0.0:
-			_save_interrupted_run(true)
+			_save_interrupted_run(true, true)
 	else:
 		interrupted_run_autosave_timer = min(interrupted_run_autosave_timer, core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL)

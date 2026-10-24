@@ -61,6 +61,18 @@ func _run() -> void:
 	game.henry_idle_beard_side = 1
 	await _capture("henry_idle_beard_right_1280x720.png", "")
 	game.henry_idle_beard_timer = 0.0
+	game.mode = "shop_opening"
+	game.shop_opening_timer = game.SHOP_OPENING_ANIM_TIME * 0.86
+	await _capture("henry_shop_entry_flash_1280x720.png", "cyan")
+	game.shop_opening_timer = game.SHOP_OPENING_ANIM_TIME * 0.61
+	await _capture("henry_shop_entry_impact_1280x720.png", "cyan")
+	game.shop_opening_timer = game.SHOP_OPENING_ANIM_TIME * 0.34
+	await _capture("henry_shop_entry_tie_1280x720.png", "")
+	root.size = Vector2i(800, 450)
+	game.shop_opening_timer = game.SHOP_OPENING_ANIM_TIME * 0.02
+	await _capture("henry_shop_entry_ready_mobile_800x450.png", "")
+	root.size = Vector2i(1280, 720)
+	game.mode = "game"
 	game.move_touch_index = 1
 	game.touch_move = Vector2.DOWN
 	await _capture("henry_walk_down_1280x720.png", "")
@@ -129,7 +141,7 @@ func _run() -> void:
 	root.size = Vector2i(960, 540)
 	await _capture("henry_incandescence_passive_low_960x540.png", "orange")
 
-	print("HENRY_INCENDIARY_VISUAL_OK selection=true intro=materialize_glasses_ready_equal_scale idle=pocket_tap beard=left_right walk=down_right_left_mirror_up fire=dedicated_equal_scale basic_skill=corrected_8dir ultimate=800ms_8frames_crouch_absorb_rise_release dialogue=off cone=true wave=true passive=true low=true " + ProjectSettings.globalize_path(OUT_DIR))
+	print("HENRY_INCENDIARY_VISUAL_OK selection=true intro=materialize_glasses_ready_equal_scale shop_entry=flash_impact_tie_ready_mobile idle=pocket_tap beard=left_right walk=down_right_left_mirror_up fire=dedicated_equal_scale basic_skill=corrected_8dir ultimate=800ms_8frames_crouch_absorb_rise_release dialogue=off cone=true wave=true passive=true low=true " + ProjectSettings.globalize_path(OUT_DIR))
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

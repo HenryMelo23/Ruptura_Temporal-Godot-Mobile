@@ -14,6 +14,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/main_runtime_state.gd` | 3524 | 3488 | 1 | `_safe_load` 5 code LOC |
 | `scripts/presentation/combat_effects_presentation.gd` | 4063 | 3719 | 99 | `_draw_projectiles` 327 code LOC |
 | `scripts/presentation/lightning_presentation.gd` | owner | owner | owner | `bolt`, `contact`, `channel`, `visible_segments`; shared render-only electrical geometry and silhouette protection |
+| `scripts/presentation/combat_text_presentation.gd` | owner | owner | owner | `add_damage`, `draw`; merged damage numbers, critical animation and disabled allocation guard |
+| `scripts/systems/ranged_attack_range.gd` | owner | owner | owner | `attack_range`, `damage_multiplier`, `configure_bullet`, `advance_bullet`, `draw_range_indicator`; shared ranged-primary range contract |
 | `scripts/presentation/menus_presentation.gd` | 3073 | 2729 | 102 | `_draw_manifest_select` 176 code LOC |
 | `scripts/presentation/world_environment_presentation.gd` | 2543 | 2384 | 56 | `_draw_boss_attacks` 375 code LOC |
 | `scripts/ui/shop_controller.gd` | 701 | 586 | 51 | `handle_touch` 82 code LOC |
@@ -41,7 +43,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/assets/runtime_asset_controller.gd` | owner | owner | owner | `should_stream_phase_assets`, `should_lazy_gallery_assets`, `release_transient_gallery_assets`, `prepare_phase`, `ensure_key`, `phase_keys` |
 | `scripts/systems/progression/runtime_progression_controller.gd` | 249 | 181 | 33 | `elite_point_multiplier` 19 code LOC |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
-| `scripts/systems/player/player_control_controller.gd` | owner | owner | owner | `read_move`, `aim_direction`, touch/gamepad/desktop input routing |
+| `scripts/systems/player/player_control_controller.gd` | owner | owner | owner | `read_move`, `aim_direction`, touch/gamepad/desktop input routing, Parasítica HAB1 and Lacerante ultimate quick-versus-held aiming |
+| `scripts/lacerante_sprites.gd` | owner | owner | owner | `register`, `snapshot`, `draw_height`; canonical Lacerante movement/attack/Q/ultimate frame selection for local and remote players |
 | `scripts/systems/umbra_observation_schema.gd` | owner | owner | owner | `build_from_runtime`, `build_from_snapshot`, `validate_observation` |
 | `scripts/systems/online/umbra_authority_controller.gd` | owner | owner | owner | `build_authoritative_decision`, `revalidate_before_execution`, `accept_replica_event` |
 | `scripts/systems/umbra_neural_runtime.gd` | owner | owner | owner | `create`, `forward`, `contract_error` |
@@ -101,6 +104,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Manifest evolution option source | `_manifest_evolution_entries` | `scripts/main_runtime_core.gd:7566` |
 | Manifest evolution projectile hook | `_apply_manifest_evolution_to_bullet` | `scripts/main_runtime_core.gd:7836` |
 | Manifest evolution impact hook | `_manifest_evolution_on_projectile_hit` | `scripts/main_runtime_core.gd:7926` |
+| Ranged primary range contract | `RTRangedAttackRange.configure_bullet`, `advance_bullet`, `draw_range_indicator` | `scripts/systems/ranged_attack_range.gd`; core retains attack gating, collision and RPC routing while combat presentation draws the subtle boundary/fade |
 | Boss 7 state | `update_boss7_state` | `scripts/systems/modern_boss_controller.gd:35` |
 | Boss 7 ultimate | `check_boss7_ultimate` | `scripts/systems/modern_boss_controller.gd:427` |
 | Boss party scaling contract | `profile_for_party_size` | `scripts/systems/boss_party_scaling.gd:13` |
@@ -109,9 +113,12 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Necronada ability owner | `RTNecronadaAbilityController.try_use_skill`, `update_remnants` | `scripts/systems/abilities/necronada_ability_controller.gd:1`; core retains `_try_use_necronada_skill` and `_update_necronada_remnants` compatibility facades |
 | Ancorada ability owner | `RTAncoradaAbilityController.update`, `trigger_hab1`, `spawn_ultimate`, `on_projectile_hit`, `on_teleport` | `scripts/systems/abilities/ancorada_ability_controller.gd:1`; owns the mobile-territory rework while core retains public compatibility facades and shared save/network fields |
 | Henry Incendiário owner | `RTHenryIncendiaryAbilityController.on_player_damaged`, `fire_auto_attack`, `begin_skill`, `cast_ultimate` | `scripts/systems/abilities/henry_incendiary_ability_controller.gd`; owns friction accumulation, periodic Incandescência release, per-target dwell scaling and existing burn kit while runtime fields remain save/network compatible |
+| Henry Barométrico owner | `RTHenryBarometricAbilityController.fire_auto_attack`, `on_henry_auto_fired`, `begin_skill`, `cast_ultimate`, `update_projectile`, `visual_snapshot` | `scripts/systems/abilities/henry_barometric_ability_controller.gd`; owns pressure autos, the mobile low-pressure corridor, the mobile Eye of the Storm and independent Nimbo duplication. `scripts/presentation/henry_barometric_presentation.gd` renders the same bounded snapshot for local and remote players without owning damage. Walk/attack/cast v1 atlases preserve approved Henry cells; `henry_barometric_ultimate_sheet_v2.png` provides eight new palette/pixel/anchor-normalized poses rebuilt by `tools/build_henry_barometric_sprites.py`. The 0.55 s Barometric windup consumes all eight frames, pure back buckets remove tie-blue pixels, and intro stays shared. Tests: `henry_barometric_smoke`, `henry_barometric_visual_smoke`. |
+| Henry Colosso D37 owner | `RTHenryColossusAbilityController.fire_auto_attack`, `begin_skill`, `cast_ultimate`, `modify_incoming_damage`, `on_damage_confirmed_enemy`, `visual_snapshot` | `scripts/systems/abilities/henry_colossus_ability_controller.gd`; owns the melee combo/Ímpeto, guard-counter, collision-safe giant charge, 1.2 s forward/reverse growth, 30 s giant timer and temporary HP. It also owns independent Lastro stacks with per-target hit throttle, regular-enemy anchor and boss slow. `scripts/presentation/henry_colossus_presentation.gd` renders bounded physical accents and marks; six runtime atlases are normalized by `tools/build_henry_colossus_sprites.py`, share a 256 px cell/ground anchor and erase rear tie blue. Giant remote state uses visual flag bit 4 while retaining visual schema/stride. Tests: `henry_colossus_smoke`, `henry_colossus_visual_smoke`. |
 | Henry unlock cheat | `_try_unlock_henry_cheat` | `scripts/main_runtime_core.gd`; `HENRYP` sets only the local persisted test unlock and does not award an UMBRA victory |
 | Henry temporal entrance / flame VFX | `RTHenryIncendiaryAbilityController.begin_entrance`, `update_entrance`, `apply_entrance_snapshot`; `HenryFire.cone`, `wave`, `charge` | Entry runs before combat, authority owns wander/brake/freeze/release; existing world visual packet carries `henry_entrance`. `scripts/presentation/henry_fire_presentation.gd` shares bounded mesh-based fire across local/remote casts. Tests: `henry_cinematic_fire_smoke`, `henry_entrance_transport_smoke`, `henry_fire_visual_smoke`, `henry_fire_budget_smoke`. |
 | Henry entrance and idle presentation | `EntitiesPresentation._draw_henry_entry`, `_henry_entry_draw_height`, `_update_henry_idle_animation`, `_henry_idle_frame_index` | entrance frames use measured alpha heights to match the 237 px idle silhouette; pocket/foot-tap is the normal idle and beard gesture chooses a side every 7 stationary seconds; exact frame index reuses the existing player animation snapshot |
+| Henry Quimera organ compositor | `RTHenryQuimeraPresentation.resolve_overlay`, `draw_local`, `draw_remote` | `scripts/presentation/henry_quimera_presentation.gd`; maps optional local/remote visual snapshots onto the existing body Rect2 with front/side/back buckets, fixed family order, source sockets and stage-3 procedural accents. No gameplay, collision, texture creation, viewport or packet ownership. Tests: `henry_quimera_presentation_smoke`, `henry_quimera_presentation_visual_smoke`. |
 | Boss party scaling snapshot | `_ensure_boss_party_scaling_context` | `scripts/main_runtime_core.gd:6896` |
 | Boss 1 animation state selection | `RTBoss1AnimationPresentation.active_texture` | `scripts/presentation/boss1_animation_presentation.gd` |
 | Boss 1 animation facing | `RTBoss1AnimationPresentation.should_flip_h` | `scripts/presentation/boss1_animation_presentation.gd` |
@@ -131,6 +138,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 ## Preserved extracted owners
 
 Use exact symbol search in these owners; core keeps compatible wrappers.
+
+- Devorador de Destinos visuals: `scripts/presentation/devorador_destinos_presentation.gd` (`warmup`, `draw_world`, `draw_foreground`); existing `_draw_devorador_world` facade retained, foreground runs after actors; existing proc timers remain authoritative. Focused tests: `devorador_destinos_smoke.gd`, `devorador_destinos_visual_smoke.gd`.
 
 - Boss 3 Miasma presentation: `scripts/presentation/boss3_miasma_presentation.gd` (`clones`, `darkness`, `overlay`, `qte_openness`); world/combat wrappers and core unchanged APIs. No gameplay state ownership.
 - Save/config/resume/retry: `scripts/systems/save/runtime_save_controller.gd`.

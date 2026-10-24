@@ -42,7 +42,7 @@ func _run() -> void:
 	for failure in failures:
 		push_error(failure)
 	if failures.is_empty():
-		print("MOBILE_MULTIPLAYER_REGRESSIONS_OK saved_gameplay_layout=true touch_revive=true kill_growth=true death_phases=7 living_votes=true silent_impacts=true music=true")
+		print("MOBILE_MULTIPLAYER_REGRESSIONS_OK saved_gameplay_layout=true fragment_altar_touch=false kill_growth=true death_phases=7 living_votes=true silent_impacts=true music=true")
 	quit(0 if failures.is_empty() else 1)
 
 
@@ -139,11 +139,8 @@ func _test_revive_touch() -> void:
 	game._clear_team_revival_state()
 	game.net_players_by_peer = {43: _peer(true)}
 	game._start_team_revival_for_dead(43, Vector2(900, 430), "ALIADO", false)
-	for fragment in game.revival_fragments.duplicate(true):
-		game.player_pos = fragment["pos"]
-		game._collect_revival_fragment(fragment["id"], game._mp_unique_id())
-	game.player_pos = game.revival_altar_points_pos
-	game.score = game._revival_points_cost()
+	_check(not game.revival_active and game.revival_fragments.is_empty() and not game.revival_altars_active, "mobile multiplayer spawned removed fragments or altars")
+	game.score = 400
 	game.ui_platform_override = "android"
 	game.hud_attack_pos = Vector2.ZERO
 	game.hud_secondary_pos = Vector2.ZERO
@@ -156,29 +153,29 @@ func _test_revive_touch() -> void:
 	await process_frame
 	if DisplayServer.get_name() != "headless":
 		await RenderingServer.frame_post_draw
-		_check(root.get_texture().get_image().save_png("res://.agent_logs/mobile_revive_1280x720.png") == OK, "revive capture failed")
+		_check(root.get_texture().get_image().save_png("res://.agent_logs/mobile_no_fragment_altars_1280x720.png") == OK, "no-revive capture failed")
 		root.size = Vector2i(960, 540)
 		game._update_button_layout(Vector2(root.size))
 		game.queue_redraw()
 		await process_frame
 		await RenderingServer.frame_post_draw
-		_check(root.get_texture().get_image().save_png("res://.agent_logs/mobile_revive_960x540.png") == OK, "small revive capture failed")
-	# Input must work even before a draw or after another overlay rebuilt its buttons.
+		_check(root.get_texture().get_image().save_png("res://.agent_logs/mobile_no_fragment_altars_960x540.png") == OK, "small no-revive capture failed")
+	# Ordinary combat touch must not resurrect the removed revival overlay.
 	game.buttons.erase("revival_mobile")
 	var touch := InputEventScreenTouch.new()
 	touch.index = 4
 	touch.position = game.buttons["attack"].get_center()
 	touch.pressed = true
 	game._unhandled_input(touch)
-	_check(game.revival_active, "first tap spent revival cost without confirmation")
+	_check(not game.revival_active and not game.buttons.has("revival_mobile"), "first touch re-enabled removed revival UI")
 	touch.pressed = false
 	game._unhandled_input(touch)
 	touch.pressed = true
 	game._unhandled_input(touch)
 	touch.pressed = false
 	game._unhandled_input(touch)
-	_check(not game.revival_active and game.score == 0, "two touch events did not revive teammate")
-	_check(not game.net_players_by_peer[43]["dead"], "revived teammate remains dead")
+	_check(not game.revival_active and game.score == 400, "combat touches spent score through removed altar flow")
+	_check(game.net_players_by_peer[43]["dead"], "combat touches revived teammate through removed altar flow")
 
 
 func _test_hit_audio() -> void:

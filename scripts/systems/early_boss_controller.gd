@@ -553,12 +553,19 @@ func start_boss1_whirlpool() -> void:
 		"center": game.WORLD_SIZE * 0.5,
 		"world_radius": _boss1_whirlpool_world_radius(game.WORLD_SIZE * 0.5),
 		"spin_direction": -1.0 if game.rng.randf() < 0.5 else 1.0,
+		"beam_count": clampi(game.boss1_whirlpool_sequence, 1, 4),
+		"beam_start_angle": game.rng.randf_range(-PI, PI),
+		"laser_warning": game.BOSS1_WHIRLPOOL_LASER_WARNING,
+		"laser_rotation_duration": game.BOSS1_WHIRLPOOL_LASER_ROTATION_DURATION,
+		"laser_inner_radius": game.BOSS1_WHIRLPOOL_LASER_INNER_RADIUS,
+		"laser_half_width": game.BOSS1_WHIRLPOOL_LASER_HALF_WIDTH,
 		"impact": false
 	})
 	game._add_boss_attack(attack)
 	game.boss1_whirlpool_cooldown = game.BOSS1_WHIRLPOOL_COOLDOWN
 	game.boss_attack_timer = float(attack["duration"]) + 0.8
 	game._add_text("REDOMOINHO DA RUPTURA", game.WORLD_SIZE * 0.5 + Vector2(0.0, -150.0), Color(0.3, 0.9, 1.0), 1.6, 27)
+	game._add_text("RAIO ROTATIVO x%d" % int(attack["beam_count"]), game.WORLD_SIZE * 0.5 + Vector2(0.0, -116.0), Color(0.66, 0.96, 1.0), 1.35, 20)
 	game._play_sfx("boss1_spin", 0.02, 0.68, 0.82)
 
 
@@ -589,6 +596,7 @@ func update_boss1_whirlpool(delta: float) -> bool:
 			game.boss_pos = center
 			game.boss_phase += delta * 24.0 * float(attack.get("spin_direction", 1.0))
 			apply_boss1_whirlpool_force(delta, attack)
+			apply_boss1_whirlpool_lasers(delta, attack)
 			if float(attack["state_age"]) >= game.BOSS1_WHIRLPOOL_ACTIVE_DURATION:
 				attack["state"] = "drying"
 				attack["state_age"] = 0.0
@@ -601,6 +609,65 @@ func update_boss1_whirlpool(delta: float) -> bool:
 				game.boss_attacks = game.boss_attacks.filter(func(value): return String(Dictionary(value).get("kind", "")) != "boss1_whirlpool")
 				game.boss_attack_timer = maxf(game.boss_attack_timer, 1.1)
 	return true
+
+
+func boss1_whirlpool_laser_angle(attack: Dictionary, beam_index: int) -> float:
+	var warning: float = maxf(0.0, float(attack.get("laser_warning", game.BOSS1_WHIRLPOOL_LASER_WARNING)))
+	var rotation_duration: float = maxf(0.01, float(attack.get("laser_rotation_duration", game.BOSS1_WHIRLPOOL_LASER_ROTATION_DURATION)))
+	var rotation_age: float = maxf(0.0, float(attack.get("state_age", 0.0)) - warning)
+	var rotation_progress: float = clampf(rotation_age / rotation_duration, 0.0, 1.0)
+	var beam_count: int = clampi(int(attack.get("beam_count", 1)), 1, 4)
+	return float(attack.get("beam_start_angle", 0.0)) + float(attack.get("spin_direction", 1.0)) * TAU * rotation_progress + TAU * float(beam_index) / float(beam_count)
+
+
+func boss1_whirlpool_laser_hit_index(attack: Dictionary, target_pos: Vector2) -> int:
+	if String(attack.get("state", "")) != "active":
+		return -1
+	var warning: float = maxf(0.0, float(attack.get("laser_warning", game.BOSS1_WHIRLPOOL_LASER_WARNING)))
+	if float(attack.get("state_age", 0.0)) < warning:
+		return -1
+	var center: Vector2 = Vector2(attack.get("center", game.WORLD_SIZE * 0.5))
+	var offset: Vector2 = target_pos - center
+	var inner_radius: float = maxf(0.0, float(attack.get("laser_inner_radius", game.BOSS1_WHIRLPOOL_LASER_INNER_RADIUS)))
+	var world_radius: float = maxf(inner_radius, float(attack.get("world_radius", 1080.0)))
+	var half_width: float = maxf(1.0, float(attack.get("laser_half_width", game.BOSS1_WHIRLPOOL_LASER_HALF_WIDTH)))
+	var beam_count: int = clampi(int(attack.get("beam_count", 1)), 1, 4)
+	for beam_index in range(beam_count):
+		var direction := Vector2.from_angle(boss1_whirlpool_laser_angle(attack, beam_index))
+		var along: float = offset.dot(direction)
+		if along < inner_radius or along > world_radius:
+			continue
+		if absf(offset.cross(direction)) <= half_width:
+			return beam_index
+	return -1
+
+
+func apply_boss1_whirlpool_lasers(delta: float, attack_override: Dictionary = {}) -> void:
+	var attack := attack_override if not attack_override.is_empty() else boss1_attack_by_kind("boss1_whirlpool")
+	if attack.is_empty() or String(attack.get("state", "")) != "active":
+		return
+	var local_peer_id: int = game._mp_unique_id() if game.is_multiplayer else 0
+	_boss1_whirlpool_laser_damage_target(delta, attack, game.player_pos, local_peer_id, false)
+	for peer_id in game._targetable_remote_peer_ids():
+		var state: Dictionary = game.net_players_by_peer.get(peer_id, {})
+		_boss1_whirlpool_laser_damage_target(delta, attack, Vector2(state.get("pos", Vector2.ZERO)), peer_id, true)
+
+
+func _boss1_whirlpool_laser_damage_target(delta: float, attack: Dictionary, target_pos: Vector2, peer_id: int, remote: bool) -> void:
+	var cooldown_key := "laser_hit_cd_%d" % peer_id
+	attack[cooldown_key] = maxf(0.0, float(attack.get(cooldown_key, 0.0)) - delta)
+	if float(attack[cooldown_key]) > 0.0 or boss1_whirlpool_laser_hit_index(attack, target_pos) < 0:
+		return
+	if not remote and not game._local_player_damageable_by_contact():
+		return
+	attack[cooldown_key] = game.BOSS1_WHIRLPOOL_LASER_HIT_COOLDOWN
+	var max_hp: float = game.net_player_hp_max if remote else game.player_hp_max
+	var damage: int = maxi(1, int(round(max_hp * game.BOSS1_WHIRLPOOL_LASER_DAMAGE_RATE + game.BOSS1_WHIRLPOOL_LASER_DAMAGE_FLAT)))
+	if remote:
+		game._send_peer_damage(peer_id, damage, "boss1_whirlpool_laser")
+	else:
+		game._damage_player(damage, "boss1_whirlpool_laser")
+	game._play_sfx("boss_impact", 0.025, 0.28, 1.24)
 
 
 func apply_boss1_whirlpool_force(delta: float, attack_override: Dictionary = {}) -> void:

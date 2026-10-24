@@ -180,14 +180,10 @@ func _run() -> void:
 	game.net_players_by_peer[42] = _remote_state(Vector2(900, 430), "DOIS")
 	game.net_players_by_peer[42]["dead"] = true
 	game._start_team_revival_for_dead(42, Vector2(900, 430), "DOIS", false)
-	_check(game.revival_active and game.revival_fragments.size() == game.REVIVAL_FRAGMENTS_PER_DEAD and is_equal_approx(game.revival_total_time, game.REVIVAL_SINGLE_TIME), "single dead did not start fragment reconstruction")
-	for fragment in game.revival_fragments.duplicate(true):
-		game.player_pos = Vector2(Dictionary(fragment).get("pos", game.player_pos))
-		game._collect_revival_fragment(int(Dictionary(fragment).get("id", 0)), game._mp_unique_id())
-	_check(game.revival_altars_active and game.revival_fragments_collected == game.revival_fragments.size(), "collecting all fragments did not spawn altars")
-	game.player_pos = game.revival_altar_points_pos
+	_check(not game.revival_active and game.revival_fragments.is_empty() and not game.revival_altars_active, "single dead re-enabled removed fragment reconstruction")
+	var score_before_removed_altar: int = game.score
 	game._try_interact_revival_altar(game.REVIVE_PAY_POINTS)
-	_check(game.score == 100 and not game.revival_active and not bool(Dictionary(game.net_players_by_peer[42]).get("dead", true)), "points altar did not spend four cards and revive remote player")
+	_check(game.score == score_before_removed_altar and bool(Dictionary(game.net_players_by_peer[42]).get("dead", false)), "removed points altar spent score or revived a player")
 
 	game._clear_team_revival_state()
 	game.net_players_by_peer[42] = _remote_state(Vector2(900, 430), "DOIS")
@@ -196,22 +192,11 @@ func _run() -> void:
 	game.net_players_by_peer[43]["dead"] = true
 	game._start_team_revival_for_dead(42, Vector2(900, 430), "DOIS", false)
 	game._start_team_revival_for_dead(43, Vector2(1180, 560), "TRES", false)
-	_check(game.revival_fragments.size() == game.REVIVAL_FRAGMENTS_PER_DEAD * 2 and is_equal_approx(game.revival_total_time, game.REVIVAL_MULTI_TIME), "multiple dead did not increase fragment window")
-	for fragment in game.revival_fragments.duplicate(true):
-		game.player_pos = Vector2(Dictionary(fragment).get("pos", game.player_pos))
-		game._collect_revival_fragment(int(Dictionary(fragment).get("id", 0)), game._mp_unique_id())
+	_check(not game.revival_active and game.revival_fragments.is_empty() and not game.revival_altars_active, "multiple dead re-enabled removed fragment/altar flow")
 	game.player_hp = 400
-	game.player_pos = game.revival_altar_life_pos
-	var expected_life_rate: float = game._revival_life_sacrifice_rate_for_dead_count(2)
-	var expected_life_loss: float = maxf(1.0, 400.0 * expected_life_rate)
-	var expected_hp_after_sacrifice: float = maxf(1.0, 400.0 - expected_life_loss)
-	var expected_hp_per_revived_player: float = maxf(1.0, expected_life_loss / 2.0)
 	game._try_interact_revival_altar(game.REVIVE_PAY_LIFE)
-	_check(is_equal_approx(game.player_hp, expected_hp_after_sacrifice) and not game.revival_active, "life altar did not apply the configured progressive sacrifice when two allies were down")
-	_check(is_equal_approx(float(Dictionary(game.net_players_by_peer[42]).get("hp", 0.0)), expected_hp_per_revived_player) and is_equal_approx(float(Dictionary(game.net_players_by_peer[43]).get("hp", 0.0)), expected_hp_per_revived_player), "life altar did not split the configured sacrificed health between dead players")
-	var healed: float = game._heal_player(100.0, "revive_smoke", false)
-	var expected_heal: float = 100.0 * game.REVIVE_HEAL_PENALTY_MULT
-	_check(is_equal_approx(healed, expected_heal) and is_equal_approx(game.player_hp, expected_hp_after_sacrifice + expected_heal), "revive sacrifice did not reduce incoming healing by the configured penalty")
+	_check(is_equal_approx(game.player_hp, 400.0), "removed life altar still sacrificed player health")
+	_check(bool(Dictionary(game.net_players_by_peer[42]).get("dead", false)) and bool(Dictionary(game.net_players_by_peer[43]).get("dead", false)), "removed life altar still revived teammates")
 	game.is_dead = true
 	game.player_hp = 0
 	game._handle_revive(true)

@@ -63,7 +63,7 @@ func _run() -> void:
 	_check_texture_array("enemy_phase_6_pustula_fossil", 2)
 	_check_texture_array("enemy_phase_6_sanguessuga_cronal", 2)
 	var suturador_atlas: Texture2D = game.textures.get("enemy_phase_6_suturador_ambar")
-	_check(suturador_atlas != null and suturador_atlas.get_size() == Vector2(724, 540), "Suturador atlas missing or malformed")
+	_check(suturador_atlas != null and suturador_atlas.get_size() == Vector2(896, 864), "Suturador atlas missing or malformed")
 
 	game.current_phase = 6
 	game.boss_hp_max = 1000.0

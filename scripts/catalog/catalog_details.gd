@@ -178,7 +178,7 @@ static func manifestation_details(host: Node, key: String) -> Dictionary:
 		"prismatica":
 			return {
 				"funcao": "Tecnica de mira. Recompensa angulo, ricochete e preparo antes de apertar os botoes.", 
-				"disparo": "ATK: feixe rapido e fino. Ricocheteia em parede ou inimigo e pode acertar mais de uma vez.", 
+				"disparo": "ATK: feixe rapido e fino, sem limite fixo de alcance. A mira automatica so ataca dentro de 300 px. PASSIVA: todo +30 px de alcance adicional vira +3% de critico nos acertos depois de ricochetear.",
 				"habilidade": "Q - Prisma de Refracao", 
 				"desc_hab": "Coloca um prisma na posicao da Geovana. Tiros que atravessam o prisma se dividem em 5 feixes.", 
 				"traco": "E - Coroa Espectral: Geovana fica invulneravel; linhas de luz giram e causam dano. Aperte E novamente para cancelar.", 

@@ -149,7 +149,7 @@ func stats_panel(host: Node2D, rect: Rect2, alpha: float) -> void:
 	surface(host, rect, CYAN, alpha)
 	text(host, "PONTOS", rect.position + Vector2(14, 20), 10, Color(MUTED, alpha))
 	text(host, str(host.score), rect.position + Vector2(14, 43), 23, Color(TEXT, alpha), rect.size.x - 28)
-	var footer: String = "Pode comprar: %d  ·  Custo: %d" % [host._affordable_card_count(), host.card_cost]
+	var footer: String = "MODO DROP  ·  CARTAS DOS INIMIGOS" if host._is_drop_game_mode() else "Pode comprar: %d  ·  Custo: %d" % [host._affordable_card_count(), host.card_cost]
 	text(host, footer, rect.position + Vector2(14, 66), 11, Color("ead391") * Color(1, 1, 1, alpha), rect.size.x - 28)
 
 

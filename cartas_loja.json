@@ -232,6 +232,33 @@
         "frame_secundario": "Deck/carta-SoloConsolidado2.png"
     },
     {
+        "id": "horizonte_ruptura",
+        "nome": "Horizonte de Ruptura",
+        "subtitulo": "Linha Limite",
+        "raridade": "incomum",
+        "descricao_loja": "+30 px de alcance e +2.5% de dano nos ataques basicos a distancia por copia, sem limite. Na Prismatica, os +30 px viram +3% de critico nos ricochetes.",
+        "icone": "Deck/carta-Horizonte_de_Ruptura1.png",
+        "frame_secundario": "Deck/carta-Horizonte_de_Ruptura2.png"
+    },
+    {
+        "id": "fragmentacao_reativa",
+        "nome": "Fragmentacao Reativa",
+        "subtitulo": "Estilhaco de Revide",
+        "raridade": "incomum",
+        "descricao_loja": "Ao perder vida para um impacto, dispara fragmentos contra ate 4 inimigos em 150 px. Copias aumentam raio e dano sem limite.",
+        "icone": "Deck/carta-Fragmentacao_Reativa1.png",
+        "frame_secundario": "Deck/carta-Fragmentacao_Reativa2.png"
+    },
+    {
+        "id": "bastiao_inercial",
+        "nome": "Bastiao Inercial",
+        "subtitulo": "Armadura de Repouso",
+        "raridade": "incomum",
+        "descricao_loja": "Apos 0.7s sem se mover, recebe +6 de armadura por copia; cada copia tambem concede +1.5% de velocidade.",
+        "icone": "Deck/carta-Bastiao_Inercial1.png",
+        "frame_secundario": "Deck/carta-Bastiao_Inercial2.png"
+    },
+    {
         "id": "rastro_de_retorno",
         "nome": "Rastro de Retorno",
         "subtitulo": "Vestigio Vivo",

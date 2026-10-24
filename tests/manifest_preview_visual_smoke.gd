@@ -62,6 +62,8 @@ func _run() -> void:
 	game.selected_aura = 0
 	_open_preview("prismatica", "ultimate", 0.42)
 	await _save_view("manifest_preview_prismatica_1280x720.png")
+	_open_details("prismatica")
+	await _save_view("manifest_details_prismatica_1280x720.png")
 	_open_preview("bombastica", "skill", 0.84)
 	await _save_view("manifest_preview_bombastica_skill_1280x720.png")
 	_open_preview("necronada", "ultimate", 1.08)

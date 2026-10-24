@@ -107,6 +107,9 @@ func _run() -> void:
 	var uncommon: Dictionary = game.enemies[0]
 	var base_points = game._points_for_enemy(uncommon)
 	game._kill_enemy(uncommon)
+	var point_orb: Dictionary = game.heal_orbs.filter(func(orb): return String(orb.get("kind", "")) == game.ENEMY_POINT_ORB_KIND).back()
+	game.player_pos = Vector2(point_orb.get("pos", game.player_pos))
+	game._update_heal_orbs(0.016)
 	_check(game.score == int(round(float(base_points) * game.LACERANTE_UNCOMMON_POINTS_MULT)), "uncommon enemy did not grant 50 percent extra points")
 
 	var details: Dictionary = game._manifestation_details("lacerante")

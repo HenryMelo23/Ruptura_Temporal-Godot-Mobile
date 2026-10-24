@@ -47,6 +47,10 @@ func _run() -> void:
 				var enemy: Dictionary = game.enemies.back()
 				enemy["points"] = 20
 				game._kill_enemy(enemy)
+				for orb in game.heal_orbs:
+					if String(orb.get("kind", "")) == game.ENEMY_POINT_ORB_KIND:
+						game.player_pos = Vector2(orb.get("pos", game.player_pos))
+				game._update_heal_orbs(0.016)
 				game._apply_score_delta(50, true, "host-reward")
 				game._apply_score_delta(50, true, "host-reward")
 			game.boss_entry_timer = 0.0 if _result_exists("client_entry") else game.BOSS_ENTRY_TIME * 0.5

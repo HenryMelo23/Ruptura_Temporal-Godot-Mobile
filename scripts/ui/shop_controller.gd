@@ -125,6 +125,10 @@ func update_countdown(delta: float) -> void:
 
 
 func start_opening_animation(forced: bool) -> void:
+	if game._is_drop_game_mode():
+		game.forced_shop_timer = -1.0
+		game.mode = "game"
+		return
 	if not game.boss1_rewind_sequence.is_empty() or not game.boss1_time_wave.is_empty():
 		return
 	clear_mp_request()
@@ -336,6 +340,9 @@ func handle_key(event: InputEventKey) -> bool:
 
 
 func open_shop(forced: bool) -> void:
+	if game._is_drop_game_mode():
+		game.mode = "game"
+		return
 	if game.mode == "shop":
 		return
 	if not forced:
@@ -648,6 +655,8 @@ func update_waiting(delta: float) -> void:
 
 
 func should_trigger_forced() -> bool:
+	if game._is_drop_game_mode():
+		return false
 	if not game.shop_auto_enabled or game.forced_shop_triggered or game.forced_shop_timer >= 0.0 or game.shop_opening_timer > 0.0:
 		return false
 	return game.shop_auto_elapsed >= game.shop_auto_interval
@@ -675,6 +684,8 @@ func set_auto_enabled(enabled: bool) -> void:
 
 
 func try_open_manual() -> void:
+	if game._is_drop_game_mode():
+		return
 	if game._local_player_controls_locked():
 		return
 	var development_tools_active: bool = game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0
@@ -699,6 +710,8 @@ func try_open_manual() -> void:
 
 
 func start_forced_countdown() -> void:
+	if game._is_drop_game_mode():
+		return
 	if game._local_player_controls_locked():
 		return
 	if not game.shop_auto_enabled:

@@ -218,6 +218,43 @@ static func whirlpool(canvas: CanvasItem, data: Dictionary, center: Vector2, tim
 	arc(canvas, center, 86.0 + sin(time * 5.0) * 4.0, 0.0, TAU, Color(0.55, 0.96, 1.0, 0.84 * opacity), 5.0, low)
 	arc(canvas, center, 112.0, time * direction * 1.6, time * direction * 1.6 + PI * 1.35, Color(0.34, 0.72, 1.0, 0.58 * opacity), 4.0, true)
 
+	if state != "active":
+		return
+	var beam_count: int = clampi(int(data.get("beam_count", 1)), 1, 4)
+	var warning: float = maxf(0.0, float(data.get("laser_warning", 0.9)))
+	var rotation_duration: float = maxf(0.01, float(data.get("laser_rotation_duration", 10.8)))
+	var rotation_progress: float = clampf(maxf(0.0, state_age - warning) / rotation_duration, 0.0, 1.0)
+	var start_angle: float = float(data.get("beam_start_angle", 0.0))
+	var telegraphing: bool = state_age < warning
+	var warning_progress: float = clampf(state_age / maxf(0.01, warning), 0.0, 1.0)
+	for beam_index in range(beam_count):
+		var angle: float = start_angle + direction * TAU * rotation_progress + TAU * float(beam_index) / float(beam_count)
+		var beam_direction := Vector2.from_angle(angle)
+		# Collision still begins outside the boss body, but the beam must be drawn
+		# from the sprite pivot so the boss naturally occludes its hidden section.
+		var beam_start := center
+		var beam_end := center + beam_direction * world_radius
+		if telegraphing:
+			var pulse: float = 0.5 + 0.5 * sin(time * 13.0 + float(beam_index) * 1.7)
+			canvas.draw_line(beam_start, beam_end, Color(0.01, 0.055, 0.1, 0.76 * warning_progress), 10.0 if low else 13.0, true)
+			canvas.draw_dashed_line(beam_start, beam_end, Color(0.48, 0.94, 1.0, (0.34 + pulse * 0.32) * warning_progress), 3.0 if low else 4.0, 18.0, true)
+			continue
+		var pulse: float = 0.78 + 0.22 * sin(time * 11.0 + float(beam_index) * 1.9)
+		canvas.draw_line(beam_start, beam_end, Color(0.005, 0.025, 0.07, 0.9), 24.0 if low else 30.0, true)
+		canvas.draw_line(beam_start, beam_end, Color(0.08, 0.66, 1.0, 0.18 * pulse), 18.0 if low else 23.0, true)
+		canvas.draw_line(beam_start, beam_end, Color(0.2, 0.9, 1.0, 0.78 * pulse), 7.0 if low else 9.0, true)
+		canvas.draw_line(beam_start, beam_end, Color(0.9, 1.0, 1.0, 0.94), 2.0 if low else 3.0, true)
+		var spark_count := 2 if low else 4
+		for spark_index in range(spark_count):
+			var spark_phase: float = fposmod(time * (0.72 + float(spark_index) * 0.05) + float(spark_index) / float(spark_count), 1.0)
+			var spark_pos: Vector2 = beam_start.lerp(beam_end, spark_phase)
+			var side := beam_direction.orthogonal() * sin(time * 17.0 + float(spark_index) * 2.3) * (4.0 if low else 7.0)
+			canvas.draw_circle(spark_pos + side, 2.0 if low else 3.0, Color(0.72, 0.98, 1.0, 0.76))
+	var emitter_pulse: float = 0.5 + 0.5 * sin(time * 9.0)
+	canvas.draw_circle(center, 26.0 + emitter_pulse * 4.0, Color(0.02, 0.16, 0.28, 0.72))
+	canvas.draw_circle(center, 17.0 + emitter_pulse * 2.0, Color(0.18, 0.82, 1.0, 0.82))
+	canvas.draw_circle(center, 7.0, Color(0.9, 1.0, 1.0, 0.96))
+
 
 static func lightning(canvas: CanvasItem, data: Dictionary, target: Vector2, time: float, age: float, low: bool) -> void:
 	var tier := Lightning.PERFORMANCE if low else Lightning.quality(canvas)
