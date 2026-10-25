@@ -5,11 +5,11 @@
   "sha256": "655297e028ed1f1ce93f7114603a7a4702e1bc480c40cfba81d112acc6319346",
   "size": 993555712,
   "notes": [
-    "Boss 4 reconstruido com combate, animacoes e sincronizacao autoritativa.",
-    "Ancorada recebeu 12 evolucoes estruturais exclusivas.",
-    "Novas cartas de pontos e pickup raro de Pontos x2 com HUD e limite de economia.",
-    "Multiplayer reforcado em entrada, pronto, manifestacao, inicio e partida para ate 3 jogadores."
+    "Multiplayer: estabilidade de join, pronto, inicio e escolha de manifestacao",
+    "Novas evolucoes funcionais de manifestacoes e cartas roguelike",
+    "Pickup temporario PONTOS x2 com HUD, controle de frequencia e multiplayer autoritativo",
+    "Polimento de combate, chefe e apresentacao visual"
   ],
   "mandatory": false,
-  "published_at": "2026-10-25T22:09:55Z"
+  "published_at": "2026-10-25T23:11:13.8995947Z"
 }
