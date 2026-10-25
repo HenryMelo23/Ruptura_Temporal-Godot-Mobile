@@ -5,19 +5,20 @@ const CYAN := Color(0.12, 0.94, 1.0)
 const ORANGE := Color(1.0, 0.42, 0.08)
 const HENRY_AMBER := Color(1.0, 0.76, 0.22)
 const HENRY_BONE := Color(0.95, 0.9, 0.76)
-const HENRY_CHOICE_ICON_TEXTURES := {
-	"incendiario": preload("res://assets/ui/henry_choices/mutacao_incendiario.png"),
-	"barometrico": preload("res://assets/ui/henry_choices/mutacao_barometrico.png"),
-	"colosso": preload("res://assets/ui/henry_choices/mutacao_colosso_d37.png"),
-	"incandescencia": preload("res://assets/ui/henry_choices/efeito_incandescencia.png"),
-	"nimbo": preload("res://assets/ui/henry_choices/efeito_nimbo.png"),
-	"lastro": preload("res://assets/ui/henry_choices/efeito_lastro.png"),
+const HENRY_CHOICE_ICON_PATHS := {
+	"incendiario": "res://assets/ui/henry_choices/mutacao_incendiario.png",
+	"barometrico": "res://assets/ui/henry_choices/mutacao_barometrico.png",
+	"colosso": "res://assets/ui/henry_choices/mutacao_colosso_d37.png",
+	"incandescencia": "res://assets/ui/henry_choices/efeito_incandescencia.png",
+	"nimbo": "res://assets/ui/henry_choices/efeito_nimbo.png",
+	"lastro": "res://assets/ui/henry_choices/efeito_lastro.png",
 }
 
 static var _henry_stage_by_game: Dictionary = {}
 static var _henry_stage_change_ms_by_game: Dictionary = {}
 static var _henry_choice_by_game: Dictionary = {}
 static var _henry_choice_change_ms_by_game: Dictionary = {}
+static var _henry_choice_icon_textures: Dictionary = {}
 
 
 static func draw(game: Node2D, viewport: Vector2) -> void:
@@ -258,8 +259,17 @@ static func _draw_henry_preview_reserve(game: Node2D, rect: Rect2, mutation_step
 	game._draw_centered("MÓDULO VISUAL RESERVADO PARA UMA ATUALIZAÇÃO FUTURA", rect.get_center() + Vector2(0.0, 13.0), 7 if compact else 8, Color(0.58, 0.6, 0.56, 0.78))
 
 
+static func _henry_choice_icon_texture(key: String) -> Texture2D:
+	if _henry_choice_icon_textures.has(key):
+		return _henry_choice_icon_textures[key] as Texture2D
+	var path := String(HENRY_CHOICE_ICON_PATHS.get(key, ""))
+	var texture := load(path) as Texture2D if path != "" else null
+	_henry_choice_icon_textures[key] = texture
+	return texture
+
+
 static func _draw_henry_choice_icon(game: Node2D, key: String, center: Vector2, radius: float, accent: Color, opacity: float) -> void:
-	var icon_texture: Texture2D = HENRY_CHOICE_ICON_TEXTURES.get(key)
+	var icon_texture: Texture2D = _henry_choice_icon_texture(key)
 	if icon_texture != null:
 		var icon_size := Vector2.ONE * radius * 2.3
 		game.draw_texture_rect(icon_texture, Rect2(center - icon_size * 0.5, icon_size), false, Color(1.0, 1.0, 1.0, opacity))

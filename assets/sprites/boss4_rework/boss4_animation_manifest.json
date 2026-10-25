@@ -1,0 +1,179 @@
+{
+  "schema": 1,
+  "cell_size": [
+    384,
+    384
+  ],
+  "pivot": [
+    192,
+    366
+  ],
+  "render_filter": "nearest",
+  "orientation": "top_down_3_4_front",
+  "sequences": {
+    "idle": {
+      "fps": 5.0,
+      "loop": true,
+      "strip": "res://assets/sprites/boss4_rework/boss4_idle.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_idle_00.png",
+        "res://assets/sprites/boss4_rework/boss4_idle_01.png",
+        "res://assets/sprites/boss4_rework/boss4_idle_02.png",
+        "res://assets/sprites/boss4_rework/boss4_idle_03.png"
+      ],
+      "frame_count": 4
+    },
+    "walk": {
+      "fps": 7.0,
+      "loop": true,
+      "strip": "res://assets/sprites/boss4_rework/boss4_walk.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_walk_00.png",
+        "res://assets/sprites/boss4_rework/boss4_walk_01.png",
+        "res://assets/sprites/boss4_rework/boss4_walk_02.png",
+        "res://assets/sprites/boss4_rework/boss4_walk_03.png"
+      ],
+      "frame_count": 4
+    },
+    "hit": {
+      "fps": 9.0,
+      "loop": false,
+      "strip": "res://assets/sprites/boss4_rework/boss4_hit.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_hit_00.png",
+        "res://assets/sprites/boss4_rework/boss4_hit_01.png"
+      ],
+      "frame_count": 2
+    },
+    "jump": {
+      "fps": 7.0,
+      "loop": false,
+      "strip": "res://assets/sprites/boss4_rework/boss4_jump.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_jump_00.png",
+        "res://assets/sprites/boss4_rework/boss4_jump_01.png"
+      ],
+      "frame_count": 2
+    },
+    "land": {
+      "fps": 8.0,
+      "loop": false,
+      "strip": "res://assets/sprites/boss4_rework/boss4_land.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_land_00.png",
+        "res://assets/sprites/boss4_rework/boss4_land_01.png"
+      ],
+      "frame_count": 2
+    },
+    "slam": {
+      "fps": 9.0,
+      "loop": false,
+      "contact_frame": 2,
+      "strip": "res://assets/sprites/boss4_rework/boss4_slam.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_slam_00.png",
+        "res://assets/sprites/boss4_rework/boss4_slam_01.png",
+        "res://assets/sprites/boss4_rework/boss4_slam_02.png",
+        "res://assets/sprites/boss4_rework/boss4_slam_03.png"
+      ],
+      "frame_count": 4
+    },
+    "tongue": {
+      "fps": 10.0,
+      "loop": false,
+      "contact_frame": 2,
+      "strip": "res://assets/sprites/boss4_rework/boss4_tongue.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_tongue_00.png",
+        "res://assets/sprites/boss4_rework/boss4_tongue_01.png",
+        "res://assets/sprites/boss4_rework/boss4_tongue_02.png",
+        "res://assets/sprites/boss4_rework/boss4_tongue_03.png"
+      ],
+      "frame_count": 4
+    },
+    "comet": {
+      "fps": 8.0,
+      "loop": false,
+      "release_frame": 2,
+      "strip": "res://assets/sprites/boss4_rework/boss4_comet.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_comet_00.png",
+        "res://assets/sprites/boss4_rework/boss4_comet_01.png",
+        "res://assets/sprites/boss4_rework/boss4_comet_02.png",
+        "res://assets/sprites/boss4_rework/boss4_comet_03.png"
+      ],
+      "frame_count": 4
+    },
+    "gravity": {
+      "fps": 7.0,
+      "loop": false,
+      "release_frame": 2,
+      "strip": "res://assets/sprites/boss4_rework/boss4_gravity.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_gravity_00.png",
+        "res://assets/sprites/boss4_rework/boss4_gravity_01.png",
+        "res://assets/sprites/boss4_rework/boss4_gravity_02.png",
+        "res://assets/sprites/boss4_rework/boss4_gravity_03.png"
+      ],
+      "frame_count": 4
+    },
+    "hp_transition": {
+      "fps": 5.0,
+      "loop": false,
+      "strip": "res://assets/sprites/boss4_rework/boss4_hp_transition.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_hp_transition_00.png",
+        "res://assets/sprites/boss4_rework/boss4_hp_transition_01.png",
+        "res://assets/sprites/boss4_rework/boss4_hp_transition_02.png",
+        "res://assets/sprites/boss4_rework/boss4_hp_transition_03.png"
+      ],
+      "frame_count": 4
+    },
+    "ultimate": {
+      "fps": 6.0,
+      "loop": false,
+      "channel_frame": 2,
+      "strip": "res://assets/sprites/boss4_rework/boss4_ultimate.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_ultimate_00.png",
+        "res://assets/sprites/boss4_rework/boss4_ultimate_01.png",
+        "res://assets/sprites/boss4_rework/boss4_ultimate_02.png"
+      ],
+      "frame_count": 3
+    },
+    "ultimate_interrupted": {
+      "fps": 7.0,
+      "loop": false,
+      "strip": "res://assets/sprites/boss4_rework/boss4_ultimate_interrupted.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_ultimate_interrupted_00.png",
+        "res://assets/sprites/boss4_rework/boss4_ultimate_interrupted_01.png"
+      ],
+      "frame_count": 2
+    },
+    "ultimate_failure": {
+      "fps": 7.0,
+      "loop": false,
+      "strip": "res://assets/sprites/boss4_rework/boss4_ultimate_failure.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_ultimate_failure_00.png",
+        "res://assets/sprites/boss4_rework/boss4_ultimate_failure_01.png"
+      ],
+      "frame_count": 2
+    },
+    "death": {
+      "fps": 6.0,
+      "loop": false,
+      "strip": "res://assets/sprites/boss4_rework/boss4_death.png",
+      "frames": [
+        "res://assets/sprites/boss4_rework/boss4_death_00.png",
+        "res://assets/sprites/boss4_rework/boss4_death_01.png",
+        "res://assets/sprites/boss4_rework/boss4_death_02.png",
+        "res://assets/sprites/boss4_rework/boss4_death_03.png",
+        "res://assets/sprites/boss4_rework/boss4_death_04.png",
+        "res://assets/sprites/boss4_rework/boss4_death_05.png"
+      ],
+      "frame_count": 6
+    }
+  }
+}

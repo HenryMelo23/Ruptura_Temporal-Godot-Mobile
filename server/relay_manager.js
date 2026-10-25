@@ -2119,6 +2119,10 @@ function behaviorForRun(run) {
   return normalizeBehaviorMetrics(run && (run.behaviorMetrics || run.behavior_metrics));
 }
 
+function knowledgeForRun(run) {
+  return normalizeUmbraKnowledge(run && (run.umbraKnowledge || run.umbra_knowledge));
+}
+
 function mean(values) {
   const clean = values.map(Number).filter(Number.isFinite);
   return clean.length ? clean.reduce((sum, value) => sum + value, 0) / clean.length : 0;
@@ -2154,14 +2158,25 @@ function profileForArchetype(archetype, confidence = 0.45, secondary = "INDEFINI
 
 function buildUmbraDossier(key, player, runs) {
   const eligibleRuns = runs.filter(runTrainingEligible);
-  const archetype = classifyUmbraArchetypeFromRuns(eligibleRuns);
+  const knowledgeRows = eligibleRuns.map(knowledgeForRun).filter((row) => row.sampleSeconds >= 30 && row.totalPercent > 0);
+  const learnedArchetype = knowledgeRows.length ? knowledgeRows[knowledgeRows.length - 1].archetype : "INDEFINIDO";
+  const archetype = learnedArchetype !== "INDEFINIDO" ? learnedArchetype : classifyUmbraArchetypeFromRuns(eligibleRuns);
   const behaviors = eligibleRuns.map(behaviorForRun);
-  const confidence = Math.min(0.92, 0.35 + eligibleRuns.length * 0.08);
+  const reportedConfidence = mean(knowledgeRows.map((row) => row.totalPercent / 100));
+  const confidence = Math.min(0.92, Math.max(0.18, reportedConfidence * 0.72 + Math.min(0.28, eligibleRuns.length * 0.04)));
+  const knowledgeCategories = {};
+  for (const category of ["movement", "shooting", "choices", "preferences", "weaknesses"]) {
+    knowledgeCategories[category] = Math.round(mean(knowledgeRows.map((row) => row.categories[category].percent)));
+  }
   return {
-    player,
-    profile_key: key,
     runs: eligibleRuns.length,
     perfil_jogador: profileForArchetype(archetype, confidence),
+    knowledge: {
+      schema_version: 1,
+      total_percent: Math.round(mean(knowledgeRows.map((row) => row.totalPercent))),
+      categories: knowledgeCategories,
+      evidence_runs: knowledgeRows.length
+    },
     behavior: {
       edge_ratio: Number(mean(behaviors.map((b) => b.edgeRatio)).toFixed(4)),
       corner_ratio: Number(mean(behaviors.map((b) => b.cornerRatio)).toFixed(4)),
@@ -2186,16 +2201,26 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
   }
   const dossiers = {};
   for (const [key, playerRuns] of grouped.entries()) {
-    dossiers[key] = buildUmbraDossier(key, String(playerRuns[0].player || "Jogador"), playerRuns);
-    dossiers[String(playerRuns[0].player || "").toLowerCase()] = dossiers[key];
+    dossiers[key] = buildUmbraDossier(key, "", playerRuns);
   }
   const globalArchetype = classifyUmbraArchetypeFromRuns(eligible);
   const versionSeed = `${Math.floor(Date.now() / (UMBRA_MIND_REFRESH_DAYS * 24 * 60 * 60 * 1000))}-${eligible.length}-${grouped.size}`;
   const mindVersion = `umbra-week-${crypto.createHash("sha1").update(versionSeed).digest("hex").slice(0, 10)}`;
   const profileId = String(query.get("profile_id") || "").trim();
-  const player = String(query.get("player") || "").trim().toLowerCase();
   const current = String(query.get("current") || "").trim();
-  const selected = dossiers[profileId] || dossiers[player] || null;
+  const selected = dossiers[profileId] || null;
+  const cohorts = {};
+  for (const dossier of Object.values(dossiers)) {
+    const archetype = String(dossier && dossier.perfil_jogador && dossier.perfil_jogador.arquetipo_principal || "INDEFINIDO");
+    if (!cohorts[archetype]) cohorts[archetype] = { archetype, players: 0, runs: 0, knowledge_total: 0 };
+    cohorts[archetype].players += 1;
+    cohorts[archetype].runs += Math.max(0, Math.floor(safeNumber(dossier.runs)));
+    cohorts[archetype].knowledge_total += Math.max(0, Math.min(100, safeNumber(dossier.knowledge && dossier.knowledge.total_percent)));
+  }
+  for (const cohort of Object.values(cohorts)) {
+    cohort.knowledge_percent = Math.round(cohort.knowledge_total / Math.max(1, cohort.players));
+    delete cohort.knowledge_total;
+  }
   const files = {
     "umbra_global_profile.json": {
       mind_version: mindVersion,
@@ -2218,9 +2243,11 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
     },
     "umbra_player_dossiers.json": {
       mind_version: mindVersion,
-      selected_profile: profileId || player,
+      schema_version: 2,
+      selected_profile: profileId,
       selected: selected || null,
-      players: dossiers
+      cohort_count: Object.keys(cohorts).length,
+      cohorts
     }
   };
   return {
@@ -2411,6 +2438,38 @@ function normalizeBehaviorMetrics(value) {
   };
 }
 
+function normalizeUmbraKnowledge(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const categorySource = source.categories && typeof source.categories === "object" ? source.categories : {};
+  const categories = {};
+  for (const key of ["movement", "shooting", "choices", "preferences", "weaknesses"]) {
+    const row = categorySource[key] && typeof categorySource[key] === "object" ? categorySource[key] : {};
+    categories[key] = {
+      percent: Math.max(0, Math.min(100, Math.round(safeNumber(row.percent)))),
+      insight: String(row.insight || "").slice(0, 96)
+    };
+  }
+  const vectorSource = source.behavior_vector && typeof source.behavior_vector === "object" ? source.behavior_vector : (source.behaviorVector && typeof source.behaviorVector === "object" ? source.behaviorVector : {});
+  return {
+    schemaVersion: Math.max(1, Math.min(1, Math.floor(safeNumber(source.schema_version, source.schemaVersion || 1)))),
+    totalPercent: Math.max(0, Math.min(100, Math.round(safeNumber(source.total_percent, source.totalPercent || 0)))),
+    archetype: String(source.archetype || "INDEFINIDO").replace(/[^A-Z0-9_]/g, "").slice(0, 48) || "INDEFINIDO",
+    sampleSeconds: Math.max(0, Math.min(6 * 60 * 60, safeNumber(source.sample_seconds, source.sampleSeconds || 0))),
+    phasesObserved: Math.max(0, Math.min(7, Math.floor(safeNumber(source.phases_observed, source.phasesObserved || 0)))),
+    categories,
+    behaviorVector: {
+      edgeRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.edge_ratio, vectorSource.edgeRatio || 0))),
+      cornerRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.corner_ratio, vectorSource.cornerRatio || 0))),
+      centerRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.center_ratio, vectorSource.centerRatio || 0))),
+      stationaryRatio: Math.max(0, Math.min(1, safeNumber(vectorSource.stationary_ratio, vectorSource.stationaryRatio || 0))),
+      dashPerMinute: Math.max(0, Math.min(180, safeNumber(vectorSource.dash_per_minute, vectorSource.dashPerMinute || 0))),
+      shotsPerMinute: Math.max(0, Math.min(1200, safeNumber(vectorSource.shots_per_minute, vectorSource.shotsPerMinute || 0))),
+      hitRate: Math.max(0, Math.min(1, safeNumber(vectorSource.hit_rate, vectorSource.hitRate || 0))),
+      damageTakenPerMinute: Math.max(0, Math.min(20000, safeNumber(vectorSource.damage_taken_per_minute, vectorSource.damageTakenPerMinute || 0)))
+    }
+  };
+}
+
 function umbraTrainingEligibility(payload, durationSeconds, rankEligible) {
   const behavior = normalizeBehaviorMetrics(payload && payload.behavior_metrics);
   const reasons = [];
@@ -2580,6 +2639,7 @@ function normalizeRunPayload(payload, ip = "") {
     damageEvents: normalizeDamageEvents(payload.damage_events),
     heatmap: normalizeHeatmap(payload.position_heatmap),
     behaviorMetrics: umbraTraining.behavior,
+    umbraKnowledge: normalizeUmbraKnowledge(payload.umbra_knowledge),
     umbraTrainingEligible: umbraTraining.eligible,
     umbraTrainingReasons: umbraTraining.reasons,
     manifestation: String(payload.manifestation || "").slice(0, 64),
@@ -2716,18 +2776,31 @@ function normalizedCatalogKey(value) {
 function loadCardCatalogIndex() {
   if (cardCatalogIndex) return cardCatalogIndex;
   cardCatalogIndex = new Map();
+  const indexCard = (icon, values) => {
+    if (!icon) return;
+    for (const value of values) {
+      const key = normalizedCatalogKey(value);
+      if (key) cardCatalogIndex.set(key, icon);
+    }
+  };
   try {
-    const source = fs.readFileSync(path.join(PROJECT_PATH, "scripts", "main.gd"), "utf8");
-    for (const line of source.split(/\r?\n/)) {
-      if (!line.includes('"icon": "Deck/')) continue;
-      const icon = line.match(/"icon"\s*:\s*"([^"]+)"/);
-      const name = line.match(/"name"\s*:\s*"([^"]+)"/);
-      const id = line.match(/"id"\s*:\s*"([^"]+)"/);
-      const nick = line.match(/"nick"\s*:\s*"([^"]+)"/);
-      if (!icon) continue;
-      for (const value of [name && name[1], id && id[1], nick && nick[1]]) {
-        const key = normalizedCatalogKey(value);
-        if (key) cardCatalogIndex.set(key, icon[1]);
+    const jsonCatalog = JSON.parse(fs.readFileSync(path.join(PROJECT_PATH, "cartas_loja.json"), "utf8"));
+    for (const card of Array.isArray(jsonCatalog) ? jsonCatalog : []) {
+      indexCard(card.icone, [card.id, card.nome, card.subtitulo]);
+    }
+    const gdscriptCatalogs = [
+      path.join(PROJECT_PATH, "scripts", "main_runtime_state.gd"),
+      path.join(PROJECT_PATH, "scripts", "catalog", "card_catalog_definitions.gd")
+    ];
+    for (const catalogPath of gdscriptCatalogs) {
+      const source = fs.readFileSync(catalogPath, "utf8");
+      for (const line of source.split(/\r?\n/)) {
+        if (!line.includes('"icon": "Deck/')) continue;
+        const icon = line.match(/"icon"\s*:\s*"([^"]+)"/);
+        const name = line.match(/"name"\s*:\s*"([^"]+)"/);
+        const id = line.match(/"id"\s*:\s*"([^"]+)"/);
+        const nick = line.match(/"nick"\s*:\s*"([^"]+)"/);
+        indexCard(icon && icon[1], [name && name[1], id && id[1], nick && nick[1]]);
       }
     }
   } catch (error) {

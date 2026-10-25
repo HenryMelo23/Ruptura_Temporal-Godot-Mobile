@@ -479,6 +479,7 @@ func build_run_report_payload(result: String) -> Dictionary:
 			"cells": game._run_heatmap_report_rows()
 		},
 		"behavior_metrics": game._run_behavior_report(),
+		"umbra_knowledge": game.umbra_memory_controller.knowledge_report(game),
 		"boss_damage_total": game._total_boss_damage_report(),
 		"boss_report": game._boss_report_text(),
 		"boss_detail": game._boss_report_rows(),

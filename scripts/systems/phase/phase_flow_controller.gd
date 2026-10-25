@@ -252,7 +252,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.enemy_speed_base = core.ENEMY_BASE_SPEED * 1.18
 		core.boss_hp_max = core._boss_hp_for_phase(4)
 		core.boss_hp = core.boss_hp_max
-		core.boss_name = "NEXO DA RUPTURA"
+		core.boss_name = "NEXO ANFIBIO"
 		core.boss_title_color = Color(1.0, 0.76, 0.18)
 		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
@@ -454,7 +454,7 @@ func _advance_to_phase(phase: int) -> void:
 		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.18)
 		core.boss_hp_max = core._boss_hp_for_phase(4)
 		core.boss_hp = core.boss_hp_max
-		core.boss_name = "NEXO DA RUPTURA"
+		core.boss_name = "NEXO ANFIBIO"
 		core.boss_title_color = Color(1.0, 0.76, 0.18)
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())

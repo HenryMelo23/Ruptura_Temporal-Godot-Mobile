@@ -752,13 +752,61 @@ const CARD_DEFINITIONS: Dictionary = {
 		"stat_label": "reserva de overkill rara",
 		"float_text": "CINZAS: EXCESSO",
 	},
+	"tributo_da_dor": {
+		"id": "tributo_da_dor",
+		"name": "Tributo da Dor",
+		"category": CATEGORY_ECONOMY,
+		"rarity": RARITY_COMMON,
+		"can_burn": true,
+		"policy": "numeric_attribute",
+		"eligible_attributes": ["points_on_damage"],
+		"burn_factor": 0.50,
+		"stat_label": "pontos recebidos ao perder vida",
+		"float_text": "CINZAS: TRIBUTO",
+	},
+	"estilhaco_prismatico": {
+		"id": "estilhaco_prismatico",
+		"name": "Estilhaço Prismático",
+		"category": CATEGORY_ECONOMY,
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
+		"eligible_attributes": [],
+		"burn_factor": 0.0,
+		"stat_label": "lasca prismatica de abate",
+		"float_text": "",
+	},
+	"critico_absoluto": {
+		"id": "critico_absoluto",
+		"name": "Crítico Absoluto",
+		"category": CATEGORY_RARE,
+		"rarity": RARITY_RARE,
+		"can_burn": false,
+		"policy": "rare_locked_non_burnable",
+		"eligible_attributes": [],
+		"burn_factor": 0.0,
+		"stat_label": "multiplicador critico final",
+		"float_text": "",
+	},
+	"arquivo_impossivel": {
+		"id": "arquivo_impossivel",
+		"name": "Arquivo do Impossível",
+		"category": CATEGORY_LEGENDARY,
+		"rarity": RARITY_LEGENDARY,
+		"can_burn": false,
+		"policy": "legendary_non_burnable",
+		"eligible_attributes": [],
+		"burn_factor": 0.0,
+		"stat_label": "duplicacao de cartas",
+		"float_text": "",
+	},
 	"coracao_paradoxo": {
 		"id": "coracao_paradoxo",
 		"name": "Coracao do Paradoxo",
 		"category": CATEGORY_LEGENDARY,
 		"rarity": RARITY_LEGENDARY,
 		"can_burn": false,
-		"policy": "legendary_unique_non_burnable",
+		"policy": "legendary_non_burnable",
 		"eligible_attributes": [],
 		"burn_factor": 0.0,
 		"stat_label": "eco impossivel",
@@ -889,6 +937,8 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 		"pacto_possibilidades":
 			var disc_pct: float = 4.0 * float(effective_stacks) * factor
 			return "Ao comprar: +%.1f%% de desconto para cartas novas (+%d%%)" % [disc_pct, total_scale_pct]
+		"tributo_da_dor":
+			return "Ao comprar: +%d%% nos pontos recebidos ao perder vida" % total_scale_pct
 		"solo_consolidado":
 			var sol_pct: float = 8.0 * float(effective_stacks) * factor
 			return "Ao comprar: +%.1f%% de reducao na duracao de perigos de chao (+%d%%)" % [sol_pct, total_scale_pct]

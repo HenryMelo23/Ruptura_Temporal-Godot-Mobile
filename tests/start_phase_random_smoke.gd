@@ -45,7 +45,8 @@ func _check_phase_route_and_boss_hp() -> void:
 	_check(is_equal_approx(phase6_hp, phase1_hp), "phase 6 boss hp should match phase 1 scaling")
 	game.run_initial_phase = 6
 	game.run_phase6_completed = false
-	_check(int(game._next_phase_after_boss(6)) == 2, "initial phase 6 should transition to phase 2")
+	_check(int(game._next_phase_after_boss(6)) == 1, "initial phase 6 should transition to phase 1")
+	_check(int(game._next_phase_after_boss(1)) == 2, "phase 1 after initial phase 6 should transition to phase 2")
 	_check(int(game._next_phase_after_boss(2)) == 3, "phase 2 after initial phase 6 should transition to phase 3")
 	_check(int(game._next_phase_after_boss(3)) == 4, "phase 3 should transition to phase 4")
 	game.run_initial_phase = 1
@@ -61,7 +62,7 @@ func _check_forced_initial_phase_cheats() -> void:
 		1: "CARANGUEJO COSMICO GIGANTE",
 		2: "SENTINELA GLACIAL",
 		3: "PAI-RATO",
-		4: "NEXO DA RUPTURA",
+		4: "NEXO ANFIBIO",
 		5: "UMBRA",
 		6: "MATRIARCA DA CHAGA",
 		7: "FENIX"

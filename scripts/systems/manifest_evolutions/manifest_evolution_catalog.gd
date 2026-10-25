@@ -94,6 +94,21 @@ const ACORRENTADA_PROFILE_KEY_BY_ID := {
 	"acorrentada_ev2_sentenca_ferro": "acorrentada_sentenca_ferro"
 }
 
+const ANCORADA_PROFILE_KEY_BY_ID := {
+	"ancorada_ev1_fundacao_profunda": "ancorada_fundacao_profunda",
+	"ancorada_ev1_muralha_ruptura": "ancorada_muralha_ruptura",
+	"ancorada_ev1_peso_absoluto": "ancorada_peso_absoluto",
+	"ancorada_ev1_territorio_jurado": "ancorada_territorio_jurado",
+	"ancorada_ev1_contra_impacto": "ancorada_contra_impacto",
+	"ancorada_ev1_linha_fundacao": "ancorada_linha_fundacao",
+	"ancorada_ev2_fortaleza_autoportante": "ancorada_fortaleza_autoportante",
+	"ancorada_ev2_coracao_fortaleza": "ancorada_coracao_fortaleza",
+	"ancorada_ev2_queda_monumental": "ancorada_queda_monumental",
+	"ancorada_ev2_rede_fundacoes": "ancorada_rede_fundacoes",
+	"ancorada_ev2_ultimo_bastiao": "ancorada_ultimo_bastiao",
+	"ancorada_ev2_continente_imovel": "ancorada_continente_imovel"
+}
+
 const LACERANTE_MELEE_PROFILE_OVERRIDES := {
 	"lacerante_ev1_hemorragia_crescente": {"hook": "impact", "non_projectile": true, "summary": "Cada quarto corte repete 34% do dano-base no alvo e aprofunda 1 laceração. Conta somente acertos corpo a corpo resolvidos."},
 	"lacerante_ev1_cicatriz_aberta": {"hook": "impact", "non_projectile": true, "summary": "O corte atravessa o primeiro alvo e atinge até 2 inimigos alinhados atrás dele por 45% do dano-base, em um corredor de 190 px."},
@@ -121,6 +136,28 @@ const ACORRENTADA_PROFILES := {
 		{"effect": "acorrentada_prisao_total", "hook": "skill", "label": "imobilização coletiva limitada", "summary": "Q imobiliza até 5 inimigos próximos por 1,15 s. Chefes resistem e sofrem só 0,18 s. Recarga interna de 7 s impede prisão infinita.", "limit": 5, "duration": 1.15, "cooldown": 7.0},
 		{"effect": "acorrentada_sobrecarga_tensao", "hook": "tension", "label": "janela de sobrecarga condutora", "summary": "Romper Sobretensão abre 4 s de sobrecarga. Cada acerto conduz 18% do dano-base para até 2 alvos próximos, com intervalo de 0,24 s.", "limit": 2, "duration": 4.0, "radius": 230.0},
 		{"effect": "acorrentada_sentenca_ferro", "hook": "secondary", "label": "veredito preparado pela habilidade E", "summary": "E sentencia os alvos presos por 4 s. O próximo acerto em cada sentenciado consome o veredito, causa 55% do dano-base e reforça 1 elo; chefes recebem 18% e só 0,08 s de contenção.", "limit": 6, "duration": 4.0}
+	]
+}
+
+# Ancorada's catalog describes structural rules owned by
+# RTAncoradaEvolutionController.  None of these entries reuse projectile count,
+# homing, pierce or the shared impact presets.
+const ANCORADA_PROFILES := {
+	"ev1": [
+		{"effect": "ancorada_fundacao_profunda", "hook": "anchor", "label": "âncoras persistentes que geram Lastro", "summary": "Cada âncora Ancorada dura 12 s, recebe 220 de integridade e, enquanto você estiver a até 170 px, gera 1 ponto de Lastro a cada 2 s; máximo de 4 pulsos por âncora.", "duration": 12.0, "limit": 4, "radius": 170.0},
+		{"effect": "ancorada_muralha_ruptura", "hook": "skill", "label": "obstáculo estrutural com rota lateral", "summary": "O impacto do Q ergue por 5,4 s uma muralha transversal de 208 px e 420 de integridade. Inimigos comuns são desviados para uma extremidade; elites desgastam mais a estrutura e chefes apenas sofrem contenção breve. Máximo: 2 muralhas.", "duration": 5.4, "limit": 2, "hp": 420.0},
+		{"effect": "ancorada_peso_absoluto", "hook": "impact", "label": "fixação espacial sustentada por Lastro", "summary": "Com 3 ou mais Lastros, acertos fixam até 3 alvos no ponto atingido por 2,4 s. Inimigos comuns são puxados de volta; chefes e Arauto recebem somente contenção resistente.", "duration": 2.4, "limit": 3},
+		{"effect": "ancorada_territorio_jurado", "hook": "skill", "label": "domínio de proteção e impacto", "summary": "O Q cria por 6 s um território de 178 px. Inimigos sofrem um impacto ao entrar; até 6 projéteis hostis por pulso perdem 42% da velocidade e 35% do dano. Máximo: 1 território.", "duration": 6.0, "limit": 1, "radius": 178.0},
+		{"effect": "ancorada_contra_impacto", "hook": "anchor", "label": "represália física das estruturas", "summary": "Inimigos que colidem com uma âncora ou estrutura recebem 24% do dano-base, são repelidos 92 px e desacelerados. Cada alvo só ativa a represália a cada 0,82 s.", "cooldown": 0.82, "force": 92.0},
+		{"effect": "ancorada_linha_fundacao", "hook": "anchor", "label": "linha defensiva entre ancoragens", "summary": "Âncoras reivindicáveis consecutivas criam uma linha por 6,5 s. Cada linha intercepta até 3 projéteis hostis antes de se descarregar. Máximo: 3 linhas.", "duration": 6.5, "limit": 3, "charges": 3}
+	],
+	"ev2": [
+		{"effect": "ancorada_fortaleza_autoportante", "hook": "skill", "label": "formação autônoma de três pilares", "summary": "O Q ergue uma fortaleza triangular por 8 s. Seus 3 pilares têm 190 de integridade, bloqueiam inimigos e a formação golpeia o alvo próximo a cada 0,65 s. Máximo: 1 fortaleza.", "duration": 8.0, "limit": 1, "hp": 190.0},
+		{"effect": "ancorada_coracao_fortaleza", "hook": "hybrid", "label": "núcleo reparador entre âncoras", "summary": "Com ao menos 2 âncoras ativas, o centro da formação pulsa a cada 0,75 s: repara muralhas e pilares próximos e reduz em 22% o dano dos projéteis hostis que atravessam o coração.", "interval": 0.75, "minimum_nodes": 2},
+		{"effect": "ancorada_queda_monumental", "hook": "teleport", "label": "monumento atrasado no destino", "summary": "Após teleportar, um monumento cai no destino em 0,42 s, atinge e afasta até 6 inimigos e permanece como obstáculo de 300 de integridade por 4,8 s. Chefes resistem ao deslocamento. Máximo: 3.", "delay": 0.42, "duration": 4.8, "limit": 3, "hp": 300.0},
+		{"effect": "ancorada_rede_fundacoes", "hook": "impact", "label": "carga transmitida entre âncoras", "summary": "Acertar a até 280 px de uma fundação transmite a carga por até 5 âncoras. Cada nó atinge um alvo distinto em 125 px por 14% do dano-base; intervalo interno de 0,38 s.", "limit": 5, "radius": 125.0, "cooldown": 0.38},
+		{"effect": "ancorada_ultimo_bastiao", "hook": "risk", "label": "refúgio reativo de vida crítica", "summary": "Ao cair para 25% de vida ou menos, ergue por 5 s um bastião que afasta inimigos e absorve até 42% da vida máxima em projéteis hostis. Recarga interna: 32 s.", "threshold": 0.25, "duration": 5.0, "cooldown": 32.0},
+		{"effect": "ancorada_continente_imovel", "hook": "secondary", "label": "fronteiras estruturais da ultimate", "summary": "A ultimate conecta até 5 fundações — ou cria 4 marcos de apoio — por 7 s. As fronteiras desviam inimigos comuns; Arauto e chefes recebem apenas contenção resistente.", "duration": 7.0, "limit": 5}
 	]
 }
 
@@ -489,6 +526,16 @@ static func _profile_for_id(manifestation: String, stage: String, evolution_id: 
 			acorrentada_profile["signature"] = evolution_id
 			acorrentada_profile["visual_tag"] = "corrente"
 			return acorrentada_profile
+	if manifestation == "ancorada":
+		for candidate in Array(ANCORADA_PROFILES.get(stage, [])):
+			var ancorada_profile := Dictionary(candidate)
+			if String(ancorada_profile.get("effect", "")) != effect_key:
+				continue
+			ancorada_profile = ancorada_profile.duplicate(true)
+			ancorada_profile["manifestation"] = manifestation
+			ancorada_profile["signature"] = evolution_id
+			ancorada_profile["visual_tag"] = "fundacao"
+			return ancorada_profile
 	var base := _shared_profile_for_effect(stage, effect_key)
 	if base.is_empty():
 		return {}
@@ -519,6 +566,8 @@ static func _explicit_effect_key(evolution_id: String) -> String:
 		return String(PRISMATICA_PROFILE_KEY_BY_ID[evolution_id])
 	if ACORRENTADA_PROFILE_KEY_BY_ID.has(evolution_id):
 		return String(ACORRENTADA_PROFILE_KEY_BY_ID[evolution_id])
+	if ANCORADA_PROFILE_KEY_BY_ID.has(evolution_id):
+		return String(ANCORADA_PROFILE_KEY_BY_ID[evolution_id])
 	for effect_key in EXPLICIT_LEGACY_DEFINITION_IDS_BY_EFFECT:
 		if String(EXPLICIT_LEGACY_DEFINITION_IDS_BY_EFFECT[effect_key]).split("|").has(evolution_id):
 			return String(effect_key)
@@ -550,11 +599,13 @@ static func _conditions_for_trigger(trigger: String) -> Array:
 		"skill": return ["skill_cast", "successful_skill"]
 		"teleport": return ["teleport", "successful_teleport"]
 		"secondary": return ["secondary_cast", "bound_target"]
+		"anchor": return ["anchor_placed", "ancorada_structure"]
+		"risk": return ["player_alive", "hp_at_or_below_threshold", "internal_cooldown_ready"]
 		_: return ["attack_emitted", "hit_resolved"]
 
 
 static func _short_description(display_name: String, theme: Dictionary, profile: Dictionary, stage: String) -> String:
-	if String(profile.get("manifestation", "")) in ["prismatica", "acorrentada"]:
+	if String(profile.get("manifestation", "")) in ["prismatica", "acorrentada", "ancorada"]:
 		return String(profile.get("summary", "%s — efeito Prismática." % display_name))
 	var label := "EV1" if stage == "ev1" else "EV2"
 	return "%s — %s converte %s em %s, com leitura visual de %s." % [label, display_name.capitalize(), String(theme.get("essence", "ruptura")), String(profile.get("label", "efeito próprio")), String(theme.get("visual", "ruptura temporal"))]

@@ -7,6 +7,7 @@ const BossRewardPresentation = preload("res://scripts/presentation/boss_reward_p
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
 const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
+const Boss4AnimationPresentation = preload("res://scripts/presentation/boss4_animation_presentation.gd")
 
 # Main runtime implementation extracted from the scene adapter.
 
@@ -30,6 +31,10 @@ func _ensure_runtime_controllers_bound() -> void:
 		henry_colossus_ability_controller.configure(self)
 	if reactive_survival_card_controller.core != self:
 		reactive_survival_card_controller.configure(self)
+	if roguelike_point_card_controller.core != self:
+		roguelike_point_card_controller.configure(self)
+	if point_boost_pickup_controller.core != self:
+		point_boost_pickup_controller.configure(self)
 	if save_controller.core != self:
 		save_controller.configure(self)
 	if phase_flow_controller.core != self:
@@ -42,6 +47,8 @@ func _ensure_runtime_controllers_bound() -> void:
 		drop_mode_controller.configure(self)
 	if shop_controller.game != self:
 		shop_controller.configure(self)
+	if boss4_controller.game != self:
+		boss4_controller.configure(self)
 
 
 func _phase_flow():
@@ -2816,7 +2823,8 @@ func _finalize_run_report(result: String) -> void :
 	if run_finalized_result != "":
 		return
 	run_finalized_result = result
-	umbra_memory_controller.finish_run(boss5_multihead_policy)
+	umbra_run_knowledge = umbra_memory_controller.knowledge_report(self)
+	umbra_memory_controller.finish_run(boss5_multihead_policy, umbra_run_knowledge)
 	_stop_qa_streaming(result)
 	_clear_interrupted_run_save()
 	if run_report_sent or run_report_in_flight:
@@ -5766,6 +5774,10 @@ func _load_procedural_sfx() -> void :
 	_register_tone_sfx("atk_acorrentada_heavy", [92.0, 184.0, 520.0], 0.19, "metal", 0.78, 0.15)
 	_register_tone_sfx("skill_acorrentada", [160.0, 320.0, 740.0], 0.22, "metal", 0.76, 0.13)
 	_register_tone_sfx("ult_acorrentada", [70.0, 140.0, 420.0], 0.32, "metal", 0.92, 0.19)
+	_register_tone_sfx("point_boost_spawn", [330.0, 660.0, 990.0], 0.22, "glass", 0.52, 0.035)
+	_register_tone_sfx("point_boost_collect", [520.0, 880.0, 1320.0], 0.18, "metal", 0.68, 0.025)
+	_register_tone_sfx("point_boost_activate", [440.0, 880.0, 1760.0], 0.28, "hollow", 0.62, 0.02)
+	_register_tone_sfx("point_boost_expire", [620.0, 420.0, 260.0], 0.19, "reverse", 0.42, 0.02)
 
 
 func _register_tone_sfx(name: String, freqs: Array, duration: float, wave: String, volume: = 0.35, noise: = 0.0) -> void :
@@ -6661,6 +6673,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	_ensure_runtime_controllers_bound()
 	experimental_phase_controller.prepare_new_run(clear_interrupted_save)
 	umbra_memory_controller.begin_run(is_multiplayer, multiplayer.get_unique_id(), boss5_multihead_policy)
+	umbra_run_knowledge.clear()
 	sineiro_boreal_controller.reset_for_new_run()
 	amber_suturer_controller.reset_for_new_run()
 	_stop_boss1_stop_audio_context(true)
@@ -6746,6 +6759,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	_start_run_security_session()
 	_reset_card_proc_state()
 	runtime_event_director.reset()
+	point_boost_pickup_controller.reset()
 	phase4_instability_pulse_controller.reset()
 	player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 	player_defense = 0.0
@@ -7689,7 +7703,7 @@ func _reset_phase4_state() -> void :
 	boss4_attack_timer = BOSS4_ATTACK_INTERVAL
 	boss4_attack_pose_timer = 0.0
 	boss4_anim_time = 0.0
-	boss4_entry_target = Vector2(WORLD_SIZE.x * 0.78, WORLD_SIZE.y * 0.5)
+	boss4_entry_target = Vector2(WORLD_SIZE.x * 0.68, WORLD_SIZE.y * 0.5)
 	boss4_instability = 0.0
 	boss4_stage = 1
 	boss4_no_hit_timer = 0.0
@@ -7706,11 +7720,25 @@ func _reset_phase4_state() -> void :
 	boss4_ultimate_gravity_timer = 0.0
 	boss4_rupture_anchors.clear()
 	boss4_ultimate_destroyed = 0
+	boss4_secondary_timer = BOSS4_SECONDARY_COOLDOWN
+	boss4_secondary_active = false
+	boss4_secondary_elapsed = 0.0
+	boss4_ultimate_cooldown = BOSS4_ULTIMATE_COOLDOWN
+	boss4_ultimate_ray_index = 0
+	boss4_strike_sequence.clear()
+	boss4_meteorites.clear()
+	boss4_meteor_event_timer = 5.0
+	boss4_meteor_event_started = false
+	boss4_meteor_damage_bonus = 0.0
 	boss4_stun_timer = 0.0
 	boss4_vulnerable_timer = 0.0
 	boss4_column_barrage_timer = BOSS4_COLUMN_BARRAGE_FIRST_DELAY
 	boss4_drag_wave_timer = BOSS4_DRAG_WAVE_FIRST_DELAY
 	boss4_sonic_used = false
+	boss4_controller.reset()
+	Boss4AnimationPresentation.reset(self)
+	boss4_ultimate_outcome = ""
+	boss4_ultimate_outcome_timer = 0.0
 	controls_inverted_timer = 0.0
 
 
@@ -7870,6 +7898,10 @@ func _load_umbra_mobile_memory() -> void :
 	if learned.has("tendencias") and not learned["tendencias"].is_empty():
 		boss5_memory["tendencias"] = learned["tendencias"]
 	_apply_remote_umbra_mind()
+	umbra_run_knowledge = umbra_memory_controller.knowledge_report(self)
+	var remote_profile: Dictionary = Dictionary(boss5_memory.get("perfil_jogador", {}))
+	boss5_memory["perfil_jogador"] = umbra_memory_controller.merge_profiles(remote_profile, umbra_run_knowledge)
+	boss5_memory["conhecimento_run"] = umbra_run_knowledge.duplicate(true)
 	_build_umbra_predatory_mods()
 
 
@@ -7915,6 +7947,9 @@ func _apply_remote_umbra_mind() -> void:
 			individual = players.get(player_nickname.to_lower(), {})
 		if not individual.is_empty():
 			profile = individual.get("perfil_jogador", individual)
+	elif dossiers.get("selected", {}) is Dictionary and not Dictionary(dossiers.get("selected", {})).is_empty():
+		var selected_dossier: Dictionary = Dictionary(dossiers.get("selected", {}))
+		profile = Dictionary(selected_dossier.get("perfil_jogador", selected_dossier))
 	if not profile.is_empty():
 		boss5_memory["perfil_jogador"] = profile
 	if archetypes.has("actions") and archetypes["actions"] is Dictionary:
@@ -8613,6 +8648,10 @@ func _manifest_evolution_dispatch_combat_event(event: Dictionary) -> bool:
 			var target: Dictionary = Dictionary(event.get("target", {}))
 			if target.is_empty():
 				return false
+			if manifestation_key == "ancorada":
+				_ensure_runtime_controllers_bound()
+				if ancorada_ability_controller.on_evolution_hit(event_id, target, Vector2(event.get("target_pos", player_pos))):
+					return true
 			if AcorrentadaEvolutionController.is_active(self):
 				AcorrentadaEvolutionController.on_hit(self, event_id, target, Vector2(event.get("target_pos", player_pos)))
 				return true
@@ -8621,10 +8660,18 @@ func _manifest_evolution_dispatch_combat_event(event: Dictionary) -> bool:
 			_manifest_evolution_apply_impact_effects(target, Vector2(event.get("target_pos", player_pos)))
 			return true
 		"skill_cast":
+			if manifestation_key == "ancorada":
+				_ensure_runtime_controllers_bound()
+				if ancorada_ability_controller.on_evolution_skill(Vector2(event.get("center", player_pos))):
+					return true
 			if AcorrentadaEvolutionController.is_active(self):
 				return AcorrentadaEvolutionController.on_skill(self, Vector2(event.get("center", player_pos)))
 			return _manifest_evolution_apply_skill_effects(Vector2(event.get("center", player_pos)))
 		"teleport":
+			if manifestation_key == "ancorada":
+				_ensure_runtime_controllers_bound()
+				if ancorada_ability_controller.on_evolution_teleport(Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos))):
+					return true
 			if AcorrentadaEvolutionController.is_active(self):
 				AcorrentadaEvolutionController.on_teleport(self, Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos)))
 				return true
@@ -9014,6 +9061,11 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 	if AcorrentadaEvolutionController.is_active(self):
 		AcorrentadaEvolutionController.update_effects(self, delta)
 		return
+	if manifestation_key == "ancorada":
+		_ensure_runtime_controllers_bound()
+		ancorada_ability_controller.update_evolutions(delta)
+		if not Dictionary(manifest_evolution_state.get("ancorada", {})).is_empty():
+			return
 	if LaceranteEvolutionController.is_active(self):
 		LaceranteEvolutionController.update_effects(self, delta)
 	var fields: Array = manifest_evolution_state.get("fields", [])
@@ -9407,6 +9459,7 @@ func _update_game(delta: float) -> void :
 	_update_valid_run_progress()
 	_update_run_telemetry(delta)
 	runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
+	point_boost_pickup_controller.update(delta, _is_world_authority())
 	phase3_ritual_pulse_controller.update(delta, _is_world_authority())
 	phase4_instability_pulse_controller.update(delta, _is_world_authority())
 	_update_bargain_capsule(delta)
@@ -9582,6 +9635,7 @@ func _update_game(delta: float) -> void :
 	# Resolve Pai-Rato presentation after authority/replica motion has advanced,
 	# so facing and locomotion reflect effective displacement from this frame.
 	Boss3AnimationPresentation.update(self, delta)
+	Boss4AnimationPresentation.update(self, delta)
 	_update_boss1_walk_audio(delta)
 	_update_acorrentada_walk_audio(delta)
 	var active_lacerante = _active_lacerante_secondary()
@@ -21743,7 +21797,8 @@ func _critical_damage(base: float, always_crit: = false, bonus_crit_chance: floa
 	var crit_chance: float = clampf(effective_crit, 0.0, 1.0)
 	var crit_overcap: float = maxf(0.0, effective_crit - 1.0)
 	if always_crit or rng.randf() < crit_chance:
-		return {"amount": base * 3.0 * (1.0 + crit_overcap), "critical": true}
+		var card_multiplier: float = roguelike_point_card_controller.critical_damage_multiplier()
+		return {"amount": base * 3.0 * (1.0 + crit_overcap) * card_multiplier, "critical": true}
 	return {"amount": base, "critical": false}
 
 
@@ -22356,6 +22411,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		if boss3_miasma_variant == 1:
 			boss3_miasma_clone_reveal_timer = maxf(boss3_miasma_clone_reveal_timer, BOSS3_MIASMA_CLONE_REVEAL_TIME)
 			boss3_miasma_clone_mislead_timer = 0.0
+	if current_phase == 4 and actual_boss_damage > 0.0:
+		Boss4AnimationPresentation.trigger_hit(self, actual_boss_damage, source)
 	if current_phase == 5 and boss5_siphon_absorbed_pending > 0.0 and actual_boss_damage > 0.0:
 		var confirmed_siphon_basis: float = minf(boss5_siphon_absorbed_pending, actual_boss_damage)
 		_apply_boss5_siphon_heal(confirmed_siphon_basis * BOSS5_SIPHON_DAMAGE_HEAL_RATIO, "damage")
@@ -22399,7 +22456,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if current_phase == 1 and boss_hp > 0.0 and boss_hp < boss_hp_max * BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown <= 0.0:
 		_start_boss1_time_wave()
 		return
-	if current_phase == 4 and boss_hp > 0.0 and not boss4_ultimate_active and boss4_ultimate_cooldown <= 0.0:
+	if current_phase == 4 and boss4_stage == 4 and boss_hp > 0.0 and not boss4_ultimate_active and not boss4_ultimate_used and boss4_ultimate_cooldown <= 0.0:
 		_start_boss4_ultimate()
 		return
 	var boss_executed = _boss_execute_threshold() > 0.0 and boss_hp <= boss_hp_max * _boss_execute_threshold()
@@ -22415,6 +22472,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			Boss2AnimationPresentation.trigger_death(self)
 		elif current_phase == 3:
 			Boss3AnimationPresentation.trigger_death(self)
+		elif current_phase == 4:
+			Boss4AnimationPresentation.trigger_death(self)
 		if is_multiplayer and _is_world_authority():
 			_confirm_card_unlock_progress_for_active_players("boss_kills", 1.0, false)
 		else:
@@ -22721,7 +22780,18 @@ func _kill_enemy(enemy: Dictionary) -> void :
 			mercenary_bonus_points = min(500, mercenary_bonus_points + contract_value)
 			mercenary_hud_pulse = 1.0
 			_add_text("MERCENARIA +%d" % mercenary_bonus_points, kill_pos + Vector2(0, -96), Color(1.0, 0.62, 0.16), 0.9, 19)
-	runtime_event_director.on_enemy_killed(enemy, runtime_event_director.context_from_game(self), _is_world_authority()); gain = int(round(float(gain) * runtime_event_director.point_multiplier()))
+	runtime_event_director.on_enemy_killed(enemy, runtime_event_director.context_from_game(self), _is_world_authority())
+	var point_multiplier: float = point_boost_pickup_controller.effective_point_multiplier(runtime_event_director.point_multiplier())
+	gain = int(round(float(gain) * point_multiplier))
+	roguelike_point_card_controller.on_enemy_defeated(enemy, kill_pos)
+	point_boost_pickup_controller.on_enemy_defeated(
+		enemy,
+		time_alive,
+		current_phase,
+		luck,
+		runtime_event_director.point_multiplier() > 1.0,
+		_is_world_authority()
+	)
 	_spawn_enemy_point_drop(kill_pos, gain)
 	_drop_mode().on_enemy_killed(enemy, kill_pos)
 	if int(enemy.get("killed_by_peer_id", _mp_unique_id())) == _mp_unique_id():
@@ -24679,7 +24749,7 @@ func _enemy_point_orbs() -> Array:
 	return heal_orbs.filter(func(orb): return String(orb.get("kind", "")) == ENEMY_POINT_ORB_KIND and float(orb.get("life", 0.0)) > 0.0)
 
 
-func _spawn_enemy_point_drop(pos: Vector2, value: int) -> Dictionary:
+func _spawn_enemy_point_drop(pos: Vector2, value: int, metadata: Dictionary = {}) -> Dictionary:
 	if value <= 0 or (is_multiplayer and not _is_world_authority()):
 		return {}
 	var point_orbs: Array = _enemy_point_orbs()
@@ -24700,11 +24770,16 @@ func _spawn_enemy_point_drop(pos: Vector2, value: int) -> Dictionary:
 	if should_merge and not nearest.is_empty():
 		nearest["score_value"] = int(nearest.get("score_value", 0)) + value
 		nearest["stack_count"] = int(nearest.get("stack_count", 1)) + 1
+		for key in metadata.keys():
+			if key == "stack_count":
+				nearest[key] = maxi(int(nearest.get(key, 1)), int(metadata[key]))
+			else:
+				nearest[key] = metadata[key]
 		nearest["life"] = ENEMY_POINT_DROP_LIFE
 		nearest["max_life"] = ENEMY_POINT_DROP_LIFE
 		nearest["pulse"] = rng.randf_range(0.0, TAU)
 		return nearest
-	return _spawn_gameplay_orb(ENEMY_POINT_ORB_KIND, pos, {
+	var orb_data: Dictionary = {
 		"score_value": value,
 		"collect_radius": ENEMY_POINT_PICKUP_RADIUS,
 		"magnet_peer_id": 0,
@@ -24713,7 +24788,10 @@ func _spawn_enemy_point_drop(pos: Vector2, value: int) -> Dictionary:
 		"velocity": Vector2.ZERO,
 		"stack_count": 1,
 		"pulse": rng.randf_range(0.0, TAU)
-	}, 0, ENEMY_POINT_DROP_LIFE)
+	}
+	for key in metadata.keys():
+		orb_data[key] = metadata[key]
+	return _spawn_gameplay_orb(ENEMY_POINT_ORB_KIND, pos, orb_data, 0, ENEMY_POINT_DROP_LIFE)
 
 
 func _phase_point_crystal_total_value() -> int:
@@ -25308,6 +25386,8 @@ func _apply_gameplay_orb_collect_local(orb: Dictionary) -> void:
 			_collect_enemy_point_orb(orb, not is_multiplayer)
 		PHASE_POINT_CRYSTAL_KIND:
 			_collect_phase_point_crystal_orb(orb)
+		POINT_BOOST_PICKUP_KIND:
+			_collect_point_boost_pickup(orb, _mp_unique_id())
 		"voraz_hunger":
 			_collect_voraz_hunger_orb(orb)
 		_:
@@ -25324,10 +25404,13 @@ func _collect_enemy_point_orb(orb: Dictionary, award_score: bool) -> void:
 		return
 	if award_score:
 		_apply_score_delta(value, true, "enemy_point:%s" % String(orb.get("uid", "")))
-	_add_text("+%d" % value, player_pos + Vector2(0, -68), Color(1.0, 0.86, 0.2), 0.72, 17)
-	_spawn_radial_particles(player_pos, Color(1.0, 0.76, 0.16), 5 if _memory_saver_active() else 9)
+	var large_prism: bool = bool(orb.get("large_prism_shard", false))
+	var text: String = "LASCA +%d" % value if large_prism else "+%d" % value
+	var color: Color = Color(0.42, 0.94, 1.0) if large_prism else Color(1.0, 0.86, 0.2)
+	_add_text(text, player_pos + Vector2(0, -68), color, 0.92 if large_prism else 0.72, 20 if large_prism else 17)
+	_spawn_radial_particles(player_pos, Color(0.48, 0.38, 1.0) if large_prism else Color(1.0, 0.76, 0.16), (8 if _memory_saver_active() else 15) if large_prism else (5 if _memory_saver_active() else 9))
 	shockwaves.append({"pos": player_pos, "radius": 6.0, "max": 54.0, "life": 0.22, "max_life": 0.22, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.36, 1.0, 0.9)})
-	_play_sfx("Moeda.mp3", 0.035, 0.28, 1.18)
+	_play_sfx("Moeda.mp3", 0.045 if large_prism else 0.035, 0.36 if large_prism else 0.28, 1.38 if large_prism else 1.18)
 
 
 func _collect_phase_point_crystal_orb(orb: Dictionary) -> void:
@@ -25346,6 +25429,49 @@ func _play_phase_point_crystal_collect_vfx(orb: Dictionary) -> void:
 	var pos: Vector2 = Vector2(orb.get("pos", player_pos))
 	var count: int = 6 if _memory_saver_active() else 11
 	_spawn_radial_particles(pos, Color(0.58, 1.0, 0.94), count)
+
+
+func _collect_point_boost_pickup(orb: Dictionary, collector_peer_id: int) -> void:
+	var pos: Vector2 = Vector2(orb.get("pos", player_pos))
+	_add_text("PONTOS x2", pos + Vector2(-50, -72), Color(1.0, 0.86, 0.18), 1.15, 23)
+	_spawn_radial_particles(pos, Color(1.0, 0.78, 0.14), 10 if _memory_saver_active() else 20)
+	_spawn_radial_particles(pos, Color(0.18, 1.0, 0.82), 7 if _memory_saver_active() else 14)
+	shockwaves.append({"pos": pos, "radius": 8.0, "max": 86.0, "life": 0.34, "max_life": 0.34, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.2, 1.0, 0.78)})
+	_play_sfx("point_boost_collect", 0.018, 0.72, 1.0)
+	_vibrate(46, 0.22)
+	point_boost_pickup_controller.activate(collector_peer_id, _is_world_authority())
+
+
+func _on_point_boost_spawned(orb: Dictionary) -> void:
+	if dedicated_server_mode:
+		return
+	var pos: Vector2 = Vector2(orb.get("pos", player_pos))
+	_add_text("ARTEFATO DE PONTOS", pos + Vector2(-86, -76), Color(1.0, 0.86, 0.24), 1.0, 17)
+	_spawn_radial_particles(pos, Color(0.2, 1.0, 0.82), 5 if _memory_saver_active() else 10)
+	shockwaves.append({"pos": pos, "radius": 5.0, "max": 62.0, "life": 0.28, "max_life": 0.28, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(1.0, 0.76, 0.12)})
+	_play_sfx("point_boost_spawn", 0.015, 0.34, 1.0)
+
+
+func _on_point_boost_activated(_collector_peer_id: int, authority_activation: bool) -> void:
+	if dedicated_server_mode:
+		return
+	_add_text("x2 PONTOS ATIVO", player_pos + Vector2(-72, -112), Color(0.28, 1.0, 0.8), 1.05, 20)
+	_spawn_radial_particles(player_pos, Color(1.0, 0.82, 0.16), 6 if _memory_saver_active() else 12)
+	_play_sfx("point_boost_activate", 0.012, 0.58, 1.0 if authority_activation else 0.98)
+
+
+func _on_point_boost_final_warning() -> void:
+	if dedicated_server_mode:
+		return
+	_add_text("x2 TERMINANDO", player_pos + Vector2(-62, -104), Color(1.0, 0.54, 0.12), 0.72, 16)
+	_play_sfx("point_boost_expire", 0.0, 0.24, 1.18)
+
+
+func _on_point_boost_expired(_authority_expiry: bool) -> void:
+	if dedicated_server_mode:
+		return
+	_add_text("x2 ENCERRADO", player_pos + Vector2(-58, -96), Color(0.62, 0.78, 0.72), 0.72, 15)
+	_play_sfx("point_boost_expire", 0.0, 0.34, 0.86)
 
 
 func _collect_voraz_hunger_orb(orb: Dictionary) -> void:
@@ -25370,7 +25496,12 @@ func _confirm_gameplay_orb_removed(uid: String, reason: String, collector_peer_i
 	net_collected_gameplay_orb_ids[uid] = true
 	if reason == "collected" and String(orb.get("kind", "")) == PHASE_POINT_CRYSTAL_KIND:
 		_play_phase_point_crystal_collect_vfx(orb)
-	if reason == "collected" and String(orb.get("kind", "")) == ENEMY_POINT_ORB_KIND:
+	if reason == "collected" and String(orb.get("kind", "")) == POINT_BOOST_PICKUP_KIND:
+		if collector_peer_id == _mp_unique_id():
+			_collect_point_boost_pickup(orb, collector_peer_id)
+		else:
+			point_boost_pickup_controller.activate(collector_peer_id, _is_world_authority())
+	elif reason == "collected" and String(orb.get("kind", "")) == ENEMY_POINT_ORB_KIND:
 		var value: int = int(orb.get("score_value", orb.get("value", 0)))
 		_apply_score_delta(value, true, "enemy_point:%s" % uid)
 		if collector_peer_id == _mp_unique_id():
@@ -26888,32 +27019,25 @@ func _update_boss_phase4(delta: float) -> void :
 	if boss_entry_timer > 0.0:
 		boss_entry_timer = max(0.0, boss_entry_timer - delta)
 		var progress: float = clamp(1.0 - boss_entry_timer / BOSS4_ENTRY_TIME, 0.0, 1.0)
-		var eased: float = 1.0 - pow(1.0 - progress, 3.0)
-		boss_pos = Vector2(lerp(WORLD_SIZE.x + 220.0, boss4_entry_target.x, eased), boss4_entry_target.y)
+		var eased: float = progress * progress * (3.0 - 2.0 * progress)
+		boss_pos = (boss4_entry_target + Vector2(0.0, -560.0)).lerp(boss4_entry_target, eased)
 		if boss_entry_timer <= 0.0:
 			boss_pos = boss4_entry_target
 			_boss_entry_impact_feedback(0.72)
-			_add_text("NEXO ESTABILIZADO", boss_pos + Vector2(0, -145), Color(1.0, 0.78, 0.22), 1.6, 25)
+			_spawn_radial_particles(boss_pos, Color(0.52, 1.0, 0.66), 42)
+			_add_text("IMPACTO ORBITAL", boss_pos + Vector2(0, -145), Color(0.52, 1.0, 0.66), 1.6, 25)
 		return
-	boss_pos = boss4_entry_target
-	_update_boss4_stage()
-	boss4_instability_fissure_controller.update(delta, _is_world_authority())
+	# Sampling stays warm for fair path-based fissures, but the high-level
+	# controller exclusively decides when the attack is allowed to cast.
+	boss4_instability_fissure_controller.update(delta, _is_world_authority(), false)
 	_update_boss4_specials(delta)
 	_update_boss4_strike_sequence(delta)
+	boss4_ultimate_cooldown = max(0.0, boss4_ultimate_cooldown - delta)
 	if boss4_ultimate_active:
 		_update_boss4_ultimate(delta)
+		boss4_controller.update(delta)
 		return
-	boss4_ultimate_cooldown = max(0.0, boss4_ultimate_cooldown - delta)
-	if boss4_ultimate_cooldown <= 0.0 and boss_hp > 0.0:
-		_start_boss4_ultimate()
-		return
-	if boss4_stun_timer > 0.0:
-		return
-	_update_boss4_pattern_timers(delta)
-	boss4_attack_timer -= delta
-	if boss4_attack_timer <= 0.0:
-		boss4_attack_timer = BOSS4_ATTACK_INTERVAL
-		_spawn_boss4_stage_attack()
+	boss4_controller.update(delta)
 
 
 func _update_boss4_stage() -> void :
@@ -26938,7 +27062,7 @@ func _boss4_attack_interval() -> float:
 
 
 func _spawn_boss4_stage_attack() -> void :
-	_spawn_boss4_comet()
+	boss4_controller.request_contextual_action()
 
 
 func _update_boss4_pattern_timers(delta: float) -> void :
@@ -27077,9 +27201,6 @@ func _start_boss4_meteor_event() -> void :
 
 func _update_boss4_meteorites(delta: float) -> void :
 	if not boss4_meteor_event_started:
-		boss4_meteor_event_timer = maxf(0.0, boss4_meteor_event_timer - delta)
-		if boss4_meteor_event_timer <= 0.0:
-			_start_boss4_meteor_event()
 		return
 	for meteor in boss4_meteorites:
 		meteor["age"] = float(meteor.get("age", 0.0)) + delta
@@ -27484,6 +27605,8 @@ func _spawn_boss4_collapse_zone() -> void :
 
 
 func _start_boss4_ultimate() -> void :
+	if boss4_ultimate_active or boss_hp <= 0.0:
+		return
 	boss4_ultimate_active = true
 	boss4_ultimate_used = true
 	boss4_ultimate_timer = BOSS4_ULTIMATE_DURATION
@@ -27492,12 +27615,29 @@ func _start_boss4_ultimate() -> void :
 	boss4_ultimate_laser_timer = 0.0
 	boss4_ultimate_gravity_timer = 0.0
 	boss4_rupture_anchors.clear()
+	var center := Vector2(WORLD_SIZE.x * 0.5, WORLD_SIZE.y * 0.56)
+	var arena_radius := minf(WORLD_SIZE.x, WORLD_SIZE.y) * 0.23
+	var anchor_hp := BOSS4_ULTIMATE_ANCHOR_HP * (1.0 + 0.18 * float(_boss_party_hazard_bonus(2)))
+	for index in range(BOSS4_ULTIMATE_REQUIRED_ANCHORS):
+		var angle := -PI * 0.5 + float(index) * TAU / float(BOSS4_ULTIMATE_REQUIRED_ANCHORS)
+		var anchor_pos := (center + Vector2.from_angle(angle) * arena_radius).clamp(Vector2(96.0, 96.0), WORLD_SIZE - Vector2(96.0, 96.0))
+		boss4_rupture_anchors.append({
+			"name": "ANCORA %d" % (index + 1),
+			"pos": anchor_pos,
+			"hp": anchor_hp,
+			"max_hp": anchor_hp,
+			"destroyed": false,
+			"phase": angle
+		})
 	_increase_boss4_instability(10.0)
-	_add_text("TEMPESTADE DE RAIOS", boss_pos + Vector2(0, -162), Color(1.0, 0.86, 0.28), 2.0, 31)
+	_add_text("SINGULARIDADE ABSOLUTA - ROMPA 3 ANCORAS", boss_pos + Vector2(0, -162), Color(1.0, 0.86, 0.28), 2.0, 27)
 	_vibrate(260, 0.82)
 
 
 func _update_boss4_ultimate(delta: float) -> void :
+	if boss4_ultimate_destroyed >= BOSS4_ULTIMATE_REQUIRED_ANCHORS:
+		_finish_boss4_ultimate(true)
+		return
 	boss4_ultimate_timer = max(0.0, boss4_ultimate_timer - delta)
 	boss4_attack_pose_timer = max(boss4_attack_pose_timer, 0.25)
 	boss4_ultimate_laser_timer = max(0.0, boss4_ultimate_laser_timer - delta)
@@ -27506,17 +27646,32 @@ func _update_boss4_ultimate(delta: float) -> void :
 		_spawn_boss4_ultimate_ray(boss4_ultimate_ray_index == 0)
 		boss4_ultimate_ray_index += 1
 	if boss4_ultimate_timer <= 0.0:
-		_finish_boss4_ultimate(true)
+		_finish_boss4_ultimate(false)
 
 
 func _finish_boss4_ultimate(success: bool) -> void :
 	boss4_ultimate_active = false
+	effects = effects.filter(func(effect): return String(Dictionary(effect).get("text", "")) != "SINGULARIDADE ABSOLUTA - ROMPA 3 ANCORAS")
+	boss4_ultimate_outcome = "ultimate_interrupted" if success else "ultimate_failure"
+	boss4_ultimate_outcome_timer = 0.55
 	boss4_stun_timer = BOSS4_ULTIMATE_STUN_TIME if success else 0.0
-	boss4_vulnerable_timer = BOSS4_ULTIMATE_VULNERABLE_TIME if success else 2.0
+	boss4_vulnerable_timer = BOSS4_ULTIMATE_VULNERABLE_TIME if success else 0.0
 	boss4_ultimate_cooldown = BOSS4_ULTIMATE_COOLDOWN
 	_decrease_boss4_instability(18.0 if success else 6.0)
-	_add_text("TEMPESTADE DISSIPADA", boss_pos + Vector2(0, -154), Color(1.0, 0.92, 0.46), 1.8, 25)
-	_spawn_radial_particles(boss_pos, Color(1.0, 0.86, 0.28), 58)
+	for anchor in boss4_rupture_anchors:
+		if not bool(anchor.get("destroyed", false)):
+			_spawn_radial_particles(Vector2(anchor.get("pos", boss_pos)), Color(0.52, 0.18, 0.84), 12)
+	boss4_rupture_anchors.clear()
+	if success:
+		_add_text("SINGULARIDADE INTERROMPIDA - EXPOSTO", boss_pos + Vector2(0, -154), Color(0.52, 1.0, 0.78), 1.8, 24)
+		_spawn_radial_particles(boss_pos, Color(1.0, 0.86, 0.28), 58)
+	else:
+		_add_text("SINGULARIDADE COMPLETA - BUSQUE AS BRECHAS", boss_pos + Vector2(0, -154), Color(1.0, 0.42, 0.28), 2.0, 23)
+		# Failure escalates through telegraphed, dodgeable patterns instead of an
+		# unavoidable damage pulse. The three wells leave navigable gaps.
+		for offset in [Vector2(-250.0, -105.0), Vector2(250.0, -105.0), Vector2(0.0, 185.0)]:
+			_spawn_boss4_gravity_well((Vector2(WORLD_SIZE.x * 0.5, WORLD_SIZE.y * 0.5) + offset).clamp(Vector2(90.0, 90.0), WORLD_SIZE - Vector2(90.0, 90.0)))
+		_spawn_boss4_laser_fan(true)
 
 
 func _spawn_boss4_ultimate_ray(targeted: bool) -> void :
@@ -31485,9 +31640,12 @@ func _update_boss_call(delta: float) -> void :
 			boss_name = "UMBRA"
 			boss_title_color = Color(0.42, 1.0, 0.55)
 			_load_umbra_mobile_memory()
+			var knowledge_percent := int(umbra_run_knowledge.get("total_percent", 0))
+			_add_text("ANALISE PREDITIVA: %d%%" % knowledge_percent, WORLD_SIZE * 0.5 + Vector2(0, -118), Color(1.0, 0.16, 0.24), 2.4, 27)
+			_add_text(String(umbra_run_knowledge.get("archetype_label", "PERFIL INDEFINIDO")), WORLD_SIZE * 0.5 + Vector2(0, -82), Color(0.86, 0.9, 0.94), 2.2, 17)
 		elif current_phase == 4:
 			boss_hp_max = _boss_hp_for_phase(4)
-			boss_name = "NEXO DA RUPTURA"
+			boss_name = "NEXO ANFIBIO"
 			boss_title_color = Color(1.0, 0.76, 0.18)
 		elif current_phase == 3:
 			boss_hp_max = _boss_hp_for_phase(3)
@@ -32569,6 +32727,8 @@ func _is_carta_zero_scalable(card_id: String, stat_id: = "") -> bool:
 			return stat_id in ["radius"]
 		"pacto_possibilidades":
 			return stat_id in ["discount"]
+		CARD_PAIN_TRIBUTE_ID:
+			return stat_id in ["points_on_damage"]
 		"solo_consolidado":
 			return stat_id in ["duration_reduction"]
 		"fratura_cronal":
@@ -35041,6 +35201,16 @@ func _paradox_direct_category(source: String, source_category: String) -> String
 	return category if category in ["basic_attack", "skill_q", "skill_e", "teleport"] else ""
 
 
+func _paradox_active_duration(copies: int = -1) -> float:
+	var count: int = _card_count_by_id(CARD_PARADOX_ID) if copies < 0 else maxi(0, copies)
+	return PARADOX_ACTIVE_DURATION + 0.35 * float(maxi(0, count - 1))
+
+
+func _paradox_echo_ratio(copies: int = -1) -> float:
+	var count: int = _card_count_by_id(CARD_PARADOX_ID) if copies < 0 else maxi(0, copies)
+	return PARADOX_ECHO_RATIO + 0.08 * float(maxi(0, count - 1))
+
+
 func _queue_paradox_echo(target_kind: String, target_uid: int, target_pos: Vector2, actual_damage: float) -> void:
 	if actual_damage <= 0.0:
 		return
@@ -35050,7 +35220,7 @@ func _queue_paradox_echo(target_kind: String, target_uid: int, target_pos: Vecto
 		"delay": PARADOX_ECHO_DELAY,
 		"kind": target_kind,
 		"uid": target_uid,
-		"damage": maxf(1.0, actual_damage * PARADOX_ECHO_RATIO),
+		"damage": maxf(1.0, actual_damage * _paradox_echo_ratio()),
 		"pos": target_pos
 	})
 
@@ -35071,7 +35241,7 @@ func _register_paradox_confirmed_damage(actual_damage: float, source: String, so
 			return
 		paradox_ready = false
 		paradox_charge_hits = 0
-		paradox_active_timer = PARADOX_ACTIVE_DURATION
+		paradox_active_timer = _paradox_active_duration()
 		paradox_flash = 1.0
 		rare_card_effects.append({"kind": "paradox_open", "pos": player_pos, "life": 1.0, "max": 1.0, "radius": 112.0})
 		_add_text("PARADOXO ABERTO", player_pos + Vector2(0, -112), CARD_RARITY_LEGENDARY_COLOR, 1.0, 21)
@@ -35723,6 +35893,10 @@ func _card_category(card_name: String) -> String:
 		"Carrasco de Colossos": return "DANO DIRETO CONTRA CHEFES"
 		"Sutura Gradual": return "RECUPERACAO POS-IMPACTO"
 		"Egide Hemofaga": return "OVERHEAL E ESCUDO"
+		"Tributo da Dor": return "ECONOMIA DE SOBREVIVENCIA"
+		"Estilhaço Prismático": return "ECONOMIA DE ABATES"
+		"Crítico Absoluto": return "AMPLIFICACAO CRITICA"
+		"Arquivo do Impossível": return "DUPLICACAO DE CARTAS"
 	return "MELHORIA"
 
 
@@ -35780,6 +35954,10 @@ func _card_lore(card_name: String) -> String:
 		"Carrasco de Colossos": return "Quanto maior a presenca diante da ruptura, mais fundo o golpe direto encontra sua costura central."
 		"Sutura Gradual": return "A ferida nao desaparece de uma vez. Pequenos pontos temporais devolvem, em parcelas, parte da vida perdida."
 		"Egide Hemofaga": return "O sangue roubado que nao caberia no corpo endurece por instantes como uma couraca viva."
+		"Tributo da Dor": return "Toda ferida paga um tributo. Sobreviver transforma impacto em novas escolhas."
+		"Estilhaço Prismático": return "Alguns destinos derrotados cristalizam possibilidades grandes demais para uma moeda comum."
+		"Crítico Absoluto": return "O ponto fraco deixa de ser uma abertura e passa a ser uma sentença multiplicada."
+		"Arquivo do Impossível": return "O Arquivo registra cada escolha não lendária e devolve cópias que nunca deveriam existir."
 	return ""
 
 
@@ -35789,6 +35967,16 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 	var effective_count: float = float(safe_count) + float(_cinzas_bonus_stacks(card_id)) * CardCatalogDefinitions.get_burn_factor(card_id)
 	var zero: float = _carta_zero_multiplier()
 	match card_id:
+		CARD_PAIN_TRIBUTE_ID:
+			return "+%d pontos sempre que dano real atingir a vida" % roguelike_point_card_controller.pain_reward(effective_count)
+		CARD_PRISM_SHARD_ID:
+			return "abates: %.1f%% de chance de lasca grande valendo %d pontos" % [roguelike_point_card_controller.prism_shard_chance(safe_count) * 100.0, roguelike_point_card_controller.prism_shard_value(safe_count)]
+		CARD_ABSOLUTE_CRIT_ID:
+			return "dano critico final x%.1f (+100%% por copia)" % roguelike_point_card_controller.critical_damage_multiplier(safe_count)
+		CARD_IMPOSSIBLE_ARCHIVE_ID:
+			return "cada carta nao lendaria adquirida concede +%d copia(s) gratuita(s)" % safe_count
+		CARD_PARADOX_ID:
+			return "apos 18 acertos, habilidade abre eco por %.2fs causando %.0f%% do dano confirmado" % [_paradox_active_duration(safe_count), _paradox_echo_ratio(safe_count) * 100.0]
 		"Speed Boost":
 			return "velocidade +%.1f%%" % ((pow(1.065, effective_count) - 1.0) * 100.0 * zero)
 		"Porcao":
@@ -36092,7 +36280,7 @@ func _apply_cinzas_return_bonus(card: Dictionary) -> void :
 	common_card_effects.append({"kind": "cinzas", "pos": player_pos, "life": 0.9, "max": 0.9, "radius": 82.0, "color": Color(1.0, 0.58, 0.28)})
 
 
-func _apply_card(card: Dictionary) -> void :
+func _apply_card(card: Dictionary, from_impossible_archive: bool = false) -> void :
 	var name = String(card["name"])
 	if _card_at_max(card):
 		return
@@ -36100,6 +36288,14 @@ func _apply_card(card: Dictionary) -> void :
 	var previous_counter_count: = int(cards_bought.get(counter_key, 0))
 	cards_bought[counter_key] = int(cards_bought.get(counter_key, 0)) + 1
 	match counter_key:
+		CARD_PAIN_TRIBUTE_ID:
+			common_card_effects.append({"kind": "tributo_dor", "pos": player_pos, "life": 0.72, "max": 0.72, "radius": 64.0, "color": Color(1.0, 0.58, 0.18)})
+		CARD_PRISM_SHARD_ID:
+			common_card_effects.append({"kind": "estilhaco_prismatico", "pos": player_pos, "life": 0.82, "max": 0.82, "radius": 78.0, "color": Color(0.38, 0.92, 1.0)})
+		CARD_ABSOLUTE_CRIT_ID:
+			rare_card_effects.append({"kind": "critico_absoluto", "pos": player_pos, "life": 0.88, "max": 0.88, "radius": 86.0, "color": Color(1.0, 0.22, 0.18)})
+		CARD_IMPOSSIBLE_ARCHIVE_ID:
+			rare_card_effects.append({"kind": "arquivo_impossivel", "pos": player_pos, "life": 1.1, "max": 1.1, "radius": 108.0, "color": CARD_RARITY_LEGENDARY_COLOR})
 		CARD_RASTRO_ID:
 			rastro_spawn_timer = minf(rastro_spawn_timer, 0.35)
 			common_card_effects.append({"kind": "rastro_spawn", "pos": player_pos, "life": 0.65, "max": 0.65, "radius": 64.0, "color": CARD_RARITY_UNCOMMON_COLOR})
@@ -36146,10 +36342,11 @@ func _apply_card(card: Dictionary) -> void :
 			egide_hemofaga_pulse = 0.85
 			rare_card_effects.append({"kind": "egide", "pos": player_pos, "life": 0.72, "max": 0.72, "radius": 72.0, "color": Color(1.0, 0.72, 0.22)})
 		CARD_PARADOX_ID:
-			paradox_charge_hits = 0
-			paradox_ready = false
-			paradox_active_timer = 0.0
-			paradox_echo_queue.clear()
+			if previous_counter_count <= 0:
+				paradox_charge_hits = 0
+				paradox_ready = false
+				paradox_active_timer = 0.0
+				paradox_echo_queue.clear()
 			paradox_flash = 1.0
 			rare_card_effects.append({"kind": "paradox_acquired", "pos": player_pos, "life": 1.1, "max": 1.1, "radius": 104.0})
 	match name:
@@ -36237,9 +36434,16 @@ func _apply_card(card: Dictionary) -> void :
 			antimatter_flash = 0.75
 		"Cofre do Excesso":
 			excess_discharge_flash = 0.75
-	if bool(card.get("cinzas_return_buff", false)):
+	if bool(card.get("cinzas_return_buff", false)) and not from_impossible_archive:
 		_apply_cinzas_return_bonus(card)
 		_clear_cinzas_mark(_card_id(card))
+	if from_impossible_archive:
+		return
+	var archive_copies: int = roguelike_point_card_controller.extra_card_copies(card)
+	for _copy_index in range(archive_copies):
+		_apply_card(card, true)
+	if archive_copies > 0:
+		_add_text("ARQUIVO +%d" % archive_copies, player_pos + Vector2(0, -132), CARD_RARITY_LEGENDARY_COLOR, 1.05, 20)
 	_add_text(name, player_pos + Vector2(0, -100), Color(card["color"]), 1.3, 25)
 	_sync_deck_network()
 
@@ -36575,6 +36779,7 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	var actual_hp_damage := mini(final, hp_before_damage)
 	_queue_sutura_gradual(float(actual_hp_damage))
 	reactive_survival_card_controller.on_player_damaged(float(actual_hp_damage))
+	roguelike_point_card_controller.on_player_damaged(float(actual_hp_damage))
 	henry_incendiary_ability_controller.on_player_damaged(actual_hp_damage)
 	estase_reparadora_pause = max(estase_reparadora_pause, 0.5)
 	_reset_tregua_regenerativa_timer()
@@ -38397,7 +38602,7 @@ func _catalog_boss_items() -> Array:
 		{"kind": "boss", "name": "Caranguejo Cosmico", "summary": "A primeira muralha viva da Ruptura.", "desc": "Grande demais para parecer justo e antigo demais para parecer perdido. Ele testa se Geovana aprendeu a ler areas, janelas e reposicionamento.", "lore": "O primeiro chefe e a fenda usando um corpo simples para perguntar uma coisa cruel: voce sabe sair do lugar certo na hora certa?", "mechanics": "Alterna perseguicao, saltos, ondas e eventos de tempo. Em multiplayer, deve dividir atencao e criar pressao inteligente sem inflar vida.", "color": Color(1.0, 0.32, 0.18), "texture": "boss_stage1"},
 		{"kind": "boss", "name": "Nevasca", "summary": "O centro frio da segunda ruptura.", "desc": "A Nevasca nao quer apenas acertar Geovana. Quer controlar onde ela acredita que pode ficar.", "lore": "Nasceu quando o mapa congelado parou de ser cenario e virou vontade. Cada vento tenta empurrar o jogador para uma decisao ruim.", "mechanics": "Usa vento, gelo, zonas seguras e congelamento. O bom combate contra ela e leitura de arena, nao corrida cega.", "color": Color(0.62, 0.94, 1.0), "texture": "boss2"},
 		{"kind": "boss", "name": "Pai-Rato", "summary": "Ritual, miasma e provocacao.", "desc": "Ele mistura nojo, humor ruim e perigo real. Parece baguncado ate os rituais comeÃ§arem a tomar partes da tela.", "lore": "O Pai-Rato comanda a terceira ruptura como um culto de sobreviventes deformados. Ele nao vence por honra; vence por insistencia.", "mechanics": "Trabalha com nuvens, clones, rituais e perseguicao. As habilidades existem para tirar conforto e forcar resposta ativa.", "color": Color(0.74, 1.0, 0.3), "texture": "boss3"},
-		{"kind": "boss", "name": "Nexo da Ruptura", "summary": "A arena pensando contra voce.", "desc": "Na quarta ruptura o chefe parece menos bicho e mais fenomeno. O Nexo transforma mapa, trajetoria e espaco em parte do combate.", "lore": "O Nexo e uma inteligencia de geometria quebrada. Ele nao odeia Geovana; apenas recalcula o mundo sem incluir a sobrevivencia dela.", "mechanics": "Invoca planetas, fendas, gravidade e ancoras. Vencer e entender quais objetos sustentam a ameaÃ§a.", "color": Color(1.0, 0.78, 0.26), "texture": "boss4"},
+		{"kind": "boss", "name": "Nexo Anfibio", "summary": "Um sapo astronauta colossal alimentado pela Ruptura.", "desc": "Um anfibio bipede de tres metros teve o traje espacial fundido ao corpo. O sistema de suporte agora bebe energia da Ruptura e transforma cada vazamento em arma.", "lore": "Ele voltou de uma missao que nao existe em nenhum registro. Dentro do visor rachado ainda ha um olhar animal; ao redor dele, o traje recalcula gravidade, trajetoria e materia para manter o hospedeiro vivo.", "mechanics": "Avanca com peso, golpeia, lanca a lingua, salta, abre fendas e canaliza a Singularidade Absoluta. Rompa exatamente tres ancoras para interromper a ultimate e expo-lo.", "color": Color(0.52, 1.0, 0.66), "texture": "boss4"},
 		{"kind": "boss", "name": "UMBRA", "summary": "A mente inevitavel da quinta fase.", "desc": "UMBRA nao e so chefe. E uma leitura do jogador tentando aprender, responder e usar memoria contra habitos repetidos.", "lore": "Os arquivos registram UMBRA com cautela incomum. Alguns relatos sugerem que ela nao luta contra Geovana; ela conversa com o modo como Geovana joga.", "mechanics": "Alterna dimensoes, teletransportes, prisao, descarga e adaptacao. O encontro pune rotina e recompensa variaÃ§Ã£o consciente.", "color": Color(0.56, 1.0, 0.68), "texture": "boss5"},
 		{"kind": "boss", "name": "Matriarca da Chaga", "summary": "A sexta ruptura em corpo aberto.", "desc": "A Matriarca nao e mais um boss que corre atras do jogador. Ela controla o mapa como um organismo parado, escolhendo quando fermentar o chao, rachar a arena e expor o proprio nucleo.", "lore": "A Matriarca e uma mae de sintomas: nada nela parece nascer inteiro, mas tudo que ela perde tenta voltar com fome.", "mechanics": "Chefe de estados da fase 6, com ataques escolhidos por peso, cooldown e pressao da arena. Muda leitura em 60% e 40% de vida, sofre eventos em 80/60/40/30/15%, cria carapaca quebravel, poÃ§as acidas dos borbulhantes, rachaduras verdes perseguidoras, foices vertebrais, cauda condutiva, mare de carnificina, nevoa giratoria e refluxo organico.", "color": Color(1.0, 0.64, 0.18), "texture": "boss6_form_1"}
 	]
@@ -49079,6 +49284,8 @@ func _rpc_gameplay_orb_spawned(orb: Dictionary) -> void:
 	var incoming: Dictionary = orb.duplicate(true)
 	incoming["collect_requested"] = false
 	heal_orbs.append(incoming)
+	if String(incoming.get("kind", "")) == POINT_BOOST_PICKUP_KIND:
+		_on_point_boost_spawned(incoming)
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)

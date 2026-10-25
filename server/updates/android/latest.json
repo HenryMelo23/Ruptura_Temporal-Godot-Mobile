@@ -1,15 +1,15 @@
 {
-  "version": "2.0.53",
-  "version_code": 25300,
-  "filename": "ruptura_temporal_mobile_2.0.53.apk",
-  "sha256": "ec4ab302bbf360d63d122e3bed8f20a429ecfc7c8f3a22ca5b2c43018e379458",
-  "size": 874415251,
+  "version": "2.0.55",
+  "version_code": 25500,
+  "filename": "ruptura_temporal_mobile_2.0.55.apk",
+  "sha256": "be51d06ba504271a6ee18750fbd49c27b2ce43c798eb641f5173c1552b0d9165",
+  "size": 943337018,
   "notes": [
-    "Nova categoria de cartas incomuns, com identidade azul e efeitos aprimorados.",
-    "Ferrolho de Ruptura, Rastro de Retorno, Eco de Impacto e Zona de Descompressao foram promovidas.",
-    "No multiplayer, host e terceiro jogador usam Geovana; o segundo jogador usa Henry.",
-    "Corrigidos a ordem de entrada, a preparacao e o inicio da partida multiplayer."
+    "Boss 4 reconstruido com combate, animacoes e sincronizacao autoritativa.",
+    "Ancorada recebeu 12 evolucoes estruturais exclusivas.",
+    "Novas cartas de pontos e pickup raro de Pontos x2 com HUD e limite de economia.",
+    "Multiplayer reforcado em entrada, pronto, manifestacao, inicio e partida para ate 3 jogadores."
   ],
   "mandatory": false,
-  "published_at": "2026-10-19T23:54:13.8766938Z"
+  "published_at": "2026-10-25T22:09:55Z"
 }

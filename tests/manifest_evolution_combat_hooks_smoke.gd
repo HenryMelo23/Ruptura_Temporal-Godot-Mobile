@@ -66,6 +66,15 @@ func _run_manifest_regression() -> void:
 			game._manifest_evolution_on_combat_hit(event_id, "regression_" + key, target, Vector2(target["pos"]))
 			var state := Dictionary(game.manifest_evolution_state.get("acorrentada", {}))
 			_check(Array(state.get("shackles", [])).size() == 1, "acorrentada direct hit did not invoke its non-projectile impact hook")
+		elif key == "ancorada":
+			var absolute_weight := _entry_for(key, "ancorada_peso_absoluto")
+			_check(not absolute_weight.is_empty(), "ancorada lacks its explicit structural impact contract")
+			_activate(key, absolute_weight)
+			game.lastro_stacks = 3
+			var event_id := "regression:%s:hit:%s" % [key, str(target.get("uid", ""))]
+			game._manifest_evolution_on_combat_hit(event_id, "regression_" + key, target, Vector2(target["pos"]))
+			var state := Dictionary(game.manifest_evolution_state.get("ancorada", {}))
+			_check(Array(state.get("absolute_pins", [])).size() == 1, "ancorada direct hit did not invoke Peso Absoluto")
 		else:
 			var link := _entry_for(key, "impact_link")
 			_check(not link.is_empty(), key + " lacks impact profile")
@@ -143,7 +152,7 @@ func _run() -> void:
 	_run_lacerante_and_acorrentada()
 	_run_necronada_skill()
 	_run_multiplayer_event_identity()
-	print("MANIFEST_EVOLUTION_COMBAT_HOOKS_OK manifestations=15 melee=lacerante/acorrentada necronada=valid_only multiplayer=deduped")
+	print("MANIFEST_EVOLUTION_COMBAT_HOOKS_OK manifestations=15 explicit=ancorada melee=lacerante/acorrentada necronada=valid_only multiplayer=deduped")
 	game.set_process(false)
 	game._cleanup_runtime_resources()
 	game.queue_free()

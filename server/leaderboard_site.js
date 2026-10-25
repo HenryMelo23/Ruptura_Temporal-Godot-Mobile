@@ -217,6 +217,23 @@ function behaviorOf(run) {
   return run && run.behaviorMetrics && typeof run.behaviorMetrics === "object" ? run.behaviorMetrics : {};
 }
 
+function knowledgeOf(run) {
+  return run && run.umbraKnowledge && typeof run.umbraKnowledge === "object" ? run.umbraKnowledge : {};
+}
+
+const UMBRA_KNOWLEDGE_LABELS = {
+  movement: "Movimento", shooting: "Disparo", choices: "Escolhas", preferences: "Preferencias", weaknesses: "Fraquezas"
+};
+
+function umbraKnowledgeBars(knowledge) {
+  const categories = knowledge && knowledge.categories && typeof knowledge.categories === "object" ? knowledge.categories : {};
+  return `<div class="umbra-knowledge-bars">${Object.entries(UMBRA_KNOWLEDGE_LABELS).map(([key, label]) => {
+    const row = categories[key] && typeof categories[key] === "object" ? categories[key] : {};
+    const percent = Math.max(0, Math.min(100, Math.round(safeNumber(row.percent))));
+    return `<div class="umbra-knowledge-row"><span>${escapeHtml(label)}</span><i><b style="width:${percent}%"></b></i><strong>${percent}%</strong></div>`;
+  }).join("")}</div>`;
+}
+
 function classifyUmbraRun(run) {
   const behavior = behaviorOf(run);
   const edge = safeNumber(behavior.edgeRatio);
@@ -237,13 +254,19 @@ function classifyUmbraRun(run) {
 function umbraAnalytics(runs) {
   const audited = arrayOf(runs);
   const eligible = audited.filter((run) => run && run.umbraTrainingEligible);
+  const knowledgeRows = eligible.map(knowledgeOf).filter((row) => safeNumber(row.totalPercent) > 0);
+  const knowledgeCategories = {};
+  for (const key of Object.keys(UMBRA_KNOWLEDGE_LABELS)) {
+    knowledgeCategories[key] = { percent: knowledgeRows.reduce((sum, row) => sum + safeNumber(row.categories && row.categories[key] && row.categories[key].percent), 0) / Math.max(1, knowledgeRows.length) };
+  }
   return {
     eligible,
     rejected: Math.max(0, audited.length - eligible.length),
     archetypes: countBy(eligible.map(classifyUmbraRun)).slice(0, 8),
     averagePhase1Seconds: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).phase1Seconds), 0) / Math.max(1, eligible.length),
     averageDashPerMinute: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).dashPerMinute), 0) / Math.max(1, eligible.length),
-    averageEdgeRatio: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).edgeRatio), 0) / Math.max(1, eligible.length)
+    averageEdgeRatio: eligible.reduce((sum, run) => sum + safeNumber(behaviorOf(run).edgeRatio), 0) / Math.max(1, eligible.length),
+    knowledge: { totalPercent: knowledgeRows.reduce((sum, row) => sum + safeNumber(row.totalPercent), 0) / Math.max(1, knowledgeRows.length), categories: knowledgeCategories }
   };
 }
 
@@ -739,6 +762,10 @@ function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
         ${metric("Pressao nas bordas", formatPercent(umbra.averageEdgeRatio), "Leitura de mapa de calor", "green", "L2")}
         ${metric("Arquetipo dominante", topUmbra ? topUmbra.label : "Sem leitura", topUmbra ? `${formatNumber(topUmbra.count)} dossies` : "Aguardando dados", "violet", "L3")}
       </section>
+      <section class="terminal-panel umbra-collective-panel">
+        ${sectionHeader("Conhecimento coletivo", `${Math.round(safeNumber(umbra.knowledge && umbra.knowledge.totalPercent))}% consolidado`, "Confianca media obtida nas cinco familias de observacao, sem publicar identidade ou historico bruto de jogadores.")}
+        ${umbraKnowledgeBars(umbra.knowledge)}
+      </section>
       <div class="terminal-panel">${signatureList(arrayOf(umbra.archetypes), "magenta")}</div>
     </section>
     <section class="observatory-grid">
@@ -865,6 +892,8 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
     edgeRatio: playerUmbra.averageEdgeRatio,
     hitRate: umbraRuns.reduce((sum, run) => sum + safeNumber(behaviorOf(run).hitRate), 0) / Math.max(1, umbraRuns.length)
   };
+  const latestKnowledgeRun = umbraRuns.find((run) => safeNumber(knowledgeOf(run).totalPercent) > 0);
+  const playerKnowledge = latestKnowledgeRun ? knowledgeOf(latestKnowledgeRun) : {};
   const timeline = [...runs].reverse().map((run) => ({
     label: formatDate(run).slice(0, 10),
     score: safeNumber(run.score),
@@ -923,6 +952,7 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
           <div><dt>Camada 3</dt><dd>${formatPercent(playerBehavior.hitRate)} precisao <small>${formatDecimal(playerBehavior.dashPerMinute, 1)} dash/min · ${formatPercent(playerBehavior.edgeRatio)} tempo em borda</small></dd></div>
           <div><dt>Fase 1 media</dt><dd>${formatDuration(playerBehavior.phase1Seconds)}</dd></div>
         </dl>
+        ${umbraKnowledgeBars(playerKnowledge)}
       </div>
       <div class="terminal-panel span-12">
         ${sectionHeader("Deck recorrente", "Cartas mais usadas", "Cartas presentes nas runs deste operador.")}
@@ -1046,6 +1076,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
   };
   const bossRows = arrayOf(run.bossDetail).filter((row) => row && (row.reached || safeNumber(row.damage) > 0));
   const behavior = behaviorOf(run);
+  const knowledge = knowledgeOf(run);
   const umbraReasons = arrayOf(run.umbraTrainingReasons);
   const timeline = runTimelineReport(run);
   const currentIndex = analytics.latest.findIndex((item) => String(item.id) === String(run.id));
@@ -1087,6 +1118,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
           <div><dt>Camada 2</dt><dd>${escapeHtml(classifyUmbraRun(run))} <small>${formatPercent(behavior.edgeRatio)} borda · ${formatPercent(behavior.cornerRatio)} canto</small></dd></div>
           <div><dt>Camada 3</dt><dd>${formatDecimal(behavior.dashPerMinute, 1)} dash/min <small>${formatDecimal(behavior.shotsPerMinute, 1)} tiros/min · ${formatPercent(behavior.hitRate)} acerto</small></dd></div>
         </dl>
+        ${umbraKnowledgeBars(knowledge)}
       </div>
       <div class="terminal-panel span-7">
         ${sectionHeader("Posicionamento", "Mapa de calor e dano", "Reconstrucao espacial da permanencia e dos pontos de impacto.", `<div class="phase-switch">${phases.map((phase, index) => `<button type="button" data-phase="${phase}" class="${index === 0 ? "active" : ""}">Fase ${phase}</button>`).join("")}</div>`)}
@@ -1562,7 +1594,7 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .hero-operator{align-self:stretch;display:grid;align-content:center;justify-items:center;text-align:center;padding:24px;border:1px solid rgba(255,255,255,.10);background:rgba(2,5,10,.32)}
 .hero-operator>span{font:800 11px var(--font-mono);color:var(--text-soft)}.hero-orbit{display:grid;place-items:center;width:178px;height:178px;margin:18px 0;border:1px solid var(--rupture-cyan);border-radius:50%;background:radial-gradient(circle,rgba(37,244,229,.14),transparent 64%);box-shadow:0 0 55px rgba(37,244,229,.15)}
 .hero-orbit img,.hero-orbit .asset-fallback{max-width:132px;max-height:132px;object-fit:contain;image-rendering:auto}.hero-operator h3{margin:0;font-size:28px}.hero-operator strong{margin-top:8px;color:var(--rupture-cyan);font:900 36px var(--font-mono)}.hero-operator p{color:var(--text-soft);line-height:1.45}.hero-operator a{color:var(--rupture-cyan);font-weight:800}
-.pulse-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:24px}.umbra-mind-block{margin-bottom:24px}.metric{position:relative;min-height:146px;padding:18px;border:1px solid var(--line);border-top:3px solid var(--tone);background:linear-gradient(180deg,var(--surface),rgba(5,10,17,.92));overflow:hidden}
+.pulse-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:24px}.umbra-mind-block{margin-bottom:24px}.umbra-collective-panel{margin-bottom:14px}.umbra-knowledge-bars{display:grid;gap:9px;margin-top:18px}.umbra-knowledge-row{display:grid;grid-template-columns:minmax(92px,150px) 1fr 48px;gap:12px;align-items:center;color:#e9d8dc;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em}.umbra-knowledge-row i{display:block;height:8px;background:rgba(75,10,24,.7);border:1px solid rgba(255,57,92,.22);overflow:hidden}.umbra-knowledge-row i b{display:block;height:100%;background:linear-gradient(90deg,#681428,#ff234f);box-shadow:0 0 12px rgba(255,35,79,.36)}.umbra-knowledge-row strong{color:#ff728b;text-align:right}.metric{position:relative;min-height:146px;padding:18px;border:1px solid var(--line);border-top:3px solid var(--tone);background:linear-gradient(180deg,var(--surface),rgba(5,10,17,.92));overflow:hidden}
 .metric:before{content:"";position:absolute;right:-28px;bottom:-36px;width:110px;height:110px;border:18px solid var(--tone);opacity:.045;transform:rotate(24deg)}.metric span{color:var(--tone);font:800 11px var(--font-mono)}.metric b{display:block;margin:14px 0 4px;color:var(--text-main);font:900 clamp(23px,2.4vw,36px) var(--font-mono);overflow-wrap:anywhere}.metric strong{display:block;text-transform:uppercase;font-size:12px}.metric small{display:block;margin-top:7px;color:var(--text-soft);line-height:1.4}
 .tone-cyan{--tone:var(--rupture-cyan)}.tone-magenta{--tone:var(--rupture-magenta)}.tone-amber{--tone:var(--survival-yellow)}.tone-green{--tone:var(--progress-green)}.tone-red{--tone:var(--danger-red)}.tone-violet{--tone:var(--rupture-violet)}
 .observatory-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:22px}.span-12{grid-column:span 12}.span-8{grid-column:span 8}.span-7{grid-column:span 7}.span-5{grid-column:span 5}.span-4{grid-column:span 4}

@@ -25,7 +25,8 @@ func pack(game: Node) -> Dictionary:
 		"boss_attacks": game.boss_attacks.duplicate(true),
 		"boss_transition_waves": game.boss_transition_waves.duplicate(true),
 		"weather": game._pack_net_weather_visuals(),
-		"runtime_event": game.runtime_event_director.active_snapshot()
+		"runtime_event": game.runtime_event_director.active_snapshot(),
+		"point_boost": game.point_boost_pickup_controller.active_snapshot()
 	}
 	if game.current_phase == 7:
 		# One clock reproduces the whole heat field; flames stay local to each client.
@@ -134,6 +135,13 @@ func pack(game: Node) -> Dictionary:
 			packet["boss4_ultimate_timer"] = game.boss4_ultimate_timer
 			packet["boss4_meteorites"] = game.boss4_meteorites.duplicate(true)
 			packet["boss4_meteor_damage_bonus"] = game.boss4_meteor_damage_bonus
+			packet["boss4_controller"] = game.boss4_controller.snapshot()
+			packet["boss4_ultimate_destroyed"] = game.boss4_ultimate_destroyed
+			packet["boss4_stun_timer"] = game.boss4_stun_timer
+			packet["boss4_vulnerable_timer"] = game.boss4_vulnerable_timer
+			packet["boss4_hit_timer"] = game.boss4_hit_timer
+			packet["boss4_ultimate_outcome"] = game.boss4_ultimate_outcome
+			packet["boss4_ultimate_outcome_timer"] = game.boss4_ultimate_outcome_timer
 		5:
 			packet["phase5_hazards"] = game.phase5_hazards.duplicate(true)
 			packet["phase5_telegraphs"] = game.phase5_telegraphs.duplicate(true)
@@ -216,6 +224,8 @@ func apply(game: Node, snapshot_data) -> void:
 		game._apply_shared_kill_progress(maxi(0, int(data["team_kills"])))
 	if game._is_world_replica() and data.has("runtime_event"):
 		game.runtime_event_director.apply_remote_snapshot(Dictionary(data["runtime_event"]))
+	if game._is_world_replica() and data.has("point_boost"):
+		game.point_boost_pickup_controller.apply_remote_snapshot(Dictionary(data["point_boost"]))
 	if game._is_world_replica() and data.has("pacing_profile"):
 		game.run_pacing_profile = String(data.get("pacing_profile", game.run_pacing_profile))
 	game.boss1_visual_snapshot_ms = Time.get_ticks_msec()
@@ -416,6 +426,15 @@ func apply(game: Node, snapshot_data) -> void:
 	game.boss4_ultimate_timer = float(data.get("boss4_ultimate_timer", game.boss4_ultimate_timer))
 	game.boss4_meteorites = Array(data.get("boss4_meteorites", game.boss4_meteorites)).duplicate(true)
 	game.boss4_meteor_damage_bonus = float(data.get("boss4_meteor_damage_bonus", game.boss4_meteor_damage_bonus))
+	if game.current_phase == 4 and game._is_world_replica() and data.has("boss4_controller"):
+		var controller_snapshot = data.get("boss4_controller", {})
+		game.boss4_controller.apply_remote_snapshot(Dictionary(controller_snapshot) if controller_snapshot is Dictionary else {})
+	game.boss4_ultimate_destroyed = int(data.get("boss4_ultimate_destroyed", game.boss4_ultimate_destroyed))
+	game.boss4_stun_timer = float(data.get("boss4_stun_timer", game.boss4_stun_timer))
+	game.boss4_vulnerable_timer = float(data.get("boss4_vulnerable_timer", game.boss4_vulnerable_timer))
+	game.boss4_hit_timer = maxf(game.boss4_hit_timer, float(data.get("boss4_hit_timer", 0.0)))
+	game.boss4_ultimate_outcome = String(data.get("boss4_ultimate_outcome", game.boss4_ultimate_outcome))
+	game.boss4_ultimate_outcome_timer = maxf(game.boss4_ultimate_outcome_timer, float(data.get("boss4_ultimate_outcome_timer", 0.0)))
 	game.phase5_hazards = Array(data.get("phase5_hazards", game.phase5_hazards)).duplicate(true)
 	game.phase5_telegraphs = Array(data.get("phase5_telegraphs", game.phase5_telegraphs)).duplicate(true)
 	game.boss5_current_action = String(data.get("boss5_current_action", game.boss5_current_action))

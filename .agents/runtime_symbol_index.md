@@ -42,6 +42,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/phase/experimental_phase_controller.gd` | owner | owner | owner | `prepare_new_run`, `activate_after_phase_setup`, `update`; isolated FaseEX exploration and altar contract |
 | `scripts/systems/assets/runtime_asset_controller.gd` | owner | owner | owner | `should_stream_phase_assets`, `should_lazy_gallery_assets`, `release_transient_gallery_assets`, `prepare_phase`, `ensure_key`, `phase_keys` |
 | `scripts/systems/progression/runtime_progression_controller.gd` | 249 | 181 | 33 | `elite_point_multiplier` 19 code LOC |
+| `scripts/systems/cards/roguelike_point_card_controller.gd` | owner | owner | owner | `on_enemy_defeated`, `on_player_damaged`, `critical_damage_multiplier`, `extra_card_copies`; triggered point, critical and duplication cards |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
 | `scripts/systems/player/player_control_controller.gd` | owner | owner | owner | `read_move`, `aim_direction`, touch/gamepad/desktop input routing, Parasítica HAB1 and Lacerante ultimate quick-versus-held aiming |
 | `scripts/lacerante_sprites.gd` | owner | owner | owner | `register`, `snapshot`, `draw_height`; canonical Lacerante movement/attack/Q/ultimate frame selection for local and remote players |
@@ -65,6 +66,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Shop reroll | `func reroll` | `scripts/ui/shop_controller.gd:411` |
 | Shop paid reroll cost | `next_paid_reroll_cost` | `scripts/ui/shop_controller.gd:135` |
 | Shop drawing | `func draw` | `scripts/ui/shop_presentation.gd:382` |
+| Triggered point/critical card owner | `class_name RTRoguelikePointCardController` | `scripts/systems/cards/roguelike_point_card_controller.gd`; kill drop, damage reward, final critical multiplier and non-legendary duplication contracts |
 | Legacy shop drawing | `func draw_legacy` | `scripts/ui/shop_presentation.gd:502` |
 | HUD render and responsive layout | `HudPresentation._draw_hud`, `HudPresentation.update_button_layout` | `scripts/presentation/hud_presentation.gd`; core keeps `_draw_hud` / `_update_button_layout` wrappers |
 | Telemetry facade | `_record_telemetry_shop_reroll` | `scripts/main_runtime_core.gd:2292` |
@@ -86,6 +88,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Boss 4 instability fissure owner | `RTBoss4InstabilityFissureController.update`, `cast_now` | `scripts/systems/bosses/boss4_instability_fissure_controller.gd`; owns cadence, recent-position history, living-target rotation, fixed-party coverage, event IDs and safe-corridor geometry |
 | Boss 4 instability fissure damage | `RTBoss4InstabilityFissureController.resolve_hazard` | `scripts/systems/bosses/boss4_instability_fissure_controller.gd`; authority-only hit resolution, safe-corridor exclusion and one hit per stable peer ID; core wrapper only routes |
 | Boss 4 instability fissure presentation | `RTBoss4InstabilityFissurePresentation.draw` | `scripts/presentation/boss4_instability_fissure_presentation.gd`; renders warning, active fracture, safe corridor and dissipation from replicated hazard snapshots |
+| Boss 4 authoritative FSM | `RTBoss4Controller.update`, `request_contextual_action`, `snapshot`, `apply_remote_snapshot` | `scripts/systems/bosses/boss4_controller.gd`; owns locomotion, per-peer contact cooldown, four-stage contextual attack choice and exact action timing |
+| Boss 4 animation presentation | `RTBoss4AnimationPresentation.visual_state`, `active_texture`, `draw_death` | `scripts/presentation/boss4_animation_presentation.gd`; maps the replicated FSM to the original Nexo Anfíbio atlas while preserving a fixed in-game scale and bottom pivot |
 | Online packet contract | `class_name RTNetContract` | `scripts/systems/online/net_contract.gd:1` |
 | Player visual snapshot | `RTVisualSyncContract.pack_player_visual`, `unpack_player_visual` | `scripts/systems/online/runtime_visual_sync_contract.gd`; fixed-stride schema on unreliable ordered player channel; movement/aim/action intent complements authoritative position and animation frame |
 | Ability visual event | `RTManifestationVisualSnapshot.capture`, `RTVisualSyncContract.sanitize_ability_payload`, `_send_network_ability_visual`, `_rpc_ability_visual`, `_rpc_ability_visual_patch` | schema 3 replays canonical local presentation state through the same renderers; reliable start plus bounded 250 ms unreliable-ordered corrections for long Q/E effects; stable event ID and peer sequence; presentation only, never damage authority |
@@ -102,6 +106,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Phase 6 Suturador VFX | `class_name RTPhase6AmberSuturerPresentation` | `scripts/presentation/phase6_amber_suturer_presentation.gd:1` |
 | Manifest evolution catalog | `class_name RTManifestEvolutionCatalog` | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd:2` |
 | Acorrentada evolution owner | `RTAcorrentadaEvolutionController.on_combo_resolved`, `on_hit`, `on_skill`, `on_teleport`, `on_sentence_started`, `update_effects`, `draw_world` | `scripts/systems/manifest_evolutions/acorrentada_evolution_controller.gd`; 12 ID-specific, save-contained contracts with capped persistent collections and no projectile dependency |
+| Ancorada evolution owner | `RTAncoradaEvolutionController.on_anchor_placed`, `on_hit`, `on_skill`, `on_teleport`, `on_ultimate_started`, `update_effects`, `draw_world` | `scripts/systems/manifest_evolutions/ancorada_evolution_controller.gd`; 12 ID-specific structural contracts with capped walls/domains/lines/fortresses/monuments, structure HP and sampled collision scans |
 | Lacerante melee evolution adapter | `RTLaceranteEvolutionController.on_hit`, `update_effects` | `scripts/systems/manifest_evolutions/lacerante_evolution_controller.gd`; five projectile-shaped legacy IDs resolve through real melee hits, with capped persistent wounds and non-recursive chains |
 | Manifest evolution option source | `_manifest_evolution_entries` | `scripts/main_runtime_core.gd:7566` |
 | Manifest evolution projectile hook | `_apply_manifest_evolution_to_bullet` | `scripts/main_runtime_core.gd:7836` |
@@ -133,6 +138,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | UMBRA 2.0 multi-head recurrent policy | `RTUmbraMultiheadPolicy.step` | `scripts/systems/umbra_multihead_policy.gd` |
 | UMBRA PC/Android fixture parity | `RTUmbraMultiheadPolicy.set_hidden_state` | `tests/umbra_multihead_parity_smoke.gd` |
 | UMBRA 2.0 memory lifecycle | `RTUmbraMemoryController.begin_run` | `scripts/systems/umbra_memory_controller.gd` |
+| UMBRA pre-combat knowledge dossier | `RTUmbraMemoryController.knowledge_report` | `scripts/systems/umbra_memory_controller.gd` |
 | UMBRA RL contract dump | `SceneTree._init` | `tools/umbra_rl_contract.gd` |
 | UMBRA RL authoritative rollout | `SceneTree._run` | `tools/umbra_rl_rollout.gd` |
 | UMBRA RL reward/curriculum | `_reward_for_transition` | `tools/umbra_rl_rollout.gd` |
@@ -153,7 +159,7 @@ Use exact symbol search in these owners; core keeps compatible wrappers.
 - Lobby ready/session snapshot application: `scripts/systems/online/runtime_lobby_controller.gd`; public RPC entrypoints remain on `Main`, preserving names, payload order and Godot RPC configuration.
 - Phase 2 Sineiro Boreal combat/reward authority: `scripts/systems/enemies/phase2_sineiro_boreal_controller.gd`; presentation: `scripts/presentation/phase2_sineiro_presentation.gd`.
 - Phase 6 Suturador de Âmbar event authority: `scripts/systems/enemies/phase6_amber_suturer_controller.gd`; presentation: `scripts/presentation/phase6_amber_suturer_presentation.gd`.
-- Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`.
+- Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`; temporary x2 point artifact drop budget, buff timer, Event Director cap and team snapshot: `scripts/systems/progression/point_boost_pickup_controller.gd`.
 - Boss wave drawing: `scripts/presentation/boss_wave_presentation.gd`.
 - Boss 1 animation/facing/damage-stage presentation: `scripts/presentation/boss1_animation_presentation.gd`; rewind plus Pinças em Tenaz targeting, sequence construction and state-machine updates live in `scripts/systems/early_boss_controller.gd`. Shared state, public wrappers and authority/RPC boundary remain in core.
 - Cross-owner regression: `tests/runtime_backup_reconciliation_smoke.gd`.

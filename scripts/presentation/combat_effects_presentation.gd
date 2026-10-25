@@ -252,6 +252,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	LaceranteVfx.draw_ground_marks(game, camera)
 	for anchor in (game.anchors + game.net_anchors):
 		_draw_anchor_visual(game, anchor, camera)
+	game.ancorada_ability_controller.draw_evolutions(camera)
 	for prism in (game.prisms + game.net_prisms):
 		game._draw_prismatica_prism(prism, camera)
 	game._draw_advanced_manifestation_world(camera)
@@ -292,6 +293,9 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_network_rewind_visuals(camera)
 	_draw_bargain_capsule(game, camera)
 	for orb in game.heal_orbs:
+		if String(orb.get("kind", "heal")) == game.POINT_BOOST_PICKUP_KIND:
+			_draw_point_boost_pickup(game, orb, camera)
+			continue
 		if String(orb.get("kind", "heal")) == game.PHASE_POINT_CRYSTAL_KIND:
 			_draw_phase_point_crystal(game, orb, camera)
 			continue
@@ -1283,6 +1287,39 @@ static func _draw_larapio_coin_drops(game: Node2D, camera: Vector2) -> void :
 			game.draw_arc(pos, radius + 7.0 + shine * 2.0, 0, TAU, 24, Color(1.0, 0.82, 0.2, 0.36), 1.4)
 
 
+static func _draw_point_boost_pickup(game: Node2D, orb: Dictionary, camera: Vector2) -> void:
+	var ground: Vector2 = Vector2(orb.get("pos", Vector2.ZERO)) - camera
+	var phase: float = float(orb.get("phase", 0.0))
+	var clock: float = game.time_alive
+	var pulse: float = 0.5 + 0.5 * sin(clock * 4.6 + phase)
+	var bob: float = sin(clock * 2.7 + phase) * 5.0 - 5.0
+	var center := ground + Vector2(0.0, bob)
+	var elapsed: float = maxf(0.0, float(orb.get("max_life", 1.0)) - float(orb.get("life", 0.0)))
+	var spawn_ratio: float = clampf(elapsed / 0.28, 0.0, 1.0)
+	var spawn_scale: float = lerpf(0.25, 1.0 + sin(spawn_ratio * PI) * 0.18, spawn_ratio)
+	var tilt: float = sin(clock * 1.65 + phase) * 0.16
+	var shadow_scale: float = clampf(1.0 - absf(bob) * 0.025, 0.72, 1.0)
+	game.draw_ellipse(ground + Vector2(0.0, 15.0), 19.0 * shadow_scale, 6.0 * shadow_scale, Color(0.015, 0.025, 0.03, 0.34))
+	game.draw_circle(center, 28.0 + pulse * 5.0, Color(1.0, 0.72, 0.08, 0.06 + pulse * 0.07))
+	game.draw_arc(center, 28.0 + pulse * 4.0, clock * 0.9 + phase, clock * 0.9 + phase + TAU * 0.76, 32, Color(0.16, 1.0, 0.82, 0.30 + pulse * 0.2), 2.0, true)
+	game.draw_set_transform(center, tilt, Vector2.ONE * spawn_scale)
+	var medal := PackedVector2Array([
+		Vector2(-10.0, -20.0), Vector2(10.0, -20.0), Vector2(20.0, -10.0), Vector2(20.0, 10.0),
+		Vector2(10.0, 20.0), Vector2(-10.0, 20.0), Vector2(-20.0, 10.0), Vector2(-20.0, -10.0)
+	])
+	game.draw_colored_polygon(medal, Color(0.08, 0.34, 0.3, 0.98))
+	game.draw_polyline(PackedVector2Array([medal[0], medal[1], medal[2], medal[3], medal[4], medal[5], medal[6], medal[7], medal[0]]), Color(0.28, 1.0, 0.82, 0.96), 2.8, true)
+	game.draw_circle(Vector2.ZERO, 15.8, Color(1.0, 0.7 + pulse * 0.12, 0.08, 1.0))
+	game.draw_circle(Vector2.ZERO, 11.4, Color(0.68, 0.37, 0.025, 0.96))
+	game.draw_arc(Vector2.ZERO, 12.8, 0.0, TAU, 28, Color(1.0, 0.94, 0.48, 0.9), 1.8, true)
+	game.draw_line(Vector2(-6.0, -7.0), Vector2(-6.0, 7.0), Color(1.0, 0.9, 0.34, 0.96), 3.0, true)
+	game.draw_line(Vector2(1.0, -7.0), Vector2(7.0, -7.0), Color(1.0, 0.9, 0.34, 0.96), 2.6, true)
+	game.draw_line(Vector2(7.0, -7.0), Vector2(1.0, 7.0), Color(1.0, 0.9, 0.34, 0.96), 2.6, true)
+	game.draw_line(Vector2(1.0, 7.0), Vector2(7.0, 7.0), Color(1.0, 0.9, 0.34, 0.96), 2.6, true)
+	game.draw_line(Vector2(-9.0, -12.0), Vector2(-3.0, -15.0), Color(1.0, 1.0, 0.82, 0.8), 2.2, true)
+	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
 static func _draw_phase_point_crystal(game: Node2D, orb: Dictionary, camera: Vector2) -> void:
 	var pos: Vector2 = Vector2(orb.get("pos", Vector2.ZERO)) - camera
 	var phase: float = game.time_alive * 4.0 + float(orb.get("pulse", 0.0))
@@ -1309,6 +1346,9 @@ static func _draw_enemy_point_orb(game: Node2D, orb: Dictionary, camera: Vector2
 	var phase: float = game.time_alive * 5.2 + float(orb.get("pulse", orb.get("phase", 0.0)))
 	var pulse: float = 0.5 + 0.5 * sin(phase)
 	var stack_scale: float = 1.0 + minf(0.45, log(float(maxi(1, int(orb.get("stack_count", 1))))) * 0.1)
+	var large_prism: bool = bool(orb.get("large_prism_shard", false))
+	if large_prism:
+		stack_scale += 0.72
 	var attracted: bool = int(orb.get("magnet_peer_id", 0)) != 0
 	var velocity: Vector2 = Vector2(orb.get("velocity", Vector2.ZERO))
 	var speed_ratio: float = clampf(float(orb.get("magnet_speed", 0.0)) / game.ENEMY_POINT_MAGNET_MAX_SPEED, 0.0, 1.0)
@@ -1332,9 +1372,12 @@ static func _draw_enemy_point_orb(game: Node2D, orb: Dictionary, camera: Vector2
 		center + Vector2(0.0, radius * 1.25),
 		center + Vector2(-radius * 0.9, 0.0)
 	])
-	game.draw_circle(center, radius * 1.5, Color(1.0, 0.7, 0.08, 0.10 + pulse * 0.08 + speed_ratio * 0.12))
-	game.draw_colored_polygon(points, Color(1.0, 0.66 + pulse * 0.18, 0.08, 0.94))
-	game.draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 0.97, 0.62, 0.92), 1.4, true)
+	var body_color: Color = Color(0.34, 0.82 + pulse * 0.14, 1.0, 0.96) if large_prism else Color(1.0, 0.66 + pulse * 0.18, 0.08, 0.94)
+	var edge_color: Color = Color(0.88, 0.74, 1.0, 0.96) if large_prism else Color(1.0, 0.97, 0.62, 0.92)
+	var glow_color: Color = Color(0.48, 0.3, 1.0, 0.16 + pulse * 0.12) if large_prism else Color(1.0, 0.7, 0.08, 0.10 + pulse * 0.08 + speed_ratio * 0.12)
+	game.draw_circle(center, radius * (1.9 if large_prism else 1.5), glow_color)
+	game.draw_colored_polygon(points, body_color)
+	game.draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), edge_color, 2.2 if large_prism else 1.4, true)
 	game.draw_line(center + Vector2(-radius * 0.2, -radius * 0.78), center + Vector2(radius * 0.14, radius * 0.54), Color(1.0, 1.0, 0.86, 0.72), 1.1, true)
 	if attracted:
 		game.draw_arc(center, radius + 5.0 + pulse * 2.0, phase * 1.4, phase * 1.4 + TAU * 0.68, 20, Color(0.34, 1.0, 0.94, 0.48 + speed_ratio * 0.3), 1.6 + speed_ratio, true)

@@ -138,6 +138,56 @@ func _run_acorrentada_behavior(entry: Dictionary) -> void:
 	_check(int(metrics.get(evolution_id, 0)) > 0, "Acorrentada contract did not produce a real metric for " + evolution_id)
 
 
+func _run_ancorada_behavior(entry: Dictionary) -> void:
+	_activate_single("ancorada", entry)
+	game.anchors.clear()
+	game.enemy_bullets.clear()
+	game.lastro_stacks = 0
+	game.player_hp_max = 1000.0
+	game.player_hp = 1000.0
+	for offset in [Vector2(80, 0), Vector2(150, 24), Vector2(205, -18)]:
+		game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + offset)
+		game.enemies.back()["hp"] = 100000.0
+		game.enemies.back()["max_hp"] = 100000.0
+	var target: Dictionary = game.enemies[0]
+	var evolution_id := String(entry.get("id", ""))
+	var effect := String(Dictionary(entry.get("profile", {})).get("effect", ""))
+	match effect:
+		"ancorada_fundacao_profunda":
+			game._place_anchor(game.player_pos + Vector2(80, 0), game.player_pos, "ancorada_test", true)
+		"ancorada_muralha_ruptura", "ancorada_territorio_jurado", "ancorada_fortaleza_autoportante":
+			game._place_anchor(game.player_pos + Vector2(100, 0), game.player_pos, "ancorada_q", true)
+		"ancorada_peso_absoluto":
+			game.lastro_stacks = 3
+			game._manifest_evolution_on_combat_hit("matrix:ancorada:weight", "ancorada", target, Vector2(target["pos"]))
+		"ancorada_contra_impacto":
+			game._place_anchor(Vector2(target["pos"]), game.player_pos, "ancorada_test", true)
+			game._update_manifest_evolution_effects(0.10)
+		"ancorada_linha_fundacao":
+			game._place_anchor(game.player_pos + Vector2(70, -30), game.player_pos, "ancorada_test_a", true)
+			game._place_anchor(game.player_pos + Vector2(180, 30), game.player_pos, "ancorada_test_b", true)
+		"ancorada_coracao_fortaleza":
+			game._place_anchor(game.player_pos + Vector2(70, -30), game.player_pos, "ancorada_test_a", true)
+			game._place_anchor(game.player_pos + Vector2(180, 30), game.player_pos, "ancorada_test_b", true)
+			game._update_manifest_evolution_effects(0.80)
+		"ancorada_queda_monumental":
+			game._manifest_evolution_on_teleport(game.player_pos, game.player_pos + Vector2(120, 0))
+			game._update_manifest_evolution_effects(0.50)
+		"ancorada_rede_fundacoes":
+			game._place_anchor(game.player_pos + Vector2(70, 0), game.player_pos, "ancorada_test_a", true)
+			game._place_anchor(game.player_pos + Vector2(160, 20), game.player_pos, "ancorada_test_b", true)
+			game._manifest_evolution_on_combat_hit("matrix:ancorada:network", "ancorada", target, Vector2(target["pos"]))
+		"ancorada_ultimo_bastiao":
+			game.player_hp = 240.0
+			game._update_manifest_evolution_effects(0.10)
+		"ancorada_continente_imovel":
+			game.ancorada_ability_controller.spawn_ultimate(game.player_pos)
+		_:
+			_check(false, "unhandled Ancorada effect " + effect)
+	var metrics: Dictionary = Dictionary(Dictionary(game.manifest_evolution_state.get("ancorada", {})).get("metrics", {}))
+	_check(int(metrics.get(evolution_id, 0)) > 0, "Ancorada contract did not produce a real metric for " + evolution_id)
+
+
 func _run() -> void:
 	game._start_game()
 	game.mode = "game"
@@ -154,6 +204,10 @@ func _run() -> void:
 				continue
 			if key == "acorrentada":
 				_run_acorrentada_behavior(Dictionary(entry))
+				checked += 1
+				continue
+			if key == "ancorada":
+				_run_ancorada_behavior(Dictionary(entry))
 				checked += 1
 				continue
 			var profile: Dictionary = Dictionary(Dictionary(entry).get("profile", {}))

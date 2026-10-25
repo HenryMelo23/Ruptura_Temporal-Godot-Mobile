@@ -111,9 +111,11 @@ func _test_reachable_cadence_and_state_blocks() -> void:
 	game.boss4_meteor_event_timer = 999.0
 	game.boss4_ultimate_cooldown = 999.0
 	game.boss4_instability_fissure_controller.reset()
-	game._update_boss_phase4(5.4)
+	# The dedicated fissure controller still owns its cadence contract. Boss 4's
+	# high-level FSM now decides when that attack is eligible in live combat.
+	game.boss4_instability_fissure_controller.update(5.4, true)
 	assert(_fissures().is_empty())
-	game._update_boss_phase4(0.2)
+	game.boss4_instability_fissure_controller.update(0.2, true)
 	assert(_fissures().size() == 2)
 
 	game.phase4_enemy_hazards.clear()

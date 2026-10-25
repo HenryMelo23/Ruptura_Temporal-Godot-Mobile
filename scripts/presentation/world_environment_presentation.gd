@@ -7,6 +7,7 @@ const BossWavePresentation = preload("res://scripts/presentation/boss_wave_prese
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
 const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
+const Boss4AnimationPresentation = preload("res://scripts/presentation/boss4_animation_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 const Phase3RitualPulsePresentation = preload("res://scripts/presentation/phase3_ritual_pulse_presentation.gd")
 const Phase4InstabilityPulsePresentation = preload("res://scripts/presentation/phase4_instability_pulse_presentation.gd")
@@ -311,6 +312,9 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 	if Boss3AnimationPresentation.death_active(game):
 		Boss3AnimationPresentation.draw_death(game, camera)
 		return
+	if Boss4AnimationPresentation.death_active(game):
+		Boss4AnimationPresentation.draw_death(game, camera)
+		return
 	if not (game.boss_active and game.boss_hp > 0.0) and not (game.current_phase == 7 and game.boss7_core_active):
 		return
 	if game._boss3_miasma_active() and game.boss3_miasma_variant == 1:
@@ -344,11 +348,13 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_dynamic_shadow_fit(boss_tex, Boss2AnimationPresentation.shadow_center(game) - camera, Vector2(122, 82), game.boss2_facing_dir < 0.0, true, 0.34)
 	elif game.current_phase == 3:
 		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), true, 0.44)
+	elif game.current_phase == 4:
+		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, Boss4AnimationPresentation.should_flip_h(game), true, 0.44)
 	elif game.current_phase == 1:
 		game._draw_dynamic_shadow_fit(boss_tex, Boss1AnimationPresentation.shadow_center(game.boss_pos - camera, boss_draw_size), boss_draw_size, Boss1AnimationPresentation.should_flip_h(game), true, 0.44)
 	else:
 		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, false, true, 0.44)
-	var boss_modulate: Color = Boss3AnimationPresentation.stage_modulate(game) if game.current_phase == 3 else (Boss1AnimationPresentation.stage_modulate(game) if game.current_phase == 1 else Color.WHITE)
+	var boss_modulate: Color = Boss4AnimationPresentation.stage_modulate(game) if game.current_phase == 4 else (Boss3AnimationPresentation.stage_modulate(game) if game.current_phase == 3 else (Boss1AnimationPresentation.stage_modulate(game) if game.current_phase == 1 else Color.WHITE))
 	if game._attack_target_is_boss() and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		game._draw_attack_target_marker(boss_draw_pos - camera + Vector2(0, 55), 64.0, game.locked_target_kind == "boss")
 		boss_modulate = boss_modulate * Color(1.0, 0.93, 0.48, 1.0)
@@ -356,6 +362,8 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, game.boss2_facing_dir < 0.0, boss_modulate, true)
 	elif game.current_phase == 3:
 		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), boss_modulate, true)
+	elif game.current_phase == 4:
+		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, Boss4AnimationPresentation.should_flip_h(game), boss_modulate, true)
 	elif game.current_phase == 1:
 		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, Boss1AnimationPresentation.should_flip_h(game), boss_modulate, true)
 		Boss1AnimationPresentation.draw_damage_stage(game, boss_draw_pos - camera, boss_draw_size)
@@ -745,6 +753,7 @@ static func _draw_phase4_environment(game: Node2D, camera: Vector2) -> void :
 			var b = a + Vector2.from_angle(seed + game.time_alive * 0.8) * (42.0 + unstable_alpha * 82.0)
 			game.draw_line(a, b, Color(0.86, 0.34, 1.0, 0.1 + unstable_alpha * 0.18), 1.4 + unstable_alpha * 1.8, true)
 	game._draw_phase4_enemy_hazards(camera)
+	_draw_boss4_action_telegraph(game, camera)
 	game._draw_boss4_specials(camera)
 	for zone in game.phase4_null_zones:
 		var life_ratio: float = clamp(float(zone.get("life", 0.0)) / max(0.01, float(zone.get("max", game.BOSS4_NULL_ZONE_DURATION))), 0.0, 1.0)
@@ -1175,7 +1184,47 @@ static func _draw_boss4_ultimate(game: Node2D, camera: Vector2) -> void :
 			var p = center - dir * (220.0 + float(i) * 92.0) + dir.orthogonal() * sin(game.time_alive * 3.0 + float(i)) * 54.0
 			game.draw_polyline(PackedVector2Array([p - dir * 22.0 + dir.orthogonal() * 14.0, p + dir * 18.0, p - dir * 22.0 - dir.orthogonal() * 14.0]), Color(0.7, 1.0, 0.9, 0.66), 3.0, false)
 		game._draw_centered("GRAVIDADE: %s" % game._boss4_gravity_dir_label(dir), Vector2(viewport.x * 0.5, 122.0), 16, Color(0.7, 1.0, 0.9, 0.92))
-	game._draw_centered("TEMPESTADE DE RAIOS %.0fs" % ceil(game.boss4_ultimate_timer), Vector2(viewport.x * 0.5, 92.0), 22, Color(1.0, 0.86, 0.28, 0.98))
+	for anchor in game.boss4_rupture_anchors:
+		if bool(anchor.get("destroyed", false)):
+			continue
+		var anchor_pos: Vector2 = Vector2(anchor.get("pos", center + camera)) - camera
+		var anchor_hp: float = float(anchor.get("hp", game.BOSS4_ULTIMATE_ANCHOR_HP))
+		var anchor_max: float = maxf(1.0, float(anchor.get("max_hp", game.BOSS4_ULTIMATE_ANCHOR_HP)))
+		var anchor_pulse: float = 0.5 + 0.5 * sin(game.time_alive * 7.0 + float(anchor.get("phase", 0.0)))
+		game.draw_circle(anchor_pos, 38.0 + anchor_pulse * 5.0, Color(0.18, 0.02, 0.28, 0.78))
+		game.draw_arc(anchor_pos, 43.0 + anchor_pulse * 4.0, -game.time_alive * 2.2, TAU - game.time_alive * 2.2, 48, Color(1.0, 0.72, 0.18, 0.96), 4.0)
+		game.draw_arc(anchor_pos, 29.0, game.time_alive * 3.1, TAU + game.time_alive * 3.1, 36, Color(0.42, 1.0, 0.92, 0.88), 3.0)
+		game._draw_bar(anchor_pos + Vector2(-42.0, -58.0), 84.0, anchor_hp / anchor_max, Color(1.0, 0.68, 0.16))
+	game._draw_centered("SINGULARIDADE %.0fs  |  ANCORAS %d/%d" % [ceil(game.boss4_ultimate_timer), game.boss4_ultimate_destroyed, game.BOSS4_ULTIMATE_REQUIRED_ANCHORS], Vector2(viewport.x * 0.5, 92.0), 22, Color(1.0, 0.86, 0.28, 0.98))
+
+
+static func _draw_boss4_action_telegraph(game: Node2D, camera: Vector2) -> void:
+	if not game.boss_active or game.boss4_ultimate_active:
+		return
+	if String(game.boss4_ai_state.get("state", "")) != "windup":
+		return
+	var action: String = String(game.boss4_ai_state.get("action", ""))
+	var duration_by_action := {"slam": 0.62, "tongue": 0.58, "jump": 0.54, "combo": 0.54}
+	var duration: float = float(duration_by_action.get(action, 0.72))
+	var progress: float = clampf(float(game.boss4_ai_state.get("action_elapsed", 0.0)) / maxf(0.01, duration), 0.0, 1.0)
+	var origin: Vector2 = game.boss_pos - camera
+	var direction: Vector2 = Vector2(game.boss4_ai_state.get("attack_dir", Vector2.LEFT)).normalized()
+	var color := Color(1.0, 0.2, 0.16, 0.18 + progress * 0.36)
+	match action:
+		"slam", "combo":
+			game.draw_arc(origin, 192.0, direction.angle() - 0.92, direction.angle() + 0.92, 46, Color(1.0, 0.3, 0.18, 0.9), 3.0 + progress * 4.0)
+			for side in [-0.92, 0.92]:
+				game.draw_line(origin, origin + direction.rotated(side) * 192.0, color, 3.0, true)
+		"tongue":
+			var finish := origin + direction * 407.0
+			game.draw_line(origin + direction * 52.0, finish, Color(0.32, 0.0, 0.12, 0.68), 22.0, true)
+			game.draw_line(origin + direction * 52.0, finish, Color(1.0, 0.22, 0.42, 0.58 + progress * 0.34), 4.0 + progress * 4.0, true)
+		"jump":
+			var landing: Vector2 = Vector2(game.boss4_ai_state.get("jump_to", game.boss_pos)) - camera
+			game.draw_circle(landing, 188.0, color)
+			game.draw_arc(landing, 188.0, -PI * 0.5, -PI * 0.5 + TAU * progress, 64, Color(1.0, 0.32, 0.16, 0.94), 5.0)
+		_:
+			game.draw_arc(origin, 124.0, 0.0, TAU * progress, 48, Color(0.82, 0.28, 1.0, 0.84), 4.0)
 
 
 static func _draw_phase4_enemy_hazards(game: Node2D, camera: Vector2) -> void :
@@ -1185,6 +1234,12 @@ static func _draw_phase4_enemy_hazards(game: Node2D, camera: Vector2) -> void :
 		var age: float = float(hazard.get("age", 0.0))
 		var fade: float = clampf(float(hazard.get("life", 0.0)) / max(0.01, float(hazard.get("max", 1.0))), 0.0, 1.0)
 		match kind:
+			"boss4_tongue_trace":
+				var tongue_a: Vector2 = Vector2(hazard.get("a", game.boss_pos)) - camera
+				var tongue_b: Vector2 = Vector2(hazard.get("b", game.boss_pos)) - camera
+				game.draw_line(tongue_a, tongue_b, Color(0.18, 0.0, 0.08, 0.76 * fade), 20.0, true)
+				game.draw_line(tongue_a, tongue_b, Color(1.0, 0.24, 0.44, 0.88 * fade), 9.0, true)
+				game.draw_circle(tongue_b, 15.0, Color(0.92, 0.12, 0.32, 0.82 * fade))
 			"rift":
 				var a: Vector2 = Vector2(hazard["a"]) - camera
 				var b: Vector2 = Vector2(hazard["b"]) - camera
@@ -1745,12 +1800,16 @@ static func _draw_boss_entry(game: Node2D, camera: Vector2) -> void :
 	if game.current_phase == 4:
 		var progress4: float = clamp(1.0 - game.boss_entry_timer / game.BOSS4_ENTRY_TIME, 0.0, 1.0)
 		var anchor: Vector2 = game.boss4_entry_target - camera
-		for i in range(5):
-			var radius = 54.0 + i * 31.0 + sin(game.time_alive * 5.0 + i) * 8.0
-			game.draw_arc(anchor, radius, - game.time_alive * (0.7 + i * 0.08), TAU - game.time_alive * (0.7 + i * 0.08), 64, Color(1.0, 0.68 - i * 0.06, 0.14 + i * 0.12, (0.72 - i * 0.1) * (1.0 - progress4 * 0.35)), 3.0)
-		game.draw_line(game.boss_pos - camera, anchor, Color(0.76, 0.34, 1.0, 0.32), 18.0)
-		game.draw_line(game.boss_pos - camera, anchor, Color(1.0, 0.78, 0.24, 0.72), 3.0)
-		game._draw_centered("NEXO DA RUPTURA", anchor + Vector2(0, -174), 32, Color(1.0, 0.82, 0.34))
+		var falling: Vector2 = game.boss_pos - camera
+		for trail_index in range(7):
+			var trail_t: float = float(trail_index + 1) / 7.0
+			var trail_pos := falling + Vector2(0.0, -trail_t * (92.0 + progress4 * 170.0))
+			game.draw_circle(trail_pos, 18.0 * (1.0 - trail_t * 0.7), Color(0.44, 1.0, 0.72, (0.34 - trail_t * 0.03) * (1.0 - progress4 * 0.35)))
+		for ring_index in range(4):
+			var ring_progress: float = clampf((progress4 - 0.72) / 0.28, 0.0, 1.0)
+			var radius := 42.0 + ring_progress * (110.0 + float(ring_index) * 54.0)
+			game.draw_arc(anchor, radius, 0.0, TAU, 64, Color(0.52, 1.0, 0.66, (1.0 - ring_progress) * (0.72 - ring_index * 0.12)), 4.0)
+		game._draw_centered("NEXO ANFIBIO", anchor + Vector2(0, -238), 32, Color(0.58, 1.0, 0.72))
 		return
 	if game.current_phase == 3:
 		var progress3 = clamp(1.0 - game.boss_entry_timer / game.BOSS3_ENTRY_TIME, 0.0, 1.0)

@@ -1,6 +1,8 @@
 class_name RTAncoradaAbilityController
 extends "res://scripts/systems/abilities/ability_controller_base.gd"
 
+const AncoradaEvolutionController = preload("res://scripts/systems/manifest_evolutions/ancorada_evolution_controller.gd")
+
 ## Gameplay owner for Ancorada's mobile-territory kit.
 ## Runtime fields remain on Main for save/network compatibility; this owner
 ## centralizes the rules so the manifestation no longer rewards immobility.
@@ -28,6 +30,7 @@ func place_anchor(pos = null, linked_from = null, source: String = "ancorada_att
 	core.anchors.append(anchor)
 	while core.anchors.size() > core.ANCORADA_ANCHOR_MAX_ACTIVE:
 		core.anchors.pop_front()
+	AncoradaEvolutionController.on_anchor_placed(core, anchor)
 	return anchor
 
 
@@ -62,6 +65,26 @@ func on_teleport(origin: Vector2, destination: Vector2) -> void:
 		return
 	place_anchor(origin, origin, "ancorada_tp_origin", false)
 	place_anchor(destination, origin, "ancorada_tp_arrival", true)
+
+
+func on_evolution_hit(event_id: String, target: Dictionary, target_pos: Vector2) -> bool:
+	return AncoradaEvolutionController.on_hit(core, event_id, target, target_pos)
+
+
+func on_evolution_skill(center: Vector2) -> bool:
+	return AncoradaEvolutionController.on_skill(core, center)
+
+
+func on_evolution_teleport(origin: Vector2, destination: Vector2) -> bool:
+	return AncoradaEvolutionController.on_teleport(core, origin, destination)
+
+
+func update_evolutions(delta: float) -> void:
+	AncoradaEvolutionController.update_effects(core, delta)
+
+
+func draw_evolutions(camera: Vector2) -> void:
+	AncoradaEvolutionController.draw_world(core, camera)
 
 
 func add_lastro_points(amount: int, _source_type: String = "") -> void:
@@ -257,6 +280,7 @@ func spawn_ultimate(_target_world = null) -> void:
 		"impacts": [],
 	})
 	place_anchor(center, center, "ancorada_ultimate_start", false)
+	AncoradaEvolutionController.on_ultimate_started(core, center)
 	core._add_text("MARCHA DA FORTALEZA", center + Vector2(0, -110), ACCENT, 1.4, 28)
 	core._spawn_radial_particles(center, ACCENT, 32)
 

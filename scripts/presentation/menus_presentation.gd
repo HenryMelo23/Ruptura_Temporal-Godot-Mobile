@@ -1,6 +1,7 @@
 extends RefCounted
 const CombatTextPresentation = preload("res://scripts/presentation/combat_text_presentation.gd")
 const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
+const UmbraKnowledgePresentation = preload("res://scripts/presentation/umbra_knowledge_presentation.gd")
 
 # Draws through the main CanvasItem; state stays on the host during migration.
 
@@ -2460,7 +2461,7 @@ static func _draw_end_overlay(game: Node2D, viewport: Vector2, title: String, co
 	var panel = Rect2(viewport.x * 0.18 if not portrait else viewport.x * 0.08, viewport.y * 0.22, viewport.x * 0.64 if not portrait else viewport.x * 0.84, viewport.y * 0.56)
 	game._draw_holo_panel(panel, color, true, 0.82)
 	game._draw_glitch_title(title, Vector2(viewport.x * 0.5, panel.position.y + 64.0), 36 if not portrait else 42, color)
-	var summary = Rect2(panel.position.x + 24.0, panel.position.y + 104.0, panel.size.x - 48.0, panel.size.y - 196.0)
+	var summary = Rect2(panel.position.x + 24.0, panel.position.y + 104.0, panel.size.x - 48.0, panel.size.y - 216.0)
 	game._draw_run_summary(summary, color, false)
 	if game.run_report_status != "":
 		game._draw_centered(game.run_report_status.to_upper(), Vector2(viewport.x * 0.5, panel.end.y - 92.0), 12, Color(0.74, 0.92, 1.0, 0.82))
@@ -2688,20 +2689,29 @@ static func _draw_run_summary(game: Node2D, area: Rect2, accent: Color, lost: bo
 		["CARTAS", str(game._deck_total_cards())],
 		["FASE DA QUEDA" if lost else "FASE CONCLUIDA", str(game.current_phase)]
 	]
+	var knowledge: Dictionary = game.umbra_run_knowledge if not game.umbra_run_knowledge.is_empty() else game.umbra_memory_controller.knowledge_report(game)
+	var knowledge_h: float = clampf(area.size.y * 0.34, 42.0, 76.0)
+	var stats_area := Rect2(area.position, Vector2(area.size.x, maxf(24.0, area.size.y - knowledge_h - 7.0)))
 	var columns = 2 if game._is_portrait(game.get_viewport_rect().size) else 3
 	var rows = int(ceil(float(entries.size()) / float(columns)))
 	var gap = 8.0
-	var cell_size = Vector2((area.size.x - gap * float(columns - 1)) / float(columns), (area.size.y - gap * float(rows - 1)) / float(rows))
+	var cell_size = Vector2((stats_area.size.x - gap * float(columns - 1)) / float(columns), (stats_area.size.y - gap * float(rows - 1)) / float(rows))
 	for i in range(entries.size()):
 		var column = i % columns
 		var row = int(i / columns)
-		var rect = Rect2(area.position + Vector2(column * (cell_size.x + gap), row * (cell_size.y + gap)), cell_size)
+		var rect = Rect2(stats_area.position + Vector2(column * (cell_size.x + gap), row * (cell_size.y + gap)), cell_size)
 		game.draw_rect(rect, Color(0.01, 0.015, 0.025, 0.82), true)
 		game.draw_rect(rect, Color(accent.r, accent.g, accent.b, 0.5), false, 1.4)
-		var label_size = game._fit_text_size(String(entries[i][0]), rect.size.x - 14.0, 11, 8)
-		game._draw_centered(String(entries[i][0]), Vector2(rect.get_center().x, rect.position.y + min(18.0, rect.size.y * 0.36)), label_size, Color(accent.r, accent.g, accent.b, 0.86))
-		var value_size = game._fit_text_size(String(entries[i][1]), rect.size.x - 14.0, 22, 14)
-		game._draw_centered(String(entries[i][1]), Vector2(rect.get_center().x, rect.end.y - min(12.0, rect.size.y * 0.24)), value_size, Color.WHITE)
+		if rect.size.y < 27.0:
+			var compact := "%s  %s" % [String(entries[i][0]), String(entries[i][1])]
+			game._draw_centered(compact, rect.get_center() + Vector2(0, 3), game._fit_text_size(compact, rect.size.x - 10.0, 10, 7), Color.WHITE)
+		else:
+			var label_size = game._fit_text_size(String(entries[i][0]), rect.size.x - 14.0, 11, 8)
+			game._draw_centered(String(entries[i][0]), Vector2(rect.get_center().x, rect.position.y + min(17.0, rect.size.y * 0.34)), label_size, Color(accent.r, accent.g, accent.b, 0.86))
+			var value_size = game._fit_text_size(String(entries[i][1]), rect.size.x - 14.0, 20, 12)
+			game._draw_centered(String(entries[i][1]), Vector2(rect.get_center().x, rect.end.y - min(10.0, rect.size.y * 0.22)), value_size, Color.WHITE)
+	var knowledge_rect := Rect2(Vector2(area.position.x, area.end.y - knowledge_h), Vector2(area.size.x, knowledge_h))
+	UmbraKnowledgePresentation.draw_summary(game, knowledge_rect, knowledge)
 
 
 static func _draw_shop_opening_upgrade(game: Node2D, viewport: Vector2) -> void :

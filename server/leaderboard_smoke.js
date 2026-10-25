@@ -57,7 +57,8 @@ fs.writeFileSync(path.join(contentUpdateRoot, "latest.json"), JSON.stringify({
   packs: [{
     filename: fakeContentPackName,
     sha256: crypto.createHash("sha256").update(fakeContentPack).digest("hex"),
-    required_game_version_code: 227
+    required_game_version_code: 227,
+    signature: Buffer.from("RUPTURA_CONTENT_SIGNATURE_SMOKE").toString("base64")
   }],
   notes: ["Conteudo incremental smoke"],
   published_at: "2026-07-16T12:00:00Z"
@@ -207,6 +208,21 @@ async function run() {
         boss_hits: 18,
         hit_rate: 0.5077,
         stationary_ratio: 0.18
+      },
+      umbra_knowledge: {
+        schema_version: 1,
+        total_percent: 68,
+        archetype: "SOBREVIVENTE_ADAPTATIVO",
+        sample_seconds: 333,
+        phases_observed: 3,
+        categories: {
+          movement: { percent: 82, insight: "Mantem deslocamento frequente" },
+          shooting: { percent: 71, insight: "Prioriza disparos confirmados" },
+          choices: { percent: 64, insight: "Concentra compras em poucos efeitos" },
+          preferences: { percent: 73, insight: "Prioriza pressao ofensiva" },
+          weaknesses: { percent: 50, insight: "Maior exposicao: Espreitador" }
+        },
+        behavior_vector: { edge_ratio: 0.1261, corner_ratio: 0.012, center_ratio: 0.2733, stationary_ratio: 0.18, dash_per_minute: 3.96, shots_per_minute: 46.8, hit_rate: 0.5077, damage_taken_per_minute: 156.75 }
       },
       boss_detail: [{ phase: 1, reached: true, duration: "00:20", damage: 4232 }]
     };
@@ -477,7 +493,12 @@ async function run() {
     assert.strictEqual(mindPayload.refresh_days, 7, "UMBRA mind should advertise weekly refresh");
     assert.strictEqual(mindPayload.trained_runs, 1, "only the valid signed run should train UMBRA");
     assert(mindPayload.files && mindPayload.files["umbra_global_profile.json"], "UMBRA global profile file missing");
-    assert(mindPayload.files["umbra_player_dossiers.json"].players[signedStored.profileKey], "signed player dossier missing from UMBRA payload");
+    const privateDossierPayload = mindPayload.files["umbra_player_dossiers.json"];
+    assert(privateDossierPayload.selected, "signed player dossier missing from UMBRA payload");
+    assert.strictEqual(privateDossierPayload.players, undefined, "UMBRA payload leaked the complete player dossier map");
+    assert.strictEqual(privateDossierPayload.selected.player, undefined, "UMBRA selected dossier leaked player identity");
+    assert(privateDossierPayload.cohorts && Object.keys(privateDossierPayload.cohorts).length > 0, "UMBRA anonymous cohorts missing");
+    assert(privateDossierPayload.selected.knowledge.total_percent > 0, "UMBRA knowledge categories were not aggregated");
     const update = await request("GET", "/updates/android/latest?version_code=226");
     assert.strictEqual(update.status, 200, "update manifest endpoint failed");
     const updatePayload = JSON.parse(update.body.toString("utf8"));

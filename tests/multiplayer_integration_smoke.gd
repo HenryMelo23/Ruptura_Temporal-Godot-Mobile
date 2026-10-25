@@ -304,11 +304,16 @@ func _run_client_loop() -> void:
 			if start_only:
 				await _finish_ok("Client joined and received the authoritative game state")
 				return
-			var victory_deadline := Time.get_ticks_msec() + 6000
-			while game.mode != "specter_upgrade" and Time.get_ticks_msec() < victory_deadline:
+			# Host observes seven seconds of gameplay before triggering victory.
+			# Clients must remain connected through that window and delivery.
+			var victory_deadline := Time.get_ticks_msec() + 15000
+			var expected_victory_mode := "victory" if game.active_character_key == game.CHARACTER_HENRY else "specter_upgrade"
+			while game.mode != expected_victory_mode and Time.get_ticks_msec() < victory_deadline:
 				await process_frame
 			_check(game.run_finalized_result == "Vitoria", "%s did not receive authoritative Umbra victory" % role)
-			_check(game.mode == "specter_upgrade" and game.specter_upgrade_previous_mode == "victory", "%s did not open Specter upgrade after Umbra" % role)
+			_check(game.mode == expected_victory_mode, "%s did not open the character-specific victory screen" % role)
+			if expected_victory_mode == "specter_upgrade":
+				_check(game.specter_upgrade_previous_mode == "victory", "%s lost Specter upgrade return mode" % role)
 			_check(game.pending_phase == 0 and game.phase_fragment.is_empty(), "%s retained a stale phase transition after Umbra" % role)
 			await _finish_ok("Client observed the authoritative Umbra victory state")
 			return

@@ -83,8 +83,23 @@ const PHASE_TEXTURE_SPECS := {
 		"enemy_phase_4_left": ["inimigo_direita4-1.png", "inimigo_direita4-2.png"],
 		"enemy_phase_4_right": ["inimigo_esquerda4-1.png", "inimigo_esquerda4-2.png"],
 		"enemy_phase_4_bullet": ["Magia_inimigo1.png", "Magia_inimigo2.png"],
-		"boss4": ["Boss4_1.png", "Boss4_3.png"],
-		"boss4_attack": "Boss4_2.png",
+		"boss4": ["boss4_rework/boss4_idle_00.png", "boss4_rework/boss4_idle_01.png", "boss4_rework/boss4_idle_02.png", "boss4_rework/boss4_idle_03.png"],
+		"boss4_rework_idle": ["boss4_rework/boss4_idle_00.png", "boss4_rework/boss4_idle_01.png", "boss4_rework/boss4_idle_02.png", "boss4_rework/boss4_idle_03.png"],
+		"boss4_rework_walk": ["boss4_rework/boss4_walk_00.png", "boss4_rework/boss4_walk_01.png", "boss4_rework/boss4_walk_02.png", "boss4_rework/boss4_walk_03.png"],
+		"boss4_rework_hit": ["boss4_rework/boss4_hit_00.png", "boss4_rework/boss4_hit_01.png"],
+		"boss4_rework_jump": ["boss4_rework/boss4_jump_00.png", "boss4_rework/boss4_jump_01.png"],
+		"boss4_rework_land": ["boss4_rework/boss4_land_00.png", "boss4_rework/boss4_land_01.png"],
+		"boss4_rework_slam": ["boss4_rework/boss4_slam_00.png", "boss4_rework/boss4_slam_01.png", "boss4_rework/boss4_slam_02.png", "boss4_rework/boss4_slam_03.png"],
+		"boss4_rework_tongue": ["boss4_rework/boss4_tongue_00.png", "boss4_rework/boss4_tongue_01.png", "boss4_rework/boss4_tongue_02.png", "boss4_rework/boss4_tongue_03.png"],
+		"boss4_rework_comet": ["boss4_rework/boss4_comet_00.png", "boss4_rework/boss4_comet_01.png", "boss4_rework/boss4_comet_02.png", "boss4_rework/boss4_comet_03.png"],
+		"boss4_rework_gravity": ["boss4_rework/boss4_gravity_00.png", "boss4_rework/boss4_gravity_01.png", "boss4_rework/boss4_gravity_02.png", "boss4_rework/boss4_gravity_03.png"],
+		"boss4_rework_transition_2": ["boss4_rework/boss4_hp_transition_00.png", "boss4_rework/boss4_hp_transition_01.png", "boss4_rework/boss4_hp_transition_02.png", "boss4_rework/boss4_hp_transition_03.png"],
+		"boss4_rework_transition_3": ["boss4_rework/boss4_hp_transition_00.png", "boss4_rework/boss4_hp_transition_01.png", "boss4_rework/boss4_hp_transition_02.png", "boss4_rework/boss4_hp_transition_03.png"],
+		"boss4_rework_transition_4": ["boss4_rework/boss4_hp_transition_00.png", "boss4_rework/boss4_hp_transition_01.png", "boss4_rework/boss4_hp_transition_02.png", "boss4_rework/boss4_hp_transition_03.png"],
+		"boss4_rework_ultimate": ["boss4_rework/boss4_ultimate_00.png", "boss4_rework/boss4_ultimate_01.png", "boss4_rework/boss4_ultimate_02.png"],
+		"boss4_rework_ultimate_interrupted": ["boss4_rework/boss4_ultimate_interrupted_00.png", "boss4_rework/boss4_ultimate_interrupted_01.png"],
+		"boss4_rework_ultimate_failure": ["boss4_rework/boss4_ultimate_failure_00.png", "boss4_rework/boss4_ultimate_failure_01.png"],
+		"boss4_rework_death": ["boss4_rework/boss4_death_00.png", "boss4_rework/boss4_death_01.png", "boss4_rework/boss4_death_02.png", "boss4_rework/boss4_death_03.png", "boss4_rework/boss4_death_04.png", "boss4_rework/boss4_death_05.png"],
 		"boss4_planet": ["Planet1_1.png", "Planet1_2.png"],
 		"boss4_vortex": ["Vortex1_1.png", "Vortex1_2.png"],
 	},
@@ -183,6 +198,8 @@ static func _load_phase(game: Node, phase: int, base_path: String, skip_optional
 				texture_spec = _compact_boss1_animation_spec(texture_key, texture_spec)
 			if skip_optional_animation_sets and texture_key.begins_with("boss2_anim_") and texture_spec is Array:
 				texture_spec = _compact_boss2_animation_spec(texture_key, texture_spec)
+			if skip_optional_animation_sets and texture_key.begins_with("boss4_rework_") and texture_spec is Array:
+				texture_spec = _compact_boss4_animation_spec(texture_key, texture_spec)
 			_load_key(game, texture_key, texture_spec, base_path)
 
 
@@ -205,6 +222,16 @@ static func _compact_boss2_animation_spec(key: String, spec: Array) -> Array:
 		return spec
 	if key in ["boss2_anim_hit", "boss2_anim_death"]:
 		return [spec[0], spec[int(spec.size() / 2)], spec[-1]]
+	return [spec[0], spec[-1]]
+
+
+static func _compact_boss4_animation_spec(key: String, spec: Array) -> Array:
+	if spec.size() <= 2:
+		return spec
+	if key.ends_with("_death") or key.contains("transition"):
+		return [spec[0], spec[int(spec.size() / 2)], spec[-1]]
+	if key.ends_with("_slam") or key.ends_with("_tongue") or key.ends_with("_comet") or key.ends_with("_gravity"):
+		return [spec[0], spec[mini(2, spec.size() - 1)], spec[-1]]
 	return [spec[0], spec[-1]]
 
 

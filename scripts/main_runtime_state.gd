@@ -69,6 +69,8 @@ const HenryIncendiaryAbilityControllerScript = preload("res://scripts/systems/ab
 const HenryBarometricAbilityControllerScript = preload("res://scripts/systems/abilities/henry_barometric_ability_controller.gd")
 const HenryColossusAbilityControllerScript = preload("res://scripts/systems/abilities/henry_colossus_ability_controller.gd")
 const ReactiveSurvivalCardControllerScript = preload("res://scripts/systems/cards/reactive_survival_card_controller.gd")
+const RoguelikePointCardControllerScript = preload("res://scripts/systems/cards/roguelike_point_card_controller.gd")
+const PointBoostPickupControllerScript = preload("res://scripts/systems/progression/point_boost_pickup_controller.gd")
 const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
 const Phase3RitualPulseControllerScript = preload("res://scripts/systems/events/phase3_ritual_pulse_controller.gd")
 const Phase4InstabilityPulseControllerScript = preload("res://scripts/systems/events/phase4_instability_pulse_controller.gd")
@@ -79,13 +81,14 @@ const UmbraNeuralRuntime = preload("res://scripts/systems/umbra_neural_runtime.g
 const RTBossPartyScaling = preload("res://scripts/systems/boss_party_scaling.gd")
 const RTSharedBossAttackContractScript = preload("res://scripts/systems/bosses/shared_boss_attack_contract.gd")
 const RTBoss4InstabilityFissureControllerScript = preload("res://scripts/systems/bosses/boss4_instability_fissure_controller.gd")
+const RTBoss4ControllerScript = preload("res://scripts/systems/bosses/boss4_controller.gd")
 const RuntimeAssetController = preload("res://scripts/systems/assets/runtime_asset_controller.gd")
 const RuntimeCollectionUtils = preload("res://scripts/systems/runtime_collection_utils.gd")
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.0.53"
-const GAME_VERSION_CODE: = 25300
+const GAME_VERSION: = "2.0.55"
+const GAME_VERSION_CODE: = 25500
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -587,6 +590,7 @@ const FUSION_TIME: = 120.0
 const CARD_COST_BASE: = 500
 const PHASE_POINT_CRYSTAL_KIND: = "phase_point_crystal"
 const ENEMY_POINT_ORB_KIND: = "enemy_point"
+const POINT_BOOST_PICKUP_KIND: = "point_boost"
 const ENEMY_POINT_DROP_LIFE: = 180.0
 const ENEMY_POINT_PICKUP_RADIUS: = 72.0
 const ENEMY_POINT_ABSORB_RADIUS: = 18.0
@@ -1966,9 +1970,11 @@ const CARDS: = [
 	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio que atrai pontos, moedas, cartas soltas e orbes neutros. Recursos atraidos perseguem o jogador ate serem absorvidos.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
 	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
 	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)},
+	{"id": "tributo_da_dor", "name": "Tributo da Dor", "nick": "Ferida Rentável", "desc": "Sempre que perder vida, recebe pontos. Começa em 1 ponto por impacto e cresce cada vez mais por cópia, sem limite.", "icon": "Deck/carta-Tributo_da_Dor1.png", "frame_2": "Deck/carta-Tributo_da_Dor2.png", "color": Color(1.0, 0.58, 0.18)},
 	{"id": "horizonte_ruptura", "name": "Horizonte de Ruptura", "nick": "Linha Limite", "rarity": CARD_RARITY_UNCOMMON, "desc": "+30 px de alcance e +2.5% de dano nos ataques basicos a distancia por copia, sem limite. Na Prismatica, os +30 px viram +3% de critico nos ricochetes.", "icon": "Deck/carta-Horizonte_de_Ruptura1.png", "frame_2": "Deck/carta-Horizonte_de_Ruptura2.png", "color": Color(0.22, 0.68, 1.0)},
 	{"id": "fragmentacao_reativa", "name": "Fragmentacao Reativa", "nick": "Estilhaco de Revide", "rarity": CARD_RARITY_UNCOMMON, "desc": "Ao perder vida para um impacto, dispara fragmentos contra ate 4 inimigos em 150 px. Copias aumentam o raio em 30 px e o dano, sem limite.", "icon": "Deck/carta-Fragmentacao_Reativa1.png", "frame_2": "Deck/carta-Fragmentacao_Reativa2.png", "color": Color(0.92, 0.14, 0.3)},
 	{"id": "bastiao_inercial", "name": "Bastiao Inercial", "nick": "Armadura de Repouso", "rarity": CARD_RARITY_UNCOMMON, "desc": "Apos 0.7s sem se mover, recebe +6 de armadura por copia. Cada copia tambem concede +1.5% de velocidade, sem limite.", "icon": "Deck/carta-Bastiao_Inercial1.png", "frame_2": "Deck/carta-Bastiao_Inercial2.png", "color": Color(0.84, 0.64, 0.3)},
+	{"id": "estilhaco_prismatico", "name": "Estilhaço Prismático", "nick": "Fortuna Lapidada", "rarity": CARD_RARITY_UNCOMMON, "desc": "Abates podem condensar uma lasca grande de prisma. Cada cópia aumenta continuamente a chance e o valor da lasca; os pontos também acompanham o tempo da partida.", "icon": "Deck/carta-Estilhaco_Prismatico1.png", "frame_2": "Deck/carta-Estilhaco_Prismatico2.png", "color": Color(0.32, 0.84, 1.0)},
 	{"id": "rastro_de_retorno", "name": "Rastro de Retorno", "nick": "Vestigio Vivo", "rarity": CARD_RARITY_UNCOMMON, "desc": "Deixa vestigios com mais frequencia. Retornar a eles concede um impulso forte e recupera parte relevante do teleporte.", "icon": "Deck/carta-RastrodeRetorno1.png", "frame_2": "Deck/carta-RastrodeRetorno2.png", "color": Color(0.2, 0.7, 1.0)},
 	{"id": "municao_de_rebate", "name": "Municao de Rebate", "nick": "Fragmento Teimoso", "rarity": CARD_RARITY_UNCOMMON, "desc": "Projeteis basicos que somem sem acertar tem alta chance de voltar como um fragmento perseguidor mais forte e de maior alcance.", "icon": "Deck/carta-municaorebatente1.png", "frame_2": "Deck/carta-municaorebatente2.png", "color": Color(0.18, 0.62, 1.0)},
 	{"id": "impulso_de_sobras", "name": "Impulso de Sobras", "nick": "Energia Guardada", "rarity": CARD_RARITY_UNCOMMON, "desc": "Q, E ou teleporte prontos por tempo suficiente guardam duas cargas que fortalecem e ampliam os proximos ataques basicos.", "icon": "Deck/carta-impulsodesobras1.png", "frame_2": "Deck/carta-impulsodesobras2.png", "color": Color(0.18, 0.62, 1.0)},
@@ -1999,7 +2005,9 @@ const CARDS: = [
 	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "Inimigos derrotados retornam temporariamente como aliados.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
 	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
 	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)},
-	{"id": "coracao_paradoxo", "name": "Coracao do Paradoxo", "nick": "Eco Impossivel", "rarity": CARD_RARITY_LEGENDARY, "max_count": 1, "desc": "18 acertos diretos carregam o nucleo. A proxima Q, E ou teleporte que acertar abre uma ruptura por 5s; danos diretos ecoam apos 0.55s com 35% da forca.", "icon": "Deck/carta-Coracao_do_Paradoxo1.png", "frame_2": "Deck/carta-Coracao_do_Paradoxo2.png", "color": CARD_RARITY_LEGENDARY_COLOR}
+	{"id": "critico_absoluto", "name": "Crítico Absoluto", "nick": "Dobra Letal", "rarity": CARD_RARITY_RARE, "desc": "Cada cópia aumenta em 100% o dano final dos acertos críticos, sem limite. Uma cópia dobra o crítico atual; cinco cópias multiplicam por seis.", "icon": "Deck/carta-Critico_Absoluto1.png", "frame_2": "Deck/carta-Critico_Absoluto2.png", "color": CARD_RARITY_RARE_COLOR},
+	{"id": "coracao_paradoxo", "name": "Coracao do Paradoxo", "nick": "Eco Impossivel", "rarity": CARD_RARITY_LEGENDARY, "desc": "18 acertos diretos carregam o nucleo. A proxima Q, E ou teleporte que acertar abre uma ruptura por 5s; danos diretos ecoam apos 0.55s com 35% da forca.", "icon": "Deck/carta-Coracao_do_Paradoxo1.png", "frame_2": "Deck/carta-Coracao_do_Paradoxo2.png", "color": CARD_RARITY_LEGENDARY_COLOR},
+	{"id": "arquivo_impossivel", "name": "Arquivo do Impossível", "nick": "Cópia Sem Fim", "rarity": CARD_RARITY_LEGENDARY, "desc": "Ao adquirir qualquer carta não lendária, recebe uma cópia adicional dela por cópia deste Arquivo. As cópias gratuitas não reativam o Arquivo.", "icon": "Deck/carta-Arquivo_do_Impossivel1.png", "frame_2": "Deck/carta-Arquivo_do_Impossivel2.png", "color": CARD_RARITY_LEGENDARY_COLOR}
 ]
 
 const CARD_MAX_COUNTS: = {
@@ -2026,6 +2034,10 @@ const CARD_SOURCE_LIMIAR: = "card_limiar_colapso"
 const CARD_SOURCE_DESVIO: = "card_desvio_probabilidade"
 const CARD_SOURCE_PONTO_CEGO: = "card_ponto_cego"
 const CARD_UNLIMITED_COUNT: = 999999
+const CARD_PRISM_SHARD_ID: = "estilhaco_prismatico"
+const CARD_PAIN_TRIBUTE_ID: = "tributo_da_dor"
+const CARD_ABSOLUTE_CRIT_ID: = "critico_absoluto"
+const CARD_IMPOSSIBLE_ARCHIVE_ID: = "arquivo_impossivel"
 const PORCAO_MAX_HP_GAIN_RATIO: = 0.1
 const PORCAO_HEAL_OLD_MAX_RATIO: = 0.05
 const CARD_RASTRO_ID: = "rastro_de_retorno"
@@ -3019,8 +3031,11 @@ var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityCont
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
 var henry_colossus_ability_controller: RefCounted = HenryColossusAbilityControllerScript.new()
 var reactive_survival_card_controller: RefCounted = ReactiveSurvivalCardControllerScript.new()
+var roguelike_point_card_controller: RefCounted = RoguelikePointCardControllerScript.new()
+var point_boost_pickup_controller: RefCounted = PointBoostPickupControllerScript.new()
 var shared_boss_attack_contract: RefCounted = RTSharedBossAttackContractScript.new()
 var boss4_instability_fissure_controller: RefCounted = RTBoss4InstabilityFissureControllerScript.new()
+var boss4_controller: RefCounted = RTBoss4ControllerScript.new()
 var runtime_event_director: Node = RuntimeEventDirectorScript.new()
 var phase3_ritual_pulse_controller: Node = Phase3RitualPulseControllerScript.new()
 var phase4_instability_pulse_controller: Node = Phase4InstabilityPulseControllerScript.new()
@@ -3804,7 +3819,7 @@ var phase4_history_sample_timer = 0.0
 var boss4_attack_timer = BOSS4_ATTACK_INTERVAL
 var boss4_attack_pose_timer = 0.0
 var boss4_anim_time = 0.0
-var boss4_entry_target = Vector2(WORLD_SIZE.x * 0.78, WORLD_SIZE.y * 0.5)
+var boss4_entry_target = Vector2(WORLD_SIZE.x * 0.68, WORLD_SIZE.y * 0.5)
 var boss4_instability = 0.0
 var boss4_stage = 1
 var boss4_no_hit_timer = 0.0
@@ -3836,6 +3851,17 @@ var boss4_vulnerable_timer = 0.0
 var boss4_column_barrage_timer = BOSS4_COLUMN_BARRAGE_FIRST_DELAY
 var boss4_drag_wave_timer = BOSS4_DRAG_WAVE_FIRST_DELAY
 var boss4_sonic_used = false
+var boss4_ai_state: Dictionary = {}
+var boss4_last_attack: String = ""
+var boss4_visual_state: String = "idle"
+var boss4_visual_state_elapsed: float = 0.0
+var boss4_hit_timer: float = 0.0
+var boss4_hit_duration: float = 0.22
+var boss4_death_timer: float = 0.0
+var boss4_death_duration: float = 1.5
+var boss4_death_pos: Vector2 = Vector2.ZERO
+var boss4_ultimate_outcome: String = ""
+var boss4_ultimate_outcome_timer: float = 0.0
 var phase5_player_history = []
 var phase5_history_sample_timer = 0.0
 var phase5_hazards = []
@@ -3889,6 +3915,7 @@ var boss5_neural_runtime
 var boss5_multihead_policy
 var umbra_memory_controller := UmbraMemoryController.new()
 var umbra_authority_controller := UmbraAuthorityController.new()
+var umbra_run_knowledge: Dictionary = {}
 var boss5_authoritative_decision: Dictionary = {}
 var boss5_predatory_mods: Array = []
 var boss5_profile_confidence = 0.0

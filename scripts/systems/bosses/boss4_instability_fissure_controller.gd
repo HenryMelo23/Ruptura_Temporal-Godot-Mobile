@@ -47,13 +47,13 @@ func reset() -> void:
 	_history_by_peer.clear()
 
 
-func update(delta: float, authority: bool) -> void:
+func update(delta: float, authority: bool, allow_autocast: bool = true) -> void:
 	if _game == null or not is_instance_valid(_game):
 		return
 	_target_grace = _game.shared_boss_attack_contract.tick_target_grace(_target_grace, delta)
 	if authority:
 		_sample_recent_positions(delta)
-	if not authority or not _can_cast():
+	if not authority or not allow_autocast or not _can_cast():
 		return
 	_cooldown = maxf(0.0, _cooldown - delta)
 	if _cooldown > 0.0 or _has_live_fissure_event():

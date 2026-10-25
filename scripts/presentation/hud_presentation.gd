@@ -150,6 +150,7 @@ static func _draw_desktop_fps_hud(game: Node2D, viewport: Vector2) -> void:
 static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	if game._spectator_controls_locked():
 		game._draw_spectator_hud(viewport)
+		_draw_point_boost_hud(game, viewport)
 		return
 	if game._uses_desktop_ui():
 		game._draw_desktop_hud(viewport)
@@ -193,6 +194,7 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 		if game._is_world_replica():
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
 		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0 * sm, 28.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
+	_draw_point_boost_hud(game, viewport)
 	game._draw_card_mechanic_huds(viewport, left_rect)
 	game._draw_ancorada_hud(viewport, left_rect)
 	game._draw_acorrentada_hud(viewport, left_rect)
@@ -203,6 +205,35 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	game._draw_lacerante_coagulum_hud(viewport)
 	game._draw_contractual_order_hud(viewport)
 	game._draw_unlock_notifications(viewport)
+
+
+static func _draw_point_boost_hud(game: Node2D, viewport: Vector2) -> void:
+	if not game.point_boost_pickup_controller.is_active():
+		return
+	var remaining: float = game.point_boost_pickup_controller.remaining()
+	var duration: float = maxf(0.01, game.point_boost_pickup_controller.duration())
+	var ratio: float = clampf(remaining / duration, 0.0, 1.0)
+	var warning: bool = game.point_boost_pickup_controller.final_warning_active()
+	var pulse: float = 0.5 + 0.5 * sin(game.time_alive * (12.0 if warning else 4.0))
+	var width: float = minf(214.0, viewport.x * 0.42)
+	var height := 44.0
+	var y: float = 52.0 if not game.boss_active else 104.0
+	if viewport.y < 520.0:
+		y = 40.0 if not game.boss_active else 82.0
+	var rect := Rect2(Vector2(viewport.x * 0.5 - width * 0.5, y), Vector2(width, height))
+	var accent := Color(1.0, 0.46 + pulse * 0.2, 0.1, 0.96) if warning else Color(0.2, 1.0, 0.8, 0.94)
+	game.draw_rect(rect, Color(0.025, 0.045, 0.045, 0.9), true)
+	game.draw_rect(rect, accent, false, 2.0 + pulse * 0.8)
+	var coin_center := rect.position + Vector2(23.0, 20.0)
+	game.draw_circle(coin_center, 12.0 + pulse * 1.2, Color(0.08, 0.32, 0.28, 1.0))
+	game.draw_circle(coin_center, 8.5, Color(1.0, 0.76, 0.12, 1.0))
+	game.draw_arc(coin_center, 12.5, 0.0, TAU, 20, Color(0.26, 1.0, 0.82, 0.96), 1.8, true)
+	game._draw_centered("x2", coin_center + Vector2(0.0, 4.0), 10, Color(0.2, 0.12, 0.01, 0.96))
+	game.draw_string(game.font, rect.position + Vector2(43.0, 20.0), "x2 PONTOS", HORIZONTAL_ALIGNMENT_LEFT, width - 91.0, 16, Color(1.0, 0.91, 0.42))
+	game.draw_string(game.font, rect.position + Vector2(width - 52.0, 20.0), "%02ds" % int(ceil(remaining)), HORIZONTAL_ALIGNMENT_RIGHT, 42.0, 15, Color.WHITE)
+	var bar_rect := Rect2(rect.position + Vector2(43.0, 29.0), Vector2(width - 55.0, 6.0))
+	game.draw_rect(bar_rect, Color(0.04, 0.09, 0.08, 0.94), true)
+	game.draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * ratio, bar_rect.size.y)), accent, true)
 
 
 static func _draw_revive_heal_penalty_hud(game: Node2D, viewport: Vector2, anchor: Rect2) -> void :
@@ -682,6 +713,7 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
 		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0, 28.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
 
+	_draw_point_boost_hud(game, viewport)
 	game._draw_card_mechanic_huds(viewport, life_rect)
 	game._draw_ancorada_hud(viewport, life_rect)
 	game._draw_acorrentada_hud(viewport, life_rect)

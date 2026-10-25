@@ -150,6 +150,21 @@ func _run_simultaneous_collect() -> void:
 	_check(game.heal_orbs.is_empty(), "simultaneous collect left orb alive")
 
 
+func _run_point_boost_remote_collect() -> void:
+	_setup_authority("Racional", "Racional")
+	game.point_boost_pickup_controller.reset()
+	var orb: Dictionary = game._spawn_gameplay_orb(game.POINT_BOOST_PICKUP_KIND, Vector2(700, 360), {"collect_radius": 66.0}, 0, 16.0)
+	var uid: String = String(orb.get("uid", ""))
+	game._rpc_request_gameplay_orb_collect(uid, 42)
+	_check(game.heal_orbs.is_empty(), "remote client did not consume point artifact on authority")
+	_check(game.point_boost_pickup_controller.is_active(), "remote client collection did not activate team buff")
+	var sequence: int = int(game.point_boost_pickup_controller.active_snapshot().get("sequence", 0))
+	game._rpc_request_gameplay_orb_collect(uid, 42)
+	_check(int(game.point_boost_pickup_controller.active_snapshot().get("sequence", 0)) == sequence, "replayed RPC activated point buff twice")
+	var packet: Dictionary = game.boss_visual_sync_controller.pack(game)
+	_check(Dictionary(packet.get("point_boost", {})).get("active", false), "team point buff missing from multiplayer snapshot")
+
+
 func _run_expire_and_reorder() -> void:
 	_setup_authority("Racional", "Racional")
 	game._spawn_heal_orb(Vector2(1200, 900), 0.25)
@@ -201,6 +216,7 @@ func _run() -> void:
 	_run_host_heal_collect()
 	_run_client_heal_collect()
 	_run_simultaneous_collect()
+	_run_point_boost_remote_collect()
 	_run_expire_and_reorder()
 	_run_inelegible_collectors()
 	_run_solo_unchanged()
@@ -211,5 +227,5 @@ func _run() -> void:
 	for _frame in range(4):
 		await process_frame
 	if not failed:
-		print("MULTIPLAYER_GAMEPLAY_ORBS_SMOKE_OK voraz_host voraz_client ownership heal_host heal_client duplicate expire reorder ineligible solo")
+		print("MULTIPLAYER_GAMEPLAY_ORBS_SMOKE_OK voraz_host voraz_client ownership heal_host heal_client point_boost_team duplicate_rpc expire reorder ineligible solo")
 	quit(1 if failed else 0)

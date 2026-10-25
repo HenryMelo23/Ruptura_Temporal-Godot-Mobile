@@ -429,5 +429,40 @@
         "descricao_loja": "Armazena dano excedente e descarrega em alvos poderosos.",
         "icone": "Deck/carta-Cofre_do_Excesso1.png",
         "frame_secundario": "Deck/carta-Cofre_do_Excesso2.png"
+    },
+    {
+        "id": "tributo_da_dor",
+        "nome": "Tributo da Dor",
+        "subtitulo": "Ferida Rentável",
+        "descricao_loja": "Sempre que perder vida, recebe pontos. Começa em 1 ponto por impacto e cresce cada vez mais por cópia, sem limite.",
+        "icone": "Deck/carta-Tributo_da_Dor1.png",
+        "frame_secundario": "Deck/carta-Tributo_da_Dor2.png"
+    },
+    {
+        "id": "estilhaco_prismatico",
+        "nome": "Estilhaço Prismático",
+        "subtitulo": "Fortuna Lapidada",
+        "raridade": "incomum",
+        "descricao_loja": "Abates podem condensar uma lasca grande de prisma. Cada cópia aumenta continuamente a chance e o valor; os pontos também acompanham o tempo da partida.",
+        "icone": "Deck/carta-Estilhaco_Prismatico1.png",
+        "frame_secundario": "Deck/carta-Estilhaco_Prismatico2.png"
+    },
+    {
+        "id": "critico_absoluto",
+        "nome": "Crítico Absoluto",
+        "subtitulo": "Dobra Letal",
+        "raridade": "rara",
+        "descricao_loja": "Cada cópia aumenta em 100% o dano final dos acertos críticos, sem limite.",
+        "icone": "Deck/carta-Critico_Absoluto1.png",
+        "frame_secundario": "Deck/carta-Critico_Absoluto2.png"
+    },
+    {
+        "id": "arquivo_impossivel",
+        "nome": "Arquivo do Impossível",
+        "subtitulo": "Cópia Sem Fim",
+        "raridade": "lendaria",
+        "descricao_loja": "Ao adquirir qualquer carta não lendária, recebe uma cópia adicional dela por cópia deste Arquivo. As cópias gratuitas não reativam o Arquivo.",
+        "icone": "Deck/carta-Arquivo_do_Impossivel1.png",
+        "frame_secundario": "Deck/carta-Arquivo_do_Impossivel2.png"
     }
 ]

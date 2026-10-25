@@ -48,7 +48,7 @@ func _run() -> void:
 		1: "CARANGUEJO COSMICO GIGANTE",
 		2: "SENTINELA GLACIAL",
 		3: "PAI-RATO",
-		4: "NEXO DA RUPTURA",
+		4: "NEXO ANFIBIO",
 		5: "UMBRA",
 		6: "MATRIARCA DA CHAGA",
 		7: "FENIX"

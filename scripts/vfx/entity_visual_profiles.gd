@@ -10,6 +10,7 @@ const HENRY_FROZEN_DRAW_OFFSET := Vector2(0.0, 4.0)
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
 const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
+const Boss4AnimationPresentation = preload("res://scripts/presentation/boss4_animation_presentation.gd")
 
 
 static func _petro_frame(game: Node2D) -> Texture2D:
@@ -303,12 +304,11 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 			return frames5[int(game.boss_phase) % frames5.size()]
 		return game.textures["boss"]
 	if game.current_phase == 4:
-		if game.boss4_attack_pose_timer > 0.0 and game.textures.get("boss4_attack") != null:
-			return game.textures["boss4_attack"]
-		var frames4: Array = game.textures.get("boss4", [])
-		if not frames4.is_empty():
-			return frames4[int(game.boss4_anim_time) % frames4.size()]
-		return game.textures["boss"]
+		var boss4_animation_texture: Texture2D = Boss4AnimationPresentation.active_texture(game)
+		if boss4_animation_texture != null:
+			return boss4_animation_texture
+		var boss4_idle_frames: Array = game.textures.get("boss4_rework_idle", [])
+		return boss4_idle_frames[0] if not boss4_idle_frames.is_empty() else null
 	if game.current_phase == 3:
 		var boss3_animation_texture: Texture2D = Boss3AnimationPresentation.active_texture(game)
 		if boss3_animation_texture != null:
@@ -356,7 +356,7 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 	if game.current_phase == 5:
 		return game.boss_pos + Vector2(sin(game.boss_phase * 0.65) * 4.0, sin(game.boss_phase * 1.1) * 5.0)
 	if game.current_phase == 4:
-		return game.boss_pos + Vector2(0, sin(game.boss4_anim_time * 2.0) * 4.0)
+		return Boss4AnimationPresentation.draw_position(game)
 	if game.current_phase == 3:
 		return game.boss_pos
 	if game.current_phase == 2:
@@ -385,6 +385,8 @@ static func _boss_draw_size(game: Node2D) -> Vector2:
 		return Boss1AnimationPresentation.draw_size(game)
 	if game.current_phase == 2:
 		return Boss2AnimationPresentation.draw_size()
+	if game.current_phase == 4:
+		return Boss4AnimationPresentation.draw_size(game)
 	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else (Vector2(59.4, 88.0) if game.current_phase == 5 else Vector2(184, 170))))
 
 

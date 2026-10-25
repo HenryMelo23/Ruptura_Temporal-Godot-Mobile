@@ -144,12 +144,15 @@ func consume_card_count(card_id: String, amount: = 1) -> bool:
 	return true
 
 
-func card_max_count(card: Dictionary) -> int:
-	return maxi(1, int(card.get("max_count", core.CARD_UNLIMITED_COUNT)))
+func card_max_count(_card: Dictionary) -> int:
+	return core.CARD_UNLIMITED_COUNT
 
 
-func card_at_max(card: Dictionary) -> bool:
-	return card_count(card) >= card_max_count(card)
+func card_at_max(_card: Dictionary) -> bool:
+	# Ruptura Temporal intentionally has no acquisition ceiling. Individual
+	# mechanics may use diminishing returns, but the run can always buy another
+	# copy and every copy must remain meaningful.
+	return false
 
 
 func find_card_by_id(target_card_id: String) -> Dictionary:

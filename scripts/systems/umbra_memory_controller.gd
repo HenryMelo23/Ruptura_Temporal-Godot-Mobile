@@ -7,10 +7,18 @@ class_name RTUmbraMemoryController
 # - persistent: versioned, aggregate-only local profile between valid runs.
 # No coordinates, raw input history, peer IDs, nicknames or policy hidden values
 # are persisted. Multiplayer never loads or writes this local profile.
-const PERSISTENT_SCHEMA_VERSION := 1
+const PERSISTENT_SCHEMA_VERSION := 2
 const DEFAULT_STORAGE_PATH := "user://umbra_mind/behavior_profile_v2.json"
 const MIN_SAMPLES_TO_PERSIST := 4
 const PROFILE_METRICS := ["evade_rate", "distance_preference", "dash_rate", "aggression_rate", "response_rate"]
+const KNOWLEDGE_CATEGORIES := ["movement", "shooting", "choices", "preferences", "weaknesses"]
+const KNOWLEDGE_LABELS := {
+	"movement": "MOVIMENTO",
+	"shooting": "DISPARO",
+	"choices": "ESCOLHAS",
+	"preferences": "PREFERENCIAS",
+	"weaknesses": "FRAQUEZAS"
+}
 
 var storage_path := DEFAULT_STORAGE_PATH
 var owner_peer_id := 1
@@ -109,10 +117,142 @@ func policy_memory_context() -> Dictionary:
 	}
 
 
-func finish_run(policy: Object = null) -> bool:
+func knowledge_report(runtime: Object) -> Dictionary:
+	if runtime == null or not is_instance_valid(runtime):
+		return _empty_knowledge_report()
+	var behavior: Dictionary = runtime.call("_run_behavior_report") if runtime.has_method("_run_behavior_report") else {}
+	var cards: Array = runtime.call("_cards_report_rows") if runtime.has_method("_cards_report_rows") else []
+	var damage_hits: Dictionary = Dictionary(runtime.get("run_damage_hits_by_source"))
+	var damage_totals: Dictionary = Dictionary(runtime.get("run_damage_taken_by_source"))
+	var damage_meta: Dictionary = Dictionary(runtime.get("run_damage_source_meta"))
+	var phase_seconds: Dictionary = Dictionary(behavior.get("phase_seconds", {}))
+	var duration := maxf(0.0, float(runtime.get("time_alive")))
+	var move_samples := maxi(0, int(runtime.get("run_behavior_move_samples"))) + maxi(0, int(runtime.get("run_behavior_stationary_samples")))
+	var phases_observed := 0
+	for seconds in phase_seconds.values():
+		if float(seconds) >= 8.0:
+			phases_observed += 1
+	var shots := maxi(0, int(behavior.get("shots_fired", 0)))
+	var hits := maxi(0, int(behavior.get("hits", 0)))
+	var dashes := maxi(0, int(behavior.get("dash_count", 0)))
+	var card_total := 0
+	for card_value in cards:
+		card_total += maxi(0, int(Dictionary(card_value).get("count", 0)))
+	var distinct_cards := cards.size()
+	var damage_hit_count := 0
+	for hit_count in damage_hits.values():
+		damage_hit_count += maxi(0, int(hit_count))
+	var damage_total := 0.0
+	for damage_value in damage_totals.values():
+		damage_total += maxf(0.0, float(damage_value))
+	var hp_max := maxf(1.0, float(runtime.get("player_hp_max")))
+	var base_choices := 0
+	if String(runtime.get("manifestation_key")) != "" or String(runtime.get("mutation_key")) != "":
+		base_choices += 1
+	var aura_state: Dictionary = Dictionary(runtime.get("aura_state"))
+	if String(aura_state.get("name", "")) != "" or String(runtime.get("effect_key")) != "":
+		base_choices += 1
+
+	var movement_score := 100.0 * (
+		0.42 * _saturation(duration, 150.0)
+		+ 0.38 * _saturation(float(move_samples), 160.0)
+		+ 0.20 * clampf(float(phases_observed) / 3.0, 0.0, 1.0)
+	)
+	var shooting_score := 100.0 * (
+		0.60 * _saturation(float(shots), 110.0)
+		+ 0.25 * _saturation(float(hits), 36.0)
+		+ 0.15 * _saturation(duration, 180.0)
+	)
+	var choices_score := 100.0 * (
+		0.30 * clampf(float(base_choices) / 2.0, 0.0, 1.0)
+		+ 0.45 * _saturation(float(card_total), 8.0)
+		+ 0.25 * _saturation(float(distinct_cards), 5.0)
+	)
+	var preferences_score := 100.0 * (
+		0.36 * _saturation(duration, 210.0)
+		+ 0.24 * _saturation(float(shots + dashes * 3), 120.0)
+		+ 0.20 * _saturation(float(card_total), 7.0)
+		+ 0.20 * clampf(float(phases_observed) / 3.0, 0.0, 1.0)
+	)
+	var weaknesses_score := 100.0 * (
+		0.52 * _saturation(float(damage_hit_count), 14.0)
+		+ 0.25 * _saturation(float(damage_hits.size()), 5.0)
+		+ 0.23 * _saturation(damage_total / hp_max, 2.2)
+	)
+	var top_damage_source := _top_damage_source(damage_totals, damage_meta)
+	var categories := {
+		"movement": _category(movement_score, _movement_insight(behavior)),
+		"shooting": _category(shooting_score, _shooting_insight(behavior)),
+		"choices": _category(choices_score, _choice_insight(card_total, distinct_cards)),
+		"preferences": _category(preferences_score, _preference_insight(behavior, dashes, shots)),
+		"weaknesses": _category(weaknesses_score, _weakness_insight(damage_hit_count, top_damage_source))
+	}
+	var total := 0.0
+	for key in KNOWLEDGE_CATEGORIES:
+		total += float(Dictionary(categories[key]).get("percent", 0.0))
+	total /= float(KNOWLEDGE_CATEGORIES.size())
+	var archetype := _classify_archetype(behavior, damage_total, duration)
+	return {
+		"schema_version": 1,
+		"total_percent": int(round(clampf(total, 0.0, 100.0))),
+		"categories": categories,
+		"archetype": archetype,
+		"archetype_label": _archetype_label(archetype),
+		"sample_seconds": snappedf(duration, 0.1),
+		"phases_observed": phases_observed,
+		"evidence": {
+			"move_samples": move_samples, "shots": shots, "hits": hits, "dashes": dashes,
+			"cards": card_total, "distinct_cards": distinct_cards,
+			"damage_hits": damage_hit_count, "damage_sources": damage_hits.size()
+		},
+		"behavior_vector": {
+			"edge_ratio": clampf(float(behavior.get("edge_ratio", 0.0)), 0.0, 1.0),
+			"corner_ratio": clampf(float(behavior.get("corner_ratio", 0.0)), 0.0, 1.0),
+			"center_ratio": clampf(float(behavior.get("center_ratio", 0.0)), 0.0, 1.0),
+			"stationary_ratio": clampf(float(behavior.get("stationary_ratio", 0.0)), 0.0, 1.0),
+			"dash_per_minute": maxf(0.0, float(behavior.get("dash_per_minute", 0.0))),
+			"shots_per_minute": maxf(0.0, float(behavior.get("shots_per_minute", 0.0))),
+			"hit_rate": clampf(float(behavior.get("hit_rate", 0.0)), 0.0, 1.0),
+			"damage_taken_per_minute": damage_total / maxf(1.0, duration) * 60.0
+		}
+	}
+
+
+func profile_from_knowledge(report: Dictionary) -> Dictionary:
+	var archetype := String(report.get("archetype", "SOBREVIVENTE_ADAPTATIVO"))
+	return {
+		"arquetipo_principal": archetype,
+		"arquetipo_secundario": "INDEFINIDO",
+		"confianca": clampf(float(report.get("total_percent", 0)) / 100.0, 0.0, 0.92),
+		"historico_arquetipos": [archetype],
+		"conhecimento": report.duplicate(true),
+		"fonte": "run_atual"
+	}
+
+
+func merge_profiles(remote_profile: Dictionary, run_report: Dictionary) -> Dictionary:
+	var local := profile_from_knowledge(run_report)
+	var local_confidence := float(local.get("confianca", 0.0))
+	var remote_confidence := clampf(float(remote_profile.get("confianca", 0.0)), 0.0, 0.92)
+	if local_confidence < 0.20 and not remote_profile.is_empty():
+		var remote := remote_profile.duplicate(true)
+		remote["arquetipo_secundario"] = String(local.get("arquetipo_principal", "INDEFINIDO"))
+		remote["conhecimento"] = run_report.duplicate(true)
+		remote["confianca"] = maxf(remote_confidence * 0.55, local_confidence)
+		remote["fonte"] = "coorte_com_validacao_local"
+		return remote
+	if not remote_profile.is_empty():
+		local["arquetipo_secundario"] = String(remote_profile.get("arquetipo_principal", "INDEFINIDO"))
+		local["confianca"] = clampf(local_confidence * 0.82 + remote_confidence * 0.18, 0.0, 0.92)
+		local["fonte"] = "run_atual_com_prior_coletivo"
+	return local
+
+
+func finish_run(policy: Object = null, knowledge: Dictionary = {}) -> bool:
 	if not run_active:
 		return false
-	var should_persist := not multiplayer_isolated and int(run_profile.get("samples", 0)) >= MIN_SAMPLES_TO_PERSIST
+	var has_run_knowledge := float(knowledge.get("sample_seconds", 0.0)) >= 30.0
+	var should_persist := not multiplayer_isolated and (int(run_profile.get("samples", 0)) >= MIN_SAMPLES_TO_PERSIST or has_run_knowledge)
 	if should_persist:
 		var metrics: Dictionary = Dictionary(persistent_profile.get("metrics", {}))
 		var current := run_features()
@@ -123,6 +263,8 @@ func finish_run(policy: Object = null) -> bool:
 		persistent_profile["schema_version"] = PERSISTENT_SCHEMA_VERSION
 		persistent_profile["runs_observed"] = observed_runs + 1
 		persistent_profile["metrics"] = metrics
+		if not knowledge.is_empty():
+			persistent_profile["knowledge"] = knowledge.duplicate(true)
 		_save_persistent_profile()
 	run_active = false
 	encounter_active = false
@@ -165,6 +307,8 @@ func _normalize_persistent_profile(raw: Dictionary) -> Dictionary:
 	for key in PROFILE_METRICS:
 		metrics[key] = clampf(float(source_metrics.get(key, 0.0)), 0.0, 1.0)
 	profile["metrics"] = metrics
+	if raw.get("knowledge", {}) is Dictionary:
+		profile["knowledge"] = Dictionary(raw.get("knowledge", {})).duplicate(true)
 	return profile
 
 
@@ -172,7 +316,7 @@ static func _empty_persistent_profile() -> Dictionary:
 	var metrics: Dictionary = {}
 	for key in PROFILE_METRICS:
 		metrics[key] = 0.0
-	return {"schema_version": PERSISTENT_SCHEMA_VERSION, "runs_observed": 0, "metrics": metrics}
+	return {"schema_version": PERSISTENT_SCHEMA_VERSION, "runs_observed": 0, "metrics": metrics, "knowledge": _empty_knowledge_report()}
 
 
 static func _empty_run_profile() -> Dictionary:
@@ -181,3 +325,112 @@ static func _empty_run_profile() -> Dictionary:
 		"threat_samples": 0, "threat_responses": 0, "last_position": Vector2.ZERO,
 		"has_previous_position": false, "last_dash_marker": -1.0, "last_attack_marker": -1.0
 	}
+
+
+static func _saturation(value: float, target: float) -> float:
+	return 1.0 - exp(-maxf(0.0, value) / maxf(0.001, target))
+
+
+static func _category(score: float, insight: String) -> Dictionary:
+	return {"percent": int(round(clampf(score, 0.0, 100.0))), "insight": insight}
+
+
+static func _empty_knowledge_report() -> Dictionary:
+	var categories := {}
+	for key in KNOWLEDGE_CATEGORIES:
+		categories[key] = _category(0.0, "Evidencia insuficiente")
+	return {"schema_version": 1, "total_percent": 0, "categories": categories, "archetype": "INDEFINIDO", "archetype_label": "PERFIL INDEFINIDO", "sample_seconds": 0.0, "phases_observed": 0, "evidence": {}, "behavior_vector": {}}
+
+
+static func _movement_insight(behavior: Dictionary) -> String:
+	if float(behavior.get("corner_ratio", 0.0)) >= 0.12:
+		return "Busca cantos sob pressao"
+	if float(behavior.get("edge_ratio", 0.0)) >= 0.34:
+		return "Prefere as bordas da arena"
+	if float(behavior.get("stationary_ratio", 0.0)) >= 0.34:
+		return "Interrompe o movimento com frequencia"
+	return "Mantem deslocamento frequente"
+
+
+static func _shooting_insight(behavior: Dictionary) -> String:
+	var rate := float(behavior.get("shots_per_minute", 0.0))
+	var accuracy := float(behavior.get("hit_rate", 0.0))
+	if rate >= 48.0 and accuracy < 0.34:
+		return "Dispara muito e corrige depois"
+	if accuracy >= 0.52:
+		return "Prioriza disparos confirmados"
+	if rate < 18.0:
+		return "Ataca em janelas curtas"
+	return "Mantem cadencia moderada"
+
+
+static func _choice_insight(card_total: int, distinct_cards: int) -> String:
+	if card_total <= 1:
+		return "Build ainda pouco definida"
+	if distinct_cards >= 5:
+		return "Distribui recursos entre varias respostas"
+	return "Concentra compras em poucos efeitos"
+
+
+static func _preference_insight(behavior: Dictionary, dashes: int, shots: int) -> String:
+	if float(behavior.get("center_ratio", 0.0)) >= 0.32:
+		return "Disputa o centro da arena"
+	if dashes * 4 > shots:
+		return "Prioriza mobilidade sobre pressao"
+	if shots >= 80:
+		return "Prioriza pressao ofensiva"
+	return "Alterna cautela e agressao"
+
+
+static func _weakness_insight(hit_count: int, source: String) -> String:
+	if hit_count <= 0:
+		return "Nenhuma fraqueza confirmada"
+	if source != "":
+		return "Maior exposicao: " + source
+	return "Repetiu falhas defensivas"
+
+
+static func _top_damage_source(totals: Dictionary, meta: Dictionary) -> String:
+	var top_key := ""
+	var top_damage := -1.0
+	for key_value in totals.keys():
+		var value := float(totals.get(key_value, 0.0))
+		if value > top_damage:
+			top_damage = value
+			top_key = String(key_value)
+	if top_key == "":
+		return ""
+	var row: Dictionary = Dictionary(meta.get(top_key, {}))
+	return String(row.get("name", top_key)).replace("_", " ").capitalize()
+
+
+static func _classify_archetype(behavior: Dictionary, damage_total: float, duration: float) -> String:
+	var edge := float(behavior.get("edge_ratio", 0.0))
+	var corner := float(behavior.get("corner_ratio", 0.0))
+	var dash := float(behavior.get("dash_per_minute", 0.0))
+	var shots := float(behavior.get("shots_per_minute", 0.0))
+	var hit_rate := float(behavior.get("hit_rate", 0.0))
+	var stationary := float(behavior.get("stationary_ratio", 0.0))
+	var damage_per_minute := damage_total / maxf(1.0, duration) * 60.0
+	if corner >= 0.12 or edge >= 0.34:
+		return "REFUGIADO_DE_CANTO"
+	if dash >= 8.0:
+		return "DEPENDENTE_DE_DASH"
+	if shots >= 48.0 and hit_rate < 0.34:
+		return "ATIRADOR_DISTANTE"
+	if stationary < 0.14 and edge < 0.22:
+		return "CORREDOR_CIRCULAR"
+	if damage_per_minute >= 120.0 and edge < 0.25:
+		return "AGRESSOR_IMPULSIVO"
+	return "SOBREVIVENTE_ADAPTATIVO"
+
+
+static func _archetype_label(archetype: String) -> String:
+	return {
+		"REFUGIADO_DE_CANTO": "REFUGIADO DE CANTO",
+		"DEPENDENTE_DE_DASH": "DEPENDENTE DE DASH",
+		"ATIRADOR_DISTANTE": "ATIRADOR DISTANTE",
+		"CORREDOR_CIRCULAR": "CORREDOR CIRCULAR",
+		"AGRESSOR_IMPULSIVO": "AGRESSOR IMPULSIVO",
+		"SOBREVIVENTE_ADAPTATIVO": "SOBREVIVENTE ADAPTATIVO"
+	}.get(archetype, "PERFIL INDEFINIDO")

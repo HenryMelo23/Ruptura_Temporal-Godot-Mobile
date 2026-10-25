@@ -78,9 +78,9 @@ func _run() -> void:
 	game.enemies.clear()
 	game.heal_orbs.clear()
 	game.effects.clear()
-	_check(BargainCapsulePresentation.MOTION_RESULTS.get_size() == Vector2(576, 384), "motion/result atlas size drifted")
-	_check(BargainCapsulePresentation.IDLE_DAMAGE.get_size() == Vector2(576, 384), "idle/damage atlas size drifted")
-	_check(BargainCapsulePresentation.HIT_REACTION.get_size() == Vector2(576, 96), "hit atlas size drifted")
+	_check(load(BargainCapsulePresentation.MOTION_RESULTS_PATH).get_size() == Vector2(576, 384), "motion/result atlas size drifted")
+	_check(load(BargainCapsulePresentation.IDLE_DAMAGE_PATH).get_size() == Vector2(576, 384), "idle/damage atlas size drifted")
+	_check(load(BargainCapsulePresentation.HIT_REACTION_PATH).get_size() == Vector2(576, 96), "hit atlas size drifted")
 
 	await _capture("preparing", _capsule_snapshot(game.BARGAIN_CAPSULE_STATE_PREPARING, 0.48, 1.0))
 	await _capture("fall_start", _capsule_snapshot(game.BARGAIN_CAPSULE_STATE_FALLING, 0.82, 1.0, 0.08))

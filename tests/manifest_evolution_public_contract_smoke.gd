@@ -74,6 +74,12 @@ func _prepare(key: String, entry: Dictionary = {}) -> Array:
 	game.shockwaves.clear()
 	game.slashes.clear()
 	game.manifest_evolution_combat_event_log.clear()
+	if key == "ancorada":
+		game.hab1_ancorada_active = false
+		game.hab1_ancorada_impact_done = false
+		game.anchors.clear()
+		game.lastro_stacks = 0
+		game.lastro_points = 0
 	game._reset_manifest_evolution_state()
 	if not entry.is_empty():
 		game.manifest_evolution_options = [entry]
@@ -92,6 +98,8 @@ func _advance_combat(delta: float = 0.03, frames: int = 16) -> void:
 	for _frame in range(frames):
 		game._update_bullets(delta)
 		game._update_return_bullets(delta)
+		if game.manifestation_key == "ancorada":
+			game._update_ancorada_standing_still(delta)
 		game._update_manifest_evolution_effects(delta)
 		game._update_acorrentada_state(delta)
 
@@ -427,6 +435,78 @@ func _exercise_acorrentada(entry: Dictionary) -> bool:
 	return int(metrics.get(String(entry.get("id", "")), 0)) > 0
 
 
+func _choose_ancorada_pair(entry: Dictionary) -> void:
+	if String(entry.get("stage", "")) == "ev2":
+		game.manifest_evolution_options = [_entry_for("ancorada", "ev1", 0)]
+		game._choose_manifest_evolution(0)
+	game.manifest_evolution_options = [entry]
+	game._choose_manifest_evolution(0)
+
+
+func _exercise_ancorada(entry: Dictionary) -> bool:
+	var targets := _prepare("ancorada")
+	_choose_ancorada_pair(entry)
+	var effect := String(Dictionary(entry.get("profile", {})).get("effect", ""))
+	match effect:
+		"ancorada_fundacao_profunda", "ancorada_muralha_ruptura", "ancorada_territorio_jurado", "ancorada_fortaleza_autoportante":
+			_public_skill("ancorada")
+			_advance_combat(0.10, 5)
+		"ancorada_peso_absoluto":
+			game.lastro_stacks = 3
+			_public_attack("ancorada", true)
+		"ancorada_contra_impacto":
+			_public_skill("ancorada")
+			_advance_combat(0.10, 5)
+			Dictionary(targets[0])["pos"] = game.hab1_ancorada_cast_pos
+			_advance_combat(0.10, 1)
+		"ancorada_linha_fundacao":
+			_public_attack("ancorada", true)
+			game.effects = game.effects.filter(func(effect): return not bool(Dictionary(effect).get("skill_lock", false)))
+			game.time_alive += 10.0
+			game.last_skill_time = -1000.0
+			game._use_skill(game.player_pos + Vector2(320.0, 0.0))
+			_advance_combat(0.10, 5)
+		"ancorada_coracao_fortaleza":
+			_public_attack("ancorada", true)
+			_public_skill("ancorada")
+			_advance_combat(0.20, 5)
+		"ancorada_queda_monumental":
+			_public_teleport("ancorada")
+			_advance_combat(0.11, 5)
+		"ancorada_rede_fundacoes":
+			_public_skill("ancorada")
+			_advance_combat(0.10, 5)
+			game.time_alive += 10.0
+			game.last_attack_time = -1000.0
+			_public_attack("ancorada", true)
+		"ancorada_ultimo_bastiao":
+			game.player_hp = float(game.player_hp_max) * 0.24
+			_advance_combat(0.11, 1)
+		"ancorada_continente_imovel":
+			game.time_alive += 10.0
+			game.last_secondary_time = -1000.0
+			game._use_secondary_skill(game.player_pos)
+			_advance_combat(0.10, 1)
+		_:
+			blocked.append(String(entry.get("id", "")) + " unsupported Ancorada effect=" + effect)
+			return false
+	var state := Dictionary(game.manifest_evolution_state.get("ancorada", {}))
+	var metrics := Dictionary(state.get("metrics", {}))
+	last_evidence = {
+		"effect": effect,
+		"metric": int(metrics.get(String(entry.get("id", "")), 0)),
+		"walls": Array(state.get("walls", [])).size(),
+		"domains": Array(state.get("domains", [])).size(),
+		"lines": Array(state.get("foundation_lines", [])).size(),
+		"fortresses": Array(state.get("fortresses", [])).size(),
+		"monuments": Array(state.get("monuments", [])).size(),
+		"pins": Array(state.get("absolute_pins", [])).size(),
+		"bastion": not Dictionary(state.get("bastion", {})).is_empty(),
+		"continent": not Dictionary(state.get("continent", {})).is_empty()
+	}
+	return int(metrics.get(String(entry.get("id", "")), 0)) > 0
+
+
 func _inventory_and_design_review(entries: Array) -> void:
 	var grouped: Dictionary = {}
 	for value in entries:
@@ -472,7 +552,7 @@ func _run() -> void:
 	for value in entries:
 		var entry: Dictionary = Dictionary(value)
 		var key := String(entry.get("manifestation", ""))
-		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else (_exercise_acorrentada(entry) if key == "acorrentada" else (_exercise_lacerante(entry) if key == "lacerante" else _exercise_generic(key, entry)))
+		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else (_exercise_acorrentada(entry) if key == "acorrentada" else (_exercise_ancorada(entry) if key == "ancorada" else (_exercise_lacerante(entry) if key == "lacerante" else _exercise_generic(key, entry))))
 		checked_by_manifestation[key] = int(checked_by_manifestation.get(key, 0)) + 1
 		if not behavior_ok:
 			_record_failure(entry, "public %s route produced no measurable gameplay delta over baseline" % String(Dictionary(entry.get("profile", {})).get("hook", "unknown")))
