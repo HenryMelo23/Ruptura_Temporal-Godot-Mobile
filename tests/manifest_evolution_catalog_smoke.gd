@@ -13,6 +13,7 @@ func _initialize() -> void:
 	var ids: Dictionary = {}
 	var counts: Dictionary = {}
 	var prismatica_effects: Dictionary = {}
+	var acorrentada_effects: Dictionary = {}
 	var shared_effects: Dictionary = {}
 	var definitions: Dictionary = {}
 	for stage_profiles in Catalog.STAGE_EFFECTS.values():
@@ -57,6 +58,17 @@ func _initialize() -> void:
 				quit(1)
 				return
 			prismatica_effects[effect] = true
+		if manifestation == "acorrentada":
+			var effect := String(Dictionary(entry).get("effect", ""))
+			if not effect.begins_with("acorrentada_"):
+				push_error("MANIFEST_EVOLUTION_CATALOG_FAIL Acorrentada retained shared effect " + id)
+				quit(1)
+				return
+			if acorrentada_effects.has(effect) or prismatica_effects.has(effect) or shared_effects.has(effect):
+				push_error("MANIFEST_EVOLUTION_CATALOG_FAIL Acorrentada effect is not exclusive " + effect)
+				quit(1)
+				return
+			acorrentada_effects[effect] = true
 		var key := "%s|%s" % [manifestation, stage]
 		counts[key] = int(counts.get(key, 0)) + 1
 	if entries.size() != Catalog.TOTAL_EVOLUTIONS:
@@ -72,6 +84,10 @@ func _initialize() -> void:
 				return
 	if prismatica_effects.size() != 12:
 		push_error("MANIFEST_EVOLUTION_CATALOG_FAIL Prismatica needs 12 exclusive effects")
+		quit(1)
+		return
+	if acorrentada_effects.size() != 12:
+		push_error("MANIFEST_EVOLUTION_CATALOG_FAIL Acorrentada needs 12 exclusive effects")
 		quit(1)
 		return
 	var arc := Dictionary(definitions.get("eletrica_ev1_arco_condutor", {}))

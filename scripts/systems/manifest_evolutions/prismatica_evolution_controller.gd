@@ -129,8 +129,11 @@ static func on_projectile_hit(game: Node, bullet: Dictionary, target: Dictionary
 	var state := _state(game)
 	var keep := false
 	var target_uid := str(target.get("uid", "target"))
+	var was_reflected := bool(bullet.get("prism_reflected", false))
+	var excluded: Dictionary = Dictionary(bullet.get("hits", {})).duplicate()
+	excluded[target_uid] = true
 	if _has(ids, EV1_REFLEXAO_DUPLA) and int(bullet.get("prism_reflections_left", 0)) > 0:
-		var next_pos := _nearest_target_pos(game, target_pos, {target_uid: true})
+		var next_pos := _nearest_target_pos(game, target_pos, excluded)
 		if next_pos != Vector2.ZERO:
 			bullet["dir"] = (next_pos - target_pos).normalized()
 			bullet["pos"] = target_pos + Vector2(bullet["dir"]) * 4.0
@@ -149,8 +152,8 @@ static func on_projectile_hit(game: Node, bullet: Dictionary, target: Dictionary
 		_add_vfx(state, "triangle_hit", target_pos, 0.34, COLOR_GOLD)
 	if _has(ids, EV1_PRISMA_ENCADEADO):
 		_apply_chain_anchor(game, state, target_pos, target_uid)
-	if _has(ids, EV2_LUZ_RECURSIVA) and bool(bullet.get("prism_reflected", false)) and int(bullet.get("prism_recursive_left", 0)) > 0:
-		var recursive_pos := _nearest_target_pos(game, target_pos, {target_uid: true})
+	if _has(ids, EV2_LUZ_RECURSIVA) and was_reflected and int(bullet.get("prism_reflections_left", 0)) <= 0 and int(bullet.get("prism_recursive_left", 0)) > 0:
+		var recursive_pos := _nearest_target_pos(game, target_pos, excluded)
 		if recursive_pos != Vector2.ZERO:
 			bullet["dir"] = (recursive_pos - target_pos).normalized()
 			bullet["pos"] = target_pos + Vector2(bullet["dir"]) * 5.0

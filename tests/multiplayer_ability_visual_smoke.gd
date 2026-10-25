@@ -197,6 +197,9 @@ func _run_client() -> void:
 			_write("client_received", "OK")
 			continue
 		if received and not response_sent:
+			# This transport matrix exercises Geovana manifestations, not Henry mutations.
+			# The lobby now correctly assigns Henry to the second player by default.
+			game.active_character_key = game.CHARACTER_GEOVANA
 			var ressonante_index := -1
 			for manifest_index in range(game.MANIFESTATIONS.size()):
 				if String(game.MANIFESTATIONS[manifest_index].get("key", "")) == "ressonante":

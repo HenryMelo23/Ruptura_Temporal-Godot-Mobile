@@ -96,6 +96,48 @@ func _run_teleport_behavior(key: String, entry: Dictionary) -> void:
 	_check(game.shockwaves.size() > before, key + " teleport burst inactive")
 
 
+func _run_acorrentada_behavior(entry: Dictionary) -> void:
+	_activate_single("acorrentada", entry)
+	var targets: Array = []
+	for offset in [Vector2(80, 0), Vector2(130, 24), Vector2(176, -22), Vector2(205, 36)]:
+		game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + offset)
+		game.enemies.back()["hp"] = 100000.0
+		game.enemies.back()["max_hp"] = 100000.0
+		targets.append(game.enemies.back())
+	var evolution_id := String(entry.get("id", ""))
+	var effect := String(Dictionary(entry.get("profile", {})).get("effect", ""))
+	match effect:
+		"acorrentada_corrente_tripla":
+			game._resolve_acorrentada_attack_motion({"stage": 3, "dir": Vector2.RIGHT, "target": {"kind": "enemy", "uid": int(Dictionary(targets[0])["uid"])}, "damage_impact": Vector2(Dictionary(targets[0])["pos"]), "manifest_evolution_event_id": "matrix:triple"})
+		"acorrentada_tensao_residual":
+			game._add_acorrentada_tension(100.0)
+			game._consume_acorrentada_overcharge()
+		"acorrentada_grilhao_movel", "acorrentada_elo_espelhado":
+			game._manifest_evolution_on_combat_hit("matrix:%s" % effect, "acorrentada", Dictionary(targets[0]), Vector2(Dictionary(targets[0])["pos"]))
+		"acorrentada_ancora_corrente", "acorrentada_teia_grilhoes", "acorrentada_prisao_total":
+			game._manifest_evolution_on_skill(game.player_pos + Vector2(120, 0))
+			game._update_manifest_evolution_effects(0.60)
+		"acorrentada_sobretensao_continua":
+			game._cast_acorrentada_q(game.player_pos + Vector2(120, 0))
+			game._update_manifest_evolution_effects(1.05)
+		"acorrentada_ruptura_sequencial":
+			for index in range(3):
+				game._manifest_evolution_on_combat_hit("matrix:sequence:%d" % index, "acorrentada", Dictionary(targets[index]), Vector2(Dictionary(targets[index])["pos"]))
+		"acorrentada_corrente_arrasto":
+			game._manifest_evolution_on_teleport(game.player_pos, game.player_pos + Vector2(220, 0))
+		"acorrentada_sobrecarga_tensao":
+			game.acorrentada_tension = 100.0
+			game._consume_acorrentada_overcharge()
+			game._manifest_evolution_on_combat_hit("matrix:overload", "acorrentada", Dictionary(targets[0]), Vector2(Dictionary(targets[0])["pos"]))
+		"acorrentada_sentenca_ferro":
+			game._cast_acorrentada_e(game.player_pos + Vector2(120, 0))
+			game._manifest_evolution_on_combat_hit("matrix:sentence", "acorrentada", Dictionary(targets[0]), Vector2(Dictionary(targets[0])["pos"]))
+		_:
+			_check(false, "unhandled Acorrentada effect " + effect)
+	var metrics: Dictionary = Dictionary(Dictionary(game.manifest_evolution_state.get("acorrentada", {})).get("metrics", {}))
+	_check(int(metrics.get(evolution_id, 0)) > 0, "Acorrentada contract did not produce a real metric for " + evolution_id)
+
+
 func _run() -> void:
 	game._start_game()
 	game.mode = "game"
@@ -108,6 +150,10 @@ func _run() -> void:
 				var prism_bullet := {"pos": game.player_pos, "dir": Vector2.RIGHT, "damage": 80.0, "life": 1.0, "max_life": 1.0, "hits": {}, "color": Color.WHITE, "kind": key}
 				game._apply_manifest_evolution_to_bullet(prism_bullet)
 				_check(bool(prism_bullet.get("prismatica_evolution", false)), "prismatica did not delegate " + String(Dictionary(entry).get("id", "")))
+				checked += 1
+				continue
+			if key == "acorrentada":
+				_run_acorrentada_behavior(Dictionary(entry))
 				checked += 1
 				continue
 			var profile: Dictionary = Dictionary(Dictionary(entry).get("profile", {}))

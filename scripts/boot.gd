@@ -15,6 +15,8 @@ var visual_smoke_only: = false
 var handoff_queued: = false
 var keep_alive_for_agent_smoke: = false
 var spawned_main: Node
+var handoff_visual_frames: = 0
+var pending_main_scene: PackedScene
 
 
 func _ready() -> void :
@@ -28,42 +30,53 @@ func _ready() -> void :
 	set_process(true)
 	queue_redraw()
 	if not visual_smoke_only:
-		call_deferred("_start_main_load_after_first_frame")
+		get_tree().process_frame.connect(_start_main_load_after_first_frame, CONNECT_ONE_SHOT)
 
 
 func _process(_delta: float) -> void :
-	if load_requested and not handoff_started:
+	if load_requested and not handoff_started and not handoff_queued and pending_main_scene == null:
 		_poll_main_load()
+	if handoff_queued and not handoff_started:
+		handoff_visual_frames -= 1
+		if handoff_visual_frames <= 0:
+			_handoff_to_main()
 	queue_redraw()
 
 
 func _start_main_load_after_first_frame() -> void :
-	await get_tree().process_frame
 	_load_boot_fonts()
 	load_started_ms = Time.get_ticks_msec()
-	var err: = ResourceLoader.load_threaded_request(MAIN_SCENE_PATH, "PackedScene")
-	if err != OK:
-		status_text = "Falha ao sincronizar ruptura."
-		push_error("Boot failed to request threaded load for %s: %s" % [MAIN_SCENE_PATH, error_string(err)])
-		return
 	load_requested = true
 	print("PERF main_scene_load_started %dms" % (load_started_ms - boot_started_ms))
-	call_deferred("_complete_main_load_after_visual_tick")
+	if keep_alive_for_agent_smoke:
+		call_deferred("_load_main_resource")
+		return
+	var err: = ResourceLoader.load_threaded_request(MAIN_SCENE_PATH, "PackedScene")
+	if err != OK:
+		load_requested = false
+		status_text = "Falha ao sincronizar ruptura."
+		push_error("Boot failed to request threaded load for %s: %s" % [MAIN_SCENE_PATH, error_string(err)])
+
+
+func _load_main_resource() -> void:
+	pending_main_scene = load(MAIN_SCENE_PATH) as PackedScene
+	if pending_main_scene == null:
+		load_requested = false
+		status_text = "Falha ao sincronizar ruptura."
+		push_error("Boot failed to load PackedScene: " + MAIN_SCENE_PATH)
+		return
+	progress = 1.0
+	_complete_main_load_after_visual_tick()
 
 
 func _complete_main_load_after_visual_tick() -> void :
 	if handoff_queued or handoff_started or not load_requested:
 		return
 	handoff_queued = true
-	await get_tree().process_frame
-	await get_tree().process_frame
-	if handoff_started or not load_requested:
-		return
 	progress = maxf(progress, 0.62)
 	status_text = "Abrindo ruptura..."
 	queue_redraw()
-	await get_tree().process_frame
-	_handoff_to_main()
+	handoff_visual_frames = 3
 
 
 func _load_boot_fonts() -> void :
@@ -94,16 +107,16 @@ func _poll_main_load() -> void :
 			status_text = "Falha ao sincronizar ruptura."
 			push_error("Boot threaded load failed: " + MAIN_SCENE_PATH)
 		ResourceLoader.THREAD_LOAD_LOADED:
-			progress = 1.0
-			_handoff_to_main()
+			pending_main_scene = ResourceLoader.load_threaded_get(MAIN_SCENE_PATH) as PackedScene
+			_complete_main_load_after_visual_tick()
 
 
 func _handoff_to_main() -> void :
 	if handoff_started:
 		return
 	handoff_started = true
-	var loaded: = ResourceLoader.load_threaded_get(MAIN_SCENE_PATH)
-	var main_scene: = loaded as PackedScene
+	load_requested = false
+	var main_scene := pending_main_scene
 	if main_scene == null:
 		status_text = "Falha ao sincronizar ruptura."
 		push_error("Boot loaded resource is not a PackedScene: " + MAIN_SCENE_PATH)
@@ -112,11 +125,15 @@ func _handoff_to_main() -> void :
 	status_text = "Abrindo ruptura..."
 	queue_redraw()
 	var main: = main_scene.instantiate()
+	pending_main_scene = null
 	spawned_main = main
 	get_tree().root.add_child(main)
 	get_tree().current_scene = main
 	print("PERF main_scene_instantiated %dms" % (Time.get_ticks_msec() - boot_started_ms))
-	await get_tree().process_frame
+	get_tree().process_frame.connect(_finish_handoff_after_first_frame, CONNECT_ONE_SHOT)
+
+
+func _finish_handoff_after_first_frame() -> void:
 	print("PERF first_menu_frame %dms" % (Time.get_ticks_msec() - boot_started_ms))
 	if keep_alive_for_agent_smoke:
 		visible = false

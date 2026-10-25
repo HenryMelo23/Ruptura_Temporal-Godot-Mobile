@@ -79,6 +79,51 @@ const PRISMATICA_PROFILE_KEY_BY_ID := {
 	"prismatica_ev2_geometria_perfeita": "prismatica_geometria_perfeita", "prismatica_ev2_luz_recursiva": "prismatica_luz_recursiva", "prismatica_ev2_prisma_harmonico": "prismatica_prisma_harmonico", "prismatica_ev2_foco_absoluto": "prismatica_foco_absoluto", "prismatica_ev2_rede_espectral": "prismatica_rede_espectral", "prismatica_ev2_colapso_cromatico": "prismatica_colapso_cromatico"
 }
 
+const ACORRENTADA_PROFILE_KEY_BY_ID := {
+	"acorrentada_ev1_corrente_tripla": "acorrentada_corrente_tripla",
+	"acorrentada_ev1_tensao_residual": "acorrentada_tensao_residual",
+	"acorrentada_ev1_grilhao_movel": "acorrentada_grilhao_movel",
+	"acorrentada_ev1_elo_espelhado": "acorrentada_elo_espelhado",
+	"acorrentada_ev1_ancora_corrente": "acorrentada_ancora_corrente",
+	"acorrentada_ev1_sobretensao_continua": "acorrentada_sobretensao_continua",
+	"acorrentada_ev2_teia_grilhoes": "acorrentada_teia_grilhoes",
+	"acorrentada_ev2_ruptura_sequencial": "acorrentada_ruptura_sequencial",
+	"acorrentada_ev2_corrente_arrasto": "acorrentada_corrente_arrasto",
+	"acorrentada_ev2_prisao_total": "acorrentada_prisao_total",
+	"acorrentada_ev2_sobrecarga_tensao": "acorrentada_sobrecarga_tensao",
+	"acorrentada_ev2_sentenca_ferro": "acorrentada_sentenca_ferro"
+}
+
+const LACERANTE_MELEE_PROFILE_OVERRIDES := {
+	"lacerante_ev1_hemorragia_crescente": {"hook": "impact", "non_projectile": true, "summary": "Cada quarto corte repete 34% do dano-base no alvo e aprofunda 1 laceração. Conta somente acertos corpo a corpo resolvidos."},
+	"lacerante_ev1_cicatriz_aberta": {"hook": "impact", "non_projectile": true, "summary": "O corte atravessa o primeiro alvo e atinge até 2 inimigos alinhados atrás dele por 45% do dano-base, em um corredor de 190 px."},
+	"lacerante_ev1_predador_rubro": {"hook": "impact", "non_projectile": true, "summary": "Após acertar, a lâmina salta para o inimigo vivo mais próximo em 350 px e causa 40% do dano-base. Não retorna ao alvo original."},
+	"lacerante_ev2_cicatriz_persistente": {"hook": "impact", "non_projectile": true, "summary": "Cada terceiro corte abre uma cicatriz com 3 pulsos de 18% do dano-base, separados por 0,5 s. Máximo: 6 cicatrizes."},
+	"lacerante_ev2_execucao_cadeia": {"hook": "impact", "non_projectile": true, "summary": "Ao golpear um alvo derrotado ou abaixo de 30% da vida, encadeia até 3 inimigos próximos por 60% do dano-base. O encadeamento não se repete sozinho."}
+}
+
+# Acorrentada uses combo, tension and physical-link state. These contracts are
+# intentionally unrelated to the twelve shared projectile presets: the basic
+# attack has no projectile, and each effect changes a different tactical rule.
+const ACORRENTADA_PROFILES := {
+	"ev1": [
+		{"effect": "acorrentada_corrente_tripla", "hook": "combo", "label": "terceira captura física", "summary": "No terceiro golpe do combo, lança um terceiro segmento contra outro alvo próximo: causa 46% do dano-base e aplica 1 elo. Até 1 captura extra por combo.", "limit": 1, "radius": 210.0},
+		{"effect": "acorrentada_tensao_residual", "hook": "tension", "label": "reserva de tensão", "summary": "Cada ganho de tensão guarda 35% como reserva, até 30. Ao romper uma Sobretensão, a reserva volta imediatamente para a barra.", "limit": 30.0},
+		{"effect": "acorrentada_grilhao_movel", "hook": "impact", "label": "grilhão perseguidor", "summary": "Acertos prendem um grilhão ao alvo por 4,2 s. Ele acompanha o alvo e, a cada 0,45 s, aproxima até 2 inimigos próximos dele. Máximo: 2 grilhões.", "limit": 2, "duration": 4.2},
+		{"effect": "acorrentada_elo_espelhado", "hook": "impact", "label": "dano refletido entre elos", "summary": "Um acerto espelha 22% do dano-base no alvo válido mais próximo e aplica 1 elo nele. Cada alvo-fonte só reflete uma vez a cada 0,35 s.", "limit": 1, "radius": 240.0},
+		{"effect": "acorrentada_ancora_corrente", "hook": "skill", "label": "âncora territorial", "summary": "Q fixa uma âncora por 5 s. A cada 0,55 s, ela puxa suavemente e marca até 3 inimigos em 150 px. Máximo: 2 âncoras.", "limit": 2, "duration": 5.0, "radius": 150.0},
+		{"effect": "acorrentada_sobretensao_continua", "hook": "hybrid", "label": "tensão sustentada por vínculo", "summary": "Enquanto existir grilhão, âncora ou teia ativa, a tensão não decai e recebe 1 ponto por segundo. O bônus cessa quando não há vínculo ativo.", "limit": 1, "duration": 1.0}
+	],
+	"ev2": [
+		{"effect": "acorrentada_teia_grilhoes", "hook": "skill", "label": "rede física multialvo", "summary": "Q conecta até 4 alvos por 4,5 s. A teia pulsa a cada 0,35 s: seus segmentos ferem, desaceleram e aproximam inimigos do centro. Máximo: 1 teia.", "limit": 1, "duration": 4.5, "radius": 260.0},
+		{"effect": "acorrentada_ruptura_sequencial", "hook": "impact", "label": "rupturas na ordem dos golpes", "summary": "Três acertos resolvidos armam uma sequência; os três pontos rompem na ordem, separados por 0,16 s. No chefe, cada pulso usa dano reduzido e não encadeia sozinho.", "limit": 3, "delay": 0.16},
+		{"effect": "acorrentada_corrente_arrasto", "hook": "teleport", "label": "arrasto pela rota", "summary": "Ao teleportar, arrasta até 5 inimigos cruzados em direção ao destino, com deslocamento máximo de 160 px. Chefes não são movidos: recebem apenas contenção breve.", "limit": 5, "radius": 72.0},
+		{"effect": "acorrentada_prisao_total", "hook": "skill", "label": "imobilização coletiva limitada", "summary": "Q imobiliza até 5 inimigos próximos por 1,15 s. Chefes resistem e sofrem só 0,18 s. Recarga interna de 7 s impede prisão infinita.", "limit": 5, "duration": 1.15, "cooldown": 7.0},
+		{"effect": "acorrentada_sobrecarga_tensao", "hook": "tension", "label": "janela de sobrecarga condutora", "summary": "Romper Sobretensão abre 4 s de sobrecarga. Cada acerto conduz 18% do dano-base para até 2 alvos próximos, com intervalo de 0,24 s.", "limit": 2, "duration": 4.0, "radius": 230.0},
+		{"effect": "acorrentada_sentenca_ferro", "hook": "secondary", "label": "veredito preparado pela habilidade E", "summary": "E sentencia os alvos presos por 4 s. O próximo acerto em cada sentenciado consome o veredito, causa 55% do dano-base e reforça 1 elo; chefes recebem 18% e só 0,08 s de contenção.", "limit": 6, "duration": 4.0}
+	]
+}
+
 # Prismatica deliberately does not use STAGE_EFFECTS.  Its evolutions are a
 # small tactical grammar (surfaces, formations and light routes), not renamed
 # variants of the generic manifest presets used by the remaining catalog.
@@ -434,6 +479,16 @@ static func _profile_for_id(manifestation: String, stage: String, evolution_id: 
 			prismatica_profile["signature"] = evolution_id
 			prismatica_profile["visual_tag"] = "luz"
 			return prismatica_profile
+	if manifestation == "acorrentada":
+		for candidate in Array(ACORRENTADA_PROFILES.get(stage, [])):
+			var acorrentada_profile := Dictionary(candidate)
+			if String(acorrentada_profile.get("effect", "")) != effect_key:
+				continue
+			acorrentada_profile = acorrentada_profile.duplicate(true)
+			acorrentada_profile["manifestation"] = manifestation
+			acorrentada_profile["signature"] = evolution_id
+			acorrentada_profile["visual_tag"] = "corrente"
+			return acorrentada_profile
 	var base := _shared_profile_for_effect(stage, effect_key)
 	if base.is_empty():
 		return {}
@@ -449,12 +504,21 @@ static func _profile_for_id(manifestation: String, stage: String, evolution_id: 
 	base["force"] = float(base.get("force", 82.0)) + m * 5.0
 	base["range"] = float(base.get("range", 330.0)) + m * 12.0
 	base["spread"] = float(base.get("spread", 0.18)) + float(_legacy_tuning_index(effect_key)) * 0.012
+	if LACERANTE_MELEE_PROFILE_OVERRIDES.has(evolution_id):
+		var melee_override: Dictionary = Dictionary(LACERANTE_MELEE_PROFILE_OVERRIDES[evolution_id])
+		for key in melee_override:
+			base[key] = melee_override[key]
+	if evolution_id == "ressonante_ev1_sincope":
+		base["duration"] = 1.35
+		base["summary"] = "A cada 3 impactos no mesmo alvo, rompe o compasso e o interrompe por 1,35 s; a contagem reinicia após a Síncope."
 	return base
 
 
 static func _explicit_effect_key(evolution_id: String) -> String:
 	if PRISMATICA_PROFILE_KEY_BY_ID.has(evolution_id):
 		return String(PRISMATICA_PROFILE_KEY_BY_ID[evolution_id])
+	if ACORRENTADA_PROFILE_KEY_BY_ID.has(evolution_id):
+		return String(ACORRENTADA_PROFILE_KEY_BY_ID[evolution_id])
 	for effect_key in EXPLICIT_LEGACY_DEFINITION_IDS_BY_EFFECT:
 		if String(EXPLICIT_LEGACY_DEFINITION_IDS_BY_EFFECT[effect_key]).split("|").has(evolution_id):
 			return String(effect_key)
@@ -479,15 +543,18 @@ static func _legacy_tuning_index(effect_key: String) -> int:
 
 static func _conditions_for_trigger(trigger: String) -> Array:
 	match trigger:
+		"combo": return ["attack_emitted", "combo_stage_3", "non_projectile_hook"]
+		"tension": return ["tension_gained", "overcharge_consumed"]
 		"projectile": return ["attack_emitted", "projectile_owned_by_peer"]
 		"impact": return ["hit_resolved", "valid_distinct_target"]
 		"skill": return ["skill_cast", "successful_skill"]
 		"teleport": return ["teleport", "successful_teleport"]
+		"secondary": return ["secondary_cast", "bound_target"]
 		_: return ["attack_emitted", "hit_resolved"]
 
 
 static func _short_description(display_name: String, theme: Dictionary, profile: Dictionary, stage: String) -> String:
-	if String(profile.get("manifestation", "")) == "prismatica":
+	if String(profile.get("manifestation", "")) in ["prismatica", "acorrentada"]:
 		return String(profile.get("summary", "%s — efeito Prismática." % display_name))
 	var label := "EV1" if stage == "ev1" else "EV2"
 	return "%s — %s converte %s em %s, com leitura visual de %s." % [label, display_name.capitalize(), String(theme.get("essence", "ruptura")), String(profile.get("label", "efeito próprio")), String(theme.get("visual", "ruptura temporal"))]

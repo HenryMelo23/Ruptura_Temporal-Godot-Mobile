@@ -1,6 +1,8 @@
 extends "res://scripts/main_runtime_state.gd"
 
 const PrismaticaEvolutionController = preload("res://scripts/systems/manifest_evolutions/prismatica_evolution_controller.gd")
+const AcorrentadaEvolutionController = preload("res://scripts/systems/manifest_evolutions/acorrentada_evolution_controller.gd")
+const LaceranteEvolutionController = preload("res://scripts/systems/manifest_evolutions/lacerante_evolution_controller.gd")
 const BossRewardPresentation = preload("res://scripts/presentation/boss_reward_presentation.gd")
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
 const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
@@ -8611,11 +8613,21 @@ func _manifest_evolution_dispatch_combat_event(event: Dictionary) -> bool:
 			var target: Dictionary = Dictionary(event.get("target", {}))
 			if target.is_empty():
 				return false
+			if AcorrentadaEvolutionController.is_active(self):
+				AcorrentadaEvolutionController.on_hit(self, event_id, target, Vector2(event.get("target_pos", player_pos)))
+				return true
+			if LaceranteEvolutionController.is_active(self):
+				LaceranteEvolutionController.on_hit(self, target, Vector2(event.get("target_pos", player_pos)))
 			_manifest_evolution_apply_impact_effects(target, Vector2(event.get("target_pos", player_pos)))
 			return true
 		"skill_cast":
+			if AcorrentadaEvolutionController.is_active(self):
+				return AcorrentadaEvolutionController.on_skill(self, Vector2(event.get("center", player_pos)))
 			return _manifest_evolution_apply_skill_effects(Vector2(event.get("center", player_pos)))
 		"teleport":
+			if AcorrentadaEvolutionController.is_active(self):
+				AcorrentadaEvolutionController.on_teleport(self, Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos)))
+				return true
 			_manifest_evolution_apply_teleport_effects(Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos)))
 			return true
 	return false
@@ -8999,6 +9011,11 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 	if PrismaticaEvolutionController.is_active(self):
 		PrismaticaEvolutionController.update_effects(self, delta)
 		return
+	if AcorrentadaEvolutionController.is_active(self):
+		AcorrentadaEvolutionController.update_effects(self, delta)
+		return
+	if LaceranteEvolutionController.is_active(self):
+		LaceranteEvolutionController.update_effects(self, delta)
 	var fields: Array = manifest_evolution_state.get("fields", [])
 	for field in fields:
 		field["life"] = float(field.get("life", 0.0)) - delta
@@ -14755,9 +14772,11 @@ func _acorrentada_color_hot() -> Color:
 func _add_acorrentada_tension(amount: float, boss_scale: = 1.0) -> void :
 	if amount <= 0.0:
 		return
-	acorrentada_tension = clampf(acorrentada_tension + amount * boss_scale, 0.0, 100.0)
+	var applied_amount := amount * boss_scale
+	acorrentada_tension = clampf(acorrentada_tension + applied_amount, 0.0, 100.0)
 	acorrentada_last_hit_timer = 0.0
 	acorrentada_overcharge_ready = acorrentada_tension >= 100.0
+	AcorrentadaEvolutionController.on_tension_added(self, applied_amount)
 
 
 func _consume_acorrentada_overcharge() -> bool:
@@ -14765,6 +14784,7 @@ func _consume_acorrentada_overcharge() -> bool:
 		return false
 	acorrentada_tension = 35.0
 	acorrentada_overcharge_ready = false
+	AcorrentadaEvolutionController.on_overcharge_consumed(self)
 	_spawn_radial_particles(player_pos, Color(1.0, 0.28, 0.18), 24)
 	_add_text("SOBRETENSAO ROMPIDA", player_pos + Vector2(0, -102), Color(1.0, 0.88, 0.62), 0.9, 19)
 	return true
@@ -14962,6 +14982,7 @@ func _resolve_acorrentada_attack_motion(motion: Dictionary) -> void :
 			_resolve_acorrentada_attack_2(dir, float(motion.get("reach", 295.0)), event_id)
 		_:
 			_resolve_acorrentada_attack_3(target, impact, event_id)
+	AcorrentadaEvolutionController.on_combo_resolved(self, stage, target, impact, event_id)
 	_play_acorrentada_hit_sfx(stage)
 	_spawn_radial_particles(impact, _acorrentada_color_hot(), 8 if stage < 3 else 14)
 
@@ -15165,6 +15186,7 @@ func _cast_acorrentada_e(target_world = null) -> bool:
 		var target_pos: Vector2 = _acorrentada_target_pos(target)
 		sec_chains.append(_init_chain_physics(sec_center, target_pos, "heavy"))
 	sec["chains"] = sec_chains
+	AcorrentadaEvolutionController.on_sentence_started(self, sec)
 	_add_text("SENTENCA DOS GRILHOES", center + Vector2(0, -92), Color(1.0, 0.28, 0.2), 0.95, 21)
 	return true
 
@@ -21258,6 +21280,9 @@ func _update_bullets(delta: float) -> void :
 					if float(bullet.get("life", 0.0)) <= 0.0:
 						break
 
+				if evolution_keep and bullet["kind"] == "prismatica":
+					bullet["life"] = maxf(float(bullet.get("life", 0.0)), 0.18)
+					break
 				if bullet["kind"] == "prismatica" and not bool(bullet.get("refracted", false)):
 					var e_hits = int(bullet.get("enemy_hits_count", 0)) + 1
 					bullet["enemy_hits_count"] = e_hits
@@ -38750,6 +38775,7 @@ func _draw_rare_card_world(camera: Vector2) -> void :
 
 func _draw_acorrentada_world(camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_acorrentada_world(self, camera)
+	AcorrentadaEvolutionController.draw_world(self, camera)
 
 
 func _draw_acorrentada_worn_chains(camera: Vector2, t: float) -> void :

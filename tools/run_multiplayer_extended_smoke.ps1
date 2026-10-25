@@ -12,6 +12,20 @@ if (-not $GodotBin -or -not (Test-Path -LiteralPath $GodotBin -PathType Leaf)) {
     throw 'Informe um executavel Godot valido em -GodotBin ou GODOT_BIN.'
 }
 
+$classCachePath = Join-Path $projectRoot '.godot\global_script_class_cache.cfg'
+if (-not (Test-Path -LiteralPath $classCachePath -PathType Leaf)) {
+    $importStdout = Join-Path $logDir 'COLD_IMPORT.out.log'
+    $importStderr = Join-Path $logDir 'COLD_IMPORT.err.log'
+    $importProcess = Start-Process -FilePath $GodotBin `
+        -ArgumentList @('--headless', '--path', ('"{0}"' -f $projectRoot), '--import') `
+        -RedirectStandardOutput $importStdout -RedirectStandardError $importStderr `
+        -PassThru -Wait
+    if ($importProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $classCachePath -PathType Leaf)) {
+        $importErrors = Get-Content -LiteralPath $importStderr -Raw -ErrorAction SilentlyContinue
+        throw "Importacao fria do projeto falhou antes do multiplayer.`n$importErrors"
+    }
+}
+
 function Invoke-MultiplayerCase {
     param(
         [Parameter(Mandatory = $true)][string]$Name,

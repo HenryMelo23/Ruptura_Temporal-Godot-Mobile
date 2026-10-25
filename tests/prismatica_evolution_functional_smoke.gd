@@ -140,10 +140,17 @@ func _prove_ev2() -> void:
 
 	_reset(EV1_IDS[0], EV2_IDS[1])
 	var recursive_a := _spawn_enemy(Vector2(700, 360))
-	_spawn_enemy(Vector2(780, 360))
+	var recursive_b := _spawn_enemy(Vector2(780, 360))
+	var recursive_c := _spawn_enemy(Vector2(860, 360))
+	_spawn_enemy(Vector2(940, 360))
 	var recursive := _bullet()
+	recursive["hits"][str(recursive_a["uid"])] = true
 	game._manifest_evolution_on_projectile_hit(recursive, recursive_a, Vector2(recursive_a["pos"]))
-	_check(int(recursive.get("prism_recursive_left", 0)) == 0, "Luz Recursiva did not consume a conditional return")
+	recursive["hits"][str(recursive_b["uid"])] = true
+	game._manifest_evolution_on_projectile_hit(recursive, recursive_b, Vector2(recursive_b["pos"]))
+	recursive["hits"][str(recursive_c["uid"])] = true
+	game._manifest_evolution_on_projectile_hit(recursive, recursive_c, Vector2(recursive_c["pos"]))
+	_check(int(recursive.get("prism_recursive_left", 0)) == 0 and Vector2(recursive.get("dir", Vector2.ZERO)).x > 0.9, "Luz Recursiva did not add its conditional return after both base reflections")
 	proofs[EV2_IDS[1]] = "conditional_return"
 
 	_reset(EV1_IDS[0], EV2_IDS[2])

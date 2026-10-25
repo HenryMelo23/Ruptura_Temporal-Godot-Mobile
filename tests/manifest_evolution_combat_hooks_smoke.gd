@@ -58,6 +58,14 @@ func _run_manifest_regression() -> void:
 			var prism_bullet := {"pos": game.player_pos, "dir": Vector2.RIGHT, "damage": 20.0, "life": 1.0, "hits": {}, "kind": key}
 			game._apply_manifest_evolution_to_bullet(prism_bullet)
 			_check(_has_event("attack_emitted"), "prismatica projectile emission was not typed")
+		elif key == "acorrentada":
+			var moving_shackle := _entry_for(key, "acorrentada_grilhao_movel")
+			_check(not moving_shackle.is_empty(), "acorrentada lacks its explicit impact contract")
+			_activate(key, moving_shackle)
+			var event_id := "regression:%s:hit:%s" % [key, str(target.get("uid", ""))]
+			game._manifest_evolution_on_combat_hit(event_id, "regression_" + key, target, Vector2(target["pos"]))
+			var state := Dictionary(game.manifest_evolution_state.get("acorrentada", {}))
+			_check(Array(state.get("shackles", [])).size() == 1, "acorrentada direct hit did not invoke its non-projectile impact hook")
 		else:
 			var link := _entry_for(key, "impact_link")
 			_check(not link.is_empty(), key + " lacks impact profile")
@@ -87,11 +95,14 @@ func _run_lacerante_and_acorrentada() -> void:
 	game.boss_active = false
 
 	game.enemies.clear()
-	var chained_link := _entry_for("acorrentada", "impact_link")
+	var chained_link := _entry_for("acorrentada", "acorrentada_grilhao_movel")
+	_check(not chained_link.is_empty(), "acorrentada lacks its non-projectile Grilhao Movel contract")
 	_activate("acorrentada", chained_link)
 	var chain_target := _spawn_target(game.player_pos + Vector2(100, 0))
 	game._resolve_acorrentada_attack_motion({"stage": 1, "dir": Vector2.RIGHT, "target": {"kind": "enemy", "uid": int(chain_target["uid"])}, "damage_impact": Vector2(chain_target["pos"]), "manifest_evolution_event_id": "acorrentada:test"})
-	_check(float(chain_target.get("evolution_slow", 0.0)) > 0.0, "acorrentada chain hit did not resolve evolution impact")
+	var chain_state := Dictionary(game.manifest_evolution_state.get("acorrentada", {}))
+	_check(Array(chain_state.get("shackles", [])).size() == 1 and game._acorrentada_enemy_elos(chain_target) > 0, "acorrentada chain hit did not resolve its moving shackle")
+	_check(game.bullets.is_empty(), "acorrentada combo hook incorrectly required a projectile")
 	_check(_has_event("hit_resolved", str(chain_target.get("uid", ""))), "acorrentada typed hit missing")
 
 	var log_before: int = game.manifest_evolution_combat_event_log.size()

@@ -240,6 +240,37 @@ func _choose_prism_pair(entry: Dictionary) -> void:
 	game._choose_manifest_evolution(0)
 
 
+func _exercise_lacerante(entry: Dictionary) -> bool:
+	var profile: Dictionary = Dictionary(entry.get("profile", {}))
+	if not bool(profile.get("non_projectile", false)):
+		return _exercise_generic("lacerante", entry)
+	var targets := _prepare("lacerante", entry)
+	var evolution_id := String(entry.get("id", ""))
+	var repeats := 1
+	if evolution_id == "lacerante_ev1_hemorragia_crescente":
+		repeats = 4
+	elif evolution_id == "lacerante_ev2_cicatriz_persistente":
+		repeats = 3
+	elif evolution_id == "lacerante_ev2_execucao_cadeia":
+		Dictionary(targets[0])["hp"] = 60.0
+		Dictionary(targets[0])["max_hp"] = 1000.0
+	for _hit in range(repeats):
+		_public_attack("lacerante", true)
+	if evolution_id == "lacerante_ev2_cicatriz_persistente":
+		_advance_combat(0.55, 2)
+	var state := Dictionary(game.manifest_evolution_state.get("lacerante", {}))
+	var metrics := Dictionary(state.get("metrics", {}))
+	last_evidence = {
+		"effect": String(profile.get("effect", "")),
+		"metric": int(metrics.get(evolution_id, 0)),
+		"projectiles": game.bullets.size(),
+		"first_hp": float(Dictionary(targets[0]).get("hp", 0.0)),
+		"second_hp": float(Dictionary(targets[1]).get("hp", 0.0)),
+		"wounds": Array(state.get("wounds", [])).size()
+	}
+	return int(metrics.get(evolution_id, 0)) > 0 and game.bullets.is_empty()
+
+
 func _prism_state() -> Dictionary:
 	return Dictionary(game.manifest_evolution_state.get("prismatica", {}))
 
@@ -330,6 +361,72 @@ func _exercise_prismatica(entry: Dictionary) -> bool:
 	return false
 
 
+func _choose_acorrentada_pair(entry: Dictionary) -> void:
+	if String(entry.get("stage", "")) == "ev2":
+		game.manifest_evolution_options = [_entry_for("acorrentada", "ev1", 0)]
+		game._choose_manifest_evolution(0)
+	game.manifest_evolution_options = [entry]
+	game._choose_manifest_evolution(0)
+
+
+func _exercise_acorrentada(entry: Dictionary) -> bool:
+	_prepare("acorrentada")
+	_choose_acorrentada_pair(entry)
+	var effect := String(Dictionary(entry.get("profile", {})).get("effect", ""))
+	match effect:
+		"acorrentada_corrente_tripla":
+			game.acorrentada_combo_step = 3
+			_public_attack("acorrentada", true)
+		"acorrentada_tensao_residual":
+			game.acorrentada_tension = 95.0
+			game.acorrentada_combo_step = 1
+			_public_attack("acorrentada", true)
+			_public_skill("acorrentada")
+		"acorrentada_grilhao_movel", "acorrentada_elo_espelhado":
+			game.acorrentada_combo_step = 1
+			_public_attack("acorrentada", true)
+		"acorrentada_ancora_corrente", "acorrentada_teia_grilhoes", "acorrentada_prisao_total":
+			_public_skill("acorrentada")
+			_advance_combat(0.60, 1)
+		"acorrentada_sobretensao_continua":
+			_public_skill("acorrentada")
+			_advance_combat(0.55, 2)
+		"acorrentada_ruptura_sequencial":
+			for _hit in range(3):
+				game.acorrentada_combo_step = 1
+				_public_attack("acorrentada", true)
+			_advance_combat(0.18, 3)
+		"acorrentada_corrente_arrasto":
+			_public_teleport("acorrentada")
+		"acorrentada_sobrecarga_tensao":
+			game.acorrentada_tension = 100.0
+			_public_skill("acorrentada")
+			game.acorrentada_combo_step = 1
+			_public_attack("acorrentada", true)
+		"acorrentada_sentenca_ferro":
+			game.time_alive += 10.0
+			game.last_secondary_time = -1000.0
+			game._use_secondary_skill(game.player_pos + Vector2(112.0, 0.0))
+			game.acorrentada_combo_step = 1
+			_public_attack("acorrentada", true)
+		_:
+			blocked.append(String(entry.get("id", "")) + " unsupported Acorrentada effect=" + effect)
+			return false
+	var state := Dictionary(game.manifest_evolution_state.get("acorrentada", {}))
+	var metrics := Dictionary(state.get("metrics", {}))
+	last_evidence = {
+		"effect": effect,
+		"metric": int(metrics.get(String(entry.get("id", "")), 0)),
+		"shackles": Array(state.get("shackles", [])).size(),
+		"anchors": Array(state.get("anchors", [])).size(),
+		"webs": Array(state.get("webs", [])).size(),
+		"ruptures": Array(state.get("ruptures", [])).size(),
+		"verdicts": Dictionary(state.get("verdicts", {})).size(),
+		"projectiles": game.bullets.size()
+	}
+	return int(metrics.get(String(entry.get("id", "")), 0)) > 0
+
+
 func _inventory_and_design_review(entries: Array) -> void:
 	var grouped: Dictionary = {}
 	for value in entries:
@@ -375,7 +472,7 @@ func _run() -> void:
 	for value in entries:
 		var entry: Dictionary = Dictionary(value)
 		var key := String(entry.get("manifestation", ""))
-		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else _exercise_generic(key, entry)
+		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else (_exercise_acorrentada(entry) if key == "acorrentada" else (_exercise_lacerante(entry) if key == "lacerante" else _exercise_generic(key, entry)))
 		checked_by_manifestation[key] = int(checked_by_manifestation.get(key, 0)) + 1
 		if not behavior_ok:
 			_record_failure(entry, "public %s route produced no measurable gameplay delta over baseline" % String(Dictionary(entry.get("profile", {})).get("hook", "unknown")))

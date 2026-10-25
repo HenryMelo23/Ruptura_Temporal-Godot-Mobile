@@ -101,6 +101,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Phase 6 Suturador owner | `class_name RTPhase6AmberSuturerController` | `scripts/systems/enemies/phase6_amber_suturer_controller.gd:1` |
 | Phase 6 Suturador VFX | `class_name RTPhase6AmberSuturerPresentation` | `scripts/presentation/phase6_amber_suturer_presentation.gd:1` |
 | Manifest evolution catalog | `class_name RTManifestEvolutionCatalog` | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd:2` |
+| Acorrentada evolution owner | `RTAcorrentadaEvolutionController.on_combo_resolved`, `on_hit`, `on_skill`, `on_teleport`, `on_sentence_started`, `update_effects`, `draw_world` | `scripts/systems/manifest_evolutions/acorrentada_evolution_controller.gd`; 12 ID-specific, save-contained contracts with capped persistent collections and no projectile dependency |
+| Lacerante melee evolution adapter | `RTLaceranteEvolutionController.on_hit`, `update_effects` | `scripts/systems/manifest_evolutions/lacerante_evolution_controller.gd`; five projectile-shaped legacy IDs resolve through real melee hits, with capped persistent wounds and non-recursive chains |
 | Manifest evolution option source | `_manifest_evolution_entries` | `scripts/main_runtime_core.gd:7566` |
 | Manifest evolution projectile hook | `_apply_manifest_evolution_to_bullet` | `scripts/main_runtime_core.gd:7836` |
 | Manifest evolution impact hook | `_manifest_evolution_on_projectile_hit` | `scripts/main_runtime_core.gd:7926` |
