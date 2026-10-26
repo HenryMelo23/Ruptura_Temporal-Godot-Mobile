@@ -440,10 +440,11 @@ static func _draw_app_update_popup(game: Node2D, viewport: Vector2) -> void :
 				for i in range(limit):
 					status_text += "\n- " + String(notes[i])
 		"downloading":
-			var downloaded = game.app_update_download_request.get_downloaded_bytes() if game.app_update_download_request != null else 0
+			var downloaded = game._app_update_downloaded_bytes()
 			var total = int(game.app_update_manifest.get("size", 0))
 			var progress = clampf(float(downloaded) / float(maxi(1, total)), 0.0, 1.0)
-			status_text = "Baixando %s direto do servidor.\nMantenha o jogo aberto ate a verificacao terminar.\n%s de %s" % [game._app_update_file_label(), game._format_download_size(downloaded), game._format_download_size(total)]
+			var transfer_label = "Retomando" if game.app_update_download_resume_offset > 0 else "Baixando"
+			status_text = "%s %s direto do servidor.\nSe a conexao cair, o progresso sera mantido.\n%s de %s" % [transfer_label, game._app_update_file_label(), game._format_download_size(downloaded), game._format_download_size(total)]
 			var bar = Rect2(content_rect.position.x, content_rect.position.y + 96.0, content_rect.size.x, 20.0)
 			game.draw_rect(bar, Color(0.01, 0.04, 0.07, 0.92), true)
 			game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), Color(0.0, 0.88, 0.72, 0.92), true)

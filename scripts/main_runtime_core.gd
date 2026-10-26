@@ -206,7 +206,9 @@ func _ready() -> void :
 	app_update_download_request.use_threads = true
 	add_child(app_update_download_request)
 	app_update_download_request.request_completed.connect(_on_app_update_download_completed)
-	_cleanup_stale_app_update_files()
+	# Preserve interrupted installer chunks across restarts. Once the manifest is
+	# known, stale chunks from other versions are removed before resuming.
+	_cleanup_stale_app_update_files("", true)
 	content_update_check_request = HTTPRequest.new()
 	content_update_check_request.timeout = 8.0
 	add_child(content_update_check_request)
@@ -3212,15 +3214,15 @@ func _app_update_file_label() -> String:
 
 
 func _update_app_update_check(delta: float) -> void :
-	if app_update_checked or dedicated_server_mode or not _app_update_supported():
+	if app_update_checked or app_update_check_in_flight or dedicated_server_mode or not _app_update_supported():
 		return
 	if mode != "menu":
 		return
 	app_update_check_timer -= delta
 	if app_update_check_timer > 0.0:
 		return
-	app_update_checked = true
 	if app_update_check_request == null:
+		_schedule_app_update_check_retry("request_missing")
 		return
 	var url: = "%s%s?version=%s&version_code=%d" % [
 		ONLINE_RELAY_BASE_URL,
@@ -3230,7 +3232,18 @@ func _update_app_update_check(delta: float) -> void :
 	]
 	var err: = app_update_check_request.request(url, ["Cache-Control: no-cache"])
 	if err != OK:
-		print("Atualizador: falha ao iniciar consulta: ", error_string(err))
+		_schedule_app_update_check_retry("start_%s" % error_string(err))
+		return
+	app_update_check_in_flight = true
+
+
+func _schedule_app_update_check_retry(reason: String) -> void:
+	app_update_check_in_flight = false
+	app_update_checked = false
+	var delay_index: int = mini(app_update_check_attempts, APP_UPDATE_CHECK_RETRY_DELAYS.size() - 1)
+	app_update_check_timer = float(APP_UPDATE_CHECK_RETRY_DELAYS[delay_index])
+	app_update_check_attempts += 1
+	print("Atualizador: nova consulta em %.1fs (%s)." % [app_update_check_timer, reason])
 
 
 func _umbra_mind_remote_supported() -> bool:
@@ -3901,35 +3914,45 @@ func _player_progress_menu_hint() -> String:
 
 
 func _on_app_update_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void :
+	app_update_check_in_flight = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
-		print("Atualizador: consulta indisponivel HTTP ", response_code)
+		_schedule_app_update_check_retry("http_%d_result_%d" % [response_code, result])
 		return
 	var payload = JSON.parse_string(body.get_string_from_utf8())
 	if not payload is Dictionary:
-		print("Atualizador: manifesto invalido")
+		_schedule_app_update_check_retry("manifesto_invalido")
 		return
-	_apply_app_update_manifest(payload)
-
-
-func _apply_app_update_manifest(payload: Dictionary) -> void :
 	if not bool(payload.get("available", false)):
+		app_update_checked = true
+		app_update_check_attempts = 0
 		return
+	if _apply_app_update_manifest(payload):
+		app_update_checked = true
+		app_update_check_attempts = 0
+		return
+	_schedule_app_update_check_retry("manifesto_recusado")
+
+
+func _apply_app_update_manifest(payload: Dictionary) -> bool:
+	if not bool(payload.get("available", false)):
+		return false
 	var version_code: = int(payload.get("version_code", 0))
 	var download_url: = String(payload.get(_app_update_download_url_field(), payload.get("download_url", "")))
 	var sha256: = String(payload.get("sha256", "")).to_lower()
 	var expected_prefix: = ONLINE_RELAY_BASE_URL + _app_update_download_prefix()
 	if version_code <= GAME_VERSION_CODE or not download_url.begins_with(expected_prefix):
 		print("Atualizador: versao ou URL recusada")
-		return
+		return false
 	if sha256.length() != 64 or not sha256.is_valid_hex_number(false):
 		print("Atualizador: SHA-256 invalido")
-		return
+		return false
 	app_update_manifest = payload.duplicate(true)
 	app_update_status = "available"
 	app_update_error = ""
 	app_update_selected = 0
 	app_update_popup_visible = true
 	_block_ui_input()
+	return true
 
 
 func _app_update_filename() -> String:
@@ -3946,7 +3969,7 @@ func _app_update_filename() -> String:
 			return "ruptura_temporal_%s.apk" % version
 
 
-func _cleanup_stale_app_update_files(keep_path: = "") -> int:
+func _cleanup_stale_app_update_files(keep_path: = "", preserve_partials: bool = false) -> int:
 	var updates_dir_absolute: = ProjectSettings.globalize_path(APP_UPDATE_STORAGE_DIR)
 	if not DirAccess.dir_exists_absolute(updates_dir_absolute):
 		return 0
@@ -3961,6 +3984,9 @@ func _cleanup_stale_app_update_files(keep_path: = "") -> int:
 		if not dir.current_is_dir():
 			var extension: = filename.get_extension().to_lower()
 			if APP_UPDATE_CACHED_EXTENSIONS.has(extension):
+				if preserve_partials and extension == "part":
+					filename = dir.get_next()
+					continue
 				var candidate: = APP_UPDATE_STORAGE_DIR + "/" + filename
 				var candidate_absolute: = ProjectSettings.globalize_path(candidate)
 				if candidate_absolute != keep_absolute and DirAccess.remove_absolute(candidate_absolute) == OK:
@@ -3981,16 +4007,34 @@ func _start_app_update_download() -> void :
 	if mkdir_err != OK and mkdir_err != ERR_ALREADY_EXISTS:
 		_set_app_update_error("Nao foi possivel preparar a pasta da atualizacao.")
 		return
-	_cleanup_stale_app_update_files()
 	app_update_download_path = APP_UPDATE_STORAGE_DIR + "/" + _app_update_filename()
-	var absolute_path: = ProjectSettings.globalize_path(app_update_download_path)
-	if FileAccess.file_exists(app_update_download_path):
-		DirAccess.remove_absolute(absolute_path)
-	app_update_download_request.download_file = app_update_download_path
+	app_update_download_part_path = app_update_download_path + ".part"
+	app_update_download_resume_path = app_update_download_part_path + ".resume"
+	app_update_download_resume_offset = 0
+	_cleanup_stale_app_update_files(app_update_download_part_path)
+	if FileAccess.file_exists(app_update_download_resume_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(app_update_download_resume_path))
+	var expected_size: int = int(app_update_manifest.get("size", 0))
+	var headers := PackedStringArray(["Cache-Control: no-cache"])
+	if FileAccess.file_exists(app_update_download_part_path):
+		var partial_size := _file_size(app_update_download_part_path)
+		if partial_size == expected_size and expected_size > 0:
+			app_update_status = "verifying"
+			app_update_error = ""
+			call_deferred("_finish_app_update_download")
+			return
+		if partial_size > 0 and partial_size < expected_size:
+			app_update_download_resume_offset = partial_size
+			headers.append("Range: bytes=%d-" % partial_size)
+			app_update_download_request.download_file = app_update_download_resume_path
+		else:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(app_update_download_part_path))
+	if app_update_download_request.download_file == "":
+		app_update_download_request.download_file = app_update_download_part_path
 	app_update_status = "downloading"
 	app_update_error = ""
 	app_update_selected = 0
-	var err: = app_update_download_request.request(String(app_update_manifest.get(_app_update_download_url_field(), app_update_manifest.get("download_url", ""))), ["Cache-Control: no-cache"])
+	var err: = app_update_download_request.request(String(app_update_manifest.get(_app_update_download_url_field(), app_update_manifest.get("download_url", ""))), headers)
 	if err != OK:
 		app_update_download_request.download_file = ""
 		_set_app_update_error("Falha ao iniciar download: %s" % error_string(err))
@@ -4000,39 +4044,89 @@ func _cancel_app_update_download() -> void :
 	if app_update_download_request != null:
 		app_update_download_request.cancel_request()
 		app_update_download_request.download_file = ""
-	_remove_partial_app_update()
+	_remove_partial_app_update(false)
 	app_update_status = "available"
 	app_update_selected = 0
 
 
-func _remove_partial_app_update() -> void :
-	if app_update_download_path == "":
-		return
-	var absolute_path: = ProjectSettings.globalize_path(app_update_download_path)
-	if FileAccess.file_exists(app_update_download_path):
-		DirAccess.remove_absolute(absolute_path)
+func _remove_partial_app_update(remove_part: bool = true) -> void :
+	if app_update_download_resume_path != "" and FileAccess.file_exists(app_update_download_resume_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(app_update_download_resume_path))
+	if remove_part and app_update_download_part_path != "" and FileAccess.file_exists(app_update_download_part_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(app_update_download_part_path))
+
+
+func _app_update_downloaded_bytes() -> int:
+	var current_bytes := app_update_download_request.get_downloaded_bytes() if app_update_download_request != null else 0
+	return app_update_download_resume_offset + current_bytes
 
 
 func _on_app_update_download_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void :
 	if app_update_download_request != null:
 		app_update_download_request.download_file = ""
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
-		_remove_partial_app_update()
-		_set_app_update_error("Download interrompido. Verifique sua conexao e tente novamente.")
+		_remove_partial_app_update(false)
+		_set_app_update_error("Download interrompido. O progresso foi mantido; tente novamente para continuar.")
+		return
+	if not _merge_app_update_download(response_code):
+		_remove_partial_app_update(false)
+		_set_app_update_error("Nao foi possivel retomar o download. Tente novamente.")
 		return
 	app_update_status = "verifying"
 	call_deferred("_finish_app_update_download")
 
 
+func _merge_app_update_download(response_code: int) -> bool:
+	if app_update_download_part_path == "":
+		return false
+	if app_update_download_resume_offset <= 0:
+		return FileAccess.file_exists(app_update_download_part_path)
+	if response_code == 200:
+		if FileAccess.file_exists(app_update_download_part_path):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(app_update_download_part_path))
+		if FileAccess.file_exists(app_update_download_resume_path):
+			return DirAccess.rename_absolute(ProjectSettings.globalize_path(app_update_download_resume_path), ProjectSettings.globalize_path(app_update_download_part_path)) == OK
+		return false
+	if response_code != 206 or not FileAccess.file_exists(app_update_download_resume_path):
+		return false
+	var target := FileAccess.open(app_update_download_part_path, FileAccess.READ_WRITE)
+	var source := FileAccess.open(app_update_download_resume_path, FileAccess.READ)
+	if target == null or source == null or target.get_length() != app_update_download_resume_offset:
+		if target != null:
+			target.close()
+		if source != null:
+			source.close()
+		return false
+	target.seek_end()
+	while source.get_position() < source.get_length():
+		var remaining := source.get_length() - source.get_position()
+		var chunk := source.get_buffer(mini(APP_UPDATE_HASH_CHUNK_BYTES, remaining))
+		if chunk.is_empty():
+			target.close()
+			source.close()
+			return false
+		target.store_buffer(chunk)
+	target.close()
+	source.close()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(app_update_download_resume_path))
+	return true
+
+
 func _finish_app_update_download() -> void :
 	var verification: = _verify_app_update_file(
-		app_update_download_path,
+		app_update_download_part_path,
 		int(app_update_manifest.get("size", 0)),
 		String(app_update_manifest.get("sha256", ""))
 	)
 	if not bool(verification.get("ok", false)):
 		_remove_partial_app_update()
 		_set_app_update_error(String(verification.get("error", "O arquivo recebido falhou na verificacao.")))
+		return
+	if FileAccess.file_exists(app_update_download_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(app_update_download_path))
+	var promote_err := DirAccess.rename_absolute(ProjectSettings.globalize_path(app_update_download_part_path), ProjectSettings.globalize_path(app_update_download_path))
+	if promote_err != OK:
+		_set_app_update_error("O instalador foi validado, mas nao pode ser preparado para abertura.")
 		return
 	_open_app_update_installer()
 
