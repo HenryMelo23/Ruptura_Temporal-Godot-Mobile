@@ -1,15 +1,15 @@
 {
-  "version": "2.0.55",
-  "version_code": 25500,
-  "filename": "Ruptura_Temporal_2.0.55.x86_64",
-  "sha256": "655297e028ed1f1ce93f7114603a7a4702e1bc480c40cfba81d112acc6319346",
-  "size": 993555712,
+  "version": "2.0.56",
+  "version_code": 25600,
+  "filename": "Ruptura_Temporal_2.0.56.x86_64",
+  "sha256": "66170883c97c771dec242a9c4bda8d9bcc52ec463348c3f19ba190276d2d3111",
+  "size": 993575624,
   "notes": [
-    "Multiplayer: estabilidade de join, pronto, inicio e escolha de manifestacao",
-    "Novas evolucoes funcionais de manifestacoes e cartas roguelike",
-    "Pickup temporario PONTOS x2 com HUD, controle de frequencia e multiplayer autoritativo",
-    "Polimento de combate, chefe e apresentacao visual"
+    "Desempenho adaptativo com batching de projeteis e multidoes",
+    "Streaming assincrono de assets por fase",
+    "Reducao de VFX e hot paths sem alterar a jogabilidade",
+    "Estabilidade multiplayer preservada"
   ],
   "mandatory": false,
-  "published_at": "2026-10-25T23:11:13.8995947Z"
+  "published_at": "2026-10-26T20:49:36.2996596Z"
 }

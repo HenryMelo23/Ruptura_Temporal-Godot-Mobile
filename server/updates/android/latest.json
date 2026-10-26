@@ -1,15 +1,15 @@
 {
-  "version": "2.0.55",
-  "version_code": 25500,
-  "filename": "ruptura_temporal_mobile_2.0.55.apk",
-  "sha256": "be51d06ba504271a6ee18750fbd49c27b2ce43c798eb641f5173c1552b0d9165",
-  "size": 943337018,
+  "version": "2.0.56",
+  "version_code": 25600,
+  "filename": "ruptura_temporal_mobile_2.0.56.apk",
+  "sha256": "b3ebfe15818a71455248a5434d8f7dd26ebf399c177a84e6511681c976012a2c",
+  "size": 943354754,
   "notes": [
-    "Multiplayer: estabilidade de join, pronto, inicio e escolha de manifestacao",
-    "Novas evolucoes funcionais de manifestacoes e cartas roguelike",
-    "Pickup temporario PONTOS x2 com HUD, controle de frequencia e multiplayer autoritativo",
-    "Polimento de combate, chefe e apresentacao visual"
+    "Desempenho adaptativo com batching de projeteis e multidoes",
+    "Streaming assincrono de assets por fase",
+    "Reducao de VFX e hot paths sem alterar a jogabilidade",
+    "Estabilidade multiplayer preservada"
   ],
   "mandatory": false,
-  "published_at": "2026-10-25T22:44:37.9370787Z"
+  "published_at": "2026-10-26T20:50:51.3459805Z"
 }
