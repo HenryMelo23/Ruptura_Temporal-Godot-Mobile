@@ -54,6 +54,7 @@ over 100 KB.
 | Menus and catalog UI | `scripts/presentation/menus_presentation.gd`, `scripts/catalog/*` | menu draw helpers, catalog repository/interface classes | `tests/main_menu_visual_smoke.gd`, `tests/catalog_repository_smoke.gd`, `tests/catalog_interface_visual_smoke.gd` |
 | World presentation | `scripts/presentation/world_environment_presentation.gd` | `_draw_boss_attacks`, environment and phase drawing helpers | `tests/phase_transition_visual_smoke.gd`, `tests/dynamic_shadows_visual_smoke.gd`, `tests/readability_visual_smoke.gd` |
 | Runtime state/constants | `scripts/main_runtime_state.gd` | state constants and shared variables | nearest domain test plus `python3 tools/check_architecture_budget.py` |
+| Runtime performance governor | `scripts/systems/performance/runtime_performance_controller.gd`, `runtime_work_scheduler.gd`, `scripts/presentation/runtime_projectile_batch_renderer.gd`, `runtime_sprite_batch_renderer.gd` plus thin facades in runtime | FPS hysteresis, reversible presentation stages, deterministic background lanes, typed hot buffers and GPU/software-aware projectile/crowd batching; never owns damage, spawns, score or network authority | `tests/runtime_adaptive_performance_smoke.gd`, `tests/runtime_advanced_pipeline_smoke.gd`, `tests/runtime_projectile_batch_benchmark.gd`, `tests/singleplayer_rendered_frame_pacing_smoke.gd`, `tests/mobile_adaptive_visual_budget_smoke.gd` |
 | UMBRA neural runtime | `scripts/systems/umbra_neural_runtime.gd` | `RTUmbraNeuralRuntime.create`, `forward`, `contract_error` | `tests/umbra_neural_runtime_smoke.gd`, `tests/umbra_dqn_contract_smoke.gd` |
 | UMBRA observation schema | `scripts/systems/umbra_observation_schema.gd` | `RTUmbraObservationSchema.build_from_runtime`, `build_from_snapshot`, `validate_observation` | `tests/umbra_observation_schema_v2_smoke.gd`, `tests/umbra_dqn_contract_smoke.gd` |
 | UMBRA multiplayer authority | `scripts/systems/online/umbra_authority_controller.gd` plus phase-5 facade hooks | `build_authoritative_decision`, `revalidate_before_execution`, `accept_replica_event`; compact event rides the world-visual snapshot | `tests/umbra_multiplayer_authority_smoke.gd`, `tests/multiplayer_gameplay_authority_smoke.gd` |
@@ -67,8 +68,9 @@ over 100 KB.
   do not restore duplicated implementations from old core history.
 - Phase flow stays in the phase owner; preserve density-carry, party-scaling,
   authoritative unlock and VFX cleanup hooks at phase boundaries.
-- Phase-scoped texture residency stays in the runtime asset owner; catalog
-  access must remain on-demand and desktop keeps eager preload behavior.
+- Phase-scoped texture residency stays in the runtime asset owner; every
+  platform keeps only active-phase art resident at authored quality. Catalog
+  art remains on-demand on every platform through `_get_texture`.
 - Score/card math stays in the progression owner; triggered card mechanics stay
   in the card-system owner. Retain telemetry, multiplayer authority and burned
   attribute hooks alongside the approved long-run baseline.

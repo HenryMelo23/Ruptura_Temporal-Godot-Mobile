@@ -69,8 +69,8 @@ func _run() -> void:
 	_check(game._is_uncommon_card(card), "card_is_not_uncommon")
 	_check(not game._can_burn_shop_card(card), "uncommon_card_is_burnable")
 	_check(not game._card_at_max(card), "card_has_a_finite_limit")
-	_check(game.textures.get("card_" + String(card["name"])) != null, "card_frame_1_missing")
-	_check(game.textures.get("card_" + String(card["name"]) + "_2") != null, "card_frame_2_missing")
+	_check(game._get_texture("card_" + String(card["name"])) != null, "card_frame_1_missing")
+	_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "card_frame_2_missing")
 	_check(is_equal_approx(game._ranged_primary_attack_range(), EXPECTED_BASE_RANGE), "base_range_is_not_300")
 
 	# Automatic aim must not spend the shot if no valid target is inside the ring.

@@ -37,8 +37,39 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 	var styles: Dictionary = {}
 	var prismatica_active: bool = not game._active_prismatica_secondary().is_empty()
 	var prismatica_time := float(Time.get_ticks_msec()) * 0.001 if prismatica_active else 0.0
+	game.runtime_enemy_sprite_batch_renderer.begin_frame(game.current_phase)
+	var crowd_batch_enabled: bool = game.enemies.size() >= 48 and game.runtime_enemy_sprite_batch_renderer.can_batch()
+	var batched_enemy_uids: Dictionary = {}
+	if crowd_batch_enabled:
+		for enemy in game.enemies:
+			var world_pos := Vector2(enemy.get("pos", Vector2.ZERO))
+			if not game._world_point_in_view(world_pos, camera, 180.0):
+				continue
+			var kind := String(enemy.get("type", ""))
+			var alpha := float(enemy.get("alpha", 1.0))
+			var uid: int = int(enemy.get("uid", -1))
+			var is_attack_target: bool = bool(game._attack_target_is_enemy(uid))
+			if not _plain_common_enemy_for_batch(game, enemy, kind, alpha, is_attack_target, prismatica_active):
+				continue
+			var texture: Texture2D = game._enemy_texture(enemy)
+			if texture == null:
+				continue
+			if not sizes.has(kind):
+				sizes[kind] = game._enemy_draw_size(enemy)
+			var size: Vector2 = sizes[kind]
+			var screen_pos := world_pos - camera
+			var draw_pos: Vector2 = screen_pos + Vector2(game._enemy_visual_offset(enemy))
+			var flip_h: bool = bool(game._enemy_should_flip(enemy))
+			var color: Color = ENEMY_TINTS.get(kind, Color.WHITE)
+			color.a *= alpha
+			game._draw_dynamic_shadow(texture, screen_pos, size, flip_h, 0.4 * alpha)
+			if game.runtime_enemy_sprite_batch_renderer.append(texture, draw_pos, size, color, flip_h):
+				batched_enemy_uids[uid] = true
+	game.runtime_enemy_sprite_batch_renderer.submit(game.get_canvas_item())
 	for enemy in game.enemies:
 		if not game._world_point_in_view(Vector2(enemy.get("pos", Vector2.ZERO)), camera, 180.0):
+			continue
+		if batched_enemy_uids.has(int(enemy.get("uid", -1))):
 			continue
 		if String(enemy.get("type", "")) == game.ENEMY_AMBER_SUTURE_NODE:
 			game.AmberSuturerPresentation.draw_node(game, enemy, camera)
@@ -79,8 +110,8 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 				var shard_pos: Vector2 = pos + Vector2.from_angle(angle) * (18.0 + reconstitute_ratio * 42.0)
 				game.draw_line(shard_pos, draw_pos, Color(1.0, 0.48, 0.1, 0.3 + reconstitute_ratio * 0.34), 2.0)
 		var enemy_flip: bool = game._enemy_should_flip(enemy)
-		game._draw_dynamic_shadow(tex, pos, visual_size, enemy_flip, 0.4 * alpha)
 		var is_attack_target = game._attack_target_is_enemy(int(enemy["uid"]))
+		game._draw_dynamic_shadow(tex, pos, visual_size, enemy_flip, 0.4 * alpha)
 		if is_attack_target:
 			game._draw_attack_target_marker(draw_pos + Vector2(0, visual_size.y * 0.3), visual_size.x * 0.43, game.locked_target_kind == "enemy" and game.locked_target_uid == int(enemy["uid"]))
 
@@ -210,6 +241,17 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			var note_time = game.time_alive * 8.0
 			var note_text = "â™«" if int(note_time) % 2 == 0 else "â™ª"
 			game._draw_centered(note_text, draw_pos + Vector2(0, -66.0 + sin(note_time) * 6.0), 24, Color(1.0, 0.74, 0.2, 0.9))
+static func _plain_common_enemy_for_batch(game: Node2D, enemy: Dictionary, kind: String, alpha: float, is_attack_target: bool, prismatica_active: bool) -> bool:
+	if kind != game.ENEMY_COMMON or game.current_phase == 4 or prismatica_active or is_attack_target:
+		return false
+	if alpha < 0.999 or float(enemy.get("hp", 0.0)) < float(enemy.get("max_hp", 1.0)) * 0.999:
+		return false
+	if game.execute_threshold > 0.0 or bool(enemy.get("sanguinaria_hunt", false)):
+		return false
+	for key in ["reconstitute_time", "tesla_shock", "crepuscular_ocaso_mark", "eletrica_static_timer", "eclipsada_weak_time", "resonant_stun_notes"]:
+		if float(enemy.get(key, 0.0)) > 0.0:
+			return false
+	return int(enemy.get("laceracao", 0)) <= 0
 
 
 static func _draw_crepuscular_player_aura(game: Node2D, camera: Vector2, player_screen: Vector2) -> void:

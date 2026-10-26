@@ -8,18 +8,22 @@ static func _particle_budget_available(game: Node2D) -> bool:
 
 
 static func _runtime_visual_budget_active(game: Node2D) -> bool:
-	return game.gfx_low_resource or game._memory_saver_active() or game.mobile_adaptive_visual_budget
+	return game.gfx_low_resource or game._memory_saver_active() or game.mobile_adaptive_visual_budget or game._runtime_performance_stage() > 0
 
 
 static func _low_resource_cap(game: Node2D, default_cap: int, low_cap: int) -> int:
 	if game._memory_saver_active():
 		return mini(low_cap, int(ceil(float(low_cap) * 0.42)))
+	if game._runtime_emergency_visual_budget_active():
+		return mini(low_cap, int(ceil(float(low_cap) * 0.30)))
 	if game.mobile_adaptive_visual_budget:
-		return mini(low_cap, int(ceil(float(low_cap) * 0.62)))
+		return mini(low_cap, int(ceil(float(low_cap) * 0.52)))
 	return low_cap if game.gfx_low_resource else default_cap
 
 
 static func _visual_effect_cap(game: Node2D) -> int:
+	if game._runtime_emergency_visual_budget_active():
+		return 36
 	return game.MEMORY_SAVER_EFFECT_CAP if game._memory_saver_active() else game.LOW_RESOURCE_EFFECT_CAP
 
 
@@ -47,10 +51,11 @@ static func _trim_visual_effect_arrays(game: Node2D) -> void :
 		return
 	while game.effects.size() > game._visual_effect_cap():
 		game.effects.pop_front()
-	var slash_cap: = 18 if game._memory_saver_active() else 42
+	var emergency: bool = game._runtime_emergency_visual_budget_active()
+	var slash_cap: = 12 if emergency else (18 if game._memory_saver_active() else 42)
 	while game.slashes.size() > slash_cap:
 		game.slashes.pop_front()
-	var frost_cap: = 28 if game._memory_saver_active() else 70
+	var frost_cap: = 16 if emergency else (28 if game._memory_saver_active() else 70)
 	while game.boss2_frost_particles.size() > frost_cap:
 		game.boss2_frost_particles.pop_front()
 	var phase7_patch_cap: int = game._phase7_ember_patch_cap()
@@ -62,10 +67,10 @@ static func _trim_visual_effect_arrays(game: Node2D) -> void :
 		game.snowflakes.pop_front()
 	while game.puddles.size() > game._low_resource_cap(game.WEATHER_MAX_PUDDLES, game.LOW_RESOURCE_PUDDLE_CAP):
 		game.puddles.pop_front()
-	var splash_cap: int = 16 if game._memory_saver_active() else 26
+	var splash_cap: int = 8 if emergency else (16 if game._memory_saver_active() else 26)
 	while game.rain_splashes.size() > splash_cap:
 		game.rain_splashes.pop_front()
-	var flame_wave_cap: int = 2 if game._memory_saver_active() else 4
+	var flame_wave_cap: int = 2 if emergency or game._memory_saver_active() else 4
 	while game.boss7_flame_waves.size() > flame_wave_cap:
 		game.boss7_flame_waves.pop_front()
 
@@ -274,8 +279,10 @@ static func _adaptive_particle_count(game: Node2D, count: int) -> int:
 		factor = 0.78
 	if game._memory_saver_active():
 		factor *= 0.22
+	elif game._runtime_emergency_visual_budget_active():
+		factor *= 0.12
 	elif game.mobile_adaptive_visual_budget:
-		factor *= 0.28
+		factor *= 0.25
 	elif game.gfx_low_resource:
 		factor *= 0.45
 	var min_count: int = 1 if game._runtime_visual_budget_active() else 2

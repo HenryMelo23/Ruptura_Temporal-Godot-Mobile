@@ -41,8 +41,8 @@ func _run() -> void:
 	_check(game._card_rarity_color(card).is_equal_approx(game.CARD_RARITY_LEGENDARY_COLOR), "color_incorrect")
 	_check(not game._can_burn_shop_card(card), "legendary_burnable")
 	_check(game._card_max_count(card) >= game.CARD_UNLIMITED_COUNT, "unlimited_contract_missing")
-	_check(game.textures.get("card_" + String(card["name"])) != null, "frame_1_missing")
-	_check(game.textures.get("card_" + String(card["name"]) + "_2") != null, "frame_2_missing")
+	_check(game._get_texture("card_" + String(card["name"])) != null, "frame_1_missing")
+	_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "frame_2_missing")
 
 	game.cards_bought["Sorte"] = 1
 	game.current_phase = 1

@@ -58,8 +58,8 @@ func _run() -> void:
 		_check(not card.is_empty(), "missing_card_%s" % card_id)
 		_check(not game._is_rare_card(card), "card_should_be_common_%s" % card_id)
 		_check(game._card_max_count(card) >= 999999, "card_should_be_unlimited_%s" % card_id)
-		_check(game.textures["card_" + String(card["name"])] != null, "missing_texture_1_%s" % card_id)
-		_check(game.textures["card_" + String(card["name"]) + "_2"] != null, "missing_texture_2_%s" % card_id)
+		_check(game._get_texture("card_" + String(card["name"])) != null, "missing_texture_1_%s" % card_id)
+		_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "missing_texture_2_%s" % card_id)
 
 	game.cards_bought["fratura_cronal"] = 5
 	_check(is_equal_approx(game._fratura_cronal_bonus(), 0.12), "fratura_bonus_bad")

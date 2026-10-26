@@ -4213,6 +4213,8 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 	# list on every rendered frame.
 	var local_bullet_count: int = game.bullets.size()
 	var bullet_count: int = local_bullet_count + game.remote_bullets.size()
+	var simplify_basic_projectiles: bool = game._runtime_visual_budget_active() and bullet_count >= 36
+	game.runtime_projectile_batch_renderer.begin_frame(game._runtime_performance_stage())
 	for bullet_index in range(bullet_count):
 		var bullet: Dictionary = game.bullets[bullet_index] if bullet_index < local_bullet_count else game.remote_bullets[bullet_index - local_bullet_count]
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
@@ -4220,12 +4222,18 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 		var kind = String(bullet.get("kind", ""))
 		var palette = game._projectile_palette(kind)
 		var pos = bullet["pos"] - camera
-		if not game.RangedAttackRange.begin_projectile_draw(game, bullet, pos):
-			continue
 		var dir: Vector2 = bullet["dir"]
 		var side = dir.orthogonal().normalized()
 		var age = float(bullet.get("age", 0.0))
 		var phase = float(bullet.get("phase", 0.0))
+		if simplify_basic_projectiles and String(bullet.get("source_category", "")) == "basic_attack" and game.RangedAttackRange.visual_presence(bullet) >= 0.995:
+			# Preserve palette/direction in a retained GPU batch. Special attacks keep
+			# their authored procedural geometry and are never routed through this path.
+			var basic_color: Color = Color(palette.get("core", bullet.get("color", Color.WHITE)))
+			game.runtime_projectile_batch_renderer.append(pos, dir, basic_color)
+			continue
+		if not game.RangedAttackRange.begin_projectile_draw(game, bullet, pos):
+			continue
 		match kind:
 			"henry_pressure", "henry_nimbo_pressure":
 				HenryBarometric.draw_projectile(game, bullet, pos)
@@ -4330,8 +4338,11 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 				c.a = 0.22
 				game.draw_circle(pos, 15, c)
 		game.RangedAttackRange.end_projectile_draw(game)
+	game.runtime_projectile_batch_renderer.submit(game.get_canvas_item(), game)
 	for bullet in game.return_bullets:
 		_draw_return_bullet_visual(game, bullet, camera)
+	var batch_simple_enemy_shots: bool = game._runtime_visual_budget_active() and game.enemy_bullets.size() >= 32
+	game.runtime_enemy_projectile_batch_renderer.begin_frame(game._runtime_performance_stage())
 	for bullet in game.enemy_bullets:
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue
@@ -4498,9 +4509,16 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 				game.draw_circle(pos + forward * 6.0 - side * 7.0, 2.5, Color(0.02, 0.015, 0.02, 0.92))
 				game.draw_circle(pos - forward * 7.0 + side * 2.0, 2.0, Color(0.02, 0.015, 0.02, 0.86))
 		elif bullet.get("type") == "atirador":
-			var c = Color(0.65, 0.85, 1.0)
-			game.draw_circle(bullet["pos"] - camera, 14, c)
-			game.draw_circle(bullet["pos"] - camera, 24, Color(0.3, 0.7, 1.0, 0.3))
+			if batch_simple_enemy_shots:
+				game.runtime_enemy_projectile_batch_renderer.append(
+					Vector2(bullet["pos"]) - camera,
+					Vector2(bullet.get("dir", Vector2.RIGHT)),
+					Color(0.65, 0.85, 1.0)
+				)
+			else:
+				var c = Color(0.65, 0.85, 1.0)
+				game.draw_circle(bullet["pos"] - camera, 14, c)
+				game.draw_circle(bullet["pos"] - camera, 24, Color(0.3, 0.7, 1.0, 0.3))
 		elif bullet.get("type") == "boss_pressure_bubble":
 			var pos = Vector2(bullet["pos"]) - camera
 			var phase = float(bullet.get("phase", 0.0))
@@ -4532,6 +4550,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 			var c = Color(0.45 + t * 0.28, 0.42, 0.5 + t * 0.5)
 			game.draw_circle(bullet["pos"] - camera, 9, c)
 			game.draw_circle(bullet["pos"] - camera, 16, Color(0.54, 0.16, 0.9, 0.22))
+	game.runtime_enemy_projectile_batch_renderer.submit(game.get_canvas_item(), game)
 
 
 static func _draw_miasma_eye_mask(game: Node2D, viewport: Vector2, openness: float) -> void :

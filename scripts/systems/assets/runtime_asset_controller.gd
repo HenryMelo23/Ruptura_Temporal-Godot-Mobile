@@ -1,8 +1,8 @@
 class_name RTRuntimeAssetController
 extends RefCounted
 
-# Keeps full-resolution phase art out of low-memory devices until the phase or
-# catalog actually needs it. Desktop keeps the historical eager preload path.
+# Keeps full-resolution art out of memory until the active phase or catalog
+# actually needs it. Streaming changes residency only, never texture quality.
 
 const PHASE_TEXTURE_SPECS := {
 	1: {
@@ -131,16 +131,101 @@ const PHASE_TEXTURE_SPECS := {
 }
 
 
-static func should_stream_phase_assets(is_mobile_runtime: bool, memory_saver_active: bool) -> bool:
-	# Streaming is a memory policy, not a visual-quality policy. Mobile keeps the
-	# authored frames for the active phase while releasing assets from other phases.
-	return is_mobile_runtime or memory_saver_active
+static var _prefetch_pending: Dictionary = {}
+static var _prefetch_ready: Dictionary = {}
+static var _prefetch_phase: int = -1
 
 
-static func should_lazy_gallery_assets(is_mobile_runtime: bool, memory_saver_active: bool) -> bool:
+static func prefetch_paths_for_phase(phase: int, base_path: String, limit: int = 10) -> PackedStringArray:
+	var result := PackedStringArray()
+	if not PHASE_TEXTURE_SPECS.has(phase) or limit <= 0:
+		return result
+	var specs: Dictionary = PHASE_TEXTURE_SPECS[phase]
+	# Dictionary insertion order is authored: common silhouettes and boss idle
+	# arrive before optional action sheets. This keeps prefetch bounded and useful.
+	for key in specs:
+		var spec: Variant = specs[key]
+		var paths: Array = spec if spec is Array else [spec]
+		for relative_path in paths:
+			var path := base_path + String(relative_path)
+			if not result.has(path):
+				result.append(path)
+			if result.size() >= limit:
+				return result
+	return result
+
+
+static func schedule_phase_prefetch(phase: int, base_path: String, limit: int = 10) -> int:
+	if phase == _prefetch_phase:
+		return 0
+	_prefetch_phase = phase
+	_prefetch_ready.clear()
+	var scheduled := 0
+	for path in prefetch_paths_for_phase(phase, base_path, limit):
+		if _prefetch_pending.has(path) or not ResourceLoader.exists(path):
+			continue
+		var error := ResourceLoader.load_threaded_request(path, "Texture2D", true, ResourceLoader.CACHE_MODE_REUSE)
+		if error == OK:
+			_prefetch_pending[path] = phase
+			scheduled += 1
+	return scheduled
+
+
+static func poll_prefetch(max_results: int = 2) -> int:
+	var completed := 0
+	for raw_path in _prefetch_pending.keys():
+		if completed >= maxi(1, max_results):
+			break
+		var path := String(raw_path)
+		var status := ResourceLoader.load_threaded_get_status(path)
+		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			var resource := ResourceLoader.load_threaded_get(path)
+			if resource is Texture2D and int(_prefetch_pending[raw_path]) == _prefetch_phase:
+				_prefetch_ready[path] = resource
+			_prefetch_pending.erase(raw_path)
+			completed += 1
+		elif status == ResourceLoader.THREAD_LOAD_FAILED or status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			_prefetch_pending.erase(raw_path)
+			completed += 1
+	return completed
+
+
+static func prefetch_snapshot() -> Dictionary:
+	return {
+		"phase": _prefetch_phase,
+		"pending": _prefetch_pending.size(),
+		"ready": _prefetch_ready.size(),
+	}
+
+
+static func reset_prefetch_for_test() -> void:
+	_prefetch_pending.clear()
+	_prefetch_ready.clear()
+	_prefetch_phase = -1
+
+
+static func shutdown_prefetch() -> void:
+	# A threaded request cannot be cancelled in Godot. Resolve the small bounded
+	# queue during runtime teardown so the loader does not retain orphaned RIDs.
+	for raw_path in _prefetch_pending.keys():
+		var path := String(raw_path)
+		if ResourceLoader.load_threaded_get_status(path) != ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			ResourceLoader.load_threaded_get(path)
+	_prefetch_pending.clear()
+	_prefetch_ready.clear()
+	_prefetch_phase = -1
+
+
+static func should_stream_phase_assets(_is_mobile_runtime: bool, _memory_saver_active: bool) -> bool:
+	# Every platform keeps the authored frames for the active phase while
+	# releasing future/past phases. The parameters remain for API compatibility.
+	return true
+
+
+static func should_lazy_gallery_assets(_is_mobile_runtime: bool, _memory_saver_active: bool) -> bool:
 	# Card/manifestation/aura art is presentation-only and can be restored from
 	# its registered path. Lazy residency keeps the authored texture untouched.
-	return is_mobile_runtime or memory_saver_active
+	return true
 
 
 static func release_transient_gallery_assets(game: Node) -> int:
@@ -239,17 +324,25 @@ static func _load_key(game: Node, key: String, spec: Variant, base_path: String)
 	if key == "boss2":
 		var preferred_frames: Array = []
 		for index in range(1, 5):
-			preferred_frames.append(game._safe_load("res://Boss2-%d.png" % index))
+			preferred_frames.append(_load_texture(game, "res://Boss2-%d.png" % index))
 		if not preferred_frames.any(func(frame): return frame == null):
 			game.textures[key] = preferred_frames
 			return
 	if spec is Array:
 		var frames: Array = []
 		for relative_path in spec:
-			frames.append(game._safe_load(base_path + String(relative_path)))
+			frames.append(_load_texture(game, base_path + String(relative_path)))
 		game.textures[key] = frames
 	else:
-		game.textures[key] = game._safe_load(base_path + String(spec))
+		game.textures[key] = _load_texture(game, base_path + String(spec))
+
+
+static func _load_texture(game: Node, path: String) -> Texture2D:
+	if _prefetch_ready.has(path):
+		var resource: Texture2D = _prefetch_ready[path]
+		_prefetch_ready.erase(path)
+		return resource
+	return game._safe_load(path)
 
 
 static func _release_inactive(game: Node, active_phase: int) -> void:

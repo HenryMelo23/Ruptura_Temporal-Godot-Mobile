@@ -398,6 +398,7 @@ func _cleanup_runtime_resources() -> void :
 	phase_transition_overlay_node = null
 	phase_transition_title_label = null
 	phase_transition_materials_cache.clear()
+	RuntimeAssetController.shutdown_prefetch()
 	audio_streams.clear()
 	textures.clear()
 	if is_inside_tree():
@@ -504,7 +505,7 @@ func _memory_saver_active() -> bool:
 
 
 func _shadows_enabled() -> bool:
-	return gfx_shadows and not gfx_low_resource and not _memory_saver_active() and not mobile_adaptive_visual_budget
+	return gfx_shadows and not _runtime_visual_budget_active()
 
 
 func _particle_budget_available() -> bool:
@@ -513,6 +514,30 @@ func _particle_budget_available() -> bool:
 
 func _runtime_visual_budget_active() -> bool:
 	return CombatVfxRuntime._runtime_visual_budget_active(self)
+
+
+func _runtime_performance_stage() -> int:
+	return runtime_performance_controller.effective_stage(self)
+
+
+func _runtime_emergency_visual_budget_active() -> bool:
+	return runtime_performance_controller.is_emergency(self)
+
+
+func _enemy_separation_interval() -> float:
+	return runtime_performance_controller.separation_interval(self)
+
+
+func _should_queue_runtime_redraw(delta: float) -> bool:
+	return runtime_performance_controller.should_redraw(self, delta)
+
+
+func _begin_runtime_frame_services() -> void:
+	runtime_work_scheduler.advance()
+	var stage: int = _runtime_performance_stage()
+	var poll_interval: int = RuntimeWorkSchedulerScript.interval_for_stage(stage, 1, 2, 3)
+	if runtime_work_scheduler.runs_key(&"phase_asset_prefetch", poll_interval):
+		RuntimeAssetController.poll_prefetch(2)
 
 
 func _phase_asset_streaming_active() -> bool:
@@ -552,30 +577,19 @@ func _trim_visual_effect_arrays() -> void :
 
 
 func _update_mobile_performance_budget(delta: float) -> void:
-	if not _is_mobile_runtime() or mode != "game" or _memory_saver_active():
-		mobile_low_fps_seconds = 0.0
-		mobile_recovered_fps_seconds = 0.0
+	var previous_stage: int = int(runtime_performance_controller.effective_stage(self))
+	if not runtime_performance_controller.update(self, delta):
 		return
-	var fps: float = Engine.get_frames_per_second()
-	if fps <= 0.0:
-		return
-	if fps < MOBILE_ADAPTIVE_FPS_FLOOR:
-		mobile_low_fps_seconds += delta
-		mobile_recovered_fps_seconds = 0.0
-		if mobile_low_fps_seconds >= _mobile_adaptive_trigger_time(fps) and not mobile_adaptive_visual_budget:
-			mobile_adaptive_visual_budget = true
-			_trim_visual_effect_arrays()
-			_net_report_event("mobile_visual_budget", "active=true fps=%.1f enemies=%d bullets=%d effects=%d" % [fps, enemies.size(), bullets.size() + enemy_bullets.size(), effects.size()])
-	elif fps >= MOBILE_ADAPTIVE_FPS_RECOVER:
-		mobile_recovered_fps_seconds += delta
-		mobile_low_fps_seconds = 0.0
-		if mobile_adaptive_visual_budget and mobile_recovered_fps_seconds >= MOBILE_ADAPTIVE_RECOVER_TIME:
-			mobile_adaptive_visual_budget = false
-			mobile_recovered_fps_seconds = 0.0
-			_net_report_event("mobile_visual_budget", "active=false fps=%.1f" % fps)
-	else:
-		mobile_low_fps_seconds = 0.0
-		mobile_recovered_fps_seconds = 0.0
+	var next_stage: int = int(runtime_performance_controller.effective_stage(self))
+	_trim_visual_effect_arrays()
+	_net_report_event("adaptive_performance_stage", "from=%d to=%d fps=%.1f enemies=%d bullets=%d effects=%d" % [
+		previous_stage,
+		next_stage,
+		runtime_performance_controller.smoothed_fps,
+		enemies.size(),
+		bullets.size() + enemy_bullets.size(),
+		effects.size()
+	])
 
 
 func _sync_sfx_player_pool() -> void :
@@ -5271,11 +5285,8 @@ func _load_textures() -> void :
 	for aura in AURAS:
 		var aura_icon: = String(aura["icon"])
 		_register_texture("aura_" + aura["key"], _resolve_sprite_icon_path(aura_icon, base), lazy_gallery_assets)
-	var sanguinaria_icon := _safe_load(AURA_SANGUINARIA_ICON_PATH)
-	if sanguinaria_icon == null:
-		sanguinaria_icon = _safe_load(AURA_SANGUINARIA_EXPORT_FALLBACK_PATH)
-	textures["aura_sanguinaria"] = sanguinaria_icon
-	lazy_texture_paths["aura_sanguinaria"] = AURA_SANGUINARIA_ICON_PATH if ResourceLoader.exists(AURA_SANGUINARIA_ICON_PATH) else AURA_SANGUINARIA_EXPORT_FALLBACK_PATH
+	var sanguinaria_path := AURA_SANGUINARIA_ICON_PATH if ResourceLoader.exists(AURA_SANGUINARIA_ICON_PATH) else AURA_SANGUINARIA_EXPORT_FALLBACK_PATH
+	_register_texture("aura_sanguinaria", sanguinaria_path, lazy_gallery_assets)
 	for card in CARDS:
 		var card_key: = "card_" + String(card["name"])
 		_register_texture(card_key, base + String(card["icon"]), lazy_gallery_assets)
@@ -5308,7 +5319,9 @@ func _ensure_runtime_texture(key: String) -> bool:
 
 func _prepare_phase_texture_assets(phase: int) -> void:
 	RuntimeAssetController.prepare_phase(self, phase, "res://assets/sprites/", _phase_asset_streaming_active(), _memory_saver_active())
-	if _is_mobile_runtime():
+	if not dedicated_server_mode and DisplayServer.get_name() != "headless":
+		RuntimeAssetController.schedule_phase_prefetch(phase + 1, "res://assets/sprites/", 10)
+	if RuntimeAssetController.should_lazy_gallery_assets(_is_mobile_runtime(), _memory_saver_active()):
 		RuntimeAssetController.release_transient_gallery_assets(self)
 
 
@@ -6671,6 +6684,8 @@ func _reset_card_proc_state() -> void :
 func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
 	_ensure_runtime_controllers_bound()
+	runtime_performance_controller.reset()
+	mobile_adaptive_visual_budget = false
 	experimental_phase_controller.prepare_new_run(clear_interrupted_save)
 	umbra_memory_controller.begin_run(is_multiplayer, multiplayer.get_unique_id(), boss5_multihead_policy)
 	umbra_run_knowledge.clear()
@@ -9092,6 +9107,7 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 
 func _process(delta: float) -> void :
 	_ensure_runtime_controllers_bound()
+	_begin_runtime_frame_services()
 	henry_incendiary_ability_controller.maintain_entrance_lifecycle()
 	hud_feedback.update(self, delta)
 	geovana_bark_controller.update(self, delta)
@@ -9203,7 +9219,8 @@ func _process(delta: float) -> void :
 	_refresh_screen_shake_frame_offset()
 	_sync_bombastica_scene_vfx_positions()
 	_update_mobile_performance_budget(delta)
-	queue_redraw()
+	if _should_queue_runtime_redraw(delta):
+		queue_redraw()
 
 func _update_multiplayer_preload(_delta: float) -> void :
 	if online_preload_started_ms <= 0:
@@ -9392,10 +9409,14 @@ func _shutdown_dedicated_room() -> void :
 
 
 func _update_orientation(delta: float) -> void :
+	if not _is_mobile_runtime():
+		return
 	orientation_poll_timer -= delta
 	if orientation_poll_timer > 0.0:
 		return
 	orientation_poll_timer = 0.5
+	if last_manual_orientation == DisplayServer.SCREEN_SENSOR_LANDSCAPE:
+		return
 	last_manual_orientation = DisplayServer.SCREEN_SENSOR_LANDSCAPE
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
 
@@ -38819,7 +38840,7 @@ func _touch_manifest_preview_atlas(cache_key: String) -> void:
 
 
 func _trim_manifest_preview_atlas_cache() -> void:
-	var cache_limit: int = 1 if _memory_saver_active() else MANIFEST_PREVIEW_ATLAS_CACHE_LIMIT
+	var cache_limit: int = 1 if _runtime_visual_budget_active() else MANIFEST_PREVIEW_ATLAS_CACHE_LIMIT
 	while manifest_preview_atlas_lru.size() > cache_limit:
 		var old_key: String = String(manifest_preview_atlas_lru.pop_front())
 		manifest_preview_atlases.erase(old_key)

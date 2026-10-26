@@ -61,10 +61,10 @@ func _run() -> void:
 			assert(game._is_common_card(card))
 		assert(game._card_max_count(card) >= 999999)
 		assert(game.cards_bought.has(card_id))
+		assert(game._get_texture("card_" + String(card["name"])) != null)
 		assert(game.textures.has("card_" + String(card["name"])))
-		assert(game.textures["card_" + String(card["name"])] != null)
+		assert(game._get_texture("card_" + String(card["name"]) + "_2") != null)
 		assert(game.textures.has("card_" + String(card["name"]) + "_2"))
-		assert(game.textures["card_" + String(card["name"]) + "_2"] != null)
 
 	var margem := _find_card("margem_segura")
 	for i in range(8):

@@ -84,10 +84,12 @@ var spatial_cells: Dictionary = {}
 var spatial_remnant_start: int = 0
 var spatial_index_query: Array[int] = []
 var spatial_entity_query: Array = []
+var separation_accumulator: float = 0.0
 
 
 func bind_game(p_game: Node) -> void:
 	game = p_game
+	separation_accumulator = 0.0
 	reset_special_pacing(true)
 	clear_spatial_index()
 
@@ -155,6 +157,14 @@ func avoidance_neighbors(pos: Vector2, my_radius: float) -> Array:
 func apply_entity_separation(delta: float) -> void:
 	if game == null or delta <= 0.0:
 		return
+	var interval: float = game._enemy_separation_interval() if game.has_method("_enemy_separation_interval") else 0.0
+	if interval > 0.0:
+		separation_accumulator += delta
+		if separation_accumulator < interval:
+			return
+		separation_accumulator = fmod(separation_accumulator, interval)
+	else:
+		separation_accumulator = 0.0
 	rebuild_spatial_index()
 	var count: int = spatial_entities.size()
 	for i in range(count):
