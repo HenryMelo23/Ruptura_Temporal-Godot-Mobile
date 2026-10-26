@@ -1,15 +1,15 @@
 {
-  "version": "2.0.56",
-  "version_code": 25600,
-  "filename": "ruptura_temporal_mobile_2.0.56.apk",
-  "sha256": "b3ebfe15818a71455248a5434d8f7dd26ebf399c177a84e6511681c976012a2c",
-  "size": 943354754,
+  "version": "2.0.57",
+  "version_code": 25700,
+  "filename": "ruptura_temporal_mobile_2.0.57.apk",
+  "sha256": "fe400459fcbc2333c9eedfd571fe760c083e911752c448d429b45d7a8f8e7ce2",
+  "size": 943361154,
   "notes": [
-    "Desempenho adaptativo com batching de projeteis e multidoes",
-    "Streaming assincrono de assets por fase",
-    "Reducao de VFX e hot paths sem alterar a jogabilidade",
-    "Estabilidade multiplayer preservada"
+    "Correcao do atualizador interrompido",
+    "Nova tentativa automatica quando a consulta falhar",
+    "Download retomavel com progresso preservado",
+    "Tela de progresso ajustada para desktop e mobile"
   ],
   "mandatory": false,
-  "published_at": "2026-10-26T20:50:51.3459805Z"
+  "published_at": "2026-10-26T21:15:21.4516234Z"
 }

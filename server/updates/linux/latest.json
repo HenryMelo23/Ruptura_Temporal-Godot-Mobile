@@ -1,15 +1,15 @@
 {
-  "version": "2.0.56",
-  "version_code": 25600,
-  "filename": "Ruptura_Temporal_2.0.56.x86_64",
-  "sha256": "66170883c97c771dec242a9c4bda8d9bcc52ec463348c3f19ba190276d2d3111",
-  "size": 993575624,
+  "version": "2.0.57",
+  "version_code": 25700,
+  "filename": "Ruptura_Temporal_2.0.57.x86_64",
+  "sha256": "121b49e9191618b8fec62a32fad1c717203079768e3d12e524ad0c29b449f910",
+  "size": 993579064,
   "notes": [
-    "Desempenho adaptativo com batching de projeteis e multidoes",
-    "Streaming assincrono de assets por fase",
-    "Reducao de VFX e hot paths sem alterar a jogabilidade",
-    "Estabilidade multiplayer preservada"
+    "Correcao do atualizador interrompido",
+    "Nova tentativa automatica quando a consulta falhar",
+    "Download retomavel com progresso preservado",
+    "Tela de progresso ajustada para desktop e mobile"
   ],
   "mandatory": false,
-  "published_at": "2026-10-26T20:49:36.2996596Z"
+  "published_at": "2026-10-26T21:17:43.3958783Z"
 }
