@@ -1,12 +1,14 @@
 {
-  "version": "2.0.58",
-  "version_code": 25800,
-  "filename": "Ruptura_Temporal_2.0.58.exe",
-  "sha256": "844f47ddf5393314e9bdcbd56312dca5a9a8bfb95ccbc572a87d00be347ac0a5",
-  "size": 1029402840,
+  "version": "2.0.59",
+  "version_code": 25900,
+  "filename": "Ruptura_Temporal_2.0.59.exe",
+  "sha256": "e93828c22265736fbaa7a04743c82b672f8270a72ac72e0e15813255cd124aa5",
+  "size": 1029411552,
   "notes": [
-    "Otimização de desempenho e estabilidade de jornada solo."
+    "Sorte Temporal progressiva: 35% aos 60 minutos, com crescimento desacelerado.",
+    "Mais estabilidade de FPS e menos acúmulo visual em jornadas longas.",
+    "Melhorias de autosave, multiplayer e progressão de cartas."
   ],
   "mandatory": false,
-  "published_at": "2026-10-27T10:54:38.9700020Z"
+  "published_at": "2026-10-27T21:56:02Z"
 }
