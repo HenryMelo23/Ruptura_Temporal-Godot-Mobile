@@ -455,7 +455,9 @@ func build_run_report_payload(result: String) -> Dictionary:
 			"defense": game.player_defense,
 			"crit_chance": game.player_crit_chance,
 			"lifesteal": game.player_lifesteal,
-			"luck": game.luck
+			"luck": game._effective_luck(),
+			"card_luck": game.luck,
+			"temporal_luck": game._temporal_luck()
 		},
 		"enemy_scaling": {
 			"limit": game._enemy_limit(),

@@ -152,6 +152,9 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 		game._draw_spectator_hud(viewport)
 		_draw_point_boost_hud(game, viewport)
 		return
+	if game._runtime_visual_budget_active():
+		_draw_performance_status_hud(game, viewport)
+		return
 	if game._uses_desktop_ui():
 		game._draw_desktop_hud(viewport)
 		return
@@ -195,6 +198,48 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
 		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0 * sm, 28.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
 	_draw_point_boost_hud(game, viewport)
+	game._draw_card_mechanic_huds(viewport, left_rect)
+	game._draw_ancorada_hud(viewport, left_rect)
+	game._draw_acorrentada_hud(viewport, left_rect)
+	game._draw_bombastica_hud(viewport, left_rect)
+	game._draw_necronada_hud(viewport, left_rect)
+	game._draw_aura_hud(viewport, left_rect)
+	game._draw_revive_heal_penalty_hud(viewport, left_rect)
+	game._draw_lacerante_coagulum_hud(viewport)
+	game._draw_contractual_order_hud(viewport)
+	game._draw_unlock_notifications(viewport)
+
+
+static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> void:
+	var accent: Color = game._manifestation_color()
+	var hp_ratio: float = clampf(float(game.player_hp) / maxf(1.0, float(game.player_hp_max)), 0.0, 1.0)
+	var hp_color := Color(0.3, 1.0, 0.48) if hp_ratio >= 0.55 else (Color(1.0, 0.68, 0.18) if hp_ratio >= 0.25 else Color(1.0, 0.2, 0.28))
+	var left_rect := Rect2(18.0, 16.0, minf(258.0, viewport.x * 0.42), 56.0)
+	var right_rect := Rect2(viewport.x - minf(230.0, viewport.x * 0.38) - 18.0, 16.0, minf(230.0, viewport.x * 0.38), 56.0)
+	game.draw_rect(left_rect, Color(0.015, 0.025, 0.035, 0.9), true)
+	game.draw_rect(left_rect, hp_color, false, 1.0)
+	game.draw_string(game.font, left_rect.position + Vector2(10.0, 18.0), "VIDA %d / %d" % [game.player_hp, game.player_hp_max], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 13, Color.WHITE)
+	var hp_bar := Rect2(left_rect.position + Vector2(10.0, 27.0), Vector2(left_rect.size.x - 20.0, 9.0))
+	game.draw_rect(hp_bar, Color(0.08, 0.11, 0.13, 0.96), true)
+	game.draw_rect(Rect2(hp_bar.position, Vector2(hp_bar.size.x * hp_ratio, hp_bar.size.y)), hp_color, true)
+	game.draw_string(game.font, left_rect.position + Vector2(10.0, 50.0), "%02d:%02d  FASE %d" % [int(game.time_alive) / 60, int(game.time_alive) % 60, int(game.current_phase)], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 11, Color(accent.r, accent.g, accent.b, 0.9))
+
+	game.draw_rect(right_rect, Color(0.015, 0.025, 0.035, 0.9), true)
+	game.draw_rect(right_rect, Color(0.12, 0.9, 1.0), false, 1.0)
+	game.draw_string(game.font, right_rect.position + Vector2(10.0, 22.0), "PONTOS  %d" % int(game.score), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 16, Color.WHITE)
+	game.draw_string(game.font, right_rect.position + Vector2(10.0, 45.0), "CARTAS %d  CUSTO %d" % [game._affordable_card_count(), int(game.card_cost)], HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 10, Color(0.72, 0.96, 1.0))
+
+	if game.boss_active and game.boss_hp > 0.0 and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
+		var boss_rect := Rect2(viewport.x * 0.5 - 180.0, 18.0, 360.0, 24.0)
+		game.draw_rect(boss_rect, Color(0.04, 0.015, 0.025, 0.92), true)
+		game.draw_rect(Rect2(boss_rect.position, Vector2(boss_rect.size.x * clampf(game.boss_hp / maxf(1.0, game.boss_hp_max), 0.0, 1.0), boss_rect.size.y)), Color(0.92, 0.1, 0.22, 0.86), true)
+		game.draw_rect(boss_rect, Color(1.0, 0.28, 0.38), false, 1.0)
+		game._draw_centered(String(game.boss_name), boss_rect.get_center() + Vector2(0.0, 5.0), 11, Color.WHITE)
+
+	if game.is_multiplayer and game.online_connected:
+		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 92.0, 58.0), "PING %sms" % (str(game.net_ping_ms) if game.net_ping_ms >= 0 else "--"), HORIZONTAL_ALIGNMENT_CENTER, 184.0, 10, Color(0.72, 0.96, 1.0, 0.86))
+	_draw_point_boost_hud(game, viewport)
+	# Tactical meters remain available; only their always-on decorative shell is reduced.
 	game._draw_card_mechanic_huds(viewport, left_rect)
 	game._draw_ancorada_hud(viewport, left_rect)
 	game._draw_acorrentada_hud(viewport, left_rect)
@@ -805,8 +850,12 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 
 static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 	if game._uses_desktop_ui():
-		game._draw_desktop_combat_hud(viewport)
-		game._draw_desktop_session_buttons(viewport)
+		if game._runtime_visual_budget_active():
+			_draw_performance_desktop_combat_hud(game, viewport)
+			_draw_performance_desktop_session_buttons(game)
+		else:
+			game._draw_desktop_combat_hud(viewport)
+			game._draw_desktop_session_buttons(viewport)
 		if game._ability_cancel_active():
 			game._draw_ability_cancel_button(viewport)
 		game._draw_player_dance_emote(game._camera(viewport))
@@ -1003,6 +1052,59 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		game._draw_ability_cancel_button(viewport)
 	game._draw_dance_wheel(viewport)
 	game._draw_player_dance_emote(game._camera(viewport))
+
+
+static func _draw_performance_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void:
+	var active_eletrica: Dictionary = game._active_eletrica_secondary()
+	var secondary_active: bool = not active_eletrica.is_empty() or not game._active_prismatica_secondary().is_empty()
+	var dash_label := "VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else "TP"
+	var entries: Array[Dictionary] = [
+		{"label": "ATK", "bind": game._compact_key_binding_name("attack"), "elapsed": game.time_alive - game.last_attack_time, "cooldown": game._current_attack_interval(), "color": Color(1.0, 0.24, 0.28)},
+		{"label": "HAB 1", "bind": game._compact_key_binding_name("skill"), "elapsed": game.time_alive - game.last_skill_time, "cooldown": game._skill_cooldown(), "color": Color(0.2, 0.75, 1.0)},
+		{"label": "CANCELAR" if secondary_active else "ULT", "bind": game._compact_key_binding_name("secondary"), "elapsed": game._secondary_skill_cooldown() if secondary_active else game.time_alive - game.last_secondary_time, "cooldown": game._secondary_skill_cooldown(), "color": Color(1.0, 0.18, 0.24) if secondary_active else Color(1.0, 0.78, 0.2)},
+		{"label": dash_label, "bind": game._compact_key_binding_name("dash"), "elapsed": game.time_alive - game.last_dash_time, "cooldown": game._current_dash_cooldown(), "color": Color(0.2, 0.9, 1.0)}
+	]
+	if game.manifestation_key == "lacerante":
+		entries.append({"label": "REFORCO" if game.lacerante_empowered_ready else "+", "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": game.time_alive - game.last_lacerante_empower_time, "cooldown": game.LACERANTE_EMPOWER_COOLDOWN, "color": Color(0.92, 0.03, 0.12)})
+	elif game.manifestation_key == "eclipsada":
+		entries.append({"label": game._eclipsada_form_label(), "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": 1.0, "cooldown": 1.0, "color": game._eclipsada_color()})
+	elif game.manifestation_key == "necronada":
+		entries.append({"label": "PO" if game.necronada_empowered_ready else "+", "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": game.NECRONADA_EMPOWER_COOLDOWN if game.necronada_empowered_ready else game.NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, game.necronada_empower_cooldown_until - game.time_alive), "cooldown": game.NECRONADA_EMPOWER_COOLDOWN, "color": Color(0.52, 0.34, 0.92)})
+	elif game.manifestation_key == "bombastica":
+		entries.append({"label": "DET x%d" % game.bombastica_bombs.size(), "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": 1.0 if not game.bombastica_bombs.is_empty() else 0.0, "cooldown": 1.0, "color": Color(1.0, 0.48, 0.12)})
+	var width := 84.0
+	var height := 48.0
+	var gap := 8.0
+	var total_width := width * entries.size() + gap * maxi(0, entries.size() - 1)
+	var start := Vector2(viewport.x * 0.5 - total_width * 0.5, viewport.y - height - 20.0)
+	for index in range(entries.size()):
+		var entry: Dictionary = entries[index]
+		var rect := Rect2(start + Vector2(float(index) * (width + gap), 0.0), Vector2(width, height))
+		var color: Color = entry["color"]
+		var cooldown: float = maxf(0.01, float(entry["cooldown"]))
+		var ratio: float = clampf(float(entry["elapsed"]) / cooldown, 0.0, 1.0)
+		game.draw_rect(rect, Color(0.015, 0.025, 0.035, 0.9), true)
+		game.draw_string(game.font, rect.position + Vector2(7.0, 28.0), "%s  %s" % [String(entry["bind"]), String(entry["label"])], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 14.0, 10, Color.WHITE)
+		game.draw_rect(Rect2(rect.position + Vector2(6.0, rect.size.y - 6.0), Vector2((rect.size.x - 12.0) * ratio, 2.0)), color, true)
+	if game._should_draw_desktop_fps_counter():
+		game.draw_string(game.font, Vector2(viewport.x - 94.0, viewport.y - 22.0), "%d FPS" % Engine.get_frames_per_second(), HORIZONTAL_ALIGNMENT_RIGHT, 76.0, 11, Color(0.2, 0.92, 1.0))
+
+
+static func _draw_performance_desktop_session_buttons(game: Node2D) -> void:
+	var entries: Array[Dictionary] = []
+	if game.buttons.has("pause"):
+		entries.append({"rect": game.buttons["pause"], "label": "II", "color": Color(0.0, 1.0, 0.82)})
+	if game.buttons.has("shop_manual"):
+		var shop_label := "REABRIR" if game._manual_shop_grace_active() else "LOJA"
+		var shop_color := Color(0.0, 1.0, 0.82) if game._affordable_card_count() > 0 else Color(0.38, 0.42, 0.46)
+		entries.append({"rect": game.buttons["shop_manual"], "label": shop_label, "color": shop_color})
+	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss") and game.experimental_phase_controller.should_show_boss_button():
+		entries.append({"rect": game.buttons["boss"], "label": "BOSS", "color": Color(1.0, 0.52, 0.16)})
+	for entry in entries:
+		var rect: Rect2 = entry["rect"]
+		var color: Color = entry["color"]
+		game.draw_rect(rect, Color(0.015, 0.025, 0.035, 0.9), true)
+		game.draw_string(game.font, rect.position + Vector2(5.0, rect.size.y * 0.5 + 5.0), String(entry["label"]), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x - 10.0, 10, color)
 
 
 static func _draw_edit_layout_safe_guides(game: Node2D, viewport: Vector2) -> void:

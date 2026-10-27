@@ -91,8 +91,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.0.57"
-const GAME_VERSION_CODE: = 25700
+const GAME_VERSION: = "2.0.59"
+const GAME_VERSION_CODE: = 25900
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -602,8 +602,11 @@ const ENEMY_POINT_ABSORB_RADIUS: = 18.0
 const ENEMY_POINT_MAGNET_START_SPEED: = 155.0
 const ENEMY_POINT_MAGNET_ACCELERATION: = 420.0
 const ENEMY_POINT_MAGNET_MAX_SPEED: = 1350.0
-const ENEMY_POINT_MERGE_RADIUS: = 20.0
-const ENEMY_POINT_MAX_ACTIVE: = 256
+# Point value is conserved when nearby shards merge or the safety cap is hit.
+# Keeping a small number of richer shards prevents an uncollected trail from
+# turning into hundreds of animated CanvasItem commands during long runs.
+const ENEMY_POINT_MERGE_RADIUS: = 72.0
+const ENEMY_POINT_MAX_ACTIVE: = 24
 const PHASE_POINT_CRYSTAL_MIN_COUNT: = 4
 const PHASE_POINT_CRYSTAL_MAX_COUNT: = 6
 const PHASE_POINT_CRYSTAL_CARD_COST_RATIO: = 0.25
@@ -1956,7 +1959,7 @@ const CARDS: = [
 	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
 	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
 	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
-	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% sorte para drops. Incomuns aparecem sem Sorte e ficam mais frequentes; raras exigem Sorte.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
+	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% de sorte adicional por copia. A Sorte Temporal cresce devagar durante a run; esta carta continua exigida para liberar raras.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
 	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},

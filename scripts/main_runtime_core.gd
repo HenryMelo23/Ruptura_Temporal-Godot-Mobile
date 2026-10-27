@@ -410,6 +410,7 @@ func _cleanup_runtime_resources() -> void :
 		var telemetry_system := get_node_or_null("/root/TelemetrySystem")
 		if telemetry_system != null:
 			telemetry_system.unbind_game(self)
+	save_controller.shutdown()
 	save_controller.configure(null)
 	phase_flow_controller.configure(null)
 	shop_controller.configure(null)
@@ -2901,7 +2902,9 @@ func _run_security_combat_snapshot_payload() -> Dictionary:
 			"defense": player_defense,
 			"crit_chance": player_crit_chance,
 			"lifesteal": player_lifesteal,
-			"luck": luck
+			"luck": _effective_luck(),
+			"card_luck": luck,
+			"temporal_luck": _temporal_luck()
 		},
 		"enemy_scaling": {
 			"limit": _enemy_limit(),
@@ -3866,7 +3869,10 @@ func _on_player_progress_sync_completed(result: int, response_code: int, _header
 			var pending: Dictionary = event
 			var event_id := String(pending.get("event_id", ""))
 			if rejected_by_id.has(event_id):
-				player_progress_quarantined_events.append({"event": pending.duplicate(true), "reason": rejected_by_id[event_id], "at": int(Time.get_unix_time_from_system())})
+				player_progress_quarantined_events = RTPlayerProgressSync.append_quarantined_event(
+					player_progress_quarantined_events,
+					{"event": pending, "reason": rejected_by_id[event_id], "at": int(Time.get_unix_time_from_system())}
+				)
 			elif not accepted_ids.has(event_id):
 				remaining.append(event)
 		player_progress_pending_events = remaining
@@ -6781,7 +6787,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	runtime_performance_controller.reset()
 	mobile_adaptive_visual_budget = false
 	experimental_phase_controller.prepare_new_run(clear_interrupted_save)
-	umbra_memory_controller.begin_run(is_multiplayer, multiplayer.get_unique_id(), boss5_multihead_policy)
+	umbra_memory_controller.begin_run(is_multiplayer, _mp_unique_id(), boss5_multihead_policy)
 	umbra_run_knowledge.clear()
 	sineiro_boreal_controller.reset_for_new_run()
 	amber_suturer_controller.reset_for_new_run()
@@ -8749,7 +8755,8 @@ func _manifest_evolution_dispatch_combat_event(event: Dictionary) -> bool:
 		"target_uid": String(event.get("target_uid", ""))
 	})
 	if manifest_evolution_combat_event_log.size() > 96:
-		manifest_evolution_combat_event_log.pop_front()
+		var expired_event: Dictionary = manifest_evolution_combat_event_log.pop_front()
+		manifest_evolution_combat_event_seen.erase(String(expired_event.get("id", "")))
 	match String(event.get("type", "")):
 		"attack_emitted":
 			return true
@@ -9727,8 +9734,8 @@ func _update_game(delta: float) -> void :
 	_update_prisms(delta)
 	_update_return_bullets(delta)
 	_update_phase6_pustule_pools(delta)
-	_update_enemies(delta)
-	_apply_entity_separation(delta)
+	_update_enemies(delta, true)
+	_apply_entity_separation(delta, true)
 	_update_enemy_bullets(delta)
 	_update_phase4_environment(delta)
 	_update_larapio_coin_drops(delta)
@@ -18894,8 +18901,8 @@ func _steer_entity_with_avoidance(entity: Dictionary, pos: Vector2, desired_dir:
 	return steered_dir
 
 
-func _apply_entity_separation(delta: float) -> void :
-	enemy_manager.apply_entity_separation(delta)
+func _apply_entity_separation(delta: float, spatial_index_ready: bool = false) -> void :
+	enemy_manager.apply_entity_separation(delta, spatial_index_ready)
 
 func _add_lastro_points(amount: int, source_type: String = "") -> void :
 	_ensure_runtime_controllers_bound()
@@ -18948,8 +18955,9 @@ func _update_ancorada_spinning(delta: float) -> void :
 	ancorada_spinning = ancorada_spinning.filter( func(s): return float(s.get("life", 0.0)) > 0.0)
 
 
-func _update_enemies(delta: float) -> void :
-	enemy_manager.rebuild_spatial_index()
+func _update_enemies(delta: float, spatial_index_ready: bool = false) -> void :
+	if not spatial_index_ready:
+		enemy_manager.rebuild_spatial_index()
 	enemy_manager.update_enemies(delta)
 
 func _local_player_targetable() -> bool:
@@ -21304,8 +21312,9 @@ func _update_bullets(delta: float) -> void :
 	# sustained fire into O(projectiles * enemies) work and is independent of the
 	# selected graphics preset. Reuse the enemy spatial grid so each projectile
 	# only evaluates actors in its neighboring cells.
-	if not bullets.is_empty():
-		enemy_manager.rebuild_spatial_index()
+	# One authoritative spatial snapshot is shared by local projectiles, remote
+	# projectile presentation, enemy steering and same-frame separation.
+	enemy_manager.rebuild_spatial_index()
 	var new_bullets = []
 	var prismatica_evolution_active := PrismaticaEvolutionController.is_active(self)
 	var bombastica_ultimate_active := not bombastica_bombs.is_empty()
@@ -21663,10 +21672,12 @@ func _update_remote_bullets(delta: float) -> void :
 			var bullet_pos: = Vector2(b["pos"])
 			if _bargain_capsule_vulnerable() and bullet_pos.distance_to(Vector2(bargain_capsule.get("pos", player_pos))) <= BARGAIN_CAPSULE_RADIUS + 18.0:
 				_apply_remote_projectile_visual_impact(b, "bargain:%s" % String(bargain_capsule.get("id", "")), Vector2(bargain_capsule.get("pos", player_pos)))
-			for enemy in enemies:
+			for enemy_index in enemy_manager.nearby_entity_indices(bullet_pos, 64.0, false):
+				var enemy: Dictionary = enemy_manager.spatial_entities[enemy_index]
 				if float(enemy.get("hp", 0.0)) <= 0.0:
 					continue
-				if bullet_pos.distance_to(Vector2(enemy["pos"])) < _enemy_radius(enemy):
+				var hit_radius: float = _enemy_radius(enemy)
+				if bullet_pos.distance_squared_to(Vector2(enemy["pos"])) < hit_radius * hit_radius:
 					_apply_remote_projectile_visual_impact(b, "enemy:%s" % str(enemy.get("uid", "")), Vector2(enemy["pos"]))
 					break
 			if float(b["life"]) > 0.0 and _arauto_active() and bullet_pos.distance_to(Vector2(arauto["pos"])) < 58.0:
@@ -21791,7 +21802,6 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void :
 		damage_text_label = "CRÍTICO FUNERÁRIO"
 	_damage_enemy(enemy, damage, bullet["kind"], true, true, Vector2(bullet.get("origin", player_pos)), String(bullet.get("source_category", "basic_attack")), 0, "", critical_hit, damage_text_label)
 
-	_spawn_custom_collision(bullet["pos"], bullet["kind"])
 	_spawn_custom_collision(bullet["pos"], bullet["kind"])
 	if player_lifesteal > 0.0 and player_hp < player_hp_max:
 		var heal = max(1, int((player_hp_max - player_hp) * player_lifesteal))
@@ -22903,7 +22913,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		enemy,
 		time_alive,
 		current_phase,
-		luck,
+		_effective_luck(),
 		runtime_event_director.point_multiplier() > 1.0,
 		_is_world_authority()
 	)
@@ -22989,6 +22999,14 @@ func _points_for_enemy(enemy: Dictionary) -> int:
 
 func _long_run_point_multiplier() -> float:
 	return _progression().long_run_point_multiplier()
+
+
+func _temporal_luck() -> float:
+	return _progression().temporal_luck_controller.temporal_luck()
+
+
+func _effective_luck() -> float:
+	return _progression().temporal_luck_controller.effective_luck()
 
 
 func _long_run_curve_progress(start_time: float, end_time: float) -> float:
@@ -23111,8 +23129,7 @@ func _pick_boss_reward_cards(count: int, rare_slots: = BOSS_REWARD_RARE_COUNT) -
 
 
 func _card_drop_chance() -> float:
-	var progress = clamp(time_alive / (120.0 * 60.0), 0.0, 1.0)
-	return clamp(0.045 + (0.4 - 0.045) * progress + luck * 0.25, 0.0, 0.7)
+	return _progression().temporal_luck_controller.card_drop_chance()
 
 
 func _update_enemy_bullets(delta: float) -> void :
@@ -26061,7 +26078,7 @@ func _sample_umbra_player_history(delta: float) -> void :
 	phase5_player_history.append(player_pos)
 	while phase5_player_history.size() > 28:
 		phase5_player_history.pop_front()
-	umbra_memory_controller.record_local_sample(multiplayer.get_unique_id(), {
+	umbra_memory_controller.record_local_sample(_mp_unique_id(), {
 		"position": player_pos,
 		"target_distance": boss_pos.distance_to(player_pos),
 		"dash_marker": last_dash_time,
@@ -35904,34 +35921,15 @@ func _card_rarity_label(card: Dictionary) -> String:
 
 
 func _chance_carta_incomum() -> float:
-	var chance_base: = 0.22
-	var chance_maxima: = 0.48
-	var sorte_peso_raridade: = 0.26
-	var sorte_bonus_por_carta: = 0.012
-	var qtd_sorte: = _sorte_card_count()
-	var chance: float = chance_base + luck * sorte_peso_raridade + float(qtd_sorte) * sorte_bonus_por_carta
-	return clampf(chance, 0.0, chance_maxima)
+	return _progression().temporal_luck_controller.uncommon_card_chance()
 
 
 func _chance_carta_rara() -> float:
-	if not _rare_cards_unlocked():
-		return 0.0
-	var chance_rara_base = 0.025
-	var chance_rara_maxima = 0.14
-	var sorte_peso_raridade = 0.12
-	var sorte_bonus_raridade_por_carta = 0.0038
-
-	var qtd_sorte = _sorte_card_count()
-	var chance = chance_rara_base + luck * sorte_peso_raridade + qtd_sorte * sorte_bonus_raridade_por_carta
-	return clamp(chance, 0.0, chance_rara_maxima)
+	return _progression().temporal_luck_controller.rare_card_chance()
 
 
 func _chance_carta_lendaria() -> float:
-	if not _legendary_cards_unlocked():
-		return 0.0
-	var qtd_sorte: int = _sorte_card_count()
-	var chance: float = 0.005 + luck * 0.02 + float(qtd_sorte) * 0.0008
-	return clampf(chance, 0.0, 0.03)
+	return _progression().temporal_luck_controller.legendary_card_chance()
 
 
 func _buy_selected_card() -> void :
@@ -39342,13 +39340,7 @@ func _draw_parasite_larva_drop(pos: Vector2, scale: float, alpha: float) -> void
 
 
 func _draw_advanced_manifestation_world(camera: Vector2) -> void :
-	_draw_cartographic_marks(camera)
-	_draw_contractual_notifications(camera)
-	if manifestation_key == "ressonante" and mode in ["game", "shop_countdown", "shop_opening", "boss_call", "pause_countdown"]:
-		_draw_resonant_player_beat(camera)
-	_draw_resonant_world_marks(camera)
-	_draw_mnesic_marks(camera)
-	_draw_necronada_world(camera)
+	CombatEffectsPresentation._draw_advanced_manifestation_world(self, camera)
 
 
 func _draw_cartographic_marks(camera: Vector2) -> void :
@@ -48720,7 +48712,7 @@ func _rpc_player_died() -> void :
 
 @rpc("authority", "call_remote", "reliable", 3)
 func _rpc_player_death_state(peer_id: int, dead: bool) -> void :
-	if dedicated_server_mode or peer_id == multiplayer.get_unique_id():
+	if dedicated_server_mode or peer_id == _mp_unique_id():
 		return
 	var state: Dictionary = net_players_by_peer.get(peer_id, {})
 	state["dead"] = dead

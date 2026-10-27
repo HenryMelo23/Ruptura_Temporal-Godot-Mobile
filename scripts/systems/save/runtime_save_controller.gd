@@ -38,6 +38,8 @@ var retry_confirm_visible: bool = false
 var retry_confirm_new_run: bool = false
 var retry_return_timer: float = 0.0
 var card_unlock_save_thread: Thread = null
+var interrupted_run_save_thread: Thread = null
+var interrupted_run_pending_snapshot: Dictionary = {}
 
 func configure(p_core: Node) -> void:
 	core = p_core
@@ -190,7 +192,7 @@ func _save_card_unlocks_async() -> void:
 	var install_secret: String = String(core._player_progress_install_secret())
 	var final_path: String = ProjectSettings.globalize_path(core.PLAYER_PROGRESS_CACHE_PATH)
 	card_unlock_save_thread = Thread.new()
-	var start_error := card_unlock_save_thread.start(_write_card_unlock_cache.bind(payload, install_secret, final_path))
+	var start_error := card_unlock_save_thread.start(_write_card_unlock_cache.bind(payload, install_secret, final_path), Thread.PRIORITY_LOW)
 	if start_error != OK:
 		card_unlock_save_thread = null
 		core.card_unlocks_dirty = true
@@ -532,8 +534,7 @@ func _build_interrupted_run_snapshot(compact_autosave := false) -> Dictionary:
 		"fields": fields
 	}
 
-func _write_interrupted_run_snapshot(snapshot: Dictionary) -> bool:
-	var final_path := ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH)
+static func _write_interrupted_run_snapshot_at_path(snapshot: Dictionary, final_path: String) -> bool:
 	var temporary_path := final_path + ".tmp"
 	var payload := var_to_bytes(snapshot)
 	var file := FileAccess.open(temporary_path, FileAccess.WRITE)
@@ -553,9 +554,40 @@ func _write_interrupted_run_snapshot(snapshot: Dictionary) -> bool:
 		return false
 	return true
 
+func _write_interrupted_run_snapshot(snapshot: Dictionary) -> bool:
+	return _write_interrupted_run_snapshot_at_path(snapshot, ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH))
+
+func _poll_interrupted_run_save(block := false) -> bool:
+	if interrupted_run_save_thread == null:
+		return true
+	if interrupted_run_save_thread.is_alive() and not block:
+		return false
+	var success := bool(interrupted_run_save_thread.wait_to_finish())
+	interrupted_run_save_thread = null
+	if success and not interrupted_run_pending_snapshot.is_empty() and core != null:
+		interrupted_run_available = true
+		interrupted_run_summary = _interrupted_run_summary_from_snapshot(interrupted_run_pending_snapshot)
+	interrupted_run_pending_snapshot.clear()
+	return true
+
+func _save_interrupted_run_async() -> bool:
+	if not _poll_interrupted_run_save(false):
+		return false
+	var snapshot := _build_interrupted_run_snapshot(true)
+	var final_path := ProjectSettings.globalize_path(core.INTERRUPTED_RUN_SAVE_PATH)
+	interrupted_run_pending_snapshot = snapshot
+	interrupted_run_save_thread = Thread.new()
+	var start_error := interrupted_run_save_thread.start(_write_interrupted_run_snapshot_at_path.bind(snapshot, final_path), Thread.PRIORITY_LOW)
+	if start_error != OK:
+		interrupted_run_save_thread = null
+		interrupted_run_pending_snapshot.clear()
+		return false
+	return true
+
 func _save_interrupted_run(force: = false, compact_autosave := false) -> void :
 	if not _run_can_be_saved():
 		return
+	_poll_interrupted_run_save(true)
 	if not force:
 		interrupted_run_autosave_timer -= core.get_process_delta_time()
 		if interrupted_run_autosave_timer > 0.0:
@@ -568,6 +600,7 @@ func _save_interrupted_run(force: = false, compact_autosave := false) -> void :
 	interrupted_run_summary = _interrupted_run_summary_from_snapshot(snapshot)
 
 func _clear_interrupted_run_save() -> void :
+	_poll_interrupted_run_save(true)
 	interrupted_run_available = false
 	interrupted_run_summary.clear()
 	interrupted_run_autosave_timer = core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL
@@ -811,9 +844,14 @@ func _retry_confirm_lines() -> Array[String]:
 	]
 
 func _update_interrupted_run_autosave(delta: float) -> void :
+	_poll_interrupted_run_save(false)
 	if _run_can_be_saved():
 		interrupted_run_autosave_timer -= delta
 		if interrupted_run_autosave_timer <= 0.0:
-			_save_interrupted_run(true, true)
+			interrupted_run_autosave_timer = core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL if _save_interrupted_run_async() else 0.5
 	else:
 		interrupted_run_autosave_timer = min(interrupted_run_autosave_timer, core.INTERRUPTED_RUN_AUTOSAVE_INTERVAL)
+
+func shutdown() -> void:
+	_poll_interrupted_run_save(true)
+	_poll_card_unlock_save(true)

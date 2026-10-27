@@ -6,6 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { renderLeaderboardSite } = require("./leaderboard_site");
+const { projectRun, compareRuns, policy: rankingPolicy } = require("./ranking_score");
+const { createObservatory } = require("./umbra_observatory");
 
 const MANAGER_PORT = numberEnv("PORT", 8090);
 const ROOM_HOST = process.env.ROOM_HOST || "72.61.217.238";
@@ -38,6 +40,16 @@ const STREAM_FRAME_BUFFER_MS = numberEnv("STREAM_FRAME_BUFFER_MS", 100);
 const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
+const umbraObservatory = createObservatory(process.env.UMBRA_OBSERVATORY_PATH || `${LEADERBOARD_PATH}.umbra_observatory.json`);
+let observatoryErrorReported = false;
+function observeUmbra(runs) {
+  try { const result = umbraObservatory.update(runs); observatoryErrorReported = false; return result; }
+  catch (error) {
+    if (!observatoryErrorReported) console.error("Umbra observatory unavailable; historical file preserved:", error.message);
+    observatoryErrorReported = true;
+    return { available: false, reason: "historical_store_unavailable", evasionAvailable: false };
+  }
+}
 const PLAYER_PROGRESS_PATH = process.env.PLAYER_PROGRESS_PATH || path.join(__dirname, "player_progress.json");
 const PLAYER_PROGRESS_SCHEMA_VERSION = 2;
 const PLAYER_PROGRESS_EVENT_VERSION = 2;
@@ -324,6 +336,28 @@ function updatePublic(platform = "android", currentVersionCode = 0) {
 
 function androidUpdatePublic(currentVersionCode = 0) {
   return updatePublic("android", currentVersionCode);
+}
+
+function downloadCatalog() {
+  return ["windows", "linux", "android"].map((platform) => {
+    const config = updateConfig(platform);
+    const update = readUpdateManifest(platform);
+    if (!update) return { platform, available: false };
+    return {
+      platform,
+      available: true,
+      version: update.version,
+      versionCode: update.versionCode,
+      filename: update.filename,
+      size: update.size,
+      sha256: update.sha256,
+      notes: update.notes,
+      mandatory: update.mandatory,
+      publishedAt: update.publishedAt,
+      // Relative links keep browser downloads on the verified public domain.
+      downloadUrl: `${config.downloadPath}${encodeURIComponent(update.filename)}`
+    };
+  });
 }
 
 function contentUpdatePublic(currentContentVersionCode = 0, gameVersionCode = 0, platform = "") {
@@ -2666,7 +2700,7 @@ function normalizeRunPayload(payload, ip = "") {
 
 function recordRun(payload, ip = "") {
   const store = loadLeaderboardStore();
-  const run = normalizeRunPayload(payload, ip);
+  const run = projectRun(normalizeRunPayload(payload, ip));
   const profileKey = profileKeyForRun(run);
   const existingProfile = store.profiles[profileKey] || {};
   const canonicalPlayer = String(existingProfile.player || run.player || "Jogador").slice(0, 32);
@@ -2677,12 +2711,14 @@ function recordRun(payload, ip = "") {
     profileId: run.profileId,
     firstSeen: existingProfile.firstSeen || run.endedUnix,
     lastSeen: run.endedUnix,
-    bestScore: Math.max(safeNumber(existingProfile.bestScore), run.score),
+    bestScore: Math.max(0, ...store.runs.filter(r => profileKeyForRun(r) === profileKey && r.rankEligible !== false).map(r => projectRun(r)).filter(r => !r.rankingWithdrawn).map(r => r.score), run.score),
     runs: Math.max(0, Math.floor(safeNumber(existingProfile.runs))) + 1
   };
   store.runs.unshift(run);
+  // Preserve encounter evidence before the bounded ranking archive rotates.
+  observeUmbra(store.runs.map(projectRun));
   store.runs = store.runs
-    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score) || safeNumber(right.durationSeconds) - safeNumber(left.durationSeconds) || safeNumber(right.endedUnix) - safeNumber(left.endedUnix))
+    .map(projectRun).sort(compareRuns)
     .slice(0, LEADERBOARD_MAX_RUNS);
   saveLeaderboardStore(store);
   return run;
@@ -2742,7 +2778,7 @@ function repairBenignLeaderboardAudits() {
   }
   if (repaired <= 0) return 0;
   store.runs = store.runs
-    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score) || safeNumber(right.durationSeconds) - safeNumber(left.durationSeconds) || safeNumber(right.endedUnix) - safeNumber(left.endedUnix))
+    .map(projectRun).sort(compareRuns)
     .slice(0, LEADERBOARD_MAX_RUNS);
   rebuildLeaderboardProfiles(store);
   saveLeaderboardStore(store);
@@ -2752,7 +2788,8 @@ function repairBenignLeaderboardAudits() {
 
 function leaderboardSnapshot() {
   const store = loadLeaderboardStore();
-  const eligibleRuns = store.runs.filter((run) => run.rankEligible !== false);
+  const auditedRuns = store.runs.map(projectRun).sort(compareRuns);
+  const eligibleRuns = auditedRuns.filter((run) => run.rankEligible !== false && !run.rankingWithdrawn);
   const bestByProfile = new Map();
   for (const run of eligibleRuns) {
     const key = profileKeyForRun(run);
@@ -2762,9 +2799,11 @@ function leaderboardSnapshot() {
     }
   }
   const players = Array.from(bestByProfile.values())
-    .sort((left, right) => safeNumber(right.score) - safeNumber(left.score))
+    .sort(compareRuns)
     .slice(0, 30);
-  return { players, recent: store.runs.slice(0, 60), runs: eligibleRuns, auditedRuns: store.runs, profiles: store.profiles };
+  const profiles = Object.fromEntries(Object.entries(store.profiles).map(([key, value]) => [key, { ...value, bestScore: bestByProfile.get(key)?.score || 0 }]));
+  return { players, recent: [...auditedRuns].sort((a,b) => safeNumber(b.endedUnix)-safeNumber(a.endedUnix)).slice(0,60), runs: eligibleRuns, auditedRuns, profiles,
+    rankingPolicy, observatory: observeUmbra(auditedRuns), downloads: downloadCatalog() };
 }
 
 let cardCatalogIndex = null;
@@ -3156,6 +3195,12 @@ async function route(req, res) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/umbra/observatory/latest") {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    sendJson(res, 200, leaderboardSnapshot().observatory);
+    return;
+  }
+
   const androidApkMatch = url.pathname.match(/^\/updates\/android\/download\/([^/]+)$/);
   if ((req.method === "GET" || req.method === "HEAD") && androidApkMatch) {
     sendAndroidApk(req, res, androidApkMatch[1]);
@@ -3537,5 +3582,6 @@ server.listen(MANAGER_PORT, "0.0.0.0", () => {
   console.log(`ruptura relay manager listening on :${MANAGER_PORT}`);
   console.log(`rooms will advertise ${ROOM_HOST}:${ROOM_PORT_START}-${ROOM_PORT_END}`);
   repairBenignLeaderboardAudits();
+  leaderboardSnapshot(); // Fix the baseline before accepting new reports.
   ensureWarmStandby();
 });

@@ -5,7 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "node relay_manager.js",
-    "check": "node --check relay_manager.js && node --check leaderboard_site.js && node --check streaming_fps_smoke.js && node --check streaming_http_mjpeg_smoke.js",
+    "check": "node --check relay_manager.js && node --check leaderboard_site.js && node --check ranking_score.js && node --check umbra_observatory.js && node --check observatory_site.js && node --check streaming_fps_smoke.js && node --check streaming_http_mjpeg_smoke.js",
+    "test:observatory": "node ranking_observatory_smoke.js",
     "test:leaderboard": "node leaderboard_smoke.js",
     "test:umbra": "node umbra_mind_smoke.js",
     "test:rooms": "node room_lifecycle_smoke.js",

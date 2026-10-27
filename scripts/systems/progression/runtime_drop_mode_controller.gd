@@ -150,12 +150,7 @@ func _pick_card_for_owner(owner_peer: int) -> Dictionary:
 		if not _card_available_for_owner(card, owner_peer):
 			continue
 		pools[core._card_rarity_key(card)].append(card)
-	var weighted := [
-		[core.CARD_RARITY_COMMON, 74.0],
-		[core.CARD_RARITY_UNCOMMON, 20.0],
-		[core.CARD_RARITY_RARE, 5.5],
-		[core.CARD_RARITY_LEGENDARY, 0.5],
-	]
+	var weighted: Array = core._progression().temporal_luck_controller.drop_mode_rarity_weights()
 	var available_weight := 0.0
 	for entry in weighted:
 		if not Array(pools[entry[0]]).is_empty():

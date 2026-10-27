@@ -1,15 +1,12 @@
 {
-  "version": "2.0.57",
-  "version_code": 25700,
-  "filename": "ruptura_temporal_mobile_2.0.57.apk",
-  "sha256": "fe400459fcbc2333c9eedfd571fe760c083e911752c448d429b45d7a8f8e7ce2",
-  "size": 943361154,
+  "version": "2.0.58",
+  "version_code": 25800,
+  "filename": "ruptura_temporal_mobile_2.0.58.apk",
+  "sha256": "d88b2b0a1af0e4e2010ac4a3a6d8758b26c624410991a72b1ed759bc0ca98b4e",
+  "size": 940026726,
   "notes": [
-    "Correcao do atualizador interrompido",
-    "Nova tentativa automatica quando a consulta falhar",
-    "Download retomavel com progresso preservado",
-    "Tela de progresso ajustada para desktop e mobile"
+    "Otimização de desempenho e estabilidade de jornada solo."
   ],
   "mandatory": false,
-  "published_at": "2026-10-26T21:15:21.4516234Z"
+  "published_at": "2026-10-27T10:57:04.8618178Z"
 }

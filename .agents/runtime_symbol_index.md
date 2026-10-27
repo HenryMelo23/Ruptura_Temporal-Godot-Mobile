@@ -161,7 +161,7 @@ Use exact symbol search in these owners; core keeps compatible wrappers.
 - Lobby ready/session snapshot application: `scripts/systems/online/runtime_lobby_controller.gd`; public RPC entrypoints remain on `Main`, preserving names, payload order and Godot RPC configuration.
 - Phase 2 Sineiro Boreal combat/reward authority: `scripts/systems/enemies/phase2_sineiro_boreal_controller.gd`; presentation: `scripts/presentation/phase2_sineiro_presentation.gd`.
 - Phase 6 Suturador de Âmbar event authority: `scripts/systems/enemies/phase6_amber_suturer_controller.gd`; presentation: `scripts/presentation/phase6_amber_suturer_presentation.gd`.
-- Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`; temporary x2 point artifact drop budget, buff timer, Event Director cap and team snapshot: `scripts/systems/progression/point_boost_pickup_controller.gd`.
+- Score/card math and long-run curves: `scripts/systems/progression/runtime_progression_controller.gd`; asymptotic Sorte Temporal and effective rarity luck: `scripts/systems/progression/runtime_temporal_luck_controller.gd`; temporary x2 point artifact drop budget, buff timer, Event Director cap and team snapshot: `scripts/systems/progression/point_boost_pickup_controller.gd`.
 - Boss wave drawing: `scripts/presentation/boss_wave_presentation.gd`.
 - Boss 1 animation/facing/damage-stage presentation: `scripts/presentation/boss1_animation_presentation.gd`; rewind plus Pinças em Tenaz targeting, sequence construction and state-machine updates live in `scripts/systems/early_boss_controller.gd`. Shared state, public wrappers and authority/RPC boundary remain in core.
 - Cross-owner regression: `tests/runtime_backup_reconciliation_smoke.gd`.

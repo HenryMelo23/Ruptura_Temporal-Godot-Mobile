@@ -18,10 +18,10 @@ func begin_frame(phase: int) -> void:
 	captured_instances = 0
 	for group_value in groups.values():
 		var group: Dictionary = group_value
-		group["positions"] = PackedVector2Array()
-		group["sizes"] = PackedVector2Array()
-		group["colors"] = PackedColorArray()
-		group["flips"] = PackedByteArray()
+		group["positions"] = []
+		group["sizes"] = []
+		group["colors"] = []
+		group["flips"] = []
 
 
 func can_batch() -> bool:
@@ -40,24 +40,20 @@ func append(texture: Texture2D, center: Vector2, size: Vector2, color: Color, fl
 			"texture": texture,
 			"mesh": _new_multimesh(),
 			"capacity": 0,
-			"positions": PackedVector2Array(),
-			"sizes": PackedVector2Array(),
-			"colors": PackedColorArray(),
-			"flips": PackedByteArray(),
+			"positions": [],
+			"sizes": [],
+			"colors": [],
+			"flips": [],
 		}
 	var group: Dictionary = groups[key]
-	var positions: PackedVector2Array = group["positions"]
-	var sizes: PackedVector2Array = group["sizes"]
-	var colors: PackedColorArray = group["colors"]
-	var flips: PackedByteArray = group["flips"]
+	var positions: Array = group["positions"]
+	var sizes: Array = group["sizes"]
+	var colors: Array = group["colors"]
+	var flips: Array = group["flips"]
 	positions.append(center)
 	sizes.append(size)
 	colors.append(color)
 	flips.append(1 if flip_h else 0)
-	group["positions"] = positions
-	group["sizes"] = sizes
-	group["colors"] = colors
-	group["flips"] = flips
 	captured_instances += 1
 	return true
 
@@ -67,14 +63,14 @@ func submit(canvas_item: RID) -> int:
 		return 0
 	for group_value in groups.values():
 		var group: Dictionary = group_value
-		var positions: PackedVector2Array = group["positions"]
+		var positions: Array = group["positions"]
 		var count := positions.size()
 		if count <= 0:
 			continue
 		_ensure_capacity(group, count)
-		var sizes: PackedVector2Array = group["sizes"]
-		var colors: PackedColorArray = group["colors"]
-		var flips: PackedByteArray = group["flips"]
+		var sizes: Array = group["sizes"]
+		var colors: Array = group["colors"]
+		var flips: Array = group["flips"]
 		var multimesh: MultiMesh = group["mesh"]
 		for index in range(count):
 			var transform := Transform2D(0.0, positions[index])

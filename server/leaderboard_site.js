@@ -1,4 +1,6 @@
 "use strict";
+const { meritPage, umbraPage, downloadsPage, themeCss } = require("./observatory_site");
+const { scoreRun, campaignPhase: rankingCampaignPhase } = require("./ranking_score");
 
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
@@ -90,9 +92,7 @@ function rawPhase(run) {
 }
 
 function campaignPhase(run) {
-  const phase = rawPhase(run);
-  if (phase === 6) return 1;
-  return Math.max(0, Math.min(5, phase));
+  return rankingCampaignPhase(run || {});
 }
 
 function phaseSortLabel(run) {
@@ -122,17 +122,10 @@ function progressRank(run) {
 }
 
 function progressValue(run) {
-  return progressRank(run) * 1000000 + safeNumber(run && run.durationSeconds);
+  return progressRank(run);
 }
 
-function speedrunValue(run) {
-  const duration = Math.max(1, safeNumber(run && run.durationSeconds, 1));
-  return progressRank(run) * 1000000 - duration;
-}
 
-function speedrunDetail(run) {
-  return `${phaseLabel(run)} em ${formatDuration(run && run.durationSeconds)} | ${formatNumber(run && run.score)} pts`;
-}
 
 function phaseMapPath(phase) {
   if (phase === 6) return "Fase6.png";
@@ -305,7 +298,13 @@ function aggregateSnapshot(snapshot) {
   const totalBossDamage = runs.reduce((sum, run) => sum + safeNumber(run.bossDamage), 0);
   const totalEnemyDamage = runs.reduce((sum, run) => sum + safeNumber(run.enemyDamage), 0);
   const totalKills = runs.reduce((sum, run) => sum + safeNumber(run.kills), 0);
-  const latestVersion = mostFrequent(latest.slice(0, 20).map((run) => run.version))[0];
+  const activeRelease = arrayOf(snapshot && snapshot.downloads)
+    .filter((release) => release && release.available !== false && textValue(release.version, ""))
+    .sort((a, b) => safeNumber(b.versionCode) - safeNumber(a.versionCode))[0] || null;
+  const latestRunVersion = mostFrequent(latest.slice(0, 20).map((run) => run.version))[0];
+  // The header describes the build players can download now. Run telemetry may
+  // legitimately lag behind after a release, so it is only the fallback.
+  const latestVersion = activeRelease ? textValue(activeRelease.version, latestRunVersion) : latestRunVersion;
   const maxPhase = Math.max(0, ...runs.map((run) => campaignPhase(run)));
   return {
     runs,
@@ -393,10 +392,12 @@ function bossIcon(run, publicAssetUrl) {
 function nav(active, analytics) {
   const links = [
     ["home", "/leaderboard", "Visao geral"],
+    ["downloads", "/leaderboard/downloads", "Downloads"],
     ["story", "/leaderboard/historia", "Historia"],
     ["catalog", "/leaderboard/catalogo", "Catalogo"],
     ["operators", "/leaderboard#operadores", "Operadores"],
     ["rankings", "/leaderboard/rankings", "Rankings"],
+    ["umbra", "/leaderboard/umbra", "Mente da Umbra"],
     ["archive", "/leaderboard#arquivo", "Arquivo de runs"]
   ];
   return `<nav class="main-nav" aria-label="Navegacao principal">
@@ -427,7 +428,7 @@ function pageShell({ title, subtitle, active, content, analytics, script = "", p
   <meta name="color-scheme" content="dark">
   <link rel="icon" href="data:,">
   <title>${escapeHtml(pageTitle)} - Ruptura Temporal</title>
-  <style>${siteCss()}</style>
+  <style>${siteCss()}${themeCss()}</style>
 </head>
 <body class="${escapeAttr(pageClass)}">
   <a class="skip-link" href="#conteudo">Ir para o conteudo</a>
@@ -453,7 +454,7 @@ function pageShell({ title, subtitle, active, content, analytics, script = "", p
     <span>${formatNumber(analytics.runs.length)} expedicoes sincronizadas · Build mais recente v${escapeHtml(analytics.latestVersion || "?")}</span>
     <span>Horarios exibidos em America/Sao_Paulo · Dados enviados pelas builds do jogo</span>
   </footer>
-  <script>${baseClientScript()}${script}</script>
+  <script>${baseClientScript()}requestAnimationFrame(()=>document.querySelector('.main-nav a.active')?.scrollIntoView({block:'nearest',inline:'center'}));${script}</script>
 </body>
 </html>`;
 }
@@ -682,7 +683,7 @@ function runRow(run, index = 0) {
         <b>${escapeHtml(textValue(run.player, "Jogador"))}</b>
         <small>${escapeHtml(textValue(run.manifestation, "?"))} + ${escapeHtml(textValue(run.spectrum, "?"))} · v${escapeHtml(textValue(run.version, "?"))}</small>
       </div>
-      <strong>${formatNumber(run && run.score)} pts</strong>
+      <strong>${formatNumber(run && run.score)} mérito</strong>
     </a>
     <div class="run-row-meta">
       ${statusBadge(textValue(run && run.result, "Run"), runResultTone(run))}
@@ -700,102 +701,6 @@ function signatureList(items, tone) {
   </div>`).join("")}</div>`;
 }
 
-function renderHome(snapshot, cardAssetUrl, publicAssetUrl) {
-  const analytics = aggregateSnapshot(snapshot);
-  const best = analytics.bestScore;
-  const latest = analytics.latest.slice(0, 14);
-  const heroImage = best ? manifestationIcon(best, publicAssetUrl) : publicAsset(publicAssetUrl, "Geo1.png");
-  const heroTitle = analytics.runs.length ? "A RUPTURA CONTINUA INSTAVEL" : "NENHUMA EXPEDICAO SINCRONIZADA";
-  const heroText = analytics.runs.length
-    ? `${formatNumber(analytics.runs.length)} expedicoes de ${formatNumber(analytics.profiles.length)} operadores foram recuperadas. A fase 6 e tratada como ramificacao inicial; o limite de campanha registrado e a Fase ${formatNumber(analytics.maxPhase || 1)}.`
-    : "O terminal esta ativo e aguardando a primeira run enviada pelas builds do jogo.";
-  const cards = arrayOf(best && best.cards).slice(0, 8);
-  const umbra = analytics.umbra || umbraAnalytics([]);
-  const topUmbra = arrayOf(umbra.archetypes)[0];
-  const campaign = [1, 2, 3, 4, 5].map((phase) => {
-    const count = analytics.runs.filter((run) => campaignPhase(run) >= phase).length;
-    const active = count > 0;
-    return `<article class="campaign-stage ${active ? "active" : ""}">
-      <span>F${phase}</span><b>${active ? `${formatNumber(count)} registros` : "Sem leitura"}</b><small>${phase === 1 ? "Linha 1 / Chaga" : phase === 5 ? "Umbra" : `Linha ${phase}`}</small>
-    </article>`;
-  }).join("");
-  const playerCards = analytics.profiles.slice(0, 6).map((profile, index) => `<a class="player-tile" href="${playerPathByKey(profile.key)}">
-    <span>#${index + 1}</span>
-    <b>${escapeHtml(profile.player)}</b>
-    <small>${escapeHtml(profile.favoriteBuild)} · v${escapeHtml(profile.favoriteVersion)}</small>
-    <i>${formatNumber(profile.best.score)} pts</i>
-  </a>`).join("");
-  const content = `
-    <section class="hero-terminal">
-      <div class="hero-copy">
-        <p class="eyebrow">LINHA TEMPORAL // ESTADO GLOBAL</p>
-        <h2>${escapeHtml(heroTitle)}</h2>
-        <p>${escapeHtml(heroText)}</p>
-        <div class="hero-actions">
-          <a class="button primary" href="/leaderboard/rankings">Explorar rankings</a>
-          <a class="button ghost" href="/leaderboard/historia">Ler historia</a>
-          ${analytics.latestRun ? `<a class="button ghost" href="${runPath(analytics.latestRun)}">Abrir ultima expedicao</a>` : `<span class="button disabled">Aguardando expedicao</span>`}
-        </div>
-      </div>
-      <aside class="hero-operator">
-        <span>OPERADOR EM DESTAQUE</span>
-        <div class="hero-orbit">${safeImage(heroImage, best ? textValue(best.manifestation, "Manifestacao") : "Ruptura Temporal", "", "RT", true)}</div>
-        <h3>${escapeHtml(best ? textValue(best.player, "Jogador") : "Sem operador")}</h3>
-        <strong>${formatNumber(best && best.score)} pts</strong>
-        <p>${escapeHtml(best ? `${textValue(best.manifestation, "?")} + ${textValue(best.spectrum, "?")} · ${phaseLabel(best)} · v${textValue(best.version, "?")}` : "Aguardando dados reais.")}</p>
-        ${best ? `<a href="${playerPath(best)}">Abrir dossie</a>` : ""}
-      </aside>
-    </section>
-    <section class="pulse-grid" aria-label="Pulso da ruptura">
-      ${metric("Expedicoes registradas", formatNumber(analytics.runs.length), `${formatNumber(analytics.profiles.length)} operadores unicos`, "cyan", "RUN")}
-      ${metric("Maior dano em boss", formatNumber(analytics.bestBoss && analytics.bestBoss.bossDamage), analytics.bestBoss ? textValue(analytics.bestBoss.player, "Jogador") : "Sem leitura", "magenta", "DMG")}
-      ${metric("Recorde de sobrevivencia", formatDuration(analytics.bestTime && analytics.bestTime.durationSeconds), analytics.bestTime ? textValue(analytics.bestTime.player, "Jogador") : "Sem leitura", "amber", "TMP")}
-      ${metric("Dano total auditado", formatNumber(analytics.totalBossDamage + analytics.totalEnemyDamage), "Boss + inimigos em todas as runs", "green", "AUD")}
-      ${metric("Maior progressao", analytics.bestProgress ? phaseLabel(analytics.bestProgress) : "Fase 0", analytics.bestProgress ? textValue(analytics.bestProgress.player, "Jogador") : "Sem leitura", "violet", "PRG")}
-    </section>
-    <section class="umbra-mind-block">
-      ${sectionHeader("Mente da UMBRA", "Camadas 1, 2 e 3", "A camada 1 le movimento, a camada 2 separa arquetipos e a camada 3 prepara o dossie individual usado pela mente remota. Runs com Fase 1 abaixo de 5 minutos ficam fora do treino.")}
-      <section class="pulse-grid" aria-label="Resumo da mente da UMBRA">
-        ${metric("Runs de treino", formatNumber(umbra.eligible.length), `${formatNumber(umbra.rejected)} descartadas por baixa confianca`, "magenta", "L1")}
-        ${metric("Tempo medio na Fase 1", formatDuration(umbra.averagePhase1Seconds), "Filtro minimo: 5 minutos", "amber", "L1")}
-        ${metric("Dash medio", `${formatDecimal(umbra.averageDashPerMinute, 1)}/min`, "Memoria de mobilidade", "cyan", "L2")}
-        ${metric("Pressao nas bordas", formatPercent(umbra.averageEdgeRatio), "Leitura de mapa de calor", "green", "L2")}
-        ${metric("Arquetipo dominante", topUmbra ? topUmbra.label : "Sem leitura", topUmbra ? `${formatNumber(topUmbra.count)} dossies` : "Aguardando dados", "violet", "L3")}
-      </section>
-      <section class="terminal-panel umbra-collective-panel">
-        ${sectionHeader("Conhecimento coletivo", `${Math.round(safeNumber(umbra.knowledge && umbra.knowledge.totalPercent))}% consolidado`, "Confianca media obtida nas cinco familias de observacao, sem publicar identidade ou historico bruto de jogadores.")}
-        ${umbraKnowledgeBars(umbra.knowledge)}
-      </section>
-      <div class="terminal-panel">${signatureList(arrayOf(umbra.archetypes), "magenta")}</div>
-    </section>
-    <section class="observatory-grid">
-      <div class="terminal-panel span-8" id="arquivo">
-        ${sectionHeader("Arquivo temporal", "Expedicoes recentes", "Partidas enviadas pelas builds QA em ordem cronologica.", `<a href="/leaderboard/rankings">Comparar jogadores</a>`)}
-        <div class="run-list">${latest.map(runRow).join("") || emptyState("Nenhuma expedicao recuperada", "Quando uma run terminar, ela aparecera neste arquivo.")}</div>
-      </div>
-      <aside class="terminal-panel span-4 build-feature">
-        ${sectionHeader("Build do recorde", "Arsenal sincronizado", best ? `${textValue(best.manifestation, "?")} + ${textValue(best.spectrum, "?")} · v${textValue(best.version, "?")}` : "Sem run registrada")}
-        <div class="deck-grid compact-grid">${cards.map((card) => cardTile(card, cardAssetUrl, true)).join("") || emptyState("Deck nao registrado", "A build do recorde ainda nao enviou cartas.")}</div>
-        ${best ? `<a class="button ghost full" href="${runPath(best)}">Abrir relatorio completo</a>` : ""}
-      </aside>
-      <div class="terminal-panel span-12">
-        ${sectionHeader("Mapa de campanha", "Limite de progressao global", "Cada capsula mostra quantas runs atravessaram aquela fase.")}
-        <div class="campaign-line">${campaign}</div>
-      </div>
-      <div class="terminal-panel span-7" id="operadores">
-        ${sectionHeader("Operadores", "Dossies em destaque", "Perfis persistentes com melhor score, build favorita e versao mais usada.")}
-        <div class="player-grid">${playerCards || emptyState("Nenhum operador catalogado", "O primeiro jogador aparecera aqui apos enviar uma run.")}</div>
-      </div>
-      <div class="terminal-panel span-5">
-        ${sectionHeader("Assinaturas recorrentes", "Manifestacoes e espectros", "Leitura agregada das escolhas mais frequentes.")}
-        <div class="dual-signatures">
-          <div><h3>Manifestacoes</h3>${signatureList(analytics.manifestations, "violet")}</div>
-          <div><h3>Espectros</h3>${signatureList(analytics.spectra, "cyan")}</div>
-        </div>
-      </div>
-    </section>`;
-  return pageShell({ title: "CENTRAL DO OBSERVATORIO", subtitle: "Estado consolidado das linhas temporais registradas.", active: "home", analytics, content, pageClass: "home-page" });
-}
 
 function renderStory(snapshot) {
   const analytics = aggregateSnapshot(snapshot);
@@ -923,8 +828,8 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
     </section>
     ${loserWarning}
     <section class="pulse-grid">
-      ${metric("Melhor score", `${formatNumber(player.best.score)} pts`, `v${textValue(player.best.version, "?")}`, "cyan", "SCR")}
-      ${metric("Melhor tempo", formatDuration(player.bestTime.durationSeconds), formatDate(player.bestTime), "amber", "TMP")}
+      ${metric("Melhor mérito", `${formatNumber(player.best.score)}`, `Não são moedas · v${textValue(player.best.version, "?")}`, "cyan", "SCR")}
+      ${metric("Maior duração", formatDuration(player.bestTime.durationSeconds), "Arquivo · não soma mérito", "amber", "TMP")}
       ${metric("Maior dano em boss", `${formatNumber(player.bestBoss.bossDamage)} dano`, phaseLabel(player.bestBoss), "magenta", "DMG")}
       ${metric("Maior progressao", phaseLabel(player.farthest), textValue(player.farthest.result, "Run"), "green", "PRG")}
     </section>
@@ -939,7 +844,7 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
         <dl>
           <div><dt>Build mais usada</dt><dd>${escapeHtml(player.favoriteBuild)} <small>${player.favoriteBuildRuns} runs</small></dd></div>
           <div><dt>Versao mais usada</dt><dd>v${escapeHtml(player.favoriteVersion)} <small>${player.favoriteVersionRuns} runs</small></dd></div>
-          <div><dt>Score medio</dt><dd>${formatNumber(player.averageScore)} pts</dd></div>
+          <div><dt>Mérito médio</dt><dd>${formatNumber(player.averageScore)}</dd></div>
           <div><dt>Dano medio recebido</dt><dd>${formatNumber(player.averageDamageTaken)} dano</dd></div>
           <div><dt>Dano total em boss</dt><dd>${formatNumber(player.totalBossDamage)} dano</dd></div>
         </dl>
@@ -947,12 +852,13 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
       <div class="terminal-panel span-12 facts-list">
         ${sectionHeader("Dossie UMBRA", "Memoria predatoria do operador", "A mente usa somente runs elegiveis para estimar como iniciar a luta contra este jogador.")}
         <dl>
-          <div><dt>Camada 1</dt><dd>${formatNumber(umbraRuns.length)} runs de treino <small>${formatNumber(umbraRejected)} descartadas; minimo de 5 minutos na Fase 1</small></dd></div>
+          <div><dt>Relatórios</dt><dd>${formatNumber(umbraRuns.length)} runs elegíveis para agregação <small>${formatNumber(umbraRejected)} descartadas; minimo de 5 minutos na Fase 1</small></dd></div>
           <div><dt>Camada 2</dt><dd>${escapeHtml(playerArchetype ? playerArchetype.label : "Sem leitura")} <small>${playerArchetype ? `${formatNumber(playerArchetype.count)} leitura(s) compativeis` : "Dados insuficientes"}</small></dd></div>
           <div><dt>Camada 3</dt><dd>${formatPercent(playerBehavior.hitRate)} precisao <small>${formatDecimal(playerBehavior.dashPerMinute, 1)} dash/min · ${formatPercent(playerBehavior.edgeRatio)} tempo em borda</small></dd></div>
           <div><dt>Fase 1 media</dt><dd>${formatDuration(playerBehavior.phase1Seconds)}</dd></div>
         </dl>
         ${umbraKnowledgeBars(playerKnowledge)}
+        <p>Cobertura de observação, não aprendizado comprovado. <a href="/leaderboard/umbra">Entenda a arquitetura e acompanhe os resultados ↗</a></p>
       </div>
       <div class="terminal-panel span-12">
         ${sectionHeader("Deck recorrente", "Cartas mais usadas", "Cartas presentes nas runs deste operador.")}
@@ -974,72 +880,6 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
   });
 }
 
-function rankingTable(title, subtitle, runs, value, detail, tone) {
-  const max = Math.max(1, ...runs.map((run) => safeNumber(value(run))));
-  const rows = runs.slice(0, 12).map((run, index) => {
-    const raw = safeNumber(value(run));
-    const display = value(run, true);
-    return `<a href="${playerPath(run)}">
-      <b>#${index + 1}</b>
-      <div><strong>${escapeHtml(textValue(run.player, "Jogador"))}</strong><small>${escapeHtml(detail(run))}</small><i style="width:${Math.max(3, raw / max * 100)}%"></i></div>
-      <span>${escapeHtml(String(display))}</span>
-    </a>`;
-  }).join("");
-  return `<section class="ranking-column tone-${tone}">
-    ${sectionHeader(subtitle, title)}
-    <div class="ranking-list">${rows || emptyState("Sem ranking", "Aguardando runs suficientes para comparar.")}</div>
-  </section>`;
-}
-
-function renderRankings(snapshot) {
-  const analytics = aggregateSnapshot(snapshot);
-  const bestRuns = analytics.profiles.map((player) => player.best).sort((a, b) => safeNumber(b.score) - safeNumber(a.score));
-  const byTime = analytics.profiles.map((player) => player.bestTime).sort((a, b) => safeNumber(b.durationSeconds) - safeNumber(a.durationSeconds));
-  const byBoss = analytics.profiles.map((player) => player.bestBoss).sort((a, b) => safeNumber(b.bossDamage) - safeNumber(a.bossDamage));
-  const byProgress = analytics.profiles.map((player) => player.farthest).sort((a, b) => progressValue(b) - progressValue(a));
-  const bySpeedrun = analytics.profiles.map((player) => player.farthest).sort((a, b) => speedrunValue(b) - speedrunValue(a));
-  const scatter = bestRuns.slice(0, 48).map((run) => ({
-    player: textValue(run.player, "Jogador"),
-    time: safeNumber(run.durationSeconds),
-    boss: safeNumber(run.bossDamage),
-    score: safeNumber(run.score),
-    phase: safeNumber(run.phase)
-  }));
-  const phaseChart = analytics.phases.map((item) => ({ label: item.label, count: item.count }));
-  const content = `
-    <section class="terminal-panel chart-section">
-      ${sectionHeader("Plano cartesiano", "Sobrevivencia x dano em boss", "Cada ponto e a melhor run de um operador; o tamanho representa o score.")}
-      <div class="chart-wrap large"><canvas id="scatter-chart" aria-label="Plano cartesiano comparando tempo e dano em boss"></canvas></div>
-      <p class="data-note">Resumo textual: ${formatNumber(bestRuns.length)} operadores comparados, maior tempo ${formatDuration(byTime[0] && byTime[0].durationSeconds)}, maior dano em boss ${formatNumber(byBoss[0] && byBoss[0].bossDamage)}.</p>
-    </section>
-    <section class="rankings-layout">
-      ${rankingTable("Melhor score geral", "Indice final", bestRuns, (run, formatted) => formatted ? `${formatNumber(run.score)} pts` : run.score, (run) => `${textValue(run.manifestation, "?")} + ${textValue(run.spectrum, "?")} | v${textValue(run.version, "?")}`, "cyan")}
-      ${rankingTable("Maior tempo vivo", "Sobrevivencia", byTime, (run, formatted) => formatted ? formatDuration(run.durationSeconds) : run.durationSeconds, (run) => `${phaseLabel(run)} | v${textValue(run.version, "?")}`, "amber")}
-      ${rankingTable("Maior dano em boss", "Pressao ofensiva", byBoss, (run, formatted) => formatted ? `${formatNumber(run.bossDamage)} dano` : run.bossDamage, (run) => `${textValue(run.manifestation, "?")} + ${textValue(run.spectrum, "?")}`, "magenta")}
-      ${rankingTable("Maior progressao", "Avanco na campanha", byProgress, (run, formatted) => formatted ? phaseLabel(run) : progressValue(run), (run) => `${formatDuration(run.durationSeconds)} | ${textValue(run.result, "Run")}`, "green")}
-      ${rankingTable("Speedrun de progressao", "Longe em pouco tempo", bySpeedrun, (run, formatted) => formatted ? `${phaseLabel(run)} · ${formatDuration(run.durationSeconds)}` : speedrunValue(run), speedrunDetail, "violet")}
-    </section>
-    <section class="observatory-grid">
-      <div class="terminal-panel span-7">
-        ${sectionHeader("Distribuicao", "Progresso por fase", "Quantidade de runs registradas por fase final.")}
-        <div class="chart-wrap"><canvas id="phase-chart" aria-label="Grafico de distribuicao por fase"></canvas></div>
-      </div>
-      <div class="terminal-panel span-5">
-        ${sectionHeader("Formula", "Score auditavel", "O servidor recalcula e valida as runs antes do ranking.")}
-        <p class="formula-text">A build envia <b>leaderboard_score</b>, assinatura, sessao segura e checkpoints da run. A partir da v2.0.30c, o servidor recalcula o indice competitivo, compara o resultado final com o historico observado, rejeita protocolo legado sem sessao e tira da tabela qualquer ficha com saltos impossiveis de pontos, cartas, fase ou dano; tentativas repetidas ficam auditadas e podem bloquear temporariamente o envio daquele IP.</p>
-        ${signatureList(analytics.versions, "cyan")}
-      </div>
-    </section>`;
-  return pageShell({
-    title: "MATRIZ COMPETITIVA",
-    subtitle: "Comparacao entre sobrevivencia, ofensiva e progressao.",
-    active: "rankings",
-    analytics,
-    content,
-    script: scatterScript(scatter) + barChartScript("phase-chart", phaseChart),
-    pageClass: "rankings-page"
-  });
-}
 
 function enemyThreatTile(threat, publicAssetUrl, maxDamage) {
   const name = textValue(threat && threat.name, "Origem desconhecida");
@@ -1097,7 +937,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
       </div>
     </section>
     <section class="pulse-grid">
-      ${metric("Score calculado", `${formatNumber(run.score)} pts`, "indice recebido da build", "cyan", "SCR")}
+      ${metric("Mérito de expedição", `${formatNumber(run.score)}`, "Regra v2 calculada pelo servidor · não são moedas", "cyan", "SCR")}
       ${metric("Tempo vivo", formatDuration(run.durationSeconds), formatDate(run), "amber", "TMP")}
       ${metric("Dano em boss", `${formatNumber(run.bossDamage)} dano`, phaseLabel(run), "magenta", "BOS")}
       ${metric("Dano recebido", `${formatNumber(run.damageTaken)} dano`, `${formatNumber(arrayOf(run.damageEvents).length)} eventos mapeados`, "red", "HIT")}
@@ -1111,9 +951,9 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
       </div>
       ${runTimelinePanel(run, timeline)}
       <div class="terminal-panel span-12 facts-list">
-        ${sectionHeader("UMBRA", "Elegibilidade para treino", "Essa leitura alimenta a atualizacao semanal da mente, sem exigir reinstalacao do jogo.")}
+        ${sectionHeader("UMBRA", "Elegibilidade para a mente", "Relatórios agregados não equivalem a treinamento neural. Consulte os critérios no observatório da Umbra.")}
         <dl>
-          <div><dt>Status</dt><dd>${run.umbraTrainingEligible ? "Usada no treino" : "Descartada"} <small>${run.umbraTrainingEligible ? "Sinal valido para a mente" : escapeHtml(umbraReasons.join(", ") || "sem sinal suficiente")}</small></dd></div>
+          <div><dt>Status</dt><dd>${run.umbraTrainingEligible ? "Elegível para agregação" : "Descartada"} <small>${run.umbraTrainingEligible ? "Sinal valido para a mente" : escapeHtml(umbraReasons.join(", ") || "sem sinal suficiente")}</small></dd></div>
           <div><dt>Camada 1</dt><dd>${formatDuration(behavior.phase1Seconds)} na Fase 1 <small>${formatNumber(behavior.distanceTraveled)} px percorridos</small></dd></div>
           <div><dt>Camada 2</dt><dd>${escapeHtml(classifyUmbraRun(run))} <small>${formatPercent(behavior.edgeRatio)} borda · ${formatPercent(behavior.cornerRatio)} canto</small></dd></div>
           <div><dt>Camada 3</dt><dd>${formatDecimal(behavior.dashPerMinute, 1)} dash/min <small>${formatDecimal(behavior.shotsPerMinute, 1)} tiros/min · ${formatPercent(behavior.hitRate)} acerto</small></dd></div>
@@ -1176,10 +1016,16 @@ function renderNotFound(message, snapshot = {}) {
 }
 
 function renderLeaderboardSite({ pathname, snapshot, cardAssetUrl, publicAssetUrl }) {
-  if (pathname === "/leaderboard" || pathname === "/leaderboard/") return renderHome(snapshot, cardAssetUrl, publicAssetUrl);
+  if (["/leaderboard", "/leaderboard/", "/leaderboard/rankings"].includes(pathname)) {
+    const analytics=aggregateSnapshot(snapshot);
+    const rankings=pathname.endsWith("/rankings");
+    return pageShell({title:rankings?"MATRIZ COMPETITIVA":"CENTRAL DO OBSERVATORIO",subtitle:"Mérito de expedição · progresso, bosses e resistência. Nenhum ponto por tempo.",active:rankings?"rankings":"home",analytics,
+      content:meritPage(snapshot,{rankings,cards:analytics.cards.slice(0,4).map(card=>cardTile(card,cardAssetUrl,true)).join("")}),pageClass:"merit-page"});
+  }
+  if (pathname === "/leaderboard/umbra") return pageShell({title:"A MENTE DA UMBRA",subtitle:"Arquitetura aberta. Observação mensurável. Nenhuma promessa sem evidência.",active:"umbra",analytics:aggregateSnapshot(snapshot),content:umbraPage(snapshot.observatory),pageClass:"umbra-page"});
+  if (pathname === "/leaderboard/downloads") return pageShell({title:"DOWNLOADS",subtitle:"Escolha sua plataforma e atravesse a ruptura.",active:"downloads",analytics:aggregateSnapshot(snapshot),content:downloadsPage(snapshot.downloads),pageClass:"downloads-page"});
   if (pathname === "/leaderboard/historia") return renderStory(snapshot);
   if (pathname === "/leaderboard/catalogo") return renderCatalog(snapshot, cardAssetUrl);
-  if (pathname === "/leaderboard/rankings") return renderRankings(snapshot, publicAssetUrl);
   const playerMatch = pathname.match(/^\/leaderboard\/player\/([^/]+)$/);
   if (playerMatch) return renderPlayer(decodeURIComponent(playerMatch[1]), snapshot, cardAssetUrl, publicAssetUrl);
   const runMatch = pathname.match(/^\/leaderboard\/run\/([^/]+)$/);
@@ -1304,25 +1150,17 @@ function runTimelinePanel(run, timeline) {
 }
 
 function scoreBreakdown(run) {
-  const rows = [
-    ["Tempo vivo", `${formatNumber(run && run.durationSeconds)}s x 2`, Math.round(safeNumber(run && run.durationSeconds) * 2)],
-    ["Abates", `${formatNumber(run && run.kills)} x 20`, Math.floor(safeNumber(run && run.kills)) * 20],
-    ["Fase", `${formatNumber(run && run.phase)} x 250`, Math.floor(safeNumber(run && run.phase)) * 250],
-    ["Dano em boss", `${formatNumber(run && run.bossDamage)} / 12`, Math.round(safeNumber(run && run.bossDamage) / 12)],
-    ["Cartas", `${formatNumber(run && run.cardsTotal)} x 15`, Math.floor(safeNumber(run && run.cardsTotal)) * 15],
-    ["Vida restante", `${formatDecimal(statNumber(run && run.playerStats, ["hp"]), 1)} x 0,5`, Math.round(Math.max(0, statNumber(run && run.playerStats, ["hp"])) * 0.5)]
-  ];
-  if (String(run && run.result || "") === "Vitoria") rows.push(["Vitoria", "bonus fixo", 1500]);
-  const total = rows.reduce((sum, row) => sum + safeNumber(row[2]), 0);
-  return `
-    <div class="terminal-panel span-5 facts-list score-breakdown">
-      ${sectionHeader("Calculo", "Condicoes do score", "Formula competitiva recalculada pelo servidor.")}
-      <dl>
-        ${rows.map(([label, formula, value]) => `<div><dt>${escapeHtml(label)}<small>${escapeHtml(formula)}</small></dt><dd>${formatNumber(value)} pts</dd></div>`).join("")}
-        <div><dt>Total recalculado</dt><dd>${formatNumber(total)} pts</dd></div>
-        <div><dt>Score publicado</dt><dd>${formatNumber(run && run.score)} pts</dd></div>
-      </dl>
-    </div>`;
+  const score = run.ranking || scoreRun(run);
+  return `<div class="terminal-panel span-5 facts-list score-breakdown">
+    ${sectionHeader("Mérito de expedição", "Condicoes do score", "Regra v2. Não são moedas da loja. Tempo não soma pontos.")}
+    ${run.rankingWithdrawn ? `<p>Retirado da competição: ${escapeHtml(run.rankingWithdrawalReason)}</p>` : ""}
+    <dl>${score.parts.map(row => `<div><dt>${escapeHtml(row.label)}<small>${escapeHtml(row.rule)}</small></dt><dd>${formatNumber(row.points)} mérito</dd></div>`).join("")}
+      <div><dt>Total recalculado</dt><dd>${formatNumber(score.total)} mérito</dd></div>
+      <div><dt>Publicado ${run.rankEligible === false ? "(auditoria)" : ""}</dt><dd>${formatNumber(run.score)} mérito</dd></div></dl>
+    <p>${score.inferredBosses} boss(es) com conclusão inferida de progresso legado; ${score.unknownDamageBosses} boss(es) sem dano recebido registrado. Dado ausente não concede bônus de resistência.</p>
+    <details><summary>Evidência por boss</summary>${score.bosses.map(b => `<p>Boss ${b.phase}: ${b.defeated ? "superado" : "conclusão não comprovada"}; ${b.defeatEvidence === "legacy_progression_inference" ? "inferido de progresso" : b.defeatEvidence === "explicit" ? "registro explícito" : "sem confirmação"}; dano recebido ${b.damage === null ? "não registrado" : formatNumber(b.damage)}; bônus ${b.resilience}.</p>`).join("")}</details>
+    <a href="/leaderboard#regras">Regra completa e limitações ↗</a>
+  </div>`;
 }
 
 function baseClientScript() {

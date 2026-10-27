@@ -79,6 +79,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 		var kind: String = enemy["type"]
 		if not sizes.has(kind):
 			sizes[kind] = game._enemy_draw_size(enemy)
+		if not styles.has(kind):
 			styles[kind] = game._enemy_health_bar_style(enemy)
 		var size: Vector2 = sizes[kind]
 		var draw_pos = pos + game._enemy_visual_offset(enemy)
@@ -684,8 +685,6 @@ static func _draw_dynamic_shadow(game: Node2D, texture: Texture2D, center: Vecto
 	game.draw_set_transform(foot + Vector2(6.0 + light_sway * 0.45, 2.0), cast_rotation, Vector2(horizontal, -0.27))
 	game.draw_texture_rect(texture, rect, false, Color(0.0, 0.0, 0.0, alpha))
 	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
 static func _draw_dynamic_shadow_fit(game: Node2D, texture: Texture2D, center: Vector2, max_size: Vector2, flip_h: = false, align_bottom: = false, alpha: = 0.42) -> void :
 	if not game._shadows_enabled() or texture == null:
 		return

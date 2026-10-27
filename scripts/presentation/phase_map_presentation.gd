@@ -26,6 +26,12 @@ void fragment() {
 	color *= 1.0 + ripple * mask * 0.045 * motion_scale;
 	COLOR = vec4(color, base.a);
 }"""
+const STATIC_SHADER_CODE := """shader_type canvas_item;
+render_mode unshaded, blend_disabled;
+
+void fragment() {
+	COLOR = texture(TEXTURE, UV);
+}"""
 const MAX_MOTES := 18
 const LOW_RESOURCE_MOTES := 8
 const TINTS := {
@@ -39,6 +45,7 @@ var map_texture: Texture2D
 var map_rect := Rect2()
 var map_tile_rects: Array[Rect2] = []
 var life_material: ShaderMaterial
+var static_material: ShaderMaterial
 var presented_surface: int = -1
 var presented_low_resource: bool = false
 
@@ -51,6 +58,10 @@ func _init() -> void:
 	var life_shader := Shader.new()
 	life_shader.code = LIFE_SHADER_CODE
 	life_material.shader = life_shader
+	static_material = ShaderMaterial.new()
+	var static_shader := Shader.new()
+	static_shader.code = STATIC_SHADER_CODE
+	static_material.shader = static_shader
 	material = life_material
 
 
@@ -75,12 +86,17 @@ func present_tiled(texture: Texture2D, rects: Array[Rect2], surface: int, elapse
 
 
 func _apply_presentation(surface: int, elapsed: float, low_resource: bool, geometry_changed: bool, material_mode_changed: bool) -> void:
-	life_material.set_shader_parameter("elapsed", elapsed)
 	if material_mode_changed:
 		presented_surface = surface
 		presented_low_resource = low_resource
+		# The full-screen animated shader and alpha blend dominate Android frame
+		# time. The map is opaque, so performance/adaptive modes use a one-sample
+		# shader with blending disabled while preserving the authored texture.
+		material = static_material if low_resource else life_material
 		life_material.set_shader_parameter("fluid_surface", not low_resource and surface not in [1, 4])
 		life_material.set_shader_parameter("motion_scale", 0.65 if low_resource else 1.0)
+	if not low_resource:
+		life_material.set_shader_parameter("elapsed", elapsed)
 	if not visible:
 		show()
 	if geometry_changed:

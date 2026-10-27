@@ -1,15 +1,12 @@
 {
-  "version": "2.0.57",
-  "version_code": 25700,
-  "filename": "Ruptura_Temporal_2.0.57.exe",
-  "sha256": "ebca2699f5587314972a4492edfc81f1a5f7aa964c6b711ba10028d400c34e25",
-  "size": 1029401864,
+  "version": "2.0.58",
+  "version_code": 25800,
+  "filename": "Ruptura_Temporal_2.0.58.exe",
+  "sha256": "844f47ddf5393314e9bdcbd56312dca5a9a8bfb95ccbc572a87d00be347ac0a5",
+  "size": 1029402840,
   "notes": [
-    "Correcao do atualizador interrompido",
-    "Nova tentativa automatica quando a consulta falhar",
-    "Download retomavel com progresso preservado",
-    "Tela de progresso ajustada para desktop e mobile"
+    "Otimização de desempenho e estabilidade de jornada solo."
   ],
   "mandatory": false,
-  "published_at": "2026-10-26T21:16:33.2837333Z"
+  "published_at": "2026-10-27T10:54:38.9700020Z"
 }

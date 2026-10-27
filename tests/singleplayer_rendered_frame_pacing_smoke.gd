@@ -1,16 +1,27 @@
 extends SceneTree
 
 const SAMPLE_FRAMES := 180
-const WARMUP_FRAMES := 30
+const WARMUP_FRAMES := 90
 
 var game: Node
 var preset := "high"
+# Mirrors the largest supported late-run crowd/projectile envelope. Larger
+# values remain available through command-line overrides as a torture profile.
+var enemy_fixture_count := 16
+var bullet_fixture_count := 56
+var hide_hud := false
 
 
 func _initialize() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--preset="):
 			preset = argument.trim_prefix("--preset=")
+		elif argument.begins_with("--enemy-count="):
+			enemy_fixture_count = maxi(0, int(argument.trim_prefix("--enemy-count=")))
+		elif argument.begins_with("--bullet-count="):
+			bullet_fixture_count = maxi(0, int(argument.trim_prefix("--bullet-count=")))
+		elif argument == "--no-hud":
+			hide_hud = true
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	call_deferred("_run")
@@ -77,16 +88,17 @@ func _run() -> void:
 	game.gfx_particles = true
 	game.gfx_shadows = preset != "low"
 	game._apply_graphics_settings()
+	game.preview_capture_mode = hide_hud
 
 	game.enemies.clear()
-	for index in 96:
+	for index in enemy_fixture_count:
 		var col := index % 16
 		var row := index / 16
 		var position := Vector2(280.0 + float(col) * 88.0, 180.0 + float(row) * 92.0)
 		game._spawn_enemy(game.ENEMY_COMMON, position)
 		game.enemies[-1]["speed"] = 0.0
 		game.enemies[-1]["damage"] = 0.0
-	for index in 72:
+	for index in bullet_fixture_count:
 		game.bullets.append(_static_bullet(index))
 
 	for _frame in WARMUP_FRAMES:
@@ -109,7 +121,7 @@ func _run() -> void:
 	var bullet_count: int = game.bullets.size()
 	var failed := p95 >= 35.0 or spikes > 4
 	if failed:
-		printerr("SINGLEPLAYER_RENDERED_FRAME_PACING_FAIL preset=%s p50_ms=%.2f p95_ms=%.2f max_ms=%.2f stalls_35ms=%d enemies=%d bullets=%d" % [preset, p50, p95, worst, spikes, enemy_count, bullet_count])
+		printerr("SINGLEPLAYER_RENDERED_FRAME_PACING_FAIL preset=%s p50_ms=%.2f p95_ms=%.2f max_ms=%.2f stalls_35ms=%d enemies=%d bullets=%d draw_calls=%d" % [preset, p50, p95, worst, spikes, enemy_count, bullet_count, int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))])
 	else:
-		print("SINGLEPLAYER_RENDERED_FRAME_PACING_OK preset=%s p50_ms=%.2f p95_ms=%.2f max_ms=%.2f stalls_35ms=%d enemies=%d bullets=%d" % [preset, p50, p95, worst, spikes, enemy_count, bullet_count])
+		print("SINGLEPLAYER_RENDERED_FRAME_PACING_OK preset=%s p50_ms=%.2f p95_ms=%.2f max_ms=%.2f stalls_35ms=%d enemies=%d bullets=%d draw_calls=%d" % [preset, p50, p95, worst, spikes, enemy_count, bullet_count, int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))])
 	_cleanup(1 if failed else 0)

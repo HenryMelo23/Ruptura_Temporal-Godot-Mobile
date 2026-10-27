@@ -1,5 +1,7 @@
 extends SceneTree
 
+const CombatEffectsPresentation = preload("res://scripts/presentation/combat_effects_presentation.gd")
+
 var game: Node
 var failed: bool = false
 
@@ -19,18 +21,27 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await process_frame
+	_check(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", "") == "gl_compatibility", "Android did not select the low-overhead compatibility renderer")
+	_check(ProjectSettings.get_setting("rendering/gl_compatibility/driver.android", "") == "opengl3", "Android compatibility renderer did not select native OpenGL ES")
 
 	game.mode = "game"
 	game.gfx_low_resource = false
 	game.gfx_memory_saver = false
 	game.gfx_shadows = true
 	game.mobile_adaptive_visual_budget = true
+	_check(CombatEffectsPresentation.is_world_point_visible(Vector2(640.0, 360.0), Vector2.ZERO, Vector2(1280.0, 720.0)), "visible pickup was culled")
+	_check(CombatEffectsPresentation.is_world_point_visible(Vector2(-32.0, 360.0), Vector2.ZERO, Vector2(1280.0, 720.0)), "pickup margin was not preserved")
+	_check(not CombatEffectsPresentation.is_world_point_visible(Vector2(-96.0, 360.0), Vector2.ZERO, Vector2(1280.0, 720.0)), "offscreen pickup was still submitted for drawing")
+	_check(CombatEffectsPresentation.advanced_world_channels("eletrica", false).is_empty(), "solo rendered inactive manifestation channels")
+	_check(CombatEffectsPresentation.advanced_world_channels("mnesica", false) == PackedStringArray(["mnesica"]), "solo did not isolate the active manifestation channel")
+	_check(CombatEffectsPresentation.advanced_world_channels("eletrica", true).size() == 5, "multiplayer lost remote manifestation channels")
 	_check(is_equal_approx(game._mobile_adaptive_trigger_time(12.0), game.MOBILE_ADAPTIVE_CRITICAL_TRIGGER_TIME), "critical FPS did not select the emergency trigger")
 	_check(is_equal_approx(game._mobile_adaptive_trigger_time(38.0), game.MOBILE_ADAPTIVE_TRIGGER_TIME), "ordinary low FPS lost the debounce window")
 	var phase_map = game.PhaseMapPresentation.new()
 	game.add_child(phase_map)
 	phase_map.present(null, Rect2(0, 0, 592, 592), 2, 5.0, game._runtime_visual_budget_active())
 	_check(not bool(phase_map.life_material.get_shader_parameter("fluid_surface")), "adaptive budget left the animated map shader enabled")
+	_check(phase_map.material == phase_map.static_material, "adaptive budget did not select the opaque static map material")
 	_check(not game._shadows_enabled(), "adaptive budget left dynamic shadows enabled during recovery")
 
 	game.effects.clear()

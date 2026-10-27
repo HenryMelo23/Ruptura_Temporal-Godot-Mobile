@@ -142,6 +142,22 @@ func _run_multiplayer_event_identity() -> void:
 	_check(game.manifest_evolution_combat_event_log.size() == before + 2, "author-scoped multiplayer events did not deduplicate correctly")
 
 
+func _run_bounded_event_ledger() -> void:
+	game.manifest_evolution_combat_event_log.clear()
+	game.manifest_evolution_combat_event_seen.clear()
+	for index in range(120):
+		game._manifest_evolution_dispatch_combat_event({
+			"type": "attack_emitted",
+			"event_id": "bounded:%d" % index,
+			"source": "ledger_smoke"
+		})
+	_check(game.manifest_evolution_combat_event_log.size() == 96, "combat event log exceeded its transient window")
+	_check(game.manifest_evolution_combat_event_seen.size() == 96, "combat event dedupe ledger grew beyond its transient window")
+	var before_duplicate: int = game.manifest_evolution_combat_event_log.size()
+	game._manifest_evolution_dispatch_combat_event({"type": "attack_emitted", "event_id": "bounded:119", "source": "ledger_smoke"})
+	_check(game.manifest_evolution_combat_event_log.size() == before_duplicate, "recent event replay escaped the bounded dedupe ledger")
+
+
 func _run() -> void:
 	game._start_game()
 	game.mode = "game"
@@ -152,7 +168,8 @@ func _run() -> void:
 	_run_lacerante_and_acorrentada()
 	_run_necronada_skill()
 	_run_multiplayer_event_identity()
-	print("MANIFEST_EVOLUTION_COMBAT_HOOKS_OK manifestations=15 explicit=ancorada melee=lacerante/acorrentada necronada=valid_only multiplayer=deduped")
+	_run_bounded_event_ledger()
+	print("MANIFEST_EVOLUTION_COMBAT_HOOKS_OK manifestations=15 explicit=ancorada melee=lacerante/acorrentada necronada=valid_only multiplayer=deduped ledger=bounded")
 	game.set_process(false)
 	game._cleanup_runtime_resources()
 	game.queue_free()

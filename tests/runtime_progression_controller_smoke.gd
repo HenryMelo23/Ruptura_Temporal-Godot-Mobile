@@ -46,6 +46,40 @@ func _free_game() -> void:
 
 func _run() -> void:
 	game._start_game()
+	game.cards_bought.clear()
+	game.luck = 0.0
+	var temporal_samples := {}
+	for minutes in [0, 30, 60, 90, 120]:
+		game.time_alive = float(minutes) * 60.0
+		temporal_samples[minutes] = game._temporal_luck()
+	_check(is_zero_approx(float(temporal_samples[0])), "temporal luck did not start at zero")
+	_check(absf(float(temporal_samples[60]) - 0.35) < 0.0001, "temporal luck did not reach 35 percent at 60 minutes")
+	var gain_30_60 := float(temporal_samples[60]) - float(temporal_samples[30])
+	var gain_60_90 := float(temporal_samples[90]) - float(temporal_samples[60])
+	var gain_90_120 := float(temporal_samples[120]) - float(temporal_samples[90])
+	_check(gain_30_60 > gain_60_90 and gain_60_90 > gain_90_120, "temporal luck did not diminish over equal time windows")
+	game.time_alive = 24.0 * 60.0 * 60.0
+	_check(game._temporal_luck() < 0.600001 and game._temporal_luck() > 0.59, "temporal luck did not approach its 60 percent ceiling")
+	game.time_alive = 0.0
+	var uncommon_at_start: float = game._chance_carta_incomum()
+	game.time_alive = 60.0 * 60.0
+	_check(game._chance_carta_incomum() > uncommon_at_start, "temporal luck did not improve uncommon items")
+	_check(is_zero_approx(game._chance_carta_rara()), "temporal luck bypassed the Sorte rare gate")
+	game.cards_bought["Sorte"] = 1
+	game.luck = 0.003
+	var rare_at_hour: float = game._chance_carta_rara()
+	_check(absf(rare_at_hour - 0.07116) < 0.00001, "unlocked rare chance did not match the 60-minute contract")
+	game.time_alive = 0.0
+	_check(rare_at_hour > game._chance_carta_rara(), "temporal luck did not improve unlocked rare items")
+	game.time_alive = 60.0 * 60.0
+	_check(absf(game._effective_luck() - 0.353) < 0.0001, "card and temporal luck did not combine")
+	game.current_phase = 2
+	_check(absf(game._chance_carta_lendaria() - 0.01286) < 0.00001, "legendary chance did not match the 60-minute contract")
+	var drop_weights: Array = game._progression().temporal_luck_controller.drop_mode_rarity_weights()
+	_check(absf(float(drop_weights[1][1]) - 27.766) < 0.0001, "Drop journey uncommon weight did not match the temporal contract")
+	_check(absf(float(drop_weights[2][1]) - 9.03) < 0.0001, "Drop journey rare weight did not match the temporal contract")
+	_check(absf(float(drop_weights[3][1]) - 1.206) < 0.0001, "Drop journey legendary weight did not match the temporal contract")
+
 	game.time_alive = 45.0 * 60.0
 	var common_enemy := {"points": 20, "type": game.ENEMY_COMMON}
 	var larapio_enemy := {"points": 20, "type": game.ENEMY_LARAPIO}
@@ -76,7 +110,7 @@ func _run() -> void:
 	_check(game._shop_price_increment_after_purchase() == 64, "shop price increment changed")
 	_check(game._shop_endurance_discount_from_elapsed(50.0 * 60.0) >= 0.50, "long-run shop discount changed")
 
-	print("RUNTIME_PROGRESSION_CONTROLLER_SMOKE_OK reward=%d score=%d price=%d" % [game._points_for_enemy(common_enemy), game.score, game._effective_card_price(speed)])
+	print("RUNTIME_PROGRESSION_CONTROLLER_SMOKE_OK reward=%d score=%d price=%d temporal_luck_60=%.2f diminishing=true rare_gate=true" % [game._points_for_enemy(common_enemy), game.score, game._effective_card_price(speed), float(temporal_samples[60])])
 	_cleanup_runtime()
 	for _i in range(4):
 		await process_frame

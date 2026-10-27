@@ -29,6 +29,11 @@ func _run() -> void:
 	var controller := Controller.new()
 
 	_check(controller.effective_stage(game) == Controller.STAGE_FULL, "new run must start at full presentation")
+	for _sample in range(5):
+		controller.update(game, 0.1, 1.0)
+	for _sample in range(15):
+		controller.update(game, 0.1, 60.0)
+	_check(controller.stage == Controller.STAGE_FULL, "startup loading frames must not trigger degradation")
 	for _sample in range(20):
 		controller.update(game, 0.1, 40.0)
 	_check(controller.stage == Controller.STAGE_REDUCED, "sustained sub-target FPS must enter reduced stage")
@@ -39,22 +44,24 @@ func _run() -> void:
 		controller.update(game, 0.1, 18.0)
 	_check(controller.stage == Controller.STAGE_EMERGENCY, "critical FPS must enter emergency stage")
 	_check(is_equal_approx(controller.separation_interval(game), 1.0 / 15.0), "emergency separation cadence must be 15 Hz")
+	_check(root.content_scale_mode == Window.CONTENT_SCALE_MODE_VIEWPORT, "reduced gameplay must use a bounded internal render target")
 	var critical_redraws := 0
 	for _sample in range(10):
 		critical_redraws += 1 if controller.should_redraw(game, 1.0 / 18.0) else 0
-	_check(critical_redraws == 5, "critical renderer protection must alternate redraw submissions")
+	_check(critical_redraws == 10, "adaptive governor must not feed a redraw throttle back into measured FPS")
 
-	for _sample in range(75):
+	for _sample in range(35):
 		controller.update(game, 0.1, 60.0)
 	_check(controller.stage == Controller.STAGE_REDUCED, "healthy FPS must recover emergency to reduced")
-	for _sample in range(115):
+	for _sample in range(45):
 		controller.update(game, 0.1, 60.0)
 	_check(controller.stage == Controller.STAGE_FULL, "long healthy window must restore full presentation")
 	_check(not game.mobile_adaptive_visual_budget, "compatibility budget flag must clear after recovery")
+	_check(root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "full presentation must restore native canvas rendering")
 
 	controller.reset()
 	game.gfx_fps_limit = 30
-	for _sample in range(120):
+	for _sample in range(140):
 		controller.update(game, 0.1, 30.0)
 	_check(controller.stage == Controller.STAGE_FULL, "intentional 30 FPS cap must not trigger degradation")
 	game.gfx_fps_limit = 60
@@ -63,10 +70,12 @@ func _run() -> void:
 	controller.force_stage_for_test(Controller.STAGE_EMERGENCY)
 	_check(controller.effective_stage(game) == Controller.STAGE_EMERGENCY, "manual profile must still allow emergency protection")
 	game.mode = "menu"
+	controller.update(game, 0.001, 60.0)
 	_check(controller.should_redraw(game, 0.001), "menus must never be throttled by gameplay redraw cadence")
+	_check(root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "menus must restore native canvas rendering")
 
 	game.queue_free()
-	print("RUNTIME_ADAPTIVE_PERFORMANCE_OK stages=full,reduced,emergency recovery=hysteresis gameplay_contract=unchanged")
+	print("RUNTIME_ADAPTIVE_PERFORMANCE_OK stages=full,reduced,emergency recovery=hysteresis redraw_feedback=absent gameplay_contract=unchanged")
 	quit(1 if failed else 0)
 
 

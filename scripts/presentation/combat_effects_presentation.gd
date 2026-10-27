@@ -12,8 +12,34 @@ const HenryColossus = preload("res://scripts/presentation/henry_colossus_present
 const ReactiveSurvivalCards = preload("res://scripts/presentation/reactive_survival_card_presentation.gd")
 const Devorador = preload("res://scripts/presentation/devorador_destinos_presentation.gd")
 const LaceranteVfx = preload("res://scripts/presentation/lacerante_vfx_presentation.gd")
+const ADVANCED_WORLD_CHANNELS := ["cartografica", "contratual", "ressonante", "mnesica", "necronada"]
 
 # Draws through the main CanvasItem; state stays on the host during migration.
+
+
+static func is_world_point_visible(world_pos: Vector2, camera: Vector2, viewport: Vector2, margin: float = 64.0) -> bool:
+	return Rect2(-Vector2.ONE * margin, viewport + Vector2.ONE * margin * 2.0).has_point(world_pos - camera)
+
+
+static func advanced_world_channels(manifestation_key: String, multiplayer: bool) -> PackedStringArray:
+	if multiplayer:
+		return PackedStringArray(ADVANCED_WORLD_CHANNELS)
+	if ADVANCED_WORLD_CHANNELS.has(manifestation_key):
+		return PackedStringArray([manifestation_key])
+	return PackedStringArray()
+
+
+static func _draw_advanced_manifestation_world(game: Node2D, camera: Vector2) -> void:
+	for channel in advanced_world_channels(String(game.manifestation_key), bool(game.is_multiplayer)):
+		match channel:
+			"cartografica": game._draw_cartographic_marks(camera)
+			"contratual": game._draw_contractual_notifications(camera)
+			"ressonante":
+				if game.mode in ["game", "shop_countdown", "shop_opening", "boss_call", "pause_countdown"]:
+					game._draw_resonant_player_beat(camera)
+				game._draw_resonant_world_marks(camera)
+			"mnesica": game._draw_mnesic_marks(camera)
+			"necronada": game._draw_necronada_world(camera)
 
 
 static func _draw_eletrica_static_indicator(game: Node2D, ci: CanvasItem, pos: Vector2, stacks: int, timer: float, uid: int) -> void :
@@ -293,6 +319,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_network_rewind_visuals(camera)
 	_draw_bargain_capsule(game, camera)
 	for orb in game.heal_orbs:
+		if not is_world_point_visible(Vector2(orb.get("pos", Vector2.ZERO)), camera, viewport):
+			continue
 		if String(orb.get("kind", "heal")) == game.POINT_BOOST_PICKUP_KIND:
 			_draw_point_boost_pickup(game, orb, camera)
 			continue
@@ -319,7 +347,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_devorador_world(camera)
 	game._draw_common_card_world(camera)
 	game._draw_rare_card_world(camera)
-	game._draw_acorrentada_world(camera)
+	if game.is_multiplayer or game.manifestation_key == "acorrentada" or not game.acorrentada_links.is_empty() or not game.acorrentada_visuals.is_empty():
+		game._draw_acorrentada_world(camera)
 	game._draw_arauto(camera)
 	game._draw_crepuscular_arauto_cracks(camera)
 	Gravity.orbitals(game, camera, true)
@@ -333,8 +362,9 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		if String(gravity_secondary.get("kind", "")) == "gravitante":
 			Gravity.ultimate(game, gravity_secondary, camera)
 	_draw_network_ability_visuals(game, camera, "foreground")
-	game._draw_parasite_marks(camera)
-	game._draw_parasite_foreground(camera)
+	if game.is_multiplayer or game.manifestation_key == "parasitica":
+		game._draw_parasite_marks(camera)
+		game._draw_parasite_foreground(camera)
 	if not game.phase_fragment.is_empty():
 		game._draw_phase_fragment(camera)
 	game._draw_team_revival_world(camera)
@@ -1350,6 +1380,7 @@ static func _draw_enemy_point_orb(game: Node2D, orb: Dictionary, camera: Vector2
 	if large_prism:
 		stack_scale += 0.72
 	var attracted: bool = int(orb.get("magnet_peer_id", 0)) != 0
+	var emergency_budget: bool = game._runtime_emergency_visual_budget_active()
 	var velocity: Vector2 = Vector2(orb.get("velocity", Vector2.ZERO))
 	var speed_ratio: float = clampf(float(orb.get("magnet_speed", 0.0)) / game.ENEMY_POINT_MAGNET_MAX_SPEED, 0.0, 1.0)
 	var direction: Vector2 = velocity.normalized() if velocity.length_squared() > 1.0 else Vector2.RIGHT
@@ -1358,13 +1389,15 @@ static func _draw_enemy_point_orb(game: Node2D, orb: Dictionary, camera: Vector2
 	if attracted:
 		var trail_length: float = 14.0 + 34.0 * speed_ratio
 		game.draw_line(center - direction * 3.0, center - direction * trail_length, Color(0.22, 0.94, 1.0, 0.18 + 0.34 * speed_ratio), 4.0 + 3.0 * speed_ratio, true)
-		for trail_index in range(1, 4):
-			var trail_t: float = float(trail_index) / 4.0
-			var trail_pos: Vector2 = center - direction * trail_length * trail_t
-			game.draw_circle(trail_pos, (5.2 - trail_t * 2.8) * stack_scale, Color(1.0, 0.7, 0.12, (0.28 - trail_t * 0.16) * (0.5 + speed_ratio)))
+		if not emergency_budget:
+			for trail_index in range(1, 4):
+				var trail_t: float = float(trail_index) / 4.0
+				var trail_pos: Vector2 = center - direction * trail_length * trail_t
+				game.draw_circle(trail_pos, (5.2 - trail_t * 2.8) * stack_scale, Color(1.0, 0.7, 0.12, (0.28 - trail_t * 0.16) * (0.5 + speed_ratio)))
 	else:
-		game.draw_circle(pos + Vector2(0.0, 8.0), 10.0 * stack_scale, Color(0.025, 0.035, 0.05, 0.28))
-		game.draw_arc(center, (13.0 + pulse * 2.0) * stack_scale, phase * 0.42, phase * 0.42 + TAU * 0.72, 22, Color(0.2, 0.92, 1.0, 0.28), 1.4, true)
+		if not emergency_budget:
+			game.draw_circle(pos + Vector2(0.0, 8.0), 10.0 * stack_scale, Color(0.025, 0.035, 0.05, 0.28))
+			game.draw_arc(center, (13.0 + pulse * 2.0) * stack_scale, phase * 0.42, phase * 0.42 + TAU * 0.72, 22, Color(0.2, 0.92, 1.0, 0.28), 1.4, true)
 	var radius: float = (6.8 + pulse * 1.2 + speed_ratio * 1.8) * stack_scale
 	var points := PackedVector2Array([
 		center + Vector2(0.0, -radius * 1.45),
@@ -1375,11 +1408,13 @@ static func _draw_enemy_point_orb(game: Node2D, orb: Dictionary, camera: Vector2
 	var body_color: Color = Color(0.34, 0.82 + pulse * 0.14, 1.0, 0.96) if large_prism else Color(1.0, 0.66 + pulse * 0.18, 0.08, 0.94)
 	var edge_color: Color = Color(0.88, 0.74, 1.0, 0.96) if large_prism else Color(1.0, 0.97, 0.62, 0.92)
 	var glow_color: Color = Color(0.48, 0.3, 1.0, 0.16 + pulse * 0.12) if large_prism else Color(1.0, 0.7, 0.08, 0.10 + pulse * 0.08 + speed_ratio * 0.12)
-	game.draw_circle(center, radius * (1.9 if large_prism else 1.5), glow_color)
+	if not emergency_budget:
+		game.draw_circle(center, radius * (1.9 if large_prism else 1.5), glow_color)
 	game.draw_colored_polygon(points, body_color)
 	game.draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), edge_color, 2.2 if large_prism else 1.4, true)
-	game.draw_line(center + Vector2(-radius * 0.2, -radius * 0.78), center + Vector2(radius * 0.14, radius * 0.54), Color(1.0, 1.0, 0.86, 0.72), 1.1, true)
-	if attracted:
+	if not emergency_budget:
+		game.draw_line(center + Vector2(-radius * 0.2, -radius * 0.78), center + Vector2(radius * 0.14, radius * 0.54), Color(1.0, 1.0, 0.86, 0.72), 1.1, true)
+	if attracted and not emergency_budget:
 		game.draw_arc(center, radius + 5.0 + pulse * 2.0, phase * 1.4, phase * 1.4 + TAU * 0.68, 20, Color(0.34, 1.0, 0.94, 0.48 + speed_ratio * 0.3), 1.6 + speed_ratio, true)
 
 
@@ -1388,6 +1423,8 @@ static func _draw_bargain_capsule(game: Node2D, camera: Vector2) -> void:
 
 
 static func _draw_larapio_ultimate_portals(game: Node2D, camera: Vector2) -> void :
+	if not game._arauto_active():
+		return
 	for enemy in game.enemies:
 		if String(enemy.get("type", "")) != game.ENEMY_LARAPIO:
 			continue
@@ -4213,7 +4250,10 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 	# list on every rendered frame.
 	var local_bullet_count: int = game.bullets.size()
 	var bullet_count: int = local_bullet_count + game.remote_bullets.size()
-	var simplify_basic_projectiles: bool = game._runtime_visual_budget_active() and bullet_count >= 36
+	# Batch dense basic fire before it can push the governor into a degraded
+	# stage. Ultra keeps the full 32x12 streak source; only authored special
+	# projectiles stay on their bespoke procedural path.
+	var batch_basic_projectiles: bool = bullet_count >= 36
 	game.runtime_projectile_batch_renderer.begin_frame(game._runtime_performance_stage())
 	for bullet_index in range(bullet_count):
 		var bullet: Dictionary = game.bullets[bullet_index] if bullet_index < local_bullet_count else game.remote_bullets[bullet_index - local_bullet_count]
@@ -4226,7 +4266,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 		var side = dir.orthogonal().normalized()
 		var age = float(bullet.get("age", 0.0))
 		var phase = float(bullet.get("phase", 0.0))
-		if simplify_basic_projectiles and String(bullet.get("source_category", "")) == "basic_attack" and game.RangedAttackRange.visual_presence(bullet) >= 0.995:
+		if batch_basic_projectiles and String(bullet.get("source_category", "")) == "basic_attack" and game.RangedAttackRange.visual_presence(bullet) >= 0.995:
 			# Preserve palette/direction in a retained GPU batch. Special attacks keep
 			# their authored procedural geometry and are never routed through this path.
 			var basic_color: Color = Color(palette.get("core", bullet.get("color", Color.WHITE)))

@@ -14,8 +14,9 @@ const RECOVER_FPS_RATIO := 0.93
 const REDUCED_TRIGGER_SECONDS := 1.5
 const EMERGENCY_TRIGGER_SECONDS := 0.55
 const REDUCED_TO_EMERGENCY_SECONDS := 3.0
-const EMERGENCY_RECOVER_SECONDS := 6.0
-const FULL_RECOVER_SECONDS := 10.0
+const EMERGENCY_RECOVER_SECONDS := 2.5
+const FULL_RECOVER_SECONDS := 4.0
+const STARTUP_WARMUP_SECONDS := 2.0
 const SAMPLE_RESPONSE := 4.0
 
 var stage: int = STAGE_FULL
@@ -24,8 +25,8 @@ var low_fps_seconds: float = 0.0
 var critical_fps_seconds: float = 0.0
 var recovered_fps_seconds: float = 0.0
 var sample_seconds: float = 0.0
+var applied_content_scale_mode: int = -1
 var redraw_accumulator: float = 0.0
-var emergency_skip_flip: bool = false
 
 
 func reset() -> void:
@@ -35,8 +36,8 @@ func reset() -> void:
 	critical_fps_seconds = 0.0
 	recovered_fps_seconds = 0.0
 	sample_seconds = 0.0
+	applied_content_scale_mode = -1
 	redraw_accumulator = 0.0
-	emergency_skip_flip = false
 
 
 func target_fps(game: Node) -> float:
@@ -65,6 +66,7 @@ func force_stage_for_test(value: int) -> void:
 
 
 func update(game: Node, delta: float, measured_fps: float = -1.0) -> bool:
+	_sync_content_scale_mode(game)
 	if game.mode != "game" or game.dedicated_server_mode:
 		low_fps_seconds = 0.0
 		critical_fps_seconds = 0.0
@@ -73,11 +75,17 @@ func update(game: Node, delta: float, measured_fps: float = -1.0) -> bool:
 	var fps := measured_fps if measured_fps >= 0.0 else float(Engine.get_frames_per_second())
 	if fps <= 0.0:
 		return false
+	sample_seconds += delta
+	if sample_seconds < STARTUP_WARMUP_SECONDS:
+		# Asset upload and the first visible frame are not representative of the
+		# run. Track the latest value, but never carry startup debt into gameplay.
+		smoothed_fps = fps
+		low_fps_seconds = 0.0
+		critical_fps_seconds = 0.0
+		recovered_fps_seconds = 0.0
+		return false
 	var weight := clampf(1.0 - exp(-SAMPLE_RESPONSE * maxf(delta, 0.001)), 0.02, 1.0)
 	smoothed_fps = fps if smoothed_fps <= 0.0 else lerpf(smoothed_fps, fps, weight)
-	sample_seconds += delta
-	if sample_seconds < 0.5:
-		return false
 
 	var target := target_fps(game)
 	var low_threshold := target * LOW_FPS_RATIO
@@ -117,7 +125,23 @@ func update(game: Node, delta: float, measured_fps: float = -1.0) -> bool:
 	game.mobile_adaptive_visual_budget = stage > STAGE_FULL
 	game.mobile_low_fps_seconds = low_fps_seconds
 	game.mobile_recovered_fps_seconds = recovered_fps_seconds
+	_sync_content_scale_mode(game)
 	return stage != previous_stage
+
+
+func _sync_content_scale_mode(game: Node) -> void:
+	var window := game.get_window()
+	if window == null:
+		return
+	# Canvas-items scaling shades the physical 2400x1080 surface even though the
+	# project is authored at 1280x720. Viewport scaling keeps the same logical
+	# coordinates/input mapping and upscales one bounded internal render target.
+	var low_resolution: bool = game.mode == "game" and effective_stage(game) >= STAGE_REDUCED
+	var desired_mode: int = Window.CONTENT_SCALE_MODE_VIEWPORT if low_resolution else Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	if applied_content_scale_mode == desired_mode and window.content_scale_mode == desired_mode:
+		return
+	window.content_scale_mode = desired_mode
+	applied_content_scale_mode = desired_mode
 
 
 func should_redraw(game: Node, delta: float) -> bool:
@@ -125,16 +149,13 @@ func should_redraw(game: Node, delta: float) -> bool:
 	if active_stage == STAGE_FULL or game.mode != "game":
 		redraw_accumulator = 0.0
 		return true
-	var target_redraw_fps := 45.0 if active_stage == STAGE_REDUCED else 30.0
-	# Below half of the requested frame rate, a redraw on every simulation tick
-	# can trap a weak renderer at 18 FPS. Alternate submissions until it climbs
-	# back above the critical band; simulation and multiplayer ticks keep running.
-	if active_stage == STAGE_EMERGENCY and smoothed_fps > 0.0 and smoothed_fps < target_fps(game) * 0.55:
-		emergency_skip_flip = not emergency_skip_flip
-		if emergency_skip_flip:
-			return false
-	redraw_accumulator += delta
-	var interval := 1.0 / target_redraw_fps
+	# Rebuilding the monolithic CanvasItem is CPU-bound; the RenderingServer can
+	# reuse its previous command list while simulation, input and networking keep
+	# ticking at the configured frame rate. Never derive this cadence from the
+	# measured FPS, avoiding the former 30 -> 15 FPS feedback trap.
+	var presentation_fps := 45.0 if active_stage == STAGE_REDUCED else 40.0
+	redraw_accumulator += minf(maxf(delta, 0.0), 0.1)
+	var interval := 1.0 / presentation_fps
 	if redraw_accumulator + 0.0001 < interval:
 		return false
 	redraw_accumulator = fmod(redraw_accumulator, interval)

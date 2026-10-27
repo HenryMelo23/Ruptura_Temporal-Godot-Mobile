@@ -1,0 +1,11 @@
+[Unit]
+Description=Twice-daily Ruptura Temporal certificate renewal check
+
+[Timer]
+OnCalendar=*-*-* 03,15:15:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=ruptura-certbot.service
+
+[Install]
+WantedBy=timers.target

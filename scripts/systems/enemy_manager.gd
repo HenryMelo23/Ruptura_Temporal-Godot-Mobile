@@ -150,11 +150,13 @@ func avoidance_neighbors(pos: Vector2, my_radius: float) -> Array:
 	# Avoidance only needs a deterministic nearby candidate, not globally sorted
 	# indices. Cell traversal and bucket insertion are already deterministic.
 	for index in nearby_entity_indices(pos, search_radius, false, false):
-		spatial_entity_query.append(spatial_entities[index])
+		var entity: Dictionary = spatial_entities[index]
+		if float(entity.get("hp", 0.0)) > 0.0:
+			spatial_entity_query.append(entity)
 	return spatial_entity_query
 
 
-func apply_entity_separation(delta: float) -> void:
+func apply_entity_separation(delta: float, spatial_index_ready: bool = false) -> void:
 	if game == null or delta <= 0.0:
 		return
 	var interval: float = game._enemy_separation_interval() if game.has_method("_enemy_separation_interval") else 0.0
@@ -165,10 +167,16 @@ func apply_entity_separation(delta: float) -> void:
 		separation_accumulator = fmod(separation_accumulator, interval)
 	else:
 		separation_accumulator = 0.0
-	rebuild_spatial_index()
+	# The runtime builds this grid before projectile collision. Enemy movement is
+	# bounded to a fraction of the 128 px cell size, so the same neighboring-cell
+	# membership remains conservative for separation later in the frame.
+	if not spatial_index_ready:
+		rebuild_spatial_index()
 	var count: int = spatial_entities.size()
 	for i in range(count):
 		var a: Dictionary = spatial_entities[i]
+		if float(a.get("hp", 0.0)) <= 0.0:
+			continue
 		var pos_a := Vector2(a.get("pos", Vector2.ZERO))
 		var r_a: float = game._entity_physical_radius(a)
 
@@ -193,6 +201,8 @@ func apply_entity_separation(delta: float) -> void:
 			if j <= i:
 				continue
 			var b: Dictionary = spatial_entities[j]
+			if float(b.get("hp", 0.0)) <= 0.0:
+				continue
 			var pos_b := Vector2(b.get("pos", Vector2.ZERO))
 			var r_b: float = game._entity_physical_radius(b)
 			var dist: float = pos_a.distance_to(pos_b)

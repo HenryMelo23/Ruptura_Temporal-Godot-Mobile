@@ -83,7 +83,7 @@
         "id": "sorte",
         "nome": "Sorte",
         "subtitulo": "Anomalia Favoravel",
-        "descricao_loja": "+0.3% sorte para drops. Incomuns aparecem sem Sorte e ficam mais frequentes; raras exigem Sorte.",
+        "descricao_loja": "+0.3% de sorte adicional por copia. A Sorte Temporal cresce devagar durante a run; esta carta continua exigida para liberar raras.",
         "icone": "Deck/carta_sorte1.png",
         "frame_secundario": "Deck/carta_sorte2.png"
     },

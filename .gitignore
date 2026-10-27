@@ -74,6 +74,9 @@ discord_webhook.local.cfg
 android_signing.local.ps1
 .leaderboard_admin.local.json
 .leaderboard_admin_backups/
+# Persistent server-side observatory data must never ship with source releases.
+server/*.umbra_observatory.json
+server/*.umbra_observatory.json.*.tmp
 
 # Python/editor noise from the desktop reference project
 __pycache__/

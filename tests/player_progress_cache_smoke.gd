@@ -115,6 +115,15 @@ func _run() -> void:
 	var compacted_event: Dictionary = Dictionary(compacted_review[0]).get("event", {})
 	_check(is_equal_approx(float(compacted_event.get("amount", 0.0)), 5000.0), "overflow compaction changed the accumulated amount")
 	_check(int(compacted_event.get("aggregate_count", 0)) == 5000, "overflow compaction lost the original event count")
+	var rejected_review: Array = []
+	for index in range(300):
+		rejected_review = RTPlayerProgressSync.append_quarantined_event(rejected_review, {
+			"event": RTPlayerProgressSync.unlock_progress_event("rtp_fixture", index + 6000, "ppd_fixture", "shots_fired", 1.0, false, 24100),
+			"reason": "server_rejected",
+			"at": index,
+		})
+	_check(rejected_review.size() == 1, "repeated server rejection review was not compacted")
+	_check(int(Dictionary(rejected_review[0]).get("aggregate_count", 0)) == 300, "server rejection compaction lost event count")
 	var compacted_payload := RTPlayerProgressSync.signed_cache(
 		RTPlayerProgressSync.build_cache_payload("rtp_fixture", snapshot, shot_events, compacted_review, sequence),
 		secret

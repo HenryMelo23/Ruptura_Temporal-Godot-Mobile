@@ -1,10 +1,14 @@
 extends RefCounted
 
+const RuntimeTemporalLuckController = preload("res://scripts/systems/progression/runtime_temporal_luck_controller.gd")
+
 var core
+var temporal_luck_controller := RuntimeTemporalLuckController.new()
 
 
 func configure(runtime_core) -> void:
 	core = runtime_core
+	temporal_luck_controller.configure(runtime_core)
 
 
 func points_for_enemy(enemy: Dictionary) -> int:

@@ -140,6 +140,9 @@ func _run() -> void:
 	game.move_touch_index = 7
 	game.attack_touch_index = 8
 	game._update_interrupted_run_autosave(game.INTERRUPTED_RUN_AUTOSAVE_INTERVAL)
+	while game.save_controller.interrupted_run_save_thread != null:
+		await process_frame
+		game.save_controller._poll_interrupted_run_save(false)
 	_check(FileAccess.file_exists(game.INTERRUPTED_RUN_SAVE_PATH), "autosave did not create interrupted run snapshot")
 	_check(game.interrupted_run_available, "autosave did not mark interrupted run available")
 	game.pointer_down = true
