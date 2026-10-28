@@ -120,6 +120,8 @@ func _load_card_unlocks() -> void :
 	core._ensure_card_unlock_defaults()
 	core.player_progress_install_secret = core._load_or_create_player_progress_install_secret()
 	core.player_progress_pending_events.clear()
+	core.player_progress_pending_unlock_index.clear()
+	core.player_progress_deferred_unlock_progress.clear()
 	core.player_progress_sync_sent_event_ids.clear()
 	core.player_progress_quarantined_events.clear()
 	core.player_progress_event_sequence = 0
@@ -138,20 +140,26 @@ func _load_card_unlocks() -> void :
 		for entry in core.RTPlayerProgressSync.compact_quarantined_events(quarantined_events):
 			if entry is Dictionary:
 				core.player_progress_quarantined_events.append(entry.duplicate(true))
+		var deferred: Variant = cached.get("deferred_unlock_progress", {})
+		if deferred is Dictionary:
+			core.player_progress_deferred_unlock_progress = deferred.duplicate(true)
 		core._apply_player_progress_snapshot(cached.get("snapshot", {}), false)
+	core._rebuild_player_progress_pending_unlock_index()
 	core.card_unlocks_dirty = false
 	core.card_unlock_save_timer = 0.0
 
 func _build_card_unlock_cache_payload() -> Dictionary:
 	core._ensure_card_unlock_defaults()
 	core.player_progress_quarantined_events = RTPlayerProgressSync.compact_quarantined_events(core.player_progress_quarantined_events)
-	return RTPlayerProgressSync.build_cache_payload(
+	var payload := RTPlayerProgressSync.build_cache_payload(
 		core.player_profile_id,
 		core._card_unlock_snapshot(),
 		core.player_progress_pending_events,
 		core.player_progress_quarantined_events,
 		core.player_progress_event_sequence
 	)
+	payload["deferred_unlock_progress"] = core.player_progress_deferred_unlock_progress.duplicate(true)
+	return payload
 
 func _write_card_unlock_cache(payload: Dictionary, install_secret: String, final_path: String) -> bool:
 	var signed_payload: Dictionary = RTPlayerProgressSync.signed_cache(payload, install_secret)
@@ -172,6 +180,68 @@ func _write_card_unlock_cache(payload: Dictionary, install_secret: String, final
 		return false
 	return true
 
+static func _sorted_enabled_keys(source: Dictionary) -> Array:
+	var enabled: Array = []
+	for raw_key in source.keys():
+		if bool(source[raw_key]):
+			enabled.append(String(raw_key))
+	enabled.sort()
+	return enabled
+
+static func _build_card_unlock_cache_payload_from_state(state: Dictionary) -> Dictionary:
+	var source_progress: Dictionary = state.get("progress", {})
+	var progress: Dictionary = {}
+	for raw_key in source_progress.keys():
+		progress[String(raw_key)] = float(source_progress[raw_key])
+	var source_levels: Dictionary = state.get("specter_levels", {})
+	var saved_specter_levels: Dictionary = {}
+	var max_specter_level := maxi(1, int(state.get("max_specter_level", 1)))
+	for raw_key in source_levels.keys():
+		saved_specter_levels[String(raw_key)] = clampi(int(source_levels[raw_key]), 1, max_specter_level)
+	var snapshot := RTPlayerProgressSync.compact_snapshot({
+		"version": 2,
+		"unlocked": _sorted_enabled_keys(Dictionary(state.get("unlocked_card_ids", {}))),
+		"unlocked_manifestations": _sorted_enabled_keys(Dictionary(state.get("unlocked_manifestation_ids", {}))),
+		"unlocked_specters": _sorted_enabled_keys(Dictionary(state.get("unlocked_spectrum_ids", {}))),
+		"specter_levels": saved_specter_levels,
+		"content_unread": _sorted_enabled_keys(Dictionary(state.get("content_unread_ids", {}))),
+		"spectral_coins": maxi(0, int(state.get("persistent_spectral_coins", 0))),
+		"progress": progress,
+		"veteran_unlock_sync_version_code": int(state.get("card_unlock_veteran_synced_version_code", 0)),
+	})
+	var payload := RTPlayerProgressSync.build_cache_payload(
+		String(state.get("player_profile_id", "")),
+		snapshot,
+		Array(state.get("pending_events", [])),
+		Array(state.get("quarantined_events", [])),
+		int(state.get("event_sequence", 0))
+	)
+	payload["deferred_unlock_progress"] = Dictionary(state.get("deferred_unlock_progress", {})).duplicate(true)
+	return payload
+
+func _capture_card_unlock_cache_state() -> Dictionary:
+	return {
+		"player_profile_id": core.player_profile_id,
+		"unlocked_card_ids": core.unlocked_card_ids.duplicate(),
+		"unlocked_manifestation_ids": core.unlocked_manifestation_ids.duplicate(),
+		"unlocked_spectrum_ids": core.unlocked_spectrum_ids.duplicate(),
+		"specter_levels": core.specter_levels.duplicate(),
+		"content_unread_ids": core.content_unread_ids.duplicate(),
+		"persistent_spectral_coins": core.persistent_spectral_coins,
+		"progress": core.card_unlock_progress.duplicate(),
+		"card_unlock_veteran_synced_version_code": core.card_unlock_veteran_synced_version_code,
+		# Event dictionaries are copy-on-write; the worker owns these array
+		# snapshots while the runtime may replace entries on the main thread.
+		"pending_events": core.player_progress_pending_events.duplicate(),
+		"quarantined_events": core.player_progress_quarantined_events.duplicate(),
+		"event_sequence": core.player_progress_event_sequence,
+		"deferred_unlock_progress": core.player_progress_deferred_unlock_progress.duplicate(true),
+		"max_specter_level": core.AuraSystem.RUN_MAX_LEVEL,
+	}
+
+func _build_and_write_card_unlock_cache(state: Dictionary, install_secret: String, final_path: String) -> bool:
+	return _write_card_unlock_cache(_build_card_unlock_cache_payload_from_state(state), install_secret, final_path)
+
 func _poll_card_unlock_save(block := false) -> bool:
 	if card_unlock_save_thread == null:
 		return true
@@ -188,11 +258,11 @@ func _poll_card_unlock_save(block := false) -> bool:
 func _save_card_unlocks_async() -> void:
 	if not _poll_card_unlock_save(false):
 		return
-	var payload: Dictionary = _build_card_unlock_cache_payload()
+	var state := _capture_card_unlock_cache_state()
 	var install_secret: String = String(core._player_progress_install_secret())
 	var final_path: String = ProjectSettings.globalize_path(core.PLAYER_PROGRESS_CACHE_PATH)
 	card_unlock_save_thread = Thread.new()
-	var start_error := card_unlock_save_thread.start(_write_card_unlock_cache.bind(payload, install_secret, final_path), Thread.PRIORITY_LOW)
+	var start_error := card_unlock_save_thread.start(_build_and_write_card_unlock_cache.bind(state, install_secret, final_path), Thread.PRIORITY_LOW)
 	if start_error != OK:
 		card_unlock_save_thread = null
 		core.card_unlocks_dirty = true
@@ -320,6 +390,8 @@ func _load_config() -> void :
 				elif k == "damage_text_scale": core.damage_text_scale = core._sanitize_damage_text_scale(float(v))
 				elif k == "interface_text_scale": core.interface_text_scale = clamp(float(v), 0.9, 1.6)
 				elif k == "geovana_bark_scale": core.geovana_bark_scale = clampf(float(v), 0.5, 1.5)
+				elif k == "auto_attack_range_color": core.auto_attack_range_color_index = int(v)
+				elif k == "auto_attack_range_opacity": core.auto_attack_range_opacity = float(v)
 				elif k == "vol_master": core.vol_master = float(v)
 				elif k == "vol_music": core.vol_music = float(v)
 				elif k == "vol_sfx": core.vol_sfx = float(v)
@@ -337,6 +409,8 @@ func _load_config() -> void :
 	core.desktop_teleport_mode = core._sanitize_desktop_teleport_mode(core.desktop_teleport_mode)
 	core.desktop_attack_aim_mode = core._sanitize_desktop_attack_aim_mode(core.desktop_attack_aim_mode)
 	core.desktop_hud_scale = core._sanitize_desktop_hud_scale(core.desktop_hud_scale)
+	core.auto_attack_range_color_index = core.RangedAttackRange.sanitize_indicator_color_index(core.auto_attack_range_color_index)
+	core.auto_attack_range_opacity = core.RangedAttackRange.sanitize_indicator_opacity(core.auto_attack_range_opacity)
 	core.forced_initial_phase = core._sanitize_forced_initial_phase(core.forced_initial_phase)
 	core.force_phase6_start = core.forced_initial_phase == 6
 	core.forced_shop_enabled = core.shop_auto_enabled
@@ -427,6 +501,8 @@ func _save_config() -> void :
 		file.store_string("damage_text_scale=" + str(core.damage_text_scale) + "\n")
 		file.store_string("interface_text_scale=" + str(core.interface_text_scale) + "\n")
 		file.store_string("geovana_bark_scale=" + str(core.geovana_bark_scale) + "\n")
+		file.store_string("auto_attack_range_color=" + str(core.RangedAttackRange.sanitize_indicator_color_index(core.auto_attack_range_color_index)) + "\n")
+		file.store_string("auto_attack_range_opacity=" + str(core.RangedAttackRange.sanitize_indicator_opacity(core.auto_attack_range_opacity)) + "\n")
 		file.store_string("vol_master=" + str(core.vol_master) + "\n")
 		file.store_string("vol_music=" + str(core.vol_music) + "\n")
 		file.store_string("vol_sfx=" + str(core.vol_sfx) + "\n")

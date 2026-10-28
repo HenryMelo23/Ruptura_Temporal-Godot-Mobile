@@ -16,7 +16,8 @@ const GIANT_DAMAGE_MULT := 2.0
 const GIANT_DAMAGE_REDUCTION := 0.35
 const GIANT_MOVE_MULT := 0.92
 const GIANT_ATTACK_INTERVAL_MULT := 1.12
-const GIANT_TEMP_HP_RATIO := 0.35
+const GIANT_TEMP_HP_RATIO := 0.20
+const GIANT_ARMOR_RATIO := 0.30
 const IMPACT_ARMOR_GAIN_RATIO := 0.035
 const IMPACT_ARMOR_CAP_RATIO := 0.14
 const IMPACT_ARMOR_HOLD_TIME := 2.4
@@ -33,6 +34,27 @@ const FALLBACK_LUNGE_DISTANCE := 58.0
 const CHARGE_DISTANCE := 220.0
 const CHARGE_DURATION := 0.44
 const CHARGE_DAMAGE_MULT := 1.70
+
+const FURY_MAX := 100.0
+const FURY_PER_HIT := 4.0
+const FURY_DAMAGE_MIN := 7.0
+const FURY_DAMAGE_RATIO := 0.22
+const FURY_DAMAGE_MAX := 28.0
+const FLASK_FURY_COST := 40.0
+const FLASK_HEAL_RATIO := 0.30
+const FLASK_DURATION := 0.62
+const HIT_PUSH_SPEED := 250.0
+const THIRD_HIT_PUSH_SPEED := 560.0
+const KNOCKBACK_DRAG := 960.0
+const REINFORCEMENT_COOLDOWN := 7.0
+const REINFORCEMENT_DURATION := 4.0
+const REINFORCED_HIT_DAMAGE_MULT := 3.5
+const RETALIATION_DAMAGE_RATIO := 0.70
+const LEAP_DISTANCE := 210.0
+const LEAP_DURATION := 0.92
+const LEAP_HEIGHT := 142.0
+const LEAP_RADIUS := 150.0
+const LEAP_DAMAGE_MULT := 2.15
 
 const LASTRO_REQUIRED := 5
 const LASTRO_WINDOW := 3.0
@@ -64,8 +86,21 @@ var transform_elapsed := 0.0
 var giant_active := false
 var giant_elapsed := 0.0
 var giant_temp_hp := 0.0
+var giant_armor := 0.0
 var impact_armor := 0.0
 var impact_armor_hold := 0.0
+var fury := 0.0
+var flask_active := false
+var flask_elapsed := 0.0
+var reinforcement_cooldown := 0.0
+var reinforced_hit_ready := false
+var retaliation_timer := 0.0
+
+var leap_active := false
+var leap_elapsed := 0.0
+var leap_origin := Vector2.ZERO
+var leap_target := Vector2.ZERO
+var leap_landed := false
 
 var boss_lastro_stacks := 0
 var boss_lastro_timer := 0.0
@@ -97,8 +132,18 @@ func reset() -> void:
 	giant_active = false
 	giant_elapsed = 0.0
 	giant_temp_hp = 0.0
+	giant_armor = 0.0
 	impact_armor = 0.0
 	impact_armor_hold = 0.0
+	fury = 0.0
+	flask_active = false
+	flask_elapsed = 0.0
+	reinforcement_cooldown = 0.0
+	reinforced_hit_ready = false
+	retaliation_timer = 0.0
+	leap_active = false
+	leap_elapsed = 0.0
+	leap_landed = false
 	boss_lastro_stacks = 0
 	boss_lastro_timer = 0.0
 	boss_lastro_slow_timer = 0.0
@@ -118,6 +163,18 @@ func mutation_active() -> bool:
 
 func lastro_active() -> bool:
 	return is_configured() and core.active_character_key == core.CHARACTER_HENRY and core.effect_key == EFFECT_KEY
+
+
+func mutation_active_for_source(source_peer_id: int) -> bool:
+	if not is_configured():
+		return false
+	if source_peer_id <= 0 or source_peer_id == core._mp_unique_id():
+		return mutation_active()
+	var state: Dictionary = core.net_players_by_peer.get(source_peer_id, {})
+	if int(state.get("manifestation", -1)) != core.HENRY_SELECTION_INDEX:
+		return false
+	var mutation_index := int(state.get("mutation", -1))
+	return mutation_index >= 0 and mutation_index < core.HENRY_MUTATIONS.size() and String(core.HENRY_MUTATIONS[mutation_index].get("key", "")) == MUTATION_KEY
 
 
 func lastro_active_for_source(source_peer_id: int) -> bool:
@@ -163,12 +220,36 @@ func attack_interval_multiplier() -> float:
 	return GIANT_ATTACK_INTERVAL_MULT if giant_active else 1.0
 
 
+func fury_ratio() -> float:
+	return clampf(fury / FURY_MAX, 0.0, 1.0)
+
+
+func reinforcement_ready() -> bool:
+	return reinforcement_cooldown <= 0.0
+
+
+func reinforcement_label() -> String:
+	if giant_active:
+		return "70%" if retaliation_timer > 0.0 else "RET"
+	return "GOLPE" if reinforced_hit_ready else "REF"
+
+
+func is_leap_invulnerable() -> bool:
+	return mutation_active() and leap_active
+
+
+func leap_visual_height() -> float:
+	if not leap_active:
+		return 0.0
+	return sin(clampf(leap_elapsed / LEAP_DURATION, 0.0, 1.0) * PI) * LEAP_HEIGHT
+
+
 func boss_move_multiplier() -> float:
 	return 1.0 - LASTRO_BOSS_SLOW if boss_lastro_slow_timer > 0.0 else 1.0
 
 
 func fire_auto_attack() -> bool:
-	if not mutation_active() or transforming or shrinking or charge_active:
+	if not mutation_active() or transforming or shrinking or charge_active or leap_active or flask_active:
 		return false
 	var direction: Vector2 = core._aim_direction()
 	if direction.length_squared() <= 0.001:
@@ -182,7 +263,13 @@ func fire_auto_attack() -> bool:
 	var stage_multipliers: Array = [0.72, 0.90, 1.28]
 	var damage: float = float(core.player_damage) * float(stage_multipliers[combo_stage]) * (GIANT_DAMAGE_MULT if giant_active else 1.0)
 	damage *= 1.0 + float(impetus) * 0.015
-	var hit: bool = _damage_target(target, damage, "henry_colossus_melee", "basic_attack", core.player_pos)
+	if reinforced_hit_ready:
+		damage *= REINFORCED_HIT_DAMAGE_MULT
+	var melee_source: String = "henry_colossus_melee_third" if combo_stage == 2 else "henry_colossus_melee"
+	var hit: bool = _damage_target(target, damage, melee_source, "basic_attack", core.player_pos)
+	if hit and reinforced_hit_ready:
+		reinforced_hit_ready = false
+		core._add_text("IMPACTO REFORCADO", Vector2(target.get("pos", core.player_pos)) + Vector2(0, -66), Color(1.0, 0.74, 0.28), 0.72, 18)
 	combo_stage = (combo_stage + 1) % 3
 	combo_timer = 0.9
 	if hit:
@@ -195,7 +282,7 @@ func fire_auto_attack() -> bool:
 
 
 func begin_skill(target_world = null) -> bool:
-	if not mutation_active() or transforming or shrinking or guard_active or charge_active:
+	if not mutation_active() or transforming or shrinking or guard_active or charge_active or leap_active or flask_active:
 		return false
 	var direction := _target_direction(target_world)
 	core._set_player_attack_visual_dir(direction)
@@ -212,18 +299,24 @@ func begin_skill(target_world = null) -> bool:
 		charge_hit_uids.clear()
 		core._send_network_ability_visual(core.NET_ABILITY_SKILL, charge_origin, charge_target, CHARGE_DURATION)
 	else:
-		guard_active = true
-		guard_elapsed = 0.0
-		guard_direction = direction
-		guard_counter_pending = false
-		guard_counter_triggered = false
-		core._send_network_ability_visual(core.NET_ABILITY_SKILL, core.player_pos, core.player_pos + direction * FALLBACK_LUNGE_DISTANCE, GUARD_WINDOW)
+		if fury < FLASK_FURY_COST or core.player_hp >= core.player_hp_max:
+			core.henry_skill_cast_active = false
+			core._add_text("FURIA %d/%d" % [int(fury), int(FLASK_FURY_COST)], core.player_pos + Vector2(0, -88), Color(1.0, 0.64, 0.24), 0.55, 17)
+			return false
+		fury -= FLASK_FURY_COST
+		flask_active = true
+		flask_elapsed = 0.0
+		var healed: float = core._heal_player(core.player_hp_max * FLASK_HEAL_RATIO, "henry_colossus_flask")
+		core._add_text("FRASCO +%d" % int(round(healed)), core.player_pos + Vector2(0, -88), Color(0.42, 1.0, 0.58), 0.72, 18)
+		core._spawn_radial_particles(core.player_pos, Color(0.44, 1.0, 0.52), 12)
+		core._send_network_ability_visual(core.NET_ABILITY_SKILL, core.player_pos, core.player_pos, FLASK_DURATION)
 	return true
 
 
 func cast_ultimate() -> bool:
-	if not mutation_active() or transforming or shrinking or giant_active or charge_active:
+	if not mutation_active() or transforming or shrinking or giant_active or charge_active or leap_active or fury < FURY_MAX:
 		return false
+	fury -= FURY_MAX
 	transforming = true
 	transform_elapsed = 0.0
 	core.henry_ultimate_cast_active = true
@@ -236,6 +329,11 @@ func cast_ultimate() -> bool:
 func modify_incoming_damage(amount: float, _source: String) -> float:
 	if not mutation_active() or amount <= 0.0:
 		return amount
+	_gain_fury(clampf(amount * FURY_DAMAGE_RATIO, FURY_DAMAGE_MIN, FURY_DAMAGE_MAX))
+	if leap_active:
+		return 0.0
+	if retaliation_timer > 0.0:
+		_reflect_damage(amount * RETALIATION_DAMAGE_RATIO, _source)
 	var result := amount
 	if guard_active:
 		if not guard_counter_pending:
@@ -251,6 +349,12 @@ func modify_incoming_damage(amount: float, _source: String) -> float:
 		result -= impact_absorbed
 		if impact_absorbed > 0.0:
 			_emit_impact(core.player_pos, -core.last_facing, 23.0)
+	if giant_active and giant_armor > 0.0:
+		var armor_absorbed := minf(giant_armor, result)
+		giant_armor -= armor_absorbed
+		result -= armor_absorbed
+		if armor_absorbed > 0.0:
+			core._add_text("ARMADURA %d" % int(round(armor_absorbed)), core.player_pos + Vector2(0, -96), Color(0.92, 0.78, 0.4), 0.38, 14)
 	if giant_active:
 		if giant_temp_hp > 0.0:
 			var absorbed := minf(giant_temp_hp, result)
@@ -261,8 +365,14 @@ func modify_incoming_damage(amount: float, _source: String) -> float:
 	return maxf(0.0, result)
 
 
-func on_damage_confirmed_enemy(enemy: Dictionary, actual_damage: float, source_peer_id: int) -> void:
-	if actual_damage <= 0.0 or not lastro_active_for_source(source_peer_id):
+func on_damage_confirmed_enemy(enemy: Dictionary, actual_damage: float, source_peer_id: int, source: String = "") -> void:
+	if actual_damage <= 0.0:
+		return
+	if mutation_active_for_source(source_peer_id):
+		if _source_is_local(source_peer_id):
+			_gain_fury(FURY_PER_HIT)
+		_apply_hit_push(enemy, source == "henry_colossus_melee_third")
+	if not lastro_active_for_source(source_peer_id):
 		return
 	var now := float(core.time_alive)
 	if now - float(enemy.get("henry_lastro_last_hit", -999.0)) < LASTRO_HIT_THROTTLE:
@@ -279,7 +389,11 @@ func on_damage_confirmed_enemy(enemy: Dictionary, actual_damage: float, source_p
 
 
 func on_damage_confirmed_boss(actual_damage: float, source_peer_id: int) -> void:
-	if actual_damage <= 0.0 or not lastro_active_for_source(source_peer_id):
+	if actual_damage <= 0.0:
+		return
+	if mutation_active_for_source(source_peer_id) and _source_is_local(source_peer_id):
+		_gain_fury(FURY_PER_HIT)
+	if not lastro_active_for_source(source_peer_id):
 		return
 	boss_lastro_stacks += 1
 	boss_lastro_timer = LASTRO_WINDOW
@@ -291,7 +405,11 @@ func on_damage_confirmed_boss(actual_damage: float, source_peer_id: int) -> void
 
 
 func on_damage_confirmed_arauto(actual_damage: float, source_peer_id: int) -> void:
-	if actual_damage <= 0.0 or not lastro_active_for_source(source_peer_id):
+	if actual_damage <= 0.0:
+		return
+	if mutation_active_for_source(source_peer_id) and _source_is_local(source_peer_id):
+		_gain_fury(FURY_PER_HIT)
+	if not lastro_active_for_source(source_peer_id):
 		return
 	arauto_lastro_stacks += 1
 	arauto_lastro_timer = LASTRO_WINDOW
@@ -311,13 +429,21 @@ func update(delta: float) -> void:
 			reset()
 		return
 	combo_timer = maxf(0.0, combo_timer - delta)
+	reinforcement_cooldown = maxf(0.0, reinforcement_cooldown - delta)
+	retaliation_timer = maxf(0.0, retaliation_timer - delta)
+	for enemy in core.enemies:
+		_update_knockback(enemy, delta)
 	_update_impact_armor(delta)
 	if combo_timer <= 0.0:
 		combo_stage = 0
 		impetus = 0
 	_update_guard(delta)
 	_update_charge(delta)
+	_update_flask(delta)
+	_update_leap(delta)
 	_update_transformation(delta)
+	if fury >= FURY_MAX and not giant_active and not transforming and not shrinking and not leap_active:
+		cast_ultimate()
 
 
 func visual_snapshot() -> Dictionary:
@@ -337,8 +463,19 @@ func visual_snapshot() -> Dictionary:
 		"charge_target": charge_target,
 		"impetus": impetus,
 		"temp_hp": giant_temp_hp,
+		"giant_armor": giant_armor,
+		"giant_armor_max": maxf(1.0, core.player_hp_max * GIANT_ARMOR_RATIO) if is_configured() else 1.0,
 		"impact_armor": impact_armor,
 		"impact_armor_cap": _impact_armor_cap(),
+		"fury": fury,
+		"fury_max": FURY_MAX,
+		"flask_active": flask_active,
+		"reinforced_hit_ready": reinforced_hit_ready,
+		"retaliation_timer": retaliation_timer,
+		"reinforcement_cooldown": reinforcement_cooldown,
+		"leap_active": leap_active,
+		"leap_elapsed": leap_elapsed,
+		"leap_height": leap_visual_height(),
 	}
 
 
@@ -373,6 +510,147 @@ func _update_charge(delta: float) -> void:
 		core.henry_skill_cast_active = false
 
 
+func _update_flask(delta: float) -> void:
+	if not flask_active:
+		return
+	flask_elapsed += delta
+	core.henry_skill_cast_elapsed = flask_elapsed
+	if flask_elapsed >= FLASK_DURATION:
+		flask_active = false
+		core.henry_skill_cast_active = false
+
+
+func activate_reinforcement() -> bool:
+	if not mutation_active() or transforming or shrinking or leap_active:
+		return false
+	if reinforcement_cooldown > 0.0:
+		core._add_text("REFORCO %.1fs" % reinforcement_cooldown, core.player_pos + Vector2(0, -90), Color(1.0, 0.68, 0.3), 0.45, 16)
+		return false
+	reinforcement_cooldown = REINFORCEMENT_COOLDOWN
+	if giant_active:
+		retaliation_timer = REINFORCEMENT_DURATION
+		core._add_text("RETALIACAO 70%", core.player_pos + Vector2(0, -112), Color(1.0, 0.66, 0.22), 0.72, 18)
+	else:
+		reinforced_hit_ready = true
+		core._add_text("PROXIMO GOLPE REFORCADO", core.player_pos + Vector2(-72, -96), Color(1.0, 0.76, 0.28), 0.72, 17)
+	core._spawn_radial_particles(core.player_pos, Color(1.0, 0.58, 0.18), 16)
+	core._send_network_ability_visual(core.NET_ABILITY_SECONDARY_END, core.player_pos, core.player_pos, REINFORCEMENT_DURATION if giant_active else 0.55)
+	return true
+
+
+func begin_leap(target_world: Vector2) -> bool:
+	if not mutation_active() or not giant_active or leap_active or transforming or shrinking or charge_active:
+		return false
+	var direction: Vector2 = target_world - Vector2(core.player_pos)
+	if direction.length_squared() <= 0.001:
+		direction = core.last_facing
+	direction = direction.normalized()
+	leap_active = true
+	leap_elapsed = 0.0
+	leap_landed = false
+	leap_origin = core.player_pos
+	leap_target = (core.player_pos + direction * LEAP_DISTANCE).clamp(Vector2(40.0, 40.0), core.WORLD_SIZE - Vector2(40.0, 40.0))
+	core._set_player_attack_visual_dir(direction)
+	_clear_hostile_effects()
+	core._send_network_ability_visual(core.NET_ABILITY_TELEPORT, leap_origin, leap_target, LEAP_DURATION, LEAP_HEIGHT)
+	return true
+
+
+func _update_leap(delta: float) -> void:
+	if not leap_active:
+		return
+	leap_elapsed += delta
+	_clear_hostile_effects()
+	var progress := clampf(leap_elapsed / LEAP_DURATION, 0.0, 1.0)
+	var desired := leap_origin.lerp(leap_target, smoothstep(0.0, 1.0, progress))
+	core.player_pos = core._resolve_phase2_fire_wall_movement(core.player_pos, desired)
+	if progress >= 1.0 and not leap_landed:
+		leap_landed = true
+		_apply_leap_impact()
+		leap_active = false
+		leap_elapsed = 0.0
+
+
+func _apply_leap_impact() -> void:
+	var center: Vector2 = core.player_pos
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) > 0.0 and center.distance_to(Vector2(enemy.get("pos", center))) <= LEAP_RADIUS:
+			core._damage_enemy(enemy, core.player_damage * GIANT_DAMAGE_MULT * LEAP_DAMAGE_MULT, "henry_colossus_slam", true, true, center, "skill_shift")
+	if core._arauto_active() and center.distance_to(Vector2(core.arauto.get("pos", center))) <= LEAP_RADIUS:
+		core._damage_arauto(core.player_damage * GIANT_DAMAGE_MULT * LEAP_DAMAGE_MULT, "henry_colossus_slam", true, true, "skill_shift", center)
+	if core.boss_active and core.boss_hp > 0.0 and center.distance_to(core.boss_pos) <= LEAP_RADIUS:
+		core._damage_boss(core.player_damage * GIANT_DAMAGE_MULT * LEAP_DAMAGE_MULT, "henry_colossus_slam", true, true, "skill_shift", center)
+	for ring in range(3):
+		core.slashes.append({"kind": "henry_colossus_impact", "pos": center, "dir": Vector2.RIGHT, "size": LEAP_RADIUS * (0.54 + ring * 0.2), "life": 0.42 + ring * 0.08, "max": 0.42 + ring * 0.08})
+	core._spawn_radial_particles(center, Color(1.0, 0.68, 0.24), 28)
+	core.screen_shake_timer = maxf(core.screen_shake_timer, 0.34)
+	core.screen_shake_strength = maxf(core.screen_shake_strength, 18.0)
+
+
+func _clear_hostile_effects() -> void:
+	core.player_stun_timer = 0.0
+	core.player_silence_timer = 0.0
+	core.player_freeze_visual_timer = 0.0
+	core.player_control_immunity_timer = maxf(core.player_control_immunity_timer, 0.05)
+	core.boss_wave_slow_timer = 0.0
+	core.controls_inverted_timer = 0.0
+	core.sanguessuga_parasite_timer = 0.0
+	core.sanguessuga_bleed_tick_timer = 0.0
+	core.sanguessuga_parasite_visual_timer = 0.0
+
+
+func _gain_fury(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	fury = minf(FURY_MAX, fury + amount)
+
+
+func _source_is_local(source_peer_id: int) -> bool:
+	return source_peer_id <= 0 or source_peer_id == core._mp_unique_id()
+
+
+func _apply_hit_push(enemy: Dictionary, third_hit: bool) -> void:
+	if enemy.is_empty() or float(enemy.get("hp", 0.0)) <= 0.0:
+		return
+	var push_dir: Vector2 = (Vector2(enemy.get("pos", core.player_pos)) - Vector2(core.player_pos)).normalized()
+	if push_dir.length_squared() <= 0.001:
+		push_dir = core.last_facing.normalized()
+	var speed := THIRD_HIT_PUSH_SPEED if third_hit else HIT_PUSH_SPEED
+	var current := Vector2(enemy.get("henry_colossus_knockback", Vector2.ZERO))
+	enemy["henry_colossus_knockback"] = current + push_dir * speed
+
+
+func _update_knockback(enemy: Dictionary, delta: float) -> void:
+	var velocity := Vector2(enemy.get("henry_colossus_knockback", Vector2.ZERO))
+	if velocity.length_squared() <= 1.0:
+		enemy.erase("henry_colossus_knockback")
+		return
+	var current := Vector2(enemy.get("pos", core.player_pos))
+	enemy["pos"] = (current + velocity * delta).clamp(Vector2(40.0, 40.0), core.WORLD_SIZE - Vector2(40.0, 40.0))
+	enemy["henry_colossus_knockback"] = velocity.move_toward(Vector2.ZERO, KNOCKBACK_DRAG * delta)
+
+
+func _reflect_damage(amount: float, source: String) -> void:
+	if amount <= 0.0:
+		return
+	if core.boss_active and core.boss_hp > 0.0 and core._damage_source_is_boss(source):
+		core._damage_boss(amount, "henry_colossus_retaliation", true, false, "status_tick", core.player_pos)
+		_emit_impact(core.boss_pos, (core.boss_pos - core.player_pos).normalized(), 42.0)
+		return
+	var nearest: Dictionary = {}
+	var nearest_distance: float = 260.0
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var distance: float = Vector2(core.player_pos).distance_to(Vector2(enemy.get("pos", core.player_pos)))
+		if distance < nearest_distance:
+			nearest = enemy
+			nearest_distance = distance
+	if not nearest.is_empty():
+		core._damage_enemy(nearest, amount, "henry_colossus_retaliation", true, false, core.player_pos, "status_tick")
+		_emit_impact(Vector2(nearest.get("pos", core.player_pos)), (Vector2(nearest.get("pos", core.player_pos)) - core.player_pos).normalized(), 36.0)
+
+
 func _update_transformation(delta: float) -> void:
 	if transforming or shrinking:
 		transform_elapsed += delta
@@ -384,11 +662,13 @@ func _update_transformation(delta: float) -> void:
 				giant_active = true
 				giant_elapsed = 0.0
 				giant_temp_hp = maxf(1.0, core.player_hp_max * GIANT_TEMP_HP_RATIO)
+				giant_armor = maxf(1.0, core.player_hp_max * GIANT_ARMOR_RATIO)
 				core._add_text("HIPERTROFIA ABSOLUTA", core.player_pos + Vector2(-94, -120), Color(0.86, 0.82, 0.58), 1.0, 20)
 			else:
 				shrinking = false
 				giant_active = false
 				giant_temp_hp = 0.0
+				giant_armor = 0.0
 			transform_elapsed = 0.0
 			core.henry_ultimate_cast_active = false
 	if giant_active:

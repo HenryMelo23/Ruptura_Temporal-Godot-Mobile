@@ -119,6 +119,26 @@ static func charge(game: Node2D, center: Vector2, progress: float, alpha: float)
 		game.draw_rect(Rect2(pos, Vector2(2, 3)), Color(1.0, 0.66, 0.14, sin(travel * PI) * fade))
 
 
+static func spin(game: Node2D, center: Vector2, turns: float, progress: float, alpha: float) -> void:
+	var p := clampf(progress, 0.0, 1.0)
+	var phase := turns * TAU
+	var arm_axis := Vector2.from_angle(phase)
+	var fade := alpha * smoothstep(0.0, 0.06, p) * (1.0 - smoothstep(0.94, 1.0, p))
+	var low: bool = game._runtime_visual_budget_active() or not game.gfx_particles
+	for side in [-1.0, 1.0]:
+		var outward: Vector2 = arm_axis * float(side)
+		var hand: Vector2 = center + outward * 42.0 + Vector2(0.0, -4.0)
+		_flame(game, hand, outward, 19.0 if low else 24.0, 54.0 if low else 76.0, p * 3.0, int(side * 3.0), fade)
+		if not low:
+			for ember in range(3):
+				var trail := fposmod(p * 8.0 + float(ember) * 0.27 + (0.5 if side < 0.0 else 0.0), 1.0)
+				var angle: float = phase - float(side) * trail * 0.9
+				var pos := center + Vector2.from_angle(angle) * (44.0 + trail * 34.0) + Vector2(0.0, -6.0 - trail * 8.0)
+				game.draw_circle(pos, 2.2 - trail * 0.8, Color(1.0, 0.55, 0.08, fade * (1.0 - trail)))
+	var ring_alpha := fade * (0.16 + smoothstep(0.72, 1.0, p) * 0.48)
+	game.draw_arc(center, 48.0 + smoothstep(0.72, 1.0, p) * 24.0, phase, phase + PI * 1.52, 42, Color(1.0, 0.34, 0.04, ring_alpha), 4.0, true)
+
+
 static func draw_entrance(game: Node2D, camera: Vector2, viewport: Vector2) -> void:
 	var owner = game.henry_incendiary_ability_controller
 	if not owner.entrance_active:

@@ -27,6 +27,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await process_frame
+	game._prepare_phase_texture_assets(6)
 
 	var exact_paths := [
 		"res://assets/sprites/Boss6-1-1.png",

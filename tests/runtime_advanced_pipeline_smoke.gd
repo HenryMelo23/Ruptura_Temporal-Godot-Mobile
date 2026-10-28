@@ -70,6 +70,10 @@ func _run() -> void:
 	_check(canvas.renderer.streak_texture.get_width() == 16, "emergency world batch must use the reduced 16 px source texture")
 	_check(canvas.sprite_submitted == 80, "sprite MultiMesh path must retain all plain crowd members")
 	_check(canvas.sprite_renderer.groups.size() == 1, "same-texture crowd must collapse into one GPU group")
+	canvas.sprite_renderer.begin_frame(1)
+	_check(canvas.sprite_renderer.captured_instances == 0, "sprite batch retained stale frame instance counts")
+	var sprite_group: Dictionary = canvas.sprite_renderer.groups.values()[0]
+	_check(Array(sprite_group["positions"]).is_empty() and int((sprite_group["mesh"] as MultiMesh).visible_instance_count) == 0, "sprite batch did not reuse and clear transient frame buffers")
 	canvas.renderer.begin_frame(0)
 	_check(canvas.renderer.streak_texture.get_width() == 32, "full stage must restore the authored high-resolution streak")
 	canvas.queue_free()
@@ -82,7 +86,7 @@ func _run() -> void:
 	AssetController.reset_prefetch_for_test()
 	await process_frame
 	await process_frame
-	print("RUNTIME_ADVANCED_PIPELINE_OK scheduler=deterministic prefetch_cap=4 projectile_instances=130 sprite_instances=80 sprite_groups=1 capacity=256 world_texture=32/24/16 hud=native")
+	print("RUNTIME_ADVANCED_PIPELINE_OK scheduler=deterministic prefetch_cap=4 projectile_instances=130 sprite_instances=80 sprite_groups=1 buffers=reused world_texture=32/24/16 hud=native")
 	quit(1 if failed else 0)
 
 

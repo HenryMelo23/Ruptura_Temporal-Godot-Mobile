@@ -508,7 +508,7 @@ func _memory_saver_active() -> bool:
 
 
 func _shadows_enabled() -> bool:
-	return gfx_shadows and not _runtime_visual_budget_active()
+	return runtime_performance_controller.shadows_enabled(self)
 
 
 func _particle_budget_available() -> bool:
@@ -985,6 +985,8 @@ func _ensure_card_unlock_defaults() -> void :
 
 func _load_card_unlocks() -> void :
 	save_controller._load_card_unlocks()
+	_ensure_card_unlock_rule_metric_index()
+	_rebuild_card_unlock_next_thresholds()
 
 
 func _save_card_unlocks() -> void :
@@ -1055,7 +1057,9 @@ func _player_progress_install_secret() -> String:
 
 
 func _player_progress_device_id() -> String:
-	return RTPlayerProgressSync.device_id_from_install_secret(_player_progress_install_secret())
+	if player_progress_device_id_cache == "":
+		player_progress_device_id_cache = RTPlayerProgressSync.device_id_from_install_secret(_player_progress_install_secret())
+	return player_progress_device_id_cache
 
 
 func _read_trusted_player_progress_cache() -> Dictionary:
@@ -1115,6 +1119,7 @@ func _apply_player_progress_snapshot(snapshot: Variant, notify_unlocks: bool, re
 	card_unlock_veteran_synced_version_code = maxi(card_unlock_veteran_synced_version_code, int(data.get("veteran_unlock_sync_version_code", 0)))
 	_ensure_card_unlock_defaults()
 	_check_card_unlock_rules(notify_unlocks)
+	_rebuild_card_unlock_next_thresholds()
 	player_progress_applying_snapshot = false
 
 
@@ -1182,6 +1187,90 @@ func _mark_card_unlocks_dirty() -> void :
 	save_controller._mark_card_unlocks_dirty()
 
 
+func _player_progress_unlock_index_key(metric: String, max_mode: bool) -> String:
+	return metric + ("|max" if max_mode else "|sum")
+
+
+func _rebuild_player_progress_pending_unlock_index() -> void:
+	player_progress_pending_unlock_index.clear()
+	for index in range(player_progress_pending_events.size()):
+		var raw_event: Variant = player_progress_pending_events[index]
+		if not raw_event is Dictionary:
+			continue
+		var event: Dictionary = raw_event
+		if String(event.get("type", "")) != "unlock_progress":
+			continue
+		var metric := String(event.get("metric", ""))
+		if metric == "":
+			continue
+		player_progress_pending_unlock_index[_player_progress_unlock_index_key(metric, bool(event.get("max_mode", false)))] = index
+
+
+func _merge_indexed_player_progress_unlock(metric: String, amount: float, max_mode: bool) -> float:
+	var index_key := _player_progress_unlock_index_key(metric, max_mode)
+	var index := int(player_progress_pending_unlock_index.get(index_key, -1))
+	if index >= 0 and index < player_progress_pending_events.size():
+		var raw_event: Variant = player_progress_pending_events[index]
+		if raw_event is Dictionary:
+			var event: Dictionary = raw_event
+			if String(event.get("type", "")) == "unlock_progress" \
+			and String(event.get("metric", "")) == metric \
+			and bool(event.get("max_mode", false)) == max_mode \
+			and not player_progress_sync_sent_event_ids.has(String(event.get("event_id", ""))):
+				var updated := event.duplicate(true)
+				if max_mode:
+					updated["amount"] = maxf(float(updated.get("amount", 0.0)), amount)
+					player_progress_pending_events[index] = updated
+					return 0.0
+				var batch_limit := float(RTPlayerProgressSync.UNLOCK_PROGRESS_BATCH_LIMITS.get(metric, 0.0))
+				var available := maxf(0.0, batch_limit - float(updated.get("amount", 0.0)))
+				if available > 0.0:
+					var merged := minf(amount, available)
+					updated["amount"] = float(updated.get("amount", 0.0)) + merged
+					player_progress_pending_events[index] = updated
+					if merged >= amount:
+						return 0.0
+					amount -= merged
+	var remaining := RTPlayerProgressSync.merge_pending_unlock_progress(
+		player_progress_pending_events,
+		player_progress_sync_sent_event_ids,
+		metric,
+		amount,
+		max_mode
+	)
+	_rebuild_player_progress_pending_unlock_index()
+	return remaining
+
+
+func _defer_player_progress_unlock(metric: String, amount: float, max_mode: bool) -> void:
+	if metric == "" or amount <= 0.0:
+		return
+	var key := _player_progress_unlock_index_key(metric, max_mode)
+	var entry: Dictionary = player_progress_deferred_unlock_progress.get(key, {
+		"metric": metric,
+		"amount": 0.0,
+		"max_mode": max_mode,
+	})
+	entry["amount"] = maxf(float(entry.get("amount", 0.0)), amount) if max_mode else float(entry.get("amount", 0.0)) + amount
+	player_progress_deferred_unlock_progress[key] = entry
+	_mark_card_unlocks_dirty()
+
+
+func _flush_deferred_player_progress_unlocks() -> void:
+	if player_progress_deferred_unlock_progress.is_empty():
+		return
+	var deferred_entries: Array = player_progress_deferred_unlock_progress.values().duplicate(true)
+	player_progress_deferred_unlock_progress.clear()
+	for raw_entry in deferred_entries:
+		if raw_entry is Dictionary:
+			var entry: Dictionary = raw_entry
+			_queue_player_progress_unlock_event(
+				String(entry.get("metric", "")),
+				float(entry.get("amount", 0.0)),
+				bool(entry.get("max_mode", false))
+			)
+
+
 func _queue_player_progress_event(event: Dictionary) -> void:
 	if event.is_empty() or dedicated_server_mode:
 		return
@@ -1194,6 +1283,10 @@ func _queue_player_progress_event(event: Dictionary) -> void:
 		_mark_card_unlocks_dirty()
 		return
 	player_progress_pending_events.append(event.duplicate(true))
+	if String(event.get("type", "")) == "unlock_progress":
+		var metric := String(event.get("metric", ""))
+		if metric != "":
+			player_progress_pending_unlock_index[_player_progress_unlock_index_key(metric, bool(event.get("max_mode", false)))] = player_progress_pending_events.size() - 1
 	player_progress_sync_timer = 0.35
 	_mark_card_unlocks_dirty()
 
@@ -1206,14 +1299,16 @@ func _next_player_progress_event_sequence() -> int:
 func _queue_player_progress_unlock_event(metric: String, amount: float, max_mode: bool) -> void:
 	if metric == "" or amount <= 0.0:
 		return
-	var remaining := RTPlayerProgressSync.merge_pending_unlock_progress(
-		player_progress_pending_events,
-		player_progress_sync_sent_event_ids,
-		metric,
-		amount,
-		max_mode
-	)
+	# The dictionaries currently inside an HTTP request stay immutable. Runtime
+	# progress is coalesced briefly and merged after the request completes.
+	if player_progress_sync_in_flight:
+		_defer_player_progress_unlock(metric, amount, max_mode)
+		return
+	var remaining := _merge_indexed_player_progress_unlock(metric, amount, max_mode)
 	while remaining > 0.0:
+		if player_progress_pending_events.size() >= RTPlayerProgressSync.MAX_PENDING_EVENTS:
+			_defer_player_progress_unlock(metric, remaining, max_mode)
+			return
 		var event_amount := minf(remaining, RTPlayerProgressSync.unlock_progress_batch_limit(metric, max_mode, remaining))
 		var event := RTPlayerProgressSync.unlock_progress_event(
 			player_profile_id,
@@ -1826,6 +1921,87 @@ func _check_card_unlock_rules(notify_unlocks: bool = true) -> void :
 			_unlock_spectrum_by_key_state(spectrum_key_id, notify_unlocks)
 
 
+func _ensure_card_unlock_rule_metric_index() -> void:
+	if not card_unlock_rules_by_metric.is_empty():
+		return
+	for source_entry in [
+		{"kind": "card", "rules": CARD_UNLOCK_RULES},
+		{"kind": "manifestation", "rules": MANIFESTATION_UNLOCK_RULES},
+		{"kind": "spectrum", "rules": SPECTRUM_UNLOCK_RULES},
+	]:
+		var kind: String = source_entry["kind"]
+		var rules: Dictionary = source_entry["rules"]
+		for raw_id in rules.keys():
+			var id := String(raw_id)
+			var rule: Dictionary = rules[raw_id]
+			for metric in _card_unlock_rule_metrics(rule):
+				if not card_unlock_rules_by_metric.has(metric):
+					card_unlock_rules_by_metric[metric] = []
+				var indexed_rules: Array = card_unlock_rules_by_metric[metric]
+				indexed_rules.append({"kind": kind, "id": id, "target": _card_unlock_rule_target_for_metric(rule, metric)})
+	_rebuild_card_unlock_next_thresholds()
+
+
+func _card_unlock_rule_target_for_metric(rule: Dictionary, metric: String) -> float:
+	if String(rule.get("metric", "")) == metric:
+		return float(rule.get("target", 0.0))
+	for extra in Array(rule.get("all", [])):
+		if extra is Dictionary and String(Dictionary(extra).get("metric", "")) == metric:
+			return float(Dictionary(extra).get("target", 0.0))
+	return 0.0
+
+
+func _indexed_unlock_is_unlocked(indexed: Dictionary) -> bool:
+	var id := String(indexed.get("id", ""))
+	match String(indexed.get("kind", "")):
+		"card":
+			return bool(unlocked_card_ids.get(id, false))
+		"manifestation":
+			return bool(unlocked_manifestation_ids.get(id, false))
+		"spectrum":
+			return bool(unlocked_spectrum_ids.get(id, false))
+	return true
+
+
+func _rebuild_card_unlock_next_thresholds() -> void:
+	card_unlock_next_threshold_by_metric.clear()
+	for metric_value in card_unlock_rules_by_metric.keys():
+		_rebuild_card_unlock_next_threshold(String(metric_value))
+
+
+func _rebuild_card_unlock_next_threshold(metric: String) -> void:
+	var current := float(card_unlock_progress.get(metric, 0.0))
+	var next_threshold := INF
+	for indexed_value in card_unlock_rules_by_metric.get(metric, []):
+		var indexed: Dictionary = indexed_value
+		if _indexed_unlock_is_unlocked(indexed):
+			continue
+		var target := float(indexed.get("target", 0.0))
+		if target > current:
+			next_threshold = minf(next_threshold, target)
+	card_unlock_next_threshold_by_metric[metric] = next_threshold
+
+
+func _check_card_unlock_rules_for_metric(metric: String, notify_unlocks: bool = true) -> void:
+	_ensure_card_unlock_rule_metric_index()
+	if float(card_unlock_progress.get(metric, 0.0)) < float(card_unlock_next_threshold_by_metric.get(metric, 0.0)):
+		return
+	for indexed_value in card_unlock_rules_by_metric.get(metric, []):
+		var indexed: Dictionary = indexed_value
+		var id := String(indexed.get("id", ""))
+		match String(indexed.get("kind", "")):
+			"card":
+				if not bool(unlocked_card_ids.get(id, false)) and _unlock_rule_completed(Dictionary(CARD_UNLOCK_RULES.get(id, {}))):
+					_unlock_card_by_id(id, notify_unlocks)
+			"manifestation":
+				if not bool(unlocked_manifestation_ids.get(id, false)) and _unlock_rule_completed(Dictionary(MANIFESTATION_UNLOCK_RULES.get(id, {}))):
+					_unlock_manifestation_by_key_state(id, notify_unlocks)
+			"spectrum":
+				if not bool(unlocked_spectrum_ids.get(id, false)) and _unlock_rule_completed(Dictionary(SPECTRUM_UNLOCK_RULES.get(id, {}))):
+					_unlock_spectrum_by_key_state(id, notify_unlocks)
+	_rebuild_card_unlock_next_threshold(metric)
+
+
 func _card_unlock_rule_metrics(rule: Dictionary) -> Array[String]:
 	var result: Array[String] = []
 	var primary: String = String(rule.get("metric", ""))
@@ -1904,7 +2080,7 @@ func _apply_card_unlock_progress_local(metric: String, amount: float, max_mode: 
 	else:
 		card_unlock_progress[metric] = maxf(0.0, float(card_unlock_progress.get(metric, 0.0)) + amount)
 		applied = true
-	_check_card_unlock_rules()
+	_check_card_unlock_rules_for_metric(metric)
 	if applied and not player_progress_applying_snapshot:
 		_queue_player_progress_unlock_event(metric, amount, max_mode)
 	_mark_card_unlocks_dirty()
@@ -1992,17 +2168,16 @@ func _update_card_unlock_runtime(delta: float) -> void :
 		if card_unlock_save_timer <= 0.0:
 			save_controller._save_card_unlocks_async()
 	card_unlock_runtime_accumulator += delta
-	if card_unlock_runtime_accumulator >= 1.0:
-		var seconds: float = floor(card_unlock_runtime_accumulator)
-		card_unlock_runtime_accumulator -= seconds
+	if card_unlock_runtime_accumulator >= CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL:
+		card_unlock_runtime_accumulator = fmod(card_unlock_runtime_accumulator, CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL)
 		_set_card_unlock_progress_max("survive_seconds", time_alive)
 	var moved_distance: = player_pos.distance_to(card_unlock_last_player_pos)
 	card_unlock_last_player_pos = player_pos
 	if moved_distance <= 2.0:
 		card_unlock_stationary_tick += delta
-		if card_unlock_stationary_tick >= 1.0:
+		if card_unlock_stationary_tick >= CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL:
 			var stationary_seconds: float = floor(card_unlock_stationary_tick)
-			card_unlock_stationary_tick -= stationary_seconds
+			card_unlock_stationary_tick = fmod(card_unlock_stationary_tick, CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL)
 			_add_card_unlock_progress("stationary_seconds", stationary_seconds)
 	else:
 		card_unlock_stationary_tick = 0.0
@@ -3842,12 +4017,14 @@ func _on_player_progress_sync_completed(result: int, response_code: int, _header
 	player_progress_sync_in_flight = false
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
 		player_progress_sync_sent_event_ids.clear()
+		_flush_deferred_player_progress_unlocks()
 		player_progress_sync_status = "sync_unavailable"
 		print("Progresso online: sync indisponivel HTTP ", response_code)
 		return
 	var payload = JSON.parse_string(body.get_string_from_utf8())
 	if not payload is Dictionary or not bool(payload.get("ok", false)):
 		player_progress_sync_sent_event_ids.clear()
+		_flush_deferred_player_progress_unlocks()
 		player_progress_sync_status = "sync_invalid"
 		print("Progresso online: resposta de sync invalida")
 		return
@@ -3876,9 +4053,11 @@ func _on_player_progress_sync_completed(result: int, response_code: int, _header
 			elif not accepted_ids.has(event_id):
 				remaining.append(event)
 		player_progress_pending_events = remaining
+		_rebuild_player_progress_pending_unlock_index()
 	if not rejected_by_id.is_empty():
 		player_progress_sync_status = "sync_rejected"
 	player_progress_sync_sent_event_ids.clear()
+	_flush_deferred_player_progress_unlocks()
 	_apply_remote_player_progress_snapshot(payload.get("unlocks", {}), false)
 	_save_card_unlocks()
 	player_progress_sync_timer = PLAYER_PROGRESS_SYNC_INTERVAL
@@ -5222,6 +5401,7 @@ func _load_textures() -> void :
 	var henry_fire_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_fire_sheet_v2.png")
 	var henry_basic_cast_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_basic_cast_sheet_v2.png")
 	var henry_ultimate_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_ultimate_sheet_v1.png")
+	var henry_spin_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_incendiary_spin_sheet_v1.png")
 	var henry_barometric_walk_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_barometric_walk_sheet_v1.png")
 	var henry_barometric_attack_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_barometric_attack_sheet_v1.png")
 	var henry_barometric_cast_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_barometric_cast_sheet_v1.png")
@@ -5307,9 +5487,11 @@ func _load_textures() -> void :
 		textures["henry_colossus_fire_network"].append_array(colossus_attack_frames)
 		textures["henry_colossus_cast_network"].append_array(colossus_skill_frames)
 	textures["henry_ultimate"] = _atlas_row_frames(henry_ultimate_sheet, 0, HENRY_ULTIMATE_FRAME_COUNT)
+	textures["henry_incendiary_spin"] = _atlas_row_frames(henry_spin_sheet, 0, HENRY_SPIN_FRAME_COUNT)
 	textures["henry_barometric_ultimate"] = _atlas_row_frames(henry_barometric_ultimate_sheet, 0, HENRY_ULTIMATE_FRAME_COUNT)
 	textures["henry_colossus_transform"] = _atlas_row_frames(henry_colossus_transform_sheet, 0, HENRY_ULTIMATE_FRAME_COUNT)
 	textures["henry_cast_network"].append_array(textures["henry_ultimate"])
+	textures["henry_cast_network"].append_array(textures["henry_incendiary_spin"])
 	textures["henry_barometric_cast_network"].append_array(textures["henry_barometric_ultimate"])
 	textures["player_damage"] = [_safe_load(base + "player/damage/Geo_Damage1.png"), _safe_load(base + "player/damage/Geo_Damage2.png"), _safe_load(base + "player/damage/Geo_Damage3.png"), _safe_load(base + "player/damage/Geo_Damage4.png")]
 	textures["player_prismatica_damage"] = []
@@ -8227,7 +8409,7 @@ func _player_start_down_controls_locked() -> bool:
 
 
 func _local_player_controls_locked() -> bool:
-	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or henry_incendiary_ability_controller.entrance_active
+	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or henry_spin_active or henry_incendiary_ability_controller.entrance_active
 
 
 func _spectator_combat_mode() -> bool:
@@ -9702,6 +9884,8 @@ func _update_game(delta: float) -> void :
 					_toggle_eclipsada_form()
 				elif manifestation_key == "necronada":
 					_try_arm_necronada_empower()
+				elif active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
+					henry_colossus_ability_controller.activate_reinforcement()
 				else:
 					_try_arm_lacerante_empower()
 			lacerante_empower_key_was_pressed = empower_key_pressed
@@ -11705,14 +11889,23 @@ func _damage_source_manifestation_key(source_peer_id: int, fallback_index: int =
 
 
 func _apply_henry_burn_from_damage(target: Dictionary, source: String, source_damage: float, source_peer_id: int, boss_target: bool) -> void:
-	if source not in ["henry_spark", "henry_flame_cone", "henry_heat_wave"]:
+	if source == "henry_true_fire":
 		return
-	var normalized_damage := source_damage / 0.72 if source == "henry_spark" else source_damage
-	var overdrive := source == "henry_heat_wave"
+	if source == "henry_spark":
+		var normalized_damage := source_damage / 0.72
+		if boss_target:
+			henry_incendiary_ability_controller.apply_burn_to_boss(normalized_damage, source_peer_id, true)
+		else:
+			henry_incendiary_ability_controller.apply_burn_to_enemy(target, normalized_damage, source_peer_id, true)
+		return
+	if source not in ["henry_flame_cone", "henry_guard_burst", "henry_heat_wave", "henry_spin_burst"]:
+		return
 	if boss_target:
-		henry_incendiary_ability_controller.apply_burn_to_boss(normalized_damage, source_peer_id, overdrive)
+		henry_incendiary_ability_controller.consume_breach_boss(source_peer_id)
+	elif target == arauto:
+		henry_incendiary_ability_controller.consume_breach_arauto(source_peer_id)
 	else:
-		henry_incendiary_ability_controller.apply_burn_to_enemy(target, normalized_damage, source_peer_id, overdrive)
+		henry_incendiary_ability_controller.consume_breach_enemy(target, source_peer_id)
 
 
 func _apply_eletrica_static_stack(target: Dictionary, source_tag: String, source_manifestation: String = "", source_peer_id: int = 0) -> void :
@@ -11808,7 +12001,7 @@ func _boss_trapped_by_gravitante() -> bool:
 
 func _player_invulnerable() -> bool:
 	var tp_invulnerable: = tp_effects.any( func(effect): return (String(effect.get("kind", "")) in ["lacerante", "eletrica"] or (String(effect.get("kind", "")) == "ressonante" and bool(effect.get("perfect", false)))) and float(effect.get("life", 0.0)) > 0.0)
-	return run_retry_invulnerability_timer > 0.0 or trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable
+	return run_retry_invulnerability_timer > 0.0 or trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable() or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable
 
 
 func _damage_source_is_boss_ultimate(source: String) -> bool:
@@ -11863,7 +12056,7 @@ func _show_silenced_feedback() -> void :
 
 func _secondary_skill_cooldown_base() -> float:
 	if active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
-		return 45.0
+		return 0.0
 	if manifestation_key == "eclipsada":
 		return _eclipsada_e_cooldown_for_form()
 	if manifestation_key == "cartografica":
@@ -11925,6 +12118,9 @@ func _use_secondary_skill(target_world = null) -> void :
 		return
 	if active_character_key == CHARACTER_HENRY:
 		if _secondary_player_locked():
+			return
+		if mutation_key == "colosso":
+			_add_text("FURIA %d%%" % int(round(henry_colossus_ability_controller.fury_ratio() * 100.0)), player_pos + Vector2(0, -110), Color(1.0, 0.62, 0.18), 0.48, 17)
 			return
 		var henry_cooldown := _secondary_skill_cooldown()
 		if time_alive - last_secondary_time < henry_cooldown:
@@ -12541,6 +12737,39 @@ func _ground_target_world(screen_pos: Vector2, viewport: Vector2, secondary: boo
 
 func _execute_teleport(target_world: Vector2) -> void :
 	var origin: Vector2 = player_pos
+	if active_character_key == CHARACTER_HENRY and mutation_key == "colosso" and henry_colossus_ability_controller.giant_active:
+		if not henry_colossus_ability_controller.begin_leap(target_world):
+			return
+		_interrupt_folego()
+		tp_cooldown_pending = true
+		tp_cooldown_override = -1.0
+		_start_direct_teleport_cooldown()
+		_consume_ressonancia_action_bonus("DASH", _current_dash_cooldown())
+		_record_ressonancia_action("DASH", _current_dash_cooldown())
+		_grant_impulso_from_ready_action("DASH")
+		_add_card_unlock_progress("teleports_used", 1.0)
+		_track_behavior_dash(origin, henry_colossus_ability_controller.leap_target)
+		_tutorial_note_action("dash")
+		return
+	if active_character_key == CHARACTER_HENRY and mutation_key == "incendiario":
+		if not henry_incendiary_ability_controller.begin_spin_dash(target_world):
+			return
+		var spin_target := _clamp_player_world(origin + henry_spin_dash_direction * HENRY_SPIN_DASH_DISTANCE)
+		_interrupt_folego()
+		_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": spin_target, "player_pos": player_pos}))
+		_grant_manto_impulso_shield()
+		_activate_passagem_intangivel()
+		tp_cooldown_pending = true
+		tp_cooldown_override = -1.0
+		_start_direct_teleport_cooldown()
+		_consume_ressonancia_action_bonus("DASH", _current_dash_cooldown())
+		_record_ressonancia_action("DASH", _current_dash_cooldown())
+		_grant_impulso_from_ready_action("DASH")
+		_add_card_unlock_progress("teleports_used", 1.0)
+		_track_behavior_dash(origin, spin_target)
+		_send_network_ability_visual(NET_ABILITY_TELEPORT, origin, spin_target, HENRY_SPIN_DURATION + HENRY_ULTIMATE_WAVE_DURATION, HENRY_SPIN_DURATION)
+		_tutorial_note_action("dash")
+		return
 	_interrupt_folego()
 	_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": target_world, "player_pos": player_pos}))
 	if manifestation_key == "cartografica":
@@ -18136,13 +18365,14 @@ func _damage_arauto(amount: float, source: String, show_text: = true, apply_aura
 	if trigger_card_effects:
 		_consume_fratura_cronal_on_arauto(source)
 	var guard_count: int = _count_aguilhao_nodules() if _arauto_is_aguilhao() else _count_arauto_echoes()
-	var reduction: float = min(AGUILHAO_MAX_NODE_REDUCTION, float(guard_count) * AGUILHAO_NODE_DAMAGE_REDUCTION) if _arauto_is_aguilhao() else min(ARAUTO_MAX_DAMAGE_REDUCTION, float(guard_count) * ARAUTO_ECHO_DAMAGE_REDUCTION)
+	var reduction: float = 0.0 if source == "henry_true_fire" else (min(AGUILHAO_MAX_NODE_REDUCTION, float(guard_count) * AGUILHAO_NODE_DAMAGE_REDUCTION) if _arauto_is_aguilhao() else min(ARAUTO_MAX_DAMAGE_REDUCTION, float(guard_count) * ARAUTO_ECHO_DAMAGE_REDUCTION))
 	amount = _apply_limiar_ruina_damage(amount, float(arauto.get("hp", 0.0)), float(arauto.get("max_hp", arauto.get("hp", 1.0))), source, effective_source_category, Vector2(arauto.get("pos", player_pos)))
 	var final: float = max(1.0, amount * (1.0 - reduction))
 	if _arauto_is_aguilhao() and float(arauto.get("aguilhao_vulnerable", 0.0)) > 0.0:
 		final *= AGUILHAO_STUN_VULNERABILITY_MULT
 	final *= _fragilidade_arauto_multiplier(source)
 	final *= _pressao_cerco_arauto_multiplier(source)
+	final *= henry_incendiary_ability_controller.damage_taken_multiplier(arauto, source)
 	var hp_before: float = float(arauto["hp"])
 	arauto["hp"] = max(0.0, hp_before - final)
 	var actual_damage: float = hp_before - max(0.0, float(arauto["hp"]))
@@ -18151,8 +18381,8 @@ func _damage_arauto(amount: float, source: String, show_text: = true, apply_aura
 		_apply_henry_burn_from_damage(arauto, source, amount, source_peer_id, false)
 		if _is_direct_player_damage_source(source, effective_source_category):
 			henry_colossus_ability_controller.on_damage_confirmed_arauto(actual_damage, source_peer_id)
-		if source == "henry_heat_wave":
-			henry_incendiary_ability_controller.apply_heat_wave_push(arauto, attack_origin)
+		if source in ["henry_guard_burst", "henry_heat_wave", "henry_spin_burst"]:
+			henry_incendiary_ability_controller.apply_heat_wave_push(arauto, attack_origin, source)
 	if String(aura_state.get("name", "")) == "Crepuscular" and _is_direct_player_damage_source(source, effective_source_category):
 		AuraSystem.on_boss_hit(aura_state, Vector2(arauto["pos"]), actual_damage)
 		if actual_damage > 0.0 and String(aura_state.get("crepuscular_phase", "")) == "ocaso":
@@ -18684,7 +18914,7 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 		enemies.back()["leech_leap_from"] = pos
 		enemies.back()["leech_leap_to"] = pos
 		enemies.back()["leech_hit_done"] = false
-		enemies.back()["alpha"] = 0.45
+		enemies.back()["alpha"] = 0.22
 	elif kind == ENEMY_AMBER_SUTURER:
 		enemies.back()["shoot_cd"] = 999.0
 		enemies.back()["parado"] = true
@@ -18724,7 +18954,7 @@ func _spawn_point_around_player(radius: float) -> Vector2:
 
 func _sanguessuga_spawn_point() -> Vector2:
 	var target_pos: = _sanguessuga_primary_target_pos()
-	return _sanguessuga_nearest_solitary_point(target_pos, -1)
+	return _sanguessuga_nearest_solitary_point(target_pos, -1, true)
 
 
 func _sanguessuga_primary_target_pos() -> Vector2:
@@ -18733,24 +18963,26 @@ func _sanguessuga_primary_target_pos() -> Vector2:
 	return player_pos
 
 
-func _sanguessuga_nearest_solitary_point(origin: Vector2, ignore_uid: int) -> Vector2:
+func _sanguessuga_nearest_solitary_point(origin: Vector2, ignore_uid: int, enforce_target_distance: bool = false) -> Vector2:
 	var min_margin: = Vector2(55.0, 55.0)
 	var clamped_origin: = origin.clamp(min_margin, WORLD_SIZE - min_margin)
 	var best: = clamped_origin
-	var best_score: = _sanguessuga_solitary_score(best, clamped_origin, ignore_uid)
-	var rings: Array = [SANGUESSUGA_SOLITARY_RADIUS, SANGUESSUGA_SOLITARY_RADIUS + 64.0, SANGUESSUGA_SOLITARY_RADIUS + 128.0]
+	var best_score: = _sanguessuga_solitary_score(best, clamped_origin, ignore_uid, enforce_target_distance)
+	var base_radius: float = SANGUESSUGA_SPAWN_MIN_DISTANCE if enforce_target_distance else SANGUESSUGA_SOLITARY_RADIUS
+	var ring_step: float = 120.0 if enforce_target_distance else 64.0
+	var rings: Array = [base_radius, base_radius + ring_step, base_radius + ring_step * 2.0]
 	for radius in rings:
-		for i in range(16):
-			var angle: = (TAU * float(i) / 16.0) + rng.randf_range(-0.08, 0.08)
+		for i in range(24):
+			var angle: = (TAU * float(i) / 24.0) + rng.randf_range(-0.06, 0.06)
 			var candidate: = (clamped_origin + Vector2.from_angle(angle) * float(radius)).clamp(min_margin, WORLD_SIZE - min_margin)
-			var score: = _sanguessuga_solitary_score(candidate, clamped_origin, ignore_uid)
+			var score: = _sanguessuga_solitary_score(candidate, clamped_origin, ignore_uid, enforce_target_distance)
 			if score > best_score:
 				best_score = score
 				best = candidate
 	return best
 
 
-func _sanguessuga_solitary_score(candidate: Vector2, origin: Vector2, ignore_uid: int) -> float:
+func _sanguessuga_solitary_score(candidate: Vector2, origin: Vector2, ignore_uid: int, enforce_target_distance: bool = false) -> float:
 	var nearest_leech: = INF
 	for enemy in enemies:
 		if String(enemy.get("type", "")) != ENEMY_CHRONAL_LEECH:
@@ -18764,7 +18996,15 @@ func _sanguessuga_solitary_score(candidate: Vector2, origin: Vector2, ignore_uid
 	var overlap_penalty: = 0.0
 	if nearest_leech < SANGUESSUGA_SOLITARY_RADIUS:
 		overlap_penalty = (SANGUESSUGA_SOLITARY_RADIUS - nearest_leech) * 8.0
-	return spacing_score - candidate.distance_to(origin) * 0.42 - overlap_penalty
+	if not enforce_target_distance:
+		return spacing_score - candidate.distance_to(origin) * 0.42 - overlap_penalty
+	var target_distance: = INF
+	for target in _combat_targets():
+		target_distance = minf(target_distance, candidate.distance_to(Vector2(target.get("pos", player_pos))))
+	if target_distance == INF:
+		target_distance = candidate.distance_to(player_pos)
+	var too_close_penalty: = maxf(0.0, SANGUESSUGA_SPAWN_MIN_DISTANCE - target_distance) * 18.0
+	return spacing_score + minf(target_distance, SANGUESSUGA_SPAWN_MIN_DISTANCE + 240.0) * 0.82 - candidate.distance_to(origin) * 0.08 - overlap_penalty - too_close_penalty
 
 
 func _spawn_point_for_type(kind: String) -> Vector2:
@@ -18824,8 +19064,10 @@ func _entity_physical_radius(entity: Dictionary) -> float:
 			return 24.0
 		ENEMY_AGGLOMERATOR, ENEMY_SHIELD_REFLECTOR, ENEMY_GUARDIAO:
 			return 36.0
-		ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH:
+		ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE:
 			return 32.0
+		ENEMY_CHRONAL_LEECH:
+			return SANGUESSUGA_HIT_RADIUS
 		ENEMY_KAMIKAZE, ENEMY_DEVOTO:
 			return 20.0
 	return 22.0
@@ -20022,12 +20264,16 @@ func _fire_fossil_pustule_spit(enemy: Dictionary, target_pos: Vector2) -> void :
 		"type": "pustula_fossil_spit",
 		"speed_mult": PUSTULE_SPIT_SPEED_MULT,
 		"radius": 18.0,
-		"hit_radius": 24.0
+		"hit_radius": 24.0,
+		"source_enemy_uid": int(enemy.get("uid", -1)),
+		"source_enemy_pos": origin
 	})
 	_spawn_radial_particles(origin + aimed_dir * 22.0, Color(0.72, 1.0, 0.18), 4)
 
 
 func _explode_fossil_pustule(enemy: Dictionary) -> void :
+	if bool(enemy.get("pustule_exploded", false)):
+		return
 	var origin: = Vector2(enemy["pos"])
 	var pool: = {
 		"pos": origin,
@@ -20043,9 +20289,40 @@ func _explode_fossil_pustule(enemy: Dictionary) -> void :
 	enemy["skip_rewards"] = true
 	enemy["hp"] = 0.0
 	_spawn_radial_particles(origin, Color(0.58, 1.0, 0.16), 18)
-	shockwaves.append({"pos": origin, "radius": 20.0, "max": 118.0, "life": 0.48, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.48, 1.0, 0.14)})
+	shockwaves.append({"pos": origin, "radius": 20.0, "max": PUSTULE_POOL_RADIUS, "life": 0.48, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.48, 1.0, 0.14)})
 	_apply_pustule_pool_damage(pool)
 	pool["tick"] = PUSTULE_POOL_TICK
+
+
+func _fossil_pustule_from_spit(bullet: Dictionary) -> Dictionary:
+	var source_uid: = int(bullet.get("source_enemy_uid", -1))
+	if source_uid < 0:
+		return {}
+	for enemy in enemies:
+		if int(enemy.get("uid", -2)) != source_uid:
+			continue
+		if String(enemy.get("type", "")) != ENEMY_FOSSIL_PUSTULE:
+			return {}
+		if float(enemy.get("hp", 0.0)) <= 0.0 or bool(enemy.get("pustule_exploded", false)):
+			return {}
+		return enemy
+	return {}
+
+
+func _resolve_fossil_pustule_spit_hit(bullet: Dictionary, target_peer_id: int = 0) -> bool:
+	var pustule: Dictionary = _fossil_pustule_from_spit(bullet)
+	if pustule.is_empty():
+		return false
+	var pull_pos: = Vector2(pustule.get("pos", bullet.get("source_enemy_pos", player_pos))).clamp(Vector2(40.0, 40.0), WORLD_SIZE - Vector2(40.0, 40.0))
+	if target_peer_id <= 0 or target_peer_id == _mp_unique_id():
+		_apply_hostile_reposition(pull_pos, "pustula_fossil_spit")
+	else:
+		var remote_state: Dictionary = net_players_by_peer.get(target_peer_id, {})
+		if not remote_state.is_empty():
+			remote_state["pos"] = pull_pos
+		_send_peer_hostile_reposition(target_peer_id, pull_pos, "pustula_fossil_spit")
+	_explode_fossil_pustule(pustule)
+	return true
 
 
 func _make_pustule_fragments() -> Array:
@@ -20346,19 +20623,19 @@ func _update_sanguessuga_cronal(enemy: Dictionary, delta: float) -> bool:
 				timer = SANGUESSUGA_DORMANT_TIME
 				enemy["leech_life"] = SANGUESSUGA_DORMANT_TIME
 				enemy["leech_arm_timer"] = SANGUESSUGA_ATTACK_ARM_TIME
-				enemy["alpha"] = 1.0
+				enemy["alpha"] = 0.22
 				_spawn_radial_particles(Vector2(enemy["pos"]), Color(0.54, 1.0, 0.18), 8)
 		SANGUESSUGA_STATE_DORMANT:
 			timer -= delta
 			var arm_timer: = maxf(0.0, float(enemy.get("leech_arm_timer", SANGUESSUGA_ATTACK_ARM_TIME)) - delta)
 			enemy["leech_arm_timer"] = arm_timer
 			enemy["leech_life"] = timer
-			enemy["alpha"] = clampf(timer / 3.0, 0.28, 1.0) if timer <= 3.0 else 1.0
+			enemy["alpha"] = clampf(timer / 3.0, 0.08, 0.22) if timer <= 3.0 else 0.22
 			if timer <= 0.0:
 				state = SANGUESSUGA_STATE_EXPIRING
 				timer = 0.38
 			elif arm_timer > 0.0:
-				enemy["alpha"] = 0.72 + 0.18 * sin(time_alive * 9.0 + float(enemy.get("phase", 0.0)))
+				enemy["alpha"] = 0.18 + 0.06 * sin(time_alive * 9.0 + float(enemy.get("phase", 0.0)))
 			else:
 				var target: = _sanguessuga_activation_target(Vector2(enemy["pos"]))
 				if not target.is_empty():
@@ -20450,7 +20727,7 @@ func _sanguessuga_try_hit(enemy: Dictionary) -> void :
 		return
 	var center: = Vector2(enemy["pos"])
 	var damage: = maxi(1, int(round(float(player_hp_max) * 0.018 + 9.0)))
-	if _local_player_damageable_by_contact() and center.distance_to(player_pos) <= 32.0:
+	if _local_player_damageable_by_contact() and center.distance_to(player_pos) <= SANGUESSUGA_HIT_RADIUS:
 		enemy["leech_hit_done"] = true
 		_apply_sanguessuga_parasitism(damage)
 		_spawn_radial_particles(player_pos, Color(0.62, 1.0, 0.18), 10)
@@ -20458,7 +20735,7 @@ func _sanguessuga_try_hit(enemy: Dictionary) -> void :
 	for peer_id in _targetable_remote_peer_ids(true):
 		var state: Dictionary = net_players_by_peer.get(peer_id, {})
 		var peer_pos: = Vector2(state.get("pos", Vector2(-10000, -10000)))
-		if center.distance_to(peer_pos) <= 32.0:
+		if center.distance_to(peer_pos) <= SANGUESSUGA_HIT_RADIUS:
 			enemy["leech_hit_done"] = true
 			var peer_hp_max: = maxf(1.0, float(state.get("hp_max", player_hp_max)))
 			_send_peer_damage(peer_id, maxi(1, int(round(peer_hp_max * 0.018 + 9.0))), "sanguessuga_cronal_impact")
@@ -22193,7 +22470,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	if current_phase == 4:
 		var planet_origin: Vector2 = attack_origin if attack_origin != Vector2.ZERO else Vector2(enemy.get("pos", player_pos))
 		_damage_phase4_planet_at(planet_origin, amount, 130.0)
-	if source != "parasite_feast":
+	if source != "parasite_feast" and source != "henry_true_fire":
 		if enemy["type"] == ENEMY_LARAPIO:
 			amount *= LARAPIO_DAMAGE_TAKEN_MULT
 			enemy["portal_pause"] = LARAPIO_PORTAL_HIT_PAUSE
@@ -22233,6 +22510,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
 	amount *= _acorrentada_chained_damage_multiplier(enemy)
 	amount *= _cartographic_trace_damage_multiplier(enemy, source)
+	amount *= henry_incendiary_ability_controller.damage_taken_multiplier(enemy, source)
 	var damage_manifestation: String = source_manifestation if source_manifestation != "" else _damage_source_manifestation_key(source_peer_id)
 	if damage_manifestation == "eletrica" and source != "eletrica_static_lightning":
 		var source_tag: = _eletrica_damage_source_category(source, effective_source_category)
@@ -22259,9 +22537,9 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	if actual_damage > 0.0:
 		_apply_henry_burn_from_damage(enemy, source, amount, source_peer_id, false)
 		if _is_direct_player_damage_source(source, effective_source_category):
-			henry_colossus_ability_controller.on_damage_confirmed_enemy(enemy, actual_damage, source_peer_id)
-		if source == "henry_heat_wave":
-			henry_incendiary_ability_controller.apply_heat_wave_push(enemy, damage_origin)
+			henry_colossus_ability_controller.on_damage_confirmed_enemy(enemy, actual_damage, source_peer_id, source)
+		if source in ["henry_guard_burst", "henry_heat_wave", "henry_spin_burst"]:
+			henry_incendiary_ability_controller.apply_heat_wave_push(enemy, damage_origin, source)
 	if actual_damage > 0.0 and String(aura_state.get("name", "")) == "Crepuscular" and String(aura_state.get("crepuscular_phase", "")) == "ocaso" and _is_direct_player_damage_source(source, effective_source_category):
 		enemy["crepuscular_ocaso_mark"] = maxf(float(enemy.get("crepuscular_ocaso_mark", 0.0)), 3.5)
 	if actual_damage > 0.0 and vfx_director:
@@ -22436,7 +22714,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		armor += 0.065
 	if source == "veneno":
 		armor += 0.1
-	if source == "parasite_feast":
+	if source in ["parasite_feast", "henry_true_fire"]:
 		armor = 0.0
 	else:
 		armor = clamp(armor, 0.12, 0.84)
@@ -22512,6 +22790,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		_add_text("ESCUDO DE CINZAS", boss_pos + Vector2(rng.randf_range(-24, 24), -102), Color(1.0, 0.62, 0.18), 0.45, 15)
 	final *= _fragilidade_boss_multiplier(source)
 	final *= _pressao_cerco_boss_multiplier(source)
+	final *= henry_incendiary_ability_controller.boss_damage_taken_multiplier(source)
 	var boss_hp_before: float = boss_hp
 	var antimatter_should_trigger: bool = _antimatter_direct_trigger(source, effective_source_category)
 	boss_hp = max(0.0, boss_hp - final)
@@ -23176,6 +23455,8 @@ func _update_enemy_bullets(delta: float) -> void :
 			bullet["probability_near_miss_registered"] = true
 			bullet_type = String(bullet.get("type", "projetador"))
 			var hit_was_blocked: = _player_invulnerable()
+			if bullet_type == "pustula_fossil_spit":
+				_resolve_fossil_pustule_spit_hit(bullet)
 			_damage_player(int(bullet["damage"]), bullet_type, true)
 			if current_phase == 5 and not hit_was_blocked:
 				_increase_umbra_cadence(0.09)
@@ -23202,6 +23483,8 @@ func _update_enemy_bullets(delta: float) -> void :
 				bullet_target_peer = _remote_peer_on_segment(previous_bullet_pos, Vector2(bullet["pos"]), bullet_hit_radius)
 			if bullet_target_peer != 0:
 				bullet_type = String(bullet.get("type", "projetador"))
+				if bullet_type == "pustula_fossil_spit":
+					_resolve_fossil_pustule_spit_hit(bullet, bullet_target_peer)
 				_send_peer_damage(bullet_target_peer, int(bullet["damage"]), bullet_type, true)
 				if current_phase == 5:
 					_increase_umbra_cadence(0.09)
@@ -23809,6 +24092,8 @@ func _apply_phase2_projectile_freeze() -> void :
 
 
 func _freeze_player(duration: float, label: = "CONGELADO!") -> void :
+	if henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
+		return
 	if _player_invulnerable():
 		return
 	if player_control_immunity_timer > 0.0:
@@ -36025,7 +36310,7 @@ func _card_lore(card_name: String) -> String:
 		"Teleporte": return "Dobre o espaco para estar exatamente onde o inimigo nao espera."
 		"Petro": return "Um guardiao leal que se alimenta de energia e lealdade ancestral."
 		"Defesa": return "Aumente a densidade do seu campo de forca contra impactos nocivos."
-		"Sorte": return "Altere as probabilidades de eventos quanticos a seu favor."
+		"Sorte": return "Nenhum instrumento consegue medir o que esta anomalia altera."
 		"Poison": return "Uma toxina que envelhece aceleradamente as celulas de quem a toca."
 		"Coletora": return "O ceifador nao espera por aqueles que ja estao a beira do abismo."
 		"Mercenaria": return "Toda queda vira contrato. Todo contrato bem cumprido paga mais caro."
@@ -36107,7 +36392,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		"Defesa":
 			return "+%.1f resistencia, limitada a 50" % (3.5 * effective_count * zero)
 		"Sorte":
-			return "+%.2f%% sorte; incomuns sem bloqueio; raras %s" % [0.3 * effective_count * zero, "liberadas" if safe_count > 0 else "bloqueadas"]
+			return "efeito de probabilidade oculto"
 		"escolha_adiada":
 			return "%d trava(s) consumivel(eis) para segurar cartas da loja no preco atual" % safe_count
 		"cinzas_escolha":
@@ -36798,6 +37083,10 @@ func _damage_all_necronada_remnants(damage: float, source: String) -> void :
 
 func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
 	if is_dead:
+		return
+	# Henry's spin and Colosso's airborne window are complete phasing states:
+	# boss ultimates and side effects must not bypass either one.
+	if henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
 		return
 	_warn_if_damage_visual_missing(source)
 	var boss_ultimate_damage: = _damage_source_is_boss_ultimate(source)
@@ -38276,6 +38565,14 @@ func _interface_text_plus_rect(panel: Rect2) -> Rect2:
 	return _damage_text_plus_rect(panel)
 
 
+func _range_opacity_minus_rect(panel: Rect2) -> Rect2:
+	return _damage_text_minus_rect(panel)
+
+
+func _range_opacity_plus_rect(panel: Rect2) -> Rect2:
+	return _damage_text_plus_rect(panel)
+
+
 func _desktop_hud_scale_minus_rect(panel: Rect2) -> Rect2:
 	return _damage_text_minus_rect(panel)
 
@@ -38705,7 +39002,7 @@ func _catalog_enemy_items() -> Array:
 		{"kind": "enemy", "name": "Enguia do Miasma", "summary": "Uma febre que aprendeu a nadar na fenda.", "desc": "A Enguia do Miasma desliza como se o ar fosse lama. Ela nao ocupa muito espaco, mas deixa a leitura da arena mais venenosa e instavel.", "lore": "Registros do Ruptura tratam a Enguia como um sintoma da sexta ruptura: um corpo fino carregando o odor vivo de algo que apodreceu fora do tempo.", "mechanics": "Inimigo de pressao movel da fase 6. Forca reposicionamento constante e prepara o terreno para ameacas mais pesadas da Matriarca.", "color": Color(0.58, 1.0, 0.78), "texture": "enemy_phase_6_enguia_miasma"},
 		{"kind": "enemy", "name": "Lodario", "summary": "O peso mole da Chaga.", "desc": "O Lodario se arrasta como lama com vontade propria. Onde ele passa, a fase parece ficar mais espessa e menos generosa com erro.", "lore": "Ele e uma mistura de sedimento, memoria e carne cansada. A Matriarca nao o comanda como soldado; ela o derrama pelo mapa.", "mechanics": "Funciona como corpo de bloqueio: mais resistente e lento, bom para fechar caminhos e tornar a fuga menos limpa.", "color": Color(0.86, 0.7, 0.46), "texture": "enemy_phase_6_lodario"},
 		{"kind": "enemy", "name": "Pustula Fossil", "summary": "Uma ferida antiga que ainda pulsa.", "desc": "A Pustula Fossil parece parada demais para ser urgente, ate a arena obrigar Geovana a encostar naquilo que devia ter sido enterrado.", "lore": "A sexta ruptura conserva suas dores como reliquias. Cada Pustula e um fragmento fossilizado da Chaga tentando voltar a ser carne.", "mechanics": "Inimigo pesado de area e prioridade. Deve ser lido como obstaculo vivo que aumenta o custo de limpar a fase sem planejamento.", "color": Color(1.0, 0.62, 0.32), "texture": "enemy_phase_6_pustula_fossil"},
-		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Cai sobre o alvo, arma o bote por alguns segundos e so entao salta para grudar no presente de Geovana.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda, pousa perto do jogador, leva 2s para armar o ataque e evita dividir o proprio raio de bote com outra sanguessuga.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"},
+		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Cai longe do alvo, arma o bote por alguns segundos e so entao salta para grudar no presente de Geovana.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda distante, permanece quase imperceptivel por 2s antes de armar o ataque e evita dividir o proprio raio de bote com outra sanguessuga.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"},
 		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele nao persegue o corpo: observa a rota e endurece a ferida da Chaga no caminho que Geovana esta prestes a usar.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente com tres ataques: suturas de rota, leque mirado de agulhas e coroa radial. Destrua os nos osseos para abrir passagem ou elimine o nucleo.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
 	]
 
@@ -38860,8 +39157,8 @@ func _draw_manifest_mp(viewport: Vector2) -> void :
 	MenusPresentation._draw_manifest_mp(self, viewport)
 
 
-func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color) -> void :
-	MenusPresentation._draw_manifest_mp_choice_surface(self, rect, active_items, active_selected, scroll, aura_view, accent)
+func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color, henry_view: bool = false) -> void :
+	MenusPresentation._draw_manifest_mp_choice_surface(self, rect, active_items, active_selected, scroll, aura_view, accent, henry_view)
 
 
 func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
@@ -38879,8 +39176,12 @@ func _draw_manifest_mp_half(rect: Rect2, stage: String, selected_manif: int, sel
 	MenusPresentation._draw_manifest_mp_half(self, rect, stage, selected_manif, selected_aur, scroll, is_remote, is_ready)
 
 
-func _draw_manifest_mp_compact_info(rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color) -> void:
-	MenusPresentation._draw_manifest_mp_compact_info(self, rect, item, details, aura_view, accent)
+func _draw_manifest_mp_compact_info(rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color, rows_override: Array = []) -> void:
+	MenusPresentation._draw_manifest_mp_compact_info(self, rect, item, details, aura_view, accent, rows_override)
+
+
+func _henry_choice_icon_texture(key: String) -> Texture2D:
+	return CharacterSelectPresentation._henry_choice_icon_texture(key)
 
 
 func _draw_online_label(text: String, rect: Rect2, size: int, color: Color) -> void:
@@ -41347,7 +41648,8 @@ func _henry_ultimate_frame() -> int:
 	var cast_duration := HENRY_ULTIMATE_CAST_DURATION
 	if mutation_key == "barometrico" and henry_barometric_ability_controller != null:
 		cast_duration = henry_barometric_ability_controller.STORM_WINDUP
-	return clampi(int(henry_ultimate_cast_elapsed / maxf(0.001, cast_duration / float(HENRY_ULTIMATE_FRAME_COUNT))), 0, HENRY_ULTIMATE_FRAME_COUNT - 1)
+	var frame_elapsed := fmod(henry_ultimate_cast_elapsed, cast_duration) if mutation_key == "incendiario" else henry_ultimate_cast_elapsed
+	return clampi(int(frame_elapsed / maxf(0.001, cast_duration / float(HENRY_ULTIMATE_FRAME_COUNT))), 0, HENRY_ULTIMATE_FRAME_COUNT - 1)
 
 
 func _henry_shop_entry_frame() -> int:
@@ -41367,6 +41669,10 @@ func _henry_player_texture(move: Vector2) -> Texture2D:
 		var shop_entry_frames: Array = textures.get("henry_shop_entry", [])
 		if not shop_entry_frames.is_empty():
 			return shop_entry_frames[_henry_shop_entry_frame()]
+	if henry_spin_active:
+		var spin_frames: Array = textures.get("henry_incendiary_spin", [])
+		if not spin_frames.is_empty():
+			return spin_frames[henry_incendiary_ability_controller.spin_frame(spin_frames.size())]
 	if henry_ultimate_cast_active:
 		var ultimate_key := "henry_colossus_transform" if colossus else ("henry_barometric_ultimate" if barometric else "henry_ultimate")
 		var ultimate_frames: Array = textures.get(ultimate_key, [])
@@ -42652,7 +42958,13 @@ func _handle_key(event: InputEventKey) -> void :
 			_activate_graphics_setting(String(graphics_keys[settings_selected]))
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
 			var selected_graphics_key: String = String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)])
-			if selected_graphics_key == "window_mode":
+			if selected_graphics_key == "range_color":
+				RangedAttackRange.cycle_indicator_color(self, -1)
+				_save_config()
+			elif selected_graphics_key == "range_opacity":
+				auto_attack_range_opacity = RangedAttackRange.sanitize_indicator_opacity(auto_attack_range_opacity - 0.1)
+				_save_config()
+			elif selected_graphics_key == "window_mode":
 				_cycle_desktop_window_mode(-1)
 				_apply_graphics_settings()
 				_save_config()
@@ -42662,7 +42974,13 @@ func _handle_key(event: InputEventKey) -> void :
 				_save_config()
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			var selected_graphics_key: String = String(graphics_keys[clampi(settings_selected, 0, graphics_count - 1)])
-			if selected_graphics_key == "window_mode":
+			if selected_graphics_key == "range_color":
+				RangedAttackRange.cycle_indicator_color(self, 1)
+				_save_config()
+			elif selected_graphics_key == "range_opacity":
+				auto_attack_range_opacity = RangedAttackRange.sanitize_indicator_opacity(auto_attack_range_opacity + 0.1)
+				_save_config()
+			elif selected_graphics_key == "window_mode":
 				_cycle_desktop_window_mode(1)
 				_apply_graphics_settings()
 				_save_config()
@@ -43233,16 +43551,23 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 	if mode in ["mutation_select", "mutation_select_mp"]:
 		if event.keycode in [KEY_LEFT, KEY_A, KEY_UP, KEY_W]:
 			selected_mutation = posmod(selected_mutation - 1, HENRY_MUTATIONS.size())
+			manifest_scroll_pos = float(selected_mutation)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 0.92)
 			_vibrate(22, 0.12)
+			if mode.ends_with("_mp"):
+				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_RIGHT, KEY_D, KEY_DOWN, KEY_S]:
 			selected_mutation = posmod(selected_mutation + 1, HENRY_MUTATIONS.size())
+			manifest_scroll_pos = float(selected_mutation)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.06)
 			_vibrate(22, 0.12)
+			if mode.ends_with("_mp"):
+				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			mode = "effect_select_mp" if mode.ends_with("_mp") else "effect_select"
 			if mode.ends_with("_mp"):
 				manifest_select_stage = MANIFEST_STAGE_AURA
+				aura_scroll_pos = float(selected_effect)
 				_sync_manifest_mp_selection(true)
 		elif event.keycode == KEY_ESCAPE:
 			if mode.ends_with("_mp"):
@@ -43253,12 +43578,18 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 	if mode in ["effect_select", "effect_select_mp"]:
 		if event.keycode in [KEY_LEFT, KEY_A, KEY_UP, KEY_W] and not (mode.ends_with("_mp") and mp_local_ready):
 			selected_effect = posmod(selected_effect - 1, HENRY_EFFECTS.size())
+			aura_scroll_pos = float(selected_effect)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 0.92)
 			_vibrate(22, 0.12)
+			if mode.ends_with("_mp"):
+				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_RIGHT, KEY_D, KEY_DOWN, KEY_S] and not (mode.ends_with("_mp") and mp_local_ready):
 			selected_effect = posmod(selected_effect + 1, HENRY_EFFECTS.size())
+			aura_scroll_pos = float(selected_effect)
 			_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.06)
 			_vibrate(22, 0.12)
+			if mode.ends_with("_mp"):
+				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			if mode.ends_with("_mp"):
 				_toggle_henry_multiplayer_ready()
@@ -43269,6 +43600,10 @@ func _handle_character_selection_key(event: InputEventKey) -> bool:
 				_cancel_manifest_mp_ready()
 			else:
 				mode = "mutation_select_mp" if mode.ends_with("_mp") else "mutation_select"
+				if mode.ends_with("_mp"):
+					manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
+					manifest_scroll_pos = float(selected_mutation)
+					_sync_manifest_mp_selection(true)
 		return true
 	return false
 
@@ -43289,6 +43624,9 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 			_go_to_menu()
 		return true
 	if mode in ["mutation_select", "mutation_select_mp", "effect_select", "effect_select_mp"]:
+		if mode.ends_with("_mp") and buttons.get("mp_manifest_start", Rect2()).has_point(pos):
+			_request_manifest_mp_start()
+			return true
 		var henry_choices: Array = HENRY_MUTATIONS if mode.begins_with("mutation_select") else HENRY_EFFECTS
 		if not (mode == "effect_select_mp" and mp_local_ready):
 			for i in range(henry_choices.size()):
@@ -43296,10 +43634,14 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 					continue
 				if mode.begins_with("mutation_select"):
 					selected_mutation = i
+					manifest_scroll_pos = float(selected_mutation)
 				else:
 					selected_effect = i
+					aura_scroll_pos = float(selected_effect)
 				_play_sfx("ui_manifest_switch", 0.01, 0.24, 1.02)
 				_vibrate(24, 0.13)
+				if mode.ends_with("_mp"):
+					_sync_manifest_mp_selection()
 				return true
 		if buttons.get("henry_back", Rect2()).has_point(pos):
 			if mode.begins_with("effect_select"):
@@ -43307,6 +43649,10 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 					_cancel_manifest_mp_ready()
 				else:
 					mode = "mutation_select_mp" if mode.ends_with("_mp") else "mutation_select"
+					if mode.ends_with("_mp"):
+						manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
+						manifest_scroll_pos = float(selected_mutation)
+						_sync_manifest_mp_selection(true)
 			elif mode.ends_with("_mp"):
 				mode = "multiplayer_menu"
 			else:
@@ -43316,6 +43662,7 @@ func _handle_character_selection_touch(pos: Vector2) -> bool:
 				mode = "effect_select_mp" if mode.ends_with("_mp") else "effect_select"
 				if mode.ends_with("_mp"):
 					manifest_select_stage = MANIFEST_STAGE_AURA
+					aura_scroll_pos = float(selected_effect)
 					_sync_manifest_mp_selection(true)
 			elif mode.ends_with("_mp"):
 				_toggle_henry_multiplayer_ready()
@@ -43735,6 +44082,17 @@ func _finish_manifest_drag(pos: Vector2, viewport: Vector2) -> void :
 		_sync_manifest_mp_selection()
 
 
+func _henry_mp_selection_wire_value(mutation: int = selected_mutation, effect: int = selected_effect) -> float:
+	var safe_mutation: int = clampi(mutation, 0, HENRY_MUTATIONS.size() - 1)
+	var safe_effect: int = clampi(effect, 0, HENRY_EFFECTS.size() - 1)
+	return float(safe_mutation * HENRY_EFFECTS.size() + safe_effect)
+
+
+func _decode_henry_mp_selection(wire_value: float) -> Vector2i:
+	var packed: int = clampi(int(round(wire_value)), 0, HENRY_MUTATIONS.size() * HENRY_EFFECTS.size() - 1)
+	return Vector2i(packed / HENRY_EFFECTS.size(), packed % HENRY_EFFECTS.size())
+
+
 func _send_manifest_mp_rpc(rpc_name: String, stage: String, manifestation: int, aura: int, scroll: float, ready: bool) -> void :
 	_net_report_count_out("control", 80)
 	_net_report_event("manifest_rpc_out", "%s stage=%s manifestation=%d aura=%d ready=%s" % [rpc_name, stage, manifestation, aura, str(ready)])
@@ -43747,7 +44105,11 @@ func _send_manifest_mp_rpc(rpc_name: String, stage: String, manifestation: int, 
 func _sync_manifest_mp_selection(force: = false) -> void :
 	if mode not in ["manifest_mp", "mutation_select_mp", "effect_select_mp"]:
 		return
-	var scroll: float = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
+	var henry_selection: bool = active_character_key == CHARACTER_HENRY and mode in ["mutation_select_mp", "effect_select_mp"]
+	if henry_selection:
+		selected_manifestation = HENRY_SELECTION_INDEX
+		selected_aura = HENRY_SELECTION_INDEX
+	var scroll: float = _henry_mp_selection_wire_value() if henry_selection else (aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos)
 	var is_ready: = mp_local_ready and manifest_select_stage == MANIFEST_STAGE_AURA
 	if is_ready or force:
 		mp_ready_last_sent_ms = Time.get_ticks_msec()
@@ -43756,7 +44118,7 @@ func _sync_manifest_mp_selection(force: = false) -> void :
 	var now_ms: = Time.get_ticks_msec()
 	if now_ms - mp_manifest_sync_last_ms < NET_MANIFEST_SYNC_INTERVAL_MS:
 		return
-	var signature: = "%s:%d:%d" % [manifest_select_stage, selected_manifestation, selected_aura]
+	var signature: = "%s:%d:%d:%.0f" % [manifest_select_stage, selected_manifestation, selected_aura, scroll]
 	if signature == mp_manifest_sync_last_signature:
 		return
 	mp_manifest_sync_last_ms = now_ms
@@ -44362,8 +44724,10 @@ func _aura_color() -> Color:
 
 func _damage_color(source: String) -> Color:
 	match source:
-		"henry_spark", "henry_flame_cone", "henry_heat_wave", "henry_burn":
+		"henry_spark", "henry_flame_cone", "henry_guard_burst", "henry_heat_wave", "henry_spin_burst", "henry_burn":
 			return Color(1.0, 0.46, 0.08)
+		"henry_true_fire":
+			return Color(1.0, 0.92, 0.48)
 		"henry_pressure", "henry_nimbo_pressure", "henry_pressure_corridor", "henry_eye_storm":
 			return Color(0.36, 0.88, 0.94)
 		"lacerante", "lacerante_empowered":
@@ -44998,7 +45362,7 @@ func _handle_graphics_settings_touch(pos: Vector2, viewport: Vector2) -> void :
 
 
 func _graphics_setting_keys() -> Array:
-	var keys: = ["particles", "shadows", "screen_shake", "fps_limit", "health_warning_start", "health_warning_strength", "low_resource", "memory_saver"]
+	var keys: = ["particles", "shadows", "screen_shake", "fps_limit", "health_warning_start", "health_warning_strength", "range_color", "range_opacity", "low_resource", "memory_saver"]
 	if _uses_desktop_ui():
 		keys.append("window_mode")
 	keys.append("back")
@@ -45017,6 +45381,8 @@ func _graphics_setting_title(key: String) -> String:
 		"fps_limit": return "LIMITE DE FPS"
 		"health_warning_start": return "ALERTA DE VIDA"
 		"health_warning_strength": return "INTENSIDADE DO ALERTA"
+		"range_color": return "COR DO ALCANCE"
+		"range_opacity": return "OPACIDADE DO ALCANCE"
 		"low_resource": return "MODO LEVE"
 		"memory_saver": return "DESEMPENHO"
 		"window_mode": return "TELA"
@@ -45031,6 +45397,8 @@ func _graphics_setting_subtitle(key: String) -> String:
 		"fps_limit": return "30, 60, 120 FPS ou sem limite em PC e celular."
 		"health_warning_start": return "Vida em que o vermelho começa. Abaixo de 25%, as veias avançam."
 		"health_warning_strength": return "Intensidade do vermelho e das veias nas bordas da visão."
+		"range_color": return "Cor do circulo do alcance do ataque automatico."
+		"range_opacity": return "De 0% invisivel a 100% completo."
 		"low_resource": return "Reduz carga visual sem trocar a interface."
 		"memory_saver": return "Prioriza aparelhos modestos e corta efeitos caros."
 		"window_mode": return "Fullscreen, janela ou janela sem borda no desktop."
@@ -45045,6 +45413,8 @@ func _graphics_setting_value(key: String) -> String:
 		"fps_limit": return "ILIMITADO" if _sanitize_graphics_fps_limit(gfx_fps_limit) == 0 else "%d FPS" % _sanitize_graphics_fps_limit(gfx_fps_limit)
 		"health_warning_start": return "%d%%" % roundi(gfx_health_warning_start * 100.0)
 		"health_warning_strength": return "DESLIGADO" if gfx_health_warning_strength == 0.0 else ("SUAVE" if gfx_health_warning_strength < 1.0 else ("FORTE" if gfx_health_warning_strength > 1.0 else "PADRÃO"))
+		"range_color": return RangedAttackRange.indicator_color_name(self)
+		"range_opacity": return "%d%%" % int(round(auto_attack_range_opacity * 100.0))
 		"low_resource": return "ON" if gfx_low_resource else "OFF"
 		"memory_saver": return "ON" if _memory_saver_active() else "OFF"
 		"window_mode":
@@ -45062,6 +45432,7 @@ func _graphics_setting_color(key: String) -> Color:
 		"screen_shake": return Color(0.6, 0.8, 1.0) if gfx_screen_shake else Color(0.46, 0.5, 0.56)
 		"fps_limit": return Color(0.32, 1.0, 0.82)
 		"health_warning_start", "health_warning_strength": return Color(1.0, 0.48, 0.42)
+		"range_color", "range_opacity": return RangedAttackRange.indicator_color(self)
 		"low_resource": return Color(1.0, 0.72, 0.28) if gfx_low_resource else Color(0.46, 0.5, 0.56)
 		"memory_saver": return Color(1.0, 0.42, 0.34) if _memory_saver_active() else Color(0.46, 0.5, 0.56)
 		"window_mode": return Color(0.32, 1.0, 0.82)
@@ -45073,7 +45444,14 @@ func _activate_graphics_setting(key: String) -> void :
 		"particles":
 			gfx_particles = not gfx_particles
 		"shadows":
-			gfx_shadows = not gfx_shadows
+			if _shadows_enabled():
+				gfx_shadows = false
+			else:
+				gfx_shadows = true
+				gfx_low_resource = false
+				gfx_memory_saver = false
+				mobile_adaptive_visual_budget = false
+				runtime_performance_controller.reset()
 		"screen_shake":
 			gfx_screen_shake = not gfx_screen_shake
 		"fps_limit":
@@ -45082,6 +45460,10 @@ func _activate_graphics_setting(key: String) -> void :
 			gfx_health_warning_start = 0.55 if gfx_health_warning_start < 0.5 else (0.7 if gfx_health_warning_start < 0.6 else 0.35)
 		"health_warning_strength":
 			gfx_health_warning_strength = 0.6 if gfx_health_warning_strength < 0.1 else (1.0 if gfx_health_warning_strength < 0.9 else (1.35 if gfx_health_warning_strength < 1.2 else 0.0))
+		"range_color":
+			RangedAttackRange.cycle_indicator_color(self)
+		"range_opacity":
+			auto_attack_range_opacity = 0.0 if auto_attack_range_opacity >= 0.999 else RangedAttackRange.sanitize_indicator_opacity(auto_attack_range_opacity + 0.1)
 		"low_resource":
 			gfx_low_resource = not gfx_low_resource
 			if not gfx_low_resource:
@@ -46128,6 +46510,28 @@ func _send_peer_damage(peer_id: int, amount: int, source: String, silent_hit_sfx
 		rpc_id(peer_id, "_rpc_client_take_damage", maxi(1, amount), source, silent_hit_sfx)
 
 
+func _send_peer_hostile_reposition(peer_id: int, destination: Vector2, source: String) -> void:
+	if peer_id == 0 or not is_multiplayer:
+		return
+	var safe_destination: = destination.clamp(Vector2(40.0, 40.0), WORLD_SIZE - Vector2(40.0, 40.0))
+	if online_connected:
+		rpc_id(1, "_request_peer_hostile_reposition", peer_id, safe_destination, source)
+	else:
+		rpc_id(peer_id, "_rpc_client_hostile_reposition", safe_destination, source)
+
+
+func _apply_hostile_reposition(destination: Vector2, source: String) -> void:
+	if is_dead or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
+		return
+	var previous_pos: Vector2 = player_pos
+	player_pos = _clamp_player_world(destination)
+	_spawn_radial_particles(previous_pos, Color(0.58, 1.0, 0.16), 8)
+	_spawn_radial_particles(player_pos, Color(1.0, 0.58, 0.16), 12)
+	if source == "pustula_fossil_spit":
+		_add_text("PUXADO PELA PUSTULA", player_pos + Vector2(0, -76), Color(0.8, 1.0, 0.24), 0.8, 17)
+	_vibrate(85, 0.42)
+
+
 func _send_remote_player_damage(amount: int, source: String) -> void :
 	for peer_id in _targetable_remote_peer_ids():
 		_send_peer_damage(peer_id, amount, source)
@@ -46590,6 +46994,8 @@ func _start_multiplayer_manifest() -> void :
 	if not dedicated_server_mode and active_character_key == CHARACTER_HENRY:
 		selected_manifestation = HENRY_SELECTION_INDEX
 		selected_aura = HENRY_SELECTION_INDEX
+		manifest_scroll_pos = float(selected_mutation)
+		aura_scroll_pos = float(selected_effect)
 		manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 		mode = "mutation_select_mp"
 		_sync_manifest_mp_selection(true)
@@ -46606,13 +47012,17 @@ func _apply_manifest_mp_remote_state(sender: int, stage: String, manifestation: 
 				var conflict_stage: String = MANIFEST_STAGE_MANIFESTATION if int(owner_choice.get("manifestation", -1)) == manifestation else MANIFEST_STAGE_AURA
 				rpc_id(sender, "_rpc_manifest_choice_rejected", conflict_stage, manifestation if conflict_stage == MANIFEST_STAGE_MANIFESTATION else aura, String(dedicated_names_by_peer.get(duplicate_owner, "outro jogador")))
 				return
+			var previous_selection: Dictionary = dedicated_manifest_selection_by_peer.get(sender, {})
+			var henry_selection: Vector2i = _decode_henry_mp_selection(scroll) if manifestation == HENRY_SELECTION_INDEX else Vector2i(-1, -1)
 			var selection: = {
 				"stage": stage,
 				"manifestation": manifestation,
 				"aura": aura,
 				"scroll": scroll,
 				"ready": is_ready,
-				"name": String(dedicated_names_by_peer.get(sender, "Player %d" % sender))
+				"name": String(dedicated_names_by_peer.get(sender, "Player %d" % sender)),
+				"henry_mutation": henry_selection.x if henry_selection.x >= 0 else int(previous_selection.get("henry_mutation", -1)),
+				"henry_effect": henry_selection.y if henry_selection.y >= 0 else int(previous_selection.get("henry_effect", -1))
 			}
 			if dedicated_manifest_selection_by_peer.get(sender, {}) == selection:
 				return
@@ -46644,9 +47054,13 @@ func _dedicated_manifest_duplicate_owner(sender: int, stage: String, manifestati
 func _apply_manifest_peer_state(peer_id: int, stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool, remote_name: String) -> void :
 	if peer_id == _mp_unique_id():
 		return
+	var previous_state: Dictionary = mp_manifest_state_by_peer.get(peer_id, {})
+	var henry_selection: Vector2i = _decode_henry_mp_selection(scroll) if manifestation == HENRY_SELECTION_INDEX else Vector2i(-1, -1)
 	mp_manifest_state_by_peer[peer_id] = {
 		"stage": stage, "manifestation": manifestation, "aura": aura,
-		"scroll": scroll, "ready": is_ready, "name": remote_name
+		"scroll": scroll, "ready": is_ready, "name": remote_name,
+		"henry_mutation": henry_selection.x if henry_selection.x >= 0 else int(previous_state.get("henry_mutation", -1)),
+		"henry_effect": henry_selection.y if henry_selection.y >= 0 else int(previous_state.get("henry_effect", -1))
 	}
 	mp_remote_manifest_stage = stage
 	mp_remote_manifestation = manifestation
@@ -46910,6 +47324,8 @@ func _network_player_animation_snapshot(now_ms: int) -> Vector2i:
 		if player_freeze_visual_timer > 0.0:
 			return Vector2i(NET_ANIM_FROZEN, _frozen_player_frame_index())
 		var henry_move := _read_move()
+		if henry_spin_active:
+			return Vector2i(NET_ANIM_LACERANTE, 48 + henry_incendiary_ability_controller.spin_frame(HENRY_SPIN_FRAME_COUNT))
 		if henry_ultimate_cast_active:
 			return Vector2i(NET_ANIM_LACERANTE, 40 + _henry_ultimate_frame())
 		if henry_skill_cast_active:
@@ -47267,12 +47683,14 @@ func _rpc_client_player_state(state: Dictionary, p_slashes: Array, p_prisms: Arr
 		return
 	if _is_dedicated_spectator(sender):
 		return
-	_dedicated_store_player_state(sender, state)
-	var player_bytes: = _net_report_estimate_packed_bytes(state) + 96
+	var canonical_state: Dictionary = state.duplicate(true)
+	_canonicalize_remote_player_identity(canonical_state)
+	_dedicated_store_player_state(sender, canonical_state)
+	var player_bytes: = _net_report_estimate_packed_bytes(canonical_state) + 96
 	for peer_id in _mp_peer_ids():
 		if peer_id != sender:
 			_net_report_count_out("player", player_bytes)
-			rpc_id(peer_id, "_rpc_remote_player_state", sender, state, p_slashes, p_prisms, p_anchors, p_seed_links, p_effects)
+			rpc_id(peer_id, "_rpc_remote_player_state", sender, canonical_state, p_slashes, p_prisms, p_anchors, p_seed_links, p_effects)
 
 @rpc("any_peer", "call_remote", "unreliable_ordered", 1)
 func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bool, manifestation: int, aura: int, anim_state: int, frame_idx: int, flip_h: bool, ping: int, stealthed: bool = false, manifestation_key_hint: String = "", visual_snapshot: PackedFloat32Array = PackedFloat32Array()) -> void :
@@ -47285,13 +47703,16 @@ func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bo
 		return
 	if _is_dedicated_spectator(sender):
 		return
+	var identity: Dictionary = _canonical_remote_player_identity(manifestation, manifestation_key_hint)
+	var canonical_manifestation: int = int(identity.get("manifestation", manifestation))
+	var canonical_manifestation_key: String = String(identity.get("manifestation_key", manifestation_key_hint))
 	var state: = {
 		"pos": pos,
 		"hp": hp,
 		"hp_max": hp_max,
 		"dead": dead,
-		"manifestation": manifestation,
-		"manifestation_key": manifestation_key_hint,
+		"manifestation": canonical_manifestation,
+		"manifestation_key": canonical_manifestation_key,
 		"aura": aura,
 		"anim_state": anim_state,
 		"frame_idx": frame_idx,
@@ -47309,7 +47730,7 @@ func _rpc_client_player_state_light(pos: Vector2, hp: int, hp_max: int, dead: bo
 	for peer_id in _mp_peer_ids():
 		if peer_id != sender:
 			_net_report_count_out("player", player_packet_bytes)
-			rpc_id(peer_id, "_rpc_remote_player_state_light", sender, pos, hp, hp_max, dead, manifestation, aura, anim_state, frame_idx, flip_h, ping, stealthed, String(dedicated_names_by_peer.get(sender, "Player %d" % sender)), manifestation_key_hint, visual_snapshot)
+			rpc_id(peer_id, "_rpc_remote_player_state_light", sender, pos, hp, hp_max, dead, canonical_manifestation, aura, anim_state, frame_idx, flip_h, ping, stealthed, String(dedicated_names_by_peer.get(sender, "Player %d" % sender)), canonical_manifestation_key, visual_snapshot)
 
 @rpc("authority", "call_remote", "unreliable_ordered", 1)
 func _rpc_remote_player_state(peer_id: int, state: Dictionary, p_slashes: Array, p_prisms: Array, p_anchors: Array, p_seed_links: Array, p_effects: Array) -> void :
@@ -47358,6 +47779,7 @@ func _rpc_remote_player_state_light(peer_id: int, pos: Vector2, hp: int, hp_max:
 func _store_remote_player_state(peer_id: int, incoming: Dictionary) -> void :
 	if peer_id == 0 or peer_id == _mp_unique_id():
 		return
+	_canonicalize_remote_player_identity(incoming)
 	var previous: Dictionary = net_players_by_peer.get(peer_id, {})
 	if _remote_snapshot_is_stale_after_revive(previous, incoming):
 		return
@@ -47376,6 +47798,37 @@ func _store_remote_player_state(peer_id: int, incoming: Dictionary) -> void :
 	partner_is_dead = _all_remote_players_dead()
 	if mode in ["game", "phase_transition", "boss_call", "shop_countdown", "pause_countdown", "paused"]:
 		_finish_multiplayer_defeat_if_all_dead()
+
+
+func _canonical_remote_player_identity(manifestation: int, manifestation_key_hint: String) -> Dictionary:
+	var key: String = manifestation_key_hint.strip_edges().to_lower()
+	var henry_keys: Array[String] = []
+	for mutation in HENRY_MUTATIONS:
+		henry_keys.append(String(mutation.get("key", "")))
+	if manifestation == HENRY_SELECTION_INDEX or key in henry_keys:
+		return {
+			"manifestation": HENRY_SELECTION_INDEX,
+			"manifestation_key": key if key in henry_keys else "incendiario"
+		}
+	var key_index: int = -1
+	if key != "":
+		for index in range(MANIFESTATIONS.size()):
+			if String(MANIFESTATIONS[index].get("key", "")) == key:
+				key_index = index
+				break
+	if key_index >= 0 and key_index < MANIFESTATIONS.size():
+		return {"manifestation": key_index, "manifestation_key": String(MANIFESTATIONS[key_index].get("key", ""))}
+	var safe_index: int = clampi(manifestation, 0, MANIFESTATIONS.size() - 1)
+	return {"manifestation": safe_index, "manifestation_key": String(MANIFESTATIONS[safe_index].get("key", ""))}
+
+
+func _canonicalize_remote_player_identity(state: Dictionary) -> void:
+	var identity: Dictionary = _canonical_remote_player_identity(
+		int(state.get("manifestation", 0)),
+		String(state.get("manifestation_key", ""))
+	)
+	state["manifestation"] = int(identity["manifestation"])
+	state["manifestation_key"] = String(identity["manifestation_key"])
 
 
 func _remote_snapshot_is_stale_after_revive(previous: Dictionary, incoming: Dictionary) -> bool:
@@ -47653,6 +48106,10 @@ func _apply_remote_world_snapshot(enemies_data, boss_data, bullets_data) -> void
 	# a phase boundary cannot reuse dictionaries from the previous roster.
 	_apply_remote_boss_snapshot(boss_data, now_ms)
 	if previous_phase != current_phase:
+		# Remote replicas do not run the authority's phase-start path. Make the
+		# newly authoritative roster resident before decoding/drawing its enemies;
+		# otherwise a valid type can fall through to a stale phase texture.
+		_prepare_phase_texture_assets(current_phase)
 		enemies.clear()
 	_apply_remote_enemy_snapshot(enemies_data, now_ms)
 	_apply_remote_bullet_snapshot(bullets_data, now_ms)
@@ -49491,10 +49948,29 @@ func _request_peer_damage(peer_id: int, amount: int, source: String, silent_hit_
 		return
 	rpc_id(peer_id, "_rpc_client_take_damage", amount, source, silent_hit_sfx)
 
+
+@rpc("any_peer", "reliable")
+func _request_peer_hostile_reposition(peer_id: int, destination: Vector2, source: String) -> void:
+	if not dedicated_server_mode or _mp_sender_id() != dedicated_room_owner_peer_id:
+		return
+	if not dedicated_player_state_by_peer.has(peer_id):
+		return
+	var safe_destination: = destination.clamp(Vector2(40.0, 40.0), WORLD_SIZE - Vector2(40.0, 40.0))
+	var player_state: Dictionary = dedicated_player_state_by_peer.get(peer_id, {})
+	player_state["pos"] = safe_destination
+	rpc_id(peer_id, "_rpc_client_hostile_reposition", safe_destination, source)
+
 @rpc("any_peer", "reliable")
 func _rpc_client_take_damage(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
 	if _mp_sender_is_self(): return
 	_damage_player(amount, source, silent_hit_sfx)
+
+
+@rpc("any_peer", "reliable")
+func _rpc_client_hostile_reposition(destination: Vector2, source: String) -> void:
+	if _mp_sender_is_self() or _mp_sender_id() != 1:
+		return
+	_apply_hostile_reposition(destination, source)
 
 
 func _request_peer_status(peer_id: int, effect_name: String, duration: float) -> void :
@@ -49536,6 +50012,8 @@ func _rpc_request_peer_rewind(peer_id: int, from_pos: Vector2, rewind_pos: Vecto
 
 @rpc("authority", "call_remote", "reliable", 3)
 func _rpc_apply_hostile_status(effect_name: String, duration: float) -> void :
+	if henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
+		return
 	match effect_name:
 		"silence": player_silence_timer = maxf(player_silence_timer, duration)
 		"stun": player_stun_timer = maxf(player_stun_timer, duration)
@@ -49594,6 +50072,8 @@ func _start_temporal_rewind_visual(event_id: String, affected_peer_id: int, from
 
 
 func _apply_temporal_rewind_result(rewind_pos: Vector2, rewind_hp: float) -> void :
+	if henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
+		return
 	player_pos = _clamp_player_world(rewind_pos)
 	player_hp = clampi(int(round(rewind_hp)), 1, int(player_hp_max))
 	_cancel_combat_aim_state(true)

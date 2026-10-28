@@ -1,5 +1,7 @@
 extends SceneTree
 
+const CardCatalogDefinitions = preload("res://scripts/catalog/card_catalog_definitions.gd")
+
 var game: Node
 
 
@@ -67,6 +69,9 @@ func _run() -> void:
 	_check(is_zero_approx(game._chance_carta_rara()), "temporal luck bypassed the Sorte rare gate")
 	game.cards_bought["Sorte"] = 1
 	game.luck = 0.003
+	var sorte_card: Dictionary = _card("Sorte")
+	var public_sorte_text: String = String(sorte_card.get("desc", "")) + " " + game._card_effect_snapshot(sorte_card, 1) + " " + CardCatalogDefinitions.get_burn_summary("Sorte", 1)
+	_check(not public_sorte_text.to_lower().contains("sorte temporal") and not public_sorte_text.contains("0.3%") and not public_sorte_text.to_lower().contains("incomuns"), "Sorte card exposed hidden temporary luck math")
 	var rare_at_hour: float = game._chance_carta_rara()
 	_check(absf(rare_at_hour - 0.07116) < 0.00001, "unlocked rare chance did not match the 60-minute contract")
 	game.time_alive = 0.0

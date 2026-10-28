@@ -665,7 +665,7 @@ static func _draw_gameplay_preference(game: Node2D, rect: Rect2, title: String, 
 	if game.mode == "settings_graphics":
 		value_rect = Rect2(rect.end.x - 136.0, rect.get_center().y - 18.0, 116.0, 36.0)
 	var text_width: float = maxf(100.0, value_rect.position.x - rect.position.x - 30.0)
-	var stepper: bool = title in ["INTERVALO DA LOJA", "TEXTO DE DANO", "TEXTOS DA INTERFACE", "TAMANHO DO HUD"]
+	var stepper: bool = title in ["INTERVALO DA LOJA", "OPACIDADE DO ALCANCE", "TEXTO DE DANO", "TEXTOS DA INTERFACE", "TAMANHO DO HUD"]
 	if stepper:
 		text_width -= 48.0
 	var title_size: int = 15 if rect.size.y >= 64.0 else 13
@@ -996,18 +996,19 @@ static func _draw_fragmented_choice_texture(game: Node2D, texture: Texture2D, re
 
 static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 	game._draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
-	var local_scroll: float = game.aura_scroll_pos if game.manifest_select_stage == game.MANIFEST_STAGE_AURA else game.manifest_scroll_pos
+	var henry_view: bool = game.active_character_key == game.CHARACTER_HENRY and game.mode in ["mutation_select_mp", "effect_select_mp"]
 	var aura_view: bool = game.manifest_select_stage == game.MANIFEST_STAGE_AURA
-	var active_items: Array = game.AURAS if aura_view else game.MANIFESTATIONS
-	var active_selected: int = game.selected_aura if aura_view else game.selected_manifestation
+	var local_scroll: float = (game.aura_scroll_pos if aura_view else game.manifest_scroll_pos)
+	var active_items: Array = (game.HENRY_EFFECTS if aura_view else game.HENRY_MUTATIONS) if henry_view else (game.AURAS if aura_view else game.MANIFESTATIONS)
+	var active_selected: int = (game.selected_effect if aura_view else game.selected_mutation) if henry_view else (game.selected_aura if aura_view else game.selected_manifestation)
 	var item: Dictionary = active_items[active_selected]
-	var color: Color = game._manifest_select_item_color(item, aura_view)
+	var color: Color = Color(item.get("accent", item.get("color", Color(1.0, 0.62, 0.16)))) if henry_view else game._manifest_select_item_color(item, aura_view)
 	var margin: float = clampf(viewport.x * 0.03, 18.0, 36.0)
 	var title_size: int = int(clampf(viewport.y * 0.046, 24.0, 34.0))
 	var header_y: float = clampf(viewport.y * 0.085, 44.0, 64.0)
 	game._draw_glitch_title("EQUIPE ONLINE", Vector2(viewport.x * 0.5, header_y), title_size, color)
-	var stage_label: String = "ESPECTRO" if aura_view else "MANIFESTACAO"
-	var status_text: String = "confirme seu estado final" if aura_view else "selecione sua manifestacao"
+	var stage_label: String = ("EFEITO" if aura_view else "MUTACAO") if henry_view else ("ESPECTRO" if aura_view else "MANIFESTACAO")
+	var status_text: String = ("confirme o efeito final" if aura_view else "selecione sua mutacao") if henry_view else ("confirme seu estado final" if aura_view else "selecione sua manifestacao")
 	if game.mp_local_ready:
 		status_text = "sua escolha esta travada"
 	game._draw_centered(stage_label + " // " + status_text.to_upper(), Vector2(viewport.x * 0.5, header_y + 34.0), game._readable_text_size(11), Color(0.78, 0.93, 0.98, 0.9))
@@ -1029,19 +1030,25 @@ static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 		team_w = maxf(220.0, panel.size.x - inner_pad * 3.0 - 430.0)
 		choice_rect.size.x = panel.size.x - team_w - inner_pad * 3.0
 		team_rect = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
-	game._draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color)
+	game._draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color, henry_view)
 	game._draw_manifest_mp_team_panel(team_rect, color)
 	var footer_y: float = panel.end.y - action_h - 10.0
 	game.buttons["mp_manifest_ready"] = Rect2(choice_rect.position.x, footer_y, choice_rect.size.x * (0.58 if aura_view and not game.mp_local_ready else 0.74), 46.0)
-	var btn_label: String = "PRONTO" if aura_view else "REVELAR ESPECTRO"
+	var btn_label: String = "PRONTO" if aura_view else ("ESCOLHER EFEITO" if henry_view else "REVELAR ESPECTRO")
 	if game.mp_local_ready:
 		btn_label = "CANCELAR PRONTO"
 	game._draw_big_button(game.buttons["mp_manifest_ready"], btn_label, Color(0.02, 0.14, 0.11, 0.9) if not game.mp_local_ready else Color(0.18, 0.06, 0.08, 0.78), color if not game.mp_local_ready else Color(1.0, 0.22, 0.3), game.mp_local_ready)
+	if henry_view:
+		game.buttons["henry_continue"] = game.buttons["mp_manifest_ready"]
 	if aura_view and not game.mp_local_ready:
 		game.buttons["mp_manifest_back_manifestation"] = Rect2(game.buttons["mp_manifest_ready"].end.x + 12.0, footer_y, maxf(136.0, choice_rect.size.x - game.buttons["mp_manifest_ready"].size.x - 12.0), 46.0)
-		game._draw_big_button(game.buttons["mp_manifest_back_manifestation"], "TROCAR MANIF.", Color(0.03, 0.08, 0.12, 0.86), Color(0.56, 0.76, 1.0), false)
+		game._draw_big_button(game.buttons["mp_manifest_back_manifestation"], "TROCAR MUTACAO" if henry_view else "TROCAR MANIF.", Color(0.03, 0.08, 0.12, 0.86), Color(0.56, 0.76, 1.0), false)
+		if henry_view:
+			game.buttons["henry_back"] = game.buttons["mp_manifest_back_manifestation"]
 	else:
 		game.buttons.erase("mp_manifest_back_manifestation")
+		if henry_view:
+			game.buttons.erase("henry_back")
 	game.buttons["mp_manifest_start"] = Rect2(team_rect.position.x, footer_y, team_rect.size.x, 46.0)
 	var all_ready: bool = game._manifest_all_players_ready()
 	var can_start: bool = game._manifest_mp_start_available()
@@ -1058,12 +1065,12 @@ static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 		game._draw_centered(game.mp_manifest_rejection_message, warning_rect.get_center() + Vector2(0, 5), 14, Color.WHITE)
 
 
-static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color) -> void :
+static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color, henry_view: bool = false) -> void :
 	var item: Dictionary = active_items[active_selected]
 	game.draw_rect(rect, Color(0.02, 0.035, 0.04, 0.82))
 	var header_h: float = 58.0
 	var title: String = String(item.get("name", "???")).to_upper()
-	var caption: String = "ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA"
+	var caption: String = ("EFEITO SELECIONADO" if aura_view else "MUTACAO SELECIONADA") if henry_view else ("ESPECTRO SELECIONADO" if aura_view else "MANIFESTACAO SELECIONADA")
 	game.draw_string(game.font, rect.position + Vector2(20.0, 30.0), title, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, game._fit_text_size(title, rect.size.x - 40.0, 24, 15), accent)
 	game.draw_string(game.font, rect.position + Vector2(20.0, 50.0), caption, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 40.0, game._readable_text_size(9), Color(0.72, 0.9, 0.96, 0.82))
 	game.draw_line(rect.position + Vector2(18.0, header_h), rect.position + Vector2(rect.size.x - 18.0, header_h), Color(accent.r, accent.g, accent.b, 0.34), 1.0)
@@ -1089,13 +1096,15 @@ static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_i
 		var pos_x: float = center_x + diff * spacing
 		var item_rect: Rect2 = Rect2(pos_x - card_w * card_scale * 0.5, center_y - card_h * card_scale * 0.5, card_w * card_scale, card_h * card_scale)
 		var card_item: Dictionary = active_items[i]
-		var item_unlocked: bool = game._manifest_select_item_unlocked(i, aura_view)
-		var item_color: Color = game._manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68)
-		var taken: bool = game._manifest_choice_taken(i, aura_view)
+		var item_unlocked: bool = true if henry_view else game._manifest_select_item_unlocked(i, aura_view)
+		var item_color: Color = Color(card_item.get("accent", card_item.get("color", accent))) if henry_view else (game._manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68))
+		var taken: bool = false if henry_view else game._manifest_choice_taken(i, aura_view)
 		if taken:
 			item_color = Color(1.0, 0.18, 0.24)
 		game._draw_holo_panel(item_rect, item_color, abs_diff < 0.5, opacity * 0.72)
-		var icon: Texture2D = game._manifest_select_item_texture(card_item, aura_view)
+		if henry_view:
+			game.buttons["henry_choice_%d" % i] = item_rect.grow(5.0)
+		var icon: Texture2D = game._henry_choice_icon_texture(String(card_item.get("key", ""))) if henry_view else game._manifest_select_item_texture(card_item, aura_view)
 		if not item_unlocked:
 			game._draw_catalog_locked_card_icon(item_rect.grow(-18.0 * card_scale), false)
 		elif icon:
@@ -1111,9 +1120,9 @@ static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_i
 		var x: float = center_x - total_w * 0.5 + i * 14.0
 		game.draw_circle(Vector2(x, dots_y), 5.5 if i == active_selected else 3.0, accent if i == active_selected else Color(0.36, 0.52, 0.62, 0.42))
 
-	var details: Dictionary = game._aura_details(String(item["name"])) if aura_view else game._manifestation_details(item["key"])
+	var details: Dictionary = {} if henry_view else (game._aura_details(String(item["name"])) if aura_view else game._manifestation_details(item["key"]))
 	var info_rect: Rect2 = Rect2(rect.position.x + 20.0, dots_y + 18.0, rect.size.x - 40.0, rect.end.y - dots_y - 32.0)
-	game._draw_manifest_mp_compact_info(info_rect, item, details, aura_view, accent)
+	game._draw_manifest_mp_compact_info(info_rect, item, details, aura_view, accent, _henry_mp_info_rows(item) if henry_view else [])
 
 
 static func _draw_manifest_mp_team_panel(game: Node2D, rect: Rect2, accent: Color) -> void :
@@ -1122,6 +1131,8 @@ static func _draw_manifest_mp_team_panel(game: Node2D, rect: Rect2, accent: Colo
 		"stage": game.manifest_select_stage,
 		"manifestation": game.selected_manifestation,
 		"aura": game.selected_aura,
+		"henry_mutation": game.selected_mutation if game.active_character_key == game.CHARACTER_HENRY else -1,
+		"henry_effect": game.selected_effect if game.active_character_key == game.CHARACTER_HENRY else -1,
 		"ready": game.mp_local_ready,
 		"name": game.player_nickname if game.player_nickname != "" else "Voce"
 	}
@@ -1137,7 +1148,7 @@ static func _draw_manifest_mp_team_panel(game: Node2D, rect: Rect2, accent: Colo
 		if bool(Dictionary(row["state"]).get("ready", false)):
 			ready_count += 1
 	game._draw_online_label("EQUIPE  %d/%d PRONTOS" % [ready_count, rows.size()], Rect2(rect.position + Vector2(16, 8), Vector2(rect.size.x - 32, 26)), 18, Color.WHITE)
-	game._draw_online_label("Manifestacao + espectro", Rect2(rect.position + Vector2(16, 36), Vector2(rect.size.x - 32, 22)), 14, Color(0.64, 0.8, 0.83))
+	game._draw_online_label("Escolhas da equipe em tempo real", Rect2(rect.position + Vector2(16, 36), Vector2(rect.size.x - 32, 22)), 14, Color(0.64, 0.8, 0.83))
 	var gap: float = 10.0
 	var list_top: float = rect.position.y + 66.0
 	var available_h: float = rect.end.y - list_top - 12.0
@@ -1154,18 +1165,20 @@ static func _draw_manifest_peer_summary_row(game: Node2D, rect: Rect2, peer_id: 
 	var aura_view = stage == game.MANIFEST_STAGE_AURA
 	var manifest_idx: int = int(state.get("manifestation", 0))
 	var aura_idx: int = int(state.get("aura", 0))
-	var manifest_item: Dictionary = game._selection_manifest_item(manifest_idx)
-	var aura_item: Dictionary = game._selection_aura_item(aura_idx)
-	var color: Color = game._manifest_select_item_color(aura_item, true) if aura_view else game._manifest_select_item_color(manifest_item, false)
-	var manifest_color: Color = game._manifest_select_item_color(manifest_item, false)
-	var aura_color: Color = game._manifest_select_item_color(aura_item, true)
+	var henry_selection: bool = manifest_idx == game.HENRY_SELECTION_INDEX
+	var henry_mutation: int = clampi(int(state.get("henry_mutation", 0)), 0, game.HENRY_MUTATIONS.size() - 1)
+	var henry_effect: int = clampi(int(state.get("henry_effect", 0)), 0, game.HENRY_EFFECTS.size() - 1)
+	var manifest_item: Dictionary = game.HENRY_MUTATIONS[henry_mutation] if henry_selection else game._selection_manifest_item(manifest_idx)
+	var aura_item: Dictionary = game.HENRY_EFFECTS[henry_effect] if henry_selection else game._selection_aura_item(aura_idx)
+	var manifest_color: Color = Color(manifest_item.get("accent", manifest_item.get("color", Color(1.0, 0.5, 0.12)))) if henry_selection else game._manifest_select_item_color(manifest_item, false)
+	var aura_color: Color = Color(aura_item.get("accent", aura_item.get("color", Color(1.0, 0.76, 0.22)))) if henry_selection else game._manifest_select_item_color(aura_item, true)
+	var color: Color = aura_color if aura_view else manifest_color
 	game.draw_rect(rect, Color(0.035, 0.06, 0.065, 0.96))
 	game.draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), color)
 	var icon_size: float = minf(rect.size.y - 28.0, 42.0)
 	var icon_rect: Rect2 = Rect2(rect.position + Vector2(12, 10), Vector2(icon_size, icon_size))
-	var henry_selection: bool = manifest_idx == game.HENRY_SELECTION_INDEX
-	var manifest_icon: Texture2D = game._frame_texture("henry_idle", 175, "player_idle") if henry_selection else game._manifest_select_item_texture(manifest_item, false)
-	var aura_icon: Texture2D = null if henry_selection else game._manifest_select_item_texture(aura_item, true)
+	var manifest_icon: Texture2D = game._henry_choice_icon_texture(String(manifest_item.get("key", ""))) if henry_selection else game._manifest_select_item_texture(manifest_item, false)
+	var aura_icon: Texture2D = game._henry_choice_icon_texture(String(aura_item.get("key", ""))) if henry_selection else game._manifest_select_item_texture(aura_item, true)
 	if manifest_icon != null:
 		game._draw_texture_contain(manifest_icon, icon_rect, Color(1.0, 1.0, 1.0, 0.88))
 	if aura_view and aura_icon != null:
@@ -1177,18 +1190,20 @@ static func _draw_manifest_peer_summary_row(game: Node2D, rect: Rect2, peer_id: 
 	var player_label: String = String(state.get("name", "Player %d" % peer_id))
 	if is_local:
 		player_label += " (voce)"
+	var compact_row: bool = rect.size.y < 92.0
 	var line_h: float = (rect.size.y - 14.0) / 4.0
-	game._draw_online_label(player_label, Rect2(text_x, rect.position.y + 5, text_w, line_h), 16, Color.WHITE)
-	game._draw_online_label(String(manifest_item.get("name", "???")), Rect2(text_x, rect.position.y + 5 + line_h, text_w, line_h), 15, manifest_color)
-	var aura_label: String = String(aura_item.get("name", "???")) if aura_view else "Espectro a escolher"
-	game._draw_online_label(aura_label, Rect2(text_x, rect.position.y + 5 + line_h * 2, text_w, line_h), 14, aura_color if aura_view else Color(0.65, 0.76, 0.8))
-	game._draw_online_label("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Rect2(text_x, rect.position.y + 5 + line_h * 3, text_w, line_h), 12, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
+	game._draw_online_label(player_label, Rect2(text_x, rect.position.y + 5, text_w, line_h), 13 if compact_row else 16, Color.WHITE)
+	game._draw_online_label(String(manifest_item.get("name", "???")), Rect2(text_x, rect.position.y + 5 + line_h, text_w, line_h), 12 if compact_row else 15, manifest_color)
+	var aura_label: String = String(aura_item.get("name", "???")) if aura_view else ("Efeito a escolher" if henry_selection else "Espectro a escolher")
+	game._draw_online_label(aura_label, Rect2(text_x, rect.position.y + 5 + line_h * 2, text_w, line_h), 11 if compact_row else 14, aura_color if aura_view else Color(0.65, 0.76, 0.8))
+	game._draw_online_label("PRONTO" if bool(state.get("ready", false)) else "ESCOLHENDO", Rect2(text_x, rect.position.y + 5 + line_h * 3, text_w, line_h), 10 if compact_row else 12, Color(0.2, 1.0, 0.52) if bool(state.get("ready", false)) else Color(1.0, 0.82, 0.24))
 
 
 static func _draw_manifest_mp_half(game: Node2D, rect: Rect2, stage: String, selected_manif: int, selected_aur: int, scroll: float, is_remote: bool, is_ready: bool) -> void :
 	var aura_view = stage == game.MANIFEST_STAGE_AURA
 	if selected_manif == game.HENRY_SELECTION_INDEX:
-		var henry_item: Dictionary = game._selection_aura_item(selected_aur) if aura_view else game._selection_manifest_item(selected_manif)
+		var decoded: Vector2i = game._decode_henry_mp_selection(scroll)
+		var henry_item: Dictionary = game.HENRY_EFFECTS[decoded.y] if aura_view else game.HENRY_MUTATIONS[decoded.x]
 		var henry_color: Color = Color(henry_item.get("color", Color(1.0, 0.42, 0.08)))
 		game._draw_holo_panel(rect.grow(-10.0), henry_color, is_ready, 0.58)
 		var henry_tex: Texture2D = game._frame_texture("henry_idle", 175, "player_idle")
@@ -1264,8 +1279,22 @@ static func _draw_manifest_mp_half(game: Node2D, rect: Rect2, stage: String, sel
 		game._draw_big_button(btn_ready_rect, btn_label, Color(0.02, 0.14, 0.11, 0.88), color)
 
 
-static func _draw_manifest_mp_compact_info(game: Node2D, rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color) -> void:
-	var rows: Array = game._manifest_info_rows(item, details, aura_view)
+static func _henry_mp_info_rows(item: Dictionary) -> Array:
+	var rows: Array = [{"label": "RESUMO", "text": String(item.get("desc", ""))}]
+	for raw_line in String(item.get("details", "")).split("\n", false):
+		var line := String(raw_line).strip_edges()
+		if line == "":
+			continue
+		var separator := line.find(":")
+		rows.append({
+			"label": line.substr(0, separator) if separator >= 0 else "EFEITO",
+			"text": line.substr(separator + 1).strip_edges() if separator >= 0 else line
+		})
+	return rows
+
+
+static func _draw_manifest_mp_compact_info(game: Node2D, rect: Rect2, item: Dictionary, details: Dictionary, aura_view: bool, accent: Color, rows_override: Array = []) -> void:
+	var rows: Array = rows_override if not rows_override.is_empty() else game._manifest_info_rows(item, details, aura_view)
 	var count: int = mini(3, rows.size())
 	var row_h: float = rect.size.y / float(maxi(1, count))
 	for i in range(count):
@@ -3001,6 +3030,10 @@ static func _draw_graphics_settings(game: Node2D, viewport: Vector2) -> void :
 			game._draw_settings_card(game.settings_buttons[key], "VOLTAR", "retornar as configuracoes", Color(1.0, 0.26, 0.36), game.settings_selected == i)
 			continue
 		game._draw_gameplay_preference(game.settings_buttons[key], game._graphics_setting_title(key), game._graphics_setting_subtitle(key), game._graphics_setting_value(key), game._graphics_setting_color(key), game.settings_selected == i)
+		if key == "range_opacity":
+			var accent: Color = game._graphics_setting_color(key)
+			game._draw_small_rect_button(game._range_opacity_minus_rect(game.settings_buttons[key]), "-", Color(accent, 0.12), accent)
+			game._draw_small_rect_button(game._range_opacity_plus_rect(game.settings_buttons[key]), "+", Color(accent, 0.12), accent)
 
 
 static func _draw_online_create_room(game: Node2D, viewport: Vector2) -> void:

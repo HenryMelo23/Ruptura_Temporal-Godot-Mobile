@@ -1763,8 +1763,8 @@ static func _draw_sanguessuga_state(game: Node2D, enemy: Dictionary, camera: Vec
 		game.SANGUESSUGA_STATE_DORMANT:
 			var life = float(enemy.get("leech_life", game.SANGUESSUGA_DORMANT_TIME))
 			var fade = clampf(life / 3.0, 0.28, 1.0) if life <= 3.0 else 1.0
-			game.draw_circle(center, game.SANGUESSUGA_DETECTION_RADIUS, Color(0.28, 1.0, 0.18, 0.045 * fade))
-			game.draw_arc(center, game.SANGUESSUGA_DETECTION_RADIUS + sin(game.time_alive * 4.4 + float(enemy.get("phase", 0.0))) * 4.0, - game.time_alive * 0.6, TAU - game.time_alive * 0.6, 72, Color(0.58, 1.0, 0.2, 0.24 * fade), 1.4)
+			game.draw_circle(center, game.SANGUESSUGA_DETECTION_RADIUS, Color(0.28, 1.0, 0.18, 0.012 * fade))
+			game.draw_arc(center, game.SANGUESSUGA_DETECTION_RADIUS + sin(game.time_alive * 4.4 + float(enemy.get("phase", 0.0))) * 4.0, - game.time_alive * 0.6, TAU - game.time_alive * 0.6, 72, Color(0.58, 1.0, 0.2, 0.07 * fade), 1.0)
 		game.SANGUESSUGA_STATE_TRIGGERED:
 			game.draw_circle(center, 38.0 + sin(game.time_alive * 18.0) * 4.0, Color(1.0, 0.18, 0.16, 0.2))
 			game.draw_arc(center, 42.0, - game.time_alive * 4.0, TAU - game.time_alive * 4.0, 42, Color(1.0, 0.42, 0.18, 0.78), 2.4)
@@ -2584,7 +2584,10 @@ static func _draw_network_ability_visuals(game: Node2D, camera: Vector2, layer: 
 				else:
 					game._draw_network_secondary_replica(visual, camera)
 			game.NET_ABILITY_TELEPORT:
-				game._draw_network_teleport_replica(visual, camera, kind, color, progress, fade)
+				if kind == "incendiario":
+					_draw_henry_network_ability(game, visual, camera, action, progress, fade)
+				else:
+					game._draw_network_teleport_replica(visual, camera, kind, color, progress, fade)
 
 
 static func _draw_canonical_network_ability(game: Node2D, visual: Dictionary, camera: Vector2, layer: String) -> void:
@@ -2684,7 +2687,12 @@ static func _draw_canonical_network_ability(game: Node2D, visual: Dictionary, ca
 				game._draw_network_secondary_replica(_canonical_secondary_state(visual, state), camera)
 			_draw_canonical_manifestation_supplement(game, state, camera, kind)
 		game.NET_ABILITY_TELEPORT:
-			game._draw_teleport_effects(camera)
+			if kind == "incendiario":
+				var spin_max := maxf(0.01, float(visual.get("max", game.HENRY_SPIN_DURATION)))
+				var spin_life := maxf(0.0, float(visual.get("life", 0.0)))
+				_draw_henry_network_ability(game, visual, camera, action, clampf(1.0 - spin_life / spin_max, 0.0, 1.0), 1.0)
+			else:
+				game._draw_teleport_effects(camera)
 			_draw_canonical_manifestation_supplement(game, state, camera, kind)
 
 	_restore_canonical_context(game, previous)
@@ -2693,6 +2701,9 @@ static func _draw_canonical_network_ability(game: Node2D, visual: Dictionary, ca
 static func _draw_henry_ability_vfx(game: Node2D, camera: Vector2) -> void:
 	HenryBarometric.draw_local(game, camera, game.henry_barometric_ability_controller)
 	HenryColossus.draw_local(game, camera, game.henry_colossus_ability_controller)
+	if game.mutation_key == "incendiario" and game.henry_spin_active:
+		var spin_progress := clampf(game.henry_spin_elapsed / maxf(0.01, game.HENRY_SPIN_DURATION), 0.0, 1.0)
+		HenryFire.spin(game, game.player_pos - camera, game.henry_incendiary_ability_controller.spin_turns(), spin_progress, 1.0)
 	if game.mutation_key == "incendiario" and game.henry_ultimate_cast_active:
 		var charge_progress := clampf(game.henry_ultimate_cast_elapsed / maxf(0.01, game.HENRY_ULTIMATE_CAST_DURATION), 0.0, 1.0)
 		_draw_henry_ultimate_charge(game, game.henry_ultimate_center - camera, charge_progress, 1.0)
@@ -2720,14 +2731,22 @@ static func _draw_henry_ability_vfx(game: Node2D, camera: Vector2) -> void:
 			continue
 		var enemy: Dictionary = enemy_value
 		var heat := float(enemy.get("henry_incandescence_heat", 0.0))
-		if heat <= 0.0 or float(enemy.get("hp", 0.0)) <= 0.0:
+		var burn_stacks := clampi(int(enemy.get("henry_burn_stacks", 0)), 0, game.HENRY_BURN_STACK_MAX)
+		if (heat <= 0.0 and burn_stacks <= 0) or float(enemy.get("hp", 0.0)) <= 0.0:
 			continue
 		var enemy_center := Vector2(enemy.get("pos", game.player_pos)) - camera
-		var flame_count := 2 if game.gfx_low_resource else 4
-		for flame_index in range(flame_count):
-			var phase: float = game.time_alive * 8.0 + float(flame_index) * 1.9
-			var base: Vector2 = enemy_center + Vector2(sin(phase) * 13.0, 12.0 - float(flame_index) * 8.0)
-			game.draw_line(base, base + Vector2(sin(phase * 1.37) * 4.0, -10.0 - float(flame_index % 2) * 4.0), Color(1.0, 0.28 + float(flame_index) * 0.1, 0.04, clampf(heat * 2.0, 0.0, 0.82)), 3.0, true)
+		if heat > 0.0:
+			var flame_count := 2 if game.gfx_low_resource else 4
+			for flame_index in range(flame_count):
+				var phase: float = game.time_alive * 8.0 + float(flame_index) * 1.9
+				var base: Vector2 = enemy_center + Vector2(sin(phase) * 13.0, 12.0 - float(flame_index) * 8.0)
+				game.draw_line(base, base + Vector2(sin(phase * 1.37) * 4.0, -10.0 - float(flame_index % 2) * 4.0), Color(1.0, 0.28 + float(flame_index) * 0.1, 0.04, clampf(heat * 2.0, 0.0, 0.82)), 3.0, true)
+		if burn_stacks > 0:
+			_draw_henry_burn_stacks(game, enemy_center + Vector2(0.0, -48.0), burn_stacks, float(enemy.get("henry_burn_stack_flash", 0.0)))
+	if game.boss_active and game.boss_hp > 0.0:
+		var boss_stacks := clampi(int(game.henry_boss_burn_state.get("stacks", 0)), 0, game.HENRY_BURN_STACK_MAX)
+		if boss_stacks > 0:
+			_draw_henry_burn_stacks(game, game.boss_pos - camera + Vector2(0.0, -102.0), boss_stacks, float(game.henry_boss_burn_state.get("stack_flash", 0.0)))
 
 
 static func _draw_henry_network_ability(game: Node2D, visual: Dictionary, camera: Vector2, action: int, progress: float, fade: float) -> void:
@@ -2741,15 +2760,43 @@ static func _draw_henry_network_ability(game: Node2D, visual: Dictionary, camera
 		_draw_henry_incandescence_zone(game, center, progress, clampf(extra - game.HENRY_INCANDESCENCE_NET_SENTINEL, 0.08, 1.0), fade)
 	elif action == game.NET_ABILITY_SKILL:
 		_draw_henry_cone(game, origin, (target - origin).normalized(), progress, fade)
+		var skill_elapsed := progress * maxf(0.01, float(visual.get("max", game.HENRY_SKILL_CAST_DURATION)))
+		for pulse in range(3):
+			var pulse_progress := clampf((skill_elapsed - game.HENRY_SKILL_IMPACT_TIME - float(pulse) * 0.09) / 0.34, 0.0, 1.0)
+			if pulse_progress > 0.0 and pulse_progress < 1.0:
+				_draw_henry_heat_wave(game, origin, game.HENRY_SKILL_GUARD_RADIUS * pulse_progress, game.HENRY_SKILL_GUARD_RADIUS, fade * (1.0 - pulse_progress * 0.35))
 	elif action == game.NET_ABILITY_SECONDARY:
 		var maximum := maxf(0.01, float(visual.get("max", game.HENRY_ULTIMATE_CAST_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION)))
 		var charge_duration := clampf(float(visual.get("extra", game.HENRY_ULTIMATE_CAST_DURATION)), 0.0, maximum)
 		var elapsed := progress * maximum
-		if elapsed < charge_duration:
-			_draw_henry_ultimate_charge(game, origin, elapsed / maxf(0.01, charge_duration), fade)
-		else:
-			var wave_progress := clampf((elapsed - charge_duration) / maxf(0.01, maximum - charge_duration), 0.0, 1.0)
-			_draw_henry_heat_wave(game, origin, game.HENRY_ULTIMATE_RADIUS * wave_progress, game.HENRY_ULTIMATE_RADIUS, fade)
+		var pulse_span := maxf(0.01, charge_duration)
+		var total_pulses: int = game.HENRY_ULTIMATE_PULSE_COUNT
+		var pulse_elapsed := fposmod(elapsed, pulse_span)
+		if elapsed < pulse_span * total_pulses:
+			_draw_henry_ultimate_charge(game, origin, pulse_elapsed / pulse_span, fade)
+		for pulse in range(total_pulses):
+			var wave_progress := clampf((elapsed - pulse_span * float(pulse + 1)) / maxf(0.01, game.HENRY_ULTIMATE_WAVE_DURATION), 0.0, 1.0)
+			if wave_progress > 0.0 and wave_progress < 1.0:
+				_draw_henry_heat_wave(game, origin, game.HENRY_ULTIMATE_RADIUS * wave_progress, game.HENRY_ULTIMATE_RADIUS, fade)
+	elif action == game.NET_ABILITY_TELEPORT:
+		var spin_duration := clampf(float(visual.get("extra", game.HENRY_SPIN_DURATION)), 0.01, maxf(0.01, float(visual.get("max", game.HENRY_SPIN_DURATION))))
+		var spin_progress := clampf(progress * float(visual.get("max", spin_duration)) / spin_duration, 0.0, 1.0)
+		var turns := 3.5 * (1.0 - pow(1.0 - spin_progress, 2.15))
+		HenryFire.spin(game, origin.lerp(target, smoothstep(0.0, game.HENRY_SPIN_DASH_DURATION / spin_duration, spin_progress)), turns, spin_progress, fade)
+		if progress * float(visual.get("max", spin_duration)) > spin_duration:
+			var final_progress := clampf((progress * float(visual.get("max", spin_duration)) - spin_duration) / maxf(0.01, game.HENRY_ULTIMATE_WAVE_DURATION), 0.0, 1.0)
+			_draw_henry_heat_wave(game, target, game.HENRY_SPIN_EXPLOSION_RADIUS * final_progress, game.HENRY_SPIN_EXPLOSION_RADIUS, fade)
+
+
+static func _draw_henry_burn_stacks(game: Node2D, center: Vector2, stacks: int, flash: float) -> void:
+	var count := clampi(stacks, 0, game.HENRY_BURN_STACK_MAX)
+	var spacing := 8.0
+	var start_x := -float(count - 1) * spacing * 0.5
+	for index in range(count):
+		var p := center + Vector2(start_x + float(index) * spacing, sin(game.time_alive * 7.0 + float(index)) * 1.5)
+		var pulse := 1.0 + clampf(flash * 2.0, 0.0, 0.35)
+		game.draw_circle(p, 3.1 * pulse, Color(0.95, 0.12, 0.015, 0.92))
+		game.draw_circle(p + Vector2(0.0, -1.0), 1.55 * pulse, Color(1.0, 0.82, 0.18, 0.96))
 
 
 static func _draw_henry_cone(game: Node2D, origin: Vector2, direction: Vector2, progress: float, alpha: float) -> void:

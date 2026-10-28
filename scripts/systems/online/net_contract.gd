@@ -14,12 +14,14 @@ const DEDICATED_SERVER_NET_FPS: = 120
 const INTERPOLATION_SHARPNESS: = 30.0
 const EXTRAPOLATION_LIMIT: = 0.06
 const SNAP_DISTANCE: = 360.0
-const ENEMY_STRIDE: = 71
-const PREVIOUS_ENEMY_STRIDE: = 65
+const ENEMY_STRIDE: = 73
+const PREVIOUS_ENEMY_STRIDE: = 71
+const LEGACY_EXTENDED_ENEMY_STRIDE: = 65
 const PREVIOUS_LARAPIO_ENEMY_STRIDE: = 53
 const LEGACY_ENEMY_STRIDE: = 34
-const ENEMY_SNAPSHOT_SCHEMA: = 3.0
-const PREVIOUS_ENEMY_SNAPSHOT_SCHEMA: = 2.0
+const ENEMY_SNAPSHOT_SCHEMA: = 4.0
+const PREVIOUS_ENEMY_SNAPSHOT_SCHEMA: = 3.0
+const LEGACY_EXTENDED_ENEMY_SNAPSHOT_SCHEMA: = 2.0
 const ELECTRIC_SOURCE_TAGS: = ["", "atk", "skill_q", "skill_e", "skill_shift"]
 const UID_CHUNK_MASK: = 65535
 const BULLET_STRIDE: = 11
@@ -64,6 +66,15 @@ static func estimate_packed_bytes(value) -> int:
 
 static func estimate_world_bytes(enemies_data, boss_data, bullets_data) -> int:
 	return 32 + estimate_packed_bytes(enemies_data) + estimate_packed_bytes(boss_data) + estimate_packed_bytes(bullets_data)
+
+
+static func enemy_type_wire_id(type_name: String) -> int:
+	# FNV-1a is independent from NET_ENEMY_TYPES ordering. Splitting the result
+	# into two 16-bit packet fields keeps every integer exact in Float32.
+	var hash_value: int = 2166136261
+	for byte in type_name.to_utf8_buffer():
+		hash_value = ((hash_value ^ int(byte)) * 16777619) & 0xffffffff
+	return hash_value
 
 
 static func pack_boss(pos: Vector2, hp: float, dead: bool, active: bool, phase_index: int, hp_max: float, boss_phase: float, music_track_index: int = -1, electric_stacks: int = 0, electric_timer: float = 0.0, electric_source_index: int = 0) -> PackedFloat32Array:
@@ -238,6 +249,9 @@ static func pack_enemies(enemies: Array, enemy_types: Array, default_enemy_type:
 		packed[offset + 68] = chant_target.y
 		packed[offset + 69] = float(enemy.get("phase3_relic_pulse", 0.0))
 		packed[offset + 70] = float(enemy.get("phase3_fervor_timer", 0.0))
+		var type_wire_id: int = enemy_type_wire_id(String(enemy.get("type", default_enemy_type)))
+		packed[offset + 71] = float(type_wire_id & UID_CHUNK_MASK)
+		packed[offset + 72] = float((type_wire_id >> 16) & UID_CHUNK_MASK)
 		offset += ENEMY_STRIDE
 	return packed
 
@@ -249,21 +263,32 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 		var stride: int = 0
 		var has_current_schema: bool = packed.size() >= ENEMY_STRIDE and packed.size() % ENEMY_STRIDE == 0 and is_equal_approx(packed[53], ENEMY_SNAPSHOT_SCHEMA)
 		var has_previous_schema: bool = packed.size() >= PREVIOUS_ENEMY_STRIDE and packed.size() % PREVIOUS_ENEMY_STRIDE == 0 and is_equal_approx(packed[53], PREVIOUS_ENEMY_SNAPSHOT_SCHEMA)
+		var has_legacy_extended_schema: bool = packed.size() >= LEGACY_EXTENDED_ENEMY_STRIDE and packed.size() % LEGACY_EXTENDED_ENEMY_STRIDE == 0 and is_equal_approx(packed[53], LEGACY_EXTENDED_ENEMY_SNAPSHOT_SCHEMA)
 		if has_current_schema:
 			stride = ENEMY_STRIDE
 		elif has_previous_schema:
 			stride = PREVIOUS_ENEMY_STRIDE
+		elif has_legacy_extended_schema:
+			stride = LEGACY_EXTENDED_ENEMY_STRIDE
 		elif packed.size() % PREVIOUS_LARAPIO_ENEMY_STRIDE == 0:
 			stride = PREVIOUS_LARAPIO_ENEMY_STRIDE
 		elif packed.size() % LEGACY_ENEMY_STRIDE == 0:
 			stride = LEGACY_ENEMY_STRIDE
 		if stride <= 0:
 			return next_enemies
+		var enemy_type_by_wire_id: Dictionary = {}
+		if stride == ENEMY_STRIDE:
+			for enemy_type_value in enemy_types:
+				var known_type: String = String(enemy_type_value)
+				enemy_type_by_wire_id[enemy_type_wire_id(known_type)] = known_type
 		for offset in range(0, packed.size() - stride + 1, stride):
 			var uid: = int(packed[offset]) | (int(packed[offset + 1]) << 16)
 			var incoming_pos: = Vector2(packed[offset + 3], packed[offset + 4])
 			var type_index: = clampi(int(packed[offset + 2]), 0, enemy_types.size() - 1)
 			var incoming_type: String = String(enemy_types[type_index]) if not enemy_types.is_empty() else default_enemy_type
+			if stride == ENEMY_STRIDE:
+				var incoming_type_wire_id: int = int(packed[offset + 71]) | (int(packed[offset + 72]) << 16)
+				incoming_type = String(enemy_type_by_wire_id.get(incoming_type_wire_id, incoming_type))
 			var previous: Dictionary = existing_by_uid.get(uid, {})
 			# A UID is only the same render/gameplay identity while its type also
 			# matches. Reusing a dictionary after a type change leaves local-only
@@ -320,7 +345,7 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 				enemy["larapio_ult_cd"] = packed[offset + 50]
 				enemy["larapio_ult_jump_cd"] = packed[offset + 51]
 				enemy["target_peer_id"] = int(packed[offset + 52])
-			if stride >= PREVIOUS_ENEMY_STRIDE and offset + 64 < packed.size():
+			if stride >= LEGACY_EXTENDED_ENEMY_STRIDE and offset + 64 < packed.size():
 				enemy["eletrica_static_stacks"] = int(packed[offset + 54])
 				enemy["eletrica_static_timer"] = packed[offset + 55]
 				var electric_source_index: int = clampi(int(packed[offset + 56]), 0, ELECTRIC_SOURCE_TAGS.size() - 1)
@@ -332,7 +357,7 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 				enemy["lodario_jump_to"] = Vector2(packed[offset + 61], packed[offset + 62])
 				enemy["lodario_jump_duration"] = packed[offset + 63]
 				enemy["lodario_lunge_active"] = packed[offset + 64] > 0.5
-			if stride == ENEMY_STRIDE and offset + 70 < packed.size():
+			if stride >= PREVIOUS_ENEMY_STRIDE and offset + 70 < packed.size():
 				enemy["phase3_surge_timer"] = packed[offset + 65]
 				enemy["phase3_chant_prepare"] = packed[offset + 66]
 				enemy["phase3_chant_target"] = Vector2(packed[offset + 67], packed[offset + 68])

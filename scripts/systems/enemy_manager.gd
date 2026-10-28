@@ -63,8 +63,8 @@ const SPECIAL_SPAWN_PACING: Dictionary = {
 		"experienced_leech_unlock": 90.0,
 		"eel_unlock": 210.0,
 		"experienced_eel_unlock": 158.0,
-		"pustule_unlock": 300.0,
-		"experienced_pustule_unlock": 225.0
+		"pustule_unlock": 330.0,
+		"experienced_pustule_unlock": 255.0
 	},
 	7: {
 		"first_unlock": 45.0,

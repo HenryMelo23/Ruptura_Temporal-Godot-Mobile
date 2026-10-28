@@ -242,7 +242,7 @@ func _run() -> void:
 	_check(int(remote_electric_target.get("eletrica_static_stacks", 0)) == 2, "remote electric player did not stack a second damage source on authority")
 
 	host_game.current_phase = 6
-	client_game.current_phase = 6
+	client_game.current_phase = 2
 	host_game.enemies = [{
 		"uid": 7601, "type": host_game.ENEMY_LODARIO, "pos": Vector2(385.4, 310),
 		"hp": 500.0, "max_hp": 500.0, "phase": 1.0,
@@ -252,7 +252,14 @@ func _run() -> void:
 		"lodario_jump_duration": 0.55, "lodario_lunge_active": true
 	}]
 	client_game.enemies.clear()
-	client_game._apply_remote_enemy_snapshot(host_game._pack_net_enemies(), Time.get_ticks_msec())
+	client_game._apply_remote_world_snapshot(
+		host_game._pack_net_enemies(),
+		host_game._pack_net_boss(),
+		host_game._pack_net_enemy_bullets()
+	)
+	_check(client_game.current_phase == 6, "authoritative phase did not switch the replica to phase 6")
+	var lodario_frames: Variant = client_game.textures.get("enemy_phase_6_lodario", [])
+	_check(lodario_frames is Array and lodario_frames.size() == 2 and lodario_frames[0] is Texture2D and lodario_frames[1] is Texture2D, "remote phase transition did not prepare Lodario textures")
 	var remote_lodario: Dictionary = client_game.enemies[0]
 	_check(float(remote_lodario.get("lodario_jump_progress", 0.0)) > 0.0, "Lodario airborne state was not synchronized")
 	_check(float(remote_lodario.get("lodario_hop_arc", 0.0)) > 0.0, "Lodario jump arc was not synchronized")
@@ -262,7 +269,7 @@ func _run() -> void:
 	client_game._update_network_interpolation(1.0 / 60.0)
 	var lodario_after: Vector2 = Vector2(remote_lodario["pos"])
 	_check(lodario_after.x > lodario_start.x and lodario_after.x < Vector2(remote_lodario["lodario_jump_to"]).x, "Lodario replica did not advance smoothly along the authoritative jump")
-	_check(client_game._enemy_texture(remote_lodario) == client_game._texture_frame("enemy_phase_6_lodario", 1), "Lodario replica did not switch to its airborne sprite")
+	_check(client_game._enemy_texture(remote_lodario) == lodario_frames[1], "Lodario replica did not switch to its airborne sprite")
 	host_game.current_phase = 2
 	client_game.current_phase = 2
 
@@ -280,6 +287,13 @@ func _run() -> void:
 	client_game._rpc_remote_player_state_light(42, Vector2(560, 300), 90, 100, false, 0, 2, client_game.NET_ANIM_FIRE, 1, true, 12, false, "MOBILE", "lacerante")
 	_check(String(client_game.net_players_by_peer[42].get("manifestation_key", "")) == "lacerante", "stable manifestation key was lost in mobile snapshot")
 	_check(client_game._net_player_texture_for_state(client_game.NET_ANIM_FIRE, 1, 0, "lacerante") == Array(client_game.textures.get("player_lacerante_attack_network", []))[1], "mobile replica used the wrong manifestation sprite")
+	client_game._rpc_remote_player_state_light(43, Vector2(650, 300), 110, 110, false, 0, 100, client_game.NET_ANIM_IDLE, 0, false, 12, false, "HENRY", "barometrico")
+	var remote_henry_state: Dictionary = client_game.net_players_by_peer[43]
+	_check(int(remote_henry_state.get("manifestation", -1)) == client_game.HENRY_SELECTION_INDEX, "Henry mutation key did not canonicalize the remote character identity")
+	_check(String(remote_henry_state.get("manifestation_key", "")) == "barometrico", "Henry mutation identity was not preserved for the host and third player")
+	client_game._rpc_remote_player_state_light(44, Vector2(720, 300), 100, 100, false, client_game.HENRY_SELECTION_INDEX, 100, client_game.NET_ANIM_IDLE, 0, false, 12, false, "HENRY LEGACY", "")
+	var legacy_henry_state: Dictionary = client_game.net_players_by_peer[44]
+	_check(int(legacy_henry_state.get("manifestation", -1)) == client_game.HENRY_SELECTION_INDEX and String(legacy_henry_state.get("manifestation_key", "")) == "incendiario", "legacy Henry identity did not receive the safe canonical mutation")
 	var visual_snapshot := VisualSyncContract.pack_player_visual(Vector2(-0.6, 0.8), Vector2(0.25, -0.75), client_game.NET_ABILITY_SKILL, 0.12, 1.0, 17, 3)
 	_check(visual_snapshot.size() == VisualSyncContract.PLAYER_VISUAL_STRIDE, "player visual snapshot changed its fixed stride")
 	client_game._rpc_remote_player_state_light(42, Vector2(565, 298), 90, 100, false, 0, 2, client_game.NET_ANIM_FIRE, 1, true, 12, false, "MOBILE", "lacerante", visual_snapshot)
@@ -302,6 +316,7 @@ func _run() -> void:
 	client_game.boss_active = false
 	client_game.boss_hp = 0.0
 	client_game.enemies = [{"uid": 9901, "type": client_game.ENEMY_COMMON, "pos": Vector2(820, 360), "hp": 100.0, "max_hp": 100.0, "phase": 0.0, "bit": 0, "last_move_dir": Vector2.ZERO}]
+	client_game.enemy_manager.rebuild_spatial_index()
 	client_game.remote_bullets = [{
 		"source": 42,
 		"uid": "42:1",
@@ -411,6 +426,9 @@ func _run() -> void:
 
 	client_game.net_ability_visuals.clear()
 	client_game.net_ability_seen.clear()
+	# This section validates packet reconstruction, not lifetime expiry. Keep the
+	# long gallery deterministic even when software rendering makes frames slow.
+	client_game.set_process(false)
 	var visual_sequence := 100
 	var expected_visuals := 0
 	var maximum_manifest_event_bytes := 0
@@ -456,6 +474,7 @@ func _run() -> void:
 	client_game._rpc_ability_visual(42, visual_sequence - 1, client_game.NET_ABILITY_SKILL, 0, Vector2(560, 340), Vector2(730, 340), 1.2, 0.0, {"schema": VisualSyncContract.ABILITY_VISUAL_SCHEMA, "event_id": "duplicate", "manifestation_key": duplicate_key}, 8)
 	_check(client_game.net_ability_visuals.size() == visuals_before_duplicate, "duplicate ability event was rendered twice")
 	_check(visuals_before_duplicate == client_game.MANIFESTATIONS.size() * 3, "not all manifestation Q/E/TP visuals were reconstructed")
+	client_game.set_process(true)
 
 	# Projectile attacks use the shared remote projectile stream; melee attacks
 	# use canonical ability events because their local animation is not a bullet.
@@ -507,7 +526,7 @@ func _run() -> void:
 	_check(core_payload_bytes < 1200, "compact one-entity core snapshot exceeded expected budget")
 	for visual_chunk in visual_wire_chunks:
 		_check(var_to_bytes([1, 0, visual_wire_chunks.size(), visual_chunk]).size() < 1392, "boss visual wire chunk exceeded ENet MTU budget")
-	print("MULTIPLAYER_NETWORK_SMOOTHING_SMOKE_OK core_bytes=%d visual_bytes=%d visual_chunks=%d ability_max_bytes=%d enemy_step=%.2f" % [core_payload_bytes, visual_payload_bytes, visual_wire_chunks.size(), maximum_manifest_event_bytes, enemy_after_one_frame - 100.0])
+	print("MULTIPLAYER_NETWORK_SMOOTHING_SMOKE_OK core_bytes=%d visual_bytes=%d visual_chunks=%d ability_max_bytes=%d enemy_step=%.2f player_identity=canonical" % [core_payload_bytes, visual_payload_bytes, visual_wire_chunks.size(), maximum_manifest_event_bytes, enemy_after_one_frame - 100.0])
 
 	for game in [host_game, client_game]:
 		game._cleanup_runtime_resources()

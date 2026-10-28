@@ -359,7 +359,9 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 		game.draw_circle(ball_p, 8.0, color)
 		game.draw_circle(ball_p, 14.0, Color(color.r, color.g, color.b, 0.26))
 	var tex = game._player_texture()
-	var center = game.player_pos - camera
+	var ground_center = game.player_pos - camera
+	var colossus_leap_height: float = game.henry_colossus_ability_controller.leap_visual_height() if game.active_character_key == game.CHARACTER_HENRY else 0.0
+	var center = ground_center + Vector2(0.0, -colossus_leap_height)
 	var profile = game._player_draw_profile()
 	var move = game._read_move()
 	if game.active_character_key == game.CHARACTER_HENRY and game.player_freeze_visual_timer > 0.0:
@@ -371,7 +373,7 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 	if game._shadows_enabled() and tex != null:
 		var s_rot = rotation + deg_to_rad(-10.0 if flip_h else 10.0)
 		var s_scale = Vector2(-1.0 if flip_h else 1.0, -0.35)
-		game.draw_set_transform(center + profile.get("offset", Vector2.ZERO) + Vector2(0, 38.0), s_rot, s_scale)
+		game.draw_set_transform(ground_center + profile.get("offset", Vector2.ZERO) + Vector2(0, 38.0), s_rot, s_scale)
 		var shadow_color = Color(0.0, 0.0, 0.0, 0.42)
 		if bool(profile.get("preserve_height", false)):
 			var tex_size = tex.get_size()
@@ -878,11 +880,18 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	var remote_manifestation_key: String = String(state.get("manifestation_key", ""))
 	var is_remote_henry: bool = int(state.get("manifestation", -1)) == game.HENRY_SELECTION_INDEX or remote_manifestation_key in ["incendiario", "barometrico", "colosso"]
 	var remote_colossus_giant: bool = remote_manifestation_key == "colosso" and (int(state.get("visual_flags", 0)) & 4) != 0
+	var remote_leap_height: float = 0.0
+	if remote_colossus_giant:
+		var leap_visual: Dictionary = _remote_colossus_leap_visual(game, peer_id)
+		if not leap_visual.is_empty():
+			var leap_progress: float = clampf(1.0 - float(leap_visual.get("life", 0.0)) / maxf(0.01, float(leap_visual.get("max", 0.92))), 0.0, 1.0)
+			var leap_origin: Vector2 = Vector2(leap_visual.get("origin", state.get("pos", Vector2.ZERO)))
+			var leap_target: Vector2 = Vector2(leap_visual.get("target", leap_origin))
+			remote_leap_height = sin(leap_progress * PI) * 142.0
+			p = leap_origin.lerp(leap_target, smoothstep(0.0, 1.0, leap_progress)) - camera + Vector2(0.0, -remote_leap_height)
 	var is_frozen_henry: bool = anim_state == game.NET_ANIM_FROZEN and is_remote_henry
 	var overhead: Vector2 = p + Vector2(0.0, -66.0 if remote_colossus_giant else (-18.0 if is_frozen_henry else 0.0))
 	var size = game.PLAYER_DRAW_FROZEN_SIZE if anim_state == game.NET_ANIM_FROZEN else (game.PLAYER_DRAW_DAMAGE_SIZE if anim_state == game.NET_ANIM_DAMAGE else game.PLAYER_DRAW_BOX_SIZE)
-	if remote_colossus_giant and not is_frozen_henry:
-		size *= 1.78
 	var rect = Rect2(p - size * 0.5, size)
 	var accent = Color(1.0, 0.44, 0.88) if peer_id % 2 == 0 else Color(0.0, 1.0, 0.82)
 	var is_leader: bool = game.is_multiplayer and peer_id == game.run_leader_peer_id
@@ -894,10 +903,15 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 		game._draw_leader_crown(overhead + Vector2(0, -62), 0.72, accent)
 	game._draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], overhead + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
 	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)), remote_manifestation_key, remote_colossus_giant)
+	var remote_henry_draw_height: float = 0.0
 	if is_frozen_henry and tex != null:
 		flip_h = false
 		size = tex.get_size() * (game.EntityVisualProfiles.HENRY_FROZEN_DRAW_HEIGHT / tex.get_height())
 		rect = Rect2(p + game.EntityVisualProfiles.HENRY_FROZEN_DRAW_OFFSET + Vector2(-size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
+	elif is_remote_henry and tex != null:
+		remote_henry_draw_height = game.HENRY_IDLE_DRAW_HEIGHT * (1.78 if remote_colossus_giant else 1.0)
+		size = tex.get_size() * (remote_henry_draw_height / maxf(1.0, tex.get_height()))
+		rect = Rect2(p + Vector2(-size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
 	var is_lacerante: bool = remote_manifestation_key == "lacerante" or game.LaceranteSprites.is_manifestation(game, int(state.get("manifestation", -1)))
 	var prismatica_secondary := _remote_prismatica_secondary(game, peer_id) if remote_manifestation_key == "prismatica" else {}
 	var is_prismatica_dancing := not prismatica_secondary.is_empty()
@@ -913,7 +927,7 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 			var lacerante_height: float = float(game.LaceranteSprites.draw_height(game, tex))
 			size = tex.get_size() * (lacerante_height / tex.get_height())
 			rect = Rect2(p - size * 0.5, size)
-	var directional_fire: bool = anim_state == game.NET_ANIM_FIRE and frame_idx >= 2 and frame_idx < 14
+	var directional_fire: bool = not is_remote_henry and anim_state == game.NET_ANIM_FIRE and frame_idx >= 2 and frame_idx < 14
 	if directional_fire and tex != null:
 		size = tex.get_size() * (game.PLAYER_FIRE_CANVAS_HEIGHT / tex.get_height())
 		rect = Rect2(p + Vector2(-size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
@@ -930,7 +944,7 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	if game._shadows_enabled() and tex != null:
 		var s_rot = rotation + deg_to_rad(-10.0 if flip_h else 10.0)
 		var s_scale = Vector2(-1.0 if flip_h else 1.0, -0.35)
-		game.draw_set_transform(rect.get_center() + Vector2(0, 38.0), s_rot, s_scale)
+		game.draw_set_transform(rect.get_center() + Vector2(0, 38.0 + remote_leap_height), s_rot, s_scale)
 		var shadow_color = Color(0.0, 0.0, 0.0, 0.42)
 		var draw_size = size
 		var pos = Vector2( - draw_size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
@@ -939,6 +953,8 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	var alpha = 0.34 if bool(state.get("stealthed", false)) else 0.86
 	if is_frozen_henry:
 		game._draw_entity_by_height_rotated(tex, p + game.EntityVisualProfiles.HENRY_FROZEN_DRAW_OFFSET, game.EntityVisualProfiles.HENRY_FROZEN_DRAW_HEIGHT, 0.0, Color(1.0, 1.0, 1.0, alpha))
+	elif is_remote_henry:
+		game._draw_entity_by_height_rotated(tex, p, remote_henry_draw_height, rotation, Color(accent.r, accent.g, accent.b, alpha), flip_h)
 	elif is_lacerante:
 		game._draw_entity_by_height_rotated(tex, p, size.y, rotation, Color(1.0, 1.0, 1.0, alpha))
 	elif is_prismatica_dancing:
@@ -947,6 +963,17 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 		game._draw_entity_fit_flipped(tex, rect.get_center(), size, flip_h, Color(accent.r, accent.g, accent.b, alpha))
 	if is_remote_henry:
 		HenryQuimeraPresentation.draw_remote(game, state, tex, rect.get_center(), size, Color(accent.r, accent.g, accent.b, alpha), flip_h)
+
+
+static func _remote_colossus_leap_visual(game: Node2D, peer_id: int) -> Dictionary:
+	for index in range(game.net_ability_visuals.size() - 1, -1, -1):
+		var value = game.net_ability_visuals[index]
+		if not value is Dictionary:
+			continue
+		var visual: Dictionary = value
+		if int(visual.get("source", 0)) == peer_id and int(visual.get("action", -1)) == game.NET_ABILITY_TELEPORT and String(visual.get("manifestation_key", "")) == "colosso" and float(visual.get("extra", 0.0)) >= 100.0 and float(visual.get("life", 0.0)) > 0.0:
+			return visual
+	return {}
 
 
 static func _remote_prismatica_secondary(game: Node2D, peer_id: int) -> Dictionary:

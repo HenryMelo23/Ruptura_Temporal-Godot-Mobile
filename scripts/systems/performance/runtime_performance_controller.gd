@@ -18,6 +18,8 @@ const EMERGENCY_RECOVER_SECONDS := 2.5
 const FULL_RECOVER_SECONDS := 4.0
 const STARTUP_WARMUP_SECONDS := 2.0
 const SAMPLE_RESPONSE := 4.0
+const MOBILE_CROWD_SEPARATION_THRESHOLD := 6
+const MOBILE_HEAVY_CROWD_SEPARATION_THRESHOLD := 12
 
 var stage: int = STAGE_FULL
 var smoothed_fps: float = 0.0
@@ -59,6 +61,17 @@ func effective_stage(game: Node) -> int:
 
 func is_emergency(game: Node) -> bool:
 	return effective_stage(game) >= STAGE_EMERGENCY
+
+
+func shadows_enabled(game: Node) -> bool:
+	if not bool(game.gfx_shadows):
+		return false
+	if bool(game.gfx_low_resource) or bool(game._memory_saver_active()):
+		return false
+	# Desktop shadows are an explicit player choice. The mobile governor may
+	# temporarily suppress them, but a transient desktop frame dip must not make
+	# the setting appear impossible to enable on a capable PC.
+	return not bool(game._is_mobile_runtime()) or effective_stage(game) == STAGE_FULL
 
 
 func force_stage_for_test(value: int) -> void:
@@ -167,5 +180,11 @@ func separation_interval(game: Node) -> float:
 		STAGE_EMERGENCY:
 			return 1.0 / 15.0
 		STAGE_REDUCED:
+			return 1.0 / 30.0
+	if bool(game._is_mobile_runtime()):
+		var crowd_count: int = game.enemies.size()
+		if crowd_count >= MOBILE_HEAVY_CROWD_SEPARATION_THRESHOLD:
+			return 1.0 / 20.0
+		if crowd_count >= MOBILE_CROWD_SEPARATION_THRESHOLD:
 			return 1.0 / 30.0
 	return 0.0

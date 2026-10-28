@@ -42,7 +42,7 @@ func _run() -> void:
 	phase_map.present(null, Rect2(0, 0, 592, 592), 2, 5.0, game._runtime_visual_budget_active())
 	_check(not bool(phase_map.life_material.get_shader_parameter("fluid_surface")), "adaptive budget left the animated map shader enabled")
 	_check(phase_map.material == phase_map.static_material, "adaptive budget did not select the opaque static map material")
-	_check(not game._shadows_enabled(), "adaptive budget left dynamic shadows enabled during recovery")
+	_check(game._shadows_enabled(), "desktop adaptive recovery stole the player's explicit shadow preference")
 
 	game.effects.clear()
 	for i in range(game.LOW_RESOURCE_EFFECT_CAP + 80):

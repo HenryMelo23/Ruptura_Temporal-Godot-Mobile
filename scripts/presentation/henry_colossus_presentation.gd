@@ -140,7 +140,7 @@ static func draw_local(game: Node2D, camera: Vector2, owner: RefCounted) -> void
 	_draw_remote_swings(game, camera)
 	if owner == null:
 		return
-	var center: Vector2 = Vector2(game.player_pos) - camera
+	var center: Vector2 = Vector2(game.player_pos) - camera + Vector2(0.0, -owner.leap_visual_height())
 	if owner.mutation_active() and not game.is_dead and game.player_freeze_visual_timer <= 0.0 and not game.henry_skill_cast_active and not game.henry_ultimate_cast_active and game._player_attack_pose_active():
 		_draw_swing(game, center, game.player_attack_visual_dir, game.henry_attack_visual_stage, (game.time_alive - game.last_attack_time) / (game.PLAYER_FIRE_FRAME_SECONDS * 2.0), owner.giant_active, 1.0)
 	if owner.transforming or owner.shrinking:
@@ -151,10 +151,14 @@ static func draw_local(game: Node2D, camera: Vector2, owner: RefCounted) -> void
 		_draw_impact_armor(game, center, owner, 1.0)
 	if owner.giant_active:
 		_draw_giant_status(game, center, owner, 1.0)
+	if owner.flask_active:
+		_draw_flask(game, center, owner.flask_elapsed / owner.FLASK_DURATION, 1.0)
 	if owner.guard_active:
 		_draw_guard(game, center, owner.guard_direction, owner.guard_elapsed / owner.GUARD_WINDOW, 1.0)
 	if owner.charge_active:
 		_draw_charge(game, owner.charge_origin - camera, game.player_pos - camera, owner.charge_direction, owner.charge_elapsed / owner.CHARGE_DURATION, 1.0)
+	if owner.leap_active:
+		_draw_leap(game, owner.leap_origin - camera, owner.leap_target - camera, owner.leap_elapsed / owner.LEAP_DURATION, 1.0)
 	_draw_lastro_marks(game, camera, owner)
 
 
@@ -190,7 +194,9 @@ static func draw_remote(game: Node2D, visual: Dictionary, camera: Vector2, actio
 			direction = Vector2.RIGHT
 		# Classify from the original path: distance remaining shrinks during a
 		# charge and must never turn its last half into a guard animation.
-		if origin.distance_to(target) > 120.0:
+		if origin.distance_to(target) <= 1.0:
+			_draw_flask(game, center, progress, fade)
+		elif origin.distance_to(target) > 120.0:
 			_draw_charge(game, Vector2(visual.get("origin", world_pos)) - camera, center, direction, progress, fade)
 		else:
 			_draw_guard(game, center, direction, progress, fade)
@@ -204,6 +210,10 @@ static func draw_remote(game: Node2D, visual: Dictionary, camera: Vector2, actio
 			_draw_growth(game, center, 1.0 - (elapsed - (maximum - windup)) / windup, fade)
 		else:
 			game.draw_arc(center + Vector2(0, 38), 46.0, 0.0, TAU, 42, Color(WEIGHT.r, WEIGHT.g, WEIGHT.b, 0.3 * fade), 2.0, true)
+	elif action == game.NET_ABILITY_TELEPORT and float(visual.get("extra", 0.0)) >= 100.0:
+		_draw_leap(game, Vector2(visual.get("origin", world_pos)) - camera, Vector2(visual.get("target", world_pos)) - camera, progress, fade)
+	elif action == game.NET_ABILITY_SECONDARY_END:
+		game.draw_arc(center, 42.0 + sin(progress * PI) * 18.0, 0.0, TAU, 40, Color(1.0, 0.52, 0.12, fade * (1.0 - progress)), 4.0, true)
 
 
 static func _draw_growth(game: Node2D, center: Vector2, progress: float, alpha: float) -> void:
@@ -235,6 +245,37 @@ static func _draw_giant_status(game: Node2D, center: Vector2, owner: RefCounted,
 		var guard_ratio := clampf(owner.giant_temp_hp / maxf(1.0, game.player_hp_max * owner.GIANT_TEMP_HP_RATIO), 0.0, 1.0)
 		game.draw_rect(Rect2(center + Vector2(-30, -78), Vector2(60, 4)), Color(0.03, 0.05, 0.04, 0.78 * alpha), true)
 		game.draw_rect(Rect2(center + Vector2(-29, -77), Vector2(58 * guard_ratio, 2)), Color(WEIGHT.r, WEIGHT.g, WEIGHT.b, 0.9 * alpha), true)
+	if owner.giant_armor > 0.0:
+		var armor_ratio := clampf(owner.giant_armor / maxf(1.0, game.player_hp_max * owner.GIANT_ARMOR_RATIO), 0.0, 1.0)
+		game.draw_rect(Rect2(center + Vector2(-36, -86), Vector2(72, 5)), Color(0.05, 0.04, 0.02, 0.9 * alpha), true)
+		game.draw_rect(Rect2(center + Vector2(-35, -85), Vector2(70 * armor_ratio, 3)), Color(1.0, 0.67, 0.2, 0.96 * alpha), true)
+
+
+static func _draw_flask(game: Node2D, center: Vector2, progress: float, alpha: float) -> void:
+	var p := clampf(progress, 0.0, 1.0)
+	var hand := center + Vector2(18.0, lerpf(-18.0, -48.0, sin(p * PI)))
+	_shape(game, 1, hand, Vector2(8.0, 12.0), p * 0.7, Color(INK, alpha * 0.92))
+	_shape(game, 1, hand + Vector2(0, 2), Vector2(5.0, 8.0), p * 0.7, Color(0.34, 1.0, 0.48, alpha * 0.95))
+	for index in range(4):
+		var spark := center + Vector2.from_angle(index * TAU / 4.0 + p * 1.8) * (22.0 + p * 22.0)
+		game.draw_circle(spark, 2.0 + p * 2.0, Color(0.42, 1.0, 0.54, alpha * (1.0 - p)))
+
+
+static func _draw_leap(game: Node2D, origin: Vector2, target: Vector2, progress: float, alpha: float) -> void:
+	var p := clampf(progress, 0.0, 1.0)
+	var ground := origin.lerp(target, smoothstep(0.0, 1.0, p))
+	var height := sin(p * PI) * 142.0
+	var shadow_ratio := 1.0 - height / 180.0
+	game.draw_set_transform(ground + Vector2(0, 40), 0.0, Vector2(1.0 + (1.0 - shadow_ratio) * 0.7, 0.28))
+	game.draw_circle(Vector2.ZERO, 36.0, Color(0.0, 0.0, 0.0, alpha * (0.18 + shadow_ratio * 0.22)))
+	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	for index in range(4):
+		var trail_y := height * float(index + 1) / 5.0
+		_shape(game, 3, ground - Vector2(0, trail_y), Vector2(18.0 + index * 5.0, 3.0), -PI * 0.5, Color(IMPACT, alpha * (0.32 - index * 0.05)))
+	if p > 0.78:
+		var landing := clampf((p - 0.78) / 0.22, 0.0, 1.0)
+		_fractures(game, target + Vector2(0, 38), 40.0 + landing * 110.0, landing * alpha)
+		_dust_wave(game, target + Vector2(0, 38), 30.0 + landing * 90.0, landing, landing * alpha)
 
 
 static func _draw_impact_armor(game: Node2D, center: Vector2, owner: RefCounted, alpha: float) -> void:

@@ -97,7 +97,7 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 		game.ENEMY_FOSSIL_PUSTULE:
 			return Vector2(92, 102)
 		game.ENEMY_CHRONAL_LEECH:
-			return Vector2(98, 62)
+			return Vector2(39.2, 24.8)
 		game.ENEMY_AMBER_SUTURER:
 			# The repacked 224x144 cells are rendered at a uniform 0.75 scale.
 			return Vector2(168, 108)

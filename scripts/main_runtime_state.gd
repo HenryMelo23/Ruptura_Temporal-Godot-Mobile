@@ -186,8 +186,8 @@ const HENRY_MUTATIONS := [
 	{
 		"key": "incendiario",
 		"name": "Incendiário",
-		"desc": "Fagulhas, cone de chamas e uma onda de calor que intensifica a Incandescência.",
-		"details": "ATK: fagulhas que renovam a queimação\nHAB1: cone de chamas; mais perto, mais dano\nULT: onda de calor de 280 px e Incandescência",
+		"desc": "Fagulhas abrem até 5 brechas de Queimadura; habilidades consomem as cargas em dano verdadeiro proporcional à vida máxima.",
+		"details": "ATK: acumula até 5 Queimaduras e fragiliza o alvo\nHAB1: cone mais 3 explosões defensivas com empurrão\nULT: 3 ondas de calor; DASH: giro imune por 3 s e explosão final",
 		"color": Color(1.0, 0.28, 0.06),
 		"accent": Color(1.0, 0.78, 0.18),
 	},
@@ -213,7 +213,7 @@ const HENRY_EFFECTS := [
 		"key": "incandescencia",
 		"name": "Incandescência",
 		"desc": "Dano sofrido acumula Atrito. Periodicamente, Henry o libera em uma aura de fogo; inimigos próximos queimam mais quanto mais tempo permanecem nela.",
-		"details": "Queimação causa ticks proporcionais ao dano por 1,5 s. A ULT Incendiária renova o efeito e, em alvos já queimando, aumenta dano e cadência por 3 s.",
+		"details": "Queimação dura 6 s e acumula até 5 cargas. Cada carga fragiliza o alvo; habilidades Incendiárias consomem todas para causar dano verdadeiro.",
 		"color": Color(1.0, 0.42, 0.08),
 		"accent": Color(1.0, 0.9, 0.36),
 	},
@@ -234,12 +234,16 @@ const HENRY_EFFECTS := [
 		"accent": Color(0.94, 0.84, 0.58),
 	}
 ]
-const HENRY_BURN_DURATION := 1.5
+const HENRY_BURN_DURATION := 6.0
 const HENRY_BURN_TICK_INTERVAL := 0.30
 const HENRY_BURN_DAMAGE_RATIO := 0.12
 const HENRY_BURN_OVERDRIVE_DURATION := 3.0
 const HENRY_BURN_OVERDRIVE_DAMAGE_MULT := 1.55
 const HENRY_BURN_OVERDRIVE_TICK_MULT := 0.58
+const HENRY_BURN_STACK_MAX := 5
+const HENRY_BURN_WEAKNESS_PER_STACK := 0.025
+const HENRY_TRUE_DAMAGE_RATE_PER_STACK := 0.006
+const HENRY_TRUE_DAMAGE_BOSS_RATE_PER_STACK := 0.003
 const HENRY_FRICTION_MAX := 100.0
 const HENRY_FRICTION_RELEASE_INTERVAL := 5.0
 const HENRY_FRICTION_MIN_RELEASE := 8.0
@@ -253,10 +257,17 @@ const HENRY_SKILL_CAST_DURATION := 1.0
 const HENRY_SKILL_IMPACT_TIME := 0.46
 const HENRY_SKILL_RANGE := 360.0
 const HENRY_SKILL_HALF_ANGLE := 0.52
+const HENRY_SKILL_GUARD_RADIUS := 118.0
 const HENRY_ULTIMATE_RADIUS := 280.0
 const HENRY_ULTIMATE_CAST_DURATION := 0.8
 const HENRY_ULTIMATE_WAVE_DURATION := 0.72
+const HENRY_ULTIMATE_PULSE_COUNT := 3
 const HENRY_ULTIMATE_FRAME_COUNT := 8
+const HENRY_SPIN_DURATION := 3.0
+const HENRY_SPIN_DASH_DISTANCE := 20.0
+const HENRY_SPIN_DASH_DURATION := 0.12
+const HENRY_SPIN_EXPLOSION_RADIUS := 210.0
+const HENRY_SPIN_FRAME_COUNT := 8
 const HENRY_ENTRY_DURATION := 3.15
 const HENRY_ENTRY_FRAME_COUNT := 12
 const HENRY_SHOP_ENTRY_FRAME_COUNT := 8
@@ -1332,7 +1343,7 @@ const PUSTULE_SPIT_SLOW_TIME: = 0.8
 const PUSTULE_SPIT_SLOW_MULT: = 0.1
 const PUSTULE_SPIT_SLOW_GRACE: = 2.0
 const PUSTULE_POOL_DURATION: = 5.0
-const PUSTULE_POOL_RADIUS: = 112.0
+const PUSTULE_POOL_RADIUS: = 192.0
 const PUSTULE_POOL_DAMAGE_RATE: = 0.018
 const PUSTULE_POOL_TICK: = 0.55
 const PUSTULE_FRAGMENT_COUNT: = 30
@@ -1419,6 +1430,8 @@ const SANGUESSUGA_DETECTION_RADIUS: = 200.0
 const SANGUESSUGA_ATTACK_ARM_TIME: = 2.0
 const SANGUESSUGA_CONTACT_GRACE_TIME: = 0.5
 const SANGUESSUGA_SOLITARY_RADIUS: = 220.0
+const SANGUESSUGA_SPAWN_MIN_DISTANCE: = 520.0
+const SANGUESSUGA_HIT_RADIUS: = 13.0
 const SANGUESSUGA_TRIGGER_TIME: = 0.28
 const SANGUESSUGA_LEAP_TIME_MIN: = 0.4
 const SANGUESSUGA_LEAP_TIME_MAX: = 0.55
@@ -1959,7 +1972,7 @@ const CARDS: = [
 	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
 	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
 	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
-	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "+0.3% de sorte adicional por copia. A Sorte Temporal cresce devagar durante a run; esta carta continua exigida para liberar raras.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
+	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "As probabilidades se dobram a seu favor, mas a anomalia nao revela seus calculos.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
 	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
@@ -2106,6 +2119,7 @@ const CARD_UNLOCK_ALWAYS_AVAILABLE: = [
 	CARD_MANTO_IMPULSO_ID, CARD_RECUSA_DANO_ID, CARD_CARRASCO_COLOSSOS_ID, CARD_SUTURA_GRADUAL_ID,
 	CARD_FRAGMENTACAO_REATIVA_ID, CARD_BASTIAO_INERCIAL_ID
 ]
+const CARD_UNLOCK_RUNTIME_SAMPLE_INTERVAL := 5.0
 const CARD_UNLOCK_RULES: = {
 	"Trembo": {"metric": "survive_seconds", "target": 1800.0, "challenge": "Sobreviver 30:00 em uma run"},
 	"Petro": {"metric": "survive_seconds", "target": 1200.0, "challenge": "Sobreviver 20:00 em uma run"},
@@ -2833,7 +2847,13 @@ var henry_ultimate_cast_active: bool = false
 var henry_ultimate_cast_elapsed: float = 0.0
 var henry_ultimate_center: Vector2 = Vector2.ZERO
 var henry_ultimate_event_id: String = ""
+var henry_ultimate_pulses_released: int = 0
 var henry_heat_waves: Array = []
+var henry_spin_active: bool = false
+var henry_spin_elapsed: float = 0.0
+var henry_spin_origin: Vector2 = Vector2.ZERO
+var henry_spin_dash_direction: Vector2 = Vector2.RIGHT
+var henry_spin_event_id: String = ""
 var henry_boss_burn_state: Dictionary = {}
 var henry_friction: float = 0.0
 var henry_friction_release_timer: float = 0.0
@@ -3498,6 +3518,8 @@ const DESKTOP_ATTACK_AIM_AUTO: = "auto"
 const DESKTOP_ATTACK_AIM_CURSOR: = "cursor"
 var desktop_attack_aim_mode: String = DESKTOP_ATTACK_AIM_AUTO
 var desktop_hud_scale: float = DESKTOP_HUD_SCALE_MIN
+var auto_attack_range_color_index: int = 0
+var auto_attack_range_opacity: float = 1.0
 var desktop_aim_action: String = ""
 var desktop_aim_event_binding: String = ""
 var desktop_aim_is_hold: bool = false
@@ -4035,13 +4057,18 @@ var specter_upgrade_previous_mode: String = "game_over"
 var specter_upgrade_selected_index: int = 1
 var specter_upgrade_message: String = ""
 var card_unlock_progress: Dictionary = {}
+var card_unlock_rules_by_metric: Dictionary = {}
+var card_unlock_next_threshold_by_metric: Dictionary = {}
 var card_unlock_runtime_accumulator: float = 0.0
 var card_unlock_last_player_pos: Vector2 = PLAYER_START
 var card_unlock_stationary_tick: float = 0.0
 var card_unlocks_dirty: bool = false
 var card_unlock_save_timer: float = 0.0
 var player_progress_install_secret: String = ""
+var player_progress_device_id_cache: String = ""
 var player_progress_pending_events: Array = []
+var player_progress_pending_unlock_index: Dictionary = {}
+var player_progress_deferred_unlock_progress: Dictionary = {}
 var player_progress_sync_sent_event_ids: Dictionary = {}
 var player_progress_quarantined_events: Array = []
 var player_progress_event_sequence: int = 0

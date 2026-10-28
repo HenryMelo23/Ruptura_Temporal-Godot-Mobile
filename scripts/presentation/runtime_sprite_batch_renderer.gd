@@ -5,7 +5,6 @@ extends RefCounted
 # authored and unscaled in memory; only instance transforms/colors are packed.
 
 const INITIAL_CAPACITY := 32
-
 var groups: Dictionary = {}
 var active_phase: int = -1
 var captured_instances: int = 0
@@ -16,12 +15,25 @@ func begin_frame(phase: int) -> void:
 		groups.clear()
 		active_phase = phase
 	captured_instances = 0
-	for group_value in groups.values():
+	_clear_groups(groups)
+
+
+func _clear_groups(target_groups: Dictionary) -> void:
+	for group_value in target_groups.values():
 		var group: Dictionary = group_value
-		group["positions"] = []
-		group["sizes"] = []
-		group["colors"] = []
-		group["flips"] = []
+		if group.has("positions"):
+			var positions: Array = group["positions"]
+			positions.clear()
+		if group.has("sizes"):
+			var sizes: Array = group["sizes"]
+			sizes.clear()
+		var colors: Array = group["colors"]
+		colors.clear()
+		if group.has("flips"):
+			var flips: Array = group["flips"]
+			flips.clear()
+		var mesh: MultiMesh = group["mesh"]
+		mesh.visible_instance_count = 0
 
 
 func can_batch() -> bool:

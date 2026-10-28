@@ -199,7 +199,10 @@ func _run() -> void:
 			"necronada_requiem": {}
 		}
 	})
-	_check(game.net_players_by_peer.size() == 4, "remote players missing from presentation")
+	var henry_visual_snapshot := VisualSyncContract.pack_player_visual(Vector2(0.5, 0.0), Vector2.RIGHT, -1, 0.0, 0.5, 5, 0)
+	game._rpc_remote_player_state_light(46, Vector2(360, 520), 125, 125, false, 0, 100, game.NET_ANIM_IDLE, 0, false, 18, false, "HENRY REMOTO", "barometrico", henry_visual_snapshot)
+	_check(int(Dictionary(game.net_players_by_peer.get(46, {})).get("manifestation", -1)) == game.HENRY_SELECTION_INDEX, "Henry remote identity was not canonicalized")
+	_check(game.net_players_by_peer.size() == 5, "remote players missing from presentation")
 	_check(game.net_ability_visuals.size() == 4, "remote casts missing from presentation")
 
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path(OUT_DIR))
@@ -218,7 +221,7 @@ func _run() -> void:
 		_check(await _capture("multiplayer_manifestation_low_%02d_%s.png" % [manifest_index + 1, key], Vector2i(960, 540)), key + " low-resource gallery capture failed")
 		game.gfx_low_resource = false
 		gallery_count += 1
-	print("MULTIPLAYER_VISUAL_FIDELITY_VISUAL_OK peers=4 abilities=4 desktop=1280x720 low=960x540 manifestations=%d actions_per_manifestation=4 modes=2" % gallery_count)
+	print("MULTIPLAYER_VISUAL_FIDELITY_VISUAL_OK peers=5 henry=aspect_preserved abilities=4 desktop=1280x720 low=960x540 manifestations=%d actions_per_manifestation=4 modes=2" % gallery_count)
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

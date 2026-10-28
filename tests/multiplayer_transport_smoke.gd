@@ -75,6 +75,31 @@ func _run() -> void:
 	)
 	_check(identity_result.size() == 1 and String(identity_result[0].get("type", "")) == new_type, "enemy identity type did not update")
 	_check(not identity_result[0].has("old_type_ability"), "new enemy body inherited an ability from the previous type")
+	var reversed_enemy_types: Array = game.NET_ENEMY_TYPES.duplicate()
+	reversed_enemy_types.reverse()
+	var reordered_identity_result: Array = game.RTNetContractScript.unpack_enemy_snapshot(
+		identity_packet,
+		{},
+		reversed_enemy_types,
+		game.ENEMY_COMMON,
+		game.NET_LEECH_STATES,
+		game.ENEMY_CHRONAL_LEECH,
+		Time.get_ticks_msec()
+	)
+	_check(reordered_identity_result.size() == 1 and String(reordered_identity_result[0].get("type", "")) == new_type, "enemy wire identity depended on local type ordering")
+	var enemy_wire_ids: Dictionary = {}
+	var every_enemy_fixture: Array = []
+	for enemy_type_value in game.NET_ENEMY_TYPES:
+		var enemy_type: String = String(enemy_type_value)
+		var wire_id: int = game.RTNetContractScript.enemy_type_wire_id(enemy_type)
+		_check(not enemy_wire_ids.has(wire_id), "enemy wire identity hash collision for " + enemy_type)
+		enemy_wire_ids[wire_id] = enemy_type
+		every_enemy_fixture.append({"uid": 5000 + every_enemy_fixture.size(), "type": enemy_type, "pos": Vector2(100 + every_enemy_fixture.size() * 3, 240), "hp": 10.0, "max_hp": 10.0})
+	var every_enemy_packet: PackedFloat32Array = game.RTNetContractScript.pack_enemies(every_enemy_fixture, game.NET_ENEMY_TYPES, game.ENEMY_COMMON, game.NET_LEECH_STATES, game.SANGUESSUGA_STATE_DORMANT)
+	var every_enemy_result: Array = game.RTNetContractScript.unpack_enemy_snapshot(every_enemy_packet, {}, reversed_enemy_types, game.ENEMY_COMMON, game.NET_LEECH_STATES, game.ENEMY_CHRONAL_LEECH, Time.get_ticks_msec())
+	_check(every_enemy_result.size() == every_enemy_fixture.size(), "enemy identity packet lost roster entries")
+	for enemy_index in range(every_enemy_fixture.size()):
+		_check(String(Dictionary(every_enemy_result[enemy_index]).get("type", "")) == String(Dictionary(every_enemy_fixture[enemy_index]).get("type", "")), "enemy identity changed at roster index %d" % enemy_index)
 	chunks_by_index.erase(0)
 	_check(game.RTWorldSnapshotChunkerScript.join(chunks_by_index, world_chunks.size(), game.NET_WORLD_CHUNK_MAX_COUNT).is_empty(), "incomplete world snapshot was accepted")
 	var oversized_visual := {"boss_name": "MATRIARCA DA CHAGA", "events": []}

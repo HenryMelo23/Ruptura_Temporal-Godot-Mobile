@@ -9,6 +9,15 @@ const RANGE_PER_STACK := 30.0
 const DAMAGE_PER_STACK := 0.025
 const PRISMATIC_RICOCHET_CRIT_PER_STACK := 0.03
 const FADE_START_RATIO := 0.72
+const INDICATOR_COLOR_NAMES := ["RUBRA", "CIANO", "VERDE D37", "AMBAR", "VIOLETA", "BRANCO"]
+const INDICATOR_COLORS := [
+	Color(1.0, 0.055, 0.085),
+	Color(0.08, 0.9, 1.0),
+	Color(0.38, 1.0, 0.18),
+	Color(1.0, 0.66, 0.12),
+	Color(0.72, 0.34, 1.0),
+	Color(0.94, 0.98, 1.0),
+]
 
 
 static func card_count(game: Node) -> int:
@@ -40,6 +49,26 @@ static func is_ranged_primary(game: Node) -> bool:
 	if String(game.active_character_key) == String(game.CHARACTER_HENRY):
 		return String(game.mutation_key) != "colosso"
 	return String(game.manifestation_key) != "lacerante"
+
+
+static func sanitize_indicator_color_index(value: int) -> int:
+	return posmod(value, INDICATOR_COLORS.size())
+
+
+static func indicator_color(game: Node) -> Color:
+	return INDICATOR_COLORS[sanitize_indicator_color_index(int(game.auto_attack_range_color_index))]
+
+
+static func indicator_color_name(game: Node) -> String:
+	return INDICATOR_COLOR_NAMES[sanitize_indicator_color_index(int(game.auto_attack_range_color_index))]
+
+
+static func cycle_indicator_color(game: Node, direction: int = 1) -> void:
+	game.auto_attack_range_color_index = sanitize_indicator_color_index(int(game.auto_attack_range_color_index) + direction)
+
+
+static func sanitize_indicator_opacity(value: float) -> float:
+	return clampf(snappedf(value, 0.1), 0.0, 1.0)
 
 
 static func configure_bullet(game: Node, bullet: Dictionary) -> void:
@@ -117,10 +146,14 @@ static func end_projectile_draw(game: CanvasItem) -> void:
 static func draw_range_indicator(game: CanvasItem, camera: Vector2) -> void:
 	if not is_ranged_primary(game):
 		return
+	var opacity := sanitize_indicator_opacity(float(game.auto_attack_range_opacity))
+	if opacity <= 0.001:
+		return
 	var center := Vector2(game.player_pos) - camera
 	var radius := attack_range(game)
 	var aiming := bool(game.attack_holding) or not String(game.locked_target_kind).is_empty()
-	var alpha := 0.14 if aiming else 0.055
+	var alpha := (0.14 if aiming else 0.055) * opacity
 	var segments := 72 if game._runtime_visual_budget_active() else 112
-	game.draw_arc(center, radius, 0.0, TAU, segments, Color(0.76, 0.015, 0.035, alpha * 0.32), 3.0, true)
-	game.draw_arc(center, radius, 0.0, TAU, segments, Color(1.0, 0.055, 0.085, alpha), 1.25, true)
+	var color := indicator_color(game)
+	game.draw_arc(center, radius, 0.0, TAU, segments, Color(color.r * 0.52, color.g * 0.52, color.b * 0.52, alpha * 0.32), 3.0, true)
+	game.draw_arc(center, radius, 0.0, TAU, segments, Color(color.r, color.g, color.b, alpha), 1.25, true)

@@ -914,8 +914,7 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			var ls_pct: float = 0.1 * float(effective_stacks) * factor
 			return "Ao comprar: +%.2f%% de roubo de vida adicional (+%d%%)" % [ls_pct, total_scale_pct]
 		"Sorte":
-			var luck_pct: float = 0.3 * float(effective_stacks) * factor
-			return "Ao comprar: +%.2f%% de sorte adicional (+%d%%)" % [luck_pct, total_scale_pct]
+			return "Ao comprar: a anomalia favorece possibilidades sem revelar seus calculos."
 		"Porcao":
 			return "Ao comprar: +%d%% de ganho de vida maxima e cura obtida" % total_scale_pct
 		"inercia_cronal":

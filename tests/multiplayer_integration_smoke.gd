@@ -16,6 +16,22 @@ var henry_ready_sent := false
 var start_only := false
 
 
+func _check_canonical_player_identities(states: Dictionary, expected_count: int, label: String) -> void:
+	_check(states.size() == expected_count, "%s expected %d player identities, got %d" % [label, expected_count, states.size()])
+	var henry_keys: Array[String] = []
+	for mutation in game.HENRY_MUTATIONS:
+		henry_keys.append(String(mutation.get("key", "")))
+	for peer_key in states.keys():
+		var state: Dictionary = Dictionary(states.get(peer_key, {}))
+		var manifestation: int = int(state.get("manifestation", -1))
+		var manifestation_key: String = String(state.get("manifestation_key", ""))
+		if manifestation == game.HENRY_SELECTION_INDEX:
+			_check(manifestation_key in henry_keys, "%s peer %s has an invalid Henry identity %s" % [label, peer_key, manifestation_key])
+		else:
+			_check(manifestation >= 0 and manifestation < game.MANIFESTATIONS.size(), "%s peer %s has an invalid manifestation index" % [label, peer_key])
+			_check(manifestation_key == String(game.MANIFESTATIONS[manifestation].get("key", "")), "%s peer %s mixed manifestation index and sprite key" % [label, peer_key])
+
+
 func _retry_rejected_selection() -> void:
 	if game.mode != "manifest_mp" or game.mp_local_ready or game.mp_manifest_rejection_message == "":
 		return
@@ -170,6 +186,7 @@ func _cleanup_audio_resources() -> void:
 func _run_server_loop() -> void:
 	var total_time = 0.0
 	var game_announced := false
+	var identities_validated := false
 	while true:
 		await process_frame
 		total_time += 0.016
@@ -180,7 +197,18 @@ func _run_server_loop() -> void:
 		# Validar que a partida foi iniciada pelo host
 		if game.mode == "game" and not game_announced:
 			game_announced = true
+			var henry_selection_found := false
+			for selection_value in game.dedicated_manifest_selection_by_peer.values():
+				var selection: Dictionary = Dictionary(selection_value)
+				if int(selection.get("manifestation", -1)) != game.HENRY_SELECTION_INDEX:
+					continue
+				henry_selection_found = true
+				_check(int(selection.get("henry_mutation", -1)) == 2 and int(selection.get("henry_effect", -1)) == 1, "Server did not preserve Henry mutation/effect highlights")
+			_check(henry_selection_found, "Server did not receive Henry's live selection state")
 			print("[SERVER] SUCCESS: Dedicated server successfully transitioned to game state")
+		if game_announced and not identities_validated and game.dedicated_player_state_by_peer.size() == 3:
+			_check_canonical_player_identities(game.dedicated_player_state_by_peer, 3, "server")
+			identities_validated = true
 			var result_file := FileAccess.open(_result_path("server"), FileAccess.WRITE)
 			if result_file:
 				result_file.store_string("OK")
@@ -229,6 +257,7 @@ func _run_host_loop() -> void:
 			await create_timer(7.0).timeout
 			print("[HOST] FLOW ping=%dms world_jitter=%.2fms players=%d" % [game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size()])
 			_check(game.net_players_by_peer.size() == 2, "Host did not retain both remote player states")
+			_check_canonical_player_identities(game.net_players_by_peer, 2, "host")
 			if start_only:
 				await _finish_ok("Host and clients joined and reached the game state")
 				return
@@ -274,8 +303,13 @@ func _run_client_loop() -> void:
 		if game.active_character_key == game.CHARACTER_HENRY and game.mode == "mutation_select_mp" and not henry_effect_selection_opened:
 			print("[CLIENT] Henry mutation stage reached. Opening effect selection...")
 			henry_effect_selection_opened = true
+			game.selected_mutation = 2
+			game.selected_effect = 1
+			game.manifest_scroll_pos = 2.0
+			game._sync_manifest_mp_selection(true)
 			game.mode = "effect_select_mp"
 			game.manifest_select_stage = game.MANIFEST_STAGE_AURA
+			game.aura_scroll_pos = 1.0
 			game._sync_manifest_mp_selection(true)
 		elif game.active_character_key == game.CHARACTER_HENRY and game.mode == "effect_select_mp" and not henry_ready_sent:
 			print("[CLIENT] Henry effect selected. Marking ready...")
@@ -299,6 +333,7 @@ func _run_client_loop() -> void:
 			print("[%s] FLOW ping=%dms world_jitter=%.2fms players=%d first_world=%s" % [role.to_upper(), game.net_ping_ms, game.net_world_jitter_ms, game.net_players_by_peer.size(), str(game.online_first_world_snapshot_received)])
 			_check(game.online_first_world_snapshot_received, "%s did not receive a world snapshot" % role)
 			_check(game.net_players_by_peer.size() == 2, "%s did not retain both remote player states" % role)
+			_check_canonical_player_identities(game.net_players_by_peer, 2, role)
 			_check(game.net_ping_ms >= 0 and game.net_ping_ms <= 100, "%s local smoke ping exceeded 100ms" % role)
 			_check(game.net_world_jitter_ms <= 15.0, "%s world snapshot jitter exceeded 15ms" % role)
 			if start_only:

@@ -211,5 +211,15 @@ static func _handle_graphics_settings_touch(game: Node, pos: Vector2, viewport: 
 	for key in game._graphics_setting_keys():
 		var option: = String(key)
 		if game.settings_buttons.has(option) and game.settings_buttons[option].has_point(pos):
+			if option == "range_opacity":
+				var panel: Rect2 = game.settings_buttons[option]
+				if game._range_opacity_minus_rect(panel).has_point(pos):
+					game.auto_attack_range_opacity = game.RangedAttackRange.sanitize_indicator_opacity(game.auto_attack_range_opacity - 0.1)
+				elif game._range_opacity_plus_rect(panel).has_point(pos):
+					game.auto_attack_range_opacity = game.RangedAttackRange.sanitize_indicator_opacity(game.auto_attack_range_opacity + 0.1)
+				else:
+					game._activate_graphics_setting(option)
+				game._save_config()
+				return
 			game._activate_graphics_setting(option)
 			return

@@ -175,17 +175,46 @@ func _run() -> void:
 
 	var reset_target := _spawn_target(game.player_pos + Vector2(80.0, 0.0))
 	reset_target["henry_burn_time"] = 0.12
-	game._damage_enemy(reset_target, 12.0, "henry_spark", false, false, game.player_pos, "basic_attack")
-	_check(is_equal_approx(float(reset_target.get("henry_burn_time", 0.0)), game.HENRY_BURN_DURATION), "spark did not reset burn to 1.5 seconds")
+	for stack_index in range(7):
+		game._damage_enemy(reset_target, 12.0, "henry_spark", false, false, game.player_pos, "basic_attack")
+	_check(is_equal_approx(float(reset_target.get("henry_burn_time", 0.0)), game.HENRY_BURN_DURATION), "spark did not refresh the six-second burn window")
+	_check(int(reset_target.get("henry_burn_stacks", 0)) == game.HENRY_BURN_STACK_MAX, "spark burn stacks did not cap at five")
 	_check(float(reset_target.get("henry_burn_damage", 0.0)) >= 1.0, "burn damage was not derived from attack damage")
+	var true_damage_expected: float = float(reset_target["max_hp"]) * game.HENRY_TRUE_DAMAGE_RATE_PER_STACK * game.HENRY_BURN_STACK_MAX
+	var true_hp_before := float(reset_target["hp"])
+	var true_damage_applied: float = game.henry_incendiary_ability_controller.consume_breach_enemy(reset_target)
+	_check(is_equal_approx(true_damage_applied, true_damage_expected), "true damage was not based on target maximum life and five stacks")
+	_check(is_equal_approx(true_hp_before - float(reset_target["hp"]), true_damage_expected), "true damage did not bypass the target mitigation path")
+	_check(int(reset_target.get("henry_burn_stacks", 0)) == 0, "ability breach did not consume burn stacks")
+	game.boss_active = true
+	game.current_phase = 5
+	game.boss_hp_max = 10000.0
+	game.boss_hp = game.boss_hp_max
+	game.boss_pos = game.player_pos + Vector2(150.0, 0.0)
+	game.enemies_killed = 5000
+	for stack_index in range(5):
+		game.henry_incendiary_ability_controller.apply_burn_to_boss(10.0, 0, true)
+	var boss_true_expected: float = game.boss_hp_max * game.HENRY_TRUE_DAMAGE_BOSS_RATE_PER_STACK * game.HENRY_BURN_STACK_MAX
+	var boss_hp_before_true: float = game.boss_hp
+	game.henry_incendiary_ability_controller.consume_breach_boss()
+	_check(absf((boss_hp_before_true - game.boss_hp) - boss_true_expected) < 0.01, "true damage did not bypass high boss armor")
+	game.boss_active = false
+	game.current_phase = 1
+	game.enemies_killed = 0
 
 	game.enemies.clear()
 	var near_target := _spawn_target(game.player_pos + Vector2(70.0, 0.0))
 	var far_target := _spawn_target(game.player_pos + Vector2(320.0, 0.0))
 	var outside_cone := _spawn_target(game.player_pos + Vector2(0.0, 180.0))
+	var guard_target := _spawn_target(game.player_pos + Vector2(-90.0, 0.0), 2000.0)
+	for stack_index in range(5):
+		game._damage_enemy(near_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
+	near_target["henry_burn_tick"] = 99.0
 	var near_hp := float(near_target["hp"])
 	var far_hp := float(far_target["hp"])
 	var outside_hp := float(outside_cone["hp"])
+	var guard_hp := float(guard_target["hp"])
+	var guard_pos := Vector2(guard_target["pos"])
 	_check(game.henry_incendiary_ability_controller.begin_skill(game.player_pos + Vector2.RIGHT * 400.0), "cone cast did not begin")
 	_check(game._local_player_controls_locked(), "basic skill did not lock movement and other actions")
 	game.henry_incendiary_ability_controller.update(game.HENRY_SKILL_IMPACT_TIME - 0.01)
@@ -195,7 +224,12 @@ func _run() -> void:
 	var far_damage := far_hp - float(far_target["hp"])
 	_check(near_damage > far_damage and far_damage > 0.0, "cone did not scale damage from near to far")
 	_check(is_equal_approx(float(outside_cone["hp"]), outside_hp), "cone damaged a target outside its angle")
-	_check(float(near_target.get("henry_burn_time", 0.0)) > 0.0, "cone did not apply burn")
+	_check(int(near_target.get("henry_burn_stacks", 0)) == 0 and near_damage > game.player_damage * 2.0, "cone did not consume stacks into bonus true damage")
+	_check(float(guard_target["hp"]) < guard_hp, "HAB1 defensive explosions did not damage a target behind Henry")
+	_check(Vector2(guard_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "HAB1 defensive explosions did not start progressive knockback")
+	_check(Vector2(guard_target["pos"]).distance_to(guard_pos) < 10.0, "HAB1 knockback snapped its target instead of advancing by frame time")
+	game.henry_incendiary_ability_controller.update(0.08)
+	_check(Vector2(guard_target["pos"]).distance_to(guard_pos) > 2.0, "HAB1 knockback did not move naturally over time")
 	game.henry_incendiary_ability_controller.update(game.HENRY_SKILL_CAST_DURATION)
 	_check(not game.henry_skill_cast_active, "one-second cast did not finish")
 
@@ -203,13 +237,14 @@ func _run() -> void:
 	var burning_target := _spawn_target(game.player_pos + Vector2(90.0, 0.0))
 	var fresh_target := _spawn_target(game.player_pos + Vector2(-110.0, 0.0))
 	var outside_wave := _spawn_target(game.player_pos + Vector2(game.HENRY_ULTIMATE_RADIUS + 25.0, 0.0))
-	game._damage_enemy(burning_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
+	for stack_index in range(5):
+		game._damage_enemy(burning_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
 	var burning_pos := Vector2(burning_target["pos"])
 	var fresh_pos := Vector2(fresh_target["pos"])
 	var fresh_hp := float(fresh_target["hp"])
 	var outside_wave_hp := float(outside_wave["hp"])
 	_check(game.henry_incendiary_ability_controller.cast_ultimate(), "heat wave did not cast")
-	_check(game.henry_ultimate_cast_active, "800ms ultimate charge did not become active")
+	_check(game.henry_ultimate_cast_active, "three-pulse ultimate did not become active")
 	_check(not game.henry_incendiary_ability_controller.cast_ultimate(), "duplicate ultimate input restarted the active charge")
 	_check(game._local_player_controls_locked(), "Henry could move during the ultimate crouch")
 	_check(game.henry_heat_waves.is_empty(), "heat wave appeared before the charge animation")
@@ -218,19 +253,54 @@ func _run() -> void:
 	_check(Vector2(burning_target["pos"]).is_equal_approx(burning_pos), "ultimate pushed a target during charge")
 	_check(float(burning_target.get("henry_burn_overdrive", 0.0)) <= 0.0, "ultimate intensified burn before the release frame")
 	game.henry_incendiary_ability_controller.update(0.02)
-	_check(not game.henry_ultimate_cast_active, "ultimate charge did not finish after 800ms")
+	_check(game.henry_ultimate_cast_active, "ultimate stopped before repeating all three animations")
 	_check(game.henry_heat_waves.size() == 1, "heat wave was not created after the release frame")
-	_check(Vector2(burning_target["pos"]).distance_to(burning_pos) > 40.0, "heat wave did not push a burning target")
-	_check(Vector2(fresh_target["pos"]).distance_to(fresh_pos) > 40.0, "heat wave did not push a fresh target")
-	_check(float(burning_target.get("henry_burn_overdrive", 0.0)) > game.HENRY_BURN_OVERDRIVE_DURATION - 0.1, "existing burn was not intensified for 3 seconds")
-	_check(float(fresh_target.get("henry_burn_overdrive", 0.0)) <= 0.0, "fresh burn was incorrectly intensified")
+	_check(Vector2(burning_target["pos"]).distance_to(burning_pos) < 10.0, "heat wave snapped a burning target instead of applying force")
+	_check(Vector2(fresh_target["pos"]).distance_to(fresh_pos) < 10.0, "heat wave snapped a fresh target instead of applying force")
+	_check(Vector2(burning_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "heat wave did not apply progressive force")
+	_check(int(burning_target.get("henry_burn_stacks", 0)) == 0, "first ultimate pulse did not consume five stacks")
+	game.henry_incendiary_ability_controller.update(0.10)
+	_check(Vector2(burning_target["pos"]).distance_to(burning_pos) > 4.0, "heat wave force did not advance naturally")
 	_check(is_equal_approx(float(outside_wave["hp"]), outside_wave_hp), "heat wave exceeded its 280px radius")
+	game.henry_incendiary_ability_controller.update(game.HENRY_ULTIMATE_CAST_DURATION * 2.0)
+	_check(not game.henry_ultimate_cast_active, "ultimate did not finish after three 800ms animation cycles")
+	_check(game.henry_ultimate_pulses_released == game.HENRY_ULTIMATE_PULSE_COUNT, "ultimate did not release exactly three explosions")
 	game.enemies.clear()
 	var remote_target := _spawn_target(game.player_pos + Vector2(96.0, 0.0))
 	var remote_start := Vector2(remote_target["pos"])
+	for stack_index in range(5):
+		game._damage_enemy(remote_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack", 22, "incendiario")
+	_check(int(remote_target.get("henry_burn_source_peer", 0)) == 22 and int(remote_target.get("henry_burn_stacks", 0)) == 5, "authority lost remote Henry's burn stack owner")
+	var remote_hp_before_wave := float(remote_target["hp"])
 	game._damage_enemy(remote_target, 25.0, "henry_heat_wave", false, false, game.player_pos, "skill_e", 22, "incendiario")
-	_check(int(remote_target.get("henry_burn_source_peer", 0)) == 22, "authority lost the remote Henry owner")
-	_check(Vector2(remote_target["pos"]).distance_to(remote_start) > 40.0, "remote Henry heat wave was validated without its push")
+	_check(int(remote_target.get("henry_burn_stacks", 0)) == 0 and remote_hp_before_wave - float(remote_target["hp"]) > 25.0, "authority did not consume remote Henry's stacks into true damage")
+	_check(Vector2(remote_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "authority did not create remote Henry's progressive push")
+	game.henry_incendiary_ability_controller.update(0.1)
+	_check(Vector2(remote_target["pos"]).distance_to(remote_start) > 4.0, "remote Henry heat wave force did not advance")
+
+	game.enemies.clear()
+	var spin_target := _spawn_target(game.player_pos + Vector2(120.0, 0.0), 4000.0)
+	for stack_index in range(5):
+		game._damage_enemy(spin_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
+	var spin_origin: Vector2 = game.player_pos
+	var spin_hp_before := float(spin_target["hp"])
+	game.last_dash_time = -99.0
+	game._execute_teleport(game.player_pos + Vector2.RIGHT * 400.0)
+	_check(game.henry_spin_active and game._local_player_controls_locked(), "Incendiario dash did not enter the protected spin")
+	_check(game.player_pos.is_equal_approx(spin_origin), "Incendiario dash teleported on the first frame")
+	game.henry_incendiary_ability_controller.update(game.HENRY_SPIN_DASH_DURATION)
+	_check(absf(game.player_pos.distance_to(spin_origin) - game.HENRY_SPIN_DASH_DISTANCE) < 0.1, "Incendiario dash was not exactly 20px")
+	var protected_hp: int = game.player_hp
+	game._damage_player(999, "boss1_wave", true)
+	game._rpc_apply_hostile_status("stun", 5.0)
+	game._apply_temporal_rewind_result(game.player_pos + Vector2(300.0, 0.0), 1.0)
+	_check(game.player_hp == protected_hp and game.player_stun_timer <= 0.0, "spin did not block boss damage or hostile status")
+	_check(game.player_pos.distance_to(spin_origin) < 25.0, "Boss 1 rewind moved Henry during the spin")
+	for spin_step in range(60):
+		game.henry_incendiary_ability_controller.update(0.05)
+	_check(not game.henry_spin_active, "spin did not finish after three seconds")
+	_check(float(spin_target["hp"]) < spin_hp_before and int(spin_target.get("henry_burn_stacks", 0)) == 0, "spin final explosion did not consume stacks and damage the target")
+	_check(Vector2(spin_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "spin final explosion did not apply progressive knockback")
 
 	var sheet := load("res://assets/sprites/player/player_2_suit/player_2_suit_sheet_v3.png") as Texture2D
 	_check(sheet != null and sheet.get_width() == 1280 and sheet.get_height() == 5120, "Henry sprite sheet dimensions changed")
@@ -242,6 +312,8 @@ func _run() -> void:
 	_check(basic_cast_sheet != null and basic_cast_sheet.get_width() == 1280 and basic_cast_sheet.get_height() == 2048, "Henry corrected basic-skill atlas dimensions changed")
 	var ultimate_sheet := load("res://assets/sprites/player/player_2_suit/henry_ultimate_sheet_v1.png") as Texture2D
 	_check(ultimate_sheet != null and ultimate_sheet.get_width() == 2048 and ultimate_sheet.get_height() == 256, "Henry ultimate atlas dimensions changed")
+	var spin_sheet := load("res://assets/sprites/player/player_2_suit/henry_incendiary_spin_sheet_v1.png") as Texture2D
+	_check(spin_sheet != null and spin_sheet.get_width() == 2048 and spin_sheet.get_height() == 256, "Henry spin atlas is not eight normalized frames")
 	var idle_image := (load("res://assets/sprites/player/player_2_suit/henry_idle_pocket_sheet_v1.png") as Texture2D).get_image()
 	var beard_sheet := load("res://assets/sprites/player/player_2_suit/henry_idle_beard_sheet_v2.png") as Texture2D
 	_check(beard_sheet != null and beard_sheet.get_width() == 512 and beard_sheet.get_height() == 256, "Henry corrected beard atlas dimensions changed")
@@ -313,8 +385,9 @@ func _run() -> void:
 	_check(game._net_player_texture_for_state(game.NET_ANIM_RIGHT, 4, game.HENRY_SELECTION_INDEX, "incendiario") != null, "remote Henry side walk frame was not resolvable")
 	_check(game._net_player_texture_for_state(game.NET_ANIM_UP, 4, game.HENRY_SELECTION_INDEX, "incendiario") != null, "remote Henry up walk frame was not resolvable")
 	_check(Array(game.textures.get("henry_fire_network", [])).size() == 40, "8-direction firing atlas does not contain 40 frames")
-	_check(Array(game.textures.get("henry_cast_network", [])).size() == 48, "basic and ultimate cast atlas does not contain 48 frames")
+	_check(Array(game.textures.get("henry_cast_network", [])).size() == 56, "basic, ultimate and spin cast atlas does not contain 56 frames")
 	_check(Array(game.textures.get("henry_ultimate", [])).size() == game.HENRY_ULTIMATE_FRAME_COUNT, "ultimate does not contain eight 100ms frames")
+	_check(Array(game.textures.get("henry_incendiary_spin", [])).size() == game.HENRY_SPIN_FRAME_COUNT, "spin does not contain eight authored orientations")
 	for direction in ["east", "southeast", "south", "southwest", "west", "northwest", "north", "northeast"]:
 		_check(Array(game.textures.get("henry_fire_" + direction, [])).size() == 5, "missing five firing frames for " + direction)
 		_check(Array(game.textures.get("henry_cast_" + direction, [])).size() == 5, "missing five cast frames for " + direction)
@@ -328,6 +401,7 @@ func _run() -> void:
 	_check(game._net_player_texture_for_state(game.NET_ANIM_FIRE, 39, game.HENRY_SELECTION_INDEX, "incendiario") != null, "remote Henry final directional firing frame was not resolvable")
 	_check(game._net_player_texture_for_state(game.NET_ANIM_LACERANTE, 7, game.HENRY_SELECTION_INDEX, "incendiario") != null, "remote Henry cast frame was not resolvable")
 	_check(game._net_player_texture_for_state(game.NET_ANIM_LACERANTE, 47, game.HENRY_SELECTION_INDEX, "incendiario") != null, "remote Henry final ultimate frame was not resolvable")
+	_check(game._net_player_texture_for_state(game.NET_ANIM_LACERANTE, 55, game.HENRY_SELECTION_INDEX, "incendiario") != null, "remote Henry final spin frame was not resolvable")
 	var visual_count_before: int = game.net_ability_visuals.size()
 	game._rpc_ability_visual(22, 1, game.NET_ABILITY_SKILL, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos + Vector2.RIGHT * 360.0, 1.0, 0.0, {
 		"schema": 1, "event_id": "22:1", "manifestation_key": "incendiario", "seed": 2201,
@@ -339,13 +413,13 @@ func _run() -> void:
 	}, 40)
 	_check(game.net_ability_visuals.size() == visual_count_before + 1, "duplicate remote VFX event was applied twice")
 	var ultimate_visual_before: int = game.net_ability_visuals.size()
-	game._rpc_ability_visual(22, 2, game.NET_ABILITY_SECONDARY, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos, game.HENRY_ULTIMATE_CAST_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_ULTIMATE_CAST_DURATION, {
+	game._rpc_ability_visual(22, 2, game.NET_ABILITY_SECONDARY, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos, game.HENRY_ULTIMATE_CAST_DURATION * game.HENRY_ULTIMATE_PULSE_COUNT + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_ULTIMATE_CAST_DURATION, {
 		"schema": 1, "event_id": "22:2", "manifestation_key": "incendiario", "seed": 2202,
 	}, 40)
 	_check(game.net_ability_visuals.size() == ultimate_visual_before + 1, "remote ultimate charge/release VFX event was not accepted")
 	var ultimate_visual: Dictionary = game.net_ability_visuals[-1]
 	_check(is_equal_approx(float(ultimate_visual.get("extra", 0.0)), game.HENRY_ULTIMATE_CAST_DURATION), "remote ultimate lost its 800ms charge split")
-	_check(is_equal_approx(float(ultimate_visual.get("max", 0.0)), game.HENRY_ULTIMATE_CAST_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION), "remote ultimate lost its full visual timeline")
+	_check(is_equal_approx(float(ultimate_visual.get("max", 0.0)), game.HENRY_ULTIMATE_CAST_DURATION * game.HENRY_ULTIMATE_PULSE_COUNT + game.HENRY_ULTIMATE_WAVE_DURATION), "remote ultimate lost its three-pulse visual timeline")
 	var passive_visual_before: int = game.net_ability_visuals.size()
 	game._rpc_ability_visual(23, 1, game.NET_ABILITY_ATTACK, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos, game.HENRY_INCANDESCENCE_DURATION, game.HENRY_INCANDESCENCE_NET_SENTINEL + 0.5, {
 		"schema": 1, "event_id": "23:1", "manifestation_key": "incendiario", "seed": 2301,
@@ -355,6 +429,15 @@ func _run() -> void:
 		"schema": 1, "event_id": "23:1", "manifestation_key": "incendiario", "seed": 2301,
 	}, 35)
 	_check(game.net_ability_visuals.size() == passive_visual_before + 1, "duplicate remote Incandescence VFX was applied twice")
+	var spin_visual_before: int = game.net_ability_visuals.size()
+	game._rpc_ability_visual(22, 3, game.NET_ABILITY_TELEPORT, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos + Vector2.RIGHT * game.HENRY_SPIN_DASH_DISTANCE, game.HENRY_SPIN_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_SPIN_DURATION, {
+		"schema": 1, "event_id": "22:3", "manifestation_key": "incendiario", "seed": 2203,
+	}, 40)
+	_check(game.net_ability_visuals.size() == spin_visual_before + 1, "remote Incendiario spin VFX event was not accepted")
+	game._rpc_ability_visual(22, 3, game.NET_ABILITY_TELEPORT, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos + Vector2.RIGHT * game.HENRY_SPIN_DASH_DISTANCE, game.HENRY_SPIN_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_SPIN_DURATION, {
+		"schema": 1, "event_id": "22:3", "manifestation_key": "incendiario", "seed": 2203,
+	}, 40)
+	_check(game.net_ability_visuals.size() == spin_visual_before + 1, "duplicate remote spin VFX event was applied twice")
 
 	game.henry_friction = 37.5
 	game.henry_friction_release_timer = 2.25
@@ -373,7 +456,7 @@ func _run() -> void:
 	game._open_specter_upgrade("victory", true)
 	_check(game.mode == "victory", "Henry was incorrectly routed into Geovana's Specter upgrade")
 
-	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off friction=actual_damage aura=dwell_scaled combo=1-2-3 burn=1.5 cone=near_far ultimate=280 multiplayer_identity=true vfx_idempotent=true retry=true")
+	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off friction=actual_damage aura=dwell_scaled combo=1-2-3 burn=5_stacks true=max_hp_armor_bypass hab1=guard_bursts_progressive_push ultimate=3_pulses spin=20px_3s_full_immunity multiplayer_identity=true vfx_idempotent=true retry=true")
 	_cleanup(0)
 
 

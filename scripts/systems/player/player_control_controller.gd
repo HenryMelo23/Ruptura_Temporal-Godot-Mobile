@@ -265,6 +265,7 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 		claim_action_touch(index)
 		if core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
 		elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
+		elif core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 		else: core._try_arm_lacerante_empower()
 		return
 	if core.buttons.has("bombastica_detonator") and core.buttons["bombastica_detonator"].has_point(pos):
@@ -353,6 +354,7 @@ func handle_mouse_press(pos: Vector2, viewport: Vector2) -> void:
 			claim_action_touch(-2)
 			if core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
 			elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
+			elif core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 			else: core._try_arm_lacerante_empower()
 			return
 		if core.buttons.has("bombastica_detonator") and core.buttons["bombastica_detonator"].has_point(pos): claim_action_touch(-2); core.bombastica_detonator_touch_index = -2; core.bombastica_detonator_hold = 0.0; return
@@ -469,6 +471,7 @@ func execute_desktop_action(action: String) -> void:
 			if core.manifestation_key == "bombastica": core._trigger_bombastica_detonator(false)
 			elif core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
 			elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
+			elif core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 			else: core._try_arm_lacerante_empower()
 		"dance": core._toggle_player_dance()
 		"interact": core._try_interact_revival_altar()

@@ -46,6 +46,8 @@ func _run() -> void:
 	game.gfx_low_resource = false
 	game.gfx_memory_saver = false
 	game.gfx_fps_limit = 60
+	game.auto_attack_range_color_index = 0
+	game.auto_attack_range_opacity = 1.0
 	game._apply_graphics_settings()
 	game.vol_music = 0.65
 	game.vol_sfx = 0.8
@@ -193,6 +195,7 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 	var hub: Dictionary = game._settings_rects(viewport)
 	_check(not hub.has("controls"), "desktop settings exposed mobile layout controls")
 	_check(game._gameplay_preference_keys().has("desktop_hud_scale"), "desktop gameplay did not expose HUD scale")
+	_check(game._graphics_setting_keys().has("range_color") and game._graphics_setting_keys().has("range_opacity"), "graphics settings did not expose attack range appearance")
 	game._update_menu_pointer(Rect2(hub["audio"]).get_center(), viewport)
 	_check(game.settings_selected == game._settings_index_for("audio"), "settings hover did not select audio")
 	game._handle_settings_touch(Rect2(hub["audio"]).get_center(), viewport)
@@ -217,6 +220,14 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 		game._handle_graphics_settings_touch(Rect2(graphics[key]).get_center(), viewport)
 		_check(bool(game.get("gfx_" + key)) != before, "graphics toggle " + key)
 		game._handle_graphics_settings_touch(Rect2(graphics[key]).get_center(), viewport)
+	var color_before: int = game.auto_attack_range_color_index
+	game._handle_graphics_settings_touch(Rect2(graphics["range_color"]).get_center(), viewport)
+	_check(game.auto_attack_range_color_index != color_before, "attack range color did not cycle")
+	game.auto_attack_range_opacity = 0.1
+	game._handle_graphics_settings_touch(game._range_opacity_minus_rect(graphics["range_opacity"]).get_center(), viewport)
+	_check(is_zero_approx(game.auto_attack_range_opacity), "attack range opacity did not reach zero")
+	game._handle_graphics_settings_touch(game._range_opacity_plus_rect(graphics["range_opacity"]).get_center(), viewport)
+	_check(is_equal_approx(game.auto_attack_range_opacity, 0.1), "attack range opacity plus failed")
 	game._handle_graphics_settings_touch(Rect2(graphics["back"]).get_center(), viewport)
 	_check(game.mode == "settings", "graphics back")
 	game._handle_settings_touch(Rect2(hub["gameplay"]).get_center(), viewport)
@@ -244,6 +255,13 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 	_check(game.mode == "settings", "gameplay back")
 	game._handle_settings_touch(Rect2(hub["back"]).get_center(), viewport)
 	_check(game.mode == "paused", "settings must return to pause")
+	game.auto_attack_range_color_index = 3
+	game.auto_attack_range_opacity = 0.4
+	game._save_config()
+	game.auto_attack_range_color_index = 0
+	game.auto_attack_range_opacity = 1.0
+	game._load_config()
+	_check(game.auto_attack_range_color_index == 3 and is_equal_approx(game.auto_attack_range_opacity, 0.4), "attack range appearance did not persist")
 	game._set_audio_volume_index(1, 0.37)
 	game.vol_music = 0.0
 	game._load_config()

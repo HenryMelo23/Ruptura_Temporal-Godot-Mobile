@@ -98,6 +98,9 @@ func _run() -> void:
 	game.player_pos = Vector2(500, 420)
 	game._spawn_enemy(game.ENEMY_CHRONAL_LEECH, Vector2(720, 420))
 	var leech: Dictionary = game.enemies.back()
+	_check(Vector2(leech["pos"]).distance_to(game.player_pos) >= game.SANGUESSUGA_SPAWN_MIN_DISTANCE - 1.0, "Chronal Leech did not spawn far from the player")
+	_check(game._enemy_draw_size(leech).is_equal_approx(Vector2(39.2, 24.8)), "Chronal Leech visual size was not reduced by 60 percent")
+	_check(is_equal_approx(game._entity_physical_radius(leech), game.SANGUESSUGA_HIT_RADIUS), "Chronal Leech physical radius did not follow its smaller body")
 	var leech_frames: Array = game.textures.get("enemy_phase_6_sanguessuga_cronal", [])
 	_check(leech_frames.size() >= 2 and leech_frames[0] != null and leech_frames[1] != null, "Chronal Leech frames were not loaded")
 	_check(is_equal_approx(game.SANGUESSUGA_DETECTION_RADIUS, 200.0), "Chronal Leech attack radius was not retuned to 200px")
@@ -109,6 +112,7 @@ func _run() -> void:
 	game._update_enemies(game.SANGUESSUGA_FALL_TIME_MAX + 0.03)
 	_check(String(leech.get("leech_state", "")) == game.SANGUESSUGA_STATE_DORMANT, "Chronal Leech did not become dormant")
 	_check(float(leech.get("leech_life", 0.0)) <= game.SANGUESSUGA_DORMANT_TIME, "Chronal Leech dormant timer invalid")
+	_check(float(leech.get("alpha", 1.0)) <= 0.24, "Chronal Leech stayed too visible while dormant")
 	game.player_pos = Vector2(leech["pos"]) + Vector2(190, 0)
 	game._update_enemies(0.04)
 	_check(String(leech.get("leech_state", "")) == game.SANGUESSUGA_STATE_TRIGGERED, "Chronal Leech did not trigger by proximity")
@@ -159,6 +163,7 @@ func _run() -> void:
 	_check(game.phase6_pustule_pools.size() == 1, "Fossil Pustule did not leave a liquid pool")
 	_check(is_equal_approx(game.PUSTULE_EXPLODE_DISTANCE, 90.0), "Fossil Pustule explosion distance was not retuned")
 	var pool: Dictionary = game.phase6_pustule_pools[0]
+	_check(is_equal_approx(float(pool.get("radius", 0.0)), 192.0), "Fossil Pustule explosion radius did not gain 80px")
 	_check(Array(pool.get("fragments", [])).size() == game.PUSTULE_FRAGMENT_COUNT, "Fossil Pustule did not create the requested fragment burst")
 	game._spawn_enemy(game.ENEMY_LODARIO, Vector2(pool["pos"]) + Vector2(120, 0))
 	var attracted_lodario: Dictionary = game.enemies.back()
@@ -213,6 +218,19 @@ func _run() -> void:
 	game.pustule_spit_slow_grace_timer = game.PUSTULE_SPIT_SLOW_GRACE
 	game._damage_player(1, "pustula_fossil_spit")
 	_check(game.pustule_spit_slow_timer <= 0.0, "Fossil Pustule spit ignored post-slow grace window")
+	game.pustule_spit_slow_grace_timer = 0.0
+	game.phase6_pustule_pools.clear()
+	game.enemy_bullets.clear()
+	game.player_pos = Vector2(760, 360)
+	shooting_pustule["hp"] = shooting_pustule.get("max_hp", 1.0)
+	shooting_pustule["pustule_exploded"] = false
+	var pustule_pos: Vector2 = Vector2(shooting_pustule["pos"])
+	game._fire_fossil_pustule_spit(shooting_pustule, game.player_pos)
+	game.enemy_bullets.back()["pos"] = game.player_pos
+	game._update_enemy_bullets(0.0)
+	_check(game.player_pos.distance_to(pustule_pos) < 1.0, "Fossil Pustule spit did not pull the player to its source")
+	_check(bool(shooting_pustule.get("pustule_exploded", false)), "Fossil Pustule did not explode after its spit hit")
+	_check(game.phase6_pustule_pools.size() == 1, "Fossil Pustule spit hit did not create its explosion pool")
 
 	game.enemies.clear()
 	game.phase_started_at = 0.0
@@ -233,7 +251,13 @@ func _run() -> void:
 	var late_kinds := {}
 	for i in range(90):
 		late_kinds[game._choose_phase6_enemy_type()] = true
-	_check(late_kinds.has(game.ENEMY_FOSSIL_PUSTULE), "phase 6-1 did not unlock pustule on the crystal timing")
+	_check(not late_kinds.has(game.ENEMY_FOSSIL_PUSTULE), "phase 6-1 still unlocked pustule at the old timing")
+	_check(is_equal_approx(game._phase6_pustule_unlock_time(), 330.0), "Fossil Pustule onboarding unlock was not delayed slightly")
+	game.time_alive = game._phase6_pustule_unlock_time() + 0.1
+	late_kinds.clear()
+	for i in range(90):
+		late_kinds[game._choose_phase6_enemy_type()] = true
+	_check(late_kinds.has(game.ENEMY_FOSSIL_PUSTULE), "phase 6-1 did not unlock pustule at the new timing")
 
 	game.enemies.clear()
 	game.phase6_pustule_pools.clear()

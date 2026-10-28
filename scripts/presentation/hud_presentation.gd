@@ -49,10 +49,11 @@ static func _draw_resonant_meter(game: Node2D, viewport: Vector2) -> void :
 
 
 static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
 	if game._uses_desktop_ui() and game.mode != "edit_layout":
 		var desktop_rects: Dictionary = RTHudLayout.desktop_button_rects(
 			viewport,
-			game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada",
+			game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or henry_colossus,
 			game.manifestation_key == "bombastica",
 			not game._is_drop_game_mode() and (not game.shop_auto_enabled or game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0),
 			game._sanitize_desktop_hud_scale(game.desktop_hud_scale)
@@ -69,13 +70,13 @@ static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
 		game._attack_center(viewport), game._attack_scale(), game._skill_pos(viewport), game._skill_scale(),
 		game._secondary_center(viewport), game._secondary_scale(), game._dash_center(viewport), game._dash_scale(),
 		game._lacerante_empower_center(viewport), game._lacerante_empower_scale(),
-		game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.mode == "edit_layout",
+		game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or henry_colossus or game.mode == "edit_layout",
 		game.manifestation_key == "bombastica" and game.mode != "edit_layout", game._pause_pos(viewport), game._boss_call_pos(viewport), game._manual_shop_pos(viewport),
 		not game._is_drop_game_mode() and not (game.shop_auto_enabled and not game.qa_data_unlocked and game._sanitize_forced_initial_phase(game.forced_initial_phase) == 0 and game.mode != "edit_layout")
 	)
 	var custom_combat_layout: bool = game.hud_attack_pos != Vector2.ZERO or game.hud_secondary_pos != Vector2.ZERO or game.hud_dash_pos != Vector2.ZERO or game.hud_skill_pos != Vector2(-1, -1) or game.hud_lacerante_empower_pos != Vector2(-1, -1)
 	if game.mode != "edit_layout" and not custom_combat_layout and _touch_hub_has_overlap(touch_rects, viewport):
-		var organized: Dictionary = RTHudLayout.organized_touch_button_rects(viewport, game._attack_scale(), game._skill_scale(), game._secondary_scale(), game._dash_scale(), game._lacerante_empower_scale(), game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.manifestation_key == "bombastica")
+		var organized: Dictionary = RTHudLayout.organized_touch_button_rects(viewport, game._attack_scale(), game._skill_scale(), game._secondary_scale(), game._dash_scale(), game._lacerante_empower_scale(), game.manifestation_key == "lacerante" or game.manifestation_key == "eclipsada" or game.manifestation_key == "necronada" or game.manifestation_key == "bombastica" or henry_colossus)
 		for key in ["attack", "skill", "secondary", "dash"]:
 			if organized.has(key):
 				touch_rects[key] = organized[key]
@@ -773,11 +774,12 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 
 static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 	var icons = []
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
 
 	var active_eletrica_secondary = game._active_eletrica_secondary()
 	var toggle_ultimate_active = (game.manifestation_key == "prismatica" and game.time_alive - game.last_secondary_time < game.SECONDARY_PRISMATICA_DURATION) or (game.manifestation_key == "eletrica" and active_eletrica_secondary)
 	var tp_visual_active = game.tp_cooldown_pending and not game.tp_effects.is_empty()
-	var dash_label = "VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
+	var dash_label = "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP"))
 
 	var q_charges = 0
 	if game.manifestation_key == "bombastica":
@@ -790,6 +792,11 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 	var ult_color = Color(1.0, 0.78, 0.2, 0.95)
 	var ult_label = "ULT"
 	var ult_sub = "ULTIMATE"
+	if henry_colossus:
+		var fury_percent := int(round(game.henry_colossus_ability_controller.fury_ratio() * 100.0))
+		ult_label = "%d%%" % fury_percent
+		ult_sub = "FURIA"
+		ult_color = Color(1.0, 0.34, 0.08, 0.98)
 
 	if not active_eletrica_secondary.is_empty():
 		var tesla_t = float(active_eletrica_secondary.get("active_time", 0.0))
@@ -813,8 +820,8 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 
 	icons.append({"id": "attack", "label": "ATK", "sub": "Ataque", "charges": 0, "bind": game._compact_key_binding_name("attack") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.24, 0.28), "cd_elapsed": 100.0, "cd_max": 1.0, "icon_type": "sword"})
 	icons.append({"id": "skill", "label": "HAB 1", "sub": "Hab 1", "charges": q_charges, "bind": game._compact_key_binding_name("skill") if game._uses_desktop_ui() else game._compact_binding_name("skill"), "color": Color(0.2, 0.75, 1.0), "cd_elapsed": game.time_alive - game.last_skill_time, "cd_max": game._skill_cooldown(), "icon_type": "star"})
-	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "active": toggle_ultimate_active, "charges": 0, "bind": game._compact_key_binding_name("secondary") if game._uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": game.time_alive - game.last_secondary_time, "cd_max": game._secondary_skill_cooldown(), "icon_type": "trident"})
-	icons.append({"id": "dash", "label": dash_label, "active": dash_label != "TP", "sub": "Teleporte" if dash_label == "TP" else "", "charges": tp_charges, "bind": game._compact_key_binding_name("dash") if game._uses_desktop_ui() else "", "color": Color(0.2, 0.9, 1.0), "cd_elapsed": game.time_alive - game.last_dash_time, "cd_max": game._current_dash_cooldown(), "icon_type": "portal"})
+	icons.append({"id": "secondary", "label": ult_label, "sub": ult_sub, "active": toggle_ultimate_active, "charges": 0, "bind": game._compact_key_binding_name("secondary") if game._uses_desktop_ui() else "", "color": ult_color, "cd_elapsed": game.henry_colossus_ability_controller.fury if henry_colossus else game.time_alive - game.last_secondary_time, "cd_max": game.henry_colossus_ability_controller.FURY_MAX if henry_colossus else game._secondary_skill_cooldown(), "icon_type": "trident"})
+	icons.append({"id": "dash", "label": "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else dash_label, "active": dash_label != "TP", "sub": "Impacto" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("Teleporte" if dash_label == "TP" else ""), "charges": tp_charges, "bind": game._compact_key_binding_name("dash") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.58, 0.18) if henry_colossus and game.henry_colossus_ability_controller.giant_active else Color(0.2, 0.9, 1.0), "cd_elapsed": game.time_alive - game.last_dash_time, "cd_max": game._current_dash_cooldown(), "icon_type": "portal"})
 
 	if game.manifestation_key == "lacerante":
 		icons.append({"id": "lacerante_empower", "label": "REFORÇO" if game.lacerante_empowered_ready else "+", "sub": "Reforço", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(0.92, 0.03, 0.12, 0.92 if game.lacerante_empowered_ready else 0.68), "cd_elapsed": game.time_alive - game.last_lacerante_empower_time, "cd_max": game.LACERANTE_EMPOWER_COOLDOWN, "icon_type": "star"})
@@ -824,6 +831,9 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 	if game.manifestation_key == "necronada":
 		var necr_cd_elapsed = game.NECRONADA_EMPOWER_COOLDOWN if game.necronada_empowered_ready else game.NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, game.necronada_empower_cooldown_until - game.time_alive)
 		icons.append({"id": "lacerante_empower", "label": "PO" if game.necronada_empowered_ready else "+", "sub": "Poeira", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(0.52, 0.34, 0.92, 0.94 if game.necronada_empowered_ready else 0.7), "cd_elapsed": necr_cd_elapsed, "cd_max": game.NECRONADA_EMPOWER_COOLDOWN, "icon_type": "star"})
+	if henry_colossus:
+		var colossus_controller = game.henry_colossus_ability_controller
+		icons.append({"id": "lacerante_empower", "label": colossus_controller.reinforcement_label(), "sub": "Retaliacao" if colossus_controller.giant_active else "Reforco", "charges": 0, "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.54, 0.16, 0.96), "cd_elapsed": colossus_controller.REINFORCEMENT_COOLDOWN - colossus_controller.reinforcement_cooldown, "cd_max": colossus_controller.REINFORCEMENT_COOLDOWN, "icon_type": "star"})
 	if game.manifestation_key == "bombastica":
 		var det_ready = 1.0 if game.bombastica_bombs.size() > 0 else 0.0
 		icons.append({"id": "bombastica_detonator", "label": "DET", "sub": "Detonar", "charges": game.bombastica_bombs.size(), "bind": game._compact_key_binding_name("lacerante_empower") if game._uses_desktop_ui() else "", "color": Color(1.0, 0.48, 0.12, 0.88 if det_ready > 0.0 else 0.44), "cd_elapsed": det_ready, "cd_max": 1.0, "icon_type": "star"})
@@ -849,6 +859,7 @@ static func _draw_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void :
 
 
 static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
 	if game._uses_desktop_ui():
 		if game._runtime_visual_budget_active():
 			_draw_performance_desktop_combat_hud(game, viewport)
@@ -913,7 +924,12 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		game.draw_circle(secondary_c, secondary_r + 9.0 + cancel_pulse * 5.0, Color(1.0, 0.0, 0.05, outer_alpha * secondary_alpha))
 		game.draw_circle(secondary_c, secondary_r * 0.96, Color(0.4, 0.0, 0.02, 0.92 * secondary_alpha))
 	if not game.is_gamepad_active:
-		game._draw_button(secondary_c, secondary_r, "CANCELAR" if toggle_ultimate_active else "ULT", _with_alpha(Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72), secondary_alpha))
+		var secondary_label := "%d%%" % int(round(game.henry_colossus_ability_controller.fury_ratio() * 100.0)) if henry_colossus else ("CANCELAR" if toggle_ultimate_active else "ULT")
+		game._draw_button(secondary_c, secondary_r, secondary_label, _with_alpha(Color(1.0, 0.34, 0.08, 0.9) if henry_colossus else (Color(1.0, 0.02, 0.06, 0.98) if toggle_ultimate_active else Color(1.0, 0.72, 0.22, 0.72)), secondary_alpha))
+	if henry_colossus:
+		var fury_ratio: float = game.henry_colossus_ability_controller.fury_ratio()
+		game.draw_arc(secondary_c, secondary_r + 9.0, -PI * 0.5, -PI * 0.5 + TAU * fury_ratio, 64, Color(1.0, 0.22, 0.04, 0.98), 5.0, true)
+		game._draw_centered("FURIA", secondary_c + Vector2(0, secondary_r + 15.0), 9, Color(1.0, 0.78, 0.42, 0.96))
 	if game.manifestation_key == "eletrica" and not toggle_ultimate_active:
 		var cd_total: float = game._secondary_skill_cooldown()
 		var cd_elapsed: float = clampf(game.time_alive - game.last_secondary_time, 0.0, cd_total)
@@ -954,7 +970,7 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 	var dash_r: float = minf(46.0 * game._dash_scale(), float(game.buttons["dash"].size.x) * 0.5)
 	var dash_alpha: float = _hud_rect_player_alpha(game, Rect2(dash_c - Vector2(dash_r, dash_r), Vector2(dash_r * 2.0, dash_r * 2.0)), viewport)
 	var tp_visual_active = game.tp_cooldown_pending and not game.tp_effects.is_empty()
-	var dash_label = "VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP")
+	var dash_label = "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else ("ATIVO" if tp_visual_active else "TP"))
 	if not game.is_gamepad_active:
 		game._draw_button(dash_c, dash_r, dash_label, _with_alpha(Color(0.42, 0.28, 1.0, 0.88) if dash_label == "VOLTAR" else Color(0.2, 0.85, 1.0, 0.72), dash_alpha))
 	if game.manifestation_key == "lacerante":
@@ -984,6 +1000,15 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 				game._draw_centered("POEIRA", empower_c + Vector2(0, empower_r + 13.0), 9, game._necronada_accent())
 			if not game.necronada_empowered_ready:
 				game._draw_cooldown_overlay(empower_c, empower_r, game.NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, game.necronada_empower_cooldown_until - game.time_alive), game.NECRONADA_EMPOWER_COOLDOWN)
+		elif henry_colossus:
+			var colossus_controller = game.henry_colossus_ability_controller
+			if colossus_controller.reinforced_hit_ready or colossus_controller.retaliation_timer > 0.0:
+				game.draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(1.0, 0.42, 0.08, 0.18 + armed_pulse * 0.18))
+			if not game.is_gamepad_active:
+				game._draw_button(empower_c, empower_r, colossus_controller.reinforcement_label(), Color(1.0, 0.48, 0.12, 0.92 if colossus_controller.reinforcement_ready() else 0.58))
+				game._draw_centered("RETALIAR" if colossus_controller.giant_active else "REFORCO", empower_c + Vector2(0, empower_r + 13.0), 9, Color(1.0, 0.78, 0.48, 0.92))
+			if not colossus_controller.reinforcement_ready():
+				game._draw_cooldown_overlay(empower_c, empower_r, colossus_controller.REINFORCEMENT_COOLDOWN - colossus_controller.reinforcement_cooldown, colossus_controller.REINFORCEMENT_COOLDOWN)
 		else:
 			if game.lacerante_empowered_ready:
 				game.draw_circle(empower_c, empower_r + 7.0 + armed_pulse * 4.0, Color(1.0, 0.02, 0.1, 0.18 + armed_pulse * 0.18))
@@ -1010,7 +1035,7 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 
 	game._draw_cooldown_overlay(atk_c, atk_r, game.time_alive - game.last_attack_time, game._current_attack_interval())
 	game._draw_cooldown_overlay(skill_c, skill_r, game.time_alive - game.last_skill_time, game._skill_cooldown())
-	if not toggle_ultimate_active:
+	if not toggle_ultimate_active and not henry_colossus:
 		game._draw_cooldown_overlay(secondary_c, secondary_r, game.time_alive - game.last_secondary_time, game._secondary_skill_cooldown())
 	if game.tp_cooldown_pending and game.tp_cooldown_release_time <= 0.0 and not game.tp_effects.is_empty():
 		var active_tp: Dictionary = game.tp_effects[0]
@@ -1055,13 +1080,14 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 
 
 static func _draw_performance_desktop_combat_hud(game: Node2D, viewport: Vector2) -> void:
+	var henry_colossus: bool = game.active_character_key == game.CHARACTER_HENRY and game.mutation_key == "colosso"
 	var active_eletrica: Dictionary = game._active_eletrica_secondary()
 	var secondary_active: bool = not active_eletrica.is_empty() or not game._active_prismatica_secondary().is_empty()
-	var dash_label := "VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else "TP"
+	var dash_label := "SALTO" if henry_colossus and game.henry_colossus_ability_controller.giant_active else ("VOLTAR" if game.manifestation_key == "retornante" and game.retornante_tp_window > 0.0 else "TP")
 	var entries: Array[Dictionary] = [
 		{"label": "ATK", "bind": game._compact_key_binding_name("attack"), "elapsed": game.time_alive - game.last_attack_time, "cooldown": game._current_attack_interval(), "color": Color(1.0, 0.24, 0.28)},
 		{"label": "HAB 1", "bind": game._compact_key_binding_name("skill"), "elapsed": game.time_alive - game.last_skill_time, "cooldown": game._skill_cooldown(), "color": Color(0.2, 0.75, 1.0)},
-		{"label": "CANCELAR" if secondary_active else "ULT", "bind": game._compact_key_binding_name("secondary"), "elapsed": game._secondary_skill_cooldown() if secondary_active else game.time_alive - game.last_secondary_time, "cooldown": game._secondary_skill_cooldown(), "color": Color(1.0, 0.18, 0.24) if secondary_active else Color(1.0, 0.78, 0.2)},
+		{"label": "%d%%" % int(round(game.henry_colossus_ability_controller.fury_ratio() * 100.0)) if henry_colossus else ("CANCELAR" if secondary_active else "ULT"), "bind": game._compact_key_binding_name("secondary"), "elapsed": game.henry_colossus_ability_controller.fury if henry_colossus else (game._secondary_skill_cooldown() if secondary_active else game.time_alive - game.last_secondary_time), "cooldown": game.henry_colossus_ability_controller.FURY_MAX if henry_colossus else game._secondary_skill_cooldown(), "color": Color(1.0, 0.34, 0.08) if henry_colossus else (Color(1.0, 0.18, 0.24) if secondary_active else Color(1.0, 0.78, 0.2))},
 		{"label": dash_label, "bind": game._compact_key_binding_name("dash"), "elapsed": game.time_alive - game.last_dash_time, "cooldown": game._current_dash_cooldown(), "color": Color(0.2, 0.9, 1.0)}
 	]
 	if game.manifestation_key == "lacerante":
@@ -1070,6 +1096,9 @@ static func _draw_performance_desktop_combat_hud(game: Node2D, viewport: Vector2
 		entries.append({"label": game._eclipsada_form_label(), "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": 1.0, "cooldown": 1.0, "color": game._eclipsada_color()})
 	elif game.manifestation_key == "necronada":
 		entries.append({"label": "PO" if game.necronada_empowered_ready else "+", "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": game.NECRONADA_EMPOWER_COOLDOWN if game.necronada_empowered_ready else game.NECRONADA_EMPOWER_COOLDOWN - maxf(0.0, game.necronada_empower_cooldown_until - game.time_alive), "cooldown": game.NECRONADA_EMPOWER_COOLDOWN, "color": Color(0.52, 0.34, 0.92)})
+	elif henry_colossus:
+		var colossus_controller = game.henry_colossus_ability_controller
+		entries.append({"label": colossus_controller.reinforcement_label(), "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": colossus_controller.REINFORCEMENT_COOLDOWN - colossus_controller.reinforcement_cooldown, "cooldown": colossus_controller.REINFORCEMENT_COOLDOWN, "color": Color(1.0, 0.5, 0.14)})
 	elif game.manifestation_key == "bombastica":
 		entries.append({"label": "DET x%d" % game.bombastica_bombs.size(), "bind": game._compact_key_binding_name("lacerante_empower"), "elapsed": 1.0 if not game.bombastica_bombs.is_empty() else 0.0, "cooldown": 1.0, "color": Color(1.0, 0.48, 0.12)})
 	var width := 84.0

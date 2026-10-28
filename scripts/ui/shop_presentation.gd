@@ -316,7 +316,7 @@ func card_stat_chips(card_name: String) -> Array:
 		"Defesa":
 			return ["+3.5 DEF"]
 		"Sorte":
-			return ["+0.3% SORTE"]
+			return ["ANOMALIA OCULTA"]
 		"Poison":
 			return ["+0.9% VENENO"]
 		"Coletora":

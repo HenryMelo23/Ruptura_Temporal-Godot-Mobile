@@ -40,7 +40,9 @@ static func merge_pending_unlock_progress(
 		var item: Variant = pending_events[index]
 		if not item is Dictionary:
 			continue
-		var event: Dictionary = item
+		# Pending event dictionaries are treated as immutable snapshots so the
+		# background cache writer can safely hold a shallow copy of the array.
+		var event: Dictionary = item.duplicate(true)
 		if String(event.get("type", "")) != "unlock_progress" \
 			or String(event.get("metric", "")) != metric \
 			or bool(event.get("max_mode", false)) != max_mode:

@@ -25,6 +25,10 @@ static func draw(game: Node2D, viewport: Vector2) -> void:
 	if game.mode == "character_select":
 		game._draw_holo_background(viewport, game.textures.get("choice_bg"), CYAN)
 		_draw_character_cards(game, viewport)
+	elif game.mode in ["mutation_select_mp", "effect_select_mp"]:
+		# Multiplayer uses the same full team surface as Geovana so Henry keeps
+		# the shared roster, ready/cancel, host-start and peer-highlight features.
+		game._draw_manifest_mp(viewport)
 	else:
 		game._draw_holo_background(viewport, null, ORANGE)
 		_draw_henry_build_step(game, viewport)

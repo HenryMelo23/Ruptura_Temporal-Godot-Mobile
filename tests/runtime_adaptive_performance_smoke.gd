@@ -9,14 +9,20 @@ class FakeGame extends Node:
 	var mode := "game"
 	var dedicated_server_mode := false
 	var gfx_fps_limit := 60
+	var gfx_shadows := true
 	var gfx_low_resource := false
 	var gfx_memory_saver := false
+	var mobile_runtime := false
+	var enemies: Array = []
 	var mobile_adaptive_visual_budget := false
 	var mobile_low_fps_seconds := 0.0
 	var mobile_recovered_fps_seconds := 0.0
 
 	func _memory_saver_active() -> bool:
 		return gfx_memory_saver
+
+	func _is_mobile_runtime() -> bool:
+		return mobile_runtime
 
 
 func _initialize() -> void:
@@ -29,6 +35,7 @@ func _run() -> void:
 	var controller := Controller.new()
 
 	_check(controller.effective_stage(game) == Controller.STAGE_FULL, "new run must start at full presentation")
+	_check(controller.shadows_enabled(game), "desktop shadows must honor the explicit player preference")
 	for _sample in range(5):
 		controller.update(game, 0.1, 1.0)
 	for _sample in range(15):
@@ -44,6 +51,7 @@ func _run() -> void:
 		controller.update(game, 0.1, 18.0)
 	_check(controller.stage == Controller.STAGE_EMERGENCY, "critical FPS must enter emergency stage")
 	_check(is_equal_approx(controller.separation_interval(game), 1.0 / 15.0), "emergency separation cadence must be 15 Hz")
+	_check(controller.shadows_enabled(game), "desktop frame recovery must not silently disable requested shadows")
 	_check(root.content_scale_mode == Window.CONTENT_SCALE_MODE_VIEWPORT, "reduced gameplay must use a bounded internal render target")
 	var critical_redraws := 0
 	for _sample in range(10):
@@ -60,6 +68,16 @@ func _run() -> void:
 	_check(root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "full presentation must restore native canvas rendering")
 
 	controller.reset()
+	game.mobile_runtime = true
+	game.enemies.resize(Controller.MOBILE_CROWD_SEPARATION_THRESHOLD)
+	_check(is_equal_approx(controller.separation_interval(game), 1.0 / 30.0), "mobile crowd separation must switch to 30 Hz before FPS collapses")
+	game.enemies.resize(Controller.MOBILE_HEAVY_CROWD_SEPARATION_THRESHOLD)
+	_check(is_equal_approx(controller.separation_interval(game), 1.0 / 20.0), "heavy mobile crowd separation must stay bounded at 20 Hz")
+	controller.force_stage_for_test(Controller.STAGE_REDUCED)
+	_check(not controller.shadows_enabled(game), "mobile recovery stage must temporarily suppress dynamic shadows")
+	controller.reset()
+	game.mobile_runtime = false
+	game.enemies.clear()
 	game.gfx_fps_limit = 30
 	for _sample in range(140):
 		controller.update(game, 0.1, 30.0)

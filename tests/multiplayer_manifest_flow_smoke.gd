@@ -51,6 +51,15 @@ func _run() -> void:
 	_check(game.mode == "manifest_mp", "multiplayer selection did not open manifest_mp")
 	_check(game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION, "multiplayer selection must start at manifestation stage")
 	_check(not game.mp_local_ready and not game.mp_remote_ready, "multiplayer ready flags must start false")
+	var henry_wire: float = game._henry_mp_selection_wire_value(2, 1)
+	_check(game._decode_henry_mp_selection(henry_wire) == Vector2i(2, 1), "Henry mutation/effect wire value did not round-trip")
+	game._apply_manifest_peer_state(77, game.MANIFEST_STAGE_MANIFESTATION, game.HENRY_SELECTION_INDEX, game.HENRY_SELECTION_INDEX, henry_wire, false, "Henry remoto")
+	var remote_henry: Dictionary = game.mp_manifest_state_by_peer.get(77, {})
+	_check(int(remote_henry.get("henry_mutation", -1)) == 2 and int(remote_henry.get("henry_effect", -1)) == 1, "remote Henry highlight did not expose mutation and effect")
+	game._apply_manifest_peer_state(77, game.MANIFEST_STAGE_AURA, game.HENRY_SELECTION_INDEX, game.HENRY_SELECTION_INDEX, game._henry_mp_selection_wire_value(2, 2), true, "Henry remoto")
+	remote_henry = game.mp_manifest_state_by_peer.get(77, {})
+	_check(String(remote_henry.get("stage", "")) == game.MANIFEST_STAGE_AURA and int(remote_henry.get("henry_mutation", -1)) == 2 and int(remote_henry.get("henry_effect", -1)) == 2 and bool(remote_henry.get("ready", false)), "remote Henry effect/ready state did not update atomically")
+	game.mp_manifest_state_by_peer.erase(77)
 
 	game._set_selected_manifestation(2, false)
 	game._confirm_manifest_mp_selection()
@@ -97,4 +106,4 @@ func _run() -> void:
 	_check(game.mode == "game", "host manual start did not begin the game")
 	_check(String(game.aura_state.get("name", "")) == String(game.AURAS[3]["name"]), "multiplayer start did not keep the selected spectrum")
 
-	await _finish_ok("MULTIPLAYER_MANIFEST_FLOW_SMOKE_OK manual_host_start=true cancel_ready=true")
+	await _finish_ok("MULTIPLAYER_MANIFEST_FLOW_SMOKE_OK manual_host_start=true cancel_ready=true henry_highlight=replicated")
