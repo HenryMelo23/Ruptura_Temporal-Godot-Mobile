@@ -220,6 +220,10 @@ func _check_settings_interactions(viewport: Vector2) -> void:
 		game._handle_graphics_settings_touch(Rect2(graphics[key]).get_center(), viewport)
 		_check(bool(game.get("gfx_" + key)) != before, "graphics toggle " + key)
 		game._handle_graphics_settings_touch(Rect2(graphics[key]).get_center(), viewport)
+	var comfort_before: bool = game.camera_comfort_enabled
+	game._handle_graphics_settings_touch(Rect2(graphics["camera_comfort"]).get_center(), viewport)
+	_check(game.camera_comfort_enabled != comfort_before and not game.camera_follow_initialized, "camera comfort toggle did not reset tracking")
+	game._handle_graphics_settings_touch(Rect2(graphics["camera_comfort"]).get_center(), viewport)
 	var color_before: int = game.auto_attack_range_color_index
 	game._handle_graphics_settings_touch(Rect2(graphics["range_color"]).get_center(), viewport)
 	_check(game.auto_attack_range_color_index != color_before, "attack range color did not cycle")

@@ -173,7 +173,96 @@ Suggested entry points when multiplayer validation resumes:
 - `tests/multiplayer_manifest_flow_smoke.gd` through the complete role-based
   multiplayer runner.
 
+### MP-004 - Native-quality governor and asynchronous card-drop art
+
+Status: pending multiplayer validation.
+
+Solo evidence completed on 2026-10-30:
+
+- `tests/runtime_adaptive_performance_smoke.gd` preserved native canvas,
+  shadows and full projectile fidelity in Ultra across measured recovery stages.
+- `tests/runtime_performance_visual_smoke.gd` rendered and captured full and
+  emergency stages without changing Ultra's authored visual stage.
+- `tests/card_drop_cold_load_smoke.gd` spawned four rewards without loading the
+  catalog or selected card textures synchronously; selected art completed via
+  the bounded threaded queue.
+- `tests/singleplayer_long_run_accumulation_smoke.gd` exercised repeated kills,
+  cleanup and resource monitors in Ultra.
+
+Affected contract: authoritative reward selection remains unchanged, while
+each peer now resolves replicated card-drop art through its local bounded
+loader. Graphics-profile fidelity is local presentation state only.
+
+Multiplayer scenarios still owed:
+
+- Host and clients receive every authoritative Larapio/Suturador card drop once.
+- A slow-loading client displays the placeholder, cannot collect before the
+  card is ready, and later renders the same selected card as the host.
+- Disconnect or scene cleanup drains pending texture requests without an
+  orphaned RID/resource or duplicate reward.
+- Desktop and mobile clients preserve their own explicit graphics profile
+  without changing simulation, authority or remote reward identity.
+
+Suggested tests/runners:
+
+- `tests/multiplayer_three_player_contract_smoke.gd`
+- `tests/card_drop_cold_load_smoke.gd`
+- the role-based host/client/client2 runner when multiplayer validation resumes.
+
+### MP-005 - Spatial enemy hot paths and periodic agglomeration
+
+Status: pending multiplayer validation.
+
+Solo evidence completed on 2026-10-30:
+
+- `tests/enemy_spatial_grid_smoke.gd` preserved deterministic separation and
+  phase-2 shooter selection while reducing 400-entity candidate discovery from
+  160,000 brute-force pairs to 13,072 spatial candidates.
+- `tests/agglomeration_spatial_smoke.gd` proved that three eligible live common
+  enemies fuse once, while dead and distant enemies remain excluded.
+- `tests/singleplayer_rendered_frame_pacing_smoke.gd` passed with full authored
+  graphics, and `tests/singleplayer_long_run_accumulation_smoke.gd` completed
+  90 seconds of repeated kills without orphan or resource growth.
+
+Affected contract: the world authority still owns enemy movement, contact,
+phase-2 common shooting and agglomerator fusion. The change reuses spatial
+candidate buffers and caches the deterministic phase-2 shooter pair for one
+simulation update; it does not add or change a network payload.
+
+Multiplayer scenarios still owed:
+
+- Host and clients observe the same phase-2 common shooter pair across cycle
+  boundaries and late snapshots.
+- Agglomerator fusion occurs once on authority and replicas remove the same
+  source enemies without a duplicate fused enemy.
+- Host plus two clients preserve collision/contact ownership when multiple
+  players and remnants occupy adjacent spatial cells.
+- Disconnect and spectator transitions do not leave a stale target or spatial
+  candidate in the following authority update.
+
+Suggested tests/runners:
+
+- `tests/enemy_spatial_grid_smoke.gd`
+- `tests/agglomeration_spatial_smoke.gd`
+- `tests/multiplayer_three_player_contract_smoke.gd` through the role-based
+  host/client/client2 runner when multiplayer validation resumes.
+
 ## Template for Future Items
+
+### MP-2026-10-30-ROUTE-SUTURER-CAMERA - Random four-map cycles and Suturador crystal rules
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/phase6_amber_suturer_smoke.gd`, `tests/start_phase_random_smoke.gd`, `tests/phase_route_fragment_portals_smoke.gd`, `tests/phase_transition_smoke.gd`, `tests/umbra_final_victory_route_smoke.gd`, and `tests/camera_comfort_smoke.gd`.
+Affected contract: world authority owns Suturador armor, crystal crossfire/repair and projectile spawn; phase-choice consensus must replicate the same four-map queue; comfortable camera remains local presentation state.
+
+Multiplayer scenarios still owed:
+
+- Host and clients observe identical armor fracture, crossfire, repair, crystal destruction and hook speed/damage without duplicate projectiles or healing.
+- Farm portal consensus chooses and preserves one authoritative four-map queue for host, clients, late join and retry restore.
+- The fourth completed boss opens exactly two portals once, and Umbra remains unreachable before the shared fourth completion.
+- Spectator/dead camera targets keep local comfort smoothing without affecting authority or other peers.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, host/client/client2 phase-consensus runner, late-join snapshot runner, and a two-device landscape visual pass when multiplayer validation resumes.
 
 Copy this block for each solo-first feature with deferred multiplayer proof:
 

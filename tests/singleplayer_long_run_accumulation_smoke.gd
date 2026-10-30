@@ -111,7 +111,9 @@ func _resource_snapshot() -> Dictionary:
 	return {
 		"static_mb": snappedf(float(Performance.get_monitor(Performance.MEMORY_STATIC)) / 1048576.0, 0.01),
 		"object_count": int(Performance.get_monitor(Performance.OBJECT_COUNT)),
+		"resource_count": int(Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT)),
 		"node_count": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+		"orphan_node_count": int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)),
 		"vram_mb": snappedf(float(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)) / 1048576.0, 0.01)
 	}
 

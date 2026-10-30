@@ -48,7 +48,7 @@ static func draw(host: Node2D, viewport: Vector2) -> void:
 	var width := right.size.x
 	host._draw_ui_text("PARTIDA EM CURSO", right.position, 10, HUD.MUTED, width)
 	host._draw_ui_text(host._manifestation_display_name(host.manifestation_key), right.position + Vector2(0, 34), 23 if compact else 28, HUD.TEXT, width)
-	host._draw_ui_text("FASE %02d  /  %s" % [host.current_phase, "ONLINE" if host.is_multiplayer else "SOLO"], right.position + Vector2(0, 58), 11, HUD.CYAN, width)
+	host._draw_ui_text("%s  /  %s" % [host._phase_region_name(host.current_phase), "ONLINE" if host.is_multiplayer else "SOLO"], right.position + Vector2(0, 58), 11, HUD.CYAN, width)
 	var health := Rect2(right.position + Vector2(0, 80), Vector2(width, 76))
 	host.hud_feedback.health_panel(host, health, 1.0)
 	var metric_y := health.end.y + (27 if compact else 39)

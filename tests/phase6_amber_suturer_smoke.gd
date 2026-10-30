@@ -41,7 +41,7 @@ func _test_timing_and_authority() -> void:
 	_check(is_equal_approx(controller.RESPAWN_MIN_TIME, 120.0), "minimum recurrence drifted")
 	_check(is_equal_approx(controller.RESPAWN_MAX_TIME, 150.0), "maximum recurrence drifted")
 	_check(is_inf(controller.MAX_LIFETIME), "Suturador still has a lifetime timeout")
-	_check(is_equal_approx(controller.MOVE_SPEED, 59.0), "base speed is not half of the original 118")
+	_check(is_equal_approx(controller.MOVE_SPEED, 106.2), "base speed did not receive the requested 80 percent increase")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(1), 1.0), "solo HP multiplier drifted")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(2), 1.75), "duo HP multiplier drifted")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(3), 2.40), "trio HP multiplier drifted")
@@ -71,7 +71,7 @@ func _test_timing_and_authority() -> void:
 	_check(controller.spawn_now() == enemy, "second spawn created a duplicate Suturador")
 	_check(game.enemies.filter(func(value): return String(Dictionary(value).get("type", "")) == game.ENEMY_AMBER_SUTURER).size() == 1, "more than one Suturador exists")
 	_check(int(enemy.get("max_hp", 0)) >= 2200, "Suturador max HP was not configured")
-	_check(is_equal_approx(float(enemy.get("speed", 0.0)), 59.0) and not bool(enemy.get("parado", true)), "Suturador base movement is not 59 px/s")
+	_check(is_equal_approx(float(enemy.get("speed", 0.0)), 106.2) and not bool(enemy.get("parado", true)), "Suturador base movement is not 106.2 px/s")
 	game.arauto.clear()
 	game.arauto_spawned = false
 	game._spawn_arauto()
@@ -142,7 +142,7 @@ func _test_sutures_nodes_and_damage_gate() -> void:
 	_check(nodes.size() == 4, "cycle did not create four independent crystals")
 	var core_hp_before: float = float(enemy.get("hp", 0.0))
 	game._damage_enemy(enemy, 100.0, "smoke", false, false)
-	_check(float(enemy.get("hp", 0.0)) < core_hp_before, "normal attacks could not damage the Suturador core")
+	_check(is_equal_approx(core_hp_before - float(enemy.get("hp", 0.0)), 28.0), "intact amber armor did not reduce incoming damage by 72 percent")
 	var expected_node_hp := maxf(100.0, float(enemy.get("max_hp", 0.0)) * 0.04)
 	_check(nodes.all(func(value): return is_equal_approx(float(Dictionary(value).get("max_hp", 0.0)), expected_node_hp)), "crystal HP is not max(100, owner_hp * 0.04)")
 	var common_shots := ceili(expected_node_hp / game.PLAYER_BASE_DAMAGE)
@@ -158,18 +158,31 @@ func _test_sutures_nodes_and_damage_gate() -> void:
 	_check(hp_after_first < hp_before, "active suture did not damage an intersecting player")
 	controller._update_active_sutures(0.01)
 	_check(is_equal_approx(game.player_hp, hp_after_first), "suture ignored the 1.2s damage gate")
+	game.enemy_bullets.clear()
+	enemy["suturer_state_timer"] = controller.CROSSFIRE_TRIGGER_REMAINING - 0.01
+	controller._update_active_sutures(0.01, enemy)
+	var crossfire_bullets: Array = game.enemy_bullets.filter(func(value): return String(Dictionary(value).get("type", "")) == "suturer_needle")
+	_check(crossfire_bullets.size() == nodes.size(), "crystal crossfire did not fire once from every living crystal")
+	_check(String(game.amber_suturer_state.get("current_ability", "")) == "crystal_crossfire", "crossfire ability was not exposed in public state")
+	var repair_hp_before := float(enemy.get("hp", 0.0)) - float(enemy.get("max_hp", 1.0)) * 0.20
+	enemy["hp"] = repair_hp_before
+	enemy["suturer_state_timer"] = controller.REPAIR_TRIGGER_REMAINING - 0.01
+	controller._update_active_sutures(0.01, enemy)
+	_check(float(enemy.get("hp", 0.0)) > repair_hp_before, "amber repair did not heal while crystals remained")
+	_check(String(game.amber_suturer_state.get("current_ability", "")) == "amber_repair", "repair ability was not exposed in public state")
 	var score_before: int = game.score
 	var kills_before: int = game.enemies_killed
 	var drops_before: int = game.arauto_card_drops.size()
 	var first_suture_id := String(Dictionary(nodes[0]).get("suture_id", ""))
 	var partner_uid := int(Dictionary(nodes.filter(func(value): return String(Dictionary(value).get("suture_id", "")) == first_suture_id)[1]).get("uid", -1))
-	var expected_speeds := [47.2, 35.4, 23.6, 11.8]
+	var expected_speeds := [84.96, 63.72, 42.48, 21.24]
 	for index in range(nodes.size()):
 		var node: Dictionary = nodes[index]
 		node["hp"] = 0.0
 		game._kill_enemy(node)
 		_check(int(enemy.get("suturer_crystal_slow_stacks", 0)) == index + 1, "crystal kill did not add one independent slow stack")
 		_check(is_equal_approx(controller._effective_move_speed(enemy), expected_speeds[index]), "crystal slow did not apply additive 20% base-speed steps")
+		_check(is_equal_approx(controller.armor_reduction(enemy), maxf(0.0, 0.72 - float(index + 1) * 0.17)), "crystal did not permanently fracture amber armor")
 		_check(is_equal_approx(float(enemy.get("suturer_crystal_slow_timer", 0.0)), controller.CRYSTAL_SLOW_DURATION), "new crystal did not refresh the 7s slow")
 		if index == 0:
 			_check(game.enemies.any(func(value): return int(Dictionary(value).get("uid", -2)) == partner_uid), "breaking one endpoint deleted its partner crystal")
@@ -178,7 +191,8 @@ func _test_sutures_nodes_and_damage_gate() -> void:
 	controller._update_crystal_slow(enemy, 6.5)
 	_check(int(enemy.get("suturer_crystal_slow_stacks", 0)) == 4, "slow expired before seven seconds")
 	controller._update_crystal_slow(enemy, 0.5)
-	_check(int(enemy.get("suturer_crystal_slow_stacks", -1)) == 0 and is_equal_approx(controller._effective_move_speed(enemy), 59.0), "speed did not return to base after slow expiry")
+	_check(int(enemy.get("suturer_crystal_slow_stacks", -1)) == 0 and is_equal_approx(controller._effective_move_speed(enemy), 106.2), "speed did not return to base after slow expiry")
+	_check(is_equal_approx(controller.damage_taken_multiplier(enemy), 0.96), "four destroyed crystals did not leave the core nearly unarmored")
 
 
 func _test_four_attack_rotation_and_hook() -> void:
@@ -209,6 +223,8 @@ func _test_four_attack_rotation_and_hook() -> void:
 	var hook_bullets: Array = game.enemy_bullets.filter(func(value): return String(Dictionary(value).get("type", "")) == "suturer_hook")
 	_check(hook_bullets.size() == 1, "amber hook did not emit exactly one ranged projectile")
 	_check(float(hook_bullets.front().get("hit_radius", 0.0)) >= 20.0, "amber hook projectile has an unreadable collision profile")
+	_check(is_equal_approx(float(hook_bullets.front().get("speed_mult", 0.0)), controller.HOOK_SPEED_MULT), "amber hook did not use its faster projectile contract")
+	_check(int(hook_bullets.front().get("damage", 0)) == maxi(1, int(game.player_hp_max * controller.HOOK_DAMAGE_MAX_HP_RATIO + game.enemy_far_damage * controller.HOOK_DAMAGE_FAR_SCALE)), "amber hook damage contract drifted")
 
 	game.cards_bought["Disparo crescente"] = 1
 	game._recalculate_common_card_stat_bonuses()
@@ -269,9 +285,9 @@ func _test_movement_slow_and_frame_rates() -> void:
 			distances.append(start.distance_to(Vector2(enemy["pos"])))
 		_check(absf(distances[0] - distances[1]) <= 1.2, "observation movement diverged between 30 and 60 FPS")
 		if stacks == 0:
-			_check(distances[0] >= 57.0 and distances[0] <= 60.0, "observation movement bypassed 59 px/s base")
+			_check(distances[0] >= 104.0 and distances[0] <= 107.5, "observation movement bypassed 106.2 px/s base")
 		else:
-			_check(distances[0] >= 11.0 and distances[0] <= 12.5, "observation movement bypassed four-stack slow")
+			_check(distances[0] >= 20.0 and distances[0] <= 22.0, "observation movement bypassed four-stack slow")
 
 	var strafe_enemy: Dictionary = source.duplicate(true)
 	strafe_enemy["pos"] = Vector2(800.0, 450.0)
@@ -280,7 +296,7 @@ func _test_movement_slow_and_frame_rates() -> void:
 	strafe_enemy["suturer_crystal_slow_timer"] = 7.0
 	var strafe_start := Vector2(strafe_enemy["pos"])
 	controller._update_combat_strafe(strafe_enemy, 1.0, 1.0)
-	_check(strafe_start.distance_to(Vector2(strafe_enemy["pos"])) <= 12.0, "combat strafe bypassed crystal slow")
+	_check(strafe_start.distance_to(Vector2(strafe_enemy["pos"])) <= 22.0, "combat strafe bypassed crystal slow")
 
 	var reposition_enemy: Dictionary = source.duplicate(true)
 	reposition_enemy["pos"] = Vector2(800.0, 450.0)
@@ -288,7 +304,7 @@ func _test_movement_slow_and_frame_rates() -> void:
 	reposition_enemy["suturer_crystal_slow_stacks"] = 4
 	reposition_enemy["suturer_crystal_slow_timer"] = 7.0
 	controller._update_reposition(reposition_enemy, 1.0)
-	_check(float(reposition_enemy["pos"].x) - 800.0 <= 15.2, "reposition still bypasses effective speed")
+	_check(float(reposition_enemy["pos"].x) - 800.0 <= 27.5, "reposition still bypasses effective speed")
 
 
 func _test_multiplayer_cleanup_and_persistence() -> void:
@@ -397,5 +413,5 @@ func _run() -> void:
 			printerr("PHASE6_AMBER_SUTURER_SMOKE_FAIL " + failure)
 		quit(1)
 		return
-	print("PHASE6_AMBER_SUTURER_SMOKE_OK persistent=true speed=59 slow_stacks=4 slow_duration=7 lines=2 nodes=4 fps=30_60 attacks=4 multiplayer=true boss_gate=true save=true")
+	print("PHASE6_AMBER_SUTURER_SMOKE_OK persistent=true speed=106.2 armor_breaks=4 active_time=18 crossfire=true repair=true hook_fast=true fps=30_60 save=true")
 	quit(0)

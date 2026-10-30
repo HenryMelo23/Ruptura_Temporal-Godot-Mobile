@@ -547,8 +547,12 @@ func _runtime_performance_stage() -> int:
 	return runtime_performance_controller.effective_stage(self)
 
 
+func _runtime_visual_performance_stage() -> int:
+	return runtime_performance_controller.visual_stage(self)
+
+
 func _runtime_emergency_visual_budget_active() -> bool:
-	return runtime_performance_controller.is_emergency(self)
+	return runtime_performance_controller.visual_stage(self) >= RuntimePerformanceControllerScript.STAGE_EMERGENCY
 
 
 func _enemy_separation_interval() -> float:
@@ -561,6 +565,7 @@ func _should_queue_runtime_redraw(delta: float) -> bool:
 
 func _begin_runtime_frame_services() -> void:
 	runtime_work_scheduler.advance()
+	RuntimeAssetController.poll_registered_textures(self, 1, 2)
 	var stage: int = _runtime_performance_stage()
 	var poll_interval: int = RuntimeWorkSchedulerScript.interval_for_stage(stage, 1, 2, 3)
 	if runtime_work_scheduler.runs_key(&"phase_asset_prefetch", poll_interval):
@@ -1816,7 +1821,8 @@ func _card_available_for_reward(card: Dictionary, include_rare: = true, require_
 		return _is_drop_game_mode() and _legendary_cards_unlocked()
 	if _is_rare_card(card) and (not include_rare or not _rare_cards_unlocked()):
 		return false
-	if require_drop_texture and not _card_drop_texture_available(card):
+	var texture_key := "card_" + String(card.get("name", ""))
+	if require_drop_texture and not RuntimeAssetController.registered_texture_available(self, texture_key):
 		return false
 	return true
 
@@ -7073,6 +7079,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	death_screen_pending_result = ""
 	death_screen_pending_specter_upgrade = false
 	mode = "game"
+	camera_follow_initialized = false
 	current_phase = _pick_initial_phase() if clear_interrupted_save else 1
 	_prepare_phase_texture_assets(current_phase)
 	if clear_interrupted_save:
@@ -7884,6 +7891,10 @@ func _roll_dimension_route(count: int, last_phase: int) -> Array[int]:
 
 func _begin_farm_dimension_cycle() -> int:
 	return _phase_flow()._begin_farm_dimension_cycle()
+
+
+func _phase_region_name(phase: int) -> String:
+	return _phase_flow().phase_region_name(phase)
 
 
 func _complete_dimension_extraction() -> void:
@@ -9575,6 +9586,7 @@ func _process(delta: float) -> void :
 		_update_retry_return(delta)
 	elif mode == "game_over" or mode == "victory":
 		_update_effects(delta)
+	_update_comfort_camera(delta)
 	_refresh_screen_shake_frame_offset()
 	_sync_bombastica_scene_vfx_positions()
 	_update_mobile_performance_budget(delta)
@@ -13783,10 +13795,11 @@ func _necronada_nearest_remnant_pos(origin: Vector2) -> Vector2:
 
 
 func _necronada_remnant_at_pos(pos: Vector2, radius: float) -> Dictionary:
+	var radius_squared := radius * radius
 	for remnant in necronada_remnants:
 		if float(remnant.get("hp", 0.0)) <= 0.0:
 			continue
-		if Vector2(remnant.get("pos", player_pos)).distance_to(pos) <= radius:
+		if Vector2(remnant.get("pos", player_pos)).distance_squared_to(pos) <= radius_squared:
 			return remnant
 	return {}
 
@@ -18609,8 +18622,9 @@ func _reward_peer_ids() -> Array[int]:
 
 
 func _append_owned_card_drop(card: Dictionary, pos: Vector2, angle: float, owner_peer: int, life: float, min_speed: float, max_speed: float, min_radius: float, max_radius: float, metadata: Dictionary = {}) -> void :
-	if not _card_drop_texture_available(card):
+	if not _card_drop_texture_registered(card):
 		return
+	_request_card_drop_texture(card)
 	net_reward_sequence += 1
 	var drop := {
 		"drop_id": "drop_%d_%d" % [Time.get_ticks_msec(), net_reward_sequence],
@@ -18634,8 +18648,10 @@ func _reward_owned_by_local(reward: Dictionary) -> bool:
 func _update_arauto_card_drops(delta: float) -> void :
 	for drop in arauto_card_drops:
 		var card: Dictionary = drop.get("card", {})
-		if not _card_drop_texture_available(card):
-			drop["life"] = 0.0
+		if not _request_card_drop_texture(card):
+			var texture_key := "card_" + String(card.get("name", ""))
+			if RuntimeAssetController.registered_texture_failed(texture_key):
+				drop["life"] = 0.0
 			continue
 		drop["age"] = float(drop.get("age", 0.0)) + delta
 		drop["life"] = float(drop.get("life", 0.0)) - delta
@@ -19186,7 +19202,8 @@ func _steer_entity_with_avoidance(entity: Dictionary, pos: Vector2, desired_dir:
 	var obstacle_radius: = 20.0
 
 
-	if boss_active and boss_hp > 0.0 and pos.distance_to(boss_pos) < (my_radius + 68.0 + ray_length):
+	var boss_avoidance_radius := my_radius + 68.0 + ray_length
+	if boss_active and boss_hp > 0.0 and pos.distance_squared_to(boss_pos) < boss_avoidance_radius * boss_avoidance_radius:
 		var to_boss: Vector2 = boss_pos - pos
 		if desired_dir.dot(to_boss.normalized()) > 0.5:
 			obstacle_found = true
@@ -19199,8 +19216,9 @@ func _steer_entity_with_avoidance(entity: Dictionary, pos: Vector2, desired_dir:
 				continue
 			var other_pos: = Vector2(other.get("pos", pos))
 			var other_radius: = _entity_physical_radius(other)
-			var dist: = pos.distance_to(other_pos)
-			if dist > 0.1 and dist < (my_radius + other_radius + ray_length):
+			var avoidance_radius := my_radius + other_radius + ray_length
+			var dist_squared := pos.distance_squared_to(other_pos)
+			if dist_squared > 0.01 and dist_squared < avoidance_radius * avoidance_radius:
 				var to_other: = (other_pos - pos).normalized()
 				if desired_dir.dot(to_other) > 0.65:
 					obstacle_found = true
@@ -21073,23 +21091,7 @@ func _update_atirador(enemy: Dictionary, delta: float) -> void :
 
 
 func _phase2_common_penguin_can_shoot(enemy: Dictionary) -> bool:
-	if current_phase != 2 or String(enemy.get("type", "")) != ENEMY_COMMON:
-		return true
-	var shooters: Array = []
-	for candidate in enemies:
-		if String(candidate.get("type", "")) == ENEMY_COMMON and float(candidate.get("hp", 0.0)) > 0.0:
-			shooters.append(candidate)
-	if shooters.size() <= 2:
-		return true
-	shooters.sort_custom( func(a, b): return int(a.get("uid", 0)) < int(b.get("uid", 0)))
-	var group_count: int = int(ceil(float(shooters.size()) / 2.0))
-	var cycle: int = int(floor(_phase_elapsed_time() / 2.35)) % max(1, group_count)
-	var start_index: int = cycle * 2
-	var end_index: int = mini(start_index + 2, shooters.size())
-	for i in range(start_index, end_index):
-		if shooters[i] == enemy:
-			return true
-	return false
+	return enemy_manager.phase2_common_penguin_can_shoot(enemy)
 
 
 func _update_phase2_common_penguin(enemy: Dictionary, delta: float) -> void :
@@ -21600,17 +21602,25 @@ func _update_agglomeration(delta: float) -> void :
 	fusion_check_timer = FUSION_CHECK_INTERVAL
 	var commons = []
 	for enemy in enemies:
-		if enemy["type"] == ENEMY_COMMON:
+		if enemy["type"] == ENEMY_COMMON and float(enemy.get("hp", 0.0)) > 0.0:
 			commons.append(enemy)
+	# The old interval scan compared every common enemy with every other common.
+	# Reuse the collision grid so this periodic system scales with nearby density
+	# rather than total run population. Sorted spatial indices preserve the former
+	# stable enemy-array order for fusion decisions.
+	enemy_manager.rebuild_spatial_index()
 	var used = {}
 	for enemy in commons:
 		if used.has(enemy["uid"]):
 			continue
 		var cluster = [enemy]
-		for other in commons:
+		for other_index in enemy_manager.nearby_entity_indices(Vector2(enemy["pos"]), FUSION_RADIUS, false):
+			var other: Dictionary = enemy_manager.spatial_entities[other_index]
 			if other == enemy or used.has(other["uid"]):
 				continue
-			if enemy["pos"].distance_to(other["pos"]) <= FUSION_RADIUS:
+			if String(other.get("type", "")) != ENEMY_COMMON or float(other.get("hp", 0.0)) <= 0.0:
+				continue
+			if Vector2(enemy["pos"]).distance_squared_to(Vector2(other["pos"])) <= FUSION_RADIUS * FUSION_RADIUS:
 				cluster.append(other)
 		if cluster.size() >= FUSION_REQUIRED:
 			var ready = true
@@ -21813,7 +21823,8 @@ func _update_bullets(delta: float) -> void :
 			var uid = str(enemy["uid"])
 			if bullet["hits"].has(uid):
 				continue
-			if bullet["pos"].distance_to(enemy["pos"]) < _enemy_radius(enemy):
+			var enemy_radius := _enemy_radius(enemy)
+			if Vector2(bullet["pos"]).distance_squared_to(Vector2(enemy["pos"])) < enemy_radius * enemy_radius:
 				bullet["hits"][uid] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
 				_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
@@ -21855,7 +21866,7 @@ func _update_bullets(delta: float) -> void :
 				elif not bool(bullet["pierce"]) and not evolution_keep:
 					bullet["life"] = 0.0
 					break
-		if float(bullet["life"]) > 0.0 and _arauto_active() and RangedAttackRange.can_hit_position(bullet, Vector2(arauto["pos"])) and Vector2(bullet["pos"]).distance_to(Vector2(arauto["pos"])) < 58.0:
+		if float(bullet["life"]) > 0.0 and _arauto_active() and RangedAttackRange.can_hit_position(bullet, Vector2(arauto["pos"])) and Vector2(bullet["pos"]).distance_squared_to(Vector2(arauto["pos"])) < 58.0 * 58.0:
 			if not bullet["hits"].has("arauto"):
 				bullet["hits"]["arauto"] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
@@ -21918,7 +21929,8 @@ func _update_bullets(delta: float) -> void :
 			_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
 			bullet["life"] = 0.0
 			continue
-		if float(bullet["life"]) > 0.0 and boss_active and boss_hp > 0.0 and RangedAttackRange.can_hit_position(bullet, boss_pos) and bullet["pos"].distance_to(boss_pos) < _boss_hit_radius():
+		var boss_hit_radius := _boss_hit_radius()
+		if float(bullet["life"]) > 0.0 and boss_active and boss_hp > 0.0 and RangedAttackRange.can_hit_position(bullet, boss_pos) and Vector2(bullet["pos"]).distance_squared_to(boss_pos) < boss_hit_radius * boss_hit_radius:
 			if not bullet["hits"].has("boss"):
 				bullet["hits"]["boss"] = true
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
@@ -22049,9 +22061,10 @@ func _update_remote_bullets(delta: float) -> void :
 				if bullet_pos.distance_squared_to(Vector2(enemy["pos"])) < hit_radius * hit_radius:
 					_apply_remote_projectile_visual_impact(b, "enemy:%s" % str(enemy.get("uid", "")), Vector2(enemy["pos"]))
 					break
-			if float(b["life"]) > 0.0 and _arauto_active() and bullet_pos.distance_to(Vector2(arauto["pos"])) < 58.0:
+			if float(b["life"]) > 0.0 and _arauto_active() and bullet_pos.distance_squared_to(Vector2(arauto["pos"])) < 58.0 * 58.0:
 				_apply_remote_projectile_visual_impact(b, "arauto", Vector2(arauto["pos"]))
-			if float(b["life"]) > 0.0 and boss_active and boss_hp > 0.0 and bullet_pos.distance_to(boss_pos) < _boss_hit_radius():
+			var remote_boss_hit_radius := _boss_hit_radius()
+			if float(b["life"]) > 0.0 and boss_active and boss_hp > 0.0 and bullet_pos.distance_squared_to(boss_pos) < remote_boss_hit_radius * remote_boss_hit_radius:
 				_apply_remote_projectile_visual_impact(b, "boss", boss_pos)
 
 	RuntimeCollectionUtils.compact_positive_float_field(remote_bullets, &"life")
@@ -22599,6 +22612,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 				if incoming_phase7.length() > 0.05 and facing_phase7.dot(incoming_phase7) > 0.342:
 					amount *= 0.58
 	amount *= sineiro_boreal_controller.damage_taken_multiplier(enemy)
+	amount *= amber_suturer_controller.damage_taken_multiplier(enemy)
 	amount *= _fragilidade_enemy_multiplier(enemy, source)
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
 	amount *= _acorrentada_chained_damage_multiplier(enemy)
@@ -33288,8 +33302,45 @@ func _card_drop_texture_available(card: Dictionary) -> bool:
 	return _card_texture(card) != null
 
 
+func _card_drop_texture_registered(card: Dictionary) -> bool:
+	if card.is_empty() or String(card.get("name", "")) == "":
+		return false
+	return RuntimeAssetController.registered_texture_available(self, "card_" + String(card.get("name", "")))
+
+
+func _request_card_drop_texture(card: Dictionary) -> bool:
+	if not _card_drop_texture_registered(card):
+		return false
+	return RuntimeAssetController.request_registered_texture(self, "card_" + String(card.get("name", "")))
+
+
+func _card_drop_texture_loaded(card: Dictionary) -> bool:
+	if card.is_empty() or String(card.get("name", "")) == "":
+		return false
+	return textures.get("card_" + String(card.get("name", ""))) != null
+
+
 func _cinzas_bonus_stacks(card_id: String) -> int:
+	var card: Dictionary = _find_card_by_id(card_id)
+	if card.is_empty() or not _is_common_card(card) or not CardCatalogDefinitions.is_burn_eligible(card_id):
+		return 0
 	return maxi(0, int(cinzas_card_bonuses.get(card_id, 0)))
+
+
+func _sanitize_legacy_cinzas_rarity_state() -> void:
+	var kept_marks: Array = []
+	for mark_value in cinzas_burn_marks:
+		var mark: Dictionary = Dictionary(mark_value)
+		var mark_card_id: String = String(mark.get("card_id", ""))
+		var marked_card: Dictionary = _find_card_by_id(mark_card_id)
+		if not marked_card.is_empty() and _is_common_card(marked_card) and CardCatalogDefinitions.is_burn_eligible(mark_card_id):
+			kept_marks.append(mark)
+	cinzas_burn_marks = kept_marks
+	for card_id_value in cinzas_card_bonuses.keys():
+		var bonus_card_id: String = String(card_id_value)
+		var bonus_card: Dictionary = _find_card_by_id(bonus_card_id)
+		if bonus_card.is_empty() or not _is_common_card(bonus_card) or not CardCatalogDefinitions.is_burn_eligible(bonus_card_id):
+			cinzas_card_bonuses.erase(card_id_value)
 
 
 func _effective_card_count(card_id: String) -> float:
@@ -41388,6 +41439,7 @@ func _cycle_deck_view(direction: int) -> void :
 
 
 func _sync_deck_network() -> void :
+	_sanitize_legacy_cinzas_rarity_state()
 	if online_local_spectator:
 		return
 	if not is_multiplayer or not online_connected or dedicated_server_mode or not _shop_rpc_available():
@@ -41984,12 +42036,43 @@ func _lacerante_attack_direction() -> Vector2:
 
 
 func _camera(viewport: Vector2) -> Vector2:
-	var target = player_pos
-	if is_multiplayer and (online_local_spectator or (is_dead and not _all_multiplayer_players_dead())):
-		target = _spectator_target_pos()
+	var target: Vector2 = _camera_target_position()
+	if camera_comfort_enabled and camera_follow_initialized:
+		target = camera_follow_center
 	var camera = target - viewport * 0.5
 	var overscan: Vector2 = _map_camera_overscan(viewport)
 	return camera.clamp(-overscan, WORLD_SIZE - viewport + overscan)
+
+
+func _camera_target_position() -> Vector2:
+	if is_multiplayer and (online_local_spectator or (is_dead and not _all_multiplayer_players_dead())):
+		return _spectator_target_pos()
+	return player_pos
+
+
+func _update_comfort_camera(delta: float) -> void:
+	var target := _camera_target_position()
+	if not camera_comfort_enabled:
+		camera_follow_center = target
+		camera_follow_initialized = true
+		return
+	if not camera_follow_initialized or camera_follow_center.distance_to(target) > 720.0:
+		camera_follow_center = target
+		camera_follow_initialized = true
+		return
+	var viewport := get_viewport_rect().size
+	var dead_zone := Vector2(
+		clampf(viewport.x * 0.105, 86.0, 148.0),
+		clampf(viewport.y * 0.105, 52.0, 86.0)
+	)
+	var offset := target - camera_follow_center
+	var desired := camera_follow_center
+	if absf(offset.x) > dead_zone.x:
+		desired.x = target.x - signf(offset.x) * dead_zone.x
+	if absf(offset.y) > dead_zone.y:
+		desired.y = target.y - signf(offset.y) * dead_zone.y
+	var follow_weight := 1.0 - exp(-7.5 * minf(delta, 0.1))
+	camera_follow_center = camera_follow_center.lerp(desired, follow_weight)
 
 
 func _map_camera_overscan(viewport: Vector2) -> Vector2:
@@ -45621,7 +45704,7 @@ func _handle_graphics_settings_touch(pos: Vector2, viewport: Vector2) -> void :
 
 
 func _graphics_setting_keys() -> Array:
-	var keys: = ["particles", "shadows", "screen_shake", "fps_limit", "health_warning_start", "health_warning_strength", "range_color", "range_opacity", "low_resource", "memory_saver"]
+	var keys: = ["particles", "shadows", "screen_shake", "camera_comfort", "fps_limit", "health_warning_start", "health_warning_strength", "range_color", "range_opacity", "low_resource", "memory_saver"]
 	if _uses_desktop_ui():
 		keys.append("window_mode")
 	keys.append("back")
@@ -45637,6 +45720,7 @@ func _graphics_setting_title(key: String) -> String:
 		"particles": return "PARTICULAS"
 		"shadows": return "SOMBRAS"
 		"screen_shake": return "TREMOR DE TELA"
+		"camera_comfort": return "CAMERA CONFORTAVEL"
 		"fps_limit": return "LIMITE DE FPS"
 		"health_warning_start": return "ALERTA DE VIDA"
 		"health_warning_strength": return "INTENSIDADE DO ALERTA"
@@ -45653,6 +45737,7 @@ func _graphics_setting_subtitle(key: String) -> String:
 		"particles": return "Efeitos visuais e particulas de combate."
 		"shadows": return "Sombra dinamica quando o modo leve permite."
 		"screen_shake": return "Impacto de tela em explosoes e hits."
+		"camera_comfort": return "Zona neutra e movimento suave para reduzir enjoo."
 		"fps_limit": return "30, 60, 120 FPS ou sem limite em PC e celular."
 		"health_warning_start": return "Vida em que o vermelho começa. Abaixo de 25%, as veias avançam."
 		"health_warning_strength": return "Intensidade do vermelho e das veias nas bordas da visão."
@@ -45669,6 +45754,7 @@ func _graphics_setting_value(key: String) -> String:
 		"particles": return "ON" if gfx_particles else "OFF"
 		"shadows": return "ON" if _shadows_enabled() else "OFF"
 		"screen_shake": return "ON" if gfx_screen_shake else "OFF"
+		"camera_comfort": return "ON" if camera_comfort_enabled else "OFF"
 		"fps_limit": return "ILIMITADO" if _sanitize_graphics_fps_limit(gfx_fps_limit) == 0 else "%d FPS" % _sanitize_graphics_fps_limit(gfx_fps_limit)
 		"health_warning_start": return "%d%%" % roundi(gfx_health_warning_start * 100.0)
 		"health_warning_strength": return "DESLIGADO" if gfx_health_warning_strength == 0.0 else ("SUAVE" if gfx_health_warning_strength < 1.0 else ("FORTE" if gfx_health_warning_strength > 1.0 else "PADRÃO"))
@@ -45689,6 +45775,7 @@ func _graphics_setting_color(key: String) -> Color:
 		"particles": return Color(0.6, 0.8, 1.0) if gfx_particles else Color(0.46, 0.5, 0.56)
 		"shadows": return Color(0.6, 0.8, 1.0) if _shadows_enabled() else Color(0.46, 0.5, 0.56)
 		"screen_shake": return Color(0.6, 0.8, 1.0) if gfx_screen_shake else Color(0.46, 0.5, 0.56)
+		"camera_comfort": return Color(0.32, 1.0, 0.82) if camera_comfort_enabled else Color(0.46, 0.5, 0.56)
 		"fps_limit": return Color(0.32, 1.0, 0.82)
 		"health_warning_start", "health_warning_strength": return Color(1.0, 0.48, 0.42)
 		"range_color", "range_opacity": return RangedAttackRange.indicator_color(self)
@@ -45713,6 +45800,9 @@ func _activate_graphics_setting(key: String) -> void :
 				runtime_performance_controller.reset()
 		"screen_shake":
 			gfx_screen_shake = not gfx_screen_shake
+		"camera_comfort":
+			camera_comfort_enabled = not camera_comfort_enabled
+			camera_follow_initialized = false
 		"fps_limit":
 			_cycle_graphics_fps_limit()
 		"health_warning_start":

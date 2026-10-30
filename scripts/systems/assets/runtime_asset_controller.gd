@@ -137,6 +137,9 @@ const PHASE_TEXTURE_SPECS := {
 static var _prefetch_pending: Dictionary = {}
 static var _prefetch_ready: Dictionary = {}
 static var _prefetch_phase: int = -1
+static var _registered_texture_waiting: Dictionary = {}
+static var _registered_texture_pending: Dictionary = {}
+static var _registered_texture_failed: Dictionary = {}
 
 
 static func prefetch_paths_for_phase(phase: int, base_path: String, limit: int = 10) -> PackedStringArray:
@@ -205,6 +208,9 @@ static func reset_prefetch_for_test() -> void:
 	_prefetch_pending.clear()
 	_prefetch_ready.clear()
 	_prefetch_phase = -1
+	_registered_texture_waiting.clear()
+	_registered_texture_pending.clear()
+	_registered_texture_failed.clear()
 
 
 static func shutdown_prefetch() -> void:
@@ -217,6 +223,13 @@ static func shutdown_prefetch() -> void:
 	_prefetch_pending.clear()
 	_prefetch_ready.clear()
 	_prefetch_phase = -1
+	for raw_key in _registered_texture_pending.keys():
+		var path := String(_registered_texture_pending[raw_key])
+		if ResourceLoader.load_threaded_get_status(path) != ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			ResourceLoader.load_threaded_get(path)
+	_registered_texture_waiting.clear()
+	_registered_texture_pending.clear()
+	_registered_texture_failed.clear()
 
 
 static func should_stream_phase_assets(_is_mobile_runtime: bool, _memory_saver_active: bool) -> bool:
@@ -264,6 +277,69 @@ static func ensure_key(game: Node, key: String, base_path: String) -> bool:
 			_load_key(game, key, specs[key], base_path)
 			return game.textures.has(key)
 	return false
+
+
+static func registered_texture_available(game: Node, key: String) -> bool:
+	# Reward-pool construction only needs to know whether an authored texture can
+	# be loaded. Loading every card image while an enemy is dying creates a
+	# visible main-thread hitch; the selected drops are loaded afterwards.
+	if game.textures.get(key) != null:
+		return true
+	return game.lazy_texture_paths.has(key)
+
+
+static func request_registered_texture(game: Node, key: String) -> bool:
+	if game.textures.get(key) != null:
+		return true
+	if _registered_texture_failed.has(key) or not game.lazy_texture_paths.has(key):
+		return false
+	var path := String(game.lazy_texture_paths[key])
+	if not _registered_texture_waiting.has(key) and not _registered_texture_pending.has(key):
+		_registered_texture_waiting[key] = path
+	return false
+
+
+static func poll_registered_textures(game: Node, max_starts: int = 1, max_results: int = 2) -> int:
+	var started := 0
+	for raw_key in _registered_texture_waiting.keys():
+		if started >= maxi(1, max_starts):
+			break
+		var key := String(raw_key)
+		var path := String(_registered_texture_waiting[raw_key])
+		_registered_texture_waiting.erase(raw_key)
+		if not ResourceLoader.exists(path):
+			_registered_texture_failed[key] = true
+			continue
+		var error := ResourceLoader.load_threaded_request(path, "Texture2D", true, ResourceLoader.CACHE_MODE_REUSE)
+		if error == OK:
+			_registered_texture_pending[key] = path
+			started += 1
+		else:
+			_registered_texture_failed[key] = true
+	var completed := 0
+	for raw_key in _registered_texture_pending.keys():
+		if completed >= maxi(1, max_results):
+			break
+		var key := String(raw_key)
+		var path := String(_registered_texture_pending[raw_key])
+		var status := ResourceLoader.load_threaded_get_status(path)
+		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			var resource := ResourceLoader.load_threaded_get(path)
+			_registered_texture_pending.erase(raw_key)
+			if resource is Texture2D:
+				game.textures[key] = resource
+			else:
+				_registered_texture_failed[key] = true
+			completed += 1
+		elif status == ResourceLoader.THREAD_LOAD_FAILED or status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+			_registered_texture_pending.erase(raw_key)
+			_registered_texture_failed[key] = true
+			completed += 1
+	return started + completed
+
+
+static func registered_texture_failed(key: String) -> bool:
+	return _registered_texture_failed.has(key)
 
 
 static func phase_keys(phase: int) -> Array:

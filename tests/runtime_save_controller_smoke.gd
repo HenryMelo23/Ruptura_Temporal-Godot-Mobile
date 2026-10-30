@@ -87,6 +87,7 @@ func _run() -> void:
 	game.online_mode_unlocked = true
 	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_LAST_DIRECTION
 	game.geovana_bark_scale = 1.3
+	game.camera_comfort_enabled = false
 	game.keyboard_bindings["attack"] = game._key_input_binding(KEY_Z)
 	game.keyboard_bindings["shop"] = game._key_input_binding(KEY_L)
 	game._save_config()
@@ -96,6 +97,7 @@ func _run() -> void:
 	game.online_mode_unlocked = false
 	game.desktop_teleport_mode = game.DESKTOP_TELEPORT_CURSOR
 	game.geovana_bark_scale = 0.5
+	game.camera_comfort_enabled = true
 	game._reset_keyboard_bindings()
 	game._load_config()
 	_check(game.hud_joy_pos == Vector2(101, 202), "config joy_pos was not restored")
@@ -104,6 +106,7 @@ func _run() -> void:
 	_check(game.online_mode_unlocked, "config unlock flag was not restored")
 	_check(game.desktop_teleport_mode == game.DESKTOP_TELEPORT_LAST_DIRECTION, "last-direction teleport config was not restored")
 	_check(is_equal_approx(game.geovana_bark_scale, 1.3), "Geovana bark scale config was not restored")
+	_check(not game.camera_comfort_enabled, "camera comfort preference was not restored")
 	_check(game.keyboard_bindings.get("attack") == game._key_input_binding(KEY_Z), "custom attack binding was not restored")
 	_check(game.keyboard_bindings.get("shop") == game._key_input_binding(KEY_L), "custom shop binding was not restored")
 
@@ -136,6 +139,11 @@ func _run() -> void:
 	game._set_run_mode_local(game.RUN_MODE_DROP)
 	game.score = 987
 	game.player_pos = Vector2(555, 444)
+	game.cards_bought[game.CARD_TREGUA_ID] = 2
+	game.tregua_regenerativa_timer = 4.25
+	var expected_tregua_regen: float = game._tregua_regen_per_second()
+	game.cinzas_burn_marks = [{"card_id": game.CARD_TREGUA_ID, "stacks": 3, "return_buff": true}]
+	game.cinzas_card_bonuses[game.CARD_TREGUA_ID] = 3
 	game.pointer_down = true
 	game.move_touch_index = 7
 	game.attack_touch_index = 8
@@ -148,12 +156,19 @@ func _run() -> void:
 	game.pointer_down = true
 	game.move_touch_index = 7
 	game.attack_touch_index = 8
+	game.cards_bought[game.CARD_TREGUA_ID] = 0
+	game.tregua_regenerativa_timer = 0.0
 	game._set_run_mode_local(game.RUN_MODE_SHOP)
 	_check(game._resume_interrupted_run(), "interrupted run did not resume")
 	_check(game.current_phase == 3, "resume did not restore phase")
 	_check(game.score == 987, "resume did not restore score")
 	_check(game.player_pos == Vector2(555, 444), "resume did not restore player position")
 	_check(game.selected_run_mode == game.RUN_MODE_DROP, "resume did not restore Drop journey mode")
+	_check(game._card_count_by_id(game.CARD_TREGUA_ID) == 2, "resume did not restore Trégua copies")
+	_check(is_equal_approx(game.tregua_regenerativa_timer, 4.25), "resume did not restore Trégua timer")
+	_check(is_equal_approx(game._tregua_regen_per_second(), expected_tregua_regen), "legacy Cinzas state changed Trégua regeneration after resume")
+	_check(game._cinzas_mark_index(game.CARD_TREGUA_ID) < 0, "legacy Trégua Cinzas mark survived resume")
+	_check(not game.cinzas_card_bonuses.has(game.CARD_TREGUA_ID), "legacy Trégua Cinzas bonus survived resume")
 	_check(not game.pointer_down and game.move_touch_index == -1 and game.attack_touch_index == -1, "resume did not reset transient input")
 
 	game._capture_retry_run_snapshot()
@@ -169,5 +184,5 @@ func _run() -> void:
 	_assert_interrupted_save_blocked("online_connected")
 
 	game._clear_interrupted_run_save()
-	print("RUNTIME_SAVE_CONTROLLER_SMOKE_OK config=true corrupt=true legacy_text=true autosave=true resume=true retry=true blocks=true")
+	print("RUNTIME_SAVE_CONTROLLER_SMOKE_OK config=true corrupt=true legacy_text=true autosave=true resume=true tregua_rare_migration=true retry=true blocks=true")
 	_cleanup(0)

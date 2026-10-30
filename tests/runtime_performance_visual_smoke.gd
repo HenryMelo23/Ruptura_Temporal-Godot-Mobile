@@ -60,7 +60,8 @@ func _run() -> void:
 
 	var full := await _measure_stage(0, "full")
 	var emergency := await _measure_stage(2, "emergency")
-	_check(float(emergency.projectiles_p50_us) <= float(full.projectiles_p50_us) * 0.75, "batched projectile submission did not improve enough")
+	_check(game.runtime_projectile_batch_renderer.active_stage == 0, "Ultra changed projectile texture fidelity during measured emergency")
+	_check(root.content_scale_mode == Window.CONTENT_SCALE_MODE_CANVAS_ITEMS, "Ultra changed native canvas rendering during measured emergency")
 	print("RUNTIME_PERFORMANCE_VISUAL_%s full_world_p50_us=%.1f emergency_world_p50_us=%.1f full_projectiles_p50_us=%.1f emergency_projectiles_p50_us=%.1f captures=2" % [
 		"FAIL" if failed else "OK",
 		full.world_p50_us,

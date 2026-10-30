@@ -120,9 +120,9 @@ static func graphics_settings_rects(g: CanvasItem, viewport: Vector2) -> Diction
 		return wide_rects
 	var w: float = min(760.0, viewport.x * (0.86 if portrait else 0.66))
 	var x: float = viewport.x * 0.5 - w * 0.5
-	var y: float = viewport.y * (0.14 if portrait else 0.15)
-	var gap: float = 9.0
-	var row_h: float = clamp((viewport.y - y - 42.0 - gap * float(keys.size() - 1)) / float(keys.size()), 42.0, 58.0)
+	var y: float = viewport.y * (0.11 if portrait else 0.15)
+	var gap: float = 6.0 if portrait and keys.size() >= 13 else 9.0
+	var row_h: float = clamp((viewport.y - y - 42.0 - gap * float(keys.size() - 1)) / float(keys.size()), 38.0 if portrait else 42.0, 58.0)
 	var rects: Dictionary = {}
 	for i in range(keys.size()):
 		rects[String(keys[i])] = Rect2(x, y + (row_h + gap) * float(i), w, row_h)

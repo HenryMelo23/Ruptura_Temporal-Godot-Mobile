@@ -138,15 +138,6 @@ static func _draw_phase_transition(game: Node2D, viewport: Vector2) -> void :
 	var target_phase: int = int(game.pending_phase if game.pending_phase > 0 else game.current_phase)
 	var elapsed_time: float = clampf(game.PHASE_TRANSITION_TIME - game.phase_transition_timer, 0.0, game.PHASE_TRANSITION_TIME)
 
-	var phase_names = {
-		1: "RUÍNAS CÓSMICAS", 
-		2: "ÁRTICO IMPERIAL", 
-		3: "CATEDRAL DOS VERMES", 
-		4: "CHARCO DOS SAPOS", 
-		5: "COLISÃO DE MUNDOS", 
-		6: "ABISMO FINAL", 
-		7: "CINZAS DA RUPTURA"
-	}
 	var phase_shaders = {
 		1: "res://shaders/transitions/star_dissolve.gdshader", 
 		2: "res://shaders/transitions/blizzard_wipe.gdshader", 
@@ -159,7 +150,7 @@ static func _draw_phase_transition(game: Node2D, viewport: Vector2) -> void :
 
 	if elapsed_time < game.PHASE_TRANSITION_HOLD_TIME:
 		game.phase_transition_title_label.visible = true
-		game.phase_transition_title_label.text = String(phase_names.get(target_phase, "FASE %d" % target_phase)).to_upper()
+		game.phase_transition_title_label.text = game._phase_region_name(target_phase).to_upper()
 		game.phase_transition_overlay_node.color = Color.BLACK
 		game.phase_transition_overlay_node.material = null
 	else:
@@ -2545,7 +2536,7 @@ static func _draw_phase_mp_request(game: Node2D, viewport: Vector2) -> void :
 	var accent = Color(0.0, 1.0, 0.82) if game.phase_mp_request_incoming else Color(1.0, 0.82, 0.24)
 	game._draw_holo_panel(panel, accent, true, 0.86)
 	var remaining: int = int(ceil(maxf(0.0, game.phase_mp_request_timer)))
-	var action_label: String = "EXTRACAO" if game.phase_mp_action == "extract" else ("ROTA FARM" if game.phase_mp_action == "farm" else "FASE %d" % game.phase_mp_target)
+	var action_label: String = "EXTRACAO" if game.phase_mp_action == "extract" else ("NOVO CICLO" if game.phase_mp_action == "farm" else game._phase_region_name(game.phase_mp_target))
 	var title: String = "EQUIPE QUER TRANSFERIR: %s" % action_label if game.phase_mp_request_incoming else "PEDIDO DE TRANSFERENCIA ENVIADO"
 	game._draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), game._readable_text_size(15), accent)
 	game._draw_centered("CONFIRMACOES %d/%d - %ds" % [game.phase_mp_vote_count, game.phase_mp_expected_count, remaining], Vector2(panel.get_center().x, panel.position.y + 58.0), game._readable_text_size(12), Color(0.98, 0.94, 0.86))

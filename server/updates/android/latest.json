@@ -1,14 +1,14 @@
 {
-  "version": "2.0.62",
-  "version_code": 26200,
-  "filename": "ruptura_temporal_mobile_2.0.62.apk",
-  "sha256": "c72b463238992151c8f115adb668559f97d2fa102bd644d464b6824bc46ef751",
-  "size": 950610947,
+  "version": "2.0.63",
+  "version_code": 26300,
+  "filename": "ruptura_temporal_mobile_2.0.63.apk",
+  "sha256": "ef63a7ba87b47ba70041b26c26c2f35d71e57517bfb22afc7ad5a2733bd84906",
+  "size": 942294267,
   "notes": [
-    "Progressao de nivel mais longa: 500 pontos para o nivel 2 e 2.500 pontos acumulados para o nivel 4.",
-    "Beneficios por nivel preservados: +1% de dano, +5 de alcance e +0,4% de mitigacao.",
-    "Atualizacao compativel com saves e multiplayer existentes."
+    "Suturador de Ambar reforcado: cristais persistentes, armadura quebravel e duas novas habilidades.",
+    "Conforto de camera com zona morta e suavizacao configuravel, sem reduzir a qualidade grafica.",
+    "Rotas dinamicas em ciclos de quatro mapas, com escolha entre continuar a run ou enfrentar a Umbra."
   ],
   "mandatory": false,
-  "published_at": "2026-10-30T17:17:41.6356757Z"
+  "published_at": "2026-10-30T23:34:03Z"
 }

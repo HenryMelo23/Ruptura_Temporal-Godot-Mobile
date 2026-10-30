@@ -92,8 +92,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.0.62"
-const GAME_VERSION_CODE: = 26200
+const GAME_VERSION: = "2.0.63"
+const GAME_VERSION_CODE: = 26300
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -476,7 +476,7 @@ const LONG_RUN_SPAWN_INTERVAL_BROKEN_MULT: = 0.92
 const LONG_RUN_SPAWN_INTERVAL_ENDLESS_MULT: = 0.86
 const LONG_RUN_ENEMY_LIMIT_BROKEN_BONUS: = 3
 const LONG_RUN_ENEMY_LIMIT_ENDLESS_BONUS: = 5
-const INITIAL_PHASE_ROLL_POOL: = [1, 6]
+const INITIAL_PHASE_ROLL_POOL: = [1, 2, 3, 4, 6, 7]
 const INITIAL_PHASE_ALTERNATE_BIAS: = 0.68
 const INITIAL_PHASE_QUICK_EXIT_BIAS: = 0.82
 const INITIAL_PHASE_QUICK_EXIT_TIME: = 45.0
@@ -986,7 +986,7 @@ const CARD_RARITY_COMMON: = "common"
 const CARD_RARITY_UNCOMMON: = "uncommon"
 const CARD_RARITY_RARE: = "rare"
 const CARD_RARITY_LEGENDARY: = "legendary"
-const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso", "Egide Hemofaga"]
+const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "TrÃ©gua Regenerativa", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso", "Egide Hemofaga"]
 const CARD_RARITY_COMMON_COLOR: = Color(0.96, 0.97, 1.0)
 const CARD_RARITY_UNCOMMON_COLOR: = Color(0.18, 0.62, 1.0)
 const CARD_RARITY_RARE_COLOR: = Color(1.0, 0.76, 0.12)
@@ -2002,7 +2002,7 @@ const CARDS: = [
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
 	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.4, 0.94, 1.0)},
-	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
+	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
 	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
@@ -3528,6 +3528,9 @@ var hit_freeze_timer: float = 0.0
 var boss_hp_lag: float = -1.0
 var gfx_shadows: bool = true
 var gfx_screen_shake: bool = true
+var camera_comfort_enabled: bool = true
+var camera_follow_center := Vector2.ZERO
+var camera_follow_initialized: bool = false
 var gfx_health_warning_start: float = 0.55
 var gfx_health_warning_strength: float = 1.0
 var gfx_low_resource: bool = false
@@ -3581,10 +3584,8 @@ var initial_phase_current_recorded: bool = true
 var run_initial_phase: int = 0
 var run_phase6_completed: bool = false
 const DIMENSION_FINAL_PHASE: int = 5
-const DIMENSION_FIRST_FARM_PHASE: int = 7
-const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 6]
-const DIMENSION_FARM_RANDOM_COUNT: int = 2
-const DIMENSION_FARM_RETURN_PHASE: int = 4
+const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 4, 6, 7]
+const DIMENSION_CYCLE_LENGTH: int = 4
 const DIMENSION_EXTRACTION_INTERVAL: int = 10
 var dimension_route_queue: Array = []
 var dimension_route_farm_cycles: int = 0

@@ -16,10 +16,10 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 
-func _support_card(id: String) -> Dictionary:
+func _support_card(id: String, expected_rarity: String = "common") -> Dictionary:
 	var card: Dictionary = game._find_card_by_id(id)
 	_check(not card.is_empty(), id + " was not registered")
-	_check(not game._is_rare_card(card), id + " should be common")
+	_check(game._card_rarity_key(card) == expected_rarity, id + " rarity drifted from " + expected_rarity)
 	_check(game._card_max_count(card) >= 999999, id + " should be unlimited")
 	_check(game._card_texture(card) != null, id + " frame 1 did not load")
 	return card
@@ -46,7 +46,8 @@ func _run() -> void:
 		game.CARD_ANCORA_ID
 	]
 	for id in ids:
-		var card: Dictionary = _support_card(id)
+		var expected_rarity: String = game.CARD_RARITY_RARE if id == game.CARD_TREGUA_ID else game.CARD_RARITY_COMMON
+		var card: Dictionary = _support_card(id, expected_rarity)
 		game._apply_card(card)
 		_check(game._card_count_by_id(id) == 1, id + " did not increment its counter")
 
@@ -58,8 +59,9 @@ func _run() -> void:
 	game._damage_player(20, "test_projectile")
 	_check(game.tregua_regenerativa_timer == 0.0 and not game.tregua_regenerativa_active, "Tregua did not reset on real damage")
 
-	var common_card: Dictionary = game._find_card_by_id(game.CARD_TREGUA_ID)
-	var rare_card: Dictionary = game._find_card_by_id("devorador_destinos")
+	var common_card_id: String = "Disparo crescente"
+	var common_card: Dictionary = game._find_card_by_id(common_card_id)
+	var rare_card: Dictionary = game._find_card_by_id(game.CARD_TREGUA_ID)
 	game.shop_cards = [common_card.duplicate(true), rare_card.duplicate(true)]
 	game.shop_selected = 0
 	var cinzas_before: int = game._card_count_by_id(game.CARD_CINZAS_ID)
@@ -73,7 +75,7 @@ func _run() -> void:
 	_check(game._card_count_by_id(game.CARD_CINZAS_ID) == cinzas_before - 1, "Cinzas was not consumed when burning")
 	_check(game.cinzas_burn_marks.size() == 1, "Cinzas did not create a mark")
 	_check(not game._can_burn_shop_card(rare_card), "Cinzas should not burn rare cards")
-	_check(game._cinzas_weight_multiplier(game.CARD_TREGUA_ID) > 2.0, "Cinzas should increase future common weight")
+	_check(game._cinzas_weight_multiplier(common_card_id) > 2.0, "Cinzas should increase future common weight")
 	for reroll_index in range(8):
 		game._update_burned_card_marks_after_shop([])
 	_check(game.cinzas_burn_marks.size() == 1, "Cinzas mark should persist through rerolls")
@@ -87,15 +89,13 @@ func _run() -> void:
 	game.shop_cards = [returned_cards[0].duplicate(true)]
 	game.shop_presentation.update(game.shop_presentation.BURN_TIME)
 	_check(game._burn_shop_card(0), "Cinzas could not burn an already-buffed common card")
-	_check(game._cinzas_mark_stacks(game.CARD_TREGUA_ID) == 2, "Cinzas did not stack when burning a buffed return")
+	_check(game._cinzas_mark_stacks(common_card_id) == 2, "Cinzas did not stack when burning a buffed return")
 	var stacked_return := [common_card.duplicate(true)]
 	game._update_burned_card_marks_after_shop(stacked_return)
 	_check(int(stacked_return[0].get("cinzas_buff_stacks", 0)) == 2, "Cinzas stacked return did not expose its buff count")
-	var regen_before: float = game._tregua_regen_per_second()
 	game._apply_card(stacked_return[0])
 	_check(game.cinzas_burn_marks.is_empty(), "Cinzas mark was not consumed when the buffed card was bought")
-	_check(game._tregua_regen_per_second() > regen_before, "Cinzas stacked return did not increase Tregua regen")
-	_check(game._cinzas_bonus_stacks(game.CARD_TREGUA_ID) == 2, "Cinzas stacked bonus count was not recorded")
+	_check(game._cinzas_bonus_stacks(common_card_id) == 2, "Cinzas stacked bonus count was not recorded")
 
 	game.player_hp = 1000
 	game.reserva_pulso_stored = 0.0
@@ -145,5 +145,5 @@ func _run() -> void:
 	_check(game.passagem_intangivel_timer == 0.0, "reset did not clear Passagem")
 	_check(game.ancora_vital_state.is_empty(), "reset did not clear Ancora")
 
-	print("SUPPORT_CARDS_SMOKE_OK cards=6 common=true unlimited=true sprites=true tregua=true cinzas=true reserva=true casulo=true passagem=true ancora=true reset=true")
+	print("SUPPORT_CARDS_SMOKE_OK cards=6 tregua_rare=true others_common=true unlimited=true sprites=true tregua=true cinzas=true reserva=true casulo=true passagem=true ancora=true reset=true")
 	quit(0)

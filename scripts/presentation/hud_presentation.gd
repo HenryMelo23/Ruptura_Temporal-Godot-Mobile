@@ -238,7 +238,7 @@ static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> voi
 	var hp_bar := Rect2(left_rect.position + Vector2(10.0, 27.0), Vector2(left_rect.size.x - 20.0, 9.0))
 	game.draw_rect(hp_bar, Color(0.08, 0.11, 0.13, 0.96), true)
 	game.draw_rect(Rect2(hp_bar.position, Vector2(hp_bar.size.x * hp_ratio, hp_bar.size.y)), hp_color, true)
-	game.draw_string(game.font, left_rect.position + Vector2(10.0, 50.0), "%02d:%02d  FASE %d" % [int(game.time_alive) / 60, int(game.time_alive) % 60, int(game.current_phase)], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 11, Color(accent.r, accent.g, accent.b, 0.9))
+	game.draw_string(game.font, left_rect.position + Vector2(10.0, 50.0), "%02d:%02d  %s" % [int(game.time_alive) / 60, int(game.time_alive) % 60, game._phase_region_name(game.current_phase)], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 10, Color(accent.r, accent.g, accent.b, 0.9))
 	_draw_player_run_level(game, left_rect)
 
 	game.draw_rect(right_rect, Color(0.015, 0.025, 0.035, 0.9), true)

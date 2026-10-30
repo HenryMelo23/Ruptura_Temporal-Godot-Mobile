@@ -42,19 +42,30 @@ func _check_phase_route_and_boss_hp() -> void:
 	game.enemies_killed = 27
 	var phase1_hp := float(game._boss_hp_for_phase(1))
 	var phase6_hp := float(game._boss_hp_for_phase(6))
-	_check(is_equal_approx(phase6_hp, phase1_hp), "phase 6 boss hp should match phase 1 scaling")
-	game.run_initial_phase = 6
-	game.run_phase6_completed = false
-	_check(int(game._next_phase_after_boss(6)) == 1, "initial phase 6 should transition to phase 1")
-	_check(int(game._next_phase_after_boss(1)) == 2, "phase 1 after initial phase 6 should transition to phase 2")
-	_check(int(game._next_phase_after_boss(2)) == 3, "phase 2 after initial phase 6 should transition to phase 3")
-	_check(int(game._next_phase_after_boss(3)) == 4, "phase 3 should transition to phase 4")
-	game.run_initial_phase = 1
-	game.run_phase6_completed = false
-	_check(int(game._next_phase_after_boss(1)) == 2, "initial phase 1 should transition to phase 2")
-	_check(int(game._next_phase_after_boss(2)) == 3, "phase 2 should transition to phase 3")
-	_check(int(game._next_phase_after_boss(4)) == 0, "phase 4 should offer portals instead of a direct phase")
-	_check(game._should_offer_dimension_choice_after_boss(4), "phase 4 should open dimension choice portals")
+	_check(phase6_hp >= phase1_hp, "phase 6 boss hp should not be lower than phase 1 scaling")
+	var region_names: Dictionary = {}
+	for phase_id in game.DIMENSION_ROUTE_POOL + [game.DIMENSION_FINAL_PHASE]:
+		var region_name: String = String(game._phase_region_name(int(phase_id)))
+		_check(region_name != "" and not region_name.begins_with("FASE"), "map still uses a numbered phase label")
+		region_names[region_name] = true
+	_check(region_names.size() == 7, "map region names are not unique")
+	game.rng.seed = 7781
+	game._begin_initial_phase_tracking(6)
+	_check(Array(game.dimension_route_queue).size() == 3, "initial cycle did not queue three additional maps")
+	var cycle: Array[int] = [6]
+	for queued in game.dimension_route_queue:
+		cycle.append(int(queued))
+	_check(cycle.all(func(value): return int(value) in game.DIMENSION_ROUTE_POOL and int(value) != game.DIMENSION_FINAL_PHASE), "cycle selected Umbra or an invalid map")
+	var unique_cycle: Dictionary = {}
+	for phase_value in cycle:
+		unique_cycle[phase_value] = true
+	_check(unique_cycle.size() == 4, "cycle repeated a map before the fourth boss")
+	for index in range(cycle.size()):
+		game._register_dimension_phase_completed(cycle[index])
+		if index < cycle.size() - 1:
+			_check(not game._should_offer_dimension_choice_after_boss(cycle[index]), "portals opened before four bosses")
+			_check(int(game._consume_next_phase_after_boss(cycle[index])) == cycle[index + 1], "queued random route was not consumed in order")
+	_check(game._should_offer_dimension_choice_after_boss(cycle.back()), "fourth defeated boss did not open the two route portals")
 
 
 func _check_forced_initial_phase_cheats() -> void:
@@ -104,36 +115,29 @@ func _run() -> void:
 	game.force_phase6_start = false
 	game.forced_initial_phase = 0
 	game._set_initial_phase_bias(0, 0.0, false)
-	var seen_phase_1 := false
-	var seen_phase_6 := false
+	var seen_phases: Dictionary = {}
 	for seed_value in range(1, 96):
 		game.rng.seed = int(seed_value * 7919 + 17)
 		game._start_game()
 		var phase := int(game.current_phase)
-		_check(phase == 1 or phase == 6, "unexpected initial phase %d" % phase)
+		_check(phase in game.INITIAL_PHASE_ROLL_POOL and phase != 5, "unexpected initial phase %d" % phase)
 		_check(is_equal_approx(float(game.phase_started_at), 0.0), "initial phase timer should start at zero")
+		_check(Array(game.dimension_route_queue).size() == 3, "new run did not prebuild the four-map cycle")
+		seen_phases[phase] = true
 		if phase == 1:
-			seen_phase_1 = true
 			_check(String(game.boss_name) == "CARANGUEJO COSMICO GIGANTE", "phase 1 boss name mismatch")
 			_check(is_equal_approx(float(game.boss_hp_max), float(game.BOSS_BASE_HP)), "phase 1 boss hp mismatch")
 			_check(game.enemies.size() == 1, "phase 1 should start with one enemy")
 			_check(String(game.enemies[0].get("type", "")) == game.ENEMY_COMMON, "phase 1 initial enemy should be common")
 		else:
-			seen_phase_6 = true
-			_check(String(game.boss_name) == "MATRIARCA DA CHAGA", "phase 6 boss name mismatch")
-			_check(is_equal_approx(float(game.boss_hp_max), float(game._boss_hp_for_phase(6))), "phase 6 boss hp mismatch")
-			_check(game.boss_pos == Vector2(game.WORLD_SIZE.x + 220.0, game.WORLD_SIZE.y * 0.36), "phase 6 boss start pos mismatch")
-			_check(game.enemies.size() == 1, "phase 6-1 should start with one enemy")
-			_check(String(game.enemies[0].get("type", "")) == game.ENEMY_LODARIO, "phase 6-1 initial enemy should be Lodario")
-			_check(is_equal_approx(float(game.enemies[0].get("max_hp", 0.0)), float(game.ENEMY_BASE_HP)), "phase 6-1 Lodario should use phase 1 common hp")
-			_check(game._boss_texture() != null, "phase 6 boss texture missing")
-			_check(game._current_map_texture() != null, "phase 6 map texture missing")
-		if seen_phase_1 and seen_phase_6:
+			_check(game._current_map_texture() != null, "random initial map texture missing")
+		if seen_phases.size() == game.INITIAL_PHASE_ROLL_POOL.size():
 			break
 
-	_check(seen_phase_1, "phase 1 was not rolled")
-	_check(seen_phase_6, "phase 6 was not rolled")
-	print("START_PHASE_RANDOM_SMOKE_OK phases=[1,6] forced=[1,2,3,4,5,6,7]")
+	for expected_phase in game.INITIAL_PHASE_ROLL_POOL:
+		_check(seen_phases.has(expected_phase), "eligible initial map %d was never rolled" % expected_phase)
+	_check(not seen_phases.has(5), "Umbra was rolled as an initial map")
+	print("START_PHASE_RANDOM_SMOKE_OK phases=[1,2,3,4,6,7] cycle=4 umbra_after_cycle=true forced=[1,2,3,4,5,6,7]")
 	game._set_initial_phase_bias(0, 0.0, true)
 	game._cleanup_runtime_resources()
 	game.textures.clear()

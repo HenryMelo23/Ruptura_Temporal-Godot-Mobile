@@ -86,6 +86,13 @@ func _run() -> void:
 	controller._activate_sutures(enemy)
 	await _capture("active", Vector2i(1280, 720))
 	await _capture("active", Vector2i(960, 540))
+	enemy["suturer_state_timer"] = controller.CROSSFIRE_TRIGGER_REMAINING - 0.01
+	controller._update_active_sutures(0.01, enemy)
+	await _capture("crystal_crossfire", Vector2i(1280, 720))
+	enemy["hp"] = float(enemy.get("max_hp", 1.0)) * 0.65
+	enemy["suturer_state_timer"] = controller.REPAIR_TRIGGER_REMAINING - 0.01
+	controller._update_active_sutures(0.01, enemy)
+	await _capture("amber_repair", Vector2i(1280, 720))
 	var first_node: Dictionary = nodes.front()
 	var first_suture_id := String(first_node.get("suture_id", ""))
 	var partner_uid := int(Dictionary(nodes.filter(func(value): return String(Dictionary(value).get("suture_id", "")) == first_suture_id)[1]).get("uid", -1))
@@ -158,5 +165,5 @@ func _run() -> void:
 			printerr("PHASE6_AMBER_SUTURER_VISUAL_FAIL " + failure)
 		quit(1)
 		return
-	print("PHASE6_AMBER_SUTURER_VISUAL_OK captures=21 nodes=4 independent=true slow_meter=true mobile_low=true timed_spawn=true recurrence=true sprite=true telegraph=true active=true needle_fan=true hook=true stolen_card=true needle_burst=true cleanup=true")
+	print("PHASE6_AMBER_SUTURER_VISUAL_OK captures=23 nodes=4 armor_meter=true crossfire=true repair=true mobile_low=true timed_spawn=true recurrence=true sprite=true telegraph=true active=true hook=true cleanup=true")
 	quit(0)

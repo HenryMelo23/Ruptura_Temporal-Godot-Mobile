@@ -59,6 +59,16 @@ func effective_stage(game: Node) -> int:
 	return result
 
 
+func visual_stage(game: Node) -> int:
+	# Visual fidelity follows the player's explicit profile, never a transient
+	# FPS sample. The measured stage remains available to CPU work scheduling.
+	if bool(game._memory_saver_active()):
+		return STAGE_EMERGENCY
+	if bool(game.gfx_low_resource):
+		return STAGE_REDUCED
+	return STAGE_FULL
+
+
 func is_emergency(game: Node) -> bool:
 	return effective_stage(game) >= STAGE_EMERGENCY
 
@@ -68,10 +78,9 @@ func shadows_enabled(game: Node) -> bool:
 		return false
 	if bool(game.gfx_low_resource) or bool(game._memory_saver_active()):
 		return false
-	# Desktop shadows are an explicit player choice. The mobile governor may
-	# temporarily suppress them, but a transient desktop frame dip must not make
-	# the setting appear impossible to enable on a capable PC.
-	return not bool(game._is_mobile_runtime()) or effective_stage(game) == STAGE_FULL
+	# Shadows are an explicit player choice. A transient frame dip must not make
+	# them disappear on desktop or mobile while the full-quality profile is active.
+	return visual_stage(game) == STAGE_FULL
 
 
 func force_stage_for_test(value: int) -> void:
@@ -135,7 +144,10 @@ func update(game: Node, delta: float, measured_fps: float = -1.0) -> bool:
 		low_fps_seconds = 0.0
 		recovered_fps_seconds = 0.0
 
-	game.mobile_adaptive_visual_budget = stage > STAGE_FULL
+	# Retained for compatibility with older presentation modules. Ultra never
+	# changes visual fidelity automatically; reduced visuals require an explicit
+	# lightweight or memory-saver profile.
+	game.mobile_adaptive_visual_budget = stage > STAGE_FULL and visual_stage(game) > STAGE_FULL
 	game.mobile_low_fps_seconds = low_fps_seconds
 	game.mobile_recovered_fps_seconds = recovered_fps_seconds
 	_sync_content_scale_mode(game)
@@ -146,11 +158,12 @@ func _sync_content_scale_mode(game: Node) -> void:
 	var window := game.get_window()
 	if window == null:
 		return
-	# Canvas-items scaling shades the physical 2400x1080 surface even though the
-	# project is authored at 1280x720. Viewport scaling keeps the same logical
-	# coordinates/input mapping and upscales one bounded internal render target.
-	var low_resolution: bool = game.mode == "game" and effective_stage(game) >= STAGE_REDUCED
-	var desired_mode: int = Window.CONTENT_SCALE_MODE_VIEWPORT if low_resolution else Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	# Keep authored sprites and HUD at the physical output resolution in every
+	# adaptive stage. Switching to VIEWPORT after a low-FPS window made the whole
+	# game visibly softer and changed Control sampling/layout at runtime; it also
+	# hid the actual accumulating cost instead of fixing it. Adaptive stages may
+	# schedule expensive work less often, but must never reduce image fidelity.
+	var desired_mode: int = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	if applied_content_scale_mode == desired_mode and window.content_scale_mode == desired_mode:
 		return
 	window.content_scale_mode = desired_mode
@@ -159,11 +172,9 @@ func _sync_content_scale_mode(game: Node) -> void:
 
 func should_redraw(game: Node, delta: float) -> bool:
 	var active_stage := effective_stage(game)
-	# A manually selected lightweight profile already removes expensive effects,
-	# shadows and native-resolution rendering. It must not silently cap a healthy
-	# device to 45 visual updates per second. Redraw throttling is reserved for a
-	# measured adaptive degradation (raw stage > FULL).
-	if stage == STAGE_FULL or active_stage == STAGE_FULL or game.mode != "game":
+	# Ultra always presents every available frame. A measured slowdown may reduce
+	# CPU sampling cadence, never the player's chosen visual cadence.
+	if visual_stage(game) == STAGE_FULL or stage == STAGE_FULL or active_stage == STAGE_FULL or game.mode != "game":
 		redraw_accumulator = 0.0
 		return true
 	# Rebuilding the monolithic CanvasItem is CPU-bound; the RenderingServer can

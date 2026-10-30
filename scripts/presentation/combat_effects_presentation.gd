@@ -1452,7 +1452,7 @@ static func _draw_arauto_card_drops(game: Node2D, camera: Vector2) -> void :
 		if (not is_drop_mode_reward and not game._reward_owned_by_local(drop)) or (drop_id != "" and game.net_collected_drop_ids.has(drop_id)):
 			continue
 		var card: Dictionary = drop.get("card", {})
-		if not game._card_drop_texture_available(card):
+		if not game._card_drop_texture_registered(card):
 			continue
 		var p = Vector2(drop.get("pos", game.player_pos)) - camera
 		var age = float(drop.get("age", 0.0))
@@ -1468,7 +1468,7 @@ static func _draw_arauto_card_drops(game: Node2D, camera: Vector2) -> void :
 		game.draw_circle(rect.get_center(), 42.0, Color(accent.r, accent.g, accent.b, 0.12 * alpha))
 		game.draw_rect(rect.grow(3.0), Color(0.01, 0.03, 0.05, 0.78 * alpha), true)
 		game.draw_rect(rect.grow(3.0), accent, false, 2.0)
-		var tex: Texture2D = game._card_texture(card)
+		var tex: Texture2D = game._card_texture(card) if game._card_drop_texture_loaded(card) else null
 		if tex:
 			game._draw_texture_contain(tex, rect.grow(-5.0), Color(1, 1, 1, alpha))
 		else:
@@ -4302,7 +4302,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 	# projectiles stay on their bespoke procedural path.
 	var batch_basic_projectiles: bool = bullet_count >= 36
 	var batch_colors_by_kind: Dictionary = {}
-	game.runtime_projectile_batch_renderer.begin_frame(game._runtime_performance_stage())
+	game.runtime_projectile_batch_renderer.begin_frame(game._runtime_visual_performance_stage())
 	for bullet_index in range(bullet_count):
 		var bullet: Dictionary = game.bullets[bullet_index] if bullet_index < local_bullet_count else game.remote_bullets[bullet_index - local_bullet_count]
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
@@ -4435,7 +4435,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 	for bullet in game.return_bullets:
 		_draw_return_bullet_visual(game, bullet, camera)
 	var batch_simple_enemy_shots: bool = game._runtime_visual_budget_active() and game.enemy_bullets.size() >= 32
-	game.runtime_enemy_projectile_batch_renderer.begin_frame(game._runtime_performance_stage())
+	game.runtime_enemy_projectile_batch_renderer.begin_frame(game._runtime_visual_performance_stage())
 	for bullet in game.enemy_bullets:
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue

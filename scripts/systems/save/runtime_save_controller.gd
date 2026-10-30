@@ -382,6 +382,7 @@ func _load_config() -> void :
 				elif k == "gfx_shadows": core.gfx_shadows = v == "true"
 
 				elif k == "gfx_screen_shake": core.gfx_screen_shake = v == "true"
+				elif k == "camera_comfort_enabled": core.camera_comfort_enabled = v == "true"
 				elif k == "gfx_health_warning_start": core.gfx_health_warning_start = clampf(float(v), 0.35, 0.7)
 				elif k == "gfx_health_warning_strength": core.gfx_health_warning_strength = clampf(float(v), 0.0, 1.35)
 				elif k == "gfx_low_resource": core.gfx_low_resource = v == "true"
@@ -399,6 +400,7 @@ func _load_config() -> void :
 				elif k == "gfx_particles": core.gfx_particles = v == "true"
 				elif k == "gfx_shadows": core.gfx_shadows = v == "true"
 				elif k == "gfx_screen_shake": core.gfx_screen_shake = v == "true"
+				elif k == "camera_comfort_enabled": core.camera_comfort_enabled = v == "true"
 				elif k == "gfx_low_resource": core.gfx_low_resource = v == "true"
 				elif k == "gfx_memory_saver": core.gfx_memory_saver = v == "true"
 				elif k == "damage_text_scale": core.damage_text_scale = core._sanitize_damage_text_scale(float(v))
@@ -493,6 +495,7 @@ func _save_config() -> void :
 		file.store_string("gfx_shadows=" + ("true" if core.gfx_shadows else "false") + "\n")
 
 		file.store_string("gfx_screen_shake=" + ("true" if core.gfx_screen_shake else "false") + "\n")
+		file.store_string("camera_comfort_enabled=" + ("true" if core.camera_comfort_enabled else "false") + "\n")
 		file.store_string("gfx_health_warning_start=" + str(core.gfx_health_warning_start) + "\n")
 		file.store_string("gfx_health_warning_strength=" + str(core.gfx_health_warning_strength) + "\n")
 		file.store_string("gfx_low_resource=" + ("true" if core.gfx_low_resource else "false") + "\n")
@@ -510,6 +513,7 @@ func _save_config() -> void :
 		file.store_string("gfx_particles=" + ("true" if core.gfx_particles else "false") + "\n")
 		file.store_string("gfx_shadows=" + ("true" if core.gfx_shadows else "false") + "\n")
 		file.store_string("gfx_screen_shake=" + ("true" if core.gfx_screen_shake else "false") + "\n")
+		file.store_string("camera_comfort_enabled=" + ("true" if core.camera_comfort_enabled else "false") + "\n")
 		file.store_string("gfx_low_resource=" + ("true" if core.gfx_low_resource else "false") + "\n")
 		file.store_string("gfx_memory_saver=" + ("true" if core.gfx_memory_saver else "false") + "\n")
 		file.store_string("damage_text_scale=" + str(core.damage_text_scale) + "\n")
@@ -774,6 +778,7 @@ func _resume_interrupted_run() -> bool:
 
 func _post_resume_interrupted_run() -> void :
 	core._player_run_level_controller().normalize()
+	core._sanitize_legacy_cinzas_rarity_state()
 	core.mode = _interrupted_run_saved_mode() if _interrupted_run_saved_mode() != "" else "game"
 	if core.mode in ["settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "pause_deck"]:
 		core.mode = "paused"

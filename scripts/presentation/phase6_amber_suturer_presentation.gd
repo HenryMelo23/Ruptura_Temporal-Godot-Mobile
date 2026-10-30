@@ -137,6 +137,16 @@ static func _draw_suturer_presence(game: Node2D, camera: Vector2) -> void:
 			rune_points.append(pos + Vector2(0.0, 14.0) + Vector2.from_angle(a) * r)
 		rune_points.append(rune_points[0])
 		game.draw_polyline(rune_points, Color(COLOR_AMBER_BRIGHT.r, COLOR_AMBER_BRIGHT.g, COLOR_AMBER_BRIGHT.b, 0.28 + breath * 0.20), 1.6, true)
+	var broken_crystals := clampi(int(suturer.get("suturer_crystals_destroyed_total", game.amber_suturer_state.get("crystals_destroyed_total", 0))), 0, 4)
+	var armor_reduction := clampf(float(game.amber_suturer_state.get("armor_reduction", game.amber_suturer_controller.armor_reduction(suturer))), 0.0, 0.72)
+	if armor_reduction > 0.01:
+		var armor_alpha := 0.22 + armor_reduction * 0.62
+		game.draw_arc(pos + Vector2(0.0, 4.0), 54.0 + breath * 3.0, -PI * 0.85, PI * 0.85, 28, Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, armor_alpha), 3.4, true)
+	var armor_meter_pos := pos + Vector2(-27.0, -84.0)
+	for armor_index in range(4):
+		var plate := Rect2(armor_meter_pos + Vector2(float(armor_index) * 14.0, 0.0), Vector2(11.0, 5.0))
+		var intact := armor_index >= broken_crystals
+		game.draw_rect(plate, Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, 0.90) if intact else Color(COLOR_FISSURE_VOID.r, COLOR_FISSURE_VOID.g, COLOR_FISSURE_VOID.b, 0.78), true)
 
 	# Compact, world-space slow meter. Four notches mirror the four crystals
 	# without creating combat popups or adding HUD clutter.
@@ -545,6 +555,10 @@ static func _draw_visual_events(game: Node2D, camera: Vector2) -> void:
 				_draw_event_evasion(game, pos, progress, fade)
 			"crystal_slow":
 				_draw_event_crystal_slow(game, event, pos, progress, fade, reduced_fx)
+			"crystal_crossfire":
+				_draw_event_crossfire(game, pos, progress, fade, reduced_fx)
+			"amber_repair", "repair_broken":
+				_draw_event_repair(game, event, pos, progress, fade, reduced_fx)
 			"break":
 				_draw_event_break(game, pos, progress, fade, reduced_fx)
 			"dissipate", "cleanup":
@@ -562,6 +576,24 @@ static func _draw_event_crystal_slow(game: Node2D, event: Dictionary, pos: Vecto
 		var direction := Vector2.from_angle(float(index) * TAU / float(shard_count) + progress * 0.8)
 		var shard_pos := pos + direction * (9.0 + progress * 24.0)
 		game.draw_line(shard_pos, shard_pos - direction * (5.0 + float(stacks)), Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, fade), 2.0, true)
+
+
+static func _draw_event_crossfire(game: Node2D, pos: Vector2, progress: float, fade: float, reduced_fx: bool) -> void:
+	var ray_count := 4 if reduced_fx else 8
+	var radius := 22.0 + progress * 68.0
+	for index in range(ray_count):
+		var direction := Vector2.from_angle(float(index) * TAU / float(ray_count) + progress * 0.7)
+		game.draw_line(pos + direction * 10.0, pos + direction * radius, Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, fade * 0.78), 2.4, true)
+	game.draw_arc(pos, radius * 0.55, 0.0, TAU, 24, Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, fade * 0.72), 2.0, true)
+
+
+static func _draw_event_repair(game: Node2D, event: Dictionary, pos: Vector2, progress: float, fade: float, reduced_fx: bool) -> void:
+	var broken := String(event.get("kind", "")) == "repair_broken"
+	var color := Color(0.95, 0.34, 0.20, fade) if broken else Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, fade)
+	var ring_count := 2 if reduced_fx else 4
+	for index in range(ring_count):
+		var radius := 26.0 + float(index) * 14.0 + progress * 36.0
+		game.draw_arc(pos, radius, -PI * 0.8, PI * 0.8, 22, color, 2.4, true)
 
 
 static func _draw_event_entry(game: Node2D, pos: Vector2, progress: float, fade: float, reduced_fx: bool) -> void:

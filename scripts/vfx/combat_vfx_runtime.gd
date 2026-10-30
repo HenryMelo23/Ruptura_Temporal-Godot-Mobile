@@ -8,7 +8,7 @@ static func _particle_budget_available(game: Node2D) -> bool:
 
 
 static func _runtime_visual_budget_active(game: Node2D) -> bool:
-	return game.gfx_low_resource or game._memory_saver_active() or game.mobile_adaptive_visual_budget or game._runtime_performance_stage() > 0
+	return game.gfx_low_resource or game._memory_saver_active() or game.mobile_adaptive_visual_budget
 
 
 static func _low_resource_cap(game: Node2D, default_cap: int, low_cap: int) -> int:

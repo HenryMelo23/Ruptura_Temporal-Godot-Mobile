@@ -24,7 +24,7 @@ const MAX_LIFETIME := INF
 const ENTRY_TIME := 1.0
 const OBSERVE_TIME := 2.1
 const TELEGRAPH_TIME := 1.5
-const ACTIVE_TIME := 9.5
+const ACTIVE_TIME := 18.0
 const REPOSITION_TIME := 1.15
 const NEEDLE_TELEGRAPH_TIME := 0.85
 const NEEDLE_RECOVERY_TIME := 0.72
@@ -35,6 +35,9 @@ const HOOK_RECOVERY_TIME := 0.82
 const HOOK_RANGE := 720.0
 const HOOK_PULL_DISTANCE := 104.0
 const HOOK_STUN_TIME := 0.65
+const HOOK_SPEED_MULT := 2.58
+const HOOK_DAMAGE_MAX_HP_RATIO := 0.067
+const HOOK_DAMAGE_FAR_SCALE := 0.62
 const MAX_STOLEN_CARDS := 2
 const REWARD_CARD_COUNT := 2
 const HISTORY_SAMPLE_INTERVAL := 0.12
@@ -46,7 +49,7 @@ const NODE_RADIUS := 27.0
 const MAX_ACTIVE_SUTURES := 2
 const MAX_LINE_LENGTH := 820.0
 const MIN_LINE_LENGTH := 520.0
-const MOVE_SPEED := 59.0
+const MOVE_SPEED := 106.2
 const CRYSTAL_SLOW_PER_STACK := 0.20
 const CRYSTAL_SLOW_DURATION := 7.0
 const CRYSTAL_SLOW_MAX_STACKS := 4
@@ -55,6 +58,13 @@ const ACTIVE_STRAFE_MULT := 0.34
 const RECOVERY_STRAFE_MULT := 0.72
 const EVASION_HP_RATIO := 0.07
 const EVASION_COOLDOWN := 2.4
+const ARMOR_BASE_REDUCTION := 0.72
+const ARMOR_REDUCTION_PER_CRYSTAL := 0.17
+const ARMOR_BREAK_CAP := 4
+const CROSSFIRE_TRIGGER_REMAINING := 12.5
+const REPAIR_TRIGGER_REMAINING := 6.0
+const REPAIR_MAX_HP_PER_NODE := 0.025
+const REPAIR_MAX_HP_RATIO := 0.10
 
 const STEALABLE_CARD_IDS: Array[String] = [
 	"Speed Boost",
@@ -109,6 +119,8 @@ func _default_state() -> Dictionary:
 		"crystal_slow_stacks": 0,
 		"crystal_slow_timer": 0.0,
 		"crystals_destroyed_cycle": 0,
+		"crystals_destroyed_total": 0,
+		"armor_reduction": ARMOR_BASE_REDUCTION,
 		"effective_speed": MOVE_SPEED,
 		"stolen_cards": [],
 		"cleanup_reason": "",
@@ -218,6 +230,8 @@ func spawn_now() -> Dictionary:
 	enemy["suturer_needle_pattern"] = "fan"
 	enemy["suturer_evasion_cd"] = 0.0
 	enemy["suturer_last_hp"] = hp
+	enemy["suturer_crossfire_used"] = false
+	enemy["suturer_repair_used"] = false
 	enemy["contact_grace"] = ENTRY_TIME
 	enemy["reconstituted_once"] = true
 	game.amber_suturer_state = _default_state()
@@ -283,7 +297,7 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 				_activate_sutures(enemy)
 		STATE_ACTIVE:
 			_update_combat_strafe(enemy, delta, ACTIVE_STRAFE_MULT)
-			_update_active_sutures(delta)
+			_update_active_sutures(delta, enemy)
 			_tick_state(enemy, delta)
 			if float(enemy.get("suturer_state_timer", 0.0)) <= 0.0:
 				_clear_sutures("cycle_complete")
@@ -346,6 +360,8 @@ func _sync_public_enemy_state(enemy: Dictionary) -> void:
 	game.amber_suturer_state["crystal_slow_stacks"] = int(enemy.get("suturer_crystal_slow_stacks", 0))
 	game.amber_suturer_state["crystal_slow_timer"] = float(enemy.get("suturer_crystal_slow_timer", 0.0))
 	game.amber_suturer_state["effective_speed"] = _effective_move_speed(enemy)
+	game.amber_suturer_state["crystals_destroyed_total"] = int(enemy.get("suturer_crystals_destroyed_total", 0))
+	game.amber_suturer_state["armor_reduction"] = armor_reduction(enemy)
 
 
 func _update_crystal_slow(enemy: Dictionary, delta: float) -> void:
@@ -360,6 +376,17 @@ func _effective_move_speed(enemy: Dictionary) -> float:
 	var base_speed := float(enemy.get("suturer_base_speed", MOVE_SPEED))
 	var stacks := clampi(int(enemy.get("suturer_crystal_slow_stacks", 0)), 0, CRYSTAL_SLOW_MAX_STACKS)
 	return base_speed * maxf(0.20, 1.0 - float(stacks) * CRYSTAL_SLOW_PER_STACK)
+
+
+func armor_reduction(enemy: Dictionary) -> float:
+	if String(enemy.get("type", "")) != TYPE_ID:
+		return 0.0
+	var broken := clampi(int(enemy.get("suturer_crystals_destroyed_total", 0)), 0, ARMOR_BREAK_CAP)
+	return maxf(0.0, ARMOR_BASE_REDUCTION - float(broken) * ARMOR_REDUCTION_PER_CRYSTAL)
+
+
+func damage_taken_multiplier(enemy: Dictionary) -> float:
+	return 1.0 - armor_reduction(enemy)
 
 
 func _update_observation_movement(enemy: Dictionary, delta: float) -> void:
@@ -598,15 +625,15 @@ func _fire_hook(enemy: Dictionary) -> void:
 	var direction := (target_pos - origin).normalized()
 	if direction.length_squared() <= 0.01:
 		direction = Vector2(enemy.get("suturer_attack_dir", Vector2.LEFT)).normalized()
-	var damage := maxi(1, int(game.player_hp_max * 0.045 + game.enemy_far_damage * 0.42))
+	var damage := maxi(1, int(game.player_hp_max * HOOK_DAMAGE_MAX_HP_RATIO + game.enemy_far_damage * HOOK_DAMAGE_FAR_SCALE))
 	game.enemy_bullets.append({
 		"pos": origin + direction * 48.0,
 		"dir": direction,
-		"life": HOOK_RANGE / (210.0 * 1.72),
+		"life": HOOK_RANGE / (210.0 * HOOK_SPEED_MULT),
 		"damage": damage,
 		"phase": game.rng.randf_range(0.0, TAU),
 		"type": "suturer_hook",
-		"speed_mult": 1.72,
+		"speed_mult": HOOK_SPEED_MULT,
 		"radius": 13.0,
 		"hit_radius": 21.0,
 		"source_enemy_uid": int(enemy.get("uid", -1)),
@@ -843,16 +870,27 @@ func _activate_sutures(enemy: Dictionary) -> void:
 		suture["timer"] = ACTIVE_TIME
 		suture["life"] = ACTIVE_TIME
 	_set_state(enemy, STATE_ACTIVE, ACTIVE_TIME)
+	enemy["suturer_crossfire_used"] = false
+	enemy["suturer_repair_used"] = false
 	game._play_sfx("Boss-Impacto.mp3", 0.025, 0.58, 0.92)
 	_emit_visual_event("activate", {"pos": Vector2(enemy.get("pos", game.player_pos))})
 
 
-func _update_active_sutures(delta: float) -> void:
+func _update_active_sutures(delta: float, enemy: Dictionary = {}) -> void:
+	if enemy.is_empty():
+		enemy = active_enemy()
 	for suture_value in game.amber_sutures:
 		var suture: Dictionary = suture_value
 		if String(suture.get("state", "")) != STATE_ACTIVE:
 			continue
 		suture["timer"] = maxf(0.0, float(suture.get("timer", ACTIVE_TIME)) - delta)
+	var remaining := float(enemy.get("suturer_state_timer", ACTIVE_TIME))
+	if remaining <= CROSSFIRE_TRIGGER_REMAINING and not bool(enemy.get("suturer_crossfire_used", false)):
+		enemy["suturer_crossfire_used"] = true
+		_fire_crystal_crossfire(enemy)
+	if remaining <= REPAIR_TRIGGER_REMAINING and not bool(enemy.get("suturer_repair_used", false)):
+		enemy["suturer_repair_used"] = true
+		_resolve_amber_repair(enemy)
 	for target_value in game._combat_targets():
 		var target: Dictionary = target_value
 		var peer_id := int(target.get("peer_id", 0))
@@ -877,6 +915,70 @@ func _update_active_sutures(delta: float) -> void:
 			game._send_peer_damage(peer_id, damage, TYPE_ID)
 		gates[str(peer_id)] = DAMAGE_INTERVAL
 		game.amber_suturer_state["damage_gate_by_peer"] = gates
+
+
+func _living_crystal_nodes() -> Array[Dictionary]:
+	var nodes: Array[Dictionary] = []
+	for enemy_value in game.enemies:
+		var candidate: Dictionary = enemy_value
+		if String(candidate.get("type", "")) == NODE_TYPE_ID and float(candidate.get("hp", 0.0)) > 0.0:
+			nodes.append(candidate)
+	return nodes
+
+
+func _fire_crystal_crossfire(enemy: Dictionary) -> void:
+	var target := _target_by_peer(int(enemy.get("suturer_target_peer", 0)))
+	if target.is_empty():
+		target = _select_next_target()
+	if target.is_empty():
+		return
+	var target_pos := Vector2(target.get("pos", game.player_pos))
+	var nodes := _living_crystal_nodes()
+	var damage := maxi(1, int(game.player_hp_max * 0.032 + game.enemy_far_damage * 0.34))
+	for node in nodes:
+		var origin := Vector2(node.get("pos", enemy.get("pos", game.player_pos)))
+		var direction := (target_pos - origin).normalized()
+		if direction.length_squared() <= 0.01:
+			continue
+		game.enemy_bullets.append({
+			"pos": origin + direction * 24.0,
+			"dir": direction,
+			"life": 3.2,
+			"damage": damage,
+			"phase": game.rng.randf_range(0.0, TAU),
+			"type": "suturer_needle",
+			"speed_mult": 1.42,
+			"radius": 9.0,
+			"hit_radius": 15.0,
+			"suturer_encounter_id": String(game.amber_suturer_state.get("encounter_id", "")),
+		})
+	game.amber_suturer_state["current_ability"] = "crystal_crossfire"
+	game.event_alert_text = "FOGO CRUZADO DOS CRISTAIS — QUEBRE OS NOS"
+	game.event_alert_timer = 1.35
+	_emit_visual_event("crystal_crossfire", {"pos": target_pos, "nodes": nodes.size()})
+	game._play_sfx("Boss-Impacto.mp3", 0.025, 0.58, 1.26)
+
+
+func _resolve_amber_repair(enemy: Dictionary) -> void:
+	var nodes := _living_crystal_nodes()
+	game.amber_suturer_state["current_ability"] = "amber_repair"
+	if nodes.is_empty():
+		game.event_alert_text = "COSTURA REGENERATIVA INTERROMPIDA"
+		game.event_alert_timer = 1.35
+		_emit_visual_event("repair_broken", {"pos": Vector2(enemy.get("pos", game.player_pos))})
+		return
+	var max_hp := float(enemy.get("max_hp", 1.0))
+	var heal_ratio := minf(REPAIR_MAX_HP_RATIO, float(nodes.size()) * REPAIR_MAX_HP_PER_NODE)
+	var healed := minf(max_hp - float(enemy.get("hp", 0.0)), max_hp * heal_ratio)
+	enemy["hp"] = minf(max_hp, float(enemy.get("hp", 0.0)) + healed)
+	game.event_alert_text = "COSTURA REGENERATIVA — DESTRUA OS CRISTAIS"
+	game.event_alert_timer = 1.6
+	_emit_visual_event("amber_repair", {
+		"pos": Vector2(enemy.get("pos", game.player_pos)),
+		"nodes": nodes.size(),
+		"healed": healed,
+	})
+	game._play_sfx("Boss-Onda.mp3", 0.02, 0.52, 1.34)
 
 
 func _update_damage_gates(delta: float) -> void:
@@ -912,6 +1014,10 @@ func on_enemy_defeated(enemy: Dictionary) -> bool:
 		return false
 	var kind := String(enemy.get("type", ""))
 	if kind == NODE_TYPE_ID:
+		if bool(enemy.get("amber_expired", false)):
+			if game.enemies.has(enemy):
+				game.enemies.erase(enemy)
+			return true
 		_apply_crystal_slow(active_enemy(), Vector2(enemy.get("pos", game.player_pos)))
 		break_suture(String(enemy.get("suture_id", "")), "node_destroyed", Vector2(enemy.get("pos", game.player_pos)))
 		if game.enemies.has(enemy):
@@ -953,10 +1059,17 @@ func _apply_crystal_slow(enemy: Dictionary, crystal_pos: Vector2) -> void:
 	enemy["suturer_crystal_slow_stacks"] = stacks
 	enemy["suturer_crystal_slow_timer"] = CRYSTAL_SLOW_DURATION
 	game.amber_suturer_state["crystals_destroyed_cycle"] = int(game.amber_suturer_state.get("crystals_destroyed_cycle", 0)) + 1
+	var total_broken := int(enemy.get("suturer_crystals_destroyed_total", 0)) + 1
+	enemy["suturer_crystals_destroyed_total"] = total_broken
+	game.amber_suturer_state["crystals_destroyed_total"] = total_broken
+	game.amber_suturer_state["armor_reduction"] = armor_reduction(enemy)
+	game.event_alert_text = "ARMADURA DE AMBAR: %d%%" % roundi(armor_reduction(enemy) * 100.0)
+	game.event_alert_timer = 1.25
 	_sync_public_enemy_state(enemy)
 	_emit_visual_event("crystal_slow", {
 		"pos": crystal_pos,
 		"stacks": stacks,
+		"armor_reduction": armor_reduction(enemy),
 		"enemy_pos": Vector2(enemy.get("pos", game.player_pos)),
 	})
 

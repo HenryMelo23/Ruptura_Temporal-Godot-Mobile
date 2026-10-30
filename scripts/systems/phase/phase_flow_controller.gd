@@ -7,6 +7,18 @@ func configure(p_core: Node) -> void:
 	core = p_core
 
 
+func phase_region_name(phase: int) -> String:
+	return String({
+		1: "RUINAS COSMICAS",
+		2: "FENDA GLACIAL",
+		3: "CATEDRAL DO ESGOTO",
+		4: "CORACAO DO NEXO",
+		5: "MENTE DA UMBRA",
+		6: "CHAGA DE AMBAR",
+		7: "CINZAS DA RUPTURA",
+	}.get(phase, "REGIAO DESCONHECIDA"))
+
+
 func _pick_initial_phase() -> int:
 	if core.experimental_phase_active:
 		return 1
@@ -34,7 +46,7 @@ func _sanitize_forced_initial_phase(phase: int) -> int:
 
 func _forced_initial_phase_label() -> String:
 	var phase: = _sanitize_forced_initial_phase(core.forced_initial_phase)
-	return "AUTO" if phase == 0 else "FASE %d" % phase
+	return "AUTO" if phase == 0 else phase_region_name(phase)
 
 
 func _begin_initial_phase_tracking(phase: int) -> void:
@@ -49,6 +61,8 @@ func _begin_initial_phase_tracking(phase: int) -> void:
 	core.run_initial_phase = initial_phase
 	core.run_phase6_completed = false
 	_reset_dimension_route_state()
+	if initial_phase > 0:
+		core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_CYCLE_LENGTH - 1, initial_phase, [initial_phase])
 	core.initial_phase_current_run = initial_phase
 	core.initial_phase_current_recorded = initial_phase == 0
 
@@ -87,23 +101,19 @@ func _record_initial_phase_completed(phase: int) -> void:
 	var completed_phase: = _sanitize_initial_phase_bias_target(phase)
 	if completed_phase == 0 or completed_phase != _sanitize_initial_phase_bias_target(core.run_initial_phase):
 		return
-	var next_preferred: = 6 if completed_phase == 1 else 1
+	var preferred_candidates: Array[int] = []
+	for candidate in core.INITIAL_PHASE_ROLL_POOL:
+		preferred_candidates.append(int(candidate))
+	preferred_candidates.erase(completed_phase)
+	var next_preferred: int = preferred_candidates[core.rng.randi_range(0, preferred_candidates.size() - 1)] if not preferred_candidates.is_empty() else 0
 	_set_initial_phase_bias(next_preferred, core.INITIAL_PHASE_ALTERNATE_BIAS)
 	core.initial_phase_current_recorded = true
 
 
 func _core_next_phase_after_boss(phase: int) -> int:
+	_record_initial_phase_completed(phase)
 	if phase == 6:
-		_record_initial_phase_completed(phase)
 		core.run_phase6_completed = true
-		return 1 if int(core.run_initial_phase) == 6 else 4
-	if phase == 1:
-		_record_initial_phase_completed(phase)
-		return 2
-	if phase == 2:
-		return 3
-	if phase == 3:
-		return 6 if int(core.run_initial_phase) == 1 and not bool(core.run_phase6_completed) else 4
 	return 0
 
 
@@ -112,9 +122,7 @@ func _next_phase_after_boss(phase: int) -> int:
 		return 0
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return 0
-	var core_next: int = _core_next_phase_after_boss(phase)
-	if core_next > 0:
-		return core_next
+	_core_next_phase_after_boss(phase)
 	if not core.dimension_route_queue.is_empty():
 		return int(core.dimension_route_queue[0])
 	return 0
@@ -125,9 +133,7 @@ func _consume_next_phase_after_boss(phase: int) -> int:
 		return 0
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return 0
-	var core_next: int = _core_next_phase_after_boss(phase)
-	if core_next > 0:
-		return core_next
+	_core_next_phase_after_boss(phase)
 	if not core.dimension_route_queue.is_empty():
 		return int(core.dimension_route_queue.pop_front())
 	return 0
@@ -160,36 +166,37 @@ func _should_offer_dimension_choice_after_boss(phase: int) -> bool:
 		return false
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return false
-	return phase == core.DIMENSION_FARM_RETURN_PHASE
+	return core.dimension_route_completed_count > 0 \
+		and core.dimension_route_completed_count % core.DIMENSION_CYCLE_LENGTH == 0 \
+		and core.dimension_route_queue.is_empty()
 
 
 func _dimension_extraction_available() -> bool:
 	return core.dimension_route_completed_count > 0 and core.dimension_route_completed_count % core.DIMENSION_EXTRACTION_INTERVAL == 0
 
 
-func _roll_dimension_route(count: int, last_phase: int) -> Array[int]:
+func _roll_dimension_route(count: int, last_phase: int, excluded: Array = []) -> Array[int]:
 	var route: Array[int] = []
-	var previous: int = last_phase
-	for i in range(maxi(0, count)):
-		var candidates: Array[int] = []
-		for phase in core.DIMENSION_ROUTE_POOL:
-			if phase == core.DIMENSION_FINAL_PHASE or phase == previous:
-				continue
-			candidates.append(phase)
-		if candidates.is_empty():
-			break
-		var chosen: int = candidates[core.rng.randi_range(0, candidates.size() - 1)]
+	var candidates: Array[int] = []
+	for phase in core.DIMENSION_ROUTE_POOL:
+		if phase == core.DIMENSION_FINAL_PHASE or phase in excluded:
+			continue
+		candidates.append(phase)
+	if candidates.size() > 1 and last_phase in candidates:
+		candidates.erase(last_phase)
+		candidates.append(last_phase)
+	for _index in range(mini(maxi(0, count), candidates.size())):
+		var upper_bound: int = candidates.size() - 2 if candidates.size() > 1 and candidates.back() == last_phase else candidates.size() - 1
+		var chosen_index: int = core.rng.randi_range(0, maxi(0, upper_bound))
+		var chosen: int = candidates.pop_at(chosen_index)
 		route.append(chosen)
-		previous = chosen
 	return route
 
 
 func _begin_farm_dimension_cycle() -> int:
 	core.dimension_route_farm_cycles += 1
-	var entry_phase: int = core.DIMENSION_FIRST_FARM_PHASE
-	core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_FARM_RANDOM_COUNT, entry_phase)
-	core.dimension_route_queue.append(core.DIMENSION_FARM_RETURN_PHASE)
-	return entry_phase
+	core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_CYCLE_LENGTH, core.dimension_route_last_phase)
+	return int(core.dimension_route_queue.pop_front()) if not core.dimension_route_queue.is_empty() else 0
 
 
 func _complete_dimension_extraction() -> void:
@@ -219,7 +226,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.boss_title_color = Color(1.0, 0.38, 0.18)
 		core.next_larapio_spawn_time = INF
 		core._spawn_enemy(core.ENEMY_CINERIDO, core._spawn_point_on_edge())
-		core._add_text("CHEAT: FASE 7", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		core._add_text("INICIO: CINZAS DA RUPTURA", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
 		return
 	if phase == 6:
 		core.enemy_base_hp = scaled_enemy_hp
@@ -232,7 +239,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.boss_title_color = Color(1.0, 0.64, 0.18)
 		core.next_larapio_spawn_time = INF
 		core._spawn_enemy(core.ENEMY_LODARIO, core._spawn_point_on_edge())
-		core._add_text("INICIO SORTEADO: FASE 6-1", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		core._add_text("INICIO: CHAGA DE AMBAR", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
 		return
 	if phase == 5:
 		core.enemy_base_hp = scaled_enemy_hp * 4.15
@@ -245,7 +252,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core._load_umbra_mobile_memory()
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
-		core._add_text("CHEAT: FASE 5", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		core._add_text("INICIO: MENTE DA UMBRA", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
 		return
 	if phase == 4:
 		core.enemy_base_hp = scaled_enemy_hp * 2.75
@@ -257,7 +264,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
-		core._add_text("CHEAT: FASE 4", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		core._add_text("INICIO: CORACAO DO NEXO", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
 		return
 	if phase == 3:
 		core.enemy_base_hp = scaled_enemy_hp * 2.05
@@ -269,7 +276,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
-		core._add_text("CHEAT: FASE 3", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		core._add_text("INICIO: CATEDRAL DO ESGOTO", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
 		return
 	if phase == 2:
 		core.enemy_base_hp = scaled_enemy_hp * 1.65
@@ -281,7 +288,7 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
-		core._add_text("CHEAT: FASE 2", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		core._add_text("INICIO: FENDA GLACIAL", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
 		return
 	core.enemy_base_hp = scaled_enemy_hp
 	core.enemy_speed_base = core.ENEMY_BASE_SPEED
@@ -299,8 +306,11 @@ func _advance_to_phase(phase: int) -> void:
 	var rain_should_become_snow = phase == 2 and core.boss1_rain_active and core.weather_kind == "rain"
 	var carried_enemy_hp: float = max(float(core.enemy_base_hp), core.ENEMY_BASE_HP)
 	var carried_enemy_speed: float = max(float(core.enemy_speed_base), core.ENEMY_BASE_SPEED)
+	var cycle_hp_mult := 1.0 + float(core.dimension_route_farm_cycles) * 0.32
+	var cycle_speed_mult := 1.0 + float(core.dimension_route_farm_cycles) * 0.055
 	var previous_enemy_cap: int = core._enemy_limit()
 	core.current_phase = phase
+	core.camera_follow_initialized = false
 	core._prepare_phase_texture_assets(phase)
 	core.pending_phase = 0
 	core.phase_started_at = core.time_alive
@@ -417,18 +427,18 @@ func _advance_to_phase(phase: int) -> void:
 	elif phase != 2:
 		core._clear_environment_weather(true)
 	if core.current_phase == 6:
-		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP)
-		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED)
+		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * cycle_hp_mult)
+		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * cycle_speed_mult)
 		core.boss_hp_max = core._boss_hp_for_phase(6)
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "MATRIARCA DA CHAGA"
 		core.boss_title_color = Color(1.0, 0.64, 0.18)
 		core._spawn_enemy(core.ENEMY_LODARIO, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_LODARIO, core._spawn_point_on_edge())
-		core._add_text("FASE 6: CHAGA DE AMBAR", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("CHAGA DE AMBAR", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	elif core.current_phase == 7:
-		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.18)
-		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.08)
+		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.18 * cycle_hp_mult)
+		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.08 * cycle_speed_mult)
 		core.boss_ready = false
 		core.boss_hp_max = 0.0
 		core.boss_hp = 0.0
@@ -437,10 +447,10 @@ func _advance_to_phase(phase: int) -> void:
 		core.next_larapio_spawn_time = INF
 		core._spawn_enemy(core.ENEMY_CINERIDO, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_CINERIDO, core._spawn_point_on_edge())
-		core._add_text("FASE 7: CINZAS DA RUPTURA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("CINZAS DA RUPTURA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	elif core.current_phase == 5:
-		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 4.15)
-		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.24)
+		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 4.15 * cycle_hp_mult)
+		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.24 * cycle_speed_mult)
 		core.boss_hp_max = core._boss_hp_for_phase(5)
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "UMBRA"
@@ -448,48 +458,48 @@ func _advance_to_phase(phase: int) -> void:
 		core._load_umbra_mobile_memory()
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
-		core._add_text("FASE 5: MENTE DA UMBRA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("MENTE DA UMBRA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	elif core.current_phase == 4:
-		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 2.75)
-		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.18)
+		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 2.75 * cycle_hp_mult)
+		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.18 * cycle_speed_mult)
 		core.boss_hp_max = core._boss_hp_for_phase(4)
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "NEXO ANFIBIO"
 		core.boss_title_color = Color(1.0, 0.76, 0.18)
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
 		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
-		core._add_text("FASE 4: CORACAO DO NEXO", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("CORACAO DO NEXO", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	elif core.current_phase == 3:
-		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 2.05)
-		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.12)
+		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 2.05 * cycle_hp_mult)
+		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.12 * cycle_speed_mult)
 		core.boss_hp_max = core._boss_hp_for_phase(3)
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "PAI-RATO"
 		core.boss_title_color = Color(0.72, 0.92, 0.24)
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
-		core._add_text("FASE 3: CATEDRAL DO ESGOTO", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("CATEDRAL DO ESGOTO", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	elif core.current_phase == 2:
-		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.65)
-		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.08)
+		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.65 * cycle_hp_mult)
+		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * 1.08 * cycle_speed_mult)
 		core.boss_hp_max = core._boss_hp_for_phase(2)
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "SENTINELA GLACIAL"
 		core.boss_title_color = Color(0.5, 0.86, 1.0)
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
-		core._add_text("FASE 2: FENDA GLACIAL", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("FENDA GLACIAL", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	else:
 		var secondary_phase1: = _phase1_is_after_phase6()
-		core.enemy_base_hp = core.ENEMY_BASE_HP * (1.12 if secondary_phase1 else 1.0)
-		core.enemy_speed_base = core.ENEMY_BASE_SPEED * (1.03 if secondary_phase1 else 1.0)
+		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * (1.12 if secondary_phase1 else 1.0) * cycle_hp_mult)
+		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * (1.03 if secondary_phase1 else 1.0) * cycle_speed_mult)
 		core.boss_hp_max = core.BOSS_BASE_HP
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "CARANGUEJO COSMICO GIGANTE"
 		core.boss_title_color = Color(1.0, 0.52, 0.16)
 		core.next_larapio_spawn_time = core.time_alive + core._larapio_spawn_delay()
 		core._spawn_enemy(core.ENEMY_COMMON, core._spawn_point_on_edge())
-		core._add_text("FASE 1: RUINAS COSMICAS" if not secondary_phase1 else "FASE 1-2: RUINAS REABERTAS", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("RUINAS COSMICAS" if not secondary_phase1 else "RUINAS REABERTAS", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	core._spawn_phase_point_crystals_for_phase(phase)
 
 
@@ -591,9 +601,6 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 		{"pos": farm_pos, "next_phase": 0, "kind": "farm", "action": "farm", "label": ""},
 		{"pos": umbra_pos, "next_phase": core.DIMENSION_FINAL_PHASE, "kind": "umbra", "action": "phase", "label": ""}
 	]
-	if _dimension_extraction_available():
-		var extraction_pos: Vector2 = (center + Vector2(0.0, -92.0)).clamp(Vector2(90.0, 90.0), core.WORLD_SIZE - Vector2(90.0, 90.0))
-		choices.append({"pos": extraction_pos, "next_phase": 0, "kind": "extract", "action": "extract", "label": "EXTRACAO"})
 	core.phase_fragment = {
 		"pos": center,
 		"next_phase": 0,
@@ -601,10 +608,14 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 		"life": 0.0,
 		"choices": choices
 	}
-	core._add_text("DUAS ROTAS ABERTAS", center + Vector2(-132, -132), Color(0.62, 1.0, 0.92), 2.1, 25)
+	core._add_text("CONTINUAR O CICLO OU ENFRENTAR UMBRA", center + Vector2(-238, -132), Color(0.62, 1.0, 0.92), 2.1, 25)
 
 
 func _start_phase_transition(next_phase: int) -> void:
+	if next_phase == core.DIMENSION_FINAL_PHASE and core.dimension_route_completed_count < core.DIMENSION_CYCLE_LENGTH:
+		core.event_alert_text = "UMBRA EXIGE QUATRO REGIOES CONCLUIDAS"
+		core.event_alert_timer = 1.8
+		return
 	core._cleanup_phase_point_crystals()
 	core.pending_phase = next_phase
 	core.mode = "phase_transition"

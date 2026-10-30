@@ -1,14 +1,14 @@
 {
-  "version": "2.0.62",
-  "version_code": 26200,
-  "filename": "Ruptura_Temporal_2.0.62.exe",
-  "sha256": "ad69f129bea9859c8a491c983ef69007f102eaa5a2f8d9d8014dd97d703e87f2",
-  "size": 1040002976,
+  "version": "2.0.63",
+  "version_code": 26300,
+  "filename": "Ruptura_Temporal_2.0.63.exe",
+  "sha256": "52e7bfd4c49f7c35225312e09f1077d176c27b087354e6f81ed59106d6e689c3",
+  "size": 1031673616,
   "notes": [
-    "Progressao de nivel mais longa: 500 pontos para o nivel 2 e 2.500 pontos acumulados para o nivel 4.",
-    "Beneficios por nivel preservados: +1% de dano, +5 de alcance e +0,4% de mitigacao.",
-    "Atualizacao compativel com saves e multiplayer existentes."
+    "Suturador de Ambar reforcado: cristais persistentes, armadura quebravel e duas novas habilidades.",
+    "Conforto de camera com zona morta e suavizacao configuravel, sem reduzir a qualidade grafica.",
+    "Rotas dinamicas em ciclos de quatro mapas, com escolha entre continuar a run ou enfrentar a Umbra."
   ],
   "mandatory": false,
-  "published_at": "2026-10-30T17:15:44.5413272Z"
+  "published_at": "2026-10-30T23:34:03Z"
 }
