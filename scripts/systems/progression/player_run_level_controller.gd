@@ -5,7 +5,10 @@ extends RefCounted
 # time, rather than added to player_damage/player_defense, so saves cannot
 # compound them and cards retain their authored values.
 const MAX_LEVEL := 10
-const XP_THRESHOLDS: Array[int] = [40, 65, 100, 155, 235, 350, 515, 760, 1110]
+# The run level is a long-horizon progression layer, not an opening burst.
+# Level 2 now costs 50 common enemies and level 4 costs 250 common enemies
+# cumulatively, while the reward and benefit values below remain unchanged.
+const XP_THRESHOLDS: Array[int] = [500, 800, 1200, 1750, 2500, 3500, 4800, 6500, 8500]
 const XP_COMMON := 10
 const XP_ELITE := 25
 const XP_MINIBOSS := 90

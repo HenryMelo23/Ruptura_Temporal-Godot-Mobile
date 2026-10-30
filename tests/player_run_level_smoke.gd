@@ -53,9 +53,15 @@ func _run() -> void:
 	_check(game.player_run_xp == 10, "confirmed_common_kill_awarded_twice")
 	level.reset()
 	game.active_character_key = game.CHARACTER_GEOVANA
+	_check(level.XP_THRESHOLDS == [500, 800, 1200, 1750, 2500, 3500, 4800, 6500, 8500], "long_run_xp_curve_wrong")
+	level.grant_xp(1200)
+	_check(game.player_run_level == 2 and game.player_run_xp == 700, "opening_burst_reached_levels_too_quickly")
+	level.reset()
 
-	for _i in range(4):
+	for _i in range(49):
 		level.grant_xp(10)
+	_check(game.player_run_level == 1 and game.player_run_xp == 490, "first_level_unlocked_before_500_xp")
+	level.grant_xp(10)
 	_check(game.player_run_level == 2 and game.player_run_xp == 0, "first_threshold_or_overflow_wrong")
 	var level_up_effect_found := false
 	for effect_value in game.effects:
@@ -64,12 +70,13 @@ func _run() -> void:
 			level_up_effect_found = true
 			break
 	_check(level_up_effect_found, "geovana_level_up_effect_missing")
-	level.grant_xp(25)
-	level.grant_confirmed_miniboss()
-	_check(game.player_run_level == 3 and game.player_run_xp == 50, "miniboss_overflow_wrong")
+	level.grant_xp(850)
+	_check(game.player_run_level == 3 and game.player_run_xp == 50, "second_threshold_overflow_wrong")
 	level.grant_confirmed_boss()
-	_check(game.player_run_level == 4 and game.player_run_xp == 130, "boss_overflow_wrong")
-	level.grant_xp(10000)
+	_check(game.player_run_level == 3 and game.player_run_xp == 230, "boss_skipped_long_horizon_threshold")
+	level.grant_xp(1100)
+	_check(game.player_run_level == 4 and game.player_run_xp == 130, "third_threshold_overflow_wrong")
+	level.grant_xp(100000)
 	_check(game.player_run_level == 10 and game.player_run_xp == 0, "max_level_cap_wrong")
 	_check(is_equal_approx(level.damage_multiplier(), 1.09), "damage_bonus_wrong")
 	_check(is_equal_approx(level.auto_attack_range_bonus(), 45.0), "range_bonus_wrong")
@@ -95,8 +102,8 @@ func _run() -> void:
 
 	var save_fields: Array = game.save_controller._interrupted_run_field_names()
 	_check(save_fields.has("player_run_level") and save_fields.has("player_run_xp"), "save_fields_missing_level")
-	game._apply_remote_player_run_level(3, 125)
-	_check(game.player_run_level == 4 and game.player_run_xp == 25, "replica_snapshot_overflow_wrong")
+	game._apply_remote_player_run_level(3, 1325)
+	_check(game.player_run_level == 4 and game.player_run_xp == 125, "replica_snapshot_overflow_wrong")
 	var before_duplicate: int = game.player_run_xp
 	game._apply_shared_kill_progress(game.enemies_killed)
 	_check(game.player_run_xp == before_duplicate, "kill_counter_duplicate_changed_xp")
