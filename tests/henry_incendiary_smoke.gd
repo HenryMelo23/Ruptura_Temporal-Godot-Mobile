@@ -279,7 +279,7 @@ func _run() -> void:
 	_check(Vector2(remote_target["pos"]).distance_to(remote_start) > 4.0, "remote Henry heat wave force did not advance")
 
 	game.enemies.clear()
-	var spin_target := _spawn_target(game.player_pos + Vector2(120.0, 0.0), 4000.0)
+	var spin_target := _spawn_target(game.player_pos + Vector2(400.0, 0.0), 4000.0)
 	for stack_index in range(5):
 		game._damage_enemy(spin_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
 	var spin_origin: Vector2 = game.player_pos
@@ -287,18 +287,26 @@ func _run() -> void:
 	game.last_dash_time = -99.0
 	game._execute_teleport(game.player_pos + Vector2.RIGHT * 400.0)
 	_check(game.henry_spin_active and game._local_player_controls_locked(), "Incendiario dash did not enter the protected spin")
+	_check(game._local_player_movement_locked(), "Incendiario dash allowed movement before reaching its destination")
 	_check(game.player_pos.is_equal_approx(spin_origin), "Incendiario dash teleported on the first frame")
 	game.henry_incendiary_ability_controller.update(game.HENRY_SPIN_DASH_DURATION)
-	_check(absf(game.player_pos.distance_to(spin_origin) - game.HENRY_SPIN_DASH_DISTANCE) < 0.1, "Incendiario dash was not exactly 20px")
+	var expected_spin_target: Vector2 = game._clamp_player_world(spin_origin + Vector2.RIGHT * 400.0)
+	_check(game.player_pos.distance_to(expected_spin_target) < 0.1, "Incendiario spin did not travel to the teleport destination")
+	_check(not game._local_player_movement_locked() and game._local_player_controls_locked(), "Incendiario spin did not release movement-only control at the destination")
+	var spin_viewport := Vector2(1280.0, 720.0)
+	var spin_move_touch: Vector2 = game._joy_center(spin_viewport) + Vector2(48.0, 0.0)
+	_check(game.player_control_controller.try_start_move_touch(991, spin_move_touch, spin_viewport), "Incendiario spin did not accept mobile movement after reaching the destination")
+	game.player_control_controller.stop_move_touch()
 	var protected_hp: int = game.player_hp
 	game._damage_player(999, "boss1_wave", true)
 	game._rpc_apply_hostile_status("stun", 5.0)
 	game._apply_temporal_rewind_result(game.player_pos + Vector2(300.0, 0.0), 1.0)
 	_check(game.player_hp == protected_hp and game.player_stun_timer <= 0.0, "spin did not block boss damage or hostile status")
-	_check(game.player_pos.distance_to(spin_origin) < 25.0, "Boss 1 rewind moved Henry during the spin")
-	for spin_step in range(60):
+	_check(game.player_pos.distance_to(expected_spin_target) < 0.1, "Boss 1 rewind moved Henry during the spin")
+	for spin_step in range(46):
 		game.henry_incendiary_ability_controller.update(0.05)
-	_check(not game.henry_spin_active, "spin did not finish after three seconds")
+	game.henry_incendiary_ability_controller.update(0.04)
+	_check(not game.henry_spin_active, "spin did not finish after 2.45 seconds")
 	_check(float(spin_target["hp"]) < spin_hp_before and int(spin_target.get("henry_burn_stacks", 0)) == 0, "spin final explosion did not consume stacks and damage the target")
 	_check(Vector2(spin_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "spin final explosion did not apply progressive knockback")
 
@@ -430,11 +438,11 @@ func _run() -> void:
 	}, 35)
 	_check(game.net_ability_visuals.size() == passive_visual_before + 1, "duplicate remote Incandescence VFX was applied twice")
 	var spin_visual_before: int = game.net_ability_visuals.size()
-	game._rpc_ability_visual(22, 3, game.NET_ABILITY_TELEPORT, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos + Vector2.RIGHT * game.HENRY_SPIN_DASH_DISTANCE, game.HENRY_SPIN_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_SPIN_DURATION, {
+	game._rpc_ability_visual(22, 3, game.NET_ABILITY_TELEPORT, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos + Vector2.RIGHT * 400.0, game.HENRY_SPIN_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_SPIN_DURATION, {
 		"schema": 1, "event_id": "22:3", "manifestation_key": "incendiario", "seed": 2203,
 	}, 40)
 	_check(game.net_ability_visuals.size() == spin_visual_before + 1, "remote Incendiario spin VFX event was not accepted")
-	game._rpc_ability_visual(22, 3, game.NET_ABILITY_TELEPORT, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos + Vector2.RIGHT * game.HENRY_SPIN_DASH_DISTANCE, game.HENRY_SPIN_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_SPIN_DURATION, {
+	game._rpc_ability_visual(22, 3, game.NET_ABILITY_TELEPORT, game.HENRY_SELECTION_INDEX, game.player_pos, game.player_pos + Vector2.RIGHT * 400.0, game.HENRY_SPIN_DURATION + game.HENRY_ULTIMATE_WAVE_DURATION, game.HENRY_SPIN_DURATION, {
 		"schema": 1, "event_id": "22:3", "manifestation_key": "incendiario", "seed": 2203,
 	}, 40)
 	_check(game.net_ability_visuals.size() == spin_visual_before + 1, "duplicate remote spin VFX event was applied twice")
@@ -456,7 +464,7 @@ func _run() -> void:
 	game._open_specter_upgrade("victory", true)
 	_check(game.mode == "victory", "Henry was incorrectly routed into Geovana's Specter upgrade")
 
-	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off friction=actual_damage aura=dwell_scaled combo=1-2-3 burn=5_stacks true=max_hp_armor_bypass hab1=guard_bursts_progressive_push ultimate=3_pulses spin=20px_3s_full_immunity multiplayer_identity=true vfx_idempotent=true retry=true")
+	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off friction=actual_damage aura=dwell_scaled combo=1-2-3 burn=5_stacks true=max_hp_armor_bypass hab1=guard_bursts_progressive_push ultimate=3_pulses spin=destination_2.45s_move_after_arrival_full_immunity multiplayer_identity=true vfx_idempotent=true retry=true")
 	_cleanup(0)
 
 

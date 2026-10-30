@@ -947,13 +947,15 @@ static func _draw_catalog_locked_card_icon(game: Node2D, rect: Rect2, large: = f
 static func _draw_spectrum_reveal_fragments(game: Node2D, center_x: float, center_y: float, card_w: float, card_h: float, spacing: float, progress: float) -> void :
 	var break_t = smoothstep(0.0, 0.56, progress)
 	var rebuild_t = smoothstep(0.34, 1.0, progress)
+	var manifest_slot: int = game._manifest_selection_slot_for_index(game.selected_manifestation, false)
+	var aura_slot: int = game._manifest_selection_slot_for_index(game.selected_aura, true)
 	for diff in [-1, 0, 1]:
 		var abs_diff = abs(float(diff))
 		var scale = 1.15 if diff == 0 else 0.85
 		var pos_x = center_x + float(diff) * spacing
 		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
-		var manifest_idx = posmod(game.selected_manifestation + diff, game.MANIFESTATIONS.size())
-		var aura_idx = posmod(game.selected_aura + diff, game.AURAS.size())
+		var manifest_idx: int = game._manifest_selection_index_for_slot(manifest_slot + diff, false)
+		var aura_idx: int = game._manifest_selection_index_for_slot(aura_slot + diff, true)
 		var manifest_item: Dictionary = game.MANIFESTATIONS[manifest_idx]
 		var aura_item: Dictionary = game.AURAS[aura_idx]
 		var manifest_color = game._manifest_select_item_color(manifest_item, false)
@@ -999,8 +1001,10 @@ static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 	var henry_view: bool = game.active_character_key == game.CHARACTER_HENRY and game.mode in ["mutation_select_mp", "effect_select_mp"]
 	var aura_view: bool = game.manifest_select_stage == game.MANIFEST_STAGE_AURA
 	var local_scroll: float = (game.aura_scroll_pos if aura_view else game.manifest_scroll_pos)
-	var active_items: Array = (game.HENRY_EFFECTS if aura_view else game.HENRY_MUTATIONS) if henry_view else (game.AURAS if aura_view else game.MANIFESTATIONS)
-	var active_selected: int = (game.selected_effect if aura_view else game.selected_mutation) if henry_view else (game.selected_aura if aura_view else game.selected_manifestation)
+	var active_indices: Array = [] if henry_view else game._manifest_selection_visible_indices(aura_view)
+	var active_items: Array = (game.HENRY_EFFECTS if aura_view else game.HENRY_MUTATIONS) if henry_view else game._manifest_selection_visible_items(aura_view)
+	var source_selected: int = (game.selected_effect if aura_view else game.selected_mutation) if henry_view else (game.selected_aura if aura_view else game.selected_manifestation)
+	var active_selected: int = source_selected if henry_view else game._manifest_selection_slot_for_index(source_selected, aura_view)
 	var item: Dictionary = active_items[active_selected]
 	var color: Color = Color(item.get("accent", item.get("color", Color(1.0, 0.62, 0.16)))) if henry_view else game._manifest_select_item_color(item, aura_view)
 	var margin: float = clampf(viewport.x * 0.03, 18.0, 36.0)
@@ -1030,7 +1034,7 @@ static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 		team_w = maxf(220.0, panel.size.x - inner_pad * 3.0 - 430.0)
 		choice_rect.size.x = panel.size.x - team_w - inner_pad * 3.0
 		team_rect = Rect2(panel.end.x - team_w - inner_pad, content_top, team_w, content_bottom - content_top)
-	game._draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color, henry_view)
+	game._draw_manifest_mp_choice_surface(choice_rect, active_items, active_selected, local_scroll, aura_view, color, henry_view, active_indices)
 	game._draw_manifest_mp_team_panel(team_rect, color)
 	var footer_y: float = panel.end.y - action_h - 10.0
 	game.buttons["mp_manifest_ready"] = Rect2(choice_rect.position.x, footer_y, choice_rect.size.x * (0.58 if aura_view and not game.mp_local_ready else 0.74), 46.0)
@@ -1065,7 +1069,7 @@ static func _draw_manifest_mp(game: Node2D, viewport: Vector2) -> void :
 		game._draw_centered(game.mp_manifest_rejection_message, warning_rect.get_center() + Vector2(0, 5), 14, Color.WHITE)
 
 
-static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color, henry_view: bool = false) -> void :
+static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color, henry_view: bool = false, source_indices: Array = []) -> void :
 	var item: Dictionary = active_items[active_selected]
 	game.draw_rect(rect, Color(0.02, 0.035, 0.04, 0.82))
 	var header_h: float = 58.0
@@ -1096,9 +1100,10 @@ static func _draw_manifest_mp_choice_surface(game: Node2D, rect: Rect2, active_i
 		var pos_x: float = center_x + diff * spacing
 		var item_rect: Rect2 = Rect2(pos_x - card_w * card_scale * 0.5, center_y - card_h * card_scale * 0.5, card_w * card_scale, card_h * card_scale)
 		var card_item: Dictionary = active_items[i]
-		var item_unlocked: bool = true if henry_view else game._manifest_select_item_unlocked(i, aura_view)
+		var source_index: int = i if henry_view else int(source_indices[i])
+		var item_unlocked: bool = true if henry_view else game._manifest_select_item_unlocked(source_index, aura_view)
 		var item_color: Color = Color(card_item.get("accent", card_item.get("color", accent))) if henry_view else (game._manifest_select_item_color(card_item, aura_view) if item_unlocked else Color(0.42, 0.46, 0.68))
-		var taken: bool = false if henry_view else game._manifest_choice_taken(i, aura_view)
+		var taken: bool = false if henry_view else game._manifest_choice_taken(source_index, aura_view)
 		if taken:
 			item_color = Color(1.0, 0.18, 0.24)
 		game._draw_holo_panel(item_rect, item_color, abs_diff < 0.5, opacity * 0.72)
@@ -1338,6 +1343,7 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 	game._draw_centered(subtitle_text, Vector2(title_x, title_y + 38), game._readable_text_size(12 if not portrait else 14), Color(0.72, 0.94, 1.0, 0.9))
 
 	var active_items: Array = game.AURAS if aura_view else game.MANIFESTATIONS
+	var active_indices: Array = game._manifest_selection_visible_indices(aura_view)
 	var active_scroll = game.aura_scroll_pos if aura_view else game.manifest_scroll_pos
 	var active_selected = game.selected_aura if aura_view else game.selected_manifestation
 	var item: Dictionary = active_items[active_selected]
@@ -1351,13 +1357,14 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 	var card_h = 154.0 if portrait else 174.0
 	var spacing = game._manifest_carousel_spacing(viewport)
 
-	var half_size = active_items.size() / 2.0
-	for i in range(active_items.size()):
-		var diff = float(i) - active_scroll
+	var half_size = active_indices.size() / 2.0
+	for slot in range(active_indices.size()):
+		var i: int = int(active_indices[slot])
+		var diff = float(slot) - active_scroll
 		if diff > half_size:
-			diff -= active_items.size()
+			diff -= active_indices.size()
 		elif diff < - half_size:
-			diff += active_items.size()
+			diff += active_indices.size()
 
 		var abs_diff = abs(diff)
 		if abs_diff > 2.2:
@@ -1412,10 +1419,11 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 
 
 	var dots_y = center_y + (card_h * 0.65) + 10
-	var total_w = active_items.size() * 18
-	for i in range(active_items.size()):
-		var x = center_x - total_w * 0.5 + i * 18
-		game.draw_circle(Vector2(x, dots_y), 4 if i != active_selected else 7, color if i == active_selected else Color(0.38, 0.52, 0.62, 0.6 * (1.0 if i == active_selected else 0.5)))
+	var total_w = active_indices.size() * 18
+	var active_selected_slot: int = game._manifest_selection_slot_for_index(active_selected, aura_view)
+	for slot in range(active_indices.size()):
+		var x = center_x - total_w * 0.5 + slot * 18
+		game.draw_circle(Vector2(x, dots_y), 4 if slot != active_selected_slot else 7, color if slot == active_selected_slot else Color(0.38, 0.52, 0.62, 0.3))
 
 
 	var details_rect: Rect2
@@ -1782,7 +1790,10 @@ static func _draw_manifest_preview_skill(game: Node2D, rect: Rect2, key: String,
 static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 	var draw_cap: int = game.MEMORY_EFFECT_DRAW_CAP if game._memory_saver_active() else (game.MOBILE_EFFECT_DRAW_CAP if game._runtime_visual_budget_active() else 999999)
 	var drawn: int = 0
-	for effect in (game.effects + game.net_effects):
+	var local_effect_count: int = game.effects.size()
+	var total_effect_count: int = local_effect_count + game.net_effects.size()
+	for effect_index in range(total_effect_count):
+		var effect: Dictionary = game.effects[effect_index] if effect_index < local_effect_count else game.net_effects[effect_index - local_effect_count]
 		if drawn >= draw_cap:
 			break
 		var effect_world_pos: Vector2 = Vector2(effect.get("pos", Vector2.ZERO))
@@ -1795,6 +1806,26 @@ static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 		var kind = String(effect.get("kind", ""))
 		if kind == CombatTextPresentation.KIND:
 			CombatTextPresentation.draw(game, effect, camera)
+		elif kind == "geovana_level_up":
+			var age_ratio: float = 1.0 - alpha
+			var center: Vector2 = Vector2(effect["pos"]) - camera + Vector2(0.0, -112.0 - 22.0 * age_ratio)
+			var pulse: float = 1.0 + sin(age_ratio * PI) * 0.12
+			var arrow := PackedVector2Array([
+				center + Vector2(0.0, -31.0) * pulse,
+				center + Vector2(-10.0, -16.0) * pulse,
+				center + Vector2(-4.5, -16.0) * pulse,
+				center + Vector2(-4.5, 9.0) * pulse,
+				center + Vector2(4.5, 9.0) * pulse,
+				center + Vector2(4.5, -16.0) * pulse,
+				center + Vector2(10.0, -16.0) * pulse
+			])
+			game.draw_circle(center + Vector2(0.0, -7.0), 27.0 * pulse, Color(0.12, 0.78, 1.0, 0.08 * alpha))
+			game.draw_polygon(arrow, PackedColorArray([Color(0.24, 0.94, 1.0, 0.9 * alpha)]))
+			game.draw_polyline(PackedVector2Array([arrow[0], arrow[1], arrow[2], arrow[3], arrow[4], arrow[5], arrow[6], arrow[0]]), Color(0.88, 1.0, 1.0, 0.94 * alpha), 1.4, true)
+			var label_rect := Rect2(center + Vector2(-38.0, -64.0), Vector2(76.0, 25.0))
+			game.draw_rect(label_rect, Color(0.0, 0.08, 0.14, 0.72 * alpha), true)
+			game.draw_rect(label_rect, Color(0.24, 0.94, 1.0, 0.68 * alpha), false, 1.2)
+			game._draw_centered("Nvl %d" % int(effect.get("level", 1)), label_rect.get_center() + Vector2(0.0, 5.5), game._readable_text_size(17), Color(0.86, 1.0, 1.0, alpha))
 		elif String(effect.get("text", "")) != "":
 			game._draw_centered(effect["text"], effect["pos"] - camera, int(effect["size"]), color)
 		elif kind == "enemy_shard":

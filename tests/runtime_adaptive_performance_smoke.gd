@@ -85,6 +85,10 @@ func _run() -> void:
 	game.gfx_fps_limit = 60
 	game.gfx_low_resource = true
 	_check(controller.effective_stage(game) == Controller.STAGE_REDUCED, "manual performance profile must retain reduced floor")
+	var manual_profile_redraws := 0
+	for _sample in range(60):
+		manual_profile_redraws += 1 if controller.should_redraw(game, 1.0 / 60.0) else 0
+	_check(manual_profile_redraws == 60, "manual performance profile must preserve 60 Hz presentation while FPS is healthy")
 	controller.force_stage_for_test(Controller.STAGE_EMERGENCY)
 	_check(controller.effective_stage(game) == Controller.STAGE_EMERGENCY, "manual profile must still allow emergency protection")
 	game.mode = "menu"

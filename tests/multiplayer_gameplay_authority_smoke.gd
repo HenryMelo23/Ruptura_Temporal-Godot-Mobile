@@ -16,6 +16,9 @@ const SPECTRUM_PROBE_MULTIPLIER := 1.69
 const EXPECTED_DAMAGE_REQUESTS := 22
 const EXPECTED_TOTAL_DAMAGE := DAMAGE_PER_HIT * 21.0 + SPECTRUM_PROBE_DAMAGE * SPECTRUM_PROBE_MULTIPLIER
 const FLOW_TIMEOUT_SECONDS := 35.0
+const SUTURER_TEST_CARD := "Disparo crescente"
+const SUTURER_TEST_ENCOUNTER := "gameplay_authority_suturer"
+const BOSS6_TEST_ABILITY := "boss6_vertebral_scythes"
 
 var game: Node
 var role: String = ""
@@ -48,6 +51,11 @@ var enemy_initial_hp := 0.0
 var host_hp_before_remote_damage := 0
 var remote_hp_before_damage := 0
 var server_game_seen_at := -1.0
+var host_deferred_started_at := -1.0
+var host_suturer_restore_sent := false
+var client_suturer_stolen_seen := false
+var client_suturer_restored_seen := false
+var client_boss6_snapshot_seen := false
 
 
 func _check(condition: bool, message: String) -> void:
@@ -211,11 +219,13 @@ func _run_host_loop() -> void:
 		if remote_damage_sent:
 			_check(int(game.player_hp) == host_hp_before_remote_damage, "enemy damage aimed at client also changed host hp")
 			if int(game.net_player_hp) < remote_hp_before_damage:
+				if not _host_deferred_feature_flow(total_time):
+					continue
 				await _wait_for_ping_budget(ping_budget_ms, 2.0)
 				_check(game.net_report_ping_min <= ping_budget_ms, "host relay ping exceeded local %dms budget: best=%d last=%d" % [ping_budget_ms, game.net_report_ping_min, game.net_ping_ms])
 				if not _result_exists("client"):
 					continue
-				await _finish_ok("host authority applied client hit and routed enemy damage to client only")
+				await _finish_ok("host authority applied client hit; Boss6/Suturador snapshots and public selections were relayed")
 				return
 
 
@@ -239,7 +249,10 @@ func _run_client_loop() -> void:
 		_check(game._is_world_replica(), "online client must be a world replica")
 		if not client_game_initialized:
 			client_game_initialized = true
+			game.cards_bought[SUTURER_TEST_CARD] = 1
 			print("[CLIENT] game reached; waiting authoritative enemy")
+
+		_update_client_deferred_feature_evidence()
 
 		if not client_hit_sent:
 			var enemy := _client_enemy_by_uid(str(HIGH_ENEMY_UID))
@@ -283,9 +296,12 @@ func _run_client_loop() -> void:
 				continue
 			if total_time - client_damage_seen_at < 0.60:
 				continue
+			if not (client_suturer_stolen_seen and client_suturer_restored_seen and client_boss6_snapshot_seen):
+				continue
+			_check(game._manifest_mp_selection_public(game.MANIFEST_STAGE_AURA, game.selected_manifestation, game.selected_aura), "client retained a hidden multiplayer selection")
 			await _wait_for_ping_budget(ping_budget_ms, 2.0)
 			_check(game.net_report_ping_min <= ping_budget_ms, "client relay ping exceeded local %dms budget: best=%d last=%d" % [ping_budget_ms, game.net_report_ping_min, game.net_ping_ms])
-			await _finish_ok("client skill hit was relayed and client-only damage arrived")
+			await _finish_ok("client hit/damage arrived; Boss6 stage, Suturador steal/restore idempotence and public selections synchronized")
 			return
 
 
@@ -306,6 +322,48 @@ func _client_lobby_and_manifest_flow() -> void:
 		game._set_lobby_ready(true)
 		return
 	_manifest_selection_flow(2, 3)
+
+
+func _host_deferred_feature_flow(total_time: float) -> bool:
+	if host_deferred_started_at < 0.0:
+		host_deferred_started_at = total_time
+		game.current_phase = 6
+		game.boss_active = true
+		game.boss_dead = false
+		game.boss_hp_max = 9000.0
+		game.boss_hp = 2700.0
+		game.boss6_stage = 3
+		game.boss6_state = game.BOSS6_STATE_EXECUTING
+		game.boss6_current_ability = BOSS6_TEST_ABILITY
+		game.amber_suturer_state["active"] = true
+		game.amber_suturer_state["encounter_id"] = SUTURER_TEST_ENCOUNTER
+		game.amber_suturer_state["state"] = game.amber_suturer_controller.STATE_ACTIVE
+		game.amber_suturer_visual_events = [{"id": "suturer_mp_visual", "kind": "hook_hit", "life": 1.0, "pos": game.player_pos}]
+		game.net_world_sync_last_ms = 0
+		game.net_world_visual_sync_last_ms = 0
+		game._send_peer_suturer_card_change(game.net_player_peer_id, SUTURER_TEST_CARD, false, SUTURER_TEST_ENCOUNTER)
+		game._send_peer_suturer_card_change(game.net_player_peer_id, SUTURER_TEST_CARD, false, SUTURER_TEST_ENCOUNTER)
+		return false
+	if not host_suturer_restore_sent and total_time - host_deferred_started_at >= 0.8:
+		host_suturer_restore_sent = true
+		game._send_peer_suturer_card_change(game.net_player_peer_id, SUTURER_TEST_CARD, true, SUTURER_TEST_ENCOUNTER)
+		game._send_peer_suturer_card_change(game.net_player_peer_id, SUTURER_TEST_CARD, true, SUTURER_TEST_ENCOUNTER)
+		return false
+	if total_time - host_deferred_started_at < 1.6:
+		return false
+	_check(game._manifest_mp_selection_public(game.MANIFEST_STAGE_AURA, game.selected_manifestation, game.selected_aura), "host retained a hidden multiplayer selection")
+	return true
+
+
+func _update_client_deferred_feature_evidence() -> void:
+	var card_count := int(game.cards_bought.get(SUTURER_TEST_CARD, 0))
+	if card_count == 0:
+		client_suturer_stolen_seen = true
+	elif client_suturer_stolen_seen and card_count == 1:
+		client_suturer_restored_seen = true
+	if game.current_phase == 6 and game.boss6_stage == 3 and game.boss6_current_ability == BOSS6_TEST_ABILITY:
+		var encounter_id := String(game.amber_suturer_state.get("encounter_id", ""))
+		client_boss6_snapshot_seen = encounter_id == SUTURER_TEST_ENCOUNTER and not game.amber_suturer_visual_events.is_empty()
 
 
 func _manifest_selection_flow(manifestation: int, aura: int) -> void:

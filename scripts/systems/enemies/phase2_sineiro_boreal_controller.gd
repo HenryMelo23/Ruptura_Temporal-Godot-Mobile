@@ -219,6 +219,8 @@ func active_enemy() -> Dictionary:
 func update_enemy(enemy: Dictionary, delta: float) -> void:
 	if game == null or not game._is_world_authority() or String(enemy.get("type", "")) != TYPE_ID:
 		return
+	if game._update_bargain_capsule_controller_enemy(enemy, delta):
+		return
 	enemy["parado"] = true
 	enemy["sineiro_anim_time"] = float(enemy.get("sineiro_anim_time", 0.0)) + delta
 	enemy["sineiro_attack_anim_timer"] = maxf(0.0, float(enemy.get("sineiro_attack_anim_timer", 0.0)) - delta)

@@ -42,6 +42,9 @@ func _run() -> void:
 		"res://assets/sprites/Boss6-3-2.png",
 		"res://assets/sprites/Boss6-3-3.png",
 		"res://assets/sprites/Boss6-3-4.png",
+		"res://assets/sprites/boss6_rework/boss6_stage1_attack_00.png",
+		"res://assets/sprites/boss6_rework/boss6_stage2_attack_02.png",
+		"res://assets/sprites/boss6_rework/boss6_stage3_attack_03.png",
 		"res://assets/sprites/Fase6.png",
 		"res://assets/sprites/enquiadomiasma1.png",
 		"res://assets/sprites/enquiadomiasma2.png",
@@ -59,6 +62,9 @@ func _run() -> void:
 	_check_texture_array("boss6_form_1", 4)
 	_check_texture_array("boss6_form_2", 4)
 	_check_texture_array("boss6_form_3", 4)
+	_check_texture_array("boss6_rework_stage1_attack", 4)
+	_check_texture_array("boss6_rework_stage2_attack", 4)
+	_check_texture_array("boss6_rework_stage3_attack", 4)
 	_check_texture_array("enemy_phase_6_enguia_miasma", 2)
 	_check_texture_array("enemy_phase_6_lodario", 2)
 	_check_texture_array("enemy_phase_6_pustula_fossil", 2)
@@ -75,9 +81,12 @@ func _run() -> void:
 	game.boss_hp = 550.0
 	_check(game._boss6_form_key() == "boss6_form_2", "boss6 form 2 threshold failed")
 	_check(game._boss_texture() == game.textures["boss6_form_2"][0], "boss6 form 2 texture failed")
-	game.boss_hp = 400.0
+	game.boss_hp = 330.0
 	_check(game._boss6_form_key() == "boss6_form_3", "boss6 form 3 threshold failed")
 	_check(game._boss_texture() == game.textures["boss6_form_3"][0], "boss6 form 3 texture failed")
+	game.boss6_state = game.BOSS6_STATE_EXECUTING
+	game.boss6_current_ability = game.BOSS6_ABILITY_CARNAGE_TIDE
+	_check(game._boss_texture() in game.textures["boss6_rework_stage3_attack"], "boss6 stage 3 attack animation was not selected")
 
 	var enemy_texture_keys := {
 		game.ENEMY_MIASMA_EEL: "enemy_phase_6_enguia_miasma",
@@ -118,7 +127,7 @@ func _run() -> void:
 	_check(game.current_phase == 6, "remote boss snapshot clamped phase 6")
 	_check(game._current_map_texture() == game.textures["map_phase_6"], "phase6 map texture failed")
 
-	print("PHASE6_ART_ASSETS_SMOKE_OK boss_forms=3 enemy_types=5 exact_paths=22 network_phase=6")
+	print("PHASE6_ART_ASSETS_SMOKE_OK boss_forms=3 boss_attack_sets=3 enemy_types=5 exact_paths=25 network_phase=6")
 	game._cleanup_runtime_resources()
 	game.textures.clear()
 	game.audio_streams.clear()

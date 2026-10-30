@@ -13,6 +13,8 @@ func pack(game: Node) -> Dictionary:
 		"boss_name": game.boss_name,
 		"boss_title_color": game.boss_title_color,
 		"team_kills": game.enemies_killed,
+		"player_run_level": game.player_run_level,
+		"player_run_xp": game.player_run_xp,
 		"boss_entry_timer": game.boss_entry_timer,
 		"pacing_profile": game.run_pacing_profile,
 		"run_leader_peer_id": game.run_leader_peer_id,
@@ -158,6 +160,7 @@ func pack(game: Node) -> Dictionary:
 				"amber_suturer_visual_events": game.amber_suturer_visual_events.duplicate(true),
 				"boss6_lodarian_pools": game.boss6_lodarian_pools.duplicate(true),
 				"boss6_state": game.boss6_state,
+				"boss6_stage": game.boss6_stage,
 				"boss6_current_ability": game.boss6_current_ability,
 				"boss6_carapace_plates": game.boss6_carapace_plates.duplicate(true),
 				"boss6_carapace_timer": game.boss6_carapace_timer,
@@ -222,6 +225,8 @@ func apply(game: Node, snapshot_data) -> void:
 			game.boss_title_color = incoming_title_color
 	if game._is_world_replica() and data.has("team_kills"):
 		game._apply_shared_kill_progress(maxi(0, int(data["team_kills"])))
+	if game._is_world_replica() and data.has("player_run_level"):
+		game._apply_remote_player_run_level(int(data["player_run_level"]), int(data.get("player_run_xp", 0)))
 	if game._is_world_replica() and data.has("runtime_event"):
 		game.runtime_event_director.apply_remote_snapshot(Dictionary(data["runtime_event"]))
 	if game._is_world_replica() and data.has("point_boost"):
@@ -365,6 +370,7 @@ func apply(game: Node, snapshot_data) -> void:
 		game.amber_suturer_visual_events = Array(data.get("amber_suturer_visual_events", game.amber_suturer_visual_events)).duplicate(true)
 	game.boss6_lodarian_pools = Array(data.get("boss6_lodarian_pools", game.boss6_lodarian_pools)).duplicate(true)
 	game.boss6_state = String(data.get("boss6_state", game.boss6_state))
+	game.boss6_stage = clampi(int(data.get("boss6_stage", game.boss6_stage)), 1, 3)
 	game.boss6_current_ability = String(data.get("boss6_current_ability", game.boss6_current_ability))
 	game.boss6_carapace_plates = Array(data.get("boss6_carapace_plates", game.boss6_carapace_plates)).duplicate(true)
 	game.boss6_carapace_timer = float(data.get("boss6_carapace_timer", game.boss6_carapace_timer))

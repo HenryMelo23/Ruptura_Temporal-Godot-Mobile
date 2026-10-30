@@ -20,6 +20,28 @@ For refactor sequencing and stop rules, use:
 
 - `.agents/REFRACTOR_CAMPAIGN.md`
 
+## Solo-First Multiplayer Freeze
+
+The user froze multiplayer validation on 2026-10-29 to prioritize solo
+production. Until the user explicitly asks to resume multiplayer validation:
+
+- Keep new gameplay compatible with the existing multiplayer architecture when
+  the affected path already has authority, snapshot, RPC, or remote-visual
+  handling.
+- Do not run dedicated-server, host/client, relay, lobby, online, multi-process,
+  or physical multi-device tests. Validate the solo behavior instead.
+- Do not remove, bypass, or knowingly break existing multiplayer contracts just
+  because their validation is deferred.
+- Append every feature with unverified multiplayer impact to
+  `.agents/MULTIPLAYER_DEFERRED_VALIDATION.md`, including the solo evidence and
+  the exact multiplayer scenarios still owed.
+- Do not load or execute the complete deferred backlog during normal solo work.
+  Read it in full only when the user explicitly asks to resume or audit
+  multiplayer.
+
+The reproducible frozen remote baseline and current pending items live in that
+backlog.
+
 ## Context Budget
 
 - Before implementation, keep discovery to at most 5 searches/reads and at most

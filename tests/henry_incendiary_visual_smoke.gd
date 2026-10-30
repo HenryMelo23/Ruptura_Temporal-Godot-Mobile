@@ -27,9 +27,13 @@ func _run() -> void:
 	game.card_unlock_progress["umbra_victories"] = 1.0
 	game.mode = "character_select"
 	game.character_select_index = 1
+	game.startup_thanks_done = true
+	game.startup_thanks_timer = 0.0
+	game.startup_thanks_fading = false
 	await _capture("henry_character_select_1280x720.png", "orange")
 
 	game.active_character_key = game.CHARACTER_HENRY
+	game.run_tutorial_enabled = false
 	game._start_game()
 	game.henry_incendiary_ability_controller.cancel_entrance()
 	game.set_process(false)
@@ -130,7 +134,7 @@ func _run() -> void:
 
 	game.henry_incendiary_ability_controller.reset()
 	game.enemies.clear()
-	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(126.0, 0.0))
+	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(400.0, 0.0))
 	var spin_target: Dictionary = game.enemies[-1]
 	spin_target["hp"] = 5000.0
 	spin_target["max_hp"] = 5000.0
@@ -139,18 +143,17 @@ func _run() -> void:
 		game._damage_enemy(spin_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
 	await _capture("henry_burn_five_stacks_1280x720.png", "")
 	game._execute_teleport(game.player_pos + Vector2.RIGHT * 400.0)
-	game.henry_incendiary_ability_controller.update(0.36)
+	game.henry_incendiary_ability_controller.update(0.20)
 	await _capture("henry_spin_fast_1280x720.png", "orange")
-	game.henry_incendiary_ability_controller.update(1.34)
+	game.henry_incendiary_ability_controller.update(0.90)
 	await _capture("henry_spin_mid_1280x720.png", "orange")
-	game.henry_incendiary_ability_controller.update(1.05)
+	game.player_pos += Vector2(64.0, 24.0)
+	game.henry_incendiary_ability_controller.update(1.15)
 	await _capture("henry_spin_slowdown_1280x720.png", "orange")
 	root.size = Vector2i(960, 540)
 	await _capture("henry_spin_slowdown_mobile_960x540.png", "orange_low")
 	root.size = Vector2i(1280, 720)
-	for spin_step in range(5):
-		game.henry_incendiary_ability_controller.update(0.05)
-	game.henry_incendiary_ability_controller.update(0.18)
+	game.henry_incendiary_ability_controller.update(0.20)
 	await _capture("henry_spin_final_explosion_1280x720.png", "orange")
 
 	game.henry_heat_waves.clear()
@@ -172,7 +175,7 @@ func _run() -> void:
 	root.size = Vector2i(960, 540)
 	await _capture("henry_incandescence_passive_low_960x540.png", "orange")
 
-	print("HENRY_INCENDIARY_VISUAL_OK selection=true intro=materialize_glasses_ready_equal_scale shop_entry=flash_impact_tie_ready_mobile idle=pocket_tap beard=left_right walk=down_right_left_mirror_up fire=dedicated_equal_scale basic_skill=cone_plus_3_guard_bursts ultimate=3x_800ms spin=8_authored_frames_dual_arm_fire_slowdown_final_burst burn_stacks=5 desktop=true mobile=true passive=true low=true " + ProjectSettings.globalize_path(OUT_DIR))
+	print("HENRY_INCENDIARY_VISUAL_OK selection=true intro=materialize_glasses_ready_equal_scale shop_entry=flash_impact_tie_ready_mobile idle=pocket_tap beard=left_right walk=down_right_left_mirror_up fire=dedicated_equal_scale basic_skill=cone_plus_3_guard_bursts ultimate=3x_800ms spin=destination_2.45s_move_after_arrival_8_authored_frames_dual_arm_fire_slowdown_final_burst burn_stacks=5 desktop=true mobile=true passive=true low=true " + ProjectSettings.globalize_path(OUT_DIR))
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

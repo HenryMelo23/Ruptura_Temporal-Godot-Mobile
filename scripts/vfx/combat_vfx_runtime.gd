@@ -452,6 +452,11 @@ static func _spawn_projectile_muzzle(game: Node2D, kind: String, pos: Vector2, d
 static func _emit_projectile_trail(game: Node2D, bullet: Dictionary) -> void :
 	if String(bullet.get("kind", "")) == "gravitante":
 		return # Short curved arcs are drawn with the projectile, without particle allocations.
+	# The projectile body remains visible through its authored or batched draw.
+	# When particles are disabled (including Performance mode), do not keep
+	# allocating hundreds of short-lived trail dictionaries every second.
+	if not bool(game.gfx_particles):
+		return
 	if game.gfx_low_resource and (game.effects.size() >= game.LOW_RESOURCE_EFFECT_CAP or game.rng.randf() < 0.45):
 		return
 	var palette = game._projectile_palette(String(bullet.get("kind", "")))

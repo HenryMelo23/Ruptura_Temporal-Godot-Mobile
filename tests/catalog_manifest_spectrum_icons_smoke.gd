@@ -48,7 +48,8 @@ func _run() -> void:
 		game.unlocked_spectrum_ids[String(item["key"])] = true
 	game.catalog_tab = 0
 	var manifest_items: Array = game._catalog_items()
-	_check(manifest_items.size() == game.MANIFESTATIONS.size(), "catalog manifestation list is not synchronized")
+	var visible_manifestations: Array = game._manifest_selection_visible_items(false)
+	_check(manifest_items.size() == visible_manifestations.size(), "catalog manifestation list is not synchronized")
 	for item in game.MANIFESTATIONS:
 		var key := String(item.get("key", ""))
 		if EXPECTED_MANIFEST_ICONS.has(key):
@@ -63,7 +64,8 @@ func _run() -> void:
 
 	game.catalog_tab = 5
 	var spectrum_items: Array = game._catalog_items()
-	_check(spectrum_items.size() == game.AURAS.size(), "catalog spectrum list is not synchronized")
+	var visible_spectrums: Array = game._manifest_selection_visible_items(true)
+	_check(spectrum_items.size() == visible_spectrums.size(), "catalog spectrum list is not synchronized")
 	for item in game.AURAS:
 		var key := String(item.get("key", ""))
 		if EXPECTED_SPECTRUM_ICONS.has(key):
@@ -76,7 +78,7 @@ func _run() -> void:
 		_check(description.length() > 35, "catalog spectrum description too shallow: " + key)
 		_check(mechanics.length() > 35 and mechanics.contains("Risco:"), "catalog spectrum mechanics missing: " + key)
 
-	print("CATALOG_MANIFEST_SPECTRUM_ICONS_SMOKE_OK manifests=%d spectrums=%d" % [game.MANIFESTATIONS.size(), game.AURAS.size()])
+	print("CATALOG_MANIFEST_SPECTRUM_ICONS_SMOKE_OK manifests=%d spectrums=%d" % [visible_manifestations.size(), visible_spectrums.size()])
 	game.visible = false
 	game.set_process(false)
 	game.set_physics_process(false)

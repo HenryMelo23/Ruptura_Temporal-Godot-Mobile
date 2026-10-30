@@ -144,6 +144,8 @@ func _exercise_bargain_draw_states() -> void:
 
 
 func _run() -> void:
+	await _run_defense_rework()
+	return
 	await process_frame
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://.agent_logs"))
 	_start_clean_game()
@@ -301,3 +303,49 @@ func _run() -> void:
 	if failures.is_empty():
 		print("BARGAIN_CAPSULE_SMOKE_OK states=6 category_bounds=5 per_card=true exit_warning=true multiplayer_authority=true")
 	quit(0 if failures.is_empty() else 1)
+
+
+func _run_defense_rework() -> void:
+	await process_frame
+	_start_clean_game()
+	var event: Dictionary = game._spawn_bargain_capsule(game.PLAYER_START + Vector2(180.0, 0.0))
+	_check(not event.is_empty(), "event did not spawn")
+	var capsules: Array = game._bargain_capsules()
+	_check(capsules.size() == 3, "did not create three capsules")
+	for a in range(capsules.size()):
+		for b in range(a + 1, capsules.size()):
+			_check(Vector2(Dictionary(capsules[a]).get("pos", Vector2.ZERO)).distance_to(Vector2(Dictionary(capsules[b]).get("pos", Vector2.ZERO))) >= game.BARGAIN_CAPSULE_MIN_SEPARATION, "capsules were not separated")
+	game._update_bargain_capsule(game.BARGAIN_CAPSULE_PREPARE_TIME + 0.01)
+	game._update_bargain_capsule(game.BARGAIN_CAPSULE_FALL_TIME + 0.01)
+	_check(String(game.bargain_capsule.get("state", "")) == game.BARGAIN_CAPSULE_STATE_ACTIVE, "event did not become active")
+	var enemy := {"pos": game.player_pos, "speed": 100.0, "uid": 1, "type": game.ENEMY_COMMON, "damage": 12.0}
+	var target: Vector2 = game._get_enemy_target_pos(enemy)
+	_check(not game._target_pos_is_local_player(target), "enemy still targeted player")
+	_check(game._nearest_target() != target, "player auto-target selected capsule")
+	var target_id := String(enemy.get("bargain_capsule_target_id", ""))
+	game._damage_bargain_capsule(12.0, "smoke", false, 0, target_id)
+	for capsule_value in game._bargain_live_capsules().slice(1):
+		var capsule: Dictionary = capsule_value
+		game._damage_bargain_capsule(float(capsule.get("hp", 0.0)) + 1.0, "smoke", false, 0, String(capsule.get("id", "")))
+	_check(game._bargain_live_capsules().size() == 1, "capsule destruction did not retarget")
+	game._update_bargain_capsule(game.BARGAIN_CAPSULE_ACTIVE_TIME + 0.01)
+	_check(not game.bargain_capsule_pending_discount.is_empty(), "survivor did not grant discount")
+	game._start_game()
+	game.mode = "game"
+	game._spawn_bargain_capsule(game.PLAYER_START + Vector2(180.0, 0.0))
+	game._update_bargain_capsule(game.BARGAIN_CAPSULE_PREPARE_TIME + 0.05)
+	game._update_bargain_capsule(game.BARGAIN_CAPSULE_FALL_TIME + 0.05)
+	for capsule_value in game._bargain_live_capsules():
+		var capsule: Dictionary = capsule_value
+		game._damage_bargain_capsule(float(capsule.get("hp", 0.0)) + 1.0, "smoke", false, 0, String(capsule.get("id", "")))
+	game._update_bargain_capsule(game.BARGAIN_CAPSULE_ACTIVE_TIME + 0.01)
+	_check(String(game.bargain_capsule.get("result", "")) == "fail", "zero capsules did not fail")
+	_check(game.enemies.filter(func(value): return bool(Dictionary(value).get("bargain_capsule_spawned", false))).size() == 3, "zero capsules did not spawn exactly three penalty enemies")
+	for failure in failures:
+		push_error("BARGAIN_CAPSULE_SMOKE_FAIL " + failure)
+	if failures.is_empty():
+		print("BARGAIN_CAPSULE_SMOKE_OK capsules=3 countdown=15 targeting=hostile_only penalty=3")
+	game._cleanup_runtime_resources()
+	game.queue_free()
+	await process_frame
+	quit(1 if not failures.is_empty() else 0)

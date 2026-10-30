@@ -11,6 +11,7 @@ const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_ani
 const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 const Boss4AnimationPresentation = preload("res://scripts/presentation/boss4_animation_presentation.gd")
+const Boss6AnimationPresentation = preload("res://scripts/presentation/boss6_animation_presentation.gd")
 
 
 static func _petro_frame(game: Node2D) -> Texture2D:
@@ -283,13 +284,16 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 		var frames7: Array = game.textures.get(key7, [])
 		if not frames7.is_empty() and frames7[int(game.boss_phase) % frames7.size()] != null:
 			return frames7[int(game.boss_phase) % frames7.size()]
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	if game.current_phase == 6:
+		var action_texture: Texture2D = Boss6AnimationPresentation.active_texture(game)
+		if action_texture != null:
+			return action_texture
 		var form_key: String = game._boss6_form_key()
 		var frames6: Array = game.textures.get(form_key, [])
 		if not frames6.is_empty() and frames6[int(game.boss_phase) % frames6.size()] != null:
 			return frames6[int(game.boss_phase) % frames6.size()]
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	if game.current_phase == 5:
 		if game.boss5_siphon_timer > 0.0:
 			var shield_frames: Array = game.textures.get("boss5_shield", [])
@@ -302,7 +306,7 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 		var frames5: Array = game.textures.get("boss5", [])
 		if not frames5.is_empty() and frames5[int(game.boss_phase) % frames5.size()] != null:
 			return frames5[int(game.boss_phase) % frames5.size()]
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	if game.current_phase == 4:
 		var boss4_animation_texture: Texture2D = Boss4AnimationPresentation.active_texture(game)
 		if boss4_animation_texture != null:
@@ -326,10 +330,10 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 	var pct = game.boss_hp / max(1.0, game.boss_hp_max)
 	var idx = int(game.boss_phase) % 2
 	if pct >= 0.6:
-		return game.textures["boss_stage1"][idx] if game.textures["boss_stage1"][idx] else game.textures["boss"]
+		return game.textures["boss_stage1"][idx] if game.textures["boss_stage1"][idx] else game.textures.get("boss")
 	if pct >= 0.4:
-		return game.textures["boss_stage2"][idx] if game.textures["boss_stage2"][idx] else game.textures["boss"]
-	return game.textures["boss_stage3"][idx] if game.textures["boss_stage3"][idx] else game.textures["boss"]
+		return game.textures["boss_stage2"][idx] if game.textures["boss_stage2"][idx] else game.textures.get("boss")
+	return game.textures["boss_stage3"][idx] if game.textures["boss_stage3"][idx] else game.textures.get("boss")
 
 
 static func _boss2_texture(game: Node2D) -> Texture2D:
@@ -338,11 +342,11 @@ static func _boss2_texture(game: Node2D) -> Texture2D:
 		return remaster_texture
 	var boss2_frames = game.textures.get("boss2", [])
 	if not boss2_frames is Array or boss2_frames.is_empty():
-		return game.textures["boss"]
+		return game.textures.get("boss")
 	var frames: Array = boss2_frames
 	var frame_count: = 2 if game.boss2_state == game.BOSS2_STATE_REPOSITION else frames.size()
 	var idx = game.boss2_anim_frame % max(1, min(frame_count, frames.size()))
-	return frames[idx] if frames[idx] else game.textures["boss"]
+	return frames[idx] if frames[idx] else game.textures.get("boss")
 
 
 static func _boss_draw_position(game: Node2D) -> Vector2:
@@ -352,7 +356,7 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 			hover = -8.0
 		return game.boss_pos + Vector2(0, hover)
 	if game.current_phase == 6:
-		return game.boss_pos
+		return Boss6AnimationPresentation.draw_position(game)
 	if game.current_phase == 5:
 		return game.boss_pos + Vector2(sin(game.boss_phase * 0.65) * 4.0, sin(game.boss_phase * 1.1) * 5.0)
 	if game.current_phase == 4:

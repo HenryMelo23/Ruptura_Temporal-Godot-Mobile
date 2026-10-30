@@ -62,6 +62,7 @@ const Phase3EnemyControllerScript = preload("res://scripts/systems/enemies/phase
 const Phase6AmberSuturerControllerScript = preload("res://scripts/systems/enemies/phase6_amber_suturer_controller.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
+const Boss6StageControllerScript = preload("res://scripts/systems/bosses/boss6_stage_controller.gd")
 const PlayerControlControllerScript = preload("res://scripts/systems/player/player_control_controller.gd")
 const NecronadaAbilityControllerScript = preload("res://scripts/systems/abilities/necronada_ability_controller.gd")
 const AncoradaAbilityControllerScript = preload("res://scripts/systems/abilities/ancorada_ability_controller.gd")
@@ -91,8 +92,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.0.60"
-const GAME_VERSION_CODE: = 26000
+const GAME_VERSION: = "2.0.61"
+const GAME_VERSION_CODE: = 26100
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -263,8 +264,7 @@ const HENRY_ULTIMATE_CAST_DURATION := 0.8
 const HENRY_ULTIMATE_WAVE_DURATION := 0.72
 const HENRY_ULTIMATE_PULSE_COUNT := 3
 const HENRY_ULTIMATE_FRAME_COUNT := 8
-const HENRY_SPIN_DURATION := 3.0
-const HENRY_SPIN_DASH_DISTANCE := 20.0
+const HENRY_SPIN_DURATION := 2.45
 const HENRY_SPIN_DASH_DURATION := 0.12
 const HENRY_SPIN_EXPLOSION_RADIUS := 210.0
 const HENRY_SPIN_FRAME_COUNT := 8
@@ -640,22 +640,20 @@ const BARGAIN_CAPSULE_CHECK_INTERVAL_MAX: = 170.0
 const BARGAIN_CAPSULE_SPAWN_CHANCE: = 0.18
 const BARGAIN_CAPSULE_PREPARE_TIME: = 1.05
 const BARGAIN_CAPSULE_FALL_TIME: = 0.9
-const BARGAIN_CAPSULE_ACTIVE_TIME: = 13.0
+const BARGAIN_CAPSULE_ACTIVE_TIME: = 15.0
 const BARGAIN_CAPSULE_CLEANUP_TIME: = 1.2
 const BARGAIN_CAPSULE_SHOP_CLAIM_TIME: = 45.0
 const BARGAIN_CAPSULE_SHOP_MIN_AVAILABLE_TIME: = 15.0
 const BARGAIN_CAPSULE_BASE_HP: = 170.0
 const BARGAIN_CAPSULE_RADIUS: = 46.0
 const BARGAIN_CAPSULE_SAFE_MARGIN: = Vector2(150.0, 120.0)
-const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_SOLO: = 4
-const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_DUO: = 6
-const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_TRIO: = 8
+const BARGAIN_CAPSULE_COUNT: = 3
+const BARGAIN_CAPSULE_MIN_SEPARATION: = 300.0
+const BARGAIN_CAPSULE_FAIL_ENEMY_COUNT: = 3
 const BARGAIN_CAPSULE_DISCOUNT_RANGES: = [
-	{"id": "pequeno", "min": 0.05, "max": 0.15, "weight": 10.0},
-	{"id": "bom", "min": 0.15, "max": 0.25, "weight": 28.0},
-	{"id": "otimo", "min": 0.25, "max": 0.40, "weight": 34.0},
-	{"id": "grande", "min": 0.40, "max": 0.50, "weight": 18.0},
-	{"id": "absurdo", "min": 0.50, "max": 0.65, "weight": 10.0}
+	{"id": "uma_capsula", "min": 0.10, "max": 0.20},
+	{"id": "duas_capsulas", "min": 0.25, "max": 0.40},
+	{"id": "tres_capsulas", "min": 0.45, "max": 0.65}
 ]
 const FORCED_SHOP_CARDS: = 6
 const FORCED_SHOP_WARNING: = 15.0
@@ -1350,6 +1348,13 @@ const PUSTULE_FRAGMENT_COUNT: = 30
 const PUSTULE_FRAGMENT_MAX_DISTANCE: = 96.0
 const BOSS6_ENTRY_TIME: = 2.8
 const BOSS6_ENTRY_PARTICLES: = 420
+const BOSS6_HP_SCALE: = 4.5
+const BOSS6_STAGE_TWO_PCT: = 2.0 / 3.0
+const BOSS6_STAGE_THREE_PCT: = 1.0 / 3.0
+const BOSS6_STAGE_TRANSITION_TIME: = 1.45
+const BOSS6_STAGE_1_MOVE_SPEED: = 46.0
+const BOSS6_STAGE_2_MOVE_SPEED: = 78.0
+const BOSS6_STAGE_3_MOVE_SPEED: = 124.0
 const BOSS6_STATE_IDLE: = "idle"
 const BOSS6_STATE_TELEGRAPH: = "telegraph"
 const BOSS6_STATE_EXECUTING: = "executing"
@@ -1912,6 +1917,25 @@ const MANIFESTATIONS: = [
 		"color": Color(0.64, 0.3, 1.0),
 		"accent": Color(0.38, 1.0, 0.86)
 	}
+]
+
+# Conteudo preservado para saves e contratos de rede, mas retirado das
+# superficies publicas ate receber uma revisao dedicada de gameplay e arte.
+const HIDDEN_UNPOLISHED_MANIFESTATION_KEYS: = [
+	"cartografica",
+	"mnesica",
+	"ressonante",
+	"acorrentada",
+	"necronada",
+	"eclipsada",
+	"contratual"
+]
+
+const HIDDEN_UNPOLISHED_SPECTRUM_KEYS: = [
+	"nula",
+	"abissal",
+	"crepuscular",
+	"equilibrista"
 ]
 
 const MANIFEST_EVOLUTION_FAMILIES: = [
@@ -2852,6 +2876,7 @@ var henry_heat_waves: Array = []
 var henry_spin_active: bool = false
 var henry_spin_elapsed: float = 0.0
 var henry_spin_origin: Vector2 = Vector2.ZERO
+var henry_spin_dash_target: Vector2 = Vector2.ZERO
 var henry_spin_dash_direction: Vector2 = Vector2.RIGHT
 var henry_spin_event_id: String = ""
 var henry_boss_burn_state: Dictionary = {}
@@ -2883,6 +2908,8 @@ var player_hp = PLAYER_BASE_HP
 var player_hp_max = PLAYER_BASE_HP
 var player_speed = PLAYER_BASE_SPEED
 var player_damage = PLAYER_BASE_DAMAGE
+var player_run_level: int = 1
+var player_run_xp: int = 0
 var player_attack_interval = PLAYER_BASE_ATTACK_INTERVAL
 var player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 var player_start_down_fall_timer: float = 0.0
@@ -3062,6 +3089,7 @@ var phase3_enemy_controller: Node = Phase3EnemyControllerScript.new()
 var amber_suturer_controller: Node = Phase6AmberSuturerControllerScript.new()
 var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
+var boss6_stage_controller: RefCounted = Boss6StageControllerScript.new()
 var player_control_controller: RefCounted = PlayerControlControllerScript.new()
 var necronada_ability_controller: RefCounted = NecronadaAbilityControllerScript.new()
 var ancorada_ability_controller: RefCounted = AncoradaAbilityControllerScript.new()
@@ -3739,6 +3767,8 @@ var phase3_miasma_zones = []
 var phase3_cheeses = []
 var phase6_pustule_pools = []
 var boss6_state = BOSS6_STATE_IDLE
+var boss6_stage: int = 1
+var boss6_move_phase: float = 0.0
 var boss6_current_ability = ""
 var boss6_state_timer = 0.0
 var boss6_global_recovery = 0.0

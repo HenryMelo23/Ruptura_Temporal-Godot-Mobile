@@ -25,12 +25,13 @@ static func card_count(game: Node) -> int:
 
 
 static func attack_range(game: Node) -> float:
+	var level_bonus: float = game._player_run_level_range_bonus() if game.has_method("_player_run_level_range_bonus") else 0.0
 	# Prismatica keeps the shared ring only as an automatic-targeting boundary.
 	# Its projectile preserves the authored lifetime/ricochets, while range-card
 	# stacks are converted into ricochet critical chance instead.
 	if is_prismatic_primary(game):
-		return BASE_RANGE
-	return BASE_RANGE + float(card_count(game)) * RANGE_PER_STACK
+		return BASE_RANGE + level_bonus
+	return BASE_RANGE + level_bonus + float(card_count(game)) * RANGE_PER_STACK
 
 
 static func damage_multiplier(game: Node) -> float:

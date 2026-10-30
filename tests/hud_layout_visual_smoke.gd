@@ -36,6 +36,8 @@ func _run() -> void:
 	game.card_cost = 500
 	game.player_hp = 450
 	game.player_hp_max = 450
+	game.player_run_level = 8
+	game.player_run_xp = 420
 	game.mode = "game"
 
 	game.ui_platform_override = game.UI_PLATFORM_DESKTOP
@@ -56,7 +58,7 @@ func _run() -> void:
 	game.ui_platform_override = game.UI_PLATFORM_ANDROID
 	await _capture_profile(Vector2i(800, 450), "hud_boss_name_mobile_800x450.png")
 
-	print("HUD_LAYOUT_VISUAL_OK captures=%d desktop=true mobile=true boss_name=true no_overlap=true basic_fire_frames=2" % captures.size())
+	print("HUD_LAYOUT_VISUAL_OK captures=%d desktop=true mobile=true boss_name=true run_level=true no_overlap=true basic_fire_frames=2" % captures.size())
 	game.queue_free()
 	await process_frame
 	await create_timer(0.6).timeout

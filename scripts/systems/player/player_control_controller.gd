@@ -230,7 +230,7 @@ func touch_index_has_action(index: int) -> bool:
 
 
 func try_start_move_touch(index: int, pos: Vector2, viewport: Vector2) -> bool:
-	if core._local_player_controls_locked():
+	if core._local_player_movement_locked():
 		return false
 	if core.move_touch_index != -1:
 		if index != core.move_touch_index and move_touch_is_stale(900):
@@ -259,7 +259,8 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 		core._handle_press(pos, viewport)
 		return
 	if core._local_player_controls_locked():
-		cancel_combat_aim_state(true)
+		if not try_start_move_touch(index, pos, viewport):
+			cancel_combat_aim_state(false)
 		return
 	if core.buttons.has("lacerante_empower") and core.buttons["lacerante_empower"].has_point(pos):
 		claim_action_touch(index)

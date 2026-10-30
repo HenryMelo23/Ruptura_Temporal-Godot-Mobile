@@ -526,8 +526,10 @@ func update_enemies(delta: float) -> void:
 
 		var contact_blocked: bool = kind in [game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURE_NODE]
 		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
-			var remnant_hit: Dictionary = game._necronada_remnant_at_pos(Vector2(enemy.get("pos", game.player_pos)), 48.0)
-			if not remnant_hit.is_empty():
+			if game._try_damage_bargain_capsule_contact(enemy):
+				enemy["hit_cd"] = 0.55
+			elif not game._necronada_remnant_at_pos(Vector2(enemy.get("pos", game.player_pos)), 48.0).is_empty():
+				var remnant_hit: Dictionary = game._necronada_remnant_at_pos(Vector2(enemy.get("pos", game.player_pos)), 48.0)
 				enemy["hit_cd"] = 0.55
 				game._damage_necronada_remnant(remnant_hit, game._enemy_damage(enemy))
 			elif game._local_player_damageable_by_contact() and Vector2(enemy["pos"]).distance_to(game.player_pos) < 46.0:

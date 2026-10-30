@@ -133,6 +133,20 @@ static func _draw_hud_bar(game: Node2D, pos: Vector2, width: float, height: floa
 	game.draw_line(pos + Vector2(0, height + 3), pos + Vector2(width * ratio, height + 3), Color(color.r, color.g, color.b, 0.5), 2)
 
 
+static func _draw_player_run_level(game: Node2D, panel: Rect2, scale_value: float = 1.0) -> void:
+	var level: int = clampi(int(game.player_run_level), 1, 10)
+	var xp: int = maxi(0, int(game.player_run_xp))
+	var thresholds: Array = [40, 65, 100, 155, 235, 350, 515, 760, 1110]
+	var needed: int = 0 if level >= 10 else int(thresholds[level - 1])
+	var ratio: float = 1.0 if needed <= 0 else clampf(float(xp) / float(needed), 0.0, 1.0)
+	var bar := Rect2(panel.position + Vector2(12.0 * scale_value, panel.size.y + 6.0 * scale_value), Vector2(panel.size.x - 24.0 * scale_value, 5.0 * scale_value))
+	game.draw_rect(bar, Color(0.015, 0.035, 0.055, 0.86), true)
+	game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), Color(0.16, 0.82, 1.0, 0.92), true)
+	game.draw_rect(bar, Color(0.34, 0.92, 1.0, 0.7), false, 1.0)
+	var label := "NV %d  MAX" % level if level >= 10 else "NV %d  %d/%d" % [level, xp, needed]
+	game.draw_string(game.font, bar.position + Vector2(0.0, -2.0 * scale_value), label, HORIZONTAL_ALIGNMENT_LEFT, bar.size.x, int(10.0 * scale_value), Color(0.66, 0.95, 1.0, 0.92))
+
+
 static func _draw_contractual_status_line(game: Node2D, pos: Vector2, label: String, color: Color) -> void:
 	var rect := Rect2(pos, Vector2(252.0, 24.0))
 	game.draw_rect(rect, Color(0.02, 0.03, 0.04, 0.72), true)
@@ -166,6 +180,7 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	var left_rect = Rect2(game._left_panel_pos(viewport), Vector2(left_w, left_h))
 	var left_alpha: float = _hud_rect_player_alpha(game, left_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, left_rect, left_alpha)
+	_draw_player_run_level(game, left_rect, sm)
 
 	var right_w = (220.0 * sm) if not portrait else min(220.0, viewport.x * 0.44)
 	var right_rect = Rect2(game._right_panel_pos(viewport), Vector2(right_w, left_h))
@@ -224,6 +239,7 @@ static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> voi
 	game.draw_rect(hp_bar, Color(0.08, 0.11, 0.13, 0.96), true)
 	game.draw_rect(Rect2(hp_bar.position, Vector2(hp_bar.size.x * hp_ratio, hp_bar.size.y)), hp_color, true)
 	game.draw_string(game.font, left_rect.position + Vector2(10.0, 50.0), "%02d:%02d  FASE %d" % [int(game.time_alive) / 60, int(game.time_alive) % 60, int(game.current_phase)], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 11, Color(accent.r, accent.g, accent.b, 0.9))
+	_draw_player_run_level(game, left_rect)
 
 	game.draw_rect(right_rect, Color(0.015, 0.025, 0.035, 0.9), true)
 	game.draw_rect(right_rect, Color(0.12, 0.9, 1.0), false, 1.0)
@@ -736,6 +752,7 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 	var life_rect = Rect2(18.0, 16.0, 276.0, 76.0)
 	var life_alpha: float = _hud_rect_player_alpha(game, life_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, life_rect, life_alpha)
+	_draw_player_run_level(game, life_rect)
 	var right_rect = Rect2(viewport.x - 300.0, 16.0, 220.0, 76.0)
 	var right_alpha: float = _hud_rect_player_alpha(game, right_rect, viewport, 84.0)
 	game.hud_feedback.stats_panel(game, right_rect, right_alpha)

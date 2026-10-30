@@ -26,21 +26,35 @@ func _check(condition: bool, message: String) -> void:
 
 func _capsule_snapshot(state: String, timer: float, hp_ratio: float, visual_age: float = 0.0, hit_flash: float = 0.0) -> Dictionary:
 	var max_hp: float = 170.0
+	var capsules: Array = []
+	var offsets := [Vector2(-245.0, -28.0), Vector2(155.0, 15.0), Vector2(0.0, 178.0)]
+	for index in range(offsets.size()):
+		var capsule_hp_ratio := clampf(hp_ratio + float(index) * 0.12, 0.0, 1.0)
+		var capsule_pos: Vector2 = game.player_pos + Vector2(offsets[index])
+		capsules.append({
+			"id": "visual_%s_%s_%d" % [capture_prefix, state, index],
+			"state": state,
+			"pos": capsule_pos,
+			"target_pos": capsule_pos,
+			"timer": timer,
+			"fall_time": game.BARGAIN_CAPSULE_FALL_TIME,
+			"hp": max_hp * capsule_hp_ratio,
+			"max_hp": max_hp,
+			"collapse_time": 8.0,
+			"collapse_max": game.BARGAIN_CAPSULE_ACTIVE_TIME,
+			"cleanup_time": game.BARGAIN_CAPSULE_CLEANUP_TIME,
+			"visual_state_age": visual_age,
+			"hit_flash": hit_flash if index == 1 else 0.0,
+			"seed": 41 + index * 13
+		})
 	return {
 		"id": "visual_%s_%s" % [capture_prefix, state],
 		"state": state,
-		"pos": game.player_pos + Vector2(155.0, 15.0),
-		"target_pos": game.player_pos + Vector2(155.0, 15.0),
-		"timer": timer,
-		"fall_time": game.BARGAIN_CAPSULE_FALL_TIME,
-		"hp": max_hp * hp_ratio,
-		"max_hp": max_hp,
+		"capsules": capsules,
 		"collapse_time": 8.0,
 		"collapse_max": game.BARGAIN_CAPSULE_ACTIVE_TIME,
 		"cleanup_time": game.BARGAIN_CAPSULE_CLEANUP_TIME,
 		"visual_state_age": visual_age,
-		"hit_flash": hit_flash,
-		"seed": 41,
 		"result": "success" if state == game.BARGAIN_CAPSULE_STATE_SUCCESS else ("fail" if state == game.BARGAIN_CAPSULE_STATE_FAIL else "")
 	}
 

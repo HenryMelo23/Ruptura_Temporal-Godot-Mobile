@@ -8,6 +8,7 @@ const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_ani
 const Boss2AnimationPresentation = preload("res://scripts/presentation/boss2_animation_presentation.gd")
 const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_animation_presentation.gd")
 const Boss4AnimationPresentation = preload("res://scripts/presentation/boss4_animation_presentation.gd")
+const Boss6AnimationPresentation = preload("res://scripts/presentation/boss6_animation_presentation.gd")
 const Miasma = preload("res://scripts/presentation/boss3_miasma_presentation.gd")
 const Phase3RitualPulsePresentation = preload("res://scripts/presentation/phase3_ritual_pulse_presentation.gd")
 const Phase4InstabilityPulsePresentation = preload("res://scripts/presentation/phase4_instability_pulse_presentation.gd")
@@ -378,7 +379,10 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 	if not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		var boss_bar_width = 168.0 if game.current_phase == 7 else (232.0 if game.current_phase == 6 else (220.0 if game.current_phase == 4 else (66.0 if game.current_phase == 5 else 148.0)))
 		var bar_color = Color(1.0, 0.46, 0.08) if game.current_phase == 7 else (Color(1.0, 0.58, 0.16) if game.current_phase == 6 else (Color(0.24, 1.0, 0.42) if game.current_phase == 5 else (Color(1.0, 0.62, 0.08) if game.current_phase == 4 else Color(1.0, 0.12, 0.22))))
-		game._draw_bar(boss_draw_pos - camera + Vector2( - boss_bar_width * 0.5, - boss_draw_size.y * 0.54), boss_bar_width, game.boss_hp / game.boss_hp_max, bar_color)
+		var boss_bar_pos: Vector2 = boss_draw_pos - camera + Vector2(-boss_bar_width * 0.5, -boss_draw_size.y * 0.54)
+		game._draw_bar(boss_bar_pos, boss_bar_width, game.boss_hp / game.boss_hp_max, bar_color)
+		if game.current_phase == 6:
+			Boss6AnimationPresentation.draw_stage_bar(game, boss_bar_pos, boss_bar_width)
 		if game.boss_eletrica_static_stacks > 0 and game.boss_eletrica_static_timer > 0.0:
 			game._draw_eletrica_static_indicator(game, boss_draw_pos - camera + Vector2(0, - boss_draw_size.y * 0.54 - 12), game.boss_eletrica_static_stacks, game.boss_eletrica_static_timer, -1)
 
@@ -2289,39 +2293,9 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 						var fire_age: float = age - (1.1 if lane % 2 == 0 else 1.58)
 						game.PhoenixFire.draw_strip(game, a_crown, b_crown, 26.0, game.time_alive, clampf(1.0 - fire_age / 0.6, 0.0, 1.0), game._phase7_visual_budget_enabled())
 			game.BOSS6_ABILITY_ACID_BLOOM, game.BOSS6_ABILITY_INCUBATION:
-				var warn_time = game.BOSS6_ACID_BLOOM_FALL_TIME if kind == game.BOSS6_ABILITY_ACID_BLOOM else 0.9
-				var p = clampf(age / warn_time, 0.0, 1.0)
-				for spot in Array(attack.get("spots", [])):
-					var screen = Vector2(spot) - camera
-					var color = Color(0.42, 1.0, 0.12, 0.7) if kind == game.BOSS6_ABILITY_ACID_BLOOM else Color(1.0, 0.62, 0.28, 0.64)
-					var radius = game.BOSS6_ACID_BLOOM_RADIUS if kind == game.BOSS6_ABILITY_ACID_BLOOM else 42.0
-					game.draw_circle(screen, radius * (0.18 + p * 0.82), Color(color.r, color.g, color.b, 0.05 + p * 0.1))
-					game.draw_arc(screen, radius * (0.22 + p * 0.78), - game.time_alive * 2.2, TAU - game.time_alive * 2.2, 72, color, 2.4)
-					if kind == game.BOSS6_ABILITY_ACID_BLOOM and not bool(attack.get("spawned", false)):
-						var high: Vector2 = (game.boss_pos - camera) + Vector2(0, -170.0 - sin(p * PI) * 80.0)
-						var spit_pos: Vector2 = high.lerp(screen, p)
-						game.draw_line(game.boss_pos - camera, spit_pos, Color(0.42, 1.0, 0.12, 0.24), 3.0, true)
-						game.draw_circle(spit_pos, 9.0 + p * 5.0, Color(0.58, 1.0, 0.16, 0.84))
+				Boss6AnimationPresentation.draw_acid_or_incubation(game, camera, attack, kind, age)
 			game.BOSS6_ABILITY_SCYTHES:
-				var origin = Vector2(attack.get("origin", game.boss_pos))
-				var duration = float(attack.get("duration", 2.85))
-				for bone in attack.get("bones", []):
-					var bone_dict: Dictionary = bone
-					var pos = game._boss6_vertebral_scythe_pos(origin, bone_dict, age, duration) - camera
-					var dir = Vector2(bone_dict.get("dir", Vector2.RIGHT)).normalized()
-					if dir.length() <= 0.05:
-						dir = Vector2.RIGHT
-					var spin: float = game.time_alive * 10.0 + float(bone_dict.get("phase", 0.0))
-					var bone_axis = dir.rotated(sin(spin) * 0.62)
-					var side = bone_axis.orthogonal()
-					var p0 = pos - bone_axis * 18.0
-					var p1 = pos + bone_axis * 18.0
-					game.draw_line(p0, p1, Color(0.1, 0.08, 0.05, 0.62), 10.0, true)
-					game.draw_line(p0, p1, Color(0.78, 0.74, 0.58, 0.92), 5.0, true)
-					game.draw_circle(p0 + side * 3.8, 4.4, Color(0.92, 0.86, 0.68, 0.88))
-					game.draw_circle(p0 - side * 3.8, 4.4, Color(0.92, 0.86, 0.68, 0.88))
-					game.draw_circle(p1 + side * 3.8, 4.0, Color(0.92, 0.86, 0.68, 0.88))
-					game.draw_circle(p1 - side * 3.8, 4.0, Color(0.92, 0.86, 0.68, 0.88))
+				Boss6AnimationPresentation.draw_scythes(game, camera, attack, age)
 			game.BOSS6_ABILITY_CHASING_CRACK:
 				for trail in Array(attack.get("trail", [])):
 					var trail_data: Dictionary = trail
@@ -2344,15 +2318,7 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 					game.draw_line(start, end, Color(0.62, 1.0, 0.22, 0.22 if not active else 0.56), 18.0 if not active else 28.0, true)
 					game.draw_line(start, end, Color(0.96, 1.0, 0.72, 0.7), 2.0, true)
 			game.BOSS6_ABILITY_CARNAGE_TIDE:
-				for drop in Array(attack.get("drops", [])):
-					var drop_data: Dictionary = drop
-					var fall = clampf(float(drop_data.get("fall", 0.0)) / maxf(0.01, float(drop_data.get("max", 0.68))), 0.0, 1.0)
-					var ground = Vector2(drop_data.get("pos", game.player_pos)) - camera
-					var high: Vector2 = (game.boss_pos - camera) + Vector2(0, -180.0)
-					var pos: Vector2 = high.lerp(ground, 1.0 - fall)
-					game.draw_line(high, pos, Color(0.62, 1.0, 0.16, 0.18 + 0.22 * (1.0 - fall)), 3.0, true)
-					game.draw_circle(ground, game.BOSS6_CARNAGE_POOL_RADIUS * (0.3 + (1.0 - fall) * 0.7), Color(0.5, 1.0, 0.1, 0.09 + 0.08 * (1.0 - fall)))
-					game.draw_circle(pos, 10.0 + (1.0 - fall) * 5.0, Color(0.58, 1.0, 0.16, 0.84))
+				Boss6AnimationPresentation.draw_carnage(game, camera, attack)
 			game.BOSS6_ABILITY_REFLUX:
 				var p = clampf(age / 2.2, 0.0, 1.0)
 				for object in Array(attack.get("objects", [])):

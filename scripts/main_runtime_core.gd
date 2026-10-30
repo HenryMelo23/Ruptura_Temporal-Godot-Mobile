@@ -49,6 +49,8 @@ func _ensure_runtime_controllers_bound() -> void:
 		shop_controller.configure(self)
 	if boss4_controller.game != self:
 		boss4_controller.configure(self)
+	if boss6_stage_controller.core != self:
+		boss6_stage_controller.configure(self)
 
 
 func _phase_flow():
@@ -59,6 +61,28 @@ func _phase_flow():
 func _progression():
 	_ensure_runtime_controllers_bound()
 	return progression_controller
+
+
+func _player_run_level_controller():
+	return _progression().player_run_level_controller
+
+
+func _player_run_level_range_bonus() -> float:
+	return _player_run_level_controller().auto_attack_range_bonus()
+
+
+func _apply_remote_player_run_level(level: int, xp: int) -> void:
+	_player_run_level_controller().apply_remote(level, xp)
+
+
+func _apply_player_run_level_damage(amount: float, source: String, source_category: String) -> float:
+	if not _is_direct_player_damage_source(source, source_category):
+		return amount
+	return amount * _player_run_level_controller().damage_multiplier()
+
+
+func _apply_player_run_level_mitigation(amount: int) -> int:
+	return maxi(1, int(round(float(amount) * _player_run_level_controller().received_damage_multiplier())))
 
 
 func _drop_mode():
@@ -1448,6 +1472,50 @@ func _card_unlock_rule(card_id: String) -> Dictionary:
 	return CARD_UNLOCK_RULES.get(card_id, {})
 
 
+func _manifest_selection_key_visible(key: String, aura_view: bool) -> bool:
+	if key == "":
+		return false
+	var hidden_keys: Array = HIDDEN_UNPOLISHED_SPECTRUM_KEYS if aura_view else HIDDEN_UNPOLISHED_MANIFESTATION_KEYS
+	return not hidden_keys.has(key)
+
+
+func _manifest_selection_index_visible(index: int, aura_view: bool) -> bool:
+	var source: Array = AURAS if aura_view else MANIFESTATIONS
+	if index < 0 or index >= source.size():
+		return false
+	return _manifest_selection_key_visible(String(source[index].get("key", "")), aura_view)
+
+
+func _manifest_selection_visible_indices(aura_view: bool) -> Array:
+	var source: Array = AURAS if aura_view else MANIFESTATIONS
+	var indices: Array = []
+	for index in range(source.size()):
+		if _manifest_selection_index_visible(index, aura_view):
+			indices.append(index)
+	return indices
+
+
+func _manifest_selection_visible_items(aura_view: bool) -> Array:
+	var source: Array = AURAS if aura_view else MANIFESTATIONS
+	var items: Array = []
+	for index_value in _manifest_selection_visible_indices(aura_view):
+		items.append(source[int(index_value)])
+	return items
+
+
+func _manifest_selection_slot_for_index(index: int, aura_view: bool) -> int:
+	var visible_indices: Array = _manifest_selection_visible_indices(aura_view)
+	var slot: int = visible_indices.find(index)
+	return slot if slot >= 0 else 0
+
+
+func _manifest_selection_index_for_slot(slot: int, aura_view: bool) -> int:
+	var visible_indices: Array = _manifest_selection_visible_indices(aura_view)
+	if visible_indices.is_empty():
+		return 0
+	return int(visible_indices[posmod(slot, visible_indices.size())])
+
+
 func _manifestation_key(index: int) -> String:
 	if index == HENRY_SELECTION_INDEX:
 		return mutation_key if mutation_key != "" else "incendiario"
@@ -1594,7 +1662,7 @@ func _cycle_specter_upgrade_selection(direction: int) -> void:
 	for _i in range(AURAS.size()):
 		index = posmod(index + direction, AURAS.size())
 		var key: = _spectrum_key(index)
-		if bool(unlocked_spectrum_ids.get(key, false)):
+		if _manifest_selection_index_visible(index, true) and bool(unlocked_spectrum_ids.get(key, false)):
 			specter_upgrade_selected_index = index
 			return
 	specter_upgrade_selected_index = clampi(start, 0, AURAS.size() - 1)
@@ -1611,7 +1679,7 @@ func _open_specter_upgrade(previous: String, force: = false) -> void:
 	spectral_coins = persistent_spectral_coins
 	specter_upgrade_previous_mode = previous
 	specter_upgrade_selected_index = clampi(selected_aura, 0, AURAS.size() - 1)
-	if not bool(unlocked_spectrum_ids.get(_current_specter_key(), false)):
+	if not _manifest_selection_index_visible(specter_upgrade_selected_index, true) or not bool(unlocked_spectrum_ids.get(_current_specter_key(), false)):
 		_cycle_specter_upgrade_selection(1)
 	specter_upgrade_message = ""
 	mode = "specter_upgrade"
@@ -6985,6 +7053,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	spectral_coins = persistent_spectral_coins
 	game_time = 0.0
 	time_alive = 0.0
+	_player_run_level_controller().reset()
 	_clear_boss_reward_reveal()
 	score = 0
 	score_total = 0
@@ -7840,7 +7909,7 @@ func _boss_hp_for_phase(phase: int) -> float:
 		7:
 			return (BOSS_BASE_HP * BOSS7_HP_SCALE + _boss_farm_hp_bonus(10.0, 32.0)) * mp_mult
 		6:
-			return (BOSS_BASE_HP + _boss_farm_hp_bonus(6.0, 24.0)) * mp_mult
+			return (BOSS_BASE_HP * BOSS6_HP_SCALE + _boss_farm_hp_bonus(12.0, 38.0)) * mp_mult
 		5:
 			return (35100.0 + _boss_farm_hp_bonus(17.0, 52.0)) * mp_mult
 		4:
@@ -8088,6 +8157,7 @@ func _reset_phase5_state() -> void :
 
 
 func _reset_phase6_state() -> void :
+	boss6_stage_controller.reset_team_target_sequence()
 	if amber_suturer_controller != null and amber_suturer_controller.game == self:
 		amber_suturer_controller.reset_for_phase()
 	else:
@@ -8097,6 +8167,8 @@ func _reset_phase6_state() -> void :
 	phase6_pustule_pools.clear()
 	boss6_lodarian_pools.clear()
 	boss6_state = BOSS6_STATE_IDLE
+	boss6_stage = 1
+	boss6_move_phase = 0.0
 	boss6_current_ability = ""
 	boss6_state_timer = 0.0
 	boss6_global_recovery = 0.0
@@ -8410,6 +8482,10 @@ func _player_start_down_controls_locked() -> bool:
 
 func _local_player_controls_locked() -> bool:
 	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or henry_spin_active or henry_incendiary_ability_controller.entrance_active
+
+
+func _local_player_movement_locked() -> bool:
+	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or (henry_spin_active and not henry_incendiary_ability_controller.spin_reached_destination()) or henry_incendiary_ability_controller.entrance_active
 
 
 func _spectator_combat_mode() -> bool:
@@ -9711,13 +9787,24 @@ func _update_manifest_selection_flow(delta: float) -> void :
 		manifest_transition_elapsed = minf(MANIFEST_SPECTRUM_TRANSITION_TIME, manifest_transition_elapsed + delta)
 		if manifest_transition_elapsed >= MANIFEST_SPECTRUM_TRANSITION_TIME:
 			manifest_select_stage = MANIFEST_STAGE_AURA
-			aura_scroll_pos = float(selected_aura)
+			aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 			_block_ui_input()
 			if mode == "manifest_mp":
 				_sync_manifest_mp_selection(true)
 	if not manifest_is_dragging:
-		var target = float(selected_aura if manifest_select_stage == MANIFEST_STAGE_AURA else selected_manifestation)
-		var count = AURAS.size() if manifest_select_stage == MANIFEST_STAGE_AURA else MANIFESTATIONS.size()
+		var aura_view: bool = manifest_select_stage == MANIFEST_STAGE_AURA
+		var henry_view: bool = active_character_key == CHARACTER_HENRY and mode in ["mutation_select_mp", "effect_select_mp"]
+		var target: float
+		var count: int
+		if henry_view:
+			target = float(selected_effect if aura_view else selected_mutation)
+			count = HENRY_EFFECTS.size() if aura_view else HENRY_MUTATIONS.size()
+		else:
+			var selected_index: int = selected_aura if aura_view else selected_manifestation
+			target = float(_manifest_selection_slot_for_index(selected_index, aura_view))
+			count = _manifest_selection_visible_indices(aura_view).size()
+		if count <= 0:
+			return
 		var scroll_value = aura_scroll_pos if manifest_select_stage == MANIFEST_STAGE_AURA else manifest_scroll_pos
 		var diff = target - scroll_value
 		var half_size = count / 2.0
@@ -9834,7 +9921,7 @@ func _update_game(delta: float) -> void :
 	_update_phase6_pustule_pheromones(delta)
 	_update_sanguessuga_parasite(delta)
 	boss_tp_stun_timer = max(0.0, boss_tp_stun_timer - delta)
-	if not _local_player_controls_locked():
+	if not _local_player_movement_locked():
 		if player_stun_timer <= 0.0 and not player_locked:
 			_update_apolo_phase5_exhibition(delta)
 			var move = _read_move()
@@ -11144,10 +11231,6 @@ func _set_player_attack_visual_dir(direction: Vector2) -> void:
 
 
 func _nearest_target() -> Vector2:
-	if _bargain_capsule_vulnerable():
-		var capsule_pos: Vector2 = Vector2(bargain_capsule.get("pos", player_pos))
-		if _pos_in_auto_attack_range(capsule_pos):
-			return capsule_pos
 	var locked_pos = _locked_attack_target_pos()
 	if locked_pos != Vector2.ZERO:
 		return locked_pos
@@ -12754,7 +12837,7 @@ func _execute_teleport(target_world: Vector2) -> void :
 	if active_character_key == CHARACTER_HENRY and mutation_key == "incendiario":
 		if not henry_incendiary_ability_controller.begin_spin_dash(target_world):
 			return
-		var spin_target := _clamp_player_world(origin + henry_spin_dash_direction * HENRY_SPIN_DASH_DISTANCE)
+		var spin_target: Vector2 = henry_spin_dash_target
 		_interrupt_folego()
 		_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": spin_target, "player_pos": player_pos}))
 		_grant_manto_impulso_shield()
@@ -18352,6 +18435,7 @@ func _damage_arauto(amount: float, source: String, show_text: = true, apply_aura
 		amount = _outgoing_damage_amount(amount, source)
 		_send_client_damage_request(NET_DAMAGE_ARAUTO, "", amount, source, attack_origin if attack_origin != Vector2.ZERO else player_pos, show_text, effective_source_category, source_peer_id if source_peer_id > 0 else _mp_unique_id(), selected_manifestation)
 		return
+	amount = _apply_player_run_level_damage(amount, source, effective_source_category)
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	if _is_direct_player_damage_source(source, effective_source_category):
@@ -18414,6 +18498,7 @@ func _finish_arauto() -> void :
 		return
 	var pos: = Vector2(arauto.get("pos", player_pos))
 	var was_aguilhao: = _arauto_is_aguilhao()
+	_player_run_level_controller().grant_confirmed_miniboss()
 	for enemy in enemies.duplicate():
 		if bool(enemy.get("eco_vinculado", false)) or bool(enemy.get("aguilhao_nodule", false)) or bool(enemy.get("aguilhao_spawned", false)):
 			_spawn_enemy_desfragmentation(Vector2(enemy.get("pos", pos)), _enemy_shard_color(enemy), 12)
@@ -18560,7 +18645,10 @@ func _update_arauto_card_drops(delta: float) -> void :
 		if drop_id != "" and net_collected_drop_ids.has(drop_id):
 			continue
 		if _reward_owned_by_local(drop) and Vector2(drop["pos"]).distance_to(player_pos) <= _neutral_pickup_radius(50.0):
-			_apply_card(card)
+			if bool(drop.get("suturer_returned", false)):
+				amber_suturer_controller.restore_local_card(_card_id(card))
+			else:
+				_apply_card(card)
 			if drop_id != "":
 				_drop_mode().remember_collected(drop_id)
 			drop["life"] = 0.0
@@ -19241,6 +19329,8 @@ func _targetable_remote_peer_ids(include_stealthed: bool = false) -> Array[int]:
 
 
 func _combat_targets() -> Array:
+	if _bargain_capsule_vulnerable():
+		return _bargain_capsule_combat_targets()
 	var targets: Array = []
 	if _local_player_targetable():
 		targets.append({"peer_id": _mp_unique_id(), "pos": player_pos, "local": true, "hp": player_hp, "hp_max": player_hp_max})
@@ -19462,6 +19552,8 @@ func _is_boss_or_mini_boss_or_larapio(enemy: Dictionary) -> bool:
 
 
 func _get_enemy_target_pos(enemy: Dictionary, targets_override: Variant = null) -> Vector2:
+	if _bargain_capsule_vulnerable():
+		return _bargain_capsule_target_pos(enemy)
 	var is_boss_or_special: = _is_boss_or_mini_boss_or_larapio(enemy)
 	if not is_boss_or_special:
 		if _necronada_has_active_taunt():
@@ -19493,6 +19585,8 @@ func _target_pos_is_local_player(pos: Vector2) -> bool:
 
 
 func _get_nearest_player_pos(pos: Vector2, targets_override: Variant = null) -> Vector2:
+	if _bargain_capsule_vulnerable():
+		return _bargain_capsule_target_pos({"pos": pos})
 	if _necronada_has_active_taunt():
 		return _necronada_taunt_target_pos(pos)
 	var targets: Array = _combat_targets() if targets_override == null else targets_override
@@ -20570,7 +20664,7 @@ func _apply_sanguessuga_bleed_tick() -> void :
 func _apply_direct_dot_player_damage(amount: int, source: String) -> void :
 	if amount <= 0 or is_dead:
 		return
-	var final: = maxi(1, amount)
+	var final: = _apply_player_run_level_mitigation(maxi(1, amount))
 	_track_player_damage(final, source)
 	var hp_before_damage := maxi(0, player_hp)
 	player_hp -= final
@@ -21947,8 +22041,6 @@ func _update_remote_bullets(delta: float) -> void :
 
 		if float(b["life"]) > 0.0:
 			var bullet_pos: = Vector2(b["pos"])
-			if _bargain_capsule_vulnerable() and bullet_pos.distance_to(Vector2(bargain_capsule.get("pos", player_pos))) <= BARGAIN_CAPSULE_RADIUS + 18.0:
-				_apply_remote_projectile_visual_impact(b, "bargain:%s" % String(bargain_capsule.get("id", "")), Vector2(bargain_capsule.get("pos", player_pos)))
 			for enemy_index in enemy_manager.nearby_entity_indices(bullet_pos, 64.0, false):
 				var enemy: Dictionary = enemy_manager.spatial_entities[enemy_index]
 				if float(enemy.get("hp", 0.0)) <= 0.0:
@@ -22448,6 +22540,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		if show_text:
 			_add_damage_text(amount, Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), _damage_color(source), "enemy:%s" % str(enemy.get("uid", "")), critical_hit, damage_text_label)
 		return false
+	amount = _apply_player_run_level_damage(amount, source, effective_source_category)
 	if float(enemy.get("reconstitute_immunity", 0.0)) > 0.0:
 		if show_text and float(enemy.get("reconstitute_time", 0.0)) <= 0.0:
 			_add_text("IMUNE", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -42), Color(1.0, 0.64, 0.18), 0.35, _damage_text_size(14))
@@ -22665,6 +22758,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			AuraSystem.on_boss_hit(aura_state, boss_pos, amount)
 		_send_client_damage_request(NET_DAMAGE_BOSS, "", amount, source, attack_origin if attack_origin != Vector2.ZERO else player_pos, true, effective_source_category, _mp_unique_id(), selected_manifestation)
 		return
+	amount = _apply_player_run_level_damage(amount, source, effective_source_category)
 	if current_phase == 7 and boss7_core_active:
 		if apply_aura_multiplier and not source.begins_with("aura_"):
 			amount *= AuraSystem.damage_multiplier(aura_state)
@@ -22869,6 +22963,7 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		collector_hud_pulse = 1.2
 		_add_text("COLETORA", boss_pos + Vector2(0, -116), Color(0.95, 0.08, 0.24), 1.4, 26)
 	if boss_hp <= 0.0 and not boss_dead:
+		_player_run_level_controller().grant_confirmed_boss()
 		if current_phase == 1:
 			Boss1AnimationPresentation.trigger_death(self)
 			_play_sfx("boss1_death", 0.0, 0.92, 1.0)
@@ -23167,6 +23262,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	enemies.erase(enemy)
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
+	_player_run_level_controller().grant_confirmed_enemy(enemy)
 	_maybe_grant_enemy_spectral_core(enemy, kill_pos)
 	_add_card_unlock_progress("enemy_kills", 1.0, int(enemy.get("killed_by_peer_id", _mp_unique_id())))
 	_contractual_order_progress("kill", 1)
@@ -23258,17 +23354,14 @@ func _kill_enemy(enemy: Dictionary) -> void :
 
 
 func _kill_damage_growth(kills: int) -> float:
-	var count: int = maxi(0, kills)
-	var groups: int = count / 10
-	var remainder: int = count % 10
-	var threat_sum: int = 5 * groups * (groups - 1) + groups * (remainder + 1)
-	return 0.06 * (float(count) + 0.1 * float(threat_sum))
+	# Compatibility seam for old telemetry/tests: per-kill damage is retired in
+	# favor of the bounded run-level curve. Never mutate player_damage here.
+	return _player_run_level_controller().damage_multiplier() - 1.0
 
 
 func _apply_shared_kill_progress(total_kills: int) -> void:
 	if total_kills <= enemies_killed:
 		return
-	player_damage += _kill_damage_growth(total_kills) - _kill_damage_growth(enemies_killed)
 	enemies_killed = total_kills
 
 
@@ -23447,8 +23540,12 @@ func _update_enemy_bullets(delta: float) -> void :
 				_spawn_boss2_slow_zone(Vector2(bullet["pos"]), rng.randf_range(14.0, 20.0), 1.25)
 		var bullet_hit_radius: = float(bullet.get("hit_radius", bullet.get("radius", 34.0)))
 		_track_probability_near_miss(bullet, previous_bullet_pos, bullet_hit_radius)
+		if _try_damage_bargain_capsule_with_enemy_bullet(bullet):
+			continue
 		var remnant_hit: = _damage_remnant_from_enemy_bullet(bullet, bullet_hit_radius)
 		var local_player_hit: bool = bullet["pos"].distance_to(player_pos) < bullet_hit_radius
+		if bullet_type == "suturer_hook" and int(bullet.get("target_peer_id", _mp_unique_id())) != _mp_unique_id():
+			local_player_hit = false
 		if not local_player_hit and bullet_type == "umbra_plasma":
 			local_player_hit = _distance_to_segment(player_pos, previous_bullet_pos, Vector2(bullet["pos"])) <= bullet_hit_radius
 		if not remnant_hit and local_player_hit:
@@ -23457,6 +23554,8 @@ func _update_enemy_bullets(delta: float) -> void :
 			var hit_was_blocked: = _player_invulnerable()
 			if bullet_type == "pustula_fossil_spit":
 				_resolve_fossil_pustule_spit_hit(bullet)
+			elif bullet_type == "suturer_hook":
+				amber_suturer_controller.on_hook_hit(bullet, _mp_unique_id())
 			_damage_player(int(bullet["damage"]), bullet_type, true)
 			if current_phase == 5 and not hit_was_blocked:
 				_increase_umbra_cadence(0.09)
@@ -23479,12 +23578,16 @@ func _update_enemy_bullets(delta: float) -> void :
 			bullet["life"] = 0.0
 		else:
 			var bullet_target_peer: = _remote_peer_in_radius(Vector2(bullet["pos"]), bullet_hit_radius)
+			if bullet_type == "suturer_hook" and bullet_target_peer != int(bullet.get("target_peer_id", bullet_target_peer)):
+				bullet_target_peer = 0
 			if bullet_target_peer == 0 and bullet_type == "umbra_plasma":
 				bullet_target_peer = _remote_peer_on_segment(previous_bullet_pos, Vector2(bullet["pos"]), bullet_hit_radius)
 			if bullet_target_peer != 0:
 				bullet_type = String(bullet.get("type", "projetador"))
 				if bullet_type == "pustula_fossil_spit":
 					_resolve_fossil_pustule_spit_hit(bullet, bullet_target_peer)
+				elif bullet_type == "suturer_hook":
+					amber_suturer_controller.on_hook_hit(bullet, bullet_target_peer)
 				_send_peer_damage(bullet_target_peer, int(bullet["damage"]), bullet_type, true)
 				if current_phase == 5:
 					_increase_umbra_cadence(0.09)
@@ -25289,12 +25392,47 @@ func _bargain_capsule_hp_for_party(party_size: int = -1) -> float:
 
 
 func _bargain_capsule_fail_enemy_count(party_size: int = -1) -> int:
-	var size: int = _bargain_capsule_party_size() if party_size <= 0 else clampi(party_size, 1, ONLINE_MAX_PLAYERS)
-	if size >= 3:
-		return BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_TRIO
-	if size == 2:
-		return BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_DUO
-	return BARGAIN_CAPSULE_FAIL_ENEMY_COUNT_SOLO
+	return BARGAIN_CAPSULE_FAIL_ENEMY_COUNT
+
+
+func _bargain_capsules() -> Array:
+	if bargain_capsule.has("capsules"):
+		return Array(bargain_capsule.get("capsules", []))
+	return [bargain_capsule] if not bargain_capsule.is_empty() else []
+
+
+func _bargain_live_capsules() -> Array:
+	var live: Array = []
+	for capsule_value in _bargain_capsules():
+		var capsule: Dictionary = capsule_value
+		if String(capsule.get("state", "")) == BARGAIN_CAPSULE_STATE_ACTIVE and float(capsule.get("hp", 0.0)) > 0.0:
+			live.append(capsule)
+	return live
+
+
+func _bargain_capsule_combat_targets() -> Array:
+	var targets: Array = []
+	for capsule_value in _bargain_live_capsules():
+		var capsule: Dictionary = capsule_value
+		targets.append({"peer_id": 0, "capsule_id": String(capsule.get("id", "")), "pos": Vector2(capsule.get("pos", player_pos)), "local": false})
+	return targets
+
+
+func _bargain_capsule_target_pos(enemy: Dictionary) -> Vector2:
+	var live := _bargain_live_capsules()
+	if live.is_empty():
+		return player_pos
+	var origin := Vector2(enemy.get("pos", player_pos))
+	var best: Dictionary = live[0]
+	var best_distance := origin.distance_squared_to(Vector2(best.get("pos", player_pos)))
+	for capsule_value in live:
+		var candidate: Dictionary = capsule_value
+		var distance := origin.distance_squared_to(Vector2(candidate.get("pos", player_pos)))
+		if distance < best_distance:
+			best = candidate
+			best_distance = distance
+	enemy["bargain_capsule_target_id"] = String(best.get("id", ""))
+	return Vector2(best.get("pos", player_pos))
 
 
 func _bargain_capsule_active() -> bool:
@@ -25317,7 +25455,7 @@ func _expire_bargain_pending_discount_if_needed() -> void:
 
 
 func _bargain_capsule_vulnerable() -> bool:
-	return _bargain_capsule_active() and String(bargain_capsule.get("state", "")) == BARGAIN_CAPSULE_STATE_ACTIVE and float(bargain_capsule.get("hp", 0.0)) > 0.0
+	return _bargain_capsule_active() and String(bargain_capsule.get("state", "")) == BARGAIN_CAPSULE_STATE_ACTIVE and not _bargain_live_capsules().is_empty()
 
 
 func _bargain_capsule_spawn_blocked() -> bool:
@@ -25357,14 +25495,50 @@ func _spawn_bargain_capsule(pos: Vector2 = Vector2.INF) -> Dictionary:
 	var party_size: int = _bargain_capsule_party_size()
 	var hp_max: float = _bargain_capsule_hp_for_party(party_size)
 	bargain_capsule_event_sequence += 1
-	var spawn_pos: Vector2 = _bargain_capsule_position() if pos == Vector2.INF else pos.clamp(BARGAIN_CAPSULE_SAFE_MARGIN, WORLD_SIZE - BARGAIN_CAPSULE_SAFE_MARGIN)
+	var positions: Array = []
+	for index in range(BARGAIN_CAPSULE_COUNT):
+		var spawn_pos: Vector2 = _bargain_capsule_position() if pos == Vector2.INF or index > 0 else pos.clamp(BARGAIN_CAPSULE_SAFE_MARGIN, WORLD_SIZE - BARGAIN_CAPSULE_SAFE_MARGIN)
+		var attempts := 0
+		var separated := false
+		while attempts < 18:
+			separated = true
+			for existing_pos in positions:
+				if spawn_pos.distance_to(Vector2(existing_pos)) < BARGAIN_CAPSULE_MIN_SEPARATION:
+					separated = false
+					break
+			if separated:
+				break
+			spawn_pos = _bargain_capsule_position()
+			attempts += 1
+		if not separated:
+			var fallback_candidates := [
+				BARGAIN_CAPSULE_SAFE_MARGIN,
+				Vector2(WORLD_SIZE.x - BARGAIN_CAPSULE_SAFE_MARGIN.x, BARGAIN_CAPSULE_SAFE_MARGIN.y),
+				WORLD_SIZE - BARGAIN_CAPSULE_SAFE_MARGIN,
+				Vector2(BARGAIN_CAPSULE_SAFE_MARGIN.x, WORLD_SIZE.y - BARGAIN_CAPSULE_SAFE_MARGIN.y),
+				Vector2(WORLD_SIZE.x * 0.5, BARGAIN_CAPSULE_SAFE_MARGIN.y),
+				Vector2(WORLD_SIZE.x - BARGAIN_CAPSULE_SAFE_MARGIN.x, WORLD_SIZE.y * 0.5),
+				Vector2(WORLD_SIZE.x * 0.5, WORLD_SIZE.y - BARGAIN_CAPSULE_SAFE_MARGIN.y),
+				Vector2(BARGAIN_CAPSULE_SAFE_MARGIN.x, WORLD_SIZE.y * 0.5)
+			]
+			var best_distance := -1.0
+			for candidate_value in fallback_candidates:
+				var candidate: Vector2 = candidate_value
+				var nearest_distance := INF
+				for existing_pos in positions:
+					nearest_distance = minf(nearest_distance, candidate.distance_to(Vector2(existing_pos)))
+				if nearest_distance > best_distance:
+					best_distance = nearest_distance
+					spawn_pos = candidate
+		positions.append(spawn_pos)
+	var capsules: Array = []
+	for index in range(positions.size()):
+		var capsule_pos: Vector2 = positions[index]
+		capsules.append({"id": "bargain_%d_%d_%d" % [Time.get_ticks_msec(), bargain_capsule_event_sequence, index], "state": BARGAIN_CAPSULE_STATE_PREPARING, "pos": capsule_pos, "target_pos": capsule_pos, "hp": hp_max, "max_hp": hp_max, "timer": BARGAIN_CAPSULE_PREPARE_TIME, "fall_time": BARGAIN_CAPSULE_FALL_TIME, "collapse_time": BARGAIN_CAPSULE_ACTIVE_TIME, "collapse_max": BARGAIN_CAPSULE_ACTIVE_TIME, "seed": rng.randi(), "visual_state_age": 0.0, "hit_flash": 0.0})
 	bargain_capsule = {
 		"id": "bargain_%d_%d" % [Time.get_ticks_msec(), bargain_capsule_event_sequence],
 		"state": BARGAIN_CAPSULE_STATE_PREPARING,
-		"pos": spawn_pos,
-		"target_pos": spawn_pos,
-		"hp": hp_max,
-		"max_hp": hp_max,
+		"capsules": capsules,
 		"collapse_time": BARGAIN_CAPSULE_ACTIVE_TIME,
 		"collapse_max": BARGAIN_CAPSULE_ACTIVE_TIME,
 		"timer": BARGAIN_CAPSULE_PREPARE_TIME,
@@ -25378,7 +25552,7 @@ func _spawn_bargain_capsule(pos: Vector2 = Vector2.INF) -> Dictionary:
 		"hit_flash": 0.0
 	}
 	_show_event_alert("CAPSULA DA BARGANHA TEMPORAL!", Color(1.0, 0.8, 0.24))
-	_add_text("BARGANHA TEMPORAL", spawn_pos + Vector2(-96, -74), Color(1.0, 0.86, 0.28), 1.4, 20)
+	_add_text("DEFENDA AS 3 CAPSULAS", player_pos + Vector2(-124, -110), Color(1.0, 0.86, 0.28), 1.4, 20)
 	return bargain_capsule
 
 
@@ -25386,6 +25560,45 @@ func _update_bargain_capsule(delta: float) -> void:
 	_expire_bargain_pending_discount_if_needed()
 	if not _is_world_authority():
 		return
+	if bargain_capsule.has("capsules"):
+		var capsules: Array = _bargain_capsules()
+		var event_state := String(bargain_capsule.get("state", ""))
+		if event_state in [BARGAIN_CAPSULE_STATE_PREPARING, BARGAIN_CAPSULE_STATE_FALLING]:
+			var next_state := BARGAIN_CAPSULE_STATE_FALLING if event_state == BARGAIN_CAPSULE_STATE_PREPARING else BARGAIN_CAPSULE_STATE_ACTIVE
+			var duration := BARGAIN_CAPSULE_PREPARE_TIME if event_state == BARGAIN_CAPSULE_STATE_PREPARING else BARGAIN_CAPSULE_FALL_TIME
+			var finished := true
+			for capsule in capsules:
+				capsule["timer"] = maxf(0.0, float(capsule.get("timer", duration)) - delta)
+				capsule["visual_state_age"] = maxf(0.0, float(capsule.get("visual_state_age", 0.0)) + delta)
+				finished = finished and float(capsule["timer"]) <= 0.0
+			if finished:
+				bargain_capsule["state"] = next_state
+				for capsule in capsules:
+					capsule["state"] = next_state
+					capsule["timer"] = BARGAIN_CAPSULE_FALL_TIME if next_state == BARGAIN_CAPSULE_STATE_FALLING else 0.0
+					capsule["visual_state_age"] = 0.0
+				if next_state == BARGAIN_CAPSULE_STATE_ACTIVE:
+					bargain_capsule["collapse_time"] = BARGAIN_CAPSULE_ACTIVE_TIME
+					for capsule in capsules:
+						_spawn_radial_particles(Vector2(capsule.get("pos", player_pos)), Color(1.0, 0.78, 0.22), 8)
+			bargain_capsule["capsules"] = capsules
+			return
+		if event_state == BARGAIN_CAPSULE_STATE_ACTIVE:
+			for capsule in capsules:
+				capsule["hit_flash"] = maxf(0.0, float(capsule.get("hit_flash", 0.0)) - delta)
+				capsule["visual_state_age"] = maxf(0.0, float(capsule.get("visual_state_age", 0.0)) + delta)
+			bargain_capsule["collapse_time"] = maxf(0.0, float(bargain_capsule.get("collapse_time", BARGAIN_CAPSULE_ACTIVE_TIME)) - delta)
+			for capsule in capsules:
+				capsule["collapse_time"] = bargain_capsule["collapse_time"]
+			bargain_capsule["capsules"] = capsules
+			if float(bargain_capsule["collapse_time"]) <= 0.0:
+				_resolve_bargain_capsule_success()
+			return
+		if event_state in [BARGAIN_CAPSULE_STATE_SUCCESS, BARGAIN_CAPSULE_STATE_FAIL]:
+			bargain_capsule["cleanup_time"] = maxf(0.0, float(bargain_capsule.get("cleanup_time", BARGAIN_CAPSULE_CLEANUP_TIME)) - delta)
+			if float(bargain_capsule["cleanup_time"]) <= 0.0:
+				bargain_capsule.clear()
+			return
 	if _bargain_capsule_active():
 		bargain_capsule["visual_state_age"] = maxf(0.0, float(bargain_capsule.get("visual_state_age", 0.0)) + delta)
 		bargain_capsule["hit_flash"] = maxf(0.0, float(bargain_capsule.get("hit_flash", 0.0)) - delta)
@@ -25429,14 +25642,33 @@ func _update_bargain_capsule(delta: float) -> void:
 		_spawn_bargain_capsule()
 
 
-func _damage_bargain_capsule(amount: float, source: String, show_text: = true, source_peer_id: int = 0) -> bool:
+func _damage_bargain_capsule(amount: float, source: String, show_text: = true, source_peer_id: int = 0, capsule_id: String = "") -> bool:
 	if amount <= 0.0 or not _bargain_capsule_vulnerable():
 		return false
-	if is_multiplayer and not _is_world_authority():
-		_send_client_damage_request(NET_DAMAGE_BARGAIN_CAPSULE, String(bargain_capsule.get("id", "")), _outgoing_damage_amount(amount, source), source, player_pos, show_text, "bargain_capsule", _mp_unique_id())
-		if show_text:
-			_add_text("-%d" % int(amount), Vector2(bargain_capsule.get("pos", player_pos)) + Vector2(0, -56), Color(1.0, 0.82, 0.22), 0.35, _damage_text_size(16))
+	if bargain_capsule.has("capsules"):
+		var capsules: Array = _bargain_capsules()
+		var selected_index := -1
+		for index in range(capsules.size()):
+			var candidate: Dictionary = capsules[index]
+			if String(candidate.get("id", "")) == capsule_id and float(candidate.get("hp", 0.0)) > 0.0:
+				selected_index = index
+				break
+		if selected_index < 0:
+			return false
+		var selected: Dictionary = capsules[selected_index]
+		var hp_before := float(selected.get("hp", 0.0))
+		var final := maxf(1.0, amount)
+		selected["hp"] = maxf(0.0, hp_before - final)
+		selected["hit_flash"] = 0.22
+		selected["last_hit_peer"] = source_peer_id
+		if float(selected["hp"]) <= 0.0:
+			selected["state"] = "destroyed"
+			_add_text("CAPSULA PERDIDA", Vector2(selected.get("pos", player_pos)) + Vector2(-58, -56), Color(1.0, 0.34, 0.18), 0.75, 16)
+		capsules[selected_index] = selected
+		bargain_capsule["capsules"] = capsules
 		return true
+	if is_multiplayer and not _is_world_authority():
+		return false
 	var hp_before: float = float(bargain_capsule.get("hp", 0.0))
 	var final: float = maxf(1.0, amount)
 	bargain_capsule["hp"] = maxf(0.0, hp_before - final)
@@ -25451,37 +25683,53 @@ func _damage_bargain_capsule(amount: float, source: String, show_text: = true, s
 
 
 func _try_damage_bargain_capsule_with_bullet(bullet: Dictionary) -> bool:
+	# Friendly player projectiles deliberately pass through the defense objective.
+	return false
+
+
+func _try_damage_bargain_capsule_with_enemy_bullet(bullet: Dictionary) -> bool:
 	if not _bargain_capsule_vulnerable():
 		return false
-	var pos: Vector2 = Vector2(bargain_capsule.get("pos", player_pos))
-	var bullet_pos: Vector2 = Vector2(bullet.get("pos", player_pos))
-	if bullet_pos.distance_to(pos) > BARGAIN_CAPSULE_RADIUS + 18.0:
+	var bullet_pos := Vector2(bullet.get("pos", player_pos))
+	for capsule_value in _bargain_live_capsules():
+		var capsule: Dictionary = capsule_value
+		if bullet_pos.distance_to(Vector2(capsule.get("pos", player_pos))) <= BARGAIN_CAPSULE_RADIUS + float(bullet.get("hit_radius", 24.0)):
+			_damage_bargain_capsule(float(bullet.get("damage", 1.0)), String(bullet.get("type", "enemy")), false, 0, String(capsule.get("id", "")))
+			bullet["life"] = 0.0
+			return true
+	return false
+
+
+func _try_damage_bargain_capsule_contact(enemy: Dictionary) -> bool:
+	if not _bargain_capsule_vulnerable():
 		return false
-	var hit_key: String = "bargain:%s" % String(bargain_capsule.get("id", ""))
-	var hits: Dictionary = bullet.get("hits", {})
-	if hits.has(hit_key):
+	var target_pos := _bargain_capsule_target_pos(enemy)
+	if Vector2(enemy.get("pos", target_pos)).distance_to(target_pos) > BARGAIN_CAPSULE_RADIUS + 28.0:
 		return false
-	hits[hit_key] = true
-	bullet["hits"] = hits
-	_spawn_bullet_hit_fragments(bullet_pos, bullet)
-	_damage_bargain_capsule(float(bullet.get("damage", player_damage)), String(bullet.get("kind", "bullet")), true, _mp_unique_id())
-	if not bool(bullet.get("pierce", false)):
-		bullet["life"] = 0.0
+	_damage_bargain_capsule(_enemy_damage(enemy), String(enemy.get("type", "enemy")), false, 0, String(enemy.get("bargain_capsule_target_id", "")))
 	return true
 
 
-func _roll_bargain_discount() -> Dictionary:
-	var total_weight: float = 0.0
-	for entry in BARGAIN_CAPSULE_DISCOUNT_RANGES:
-		total_weight += float(Dictionary(entry).get("weight", 0.0))
-	var roll: float = rng.randf() * maxf(0.001, total_weight)
-	var picked: Dictionary = BARGAIN_CAPSULE_DISCOUNT_RANGES[0]
-	for entry in BARGAIN_CAPSULE_DISCOUNT_RANGES:
-		var row: Dictionary = entry
-		roll -= float(row.get("weight", 0.0))
-		if roll <= 0.0:
-			picked = row
-			break
+func _update_bargain_capsule_controller_enemy(enemy: Dictionary, delta: float) -> bool:
+	if not _bargain_capsule_vulnerable():
+		return false
+	var target := _bargain_capsule_target_pos(enemy)
+	var origin := Vector2(enemy.get("pos", target))
+	var direction := (target - origin).normalized()
+	if origin.distance_to(target) > 250.0:
+		enemy["pos"] = (origin + direction * float(enemy.get("speed", enemy_speed_base)) * delta).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		enemy["last_move_dir"] = direction
+		return true
+	var cooldown := maxf(0.0, float(enemy.get("bargain_capsule_attack_cd", 0.0)) - delta)
+	enemy["bargain_capsule_attack_cd"] = cooldown
+	if cooldown <= 0.0:
+		enemy["bargain_capsule_attack_cd"] = 1.15
+		enemy_bullets.append({"pos": origin, "dir": direction, "life": 2.0, "damage": _enemy_damage(enemy), "phase": 0.0, "type": String(enemy.get("type", "enemy")), "hit_radius": 22.0})
+	return true
+
+
+func _roll_bargain_discount(live_count: int = 1) -> Dictionary:
+	var picked: Dictionary = BARGAIN_CAPSULE_DISCOUNT_RANGES[clampi(live_count - 1, 0, BARGAIN_CAPSULE_DISCOUNT_RANGES.size() - 1)]
 	var min_rate: float = float(picked.get("min", 0.05))
 	var max_rate: float = float(picked.get("max", min_rate))
 	var rate: float = snappedf(rng.randf_range(min_rate, max_rate), 0.01)
@@ -25519,10 +25767,15 @@ func _apply_bargain_capsule_discount(discount: Dictionary) -> void:
 func _resolve_bargain_capsule_success() -> void:
 	if bargain_capsule.is_empty() or String(bargain_capsule.get("result", "")) != "":
 		return
-	var pos: Vector2 = Vector2(bargain_capsule.get("pos", player_pos))
-	var discount: Dictionary = _roll_bargain_discount()
+	var live_count: int = _bargain_live_capsules().size()
+	if live_count <= 0:
+		_resolve_bargain_capsule_failure()
+		return
+	var pos: Vector2 = player_pos
+	var discount: Dictionary = _roll_bargain_discount(live_count)
 	bargain_capsule["state"] = BARGAIN_CAPSULE_STATE_SUCCESS
-	bargain_capsule["result"] = "success"
+	bargain_capsule["result"] = "success_%d" % live_count
+	bargain_capsule["survivors"] = live_count
 	bargain_capsule["cleanup_time"] = BARGAIN_CAPSULE_CLEANUP_TIME
 	bargain_capsule["visual_state_age"] = 0.0
 	bargain_capsule["discount"] = discount.duplicate(true)
@@ -25536,7 +25789,7 @@ func _resolve_bargain_capsule_success() -> void:
 func _resolve_bargain_capsule_failure() -> void:
 	if bargain_capsule.is_empty() or String(bargain_capsule.get("result", "")) != "":
 		return
-	var pos: Vector2 = Vector2(bargain_capsule.get("pos", player_pos))
+	var pos: Vector2 = player_pos
 	bargain_capsule["state"] = BARGAIN_CAPSULE_STATE_FAIL
 	bargain_capsule["result"] = "fail"
 	bargain_capsule["cleanup_time"] = BARGAIN_CAPSULE_CLEANUP_TIME
@@ -25547,8 +25800,6 @@ func _resolve_bargain_capsule_failure() -> void:
 	var spawned: int = 0
 	var target_count: int = _bargain_capsule_fail_enemy_count(int(bargain_capsule.get("party_size", _bargain_capsule_party_size())))
 	for i in range(target_count):
-		if enemies.size() >= _enemy_limit():
-			break
 		var before: int = enemies.size()
 		var angle: float = TAU * float(i) / float(maxi(1, target_count)) + rng.randf_range(-0.22, 0.22)
 		var spawn_pos: Vector2 = (pos + Vector2.from_angle(angle) * rng.randf_range(80.0, 150.0)).clamp(Vector2(42, 42), WORLD_SIZE - Vector2(42, 42))
@@ -28597,6 +28848,7 @@ func _update_boss_phase6(delta: float) -> void :
 		return
 	_update_boss_transition_waves(delta)
 	_update_boss_attacks(delta)
+	boss6_stage_controller.update(delta)
 	if boss6_relocating:
 		_update_boss6_relocation(delta)
 		return
@@ -28642,6 +28894,15 @@ func _update_boss6_timers(delta: float) -> void :
 
 func _boss6_hp_pct() -> float:
 	return clampf(boss_hp / maxf(1.0, boss_hp_max), 0.0, 1.0)
+
+
+func _boss6_stage_for_hp() -> int:
+	var pct := _boss6_hp_pct()
+	if pct > BOSS6_STAGE_TWO_PCT:
+		return 1
+	if pct > BOSS6_STAGE_THREE_PCT:
+		return 2
+	return 3
 
 
 func _boss6_miasma_ultimate_active() -> bool:
@@ -28806,34 +29067,20 @@ func _update_boss6_miasma_ultimate(delta: float) -> void :
 
 
 func _boss6_next_wait() -> float:
-	var pct: = _boss6_hp_pct()
-	var wait: float
-	if pct >= 0.81:
-		wait = rng.randf_range(3.6, 4.1)
-	elif pct >= 0.61:
-		wait = rng.randf_range(3.2, 3.7)
-	elif pct >= 0.41:
-		wait = rng.randf_range(2.8, 3.3)
-	elif pct >= 0.31:
-		wait = rng.randf_range(2.6, 3.1)
-	else:
-		wait = rng.randf_range(2.35, 2.85)
+	var wait := rng.randf_range(3.45, 3.95)
+	if boss6_stage == 2:
+		wait = rng.randf_range(2.85, 3.35)
+	elif boss6_stage >= 3:
+		wait = rng.randf_range(2.25, 2.75)
 	return _boss_party_scaled_interval(wait, 1.85)
 
 
 func _boss6_recovery_time() -> float:
-	var pct: = _boss6_hp_pct()
-	var recovery: float
-	if pct >= 0.81:
-		recovery = 1.7
-	elif pct >= 0.61:
-		recovery = 1.55
-	elif pct >= 0.41:
+	var recovery := 1.65
+	if boss6_stage == 2:
 		recovery = 1.4
-	elif pct >= 0.31:
-		recovery = 1.3
-	else:
-		recovery = 1.2
+	elif boss6_stage >= 3:
+		recovery = 1.15
 	return _boss_party_scaled_interval(recovery, 1.0)
 
 
@@ -28916,16 +29163,9 @@ func _update_boss6_special(delta: float) -> void :
 
 func _boss6_ability_defs() -> Array:
 	return [
-		{"id": BOSS6_ABILITY_SCYTHES, "weight": 5.0, "cooldown": 9.0, "min_pct": 0.0, "max_pct": 1.0, "category": "PROJECTILE", "pressure": 1, "telegraph": maxf(0.8, 1.0 - (1.0 - _boss6_hp_pct()) * 0.22)},
-		{"id": BOSS6_ABILITY_INCUBATION, "weight": 5.0, "cooldown": 9.5, "min_pct": 0.0, "max_pct": 1.0, "category": "SPAWN", "pressure": 2, "telegraph": 0.9},
-		{"id": BOSS6_ABILITY_SWARM, "weight": 2.8, "cooldown": 13.0, "min_pct": 0.0, "max_pct": 1.0, "category": "MOVEMENT", "pressure": 0, "telegraph": 0.85},
-		{"id": BOSS6_ABILITY_CARAPACE, "weight": 2.4, "cooldown": 20.0, "min_pct": 0.3, "max_pct": 0.8, "category": "DEFENSE", "pressure": 1, "telegraph": 0.75},
-		{"id": BOSS6_ABILITY_ACID_BLOOM, "weight": 3.4, "cooldown": BOSS6_ACID_BLOOM_COOLDOWN, "min_pct": 0.0, "max_pct": BOSS6_ACID_BLOOM_UNLOCK_PCT, "category": "FIELD_CONTROL", "pressure": 3, "telegraph": 1.05},
-		{"id": BOSS6_ABILITY_TAIL, "weight": 3.0, "cooldown": 12.0, "min_pct": 0.0, "max_pct": 0.6, "category": "FIELD_CONTROL", "pressure": 2, "telegraph": 0.86},
-		{"id": BOSS6_ABILITY_CARNAGE_TIDE, "weight": 3.2, "cooldown": BOSS6_CARNAGE_TIDE_COOLDOWN, "min_pct": 0.0, "max_pct": BOSS6_CARNAGE_TIDE_UNLOCK_PCT, "category": "FIELD_CONTROL", "pressure": 3, "telegraph": 0.95},
-		{"id": BOSS6_ABILITY_REFLUX, "weight": 2.7, "cooldown": 15.0, "min_pct": 0.0, "max_pct": 0.4, "category": "CONSUME", "pressure": -2, "telegraph": 1.0},
-		{"id": BOSS6_ABILITY_FOSSIL_ECHO, "weight": 3.5, "cooldown": 14.0, "min_pct": 0.0, "max_pct": 1.0, "category": "DEBUFF", "pressure": 1, "telegraph": 0.8},
-		{"id": BOSS6_ABILITY_NECRO_EROSION, "weight": 3.0, "cooldown": 18.0, "min_pct": 0.0, "max_pct": 1.0, "category": "FIELD_CONTROL", "pressure": 2, "telegraph": 1.1}
+		{"id": BOSS6_ABILITY_SCYTHES, "weight": 5.0, "cooldown": 7.8, "min_stage": 1, "category": "PROJECTILE", "pressure": 1, "telegraph": maxf(0.78, 1.0 - float(boss6_stage - 1) * 0.09)},
+		{"id": BOSS6_ABILITY_ACID_BLOOM, "weight": 4.2, "cooldown": 10.5, "min_stage": 2, "category": "FIELD_CONTROL", "pressure": 3, "telegraph": 1.05},
+		{"id": BOSS6_ABILITY_CARNAGE_TIDE, "weight": 4.6, "cooldown": 12.0, "min_stage": 3, "category": "ASSAULT", "pressure": 3, "telegraph": 0.92},
 	]
 
 
@@ -28948,7 +29188,11 @@ func _boss6_select_ability() -> String:
 		total += weight
 		candidates.append({"id": id, "weight": weight})
 	if candidates.is_empty():
-		return BOSS6_ABILITY_SCYTHES if float(boss6_ability_cooldowns.get(BOSS6_ABILITY_SCYTHES, 0.0)) <= 0.0 else ""
+		for fallback in _boss6_ability_defs():
+			var fallback_id := String(fallback.get("id", ""))
+			if int(fallback.get("min_stage", 1)) <= boss6_stage and float(boss6_ability_cooldowns.get(fallback_id, 0.0)) <= 0.0:
+				return fallback_id
+		return ""
 	var roll: = rng.randf() * total
 	for item in candidates:
 		roll -= float(item["weight"])
@@ -28960,6 +29204,8 @@ func _boss6_select_ability() -> String:
 func _boss6_ability_available(ability: Dictionary, pressure: int) -> bool:
 	var id: = String(ability["id"])
 	var pct: = _boss6_hp_pct()
+	if boss6_stage < int(ability.get("min_stage", 1)):
+		return false
 	if _boss6_miasma_ultimate_active() and not (id in [BOSS6_ABILITY_SCYTHES, BOSS6_ABILITY_INCUBATION]):
 		return false
 	if pct > float(ability.get("max_pct", 1.0)) or pct < float(ability.get("min_pct", 0.0)):
@@ -29075,19 +29321,8 @@ func _boss6_cancel_active_attacks() -> void :
 func _start_boss6_vertebral_scythes() -> void :
 	var pct: = _boss6_hp_pct()
 	var precise: = _boss6_miasma_ultimate_active()
-	var count: = 5 if pct > 0.6 else (7 if pct > 0.3 else 9)
-	if precise:
-		count = maxi(count, 8)
-	var bones: Array = []
-	var aim_prediction: = 0.32 if precise else 0.18
-	var aim: float = (_boss_target_pos(true, aim_prediction) - boss_pos).angle()
-	var fan: = 0.58 if precise else 1.22
-	for i in range(count):
-		var spread: = (float(i) - float(count - 1) * 0.5) * fan / maxf(1.0, float(count - 1))
-		var dir: = Vector2.from_angle(aim + spread).normalized()
-		var side_range: = 10.0 if precise else 28.0
-		bones.append({"dir": dir, "distance": rng.randf_range(420.0, 610.0) if precise else rng.randf_range(360.0, 560.0), "side": rng.randf_range( - side_range, side_range), "phase": rng.randf_range(0.0, TAU), "hit_local_out": false, "hit_local_return": false})
-	_add_boss_attack({"kind": BOSS6_ABILITY_SCYTHES, "age": 0.0, "duration": 2.35 if precise else 2.65, "origin": boss_pos, "bones": bones, "precise": precise})
+	var bones: Array = boss6_stage_controller.build_vertebral_scythes(pct, precise)
+	_add_boss_attack({"kind": BOSS6_ABILITY_SCYTHES, "age": 0.0, "duration": 2.35 if precise else 2.65, "origin": boss_pos, "bones": bones, "precise": precise, "team_target_count": boss6_stage_controller.attack_target_count(bones)})
 
 
 func _start_boss6_incubation_pustules() -> void :
@@ -29157,32 +29392,12 @@ func _start_boss6_carapace() -> void :
 
 
 func _start_boss6_acid_bloom(scripted: bool) -> void :
-	var spots: = _boss6_acid_bloom_spots()
-	_add_boss_attack({"kind": BOSS6_ABILITY_ACID_BLOOM, "age": 0.0, "duration": BOSS6_ACID_BLOOM_FALL_TIME + 0.35, "spots": spots, "spawned": false, "scripted": scripted})
+	var spots: Array = boss6_stage_controller.build_acid_bloom_spots()
+	_add_boss_attack({"kind": BOSS6_ABILITY_ACID_BLOOM, "age": 0.0, "duration": BOSS6_ACID_BLOOM_FALL_TIME + 0.35, "spots": spots, "spawned": false, "scripted": scripted, "team_target_count": boss6_stage_controller.attack_target_count(spots)})
 
 
 func _boss6_acid_bloom_spots() -> Array:
-	var spots: Array = []
-	var target: = _boss_target_pos(true, 0.18)
-	for i in range(BOSS6_ACID_BLOOM_COUNT + _boss_party_hazard_bonus(2)):
-		var best: = Vector2.ZERO
-		var best_score: = -999999.0
-		for attempt in range(18):
-			var angle: = rng.randf_range(0.0, TAU)
-			var radius: = rng.randf_range(180.0, 520.0)
-			var anchor: = target if attempt < 8 else WORLD_SIZE * 0.5
-			var candidate: = (anchor + Vector2.from_angle(angle) * radius).clamp(Vector2(110, 110), WORLD_SIZE - Vector2(110, 110))
-			var spacing: = 9999.0
-			for spot in spots:
-				spacing = minf(spacing, candidate.distance_to(Vector2(spot)))
-			var player_gap: = candidate.distance_to(target)
-			var boss_gap: = candidate.distance_to(boss_pos)
-			var score: = spacing * 0.9 + minf(player_gap, 360.0) * 0.35 + minf(boss_gap, 420.0) * 0.22
-			if score > best_score:
-				best_score = score
-				best = candidate
-		spots.append(best)
-	return spots
+	return boss6_stage_controller.build_acid_bloom_spots()
 
 
 func _start_boss6_chasing_crack() -> void :
@@ -31655,7 +31870,7 @@ func _update_boss_attacks(delta: float) -> void :
 				if age >= BOSS6_ACID_BLOOM_FALL_TIME and not bool(attack.get("spawned", false)):
 					attack["spawned"] = true
 					for spot in Array(attack.get("spots", [])):
-						var acid_pos: = Vector2(spot)
+						var acid_pos: = Vector2(Dictionary(spot).get("pos", player_pos)) if spot is Dictionary else Vector2(spot)
 						_add_boss6_acid_pool(acid_pos, BOSS6_ACID_BLOOM_RADIUS, BOSS6_ACID_BLOOM_DURATION, "acid_bloom")
 						shockwaves.append({"pos": acid_pos, "radius": 20.0, "max": BOSS6_ACID_BLOOM_RADIUS, "life": 0.55, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.42, 1.0, 0.1)})
 			BOSS6_ABILITY_CHASING_CRACK:
@@ -31699,11 +31914,10 @@ func _update_boss_attacks(delta: float) -> void :
 				attack["drop_timer"] = float(attack.get("drop_timer", 0.0)) - delta
 				if age <= BOSS6_CARNAGE_TIDE_DURATION and float(attack["drop_timer"]) <= 0.0:
 					attack["drop_timer"] = _boss_party_scaled_interval(BOSS6_CARNAGE_TIDE_INTERVAL, 1.45)
-					var aim: = _boss_target_pos(true, 0.18)
-					var spread: = Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(0.0, 46.0)
-					var drop_pos: = (aim + spread).clamp(Vector2(80, 80), WORLD_SIZE - Vector2(80, 80))
 					var drops: Array = attack.get("drops", [])
-					drops.append({"pos": drop_pos, "fall": 0.68, "max": 0.68, "spawned": false, "phase": rng.randf_range(0.0, TAU)})
+					var batch: Array = boss6_stage_controller.build_carnage_drop_batch()
+					drops.append_array(batch)
+					attack["team_target_count"] = boss6_stage_controller.attack_target_count(batch)
 					attack["drops"] = drops
 				var updated_drops: Array = []
 				for drop in Array(attack.get("drops", [])):
@@ -31968,6 +32182,10 @@ func _boss_call_can_start(show_message: = true) -> bool:
 		if show_message:
 			_add_text("DERROTE O ARAUTO", player_pos + Vector2(0, -110), Color(0.74, 0.92, 1.0), 1.0, 22)
 		return false
+	if current_phase == 6 and amber_suturer_controller != null and not amber_suturer_controller.active_enemy().is_empty():
+		if show_message:
+			_add_text("DERROTE O SUTURADOR DE AMBAR", player_pos + Vector2(0, -110), Color(1.0, 0.68, 0.22), 1.0, 22)
+		return false
 	return true
 
 
@@ -32016,8 +32234,8 @@ func _despawn_enemies_for_boss_call() -> void :
 	phase4_instability_pulse_controller.cleanup("boss_call")
 	if bool(sineiro_boreal_state.get("active", false)):
 		sineiro_boreal_controller.cleanup("boss_call")
-	if current_phase == 6 and amber_suturer_controller != null:
-		amber_suturer_controller.cleanup("boss_call")
+	# Phase 6 boss entry is gated while the Suturador lives. Keep this actor out
+	# of the generic despawn path so a valid encounter cannot be erased.
 	if current_phase == 5:
 		phase5_hazards.clear()
 		phase5_rats.clear()
@@ -37162,6 +37380,7 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	var final = max(1, amount - int(player_defense + stationary_armor))
 	if active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
 		final = int(round(henry_colossus_ability_controller.modify_incoming_damage(float(final), source)))
+	final = _apply_player_run_level_mitigation(final)
 	final = _absorb_devorador_shield(final)
 	final = _absorb_manto_impulso_shield(final)
 	final = _absorb_egide_hemofaga_shield(final)
@@ -37329,7 +37548,9 @@ func _update_effects(delta: float) -> void :
 	for effect in effects:
 		effect["life"] = float(effect["life"]) - delta
 		var kind = String(effect.get("kind", ""))
-		if kind == "enemy_shard":
+		if kind == "geovana_level_up":
+			effect["pos"] = player_pos
+		elif kind == "enemy_shard":
 			var delay = max(0.0, float(effect.get("delay", 0.0)) - delta)
 			effect["delay"] = delay
 			if delay > 0.0:
@@ -37447,6 +37668,8 @@ func _queue_unlock_manifestation_notification(manifestation: Dictionary, challen
 	if manifestation.is_empty():
 		return
 	var key: String = String(manifestation.get("key", ""))
+	if not _manifest_selection_key_visible(key, false):
+		return
 	var icon: Texture2D = _get_texture("manifestation_" + key)
 	var accent: Color = manifestation.get("accent", manifestation.get("color", Color(0.12, 0.82, 1.0)))
 	_queue_unlock_notification("MANIFESTACAO DESBLOQUEADA", String(manifestation.get("name", "Manifestacao")).to_upper(), challenge_text, icon, accent)
@@ -37469,6 +37692,8 @@ func _queue_unlock_spectrum_notification(aura: Dictionary, challenge_text: Strin
 	if aura.is_empty():
 		return
 	var key: String = String(aura.get("key", ""))
+	if not _manifest_selection_key_visible(key, true):
+		return
 	var icon: Texture2D = _get_texture("aura_" + key)
 	var accent: Color = _unlock_spectrum_accent(key)
 	_queue_unlock_notification("ESPECTRO DESBLOQUEADO", String(aura.get("name", "Espectro")).to_upper(), challenge_text, icon, accent)
@@ -39003,7 +39228,7 @@ func _catalog_enemy_items() -> Array:
 		{"kind": "enemy", "name": "Lodario", "summary": "O peso mole da Chaga.", "desc": "O Lodario se arrasta como lama com vontade propria. Onde ele passa, a fase parece ficar mais espessa e menos generosa com erro.", "lore": "Ele e uma mistura de sedimento, memoria e carne cansada. A Matriarca nao o comanda como soldado; ela o derrama pelo mapa.", "mechanics": "Funciona como corpo de bloqueio: mais resistente e lento, bom para fechar caminhos e tornar a fuga menos limpa.", "color": Color(0.86, 0.7, 0.46), "texture": "enemy_phase_6_lodario"},
 		{"kind": "enemy", "name": "Pustula Fossil", "summary": "Uma ferida antiga que ainda pulsa.", "desc": "A Pustula Fossil parece parada demais para ser urgente, ate a arena obrigar Geovana a encostar naquilo que devia ter sido enterrado.", "lore": "A sexta ruptura conserva suas dores como reliquias. Cada Pustula e um fragmento fossilizado da Chaga tentando voltar a ser carne.", "mechanics": "Inimigo pesado de area e prioridade. Deve ser lido como obstaculo vivo que aumenta o custo de limpar a fase sem planejamento.", "color": Color(1.0, 0.62, 0.32), "texture": "enemy_phase_6_pustula_fossil"},
 		{"kind": "enemy", "name": "Sanguessuga Cronal", "summary": "Bebe segundos antes de beber sangue.", "desc": "Ela nao caca como um perseguidor comum. Cai longe do alvo, arma o bote por alguns segundos e so entao salta para grudar no presente de Geovana.", "lore": "A Sanguessuga Cronal e parasita de instante: gruda no presente e tenta tornar todo futuro curto demais para escapar.", "mechanics": "Armadilha viva da fase 6. Avisa a queda distante, permanece quase imperceptivel por 2s antes de armar o ataque e evita dividir o proprio raio de bote com outra sanguessuga.", "color": Color(0.92, 0.42, 0.72), "texture": "enemy_phase_6_sanguessuga_cronal"},
-		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele nao persegue o corpo: observa a rota e endurece a ferida da Chaga no caminho que Geovana esta prestes a usar.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente com tres ataques: suturas de rota, leque mirado de agulhas e coroa radial. Destrua os nos osseos para abrir passagem ou elimine o nucleo.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
+		{"kind": "enemy", "name": "Suturador de Ambar", "summary": "Uma cicatriz que escolhe por onde a arena pode respirar.", "desc": "Ele circula o alvo enquanto costura a Chaga, dispara agulhas e usa um arpao para puxar, punir e roubar uma carta visivel.", "lore": "O Suturador e uma cicatriz que ainda trabalha. Seu ambar vivo segura a carne da fase 6 como se o futuro precisasse de costura.", "mechanics": "Encontro recorrente com quatro ataques: suturas de rota, leque mirado, arpao de puxao e coroa radial. O arpao pode roubar uma carta e mostra qual foi levada; ao morrer, entrega cartas e devolve as roubadas como espolios.", "color": Color(1.0, 0.66, 0.18), "texture": "enemy_phase_6_suturador_ambar"}
 	]
 
 
@@ -39069,21 +39294,40 @@ func _catalog_item_texture(item: Dictionary) -> Texture2D:
 	return null
 
 
+func _catalog_public_entries_for_tab(tab_index: int) -> Array:
+	var visible_manifestations: Array = _manifest_selection_visible_items(false)
+	var visible_spectrums: Array = _manifest_selection_visible_items(true)
+	var entries: Array = CatalogRepository.entries_for_tab(tab_index, visible_manifestations, visible_spectrums, CARDS)
+	var hidden_ids: Array = HIDDEN_UNPOLISHED_MANIFESTATION_KEYS + HIDDEN_UNPOLISHED_SPECTRUM_KEYS
+	var public_entries: Array = []
+	for entry_value in entries:
+		var entry: Dictionary = Dictionary(entry_value).duplicate(true)
+		if entry.has("related_entry_ids"):
+			var public_related_ids: Array = []
+			for related_id_value in entry.get("related_entry_ids", []):
+				var related_id: String = String(related_id_value)
+				if not hidden_ids.has(related_id):
+					public_related_ids.append(related_id)
+			entry["related_entry_ids"] = public_related_ids
+		public_entries.append(entry)
+	return public_entries
+
+
 func _catalog_all_items_by_tab() -> Array:
 	var all_tabs: Array = []
 	for tab_index in range(CATALOG_TABS.size()):
-		all_tabs.append(CatalogRepository.entries_for_tab(tab_index, MANIFESTATIONS, AURAS, CARDS))
+		all_tabs.append(_catalog_public_entries_for_tab(tab_index))
 	return all_tabs
 
 
 func _catalog_items() -> Array:
-	var base_items: = CatalogRepository.entries_for_tab(catalog_tab, MANIFESTATIONS, AURAS, CARDS)
+	var base_items: Array = _catalog_public_entries_for_tab(catalog_tab)
 	return CatalogRepository.filter_entries(base_items, catalog_search_query, catalog_filter_mode)
 
 
 func _catalog_open_related(entry_id: String) -> bool:
 	for tab_index in range(CATALOG_TABS.size()):
-		var tab_items: Array = CatalogRepository.entries_for_tab(tab_index, MANIFESTATIONS, AURAS, CARDS)
+		var tab_items: Array = _catalog_public_entries_for_tab(tab_index)
 		for i in range(tab_items.size()):
 			var item: Dictionary = Dictionary(tab_items[i])
 			var id: = String(item.get("id", item.get("key", item.get("name", ""))))
@@ -39157,8 +39401,8 @@ func _draw_manifest_mp(viewport: Vector2) -> void :
 	MenusPresentation._draw_manifest_mp(self, viewport)
 
 
-func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color, henry_view: bool = false) -> void :
-	MenusPresentation._draw_manifest_mp_choice_surface(self, rect, active_items, active_selected, scroll, aura_view, accent, henry_view)
+func _draw_manifest_mp_choice_surface(rect: Rect2, active_items: Array, active_selected: int, scroll: float, aura_view: bool, accent: Color, henry_view: bool = false, source_indices: Array = []) -> void :
+	MenusPresentation._draw_manifest_mp_choice_surface(self, rect, active_items, active_selected, scroll, aura_view, accent, henry_view, source_indices)
 
 
 func _draw_manifest_mp_team_panel(rect: Rect2, accent: Color) -> void :
@@ -40017,10 +40261,10 @@ func _phase6_enemy_texture_key(kind: String) -> String:
 
 
 func _boss6_form_key() -> String:
-	var pct: float = boss_hp / max(1.0, boss_hp_max)
-	if pct > 0.6:
+	var pct: float = boss_hp / maxf(1.0, boss_hp_max)
+	if pct > BOSS6_STAGE_TWO_PCT:
 		return "boss6_form_1"
-	if pct > 0.4:
+	if pct > BOSS6_STAGE_THREE_PCT:
 		return "boss6_form_2"
 	return "boss6_form_3"
 
@@ -43149,23 +43393,23 @@ func _handle_key(event: InputEventKey) -> void :
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				_set_selected_aura(selected_aura + 1, true)
-				aura_scroll_pos = float(selected_aura)
+				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 				if mode == "manifest_mp":
 					_sync_manifest_mp_selection()
 				return
 			_set_selected_manifestation(selected_manifestation + 1, true)
-			manifest_scroll_pos = float(selected_manifestation)
+			manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 			if mode == "manifest_mp":
 				_sync_manifest_mp_selection()
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				_set_selected_aura(selected_aura - 1, true)
-				aura_scroll_pos = float(selected_aura)
+				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 				if mode == "manifest_mp":
 					_sync_manifest_mp_selection()
 				return
 			_set_selected_manifestation(selected_manifestation - 1, true)
-			manifest_scroll_pos = float(selected_manifestation)
+			manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 			if mode == "manifest_mp":
 				_sync_manifest_mp_selection()
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
@@ -43698,8 +43942,12 @@ func _reset_manifest_selection_stage() -> void :
 	manifest_preview_consumed_touch_index = -999
 	manifest_preview_drag_touch_index = -999
 	manifest_preview_drag_moved = false
-	manifest_scroll_pos = float(selected_manifestation)
-	aura_scroll_pos = float(selected_aura)
+	if active_character_key == CHARACTER_HENRY and selected_manifestation == HENRY_SELECTION_INDEX:
+		manifest_scroll_pos = float(selected_mutation)
+		aura_scroll_pos = float(selected_effect)
+	else:
+		manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
+		aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 	manifest_is_dragging = false
 	manifest_drag_touch_index = -999
 	manifest_drag_moved = false
@@ -43716,7 +43964,7 @@ func _start_spectrum_reveal() -> void :
 	manifest_preview_consumed_touch_index = -999
 	manifest_preview_drag_touch_index = -999
 	manifest_preview_drag_moved = false
-	aura_scroll_pos = float(selected_aura)
+	aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 	manifest_is_dragging = false
 	manifest_drag_touch_index = -999
 	manifest_drag_moved = false
@@ -43725,13 +43973,15 @@ func _start_spectrum_reveal() -> void :
 
 
 func _wrap_manifest_scroll(value: float) -> float:
-	return fposmod(value, float(MANIFESTATIONS.size()))
+	return fposmod(value, float(maxi(1, _manifest_selection_visible_indices(false).size())))
 
 
 func _nearest_manifest_index(value: float) -> int:
-	var count = MANIFESTATIONS.size()
+	var count: int = _manifest_selection_visible_indices(false).size()
+	if count <= 0:
+		return 0
 	var idx = int(round(_wrap_manifest_scroll(value))) % count
-	return idx if idx >= 0 else idx + count
+	return _manifest_selection_index_for_slot(idx if idx >= 0 else idx + count, false)
 
 
 func _set_selected_manifestation(index: int, vibrate: = true) -> void :
@@ -43740,10 +43990,10 @@ func _set_selected_manifestation(index: int, vibrate: = true) -> void :
 		return
 	var next_index = posmod(index, count)
 	var guard: = 0
-	while _manifest_choice_taken(next_index, false) and guard < count:
+	while (not _manifest_selection_index_visible(next_index, false) or _manifest_choice_taken(next_index, false)) and guard < count:
 		next_index = posmod(next_index + (1 if index >= selected_manifestation else -1), count)
 		guard += 1
-	if guard >= count and _manifest_choice_taken(next_index, false):
+	if guard >= count and (not _manifest_selection_index_visible(next_index, false) or _manifest_choice_taken(next_index, false)):
 		return
 	var changed = next_index != selected_manifestation
 	selected_manifestation = next_index
@@ -43757,6 +44007,8 @@ func _set_selected_manifestation(index: int, vibrate: = true) -> void :
 
 func _manifestation_unlocked(index: int) -> bool:
 	if index < 0 or index >= MANIFESTATIONS.size():
+		return false
+	if not _manifest_selection_index_visible(index, false):
 		return false
 	var key: = String(MANIFESTATIONS[index].get("key", ""))
 	return bool(unlocked_manifestation_ids.get(key, false)) or (key == "retornante" and retornante_unlocked)
@@ -43953,17 +44205,21 @@ func _handle_pause_mp_overlay_press(pos: Vector2, viewport: Vector2 = Vector2.ZE
 
 
 func _wrap_aura_scroll(value: float) -> float:
-	return fposmod(value, float(AURAS.size()))
+	return fposmod(value, float(maxi(1, _manifest_selection_visible_indices(true).size())))
 
 
 func _nearest_aura_index(value: float) -> int:
-	var count = AURAS.size()
+	var count: int = _manifest_selection_visible_indices(true).size()
+	if count <= 0:
+		return 0
 	var idx = int(round(_wrap_aura_scroll(value))) % count
-	return idx if idx >= 0 else idx + count
+	return _manifest_selection_index_for_slot(idx if idx >= 0 else idx + count, true)
 
 
 func _spectrum_unlocked(index: int) -> bool:
 	if index < 0 or index >= AURAS.size():
+		return false
+	if not _manifest_selection_index_visible(index, true):
 		return false
 	var key: = String(AURAS[index].get("key", ""))
 	return bool(unlocked_spectrum_ids.get(key, false))
@@ -43976,10 +44232,10 @@ func _set_selected_aura(index: int, vibrate: = true) -> void :
 	var next_index = posmod(index, count)
 	var direction: = 1 if index >= selected_aura else -1
 	var guard: = 0
-	while _manifest_choice_taken(next_index, true) and guard < count:
+	while (not _manifest_selection_index_visible(next_index, true) or _manifest_choice_taken(next_index, true)) and guard < count:
 		next_index = posmod(next_index + direction, count)
 		guard += 1
-	if guard >= count and _manifest_choice_taken(next_index, true):
+	if guard >= count and (not _manifest_selection_index_visible(next_index, true) or _manifest_choice_taken(next_index, true)):
 		return
 	var changed = next_index != selected_aura
 	selected_aura = next_index
@@ -44071,9 +44327,9 @@ func _finish_manifest_drag(pos: Vector2, viewport: Vector2) -> void :
 		else:
 			_handle_manifest_touch(pos, viewport)
 	if manifest_select_stage == MANIFEST_STAGE_AURA:
-		aura_scroll_pos = float(selected_aura)
+		aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 	else:
-		manifest_scroll_pos = float(selected_manifestation)
+		manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 	manifest_drag_touch_index = -999
 	manifest_is_dragging = false
 	manifest_drag_moved = false
@@ -44177,7 +44433,7 @@ func _return_manifest_mp_to_manifestation() -> void:
 		_cancel_manifest_mp_ready()
 	manifest_select_stage = MANIFEST_STAGE_MANIFESTATION
 	manifest_transition_elapsed = 0.0
-	manifest_scroll_pos = float(selected_manifestation)
+	manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 	mp_manifest_start_pending = false
 	_sync_manifest_mp_selection(true)
 	_play_sfx("ui_manifest_switch", 0.01, 0.28, 0.88)
@@ -44323,11 +44579,11 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void :
 		return
 	if buttons.has("aura_prev") and buttons["aura_prev"].has_point(pos):
 		_set_selected_aura(selected_aura - 1, true)
-		aura_scroll_pos = float(selected_aura)
+		aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 		return
 	if buttons.has("aura_next") and buttons["aura_next"].has_point(pos):
 		_set_selected_aura(selected_aura + 1, true)
-		aura_scroll_pos = float(selected_aura)
+		aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 		return
 
 	if buttons.has("manifest_start") and buttons["manifest_start"].has_point(pos):
@@ -44360,19 +44616,20 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void :
 	var spacing = _manifest_carousel_spacing(viewport)
 
 	for diff in [-1, 1]:
-		var count = AURAS.size() if manifest_select_stage == MANIFEST_STAGE_AURA else MANIFESTATIONS.size()
-		var selected = selected_aura if manifest_select_stage == MANIFEST_STAGE_AURA else selected_manifestation
-		var idx = (selected + diff + count) % count
+		var aura_view: bool = manifest_select_stage == MANIFEST_STAGE_AURA
+		var selected: int = selected_aura if aura_view else selected_manifestation
+		var selected_slot: int = _manifest_selection_slot_for_index(selected, aura_view)
+		var idx: int = _manifest_selection_index_for_slot(selected_slot + diff, aura_view)
 		var scale = 0.85
 		var pos_x = center_x + diff * spacing
 		var rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
 		if rect.has_point(pos):
 			if manifest_select_stage == MANIFEST_STAGE_AURA:
 				_set_selected_aura(idx, true)
-				aura_scroll_pos = float(selected_aura)
+				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 			else:
 				_set_selected_manifestation(idx, true)
-				manifest_scroll_pos = float(selected_manifestation)
+				manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 			return
 			return
 
@@ -44408,7 +44665,8 @@ func _handle_manifest_mp_touch(pos: Vector2, viewport: Vector2) -> void :
 	var spacing = 120.0
 
 	var aura_view = manifest_select_stage == MANIFEST_STAGE_AURA
-	var active_items = AURAS if aura_view else MANIFESTATIONS
+	var active_items: Array = _manifest_selection_visible_items(aura_view)
+	var active_indices: Array = _manifest_selection_visible_indices(aura_view)
 	var active_scroll = aura_scroll_pos if aura_view else manifest_scroll_pos
 
 	var half_size = active_items.size() / 2.0
@@ -44423,13 +44681,14 @@ func _handle_manifest_mp_touch(pos: Vector2, viewport: Vector2) -> void :
 		var pos_x = center_x + diff * spacing
 		var item_rect = Rect2(pos_x - card_w * scale * 0.5, center_y - card_h * scale * 0.5, card_w * scale, card_h * scale)
 		if item_rect.has_point(pos):
+			var source_index: int = int(active_indices[i])
 			if aura_view:
-				_set_selected_aura(i, true)
-				aura_scroll_pos = float(selected_aura)
+				_set_selected_aura(source_index, true)
+				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 			else:
-				if _manifestation_unlocked(i):
-					_set_selected_manifestation(i, true)
-					manifest_scroll_pos = float(selected_manifestation)
+				if _manifestation_unlocked(source_index):
+					_set_selected_manifestation(source_index, true)
+					manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
 			_sync_manifest_mp_selection()
 			return
 
@@ -46520,6 +46779,15 @@ func _send_peer_hostile_reposition(peer_id: int, destination: Vector2, source: S
 		rpc_id(peer_id, "_rpc_client_hostile_reposition", safe_destination, source)
 
 
+func _send_peer_suturer_card_change(peer_id: int, card_id: String, restore: bool, encounter_id: String) -> void:
+	if peer_id == 0 or card_id == "" or encounter_id == "" or not is_multiplayer:
+		return
+	if online_connected:
+		rpc_id(1, "_request_peer_suturer_card_change", peer_id, card_id, restore, encounter_id)
+	else:
+		rpc_id(peer_id, "_rpc_client_suturer_card_change", card_id, restore, encounter_id)
+
+
 func _apply_hostile_reposition(destination: Vector2, source: String) -> void:
 	if is_dead or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
 		return
@@ -46529,6 +46797,8 @@ func _apply_hostile_reposition(destination: Vector2, source: String) -> void:
 	_spawn_radial_particles(player_pos, Color(1.0, 0.58, 0.16), 12)
 	if source == "pustula_fossil_spit":
 		_add_text("PUXADO PELA PUSTULA", player_pos + Vector2(0, -76), Color(0.8, 1.0, 0.24), 0.8, 17)
+	elif source == ENEMY_AMBER_SUTURER:
+		_add_text("PUXADO PELO SUTURADOR", player_pos + Vector2(-72, -76), Color(1.0, 0.68, 0.2), 0.9, 18)
 	_vibrate(85, 0.42)
 
 
@@ -47002,6 +47272,11 @@ func _start_multiplayer_manifest() -> void :
 
 func _apply_manifest_mp_remote_state(sender: int, stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool, reliable_forward: bool) -> void :
 	if not is_multiplayer or mode not in ["manifest_mp", "mutation_select_mp", "effect_select_mp"]: return
+	if not _manifest_mp_selection_public(stage, manifestation, aura):
+		_net_report_event("manifest_choice_rejected", "hidden_or_invalid sender=%d stage=%s manifestation=%d aura=%d" % [sender, stage, manifestation, aura])
+		if dedicated_server_mode and sender != 0:
+			dedicated_manifest_ready_by_peer[sender] = false
+		return
 	if dedicated_server_mode:
 		if sender != 0:
 			if _is_dedicated_spectator(sender):
@@ -47035,6 +47310,16 @@ func _apply_manifest_mp_remote_state(sender: int, stage: String, manifestation: 
 		_apply_manifest_peer_state(sender, stage, manifestation, aura, scroll, is_ready, "Player %d" % sender)
 
 
+func _manifest_mp_selection_public(stage: String, manifestation: int, aura: int) -> bool:
+	if manifestation == HENRY_SELECTION_INDEX:
+		return true
+	if not _manifest_selection_index_visible(manifestation, false):
+		return false
+	if stage == MANIFEST_STAGE_AURA and not _manifest_selection_index_visible(aura, true):
+		return false
+	return true
+
+
 func _dedicated_manifest_duplicate_owner(sender: int, stage: String, manifestation: int, aura: int) -> int:
 	if manifestation == HENRY_SELECTION_INDEX:
 		return 0
@@ -47053,6 +47338,8 @@ func _dedicated_manifest_duplicate_owner(sender: int, stage: String, manifestati
 
 func _apply_manifest_peer_state(peer_id: int, stage: String, manifestation: int, aura: int, scroll: float, is_ready: bool, remote_name: String) -> void :
 	if peer_id == _mp_unique_id():
+		return
+	if not _manifest_mp_selection_public(stage, manifestation, aura):
 		return
 	var previous_state: Dictionary = mp_manifest_state_by_peer.get(peer_id, {})
 	var henry_selection: Vector2i = _decode_henry_mp_selection(scroll) if manifestation == HENRY_SELECTION_INDEX else Vector2i(-1, -1)
@@ -49735,8 +50022,8 @@ func _client_damage_request(target_kind: int, target_uid: String, amount: float,
 		NET_DAMAGE_ARAUTO:
 			_damage_arauto(amount, source, show_text, false, source_category, attack_origin, attacker_peer_id, attacker_manifestation)
 		NET_DAMAGE_BARGAIN_CAPSULE:
-			if target_uid == String(bargain_capsule.get("id", "")):
-				_damage_bargain_capsule(amount, source, show_text, attacker_peer_id)
+			# Friendly capsules are damaged only by host-owned enemy attacks.
+			return
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
@@ -49960,6 +50247,15 @@ func _request_peer_hostile_reposition(peer_id: int, destination: Vector2, source
 	player_state["pos"] = safe_destination
 	rpc_id(peer_id, "_rpc_client_hostile_reposition", safe_destination, source)
 
+
+@rpc("any_peer", "reliable")
+func _request_peer_suturer_card_change(peer_id: int, card_id: String, restore: bool, encounter_id: String) -> void:
+	if not dedicated_server_mode or _mp_sender_id() != dedicated_room_owner_peer_id:
+		return
+	if not dedicated_player_state_by_peer.has(peer_id) or card_id == "" or encounter_id == "":
+		return
+	rpc_id(peer_id, "_rpc_client_suturer_card_change", card_id, restore, encounter_id)
+
 @rpc("any_peer", "reliable")
 func _rpc_client_take_damage(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
 	if _mp_sender_is_self(): return
@@ -49971,6 +50267,13 @@ func _rpc_client_hostile_reposition(destination: Vector2, source: String) -> voi
 	if _mp_sender_is_self() or _mp_sender_id() != 1:
 		return
 	_apply_hostile_reposition(destination, source)
+
+
+@rpc("any_peer", "reliable")
+func _rpc_client_suturer_card_change(card_id: String, restore: bool, encounter_id: String) -> void:
+	if _mp_sender_is_self() or _mp_sender_id() != 1:
+		return
+	amber_suturer_controller.apply_remote_card_change(card_id, restore, encounter_id)
 
 
 func _request_peer_status(peer_id: int, effect_name: String, duration: float) -> void :

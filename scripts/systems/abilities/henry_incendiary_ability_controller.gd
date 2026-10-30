@@ -152,6 +152,7 @@ func reset() -> void:
 	core.henry_spin_active = false
 	core.henry_spin_elapsed = 0.0
 	core.henry_spin_origin = Vector2.ZERO
+	core.henry_spin_dash_target = Vector2.ZERO
 	core.henry_spin_dash_direction = Vector2.RIGHT
 	core.henry_spin_event_id = ""
 	core.henry_boss_burn_state.clear()
@@ -198,6 +199,10 @@ func is_spin_invulnerable() -> bool:
 	return is_configured() and core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "incendiario" and core.henry_spin_active
 
 
+func spin_reached_destination() -> bool:
+	return is_spin_invulnerable() and core.henry_spin_elapsed >= core.HENRY_SPIN_DASH_DURATION
+
+
 func spin_turns() -> float:
 	var progress := clampf(core.henry_spin_elapsed / maxf(0.01, core.HENRY_SPIN_DURATION), 0.0, 1.0)
 	# Ease-out integrates a high initial angular speed into a readable stop.
@@ -219,6 +224,7 @@ func begin_spin_dash(target_world: Vector2) -> bool:
 	core.henry_spin_active = true
 	core.henry_spin_elapsed = 0.0
 	core.henry_spin_origin = core.player_pos
+	core.henry_spin_dash_target = core._clamp_player_world(target_world)
 	core.henry_spin_dash_direction = direction.normalized()
 	core.henry_spin_event_id = core._next_network_event_id("henry_spin")
 	_clear_hostile_effects()
@@ -334,8 +340,8 @@ func _update_spin(delta: float) -> void:
 	var previous_dash := clampf(previous_elapsed / maxf(0.01, core.HENRY_SPIN_DASH_DURATION), 0.0, 1.0)
 	var current_dash := clampf(core.henry_spin_elapsed / maxf(0.01, core.HENRY_SPIN_DASH_DURATION), 0.0, 1.0)
 	if current_dash > previous_dash:
-		var displacement: Vector2 = core.henry_spin_dash_direction * core.HENRY_SPIN_DASH_DISTANCE * (smoothstep(0.0, 1.0, current_dash) - smoothstep(0.0, 1.0, previous_dash))
-		core.player_pos = core._clamp_player_world(core.player_pos + displacement)
+		var travel_ease := smoothstep(0.0, 1.0, current_dash)
+		core.player_pos = core._clamp_player_world(core.henry_spin_origin.lerp(core.henry_spin_dash_target, travel_ease))
 	_clear_hostile_effects()
 	if core.henry_spin_elapsed >= core.HENRY_SPIN_DURATION:
 		_release_spin_burst()
@@ -352,6 +358,7 @@ func _release_spin_burst() -> void:
 	core.henry_spin_active = false
 	core.henry_spin_elapsed = 0.0
 	core.henry_spin_origin = Vector2.ZERO
+	core.henry_spin_dash_target = Vector2.ZERO
 	core.henry_spin_event_id = ""
 
 

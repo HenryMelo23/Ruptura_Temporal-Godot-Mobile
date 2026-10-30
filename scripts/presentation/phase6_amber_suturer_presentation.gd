@@ -46,10 +46,10 @@ static func enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 			"observe", "reposition":
 				row = ROW_MOVE
 				fps = 7.0
-			"telegraph", "needle_telegraph":
+			"telegraph", "needle_telegraph", "hook_telegraph":
 				row = ROW_PREPARE
 				fps = 6.5
-			"active", "needle_recovery":
+			"active", "needle_recovery", "hook_recovery":
 				row = ROW_STITCH
 				fps = 9.0
 			"dying":
@@ -69,7 +69,8 @@ static func draw_world(game: Node2D, camera: Vector2) -> void:
 static func _draw_needle_projectiles(game: Node2D, camera: Vector2) -> void:
 	for bullet_value in game.enemy_bullets:
 		var bullet: Dictionary = bullet_value
-		if String(bullet.get("type", "")) != "suturer_needle":
+		var bullet_type := String(bullet.get("type", ""))
+		if bullet_type not in ["suturer_needle", "suturer_hook"]:
 			continue
 		var world_pos := Vector2(bullet.get("pos", Vector2.ZERO))
 		if not game._world_point_in_view(world_pos, camera, 90.0):
@@ -78,6 +79,20 @@ static func _draw_needle_projectiles(game: Node2D, camera: Vector2) -> void:
 		var direction := Vector2(bullet.get("dir", Vector2.LEFT)).normalized()
 		var side := direction.orthogonal()
 		var phase := float(bullet.get("phase", 0.0))
+		if bullet_type == "suturer_hook":
+			var tail := pos - direction * 62.0
+			game.draw_line(tail, pos - direction * 8.0, Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, 0.42), 7.0, true)
+			game.draw_line(tail, pos - direction * 8.0, Color(COLOR_AMBER_CORE.r, COLOR_AMBER_CORE.g, COLOR_AMBER_CORE.b, 0.88), 2.2, true)
+			var barb := PackedVector2Array([
+				pos + direction * 20.0,
+				pos - direction * 8.0 + side * 12.0,
+				pos - direction * 3.0,
+				pos - direction * 8.0 - side * 12.0,
+			])
+			game.draw_colored_polygon(barb, Color(COLOR_BONE_BASE.r, COLOR_BONE_BASE.g, COLOR_BONE_BASE.b, 0.98))
+			game.draw_polyline(PackedVector2Array([barb[0], barb[1], barb[2], barb[3], barb[0]]), COLOR_AMBER_DEEP, 2.0, true)
+			game.draw_circle(pos - direction * 5.0, 4.0 + sin(phase) * 1.0, COLOR_AMBER_BRIGHT)
+			continue
 		var body := PackedVector2Array([
 			pos + direction * 18.0,
 			pos - direction * 13.0 + side * 4.0,
@@ -122,6 +137,22 @@ static func _draw_suturer_presence(game: Node2D, camera: Vector2) -> void:
 			rune_points.append(pos + Vector2(0.0, 14.0) + Vector2.from_angle(a) * r)
 		rune_points.append(rune_points[0])
 		game.draw_polyline(rune_points, Color(COLOR_AMBER_BRIGHT.r, COLOR_AMBER_BRIGHT.g, COLOR_AMBER_BRIGHT.b, 0.28 + breath * 0.20), 1.6, true)
+
+	# Compact, world-space slow meter. Four notches mirror the four crystals
+	# without creating combat popups or adding HUD clutter.
+	var slow_stacks := clampi(int(suturer.get("suturer_crystal_slow_stacks", game.amber_suturer_state.get("crystal_slow_stacks", 0))), 0, 4)
+	var slow_timer := float(suturer.get("suturer_crystal_slow_timer", game.amber_suturer_state.get("crystal_slow_timer", 0.0)))
+	if slow_stacks > 0 and slow_timer > 0.0:
+		var meter_pos := pos + Vector2(-27.0, -72.0)
+		var timer_ratio := clampf(slow_timer / maxf(0.01, game.amber_suturer_controller.CRYSTAL_SLOW_DURATION), 0.0, 1.0)
+		game.draw_rect(Rect2(meter_pos - Vector2(3.0, 3.0), Vector2(60.0, 11.0)), Color(0.06, 0.035, 0.015, 0.78), true)
+		for index in range(4):
+			var notch := Rect2(meter_pos + Vector2(float(index) * 14.0, 0.0), Vector2(11.0, 5.0))
+			var filled := index < slow_stacks
+			var color := Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, 0.48 + timer_ratio * 0.48) if filled else Color(COLOR_BONE_DARK.r, COLOR_BONE_DARK.g, COLOR_BONE_DARK.b, 0.58)
+			game.draw_rect(notch, color, true)
+			if filled:
+				game.draw_line(notch.position, notch.position + Vector2(notch.size.x * timer_ratio, 0.0), COLOR_AMBER_CORE, 1.0)
 
 	# 2. Weaving Filaments connecting Suturador to active/telegraphed sutures
 	if state in ["telegraph", "active"] and not game.amber_sutures.is_empty():
@@ -504,12 +535,33 @@ static func _draw_visual_events(game: Node2D, camera: Vector2) -> void:
 				_draw_event_needle_telegraph(game, event, pos, progress, fade, reduced_fx)
 			"needle_fire":
 				_draw_event_needle_fire(game, event, pos, progress, fade, reduced_fx)
+			"hook_telegraph":
+				_draw_event_hook_telegraph(game, event, pos, progress)
+			"hook_fire", "hook_hit":
+				_draw_event_hook(game, event, pos, progress, fade, reduced_fx)
+			"card_steal":
+				_draw_event_card_steal(game, event, pos, progress, fade)
+			"evasion":
+				_draw_event_evasion(game, pos, progress, fade)
+			"crystal_slow":
+				_draw_event_crystal_slow(game, event, pos, progress, fade, reduced_fx)
 			"break":
 				_draw_event_break(game, pos, progress, fade, reduced_fx)
 			"dissipate", "cleanup":
 				_draw_event_dissipate(game, pos, progress, fade, reduced_fx)
 			"death":
 				_draw_death_frame(game, pos, progress, fade, reduced_fx)
+
+
+static func _draw_event_crystal_slow(game: Node2D, event: Dictionary, pos: Vector2, progress: float, fade: float, reduced_fx: bool) -> void:
+	var stacks := clampi(int(event.get("stacks", 1)), 1, 4)
+	var radius := 12.0 + progress * 34.0
+	game.draw_arc(pos, radius, 0.0, TAU, 18, Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, fade * 0.82), 2.2, true)
+	var shard_count := stacks + 2 if reduced_fx else stacks * 2 + 4
+	for index in range(shard_count):
+		var direction := Vector2.from_angle(float(index) * TAU / float(shard_count) + progress * 0.8)
+		var shard_pos := pos + direction * (9.0 + progress * 24.0)
+		game.draw_line(shard_pos, shard_pos - direction * (5.0 + float(stacks)), Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, fade), 2.0, true)
 
 
 static func _draw_event_entry(game: Node2D, pos: Vector2, progress: float, fade: float, reduced_fx: bool) -> void:
@@ -586,6 +638,56 @@ static func _draw_event_needle_fire(game: Node2D, event: Dictionary, pos: Vector
 		var shard_pos := pos + shard_dir * (34.0 + progress * 76.0)
 		game.draw_line(shard_pos - shard_dir * 11.0, shard_pos + shard_dir * 5.0, Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, 0.86 * fade), 2.8, true)
 	game.draw_arc(pos, 30.0 + progress * 54.0, 0.0, TAU, 28, Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, 0.62 * fade), 2.5, true)
+
+
+static func _draw_event_hook_telegraph(game: Node2D, event: Dictionary, pos: Vector2, progress: float) -> void:
+	var target := Vector2(event.get("target_pos", Vector2(event.get("pos", Vector2.ZERO)))) - Vector2(event.get("pos", Vector2.ZERO)) + pos
+	var direction := (target - pos).normalized()
+	var distance := minf(pos.distance_to(target), game.amber_suturer_controller.HOOK_RANGE)
+	var finish := pos + direction * distance
+	var pulse := 0.55 + 0.45 * sin(progress * TAU * 5.0)
+	game.draw_line(pos + direction * 42.0, finish, Color(COLOR_AMBER_DEEP.r, COLOR_AMBER_DEEP.g, COLOR_AMBER_DEEP.b, 0.58), 9.0, true)
+	game.draw_dashed_line(pos + direction * 42.0, finish, Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, 0.48 + pulse * 0.3), 3.0, 14.0, true)
+	game.draw_arc(finish, 24.0 + pulse * 7.0, -PI * 0.25, PI * 1.25, 18, Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, 0.82), 3.0, true)
+
+
+static func _draw_event_hook(game: Node2D, event: Dictionary, pos: Vector2, progress: float, fade: float, reduced_fx: bool) -> void:
+	var target_world := Vector2(event.get("target_pos", event.get("pos", Vector2.ZERO)))
+	var origin_world := Vector2(event.get("pos", Vector2.ZERO))
+	var target := target_world - origin_world + pos
+	var direction := (target - pos).normalized()
+	var reach := pos.lerp(target, minf(1.0, progress * 2.4))
+	game.draw_line(pos + direction * 38.0, reach, Color(COLOR_AMBER_DEEP.r, COLOR_AMBER_DEEP.g, COLOR_AMBER_DEEP.b, 0.62 * fade), 8.0, true)
+	game.draw_line(pos + direction * 38.0, reach, Color(COLOR_AMBER_CORE.r, COLOR_AMBER_CORE.g, COLOR_AMBER_CORE.b, 0.88 * fade), 2.2, true)
+	var shard_count := 4 if reduced_fx else 8
+	for index in range(shard_count):
+		var t := float(index + 1) / float(shard_count + 1)
+		var bead := (pos + direction * 38.0).lerp(reach, t)
+		game.draw_circle(bead, 2.2, Color(COLOR_BIO_ACID.r, COLOR_BIO_ACID.g, COLOR_BIO_ACID.b, 0.72 * fade))
+	game.draw_arc(reach, 12.0 + progress * 24.0, 0.0, TAU, 20, Color(COLOR_AMBER_GOLD.r, COLOR_AMBER_GOLD.g, COLOR_AMBER_GOLD.b, 0.76 * fade), 2.6, true)
+
+
+static func _draw_event_card_steal(game: Node2D, event: Dictionary, pos: Vector2, progress: float, fade: float) -> void:
+	var color: Color = event.get("card_color", COLOR_AMBER_WARM)
+	var card_name := String(event.get("card_name", "CARTA")).to_upper()
+	var viewport := game.get_viewport_rect().size
+	var panel_size := Vector2(224.0, 50.0)
+	var desired := pos + Vector2(0.0, -37.0 - progress * 10.0) - Vector2(panel_size.x * 0.5, panel_size.y * 0.5)
+	var panel_pos := Vector2(
+		clampf(desired.x, 14.0, maxf(14.0, viewport.x - panel_size.x - 14.0)),
+		clampf(desired.y, 155.0, maxf(155.0, viewport.y - panel_size.y - 72.0))
+	)
+	var panel := Rect2(panel_pos, panel_size)
+	game.draw_rect(panel, Color(COLOR_FISSURE_VOID.r, COLOR_FISSURE_VOID.g, COLOR_FISSURE_VOID.b, 0.88 * fade), true)
+	game.draw_rect(panel, Color(color.r, color.g, color.b, 0.92 * fade), false, 2.5)
+	game.draw_string(game.font, panel.position + Vector2(10.0, 18.0), "CARTA ROUBADA", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x - 20.0, game._readable_text_size(11), Color(1.0, 0.56, 0.28, fade))
+	game.draw_string(game.font, panel.position + Vector2(10.0, 39.0), card_name, HORIZONTAL_ALIGNMENT_CENTER, panel.size.x - 20.0, game._readable_text_size(14), Color(1.0, 0.96, 0.82, fade))
+
+
+static func _draw_event_evasion(game: Node2D, pos: Vector2, progress: float, fade: float) -> void:
+	for index in range(3):
+		var offset := Vector2(-34.0 - float(index) * 20.0, 0.0) * progress
+		game.draw_arc(pos + offset, 28.0 + float(index) * 8.0, -PI * 0.55, PI * 0.55, 16, Color(COLOR_AMBER_BRIGHT.r, COLOR_AMBER_BRIGHT.g, COLOR_AMBER_BRIGHT.b, (0.5 - float(index) * 0.1) * fade), 2.0, true)
 
 
 static func _draw_event_activate(game: Node2D, pos: Vector2, progress: float, fade: float, reduced_fx: bool) -> void:

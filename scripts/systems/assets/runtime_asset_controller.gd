@@ -117,6 +117,9 @@ const PHASE_TEXTURE_SPECS := {
 		"boss6_form_1": ["Boss6-1-1.png", "Boss6-1-2.png", "Boss6-1-3.png", "Boss6-1-4.png"],
 		"boss6_form_2": ["Boss6-2-1.png", "Boss6-2-2.png", "Boss6-2-3.png", "Boss6-2-4.png"],
 		"boss6_form_3": ["Boss6-3-1.png", "Boss6-3-2.png", "Boss6-3-3.png", "Boss6-3-4.png"],
+		"boss6_rework_stage1_attack": ["boss6_rework/boss6_stage1_attack_00.png", "boss6_rework/boss6_stage1_attack_01.png", "boss6_rework/boss6_stage1_attack_02.png", "boss6_rework/boss6_stage1_attack_03.png"],
+		"boss6_rework_stage2_attack": ["boss6_rework/boss6_stage2_attack_00.png", "boss6_rework/boss6_stage2_attack_01.png", "boss6_rework/boss6_stage2_attack_02.png", "boss6_rework/boss6_stage2_attack_03.png"],
+		"boss6_rework_stage3_attack": ["boss6_rework/boss6_stage3_attack_00.png", "boss6_rework/boss6_stage3_attack_01.png", "boss6_rework/boss6_stage3_attack_02.png", "boss6_rework/boss6_stage3_attack_03.png"],
 	},
 	7: {
 		"enemy_phase_7_cinerido_mov": ["cinerido-mov-1.png", "cinerido-mov-2.png", "cinerido-mov-3.png", "cinerido-mov-4.png"],

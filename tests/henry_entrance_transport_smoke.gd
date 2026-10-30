@@ -39,8 +39,8 @@ func remote_spin_visual_seen() -> bool:
 			continue
 		if String(visual.get("manifestation_key", visual.get("kind", ""))) != "incendiario":
 			continue
-		_check(absf(Vector2(visual.get("origin", Vector2.ZERO)).distance_to(Vector2(visual.get("target", Vector2.ZERO))) - game.HENRY_SPIN_DASH_DISTANCE) < 0.1, "remote spin did not transport the 20px dash")
-		_check(is_equal_approx(float(visual.get("extra", 0.0)), game.HENRY_SPIN_DURATION), "remote spin lost its three-second protected interval")
+		_check(absf(Vector2(visual.get("origin", Vector2.ZERO)).distance_to(Vector2(visual.get("target", Vector2.ZERO))) - 400.0) < 0.1, "remote spin did not transport the requested destination")
+		_check(is_equal_approx(float(visual.get("extra", 0.0)), game.HENRY_SPIN_DURATION), "remote spin lost its 2.45-second protected interval")
 		return true
 	return false
 
@@ -93,7 +93,7 @@ func _run_host() -> void:
 			if saw_spin:
 				mark("host_spin_seen")
 		if saw_frozen and saw_spin and all_clients("done"):
-			print("HENRY_ENTRANCE_TRANSPORT_OK role=host frozen_enemies=%d spin_20px_3s=true" % frozen_positions.size())
+			print("HENRY_ENTRANCE_TRANSPORT_OK role=host frozen_enemies=%d spin_destination_2.45s=true" % frozen_positions.size())
 			mark("host_done")
 			while not exists("server_done") and Time.get_ticks_msec() < deadline:
 				await process_frame
@@ -137,7 +137,7 @@ func _run_client() -> void:
 			game.last_dash_time = -99.0
 			var spin_origin: Vector2 = game.player_pos
 			game._execute_teleport(spin_origin + Vector2.RIGHT * 400.0)
-			_check(game.henry_spin_active and game.player_pos.is_equal_approx(spin_origin), "client Henry did not start the non-teleport spin")
+			_check(game.henry_spin_active and game.player_pos.is_equal_approx(spin_origin), "client Henry did not start the traveling spin")
 			spin_sent = true
 			mark("client_spin_sent")
 		if saw_frozen and owner.entrance_finished and not owner.entrance_active and exists("host_spin_seen"):

@@ -159,7 +159,11 @@ func _sync_content_scale_mode(game: Node) -> void:
 
 func should_redraw(game: Node, delta: float) -> bool:
 	var active_stage := effective_stage(game)
-	if active_stage == STAGE_FULL or game.mode != "game":
+	# A manually selected lightweight profile already removes expensive effects,
+	# shadows and native-resolution rendering. It must not silently cap a healthy
+	# device to 45 visual updates per second. Redraw throttling is reserved for a
+	# measured adaptive degradation (raw stage > FULL).
+	if stage == STAGE_FULL or active_stage == STAGE_FULL or game.mode != "game":
 		redraw_accumulator = 0.0
 		return true
 	# Rebuilding the monolithic CanvasItem is CPU-bound; the RenderingServer can

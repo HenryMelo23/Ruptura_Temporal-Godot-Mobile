@@ -4301,13 +4301,13 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 	# stage. Ultra keeps the full 32x12 streak source; only authored special
 	# projectiles stay on their bespoke procedural path.
 	var batch_basic_projectiles: bool = bullet_count >= 36
+	var batch_colors_by_kind: Dictionary = {}
 	game.runtime_projectile_batch_renderer.begin_frame(game._runtime_performance_stage())
 	for bullet_index in range(bullet_count):
 		var bullet: Dictionary = game.bullets[bullet_index] if bullet_index < local_bullet_count else game.remote_bullets[bullet_index - local_bullet_count]
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 150.0):
 			continue
 		var kind = String(bullet.get("kind", ""))
-		var palette = game._projectile_palette(kind)
 		var pos = bullet["pos"] - camera
 		var dir: Vector2 = bullet["dir"]
 		var side = dir.orthogonal().normalized()
@@ -4316,9 +4316,15 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 		if batch_basic_projectiles and String(bullet.get("source_category", "")) == "basic_attack" and game.RangedAttackRange.visual_presence(bullet) >= 0.995:
 			# Preserve palette/direction in a retained GPU batch. Special attacks keep
 			# their authored procedural geometry and are never routed through this path.
-			var basic_color: Color = Color(palette.get("core", bullet.get("color", Color.WHITE)))
+			# Resolve one palette per kind, rather than allocating one Dictionary for
+			# every projectile on every rendered frame.
+			if not batch_colors_by_kind.has(kind):
+				var batch_palette: Dictionary = game._projectile_palette(kind)
+				batch_colors_by_kind[kind] = Color(batch_palette.get("core", bullet.get("color", Color.WHITE)))
+			var basic_color: Color = batch_colors_by_kind[kind]
 			game.runtime_projectile_batch_renderer.append(pos, dir, basic_color)
 			continue
+		var palette = game._projectile_palette(kind)
 		if not game.RangedAttackRange.begin_projectile_draw(game, bullet, pos):
 			continue
 		match kind:
@@ -4433,7 +4439,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 	for bullet in game.enemy_bullets:
 		if not game._world_point_in_view(Vector2(bullet.get("pos", Vector2.ZERO)), camera, 180.0):
 			continue
-		if String(bullet.get("type", "")) in ["sineiro_shard", "suturer_needle"]:
+		if String(bullet.get("type", "")) in ["sineiro_shard", "suturer_needle", "suturer_hook"]:
 			continue
 		if bullet.get("type") == "boss4_comet":
 			var comet_pos: Vector2 = Vector2(bullet["pos"]) - camera

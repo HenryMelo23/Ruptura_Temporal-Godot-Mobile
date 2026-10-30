@@ -16,6 +16,7 @@
 !assets/sprites/Fase6.png.import
 !assets/previews/manifestations/*.webp.import
 .agent_logs/
+tests/*_result.txt
 # Generated Android/export artifacts
 android/
 !android/
@@ -95,6 +96,8 @@ Game Base/**/SIGMon/
 # Ferramentas IA e Agents
 .agents/*
 !.agents/REFRACTOR_CAMPAIGN.md
+!.agents/MULTIPLAYER_DEFERRED_VALIDATION.md
+!.agents/PERFORMANCE_ACCUMULATION_AUDIT.md
 !.agents/architecture_budget_baseline.json
 !.agents/runtime_symbol_index.md
 !.agents/skills/

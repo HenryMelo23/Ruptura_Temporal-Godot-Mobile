@@ -91,10 +91,18 @@ static func draw(game: Node2D, camera: Vector2) -> void:
 	_hit_reaction = _texture(HIT_REACTION_PATH, _hit_reaction)
 	if _motion_results == null or _idle_damage == null or _hit_reaction == null:
 		return
-	var capsule: Dictionary = game.bargain_capsule
+	var capsules: Array = Array(game.bargain_capsule.get("capsules", [])) if game.bargain_capsule.has("capsules") else [game.bargain_capsule]
+	for capsule_value in capsules:
+		if capsule_value is Dictionary:
+			_draw_capsule(game, camera, Dictionary(capsule_value))
+
+
+static func _draw_capsule(game: Node2D, camera: Vector2, capsule: Dictionary) -> void:
 	if capsule.is_empty():
 		return
 	var state: String = String(capsule.get("state", ""))
+	if state == "destroyed":
+		state = game.BARGAIN_CAPSULE_STATE_FAIL
 	if state == game.BARGAIN_CAPSULE_STATE_NONE:
 		return
 	var world_pos: Vector2 = Vector2(capsule.get("pos", game.player_pos))

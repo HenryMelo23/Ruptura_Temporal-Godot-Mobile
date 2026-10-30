@@ -2,6 +2,9 @@ extends RefCounted
 const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 const HenryQuimeraPresentation = preload("res://scripts/presentation/henry_quimera_presentation.gd")
 
+const CROWD_BATCH_THRESHOLD := 32
+const PERFORMANCE_CROWD_BATCH_THRESHOLD := 12
+
 const ENEMY_TINTS := {
 	"atirador": Color(0.7, 0.86, 1.0),
 	"devoto_febril": Color(0.76, 1.0, 0.56),
@@ -38,7 +41,8 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 	var prismatica_active: bool = not game._active_prismatica_secondary().is_empty()
 	var prismatica_time := float(Time.get_ticks_msec()) * 0.001 if prismatica_active else 0.0
 	game.runtime_enemy_sprite_batch_renderer.begin_frame(game.current_phase)
-	var crowd_batch_enabled: bool = game.enemies.size() >= 48 and game.runtime_enemy_sprite_batch_renderer.can_batch()
+	var batch_threshold: int = PERFORMANCE_CROWD_BATCH_THRESHOLD if game._is_mobile_runtime() or game.gfx_low_resource or game._memory_saver_active() else CROWD_BATCH_THRESHOLD
+	var crowd_batch_enabled: bool = game.enemies.size() >= batch_threshold and game.runtime_enemy_sprite_batch_renderer.can_batch()
 	var batched_enemy_uids: Dictionary = {}
 	if crowd_batch_enabled:
 		for enemy in game.enemies:
