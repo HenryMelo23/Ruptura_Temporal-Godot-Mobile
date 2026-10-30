@@ -1,14 +1,16 @@
 {
-  "version": "2.0.60",
-  "version_code": 26000,
-  "filename": "ruptura_temporal_mobile_2.0.60.apk",
-  "sha256": "d5d9a22e3f1fecf53b3186f381cb75705160f9a9226a48c11bfe7985f3d8db14",
-  "size": 948693884,
+  "version": "2.0.61",
+  "version_code": 26100,
+  "filename": "ruptura_temporal_mobile_2.0.61.apk",
+  "sha256": "d9166a7170362e4f1ad4248093352e1796d9ae007907d7df3d6feb65d407dfd0",
+  "size": 942283355,
   "notes": [
-    "Correções de conexão, lobby, pronto, espectador e início de partidas multiplayer.",
-    "Novas mutações funcionais e feedbacks visuais do Henry.",
-    "Melhorias de salvamento, interface e estabilidade durante partidas longas."
+    "Multiplayer validado com servidor, host e dois clientes, incluindo lobby, pronto, manifestação, espectador e loja.",
+    "Boss 6 recebe três estágios, pressão de equipe e animações próprias.",
+    "Suturador de Âmbar recebe sincronização autoritativa e roubo/devolução idempotente de cartas.",
+    "Nível da run, cápsulas de barganha, filtros de manifestações e melhorias visuais do Henry.",
+    "Correções de estabilidade, renderização e suporte a partidas longas."
   ],
   "mandatory": false,
-  "published_at": "2026-10-28T22:36:37Z"
+  "published_at": "2026-10-30T13:38:26.6831057Z"
 }

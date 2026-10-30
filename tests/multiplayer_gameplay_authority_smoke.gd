@@ -3,6 +3,7 @@ extends SceneTree
 const RESULT_PREFIX := "res://tests/gameplay_authority_"
 const ERROR_FILE := "res://tests/gameplay_authority_error.txt"
 const CLIENT_TEST_POS := Vector2(760, 500)
+const HOST_TEST_POS := Vector2(180, 160)
 const HIGH_ENEMY_UID := 4026531841
 const DAMAGE_PER_HIT := 7.0
 const DAMAGE_SOURCES := [
@@ -168,6 +169,9 @@ func _run_host_loop() -> void:
 
 		_check(game._is_world_authority(), "online host owner must be world authority")
 		_check(not game.dedicated_server_mode, "host process cannot be dedicated server")
+		# Keep the authority probe deterministic even when the first Internet
+		# snapshots leave host and client temporarily overlapping.
+		game.player_pos = HOST_TEST_POS
 		if not host_game_initialized:
 			host_game_initialized = true
 			game.spawn_timer = 9999.0

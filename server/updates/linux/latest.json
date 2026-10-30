@@ -1,14 +1,16 @@
 {
-  "version": "2.0.60",
-  "version_code": 26000,
-  "filename": "Ruptura_Temporal_2.0.60.x86_64",
-  "sha256": "d134e4451183841a763f8b2d5883b35571cce44536fd66d24bdb6e9854ca37ae",
-  "size": 1002265624,
+  "version": "2.0.61",
+  "version_code": 26100,
+  "filename": "Ruptura_Temporal_2.0.61.x86_64",
+  "sha256": "b2ab672d008e1879cba5d8e183848a90093992f289559314a82ae29e20a8a9a2",
+  "size": 995840208,
   "notes": [
-    "Correções de conexão, lobby, pronto, espectador e início de partidas multiplayer.",
-    "Novas mutações funcionais e feedbacks visuais do Henry.",
-    "Melhorias de salvamento, interface e estabilidade durante partidas longas."
+    "Multiplayer validado com servidor, host e dois clientes, incluindo lobby, pronto, manifestação, espectador e loja.",
+    "Boss 6 recebe três estágios, pressão de equipe e animações próprias.",
+    "Suturador de Âmbar recebe sincronização autoritativa e roubo/devolução idempotente de cartas.",
+    "Nível da run, cápsulas de barganha, filtros de manifestações e melhorias visuais do Henry.",
+    "Correções de estabilidade, renderização e suporte a partidas longas."
   ],
   "mandatory": false,
-  "published_at": "2026-10-28T22:36:37Z"
+  "published_at": "2026-10-30T13:38:26.7535513Z"
 }
