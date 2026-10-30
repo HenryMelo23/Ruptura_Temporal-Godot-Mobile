@@ -217,11 +217,11 @@ func _run_host_loop() -> void:
 			enemy["speed"] = 0.0
 			enemy["hit_cd"] = 0.0
 			game._update_enemies(0.20)
+			_check(int(game.player_hp) == host_hp_before_remote_damage, "enemy damage aimed at client also changed host hp")
 			print("[HOST] routed enemy damage to remote peer; host_hp=%d remote_hp_before=%d" % [host_hp_before_remote_damage, remote_hp_before_damage])
 			continue
 
 		if remote_damage_sent:
-			_check(int(game.player_hp) == host_hp_before_remote_damage, "enemy damage aimed at client also changed host hp")
 			if int(game.net_player_hp) < remote_hp_before_damage:
 				if not _host_deferred_feature_flow(total_time):
 					continue
@@ -253,6 +253,7 @@ func _run_client_loop() -> void:
 		_check(game._is_world_replica(), "online client must be a world replica")
 		if not client_game_initialized:
 			client_game_initialized = true
+			hp_before = int(game.player_hp)
 			game.cards_bought[SUTURER_TEST_CARD] = 1
 			print("[CLIENT] game reached; waiting authoritative enemy")
 
@@ -264,7 +265,6 @@ func _run_client_loop() -> void:
 				continue
 			var local_hp_before := float(enemy.get("hp", 0.0))
 			client_hit_sent = true
-			hp_before = int(game.player_hp)
 			for source in DAMAGE_SOURCES:
 				game._damage_enemy(enemy, DAMAGE_PER_HIT, source, false)
 			game.player_crit_chance = 0.0
@@ -297,6 +297,10 @@ func _run_client_loop() -> void:
 			_check(game.player_damage >= game._manifestation_base_damage() + game._kill_damage_growth(100), "client did not receive shared damage progression")
 			if client_damage_seen_at < 0.0:
 				client_damage_seen_at = total_time
+				# The routed contact hit has already been observed. Keep later
+				# Boss6 snapshot probes from killing the client while this smoke
+				# waits for replication-only evidence.
+				game.qa_streaming_permission_pending = true
 				continue
 			if total_time - client_damage_seen_at < 0.60:
 				continue

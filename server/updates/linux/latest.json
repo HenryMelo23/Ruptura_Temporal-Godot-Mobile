@@ -1,16 +1,14 @@
 {
-  "version": "2.0.61",
-  "version_code": 26100,
-  "filename": "Ruptura_Temporal_2.0.61.x86_64",
-  "sha256": "b2ab672d008e1879cba5d8e183848a90093992f289559314a82ae29e20a8a9a2",
-  "size": 995840208,
+  "version": "2.0.62",
+  "version_code": 26200,
+  "filename": "Ruptura_Temporal_2.0.62.x86_64",
+  "sha256": "2e364515d6d53454fe1db92c73e7ffd11e4a65ea8d0656637d3f58150b624635",
+  "size": 1004180176,
   "notes": [
-    "Multiplayer validado com servidor, host e dois clientes, incluindo lobby, pronto, manifestação, espectador e loja.",
-    "Boss 6 recebe três estágios, pressão de equipe e animações próprias.",
-    "Suturador de Âmbar recebe sincronização autoritativa e roubo/devolução idempotente de cartas.",
-    "Nível da run, cápsulas de barganha, filtros de manifestações e melhorias visuais do Henry.",
-    "Correções de estabilidade, renderização e suporte a partidas longas."
+    "Progressao de nivel mais longa: 500 pontos para o nivel 2 e 2.500 pontos acumulados para o nivel 4.",
+    "Beneficios por nivel preservados: +1% de dano, +5 de alcance e +0,4% de mitigacao.",
+    "Atualizacao compativel com saves e multiplayer existentes."
   ],
   "mandatory": false,
-  "published_at": "2026-10-30T13:38:26.7535513Z"
+  "published_at": "2026-10-30T17:16:43.3394003Z"
 }
