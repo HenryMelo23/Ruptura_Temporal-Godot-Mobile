@@ -4,11 +4,14 @@ class_name RTRangedAttackRange
 # Shared contract for every ranged primary attack. Melee identities keep their
 # authored reach; projectile/ranged identities start at the same readable ring.
 const CARD_ID := "horizonte_ruptura"
-const BASE_RANGE := 300.0
-const RANGE_PER_STACK := 30.0
+const BASE_RANGE := 420.0
+const RANGE_PER_STACK := 45.0
 const DAMAGE_PER_STACK := 0.025
 const PRISMATIC_RICOCHET_CRIT_PER_STACK := 0.03
 const FADE_START_RATIO := 0.72
+const INDICATOR_IDLE_ALPHA := 0.11
+const INDICATOR_AIM_ALPHA := 0.22
+const INDICATOR_LINE_WIDTH := 1.5
 const INDICATOR_COLOR_NAMES := ["RUBRA", "CIANO", "VERDE D37", "AMBAR", "VIOLETA", "BRANCO"]
 const INDICATOR_COLORS := [
 	Color(1.0, 0.055, 0.085),
@@ -153,8 +156,8 @@ static func draw_range_indicator(game: CanvasItem, camera: Vector2) -> void:
 	var center := Vector2(game.player_pos) - camera
 	var radius := attack_range(game)
 	var aiming := bool(game.attack_holding) or not String(game.locked_target_kind).is_empty()
-	var alpha := (0.14 if aiming else 0.055) * opacity
+	var alpha := (INDICATOR_AIM_ALPHA if aiming else INDICATOR_IDLE_ALPHA) * opacity
 	var segments := 72 if game._runtime_visual_budget_active() else 112
 	var color := indicator_color(game)
-	game.draw_arc(center, radius, 0.0, TAU, segments, Color(color.r * 0.52, color.g * 0.52, color.b * 0.52, alpha * 0.32), 3.0, true)
-	game.draw_arc(center, radius, 0.0, TAU, segments, Color(color.r, color.g, color.b, alpha), 1.25, true)
+	game.draw_arc(center, radius, 0.0, TAU, segments, Color(color.r * 0.52, color.g * 0.52, color.b * 0.52, alpha * 0.32), 3.2, true)
+	game.draw_arc(center, radius, 0.0, TAU, segments, Color(color.r, color.g, color.b, alpha), INDICATOR_LINE_WIDTH, true)

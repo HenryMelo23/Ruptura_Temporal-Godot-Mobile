@@ -10,8 +10,11 @@ const HenryFire = preload("res://scripts/presentation/henry_fire_presentation.gd
 const HenryBarometric = preload("res://scripts/presentation/henry_barometric_presentation.gd")
 const HenryColossus = preload("res://scripts/presentation/henry_colossus_presentation.gd")
 const ReactiveSurvivalCards = preload("res://scripts/presentation/reactive_survival_card_presentation.gd")
+const CardPowerFeedback = preload("res://scripts/presentation/card_power_feedback_presentation.gd")
 const Devorador = preload("res://scripts/presentation/devorador_destinos_presentation.gd")
 const LaceranteVfx = preload("res://scripts/presentation/lacerante_vfx_presentation.gd")
+const MerchantRiftPresentation = preload("res://scripts/presentation/merchant_rift_presentation.gd")
+const MistGuidePresentation = preload("res://scripts/presentation/mist_guide_presentation.gd")
 const ADVANCED_WORLD_CHANNELS := ["cartografica", "contratual", "ressonante", "mnesica", "necronada"]
 
 # Draws through the main CanvasItem; state stays on the host during migration.
@@ -211,7 +214,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	Lightning.begin_frame(game, camera)
 	var map_texture = game._current_map_texture()
 	if map_texture:
-		if game.current_phase == 5 and game.phase5_transmute_active:
+		if game.current_phase == 5 and game.phase5_transmute_active and not game.experimental_phase_controller.uses_definitive_world():
 			game._draw_phase5_transmute_map_reveal(map_texture, game._desktop_stage_draw_rect(camera))
 		else:
 			if not is_instance_valid(game.phase_map_layer):
@@ -220,8 +223,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 				game.phase_map_layer.show_behind_parent = true
 				game.add_child(game.phase_map_layer)
 			var surface: int = game.PhaseMapPresentation.surface_for(game)
-			if game.experimental_phase_active:
-				game.phase_map_layer.present_tiled(map_texture, game.experimental_phase_controller.map_tile_rects(camera), surface, game.time_alive, game._runtime_visual_budget_active())
+			if game.experimental_phase_controller.uses_definitive_world():
+				game.phase_map_layer.present_chunks(map_texture, game.experimental_phase_controller.terrain_chunks(camera, viewport), camera, game.experimental_boss_altar_pos, game.experimental_phase_controller.altar_source_center(), surface, game.time_alive, game._runtime_visual_budget_active(), game._get_texture("map_phase_ex5") if game.experimental_phase_controller.terrain_phase() == 5 else null)
 			else:
 				game.phase_map_layer.present(map_texture, game._desktop_stage_draw_rect(camera), surface, game.time_alive, game._runtime_visual_budget_active())
 			game.PhaseMapPresentation.draw_ambient(game, camera, surface)
@@ -229,6 +232,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	else:
 		game.draw_rect(Rect2( - camera, game.WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
 	game._draw_event_alert_world(camera, viewport)
+	MerchantRiftPresentation.draw_world(game, camera, viewport)
 	game._draw_boss6_necro_erosion(camera)
 	game._draw_phase5_transmute_particles(camera)
 	if game.vfx_director:
@@ -396,6 +400,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	HenryFire.draw_entrance(game, camera, viewport)
 	if game.preview_capture_mode:
 		return
+	MistGuidePresentation.draw_overlay(game, camera, viewport)
 	game.hud_feedback.overlay(game, viewport)
 	game._draw_hud(viewport)
 	game._draw_apolo_phase5_exhibition_overlay(viewport)
@@ -443,6 +448,8 @@ static func _draw_common_card_world(game: Node2D, camera: Vector2) -> void :
 		var ratio: float = clamp(life / max_life, 0.0, 1.0)
 		var radius: float = float(effect.get("radius", 46.0)) * (1.0 - ratio * 0.18)
 		var color: Color = Color(effect.get("color", Color(0.86, 0.94, 1.0)))
+		if CardPowerFeedback.draw_effect(game, camera, effect, pos, ratio, radius, color, t):
+			continue
 		match String(effect.get("kind", "")):
 			"choque":
 				color = Color(0.92, 0.86, 1.0, 0.7 * ratio)
@@ -2112,6 +2119,8 @@ static func _draw_contractual_notifications(game: Node2D, camera: Vector2) -> vo
 
 
 static func _draw_manifest_evolution_fields(game: Node2D, camera: Vector2) -> void :
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		return
 	if game.manifest_evolution_state.is_empty():
 		return
 	if game.manifestation_key == "prismatica":
@@ -2701,12 +2710,17 @@ static func _draw_canonical_network_ability(game: Node2D, visual: Dictionary, ca
 static func _draw_henry_ability_vfx(game: Node2D, camera: Vector2) -> void:
 	HenryBarometric.draw_local(game, camera, game.henry_barometric_ability_controller)
 	HenryColossus.draw_local(game, camera, game.henry_colossus_ability_controller)
+	HenryFire.draw_ember_trail(game, camera, game.henry_incendiary_ability_controller.ember_trail)
+	HenryFire.draw_combustion(game, camera, game.henry_incendiary_ability_controller.combustion_bursts)
+	if not game.henry_incendiary_ability_controller.fireballs.is_empty():
+		for bullet_value in game.bullets:
+			if int(Dictionary(bullet_value).get("henry_fireball_id", 0)) > 0:
+				HenryFire.fireball(game, Vector2(bullet_value["pos"]) - camera, Vector2(bullet_value.get("dir", Vector2.RIGHT)))
 	if game.mutation_key == "incendiario" and game.henry_spin_active:
-		var spin_progress := clampf(game.henry_spin_elapsed / maxf(0.01, game.HENRY_SPIN_DURATION), 0.0, 1.0)
-		HenryFire.spin(game, game.player_pos - camera, game.henry_incendiary_ability_controller.spin_turns(), spin_progress, 1.0)
+		var dash_progress := clampf(game.henry_spin_elapsed / maxf(0.01, game.HENRY_SPIN_DURATION), 0.0, 1.0)
+		HenryFire.dash(game, game.player_pos - camera, game.henry_spin_dash_direction, dash_progress, 1.0)
 	if game.mutation_key == "incendiario" and game.henry_ultimate_cast_active:
-		var charge_progress := clampf(game.henry_ultimate_cast_elapsed / maxf(0.01, game.HENRY_ULTIMATE_CAST_DURATION), 0.0, 1.0)
-		_draw_henry_ultimate_charge(game, game.henry_ultimate_center - camera, charge_progress, 1.0)
+		HenryFire.ignition(game, game.henry_ultimate_center - camera, game.henry_ultimate_cast_elapsed, game.henry_ultimate_pulses_released)
 	for cone_value in game.henry_flame_cones:
 		if not cone_value is Dictionary:
 			continue
@@ -2718,6 +2732,9 @@ static func _draw_henry_ability_vfx(game: Node2D, camera: Vector2) -> void:
 		if not wave_value is Dictionary:
 			continue
 		var wave: Dictionary = wave_value
+		if String(wave.get("kind", "")) == "ultimate":
+			HenryFire.eruption(game, Vector2(wave.get("center", game.player_pos)) - camera, float(wave.get("radius", 0.0)), float(wave.get("max_radius", game.HENRY_ULTIMATE_RADIUS)), int(wave.get("pulse", 0)))
+			continue
 		_draw_henry_heat_wave(game, Vector2(wave.get("center", game.player_pos)) - camera, float(wave.get("radius", 0.0)), float(wave.get("max_radius", game.HENRY_ULTIMATE_RADIUS)), 1.0)
 	for zone_value in game.henry_incandescence_zones:
 		if not zone_value is Dictionary:
@@ -2789,14 +2806,7 @@ static func _draw_henry_network_ability(game: Node2D, visual: Dictionary, camera
 
 
 static func _draw_henry_burn_stacks(game: Node2D, center: Vector2, stacks: int, flash: float) -> void:
-	var count := clampi(stacks, 0, game.HENRY_BURN_STACK_MAX)
-	var spacing := 8.0
-	var start_x := -float(count - 1) * spacing * 0.5
-	for index in range(count):
-		var p := center + Vector2(start_x + float(index) * spacing, sin(game.time_alive * 7.0 + float(index)) * 1.5)
-		var pulse := 1.0 + clampf(flash * 2.0, 0.0, 0.35)
-		game.draw_circle(p, 3.1 * pulse, Color(0.95, 0.12, 0.015, 0.92))
-		game.draw_circle(p + Vector2(0.0, -1.0), 1.55 * pulse, Color(1.0, 0.82, 0.18, 0.96))
+	HenryFire.burn_pips(game, center, clampi(stacks, 0, game.HENRY_BURN_STACK_MAX), flash)
 
 
 static func _draw_henry_cone(game: Node2D, origin: Vector2, direction: Vector2, progress: float, alpha: float) -> void:

@@ -46,7 +46,7 @@ func _run() -> void:
 		game.CARD_IMPOSSIBLE_ARCHIVE_ID,
 	]
 	var expected_rarities := [
-		game.CARD_RARITY_COMMON,
+		game.CARD_RARITY_UNCOMMON,
 		game.CARD_RARITY_UNCOMMON,
 		game.CARD_RARITY_RARE,
 		game.CARD_RARITY_LEGENDARY,

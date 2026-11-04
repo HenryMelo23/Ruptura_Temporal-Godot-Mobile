@@ -140,6 +140,7 @@ static func draw_local(game: Node2D, camera: Vector2, owner: RefCounted) -> void
 	_draw_remote_swings(game, camera)
 	if owner == null:
 		return
+	_draw_decals(game, camera, owner.impact_decals)
 	var center: Vector2 = Vector2(game.player_pos) - camera + Vector2(0.0, -owner.leap_visual_height())
 	if owner.mutation_active() and not game.is_dead and game.player_freeze_visual_timer <= 0.0 and not game.henry_skill_cast_active and not game.henry_ultimate_cast_active and game._player_attack_pose_active():
 		_draw_swing(game, center, game.player_attack_visual_dir, game.henry_attack_visual_stage, (game.time_alive - game.last_attack_time) / (game.PLAYER_FIRE_FRAME_SECONDS * 2.0), owner.giant_active, 1.0)
@@ -358,3 +359,65 @@ static func _draw_stack_ticks(game: Node2D, center: Vector2, stacks: int, trigge
 
 
 const LASTRO_TICKS := 5
+
+
+
+static func _decal_tex(game: Node2D, name: String) -> Texture2D:
+	if game.textures.has(name):
+		return game.textures[name] as Texture2D
+	var path := "res://assets/sprites/player/player_2_suit/" + name + ".png"
+	var tex: Texture2D = load(path) as Texture2D if ResourceLoader.exists(path) else null
+	game.textures[name] = tex
+	return tex
+
+
+## Decalques de peso: rachadura no chao, poeira, onda de choque, estrela de impacto e sulco da investida.
+static func _draw_decals(game: Node2D, camera: Vector2, decals: Array) -> void:
+	for decal_value in decals:
+		var decal: Dictionary = decal_value
+		var life := clampf(float(decal.get("life", 0.0)) / maxf(0.01, float(decal.get("max", 1.0))), 0.0, 1.0)
+		var u := 1.0 - life
+		var pos: Vector2 = Vector2(decal.get("pos", Vector2.ZERO)) - camera
+		var radius: float = float(decal.get("radius", 60.0))
+		var kind := String(decal.get("kind", "dust"))
+		match kind:
+			"crack":
+				var crack_tex := _decal_tex(game, "henry_colossus_crack_decal")
+				var fade := smoothstep(0.0, 0.3, life)
+				if crack_tex != null:
+					game.draw_texture_rect(crack_tex, Rect2(pos - Vector2(radius, radius * 0.62), Vector2(radius * 2.0, radius * 1.24)), false, Color(1.0, 1.0, 1.0, fade))
+				else:
+					_fractures(game, pos, radius * minf(1.0, u * 6.0 + 0.4), fade)
+			"dust":
+				var dust_tex := _decal_tex(game, "henry_colossus_dust_burst")
+				if dust_tex != null:
+					var r := radius * (0.5 + 0.7 * u)
+					game.draw_texture_rect(dust_tex, Rect2(pos - Vector2(r, r * 0.62), Vector2(r * 2.0, r * 1.24)), false, Color(1.0, 1.0, 1.0, life))
+				else:
+					_dust_wave(game, pos, radius, u, life)
+			"shock":
+				var r2 := radius * (0.3 + 0.9 * (1.0 - pow(1.0 - u, 2.0)))
+				var points := PackedVector2Array()
+				for index in range(33):
+					points.append(pos + Vector2.from_angle(float(index) * TAU / 32.0) * r2 * Vector2(1.0, 0.62))
+				game.draw_polyline(points, Color(CHALK.r, CHALK.g, CHALK.b, 0.85 * life), 3.0 + 5.0 * life, true)
+				game.draw_polyline(points, Color(INK.r, INK.g, INK.b, 0.4 * life), 1.5, true)
+			"star":
+				var star_tex := _decal_tex(game, "henry_colossus_impact_star")
+				var s := radius * (0.8 + 0.6 * u)
+				if star_tex != null:
+					game.draw_texture_rect(star_tex, Rect2(pos - Vector2(s, s), Vector2(s, s) * 2.0), false, Color(1.0, 1.0, 1.0, life))
+				else:
+					var spikes := PackedVector2Array()
+					for index in range(16):
+						var a := float(index) * TAU / 16.0 + float(decal.get("seed", 0)) * 0.1
+						spikes.append(pos + Vector2.from_angle(a) * s * (1.0 if index % 2 == 0 else 0.45))
+					game.draw_colored_polygon(spikes, Color(CHALK.r, CHALK.g, CHALK.b, 0.9 * life))
+					game.draw_polyline(spikes + PackedVector2Array([spikes[0]]), Color(INK.r, INK.g, INK.b, 0.8 * life), 2.0, true)
+			"furrow":
+				var dir: Vector2 = Vector2(decal.get("dir", Vector2.RIGHT)).normalized()
+				var side := dir.orthogonal()
+				var fade2 := smoothstep(0.0, 0.4, life)
+				game.draw_line(pos - dir * radius * 0.5 + side * 14.0, pos + dir * radius * 0.5 + side * 14.0, Color(DUST.r, DUST.g, DUST.b, 0.6 * fade2), 5.0, true)
+				game.draw_line(pos - dir * radius * 0.5 - side * 14.0, pos + dir * radius * 0.5 - side * 14.0, Color(DUST.r, DUST.g, DUST.b, 0.6 * fade2), 5.0, true)
+				game.draw_circle(pos + side * 22.0 * sin(u * 6.0), 6.0 * life, Color(IMPACT.r, IMPACT.g, IMPACT.b, 0.5 * life))

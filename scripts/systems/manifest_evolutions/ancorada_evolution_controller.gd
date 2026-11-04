@@ -38,6 +38,8 @@ const MAP_MARGIN := Vector2(42.0, 42.0)
 
 
 static func is_active(game: Node) -> bool:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		return false
 	if String(game.manifestation_key) != "ancorada":
 		return false
 	for choice_value in Array(game.manifest_evolution_state.get("choices", [])):

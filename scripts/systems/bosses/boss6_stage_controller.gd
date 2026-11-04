@@ -93,7 +93,7 @@ func build_acid_bloom_spots() -> Array:
 		for attempt in range(18):
 			var radius: float = core.rng.randf_range(18.0, 92.0) if ring_slot == 0 else core.rng.randf_range(150.0, 310.0)
 			var angle: float = core.rng.randf_range(0.0, TAU)
-			var candidate: Vector2 = (target_pos + Vector2.from_angle(angle) * radius).clamp(Vector2(110, 110), core.WORLD_SIZE - Vector2(110, 110))
+			var candidate: Vector2 = clamp_to_arena(target_pos + Vector2.from_angle(angle) * radius, Vector2(110, 110))
 			var spacing := 9999.0
 			for existing in spots:
 				spacing = minf(spacing, candidate.distance_to(Vector2(Dictionary(existing).get("pos", candidate))))
@@ -120,7 +120,7 @@ func build_carnage_drop_batch() -> Array:
 		var target_pos := Vector2(target.get("pos", core.player_pos))
 		var spread: Vector2 = Vector2.from_angle(core.rng.randf_range(0.0, TAU)) * core.rng.randf_range(0.0, 54.0)
 		drops.append({
-			"pos": (target_pos + spread).clamp(Vector2(80, 80), core.WORLD_SIZE - Vector2(80, 80)),
+			"pos": clamp_to_arena(target_pos + spread, Vector2(80, 80)),
 			"fall": 0.78,
 			"max": 0.78,
 			"spawned": false,
@@ -131,48 +131,28 @@ func build_carnage_drop_batch() -> Array:
 	return drops
 
 
+func arena_center() -> Vector2:
+	return core.experimental_boss_altar_pos if core.experimental_phase_controller.uses_definitive_world() and core.current_phase == 6 else core.WORLD_SIZE * 0.5
+
+
+func clamp_to_arena(position: Vector2, margin: Vector2 = Vector2.ZERO) -> Vector2:
+	return core.experimental_phase_controller.clamp_to_boss_encounter(position, margin)
+
+
 func update(delta: float) -> void:
 	if core == null or not core._is_world_authority() or not core.boss_active or core.boss_dead:
 		return
+	core.boss6_relocating = false
 	var next_stage: int = core._boss6_stage_for_hp()
 	if next_stage > core.boss6_stage:
 		_enter_stage(next_stage)
-	if core.boss6_relocating or core.boss6_state in [core.BOSS6_STATE_TRANSITION, core.BOSS6_STATE_SPECIAL, core.BOSS6_STATE_STUNNED]:
-		return
-	var target: Vector2 = core._boss_target_pos(true, 0.12)
-	var offset: Vector2 = target - core.boss_pos
-	var distance := offset.length()
-	if distance <= 0.01:
-		return
-	var toward := offset / distance
-	var tangent := toward.orthogonal()
-	core.boss6_move_phase += delta * (0.78 + float(core.boss6_stage) * 0.24)
-	var weave := sin(core.boss6_move_phase)
-	var move_dir := Vector2.ZERO
-	var speed: float = core.BOSS6_STAGE_1_MOVE_SPEED
-	match core.boss6_stage:
-		1:
-			move_dir = toward * clampf((distance - 350.0) / 180.0, -0.55, 1.0) + tangent * weave * 0.18
-		2:
-			speed = core.BOSS6_STAGE_2_MOVE_SPEED
-			move_dir = tangent * (0.82 if weave >= 0.0 else -0.82) + toward * clampf((distance - 300.0) / 150.0, -0.72, 0.72)
-		_:
-			speed = core.BOSS6_STAGE_3_MOVE_SPEED
-			move_dir = toward * (0.92 if distance > 185.0 else -0.34) + tangent * weave * 0.34
-	if move_dir.length_squared() <= 0.01:
-		return
-	var state_scale := 1.0
-	if core.boss6_state == core.BOSS6_STATE_TELEGRAPH:
-		state_scale = 0.34
-	elif core.boss6_state == core.BOSS6_STATE_EXECUTING:
-		state_scale = 0.52
-	var margin := Vector2(150.0, 125.0)
-	core.boss_pos = (core.boss_pos + move_dir.normalized() * speed * state_scale * delta).clamp(margin, core.WORLD_SIZE - margin)
+	core.boss6_move_phase += delta
 
 
 func _enter_stage(stage: int) -> void:
 	core.boss6_stage = clampi(stage, 1, 3)
 	core._boss6_cancel_active_attacks()
+	core.boss6_controller.cancel_burrow()
 	core.boss6_state = core.BOSS6_STATE_TRANSITION
 	core.boss6_state_timer = core.BOSS6_STAGE_TRANSITION_TIME
 	core.boss6_wait_timer = 0.0

@@ -14,7 +14,7 @@ const XP_ELITE := 25
 const XP_MINIBOSS := 90
 const XP_BOSS := 180
 const DAMAGE_PER_LEVEL := 0.01
-const RANGE_PER_LEVEL := 5.0
+const RANGE_PER_LEVEL := 10.0
 const MITIGATION_PER_LEVEL := 0.004
 
 var core: Node

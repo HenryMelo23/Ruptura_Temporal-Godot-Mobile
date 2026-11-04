@@ -20,6 +20,13 @@ For refactor sequencing and stop rules, use:
 
 - `.agents/REFRACTOR_CAMPAIGN.md`
 
+## Experimental Map Standard
+
+For `FaseEX`, `FaseEX2`, `FaseEX3`, `FaseEX4`, `FaseEX6`, `FaseEX7`, or a new experimental phase, read
+`docs/PHASE_EX_TERRAIN.md` before implementation. Reuse the shared experimental
+controller and chunk renderer. Preserve each source phase's identity and rules;
+validate with the actual player sprite at desktop and mobile landscape scales.
+
 ## Solo-First Multiplayer Freeze
 
 The user froze multiplayer validation on 2026-10-29 to prioritize solo

@@ -1,6 +1,6 @@
 extends SceneTree
 
-const BASE_RANGE := 300.0
+const BASE_RANGE := 420.0
 
 var game: Node
 
@@ -79,7 +79,7 @@ func _run() -> void:
 	level.grant_xp(100000)
 	_check(game.player_run_level == 10 and game.player_run_xp == 0, "max_level_cap_wrong")
 	_check(is_equal_approx(level.damage_multiplier(), 1.09), "damage_bonus_wrong")
-	_check(is_equal_approx(level.auto_attack_range_bonus(), 45.0), "range_bonus_wrong")
+	_check(is_equal_approx(level.auto_attack_range_bonus(), 90.0), "range_bonus_wrong")
 	_check(is_equal_approx(level.received_damage_multiplier(), 0.964), "mitigation_bonus_wrong")
 	_check(is_equal_approx(game._apply_player_run_level_damage(100.0, "eletrica", "basic_attack"), 109.0), "direct_damage_not_scaled")
 	_check(is_equal_approx(game._apply_player_run_level_damage(100.0, "veneno", "common_card"), 100.0), "proc_damage_scaled_twice")
@@ -88,12 +88,12 @@ func _run() -> void:
 	game.active_character_key = game.CHARACTER_GEOVANA
 	game.manifestation_key = "eletrica"
 	game.cards_bought.clear()
-	_check(is_equal_approx(game._auto_attack_range(), BASE_RANGE + 45.0), "ranged_target_range_missing_level_bonus")
+	_check(is_equal_approx(game._auto_attack_range(), BASE_RANGE + 90.0), "ranged_target_range_missing_level_bonus")
 	var bullet := {"source_category": "basic_attack", "kind": "eletrica", "origin": game.player_pos, "pos": game.player_pos, "speed": 600.0, "life": 2.0, "damage": 20.0}
 	game.RangedAttackRange.configure_bullet(game, bullet)
-	_check(is_equal_approx(float(bullet.get("max_range", 0.0)), BASE_RANGE + 45.0), "projectile_range_missing_level_bonus")
+	_check(is_equal_approx(float(bullet.get("max_range", 0.0)), BASE_RANGE + 90.0), "projectile_range_missing_level_bonus")
 	game.manifestation_key = "prismatica"
-	_check(is_equal_approx(game._auto_attack_range(), BASE_RANGE + 45.0), "prismatica_target_range_missing_level_bonus")
+	_check(is_equal_approx(game._auto_attack_range(), BASE_RANGE + 90.0), "prismatica_target_range_missing_level_bonus")
 	var prism := {"source_category": "basic_attack", "kind": "prismatica", "origin": game.player_pos, "pos": game.player_pos, "speed": 600.0, "life": 2.0, "damage": 20.0}
 	game.RangedAttackRange.configure_bullet(game, prism)
 	_check(not prism.has("max_range"), "prismatica_lifetime_was_replaced")

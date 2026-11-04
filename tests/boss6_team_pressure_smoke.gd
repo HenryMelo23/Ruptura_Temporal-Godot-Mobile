@@ -59,10 +59,10 @@ func _run() -> void:
 
 	game._start_boss6_vertebral_scythes()
 	var scythes: Dictionary = game.boss_attacks.back()
-	var scythe_peers := _target_peers(Array(scythes.get("bones", [])))
+	var scythe_peers := _target_peers(Array(scythes.get("waves", [])))
 	_check(scythe_peers == living_ids, "vertebral scythes did not split across every living player")
 	_check(int(scythes.get("team_target_count", 0)) == 3, "scythe team target metadata is incomplete")
-	_check(Array(scythes.get("bones", [])).size() <= 12, "scythe party budget exceeded the readable cap")
+	_check(Array(scythes.get("waves", [])).size() <= 6, "scythe party budget exceeded the readable cap")
 
 	game.boss_attacks.clear()
 	game._start_boss6_acid_bloom(false)
@@ -87,8 +87,9 @@ func _run() -> void:
 		_check(_target_peers(Array(Dictionary(replicated_attacks.back()).get("drops", []))) == living_ids, "visual snapshot lost per-player drop targets")
 
 	game.net_players_by_peer.clear()
-	var solo_bones: Array = game.boss6_stage_controller.build_vertebral_scythes(0.8, false)
-	_check(solo_bones.size() == 5, "solo scythe budget no longer matches the original opening stage")
+	game.boss6_stage = 1
+	var solo_waves: Array = game.boss6_controller.build_scythe_waves()
+	_check(solo_waves.size() == 2, "solo stage 1 should sweep two scythe waves")
 	var solo_drops: Array = game.boss6_stage_controller.build_carnage_drop_batch()
 	_check(solo_drops.size() == 1, "solo carnage tide should keep one drop per wave")
 

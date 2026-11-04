@@ -165,6 +165,8 @@ static func _capture_necronada(game: Node, snapshot: Dictionary) -> void:
 
 static func _evolution_ids(game: Node) -> Array:
 	var result: Array = []
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		return result
 	for choice_value in game.manifest_evolution_state.get("choices", []):
 		if not choice_value is Dictionary:
 			continue

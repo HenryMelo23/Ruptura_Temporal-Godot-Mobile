@@ -16,6 +16,8 @@ const WOUND_INTERVAL := 0.50
 
 
 static func is_active(game: Node) -> bool:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		return false
 	if String(game.manifestation_key) != "lacerante":
 		return false
 	for choice_value in Array(game.manifest_evolution_state.get("choices", [])):

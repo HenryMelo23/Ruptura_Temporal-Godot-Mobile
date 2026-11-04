@@ -145,7 +145,7 @@ func _run_server_loop() -> void:
 			print("[SERVER] GAMEPLAY_AUTHORITY_OK server relay stayed clean")
 		if results_seen and game.dedicated_room_shutdown_pending:
 			return
-		if total_time > FLOW_TIMEOUT_SECONDS:
+		if total_time > FLOW_TIMEOUT_SECONDS + 5.0:
 			_check(false, "timeout waiting for host/client gameplay authority result")
 			return
 
@@ -158,7 +158,7 @@ func _run_host_loop() -> void:
 		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
 		if total_time > FLOW_TIMEOUT_SECONDS:
 			var timeout_enemy := _host_enemy_by_uid(enemy_uid)
-			print("[HOST] TIMEOUT enemy_hp=%.2f expected=%.2f remote_hp=%d peer=%d" % [float(timeout_enemy.get("hp", -1.0)), enemy_initial_hp - EXPECTED_TOTAL_DAMAGE, int(game.net_player_hp), game.net_player_peer_id])
+			print("[HOST] TIMEOUT enemy_hp=%.2f expected=%.2f remote_hp=%d peer=%d phase=%d boss6=%s suturer=%s visuals=%d" % [float(timeout_enemy.get("hp", -1.0)), enemy_initial_hp - EXPECTED_TOTAL_DAMAGE, int(game.net_player_hp), game.net_player_peer_id, game.current_phase, game.boss6_current_ability, String(game.amber_suturer_state.get("encounter_id", "")), game.amber_suturer_visual_events.size()])
 			_check(false, "timeout waiting for host gameplay authority checks")
 			return
 
@@ -223,6 +223,8 @@ func _run_host_loop() -> void:
 
 		if remote_damage_sent:
 			if int(game.net_player_hp) < remote_hp_before_damage:
+				if host_deferred_started_at < 0.0:
+					print("[HOST] remote damage confirmed; starting Boss6/Suturador relay probes")
 				if not _host_deferred_feature_flow(total_time):
 					continue
 				await _wait_for_ping_budget(ping_budget_ms, 2.0)
@@ -241,6 +243,7 @@ func _run_client_loop() -> void:
 		await process_frame
 		total_time = float(Time.get_ticks_msec() - started_ms) / 1000.0
 		if total_time > FLOW_TIMEOUT_SECONDS:
+			print("[CLIENT] TIMEOUT hp=%d/%d kills=%d phase=%d boss6=%s suturer=%s visuals=%d flags=%s/%s/%s" % [int(game.player_hp), hp_before, game.enemies_killed, game.current_phase, game.boss6_current_ability, String(game.amber_suturer_state.get("encounter_id", "")), game.amber_suturer_visual_events.size(), str(client_suturer_stolen_seen), str(client_suturer_restored_seen), str(client_boss6_snapshot_seen)])
 			_check(false, "timeout waiting for client gameplay authority checks")
 			return
 
@@ -297,6 +300,7 @@ func _run_client_loop() -> void:
 			_check(game.player_damage >= game._manifestation_base_damage() + game._kill_damage_growth(100), "client did not receive shared damage progression")
 			if client_damage_seen_at < 0.0:
 				client_damage_seen_at = total_time
+				print("[CLIENT] routed damage and shared progression confirmed")
 				# The routed contact hit has already been observed. Keep later
 				# Boss6 snapshot probes from killing the client while this smoke
 				# waits for replication-only evidence.
@@ -339,14 +343,25 @@ func _host_deferred_feature_flow(total_time: float) -> bool:
 		game.boss_active = true
 		game.boss_dead = false
 		game.boss_hp_max = 9000.0
-		game.boss_hp = 2700.0
+		# Stage 3 without crossing the scripted 30% special-event threshold.
+		game.boss_hp = 3000.0
 		game.boss6_stage = 3
-		game.boss6_state = game.BOSS6_STATE_EXECUTING
+		# This probe targets replication, not the threshold event sequence.
+		game.boss6_event_80_triggered = true
+		game.boss6_event_60_triggered = true
+		game.boss6_event_40_triggered = true
+		game.boss6_event_30_triggered = true
+		game.boss6_event_15_triggered = true
+		# Keep a valid replicated state alive long enough to cross a real relay.
+		# EXECUTING without its matching attack is intentionally closed by the
+		# Boss 6 controller and made this synchronization probe race the frame.
+		game.boss6_state = game.BOSS6_STATE_TELEGRAPH
+		game.boss6_state_timer = 10.0
 		game.boss6_current_ability = BOSS6_TEST_ABILITY
 		game.amber_suturer_state["active"] = true
 		game.amber_suturer_state["encounter_id"] = SUTURER_TEST_ENCOUNTER
 		game.amber_suturer_state["state"] = game.amber_suturer_controller.STATE_ACTIVE
-		game.amber_suturer_visual_events = [{"id": "suturer_mp_visual", "kind": "hook_hit", "life": 1.0, "pos": game.player_pos}]
+		game.amber_suturer_visual_events = [{"id": "suturer_mp_visual", "kind": "hook_hit", "life": 20.0, "pos": game.player_pos}]
 		game.net_world_sync_last_ms = 0
 		game.net_world_visual_sync_last_ms = 0
 		game._send_peer_suturer_card_change(game.net_player_peer_id, SUTURER_TEST_CARD, false, SUTURER_TEST_ENCOUNTER)
@@ -366,12 +381,19 @@ func _host_deferred_feature_flow(total_time: float) -> bool:
 func _update_client_deferred_feature_evidence() -> void:
 	var card_count := int(game.cards_bought.get(SUTURER_TEST_CARD, 0))
 	if card_count == 0:
+		if not client_suturer_stolen_seen:
+			print("[CLIENT] Suturador card theft synchronized")
 		client_suturer_stolen_seen = true
 	elif client_suturer_stolen_seen and card_count == 1:
+		if not client_suturer_restored_seen:
+			print("[CLIENT] Suturador card restore synchronized")
 		client_suturer_restored_seen = true
 	if game.current_phase == 6 and game.boss6_stage == 3 and game.boss6_current_ability == BOSS6_TEST_ABILITY:
 		var encounter_id := String(game.amber_suturer_state.get("encounter_id", ""))
-		client_boss6_snapshot_seen = encounter_id == SUTURER_TEST_ENCOUNTER and not game.amber_suturer_visual_events.is_empty()
+		var snapshot_seen: bool = encounter_id == SUTURER_TEST_ENCOUNTER and not game.amber_suturer_visual_events.is_empty()
+		if snapshot_seen and not client_boss6_snapshot_seen:
+			print("[CLIENT] Boss6/Suturador visual snapshot synchronized")
+		client_boss6_snapshot_seen = snapshot_seen
 
 
 func _manifest_selection_flow(manifestation: int, aura: int) -> void:

@@ -55,7 +55,7 @@ static func draw(host: Node2D, viewport: Vector2) -> void:
 	host._draw_ui_text("TEMPO", Vector2(right.position.x, metric_y), 10, HUD.MUTED)
 	host._draw_ui_text("PONTOS", Vector2(right.position.x + width * 0.53, metric_y), 10, HUD.MUTED)
 	host._draw_ui_text("%02d:%02d" % [int(host.time_alive) / 60, int(host.time_alive) % 60], Vector2(right.position.x, metric_y + 27), 22, HUD.TEXT, width * 0.47)
-	host._draw_ui_text(str(host.score), Vector2(right.position.x + width * 0.53, metric_y + 27), 22, HUD.TEXT, width * 0.47)
+	host._draw_ui_text(host._format_points(host.score), Vector2(right.position.x + width * 0.53, metric_y + 27), 22, HUD.TEXT, width * 0.47)
 	if not compact:
 		host.draw_line(Vector2(right.position.x, metric_y + 55), Vector2(right.end.x, metric_y + 55), Color(HUD.MUTED, 0.17), 1.0)
 		host._draw_ui_wrap("Tempo suspenso. Retome quando estiver pronto.", Rect2(right.position.x, metric_y + 80, width, 50), 13, HUD.MUTED, 2)

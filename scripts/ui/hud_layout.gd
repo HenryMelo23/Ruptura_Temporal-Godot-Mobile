@@ -160,8 +160,9 @@ static func right_panel_pos(viewport: Vector2, saved_pos: Vector2) -> Vector2:
 	return saved_panel_or_default(saved_pos, default_right_panel_pos(viewport))
 
 
+## Abaixo do relogio central do HUD.
 static func default_boss_panel_pos(viewport: Vector2) -> Vector2:
-	return Vector2(viewport.x * 0.5 - 190.0, 16.0)
+	return Vector2(viewport.x * 0.5 - 190.0, 102.0)
 
 
 static func boss_panel_pos(viewport: Vector2, saved_pos: Vector2) -> Vector2:
@@ -169,7 +170,7 @@ static func boss_panel_pos(viewport: Vector2, saved_pos: Vector2) -> Vector2:
 
 
 static func default_edit_layout_boss_panel_pos(viewport: Vector2) -> Vector2:
-	return clamp_layout_rect_position(Vector2(viewport.x * 0.5 - 190.0, 96.0), Vector2(380.0, 30.0), viewport)
+	return clamp_layout_rect_position(Vector2(viewport.x * 0.5 - 190.0, 102.0), Vector2(380.0, 30.0), viewport)
 
 
 static func aura_panel_pos(_viewport: Vector2, saved_pos: Vector2, anchor: Rect2) -> Vector2:

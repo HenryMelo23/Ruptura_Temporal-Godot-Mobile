@@ -90,11 +90,14 @@ var separation_accumulator: float = 0.0
 var dead_enemy_buffer: Array = []
 var phase2_common_uid_buffer: Array[int] = []
 var phase2_common_shooter_uids: Dictionary = {}
+var horde = preload("res://scripts/systems/enemies/horde_pressure_controller.gd").new()
+var lod_target_positions: Array = []
 
 
 func bind_game(p_game: Node) -> void:
 	game = p_game
 	separation_accumulator = 0.0
+	horde.configure(p_game)
 	reset_special_pacing(true)
 	clear_spatial_index()
 
@@ -254,6 +257,8 @@ func apply_entity_separation(delta: float, spatial_index_ready: bool = false) ->
 
 
 func reset_special_pacing(clear_history: bool = false) -> void:
+	if clear_history:
+		horde.reset_run()
 	special_last_spawn_phase_time = -1.0
 	if clear_history:
 		special_spawn_history.clear()
@@ -437,6 +442,7 @@ func special_spawn_report() -> Dictionary:
 func update(delta: float) -> void:
 	if game == null:
 		return
+	horde.update(delta)
 	if not game._is_world_authority() or game.spawn_timer > 0.0 or game.boss_active or game._tutorial_blocks_normal_spawn():
 		return
 	spawn_wave()
@@ -445,6 +451,12 @@ func update(delta: float) -> void:
 func update_enemies(delta: float) -> void:
 	if game == null or not game._is_world_authority():
 		return
+	var cost_started := Time.get_ticks_usec()
+	_update_enemies_body(delta)
+	horde.note_update_cost(Time.get_ticks_usec() - cost_started)
+
+
+func _update_enemies_body(delta: float) -> void:
 	dead_enemy_buffer.clear()
 	_refresh_phase2_common_shooters()
 	var lacerante_secondary: Dictionary = game._active_lacerante_secondary()
@@ -453,98 +465,115 @@ func update_enemies(delta: float) -> void:
 	var combat_targets: Array = game._combat_targets()
 	var remote_target_peer_ids: Array[int] = game._targetable_remote_peer_ids()
 	var phase1_boss_freeze: bool = game._phase1_boss_freezes_enemies()
+	var lod_active: bool = game.enemies.size() >= horde.AI_LOD_MIN_CROWD
+	lod_target_positions.clear()
+	if lod_active:
+		for target_value in combat_targets:
+			lod_target_positions.append(Vector2(Dictionary(target_value).get("pos", game.player_pos)))
+		if lod_target_positions.is_empty():
+			lod_target_positions.append(game.player_pos)
+	var enemy_index := -1
 	for enemy in game.enemies:
+		enemy_index += 1
+		# LOD de IA: longe de todos os alvos, atualiza em quadros alternados com o tempo acumulado.
+		var enemy_delta: float = delta
+		if lod_active:
+			if horde.ai_lod_skip(enemy, enemy_index, lod_target_positions):
+				enemy["lod_dt"] = float(enemy.get("lod_dt", 0.0)) + delta
+				continue
+			enemy_delta += float(enemy.get("lod_dt", 0.0))
+			enemy["lod_dt"] = 0.0
 		var kind := String(enemy.get("type", ""))
 		if kind == game.ENEMY_FOSSIL_PUSTULE:
-			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 2.0
+			enemy["phase"] = float(enemy.get("phase", 0.0)) + enemy_delta * 2.0
 		else:
-			enemy["phase"] = float(enemy.get("phase", 0.0)) + delta * 7.0
+			enemy["phase"] = float(enemy.get("phase", 0.0)) + enemy_delta * 7.0
 		if float(enemy.get("hit_cd", 0.0)) > 0.0:
-			enemy["hit_cd"] = maxf(0.0, float(enemy["hit_cd"]) - delta)
+			enemy["hit_cd"] = maxf(0.0, float(enemy["hit_cd"]) - enemy_delta)
 		if float(enemy.get("contact_grace", 0.0)) > 0.0:
-			enemy["contact_grace"] = maxf(0.0, float(enemy["contact_grace"]) - delta)
+			enemy["contact_grace"] = maxf(0.0, float(enemy["contact_grace"]) - enemy_delta)
 		if float(enemy.get("stun", 0.0)) > 0.0:
-			enemy["stun"] = maxf(0.0, float(enemy["stun"]) - delta)
+			enemy["stun"] = maxf(0.0, float(enemy["stun"]) - enemy_delta)
 		if float(enemy.get("tesla_shock", 0.0)) > 0.0:
-			enemy["tesla_shock"] = maxf(0.0, float(enemy["tesla_shock"]) - delta)
+			enemy["tesla_shock"] = maxf(0.0, float(enemy["tesla_shock"]) - enemy_delta)
 		if float(enemy.get("eletrica_static_timer", 0.0)) > 0.0:
-			enemy["eletrica_static_timer"] = maxf(0.0, float(enemy.get("eletrica_static_timer", 0.0)) - delta)
+			enemy["eletrica_static_timer"] = maxf(0.0, float(enemy.get("eletrica_static_timer", 0.0)) - enemy_delta)
 			if float(enemy["eletrica_static_timer"]) <= 0.0:
 				enemy["eletrica_static_stacks"] = 0
 				enemy["eletrica_static_last_source"] = ""
 		for timer_key in PASSIVE_TIMER_KEYS:
 			var timer_value := float(enemy.get(timer_key, 0.0))
 			if timer_value > 0.0:
-				enemy[timer_key] = maxf(0.0, timer_value - delta)
+				enemy[timer_key] = maxf(0.0, timer_value - enemy_delta)
 		var evolution_slow := float(enemy.get("evolution_slow", 0.0))
 		if evolution_slow > 0.0:
-			evolution_slow = maxf(0.0, evolution_slow - delta)
+			evolution_slow = maxf(0.0, evolution_slow - enemy_delta)
 			enemy["evolution_slow"] = evolution_slow
 			if evolution_slow <= 0.0:
 				enemy["evolution_slow_mult"] = 1.0
 		var fragilidade_cronal := float(enemy.get("fragilidade_cronal", 0.0))
 		if fragilidade_cronal > 0.0:
-			fragilidade_cronal = maxf(0.0, fragilidade_cronal - delta)
+			fragilidade_cronal = maxf(0.0, fragilidade_cronal - enemy_delta)
 			enemy["fragilidade_cronal"] = fragilidade_cronal
 			if fragilidade_cronal <= 0.0:
 				enemy["fragilidade_cronal_bonus"] = 0.0
-		game._update_shield_reflector(enemy, delta)
-		game._update_enemy_dots(enemy, delta)
+		game._update_shield_reflector(enemy, enemy_delta)
+		game._update_enemy_dots(enemy, enemy_delta)
 		if float(enemy.get("hp", 0.0)) <= 0.0:
 			dead_enemy_buffer.append(enemy)
 			continue
 		if phase1_boss_freeze:
 			continue
 		if kind == game.ENEMY_CURATER:
-			game._update_curater(enemy, delta)
+			game._update_curater(enemy, enemy_delta)
 		if kind == game.ENEMY_STALKER:
-			game._update_stalker(enemy, delta)
+			game._update_stalker(enemy, enemy_delta)
 		if kind == game.ENEMY_PROJECTOR:
-			game._update_projector(enemy, delta)
+			game._update_projector(enemy, enemy_delta)
 		if kind == game.ENEMY_ATIRADOR:
-			game._update_atirador(enemy, delta)
+			game._update_atirador(enemy, enemy_delta)
 		if kind == game.ENEMY_KAMIKAZE:
-			game._update_kamikaze(enemy, delta)
+			game._update_kamikaze(enemy, enemy_delta)
 		if kind == game.ENEMY_LARAPIO:
-			game._update_larapio(enemy, delta)
-		if kind == game.ENEMY_FOSSIL_PUSTULE and game._update_fossil_pustule(enemy, delta):
+			game._update_larapio(enemy, enemy_delta)
+		if kind == game.ENEMY_FOSSIL_PUSTULE and game._update_fossil_pustule(enemy, enemy_delta):
 			dead_enemy_buffer.append(enemy)
 			continue
 		if kind == game.ENEMY_LODARIO:
-			game._update_lodario(enemy, delta)
+			game._update_lodario(enemy, enemy_delta)
 		if kind == game.ENEMY_MIASMA_EEL:
-			game._update_miasma_eel(enemy, delta)
+			game._update_miasma_eel(enemy, enemy_delta)
 		if kind == game.ENEMY_CHRONAL_LEECH:
-			if game._update_sanguessuga_cronal(enemy, delta):
+			if game._update_sanguessuga_cronal(enemy, enemy_delta):
 				dead_enemy_buffer.append(enemy)
 				continue
 		if kind == game.ENEMY_AMBER_SUTURER:
-			game.amber_suturer_controller.update_enemy(enemy, delta)
+			game.amber_suturer_controller.update_enemy(enemy, enemy_delta)
 		if kind == game.ENEMY_AMBER_SUTURE_NODE:
-			game.amber_suturer_controller.update_node(enemy, delta)
+			game.amber_suturer_controller.update_node(enemy, enemy_delta)
 		if kind == game.ENEMY_CINERIDO:
-			game._update_cinerido(enemy, delta)
+			game._update_cinerido(enemy, enemy_delta)
 		if kind == game.ENEMY_PANGOLIRO:
-			game._update_pangoliro(enemy, delta)
+			game._update_pangoliro(enemy, enemy_delta)
 		if kind == game.ENEMY_CORVOL:
-			game._update_corvol(enemy, delta)
+			game._update_corvol(enemy, enemy_delta)
 		if kind == game.ENEMY_COUT_ATTACK_SPEED:
-			game._update_cout_attack_speed(enemy, delta)
+			game._update_cout_attack_speed(enemy, enemy_delta)
 		if kind == game.ENEMY_PYRO_PENGUIN:
-			game._update_pyro_penguin(enemy, delta)
+			game._update_pyro_penguin(enemy, enemy_delta)
 		if kind == game.ENEMY_SINEIRO_BOREAL:
-			game.sineiro_boreal_controller.update_enemy(enemy, delta)
+			game.sineiro_boreal_controller.update_enemy(enemy, enemy_delta)
 		if game.current_phase == 2 and kind == game.ENEMY_COMMON:
-			game._update_phase2_common_penguin(enemy, delta)
+			game._update_phase2_common_penguin(enemy, enemy_delta)
 		if game.current_phase == 3:
-			game._update_phase3_enemy(enemy, delta)
+			game._update_phase3_enemy(enemy, enemy_delta)
 		elif game.current_phase == 4:
-			game._update_phase4_enemy(enemy, delta)
+			game._update_phase4_enemy(enemy, enemy_delta)
 		var custom_phase6_move: bool = kind in [game.ENEMY_LODARIO, game.ENEMY_MIASMA_EEL, game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURER, game.ENEMY_AMBER_SUTURE_NODE]
 		var custom_phase7_move: bool = kind in [game.ENEMY_CINERIDO, game.ENEMY_PANGOLIRO, game.ENEMY_CORVOL]
 		var custom_phase2_sineiro: bool = kind == game.ENEMY_SINEIRO_BOREAL
 		if not custom_phase2_sineiro and not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or prismatica_active):
-			game._move_enemy(enemy, delta, lacerante_secondary, prismatica_active, combat_targets)
+			game._move_enemy(enemy, enemy_delta, lacerante_secondary, prismatica_active, combat_targets)
 
 		var t_pos: Vector2 = game._get_nearest_player_pos(Vector2(enemy["pos"]), combat_targets)
 		if not lacerante_storm and kind == game.ENEMY_KAMIKAZE and Vector2(enemy["pos"]).distance_to(t_pos) < 60.0:
@@ -616,17 +645,28 @@ func phase2_common_penguin_can_shoot(enemy: Dictionary) -> bool:
 func spawn_wave() -> void:
 	if game == null or not game._is_world_authority():
 		return
-	game.spawn_timer = get_enemy_spawn_interval()
+	game.spawn_timer = horde.spawn_interval(get_enemy_spawn_interval())
 	if game.boss_active or game._arauto_active():
 		return
-	var limit = get_enemy_limit()
-	if game.enemies.size() >= limit:
-		return
-	var kind = game._choose_enemy_type()
-	game._spawn_enemy(kind, game._spawn_point_for_type(kind))
+	var desired: int = get_desired_enemy_limit()
+	var limit: int = horde.clamp_limit(desired)
+	var ratio: float = horde.overflow_ratio(desired)
+	for _spawn in range(horde.spawns_this_tick(limit, game.enemies.size())):
+		var before: int = game.enemies.size()
+		var kind = game._choose_enemy_type()
+		game._spawn_enemy(kind, game._spawn_point_for_type(kind))
+		if game.enemies.size() > before:
+			horde.apply_overflow(game.enemies.back(), ratio)
 
 
+## Limite efetivo de inimigos vivos: o desejado (que cresce sem fim) preso ao orcamento do aparelho.
 func get_enemy_limit(native_only: bool = false) -> int:
+	if native_only:
+		return get_desired_enemy_limit(true)
+	return horde.clamp_limit(get_desired_enemy_limit())
+
+
+func get_desired_enemy_limit(native_only: bool = false) -> int:
 	var mp_bonus: int = game._multiplayer_enemy_limit_bonus()
 	var native_limit: int = 0
 	if game.current_phase == 7:
@@ -653,7 +693,7 @@ func get_enemy_limit(native_only: bool = false) -> int:
 		else:
 			game.phase1_limit_break_kills_start = -1
 			native_limit = game.ENEMY_MAX_BASE + mp_bonus
-	native_limit += game._long_run_enemy_limit_bonus()
+	native_limit += maxi(game._long_run_enemy_limit_bonus(), horde.extra_enemies())
 	if native_only or game.current_phase <= 1 or phase_density_carry_cap <= 0:
 		return native_limit
 	var growth_after_entry: int = maxi(0, native_limit - phase_density_native_entry_cap)

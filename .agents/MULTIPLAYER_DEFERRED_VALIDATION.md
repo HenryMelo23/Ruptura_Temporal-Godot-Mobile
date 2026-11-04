@@ -1,5 +1,11 @@
 # Multiplayer Deferred Validation Backlog
 
+## 2026-11-02 — Character status VFX and XP HUD
+
+- Local presentation only: left card/aura/manifestation/contract panels replaced by character-attached feedback. XP uses existing progression threshold getter. No RPC, snapshot or gameplay math changed.
+- Solo evidence: `tests/player_status_vfx_visual_smoke.gd` rendered desktop/mobile landscape, four manifestations, animation, lightweight HUD, contracts, death and asserted XP fill for levels 1–10. Existing world card effects retained; per-card gameplay coverage is not claimed.
+- Owed: local feedback from replicated aura/card/charge states on clients; contract progress/timers after sync; XP after authoritative grants; revive/spectator/disconnect transitions. New signals are local-player only, as were the retired HUD panels; remote-player rendering remains unchanged. No online, multi-process or physical-device tests in this task.
+
 This file records multiplayer work intentionally deferred while production is
 focused on the solo game. It is a validation backlog, not permission to remove
 or ignore multiplayer implementation paths.
@@ -264,6 +270,141 @@ Multiplayer scenarios still owed:
 
 Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, host/client/client2 phase-consensus runner, late-join snapshot runner, and a two-device landscape visual pass when multiplayer validation resumes.
 
+### MP-2026-11-01-AFFORDABLE-SCORE-CACHE - High-score shop forecast performance
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/runtime_progression_controller_smoke.gd`, `tests/long_run_economy_smoke.gd`, `tests/shop_abuse_integrity_smoke.gd`, the Larápio steal/loot assertions in `tests/pause_cronomante_larapio_smoke.gd`, and a 60-second rendered six-enemy cycling-kill run in `tests/singleplayer_long_run_accumulation_smoke.gd`.
+Affected contract: score authority and purchase rules are unchanged; local HUD/shop affordability now reuses an exact cached forecast and invalidates it when score, card cost, discounts, cards or Cinzas state changes. No packet or RPC schema changed.
+
+Multiplayer scenarios still owed:
+
+- Host and clients show the same affordable-card count after authoritative rewards, purchases and a Larápio theft.
+- A score RPC received in the same frame as opening the manual shop cannot reuse a stale forecast.
+- Late join, retry restore and shop-discount activation invalidate the local forecast without changing the authoritative price.
+- Two- and three-player shop entry still rejects insufficient funds and accepts the same boundary purchase on every peer.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, the role-based host/client/client2 runner, and a late-join shop snapshot scenario when multiplayer validation resumes.
+
+### MP-2026-11-01-SHOP-PURCHASE-FULL-REROLL - Full shop refresh and retired design cards
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/new_common_cards_smoke.gd`, `tests/shop_hub_animation_smoke.gd`, `tests/cinzas_attribute_burn_system_smoke.gd`, and `tests/cinzas_card_visual_smoke.gd` passed. `tests/shop_paid_rerolls_smoke.gd` preserved its economy assertions but still reports the pre-existing `shop_spend` audio-check failure for both paid reroll and purchase.
+Affected contract: a committed purchase now generates all three offers again and clears legacy shop locks; `escolha_adiada`, `leitura_instante`, `margem_segura`, and `solo_consolidado` no longer enter the card pool, unlock rules, catalog, or effective saved-card count. Purchase authority, pricing, and packet schemas are unchanged.
+
+Multiplayer scenarios still owed:
+
+- Host and clients receive the same three replacement offers and generation index after an authoritative purchase.
+- Late join, retry restore, and old saves cannot reactivate retired cards or preserve a stale locked shop slot.
+- Two- and three-player purchase timing keeps score, discounts, Cinzas marks, selection, and refreshed offers synchronized.
+- Duplicate purchase requests cannot trigger two full generations or leave different offers between peers.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, `tests/multiplayer_shop_flow_smoke.gd`, the role-based host/client/client2 runner, and a late-join shop snapshot scenario when multiplayer validation resumes.
+
+### MP-2026-11-01-TARGET-RANGE-REGULAR-ENEMY-BALANCE - Independent ability targeting and softer regular enemies
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/ranged_attack_range_smoke.gd`, `tests/player_run_level_smoke.gd`, `tests/gameplay_safety_pack_smoke.gd`, `tests/player_control_controller_smoke.gd`, `tests/parasitica_skill_aim_smoke.gd`, `tests/lacerante_ultimate_aim_smoke.gd`, `tests/ancorada_manifestation_smoke.gd`, all three focused Henry mutation smokes, `tests/regular_enemy_balance_smoke.gd`, and `tests/phase6_amber_suturer_smoke.gd` passed.
+Affected contract: basic attacks retain a replicated 420 px base range and projectile boundary while automatic abilities can choose nearest/lowest-health targets independently; regular enemy HP growth and armor reduction retain 55 percent of their former scaling, with bosses, Larápio, Sineiro Boreal and Suturador de Âmbar exempt. No packet schema changed.
+
+Multiplayer scenarios still owed:
+
+- Host and clients choose the same nearest/lowest-health ability target when it is outside basic-attack range.
+- Remote basic projectiles retain the 420 px base plus card/level growth without allowing automatic fire beyond the ring.
+- Authority-spawned regular enemies use the softened HP curve identically in two- and three-player runs while exempt minibosses keep their prior health.
+- Damage requests apply softened regular armor exactly once and preserve boss/miniboss armor on host, clients, late join and retry restore.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, the role-based host/client/client2 combat runner, remote projectile snapshot checks, and a late-join enemy snapshot scenario when multiplayer validation resumes.
+
+### MP-2026-11-01-ECONOMY-RARITY-LIFESTEAL-OVERCRIT - Economy denomination and card balance
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/runtime_progression_controller_smoke.gd`, `tests/new_common_cards_smoke.gd`, `tests/roguelike_point_cards_smoke.gd`, `tests/cinzas_attribute_burn_system_smoke.gd`, `tests/ranged_attack_range_smoke.gd`, and the desktop/mobile captures from `tests/uncommon_cards_visual_smoke.gd` passed.
+Affected contract: internal score, prices, purchase authority, save values, and packet schemas remain unchanged while player-facing point values use a 10:1 denomination. Roubo de Vida, Moeda Estável, Pacto das Possibilidades, and Tributo da Dor are now uncommon; incompatible legacy Cinzas state is sanitized. Roubo de Vida heals 3 percent of projectile damage per copy, and Tempestade grants 10 percent critical chance per copy with excess chance converted into critical damage.
+
+Multiplayer scenarios still owed:
+
+- Host and clients display the same denominated score, prices, spend animation, Larápio theft, loot return, boss reward, and point-card rewards from authoritative raw values.
+- Authoritative purchases and late-join snapshots preserve the new uncommon rarities without allowing promoted cards through the common or Cinzas pools.
+- Projectile lifesteal heals exactly once from confirmed damage on host and replicas, including critical and overcritical hits.
+- Ten or more Tempestade copies produce identical guaranteed critical damage on host, clients, late join, retry restore, and remote combat presentation.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, `tests/multiplayer_shop_flow_smoke.gd`, the role-based host/client/client2 combat runner, and a late-join score/card snapshot scenario when multiplayer validation resumes.
+
+### MP-2026-11-01-CARD-POWER-FEEDBACK - Visible card power and combat threat feedback
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/card_power_feedback_smoke.gd` passed; `tests/card_power_feedback_visual_smoke.gd` produced desktop and landscape-mobile captures with the memory-saver reduction active.
+Affected contract: card acquisition, confirmed damage, lifesteal, mitigation and heavy-hit events now create bounded local draw-primitive feedback. Purchases made behind the shop queue their presentation until gameplay resumes. No authority, snapshot, RPC or packet schema changed.
+
+Multiplayer scenarios still owed:
+
+- Host and clients show one local acquisition confirmation after each authoritative shop purchase without replaying it from snapshots.
+- Remote confirmed attacks do not duplicate the local critical, power-hit, lifesteal or overkill feedback.
+- Late join, retry restore, disconnect and run reset clear queued acquisition and cooldown state without losing card counts.
+- Desktop and landscape-mobile peers keep equivalent readable feedback while memory-saver peers use the reduced ray count.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, `tests/multiplayer_shop_flow_smoke.gd`, the role-based host/client/client2 combat runner, and desktop/mobile remote-presentation captures when multiplayer validation resumes.
+
+### MP-2026-11-01-PHASE1-ENEMY-TUNING - Crystal armor, Projector range and Stalker opacity
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/phase1_enemy_tuning_smoke.gd` and the before/after landscape capture from `tests/phase1_enemy_tuning_visual_smoke.gd`.
+Affected contract: the Cristalizado now applies stronger authority-side mitigation, the Projetador engages at 420 px, and Espreitador snapshots carry a 0.75 opacity multiplier in visible, sprint and furtive states. No packet or RPC schema changed.
+
+Multiplayer scenarios still owed:
+
+- Host-authoritative Cristalizado mitigation produces identical remote health and damage text.
+- Projetadores select and fire at targets between 281 and 420 px without duplicate remote projectiles.
+- Espreitador opacity remains 0.75 on host, clients and late join across visible, sprint and furtive transitions.
+- Retry restore and enemy snapshot interpolation preserve these values without reverting to the former defaults.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, the role-based host/client/client2 combat runner, a late-join enemy snapshot scenario, and remote landscape captures when multiplayer validation resumes.
+
+### MP-2026-11-01-CINZAS-LARAPIO-PHASE1-PRESSURE - Uncommon Cinzas and earlier mixed horde pressure
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/cinzas_attribute_burn_system_smoke.gd`, `tests/porcao_larapio_balance_smoke.gd`, `tests/phase1_pressure_balance_smoke.gd`, and `tests/phase_density_carry_smoke.gd` passed.
+Affected contract: Cinzas da Escolha now belongs to the uncommon pool while retaining its consumable and non-burnable policy; authority-spawned Larápio HP uses the stronger base/time/kill curve; phase 1 and phase 6 break their base enemy cap at 600 seconds, and phase 1 chooses special enemies more often than common Errantes after the first special unlock. No packet schema changed.
+
+Multiplayer scenarios still owed:
+
+- Host purchases, refreshed shops, late joins and retry restores keep Cinzas in the uncommon pool and out of common/Cinzas targets.
+- Authority-spawned Larápios use the same HP curve for every peer and preserve it through enemy snapshots and reconnects.
+- Two- and three-player enemy caps begin post-break kill growth at the same phase elapsed time without duplicate increments.
+- Remote clients receive the same mixed phase-1 composition and special caps without locally spawning extra enemies.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, `tests/multiplayer_shop_flow_smoke.gd`, the role-based host/client/client2 combat runner, and late-join shop/enemy snapshot scenarios when multiplayer validation resumes.
+
+### MP-2026-11-01-MANIFEST-EVOLUTIONS-HIDDEN - Temporary evolution shutdown
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/manifest_evolution_hidden_smoke.gd` passed with choice capacity, fragments, saved effects and menu access disabled.
+Affected contract: the evolution catalog and saved data remain intact, but runtime choices, combat hooks, fields, visual snapshot IDs, fragments and selection UI are gated off by `MANIFEST_EVOLUTIONS_ENABLED`. Existing barrier/RPC schemas remain present and unchanged.
+
+Multiplayer scenarios still owed:
+
+- Host and clients never spawn or collect evolution fragments after Arauto defeat while the feature flag is disabled.
+- Late join and retry restore preserve saved evolution data without activating its combat or visual effects.
+- A stale evolution barrier cannot pause one peer, open a hidden selection screen or leave peers waiting.
+- Re-enabling the flag later restores one authoritative shared choice flow without duplicate picks.
+
+Suggested tests/runners: `tests/multiplayer_manifest_evolution_barrier_smoke.gd`, `tests/multiplayer_three_player_contract_smoke.gd`, the role-based host/client/client2 runner, and a late-join interrupted-run scenario when multiplayer validation resumes.
+
+### MP-2026-11-01-BOSS6-STATIONARY-SURVIVAL - Stationary Matriarch survival cycles
+
+Status: pending multiplayer validation.
+Solo evidence: `tests/boss6_three_stage_rework_smoke.gd` passed; `tests/boss6_three_stage_visual_smoke.gd` produced six inspected desktop and landscape-mobile captures with the boss fixed to the arena anchor.
+Affected contract: the Matriarca da Chaga no longer moves or relocates; authority stage updates snap it to the central altar. HP milestones now combine carapace with scythes/incubation, acid bloom or carnage tide to create survival windows. Existing boss attack and visual snapshot shapes remain unchanged.
+
+Multiplayer scenarios still owed:
+
+- Host, clients and late join keep the Matriarch on the same fixed world anchor through every stage and special event.
+- Survival-cycle carapace and hazards start once on authority and replicate without duplicate attacks or damage.
+- Disconnect, retry restore and interrupted-run restore preserve milestone flags without replaying completed cycles.
+- Remote desktop and landscape-mobile peers see matching telegraphs, stage sprites, carapace state and arena hazards.
+
+Suggested tests/runners: `tests/multiplayer_three_player_contract_smoke.gd`, the role-based host/client/client2 boss runner, a late-join boss snapshot scenario, and remote desktop/mobile captures when multiplayer validation resumes.
+
 Copy this block for each solo-first feature with deferred multiplayer proof:
 
 ```text
@@ -279,3 +420,205 @@ Multiplayer scenarios still owed:
 - Remote desktop/mobile visual parity as applicable.
 Suggested tests/runners: exact paths or commands to use later.
 ```
+
+## 2026-11-01 — Anti-heal health-bar wire
+
+- Changed `scripts/ui/combat_hud.gd` and `scripts/presentation/hud_presentation.gd`: local HUD draws barbed wire from existing sacrifice healing-penalty and calcification states; no gameplay or packet changes.
+- Solo evidence: `tests/health_barbed_wire_visual_smoke.gd` passed under Compatibility/llvmpipe at 1280x720 and 960x540, including active, expired, calcified and lightweight HUD captures. Pixel assertions verify appearance and removal after penalty expiry.
+- Deferred: verify each client's own bar after sacrifice/revive, penalty expiry and calcification entry/exit; verify spectator/death transitions and remote desktop/mobile parity. Multiplayer and physical-device performance were not exercised.
+
+
+## 2026-11-02 — Fase EX: terreno em chunks e altar integrado
+
+- EX continua explicitamente solo-only. Novo atlas de 16 regiões, seleção estável
+  por célula de 384 unidades e altar integrado à célula reservada; o ponto de
+  interação é o centro da mesma célula. A camada de mapa comum ganhou um modo
+  de atlas, restaurando o material normal ao sair da EX.
+- Evidência solo: smoke de EX verifica unicidade do altar, variedade, estabilidade
+  ao mover câmera, deslocamento da célula e invocação; capturas desktop 1280x720
+  e paisagem 960x540 em Compatibility/llvmpipe. Não é evidência de Android físico.
+- Ainda devido quando a validação multiplayer for retomada: conferir retorno ao
+  mapa normal em host/client após uma partida EX solo; conferir que o bloqueio
+  de EX em lobby/online permanece. Se EX for liberada online no futuro, replicar
+  célula do altar/layout antes de validar desenho remoto e invocação autoritativa.
+- Nenhum servidor, lobby, relay ou sessão multiplayer executado neste trabalho.
+
+## 2026-11-02 — FaseEX2 e padrão compartilhado de mapas experimentais
+
+- `FaseEX2` arma uma nova partida solo baseada na fase 2. Usa o controlador de
+  EX, área 5×, atlas glacial de 16 regiões e altar único integrado. A entrada da
+  Sentinela Glacial usa a célula do altar somente na EX2; fase 2 normal mantém o
+  centro da arena. O renderer recebe a textura do perfil, evitando cache da EX1.
+- Evidência solo: `experimental_phase2_smoke` verifica comando/cancelamento,
+  regras da fase 2, unicidade do altar, invocação/entrada da Sentinela, alternância
+  EX2 -> EX -> normal e entrada normal. `experimental_phase_smoke` e
+  `boss2_state_machine_smoke` passaram. Capturas EX2 desktop 1280×720 e paisagem
+  960×540, com a personagem, altar movido/usado e modo leve, em llvmpipe local.
+- `experimental_terrain_render_smoke` passou para EX e EX2: deslocamento de
+  câmera sem diferença nos pixels comparados e amostra central do altar alinhada.
+- Pendente quando a validação multiplayer for retomada: verificar bloqueio de
+  FaseEX2 em host/client/lobby, entrada normal da Sentinela e apresentação de
+  mapas normais após uma EX2 solo. Se EX2 for liberada online futuramente,
+  sincronizar perfil, célula/âncora do altar e início de invocação antes de testar
+  chegada da Sentinela e eventos climáticos em peers remotos.
+- Nenhuma sessão de servidor, host/client, lobby, relay ou múltiplos dispositivos
+  foi executada. Android físico e desempenho em aparelho continuam não medidos.
+
+## 2026-11-02 — FaseEX3: catedral e esgoto
+
+- Alteração: perfil solo FaseEX3, atlas com altar integrado e chegada do Pai-Rato
+  ancorada na célula de invocação apenas durante a variante experimental.
+- Evidência solo: `experimental_phase3_smoke.gd` passou comando/cancelamento,
+  atributos originais, altar único, invocação, chegada e retorno à fase normal;
+  `experimental_phase_visual_smoke.gd -- --ex3` e `--ex3 --low` passaram com
+  capturas desktop/paisagem móvel, altar movido/usado e restauração do material.
+  `experimental_terrain_render_smoke.gd` confirmou câmera e centro nas três artes.
+  Regressões EX/EX2 e `phase3_smoke.gd` passaram; este último foi corrigido para
+  respeitar a rota variável existente em vez de presumir fase 2 -> fase 3.
+- Ainda devido quando o usuário retomar multiplayer: verificar entrada do
+  Pai-Rato e anúncio na fase 3 normal em host/cliente, sincronização visual do
+  boss e restauração de mapa/tamanho ao entrar online depois de uma jornada EX3;
+  confirmar rejeição da variante em conexão online/servidor. Caso EX3 seja
+  liberada online no futuro, sincronizar perfil, célula, descoberta, progresso,
+  invocação única e entrada do boss para clientes e reconexão.
+- Nenhuma sessão multiplayer executada. Capturas locais não validam Android físico.
+
+## 2026-11-02 — FaseEX4: Coração do Nexo
+
+- Alteração: perfil solo FaseEX4, piso escuro com fissuras/cristais magenta e
+  altar integrado do Nexo Anfíbio (sapo adulto sem cauda). Na variante, a queda
+  orbital termina na célula do altar; o alvo normal em 68%/50% foi preservado.
+- Evidência solo: `experimental_phase4_smoke.gd` passou comando/cancelamento,
+  atributos originais, altar único, invocação, meio/fim da queda e retorno normal.
+  Regressões EX/EX2/EX3 e `boss4_integral_rework_smoke.gd` passaram, incluindo
+  locomoção, estágios, habilidades contextuais e resultados da ultimate.
+  Arte corrigida conferida em `experimental_phase_visual_smoke.gd -- --ex4`
+  e `--ex4 --low`, desktop/paisagem móvel, altar movido/usado e retorno do material.
+  `experimental_terrain_render_smoke.gd` passou câmera/âncora nas quatro artes.
+- Ainda devido quando o usuário retomar multiplayer: entrada orbital normal do
+  boss 4 em host/cliente, sincronização do destino e do movimento, retorno ao
+  mapa/tamanho normal após EX4 e rejeição da variante em online/servidor. Se EX4
+  for liberada online no futuro, sincronizar perfil, célula, descoberta,
+  progresso, autorização única e chegada do boss, inclusive reconexão.
+- Nenhuma sessão multiplayer executada. Android físico não exercitado.
+
+## 2026-11-03 — FaseEX6: pântano, doença e ossos
+
+- Alteração: perfil solo FaseEX6, atlas orgânico próprio sem referência visual às
+  fases 3/4, ninho integrado de raízes/costelas/âmbar e decoração no próprio piso.
+  `RTBoss6StageController.arena_center()` mantém a Matriarca no altar durante
+  entrada, três estágios e eventos; miasma (colisão/desenho), órgãos e pontos de
+  invocação relacionados usam o mesmo centro. Fase 6 normal mantém o centro antigo.
+- Evidência solo: `experimental_phase6_smoke.gd` passou comando, atributos,
+  altar único, partículas de entrada, estágios, especiais, órgãos, miasma,
+  retorno normal e bloqueio de persistência. Regressões EX/EX2/EX3/EX4 e
+  `boss6_three_stage_rework_smoke.gd` passaram. Capturas finais de
+  `experimental_phase_visual_smoke.gd -- --ex6` e `--ex6 --low` conferidas em
+  desktop/paisagem móvel, com altar movido/usado e miasma. Render da câmera e
+  centro do altar passou nas cinco artes em `experimental_terrain_render_smoke.gd`.
+- Ainda devido quando o usuário retomar multiplayer: entrada/âncora da Matriarca
+  na fase 6 normal em host/cliente, miasma visual versus colisão autoritativa,
+  órgãos/eventos especiais, restauração após EX6 e rejeição da variante online.
+  Se EX6 for liberada online no futuro, sincronizar perfil, célula, descoberta,
+  progresso, autorização única, centro do encontro e reconexão.
+- Nenhuma sessão multiplayer executada. Android físico não exercitado.
+
+## 2026-11-03 — FaseEX7: floresta queimada e brasas
+
+- Alteração: perfil solo FaseEX7, atlas de floresta carbonizada com clareira da
+  Fênix integrada. A arte foi revisada após captura com Geovana para reduzir
+  granulação e aproximar o acabamento do jogo. Invocação na célula; voo, mergulho,
+  projéteis e quadrantes de fogo usam o encontro local de dimensões normais.
+  Fogo visual e dano compartilham a origem/tamanho; fase normal mantém coordenadas.
+- Evidência solo: `experimental_phase7_smoke.gd` passou comando/atributos,
+  altar único, entrada, voo, mergulho/projétil, fogo local, núcleo/renascimento e
+  retorno normal. `boss7_fenix_smoke.gd`, `boss7_fire_progression_smoke.gd` e
+  regressões EX/EX2/EX3/EX4/EX6 passaram. O teste de progressão do fogo foi repetido
+  com renderização real após erro do compilador de shader no encerramento
+  headless; a execução renderizada passou sem esse erro.
+  `experimental_phase_visual_smoke.gd -- --ex7` e `--ex7 --low` conferidos com
+  Geovana real em desktop/paisagem móvel, altar movido/usado e fogo. Teste de
+  terreno passou câmera/centro nas seis artes, incluindo a revisão final.
+- Ainda devido quando o usuário retomar multiplayer: entrada normal da Fênix,
+  voo/mergulho, sincronização dos quadrantes e dano remoto, núcleo/renascimento,
+  retorno ao mapa normal depois de EX7 e rejeição da variante online. Para futura
+  liberação online de EX7, sincronizar perfil/célula, centro/retângulo do encontro,
+  descoberta, progresso e autorização única de invocação, inclusive reconexão.
+- Nenhuma sessão multiplayer executada. Android físico não exercitado.
+
+## 2026-11-03 — Conjunto ilustrado EX1–EX5 e perfil EX5
+- Escopo: repintura dos atlas EX–EX4, novo atlas/perfil EX5, selo da UMBRA preservado no shader durante trocas dimensionais, entrada/vórtice/laser ancorados no altar. Fases EX seguem exclusivas solo.
+- Evidência solo: smokes EX1–EX5 e fase5 normal aprovados; capturas reais com Geovana em 1280x720 e 960x540, modo leve, altar movido; teste de terreno EX1–EX7 sem deslocamento com câmera; validação profunda e orçamento aprovados. Logs: `.agent_logs/phase_ex_collection/`.
+- Ainda devido quando o congelamento terminar: confirmar rejeição do comando EX5 em sessão real host/client; regressão da UMBRA normal com transmutação, vórtice e laser (origem de desenho, dano e snapshots) em host/client; confirmar retorno de materiais após troca de fase/conexão. Nenhuma sessão multiplayer foi executada.
+
+## 2026-11-03 — Mapas expandidos promovidos à campanha definitiva
+
+- Alteração: as fases 1–7 da campanha agora usam por padrão o mundo 3200×2250,
+  atlas em chunks, exploração e altar local do boss. Os antigos mapas 1600×900
+  passaram a ser variantes one-shot `FaseEX`–`FaseEX7`, exclusivas de solo e sem
+  partida interrompida. A campanha expandida preserva rota e salvamento; posição,
+  descoberta e uso do altar entram no snapshot.
+- Compatibilidade implementada sem sessão online: sorteio do altar é determinístico
+  por fase quando há multiplayer/online/servidor, e a interação encaminha a chamada
+  pelo fluxo existente de votação/RPC em vez de iniciar o boss apenas localmente.
+- Evidência solo: `experimental_phase_smoke.gd`, smokes específicos 2–7,
+  `phase_transition_smoke.gd` e `runtime_save_controller_smoke.gd` aprovados.
+- Ainda devido quando o usuário retomar multiplayer: executar host/cliente e
+  servidor dedicado; confirmar mesma célula de altar e chunks em todos os pares,
+  descoberta/apresentação remota, votação iniciada no altar por host e cliente,
+  chamada única, entrada e centro local dos bosses 1–7, transmutação da fase 5,
+  transições de rota, reconexão e rejeição das variantes clássicas EX.
+- Nenhuma sessão multiplayer ou dispositivo físico foi executado nesta alteração.
+
+## 2026-11-03 — Fenda do Mercador (loja automática solo) e névoa-guia
+
+- Alteração: em partidas solo com loja automática, a contagem de 15 s foi
+  substituída por uma fenda no mundo (`merchant_rift_controller.gd`) aberta por
+  marco de abates ou pelo intervalo configurado; o jogador entra andando,
+  entrada no limite dá -10%, fenda ignorada guarda fragmento (-5% e +1 reroll).
+  A linha do altar virou névoa-guia compartilhada com marcador de borda.
+- Compatibilidade: a fenda é desativada com `is_multiplayer`/servidor dedicado;
+  nesses casos `shop_controller.should_trigger_forced` mantém a contagem e o RPC
+  `_rpc_trigger_shop` legados. Estado salvo na partida interrompida solo.
+- Evidência solo (Godot 4.7.2): `merchant_rift_smoke.gd` aprovado (abates,
+  entrada, limite, fragmento, colapso, reembolso do boss, intervalo, online
+  legado, troca de fase); `merchant_rift_visual_smoke.gd` normal e `--low`
+  com capturas em `.agent_logs/merchant_rift/`; regressões
+  `bargain_capsule_smoke`, `shop_button_layout_smoke`, `experimental_phase_smoke`,
+  `phase_transition_smoke`, `runtime_save_controller_smoke` aprovadas.
+  `shop_schedule_rarity_smoke` falha antes da fenda: a oferta de tutorial do
+  início pausa o mundo e o tempo da loja não avança (problema pré-existente).
+- Ainda devido quando o multiplayer for retomado: decidir se a fenda vira
+  entidade de mundo autoritativa (posição, idade, estado, entrada de qualquer
+  par abrindo a loja do grupo, fragmentos por grupo, snapshot/reconexão) ou se
+  o online permanece na contagem; confirmar que a névoa do altar aparece nos
+  clientes com descoberta sincronizada. Nenhuma sessão multiplayer executada.
+
+
+## 2026-11-03 — Boss 4: saltos, Língua-Arpão e Salto Esmagador
+
+- Alteração: locomoção por saltos (fases em `boss4_ai_state`), Língua-Arpão com mira
+  que trava, puxão + tapa, quebra por dash e auto-puxão no erro; anel de choque
+  `boss4_shock_ring` em `phase4_enemy_hazards`; sorteio reduzido por estágio.
+- Compatibilidade: todo o estado novo vive em `boss4_ai_state` (já incluído em
+  `snapshot()`); o anel usa `phase4_enemy_hazards`; dano remoto via `_send_peer_damage`.
+  O puxão da língua só move o jogador local (pares remotos só levam o dano).
+- Evidência solo: `boss4_hop_tongue_smoke`, `boss4_integral_rework_smoke`,
+  `boss4_nexus_mechanics_smoke`, `boss4_multiplayer_sync_smoke` (contrato de snapshot),
+  `boss4_continuous_performance_smoke` e visual `boss4_hop_tongue_visual_smoke`.
+- Ainda devido: host/cliente reais — altura/fase do salto e quadro da língua nos
+  clientes, puxão de um cliente agarrado (hoje só dano), dash de cliente quebrando a
+  língua, anel acertando cada par uma vez, reconexão no meio do salto.
+
+- Boss 4 Raio do Capacete: `beam_from/beam_to/beam_angle/beam_hits` vivem em `boss4_ai_state` (snapshot); dano remoto via `_send_peer_damage`. Validar sincronia do angulo da varredura e dano em peers quando o congelamento acabar.
+- Boss 4 Poco Gravitacional: o puxao so e aplicado ao jogador local do host (`_update_singularities`); peers remotos recebem dano do nucleo/implosao via `_send_peer_damage`, mas ainda NAO sao puxados. Decidir: aplicar o puxao no cliente lendo o hazard `boss4_singularity` replicado.
+- Boss 6 locomoção/Mergulho: `boss6_ai_state` (modo, monte, ponto de emersão, facing) ainda NÃO entra no pacote de `runtime_boss_visual_sync_controller`; réplicas veem só `boss_pos` (o corpo desliza com o monte e não afunda). Adicionar `boss6_ai_state` ao pacote visual e validar dano de emersão em peers (`_send_peer_damage`).
+- Boss 6 Foices/Cuspe/Cauda: ataques novos vivem em `boss_attacks` (`waves`, `spots` com `launch`, `back/side`), já replicados pelo pacote visual; validar que réplicas desenham com a idade certa e que o dano remoto (`_send_peer_damage`) chega uma vez por onda/bola/varrida.
+- Henry Incendiário rework: trilha do dash (`ember_trail`), fila/explosões de Combustão e bolas de fogo vivem no controlador local (não estão no snapshot); a autoridade aplica dano/cargas, mas peers remotos não veem a trilha nem as explosões. O visual remoto do dash ainda usa o pacote antigo do giro (`NET_ANIM_LACERANTE 48+`, `NET_ABILITY_TELEPORT` com `HenryFire.spin`). Replicar trilha/explosões e trocar o visual remoto do dash.
+- Pressão infinita da horda (`scripts/systems/enemies/horde_pressure_controller.gd`): o orçamento de inimigos vivos é aprendido pelo FPS do host; validar com clientes lentos (o host pode ficar folgado e o cliente travar) e se o enxame condensado (vida/dano/pontos) replica certo.
+- Henry Ignição Total rework: a linha do tempo local mudou (impactos em 0,70/1,45/2,20 s, raios 150/225/300, total 2,55 s), mas o visual remoto (`NET_ABILITY_SECONDARY` em `_draw_henry_network_ability`) ainda desenha 3 ciclos de 0,8 s com anel genérico de 280 px e os quadros de rede seguem a v1 (8 quadros, índices 40–47). Alinhar o visual remoto e o pacote de quadros.
+
+## Henry Colosso — rework de peso (local)
+- Hit-freeze, cone de choque do 3º soco, passos do gigante, decals (rachadura/poeira/estrela/sulco) e estouro da transformação rodam só no cliente local; dano do cone e empurrão do estouro precisam ser validados como autoritativos no host.
+- Sheets v2 (8 direções) são carregadas só pro jogador local; pools de frames de rede continuam nos índices v1 (3 direções). Ao destravar o multiplayer: sincronizar índice v2 ou mapear v2→v1.
+- Teste: tests/henry_colossus_weight_smoke.gd, tests/henry_colossus_weight_visual_smoke.gd.

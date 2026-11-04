@@ -199,8 +199,8 @@ func trigger_hab1(target_world = null) -> void:
 	elif core._uses_desktop_ui():
 		cast_pos = core._desktop_aim_target_world()
 	else:
-		var target_enemy: Vector2 = core._nearest_target()
-		cast_pos = target_enemy if target_enemy != Vector2.ZERO and target_enemy.distance_to(core.player_pos) <= 520.0 else core.player_pos + core._aim_direction() * 200.0
+		var target_enemy: Vector2 = core._nearest_ability_target()
+		cast_pos = target_enemy if target_enemy != Vector2.ZERO and target_enemy.distance_to(core.player_pos) <= 520.0 else core.player_pos + core._ability_aim_direction() * 200.0
 	core.hab1_ancorada_cast_origin = core.player_pos
 	core.hab1_ancorada_cast_pos = cast_pos.clamp(Vector2(50, 50), core.WORLD_SIZE - Vector2(50, 50))
 	core.hab1_ancorada_cast_lastro = core.lastro_stacks

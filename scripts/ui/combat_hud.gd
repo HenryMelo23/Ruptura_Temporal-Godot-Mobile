@@ -6,6 +6,17 @@ const MUTED := Color("a2b8c1")
 const CYAN := Color("65d9dd")
 const HEAL := Color("6ce5b1")
 const HURT := Color("ff625c")
+## Estilo do HUD alinhado aos mapas: paineis ameixa, moldura de bronze e diamantes.
+const PANEL := Color("1a0f20")
+const BRONZE := Color("b07a3c")
+const BRONZE_HI := Color("e8b870")
+const GOLD := Color("ffd68c")
+const CREAM := Color("f6e8ce")
+const PLUM_MUTED := Color("c4aa96")
+const XP_GOLD := Color("ffc45a")
+const RIFT_VIOLET := Color("c68cff")
+const THREAT_TIER_NAMES := ["ESTÁVEL", "INQUIETA", "INSTÁVEL", "RUPTURA", "COLAPSO", "SEM FIM"]
+const THREAT_COLORS := [Color("6fe0d6"), Color("b6e06f"), Color("ffb24a"), Color("ff7a3c"), Color("ff4a5a"), Color("ff3060")]
 var last_hp: float = -1.0
 var last_max: float = -1.0
 var fill: float = 1.0
@@ -79,9 +90,27 @@ func pulse() -> float:
 
 
 func surface(host: Node2D, rect: Rect2, accent: Color, alpha: float = 1.0) -> void:
-	host.draw_rect(rect, Color(INK, 0.94 * alpha))
-	host.draw_rect(rect, Color(accent, 0.23 * alpha), false, 1.0)
-	host.draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), Color(accent, 0.9 * alpha))
+	host.draw_rect(rect.grow(3.0), Color(0.0, 0.0, 0.0, 0.22 * alpha))
+	host.draw_rect(rect, Color(PANEL, 0.88 * alpha))
+	host.draw_rect(Rect2(rect.position + Vector2(0.0, rect.size.y - 3.0), Vector2(rect.size.x, 3.0)), Color(accent, 0.55 * alpha))
+	host.draw_rect(rect, Color(BRONZE, 0.95 * alpha), false, 1.5)
+	host.draw_rect(rect.grow(-3.0), Color(BRONZE_HI, 0.22 * alpha), false, 1.0)
+	for corner in [rect.position, Vector2(rect.end.x, rect.position.y), Vector2(rect.position.x, rect.end.y), rect.end]:
+		stud(host, corner, 4.0, Color(BRONZE_HI, alpha))
+
+
+func stud(host: Node2D, center: Vector2, radius: float, color: Color, outline: Color = Color(0.35, 0.21, 0.1)) -> void:
+	if radius < 1.0 or color.a <= 0.01:
+		return
+	var diamond := PackedVector2Array([center + Vector2(0.0, -radius), center + Vector2(radius, 0.0), center + Vector2(0.0, radius), center + Vector2(-radius, 0.0)])
+	host.draw_colored_polygon(diamond, color)
+	diamond.append(diamond[0])
+	host.draw_polyline(diamond, Color(outline, color.a), 1.0, true)
+
+
+func number(host: Node2D, value: String, pos: Vector2, size: int, color: Color, align: int = HORIZONTAL_ALIGNMENT_LEFT, width: float = -1.0) -> void:
+	host.draw_string_outline(host.menu_ui_font, pos, value, align, width, size, maxi(2, size / 7), Color(0.04, 0.01, 0.06, color.a * 0.95))
+	host.draw_string(host.menu_ui_font, pos, value, align, width, size, color)
 
 
 func text(host: Node2D, value: String, pos: Vector2, size: int, color: Color, width: float = -1.0) -> void:
@@ -100,28 +129,52 @@ func health_panel(host: Node2D, rect: Rect2, alpha: float) -> void:
 	var ratio: float = clampf(float(host.player_hp) / maxf(1.0, float(host.player_hp_max)), 0.0, 1.0)
 	var accent: Color = health_color(ratio).lerp(Color.WHITE, damage * 0.5)
 	surface(host, rect, accent, alpha)
-	var x: float = rect.position.x + 14.0
+	var emblem_center := rect.position + Vector2(31.0, rect.size.y * 0.5)
+	_level_emblem(host, emblem_center, 22.0, alpha)
+	var x: float = rect.position.x + 62.0
+	var right: float = rect.end.x - 12.0
 	var top: float = rect.position.y
-	var status: String = "VIDA" if ratio >= 0.55 else ("VIDA BAIXA" if ratio >= 0.25 else "ESTADO CRÍTICO")
-	text(host, status, Vector2(x, top + 21), 11, Color(accent, alpha), rect.size.x * 0.48)
-	var value: String = "%d / %d" % [host.player_hp, host.player_hp_max]
-	var value_width: float = host.menu_ui_font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
-	text(host, value, Vector2(rect.end.x - 14 - value_width, top + 22), 16, Color(TEXT, alpha))
-	var bar := Rect2(x, top + 31, rect.size.x - 28, 20)
+	var name: String = String(host.HENRY_MUTATIONS[host.selected_mutation].get("name", "Incendiário")) if host.active_character_key == host.CHARACTER_HENRY else String(host.MANIFESTATIONS[host.selected_manifestation]["name"])
+	var name_width: float = (right - x) - 86.0
+	if name_width >= 44.0:
+		text(host, name.to_upper(), Vector2(x, top + 20.0), 11, Color(PLUM_MUTED, alpha), name_width)
+	number(host, "%d / %d" % [host.player_hp, host.player_hp_max], Vector2(x, top + 21.0), 16, Color(CREAM, alpha), HORIZONTAL_ALIGNMENT_RIGHT, right - x)
+	var bar := Rect2(x, top + 28.0, right - x, 20.0)
 	health_bar(host, bar, ratio, accent, alpha)
-	var footer_y: float = top + 67
-	text(host, "%02d:%02d" % [int(host.time_alive) / 60, int(host.time_alive) % 60], Vector2(x, footer_y), 12, Color(MUTED, alpha), 52)
-	var footer: String = String(host.HENRY_MUTATIONS[host.selected_mutation].get("name", "Incendiário")) if host.active_character_key == host.CHARACTER_HENRY else String(host.MANIFESTATIONS[host.selected_manifestation]["name"])
-	var footer_color := MUTED
+	var status: String = ""
+	var status_color: Color = PLUM_MUTED
 	if healing > 0.0:
-		footer = "+%d  RECUPERANDO" % change
-		footer_color = HEAL
+		status = "+%d  RECUPERANDO" % change
+		status_color = HEAL
 	elif damage > 0.0:
-		footer = "%d  DANO" % change
-		footer_color = HURT
-	text(host, footer, Vector2(x + 59, footer_y), 11, Color(footer_color, alpha), rect.size.x - 88)
+		status = "%d  DANO" % change
+		status_color = HURT
+	elif ratio < 0.25:
+		status = "ESTADO CRÍTICO"
+		status_color = HURT
+	elif ratio < 0.55:
+		status = "VIDA BAIXA"
+		status_color = Color("efb66b")
+	if status != "":
+		text(host, status, Vector2(x, top + 64.0), 11, Color(status_color, alpha), right - x)
 	if host.is_multiplayer and host._is_local_run_leader():
 		host._draw_leader_crown(rect.position + Vector2(-3, -3), 0.4, Color("ead391"))
+
+
+## Emblema com o nivel da run e um anel de XP em volta.
+func _level_emblem(host: Node2D, center: Vector2, radius: float, alpha: float) -> void:
+	var level: int = clampi(int(host.player_run_level), 1, 10)
+	var xp: int = maxi(0, int(host.player_run_xp))
+	var needed: int = host._player_run_level_controller().xp_to_next()
+	var xp_ratio: float = 1.0 if needed <= 0 or level >= 10 else clampf(float(xp) / float(needed), 0.0, 1.0)
+	var manifest: Color = host._manifestation_color()
+	host.draw_circle(center, radius + 2.0, Color(0.03, 0.01, 0.05, 0.9 * alpha))
+	host.draw_circle(center, radius - 4.0, Color(manifest.darkened(0.55), 0.9 * alpha))
+	host.draw_arc(center, radius, 0.0, TAU, 40, Color(BRONZE, 0.9 * alpha), 3.0, true)
+	host.draw_arc(center, radius, -PI * 0.5, -PI * 0.5 + TAU * xp_ratio, 40, Color(XP_GOLD, alpha), 3.0, true)
+	host.draw_arc(center, radius - 5.0, 0.0, TAU, 32, Color(manifest, 0.55 * alpha), 1.5, true)
+	number(host, str(level), center + Vector2(0.0, 7.0), 19, Color(CREAM, alpha), HORIZONTAL_ALIGNMENT_CENTER, -1.0)
+	host.draw_string(host.menu_ui_font, center + Vector2(-radius, -radius * 0.42 + 1.0), "NV", HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 8, Color(GOLD, 0.85 * alpha))
 
 
 func health_bar(host: Node2D, rect: Rect2, ratio: float, accent: Color, alpha: float) -> void:
@@ -143,14 +196,149 @@ func health_bar(host: Node2D, rect: Rect2, ratio: float, accent: Color, alpha: f
 		var marker_x: float = inner.position.x + inner.size.x * marker
 		host.draw_line(Vector2(marker_x, inner.position.y), Vector2(marker_x, inner.end.y), Color(INK, 0.5 * alpha), 1.0)
 	host.draw_rect(rect, Color(accent, (0.25 + damage * 0.6) * alpha), false, 1.0)
+	heal_reduction_wire(host, rect, alpha)
+
+
+func heal_reduction_wire(host: Node2D, rect: Rect2, alpha: float) -> void:
+	if host.is_dead or host.player_hp <= 0:
+		return
+	if host.revive_heal_penalty_timer <= 0.0 and not host._is_player_calcified():
+		return
+	var turns := clampi(int(rect.size.x / 36.0), 4, 7)
+	var pitch: float = (rect.size.x - 8.0) / float(turns)
+	var barb_size := clampf(rect.size.y * 0.22, 2.0, 4.0)
+	var shadow := Color(0.04, 0.025, 0.035, alpha)
+	var metal := Color(0.67, 0.69, 0.72, alpha)
+	var rust := Color(0.92, 0.32, 0.35, alpha)
+	for turn in range(turns):
+		var start := Vector2(rect.position.x + 4.0 + pitch * turn, rect.end.y + 1.0)
+		var end := start + Vector2(pitch * 0.75, -rect.size.y - 2.0)
+		var next := start + Vector2(pitch, 0.0)
+		host.draw_line(end, next, shadow, 3.0, true)
+		host.draw_line(end, next, Color(0.38, 0.34, 0.39, alpha), 1.0, true)
+		host.draw_line(start, end, shadow, 4.0, true)
+		host.draw_line(start, end, metal, 1.4, true)
+		var knot := start.lerp(end, 0.5)
+		var barb := Vector2(barb_size, barb_size)
+		host.draw_line(knot - barb, knot + barb, shadow, 3.0, true)
+		host.draw_line(knot - barb, knot + barb, metal, 1.0, true)
+		host.draw_line(knot + Vector2(-barb_size, 1.0), knot + Vector2(barb_size, -1.0), rust, 1.5, true)
 
 
 func stats_panel(host: Node2D, rect: Rect2, alpha: float) -> void:
-	surface(host, rect, CYAN, alpha)
-	text(host, "PONTOS", rect.position + Vector2(14, 20), 10, Color(MUTED, alpha))
-	text(host, str(host.score), rect.position + Vector2(14, 43), 23, Color(TEXT, alpha), rect.size.x - 28)
-	var footer: String = "MODO DROP  ·  CARTAS DOS INIMIGOS" if host._is_drop_game_mode() else "Pode comprar: %d  ·  Custo: %d" % [host._affordable_card_count(), host.card_cost]
-	text(host, footer, rect.position + Vector2(14, 66), 11, Color("ead391") * Color(1, 1, 1, alpha), rect.size.x - 28)
+	surface(host, rect, GOLD, alpha)
+	var x: float = rect.position.x + 14.0
+	var right: float = rect.end.x - 12.0
+	var top: float = rect.position.y
+	var gem := rect.position + Vector2(24.0, 30.0)
+	host.draw_circle(gem, 13.0, Color(CYAN, 0.16 * alpha))
+	stud(host, gem, 9.0, Color(CYAN, alpha), Color(0.08, 0.35, 0.36))
+	number(host, display_points(host, host.score), Vector2(x + 26.0, top + 40.0), 26, Color(CREAM, alpha))
+	text(host, "PONTOS", Vector2(right - 52.0, top + 16.0), 10, Color(PLUM_MUTED, alpha), 52.0)
+	var affordable: int = host._affordable_card_count() if not host._is_drop_game_mode() else 0
+	if affordable > 0:
+		var badge := Rect2(right - 84.0, top + 22.0, 84.0, 22.0)
+		var shine: float = 0.82 + 0.18 * sin(clock * 3.0)
+		host.draw_rect(badge, Color(XP_GOLD, shine * alpha))
+		host.draw_rect(badge, Color(BRONZE, alpha), false, 1.0)
+		var label: String = "%d CARTA%s" % [affordable, "S" if affordable > 1 else ""]
+		host.draw_string(host.menu_ui_font, badge.position + Vector2(0.0, 16.0), label, HORIZONTAL_ALIGNMENT_CENTER, badge.size.x, 12, Color(0.16, 0.07, 0.03, alpha))
+	_shop_status_line(host, Rect2(x, top + 54.0, right - x, 16.0), alpha)
+
+
+## Linha de baixo do painel de pontos: situacao da loja (fenda / drop).
+func _shop_status_line(host: Node2D, area: Rect2, alpha: float) -> void:
+	if host._is_drop_game_mode():
+		text(host, "MODO DROP  ·  CARTAS DOS INIMIGOS", area.position + Vector2(0.0, 11.0), 10, Color(GOLD, alpha), area.size.x)
+		return
+	var rift = host.shop_rift_controller
+	if rift == null or not rift.enabled():
+		return
+	if rift.active() and rift.state() != "entered":
+		var unstable: bool = rift.unstable()
+		var color: Color = Color("ff8a5a") if unstable else RIFT_VIOLET
+		var label: String = "FENDA %s  ·  %ds" % ["INSTÁVEL" if unstable else "ABERTA", int(ceil(rift.remaining()))]
+		var pulse_alpha: float = 0.75 + 0.25 * sin(clock * (9.0 if unstable else 4.0))
+		text(host, label, area.position + Vector2(0.0, 11.0), 11, Color(color, alpha * pulse_alpha), area.size.x)
+		return
+	var progress: float = rift.kill_progress()
+	if host.shop_auto_interval > 0.0:
+		progress = maxf(progress, clampf(float(host.shop_auto_elapsed) / float(host.shop_auto_interval), 0.0, 1.0))
+	text(host, "PRÓXIMA FENDA", area.position + Vector2(0.0, 9.0), 9, Color(PLUM_MUTED, alpha), 96.0)
+	var bar := Rect2(area.position + Vector2(98.0, 4.0), Vector2(maxf(10.0, area.size.x - 98.0), 5.0))
+	host.draw_rect(bar, Color(0.04, 0.01, 0.06, 0.9 * alpha))
+	host.draw_rect(Rect2(bar.position, Vector2(bar.size.x * progress, bar.size.y)), Color(RIFT_VIOLET, alpha))
+
+
+## Pontos inteiros (sem decimal) na mesma escala da loja, com separador de milhar.
+func display_points(host: Node, amount: Variant) -> String:
+	var value: int = int(floor(float(amount) / host._progression().POINT_DISPLAY_DENOMINATION))
+	var digits: String = str(absi(value))
+	var grouped: String = ""
+	while digits.length() > 3:
+		grouped = "." + digits.right(3) + grouped
+		digits = digits.left(digits.length() - 3)
+	return ("-" if value < 0 else "") + digits + grouped
+
+
+## Estagio de ameaca da run (0..5) a partir do tempo; 3+ coincidem com as curvas longas.
+func threat_tier(host: Node) -> int:
+	var thresholds: Array = [600.0, 1200.0, float(host.LONG_RUN_RUPTURE_TIME), float(host.LONG_RUN_BROKEN_BUILD_TIME), float(host.LONG_RUN_ENDLESS_TIME)]
+	var tier: int = 0
+	for limit in thresholds:
+		if float(host.time_alive) >= float(limit):
+			tier += 1
+	return tier
+
+
+func threat_progress(host: Node) -> float:
+	var thresholds: Array = [0.0, 600.0, 1200.0, float(host.LONG_RUN_RUPTURE_TIME), float(host.LONG_RUN_BROKEN_BUILD_TIME), float(host.LONG_RUN_ENDLESS_TIME)]
+	var tier: int = threat_tier(host)
+	if tier >= thresholds.size() - 1:
+		return 1.0
+	return clampf((float(host.time_alive) - float(thresholds[tier])) / maxf(1.0, float(thresholds[tier + 1]) - float(thresholds[tier])), 0.0, 1.0)
+
+
+func clock_text(host: Node) -> String:
+	var total: int = maxi(0, int(host.time_alive))
+	if total >= 3600:
+		return "%d:%02d:%02d" % [total / 3600, (total / 60) % 60, total % 60]
+	return "%02d:%02d" % [total / 60, total % 60]
+
+
+## Relogio da run + ameaca (estagio e multiplicador de pontos). compact = celular.
+func clock_panel(host: Node2D, rect: Rect2, alpha: float, compact: bool = false) -> void:
+	var tier: int = threat_tier(host)
+	var tier_color: Color = THREAT_COLORS[tier]
+	surface(host, rect, tier_color, alpha)
+	for side in [-1.0, 1.0]:
+		stud(host, Vector2(rect.get_center().x + side * rect.size.x * 0.5, rect.get_center().y), 6.0, Color(BRONZE_HI, alpha))
+	var time_size: int = 28 if compact else 32
+	var time_y: float = rect.position.y + (30.0 if compact else 37.0)
+	number(host, clock_text(host), Vector2(rect.position.x, time_y), time_size, Color(CREAM, alpha), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x)
+	var multiplier: float = float(host._progression().long_run_point_multiplier())
+	var pip_y: float = rect.end.y - (14.0 if compact else 13.0)
+	if not compact:
+		var label: String = "AMEAÇA  %s  ·  ×%.1f PTS" % [String(THREAT_TIER_NAMES[tier]), multiplier]
+		host.draw_string(host.menu_ui_font, Vector2(rect.position.x, rect.position.y + 55.0), label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 11, Color(tier_color, alpha))
+	var pip_gap: float = 13.0 if compact else 15.0
+	var pip_x0: float = rect.get_center().x - pip_gap * 2.0 - (16.0 if compact else 0.0)
+	var progress: float = threat_progress(host)
+	for index in range(5):
+		var center := Vector2(pip_x0 + pip_gap * float(index), pip_y)
+		var lit: bool = index < tier or tier >= 5
+		var current: bool = index == tier and tier < 5
+		if lit:
+			var pulse_amount: float = 0.5 + 0.5 * sin(clock * 6.0) if tier >= 5 else 1.0
+			host.draw_circle(center, 7.0, Color(tier_color, 0.22 * alpha * pulse_amount))
+			stud(host, center, 5.0, Color(tier_color, alpha))
+		elif current:
+			stud(host, center, 5.0, Color(0.2, 0.12, 0.16, alpha), Color(0.55, 0.4, 0.3))
+			stud(host, center, 5.0 * progress, Color(tier_color, 0.85 * alpha), Color(tier_color.darkened(0.4)))
+		else:
+			stud(host, center, 5.0, Color(0.2, 0.12, 0.16, 0.85 * alpha), Color(0.48, 0.36, 0.28))
+	if compact:
+		host.draw_string(host.menu_ui_font, Vector2(pip_x0 + pip_gap * 4.0 + 10.0, pip_y + 4.0), "×%.1f" % multiplier, HORIZONTAL_ALIGNMENT_LEFT, 44.0, 11, Color(tier_color, alpha))
 
 
 func ability_status(info: Dictionary) -> String:

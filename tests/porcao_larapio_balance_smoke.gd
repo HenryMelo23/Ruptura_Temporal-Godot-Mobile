@@ -32,12 +32,19 @@ func _run() -> void:
 	game.player_hp = 400
 	game.cards_bought.clear()
 	game._apply_card(porcao)
-	_expect(game.player_hp_max == 1450, "porcao_max_hp_gain_wrong")
+	_expect(game.player_hp_max == 1100, "porcao_max_hp_gain_wrong")
 	_expect(game.player_hp == 450, "porcao_heal_should_use_old_max_hp")
 
 	game.enemies.clear()
+	game.current_phase = 1
+	game.phase_started_at = 0.0
+	game.time_alive = 600.0
+	game.enemies_killed = 120
 	game._spawn_enemy(game.ENEMY_LARAPIO, game.player_pos + Vector2(120, 0))
 	var larapio: Dictionary = game.enemies[0]
+	var expected_hp: float = game.enemy_base_hp * game.LARAPIO_BASE_HP_MULT * (1.0 + game._phase_elapsed_time() * game.LARAPIO_HP_TIME_SCALE + game.enemies_killed * game.LARAPIO_HP_KILL_SCALE)
+	_expect(is_equal_approx(float(larapio.get("max_hp", 0.0)), expected_hp), "larapio_hp_scaling_wrong")
+	_expect(expected_hp > game.enemy_base_hp * 6.0, "larapio_hp_scaling_not_meaningful")
 	larapio["hp"] = float(larapio["max_hp"]) * 0.55
 	larapio["larapio_ult_cd"] = 0.0
 	larapio["larapio_ult_timer"] = 0.0
@@ -45,5 +52,5 @@ func _run() -> void:
 	_expect(float(larapio.get("larapio_ult_timer", 0.0)) > 0.0, "larapio_ultimate_not_started")
 	_expect(is_equal_approx(float(larapio.get("larapio_ult_cd", 0.0)), game.LARAPIO_ULTIMATE_DURATION + game.LARAPIO_ULTIMATE_COOLDOWN), "larapio_ultimate_cooldown_should_be_60s_after_duration")
 
-	print("PORCAO_LARAPIO_BALANCE_SMOKE_OK porcao_hp=1450 heal=50 larapio_portal_cd=60s")
+	print("PORCAO_LARAPIO_BALANCE_SMOKE_OK porcao_hp=1100 heal=50 larapio_hp=%d larapio_portal_cd=60s" % int(expected_hp))
 	quit(0)

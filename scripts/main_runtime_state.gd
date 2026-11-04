@@ -57,12 +57,13 @@ const ExperimentalPhaseControllerScript = preload("res://scripts/systems/phase/e
 const RuntimeProgressionControllerScript = preload("res://scripts/systems/progression/runtime_progression_controller.gd")
 const RuntimeDropModeControllerScript = preload("res://scripts/systems/progression/runtime_drop_mode_controller.gd")
 const EnemyManagerScript = preload("res://scripts/systems/enemy_manager.gd")
+const RuntimeTargetingControllerScript = preload("res://scripts/systems/combat/runtime_targeting_controller.gd")
+const RegularEnemyBalance = preload("res://scripts/systems/enemies/regular_enemy_balance.gd")
 const Phase2SineiroBorealControllerScript = preload("res://scripts/systems/enemies/phase2_sineiro_boreal_controller.gd")
 const Phase3EnemyControllerScript = preload("res://scripts/systems/enemies/phase3_enemy_controller.gd")
 const Phase6AmberSuturerControllerScript = preload("res://scripts/systems/enemies/phase6_amber_suturer_controller.gd")
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
-const Boss6StageControllerScript = preload("res://scripts/systems/bosses/boss6_stage_controller.gd")
 const PlayerControlControllerScript = preload("res://scripts/systems/player/player_control_controller.gd")
 const NecronadaAbilityControllerScript = preload("res://scripts/systems/abilities/necronada_ability_controller.gd")
 const AncoradaAbilityControllerScript = preload("res://scripts/systems/abilities/ancorada_ability_controller.gd")
@@ -71,7 +72,9 @@ const HenryBarometricAbilityControllerScript = preload("res://scripts/systems/ab
 const HenryColossusAbilityControllerScript = preload("res://scripts/systems/abilities/henry_colossus_ability_controller.gd")
 const ReactiveSurvivalCardControllerScript = preload("res://scripts/systems/cards/reactive_survival_card_controller.gd")
 const RoguelikePointCardControllerScript = preload("res://scripts/systems/cards/roguelike_point_card_controller.gd")
+const CardPowerFeedbackControllerScript = preload("res://scripts/systems/cards/card_power_feedback_controller.gd")
 const PointBoostPickupControllerScript = preload("res://scripts/systems/progression/point_boost_pickup_controller.gd")
+const MerchantRiftControllerScript = preload("res://scripts/systems/shop/merchant_rift_controller.gd")
 const RuntimeEventDirectorScript = preload("res://scripts/systems/events/runtime_event_director.gd")
 const Phase3RitualPulseControllerScript = preload("res://scripts/systems/events/phase3_ritual_pulse_controller.gd")
 const Phase4InstabilityPulseControllerScript = preload("res://scripts/systems/events/phase4_instability_pulse_controller.gd")
@@ -92,8 +95,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.0.63"
-const GAME_VERSION_CODE: = 26300
+const GAME_VERSION: = "2.0.64"
+const GAME_VERSION_CODE: = 26400
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -187,8 +190,8 @@ const HENRY_MUTATIONS := [
 	{
 		"key": "incendiario",
 		"name": "Incendiário",
-		"desc": "Fagulhas abrem até 5 brechas de Queimadura; habilidades consomem as cargas em dano verdadeiro proporcional à vida máxima.",
-		"details": "ATK: acumula até 5 Queimaduras e fragiliza o alvo\nHAB1: cone mais 3 explosões defensivas com empurrão\nULT: 3 ondas de calor; DASH: giro imune por 3 s e explosão final",
+		"desc": "Estalos de fogo acumulam até 5 Queimaduras; o 3º golpe é uma bola de fogo que explode. Habilidades consomem as cargas em dano verdadeiro.",
+		"details": "ATK: Estalo Ígneo, 3º golpe explode e queima em área\nHAB1: cone mais 3 explosões defensivas com empurrão\nULT: 3 ondas de calor; DASH: Rastro de Brasa, investida que deixa o chão em chamas",
 		"color": Color(1.0, 0.28, 0.06),
 		"accent": Color(1.0, 0.78, 0.18),
 	},
@@ -212,9 +215,9 @@ const HENRY_MUTATIONS := [
 const HENRY_EFFECTS := [
 	{
 		"key": "incandescencia",
-		"name": "Incandescência",
-		"desc": "Dano sofrido acumula Atrito. Periodicamente, Henry o libera em uma aura de fogo; inimigos próximos queimam mais quanto mais tempo permanecem nela.",
-		"details": "Queimação dura 6 s e acumula até 5 cargas. Cada carga fragiliza o alvo; habilidades Incendiárias consomem todas para causar dano verdadeiro.",
+		"name": "Combustão em Cadeia",
+		"desc": "Inimigos que morrem queimando explodem e passam as cargas de Queimadura para quem estiver perto, em reação em cadeia.",
+		"details": "Mais cargas = explosão maior e mais forte. Com outras Mutações, cada 3º golpe no mesmo alvo acende 1 Queimadura.",
 		"color": Color(1.0, 0.42, 0.08),
 		"accent": Color(1.0, 0.9, 0.36),
 	},
@@ -264,9 +267,9 @@ const HENRY_ULTIMATE_CAST_DURATION := 0.8
 const HENRY_ULTIMATE_WAVE_DURATION := 0.72
 const HENRY_ULTIMATE_PULSE_COUNT := 3
 const HENRY_ULTIMATE_FRAME_COUNT := 8
-const HENRY_SPIN_DURATION := 2.45
-const HENRY_SPIN_DASH_DURATION := 0.12
-const HENRY_SPIN_EXPLOSION_RADIUS := 210.0
+const HENRY_SPIN_DURATION := 0.32
+const HENRY_SPIN_DASH_DURATION := 0.2
+const HENRY_SPIN_EXPLOSION_RADIUS := 110.0
 const HENRY_SPIN_FRAME_COUNT := 8
 const HENRY_ENTRY_DURATION := 3.15
 const HENRY_ENTRY_FRAME_COUNT := 12
@@ -485,11 +488,14 @@ const PHASE1_PROJECTOR_UNLOCK_TIME: = 420.0
 const PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME: = 540.0
 const PHASE1_CURATER_UNLOCK_TIME: = 720.0
 const PHASE1_REVIVATOR_UNLOCK_TIME: = 900.0
-const PHASE1_LIMIT_BREAK_TIME: = 960.0
+const PHASE1_LIMIT_BREAK_TIME: = 600.0
 const PHASE1_LIMIT_KILLS_PER_EXTRA: = 30
 const PHASE1_SECONDARY_LARAPIO_SPAWN_TIME: = 240.0
-const PHASE1_SECONDARY_LARAPIO_HP_MULT: = 1.28
+const PHASE1_SECONDARY_LARAPIO_HP_MULT: = 1.34
 const PHASE1_SECONDARY_LARAPIO_DAMAGE_MULT: = 1.18
+const LARAPIO_BASE_HP_MULT: = 1.35
+const LARAPIO_HP_TIME_SCALE: = 0.0065
+const LARAPIO_HP_KILL_SCALE: = 0.0025
 const ANOMALIA_ESPREITADOR_TIME: = PHASE1_STALKER_UNLOCK_TIME
 const ANOMALIA_PROJETADOR_TIME: = PHASE1_PROJECTOR_UNLOCK_TIME
 const ANOMALIA_CRISTALIZADOR_TIME: = PHASE1_SHIELD_CRYSTAL_UNLOCK_TIME
@@ -1181,6 +1187,9 @@ const ENEMY_AGGLOMERATOR: = "aglomerador"
 const ENEMY_STALKER: = "espreitador"
 const ENEMY_PROJECTOR: = "projetador"
 const ENEMY_CRYSTAL: = "cristalizador"
+const STALKER_OPACITY_MULT: = 0.75
+const PROJECTOR_ATTACK_RANGE: = 420.0
+const CRYSTAL_DAMAGE_TAKEN_MULT: = 0.50
 const ENEMY_CURATER: = "curater"
 const ENEMY_LARAPIO: = "larapio"
 const ENEMY_COUT_ATTACK_SPEED: = "cout_attack_speed"
@@ -1816,7 +1825,7 @@ const MANIFESTATIONS: = [
 	{
 		"key": "prismatica",
 		"name": "Prismatica",
-		"desc": "Mira e angulo: o feixe nao tem limite fixo de alcance, mas a mira automatica so ataca dentro de 300 px. Todo alcance adicional vira chance de critico nos ricochetes. Q divide tiros em prismas e E deixa Geovana invulneravel com linhas de luz.",
+		"desc": "Mira e angulo: o feixe nao tem limite fixo de alcance, mas a mira automatica so ataca dentro de 420 px. Todo alcance adicional vira chance de critico nos ricochetes. Q divide tiros em prismas e E deixa Geovana invulneravel com linhas de luz.",
 		"icon": "manifestacao_prismatica.png",
 		"color": Color(0.32, 1.0, 0.96),
 		"accent": Color(1.0, 0.42, 0.72)
@@ -1949,6 +1958,7 @@ const MANIFEST_EVOLUTION_FAMILIES: = [
 	{"key": "campo", "title": "Campo", "verb": "marca", "summary": "A habilidade Q deixa uma zona persistente com identidade da manifestacao."},
 	{"key": "passo", "title": "Passo", "verb": "rasga", "summary": "O teleporte libera pressao temporal na origem e no destino."}
 ]
+const MANIFEST_EVOLUTIONS_ENABLED: = false
 
 const MANIFEST_EVOLUTION_NAMES: = {
 	"eletrica": ["Arco Bifasico", "Fio Condutor", "Raio Teleguiado", "Rede Ionica", "Estouro Galvanico", "Polo Magnetico", "Selo de Voltagem", "Campo Tesla", "Passo Fulminante"],
@@ -1989,9 +1999,9 @@ const CARDS: = [
 	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)},
 	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)},
 	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+15% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)},
-	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +2% chance critica.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
+	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +10% chance critica. Acima de 100%, o excesso aumenta o dano critico.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
 	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)},
-	{"name": "Roubo de Vida", "nick": "Hemofluxo", "desc": "Projeteis curam uma fracao da vida perdida ao acertar.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
+	{"name": "Roubo de Vida", "nick": "Hemofluxo", "rarity": CARD_RARITY_UNCOMMON, "desc": "Projeteis curam diretamente 3% do dano causado por copia, sem chance de falha.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
 	{"name": "Speed Atack", "nick": "Fluidez Letal", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)},
 	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
 	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
@@ -2001,22 +2011,18 @@ const CARDS: = [
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
-	{"id": "escolha_adiada", "name": "Escolha Adiada", "nick": "Reserva Causal", "desc": "Consumivel. Trava uma carta comum da loja no slot selecionado, preservando o preco atual ate comprar ou destravar.", "icon": "Deck/carta-Escolha_Adiada1.png", "frame_2": "Deck/carta-Escolha_Adiada2.png", "color": Color(0.4, 0.94, 1.0)},
 	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
-	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "desc": "Consumivel. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
+	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Consumivel incomum. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
 	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
 	{"id": "ancora_vital", "name": "Ã‚ncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
 	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)},
-	{"id": "leitura_instante", "name": "Leitura do Instante", "nick": "Previsao Clara", "desc": "Aumenta a antecedencia visual de ataques inimigos e de chefes.", "icon": "Deck/carta-LeituraInstante1.png", "frame_2": "Deck/carta-LeituraInstante2.png", "color": Color(1.0, 0.84, 0.3)},
-	{"id": "margem_segura", "name": "Margem Segura", "nick": "Distancia Certa", "desc": "Inimigos comuns surgem mais longe do jogador.", "icon": "Deck/carta-MargenSegura1.png", "frame_2": "Deck/carta-MargenSegura2.png", "color": Color(0.26, 0.9, 0.96)},
-	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)},
+	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "rarity": CARD_RARITY_UNCOMMON, "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)},
 	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio que atrai pontos, moedas, cartas soltas e orbes neutros. Recursos atraidos perseguem o jogador ate serem absorvidos.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
-	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
-	{"id": "solo_consolidado", "name": "Solo Consolidado", "nick": "Chao Estavel", "desc": "Reduz a duracao de perigos hostis persistentes no chao.", "icon": "Deck/carta-SoloConsolidado1.png", "frame_2": "Deck/carta-SoloConsolidado2.png", "color": Color(0.78, 0.92, 0.42)},
-	{"id": "tributo_da_dor", "name": "Tributo da Dor", "nick": "Ferida Rentável", "desc": "Sempre que perder vida, recebe pontos. Começa em 1 ponto por impacto e cresce cada vez mais por cópia, sem limite.", "icon": "Deck/carta-Tributo_da_Dor1.png", "frame_2": "Deck/carta-Tributo_da_Dor2.png", "color": Color(1.0, 0.58, 0.18)},
-	{"id": "horizonte_ruptura", "name": "Horizonte de Ruptura", "nick": "Linha Limite", "rarity": CARD_RARITY_UNCOMMON, "desc": "+30 px de alcance e +2.5% de dano nos ataques basicos a distancia por copia, sem limite. Na Prismatica, os +30 px viram +3% de critico nos ricochetes.", "icon": "Deck/carta-Horizonte_de_Ruptura1.png", "frame_2": "Deck/carta-Horizonte_de_Ruptura2.png", "color": Color(0.22, 0.68, 1.0)},
+	{"id": "pacto_possibilidades", "name": "Pacto das Possibilidades", "nick": "Primeira Oferta", "rarity": CARD_RARITY_UNCOMMON, "desc": "Cartas comuns ainda nao compradas ficam mais baratas na loja.", "icon": "Deck/carta-Pacto_das_Possibilidades1.png", "frame_2": "Deck/carta-Pacto_das_Possibilidades2.png", "color": Color(0.96, 0.5, 1.0)},
+	{"id": "tributo_da_dor", "name": "Tributo da Dor", "nick": "Ferida Rentável", "rarity": CARD_RARITY_UNCOMMON, "desc": "Sempre que perder vida, recebe pontos. A recompensa cresce cada vez mais por cópia, sem limite.", "icon": "Deck/carta-Tributo_da_Dor1.png", "frame_2": "Deck/carta-Tributo_da_Dor2.png", "color": Color(1.0, 0.58, 0.18)},
+	{"id": "horizonte_ruptura", "name": "Horizonte de Ruptura", "nick": "Linha Limite", "rarity": CARD_RARITY_UNCOMMON, "desc": "+45 px de alcance e +2.5% de dano nos ataques basicos a distancia por copia, sem limite. Na Prismatica, os +45 px viram +3% de critico nos ricochetes.", "icon": "Deck/carta-Horizonte_de_Ruptura1.png", "frame_2": "Deck/carta-Horizonte_de_Ruptura2.png", "color": Color(0.22, 0.68, 1.0)},
 	{"id": "fragmentacao_reativa", "name": "Fragmentacao Reativa", "nick": "Estilhaco de Revide", "rarity": CARD_RARITY_UNCOMMON, "desc": "Ao perder vida para um impacto, dispara fragmentos contra ate 4 inimigos em 150 px. Copias aumentam o raio em 30 px e o dano, sem limite.", "icon": "Deck/carta-Fragmentacao_Reativa1.png", "frame_2": "Deck/carta-Fragmentacao_Reativa2.png", "color": Color(0.92, 0.14, 0.3)},
 	{"id": "bastiao_inercial", "name": "Bastiao Inercial", "nick": "Armadura de Repouso", "rarity": CARD_RARITY_UNCOMMON, "desc": "Apos 0.7s sem se mover, recebe +6 de armadura por copia. Cada copia tambem concede +1.5% de velocidade, sem limite.", "icon": "Deck/carta-Bastiao_Inercial1.png", "frame_2": "Deck/carta-Bastiao_Inercial2.png", "color": Color(0.84, 0.64, 0.3)},
 	{"id": "estilhaco_prismatico", "name": "Estilhaço Prismático", "nick": "Fortuna Lapidada", "rarity": CARD_RARITY_UNCOMMON, "desc": "Abates podem condensar uma lasca grande de prisma. Cada cópia aumenta continuamente a chance e o valor da lasca; os pontos também acompanham o tempo da partida.", "icon": "Deck/carta-Estilhaco_Prismatico1.png", "frame_2": "Deck/carta-Estilhaco_Prismatico2.png", "color": Color(0.32, 0.84, 1.0)},
@@ -2115,6 +2121,7 @@ const CHOQUE_FONTES_TARGET_COOLDOWN: = 4.0
 const CARD_TREGUA_ID: = "tregua_regenerativa"
 const CARD_CINZAS_ID: = "cinzas_escolha"
 const CARD_ESCOLHA_ADIADA_ID: = "escolha_adiada"
+const RETIRED_CARD_IDS: Array[String] = [CARD_ESCOLHA_ADIADA_ID, "leitura_instante", "margem_segura", "solo_consolidado"]
 const CARD_RESERVA_ID: = "reserva_pulso"
 const CARD_CASULO_ID: = "casulo_reativo"
 const CARD_PASSAGEM_ID: = "passagem_intangivel"
@@ -2151,7 +2158,6 @@ const CARD_UNLOCK_RULES: = {
 	"Coletora": {"metric": "enemy_kills", "target": 280.0, "challenge": "Eliminar 280/280 inimigos"},
 	"Mercenaria": {"metric": "enemy_kills", "target": 420.0, "challenge": "Eliminar 420/420 inimigos"},
 	"devorador_destinos": {"metric": "boss_kills", "target": 2.0, "challenge": "Eliminar 2/2 chefes"},
-	CARD_ESCOLHA_ADIADA_ID: {"metric": "shop_rerolls", "target": 18.0, "challenge": "Rerollar 18/18 vezes e comprar 12 cartas", "all": [{"metric": "shop_purchases", "target": 12.0}]},
 	CARD_TREGUA_ID: {"metric": "survive_seconds", "target": 1500.0, "challenge": "Sobreviver 25:00 em uma run"},
 	CARD_CINZAS_ID: {"metric": "shop_purchases", "target": 30.0, "challenge": "Comprar 30/30 cartas e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	CARD_RESERVA_ID: {"metric": "healing_events", "target": 24.0, "challenge": "Receber cura 24/24 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
@@ -2159,11 +2165,8 @@ const CARD_UNLOCK_RULES: = {
 	CARD_PASSAGEM_ID: {"metric": "teleports_used", "target": 90.0, "challenge": "Usar teleporte 90/90 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	CARD_ANCORA_ID: {"metric": "damage_taken_events", "target": 65.0, "challenge": "Sobreviver a 65/65 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
 	"inercia_cronal": {"metric": "damage_taken_events", "target": 80.0, "challenge": "Sobreviver a 80/80 impactos"},
-	"leitura_instante": {"metric": "survive_seconds", "target": 1800.0, "challenge": "Sobreviver 30:00 em uma run"},
-	"margem_segura": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
 	"moeda_estavel": {"metric": "shop_purchases", "target": 18.0, "challenge": "Comprar 18/18 cartas"},
 	"pacto_possibilidades": {"metric": "unique_cards_bought", "target": 18.0, "challenge": "Comprar 18/18 cartas diferentes"},
-	"solo_consolidado": {"metric": "phase_reached", "target": 3.0, "challenge": "Chegar na Fase 3"},
 	CARD_RASTRO_ID: {"metric": "teleports_used", "target": 140.0, "challenge": "Usar teleporte 140/140 vezes"},
 	CARD_REBATE_ID: {"metric": "shots_fired", "target": 750.0, "challenge": "Disparar 750/750 vezes"},
 	CARD_IMPULSO_ID: {"metric": "abilities_used", "target": 140.0, "challenge": "Usar habilidades 140/140 vezes"},
@@ -3079,6 +3082,7 @@ var lobby_controller: Node = RTLobbyControllerScript.new()
 var progression_controller = RuntimeProgressionControllerScript.new()
 var drop_mode_controller = RuntimeDropModeControllerScript.new()
 var enemy_manager: Node = EnemyManagerScript.new()
+var runtime_targeting_controller: RefCounted = RuntimeTargetingControllerScript.new()
 var runtime_performance_controller: RefCounted = RuntimePerformanceControllerScript.new()
 var runtime_work_scheduler: RefCounted = RuntimeWorkSchedulerScript.new()
 var runtime_projectile_batch_renderer: RefCounted = RuntimeProjectileBatchRendererScript.new()
@@ -3089,7 +3093,8 @@ var phase3_enemy_controller: Node = Phase3EnemyControllerScript.new()
 var amber_suturer_controller: Node = Phase6AmberSuturerControllerScript.new()
 var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
-var boss6_stage_controller: RefCounted = Boss6StageControllerScript.new()
+var boss6_stage_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_stage_controller.gd").new()
+var boss6_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_controller.gd").new()
 var player_control_controller: RefCounted = PlayerControlControllerScript.new()
 var necronada_ability_controller: RefCounted = NecronadaAbilityControllerScript.new()
 var ancorada_ability_controller: RefCounted = AncoradaAbilityControllerScript.new()
@@ -3098,7 +3103,9 @@ var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityCont
 var henry_colossus_ability_controller: RefCounted = HenryColossusAbilityControllerScript.new()
 var reactive_survival_card_controller: RefCounted = ReactiveSurvivalCardControllerScript.new()
 var roguelike_point_card_controller: RefCounted = RoguelikePointCardControllerScript.new()
+var card_power_feedback_controller: RefCounted = CardPowerFeedbackControllerScript.new()
 var point_boost_pickup_controller: RefCounted = PointBoostPickupControllerScript.new()
+var shop_rift_controller: RefCounted = MerchantRiftControllerScript.new()
 var shared_boss_attack_contract: RefCounted = RTSharedBossAttackContractScript.new()
 var boss4_instability_fissure_controller: RefCounted = RTBoss4InstabilityFissureControllerScript.new()
 var boss4_controller: RefCounted = RTBoss4ControllerScript.new()
@@ -3143,6 +3150,10 @@ var shop_recent_manual_open_count = 0
 var shop_purchases_this_visit = 0
 var shop_last_exit_had_purchase = false
 var shop_last_exit_time = -999.0
+var shop_rift: Dictionary = {}
+var shop_rift_kills: int = 0
+var shop_rift_fragments: int = 0
+var shop_rift_next_allowed_time: float = 0.0
 var shop_abuse_penalty_count = 0
 var shop_manual_reopen_warning_until_ms: int = 0
 var shop_manual_reopen_warning_text: String = ""
@@ -3770,6 +3781,7 @@ var phase6_pustule_pools = []
 var boss6_state = BOSS6_STATE_IDLE
 var boss6_stage: int = 1
 var boss6_move_phase: float = 0.0
+var boss6_ai_state: Dictionary = {}
 var boss6_current_ability = ""
 var boss6_state_timer = 0.0
 var boss6_global_recovery = 0.0

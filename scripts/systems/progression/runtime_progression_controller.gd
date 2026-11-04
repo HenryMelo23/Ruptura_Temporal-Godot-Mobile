@@ -2,16 +2,28 @@ extends RefCounted
 
 const RuntimeTemporalLuckController = preload("res://scripts/systems/progression/runtime_temporal_luck_controller.gd")
 const PlayerRunLevelController = preload("res://scripts/systems/progression/player_run_level_controller.gd")
+const RuntimeAffordableCardController = preload("res://scripts/systems/progression/runtime_affordable_card_controller.gd")
 
 var core
 var temporal_luck_controller := RuntimeTemporalLuckController.new()
 var player_run_level_controller := PlayerRunLevelController.new()
+var affordable_card_controller := RuntimeAffordableCardController.new()
+
+const POINT_DISPLAY_DENOMINATION: float = 10.0
 
 
 func configure(runtime_core) -> void:
 	core = runtime_core
 	temporal_luck_controller.configure(runtime_core)
 	player_run_level_controller.configure(runtime_core)
+	affordable_card_controller.configure(runtime_core)
+
+
+func format_points(amount: Variant) -> String:
+	var display_value: float = float(amount) / POINT_DISPLAY_DENOMINATION
+	if is_equal_approx(display_value, round(display_value)):
+		return str(int(round(display_value)))
+	return "%.1f" % display_value
 
 
 func points_for_enemy(enemy: Dictionary) -> int:
@@ -103,6 +115,10 @@ func apply_score_delta(amount: int, broadcast: = true, event_id: String = "") ->
 
 
 func elite_point_multiplier(enemy: Dictionary) -> float:
+	return _kind_point_multiplier(enemy) * float(enemy.get("horde_points", 1.0))
+
+
+func _kind_point_multiplier(enemy: Dictionary) -> float:
 	match String(enemy.get("type", core.ENEMY_COMMON)):
 		core.ENEMY_AGGLOMERATOR:
 			return 1.55
@@ -136,6 +152,8 @@ func card_count(card: Dictionary) -> int:
 
 
 func card_count_by_id(card_id: String) -> int:
+	if card_id in core.RETIRED_CARD_IDS:
+		return 0
 	return int(core.cards_bought.get(card_id, 0))
 
 
@@ -247,18 +265,4 @@ func support_log2_count(card_id: String) -> float:
 
 
 func affordable_card_count() -> int:
-	var temp_score = core.score
-	var temp_cost = core.card_cost
-	var count = 0
-	while temp_score > 0:
-		var cheapest: = INF
-		for card in core.CARDS:
-			if card_at_max(card):
-				continue
-			cheapest = min(cheapest, float(effective_card_price(card, temp_cost)))
-		if cheapest == INF or float(temp_score) < cheapest:
-			break
-		temp_score -= int(cheapest)
-		temp_cost += shop_price_increment_after_purchase()
-		count += 1
-	return count
+	return affordable_card_controller.count()

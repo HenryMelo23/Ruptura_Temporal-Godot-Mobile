@@ -136,15 +136,24 @@ static func _draw_hud_bar(game: Node2D, pos: Vector2, width: float, height: floa
 static func _draw_player_run_level(game: Node2D, panel: Rect2, scale_value: float = 1.0) -> void:
 	var level: int = clampi(int(game.player_run_level), 1, 10)
 	var xp: int = maxi(0, int(game.player_run_xp))
-	var thresholds: Array = [40, 65, 100, 155, 235, 350, 515, 760, 1110]
-	var needed: int = 0 if level >= 10 else int(thresholds[level - 1])
+	var needed: int = game._player_run_level_controller().xp_to_next()
 	var ratio: float = 1.0 if needed <= 0 else clampf(float(xp) / float(needed), 0.0, 1.0)
-	var bar := Rect2(panel.position + Vector2(12.0 * scale_value, panel.size.y + 6.0 * scale_value), Vector2(panel.size.x - 24.0 * scale_value, 5.0 * scale_value))
+	var bar := Rect2(panel.position + Vector2(12.0 * scale_value, panel.size.y + 22.0 * scale_value), Vector2(panel.size.x - 24.0 * scale_value, 6.0 * scale_value))
 	game.draw_rect(bar, Color(0.015, 0.035, 0.055, 0.86), true)
 	game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * ratio, bar.size.y)), Color(0.16, 0.82, 1.0, 0.92), true)
 	game.draw_rect(bar, Color(0.34, 0.92, 1.0, 0.7), false, 1.0)
 	var label := "NV %d  MAX" % level if level >= 10 else "NV %d  %d/%d" % [level, xp, needed]
-	game.draw_string(game.font, bar.position + Vector2(0.0, -2.0 * scale_value), label, HORIZONTAL_ALIGNMENT_LEFT, bar.size.x, int(10.0 * scale_value), Color(0.66, 0.95, 1.0, 0.92))
+	game.draw_string_outline(game.font, bar.position + Vector2(0.0, -5.0 * scale_value), label, HORIZONTAL_ALIGNMENT_LEFT, bar.size.x, int(11.0 * scale_value), 3, Color(0.01, 0.02, 0.03, 0.95))
+	game.draw_string(game.font, bar.position + Vector2(0.0, -5.0 * scale_value), label, HORIZONTAL_ALIGNMENT_LEFT, bar.size.x, int(11.0 * scale_value), Color(0.66, 0.95, 1.0, 0.92))
+
+
+## Relogio + ameaca no topo central. No retrato desce para baixo dos paineis laterais.
+static func _clock_rect(game: Node2D, viewport: Vector2, compact: bool, below: float = 0.0) -> Rect2:
+	var size := Vector2(160.0, 66.0) if compact else Vector2(204.0, 80.0)
+	var y: float = 12.0
+	if game._is_portrait(viewport):
+		y = below + 8.0
+	return Rect2(Vector2(viewport.x * 0.5 - size.x * 0.5, y), size)
 
 
 static func _draw_contractual_status_line(game: Node2D, pos: Vector2, label: String, color: Color) -> void:
@@ -180,7 +189,8 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 	var left_rect = Rect2(game._left_panel_pos(viewport), Vector2(left_w, left_h))
 	var left_alpha: float = _hud_rect_player_alpha(game, left_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, left_rect, left_alpha)
-	_draw_player_run_level(game, left_rect, sm)
+	var clock_rect: Rect2 = _clock_rect(game, viewport, true, left_rect.end.y)
+	game.hud_feedback.clock_panel(game, clock_rect, _hud_rect_player_alpha(game, clock_rect, viewport, 84.0), true)
 
 	var right_w = (220.0 * sm) if not portrait else min(220.0, viewport.x * 0.44)
 	var right_rect = Rect2(game._right_panel_pos(viewport), Vector2(right_w, left_h))
@@ -212,15 +222,8 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 			ping_text += "  PAR %dms" % game.net_remote_ping_ms
 		if game._is_world_replica():
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
-		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0 * sm, 28.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
+		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0 * sm, clock_rect.end.y + 14.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
 	_draw_point_boost_hud(game, viewport)
-	game._draw_card_mechanic_huds(viewport, left_rect)
-	game._draw_ancorada_hud(viewport, left_rect)
-	game._draw_acorrentada_hud(viewport, left_rect)
-	game._draw_bombastica_hud(viewport, left_rect)
-	game._draw_necronada_hud(viewport, left_rect)
-	game._draw_aura_hud(viewport, left_rect)
-	game._draw_revive_heal_penalty_hud(viewport, left_rect)
 	game._draw_lacerante_coagulum_hud(viewport)
 	game._draw_contractual_order_hud(viewport)
 	game._draw_unlock_notifications(viewport)
@@ -238,13 +241,17 @@ static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> voi
 	var hp_bar := Rect2(left_rect.position + Vector2(10.0, 27.0), Vector2(left_rect.size.x - 20.0, 9.0))
 	game.draw_rect(hp_bar, Color(0.08, 0.11, 0.13, 0.96), true)
 	game.draw_rect(Rect2(hp_bar.position, Vector2(hp_bar.size.x * hp_ratio, hp_bar.size.y)), hp_color, true)
-	game.draw_string(game.font, left_rect.position + Vector2(10.0, 50.0), "%02d:%02d  %s" % [int(game.time_alive) / 60, int(game.time_alive) % 60, game._phase_region_name(game.current_phase)], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 10, Color(accent.r, accent.g, accent.b, 0.9))
-	_draw_player_run_level(game, left_rect)
+	game.hud_feedback.heal_reduction_wire(game, hp_bar, 1.0)
+	game.draw_string(game.font, left_rect.position + Vector2(10.0, 50.0), "NV %d  %s" % [int(game.player_run_level), game._phase_region_name(game.current_phase)], HORIZONTAL_ALIGNMENT_LEFT, left_rect.size.x - 20.0, 11, Color(accent.r, accent.g, accent.b, 0.9))
+	var perf_clock := Rect2(viewport.x * 0.5 - 60.0, 16.0, 120.0, 36.0)
+	game.draw_rect(perf_clock, Color(0.015, 0.025, 0.035, 0.9), true)
+	game.draw_rect(perf_clock, game.hud_feedback.THREAT_COLORS[game.hud_feedback.threat_tier(game)], false, 1.0)
+	game.draw_string(game.font, perf_clock.position + Vector2(0.0, 27.0), game.hud_feedback.clock_text(game), HORIZONTAL_ALIGNMENT_CENTER, perf_clock.size.x, 22, Color.WHITE)
 
 	game.draw_rect(right_rect, Color(0.015, 0.025, 0.035, 0.9), true)
 	game.draw_rect(right_rect, Color(0.12, 0.9, 1.0), false, 1.0)
-	game.draw_string(game.font, right_rect.position + Vector2(10.0, 22.0), "PONTOS  %d" % int(game.score), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 16, Color.WHITE)
-	game.draw_string(game.font, right_rect.position + Vector2(10.0, 45.0), "CARTAS %d  CUSTO %d" % [game._affordable_card_count(), int(game.card_cost)], HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 10, Color(0.72, 0.96, 1.0))
+	game.draw_string(game.font, right_rect.position + Vector2(10.0, 22.0), "PONTOS  %s" % game.hud_feedback.display_points(game, game.score), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 16, Color.WHITE)
+	game.draw_string(game.font, right_rect.position + Vector2(10.0, 45.0), "CARTAS COMPRAVEIS: %d" % game._affordable_card_count(), HORIZONTAL_ALIGNMENT_LEFT, right_rect.size.x - 20.0, 11, Color(0.72, 0.96, 1.0))
 
 	if game.boss_active and game.boss_hp > 0.0 and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		var boss_rect := Rect2(viewport.x * 0.5 - 180.0, 18.0, 360.0, 24.0)
@@ -256,14 +263,6 @@ static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> voi
 	if game.is_multiplayer and game.online_connected:
 		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 92.0, 58.0), "PING %sms" % (str(game.net_ping_ms) if game.net_ping_ms >= 0 else "--"), HORIZONTAL_ALIGNMENT_CENTER, 184.0, 10, Color(0.72, 0.96, 1.0, 0.86))
 	_draw_point_boost_hud(game, viewport)
-	# Tactical meters remain available; only their always-on decorative shell is reduced.
-	game._draw_card_mechanic_huds(viewport, left_rect)
-	game._draw_ancorada_hud(viewport, left_rect)
-	game._draw_acorrentada_hud(viewport, left_rect)
-	game._draw_bombastica_hud(viewport, left_rect)
-	game._draw_necronada_hud(viewport, left_rect)
-	game._draw_aura_hud(viewport, left_rect)
-	game._draw_revive_heal_penalty_hud(viewport, left_rect)
 	game._draw_lacerante_coagulum_hud(viewport)
 	game._draw_contractual_order_hud(viewport)
 	game._draw_unlock_notifications(viewport)
@@ -314,7 +313,6 @@ static func _draw_contractual_order_hud(game: Node2D, viewport: Vector2) -> void
 		var age = float(game.contractual_order.get("real_age", game.contractual_order.get("age", 0.0)))
 		var goal: int = max(1, int(game.contractual_order.get("goal", 1)))
 		var progress: int = clampi(int(game.contractual_order.get("progress", 0)), 0, goal)
-		var time_left = float(game.contractual_order.get("time_left", 0.0))
 		if age < game.CONTRACT_ORDER_EXECUTION_START_TIME:
 			var panel_size = Vector2(min(560.0, viewport.x * 0.74), 246.0)
 			var center = viewport * 0.5
@@ -327,18 +325,6 @@ static func _draw_contractual_order_hud(game: Node2D, viewport: Vector2) -> void
 			var read_left = maxf(0.0, game.CONTRACT_ORDER_READ_END_TIME - maxf(age, game.CONTRACT_ORDER_SLOW_IN_TIME))
 			var phase_label = "DESACELERANDO O MUNDO" if age < game.CONTRACT_ORDER_SLOW_IN_TIME else ("LEITURA %.0fs" % ceil(read_left) if age < game.CONTRACT_ORDER_READ_END_TIME else "PROTOCOLANDO ORDEM")
 			game._draw_judicial_order_paper(reveal_rect, String(game.contractual_order.get("label", "")), String(game.contractual_order.get("desc", "")), "%d/%d" % [progress, goal], phase_label, false)
-		else:
-			var compact_rect = Rect2(18.0, 238.0, min(330.0, viewport.x * 0.36), 104.0)
-			game._draw_judicial_order_paper(compact_rect, String(game.contractual_order.get("label", "")), "", "%d/%d" % [progress, goal], "%.0fs" % ceil(time_left), true)
-			var ratio = float(progress) / float(goal)
-			_draw_hud_bar(game, compact_rect.position + Vector2(18, 76), compact_rect.size.x - 36.0, 8.0, ratio, Color(0.54, 0.12, 0.04))
-	var y = 334.0
-	for key in game.contractual_order_rewards.keys():
-		_draw_contractual_status_line(game, Vector2(18.0, y), "BENCAO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_rewards[key]))], Color(0.38, 1.0, 0.58))
-		y += 28.0
-	for key in game.contractual_order_penalties.keys():
-		_draw_contractual_status_line(game, Vector2(18.0, y), "CONFISCO %s %.0fs" % [String(key).to_upper(), ceil(float(game.contractual_order_penalties[key]))], Color(1.0, 0.3, 0.18))
-		y += 28.0
 
 
 static func _draw_spectator_hud(game: Node2D, viewport: Vector2) -> void :
@@ -752,7 +738,8 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 	var life_rect = Rect2(18.0, 16.0, 276.0, 76.0)
 	var life_alpha: float = _hud_rect_player_alpha(game, life_rect, viewport, 84.0)
 	game.hud_feedback.health_panel(game, life_rect, life_alpha)
-	_draw_player_run_level(game, life_rect)
+	var clock_rect: Rect2 = _clock_rect(game, viewport, false)
+	game.hud_feedback.clock_panel(game, clock_rect, _hud_rect_player_alpha(game, clock_rect, viewport, 84.0), false)
 	var right_rect = Rect2(viewport.x - 300.0, 16.0, 220.0, 76.0)
 	var right_alpha: float = _hud_rect_player_alpha(game, right_rect, viewport, 84.0)
 	game.hud_feedback.stats_panel(game, right_rect, right_alpha)
@@ -774,16 +761,9 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 			ping_text += "  PAR %dms" % game.net_remote_ping_ms
 		if game._is_world_replica():
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
-		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0, 28.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
+		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0, clock_rect.end.y + 14.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
 
 	_draw_point_boost_hud(game, viewport)
-	game._draw_card_mechanic_huds(viewport, life_rect)
-	game._draw_ancorada_hud(viewport, life_rect)
-	game._draw_acorrentada_hud(viewport, life_rect)
-	game._draw_bombastica_hud(viewport, life_rect)
-	game._draw_necronada_hud(viewport, life_rect)
-	game._draw_aura_hud(viewport, life_rect)
-	game._draw_revive_heal_penalty_hud(viewport, life_rect)
 	game._draw_lacerante_coagulum_hud(viewport)
 	game._draw_contractual_order_hud(viewport)
 	game._draw_unlock_notifications(viewport)
@@ -1071,9 +1051,11 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 		var shop_label: String = "REABRIR" if shop_grace else "LOJA"
 		var shop_top: String = game._manual_shop_status_text()
 		if shop_top == "":
-			shop_top = "LOJA %d" % game.card_cost
+			# As cartas compraveis ja aparecem no painel de pontos; aqui so status.
+			shop_top = ""
 		game._draw_hud_rect_button(shop_rect, shop_label, _with_alpha(shop_accent, shop_alpha))
-		game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.96 * shop_alpha))
+		if shop_top != "":
+			game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.96 * shop_alpha))
 		if shop_cooldown > 0.0:
 			var cooldown_total: float = maxf(0.01, game.SHOP_MANUAL_REOPEN_COOLDOWN)
 			var progress: float = clampf(1.0 - shop_cooldown / cooldown_total, 0.0, 1.0)

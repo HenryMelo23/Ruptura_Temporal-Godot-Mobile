@@ -6,7 +6,7 @@ class FakeGame:
 	extends Node
 
 	const ENEMY_MAX_BASE := 6
-	const PHASE1_LIMIT_BREAK_TIME := 960.0
+	const PHASE1_LIMIT_BREAK_TIME := 600.0
 	const PHASE1_LIMIT_KILLS_PER_EXTRA := 30
 	const PHASE2_COMMON_LIMIT := 6
 	const PHASE2_KAMIKAZE_LIMIT := 2

@@ -74,7 +74,7 @@ func on_enemy_defeated(enemy: Dictionary, pos: Vector2) -> Dictionary:
 	})
 	if orb.is_empty():
 		return {}
-	core._add_text("LASCA +%d" % value, pos + Vector2(0, -82), Color(0.38, 0.96, 1.0), 1.05, 20)
+	core._add_text("LASCA +%s" % core._format_points(value), pos + Vector2(0, -82), Color(0.38, 0.96, 1.0), 1.05, 20)
 	core._spawn_radial_particles(pos, Color(0.48, 0.36, 1.0), 8 if core._memory_saver_active() else 15)
 	core._play_sfx("Moeda.mp3", 0.045, 0.40, 1.42)
 	return orb
@@ -87,7 +87,7 @@ func on_player_damaged(actual_hp_damage: float) -> int:
 	if reward <= 0:
 		return 0
 	core._apply_score_delta(reward)
-	core._add_text("DOR +%d" % reward, core.player_pos + Vector2(0, -104), Color(1.0, 0.66, 0.18), 0.72, 17)
+	core._add_text("DOR +%s" % core._format_points(reward), core.player_pos + Vector2(0, -104), Color(1.0, 0.66, 0.18), 0.72, 17)
 	core._spawn_radial_particles(core.player_pos, Color(1.0, 0.46, 0.14), 4 if core._memory_saver_active() else 7)
 	return reward
 

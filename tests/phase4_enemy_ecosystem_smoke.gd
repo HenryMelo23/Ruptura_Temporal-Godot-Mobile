@@ -33,6 +33,7 @@ func _hazard(kind: String) -> Dictionary:
 func _run() -> void:
 	game._start_game()
 	game.current_phase = 4
+	game._prepare_phase_texture_assets(4)
 	game.mode = "game"
 	game.player_pos = Vector2(720, 420)
 	game.enemies.clear()
@@ -42,6 +43,30 @@ func _run() -> void:
 		_spawn(String(kinds[i]), Vector2(300 + i * 150, 250 + (i % 2) * 220))
 	_check(game.enemies.size() == 5, "five thematic enemies were not created")
 	_check(game.enemies.all(func(enemy): return String(enemy["type"]) != game.ENEMY_COMMON), "phase4 ecosystem still uses a generic common enemy")
+	var expected_texture_keys := {
+		game.ENEMY_NEXUS_CARTOGRAPHER: "enemy_phase_4_cartografo",
+		game.ENEMY_NEXUS_CHRONOPHAGE: "enemy_phase_4_cronofago",
+		game.ENEMY_NEXUS_REFRACTOR: "enemy_phase_4_refrator",
+		game.ENEMY_NEXUS_WEAVER: "enemy_phase_4_tecelao",
+		game.ENEMY_NEXUS_ECHO: "enemy_phase_4_eco",
+	}
+	var first_frame_paths := {}
+	for enemy in game.enemies:
+		var kind := String(enemy["type"])
+		var texture_key := String(expected_texture_keys[kind])
+		var frames: Array = game.textures.get(texture_key, [])
+		_check(frames.size() == 2 and frames.all(func(frame): return frame is Texture2D), "%s does not expose two authored frames" % kind)
+		enemy["phase"] = 0.0
+		var frame_0: Texture2D = game._enemy_texture(enemy)
+		enemy["phase"] = 1.0
+		var frame_1: Texture2D = game._enemy_texture(enemy)
+		_check(frame_0 != null and frame_1 != null and frame_0.resource_path != frame_1.resource_path, "%s does not alternate between distinct walk frames" % kind)
+		_check(not first_frame_paths.has(frame_0.resource_path), "%s still shares its base silhouette with another phase 4 species" % kind)
+		first_frame_paths[frame_0.resource_path] = true
+		enemy["facing_dir"] = Vector2.LEFT
+		_check(game._enemy_should_flip(enemy), "%s cannot face left with the authored right-facing frames" % kind)
+		enemy["facing_dir"] = Vector2.RIGHT
+		_check(not game._enemy_should_flip(enemy), "%s flips while already facing right" % kind)
 
 	game.phase4_enemy_hazards.clear()
 	var cartographer: Dictionary = game.enemies[0]
@@ -98,5 +123,5 @@ func _run() -> void:
 	game._despawn_enemies_for_boss_call()
 	_check(game.phase4_enemy_hazards.is_empty() and game.enemies.is_empty(), "phase4 anomalies survived the boss call")
 
-	print("PHASE4_ECOSYSTEM_OK cartographer=rift chronophage=cooldown refractor=triple weaver=vectors echo=memory")
+	print("PHASE4_ECOSYSTEM_OK cartographer=rift chronophage=cooldown refractor=triple weaver=vectors echo=memory species=5 frames=2 stride_swap=true")
 	quit(0)

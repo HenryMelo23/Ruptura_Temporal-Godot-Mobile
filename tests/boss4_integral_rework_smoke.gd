@@ -47,6 +47,7 @@ func _normal_action_for_stage(stage: int, hp_ratio: float, distance: float) -> S
 	game.boss4_ai_state["state"] = "walk"
 	game.boss4_ai_state["action"] = ""
 	game.boss4_ai_state["cooldowns"] = {}
+	game.boss4_ai_state["hop_phase"] = "pause"
 	game.boss4_attack_timer = 0.0
 	game.boss4_controller.update(0.01)
 	if String(game.boss4_ai_state.get("state", "")) == "transition":
@@ -84,16 +85,16 @@ func _run() -> void:
 	var actions: Array[String] = []
 	var action1 := _normal_action_for_stage(1, 0.90, 150.0)
 	actions.append(action1)
-	_check(action1 in ["slam", "tongue", "comet"], "stage 1 chose invalid action: " + action1)
+	_check(action1 in ["slam", "tongue", "jump"], "stage 1 chose invalid action: " + action1)
 	var action2 := _normal_action_for_stage(2, 0.70, 315.0)
 	actions.append(action2)
-	_check(action2 in ["slam", "tongue", "comet", "jump", "fissure", "leak"], "stage 2 chose invalid action: " + action2)
+	_check(action2 in ["slam", "tongue", "comet", "jump"], "stage 2 chose invalid action: " + action2)
 	var action3 := _normal_action_for_stage(3, 0.45, 230.0)
 	actions.append(action3)
-	_check(action3 in ["slam", "tongue", "comet", "jump", "fissure", "leak", "prison", "clone", "combo"], "stage 3 chose invalid action: " + action3)
+	_check(action3 in ["slam", "tongue", "comet", "jump", "gravity"], "stage 3 chose invalid action: " + action3)
 	var action4 := _normal_action_for_stage(4, 0.20, 360.0)
 	actions.append(action4)
-	_check(action4 in ["slam", "tongue", "comet", "jump", "fissure", "leak", "prison", "clone", "combo", "fragments", "gravity", "collapse", "meteor"], "stage 4 chose invalid action: " + action4)
+	_check(action4 in ["slam", "tongue", "comet", "jump", "gravity"], "stage 4 chose invalid action: " + action4)
 	var distinct_actions: Dictionary = {}
 	for action in actions:
 		distinct_actions[action] = true

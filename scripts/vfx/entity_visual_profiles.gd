@@ -159,6 +159,23 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 		var phase6_texture: Texture2D = game._texture_frame(game._phase6_enemy_texture_key(kind6), idx)
 		return phase6_texture if phase6_texture != null else game._texture_frame("enemy_common_phase_1", idx)
 	if game.current_phase == 4:
+		var phase4_kind := String(enemy.get("type", game.ENEMY_COMMON))
+		var typed_phase4_key := ""
+		match phase4_kind:
+			game.ENEMY_NEXUS_CARTOGRAPHER:
+				typed_phase4_key = "enemy_phase_4_cartografo"
+			game.ENEMY_NEXUS_CHRONOPHAGE:
+				typed_phase4_key = "enemy_phase_4_cronofago"
+			game.ENEMY_NEXUS_REFRACTOR:
+				typed_phase4_key = "enemy_phase_4_refrator"
+			game.ENEMY_NEXUS_WEAVER:
+				typed_phase4_key = "enemy_phase_4_tecelao"
+			game.ENEMY_NEXUS_ECHO:
+				typed_phase4_key = "enemy_phase_4_eco"
+		if typed_phase4_key != "":
+			var typed_phase4_texture: Texture2D = game._texture_frame(typed_phase4_key, idx)
+			if typed_phase4_texture != null:
+				return typed_phase4_texture
 		var moving_right4 = Vector2(enemy.get("facing_dir", Vector2.LEFT)).x >= 0.0
 		var phase4_key = "enemy_phase_4_right" if moving_right4 else "enemy_phase_4_left"
 		var phase4_texture: Texture2D = game._texture_frame(phase4_key, idx)
@@ -233,6 +250,9 @@ static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
 			return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 		return false
 	if game.current_phase == 4:
+		var phase4_kind := String(enemy.get("type", game.ENEMY_COMMON))
+		if phase4_kind in [game.ENEMY_NEXUS_CARTOGRAPHER, game.ENEMY_NEXUS_CHRONOPHAGE, game.ENEMY_NEXUS_REFRACTOR, game.ENEMY_NEXUS_WEAVER, game.ENEMY_NEXUS_ECHO]:
+			return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 		return false
 	var dir: Vector2 = Vector2(enemy.get("facing_dir", game._enemy_default_facing(String(enemy.get("type", game.ENEMY_COMMON)))))
 	var moving_right = dir.x >= 0.0

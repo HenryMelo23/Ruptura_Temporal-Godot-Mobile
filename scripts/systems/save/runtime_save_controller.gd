@@ -522,13 +522,13 @@ func _save_config() -> void :
 func _interrupted_run_field_names() -> Array:
 	var names: Array = [
 		"shop_paid_rerolls_this_visit", "manifest_evolution_fragment_claim_count", "cinzas_card_bonuses",
-		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted",
+		"mode", "current_phase", "pending_phase", "phase_started_at", "game_time", "time_alive", "elapsed_unpaused", "run_initial_phase", "run_phase6_completed", "dimension_route_queue", "dimension_route_farm_cycles", "dimension_route_completed_count", "dimension_route_last_phase", "run_extracted", "experimental_boss_altar_pos", "experimental_boss_altar_discovered", "experimental_boss_altar_used",
 		"run_pacing_profile", "run_pacing_valid_runs_at_start", "run_valid_duration_recorded", "run_pacing_larapio_first_time", "run_pacing_arauto_first_time", "run_pacing_first_special_enemy_time", "run_pacing_first_special_enemy_kind",
 		"active_character_key", "selected_run_mode", "selected_manifestation", "selected_aura", "selected_mutation", "selected_effect", "manifestation_key", "mutation_key", "effect_key", "aura_state", "manifest_evolution_state",
 		"player_pos", "player_hp", "player_hp_max", "player_speed", "player_damage", "player_run_level", "player_run_xp", "player_attack_interval", "player_dash_cooldown", "player_defense", "player_crit_chance", "player_lifesteal",
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer",
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
-		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "bargain_capsule", "bargain_capsule_next_check_time", "bargain_capsule_event_sequence", "bargain_capsule_pending_discount", "bargain_capsule_last_result", "shop_bargain_discount_session", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", "shop_manual_cooldown_until", "shop_manual_grace_until", "shop_manual_grace_reopen_available", "shop_manual_visit_active", "shop_manual_visit_grace_on_close", "shop_manual_cooldown_pulse",
+		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "bargain_capsule", "bargain_capsule_next_check_time", "bargain_capsule_event_sequence", "bargain_capsule_pending_discount", "bargain_capsule_last_result", "shop_rift", "shop_rift_kills", "shop_rift_fragments", "shop_rift_next_allowed_time", "shop_bargain_discount_session", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", "shop_manual_cooldown_until", "shop_manual_grace_until", "shop_manual_grace_reopen_available", "shop_manual_visit_active", "shop_manual_visit_grace_on_close", "shop_manual_cooldown_pulse",
 		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", "henry_attack_combo", "henry_attack_visual_stage", "henry_skill_cast_active", "henry_skill_cast_elapsed", "henry_skill_cast_direction", "henry_skill_damage_applied", "henry_flame_cones", "henry_ultimate_cast_active", "henry_ultimate_cast_elapsed", "henry_ultimate_center", "henry_ultimate_event_id", "henry_heat_waves", "henry_boss_burn_state", "henry_friction", "henry_friction_release_timer", "henry_incandescence_active_timer", "henry_incandescence_tick_timer", "henry_incandescence_intensity", "henry_incandescence_target_dwell", "henry_incandescence_zones",
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing",
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player",
@@ -547,7 +547,7 @@ func _interrupted_run_field_names() -> Array:
 		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects", "necronada_vestiges", "necronada_remnants", "necronada_requiem", "necronada_pente_history", "necronada_attack_counter", "necronada_empowered_ready", "necronada_empower_until", "necronada_empower_cooldown_until", "necronada_horde_progress",
 		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
 	]
-	names.append_array(["boss6_stage", "boss6_move_phase"])
+	names.append_array(["boss6_stage", "boss6_move_phase", "boss6_ai_state"])
 	return names
 
 func _run_report_state_field_names() -> Array:
@@ -773,6 +773,7 @@ func _resume_interrupted_run() -> bool:
 		var key: = String(field)
 		if fields.has(key):
 			core.set(key, fields[key])
+	core.experimental_phase_controller.restore_after_snapshot()
 	_post_resume_interrupted_run()
 	return true
 
@@ -852,6 +853,7 @@ func _use_run_retry() -> bool:
 		var key: = String(field)
 		if fields.has(key):
 			core.set(key, fields[key])
+	core.experimental_phase_controller.restore_after_snapshot()
 	core._player_run_level_controller().normalize()
 	core.is_dead = false
 	core.partner_is_dead = false

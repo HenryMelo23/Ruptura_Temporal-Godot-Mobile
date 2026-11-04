@@ -10,13 +10,47 @@ const SPARK_LIFE := 1.15
 const SKILL_NEAR_DAMAGE_MULT := 2.0
 const SKILL_FAR_DAMAGE_MULT := 0.82
 const SKILL_GUARD_DAMAGE_MULT := 0.46
-const ULTIMATE_DAMAGE_MULT := 0.78
+const ULTIMATE_DAMAGE_MULT := 0.9
+# Ignicao Total: uma animacao continua com 3 impactos, cada anel de colunas mais longe.
+const ULT_PULSE_TIMES := [0.7, 1.45, 2.2]
+const ULT_PULSE_RADII := [150.0, 225.0, 300.0]
+const ULT_TOTAL := 2.55
+const ULT_SHAKE := [5.0, 7.5, 11.0]
+## Linha do tempo dos quadros (inicio em s -> quadro). v2 = folha nova de 10; v1 = folha antiga remapeada.
+const ULT_FRAMES_V2 := [[0.0, 0], [0.25, 1], [0.5, 2], [0.7, 3], [0.9, 4], [1.45, 5], [1.75, 6], [2.2, 7], [2.38, 8], [2.5, 9]]
+const ULT_FRAMES_V1 := [[0.0, 0], [0.25, 1], [0.5, 2], [0.7, 7], [0.85, 3], [1.15, 4], [1.45, 7], [1.6, 5], [1.95, 6], [2.2, 7], [2.42, 4]]
 const SKILL_GUARD_PUSH_SPEED := 250.0
 const ULTIMATE_PUSH_SPEED := 330.0
 const SPIN_PUSH_SPEED := 390.0
 const KNOCKBACK_DRAG := 620.0
-const SPIN_DAMAGE_MULT := 0.95
+const SPIN_DAMAGE_MULT := 0.5
 const SPIN_TURNS := 3.5
+
+# Rastro de Brasa (dash): investida curta que deixa chao em chamas.
+const DASH_MAX_DISTANCE := 300.0
+const TRAIL_SPACING := 26.0
+const TRAIL_LIFE := 3.0
+const TRAIL_RADIUS := 36.0
+const TRAIL_TICK := 0.45
+const TRAIL_DAMAGE_MULT := 0.22
+const TRAIL_MAX_POINTS := 16
+
+# Estalo Igneo: o 3o golpe do combo e uma bola de fogo que explode no impacto.
+const FIREBALL_VISUAL_SCALE := 2.1
+const FIREBALL_RADIUS := 74.0
+const FIREBALL_DAMAGE_MULT := 0.55
+
+# Combustao em Cadeia (efeito "incandescencia"): quem morre queimando explode e passa as cargas.
+const COMBUSTION_BASE_RADIUS := 70.0
+const COMBUSTION_RADIUS_PER_STACK := 16.0
+const COMBUSTION_DAMAGE_BASE := 0.3
+const COMBUSTION_DAMAGE_PER_STACK := 0.14
+const COMBUSTION_MAX_PER_FRAME := 6
+const COMBUSTION_MAX_DEPTH := 4
+const COMBUSTION_QUEUE_CAP := 48
+const COMBUSTION_VISUAL_LIFE := 0.5
+const IGNITE_EVERY_HITS := 3
+const NON_TRIGGER_SOURCES := ["henry_burn", "henry_combustion", "henry_ember_trail", "henry_true_fire", "henry_incandescence"]
 
 const ENTRY_WANDER_TIME := 1.2
 const ENTRY_BRAKE_TIME := 0.65
@@ -26,6 +60,12 @@ var entrance_peers: Array = []
 var entrance_spawn_clock := 0.0
 var entrance_finished := false
 var entrance_phase := 0
+var ember_trail: Array = []
+var trail_tick := 0.0
+var fireballs: Array = []
+var fireball_sequence := 0
+var combustion_queue: Array = []
+var combustion_bursts: Array = []
 
 
 func begin_entrance() -> void:
@@ -164,19 +204,23 @@ func reset() -> void:
 	core.henry_incandescence_target_dwell.clear()
 	core.henry_incandescence_zones.clear()
 	core._reset_henry_idle_animation()
+	ember_trail.clear()
+	trail_tick = 0.0
+	fireballs.clear()
+	combustion_queue.clear()
+	combustion_bursts.clear()
 	for enemy in core.enemies:
 		_clear_burn(enemy)
 		enemy.erase("henry_incandescence_heat")
 
 
-func on_player_damaged(actual_damage: int) -> void:
-	if not is_configured() or core.active_character_key != core.CHARACTER_HENRY or core.effect_key != "incandescencia" or actual_damage <= 0:
-		return
-	var hp_reference := maxf(1.0, float(core.player_hp_max))
-	var friction_gain: float = float(actual_damage) / hp_reference * core.HENRY_FRICTION_MAX
-	core.henry_friction = minf(core.HENRY_FRICTION_MAX, core.henry_friction + friction_gain)
-	if core.henry_friction_release_timer <= 0.0 and core.henry_incandescence_active_timer <= 0.0:
-		core.henry_friction_release_timer = core.HENRY_FRICTION_RELEASE_INTERVAL
+## Rework: a passiva nao depende mais de tomar dano (Combustao em Cadeia via on_enemy_killed).
+func on_player_damaged(_actual_damage: int) -> void:
+	return
+
+
+func combustion_active() -> bool:
+	return is_configured() and core.active_character_key == core.CHARACTER_HENRY and core.effect_key == "incandescencia"
 
 
 func fire_auto_attack() -> bool:
@@ -192,6 +236,11 @@ func fire_auto_attack() -> bool:
 	bullet["henry_burn"] = true
 	bullet["henry_combo_stage"] = core.henry_attack_visual_stage
 	bullet["source_character"] = core.CHARACTER_HENRY
+	if core.henry_attack_visual_stage == 2:
+		fireball_sequence += 1
+		bullet["henry_fireball_id"] = fireball_sequence
+		bullet["visual_scale"] = maxf(float(bullet.get("visual_scale", 1.0)), FIREBALL_VISUAL_SCALE)
+		fireballs.append({"id": fireball_sequence, "pos": Vector2(bullet.get("pos", core.player_pos)), "life": float(bullet.get("life", 1.0))})
 	return true
 
 
@@ -224,8 +273,12 @@ func begin_spin_dash(target_world: Vector2) -> bool:
 	core.henry_spin_active = true
 	core.henry_spin_elapsed = 0.0
 	core.henry_spin_origin = core.player_pos
-	core.henry_spin_dash_target = core._clamp_player_world(target_world)
+	var dash_target: Vector2 = target_world
+	if dash_target.distance_to(core.player_pos) > DASH_MAX_DISTANCE:
+		dash_target = core.player_pos + direction.normalized() * DASH_MAX_DISTANCE
+	core.henry_spin_dash_target = core._clamp_player_world(dash_target)
 	core.henry_spin_dash_direction = direction.normalized()
+	_add_trail_point(core.player_pos)
 	core.henry_spin_event_id = core._next_network_event_id("henry_spin")
 	_clear_hostile_effects()
 	core._cancel_combat_aim_state(true)
@@ -264,7 +317,7 @@ func cast_ultimate() -> bool:
 		core.NET_ABILITY_SECONDARY,
 		core.henry_ultimate_center,
 		core.henry_ultimate_center,
-		core.HENRY_ULTIMATE_CAST_DURATION * core.HENRY_ULTIMATE_PULSE_COUNT + core.HENRY_ULTIMATE_WAVE_DURATION,
+		ULT_TOTAL + core.HENRY_ULTIMATE_WAVE_DURATION,
 		core.HENRY_ULTIMATE_CAST_DURATION
 	)
 	return true
@@ -272,17 +325,21 @@ func cast_ultimate() -> bool:
 
 func _release_ultimate_pulse(pulse_index: int) -> void:
 	var center: Vector2 = core.henry_ultimate_center
+	var pulse_radius: float = float(ULT_PULSE_RADII[clampi(pulse_index, 0, ULT_PULSE_RADII.size() - 1)])
+	core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.22 + 0.06 * float(pulse_index))
+	core.screen_shake_strength = maxf(float(core.screen_shake_strength), float(ULT_SHAKE[clampi(pulse_index, 0, 2)]))
+	core._vibrate(90 + 40 * pulse_index, 0.4 + 0.15 * float(pulse_index))
 	core.henry_heat_waves.append({
 		"center": center,
 		"radius": 0.0,
-		"max_radius": core.HENRY_ULTIMATE_RADIUS,
+		"max_radius": pulse_radius,
 		"life": core.HENRY_ULTIMATE_WAVE_DURATION,
 		"max": core.HENRY_ULTIMATE_WAVE_DURATION,
 		"event_id": "%s:%d" % [core.henry_ultimate_event_id, pulse_index],
 		"kind": "ultimate",
 		"pulse": pulse_index,
 	})
-	_apply_heat_wave(center)
+	_apply_heat_wave(center, pulse_radius)
 
 
 func update(delta: float) -> void:
@@ -293,6 +350,9 @@ func update(delta: float) -> void:
 		_update_ultimate_cast(delta)
 		_update_spin(delta)
 	_update_incandescence(delta)
+	_update_trail(delta)
+	_update_fireballs()
+	_update_combustion(delta)
 	for cone in core.henry_flame_cones:
 		cone["life"] = maxf(0.0, float(cone.get("life", 0.0)) - delta)
 	core.henry_flame_cones = core.henry_flame_cones.filter(func(cone): return float(cone.get("life", 0.0)) > 0.0)
@@ -319,9 +379,12 @@ func update(delta: float) -> void:
 func _update_ultimate_cast(delta: float) -> void:
 	if not core.henry_ultimate_cast_active:
 		return
-	var total_duration: float = core.HENRY_ULTIMATE_CAST_DURATION * core.HENRY_ULTIMATE_PULSE_COUNT
+	var total_duration: float = ULT_TOTAL
 	core.henry_ultimate_cast_elapsed = minf(total_duration, core.henry_ultimate_cast_elapsed + delta)
-	var due_pulses := mini(core.HENRY_ULTIMATE_PULSE_COUNT, int(floor((core.henry_ultimate_cast_elapsed + 0.0001) / core.HENRY_ULTIMATE_CAST_DURATION)))
+	var due_pulses := 0
+	for pulse_time in ULT_PULSE_TIMES:
+		if core.henry_ultimate_cast_elapsed + 0.0001 >= float(pulse_time):
+			due_pulses += 1
 	while core.henry_ultimate_pulses_released < due_pulses:
 		_release_ultimate_pulse(core.henry_ultimate_pulses_released)
 		core.henry_ultimate_pulses_released += 1
@@ -342,6 +405,7 @@ func _update_spin(delta: float) -> void:
 	if current_dash > previous_dash:
 		var travel_ease := smoothstep(0.0, 1.0, current_dash)
 		core.player_pos = core._clamp_player_world(core.henry_spin_origin.lerp(core.henry_spin_dash_target, travel_ease))
+		_extend_trail_to(core.player_pos)
 	_clear_hostile_effects()
 	if core.henry_spin_elapsed >= core.HENRY_SPIN_DURATION:
 		_release_spin_burst()
@@ -383,10 +447,9 @@ func _update_incandescence(delta: float) -> void:
 		core.henry_incandescence_target_dwell.clear()
 		core.henry_incandescence_zones.clear()
 		return
-	for zone in core.henry_incandescence_zones:
-		zone["center"] = core.player_pos
-		zone["life"] = maxf(0.0, float(zone.get("life", 0.0)) - delta)
-	core.henry_incandescence_zones = core.henry_incandescence_zones.filter(func(zone): return float(zone.get("life", 0.0)) > 0.0)
+	core.henry_friction = 0.0
+	core.henry_friction_release_timer = 0.0
+	core.henry_incandescence_zones.clear()
 	if core.henry_incandescence_active_timer > 0.0:
 		core.henry_incandescence_active_timer = maxf(0.0, core.henry_incandescence_active_timer - delta)
 		_update_incandescence_targets(delta)
@@ -613,18 +676,20 @@ func _apply_radial_damage(center: Vector2, radius: float, damage: float, source:
 		core._damage_boss(damage, source, true, true, "skill_q" if source == "henry_guard_burst" else "skill_shift", center)
 
 
-func _apply_heat_wave(center: Vector2) -> void:
+func _apply_heat_wave(center: Vector2, radius: float = -1.0) -> void:
+	if radius <= 0.0:
+		radius = core.HENRY_ULTIMATE_RADIUS
 	for enemy in core.enemies:
 		if float(enemy.get("hp", 0.0)) <= 0.0:
 			continue
 		var enemy_pos := Vector2(enemy.get("pos", center))
 		var distance := center.distance_to(enemy_pos)
-		if distance > core.HENRY_ULTIMATE_RADIUS:
+		if distance > radius:
 			continue
 		core._damage_enemy(enemy, core.player_damage * ULTIMATE_DAMAGE_MULT, "henry_heat_wave", true, true, center, "skill_e")
-	if core._arauto_active() and center.distance_to(Vector2(core.arauto.get("pos", center))) <= core.HENRY_ULTIMATE_RADIUS:
+	if core._arauto_active() and center.distance_to(Vector2(core.arauto.get("pos", center))) <= radius:
 		core._damage_arauto(core.player_damage * ULTIMATE_DAMAGE_MULT, "henry_heat_wave", true, true, "skill_e", center)
-	if core.boss_active and core.boss_hp > 0.0 and center.distance_to(core.boss_pos) <= core.HENRY_ULTIMATE_RADIUS:
+	if core.boss_active and core.boss_hp > 0.0 and center.distance_to(core.boss_pos) <= radius + 40.0:
 		core._damage_boss(core.player_damage * ULTIMATE_DAMAGE_MULT, "henry_heat_wave", true, true, "skill_e", center)
 
 
@@ -656,7 +721,9 @@ func _update_enemy_burn(enemy: Dictionary, delta: float) -> void:
 	enemy["henry_burn_time"] = remaining
 	enemy["henry_burn_overdrive"] = overdrive
 	enemy["henry_burn_stack_flash"] = maxf(0.0, float(enemy.get("henry_burn_stack_flash", 0.0)) - delta)
-	if remaining <= 0.0 or float(enemy.get("hp", 0.0)) <= 0.0:
+	if float(enemy.get("hp", 0.0)) <= 0.0:
+		return
+	if remaining <= 0.0:
 		_clear_burn(enemy)
 		return
 	enemy["henry_burn_tick"] = float(enemy.get("henry_burn_tick", core.HENRY_BURN_TICK_INTERVAL)) - delta
@@ -694,7 +761,7 @@ func _inside_cone(origin: Vector2, direction: Vector2, target: Vector2) -> bool:
 
 
 func _target_direction(target_world) -> Vector2:
-	var direction: Vector2 = core._aim_direction()
+	var direction: Vector2 = core._ability_aim_direction()
 	if target_world is Vector2:
 		direction = Vector2(target_world) - core.player_pos
 	if direction.length_squared() <= 0.001:
@@ -705,3 +772,212 @@ func _target_direction(target_world) -> Vector2:
 func _clear_burn(enemy: Dictionary) -> void:
 	for key in ["henry_burn_time", "henry_burn_tick", "henry_burn_damage", "henry_burn_overdrive", "henry_burn_source_peer", "henry_burn_stacks", "henry_burn_stack_flash"]:
 		enemy.erase(key)
+
+
+
+## --- Dano confirmado (antes em main_runtime_core._apply_henry_burn_from_damage) ---
+func on_damage_dealt(target: Dictionary, source: String, source_damage: float, source_peer_id: int, boss_target: bool) -> void:
+	if source == "henry_true_fire":
+		return
+	if source == "henry_spark":
+		var normalized_damage := source_damage / SPARK_DAMAGE_MULT
+		if boss_target:
+			apply_burn_to_boss(normalized_damage, source_peer_id, true)
+		else:
+			apply_burn_to_enemy(target, normalized_damage, source_peer_id, true)
+		return
+	if source in ["henry_flame_cone", "henry_guard_burst", "henry_heat_wave", "henry_spin_burst"]:
+		if boss_target:
+			consume_breach_boss(source_peer_id)
+		elif target == core.arauto:
+			consume_breach_arauto(source_peer_id)
+		else:
+			consume_breach_enemy(target, source_peer_id)
+		return
+	# Combustao com outras Mutacoes: cada 3o golpe confirmado no mesmo alvo acende 1 Queimadura.
+	if not combustion_active() or core.mutation_key == "incendiario" or source in NON_TRIGGER_SOURCES:
+		return
+	if boss_target:
+		var boss_hits := int(core.henry_boss_burn_state.get("ignite_hits", 0)) + 1
+		core.henry_boss_burn_state["ignite_hits"] = boss_hits % IGNITE_EVERY_HITS
+		if boss_hits >= IGNITE_EVERY_HITS:
+			apply_burn_to_boss(source_damage, source_peer_id, true)
+		return
+	if target.is_empty():
+		return
+	var hits := int(target.get("henry_ignite_hits", 0)) + 1
+	target["henry_ignite_hits"] = hits % IGNITE_EVERY_HITS
+	if hits >= IGNITE_EVERY_HITS:
+		apply_burn_to_enemy(target, source_damage, source_peer_id, true)
+
+
+## --- Combustao em Cadeia ---
+func on_enemy_killed(enemy: Dictionary) -> void:
+	if not combustion_active() or not core._is_world_authority():
+		return
+	var stacks := burn_stacks(enemy)
+	if stacks <= 0 or combustion_queue.size() >= COMBUSTION_QUEUE_CAP:
+		return
+	combustion_queue.append({"pos": Vector2(enemy.get("pos", core.player_pos)), "stacks": stacks, "depth": int(enemy.get("henry_combustion_depth", 0)), "source_peer": int(enemy.get("henry_burn_source_peer", 0))})
+
+
+static func combustion_radius(stacks: int) -> float:
+	return COMBUSTION_BASE_RADIUS + COMBUSTION_RADIUS_PER_STACK * float(clampi(stacks, 1, 5))
+
+
+func _update_combustion(delta: float) -> void:
+	for burst in combustion_bursts:
+		burst["life"] = float(burst.get("life", 0.0)) - delta
+	combustion_bursts = combustion_bursts.filter(func(burst): return float(burst.get("life", 0.0)) > 0.0)
+	var processed := 0
+	while not combustion_queue.is_empty() and processed < COMBUSTION_MAX_PER_FRAME:
+		var entry: Dictionary = combustion_queue.pop_front()
+		_detonate(entry)
+		processed += 1
+
+
+func _detonate(entry: Dictionary) -> void:
+	var center: Vector2 = Vector2(entry.get("pos", core.player_pos))
+	var stacks: int = clampi(int(entry.get("stacks", 1)), 1, core.HENRY_BURN_STACK_MAX)
+	var depth: int = int(entry.get("depth", 0))
+	var radius := combustion_radius(stacks)
+	var damage: float = float(core.player_damage) * (COMBUSTION_DAMAGE_BASE + COMBUSTION_DAMAGE_PER_STACK * float(stacks))
+	var spread: int = maxi(1, stacks - 1) if depth < COMBUSTION_MAX_DEPTH else 0
+	var source_peer: int = int(entry.get("source_peer", 0))
+	combustion_bursts.append({"pos": center, "radius": radius, "stacks": stacks, "life": COMBUSTION_VISUAL_LIFE, "max": COMBUSTION_VISUAL_LIFE})
+	var radius_sq := radius * radius
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		if Vector2(enemy.get("pos", center)).distance_squared_to(center) > radius_sq:
+			continue
+		enemy["henry_combustion_depth"] = depth + 1
+		for _i in range(spread):
+			apply_burn_to_enemy(enemy, damage, source_peer, true)
+		core._damage_enemy(enemy, damage, "henry_combustion", false, false, center, "status_tick", source_peer, "incendiario")
+	if core._arauto_active() and Vector2(core.arauto.get("pos", center)).distance_squared_to(center) <= radius_sq:
+		core._damage_arauto(damage, "henry_combustion", false, false, "status_tick", center, source_peer, "incendiario")
+	if core.boss_active and core.boss_hp > 0.0 and core.boss_pos.distance_squared_to(center) <= radius_sq:
+		if spread > 0:
+			apply_burn_to_boss(damage, source_peer, true)
+		core._damage_boss(damage, "henry_combustion", false, false, "status_tick", center, source_peer, "incendiario")
+	if stacks >= 3:
+		core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.08)
+		core.screen_shake_strength = maxf(float(core.screen_shake_strength), 3.0 + float(stacks))
+
+
+## --- Rastro de Brasa ---
+func _add_trail_point(pos: Vector2) -> void:
+	ember_trail.append({"pos": pos, "life": TRAIL_LIFE, "max": TRAIL_LIFE})
+	while ember_trail.size() > TRAIL_MAX_POINTS:
+		ember_trail.pop_front()
+
+
+## Preenche a trilha em passos fixos ate a posicao atual (independe do tamanho do quadro).
+func _extend_trail_to(pos: Vector2) -> void:
+	if ember_trail.is_empty():
+		_add_trail_point(pos)
+		return
+	var last: Vector2 = Vector2(ember_trail.back()["pos"])
+	var distance := last.distance_to(pos)
+	var steps := int(floor(distance / TRAIL_SPACING))
+	for index in range(steps):
+		_add_trail_point(last.lerp(pos, float(index + 1) * TRAIL_SPACING / distance))
+
+
+func _update_trail(delta: float) -> void:
+	if ember_trail.is_empty():
+		return
+	for point in ember_trail:
+		point["life"] = float(point.get("life", 0.0)) - delta
+	ember_trail = ember_trail.filter(func(point): return float(point.get("life", 0.0)) > 0.0)
+	if not core._is_world_authority():
+		return
+	trail_tick -= delta
+	if trail_tick > 0.0:
+		return
+	trail_tick = 0.15
+	var radius_sq := TRAIL_RADIUS * TRAIL_RADIUS
+	var damage: float = float(core.player_damage) * TRAIL_DAMAGE_MULT
+	var now: float = float(core.time_alive)
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0 or now < float(enemy.get("henry_trail_cd", -1.0)):
+			continue
+		var pos := Vector2(enemy.get("pos", core.player_pos))
+		for point in ember_trail:
+			if pos.distance_squared_to(Vector2(point["pos"])) <= radius_sq:
+				enemy["henry_trail_cd"] = now + TRAIL_TICK
+				apply_burn_to_enemy(enemy, damage / TRAIL_DAMAGE_MULT * SPARK_DAMAGE_MULT, 0, true)
+				core._damage_enemy(enemy, damage, "henry_ember_trail", false, false, pos, "skill_shift")
+				break
+	if core.boss_active and core.boss_hp > 0.0 and now >= float(core.henry_boss_burn_state.get("trail_cd", -1.0)):
+		for point in ember_trail:
+			if core.boss_pos.distance_to(Vector2(point["pos"])) <= TRAIL_RADIUS + 60.0:
+				core.henry_boss_burn_state["trail_cd"] = now + TRAIL_TICK
+				apply_burn_to_boss(damage, 0, true)
+				core._damage_boss(damage, "henry_ember_trail", false, false, "skill_shift", core.boss_pos)
+				break
+
+
+## --- Bola de fogo do 3o golpe: explode quando some antes do fim da vida (acertou algo) ---
+func _update_fireballs() -> void:
+	if fireballs.is_empty():
+		return
+	var alive: Dictionary = {}
+	for bullet in core.bullets:
+		var id := int(Dictionary(bullet).get("henry_fireball_id", 0))
+		if id > 0:
+			alive[id] = bullet
+	var remaining: Array = []
+	for entry in fireballs:
+		var id := int(entry["id"])
+		if alive.has(id):
+			var bullet: Dictionary = alive[id]
+			entry["pos"] = Vector2(bullet.get("pos", entry["pos"]))
+			entry["life"] = float(bullet.get("life", 0.0))
+			remaining.append(entry)
+		elif float(entry.get("life", 0.0)) > 0.05:
+			_explode_fireball(Vector2(entry["pos"]))
+	fireballs = remaining
+
+
+func _explode_fireball(center: Vector2) -> void:
+	combustion_bursts.append({"pos": center, "radius": FIREBALL_RADIUS, "stacks": 1, "life": COMBUSTION_VISUAL_LIFE * 0.8, "max": COMBUSTION_VISUAL_LIFE * 0.8, "fireball": true})
+	if not core._is_world_authority():
+		return
+	var damage: float = float(core.player_damage) * FIREBALL_DAMAGE_MULT
+	var radius_sq := FIREBALL_RADIUS * FIREBALL_RADIUS
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) > 0.0 and Vector2(enemy.get("pos", center)).distance_squared_to(center) <= radius_sq:
+			apply_burn_to_enemy(enemy, float(core.player_damage), 0, true)
+			core._damage_enemy(enemy, damage, "henry_combustion", true, false, center, "basic_attack")
+	if core.boss_active and core.boss_hp > 0.0 and core.boss_pos.distance_to(center) <= FIREBALL_RADIUS + 60.0:
+		apply_burn_to_boss(float(core.player_damage), 0, true)
+		core._damage_boss(damage, "henry_combustion", true, false, "basic_attack", center)
+
+
+
+## Quadro do Rastro de Brasa (folha nova quando existir); null = usa o andar normal na direcao.
+func dash_texture() -> Texture2D:
+	var key: String = "henry_incendiary_dash_" + core._henry_direction_key(core.henry_spin_dash_direction)
+	var frames: Array = core.textures.get(key, [])
+	if frames.is_empty():
+		return null
+	var progress := clampf(core.henry_spin_elapsed / maxf(0.01, core.HENRY_SPIN_DURATION), 0.0, 1.0)
+	return frames[clampi(int(progress * float(frames.size())), 0, frames.size() - 1)] as Texture2D
+
+
+
+## Quadro da Ignicao Total pela linha do tempo (sem repetir a carga em loop).
+func ultimate_frame(frame_count: int) -> int:
+	var table: Array = ULT_FRAMES_V2 if frame_count >= 10 else ULT_FRAMES_V1
+	var elapsed: float = core.henry_ultimate_cast_elapsed
+	var frame := 0
+	for entry in table:
+		if elapsed >= float(entry[0]):
+			frame = int(entry[1])
+	return clampi(frame, 0, maxi(0, frame_count - 1))
+
+
+func ultimate_progress() -> float:
+	return clampf(core.henry_ultimate_cast_elapsed / ULT_TOTAL, 0.0, 1.0)

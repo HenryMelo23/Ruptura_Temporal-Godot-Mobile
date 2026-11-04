@@ -56,7 +56,7 @@ func _run() -> void:
 	game.current_phase = 1
 	for manifestation in ["eletrica", "prismatica", "parasitica", "ancorada", "bombastica", "necronada"]:
 		game.manifestation_key = manifestation
-		_check(is_equal_approx(game._auto_attack_range(), game.RangedAttackRange.BASE_RANGE), "automatic aim did not use the shared 300px range for " + manifestation)
+		_check(is_equal_approx(game._auto_attack_range(), game.RangedAttackRange.BASE_RANGE), "automatic aim did not use the shared 420px range for " + manifestation)
 	game.manifestation_key = "eletrica"
 	game.boss_pos = game.player_pos + Vector2(game.RangedAttackRange.BASE_RANGE - 1.0, 0.0)
 	_check(game._nearest_target() == game.boss_pos, "automatic aim rejected a target inside the shared range")
@@ -120,7 +120,7 @@ func _run() -> void:
 	game.move_touch_index = -1
 	game.touch_move = Vector2.ZERO
 
-	print("GAMEPLAY_SAFETY_PACK_OK wall=solid auto_range=300 locked_outside_retained=true low_hp=progressive hidden_boss=no_auto_target miasma=softer plus=moves")
+	print("GAMEPLAY_SAFETY_PACK_OK wall=solid auto_range=420 locked_outside_retained=true low_hp=progressive hidden_boss=no_auto_target miasma=softer plus=moves")
 	game.queue_free()
 	await process_frame
 	quit(0)

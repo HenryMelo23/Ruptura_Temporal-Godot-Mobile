@@ -26,6 +26,7 @@ func _capture(path: String) -> void:
 
 
 func _visual_bullet(offset: Vector2, traveled: float) -> Dictionary:
+	var max_range: float = game.RangedAttackRange.BASE_RANGE
 	return {
 		"uid": "visual:%d" % int(traveled),
 		"pos": game.player_pos + offset,
@@ -43,9 +44,9 @@ func _visual_bullet(offset: Vector2, traveled: float) -> Dictionary:
 		"pierce": false,
 		"hits": {},
 		"color": Color(0.32, 1.0, 0.96),
-		"max_range": 300.0,
+		"max_range": max_range,
 		"range_traveled": traveled,
-		"range_presence": 1.0 - smoothstep(game.RangedAttackRange.FADE_START_RATIO, 1.0, traveled / 300.0),
+		"range_presence": 1.0 - smoothstep(game.RangedAttackRange.FADE_START_RATIO, 1.0, traveled / max_range),
 	}
 
 
@@ -81,9 +82,9 @@ func _run() -> void:
 	game.attack_holding = true
 	game.enemies.clear()
 	game.bullets = [
-		_visual_bullet(Vector2(118.0, 0.0), 118.0),
-		_visual_bullet(Vector2(242.0, -38.0), 245.0),
-		_visual_bullet(Vector2(292.0, 34.0), 294.0),
+		_visual_bullet(Vector2(168.0, 0.0), 168.0),
+		_visual_bullet(Vector2(338.0, -38.0), 340.0),
+		_visual_bullet(Vector2(412.0, 34.0), 414.0),
 	]
 	await create_timer(0.35).timeout
 	print("RANGED_ATTACK_RANGE_VISUAL_GEOMETRY viewport=%s player=%s camera=%s bullets=%s" % [game.get_viewport_rect().size, game.player_pos, game._camera(game.get_viewport_rect().size), game.bullets.map(func(b): return b["pos"])])
@@ -111,7 +112,7 @@ func _run() -> void:
 		"hits": {},
 		"color": Color(0.32, 1.0, 0.96),
 	})
-	_check(is_equal_approx(game._ranged_primary_attack_range(), 300.0), "prismatica_target_ring_not_fixed_at_300")
+	_check(is_equal_approx(game._ranged_primary_attack_range(), game.RangedAttackRange.BASE_RANGE), "prismatica_target_ring_not_fixed_at_shared_base")
 	_check(not game.bullets[0].has("max_range"), "prismatica_visual_projectile_received_range_cap")
 	await _capture(OUT_PRISMATICA)
 

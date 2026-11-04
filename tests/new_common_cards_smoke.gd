@@ -24,14 +24,10 @@ func _run() -> void:
 	game._start_game()
 
 	var expected_ids := [
-		"escolha_adiada",
 		"inercia_cronal",
-		"leitura_instante",
-		"margem_segura",
 		"moeda_estavel",
 		"orbita_coletora",
 		"pacto_possibilidades",
-		"solo_consolidado",
 		"rastro_de_retorno",
 		"municao_de_rebate",
 		"impulso_de_sobras",
@@ -42,6 +38,8 @@ func _run() -> void:
 		"ressonancia_de_alternancia"
 	]
 	var uncommon_ids := [
+		"moeda_estavel",
+		"pacto_possibilidades",
 		"rastro_de_retorno",
 		"municao_de_rebate",
 		"impulso_de_sobras",
@@ -66,28 +64,7 @@ func _run() -> void:
 		assert(game._get_texture("card_" + String(card["name"]) + "_2") != null)
 		assert(game.textures.has("card_" + String(card["name"]) + "_2"))
 
-	var margem := _find_card("margem_segura")
-	for i in range(8):
-		game._apply_card(margem)
-	assert(game.cards_bought["margem_segura"] == 8)
-	assert(not game._card_at_max(margem))
-
-	game.cards_bought["escolha_adiada"] = 1
 	var speed := _find_card("Speed Boost")
-	game.shop_cards = [speed.duplicate(true)]
-	game.card_cost = 500
-	game._reserve_shop_card(0)
-	assert(game._card_count_by_id("escolha_adiada") == 0)
-	assert(game._shop_slot_locked(0))
-	assert(game._effective_card_price(game.shop_cards[0]) == 500)
-	game.card_cost = 900
-	game.shop_cards = game._roll_shop_cards()
-	assert(game._shop_slot_locked(0))
-	assert(game._card_id(game.shop_cards[0]) == "Speed Boost")
-	assert(game._effective_card_price(game.shop_cards[0]) == 500)
-	game._reserve_shop_card(0)
-	assert(not game._shop_slot_locked(0))
-
 	game.card_cost = 500
 	game.cards_bought["pacto_possibilidades"] = 5
 	assert(game._effective_card_price(speed) == 350)
@@ -98,18 +75,19 @@ func _run() -> void:
 	game.cards_bought["inercia_cronal"] = 5
 	assert(_approx(game._hostile_control_duration(1.0), 0.60))
 	assert(_approx(game._hostile_knockback(Vector2(100, 0)).length(), 28.0))
-	game.cards_bought["leitura_instante"] = 4
-	assert(_approx(game._telegraph_window(1.0), 1.28))
 	game.cards_bought["orbita_coletora"] = 5
 	assert(_approx(game._neutral_pickup_radius(50.0), 105.0))
-	game.cards_bought["solo_consolidado"] = 4
-	assert(_approx(game._hostile_ground_hazard_duration(10.0), 6.8))
-	game.cards_bought["margem_segura"] = 4
-	assert(_approx(game._safe_spawn_distance_bonus(), 140.0))
+	for retired_id in game.RETIRED_CARD_IDS:
+		assert(_find_card(retired_id).is_empty())
+		game.cards_bought[retired_id] = 8
+		assert(game._card_count_by_id(retired_id) == 0)
+	assert(_approx(game._telegraph_window(1.0), 1.0))
+	assert(_approx(game._hostile_ground_hazard_duration(10.0), 10.0))
+	assert(_approx(game._safe_spawn_distance_bonus(), 0.0))
 
 	var attack: Dictionary = game._with_card_telegraph({"warn": 1.0, "duration": 2.0})
-	assert(_approx(float(attack["warn"]), 1.28))
-	assert(_approx(float(attack["duration"]), 2.28))
+	assert(_approx(float(attack["warn"]), 1.0))
+	assert(_approx(float(attack["duration"]), 2.0))
 
 	game.cards_bought["rastro_de_retorno"] = 3
 	assert(game._rastro_interval() < 12.0)
@@ -133,5 +111,5 @@ func _run() -> void:
 	game.queue_free()
 	await process_frame
 	await process_frame
-	print("NEW_COMMON_CARDS_SMOKE_OK cards=16 uncommon=7 migrated=true unlimited=true reserve=true prices=true effects=true assets=true")
+	print("NEW_COMMON_CARDS_SMOKE_OK cards=16 uncommon=9 migrated=true unlimited=true retired=true prices=true effects=true assets=true")
 	quit(0)

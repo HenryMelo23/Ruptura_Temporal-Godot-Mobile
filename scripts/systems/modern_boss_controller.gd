@@ -27,7 +27,7 @@ func update_boss7_flight(delta: float) -> void:
 	else:
 		desired = to_target.normalized().orthogonal() * (78.0 if int(game.time_alive * 0.2) % 2 == 0 else -78.0)
 	game.boss7_velocity = game.boss7_velocity.move_toward(desired, 420.0 * delta)
-	game.boss_pos = (game.boss_pos + game.boss7_velocity * delta).clamp(Vector2(100, 92), game.WORLD_SIZE - Vector2(100, 92))
+	game.boss_pos = game.experimental_phase_controller.clamp_to_boss_encounter(game.boss_pos + game.boss7_velocity * delta, Vector2(100, 92))
 	if game.boss7_velocity.length() > 8.0:
 		game.boss7_attack_dir = game.boss7_velocity.normalized()
 
@@ -45,19 +45,19 @@ func update_boss7_state(delta: float) -> void:
 				fire_boss7_wing_blast()
 				boss7_enter_recovery(0.46)
 		game.BOSS7_STATE_DIVE_PREP:
-			game.boss_pos.y = move_toward(game.boss_pos.y, -180.0, 750.0 * delta)
+			game.boss_pos.y = move_toward(game.boss_pos.y, game.experimental_phase_controller.boss_encounter_rect().position.y - 180.0, 750.0 * delta)
 			if game.boss7_state_timer <= 0.0:
 				game.boss7_state = game.BOSS7_STATE_DIVE_WAIT
 				game.boss7_state_timer = 0.8
 		game.BOSS7_STATE_DIVE_WAIT:
-			game.boss_pos.y = -180.0
+			game.boss_pos.y = game.experimental_phase_controller.boss_encounter_rect().position.y - 180.0
 			if game.boss7_state_timer <= 0.0:
 				game.boss7_state = game.BOSS7_STATE_DIVE_MARK
 				game.boss7_state_timer = 0.9
 				var aim: Vector2 = game._boss_target_pos(true, 0.32)
-				game.boss7_target_pos = aim.clamp(Vector2(90, 90), game.WORLD_SIZE - Vector2(90, 90))
+				game.boss7_target_pos = game.experimental_phase_controller.clamp_to_boss_encounter(aim, Vector2(90, 90))
 		game.BOSS7_STATE_DIVE_MARK:
-			game.boss_pos.y = -180.0
+			game.boss_pos.y = game.experimental_phase_controller.boss_encounter_rect().position.y - 180.0
 			if game.boss7_state_timer <= 0.0:
 				if game.boss7_dive_fake_count < 3 and game.rng.randf() < 0.5:
 					game.boss7_dive_fake_count += 1
@@ -70,12 +70,12 @@ func update_boss7_state(delta: float) -> void:
 					game.boss_pos = game.boss7_target_pos - Vector2(380.0, 380.0)
 					game.boss7_attack_dir = Vector2(1, 1).normalized()
 		game.BOSS7_STATE_DIVE_FAKE:
-			game.boss_pos.y = -180.0
+			game.boss_pos.y = game.experimental_phase_controller.boss_encounter_rect().position.y - 180.0
 			if game.boss7_state_timer <= 0.0:
 				game.boss7_state = game.BOSS7_STATE_DIVE_MARK
 				game.boss7_state_timer = 0.9
 				var aim: Vector2 = game._boss_target_pos(true, 0.32)
-				game.boss7_target_pos = aim.clamp(Vector2(90, 90), game.WORLD_SIZE - Vector2(90, 90))
+				game.boss7_target_pos = game.experimental_phase_controller.clamp_to_boss_encounter(aim, Vector2(90, 90))
 		game.BOSS7_STATE_DIVE:
 			var old_pos: Vector2 = game.boss_pos
 			var speed: float = 1750.0 if game.boss7_reborn else 1550.0
@@ -141,8 +141,8 @@ func boss7_dive_fireball_damage() -> int:
 
 
 func spawn_boss7_dive_fireball(target: Vector2) -> void:
-	var impact_pos: Vector2 = target.clamp(Vector2(90.0, 90.0), game.WORLD_SIZE - Vector2(90.0, 90.0))
-	var spawn_pos: Vector2 = Vector2(impact_pos.x, -124.0)
+	var impact_pos: Vector2 = game.experimental_phase_controller.clamp_to_boss_encounter(target, Vector2(90.0, 90.0))
+	var spawn_pos: Vector2 = Vector2(impact_pos.x, game.experimental_phase_controller.boss_encounter_rect().position.y - 124.0)
 	var dir: Vector2 = (impact_pos - spawn_pos).normalized()
 	game.enemy_bullets.append({
 		"pos": spawn_pos,
@@ -296,7 +296,7 @@ func fire_boss7_wing_blast() -> void:
 func start_boss7_dive() -> void:
 	game.boss7_state = game.BOSS7_STATE_DIVE_PREP
 	game.boss7_state_timer = 1.0
-	game.boss7_target_pos = (game._boss_target_pos(true, 0.32)).clamp(Vector2(90, 90), game.WORLD_SIZE - Vector2(90, 90))
+	game.boss7_target_pos = game.experimental_phase_controller.clamp_to_boss_encounter((game._boss_target_pos(true, 0.32)), Vector2(90, 90))
 	game.boss7_attack_dir = Vector2.UP
 	game.boss7_dive_fake_count = 0
 	game.boss7_cooldowns[game.BOSS7_ATTACK_DIVE_TRAIL] = game._boss_party_scaled_interval(20.0, 14.0)
@@ -309,11 +309,11 @@ func add_boss7_dive_trail(a: Vector2, b: Vector2) -> void:
 func start_boss7_thermal() -> void:
 	var spots: Array = []
 	var base_target: Vector2 = game._boss_target_pos(true, 0.18)
-	spots.append(base_target.clamp(Vector2(80, 80), game.WORLD_SIZE - Vector2(80, 80)))
+	spots.append(game.experimental_phase_controller.clamp_to_boss_encounter(base_target, Vector2(80, 80)))
 	var count := (4 if game.boss7_reborn else 3) + mini(1, game._boss_party_hazard_bonus(2))
 	for i in range(count - 1):
 		var offset: Vector2 = Vector2.from_angle(game.rng.randf_range(0.0, TAU)) * game.rng.randf_range(90.0, 180.0)
-		spots.append((base_target + offset).clamp(Vector2(80, 80), game.WORLD_SIZE - Vector2(80, 80)))
+		spots.append(game.experimental_phase_controller.clamp_to_boss_encounter((base_target + offset), Vector2(80, 80)))
 	game._add_boss_attack({"kind": game.BOSS7_ATTACK_THERMAL, "age": 0.0, "duration": 1.25, "spots": spots, "hit": {}})
 	game.boss7_cooldowns[game.BOSS7_ATTACK_THERMAL] = game._boss_party_scaled_interval(3.4, 2.55)
 	game.boss_attack_timer = game._boss7_attack_delay()
@@ -408,10 +408,10 @@ func start_boss7_sky_fireballs() -> void:
 	var count: int = (15 if game.boss7_reborn else 12) + game._boss_party_hazard_bonus(2) * 2
 	var spots: Array = []
 	var base_target: Vector2 = game._boss_target_pos(true, 0.2)
-	spots.append(base_target.clamp(Vector2(90, 90), game.WORLD_SIZE - Vector2(90, 90)))
+	spots.append(game.experimental_phase_controller.clamp_to_boss_encounter(base_target, Vector2(90, 90)))
 	for i in range(count - 1):
 		var offset: Vector2 = Vector2.from_angle(game.rng.randf_range(0.0, TAU)) * game.rng.randf_range(80.0, 220.0)
-		spots.append((base_target + offset).clamp(Vector2(90, 90), game.WORLD_SIZE - Vector2(90, 90)))
+		spots.append(game.experimental_phase_controller.clamp_to_boss_encounter((base_target + offset), Vector2(90, 90)))
 	game._add_boss_attack({
 		"kind": game.BOSS7_ATTACK_SKY_FIREBALLS,
 		"age": 0.0,
@@ -454,15 +454,19 @@ func update_boss7_ultimate(delta: float) -> void:
 		return
 	game.boss7_ultimate_tick_timer = 0.6
 	var elapsed: float = PhoenixFire.DURATION - game.boss7_ultimate_timer
-	if PhoenixFire.dangerous(game.player_pos, game.WORLD_SIZE, elapsed) and game._local_player_damageable_by_contact():
+	if boss7_fire_dangerous(game.player_pos, elapsed) and game._local_player_damageable_by_contact():
 		game._damage_player(int(game.player_hp_max * 0.025 + 10), "boss7_global_warming")
 		game._apply_boss_burn(1)
 	if game._remote_player_damage_ready():
 		for peer_id in game._targetable_remote_peer_ids():
 			var state: Dictionary = game.net_players_by_peer.get(peer_id, {})
-			if PhoenixFire.dangerous(Vector2(state.get("pos", Vector2(-10000, -10000))), game.WORLD_SIZE, elapsed):
+			if boss7_fire_dangerous(Vector2(state.get("pos", Vector2(-10000, -10000))), elapsed):
 				game._send_peer_damage(peer_id, int(float(state.get("hp_max", game.player_hp_max)) * 0.025 + 10), "boss7_global_warming")
 
+
+func boss7_fire_dangerous(position: Vector2, elapsed: float) -> bool:
+	var arena: Rect2 = game.experimental_phase_controller.boss_encounter_rect()
+	return PhoenixFire.dangerous(position - arena.position, arena.size, elapsed)
 
 func refresh_boss7_ultimate_quadrants() -> void:
 	game.boss7_ultimate_quadrants.resize(4)

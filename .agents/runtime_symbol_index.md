@@ -16,6 +16,8 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/presentation/lightning_presentation.gd` | owner | owner | owner | `bolt`, `contact`, `channel`, `visible_segments`; shared render-only electrical geometry and silhouette protection |
 | `scripts/presentation/combat_text_presentation.gd` | owner | owner | owner | `add_damage`, `draw`; merged damage numbers, critical animation and disabled allocation guard |
 | `scripts/systems/ranged_attack_range.gd` | owner | owner | owner | `attack_range`, `damage_multiplier`, `configure_bullet`, `advance_bullet`, `draw_range_indicator`; shared ranged-primary range contract |
+| `scripts/systems/combat/runtime_targeting_controller.gd` | owner | owner | owner | independent auto-attack and ability target selection; ability priority does not inherit primary range |
+| `scripts/systems/enemies/regular_enemy_balance.gd` | owner | owner | owner | regular-enemy HP growth and armor-reduction retention; explicit boss/miniboss exemptions |
 | `scripts/presentation/menus_presentation.gd` | 3073 | 2729 | 102 | `_draw_manifest_select` 176 code LOC |
 | `scripts/presentation/world_environment_presentation.gd` | 2543 | 2384 | 56 | `_draw_boss_attacks` 375 code LOC |
 | `scripts/ui/shop_controller.gd` | 701 | 586 | 51 | `handle_touch` 82 code LOC |
@@ -36,13 +38,16 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | `scripts/systems/boss_party_scaling.gd` | owner | owner | owner | `profile_for_party_size` |
 | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd` | owner | owner | owner | `all_entries`, `entries_for_manifestation`, `validate_catalog` |
 | `scripts/presentation/gravitante_vfx_presentation.gd` | owner | owner | owner | `lod`, `projectile`, `orbitals`, `collision`, `teleport`, `ultimate` |
+| `scripts/presentation/card_power_feedback_presentation.gd` | owner | owner | owner | primitive-only acquisition, speed, power-hit, critical, lifesteal, defense, overkill and threat rendering |
 | `scripts/systems/modern_boss_controller.gd` | 520 | 453 | 30 | `update_boss7_state` 70 code LOC |
 | `scripts/presentation/boss_wave_presentation.gd` | 127 | 97 | 4 | `_draw_boss_wave_crest_and_foam` 49 code LOC |
 | `scripts/systems/phase/phase_flow_controller.gd` | 624 | 555 | 34 | `_advance_to_phase` 191 code LOC |
-| `scripts/systems/phase/experimental_phase_controller.gd` | owner | owner | owner | `prepare_new_run`, `activate_after_phase_setup`, `update`; isolated FaseEX exploration and altar contract |
+| `scripts/systems/phase/experimental_phase_controller.gd` | owner | owner | owner | `prepare_new_run`, `begin_definitive_phase`, `restore_after_snapshot`, `uses_definitive_world`, `activate_after_phase_setup`, `update`; definitive expanded phases, classic FaseEX variants, exploration and altar contract |
 | `scripts/systems/assets/runtime_asset_controller.gd` | owner | owner | owner | `should_stream_phase_assets`, `should_lazy_gallery_assets`, `release_transient_gallery_assets`, `prepare_phase`, `ensure_key`, `phase_keys` |
 | `scripts/systems/progression/runtime_progression_controller.gd` | 249 | 181 | 33 | `elite_point_multiplier` 19 code LOC |
+| `scripts/systems/progression/runtime_affordable_card_controller.gd` | owner | owner | owner | `count`; exact cached affordable-card forecast using deduplicated discount profiles instead of score-scaled catalog rescans |
 | `scripts/systems/cards/roguelike_point_card_controller.gd` | owner | owner | owner | `on_enemy_defeated`, `on_player_damaged`, `critical_damage_multiplier`, `extra_card_copies`; triggered point, critical and duplication cards |
+| `scripts/systems/cards/card_power_feedback_controller.gd` | owner | owner | owner | `on_card_acquired`, `on_damage_confirmed`, `on_lifesteal`, `on_player_hit`; bounded local card-power and danger feedback |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
 | `scripts/systems/player/player_control_controller.gd` | owner | owner | owner | `read_move`, `aim_direction`, touch/gamepad/desktop input routing, Parasítica HAB1 and Lacerante ultimate quick-versus-held aiming |
 | `scripts/lacerante_sprites.gd` | owner | owner | owner | `register`, `snapshot`, `draw_height`; canonical Lacerante movement/attack/Q/ultimate frame selection for local and remote players |
@@ -67,8 +72,10 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Shop paid reroll cost | `next_paid_reroll_cost` | `scripts/ui/shop_controller.gd:135` |
 | Shop drawing | `func draw` | `scripts/ui/shop_presentation.gd:382` |
 | Triggered point/critical card owner | `class_name RTRoguelikePointCardController` | `scripts/systems/cards/roguelike_point_card_controller.gd`; kill drop, damage reward, final critical multiplier and non-legendary duplication contracts |
+| Card power/danger feedback owner | `on_card_acquired`, `on_damage_confirmed`, `on_lifesteal`, `on_player_hit` | `scripts/systems/cards/card_power_feedback_controller.gd`; queues shop acquisitions until gameplay and caps primitive-only feedback |
 | Legacy shop drawing | `func draw_legacy` | `scripts/ui/shop_presentation.gd:502` |
 | HUD render and responsive layout | `HudPresentation._draw_hud`, `HudPresentation.update_button_layout` | `scripts/presentation/hud_presentation.gd`; core keeps `_draw_hud` / `_update_button_layout` wrappers |
+| Character status VFX / run XP | `PlayerStatusVfx.draw`, `HudPresentation._draw_player_run_level` | `scripts/presentation/player_status_vfx_presentation.gd` via local entity renderer; left status panels retired from active HUD paths; progression `xp_to_next()` supplies XP threshold |
 | Telemetry facade | `_record_telemetry_shop_reroll` | `scripts/main_runtime_core.gd:2292` |
 | Telemetry owner | `class_name RTTelemetrySystem` | `scripts/systems/telemetry/telemetry_system.gd:1` |
 | Shop reroll telemetry | `record_shop_reroll` | `scripts/systems/telemetry/telemetry_system.gd:191` |
@@ -104,7 +111,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
 | Phase 2 Sineiro VFX | `class_name RTPhase2SineiroPresentation` | `scripts/presentation/phase2_sineiro_presentation.gd:1` |
 | Phase 6 Suturador owner | `class_name RTPhase6AmberSuturerController` | `scripts/systems/enemies/phase6_amber_suturer_controller.gd:1` |
 | Phase 6 Suturador VFX | `class_name RTPhase6AmberSuturerPresentation` | `scripts/presentation/phase6_amber_suturer_presentation.gd:1` |
-| Boss 6 stage movement and team pressure | `class_name RTBoss6StageController` | `scripts/systems/bosses/boss6_stage_controller.gd:1`; owns living-target batches for Foices, Florada and Maré, capped at three distinct players per attack wave |
+| Boss 6 stage movement and team pressure | `class_name RTBoss6StageController` | `scripts/systems/bosses/boss6_stage_controller.gd:1`; owns `arena_center` and `clamp_to_arena` (EX6 local altar encounter / normal arena), living-target batches for Foices, Florada and Maré, capped at three distinct players per attack wave |
 | Boss 6 attack animation | `class_name RTBoss6AnimationPresentation` | `scripts/presentation/boss6_animation_presentation.gd:1` |
 | Manifest evolution catalog | `class_name RTManifestEvolutionCatalog` | `scripts/systems/manifest_evolutions/manifest_evolution_catalog.gd:2` |
 | Acorrentada evolution owner | `RTAcorrentadaEvolutionController.on_combo_resolved`, `on_hit`, `on_skill`, `on_teleport`, `on_sentence_started`, `update_effects`, `draw_world` | `scripts/systems/manifest_evolutions/acorrentada_evolution_controller.gd`; 12 ID-specific, save-contained contracts with capped persistent collections and no projectile dependency |
@@ -155,7 +162,7 @@ Use exact symbol search in these owners; core keeps compatible wrappers.
 - Save/config/resume/retry: `scripts/systems/save/runtime_save_controller.gd`.
 - Player/input interpretation: `scripts/systems/player/player_control_controller.gd`; shared runtime state and public core wrappers remain compatible while attack, skill and dash execution stay in the core.
 - Phase setup/transition/portals: `scripts/systems/phase/phase_flow_controller.gd`.
-- Experimental FaseEX world, randomized hidden altar and discovery lifecycle: `scripts/systems/phase/experimental_phase_controller.gd`; integrated altar, post-discovery guidance and map presentation: `scripts/presentation/experimental_phase_presentation.gd` and `scripts/presentation/phase_map_presentation.gd`.
+- Definitive expanded phase profiles (`begin_definitive_phase`, `uses_definitive_world`, `terrain_phase`, `map_key`) provide the randomized hidden altar, save/restore lifecycle and camera-culled 384-unit cells with atlas tile 5 reserved for the altar; one-shot solo `FaseEX`–`FaseEX7` select the former classic maps through `arm_phase`: `scripts/systems/phase/experimental_phase_controller.gd`. Integrated altar cues, post-discovery guidance and world-space atlas blending: `scripts/presentation/experimental_phase_presentation.gd` and `scripts/presentation/phase_map_presentation.gd`.
 - Phase-scoped texture residency/catalog lazy loading: `scripts/systems/assets/runtime_asset_controller.gd`; every platform keeps only the active phase resident at authored quality, while catalog art loads on demand through `_get_texture`.
 - Adaptive runtime performance: `RTRuntimePerformanceController.update`, `effective_stage`, `should_redraw`, `separation_interval` in `scripts/systems/performance/runtime_performance_controller.gd`; `RTRuntimeWorkScheduler` provides deterministic presentation/background lanes; `RTRuntimeProjectileBatchRenderer` and `RTRuntimeSpriteBatchRenderer` own phase-scoped typed buffers, adaptive 32/24/16 px projectile sources, GPU MultiMesh submission and software-renderer fallbacks. Focused tests: `runtime_adaptive_performance_smoke`, `runtime_advanced_pipeline_smoke`, `runtime_projectile_batch_benchmark`, `singleplayer_rendered_frame_pacing_smoke`.
 - Threaded phase prefetch: `RTRuntimeAssetController.schedule_phase_prefetch`, `poll_prefetch`, `prefetch_paths_for_phase`; bounded next-phase texture warmup on graphical clients only, consumed by the existing phase owner without changing texture quality or dedicated-server residency.

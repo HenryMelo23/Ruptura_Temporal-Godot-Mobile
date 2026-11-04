@@ -21,7 +21,7 @@ func phase_region_name(phase: int) -> String:
 
 func _pick_initial_phase() -> int:
 	if core.experimental_phase_active:
-		return 1
+		return core.experimental_phase_controller.active_phase
 	var forced_phase: = _sanitize_forced_initial_phase(core.forced_initial_phase)
 	if core.force_phase6_start and forced_phase == 0:
 		forced_phase = 6
@@ -310,6 +310,7 @@ func _advance_to_phase(phase: int) -> void:
 	var cycle_speed_mult := 1.0 + float(core.dimension_route_farm_cycles) * 0.055
 	var previous_enemy_cap: int = core._enemy_limit()
 	core.current_phase = phase
+	core.experimental_phase_controller.begin_definitive_phase(phase)
 	core.camera_follow_initialized = false
 	core._prepare_phase_texture_assets(phase)
 	core.pending_phase = 0
@@ -357,6 +358,7 @@ func _advance_to_phase(phase: int) -> void:
 	core.lacerante_prepare_dir = core.last_facing if core.last_facing.length() > 0.05 else Vector2.RIGHT
 	core.forced_shop_timer = -1.0
 	core.forced_shop_triggered = false
+	core.shop_rift_controller.on_phase_changed()
 	core.next_forced_shop_time = max(0.0, core.shop_auto_interval - core.shop_auto_elapsed) if core.shop_auto_enabled else INF
 	core.shop_opening_timer = 0.0
 	core.shop_opening_forced = false

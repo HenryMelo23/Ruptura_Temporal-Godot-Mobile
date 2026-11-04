@@ -154,3 +154,219 @@ static func draw_entrance(game: Node2D, camera: Vector2, viewport: Vector2) -> v
 			var state: Dictionary = game.net_players_by_peer.get(int(peer), {})
 			pos = Vector2(state.get("render_pos", state.get("pos", game.PLAYER_START)))
 		game.EntitiesPresentation._draw_henry_entry_pose(game, camera, pos, owner.entrance_pose_time())
+
+
+
+static func _tex(game: Node2D, path: String) -> Texture2D:
+	if game.textures.has(path):
+		return game.textures[path] as Texture2D
+	var full := "res://assets/sprites/player/player_2_suit/" + path + ".png"
+	if not ResourceLoader.exists(full):
+		game.textures[path] = null
+		return null
+	var texture := load(full) as Texture2D
+	game.textures[path] = texture
+	return texture
+
+
+## Cargas de Queimadura: chamas pequenas acima do alvo (cresce e pisca ao ganhar carga).
+static func burn_pips(game: Node2D, center: Vector2, count: int, flash: float) -> void:
+	if count <= 0:
+		return
+	var pip: Texture2D = _tex(game, "henry_burn_pip")
+	var spacing := 11.0
+	var start_x := -float(count - 1) * spacing * 0.5
+	var pulse := 1.0 + clampf(flash * 2.2, 0.0, 0.45)
+	var hot := count >= 5
+	for index in range(count):
+		var p := center + Vector2(start_x + float(index) * spacing, sin(game.time_alive * 7.0 + float(index)) * 1.5)
+		if pip != null:
+			var size := Vector2(14.0, 14.0) * pulse
+			game.draw_texture_rect(pip, Rect2(p - size * 0.5, size), false)
+		else:
+			var height := 10.0 * pulse * (1.25 if hot else 1.0)
+			var flick := sin(game.time_alive * 22.0 + float(index) * 1.7) * 1.2
+			game.draw_colored_polygon(PackedVector2Array([p + Vector2(-4.0, 3.0), p + Vector2(4.0, 3.0), p + Vector2(flick, -height)]), Color(1.0, 0.3, 0.03, 0.95))
+			game.draw_colored_polygon(PackedVector2Array([p + Vector2(-2.0, 2.5), p + Vector2(2.0, 2.5), p + Vector2(flick * 0.6, -height * 0.55)]), Color(1.0, 0.88, 0.3, 0.98))
+	if hot:
+		game.draw_arc(center + Vector2(0.0, 1.0), float(count) * spacing * 0.6, 0.0, TAU, 20, Color(1.0, 0.5, 0.1, 0.35 + 0.25 * sin(game.time_alive * 12.0)), 1.5, true)
+
+
+## Rastro de Brasa: chao rachado em brasa com chamas baixas ao longo da trilha.
+static func draw_ember_trail(game: Node2D, camera: Vector2, trail: Array) -> void:
+	if trail.is_empty():
+		return
+	var patch: Texture2D = _tex(game, "henry_fire_patch")
+	var low: bool = game._runtime_visual_budget_active() or not game.gfx_particles
+	for index in range(trail.size()):
+		var point: Dictionary = trail[index]
+		var life := clampf(float(point.get("life", 0.0)) / maxf(0.01, float(point.get("max", 3.0))), 0.0, 1.0)
+		var fade := smoothstep(0.0, 0.25, life)
+		var pos: Vector2 = Vector2(point.get("pos", Vector2.ZERO)) - camera
+		if patch != null:
+			game.draw_texture_rect(patch, Rect2(pos - Vector2(40.0, 30.0), Vector2(80.0, 60.0)), false, Color(1.0, 1.0, 1.0, fade))
+		else:
+			game.draw_circle(pos, 30.0, Color(0.16, 0.04, 0.0, 0.42 * fade))
+			game.draw_circle(pos, 20.0, Color(0.9, 0.26, 0.02, 0.32 * fade))
+			for crack in range(3):
+				var a := float(index * 3 + crack) * 2.1
+				game.draw_line(pos, pos + Vector2.from_angle(a) * 22.0, Color(1.0, 0.6, 0.12, 0.7 * fade), 2.0, true)
+		# Chamas baixas e irregulares (pula pontos e varia o tamanho para nao virar uma serra).
+		if index % (3 if low else 2) == 0:
+			var size_jitter := 0.6 + 0.4 * absf(sin(float(index) * 2.7))
+			var side := Vector2(sin(float(index) * 4.1) * 10.0, 6.0)
+			_flame(game, pos + side, Vector2.UP, 16.0 * size_jitter + 6.0, (14.0 + 16.0 * absf(sin(game.time_alive * 7.0 + float(index) * 1.3))) * size_jitter * (0.4 + 0.6 * fade), game.time_alive, index, fade * 0.85)
+
+
+## Investida: rastro de fogo atras de Henry e sapatos em chamas.
+static func dash(game: Node2D, center: Vector2, direction: Vector2, progress: float, alpha: float) -> void:
+	var dir := direction.normalized() if direction.length_squared() > 0.001 else Vector2.RIGHT
+	var fade := alpha * (1.0 - smoothstep(0.8, 1.0, progress))
+	for index in range(5):
+		var back := float(index + 1) * 16.0
+		_flame(game, center - dir * back + Vector2(0.0, 20.0), (-dir + Vector2.UP * 0.6).normalized(), 26.0 - float(index) * 3.0, 40.0 - float(index) * 5.0, game.time_alive, index, fade * (1.0 - float(index) * 0.15))
+	for side in [-1.0, 1.0]:
+		_flame(game, center + Vector2(side * 10.0, 34.0), Vector2.UP, 12.0, 20.0, game.time_alive, int(side * 7.0), fade)
+
+
+## Explosoes de Combustao (e da bola de fogo): anel de fogo + estilhacos de brasa.
+static func draw_combustion(game: Node2D, camera: Vector2, bursts: Array) -> void:
+	if bursts.is_empty():
+		return
+	var tex: Texture2D = _tex(game, "henry_combustion_burst")
+	var low: bool = game._runtime_visual_budget_active() or not game.gfx_particles
+	for burst_value in bursts:
+		var burst: Dictionary = burst_value
+		var u := 1.0 - clampf(float(burst.get("life", 0.0)) / maxf(0.01, float(burst.get("max", 0.5))), 0.0, 1.0)
+		var center: Vector2 = Vector2(burst.get("pos", Vector2.ZERO)) - camera
+		var radius: float = float(burst.get("radius", 80.0))
+		var stacks: int = int(burst.get("stacks", 1))
+		var r := radius * (0.35 + 0.65 * (1.0 - pow(1.0 - u, 2.0)))
+		var fade := 1.0 - smoothstep(0.55, 1.0, u)
+		if tex != null:
+			game.draw_texture_rect(tex, Rect2(center - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 1.0, 1.0, fade))
+			continue
+		game.draw_circle(center, r * 0.55, Color(1.0, 0.82, 0.36, 0.55 * fade * (1.0 - u)))
+		game.draw_arc(center, r, 0.0, TAU, 36, Color(1.0, 0.42, 0.06, 0.85 * fade), 5.0 + float(stacks), true)
+		game.draw_arc(center, r * 0.82, 0.0, TAU, 32, Color(1.0, 0.82, 0.3, 0.55 * fade), 2.0, true)
+		var shards: int = (6 if low else 10) + stacks
+		for index in range(shards):
+			var a := float(index) * TAU / float(shards) + float(stacks) * 0.4
+			var p := center + Vector2.from_angle(a) * r * (0.9 + 0.25 * u)
+			game.draw_line(p, p + Vector2.from_angle(a) * (8.0 + 10.0 * (1.0 - u)), Color(1.0, 0.66, 0.16, fade), 3.0, true)
+		if not low:
+			for index in range(4 + stacks):
+				var a2 := float(index) * 2.399
+				_flame(game, center + Vector2.from_angle(a2) * r * 0.6, (Vector2.from_angle(a2) * 0.4 + Vector2.UP).normalized(), 22.0, 30.0 * fade, game.time_alive, index, fade)
+
+
+
+## Bola de fogo do 3o golpe: miolo claro, chamas para tras e brasas soltas.
+static func fireball(game: Node2D, pos: Vector2, direction: Vector2) -> void:
+	var dir := direction.normalized() if direction.length_squared() > 0.001 else Vector2.RIGHT
+	var tex: Texture2D = _tex(game, "henry_fireball")
+	if tex != null:
+		game.draw_set_transform(pos, dir.angle(), Vector2.ONE)
+		game.draw_texture_rect(tex, Rect2(Vector2(-34.0, -22.0), Vector2(44.0, 44.0)), false)
+		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		return
+	for index in range(3):
+		_flame(game, pos - dir * (6.0 + float(index) * 9.0), -dir, 22.0 - float(index) * 5.0, 30.0 - float(index) * 6.0, game.time_alive, index, 0.9 - float(index) * 0.2)
+	game.draw_circle(pos, 12.0, Color(1.0, 0.42, 0.06, 0.9))
+	game.draw_circle(pos, 7.0, Color(1.0, 0.92, 0.6, 1.0))
+
+
+
+const ULT_CRACK_COUNT := 9
+const ULT_PULSE_TIMES := [0.7, 1.45, 2.2]
+const ULT_PULSE_RADII := [150.0, 225.0, 300.0]
+
+
+## Ignicao Total (durante o cast): carga no corpo antes do 1o impacto e rachaduras de magma que
+## crescem a cada impacto (ficam acesas ate o fim).
+static func ignition(game: Node2D, center: Vector2, elapsed: float, pulses: int) -> void:
+	var low: bool = game._runtime_visual_budget_active() or not game.gfx_particles
+	var feet := center + Vector2(0.0, 30.0)
+	# Carga: brasas sugadas para os punhos e chamas subindo pelas pernas.
+	var next_index: int = clampi(pulses, 0, 2)
+	var next_time: float = float(ULT_PULSE_TIMES[next_index])
+	var prev_time: float = 0.0 if next_index == 0 else float(ULT_PULSE_TIMES[next_index - 1]) + 0.1
+	var charge: float = clampf((elapsed - prev_time) / maxf(0.05, next_time - prev_time), 0.0, 1.0) if pulses < 3 else 0.0
+	if charge > 0.0:
+		for index in range(5 if low else 10):
+			var a := float(index) * 2.399 + elapsed * 3.0
+			var travel := fposmod(elapsed * 1.8 + float(index) * 0.13, 1.0)
+			var p := center + Vector2.from_angle(a) * lerpf(110.0, 16.0, travel)
+			game.draw_circle(p, 2.5, Color(1.0, 0.62, 0.12, charge * sin(travel * PI)))
+		game.draw_circle(feet, 26.0 + 10.0 * charge, Color(1.0, 0.36, 0.04, 0.14 + 0.18 * charge))
+	# Rachaduras: crescem ate o raio do ultimo impacto liberado.
+	if pulses <= 0:
+		return
+	var reach: float = float(ULT_PULSE_RADII[clampi(pulses - 1, 0, 2)])
+	var since: float = elapsed - float(ULT_PULSE_TIMES[clampi(pulses - 1, 0, 2)])
+	var grow: float = clampf(since / 0.18, 0.0, 1.0)
+	var prev_reach: float = 0.0 if pulses <= 1 else float(ULT_PULSE_RADII[pulses - 2])
+	var r: float = lerpf(prev_reach, reach, grow)
+	var cracks: Texture2D = _tex(game, "henry_ground_cracks")
+	var glow: float = 0.65 + 0.35 * sin(elapsed * 14.0)
+	if cracks != null:
+		game.draw_texture_rect(cracks, Rect2(feet - Vector2(r, r * 0.62), Vector2(r * 2.0, r * 1.24)), false, Color(1.0, 1.0, 1.0, 0.9))
+		return
+	for index in range(ULT_CRACK_COUNT):
+		var a2 := float(index) * TAU / float(ULT_CRACK_COUNT) + 0.31
+		var points := PackedVector2Array([feet])
+		var segments := 5
+		for step in range(1, segments + 1):
+			var u := float(step) / float(segments)
+			var wobble := sin(float(index) * 3.7 + float(step) * 1.9) * 0.22
+			points.append(feet + Vector2.from_angle(a2 + wobble) * r * u * Vector2(1.0, 0.62))
+		game.draw_polyline(points, Color(0.18, 0.04, 0.0, 0.85), 7.0, true)
+		game.draw_polyline(points, Color(1.0, 0.42 + 0.2 * glow, 0.06, 0.9), 3.0, true)
+	game.draw_circle(feet, 18.0 + 6.0 * glow, Color(1.0, 0.7, 0.2, 0.5))
+
+
+## Impacto da Ignicao Total: anel de colunas de fogo irrompendo na borda, onda de choque e brasas.
+static func eruption(game: Node2D, center: Vector2, radius: float, max_radius: float, pulse: int) -> void:
+	var low: bool = game._runtime_visual_budget_active() or not game.gfx_particles
+	var p := clampf(radius / maxf(1.0, max_radius), 0.0, 1.0)
+	var feet := center + Vector2(0.0, 30.0)
+	var fade := 1.0 - smoothstep(0.7, 1.0, p)
+	var squash := Vector2(1.0, 0.62)
+	# Onda de choque no chao (elipse = perspectiva top-down 3/4).
+	var front: float = max_radius * (1.0 - pow(1.0 - p, 2.4))
+	_draw_ellipse_ring(game, feet, front, squash, Color(1.0, 0.78, 0.34, 0.75 * fade), 4.0 + float(pulse) * 2.0)
+	_draw_ellipse_ring(game, feet, front * 0.86, squash, Color(1.0, 0.34, 0.04, 0.5 * fade), 9.0)
+	# Colunas de fogo: sobem rapido e caem, escalonadas pelo angulo; mais colunas a cada impacto.
+	var count: int = (8 + pulse * 3) if low else (12 + pulse * 5)
+	var pillar: Texture2D = _tex(game, "henry_fire_pillar")
+	for index in range(count):
+		var a := float(index) * TAU / float(count) + float(pulse) * 0.37
+		var delay := fposmod(float(index) * 0.37, 1.0) * 0.25
+		var local := clampf((p - delay) / 0.55, 0.0, 1.0)
+		if local <= 0.0:
+			continue
+		var rise := sin(local * PI)
+		var base := feet + Vector2.from_angle(a) * max_radius * squash
+		var height := (70.0 + 30.0 * float(pulse)) * rise
+		if pillar != null:
+			var w := 30.0 + 6.0 * float(pulse)
+			game.draw_texture_rect(pillar, Rect2(base - Vector2(w * 0.5, height), Vector2(w, height)), false, Color(1.0, 1.0, 1.0, fade))
+		else:
+			_flame(game, base, Vector2.UP, 26.0 + 5.0 * float(pulse), height, game.time_alive, index + pulse * 17, fade)
+			game.draw_circle(base, 10.0 * rise, Color(1.0, 0.86, 0.4, 0.7 * fade))
+	# Brasas voando para fora.
+	if not low:
+		for index in range(10 + pulse * 4):
+			var a3 := float(index) * 2.399 + float(pulse)
+			var travel := clampf(p * 1.2 - fposmod(float(index) * 0.11, 0.3), 0.0, 1.0)
+			var pos := feet + Vector2.from_angle(a3) * max_radius * travel * squash + Vector2(0.0, -sin(travel * PI) * 40.0)
+			game.draw_rect(Rect2(pos, Vector2(3, 3)), Color(1.0, 0.7, 0.2, fade * (1.0 - travel)))
+
+
+static func _draw_ellipse_ring(game: Node2D, center: Vector2, radius: float, squash: Vector2, color: Color, width: float) -> void:
+	if radius < 2.0 or color.a <= 0.01:
+		return
+	var points := PackedVector2Array()
+	for index in range(41):
+		points.append(center + Vector2.from_angle(float(index) * TAU / 40.0) * radius * squash)
+	game.draw_polyline(points, color, width, true)

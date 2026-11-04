@@ -1,14 +1,14 @@
 {
-  "version": "2.0.63",
-  "version_code": 26300,
-  "filename": "ruptura_temporal_mobile_2.0.63.apk",
-  "sha256": "ef63a7ba87b47ba70041b26c26c2f35d71e57517bfb22afc7ad5a2733bd84906",
-  "size": 942294267,
+  "version": "2.0.64",
+  "version_code": 26400,
+  "filename": "ruptura_temporal_mobile_2.0.64.apk",
+  "sha256": "1fd396ab21fa6390cd519a5103d93e607d2eb00884fcb67f55777a32055e999c",
+  "size": 959603255,
   "notes": [
-    "Suturador de Ambar reforcado: cristais persistentes, armadura quebravel e duas novas habilidades.",
-    "Conforto de camera com zona morta e suavizacao configuravel, sem reduzir a qualidade grafica.",
-    "Rotas dinamicas em ciclos de quatro mapas, com escolha entre continuar a run ou enfrentar a Umbra."
+    "Chefes 4 e 6 retrabalhados com ataques, locomocao, telegraph e apresentacao visual renovados.",
+    "Progressao, cartas e pressao das hordas ajustadas para runs longas sem sacrificar a qualidade visual.",
+    "Multiplayer revisado em lobby, pronto/inicio, manifestacoes, espectadores, combate e progressao compartilhada."
   ],
   "mandatory": false,
-  "published_at": "2026-10-30T23:34:03Z"
+  "published_at": "2026-11-04T01:32:47Z"
 }

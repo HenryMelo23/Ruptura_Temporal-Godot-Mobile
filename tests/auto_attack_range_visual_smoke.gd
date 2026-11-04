@@ -49,6 +49,9 @@ func _run() -> void:
 	game.auto_attack_range_opacity = 1.0
 	await _capture("range_ciano_100_960x540.png")
 	_check(game.RangedAttackRange.indicator_color_name(game) == "CIANO", "cyan choice was not applied")
+	game.attack_holding = false
+	await _capture("range_ciano_idle_100_960x540.png")
+	game.attack_holding = true
 
 	game.auto_attack_range_color_index = 3
 	game.auto_attack_range_opacity = 0.4
@@ -57,7 +60,7 @@ func _run() -> void:
 	_check(is_equal_approx(game.RangedAttackRange.sanitize_indicator_opacity(game.auto_attack_range_opacity), 0.4), "40 percent opacity was not applied")
 
 	if not failed:
-		print("AUTO_ATTACK_RANGE_VISUAL_OK captures=2 colors=ciano,ambar opacity=100,40 size=960x540")
+		print("AUTO_ATTACK_RANGE_VISUAL_OK captures=3 colors=ciano,ambar opacity=100,40 aiming,idle size=960x540")
 	game._cleanup_runtime_resources()
 	game.queue_free()
 	await process_frame

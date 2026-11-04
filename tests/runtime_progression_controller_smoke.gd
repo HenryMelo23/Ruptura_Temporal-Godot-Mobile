@@ -26,6 +26,24 @@ func _card(card_id: String) -> Dictionary:
 	return {}
 
 
+func _reference_affordable_card_count() -> int:
+	var temp_score: int = int(game.score)
+	var temp_cost: int = int(game.card_cost)
+	var count := 0
+	while temp_score > 0:
+		var cheapest: float = INF
+		for card in game.CARDS:
+			if game._card_at_max(card):
+				continue
+			cheapest = minf(cheapest, float(game._effective_card_price(card, temp_cost)))
+		if cheapest == INF or float(temp_score) < cheapest:
+			break
+		temp_score -= int(cheapest)
+		temp_cost += game._shop_price_increment_after_purchase()
+		count += 1
+	return count
+
+
 func _cleanup_runtime() -> void:
 	if game == null:
 		return
@@ -106,6 +124,11 @@ func _run() -> void:
 	var speed := _card("Speed Boost")
 	var pacto := _card("pacto_possibilidades")
 	_check(not speed.is_empty() and not pacto.is_empty(), "required cards missing")
+	_check(game._format_points(8000) == "800", "point denomination did not reduce large displayed values")
+	_check(game._format_points(8055) == "805.5", "point denomination lost fractional precision")
+	for uncommon_id in ["Roubo de Vida", "moeda_estavel", "pacto_possibilidades", "tributo_da_dor"]:
+		_check(game._is_uncommon_card(_card(uncommon_id)), "economy balance card did not move to uncommon: " + uncommon_id)
+	_check(game._is_common_card(_card("Tempestade")), "Tempestade must remain common")
 	game.cards_bought.clear()
 	game.cards_bought["pacto_possibilidades"] = 5
 	game.card_cost = 500
@@ -113,9 +136,58 @@ func _run() -> void:
 	_check(game._effective_card_price(speed) == 350, "Pacto discount did not keep up with the shop curve")
 	game.cards_bought["moeda_estavel"] = 6
 	_check(game._shop_price_increment_after_purchase() == 64, "shop price increment changed")
+	game.cards_bought.clear()
+	game.cards_bought["Roubo de Vida"] = 1
+	game._recalculate_common_card_stat_bonuses()
+	_check(is_equal_approx(game.player_lifesteal, 0.03), "lifesteal card did not grant direct three percent healing")
+	_check(int(round(200.0 * game.player_lifesteal)) == 6, "lifesteal percentage did not scale directly from damage dealt")
+	game.cinzas_burn_marks = [
+		{"card_id": "Roubo de Vida", "stacks": 2},
+		{"card_id": "moeda_estavel", "stacks": 2},
+		{"card_id": "Tempestade", "stacks": 2},
+	]
+	game.cinzas_card_bonuses = {"Roubo de Vida": 2, "pacto_possibilidades": 3, "Tempestade": 2}
+	game._sanitize_legacy_cinzas_rarity_state()
+	_check(game.cinzas_burn_marks.size() == 1 and String(Dictionary(game.cinzas_burn_marks[0]).get("card_id", "")) == "Tempestade", "promoted cards kept incompatible legacy Cinzas marks")
+	_check(not game.cinzas_card_bonuses.has("Roubo de Vida") and not game.cinzas_card_bonuses.has("pacto_possibilidades") and int(game.cinzas_card_bonuses.get("Tempestade", 0)) == 2, "promoted cards kept incompatible legacy Cinzas bonuses")
+	game.cinzas_burn_marks.clear()
+	game.cinzas_card_bonuses.clear()
+	game.cards_bought.clear()
+	game.cards_bought["Tempestade"] = 11
+	game._recalculate_common_card_stat_bonuses()
+	_check(is_equal_approx(game.player_crit_chance, 1.10), "Tempestade did not grant ten percent crit per copy")
+	var overcrit_result: Dictionary = game._critical_damage(100.0)
+	_check(bool(overcrit_result.get("critical", false)), "crit chance above one hundred percent was not guaranteed")
+	_check(is_equal_approx(float(overcrit_result.get("amount", 0.0)), 330.0), "excess crit chance did not convert into critical damage")
 	_check(game._shop_endurance_discount_from_elapsed(50.0 * 60.0) >= 0.50, "long-run shop discount changed")
 
-	print("RUNTIME_PROGRESSION_CONTROLLER_SMOKE_OK reward=%d score=%d price=%d temporal_luck_60=%.2f diminishing=true rare_gate=true" % [game._points_for_enemy(common_enemy), game.score, game._effective_card_price(speed), float(temporal_samples[60])])
+	var progression = game._progression()
+	game.cards_bought.clear()
+	game.cinzas_card_bonuses.clear()
+	game.shop_bargain_discount_session.clear()
+	game.shop_endurance_discount = 0.0
+	game.card_cost = 500
+	game.score = 1000000
+	var reference_started_usec := Time.get_ticks_usec()
+	var high_score_expected := _reference_affordable_card_count()
+	var reference_elapsed_usec := Time.get_ticks_usec() - reference_started_usec
+	var recomputes_before: int = progression.affordable_card_controller.recomputes
+	var cold_started_usec := Time.get_ticks_usec()
+	_check(game._affordable_card_count() == high_score_expected, "high-score affordable count changed")
+	var cold_elapsed_usec := Time.get_ticks_usec() - cold_started_usec
+	var cached_started_usec := Time.get_ticks_usec()
+	for _query in range(240):
+		_check(game._affordable_card_count() == high_score_expected, "cached high-score affordable count drifted")
+	var cached_elapsed_usec := Time.get_ticks_usec() - cached_started_usec
+	_check(progression.affordable_card_controller.recomputes == recomputes_before + 1, "unchanged HUD queries recomputed the score-scaled shop loop")
+	game._apply_score_delta(-250000, false, "larapio:cache-regression")
+	_check(game._affordable_card_count() == _reference_affordable_card_count(), "score spend did not invalidate affordable cache")
+	game.shop_endurance_discount = 0.30
+	_check(game._affordable_card_count() == _reference_affordable_card_count(), "shop discount did not invalidate affordable cache")
+	game.cards_bought["pacto_possibilidades"] = 4
+	_check(game._affordable_card_count() == _reference_affordable_card_count(), "card state did not invalidate affordable cache")
+
+	print("RUNTIME_PROGRESSION_CONTROLLER_SMOKE_OK reward=%d score=%d price=%d temporal_luck_60=%.2f diminishing=true rare_gate=true affordable_high_score=%d reference_usec=%d cold_usec=%d cached_240_usec=%d" % [game._points_for_enemy(common_enemy), game.score, game._effective_card_price(speed), float(temporal_samples[60]), high_score_expected, reference_elapsed_usec, cold_elapsed_usec, cached_elapsed_usec])
 	_cleanup_runtime()
 	for _i in range(4):
 		await process_frame

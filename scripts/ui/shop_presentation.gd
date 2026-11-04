@@ -131,7 +131,7 @@ func bargain_base_price(g, card: Dictionary) -> int:
 func draw_bargain_price_tag(g, card: Dictionary, rect: Rect2, selected: bool, alpha: float = 1.0) -> void:
 	var rate: float = bargain_discount_rate(card)
 	if rate <= 0.0 or g._is_empty_shop_slot(card):
-		text(g, "VAZIA" if g._is_empty_shop_slot(card) else "%d PTS" % g._effective_card_price(card), rect, 18, GOLD if selected else MUTED, true)
+		text(g, "VAZIA" if g._is_empty_shop_slot(card) else "%s PTS" % g._format_points(g._effective_card_price(card)), rect, 18, GOLD if selected else MUTED, true)
 		return
 	var price: int = g._effective_card_price(card)
 	var base_price: int = bargain_base_price(g, card)
@@ -142,7 +142,7 @@ func draw_bargain_price_tag(g, card: Dictionary, rect: Rect2, selected: bool, al
 	var right := Rect2(Vector2(inner.position.x + inner.size.x * 0.42, inner.position.y), Vector2(inner.size.x * 0.58, inner.size.y))
 	text(g, "%d" % base_price, left, 12, Color(1.0, 0.74, 0.38, 0.66 * alpha), true)
 	g.draw_line(left.position + Vector2(7.0, left.size.y * 0.52), Vector2(left.end.x - 7.0, left.position.y + left.size.y * 0.52), Color(1.0, 0.34, 0.16, 0.84 * alpha), 1.4)
-	text(g, "%d PTS" % price, right, 15, Color(1.0, 0.94, 0.42, alpha), true)
+	text(g, "%s PTS" % g._format_points(price), right, 15, Color(1.0, 0.94, 0.42, alpha), true)
 
 
 func draw_bargain_banner(g, card: Dictionary, rect: Rect2, alpha: float = 1.0) -> void:
@@ -224,7 +224,7 @@ func reroll_visual_state(g) -> Dictionary:
 		accent = Color(1.0, 0.84, 0.22).lerp(Color(1.0, 0.43, 0.12), clampf((ratio - 0.42) / 0.3, 0.0, 1.0))
 	else:
 		accent = Color(0.24, 1.0, 0.46).lerp(Color(1.0, 0.84, 0.22), clampf(ratio / 0.42, 0.0, 1.0))
-	var detail: String = "%d pts / carta %d" % [cost, card_cost]
+	var detail: String = "%s pts / carta %s" % [g._format_points(cost), g._format_points(card_cost)]
 	if not enabled:
 		detail = "saldo insuficiente - %d pts" % cost
 	return {
@@ -234,7 +234,7 @@ func reroll_visual_state(g) -> Dictionary:
 		"accent": accent,
 		"title": "REROLL PAGO",
 		"detail": detail,
-		"short": "%d PTS" % cost,
+		"short": "%s PTS" % g._format_points(cost),
 		"enabled": enabled
 	}
 
@@ -527,7 +527,7 @@ func draw_spend_anim(g, center: Vector2) -> void:
 	var rect := Rect2(pos - Vector2(64.0, 16.0), Vector2(128.0, 32.0))
 	g.draw_rect(rect, Color(0.16, 0.035, 0.02, 0.78 * alpha), true)
 	g.draw_rect(rect, Color(1.0, 0.42, 0.16, 0.86 * alpha), false, 2)
-	g._draw_centered("-%d PTS" % g.shop_spend_anim_amount, rect.get_center() + Vector2(0.0, 5.0), g._readable_text_size(14), Color(1.0, 0.58, 0.24, alpha))
+	g._draw_centered("-%s PTS" % g._format_points(g.shop_spend_anim_amount), rect.get_center() + Vector2(0.0, 5.0), g._readable_text_size(14), Color(1.0, 0.58, 0.24, alpha))
 
 
 func draw_countdown_alert(g, viewport: Vector2) -> void:
@@ -558,7 +558,7 @@ func draw(g, viewport: Vector2) -> void:
 	g.draw_rect(Rect2(0, 0, viewport.x, 110), Color(0.02, 0.04, 0.048, 0.96))
 	text(g, "ARQUIVO TEMPORAL", Rect2(margin, 15, 340, 18), 13, CYAN)
 	text(g, "LOJA DE CARTAS", Rect2(margin, 37, viewport.x - 310, 36), 30, PAPER)
-	text(g, "%d PONTOS    /    CUSTO BASE %d    /    %d CARTAS NO DECK" % [g.score, g.card_cost, g._deck_total_cards()], Rect2(margin, 80, 650, 24), 17, GOLD)
+	text(g, "%s PONTOS    /    CUSTO BASE %s    /    %d CARTAS NO DECK" % [g._format_points(g.score), g._format_points(g.card_cost), g._deck_total_cards()], Rect2(margin, 80, 650, 24), 17, GOLD)
 	if g.shop_spend_anim_timer > 0.0 and g.shop_spend_anim_amount > 0:
 		var spend_progress: float = 1.0 - clampf(g.shop_spend_anim_timer / maxf(0.01, g.SHOP_SPEND_ANIM_TIME), 0.0, 1.0)
 		var rise: float = sin(spend_progress * PI) * 16.0
@@ -566,7 +566,7 @@ func draw(g, viewport: Vector2) -> void:
 		var spend_rect := Rect2(margin + 430.0, 67.0 - rise, 126.0, 28.0)
 		g.draw_rect(spend_rect, Color(0.16, 0.035, 0.02, 0.78 * alpha), true)
 		g.draw_line(spend_rect.position + Vector2(8.0, 2.0), spend_rect.position + Vector2(spend_rect.size.x - 8.0, 2.0), Color(1.0, 0.42, 0.16, 0.92 * alpha), 2.0)
-		text(g, "-%d PTS" % int(g.shop_spend_anim_amount), spend_rect.grow(-5), 16, Color(1.0, 0.56, 0.22, alpha), true)
+		text(g, "-%s PTS" % g._format_points(g.shop_spend_anim_amount), spend_rect.grow(-5), 16, Color(1.0, 0.56, 0.22, alpha), true)
 	draw_reroll_button(g, areas.reroll)
 	button(g, areas.deck, "MEU DECK", GOLD, g._deck_total_cards() > 0 and not busy() and not g._shop_purchase_animating())
 	var team := "ESCOLHA UMA CARTA"
@@ -638,7 +638,7 @@ func draw(g, viewport: Vector2) -> void:
 		if not compact:
 			text(g, String(card.get("nick", "")), Rect2(detail.position + Vector2(0, 70), Vector2(detail.size.x, 24)), 16, CYAN)
 		if bargain_discount_rate(card) > 0.0:
-			text(g, "CAPSULA DA BARGANHA: %d -> %d PTS" % [bargain_base_price(g, card), g._effective_card_price(card)], Rect2(detail.position + Vector2(0, 94 if not compact else 72), Vector2(detail.size.x, 22)), 14, GOLD)
+			text(g, "CAPSULA DA BARGANHA: %s -> %s PTS" % [g._format_points(bargain_base_price(g, card)), g._format_points(g._effective_card_price(card))], Rect2(detail.position + Vector2(0, 94 if not compact else 72), Vector2(detail.size.x, 22)), 14, GOLD)
 		var cinzas_callout_y: float = 120.0 if bargain_discount_rate(card) > 0.0 else (96.0 if not compact else 74.0)
 		if card.has("cinzas_bonus_summary"):
 			draw_cinzas_bonus_callout(g, card, Rect2(detail.position + Vector2(0, cinzas_callout_y), Vector2(detail.size.x, 58.0)), 1.0)
@@ -656,7 +656,7 @@ func draw(g, viewport: Vector2) -> void:
 		g.buttons["shop_burn_%d" % g.shop_selected] = areas.burn
 		g.buttons["shop_reserve_%d" % g.shop_selected] = areas.reserve
 		var price: int = g._effective_card_price(card)
-		var label := "COMPRAR  %d PTS" % price
+		var label := "COMPRAR  %s PTS" % g._format_points(price)
 		if g._is_empty_shop_slot(card):
 			label = "VAGA VAZIA"
 		if g._shop_purchase_animating():
@@ -715,7 +715,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 		var header = Rect2(viewport.x * 0.06, 24, viewport.x * 0.88, 124)
 		g._draw_holo_panel(header, Color(0.0, 1.0, 0.82), true, 0.76)
 		g._draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 60), 30, Color(0.0, 1.0, 0.82))
-		var header_text = "Pontos %d  |  Custo %d  |  %s" % [score, card_cost, reroll_status]
+		var header_text = "Pontos %s  |  Custo %s  |  %s" % [g._format_points(score), g._format_points(card_cost), reroll_status]
 		if shop_endurance_discount > 0.0:
 			header_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 		if purchase_animating:
@@ -847,7 +847,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 	g._draw_glitch_title("LOJA DE CARTAS", Vector2(viewport.x * 0.5, 46), 26, Color(0.0, 1.0, 0.82))
 
 
-	var hud_text = "Pontos: %d  |  Custo: %d  |  %s" % [score, card_cost, reroll_status]
+	var hud_text = "Pontos: %s  |  Custo: %s  |  %s" % [g._format_points(score), g._format_points(card_cost), reroll_status]
 	if shop_endurance_discount > 0.0:
 		hud_text += "  |  Resistencia -%d%%" % int(round(shop_endurance_discount * 100.0))
 	g._draw_centered(hud_text, Vector2(viewport.x * 0.5, 73), g._readable_text_size(16), Color(1.0, 0.85, 0.24))

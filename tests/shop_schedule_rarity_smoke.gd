@@ -18,6 +18,8 @@ func _initialize() -> void:
 func _run() -> void:
 	game._start_game()
 	game.shop_auto_enabled = true
+	# Cobre a contagem legada (multiplayer); a Fenda tem teste proprio.
+	game.shop_rift_controller.allow_rift = false
 	game.shop_auto_interval = 180.0
 	game.shop_auto_elapsed = 120.0
 	game._advance_to_phase(2)

@@ -73,6 +73,8 @@ static func lod(game: Node2D) -> int:
 	return 2 if game._runtime_visual_budget_active() else 3
 
 static func evolved(game: Node2D, suffix: String) -> bool:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		return false
 	for choice in game.manifest_evolution_state.get("choices", []):
 		# Runtime choices are authored by _choose_manifest_evolution with
 		# `evolution`; `id` remains a read-only compatibility fallback for saves

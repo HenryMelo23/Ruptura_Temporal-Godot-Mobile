@@ -361,6 +361,7 @@ func open_shop(forced: bool) -> void:
 	game.mode = "shop"
 	game._update_audio_volumes()
 	game.shop_rerolls = game.SHOP_FREE_REROLLS_PER_VISIT
+	var rift_entry: bool = game.shop_rift_controller.apply_entry_bonus()
 	game.shop_paid_rerolls_this_visit = 0
 	reset()
 	game.shop_mp_ready_count = 0
@@ -383,7 +384,7 @@ func open_shop(forced: bool) -> void:
 	game.shop_select_pulse_timer = 0.2
 	game.shop_last_tap_index = -1
 	game.shop_last_tap_msec = 0
-	if forced:
+	if forced and not rift_entry:
 		game._add_text("Loja forcada", game.player_pos + Vector2(0, -92), Color(0.0, 1.0, 0.82), 1.4, 26)
 	if game.shop_endurance_discount > 0.0:
 		game._add_text("RESISTENCIA: -%d%%" % int(round(game.shop_endurance_discount * 100.0)), game.player_pos + Vector2(0, -128), Color(1.0, 0.86, 0.28), 1.6, 24)
@@ -609,6 +610,7 @@ func finish() -> void:
 	bargain_exit_confirmation_pending = false
 	game.shop_last_exit_had_purchase = game.shop_purchases_this_visit > 0
 	game.shop_last_exit_time = game.time_alive
+	game.shop_rift_controller.on_shop_closed()
 	finish_manual_visit()
 	game.shop_purchase_anim_timer = 0.0
 	game.shop_purchase_pending_card = {}
@@ -656,6 +658,8 @@ func update_waiting(delta: float) -> void:
 
 func should_trigger_forced() -> bool:
 	if game._is_drop_game_mode():
+		return false
+	if game.shop_rift_controller.replaces_forced_countdown():
 		return false
 	if not game.shop_auto_enabled or game.forced_shop_triggered or game.forced_shop_timer >= 0.0 or game.shop_opening_timer > 0.0:
 		return false
@@ -755,8 +759,8 @@ func update(delta: float) -> void:
 	game._apply_card(card)
 	game._register_card_purchase_unlock_progress(card)
 	game.card_cost += game._shop_price_increment_after_purchase()
-	game._clear_locked_shop_slot_for_card(card)
-	game._refill_shop_slot_after_purchase(game.shop_selected)
+	game.shop_locked_slots.clear()
+	game.shop_cards = game._roll_shop_cards("purchase")
 	game.shop_selected = clamp(game.shop_selected, 0, max(0, game.shop_cards.size() - 1))
 	game.shop_select_pulse_index = game.shop_selected
 	game.shop_select_pulse_timer = 0.22

@@ -50,6 +50,7 @@ func _run() -> void:
 	await process_frame
 	game.force_phase6_start = true
 	game._start_game()
+	game._reset_tutorial_state()
 	game.set_process(false)
 	game.startup_thanks_done = true
 	game.mode = "game"

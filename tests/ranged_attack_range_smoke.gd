@@ -1,7 +1,7 @@
 extends SceneTree
 
-const EXPECTED_BASE_RANGE := 300.0
-const EXPECTED_RANGE_PER_COPY := 30.0
+const EXPECTED_BASE_RANGE := 420.0
+const EXPECTED_RANGE_PER_COPY := 45.0
 const EXPECTED_DAMAGE_PER_COPY := 0.025
 const EXPECTED_PRISMATIC_RICOCHET_CRIT_PER_COPY := 0.03
 
@@ -71,7 +71,7 @@ func _run() -> void:
 	_check(not game._card_at_max(card), "card_has_a_finite_limit")
 	_check(game._get_texture("card_" + String(card["name"])) != null, "card_frame_1_missing")
 	_check(game._get_texture("card_" + String(card["name"]) + "_2") != null, "card_frame_2_missing")
-	_check(is_equal_approx(game._ranged_primary_attack_range(), EXPECTED_BASE_RANGE), "base_range_is_not_300")
+	_check(is_equal_approx(game._ranged_primary_attack_range(), EXPECTED_BASE_RANGE), "base_range_is_not_420")
 
 	# Automatic aim must not spend the shot if no valid target is inside the ring.
 	game.time_alive = 20.0
@@ -84,6 +84,14 @@ func _run() -> void:
 	game._try_attack()
 	_check(game.bullets.is_empty(), "automatic_aim_fired_at_target_outside_range")
 	_check(game._auto_target_enemy().is_empty(), "out_of_range_target_entered_auto_selection")
+	var near_high_hp := _spawn_target(Vector2(110.0, 0.0), 5000.0)
+	outside["hp"] = 10.0
+	outside["max_hp"] = 5000.0
+	game.auto_target_priority = "hp_low"
+	_check(game._nearest_target() == Vector2(near_high_hp["pos"]), "basic_attack_ignored_its_range_for_low_hp_priority")
+	_check(game._nearest_ability_target() == Vector2(outside["pos"]), "ability_targeting_still_respected_auto_attack_range")
+	game.auto_target_priority = "nearest"
+	game.enemies.erase(near_high_hp)
 
 	outside["pos"] = game.player_pos + Vector2(EXPECTED_BASE_RANGE - 5.0, 0.0)
 	game._try_attack()
@@ -158,7 +166,7 @@ func _run() -> void:
 		"color": Color.CYAN,
 	})
 	var stacked_bullet: Dictionary = game.bullets[0]
-	_check(is_equal_approx(float(stacked_bullet["max_range"]), 900.0), "stacked_projectile_range_wrong")
+	_check(is_equal_approx(float(stacked_bullet["max_range"]), EXPECTED_BASE_RANGE + EXPECTED_RANGE_PER_COPY * 20.0), "stacked_projectile_range_wrong")
 	_check(is_equal_approx(float(stacked_bullet["damage"]), 150.0), "stacked_projectile_damage_wrong")
 	var derived_bullet: Dictionary = stacked_bullet.duplicate(true)
 	derived_bullet["uid"] = "derived-range-smoke"
@@ -167,7 +175,7 @@ func _run() -> void:
 	_check(is_equal_approx(float(game.bullets[-1]["damage"]), 108.0), "derived_projectile_received_card_damage_twice")
 
 	# Prismatica alone keeps an uncapped projectile. Its automatic acquisition
-	# remains fixed at 300 px and every range stack becomes ricochet crit chance.
+	# remains fixed at the shared base and every range stack becomes ricochet crit chance.
 	game.active_character_key = game.CHARACTER_GEOVANA
 	game.manifestation_key = "prismatica"
 	game.locked_target_kind = ""
@@ -228,5 +236,5 @@ func _run() -> void:
 	game.mutation_key = "barometrico"
 	_check(game.RangedAttackRange.is_ranged_primary(game), "barometrico_missing_ranged_contract")
 
-	print("RANGED_ATTACK_RANGE_SMOKE_OK base=300 card_range_per_copy=30 card_damage_per_copy=2.5pct prismatica_uncapped=true prismatica_ricochet_crit_per_copy=3pct auto_gate=true outside_lock_manual_only=true melee_excluded=true")
+	print("RANGED_ATTACK_RANGE_SMOKE_OK base=420 card_range_per_copy=45 level_range_per_level=10 ability_target_global=true card_damage_per_copy=2.5pct prismatica_uncapped=true prismatica_ricochet_crit_per_copy=3pct auto_gate=true outside_lock_manual_only=true melee_excluded=true")
 	_cleanup(0)

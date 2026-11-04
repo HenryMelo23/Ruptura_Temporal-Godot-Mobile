@@ -1,14 +1,14 @@
 {
-  "version": "2.0.63",
-  "version_code": 26300,
-  "filename": "Ruptura_Temporal_2.0.63.x86_64",
-  "sha256": "590d54a19774b17167424464c0a2ed6a434d6b14495d637d237a65a90b14567b",
-  "size": 995850816,
+  "version": "2.0.64",
+  "version_code": 26400,
+  "filename": "Ruptura_Temporal_2.0.64.x86_64",
+  "sha256": "617594f5376c79f4d6169efd6d7e7051a52c79b838879342308fb2cdd3c33b4e",
+  "size": 1013163632,
   "notes": [
-    "Suturador de Ambar reforcado: cristais persistentes, armadura quebravel e duas novas habilidades.",
-    "Conforto de camera com zona morta e suavizacao configuravel, sem reduzir a qualidade grafica.",
-    "Rotas dinamicas em ciclos de quatro mapas, com escolha entre continuar a run ou enfrentar a Umbra."
+    "Chefes 4 e 6 retrabalhados com ataques, locomocao, telegraph e apresentacao visual renovados.",
+    "Progressao, cartas e pressao das hordas ajustadas para runs longas sem sacrificar a qualidade visual.",
+    "Multiplayer revisado em lobby, pronto/inicio, manifestacoes, espectadores, combate e progressao compartilhada."
   ],
   "mandatory": false,
-  "published_at": "2026-10-30T23:34:03Z"
+  "published_at": "2026-11-04T01:32:47Z"
 }

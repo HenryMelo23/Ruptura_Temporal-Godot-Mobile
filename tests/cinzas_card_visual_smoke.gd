@@ -52,9 +52,9 @@ func _run() -> void:
 	game.shop_rerolls = 3
 	game._open_shop(false)
 
-	var left_card: Dictionary = game._find_card_by_id("escolha_adiada").duplicate(true)
+	var left_card: Dictionary = game._find_card_by_id("inercia_cronal").duplicate(true)
 	var buffed_card: Dictionary = game._find_card_by_id("passagem_intangivel").duplicate(true)
-	var right_card: Dictionary = game._find_card_by_id("escolha_adiada").duplicate(true)
+	var right_card: Dictionary = game._find_card_by_id("orbita_coletora").duplicate(true)
 	_check(not left_card.is_empty(), "left card was not found")
 	_check(not buffed_card.is_empty(), "Passagem Intangivel was not found")
 	_check(not right_card.is_empty(), "right card was not found")

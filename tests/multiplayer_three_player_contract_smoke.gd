@@ -51,7 +51,9 @@ func _run() -> void:
 	_check(is_equal_approx(game._multiplayer_enemy_hp_scale(), game.MULTIPLAYER_ENEMY_HP_SCALE_3P), "three-player enemy hp scale is not active")
 	_check(is_equal_approx(game._multiplayer_boss_damage_scale(), game.MULTIPLAYER_BOSS_DAMAGE_SCALE_3P), "three-player boss damage scale is not active")
 	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss hp scale is not active")
-	_check(game._enemy_limit() == game.ENEMY_MAX_BASE + game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player enemy limit bonus is not active")
+	var desired_enemy_limit: int = game.enemy_manager.get_desired_enemy_limit(true)
+	_check(desired_enemy_limit == game.ENEMY_MAX_BASE + game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player desired enemy limit bonus is not active")
+	_check(game._enemy_limit() <= desired_enemy_limit, "device-safe enemy cap exceeded the multiplayer desired limit")
 	game.online_room_owner = true
 	game.is_host = true
 	game.run_leader_peer_id = 0
@@ -116,7 +118,10 @@ func _run() -> void:
 	for fragment_value in game.arauto_evolution_fragments:
 		var fragment: Dictionary = fragment_value
 		fragment_owners[int(fragment.get("owner_peer", -1))] = true
-	_check(fragment_owners.size() == 3, "Arauto evolution fragment was not created for every player")
+	if game.MANIFEST_EVOLUTIONS_ENABLED:
+		_check(fragment_owners.size() == 3, "Arauto evolution fragment was not created for every player")
+	else:
+		_check(fragment_owners.is_empty(), "disabled manifestation evolutions still created multiplayer fragments")
 
 	game.mp_manifest_state_by_peer = {
 		42: {"stage": game.MANIFEST_STAGE_AURA, "manifestation": 1, "aura": 2, "ready": true},

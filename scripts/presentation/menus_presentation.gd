@@ -623,7 +623,7 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	var tutorial_accent = Color(0.0, 1.0, 0.82) if game.run_tutorial_enabled else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["tutorial"], "TUTORIAL INICIAL", "Pergunta ao iniciar a proxima partida.", "ON" if game.run_tutorial_enabled else "OFF", tutorial_accent, game.settings_selected == game._gameplay_preference_index("tutorial"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["tutorial"]), game.run_tutorial_enabled, tutorial_accent)
-	var cheat_value = "FASE EX ARMADA" if game.experimental_phase_requested else ("QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else ("RETORNANTE OK" if game.retornante_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE"))))
+	var cheat_value = (game.experimental_phase_controller.phase_label(game.experimental_phase_controller.requested_phase) + " ARMADA") if game.experimental_phase_requested else ("QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else ("RETORNANTE OK" if game.retornante_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE"))))
 	var cheat_accent = Color(0.34, 0.94, 1.0) if game.experimental_phase_requested else (Color(0.74, 1.0, 0.36) if game.qa_data_unlocked else (Color(0.0, 1.0, 0.82) if game.online_mode_unlocked else (Color(0.86, 0.48, 1.0) if game.retornante_unlocked else Color(0.64, 0.44, 1.0))))
 	if game.gameplay_cheat_focused:
 		cheat_value = "DIGITANDO..."
@@ -2360,7 +2360,7 @@ static func _draw_revival_altar_talkbox(game: Node2D, camera: Vector2) -> void:
 	var cost_text: String = "%.0f%% DA VIDA" % (game._revival_life_sacrifice_rate() * 100.0)
 	var detail: String = "divide entre %d caido(s)" % game._team_revival_dead_count()
 	if method == game.REVIVE_PAY_POINTS:
-		cost_text = "%d PONTOS" % game._revival_points_cost()
+		cost_text = "%s PONTOS" % game._format_points(game._revival_points_cost())
 		detail = "gasto individual"
 	var rect: Rect2 = Rect2(center.x - 172.0, center.y - 132.0, 344.0, 72.0)
 	game._draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
@@ -2375,7 +2375,7 @@ static func _draw_revival_interaction_prompt(game: Node2D, viewport: Vector2) ->
 	var key_name: String = "REVIVE" if game._uses_touch_ui() else game._compact_key_binding_name("interact")
 	var cost_text: String = "%.0f%% DA VIDA" % (game._revival_life_sacrifice_rate() * 100.0)
 	if method == game.REVIVE_PAY_POINTS:
-		cost_text = "%d PONTOS" % game._revival_points_cost()
+		cost_text = "%s PONTOS" % game._format_points(game._revival_points_cost())
 	var text: String = "%s INTERAGIR - ALTAR %s (%s)" % [key_name, game._revival_method_label(method), cost_text]
 	var rect: Rect2 = Rect2(viewport.x * 0.5 - 230.0, viewport.y * 0.58, 460.0, 38.0)
 	game._draw_holo_panel(rect, Color(0.0, 1.0, 0.82), true, 0.78)
@@ -2403,7 +2403,7 @@ static func _draw_revive_request(game: Node2D, viewport: Vector2) -> void :
 		var remaining = int(ceil(max(0.0, game.revive_request_timer)))
 		game._draw_centered("ALIADO CAIDO PEDE REVIVE", Vector2(panel.get_center().x, panel.position.y + 34.0), game._readable_text_size(15), accent)
 		game._draw_centered("ESCOLHA COMO REERGUER O ALIADO  |  %ds" % remaining, Vector2(panel.get_center().x, panel.position.y + 66.0), game._readable_text_size(12), Color(0.92, 0.96, 1.0))
-		game._draw_centered("PONTOS: %d  OU  VIDA: -50%% HP" % cost, Vector2(panel.get_center().x, panel.position.y + 96.0), game._readable_text_size(13), Color(1.0, 0.86, 0.26))
+		game._draw_centered("PONTOS: %s  OU  VIDA: -50%% HP" % game._format_points(cost), Vector2(panel.get_center().x, panel.position.y + 96.0), game._readable_text_size(13), Color(1.0, 0.86, 0.26))
 		var sacrifice_rect = Rect2(panel.position.x + 28.0, panel.position.y + 112.0, panel.size.x - 56.0, 28.0)
 		game._draw_wrapped_clamped("SACRIFICIO: SUAS CURAS FICAM 50% MAIS FRACAS POR 1 MINUTO", sacrifice_rect, game._readable_text_size(10), Color(1.0, 0.58, 0.62), 1)
 		var gap = 10.0
@@ -2419,7 +2419,7 @@ static func _draw_revive_request(game: Node2D, viewport: Vector2) -> void :
 		return
 	if game.is_dead:
 		var title = "VOCE FOI ELIMINADO"
-		var detail = "ALIADO PODE PAGAR %d PONTOS OU DOAR VIDA" % cost
+		var detail = "ALIADO PODE PAGAR %s PONTOS OU DOAR VIDA" % game._format_points(cost)
 		var enabled: bool = game.revive_request_cooldown <= 0.0 and not game.revive_request_outgoing
 		if game.revive_request_outgoing:
 			detail = "PEDIDO ENVIADO %.0fs" % ceil(max(0.0, game.revive_request_timer))
@@ -2745,8 +2745,8 @@ static func _draw_run_summary(game: Node2D, area: Rect2, accent: Color, lost: bo
 		["TEMPO", game._run_time_text()],
 		["INIMIGOS", str(game.enemies_killed)],
 		["DANO INIMIGOS", str(int(round(game.run_damage_to_enemies)))],
-		["PONTOS GANHOS", str(game.run_points_earned)],
-		["PONTOS GASTOS", str(game.run_points_spent)],
+		["PONTOS GANHOS", game._format_points(game.run_points_earned)],
+		["PONTOS GASTOS", game._format_points(game.run_points_spent)],
 		["CARTAS", str(game._deck_total_cards())],
 		["FASE DA QUEDA" if lost else "FASE CONCLUIDA", str(game.current_phase)]
 	]

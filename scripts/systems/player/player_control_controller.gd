@@ -53,6 +53,14 @@ func right_aim_vector() -> Vector2:
 
 
 func aim_direction() -> Vector2:
+	return _resolved_aim_direction(false)
+
+
+func ability_aim_direction() -> Vector2:
+	return _resolved_aim_direction(true)
+
+
+func _resolved_aim_direction(for_ability: bool) -> Vector2:
 	if core._apolo_phase5_exhibition_active():
 		if core.apolo_phase5_exhibition_aim.length() > 0.05:
 			return core.apolo_phase5_exhibition_aim.normalized()
@@ -69,7 +77,7 @@ func aim_direction() -> Vector2:
 		var to_cursor: Vector2 = desktop_aim_target_world() - core.player_pos
 		if to_cursor.length() > 0.05:
 			return to_cursor.normalized()
-	var target: Vector2 = core._nearest_target()
+	var target: Vector2 = core._nearest_ability_target() if for_ability else core._nearest_target()
 	if target != Vector2.ZERO:
 		var to_target: Vector2 = target - core.player_pos
 		if to_target.length() > 0.05:
@@ -418,7 +426,7 @@ func desktop_cursor_ground_target(secondary: bool) -> Variant:
 	if core._ground_target_profile(secondary).is_empty(): return null
 	var profile: Dictionary = core._ground_target_profile(secondary)
 	var delta: Vector2 = desktop_aim_target_world() - core.player_pos
-	if delta.length() <= 0.05: delta = aim_direction() * float(profile.get("default", 160.0))
+	if delta.length() <= 0.05: delta = ability_aim_direction() * float(profile.get("default", 160.0))
 	if delta.length() <= 0.05: delta = Vector2.RIGHT * float(profile.get("default", 160.0))
 	return core.player_pos + delta.normalized() * clampf(delta.length(), float(profile.get("minimum", 0.0)), float(profile.get("range", core.PLAYER_DASH_DISTANCE)))
 

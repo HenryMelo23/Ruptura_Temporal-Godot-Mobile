@@ -37,27 +37,28 @@ func _run() -> void:
 	_prepare_boss()
 	_check(game._boss_hp_for_phase(6) >= game.BOSS_BASE_HP * game.BOSS6_HP_SCALE, "phase 6 HP did not receive the durability rework")
 	var defs: Array = game._boss6_ability_defs()
-	_check(defs.size() == 3, "boss 6 does not expose exactly three basic abilities")
+	_check(defs.size() == 4, "boss 6 does not expose the four basic abilities (scythes, spit, tail, tide)")
 	_check(String(defs[0].get("id", "")) == game.BOSS6_ABILITY_SCYTHES, "stage 1 ability is not vertebral scythes")
 	_check(not game._boss6_ability_available(defs[1], 0), "acid bloom unlocked before stage 2")
-	_check(not game._boss6_ability_available(defs[2], 0), "carnage tide unlocked before stage 3")
+	_check(not game._boss6_ability_available(defs[3], 0), "carnage tide unlocked before stage 3")
 
+	# Rework: o controlador de estagio nao prende mais a Matriarca no centro.
 	var stage1_start: Vector2 = game.boss_pos
 	game.boss6_stage_controller.update(0.5)
-	_check(game.boss_pos.distance_to(stage1_start) > 1.0, "stage 1 remained immobile")
+	_check(game.boss_pos.is_equal_approx(stage1_start), "stage controller teleported the boss")
 
 	game.boss_hp = 660.0
 	game.boss6_stage_controller.update(0.05)
 	_check(game.boss6_stage == 2, "66 percent threshold did not enter stage 2")
 	_check(game.boss6_state == game.BOSS6_STATE_TRANSITION, "stage 2 skipped its transition animation state")
 	_check(game._boss6_ability_available(defs[1], 0), "stage 2 did not unlock acid bloom")
-	_check(not game._boss6_ability_available(defs[2], 0), "stage 2 unlocked carnage tide too early")
+	_check(not game._boss6_ability_available(defs[3], 0), "stage 2 unlocked carnage tide too early")
 
 	game.boss6_state = game.BOSS6_STATE_IDLE
 	game.boss_hp = 330.0
 	game.boss6_stage_controller.update(0.05)
 	_check(game.boss6_stage == 3, "33 percent threshold did not enter stage 3")
-	_check(game._boss6_ability_available(defs[2], 0), "stage 3 did not unlock carnage tide")
+	_check(game._boss6_ability_available(defs[3], 0), "stage 3 did not unlock carnage tide")
 
 	game.boss6_state = game.BOSS6_STATE_EXECUTING
 	game.boss6_current_ability = game.BOSS6_ABILITY_CARNAGE_TIDE
@@ -66,6 +67,21 @@ func _run() -> void:
 	_check(game.save_controller._interrupted_run_field_names().has("boss6_stage"), "interrupted-run save omitted boss6 stage")
 	var visual_packet: Dictionary = game.boss_visual_sync_controller.pack(game)
 	_check(int(visual_packet.get("boss6_stage", 0)) == 3, "multiplayer visual snapshot omitted boss6 stage")
+
+	game.boss_attacks.clear()
+	game.boss6_carapace_plates.clear()
+	game._boss6_start_special("first_infestation")
+	_check(not game.boss6_carapace_plates.is_empty(), "opening survival cycle omitted the carapace")
+	_check(game.boss_attacks.any(func(attack): return String(Dictionary(attack).get("kind", "")) == game.BOSS6_ABILITY_SCYTHES), "opening survival cycle omitted vertebral scythes")
+	_check(game.boss_attacks.any(func(attack): return String(Dictionary(attack).get("kind", "")) == game.BOSS6_ABILITY_INCUBATION), "opening survival cycle omitted incubation")
+
+	game.boss_attacks.clear()
+	game.boss6_carapace_plates.clear()
+	game._boss6_start_special("ecdysis")
+	_check(not game.boss6_relocating, "ecdysis still uses the legacy relocation")
+	_check(game.boss_pos.is_equal_approx(game.WORLD_SIZE * 0.5), "ecdysis teleported the boss")
+	_check(not game.boss6_carapace_plates.is_empty(), "ecdysis survival cycle omitted the carapace")
+	_check(game.boss_attacks.any(func(attack): return String(Dictionary(attack).get("kind", "")) == game.BOSS6_ABILITY_ACID_BLOOM), "ecdysis survival cycle omitted acid bloom")
 
 	game._cleanup_runtime_resources()
 	game.textures.clear()
@@ -77,7 +93,7 @@ func _run() -> void:
 			printerr("BOSS6_THREE_STAGE_REWORK_FAIL " + failure)
 		quit(1)
 		return
-	print("BOSS6_THREE_STAGE_REWORK_OK hp_scale=4.5 stages=3 abilities=3 movement=true transitions=true attack_frames=12 save=true multiplayer=true")
+	print("BOSS6_THREE_STAGE_REWORK_OK hp_scale=4.5 stages=3 abilities=3 stationary=false survival_cycles=true transitions=true attack_frames=12 save=true multiplayer=true")
 	for _frame in range(4):
 		await process_frame
 	quit(0)

@@ -108,8 +108,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "Roubo de Vida",
 		"name": "Roubo de Vida",
 		"category": CATEGORY_LIFESTEAL,
-		"can_burn": true,
-		"policy": "numeric_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["lifesteal"],
 		"burn_factor": 0.50,
 		"stat_label": "roubo de vida",
@@ -217,17 +218,6 @@ const CARD_DEFINITIONS: Dictionary = {
 		"stat_label": "marca de destino rara",
 		"float_text": "CINZAS: DEVORADOR",
 	},
-	"escolha_adiada": {
-		"id": "escolha_adiada",
-		"name": "Escolha Adiada",
-		"category": CATEGORY_CONSUMABLE,
-		"can_burn": false,
-		"policy": "utility_consumable_non_burnable",
-		"eligible_attributes": [],
-		"burn_factor": 0.0,
-		"stat_label": "reserva consumivel",
-		"float_text": "CINZAS: RESERVA",
-	},
 	"tregua_regenerativa": {
 		"id": "tregua_regenerativa",
 		"name": "Trégua Regenerativa",
@@ -244,6 +234,7 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "cinzas_escolha",
 		"name": "Cinzas da Escolha",
 		"category": CATEGORY_CONSUMABLE,
+		"rarity": RARITY_UNCOMMON,
 		"can_burn": false,
 		"policy": "utility_consumable_non_burnable",
 		"eligible_attributes": [],
@@ -307,36 +298,13 @@ const CARD_DEFINITIONS: Dictionary = {
 		"float_text": "CINZAS: INERCIA",
 		"caps": {"max_control": 0.40, "max_knockback": 0.72},
 	},
-	"leitura_instante": {
-		"id": "leitura_instante",
-		"name": "Leitura do Instante",
-		"category": CATEGORY_UTILITY,
-		"can_burn": true,
-		"policy": "numeric_attribute",
-		"eligible_attributes": ["window"],
-		"burn_factor": 0.50,
-		"stat_label": "antecedencia visual",
-		"float_text": "CINZAS: PREVISAO",
-		"caps": {"max_window": 0.28},
-	},
-	"margem_segura": {
-		"id": "margem_segura",
-		"name": "Margem Segura",
-		"category": CATEGORY_AREA,
-		"can_burn": true,
-		"policy": "numeric_attribute",
-		"eligible_attributes": ["distance"],
-		"burn_factor": 0.50,
-		"stat_label": "distancia de spawn",
-		"float_text": "CINZAS: DISTANCIA",
-		"caps": {"max_distance": 140.0},
-	},
 	"moeda_estavel": {
 		"id": "moeda_estavel",
 		"name": "Moeda Estavel",
 		"category": CATEGORY_ECONOMY,
-		"can_burn": true,
-		"policy": "numeric_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["economy"],
 		"burn_factor": 0.50,
 		"stat_label": "economia de compras",
@@ -359,25 +327,14 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "pacto_possibilidades",
 		"name": "Pacto das Possibilidades",
 		"category": CATEGORY_ECONOMY,
-		"can_burn": true,
-		"policy": "numeric_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["discount"],
 		"burn_factor": 0.50,
 		"stat_label": "desconto de loja",
 		"float_text": "CINZAS: PACTO",
 		"caps": {"max_discount": 0.20},
-	},
-	"solo_consolidado": {
-		"id": "solo_consolidado",
-		"name": "Solo Consolidado",
-		"category": CATEGORY_DURATION,
-		"can_burn": true,
-		"policy": "numeric_attribute",
-		"eligible_attributes": ["duration_reduction"],
-		"burn_factor": 0.50,
-		"stat_label": "reducao de perigos de chao",
-		"float_text": "CINZAS: ESTABILIDADE",
-		"caps": {"max_reduction": 0.32},
 	},
 	"horizonte_ruptura": {
 		"id": "horizonte_ruptura",
@@ -757,9 +714,9 @@ const CARD_DEFINITIONS: Dictionary = {
 		"id": "tributo_da_dor",
 		"name": "Tributo da Dor",
 		"category": CATEGORY_ECONOMY,
-		"rarity": RARITY_COMMON,
-		"can_burn": true,
-		"policy": "numeric_attribute",
+		"rarity": RARITY_UNCOMMON,
+		"can_burn": false,
+		"policy": "uncommon_non_burnable",
 		"eligible_attributes": ["points_on_damage"],
 		"burn_factor": 0.50,
 		"stat_label": "pontos recebidos ao perder vida",
@@ -903,7 +860,7 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			return "Ao comprar: +%.1f%% de dano base (+%.1f dano, +%d%%)" % [bonus_pct, dmg_val, total_scale_pct]
 		"Tempestade":
 			var flat_dmg: float = 5.0 * float(effective_stacks) * factor
-			var crit_pct: float = 2.0 * float(effective_stacks) * factor
+			var crit_pct: float = 10.0 * float(effective_stacks) * factor
 			return "Ao comprar: +%.1f de dano e +%.1f%% de critico adicional (+%d%%)" % [flat_dmg, crit_pct, total_scale_pct]
 		"Speed Atack":
 			var reduction_val: float = 0.014 * float(effective_stacks) * factor
@@ -912,8 +869,8 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			var cd_val: float = 0.3 * float(effective_stacks) * factor
 			return "Ao comprar: -%.2fs de recarga do teleporte (+%d%%) [min: 0.5s]" % [cd_val, total_scale_pct]
 		"Roubo de Vida":
-			var ls_pct: float = 0.1 * float(effective_stacks) * factor
-			return "Ao comprar: +%.2f%% de roubo de vida adicional (+%d%%)" % [ls_pct, total_scale_pct]
+			var ls_pct: float = 3.0 * float(effective_stacks)
+			return "Ao comprar: cura direta de %.1f%% do dano causado por projetil" % ls_pct
 		"Sorte":
 			return "Ao comprar: a anomalia favorece possibilidades sem revelar seus calculos."
 		"Porcao":
@@ -922,12 +879,6 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			var ctrl_pct: float = 8.0 * float(effective_stacks) * factor
 			var kb_pct: float = 18.0 * float(effective_stacks) * factor
 			return "Ao comprar: +%.1f%% resist. controle e +%.1f%% resist. empurrao (+%d%%)" % [ctrl_pct, kb_pct, total_scale_pct]
-		"leitura_instante":
-			var win_pct: float = 7.0 * float(effective_stacks) * factor
-			return "Ao comprar: +%.1f%% de antecedencia visual de ataques (+%d%%)" % [win_pct, total_scale_pct]
-		"margem_segura":
-			var dist_val: float = 35.0 * float(effective_stacks) * factor
-			return "Ao comprar: +%.1f de distancia segura de spawn (+%d%%) [limite: 140]" % [dist_val, total_scale_pct]
 		"moeda_estavel":
 			var econ_val: float = 6.0 * float(effective_stacks) * factor
 			return "Ao comprar: -%.1f no incremento de preco da loja (+%d%%)" % [econ_val, total_scale_pct]
@@ -939,9 +890,6 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 			return "Ao comprar: +%.1f%% de desconto para cartas novas (+%d%%)" % [disc_pct, total_scale_pct]
 		"tributo_da_dor":
 			return "Ao comprar: +%d%% nos pontos recebidos ao perder vida" % total_scale_pct
-		"solo_consolidado":
-			var sol_pct: float = 8.0 * float(effective_stacks) * factor
-			return "Ao comprar: +%.1f%% de reducao na duracao de perigos de chao (+%d%%)" % [sol_pct, total_scale_pct]
 		"intervalo_fraturado":
 			return "Ao comprar: +%d%% na reducao de recarga de Hab1 e Ultimate" % total_scale_pct
 		"tregua_regenerativa":

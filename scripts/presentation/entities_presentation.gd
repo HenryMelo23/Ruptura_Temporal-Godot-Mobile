@@ -1,6 +1,7 @@
 extends RefCounted
 const Lightning = preload("res://scripts/presentation/lightning_presentation.gd")
 const HenryQuimeraPresentation = preload("res://scripts/presentation/henry_quimera_presentation.gd")
+const PlayerStatusVfx = preload("res://scripts/presentation/player_status_vfx_presentation.gd")
 
 const CROWD_BATCH_THRESHOLD := 32
 const PERFORMANCE_CROWD_BATCH_THRESHOLD := 12
@@ -34,6 +35,12 @@ const ENEMY_TINTS := {
 
 
 static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
+	var cost_started := Time.get_ticks_usec()
+	_draw_enemies_body(game, camera)
+	game.enemy_manager.horde.note_draw_cost(Time.get_ticks_usec() - cost_started)
+
+
+static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
 	# Frame-local, keyed by kind: these profiles depend on phase/kind only.
 	# Keep per-entity animation, health and status overrides live below.
 	var sizes: Dictionary = {}
@@ -409,6 +416,7 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 		else:
 			game._draw_entity_stretched_rotated(tex, center + profile["offset"], profile["size"], rotation, player_modulate, flip_h)
 	HenryQuimeraPresentation.draw_local(game, tex, center, profile, rotation, player_modulate, flip_h)
+	PlayerStatusVfx.draw(game, center)
 	if game.is_multiplayer and game._is_local_run_leader():
 		game._draw_leader_crown(center + Vector2(0.0, -62.0), 0.82, Color(1.0, 0.86, 0.18, 0.95))
 

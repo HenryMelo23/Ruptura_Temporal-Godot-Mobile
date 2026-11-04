@@ -26,6 +26,8 @@ const COLOR_GOLD := Color(1.0, 0.84, 0.38)
 
 
 static func is_active(game: Node) -> bool:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		return false
 	if String(game.manifestation_key) != "prismatica":
 		return false
 	for choice in Array(game.manifest_evolution_state.get("choices", [])):

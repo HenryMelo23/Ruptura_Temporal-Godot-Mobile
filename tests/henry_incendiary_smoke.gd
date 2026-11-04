@@ -139,32 +139,34 @@ func _run() -> void:
 	game.player_hp = 400
 	game.player_defense = 0.0
 	game.henry_incendiary_ability_controller.reset()
-	game.qa_streaming_permission_pending = true
-	game._damage_player(40, "test_blocked_hit", true)
-	_check(is_equal_approx(game.henry_friction, 0.0), "blocked damage charged friction")
-	game.qa_streaming_permission_pending = false
+	# Rework: Combustao em Cadeia (tomar dano nao gera mais Atrito).
 	game._damage_player(40, "test_real_hit", true)
-	_check(is_equal_approx(game.henry_friction, 10.0), "actual damage did not charge friction proportionally")
+	_check(is_equal_approx(game.henry_friction, 0.0), "damage taken still charges the removed friction")
 	game.enemies.clear()
-	var friction_target := _spawn_target(game.player_pos + Vector2(82.0, 0.0), 5000.0)
-	var outside_friction := _spawn_target(game.player_pos + Vector2(game.HENRY_INCANDESCENCE_RADIUS + 40.0, 0.0), 5000.0)
-	game.henry_incendiary_ability_controller.update(game.HENRY_FRICTION_RELEASE_INTERVAL + 0.01)
-	_check(game.henry_incandescence_active_timer > 0.0 and game.henry_incandescence_zones.size() == 1, "friction did not release into one Incandescence zone")
-	_check(is_equal_approx(game.henry_friction, 0.0), "released friction was not consumed")
-	var target_hp_before := float(friction_target["hp"])
-	var outside_hp_before := float(outside_friction["hp"])
-	game.henry_incendiary_ability_controller.update(0.02)
-	var early_burn_damage := target_hp_before - float(friction_target["hp"])
-	var hp_before_late_tick := float(friction_target["hp"])
-	game.henry_incendiary_ability_controller.update(1.25)
-	var late_burn_damage := hp_before_late_tick - float(friction_target["hp"])
-	_check(early_burn_damage > 0.0 and late_burn_damage > early_burn_damage, "Incandescence burn did not scale with continuous dwell time")
-	_check(is_equal_approx(float(outside_friction["hp"]), outside_hp_before), "Incandescence damaged a target outside its radius")
-	_check(float(friction_target.get("henry_incandescence_heat", 0.0)) > 0.0, "Incandescence did not expose target burn feedback")
+	var burning := _spawn_target(game.player_pos + Vector2(140.0, 0.0), 30.0)
+	var neighbor := _spawn_target(game.player_pos + Vector2(190.0, 0.0), 5000.0)
+	var far_one := _spawn_target(game.player_pos + Vector2(600.0, 0.0), 5000.0)
+	for _stack in range(4):
+		game.henry_incendiary_ability_controller.apply_burn_to_enemy(burning, 10.0, 0, true)
+	var neighbor_hp := float(neighbor["hp"])
+	var far_one_hp := float(far_one["hp"])
+	game._damage_enemy(burning, 9999.0, "test_kill", false, false, game.player_pos, "basic_attack")
+	game.enemy_manager.update_enemies(0.01)
+	game.henry_incendiary_ability_controller.update(0.01)
+	_check(not game.henry_incendiary_ability_controller.combustion_bursts.is_empty(), "burning kill did not detonate a combustion")
+	_check(float(neighbor["hp"]) < neighbor_hp, "combustion did not damage the neighbor")
+	_check(int(neighbor.get("henry_burn_stacks", 0)) >= 3, "combustion did not pass stacks-1 to the neighbor (%d)" % int(neighbor.get("henry_burn_stacks", 0)))
+	_check(is_equal_approx(float(far_one["hp"]), far_one_hp), "combustion reached a target outside its radius")
+	var unburnt := _spawn_target(game.player_pos + Vector2(-200.0, 0.0), 30.0)
+	var unburnt_neighbor := _spawn_target(game.player_pos + Vector2(-230.0, 0.0), 5000.0)
+	var unburnt_neighbor_hp := float(unburnt_neighbor["hp"])
+	game.henry_incendiary_ability_controller.combustion_bursts.clear()
+	game._damage_enemy(unburnt, 9999.0, "test_kill", false, false, game.player_pos, "basic_attack")
+	game.enemy_manager.update_enemies(0.01)
+	game.henry_incendiary_ability_controller.update(0.01)
+	_check(is_equal_approx(float(unburnt_neighbor["hp"]), unburnt_neighbor_hp), "an enemy without burns exploded")
+	game.enemies.clear()
 	game.henry_incendiary_ability_controller.reset()
-	game.henry_incendiary_ability_controller.on_player_damaged(1)
-	game.henry_incendiary_ability_controller.update(game.HENRY_FRICTION_RELEASE_INTERVAL + 0.1)
-	_check(game.henry_incandescence_zones.is_empty(), "sub-threshold friction released a noisy aura")
 
 	for expected_stage in range(3):
 		_check(game.henry_incendiary_ability_controller.fire_auto_attack(), "auto attack failed at combo stage %d" % expected_stage)
@@ -248,7 +250,7 @@ func _run() -> void:
 	_check(not game.henry_incendiary_ability_controller.cast_ultimate(), "duplicate ultimate input restarted the active charge")
 	_check(game._local_player_controls_locked(), "Henry could move during the ultimate crouch")
 	_check(game.henry_heat_waves.is_empty(), "heat wave appeared before the charge animation")
-	game.henry_incendiary_ability_controller.update(game.HENRY_ULTIMATE_CAST_DURATION - 0.01)
+	game.henry_incendiary_ability_controller.update(float(game.henry_incendiary_ability_controller.ULT_PULSE_TIMES[0]) - 0.01)
 	_check(is_equal_approx(float(fresh_target["hp"]), fresh_hp), "ultimate hit a fresh target during charge")
 	_check(Vector2(burning_target["pos"]).is_equal_approx(burning_pos), "ultimate pushed a target during charge")
 	_check(float(burning_target.get("henry_burn_overdrive", 0.0)) <= 0.0, "ultimate intensified burn before the release frame")
@@ -262,8 +264,9 @@ func _run() -> void:
 	game.henry_incendiary_ability_controller.update(0.10)
 	_check(Vector2(burning_target["pos"]).distance_to(burning_pos) > 4.0, "heat wave force did not advance naturally")
 	_check(is_equal_approx(float(outside_wave["hp"]), outside_wave_hp), "heat wave exceeded its 280px radius")
-	game.henry_incendiary_ability_controller.update(game.HENRY_ULTIMATE_CAST_DURATION * 2.0)
-	_check(not game.henry_ultimate_cast_active, "ultimate did not finish after three 800ms animation cycles")
+	_check(game.henry_incendiary_ability_controller.ultimate_frame(8) == 7, "first impact frame is not the burst pose")
+	game.henry_incendiary_ability_controller.update(game.henry_incendiary_ability_controller.ULT_TOTAL)
+	_check(not game.henry_ultimate_cast_active, "ultimate did not finish its 2.55s timeline")
 	_check(game.henry_ultimate_pulses_released == game.HENRY_ULTIMATE_PULSE_COUNT, "ultimate did not release exactly three explosions")
 	game.enemies.clear()
 	var remote_target := _spawn_target(game.player_pos + Vector2(96.0, 0.0))
@@ -278,37 +281,50 @@ func _run() -> void:
 	game.henry_incendiary_ability_controller.update(0.1)
 	_check(Vector2(remote_target["pos"]).distance_to(remote_start) > 4.0, "remote Henry heat wave force did not advance")
 
+	# Rework: Rastro de Brasa (investida curta que deixa o chao em chamas).
 	game.enemies.clear()
-	var spin_target := _spawn_target(game.player_pos + Vector2(400.0, 0.0), 4000.0)
-	for stack_index in range(5):
-		game._damage_enemy(spin_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
-	var spin_origin: Vector2 = game.player_pos
-	var spin_hp_before := float(spin_target["hp"])
+	var dash_origin: Vector2 = game.player_pos
 	game.last_dash_time = -99.0
-	game._execute_teleport(game.player_pos + Vector2.RIGHT * 400.0)
-	_check(game.henry_spin_active and game._local_player_controls_locked(), "Incendiario dash did not enter the protected spin")
-	_check(game._local_player_movement_locked(), "Incendiario dash allowed movement before reaching its destination")
-	_check(game.player_pos.is_equal_approx(spin_origin), "Incendiario dash teleported on the first frame")
+	game._execute_teleport(game.player_pos + Vector2.RIGHT * 700.0)
+	_check(game.henry_spin_active and game._local_player_controls_locked(), "Incendiario dash did not start")
+	_check(game.henry_incendiary_ability_controller.is_spin_invulnerable(), "dash is not protected")
 	game.henry_incendiary_ability_controller.update(game.HENRY_SPIN_DASH_DURATION)
-	var expected_spin_target: Vector2 = game._clamp_player_world(spin_origin + Vector2.RIGHT * 400.0)
-	_check(game.player_pos.distance_to(expected_spin_target) < 0.1, "Incendiario spin did not travel to the teleport destination")
-	_check(not game._local_player_movement_locked() and game._local_player_controls_locked(), "Incendiario spin did not release movement-only control at the destination")
-	var spin_viewport := Vector2(1280.0, 720.0)
-	var spin_move_touch: Vector2 = game._joy_center(spin_viewport) + Vector2(48.0, 0.0)
-	_check(game.player_control_controller.try_start_move_touch(991, spin_move_touch, spin_viewport), "Incendiario spin did not accept mobile movement after reaching the destination")
-	game.player_control_controller.stop_move_touch()
+	var dash_end: Vector2 = game.player_pos
+	_check(dash_end.distance_to(dash_origin) <= game.henry_incendiary_ability_controller.DASH_MAX_DISTANCE + 1.0, "dash travelled past its max distance")
+	_check(dash_end.distance_to(dash_origin) > 200.0, "dash did not travel")
 	var protected_hp: int = game.player_hp
 	game._damage_player(999, "boss1_wave", true)
-	game._rpc_apply_hostile_status("stun", 5.0)
-	game._apply_temporal_rewind_result(game.player_pos + Vector2(300.0, 0.0), 1.0)
-	_check(game.player_hp == protected_hp and game.player_stun_timer <= 0.0, "spin did not block boss damage or hostile status")
-	_check(game.player_pos.distance_to(expected_spin_target) < 0.1, "Boss 1 rewind moved Henry during the spin")
-	for spin_step in range(46):
-		game.henry_incendiary_ability_controller.update(0.05)
-	game.henry_incendiary_ability_controller.update(0.04)
-	_check(not game.henry_spin_active, "spin did not finish after 2.45 seconds")
-	_check(float(spin_target["hp"]) < spin_hp_before and int(spin_target.get("henry_burn_stacks", 0)) == 0, "spin final explosion did not consume stacks and damage the target")
-	_check(Vector2(spin_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "spin final explosion did not apply progressive knockback")
+	_check(game.player_hp == protected_hp, "dash did not block damage")
+	game.henry_incendiary_ability_controller.update(game.HENRY_SPIN_DURATION)
+	_check(not game.henry_spin_active, "dash did not finish quickly")
+	var trail: Array = game.henry_incendiary_ability_controller.ember_trail
+	_check(trail.size() >= 6, "dash left no ember trail (%d points)" % trail.size())
+	var trail_target := _spawn_target(dash_origin.lerp(dash_end, 0.5), 5000.0)
+	var trail_hp := float(trail_target["hp"])
+	for _tick in range(8):
+		game.time_alive += 0.1
+		game.henry_incendiary_ability_controller.update(0.1)
+	_check(float(trail_target["hp"]) < trail_hp, "ember trail did not burn an enemy standing on it")
+	_check(int(trail_target.get("henry_burn_stacks", 0)) >= 1, "ember trail did not apply burn stacks")
+	for _tick in range(40):
+		game.henry_incendiary_ability_controller.update(0.1)
+	_check(game.henry_incendiary_ability_controller.ember_trail.is_empty(), "ember trail did not expire")
+
+	# Bola de fogo do 3o golpe explode e queima em area.
+	game.enemies.clear()
+	game.bullets.clear()
+	game.henry_attack_combo = 2
+	_check(game.henry_incendiary_ability_controller.fire_auto_attack(), "third combo attack failed")
+	var fireball: Dictionary = game.bullets.back()
+	_check(int(fireball.get("henry_fireball_id", 0)) > 0 and float(fireball.get("visual_scale", 1.0)) > 1.5, "third combo is not a fireball")
+	var splash_a := _spawn_target(Vector2(fireball["pos"]) + Vector2(30.0, 0.0), 5000.0)
+	var splash_hp := float(splash_a["hp"])
+	game.henry_incendiary_ability_controller.update(0.0)
+	game.bullets.clear()
+	game.henry_incendiary_ability_controller.update(0.01)
+	_check(float(splash_a["hp"]) < splash_hp and int(splash_a.get("henry_burn_stacks", 0)) >= 1, "fireball did not explode and burn the area")
+	game.enemies.clear()
+	game.henry_incendiary_ability_controller.reset()
 
 	var sheet := load("res://assets/sprites/player/player_2_suit/player_2_suit_sheet_v3.png") as Texture2D
 	_check(sheet != null and sheet.get_width() == 1280 and sheet.get_height() == 5120, "Henry sprite sheet dimensions changed")
@@ -464,7 +480,7 @@ func _run() -> void:
 	game._open_specter_upgrade("victory", true)
 	_check(game.mode == "victory", "Henry was incorrectly routed into Geovana's Specter upgrade")
 
-	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off friction=actual_damage aura=dwell_scaled combo=1-2-3 burn=5_stacks true=max_hp_armor_bypass hab1=guard_bursts_progressive_push ultimate=3_pulses spin=destination_2.45s_move_after_arrival_full_immunity multiplayer_identity=true vfx_idempotent=true retry=true")
+	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off passive=combustion_chain fireball=combo3_aoe combo=1-2-3 burn=5_stacks true=max_hp_armor_bypass hab1=guard_bursts_progressive_push ultimate=3_impacts_timeline dash=ember_trail_300px_0.32s multiplayer_identity=true vfx_idempotent=true retry=true")
 	_cleanup(0)
 
 

@@ -535,7 +535,7 @@ func on_enemy_defeated(enemy: Dictionary) -> void:
 	var points := maxi(1, int(round(float(game.card_cost) * REWARD_POINT_RATIO)))
 	game._apply_score_delta(points, true, reward_id + ":points")
 	game._add_text("2 CARTAS POR JOGADOR", pos + Vector2(-108.0, -130.0), Color(0.72, 0.94, 1.0), 1.8, 20)
-	game._add_text("+%d PONTOS" % points, pos + Vector2(-62.0, -98.0), Color(1.0, 0.84, 0.28), 1.5, 19)
+	game._add_text("+%s PONTOS" % game._format_points(points), pos + Vector2(-62.0, -98.0), Color(1.0, 0.84, 0.28), 1.5, 19)
 	game._play_sfx("Descongelando.mp3", 0.03, 0.82, 0.72)
 	_emit_visual_event("death", {"event_id": reward_id, "pos": pos})
 	_clear_hostile_state()

@@ -63,6 +63,28 @@ const LASTRO_ENEMY_ANCHOR := 0.80
 const LASTRO_BOSS_SLOW := 0.25
 const LASTRO_BOSS_DURATION := 0.80
 
+# Peso (rework): hit-freeze, onda do 3o soco, pisadas do gigante, decalques de impacto.
+const HIT_FREEZE := 0.08
+const THIRD_SHOCK_RADIUS := 90.0
+const GIANT_THIRD_SHOCK_RADIUS := 150.0
+const THIRD_SHOCK_HALF_ANGLE := 0.8
+const THIRD_SHOCK_DAMAGE_RATIO := 0.4
+const GIANT_STEP_INTERVAL := 0.42
+const TRANSFORM_BURST_RADIUS := 180.0
+const TRANSFORM_BURST_PUSH := 520.0
+const DECAL_CAP := 14
+const V2_DIRS := ["east", "southeast", "south", "southwest", "west", "northwest", "north", "northeast"]
+const V2_SHEETS := {
+	"giant_walk": ["henry_colossus_giant_walk_sheet_v2.png", 6],
+	"giant_attack": ["henry_colossus_giant_attack_sheet_v2.png", 12],
+	"giant_charge": ["henry_colossus_giant_charge_sheet_v2.png", 6],
+	"giant_leap": ["henry_colossus_giant_leap_sheet_v2.png", 6],
+	"normal_attack": ["henry_colossus_normal_attack_sheet_v2.png", 12],
+	"normal_skill": ["henry_colossus_normal_skill_sheet_v2.png", 6],
+}
+const V2_TRANSFORM := "henry_colossus_transform_sheet_v2.png"
+const V2_DIR := "res://assets/sprites/player/player_2_suit/"
+
 var combo_stage := 0
 var combo_timer := 0.0
 var impetus := 0
@@ -107,6 +129,10 @@ var boss_lastro_timer := 0.0
 var boss_lastro_slow_timer := 0.0
 var arauto_lastro_stacks := 0
 var arauto_lastro_timer := 0.0
+var impact_decals: Array = []
+var step_timer := 0.0
+var charge_last_decal := Vector2.ZERO
+var v2_cache: Dictionary = {}
 
 
 func configure(runtime_core: Node) -> void:
@@ -116,6 +142,8 @@ func configure(runtime_core: Node) -> void:
 
 
 func reset() -> void:
+	impact_decals.clear()
+	step_timer = 0.0
 	combo_stage = 0
 	combo_timer = 0.0
 	impetus = 0
@@ -251,7 +279,7 @@ func boss_move_multiplier() -> float:
 func fire_auto_attack() -> bool:
 	if not mutation_active() or transforming or shrinking or charge_active or leap_active or flask_active:
 		return false
-	var direction: Vector2 = core._aim_direction()
+	var direction: Vector2 = core._ability_aim_direction()
 	if direction.length_squared() <= 0.001:
 		direction = core.last_facing
 	direction = direction.normalized()
@@ -275,6 +303,7 @@ func fire_auto_attack() -> bool:
 	if hit:
 		impetus = mini(10, impetus + 1)
 		_grant_impact_armor()
+		_hit_weight(target, direction, combo_stage == 0, damage)
 		if giant_active:
 			_damage_targets_behind(target, direction, damage * GIANT_CLEAVE_DAMAGE_RATIO)
 		core._spawn_radial_particles(Vector2(target.get("pos", core.player_pos + direction * melee_range)), Color(0.86, 0.72, 0.48), 5 if giant_active else 3)
@@ -424,6 +453,7 @@ func update(delta: float) -> void:
 	if not is_configured():
 		return
 	_update_lastro_timers(delta)
+	_update_decals(delta)
 	if not mutation_active():
 		if transforming or shrinking or giant_active or guard_active or charge_active:
 			reset()
@@ -442,6 +472,7 @@ func update(delta: float) -> void:
 	_update_flask(delta)
 	_update_leap(delta)
 	_update_transformation(delta)
+	_update_giant_steps(delta)
 	if fury >= FURY_MAX and not giant_active and not transforming and not shrinking and not leap_active:
 		cast_ultimate()
 
@@ -504,6 +535,9 @@ func _update_charge(delta: float) -> void:
 	var progress := clampf(charge_elapsed / CHARGE_DURATION, 0.0, 1.0)
 	var desired := charge_origin.lerp(charge_target, smoothstep(0.0, 1.0, progress))
 	core.player_pos = core._resolve_phase2_fire_wall_movement(core.player_pos, desired)
+	if charge_last_decal.distance_to(core.player_pos) >= 42.0:
+		charge_last_decal = core.player_pos
+		add_decal(core.player_pos, 46.0, "furrow", 1.0, charge_direction)
 	_damage_charge_targets()
 	if charge_elapsed >= CHARGE_DURATION:
 		charge_active = false
@@ -585,6 +619,10 @@ func _apply_leap_impact() -> void:
 	core._spawn_radial_particles(center, Color(1.0, 0.68, 0.24), 28)
 	core.screen_shake_timer = maxf(core.screen_shake_timer, 0.34)
 	core.screen_shake_strength = maxf(core.screen_shake_strength, 18.0)
+	add_decal(center, LEAP_RADIUS * 1.1, "crack", 1.6)
+	add_decal(center, LEAP_RADIUS * 1.4, "dust", 0.7)
+	add_decal(center, LEAP_RADIUS * 0.9, "shock", 0.45)
+	core._vibrate(160, 0.7)
 
 
 func _clear_hostile_effects() -> void:
@@ -664,6 +702,7 @@ func _update_transformation(delta: float) -> void:
 				giant_temp_hp = maxf(1.0, core.player_hp_max * GIANT_TEMP_HP_RATIO)
 				giant_armor = maxf(1.0, core.player_hp_max * GIANT_ARMOR_RATIO)
 				core._add_text("HIPERTROFIA ABSOLUTA", core.player_pos + Vector2(-94, -120), Color(0.86, 0.82, 0.58), 1.0, 20)
+				_transform_burst()
 			else:
 				shrinking = false
 				giant_active = false
@@ -839,9 +878,169 @@ func _emit_impact(position: Vector2, direction: Vector2, size: float) -> void:
 
 
 func _target_direction(target_world) -> Vector2:
-	var direction: Vector2 = core._aim_direction()
+	var direction: Vector2 = core._ability_aim_direction()
 	if target_world is Vector2:
 		direction = Vector2(target_world) - core.player_pos
 	if direction.length_squared() <= 0.001:
 		direction = core.last_facing
 	return direction.normalized() if direction.length_squared() > 0.001 else Vector2.RIGHT
+
+
+
+## --- Peso ---
+func add_decal(pos: Vector2, radius: float, kind: String, life: float, direction: Vector2 = Vector2.RIGHT) -> void:
+	if impact_decals.size() >= DECAL_CAP:
+		impact_decals.pop_front()
+	impact_decals.append({"pos": pos, "radius": radius, "kind": kind, "life": life, "max": life, "dir": direction, "seed": randi() % 997})
+
+
+func _update_decals(delta: float) -> void:
+	if impact_decals.is_empty():
+		return
+	for decal in impact_decals:
+		decal["life"] = float(decal.get("life", 0.0)) - delta
+	impact_decals = impact_decals.filter(func(decal): return float(decal.get("life", 0.0)) > 0.0)
+
+
+## Soco confirmado: trava o alvo um instante, micro-tremor e, no 3o golpe, onda de choque em leque.
+func _hit_weight(target: Dictionary, direction: Vector2, third_hit: bool, damage: float) -> void:
+	var impact_pos := Vector2(target.get("pos", core.player_pos))
+	if String(target.get("kind", "")) == "enemy":
+		var enemy: Dictionary = target["enemy"]
+		enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), HIT_FREEZE * (1.6 if third_hit else 1.0))
+	core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.1 if not third_hit else 0.2)
+	core.screen_shake_strength = maxf(float(core.screen_shake_strength), (5.0 if giant_active else 2.0) * (2.0 if third_hit else 1.0))
+	add_decal(impact_pos, 30.0 if not giant_active else 44.0, "star", 0.16)
+	if not third_hit:
+		return
+	var radius: float = GIANT_THIRD_SHOCK_RADIUS if giant_active else THIRD_SHOCK_RADIUS
+	var center: Vector2 = core.player_pos + direction * radius * 0.45
+	add_decal(center, radius, "crack", 1.1, direction)
+	add_decal(center, radius * 1.15, "shock", 0.35, direction)
+	core._vibrate(90 if not giant_active else 140, 0.5)
+	var shock_damage: float = damage * THIRD_SHOCK_DAMAGE_RATIO
+	var hit_uid: int = int(Dictionary(target.get("enemy", {})).get("uid", -1)) if String(target.get("kind", "")) == "enemy" else -1
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0 or int(enemy.get("uid", -2)) == hit_uid:
+			continue
+		var offset: Vector2 = Vector2(enemy.get("pos", center)) - core.player_pos
+		if offset.length() > radius * 1.25 or absf(direction.angle_to(offset)) > THIRD_SHOCK_HALF_ANGLE:
+			continue
+		core._damage_enemy(enemy, shock_damage, "henry_colossus_shock", true, true, core.player_pos, "basic_attack")
+		_apply_hit_push(enemy, true)
+
+
+func _update_giant_steps(delta: float) -> void:
+	if not giant_active or leap_active or charge_active or transforming or shrinking:
+		step_timer = 0.0
+		return
+	if core._read_move().length() < 0.1:
+		step_timer = minf(step_timer, GIANT_STEP_INTERVAL * 0.5)
+		return
+	step_timer += delta
+	if step_timer < GIANT_STEP_INTERVAL:
+		return
+	step_timer = 0.0
+	core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.08)
+	core.screen_shake_strength = maxf(float(core.screen_shake_strength), 2.5)
+	add_decal(core.player_pos + Vector2(0.0, 30.0), 40.0, "dust", 0.45)
+
+
+func _transform_burst() -> void:
+	var center: Vector2 = core.player_pos
+	add_decal(center, TRANSFORM_BURST_RADIUS, "shock", 0.5)
+	add_decal(center, TRANSFORM_BURST_RADIUS * 0.8, "crack", 1.4)
+	add_decal(center, TRANSFORM_BURST_RADIUS * 1.2, "dust", 0.8)
+	core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.4)
+	core.screen_shake_strength = maxf(float(core.screen_shake_strength), 14.0)
+	core._vibrate(180, 0.75)
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var offset: Vector2 = Vector2(enemy.get("pos", center)) - center
+		if offset.length() > TRANSFORM_BURST_RADIUS:
+			continue
+		var push_dir := offset.normalized() if offset.length() > 1.0 else Vector2.RIGHT
+		enemy["henry_colossus_knockback"] = Vector2(enemy.get("henry_colossus_knockback", Vector2.ZERO)) + push_dir * TRANSFORM_BURST_PUSH
+
+
+## --- Quadros v2 (8 direcoes): usados sozinhos quando as folhas existirem ---
+func _v2_frames(sheet_key: String, direction: Vector2) -> Array:
+	var spec: Array = V2_SHEETS.get(sheet_key, [])
+	if spec.is_empty():
+		return []
+	var row: int = V2_DIRS.find(core._henry_direction_key(direction))
+	if row < 0:
+		row = 2
+	var cache_key := "%s:%d" % [sheet_key, row]
+	if v2_cache.has(cache_key):
+		return v2_cache[cache_key]
+	var frames: Array = []
+	var path: String = V2_DIR + String(spec[0])
+	if ResourceLoader.exists(path):
+		var sheet := load(path) as Texture2D
+		for column in range(int(spec[1])):
+			var atlas := AtlasTexture.new()
+			atlas.atlas = sheet
+			atlas.region = Rect2(float(column) * 256.0, float(row) * 256.0, 256.0, 256.0)
+			frames.append(atlas)
+	v2_cache[cache_key] = frames
+	return frames
+
+
+func _v2_transform_frames() -> Array:
+	if v2_cache.has("transform"):
+		return v2_cache["transform"]
+	var frames: Array = []
+	if ResourceLoader.exists(V2_DIR + V2_TRANSFORM):
+		var sheet := load(V2_DIR + V2_TRANSFORM) as Texture2D
+		for column in range(10):
+			var atlas := AtlasTexture.new()
+			atlas.atlas = sheet
+			atlas.region = Rect2(float(column) * 256.0, 0.0, 256.0, 256.0)
+			frames.append(atlas)
+	v2_cache["transform"] = frames
+	return frames
+
+
+static func attack_v2_index(elapsed: float, stage: int) -> int:
+	var phase := 0 if elapsed < 0.05 else (1 if elapsed < 0.1 else (2 if elapsed < 0.2 else 3))
+	return clampi(stage, 0, 2) * 4 + phase
+
+
+func v2_texture(move: Vector2) -> Texture2D:
+	if not mutation_active():
+		return null
+	var frames: Array = []
+	if transforming or shrinking:
+		frames = _v2_transform_frames()
+		if frames.is_empty():
+			return null
+		var p := clampf(transform_elapsed / TRANSFORM_DURATION, 0.0, 1.0)
+		if shrinking:
+			p = 1.0 - p
+		return frames[clampi(int(p * float(frames.size())), 0, frames.size() - 1)]
+	if leap_active:
+		frames = _v2_frames("giant_leap", leap_target - leap_origin)
+		if not frames.is_empty():
+			return frames[clampi(int(clampf(leap_elapsed / LEAP_DURATION, 0.0, 0.999) * float(frames.size())), 0, frames.size() - 1)]
+	if charge_active:
+		frames = _v2_frames("giant_charge", charge_direction)
+		if not frames.is_empty():
+			return frames[clampi(int(clampf(charge_elapsed / CHARGE_DURATION, 0.0, 0.999) * float(frames.size())), 0, frames.size() - 1)]
+	if flask_active and not giant_active:
+		frames = _v2_frames("normal_skill", core.henry_skill_cast_direction)
+		if not frames.is_empty():
+			return frames[clampi(int(clampf(flask_elapsed / FLASK_DURATION, 0.0, 0.999) * float(frames.size())), 0, frames.size() - 1)]
+	if core._player_attack_pose_active() and not core.henry_skill_cast_active:
+		frames = _v2_frames("giant_attack" if giant_active else "normal_attack", core.player_attack_visual_dir)
+		if frames.size() >= 12:
+			return frames[attack_v2_index(float(core.time_alive) - float(core.last_attack_time), int(core.henry_attack_visual_stage))]
+	if giant_active and not core.henry_skill_cast_active:
+		var facing: Vector2 = move if move.length() > 0.1 else Vector2(core.last_facing)
+		frames = _v2_frames("giant_walk", facing)
+		if not frames.is_empty():
+			if move.length() <= 0.1:
+				return frames[0]
+			return frames[int(float(Time.get_ticks_msec()) / 100.0) % frames.size()]
+	return null
