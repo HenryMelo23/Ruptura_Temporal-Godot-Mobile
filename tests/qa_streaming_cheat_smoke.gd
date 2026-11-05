@@ -69,7 +69,7 @@ func _run() -> void:
 	_check(not game.qa_streaming_unlocked, "hard reset should clear CHANZADA unlock")
 
 	game.gameplay_cheat_text = "CHANZADA"
-	_check(game._try_unlock_retornante_cheat(), "CHANZADA should unlock match streaming")
+	_check(game._try_apply_gameplay_cheat(), "CHANZADA should unlock match streaming")
 	_check(game.qa_streaming_unlocked, "CHANZADA should set streaming unlock flag")
 	_check(not game.qa_streaming_enabled, "CHANZADA should not auto-enable streaming")
 	_check(game._gameplay_preferences_rects(Vector2(1280, 720)).has("qa_stream_quality"), "quality option should show after CHANZADA")

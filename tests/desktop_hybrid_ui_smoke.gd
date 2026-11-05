@@ -35,7 +35,7 @@ func _run() -> void:
 	_check(game.buttons.has("attack") and game.buttons["attack"].size.x > 100.0, "android touch attack button stayed desktop-sized")
 
 	game.gameplay_cheat_text = "Henry_meelo"
-	_check(game._try_unlock_retornante_cheat(), "Henry_meelo cheat was not accepted")
+	_check(game._try_apply_gameplay_cheat(), "Henry_meelo cheat was not accepted")
 	_check(game.ui_platform_override_unlocked, "Henry_meelo did not unlock UI platform selector")
 	_check(game._sanitize_ui_platform_override(game.ui_platform_override) in [game.UI_PLATFORM_ANDROID, game.UI_PLATFORM_DESKTOP], "Henry_meelo did not choose a concrete profile")
 

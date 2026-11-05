@@ -124,7 +124,7 @@ func _run() -> void:
 	assert(game.boss_pos.is_equal_approx(altar))
 
 	game.gameplay_cheat_text = "FaseEX6"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	game._start_game()
 	assert(game.current_phase == 6 and game.experimental_phase_active)
 	assert(game.WORLD_SIZE == game.DEFAULT_WORLD_SIZE)

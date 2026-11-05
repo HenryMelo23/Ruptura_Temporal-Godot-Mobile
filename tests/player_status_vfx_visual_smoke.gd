@@ -63,18 +63,13 @@ func _run() -> void:
 		root.size = viewport
 		game.ui_platform_override_unlocked = true
 		game.ui_platform_override = "desktop" if viewport.x == 1280 else "android"
-		for manifestation in ["ancorada", "acorrentada", "bombastica", "necronada"]:
+		for manifestation in ["eletrica", "lacerante", "prismatica", "parasitica", "gravitante"]:
 			game.manifestation_key = manifestation
-			game.lastro_stacks = 3
-			game.lastro_points = 2
-			game.acorrentada_tension = 75.0
-			game.acorrentada_combo_step = 2
-			game.necronada_horde_progress = 3
 			await _capture("%d_%s" % [viewport.x, manifestation])
 		game.gfx_low_resource = true
 		await _capture("%d_lightweight" % viewport.x)
 		game.gfx_low_resource = false
-		game.manifestation_key = "ancorada"
+		game.manifestation_key = "parasitica"
 		var early := await _capture("%d_motion_start" % viewport.x)
 		game.time_alive += 0.5
 		var later := await _capture("%d_motion_end" % viewport.x)
@@ -93,13 +88,6 @@ func _run() -> void:
 			_check((capture.get_pixelv(tail).b > 0.65) == (level == 10), "XP ratio incorrect at level %d" % level)
 		game.player_run_level = 1
 		game.player_run_xp = 250
-		game.contractual_order = {"label": "CUMPRIR SENTENCA", "progress": 3, "goal": 8, "time_left": 15.0, "real_age": game.CONTRACT_ORDER_EXECUTION_START_TIME + 1.0}
-		game.contractual_order_rewards = {"damage": 8.0}
-		game.contractual_order_penalties = {"speed": 5.0}
-		await _capture("%d_contract" % viewport.x)
-		game.contractual_order.clear()
-		game.contractual_order_rewards.clear()
-		game.contractual_order_penalties.clear()
 		game.is_dead = true
 		await _capture("%d_dead" % viewport.x)
 		game.is_dead = false

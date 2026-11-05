@@ -23,6 +23,19 @@ const SKILL_GUARD_PUSH_SPEED := 250.0
 const ULTIMATE_PUSH_SPEED := 330.0
 const SPIN_PUSH_SPEED := 390.0
 const KNOCKBACK_DRAG := 620.0
+## Canalizacao segura: ao iniciar Q/ultimate o Henry repele a horda e aplica lentidao;
+## enquanto canaliza, uma guarda curta empurra quem tentar encostar.
+const CHANNEL_REPEL_RADIUS_SKILL := 165.0
+const CHANNEL_REPEL_RADIUS_ULT := 205.0
+## ~50 px de recuo: abre espaco sem tirar a horda do primeiro pulso (150 px).
+const CHANNEL_REPEL_SPEED := 250.0
+const CHANNEL_GUARD_RADIUS := 94.0
+const CHANNEL_GUARD_SPEED := 300.0
+const CHANNEL_GUARD_TICK := 0.16
+const CHANNEL_SKILL_TOUCH_RADIUS := 62.0
+const PUSH_SLOW_TIME := 1.4
+const PUSH_SLOW_MULT := 0.5
+const KNOCKBACK_MAX_SPEED := 760.0
 const SPIN_DAMAGE_MULT := 0.5
 const SPIN_TURNS := 3.5
 
@@ -66,6 +79,8 @@ var fireballs: Array = []
 var fireball_sequence := 0
 var combustion_queue: Array = []
 var combustion_bursts: Array = []
+var channel_guard_clock := 0.0
+var skill_cone_event_id := ""
 
 
 func begin_entrance() -> void:
@@ -209,6 +224,8 @@ func reset() -> void:
 	fireballs.clear()
 	combustion_queue.clear()
 	combustion_bursts.clear()
+	channel_guard_clock = 0.0
+	skill_cone_event_id = ""
 	for enemy in core.enemies:
 		_clear_burn(enemy)
 		enemy.erase("henry_incandescence_heat")
@@ -294,13 +311,15 @@ func begin_skill(target_world = null) -> bool:
 	core.henry_skill_cast_direction = direction
 	core.henry_skill_damage_applied = false
 	core._set_player_attack_visual_dir(direction)
+	skill_cone_event_id = core._next_network_event_id("henry_cone")
 	core.henry_flame_cones.append({
 		"origin": core.player_pos,
 		"dir": direction,
 		"life": core.HENRY_SKILL_CAST_DURATION,
 		"max": core.HENRY_SKILL_CAST_DURATION,
-		"event_id": core._next_network_event_id("henry_cone"),
+		"event_id": skill_cone_event_id,
 	})
+	_begin_channel_guard(CHANNEL_REPEL_RADIUS_SKILL, direction)
 	core._send_network_ability_visual(core.NET_ABILITY_SKILL, core.player_pos, core.player_pos + direction * core.HENRY_SKILL_RANGE, core.HENRY_SKILL_CAST_DURATION)
 	return true
 
@@ -313,6 +332,7 @@ func cast_ultimate() -> bool:
 	core.henry_ultimate_center = core.player_pos
 	core.henry_ultimate_event_id = core._next_network_event_id("henry_heat")
 	core.henry_ultimate_pulses_released = 0
+	_begin_channel_guard(CHANNEL_REPEL_RADIUS_ULT)
 	core._send_network_ability_visual(
 		core.NET_ABILITY_SECONDARY,
 		core.henry_ultimate_center,
@@ -349,6 +369,7 @@ func update(delta: float) -> void:
 		_update_cast(delta)
 		_update_ultimate_cast(delta)
 		_update_spin(delta)
+		_update_channel_guard(delta)
 	_update_incandescence(delta)
 	_update_trail(delta)
 	_update_fireballs()
@@ -701,11 +722,130 @@ func apply_heat_wave_push(target: Dictionary, center: Vector2, source: String = 
 	if push_dir.length_squared() <= 0.001:
 		push_dir = Vector2.RIGHT.rotated(float(int(target.get("uid", 0)) % 16) * TAU / 16.0)
 	var speed := SKILL_GUARD_PUSH_SPEED if source == "henry_guard_burst" else (SPIN_PUSH_SPEED if source == "henry_spin_burst" else ULTIMATE_PUSH_SPEED)
+	_push_and_slow(target, push_dir, speed)
+
+
+## Todo empurrao do Henry Incendiario tambem aplica lentidao.
+func _push_and_slow(target: Dictionary, push_dir: Vector2, speed: float) -> void:
 	var current := Vector2(target.get("henry_knockback_velocity", Vector2.ZERO))
-	target["henry_knockback_velocity"] = current + push_dir * speed
+	target["henry_knockback_velocity"] = (current + push_dir * speed).limit_length(KNOCKBACK_MAX_SPEED)
+	target["evolution_slow"] = maxf(float(target.get("evolution_slow", 0.0)), PUSH_SLOW_TIME)
+	target["evolution_slow_mult"] = minf(float(target.get("evolution_slow_mult", 1.0)), PUSH_SLOW_MULT)
+
+
+## cone_dir != ZERO: inimigos dentro do cone do Q levam so um empurrao leve para o fogo ainda pegar perto.
+func _repel_from(center: Vector2, radius: float, speed: float, cone_dir: Vector2 = Vector2.ZERO) -> int:
+	if not core._is_world_authority():
+		return 0
+	var pushed := 0
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var offset: Vector2 = Vector2(enemy.get("pos", center)) - center
+		var distance := offset.length()
+		if distance > radius:
+			continue
+		var push_dir := offset / distance if distance > 0.5 else Vector2.RIGHT.rotated(float(int(enemy.get("uid", pushed)) % 16) * TAU / 16.0)
+		var enemy_speed := speed * lerpf(1.0, 0.55, distance / maxf(1.0, radius))
+		if cone_dir != Vector2.ZERO and _inside_cone(center, cone_dir, Vector2(enemy.get("pos", center))):
+			enemy_speed *= 0.35
+		_push_and_slow(enemy, push_dir, enemy_speed)
+		pushed += 1
+	if core._arauto_active():
+		var arauto_offset: Vector2 = Vector2(core.arauto.get("pos", center)) - center
+		if arauto_offset.length() <= radius and arauto_offset.length() > 0.5:
+			_push_and_slow(core.arauto, arauto_offset.normalized(), speed * 0.6)
+			pushed += 1
+	return pushed
+
+
+## Ultimate: empurra todo mundo no raio. Q: lentidao no raio todo, empurrao so em quem
+## esta colado (o estouro defensivo do impacto ainda pega a horda perto) e a guarda
+## continua comeca depois do impacto, cobrindo a recuperacao.
+func _begin_channel_guard(radius: float, cone_dir: Vector2 = Vector2.ZERO) -> void:
+	var skill_channel := cone_dir != Vector2.ZERO
+	channel_guard_clock = (float(core.HENRY_SKILL_IMPACT_TIME) + CHANNEL_GUARD_TICK) if skill_channel else CHANNEL_GUARD_TICK
+	if skill_channel:
+		_slow_in_radius(core.player_pos, radius)
+		_repel_from(core.player_pos, CHANNEL_SKILL_TOUCH_RADIUS, CHANNEL_GUARD_SPEED, cone_dir)
+	else:
+		_repel_from(core.player_pos, radius, CHANNEL_REPEL_SPEED)
+	core.henry_heat_waves.append({
+		"center": core.player_pos, "radius": 0.0, "max_radius": radius,
+		"life": 0.3, "max": 0.3, "event_id": core._next_network_event_id("henry_repel"), "kind": "guard_burst", "pulse": 0,
+	})
+
+
+func _update_channel_guard(delta: float) -> void:
+	if not channel_active():
+		channel_guard_clock = 0.0
+		return
+	channel_guard_clock -= delta
+	if channel_guard_clock > 0.0:
+		return
+	channel_guard_clock = CHANNEL_GUARD_TICK
+	_repel_from(core.player_pos, CHANNEL_GUARD_RADIUS, CHANNEL_GUARD_SPEED)
+
+
+func _slow_in_radius(center: Vector2, radius: float) -> void:
+	if not core._is_world_authority():
+		return
+	for enemy in core.enemies:
+		if float(enemy.get("hp", 0.0)) > 0.0 and center.distance_to(Vector2(enemy.get("pos", center))) <= radius:
+			enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), PUSH_SLOW_TIME)
+			enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), PUSH_SLOW_MULT)
+
+
+func channel_active() -> bool:
+	return is_configured() and core.mutation_key == "incendiario" and (bool(core.henry_skill_cast_active) or bool(core.henry_ultimate_cast_active))
+
+
+## Durante a canalizacao so o teleporte e a mesma habilidade passam pelo bloqueio de controles.
+func channel_interruptible() -> bool:
+	return channel_active() and not bool(core.is_dead) and float(core.player_hp) > 0.0 and not bool(entrance_active)
+
+
+## kind: "dash" | "skill" | "secondary". Retorna true quando a entrada foi consumida
+## (nao seguir com a acao); false quando a acao pode continuar normalmente.
+func handle_channel_input(kind: String) -> bool:
+	if not channel_interruptible():
+		return false
+	match kind:
+		"dash":
+			if float(core.time_alive) - float(core.last_dash_time) < float(core._current_dash_cooldown()):
+				return true
+			cancel_channel()
+			return false
+		"skill":
+			if core.henry_skill_cast_active:
+				cancel_channel()
+		"secondary":
+			if core.henry_ultimate_cast_active:
+				cancel_channel()
+	return true
+
+
+func cancel_channel() -> void:
+	if core.henry_skill_cast_active:
+		if not core.henry_skill_damage_applied and skill_cone_event_id != "":
+			var cancelled_id := skill_cone_event_id
+			core.henry_flame_cones = core.henry_flame_cones.filter(func(cone): return String(cone.get("event_id", "")) != cancelled_id)
+		core.henry_skill_cast_active = false
+		core.henry_skill_cast_elapsed = 0.0
+		core.henry_skill_damage_applied = true
+		skill_cone_event_id = ""
+	if core.henry_ultimate_cast_active:
+		core.henry_ultimate_cast_active = false
+		core.henry_ultimate_cast_elapsed = 0.0
+		core.henry_ultimate_center = Vector2.ZERO
+		core.henry_ultimate_event_id = ""
+	channel_guard_clock = 0.0
+	core._spawn_radial_particles(core.player_pos, Color(1.0, 0.52, 0.18), 10)
 
 
 func _update_knockback(target: Dictionary, delta: float) -> void:
+	if not target.has("henry_knockback_velocity"):
+		return
 	var velocity := Vector2(target.get("henry_knockback_velocity", Vector2.ZERO))
 	if velocity.length_squared() <= 1.0:
 		target.erase("henry_knockback_velocity")
@@ -716,6 +856,10 @@ func _update_knockback(target: Dictionary, delta: float) -> void:
 
 
 func _update_enemy_burn(enemy: Dictionary, delta: float) -> void:
+	# Burn always starts by writing henry_burn_time and _clear_burn erases every
+	# key, so an unburnt enemy (almost all of them) needs no work at all.
+	if not enemy.has("henry_burn_time"):
+		return
 	var remaining := maxf(0.0, float(enemy.get("henry_burn_time", 0.0)) - delta)
 	var overdrive := maxf(0.0, float(enemy.get("henry_burn_overdrive", 0.0)) - delta)
 	enemy["henry_burn_time"] = remaining

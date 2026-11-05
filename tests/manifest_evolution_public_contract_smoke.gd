@@ -59,27 +59,15 @@ func _prepare(key: String, entry: Dictionary = {}) -> Array:
 	# placebo merely because no input was accepted.
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0
-	if key == "eclipsada":
-		# Keep this public attack probe on the Sol branch: it is the branch that
-		# emits projectiles. Lua is still exercised by the E-route coverage pass.
-		game.eclipsada_form = game.ECLIPSADA_FORM_SOL
-		game.eclipsada_next_attack_time = 0.0
 	game.last_attack_time = -1000.0
 	game.last_skill_time = -1000.0
 	game.last_secondary_time = -1000.0
 	game.effects.clear()
 	game.bullets.clear()
-	game.return_bullets.clear()
 	game.enemies.clear()
 	game.shockwaves.clear()
 	game.slashes.clear()
 	game.manifest_evolution_combat_event_log.clear()
-	if key == "ancorada":
-		game.hab1_ancorada_active = false
-		game.hab1_ancorada_impact_done = false
-		game.anchors.clear()
-		game.lastro_stacks = 0
-		game.lastro_points = 0
 	game._reset_manifest_evolution_state()
 	if not entry.is_empty():
 		game.manifest_evolution_options = [entry]
@@ -97,11 +85,7 @@ func _prepare(key: String, entry: Dictionary = {}) -> Array:
 func _advance_combat(delta: float = 0.03, frames: int = 16) -> void:
 	for _frame in range(frames):
 		game._update_bullets(delta)
-		game._update_return_bullets(delta)
-		if game.manifestation_key == "ancorada":
-			game._update_ancorada_standing_still(delta)
 		game._update_manifest_evolution_effects(delta)
-		game._update_acorrentada_state(delta)
 
 
 func _public_attack(key: String, resolve: bool = true) -> void:
@@ -112,22 +96,13 @@ func _public_attack(key: String, resolve: bool = true) -> void:
 	if key == "lacerante":
 		game._update_lacerante_prepare(1.0)
 	if resolve:
-		# Acorrentada resolves its real windup/out/hold/return state machine.
-		# Giving it the full motion duration here avoids mistaking an incomplete
-		# animation for an evolution that failed to receive a hit event.
-		_advance_combat(0.03, 60 if key == "acorrentada" else 16)
+		_advance_combat(0.03, 16)
 
 
 func _public_skill(key: String) -> void:
 	game.effects = game.effects.filter(func(effect): return not bool(Dictionary(effect).get("skill_lock", false)))
 	game.time_alive += 10.0
 	game.last_skill_time = -1000.0
-	if key == "necronada":
-		game.necronada_vestiges = [{
-			"id": 901, "enemy_type": game.ENEMY_COMMON,
-			"pos": game.player_pos + Vector2(24.0, 0.0),
-			"profile": game._necronada_profile(game.ENEMY_COMMON), "depth": 1
-		}]
 	game._use_skill(game.player_pos + Vector2(112.0, 0.0))
 	_advance_combat(0.05, 8)
 
@@ -136,18 +111,12 @@ func _public_teleport(key: String) -> void:
 	game.effects = game.effects.filter(func(effect): return not bool(Dictionary(effect).get("skill_lock", false)))
 	game.time_alive += 10.0
 	game._execute_teleport(game.player_pos + Vector2(124.0, 0.0))
-	if key == "cartografica":
-		# Cartografica's first public TP places the pin; the second is the actual
-		# displacement and therefore the only valid evolution trigger.
-		game.time_alive += 10.0
-		game._execute_teleport(game.player_pos + Vector2(124.0, 0.0))
 	_advance_combat(0.05, 8)
 
 
 func _projectile_snapshot() -> Dictionary:
 	var all: Array = []
 	all.append_array(game.bullets)
-	all.append_array(game.return_bullets)
 	var flags := {"pierce": false, "homing": false, "prism": false, "count": all.size()}
 	for value in all:
 		var bullet: Dictionary = Dictionary(value)
@@ -369,144 +338,6 @@ func _exercise_prismatica(entry: Dictionary) -> bool:
 	return false
 
 
-func _choose_acorrentada_pair(entry: Dictionary) -> void:
-	if String(entry.get("stage", "")) == "ev2":
-		game.manifest_evolution_options = [_entry_for("acorrentada", "ev1", 0)]
-		game._choose_manifest_evolution(0)
-	game.manifest_evolution_options = [entry]
-	game._choose_manifest_evolution(0)
-
-
-func _exercise_acorrentada(entry: Dictionary) -> bool:
-	_prepare("acorrentada")
-	_choose_acorrentada_pair(entry)
-	var effect := String(Dictionary(entry.get("profile", {})).get("effect", ""))
-	match effect:
-		"acorrentada_corrente_tripla":
-			game.acorrentada_combo_step = 3
-			_public_attack("acorrentada", true)
-		"acorrentada_tensao_residual":
-			game.acorrentada_tension = 95.0
-			game.acorrentada_combo_step = 1
-			_public_attack("acorrentada", true)
-			_public_skill("acorrentada")
-		"acorrentada_grilhao_movel", "acorrentada_elo_espelhado":
-			game.acorrentada_combo_step = 1
-			_public_attack("acorrentada", true)
-		"acorrentada_ancora_corrente", "acorrentada_teia_grilhoes", "acorrentada_prisao_total":
-			_public_skill("acorrentada")
-			_advance_combat(0.60, 1)
-		"acorrentada_sobretensao_continua":
-			_public_skill("acorrentada")
-			_advance_combat(0.55, 2)
-		"acorrentada_ruptura_sequencial":
-			for _hit in range(3):
-				game.acorrentada_combo_step = 1
-				_public_attack("acorrentada", true)
-			_advance_combat(0.18, 3)
-		"acorrentada_corrente_arrasto":
-			_public_teleport("acorrentada")
-		"acorrentada_sobrecarga_tensao":
-			game.acorrentada_tension = 100.0
-			_public_skill("acorrentada")
-			game.acorrentada_combo_step = 1
-			_public_attack("acorrentada", true)
-		"acorrentada_sentenca_ferro":
-			game.time_alive += 10.0
-			game.last_secondary_time = -1000.0
-			game._use_secondary_skill(game.player_pos + Vector2(112.0, 0.0))
-			game.acorrentada_combo_step = 1
-			_public_attack("acorrentada", true)
-		_:
-			blocked.append(String(entry.get("id", "")) + " unsupported Acorrentada effect=" + effect)
-			return false
-	var state := Dictionary(game.manifest_evolution_state.get("acorrentada", {}))
-	var metrics := Dictionary(state.get("metrics", {}))
-	last_evidence = {
-		"effect": effect,
-		"metric": int(metrics.get(String(entry.get("id", "")), 0)),
-		"shackles": Array(state.get("shackles", [])).size(),
-		"anchors": Array(state.get("anchors", [])).size(),
-		"webs": Array(state.get("webs", [])).size(),
-		"ruptures": Array(state.get("ruptures", [])).size(),
-		"verdicts": Dictionary(state.get("verdicts", {})).size(),
-		"projectiles": game.bullets.size()
-	}
-	return int(metrics.get(String(entry.get("id", "")), 0)) > 0
-
-
-func _choose_ancorada_pair(entry: Dictionary) -> void:
-	if String(entry.get("stage", "")) == "ev2":
-		game.manifest_evolution_options = [_entry_for("ancorada", "ev1", 0)]
-		game._choose_manifest_evolution(0)
-	game.manifest_evolution_options = [entry]
-	game._choose_manifest_evolution(0)
-
-
-func _exercise_ancorada(entry: Dictionary) -> bool:
-	var targets := _prepare("ancorada")
-	_choose_ancorada_pair(entry)
-	var effect := String(Dictionary(entry.get("profile", {})).get("effect", ""))
-	match effect:
-		"ancorada_fundacao_profunda", "ancorada_muralha_ruptura", "ancorada_territorio_jurado", "ancorada_fortaleza_autoportante":
-			_public_skill("ancorada")
-			_advance_combat(0.10, 5)
-		"ancorada_peso_absoluto":
-			game.lastro_stacks = 3
-			_public_attack("ancorada", true)
-		"ancorada_contra_impacto":
-			_public_skill("ancorada")
-			_advance_combat(0.10, 5)
-			Dictionary(targets[0])["pos"] = game.hab1_ancorada_cast_pos
-			_advance_combat(0.10, 1)
-		"ancorada_linha_fundacao":
-			_public_attack("ancorada", true)
-			game.effects = game.effects.filter(func(effect): return not bool(Dictionary(effect).get("skill_lock", false)))
-			game.time_alive += 10.0
-			game.last_skill_time = -1000.0
-			game._use_skill(game.player_pos + Vector2(320.0, 0.0))
-			_advance_combat(0.10, 5)
-		"ancorada_coracao_fortaleza":
-			_public_attack("ancorada", true)
-			_public_skill("ancorada")
-			_advance_combat(0.20, 5)
-		"ancorada_queda_monumental":
-			_public_teleport("ancorada")
-			_advance_combat(0.11, 5)
-		"ancorada_rede_fundacoes":
-			_public_skill("ancorada")
-			_advance_combat(0.10, 5)
-			game.time_alive += 10.0
-			game.last_attack_time = -1000.0
-			_public_attack("ancorada", true)
-		"ancorada_ultimo_bastiao":
-			game.player_hp = float(game.player_hp_max) * 0.24
-			_advance_combat(0.11, 1)
-		"ancorada_continente_imovel":
-			game.time_alive += 10.0
-			game.last_secondary_time = -1000.0
-			game._use_secondary_skill(game.player_pos)
-			_advance_combat(0.10, 1)
-		_:
-			blocked.append(String(entry.get("id", "")) + " unsupported Ancorada effect=" + effect)
-			return false
-	var state := Dictionary(game.manifest_evolution_state.get("ancorada", {}))
-	var metrics := Dictionary(state.get("metrics", {}))
-	last_evidence = {
-		"effect": effect,
-		"metric": int(metrics.get(String(entry.get("id", "")), 0)),
-		"walls": Array(state.get("walls", [])).size(),
-		"domains": Array(state.get("domains", [])).size(),
-		"lines": Array(state.get("foundation_lines", [])).size(),
-		"fortresses": Array(state.get("fortresses", [])).size(),
-		"monuments": Array(state.get("monuments", [])).size(),
-		"pins": Array(state.get("absolute_pins", [])).size(),
-		"bastion": not Dictionary(state.get("bastion", {})).is_empty(),
-		"continent": not Dictionary(state.get("continent", {})).is_empty()
-	}
-	return int(metrics.get(String(entry.get("id", "")), 0)) > 0
-
-
 func _inventory_and_design_review(entries: Array) -> void:
 	var grouped: Dictionary = {}
 	for value in entries:
@@ -541,6 +372,10 @@ func _exercise_secondary_actions() -> void:
 
 
 func _run() -> void:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_OK disabled=true definitions=%d roster=%d" % [Catalog.TOTAL_EVOLUTIONS, game.MANIFESTATIONS.size()])
+		quit(0)
+		return
 	game._start_game()
 	var entries: Array = Catalog.all_entries()
 	_inventory_and_design_review(entries)
@@ -552,7 +387,7 @@ func _run() -> void:
 	for value in entries:
 		var entry: Dictionary = Dictionary(value)
 		var key := String(entry.get("manifestation", ""))
-		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else (_exercise_acorrentada(entry) if key == "acorrentada" else (_exercise_ancorada(entry) if key == "ancorada" else (_exercise_lacerante(entry) if key == "lacerante" else _exercise_generic(key, entry))))
+		var behavior_ok := _exercise_prismatica(entry) if key == "prismatica" else (_exercise_lacerante(entry) if key == "lacerante" else _exercise_generic(key, entry))
 		checked_by_manifestation[key] = int(checked_by_manifestation.get(key, 0)) + 1
 		if not behavior_ok:
 			_record_failure(entry, "public %s route produced no measurable gameplay delta over baseline" % String(Dictionary(entry.get("profile", {})).get("hook", "unknown")))
@@ -563,7 +398,7 @@ func _run() -> void:
 		if count != 12:
 			_fail("coverage incomplete for %s: %d/12" % [key, count])
 	if blocked.is_empty() and behavioral_failures.is_empty():
-		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_OK definitions=180 source=public_attack_q_e_tp design_review_groups=%d" % design_review_groups.size())
+		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_OK definitions=60 source=public_attack_q_e_tp design_review_groups=%d" % design_review_groups.size())
 	else:
 		print("MANIFEST_EVOLUTION_PUBLIC_CONTRACT_REPROVED placebo=%d blocked=%d design_review_groups=%d" % [behavioral_failures.size(), blocked.size(), design_review_groups.size()])
 		for item in blocked:

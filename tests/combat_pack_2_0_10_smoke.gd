@@ -36,7 +36,9 @@ func _run() -> void:
 	var expected_reward := int(round(float(game._points_for_enemy({"points": 75})) * 2.5))
 	game._damage_boss(99999.0, "test")
 	_check(game.score == expected_reward, "boss reward is not 250 percent of a common enemy")
-	_check(_owned_card_count() == game.BOSS_REWARD_CARD_COUNT, "boss did not grant the configured guaranteed cards")
+	# 2026-11: chefes nao dao cartas; no lugar fica a escolha de pacto (Chefe 1).
+	_check(_owned_card_count() == 0, "boss still grants cards")
+	_check(game._run_choice().pending_kind == "pact", "boss 1 did not queue the post-battle pact")
 
 	game.current_phase = 2
 	game.enemies.clear()
@@ -81,8 +83,14 @@ func _run() -> void:
 	game.orbitals.append({"enemy_uid": marked_b["uid"], "life": 3.0, "target_kind": "enemy", "angle": PI, "tick": 1.0, "damage": 10.0})
 	var unmarked_before := Vector2(unmarked["pos"])
 	game._trigger_gravitante_mark_collision()
+	# Rework: os marcados sao puxados por 0,3 s antes de colidir (sem teleporte).
+	_check(Vector2(marked_a["pos"]).distance_to(Vector2(marked_b["pos"])) > 120.0, "collision snapped instantly")
+	for _pull in range(24):
+		game._gravitante().update(1.0 / 60.0)
 	_check(Vector2(marked_a["pos"]).distance_to(Vector2(marked_b["pos"])) <= 40.0, "marked enemies did not collide")
 	_check(float(marked_a["hp"]) < 2000.0 and float(marked_b["hp"]) < 2000.0, "marked enemies took no collision damage")
+	for _push_frames in range(30):
+		game._gravitante().update(1.0 / 60.0)
 	_check(Vector2(unmarked["pos"]).distance_to(unmarked_before) >= 90.0, "nearby unmarked enemy was not pushed")
 
 	game.enemies.clear()

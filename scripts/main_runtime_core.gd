@@ -1,7 +1,6 @@
 extends "res://scripts/main_runtime_state.gd"
 
 const PrismaticaEvolutionController = preload("res://scripts/systems/manifest_evolutions/prismatica_evolution_controller.gd")
-const AcorrentadaEvolutionController = preload("res://scripts/systems/manifest_evolutions/acorrentada_evolution_controller.gd")
 const LaceranteEvolutionController = preload("res://scripts/systems/manifest_evolutions/lacerante_evolution_controller.gd")
 const BossRewardPresentation = preload("res://scripts/presentation/boss_reward_presentation.gd")
 const Boss1AnimationPresentation = preload("res://scripts/presentation/boss1_animation_presentation.gd")
@@ -10,6 +9,29 @@ const Boss3AnimationPresentation = preload("res://scripts/presentation/boss3_ani
 const Boss4AnimationPresentation = preload("res://scripts/presentation/boss4_animation_presentation.gd")
 
 # Main runtime implementation extracted from the scene adapter.
+var player_shove: RTPlayerShoveController = preload("res://scripts/systems/player/player_shove_controller.gd").new()
+var necrocronism: RTNecrocronismController = preload("res://scripts/systems/cards/necrocronism_controller.gd").new()
+var gravitante: RTGravitanteController = preload("res://scripts/systems/manifestations/gravitante_controller.gd").new()
+var lacerante_execution: RTLaceranteExecutionController = preload("res://scripts/systems/manifestations/lacerante_execution_controller.gd").new()
+
+
+func _lacerante_exec() -> RTLaceranteExecutionController:
+	if lacerante_execution.core != self:
+		lacerante_execution.configure(self)
+	return lacerante_execution
+
+
+func _gravitante() -> RTGravitanteController:
+	if gravitante.core != self:
+		gravitante.configure(self)
+	return gravitante
+
+
+## Empurrao/puxao de impacto: desloca o jogador ao longo de alguns quadros (sem teleporte).
+func _shove_player(offset: Vector2) -> void:
+	player_shove.push(self, offset)
+
+
 
 func _configure_dedicated_server_timing() -> void :
 	Engine.max_fps = DEDICATED_SERVER_NET_FPS
@@ -21,10 +43,6 @@ func _ensure_runtime_controllers_bound() -> void:
 		player_control_controller.configure(self)
 	if runtime_targeting_controller.core != self:
 		runtime_targeting_controller.configure(self)
-	if necronada_ability_controller.core != self:
-		necronada_ability_controller.configure(self)
-	if ancorada_ability_controller.core != self:
-		ancorada_ability_controller.configure(self)
 	if henry_incendiary_ability_controller.core != self:
 		henry_incendiary_ability_controller.configure(self)
 	if henry_barometric_ability_controller.core != self:
@@ -180,9 +198,6 @@ func _ready() -> void :
 	boss1_stop_audio_player.bus = "Master"
 	add_child(boss1_stop_audio_player)
 
-	acorrentada_walk_audio_player = AudioStreamPlayer.new()
-	acorrentada_walk_audio_player.bus = "Master"
-	add_child(acorrentada_walk_audio_player)
 
 	prismatica_ultimate_audio_player = AudioStreamPlayer.new()
 	prismatica_ultimate_audio_player.bus = "Master"
@@ -407,9 +422,6 @@ func _cleanup_runtime_resources() -> void :
 	if boss1_stop_audio_player != null:
 		boss1_stop_audio_player.stop()
 		boss1_stop_audio_player.stream = null
-	if acorrentada_walk_audio_player != null:
-		acorrentada_walk_audio_player.stop()
-		acorrentada_walk_audio_player.stream = null
 	if prismatica_ultimate_audio_player != null:
 		prismatica_ultimate_audio_player.stop()
 		prismatica_ultimate_audio_player.stream = null
@@ -604,11 +616,16 @@ func _phase7_ember_patch_cap() -> int:
 
 
 func _screen_point_in_view(screen_pos: Vector2, margin: float = 96.0) -> bool:
-	return CombatVfxRuntime._screen_point_in_view(self, screen_pos, margin)
+	var viewport_size: Vector2 = get_viewport_rect().size
+	return screen_pos.x >= -margin and screen_pos.y >= -margin and screen_pos.x <= viewport_size.x + margin and screen_pos.y <= viewport_size.y + margin
 
 
 func _world_point_in_view(world_pos: Vector2, camera: Vector2, margin: float = 96.0) -> bool:
-	return CombatVfxRuntime._world_point_in_view(self, world_pos, camera, margin)
+	# Hot path (called per entity per frame): inlined instead of delegating twice.
+	var viewport_size: Vector2 = get_viewport_rect().size
+	var sx: float = world_pos.x - camera.x
+	var sy: float = world_pos.y - camera.y
+	return sx >= -margin and sy >= -margin and sx <= viewport_size.x + margin and sy <= viewport_size.y + margin
 
 
 func _trim_visual_effect_arrays() -> void :
@@ -1129,7 +1146,7 @@ func _apply_player_progress_snapshot(snapshot: Variant, notify_unlocks: bool, re
 			unlocked_card_ids[key] = true
 	for manifestation_id in data.get("unlocked_manifestations", []):
 		var key := String(manifestation_id)
-		if key != "":
+		if key in MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE or MANIFESTATION_UNLOCK_RULES.has(key):
 			unlocked_manifestation_ids[key] = true
 	for spectrum_id in data.get("unlocked_specters", data.get("unlocked_spectrums", [])):
 		var key := String(spectrum_id)
@@ -1949,9 +1966,6 @@ func _unlock_manifestation_by_key_state(key: String, notify: = true) -> bool:
 	if notify:
 		_queue_content_unread("manifestation", key)
 		_queue_content_unread("catalog_manifestation", key)
-	if key == "retornante":
-		retornante_unlocked = true
-		_save_config()
 	if notify:
 		_queue_unlock_manifestation_notification(manifestation, _manifestation_unlock_challenge_text(key))
 	_mark_card_unlocks_dirty()
@@ -2470,11 +2484,8 @@ func _close_gameplay_cheat_popup(clear_text: = true) -> void :
 func _submit_gameplay_cheat() -> void :
 	if cheat_edit != null:
 		gameplay_cheat_text = cheat_edit.text
-	if _try_unlock_retornante_cheat():
-		_close_gameplay_cheat_popup()
-		_save_config()
-		return
 	_close_gameplay_cheat_popup(false)
+	_try_apply_gameplay_cheat()
 	_save_config()
 
 
@@ -5245,7 +5256,7 @@ func _keyboard_action_subtitle(action: String) -> String:
 		"skill": return "Mira no cursor quando a skill usa area"
 		"secondary": return "Ultimate no cursor; pode usar teclado ou mouse"
 		"dash": return "Teleporte para o cursor apenas no botao vinculado"
-		"lacerante_empower": return "Reforco da Lacerante, troca Sol/Lua da Eclipsada ou Poeira da Necronada"
+		"lacerante_empower": return "Reforço da Lacerante ou do Henry Colosso"
 		"dance": return "Ativa a danca/emote do jogador"
 		"interact": return "Interagir com altar, revive e objetos de fase"
 		"pause": return "Pausar e sair de telas"
@@ -5529,6 +5540,15 @@ func _load_textures() -> void :
 	textures["henry_colossus_down"] = _atlas_row_frames(henry_colossus_walk_sheet, 0, 3)
 	textures["henry_colossus_right"] = _atlas_row_frames(henry_colossus_walk_sheet, 1, 3)
 	textures["henry_colossus_up"] = _atlas_row_frames(henry_colossus_walk_sheet, 2, 3)
+	# Gigante parado: respiracao (4 quadros) e freada (3 quadros), linhas frente/lado/costas.
+	var henry_colossus_idle_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_colossus_idle_sheet_v1.png")
+	var henry_colossus_stop_sheet: Texture2D = _safe_load(base + "player/player_2_suit/henry_colossus_stop_sheet_v1.png")
+	for colossus_rest_row in range(3):
+		var rest_dir: String = ["down", "right", "up"][colossus_rest_row]
+		if henry_colossus_idle_sheet != null:
+			textures["henry_colossus_idle_" + rest_dir] = _atlas_row_frames(henry_colossus_idle_sheet, colossus_rest_row, 4)
+		if henry_colossus_stop_sheet != null:
+			textures["henry_colossus_stop_" + rest_dir] = _atlas_row_frames(henry_colossus_stop_sheet, colossus_rest_row, 3)
 	textures["henry_intro"] = _atlas_row_frames(henry_intro_sheet, 0, HENRY_ENTRY_FRAME_COUNT)
 	textures["henry_shop_entry"] = _atlas_row_frames(henry_shop_entry_sheet, 0, HENRY_SHOP_ENTRY_FRAME_COUNT)
 	textures["henry_fire_network"] = []
@@ -6084,8 +6104,6 @@ func _load_audio_streams() -> void :
 		"Risada-Loop2.mp3": "res://Risada-Loop2.mp3",
 		"Risada-Loop3.mp3": "res://Risada-Loop3.mp3",
 		"Lodario-mov.mp3": "res://Lodario-mov.mp3",
-		"Mina-Bombastica.mp3": "res://Mina-Bombastica.mp3",
-		"Bomba-Bombastica.mp3": "res://Bomba-Bombastica.mp3",
 		"Nevasca.mp3": "res://Nevasca.mp3",
 		"Congelando.mp3": "res://Congelando.mp3",
 		"Descongelando.mp3": "res://Descongelando.mp3",
@@ -6107,10 +6125,6 @@ func _load_audio_streams() -> void :
 		"prismatica_shot": "res://Prismatica-hit-1.MP3",
 		"tp_prismatica": "res://Prismatica-Teleporte.MP3",
 		"ult_prismatica": "res://assets/sprites/Song-Ult-Prismatica.MP3",
-		"acorrentada_hit_1": "res://acorrentada-hit-1.MP3",
-		"acorrentada_hit_2": "res://acorrentada-hit-2.MP3",
-		"acorrentada_hit_3": "res://acorrentada-hit-3.MP3",
-		"acorrentada_walk": "res://acorrentada-walking.MP3",
 		"boss1_walk": "res://Wlaker-Boss1.mp3",
 		"boss1_anti_bubble": "res://Songs/Anti_Bolha.mp3",
 		"boss1_dash": "res://Songs/Dash_Cronoguejo.mp3",
@@ -6127,7 +6141,7 @@ func _load_audio_streams() -> void :
 	}
 
 	for name in root_sfx:
-		var is_looping: bool = name in ["rain", "boss1_walk", "boss1_stop_loop", "acorrentada_walk", "Nevasca.mp3"]
+		var is_looping: bool = name in ["rain", "boss1_walk", "boss1_stop_loop", "Nevasca.mp3"]
 		_register_audio_stream(name, root_sfx[name], is_looping, name == "rain", _memory_saver_active() and is_looping)
 	_load_procedural_sfx()
 	_perf_mark("load_audio_streams", perf_start_ms)
@@ -6147,17 +6161,11 @@ func _load_procedural_sfx() -> void :
 	_register_tone_sfx("shop_countdown_tick", [540.0, 810.0], 0.065, "sine", 0.34, 0.01)
 	_register_tone_sfx("prismatica_glass_hit", [620.0, 1240.0, 2480.0], 0.135, "glass", 0.88, 0.05)
 	_register_tone_sfx("prismatica_shatter", [760.0, 1520.0, 3040.0], 0.24, "shatter", 0.95, 0.17)
-	_register_tone_sfx("retornante_reverse", [720.0, 520.0, 340.0], 0.19, "reverse", 0.78, 0.04)
-	_register_tone_sfx("retornante_wave", [390.0, 470.0, 610.0], 0.13, "hollow", 0.54, 0.03)
 	_register_tone_sfx("parasitica_wet_hit", [95.0, 145.0, 210.0], 0.17, "wet", 0.82, 0.15)
 	_register_tone_sfx("gravitante_attach", [70.0, 130.0, 260.0], 0.24, "gravity", 0.84, 0.055)
 	_register_tone_sfx("gravitante_orbit_loop", [88.0, 176.0, 264.0], 0.17, "gravity", 0.56, 0.04)
 	_register_tone_sfx("eletrica_travel", [1240.0, 1860.0], 0.085, "spark", 0.38, 0.03)
 	_register_tone_sfx("eletrica_hit", [420.0, 1260.0, 2520.0], 0.155, "spark", 0.88, 0.09)
-	_register_tone_sfx("atk_acorrentada_light", [210.0, 420.0, 1180.0], 0.12, "metal", 0.62, 0.09)
-	_register_tone_sfx("atk_acorrentada_heavy", [92.0, 184.0, 520.0], 0.19, "metal", 0.78, 0.15)
-	_register_tone_sfx("skill_acorrentada", [160.0, 320.0, 740.0], 0.22, "metal", 0.76, 0.13)
-	_register_tone_sfx("ult_acorrentada", [70.0, 140.0, 420.0], 0.32, "metal", 0.92, 0.19)
 	_register_tone_sfx("point_boost_spawn", [330.0, 660.0, 990.0], 0.22, "glass", 0.52, 0.035)
 	_register_tone_sfx("point_boost_collect", [520.0, 880.0, 1320.0], 0.18, "metal", 0.68, 0.025)
 	_register_tone_sfx("point_boost_activate", [440.0, 880.0, 1760.0], 0.28, "hollow", 0.62, 0.02)
@@ -6290,7 +6298,7 @@ func _is_shot_audio(name: String) -> bool:
 	if name.ends_with("_hit"):
 		return true
 	var specific = [
-		"eletrica_travel", "retornante_wave", "retornante_reverse",
+		"eletrica_travel",
 		"gravitante_orbit_loop", "player_shot", "prismatica_shot",
 		"Frasco.mp3"
 	]
@@ -6302,8 +6310,6 @@ func _sfx_channel_volume(name: String) -> float:
 
 
 func _play_manifestation_attack_sfx(kind: String) -> void :
-	if kind == "acorrentada":
-		return
 	if kind == "prismatica":
 		_play_sfx("prismatica_shot", 0.035, rng.randf_range(0.94, 1.04), 1.0)
 		return
@@ -6711,7 +6717,6 @@ func _go_to_menu() -> void :
 	_stop_boss1_walk_audio()
 	_stop_boss1_stop_audio_context(true)
 	_clear_environment_weather(true)
-	_stop_acorrentada_walk_audio()
 	_stop_prismatica_ultimate_audio()
 	multiplayer_notice = ""
 	manifest_preview_open = false
@@ -6846,34 +6851,6 @@ func _play_boss1_pre_stop_warning() -> void :
 	boss1_stop_pre_played = true
 	_begin_boss1_stop_music_duck()
 	_play_sfx("boss1_pre_stop", 0.02, 0.7, 1.0)
-
-
-func _update_acorrentada_walk_audio(delta: float) -> void :
-	if acorrentada_walk_audio_player == null:
-		return
-	if acorrentada_walk_previous_pos == Vector2.ZERO:
-		acorrentada_walk_previous_pos = player_pos
-	var distance: = acorrentada_walk_previous_pos.distance_to(player_pos)
-	acorrentada_walk_previous_pos = player_pos
-	var movement_speed: = distance / maxf(0.001, delta)
-	var walking: bool = mode == "game" and manifestation_key == "acorrentada" and not is_dead and movement_speed >= 18.0
-	var target_volume: = 1.0 if walking else 0.0
-	acorrentada_walk_current_volume = move_toward(acorrentada_walk_current_volume, target_volume, delta / ACORRENTADA_WALK_FADE_TIME)
-	if acorrentada_walk_current_volume > 0.001 and audio_streams.has("acorrentada_walk"):
-		if acorrentada_walk_audio_player.stream != audio_streams["acorrentada_walk"]:
-			acorrentada_walk_audio_player.stream = audio_streams["acorrentada_walk"]
-		acorrentada_walk_audio_player.volume_db = linear_to_db(max(0.001, vol_master * vol_sfx * ACORRENTADA_WALK_VOLUME * acorrentada_walk_current_volume))
-		if not acorrentada_walk_audio_player.playing:
-			acorrentada_walk_audio_player.play()
-	elif acorrentada_walk_audio_player.playing:
-		acorrentada_walk_audio_player.stop()
-
-
-func _stop_acorrentada_walk_audio() -> void :
-	acorrentada_walk_current_volume = 0.0
-	acorrentada_walk_previous_pos = player_pos
-	if acorrentada_walk_audio_player != null and acorrentada_walk_audio_player.playing:
-		acorrentada_walk_audio_player.stop()
 
 
 func _rain_audio_target_volume() -> float:
@@ -7028,6 +7005,7 @@ func _reset_card_proc_state() -> void :
 	ressonancia_preresonance_used = false
 	necro_kill_counter = 0
 	active_necro_specters.clear()
+	necrocronism.reset()
 	antimatter_charge = 0.0
 	antimatter_armed = false
 	antimatter_flash = 0.0
@@ -7056,6 +7034,7 @@ func _reset_card_proc_state() -> void :
 func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
 	_ensure_runtime_controllers_bound()
+	player_shove.reset()
 	runtime_performance_controller.reset()
 	mobile_adaptive_visual_budget = false
 	experimental_phase_controller.prepare_new_run(clear_interrupted_save)
@@ -7149,6 +7128,10 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	_reset_card_proc_state()
 	runtime_event_director.reset()
 	point_boost_pickup_controller.reset()
+	_field_artifacts().reset()
+	_boss_pacts().reset()
+	_run_choice().reset()
+	_form_evolutions().reset()
 	phase4_instability_pulse_controller.reset()
 	player_dash_cooldown = PLAYER_BASE_DASH_COOLDOWN
 	player_defense = 0.0
@@ -7225,6 +7208,9 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	lacerante_prepare_timer = 0.0
 	lacerante_prepare_dir = Vector2.RIGHT
 	lacerante_coagula = 0
+	lacerante_execution.reset()
+	if manifestation_key == "lacerante":
+		RTLaceranteExecutionVfx.sheet()  # pre-carrega a folha: sem engasgo na 1a execucao
 	lacerante_empowered_ready = false
 	last_lacerante_empower_time = - LACERANTE_EMPOWER_COOLDOWN
 	lacerante_empower_key_was_pressed = false
@@ -7237,8 +7223,6 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	tp_cooldown_pending = false
 	tp_cooldown_override = -1.0
 	tp_cooldown_release_time = -1.0
-	retornante_tp_origin = Vector2.ZERO
-	retornante_tp_window = 0.0
 	boss_tp_stun_timer = 0.0
 	player_stun_timer = 0.0
 	player_silence_timer = 0.0
@@ -7256,7 +7240,6 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	last_damage_time = -10.0
 	boss_wave_slow_timer = 0.0
 	secondary_drain_flash_timer = 0.0
-	retornante_memoria_pending = false
 	forced_shop_timer = -1.0
 	forced_shop_triggered = false
 	shop_auto_elapsed = 0.0
@@ -7379,9 +7362,9 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	net_seen_card_unlock_request_ids.clear()
 	net_confirmed_card_unlock_event_ids.clear()
 	slashes.clear()
-	anchors.clear()
 	prisms.clear()
 	orbitals.clear()
+	gravitante.reset()
 	gravitante_vfx_events.clear()
 	seed_links.clear()
 
@@ -7391,7 +7374,6 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	net_seed_links.clear()
 	net_effects.clear()
 	parasite_spit_zones.clear()
-	return_bullets.clear()
 	manifestation_secondaries.clear()
 	_reset_advanced_manifestation_state()
 	_reset_arauto_state(true)
@@ -8004,6 +7986,7 @@ func _boss_farm_pressure_multiplier() -> float:
 
 
 func _reset_boss7_state() -> void:
+	_boss7_motion().reset()
 	boss7_ultimate_active = false
 	boss7_ultimate_used = false
 	boss7_ultimate_timer = 0.0
@@ -8510,11 +8493,11 @@ func _player_start_down_controls_locked() -> bool:
 
 
 func _local_player_controls_locked() -> bool:
-	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or henry_spin_active or henry_incendiary_ability_controller.entrance_active
+	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or henry_spin_active or henry_incendiary_ability_controller.entrance_active or lacerante_execution.is_active()
 
 
 func _local_player_movement_locked() -> bool:
-	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or (henry_spin_active and not henry_incendiary_ability_controller.spin_reached_destination()) or henry_incendiary_ability_controller.entrance_active
+	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or (henry_spin_active and not henry_incendiary_ability_controller.spin_reached_destination()) or henry_incendiary_ability_controller.entrance_active or lacerante_execution.is_active()
 
 
 func _spectator_combat_mode() -> bool:
@@ -8529,34 +8512,18 @@ func _clear_spectator_local_combat_state() -> void :
 	eletrica_waves.clear()
 	eletrica_chains.clear()
 	slashes.clear()
-	anchors.clear()
 	prisms.clear()
 	orbitals.clear()
+	gravitante.reset()
 	gravitante_vfx_events.clear()
 	parasite_spit_zones.clear()
-	return_bullets.clear()
 	manifestation_secondaries.clear()
-	acorrentada_links.clear()
-	acorrentada_visuals.clear()
-	bombastica_bombs.clear()
-	bombastica_vfx.clear()
-	bombastica_powder_marks.clear()
-	bombastica_detonator_touch_index = -1
-	bombastica_detonator_hold = 0.0
-	bombastica_ult_state = "IDLE"
-	bombastica_ult_timer = 0.0
-	bombastica_ult_visual_path.clear()
-	bombastica_ult_blast_anchors.clear()
-	bombastica_ult_reverse_anchors.clear()
-	bombastica_ult_target_hits.clear()
-	bombastica_ult_detonation_index = 0
-	bombastica_ult_detonation_timer = 0.0
 	tp_effects.clear()
 	LaceranteVfx.reset()
 
 
 func _gamepad_action_order() -> Array:
-	return ["attack", "skill", "secondary", "dash", "lacerante_empower", "bombastica_detonator", "pause", "shop", "boss"]
+	return ["attack", "skill", "secondary", "dash", "lacerante_empower", "pause", "shop", "boss"]
 
 
 func _gamepad_action_title(action: String) -> String:
@@ -8566,7 +8533,6 @@ func _gamepad_action_title(action: String) -> String:
 		"secondary": return "SECUNDARIA"
 		"dash": return "DASH / TP"
 		"lacerante_empower": return "REFORCO (+)"
-		"bombastica_detonator": return "DETONADOR"
 		"dance": return "DANCA / EMOTE"
 		"interact": return "INTERAGIR"
 		"pause": return "PAUSAR / MENU"
@@ -8581,8 +8547,7 @@ func _gamepad_action_subtitle(action: String) -> String:
 		"skill": return "Habilidade principal"
 		"secondary": return "Efeito passivo/ativo"
 		"dash": return "Movimento de esquiva"
-		"lacerante_empower": return "Lacerante, Eclipsada ou Necronada"
-		"bombastica_detonator": return "Bombastica apenas"
+		"lacerante_empower": return "Lacerante ou Henry Colosso"
 		"dance": return "Ativa a danca do jogador"
 		"interact": return "Altares, revive e objetos"
 		"pause": return "Abrir, navegar e sair do pause"
@@ -8598,7 +8563,6 @@ func _gamepad_action_color(action: String) -> Color:
 		"secondary": return Color(1.0, 0.72, 0.22)
 		"dash": return Color(0.2, 0.85, 1.0)
 		"lacerante_empower": return Color(0.92, 0.03, 0.12)
-		"bombastica_detonator": return Color(1.0, 0.48, 0.12)
 		"dance": return Color(0.95, 0.45, 1.0)
 		"interact": return Color(0.0, 1.0, 0.82)
 		"pause": return Color(0.8, 0.8, 0.8)
@@ -8612,7 +8576,7 @@ func _gamepad_navigation_mode() -> bool:
 
 
 func _combat_controls_active() -> bool:
-	return not _local_player_controls_locked() and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown")
+	return (not _local_player_controls_locked() or henry_incendiary_ability_controller.channel_interruptible()) and (mode == "game" or mode == "shop_countdown" or mode == "boss_call" or mode == "pause_countdown")
 
 
 func _reset_arauto_state(reset_spawn_flag: = false) -> void :
@@ -9061,33 +9025,13 @@ func _manifest_evolution_dispatch_combat_event(event: Dictionary) -> bool:
 			var target: Dictionary = Dictionary(event.get("target", {}))
 			if target.is_empty():
 				return false
-			if manifestation_key == "ancorada":
-				_ensure_runtime_controllers_bound()
-				if ancorada_ability_controller.on_evolution_hit(event_id, target, Vector2(event.get("target_pos", player_pos))):
-					return true
-			if AcorrentadaEvolutionController.is_active(self):
-				AcorrentadaEvolutionController.on_hit(self, event_id, target, Vector2(event.get("target_pos", player_pos)))
-				return true
 			if LaceranteEvolutionController.is_active(self):
 				LaceranteEvolutionController.on_hit(self, target, Vector2(event.get("target_pos", player_pos)))
 			_manifest_evolution_apply_impact_effects(target, Vector2(event.get("target_pos", player_pos)))
 			return true
 		"skill_cast":
-			if manifestation_key == "ancorada":
-				_ensure_runtime_controllers_bound()
-				if ancorada_ability_controller.on_evolution_skill(Vector2(event.get("center", player_pos))):
-					return true
-			if AcorrentadaEvolutionController.is_active(self):
-				return AcorrentadaEvolutionController.on_skill(self, Vector2(event.get("center", player_pos)))
 			return _manifest_evolution_apply_skill_effects(Vector2(event.get("center", player_pos)))
 		"teleport":
-			if manifestation_key == "ancorada":
-				_ensure_runtime_controllers_bound()
-				if ancorada_ability_controller.on_evolution_teleport(Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos))):
-					return true
-			if AcorrentadaEvolutionController.is_active(self):
-				AcorrentadaEvolutionController.on_teleport(self, Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos)))
-				return true
 			_manifest_evolution_apply_teleport_effects(Vector2(event.get("origin", player_pos)), Vector2(event.get("destination", player_pos)))
 			return true
 	return false
@@ -9125,7 +9069,6 @@ func _apply_manifest_evolution_to_bullet(bullet: Dictionary) -> void :
 	if choices.is_empty():
 		return
 	# `pierce` predates evolutions and still means native, unlimited piercing for
-	# manifestations such as Retornante.  Evolution charges are deliberately
 	# tracked separately so a temporary evolution never turns a normal shot into
 	# a permanently piercing one.
 	if not bullet.has("native_pierce"):
@@ -9180,7 +9123,6 @@ func _refresh_manifest_evolution_pierce_state(bullet: Dictionary) -> void:
 
 func _consume_manifest_evolution_pierce_on_hit(bullet: Dictionary, target: Dictionary) -> bool:
 	# Native pierce is never charged or limited by an evolution.  This preserves
-	# Retornante and the legacy native-pierce contract.
 	if bool(bullet.get("native_pierce", false)):
 		return true
 	var target_id := str(target.get("uid", ""))
@@ -9473,14 +9415,6 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 	if PrismaticaEvolutionController.is_active(self):
 		PrismaticaEvolutionController.update_effects(self, delta)
 		return
-	if AcorrentadaEvolutionController.is_active(self):
-		AcorrentadaEvolutionController.update_effects(self, delta)
-		return
-	if manifestation_key == "ancorada":
-		_ensure_runtime_controllers_bound()
-		ancorada_ability_controller.update_evolutions(delta)
-		if not Dictionary(manifest_evolution_state.get("ancorada", {})).is_empty():
-			return
 	if LaceranteEvolutionController.is_active(self):
 		LaceranteEvolutionController.update_effects(self, delta)
 	var fields: Array = manifest_evolution_state.get("fields", [])
@@ -9506,6 +9440,7 @@ func _update_manifest_evolution_effects(delta: float) -> void :
 
 
 func _process(delta: float) -> void :
+	RTFrameProfiler.begin()
 	_ensure_runtime_controllers_bound()
 	_begin_runtime_frame_services()
 	henry_incendiary_ability_controller.maintain_entrance_lifecycle()
@@ -9580,10 +9515,10 @@ func _process(delta: float) -> void :
 	if mode in ["manifest_mp", "mutation_select_mp", "effect_select_mp"]:
 		_update_manifest_mp_ready_resend()
 
+	RTFrameProfiler.mark("p_services_menus_net")
 	if mode == "game":
-		contractual_order_real_delta = delta
-		_update_game(delta * _contractual_order_world_time_scale())
-		contractual_order_real_delta = 0.0
+		_update_game(delta)
+		RTFrameProfiler.begin()
 	elif mode == "phase_transition":
 		_update_phase_transition(delta)
 	elif mode == "shop_countdown":
@@ -9618,10 +9553,11 @@ func _process(delta: float) -> void :
 		_update_effects(delta)
 	_update_comfort_camera(delta)
 	_refresh_screen_shake_frame_offset()
-	_sync_bombastica_scene_vfx_positions()
 	_update_mobile_performance_budget(delta)
 	if _should_queue_runtime_redraw(delta):
 		queue_redraw()
+	RTFrameProfiler.mark("p_tail")
+	RTFrameProfiler.end_frame()
 
 func _update_multiplayer_preload(_delta: float) -> void :
 	if online_preload_started_ms <= 0:
@@ -9719,7 +9655,7 @@ func _update_network_ability_replica(visual: Dictionary, delta: float) -> void :
 		return
 	var kind: = String(visual.get("kind", ""))
 	var previous_center := Vector2(visual.get("center", Vector2.ZERO))
-	if kind in ["eletrica", "prismatica", "retornante", "ancorada", "cartografica", "mnesica", "ressonante", "contratual"]:
+	if kind in ["eletrica", "prismatica"]:
 		var source_peer: int = int(visual.get("source", 0))
 		var source_state: Dictionary = net_players_by_peer.get(source_peer, {})
 		if not source_state.is_empty():
@@ -9730,9 +9666,6 @@ func _update_network_ability_replica(visual: Dictionary, delta: float) -> void :
 	visual["angle"] = float(visual.get("angle", 0.0)) + SECONDARY_PRISMATICA_BEAM_SPIN_SPEED * delta
 	visual["charge"] = float(visual.get("charge", 0.0)) + delta
 	visual["ghost_tick"] = float(visual.get("ghost_tick", 0.0)) + delta
-	if kind == "ancorada":
-		_ensure_runtime_controllers_bound()
-		ancorada_ability_controller.update_network_replica(visual, previous_center, delta)
 	if kind == "lacerante":
 		var cuts: Array = visual.get("cuts", [])
 		for cut in cuts:
@@ -9863,6 +9796,7 @@ func _update_manifest_selection_flow(delta: float) -> void :
 
 
 func _update_game(delta: float) -> void :
+	RTFrameProfiler.begin()
 	_sync_multiplayer_state()
 	if dedicated_server_mode:
 		return
@@ -9886,6 +9820,7 @@ func _update_game(delta: float) -> void :
 	time_alive += delta
 	elapsed_unpaused += delta
 	experimental_phase_controller.update(delta)
+	RTFrameProfiler.mark("u_prelude")
 	if mode != "game":
 		return
 	_update_card_unlock_runtime(delta)
@@ -9893,11 +9828,15 @@ func _update_game(delta: float) -> void :
 	_update_run_telemetry(delta)
 	runtime_event_director.update(delta, runtime_event_director.context_from_game(self), _is_world_authority())
 	point_boost_pickup_controller.update(delta, _is_world_authority())
+	_field_artifacts().update(delta)
+	_run_choice().update(delta)
+	_boss_pacts().update(delta)
 	phase3_ritual_pulse_controller.update(delta, _is_world_authority())
 	phase4_instability_pulse_controller.update(delta, _is_world_authority())
 	_update_bargain_capsule(delta)
 	sineiro_boreal_controller.update(delta)
 	amber_suturer_controller.update(delta)
+	RTFrameProfiler.mark("u_events_telemetry")
 	if shop_auto_enabled and not forced_shop_triggered:
 		shop_auto_elapsed += delta
 		next_forced_shop_time = max(0.0, shop_auto_interval - shop_auto_elapsed)
@@ -9928,11 +9867,14 @@ func _update_game(delta: float) -> void :
 	_update_teleport_effects(delta)
 	_update_advanced_manifestation_state(delta)
 	_update_manifest_evolution_effects(delta)
+	RTFrameProfiler.mark("u_timers_cards_tp")
 	_update_aura(delta)
+	RTFrameProfiler.mark("u_aura")
 	_update_boss2_environment(delta)
 	_update_phase2_fire_walls(delta)
 	_update_phase7_ember_patches(delta)
 	_update_phase3_environment(delta)
+	RTFrameProfiler.mark("u_environment")
 	if not boss_ready and time_alive >= BOSS_READY_TIME and not _tutorial_blocks_normal_spawn():
 		boss_ready = true
 		_add_text("Aperte BOSS quando quiser chamar", player_pos + Vector2(0, -100), Color(1.0, 0.72, 0.2), 2.2, 24)
@@ -9965,6 +9907,8 @@ func _update_game(delta: float) -> void :
 	_update_phase6_pustule_pheromones(delta)
 	_update_sanguessuga_parasite(delta)
 	boss_tp_stun_timer = max(0.0, boss_tp_stun_timer - delta)
+	RTFrameProfiler.mark("u_shop_player_timers")
+	player_shove.update(self, delta)
 	if not _local_player_movement_locked():
 		if player_stun_timer <= 0.0 and not player_locked:
 			_update_apolo_phase5_exhibition(delta)
@@ -9976,7 +9920,7 @@ func _update_game(delta: float) -> void :
 					player_dancing = false
 					player_dance_timer = 0.0
 				last_facing = move.normalized()
-				var desired_pos: Vector2 = player_pos + last_facing * player_speed * runtime_event_director.move_speed_multiplier() * phase4_instability_pulse_controller.player_move_speed_multiplier() * _contractual_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _pustule_spit_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _eclipsada_speed_multiplier() * _new_common_speed_multiplier() * reactive_survival_card_controller.movement_speed_multiplier() * henry_colossus_ability_controller.move_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
+				var desired_pos: Vector2 = player_pos + last_facing * player_speed * runtime_event_director.move_speed_multiplier() * _boss_pacts().move_multiplier() * phase4_instability_pulse_controller.player_move_speed_multiplier() * _environment_player_slow_mult() * _miasma_eel_slow_multiplier() * _pustule_spit_slow_multiplier() * _boss6_miasma_slow_multiplier() * _boss6_carnage_slow_multiplier() * _boss6_fossil_echo_slow_multiplier() * _sanguessuga_slow_multiplier() * _new_common_speed_multiplier() * reactive_survival_card_controller.movement_speed_multiplier() * henry_colossus_ability_controller.move_speed_multiplier() * AuraSystem.speed_multiplier(aura_state) * delta
 				player_pos = _resolve_phase2_fire_wall_movement(player_pos, desired_pos)
 			_update_eletrica_recoil(delta)
 		player_pos = _clamp_player_world(player_pos)
@@ -10009,13 +9953,7 @@ func _update_game(delta: float) -> void :
 				_start_boss_call()
 			var empower_key_pressed = _is_keyboard_binding_pressed("lacerante_empower")
 			if empower_key_pressed and not lacerante_empower_key_was_pressed:
-				if manifestation_key == "bombastica":
-					_trigger_bombastica_detonator(false)
-				elif manifestation_key == "eclipsada":
-					_toggle_eclipsada_form()
-				elif manifestation_key == "necronada":
-					_try_arm_necronada_empower()
-				elif active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
+				if active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
 					henry_colossus_ability_controller.activate_reinforcement()
 				else:
 					_try_arm_lacerante_empower()
@@ -10025,10 +9963,12 @@ func _update_game(delta: float) -> void :
 	# the synchronized immutable attack snapshot to their own controlled player.
 	if _is_world_replica() and current_phase == 1 and boss_active:
 		early_boss_controller.apply_boss1_whirlpool_force(delta)
+	RTFrameProfiler.mark("u_player_move")
 	_refresh_run_leader()
 	if run_leader_notice_timer > 0.0:
 		run_leader_notice_timer = maxf(0.0, run_leader_notice_timer - delta)
 	enemy_manager.update(delta)
+	RTFrameProfiler.mark("u_enemy_manager")
 	_update_event_alerts(delta)
 	_update_team_revival(delta)
 	if _is_world_authority():
@@ -10041,28 +9981,38 @@ func _update_game(delta: float) -> void :
 
 	if _is_world_authority():
 		_update_arauto(delta)
+	RTFrameProfiler.mark("u_alerts_revival")
 	_update_bullets(delta)
+	RTFrameProfiler.mark("u_bullets")
 	_update_eletrica_waves(delta)
 	_update_eletrica_chains(delta)
 	_update_remote_bullets(delta)
 	_update_parasite_spit_zones(delta)
 	_update_prisms(delta)
-	_update_return_bullets(delta)
 	_update_phase6_pustule_pools(delta)
+	RTFrameProfiler.mark("u_skill_zones")
 	_update_enemies(delta, true)
+	RTFrameProfiler.mark("u_enemies")
 	_apply_entity_separation(delta, true)
+	RTFrameProfiler.mark("u_separation")
 	_update_enemy_bullets(delta)
+	RTFrameProfiler.mark("u_enemy_bullets")
 	_update_phase4_environment(delta)
 	_update_larapio_coin_drops(delta)
 	_update_arauto_card_drops(delta)
 	_update_arauto_evolution_fragment(delta)
 	_update_orbitals(delta)
+	_gravitante().update(delta)
+	_lacerante_exec().update(delta)
 	_update_trembo(delta)
 	_update_petrov(delta)
 	_update_shockwaves(delta)
 	_update_manifestation_secondaries(delta)
+	RTFrameProfiler.mark("u_drops_orbitals_secondaries")
 	_update_heal_orbs(delta)
+	RTFrameProfiler.mark("u_heal_orbs")
 	_update_effects(delta)
+	RTFrameProfiler.mark("u_effects")
 	if _is_world_authority() and boss_active:
 		_update_boss(delta * AuraSystem.world_multiplier(aura_state))
 		_update_boss_poison(delta)
@@ -10074,16 +10024,16 @@ func _update_game(delta: float) -> void :
 	Boss3AnimationPresentation.update(self, delta)
 	Boss4AnimationPresentation.update(self, delta)
 	_update_boss1_walk_audio(delta)
-	_update_acorrentada_walk_audio(delta)
 	var active_lacerante = _active_lacerante_secondary()
 	if not active_lacerante.is_empty():
 		player_pos = Vector2(active_lacerante.get("center", player_pos))
+	RTFrameProfiler.mark("u_boss")
 	_update_environment_weather(delta)
 	if player_hp <= 0:
 		_handle_player_down()
 	if mode == "game" and boss_active and current_phase == 1 and boss_entry_timer <= 0.0:
 		_record_boss1_rewind_history(delta)
-
+	RTFrameProfiler.mark("u_tail")
 
 func _update_aura(delta: float) -> void :
 	if aura_state.is_empty():
@@ -10160,7 +10110,6 @@ func _update_aura_visual_state(delta: float) -> void :
 				screen_shake_timer = maxf(screen_shake_timer, 0.16)
 				screen_shake_strength = maxf(screen_shake_strength, 5.0)
 				_spawn_radial_particles(player_pos, Color(1.0, 0.52, 0.12), 24)
-				_play_sfx("Bomba-Bombastica.mp3", 0.05, 1.25, 1.45)
 				_add_text("REBOTE TEMPORAL (1.18x)", player_pos + Vector2(0, -92), Color(1.0, 0.52, 0.12), 1.0, 20)
 		else:
 			rational_rebound_active = false
@@ -10392,7 +10341,6 @@ func _trigger_rational_dilation_fx() -> void :
 	_vibrate(85, 0.38)
 	_spawn_radial_particles(player_pos, Color(0.18, 0.88, 1.0), 32)
 	_spawn_radial_particles(player_pos, Color(1.0, 0.88, 0.32), 16)
-	_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.65, 0.85)
 	for i in range(16):
 		effects.append({
 			"text": "",
@@ -10468,7 +10416,6 @@ func _apply_aura_events(events: Array) -> void :
 				var score_text: String = String(event.get("text", "+%d" % amount))
 				if String(aura_state.get("name", "")) == "Racional" and score_text.begins_with("ANALISE"):
 					_spawn_radial_particles(player_pos, Color(0.18, 0.88, 1.0), 22)
-					_play_sfx("Mina-Bombastica.mp3", 0.05, 1.15, 1.35)
 				_add_text(score_text, player_pos + Vector2(0, -98), _aura_color(), 1.0, 19)
 			"text":
 				var text: = String(event.get("text", "AUREA"))
@@ -10542,8 +10489,6 @@ func start_apolo_phase5_exhibition(manifestation_index: int = -1) -> void:
 		target_manifestation = clampi(manifestation_index, 0, MANIFESTATIONS.size() - 1)
 		var unlock_key: String = String(MANIFESTATIONS[target_manifestation].get("key", "eletrica"))
 		unlocked_manifestation_ids[unlock_key] = true
-		if unlock_key == "retornante":
-			retornante_unlocked = true
 		_set_selected_manifestation(target_manifestation, false)
 	_start_game()
 	_finish_startup_thanks()
@@ -10888,9 +10833,6 @@ func _try_attack() -> void :
 		return
 	if RangedAttackRange.is_ranged_primary(self) and not _ranged_primary_attack_can_fire():
 		return
-	if manifestation_key == "eclipsada":
-		_try_eclipsada_attack()
-		return
 	if time_alive - last_attack_time < _current_attack_interval():
 		return
 	last_attack_time = time_alive
@@ -10910,127 +10852,15 @@ func _try_attack() -> void :
 		"prismatica":
 			_play_manifestation_attack_sfx("prismatica")
 			_fire_projectile("prismatica", player_damage * 0.6, BULLET_SPEED * 1.35, 1.0, true)
-		"retornante":
-			_play_manifestation_attack_sfx("retornante")
-			_fire_returning()
 		"parasitica":
 			_play_manifestation_attack_sfx("parasitica")
 			_fire_projectile("parasitica", player_damage * 0.88, BULLET_SPEED * 0.84, 1.4, false)
 		"gravitante":
 			_play_manifestation_attack_sfx("gravitante")
 			_fire_projectile("gravitante", player_damage * 0.52, BULLET_SPEED * 0.72, 1.2, false)
-		"ancorada":
-			_play_manifestation_attack_sfx("ancorada")
-			_fire_projectile("ancorada", player_damage * _anchor_bonus(), ANCORADA_BASIC_PROJECTILE_SPEED, ANCORADA_BASIC_PROJECTILE_RANGE / ANCORADA_BASIC_PROJECTILE_SPEED, false)
-		"cartografica":
-			_play_manifestation_attack_sfx("cartografica")
-			_fire_cartographic_survey_needle()
-		"mnesica":
-			_play_manifestation_attack_sfx("mnesica")
-			_fire_projectile("mnesica", player_damage * 0.58, BULLET_SPEED * 0.96, 1.25, false)
-		"ressonante":
-			var perfect: = _resonant_is_perfect()
-			_play_manifestation_attack_sfx("ressonante")
-			var before_resonant = bullets.size()
-			var resonant_damage: float = player_damage * 0.58 * _resonant_combo_multiplier() if perfect else player_damage * 0.42
-			_fire_projectile("ressonante", resonant_damage, BULLET_SPEED * (1.08 if perfect else 0.95), 1.18, false)
-			if bullets.size() > before_resonant:
-				bullets[-1]["resonant_perfect"] = perfect
-				bullets[-1]["resonant_note"] = _resonant_note_name()
-			_record_resonant_attack(perfect)
-			if perfect:
-				_add_text("NOTA PERFEITA", player_pos + Vector2(0, -88), Color(1.0, 0.82, 0.26), 0.55, 18)
-		"contratual":
-			_play_manifestation_attack_sfx("contratual")
-			_fire_projectile("contratual", player_damage * 0.46, BULLET_SPEED * 0.98, 1.22, false)
-		"acorrentada":
-			_perform_acorrentada_attack()
-		"bombastica":
-			_play_manifestation_attack_sfx("bombastica")
-			_fire_projectile("bombastica", player_damage * 0.62, BULLET_SPEED * 0.92, 1.25, false)
-		"necronada":
-			_play_manifestation_attack_sfx("necronada")
-			_necronada_register_attack_passive()
-			if necronada_empowered_ready:
-				_fire_necronada_empowered_dust()
-			else:
-				_fire_projectile("necronada", player_damage * 0.4, BULLET_SPEED * 0.94, 1.28, false)
 		_:
 			_play_manifestation_attack_sfx("eletrica")
 			_fire_projectile("eletrica", player_damage, BULLET_SPEED, 1.2, false)
-
-
-func _necronada_register_attack_passive() -> void :
-	necronada_attack_counter += 1
-	if necronada_attack_counter < NECRONADA_PASSIVE_ATTACKS:
-		return
-	necronada_attack_counter = 0
-	var heal: = maxi(1, int(player_hp_max * NECRONADA_PASSIVE_HEAL_RATE))
-	_heal_player(heal, "necronada_passive", true)
-	_add_text("+%d" % heal, player_pos + Vector2(0, -76), _necronada_accent(), 0.58, 17)
-
-
-func _try_arm_necronada_empower() -> bool:
-	if manifestation_key != "necronada":
-		return false
-	if necronada_empowered_ready:
-		_add_text("POEIRA JA ERGUIDA", player_pos + Vector2(0, -88), _necronada_accent(), 0.55, 17)
-		return false
-	if time_alive < necronada_empower_cooldown_until:
-		_add_text("%.1fs" % (necronada_empower_cooldown_until - time_alive), player_pos + Vector2(0, -88), Color(1.0, 0.82, 0.36), 0.55, 17)
-		return false
-	necronada_empowered_ready = true
-	necronada_empower_until = time_alive + NECRONADA_EMPOWER_DURATION
-	_add_text("POEIRA FUNERARIA", player_pos + Vector2(0, -88), _necronada_accent(), 0.75, 19)
-	_spawn_radial_particles(player_pos, _necronada_color(), 14)
-	return true
-
-
-func _fire_necronada_empowered_dust() -> void :
-	var dir: = _aim_direction()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	if dir.length() <= 0.05:
-		dir = Vector2.RIGHT
-	_set_player_attack_visual_dir(dir)
-	necronada_empowered_ready = false
-	necronada_empower_cooldown_until = time_alive + NECRONADA_EMPOWER_COOLDOWN
-	var target: = (player_pos + dir * NECRONADA_EMPOWER_RANGE).clamp(Vector2(50, 50), WORLD_SIZE - Vector2(50, 50))
-	var palette: = _projectile_palette("necronada_dust")
-	_add_bullet({
-		"pos": player_pos + dir * 34.0,
-		"origin": player_pos,
-		"target_pos": target,
-		"source_category": "basic_attack",
-		"dir": dir,
-		"life": 0.78,
-		"max_life": 0.78,
-		"age": 0.0,
-		"phase": rng.randf_range(0.0, TAU),
-		"trail_cd": 0.0,
-		"damage": player_damage * NECRONADA_EMPOWER_DAMAGE_MULT,
-		"player_damage": player_damage,
-		"speed": BULLET_SPEED * 0.66,
-		"kind": "necronada_dust",
-		"pierce": true,
-		"hits": {},
-		"ricochets": 0,
-		"durability": 0.0,
-		"fly_sfx_cd": 0.0,
-		"color": palette["glow"],
-		"visual_scale": 1.35
-	})
-	_necronada_empower_allies(target)
-	_spawn_projectile_muzzle("necronada_dust", player_pos + dir * 34.0, dir)
-
-
-func _necronada_empower_allies(target: Vector2) -> void :
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) <= 0.0:
-			continue
-		remnant["empower_timer"] = maxf(float(remnant.get("empower_timer", 0.0)), NECRONADA_EMPOWER_ALLY_BUFF_DURATION)
-		remnant["empower_target_pos"] = target
-	necronada_vfx.append({"kind": "empower_target", "pos": target, "life": NECRONADA_EMPOWER_ALLY_BUFF_DURATION, "max": NECRONADA_EMPOWER_ALLY_BUFF_DURATION})
 
 
 func _fire_projectile(kind: String, damage: float, speed: float, life: float, pierce: bool) -> void :
@@ -11040,8 +10870,6 @@ func _fire_projectile(kind: String, damage: float, speed: float, life: float, pi
 	_set_player_attack_visual_dir(dir)
 	var palette = _projectile_palette(kind)
 	var final_damage = damage
-	if kind == "ancorada":
-		final_damage *= 1.0 + _secondary_ancorada_charge_at_player() * 0.32
 	final_damage *= _consume_impulso_attack_bonus()
 	final_damage *= _consume_folego_damage_bonus(kind, "basic_attack")
 	var ressonancia_attack_bonus: = _consume_ressonancia_action_bonus("ATTACK")
@@ -11078,61 +10906,6 @@ func _fire_projectile(kind: String, damage: float, speed: float, life: float, pi
 	_track_behavior_shot()
 
 
-func _fire_returning() -> void :
-	if return_bullets.size() >= 8:
-		return
-	var dir = _aim_direction()
-	_set_player_attack_visual_dir(dir)
-	var bullet = {
-		"uid": "%d:%d" % [_mp_unique_id(), net_projectile_sequence + 1],
-		"pos": player_pos + dir * 44.0,
-		"origin": player_pos,
-		"source_category": "basic_attack",
-		"dir": dir,
-		"speed": BULLET_SPEED * 0.92,
-		"player_damage": player_damage,
-		"life": 6.0,
-		"kind": "retornante",
-		"pierce": true,
-		"color": _manifestation_color(),
-		"motion_mode": "returning",
-		"age": 0.0,
-		"phase": rng.randf_range(0.0, TAU),
-		"trail_cd": 0.0,
-		"state": "ida",
-		"returning": false,
-		"damage": player_damage * 0.62,
-		"hits": {},
-		"memory_bonus": 1.0,
-		"memory_impacts": 0,
-		"memory_until": 0.0,
-		"memory_seek_cd": 0.0,
-		"memory_last_uid": -1,
-		"memory_last_hit_time": -999.0,
-		"memory_hit_times": {},
-		"forced": false,
-		"fly_sfx_cd": 0.0,
-		"last_state_sfx": "ida"
-	}
-	RangedAttackRange.configure_bullet(self, bullet)
-	# Retornante uses the shared range only for the outbound leg; its authored
-	# return trip remains intact after touching the limit.
-	bullet["outbound_duration"] = maxf(0.01, (float(bullet.get("max_range", RangedAttackRange.BASE_RANGE)) - float(bullet.get("range_traveled", 0.0))) / maxf(1.0, float(bullet["speed"])))
-	bullet["life"] = 6.0
-	bullet["max_life"] = 6.0
-	_apply_manifest_evolution_to_bullet(bullet)
-	net_projectile_sequence += 1
-	return_bullets.append(bullet)
-	_send_remote_projectile_spawn(bullet)
-	_spawn_projectile_muzzle("retornante", player_pos + dir * 34.0, dir)
-	_apply_aura_events(AuraSystem.on_attack(aura_state, bullet))
-	_add_card_unlock_progress("shots_fired", 1.0)
-	_track_behavior_shot()
-	if retornante_memoria_pending:
-		retornante_memoria_pending = false
-		_activate_retornante_memory(bullet)
-
-
 func _begin_lacerante_prepare() -> void :
 	var attack_dir = _aim_direction()
 	if attack_dir.length() <= 0.05:
@@ -11165,11 +10938,11 @@ func _try_arm_lacerante_empower() -> bool:
 	if lacerante_empowered_ready:
 		_add_text("CORTE JA REFORCADO", player_pos + Vector2(0, -88), Color(1.0, 0.48, 0.54), 0.55, 17)
 		return false
-	var elapsed = time_alive - last_lacerante_empower_time
-	if elapsed < LACERANTE_EMPOWER_COOLDOWN:
-		_add_text("%.1fs" % (LACERANTE_EMPOWER_COOLDOWN - elapsed), player_pos + Vector2(0, -88), Color(1.0, 0.56, 0.6), 0.45, 17)
+	var remaining: float = _lacerante_exec().reforco_remaining()
+	if remaining > 0.0:
+		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -88), Color(1.0, 0.56, 0.6), 0.45, 17)
 		return false
-	last_lacerante_empower_time = time_alive
+	# So arma: o golpe sai no proximo ATK (executa se o corte pegar um executavel).
 	lacerante_empowered_ready = true
 	lacerante_coagulum_pulse = 0.65
 	_play_sfx("atk_lacerante_3", 0.025, 0.78, 0.72)
@@ -11181,6 +10954,7 @@ func _try_arm_lacerante_empower() -> bool:
 
 func _grant_lacerante_coagulum(at: Vector2) -> void :
 	lacerante_coagula += 1
+	lacerante_execution.on_coagulum(at)
 	lacerante_coagulum_pulse = 1.0
 	_play_sfx("atk_lacerante_3", 0.025, 0.86, 1.12)
 	_spawn_radial_particles(at, Color(1.0, 0.06, 0.18), 22)
@@ -11205,8 +10979,14 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 	lacerante_combo_visual = slash_stage
 	lacerante_combo = (slash_stage + 1) % 3
 	var empowered = lacerante_empowered_ready
-	lacerante_empowered_ready = false
 	var points = _lacerante_stage_points(player_pos, attack_dir, slash_stage)
+	if empowered and _lacerante_exec().try_start_on_slash(points, 52.0):
+		lacerante_empowered_ready = false
+		_lacerante_exec().start_reforco_cooldown(true)
+		return
+	lacerante_empowered_ready = false
+	if empowered:
+		_lacerante_exec().start_reforco_cooldown(false)
 	var width = 52.0
 	slashes.append({
 		"points": points,
@@ -11223,18 +11003,19 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 	var executed_pos = Vector2.ZERO
 	for enemy in enemies:
 		if _distance_to_polyline(enemy["pos"], points) <= width:
-			var base_damage = player_damage * 1.12 * _lacerante_coagulum_damage_multiplier()
+			var base_damage = player_damage * 1.12 * _lacerante_coagulum_damage_multiplier() * lacerante_execution.damage_bonus(enemy)
 			if empowered:
 				base_damage *= LACERANTE_EMPOWER_DAMAGE_MULT
 			var killed = _damage_enemy(enemy, _lacerante_damage_for_enemy(base_damage, enemy), "lacerante_empowered" if empowered else "lacerante")
 			_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(enemy.get("uid", ""))], "lacerante", enemy, Vector2(enemy["pos"]))
-			enemy["laceracao"] = int(enemy.get("laceracao", 0)) + 1
-			enemy["bleed_timer"] = 4.0
+			lacerante_execution.apply_laceration(enemy, 2 if slash_stage == 2 else 1)
 			LaceranteVfx.on_lacerate_applied(self, enemy)
 			if empowered and killed and executed_pos == Vector2.ZERO:
 				executed_pos = Vector2(enemy["pos"])
 			if slash_stage == 2 and killed:
 				last_secondary_time -= 1.5
+	if not empowered and enemies.any(func(e): return float(e.get("hp", 0.0)) > 0.0 and _distance_to_polyline(e["pos"], points) <= width):
+		_lacerante_exec().on_attack_hit()
 	for cheese in phase3_cheeses:
 		if _distance_to_polyline(Vector2(cheese["pos"]), points) <= width:
 			_damage_phase3_cheeses_at(Vector2(cheese["pos"]), player_damage * 1.12, 4.0)
@@ -11253,11 +11034,6 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 		LaceranteVfx.on_lacerate_applied(self, boss_pos)
 	if executed_pos != Vector2.ZERO:
 		_grant_lacerante_coagulum(executed_pos)
-
-
-func _place_anchor(pos = null, linked_from = null, source: String = "ancorada_attack", claimable: bool = true) -> Dictionary:
-	_ensure_runtime_controllers_bound()
-	return ancorada_ability_controller.place_anchor(pos, linked_from, source, claimable)
 
 
 func _aim_direction() -> Vector2:
@@ -11292,7 +11068,7 @@ func _nearest_ability_target() -> Vector2:
 func _boss_available_for_auto_target() -> bool:
 	if not boss_active or boss_hp <= 0.0:
 		return false
-	if current_phase == 2 and boss2_ultimate_timer > 0.0 and not _boss2_ultimate_boss_visible():
+	if current_phase == 2 and boss2_ultimate_timer > 0.0 and _boss2_motion().in_blizzard():
 		return false
 	if current_phase == 3 and _boss3_miasma_active():
 		return boss3_miasma_variant == 1 and boss3_miasma_clone_reveal_timer > 0.0
@@ -11526,6 +11302,8 @@ func _lacerante_quick_ultimate_target(use_configured_priority: bool = true) -> V
 
 
 func _use_skill(target_world = null) -> void :
+	if henry_incendiary_ability_controller.handle_channel_input("skill"):
+		return
 	if _local_player_controls_locked():
 		return
 	if _secondary_player_locked():
@@ -11549,19 +11327,6 @@ func _use_skill(target_world = null) -> void :
 		if henry_skill_started:
 			last_skill_time = time_alive
 			_register_manual_skill_use("skill_q", henry_cooldown)
-			_tutorial_note_action("skill")
-		return
-	if manifestation_key == "bombastica":
-		var bombastica_before_skill: float = last_skill_time
-		_try_cast_bombastica_q(target_world)
-		if last_skill_time != bombastica_before_skill:
-			_tutorial_note_action("skill")
-		return
-	if manifestation_key == "eclipsada":
-		var sol_before_skill: float = eclipsada_sol_last_skill_time
-		var lua_before_skill: float = eclipsada_lua_last_skill_time
-		_try_use_eclipsada_q(target_world)
-		if eclipsada_sol_last_skill_time != sol_before_skill or eclipsada_lua_last_skill_time != lua_before_skill:
 			_tutorial_note_action("skill")
 		return
 	var cooldown = _skill_cooldown()
@@ -11602,8 +11367,6 @@ func _use_skill(target_world = null) -> void :
 			_spawn_parasite_spit(target_world)
 		"gravitante":
 			_trigger_gravitante_mark_collision()
-		"ancorada":
-			_trigger_hab1_ancorada(target_world)
 		"prismatica":
 			var prism_pos = Vector2(target_world) if target_world is Vector2 else player_pos
 			prisms.append({
@@ -11613,31 +11376,6 @@ func _use_skill(target_world = null) -> void :
 				"damage_tick": 0.0
 			})
 			_add_text("PRISMA DE REFRACAO", prism_pos + Vector2(0, -70), Color(0.32, 1.0, 0.96), 1.3, 25)
-		"retornante":
-			var chosen = _choose_retornante_memory_bullet()
-			if chosen.is_empty():
-				retornante_memoria_pending = true
-				_add_text("MEMORIA RESERVADA", player_pos + Vector2(0, -90), Color(0.86, 0.58, 1.0), 1.2, 24)
-			else:
-				_activate_retornante_memory(chosen)
-				_add_text("MEMORIA INSTAVEL", Vector2(chosen.get("pos", player_pos)) + Vector2(0, -52), Color(1.0, 0.44, 0.8), 1.2, 24)
-		"cartografica":
-			_cast_cartographic_fold(visual_target)
-		"mnesica":
-			_trigger_mnesic_reenactment()
-		"ressonante":
-			_trigger_resonant_silence()
-		"contratual":
-			_execute_contracts()
-		"acorrentada":
-			_cast_acorrentada_q(target_world)
-		"eclipsada":
-			_cast_eclipsada_q(target_world, skill_power)
-		"necronada":
-			if _try_use_necronada_skill(target_world):
-				_send_network_ability_visual(NET_ABILITY_SKILL, visual_origin, visual_target, _network_skill_visual_duration())
-				_tutorial_note_action("skill")
-			return
 		_:
 			shockwaves.append({"pos": player_pos, "radius": 0.0, "max": 250.0, "life": 0.45, "damage": player_damage * 1.05 * skill_power, "hit": {}, "source_category": "skill_q"})
 	_manifest_evolution_on_skill(visual_target)
@@ -11648,85 +11386,7 @@ func _use_skill(target_world = null) -> void :
 
 
 func _trigger_gravitante_mark_collision() -> void :
-	var marked_uids: Dictionary = {}
-	var boss_marked: = false
-	for orbital in orbitals:
-		if float(orbital.get("life", 0.0)) <= 0.0:
-			continue
-		if String(orbital.get("target_kind", "enemy")) == "boss":
-			boss_marked = true
-		else:
-			marked_uids[int(orbital.get("enemy_uid", -1))] = true
-	var marked: Array = []
-	var collision_center: = Vector2.ZERO
-	for enemy in enemies:
-		if marked_uids.has(int(enemy.get("uid", -1))) and float(enemy.get("hp", 0.0)) > 0.0:
-			marked.append(enemy)
-			collision_center += Vector2(enemy["pos"])
-	if marked.is_empty() and not boss_marked:
-		_add_text("MARQUE ALVOS COM ATK", player_pos + Vector2(0, -90), Color(0.7, 0.82, 1.0), 0.9, 18)
-		return
-	if not marked.is_empty():
-		collision_center /= float(marked.size())
-		GravitanteVfx.collision(self, marked, collision_center)
-		var collision_damage: float = player_damage * (1.1 + marked.size() * 0.22)
-		for enemy in marked:
-			enemy["pos"] = collision_center + Vector2.from_angle(float(enemy.get("uid", 0)) * 0.017) * 18.0
-			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.55)
-			_damage_enemy(enemy, collision_damage, "gravitante")
-		for enemy in enemies:
-			if marked_uids.has(int(enemy.get("uid", -1))) or float(enemy.get("hp", 0.0)) <= 0.0:
-				continue
-			var offset: = Vector2(enemy["pos"]) - collision_center
-			if offset.length() <= 190.0:
-				var push_dir: = offset.normalized() if offset.length() > 0.01 else Vector2.RIGHT
-				enemy["pos"] = (Vector2(enemy["pos"]) + push_dir * 105.0).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
-				enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.24)
-	if boss_marked and boss_active and boss_hp > 0.0:
-		if marked.is_empty():
-			GravitanteVfx.collision(self, [{"pos": boss_pos}], boss_pos)
-		_damage_boss(player_damage * 1.35, "gravitante")
-		boss_pos = boss_pos.lerp(collision_center if not marked.is_empty() else player_pos, 0.18)
-	for orbital in orbitals:
-		orbital["life"] = 0.0
-	_add_text("COLISAO GRAVITACIONAL x%d" % (marked.size() + (1 if boss_marked else 0)), (collision_center if not marked.is_empty() else boss_pos) + Vector2(0, -92), Color(0.6, 0.82, 1.0), 1.3, 24)
-
-
-func _retornante_memory_target_point() -> Vector2:
-	if attack_dragging and attack_drag_direction.length() > 0.05:
-		return player_pos + attack_drag_direction.normalized() * 320.0
-	var nearest = _nearest_ability_target()
-	if nearest != Vector2.ZERO:
-		return nearest
-	return player_pos + last_facing.normalized() * 240.0
-
-
-func _choose_retornante_memory_bullet() -> Dictionary:
-	var target = _retornante_memory_target_point()
-	var best = {}
-	var best_d = INF
-	for bullet in return_bullets:
-		if bool(bullet.get("expired", false)):
-			continue
-		if String(bullet.get("state", "ida")) == "instavel":
-			continue
-		var d = Vector2(bullet.get("pos", player_pos)).distance_squared_to(target)
-		if d < best_d:
-			best_d = d
-			best = bullet
-	return best
-
-
-func _activate_retornante_memory(bullet: Dictionary) -> void :
-	bullet["state"] = "instavel"
-	bullet["returning"] = false
-	bullet["memory_until"] = time_alive + 4.0
-	bullet["memory_impacts"] = 0
-	bullet["memory_seek_cd"] = 0.0
-	bullet["memory_last_uid"] = -1
-	bullet["memory_last_hit_time"] = -999.0
-	bullet["memory_hit_times"] = {}
-	bullet["forced"] = false
+	_gravitante().begin_collision()
 
 
 func _active_lacerante_secondary() -> Dictionary:
@@ -11745,13 +11405,6 @@ func _active_prismatica_secondary() -> Dictionary:
 func _active_eletrica_secondary() -> Dictionary:
 	for sec in manifestation_secondaries:
 		if String(sec.get("kind", "")) == "eletrica" and float(sec.get("life", 0.0)) > 0.0:
-			return sec
-	return {}
-
-
-func _active_eclipsada_secondary() -> Dictionary:
-	for sec in manifestation_secondaries:
-		if String(sec.get("kind", "")) == "eclipsada" and float(sec.get("life", 0.0)) > 0.0:
 			return sec
 	return {}
 
@@ -12017,7 +11670,7 @@ func _trigger_eletrica_static_lightning(target: Dictionary, target_pos: Vector2,
 	target["eletrica_static_timer"] = 0.0
 
 	var base_crit_chance: = 0.1
-	var bonus_crit: = maxf(0.0, (player_crit_chance - 0.05) + ancorada_crit_bonus)
+	var bonus_crit: = maxf(0.0, player_crit_chance - 0.05)
 	var total_crit_chance: = base_crit_chance + bonus_crit
 
 	var is_crit: = false
@@ -12072,8 +11725,8 @@ func _boss_trapped_by_gravitante() -> bool:
 
 
 func _player_invulnerable() -> bool:
-	var tp_invulnerable: = tp_effects.any( func(effect): return (String(effect.get("kind", "")) in ["lacerante", "eletrica"] or (String(effect.get("kind", "")) == "ressonante" and bool(effect.get("perfect", false)))) and float(effect.get("life", 0.0)) > 0.0)
-	return run_retry_invulnerability_timer > 0.0 or trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable() or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable
+	var tp_invulnerable: = tp_effects.any( func(effect): return String(effect.get("kind", "")) in ["lacerante", "eletrica"] and float(effect.get("life", 0.0)) > 0.0)
+	return run_retry_invulnerability_timer > 0.0 or trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable() or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable or lacerante_execution.is_protected()
 
 
 func _damage_source_is_boss_ultimate(source: String) -> bool:
@@ -12129,20 +11782,8 @@ func _show_silenced_feedback() -> void :
 func _secondary_skill_cooldown_base() -> float:
 	if active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
 		return 0.0
-	if manifestation_key == "eclipsada":
-		return _eclipsada_e_cooldown_for_form()
-	if manifestation_key == "cartografica":
-		return 50.0
-	if manifestation_key == "bombastica":
-		return BOMBASTICA_E_COOLDOWN
-	if manifestation_key == "ancorada":
-		return SECONDARY_ANCORADA_COOLDOWN
 	if manifestation_key == "eletrica":
 		return 10.0
-	if manifestation_key == "contratual":
-		return CONTRACT_ORDER_COOLDOWN
-	if manifestation_key == "necronada":
-		return NECRONADA_ULTIMATE_COOLDOWN
 	return SECONDARY_SKILL_COOLDOWN
 
 
@@ -12156,12 +11797,7 @@ func _network_skill_visual_duration() -> float:
 		"lacerante": return LACERANTE_Q_DURATION
 		"parasitica": return 3.2
 		"prismatica": return 6.2
-		"gravitante", "ancorada": return 0.8
-		"cartografica", "mnesica", "ressonante", "contratual": return 1.2
-		"acorrentada": return ACORRENTADA_Q_OVERCHARGE_DURATION if acorrentada_tension >= 100.0 else ACORRENTADA_Q_DURATION
-		"eclipsada": return 0.85
-		"bombastica": return BOMBASTICA_Q_FUSE_MAX
-		"necronada": return NECRONADA_REMNANT_BASE_DURATION
+		"gravitante": return 0.8
 	return 0.75
 
 
@@ -12169,20 +11805,15 @@ func _network_secondary_visual_duration() -> float:
 	match manifestation_key:
 		"lacerante": return SECONDARY_LACERANTE_DURATION
 		"prismatica": return SECONDARY_PRISMATICA_DURATION
-		"retornante": return SECONDARY_RETORNANTE_DURATION
 		"parasitica": return PARASITE_ULTIMATE_MAX_DURATION
 		"gravitante": return SECONDARY_GRAVITANTE_DURATION
-		"ancorada": return SECONDARY_ANCORADA_DURATION
 		"eletrica": return SECONDARY_ELETRICA_DURATION
-		"cartografica", "mnesica", "ressonante", "contratual": return 5.2
-		"acorrentada": return ACORRENTADA_E_DURATION
-		"eclipsada": return ECLIPSADA_SOL_E_DURATION if _eclipsada_is_sol() else ECLIPSADA_E_MAX_TARGET_TIME
-		"bombastica": return BOMBASTICA_ULTIMATE_DURATION
-		"necronada": return 1.18
 	return 1.0
 
 
 func _use_secondary_skill(target_world = null) -> void :
+	if henry_incendiary_ability_controller.handle_channel_input("secondary"):
+		return
 	if _local_player_controls_locked():
 		return
 	if _player_silenced():
@@ -12209,9 +11840,6 @@ func _use_secondary_skill(target_world = null) -> void :
 			_register_manual_skill_use("skill_e", henry_cooldown)
 			_tutorial_note_action("secondary")
 		return
-	if manifestation_key == "eclipsada":
-		_try_use_eclipsada_e(target_world)
-		return
 	var active_eletrica = _active_eletrica_secondary()
 	if manifestation_key == "eletrica" and not active_eletrica.is_empty():
 		_finish_toggle_secondary(active_eletrica, "ANEL CANCELADO", Color(0.52, 0.88, 1.0))
@@ -12220,11 +11848,6 @@ func _use_secondary_skill(target_world = null) -> void :
 	var active_prismatica = _active_prismatica_secondary()
 	if manifestation_key == "prismatica" and not active_prismatica.is_empty():
 		_finish_toggle_secondary(active_prismatica, "COROA CANCELADA", Color(0.64, 1.0, 0.96), false)
-		_send_network_ability_visual(NET_ABILITY_SECONDARY_END, player_pos, player_pos, 0.08)
-		return
-	var active_eclipsada = _active_eclipsada_secondary()
-	if manifestation_key == "eclipsada" and not active_eclipsada.is_empty():
-		_cancel_eclipsada_secondary(active_eclipsada)
 		_send_network_ability_visual(NET_ABILITY_SECONDARY_END, player_pos, player_pos, 0.08)
 		return
 	if _secondary_player_locked():
@@ -12248,9 +11871,6 @@ func _use_secondary_skill(target_world = null) -> void :
 		"prismatica":
 			last_secondary_time = time_alive
 			_spawn_secondary_prismatica()
-		"retornante":
-			last_secondary_time = time_alive
-			_spawn_secondary_retornante()
 		"parasitica":
 			if _has_parasite_ultimate_targets():
 				last_secondary_time = time_alive
@@ -12261,47 +11881,6 @@ func _use_secondary_skill(target_world = null) -> void :
 		"gravitante":
 			last_secondary_time = time_alive
 			_spawn_secondary_gravitante(target_world)
-		"ancorada":
-			last_secondary_time = time_alive
-			_spawn_secondary_ancorada(target_world)
-		"cartografica":
-			last_secondary_time = time_alive
-			_cast_cartographic_atlas(visual_target)
-			_add_text("MAPA RASGADO", player_pos + Vector2(0, -112), Color(0.4, 1.0, 0.82), 1.2, 24)
-		"mnesica":
-			last_secondary_time = time_alive
-			manifestation_secondaries.append({"kind": "mnesica", "life": 5.0, "max": 5.0, "tick": 0.0})
-			_trigger_mnesic_reenactment()
-			_add_text("ARQUIVO VIVO", player_pos + Vector2(0, -112), Color(0.88, 0.6, 1.0), 1.2, 24)
-		"ressonante":
-			last_secondary_time = time_alive
-			resonant_next_perfect = true
-			resonant_speed_timer = 5.0
-			manifestation_secondaries.append({"kind": "ressonante", "life": 5.2, "max": 5.2, "tick": 0.0})
-			_add_text("CRESCENDO", player_pos + Vector2(0, -112), Color(1.0, 0.8, 0.28), 1.2, 24)
-		"contratual":
-			if _start_contractual_order():
-				last_secondary_time = time_alive
-			else:
-				ability_activated = false
-		"acorrentada":
-			if _cast_acorrentada_e(target_world):
-				last_secondary_time = time_alive
-			else:
-				ability_activated = false
-		"eclipsada":
-			if _cast_eclipsada_e(target_world):
-				last_secondary_time = time_alive
-			else:
-				ability_activated = false
-		"bombastica":
-			_spawn_secondary_bombastica(target_world)
-			last_secondary_time = time_alive
-		"necronada":
-			if _cast_necronada_requiem():
-				last_secondary_time = time_alive
-			else:
-				ability_activated = false
 		_:
 			ability_activated = false
 			_add_text("2A HABILIDADE EM PREPARO", player_pos + Vector2(0, -110), Color(1.0, 0.82, 0.32), 0.9, 18)
@@ -12456,21 +12035,6 @@ func _spawn_secondary_prismatica() -> void :
 	_spawn_radial_particles(player_pos, Color(0.74, 1.0, 1.0), 34)
 
 
-func _spawn_secondary_retornante() -> void :
-	manifestation_secondaries.append({
-		"kind": "retornante",
-		"life": SECONDARY_RETORNANTE_DURATION,
-		"max": SECONDARY_RETORNANTE_DURATION,
-		"line_tick": 0.0,
-		"ghost_tick": 0.0,
-		"ghosts": [],
-		"marked": false,
-		"forced_final": false
-	})
-	_add_text("PARADOXO DE RETORNO", player_pos + Vector2(0, -110), Color(0.74, 0.55, 1.0), 1.4, 28)
-	_spawn_radial_particles(player_pos, Color(0.88, 0.52, 1.0), 28)
-
-
 func _spawn_secondary_parasitica() -> void :
 	var targets = []
 	var target_index = 0
@@ -12566,12 +12130,9 @@ func _spawn_secondary_gravitante(target_world = null) -> void :
 	_add_text("COLAPSO ORBITAL", center + Vector2(0, -110), Color(0.6, 0.82, 1.0), 1.4, 28)
 
 
-func _spawn_secondary_ancorada(target_world = null) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller.spawn_ultimate(target_world)
-
-
 func _try_dash() -> void :
+	if henry_incendiary_ability_controller.handle_channel_input("dash"):
+		return
 	if _local_player_controls_locked():
 		return
 	if _is_player_calcified():
@@ -12581,9 +12142,6 @@ func _try_dash() -> void :
 		return
 	if _player_silenced():
 		_show_silenced_feedback()
-		return
-	if manifestation_key == "retornante" and retornante_tp_window > 0.0:
-		_return_retornante_teleport()
 		return
 	if _teleport_effect_blocks_new_dash():
 		return
@@ -12605,6 +12163,8 @@ func _try_dash() -> void :
 
 
 func _try_dash_to_screen(screen_pos: Vector2, viewport: Vector2) -> void :
+	if henry_incendiary_ability_controller.handle_channel_input("dash"):
+		return
 	if _local_player_controls_locked():
 		return
 	if _is_player_calcified():
@@ -12614,9 +12174,6 @@ func _try_dash_to_screen(screen_pos: Vector2, viewport: Vector2) -> void :
 		return
 	if _player_silenced():
 		_show_silenced_feedback()
-		return
-	if manifestation_key == "retornante" and retornante_tp_window > 0.0:
-		_return_retornante_teleport()
 		return
 	if _teleport_effect_blocks_new_dash():
 		return
@@ -12637,6 +12194,8 @@ func _try_dash_to_screen(screen_pos: Vector2, viewport: Vector2) -> void :
 
 
 func _try_dash_to_world(target_world: Vector2) -> void :
+	if henry_incendiary_ability_controller.handle_channel_input("dash"):
+		return
 	if _local_player_controls_locked():
 		return
 	if _is_player_calcified():
@@ -12646,9 +12205,6 @@ func _try_dash_to_world(target_world: Vector2) -> void :
 		return
 	if _player_silenced():
 		_show_silenced_feedback()
-		return
-	if manifestation_key == "retornante" and retornante_tp_window > 0.0:
-		_return_retornante_teleport()
 		return
 	if _teleport_effect_blocks_new_dash():
 		return
@@ -12711,34 +12267,6 @@ func _consume_lacerante_tp_charge() -> void :
 	lacerante_tp_chain_timer = LACERANTE_TP_CHAIN_WINDOW if lacerante_tp_charges > 0 else 0.0
 
 
-func _cartografica_has_active_pin() -> bool:
-	return manifestation_key == "cartografica" and carto_tp_window > 0.0
-
-
-func _start_cartografica_teleport_pin(origin: Vector2, destination: Vector2) -> void:
-	carto_tp_origin = origin
-	carto_tp_pin = _clamp_player_world(destination)
-	carto_tp_window = 2.5
-	_add_cartographic_coord(carto_tp_pin, -1, "fixed", "teleport")
-	cartographic_route_timer = max(cartographic_route_timer, 0.75)
-	tp_effects.append({"kind": "cartografica_pin", "life": carto_tp_window, "max": carto_tp_window, "pos": carto_tp_pin})
-	_add_text("PIN CARTOGRAFICO", carto_tp_pin + Vector2(0, -92), Color(0.38, 1.0, 0.82), 0.9, 18)
-
-
-func _execute_cartografica_pin_teleport(origin: Vector2) -> void:
-	var destination: Vector2 = _clamp_player_world(carto_tp_pin)
-	carto_tp_window = 0.0
-	carto_tp_pin = Vector2.ZERO
-	player_pos = destination
-	tp_cooldown_pending = true
-	tp_cooldown_override = 6.0
-	tp_cooldown_release_time = -1.0
-	tp_effects = tp_effects.filter(func(effect): return String(effect.get("kind", "")) != "cartografica_pin")
-	tp_effects.append({"kind": "cartografica", "life": 0.62, "max": 0.62, "a": origin, "b": destination})
-	_send_network_ability_visual(NET_ABILITY_TELEPORT, origin, player_pos, 0.55)
-	_add_text("TRACADO CUMPRIDO", player_pos + Vector2(0, -92), Color(0.38, 1.0, 0.82), 0.9, 18)
-
-
 func _teleport_destination_from_drag(screen_pos: Vector2, viewport: Vector2) -> Vector2:
 	var drag = screen_pos - _dash_center(viewport)
 	var dir = drag.normalized()
@@ -12757,30 +12285,12 @@ func _ground_target_profile(secondary: bool) -> Dictionary:
 				return {"range": 520.0, "radius": 220.0, "default": 170.0, "minimum": 60.0, "color": Color(1.0, 0.18, 0.28)}
 			"gravitante":
 				return {"range": 560.0, "radius": 330.0, "default": 0.0, "minimum": 90.0, "color": Color(0.46, 0.78, 1.0)}
-			"ancorada":
-				return {"range": 500.0, "radius": 220.0, "default": 0.0, "minimum": 80.0, "color": Color(0.3, 0.88, 1.0)}
-			"acorrentada":
-				return {"range": 620.0, "radius": ACORRENTADA_E_OVERCHARGE_RADIUS if acorrentada_tension >= 100.0 else ACORRENTADA_E_RADIUS, "default": 285.0, "minimum": 120.0, "color": Color(0.88, 0.16, 0.18)}
-			"eclipsada":
-				return {"range": ECLIPSADA_SOL_E_RANGE if _eclipsada_is_sol() else ECLIPSADA_E_AIM_RANGE, "radius": ECLIPSADA_SOL_E_RADIUS if _eclipsada_is_sol() else ECLIPSADA_E_CHAIN_RADIUS, "default": 190.0 if _eclipsada_is_sol() else 105.0, "minimum": 64.0 if _eclipsada_is_sol() else 36.0, "color": _eclipsada_color()}
-			"bombastica":
-				return {"range": 520.0, "radius": BOMBASTICA_ULTIMATE_RADIUS, "default": 230.0, "minimum": 90.0, "color": Color(1.0, 0.62, 0.18)}
-			"necronada":
-				return {"range": 0.0, "radius": NECRONADA_ULTIMATE_RADIUS, "default": 0.0, "minimum": 0.0, "color": Color(0.52, 0.34, 0.92)}
 	else:
 		match manifestation_key:
 			"parasitica":
 				return {"range": 520.0, "radius": PARASITE_SPIT_RADIUS, "default": 285.0, "minimum": 110.0, "color": Color(0.58, 0.92, 0.2)}
 			"prismatica":
 				return {"range": 480.0, "radius": 58.0, "default": 180.0, "minimum": 90.0, "color": Color(0.32, 1.0, 0.96)}
-			"acorrentada":
-				return {"range": 560.0, "radius": 210.0, "default": 285.0, "minimum": 120.0, "color": Color(0.16, 0.86, 1.0)}
-			"bombastica":
-				return {"range": BOMBASTICA_Q_THROW_RANGE, "radius": BOMBASTICA_Q_RADIUS, "default": 245.0, "minimum": 38.0, "color": Color(1.0, 0.48, 0.12)}
-			"ancorada":
-				return {"range": 520.0, "radius": 105.0 + 14.0 * float(lastro_stacks), "default": 200.0, "minimum": 0.0, "color": Color(0.38, 1.0, 0.46)}
-			"necronada":
-				return {"range": 420.0, "radius": NECRONADA_ROSE_SUMMON_RADIUS, "default": 0.0, "minimum": 0.0, "color": Color(0.72, 0.96, 1.0)}
 	return {}
 
 
@@ -12796,8 +12306,6 @@ func _ground_target_world(screen_pos: Vector2, viewport: Vector2, secondary: boo
 		var strength = clamp((drag.length() - ABILITY_TARGET_DRAG_DEADZONE) / (ABILITY_TARGET_FULL_DRAG - ABILITY_TARGET_DRAG_DEADZONE), 0.0, 1.0)
 		distance = lerp(float(profile["minimum"]), float(profile["range"]), strength)
 	else:
-		if manifestation_key == "bombastica" and not secondary:
-			return player_pos
 		direction = _ability_aim_direction()
 		if direction.length() <= 0.05:
 			direction = last_facing.normalized()
@@ -12844,21 +12352,6 @@ func _execute_teleport(target_world: Vector2) -> void :
 		return
 	_interrupt_folego()
 	_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": target_world, "player_pos": player_pos}))
-	if manifestation_key == "cartografica":
-		if carto_tp_window > 0.0:
-			_execute_cartografica_pin_teleport(origin)
-			_grant_manto_impulso_shield()
-			_manifest_evolution_on_teleport(origin, player_pos)
-			_activate_passagem_intangivel()
-			_consume_ressonancia_action_bonus("TELEPORT", _current_dash_cooldown())
-			_record_ressonancia_action("TELEPORT", _current_dash_cooldown())
-			_grant_impulso_from_ready_action("TELEPORT")
-			_add_card_unlock_progress("teleports_used", 1.0)
-			_track_behavior_dash(origin, player_pos)
-			_tutorial_note_action("dash")
-			return
-		_start_cartografica_teleport_pin(origin, target_world)
-		return
 	player_pos = _clamp_player_world(target_world)
 	_grant_manto_impulso_shield()
 	var dash_color: Color = _manifestation_color()
@@ -12892,17 +12385,11 @@ func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2)
 			tp_effects.append({"kind": "prismatica", "life": TP_PRISM_DURATION, "max": TP_PRISM_DURATION, "a": origin, "b": destination, "path": _prismatica_teleport_path(origin, destination)})
 			_start_direct_teleport_cooldown()
 			_add_text("PRISMA DE PASSAGEM", destination + Vector2(0, -92), Color(0.38, 1.0, 0.96), 1.0, 20)
-		"retornante":
-			retornante_tp_origin = origin
-			retornante_tp_window = TP_RETURN_WINDOW
-			tp_cooldown_override = TP_RETURN_COOLDOWN
-			tp_effects.append({"kind": "retornante", "life": TP_RETURN_WINDOW, "max": TP_RETURN_WINDOW, "a": origin, "b": destination})
-			_add_text("TP: TOQUE PARA VOLTAR", destination + Vector2(0, -92), Color(0.72, 0.54, 1.0), 0.85, 18)
 		"parasitica":
 			_spawn_tp_parasite_eggs(origin)
 			tp_effects.append({"kind": "parasitica", "life": TP_PARASITE_DURATION, "max": TP_PARASITE_DURATION, "a": origin, "b": destination})
 		"gravitante":
-			_apply_tp_gravity_wave(origin)
+			_gravitante().begin_well(origin)
 			tp_effects.append({"kind": "gravitante", "life": 0.68, "max": 0.68, "center": origin, "a": origin, "b": destination})
 		"lacerante":
 			_play_sfx("tp_lacerante", 0.025, 0.92, 1.0)
@@ -12911,85 +12398,14 @@ func _start_manifestation_teleport_effect(origin: Vector2, destination: Vector2)
 			tp_effects.append({"kind": "eletrica", "life": TP_ELECTRIC_DURATION, "max": TP_ELECTRIC_DURATION, "a": origin, "b": destination, "tick": 0.0})
 			_start_direct_teleport_cooldown()
 			_add_text("FORMA ELETRICA", destination + Vector2(0, -92), Color(0.28, 0.94, 1.0), 1.0, 20)
-		"cartografica":
-			tp_effects.append({"kind": "cartografica", "life": 0.62, "max": 0.62, "a": origin, "b": destination})
-		"mnesica":
-			mnesic_trick_timer = MNESIC_TRICK_TIME
-			mnesic_trick_origin = origin
-			for enemy in enemies:
-				if Vector2(enemy["pos"]).distance_to(origin) <= 340.0:
-					enemy["mnesic_tricked"] = MNESIC_TRICK_TIME
-			_apply_mnesica_teleport_fragment_burst(origin)
-			tp_effects.append({"kind": "mnesica", "life": MNESIC_TRICK_TIME, "max": MNESIC_TRICK_TIME, "a": origin, "b": destination})
-			_add_text("APAGAO MNEMICO", destination + Vector2(0, -92), Color(0.86, 0.58, 1.0), 0.9, 18)
-		"ressonante":
-			var perfect: = _resonant_is_perfect()
-			if perfect:
-				resonant_next_perfect = true
-				resonant_speed_timer = 2.6
-				last_attack_time -= 0.16
-				tp_effects.append({"kind": "ressonante", "life": 0.85, "max": 0.85, "a": origin, "b": destination, "perfect": true})
-				_add_text("CONTRATEMPO PERFEITO", destination + Vector2(0, -92), Color(1.0, 0.78, 0.24), 0.9, 18)
-			else:
-				tp_effects.append({"kind": "ressonante", "life": 0.35, "max": 0.35, "a": origin, "b": destination, "perfect": false})
-			_record_resonant_attack(perfect)
-		"contratual":
-			contractual_notifications.append({"pos": origin, "life": CONTRACT_TRAP_LIFE, "max": CONTRACT_TRAP_LIFE, "phase": rng.randf_range(0.0, TAU)})
-			tp_effects.append({"kind": "contratual", "life": 0.55, "max": 0.55, "a": origin, "b": destination})
-			_add_text("NOTIFICACAO", origin + Vector2(0, -78), Color(1.0, 0.58, 0.24), 0.9, 18)
-		"necronada":
-			var dust_dir: = (destination - origin).normalized()
-			if dust_dir.length() <= 0.05:
-				dust_dir = last_facing.normalized()
-			if dust_dir.length() <= 0.05:
-				dust_dir = Vector2.RIGHT
-			_apply_necronada_teleport_dust(destination, dust_dir)
-			tp_effects.append({"kind": "necronada", "life": 0.7, "max": 0.7, "a": origin, "b": destination, "dir": dust_dir})
-			_start_direct_teleport_cooldown()
-			_add_text("POEIRA DO OSSUARIO", destination + Vector2(0, -92), _necronada_accent(), 0.9, 18)
-		"ancorada":
-			ancorada_ability_controller.on_teleport(origin, destination)
-			tp_effects.append({"kind": "ancorada", "life": 0.82, "max": 0.82, "a": origin, "b": destination})
-			_start_direct_teleport_cooldown()
-			_add_text("ANCORA LANCADA", destination + Vector2(0, -92), Color(0.34, 1.0, 0.42), 0.85, 18)
-		"acorrentada":
-			_start_tp_acorrentada(origin, destination)
-		"eclipsada":
-			if _eclipsada_is_sol():
-				tp_effects.append({"kind": "eclipsada_sol_tp", "life": 0.48, "max": 0.48, "a": origin, "b": destination, "color": Color(1.0, 0.66, 0.18)})
-				_eclipsada_damage_at(destination, 86.0, player_damage * 0.42, "eclipsada_sol_tp", "teleport")
-				shockwaves.append({"pos": destination, "radius": 10.0, "max": 92.0, "life": 0.26, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(1.0, 0.66, 0.18)})
-				_add_text("PASSO SOLAR", destination + Vector2(0, -92), Color(1.0, 0.66, 0.18), 0.85, 18)
-			else:
-				tp_effects.append({"kind": "eclipsada_lua_tp", "life": 0.58, "max": 0.58, "a": origin, "b": destination, "color": Color(0.58, 0.42, 1.0)})
-				_apply_eclipsada_weakpoints(2.2)
-				_add_text("PASSO LUNAR", destination + Vector2(0, -92), Color(0.68, 0.54, 1.0), 0.85, 18)
-			_start_direct_teleport_cooldown()
 		_:
 			_finish_teleport_effect_cooldown()
 
 
 func _teleport_effect_blocks_new_dash() -> bool:
-	if manifestation_key == "retornante" and retornante_tp_window > 0.0:
-		return false
-	if _cartografica_has_active_pin():
-		return false
 	if manifestation_key == "lacerante" and lacerante_tp_chain_timer > 0.0 and lacerante_tp_charges > 0:
 		return false
 	return tp_cooldown_pending
-
-
-func _return_retornante_teleport() -> void :
-	if retornante_tp_window <= 0.0:
-		return
-	var current: Vector2 = player_pos
-	player_pos = _clamp_player_world(retornante_tp_origin)
-	retornante_tp_window = 0.0
-	for effect in tp_effects:
-		if String(effect.get("kind", "")) == "retornante":
-			effect["life"] = 0.0
-	_send_network_ability_visual(NET_ABILITY_TELEPORT, current, player_pos, 0.55)
-	_add_text("RETORNO TEMPORAL", player_pos + Vector2(0, -84), Color(0.78, 0.64, 1.0), 0.8, 20)
 
 
 func _finish_teleport_effect_cooldown() -> void :
@@ -13010,92 +12426,11 @@ func _finish_teleport_effect_cooldown() -> void :
 	tp_cooldown_pending = false
 	tp_cooldown_override = -1.0
 	tp_cooldown_release_time = -1.0
-	retornante_tp_window = 0.0
-	retornante_tp_origin = Vector2.ZERO
-	if manifestation_key == "cartografica":
-		carto_tp_window = 0.0
-		carto_tp_origin = Vector2.ZERO
-		carto_tp_pin = Vector2.ZERO
-
 
 func _reset_advanced_manifestation_state() -> void :
 	henry_incendiary_ability_controller.reset()
 	henry_barometric_ability_controller.reset()
 	henry_colossus_ability_controller.reset()
-	cartographic_coords.clear()
-	cartographic_route_timer = 0.0
-	cartographic_boss_displacement = 0
-	cartographic_coord_sequence = 0
-	cartographic_complete_map_timer = 0.0
-	cartographic_trace_flash = 0.0
-	for enemy in enemies:
-		enemy.erase("carto_trace_timer")
-		enemy.erase("carto_trace_stacks")
-		enemy.erase("carto_point_timer")
-	mnesic_trick_timer = 0.0
-	mnesic_trick_origin = Vector2.ZERO
-	mnesic_boss_vulnerability = 0.0
-	resonant_perfect_streak = 0
-	resonant_noise = 0
-	resonant_next_perfect = false
-	resonant_speed_timer = 0.0
-	resonant_note_index = 0
-	boss_resonant_notes.clear()
-	boss_contract_clause = ""
-	boss_contract_infractions = 0
-	boss_contract_vulnerability = 0.0
-	contractual_notifications.clear()
-	contractual_vfx.clear()
-	contractual_penalty_timer = 0.0
-	contractual_order.clear()
-	contractual_order_rewards.clear()
-	contractual_order_penalties.clear()
-	acorrentada_combo_step = 1
-	acorrentada_combo_reset_timer = 0.0
-	acorrentada_tension = 0.0
-	acorrentada_last_hit_timer = 0.0
-	acorrentada_overcharge_ready = false
-	acorrentada_force_next_attack_3 = false
-	acorrentada_links.clear()
-	acorrentada_visuals.clear()
-	acorrentada_worn_chains.clear()
-	acorrentada_last_player_pos = player_pos
-	_stop_acorrentada_walk_audio()
-	acorrentada_boss_elos = 0
-	acorrentada_boss_elo_timer = 0.0
-	acorrentada_boss_crack_timer = 0.0
-	acorrentada_boss_containment_charges = 0
-	for enemy in enemies:
-		enemy.erase("acorrentada_elo_count")
-		enemy.erase("acorrentada_elo_timer")
-		enemy.erase("acorrentada_flash")
-		enemy.erase("acorrentada_slow")
-		enemy.erase("eclipsada_weak_time")
-		enemy.erase("eclipsada_weak_offset")
-		enemy.erase("eclipsada_weak_flash")
-		enemy.erase("eclipsada_last_seen")
-	tp_effects = tp_effects.filter( func(effect): return String(effect.get("kind", "")) != "acorrentada")
-	eclipsada_attack_step = 0
-	eclipsada_next_attack_time = 0.0
-	eclipsada_q_speed_timer = 0.0
-	eclipsada_stealth_timer = 0.0
-	eclipsada_lua_stealth_active = false
-	eclipsada_lua_stealth_elapsed = 0.0
-	eclipsada_lua_stealth_damage_timer = 0.0
-	eclipsada_lua_last_skill_time = -999.0
-	eclipsada_sol_last_skill_time = -999.0
-	eclipsada_lua_last_secondary_time = -999.0
-	eclipsada_sol_last_secondary_time = -999.0
-	eclipsada_passive_timer = ECLIPSADA_PASSIVE_READY_TIME
-	eclipsada_trait_timer = 0.0
-	eclipsada_trait_key = ""
-	eclipsada_trait_name = ""
-	eclipsada_trait_color = Color(0.58, 0.42, 1.0)
-	eclipsada_form = ECLIPSADA_FORM_LUA
-	eclipsada_vfx.clear()
-	manifestation_secondaries = manifestation_secondaries.filter( func(sec): return not String(sec.get("kind", "")).begins_with("eclipsada"))
-	_reset_bombastica_state()
-	_reset_necronada_state()
 
 
 func _update_advanced_manifestation_state(delta: float) -> void :
@@ -13103,905 +12438,11 @@ func _update_advanced_manifestation_state(delta: float) -> void :
 	henry_barometric_ability_controller.update(delta)
 	henry_colossus_ability_controller.update(delta)
 	reactive_survival_card_controller.update(delta)
-	cartographic_route_timer = max(0.0, cartographic_route_timer - delta)
-	cartographic_complete_map_timer = max(0.0, cartographic_complete_map_timer - delta)
-	cartographic_trace_flash = max(0.0, cartographic_trace_flash - delta)
-	mnesic_trick_timer = max(0.0, mnesic_trick_timer - delta)
-	mnesic_boss_vulnerability = max(0.0, mnesic_boss_vulnerability - delta)
-	boss_contract_vulnerability = max(0.0, boss_contract_vulnerability - delta)
-	resonant_speed_timer = max(0.0, resonant_speed_timer - delta)
-	resonant_sinfonia_buff_timer = max(0.0, resonant_sinfonia_buff_timer - delta)
-	contractual_penalty_timer = max(0.0, contractual_penalty_timer - delta)
-	_update_contractual_order(delta)
-	_update_contractual_timed_effects(delta)
-	for visual in contractual_vfx:
-		visual["life"] = max(0.0, float(visual.get("life", 0.0)) - delta)
-	contractual_vfx = contractual_vfx.filter( func(visual): return float(visual.get("life", 0.0)) > 0.0)
-	var kept_coords = []
-	for coord in cartographic_coords:
-		var kind: = String(coord.get("kind", "fixed"))
-		if kind == "enemy":
-			var enemy = _enemy_by_uid(int(coord.get("uid", -1)))
-			if enemy and float(enemy.get("hp", 0.0)) > 0.0:
-				coord["pos"] = Vector2(enemy["pos"])
-				coord["life"] = max(0.0, float(coord.get("life", 0.0)) - delta)
-				kept_coords.append(coord)
-		elif kind == "arauto":
-			if _arauto_active():
-				coord["pos"] = Vector2(arauto.get("pos", coord.get("pos", player_pos)))
-				coord["life"] = max(0.0, float(coord.get("life", 0.0)) - delta)
-				kept_coords.append(coord)
-		elif kind == "boss":
-			if boss_active and boss_hp > 0.0:
-				coord["life"] = max(0.0, float(coord.get("life", 0.0)) - delta)
-				var phase: float = float(coord.get("phase", 0.0)) + time_alive * 1.15
-				coord["pos"] = boss_pos + Vector2.from_angle(phase) * 54.0
-				kept_coords.append(coord)
-		else:
-			coord["life"] = max(0.0, float(coord.get("life", 0.0)) - delta)
-			if float(coord["life"]) > 0.0:
-				kept_coords.append(coord)
-	cartographic_coords = kept_coords
-	for enemy in enemies:
-		if enemy.has("carto_trace_timer"):
-			enemy["carto_trace_timer"] = max(0.0, float(enemy.get("carto_trace_timer", 0.0)) - delta)
-			if float(enemy["carto_trace_timer"]) <= 0.0:
-				enemy.erase("carto_trace_timer")
-				enemy.erase("carto_trace_stacks")
-		if enemy.has("carto_point_timer"):
-			enemy["carto_point_timer"] = max(0.0, float(enemy.get("carto_point_timer", 0.0)) - delta)
-			if float(enemy["carto_point_timer"]) <= 0.0:
-				enemy.erase("carto_point_timer")
-	_update_contractual_notifications(delta)
-	if cartographic_route_timer > 0.0:
-		_apply_cartographic_route_pressure(delta)
-	_update_eclipsada_state(delta)
-	_update_acorrentada_state(delta)
-	_update_bombastica_state(delta)
-	_update_necronada_state(delta)
-	_update_ancorada_standing_still(delta)
-	_update_ancorada_spinning(delta)
-
-
-func _reset_necronada_state() -> void :
-	necronada_vestiges.clear()
-	necronada_ossuary.clear()
-	necronada_remnants.clear()
-	necronada_requiem.clear()
-	necronada_pente_history.clear()
-	necronada_selected_slot = 0
-	necronada_next_id = 1
-	necronada_vfx.clear()
-	necronada_attack_counter = 0
-	necronada_empowered_ready = false
-	necronada_empower_until = 0.0
-	necronada_empower_cooldown_until = 0.0
-	necronada_horde_progress = 0
-	necronada_boss_empower_rose_window = 0.0
-	necronada_boss_empower_rose_hits = 0
-	for enemy in enemies:
-		enemy.erase("necronada_epitaph")
-		enemy.erase("necronada_epitaph_depth")
-		enemy.erase("necronada_epitaph_time")
-		enemy.erase("necronada_epitaph_flash")
-		enemy.erase("necronada_crit_window")
-		enemy.erase("necronada_empower_rose_window")
-		enemy.erase("necronada_empower_rose_hits")
-		enemy.erase("necronada_crit_chance")
-
-
-func _necronada_color() -> Color:
-	return Color(0.52, 0.34, 0.92)
-
-
-func _necronada_accent() -> Color:
-	return Color(0.72, 0.96, 1.0)
-
-
-func _necronada_profile(enemy_type: String) -> Dictionary:
-	var profile: = {
-		"name": "Errante reconstruido",
-		"archetype": "predador",
-		"last_act": "rupture",
-		"hp": 0.45,
-		"damage": 0.34,
-		"speed": 118.0,
-		"range": 128.0,
-		"color": _necronada_color()
-	}
-	match enemy_type:
-		ENEMY_ATIRADOR, ENEMY_PROJECTOR, ENEMY_MIASMA_EEL, ENEMY_PYRO_PENGUIN:
-			profile = {"name": "Executor de lapide", "archetype": "executor", "last_act": "shot", "hp": 0.46, "damage": 0.34, "speed": 96.0, "range": 340.0, "color": Color(0.58, 0.76, 1.0)}
-		ENEMY_STALKER, ENEMY_LODARIO, ENEMY_KAMIKAZE, ENEMY_CHRONAL_LEECH:
-			profile = {"name": "Predador funerario", "archetype": "predador", "last_act": "leap", "hp": 0.48, "damage": 0.43, "speed": 156.0, "range": 132.0, "color": Color(0.68, 0.54, 1.0)}
-		ENEMY_CRYSTAL, ENEMY_SHIELD_REFLECTOR, ENEMY_FOSSIL_PUSTULE:
-			profile = {"name": "Bastiao ossuario", "archetype": "bastiao", "last_act": "guard", "hp": 0.78, "damage": 0.28, "speed": 82.0, "range": 142.0, "color": Color(0.86, 0.86, 0.76)}
-		ENEMY_CURATER, ENEMY_DEVOTO, ENEMY_INCENSARIO:
-			profile = {"name": "Ritualista reverso", "archetype": "ritualista", "last_act": "heal", "hp": 0.56, "damage": 0.3, "speed": 104.0, "range": 230.0, "color": Color(0.7, 0.98, 0.92)}
-		ENEMY_LARAPIO, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_ECHO:
-			profile = {"name": "Anomalia insepulta", "archetype": "anomalia", "last_act": "rewind", "hp": 0.48, "damage": 0.38, "speed": 138.0, "range": 170.0, "color": Color(0.86, 0.62, 1.0)}
-	return profile
-
-
-func _apply_necronada_epitaph(enemy: Dictionary, impact_pos: Vector2) -> void :
-	if manifestation_key != "necronada":
-		return
-	var enemy_type: = String(enemy.get("type", ENEMY_COMMON))
-	if enemy_type in [ENEMY_LARAPIO, "arauto"] or bool(enemy.get("boss", false)) or bool(enemy.get("mini_boss", false)):
-		return
-	var depth: = clampi(int(enemy.get("necronada_epitaph_depth", 0)) + 1, 1, NECRONADA_EPITAPH_MAX_DEPTH)
-	enemy["necronada_epitaph"] = true
-	enemy["necronada_epitaph_depth"] = depth
-	enemy["necronada_epitaph_time"] = NECRONADA_EPITAPH_DURATION
-	enemy["necronada_epitaph_flash"] = 0.45
-	necronada_vfx.append({"kind": "epitaph_hit", "pos": impact_pos, "life": 0.42, "max": 0.42, "depth": depth, "phase": rng.randf_range(0.0, TAU)})
-
-
-func _necronada_start_empower_rose_window(enemy: Dictionary) -> void :
-	if manifestation_key != "necronada":
-		return
-	enemy["necronada_empower_rose_window"] = NECRONADA_EMPOWER_ROSE_WINDOW
-	enemy["necronada_empower_rose_hits"] = 0
-
-
-func _necronada_register_empower_followup_hit(enemy: Dictionary) -> void :
-	if manifestation_key != "necronada":
-		return
-	if float(enemy.get("necronada_empower_rose_window", 0.0)) <= 0.0:
-		return
-	var hits: = int(enemy.get("necronada_empower_rose_hits", 0)) + 1
-	enemy["necronada_empower_rose_hits"] = hits
-	if hits < NECRONADA_EMPOWER_ROSE_REQUIRED_HITS:
-		_add_text("%d/%d" % [hits, NECRONADA_EMPOWER_ROSE_REQUIRED_HITS], Vector2(enemy.get("pos", player_pos)) + Vector2(18, -58), _necronada_accent(), 0.34, 13)
-		return
-	enemy["necronada_empower_rose_window"] = 0.0
-	enemy["necronada_empower_rose_hits"] = 0
-	var enemy_type: = String(enemy.get("type", ENEMY_COMMON))
-	var depth: = clampi(int(enemy.get("necronada_epitaph_depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
-	if _drop_necronada_rose(enemy_type, Vector2(enemy.get("pos", player_pos)), depth, "ROSA FORCADA"):
-		_spawn_radial_particles(Vector2(enemy.get("pos", player_pos)), _necronada_accent(), 18)
-
-
-func _necronada_start_boss_empower_rose_window() -> void :
-	if manifestation_key != "necronada":
-		return
-	necronada_boss_empower_rose_window = NECRONADA_EMPOWER_ROSE_WINDOW
-	necronada_boss_empower_rose_hits = 0
-
-
-func _necronada_register_boss_empower_followup_hit() -> void :
-	if manifestation_key != "necronada" or not boss_active or boss_hp <= 0.0:
-		return
-	if necronada_boss_empower_rose_window <= 0.0:
-		return
-	necronada_boss_empower_rose_hits += 1
-	if necronada_boss_empower_rose_hits < NECRONADA_EMPOWER_ROSE_REQUIRED_HITS:
-		_add_text("%d/%d" % [necronada_boss_empower_rose_hits, NECRONADA_EMPOWER_ROSE_REQUIRED_HITS], boss_pos + Vector2(34, -118), _necronada_accent(), 0.36, 14)
-		return
-	necronada_boss_empower_rose_window = 0.0
-	necronada_boss_empower_rose_hits = 0
-	var history: Array = necronada_pente_history if not necronada_pente_history.is_empty() else [ENEMY_COMMON]
-	var enemy_type: = String(history[rng.randi_range(0, history.size() - 1)])
-	var rose_pos: Vector2 = (boss_pos + Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(70.0, 125.0)).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
-	if _drop_necronada_rose(enemy_type, rose_pos, 1, "ROSA DO CHEFE"):
-		_spawn_radial_particles(rose_pos, _necronada_accent(), 20)
-
-
-func _remember_necronada_species(enemy_type: String) -> void :
-	if enemy_type == "":
-		enemy_type = ENEMY_COMMON
-	if not necronada_pente_history.has(enemy_type):
-		necronada_pente_history.append(enemy_type)
-
-
-func _necronada_active_remnant_count() -> int:
-	var count: = 0
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) > 0.0:
-			count += 1
-	return count
-
-
-func _necronada_rose_capacity_available() -> bool:
-	return _necronada_active_remnant_count() + necronada_vestiges.size() < NECRONADA_MAX_ACTIVE_REMNANTS
-
-
-func _drop_necronada_rose(enemy_type: String, pos: Vector2, depth: = 1, label: = "ALMA FLORESCEU") -> bool:
-	if manifestation_key != "necronada":
-		return false
-	if not _necronada_rose_capacity_available():
-		return false
-	enemy_type = String(enemy_type)
-	if enemy_type == "":
-		enemy_type = ENEMY_COMMON
-	_remember_necronada_species(enemy_type)
-	var vestige: = {
-		"id": necronada_next_id,
-		"enemy_type": enemy_type,
-		"pos": pos.clamp(Vector2(58, 58), WORLD_SIZE - Vector2(58, 58)),
-		"life": 999999.0,
-		"max": 999999.0,
-		"depth": clampi(depth, 1, NECRONADA_EPITAPH_MAX_DEPTH),
-		"profile": _necronada_profile(enemy_type),
-		"phase": rng.randf_range(0.0, TAU)
-	}
-	necronada_next_id += 1
-	necronada_vestiges.append(vestige)
-	while necronada_vestiges.size() > NECRONADA_ROSE_MAX:
-		necronada_vestiges.pop_front()
-	_add_text(label, Vector2(vestige["pos"]) + Vector2(0, -78), _necronada_accent(), 0.85, 16)
-	return true
-
-
-func _apply_necronada_teleport_dust(origin: Vector2, dir: Vector2) -> void :
-	dir = dir.normalized()
-	if dir.length() <= 0.05:
-		dir = Vector2.RIGHT
-	var base_damage: float = float(player_damage) * NECRONADA_TP_DUST_DAMAGE_MULT
-	var hit_count: = 0
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var enemy_pos: = Vector2(enemy.get("pos", origin))
-		var to_enemy: = enemy_pos - origin
-		var distance: = to_enemy.length()
-		if distance > NECRONADA_TP_DUST_RADIUS or distance <= 1.0:
-			continue
-		if absf(dir.angle_to(to_enemy.normalized())) > NECRONADA_TP_DUST_HALF_ANGLE:
-			continue
-		var falloff: = 1.0 - clampf(distance / NECRONADA_TP_DUST_RADIUS, 0.0, 1.0) * 0.42
-		enemy["pos"] = (enemy_pos + dir * NECRONADA_TP_DUST_PUSH * falloff).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
-		_damage_enemy(enemy, base_damage * falloff, "necronada_tp_dust", true, true, origin, "teleport")
-		hit_count += 1
-	if _arauto_active():
-		var arauto_pos: = Vector2(arauto.get("pos", origin))
-		var to_arauto: = arauto_pos - origin
-		if to_arauto.length() <= NECRONADA_TP_DUST_RADIUS and to_arauto.length() > 1.0 and absf(dir.angle_to(to_arauto.normalized())) <= NECRONADA_TP_DUST_HALF_ANGLE:
-			_damage_arauto(base_damage * 0.72, "necronada_tp_dust", true, true, "teleport", origin)
-			hit_count += 1
-	if boss_active and boss_hp > 0.0:
-		var to_boss: Vector2 = boss_pos - origin
-		if to_boss.length() <= NECRONADA_TP_DUST_RADIUS + _boss_hit_radius() and to_boss.length() > 1.0 and absf(dir.angle_to(to_boss.normalized())) <= NECRONADA_TP_DUST_HALF_ANGLE:
-			_damage_boss(base_damage * 0.62, "necronada_tp_dust", true, true, "teleport", origin)
-			hit_count += 1
-	necronada_vfx.append({"kind": "tp_dust_fan", "pos": origin, "dir": dir, "radius": NECRONADA_TP_DUST_RADIUS, "life": 0.42, "max": 0.42, "hits": hit_count})
-	_spawn_radial_particles(origin + dir * 36.0, _necronada_accent(), 14 + mini(18, hit_count * 3))
-
-
-func _necronada_on_enemy_killed(enemy: Dictionary) -> void :
-	if manifestation_key != "necronada":
-		return
-	var enemy_type: = String(enemy.get("type", ENEMY_COMMON))
-	if enemy_type in [ENEMY_LARAPIO, "arauto"] or bool(enemy.get("boss", false)) or bool(enemy.get("mini_boss", false)):
-		return
-	var source: = String(enemy.get("killed_by_source", ""))
-	if source.begins_with("necronada_remnant") or source.begins_with("necronada_requiem"):
-		return
-	var depth: = clampi(int(enemy.get("necronada_epitaph_depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
-	_drop_necronada_rose(enemy_type, Vector2(enemy.get("pos", player_pos)), depth)
-
-
-func _try_use_necronada_skill(target_world = null) -> bool:
-	_ensure_runtime_controllers_bound()
-	return necronada_ability_controller.try_use_skill(target_world)
-
-
-func _necronada_has_ossuary_entry() -> bool:
-	return not necronada_ossuary.is_empty()
-
-
-func _capture_necronada_vestige(target_world = null) -> bool:
-	if necronada_vestiges.is_empty():
-		return false
-	var target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
-	var best_index: = -1
-	var best_distance: = INF
-	for i in range(necronada_vestiges.size()):
-		var vestige: Dictionary = necronada_vestiges[i]
-		var distance: = target.distance_to(Vector2(vestige.get("pos", player_pos)))
-		if distance < best_distance:
-			best_distance = distance
-			best_index = i
-	if best_index < 0:
-		return false
-	var vestige: Dictionary = necronada_vestiges[best_index]
-	necronada_vestiges.remove_at(best_index)
-	var enemy_type_captured: = String(vestige.get("enemy_type", ENEMY_COMMON))
-	_remember_necronada_species(enemy_type_captured)
-	var slot: = {
-		"id": int(vestige.get("id", necronada_next_id)),
-		"enemy_type": enemy_type_captured,
-		"profile": Dictionary(vestige.get("profile", {})),
-		"depth": int(vestige.get("depth", 1)),
-		"stored_at": time_alive
-	}
-	if necronada_ossuary.size() >= NECRONADA_OSSUARY_SLOTS:
-		necronada_selected_slot = clampi(necronada_selected_slot, 0, necronada_ossuary.size() - 1)
-		necronada_ossuary[necronada_selected_slot] = slot
-	else:
-		necronada_ossuary.append(slot)
-		necronada_selected_slot = necronada_ossuary.size() - 1
-	_add_necronada_horde_progress(1)
-	_add_text("OSSUARIO +1", player_pos + Vector2(0, -96), _necronada_accent(), 0.85, 18)
-	_spawn_radial_particles(Vector2(vestige.get("pos", player_pos)), _necronada_accent(), 18)
-	return true
-
-
-func _add_necronada_horde_progress(_amount: int) -> void :
-	necronada_horde_progress = maxi(0, necronada_horde_progress + maxi(0, _amount))
-
-
-func _summon_necronada_remnant(target_world = null, slot_override: Dictionary = {}) -> bool:
-	if _necronada_active_remnant_count() >= NECRONADA_MAX_ACTIVE_REMNANTS:
-		return false
-	var slot: Dictionary
-	var consume_slot: = slot_override.is_empty()
-	if consume_slot:
-		if necronada_ossuary.is_empty():
-			return false
-		slot = necronada_ossuary.pop_front()
-		necronada_selected_slot = 0
-	else:
-		slot = slot_override.duplicate(true)
-	var enemy_type_str: = String(slot.get("enemy_type", ENEMY_COMMON))
-	var profile: Dictionary = Dictionary(slot.get("profile", _necronada_profile(enemy_type_str)))
-	var target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _ability_aim_direction() * 92.0
-	var depth: = clampi(int(slot.get("depth", 1)), 1, NECRONADA_EPITAPH_MAX_DEPTH)
-	var profile_hp: = clampf(float(profile.get("hp", 0.45)), 0.3, 0.95)
-	var max_hp: = maxf(24.0, player_hp_max * (0.42 + profile_hp * 0.42))
-	if bool(slot.get("supreme", false)):
-		max_hp *= 1.65
-	max_hp = maxf(24.0, max_hp * NECRONADA_REMNANT_HEALTH_MULT)
-	var archetype: = String(profile.get("archetype", "predador"))
-	var is_ranged: = archetype == "executor" or enemy_type_str in [ENEMY_ATIRADOR, ENEMY_PROJECTOR, ENEMY_MIASMA_EEL, ENEMY_PYRO_PENGUIN]
-	var is_curate: = archetype == "ritualista"
-	var remnant: = {
-		"id": necronada_next_id,
-		"enemy_type": enemy_type_str,
-		"profile": profile,
-		"pos": target.clamp(Vector2(64, 64), WORLD_SIZE - Vector2(64, 64)),
-		"facing_dir": Vector2.LEFT,
-		"hp": max_hp,
-		"max_hp": max_hp,
-		"summon": NECRONADA_REMNANT_SUMMON_TIME,
-		"target_timer": 0.0,
-		"target_kind": "",
-		"target_uid": -1,
-		"target_pos": target,
-		"attack_cd": 0.4,
-		"phase": rng.randf_range(0.0, TAU),
-		"depth": depth,
-		"last_act_done": false,
-		"supreme": bool(slot.get("supreme", false)),
-		"is_ultimate": bool(slot.get("supreme", false)),
-		"is_ranged": is_ranged,
-		"is_curate": is_curate,
-		"empower_timer": 0.0,
-		"empower_target_pos": target,
-		"blocked_retries": 0,
-		"wait_timer": 0.0
-	}
-	necronada_next_id += 1
-	necronada_remnants.append(remnant)
-	_add_text("HORDA SUPREMA" if bool(remnant.get("supreme", false)) else "LEVANTE REVERSO", target + Vector2(0, -82), _necronada_accent(), 1.0, 20)
-	_spawn_radial_particles(target, _necronada_color(), 28)
-	return true
-
-
-func _cast_necronada_requiem() -> bool:
-	if necronada_horde_progress < NECRONADA_ULTIMATE_REQUIRED_REVIVES:
-		_add_text("ONDA %d/%d" % [necronada_horde_progress, NECRONADA_ULTIMATE_REQUIRED_REVIVES], player_pos + Vector2(0, -114), _necronada_accent(), 0.9, 18)
-		return false
-	necronada_horde_progress -= NECRONADA_ULTIMATE_REQUIRED_REVIVES
-	necronada_requiem = {
-		"kind": "necrotic_wave",
-		"life": 1.18,
-		"max": 1.18,
-		"tick": 0.06,
-		"echoes": 9,
-		"phase": rng.randf_range(0.0, TAU),
-		"total_taunt_timer": 0.0,
-		"origin": player_pos
-	}
-	_apply_necronada_necrotic_wave(player_pos)
-	_spawn_radial_particles(player_pos, _necronada_accent(), 42)
-	_add_text("ONDA NECROTICA", player_pos + Vector2(0, -116), _necronada_accent(), 1.45, 23)
-	return true
-
-
-func _apply_necronada_necrotic_wave(origin: Vector2) -> void :
-	var targets: Array = []
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var pos: = Vector2(enemy.get("pos", origin))
-		var distance: = origin.distance_to(pos)
-		if distance <= NECRONADA_ULTIMATE_RADIUS:
-			targets.append({"kind": "enemy", "ref": enemy, "pos": pos, "distance": distance})
-	if _arauto_active():
-		var a_pos: = Vector2(arauto.get("pos", origin))
-		var a_distance: = origin.distance_to(a_pos)
-		if a_distance <= NECRONADA_ULTIMATE_RADIUS:
-			targets.append({"kind": "arauto", "pos": a_pos, "distance": a_distance})
-	if boss_active and boss_hp > 0.0:
-		var b_distance: = origin.distance_to(boss_pos)
-		if b_distance <= NECRONADA_ULTIMATE_RADIUS:
-			targets.append({"kind": "boss", "pos": boss_pos, "distance": b_distance})
-	targets.sort_custom( func(a, b): return float(a.get("distance", 0.0)) < float(b.get("distance", 0.0)))
-	var dust_integrity: = 1.0
-	for target in targets:
-		var distance: = float(target.get("distance", 0.0))
-		var falloff: = clampf((distance - NECRONADA_ULTIMATE_FULL_RADIUS) / maxf(1.0, NECRONADA_ULTIMATE_RADIUS - NECRONADA_ULTIMATE_FULL_RADIUS), 0.0, 1.0)
-		var damage_mult: = lerpf(NECRONADA_ULTIMATE_DAMAGE_MAX, NECRONADA_ULTIMATE_DAMAGE_MIN, falloff) * dust_integrity
-		var damage: float = player_damage * damage_mult
-		var pos: = Vector2(target.get("pos", origin))
-		match String(target.get("kind", "")):
-			"enemy":
-				var enemy: Dictionary = target.get("ref", {})
-				if not enemy.is_empty():
-					enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), 2.2)
-					enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), NECRONADA_ULTIMATE_SLOW_MULT)
-					enemy["necronada_crit_window"] = maxf(float(enemy.get("necronada_crit_window", 0.0)), NECRONADA_ULTIMATE_MARK_DURATION)
-					enemy["necronada_crit_chance"] = maxf(float(enemy.get("necronada_crit_chance", 0.0)), NECRONADA_ULTIMATE_CRIT_CHANCE)
-					_damage_enemy(enemy, damage, "necronada_requiem", true, true, origin, "manifestation_secondary")
-			"arauto":
-				_damage_arauto(damage * 0.88, "necronada_requiem")
-			"boss":
-				_damage_boss(damage * 0.72, "necronada_requiem")
-		necronada_vfx.append({"kind": "requiem_impact", "pos": pos, "life": 0.42, "max": 0.42, "damage_mult": damage_mult})
-		dust_integrity = maxf(0.42, dust_integrity * 0.84)
-
-
-func _update_necronada_state(delta: float) -> void :
-	if manifestation_key == "necronada":
-		for enemy in enemies:
-			if bool(enemy.get("necronada_epitaph", false)):
-				enemy["necronada_epitaph_time"] = maxf(0.0, float(enemy.get("necronada_epitaph_time", 0.0)) - delta)
-				enemy["necronada_epitaph_flash"] = maxf(0.0, float(enemy.get("necronada_epitaph_flash", 0.0)) - delta)
-				if float(enemy.get("necronada_epitaph_time", 0.0)) <= 0.0:
-					enemy.erase("necronada_epitaph")
-					enemy.erase("necronada_epitaph_depth")
-					enemy.erase("necronada_epitaph_time")
-					enemy.erase("necronada_epitaph_flash")
-			if float(enemy.get("necronada_crit_window", 0.0)) > 0.0:
-				enemy["necronada_crit_window"] = maxf(0.0, float(enemy.get("necronada_crit_window", 0.0)) - delta)
-			if float(enemy.get("necronada_empower_rose_window", 0.0)) > 0.0:
-				enemy["necronada_empower_rose_window"] = maxf(0.0, float(enemy.get("necronada_empower_rose_window", 0.0)) - delta)
-				if float(enemy.get("necronada_empower_rose_window", 0.0)) <= 0.0:
-					enemy["necronada_empower_rose_hits"] = 0
-		if necronada_boss_empower_rose_window > 0.0:
-			necronada_boss_empower_rose_window = maxf(0.0, necronada_boss_empower_rose_window - delta)
-			if necronada_boss_empower_rose_window <= 0.0:
-				necronada_boss_empower_rose_hits = 0
-	var auto_capture_positions: Array = []
-	for vestige in necronada_vestiges:
-		vestige["phase"] = float(vestige.get("phase", 0.0)) + delta * 2.6
-	necronada_vestiges = necronada_vestiges.filter( func(vestige): return not bool(vestige.get("auto_capture", false)))
-	if necronada_empowered_ready and time_alive > necronada_empower_until:
-		necronada_empowered_ready = false
-		necronada_empower_cooldown_until = time_alive + NECRONADA_EMPOWER_COOLDOWN
-	for visual in necronada_vfx:
-		visual["life"] = maxf(0.0, float(visual.get("life", 0.0)) - delta)
-	necronada_vfx = necronada_vfx.filter( func(visual): return float(visual.get("life", 0.0)) > 0.0)
-	_update_necronada_remnants(delta)
-	_update_necronada_requiem(delta)
-
-
-func _update_necronada_remnants(delta: float) -> void :
-	_ensure_runtime_controllers_bound()
-	necronada_ability_controller.update_remnants(delta)
-
-
-func _necronada_find_target_near(point: Vector2) -> Dictionary:
-	var best: = {}
-	var best_dist: = INF
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var pos: = Vector2(enemy.get("pos", player_pos))
-		var distance: = point.distance_squared_to(pos)
-		if distance < best_dist:
-			best_dist = distance
-			best = {"kind": "enemy", "uid": int(enemy.get("uid", -1)), "pos": pos}
-	if _arauto_active():
-		var arauto_pos: = Vector2(arauto.get("pos", player_pos))
-		var arauto_distance: = point.distance_squared_to(arauto_pos)
-		if arauto_distance < best_dist:
-			best_dist = arauto_distance
-			best = {"kind": "arauto", "uid": -2, "pos": arauto_pos}
-	if _necronada_can_target_boss():
-		var boss_distance: = point.distance_squared_to(boss_pos)
-		if boss_distance < best_dist:
-			best = {"kind": "boss", "uid": -1, "pos": boss_pos}
-	return best
-
-
-func _necronada_find_target(origin: Vector2, exclude_uids: Array = []) -> Dictionary:
-	var best: = {}
-	var best_score: = -999999.0
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var uid: = int(enemy.get("uid", -1))
-		if uid in exclude_uids:
-			continue
-		var hp: = float(enemy.get("hp", 1.0))
-		var max_hp: = maxf(1.0, float(enemy.get("max_hp", 1.0)))
-		var hp_ratio: = hp / max_hp
-
-		var hp_score: = (1.0 - hp_ratio) * 100.0
-
-		var hits: = int(enemy.get("player_hits", 0))
-		var hit_score: = 500.0 if hits >= 4 else 0.0
-		var dist_penalty: = origin.distance_to(Vector2(enemy.get("pos", player_pos))) * 0.05
-		var total_score: = hp_score + hit_score - dist_penalty
-		if total_score > best_score:
-			best_score = total_score
-			best = {"kind": "enemy", "uid": uid, "pos": Vector2(enemy.get("pos", player_pos))}
-	if _arauto_active() and -2 not in exclude_uids:
-		var arauto_hp_val: = float(arauto.get("hp", 0.0))
-		var arauto_max_val: = maxf(1.0, float(arauto.get("max_hp", 100.0)))
-		var arauto_hp_ratio: = arauto_hp_val / arauto_max_val
-		var arauto_score: = (1.0 - arauto_hp_ratio) * 120.0 - origin.distance_to(Vector2(arauto.get("pos", player_pos))) * 0.04
-		if arauto_score > best_score:
-			best_score = arauto_score
-			best = {"kind": "arauto", "uid": -2, "pos": Vector2(arauto.get("pos", player_pos))}
-	if _necronada_can_target_boss() and -1 not in exclude_uids:
-		var boss_hp_ratio: float = float(boss_hp) / maxf(1.0, float(boss_hp_max))
-		var boss_score: = (1.0 - boss_hp_ratio) * 150.0 - origin.distance_to(boss_pos) * 0.03
-		if boss_score > best_score:
-			best_score = boss_score
-			best = {"kind": "boss", "uid": -1, "pos": boss_pos}
-	return best
-
-
-func _necronada_can_target_boss() -> bool:
-	if not boss_active or boss_hp <= 0.0:
-		return false
-	if current_phase == 2 and boss2_ultimate_timer > 0.0 and not _boss2_ultimate_boss_visible():
-		return false
-	return true
-
-
-func _necronada_target_alive(remnant: Dictionary) -> bool:
-	match String(remnant.get("target_kind", "")):
-		"enemy":
-			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
-			return enemy != null and float(enemy.get("hp", 0.0)) > 0.0
-		"arauto":
-			return _arauto_active()
-		"boss":
-			return _necronada_can_target_boss()
-	return false
-
-
-func _necronada_remnant_target_pos(remnant: Dictionary) -> Vector2:
-	match String(remnant.get("target_kind", "")):
-		"enemy":
-			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
-			if enemy != null:
-				return Vector2(enemy.get("pos", player_pos))
-		"arauto":
-			if _arauto_active():
-				return Vector2(arauto.get("pos", player_pos))
-		"boss":
-			if _necronada_can_target_boss():
-				return boss_pos
-	return Vector2(remnant.get("target_pos", player_pos))
-
-
-func _necronada_remnant_attack(remnant: Dictionary) -> void :
-	var target_kind: = String(remnant.get("target_kind", ""))
-	var pos: = Vector2(remnant.get("pos", player_pos))
-	var target_pos: = Vector2(remnant.get("target_pos", pos))
-	var profile: Dictionary = Dictionary(remnant.get("profile", {}))
-	var color: Color = profile.get("color", _necronada_accent())
-	var archetype: = String(profile.get("archetype", "predador"))
-	var is_ranged: = bool(remnant.get("is_ranged", false))
-	var base_dmg: float = float(player_damage) * (0.54 if is_ranged else (0.74 if archetype == "predador" else 0.62))
-	if bool(remnant.get("supreme", false)):
-		base_dmg *= 1.35
-	if float(remnant.get("empower_timer", 0.0)) > 0.0:
-		base_dmg *= NECRONADA_EMPOWER_ALLY_DAMAGE_MULT
-
-
-	var is_crit: = rng.randf() < clampf(player_crit_chance, 0.0, 0.85)
-	if is_crit:
-		base_dmg *= 1.5
-
-	var final_damage: = base_dmg
-	var strike_kind: = "remnant_bolt" if is_ranged else ("remnant_shock" if archetype == "bastiao" else "remnant_strike")
-	necronada_vfx.append({"kind": strike_kind, "a": pos, "b": target_pos, "life": 0.26, "max": 0.26, "color": color, "archetype": archetype})
-	_spawn_radial_particles(target_pos, color, 8 if is_ranged else 12)
-
-
-	var hit_success: = false
-	match target_kind:
-		"enemy":
-			var enemy = _enemy_by_uid(int(remnant.get("target_uid", -1)))
-			if enemy != null:
-				if archetype == "executor":
-					enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), 0.35)
-					enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), 0.82)
-				elif archetype == "anomalia":
-					enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.2)
-				elif archetype == "bastiao":
-					shockwaves.append({"pos": target_pos, "radius": 14.0, "max": 82.0, "life": 0.22, "damage": final_damage * 0.28, "hit": {}, "source_category": "summon", "color": color})
-				_damage_enemy(enemy, final_damage, "necronada_remnant", true, true, pos)
-				hit_success = true
-		"arauto":
-			if _arauto_active():
-				_damage_arauto(final_damage, "necronada_remnant")
-				hit_success = true
-		"boss":
-			if boss_active:
-				_damage_boss(final_damage * 0.46, "necronada_remnant", true, true, "summon", pos)
-				hit_success = true
-
-
-
-func _damage_necronada_remnant(remnant: Dictionary, raw_damage: float) -> void :
-	var profile: Dictionary = Dictionary(remnant.get("profile", {}))
-	var archetype: = String(profile.get("archetype", "predador"))
-	var armor_scale: = clampf(0.72 / (1.0 + time_alive * 0.0018 + float(current_phase) * 0.1), 0.18, 0.72)
-	if archetype == "bastiao":
-		armor_scale *= 0.78
-	if bool(remnant.get("supreme", false)):
-		armor_scale *= 0.74
-	if player_defense > 0.0:
-		armor_scale *= clampf(1.0 - player_defense * 0.012, 0.38, 1.0)
-	var actual_damage: = raw_damage * armor_scale
-	remnant["hp"] = float(remnant.get("hp", 0.0)) - actual_damage
-	if float(remnant.get("hp", 0.0)) <= 0.0:
-		remnant["life"] = 0.0
-		_spawn_radial_particles(Vector2(remnant.get("pos", player_pos)), Color(0.5, 0.3, 0.9), 16)
-
-
-func _necronada_nearest_remnant_pos(origin: Vector2) -> Vector2:
-	var best_pos: = Vector2.INF
-	var best_dist: = INF
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) <= 0.0:
-			continue
-		var pos: = Vector2(remnant.get("pos", player_pos))
-		var dist: = origin.distance_squared_to(pos)
-		if dist < best_dist:
-			best_dist = dist
-			best_pos = pos
-	return best_pos
-
-
-func _necronada_remnant_at_pos(pos: Vector2, radius: float) -> Dictionary:
-	var radius_squared := radius * radius
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) <= 0.0:
-			continue
-		if Vector2(remnant.get("pos", player_pos)).distance_squared_to(pos) <= radius_squared:
-			return remnant
-	return {}
-
-func _necronada_last_act(remnant: Dictionary) -> void :
-	if bool(remnant.get("last_act_done", false)):
-		return
-	remnant["last_act_done"] = true
-	var profile: Dictionary = Dictionary(remnant.get("profile", {}))
-	var pos: = Vector2(remnant.get("pos", player_pos))
-	var color: Color = profile.get("color", _necronada_accent())
-	_spawn_radial_particles(pos, color, 18)
-	var act: = String(profile.get("last_act", "rupture"))
-	if act == "heal":
-		_heal_player(maxi(1, int(player_hp_max * 0.035)), "necronada", true)
-	elif act == "guard":
-		shockwaves.append({"pos": pos, "radius": 12.0, "max": 132.0, "life": 0.36, "damage": player_damage * 0.18, "hit": {}, "source_category": "summon", "color": color})
-	elif act == "shot":
-		var target: = _necronada_find_target(pos)
-		if not target.is_empty():
-			necronada_vfx.append({"kind": "remnant_strike", "a": pos, "b": Vector2(target.get("pos", pos)), "life": 0.3, "max": 0.3, "color": color})
-	elif act == "rewind":
-		for enemy in enemies:
-			if Vector2(enemy.get("pos", player_pos)).distance_to(pos) <= 148.0:
-				enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.45)
-	else:
-		shockwaves.append({"pos": pos, "radius": 18.0, "max": 96.0, "life": 0.26, "damage": player_damage * 0.24, "hit": {}, "source_category": "summon", "color": color})
-
-
-func _update_necronada_requiem(delta: float) -> void :
-	if necronada_requiem.is_empty():
-		return
-	necronada_requiem["life"] = maxf(0.0, float(necronada_requiem.get("life", 0.0)) - delta)
-	necronada_requiem["tick"] = float(necronada_requiem.get("tick", 0.0)) - delta
-	necronada_requiem["total_taunt_timer"] = maxf(0.0, float(necronada_requiem.get("total_taunt_timer", 0.0)) - delta)
-	if float(necronada_requiem["tick"]) <= 0.0 and int(necronada_requiem.get("echoes", 0)) > 0:
-		necronada_requiem["tick"] = NECRONADA_REQUIEM_TICK
-		necronada_requiem["echoes"] = int(necronada_requiem.get("echoes", 0)) - 1
-		necronada_vfx.append({"kind": "requiem_echo", "pos": player_pos, "life": 0.48, "max": 0.48, "phase": rng.randf_range(0.0, TAU)})
-	if float(necronada_requiem.get("life", 0.0)) <= 0.0:
-		necronada_requiem.clear()
-
-
-func _necronada_has_active_taunt() -> bool:
-	if float(Dictionary(necronada_requiem).get("total_taunt_timer", 0.0)) <= 0.0:
-		return false
-	for remnant in necronada_remnants:
-		if float(Dictionary(remnant).get("hp", 0.0)) > 0.0:
-			return true
-	return false
-
-
-func _necronada_taunt_target_pos(from_pos: Vector2) -> Vector2:
-	if necronada_remnants.is_empty():
-		return player_pos
-	var best_pos: Vector2 = player_pos
-	var best_dist: float = INF
-	for remnant in necronada_remnants:
-		if float(Dictionary(remnant).get("hp", 0.0)) <= 0.0:
-			continue
-		var r_pos: Vector2 = Vector2(Dictionary(remnant).get("pos", player_pos))
-		var d: = from_pos.distance_squared_to(r_pos)
-		if d < best_dist:
-			best_dist = d
-			best_pos = r_pos
-	return best_pos
-
-
-func _reset_bombastica_state() -> void :
-	bombastica_bombs.clear()
-	bombastica_powder_marks.clear()
-	bombastica_vfx.clear()
-	bombastica_q_recharges = [0.0, 0.0, 0.0]
-	bombastica_next_id = 1
-	bombastica_detonator_touch_index = -1
-	bombastica_detonator_hold = 0.0
-	bombastica_total_detonation_flash = 0.0
-	bombastica_ult_state = "IDLE"
-	bombastica_ult_timer = 0.0
-	bombastica_ult_visual_path.clear()
-	bombastica_ult_blast_anchors.clear()
-	bombastica_ult_reverse_anchors.clear()
-	bombastica_ult_target_hits.clear()
-	bombastica_ult_detonation_index = 0
-	bombastica_ult_detonation_timer = 0.0
-	manifestation_secondaries = manifestation_secondaries.filter( func(sec): return String(sec.get("kind", "")) != "bombastica")
-	for node in bombastica_explosion_pool + bombastica_mine_pool + bombastica_ignition_pool:
-		if is_instance_valid(node):
-			node.hide()
-
-
-func _update_bombastica_state(delta: float) -> void :
-	_update_bombastica_ultimate(delta)
-	for i in range(bombastica_q_recharges.size()):
-		bombastica_q_recharges[i] = maxf(0.0, float(bombastica_q_recharges[i]) - delta)
-	var expired_marks: Array = []
-	for key in bombastica_powder_marks.keys():
-		var mark: Dictionary = bombastica_powder_marks[key]
-		mark["life"] = maxf(0.0, float(mark.get("life", 0.0)) - delta)
-		if float(mark["life"]) <= 0.0:
-			expired_marks.append(key)
-		else:
-			bombastica_powder_marks[key] = mark
-	for key in expired_marks:
-		bombastica_powder_marks.erase(key)
-	bombastica_total_detonation_flash = maxf(0.0, bombastica_total_detonation_flash - delta)
-	if bombastica_detonator_touch_index != -1:
-		bombastica_detonator_hold += delta
-		if bombastica_detonator_hold >= 0.62:
-			_trigger_bombastica_detonator(true)
-			bombastica_detonator_touch_index = -1
-			bombastica_detonator_hold = 0.0
-	for visual in bombastica_vfx:
-		visual["life"] = maxf(0.0, float(visual.get("life", 0.0)) - delta)
-	bombastica_vfx = bombastica_vfx.filter( func(visual): return float(visual.get("life", 0.0)) > 0.0)
-	var armed_bombs: Array = []
-	for bomb in bombastica_bombs:
-		if bool(bomb.get("exploded", false)):
-			continue
-		if String(bomb.get("kind", "")) == "ultimate_bomb":
-			_update_bombastica_ultimate_bomb(bomb, delta)
-			if not bool(bomb.get("exploded", false)) and float(bomb.get("life", 0.0)) > 0.0:
-				armed_bombs.append(bomb)
-			continue
-		var state: = String(bomb.get("state", "armed"))
-		if state == "flying":
-			bomb["age"] = float(bomb.get("age", 0.0)) + delta
-			var travel: = maxf(0.01, float(bomb.get("travel", 0.28)))
-			var progress: = clampf(float(bomb["age"]) / travel, 0.0, 1.0)
-			var origin: = Vector2(bomb.get("origin", player_pos))
-			var target: = Vector2(bomb.get("target", origin))
-			bomb["pos"] = origin.lerp(target, progress) + Vector2(0.0, - sin(progress * PI) * 62.0)
-			if progress >= 1.0:
-				bomb["pos"] = target
-				bomb["state"] = "armed"
-				_spawn_radial_particles(target, Color(1.0, 0.62, 0.18), 8)
-			armed_bombs.append(bomb)
-			continue
-		bomb["fuse"] = float(bomb.get("fuse", 0.0)) - delta
-		if float(bomb["fuse"]) <= 0.0:
-			_detonate_bombastica_bomb(bomb, false, 0, {})
-		else:
-			armed_bombs.append(bomb)
-	bombastica_bombs = armed_bombs.filter( func(bomb): return not bool(bomb.get("exploded", false)))
 
 
 func _trigger_screen_shake(strength: float, duration: float) -> void:
 	screen_shake_strength = maxf(screen_shake_strength, strength)
 	screen_shake_timer = maxf(screen_shake_timer, duration)
-
-
-func _start_bombastica_ultimate() -> bool:
-	if bombastica_ult_state != "IDLE":
-		return false
-
-	bombastica_ult_state = "DRAWING"
-	bombastica_ult_timer = 0.0
-	bombastica_ult_start_pos = player_pos
-	bombastica_ult_fuse_pos = player_pos
-	bombastica_ult_visual_path.clear()
-	bombastica_ult_blast_anchors.clear()
-	bombastica_ult_reverse_anchors.clear()
-	bombastica_ult_target_hits.clear()
-	bombastica_ult_detonation_index = 0
-	bombastica_ult_detonation_timer = 0.0
-	bombastica_ult_seed = rng.randi()
-
-	bombastica_ult_visual_path.append(player_pos)
-
-	_spawn_bombastica_explosion_vfx(player_pos, BOMBASTICA_IGNITION_RADIUS, "bombastic_powder_ignition")
-	_add_text("RASTRO DE PÓLVORA!", player_pos + Vector2(0, -112), Color(1.0, 0.45, 0.15), 1.2, 26)
-	_trigger_screen_shake(12.0, 0.35)
-	_spawn_radial_particles(player_pos, Color(1.0, 0.5, 0.12), 16)
-	return true
-
-
-func _update_bombastica_ultimate(delta: float) -> void:
-	if bombastica_ult_state == "IDLE":
-		return
-
-	bombastica_ult_timer += delta
-
-	if bombastica_ult_state == "DRAWING":
-		var last_p: Vector2 = Vector2(bombastica_ult_visual_path.back()) if not bombastica_ult_visual_path.is_empty() else player_pos
-		if player_pos.distance_to(last_p) >= 12.0:
-			bombastica_ult_visual_path.append(player_pos)
-			_spawn_radial_particles(player_pos, Color(1.0, 0.6, 0.2, 0.6), 2)
-
-		if bombastica_ult_timer >= BOMBASTICA_ULT_TRAIL_DURATION * 0.5:
-			_finish_bombastica_drawing_phase()
-
-	elif bombastica_ult_state == "BURNING":
-		_update_bombastica_burning_phase(delta)
-
-	elif bombastica_ult_state == "DETONATING":
-		_update_bombastica_detonating_phase(delta)
-
-
-func _finish_bombastica_drawing_phase() -> void:
-	if bombastica_ult_visual_path.size() < 2:
-		bombastica_ult_visual_path.append(player_pos + Vector2(10, 0))
-
-	var total_len: float = 0.0
-	for i in range(1, bombastica_ult_visual_path.size()):
-		total_len += Vector2(bombastica_ult_visual_path[i]).distance_to(Vector2(bombastica_ult_visual_path[i-1]))
-
-	var num_anchors: int = max(2, int(total_len / BOMBASTICA_ULT_BLAST_SPACING))
-	num_anchors = mini(num_anchors, BOMBASTICA_ULT_MAX_BLASTS)
-	bombastica_ult_blast_anchors.clear()
-
-	var step_dist: float = total_len / float(num_anchors)
-
-	for i in range(num_anchors + 1):
-		var target_d: float = float(i) * step_dist
-		var anchor_p: Vector2 = _get_point_at_distance_on_path(bombastica_ult_visual_path, target_d)
-		bombastica_ult_blast_anchors.append(anchor_p)
-
-	bombastica_ult_reverse_anchors = bombastica_ult_blast_anchors.duplicate()
-	bombastica_ult_reverse_anchors.reverse()
-
-	bombastica_ult_state = "BURNING"
-	bombastica_ult_timer = 0.0
-	bombastica_ult_fuse_pos = Vector2(bombastica_ult_visual_path[0])
-
-	_trigger_screen_shake(16.0, 0.4)
-	_add_text("FUSÍVEL ACESO!", bombastica_ult_fuse_pos + Vector2(0, -40), Color(1.0, 0.85, 0.3), 0.8, 22)
 
 
 func _get_point_at_distance_on_path(path: Array, dist: float) -> Vector2:
@@ -14023,2360 +12464,6 @@ func _get_point_at_distance_on_path(path: Array, dist: float) -> Vector2:
 	return Vector2(path.back())
 
 
-func _update_bombastica_burning_phase(delta: float) -> void:
-	var burn_duration: float = 0.8
-	var progress: float = clampf(bombastica_ult_timer / burn_duration, 0.0, 1.0)
-
-	var total_len: float = 0.0
-	for i in range(1, bombastica_ult_visual_path.size()):
-		total_len += Vector2(bombastica_ult_visual_path[i]).distance_to(Vector2(bombastica_ult_visual_path[i-1]))
-
-	var current_d: float = progress * total_len
-	bombastica_ult_fuse_pos = _get_point_at_distance_on_path(bombastica_ult_visual_path, current_d)
-
-	if randf() < 0.8:
-		_spawn_radial_particles(bombastica_ult_fuse_pos, Color(1.0, 0.8, 0.2), 3)
-
-	_spawn_bombastica_explosion_vfx(bombastica_ult_fuse_pos, BOMBASTICA_IGNITION_RADIUS, "bombastic_powder_ignition")
-
-	if progress >= 1.0:
-		bombastica_ult_state = "DETONATING"
-		bombastica_ult_timer = 0.0
-		bombastica_ult_detonation_index = 0
-		bombastica_ult_detonation_timer = 0.0
-		_trigger_screen_shake(24.0, 0.6)
-
-
-func _update_bombastica_detonating_phase(delta: float) -> void:
-	bombastica_ult_detonation_timer += delta
-
-	var interval: float = BOMBASTICA_ULT_BLAST_INTERVAL
-	while bombastica_ult_detonation_index < bombastica_ult_reverse_anchors.size() and bombastica_ult_detonation_timer >= (bombastica_ult_detonation_index * interval):
-		var pos: Vector2 = Vector2(bombastica_ult_reverse_anchors[bombastica_ult_detonation_index])
-		_trigger_trail_segment_detonation(pos, bombastica_ult_detonation_index)
-		bombastica_ult_detonation_index += 1
-
-	if bombastica_ult_detonation_index >= bombastica_ult_reverse_anchors.size() and bombastica_ult_detonation_timer >= (bombastica_ult_reverse_anchors.size() * interval + 0.5):
-		bombastica_ult_state = "IDLE"
-		bombastica_ult_visual_path.clear()
-		bombastica_ult_blast_anchors.clear()
-		bombastica_ult_reverse_anchors.clear()
-		bombastica_ult_target_hits.clear()
-
-
-func _trigger_trail_segment_detonation(pos: Vector2, idx: int) -> void:
-	var is_finale: bool = (idx == bombastica_ult_reverse_anchors.size() - 1)
-	var radius: float = BOMBASTICA_ULT_FINALE_RADIUS if is_finale else BOMBASTICA_ULT_BLAST_RADIUS
-	var damage_mult: float = BOMBASTICA_ULT_FINALE_DAMAGE_MULT if is_finale else BOMBASTICA_ULT_BLAST_DAMAGE_MULT
-	var final_damage: float = player_damage * damage_mult
-
-	_apply_bombastica_explosion(pos, radius, final_damage, "bombastica_ult_finale" if is_finale else "bombastica_ult_blast", false, 0, {})
-
-	if is_finale:
-		_trigger_screen_shake(26.0, 0.45)
-		_spawn_radial_particles(pos, Color(1.0, 0.85, 0.25), 24)
-	else:
-		_spawn_radial_particles(pos, Color(1.0, 0.6, 0.18), 10)
-
-
-func _draw_bombastica_powder_trail_world(camera: Vector2) -> void:
-	CombatEffectsPresentation._draw_bombastica_powder_trail_world(self, camera)
-
-
-func _bombastica_available_q_charge_index() -> int:
-	for i in range(bombastica_q_recharges.size()):
-		if float(bombastica_q_recharges[i]) <= 0.0:
-			return i
-	return -1
-
-
-func _bombastica_ready_charges() -> int:
-	var count: = 0
-	for timer in bombastica_q_recharges:
-		if float(timer) <= 0.0:
-			count += 1
-	return count
-
-
-func _try_cast_bombastica_q(target_world = null) -> void :
-	var charge_index: = _bombastica_available_q_charge_index()
-	if charge_index < 0:
-		var remaining: = 999.0
-		for timer in bombastica_q_recharges:
-			remaining = minf(remaining, float(timer))
-		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(1.0, 0.78, 0.28), 0.45, 18)
-		return
-	bombastica_q_recharges[charge_index] = BOMBASTICA_Q_RECHARGE
-	last_skill_time = time_alive
-	var skill_power: = _register_manual_skill_use("skill_q", BOMBASTICA_Q_RECHARGE)
-	var direction: Vector2 = _ability_aim_direction()
-	var target: Vector2 = player_pos + direction * 245.0
-	if target_world is Vector2:
-		target = Vector2(target_world)
-		var aimed: Vector2 = target - player_pos
-		if aimed.length() > 0.05:
-			direction = aimed.normalized()
-	else:
-		target = player_pos
-	target = (player_pos + (target - player_pos).limit_length(BOMBASTICA_Q_THROW_RANGE)).clamp(Vector2(95, 95), WORLD_SIZE - Vector2(95, 95))
-	var selected_fuse: = rng.randf_range(BOMBASTICA_Q_FUSE_MIN, BOMBASTICA_Q_FUSE_MAX)
-	var fuse_bonus_ratio: = clampf((selected_fuse - BOMBASTICA_Q_FUSE_MIN) / (BOMBASTICA_Q_FUSE_MAX - BOMBASTICA_Q_FUSE_MIN), 0.0, 1.0)
-	var damage_mult: = lerpf(1.0, 1.25, fuse_bonus_ratio)
-	var radius_mult: = lerpf(1.0, 1.15, fuse_bonus_ratio)
-	var placed: = target.distance_to(player_pos) <= BOMBASTICA_Q_PLACE_DISTANCE
-	if placed:
-		target = player_pos.clamp(Vector2(95, 95), WORLD_SIZE - Vector2(95, 95))
-	_spawn_bombastica_bomb(target, player_damage * BOMBASTICA_Q_DAMAGE_MULT * skill_power * damage_mult, BOMBASTICA_Q_RADIUS * radius_mult, selected_fuse, not placed)
-	_add_text("TRIADE %.0fs" % selected_fuse, target + Vector2(0, -72), Color(1.0, 0.62, 0.18), 0.9, 20)
-	_manifest_evolution_on_skill(target)
-	_send_network_ability_visual(NET_ABILITY_SKILL, player_pos, target, selected_fuse)
-
-
-func _spawn_bombastica_bomb(target: Vector2, damage: float, radius: float, fuse: float, thrown: bool) -> void :
-	if bombastica_bombs.size() >= BOMBASTICA_Q_CHARGES:
-		bombastica_bombs.sort_custom( func(a, b): return int(a.get("id", 0)) < int(b.get("id", 0)))
-		var old: Dictionary = bombastica_bombs.pop_front()
-		_detonate_bombastica_bomb(old, true, 0, {})
-	var bomb: = {
-		"id": bombastica_next_id,
-		"kind": "q_bomb",
-		"pos": player_pos if thrown else target,
-		"origin": player_pos,
-		"target": target,
-		"state": "flying" if thrown else "armed",
-		"age": 0.0,
-		"travel": clampf(player_pos.distance_to(target) / 760.0, 0.18, 0.36),
-		"fuse": fuse,
-		"fuse_total": fuse,
-		"damage": damage,
-		"radius": radius,
-		"compressions": 0,
-		"critical": false,
-		"manual": false,
-		"exploded": false,
-		"phase": rng.randf_range(0.0, TAU)
-	}
-	bombastica_next_id += 1
-	bombastica_bombs.append(bomb)
-	_spawn_radial_particles(Vector2(bomb["pos"]), Color(1.0, 0.48, 0.1), 10)
-
-
-func _spawn_secondary_bombastica(target_world = null) -> void :
-	var skill_power: float = _register_manual_skill_use("skill_e", BOMBASTICA_E_COOLDOWN)
-	var direction: Vector2 = _ability_aim_direction()
-	if target_world is Vector2:
-		var aimed: Vector2 = Vector2(target_world) - player_pos
-		if aimed.length() > 0.05:
-			direction = aimed.normalized()
-	var bomb_id: int = bombastica_next_id
-	bombastica_next_id += 1
-	var comet: Dictionary = {
-		"id": bomb_id,
-		"kind": "ultimate_bomb",
-		"pos": player_pos + direction * 40.0,
-		"dir": direction,
-		"radius": BOMBASTICA_ULTIMATE_RADIUS,
-		"speed": BOMBASTICA_ULTIMATE_SPEED,
-		"life": BOMBASTICA_ULTIMATE_DURATION,
-		"max_life": BOMBASTICA_ULTIMATE_DURATION,
-		"damage": player_damage * BOMBASTICA_ULTIMATE_DAMAGE_MULT * skill_power,
-		"bounce_phase": 0.0,
-		"grounded_timer": 0.0,
-		"hit_count": 0,
-		"spin_angle": 0.0,
-		"spin_vel": 0.0,
-		"squash_x": 1.0,
-		"squash_y": 1.0,
-		"flash_timer": 0.0,
-		"trail_history": [],
-		"exploded": false
-	}
-	bombastica_bombs.append(comet)
-	manifestation_secondaries.append({
-		"kind": "bombastica",
-		"mode": "ultimate_bomb",
-		"life": BOMBASTICA_ULTIMATE_DURATION,
-		"max": BOMBASTICA_ULTIMATE_DURATION,
-		"id": bomb_id
-	})
-	_add_text("BOMBA-COMETÁRIO", player_pos + Vector2(0, -112), Color(1.0, 0.62, 0.16), 1.2, 24)
-	_spawn_radial_particles(player_pos, Color(1.0, 0.5, 0.1), 22)
-
-
-func _update_secondary_bombastica(secondary: Dictionary, delta: float) -> void :
-	if String(secondary.get("mode", "")) == "ultimate_bomb":
-		var bomb_id: int = int(secondary.get("id", -1))
-		var bomb: Dictionary = _bombastica_bomb_by_id(bomb_id)
-		if bomb.is_empty() or bool(bomb.get("exploded", false)) or float(bomb.get("life", 0.0)) <= 0.0:
-			secondary["life"] = 0.0
-		else:
-			secondary["life"] = float(bomb.get("life", 0.0))
-		return
-	var mines: Array = secondary.get("mines", [])
-	var active_count: = 0
-	for mine in mines:
-		if bool(mine.get("triggered", false)):
-			continue
-		mine["arm"] = maxf(0.0, float(mine.get("arm", 0.0)) - delta)
-		if float(mine["arm"]) <= 0.0:
-			mine["armed"] = true
-		if not bool(mine.get("armed", false)):
-			active_count += 1
-			continue
-		var mine_pos: = Vector2(mine.get("pos", player_pos))
-		var should_trigger: = false
-		for enemy in enemies:
-			if float(enemy.get("hp", 0.0)) > 0.0 and mine_pos.distance_to(Vector2(enemy["pos"])) <= BOMBASTICA_E_MINE_RADIUS + _enemy_radius(enemy) * 0.45:
-				should_trigger = true
-				break
-		if not should_trigger and boss_active and boss_hp > 0.0 and mine_pos.distance_to(boss_pos) <= BOMBASTICA_E_MINE_RADIUS + _boss_hit_radius() * 0.45:
-			should_trigger = true
-		if not should_trigger and _arauto_active() and mine_pos.distance_to(Vector2(arauto.get("pos", mine_pos))) <= BOMBASTICA_E_MINE_RADIUS + 48.0:
-			should_trigger = true
-		if should_trigger:
-			mine["triggered"] = true
-			_play_sfx("Mina-Bombastica.mp3", 0.05, 0.8, 1.05)
-			_apply_bombastica_explosion(mine_pos, BOMBASTICA_E_MINE_RADIUS, player_damage * BOMBASTICA_E_MINE_DAMAGE_MULT, "bombastic_field_mine", false, 0, {})
-		else:
-			active_count += 1
-	secondary["mines"] = mines
-	if active_count <= 0 and not bool(secondary.get("collapse_done", false)):
-		secondary["collapse_done"] = true
-		secondary["life"] = minf(float(secondary.get("life", 0.0)), 0.15)
-
-
-func _bombastica_bomb_by_id(id: int) -> Dictionary:
-	for bomb in bombastica_bombs:
-		if int(bomb.get("id", -1)) == id:
-			return bomb
-	return {}
-
-
-func _update_bombastica_ultimate_bomb(bomb: Dictionary, delta: float) -> void:
-	bomb["life"] = maxf(0.0, float(bomb.get("life", 0.0)) - delta)
-	var dir: Vector2 = Vector2(bomb.get("dir", Vector2.RIGHT))
-	var speed: float = float(bomb.get("speed", BOMBASTICA_ULTIMATE_SPEED))
-	var pos: Vector2 = Vector2(bomb.get("pos", player_pos)) + dir * speed * delta
-	bomb["pos"] = pos.clamp(Vector2(110, 110), WORLD_SIZE - Vector2(110, 110))
-	bomb["grounded_timer"] = maxf(0.0, float(bomb.get("grounded_timer", 0.0)) - delta)
-	bomb["flash_timer"] = maxf(0.0, float(bomb.get("flash_timer", 0.0)) - delta)
-
-	var spin_vel: float = float(bomb.get("spin_vel", 0.0)) * exp(- delta * 6.0)
-	bomb["spin_vel"] = spin_vel
-	bomb["spin_angle"] = fmod(float(bomb.get("spin_angle", 0.0)) + (spin_vel + 2.5) * delta, TAU)
-
-	var trails: Array = bomb.get("trail_history", [])
-	trails.append({"pos": Vector2(bomb["pos"]), "dir": dir, "life": 0.42})
-	if trails.size() > 14:
-		trails.pop_front()
-	for t in trails:
-		t["life"] = maxf(0.0, float(t.get("life", 0.0)) - delta)
-	bomb["trail_history"] = trails.filter(func(t): return float(t.get("life", 0.0)) > 0.0)
-
-	var bounce_phase: float = float(bomb.get("bounce_phase", 0.0)) + delta
-	var bounce_period: float = BOMBASTICA_ULTIMATE_BOUNCE_PERIOD
-	var time_to_bounce: float = bounce_period - bounce_phase
-
-	if bounce_phase >= bounce_period:
-		bounce_phase = fmod(bounce_phase, bounce_period)
-		bomb["grounded_timer"] = BOMBASTICA_ULTIMATE_GROUNDED_WINDOW
-		var dmg: float = float(bomb.get("damage", player_damage))
-		var rad: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
-		bomb["squash_y"] = 1.35
-		bomb["squash_x"] = 0.75
-		_spawn_radial_particles(Vector2(bomb["pos"]), Color(1.0, 0.55, 0.1), 18)
-		_spawn_radial_particles(Vector2(bomb["pos"]), Color(0.2, 0.88, 1.0), 12)
-		_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.85, 1.05)
-		_apply_bombastica_explosion(Vector2(bomb["pos"]), rad, dmg, "bombastic_ultimate_bounce", false, 0, {})
-	elif time_to_bounce <= 0.15 and time_to_bounce > 0.0:
-		var compress_ratio: float = 1.0 - (time_to_bounce / 0.15)
-		bomb["squash_y"] = lerpf(1.0, 0.65, compress_ratio)
-		bomb["squash_x"] = lerpf(1.0, 1.30, compress_ratio)
-	else:
-		bomb["squash_y"] = lerpf(float(bomb.get("squash_y", 1.0)), 1.0, delta * 12.0)
-		bomb["squash_x"] = lerpf(float(bomb.get("squash_x", 1.0)), 1.0, delta * 12.0)
-
-	bomb["bounce_phase"] = bounce_phase
-	if float(bomb["life"]) <= 0.0:
-		bomb["exploded"] = true
-		_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.85, 1.05)
-		_apply_bombastica_explosion(Vector2(bomb["pos"]), float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS)), float(bomb.get("damage", player_damage)), "bombastic_ultimate_detonation", false, 0, {})
-
-
-func _try_hit_bombastica_ultimate_with_bullet(bullet: Dictionary) -> bool:
-	for bomb in bombastica_bombs:
-		if String(bomb.get("kind", "")) != "ultimate_bomb" or bool(bomb.get("exploded", false)):
-			continue
-		var comet_pos: Vector2 = Vector2(bomb.get("pos", player_pos))
-		var bullet_pos: Vector2 = Vector2(bullet.get("pos", player_pos))
-		var rad: float = float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS))
-		if bullet_pos.distance_to(comet_pos) <= rad * 0.5 or float(bomb.get("grounded_timer", 0.0)) > 0.0:
-			var shot_hits: int = int(bomb.get("hit_count", 0)) + 1
-			bomb["hit_count"] = shot_hits
-			bomb["flash_timer"] = 0.25
-			bomb["spin_vel"] = float(bomb.get("spin_vel", 0.0)) + 16.0
-
-			var shot_dmg: float = float(bullet.get("damage", 0.0))
-			bomb["damage"] = float(bomb.get("damage", player_damage)) + shot_dmg * BOMBASTICA_ULTIMATE_SHOT_DAMAGE_MULT
-
-			bomb["radius"] = minf(480.0, float(bomb.get("radius", BOMBASTICA_ULTIMATE_RADIUS)) + 14.0)
-			bomb["speed"] = minf(250.0, float(bomb.get("speed", BOMBASTICA_ULTIMATE_SPEED)) + 12.0)
-
-			var shot_dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT))
-			if shot_dir.length() > 0.01:
-				var deflection: float = randf_range(-0.14, 0.14)
-				bomb["dir"] = shot_dir.rotated(deflection).normalized()
-
-			_spawn_radial_particles(comet_pos, Color(1.0, 0.62, 0.15), 18)
-			_spawn_radial_particles(comet_pos, Color(0.18, 0.88, 1.0), 12)
-			screen_shake_timer = maxf(screen_shake_timer, 0.14)
-			screen_shake_strength = maxf(screen_shake_strength, 6.0)
-			_play_sfx("Bomba-Bombastica.mp3", 0.05, 1.05, 1.25)
-			_add_text("+DANO! [x%d]" % shot_hits, comet_pos + Vector2(0, -42), Color(1.0, 0.68, 0.18), 0.75, 18)
-			return true
-	return false
-
-
-func _trigger_bombastica_detonator(total: = false) -> bool:
-	var candidates: = bombastica_bombs.filter( func(bomb): return String(bomb.get("state", "")) == "armed" and not bool(bomb.get("exploded", false)))
-	if candidates.is_empty():
-		_add_text("SEM BOMBAS", player_pos + Vector2(0, -82), Color(0.84, 0.9, 1.0), 0.45, 16)
-		return false
-	candidates.sort_custom( func(a, b): return int(a.get("id", 0)) < int(b.get("id", 0)))
-	if total:
-		bombastica_total_detonation_flash = 0.55
-		for i in range(candidates.size()):
-			var bomb: Dictionary = candidates[i]
-			bomb["fuse"] = minf(float(bomb.get("fuse", 0.0)), 0.08 + i * 0.15)
-			bomb["manual"] = true
-		_add_text("DETONACAO TOTAL", player_pos + Vector2(0, -92), Color(1.0, 0.46, 0.08), 0.85, 20)
-	else:
-		_detonate_bombastica_bomb(candidates[0], true, 0, {})
-	return true
-
-
-func _detonate_bombastica_bomb(bomb: Dictionary, manual: bool, chain_depth: int, affected: Dictionary) -> void :
-	_play_sfx("Bomba-Bombastica.mp3", 0.05, 0.85, 1.05)
-	if bool(bomb.get("exploded", false)):
-		return
-	bomb["exploded"] = true
-	var center: = Vector2(bomb.get("pos", player_pos))
-	var damage: = float(bomb.get("damage", player_damage))
-	var radius: = float(bomb.get("radius", BOMBASTICA_Q_RADIUS))
-	if manual:
-		damage *= BOMBASTICA_MANUAL_DAMAGE_MULT
-	_apply_bombastica_explosion(center, radius, damage, "bombastic_q_explosion" if chain_depth == 0 else "bombastic_chain_explosion", true, chain_depth, affected)
-	if chain_depth >= BOMBASTICA_CHAIN_DEPTH_MAX:
-		return
-	for other in bombastica_bombs:
-		if bool(other.get("exploded", false)) or int(other.get("id", 0)) == int(bomb.get("id", 0)):
-			continue
-		if affected.has(int(other.get("id", 0))):
-			continue
-		var other_pos: = Vector2(other.get("pos", center))
-		var other_radius: = float(other.get("radius", BOMBASTICA_Q_RADIUS))
-		var chain_distance: = center.distance_to(other_pos)
-		if chain_distance > radius + other_radius + BOMBASTICA_CHAIN_TOUCH_MARGIN:
-			continue
-		affected[int(other.get("id", 0))] = true
-		other["critical"] = true
-		other["damage"] = float(other.get("damage", player_damage)) * (1.08 + minf(0.2, float(chain_depth) * 0.035))
-		other["radius"] = other_radius * 1.04
-		_spawn_bombastica_link(center, other_pos, Color(1.0, 0.22, 0.08) if chain_depth > 0 else Color(0.18, 0.88, 1.0))
-		_detonate_bombastica_bomb(other, false, chain_depth + 1, affected)
-
-
-func _bombastica_target_key(kind: String, uid: int) -> String:
-	return "%s:%d" % [kind, uid]
-
-
-func _apply_bombastica_powder_to_target(kind: String, uid: int, pos: Vector2) -> void :
-	var key: = _bombastica_target_key(kind, uid)
-	var mark: Dictionary = bombastica_powder_marks.get(key, {"stacks": 0})
-	mark["stacks"] = mini(BOMBASTICA_POWDER_MAX_STACKS, int(mark.get("stacks", 0)) + 1)
-	mark["life"] = BOMBASTICA_POWDER_DURATION
-	mark["pos"] = pos
-	mark["kind"] = kind
-	mark["uid"] = uid
-	bombastica_powder_marks[key] = mark
-
-
-func _bombastica_powder_bonus(kind: String, uid: int) -> float:
-	var mark: Dictionary = bombastica_powder_marks.get(_bombastica_target_key(kind, uid), {})
-	return 1.0 + float(int(mark.get("stacks", 0))) * BOMBASTICA_POWDER_DAMAGE_BONUS
-
-
-func _try_bombastica_ignition(kind: String, uid: int, pos: Vector2) -> void :
-	var key: = _bombastica_target_key(kind, uid)
-	var mark: Dictionary = bombastica_powder_marks.get(key, {})
-	if int(mark.get("stacks", 0)) < BOMBASTICA_POWDER_MAX_STACKS:
-		return
-	bombastica_powder_marks.erase(key)
-	_apply_bombastica_explosion(pos, BOMBASTICA_IGNITION_RADIUS, player_damage * BOMBASTICA_IGNITION_DAMAGE_MULT, "bombastic_powder_ignition", false, BOMBASTICA_CHAIN_DEPTH_MAX, {})
-
-
-func _apply_bombastica_explosion(center: Vector2, radius: float, damage: float, source: String, _can_chain: bool, _chain_depth: int, _affected: Dictionary) -> void :
-	screen_shake_timer = maxf(screen_shake_timer, 0.12)
-	screen_shake_strength = maxf(screen_shake_strength, 5.0)
-	_spawn_bombastica_explosion_vfx(center, radius, source)
-	var is_comet_blast: bool = source.begins_with("bombastic_ultimate")
-
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var enemy_pos: Vector2 = Vector2(enemy["pos"])
-		if center.distance_to(enemy_pos) <= radius + _enemy_radius(enemy) * 0.55:
-			var uid: = int(enemy.get("uid", -1))
-			var powder_mult: float = _bombastica_powder_bonus("enemy", uid)
-			var total_damage: = damage * powder_mult
-			_damage_enemy(enemy, total_damage, source, true, true, center, "manifestation_secondary")
-			_try_bombastica_ignition("enemy", uid, enemy_pos)
-
-			# Powder Instável Extra Ignition Synergy for Bomba-Cometário
-			if is_comet_blast and powder_mult > 1.0:
-				_spawn_bombastica_explosion_vfx(enemy_pos, 75.0, "bombastic_powder_ignition")
-				_spawn_radial_particles(enemy_pos, Color(1.0, 0.5, 0.1), 14)
-				_spawn_radial_particles(enemy_pos, Color(0.18, 0.88, 1.0), 10)
-
-			var away: = (enemy_pos - center).normalized()
-			if away.length() > 0.01:
-				enemy["pos"] = (enemy_pos + away * 18.0).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
-
-	if boss_active and boss_hp > 0.0 and center.distance_to(boss_pos) <= radius + _boss_hit_radius() * 0.65:
-		var boss_mult: float = _bombastica_powder_bonus("boss", -1)
-		_damage_boss(damage * boss_mult, source, true, true, "manifestation_secondary", center)
-		_try_bombastica_ignition("boss", -1, boss_pos)
-		if is_comet_blast and boss_mult > 1.0:
-			_spawn_bombastica_explosion_vfx(boss_pos, 90.0, "bombastic_powder_ignition")
-			_spawn_radial_particles(boss_pos, Color(1.0, 0.5, 0.1), 18)
-			_spawn_radial_particles(boss_pos, Color(0.18, 0.88, 1.0), 12)
-
-	if _arauto_active() and center.distance_to(Vector2(arauto.get("pos", center))) <= radius + 68.0:
-		var arauto_pos: Vector2 = Vector2(arauto.get("pos", center))
-		var arauto_mult: float = _bombastica_powder_bonus("arauto", -2)
-		_damage_arauto(damage * arauto_mult, source, true, true, "manifestation_secondary", center)
-		_try_bombastica_ignition("arauto", -2, arauto_pos)
-		if is_comet_blast and arauto_mult > 1.0:
-			_spawn_bombastica_explosion_vfx(arauto_pos, 85.0, "bombastic_powder_ignition")
-			_spawn_radial_particles(arauto_pos, Color(1.0, 0.5, 0.1), 16)
-
-
-func _spawn_bombastica_link(a: Vector2, b: Vector2, color: Color) -> void :
-	bombastica_vfx.append({"kind": "link", "a": a, "b": b, "life": 0.42, "max": 0.42, "color": color, "seed": rng.randi()})
-
-
-func _spawn_bombastica_explosion_vfx(center: Vector2, radius: float, source: String) -> void :
-	BombasticaSceneVfx._spawn_bombastica_explosion_vfx(self, center, radius, source)
-
-
-func _ensure_bombastica_world_vfx_root() -> Node2D:
-	return BombasticaSceneVfx._ensure_bombastica_world_vfx_root(self)
-
-
-func _prepare_bombastica_scene_vfx(inst: Node2D, world_origin: Vector2) -> void:
-	BombasticaSceneVfx._prepare_bombastica_scene_vfx(self, inst, world_origin)
-
-
-func _bombastica_vfx_camera() -> Vector2:
-	return BombasticaSceneVfx._bombastica_vfx_camera(self)
-
-
-func _bombastica_vfx_canvas_pos(world_pos: Vector2) -> Vector2:
-	return BombasticaSceneVfx._bombastica_vfx_canvas_pos(self, world_pos)
-
-
-func _sync_bombastica_scene_vfx_positions() -> void:
-	BombasticaSceneVfx._sync_bombastica_scene_vfx_positions(self)
-
-
-func _eclipsada_speed_multiplier() -> float:
-	return ECLIPSADA_Q_SPEED_MULT if manifestation_key == "eclipsada" and eclipsada_q_speed_timer > 0.0 else 1.0
-
-
-func _eclipsada_q_cooldown_for_form(form: String = "") -> float:
-	var current_form: String = eclipsada_form if form == "" else form
-	return ECLIPSADA_LUA_STEALTH_COOLDOWN if current_form == ECLIPSADA_FORM_LUA else 3.0
-
-
-func _eclipsada_e_cooldown_for_form(form: String = "") -> float:
-	var current_form: String = eclipsada_form if form == "" else form
-	return ECLIPSADA_E_COOLDOWN if current_form == ECLIPSADA_FORM_LUA else ECLIPSADA_E_COOLDOWN
-
-
-func _sync_eclipsada_visible_cooldowns() -> void :
-	if manifestation_key != "eclipsada":
-		return
-	last_skill_time = eclipsada_sol_last_skill_time if _eclipsada_is_sol() else eclipsada_lua_last_skill_time
-	last_secondary_time = eclipsada_sol_last_secondary_time if _eclipsada_is_sol() else eclipsada_lua_last_secondary_time
-
-
-func _eclipsada_is_sol() -> bool:
-	return eclipsada_form == ECLIPSADA_FORM_SOL
-
-
-func _eclipsada_form_label() -> String:
-	return "SOL" if _eclipsada_is_sol() else "LUA"
-
-
-func _eclipsada_color() -> Color:
-	var base: = Color(1.0, 0.66, 0.18) if _eclipsada_is_sol() else Color(0.58, 0.42, 1.0)
-	if manifestation_key == "eclipsada" and eclipsada_trait_timer > 0.0:
-		return base.lerp(eclipsada_trait_color, 0.42)
-	return base
-
-
-func _toggle_eclipsada_form() -> bool:
-	if manifestation_key != "eclipsada":
-		return false
-	if not _eclipsada_is_sol() and eclipsada_lua_stealth_active:
-		_deactivate_eclipsada_lua_stealth("FURTIVIDADE ENCERRADA")
-	eclipsada_form = ECLIPSADA_FORM_LUA if _eclipsada_is_sol() else ECLIPSADA_FORM_SOL
-	_sync_eclipsada_visible_cooldowns()
-	var color: = _eclipsada_color()
-	var label: = "FORMA SOL" if _eclipsada_is_sol() else "FORMA LUA"
-	_push_eclipsada_vfx({
-		"kind": "form_swap",
-		"target": player_pos,
-		"life": 0.72,
-		"max": 0.72,
-		"color": color,
-		"form": eclipsada_form
-	})
-	_spawn_radial_particles(player_pos, color, 32)
-	_add_text(label, player_pos + Vector2(-58, -94), color, 0.85, 20)
-	return true
-
-
-func _eclipsada_is_stealthed() -> bool:
-	return manifestation_key == "eclipsada" and (eclipsada_lua_stealth_active or eclipsada_stealth_timer > 0.0)
-
-
-func _activate_eclipsada_lua_stealth() -> void :
-	eclipsada_lua_stealth_active = true
-	eclipsada_lua_stealth_elapsed = 0.0
-	eclipsada_lua_stealth_damage_timer = 0.0
-	eclipsada_stealth_timer = 0.0
-	_apply_eclipsada_weakpoints(ECLIPSADA_Q_WEAKPOINT_TIME)
-	var color: = _eclipsada_color()
-	_push_eclipsada_vfx({"kind": "q_dash", "origin": player_pos - last_facing.normalized() * 18.0, "target": player_pos, "dir": last_facing.normalized(), "life": 0.48, "max": 0.48, "color": color, "stealth_toggle": true})
-	_spawn_radial_particles(player_pos, Color(0.85, 0.45, 1.0), 26)
-	_add_text("LUA OCULTA", player_pos + Vector2(-68, -92), color, 0.9, 19)
-
-
-func _deactivate_eclipsada_lua_stealth(message: = "LUA REVELADA") -> void :
-	if not eclipsada_lua_stealth_active:
-		return
-	eclipsada_lua_stealth_active = false
-	eclipsada_lua_stealth_elapsed = 0.0
-	eclipsada_lua_stealth_damage_timer = 0.0
-	eclipsada_lua_last_skill_time = time_alive
-	_sync_eclipsada_visible_cooldowns()
-	var color: = _eclipsada_color()
-	_push_eclipsada_vfx({"kind": "form_swap", "target": player_pos, "life": 0.42, "max": 0.42, "color": color, "form": ECLIPSADA_FORM_LUA})
-	_spawn_radial_particles(player_pos, color, 18)
-	_add_text(message, player_pos + Vector2(-72, -92), color, 0.75, 17)
-
-
-func _eclipsada_target_pos(target: Dictionary) -> Vector2:
-	return _acorrentada_target_pos(target)
-
-
-func _eclipsada_target_alive(target: Dictionary) -> bool:
-	return _acorrentada_target_alive(target)
-
-
-func _eclipsada_trait_profile(kind: String) -> Dictionary:
-	match kind:
-		ENEMY_STALKER:
-			return {"key": kind, "name": "Olho Furtivo", "color": Color(0.7, 0.34, 1.0), "damage": 1.08, "speed": 1.06, "weak": 0.08}
-		ENEMY_PROJECTOR, ENEMY_ATIRADOR:
-			return {"key": kind, "name": "Mira Predatoria", "color": Color(1.0, 0.72, 0.24), "damage": 1.04, "weak": 0.25}
-		ENEMY_SHIELD_REFLECTOR, ENEMY_GUARDIAO:
-			return {"key": kind, "name": "Casca Frontal", "color": Color(0.78, 0.94, 1.0), "damage": 1.02, "area": 12.0}
-		ENEMY_CRYSTAL, ENEMY_NEXUS_REFRACTOR:
-			return {"key": kind, "name": "Cristal Lunar", "color": Color(0.28, 0.96, 1.0), "damage": 1.06, "cuts": 1}
-		ENEMY_CURATER:
-			return {"key": kind, "name": "Sutura Sombria", "color": Color(0.38, 1.0, 0.54), "damage": 0.96, "heal": 0.08}
-		ENEMY_LARAPIO:
-			return {"key": kind, "name": "Passo Ladino", "color": Color(1.0, 0.82, 0.24), "damage": 1.02, "speed": 1.1}
-		ENEMY_COUT_ATTACK_SPEED:
-			return {"key": kind, "name": "Refragmento", "color": Color(1.0, 0.5, 0.12), "damage": 1.05, "chain": 12.0}
-		ENEMY_AGGLOMERATOR:
-			return {"key": kind, "name": "Massa Eclipsada", "color": Color(0.96, 0.42, 0.2), "damage": 1.1, "area": 16.0}
-		ENEMY_KAMIKAZE, ENEMY_PYRO_PENGUIN:
-			return {"key": kind, "name": "Brasa Suicida", "color": Color(1.0, 0.18, 0.12), "damage": 1.14, "area": 8.0}
-		ENEMY_DEVOTO, ENEMY_INCENSARIO:
-			return {"key": kind, "name": "Febre Devota", "color": Color(0.82, 1.0, 0.34), "damage": 1.04, "cuts": 1}
-		ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO:
-			return {"key": kind, "name": "Nexo Roubado", "color": Color(1.0, 0.34, 0.78), "damage": 1.12, "chain": 16.0, "weak": 0.12}
-	return {"key": kind, "name": "Sombra Comum", "color": Color(0.58, 0.42, 1.0), "damage": 1.0}
-
-
-func _eclipsada_trait_value(name: String, fallback: float) -> float:
-	if eclipsada_trait_timer <= 0.0:
-		return fallback
-	var profile: = _eclipsada_trait_profile(eclipsada_trait_key)
-	return float(profile.get(name, fallback))
-
-
-func _try_gain_eclipsada_trait(enemy: Dictionary) -> void :
-	if manifestation_key != "eclipsada" or eclipsada_passive_timer > 0.0:
-		return
-	var profile: = _eclipsada_trait_profile(String(enemy.get("type", ENEMY_COMMON)))
-	eclipsada_trait_key = String(profile.get("key", ENEMY_COMMON))
-	eclipsada_trait_name = String(profile.get("name", "Sombra Comum"))
-	eclipsada_trait_color = profile.get("color", Color(0.58, 0.42, 1.0))
-	eclipsada_trait_timer = ECLIPSADA_TRAIT_DURATION
-	eclipsada_passive_timer = ECLIPSADA_PASSIVE_READY_TIME
-	_add_text("TRACO COPIADO: %s" % eclipsada_trait_name, Vector2(enemy.get("pos", player_pos)) + Vector2(-86, -86), eclipsada_trait_color, 1.2, 18)
-
-
-func _update_eclipsada_state(delta: float) -> void :
-	eclipsada_q_speed_timer = max(0.0, eclipsada_q_speed_timer - delta)
-	if eclipsada_lua_stealth_active:
-		eclipsada_lua_stealth_elapsed += delta
-		eclipsada_lua_stealth_damage_timer += delta
-		while eclipsada_lua_stealth_elapsed > ECLIPSADA_LUA_STEALTH_SAFE_TIME and eclipsada_lua_stealth_damage_timer >= 1.0:
-			eclipsada_lua_stealth_damage_timer -= 1.0
-			var drain_step: = int(floor((eclipsada_lua_stealth_elapsed - ECLIPSADA_LUA_STEALTH_SAFE_TIME) / 3.0))
-			var drain_ratio: = ECLIPSADA_LUA_STEALTH_DRAIN_BASE + ECLIPSADA_LUA_STEALTH_DRAIN_STEP * float(maxi(0, drain_step))
-			_damage_player(maxi(1, int(ceil(player_hp_max * drain_ratio))), "eclipsada_lua_stealth")
-	else:
-		eclipsada_stealth_timer = max(0.0, eclipsada_stealth_timer - delta)
-	eclipsada_passive_timer = max(0.0, eclipsada_passive_timer - delta)
-	eclipsada_trait_timer = max(0.0, eclipsada_trait_timer - delta)
-	for enemy in enemies:
-		if enemy.has("eclipsada_weak_time"):
-			enemy["eclipsada_weak_time"] = max(0.0, float(enemy.get("eclipsada_weak_time", 0.0)) - delta)
-			enemy["eclipsada_weak_flash"] = max(0.0, float(enemy.get("eclipsada_weak_flash", 0.0)) - delta)
-		if not _eclipsada_is_stealthed():
-			enemy["eclipsada_last_seen"] = player_pos
-	for secondary in manifestation_secondaries:
-		if String(secondary.get("kind", "")) == "eclipsada" and float(secondary.get("life", 0.0)) > 0.0:
-			_update_eclipsada_secondary(secondary, delta)
-		elif String(secondary.get("kind", "")) == "eclipsada_sol" and float(secondary.get("life", 0.0)) > 0.0:
-			_update_eclipsada_sol_secondary(secondary, delta)
-		elif String(secondary.get("kind", "")) == "eclipsada_lua_eclipse" and float(secondary.get("life", 0.0)) > 0.0:
-			_update_eclipsada_lua_eclipse_secondary(secondary, delta)
-	for visual in eclipsada_vfx:
-		visual["life"] = maxf(0.0, float(visual.get("life", 0.0)) - delta)
-	eclipsada_vfx = eclipsada_vfx.filter( func(visual): return float(visual.get("life", 0.0)) > 0.0)
-
-
-func _push_eclipsada_vfx(visual: Dictionary) -> void :
-	CombatVfxRuntime._push_eclipsada_vfx(self, visual)
-
-
-func _try_eclipsada_attack() -> void :
-	var interval: = _current_attack_interval()
-	if time_alive < eclipsada_next_attack_time or time_alive - last_attack_time < interval:
-		return
-	if _eclipsada_is_sol():
-		_perform_eclipsada_attack(1)
-		eclipsada_attack_step = 0
-	else:
-		eclipsada_attack_step = (eclipsada_attack_step % 3) + 1
-		_perform_eclipsada_lua_blade_attack(eclipsada_attack_step)
-	last_attack_time = time_alive
-	eclipsada_next_attack_time = time_alive + interval
-
-
-func _perform_eclipsada_attack(step: int) -> void :
-	if bullets.size() >= MAX_BULLETS:
-		return
-	var dir: = _aim_direction()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	_set_player_attack_visual_dir(dir)
-	var color: Color = _eclipsada_color()
-	var sol: = _eclipsada_is_sol()
-	var kind: = "eclipsada_sol" if sol else "eclipsada_lua"
-	var speed: = ECLIPSADA_SOL_SHURIKEN_SPEED if sol else ECLIPSADA_LUA_SHURIKEN_SPEED
-	var damage_mult: = ECLIPSADA_SOL_SHURIKEN_DAMAGE_MULT if sol else ECLIPSADA_LUA_SHURIKEN_DAMAGE_MULT
-	var damage: float = player_damage * damage_mult * _eclipsada_trait_value("damage", 1.0)
-	var life: = ECLIPSADA_SHURIKEN_FALL_RANGE / speed
-	_play_manifestation_attack_sfx("eclipsada")
-	_apply_aura_events(AuraSystem.on_attack(aura_state, {"pos": player_pos, "dir": dir, "kind": "eclipsada"}))
-	_add_bullet({
-		"pos": player_pos + dir * 36.0,
-		"origin": player_pos,
-		"source_category": "basic_attack",
-		"dir": dir,
-		"life": life,
-		"max_life": life,
-		"age": 0.0,
-		"phase": rng.randf_range(0.0, TAU),
-		"trail_cd": 0.0,
-		"damage": damage,
-		"player_damage": player_damage,
-		"speed": speed,
-		"kind": kind,
-		"pierce": not sol,
-		"hits": {},
-		"ricochets": 0,
-		"durability": 0.0,
-		"fly_sfx_cd": 0.0,
-		"color": color,
-		"range_limit": ECLIPSADA_SHURIKEN_RANGE,
-		"fall_range": ECLIPSADA_SHURIKEN_FALL_RANGE,
-		"travel": 36.0,
-		"solar_splash": sol
-	})
-	_apply_manifest_evolution_to_bullet(bullets[-1])
-	_push_eclipsada_vfx({
-		"kind": "attack",
-		"origin": player_pos,
-		"center": player_pos + dir * 58.0,
-		"dir": dir,
-		"radius": 34.0 if sol else 28.0,
-		"step": step,
-		"life": 0.26,
-		"max": 0.26,
-		"color": color,
-		"style": "shuriken_muzzle"
-	})
-	_send_network_ability_visual(NET_ABILITY_ATTACK, player_pos, player_pos + dir * ECLIPSADA_SHURIKEN_RANGE, 0.34, 1.0 if sol else 0.0)
-
-
-func _perform_eclipsada_lua_blade_attack(step: int) -> void :
-	var dir: = _aim_direction()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	if dir.length() <= 0.05:
-		dir = Vector2.RIGHT
-	_set_player_attack_visual_dir(dir)
-	var color: Color = _eclipsada_color()
-	var angle_offset: float = [-0.34, 0.34, 0.0][clampi(step - 1, 0, 2)]
-	var slash_dir: Vector2 = dir.rotated(angle_offset).normalized()
-	var crit: bool = step == 3
-	var crit_mult: float = ECLIPSADA_LUA_BLADE_CRIT_MULT + clampf(player_crit_chance, 0.0, 1.0) * 0.65 if crit else 1.0
-	var stealth_bonus: float = 1.0 + minf(0.28, eclipsada_lua_stealth_elapsed * 0.035) if eclipsada_lua_stealth_active else 1.0
-	var damage: float = player_damage * ECLIPSADA_LUA_BLADE_DAMAGE_MULT * crit_mult * stealth_bonus * _eclipsada_trait_value("damage", 1.0)
-	_play_manifestation_attack_sfx("eclipsada")
-	_apply_aura_events(AuraSystem.on_attack(aura_state, {"pos": player_pos, "dir": slash_dir, "kind": "eclipsada_lua_blade"}))
-	_eclipsada_damage_blade_line(player_pos, slash_dir, ECLIPSADA_LUA_BLADE_REACH, ECLIPSADA_LUA_BLADE_WIDTH + (14.0 if crit else 0.0), damage, "eclipsada_lua_blade", "basic_attack", crit)
-	_push_eclipsada_vfx({
-		"kind": "attack",
-		"origin": player_pos,
-		"center": player_pos + slash_dir * (ECLIPSADA_LUA_BLADE_REACH * 0.52),
-		"dir": slash_dir,
-		"radius": ECLIPSADA_LUA_BLADE_REACH,
-		"step": step,
-		"life": 0.3 if crit else 0.24,
-		"max": 0.3 if crit else 0.24,
-		"color": color,
-		"style": "lua_blades",
-		"crit": crit
-	})
-	_send_network_ability_visual(NET_ABILITY_ATTACK, player_pos, player_pos + slash_dir * ECLIPSADA_LUA_BLADE_REACH, 0.28, 0.0)
-
-
-func _eclipsada_damage_blade_line(origin: Vector2, dir: Vector2, reach: float, width: float, amount: float, source: String, source_category: = "basic_attack", forced_crit: = false) -> void :
-	if dir.length() <= 0.05:
-		return
-	var side: Vector2 = dir.orthogonal()
-	var hit_pos: Vector2 = origin + dir * reach
-	for lane in [-1.0, 1.0]:
-		var a: Vector2 = origin + dir * 24.0 + side * lane * 12.0
-		var b: Vector2 = origin + dir * reach + side * lane * 12.0
-		for enemy in enemies.duplicate():
-			if float(enemy.get("hp", 0.0)) <= 0.0:
-				continue
-			if _distance_to_segment(Vector2(enemy["pos"]), a, b) <= width + _enemy_radius(enemy) * 0.38:
-				var blade_damage: = amount
-				_eclipsada_damage_target({"kind": "enemy", "uid": int(enemy["uid"])}, blade_damage, source, source_category, hit_pos, forced_crit)
-		if boss_active and boss_hp > 0.0 and _distance_to_segment(boss_pos, a, b) <= width + _boss_hit_radius() * 0.4:
-			_eclipsada_damage_target({"kind": "boss"}, amount * 0.72, source, source_category, hit_pos, forced_crit)
-		if _arauto_active() and _distance_to_segment(Vector2(arauto["pos"]), a, b) <= width + 40.0:
-			_eclipsada_damage_target({"kind": "arauto"}, amount * 0.82, source, source_category, hit_pos, forced_crit)
-
-
-func _spawn_eclipsada_shuriken_fall(pos: Vector2, color: Color, kind: String) -> void :
-	if not kind.begins_with("eclipsada_"):
-		return
-	_push_eclipsada_vfx({
-		"kind": "shuriken_fall",
-		"target": pos,
-		"life": 0.55,
-		"max": 0.55,
-		"color": color
-	})
-	_spawn_radial_particles(pos, color, 8)
-
-
-func _eclipsada_damage_at(center: Vector2, radius: float, amount: float, source: String, source_category: = "basic_attack") -> void :
-	for enemy in enemies.duplicate():
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		if Vector2(enemy["pos"]).distance_to(center) <= radius + _enemy_radius(enemy) * 0.35:
-			_eclipsada_damage_target({"kind": "enemy", "uid": int(enemy["uid"])}, amount, source, source_category, center)
-	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= radius + _boss_hit_radius() * 0.45:
-		_eclipsada_damage_target({"kind": "boss"}, amount * 0.62, source, source_category, center)
-	if _arauto_active() and Vector2(arauto["pos"]).distance_to(center) <= radius + 44.0:
-		_eclipsada_damage_target({"kind": "arauto"}, amount * 0.78, source, source_category, center)
-
-
-func _apply_eclipsada_solar_splash(center: Vector2, base_damage: float, source_category: = "basic_attack") -> void :
-	var radius: = ECLIPSADA_SOL_SPLASH_RADIUS + _eclipsada_trait_value("area", 0.0) * 0.45
-	_eclipsada_damage_at(center, radius, base_damage * 0.42, "eclipsada_sol_splash", source_category)
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) > 0.0 and Vector2(enemy["pos"]).distance_to(center) <= radius + _enemy_radius(enemy) * 0.35:
-			enemy["aura_burn"] = maxf(float(enemy.get("aura_burn", 0.0)), 2.4)
-			enemy["aura_burn_tick"] = min(float(enemy.get("aura_burn_tick", 0.0)), 0.12)
-	shockwaves.append({"pos": center, "radius": 8.0, "max": radius, "life": 0.24, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(1.0, 0.66, 0.18)})
-	_push_eclipsada_vfx({"kind": "sol_burst", "target": center, "radius": radius, "life": 0.38, "max": 0.38, "color": Color(1.0, 0.66, 0.18)})
-
-
-func _eclipsada_damage_target(target: Dictionary, amount: float, source: String, source_category: String, hit_pos: Vector2, forced_crit: bool = false) -> bool:
-	var final: = amount
-	var emphasized_hit := forced_crit
-	var damage_text_label := "CRÍTICO" if forced_crit else ""
-	if String(target.get("kind", "enemy")) == "enemy":
-		var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-		if enemy:
-			if _eclipsada_weakpoint_hit(enemy, hit_pos):
-				final *= ECLIPSADA_WEAKPOINT_DAMAGE_MULT + _eclipsada_trait_value("weak", 0.0)
-				enemy["eclipsada_weak_flash"] = 0.45
-				emphasized_hit = true
-				damage_text_label = "PONTO FRACO"
-			var killed: = _damage_enemy(enemy, final, source, true, true, hit_pos, source_category, 0, "", emphasized_hit, damage_text_label)
-			if killed:
-				_kill_enemy(enemy)
-			return killed
-	if String(target.get("kind", "")) == "boss":
-		_damage_boss(final, source, true, true, source_category, hit_pos, 0, "", emphasized_hit, damage_text_label)
-		return boss_hp <= 0.0
-	if String(target.get("kind", "")) == "arauto":
-		_damage_arauto(final, source, true, true, source_category, hit_pos, 0, "", emphasized_hit, damage_text_label)
-	return false
-
-
-func _try_use_eclipsada_q(target_world = null) -> void :
-	var cooldown: = _eclipsada_q_cooldown_for_form()
-	if _eclipsada_is_sol():
-		if time_alive - eclipsada_sol_last_skill_time < cooldown:
-			var remaining: float = cooldown - (time_alive - eclipsada_sol_last_skill_time)
-			_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
-			return
-		eclipsada_sol_last_skill_time = time_alive
-		_sync_eclipsada_visible_cooldowns()
-		var skill_power: float = _register_manual_skill_use("skill_q", cooldown)
-		var visual_origin: Vector2 = player_pos
-		var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _ability_aim_direction() * ECLIPSADA_SOL_Q_RANGE
-		_play_manifestation_skill_sfx("eclipsada")
-		_cast_eclipsada_q_sol(target_world, skill_power)
-		_manifest_evolution_on_skill(visual_target)
-		_send_network_ability_visual(NET_ABILITY_SKILL, visual_origin, visual_target, _network_skill_visual_duration())
-		_spawn_radial_particles(player_pos, _manifestation_color(), 22)
-		effects.append({"pos": player_pos, "text": "", "life": 0.25, "max": 0.25, "color": Color.WHITE, "size": 1, "skill_lock": true})
-		return
-	if eclipsada_lua_stealth_active:
-		_deactivate_eclipsada_lua_stealth()
-		return
-	if time_alive - eclipsada_lua_last_skill_time < cooldown:
-		var remaining: float = cooldown - (time_alive - eclipsada_lua_last_skill_time)
-		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
-		return
-	_register_manual_skill_use("skill_q", cooldown)
-	_play_manifestation_skill_sfx("eclipsada")
-	_activate_eclipsada_lua_stealth()
-	_manifest_evolution_on_skill(player_pos)
-	_send_network_ability_visual(NET_ABILITY_SKILL, player_pos, player_pos, 0.48)
-
-
-func _try_use_eclipsada_e(target_world = null) -> void :
-	if _secondary_player_locked():
-		return
-	var cooldown: = _eclipsada_e_cooldown_for_form()
-	var last_time: float = eclipsada_sol_last_secondary_time if _eclipsada_is_sol() else eclipsada_lua_last_secondary_time
-	if time_alive - last_time < cooldown:
-		var remaining: float = cooldown - (time_alive - last_time)
-		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -110), Color(1.0, 0.84, 0.4), 0.55, 18)
-		return
-	var visual_origin: Vector2 = player_pos
-	var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
-	_play_manifestation_ultimate_sfx("eclipsada")
-	if not _cast_eclipsada_e(target_world):
-		return
-	if _eclipsada_is_sol():
-		eclipsada_sol_last_secondary_time = time_alive
-	else:
-		eclipsada_lua_last_secondary_time = time_alive
-	_sync_eclipsada_visible_cooldowns()
-	_register_manual_skill_use("skill_e", cooldown)
-	_send_network_ability_visual(NET_ABILITY_SECONDARY, visual_origin, visual_target, _network_secondary_visual_duration())
-
-
-func _cast_eclipsada_q(target_world, skill_power: float) -> void :
-	if _eclipsada_is_sol():
-		_cast_eclipsada_q_sol(target_world, skill_power)
-	else:
-		_cast_eclipsada_q_lua(target_world, skill_power)
-
-
-func _cast_eclipsada_q_lua(_target_world, _skill_power: float) -> void :
-	if eclipsada_lua_stealth_active:
-		_deactivate_eclipsada_lua_stealth()
-	else:
-		_activate_eclipsada_lua_stealth()
-
-
-func _cast_eclipsada_q_sol(target_world, skill_power: float) -> void :
-	var dir: = _ability_aim_direction()
-	if target_world is Vector2 and Vector2(target_world).distance_squared_to(player_pos) > 16.0:
-		dir = (Vector2(target_world) - player_pos).normalized()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	var color: Color = _eclipsada_color()
-	var origin: Vector2 = player_pos
-	eclipsada_q_speed_timer = max(eclipsada_q_speed_timer, 2.4)
-	var angles = [-0.24, 0.0, 0.24]
-	for angle_offset in angles:
-		var shuriken_dir: = dir.rotated(angle_offset).normalized()
-		var life: = ECLIPSADA_SOL_Q_RANGE / ECLIPSADA_SOL_SHURIKEN_SPEED
-		_add_bullet({
-			"pos": player_pos + shuriken_dir * 22.0,
-			"origin": player_pos,
-			"source_category": "skill_q",
-			"dir": shuriken_dir,
-			"speed": ECLIPSADA_SOL_SHURIKEN_SPEED,
-			"life": life,
-			"max_life": life,
-			"age": 0.0,
-			"phase": rng.randf_range(0.0, TAU),
-			"trail_cd": 0.0,
-			"damage": player_damage * 1.05 * skill_power * _eclipsada_trait_value("damage", 1.0),
-			"player_damage": player_damage,
-			"kind": "eclipsada_sol",
-			"pierce": false,
-			"hits": {},
-			"color": color,
-			"range_limit": ECLIPSADA_SOL_Q_RANGE,
-			"fall_range": ECLIPSADA_SOL_Q_RANGE + 5.0,
-			"travel": 22.0,
-			"solar_splash": true
-		})
-	_push_eclipsada_vfx({
-		"kind": "q_sol",
-		"origin": origin,
-		"target": player_pos + dir * ECLIPSADA_SOL_Q_RANGE,
-		"dir": dir,
-		"life": 0.62,
-		"max": 0.62,
-		"color": color
-	})
-	_spawn_radial_particles(player_pos, color, 30)
-	_play_manifestation_attack_sfx("eclipsada")
-	_add_text("SOL: ESTILHACO RADIAL", player_pos + Vector2(-112, -90), color, 0.95, 18)
-
-
-func _apply_eclipsada_weakpoints(duration: float) -> void :
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var angle: = fmod(float(int(enemy.get("uid", 0)) * 37) * 0.017 + time_alive * 0.31, TAU)
-		enemy["eclipsada_weak_time"] = duration
-		enemy["eclipsada_weak_offset"] = Vector2.from_angle(angle) * max(18.0, _enemy_radius(enemy) * 0.46)
-		enemy["eclipsada_weak_flash"] = 0.18
-
-
-func _eclipsada_weakpoint_pos(enemy: Dictionary) -> Vector2:
-	return Vector2(enemy.get("pos", player_pos)) + Vector2(enemy.get("eclipsada_weak_offset", Vector2.ZERO))
-
-
-func _eclipsada_weakpoint_hit(enemy: Dictionary, hit_pos: Vector2) -> bool:
-	if float(enemy.get("eclipsada_weak_time", 0.0)) <= 0.0:
-		return false
-	return _eclipsada_weakpoint_pos(enemy).distance_to(hit_pos) <= ECLIPSADA_WEAKPOINT_RADIUS + 12.0
-
-
-func _cast_eclipsada_e(target_world) -> bool:
-	if _eclipsada_is_sol():
-		return _cast_eclipsada_e_sol(target_world)
-	return _cast_eclipsada_e_lua(target_world)
-
-
-func _cast_eclipsada_e_lua(target_world) -> bool:
-	var target_pos: Vector2 = player_pos
-	if target_world is Vector2 and Vector2(target_world).distance_to(player_pos) > 8.0:
-		target_pos = Vector2(target_world)
-		var delta: Vector2 = target_pos - player_pos
-		if delta.length() > ECLIPSADA_E_AIM_RANGE:
-			target_pos = player_pos + delta.normalized() * ECLIPSADA_E_AIM_RANGE
-	target_pos = target_pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
-	var color: = _eclipsada_color()
-	manifestation_secondaries.append({
-		"kind": "eclipsada_lua_eclipse",
-		"life": ECLIPSADA_LUA_E_DURATION,
-		"max": ECLIPSADA_LUA_E_DURATION,
-		"center": target_pos,
-		"radius": ECLIPSADA_LUA_E_RADIUS + _eclipsada_trait_value("area", 0.0),
-		"cut_timer": 0.0,
-		"cut_interval": ECLIPSADA_LUA_E_TICK,
-		"pulse": 0,
-		"color": color,
-		"lock_player": false,
-		"phase": rng.randf_range(0.0, TAU),
-		"last_pos": target_pos
-	})
-	_apply_eclipsada_weakpoints(4.0)
-	_push_eclipsada_vfx({"kind": "e_entry", "origin": player_pos, "target": target_pos, "life": 0.5, "max": 0.5, "color": color})
-	_spawn_radial_particles(target_pos, color, 34)
-	_add_text("ECLIPSE LAMINAR", target_pos + Vector2(-92, -82), color, 0.9, 18)
-	return true
-
-
-func _cast_eclipsada_e_sol(target_world) -> bool:
-	var target_pos: Vector2 = player_pos + _ability_aim_direction() * ECLIPSADA_SOL_E_RANGE
-	if target_world is Vector2 and Vector2(target_world).distance_to(player_pos) > 8.0:
-		target_pos = Vector2(target_world)
-	var delta: Vector2 = target_pos - player_pos
-	if delta.length() > ECLIPSADA_SOL_E_RANGE:
-		target_pos = player_pos + delta.normalized() * ECLIPSADA_SOL_E_RANGE
-	target_pos = target_pos.clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
-	var color: = _eclipsada_color()
-	manifestation_secondaries.append({
-		"kind": "eclipsada_sol",
-		"life": ECLIPSADA_SOL_E_DURATION,
-		"max": ECLIPSADA_SOL_E_DURATION,
-		"pos": target_pos,
-		"tick": 0.0,
-		"pulse": 0,
-		"radius": ECLIPSADA_SOL_E_RADIUS + _eclipsada_trait_value("area", 0.0),
-		"color": color,
-		"phase": rng.randf_range(0.0, TAU)
-	})
-	_push_eclipsada_vfx({"kind": "sol_burst", "target": target_pos, "radius": ECLIPSADA_SOL_E_RADIUS, "life": 0.62, "max": 0.62, "color": color})
-	shockwaves.append({"pos": target_pos, "radius": 12.0, "max": ECLIPSADA_SOL_E_RADIUS, "life": 0.32, "damage": 0.0, "hit": {}, "visual_only": true, "color": color})
-	_spawn_radial_particles(target_pos, color, 34)
-	_add_text("SOL: COROA DE CORTE", target_pos + Vector2(-98, -82), color, 0.9, 18)
-	return true
-
-
-func _cancel_eclipsada_secondary(secondary: Dictionary) -> void :
-	_finish_eclipsada_secondary(secondary, true)
-	_add_text("ECLIPSE CANCELADO", player_pos + Vector2(-78, -92), _eclipsada_color(), 0.55, 16)
-
-
-func _finish_eclipsada_secondary(secondary: Dictionary, cancelled: = false) -> void :
-	if bool(secondary.get("visual_finished", false)):
-		return
-	secondary["visual_finished"] = true
-	secondary["life"] = 0.0
-	secondary["lock_player"] = false
-	_push_eclipsada_vfx({
-		"kind": "e_exit",
-		"target": Vector2(secondary.get("last_pos", player_pos)),
-		"cancelled": cancelled,
-		"life": 0.48,
-		"max": 0.48,
-		"color": secondary.get("color", _eclipsada_color())
-	})
-
-
-func _update_eclipsada_secondary(secondary: Dictionary, delta: float) -> void :
-	secondary["life"] = max(0.0, float(secondary.get("life", 0.0)) - delta)
-	if float(secondary["life"]) <= 0.0:
-		_finish_eclipsada_secondary(secondary)
-		return
-	var target: Dictionary = secondary.get("target", {})
-	if target.is_empty() or not _eclipsada_target_alive(target):
-		var next: = _eclipsada_next_chain_target(Vector2(secondary.get("last_pos", player_pos)), float(secondary.get("chain_radius", ECLIPSADA_E_CHAIN_RADIUS)), {})
-		if next.is_empty():
-			_finish_eclipsada_secondary(secondary)
-			return
-		_push_eclipsada_vfx({"kind": "e_chain", "origin": Vector2(secondary.get("last_pos", player_pos)), "target": _eclipsada_target_pos(next), "life": 0.42, "max": 0.42, "color": secondary.get("color", _eclipsada_color())})
-		secondary["target"] = next
-		secondary["cuts_left"] = int(secondary.get("max_cuts", ECLIPSADA_E_BASE_CUTS))
-		target = next
-	var target_pos: = _eclipsada_target_pos(target)
-	secondary["last_pos"] = target_pos
-	var away: = (player_pos - target_pos).normalized()
-	if away.length() <= 0.05:
-		away = Vector2.from_angle(float(secondary.get("phase", 0.0)) + time_alive * 9.0)
-	player_pos = _clamp_player_world(target_pos + away * 24.0)
-	secondary["cut_timer"] = float(secondary.get("cut_timer", 0.0)) - delta
-	while float(secondary.get("cut_timer", 0.0)) <= 0.0 and int(secondary.get("cuts_left", 0)) > 0 and float(secondary.get("life", 0.0)) > 0.0:
-		secondary["cut_timer"] = float(secondary.get("cut_timer", 0.0)) + float(secondary.get("cut_interval", ECLIPSADA_E_CUT_INTERVAL_BASE))
-		secondary["cuts_left"] = int(secondary.get("cuts_left", 0)) - 1
-		var color: Color = secondary.get("color", _eclipsada_color())
-		var slash_dir: = Vector2.from_angle(float(secondary.get("phase", 0.0)) + time_alive * 13.0 + float(secondary.get("cuts_left", 0)))
-		_push_eclipsada_vfx({"kind": "e_cut", "target": target_pos, "dir": slash_dir, "cut_index": int(secondary.get("max_cuts", 1)) - int(secondary.get("cuts_left", 0)), "life": 0.3, "max": 0.3, "color": color})
-		var killed: = _eclipsada_damage_target(target, player_damage * ECLIPSADA_E_DAMAGE_SCALE * _eclipsada_trait_value("damage", 1.0), "eclipsada_e", "skill_e", target_pos)
-		if _eclipsada_trait_value("heal", 0.0) > 0.0:
-			_heal_player(int(player_hp_max * _eclipsada_trait_value("heal", 0.0) * 0.08), "eclipsada", true)
-		if killed:
-			var next_target: = _eclipsada_next_chain_target(target_pos, float(secondary.get("chain_radius", ECLIPSADA_E_CHAIN_RADIUS)), target)
-			if next_target.is_empty():
-				_finish_eclipsada_secondary(secondary)
-				return
-			_push_eclipsada_vfx({"kind": "e_chain", "origin": target_pos, "target": _eclipsada_target_pos(next_target), "life": 0.42, "max": 0.42, "color": color})
-			secondary["target"] = next_target
-			secondary["cuts_left"] = int(secondary.get("max_cuts", ECLIPSADA_E_BASE_CUTS))
-			target = next_target
-			target_pos = _eclipsada_target_pos(target)
-			secondary["last_pos"] = target_pos
-	if int(secondary.get("cuts_left", 0)) <= 0 and _eclipsada_target_alive(target):
-		_finish_eclipsada_secondary(secondary)
-
-
-func _update_eclipsada_sol_secondary(secondary: Dictionary, delta: float) -> void :
-	secondary["life"] = max(0.0, float(secondary.get("life", 0.0)) - delta)
-	if float(secondary["life"]) <= 0.0:
-		_push_eclipsada_vfx({"kind": "e_exit", "target": Vector2(secondary.get("pos", player_pos)), "life": 0.42, "max": 0.42, "color": secondary.get("color", _eclipsada_color())})
-		return
-	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
-	if float(secondary.get("tick", 0.0)) > 0.0:
-		return
-	secondary["tick"] = ECLIPSADA_SOL_E_TICK
-	secondary["pulse"] = int(secondary.get("pulse", 0)) + 1
-	var pos: = Vector2(secondary.get("pos", player_pos))
-	var radius: = float(secondary.get("radius", ECLIPSADA_SOL_E_RADIUS))
-	var color: Color = secondary.get("color", _eclipsada_color())
-	_eclipsada_damage_at(pos, radius, player_damage * 0.62 * _eclipsada_trait_value("damage", 1.0), "eclipsada_sol_e", "skill_e")
-	_push_eclipsada_vfx({
-		"kind": "sol_pulse",
-		"target": pos,
-		"radius": radius,
-		"life": 0.36,
-		"max": 0.36,
-		"color": color,
-		"pulse": int(secondary.get("pulse", 0)),
-		"phase": float(secondary.get("phase", 0.0))
-	})
-
-
-func _update_eclipsada_lua_eclipse_secondary(secondary: Dictionary, delta: float) -> void :
-	secondary["life"] = max(0.0, float(secondary.get("life", 0.0)) - delta)
-	if float(secondary["life"]) <= 0.0:
-		_push_eclipsada_vfx({"kind": "e_exit", "target": Vector2(secondary.get("center", player_pos)), "life": 0.42, "max": 0.42, "color": secondary.get("color", _eclipsada_color())})
-		return
-	var center: = Vector2(secondary.get("center", player_pos))
-	center = center.lerp(player_pos, 0.12)
-	secondary["center"] = center
-	secondary["last_pos"] = center
-	secondary["cut_timer"] = float(secondary.get("cut_timer", 0.0)) - delta
-	if float(secondary.get("cut_timer", 0.0)) > 0.0:
-		return
-	secondary["cut_timer"] = float(secondary.get("cut_interval", ECLIPSADA_LUA_E_TICK))
-	secondary["pulse"] = int(secondary.get("pulse", 0)) + 1
-	var radius: = float(secondary.get("radius", ECLIPSADA_LUA_E_RADIUS))
-	var targets: = _eclipsada_targets_near(center, radius, ECLIPSADA_LUA_E_MAX_TARGETS, true)
-	var pulse: = int(secondary.get("pulse", 0))
-	var color: Color = secondary.get("color", _eclipsada_color())
-	for target in targets:
-		var target_pos: = _eclipsada_target_pos(target)
-		var dir: = (target_pos - center).normalized()
-		if dir.length() <= 0.05:
-			dir = Vector2.from_angle(float(secondary.get("phase", 0.0)) + float(pulse))
-		var crit: = pulse % 3 == 0
-		var damage: float = player_damage * ECLIPSADA_E_DAMAGE_SCALE * (1.32 if crit else 0.72) * _eclipsada_trait_value("damage", 1.0)
-		_push_eclipsada_vfx({"kind": "e_cut", "target": target_pos, "dir": dir.rotated(rng.randf_range(-0.32, 0.32)), "cut_index": pulse, "life": 0.24, "max": 0.24, "color": color, "crit": crit})
-		_eclipsada_damage_target(target, damage, "eclipsada_lua_eclipse", "skill_e", target_pos)
-		if _eclipsada_trait_value("heal", 0.0) > 0.0 and crit:
-			_heal_player(int(player_hp_max * _eclipsada_trait_value("heal", 0.0) * 0.05), "eclipsada", true)
-	_push_eclipsada_vfx({"kind": "lua_eclipse_pulse", "target": center, "radius": radius, "life": 0.34, "max": 0.34, "color": color, "pulse": pulse, "phase": float(secondary.get("phase", 0.0))})
-
-
-func _eclipsada_pick_e_target(target_world) -> Dictionary:
-	var aimed: bool = target_world is Vector2 and Vector2(target_world).distance_to(player_pos) > 8.0
-	var center: Vector2 = Vector2(target_world) if aimed else player_pos
-	if aimed and center.distance_to(player_pos) > ECLIPSADA_E_AIM_RANGE:
-		center = player_pos + (center - player_pos).normalized() * ECLIPSADA_E_AIM_RANGE
-	var candidates: = _eclipsada_targets_near(center, ECLIPSADA_E_CHAIN_RADIUS if aimed else 380.0, 64, true)
-	if candidates.is_empty():
-		return {}
-	if aimed:
-		return candidates[0]
-	match auto_target_priority:
-		"lowest_max_hp":
-			candidates.sort_custom( func(a, b): return float(a.get("max_hp", 1.0)) < float(b.get("max_hp", 1.0)))
-		"lowest_hp":
-			candidates.sort_custom( func(a, b): return float(a.get("hp", 1.0)) < float(b.get("hp", 1.0)))
-		_:
-			candidates.sort_custom( func(a, b): return float(a.get("player_distance", 0.0)) < float(b.get("player_distance", 0.0)))
-	return candidates[0]
-
-
-func _eclipsada_next_chain_target(origin: Vector2, radius: float, previous: Dictionary) -> Dictionary:
-	var candidates: = _eclipsada_targets_near(origin, radius, 12, true)
-	for candidate in candidates:
-		if _acorrentada_same_target(candidate, previous):
-			continue
-		return candidate
-	return {}
-
-
-func _eclipsada_targets_near(point: Vector2, radius: float, limit: int, include_boss: = true) -> Array:
-	var candidates: Array = []
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var pos: = Vector2(enemy["pos"])
-		var dist: = point.distance_squared_to(pos)
-		if dist <= radius * radius:
-			candidates.append({"kind": "enemy", "uid": int(enemy["uid"]), "pos": pos, "distance": dist, "player_distance": player_pos.distance_squared_to(pos), "hp": float(enemy.get("hp", 1.0)), "max_hp": float(enemy.get("max_hp", 1.0))})
-	if include_boss and boss_active and boss_hp > 0.0 and boss_pos.distance_squared_to(point) <= radius * radius:
-		candidates.append({"kind": "boss", "uid": -1, "pos": boss_pos, "distance": boss_pos.distance_squared_to(point), "player_distance": player_pos.distance_squared_to(boss_pos), "hp": boss_hp, "max_hp": boss_hp_max})
-	if _arauto_active() and Vector2(arauto["pos"]).distance_squared_to(point) <= radius * radius:
-		var pos: = Vector2(arauto["pos"])
-		candidates.append({"kind": "arauto", "uid": -1, "pos": pos, "distance": pos.distance_squared_to(point), "player_distance": player_pos.distance_squared_to(pos), "hp": float(arauto.get("hp", 1.0)), "max_hp": float(arauto.get("max_hp", 1.0))})
-	candidates.sort_custom( func(a, b): return float(a["distance"]) < float(b["distance"]))
-	if candidates.size() > limit:
-		candidates.resize(limit)
-	return candidates
-
-
-func _acorrentada_reach_multiplier() -> float:
-	if acorrentada_tension >= 40.0:
-		return 1.08
-	return 1.0
-
-
-func _acorrentada_damage_multiplier() -> float:
-	return 1.12 if acorrentada_tension >= 70.0 else 1.0
-
-
-func _acorrentada_color_hot() -> Color:
-	if acorrentada_tension >= 100.0:
-		return Color(1.0, 0.96, 0.92)
-	if acorrentada_tension >= 70.0:
-		return Color(1.0, 0.18, 0.16)
-	if acorrentada_tension >= 40.0:
-		return Color(0.16, 0.86, 1.0)
-	return Color(0.35, 0.3, 0.28)
-
-
-func _add_acorrentada_tension(amount: float, boss_scale: = 1.0) -> void :
-	if amount <= 0.0:
-		return
-	var applied_amount := amount * boss_scale
-	acorrentada_tension = clampf(acorrentada_tension + applied_amount, 0.0, 100.0)
-	acorrentada_last_hit_timer = 0.0
-	acorrentada_overcharge_ready = acorrentada_tension >= 100.0
-	AcorrentadaEvolutionController.on_tension_added(self, applied_amount)
-
-
-func _consume_acorrentada_overcharge() -> bool:
-	if acorrentada_tension < 100.0:
-		return false
-	acorrentada_tension = 35.0
-	acorrentada_overcharge_ready = false
-	AcorrentadaEvolutionController.on_overcharge_consumed(self)
-	_spawn_radial_particles(player_pos, Color(1.0, 0.28, 0.18), 24)
-	_add_text("SOBRETENSAO ROMPIDA", player_pos + Vector2(0, -102), Color(1.0, 0.88, 0.62), 0.9, 19)
-	return true
-
-
-func _acorrentada_enemy_elos(enemy: Dictionary) -> int:
-	return clampi(int(enemy.get("acorrentada_elo_count", 0)), 0, ACORRENTADA_MAX_ELOS)
-
-
-func _add_acorrentada_elo_enemy(enemy: Dictionary, amount: = 1) -> void :
-	var count: = clampi(_acorrentada_enemy_elos(enemy) + amount, 0, ACORRENTADA_MAX_ELOS)
-	enemy["acorrentada_elo_count"] = count
-	enemy["acorrentada_elo_timer"] = ACORRENTADA_ELO_TIME
-	enemy["acorrentada_flash"] = 0.55
-
-
-func _consume_acorrentada_elos_enemy(enemy: Dictionary) -> int:
-	var count: = _acorrentada_enemy_elos(enemy)
-	enemy["acorrentada_elo_count"] = 0
-	enemy["acorrentada_elo_timer"] = 0.0
-	enemy["acorrentada_flash"] = 0.7
-	return count
-
-
-func _add_acorrentada_elo_boss(amount: = 1) -> void :
-	if not boss_active or boss_hp <= 0.0:
-		return
-	acorrentada_boss_elos = clampi(acorrentada_boss_elos + amount, 0, ACORRENTADA_MAX_ELOS)
-	acorrentada_boss_elo_timer = ACORRENTADA_ELO_TIME
-
-
-func _consume_acorrentada_boss_elos() -> int:
-	var count: int = acorrentada_boss_elos
-	acorrentada_boss_elos = 0
-	acorrentada_boss_elo_timer = 0.0
-	return count
-
-
-func _acorrentada_target_pos(target: Dictionary) -> Vector2:
-	var kind: = String(target.get("kind", "enemy"))
-	if kind == "boss":
-		return boss_pos
-	if kind == "arauto" and _arauto_active():
-		return Vector2(arauto.get("pos", player_pos))
-	var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-	if enemy:
-		return Vector2(enemy.get("pos", player_pos))
-	return Vector2(target.get("pos", player_pos))
-
-
-func _acorrentada_target_alive(target: Dictionary) -> bool:
-	var kind: = String(target.get("kind", "enemy"))
-	if kind == "boss":
-		return boss_active and boss_hp > 0.0
-	if kind == "arauto":
-		return _arauto_active()
-	var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-	return enemy != null and float(enemy.get("hp", 0.0)) > 0.0
-
-
-func _acorrentada_targets_near(point: Vector2, radius: float, limit: int, include_boss: = true) -> Array:
-	var candidates: Array = []
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var dist: = Vector2(enemy["pos"]).distance_squared_to(point)
-		if dist <= radius * radius:
-			candidates.append({"kind": "enemy", "uid": int(enemy["uid"]), "pos": Vector2(enemy["pos"]), "distance": dist})
-	if include_boss and boss_active and boss_hp > 0.0 and boss_pos.distance_squared_to(point) <= radius * radius:
-		candidates.append({"kind": "boss", "uid": -1, "pos": boss_pos, "distance": boss_pos.distance_squared_to(point)})
-	if _arauto_active() and Vector2(arauto["pos"]).distance_squared_to(point) <= radius * radius:
-		candidates.append({"kind": "arauto", "uid": -1, "pos": Vector2(arauto["pos"]), "distance": Vector2(arauto["pos"]).distance_squared_to(point)})
-	candidates.sort_custom( func(a, b): return float(a["distance"]) < float(b["distance"]))
-	if candidates.size() > limit:
-		candidates.resize(limit)
-	return candidates
-
-
-func _acorrentada_target_in_front(pos: Vector2, origin: Vector2, dir: Vector2, reach: float, half_angle: float) -> bool:
-	var offset: = pos - origin
-	if offset.length() > reach:
-		return false
-	if offset.length() <= 8.0:
-		return true
-	return dir.normalized().dot(offset.normalized()) >= cos(half_angle)
-
-
-func _perform_acorrentada_attack() -> void :
-	var dir: = _aim_direction()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	last_attack_time = time_alive
-	_set_player_attack_visual_dir(dir)
-	acorrentada_combo_reset_timer = ACORRENTADA_COMBO_RESET_TIME
-	_play_manifestation_attack_sfx("acorrentada")
-	_apply_aura_events(AuraSystem.on_attack(aura_state, {"pos": player_pos, "dir": dir, "kind": "acorrentada"}))
-	var stage: int = 3 if acorrentada_force_next_attack_3 else acorrentada_combo_step
-	acorrentada_force_next_attack_3 = false
-	var motion: = _start_acorrentada_attack_motion(stage, dir)
-	_send_network_ability_visual(NET_ABILITY_ATTACK, player_pos, Vector2(motion["impact"]), float(motion["duration"]), float(stage))
-	if stage >= 3:
-		acorrentada_combo_step = 1
-	else:
-		acorrentada_combo_step = stage + 1
-
-
-func _acorrentada_attack_out_time(stage: int) -> float:
-	return float(ACORRENTADA_ATTACK_OUT_TIMES[clampi(stage, 1, 3) - 1])
-
-
-func _acorrentada_attack_return_time(stage: int) -> float:
-	return float(ACORRENTADA_ATTACK_RETURN_TIMES[clampi(stage, 1, 3) - 1])
-
-
-func _acorrentada_attack_windup_time(stage: int) -> float:
-	return float(ACORRENTADA_ATTACK_WINDUP_TIMES[clampi(stage, 1, 3) - 1])
-
-
-func _acorrentada_attack_windup_distance(stage: int) -> float:
-	return float(ACORRENTADA_ATTACK_WINDUP_BACK_DISTANCES[clampi(stage, 1, 3) - 1])
-
-
-func _acorrentada_attack_windup_fraction(stage: int) -> float:
-	var nominal_reach: = 250.0 if stage == 1 else (295.0 if stage == 2 else 285.0)
-	return clampf(_acorrentada_attack_windup_distance(stage) / nominal_reach, 0.12, 0.34)
-
-
-func _acorrentada_attack_duration(stage: int) -> float:
-	return _acorrentada_attack_windup_time(stage) + _acorrentada_attack_out_time(stage) + ACORRENTADA_ATTACK_HOLD_TIME + _acorrentada_attack_return_time(stage)
-
-
-func _start_acorrentada_attack_motion(stage: int, dir: Vector2) -> Dictionary:
-	if acorrentada_worn_chains.is_empty():
-		_init_acorrentada_worn_chains()
-	var reach: = _ranged_primary_attack_range()
-	var width: = 34.0 if stage == 1 else (92.0 if stage == 2 else 62.0)
-	var target: Dictionary = _best_acorrentada_line_target(player_pos, dir, reach, width)
-	var impact: Vector2 = player_pos + dir * reach
-	if not target.is_empty():
-		impact = _acorrentada_target_pos(target)
-	var duration: = _acorrentada_attack_duration(stage)
-	var primary_index: = 0 if stage != 2 else 1
-	var event_id := _manifest_evolution_new_combat_event_id("attack", "acorrentada")
-	_manifest_evolution_dispatch_combat_event({"type": "attack_emitted", "event_id": event_id, "source": "acorrentada", "author_peer_id": _mp_unique_id()})
-	var motion: = {
-		"stage": stage,
-		"elapsed": 0.0,
-		"windup_time": _acorrentada_attack_windup_time(stage),
-		"out_time": _acorrentada_attack_out_time(stage),
-		"hold_time": ACORRENTADA_ATTACK_HOLD_TIME,
-		"return_time": _acorrentada_attack_return_time(stage),
-		"windup_distance": _acorrentada_attack_windup_distance(stage),
-		"impact": impact,
-		"impact_offset": Vector2.ZERO,
-		"damage_impact": impact,
-		"target": target,
-		"dir": dir.normalized(),
-		"reach": reach,
-		"arc": 26.0 if stage == 1 else (64.0 if stage == 2 else 42.0),
-		"arc_sign": -1.0 if primary_index % 2 == 0 else 1.0,
-		"resolve": true,
-		"hit_resolved": false,
-		"manifest_evolution_event_id": event_id
-	}
-	acorrentada_worn_chains[primary_index]["attack_motion"] = motion
-	if stage == 3 and acorrentada_worn_chains.size() > 1:
-		var side: = dir.normalized().orthogonal() * 24.0
-		motion["impact"] = impact + side
-		motion["impact_offset"] = side
-		var secondary_motion: = motion.duplicate(true)
-		secondary_motion["impact"] = impact - side
-		secondary_motion["impact_offset"] = - side
-		secondary_motion["arc_sign"] = 1.0
-		secondary_motion["resolve"] = false
-		acorrentada_worn_chains[1]["attack_motion"] = secondary_motion
-	return {"impact": impact, "duration": duration}
-
-
-func _resolve_acorrentada_attack_motion(motion: Dictionary) -> void :
-	var stage: = int(motion.get("stage", 1))
-	var dir: = Vector2(motion.get("dir", Vector2.RIGHT)).normalized()
-	var target: Dictionary = motion.get("target", {})
-	var impact: = Vector2(motion.get("damage_impact", player_pos))
-	var event_id := String(motion.get("manifest_evolution_event_id", ""))
-	if event_id == "":
-		event_id = _manifest_evolution_new_combat_event_id("attack", "acorrentada")
-	match stage:
-		1:
-			if not target.is_empty() and _acorrentada_target_alive(target):
-				_acorrentada_damage_target(target, player_damage * 0.82 * _acorrentada_damage_multiplier() * _ranged_primary_damage_multiplier(), "acorrentada_attack_1", "basic_attack", player_pos)
-				_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(target.get("uid", target.get("kind", "")))], "acorrentada", target, _acorrentada_target_pos(target))
-				_acorrentada_apply_elo_to_target(target, 1)
-				_add_acorrentada_tension(3.0 if String(target.get("kind", "")) == "boss" else 6.0)
-		2:
-			_resolve_acorrentada_attack_2(dir, float(motion.get("reach", 295.0)), event_id)
-		_:
-			_resolve_acorrentada_attack_3(target, impact, event_id)
-	AcorrentadaEvolutionController.on_combo_resolved(self, stage, target, impact, event_id)
-	_play_acorrentada_hit_sfx(stage)
-	_spawn_radial_particles(impact, _acorrentada_color_hot(), 8 if stage < 3 else 14)
-
-
-func _play_acorrentada_hit_sfx(stage: int) -> void :
-	var idx: = clampi(stage, 1, 3)
-	_play_sfx("acorrentada_hit_%d" % idx, 0.025, 0.78 + float(idx) * 0.08, 0.96 + float(idx) * 0.04)
-
-
-func _resolve_acorrentada_attack_2(dir: Vector2, reach: float, event_id: String = "") -> void :
-	var hit_count: = 0
-	var center: Vector2 = player_pos + dir * (reach * 0.55)
-	acorrentada_visuals.append({"kind": "sweep", "pos": player_pos, "dir": dir, "life": 0.18, "max": 0.18, "radius": reach, "heavy": true})
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var enemy_pos: = Vector2(enemy["pos"])
-		if not _acorrentada_target_in_front(enemy_pos, player_pos, dir, reach, deg_to_rad(58.0)):
-			continue
-		var had_elos: = _acorrentada_enemy_elos(enemy) > 0
-		_acorrentada_damage_target({"kind": "enemy", "uid": int(enemy["uid"])}, player_damage * 1.04 * _acorrentada_damage_multiplier() * _ranged_primary_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
-		_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(enemy.get("uid", ""))], "acorrentada", enemy, enemy_pos)
-		_add_acorrentada_elo_enemy(enemy, 1)
-		if had_elos:
-			enemy["acorrentada_slow"] = max(float(enemy.get("acorrentada_slow", 0.0)), 0.8)
-			enemy["pos"] = Vector2(enemy["pos"]).lerp(center, 0.1 if _is_uncommon_enemy(enemy) else 0.18)
-		_add_acorrentada_tension(8.0 if hit_count == 0 else (5.0 if hit_count == 1 else 3.0))
-		hit_count += 1
-	if boss_active and boss_hp > 0.0 and _acorrentada_target_in_front(boss_pos, player_pos, dir, reach + 42.0, deg_to_rad(58.0)):
-		_acorrentada_damage_target({"kind": "boss"}, player_damage * 0.48 * _acorrentada_damage_multiplier() * _ranged_primary_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
-		_manifest_evolution_on_combat_hit("%s:hit:boss" % event_id, "acorrentada", {"uid": "boss", "kind": "boss", "pos": boss_pos}, boss_pos)
-		_add_acorrentada_elo_boss(1)
-		_add_acorrentada_tension(3.0)
-	if _arauto_active() and _acorrentada_target_in_front(Vector2(arauto["pos"]), player_pos, dir, reach + 38.0, deg_to_rad(58.0)):
-		_acorrentada_damage_target({"kind": "arauto"}, player_damage * 0.7 * _acorrentada_damage_multiplier() * _ranged_primary_damage_multiplier(), "acorrentada_attack_2", "basic_attack", player_pos)
-		_manifest_evolution_on_combat_hit("%s:hit:arauto" % event_id, "acorrentada", {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"])}, Vector2(arauto["pos"]))
-		_acorrentada_apply_elo_to_target({"kind": "arauto"}, 1)
-		_add_acorrentada_tension(5.0)
-
-
-func _resolve_acorrentada_attack_3(target: Dictionary, impact: Vector2, event_id: String = "") -> void :
-	var consumed: = 0
-	if not target.is_empty() and _acorrentada_target_alive(target):
-		if String(target.get("kind", "")) == "boss":
-			consumed = _consume_acorrentada_boss_elos()
-			var boss_bonus: = 1.0 + float(consumed) * 0.11 + (0.25 if acorrentada_boss_crack_timer > 0.0 else 0.0)
-			acorrentada_boss_crack_timer = 0.0
-			_acorrentada_damage_target(target, player_damage * 1.52 * boss_bonus * _acorrentada_damage_multiplier() * _ranged_primary_damage_multiplier(), "acorrentada_attack_3", "basic_attack", player_pos)
-			_manifest_evolution_on_combat_hit("%s:hit:boss" % event_id, "acorrentada", target, impact)
-			_add_acorrentada_tension(8.0 + consumed * 2.0)
-		else:
-			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-			if enemy:
-				consumed = _consume_acorrentada_elos_enemy(enemy)
-			_acorrentada_damage_target(target, player_damage * (1.52 + float(consumed) * 0.2) * _acorrentada_damage_multiplier() * _ranged_primary_damage_multiplier(), "acorrentada_attack_3", "basic_attack", player_pos)
-			_manifest_evolution_on_combat_hit("%s:hit:%s" % [event_id, str(target.get("uid", ""))], "acorrentada", target, impact)
-			_add_acorrentada_tension(12.0 + consumed * 4.0)
-	_acorrentada_wave(impact, 115.0 + (20.0 if acorrentada_tension >= 40.0 else 0.0), player_damage * 0.36)
-
-
-func _best_acorrentada_line_target(origin: Vector2, dir: Vector2, reach: float, width: float) -> Dictionary:
-	var best: Dictionary = {}
-	var best_dist: = INF
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var pos: = Vector2(enemy["pos"])
-		var along: = (pos - origin).dot(dir.normalized())
-		if along < 0.0 or along > reach:
-			continue
-		if _distance_to_segment(pos, origin, origin + dir.normalized() * reach) > width + _enemy_radius(enemy) * 0.35:
-			continue
-		if along < best_dist:
-			best_dist = along
-			best = {"kind": "enemy", "uid": int(enemy["uid"])}
-	if boss_active and boss_hp > 0.0:
-		var boss_along: float = (boss_pos - origin).dot(dir.normalized())
-		if boss_along >= 0.0 and boss_along <= reach and _distance_to_segment(boss_pos, origin, origin + dir.normalized() * reach) <= width + _boss_hit_radius() * 0.45 and boss_along < best_dist:
-			best_dist = boss_along
-			best = {"kind": "boss", "uid": -1}
-	if _arauto_active():
-		var arauto_pos: = Vector2(arauto["pos"])
-		var arauto_along: = (arauto_pos - origin).dot(dir.normalized())
-		if arauto_along >= 0.0 and arauto_along <= reach and _distance_to_segment(arauto_pos, origin, origin + dir.normalized() * reach) <= width + 58.0 and arauto_along < best_dist:
-			best = {"kind": "arauto", "uid": -1}
-	return best
-
-
-func _acorrentada_damage_target(target: Dictionary, amount: float, source: String, source_category: String, origin: Vector2) -> bool:
-	match String(target.get("kind", "enemy")):
-		"boss":
-			_damage_boss(amount, source, true, true, source_category, origin)
-			return boss_hp <= 0.0
-		"arauto":
-			_damage_arauto(amount, source, true, true, source_category, origin)
-			return false
-		_:
-			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-			if enemy:
-				var killed: = _damage_enemy(enemy, amount, source, true, true, origin, source_category)
-				if killed:
-					_kill_enemy(enemy)
-				return killed
-	return false
-
-
-func _acorrentada_apply_elo_to_target(target: Dictionary, amount: = 1) -> void :
-	match String(target.get("kind", "enemy")):
-		"boss":
-			_add_acorrentada_elo_boss(amount)
-		"arauto":
-			if _arauto_active():
-				var count: = clampi(int(arauto.get("acorrentada_elo_count", 0)) + amount, 0, ACORRENTADA_MAX_ELOS)
-				arauto["acorrentada_elo_count"] = count
-				arauto["acorrentada_elo_timer"] = ACORRENTADA_ELO_TIME
-		"enemy":
-			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-			if enemy:
-				_add_acorrentada_elo_enemy(enemy, amount)
-
-
-func _acorrentada_wave(center: Vector2, radius: float, damage: float) -> void :
-	shockwaves.append({"pos": center, "radius": 0.0, "max": radius, "life": 0.34, "damage": damage, "hit": {}, "kind": "acorrentada_attack_3_wave", "source_category": "manifestation_secondary"})
-
-
-func _cast_acorrentada_q(target_world = null) -> bool:
-	var target_point: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos + _ability_aim_direction() * 260.0
-	var overcharged: bool = _consume_acorrentada_overcharge()
-	var limit: int = 3 if overcharged else 2
-	var duration: float = ACORRENTADA_Q_OVERCHARGE_DURATION if overcharged else ACORRENTADA_Q_DURATION
-	var targets: Array = _acorrentada_targets_near(target_point, 210.0, limit, true)
-	if targets.is_empty():
-		for i in range(2):
-			acorrentada_links.append({"kind": "anchor", "target": {}, "anchor": target_point + Vector2.from_angle(float(i) * PI) * 62.0, "life": 1.7, "max": 1.7, "hit_cd": {}})
-			_init_link_chain_physics(acorrentada_links[-1])
-		_add_text("ANCORAS CURTAS", target_point + Vector2(0, -72), Color(0.46, 0.88, 1.0), 0.8, 18)
-		return true
-	if targets.size() == 1:
-		var target: Dictionary = targets[0]
-		var kind: String = String(target.get("kind", "enemy"))
-		if kind == "boss":
-			acorrentada_links.append({"kind": "boss", "target": target, "center": boss_pos, "life": duration, "max": duration, "charges": 0, "ruptured": false})
-			_init_link_chain_physics(acorrentada_links[-1])
-			_add_text("CONTENCAO GEMINADA", boss_pos + Vector2(0, -116), Color(0.3, 0.86, 1.0), 0.9, 18)
-		else:
-			acorrentada_links.append({"kind": "anchor", "target": target, "anchor": target_point, "life": duration, "max": duration, "hit_cd": {}})
-			_init_link_chain_physics(acorrentada_links[-1])
-			_acorrentada_apply_elo_to_target(target, 1)
-		_add_acorrentada_tension(5.0, 0.65 if kind == "boss" else 1.0)
-		return true
-	if targets.size() >= 3:
-		acorrentada_links.append({"kind": "triad", "targets": targets, "life": duration, "max": duration, "share": 0.24, "hit_cd": {}})
-	else:
-		acorrentada_links.append({"kind": "pair", "targets": targets, "life": duration, "max": duration, "share": 0.18, "hit_cd": {}})
-	_init_link_chain_physics(acorrentada_links[-1])
-	for target in targets:
-		_acorrentada_apply_elo_to_target(target, 1)
-	_add_acorrentada_tension(5.0)
-	_add_text("PRISAO GEMINADA", target_point + Vector2(0, -82), Color(0.26, 0.86, 1.0), 0.95, 21)
-	return true
-
-
-func _cast_acorrentada_e(target_world = null) -> bool:
-	var center: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
-	if center.distance_to(player_pos) > 620.0:
-		center = player_pos + (center - player_pos).normalized() * 620.0
-	var overcharged: bool = _consume_acorrentada_overcharge()
-	var radius: float = ACORRENTADA_E_OVERCHARGE_RADIUS if overcharged else ACORRENTADA_E_RADIUS
-	var targets: Array = []
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var linked: bool = _acorrentada_target_linked({"kind": "enemy", "uid": int(enemy["uid"])})
-		if _acorrentada_enemy_elos(enemy) > 0 or linked or Vector2(enemy["pos"]).distance_to(center) <= radius:
-			if Vector2(enemy["pos"]).distance_to(center) <= radius:
-				targets.append({"kind": "enemy", "uid": int(enemy["uid"]), "linked": linked})
-	var boss_linked: bool = _acorrentada_target_linked({"kind": "boss"})
-	if boss_active and boss_hp > 0.0 and (acorrentada_boss_elos > 0 or boss_linked or boss_pos.distance_to(center) <= radius + 70.0):
-		targets.append({"kind": "boss", "uid": -1, "linked": boss_linked})
-	var arauto_linked: bool = _acorrentada_target_linked({"kind": "arauto"})
-	if _arauto_active() and (int(arauto.get("acorrentada_elo_count", 0)) > 0 or arauto_linked or Vector2(arauto["pos"]).distance_to(center) <= radius + 58.0):
-		targets.append({"kind": "arauto", "uid": -1, "linked": arauto_linked})
-	if targets.is_empty():
-		_add_text("SEM ELOS", player_pos + Vector2(0, -98), Color(0.74, 0.86, 0.92), 0.65, 17)
-		return false
-	manifestation_secondaries.append({
-		"kind": "acorrentada",
-		"life": ACORRENTADA_E_DURATION,
-		"max": ACORRENTADA_E_DURATION,
-		"center": center,
-		"radius": radius,
-		"targets": targets,
-		"resolved": false,
-		"overcharged": overcharged,
-		"tick": ACORRENTADA_E_TICK_INTERVAL
-	})
-	var sec: Dictionary = manifestation_secondaries[-1]
-	var sec_chains: Array = []
-	var sec_center: Vector2 = Vector2(sec.get("center", player_pos))
-	for target in sec.get("targets", []):
-		var target_pos: Vector2 = _acorrentada_target_pos(target)
-		sec_chains.append(_init_chain_physics(sec_center, target_pos, "heavy"))
-	sec["chains"] = sec_chains
-	AcorrentadaEvolutionController.on_sentence_started(self, sec)
-	_add_text("SENTENCA DOS GRILHOES", center + Vector2(0, -92), Color(1.0, 0.28, 0.2), 0.95, 21)
-	return true
-
-
-func _resolve_acorrentada_sentence(secondary: Dictionary) -> void :
-	if bool(secondary.get("resolved", false)):
-		return
-	secondary["resolved"] = true
-	var center: Vector2 = Vector2(secondary.get("center", player_pos))
-	var overcharged: bool = bool(secondary.get("overcharged", false))
-	var index: int = 0
-	for raw_target in secondary.get("targets", []):
-		if typeof(raw_target) != TYPE_DICTIONARY:
-			continue
-		var target: Dictionary = raw_target
-		if not _acorrentada_target_alive(target):
-			continue
-		var target_kind: = String(target.get("kind", ""))
-		var is_boss: = target_kind == "boss"
-		var is_arauto: = target_kind == "arauto"
-		var elos: = _consume_acorrentada_boss_elos() if is_boss else 0
-		if is_arauto and _arauto_active():
-			elos = clampi(int(arauto.get("acorrentada_elo_count", 0)), 0, ACORRENTADA_MAX_ELOS)
-			arauto["acorrentada_elo_count"] = 0
-			arauto["acorrentada_elo_timer"] = 0.0
-		elif not is_boss:
-			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-			if enemy:
-				elos = _consume_acorrentada_elos_enemy(enemy)
-				enemy["acorrentada_slow"] = max(float(enemy.get("acorrentada_slow", 0.0)), 1.4)
-				enemy["pos"] = Vector2(enemy["pos"]).lerp(center, 0.12 if _is_uncommon_enemy(enemy) else 0.22)
-		var linked: = bool(target.get("linked", false))
-		var boss_like: = is_boss or is_arauto
-		var tension_mult: float = 1.0 + (acorrentada_tension / 100.0) * (0.225 if boss_like else 0.3)
-		var bonus_per_elo: = 0.14 if boss_like else 0.22
-		var linked_bonus: = 0.1 if boss_like else 0.15
-		var damage: float = player_damage * (1.1 + float(elos) * bonus_per_elo + (linked_bonus if linked else 0.0)) * tension_mult * (1.2 if overcharged else 1.0)
-		_acorrentada_damage_target(target, damage, "acorrentada_e", "skill_e", player_pos)
-		_add_acorrentada_tension(10.0 if index == 0 else (6.0 if index == 1 else 3.0), 0.55 if boss_like else 1.0)
-		if is_boss:
-			acorrentada_boss_crack_timer = max(acorrentada_boss_crack_timer, 4.0)
-		index += 1
-	_clear_acorrentada_links()
-	if overcharged:
-		acorrentada_force_next_attack_3 = true
-		acorrentada_visuals.append({"kind": "implosion", "pos": center, "life": 0.55, "max": 0.55, "radius": float(secondary.get("radius", ACORRENTADA_E_RADIUS))})
-	_spawn_radial_particles(center, Color(1.0, 0.16, 0.14), 28)
-
-
-func _tick_acorrentada_sentence(secondary: Dictionary) -> void :
-	var center: Vector2 = Vector2(secondary.get("center", player_pos))
-	var overcharged: bool = bool(secondary.get("overcharged", false))
-	var damage: float = player_damage * ACORRENTADA_E_TICK_DAMAGE_SCALE * (1.18 if overcharged else 1.0) * _acorrentada_damage_multiplier()
-	var hit_any: = false
-	for raw_target in secondary.get("targets", []):
-		if typeof(raw_target) != TYPE_DICTIONARY:
-			continue
-		var target: Dictionary = raw_target
-		if not _acorrentada_target_alive(target):
-			continue
-		if _acorrentada_damage_target(target, damage, "acorrentada_e_pull", "skill_e", center):
-			hit_any = true
-		else:
-			hit_any = true
-	if hit_any:
-		_spawn_radial_particles(center, Color(0.95, 0.1, 0.08), 5)
-
-
-func _pull_acorrentada_sentence_targets(secondary: Dictionary, delta: float) -> void :
-	var center: Vector2 = Vector2(secondary.get("center", player_pos))
-	var speed: = ACORRENTADA_E_PULL_SPEED * (1.18 if bool(secondary.get("overcharged", false)) else 1.0)
-	for raw_target in secondary.get("targets", []):
-		if typeof(raw_target) != TYPE_DICTIONARY:
-			continue
-		var target: Dictionary = raw_target
-		if not _acorrentada_target_alive(target):
-			continue
-		match String(target.get("kind", "")):
-			"enemy":
-				var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-				if enemy:
-					var pos: = Vector2(enemy["pos"])
-					enemy["pos"] = pos.move_toward(center, speed * delta)
-					enemy["acorrentada_slow"] = max(float(enemy.get("acorrentada_slow", 0.0)), 0.35)
-			"arauto":
-				if _arauto_active():
-					var arauto_pos: = Vector2(arauto["pos"])
-					arauto["pos"] = arauto_pos.move_toward(center, speed * delta * 0.7)
-
-
-func _acorrentada_target_linked(target: Dictionary) -> bool:
-	for link in acorrentada_links:
-		match String(link.get("kind", "")):
-			"pair", "triad":
-				for entry in link.get("targets", []):
-					if String(entry.get("kind", "")) == String(target.get("kind", "")) and int(entry.get("uid", -1)) == int(target.get("uid", -1)):
-						return true
-			"anchor", "boss":
-				var linked_target: Dictionary = link.get("target", {})
-				if String(linked_target.get("kind", "")) == String(target.get("kind", "")) and int(linked_target.get("uid", -1)) == int(target.get("uid", -1)):
-					return true
-	return false
-
-
-func _update_acorrentada_state(delta: float) -> void :
-	_update_acorrentada_worn_chains(delta)
-	acorrentada_combo_reset_timer = max(0.0, acorrentada_combo_reset_timer - delta)
-	if acorrentada_combo_reset_timer <= 0.0 and acorrentada_combo_step != 1:
-		acorrentada_combo_step = 1
-	acorrentada_last_hit_timer += delta
-	if acorrentada_last_hit_timer > ACORRENTADA_TENSION_DECAY_DELAY:
-		acorrentada_tension = max(0.0, acorrentada_tension - 5.0 * delta)
-		acorrentada_overcharge_ready = acorrentada_tension >= 100.0
-	acorrentada_boss_elo_timer = max(0.0, acorrentada_boss_elo_timer - delta)
-	if acorrentada_boss_elo_timer <= 0.0:
-		acorrentada_boss_elos = 0
-	acorrentada_boss_crack_timer = max(0.0, acorrentada_boss_crack_timer - delta)
-	if _arauto_active() and float(arauto.get("acorrentada_elo_timer", 0.0)) > 0.0:
-		arauto["acorrentada_elo_timer"] = max(0.0, float(arauto.get("acorrentada_elo_timer", 0.0)) - delta)
-		if float(arauto["acorrentada_elo_timer"]) <= 0.0:
-			arauto["acorrentada_elo_count"] = 0
-	for enemy in enemies:
-		if float(enemy.get("acorrentada_elo_timer", 0.0)) > 0.0:
-			enemy["acorrentada_elo_timer"] = max(0.0, float(enemy.get("acorrentada_elo_timer", 0.0)) - delta)
-			if float(enemy["acorrentada_elo_timer"]) <= 0.0:
-				enemy["acorrentada_elo_count"] = 0
-		enemy["acorrentada_flash"] = max(0.0, float(enemy.get("acorrentada_flash", 0.0)) - delta)
-		enemy["acorrentada_slow"] = max(0.0, float(enemy.get("acorrentada_slow", 0.0)) - delta)
-	for visual in acorrentada_visuals:
-		visual["life"] = max(0.0, float(visual.get("life", 0.0)) - delta)
-		if visual.has("physics"):
-			_update_single_chain_physics(visual["physics"], Vector2(visual.get("a", player_pos)), Vector2(visual.get("b", player_pos)), delta)
-		if visual.has("physics_1") and visual.has("physics_2"):
-			var a: = Vector2(visual.get("a", player_pos))
-			var b: = Vector2(visual.get("b", player_pos))
-			var dir: = (b - a).normalized()
-			if dir.length() <= 0.01:
-				dir = Vector2.RIGHT
-			var side: = dir.orthogonal() * 42.0
-			_update_single_chain_physics(visual["physics_1"], a + side, b - side, delta)
-			_update_single_chain_physics(visual["physics_2"], a - side, b + side, delta)
-	acorrentada_visuals = acorrentada_visuals.filter( func(v): return float(v.get("life", 0.0)) > 0.0)
-	_update_acorrentada_links(delta)
-
-
-func _update_acorrentada_worn_chains(delta: float) -> void :
-	if manifestation_key != "acorrentada":
-		acorrentada_worn_chains.clear()
-		acorrentada_last_player_pos = player_pos
-		return
-	if delta <= 0.0:
-		return
-	var player_velocity: Vector2 = (player_pos - acorrentada_last_player_pos) / delta
-	acorrentada_last_player_pos = player_pos
-	if acorrentada_worn_chains.is_empty():
-		_init_acorrentada_worn_chains()
-	var moving: = player_velocity.length() > 14.0
-	var drag_dir: = ( - player_velocity.normalized()) if moving else ( - last_facing.normalized() if last_facing.length() > 0.05 else Vector2.LEFT)
-	var face: = last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT
-	var side: = face.orthogonal()
-	var drag_strength: float = clampf(player_velocity.length() / 260.0, 0.0, 1.0)
-	for chain_entry in acorrentada_worn_chains:
-		var index: = int(chain_entry.get("index", 0))
-		var anchor: Vector2 = _acorrentada_body_anchor(index, face, side)
-		var rest_target: Vector2 = _acorrentada_worn_chain_target(index, drag_dir, face, side, drag_strength)
-		var target: = rest_target
-		if chain_entry.has("attack_motion"):
-			target = _update_acorrentada_chain_attack_motion(chain_entry, rest_target, delta)
-		var physics: Dictionary = chain_entry.get("physics", {})
-		if physics.is_empty():
-			physics = _init_chain_physics(anchor, target, String(chain_entry.get("weight", "light")))
-			chain_entry["physics"] = physics
-		_update_single_chain_physics(physics, anchor, target, delta)
-
-
-func _update_acorrentada_chain_attack_motion(chain_entry: Dictionary, rest_target: Vector2, delta: float) -> Vector2:
-	var motion: Dictionary = chain_entry.get("attack_motion", {})
-	if motion.is_empty():
-		return rest_target
-	var elapsed: = float(motion.get("elapsed", 0.0)) + delta
-	motion["elapsed"] = elapsed
-	var windup_time: = maxf(0.01, float(motion.get("windup_time", _acorrentada_attack_windup_time(int(motion.get("stage", 1))))))
-	var out_time: = maxf(0.01, float(motion.get("out_time", 0.28)))
-	var hold_time: = maxf(0.0, float(motion.get("hold_time", ACORRENTADA_ATTACK_HOLD_TIME)))
-	var return_time: = maxf(0.01, float(motion.get("return_time", 0.24)))
-	var hit_time: = windup_time + out_time
-	var impact: = Vector2(motion.get("impact", rest_target))
-	var stage: = int(motion.get("stage", 1))
-	var tracked_target: Dictionary = motion.get("target", {})
-	if stage != 2 and not tracked_target.is_empty() and _acorrentada_target_alive(tracked_target):
-		var tracked_impact: = _acorrentada_target_pos(tracked_target)
-		motion["damage_impact"] = tracked_impact
-		impact = tracked_impact + Vector2(motion.get("impact_offset", Vector2.ZERO))
-		motion["impact"] = impact
-	var direction: = Vector2(motion.get("dir", Vector2.RIGHT)).normalized()
-	if direction.length() <= 0.01:
-		direction = Vector2.RIGHT
-	var normal: = direction.orthogonal() * float(motion.get("arc_sign", 1.0))
-	var arc: = float(motion.get("arc", 32.0))
-	var windup_distance: = float(motion.get("windup_distance", _acorrentada_attack_windup_distance(stage)))
-	var windup_target: = rest_target - direction * windup_distance + normal * arc * 0.34
-	if elapsed >= hit_time and not bool(motion.get("hit_resolved", false)):
-		motion["hit_resolved"] = true
-		if bool(motion.get("resolve", false)):
-			_resolve_acorrentada_attack_motion(motion)
-		var physics: Dictionary = chain_entry.get("physics", {})
-		if not physics.is_empty():
-			physics["ripple_amp"] = maxf(float(physics.get("ripple_amp", 0.0)), 170.0)
-			physics["ripple_t"] = 0.0
-	var tip: = impact
-	if elapsed < windup_time:
-		var windup_ratio: = clampf(elapsed / windup_time, 0.0, 1.0)
-		var windup_ease: = 1.0 - pow(1.0 - windup_ratio, 2.0)
-		tip = rest_target.lerp(windup_target, windup_ease) - normal * sin(windup_ratio * PI) * arc * 0.18
-	elif elapsed < hit_time:
-		var strike_ratio: = clampf((elapsed - windup_time) / out_time, 0.0, 1.0)
-		var travel: = pow(strike_ratio, 2.35)
-		tip = windup_target.lerp(impact, travel) + normal * sin(strike_ratio * PI) * arc
-	elif elapsed > hit_time + hold_time:
-		var return_ratio: = clampf((elapsed - hit_time - hold_time) / return_time, 0.0, 1.0)
-		var travel_back: = 1.0 - pow(1.0 - return_ratio, 3.0)
-		tip = impact.lerp(rest_target, travel_back) - normal * sin(return_ratio * PI) * arc * 0.38
-	if elapsed >= hit_time + hold_time + return_time:
-		chain_entry.erase("attack_motion")
-		return rest_target
-	return tip
-
-
-func _init_acorrentada_worn_chains() -> void :
-	acorrentada_worn_chains.clear()
-	var face: = last_facing.normalized() if last_facing.length() > 0.05 else Vector2.RIGHT
-	var side: = face.orthogonal()
-	for i in range(2):
-		var a: Vector2 = _acorrentada_body_anchor(i, face, side)
-		var b: Vector2 = _acorrentada_worn_chain_target(i, - face, face, side, 0.0)
-		var weight: = "light" if i % 2 == 0 else "heavy"
-		acorrentada_worn_chains.append({
-			"index": i,
-			"weight": weight,
-			"physics": _init_chain_physics(a, b, weight)
-		})
-
-
-func _acorrentada_body_anchor(index: int, face: Vector2, side: Vector2) -> Vector2:
-	var bob: = sin(time_alive * 7.2 + float(index) * 1.3) * 2.2
-	match index:
-		0:
-			return player_pos - face * 7.0 - side * 18.0 + Vector2(0, -28.0 + bob)
-		1:
-			return player_pos - face * 6.0 + side * 19.0 + Vector2(0, -24.0 - bob * 0.7)
-		2:
-			return player_pos - face * 10.0 - side * 15.0 + Vector2(0, 4.0 + bob * 0.6)
-		_:
-			return player_pos - face * 9.0 + side * 16.0 + Vector2(0, 7.0 - bob * 0.5)
-
-
-func _acorrentada_worn_chain_target(index: int, drag_dir: Vector2, face: Vector2, side: Vector2, drag_strength: float) -> Vector2:
-	var sway: = sin(time_alive * (3.6 + float(index) * 0.2) + float(index) * 1.7)
-	var length: = 42.0 + drag_strength * 54.0 + float(index % 2) * 12.0
-	var side_offset: = (-1.0 if index % 2 == 0 else 1.0) * (20.0 + sway * 8.0)
-	var vertical: = 16.0 + sin(time_alive * 5.0 + float(index)) * 5.0
-	return player_pos + drag_dir * length + side * side_offset + face * sin(time_alive * 4.1 + float(index)) * 8.0 + Vector2(0, vertical)
-
-
-func _update_acorrentada_links(delta: float) -> void :
-	for link in acorrentada_links:
-		link["life"] = max(0.0, float(link.get("life", 0.0)) - delta)
-		_acorrentada_tick_link_hit_cooldowns(link, delta)
-		var kind: = String(link.get("kind", ""))
-		if kind == "pair" or kind == "triad":
-			var targets: Array = link.get("targets", [])
-			var chains: Dictionary = link.get("chains", {})
-			for i in range(targets.size()):
-				for j in range(i + 1, targets.size()):
-					_acorrentada_tension_pair(targets[i], targets[j], delta)
-					_acorrentada_update_link_line_contact(link, targets[i], targets[j])
-					var key: = "%d_%d" % [i, j]
-					if chains.has(key) and _acorrentada_target_alive(targets[i]) and _acorrentada_target_alive(targets[j]):
-						var a: = _acorrentada_target_pos(targets[i])
-						var b: = _acorrentada_target_pos(targets[j])
-						_update_single_chain_physics(chains[key], a, b, delta)
-		elif kind == "anchor":
-			var target: Dictionary = link.get("target", {})
-			if target.is_empty() or not _acorrentada_target_alive(target):
-				continue
-			var target_pos: = _acorrentada_target_pos(target)
-			var anchor: = Vector2(link.get("anchor", target_pos))
-			if link.has("physics"):
-				_update_single_chain_physics(link["physics"], anchor, target_pos, delta)
-			var radius: = 155.0 if _acorrentada_target_is_elite(target) else 135.0
-			if target_pos.distance_to(anchor) > radius:
-				var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-				if enemy:
-					enemy["pos"] = target_pos.move_toward(anchor, (120.0 if _is_uncommon_enemy(enemy) else 210.0) * delta)
-		elif kind == "boss" and boss_active and boss_hp > 0.0:
-			link["center"] = boss_pos
-			link["activity"] = float(link.get("activity", 0.0)) + delta
-			if float(link["activity"]) >= 0.75 and not bool(link.get("ruptured", false)):
-				link["activity"] = 0.0
-				link["charges"] = int(link.get("charges", 0)) + 1
-				_add_acorrentada_tension(2.0, 0.65)
-				if int(link["charges"]) >= 3:
-					link["ruptured"] = true
-					_damage_boss(player_damage * 0.65, "acorrentada_q_chain", true, true, "manifestation_secondary", player_pos)
-					_add_acorrentada_elo_boss(1)
-	acorrentada_links = acorrentada_links.filter( func(link): return float(link.get("life", 0.0)) > 0.0)
-
-
-func _acorrentada_tension_pair(a: Dictionary, b: Dictionary, delta: float) -> void :
-	if not _acorrentada_target_alive(a) or not _acorrentada_target_alive(b):
-		return
-	var pos_a: = _acorrentada_target_pos(a)
-	var pos_b: = _acorrentada_target_pos(b)
-	var dist: = pos_a.distance_to(pos_b)
-	if dist <= ACORRENTADA_Q_LINK_DISTANCE:
-		return
-	var pull: = (dist - ACORRENTADA_Q_LINK_DISTANCE) * 0.35 * delta
-	for target in [a, b]:
-		if String(target.get("kind", "")) != "enemy":
-			continue
-		var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-		if enemy:
-			var other: = pos_b if target == a else pos_a
-			enemy["pos"] = Vector2(enemy["pos"]).move_toward(other, pull)
-
-
-func _acorrentada_tick_link_hit_cooldowns(link: Dictionary, delta: float) -> void :
-	var hit_cd: Dictionary = link.get("hit_cd", {})
-	for key in hit_cd.keys():
-		hit_cd[key] = max(0.0, float(hit_cd[key]) - delta)
-	link["hit_cd"] = hit_cd
-
-
-func _acorrentada_update_link_line_contact(link: Dictionary, a: Dictionary, b: Dictionary) -> void :
-	if not _acorrentada_target_alive(a) or not _acorrentada_target_alive(b):
-		return
-	var pos_a: = _acorrentada_target_pos(a)
-	var pos_b: = _acorrentada_target_pos(b)
-	var width: = 30.0 if String(link.get("kind", "")) == "triad" else 24.0
-	var hit_cd: Dictionary = link.get("hit_cd", {})
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var uid: = int(enemy.get("uid", -1))
-		if _acorrentada_same_target({"kind": "enemy", "uid": uid}, a) or _acorrentada_same_target({"kind": "enemy", "uid": uid}, b):
-			continue
-		var key: = "e_%d" % uid
-		if float(hit_cd.get(key, 0.0)) > 0.0:
-			continue
-		var enemy_pos: = Vector2(enemy["pos"])
-		if _distance_to_segment(enemy_pos, pos_a, pos_b) > width + _enemy_radius(enemy) * 0.25:
-			continue
-		var killed: = _damage_enemy(enemy, player_damage * 0.18, "acorrentada_q_chain", true, true, pos_a, "manifestation_secondary")
-		if killed:
-			_kill_enemy(enemy)
-		hit_cd[key] = ACORRENTADA_Q_LINE_CD
-		_add_acorrentada_tension(1.0)
-	if boss_active and boss_hp > 0.0 and not _acorrentada_same_target({"kind": "boss"}, a) and not _acorrentada_same_target({"kind": "boss"}, b):
-		var key: = "boss"
-		if float(hit_cd.get(key, 0.0)) <= 0.0 and _distance_to_segment(boss_pos, pos_a, pos_b) <= width + 48.0:
-			_damage_boss(player_damage * 0.08, "acorrentada_q_chain", true, true, "manifestation_secondary", pos_a)
-			hit_cd[key] = ACORRENTADA_Q_LINE_CD
-			_add_acorrentada_tension(0.5, 0.65)
-	link["hit_cd"] = hit_cd
-
-
-func _acorrentada_same_target(a: Dictionary, b: Dictionary) -> bool:
-	var kind_a: = String(a.get("kind", ""))
-	var kind_b: = String(b.get("kind", ""))
-	if kind_a != kind_b:
-		return false
-	if kind_a == "boss":
-		return true
-	return int(a.get("uid", -1)) == int(b.get("uid", -2))
-
-
-func _acorrentada_damage_can_share(source: String, source_category: String) -> bool:
-	if acorrentada_links.is_empty():
-		return false
-	if source in ["acorrentada_q_shared", "acorrentada_q_chain", "acorrentada_attack_3_wave", "acorrentada_tp_chain"]:
-		return false
-	if source.begins_with("card_") or source.begins_with("rare_") or source.begins_with("aura_"):
-		return false
-	return source_category != "manifestation_secondary"
-
-
-func _acorrentada_share_link_damage(hit_target: Dictionary, actual_damage: float, source: String, source_category: String, origin: Vector2) -> void :
-	if actual_damage <= 0.0 or not _acorrentada_damage_can_share(source, source_category):
-		return
-	for link in acorrentada_links:
-		var kind: = String(link.get("kind", ""))
-		if kind != "pair" and kind != "triad":
-			continue
-		var targets: Array = link.get("targets", [])
-		var shares_from_target: = false
-		for target in targets:
-			if _acorrentada_same_target(hit_target, target):
-				shares_from_target = true
-				break
-		if not shares_from_target:
-			continue
-		for other in targets:
-			if _acorrentada_same_target(hit_target, other) or not _acorrentada_target_alive(other):
-				continue
-			var share_ratio: = float(link.get("share", 0.18))
-			if _acorrentada_target_is_elite(hit_target) or _acorrentada_target_is_elite(other):
-				share_ratio = minf(share_ratio, 0.14)
-			if String(hit_target.get("kind", "")) == "boss" or String(other.get("kind", "")) == "boss":
-				share_ratio = minf(share_ratio, 0.08)
-			_acorrentada_damage_target(other, actual_damage * share_ratio, "acorrentada_q_shared", "manifestation_secondary", origin)
-			_add_acorrentada_tension(0.8, 0.65 if String(other.get("kind", "")) == "boss" else 1.0)
-
-
-func _acorrentada_target_is_elite(target: Dictionary) -> bool:
-	if String(target.get("kind", "")) != "enemy":
-		return false
-	var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-	return enemy != null and _is_uncommon_enemy(enemy)
-
-
-func _clear_acorrentada_links() -> void :
-	for link in acorrentada_links:
-		link["life"] = 0.0
-
-
-func _cartographic_coord_color(index: int) -> Color:
-	match index % 3:
-		0:
-			return Color(0.3, 1.0, 0.88)
-		1:
-			return Color(1.0, 0.78, 0.24)
-		_:
-			return Color(0.7, 0.44, 1.0)
-
-
-func _cartographic_update_coord_slots() -> void :
-	for i in range(cartographic_coords.size()):
-		cartographic_coords[i]["slot"] = i
-
-
-func _add_cartographic_coord(pos: Vector2, uid: = -1, target_kind: = "", source: = "") -> void :
-	var kind: = String(target_kind)
-	if kind.is_empty():
-		kind = "enemy" if uid >= 0 else "fixed"
-	var clamped_pos: = pos.clamp(Vector2(60, 70), WORLD_SIZE - Vector2(60, 70))
-	var coord_life: = 5.0
-	if source == "teleport" or kind == "teleport":
-		coord_life = 3.0
-	elif kind in ["enemy", "boss", "arauto"]:
-		coord_life = 10.0
-	else:
-		coord_life = 5.0
-
-	if kind != "fixed":
-		for existing in cartographic_coords:
-			var same_kind: = String(existing.get("kind", "fixed")) == kind
-			var same_uid: = int(existing.get("uid", -99999)) == uid or kind in ["boss", "arauto"]
-			if same_kind and same_uid:
-				existing["pos"] = clamped_pos
-				existing["life"] = coord_life
-				existing["max"] = coord_life
-				existing["source"] = source
-				_cartographic_update_coord_slots()
-				return
-	cartographic_coord_sequence += 1
-	var coord = {
-		"id": cartographic_coord_sequence,
-		"pos": clamped_pos,
-		"life": coord_life,
-		"max": coord_life,
-		"phase": rng.randf_range(0.0, TAU),
-		"kind": kind,
-		"uid": uid,
-		"source": source,
-		"slot": cartographic_coords.size()
-	}
-	cartographic_coords.append(coord)
-	var max_allowed: = CARTO_COORD_MAX
-	for c in cartographic_coords:
-		if String(c.get("source", "")) == "teleport":
-			max_allowed = 4
-			break
-	while cartographic_coords.size() > max_allowed:
-		var old_coord = cartographic_coords.pop_front()
-		var old_pos: = Vector2(old_coord.get("pos", clamped_pos))
-		slashes.append({"a": old_pos + Vector2(-18, 0), "b": old_pos + Vector2(18, 0), "life": 0.14, "max": 0.14, "color": Color(0.3, 1.0, 0.88), "width": 8.0})
-	_cartographic_update_coord_slots()
-
-
-func _cartographic_coord_world_pos(coord: Dictionary) -> Vector2:
-	match String(coord.get("kind", "fixed")):
-		"enemy":
-			var enemy = _enemy_by_uid(int(coord.get("uid", -1)))
-			if enemy:
-				coord["pos"] = Vector2(enemy.get("pos", coord.get("pos", player_pos)))
-		"arauto":
-			if _arauto_active():
-				coord["pos"] = Vector2(arauto.get("pos", coord.get("pos", player_pos)))
-		"boss":
-			if boss_active and boss_hp > 0.0:
-				var phase: float = float(coord.get("phase", 0.0)) + time_alive * 1.15
-				coord["pos"] = boss_pos + Vector2.from_angle(phase) * 54.0
-	return Vector2(coord.get("pos", player_pos))
-
-
-func _cartographic_coord_points() -> Array:
-	var points: Array = []
-	for coord in cartographic_coords:
-		points.append(_cartographic_coord_world_pos(coord))
-	return points
-
-
-func _cartographic_focus_target(max_range: float = 820.0) -> Dictionary:
-	var best: Dictionary = {}
-	var best_metric: float = INF
-	var range_sq: float = max_range * max_range
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var pos: = Vector2(enemy.get("pos", player_pos))
-		var distance: float = player_pos.distance_squared_to(pos)
-		if distance > range_sq:
-			continue
-		var metric: float = distance
-		match auto_target_priority:
-			"max_hp_low":
-				metric = float(enemy.get("max_hp", INF)) * 120.0 + sqrt(distance)
-			"hp_low":
-				metric = float(enemy.get("hp", INF)) * 120.0 + sqrt(distance)
-		if metric < best_metric:
-			best_metric = metric
-			best = {"kind": "enemy", "uid": int(enemy.get("uid", -1)), "pos": pos, "hp": float(enemy.get("hp", 1.0)), "max_hp": float(enemy.get("max_hp", 1.0))}
-	if _arauto_active():
-		var pos: = Vector2(arauto.get("pos", player_pos))
-		var distance: float = player_pos.distance_squared_to(pos)
-		if distance <= range_sq:
-			var metric: float = sqrt(distance) + float(arauto.get("hp", 1.0)) * 0.025
-			if metric < best_metric:
-				best_metric = metric
-				best = {"kind": "arauto", "uid": -2, "pos": pos, "hp": float(arauto.get("hp", 1.0)), "max_hp": float(arauto.get("max_hp", 1.0))}
-	if boss_active and boss_hp > 0.0:
-		var distance: float = player_pos.distance_squared_to(boss_pos)
-		if distance <= range_sq:
-			var metric: float = sqrt(distance) + boss_hp * 0.015
-			if metric < best_metric:
-				best = {"kind": "boss", "uid": -1, "pos": boss_pos, "hp": boss_hp, "max_hp": boss_hp_max}
-	return best
-
-
-func _cartographic_target_pos(target: Dictionary) -> Vector2:
-	match String(target.get("kind", "")):
-		"enemy":
-			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-			return Vector2(enemy.get("pos", target.get("pos", player_pos))) if enemy else Vector2(target.get("pos", player_pos))
-		"arauto":
-			return Vector2(arauto.get("pos", target.get("pos", player_pos))) if _arauto_active() else Vector2.ZERO
-		"boss":
-			return boss_pos if boss_active and boss_hp > 0.0 else Vector2.ZERO
-	return Vector2(target.get("pos", player_pos))
-
-
-func _cartographic_damage_target(target: Dictionary, amount: float, source: = "cartografica", source_category: = "manifestation_secondary") -> void :
-	match String(target.get("kind", "")):
-		"enemy":
-			var enemy = _enemy_by_uid(int(target.get("uid", -1)))
-			if enemy:
-				_damage_enemy(enemy, amount, source, true, true, player_pos, source_category)
-		"arauto":
-			if _arauto_active():
-				_damage_arauto(amount, source, true, true, source_category, player_pos)
-		"boss":
-			if boss_active and boss_hp > 0.0:
-				_damage_boss(amount, source, true, true, source_category, player_pos)
-
-
-func _cartographic_seed_combat_coords() -> void :
-	if cartographic_coords.size() >= 2:
-		return
-	var dir: = _ability_aim_direction()
-	if dir.length() <= 0.05:
-		dir = last_facing.normalized()
-	var target: = _cartographic_focus_target()
-	var target_pos: = Vector2.ZERO
-	if not target.is_empty():
-		target_pos = _cartographic_target_pos(target)
-	if target_pos == Vector2.ZERO:
-		target_pos = (player_pos + dir * 260.0).clamp(Vector2(60, 70), WORLD_SIZE - Vector2(60, 70))
-	if cartographic_coords.is_empty():
-		_add_cartographic_coord((player_pos + dir * 96.0).clamp(Vector2(60, 70), WORLD_SIZE - Vector2(60, 70)), -1, "fixed", "skill_q")
-	var first: = _cartographic_coord_world_pos(cartographic_coords[0])
-	if first.distance_to(target_pos) < 42.0:
-		target_pos = (player_pos - dir * 72.0).clamp(Vector2(60, 70), WORLD_SIZE - Vector2(60, 70))
-	var target_kind: = String(target.get("kind", "fixed")) if not target.is_empty() else "fixed"
-	var target_uid: = int(target.get("uid", -1)) if not target.is_empty() else -1
-	_add_cartographic_coord(target_pos, target_uid, target_kind, "skill_q")
-
-
-func _cartographic_route_hits_point(pos: Vector2, radius: float, points: Array) -> bool:
-	if points.size() < 2:
-		return false
-	for i in range(points.size()):
-		if points.size() == 2 and i > 0:
-			break
-		var a: Vector2 = points[i]
-		var b: Vector2 = points[(i + 1) % points.size()]
-		if _distance_to_segment(pos, a, b) <= CARTO_ROUTE_WIDTH + radius:
-			return true
-	return points.size() >= 3 and _point_in_triangle(pos, points[0], points[1], points[2])
-
-
-func _cartographic_fire_barrage(target: Dictionary, burst_index: int) -> void :
-	var target_pos: = _cartographic_target_pos(target)
-	if target_pos == Vector2.ZERO or bullets.size() >= MAX_BULLETS:
-		return
-	var origin: Vector2 = player_pos
-	var aim_dir: = _ability_aim_direction()
-	var dir: = (target_pos - origin).normalized()
-	if dir.length() <= 0.05:
-		dir = aim_dir
-	var damage: float = player_damage * (0.66 if String(target.get("kind", "")) == "enemy" else 0.48)
-	_add_bullet({
-		"pos": origin + dir * 34.0,
-		"origin": player_pos,
-		"source_category": "manifestation_secondary",
-		"dir": dir,
-		"life": 1.05,
-		"max_life": 1.05,
-		"age": 0.0,
-		"phase": rng.randf_range(0.0, TAU),
-		"trail_cd": 0.0,
-		"damage": damage,
-		"player_damage": player_damage,
-		"speed": BULLET_SPEED * 1.22,
-		"kind": "cartografica",
-		"pierce": false,
-		"hits": {},
-		"carto_barrage": true,
-		"fly_sfx_cd": 0.0,
-		"color": Color(0.34, 1.0, 0.82)
-	})
-	_setup_cartographic_projectile(bullets[-1])
-	_spawn_projectile_muzzle("cartografica", origin, dir)
-	slashes.append({"a": origin, "b": target_pos, "life": 0.16, "max": 0.16, "color": Color(0.34, 1.0, 0.82), "width": 10.0})
-
-
-func _activate_cartographic_routes() -> void :
-	_cartographic_seed_combat_coords()
-	if cartographic_coords.size() < 2:
-		_add_text("COORDENADA FIXADA", player_pos + Vector2(0, -92), Color(0.65, 1.0, 0.84), 0.9, 18)
-		return
-	cartographic_route_timer = CARTO_ROUTE_ACTIVE_TIME
-	if cartographic_coords.size() >= 3:
-		cartographic_complete_map_timer = CARTO_COMPLETE_MAP_TIME
-	_apply_cartographic_route_pressure(0.18)
-	_add_text("MAPA COMPLETO" if cartographic_coords.size() >= 3 else "DOBRA CARTOGRAFICA", player_pos + Vector2(0, -102), Color(0.4, 1.0, 0.82), 1.1, 24)
-	_spawn_radial_particles(player_pos, Color(0.24, 1.0, 0.78), 20)
-
-
-func _cast_cartographic_fold(target_world: Vector2) -> void :
-	var target: = _cartographic_focus_target(860.0)
-	if not target.is_empty():
-		_add_cartographic_coord(_cartographic_target_pos(target), int(target.get("uid", -1)), String(target.get("kind", "enemy")), "skill_q")
-	elif target_world.distance_to(player_pos) > 34.0:
-		_add_cartographic_coord(target_world, -1, "fixed", "skill_q")
-	_activate_cartographic_routes()
-
-
-func _cast_cartographic_atlas(target_world: Vector2) -> void :
-	if target_world.distance_to(player_pos) > 40.0:
-		_add_cartographic_coord(target_world, -1, "fixed", "skill_e")
-	_activate_cartographic_routes()
-	manifestation_secondaries.append({"kind": "cartografica", "life": 6.4, "max": 6.4, "tick": 0.0, "burst_index": 0})
-	cartographic_complete_map_timer = max(cartographic_complete_map_timer, CARTO_COMPLETE_MAP_TIME)
-
-
-func _apply_cartographic_route_pressure(delta: float) -> void :
-	var points = _cartographic_coord_points()
-	if points.size() < 2:
-		return
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var enemy_pos = Vector2(enemy["pos"])
-		var close_to_route = false
-		for i in range(points.size()):
-			var a: Vector2 = points[i]
-			var b: Vector2 = points[(i + 1) % points.size()]
-			if points.size() == 2 and i > 0:
-				break
-			if _distance_to_segment(enemy_pos, a, b) <= CARTO_ROUTE_WIDTH + _enemy_radius(enemy) * 0.35:
-				close_to_route = true
-				break
-		var inside_triangle = points.size() >= 3 and _point_in_triangle(enemy_pos, points[0], points[1], points[2])
-		if close_to_route or inside_triangle:
-			enemy["carto_confuse"] = max(float(enemy.get("carto_confuse", 0.0)), 0.75)
-			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.06)
-			var route_damage: float = maxf(1.0, player_damage * (0.18 if close_to_route else 0.12) + float(enemy.get("max_hp", 1.0)) * (0.004 if close_to_route else 0.006))
-			if inside_triangle:
-				route_damage *= 1.28
-			_damage_enemy(enemy, route_damage * maxf(delta, 0.1), "cartografica", false)
-	if boss_active and boss_hp > 0.0:
-		if _cartographic_route_hits_point(boss_pos, 72.0, points):
-			cartographic_boss_displacement += 1
-			_damage_boss(maxf(1.0, player_damage * 0.18) * maxf(delta, 0.1), "cartografica", false, true, "manifestation_secondary", player_pos)
-			if cartographic_boss_displacement % 3 == 1:
-				_add_text("DESLOCAMENTO", boss_pos + Vector2(0, -104), Color(0.45, 1.0, 0.82), 0.55, 15)
-	if _arauto_active():
-		var arauto_pos: = Vector2(arauto.get("pos", player_pos))
-		if _cartographic_route_hits_point(arauto_pos, 58.0, points):
-			_damage_arauto(maxf(1.0, player_damage * 0.22) * maxf(delta, 0.1), "cartografica", false, true, "manifestation_secondary", player_pos)
-
-
 func _point_in_triangle(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> bool:
 	var d1 = _triangle_sign(p, a, b)
 	var d2 = _triangle_sign(p, b, c)
@@ -16388,572 +12475,6 @@ func _point_in_triangle(p: Vector2, a: Vector2, b: Vector2, c: Vector2) -> bool:
 
 func _triangle_sign(p1: Vector2, p2: Vector2, p3: Vector2) -> float:
 	return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y)
-
-
-func _setup_cartographic_projectile(bullet: Dictionary) -> void :
-	bullet["carto_route_ids"] = {}
-	bullet["carto_route_hits"] = 0
-	bullet["carto_bonus_applied"] = 1.0
-	bullet["coord_spawned"] = false
-
-
-func _cartographic_projectile_route_candidates(origin: Vector2, dir: Vector2) -> Array:
-	var candidates: Array = []
-	if dir.length() <= 0.05:
-		return candidates
-	var width: = CARTO_ROUTE_SHOT_WIDTH + (18.0 if cartographic_complete_map_timer > 0.0 else 0.0)
-	for coord in cartographic_coords:
-		var coord_pos: = _cartographic_coord_world_pos(coord)
-		var delta: = coord_pos - origin
-		var projection: = delta.dot(dir)
-		if projection <= 20.0 or projection > CARTO_ROUTE_SHOT_MAX_DISTANCE:
-			continue
-		var lateral: float = abs(delta.cross(dir))
-		if lateral <= width:
-			candidates.append({"id": int(coord.get("id", -1)), "pos": coord_pos, "projection": projection, "slot": int(coord.get("slot", 0))})
-	candidates.sort_custom( func(a, b): return float(a.get("projection", 0.0)) < float(b.get("projection", 0.0)))
-	while candidates.size() > CARTO_COORD_MAX:
-		candidates.pop_back()
-	return candidates
-
-
-func _update_cartographic_projectile_route(bullet: Dictionary, previous_pos: Vector2) -> void :
-	if String(bullet.get("kind", "")) != "cartografica":
-		return
-	var dir: = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
-	var origin: = Vector2(bullet.get("origin", player_pos))
-	var used: Dictionary = bullet.get("carto_route_ids", {})
-	for candidate in _cartographic_projectile_route_candidates(origin, dir):
-		var coord_id: = int(candidate.get("id", -1))
-		var key: = str(coord_id)
-		if coord_id < 0 or used.has(key):
-			continue
-		var coord_pos: = Vector2(candidate.get("pos", player_pos))
-		if _distance_to_segment(coord_pos, previous_pos, Vector2(bullet.get("pos", previous_pos))) > CARTO_ROUTE_SHOT_WIDTH:
-			continue
-		used[key] = true
-		var route_hits: = int(bullet.get("carto_route_hits", 0)) + 1
-		bullet["carto_route_ids"] = used
-		bullet["carto_route_hits"] = route_hits
-		bullet["carto_routed"] = true
-		var color: = _cartographic_coord_color(int(candidate.get("slot", route_hits - 1)))
-		match route_hits:
-			1:
-				bullet["damage"] = float(bullet.get("damage", 1.0)) * 1.22
-				bullet["speed"] = float(bullet.get("speed", BULLET_SPEED)) * 1.1
-				bullet["life"] = float(bullet.get("life", 0.0)) + 0.08
-				bullet["color"] = color
-			2:
-				bullet["damage"] = float(bullet.get("damage", 1.0)) * 1.18
-				bullet["pierce"] = true
-				bullet["carto_pierce_limit"] = max(2, int(bullet.get("carto_pierce_limit", 0)))
-				bullet["color"] = color
-			_:
-				bullet["damage"] = float(bullet.get("damage", 1.0)) * 1.25
-				bullet["pierce"] = true
-				bullet["carto_explosion"] = true
-				bullet["carto_pierce_limit"] = max(3, int(bullet.get("carto_pierce_limit", 0)))
-				bullet["color"] = Color(1.0, 0.86, 0.28)
-		cartographic_trace_flash = 0.28
-		slashes.append({"a": previous_pos, "b": coord_pos, "life": 0.16, "max": 0.16, "color": color, "width": 12.0 + route_hits * 2.0})
-
-
-func _fire_cartographic_survey_needle() -> void :
-	var before: = bullets.size()
-	_fire_projectile("cartografica", player_damage * 0.72, BULLET_SPEED * 1.08, 1.25, false)
-	if bullets.size() > before:
-		_setup_cartographic_projectile(bullets[-1])
-
-
-func _add_cartographic_trace_to_enemy(enemy: Dictionary, routed_hits: int) -> void :
-	if routed_hits <= 0:
-		return
-	var stacks: = clampi(int(enemy.get("carto_trace_stacks", 0)) + 1, 1, 3)
-	enemy["carto_trace_stacks"] = stacks
-	enemy["carto_trace_timer"] = CARTO_TRACE_TIME
-	enemy["carto_mobile_coord"] = max(float(enemy.get("carto_mobile_coord", 0.0)), 4.2)
-	if stacks >= 3:
-		enemy["carto_point_timer"] = CARTO_POINT_TIME
-		enemy["carto_confuse"] = max(float(enemy.get("carto_confuse", 0.0)), 1.2)
-		_add_text("PONTO DE INTERESSE", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -72), Color(1.0, 0.84, 0.3), 0.7, 15)
-
-
-func _cartographic_trace_damage_multiplier(enemy: Dictionary, source: String) -> float:
-	var multiplier: = 1.0
-	if source == "cartografica":
-		multiplier *= 1.0 + min(3, int(enemy.get("carto_trace_stacks", 0))) * 0.06
-	if float(enemy.get("carto_point_timer", 0.0)) > 0.0:
-		multiplier *= 1.18
-	return multiplier
-
-
-func _cartographic_route_burst(pos: Vector2, damage: float, ignored_uid: = -999999) -> void :
-	shockwaves.append({"pos": pos, "radius": 18.0, "max": 96.0, "life": 0.3, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.34, 1.0, 0.82)})
-	_spawn_radial_particles(pos, Color(0.34, 1.0, 0.82), 15)
-	for enemy in enemies:
-		if int(enemy.get("uid", -1)) == ignored_uid or float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		if Vector2(enemy.get("pos", pos)).distance_to(pos) <= 96.0:
-			_damage_enemy(enemy, damage * 0.34, "cartografica", false, true, pos, "basic_attack")
-	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(pos) <= 122.0:
-		_damage_boss(damage * 0.26, "cartografica", false, true, "basic_attack", pos)
-	if _arauto_active() and Vector2(arauto.get("pos", pos)).distance_to(pos) <= 112.0:
-		_damage_arauto(damage * 0.28, "cartografica", false, true, "basic_attack", pos)
-
-
-func _maybe_cartographic_redirect(_bullet: Dictionary) -> void :
-	return
-
-
-func _register_mnesic_memory(enemy: Dictionary, hit_damage: float) -> void :
-	var memories: Array = enemy.get("mnesic_memories", [])
-	var memory_type: = "perseguicao"
-	if time_alive - float(enemy.get("last_damage_time", -99.0)) < 0.75:
-		memory_type = "dor"
-	elif float(enemy.get("shoot_cd", 9.0)) < 0.45 or float(enemy.get("prepare", 0.0)) > 0.0:
-		memory_type = "ataque"
-	memories.append({"type": memory_type, "damage": hit_damage, "pos": Vector2(enemy["pos"]), "player_pos": player_pos, "time": time_alive})
-	while memories.size() > MNESIC_MEMORY_MAX:
-		memories.pop_front()
-	enemy["mnesic_memories"] = memories
-	if memories.size() >= MNESIC_MEMORY_MAX:
-		enemy["mnesic_dejavu"] = max(float(enemy.get("mnesic_dejavu", 0.0)), 2.4)
-
-
-func _trigger_mnesic_reenactment() -> void :
-	var activated: = 0
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0 or Vector2(enemy["pos"]).distance_to(player_pos) > MNESIC_REENACT_RADIUS:
-			continue
-		var memories: Array = enemy.get("mnesic_memories", [])
-		if memories.is_empty():
-			continue
-		activated += memories.size()
-		for memory in memories:
-			match String(memory.get("type", "")):
-				"dor":
-					_damage_enemy(enemy, max(player_damage * 0.22, float(memory.get("damage", player_damage)) * 0.35), "mnesica", false)
-				"ataque":
-					enemy["shoot_cd"] = max(float(enemy.get("shoot_cd", 0.0)), 1.1)
-					enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.22)
-					slashes.append({"a": Vector2(enemy["pos"]), "b": Vector2(memory.get("player_pos", player_pos)), "life": 0.3, "max": 0.3, "color": Color(0.84, 0.58, 1.0), "width": 16.0})
-				_:
-					enemy["mnesic_replay"] = max(float(enemy.get("mnesic_replay", 0.0)), 1.0)
-					shockwaves.append({"pos": Vector2(memory.get("pos", enemy["pos"])), "radius": 0.0, "max": 110.0, "life": 0.34, "damage": player_damage * 0.18, "hit": {}, "visual_only": true})
-		if memories.size() >= MNESIC_MEMORY_MAX:
-			enemy["mnesic_vulnerable"] = max(float(enemy.get("mnesic_vulnerable", 0.0)), 2.6)
-		enemy["mnesic_memories"] = []
-	if boss_active and boss_hp > 0.0:
-		mnesic_boss_vulnerability = max(mnesic_boss_vulnerability, 2.4 + min(2.0, float(activated) * 0.18))
-		if activated > 0:
-			_damage_boss(player_damage * (0.22 + min(0.6, float(activated) * 0.04)), "mnesica")
-	_add_text("REVIVENCIA x%d" % activated, player_pos + Vector2(0, -96), Color(0.86, 0.58, 1.0), 1.0, 22)
-
-
-func _resonant_beat_offset() -> float:
-	var beat = fposmod(time_alive, RESONANT_BEAT_INTERVAL)
-	return min(beat, RESONANT_BEAT_INTERVAL - beat)
-
-
-func _resonant_is_perfect() -> bool:
-	return resonant_next_perfect or resonant_sinfonia_buff_timer > 0.0 or _resonant_beat_offset() <= RESONANT_PERFECT_WINDOW
-
-
-func _resonant_combo_multiplier() -> float:
-	return 1.0 + float(resonant_perfect_streak) * 0.075
-
-
-func _resonant_note_name() -> String:
-	var notes = ["grave", "aguda", "quebrada"]
-	var note = notes[resonant_note_index % notes.size()]
-	resonant_note_index += 1
-	return note
-
-
-func _record_resonant_attack(perfect: bool) -> void :
-	if perfect:
-		resonant_perfect_streak += 1
-		resonant_noise = max(0, resonant_noise - 1)
-		_spawn_music_notes(player_pos, rng.randi_range(2, 3))
-	else:
-		resonant_noise += 1
-		resonant_perfect_streak = 0
-		resonant_noise = 0
-		_add_text("RITMO QUEBRADO", player_pos + Vector2(0, -86), Color(0.74, 0.8, 0.92), 0.52, 16)
-	resonant_next_perfect = false
-
-
-func _apply_resonant_note(enemy: Dictionary, note: String, perfect: bool) -> void :
-	if not perfect:
-		return
-	var notes: Array = enemy.get("resonant_notes", [])
-	if not notes.has(note):
-		notes.append(note)
-	enemy["resonant_notes"] = notes
-	enemy["resonant_flash"] = 0.45
-	if notes.size() >= 3:
-		_trigger_resonant_chord(Vector2(enemy["pos"]), 1.0 + resonant_perfect_streak * 0.06)
-		enemy["resonant_notes"] = []
-
-
-func _trigger_resonant_chord(center: Vector2, power: float) -> void :
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		if Vector2(enemy["pos"]).distance_to(center) <= 130.0:
-			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.2)
-			_damage_enemy(enemy, player_damage * 0.32 * power, "ressonante", false)
-	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(center) <= 165.0:
-		_damage_boss(player_damage * 0.18 * power, "ressonante")
-	shockwaves.append({"pos": center, "radius": 0.0, "max": 142.0, "life": 0.38, "damage": 0.0, "hit": {}, "visual_only": true})
-	_spawn_radial_particles(center, Color(1.0, 0.76, 0.2), 18)
-
-
-func _trigger_resonant_silence() -> void :
-	var detonated: = 0
-	var power: float = 0.72 + float(resonant_perfect_streak) * 0.08
-	if resonant_noise >= RESONANT_NOISE_LIMIT - 1:
-		power *= 0.7
-	for enemy in enemies:
-		var notes: Array = enemy.get("resonant_notes", [])
-		if notes.is_empty():
-			continue
-		detonated += notes.size()
-		enemy["shoot_cd"] = max(float(enemy.get("shoot_cd", 0.0)), 1.0 + min(1.0, notes.size() * 0.22))
-		enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.18 + notes.size() * 0.08)
-		_damage_enemy(enemy, player_damage * power * notes.size(), "ressonante", false)
-		enemy["resonant_notes"] = []
-		_spawn_music_notes(Vector2(enemy["pos"]), notes.size() * 2)
-	if boss_active and boss_hp > 0.0:
-		_damage_boss(player_damage * (0.35 + resonant_perfect_streak * 0.025), "ressonante")
-		_spawn_music_notes(boss_pos, boss_resonant_notes.size() * 2)
-		boss_resonant_notes.clear()
-		mnesic_boss_vulnerability = max(mnesic_boss_vulnerability, 1.2)
-	_add_text("SINFONIA DO SILENCIO", player_pos + Vector2(0, -96), Color(1.0, 0.78, 0.24), 1.0, 22)
-	_spawn_radial_particles(player_pos, Color(1.0, 0.78, 0.24), 24)
-	shockwaves.append({
-		"pos": player_pos,
-		"radius": 10.0,
-		"max": 650.0,
-		"life": 1.2,
-		"max_life": 1.2,
-		"damage": player_damage * power * 0.8,
-		"hit": {},
-		"kind": "sinfonia_silencio"
-	})
-	resonant_sinfonia_buff_timer = 3.0
-
-
-func _apply_contract_clause(enemy: Dictionary) -> void :
-	var clause: = "aproximacao"
-	if float(enemy.get("shoot_cd", 9.0)) < 0.55 or float(enemy.get("prepare", 0.0)) > 0.0:
-		clause = "agressao"
-	elif Vector2(enemy["pos"]).distance_to(player_pos) > 300.0:
-		clause = "fuga"
-	enemy["contract_clause"] = clause
-	enemy["contract_infractions"] = min(CONTRACT_MAX_INFRACTIONS, int(enemy.get("contract_infractions", 0)))
-	enemy["contract_origin_dist"] = Vector2(enemy["pos"]).distance_to(player_pos)
-	enemy["contract_time"] = 5.5
-	enemy["contract_check_cd"] = 0.35
-	enemy["contract_flash"] = 0.45
-	_contractual_order_progress("mark", 1)
-
-
-func _contract_clause_letter(clause: String) -> String:
-	match clause:
-		"agressao":
-			return "A"
-		"fuga":
-			return "F"
-		_:
-			return "P"
-
-
-func _contract_clause_color(clause: String) -> Color:
-	match clause:
-		"agressao":
-			return Color(1.0, 0.36, 0.18)
-		"fuga":
-			return Color(0.4, 0.88, 1.0)
-		_:
-			return Color(1.0, 0.74, 0.24)
-
-
-func _spawn_contract_break_vfx(pos: Vector2, clause: String, infractions: int) -> void :
-	CombatVfxRuntime._spawn_contract_break_vfx(self, pos, clause, infractions)
-
-
-func _update_contract_clause(enemy: Dictionary, delta: float) -> void :
-	if not enemy.has("contract_clause"):
-		return
-	enemy["contract_time"] = max(0.0, float(enemy.get("contract_time", 0.0)) - delta)
-	enemy["contract_flash"] = max(0.0, float(enemy.get("contract_flash", 0.0)) - delta)
-	enemy["contract_check_cd"] = max(0.0, float(enemy.get("contract_check_cd", 0.0)) - delta)
-	if float(enemy["contract_time"]) <= 0.0:
-		enemy.erase("contract_clause")
-		return
-	if float(enemy["contract_check_cd"]) > 0.0:
-		return
-	enemy["contract_check_cd"] = 0.42
-	var broken: = false
-	match String(enemy.get("contract_clause", "")):
-		"agressao":
-			broken = float(enemy.get("shoot_cd", 9.0)) < 0.36 or float(enemy.get("prepare", 0.0)) > 0.0
-		"fuga":
-			broken = Vector2(enemy["pos"]).distance_to(player_pos) > float(enemy.get("contract_origin_dist", 240.0)) + 120.0
-		_:
-			broken = Vector2(enemy["pos"]).distance_to(player_pos) <= 115.0
-	if broken:
-		var current_infractions: int = int(enemy.get("contract_infractions", 0))
-		if current_infractions < CONTRACT_MAX_INFRACTIONS:
-			var new_infractions: int = min(CONTRACT_MAX_INFRACTIONS, current_infractions + 1)
-			enemy["contract_infractions"] = new_infractions
-			var clause: = String(enemy.get("contract_clause", "aproximacao"))
-			var contract_damage: float = player_damage * (0.12 + float(new_infractions) * 0.08) + float(enemy.get("max_hp", 1.0)) * 0.004
-			var killed: = _damage_enemy(enemy, contract_damage, "contratual_break", false)
-			_spawn_contract_break_vfx(Vector2(enemy["pos"]), clause, new_infractions)
-			_contractual_order_progress("break", 1, clause)
-			if manifestation_key == "contratual" and contractual_order.is_empty():
-				last_secondary_time -= 1.25
-			if killed:
-				_kill_enemy(enemy)
-				return
-		enemy["contract_flash"] = 0.6
-		enemy["contract_time"] = max(float(enemy["contract_time"]), 3.5)
-
-
-func _execute_contracts() -> void :
-	var executed: = 0
-	var empty_contracts: = 0
-	for enemy in enemies:
-		if not enemy.has("contract_clause") or float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		executed += 1
-		var infractions = int(enemy.get("contract_infractions", 0))
-		if infractions <= 0:
-			empty_contracts += 1
-		var mult = [0.42, 0.92, 1.55, 2.35][clampi(infractions, 0, 3)]
-		if infractions >= 2:
-			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.28)
-			enemy["contract_vulnerable"] = max(float(enemy.get("contract_vulnerable", 0.0)), 2.0)
-		if infractions >= 3:
-			enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.75)
-		_spawn_contract_break_vfx(Vector2(enemy["pos"]), String(enemy.get("contract_clause", "aproximacao")), max(1, infractions))
-		_damage_enemy(enemy, player_damage * mult + float(enemy.get("max_hp", 1.0)) * 0.01 * infractions, "contratual", false)
-		enemy.erase("contract_clause")
-	if boss_active and boss_hp > 0.0 and boss_contract_clause != "":
-		var boss_mult = [0.3, 0.78, 1.25, 1.95][clampi(boss_contract_infractions, 0, 3)]
-		_damage_boss(player_damage * boss_mult + boss_hp_max * 0.0025 * boss_contract_infractions, "contratual")
-		_contractual_order_progress("boss_break", max(1, boss_contract_infractions))
-		if boss_contract_infractions >= 3:
-			boss_contract_vulnerability = max(boss_contract_vulnerability, 3.0)
-		boss_contract_clause = ""
-		boss_contract_infractions = 0
-	if empty_contracts >= 3:
-		contractual_penalty_timer = 2.5
-		_add_text("MULTA DE RUPTURA", player_pos + Vector2(0, -120), Color(1.0, 0.36, 0.18), 0.9, 18)
-	_add_text("EXECUCAO x%d" % executed, player_pos + Vector2(0, -96), Color(1.0, 0.58, 0.24), 1.0, 22)
-	_contractual_order_progress("execute", executed)
-
-
-func _contractual_order_templates() -> Array:
-	var templates: Array = [
-		{"id": "break_3", "label": "Quebra de clausula", "goal": 3, "kind": "break", "desc": "Faca inimigos quebrarem 3 contratos."},
-		{"id": "execute_4", "label": "Execucao sumaria", "goal": 4, "kind": "execute", "desc": "Execute 4 contratos marcados com o Q."},
-		{"id": "mark_8", "label": "Cartorio em campo", "goal": 8, "kind": "mark", "desc": "Aplique contratos em 8 inimigos."},
-		{"id": "kill_10", "label": "Limpeza judicial", "goal": 10, "kind": "kill", "desc": "Elimine 10 inimigos durante a ordem."},
-		{"id": "no_damage", "label": "Desacato negado", "goal": 10, "kind": "survive", "desc": "Fique 10s sem receber dano."},
-		{"id": "close_4", "label": "Intimacao corporal", "goal": 4, "kind": "close_break", "desc": "Faca 4 contratos P serem quebrados por aproximacao."},
-		{"id": "aggression_3", "label": "Agressao comprovada", "goal": 3, "kind": "aggression_break", "desc": "Faca 3 contratos A serem quebrados por ataque inimigo."},
-		{"id": "heal_safe", "label": "Medida protetiva", "goal": 1, "kind": "survive_low", "desc": "Sobreviva ate o fim com mais de 35% de vida."}
-	]
-	if boss_active and boss_hp > 0.0:
-		templates.append({"id": "boss_break_2", "label": "Audiencia do chefe", "goal": 2, "kind": "boss_break", "desc": "Force 2 infracoes do chefe e execute o contrato."})
-	if _arauto_active():
-		templates.append({"id": "arauto_hit", "label": "Intimar Arauto", "goal": 1, "kind": "arauto_hit", "desc": "Derrube um eco ou golpeie o Arauto durante a ordem."})
-	while templates.size() < 10:
-		templates.append({"id": "kill_extra_%d" % templates.size(), "label": "Sentenca de abate", "goal": 6 + templates.size(), "kind": "kill", "desc": "Elimine inimigos suficientes para cumprir a sentenca."})
-	return templates
-
-
-func _start_contractual_order() -> bool:
-	if not contractual_order.is_empty():
-		_add_text("ORDEM EM ANDAMENTO", player_pos + Vector2(0, -112), Color(1.0, 0.74, 0.24), 0.8, 18)
-		return false
-	var options: = _contractual_order_templates()
-	var order: Dictionary = options[rng.randi_range(0, options.size() - 1)].duplicate(true)
-	order["time_left"] = CONTRACT_ORDER_DURATION
-	order["age"] = 0.0
-	order["real_age"] = 0.0
-	order["active"] = false
-	order["progress"] = 0
-	order["failed"] = false
-	order["origin"] = player_pos
-	contractual_order = order
-	manifestation_secondaries.append({"kind": "contratual", "life": CONTRACT_ORDER_REVEAL_TIME, "max": CONTRACT_ORDER_REVEAL_TIME, "tick": 0.0})
-	for enemy in enemies:
-		if Vector2(enemy["pos"]).distance_to(player_pos) <= 420.0:
-			_apply_contract_clause(enemy)
-	if boss_active and boss_hp > 0.0:
-		boss_contract_clause = "agressao"
-		boss_contract_infractions = min(CONTRACT_MAX_INFRACTIONS, boss_contract_infractions + 1)
-	_add_text("ORDEM JUDICIAL", player_pos + Vector2(0, -112), Color(1.0, 0.58, 0.24), 1.2, 24)
-	_spawn_radial_particles(player_pos, Color(1.0, 0.58, 0.24), 22)
-	return true
-
-
-func _contractual_order_progress(kind: String, amount: = 1, clause: = "") -> void :
-	if contractual_order.is_empty() or amount <= 0:
-		return
-	if not bool(contractual_order.get("active", false)):
-		return
-	var order_kind: = String(contractual_order.get("kind", ""))
-	var accepted: = kind == order_kind
-	if order_kind == "close_break" and kind == "break" and clause == "aproximacao":
-		accepted = true
-	elif order_kind == "aggression_break" and kind == "break" and clause == "agressao":
-		accepted = true
-	elif order_kind == "boss_break" and kind in ["boss_break", "execute"]:
-		accepted = true
-	elif order_kind == "arauto_hit" and kind in ["arauto_hit", "kill"]:
-		accepted = true
-	if not accepted:
-		return
-	contractual_order["progress"] = int(contractual_order.get("progress", 0)) + amount
-	contractual_order["pulse"] = 0.55
-	if int(contractual_order["progress"]) >= int(contractual_order.get("goal", 1)):
-		_complete_contractual_order()
-
-
-func _complete_contractual_order() -> void :
-	if contractual_order.is_empty():
-		return
-	var reward_pool: = ["immortal", "damage", "speed", "veredict", "cooldown"]
-	var reward: = String(reward_pool[rng.randi_range(0, reward_pool.size() - 1)])
-	contractual_order_rewards[reward] = CONTRACT_ORDER_REWARD_TIME
-	_add_text("ORDEM CUMPRIDA", player_pos + Vector2(0, -124), Color(0.38, 1.0, 0.58), 1.2, 24)
-	_spawn_radial_particles(player_pos, Color(0.38, 1.0, 0.58), 36)
-	contractual_order.clear()
-
-
-func _fail_contractual_order() -> void :
-	if contractual_order.is_empty():
-		return
-	var penalties: = ["speed_down", "damage_down", "defense_down", "silence_tick", "tax"]
-	var penalty: = String(penalties[rng.randi_range(0, penalties.size() - 1)])
-	contractual_order_penalties[penalty] = CONTRACT_ORDER_PENALTY_TIME
-	if penalty == "tax":
-		score = max(0, score - max(80, int(card_cost * 0.45)))
-	_add_text("CONFISCO: %s" % penalty.to_upper(), player_pos + Vector2(0, -124), Color(1.0, 0.3, 0.18), 1.2, 22)
-	_spawn_radial_particles(player_pos, Color(1.0, 0.3, 0.18), 30)
-	contractual_order.clear()
-
-
-func _update_contractual_order(delta: float) -> void :
-	if contractual_order.is_empty():
-		return
-	var real_delta: = contractual_order_real_delta if contractual_order_real_delta > 0.0 else delta
-	var previous_age: = float(contractual_order.get("real_age", contractual_order.get("age", 0.0)))
-	var current_age: = previous_age + real_delta
-	contractual_order["real_age"] = current_age
-	contractual_order["age"] = current_age
-	if current_age < CONTRACT_ORDER_EXECUTION_START_TIME:
-		contractual_order["time_left"] = CONTRACT_ORDER_DURATION
-		return
-	var execution_delta: = real_delta
-	if not bool(contractual_order.get("active", false)):
-		contractual_order["active"] = true
-		contractual_order["time_left"] = CONTRACT_ORDER_DURATION
-		_add_text("PRAZO ABERTO", player_pos + Vector2(0, -112), Color(1.0, 0.8, 0.32), 0.9, 20)
-		execution_delta = maxf(0.0, current_age - CONTRACT_ORDER_EXECUTION_START_TIME)
-	contractual_order["time_left"] = max(0.0, float(contractual_order.get("time_left", 0.0)) - execution_delta)
-	if String(contractual_order.get("kind", "")) in ["survive", "survive_low"]:
-		var survived: = CONTRACT_ORDER_DURATION - float(contractual_order.get("time_left", 0.0))
-		contractual_order["progress"] = int(floor(min(float(contractual_order.get("goal", 1)), survived)))
-	if String(contractual_order.get("kind", "")) == "survive_low" and float(player_hp) / max(1.0, float(player_hp_max)) < 0.35:
-		contractual_order["failed"] = true
-	if bool(contractual_order.get("failed", false)):
-		_fail_contractual_order()
-		return
-	if int(contractual_order.get("progress", 0)) >= int(contractual_order.get("goal", 1)):
-		_complete_contractual_order()
-		return
-	if float(contractual_order.get("time_left", 0.0)) <= 0.0:
-		_fail_contractual_order()
-
-
-func _update_contractual_timed_effects(delta: float) -> void :
-	for key in contractual_order_rewards.keys():
-		contractual_order_rewards[key] = max(0.0, float(contractual_order_rewards[key]) - delta)
-	for key in contractual_order_rewards.keys():
-		if float(contractual_order_rewards[key]) <= 0.0:
-			contractual_order_rewards.erase(key)
-	for key in contractual_order_penalties.keys():
-		contractual_order_penalties[key] = max(0.0, float(contractual_order_penalties[key]) - delta)
-	for key in contractual_order_penalties.keys():
-		if float(contractual_order_penalties[key]) <= 0.0:
-			contractual_order_penalties.erase(key)
-
-
-func _contractual_order_world_time_scale() -> float:
-	if current_phase == 5 and phase5_transmute_active and phase5_transmute_timer <= 0.65:
-		return 0.25
-	if contractual_order.is_empty():
-		return 1.0
-	var age: = float(contractual_order.get("real_age", contractual_order.get("age", 0.0)))
-	if age < CONTRACT_ORDER_SLOW_IN_TIME:
-		var t: = clampf(age / maxf(0.01, CONTRACT_ORDER_SLOW_IN_TIME), 0.0, 1.0)
-		return lerpf(1.0, 0.03, t)
-	if age < CONTRACT_ORDER_READ_END_TIME:
-		return 0.0
-	if age < CONTRACT_ORDER_EXECUTION_START_TIME:
-		var out_t: = clampf((age - CONTRACT_ORDER_READ_END_TIME) / maxf(0.01, CONTRACT_ORDER_SLOW_OUT_TIME), 0.0, 1.0)
-		return lerpf(0.03, 1.0, out_t)
-	return 1.0
-
-
-func _contractual_damage_multiplier() -> float:
-	var mult: = 1.0
-	if contractual_order_rewards.has("damage") or contractual_order_rewards.has("veredict"):
-		mult *= 1.55
-	if contractual_order_penalties.has("damage_down"):
-		mult *= 0.72
-	return mult
-
-
-func _contractual_speed_multiplier() -> float:
-	var mult: = 1.0
-	if contractual_order_rewards.has("speed"):
-		mult *= 1.32
-	if contractual_order_penalties.has("speed_down"):
-		mult *= 0.78
-	return mult
-
-
-func _contractual_blocks_damage() -> bool:
-	return contractual_order_rewards.has("immortal")
-
-
-func _update_contractual_notifications(delta: float) -> void :
-	var kept = []
-	for trap in contractual_notifications:
-		trap["life"] = float(trap.get("life", 0.0)) - delta
-		trap["phase"] = float(trap.get("phase", 0.0)) + delta * 4.0
-		var consumed: = false
-		for enemy in enemies:
-			if float(enemy.get("hp", 0.0)) <= 0.0:
-				continue
-			if Vector2(enemy["pos"]).distance_to(Vector2(trap.get("pos", player_pos))) <= 58.0:
-				if enemy.has("contract_clause"):
-					enemy["contract_infractions"] = min(CONTRACT_MAX_INFRACTIONS, int(enemy.get("contract_infractions", 0)) + 1)
-				else:
-					_apply_contract_clause(enemy)
-				enemy["contract_flash"] = 0.7
-				consumed = true
-				break
-		if not consumed and float(trap["life"]) > 0.0:
-			kept.append(trap)
-	contractual_notifications = kept
 
 
 func _spawn_tp_parasite_eggs(origin: Vector2) -> void :
@@ -16981,16 +12502,6 @@ func _spawn_tp_parasite_eggs(origin: Vector2) -> void :
 	_spawn_radial_particles(origin, Color(0.54, 0.96, 0.22), 16)
 
 
-func _apply_tp_gravity_wave(origin: Vector2) -> void :
-	for enemy in enemies:
-		var offset: Vector2 = Vector2(enemy["pos"]) - origin
-		if offset.length() <= TP_GRAVITY_RADIUS:
-			var direction: = offset.normalized() if offset.length() > 0.01 else Vector2.from_angle(rng.randf_range(0.0, TAU))
-			enemy["pos"] = (Vector2(enemy["pos"]) + direction * 145.0).clamp(Vector2(45, 45), WORLD_SIZE - Vector2(45, 45))
-	shockwaves.append({"pos": origin, "radius": 0.0, "max": TP_GRAVITY_RADIUS, "life": 0.55, "damage": 0.0, "hit": {}, "visual_only": true})
-	_add_text("REPULSAO GRAVITACIONAL", origin + Vector2(0, -96), Color(0.52, 0.78, 1.0), 0.9, 18)
-
-
 func _start_tp_lacerante(origin: Vector2, destination: Vector2) -> void :
 	var candidates = []
 	for enemy in enemies:
@@ -17006,26 +12517,6 @@ func _start_tp_lacerante(origin: Vector2, destination: Vector2) -> void :
 	var cuts: = TP_LACERANTE_BASE_CUTS + _lacerante_ultimate_extra_cuts()
 	tp_effects.append({"kind": "lacerante", "life": TP_LACERANTE_DURATION, "max": TP_LACERANTE_DURATION, "tick": 0.0, "cuts": cuts, "cuts_done": 0, "targets": candidates, "origin": origin})
 	_add_text("EXECUCAO EM %d CORTES" % cuts, destination + Vector2(0, -102), Color(1.0, 0.12, 0.2), 1.1, 20)
-
-
-func _start_tp_acorrentada(origin: Vector2, destination: Vector2) -> void :
-	var life: float = ACORRENTADA_TP_LINE_TIME + (ACORRENTADA_TP_OVERHEAT_LINE_BONUS if acorrentada_tension >= 70.0 else 0.0)
-	tp_effects.append({"kind": "acorrentada", "life": life, "max": life, "a": origin, "b": destination, "hits": {}, "width": 44.0 if acorrentada_tension >= 70.0 else 34.0})
-	var effect: Dictionary = tp_effects[-1]
-	effect["physics"] = _init_chain_physics(origin, destination, "light" if acorrentada_tension < 70.0 else "heavy")
-	var travel: Vector2 = destination - origin
-	if travel.length() <= 1.0:
-		return
-	var target: Dictionary = _best_acorrentada_line_target(origin, travel.normalized(), travel.length(), 58.0)
-	if not target.is_empty():
-		_acorrentada_apply_elo_to_target(target, 1)
-		_acorrentada_damage_target(target, player_damage * 0.48, "acorrentada_tp_chain", "teleport", origin)
-		if acorrentada_combo_step < 3:
-			acorrentada_combo_step += 1
-		else:
-			acorrentada_force_next_attack_3 = true
-		_add_acorrentada_tension(6.0, 0.5 if String(target.get("kind", "")) == "boss" else 1.0)
-	_add_text("TROCA DE ELO", destination + Vector2(0, -92), Color(0.3, 0.86, 1.0), 0.85, 18)
 
 
 func _prismatica_teleport_path(origin: Vector2, destination: Vector2) -> Array:
@@ -17046,36 +12537,13 @@ func _prismatica_teleport_path(origin: Vector2, destination: Vector2) -> Array:
 	return path
 
 
-func _apply_mnesica_teleport_fragment_burst(origin: Vector2) -> void:
-	var radius: float = 150.0
-	var amount: float = maxf(6.0, player_damage * 0.34)
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) > 0.0 and Vector2(enemy.get("pos", origin)).distance_to(origin) <= radius + _enemy_radius(enemy):
-			_damage_enemy(enemy, amount, "mnesica_tp_fragments", true, true, origin, "teleport")
-	if boss_active and boss_hp > 0.0 and boss_pos.distance_to(origin) <= radius + _boss_hit_radius():
-		_damage_boss(amount * 0.72, "mnesica_tp_fragments", true, true, "teleport", origin)
-	if _arauto_active() and Vector2(arauto.get("pos", origin)).distance_to(origin) <= radius + 56.0:
-		_damage_arauto(amount * 0.82, "mnesica_tp_fragments", true, true, "teleport", origin)
-	_spawn_radial_particles(origin, Color(0.86, 0.58, 1.0), 18)
-
-
 func _update_teleport_effects(delta: float) -> void :
-	retornante_tp_window = max(0.0, retornante_tp_window - delta)
-	if carto_tp_window > 0.0:
-		carto_tp_window = max(0.0, carto_tp_window - delta)
-		if is_zero_approx(carto_tp_window):
-			carto_tp_pin = Vector2.ZERO
-			tp_cooldown_pending = true
-			tp_cooldown_override = 6.0
-			tp_effects = tp_effects.filter(func(effect): return String(effect.get("kind", "")) != "cartografica_pin")
-			_finish_teleport_effect_cooldown()
 	for effect in tp_effects:
 		effect["life"] = float(effect.get("life", 0.0)) - delta
 		match String(effect.get("kind", "")):
 			"parasite_egg": _update_tp_parasite_egg(effect, delta)
 			"lacerante": _update_tp_lacerante(effect, delta)
 			"eletrica": _update_tp_electric(effect, delta)
-			"acorrentada": _update_tp_acorrentada(effect, delta)
 	tp_effects = tp_effects.filter( func(effect): return float(effect.get("life", 0.0)) > 0.0)
 	if tp_cooldown_pending:
 		if tp_cooldown_release_time > 0.0:
@@ -17111,33 +12579,6 @@ func _update_tp_parasite_egg(effect: Dictionary, delta: float) -> void :
 			boss_tp_stun_timer = max(boss_tp_stun_timer, TP_PARASITE_STUN)
 		effect["life"] = 0.0
 		_spawn_radial_particles(target_pos, Color(0.46, 0.96, 0.2), 10)
-
-
-func _update_tp_acorrentada(effect: Dictionary, delta: float) -> void :
-	var a: = Vector2(effect.get("a", player_pos))
-	var b: = Vector2(effect.get("b", player_pos))
-	if effect.has("physics"):
-		_update_single_chain_physics(effect["physics"], a, b, delta)
-	var hits: Dictionary = effect.get("hits", {})
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var uid: = str(enemy.get("uid", 0))
-		if hits.has(uid):
-			continue
-		if _distance_to_segment(Vector2(enemy["pos"]), a, b) <= float(effect.get("width", 34.0)) + _enemy_radius(enemy) * 0.35:
-			hits[uid] = true
-			_add_acorrentada_elo_enemy(enemy, 1)
-			var killed: = _damage_enemy(enemy, player_damage * 0.32, "acorrentada_tp_chain", true, true, a, "teleport")
-			if killed:
-				_kill_enemy(enemy)
-			_add_acorrentada_tension(4.0)
-	if boss_active and boss_hp > 0.0 and not hits.has("boss") and _distance_to_segment(boss_pos, a, b) <= float(effect.get("width", 34.0)) + _boss_hit_radius() * 0.35:
-		hits["boss"] = true
-		_add_acorrentada_elo_boss(1)
-		_damage_boss(player_damage * 0.18, "acorrentada_tp_chain", true, true, "teleport", a)
-		_add_acorrentada_tension(2.0)
-	effect["hits"] = hits
 
 
 func _boss_is_using_ability() -> bool:
@@ -17634,6 +13075,7 @@ func _try_spawn_arauto() -> void :
 
 
 func _spawn_arauto() -> void :
+	_arauto_threat().reset()
 	var pos: = _arauto_safe_position()
 	var hp: float = max(820.0, player_damage * 58.0 + enemy_base_hp * 4.9)
 	_clear_enemies_for_arauto_entry()
@@ -17734,6 +13176,20 @@ func _spawn_aguilhao_arauto(pos: Vector2) -> void :
 
 func _arauto_safe_position() -> Vector2:
 	var margin: = 120.0
+	if experimental_phase_controller.uses_definitive_world():
+		# Mapa grande: o "canto mais longe" ficava a milhares de pixels e o Arauto
+		# passava a luta andando. Nasce a ~560 px, na direcao com mais espaco.
+		var best_ring: Vector2 = player_pos + Vector2(560.0, 0.0)
+		var best_room: float = -1.0
+		for i in range(8):
+			var candidate_ring: Vector2 = (player_pos + Vector2.from_angle(float(i) * TAU / 8.0) * 560.0).clamp(Vector2(margin, margin), WORLD_SIZE - Vector2(margin, margin))
+			var room: float = minf(minf(candidate_ring.x, WORLD_SIZE.x - candidate_ring.x), minf(candidate_ring.y, WORLD_SIZE.y - candidate_ring.y))
+			if candidate_ring.distance_to(player_pos) < 380.0:
+				room -= 1000.0
+			if room > best_room:
+				best_room = room
+				best_ring = candidate_ring
+		return best_ring
 	var candidates: = [
 		Vector2(margin, margin),
 		Vector2(WORLD_SIZE.x - margin, margin),
@@ -17831,8 +13287,21 @@ func _count_aguilhao_threats() -> int:
 	return count
 
 
+var arauto_threat: RTArautoThreatController = null
+
+
+func _arauto_threat() -> RTArautoThreatController:
+	if arauto_threat == null:
+		arauto_threat = RTArautoThreatController.new()
+		arauto_threat.bind_game(self)
+		arauto_threat.reset()
+	return arauto_threat
+
+
 func _update_arauto(delta: float) -> void :
 	_update_arauto_vfx(delta)
+	if _is_world_authority():
+		_arauto_threat().update_world(delta)
 	if not _arauto_active():
 		return
 	arauto_target_switch_timer = maxf(0.0, arauto_target_switch_timer - delta)
@@ -17861,6 +13330,8 @@ func _update_arauto(delta: float) -> void :
 		_add_text("O OLHO DA RUPTURA DESPERTOU!", Vector2(arauto["pos"]) + Vector2(-170, -154), Color(1.0, 0.4, 0.92), 2.0, 25)
 		shockwaves.append({"pos": Vector2(arauto["pos"]), "radius": 20.0, "max": 360.0, "life": 0.58, "damage": 0.0, "hit": {}, "visual_only": true})
 	_move_arauto(delta, phase2)
+	if _arauto_threat().update(delta, phase2):
+		return
 	if bool(arauto.get("silence_active", false)):
 		_update_arauto_silence(delta, phase2)
 		return
@@ -17904,6 +13375,10 @@ func _move_arauto(delta: float, phase2: bool) -> void :
 		radial_factor = 0.65
 	var move_dir: Vector2 = (tangent + radial * radial_factor).normalized()
 	var speed: float = ARAUTO_SPEED * (1.25 if phase2 else 1.0)
+	if distance > ARAUTO_DISTANCE_MAX * 1.8:
+		# Longe demais (o jogador fugiu): avanca rapido em vez de orbitar.
+		move_dir = radial
+		speed *= 3.0
 	var next: Vector2 = (pos + move_dir * speed * delta).clamp(Vector2(80, 90), WORLD_SIZE - Vector2(80, 90))
 	if next != pos + move_dir * speed * delta:
 		arauto["orbit_sign"] = - float(arauto.get("orbit_sign", 1.0))
@@ -17963,6 +13438,8 @@ func _update_aguilhao_arauto(delta: float) -> void :
 				arauto["state"] = "idle"
 			return
 
+	if _arauto_threat().update(delta, phase2):
+		return
 	_move_aguilhao(delta, phase2)
 	_choose_aguilhao_ability(phase2)
 
@@ -17981,6 +13458,8 @@ func _move_aguilhao(delta: float, phase2: bool) -> void :
 	elif distance < 250.0:
 		desired = Vector2( - desired.y, desired.x) * float(arauto.get("facing", 1.0))
 	var speed: = AGUILHAO_MOVE_SPEED * (AGUILHAO_PHASE2_MOVE_MULT if phase2 else 1.0)
+	if distance > 700.0:
+		speed *= 3.0
 	var next: = (pos + desired.normalized() * speed * delta).clamp(Vector2(70, 80), WORLD_SIZE - Vector2(70, 80))
 	arauto["pos"] = next
 	if abs(next.x - pos.x) > 0.01:
@@ -18037,6 +13516,7 @@ func _start_aguilhao_charge(phase2: bool, chained: bool = false, excluded_peer_i
 	arauto["charge_leg"] = 2 if chained else 1
 	if not chained:
 		arauto["charge_chain_remaining"] = 1 if phase2 else 0
+		arauto["ricochet_left"] = RTArautoThreatController.RICOCHET_BOUNCES if phase2 else 0
 	arauto["charge_hit_local"] = false
 	arauto["charge_hit_peers"] = {}
 	arauto["ability_sequence"] = int(arauto.get("ability_sequence", 0)) + 1
@@ -18069,7 +13549,7 @@ func _update_aguilhao_charge(delta: float, phase2: bool) -> void :
 		var push: = (player_pos - next).normalized()
 		if push.length() <= 0.05:
 			push = dir
-		player_pos = _clamp_player_world(player_pos + push * 76.0)
+		_shove_player(push * 76.0)
 		boss_wave_slow_timer = max(boss_wave_slow_timer, 1.15)
 		_damage_player(int(player_hp_max * AGUILHAO_CHARGE_DAMAGE_RATE + enemy_close_damage * 0.45), "aguilhao_charge")
 		_add_text("CHAGA PERFURANTE", player_pos + Vector2(-78, -82), Color(0.64, 1.0, 0.24), 0.85, 18)
@@ -18078,9 +13558,26 @@ func _update_aguilhao_charge(delta: float, phase2: bool) -> void :
 	arauto["charge_hit_peers"] = remote_hits
 	if _aguilhao_charge_hit_nodule(pos, next):
 		return
-	if next != intended:
-		_finish_aguilhao_charge(phase2, AGUILHAO_BOUNDARY_RECOVERY)
-		return
+	if next != intended or float(arauto.get("state_timer", 0.0)) <= 0.0:
+		# Investida Ricochete (fase 2): no fim de cada perna (ou na borda) ela quica e
+		# mira de novo no jogador, com um aviso curto.
+		var bounce_dir: Vector2 = _arauto_threat().ricochet_direction(dir, next)
+		if bounce_dir != Vector2.ZERO:
+			arauto["charge_dir"] = bounce_dir
+			arauto["charge_target"] = (next + bounce_dir * 780.0).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+			arauto["charge_hit_local"] = false
+			arauto["charge_hit_peers"] = {}
+			arauto["state"] = "charge_windup"
+			arauto["state_timer"] = 0.28
+			arauto["ricochet_flash"] = 0.28
+			arauto["facing"] = 1.0 if bounce_dir.x >= 0.0 else -1.0
+			screen_shake_timer = maxf(screen_shake_timer, 0.1)
+			screen_shake_strength = maxf(screen_shake_strength, 5.0)
+			_spawn_radial_particles(next, Color(0.6, 1.0, 0.24), 14)
+			return
+		if next != intended:
+			_finish_aguilhao_charge(phase2, AGUILHAO_BOUNDARY_RECOVERY)
+			return
 	if float(arauto.get("state_timer", 0.0)) <= 0.0:
 		_finish_aguilhao_charge(phase2, 0.55)
 
@@ -18185,7 +13682,7 @@ func _resolve_aguilhao_pulse(phase2: bool, stage: int) -> void :
 					dir = (player_pos - Vector2(arauto.get("pos", player_pos))).normalized()
 				if dir.length() <= 0.05:
 					dir = Vector2.RIGHT
-				player_pos = _clamp_player_world(player_pos + dir * (64.0 + float(stage) * 22.0))
+				_shove_player(dir * (64.0 + float(stage) * 22.0))
 				boss_wave_slow_timer = max(boss_wave_slow_timer, AGUILHAO_PULSE_SLOW_DURATION)
 				_damage_player(damage, "aguilhao_pulse")
 		elif _peer_is_living_runner(peer_id):
@@ -18332,7 +13829,7 @@ func _cast_arauto_echo_pulse(phase2: bool) -> void :
 		var direction: = (player_pos - center).normalized()
 		if direction.length() <= 0.05:
 			direction = Vector2.RIGHT
-		player_pos = _clamp_player_world(player_pos + direction * (88.0 if phase2 else 66.0))
+		_shove_player(direction * (88.0 if phase2 else 66.0))
 		_damage_player(int((player_hp_max * 0.052 + enemy_close_damage * 0.35) * ARAUTO_DAMAGE_MULT), "pulso_ecos")
 		_add_text("PULSO DOS ECOS", player_pos + Vector2(-72, -92), Color(0.55, 0.92, 1.0), 0.82, 19)
 	_damage_remote_player_in_radius(center, radius, int((player_hp_max * 0.052 + enemy_close_damage * 0.35) * ARAUTO_DAMAGE_MULT), "pulso_ecos")
@@ -18429,8 +13926,6 @@ func _damage_arauto(amount: float, source: String, show_text: = true, apply_aura
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	if _is_direct_player_damage_source(source, effective_source_category):
-		amount *= _contractual_damage_multiplier()
-	if _is_direct_player_damage_source(source, effective_source_category):
 		var opportunity: = AuraSystem.consume_opportunity_damage(aura_state, player_damage)
 		amount += float(opportunity.get("bonus", 0.0))
 		_apply_aura_events(opportunity.get("events", []))
@@ -18444,6 +13939,8 @@ func _damage_arauto(amount: float, source: String, show_text: = true, apply_aura
 	var final: float = max(1.0, amount * (1.0 - reduction))
 	if _arauto_is_aguilhao() and float(arauto.get("aguilhao_vulnerable", 0.0)) > 0.0:
 		final *= AGUILHAO_STUN_VULNERABILITY_MULT
+	if _arauto_is_aguilhao():
+		final *= _arauto_threat().shell_damage_multiplier(attack_origin)
 	final *= _fragilidade_arauto_multiplier(source)
 	final *= _pressao_cerco_arauto_multiplier(source)
 	final *= henry_incendiary_ability_controller.damage_taken_multiplier(arauto, source)
@@ -19198,20 +14695,14 @@ func _steer_entity_with_avoidance(entity: Dictionary, pos: Vector2, desired_dir:
 			obstacle_radius = 64.0
 
 	if not obstacle_found:
-		for other in enemy_manager.avoidance_neighbors(pos, my_radius):
-			if other == entity or float(other.get("hp", 0.0)) <= 0.0:
-				continue
-			var other_pos: = Vector2(other.get("pos", pos))
-			var other_radius: = _entity_physical_radius(other)
-			var avoidance_radius := my_radius + other_radius + ray_length
-			var dist_squared := pos.distance_squared_to(other_pos)
-			if dist_squared > 0.01 and dist_squared < avoidance_radius * avoidance_radius:
-				var to_other: = (other_pos - pos).normalized()
-				if desired_dir.dot(to_other) > 0.65:
-					obstacle_found = true
-					obstacle_pos = other_pos
-					obstacle_radius = other_radius
-					break
+		var self_index: int = int(entity.get("_si", -1))
+		if self_index >= 0 and (self_index >= enemy_manager.spatial_entities.size() or enemy_manager.spatial_entities[self_index] != entity):
+			self_index = -1
+		var hit: int = enemy_manager.find_avoidance_obstacle(pos, my_radius, ray_length, desired_dir, self_index)
+		if hit >= 0 and enemy_manager.spatial_entities[hit] != entity:
+			obstacle_found = true
+			obstacle_pos = enemy_manager.spatial_positions[hit]
+			obstacle_radius = enemy_manager.spatial_physical_radii[hit]
 
 	if not obstacle_found:
 		entity["bypass_side"] = 0.0
@@ -19239,64 +14730,13 @@ func _steer_entity_with_avoidance(entity: Dictionary, pos: Vector2, desired_dir:
 func _apply_entity_separation(delta: float, spatial_index_ready: bool = false) -> void :
 	enemy_manager.apply_entity_separation(delta, spatial_index_ready)
 
-func _add_lastro_points(amount: int, source_type: String = "") -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller.add_lastro_points(amount, source_type)
-
-
-func _update_lastro_decay(delta: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller._update_lastro_decay(delta)
-
-
-func _consume_all_lastro_stacks() -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller.consume_all_lastro_stacks()
-
-
-func _update_ancorada_standing_still(delta: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller.update(delta)
-
-
-func _update_ancorada_spinning(delta: float) -> void :
-	for spin in ancorada_spinning:
-		spin["life"] = maxf(0.0, float(spin.get("life", 0.0)) - delta)
-		spin["angle"] = float(spin.get("angle", 0.0)) + delta * 2.2
-		spin["damage_tick"] = float(spin.get("damage_tick", 0.0)) - delta
-		if float(spin["damage_tick"]) <= 0.0:
-			spin["damage_tick"] = 0.45
-			var center: Vector2 = player_pos
-			var arm_count: = 4
-			for arm_i in range(arm_count):
-				var arm_angle: float = float(spin["angle"]) + float(arm_i) * TAU / float(arm_count)
-				var arm_tip: Vector2 = center + Vector2.from_angle(arm_angle) * 92.0
-				for enemy in enemies:
-					if float(enemy.get("hp", 0.0)) <= 0.0:
-						continue
-					var hit_key: = str(int(enemy.get("uid", 0))) + "_" + str(arm_i)
-					if spin.get("hit", {}).has(hit_key):
-						continue
-					if Vector2(enemy.get("pos", Vector2.ZERO)).distance_to(arm_tip) < 52.0:
-						_damage_enemy(enemy, player_damage * 0.65, "ancorada", false)
-						if not spin.has("hit"):
-							spin["hit"] = {}
-						spin["hit"][hit_key] = true
-				if boss_active and boss_hp > 0.0 and boss_pos.distance_to(arm_tip) < 72.0:
-					_damage_boss(player_damage * 0.38, "ancorada")
-				if _arauto_active() and Vector2(arauto.get("pos", Vector2.ZERO)).distance_to(arm_tip) < 72.0:
-					_damage_arauto(player_damage * 0.38, "ancorada", false)
-			spin["hit"] = {}
-	ancorada_spinning = ancorada_spinning.filter( func(s): return float(s.get("life", 0.0)) > 0.0)
-
-
 func _update_enemies(delta: float, spatial_index_ready: bool = false) -> void :
 	if not spatial_index_ready:
 		enemy_manager.rebuild_spatial_index()
 	enemy_manager.update_enemies(delta)
 
 func _local_player_targetable() -> bool:
-	return _local_counts_as_player() and player_hp > 0.0 and not is_dead and not _eclipsada_is_stealthed()
+	return _local_counts_as_player() and player_hp > 0.0 and not is_dead
 
 
 func _local_player_damageable_by_contact() -> bool:
@@ -19539,7 +14979,7 @@ func _enemy_prefers_remote(enemy: Dictionary) -> bool:
 	for target in targets:
 		if int(target.get("peer_id", 0)) == target_peer:
 			return not bool(target.get("local", false))
-	var target_index: = posmod(int(enemy.get("uid", enemies.find(enemy))), targets.size())
+	var target_index: = posmod(int(enemy["uid"]) if enemy.has("uid") else enemies.find(enemy), targets.size())
 	var selected: Dictionary = targets[target_index]
 	enemy["target_peer_id"] = int(selected.get("peer_id", 0))
 	return not bool(selected.get("local", false))
@@ -19559,19 +14999,9 @@ func _is_boss_or_mini_boss_or_larapio(enemy: Dictionary) -> bool:
 func _get_enemy_target_pos(enemy: Dictionary, targets_override: Variant = null) -> Vector2:
 	if _bargain_capsule_vulnerable():
 		return _bargain_capsule_target_pos(enemy)
-	var is_boss_or_special: = _is_boss_or_mini_boss_or_larapio(enemy)
-	if not is_boss_or_special:
-		if _necronada_has_active_taunt():
-			return _necronada_taunt_target_pos(Vector2(enemy.get("pos", player_pos)))
-		if float(enemy.get("blind_confusion", 0.0)) > 0.0:
-			return Vector2(enemy.get("blind_decoy_position", player_pos))
-		if not necronada_remnants.is_empty():
-			var nearest_remnant_pos: = _necronada_nearest_remnant_pos(Vector2(enemy.get("pos", player_pos)))
-			if nearest_remnant_pos != Vector2.INF:
-				return nearest_remnant_pos
-	else:
-		if float(enemy.get("blind_confusion", 0.0)) > 0.0:
-			return Vector2(enemy.get("blind_decoy_position", player_pos))
+	# Same rule for bosses/specials and commons: a blinded enemy chases its decoy.
+	if float(enemy.get("blind_confusion", 0.0)) > 0.0:
+		return Vector2(enemy.get("blind_decoy_position", player_pos))
 	var targets: Array = _combat_targets() if targets_override == null else targets_override
 	if targets.is_empty():
 		return Vector2(enemy.get("pos", player_pos))
@@ -19579,7 +15009,8 @@ func _get_enemy_target_pos(enemy: Dictionary, targets_override: Variant = null) 
 	for target in targets:
 		if int(target.get("peer_id", 0)) == target_peer:
 			return Vector2(target.get("pos", player_pos))
-	var target_index: = posmod(int(enemy.get("uid", enemies.find(enemy))), targets.size())
+	# enemies.find() is O(n) with deep Dictionary comparison: only for uid-less entries.
+	var target_index: = posmod(int(enemy["uid"]) if enemy.has("uid") else enemies.find(enemy), targets.size())
 	var selected: Dictionary = targets[target_index]
 	enemy["target_peer_id"] = int(selected.get("peer_id", 0))
 	return Vector2(selected.get("pos", player_pos))
@@ -19592,8 +15023,6 @@ func _target_pos_is_local_player(pos: Vector2) -> bool:
 func _get_nearest_player_pos(pos: Vector2, targets_override: Variant = null) -> Vector2:
 	if _bargain_capsule_vulnerable():
 		return _bargain_capsule_target_pos({"pos": pos})
-	if _necronada_has_active_taunt():
-		return _necronada_taunt_target_pos(pos)
 	var targets: Array = _combat_targets() if targets_override == null else targets_override
 	if targets.is_empty():
 		return pos
@@ -20869,7 +16298,10 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 		target_pos = Vector2(lacerante_secondary.get("center", target_pos))
 	var is_disco: bool = not _active_prismatica_secondary().is_empty() if prismatica_active_override == null else bool(prismatica_active_override)
 	var dir = (target_pos - enemy["pos"]).normalized()
-	if enemy["type"] == ENEMY_LARAPIO and not is_disco:
+	var larapio_lunge_mode: String = larapio_lunge_state(enemy) if enemy["type"] == ENEMY_LARAPIO else ""
+	if larapio_lunge_mode != "" and not is_disco:
+		dir = Vector2(enemy.get("larapio_lunge_dir", dir)).normalized()
+	elif enemy["type"] == ENEMY_LARAPIO and not is_disco:
 		var to_player = (target_pos - Vector2(enemy["pos"])).normalized()
 		var dist = Vector2(enemy["pos"]).distance_to(target_pos)
 		var has_loot = int(enemy.get("stolen", 0)) > 0
@@ -20888,7 +16320,8 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 				dir = (to_player.orthogonal() * float(enemy.get("strafe", 1.0)) + patrol_dir * 0.2).normalized()
 		elif has_loot or enemy["hp"] < enemy["max_hp"] * 0.5:
 			dir = - to_player
-		elif bool(enemy.get("alerted", false)) and dist < 430.0:
+		elif bool(enemy.get("alerted", false)) and dist < 430.0 and float(enemy.get("steal_cd", 0.0)) > 0.0:
+			# So recua (e apedreja) enquanto o roubo esta em recarga; pronto, ele vem.
 			dir = ( - to_player + to_player.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.72).normalized()
 		elif dist < LARAPIO_STEAL_RADIUS * 0.82:
 			dir = - to_player
@@ -20904,19 +16337,16 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 	var speed_mult = 1.0
 	if float(enemy.get("parasite_slow_time", 0.0)) > 0.0:
 		speed_mult *= 0.8
-	if float(enemy.get("acorrentada_slow", 0.0)) > 0.0:
-		speed_mult *= 0.85 if not _is_uncommon_enemy(enemy) else 0.92
 	if float(enemy.get("evolution_slow", 0.0)) > 0.0:
 		speed_mult *= clampf(float(enemy.get("evolution_slow_mult", 0.75)), 0.35, 1.0)
 	if is_disco:
 		speed_mult *= 1.12
 		dir = (target_pos - enemy["pos"]).normalized()
-	if manifestation_key == "ancorada":
-		for anchor in anchors:
-			if anchor["pos"].distance_to(enemy["pos"]) < 130.0:
-				speed_mult = 0.76
-				break
 	if enemy["type"] == ENEMY_LARAPIO:
+		if larapio_lunge_mode == "windup":
+			speed_mult *= 0.12
+		elif larapio_lunge_mode == "lunge":
+			speed_mult *= LARAPIO_LUNGE_SPEED_MULT
 		if bool(enemy.get("direct_steal", false)) and player_stun_timer > 0.0:
 			speed_mult *= 1.55
 		if _larapio_desperate(enemy):
@@ -20991,9 +16421,7 @@ func _update_enemy_dots(enemy: Dictionary, delta: float) -> void :
 			enemy["poison"] = max(0.0, float(enemy["poison"]) - 0.65)
 			_damage_enemy(enemy, max(1.0, player_damage * poison_damage), "veneno", false)
 	if int(enemy.get("laceracao", 0)) > 0:
-		enemy["bleed_timer"] = max(0.0, float(enemy.get("bleed_timer", 0.0)) - delta)
-		if float(enemy["bleed_timer"]) > 0.0 and int(Time.get_ticks_msec() / 350) % 2 == 0:
-			enemy["hp"] = float(enemy["hp"]) - int(enemy.get("laceracao", 0)) * 0.18
+		_lacerante_exec().update_bleed(enemy, delta)
 	var carto_confuse := float(enemy.get("carto_confuse", 0.0))
 	if carto_confuse > 0.0:
 		carto_confuse = maxf(0.0, carto_confuse - delta)
@@ -21005,30 +16433,9 @@ func _update_enemy_dots(enemy: Dictionary, delta: float) -> void :
 		var wobble = Vector2.from_angle(time_alive * 5.1 + float(enemy.get("uid", 0)) * 0.013)
 		enemy["pos"] = (Vector2(enemy["pos"]) + wobble * float(enemy.get("speed", enemy_speed_base)) * delta * 0.48).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
 		enemy["shoot_cd"] = max(float(enemy.get("shoot_cd", 0.0)), 0.3)
-	var mnesic_tricked := float(enemy.get("mnesic_tricked", 0.0))
-	if mnesic_tricked > 0.0:
-		enemy["mnesic_tricked"] = maxf(0.0, mnesic_tricked - delta)
-	var mnesic_dejavu := float(enemy.get("mnesic_dejavu", 0.0))
-	if mnesic_dejavu > 0.0:
-		enemy["mnesic_dejavu"] = maxf(0.0, mnesic_dejavu - delta)
-	var mnesic_vulnerable := float(enemy.get("mnesic_vulnerable", 0.0))
-	if mnesic_vulnerable > 0.0:
-		enemy["mnesic_vulnerable"] = maxf(0.0, mnesic_vulnerable - delta)
-	var mnesic_replay := float(enemy.get("mnesic_replay", 0.0))
-	if mnesic_replay > 0.0:
-		enemy["mnesic_replay"] = maxf(0.0, mnesic_replay - delta)
-	if float(enemy.get("mnesic_replay", 0.0)) > 0.0:
-		var replay_dir = (Vector2(enemy.get("pos", player_pos)) - player_pos).normalized()
-		if replay_dir.length() <= 0.05:
-			replay_dir = Vector2.from_angle(float(enemy.get("uid", 0)) * 0.01)
-		enemy["pos"] = (Vector2(enemy["pos"]) + replay_dir * float(enemy.get("speed", enemy_speed_base)) * delta * 0.42).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
-	var resonant_flash := float(enemy.get("resonant_flash", 0.0))
-	if resonant_flash > 0.0:
-		enemy["resonant_flash"] = maxf(0.0, resonant_flash - delta)
 	var contract_vulnerable := float(enemy.get("contract_vulnerable", 0.0))
 	if contract_vulnerable > 0.0:
 		enemy["contract_vulnerable"] = maxf(0.0, contract_vulnerable - delta)
-	_update_contract_clause(enemy, delta)
 
 
 func _update_curater(enemy: Dictionary, delta: float) -> void :
@@ -21226,6 +16633,17 @@ func _rpc_destroy_remote_bullet(source_peer_id: int, uid: String, impact_pos: Ve
 	_spawn_radial_particles(impact_pos, color, 6)
 
 
+## Larapio mais agressivo: bote de roubo (aviso curto e dispara reto), leque de
+## pedras e portais da ultimate com recarga individual (nao da para "floodar").
+const LARAPIO_LUNGE_RANGE := 300.0
+const LARAPIO_LUNGE_WINDUP := 0.42
+const LARAPIO_LUNGE_TIME := 0.42
+const LARAPIO_LUNGE_SPEED_MULT := 3.4
+const LARAPIO_LUNGE_COOLDOWN := 5.0
+const LARAPIO_FAN_SPREAD := 0.22
+const LARAPIO_PORTAL_REUSE_COOLDOWN := 5.5
+
+
 func _update_larapio(enemy: Dictionary, delta: float) -> void :
 	_update_larapio_navigation(enemy, delta)
 	var has_loot = int(enemy.get("stolen", 0)) > 0
@@ -21251,6 +16669,7 @@ func _update_larapio(enemy: Dictionary, delta: float) -> void :
 
 	var target_pos: = _get_enemy_target_pos(enemy)
 	var dist = Vector2(enemy["pos"]).distance_to(target_pos)
+	_update_larapio_lunge(enemy, delta, target_pos, dist, has_loot)
 	if not _enemy_prefers_remote(enemy) and score > 0 and dist < LARAPIO_STEAL_RADIUS and float(enemy.get("steal_cd", 0.0)) <= 0.0:
 		_larapio_steal(enemy, LARAPIO_STEAL_RATIO)
 		return
@@ -21271,6 +16690,45 @@ func _update_larapio(enemy: Dictionary, delta: float) -> void :
 	if float(enemy.get("throw_cd", 0.0)) <= 0.0 and (bool(enemy.get("alerted", false)) or has_loot or desperate) and dist <= throw_range:
 		enemy["throw_cd"] = _larapio_throw_interval(enemy, dist, has_loot, aggressive, desperate)
 		_throw_larapio_projectile(enemy)
+
+
+func _update_larapio_lunge(enemy: Dictionary, delta: float, target_pos: Vector2, dist: float, has_loot: bool) -> void:
+	var windup := float(enemy.get("larapio_lunge_windup", 0.0))
+	if windup > 0.0:
+		windup = maxf(0.0, windup - delta)
+		enemy["larapio_lunge_windup"] = windup
+		if windup <= 0.0:
+			enemy["larapio_lunge"] = LARAPIO_LUNGE_TIME
+			_play_sfx("boss1_dash", 0.012, 0.5, 1.35)
+		return
+	var lunge := float(enemy.get("larapio_lunge", 0.0))
+	if lunge > 0.0:
+		enemy["larapio_lunge"] = maxf(0.0, lunge - delta)
+		return
+	enemy["larapio_lunge_cd"] = maxf(0.0, float(enemy.get("larapio_lunge_cd", 1.5)) - delta)
+	if has_loot or score <= 0 or player_stun_timer > 0.0 or _enemy_prefers_remote(enemy):
+		return
+	if float(enemy["larapio_lunge_cd"]) > 0.0 or float(enemy.get("steal_cd", 0.0)) > 0.0:
+		return
+	if dist <= LARAPIO_STEAL_RADIUS or dist > LARAPIO_LUNGE_RANGE:
+		return
+	# Mira no inicio do aviso: da para desviar de lado.
+	var lunge_dir := (target_pos - Vector2(enemy["pos"])).normalized()
+	if lunge_dir.length() <= 0.05:
+		return
+	enemy["larapio_lunge_dir"] = lunge_dir
+	enemy["larapio_lunge_windup"] = LARAPIO_LUNGE_WINDUP
+	enemy["larapio_lunge_cd"] = LARAPIO_LUNGE_COOLDOWN
+	enemy["alerted"] = true
+	_add_text("TE PEGO!", Vector2(enemy["pos"]) + Vector2(0, -74), Color(1.0, 0.82, 0.22), 0.6, 16)
+
+
+func larapio_lunge_state(enemy: Dictionary) -> String:
+	if float(enemy.get("larapio_lunge_windup", 0.0)) > 0.0:
+		return "windup"
+	if float(enemy.get("larapio_lunge", 0.0)) > 0.0:
+		return "lunge"
+	return ""
 
 
 func _larapio_throw_interval(enemy: Dictionary, target_distance: float, has_loot: bool, aggressive: bool, desperate: bool) -> float:
@@ -21294,6 +16752,9 @@ func _update_larapio_ultimate(enemy: Dictionary, delta: float, hp_ratio: float, 
 			_start_larapio_ultimate(enemy)
 		return
 	enemy["larapio_ult_jump_cd"] = maxf(0.0, float(enemy.get("larapio_ult_jump_cd", 0.0)) - delta)
+	for portal_value in Array(enemy.get("larapio_ult_portals", [])):
+		var portal: Dictionary = portal_value
+		portal["cd"] = maxf(0.0, float(portal.get("cd", 0.0)) - delta)
 	var target_pos: = _get_enemy_target_pos(enemy)
 	var distance: = Vector2(enemy.get("pos", target_pos)).distance_to(target_pos)
 	var should_jump: = has_loot or distance < 420.0 or rng.randf() < 0.18
@@ -21328,24 +16789,33 @@ func _larapio_jump_between_ultimate_portals(enemy: Dictionary, target_pos: Vecto
 	if portals.size() < 2:
 		return
 	var current_pos: = Vector2(enemy.get("pos", target_pos))
-	var entry_index: = 0
+	# Cada portal usado (entrada e saida) fica em recarga: ele precisa de dois livres.
+	var entry_index: = -1
 	var entry_distance: = INF
 	for i in range(portals.size()):
+		if float(Dictionary(portals[i]).get("cd", 0.0)) > 0.0:
+			continue
 		var p: = Vector2(Dictionary(portals[i]).get("pos", current_pos))
 		var d: = current_pos.distance_squared_to(p)
 		if d < entry_distance:
 			entry_distance = d
 			entry_index = i
+	if entry_index < 0:
+		return
 	var exit_index: = entry_index
 	var best_score: = - INF
 	for i in range(portals.size()):
-		if i == entry_index:
+		if i == entry_index or float(Dictionary(portals[i]).get("cd", 0.0)) > 0.0:
 			continue
 		var p: = Vector2(Dictionary(portals[i]).get("pos", current_pos))
 		var score_value: = p.distance_to(target_pos) + rng.randf_range(-40.0, 40.0)
 		if score_value > best_score:
 			best_score = score_value
 			exit_index = i
+	if exit_index == entry_index:
+		return
+	Dictionary(portals[entry_index])["cd"] = LARAPIO_PORTAL_REUSE_COOLDOWN
+	Dictionary(portals[exit_index])["cd"] = LARAPIO_PORTAL_REUSE_COOLDOWN
 	var entry_pos: = Vector2(Dictionary(portals[entry_index]).get("pos", current_pos))
 	var exit_pos: = Vector2(Dictionary(portals[exit_index]).get("pos", current_pos))
 	_spawn_radial_particles(entry_pos, Color(1.0, 0.72, 0.22), 16)
@@ -21507,6 +16977,16 @@ func _throw_larapio_projectile(enemy: Dictionary) -> void :
 	var desperate = _larapio_desperate(enemy)
 	var stone_damage_mult: = LARAPIO_DESPERATE_STONE_DAMAGE_MULT if desperate and not has_loot else 1.0
 	var stone_speed_mult: = LARAPIO_DESPERATE_STONE_SPEED_MULT if desperate and not has_loot else (LARAPIO_AGGRESSIVE_STONE_SPEED_MULT if aggressive and not has_loot else 1.0)
+	# Agressivo ou desesperado: leque de tres pedras em vez de uma.
+	var spreads: Array = [0.0]
+	if (aggressive or desperate) and not has_loot:
+		spreads = [0.0, -LARAPIO_FAN_SPREAD, LARAPIO_FAN_SPREAD]
+	for spread in spreads:
+		_append_larapio_projectile(enemy, dir.rotated(float(spread)), has_loot, stone_damage_mult * (1.0 if is_zero_approx(float(spread)) else 0.7), stone_speed_mult)
+	_add_text("PEDRA PESADA!" if desperate and not has_loot else ("PEDRAS!" if aggressive and not has_loot else "TIN!"), Vector2(enemy["pos"]) + Vector2(0, -72), Color(1.0, 0.36, 0.12) if desperate else (Color(1.0, 0.52, 0.18) if aggressive else Color(1.0, 0.82, 0.24)), 0.45, 14)
+
+
+func _append_larapio_projectile(enemy: Dictionary, dir: Vector2, has_loot: bool, stone_damage_mult: float, stone_speed_mult: float) -> void:
 	enemy_bullets.append({
 		"pos": Vector2(enemy["pos"]) + Vector2(0, -10),
 		"spawn_pos": Vector2(enemy["pos"]) + Vector2(0, -10),
@@ -21519,7 +16999,6 @@ func _throw_larapio_projectile(enemy: Dictionary) -> void :
 		"spin": rng.randf_range(-1.0, 1.0),
 		"owner_uid": int(enemy.get("uid", -1))
 	})
-	_add_text("PEDRA PESADA!" if desperate and not has_loot else ("PEDRA!" if aggressive and not has_loot else "TIN!"), Vector2(enemy["pos"]) + Vector2(0, -72), Color(1.0, 0.36, 0.12) if desperate else (Color(1.0, 0.52, 0.18) if aggressive else Color(1.0, 0.82, 0.24)), 0.45, 14)
 
 
 func _spawn_larapio_coin_drop(pos: Vector2, value: int, collectable: bool) -> void :
@@ -21601,7 +17080,7 @@ func _update_agglomeration(delta: float) -> void :
 		if used.has(enemy["uid"]):
 			continue
 		var cluster = [enemy]
-		for other_index in enemy_manager.nearby_entity_indices(Vector2(enemy["pos"]), FUSION_RADIUS, false):
+		for other_index in enemy_manager.nearby_entity_indices(Vector2(enemy["pos"]), FUSION_RADIUS):
 			var other: Dictionary = enemy_manager.spatial_entities[other_index]
 			if other == enemy or used.has(other["uid"]):
 				continue
@@ -21685,7 +17164,6 @@ func _update_bullets(delta: float) -> void :
 	enemy_manager.rebuild_spatial_index()
 	var new_bullets = []
 	var prismatica_evolution_active := PrismaticaEvolutionController.is_active(self)
-	var bombastica_ultimate_active := not bombastica_bombs.is_empty()
 	for bullet in bullets:
 		var kind := String(bullet.get("kind", ""))
 		var previous_pos: = Vector2(bullet.get("pos", player_pos))
@@ -21701,23 +17179,12 @@ func _update_bullets(delta: float) -> void :
 		if bullet.has("fall_range"):
 			var traveled: = float(bullet.get("travel", 0.0)) + previous_pos.distance_to(Vector2(bullet["pos"]))
 			bullet["travel"] = traveled
-			if traveled >= float(bullet.get("fall_range", ECLIPSADA_SHURIKEN_FALL_RANGE)):
-				bullet["life"] = 0.0
-				var fall_color: Color = bullet.get("color", _eclipsada_color())
-				_spawn_eclipsada_shuriken_fall(Vector2(bullet["pos"]), fall_color, String(bullet.get("kind", "")))
-				continue
-		if kind == "cartografica":
-			_update_cartographic_projectile_route(bullet, previous_pos)
 		bullet["life"] = float(bullet["life"]) - delta
 		if kind in ["eletrica", "eletrica_charged"]:
 			_update_projectile_travel_sfx(bullet, delta)
 		if float(bullet["trail_cd"]) <= 0.0:
 			bullet["trail_cd"] = 0.028 if kind == "eletrica_charged" else 0.04
 			_emit_projectile_trail(bullet)
-		if bombastica_ultimate_active:
-			_try_hit_bombastica_ultimate_with_bullet(bullet)
-
-
 		if kind == "prismatica":
 			var pos: Vector2 = bullet["pos"]
 			var hit_wall = false
@@ -21786,9 +17253,6 @@ func _update_bullets(delta: float) -> void :
 					break
 
 		if float(bullet["life"]) <= 0.0:
-			if String(bullet.get("kind", "")) == "cartografica" and not bool(bullet.get("coord_spawned", false)):
-				_add_cartographic_coord(Vector2(bullet.get("pos", player_pos)))
-				bullet["coord_spawned"] = true
 			_try_rebate_from_bullet(bullet)
 			_play_projectile_end_sfx_once(bullet)
 			continue
@@ -21801,7 +17265,7 @@ func _update_bullets(delta: float) -> void :
 				_play_projectile_end_sfx_once(bullet)
 				continue
 
-		for enemy_index in enemy_manager.nearby_entity_indices(Vector2(bullet["pos"]), 64.0, false):
+		for enemy_index in enemy_manager.nearby_entity_indices(Vector2(bullet["pos"]), 64.0):
 			var enemy: Dictionary = enemy_manager.spatial_entities[enemy_index]
 			if float(enemy.get("hp", 0.0)) <= 0.0:
 				continue
@@ -21819,8 +17283,6 @@ func _update_bullets(delta: float) -> void :
 					bullet["life"] = 0.0
 					break
 				_apply_bullet_effect(bullet, enemy)
-				if bool(bullet.get("solar_splash", false)):
-					_apply_eclipsada_solar_splash(Vector2(bullet["pos"]), float(bullet.get("damage", player_damage)), String(bullet.get("source_category", "basic_attack")))
 				var evolution_keep: = _manifest_evolution_on_projectile_hit(bullet, enemy, Vector2(enemy["pos"]))
 				if String(bullet.get("kind", "")) in ["henry_pressure", "henry_nimbo_pressure"]:
 					henry_barometric_ability_controller.on_projectile_hit(bullet, Vector2(enemy["pos"]), uid)
@@ -21844,12 +17306,6 @@ func _update_bullets(delta: float) -> void :
 						bullet["life"] = 0.0
 						_play_projectile_end_sfx_once(bullet)
 						break
-				elif bullet["kind"] == "cartografica" and int(bullet.get("carto_pierce_limit", 0)) > 0:
-					var carto_hits: = int(bullet.get("carto_enemy_hits_count", 0)) + 1
-					bullet["carto_enemy_hits_count"] = carto_hits
-					if carto_hits >= int(bullet.get("carto_pierce_limit", 0)):
-						bullet["life"] = 0.0
-						break
 				elif not bool(bullet["pierce"]) and not evolution_keep:
 					bullet["life"] = 0.0
 					break
@@ -21859,41 +17315,13 @@ func _update_bullets(delta: float) -> void :
 				_play_projectile_hit_sfx(String(bullet.get("kind", "")))
 				_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
 				_apply_bullet_effect_to_arauto(bullet)
-				if String(bullet.get("kind", "")) == "ancorada":
-					_ensure_runtime_controllers_bound()
-					ancorada_ability_controller.on_projectile_hit(bullet, Vector2(arauto["pos"]), "arauto")
-				if bool(bullet.get("solar_splash", false)):
-					_apply_eclipsada_solar_splash(Vector2(bullet["pos"]), float(bullet.get("damage", player_damage)), String(bullet.get("source_category", "basic_attack")))
 				var evolution_keep_arauto: = _manifest_evolution_on_projectile_hit(bullet, {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"]), "stun": float(arauto.get("stun", 0.0))}, Vector2(arauto["pos"]))
 				if String(bullet.get("kind", "")) in ["henry_pressure", "henry_nimbo_pressure"]:
 					henry_barometric_ability_controller.on_projectile_hit(bullet, Vector2(arauto["pos"]), "arauto")
 				if bullet["kind"] == "gravitante":
-					orbitals.append({
-						"target_kind": "arauto",
-						"enemy_uid": -1,
-						"origin_pos": Vector2(arauto["pos"]),
-						"angle": rng.randf_range(0.0, TAU),
-						"life": 4.0,
-						"tick": 0.1,
-						"damage": player_damage * 0.14,
-						"sfx_cd": 0.0
-					})
-					GravitanteVfx.capture(orbitals.back(), bullet)
+					_gravitante().attach_orbital("arauto", -1, Vector2(arauto["pos"]), bullet)
 				if bullet["kind"] == "parasitica":
 					arauto["parasite_mark_time"] = PARASITE_MARK_DURATION
-				if bullet["kind"] == "cartografica":
-					_add_cartographic_coord(Vector2(arauto["pos"]), -2, "arauto", "hit")
-					if int(bullet.get("carto_route_hits", 0)) > 0:
-						cartographic_boss_displacement += 1
-					if bool(bullet.get("carto_explosion", false)) and not bool(bullet.get("carto_explosion_done", false)):
-						bullet["carto_explosion_done"] = true
-						_cartographic_route_burst(Vector2(arauto["pos"]), float(bullet.get("damage", player_damage)))
-				if bullet["kind"] == "mnesica":
-					arauto["stun"] = max(float(arauto.get("stun", 0.0)), 0.18)
-				if bullet["kind"] == "ressonante" and bool(bullet.get("resonant_perfect", false)):
-					_damage_arauto(player_damage * 0.22, "ressonante", false)
-				if bullet["kind"] == "contratual":
-					arauto["stun"] = max(float(arauto.get("stun", 0.0)), 0.2)
 				if bullet["kind"] == "prismatica" and not bool(bullet.get("refracted", false)):
 					var arauto_hits = int(bullet.get("enemy_hits_count", 0)) + 1
 					bullet["enemy_hits_count"] = arauto_hits
@@ -21924,61 +17352,20 @@ func _update_bullets(delta: float) -> void :
 				_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
 				var critical_result := _bullet_critical_damage(bullet)
 				_damage_boss(float(critical_result["amount"]), bullet["kind"], true, true, String(bullet.get("source_category", "basic_attack")), Vector2(bullet.get("origin", player_pos)), 0, "", bool(critical_result["critical"]))
-				if String(bullet.get("kind", "")) == "ancorada":
-					_ensure_runtime_controllers_bound()
-					ancorada_ability_controller.on_projectile_hit(bullet, boss_pos, "boss")
-				if bool(bullet.get("solar_splash", false)):
-					_apply_eclipsada_solar_splash(Vector2(bullet["pos"]), float(bullet.get("damage", player_damage)), String(bullet.get("source_category", "basic_attack")))
 				var evolution_keep_boss: = _manifest_evolution_on_projectile_hit(bullet, {"uid": "boss", "kind": "boss", "pos": boss_pos}, boss_pos)
 				if String(bullet.get("kind", "")) in ["henry_pressure", "henry_nimbo_pressure"]:
 					henry_barometric_ability_controller.on_projectile_hit(bullet, boss_pos, "boss")
 				if bullet["kind"] == "gravitante":
-					orbitals.append({
-						"target_kind": "boss",
-						"enemy_uid": -1,
-						"origin_pos": boss_pos,
-						"angle": rng.randf_range(0.0, TAU),
-						"life": 4.0,
-						"tick": 0.1,
-						"damage": player_damage * 0.14,
-						"sfx_cd": 0.0
-					})
-					GravitanteVfx.capture(orbitals.back(), bullet)
+					_gravitante().attach_orbital("boss", -1, boss_pos, bullet)
 				if bullet["kind"] == "parasitica":
 					boss_parasite_seeds = min(5, boss_parasite_seeds + 1)
 					boss_parasite_mark_time = PARASITE_MARK_DURATION
-				if bullet["kind"] == "bombastica":
-					_apply_bombastica_powder_to_target("boss", -1, boss_pos)
-				if bullet["kind"] == "necronada":
-					_necronada_register_boss_empower_followup_hit()
-				if bullet["kind"] == "necronada_dust":
-					_necronada_start_boss_empower_rose_window()
-					necronada_vfx.append({"kind": "dust_hit", "pos": boss_pos, "life": 0.34, "max": 0.34})
 				if bullet["kind"] == "eletrica_charged":
 					shockwaves.append({"pos": boss_pos, "radius": 18.0, "max": 132.0, "life": 0.28, "damage": float(bullet["damage"]) * 0.42, "hit": {}})
 					_spawn_radial_particles(boss_pos, Color(0.46, 1.0, 1.0), 10)
 					if vfx_director:
 						vfx_director.request_sky_lightning_strike(boss_pos, "eletrica")
 					_play_sfx("eletrica_hit", 0.05, 0.9, 1.1)
-				if bullet["kind"] == "cartografica":
-					_add_cartographic_coord(boss_pos, -1, "boss", "hit")
-					cartographic_boss_displacement += max(1, int(bullet.get("carto_route_hits", 0)))
-					if bool(bullet.get("carto_explosion", false)) and not bool(bullet.get("carto_explosion_done", false)):
-						bullet["carto_explosion_done"] = true
-						_cartographic_route_burst(boss_pos, float(bullet.get("damage", player_damage)))
-				if bullet["kind"] == "mnesica":
-					mnesic_boss_vulnerability = max(mnesic_boss_vulnerability, 1.15)
-				if bullet["kind"] == "ressonante" and bool(bullet.get("resonant_perfect", false)):
-					var note: = String(bullet.get("resonant_note", "grave"))
-					boss_resonant_notes[note] = true
-					if boss_resonant_notes.size() >= 3:
-						_trigger_resonant_chord(boss_pos, 1.15)
-						boss_resonant_notes.clear()
-				if bullet["kind"] == "contratual":
-					boss_contract_clause = "agressao"
-					boss_contract_infractions = min(CONTRACT_MAX_INFRACTIONS, boss_contract_infractions + 1)
-					_contractual_order_progress("boss_break", 1)
-
 				if bullet["kind"] == "prismatica" and not bool(bullet.get("refracted", false)):
 					var e_hits = int(bullet.get("enemy_hits_count", 0)) + 1
 					bullet["enemy_hits_count"] = e_hits
@@ -22040,7 +17427,7 @@ func _update_remote_bullets(delta: float) -> void :
 
 		if float(b["life"]) > 0.0:
 			var bullet_pos: = Vector2(b["pos"])
-			for enemy_index in enemy_manager.nearby_entity_indices(bullet_pos, 64.0, false):
+			for enemy_index in enemy_manager.nearby_entity_indices(bullet_pos, 64.0):
 				var enemy: Dictionary = enemy_manager.spatial_entities[enemy_index]
 				if float(enemy.get("hp", 0.0)) <= 0.0:
 					continue
@@ -22149,26 +17536,11 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void :
 	var damage: float = float(critical_result["amount"])
 	var critical_hit: bool = bool(critical_result["critical"])
 	var damage_text_label := ""
-	if String(bullet.get("kind", "")).begins_with("eclipsada_") and _eclipsada_weakpoint_hit(enemy, Vector2(bullet.get("pos", enemy["pos"]))):
-		damage *= ECLIPSADA_WEAKPOINT_DAMAGE_MULT + _eclipsada_trait_value("weak", 0.0)
-		enemy["eclipsada_weak_flash"] = 0.45
-		critical_hit = true
-		damage_text_label = "PONTO FRACO"
 	var aura_hit: = AuraSystem.on_enemy_hit(aura_state, enemy, bullet, damage)
 	damage = float(aura_hit.get("damage", damage))
 	_apply_aura_events(aura_hit.get("events", []))
-	if float(enemy.get("mnesic_tricked", 0.0)) > 0.0:
-		damage *= 1.22
-		enemy["mnesic_tricked"] = 0.0
-	if float(enemy.get("mnesic_vulnerable", 0.0)) > 0.0:
-		damage *= 1.18
 	if float(enemy.get("contract_vulnerable", 0.0)) > 0.0:
 		damage *= 1.16
-	if float(enemy.get("necronada_crit_window", 0.0)) > 0.0 and rng.randf() < clampf(float(enemy.get("necronada_crit_chance", NECRONADA_ULTIMATE_CRIT_CHANCE)), 0.0, 0.85):
-		damage *= 1.5
-		enemy["necronada_epitaph_flash"] = maxf(float(enemy.get("necronada_epitaph_flash", 0.0)), 0.35)
-		critical_hit = true
-		damage_text_label = "CRÍTICO FUNERÁRIO"
 	_damage_enemy(enemy, damage, bullet["kind"], true, true, Vector2(bullet.get("origin", player_pos)), String(bullet.get("source_category", "basic_attack")), 0, "", critical_hit, damage_text_label)
 
 	_spawn_custom_collision(bullet["pos"], bullet["kind"])
@@ -22179,59 +17551,11 @@ func _apply_bullet_effect(bullet: Dictionary, enemy: Dictionary) -> void :
 		_add_text("+%d" % heal, player_pos + Vector2(0, -70), Color(0.45, 1.0, 0.55), 0.6, 18)
 	if poison_damage > 0.0:
 		enemy["poison"] = min(5.0, max(float(enemy.get("poison", 0.0)), 2.2) + 0.55)
-	if bullet["kind"] == "shuriken_eclipsado" or String(bullet["kind"]).begins_with("eclipsada_"):
-		var hit_color: Color = bullet.get("color", Color(0.85, 0.4, 1.0))
-		_spawn_radial_particles(Vector2(bullet["pos"]), hit_color, 10)
-		slashes.append({"a": Vector2(bullet["pos"]) - Vector2(bullet.get("dir", Vector2.RIGHT)) * 26.0, "b": Vector2(bullet["pos"]) + Vector2(bullet.get("dir", Vector2.RIGHT)) * 26.0, "life": 0.16, "max": 0.16, "color": hit_color, "width": 8.0})
 	if bullet["kind"] == "parasitica":
 		enemy["seeds"] = min(5, int(enemy.get("seeds", 0)) + 1)
 		enemy["parasite_mark_time"] = PARASITE_MARK_DURATION
-	if bullet["kind"] == "bombastica":
-		_apply_bombastica_powder_to_target("enemy", int(enemy.get("uid", -1)), Vector2(enemy["pos"]))
-	if bullet["kind"] == "necronada":
-		_apply_necronada_epitaph(enemy, Vector2(bullet.get("pos", enemy["pos"])))
-		_necronada_register_empower_followup_hit(enemy)
-	if bullet["kind"] == "necronada_dust":
-		enemy["evolution_slow"] = maxf(float(enemy.get("evolution_slow", 0.0)), 1.0)
-		enemy["evolution_slow_mult"] = minf(float(enemy.get("evolution_slow_mult", 1.0)), 0.7)
-		enemy["necronada_crit_window"] = maxf(float(enemy.get("necronada_crit_window", 0.0)), 2.6)
-		enemy["necronada_crit_chance"] = maxf(float(enemy.get("necronada_crit_chance", 0.0)), 0.26)
-		_necronada_start_empower_rose_window(enemy)
-		necronada_vfx.append({"kind": "dust_hit", "pos": Vector2(bullet.get("pos", enemy["pos"])), "life": 0.34, "max": 0.34})
-	if bullet["kind"] == "ancorada":
-		_ensure_runtime_controllers_bound()
-		ancorada_ability_controller.on_projectile_hit(bullet, Vector2(enemy.get("pos", bullet.get("pos", player_pos))), str(enemy.get("uid", "enemy")))
 	if bullet["kind"] == "gravitante":
-		orbitals.append({
-			"target_kind": "enemy",
-			"enemy_uid": enemy["uid"],
-			"origin_pos": Vector2(enemy["pos"]),
-			"angle": rng.randf_range(0.0, TAU),
-			"life": 4.0,
-			"tick": 0.1,
-			"damage": player_damage * 0.18,
-			"sfx_cd": 0.0
-		})
-		GravitanteVfx.capture(orbitals.back(), bullet)
-	if bullet["kind"] == "cartografica":
-		_add_cartographic_coord(Vector2(enemy["pos"]), int(enemy["uid"]), "enemy", "hit")
-		_add_cartographic_trace_to_enemy(enemy, int(bullet.get("carto_route_hits", 0)))
-		if bool(bullet.get("carto_explosion", false)) and not bool(bullet.get("carto_explosion_done", false)):
-			bullet["carto_explosion_done"] = true
-			_cartographic_route_burst(Vector2(enemy["pos"]), damage, int(enemy.get("uid", -1)))
-	if bullet["kind"] == "mnesica":
-		_register_mnesic_memory(enemy, damage)
-	if bullet["kind"] == "ressonante":
-		var perfect: = bool(bullet.get("resonant_perfect", false))
-		_apply_resonant_note(enemy, String(bullet.get("resonant_note", "grave")), perfect)
-		if perfect:
-			if float(enemy.get("hp", 0.0)) <= 0.0:
-				_spawn_music_notes(Vector2(enemy["pos"]), 8)
-			else:
-				enemy["stun"] = max(float(enemy.get("stun", 0.0)), 0.8)
-				enemy["resonant_stun_notes"] = 0.8
-	if bullet["kind"] == "contratual":
-		_apply_contract_clause(enemy)
+		_gravitante().attach_orbital("enemy", int(enemy["uid"]), Vector2(enemy["pos"]), bullet)
 	if bullet["kind"] == "eletrica_charged":
 		shockwaves.append({"pos": enemy["pos"], "radius": 18.0, "max": 128.0, "life": 0.28, "damage": damage * 0.52, "hit": {str(enemy["uid"]): true}})
 		_spawn_radial_particles(enemy["pos"], Color(0.46, 1.0, 1.0), 10)
@@ -22276,10 +17600,6 @@ func _apply_bullet_effect_to_arauto(bullet: Dictionary) -> void :
 	if String(bullet.get("kind", "")) == "parasitica":
 		arauto["seeds"] = min(5, int(arauto.get("seeds", 0)) + 1)
 		arauto["parasite_mark_time"] = PARASITE_MARK_DURATION
-	if String(bullet.get("kind", "")) == "bombastica":
-		_apply_bombastica_powder_to_target("arauto", -2, Vector2(arauto["pos"]))
-
-
 func _bullet_critical_damage(bullet: Dictionary) -> Dictionary:
 	var ricochet_bonus := 0.0
 	if String(bullet.get("kind", "")) == "prismatica" and bool(bullet.get("ricocheted", false)):
@@ -22288,7 +17608,7 @@ func _bullet_critical_damage(bullet: Dictionary) -> Dictionary:
 
 
 func _critical_damage(base: float, always_crit: = false, bonus_crit_chance: float = 0.0) -> Dictionary:
-	var effective_crit: float = player_crit_chance + ancorada_crit_bonus + maxf(0.0, bonus_crit_chance)
+	var effective_crit: float = player_crit_chance + maxf(0.0, bonus_crit_chance)
 	var crit_chance: float = clampf(effective_crit, 0.0, 1.0)
 	var crit_overcap: float = maxf(0.0, effective_crit - 1.0)
 	if always_crit or rng.randf() < crit_chance:
@@ -22316,197 +17636,6 @@ func _update_prisms(delta: float) -> void :
 	prisms = prisms.filter( func(p): return float(p["life"]) > 0.0)
 
 
-func _update_return_bullets(delta: float) -> void :
-	if _boss_absorb_time_stop_active():
-		return
-	for bullet in return_bullets:
-		bullet["age"] = float(bullet["age"]) + delta
-		bullet["phase"] = float(bullet.get("phase", 0.0)) + delta * 9.0
-		bullet["trail_cd"] = float(bullet.get("trail_cd", 0.0)) - delta
-		var state = String(bullet.get("state", "volta" if bool(bullet.get("returning", false)) else "ida"))
-		var previous_state: String = state
-		if state == "ida" and not bullet.has("max_range") and float(bullet["age"]) > 0.58:
-			state = "volta"
-		var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT))
-		var speed = BULLET_SPEED * 0.92
-		var damage = float(bullet["damage"])
-		_update_manifest_evolution_projectile(bullet, delta)
-		dir = Vector2(bullet.get("dir", dir))
-		if state == "instavel":
-			if time_alive >= float(bullet.get("memory_until", 0.0)):
-				state = "volta"
-				var impacts = int(bullet.get("memory_impacts", 0))
-				bullet["memory_bonus"] = 1.25 if impacts >= 6 else (1.15 if impacts >= 3 else 1.0)
-				bullet["forced"] = false
-			else:
-				bullet["memory_seek_cd"] = float(bullet.get("memory_seek_cd", 0.0)) - delta
-				if float(bullet.get("memory_seek_cd", 0.0)) <= 0.0:
-					bullet["memory_seek_cd"] = 0.48
-					var chosen = {}
-					var best_d = 520.0
-					for enemy in enemies:
-						if float(enemy.get("hp", 0.0)) <= 0.0:
-							continue
-						if int(enemy.get("uid", -1)) == int(bullet.get("memory_last_uid", -999999)) and time_alive - float(bullet.get("memory_last_hit_time", -999.0)) < 0.4:
-							continue
-						var d = Vector2(enemy["pos"]).distance_to(Vector2(bullet["pos"]))
-						if d <= best_d:
-							best_d = d
-							chosen = enemy
-					if not chosen.is_empty():
-						dir = (Vector2(chosen["pos"]) - Vector2(bullet["pos"])).normalized()
-					else:
-						dir = dir.rotated(PI + 0.19).normalized()
-				var next = Vector2(bullet["pos"]) + dir * speed * delta
-				var bounced = false
-				if next.x <= 10.0 or next.x >= WORLD_SIZE.x - 10.0:
-					dir.x = - dir.x
-					bounced = true
-				if next.y <= 10.0 or next.y >= WORLD_SIZE.y - 10.0:
-					dir.y = - dir.y
-					bounced = true
-				if bounced:
-					bullet["memory_last_uid"] = -1
-					bullet["memory_seek_cd"] = 0.0
-				dir = dir.normalized()
-				bullet["pos"] = (Vector2(bullet["pos"]) + dir * speed * delta).clamp(Vector2(10.0, 10.0), WORLD_SIZE - Vector2(10.0, 10.0))
-				damage *= 0.32
-		if state == "volta":
-			bullet["returning"] = true
-			dir = (player_pos - Vector2(bullet["pos"])).normalized()
-			damage *= 1.85 * float(bullet.get("memory_bonus", 1.0))
-			if bool(bullet.get("forced", false)):
-				damage *= 1.28
-			bullet["pos"] = Vector2(bullet["pos"]) + dir * speed * delta
-		elif state == "ida":
-			bullet["returning"] = false
-			var outbound_previous := Vector2(bullet["pos"])
-			bullet["pos"] = outbound_previous + dir * speed * delta
-			if RangedAttackRange.advance_bullet(bullet, outbound_previous, Vector2(bullet["pos"])):
-				state = "volta"
-				bullet["returning"] = true
-				bullet["range_presence"] = 1.0
-		else:
-			bullet["returning"] = false
-		bullet["state"] = state
-		bullet["dir"] = dir
-		if previous_state != state and state == "volta":
-			_play_sfx("retornante_reverse", 0.035, 1.04, 1.0)
-		bullet["fly_sfx_cd"] = float(bullet.get("fly_sfx_cd", 0.0)) - delta
-		if float(bullet["fly_sfx_cd"]) <= 0.0:
-			bullet["fly_sfx_cd"] = 0.3 if state == "ida" else 0.24
-			_play_sfx("retornante_wave" if state == "ida" else "retornante_reverse", 0.02, 0.42 if state == "ida" else 0.48, 0.94 if state == "ida" else 1.03)
-		if float(bullet["trail_cd"]) <= 0.0:
-			bullet["trail_cd"] = 0.045
-			effects.append({
-				"kind": "trail",
-				"text": "",
-				"pos": bullet["pos"] - dir * 14.0,
-				"life": 0.18,
-				"max": 0.18,
-				"color": Color(1.0, 0.28, 0.76, 0.4) if state == "instavel" else (Color(1.0, 0.42, 0.92, 0.36) if bool(bullet["returning"]) else Color(0.64, 0.42, 1.0, 0.32)),
-				"size": 8.0,
-				"vel": - dir * 26.0
-			})
-		if current_phase == 4 and _damage_phase4_planet_at(Vector2(bullet["pos"]), damage, 58.0):
-			bullet["age"] = 99.0
-			continue
-		for enemy in enemies:
-			if float(enemy.get("hp", 0.0)) <= 0.0:
-				continue
-			if state != "instavel" and not RangedAttackRange.can_hit_position(bullet, Vector2(enemy["pos"])):
-				continue
-			var hit_radius_bonus = 14.0 if float(bullet.get("paradox_until", 0.0)) > time_alive or state == "instavel" else 0.0
-			if state == "instavel":
-				var last_enemy_hit = float(Dictionary(bullet.get("memory_hit_times", {})).get(str(enemy["uid"]), -999.0))
-				if time_alive - last_enemy_hit < 0.4 or time_alive - float(bullet.get("memory_last_hit_time", -999.0)) < 0.09:
-					continue
-				if Vector2(bullet["pos"]).distance_to(enemy["pos"]) < _enemy_radius(enemy) + hit_radius_bonus:
-					var hit_times = Dictionary(bullet.get("memory_hit_times", {}))
-					hit_times[str(enemy["uid"])] = time_alive
-					bullet["memory_hit_times"] = hit_times
-					bullet["memory_last_hit_time"] = time_alive
-					bullet["memory_last_uid"] = int(enemy["uid"])
-					bullet["memory_impacts"] = int(bullet.get("memory_impacts", 0)) + 1
-					bullet["memory_seek_cd"] = 0.0
-					_play_sfx("retornante_wave", 0.035, 0.74, 1.12)
-					_damage_enemy(enemy, damage, "retornante", true, true, Vector2(bullet.get("origin", player_pos)), String(bullet.get("source_category", "basic_attack")))
-					_manifest_evolution_on_projectile_hit(bullet, enemy, Vector2(enemy["pos"]))
-				continue
-			var key = str(enemy["uid"]) + ("r" if state == "volta" else "i")
-			if bullet["hits"].has(key):
-				continue
-			if Vector2(bullet["pos"]).distance_to(enemy["pos"]) < _enemy_radius(enemy) + hit_radius_bonus:
-				bullet["hits"][key] = true
-				_play_sfx("retornante_wave" if state == "ida" else "retornante_reverse", 0.035, 0.76, 1.0)
-				_damage_enemy(enemy, damage, "retornante", true, true, Vector2(bullet.get("origin", player_pos)), String(bullet.get("source_category", "basic_attack")))
-				_manifest_evolution_on_projectile_hit(bullet, enemy, Vector2(enemy["pos"]))
-		if _arauto_active() and (state == "instavel" or RangedAttackRange.can_hit_position(bullet, Vector2(arauto["pos"]))) and Vector2(bullet["pos"]).distance_to(Vector2(arauto["pos"])) < 62.0:
-			if state == "instavel":
-				var arauto_hit_times = Dictionary(bullet.get("memory_hit_times", {}))
-				var last_arauto_hit = float(arauto_hit_times.get("arauto", -999.0))
-				if time_alive - last_arauto_hit >= 0.4 and time_alive - float(bullet.get("memory_last_hit_time", -999.0)) >= 0.09:
-					arauto_hit_times["arauto"] = time_alive
-					bullet["memory_hit_times"] = arauto_hit_times
-					bullet["memory_last_hit_time"] = time_alive
-					bullet["memory_last_uid"] = -3
-					bullet["memory_impacts"] = int(bullet.get("memory_impacts", 0)) + 1
-					bullet["memory_seek_cd"] = 0.0
-					_play_sfx("retornante_wave", 0.035, 0.76, 1.08)
-					_damage_arauto(damage, "retornante")
-					_manifest_evolution_on_projectile_hit(bullet, {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"])}, Vector2(arauto["pos"]))
-			else:
-				var arauto_key = "arauto" + ("r" if state == "volta" else "i")
-				if not bullet["hits"].has(arauto_key):
-					bullet["hits"][arauto_key] = true
-					_play_sfx("retornante_wave" if state == "ida" else "retornante_reverse", 0.035, 0.76, 1.0)
-					_damage_arauto(damage, "retornante")
-					_manifest_evolution_on_projectile_hit(bullet, {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"])}, Vector2(arauto["pos"]))
-		if time_alive >= float(bullet.get("cheese_hit_at", 0.0)) and _damage_phase3_cheeses_at(Vector2(bullet["pos"]), damage, 30.0):
-			bullet["cheese_hit_at"] = time_alive + 0.35
-		if _register_boss3_clone_hit(Vector2(bullet["pos"]), BOSS3_MIASMA_CLONE_HIT_RADIUS + 14.0):
-			bullet["age"] = 99.0
-			continue
-		var boss_hit_bonus = 14.0 if float(bullet.get("paradox_until", 0.0)) > time_alive or state == "instavel" else 0.0
-		if boss_active and boss_hp > 0.0 and (state == "instavel" or RangedAttackRange.can_hit_position(bullet, boss_pos)) and bullet["pos"].distance_to(boss_pos) < _boss_hit_radius() + boss_hit_bonus:
-			if state == "instavel":
-				var boss_hit_times = Dictionary(bullet.get("memory_hit_times", {}))
-				var last_boss_hit = float(boss_hit_times.get("boss", -999.0))
-				if time_alive - last_boss_hit >= 0.4 and time_alive - float(bullet.get("memory_last_hit_time", -999.0)) >= 0.09:
-					boss_hit_times["boss"] = time_alive
-					bullet["memory_hit_times"] = boss_hit_times
-					bullet["memory_last_hit_time"] = time_alive
-					bullet["memory_last_uid"] = -2
-					bullet["memory_impacts"] = int(bullet.get("memory_impacts", 0)) + 1
-					bullet["memory_seek_cd"] = 0.0
-					_play_sfx("retornante_wave", 0.035, 0.76, 1.08)
-					_damage_boss(damage, "retornante", true, true, String(bullet.get("source_category", "basic_attack")), Vector2(bullet.get("origin", player_pos)))
-					_manifest_evolution_on_projectile_hit(bullet, {"uid": "boss", "kind": "boss", "pos": boss_pos}, boss_pos)
-			else:
-				_play_sfx("retornante_wave" if state == "ida" else "retornante_reverse", 0.035, 0.76, 1.0)
-				_damage_boss(damage, "retornante", true, true, String(bullet.get("source_category", "basic_attack")), Vector2(bullet.get("origin", player_pos)))
-				_manifest_evolution_on_projectile_hit(bullet, {"uid": "boss", "kind": "boss", "pos": boss_pos}, boss_pos)
-		if state == "volta" and Vector2(bullet["pos"]).distance_to(player_pos) < 34.0:
-			if float(bullet.get("paradox_until", 0.0)) > time_alive:
-				var cycles = min(2, int(bullet.get("paradox_cycles", 0)) + 1)
-				bullet["paradox_cycles"] = cycles
-				bullet["state"] = "ida"
-				bullet["returning"] = false
-				bullet["age"] = 0.0
-				bullet["hits"] = {}
-				bullet["dir"] = dir
-				RangedAttackRange.reset_outbound_travel(bullet, player_pos)
-				var new_range = 165.0 + cycles * 45.0
-				bullet["pos"] = player_pos + dir * 18.0
-				bullet["memory_bonus"] = float(bullet.get("memory_bonus", 1.0))
-			else:
-				bullet["age"] = 99.0
-	return_bullets = return_bullets.filter( func(b):
-		var state = String(b.get("state", "ida"))
-		return state == "instavel" or float(b["age"]) < 6.0
-	)
-
-
 func _element_from_source(source: String) -> String:
 	var src: = source.to_lower()
 	if src.contains("eletric") or src.contains("choque") or manifestation_key == "eletrica":
@@ -22525,6 +17654,8 @@ func _element_from_source(source: String) -> String:
 
 
 func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: = true, apply_aura_multiplier: = true, attack_origin: = Vector2.ZERO, source_category: = "", source_peer_id: int = 0, source_manifestation: String = "", critical_hit: bool = false, damage_text_label: String = "") -> bool:
+	if RTLaceranteExecutionController.blocks_damage(enemy, source):
+		return false
 	if _is_player_calcified():
 		amount *= 2.0
 	var effective_source_category: = source_category
@@ -22534,7 +17665,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		if show_text:
 			_tutorial_wrong_damage_feedback(enemy)
 		return false
-	if _is_direct_player_damage_source(source, effective_source_category): amount *= runtime_event_director.damage_multiplier()
+	if _is_direct_player_damage_source(source, effective_source_category): amount *= runtime_event_director.damage_multiplier() * _field_artifacts().damage_multiplier() * _boss_pacts().m("dmg")
 	if is_multiplayer and not _is_world_authority():
 		amount = _outgoing_damage_amount(amount, source)
 		_send_client_damage_request(NET_DAMAGE_ENEMY, str(enemy.get("uid", "")), amount, source, player_pos, show_text, effective_source_category, _mp_unique_id(), selected_manifestation)
@@ -22604,8 +17735,6 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	amount *= amber_suturer_controller.damage_taken_multiplier(enemy)
 	amount *= _fragilidade_enemy_multiplier(enemy, source)
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
-	amount *= _acorrentada_chained_damage_multiplier(enemy)
-	amount *= _cartographic_trace_damage_multiplier(enemy, source)
 	amount *= henry_incendiary_ability_controller.damage_taken_multiplier(enemy, source)
 	var damage_manifestation: String = source_manifestation if source_manifestation != "" else _damage_source_manifestation_key(source_peer_id)
 	if damage_manifestation == "eletrica" and source != "eletrica_static_lightning":
@@ -22657,7 +17786,6 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	if actual_damage > 0.0 and _is_direct_player_damage_source(source, effective_source_category):
 		_geovana_bark("enemy_hit", {"damage": actual_damage, "source": source, "category": effective_source_category})
 	_track_enemy_damage(enemy, actual_damage)
-	_acorrentada_share_link_damage({"kind": "enemy", "uid": int(enemy.get("uid", -1))}, actual_damage, source, effective_source_category, damage_origin)
 	if antimatter_should_trigger:
 		_trigger_antimatter_implosion(Vector2(enemy.get("pos", damage_origin)), enemy)
 	else:
@@ -22672,13 +17800,6 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	if trigger_card_effects:
 		_consume_pulso_desestabilizador(Vector2(enemy["pos"]), source)
 	return float(enemy["hp"]) <= 0.0
-
-
-func _acorrentada_chained_damage_multiplier(enemy: Dictionary) -> float:
-	var elos: = _acorrentada_enemy_elos(enemy)
-	if elos <= 0:
-		return 1.0
-	return 1.0 + ACORRENTADA_CHAINED_DAMAGE_BONUS * float(elos)
 
 
 func _play_enemy_hit_sfx(enemy: Dictionary, source: String) -> void :
@@ -22725,8 +17846,6 @@ func _enemy_hit_audio_profile(enemy: Dictionary, source: String) -> Dictionary:
 			pitch *= 0.92
 		"prismatica":
 			pitch *= 1.1
-		"retornante":
-			pitch *= 0.96
 		"parasitica":
 			volume *= 0.82
 	return {
@@ -22763,6 +17882,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		_send_client_damage_request(NET_DAMAGE_BOSS, "", amount, source, attack_origin if attack_origin != Vector2.ZERO else player_pos, true, effective_source_category, _mp_unique_id(), selected_manifestation)
 		return
 	amount = _apply_player_run_level_damage(amount, source, effective_source_category)
+	if _is_direct_player_damage_source(source, effective_source_category):
+		amount *= _field_artifacts().damage_multiplier() * _boss_pacts().m("dmg") * _boss_pacts().m("boss_dmg")
 	if current_phase == 7 and boss7_core_active:
 		if apply_aura_multiplier and not source.begins_with("aura_"):
 			amount *= AuraSystem.damage_multiplier(aura_state)
@@ -22778,8 +17899,6 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		return
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
-	if _is_direct_player_damage_source(source, effective_source_category):
-		amount *= _contractual_damage_multiplier()
 	amount *= _mandamento_damage_multiplier(effective_source_category)
 	var damage_manifestation: String = source_manifestation if source_manifestation != "" else _damage_source_manifestation_key(source_peer_id)
 	if damage_manifestation == "eletrica" and source != "eletrica_static_lightning":
@@ -22824,13 +17943,6 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	var final = max(1.0, amount * (1.0 - armor))
 	if current_phase == 1 and not boss1_attack_windup.is_empty() and source != "parasite_feast":
 		final *= BOSS1_ATTACK_WINDUP_DAMAGE_TAKEN_MULT
-	if mnesic_boss_vulnerability > 0.0 and source != "parasite_feast":
-		final *= 1.16
-	if boss_contract_vulnerability > 0.0 and source != "parasite_feast":
-		final *= 1.14
-	if cartographic_boss_displacement >= CARTO_BOSS_DISPLACEMENT_REQUIRED and source != "cartografica":
-		final *= 1.28
-		cartographic_boss_displacement = 0
 	if current_phase == 2 and _boss2_shield_active() and source != "parasite_feast":
 		_add_text("IMUNE", boss_pos + Vector2(rng.randf_range(-24, 24), -96), Color(0.72, 0.96, 1.0), 0.55, 18)
 		return
@@ -22937,7 +18049,6 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			vfx_director.request_floor_crack(boss_pos, 42.0, elem, 3.0)
 	_track_boss_damage(boss_hp_before - boss_hp)
 	_register_boss_threat(source_peer_id if source_peer_id > 0 else _boss_source_peer_from_origin(attack_origin), actual_boss_damage, source, effective_source_category)
-	_acorrentada_share_link_damage({"kind": "boss"}, boss_hp_before - boss_hp, source, effective_source_category, attack_origin if attack_origin != Vector2.ZERO else player_pos)
 	if antimatter_should_trigger:
 		_trigger_antimatter_implosion(boss_pos)
 	else:
@@ -23000,18 +18111,21 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		var reward: = int(round(float(common_reward_reference) * 2.5))
 		_apply_score_delta(reward)
 		_grant_spectral_core(SPECTRAL_CORE_BOSS_REWARD, boss_pos, "boss_phase_%d" % current_phase)
-		var rewarded_cards: = _grant_boss_reward_cards(BOSS_REWARD_CARD_COUNT, BOSS_REWARD_RARE_COUNT)
+		# 2026-11: chefes nao dao mais cartas. Pontos + nucleos continuam; no lugar das
+		# cartas entra a escolha obrigatoria (Chefe 2 = evolucao, demais = pacto).
 		if is_multiplayer:
 			_revive_multiplayer_team_after_boss_kill()
 		_add_text("BOSS DISSOLVIDO", boss_pos + Vector2(0, -100), Color(1.0, 0.78, 0.25), 3.0, 34)
-		_add_text("+%d CARTAS  +%s PONTOS" % [rewarded_cards, _format_points(reward)], boss_pos + Vector2(0, -142), Color(1.0, 0.9, 0.34), 2.8, 23)
+		_add_text("+%s PONTOS" % _format_points(reward), boss_pos + Vector2(0, -142), Color(1.0, 0.9, 0.34), 2.8, 23)
 		_geovana_bark("boss_kill", {"phase": current_phase})
 		_register_dimension_phase_completed(current_phase)
 		if _should_offer_dimension_choice_after_boss(current_phase):
+			_queue_post_boss_choice(current_phase)
 			_spawn_phase_choice_portals(boss_pos)
 		else:
 			var next_phase: = _consume_next_phase_after_boss(current_phase)
 			if next_phase > 0:
+				_queue_post_boss_choice(current_phase)
 				_spawn_phase_fragment(boss_pos, next_phase)
 			else:
 				_stop_battle_music_for_screen_transition()
@@ -23023,6 +18137,14 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 				_commit_final_phase_victory_cleanup(current_phase)
 				_open_specter_upgrade("victory", true)
 				_broadcast_final_phase_victory(current_phase)
+
+
+## Chefe 2 abre a evolucao da forma; os outros chefes (menos o final) abrem pacto.
+func _queue_post_boss_choice(phase: int) -> void:
+	if phase == 2 and _form_evolutions().chosen.is_empty() and not RTFormEvolutionCatalog.for_form(_form_evolutions().form_key()).is_empty():
+		_run_choice().queue("evolution")
+	elif phase != 2:
+		_run_choice().queue("pact")
 
 
 func _apply_final_phase_victory_from_authority(phase: int) -> bool:
@@ -23243,8 +18365,6 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		return
 	if _try_reconstitute_enemy(enemy):
 		return
-	_try_gain_eclipsada_trait(enemy)
-	_necronada_on_enemy_killed(enemy)
 	_handle_devorador_enemy_death(enemy)
 	_register_valid_necro_kill(enemy)
 	_sanguinaria_handle_enemy_kill(enemy)
@@ -23271,7 +18391,6 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	_player_run_level_controller().grant_confirmed_enemy(enemy)
 	_maybe_grant_enemy_spectral_core(enemy, kill_pos)
 	_add_card_unlock_progress("enemy_kills", 1.0, int(enemy.get("killed_by_peer_id", _mp_unique_id())))
-	_contractual_order_progress("kill", 1)
 	shop_rift_controller.on_enemy_killed(enemy)
 	henry_incendiary_ability_controller.on_enemy_killed(enemy)
 	var gain = _points_for_enemy(enemy)
@@ -23290,7 +18409,8 @@ func _kill_enemy(enemy: Dictionary) -> void :
 			_add_text("MERCENARIA +%s" % _format_points(mercenary_bonus_points), kill_pos + Vector2(0, -96), Color(1.0, 0.62, 0.16), 0.9, 19)
 	runtime_event_director.on_enemy_killed(enemy, runtime_event_director.context_from_game(self), _is_world_authority())
 	var point_multiplier: float = point_boost_pickup_controller.effective_point_multiplier(runtime_event_director.point_multiplier())
-	gain = int(round(float(gain) * point_multiplier))
+	gain = int(round(float(gain) * point_multiplier * _boss_pacts().m("points")))
+	_boss_pacts().on_enemy_killed(kill_pos)
 	roguelike_point_card_controller.on_enemy_defeated(enemy, kill_pos)
 	point_boost_pickup_controller.on_enemy_defeated(
 		enemy,
@@ -23518,7 +18638,7 @@ func _update_enemy_bullets(delta: float) -> void :
 	for bullet in enemy_bullets:
 		var previous_bullet_pos: = Vector2(bullet.get("pos", player_pos))
 		var bullet_type: = String(bullet.get("type", ""))
-		var slow_mult = _secondary_ancorada_projectile_slow_at(Vector2(bullet["pos"]))
+		var slow_mult := 1.0
 		if bullet_type == "boss4_comet":
 			var comet_target: Vector2 = _boss_target_pos(true, 0.12)
 			var desired_dir: Vector2 = (comet_target - Vector2(bullet["pos"])).normalized()
@@ -23550,40 +18670,11 @@ func _update_enemy_bullets(delta: float) -> void :
 		_track_probability_near_miss(bullet, previous_bullet_pos, bullet_hit_radius)
 		if _try_damage_bargain_capsule_with_enemy_bullet(bullet):
 			continue
-		var remnant_hit: = _damage_remnant_from_enemy_bullet(bullet, bullet_hit_radius)
 		var local_player_hit: bool = bullet["pos"].distance_to(player_pos) < bullet_hit_radius
 		if bullet_type == "suturer_hook" and int(bullet.get("target_peer_id", _mp_unique_id())) != _mp_unique_id():
 			local_player_hit = false
 		if not local_player_hit and bullet_type == "umbra_plasma":
 			local_player_hit = _distance_to_segment(player_pos, previous_bullet_pos, Vector2(bullet["pos"])) <= bullet_hit_radius
-		if not remnant_hit and local_player_hit:
-			bullet["probability_near_miss_registered"] = true
-			bullet_type = String(bullet.get("type", "projetador"))
-			var hit_was_blocked: = _player_invulnerable()
-			if bullet_type == "pustula_fossil_spit":
-				_resolve_fossil_pustule_spit_hit(bullet)
-			elif bullet_type == "suturer_hook":
-				amber_suturer_controller.on_hook_hit(bullet, _mp_unique_id())
-			_damage_player(int(bullet["damage"]), bullet_type, true)
-			if current_phase == 5 and not hit_was_blocked:
-				_increase_umbra_cadence(0.09)
-			if bullet_type == "pyro_wall_seed":
-				_add_phase2_fire_wall_tile(Vector2(bullet["pos"]))
-			elif current_phase == 2 and bullet_type != "sineiro_shard":
-				_apply_phase2_projectile_freeze()
-			elif bullet_type == "miasma_cheese_spit":
-				player_stun_timer = max(player_stun_timer, _hostile_control_duration(0.9))
-				_add_text("COLADO 0.9s", player_pos + Vector2(0, -52), Color(0.84, 1.0, 0.24), 0.9, 18)
-			elif bullet_type == "rat_spit":
-				player_stun_timer = max(player_stun_timer, _hostile_control_duration(0.8))
-				_add_phase3_miasma(Vector2(bullet["pos"]), 48.0, 1.9, 0.018)
-				bullet["exploded"] = true
-				_add_text("DOENCA", player_pos + Vector2(0, -44), Color(0.64, 1.0, 0.22), 0.9, 18)
-			elif bullet_type == "phase4_magic" and not hit_was_blocked:
-				_teleport_player_from_phase4_magic()
-			elif bullet_type == "larapio_coin" or bullet_type == "larapio_stone":
-				_apply_larapio_projectile_hit(bullet)
-			bullet["life"] = 0.0
 		else:
 			var bullet_target_peer: = _remote_peer_in_radius(Vector2(bullet["pos"]), bullet_hit_radius)
 			if bullet_type == "suturer_hook" and bullet_target_peer != int(bullet.get("target_peer_id", bullet_target_peer)):
@@ -23612,45 +18703,6 @@ func _update_enemy_bullets(delta: float) -> void :
 			bullet["probability_near_miss_registered"] = true
 			_gain_desvio_charge(Vector2(bullet.get("pos", player_pos)))
 	RuntimeCollectionUtils.compact_positive_float_field(enemy_bullets, &"life")
-
-
-func _enemy_bullet_should_end_on_remnant_hit(bullet_type: String) -> bool:
-	return bullet_type not in [
-		"boss6_carnage_slime",
-		"boss6_carnage_pool"
-	]
-
-
-func _damage_remnant_from_enemy_bullet(bullet: Dictionary, hit_radius: float) -> bool:
-	if necronada_remnants.is_empty():
-		return false
-	var bullet_pos: = Vector2(bullet.get("pos", player_pos))
-	var bullet_type: = String(bullet.get("type", "projetador"))
-	var closest_remnant: = {}
-	var closest_dist: = INF
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
-			continue
-		var remnant_pos: = Vector2(remnant.get("pos", player_pos))
-		var dist: = remnant_pos.distance_to(bullet_pos)
-		if dist <= hit_radius + 18.0 and dist < closest_dist:
-			closest_dist = dist
-			closest_remnant = remnant
-	if closest_remnant.is_empty():
-		return false
-	var damage: = maxf(1.0, float(bullet.get("damage", 1.0)) * 0.8)
-	_damage_necronada_remnant(closest_remnant, damage)
-	var hit_pos: = Vector2(closest_remnant.get("pos", bullet_pos))
-	_add_text("-%d" % int(damage), hit_pos + Vector2(0, -42), Color(1.0, 0.35, 0.35), 0.45, 15)
-	_spawn_radial_particles(hit_pos, Color(0.92, 0.25, 0.36), 7)
-	if bullet_type == "pyro_wall_seed":
-		_add_phase2_fire_wall_tile(bullet_pos)
-	elif bullet_type == "rat_spit":
-		_add_phase3_miasma(bullet_pos, 48.0, 1.9, 0.018)
-		bullet["exploded"] = true
-	if _enemy_bullet_should_end_on_remnant_hit(bullet_type):
-		bullet["life"] = 0.0
-	return true
 
 
 func _teleport_player_from_phase4_magic() -> void :
@@ -23931,7 +18983,7 @@ func _update_phase4_enemy_hazards(delta: float) -> void :
 					var side: = line_dir.orthogonal()
 					if side.dot(player_pos - Vector2(hazard["a"])) < 0.0:
 						side = - side
-					player_pos = _clamp_player_world(player_pos + _hostile_knockback(side * 145.0))
+					_shove_player(_hostile_knockback(side * 145.0))
 					_damage_player(int(player_hp_max * 0.055 + 18.0), "fenda_nexo")
 				_damage_remote_player_on_segment(Vector2(hazard["a"]), Vector2(hazard["b"]), 22.0, int(player_hp_max * 0.055 + 18.0), "fenda_nexo", hazard, "triggered_remote")
 			"chrono":
@@ -23960,7 +19012,7 @@ func _update_phase4_enemy_hazards(delta: float) -> void :
 						var push: = (player_pos - center).normalized()
 						if push.length() <= 0.01:
 							push = Vector2.LEFT
-						player_pos = _clamp_player_world(player_pos + _hostile_knockback(push * 185.0))
+						_shove_player(_hostile_knockback(push * 185.0))
 						_damage_player(int(player_hp_max * 0.07 + 32.0), "pulso_nexo")
 						_vibrate(120, 0.55)
 					_damage_remote_player_in_radius(center, radius, int(player_hp_max * 0.07 + 32.0), "pulso_nexo", hazard, "triggered_remote")
@@ -24543,28 +19595,10 @@ func _update_manifestation_secondaries(delta: float) -> void :
 				_update_secondary_lacerante(secondary, delta)
 			"prismatica":
 				_update_secondary_prismatica(secondary, delta)
-			"retornante":
-				_update_secondary_retornante(secondary, delta)
 			"parasitica":
 				_update_secondary_parasitica(secondary, delta)
 			"gravitante":
 				_update_secondary_gravitante(secondary, delta)
-			"ancorada":
-				_update_secondary_ancorada(secondary, delta)
-			"cartografica":
-				_update_secondary_cartografica(secondary, delta)
-			"mnesica":
-				_update_secondary_mnesica(secondary, delta)
-			"ressonante":
-				_update_secondary_ressonante(secondary, delta)
-				if rng.randf() < delta * 15.0:
-					_spawn_music_notes(player_pos, 1)
-			"contratual":
-				_update_secondary_contratual(secondary, delta)
-			"acorrentada":
-				_update_secondary_acorrentada(secondary, delta)
-			"bombastica":
-				_update_secondary_bombastica(secondary, delta)
 		if was_active and float(secondary.get("life", 0.0)) <= 0.0:
 			if kind == "eletrica":
 				_finish_toggle_secondary(secondary, "ANEL ENCERRADO", Color(0.52, 0.88, 1.0))
@@ -24574,76 +19608,6 @@ func _update_manifestation_secondaries(delta: float) -> void :
 					_spawn_prismatica_ultimate_finish(Vector2(secondary.get("center", player_pos)))
 				_finish_toggle_secondary(secondary, "COROA ENCERRADA", Color(0.64, 1.0, 0.96), false)
 	manifestation_secondaries = manifestation_secondaries.filter( func(s): return float(s.get("life", 0.0)) > 0.0)
-
-
-func _update_secondary_acorrentada(secondary: Dictionary, delta: float) -> void :
-	if bool(secondary.get("resolved", false)):
-		return
-	var chains: Array = secondary.get("chains", [])
-	var center: = Vector2(secondary.get("center", player_pos))
-	var targets: Array = secondary.get("targets", [])
-	for idx in range(mini(chains.size(), targets.size())):
-		var chain: Dictionary = chains[idx]
-		var target: Dictionary = targets[idx]
-		if _acorrentada_target_alive(target):
-			var target_pos: = _acorrentada_target_pos(target)
-			_update_single_chain_physics(chain, center, target_pos, delta)
-	_pull_acorrentada_sentence_targets(secondary, delta)
-	secondary["tick"] = float(secondary.get("tick", ACORRENTADA_E_TICK_INTERVAL)) - delta
-	if float(secondary["tick"]) <= 0.0:
-		secondary["tick"] = ACORRENTADA_E_TICK_INTERVAL
-		_tick_acorrentada_sentence(secondary)
-	if float(secondary.get("life", 0.0)) <= 0.08:
-		_resolve_acorrentada_sentence(secondary)
-
-
-func _update_secondary_cartografica(secondary: Dictionary, delta: float) -> void :
-	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
-	if float(secondary["tick"]) > 0.0:
-		return
-	secondary["tick"] = 0.45
-	cartographic_route_timer = max(cartographic_route_timer, 0.6)
-	_apply_cartographic_route_pressure(0.45)
-	var burst_index: = int(secondary.get("burst_index", 0))
-	for i in range(2):
-		var target: = _cartographic_focus_target(920.0)
-		if target.is_empty():
-			break
-		_cartographic_fire_barrage(target, burst_index + i)
-		if String(target.get("kind", "")) != "enemy":
-			_cartographic_damage_target(target, player_damage * 0.1, "cartografica", "manifestation_secondary")
-	secondary["burst_index"] = burst_index + 2
-
-
-func _update_secondary_mnesica(secondary: Dictionary, delta: float) -> void :
-	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
-	if float(secondary["tick"]) > 0.0:
-		return
-	secondary["tick"] = 0.75
-	for enemy in enemies:
-		if Vector2(enemy["pos"]).distance_to(player_pos) <= 360.0:
-			_register_mnesic_memory(enemy, player_damage * 0.18)
-
-
-func _update_secondary_ressonante(secondary: Dictionary, delta: float) -> void :
-	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
-	if float(secondary["tick"]) > 0.0:
-		return
-	secondary["tick"] = RESONANT_BEAT_INTERVAL
-	_trigger_resonant_chord(player_pos, 0.3 + resonant_perfect_streak * 0.02)
-
-
-func _update_secondary_contratual(secondary: Dictionary, delta: float) -> void :
-	secondary["tick"] = float(secondary.get("tick", 0.0)) - delta
-	if float(secondary["tick"]) > 0.0:
-		return
-	secondary["tick"] = 0.85
-	for enemy in enemies:
-		if Vector2(enemy["pos"]).distance_to(player_pos) <= 360.0:
-			if enemy.has("contract_clause"):
-				enemy["contract_infractions"] = min(CONTRACT_MAX_INFRACTIONS, int(enemy.get("contract_infractions", 0)) + 1)
-			else:
-				_apply_contract_clause(enemy)
 
 
 func _update_secondary_eletrica(secondary: Dictionary, delta: float) -> void :
@@ -24976,74 +19940,6 @@ func _secondary_prismatica_beam_dirs(angle: float) -> Array:
 	]
 
 
-func _ensure_secondary_retornante_targets(secondary: Dictionary) -> void :
-	if bool(secondary.get("marked", false)):
-		return
-	secondary["marked"] = true
-	var found = false
-	for bullet in return_bullets:
-		bullet["paradox_until"] = time_alive + float(secondary.get("life", SECONDARY_RETORNANTE_DURATION))
-		bullet["paradox_cycles"] = 0
-		bullet["paradox_hit_tick"] = 0.0
-		found = true
-	if found:
-		return
-	var ghosts = []
-	for i in range(5):
-		var angle = i * TAU / 5.0 + rng.randf_range(-0.2, 0.2)
-		ghosts.append({
-			"base_angle": angle,
-			"radius_x": 260.0,
-			"radius_y": 210.0,
-			"phase": rng.randf_range(0.0, TAU)
-		})
-	secondary["ghosts"] = ghosts
-
-
-func _update_secondary_retornante(secondary: Dictionary, delta: float) -> void :
-	_ensure_secondary_retornante_targets(secondary)
-	secondary["line_tick"] = float(secondary.get("line_tick", 0.0)) - delta
-	secondary["ghost_tick"] = float(secondary.get("ghost_tick", 0.0)) + delta
-	if float(secondary["line_tick"]) <= 0.0:
-		secondary["line_tick"] = 0.41
-		for bullet in return_bullets:
-			if float(bullet.get("paradox_until", 0.0)) < time_alive:
-				continue
-			var cycles = min(2, int(bullet.get("paradox_cycles", 0)))
-			var mults = [1.25, 1.0, 0.82]
-			var mult = mults[cycles]
-			for enemy in enemies:
-				if float(enemy.get("hp", 0.0)) <= 0.0:
-					continue
-				if _distance_to_segment(enemy["pos"], player_pos, bullet["pos"]) <= 34.0:
-					_damage_enemy(enemy, player_damage * mult, "retornante", false)
-			if boss_active and boss_hp > 0.0 and _distance_to_segment(boss_pos, player_pos, bullet["pos"]) <= 84.0:
-				_damage_boss(player_damage * 0.55 * mult, "retornante")
-			bullet["paradox_cycles"] = cycles + 1
-		for ghost in secondary.get("ghosts", []):
-			var ang = float(ghost.get("base_angle", 0.0)) + float(secondary.get("ghost_tick", 0.0)) * 0.9
-			var endpoint = player_pos + Vector2(cos(ang) * float(ghost.get("radius_x", 260.0)), sin(ang + float(ghost.get("phase", 0.0)) * 0.18) * float(ghost.get("radius_y", 210.0)))
-			for enemy in enemies:
-				if float(enemy.get("hp", 0.0)) <= 0.0:
-					continue
-				if _distance_to_segment(enemy["pos"], player_pos, endpoint) <= 32.0:
-					_damage_enemy(enemy, player_damage * 0.78, "retornante", false)
-			if boss_active and boss_hp > 0.0 and _distance_to_segment(boss_pos, player_pos, endpoint) <= 82.0:
-				_damage_boss(player_damage * 0.34, "retornante")
-	var progress = 1.0 - float(secondary.get("life", 0.0)) / max(0.01, float(secondary.get("max", SECONDARY_RETORNANTE_DURATION)))
-	if progress >= 0.88 and not bool(secondary.get("forced_final", false)):
-		secondary["forced_final"] = true
-		for bullet in return_bullets:
-			if float(bullet.get("paradox_until", 0.0)) < time_alive:
-				continue
-			bullet["state"] = "volta"
-			bullet["returning"] = true
-			bullet["forced"] = true
-			bullet["damage"] = float(bullet.get("damage", player_damage * 0.62)) * 1.35
-			bullet["paradox_final"] = true
-			bullet["paradox_until"] = time_alive + 0.45
-
-
 func _update_secondary_parasitica(secondary: Dictionary, delta: float) -> void :
 	var active_targets = 0
 	for target in secondary.get("targets", []):
@@ -25199,36 +20095,6 @@ func _gravitante_radius(progress: float) -> float:
 
 func _gravitante_edge_ratio(dist: float, radius: float) -> float:
 	return clamp(dist / max(1.0, radius), 0.0, 1.0)
-
-
-func _update_secondary_ancorada(secondary: Dictionary, delta: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller.update_ultimate(secondary, delta)
-
-
-func _spawn_ancorada_ultimate_drops(secondary: Dictionary, center: Vector2, radius: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller._spawn_ultimate_drops(secondary, center, radius)
-
-
-func _make_ancorada_ultimate_drop(target: Vector2, target_kind: String, target_uid: int) -> Dictionary:
-	_ensure_runtime_controllers_bound()
-	return ancorada_ability_controller._make_ultimate_drop(target, target_kind, target_uid)
-
-
-func _update_ancorada_ultimate_drops(secondary: Dictionary, delta: float, center: Vector2, radius: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller._update_ultimate_drops(secondary, delta, center, radius)
-
-
-func _update_ancorada_ultimate_impacts(secondary: Dictionary, delta: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller._update_ultimate_impacts(secondary, delta)
-
-
-func _apply_ancorada_ultimate_impact(drop: Dictionary, secondary: Dictionary, center: Vector2, radius: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller._apply_ultimate_impact(drop, secondary, center, radius)
 
 
 func _update_heal_orbs(delta: float) -> void :
@@ -26114,20 +20980,47 @@ func _play_phase_point_crystal_collect_vfx(orb: Dictionary) -> void:
 
 func _collect_point_boost_pickup(orb: Dictionary, collector_peer_id: int) -> void:
 	var pos: Vector2 = Vector2(orb.get("pos", player_pos))
-	_add_text("PONTOS x2", pos + Vector2(-50, -72), Color(1.0, 0.86, 0.18), 1.15, 23)
-	_spawn_radial_particles(pos, Color(1.0, 0.78, 0.14), 10 if _memory_saver_active() else 20)
-	_spawn_radial_particles(pos, Color(0.18, 1.0, 0.82), 7 if _memory_saver_active() else 14)
-	shockwaves.append({"pos": pos, "radius": 8.0, "max": 86.0, "life": 0.34, "max_life": 0.34, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.2, 1.0, 0.78)})
+	var kind: String = String(orb.get("artifact_type", RTFieldArtifactController.TYPE_POINTS))
+	var info: Dictionary = RTFieldArtifactController.info(kind)
+	var main_color: Color = info["color"]
+	var accent: Color = info["accent"]
+	_add_text(String(info["label"]), pos + Vector2(-50, -72), main_color, 1.15, 23)
+	_spawn_radial_particles(pos, main_color, 10 if _memory_saver_active() else 20)
+	_spawn_radial_particles(pos, accent, 7 if _memory_saver_active() else 14)
+	shockwaves.append({"pos": pos, "radius": 8.0, "max": 86.0, "life": 0.34, "max_life": 0.34, "damage": 0.0, "hit": {}, "visual_only": true, "color": accent})
 	_play_sfx("point_boost_collect", 0.018, 0.72, 1.0)
 	_vibrate(46, 0.22)
-	point_boost_pickup_controller.activate(collector_peer_id, _is_world_authority())
+	_activate_field_artifact(orb, collector_peer_id)
+
+
+## Despacha o artefato coletado para o efeito certo.
+func _activate_field_artifact(orb: Dictionary, collector_peer_id: int) -> void:
+	var kind: String = String(orb.get("artifact_type", RTFieldArtifactController.TYPE_POINTS))
+	if kind == RTFieldArtifactController.TYPE_POINTS:
+		point_boost_pickup_controller.activate(collector_peer_id, _is_world_authority())
+		return
+	var pos: Vector2 = Vector2(orb.get("pos", player_pos))
+	_field_artifacts().activate(kind, collector_peer_id, pos, _is_world_authority())
+	if dedicated_server_mode:
+		return
+	match kind:
+		RTFieldArtifactController.TYPE_MAGNET:
+			_play_sfx("point_boost_activate", 0.012, 0.5, 0.82)
+		RTFieldArtifactController.TYPE_FURY:
+			_add_text("FURIA ATIVA", player_pos + Vector2(-48, -112), Color(1.0, 0.42, 0.18), 1.05, 20)
+			_play_sfx("point_boost_activate", 0.012, 0.6, 0.72)
+		RTFieldArtifactController.TYPE_PURGE:
+			shockwaves.append({"pos": pos, "radius": 20.0, "max": 1300.0, "life": 0.5, "max_life": 0.5, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.9, 0.94, 1.0)})
+			_vibrate(90, 0.5)
+			_play_sfx("point_boost_activate", 0.0, 0.8, 0.6)
 
 
 func _on_point_boost_spawned(orb: Dictionary) -> void:
 	if dedicated_server_mode:
 		return
 	var pos: Vector2 = Vector2(orb.get("pos", player_pos))
-	_add_text("ARTEFATO DE PONTOS", pos + Vector2(-86, -76), Color(1.0, 0.86, 0.24), 1.0, 17)
+	var spawn_info: Dictionary = RTFieldArtifactController.info(String(orb.get("artifact_type", RTFieldArtifactController.TYPE_POINTS)))
+	_add_text(String(spawn_info["spawn"]), pos + Vector2(-86, -76), Color(spawn_info["color"]), 1.0, 17)
 	_spawn_radial_particles(pos, Color(0.2, 1.0, 0.82), 5 if _memory_saver_active() else 10)
 	shockwaves.append({"pos": pos, "radius": 5.0, "max": 62.0, "life": 0.28, "max_life": 0.28, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(1.0, 0.76, 0.12)})
 	_play_sfx("point_boost_spawn", 0.015, 0.34, 1.0)
@@ -26181,7 +21074,7 @@ func _confirm_gameplay_orb_removed(uid: String, reason: String, collector_peer_i
 		if collector_peer_id == _mp_unique_id():
 			_collect_point_boost_pickup(orb, collector_peer_id)
 		else:
-			point_boost_pickup_controller.activate(collector_peer_id, _is_world_authority())
+			_activate_field_artifact(orb, collector_peer_id)
 	elif reason == "collected" and String(orb.get("kind", "")) == ENEMY_POINT_ORB_KIND:
 		var value: int = int(orb.get("score_value", orb.get("value", 0)))
 		_apply_score_delta(value, true, "enemy_point:%s" % uid)
@@ -26555,7 +21448,7 @@ func _update_boss_phase5(delta: float) -> void :
 	elif boss5_dimension != "base" and boss5_mental_state == "RESSACA DE TRANSMUTAÇÃO":
 		boss5_mental_state = "DIMENSAO " + boss5_dimension.to_upper()
 	if phase5_transmute_active:
-		var real_dt: float = contractual_order_real_delta if contractual_order_real_delta > 0.0 else delta
+		var real_dt := delta
 		phase5_transmute_timer += real_dt
 		var p_count: int = phase5_transmute_particles.size()
 		for i in range(p_count):
@@ -28507,8 +23400,6 @@ func _boss_target_entry(force_rotate: bool = false) -> Dictionary:
 
 
 func _boss_target_pos(force_rotate: bool = false, prediction: float = 0.0) -> Vector2:
-	if _necronada_has_active_taunt():
-		return _necronada_taunt_target_pos(boss_pos)
 	if current_phase == 6 and not boss6_fossil_echo.is_empty() and boss6_fossil_echo.get("timer", 0.0) > 0.0:
 		return Vector2(boss6_fossil_echo.get("pos", player_pos))
 	var target: = _boss_target_entry(force_rotate)
@@ -28562,7 +23453,7 @@ func _update_boss1_uninterruptible_state(delta: float) -> bool:
 					var push = (player_pos - target).normalized()
 					if push.length() <= 0.01:
 						push = Vector2.RIGHT
-					player_pos = _clamp_player_world(player_pos + _hostile_knockback(push * max(35.0, 120.0 * (1.0 - dist / 350.0))))
+					_shove_player(_hostile_knockback(push * max(35.0, 120.0 * (1.0 - dist / 350.0))))
 					_spawn_radial_particles(target, Color(0.78, 0.1, 1.0), 48)
 		return true
 	if not boss1_time_wave.is_empty():
@@ -28702,6 +23593,7 @@ func _boss7_attack_delay() -> float:
 func _update_boss_phase7(delta: float) -> void:
 	var flap_speed: float = 20.0 if boss7_state == BOSS7_STATE_DIVE_PREP else (8.0 if boss7_reborn else 6.2)
 	boss_phase += delta * flap_speed
+	_boss7_motion().update_common(delta)
 	_update_player_burn(delta)
 	_update_dance_state(delta)
 	_update_boss7_cooldowns(delta)
@@ -28729,7 +23621,7 @@ func _update_boss_phase7(delta: float) -> void:
 		_spawn_radial_particles(boss_pos, Color(1.0, 0.28, 0.06), 110)
 		_add_text("GRITO DE COMBUSTAO", boss_pos + Vector2(0, -118), Color(1.0, 0.55, 0.12), 1.35, 24)
 		return
-	if boss7_state in [BOSS7_STATE_FEATHER, BOSS7_STATE_WING, BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE_WAIT, BOSS7_STATE_DIVE_MARK, BOSS7_STATE_DIVE_FAKE, BOSS7_STATE_DIVE, BOSS7_STATE_RECOVERY, BOSS7_STATE_REBIRTH]:
+	if boss7_state in [BOSS7_STATE_FEATHER, BOSS7_STATE_WING, BOSS7_STATE_DIVE_PREP, BOSS7_STATE_DIVE_WAIT, BOSS7_STATE_DIVE_MARK, BOSS7_STATE_DIVE_FAKE, BOSS7_STATE_DIVE, BOSS7_STATE_RECOVERY, BOSS7_STATE_REBIRTH, RTBoss7MotionController.STATE_SWOOP_WARN, RTBoss7MotionController.STATE_SWOOP]:
 		_update_boss7_state(delta)
 		return
 	_update_boss7_flight(delta)
@@ -30152,7 +25044,7 @@ func _update_boss3_attacks(delta: float) -> void :
 			if player_pos.distance_to(boss_pos) <= 155.0:
 				_damage_player(int(player_hp_max * 0.15), "cauda")
 				var push = (player_pos - boss_pos).normalized()
-				player_pos = _clamp_player_world(player_pos + _hostile_knockback(push * 42.0))
+				_shove_player(_hostile_knockback(push * 42.0))
 			_damage_remote_player_in_radius(boss_pos, 155.0, int(player_hp_max * 0.15), "cauda", attack, "hit_remote")
 		elif kind == "faith_pulse":
 			if boss3_faith_link_timer > 0.0:
@@ -30371,6 +25263,61 @@ func _boss2_update_idle(delta: float) -> void :
 		_boss2_choose_next_action()
 
 
+var boss2_motion: RTBoss2MotionController = null
+var boss7_motion: RTBoss7MotionController = null
+
+
+func _boss7_motion() -> RTBoss7MotionController:
+	if boss7_motion == null:
+		boss7_motion = RTBoss7MotionController.new()
+		boss7_motion.bind_game(self)
+	return boss7_motion
+
+var field_artifacts: RTFieldArtifactController = null
+
+
+var boss_pacts: RTBossPactController = null
+var run_choice: RTRunChoiceController = null
+var form_evolutions: RTFormEvolutionController = null
+
+
+func _boss_pacts() -> RTBossPactController:
+	if boss_pacts == null:
+		boss_pacts = RTBossPactController.new()
+		boss_pacts.configure(self)
+	return boss_pacts
+
+
+func _run_choice() -> RTRunChoiceController:
+	if run_choice == null:
+		run_choice = RTRunChoiceController.new()
+		run_choice.configure(self)
+	return run_choice
+
+
+func _form_evolutions() -> RTFormEvolutionController:
+	if form_evolutions == null:
+		form_evolutions = RTFormEvolutionController.new()
+		form_evolutions.configure(self)
+	return form_evolutions
+
+
+func _field_artifacts() -> RTFieldArtifactController:
+	if field_artifacts == null:
+		field_artifacts = RTFieldArtifactController.new()
+		field_artifacts.configure(self)
+	return field_artifacts
+
+
+
+func _boss2_motion() -> RTBoss2MotionController:
+	if boss2_motion == null:
+		boss2_motion = RTBoss2MotionController.new()
+		boss2_motion.bind_game(self)
+		boss2_motion.reset()
+	return boss2_motion
+
+
 func _boss2_start_reposition() -> void :
 	boss2_state = BOSS2_STATE_REPOSITION
 	boss2_target_position = _boss2_pick_reposition_target()
@@ -30379,6 +25326,7 @@ func _boss2_start_reposition() -> void :
 	boss2_facing_dir = 1.0 if boss2_target_position.x >= boss_pos.x else -1.0
 	boss2_anim_timer = 0.0
 	boss2_anim_frame = 0
+	_boss2_motion().begin_reposition()
 
 
 func _boss2_update_reposition(delta: float) -> void :
@@ -30387,9 +25335,12 @@ func _boss2_update_reposition(delta: float) -> void :
 	if to_target.length() > 5.0:
 		boss2_facing_dir = 1.0 if to_target.x >= 0.0 else -1.0
 		var speed_scale = 1.0 + (1.0 - boss_hp / max(1.0, boss_hp_max)) * 0.2
+		speed_scale *= _boss2_motion().reposition_speed_mult()
 		boss_pos = boss_pos.move_toward(boss2_target_position, boss2_walk_speed * speed_scale * _boss_card_move_multiplier() * delta)
 		boss_pos = boss_pos.clamp(Vector2(120, 120), WORLD_SIZE - Vector2(120, 120))
-	if to_target.length() <= 8.0 or boss2_action_timer <= 0.0:
+	_boss2_motion().update_reposition()
+	if boss_pos.distance_to(boss2_target_position) <= 8.0 or boss2_action_timer <= 0.0:
+		_boss2_motion().end_reposition()
 		_boss2_choose_next_action()
 
 
@@ -30517,6 +25468,7 @@ func _start_boss2_ultimate() -> void :
 	boss2_ultimate_blizzard_exposure = 0.0
 	boss2_ultimate_hit_gate = 0.0
 	boss_attacks.clear()
+	_boss2_motion().reset()
 	_boss2_start_idle(0.4)
 	_add_text("ULTIMATE: NEVASCA DO SENTINELA", boss2_ultimate_center + Vector2(0, - BOSS2_ULTIMATE_SAFE_RADIUS - 42), Color(0.55, 0.92, 1.0), 2.2, 27)
 	_start_nevasca_sfx()
@@ -30566,21 +25518,12 @@ func _update_boss2_ultimate(delta: float) -> void :
 
 
 func _update_boss2_ultimate_orbit(delta: float) -> void :
-	var pct = boss_hp / max(1.0, boss_hp_max)
-	var speed: = 0.62 if pct > 0.4 else 0.82
-	boss2_ultimate_orbit_angle = wrapf(boss2_ultimate_orbit_angle + speed * delta, 0.0, TAU)
-	var radius: = BOSS2_ULTIMATE_ORBIT_RADIUS + sin(time_alive * 1.7) * 34.0
-	var target: Vector2 = boss2_ultimate_center + Vector2.from_angle(boss2_ultimate_orbit_angle) * radius
-	target = target.clamp(Vector2(100, 100), WORLD_SIZE - Vector2(100, 100))
-	boss2_facing_dir = 1.0 if target.x >= boss_pos.x else -1.0
-	boss_pos = boss_pos.move_toward(target, 170.0 * _boss_card_move_multiplier() * delta)
+	# Orbita imprevisivel + botes pela tempestade (RTBoss2MotionController).
+	_boss2_motion().update_orbit(delta)
 
 
 func _update_boss2_ultimate_blizzard_damage(delta: float) -> void :
 	boss2_ultimate_remnant_blizzard_tick -= delta
-	if boss2_ultimate_remnant_blizzard_tick <= 0.0:
-		boss2_ultimate_remnant_blizzard_tick = BOSS2_ULTIMATE_BLIZZARD_BASE_TICK
-		_damage_remnants_outside_boss2_safe(float(30 + player_hp_max * 0.065) * 0.68, "boss2_ultimate_blizzard")
 	var distance: float = player_pos.distance_to(boss2_ultimate_center)
 	if distance <= BOSS2_ULTIMATE_SAFE_RADIUS:
 		boss2_ultimate_blizzard_exposure = max(0.0, boss2_ultimate_blizzard_exposure - delta * 0.75)
@@ -30594,18 +25537,6 @@ func _update_boss2_ultimate_blizzard_damage(delta: float) -> void :
 		_damage_player(int(30 + player_hp_max * 0.065), "boss2_ultimate_blizzard")
 		_damage_remote_player(int(30 + player_hp_max * 0.065), "boss2_ultimate_blizzard")
 		_spawn_boss2_slow_zone(player_pos, 42.0, 1.6)
-
-
-func _damage_remnants_outside_boss2_safe(damage: float, source: String) -> void :
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
-			continue
-		var r_pos: = Vector2(remnant.get("pos", player_pos))
-		if r_pos.distance_to(boss2_ultimate_center) <= BOSS2_ULTIMATE_SAFE_RADIUS:
-			continue
-		_damage_necronada_remnant(remnant, damage)
-		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(0.58, 0.92, 1.0), 0.45, 16)
-		_spawn_radial_particles(r_pos, Color(0.58, 0.92, 1.0), 7)
 
 
 func _update_boss2_ultimate_spit(delta: float) -> void :
@@ -31505,7 +26436,6 @@ func _update_boss_transition_waves(delta: float) -> void :
 			continue
 		wave["radius"] = float(wave["radius"]) + float(wave["speed"]) * delta
 		_apply_boss_transition_wave_to_player(wave, player_pos, 0)
-		_apply_boss_transition_wave_to_remnants(wave)
 		for peer_id in _targetable_remote_peer_ids():
 			var state: Dictionary = net_players_by_peer.get(peer_id, {})
 			_apply_boss_transition_wave_to_player(wave, Vector2(state.get("pos", Vector2.ZERO)), peer_id)
@@ -31537,34 +26467,6 @@ func _apply_boss_transition_wave_to_player(wave: Dictionary, target_pos: Vector2
 		if enraged:
 			boss_wave_slow_timer = max(boss_wave_slow_timer, _hostile_control_duration(BOSS_STAGE_ENRAGED_SLOW_TIME))
 	_play_sfx("boss_impact", 0.035, 0.78, 0.82 if enraged else 1.0)
-
-
-func _apply_boss_transition_wave_to_remnants(wave: Dictionary) -> void :
-	var wave_pos: = Vector2(wave["pos"])
-	var enraged: = bool(wave.get("enraged", false))
-	var damage: = int(player_hp_max * (BOSS_STAGE_ENRAGED_DAMAGE_RATE if enraged else BOSS_STAGE_WAVE_DAMAGE_RATE) + (BOSS_STAGE_ENRAGED_DAMAGE_FLAT if enraged else BOSS_STAGE_WAVE_DAMAGE_FLAT))
-	for i in range(necronada_remnants.size()):
-		var remnant: Dictionary = necronada_remnants[i]
-		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
-			continue
-		var hit_key: = "hit_remnant_%d_%d" % [int(remnant.get("id", -1)), i]
-		if bool(wave.get(hit_key, false)):
-			continue
-		var r_pos: = Vector2(remnant.get("pos", player_pos))
-		var dist: = r_pos.distance_to(wave_pos)
-		if abs(dist - float(wave["radius"])) > float(wave["width"]) + 16.0:
-			continue
-		var angle_to_remnant: = (r_pos - wave_pos).angle()
-		var opening: = float(wave["open_angle"])
-		var opening_size: = float(wave["open_size"])
-		var first_gap: bool = abs(wrapf(angle_to_remnant - opening, - PI, PI)) <= opening_size * 0.5
-		var opposite_gap: bool = abs(wrapf(angle_to_remnant - (opening + PI), - PI, PI)) <= opening_size * 0.5
-		if first_gap or opposite_gap:
-			continue
-		wave[hit_key] = true
-		_damage_necronada_remnant(remnant, float(damage) * 0.75)
-		_add_text("-%d" % int(float(damage) * 0.75), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
-		_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
 
 
 func _launch_boss_attack() -> void :
@@ -31771,7 +26673,7 @@ func _update_boss_attacks(delta: float) -> void :
 				if not bool(attack.get("hit", false)) and _phase7_point_in_cone(player_pos, origin7, dir_wing, BOSS7_WING_RANGE, BOSS7_WING_HALF_ANGLE) and _local_player_damageable_by_contact():
 					attack["hit"] = true
 					_damage_player(int(player_hp_max * 0.055 + 16), "boss7_wing_blast")
-					player_pos = _clamp_player_world(player_pos + _hostile_knockback((player_pos - origin7).normalized() * 140.0))
+					_shove_player(_hostile_knockback((player_pos - origin7).normalized() * 140.0))
 				_damage_remote_player_in_radius(origin7 + dir_wing * (BOSS7_WING_RANGE * 0.5), BOSS7_WING_RANGE * 0.55, int(net_player_hp_max * 0.055 + 16), "boss7_wing_blast", attack, "wing")
 			BOSS7_ATTACK_DIVE_TRAIL:
 				attack["tick"] = float(attack.get("tick", 0.0)) - delta
@@ -31823,6 +26725,8 @@ func _update_boss_attacks(delta: float) -> void :
 					if float(drop_data.get("age", 0.0)) < 1.05:
 						active_drops.append(drop_data)
 				attack["drops"] = active_drops
+			BOSS7_ATTACK_SKY_FIREBALLS:
+				RTBoss7Attacks.update_sky_fireballs(self, attack, age, delta)
 			BOSS7_ATTACK_CROWN:
 				var fired_group: = int(attack.get("fired_group", 0))
 				var group_time: = 1.1 if fired_group == 0 else 1.58
@@ -32056,7 +26960,7 @@ func _update_boss_attacks(delta: float) -> void :
 					var speed = 560.0 + _boss1_fury_scale() * 95.0
 					boss_pos = (boss_pos + dir * speed * _boss_card_move_multiplier() * delta).clamp(Vector2(76, 76), WORLD_SIZE - Vector2(76, 76))
 					for i in range(2):
-						effects.append({"pos": old_pos + dir.orthogonal() * rng.randf_range(-42.0, 42.0), "vel": - dir * rng.randf_range(80.0, 150.0), "life": 0.18, "max": 0.18, "color": Color(1.0, 0.28, 0.16, 0.55), "size": rng.randf_range(8.0, 18.0), "kind": "trail"})
+						effects.append({"pos": old_pos + dir.orthogonal() * rng.randf_range(-42.0, 42.0), "vel": - dir * rng.randf_range(80.0, 150.0), "life": 0.18, "max": 0.18, "color": Color(0.62, 0.36, 1.0, 0.32), "size": rng.randf_range(8.0, 18.0) * 0.6, "kind": "trail"})
 					if not bool(attack["hit"]) and _distance_to_segment(player_pos, old_pos, boss_pos) <= 92.0:
 						attack["hit"] = true
 						_start_boss1_rush_throw(attack, dir)
@@ -33442,7 +28346,8 @@ func _current_common_card_stat_bonuses() -> Dictionary:
 	var defense_count: float = _effective_card_count("Defesa")
 	var defense_bonus: float = 3.5 * defense_count * zero
 	var sorte_count: float = _effective_card_count("Sorte")
-	var luck_bonus: float = 0.003 * sorte_count * zero
+	# Retorno decrescente: 10 copias = ~0,019 (antes 0,030), teto 0,030.
+	var luck_bonus: float = 0.03 * (1.0 - exp(-sorte_count / 10.0)) * zero
 	return {
 		"speed_bonus": speed_bonus,
 		"damage_bonus": damage_bonus,
@@ -33483,8 +28388,6 @@ func _inercia_control_multiplier() -> float:
 
 func _inercia_knockback_multiplier() -> float:
 	var mult = 1.0 - min(0.72, _apply_carta_zero_to_common_value("inercia_cronal", "knockback", _new_common_card_count("inercia_cronal") * 0.18))
-	if manifestation_key == "ancorada":
-		mult *= (1.0 - ANCORADA_LASTRO_KNOCKBACK_RESIST_PER_STACK * float(lastro_stacks))
 	return mult
 
 
@@ -33505,7 +28408,7 @@ func _telegraph_window(base: float) -> float:
 
 
 func _neutral_pickup_radius(base: float) -> float:
-	return base * (1.0 + min(1.1, _apply_carta_zero_to_common_value("orbita_coletora", "radius", _new_common_card_count("orbita_coletora") * 0.22)))
+	return base * (1.0 + min(1.1, _apply_carta_zero_to_common_value("orbita_coletora", "radius", _new_common_card_count("orbita_coletora") * 0.22))) * _boss_pacts().m("pickup")
 
 
 func _hostile_ground_hazard_duration(base: float) -> float:
@@ -33962,6 +28865,10 @@ func _heal_player(amount: float, source: String = "generic", feed_reserva: bool 
 		return 0.0
 	if revive_heal_penalty_timer > 0.0 and source != "aura_adjust":
 		amount *= REVIVE_HEAL_PENALTY_MULT
+	if source != "aura_adjust":
+		amount *= _boss_pacts().heal_multiplier()
+		if amount <= 0.0:
+			return 0.0
 	var missing_before: float = max(0.0, float(player_hp_max - player_hp))
 	var overheal: float = max(0.0, amount - missing_before)
 	var applied: float = min(missing_before, amount)
@@ -34575,15 +29482,13 @@ func _pressao_cerco_bonus() -> float:
 func _card_damage_can_trigger(source: String) -> bool:
 	if source == CARD_SOURCE_PULSO:
 		return false
-	if source.begins_with("acorrentada_q_") or source == "acorrentada_attack_3_wave" or source == "acorrentada_tp_chain":
-		return false
 	if source in ["veneno", "petro", "parasite_feast", "gravitante_orbital"]:
 		return false
 	return not source.begins_with("card_") and not source.begins_with("rare_") and not source.begins_with("legendary_")
 
 
 func _card_damage_can_receive_bonus(source: String) -> bool:
-	return source != CARD_SOURCE_PULSO and source != "acorrentada_attack_3_wave" and source != "acorrentada_tp_chain" and not source.begins_with("acorrentada_q_") and not source.begins_with("card_") and not source.begins_with("rare_") and not source.begins_with("legendary_")
+	return source != CARD_SOURCE_PULSO and not source.begins_with("card_") and not source.begins_with("rare_") and not source.begins_with("legendary_")
 
 
 func _card_log2_count(card_id: String) -> float:
@@ -34600,14 +29505,6 @@ func _damage_source_category(source: String, explicit_category: = "") -> String:
 		return explicit_category
 	if source == RARE_SOURCE_NECRO:
 		return "necro_specter"
-	if source in ["acorrentada_attack_1", "acorrentada_attack_2", "acorrentada_attack_3"]:
-		return "basic_attack"
-	if source == "acorrentada_e":
-		return "skill_e"
-	if source == "acorrentada_tp_chain":
-		return "teleport"
-	if source.begins_with("acorrentada_q_") or source == "acorrentada_attack_3_wave":
-		return "manifestation_secondary"
 	if source.begins_with("rare_"):
 		return "rare_card"
 	if source.begins_with("legendary_"):
@@ -35594,49 +30491,21 @@ func _necro_duration(enemy: Dictionary) -> float:
 func _necro_total_power() -> float:
 	if _rare_card_count("necrocronismo") <= 0:
 		return 0.0
-	return 0.18 + 0.075 * _rare_sqrt_extra("necrocronismo")
+	return RTNecrocronismController.DASH_DAMAGE_BASE + RTNecrocronismController.DASH_DAMAGE_PER_EXTRA * _rare_sqrt_extra("necrocronismo")
 
 
-func _necro_spectral_hp_ratio() -> float:
-	if _rare_card_count("necrocronismo") <= 0:
-		return 0.0
-	return 0.22 + 0.035 * _rare_sqrt_extra("necrocronismo")
+func _necrocronism() -> RTNecrocronismController:
+	if necrocronism.core != self:
+		necrocronism.configure(self)
+	return necrocronism
 
 
 func _recalculate_necro_spectral_power() -> void :
-	var alive_count: int = max(1, active_necro_specters.size())
-	var power: float = _necro_total_power() / float(alive_count)
-	for specter in active_necro_specters:
-		specter["power"] = power
-
-
-func _create_safe_necro_ally_data(enemy: Dictionary) -> Dictionary:
-	var max_hp: float = max(1.0, float(enemy.get("max_hp", enemy_base_hp)))
-	var duration: float = _necro_duration(enemy)
-	return {
-		"type": String(enemy.get("type", ENEMY_COMMON)),
-		"pos": Vector2(enemy.get("pos", player_pos)),
-		"life": duration,
-		"max": duration,
-		"hp": max_hp * _necro_spectral_hp_ratio(),
-		"max_hp": max_hp * _necro_spectral_hp_ratio(),
-		"attack_cd": 0.35,
-		"phase": rng.randf_range(0.0, TAU),
-		"elite": _is_uncommon_enemy(enemy),
-		"power": 0.0,
-		"source_uid": int(enemy.get("uid", 0)),
-		"base_enemy_hp": max_hp,
-		"is_necro_specter": true
-	}
+	pass
 
 
 func _spawn_necro_specter_from_enemy(enemy: Dictionary) -> void :
-	if _rare_card_count("necrocronismo") <= 0:
-		return
-	active_necro_specters.append(_create_safe_necro_ally_data(enemy))
-	_recalculate_necro_spectral_power()
-	rare_card_effects.append({"kind": "necro_spawn", "pos": Vector2(enemy.get("pos", player_pos)), "life": 0.72, "max": 0.72, "radius": _enemy_radius(enemy) + 46.0})
-	_add_text("ESPECTRO", Vector2(enemy.get("pos", player_pos)) + Vector2(0, -82), Color(0.46, 1.0, 0.94), 0.8, 17)
+	_necrocronism().spawn_from(enemy)
 
 
 func _register_valid_necro_kill(enemy: Dictionary) -> void :
@@ -35653,49 +30522,8 @@ func _register_valid_necro_kill(enemy: Dictionary) -> void :
 	_spawn_necro_specter_from_enemy(enemy)
 
 
-func _nearest_necro_target(from_pos: Vector2) -> Dictionary:
-	var best: Dictionary = {}
-	var best_dist: float = INF
-	for enemy in enemies:
-		if float(enemy.get("hp", 0.0)) <= 0.0:
-			continue
-		var dist: float = from_pos.distance_squared_to(Vector2(enemy.get("pos", from_pos)))
-		if dist < best_dist:
-			best_dist = dist
-			best = enemy
-	return best
-
-
 func _update_necro_specters(delta: float) -> void :
-	var changed: bool = false
-	for specter in active_necro_specters:
-		specter["life"] = max(0.0, float(specter.get("life", 0.0)) - delta)
-		if float(specter["life"]) <= 0.0:
-			changed = true
-			continue
-		var pos: Vector2 = Vector2(specter.get("pos", player_pos))
-		var target: Dictionary = _nearest_necro_target(pos)
-		var target_pos: Vector2 = boss_pos if boss_active and boss_hp > 0.0 and target.is_empty() else Vector2(target.get("pos", boss_pos))
-		if not target.is_empty() or (boss_active and boss_hp > 0.0):
-			var dir: Vector2 = (target_pos - pos).normalized()
-			if dir.length() > 0.05:
-				pos = pos.move_toward(target_pos, (190.0 if bool(specter.get("elite", false)) else 220.0) * delta)
-		specter["pos"] = pos
-		specter["attack_cd"] = float(specter.get("attack_cd", 0.0)) - delta
-		if float(specter["attack_cd"]) > 0.0:
-			continue
-		specter["attack_cd"] = 0.58 if bool(specter.get("elite", false)) else 0.72
-		var damage: float = max(1.0, player_damage * float(specter.get("power", 0.0)))
-		if not target.is_empty() and pos.distance_to(Vector2(target.get("pos", pos))) <= 74.0 + _enemy_radius(target):
-			var killed: = _damage_enemy(target, damage, RARE_SOURCE_NECRO, false, false, pos, "necro_specter")
-			if killed:
-				_kill_enemy(target)
-		elif boss_active and boss_hp > 0.0 and pos.distance_to(boss_pos) <= 112.0:
-			_damage_boss(damage * 0.55, RARE_SOURCE_NECRO, false, false, "necro_specter", pos)
-	var before: int = active_necro_specters.size()
-	active_necro_specters = active_necro_specters.filter( func(s): return float(s.get("life", 0.0)) > 0.0 and float(s.get("hp", 1.0)) > 0.0)
-	if changed or active_necro_specters.size() != before:
-		_recalculate_necro_spectral_power()
+	_necrocronism().update(delta)
 
 
 func _antimatter_charge_rate() -> float:
@@ -36491,7 +31319,7 @@ func _card_category(card_name: String) -> String:
 		"Ponto Cego": return "ATAQUE PELAS COSTAS"
 		"Mandamento da Ruptura": return "LEI DE HABILIDADES"
 		"Carta Zero": return "ESCALA DE CARTAS COMUNS"
-		"Necrocronismo": return "COPIA ESPECTRAL"
+		"Necrocronismo": return "ECO QUE RICOCHETEIA"
 		"CoraÃ§Ã£o de AntimatÃ©ria": return "CARGA DE IMPLOSAO"
 		"Cofre do Excesso": return "OVERKILL ARMAZENADO"
 		"Intervalo Fraturado": return "COOLDOWN DE HABILIDADES"
@@ -36552,7 +31380,7 @@ func _card_lore(card_name: String) -> String:
 		"Ponto Cego": return "O destino tem costas. Quem ataca por elas encontra uma defesa que ainda nao virou o rosto."
 		"Mandamento da Ruptura": return "A terceira ordem nao pede permissao: ela atravessa cooldown, impacto e risco por pura autoridade temporal."
 		"Carta Zero": return "A origem reescreve os numeros pequenos. Toda carta comum passa a lembrar que veio depois dela."
-		"Necrocronismo": return "A morte recente vira copia breve, fraca no corpo e agressiva na memoria."
+		"Necrocronismo": return "A morte rebobina: o inimigo volta como Eco, atravessa a horda em investidas e implode quando o tempo acaba."
 		"CoraÃ§Ã£o de AntimatÃ©ria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
 		"Cofre do Excesso": return "Nada se perde no excesso. O dano que sobraria e guardado para cobrar elites e chefes."
 		"Intervalo Fraturado": return "Uma fratura curta entre duas acoes permite que Hab1 e Ultimate retornem antes do tempo previsto."
@@ -36624,7 +31452,7 @@ func _card_effect_snapshot(card: Dictionary, count: int) -> String:
 		"carta_zero":
 			return "cartas comuns multiplicadas em %.1f%%" % ((1.0 + 0.06 * sqrt(float(safe_count))) * 100.0 if safe_count > 0 else 100.0)
 		"necrocronismo":
-			return "aliados espectrais com poder %.0f%%" % (_necro_total_power() * 100.0 if safe_count > 0 else 0.0)
+			return "Ecos: investida %.0f%% do dano, ate %d ativos" % [(_necro_total_power() * 100.0 if safe_count > 0 else 0.0), _necrocronism().alive_cap()]
 		"coracao_antimateria":
 			return "carga de antimataria x%d; proximo acerto implode o alvo" % safe_count
 		"cofre_excesso":
@@ -37229,92 +32057,17 @@ func _warn_if_damage_visual_missing(source: String) -> void :
 			push_warning("MULTIPLAYER: dano da nevasca sem visual ativo | " + detail)
 
 
-func _damage_remnants_in_area(epicenter: Vector2, radius: float, damage: float, source: String) -> void :
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
-			continue
-		var r_pos: = Vector2(remnant.get("pos", player_pos))
-		if r_pos.distance_to(epicenter) <= radius + 24.0:
-			_damage_necronada_remnant(remnant, damage)
-			_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
-			_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
-
-
-func _damage_remnants_in_area_once(epicenter: Vector2, radius: float, damage: float, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
-	var hit_any: = false
-	for i in range(necronada_remnants.size()):
-		var remnant: Dictionary = necronada_remnants[i]
-		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
-			continue
-		var remnant_key: = ""
-		if hit_key != "":
-			remnant_key = "%s_remnant_%d_%d" % [hit_key, int(remnant.get("id", -1)), i]
-			if bool(hit_owner.get(remnant_key, false)):
-				continue
-		var r_pos: = Vector2(remnant.get("pos", player_pos))
-		if r_pos.distance_to(epicenter) > radius + 24.0:
-			continue
-		if remnant_key != "":
-			hit_owner[remnant_key] = true
-		_damage_necronada_remnant(remnant, damage)
-		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
-		_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
-		hit_any = true
-	return hit_any
-
-
-func _damage_remnants_on_segment_once(a: Vector2, b: Vector2, width: float, damage: float, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
-	var hit_any: = false
-	for i in range(necronada_remnants.size()):
-		var remnant: Dictionary = necronada_remnants[i]
-		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
-			continue
-		var remnant_key: = ""
-		if hit_key != "":
-			remnant_key = "%s_remnant_%d_%d" % [hit_key, int(remnant.get("id", -1)), i]
-			if bool(hit_owner.get(remnant_key, false)):
-				continue
-		var r_pos: = Vector2(remnant.get("pos", player_pos))
-		if _distance_to_segment(r_pos, a, b) > width + 18.0:
-			continue
-		if remnant_key != "":
-			hit_owner[remnant_key] = true
-		_damage_necronada_remnant(remnant, damage)
-		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.35, 0.35), 0.45, 16)
-		_spawn_radial_particles(r_pos, Color(1.0, 0.2, 0.2), 6)
-		hit_any = true
-	return hit_any
-
-
-func _damage_all_necronada_remnants(damage: float, source: String) -> void :
-	for remnant in necronada_remnants:
-		if float(remnant.get("hp", 0.0)) <= 0.0 or float(remnant.get("summon", 0.0)) > 0.0:
-			continue
-		var r_pos: = Vector2(remnant.get("pos", player_pos))
-		_damage_necronada_remnant(remnant, damage)
-		_add_text("-%d" % int(damage), r_pos + Vector2(0, -38), Color(1.0, 0.24, 0.36), 0.45, 16)
-		_spawn_radial_particles(r_pos, Color(1.0, 0.18, 0.28), 6)
-
-
 func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
 	if is_dead:
 		return
+	if not source.begins_with("pact_"):
+		amount = maxi(1, int(round(float(amount) * _boss_pacts().m("dmg_taken")))) if amount > 0 else amount
 	# Henry's spin and Colosso's airborne window are complete phasing states:
 	# boss ultimates and side effects must not bypass either one.
 	if henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
 		return
 	_warn_if_damage_visual_missing(source)
 	var boss_ultimate_damage: = _damage_source_is_boss_ultimate(source)
-	if boss_ultimate_damage:
-		if source != "boss2_ultimate_blizzard":
-			_damage_all_necronada_remnants(float(amount) * 0.68, source)
-	else:
-		_damage_remnants_in_area(player_pos, 146.0 if _damage_source_is_boss(source) else 54.0, float(amount) * 0.75, source)
-	if _contractual_blocks_damage():
-		if rng.randf() < 0.28:
-			_spawn_radial_particles(player_pos, Color(1.0, 0.74, 0.24), 3)
-		_add_text("IMORTAL", player_pos + Vector2(0, -86), Color(1.0, 0.74, 0.24), 0.35, 16)
-		return
 	if qa_streaming_permission_pending:
 		return
 	if not _active_prismatica_secondary().is_empty():
@@ -37344,8 +32097,6 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 		_apply_phase6_pustule_pheromone(BOSS6_PUSTULE_PHEROMONE_TIME if current_phase == 6 and boss_active else PUSTULE_PHEROMONE_TIME)
 	if source in ["boss6_carnage_slime", "boss6_carnage_pool"]:
 		_apply_boss6_carnage_slow()
-	if not contractual_order.is_empty() and bool(contractual_order.get("active", false)) and String(contractual_order.get("kind", "")) == "survive":
-		contractual_order["failed"] = true
 	var aura_amount_before := amount
 	var aura_hit: = {"blocked": false, "amount": amount, "heal": 0.0, "events": []}
 	if not boss_ultimate_damage:
@@ -37365,10 +32116,6 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	amount = int(aura_hit.get("amount", amount))
 	if manifestation_key == "lacerante":
 		amount = max(1, int(round(float(amount) * LACERANTE_DAMAGE_TAKEN_MULT)))
-	if contractual_order_penalties.has("defense_down"):
-		amount = max(1, int(round(float(amount) * 1.35)))
-	if contractual_order_penalties.has("silence_tick"):
-		player_silence_timer = max(player_silence_timer, 1.2)
 	if boss_active and boss_hp > 0.0 and _damage_source_is_boss(source):
 		amount = max(1, int(round(float(amount) * _boss_farm_pressure_multiplier() * _multiplayer_boss_damage_scale())))
 	if not silent_hit_sfx:
@@ -37591,13 +32338,10 @@ func _update_effects(delta: float) -> void :
 			slash["life"] = float(slash["life"]) - delta
 			if String(slash.get("kind", "")) == "lacerante_spin":
 				_update_lacerante_spin_hits(slash)
-		for anchor in anchors:
-			anchor["life"] = float(anchor["life"]) - delta
 		for link in seed_links:
 			link["time"] = float(link["time"]) - delta
 	RuntimeCollectionUtils.compact_positive_float_field(effects, &"life")
 	RuntimeCollectionUtils.compact_positive_float_field(slashes, &"life")
-	RuntimeCollectionUtils.compact_positive_float_field(anchors, &"life")
 	RuntimeCollectionUtils.compact_positive_float_field(seed_links, &"time")
 	_trim_visual_effect_arrays()
 
@@ -37947,6 +32691,8 @@ func _draw_phase_transition(viewport: Vector2) -> void :
 
 
 func _draw() -> void :
+	if mode != "game":
+		RTExecutionCamera.clear(self)
 	var viewport = get_viewport_rect().size
 	if is_instance_valid(phase_map_layer):
 		phase_map_layer.hide()
@@ -38041,6 +32787,9 @@ func _draw() -> void :
 		"manifest_evolution", "manifest_evolution_waiting":
 			_draw_game(viewport)
 			_draw_manifest_evolution_choice(viewport)
+		"run_choice":
+			_draw_game(viewport)
+			RTRunChoicePresentation.draw(self, viewport)
 		"specter_upgrade":
 			_draw_game(viewport)
 			_draw_specter_upgrade(viewport)
@@ -38069,8 +32818,6 @@ func _draw() -> void :
 		_draw_phase_mp_request(viewport)
 	if _pause_mp_request_visible():
 		_draw_pause_mp_request(viewport)
-	if manifestation_key == "ressonante" and mode in ["game", "shop_countdown", "shop_opening", "boss_call", "pause_countdown"]:
-		_draw_resonant_meter(viewport)
 	if _should_draw_compact_fps_counter():
 		_draw_fps_counter(viewport)
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_enabled and qa_streaming_status != "":
@@ -38086,7 +32833,7 @@ func _draw() -> void :
 func _should_show_os_mouse() -> bool:
 	if not _uses_desktop_ui():
 		return true
-	if mode in ["menu", "nick_setup", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
+	if mode in ["menu", "nick_setup", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_mp", "manifest_evolution", "manifest_evolution_waiting", "run_choice", "shop", "paused", "pause_deck", "edit_layout", "specter_upgrade", "death_slow", "retry_return", "game_over", "victory"]:
 		return true
 	if _shop_mp_request_visible() or _boss_mp_request_visible() or _phase_mp_request_visible() or _pause_mp_request_visible() or app_update_popup_visible:
 		return true
@@ -38120,10 +32867,6 @@ func _draw_custom_mouse_cursor(_viewport: Vector2) -> void :
 
 func _draw_manifest_evolution_choice(viewport: Vector2) -> void :
 	MenusPresentation._draw_manifest_evolution_choice(self, viewport)
-
-
-func _draw_resonant_meter(viewport: Vector2) -> void :
-	HudPresentation._draw_resonant_meter(self, viewport)
 
 
 func _draw_fps_counter(viewport: Vector2) -> void :
@@ -38722,12 +33465,12 @@ func _gameplay_preferences_rects(viewport: Vector2) -> Dictionary:
 
 
 func _gameplay_preference_keys() -> Array:
-	var keys: = ["analog", "shop_mode", "shop_interval", "target_priority", "damage_text", "interface_text", "geovana_bark", "fps", "tutorial", "retornante_cheat", "haptics"]
+	var keys: = ["analog", "target_priority", "damage_text", "interface_text", "geovana_bark", "fps", "tutorial", "gameplay_cheat", "haptics"]
 	if _uses_desktop_ui():
-		keys.insert(4, "desktop_aim")
-		keys.insert(5, "desktop_teleport")
-		keys.insert(6, "desktop_attack_aim")
-		keys.insert(7, "desktop_hud_scale")
+		keys.insert(2, "desktop_aim")
+		keys.insert(3, "desktop_teleport")
+		keys.insert(4, "desktop_attack_aim")
+		keys.insert(5, "desktop_hud_scale")
 	if ui_platform_override_unlocked:
 		keys.append("ui_platform_profile")
 	if QA_STREAMING_FEATURE_ENABLED and qa_streaming_unlocked:
@@ -38906,13 +33649,6 @@ func _manifest_selection_summary_rows(key: String) -> Array:
 				{"label": "E", "text": "Linhas de luz protegem e causam dano."},
 				{"label": "ESTILO", "text": "Mira tecnica, preparo e posicionamento."}
 			]
-		"retornante":
-			return [
-				{"label": "ATK", "text": "Pulso que volta mais perigoso."},
-				{"label": "Q", "text": "Fortalece a memoria de retorno."},
-				{"label": "E", "text": "Cria paradoxos entre voce e os pulsos."},
-				{"label": "ESTILO", "text": "Dano atrasado e controle de trajetoria."}
-			]
 		"parasitica":
 			return [
 				{"label": "ATK", "text": "Infesta inimigos com larvas."},
@@ -38926,69 +33662,6 @@ func _manifest_selection_summary_rows(key: String) -> Array:
 				{"label": "Q", "text": "Colide inimigos marcados."},
 				{"label": "E", "text": "Prende a arena em um nucleo gravitante."},
 				{"label": "ESTILO", "text": "Controle automatico quando a tela lota."}
-			]
-		"ancorada":
-			return [
-				{"label": "ATK", "text": "Tiros pesados ligados ao territorio."},
-				{"label": "Q", "text": "Ativa postura ancorada e fortalece o combate."},
-				{"label": "E", "text": "Faz ancoras cairem sobre os inimigos."},
-				{"label": "ESTILO", "text": "Defesa, area fixa e poder parado."}
-			]
-		"cartografica":
-			return [
-				{"label": "ATK", "text": "Cria coordenadas no campo."},
-				{"label": "Q", "text": "Liga rotas perigosas entre marcas."},
-				{"label": "E", "text": "Rasga o mapa e reposiciona tiros."},
-				{"label": "ESTILO", "text": "Planejamento espacial e controle de rotas."}
-			]
-		"mnesica":
-			return [
-				{"label": "ATK", "text": "Grava memorias nos inimigos."},
-				{"label": "Q", "text": "Detona padroes registrados."},
-				{"label": "E", "text": "Acelera arquivos para punir grupos."},
-				{"label": "ESTILO", "text": "Luta por leitura, repeticao e punicao."}
-			]
-		"ressonante":
-			return [
-				{"label": "ATK", "text": "Ataques no compasso aplicam notas."},
-				{"label": "Q", "text": "Detona acordes e atrasa a horda."},
-				{"label": "E", "text": "Cria uma janela ofensiva ritmada."},
-				{"label": "ESTILO", "text": "Timing, musica e recompensa por ritmo."}
-			]
-		"contratual":
-			return [
-				{"label": "ATK", "text": "Aplica clausulas nos inimigos."},
-				{"label": "Q", "text": "Executa infracoes cometidas."},
-				{"label": "E", "text": "Abre uma ordem judicial com premio ou punicao."},
-				{"label": "ESTILO", "text": "Regras, risco calculado e sentenca."}
-			]
-		"acorrentada":
-			return [
-				{"label": "ATK", "text": "Correntes marcam e rompem Elos."},
-				{"label": "Q", "text": "Prende e compartilha dano entre alvos."},
-				{"label": "E", "text": "Puxa Elos para uma sentenca pesada."},
-				{"label": "ESTILO", "text": "Controle, tensao e golpes encadeados."}
-			]
-		"eclipsada":
-			return [
-				{"label": "ATK", "text": "Lua corta de perto; Sol arremessa shurikens."},
-				{"label": "Q", "text": "Lua some; Sol dispara rajadas solares."},
-				{"label": "E", "text": "Lua cria cortes proximos; Sol cria uma coroa."},
-				{"label": "ESTILO", "text": "Duas formas trocadas pelo reforco."}
-			]
-		"bombastica":
-			return [
-				{"label": "ATK", "text": "Prepara Polvora Instavel nos alvos."},
-				{"label": "Q", "text": "Planta ou arremessa bombas."},
-				{"label": "E", "text": "Solta uma bomba viva para controlar area."},
-				{"label": "ESTILO", "text": "Armadilhas e explosoes em cadeia."}
-			]
-		"necronada":
-			return [
-				{"label": "ATK", "text": "Marca epitafios e sustenta a horda."},
-				{"label": "Q", "text": "Ergue necro-aliados a partir das rosas."},
-				{"label": "E", "text": "Libera uma onda necrotica acumulada."},
-				{"label": "ESTILO", "text": "Invocacao, taunt e aliados temporais."}
 			]
 	return []
 
@@ -39635,67 +34308,10 @@ func _draw_rare_card_world(camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_rare_card_world(self, camera)
 
 
-func _draw_acorrentada_world(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_acorrentada_world(self, camera)
-	AcorrentadaEvolutionController.draw_world(self, camera)
-
-
-func _draw_acorrentada_worn_chains(camera: Vector2, t: float) -> void :
-	CombatEffectsPresentation._draw_acorrentada_worn_chains(self, camera, t)
-
-
-func _draw_acorrentada_chain(a: Vector2, b: Vector2, color: Color, width: float, fade: float, light: = false) -> void :
-	CombatEffectsPresentation._draw_acorrentada_chain(self, a, b, color, width, fade, light)
-
-
-func _draw_acorrentada_chain_glow(path: PackedVector2Array, color: Color, width: float, fade: float) -> void :
-	if path.size() < 2:
-		return
-	draw_polyline(path, Color(color.r, color.g, color.b, 0.12 * fade), width + 15.0, true)
-	draw_polyline(path, Color(color.r, color.g, color.b, 0.2 * fade), width + 7.5, true)
-	draw_polyline(path, Color(1.0, 0.94, 0.72, 0.16 * fade), max(1.0, width * 0.4), true)
-
-
-func _acorrentada_link_color(color: Color, fade: float, index: int, light: = false) -> Color:
-	var metal: = 0.24 + 0.14 * sin(time_alive * 9.0 + float(index) * 0.7)
-	var hot: = clampf(acorrentada_tension / 100.0, 0.0, 1.0)
-	var target: = Color(1.0, 0.88, 0.58, color.a)
-	var mixed: = color.lerp(target, clampf(metal + hot * (0.24 if light else 0.18), 0.0, 0.62))
-	mixed = mixed.lightened(0.1 + hot * 0.08)
-	mixed.a = minf(1.0, color.a * fade * (1.04 + hot * 0.16))
-	return mixed
-
-
-func _acorrentada_link_outline_color(color: Color, fade: float) -> Color:
-	var hot: = clampf(acorrentada_tension / 100.0, 0.0, 1.0)
-	var outline: = Color(0.018, 0.026, 0.04, 0.72 * fade)
-	return outline.lerp(Color(color.r * 0.38, color.g * 0.38, color.b * 0.38, 0.66 * fade), 0.35 + hot * 0.25)
-
-
-func _init_chain_physics(a: Vector2, b: Vector2, kind: = "heavy") -> Dictionary:
-	return ChainVisualPhysics._init_chain_physics(self, a, b, kind)
-
-
-func _update_single_chain_physics(chain: Dictionary, a_curr: Vector2, b_target: Vector2, delta: float) -> void :
-	ChainVisualPhysics._update_single_chain_physics(self, chain, a_curr, b_target, delta)
-
-
-func _draw_physical_chain(chain: Dictionary, camera: Vector2, color: Color, width: float, fade: float, light: = false) -> void :
-	CombatEffectsPresentation._draw_physical_chain(self, chain, camera, color, width, fade, light)
-
-
-func _init_link_chain_physics(link: Dictionary) -> void :
-	ChainVisualPhysics._init_link_chain_physics(self, link)
-
-
 func _draw_enemies(camera: Vector2) -> void :
 	SineiroBorealPresentation.draw_world(self, camera)
 	AmberSuturerPresentation.draw_world(self, camera)
 	EntitiesPresentation._draw_enemies(self, camera)
-
-
-func _draw_eclipsada_weakpoint(enemy: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_eclipsada_weakpoint(self, enemy, camera)
 
 
 func _draw_phase4_enemy_identity(enemy: Dictionary, pos: Vector2, size: Vector2) -> void :
@@ -39883,37 +34499,8 @@ func _draw_parasite_larva_drop(pos: Vector2, scale: float, alpha: float) -> void
 	draw_circle(pos + Vector2(0, -1.0), 1.0 * scale, Color(1.0, 0.8, 0.2, alpha))
 
 
-func _draw_advanced_manifestation_world(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_advanced_manifestation_world(self, camera)
-
-
-func _draw_cartographic_marks(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_cartographic_marks(self, camera)
-
-
-func _draw_mnesic_marks(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_mnesic_marks(self, camera)
-
-
-
 func _draw_necro_aliado_health_bar(pos: Vector2, width: float, ratio: float, alpha: float) -> void :
 	CombatEffectsPresentation._draw_necro_aliado_health_bar(self, pos, width, ratio, alpha)
-
-func _draw_necronada_world(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_necronada_world(self, camera)
-
-
-func _draw_resonant_world_marks(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_resonant_world_marks(self, camera)
-
-
-func _draw_resonant_player_beat(camera: Vector2) -> void :
-	EntitiesPresentation._draw_resonant_player_beat(self, camera)
-
-
-func _draw_contractual_notifications(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_contractual_notifications(self, camera)
-
 
 func _draw_manifest_evolution_fields(camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_manifest_evolution_fields(self, camera)
@@ -39921,18 +34508,6 @@ func _draw_manifest_evolution_fields(camera: Vector2) -> void :
 
 func _draw_manifestation_secondaries(camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_manifestation_secondaries(self, camera)
-
-
-func _draw_bombastica_world(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_bombastica_world(self, camera)
-
-
-func _draw_bombastica_ultimate_bomb(bomb: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_bombastica_ultimate_bomb(self, bomb, camera)
-
-
-func _draw_secondary_bombastica(secondary: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_secondary_bombastica(self, secondary, camera)
 
 
 func _draw_eletrica_kinetic_waves(camera: Vector2) -> void :
@@ -39956,26 +34531,6 @@ func _draw_prismatica_prism(prism: Dictionary, camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_prismatica_prism(self, prism, camera)
 
 
-func _acorrentada_replica_travel(stage: int, progress: float) -> float:
-	var duration: = _acorrentada_attack_duration(stage)
-	var windup_ratio: = _acorrentada_attack_windup_time(stage) / duration
-	var out_ratio: = _acorrentada_attack_out_time(stage) / duration
-	var hit_ratio: = windup_ratio + out_ratio
-	var hold_end: = (hit_ratio * duration + ACORRENTADA_ATTACK_HOLD_TIME) / duration
-	if progress < windup_ratio:
-		var windup_phase: = clampf(progress / maxf(0.01, windup_ratio), 0.0, 1.0)
-		var windup_ease: = 1.0 - pow(1.0 - windup_phase, 2.0)
-		return - _acorrentada_attack_windup_fraction(stage) * windup_ease
-	if progress < hit_ratio:
-		var strike_phase: = clampf((progress - windup_ratio) / maxf(0.01, out_ratio), 0.0, 1.0)
-		var travel: = pow(strike_phase, 2.35)
-		return lerpf( - _acorrentada_attack_windup_fraction(stage), 1.0, travel)
-	if progress <= hold_end:
-		return 1.0
-	var return_ratio: = clampf((progress - hold_end) / maxf(0.01, 1.0 - hold_end), 0.0, 1.0)
-	return 1.0 - (1.0 - pow(1.0 - return_ratio, 3.0))
-
-
 func _draw_network_secondary_replica(visual: Dictionary, camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_network_secondary_replica(self, visual, camera)
 
@@ -39984,62 +34539,8 @@ func _draw_network_parasite_spit_replica(visual: Dictionary, camera: Vector2) ->
 	CombatEffectsPresentation._draw_network_parasite_spit_replica(self, visual, camera)
 
 
-func _draw_secondary_eclipsada(secondary: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_secondary_eclipsada(self, secondary, camera)
-
-
-func _draw_eclipsada_vfx(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_eclipsada_vfx(self, camera)
-
-
-func _eclipsada_vfx_progress(visual: Dictionary) -> float:
-	var maximum: = maxf(0.01, float(visual.get("max", 0.35)))
-	return clampf(1.0 - float(visual.get("life", 0.0)) / maximum, 0.0, 1.0)
-
-
-func _eclipsada_vfx_fade(visual: Dictionary) -> float:
-	var progress: = _eclipsada_vfx_progress(visual)
-	var maximum: = maxf(0.01, float(visual.get("max", 0.35)))
-	var remaining: = clampf(float(visual.get("life", 0.0)) / maximum, 0.0, 1.0)
-	return clampf(minf(progress * 7.0, remaining * 4.0), 0.0, 1.0)
-
-
-func _draw_eclipsada_attack_vfx(visual: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_eclipsada_attack_vfx(self, visual, camera)
-
-
-func _draw_eclipsada_q_vfx(visual: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_eclipsada_q_vfx(self, visual, camera)
-
-
-func _draw_eclipsada_e_vfx(visual: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_eclipsada_e_vfx(self, visual, camera)
-
-
-func _draw_eclipsada_special_vfx(visual: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_eclipsada_special_vfx(self, visual, camera)
-
-
-func _eclipsada_stealth_overlay_alpha() -> float:
-	if not _eclipsada_is_stealthed():
-		return 0.0
-	if eclipsada_lua_stealth_active:
-		var danger: = clampf(maxf(0.0, eclipsada_lua_stealth_elapsed - ECLIPSADA_LUA_STEALTH_SAFE_TIME) / 9.0, 0.0, 1.0)
-		return 0.095 + danger * 0.045 + sin(time_alive * 3.6) * 0.008
-	var ratio: = clampf(eclipsada_stealth_timer / ECLIPSADA_Q_STEALTH_TIME, 0.0, 1.0)
-	return 0.085 + ratio * 0.055 + sin(time_alive * 3.6) * 0.008
-
-
-func _draw_eclipsada_stealth_overlay(viewport: Vector2, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_eclipsada_stealth_overlay(self, viewport, camera)
-
-
 func _draw_network_teleport_replica(visual: Dictionary, camera: Vector2, kind: String, color: Color, progress: float, fade: float) -> void :
 	CombatEffectsPresentation._draw_network_teleport_replica(self, visual, camera, kind, color, progress, fade)
-
-
-func _draw_secondary_advanced(secondary: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_secondary_advanced(self, secondary, camera)
 
 
 func _draw_secondary_eletrica(secondary: Dictionary, camera: Vector2) -> void :
@@ -40097,10 +34598,6 @@ func _draw_teleport_effects(camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_teleport_effects(self, camera)
 
 
-func _draw_secondary_acorrentada(secondary: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_secondary_acorrentada(self, secondary, camera)
-
-
 func _draw_secondary_lacerante(secondary: Dictionary, camera: Vector2) -> void :
 	CombatEffectsPresentation._draw_secondary_lacerante(self, secondary, camera)
 
@@ -40138,10 +34635,6 @@ func _draw_secondary_prismatica_zap(zap: Dictionary, camera: Vector2) -> void :
 
 func _draw_prismatica_colored_bolt(start: Vector2, finish: Vector2, seed: int, color: Color, alpha: float, width: float) -> void :
 	CombatEffectsPresentation._draw_prismatica_colored_bolt(self, start, finish, seed, color, alpha, width)
-
-
-func _draw_secondary_retornante(secondary: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_secondary_retornante(self, secondary, camera)
 
 
 func _draw_secondary_parasitica(secondary: Dictionary, camera: Vector2) -> void :
@@ -40222,18 +34715,6 @@ func _draw_enemy_texture_raw(texture: Texture2D, center: Vector2, size: Vector2,
 	draw_set_transform(center, rotation, Vector2(-1.0, 1.0) if flip_h else Vector2.ONE)
 	draw_texture_rect(texture, Rect2( - size * 0.5, size), false, modulate)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
-func _draw_ancorada_spinning_anchors(camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_ancorada_spinning_anchors(self, camera)
-
-
-func _draw_ancorada_anchor_icon(center: Vector2, size: = 32.0, draw_rotation: = 0.0, alpha: = 1.0, energy: = 1.0) -> void :
-	CombatEffectsPresentation._draw_ancorada_anchor_icon(self, center, size, draw_rotation, alpha, energy)
-
-
-func _draw_secondary_ancorada(secondary: Dictionary, camera: Vector2) -> void :
-	CombatEffectsPresentation._draw_secondary_ancorada(self, secondary, camera)
 
 
 func _texture_frame(key: String, index: int) -> Texture2D:
@@ -40595,10 +35076,6 @@ func _draw_revive_heal_penalty_hud(viewport: Vector2, anchor: Rect2) -> void :
 	HudPresentation._draw_revive_heal_penalty_hud(self, viewport, anchor)
 
 
-func _draw_contractual_order_hud(viewport: Vector2) -> void :
-	HudPresentation._draw_contractual_order_hud(self, viewport)
-
-
 func _draw_judicial_order_paper(rect: Rect2, label: String, desc: String, progress_text: String, timer_text: String, compact: = false) -> void :
 	MenusPresentation._draw_judicial_order_paper(self, rect, label, desc, progress_text, timer_text, compact)
 
@@ -40619,41 +35096,6 @@ func _draw_spectator_hud(viewport: Vector2) -> void :
 
 func _draw_lacerante_coagulum_hud(viewport: Vector2) -> void :
 	HudPresentation._draw_lacerante_coagulum_hud(self, viewport)
-
-
-func _trigger_hab1_ancorada(target_world = null) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller.trigger_hab1(target_world)
-
-
-func _update_hab1_ancorada(delta: float) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller.update_hab1(delta)
-
-
-func _apply_hab1_ancorada_impact(cast_pos: Vector2, L: int) -> void :
-	_ensure_runtime_controllers_bound()
-	ancorada_ability_controller._apply_hab1_impact(cast_pos, L)
-
-
-func _spawn_ancorada_counterweight_vfx(pos: Vector2, L: int) -> void :
-	CombatVfxRuntime._spawn_ancorada_counterweight_vfx(self, pos, L)
-
-
-func _draw_ancorada_hud(viewport: Vector2, anchor: Rect2) -> void :
-	HudPresentation._draw_ancorada_hud(self, viewport, anchor)
-
-
-func _draw_acorrentada_hud(viewport: Vector2, anchor: Rect2) -> void :
-	HudPresentation._draw_acorrentada_hud(self, viewport, anchor)
-
-
-func _draw_bombastica_hud(viewport: Vector2, anchor: Rect2) -> void :
-	HudPresentation._draw_bombastica_hud(self, viewport, anchor)
-
-
-func _draw_necronada_hud(viewport: Vector2, anchor: Rect2) -> void :
-	HudPresentation._draw_necronada_hud(self, viewport, anchor)
 
 
 func _draw_card_mechanic_huds(viewport: Vector2, anchor: Rect2) -> void :
@@ -41200,7 +35642,10 @@ func _pixel_card_burn_material(card: Dictionary, rect: Rect2) -> ShaderMaterial:
 		mat.set_shader_parameter("noise_scroll_speed", Vector2(0.0, 0.0))
 		mat.set_shader_parameter("ember_pulse_speed", 4.6)
 		pixel_card_burn_material_cache[cache_key] = mat
-	var dissolve_amount: = clampf(0.2 + float(min(stacks, 14)) * 0.035, 0.2, 0.58)
+	# 2026-11: a carta nao se desfaz mais com as cargas. O buraco para em ~0,32 e,
+	# dali em diante, cada carga acende mais fogo (uniform heat, teto em 10 cargas).
+	var dissolve_amount: = clampf(0.2 + float(min(stacks, 4)) * 0.03, 0.2, 0.32)
+	mat.set_shader_parameter("heat", clampf(float(stacks) / 10.0, 0.1, 1.0))
 	var pixel_factor: = clampf(round(minf(rect.size.x, rect.size.y)), 72.0, 180.0)
 	mat.set_shader_parameter("dissolve_value", dissolve_amount)
 	mat.set_shader_parameter("pixel_factor", pixel_factor)
@@ -41235,7 +35680,7 @@ func _draw_cinzas_burn_glow(rect: Rect2, alpha: float, selected: bool) -> void :
 func _configure_cinzas_ember_nodes(holder: Control, card: Dictionary, size: Vector2, alpha: float) -> void :
 	var seed_value: int = abs(int(card.get("cinzas_burn_seed", abs(_card_id(card).hash()))))
 	var stacks: int = max(1, int(card.get("cinzas_buff_stacks", 1)))
-	var ember_count: int = mini(32, 14 + stacks * 3)
+	var ember_count: int = mini(32, 16 + stacks * 4)
 	if gfx_low_resource or _memory_saver_active():
 		ember_count = mini(20, ember_count)
 	var real_time: float = Time.get_ticks_msec() / 1000.0
@@ -41946,9 +36391,9 @@ func _henry_player_texture(move: Vector2) -> Texture2D:
 	if absf(move.x) > 0.1:
 		return _frame_texture("henry_colossus_right" if giant_colossus else ("henry_barometric_right" if barometric else "henry_right"), 105, "henry_idle")
 	if giant_colossus:
-		var giant_idle: Array = textures.get("henry_colossus_down", [])
-		if not giant_idle.is_empty():
-			return giant_idle[0]
+		var giant_rest: Texture2D = henry_colossus_ability_controller.giant_rest_texture()
+		if giant_rest != null:
+			return giant_rest
 	var idle_frames: Array = textures.get("henry_idle", [])
 	return idle_frames[clampi(_henry_idle_frame_index(), 0, idle_frames.size() - 1)] if not idle_frames.is_empty() else _frame_texture("henry_right", 175, "henry_right")
 
@@ -42581,7 +37026,7 @@ func _handle_edit_layout_press(index: int, pos: Vector2, viewport: Vector2) -> v
 			_adjust_layout_box_scale(scale_entry[0], 0.1)
 			return
 
-	if shop_rect.has_point(pos):
+	if shop_controller.manual_dev_access() and shop_rect.has_point(pos):
 		edit_layout_selected = "shop_manual"
 		edit_layout_resize_visible = false
 		edit_layout_touch_index = index
@@ -43139,8 +37584,6 @@ func _handle_key(event: InputEventKey) -> void :
 				_submit_gameplay_cheat()
 			elif cheat_edit == null and event.unicode >= 32 and gameplay_cheat_text.length() < 24:
 				gameplay_cheat_text += char(event.unicode)
-				if _try_unlock_retornante_cheat():
-					_close_gameplay_cheat_popup()
 		elif event.keycode == KEY_ESCAPE:
 			_save_config()
 			mode = "settings"
@@ -43152,7 +37595,6 @@ func _handle_key(event: InputEventKey) -> void :
 		elif event.keycode in [KEY_ENTER, KEY_SPACE]:
 			match _gameplay_selected_key():
 				"analog": analog_fixed = not analog_fixed
-				"shop_mode": shop_auto_enabled = not shop_auto_enabled
 				"target_priority": _cycle_target_priority()
 				"desktop_aim": _cycle_desktop_aim_mode()
 				"desktop_teleport": _cycle_desktop_teleport_mode()
@@ -43160,7 +37602,6 @@ func _handle_key(event: InputEventKey) -> void :
 				"desktop_hud_scale": _cycle_desktop_hud_scale()
 				"fps": show_fps_counter = not show_fps_counter
 				"tutorial": _set_run_tutorial_enabled(not run_tutorial_enabled, false)
-				"retornante_cheat": _open_gameplay_cheat_popup()
 				"haptics": haptics_enabled = not haptics_enabled
 				"ui_platform_profile": _cycle_ui_platform_override()
 				"qa_stream_quality": _cycle_qa_stream_quality_mode()
@@ -43170,7 +37611,6 @@ func _handle_key(event: InputEventKey) -> void :
 			_save_config()
 		elif event.keycode == KEY_LEFT or event.keycode == KEY_A:
 			match _gameplay_selected_key():
-				"shop_interval": shop_auto_interval = max(60.0, shop_auto_interval - 60.0)
 				"target_priority": _cycle_target_priority(-1)
 				"damage_text": _adjust_damage_text_scale(-1)
 				"interface_text": interface_text_scale = max(0.5, interface_text_scale - 0.25)
@@ -43185,7 +37625,6 @@ func _handle_key(event: InputEventKey) -> void :
 			_save_config()
 		elif event.keycode == KEY_RIGHT or event.keycode == KEY_D:
 			match _gameplay_selected_key():
-				"shop_interval": shop_auto_interval = min(600.0, shop_auto_interval + 60.0)
 				"target_priority": _cycle_target_priority(1)
 				"damage_text": _adjust_damage_text_scale(1)
 				"interface_text": interface_text_scale = min(2.0, interface_text_scale + 0.25)
@@ -43466,6 +37905,8 @@ func _handle_key(event: InputEventKey) -> void :
 					_confirm_manifest_mp_selection()
 				else:
 					_start_spectrum_reveal()
+	elif mode == "run_choice":
+		_run_choice().handle_key(event.keycode)
 	elif mode == "manifest_evolution":
 		if event.keycode == KEY_LEFT or event.keycode == KEY_A or event.keycode == KEY_UP or event.keycode == KEY_W:
 			manifest_evolution_selected = (manifest_evolution_selected - 1 + max(1, manifest_evolution_options.size())) % max(1, manifest_evolution_options.size())
@@ -43569,7 +38010,7 @@ func _handle_player_progress_profile_touch(pos: Vector2) -> void:
 
 
 func _handle_press(pos: Vector2, viewport: Vector2) -> void :
-	if _ui_input_blocked() and (mode in ["menu", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_evolution", "specter_upgrade", "paused", "pause_deck", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "multiplayer_syncing"]):
+	if _ui_input_blocked() and (mode in ["menu", "progress_profile", "settings", "settings_gamepad", "settings_keys", "settings_gameplay", "settings_audio", "settings_graphics", "settings_data", "catalog", "character_select", "mutation_select", "effect_select", "mutation_select_mp", "effect_select_mp", "manifest", "manifest_evolution", "run_choice", "specter_upgrade", "paused", "pause_deck", "multiplayer_menu", "online_create_room", "online_find_room", "lobby_online_host", "lobby_online_client", "multiplayer_preload", "multiplayer_syncing"]):
 		return
 	if _handle_character_selection_touch(pos):
 		return
@@ -43661,6 +38102,9 @@ func _handle_press(pos: Vector2, viewport: Vector2) -> void :
 	if mode == "pause_deck":
 		if buttons.get("pause_deck_back", Rect2()).has_point(pos):
 			_return_from_deck()
+		return
+	if mode == "run_choice":
+		_run_choice().handle_tap(pos)
 		return
 	if mode == "manifest_evolution":
 		for i in range(manifest_evolution_options.size()):
@@ -44048,7 +38492,7 @@ func _manifestation_unlocked(index: int) -> bool:
 	if not _manifest_selection_index_visible(index, false):
 		return false
 	var key: = String(MANIFESTATIONS[index].get("key", ""))
-	return bool(unlocked_manifestation_ids.get(key, false)) or (key == "retornante" and retornante_unlocked)
+	return bool(unlocked_manifestation_ids.get(key, false))
 
 
 func _try_apply_initial_phase_cheat(cheat: String) -> bool:
@@ -44121,7 +38565,6 @@ func _try_apply_collection_unlock_cheat(cheat: String) -> bool:
 			var spectrum_key_id: = String(aura.get("key", ""))
 			if spectrum_key_id != "":
 				unlocked_spectrum_ids[spectrum_key_id] = true
-		retornante_unlocked = true
 		gameplay_cheat_text = ""
 		_save_config()
 		_save_card_unlocks()
@@ -44132,9 +38575,9 @@ func _try_apply_collection_unlock_cheat(cheat: String) -> bool:
 	return false
 
 
-func _try_unlock_retornante_cheat() -> bool:
-	var cheat: = gameplay_cheat_text.strip_edges()
-	var normalized: = cheat.to_upper().replace(" ", "").replace("_", "").replace("-", "")
+func _try_apply_gameplay_cheat() -> bool:
+	var cheat := gameplay_cheat_text.strip_edges()
+	var normalized := cheat.to_upper().replace(" ", "").replace("_", "").replace("-", "")
 	if normalized == "ONLINE30":
 		online_mode_unlocked = true
 		gameplay_cheat_text = ""
@@ -44152,16 +38595,6 @@ func _try_unlock_retornante_cheat() -> bool:
 		_save_config()
 		_add_text("CUTSCENE REATIVADA", player_pos + Vector2(0, -100), Color(0.38, 0.92, 1.0), 1.4, 24)
 		_play_sfx("ui_spectrum_switch", 0.01, 0.6, 1.14)
-		_vibrate(80, 0.32)
-		return true
-	if cheat.to_lower() == "geovaninha":
-		retornante_unlocked = true
-		unlocked_manifestation_ids["retornante"] = true
-		gameplay_cheat_text = ""
-		_save_config()
-		_save_card_unlocks()
-		_add_text("RETORNANTE LIBERADA", player_pos + Vector2(0, -100), Color(0.82, 0.48, 1.0), 1.4, 24)
-		_play_sfx("ui_spectrum_switch", 0.01, 0.6, 1.16)
 		_vibrate(80, 0.32)
 		return true
 	if _try_apply_collection_unlock_cheat(cheat):
@@ -44624,6 +39057,31 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void :
 		aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
 		return
 
+	if mode == "manifest":
+		var aura_pick: bool = manifest_select_stage == MANIFEST_STAGE_AURA
+		var step_dir: int = -1 if buttons.has("build_prev") and buttons["build_prev"].has_point(pos) else (1 if buttons.has("build_next") and buttons["build_next"].has_point(pos) else 0)
+		if step_dir != 0:
+			var current_slot: int = _manifest_selection_slot_for_index(selected_aura if aura_pick else selected_manifestation, aura_pick)
+			var next_index: int = _manifest_selection_index_for_slot(current_slot + step_dir, aura_pick)
+			if aura_pick:
+				_set_selected_aura(next_index, true)
+				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+			else:
+				_set_selected_manifestation(next_index, true)
+				manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
+			return
+		for key in buttons.keys():
+			if not String(key).begins_with("build_pick_") or not Rect2(buttons[key]).has_point(pos):
+				continue
+			var picked: int = int(String(key).substr(11))
+			if aura_pick and picked != selected_aura:
+				_set_selected_aura(picked, true)
+				aura_scroll_pos = float(_manifest_selection_slot_for_index(selected_aura, true))
+				return
+			if not aura_pick and picked != selected_manifestation:
+				_set_selected_manifestation(picked, true)
+				manifest_scroll_pos = float(_manifest_selection_slot_for_index(selected_manifestation, false))
+				return
 	if buttons.has("manifest_start") and buttons["manifest_start"].has_point(pos):
 		if manifest_select_stage == MANIFEST_STAGE_AURA:
 			if not _spectrum_unlocked(selected_aura):
@@ -44643,6 +39101,8 @@ func _handle_manifest_touch(pos: Vector2, viewport: Vector2) -> void :
 			_reset_manifest_selection_stage()
 		else:
 			_go_to_menu()
+		return
+	if mode == "manifest":
 		return
 
 
@@ -44874,28 +39334,10 @@ func _manifestation_base_damage() -> float:
 			return PLAYER_BASE_DAMAGE * 1.12
 		"prismatica":
 			return PLAYER_BASE_DAMAGE * 0.86
-		"retornante":
-			return PLAYER_BASE_DAMAGE * 0.92
 		"parasitica":
 			return PLAYER_BASE_DAMAGE * 0.78
 		"gravitante":
 			return PLAYER_BASE_DAMAGE * 0.82
-		"cartografica":
-			return PLAYER_BASE_DAMAGE * 0.92
-		"mnesica":
-			return PLAYER_BASE_DAMAGE * 0.74
-		"ressonante":
-			return PLAYER_BASE_DAMAGE * 0.82
-		"contratual":
-			return PLAYER_BASE_DAMAGE * 0.76
-		"acorrentada":
-			return PLAYER_BASE_DAMAGE * 0.86
-		"eclipsada":
-			return PLAYER_BASE_DAMAGE * 0.84
-		"bombastica":
-			return PLAYER_BASE_DAMAGE * 0.9
-		"necronada":
-			return PLAYER_BASE_DAMAGE * 0.84
 	return PLAYER_BASE_DAMAGE
 
 
@@ -44907,26 +39349,8 @@ func _manifestation_attack_interval() -> float:
 			return 0.72
 		"prismatica":
 			return 0.42
-		"retornante":
-			return 0.62
 		"gravitante":
 			return 0.74
-		"cartografica":
-			return 0.61
-		"mnesica":
-			return 0.58
-		"ressonante":
-			return 0.5
-		"contratual":
-			return 0.6
-		"acorrentada":
-			return 0.76
-		"eclipsada":
-			return 0.58
-		"bombastica":
-			return 0.58
-		"necronada":
-			return 0.64
 	return PLAYER_BASE_ATTACK_INTERVAL
 
 
@@ -44934,22 +39358,9 @@ func _current_attack_interval() -> float:
 	var interval = player_attack_interval
 	if active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
 		interval *= henry_colossus_ability_controller.attack_interval_multiplier()
-	if manifestation_key == "necronada":
-		interval /= 0.75
 	if manifestation_key == "lacerante":
 		interval /= 1.0 + float(lacerante_coagula) * LACERANTE_COAGULUM_ATTACK_SPEED_RATE
-	if manifestation_key == "ancorada":
-		_ensure_runtime_controllers_bound()
-		interval *= ancorada_ability_controller.attack_interval_multiplier()
-	if manifestation_key == "ressonante":
-		interval *= max(0.76, 1.0 - resonant_perfect_streak * 0.018)
-		if resonant_speed_timer > 0.0:
-			interval *= 0.88
-	if contractual_penalty_timer > 0.0:
-		interval *= 1.22
-	if manifestation_key == "acorrentada" and acorrentada_tension >= 70.0:
-		interval *= 0.96
-	return max(0.14, interval * AuraSystem.attack_interval_multiplier(aura_state) * runtime_event_director.attack_interval_multiplier())
+	return max(0.14, interval * AuraSystem.attack_interval_multiplier(aura_state) * runtime_event_director.attack_interval_multiplier() * _boss_pacts().m("atk"))
 
 
 func _current_dash_cooldown() -> float:
@@ -44966,7 +39377,7 @@ func _current_dash_cooldown() -> float:
 			base_cooldown = maxf(0.5, TP_PRISM_DASH_COOLDOWN - card_reduction)
 		"eletrica":
 			base_cooldown = maxf(0.5, TP_ELECTRIC_DASH_COOLDOWN - card_reduction)
-	return base_cooldown * AuraSystem.dash_cooldown_multiplier(aura_state, burning)
+	return base_cooldown * AuraSystem.dash_cooldown_multiplier(aura_state, burning) * _boss_pacts().m("dash_cd")
 
 
 func _skill_cooldown_base() -> float:
@@ -44981,24 +39392,6 @@ func _skill_cooldown_base() -> float:
 			return PLAYER_BASE_SKILL_COOLDOWN + 0.5
 		"gravitante":
 			return PLAYER_BASE_SKILL_COOLDOWN + 0.8
-		"ancorada":
-			return ANCORADA_HAB1_COOLDOWN
-		"cartografica":
-			return 7.5
-		"mnesica":
-			return PLAYER_BASE_SKILL_COOLDOWN + 0.25
-		"ressonante":
-			return max(2.4, PLAYER_BASE_SKILL_COOLDOWN - min(1.5, resonant_perfect_streak * 0.08))
-		"contratual":
-			return PLAYER_BASE_SKILL_COOLDOWN + 0.55
-		"acorrentada":
-			return PLAYER_BASE_SKILL_COOLDOWN + 0.3
-		"bombastica":
-			return BOMBASTICA_Q_RECHARGE
-		"eclipsada":
-			return _eclipsada_q_cooldown_for_form()
-		"necronada":
-			return PLAYER_BASE_SKILL_COOLDOWN + 0.45
 	return PLAYER_BASE_SKILL_COOLDOWN
 
 
@@ -45035,22 +39428,6 @@ func _damage_color(source: String) -> Color:
 			return Color(0.55, 0.82, 1.0)
 		"prismatica":
 			return Color(0.44, 1.0, 0.96)
-		"cartografica":
-			return Color(0.4, 1.0, 0.82)
-		"mnesica":
-			return Color(0.88, 0.62, 1.0)
-		"ressonante":
-			return Color(1.0, 0.8, 0.24)
-		"contratual":
-			return Color(1.0, 0.58, 0.24)
-		"acorrentada", "acorrentada_attack_1", "acorrentada_attack_2", "acorrentada_attack_3", "acorrentada_e":
-			return Color(0.94, 0.16, 0.14)
-		"acorrentada_q_chain", "acorrentada_q_shared", "acorrentada_tp_chain", "acorrentada_attack_3_wave":
-			return Color(0.18, 0.86, 1.0)
-		"eclipsada", "eclipsada_4", "eclipsada_e", "eclipsada_lua", "eclipsada_sol", "eclipsada_sol_splash", "eclipsada_sol_e":
-			return _eclipsada_color()
-		"bombastica", "bombastic_basic_shot", "bombastic_q_explosion", "bombastic_chain_explosion", "bombastic_field_mine", "bombastic_powder_ignition":
-			return Color(1.0, 0.58, 0.12)
 		"card_devorador_destinos":
 			return Color(1.0, 0.18, 0.82)
 		"card_choque_fontes":
@@ -45263,21 +39640,6 @@ func _enemy_by_uid(uid: int):
 	return null
 
 
-func _anchor_bonus() -> float:
-	_ensure_runtime_controllers_bound()
-	return ancorada_ability_controller.attack_damage_multiplier()
-
-
-func _secondary_ancorada_charge_at_player() -> float:
-	_ensure_runtime_controllers_bound()
-	return ancorada_ability_controller.ultimate_momentum()
-
-
-func _secondary_ancorada_projectile_slow_at(pos: Vector2) -> float:
-	_ensure_runtime_controllers_bound()
-	return ancorada_ability_controller.projectile_slow_at(pos)
-
-
 func _distance_to_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab = b - a
 	var denom = ab.length_squared()
@@ -45408,12 +39770,6 @@ func _spawn_custom_collision(pos: Vector2, kind: String) -> void :
 			_spawn_radial_particles(pos, Color(0.38, 1.0, 0.5), 12)
 		"gravitante":
 			_spawn_radial_particles(pos, Color(0.46, 0.78, 1.0), 8)
-		"bombastica":
-			_spawn_radial_particles(pos, Color(1.0, 0.48, 0.1), 10)
-		"retornante":
-			_spawn_radial_particles(pos, Color(0.58, 0.38, 1.0), 10)
-		"ancorada":
-			_spawn_radial_particles(pos, Color(0.3, 0.88, 1.0), 8)
 		_:
 			_spawn_radial_particles(pos, Color(1.0, 1.0, 1.0), 5)
 
@@ -45811,7 +40167,11 @@ func _cards_panel_pos(viewport: Vector2, anchor: Rect2) -> Vector2:
 	return RTHudLayoutScript.cards_panel_pos(viewport, hud_cards_panel_pos, anchor)
 
 func _coagulum_hud_center(viewport: Vector2, group_width: float, orb_radius: float, center_y: float) -> Vector2:
-	return RTHudLayoutScript.coagulum_hud_center(viewport, hud_coagulum_pos, group_width, orb_radius, center_y)
+	if hud_coagulum_pos != RTHudLayoutScript.UNSAVED_PANEL_POS or _is_portrait(viewport):
+		return RTHudLayoutScript.coagulum_hud_center(viewport, hud_coagulum_pos, group_width, orb_radius, center_y)
+	# Ao lado do painel de vida real (o desktop usa um painel fixo mais largo).
+	var left_end: float = 294.0 if _uses_desktop_ui() else _left_panel_pos(viewport).x + 236.0 * (1.25 if is_gamepad_active else 1.0)
+	return Vector2(left_end + 12.0 + RTHudLayoutScript.COAGULUM_PANEL_SIZE.x * 0.5, 16.0 + 38.0)
 
 func _skill_pos(viewport: Vector2) -> Vector2:
 	return RTHudLayoutScript.skill_pos(viewport, hud_skill_pos, _skill_scale())
@@ -46868,7 +41228,6 @@ func _damage_remote_player(amount: int, source: String) -> void :
 
 
 func _damage_remote_player_in_radius(center: Vector2, radius: float, amount: int, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
-	_damage_remnants_in_area_once(center, radius, float(amount) * 0.75, source, hit_owner, hit_key)
 	if not _remote_player_damage_ready():
 		return false
 	var hit_any: = false
@@ -46897,7 +41256,6 @@ func _remote_peer_on_segment(a: Vector2, b: Vector2, width: float) -> int:
 
 
 func _damage_remote_player_on_segment(a: Vector2, b: Vector2, width: float, amount: int, source: String, hit_owner: Dictionary = {}, hit_key: String = "") -> bool:
-	_damage_remnants_on_segment_once(a, b, width, float(amount) * 0.75, source, hit_owner, hit_key)
 	if not _remote_player_damage_ready():
 		return false
 	var hit_any: = false
@@ -47181,7 +41539,7 @@ func _run_multiplayer_preload() -> void :
 	online_preload_progress = 0.36
 	var preload_texture_keys: Array = ["map_phase_1", "player_idle", "player_right", "player_left", "player_up", "player_down", "enemy_common_phase_1", "enemy_right", "enemy_left", "boss", "boss_stage1", "coin"]
 	if active_character_key == CHARACTER_HENRY:
-		preload_texture_keys.append_array(["henry_idle", "henry_right", "henry_up", "henry_down", "henry_fire_network", "henry_cast_network", "henry_barometric_right", "henry_barometric_up", "henry_barometric_down", "henry_barometric_fire_network", "henry_barometric_cast_network", "henry_colossus_right", "henry_colossus_up", "henry_colossus_down", "henry_colossus_normal_fire_network", "henry_colossus_normal_cast_network", "henry_colossus_fire_network", "henry_colossus_cast_network", "henry_colossus_transform"])
+		preload_texture_keys.append_array(["henry_idle", "henry_right", "henry_up", "henry_down", "henry_fire_network", "henry_cast_network", "henry_barometric_right", "henry_barometric_up", "henry_barometric_down", "henry_barometric_fire_network", "henry_barometric_cast_network", "henry_colossus_right", "henry_colossus_up", "henry_colossus_down", "henry_colossus_idle_down", "henry_colossus_idle_right", "henry_colossus_idle_up", "henry_colossus_stop_down", "henry_colossus_stop_right", "henry_colossus_stop_up", "henry_colossus_normal_fire_network", "henry_colossus_normal_cast_network", "henry_colossus_fire_network", "henry_colossus_cast_network", "henry_colossus_transform"])
 	_prewarm_texture_keys(preload_texture_keys)
 	await get_tree().process_frame
 	online_preload_stage = "AUDIO ESSENCIAL"
@@ -47748,8 +42106,6 @@ func _network_player_visual_snapshot() -> PackedFloat32Array:
 		action = NET_ABILITY_ATTACK
 		elapsed = maxf(0.0, time_alive - last_attack_time)
 	var flags := 0
-	if _eclipsada_is_stealthed():
-		flags |= 1
 	if not manifestation_secondaries.is_empty():
 		flags |= 2
 	if active_character_key == CHARACTER_HENRY and mutation_key == "colosso" and henry_colossus_ability_controller.is_giant_visual():
@@ -47843,7 +42199,7 @@ func _sync_multiplayer_state() -> void :
 			var animation: = _network_player_animation_snapshot(now_ms)
 			var visual_snapshot := _network_player_visual_snapshot()
 			var network_secondary: int = selected_effect if active_character_key == CHARACTER_HENRY else selected_aura
-			rpc_id(1, "_rpc_client_player_state_light", player_pos, int(player_hp), int(player_hp_max), is_dead, selected_manifestation, network_secondary, animation.x, animation.y, _should_flip_player_sprite(), net_ping_ms, _eclipsada_is_stealthed(), manifestation_key, visual_snapshot)
+			rpc_id(1, "_rpc_client_player_state_light", player_pos, int(player_hp), int(player_hp_max), is_dead, selected_manifestation, network_secondary, animation.x, animation.y, _should_flip_player_sprite(), net_ping_ms, false, manifestation_key, visual_snapshot)
 		_sync_active_ability_visual_state(now_ms)
 		if _is_world_replica():
 			return
@@ -47873,7 +42229,7 @@ func _sync_multiplayer_state() -> void :
 				net_player_flip_h = p.flip_h
 
 	if not online_connected:
-		rpc("_update_remote_visuals", slashes, prisms, anchors, seed_links, effects)
+		rpc("_update_remote_visuals", slashes, prisms, [], seed_links, effects)
 
 	if _is_world_authority():
 		if online_connected:
@@ -48595,9 +42951,6 @@ func _send_network_ability_visual(action: int, origin: Vector2, target: Vector2,
 	var packet_arguments := [_mp_unique_id(), net_ability_sequence, action, selected_manifestation, origin, target, duration, extra, payload, net_ping_ms]
 	var packet_bytes := RTVisualSyncContractScript.ability_event_bytes(packet_arguments)
 	if packet_bytes > RTVisualSyncContractScript.ABILITY_VISUAL_MAX_BYTES:
-		for array_key in ["marked_points", "anchor_points", "route_points", "remnant_positions", "remnant_types", "target_positions"]:
-			if payload.get(array_key, null) is Array:
-				payload[array_key] = Array(payload[array_key]).slice(0, 6)
 		packet_arguments[8] = payload
 		packet_bytes = RTVisualSyncContractScript.ability_event_bytes(packet_arguments)
 	if packet_bytes > RTVisualSyncContractScript.ABILITY_VISUAL_MAX_BYTES:
@@ -48677,26 +43030,6 @@ func _network_ability_payload(action: int, origin: Vector2, target: Vector2) -> 
 				if orbital is Dictionary:
 					marked_points.append(Vector2(orbital.get("pos", orbital.get("target_pos", target))))
 			payload["marked_points"] = marked_points
-		elif manifestation_key == "ancorada":
-			var anchor_points: Array = []
-			for anchor in anchors:
-				if anchor_points.size() >= 12:
-					break
-				if anchor is Dictionary:
-					anchor_points.append(Vector2(anchor.get("pos", origin)))
-			payload["anchor_points"] = anchor_points
-		elif manifestation_key == "cartografica":
-			payload["route_points"] = _cartographic_coord_points()
-		elif manifestation_key == "necronada":
-			var remnant_positions: Array = []
-			var remnant_types: Array = []
-			for remnant in necronada_remnants:
-				if remnant_positions.size() >= 12:
-					break
-				remnant_positions.append(Vector2(remnant.get("pos", target)))
-				remnant_types.append(String(remnant.get("enemy_type", ENEMY_COMMON)))
-			payload["remnant_positions"] = remnant_positions
-			payload["remnant_types"] = remnant_types
 	elif action == NET_ABILITY_SECONDARY and not manifestation_secondaries.is_empty():
 		var secondary: Dictionary = manifestation_secondaries[-1]
 		payload["center"] = Vector2(secondary.get("center", origin))
@@ -48709,26 +43042,8 @@ func _network_ability_payload(action: int, origin: Vector2, target: Vector2) -> 
 				if target_pos != Vector2.ZERO:
 					target_positions.append(target_pos)
 			payload["target_positions"] = target_positions
-		elif manifestation_key == "acorrentada":
-			payload["radius"] = float(secondary.get("radius", ACORRENTADA_E_RADIUS))
-			payload["overcharged"] = bool(secondary.get("overcharged", false))
-			var chain_target_positions: Array[Vector2] = []
-			for chain_target in secondary.get("targets", []):
-				if typeof(chain_target) != TYPE_DICTIONARY:
-					continue
-				var target_dict: Dictionary = chain_target
-				if _acorrentada_target_alive(target_dict):
-					chain_target_positions.append(_acorrentada_target_pos(target_dict))
-			payload["target_positions"] = chain_target_positions
-		elif manifestation_key == "eclipsada":
-			payload["last_pos"] = Vector2(secondary.get("last_pos", target))
-			payload["color"] = secondary.get("color", _eclipsada_color())
 		elif manifestation_key == "prismatica":
 			payload["final_frame"] = int(secondary.get("final_frame", int(payload["seed"]) & 1))
-		elif manifestation_key == "cartografica":
-			payload["route_points"] = _cartographic_coord_points()
-		elif manifestation_key == "necronada":
-			payload["requiem_phase"] = float(necronada_requiem.get("phase", 0.0))
 	return RTVisualSyncContractScript.sanitize_ability_payload(payload)
 
 
@@ -48871,29 +43186,12 @@ func _initialize_network_ability_replica(visual: Dictionary) -> void :
 		visual["cut_timer"] = 0.0
 		visual["cut_index"] = 0
 		visual["ghost_tick"] = 0.0
-		if kind == "ancorada":
-			visual["momentum"] = 0.0
-			visual["trail_tick"] = 0.0
-			visual["trail"] = [Vector2(visual.get("center", visual.get("origin", Vector2.ZERO)))]
-			visual["drop_tick"] = 0.0
-			visual["drop_cycle"] = 0
-			visual["drops"] = []
-			visual["impacts"] = []
-		visual["ghosts"] = _network_retornante_ghosts(int(visual.get("seed", 0))) if kind == "retornante" else []
 		if kind == "prismatica":
 			visual["zaps"] = []
 			visual["zap_tick"] = 0.0
 			visual["final_frame"] = int(visual.get("final_frame", int(visual.get("seed", 0)) & 1))
 		if kind == "parasitica":
 			visual["targets"] = _network_parasite_targets(Array(visual.get("target_positions", [])), int(visual.get("seed", 0)), Vector2(visual.get("origin", Vector2.ZERO)))
-
-
-func _network_retornante_ghosts(seed: int) -> Array:
-	var ghosts: = []
-	for index in range(9):
-		var phase: = float(seed % 997) * 0.001 + float(index) * 1.731
-		ghosts.append({"base_angle": phase, "radius_x": 210.0 + fposmod(float(seed + index * 71), 110.0), "radius_y": 165.0 + fposmod(float(seed + index * 43), 90.0), "phase": phase})
-	return ghosts
 
 
 func _network_parasite_targets(positions: Array, seed: int, origin: Vector2) -> Array:
@@ -50426,7 +44724,6 @@ func _apply_temporal_rewind_result(rewind_pos: Vector2, rewind_hp: float) -> voi
 	player_hp = clampi(int(round(rewind_hp)), 1, int(player_hp_max))
 	_cancel_combat_aim_state(true)
 	bullets.clear()
-	return_bullets.clear()
 	eletrica_waves.clear()
 	eletrica_chains.clear()
 	eletrica_recoil_velocity = Vector2.ZERO

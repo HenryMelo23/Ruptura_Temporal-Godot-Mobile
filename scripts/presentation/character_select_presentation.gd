@@ -30,8 +30,34 @@ static func draw(game: Node2D, viewport: Vector2) -> void:
 		# the shared roster, ready/cancel, host-start and peer-highlight features.
 		game._draw_manifest_mp(viewport)
 	else:
-		game._draw_holo_background(viewport, null, ORANGE)
-		_draw_henry_build_step(game, viewport)
+		RTBuildSelectPresentation.draw(game, viewport, _henry_build_model(game))
+
+
+## Monta o model da tela unificada para o Henry (mesma tela da Geovana, tema elegante).
+static func _henry_build_model(game: Node2D) -> Dictionary:
+	var mutation_step: bool = game.mode == "mutation_select"
+	var source: Array = game.HENRY_MUTATIONS if mutation_step else game.HENRY_EFFECTS
+	var selected: int = clampi(game.selected_mutation if mutation_step else game.selected_effect, 0, source.size() - 1)
+	var items: Array = []
+	for i in range(source.size()):
+		var entry: Dictionary = source[i]
+		var key: String = String(entry.get("key", ""))
+		items.append({"index": i, "key": key, "name": String(entry.get("name", "")), "color": entry.get("accent", HENRY_AMBER), "texture": _henry_choice_icon_texture(key), "unlocked": true, "unread": false})
+	var key_selected: String = String(source[selected].get("key", ""))
+	return {
+		"theme": "henry",
+		"step": 0 if mutation_step else 1,
+		"items": items,
+		"selected_slot": selected,
+		"target_scroll": float(selected),
+		"dossier": RTBuildChoiceDossier.mutation(key_selected) if mutation_step else RTBuildChoiceDossier.effect(key_selected),
+		"summary": "" if mutation_step else "MUTAÇÃO: " + String(game.HENRY_MUTATIONS[clampi(game.selected_mutation, 0, game.HENRY_MUTATIONS.size() - 1)].get("name", "")).to_upper(),
+		"primary_label": "CONTINUAR" if mutation_step else "INICIAR",
+		"primary_enabled": true,
+		"preview_enabled": false,
+		"hint": "A / D OU TOQUE NUMA PLACA",
+		"keys": {"primary": "henry_continue", "back": "henry_back", "pick_prefix": "henry_choice_"},
+	}
 
 
 static func _draw_character_cards(game: Node2D, viewport: Vector2) -> void:

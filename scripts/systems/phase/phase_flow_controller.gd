@@ -343,7 +343,6 @@ func _advance_to_phase(phase: int) -> void:
 	core.player_silence_timer = 0.0
 	core.boss_parasite_seeds = 0
 	core.boss_parasite_mark_time = 0.0
-	core.retornante_memoria_pending = false
 	core.damage_flash_timer = 0.0
 	core.hud_feedback.reset(core)
 	core.low_health_heartbeat_timer = 0.0
@@ -408,13 +407,11 @@ func _advance_to_phase(phase: int) -> void:
 	core.effects.clear()
 	core.heal_orbs.clear()
 	core.slashes.clear()
-	core.anchors.clear()
 	core.prisms.clear()
 	core.orbitals.clear()
 	core.gravitante_vfx_events.clear()
 	core.seed_links.clear()
 	core.parasite_spit_zones.clear()
-	core.return_bullets.clear()
 	core.manifestation_secondaries.clear()
 	core._reset_advanced_manifestation_state()
 	core._reset_arauto_state(true)

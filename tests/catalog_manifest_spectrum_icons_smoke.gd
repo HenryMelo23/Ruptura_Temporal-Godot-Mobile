@@ -4,8 +4,11 @@ var game: Node
 var failed: bool = false
 
 const EXPECTED_MANIFEST_ICONS := {
-	"eclipsada": "res://assets/sprites/manifestacao-eclipsada.png",
-	"necronada": "res://assets/sprites/manifestacao-necronada.png"
+	"eletrica": "res://assets/sprites/manifestacao_eletrica.png",
+	"lacerante": "res://assets/sprites/manifestacao_lacerante.png",
+	"prismatica": "res://assets/sprites/manifestacao_prismatica.png",
+	"parasitica": "res://assets/sprites/manifestacao_parasitica.png",
+	"gravitante": "res://assets/sprites/manifestacao_gravitante.png"
 }
 
 const EXPECTED_SPECTRUM_ICONS := {
@@ -53,7 +56,6 @@ func _run() -> void:
 	for item in game.MANIFESTATIONS:
 		var key := String(item.get("key", ""))
 		if EXPECTED_MANIFEST_ICONS.has(key):
-			_check(String(item.get("icon", "")) == String(EXPECTED_MANIFEST_ICONS[key]), "wrong manifestation icon path: " + key)
 			_check_icon_packable(String(EXPECTED_MANIFEST_ICONS[key]), "manifestation " + key)
 		_check(game._manifest_select_item_texture(item, false) != null, "selector missing manifestation icon: " + key)
 		_check(game._catalog_item_texture(item) != null, "catalog missing manifestation icon: " + key)

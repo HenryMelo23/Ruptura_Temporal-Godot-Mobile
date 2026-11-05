@@ -44,15 +44,39 @@
     {
       "id": "control",
       "split": "control",
-      "scenario_ids": ["eletrica_racional_orbit", "lacerante_sanguinaria_strafe"],
-      "seeds": [41001, 41002, 41003, 41004, 41005, 41006, 41007, 41008],
+      "scenario_ids": [
+        "eletrica_racional_orbit",
+        "lacerante_sanguinaria_strafe"
+      ],
+      "seeds": [
+        41001,
+        41002,
+        41003,
+        41004,
+        41005,
+        41006,
+        41007,
+        41008
+      ],
       "pattern_change": false
     },
     {
       "id": "adaptation",
       "split": "adaptation",
-      "scenario_ids": ["cartografica_racional_feint", "necronada_devota_breakout"],
-      "seeds": [42001, 42002, 42003, 42004, 42005, 42006, 42007, 42008],
+      "scenario_ids": [
+        "prismatica_racional_feint",
+        "gravitante_devota_breakout"
+      ],
+      "seeds": [
+        42001,
+        42002,
+        42003,
+        42004,
+        42005,
+        42006,
+        42007,
+        42008
+      ],
       "pattern_change": true,
       "change_at_step": 48,
       "change_description": "O movimento do jogador troca para um padrao deterministico diferente no mesmo episodio; o executor e os parametros de dificuldade nao mudam."
@@ -60,8 +84,22 @@
     {
       "id": "generalization",
       "split": "held_out",
-      "scenario_ids": ["retornante_sanguinaria_heldout", "acorrentada_impulsiva_heldout", "bombastica_vanguarda_heldout", "eclipsada_devota_heldout"],
-      "seeds": [43001, 43002, 43003, 43004, 43005, 43006, 43007, 43008],
+      "scenario_ids": [
+        "parasitica_sanguinaria_heldout",
+        "lacerante_impulsiva_heldout",
+        "eletrica_vanguarda_heldout",
+        "prismatica_devota_heldout"
+      ],
+      "seeds": [
+        43001,
+        43002,
+        43003,
+        43004,
+        43005,
+        43006,
+        43007,
+        43008
+      ],
       "pattern_change": false
     }
   ],
@@ -69,23 +107,81 @@
     "format": "ruptura_umbra_v1_v2_tcc_raw",
     "version": 1,
     "retain": "Guardar JSON bruto por policy, manifest congelado, logs do runner, hash SHA-256 de cada arquivo e CSV bruto do estudo humano. Nao sobrescrever uma rodada concluida.",
-    "episode_fields": ["scenario_id", "seed", "outcome", "duration_seconds", "damage_to_player", "damage_to_umbra", "actions", "decision_usec", "frame_usec", "peak_runtime_bytes", "invalid_action_count", "executor_reject_count", "crash"],
-    "adaptation_fields": ["pre_actions", "post_actions", "pre_damage_to_player", "post_damage_to_player", "window_seconds"]
+    "episode_fields": [
+      "scenario_id",
+      "seed",
+      "outcome",
+      "duration_seconds",
+      "damage_to_player",
+      "damage_to_umbra",
+      "actions",
+      "decision_usec",
+      "frame_usec",
+      "peak_runtime_bytes",
+      "invalid_action_count",
+      "executor_reject_count",
+      "crash"
+    ],
+    "adaptation_fields": [
+      "pre_actions",
+      "post_actions",
+      "pre_damage_to_player",
+      "post_damage_to_player",
+      "window_seconds"
+    ]
   },
   "metrics": {
-    "primary": ["win_rate_wilson_95", "damage_to_player", "damage_to_umbra", "action_entropy_bits", "adjacent_action_repeat_rate", "adaptation_action_tvd", "held_out_win_rate_wilson_95"],
-    "systems": ["decision_usec_mean_p95", "frame_usec_mean_p95", "peak_runtime_bytes_max", "model_bytes", "invalid_action_count", "executor_reject_count", "crash_count", "determinism_mismatch_count"],
-    "human": ["perceived_intelligence_1_to_7", "perceived_fairness_1_to_7", "perceived_fun_1_to_7", "free_comment"],
+    "primary": [
+      "win_rate_wilson_95",
+      "damage_to_player",
+      "damage_to_umbra",
+      "action_entropy_bits",
+      "adjacent_action_repeat_rate",
+      "adaptation_action_tvd",
+      "held_out_win_rate_wilson_95"
+    ],
+    "systems": [
+      "decision_usec_mean_p95",
+      "frame_usec_mean_p95",
+      "peak_runtime_bytes_max",
+      "model_bytes",
+      "invalid_action_count",
+      "executor_reject_count",
+      "crash_count",
+      "determinism_mismatch_count"
+    ],
+    "human": [
+      "perceived_intelligence_1_to_7",
+      "perceived_fairness_1_to_7",
+      "perceived_fun_1_to_7",
+      "free_comment"
+    ],
     "interpretation": "Relatar estimativas e intervalos por metrica; nao calcular placar unico. Resultado negativo, misto ou inconclusivo e valido."
   },
   "platforms": {
-    "pc": {"required": true, "brain_hz": 10.0},
-    "android": {"required": true, "brain_hz": 10.0, "device_identification_required": true},
-    "parity": {"required": true, "fixture_tolerance": 0.00001, "same_weights_required": true}
+    "pc": {
+      "required": true,
+      "brain_hz": 10.0
+    },
+    "android": {
+      "required": true,
+      "brain_hz": 10.0,
+      "device_identification_required": true
+    },
+    "parity": {
+      "required": true,
+      "fixture_tolerance": 1e-05,
+      "same_weights_required": true
+    }
   },
   "human_study": {
     "design": "ordem aleatoria e cega por codigo A/B; participante nao recebe a versao da policy; registrar plataforma e experiencia sem dados pessoais desnecessarios",
     "minimum": "Exploratorio: declarar N, excluir desistencias antes da analise e nunca inferir preferencia com N insuficiente.",
-    "questions": ["intelligence", "fairness", "fun", "comment"]
+    "questions": [
+      "intelligence",
+      "fairness",
+      "fun",
+      "comment"
+    ]
   }
 }

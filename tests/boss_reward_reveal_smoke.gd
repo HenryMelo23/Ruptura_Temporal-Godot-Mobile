@@ -42,15 +42,12 @@ func _run() -> void:
 	game.boss_hp_max = 1000.0
 	game.boss_hp = 1.0
 	game._damage_boss(99999.0, "boss_reward_reveal_test")
-	var reveal: Dictionary = game.boss_reward_reveal.duplicate(true)
-	var card_ids: Array = Array(reveal.get("card_ids", []))
-	_check(game.BOSS_REWARD_CARD_COUNT == card_ids.size(), "snapshot_does_not_match_boss_grant_count")
-	_check(_deck_count() == before_deck + card_ids.size(), "snapshot_cards_were_not_applied_to_deck")
-	_check(int(reveal.get("recipient_peer_id", 0)) == game._mp_unique_id(), "recipient_is_not_local_grantee")
-	_check(Vector2(reveal.get("origin", Vector2.ZERO)) == game.boss_pos, "reward_origin_drifted")
-	for card_id in card_ids:
-		_check(not game._find_card_by_id(String(card_id)).is_empty(), "snapshot_has_unknown_card_id")
-
+	# 2026-11: chefe nao concede mais cartas (vira escolha de pacto/evolucao).
+	_check(game.boss_reward_reveal.is_empty(), "boss_kill_still_reveals_cards")
+	_check(_deck_count() == before_deck, "boss_kill_still_grants_cards")
+	_check(game._run_choice().pending_kind == "pact" or String(game.run_finalized_result) != "", "boss_kill_did_not_queue_pact")
+	# A apresentacao continua funcionando para outras fontes de carta.
+	var card_ids: Array = [String(game._card_id(Dictionary(game.CARDS[0])))]
 	var before_presentation_only: int = _deck_count()
 	game._present_boss_reward_cards([String(card_ids[0])], game.boss_pos)
 	_check(_deck_count() == before_presentation_only, "presentation_created_or_applied_loot")

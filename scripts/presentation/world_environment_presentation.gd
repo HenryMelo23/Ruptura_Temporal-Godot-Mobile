@@ -70,6 +70,8 @@ static func _draw_boss7_flame_waves(game: Node2D, camera: Vector2) -> void:
 	for wave in game.boss7_flame_waves:
 		if not game._world_point_in_view(Vector2(wave.get("pos", Vector2.ZERO)), camera, float(wave.get("max_radius", 250.0)) + 120.0):
 			continue
+		RTBoss7Presentation.draw_flame_wave(game, camera, wave)
+		continue
 		var center: Vector2 = Vector2(wave["pos"]) - camera
 		var r: float = float(wave.get("radius", 0.0))
 		var max_r: float = maxf(1.0, float(wave.get("max_radius", 250.0)))
@@ -87,7 +89,8 @@ static func _draw_boss7_flame_waves(game: Node2D, camera: Vector2) -> void:
 static func _draw_boss7_ground_indicators(game: Node2D, camera: Vector2) -> void:
 	if game.current_phase != 7:
 		return
-	if game.boss7_state == game.BOSS7_STATE_DIVE_MARK:
+	RTBoss7Presentation.draw_ground(game, camera)
+	if false and game.boss7_state == game.BOSS7_STATE_DIVE_MARK:
 		var pos: Vector2 = game.boss7_target_pos - camera
 		var p: float = clampf(1.0 - game.boss7_state_timer / 0.9, 0.0, 1.0)
 		game.draw_circle(pos, 86.0, Color(1.0, 0.22, 0.05, 0.22 + p * 0.15))
@@ -113,7 +116,7 @@ static func _draw_boss7_ground_indicators(game: Node2D, camera: Vector2) -> void
 		game.draw_line(impact + Vector2(0.0, -18.0), impact + Vector2(0.0, 18.0), Color(1.0, 0.88, 0.32, 0.82), 2.0)
 
 	for atk in game.boss_attacks:
-		if atk.get("kind") == game.BOSS7_ATTACK_SKY_FIREBALLS:
+		if false and atk.get("kind") == game.BOSS7_ATTACK_SKY_FIREBALLS:
 			var spots: Array = atk.get("spots", [])
 			var age: float = float(atk.get("age", 0.0))
 			var warning: float = float(atk.get("warning", 0.85))
@@ -326,7 +329,12 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_bar(game.boss7_core_pos - camera + Vector2(-70, -78), 140.0, game.boss7_core_hp / maxf(1.0, game.boss7_core_hp_max), Color(1.0, 0.52, 0.08))
 		game._draw_centered("%.1fs" % game.boss7_core_timer, game.boss7_core_pos - camera + Vector2(0, -104), 18, Color(1.0, 0.86, 0.48))
 		return
-	var draw_boss_sprite: bool = not (game.current_phase == 2 and game.boss2_ultimate_timer > 0.0 and not game._boss2_ultimate_boss_visible())
+	var draw_boss_sprite: bool = true
+	var boss2_reveal: float = 1.0
+	if game.current_phase == 2:
+		boss2_reveal = RTBoss2BlizzardPresentation.reveal(game)
+		RTBoss2BlizzardPresentation.draw_presence(game, camera, game._boss_texture(), game._boss_draw_position(), game._boss_draw_size(), 1.0 - boss2_reveal)
+		draw_boss_sprite = boss2_reveal > 0.001
 	if game.current_phase == 6 and (game.boss_entry_timer > 0.0 or game.boss6_relocating):
 		draw_boss_sprite = false
 	if game.boss_entry_timer > 0.0 or (game.current_phase == 6 and game.boss6_relocating):
@@ -337,7 +345,7 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 	var boss_draw_pos = game._boss_draw_position()
 	var boss_draw_size = game._boss_draw_size()
 	if game.current_phase == 2:
-		game._draw_dynamic_shadow_fit(boss_tex, Boss2AnimationPresentation.shadow_center(game) - camera, Vector2(122, 82), game.boss2_facing_dir < 0.0, true, 0.34)
+		game._draw_dynamic_shadow_fit(boss_tex, Boss2AnimationPresentation.shadow_center(game) - camera, Vector2(122, 82), game.boss2_facing_dir < 0.0, true, 0.34 * boss2_reveal * boss2_reveal)
 	elif game.current_phase == 3:
 		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), true, 0.44)
 	elif game.current_phase == 4:
@@ -346,14 +354,18 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_dynamic_shadow_fit(boss_tex, Boss1AnimationPresentation.shadow_center(game.boss_pos - camera, boss_draw_size), boss_draw_size, Boss1AnimationPresentation.should_flip_h(game), true, 0.44)
 	elif game.current_phase == 6:
 		Boss6AnimationPresentation.draw_ground_layer(game, camera, boss_tex, boss_draw_size)
-	else:
+	elif game.current_phase != 7:
 		game._draw_dynamic_shadow_fit(boss_tex, game.boss_pos - camera, boss_draw_size, false, true, 0.44)
 	var boss_modulate: Color = Boss4AnimationPresentation.stage_modulate(game) if game.current_phase == 4 else (Boss3AnimationPresentation.stage_modulate(game) if game.current_phase == 3 else (Boss1AnimationPresentation.stage_modulate(game) if game.current_phase == 1 else Color.WHITE))
 	if game._attack_target_is_boss() and not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
 		game._draw_attack_target_marker(boss_draw_pos - camera + Vector2(0, 55), 64.0, game.locked_target_kind == "boss")
 		boss_modulate = boss_modulate * Color(1.0, 0.93, 0.48, 1.0)
 	if game.current_phase == 2:
-		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, game.boss2_facing_dir < 0.0, boss_modulate, true)
+		if boss2_reveal >= 0.999:
+			game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, game.boss2_facing_dir < 0.0, boss_modulate, true)
+		else:
+			var b2_low: bool = game._memory_saver_active() or game._runtime_visual_budget_active() or game.gfx_low_resource
+			RTBoss2DissolvePresentation.draw(game, boss_tex, boss_draw_pos - camera, boss_draw_size, game.boss2_facing_dir < 0.0, boss_modulate, boss2_reveal, RTBoss2BlizzardPresentation.wind_at(game, game.boss_pos), RTBoss2BlizzardPresentation.fog_front(game), b2_low)
 	elif game.current_phase == 3:
 		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, Boss3AnimationPresentation.should_flip_h(game), boss_modulate, true)
 	elif game.current_phase == 4:
@@ -368,13 +380,14 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		Boss6AnimationPresentation.draw_body(game, boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate)
 	else:
 		if game.current_phase == 7:
-			game._draw_boss7_fire_aura(boss_tex, boss_draw_pos - camera, boss_draw_size)
-		game._draw_entity_fit(boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate, true)
+			RTBoss7Presentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
+		else:
+			game._draw_entity_fit(boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate, true)
 	if game.current_phase == 6 and Boss6AnimationPresentation.sink(game) < 0.35:
 		game._draw_boss6_amber_heart(boss_draw_pos - camera, boss_draw_size)
 		game._draw_boss6_smoke_shield(boss_draw_pos - camera, boss_draw_size)
 		game._draw_boss6_rotating_barrier(boss_draw_pos - camera)
-	if not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar():
+	if not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar() and boss2_reveal > 0.6:
 		var boss_bar_width = 168.0 if game.current_phase == 7 else (232.0 if game.current_phase == 6 else (220.0 if game.current_phase == 4 else (66.0 if game.current_phase == 5 else 148.0)))
 		var bar_color = Color(1.0, 0.46, 0.08) if game.current_phase == 7 else (Color(1.0, 0.58, 0.16) if game.current_phase == 6 else (Color(0.24, 1.0, 0.42) if game.current_phase == 5 else (Color(1.0, 0.62, 0.08) if game.current_phase == 4 else Color(1.0, 0.12, 0.22))))
 		var boss_bar_pos: Vector2 = boss_draw_pos - camera + Vector2(-boss_bar_width * 0.5, -boss_draw_size.y * (0.4 if game.current_phase == 4 else (0.8 if game.current_phase == 6 else 0.54)))
@@ -1637,29 +1650,7 @@ static func _draw_boss2_ultimate_environment(game: Node2D, camera: Vector2) -> v
 	var center: Vector2 = game.boss2_ultimate_center - camera
 	var safe_radius: float = game.BOSS2_ULTIMATE_SAFE_RADIUS
 	var low: bool = game._memory_saver_active() or game._runtime_visual_budget_active() or game.gfx_low_resource
-	var segments: int = 48 if low else 96
-	# Put the storm outside the exact safe boundary, leaving combat readable inside.
-	for ring in range(5 if low else 8):
-		var radius: float = safe_radius + 30.0 + ring * 58.0
-		var start: float = game.time_alive * (0.38 + ring * 0.035) + ring * 1.9
-		game.draw_arc(center, radius, start, start + PI * 1.35, segments, Color(0.04, 0.14, 0.26, 0.28), 38.0)
-		game.draw_arc(center, radius + 6.0, start, start + PI * 1.35, segments, Color(0.64, 0.85, 0.95, 0.3), 13.0)
-		game.draw_arc(center, radius + 14.0, start + 0.4, start + PI, segments, Color(0.94, 1.0, 1.0, 0.34), 2.0)
-	for i in range(65 if low else 150):
-		var seed_value: float = float(i)
-		var angle: float = game.time_alive * (1.15 + fposmod(seed_value * 0.13, 0.7)) + seed_value * 2.4
-		var radius: float = safe_radius + 24.0 + fposmod(seed_value * 37.0, 570.0)
-		var point: Vector2 = center + Vector2.from_angle(angle) * radius
-		if not game._screen_point_in_view(point, 50.0):
-			continue
-		var tangent: Vector2 = Vector2.from_angle(angle + PI * 0.5)
-		var length: float = 7.0 + fposmod(seed_value * 1.61, 16.0)
-		game.draw_line(point - tangent * length, point, Color(0.8, 0.94, 1.0, 0.42), 2.0)
-		game.draw_rect(Rect2(point.floor(), Vector2(2, 2)), Color(1.0, 1.0, 1.0, 0.72))
-	game.Boss2VFX.rim(game, center, safe_radius, Color(0.5, 1.0, 0.88, 0.96), low)
-	for i in range(24):
-		var dir: Vector2 = Vector2.from_angle(i * TAU / 24.0)
-		game.draw_line(center + dir * (safe_radius - 10.0), center + dir * (safe_radius - 18.0), Color(0.5, 1.0, 0.88, 0.72), 2.0)
+	RTBoss2BlizzardPresentation.draw_environment(game, camera)
 	game._draw_boss2_ultimate_warning(camera)
 	var banner = Rect2(Vector2(viewport.x * 0.5 - 145.0, 158.0), Vector2(290.0, 42.0))
 	game.draw_rect(banner, Color(0.02, 0.06, 0.1, 0.88))
@@ -1965,60 +1956,95 @@ static func _draw_boss1_rewind_overlay(game: Node2D, viewport: Vector2, camera: 
 	if game.boss1_rewind_sequence.is_empty():
 		return
 	var elapsed = float(game.boss1_rewind_sequence.get("elapsed", 0.0))
-	var center_target = viewport * 0.5
+	var low: bool = game._get_boss_wave_quality_profile() == "LOW"
+	var center_target = viewport * 0.5 + Vector2(0, -20)
 	var travel_progress = clamp(elapsed / game.BOSS1_CLOCK_TRAVEL_TIME, 0.0, 1.0)
 	var smooth_travel = smoothstep(0.0, 1.0, travel_progress)
+	# O relogio do peito do boss sai voando ate o centro com um "elastico" no fim.
 	var clock_origin = game.boss_pos - camera + Vector2(0, -36)
-	var clock_center = clock_origin.lerp(center_target, smooth_travel)
-	var clock_scale = lerp(0.34, 1.0, smooth_travel)
+	var vp: Viewport = game.get_viewport()
+	if vp != null:
+		clock_origin = vp.canvas_transform * clock_origin
+	var clock_center: Vector2 = clock_origin.lerp(center_target, smooth_travel)
+	var elastic: float = 1.0 + sin(clampf((travel_progress - 0.7) / 0.3, 0.0, 1.0) * PI) * 0.12
+	var clock_scale: float = lerpf(0.3, 1.0, smooth_travel) * elastic
+	var spin_in: float = (1.0 - smooth_travel) * -TAU * 0.75
 	var turn_progress = clamp((elapsed - game.BOSS1_CLOCK_TRAVEL_TIME) / game.BOSS1_CLOCK_TURN_TIME, 0.0, 1.0)
 	var variant = int(game.boss1_rewind_sequence.get("variant", 0))
 	var variant_color = game._chrono_variant_color(variant)
-	var overlay_alpha = 0.06 + 0.09 * smooth_travel
-	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.01, 0.04, 0.1, overlay_alpha), true)
-	for scan_index in range(7):
-		var scan_y = fposmod(elapsed * -180.0 + scan_index * viewport.y / 7.0, viewport.y)
-		game.draw_line(Vector2(0, scan_y), Vector2(viewport.x, scan_y), Color(0.22, 0.86, 1.0, 0.06), 2.0)
-	var radius = 106.0 * clock_scale
-	game.Boss1VFX.clock_shell(game, clock_center, radius, elapsed, variant_color, game._get_boss_wave_quality_profile() == "LOW")
-	game.draw_arc(clock_center, radius * 0.88, 0.0, TAU, 80, Color(1.0, 0.42, 0.78, 0.52), 2.0 * clock_scale)
-	match variant:
-		1:
-			game.draw_arc(clock_center + Vector2( - radius * 0.16, 0), radius * 0.72, PI * 0.2, PI * 1.2, 54, Color(1.0, 0.48, 0.82, 0.34), 3.0)
-			game.draw_arc(clock_center + Vector2(radius * 0.16, 0), radius * 0.72, PI * 1.2, PI * 2.2, 54, Color(0.42, 0.92, 1.0, 0.34), 3.0)
-		2:
-			for spiral in range(3):
-				var spiral_angle = - turn_progress * TAU * 2.0 + spiral * TAU / 3.0
-				game.draw_arc(clock_center, radius * (0.35 + spiral * 0.16), spiral_angle, spiral_angle + PI * 1.25, 42, Color(0.72, 0.52, 1.0, 0.3), 2.0)
-		3:
-			for fracture in range(8):
-				var fracture_angle = fracture * TAU / 8.0 + turn_progress * 0.4
-				game.draw_line(clock_center + Vector2.from_angle(fracture_angle) * radius * 0.3, clock_center + Vector2.from_angle(fracture_angle + 0.08) * radius * 0.78, Color(1.0, 0.78, 0.3, 0.34), 2.0)
+	var gold := Color(1.0, 0.8, 0.36)
+	var ice := Color(0.62, 0.98, 1.0)
+	var pink := Color(1.0, 0.38, 0.76)
+	# Pulso a cada tique (10 tiques no rebobinar, como o som).
+	var tick_phase: float = fposmod(turn_progress * 10.0, 1.0) if turn_progress > 0.0 and turn_progress < 1.0 else 1.0
+	var tick_pulse: float = 1.0 - smoothstep(0.0, 0.35, tick_phase)
+	var radius: float = 118.0 * clock_scale * (1.0 + tick_pulse * 0.025)
+	# Halo e fundo.
+	game.draw_circle(clock_center, radius * 1.55, Color(0.02, 0.08, 0.18, 0.35 * smooth_travel))
+	game.draw_circle(clock_center, radius * 1.25, Color(variant_color, 0.08 + tick_pulse * 0.06))
+	# Engrenagem externa com dentes girando para tras.
+	var gear_angle: float = -elapsed * 0.9 - turn_progress * TAU * 1.5 + spin_in
+	var teeth: int = 20 if low else 32
+	var gear := PackedVector2Array()
+	for i in range(teeth * 2):
+		var a: float = gear_angle + float(i) * PI / float(teeth)
+		var rr: float = radius * (1.2 if i % 2 == 0 else 1.11)
+		gear.append(clock_center + Vector2.from_angle(a) * rr)
+	game.draw_colored_polygon(gear, Color(0.05, 0.06, 0.12, 0.92))
+	gear.append(gear[0])
+	game.draw_polyline(gear, Color(gold, 0.85), 2.0 * clock_scale, true)
+	# Mostrador.
+	var face := Color(0.97, 0.91, 0.78)
+	var ink := Color(0.07, 0.06, 0.14)
+	game.draw_circle(clock_center, radius * 1.06, Color(0.02, 0.035, 0.08, 0.96))
+	game.draw_circle(clock_center, radius * 0.93, face)
+	game.draw_circle(clock_center, radius * 0.93, Color(variant_color, 0.08 + tick_pulse * 0.1))
+	game.Boss1VFX.arc(game, clock_center, radius * 1.03, 0.0, TAU, Color(variant_color, 0.95), 4.0 * clock_scale, low)
+	game.draw_arc(clock_center, radius * 0.95, 0.0, TAU, 96, Color(gold, 0.7), 2.0 * clock_scale, true)
+	# Mostrador interno girando ao contrario.
+	var inner_angle: float = elapsed * 1.4 + turn_progress * TAU
+	for i in range(24):
+		var a: float = inner_angle + float(i) * TAU / 24.0
+		var p0: Vector2 = clock_center + Vector2.from_angle(a) * radius * 0.3
+		var p1: Vector2 = clock_center + Vector2.from_angle(a) * radius * (0.36 if i % 2 == 0 else 0.33)
+		game.draw_line(p0, p1, Color(ink, 0.55), 1.5 * clock_scale, true)
+	game.draw_arc(clock_center, radius * 0.38, 0.0, TAU, 48, Color(ink, 0.45), 1.5 * clock_scale, true)
+	# Marcas e numeros.
 	for tick_index in range(60):
-		var angle = - PI * 0.5 + tick_index * TAU / 60.0
+		var angle = - PI * 0.5 + tick_index * TAU / 60.0 + spin_in
 		var major = tick_index % 5 == 0
-		var outer = clock_center + Vector2.from_angle(angle) * radius * 0.82
-		var inner = clock_center + Vector2.from_angle(angle) * radius * (0.68 if major else 0.75)
-		game.draw_line(inner, outer, Color(0.82, 0.98, 1.0, 0.92 if major else 0.54), (3.2 if major else 1.4) * clock_scale)
+		var outer = clock_center + Vector2.from_angle(angle) * radius * 0.9
+		var inner = clock_center + Vector2.from_angle(angle) * radius * (0.78 if major else 0.85)
+		game.draw_line(inner, outer, Color(ink, 0.95 if major else 0.5), (3.0 if major else 1.2) * clock_scale)
+	if clock_scale > 0.55:
+		for hour in range(1, 13):
+			var ha: float = -PI * 0.5 + float(hour) * TAU / 12.0 + spin_in
+			var hp: Vector2 = clock_center + Vector2.from_angle(ha) * radius * 0.64 + Vector2(0, 5.0 * clock_scale)
+			game._draw_centered(str(hour), hp, int(15.0 * clock_scale), Color(ink, 0.92))
+	# Ponteiros: hora e minuto voltam 10 min; segundos giram rapido para tras.
 	var shown_minutes = lerp(10.0, 0.0, turn_progress)
 	var minute_angle = - PI * 0.5 + shown_minutes * TAU / 60.0
 	var hour_angle = - PI * 0.5 + (11.0 + shown_minutes / 60.0) * TAU / 12.0
+	var second_angle: float = -PI * 0.5 - turn_progress * TAU * 8.0 - elapsed * 2.0
 	if turn_progress > 0.0 and turn_progress < 1.0:
-		for trail_index in range(1, 5):
-			var trail_minutes = min(10.0, shown_minutes + trail_index * 0.65)
+		for trail_index in range(1, 6):
+			var trail_minutes = min(10.0, shown_minutes + trail_index * 0.55)
 			var trail_angle = - PI * 0.5 + trail_minutes * TAU / 60.0
-			game.draw_line(clock_center, clock_center + Vector2.from_angle(trail_angle) * radius * 0.62, Color(0.32, 0.88, 1.0, 0.13), 3.0 * clock_scale)
-	game.Boss1VFX.streak(game, clock_center, clock_center + Vector2.from_angle(hour_angle) * radius * 0.44, Color(1.0, 0.35, 0.72), 10.0 * clock_scale)
-	game.Boss1VFX.streak(game, clock_center, clock_center + Vector2.from_angle(minute_angle) * radius * 0.64, Color(0.62, 0.98, 1.0), 7.0 * clock_scale)
-	game.draw_circle(clock_center, 8.0 * clock_scale, Color.WHITE)
+			game.draw_line(clock_center, clock_center + Vector2.from_angle(trail_angle) * radius * 0.7, Color(0.1, 0.5, 0.8, 0.22 - trail_index * 0.035), 4.0 * clock_scale)
+		game.draw_arc(clock_center, radius * 0.74, second_angle, second_angle + 1.1, 24, Color(pink, 0.35), 6.0 * clock_scale, true)
+	game.Boss1VFX.streak(game, clock_center, clock_center + Vector2.from_angle(hour_angle) * radius * 0.46, pink, 11.0 * clock_scale)
+	game.Boss1VFX.streak(game, clock_center, clock_center + Vector2.from_angle(minute_angle) * radius * 0.7, ice, 8.0 * clock_scale)
+	game.draw_line(clock_center, clock_center + Vector2.from_angle(second_angle) * radius * 0.8, Color(pink, 0.95), 2.0 * clock_scale, true)
+	game.draw_circle(clock_center, 9.0 * clock_scale, Color(gold))
+	game.draw_circle(clock_center, 4.0 * clock_scale, Color.WHITE)
 	var minute_label = int(round(shown_minutes))
-	game._draw_centered("11:%02d PM" % minute_label, clock_center + Vector2(0, radius * 0.46), int(18 * clock_scale), Color(0.82, 0.98, 1.0))
+	game._draw_centered("11:%02d PM" % minute_label, clock_center + Vector2(0, radius * 0.5), int(13 * clock_scale), Color(ink, 0.8))
 	if elapsed < game.BOSS1_CLOCK_TRAVEL_TIME:
-		game._draw_centered("CRONO-RUPTURA", clock_center + Vector2(0, radius + 34.0), 20, Color(0.42, 0.92, 1.0))
+		game._draw_centered("CRONO-RUPTURA", clock_center + Vector2(0, radius * 1.3 + 30.0), 22, Color(0.42, 0.92, 1.0))
 	elif turn_progress < 1.0:
-		game._draw_centered("TEMPO -%.1fs" % (turn_progress * game.BOSS1_REWIND_SECONDS), clock_center + Vector2(0, radius + 40.0), 22, Color(1.0, 0.42, 0.76))
+		game._draw_centered("TEMPO -%.1fs" % (turn_progress * game.BOSS1_REWIND_SECONDS), clock_center + Vector2(0, radius * 1.3 + 34.0), 24, Color(pink.r, pink.g, pink.b, 0.85 + tick_pulse * 0.15))
 	else:
-		game._draw_centered("LINHA RESTAURADA", clock_center + Vector2(0, radius + 40.0), 22, Color(0.48, 0.94, 1.0))
+		game._draw_centered("LINHA RESTAURADA", clock_center + Vector2(0, radius * 1.3 + 34.0), 24, Color(0.48, 0.94, 1.0))
 
 
 static func _draw_boss1_oceanic_slam_impact(game: Node2D, camera: Vector2) -> void :
@@ -2206,6 +2232,8 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 		var age = float(attack.get("age", 0.0))
 		var kind = String(attack.get("kind", ""))
 		if age < 0.0:
+			if game.current_phase == 1 and kind in ["bubble", "pressure_bubbles", "boiling_bubbles"]:
+				game.Boss1VFX.lead_warning(game, attack, game.boss_pos - camera, Vector2(attack.get("target", game.player_pos)) - camera, -age, game.BOSS1_BUBBLE_WARNING_LEAD, game.time_alive, profile == "LOW")
 			continue
 		if game.current_phase == 1:
 			# Lightning promises a full 1.2 s warning. Do not consume any of that
@@ -2256,7 +2284,13 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 				var a7 = Vector2(attack.get("a", game.boss_pos)) - camera
 				var b7 = Vector2(attack.get("b", game.boss_pos)) - camera
 				var fade7 = 1.0 - clampf(age / maxf(0.01, float(attack.get("duration", 1.0))), 0.0, 1.0)
-				game.PhoenixFire.draw_strip(game, a7, b7, 34.0, game.time_alive, fade7, game._phase7_visual_budget_enabled())
+				# Faixa continua (chao queimado + brasa) para o rastro nao parecer pontilhado.
+				var heat7: float = 0.5 + 0.5 * sin(game.time_alive * 6.0 + a7.x * 0.02)
+				game.draw_line(a7, b7, Color(0.2, 0.04, 0.0, 0.42 * fade7), 34.0, true)
+				game.draw_line(a7, b7, Color(0.95, 0.3, 0.05, (0.35 + 0.2 * heat7) * fade7), 16.0, true)
+				game.draw_line(a7, b7, Color(1.0, 0.86, 0.4, 0.7 * fade7), 4.0, true)
+				if a7.distance_to(b7) > 18.0 or int(a7.x + a7.y) % 3 == 0:
+					game.PhoenixFire.draw_strip(game, a7, b7, 30.0, game.time_alive, fade7, game._phase7_visual_budget_enabled())
 			game.BOSS7_ATTACK_THERMAL:
 				var p_thermal = clampf(age / game.BOSS7_THERMAL_WARNING, 0.0, 1.0)
 				for spot in Array(attack.get("spots", [])):
@@ -2456,10 +2490,11 @@ static func _draw_boss_attacks(game: Node2D, camera: Vector2) -> void :
 				var tide_visual: Dictionary = attack.duplicate()
 				tide_visual["age"] = age
 				var line_pos = game._boss_tide_line(tide_visual)
+				var advance_sign: float = 1.0 if bool(attack.get("positive", true)) else -1.0
 				if bool(attack["horizontal"]):
-					game.Boss1VFX.tide(game, Vector2(-camera.x, line_pos - camera.y), Vector2(game.WORLD_SIZE.x - camera.x, line_pos - camera.y), game.time_alive, profile == "LOW")
+					game.Boss1VFX.tide(game, Vector2(-camera.x, line_pos - camera.y), Vector2(game.WORLD_SIZE.x - camera.x, line_pos - camera.y), game.time_alive, profile == "LOW", Vector2(0.0, advance_sign))
 				else:
-					game.Boss1VFX.tide(game, Vector2(line_pos - camera.x, -camera.y), Vector2(line_pos - camera.x, game.WORLD_SIZE.y - camera.y), game.time_alive, profile == "LOW")
+					game.Boss1VFX.tide(game, Vector2(line_pos - camera.x, -camera.y), Vector2(line_pos - camera.x, game.WORLD_SIZE.y - camera.y), game.time_alive, profile == "LOW", Vector2(advance_sign, 0.0))
 			"sand":
 				var p = attack["target"] - camera
 				var r = 48.0 + sin(game.time_alive * 8.0) * 8.0

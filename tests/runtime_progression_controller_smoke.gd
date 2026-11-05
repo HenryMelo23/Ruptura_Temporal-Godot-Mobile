@@ -91,17 +91,17 @@ func _run() -> void:
 	var public_sorte_text: String = String(sorte_card.get("desc", "")) + " " + game._card_effect_snapshot(sorte_card, 1) + " " + CardCatalogDefinitions.get_burn_summary("Sorte", 1)
 	_check(not public_sorte_text.to_lower().contains("sorte temporal") and not public_sorte_text.contains("0.3%") and not public_sorte_text.to_lower().contains("incomuns"), "Sorte card exposed hidden temporary luck math")
 	var rare_at_hour: float = game._chance_carta_rara()
-	_check(absf(rare_at_hour - 0.07116) < 0.00001, "unlocked rare chance did not match the 60-minute contract")
+	_check(absf(rare_at_hour - 0.05219) < 0.00001, "unlocked rare chance did not match the 60-minute contract (rebalance 2026-11)")
 	game.time_alive = 0.0
 	_check(rare_at_hour > game._chance_carta_rara(), "temporal luck did not improve unlocked rare items")
 	game.time_alive = 60.0 * 60.0
 	_check(absf(game._effective_luck() - 0.353) < 0.0001, "card and temporal luck did not combine")
 	game.current_phase = 2
-	_check(absf(game._chance_carta_lendaria() - 0.01286) < 0.00001, "legendary chance did not match the 60-minute contract")
+	_check(absf(game._chance_carta_lendaria() - 0.00953) < 0.00001, "legendary chance did not match the 60-minute contract")
 	var drop_weights: Array = game._progression().temporal_luck_controller.drop_mode_rarity_weights()
 	_check(absf(float(drop_weights[1][1]) - 27.766) < 0.0001, "Drop journey uncommon weight did not match the temporal contract")
-	_check(absf(float(drop_weights[2][1]) - 9.03) < 0.0001, "Drop journey rare weight did not match the temporal contract")
-	_check(absf(float(drop_weights[3][1]) - 1.206) < 0.0001, "Drop journey legendary weight did not match the temporal contract")
+	_check(absf(float(drop_weights[2][1]) - 4.4028) < 0.0001, "Drop journey rare weight did not match the temporal contract")
+	_check(absf(float(drop_weights[3][1]) - 0.5736) < 0.0001, "Drop journey legendary weight did not match the temporal contract")
 
 	game.time_alive = 45.0 * 60.0
 	var common_enemy := {"points": 20, "type": game.ENEMY_COMMON}

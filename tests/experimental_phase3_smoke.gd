@@ -100,7 +100,7 @@ func _run() -> void:
 	assert(rain_count == 3)
 
 	game.gameplay_cheat_text = "FaseEX3"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	game._start_game()
 	assert(game.current_phase == 3 and game.experimental_phase_active)
 	assert(game.WORLD_SIZE == game.DEFAULT_WORLD_SIZE)

@@ -70,3 +70,21 @@ Data: 2026-10-29
 - A meta de 55-60 FPS nao foi atingida nem certificada neste ambiente. O smoke aceita `--enforce-target` para transformar o alvo nao atingido em codigo de saida de falha durante a medicao no aparelho.
 
 Nenhum Android estava conectado via ADB. Estes resultados nao certificam 55-60 FPS no aparelho fisico. A proxima medicao valida deve durar pelo menos cinco minutos no dispositivo, com o mesmo numero de inimigos/projeteis e amostragem por minuto.
+
+
+## Caçada de FPS (nov/2026)
+Ferramenta: `tests/perf_gameplay_profile.gd -- --manif=eletrica --enemies=150 --seconds=8 [--skip=enemies,map,hud,controls,effects]`
+(RTFrameProfiler por seção; `--skip` atribui draw calls). `tests/perf_micro_enemy_draw.gd` mede helpers por inimigo.
+Medido no editor (build debug, 2 vCPU i7-13620H, llvmpipe), 150 inimigos:
+- Script por quadro: ~60 ms -> ~27 ms. Quadro total na VM: 184 ms -> 112 ms (resto é rasterização por software).
+- Desvio (avoidance): 24 ms -> ~3 ms (varredura direta de células). Separação 4,3 -> 1,5 ms.
+- Atualização de inimigos (sem marcas por inimigo): ~16 ms -> ~7 ms.
+- Desenho de inimigos: 7,4 -> ~3,5 ms; draw calls dos inimigos ~constantes (eram ~4 por inimigo).
+Regras aprendidas:
+- Nunca `RTFrameProfiler.mark` dentro de laço por entidade (custa mesmo desligado).
+- `enemy.get()` ~0,5–1 us no debug: ler cada chave uma vez; chaves de status ausentes -> `has()` e sair.
+- `kind in [..]` aloca array por inimigo: usar Dictionary pré-montado fora do laço.
+- Intercalar sombra/sprite/barra por inimigo quebra o batching; desenhar em camadas.
+- `draw_rect(..., false, w)` vira polyline (draw call própria): contorno com 4 rects.
+Próximos alvos: HUD+controles (~3 ms e ~180 draw calls; precisa de CanvasItem próprio redesenhado só quando muda),
+temporizadores por inimigo (~3,5 ms), `p_services_menus_net` (~1 ms), projéteis (~1,3 ms).

@@ -78,20 +78,5 @@ func _run() -> void:
 	for drop in game.arauto_card_drops:
 		_check(game._card_drop_texture_available(Dictionary(drop.get("card", {}))), "invalid card drop was not discarded")
 
-	var eclipsada_index := -1
-	for i in range(game.MANIFESTATIONS.size()):
-		if String(game.MANIFESTATIONS[i].get("key", "")) == "eclipsada":
-			eclipsada_index = i
-			break
-	_check(eclipsada_index >= 0, "Eclipsada was not registered")
-	var eclipsada: Dictionary = game.MANIFESTATIONS[eclipsada_index]
-	var icon_path := String(eclipsada.get("icon", ""))
-	_check(icon_path == "res://assets/sprites/manifestacao-eclipsada.png", "Eclipsada icon path used the wrong root")
-	_check(FileAccess.file_exists(icon_path), "Eclipsada icon source file does not resolve")
-	_check(FileAccess.file_exists(icon_path + ".import"), "Eclipsada icon has no import metadata for Android export")
-	_check(ResourceLoader.exists(icon_path), "Eclipsada icon resource does not resolve")
-	_check(game._manifest_select_item_texture(eclipsada, false) != null, "Eclipsada icon texture did not load")
-	_check(game._manifestation_details("eclipsada").has("funcao"), "Eclipsada details were not registered")
-
-	print("CARD_QUALITY_RULES_SMOKE_OK rare_gate=true sorte=true webhook_new_cards=true projections=true card_drops=true eclipsada_icon=true")
+	print("CARD_QUALITY_RULES_SMOKE_OK rare_gate=true sorte=true webhook_new_cards=true projections=true card_drops=true")
 	quit(0)

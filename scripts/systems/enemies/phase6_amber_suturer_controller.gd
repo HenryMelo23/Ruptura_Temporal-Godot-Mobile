@@ -91,6 +91,16 @@ var _remote_card_change_state: Dictionary = {}
 var _remote_card_change_order: Array[String] = []
 
 
+var _threat: RTSuturerThreatController = null
+
+
+func threat() -> RTSuturerThreatController:
+	if _threat == null:
+		_threat = RTSuturerThreatController.new()
+		_threat.bind_game(game)
+	return _threat
+
+
 func bind_game(p_game: Node) -> void:
 	game = p_game
 	if game.amber_suturer_state.is_empty():
@@ -198,7 +208,9 @@ func spawn_now() -> Dictionary:
 	var existing := active_enemy()
 	if not existing.is_empty():
 		return existing
-	var spawn_pos: Vector2 = game._spawn_point_on_edge().clamp(Vector2(100.0, 90.0), game.WORLD_SIZE - Vector2(100.0, 90.0))
+	# Perto do jogador (fora da tela): no mapa grande a borda ficava longe demais.
+	var spawn_angle: float = game.rng.randf_range(0.0, TAU)
+	var spawn_pos: Vector2 = (game.player_pos + Vector2.from_angle(spawn_angle) * 620.0).clamp(Vector2(100.0, 90.0), game.WORLD_SIZE - Vector2(100.0, 90.0))
 	var previous_count: int = game.enemies.size()
 	game._spawn_enemy(TYPE_ID, spawn_pos)
 	if game.enemies.size() <= previous_count:
@@ -328,6 +340,7 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 			if float(enemy.get("suturer_state_timer", 0.0)) <= 0.0:
 				_set_state(enemy, STATE_OBSERVE, OBSERVE_TIME)
 	_try_damage_evasion(enemy)
+	threat().update(enemy, delta)
 	_sync_public_enemy_state(enemy)
 
 

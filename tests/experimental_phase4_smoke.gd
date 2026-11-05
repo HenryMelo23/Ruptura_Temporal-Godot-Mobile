@@ -113,7 +113,7 @@ func _run() -> void:
 	assert(ray_pos.y >= encounter.position.y + 74.0 and ray_pos.y <= encounter.end.y - 74.0)
 
 	game.gameplay_cheat_text = "FaseEX4"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	game._start_game()
 	assert(game.current_phase == 4 and game.experimental_phase_active)
 	assert(game.WORLD_SIZE == game.DEFAULT_WORLD_SIZE)

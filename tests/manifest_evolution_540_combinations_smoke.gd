@@ -26,27 +26,19 @@ func _exercise_pair_through_public_flow(key: String) -> void:
 	# prove that both real choices survive actual combat entry points together.
 	game.effects.clear()
 	game.bullets.clear()
-	game.return_bullets.clear()
 	game.enemies.clear()
 	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(108.0, 0.0))
 	game.enemies[0]["hp"] = 100000.0
 	game.enemies[0]["max_hp"] = 100000.0
 	game.time_alive += 10.0
 	game.last_attack_time = -1000.0
-	if key == "eclipsada":
-		game.eclipsada_form = game.ECLIPSADA_FORM_SOL
-		game.eclipsada_next_attack_time = 0.0
 	game._try_attack()
 	if key == "lacerante":
 		game._update_lacerante_prepare(1.0)
-	for _frame in range(60 if key == "acorrentada" else 16):
+	for _frame in range(16):
 		game._update_bullets(0.03)
-		game._update_return_bullets(0.03)
-		game._update_acorrentada_state(0.03)
 	game.time_alive += 10.0
 	game.last_skill_time = -1000.0
-	if key == "necronada":
-		game.necronada_vestiges = [{"id": 905, "enemy_type": game.ENEMY_COMMON, "pos": game.player_pos, "profile": game._necronada_profile(game.ENEMY_COMMON), "depth": 1}]
 	game._use_skill(game.player_pos + Vector2(112.0, 0.0))
 	game._execute_teleport(game.player_pos + Vector2(124.0, 0.0))
 	for _frame in range(8):
@@ -55,6 +47,10 @@ func _exercise_pair_through_public_flow(key: String) -> void:
 
 
 func _run() -> void:
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		print("MANIFEST_EVOLUTION_180_OK disabled=true roster=%d" % game.MANIFESTATIONS.size())
+		quit(0)
+		return
 	game._start_game()
 	game.mode = "game"
 	game.player_pos = Vector2(640, 360)
@@ -87,5 +83,5 @@ func _run() -> void:
 				game._reset_manifest_evolution_state()
 				_check(game._manifest_evolution_choices().is_empty(), key + " reset did not clear choices")
 				pairs += 1
-	print("MANIFEST_EVOLUTION_540_OK pairs=%d" % pairs)
+	print("MANIFEST_EVOLUTION_180_OK pairs=%d" % pairs)
 	quit(0)

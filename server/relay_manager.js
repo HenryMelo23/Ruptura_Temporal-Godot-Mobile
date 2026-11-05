@@ -1529,21 +1529,11 @@ const PLAYER_PROGRESS_RULES = {
     "coracao_antimateria": { metric: "boss_kills", target: 4 },
     "cofre_excesso": { metric: "boss_kills", target: 4 }
   },
-  manifestations: {
-    lacerante: { metric: "enemy_kills", target: 250 },
-    prismatica: { metric: "boss_kills", target: 1 },
-    retornante: { metric: "teleports_used", target: 100, all: [{ metric: "survive_seconds", target: 900 }] },
-    parasitica: { metric: "phase_reached", target: 6 },
-    gravitante: { metric: "phase_reached", target: 4 },
-    ancorada: { metric: "stationary_seconds", target: 180, all: [{ metric: "survive_seconds", target: 900 }] },
-    cartografica: { metric: "phase_reached", target: 4 },
-    mnesica: { metric: "boss_kills", target: 3 },
-    ressonante: { metric: "abilities_used", target: 180, all: [{ metric: "survive_seconds", target: 900 }] },
-    contratual: { metric: "shop_purchases", target: 35 },
-    acorrentada: { metric: "damage_taken_events", target: 55, all: [{ metric: "phase_reached", target: 2 }] },
-    eclipsada: { metric: "phase_reached", target: 7 },
-    bombastica: { metric: "enemy_kills", target: 550 },
-    necronada: { metric: "enemy_kills", target: 700, all: [{ metric: "phase_reached", target: 3 }] }
+	manifestations: {
+		lacerante: { metric: "enemy_kills", target: 250 },
+		prismatica: { metric: "boss_kills", target: 1 },
+		parasitica: { metric: "phase_reached", target: 6 },
+		gravitante: { metric: "phase_reached", target: 4 }
   },
   specters: {
     racional: { metric: "stationary_seconds", target: 150, all: [{ metric: "survive_seconds", target: 900 }] },
@@ -2300,18 +2290,8 @@ const MANIFESTATION_UNLOCK_ALIASES = {
   eletrica: "eletrica",
   lacerante: "lacerante",
   prismatica: "prismatica",
-  retornante: "retornante",
   parasitica: "parasitica",
-  gravitante: "gravitante",
-  ancorada: "ancorada",
-  cartografica: "cartografica",
-  mnesica: "mnesica",
-  ressonante: "ressonante",
-  contratual: "contratual",
-  acorrentada: "acorrentada",
-  eclipsada: "eclipsada",
-  bombastica: "bombastica",
-  necronada: "necronada"
+  gravitante: "gravitante"
 };
 
 const SPECTER_UNLOCK_ALIASES = {

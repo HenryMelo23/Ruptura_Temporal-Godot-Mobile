@@ -139,8 +139,11 @@ static func cards_panel_size(viewport: Vector2, scale: float) -> Vector2:
 	return Vector2(min(224.0, viewport.x * 0.46), 94.0) * scale
 
 
+const COAGULUM_PANEL_SIZE := Vector2(200.0, 50.0)
+
+
 static func coagulum_panel_size(scale: float) -> Vector2:
-	return Vector2(160.0, 48.0) * scale
+	return COAGULUM_PANEL_SIZE * scale
 
 
 static func default_left_panel_pos(_viewport: Vector2) -> Vector2:
@@ -188,7 +191,12 @@ static func coagulum_hud_center(
 	orb_radius: float,
 	center_y: float
 ) -> Vector2:
-	return saved_panel_or_default(saved_pos, Vector2(viewport.x * 0.5 - group_width * 0.5 + orb_radius, center_y))
+	# Painel colado ao painel de vida (desktop: ao lado; retrato: logo abaixo).
+	var left := default_left_panel_pos(viewport)
+	var lw := left_panel_width(viewport)
+	if is_portrait(viewport):
+		return saved_panel_or_default(saved_pos, left + Vector2(COAGULUM_PANEL_SIZE.x * 0.5, 76.0 + 10.0 + COAGULUM_PANEL_SIZE.y * 0.5))
+	return saved_panel_or_default(saved_pos, left + Vector2(lw + 12.0 + COAGULUM_PANEL_SIZE.x * 0.5, 38.0))
 
 
 static func skill_pos(viewport: Vector2, saved_pos: Vector2, skill_scale: float) -> Vector2:
@@ -242,7 +250,6 @@ static func manual_shop_pos(viewport: Vector2, saved_pos: Vector2) -> Vector2:
 static func desktop_button_rects(
 	viewport: Vector2,
 	include_empower: bool,
-	include_detonator: bool,
 	include_shop_manual: bool,
 	desktop_scale: float = 1.0
 ) -> Dictionary:
@@ -254,7 +261,7 @@ static func desktop_button_rects(
 	# At the minimum 50% scale, cards are 46px wide, so a 32px gutter keeps
 	# adjacent centers at least 78px apart and prevents accidental overlaps.
 	var gap: = maxf(12.0 * scale, 78.0 - card_w)
-	var total_cards: int = 4 + (1 if (include_empower or include_detonator) else 0)
+	var total_cards: int = 4 + (1 if include_empower else 0)
 	var total_w: = card_w * float(total_cards) + gap * float(total_cards - 1)
 	var x: = viewport.x * 0.5 - total_w * 0.5
 	var y: = viewport.y - card_h - 24.0
@@ -264,8 +271,6 @@ static func desktop_button_rects(
 	rects["dash"] = Rect2(x + (card_w + gap) * 3.0, y, card_w, card_h)
 	if include_empower:
 		rects["lacerante_empower"] = Rect2(x + (card_w + gap) * 4.0, y, card_w, card_h)
-	if include_detonator:
-		rects["bombastica_detonator"] = Rect2(x + (card_w + gap) * 4.0, y, card_w, card_h)
 	rects["pause"] = Rect2(viewport.x - 58.0, 16.0, 42.0, 36.0)
 	rects["boss"] = Rect2(viewport.x - 178.0, 186.0, 160.0, 44.0)
 	if include_shop_manual:
@@ -285,7 +290,6 @@ static func touch_button_rects(
 	empower_center_value: Vector2,
 	empower_scale: float,
 	include_empower: bool,
-	include_detonator: bool,
 	pause_position: Vector2,
 	boss_position: Vector2,
 	shop_position: Vector2,
@@ -303,9 +307,6 @@ static func touch_button_rects(
 	if include_empower:
 		var empower_r = 32.0 * empower_scale
 		rects["lacerante_empower"] = Rect2(empower_center_value - Vector2(empower_r, empower_r), Vector2(empower_r * 2.0, empower_r * 2.0))
-	if include_detonator:
-		var det_r = 32.0 * empower_scale
-		rects["bombastica_detonator"] = Rect2(empower_center_value - Vector2(det_r, det_r), Vector2(det_r * 2.0, det_r * 2.0))
 	rects["pause"] = Rect2(pause_position, Vector2(52.0, 42.0))
 	rects["boss"] = Rect2(boss_position, Vector2(96.0, 42.0))
 	if include_shop_manual:

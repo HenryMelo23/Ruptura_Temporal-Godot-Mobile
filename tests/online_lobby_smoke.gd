@@ -46,7 +46,7 @@ func _run() -> void:
 	_check(not game._online_menu_available(), "Online mode should start locked without the cheat")
 	_check(not game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should hide the online button while locked")
 	game.gameplay_cheat_text = "ONLINE30"
-	_check(game._try_unlock_retornante_cheat(), "ONLINE30 cheat should unlock the online button")
+	_check(game._try_apply_gameplay_cheat(), "ONLINE30 cheat should unlock the online button")
 	_check(game.online_mode_unlocked and game._online_menu_available(), "Online mode should be available after cheat")
 	_check(game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "Hub should expose the multiplayer button after unlock")
 	game._activate_menu_option("multiplayer")

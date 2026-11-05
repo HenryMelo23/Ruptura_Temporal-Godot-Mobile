@@ -12,13 +12,13 @@ const CONFIG := {
 	"min_run_time": 300.0,
 	"min_phase": 1,
 	"charge_threshold": 90.0,
-	"cooldown": 240.0,
+	"cooldown": 180.0,
 	"duration": 12.0,
 	"multiplier": 2.0,
 	"ground_lifetime": 16.0,
 	"collect_radius": 66.0,
 	"window_duration": 600.0,
-	"max_drops_per_window": 2,
+	"max_drops_per_window": 3,
 	"luck_threshold_reduction_cap": 0.15,
 	"final_warning_time": 3.0,
 }
@@ -92,10 +92,13 @@ func on_enemy_defeated(enemy: Dictionary, run_time: float, phase: int, luck: flo
 	if _charge < threshold:
 		return {}
 	var pos: Vector2 = Vector2(enemy.get("pos", core.player_pos))
+	# O mesmo artefato agora sorteia o efeito (x2, ima, furia, expurgo).
+	var artifact_type: String = core._field_artifacts().choose_type(event_points_active, is_active())
 	var orb: Dictionary = core._spawn_gameplay_orb(PICKUP_KIND, pos, {
 		"collect_radius": float(CONFIG["collect_radius"]),
 		"spawn_time": run_time,
 		"artifact": true,
+		"artifact_type": artifact_type,
 	}, 0, float(CONFIG["ground_lifetime"]))
 	if orb.is_empty():
 		return {}
@@ -107,8 +110,9 @@ func on_enemy_defeated(enemy: Dictionary, run_time: float, phase: int, luck: flo
 	return orb
 
 
-func can_spawn(event_points_active: bool, luck: float = 0.0) -> bool:
-	if core == null or _cooldown_remaining > 0.0 or is_active() or event_points_active:
+func can_spawn(_event_points_active: bool, luck: float = 0.0) -> bool:
+	# x2 ativo ou evento de pontos nao bloqueiam mais: o sorteio so evita outro x2.
+	if core == null or _cooldown_remaining > 0.0:
 		return false
 	if _window_drops >= int(CONFIG["max_drops_per_window"]):
 		return false

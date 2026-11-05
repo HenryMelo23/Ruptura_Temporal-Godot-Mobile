@@ -30,9 +30,7 @@ static func draw_world(game: Node2D, camera: Vector2, viewport: Vector2) -> void
 	var state: String = String(rift.get("state", ""))
 	var low: bool = game._runtime_visual_budget_active() or bool(game.gfx_low_resource)
 	var unstable: bool = controller.unstable()
-	if controller.guide_visible() and game.mode in ["game", "boss_call", "pause_countdown"]:
-		var palette: Dictionary = MistGuide.palette_for("rift", unstable)
-		MistGuide.draw_floor(game, camera, viewport, world_pos, palette, 1.0, noise_seed)
+	# Sem trilha no chao: a direcao da fenda fica so com a seta de borda (HUD).
 	var center: Vector2 = world_pos - camera
 	var cull := Rect2(Vector2(-280.0, -280.0), viewport + Vector2(560.0, 560.0))
 	if not cull.has_point(center):

@@ -195,7 +195,7 @@ async function run() {
       boss_damage_total: 4232,
       enemy_damage_total: 14000,
       damage_taken_total: 870,
-      manifestation: "Ancorada",
+      manifestation: "Gravitante",
       spectrum: "Sanguinaria",
       cards_total: 2,
       cards_detail: [{ id: "Porcao", name: "Porcao", count: 1 }, { id: "Defesa", name: "Defesa", count: 1 }],
@@ -480,7 +480,7 @@ async function run() {
     const downloads = (await request("GET", "/leaderboard/downloads")).body.toString("utf8");
     assert(home.includes("CENTRAL DO OBSERVATORIO") && home.includes("Mérito de expedição") && home.includes("pontos por tempo"), "merit dashboard missing");
     assert(home.includes("EXPEDIÇÃO EM DESTAQUE") && home.includes("Expedições recentes") && home.includes("Buscar operador"), "dashboard observatory shell missing");
-    assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Ancorada + Sanguinaria"), "player profile missing");
+    assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Gravitante + Sanguinaria"), "player profile missing");
     assert(loserProfile.includes("LOSER") && loserProfile.includes("Observatorio viu a gambiarra temporal"), "tampered player profile loser warning missing");
     assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Resistir ao confronto") && !rankings.includes("Speedrun de progressao"), "merit rules missing or time competition retained");
     assert(story.includes("ARQUIVO NARRATIVO") && story.includes("ramificacao inicial"), "story page missing");

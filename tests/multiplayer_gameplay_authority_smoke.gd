@@ -7,15 +7,14 @@ const HOST_TEST_POS := Vector2(180, 160)
 const HIGH_ENEMY_UID := 4026531841
 const DAMAGE_PER_HIT := 7.0
 const DAMAGE_SOURCES := [
-	"eletrica", "lacerante", "prismatica", "retornante", "parasitica", "gravitante",
-	"ancorada", "cartografica", "mnesica", "ressonante", "contratual",
+	"eletrica", "lacerante", "prismatica", "parasitica", "gravitante",
 	"eletrica_charged", "lacerante_empowered", "gravitante_orbital", "veneno",
 	"aura_vanguarda", "aura_insana", "aura_voraz", "aura_abissal"
 ]
 const SPECTRUM_PROBE_DAMAGE := 10.0
 const SPECTRUM_PROBE_MULTIPLIER := 1.69
-const EXPECTED_DAMAGE_REQUESTS := 22
-const EXPECTED_TOTAL_DAMAGE := DAMAGE_PER_HIT * 21.0 + SPECTRUM_PROBE_DAMAGE * SPECTRUM_PROBE_MULTIPLIER
+const EXPECTED_DAMAGE_REQUESTS := 16
+const EXPECTED_TOTAL_DAMAGE := DAMAGE_PER_HIT * 15.0 + SPECTRUM_PROBE_DAMAGE * SPECTRUM_PROBE_MULTIPLIER
 const FLOW_TIMEOUT_SECONDS := 35.0
 const SUTURER_TEST_CARD := "Disparo crescente"
 const SUTURER_TEST_ENCOUNTER := "gameplay_authority_suturer"

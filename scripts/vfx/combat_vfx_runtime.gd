@@ -1,5 +1,4 @@
 extends RefCounted
-
 # Host-owned state and compatibility wrappers are retained during extraction.
 
 
@@ -112,31 +111,6 @@ static func _spawn_insane_echo_visual(game: Node2D, pos: Vector2, direction: Vec
 	game.insane_echo_visuals.append({"pos": pos, "dir": direction.normalized(), "life": 0.72, "max": 0.72, "phase": game.rng.randf_range(0.0, TAU)})
 	if game.insane_echo_visuals.size() > 10:
 		game.insane_echo_visuals.pop_front()
-
-
-static func _push_eclipsada_vfx(game: Node2D, visual: Dictionary) -> void :
-	if not visual.has("life"):
-		visual["life"] = 0.35
-	if not visual.has("max"):
-		visual["max"] = float(visual["life"])
-	visual["color"] = visual.get("color", game._eclipsada_color())
-	visual["seed"] = int(visual.get("seed", game.rng.randi()))
-	game.eclipsada_vfx.append(visual)
-	while game.eclipsada_vfx.size() > 72:
-		game.eclipsada_vfx.pop_front()
-
-
-static func _spawn_contract_break_vfx(game: Node2D, pos: Vector2, clause: String, infractions: int) -> void :
-	game.contractual_vfx.append({
-		"kind": "gavel", 
-		"pos": pos, 
-		"clause": clause, 
-		"infractions": infractions, 
-		"life": 0.62, 
-		"max": 0.62, 
-		"seed": game.rng.randi()
-	})
-	game._spawn_radial_particles(pos + Vector2(0, -42), game._contract_clause_color(clause), 8 + infractions * 3)
 
 
 static func _spawn_tp_cut_visual(game: Node2D, pos: Vector2, cut_index: int) -> void :
@@ -398,28 +372,6 @@ static func _projectile_palette(game: Node2D, kind: String) -> Dictionary:
 			return {"core": Color(0.8, 1.0, 0.54), "glow": Color(0.24, 0.95, 0.38, 0.9), "trail": Color(0.78, 1.0, 0.26, 0.42), "size": 8.0, "trail_size": 8.0}
 		"gravitante":
 			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.5, 0.78, 1.0, 0.92), "trail": Color(0.74, 0.54, 1.0, 0.34), "size": 9.0, "trail_size": 9.0}
-		"ancorada":
-			return {"core": Color(1.0, 1.0, 1.0), "glow": Color(0.26, 0.96, 1.0, 0.9), "trail": Color(1.0, 0.78, 0.24, 0.38), "size": 8.0, "trail_size": 6.0}
-		"cartografica":
-			return {"core": Color(0.94, 1.0, 0.8), "glow": Color(0.3, 1.0, 0.78, 0.92), "trail": Color(1.0, 0.78, 0.24, 0.42), "size": 7.0, "trail_size": 6.0}
-		"mnesica":
-			return {"core": Color(1.0, 0.88, 1.0), "glow": Color(0.8, 0.5, 1.0, 0.9), "trail": Color(1.0, 0.42, 0.88, 0.38), "size": 7.0, "trail_size": 7.0}
-		"ressonante":
-			return {"core": Color(1.0, 0.96, 0.72), "glow": Color(1.0, 0.72, 0.18, 0.92), "trail": Color(0.34, 0.92, 1.0, 0.4), "size": 8.0, "trail_size": 7.0}
-		"contratual":
-			return {"core": Color(1.0, 0.96, 0.82), "glow": Color(1.0, 0.52, 0.2, 0.92), "trail": Color(1.0, 0.86, 0.42, 0.36), "size": 8.0, "trail_size": 6.0}
-		"bombastica":
-			return {"core": Color(1.0, 0.92, 0.46), "glow": Color(1.0, 0.46, 0.08, 0.94), "trail": Color(0.18, 0.88, 1.0, 0.36), "size": 9.0, "trail_size": 8.0}
-		"retornante":
-			return {"core": Color(1.0, 0.92, 1.0), "glow": Color(1.0, 0.34, 0.88, 0.94), "trail": Color(0.72, 0.42, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"necronada":
-			return {"core": Color(0.92, 0.98, 1.0), "glow": Color(0.48, 0.34, 0.92, 0.94), "trail": Color(0.72, 0.96, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"necronada_dust":
-			return {"core": Color(0.82, 0.7, 1.0), "glow": Color(0.35, 0.14, 0.58, 0.92), "trail": Color(0.06, 0.03, 0.1, 0.52), "size": 11.0, "trail_size": 14.0}
-		"eclipsada_lua", "shuriken_eclipsado":
-			return {"core": Color(0.92, 0.86, 1.0), "glow": Color(0.7, 0.36, 1.0, 0.94), "trail": Color(0.36, 0.72, 1.0, 0.38), "size": 8.0, "trail_size": 8.0}
-		"eclipsada_sol":
-			return {"core": Color(1.0, 0.96, 0.62), "glow": Color(1.0, 0.62, 0.16, 0.96), "trail": Color(1.0, 0.88, 0.3, 0.42), "size": 9.0, "trail_size": 9.0}
 		"petro":
 			return {"core": Color(0.82, 1.0, 1.0), "glow": Color(0.16, 0.92, 1.0, 0.88), "trail": Color(0.72, 1.0, 1.0, 0.38), "size": 6.0, "trail_size": 5.0}
 	return {"core": Color.WHITE, "glow": Color(0.72, 0.92, 1.0, 0.9), "trail": Color(0.72, 0.92, 1.0, 0.35), "size": 7.0, "trail_size": 6.0}
@@ -521,13 +473,3 @@ static func _spawn_prismatica_ultimate_finish(game: Node2D, center: Vector2) -> 
 			"vel": dir * game.rng.randf_range(120.0, 260.0), 
 			"kind": "spark"
 		})
-
-
-static func _spawn_ancorada_counterweight_vfx(game: Node2D, pos: Vector2, L: int) -> void :
-	var vfx_scene: PackedScene = load("res://vfx/ancorada/AncoradaCounterweightVFX.tscn")
-	if vfx_scene:
-		var inst = vfx_scene.instantiate()
-		game.add_child(inst)
-		inst.global_position = pos
-		var profile: String = game._get_boss_wave_quality_profile()
-		inst.setup(L, profile, false)

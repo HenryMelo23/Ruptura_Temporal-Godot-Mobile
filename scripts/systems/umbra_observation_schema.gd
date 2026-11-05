@@ -12,7 +12,7 @@ const COOLDOWN_LIMIT := 24.0
 const DAMAGE_LIMIT := 1000.0
 const CARD_LIMIT := 30.0
 const ACTIONS := ["FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE", "TELEPORTE_JUKE", "TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO", "VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "PRAGA_RATOS", "LASER_SOBRECARGA", "CAMINHO_ESPINHOS", "NENHUMA"]
-const MANIFESTATIONS := ["eletrica", "lacerante", "prismatica", "retornante", "parasitica", "gravitante", "ancorada", "cartografica", "mnesica", "ressonante", "contratual", "acorrentada", "eclipsada", "bombastica", "necronada"]
+const MANIFESTATIONS := ["eletrica", "lacerante", "prismatica", "parasitica", "gravitante"]
 const COOLDOWN_KEYS := ["VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "CAMINHO_ESPINHOS", "PRAGA_RATOS", "LASER_SOBRECARGA"]
 
 

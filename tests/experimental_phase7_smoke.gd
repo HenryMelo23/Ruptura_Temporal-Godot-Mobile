@@ -100,7 +100,7 @@ func _run() -> void:
 	game._update_boss7_core(0.02)
 	assert(game.boss7_reborn and not game.boss7_core_active)
 	game.gameplay_cheat_text = "FaseEX7"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	game._start_game()
 	assert(game.current_phase == 7 and game.experimental_phase_active)
 	assert(game.WORLD_SIZE == game.DEFAULT_WORLD_SIZE)

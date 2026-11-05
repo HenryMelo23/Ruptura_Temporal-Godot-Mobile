@@ -212,10 +212,7 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 			game._draw_phase4_enemy_identity(enemy, draw_pos, size)
 		if int(enemy.get("laceracao", 0)) > 0:
 			game._draw_centered("x%d" % int(enemy["laceracao"]), pos + Vector2(28, -36), 14, Color(1.0, 0.2, 0.25))
-		if float(enemy.get("eclipsada_weak_time", 0.0)) > 0.0:
-			game._draw_eclipsada_weakpoint(enemy, camera)
 		if float(enemy.get("resonant_stun_notes", 0.0)) > 0.0:
 			var note_time = game.time_alive * 8.0
 			var note_text = "â™«" if int(note_time) % 2 == 0 else "â™ª"
 			game._draw_centered(note_text, draw_pos + Vector2(0, -66.0 + sin(note_time) * 6.0), 24, Color(1.0, 0.74, 0.2, 0.9))
-

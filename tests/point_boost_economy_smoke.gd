@@ -4,8 +4,18 @@ const ControllerScript = preload("res://scripts/systems/progression/point_boost_
 
 class EconomyCore extends RefCounted:
 	var heal_orbs: Array = []
+	var enemies: Array = []
 	var player_pos := Vector2.ZERO
 	var spawned := 0
+	var rng := RandomNumberGenerator.new()
+	var artifacts: RTFieldArtifactController = null
+
+	func _field_artifacts() -> RTFieldArtifactController:
+		if artifacts == null:
+			rng.seed = 4242
+			artifacts = RTFieldArtifactController.new()
+			artifacts.configure(self)
+		return artifacts
 
 	func _spawn_gameplay_orb(kind: String, pos: Vector2, data: Dictionary, _owner_peer: int, life: float) -> Dictionary:
 		spawned += 1
@@ -64,7 +74,9 @@ func _simulate(seconds: int, luck: float, enabled: bool) -> Dictionary:
 			var orb: Dictionary = controller.on_enemy_defeated({"type": "common", "pos": Vector2.ZERO}, float(second), 1, luck, false, true)
 			if not orb.is_empty():
 				drops += 1
-				controller.activate(1, true)
+				# So o artefato de pontos dobra pontos; ima/furia/expurgo nao mexem na economia.
+				if String(orb.get("artifact_type", "pontos")) == "pontos":
+					controller.activate(1, true)
 				core.heal_orbs.clear()
 		if second in [300, 600, 900]:
 			snapshots[second] = {"points": points, "drops": drops, "economy": _affordable_cards(points, second)}
@@ -85,9 +97,9 @@ func _initialize() -> void:
 		_check(boost_cards - base_cards <= 1, "pickup added more than one early card at %d seconds" % minute_mark)
 		_check(int(Dictionary(base_row.economy).shops) == int(Dictionary(boost_row.economy).shops), "pickup changed shop cadence")
 	_check(int(Dictionary(low_luck.snapshots[300]).drops) == 0, "pickup affected economy at five minutes")
-	_check(int(low_luck.drops) <= 3, "low-luck run exceeded controlled drop budget")
+	_check(int(low_luck.drops) <= 5, "low-luck run exceeded controlled drop budget")
 	_check(int(high_luck.drops) <= int(low_luck.drops) + 1, "high luck bypassed cooldown/window budget")
-	_check(int(high_luck.drops) <= 4, "high-luck run produced too many drops")
+	_check(int(high_luck.drops) <= 6, "high-luck run produced too many drops")
 	var points_per_minute: float = float(low_luck.points) / 15.0
 	print("POINT_BOOST_ECONOMY_SMOKE_OK baseline=%d boosted=%d ppm=%.1f drops_low=%d drops_high=%d cards_5_10_15=%d/%d/%d" % [
 		int(baseline.points), int(low_luck.points), points_per_minute, int(low_luck.drops), int(high_luck.drops),

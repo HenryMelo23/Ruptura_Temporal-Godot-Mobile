@@ -10,12 +10,10 @@
 !assets/sprites/aurea-equilibrista.png.import
 !assets/sprites/aurea-oportunista.png.import
 !assets/sprites/aurea-peregrina.png.import
-!assets/sprites/manifestacao-eclipsada.png.import
-!assets/sprites/manifestacao_bombastica.png.import
-!assets/sprites/manifestacao-necronada.png.import
 !assets/sprites/Fase6.png.import
 !assets/previews/manifestations/*.webp.import
 .agent_logs/
+_to_delete/
 tests/*_result.txt
 # Generated Android/export artifacts
 android/

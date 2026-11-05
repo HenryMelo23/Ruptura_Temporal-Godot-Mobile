@@ -179,31 +179,11 @@ func _spawn_preview_enemies() -> void:
 
 
 func _prepare_manifestation_context(key: String) -> void:
-	match key:
-		"cartografica":
-			game._add_cartographic_coord(game.player_pos + Vector2(120, -62))
-			game._add_cartographic_coord(game.player_pos + Vector2(265, 48))
-			game._add_cartographic_coord(game.player_pos + Vector2(100, 122))
-		"mnesica":
-			for enemy in game.enemies:
-				game._register_mnesic_memory(enemy, 80.0)
-				game._register_mnesic_memory(enemy, 70.0)
-				game._register_mnesic_memory(enemy, 60.0)
-		"ressonante":
-			game.resonant_next_perfect = true
-			for enemy in game.enemies:
-				enemy["resonant_notes"] = ["grave", "aguda", "quebrada"]
-				enemy["resonant_flash"] = 0.7
-		"contratual":
-			for enemy in game.enemies:
-				game._apply_contract_clause(enemy)
-				enemy["contract_infractions"] = 2
+	game.manifestation_key = key
 				enemy["contract_flash"] = 0.85
 
 
 func _prepare_skill_clip(key: String) -> void:
-	if key == "retornante":
-		game._fire_returning()
 	if key == "gravitante":
 		for enemy in game.enemies:
 			game.orbitals.append({
@@ -216,21 +196,6 @@ func _prepare_skill_clip(key: String) -> void:
 				"tick": 0.0,
 				"damage": 10.0
 			})
-	if key == "cartografica":
-		game.cartographic_route_timer = 3.0
-	if key == "mnesica":
-		for enemy in game.enemies:
-			game._register_mnesic_memory(enemy, 95.0)
-			game._register_mnesic_memory(enemy, 85.0)
-	if key == "ressonante":
-		game.resonant_perfect_streak = 3
-		for enemy in game.enemies:
-			enemy["resonant_notes"] = ["grave", "aguda", "quebrada"]
-	if key == "contratual":
-		for enemy in game.enemies:
-			if not enemy.has("contract_clause"):
-				game._apply_contract_clause(enemy)
-			enemy["contract_infractions"] = 3
 	game._use_skill(game.player_pos + Vector2(205, 0))
 
 
@@ -242,20 +207,6 @@ func _prepare_ultimate_clip(key: String) -> void:
 	if key == "gravitante":
 		for enemy in game.enemies:
 			enemy["stun"] = 0.0
-	if key == "cartografica":
-		game.cartographic_route_timer = 4.5
-	if key == "mnesica":
-		for enemy in game.enemies:
-			game._register_mnesic_memory(enemy, 110.0)
-			game._register_mnesic_memory(enemy, 90.0)
-	if key == "ressonante":
-		game.resonant_perfect_streak = 4
-		game.resonant_next_perfect = true
-	if key == "contratual":
-		for enemy in game.enemies:
-			if not enemy.has("contract_clause"):
-				game._apply_contract_clause(enemy)
-			enemy["contract_infractions"] = 3
 	game._use_secondary_skill(game.player_pos + Vector2(165, 0))
 	if key == "gravitante":
 		_check(not game.manifestation_secondaries.is_empty(), "Gravitante ultimate did not activate")

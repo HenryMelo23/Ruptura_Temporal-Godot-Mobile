@@ -244,7 +244,7 @@ func _emerge_hit() -> void:
 			var push: Vector2 = (position - center).normalized()
 			if push.length() < 0.1:
 				push = Vector2.LEFT
-			game.player_pos = game._clamp_player_world(game.player_pos + game._hostile_knockback(push * 150.0))
+			game._shove_player(game._hostile_knockback(push * 150.0))
 		else:
 			game._send_peer_damage(peer_id, damage, "boss6_emerge")
 	game.shockwaves.append({"pos": center, "radius": 24.0, "max": EMERGE_RADIUS + 60.0, "life": 0.45, "damage": 0.0, "hit": {}, "visual_only": true, "color": Color(0.62, 1.0, 0.2)})
@@ -331,7 +331,7 @@ func update_scythes(attack: Dictionary, age: float) -> void:
 				if float(game.time_alive) - float(game.last_dash_time) <= 0.2 or not game._local_player_damageable_by_contact():
 					continue
 				game._damage_player(int(float(game.player_hp_max) * 0.065 + float(game.enemy_far_damage) * 0.55 + 20.0), "boss6_vertebral_scythe")
-				game.player_pos = game._clamp_player_world(game.player_pos + game._hostile_knockback(offset.normalized() * 110.0))
+				game._shove_player(game._hostile_knockback(offset.normalized() * 110.0))
 			else:
 				game._send_peer_damage(peer_id, int(float(game.net_player_hp_max) * 0.065 + 20.0), "boss6_vertebral_scythe")
 		wave["hit"] = hit
@@ -461,7 +461,7 @@ func update_tail(attack: Dictionary, age: float) -> void:
 			if float(game.time_alive) - float(game.last_dash_time) <= 0.2:
 				continue
 			game._damage_player(int(float(game.player_hp_max) * 0.08 + 28.0), "boss6_conductive_tail")
-			game.player_pos = game._clamp_player_world(game.player_pos + game._hostile_knockback(offset.normalized() * 190.0))
+			game._shove_player(game._hostile_knockback(offset.normalized() * 190.0))
 		else:
 			game._send_peer_damage(peer_id, int(float(game.net_player_hp_max) * 0.08 + 28.0), "boss6_conductive_tail")
 	attack["hit"] = hit

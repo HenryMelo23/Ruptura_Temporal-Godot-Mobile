@@ -77,6 +77,9 @@ func _run() -> void:
 	rift["age"] = game.PHASE4_RIFT_WARNING
 	var before_rift: Vector2 = game.player_pos
 	game._update_phase4_enemy_hazards(0.01)
+	# Knockbacks are now a smooth shove (RTPlayerShoveController), not a teleport.
+	for _step in range(60):
+		game.player_shove.update(game, 1.0 / 60.0)
 	_check(game.player_pos.distance_to(before_rift) > 100.0, "crossing the cartographer rift did not displace the player")
 
 	game.phase4_enemy_hazards.clear()

@@ -200,14 +200,14 @@ func _run_client() -> void:
 			# This transport matrix exercises Geovana manifestations, not Henry mutations.
 			# The lobby now correctly assigns Henry to the second player by default.
 			game.active_character_key = game.CHARACTER_GEOVANA
-			var ressonante_index := -1
+			var gravitante_index := -1
 			for manifest_index in range(game.MANIFESTATIONS.size()):
-				if String(game.MANIFESTATIONS[manifest_index].get("key", "")) == "ressonante":
-					ressonante_index = manifest_index
+				if String(game.MANIFESTATIONS[manifest_index].get("key", "")) == "gravitante":
+					gravitante_index = manifest_index
 					break
-			_check(ressonante_index >= 0, "ressonante manifestation missing")
-			game.selected_manifestation = ressonante_index
-			game.manifestation_key = "ressonante"
+			_check(gravitante_index >= 0, "gravitante manifestation missing")
+			game.selected_manifestation = gravitante_index
+			game.manifestation_key = "gravitante"
 			game.time_alive = 45.0
 			game.last_skill_time = -999.0
 			game.last_secondary_time = -999.0
@@ -217,7 +217,7 @@ func _run_client() -> void:
 			game._use_secondary_skill(Vector2(920, 400))
 			game._execute_teleport(Vector2(780, 440))
 			var visual_snapshot := VisualSyncContract.pack_player_visual(Vector2(-0.8, 0.2), Vector2(-1.0, 0.25), game.NET_ABILITY_SKILL, 0.14, 0.82, 321, 2)
-			game.rpc_id(1, "_rpc_client_player_state_light", game.player_pos, int(game.player_hp), int(game.player_hp_max), false, ressonante_index, 0, game.NET_ANIM_FIRE, 1, true, game.net_ping_ms, false, "ressonante", visual_snapshot)
+			game.rpc_id(1, "_rpc_client_player_state_light", game.player_pos, int(game.player_hp), int(game.player_hp_max), false, gravitante_index, 0, game.NET_ANIM_FIRE, 1, true, game.net_ping_ms, false, "gravitante", visual_snapshot)
 			response_sent = true
 			_write("client_sent", "OK")
 			continue
@@ -245,7 +245,7 @@ func _send_manifestation_transport_matrix() -> void:
 		for action in [game.NET_ABILITY_SKILL, game.NET_ABILITY_SECONDARY, game.NET_ABILITY_TELEPORT]:
 			var state := {"manifestation_key": manifest_key, "evolution_ids": [], "source_time": game.time_alive}
 			if action == game.NET_ABILITY_SECONDARY:
-				state["secondary"] = {"kind": "eclipsada_sol" if manifest_key == "eclipsada" else manifest_key, "life": 4.0, "max": 4.0, "active_time": 0.0, "center": game.player_pos}
+				state["secondary"] = {"kind": manifest_key, "life": 4.0, "max": 4.0, "active_time": 0.0, "center": game.player_pos}
 			elif action == game.NET_ABILITY_TELEPORT:
 				state["tp_effects"] = [{"kind": manifest_key, "life": 0.8, "max": 0.8, "a": game.player_pos, "b": game.player_pos + Vector2(80, 0)}]
 			var payload := {

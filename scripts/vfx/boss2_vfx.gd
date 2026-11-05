@@ -175,14 +175,26 @@ static func attack(g: Node2D, data: Dictionary, camera: Vector2, low: bool) -> v
 			for i in range(25):
 				points.append(origin + Vector2.from_angle(angle - 0.48 + 0.96 * i / 24.0) * 280.0)
 			points.append(origin)
-			g.draw_colored_polygon(points, Color(0.04, 0.13, 0.22, 0.28))
+			var pulse := 0.5 + 0.5 * sin(t * (10.0 + progress * 18.0))
+			g.draw_colored_polygon(points, Color(0.1, 0.42, 0.62, 0.14 + progress * 0.18 + (0.16 if active else 0.0)))
+			# Frente do cone avancando ate o alcance real (le quando vai disparar).
+			var front := PackedVector2Array([origin])
+			for i in range(25):
+				front.append(origin + Vector2.from_angle(angle - 0.48 + 0.96 * i / 24.0) * 280.0 * (progress if not active else 1.0))
+			front.append(origin)
+			g.draw_colored_polygon(front, Color(0.7, 0.95, 1.0, 0.1 + progress * 0.12))
 			g.draw_polyline(points, INK, 7.0)
-			g.draw_polyline(points, ICE if active else WARNING, 3.0)
+			g.draw_polyline(points, Color(ICE, 0.6 + pulse * 0.35) if not active else ICE, 3.0)
 			for i in range(6 if low else 12):
 				var dir := Vector2.from_angle(angle + sin(i * 2.4) * 0.42)
-				var distance := fposmod(i * 27.0 + t * 230.0, 260.0)
 				if active:
+					var distance := fposmod(i * 27.0 + t * 230.0, 260.0)
 					crystal(g, origin + dir * distance, dir, 6.0 + distance * 0.025, 0.8)
+				else:
+					# Inspirando: flocos sendo puxados para o bico.
+					var inward := fposmod(i * 0.173 - t * 1.6, 1.0)
+					var fp := origin + dir * (40.0 + inward * 230.0)
+					g.draw_line(fp, fp - dir * 14.0, Color(0.92, 1.0, 1.0, 0.75 * (1.0 - inward)), 2.0, true)
 		"ice_prison":
 			var center := Vector2(data["center"]) - camera
 			var radius := float(data["radius"])

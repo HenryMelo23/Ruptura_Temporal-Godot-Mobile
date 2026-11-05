@@ -74,39 +74,19 @@ BOSS_FARM_RATES: Dict[int, Dict[str, float]] = {
 }
 
 MANIFESTATION_DAMAGE_MULTIPLIERS: Dict[str, float] = {
-    "eletrica": 1.0,
-    "lacerante": 1.12,
-    "prismatica": 0.86,
-    "retornante": 0.92,
-    "parasitica": 0.78,
-    "gravitante": 0.82,
-    "ancorada": 1.0,
-    "cartografica": 0.92,
-    "mnesica": 0.74,
-    "ressonante": 0.82,
-    "contratual": 0.76,
-    "acorrentada": 0.86,
-    "eclipsada": 0.84,
-    "bombastica": 0.9,
-    "necronada": 0.84,
+	"eletrica": 1.0,
+	"lacerante": 1.12,
+	"prismatica": 0.86,
+	"parasitica": 0.78,
+	"gravitante": 0.82,
 }
 
 MANIFESTATION_ATTACK_INTERVALS: Dict[str, float] = {
-    "eletrica": PLAYER_BASE_ATTACK_INTERVAL,
-    "lacerante": 0.72,
-    "prismatica": 0.42,
-    "retornante": 0.62,
-    "parasitica": PLAYER_BASE_ATTACK_INTERVAL,
-    "gravitante": 0.74,
-    "ancorada": PLAYER_BASE_ATTACK_INTERVAL,
-    "cartografica": 0.61,
-    "mnesica": 0.58,
-    "ressonante": 0.5,
-    "contratual": 0.6,
-    "acorrentada": 0.76,
-    "eclipsada": 0.58,
-    "bombastica": 0.58,
-    "necronada": 0.64,
+	"eletrica": PLAYER_BASE_ATTACK_INTERVAL,
+	"lacerante": 0.72,
+	"prismatica": 0.42,
+	"parasitica": PLAYER_BASE_ATTACK_INTERVAL,
+	"gravitante": 0.74,
 }
 
 ENEMY_KIND_MULTIPLIERS: Dict[str, Dict[str, float]] = {

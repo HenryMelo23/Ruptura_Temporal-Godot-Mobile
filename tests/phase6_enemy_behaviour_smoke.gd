@@ -21,7 +21,7 @@ func _run() -> void:
 
 	game.force_phase6_start = false
 	game.gameplay_cheat_text = "FASE6"
-	_check(game._try_unlock_retornante_cheat(), "FASE6 cheat was not accepted")
+	_check(game._try_apply_gameplay_cheat(), "FASE6 cheat was not accepted")
 	_check(game.force_phase6_start, "FASE6 cheat did not enable forced start")
 	game._start_game()
 	_check(int(game.current_phase) == 6, "forced start did not enter phase 6")
@@ -358,7 +358,7 @@ func _run() -> void:
 	_check(game.boss6_state == game.BOSS6_STATE_STUNNED and game.boss6_vulnerability_timer > 0.0, "Boss6 ecdysis success did not stun boss")
 
 	game.gameplay_cheat_text = "FASE6"
-	_check(game._try_unlock_retornante_cheat(), "FASE6 cheat did not toggle off")
+	_check(game._try_apply_gameplay_cheat(), "FASE6 cheat did not toggle off")
 	_check(not game.force_phase6_start, "FASE6 cheat did not disable forced start")
 
 	print("PHASE6_ENEMY_BEHAVIOUR_SMOKE_OK cheat=true lodario_hop=35 pheromone_hop=90 eel_cd=30 phase6_1=true pustule_pool=true pustule_spit=true boss6_rework=true")

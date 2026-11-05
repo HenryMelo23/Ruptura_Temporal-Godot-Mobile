@@ -707,7 +707,7 @@ function renderStory(snapshot) {
   const chapters = [
     ["O primeiro rasgo", "Geovana encontra uma ruptura que nao so abre espaco: ela altera habito, tempo e memoria. Cada run e uma tentativa de atravessar uma regra nova sem perder o proprio corpo no processo."],
     ["A ramificacao da Chaga", "A fase 6 nao e o fim numerico da jornada. Ela e uma abertura alternativa, uma contaminacao inicial que pode substituir ou interromper a primeira linha antes da campanha seguir para as camadas seguintes."],
-    ["As manifestacoes", "Cada manifestacao e uma forma diferente de negociar com a Ruptura. Eletrica insiste em energia acumulada, Necronada transforma perda em exercito, Contratual troca risco por julgamento e Bombastica altera o mapa com consequencias explosivas."],
+    ["As manifestacoes", "Cada manifestacao e uma forma diferente de negociar com a Ruptura. Eletrica acumula energia, Lacerante converte risco em pressao, Prismatica domina angulos, Parasitica contamina a arena e Gravitante controla o espaco."],
     ["O observatorio", "Este site le as runs como documentos. Tempo, dano, escolhas, cartas e posicoes mostram onde o jogador dominou a partida e onde a fase obrigou uma decisao ruim."]
   ];
   const content = `

@@ -1,5 +1,4 @@
 extends RefCounted
-
 const CYAN := Color(0.35, 0.9, 1.0, 0.9)
 const GOLD := Color(1.0, 0.77, 0.28, 0.9)
 const RED := Color(1.0, 0.25, 0.32, 0.9)
@@ -9,10 +8,8 @@ const GREEN := Color(0.45, 1.0, 0.72, 0.85)
 static func draw(game: Node2D, center: Vector2) -> void:
 	if game.is_dead or game._spectator_controls_locked():
 		return
-	_draw_manifestation(game, center)
 	_draw_aura(game, center)
 	_draw_card_readiness(game, center)
-	_draw_contract(game, center)
 	if game.revive_heal_penalty_timer > 0.0 or game._is_player_calcified():
 		for side in [-1.0, 1.0]:
 			var wound := center + Vector2(side * 25.0, -16.0)
@@ -30,46 +27,6 @@ static func shard(game: Node2D, center: Vector2, direction: Vector2, size: float
 	game.draw_colored_polygon(PackedVector2Array([center + direction * size, center + side, center - direction * size * 0.6, center - side]), Color(0.025, 0.04, 0.055, 0.8))
 	stroke(game, center - direction * size * 0.6, center + direction * size, color, 2.0)
 	stroke(game, center - side, center + side, Color(color, color.a * 0.65), 1.0)
-
-
-static func _draw_manifestation(game: Node2D, center: Vector2) -> void:
-	var clock: float = game.time_alive
-	match String(game.manifestation_key):
-		"ancorada":
-			for index in range(5):
-				var strength := clampf(float(game.lastro_stacks) + float(game.lastro_points) / 4.0 - index, 0.0, 1.0)
-				if strength <= 0.0:
-					continue
-				var position := center + Vector2((index - 2) * 13.0, 39.0 + absf(index - 2) * 2.0)
-				var color := GREEN.lerp(Color.WHITE, 0.7 if game.lastro_stacks == 5 else 0.0)
-				shard(game, position, Vector2.UP, 5.0 + strength * 5.0, Color(color, 0.35 + strength * 0.6))
-		"acorrentada":
-			var tension := clampf(game.acorrentada_tension / 100.0, 0.0, 1.0)
-			for index in range(3):
-				var angle := PI * 0.25 + index * PI * 0.25
-				var position := center + Vector2.from_angle(angle) * (43.0 - tension * 9.0)
-				var color := RED if tension >= 1.0 else CYAN
-				var strength := 1.0 if index < game.acorrentada_combo_step else tension * 0.55
-				if strength > 0.0:
-					game.draw_arc(position, 5.0, 0.0, TAU, 10, Color(color, strength), 2.5, true)
-			if tension > 0.0:
-				game.draw_arc(center + Vector2(0, 8), 35.0, PI * 0.12, PI * (0.12 + tension * 0.76), 18, Color(RED if tension >= 1.0 else CYAN, 0.8), 2.0, true)
-		"bombastica":
-			for index in range(mini(game.BOMBASTICA_Q_CHARGES, game.bombastica_q_recharges.size())):
-				var charge := 1.0 - clampf(float(game.bombastica_q_recharges[index]) / game.BOMBASTICA_Q_RECHARGE, 0.0, 1.0)
-				var position := center + Vector2(34.0, -20.0 + index * 15.0)
-				game.draw_circle(position, 4.0, Color(0.12, 0.075, 0.04, 0.9))
-				game.draw_arc(position, 4.0, -PI * 0.5, -PI * 0.5 + TAU * charge, 12, GOLD, 2.0, true)
-				stroke(game, position + Vector2(0, -3), position + Vector2(3, -7), GOLD, 1.0)
-				if charge >= 1.0:
-					shard(game, position + Vector2(3, -8), Vector2.UP, 2.5 + sin(clock * 6.0 + index), GOLD)
-		"necronada":
-			var progress := clampf(float(game.necronada_horde_progress) / maxf(1.0, game.NECRONADA_ULTIMATE_REQUIRED_REVIVES), 0.0, 1.0)
-			for index in range(6):
-				if float(index) / 6.0 >= progress:
-					continue
-				var direction := Vector2.from_angle(index * TAU / 6.0 + clock * 0.35)
-				shard(game, center + Vector2(-34, -15) + direction * 8.0, direction, 5.0, Color(0.7, 0.55, 1.0, 0.9))
 
 
 static func _draw_aura(game: Node2D, center: Vector2) -> void:
@@ -161,20 +118,3 @@ static func _draw_card_readiness(game: Node2D, center: Vector2) -> void:
 	if game.casulo_reativo_cooldown > 0.0 and game.casulo_reativo_timer <= 0.0:
 		var charge := 1.0 - clampf(game.casulo_reativo_cooldown / maxf(0.01, game.CASULO_INTERNAL_COOLDOWN), 0.0, 1.0)
 		game.draw_arc(center + Vector2(0, 16), 26.0, PI * 0.15, PI * (0.15 + charge * 0.7), 16, Color(GREEN, 0.55), 1.5, true)
-
-
-static func _draw_contract(game: Node2D, center: Vector2) -> void:
-	if not game.contractual_order_rewards.is_empty():
-		shard(game, center + Vector2(-18, -38), Vector2.UP, 7.0, GOLD)
-	if not game.contractual_order_penalties.is_empty():
-		stroke(game, center + Vector2(14, -43), center + Vector2(22, -33), RED)
-		stroke(game, center + Vector2(22, -43), center + Vector2(14, -33), RED)
-	if game.contractual_order.is_empty():
-		return
-	var order: Dictionary = game.contractual_order
-	if float(order.get("real_age", order.get("age", 0.0))) < game.CONTRACT_ORDER_EXECUTION_START_TIME:
-		return
-	var label := "%s  %d/%d  %.0fs" % [String(order.get("label", "ORDEM")), int(order.get("progress", 0)), maxi(1, int(order.get("goal", 1))), ceil(float(order.get("time_left", 0.0)))]
-	var position := center + Vector2(-140, -64)
-	game.draw_string_outline(game.font, position, label, HORIZONTAL_ALIGNMENT_CENTER, 280.0, 11, 4, Color(0.02, 0.02, 0.025, 0.95))
-	game.draw_string(game.font, position, label, HORIZONTAL_ALIGNMENT_CENTER, 280.0, 11, GOLD)

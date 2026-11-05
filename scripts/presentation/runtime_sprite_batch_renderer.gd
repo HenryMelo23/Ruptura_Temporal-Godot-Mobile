@@ -8,11 +8,15 @@ const INITIAL_CAPACITY := 32
 var groups: Dictionary = {}
 var active_phase: int = -1
 var captured_instances: int = 0
+var _last_texture: Texture2D = null
+var _last_group: Dictionary = {}
 
 
 func begin_frame(phase: int) -> void:
 	if phase != active_phase:
 		groups.clear()
+		_last_texture = null
+		_last_group = {}
 		active_phase = phase
 	captured_instances = 0
 	_clear_groups(groups)
@@ -32,6 +36,9 @@ func _clear_groups(target_groups: Dictionary) -> void:
 		if group.has("flips"):
 			var flips: Array = group["flips"]
 			flips.clear()
+		if group.has("xforms"):
+			var xforms: Array = group["xforms"]
+			xforms.clear()
 		var mesh: MultiMesh = group["mesh"]
 		mesh.visible_instance_count = 0
 
@@ -44,28 +51,39 @@ func can_batch() -> bool:
 
 
 func append(texture: Texture2D, center: Vector2, size: Vector2, color: Color, flip_h: bool) -> bool:
+	# QuadMesh UVs are vertically inverted relative to CanvasItem's
+	# draw_texture_rect convention used by the legacy entity renderer.
+	var xform := Transform2D(0.0, Vector2(size.x * (-1.0 if flip_h else 1.0), -size.y), 0.0, center)
+	return append_xform(texture, xform, color, center)
+
+
+# Arbitrary affine instance (rotation/skew/negative scale). The transform maps
+# the unit quad centered on the origin; callers own the UV flip convention.
+func append_xform(texture: Texture2D, xform: Transform2D, color: Color, center: Vector2 = Vector2.ZERO) -> bool:
 	if texture == null or not can_batch():
 		return false
-	var key := texture.get_rid().get_id()
-	if not groups.has(key):
-		groups[key] = {
+	var group: Dictionary
+	if texture == _last_texture:
+		group = _last_group
+	else:
+		var key := texture.get_rid().get_id()
+		group = groups.get(key, {})
+	if group.is_empty():
+		var key := texture.get_rid().get_id()
+		group = {
 			"texture": texture,
 			"mesh": _new_multimesh(),
 			"capacity": 0,
 			"positions": [],
-			"sizes": [],
 			"colors": [],
-			"flips": [],
+			"xforms": [],
 		}
-	var group: Dictionary = groups[key]
-	var positions: Array = group["positions"]
-	var sizes: Array = group["sizes"]
-	var colors: Array = group["colors"]
-	var flips: Array = group["flips"]
-	positions.append(center)
-	sizes.append(size)
-	colors.append(color)
-	flips.append(1 if flip_h else 0)
+		groups[key] = group
+	_last_texture = texture
+	_last_group = group
+	(group["positions"] as Array).append(center)
+	(group["colors"] as Array).append(color)
+	(group["xforms"] as Array).append(xform)
 	captured_instances += 1
 	return true
 
@@ -75,22 +93,15 @@ func submit(canvas_item: RID) -> int:
 		return 0
 	for group_value in groups.values():
 		var group: Dictionary = group_value
-		var positions: Array = group["positions"]
-		var count := positions.size()
+		var xforms: Array = group["xforms"]
+		var count := xforms.size()
 		if count <= 0:
 			continue
 		_ensure_capacity(group, count)
-		var sizes: Array = group["sizes"]
 		var colors: Array = group["colors"]
-		var flips: Array = group["flips"]
 		var multimesh: MultiMesh = group["mesh"]
 		for index in range(count):
-			var transform := Transform2D(0.0, positions[index])
-			transform.x *= sizes[index].x * (-1.0 if flips[index] == 1 else 1.0)
-			# QuadMesh UVs are vertically inverted relative to CanvasItem's
-			# draw_texture_rect convention used by the legacy entity renderer.
-			transform.y *= -sizes[index].y
-			multimesh.set_instance_transform_2d(index, transform)
+			multimesh.set_instance_transform_2d(index, xforms[index])
 			multimesh.set_instance_color(index, colors[index])
 		multimesh.visible_instance_count = count
 		var texture: Texture2D = group["texture"]

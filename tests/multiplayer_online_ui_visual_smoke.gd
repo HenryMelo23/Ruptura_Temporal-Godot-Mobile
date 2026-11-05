@@ -38,7 +38,7 @@ func _run() -> void:
 	await _capture("online_menu_locked_1280x720.png")
 	_check(not game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "locked menu should not expose online")
 	game.gameplay_cheat_text = "ONLINE30"
-	_check(game._try_unlock_retornante_cheat(), "ONLINE30 did not unlock online")
+	_check(game._try_apply_gameplay_cheat(), "ONLINE30 did not unlock online")
 	await _capture("online_menu_unlocked_1280x720.png")
 	_check(game._menu_rects(Vector2(1280, 720)).has("multiplayer"), "unlocked menu should expose online")
 

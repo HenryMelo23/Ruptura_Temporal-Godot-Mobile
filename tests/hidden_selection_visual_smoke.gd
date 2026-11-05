@@ -53,7 +53,7 @@ func _run() -> void:
 	for item_value in game._manifest_selection_visible_items(true):
 		game.unlocked_spectrum_ids[String(Dictionary(item_value).get("key", ""))] = true
 
-	game.selected_manifestation = _index_for_key(game.MANIFESTATIONS, "ancorada")
+	game.selected_manifestation = _index_for_key(game.MANIFESTATIONS, "gravitante")
 	game.selected_aura = _index_for_key(game.AURAS, "voraz")
 	game.ui_platform_override = game.UI_PLATFORM_DESKTOP
 	game._open_manifest_select()

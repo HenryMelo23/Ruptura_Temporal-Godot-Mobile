@@ -25,7 +25,7 @@ func _run() -> void:
 	game._rpc_ability_visual(43, 2, game.NET_ABILITY_TELEPORT, 2, Vector2(800, 450), Vector2(1040, 520), 0.4, 0.0, {}, 20)
 	assert(game.net_players_by_peer[43]["render_pos"] == Vector2(1040, 520), "third player's teleport did not snap its own replica")
 	assert(game.net_players_by_peer[42]["pos"] == Vector2(312, 300), "teleport moved the wrong ally")
-	game.remote_bullets = [{"source": 43, "uid": "43:return", "pos": Vector2(700, 520), "dir": Vector2.LEFT, "speed": 100.0, "life": 3.0, "max_life": 3.0, "age": 1.0, "phase": 0.0, "trail_cd": 10.0, "kind": "retornante", "motion_mode": "returning", "state": "volta", "pierce": true, "hits": {}, "color": Color.CYAN}]
+	game.remote_bullets = [{"source": 43, "uid": "43:prism", "pos": Vector2(700, 520), "dir": Vector2.LEFT, "speed": 100.0, "life": 3.0, "max_life": 3.0, "age": 1.0, "phase": 0.0, "trail_cd": 10.0, "kind": "prismatica", "pierce": true, "hits": {}, "color": Color.CYAN}]
 	game._update_remote_bullets(0.01)
 	assert(Vector2(game.remote_bullets[0]["dir"]).x > 0.0, "third player's returning projectile homed toward the other ally")
 	game._rpc_ability_visual(43, 3, game.NET_ABILITY_SECONDARY_END, 2, Vector2.ZERO, Vector2.ZERO, 0.1, 0.0, {}, 20)

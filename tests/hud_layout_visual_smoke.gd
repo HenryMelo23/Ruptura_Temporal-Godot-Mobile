@@ -89,8 +89,6 @@ func _check_no_overlap(viewport: Vector2) -> void:
 	var action_keys: Array[String] = ["attack", "skill", "secondary", "dash"]
 	if game.buttons.has("lacerante_empower"):
 		action_keys.append("lacerante_empower")
-	if game.buttons.has("bombastica_detonator"):
-		action_keys.append("bombastica_detonator")
 	for key in action_keys:
 		var rect: Rect2 = game.buttons[key]
 		_check(rect.position.x >= -0.5 and rect.position.y >= -0.5, key + " left/top clipped")

@@ -14,7 +14,7 @@ func _run() -> void:
 	assert(game._is_allowed_discord_webhook("https://discord.com/api/webhooks/1/token"))
 	assert(not game._is_allowed_discord_webhook("https://example.com/hook"))
 	game.gameplay_cheat_text = "QA231021"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	assert(game.qa_data_unlocked)
 	game.run_report_webhook_url = ""
 	game.webhook_edit.text = "https://discord.com/api/webhooks/123456789/test_token"

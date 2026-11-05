@@ -300,6 +300,8 @@ static func _enemy_visual_offset(game: Node2D, enemy: Dictionary) -> Vector2:
 
 static func _boss_texture(game: Node2D) -> Texture2D:
 	if game.current_phase == 7:
+		if not game.boss7_core_active:
+			return RTBoss7Animator.texture(game)
 		var key7: = "boss7_dive" if game.boss7_state == game.BOSS7_STATE_DIVE else "boss7_fly"
 		var frames7: Array = game.textures.get(key7, [])
 		if not frames7.is_empty() and frames7[int(game.boss_phase) % frames7.size()] != null:

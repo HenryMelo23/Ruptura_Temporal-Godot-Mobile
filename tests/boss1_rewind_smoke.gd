@@ -106,7 +106,7 @@ func _run() -> void:
 	assert(abs(game.time_alive - float(rewind_target["time"])) < 0.01)
 	assert(abs(game.last_skill_time - float(rewind_target["last_skill"])) < 0.01)
 	assert(abs(game.boss_hp - (hp_before_heal + expected_heal)) < 0.05)
-	assert(game.bullets.is_empty() and game.return_bullets.is_empty() and game.enemy_bullets.is_empty())
+	assert(game.bullets.is_empty() and game.enemy_bullets.is_empty())
 
 	game._start_boss1_time_wave()
 	assert(game.boss1_time_wave.is_empty())

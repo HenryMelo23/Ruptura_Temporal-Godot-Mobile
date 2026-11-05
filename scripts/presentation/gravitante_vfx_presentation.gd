@@ -248,6 +248,8 @@ static func event(game: Node2D, effect: Dictionary, camera: Vector2) -> void:
 	if not game._screen_point_in_view(center, 230.0):
 		return
 	var kind: String = effect.get("kind", "")
+	if kind in ["gravity_star_birth", "gravity_well_collapse", "gravity_q_pull"]:
+		return # desenhados por RTGravitanteMassVfx
 	if kind == "gravity_q":
 		if p < 0.55:
 			for point in effect.get("points", PackedVector2Array()):
@@ -340,7 +342,7 @@ static func ultimate(game: Node2D, secondary: Dictionary, camera: Vector2) -> vo
 	var spin: float = game.time_alive * (0.85 + float(secondary.get("spin_speed", 250.0)) * 0.004)
 	var birth := smoothstep(0.12, 0.9, age)
 	var collapse := smoothstep(0.08, 0.62, life)
-	var core_radius: float = (48.0 + tier * 4.0) * birth * collapse
+	var core_radius: float = (38.0 + tier * 4.0) * birth * collapse
 	# Exact gameplay boundary, always present even on minimum quality.
 	game.draw_arc(center, radius, 0.0, TAU, SEGMENTS[detail] * 2, tint(CYAN, 0.33), 1.0, true)
 	for i in range(4):
@@ -360,7 +362,9 @@ static func ultimate(game: Node2D, secondary: Dictionary, camera: Vector2) -> vo
 	if horizon:
 		intensity += tier * 0.15
 		spin *= 1.0 + tier * 0.12
+	RTGravitanteMassVfx.accretion(game, center, maxf(core_radius * 3.2, radius * 0.5) * birth * collapse, spin * 1.6, 0.85 * birth * collapse, 3 if detail < 2 else 4)
 	singularity(game, center, core_radius, spin * (1.0 + (1.0 - collapse) * 2.0), intensity, detail)
+	RTGravitanteMassVfx.photon_ring(game, center, core_radius, spin, birth * collapse)
 	if evolved(game, "ev2_tidal_event"):
 		var inward: float = fposmod(age * 1.2, 1.0)
 		game.draw_arc(center, lerpf(radius, maxf(2.0, core_radius * 1.1), inward), 0.0, TAU, SEGMENTS[detail], tint(CYAN, sin(inward * PI) * 0.55), 1.5, true)

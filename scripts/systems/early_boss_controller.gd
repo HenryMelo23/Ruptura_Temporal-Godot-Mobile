@@ -19,15 +19,6 @@ func capture_boss1_rewind_projectiles() -> Array:
 			"pos": Vector2(bullet.get("pos", game.player_pos)),
 			"dir": Vector2(bullet.get("dir", game.last_facing))
 		})
-	for bullet in game.return_bullets:
-		if captured.size() >= 30:
-			break
-		captured.append({
-			"visual": "returning",
-			"kind": "retornante",
-			"pos": Vector2(bullet.get("pos", game.player_pos)),
-			"dir": Vector2(bullet.get("dir", game.last_facing))
-		})
 	for bullet in game.enemy_bullets:
 		if captured.size() >= 36:
 			break
@@ -328,7 +319,6 @@ func finish_boss1_rewind() -> void:
 		game.player_hp = clampi(int(round(float(game.boss1_rewind_sequence.get("player_final_hp", game.player_hp)))), 1, int(game.player_hp_max))
 	game.bullets.clear()
 	game.remote_bullets.clear()
-	game.return_bullets.clear()
 	game.enemy_bullets.clear()
 	game.eletrica_waves.clear()
 	game.eletrica_chains.clear()
@@ -453,7 +443,7 @@ func update_boss1_pincer_dash(attack: Dictionary, prefix: String, delta: float) 
 	attack["last_dash_from"] = old_pos
 	attack["last_dash_to"] = game.boss_pos
 	for trail_index in range(2):
-		game.effects.append({"pos": old_pos + dir.orthogonal() * (trail_index * 18.0 - 9.0), "vel": -dir * (90.0 + trail_index * 22.0), "life": 0.16, "max": 0.16, "color": Color(0.92, 0.48, 0.16, 0.48), "size": 10.0 + trail_index * 3.0, "kind": "trail"})
+		game.effects.append({"pos": old_pos + dir.orthogonal() * (trail_index * 18.0 - 9.0), "vel": -dir * (90.0 + trail_index * 22.0), "life": 0.16, "max": 0.16, "color": Color(1.0, 0.6, 0.22, 0.34), "size": 6.0 + trail_index * 2.0, "kind": "trail"})
 	var damage: int = int(game.player_hp_max * 0.18 + 85)
 	var hit_key: String = "%s_hit" % prefix
 	if not bool(attack.get(hit_key, false)) and game._local_player_damageable_by_contact() and game._distance_to_segment(game.player_pos, old_pos, game.boss_pos) <= float(attack.get("width", game.BOSS1_PINCER_TENAZ_WIDTH)):
@@ -687,8 +677,6 @@ func apply_boss1_whirlpool_force(delta: float, attack_override: Dictionary = {})
 	var pull_speed: float = game.BOSS1_WHIRLPOOL_PULL_SPEED * lerpf(0.72, 1.0, inner_strength)
 	var force: Vector2 = (radial * pull_speed + tangent * game.BOSS1_WHIRLPOOL_TANGENT_SPEED) * delta
 	game.player_pos = game._clamp_player_world(game.player_pos + game._hostile_knockback(force))
-
-
 func update_boss1_timeout_storm(delta: float) -> void:
 	if game.current_phase != 1 or not game.boss_active or game.boss_dead or game.boss_hp <= 0.0:
 		return

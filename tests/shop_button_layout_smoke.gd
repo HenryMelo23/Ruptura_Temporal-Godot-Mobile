@@ -20,10 +20,11 @@ func _run() -> void:
 	var viewport := Vector2(1280, 720)
 	game._start_game()
 	game.shop_auto_enabled = true
+	game.qa_data_unlocked = true # loja manual existe so como atalho de QA
 	game.hud_shop_pos = Vector2(-1, -1)
 	game._open_edit_layout(viewport)
 	game._update_button_layout(viewport)
-	_check(game.buttons.has("shop_manual"), "shop button must be editable even when automatic shop is enabled")
+	_check(game.buttons.has("shop_manual"), "QA shop shortcut must stay editable")
 
 	var start_pos: Vector2 = game._manual_shop_pos(viewport)
 	var drag_to := start_pos + Vector2(-130, 70)

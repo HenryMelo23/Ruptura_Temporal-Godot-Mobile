@@ -5,6 +5,24 @@ const PlayerStatusVfx = preload("res://scripts/presentation/player_status_vfx_pr
 
 const CROWD_BATCH_THRESHOLD := 32
 const PERFORMANCE_CROWD_BATCH_THRESHOLD := 12
+# Crowd renderer record layout (Array is much cheaper than a Dictionary here).
+const R_ENEMY := 0
+const R_KIND := 1
+const R_UID := 2
+const R_TEX := 3
+const R_POS := 4
+const R_DRAW_POS := 5
+const R_SIZE := 6
+const R_VISUAL_SIZE := 7
+const R_FLIP := 8
+const R_MODULATE := 9
+const R_ALPHA := 10
+const R_TARGET := 11
+const R_PRISM := 12
+const R_RECON := 13
+const R_ROLLING := 14
+const R_SHADOW_DONE := 15
+const R_SPRITE_DONE := 16
 
 const ENEMY_TINTS := {
 	"atirador": Color(0.7, 0.86, 1.0),
@@ -40,219 +58,372 @@ static func _draw_enemies(game: Node2D, camera: Vector2) -> void :
 	game.enemy_manager.horde.note_draw_cost(Time.get_ticks_usec() - cost_started)
 
 
+static var _shadow_batch: RTRuntimeSpriteBatchRenderer = null
+
+
+# Layered crowd renderer. Every pass keeps one kind of draw command together so
+# the canvas renderer can merge them: all shadows (one MultiMesh per texture),
+# ground decorations, all sprites (MultiMesh), overhead decorations and finally
+# every health bar as plain untextured rects. The former per-enemy interleaving
+# (shadow, sprite, bar, outline...) broke batching on every enemy and cost
+# several draw calls each.
 static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
-	# Frame-local, keyed by kind: these profiles depend on phase/kind only.
-	# Keep per-entity animation, health and status overrides live below.
 	var sizes: Dictionary = {}
 	var styles: Dictionary = {}
 	var prismatica_active: bool = not game._active_prismatica_secondary().is_empty()
 	var prismatica_time := float(Time.get_ticks_msec()) * 0.001 if prismatica_active else 0.0
-	game.runtime_enemy_sprite_batch_renderer.begin_frame(game.current_phase)
-	var batch_threshold: int = PERFORMANCE_CROWD_BATCH_THRESHOLD if game._is_mobile_runtime() or game.gfx_low_resource or game._memory_saver_active() else CROWD_BATCH_THRESHOLD
-	var crowd_batch_enabled: bool = game.enemies.size() >= batch_threshold and game.runtime_enemy_sprite_batch_renderer.can_batch()
-	var batched_enemy_uids: Dictionary = {}
-	if crowd_batch_enabled:
-		for enemy in game.enemies:
-			var world_pos := Vector2(enemy.get("pos", Vector2.ZERO))
-			if not game._world_point_in_view(world_pos, camera, 180.0):
-				continue
-			var kind := String(enemy.get("type", ""))
-			var alpha := float(enemy.get("alpha", 1.0))
-			var uid: int = int(enemy.get("uid", -1))
-			var is_attack_target: bool = bool(game._attack_target_is_enemy(uid))
-			if not _plain_common_enemy_for_batch(game, enemy, kind, alpha, is_attack_target, prismatica_active):
-				continue
-			var texture: Texture2D = game._enemy_texture(enemy)
-			if texture == null:
-				continue
-			if not sizes.has(kind):
-				sizes[kind] = game._enemy_draw_size(enemy)
-			var size: Vector2 = sizes[kind]
-			var screen_pos := world_pos - camera
-			var draw_pos: Vector2 = screen_pos + Vector2(game._enemy_visual_offset(enemy))
-			var flip_h: bool = bool(game._enemy_should_flip(enemy))
-			var color: Color = ENEMY_TINTS.get(kind, Color.WHITE)
-			color.a *= alpha
-			game._draw_dynamic_shadow(texture, screen_pos, size, flip_h, 0.4 * alpha)
-			if game.runtime_enemy_sprite_batch_renderer.append(texture, draw_pos, size, color, flip_h):
-				batched_enemy_uids[uid] = true
-	game.runtime_enemy_sprite_batch_renderer.submit(game.get_canvas_item())
-	for enemy in game.enemies:
-		if not game._world_point_in_view(Vector2(enemy.get("pos", Vector2.ZERO)), camera, 180.0):
+	var t: float = float(game.time_alive)
+	var sprite_batch: RTRuntimeSpriteBatchRenderer = game.runtime_enemy_sprite_batch_renderer
+	sprite_batch.begin_frame(game.current_phase)
+	if _shadow_batch == null:
+		_shadow_batch = RTRuntimeSpriteBatchRenderer.new()
+	_shadow_batch.begin_frame(game.current_phase)
+	var shadows_on: bool = game._shadows_enabled()
+	var light_sway: float = sin(t * 0.72) * 2.0
+	var cast_rotation: float = deg_to_rad(9.0) + sin(t * 0.45) * 0.018
+	var kind_amber_node: String = game.ENEMY_AMBER_SUTURE_NODE
+	var kind_eel: String = game.ENEMY_MIASMA_EEL
+	var kind_kamikaze: String = game.ENEMY_KAMIKAZE
+	var kind_pangoliro: String = game.ENEMY_PANGOLIRO
+	var kind_leech: String = game.ENEMY_CHRONAL_LEECH
+	var recon_time: float = game.COUT_AS_RECONSTITUTE_TIME
+	var player_pos: Vector2 = game.player_pos
+	var kind_common: String = game.ENEMY_COMMON
+	var phase: int = game.current_phase
+	var common_frames: Array = _valid_frames(game, "enemy_common_phase_1")
+	if common_frames.is_empty():
+		common_frames = _valid_frames(game, "enemy_left")
+	var common_left_frames: Array = _valid_frames(game, "enemy_common_phase_2_left")
+	var common_right_frames: Array = _valid_frames(game, "enemy_common_phase_2_right")
+	var phase2_split: bool = phase == 2 and not common_left_frames.is_empty() and not common_right_frames.is_empty()
+	var common_fast: bool = phase != 3 and phase != 4 and phase != 6 and not common_frames.is_empty()
+	var phase7_kinds := {game.ENEMY_CINERIDO: true, game.ENEMY_PANGOLIRO: true, game.ENEMY_CORVOL: true}
+	var target_uid: int = -1
+	if game.attack_lock_selecting:
+		if game.attack_lock_candidate_kind == "enemy":
+			target_uid = game.attack_lock_candidate_uid
+	elif game.locked_target_kind == "enemy":
+		target_uid = game.locked_target_uid
+	var viewport_size: Vector2 = game.get_viewport_rect().size
+	var view_min: Vector2 = camera - Vector2(180.0, 180.0)
+	var view_max: Vector2 = camera + viewport_size + Vector2(180.0, 180.0)
+	var records: Array = []
+	var specials: Array = []
+	for enemy_value in game.enemies:
+		var enemy: Dictionary = enemy_value
+		var world_pos: Vector2 = enemy.get("pos", Vector2.ZERO)
+		if world_pos.x < view_min.x or world_pos.y < view_min.y or world_pos.x > view_max.x or world_pos.y > view_max.y:
 			continue
-		if batched_enemy_uids.has(int(enemy.get("uid", -1))):
+		var kind: String = String(enemy.get("type", ""))
+		if kind == kind_amber_node:
+			specials.append(enemy)
 			continue
-		if String(enemy.get("type", "")) == game.ENEMY_AMBER_SUTURE_NODE:
-			game.AmberSuturerPresentation.draw_node(game, enemy, camera)
+		if kind == kind_eel and float(enemy.get("eel_relocating", 0.0)) > 0.0:
+			specials.append(enemy)
 			continue
-		var pos: Vector2 = enemy["pos"] - camera
-		var tex = game._enemy_texture(enemy)
-		var kind: String = enemy["type"]
+		var pos: Vector2 = world_pos - camera
+		var is_common: bool = common_fast and kind == kind_common
+		var tex: Texture2D = null
+		var enemy_flip := false
+		var draw_pos: Vector2 = pos
+		if is_common:
+			# Same result as EntityVisualProfiles for a plain common in phases
+			# 1/2/5/7, without its long kind/phase dispatch per enemy.
+			var frames: Array = common_frames
+			if phase2_split:
+				frames = common_right_frames if player_pos.x >= world_pos.x else common_left_frames
+			var phase_value: float = enemy.get("phase", 0.0)
+			tex = frames[int(phase_value) % 2 % frames.size()]
+			var facing: Vector2 = enemy.get("facing_dir", Vector2.LEFT)
+			enemy_flip = facing.x >= 0.0
+		else:
+			tex = game._enemy_texture(enemy)
+			draw_pos += game._enemy_visual_offset(enemy)
+			enemy_flip = game._enemy_should_flip(enemy)
 		if not sizes.has(kind):
 			sizes[kind] = game._enemy_draw_size(enemy)
-		if not styles.has(kind):
-			styles[kind] = game._enemy_health_bar_style(enemy)
 		var size: Vector2 = sizes[kind]
-		var draw_pos = pos + game._enemy_visual_offset(enemy)
-		var alpha = float(enemy.get("alpha", 1.0))
+		var uid: int = int(enemy.get("uid", -1))
+		var alpha: float = float(enemy.get("alpha", 1.0))
 		var modulate_color: Color = ENEMY_TINTS.get(kind, Color.WHITE)
 		modulate_color.a *= alpha
-		if kind == game.ENEMY_KAMIKAZE:
-			if sin(game.time_alive * 12.0) > 0.0:
+		var rolling := false
+		if kind == kind_kamikaze:
+			if sin(t * 12.0) > 0.0:
 				modulate_color = Color(1.0, 0.92, 0.9, alpha)
-		elif kind == game.ENEMY_PANGOLIRO:
+		elif kind == kind_pangoliro:
 			if float(enemy.get("phase7_vulnerable", 0.0)) > 0.0:
 				modulate_color = Color(1.0, 0.52, 0.22, alpha)
-		if enemy["type"] == game.ENEMY_MIASMA_EEL and float(enemy.get("eel_relocating", 0.0)) > 0.0:
-			game._draw_miasma_eel_relocation_path(enemy, camera)
-			continue
-		if enemy["type"] == game.ENEMY_CHRONAL_LEECH:
-			game._draw_sanguessuga_state(enemy, camera)
+			rolling = String(enemy.get("phase7_state", "walk")) == "roll"
 		var visual_size: Vector2 = size
-		if enemy["type"] == game.ENEMY_PANGOLIRO and String(enemy.get("phase7_state", "walk")) == "roll":
+		if rolling:
 			visual_size *= game.PHASE7_PANGOLIRO_ROLL_VISUAL_SCALE
-		var reconstitute_ratio: float = clamp(float(enemy.get("reconstitute_time", 0.0)) / game.COUT_AS_RECONSTITUTE_TIME, 0.0, 1.0)
-		if reconstitute_ratio > 0.0:
-			var rebuild = 1.0 - reconstitute_ratio
+		var reconstitute_ratio: float = 0.0
+		var recon_value: float = float(enemy.get("reconstitute_time", 0.0))
+		if recon_value > 0.0:
+			reconstitute_ratio = clampf(recon_value / recon_time, 0.0, 1.0)
+			var rebuild := 1.0 - reconstitute_ratio
 			visual_size *= 0.72 + rebuild * 0.28
-			draw_pos += Vector2(sin(game.time_alive * 36.0 + int(enemy["uid"])) * 4.0, -14.0 * reconstitute_ratio)
+			draw_pos += Vector2(sin(t * 36.0 + uid) * 4.0, -14.0 * reconstitute_ratio)
 			modulate_color = modulate_color.lerp(Color(1.0, 0.58, 0.14, alpha), 0.55)
-			for shard in range(5):
-				var angle: float = game.time_alive * 4.5 + float(shard) * TAU / 5.0 + int(enemy["uid"]) * 0.01
-				var shard_pos: Vector2 = pos + Vector2.from_angle(angle) * (18.0 + reconstitute_ratio * 42.0)
-				game.draw_line(shard_pos, draw_pos, Color(1.0, 0.48, 0.1, 0.3 + reconstitute_ratio * 0.34), 2.0)
-		var enemy_flip: bool = game._enemy_should_flip(enemy)
-		var is_attack_target = game._attack_target_is_enemy(int(enemy["uid"]))
-		game._draw_dynamic_shadow(tex, pos, visual_size, enemy_flip, 0.4 * alpha)
-		if is_attack_target:
-			game._draw_attack_target_marker(draw_pos + Vector2(0, visual_size.y * 0.3), visual_size.x * 0.43, game.locked_target_kind == "enemy" and game.locked_target_uid == int(enemy["uid"]))
-
-		if prismatica_active and enemy["pos"].distance_to(game.player_pos) < 900.0:
-			var hue = fmod(prismatica_time * 0.8 + int(enemy["uid"]) * 0.15, 1.0)
-			var c = Color.from_hsv(hue, 1.0, 1.0, 0.5)
-
-			game.draw_circle(draw_pos + Vector2(0, 16), 46, Color(c.r, c.g, c.b, 0.18))
-			modulate_color = c
+		var is_attack_target: bool = uid == target_uid
+		var prism := false
+		if prismatica_active and world_pos.distance_to(player_pos) < 900.0:
+			prism = true
+			var hue := fmod(prismatica_time * 0.8 + uid * 0.15, 1.0)
+			modulate_color = Color.from_hsv(hue, 1.0, 1.0, 0.5)
 		if is_attack_target:
 			modulate_color = modulate_color.lerp(Color(1.0, 0.92, 0.34, alpha), 0.48)
+		var batchable: bool = tex != null and not (tex is AtlasTexture)
+		var shadow_done := false
+		if shadows_on and batchable and alpha > 0.0:
+			_append_enemy_shadow(tex, pos, visual_size, enemy_flip, 0.4 * alpha, light_sway, cast_rotation)
+			shadow_done = true
+		var sprite_done := false
+		if batchable and not rolling:
+			sprite_done = sprite_batch.append(tex, draw_pos, visual_size, modulate_color, enemy_flip)
+		records.append([enemy, kind, uid, tex, pos, draw_pos, size, visual_size, enemy_flip, modulate_color, alpha, is_attack_target, prism, reconstitute_ratio, rolling, shadow_done, sprite_done])
+	RTFrameProfiler.mark("de_collect")
+	var canvas: RID = game.get_canvas_item()
+	_shadow_batch.submit(canvas)
+	RTFrameProfiler.mark("de_shadow_submit")
 
-		game._draw_phase7_enemy_vfx(enemy, camera, pos, draw_pos, visual_size)
-		if enemy["type"] == game.ENEMY_PANGOLIRO and String(enemy.get("phase7_state", "walk")) == "roll":
+	# Ground pass: special entities and decorations that sit under the sprites.
+	for enemy_value in specials:
+		var special: Dictionary = enemy_value
+		if String(special.get("type", "")) == kind_amber_node:
+			game.AmberSuturerPresentation.draw_node(game, special, camera)
+		else:
+			game._draw_miasma_eel_relocation_path(special, camera)
+	for record_value in records:
+		var r: Array = record_value
+		var enemy: Dictionary = r[R_ENEMY]
+		var pos: Vector2 = r[R_POS]
+		var draw_pos: Vector2 = r[R_DRAW_POS]
+		var visual_size: Vector2 = r[R_VISUAL_SIZE]
+		var uid: int = r[R_UID]
+		if String(r[R_KIND]) == kind_leech:
+			game._draw_sanguessuga_state(enemy, camera)
+		var reconstitute_ratio: float = r[R_RECON]
+		if reconstitute_ratio > 0.0:
+			for shard in range(5):
+				var angle: float = t * 4.5 + float(shard) * TAU / 5.0 + uid * 0.01
+				var shard_pos: Vector2 = pos + Vector2.from_angle(angle) * (18.0 + reconstitute_ratio * 42.0)
+				game.draw_line(shard_pos, draw_pos, Color(1.0, 0.48, 0.1, 0.3 + reconstitute_ratio * 0.34), 2.0)
+		if not bool(r[R_SHADOW_DONE]):
+			game._draw_dynamic_shadow(r[R_TEX], pos, visual_size, r[R_FLIP], 0.4 * float(r[R_ALPHA]))
+		if bool(r[R_TARGET]):
+			game._draw_attack_target_marker(draw_pos + Vector2(0, visual_size.y * 0.3), visual_size.x * 0.43, game.locked_target_kind == "enemy" and game.locked_target_uid == uid)
+		if bool(r[R_PRISM]):
+			var c: Color = r[R_MODULATE]
+			game.draw_circle(draw_pos + Vector2(0, 16), 46, Color(c.r, c.g, c.b, 0.18))
+		_draw_enemy_ground_decor(game, r, camera, t)
+		if phase7_kinds.has(r[R_KIND]):
+			game._draw_phase7_enemy_vfx(enemy, camera, pos, draw_pos, visual_size)
+
+	RTFrameProfiler.mark("de_ground")
+	# Sprite pass.
+	sprite_batch.submit(canvas)
+	RTFrameProfiler.mark("de_sprite_submit")
+	for record_value in records:
+		var r: Array = record_value
+		if bool(r[R_SPRITE_DONE]):
+			continue
+		var tex: Texture2D = r[R_TEX]
+		var enemy: Dictionary = r[R_ENEMY]
+		if bool(r[R_ROLLING]):
 			var roll_dir: Vector2 = Vector2(enemy.get("phase7_roll_dir", enemy.get("facing_dir", Vector2.LEFT))).normalized()
 			var roll_sign: float = 1.0 if roll_dir.x >= 0.0 else -1.0
 			var roll_turns: float = game.PHASE7_PANGOLIRO_ROLL_VISUAL_TURNS
 			var roll_rotation: float = float(enemy.get("phase7_timer", 0.0)) / maxf(0.01, game.PHASE7_PANGOLIRO_ROLL_TIME) * TAU * roll_turns * roll_sign
-			game._draw_entity_stretched_rotated(tex, draw_pos, visual_size, roll_rotation, modulate_color, enemy_flip)
+			game._draw_entity_stretched_rotated(tex, r[R_DRAW_POS], r[R_VISUAL_SIZE], roll_rotation, r[R_MODULATE], r[R_FLIP])
 		else:
-			game._draw_entity(tex, draw_pos, visual_size, modulate_color, enemy_flip)
-		if float(enemy.get("crepuscular_ocaso_mark", 0.0)) > 0.0:
-			game._draw_crepuscular_ocaso_cracks(draw_pos, visual_size, int(enemy.get("uid", 0)), float(enemy.get("crepuscular_ocaso_mark", 0.0)))
-		var enemy_bar_pos = draw_pos + Vector2(-30.0, -visual_size.y * 0.55 - 10.0)
-		var enemy_hp_ratio = float(enemy["hp"]) / float(enemy["max_hp"])
-		var tesla_bar_shock = float(enemy.get("tesla_shock", 0.0))
+			game._draw_entity(tex, r[R_DRAW_POS], r[R_VISUAL_SIZE], r[R_MODULATE], r[R_FLIP])
+	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	RTFrameProfiler.mark("de_sprite_immediate")
+	# Overhead decorations.
+	for record_value in records:
+		var r: Array = record_value
+		_draw_enemy_overlays(game, r, camera, t)
+
+	RTFrameProfiler.mark("de_overlays")
+	# Health bars last: plain rects merge into a single batch.
+	var execute_threshold: float = game.execute_threshold
+	for record_value in records:
+		var r: Array = record_value
+		var enemy: Dictionary = r[R_ENEMY]
+		var uid: int = r[R_UID]
+		var kind: String = r[R_KIND]
+		var draw_pos: Vector2 = r[R_DRAW_POS]
+		var visual_size: Vector2 = r[R_VISUAL_SIZE]
+		var enemy_bar_pos := draw_pos + Vector2(-30.0, -visual_size.y * 0.55 - 10.0)
+		var enemy_hp_ratio := float(enemy["hp"]) / maxf(0.001, float(enemy["max_hp"]))
+		var tesla_bar_shock := float(enemy.get("tesla_shock", 0.0))
 		var enemy_bar_draw_pos: Vector2 = enemy_bar_pos
 		if tesla_bar_shock > 0.0:
-			var shake_power: float = clamp(tesla_bar_shock / 0.42, 0.0, 1.0)
-			enemy_bar_draw_pos += Vector2(sin(game.time_alive * 90.0 + int(enemy["uid"])) * 2.8, cos(game.time_alive * 76.0 + int(enemy["uid"]) * 0.37) * 1.8) * shake_power
-			game._draw_tesla_health_bar_fx(enemy_bar_draw_pos, 60.0, enemy_hp_ratio, tesla_bar_shock, int(enemy["uid"]))
-		elif _enemy_health_bar_visible(game, enemy, enemy_hp_ratio, is_attack_target):
+			var shake_power: float = clampf(tesla_bar_shock / 0.42, 0.0, 1.0)
+			enemy_bar_draw_pos += Vector2(sin(t * 90.0 + uid) * 2.8, cos(t * 76.0 + uid * 0.37) * 1.8) * shake_power
+			game._draw_tesla_health_bar_fx(enemy_bar_draw_pos, 60.0, enemy_hp_ratio, tesla_bar_shock, uid)
+		elif _enemy_health_bar_visible(game, enemy, enemy_hp_ratio, bool(r[R_TARGET])):
+			if not styles.has(kind):
+				styles[kind] = game._enemy_health_bar_style(enemy)
 			_draw_enemy_health_bar(game, enemy, enemy_bar_draw_pos, 60.0, enemy_hp_ratio, styles[kind])
 		if bool(enemy.get("sanguinaria_hunt", false)):
 			game._draw_sanguinaria_hunt_mark(enemy_bar_draw_pos, 60.0)
-		var static_stacks = int(enemy.get("eletrica_static_stacks", 0))
-		var static_timer = float(enemy.get("eletrica_static_timer", 0.0))
-		if static_stacks > 0 and static_timer > 0.0:
-			game._draw_eletrica_static_indicator(game, enemy_bar_draw_pos + Vector2(30, -10), static_stacks, static_timer, int(enemy["uid"]))
-		if game.execute_threshold > 0.0:
-			game._draw_collector_threshold(enemy_bar_draw_pos, 60.0, game.execute_threshold, enemy_hp_ratio)
-		if enemy["type"] == game.ENEMY_AGGLOMERATOR:
-			for i in range(8):
-				var ang = game.time_alive * 5.0 + i * TAU / 8.0
-				game.draw_circle(pos + Vector2(cos(ang), sin(ang)) * 44.0, 3 + int(i % 3), Color(0.48, 0.48, 0.56, 0.75))
-		if enemy["type"] == game.ENEMY_CURATER:
-			game.draw_arc(pos, 92, 0, TAU, 48, Color(0.32, 1.0, 0.42, 0.35), 2)
-			for i in range(7):
-				var px = pos.x + cos(i * 1.7) * 30.0 + sin(game.time_alive * 2.0 + i) * 2.0
-				var py = pos.y + 26.0 + sin(i * 1.3) * 8.0
-				game.draw_line(Vector2(px, py), Vector2(px, py - 10 - (i % 3) * 3), Color(0.28, 0.86, 0.36), 2)
-				game.draw_circle(Vector2(px + 3, py - 12), 4, Color(0.5, 1.0, 0.58))
-		if enemy["type"] == game.ENEMY_PROJECTOR:
-			var r = 24.0 + sin(game.time_alive * 9.0) * 3.0
-			game.draw_arc(pos, r, 0, TAU, 40, Color(1.0, 0.76, 0.28, 0.86), 2)
-			game.draw_circle(pos + Vector2(0, -12), 5, Color(1.0, 0.96, 0.62, 0.95))
-		if enemy["type"] == game.ENEMY_CRYSTAL:
-			game._draw_hex(pos, 38.0 + sin(game.time_alive * 4.0) * 8.0, Color(0.0, 0.78, 1.0, 0.7))
-		if enemy["type"] == game.ENEMY_LARAPIO and int(enemy.get("stolen", 0)) > 0:
-			var bag_pulse = 0.5 + 0.5 * sin(game.time_alive * 8.0)
+		var static_stacks := int(enemy.get("eletrica_static_stacks", 0))
+		if static_stacks > 0:
+			var static_timer := float(enemy.get("eletrica_static_timer", 0.0))
+			if static_timer > 0.0:
+				game._draw_eletrica_static_indicator(game, enemy_bar_draw_pos + Vector2(30, -10), static_stacks, static_timer, uid)
+		if execute_threshold > 0.0:
+			game._draw_collector_threshold(enemy_bar_draw_pos, 60.0, execute_threshold, enemy_hp_ratio)
+
+
+static func _valid_frames(game: Node2D, key: String) -> Array:
+	var frames = game.textures.get(key, [])
+	if not frames is Array:
+		return []
+	for frame in frames:
+		if not frame is Texture2D:
+			return []
+	return frames
+
+
+static func _append_enemy_shadow(tex: Texture2D, center: Vector2, size: Vector2, flip_h: bool, alpha: float, light_sway: float, cast_rotation: float) -> void:
+	# Same geometry as _draw_dynamic_shadow: the sprite rect (bottom-anchored on
+	# the foot) squashed and skewed on the ground, drawn twice in black.
+	var foot := center + Vector2(0.0, size.y * 0.5)
+	var horizontal := -1.0 if flip_h else 1.0
+	var local := Transform2D(0.0, Vector2(size.x, -size.y), 0.0, Vector2(0.0, -size.y * 0.5))
+	var soft := Transform2D(cast_rotation, Vector2(horizontal * 1.03, -0.3), 0.0, foot + Vector2(10.0 + light_sway, 5.0)) * local
+	var core := Transform2D(cast_rotation, Vector2(horizontal, -0.27), 0.0, foot + Vector2(6.0 + light_sway * 0.45, 2.0)) * local
+	_shadow_batch.append_xform(tex, soft, Color(0.0, 0.0, 0.0, alpha * 0.25), center)
+	_shadow_batch.append_xform(tex, core, Color(0.0, 0.0, 0.0, alpha), center)
+
+
+static func _draw_enemy_overlays(game: Node2D, r: Array, camera: Vector2, t: float) -> void:
+	var enemy: Dictionary = r[R_ENEMY]
+	var kind: String = r[R_KIND]
+	var pos: Vector2 = r[R_POS]
+	var draw_pos: Vector2 = r[R_DRAW_POS]
+	var visual_size: Vector2 = r[R_VISUAL_SIZE]
+	var uid: int = r[R_UID]
+	var ocaso := float(enemy.get("crepuscular_ocaso_mark", 0.0))
+	if ocaso > 0.0:
+		game._draw_crepuscular_ocaso_cracks(draw_pos, visual_size, uid, ocaso)
+	if game.current_phase == 4:
+		game._draw_phase4_enemy_identity(enemy, draw_pos, r[R_SIZE])
+	var lac := int(enemy.get("laceracao", 0))
+	if lac > 0:
+		game._draw_centered("x%d" % lac, pos + Vector2(28, -36), 14, Color(1.0, 0.2, 0.25))
+	if float(enemy.get("phase3_fervor_timer", 0.0)) > 0.0:
+		var fervor_pulse := 0.5 + 0.5 * sin(t * 8.0 + float(uid % 17))
+		game.draw_arc(pos, visual_size.x * (0.42 + fervor_pulse * 0.05), 0.0, TAU, 24, Color(0.68, 1.0, 0.28, 0.46), 2.0)
+	if kind == game.ENEMY_COMMON:
+		return
+	if kind == game.ENEMY_AGGLOMERATOR:
+		for i in range(8):
+			var ang := t * 5.0 + i * TAU / 8.0
+			game.draw_circle(pos + Vector2(cos(ang), sin(ang)) * 44.0, 3 + int(i % 3), Color(0.48, 0.48, 0.56, 0.75))
+	elif kind == game.ENEMY_PROJECTOR:
+		var pr := 24.0 + sin(t * 9.0) * 3.0
+		game.draw_arc(pos, pr, 0, TAU, 40, Color(1.0, 0.76, 0.28, 0.86), 2)
+		game.draw_circle(pos + Vector2(0, -12), 5, Color(1.0, 0.96, 0.62, 0.95))
+	elif kind == game.ENEMY_CRYSTAL:
+		game._draw_hex(pos, 38.0 + sin(t * 4.0) * 8.0, Color(0.0, 0.78, 1.0, 0.7))
+	elif kind == game.ENEMY_LARAPIO:
+		var stolen := int(enemy.get("stolen", 0))
+		if stolen > 0:
+			var bag_pulse := 0.5 + 0.5 * sin(t * 8.0)
 			game.draw_circle(draw_pos + Vector2(23, -21), 11.0 + bag_pulse * 2.0, Color(1.0, 0.78, 0.18, 0.72))
 			game.draw_circle(draw_pos + Vector2(23, -21), 5.0, Color(0.45, 0.24, 0.04, 0.88))
-			game._draw_centered(str(int(enemy.get("stolen", 0))), draw_pos + Vector2(23, -39), 11, Color(1.0, 0.92, 0.42, 0.92))
-		if enemy["type"] == game.ENEMY_LARAPIO and int(enemy.get("stolen", 0)) > 0 and enemy["hp"] < enemy["max_hp"] * 0.7:
-			var ratio = clamp(float(enemy.get("portal", 0.0)) / game.LARAPIO_PORTAL_TIME, 0.0, 1.0)
-			var portal_center = pos + Vector2(0, 28)
-			var portal_radius: float = 18.0 + 42.0 * ratio
-			var portal_tilt = -0.18 + sin(game.time_alive * 1.7 + int(enemy.get("uid", 0))) * 0.035
-			game.draw_set_transform(portal_center, portal_tilt, Vector2(1.0 + ratio * 0.2, 0.34 + ratio * 0.06))
-			game.draw_circle(Vector2.ZERO, portal_radius, Color(0.15, 0.0, 0.25, 0.44))
-			game.draw_arc(Vector2.ZERO, portal_radius + 3.0, - game.time_alive * 2.0, TAU - game.time_alive * 2.0, 48, Color(0.75, 0.2, 1.0, 0.82), 3.2)
-			game.draw_arc(Vector2.ZERO, portal_radius * 0.68, game.time_alive * 2.4, game.time_alive * 2.4 + PI * 1.45, 34, Color(1.0, 0.74, 0.32, 0.56), 2.0)
-			game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		if enemy["type"] == game.ENEMY_COUT_ATTACK_SPEED:
-			var stacks = int(enemy.get("as_stack", 0))
-			var pulse = 0.5 + 0.5 * sin(game.time_alive * 9.0 + int(enemy["uid"]))
-			var aura_alpha = 0.12 + stacks * 0.035
-			var rebuild_pulse: float = clamp(float(enemy.get("reconstitute_pulse", 0.0)) / 0.55, 0.0, 1.0)
-			game.draw_circle(pos, game.COUT_AS_AURA_RADIUS + rebuild_pulse * 18.0, Color(1.0, 0.5, 0.08, min(0.3, aura_alpha + rebuild_pulse * 0.08)))
-			if rebuild_pulse > 0.0:
-				game.draw_arc(pos, game.COUT_AS_AURA_RADIUS + 12.0 + rebuild_pulse * 28.0, - game.time_alive * 5.0, TAU - game.time_alive * 5.0, 64, Color(1.0, 0.76, 0.2, 0.88 * rebuild_pulse), 4.0)
-			game.draw_arc(pos, 36.0 + pulse * 5.0, - game.time_alive * 2.4, TAU - game.time_alive * 2.4, 32, Color(1.0, 0.72, 0.16, 0.82), 2.6)
-			if stacks > 0:
-				game._draw_centered("x%d" % stacks, pos + Vector2(0, -66), 15, Color(1.0, 0.86, 0.34, 0.92))
-		if enemy["type"] == game.ENEMY_INCENSARIO and float(enemy.get("prepare", 0.0)) > 0.0:
-			var target = Vector2(enemy.get("miasma_target", game.player_pos)) - camera
-			game.draw_circle(target, 64.0, Color(0.42, 0.72, 0.08, 0.13))
-			game.draw_arc(target, 64.0, 0, TAU, 40, Color(0.72, 1.0, 0.28, 0.82), 3.0)
-		if enemy["type"] == game.ENEMY_GUARDIAO:
-			var shield_dir = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
-			game.draw_arc(pos + shield_dir * 26.0, 42.0, shield_dir.angle() - PI * 0.45, shield_dir.angle() + PI * 0.45, 24, Color(0.78, 0.92, 0.56, 0.82), 5.0)
-		if enemy["type"] == game.ENEMY_FLAGELANTE and float(enemy.get("phase3_surge_timer", 0.0)) > 0.0:
+			game._draw_centered(str(stolen), draw_pos + Vector2(23, -39), 11, Color(1.0, 0.92, 0.42, 0.92))
+	elif kind == game.ENEMY_COUT_ATTACK_SPEED:
+		var stacks := int(enemy.get("as_stack", 0))
+		var pulse := 0.5 + 0.5 * sin(t * 9.0 + uid)
+		game.draw_arc(pos, 36.0 + pulse * 5.0, - t * 2.4, TAU - t * 2.4, 32, Color(1.0, 0.72, 0.16, 0.82), 2.6)
+		if stacks > 0:
+			game._draw_centered("x%d" % stacks, pos + Vector2(0, -66), 15, Color(1.0, 0.86, 0.34, 0.92))
+	elif kind == game.ENEMY_GUARDIAO:
+		var shield_dir := Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
+		game.draw_arc(pos + shield_dir * 26.0, 42.0, shield_dir.angle() - PI * 0.45, shield_dir.angle() + PI * 0.45, 24, Color(0.78, 0.92, 0.56, 0.82), 5.0)
+	elif kind == game.ENEMY_FLAGELANTE:
+		if float(enemy.get("phase3_surge_timer", 0.0)) > 0.0:
 			var trail_dir := -Vector2(enemy.get("last_move_dir", Vector2.RIGHT)).normalized()
 			game.draw_line(pos + trail_dir * 18.0, pos + trail_dir * 54.0, Color(0.72, 1.0, 0.3, 0.58), 4.0)
-		if enemy["type"] == game.ENEMY_SALMODIANTE and float(enemy.get("phase3_chant_prepare", 0.0)) > 0.0:
+	elif kind == game.ENEMY_SALMODIANTE:
+		if float(enemy.get("phase3_chant_prepare", 0.0)) > 0.0:
 			var chant_target := Vector2(enemy.get("phase3_chant_target", game.player_pos)) - camera
 			var chant_dir := (chant_target - pos).normalized()
 			for fan_angle in [-game.PHASE3_SALMODIANTE_FAN_ANGLE, 0.0, game.PHASE3_SALMODIANTE_FAN_ANGLE]:
 				game.draw_line(pos, pos + chant_dir.rotated(float(fan_angle)) * 92.0, Color(0.82, 0.4, 1.0, 0.42), 2.0)
-		if enemy["type"] == game.ENEMY_RELICARIO and float(enemy.get("phase3_relic_pulse", 0.0)) > 0.0:
+	elif kind == game.ENEMY_SHIELD_REFLECTOR:
+		var shield_dir := Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
+		if game._shield_reflector_active(enemy):
+			var flash := clampf(float(enemy.get("shield_flash", 0.0)) / 0.32, 0.0, 1.0)
+			var shield_color := Color(0.76, 0.96, 1.0, 0.76 + flash * 0.22)
+			game.draw_arc(pos + shield_dir * 28.0, 44.0 + flash * 9.0, shield_dir.angle() - PI * 0.46, shield_dir.angle() + PI * 0.46, 28, shield_color, 5.0 + flash * 3.0)
+			game.draw_line(pos + shield_dir * 32.0 + shield_dir.orthogonal() * 24.0, pos + shield_dir * 32.0 - shield_dir.orthogonal() * 24.0, Color(0.86, 1.0, 1.0, 0.52), 2.0)
+		else:
+			var speed_pulse := 0.5 + 0.5 * sin(t * 10.0 + uid)
+			game.draw_line(pos - shield_dir * (30.0 + speed_pulse * 12.0), pos - shield_dir * 58.0, Color(1.0, 0.58, 0.18, 0.5), 3.0)
+	elif kind == game.ENEMY_PYRO_PENGUIN:
+		var flame_pulse := 0.5 + 0.5 * sin(t * 9.0 + uid)
+		game.draw_arc(draw_pos, 45.0, t * 2.2, t * 2.2 + PI * 1.35, 30, Color(1.0, 0.44, 0.08, 0.82), 3.0)
+
+
+
+# Ground decorations: wide auras/zones sit under every sprite so they tint the
+# floor instead of washing over neighbouring enemies.
+static func _draw_enemy_ground_decor(game: Node2D, r: Array, camera: Vector2, t: float) -> void:
+	var kind: String = r[R_KIND]
+	if kind == game.ENEMY_COMMON:
+		return
+	var enemy: Dictionary = r[R_ENEMY]
+	var pos: Vector2 = r[R_POS]
+	var draw_pos: Vector2 = r[R_DRAW_POS]
+	var uid: int = r[R_UID]
+	if kind == game.ENEMY_LARAPIO:
+		if int(enemy.get("stolen", 0)) > 0:
+			if enemy["hp"] < enemy["max_hp"] * 0.7:
+				var ratio := clampf(float(enemy.get("portal", 0.0)) / game.LARAPIO_PORTAL_TIME, 0.0, 1.0)
+				var portal_center := pos + Vector2(0, 28)
+				var portal_radius: float = 18.0 + 42.0 * ratio
+				var portal_tilt := -0.18 + sin(t * 1.7 + uid) * 0.035
+				game.draw_set_transform(portal_center, portal_tilt, Vector2(1.0 + ratio * 0.2, 0.34 + ratio * 0.06))
+				game.draw_circle(Vector2.ZERO, portal_radius, Color(0.15, 0.0, 0.25, 0.44))
+				game.draw_arc(Vector2.ZERO, portal_radius + 3.0, - t * 2.0, TAU - t * 2.0, 48, Color(0.75, 0.2, 1.0, 0.82), 3.2)
+				game.draw_arc(Vector2.ZERO, portal_radius * 0.68, t * 2.4, t * 2.4 + PI * 1.45, 34, Color(1.0, 0.74, 0.32, 0.56), 2.0)
+				game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	elif kind == game.ENEMY_COUT_ATTACK_SPEED:
+		var stacks := int(enemy.get("as_stack", 0))
+		var aura_alpha := 0.12 + stacks * 0.035
+		var rebuild_pulse: float = clampf(float(enemy.get("reconstitute_pulse", 0.0)) / 0.55, 0.0, 1.0)
+		game.draw_circle(pos, game.COUT_AS_AURA_RADIUS + rebuild_pulse * 18.0, Color(1.0, 0.5, 0.08, minf(0.3, aura_alpha + rebuild_pulse * 0.08)))
+		if rebuild_pulse > 0.0:
+			game.draw_arc(pos, game.COUT_AS_AURA_RADIUS + 12.0 + rebuild_pulse * 28.0, - t * 5.0, TAU - t * 5.0, 64, Color(1.0, 0.76, 0.2, 0.88 * rebuild_pulse), 4.0)
+	elif kind == game.ENEMY_INCENSARIO:
+		if float(enemy.get("prepare", 0.0)) > 0.0:
+			var target := Vector2(enemy.get("miasma_target", game.player_pos)) - camera
+			game.draw_circle(target, 64.0, Color(0.42, 0.72, 0.08, 0.13))
+			game.draw_arc(target, 64.0, 0, TAU, 40, Color(0.72, 1.0, 0.28, 0.82), 3.0)
+	elif kind == game.ENEMY_RELICARIO:
+		if float(enemy.get("phase3_relic_pulse", 0.0)) > 0.0:
 			var relic_ratio := clampf(float(enemy.get("phase3_relic_pulse", 0.0)) / 0.7, 0.0, 1.0)
 			game.draw_arc(pos, game.PHASE3_RELIC_RADIUS * (1.0 - relic_ratio * 0.55), 0.0, TAU, 48, Color(0.7, 0.92, 0.3, 0.42 * relic_ratio), 3.0)
-		if float(enemy.get("phase3_fervor_timer", 0.0)) > 0.0:
-			var fervor_pulse := 0.5 + 0.5 * sin(game.time_alive * 8.0 + float(int(enemy.get("uid", 0)) % 17))
-			game.draw_arc(pos, visual_size.x * (0.42 + fervor_pulse * 0.05), 0.0, TAU, 24, Color(0.68, 1.0, 0.28, 0.46), 2.0)
-		if enemy["type"] == game.ENEMY_SHIELD_REFLECTOR:
-			var shield_dir = Vector2(enemy.get("facing_dir", Vector2.LEFT)).normalized()
-			if game._shield_reflector_active(enemy):
-				var flash = clamp(float(enemy.get("shield_flash", 0.0)) / 0.32, 0.0, 1.0)
-				var shield_color = Color(0.76, 0.96, 1.0, 0.76 + flash * 0.22)
-				game.draw_arc(pos + shield_dir * 28.0, 44.0 + flash * 9.0, shield_dir.angle() - PI * 0.46, shield_dir.angle() + PI * 0.46, 28, shield_color, 5.0 + flash * 3.0)
-				game.draw_line(pos + shield_dir * 32.0 + shield_dir.orthogonal() * 24.0, pos + shield_dir * 32.0 - shield_dir.orthogonal() * 24.0, Color(0.86, 1.0, 1.0, 0.52), 2.0)
-			else:
-				var speed_pulse = 0.5 + 0.5 * sin(game.time_alive * 10.0 + int(enemy.get("uid", 0)))
-				game.draw_line(pos - shield_dir * (30.0 + speed_pulse * 12.0), pos - shield_dir * 58.0, Color(1.0, 0.58, 0.18, 0.5), 3.0)
-		if enemy["type"] == game.ENEMY_PYRO_PENGUIN:
-			var flame_pulse = 0.5 + 0.5 * sin(game.time_alive * 9.0 + int(enemy["uid"]))
-			game.draw_circle(draw_pos + Vector2(0, 24), 25.0 + flame_pulse * 5.0, Color(1.0, 0.12, 0.02, 0.13))
-			game.draw_arc(draw_pos, 45.0, game.time_alive * 2.2, game.time_alive * 2.2 + PI * 1.35, 30, Color(1.0, 0.44, 0.08, 0.82), 3.0)
-		if game.current_phase == 4:
-			game._draw_phase4_enemy_identity(enemy, draw_pos, size)
-		if int(enemy.get("laceracao", 0)) > 0:
-			game._draw_centered("x%d" % int(enemy["laceracao"]), pos + Vector2(28, -36), 14, Color(1.0, 0.2, 0.25))
-		if float(enemy.get("eclipsada_weak_time", 0.0)) > 0.0:
-			game._draw_eclipsada_weakpoint(enemy, camera)
-		if float(enemy.get("resonant_stun_notes", 0.0)) > 0.0:
-			var note_time = game.time_alive * 8.0
-			var note_text = "â™«" if int(note_time) % 2 == 0 else "â™ª"
-			game._draw_centered(note_text, draw_pos + Vector2(0, -66.0 + sin(note_time) * 6.0), 24, Color(1.0, 0.74, 0.2, 0.9))
+	elif kind == game.ENEMY_CURATER:
+		game.draw_arc(pos, 92, 0, TAU, 48, Color(0.32, 1.0, 0.42, 0.35), 2)
+		for i in range(7):
+			var px := pos.x + cos(i * 1.7) * 30.0 + sin(t * 2.0 + i) * 2.0
+			var py := pos.y + 26.0 + sin(i * 1.3) * 8.0
+			game.draw_line(Vector2(px, py), Vector2(px, py - 10 - (i % 3) * 3), Color(0.28, 0.86, 0.36), 2)
+			game.draw_circle(Vector2(px + 3, py - 12), 4, Color(0.5, 1.0, 0.58))
+	elif kind == game.ENEMY_PYRO_PENGUIN:
+		var flame_pulse := 0.5 + 0.5 * sin(t * 9.0 + uid)
+		game.draw_circle(draw_pos + Vector2(0, 24), 25.0 + flame_pulse * 5.0, Color(1.0, 0.12, 0.02, 0.13))
+
+
 static func _plain_common_enemy_for_batch(game: Node2D, enemy: Dictionary, kind: String, alpha: float, is_attack_target: bool, prismatica_active: bool) -> bool:
 	if kind != game.ENEMY_COMMON or game.current_phase == 4 or prismatica_active or is_attack_target:
 		return false
@@ -260,7 +431,7 @@ static func _plain_common_enemy_for_batch(game: Node2D, enemy: Dictionary, kind:
 		return false
 	if game.execute_threshold > 0.0 or bool(enemy.get("sanguinaria_hunt", false)):
 		return false
-	for key in ["reconstitute_time", "tesla_shock", "crepuscular_ocaso_mark", "eletrica_static_timer", "eclipsada_weak_time", "resonant_stun_notes"]:
+	for key in ["reconstitute_time", "tesla_shock", "crepuscular_ocaso_mark", "eletrica_static_timer"]:
 		if float(enemy.get(key, 0.0)) > 0.0:
 			return false
 	return int(enemy.get("laceracao", 0)) <= 0
@@ -289,43 +460,6 @@ static func _draw_crepuscular_player_aura(game: Node2D, camera: Vector2, player_
 		])
 		game.draw_polygon(beam, PackedColorArray([Color(1.0, 0.93, 0.52, 0.0), Color(1.0, 0.93, 0.52, 0.0), Color(1.0, 0.93, 0.52, 0.22 * ratio), Color(1.0, 0.93, 0.52, 0.22 * ratio)]))
 		game.draw_circle(player_screen, 54.0 + sin(game.time_alive * 18.0) * 3.0, Color(1.0, 0.86, 0.35, 0.18 * ratio))
-
-
-static func _draw_resonant_player_beat(game: Node2D, camera: Vector2) -> void :
-	var center: Vector2 = game.player_pos - camera + Vector2(0, -4)
-	var beat: float = fposmod(game.time_alive, game.RESONANT_BEAT_INTERVAL)
-	var beat_progress: float = beat / game.RESONANT_BEAT_INTERVAL
-	var cycle_progress: float = fposmod(game.time_alive, game.RESONANT_BEAT_INTERVAL * 4.0) / (game.RESONANT_BEAT_INTERVAL * 4.0)
-	var to_hit: float = minf(beat, game.RESONANT_BEAT_INTERVAL - beat) / maxf(0.001, game.RESONANT_PERFECT_WINDOW)
-	var perfect_ratio: float = 1.0 - clampf(to_hit, 0.0, 1.0)
-	var pulse: float = 0.5 + 0.5 * sin(game.time_alive * 5.5)
-	var radius: float = 82.0 + perfect_ratio * 11.0
-	var alpha: float = 0.2 + perfect_ratio * 0.54
-	game.draw_circle(center, radius + 18.0, Color(0.18, 0.72, 1.0, 0.03 + perfect_ratio * 0.035))
-	game.draw_circle(center, 44.0 + perfect_ratio * 10.0, Color(1.0, 0.78, 0.18, 0.025 + perfect_ratio * 0.05))
-	game.draw_arc(center, radius, 0.0, TAU, 96, Color(1.0, 0.78, 0.18, alpha), 2.0 + perfect_ratio * 1.9)
-	game.draw_arc(center, radius + 12.0 + pulse * 3.0, 0.0, TAU, 96, Color(0.46, 0.94, 1.0, 0.16 + perfect_ratio * 0.26), 1.5)
-	for i in range(4):
-		var angle = - PI * 0.5 + TAU * (float(i) / 4.0)
-		var gate_alpha = 0.34 + (0.46 if perfect_ratio > 0.0 and i == int(floor(cycle_progress * 4.0)) else 0.0)
-		var gate_radius = radius + 2.0 + perfect_ratio * 8.0
-		game.draw_arc(center, gate_radius, angle - 0.18, angle + 0.18, 18, Color(1.0, 0.96, 0.48, gate_alpha), 5.0)
-		var note_pos = center + Vector2.from_angle(angle) * (gate_radius + 15.0)
-		game.draw_circle(note_pos, 4.5 + perfect_ratio * 2.0, Color(1.0, 0.82, 0.22, 0.46 + perfect_ratio * 0.34))
-	for i in range(16):
-		var angle = - PI * 0.5 + TAU * (float(i) / 16.0)
-		var wave = sin(game.time_alive * 3.6 + float(i) * 0.9)
-		var inner: Vector2 = center + Vector2.from_angle(angle) * (radius - 8.0 + wave * 2.0)
-		var outer: Vector2 = center + Vector2.from_angle(angle) * (radius + 12.0 + wave * 8.0 + perfect_ratio * 8.0)
-		game.draw_line(inner, outer, Color(0.52, 0.94, 1.0, 0.16 + perfect_ratio * 0.3), 1.2)
-	var hand_angle = - PI * 0.5 + cycle_progress * TAU
-	var hand_end: Vector2 = center + Vector2.from_angle(hand_angle) * (radius + 22.0)
-	game.draw_line(center, hand_end, Color(1.0, 0.86, 0.24, 0.28 + perfect_ratio * 0.36), 1.4 + perfect_ratio * 1.2)
-	game.draw_circle(hand_end, 5.0 + perfect_ratio * 4.0 + pulse * perfect_ratio * 1.5, Color(1.0, 0.92, 0.3, 0.66 + perfect_ratio * 0.28))
-	var beat_wave = radius * (0.52 + beat_progress * 0.62)
-	game.draw_arc(center, beat_wave, 0.0, TAU, 72, Color(1.0, 0.96, 0.52, (0.26 + perfect_ratio * 0.36) * (1.0 - beat_progress * 0.45)), 2.0)
-	if perfect_ratio > 0.05:
-		game.draw_arc(center, radius + 24.0 + perfect_ratio * 8.0, - game.time_alive * 1.3, - game.time_alive * 1.3 + TAU * 0.62, 60, Color(1.0, 0.96, 0.52, perfect_ratio * 0.48), 2.8)
 
 
 static func _draw_tesla_enemy_crown(game: Node2D, center: Vector2, shock_time: float, uid: int) -> void :
@@ -406,8 +540,6 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	var player_modulate = Color.WHITE
-	if game._eclipsada_is_stealthed():
-		player_modulate = Color(0.54, 0.82, 1.0, 0.46 + sin(game.time_alive * 9.0) * 0.07)
 	if bool(profile.get("preserve_height", false)):
 		game._draw_entity_by_height_rotated(tex, center + profile["offset"], float(profile.get("height", game.PLAYER_DRAW_LACERAR_HEIGHT)), rotation, player_modulate, flip_h)
 	else:
@@ -769,7 +901,20 @@ static func _enemy_health_bar_visible(game: Node2D, enemy: Dictionary, health_ra
 		or is_attack_target \
 		or game.execute_threshold > 0.0 \
 		or bool(enemy.get("sanguinaria_hunt", false)) \
-		or float(enemy.get("crepuscular_ocaso_mark", 0.0)) > 0.0
+		or float(enemy.get("crepuscular_ocaso_mark", 0.0)) > 0.0 \
+		or (game.manifestation_key == "lacerante" and game._lacerante_exec().can_be_executed(enemy))
+
+
+# Outline from four filled rects: an unfilled draw_rect becomes a polyline
+# (its own draw call), while filled rects merge with the rest of the bar pass.
+static func _draw_rect_outline(game: Node2D, rect: Rect2, color: Color, width: float) -> void:
+	var h := width * 0.5
+	var p := rect.position
+	var sz := rect.size
+	game.draw_rect(Rect2(p.x - h, p.y - h, sz.x + width, width), color, true)
+	game.draw_rect(Rect2(p.x - h, p.y + sz.y - h, sz.x + width, width), color, true)
+	game.draw_rect(Rect2(p.x - h, p.y + h, width, sz.y - width), color, true)
+	game.draw_rect(Rect2(p.x + sz.x - h, p.y + h, width, sz.y - width), color, true)
 
 
 static func _draw_enemy_health_bar(game: Node2D, enemy: Dictionary, pos: Vector2, width: float, ratio: float, shared_style: Dictionary = {}) -> void :
@@ -794,9 +939,14 @@ static func _draw_enemy_health_bar(game: Node2D, enemy: Dictionary, pos: Vector2
 	var inner = Rect2(pos, Vector2(width, height))
 	game.draw_rect(outer, Color(0.0, 0.0, 0.0, 0.62), true)
 	game.draw_rect(inner, back, true)
+	var exec_overlay: Dictionary = game._lacerante_exec().bar_overlay(enemy) if game.manifestation_key == "lacerante" else {}
+	if not exec_overlay.is_empty() and bool(exec_overlay.get("executable", false)):
+		fill = Color(0.86, 0.04, 0.12)
 	if health_ratio > 0.0:
 		game.draw_rect(Rect2(pos, Vector2(width * health_ratio, height)), fill, true)
-	game.draw_rect(inner, border, false, 1.2)
+	if not exec_overlay.is_empty():
+		RTLaceranteExecutionVfx.draw_bar_overlay(game, pos, width, height, health_ratio, exec_overlay)
+	_draw_rect_outline(game, inner, border, 1.2)
 	match shape:
 		"swift":
 			game.draw_line(pos + Vector2(width * 0.18, -2.0), pos + Vector2(width * 0.06, height + 3.0), accent, 1.4, true)

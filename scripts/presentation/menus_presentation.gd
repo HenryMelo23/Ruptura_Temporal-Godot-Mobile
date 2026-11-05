@@ -583,15 +583,6 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	game.settings_buttons = game._gameplay_preferences_rects(viewport)
 	var analog_accent = Color(0.0, 1.0, 0.82) if game.analog_fixed else Color(1.0, 0.74, 0.22)
 	game._draw_gameplay_preference(game.settings_buttons["analog"], "ANALOGICO", "Origem do controle de movimento.", "FIXO" if game.analog_fixed else "DINAMICO", analog_accent, game.settings_selected == game._gameplay_preference_index("analog"))
-	var shop_accent = Color(0.0, 1.0, 0.82) if game.shop_auto_enabled else Color(1.0, 0.68, 0.24)
-	game._draw_gameplay_preference(game.settings_buttons["shop_mode"], "ABERTURA DA LOJA", "Automatica usa contagem; manual usa botao no HUD.", "AUTOMATICA" if game.shop_auto_enabled else "MANUAL", shop_accent, game.settings_selected == game._gameplay_preference_index("shop_mode"))
-	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["shop_mode"]), game.shop_auto_enabled, shop_accent)
-	var interval_panel: Rect2 = game.settings_buttons["shop_interval"]
-	var interval_value = "%d MIN" % int(game.shop_auto_interval / 60.0) if game.shop_auto_enabled else "DESATIVADO"
-	game._draw_gameplay_preference(interval_panel, "INTERVALO DA LOJA", "Tempo entre aberturas automaticas.", interval_value, Color(0.44, 0.82, 1.0) if game.shop_auto_enabled else Color(0.48, 0.52, 0.58), game.settings_selected == game._gameplay_preference_index("shop_interval"))
-	if game.shop_auto_enabled:
-		game._draw_small_rect_button(game._shop_interval_minus_rect(interval_panel), "-", Color(0.04, 0.1, 0.14), Color(0.44, 0.82, 1.0))
-		game._draw_small_rect_button(game._shop_interval_plus_rect(interval_panel), "+", Color(0.04, 0.1, 0.14), Color(0.44, 0.82, 1.0))
 	game._draw_gameplay_preference(game.settings_buttons["target_priority"], "PRIORIDADE DO DISPARO", "Define o alvo escolhido pela mira automatica.", game._target_priority_label(), Color(1.0, 0.48, 0.74), game.settings_selected == game._gameplay_preference_index("target_priority"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", game._desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_aim"))
@@ -623,11 +614,11 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	var tutorial_accent = Color(0.0, 1.0, 0.82) if game.run_tutorial_enabled else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["tutorial"], "TUTORIAL INICIAL", "Pergunta ao iniciar a proxima partida.", "ON" if game.run_tutorial_enabled else "OFF", tutorial_accent, game.settings_selected == game._gameplay_preference_index("tutorial"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["tutorial"]), game.run_tutorial_enabled, tutorial_accent)
-	var cheat_value = (game.experimental_phase_controller.phase_label(game.experimental_phase_controller.requested_phase) + " ARMADA") if game.experimental_phase_requested else ("QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else ("RETORNANTE OK" if game.retornante_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE"))))
-	var cheat_accent = Color(0.34, 0.94, 1.0) if game.experimental_phase_requested else (Color(0.74, 1.0, 0.36) if game.qa_data_unlocked else (Color(0.0, 1.0, 0.82) if game.online_mode_unlocked else (Color(0.86, 0.48, 1.0) if game.retornante_unlocked else Color(0.64, 0.44, 1.0))))
+	var cheat_value = (game.experimental_phase_controller.phase_label(game.experimental_phase_controller.requested_phase) + " ARMADA") if game.experimental_phase_requested else ("QA ATIVO" if game.qa_data_unlocked else ("ONLINE OK" if game.online_mode_unlocked else (game.gameplay_cheat_text if game.gameplay_cheat_text != "" else "TOQUE E DIGITE")))
+	var cheat_accent = Color(0.34, 0.94, 1.0) if game.experimental_phase_requested else (Color(0.74, 1.0, 0.36) if game.qa_data_unlocked else (Color(0.0, 1.0, 0.82) if game.online_mode_unlocked else Color(0.64, 0.44, 1.0)))
 	if game.gameplay_cheat_focused:
 		cheat_value = "DIGITANDO..."
-	game._draw_gameplay_preference(game.settings_buttons["retornante_cheat"], "CHEAT SECRETO", "Campo reservado para codigos de QA e dev.", cheat_value, cheat_accent, game.settings_selected == game._gameplay_preference_index("retornante_cheat"))
+	game._draw_gameplay_preference(game.settings_buttons["gameplay_cheat"], "CHEAT SECRETO", "Campo reservado para códigos de QA e dev.", cheat_value, cheat_accent, game.settings_selected == game._gameplay_preference_index("gameplay_cheat"))
 	var haptics_accent = Color(0.0, 1.0, 0.82) if game.haptics_enabled else Color(0.48, 0.52, 0.58)
 	game._draw_gameplay_preference(game.settings_buttons["haptics"], "VIBRACAO", "Feedback tatil dos impactos e habilidades.", "ON" if game.haptics_enabled else "OFF", haptics_accent, game.settings_selected == game._gameplay_preference_index("haptics"))
 	game._draw_toggle_switch(game._shop_mode_toggle_rect(game.settings_buttons["haptics"]), game.haptics_enabled, haptics_accent)
@@ -1324,7 +1315,13 @@ static func _draw_online_label(game: Node2D, text: String, rect: Rect2, size: in
 
 
 static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
-
+	if game.mode == "manifest":
+		RTBuildSelectPresentation.draw(game, viewport, _geovana_build_model(game))
+		if game.manifest_preview_open:
+			game._draw_manifest_preview_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
+		if game.manifest_details_open:
+			game._draw_manifest_details_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
+		return
 	game._draw_holo_background(viewport, null, Color(0.0, 1.0, 0.82))
 	var portrait = game._is_portrait(viewport)
 
@@ -1550,6 +1547,48 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 		game._draw_manifest_details_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
 
 
+## Monta o model da tela unificada (RTBuildSelectPresentation) para a Geovana.
+static func _geovana_build_model(game: Node2D) -> Dictionary:
+	var transition_t: float = game._manifest_transition_progress()
+	var aura_view: bool = game.manifest_select_stage == game.MANIFEST_STAGE_AURA or (game.manifest_select_stage == game.MANIFEST_STAGE_TRANSITION and transition_t >= 0.52)
+	var source: Array = game.AURAS if aura_view else game.MANIFESTATIONS
+	var indices: Array = game._manifest_selection_visible_indices(aura_view)
+	var selected: int = game.selected_aura if aura_view else game.selected_manifestation
+	var items: Array = []
+	for slot in range(indices.size()):
+		var index: int = int(indices[slot])
+		var entry: Dictionary = source[index]
+		var key: String = String(entry.get("key", ""))
+		items.append({
+			"index": index,
+			"key": key,
+			"name": String(entry.get("name", "")),
+			"color": game._manifest_select_item_color(entry, aura_view),
+			"texture": game._manifest_select_item_texture(entry, aura_view),
+			"unlocked": game._manifest_select_item_unlocked(index, aura_view),
+			"unread": game._content_is_unread("specter" if aura_view else "manifestation", key),
+		})
+	var selected_slot: int = maxi(0, game._manifest_selection_slot_for_index(selected, aura_view))
+	var selected_entry: Dictionary = source[clampi(selected, 0, source.size() - 1)]
+	var unlocked: bool = game._manifest_select_item_unlocked(selected, aura_view)
+	var dossier: Dictionary = RTBuildChoiceDossier.spectrum(String(selected_entry.get("name", ""))) if aura_view else RTBuildChoiceDossier.manifestation(String(selected_entry.get("key", "")))
+	return {
+		"theme": "geovana",
+		"step": 1 if aura_view else 0,
+		"items": items,
+		"selected_slot": selected_slot,
+		"target_scroll": float(game.aura_scroll_pos if aura_view else game.manifest_scroll_pos) if bool(game.manifest_is_dragging) else float(selected_slot),
+		"dossier": dossier,
+		"locked_text": game._manifest_select_unlock_objective_text(selected, aura_view, true),
+		"summary": ("MANIFESTAÇÃO: " + String(game.MANIFESTATIONS[game.selected_manifestation].get("name", "")).to_upper()) if aura_view else "",
+		"primary_label": ("INICIAR" if aura_view else "ESCOLHER ESPECTRO") if unlocked else "BLOQUEADO",
+		"primary_enabled": unlocked,
+		"preview_enabled": unlocked and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
+		"hint": "A / D, ARRASTE OU TOQUE NUMA CARTA",
+		"keys": {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next"},
+	}
+
+
 static func _draw_manifest_preview_popup(game: Node2D, viewport: Vector2, item: Dictionary) -> void :
 	var portrait = game._is_portrait(viewport)
 	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.0, 0.56), true)
@@ -1693,11 +1732,6 @@ static func _draw_manifest_preview_atk(game: Node2D, rect: Rect2, key: String, t
 			game.draw_line(p + Vector2(22, -8), beam_end, Color(accent.r, accent.g, accent.b, 0.38), 8.0)
 			game.draw_line(p + Vector2(22, -8), beam_end, Color(1.0, 1.0, 1.0, 0.8), 2.0)
 			game.draw_circle(beam_end, 12.0 + pulse * 8.0, Color(1.0, 0.42, 0.88, 0.32))
-		"retornante":
-			var mid = p.lerp(e, 0.52) + Vector2(0, -34.0 * sin(t * TAU))
-			game.draw_arc(mid, rect.size.x * 0.21, PI * 0.15, PI * 1.18, 42, Color(accent.r, accent.g, accent.b, 0.6), 3.0)
-			game.draw_circle(p.lerp(e, fposmod(t * 0.6, 1.0)), 8.0, Color(1.0, 0.48, 0.84, 0.9))
-			game.draw_circle(e.lerp(p, fposmod(t * 0.8 + 0.35, 1.0)), 6.0, Color(0.82, 0.7, 1.0, 0.8))
 		"parasitica":
 			var worm = p.lerp(e, fposmod(t * 0.75, 1.0))
 			game._draw_preview_worm_path(p + Vector2(18, 0), e - Vector2(16, 0), t, accent)
@@ -1706,26 +1740,6 @@ static func _draw_manifest_preview_atk(game: Node2D, rect: Rect2, key: String, t
 		"gravitante":
 			var orb = p.lerp(e, fposmod(t * 0.55, 1.0))
 			game.GravitanteVfx.projectile(game, orb, (e - p).normalized(), t)
-		"acorrentada":
-			var step = int(fposmod(floor(t * 3.0), 3.0)) + 1
-			if step == 1:
-				game._draw_acorrentada_chain(p + Vector2(18, -4), e - Vector2(14, 0), Color(0.18, 0.86, 1.0, 0.86), 5.0, 1.0, true)
-			elif step == 2:
-				game.draw_arc(p, rect.size.x * 0.34, -0.65, 0.75, 42, Color(0.92, 0.12, 0.1, 0.68), 6.0)
-				game._draw_acorrentada_chain(p + Vector2(20, 8), e - Vector2(8, 8), Color(0.92, 0.12, 0.1, 0.84), 8.0, 1.0, false)
-			else:
-				game._draw_acorrentada_chain(p + Vector2(16, -22), e + Vector2(-10, 18), Color(0.18, 0.86, 1.0, 0.84), 6.0, 1.0, true)
-				game._draw_acorrentada_chain(p + Vector2(16, 22), e + Vector2(-10, -18), Color(0.92, 0.12, 0.1, 0.84), 8.0, 1.0, false)
-				game.draw_circle(e, 18.0 + pulse * 7.0, Color(1.0, 1.0, 1.0, 0.24))
-		"eclipsada":
-			var step = int(fposmod(floor(t * 4.0), 4.0)) + 1
-			var slash_center: Vector2 = p + Vector2(54.0, -8.0)
-			var slash_angle: float = -0.9 + pulse * 1.8 + float(step) * 0.34
-			game.draw_circle(slash_center, 80.0, Color(0.06, 0.2, 0.48, 0.1))
-			game.draw_arc(slash_center, 80.0, slash_angle, slash_angle + PI * 1.38, 54, Color(accent.r, accent.g, accent.b, 0.88), 7.0 if step == 4 else 5.0)
-			game.draw_arc(slash_center, 72.0, slash_angle + 0.12, slash_angle + PI * 1.22, 48, Color(0.9, 0.98, 1.0, 0.78), 2.0)
-			if step == 4:
-				game.draw_arc(slash_center, 54.0, - slash_angle, TAU - slash_angle, 48, Color(1.0, 0.86, 0.3, 0.68), 3.0)
 		_:
 			game.draw_line(p + Vector2(20, 0), e - Vector2(16, 0), Color(accent.r, accent.g, accent.b, 0.7), 5.0)
 			game.draw_circle(e, 17.0 + pulse * 5.0, Color(1.0, 0.78, 0.26, 0.2))
@@ -1755,11 +1769,6 @@ static func _draw_manifest_preview_skill(game: Node2D, rect: Rect2, key: String,
 			game._draw_preview_diamond(prism, 24.0 + pulse * 3.0, accent)
 			for angle in [-0.7, 0.0, 0.7, 1.35, -1.35]:
 				game.draw_line(prism, prism + Vector2.from_angle(angle) * rect.size.x * 0.28, Color(accent.r, accent.g, accent.b, 0.48), 4.0)
-		"retornante":
-			for i in range(4):
-				var r = 28.0 + i * 13.0 + pulse * 4.0
-				game.draw_arc(c, r, t * TAU + i, t * TAU + i + PI * 1.25, 48, Color(accent.r, accent.g, accent.b, 0.42 - i * 0.06), 2.0)
-			game.draw_circle(c, 10.0 + pulse * 5.0, Color(1.0, 0.38, 0.7, 0.42))
 		"parasitica":
 			game.draw_circle(c + Vector2(8, 10), 58.0 + pulse * 6.0, Color(0.16, 0.75, 0.18, 0.18))
 			for i in range(8):
@@ -1770,18 +1779,6 @@ static func _draw_manifest_preview_skill(game: Node2D, rect: Rect2, key: String,
 			game.GravitanteVfx.event(game, {"kind": "gravity_q", "pos": c,
 				"points": PackedVector2Array([e1, e2]), "max": 0.55,
 				"life": 0.55 * (1.0 - fposmod(t, 1.0))}, Vector2.ZERO)
-		"acorrentada":
-			game._draw_acorrentada_chain(e1, e2, Color(0.18, 0.86, 1.0, 0.82), 6.0, 1.0, true)
-			game._draw_acorrentada_chain(p + Vector2(10, -4), e1, Color(0.92, 0.12, 0.1, 0.7), 7.0, 1.0, false)
-			game.draw_arc(e1.lerp(e2, 0.5), 26.0 + pulse * 9.0, 0.0, TAU, 36, Color(1.0, 0.24, 0.18, 0.42), 2.4)
-		"eclipsada":
-			var dash_end: Vector2 = p + Vector2(52.0, -18.0)
-			game.draw_rect(rect, Color(0.02, 0.16, 0.38, 0.12), true)
-			game.draw_line(p - Vector2(42, 0), dash_end + Vector2(34, 0), Color(0.04, 0.1, 0.28, 0.72), 24.0, true)
-			game.draw_line(p - Vector2(42, 0), dash_end + Vector2(34, 0), Color(accent.r, accent.g, accent.b, 0.82), 5.0, true)
-			for enemy_pos in [e1, e2]:
-				game.draw_arc(enemy_pos + Vector2(8, -8), 18.0 + pulse * 5.0, - t * TAU, TAU - t * TAU, 30, Color(1.0, 0.88, 0.3, 0.88), 2.5)
-				game.draw_line(enemy_pos + Vector2(0, -8), enemy_pos + Vector2(16, -8), Color(0.92, 0.98, 1.0, 0.78), 1.5)
 		_:
 			game.draw_arc(p, 58.0 + pulse * 7.0, 0.0, TAU, 72, Color(accent.r, accent.g, accent.b, 0.54), 3.0)
 			game.draw_line(p, e1, Color(1.0, 0.8, 0.26, 0.46), 3.0)

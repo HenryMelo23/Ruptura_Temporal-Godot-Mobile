@@ -5,13 +5,13 @@ const PAPER := Color(0.91, 0.95, 0.96)
 const MUTED := Color(0.57, 0.69, 0.72)
 const CYAN := Color(0.18, 0.88, 0.89)
 const GOLD := Color(1.0, 0.78, 0.29)
-const BURN_TIME := 0.72
+const BURN_TIME := 0.95
 var action := ""
 var elapsed := 0.0
 var duration := 0.0
 var slot := -1
 var previous_cards: Array = []
-var entrance := 1.0
+var entrance := 2.0
 
 
 func reset() -> void:
@@ -25,7 +25,7 @@ func begin(kind: String, cards: Array, index: int = -1) -> void:
 	previous_cards = cards.duplicate(true)
 	slot = index
 	elapsed = 0.0
-	duration = 0.62 if kind == "reroll" else (BURN_TIME if kind == "burn" else 0.34)
+	duration = 0.72 if kind == "reroll" else (BURN_TIME if kind == "burn" else 0.5)
 
 
 func busy() -> bool:
@@ -33,7 +33,8 @@ func busy() -> bool:
 
 
 func update(delta: float) -> void:
-	entrance = minf(1.0, entrance + delta / 0.4)
+	# 0..1 = visor abrindo; 1..2 = cartas materializando.
+	entrance = minf(2.0, entrance + delta / 0.4)
 	if not busy():
 		return
 	elapsed += delta
@@ -43,27 +44,53 @@ func update(delta: float) -> void:
 
 
 func layout(viewport: Vector2) -> Dictionary:
-	var margin := 28.0 if viewport.x >= 1000 else 16.0
-	var detail_width := clampf(viewport.x * 0.3, 260.0, 380.0)
-	var footer_y := viewport.y - 68.0
-	var detail := Rect2(viewport.x - margin - detail_width, 132, detail_width, footer_y - 150)
-	var rack := Rect2(margin, 148, detail.position.x - margin - 30, footer_y - 168)
-	var card_width := minf(220.0, (rack.size.x - 32) / 3.0)
-	var card_height := minf(card_width * 1.48, rack.size.y - 26)
+	# Visor holografico projetado pelo bracelete (embaixo, no centro).
+	var small: bool = viewport.y < 560.0
+	var margin := 22.0 if viewport.x >= 1000 else 12.0
+	var bracelet_h := 62.0 if small else 92.0
+	var visor := Rect2(margin, 12.0 if small else 18.0, viewport.x - margin * 2.0, viewport.y - bracelet_h - (12.0 if small else 18.0))
+	var pad := 14.0 if small else 22.0
+	var header_h := 54.0 if small else 70.0
+	var footer_h := 52.0 if small else 62.0
+	var detail_width := clampf(visor.size.x * 0.32, 240.0, 370.0)
+	var content_top := visor.position.y + header_h + (6.0 if small else 12.0)
+	var footer_y := visor.end.y - footer_h
+	var detail := Rect2(visor.end.x - pad - detail_width, content_top, detail_width, footer_y - content_top - 8.0)
+	var rack := Rect2(visor.position.x + pad, content_top, detail.position.x - visor.position.x - pad * 2.0, footer_y - content_top - (30.0 if small else 38.0))
+	var card_width := minf(212.0, (rack.size.x - 30) / 3.0)
+	var card_height := minf(card_width * 1.48, rack.size.y - 8)
 	card_width = minf(card_width, card_height / 1.48)
 	var cards: Array[Rect2] = []
 	for i in range(3):
-		var center := rack.position + Vector2(rack.size.x * (float(i) + 0.5) / 3, rack.size.y * 0.48)
+		var center := rack.position + Vector2(rack.size.x * (float(i) + 0.5) / 3, rack.size.y * 0.5)
 		cards.append(Rect2(center - Vector2(card_width, card_height) * 0.5, Vector2(card_width, card_height)))
+	var button_h := 40.0 if small else 48.0
+	var deck_w := 150.0 if not small else 128.0
+	var reroll_w := 196.0 if not small else 168.0
+	var header_y := visor.position.y + (header_h - button_h) * 0.5 + 2.0
+	var action_h := 38.0 if small else 44.0
 	return {
+		"visor": visor, "header_h": header_h, "pad": pad, "small": small,
+		"bracelet": Vector2(viewport.x * 0.5, viewport.y - bracelet_h * 0.46),
+		"points": Rect2(visor.position.x + pad, visor.position.y + 6.0, 300.0, header_h - 8.0),
 		"cards": cards, "detail": detail,
-		"buy": Rect2(detail.position.x, footer_y, detail_width, 48),
-		"exit": Rect2(margin, footer_y, 190, 48),
-		"reroll": Rect2(viewport.x - margin - 318, 28, 190, 56),
-		"deck": Rect2(viewport.x - margin - 112, 28, 112, 48),
-		"burn": Rect2(detail.position.x, detail.end.y - 48, (detail_width - 12) * 0.5, 44),
-		"reserve": Rect2(detail.position.x + (detail_width + 12) * 0.5, detail.end.y - 48, (detail_width - 12) * 0.5, 44)
+		"buy": Rect2(detail.position.x, footer_y + (footer_h - button_h) * 0.5, detail_width, button_h),
+		"exit": Rect2(visor.position.x + pad, footer_y + (footer_h - button_h) * 0.5, 190 if not small else 160, button_h),
+		"deck": Rect2(visor.end.x - pad - deck_w, header_y, deck_w, button_h),
+		"reroll": Rect2(visor.end.x - pad - deck_w - 12.0 - reroll_w, header_y, reroll_w, button_h),
+		"burn": Rect2(detail.position.x, detail.end.y - action_h, (detail_width - 12) * 0.5, action_h),
+		"reserve": Rect2(detail.position.x + (detail_width + 12) * 0.5, detail.end.y - action_h, (detail_width - 12) * 0.5, action_h)
 	}
+
+
+## Queimar so aparece com Cinzas no deck; reservar so com Escolha Adiada (ou
+## para soltar uma vaga ja reservada).
+func burn_visible(g) -> bool:
+	return g._support_card_count(g.CARD_CINZAS_ID) > 0
+
+
+func reserve_visible(g) -> bool:
+	return g._new_common_card_count(g.CARD_ESCOLHA_ADIADA_ID) > 0 or g._shop_slot_locked(g.shop_selected)
 
 
 func text(g, value: String, rect: Rect2, size: int, color: Color, centered: bool = false) -> void:
@@ -224,7 +251,7 @@ func reroll_visual_state(g) -> Dictionary:
 		accent = Color(1.0, 0.84, 0.22).lerp(Color(1.0, 0.43, 0.12), clampf((ratio - 0.42) / 0.3, 0.0, 1.0))
 	else:
 		accent = Color(0.24, 1.0, 0.46).lerp(Color(1.0, 0.84, 0.22), clampf(ratio / 0.42, 0.0, 1.0))
-	var detail: String = "%s pts / carta %s" % [g._format_points(cost), g._format_points(card_cost)]
+	var detail: String = "%s pts" % g._format_points(cost)
 	if not enabled:
 		detail = "saldo insuficiente - %d pts" % cost
 	return {
@@ -256,11 +283,12 @@ func draw_reroll_button(g, rect: Rect2) -> void:
 	g.draw_style_box(_style(fill, Color(accent.r, accent.g, accent.b, (0.95 if enabled else 0.42)), 5), rect)
 	var stripe: Rect2 = Rect2(rect.position.x + 7.0, rect.position.y + 7.0, 5.0, rect.size.y - 14.0)
 	g.draw_rect(stripe, Color(accent.r, accent.g, accent.b, 0.86 * alpha), true)
-	var title_rect: Rect2 = Rect2(rect.position.x + 20.0, rect.position.y + 6.0, rect.size.x - 28.0, 22.0)
-	var detail_rect: Rect2 = Rect2(rect.position.x + 20.0, rect.position.y + 29.0, rect.size.x - 28.0, 18.0)
+	var compact_btn: bool = rect.size.y < 46.0
+	var title_rect: Rect2 = Rect2(rect.position.x + 20.0, rect.position.y + (3.0 if compact_btn else 6.0), rect.size.x - 28.0, 18.0 if compact_btn else 22.0)
+	var detail_rect: Rect2 = Rect2(rect.position.x + 20.0, rect.end.y - (17.0 if compact_btn else 19.0), rect.size.x - 28.0, 14.0 if compact_btn else 18.0)
 	text(g, String(state.get("title", "REROLL")), title_rect, 15, PAPER if enabled else MUTED, false)
 	text(g, String(state.get("detail", "")), detail_rect, 12, Color(accent.r, accent.g, accent.b, 0.96 * alpha), false)
-	if bool(state.get("free", false)):
+	if bool(state.get("free", false)) and not compact_btn:
 		var pill: Rect2 = Rect2(rect.end.x - 72.0, rect.position.y + 8.0, 58.0, 20.0)
 		g.draw_rect(pill, Color(0.04, 0.22, 0.08, 0.84 * alpha), true)
 		g.draw_rect(pill, Color(accent.r, accent.g, accent.b, 0.72 * alpha), false, 1)
@@ -374,7 +402,7 @@ func card_stat_chips(card_name: String) -> Array:
 		"Carta Zero":
 			return ["+6% COMUNS", "RETROATIVA"]
 		"Necrocronismo":
-			return ["12 ABATES", "COPIA CURTA"]
+			return ["12 ABATES", "ECO + IMPLOSAO"]
 		"CoraÃ§Ã£o de AntimatÃ©ria":
 			return ["CARGA DANO", "IMPLOSAO"]
 		"Cofre do Excesso":
@@ -548,127 +576,412 @@ func draw_countdown_alert(g, viewport: Vector2) -> void:
 func draw(g, viewport: Vector2) -> void:
 	var areas := layout(viewport)
 	var detail: Rect2 = areas.detail
+	var visor: Rect2 = areas.visor
+	var small: bool = areas.small
 	var compact: bool = detail.size.y < 290
-	var margin: float = areas.exit.position.x
+	var now: float = float(Time.get_ticks_msec()) * 0.001
 	g.buttons.clear()
 	var background: Texture2D = g.textures.get("cards_back")
 	if background:
-		g.draw_texture_rect(background, Rect2(Vector2.ZERO, viewport), false, Color(0.22, 0.25, 0.26))
-	g.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.015, 0.022, 0.028, 0.76))
-	g.draw_rect(Rect2(0, 0, viewport.x, 110), Color(0.02, 0.04, 0.048, 0.96))
-	text(g, "ARQUIVO TEMPORAL", Rect2(margin, 15, 340, 18), 13, CYAN)
-	text(g, "LOJA DE CARTAS", Rect2(margin, 37, viewport.x - 310, 36), 30, PAPER)
-	text(g, "%s PONTOS    /    CUSTO BASE %s    /    %d CARTAS NO DECK" % [g._format_points(g.score), g._format_points(g.card_cost), g._deck_total_cards()], Rect2(margin, 80, 650, 24), 17, GOLD)
-	if g.shop_spend_anim_timer > 0.0 and g.shop_spend_anim_amount > 0:
-		var spend_progress: float = 1.0 - clampf(g.shop_spend_anim_timer / maxf(0.01, g.SHOP_SPEND_ANIM_TIME), 0.0, 1.0)
-		var rise: float = sin(spend_progress * PI) * 16.0
-		var alpha: float = 1.0 - smoothstep(0.62, 1.0, spend_progress)
-		var spend_rect := Rect2(margin + 430.0, 67.0 - rise, 126.0, 28.0)
-		g.draw_rect(spend_rect, Color(0.16, 0.035, 0.02, 0.78 * alpha), true)
-		g.draw_line(spend_rect.position + Vector2(8.0, 2.0), spend_rect.position + Vector2(spend_rect.size.x - 8.0, 2.0), Color(1.0, 0.42, 0.16, 0.92 * alpha), 2.0)
-		text(g, "-%s PTS" % g._format_points(g.shop_spend_anim_amount), spend_rect.grow(-5), 16, Color(1.0, 0.56, 0.22, alpha), true)
+		g.draw_texture_rect(background, Rect2(Vector2.ZERO, viewport), false, Color(0.16, 0.18, 0.2))
+	g.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.01, 0.016, 0.022, 0.8))
+	# Visor abre a partir do bracelete.
+	var open: float = smoothstep(0.0, 1.0, minf(1.0, entrance))
+	var pivot: Vector2 = areas.bracelet
+	draw_bracelet(g, pivot, open, now, areas)
+	draw_beam(g, pivot, visor, open, now)
+	var sy: float = lerpf(0.04, 1.0, open)
+	var sx: float = lerpf(0.4, 1.0, open)
+	_visor_origin = pivot - Vector2(pivot.x * sx, pivot.y * sy)
+	_visor_scale = Vector2(sx, sy)
+	g.draw_set_transform(_visor_origin, 0.0, _visor_scale)
+	draw_visor(g, visor, now, areas.header_h)
+	draw_points_counter(g, areas.points, now, small)
 	draw_reroll_button(g, areas.reroll)
-	button(g, areas.deck, "MEU DECK", GOLD, g._deck_total_cards() > 0 and not busy() and not g._shop_purchase_animating())
-	var team := "ESCOLHA UMA CARTA"
+	draw_deck_button(g, areas.deck, now)
 	if g.is_multiplayer:
-		team = "EQUIPE  %d/%d PRONTOS    |    SUAS COMPRAS, SEU SALDO" % [g.shop_mp_ready_count, maxi(1, g.shop_mp_expected_count)]
-	text(g, team, Rect2(margin, 114, viewport.x - margin * 2, 25), 15, MUTED)
+		text(g, "EQUIPE  %d/%d PRONTOS  |  SUAS COMPRAS, SEU SALDO" % [g.shop_mp_ready_count, maxi(1, g.shop_mp_expected_count)], Rect2(visor.position.x + 330, visor.position.y + 18, maxf(60.0, areas.reroll.position.x - visor.position.x - 350), 24), 13, MUTED)
+	var t := clampf(elapsed / maxf(duration, 0.01), 0, 1)
 	for i in range(mini(3, g.shop_cards.size())):
 		var card: Dictionary = g.shop_cards[i]
 		var rect: Rect2 = areas.cards[i]
 		var selected: bool = i == g.shop_selected
-		var t := clampf(elapsed / maxf(duration, 0.01), 0, 1)
+		var reveal := 1.0
 		if action == "reroll" and not g._shop_slot_locked(i):
-			var local_t := clampf((t - i * 0.09) / 0.8, 0, 1)
+			var local_t := clampf((t - i * 0.08) / 0.8, 0, 1)
 			if local_t < 0.5 and previous_cards.size() > i:
 				card = previous_cards[i]
-			var flip := maxf(0.035, absf(cos(local_t * PI)))
-			rect = Rect2(rect.get_center() - Vector2(rect.size.x * flip, rect.size.y) * 0.5, Vector2(rect.size.x * flip, rect.size.y))
-			rect.position.y -= sin(local_t * PI) * 20
-		if action == "burn" and slot == i:
+				reveal = 1.0 - smoothstep(0.0, 0.5, local_t)
+			else:
+				reveal = smoothstep(0.5, 1.0, local_t)
+		var materialize: float = clampf((entrance - 0.7 - float(i) * 0.18) / 0.55, 0.0, 1.0)
+		reveal = minf(reveal, smoothstep(0.0, 1.0, materialize))
+		if action == "burn" and slot == i and previous_cards.size() > i:
 			card = previous_cards[i]
-		rect.position.y += (1 - smoothstep(0, 1, entrance)) * (24 + i * 12)
 		if selected:
 			rect.position.y -= 8
 			if g.shop_select_pulse_timer > 0:
 				rect.position.y -= sin(clampf(1 - g.shop_select_pulse_timer / 0.26, 0, 1) * PI) * 5
 		var price_rect: Rect2 = areas.cards[i]
 		var purchase: bool = g._shop_purchase_animating() and g.shop_select_pulse_index == i
+		var flight := 0.0
 		if purchase:
 			var p: float = 1 - g.shop_purchase_anim_timer / g.SHOP_PURCHASE_ANIM_TIME
-			var flight := smoothstep(0.12, 0.88, p)
-			var target: Vector2 = areas.deck.get_center()
-			var center := rect.get_center().lerp(target, flight) + Vector2(0, -sin(flight * PI) * 65)
-			rect.size *= lerpf(1.0, 0.14, flight)
+			flight = smoothstep(0.18, 0.92, p)
+			# Lift curto, depois mergulha no bracelete (coordenadas do visor).
+			var target: Vector2 = pivot
+			var center := rect.get_center().lerp(target, flight) + Vector2(0, -sin(flight * PI) * 70 - (1.0 - flight) * smoothstep(0.0, 0.18, p) * 16.0)
+			rect.size *= lerpf(1.0, 0.12, flight)
 			rect.position = center - rect.size * 0.5
+			if flight > 0.05:
+				draw_card_trail(g, areas.cards[i].get_center(), center, flight, g._card_rarity_color(card))
 		var accent: Color = g._card_rarity_color(card)
-		frame(g, rect, accent if selected else MUTED.darkened(0.3), selected)
+		var alpha: float = clampf(reveal * 1.6, 0.0, 1.0)
+		frame(g, rect, Color(accent if selected else MUTED.darkened(0.3), alpha), selected)
 		var icon: Texture2D = g._card_texture(card)
 		var art := rect.grow(-9)
 		if icon:
 			if action == "burn" and slot == i:
 				_draw_burn(g, icon, art, t)
+			elif reveal < 0.999:
+				draw_art_reveal(g, icon, art, reveal, accent)
 			elif not g._draw_cinzas_shader_card(card, art, icon, 1.0, true):
 				g._draw_texture_contain(icon, art, Color.WHITE)
-		if not purchase and not (action == "burn" and slot == i) and rect.size.x > 80:
+			elif not purchase:
+				draw_card_flames(g, rect, card, now)
+		if not purchase and not (action == "burn" and slot == i) and rect.size.x > 80 and reveal > 0.6:
 			var caption := Rect2(rect.position + Vector2(9, rect.size.y * 0.64), Vector2(rect.size.x - 18, rect.size.y * 0.36 - 9))
-			g.draw_rect(caption, Color(0.035, 0.045, 0.055, 0.97))
+			g.draw_rect(caption, Color(0.03, 0.05, 0.06, 0.95))
 			g.draw_line(caption.position, Vector2(caption.end.x, caption.position.y), accent.darkened(0.2), 2)
-			paragraph(g, String(card.get("name", "Vaga vazia")), Rect2(caption.position + Vector2(6, 4), Vector2(caption.size.x - 12, 36)), 16, true)
-			text(g, g._card_rarity_label(card), Rect2(caption.position + Vector2(6, 40), Vector2(caption.size.x - 12, 22)), 13, accent, true)
+			paragraph(g, String(card.get("name", "Vaga vazia")), Rect2(caption.position + Vector2(6, 4), Vector2(caption.size.x - 12, 36)), 16 if not small else 13, true)
+			text(g, g._card_rarity_label(card), Rect2(caption.position + Vector2(6, caption.size.y - 24), Vector2(caption.size.x - 12, 20)), 12, accent, true)
 			draw_bargain_banner(g, card, rect, 1.0)
-		if g._shop_slot_locked(i):
-			var lock_t := smoothstep(0, 1, t) if action == "lock" and slot == i else 1.0
-			var strip := Rect2(rect.position.x + 8, rect.get_center().y - 17, rect.size.x - 16, 34)
-			strip.position.x += (1 - lock_t) * 40
-			g.draw_rect(strip, Color(0.025, 0.14, 0.17, 0.96))
-			text(g, "RESERVADA", strip.grow(-4), 15, CYAN, true)
-			g.draw_line(strip.position, Vector2(strip.end.x, strip.position.y), CYAN, 2)
+		var lock_anim: bool = (action == "lock" or action == "unlock") and slot == i
+		if g._shop_slot_locked(i) or lock_anim:
+			draw_lock_overlay(g, rect, t if lock_anim else 1.0, action == "unlock" and slot == i, now)
 		if not purchase:
-			draw_bargain_price_tag(g, card, Rect2(price_rect.position.x, price_rect.end.y + 12, price_rect.size.x, 26), selected, 1.0)
+			draw_bargain_price_tag(g, card, Rect2(price_rect.position.x, price_rect.end.y + (6 if small else 10), price_rect.size.x, 26), selected, 1.0)
 		g.buttons["shop_card_%d" % i] = areas.cards[i]
 	if not g.shop_cards.is_empty():
 		var card: Dictionary = g.shop_cards[g.shop_selected]
-		if action == "burn" and slot == g.shop_selected:
+		if action == "burn" and slot == g.shop_selected and previous_cards.size() > slot:
 			card = previous_cards[slot]
 		var accent: Color = g._card_rarity_color(card)
-		g.draw_line(detail.position + Vector2(-16, 12), Vector2(detail.position.x - 16, detail.end.y), MUTED.darkened(0.65), 1)
-		text(g, "%s  /  NO DECK: %d" % [g._card_rarity_label(card), g._card_count(card)], Rect2(detail.position, Vector2(detail.size.x, 26)), 14, accent)
-		text(g, String(card.get("name", "Vaga vazia")).to_upper(), Rect2(detail.position + Vector2(0, 32), Vector2(detail.size.x, 34)), 25, PAPER)
+		g.draw_line(detail.position + Vector2(-12, 4), Vector2(detail.position.x - 12, detail.end.y), Color(CYAN, 0.25), 1)
+		text(g, "%s  /  NO DECK: %d" % [g._card_rarity_label(card), g._card_count(card)], Rect2(detail.position, Vector2(detail.size.x, 24)), 13, accent)
+		text(g, String(card.get("name", "Vaga vazia")).to_upper(), Rect2(detail.position + Vector2(0, 26), Vector2(detail.size.x, 32)), 23 if not small else 19, PAPER)
 		if not compact:
-			text(g, String(card.get("nick", "")), Rect2(detail.position + Vector2(0, 70), Vector2(detail.size.x, 24)), 16, CYAN)
+			text(g, String(card.get("nick", "")), Rect2(detail.position + Vector2(0, 62), Vector2(detail.size.x, 22)), 15, CYAN)
 		if bargain_discount_rate(card) > 0.0:
-			text(g, "CAPSULA DA BARGANHA: %s -> %s PTS" % [g._format_points(bargain_base_price(g, card)), g._format_points(g._effective_card_price(card))], Rect2(detail.position + Vector2(0, 94 if not compact else 72), Vector2(detail.size.x, 22)), 14, GOLD)
-		var cinzas_callout_y: float = 120.0 if bargain_discount_rate(card) > 0.0 else (96.0 if not compact else 74.0)
+			text(g, "CAPSULA DA BARGANHA: %s -> %s PTS" % [g._format_points(bargain_base_price(g, card)), g._format_points(g._effective_card_price(card))], Rect2(detail.position + Vector2(0, 86 if not compact else 62), Vector2(detail.size.x, 22)), 13, GOLD)
+		var cinzas_callout_y: float = 110.0 if bargain_discount_rate(card) > 0.0 else (88.0 if not compact else 62.0)
 		if card.has("cinzas_bonus_summary"):
 			draw_cinzas_bonus_callout(g, card, Rect2(detail.position + Vector2(0, cinzas_callout_y), Vector2(detail.size.x, 58.0)), 1.0)
 		var copy := String(card.get("desc", ""))
 		var projections: Array = [] if g._is_empty_shop_slot(card) or action == "burn" else g._card_projection_lines(card)
 		if not projections.is_empty() and detail.size.y >= 320:
 			copy += "\n\n" + "\n".join(projections)
-		var copy_y := 78.0 if compact else 110.0
+		var copy_y := 62.0 if compact else 98.0
 		if card.has("cinzas_bonus_summary"):
 			copy_y = cinzas_callout_y + 64.0
-		paragraph(g, copy, Rect2(detail.position + Vector2(0, copy_y), Vector2(detail.size.x, maxf(48, detail.size.y - copy_y - 64))))
+		var show_burn: bool = burn_visible(g)
+		var show_reserve: bool = reserve_visible(g)
+		var actions_h: float = 54.0 if (show_burn or show_reserve) else 0.0
+		paragraph(g, copy, Rect2(detail.position + Vector2(0, copy_y), Vector2(detail.size.x, maxf(40, detail.size.y - copy_y - actions_h - 6))), 16 if not small else 13)
 		var enabled: bool = not busy() and not g._shop_purchase_animating()
-		button(g, areas.burn, "QUEIMAR", Color(1, 0.38, 0.17), enabled and g._can_burn_shop_card(card))
-		button(g, areas.reserve, "SOLTAR" if g._shop_slot_locked(g.shop_selected) else "RESERVAR", CYAN, enabled and g._can_toggle_shop_reserve(g.shop_selected))
-		g.buttons["shop_burn_%d" % g.shop_selected] = areas.burn
-		g.buttons["shop_reserve_%d" % g.shop_selected] = areas.reserve
+		var burn_rect: Rect2 = areas.burn
+		var reserve_rect: Rect2 = areas.reserve
+		if show_burn and not show_reserve:
+			burn_rect = Rect2(burn_rect.position, Vector2(detail.size.x, burn_rect.size.y))
+		elif show_reserve and not show_burn:
+			reserve_rect = Rect2(Vector2(detail.position.x, reserve_rect.position.y), Vector2(detail.size.x, reserve_rect.size.y))
+		if show_burn:
+			draw_fire_button(g, burn_rect, "QUEIMAR", enabled and g._can_burn_shop_card(card), now)
+			g.buttons["shop_burn_%d" % g.shop_selected] = burn_rect
+		if show_reserve:
+			button(g, reserve_rect, "SOLTAR" if g._shop_slot_locked(g.shop_selected) else "RESERVAR", CYAN, enabled and g._can_toggle_shop_reserve(g.shop_selected))
+			draw_padlock(g, reserve_rect.position + Vector2(18, reserve_rect.size.y * 0.5), 0.8, Color(CYAN, 0.9 if g._can_toggle_shop_reserve(g.shop_selected) else 0.4), g._shop_slot_locked(g.shop_selected))
+			g.buttons["shop_reserve_%d" % g.shop_selected] = reserve_rect
 		var price: int = g._effective_card_price(card)
 		var label := "COMPRAR  %s PTS" % g._format_points(price)
 		if g._is_empty_shop_slot(card):
 			label = "VAGA VAZIA"
 		if g._shop_purchase_animating():
-			label = "INCORPORANDO AO DECK"
+			label = "ENVIANDO AO BRACELETE"
 		elif busy():
-			label = {"burn": "REDUZINDO A CINZAS", "reroll": "NOVAS POSSIBILIDADES", "lock": "RESERVA FIXADA", "unlock": "RESERVA LIBERADA"}.get(action, "AGUARDE")
+			label = {"burn": "REDUZINDO A CINZAS", "reroll": "RECALIBRANDO VISOR", "lock": "RESERVA FIXADA", "unlock": "RESERVA LIBERADA"}.get(action, "AGUARDE")
 		button(g, areas.buy, label, Color(0.38, 0.95, 0.57), enabled and g.score >= price and not g._is_empty_shop_slot(card))
 	button(g, areas.exit, "PRONTO" if g.is_multiplayer else "VOLTAR AO CAMPO", CYAN, g._shop_can_exit())
-	if g.is_multiplayer:
-		text(g, "Retorno quando todos terminarem", Rect2(areas.exit.end + Vector2(18, -48), Vector2(detail.position.x - areas.exit.end.x - 30, 48)), 15, MUTED)
+	g.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if action == "reroll":
+		draw_reroll_scan(g, visor, t)
 	for key in ["buy", "exit", "deck", "reroll"]:
 		g.buttons["shop_" + key] = areas[key]
+
+
+## Moldura do visor: vidro escuro, bordas ciano, scanlines e cantos.
+func draw_visor(g, visor: Rect2, now: float, header_h: float) -> void:
+	var flicker: float = 0.92 + 0.08 * sin(now * 31.0) * sin(now * 7.0)
+	var style := _style(Color(0.012, 0.05, 0.06, 0.9), Color(CYAN, 0.85 * flicker), 16)
+	style.set_border_width_all(2)
+	g.draw_style_box(style, visor)
+	g.draw_rect(Rect2(visor.position + Vector2(10, header_h), Vector2(visor.size.x - 20, 1)), Color(CYAN, 0.22), true)
+	var y: float = visor.position.y + 6.0
+	var scan_y: float = visor.position.y + fposmod(now * 90.0, visor.size.y)
+	while y < visor.end.y - 6.0:
+		g.draw_line(Vector2(visor.position.x + 6, y), Vector2(visor.end.x - 6, y), Color(CYAN, 0.025), 1.0)
+		y += 4.0
+	g.draw_rect(Rect2(Vector2(visor.position.x + 6, scan_y), Vector2(visor.size.x - 12, 2)), Color(CYAN, 0.07), true)
+	for i in range(4):
+		var dir := Vector2(1 if i in [0, 3] else -1, 1 if i < 2 else -1)
+		var corner: Vector2 = [visor.position, Vector2(visor.end.x, visor.position.y), visor.end, Vector2(visor.position.x, visor.end.y)][i]
+		var p: Vector2 = corner + dir * 8.0
+		g.draw_line(p, p + Vector2(dir.x * 30, 0), Color(0.6, 1.0, 1.0, 0.9), 3)
+		g.draw_line(p, p + Vector2(0, dir.y * 22), Color(0.6, 1.0, 1.0, 0.9), 3)
+	if visor.size.x < 900.0:
+		return
+	var tab := Rect2(Vector2(visor.get_center().x - 130, visor.position.y - 1), Vector2(260, 20))
+	g.draw_rect(tab, Color(0.02, 0.12, 0.14, 0.95), true)
+	g.draw_rect(tab, Color(CYAN, 0.6), false, 1.0)
+	text(g, "BRACELETE  ·  ARQUIVO TEMPORAL", tab.grow(-3), 11, Color(0.7, 1.0, 1.0), true)
+
+
+## Bracelete da personagem embaixo da tela; a gema projeta o visor.
+func draw_bracelet(g, center: Vector2, open: float, now: float, areas: Dictionary) -> void:
+	var small: bool = areas.small
+	var w: float = 250.0 if not small else 190.0
+	var h: float = 44.0 if not small else 32.0
+	var band := Rect2(center - Vector2(w, h) * 0.5, Vector2(w, h))
+	var metal := _style(Color(0.09, 0.1, 0.13, 1.0), Color(0.46, 0.52, 0.6, 1.0), int(h * 0.5))
+	metal.set_border_width_all(2)
+	g.draw_style_box(metal, band)
+	g.draw_rect(Rect2(band.position + Vector2(h * 0.4, 4), Vector2(w - h * 0.8, 3)), Color(1, 1, 1, 0.16), true)
+	for k in range(6):
+		var x: float = band.position.x + 22.0 + float(k) * (w - 44.0) / 5.0
+		if absf(x - center.x) < 34.0:
+			continue
+		g.draw_line(Vector2(x, band.position.y + 9), Vector2(x, band.end.y - 9), Color(CYAN, 0.25 + 0.2 * sin(now * 3.0 + float(k))), 2.0)
+	var pulse: float = 0.5 + 0.5 * sin(now * 4.0)
+	var gem_r: float = h * 0.42
+	var flash: float = _purchase_flash(g)
+	g.draw_circle(center, gem_r + 10.0 + pulse * 4.0 + flash * 18.0, Color(CYAN, 0.12 + 0.1 * open + flash * 0.3))
+	g.draw_circle(center, gem_r, Color(0.04, 0.3, 0.34))
+	g.draw_circle(center, gem_r * 0.72, Color(0.3 + flash * 0.6, 0.95, 1.0, 0.9))
+	g.draw_circle(center + Vector2(-gem_r * 0.25, -gem_r * 0.3), gem_r * 0.22, Color(1, 1, 1, 0.8))
+	g.draw_arc(center, gem_r + 3.0, 0.0, TAU, 24, Color(0.8, 1.0, 1.0, 0.8), 2.0, true)
+
+
+func _purchase_flash(g) -> float:
+	if not g._shop_purchase_animating():
+		return 0.0
+	var p: float = 1 - g.shop_purchase_anim_timer / g.SHOP_PURCHASE_ANIM_TIME
+	return clampf(1.0 - absf(p - 0.9) / 0.12, 0.0, 1.0)
+
+
+## Feixe de luz da gema ate a base do visor.
+func draw_beam(g, gem: Vector2, visor: Rect2, open: float, now: float) -> void:
+	var top_y: float = lerpf(gem.y, visor.end.y - 4.0, 1.0)
+	var half_top: float = visor.size.x * 0.32 * open
+	var a: float = 0.14 + 0.05 * sin(now * 5.0)
+	var pts := PackedVector2Array([gem + Vector2(-10, -6), gem + Vector2(10, -6), Vector2(gem.x + half_top, top_y), Vector2(gem.x - half_top, top_y)])
+	var cols := PackedColorArray([Color(CYAN, a * 2.2), Color(CYAN, a * 2.2), Color(CYAN, a * 0.4), Color(CYAN, a * 0.4)])
+	g.draw_polygon(pts, cols)
+
+
+## Contador de pontos grande com moeda.
+func draw_points_counter(g, rect: Rect2, now: float, small: bool) -> void:
+	var coin := rect.position + Vector2(20, rect.size.y * 0.5 + 2)
+	var r: float = 15.0 if not small else 12.0
+	var spin: float = absf(cos(now * 1.6))
+	g.draw_circle(coin, r + 5.0, Color(GOLD, 0.15))
+	g.draw_set_transform(_visor_origin + coin * _visor_scale, 0.0, Vector2(maxf(0.25, spin), 1.0) * _visor_scale)
+	g.draw_circle(Vector2.ZERO, r, Color(1.0, 0.76, 0.18))
+	g.draw_circle(Vector2.ZERO, r * 0.72, Color(0.8, 0.48, 0.06))
+	g.draw_arc(Vector2.ZERO, r * 0.82, 0.0, TAU, 20, Color(1.0, 0.95, 0.6), 1.6, true)
+	g.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_restore_visor_transform(g)
+	var x: float = coin.x + r + 12.0
+	text(g, "PONTOS", Rect2(x, rect.position.y + 2, 160, 14), 11, Color(GOLD, 0.8))
+	var value_size: int = 34 if not small else 26
+	var bump: float = 0.0
+	if g.shop_spend_anim_timer > 0.0 and g.shop_spend_anim_amount > 0:
+		bump = sin((1.0 - clampf(g.shop_spend_anim_timer / maxf(0.01, g.SHOP_SPEND_ANIM_TIME), 0.0, 1.0)) * PI)
+	var value_rect := Rect2(x - 1, rect.position.y + 14, 240, rect.size.y - 12)
+	text(g, g._format_points(g.score), Rect2(value_rect.position + Vector2(2, 2), value_rect.size), value_size, Color(0.25, 0.12, 0.0, 0.9))
+	text(g, g._format_points(g.score), value_rect, value_size, Color(1.0, 0.86 - bump * 0.3, 0.34 - bump * 0.2))
+	if bump > 0.0:
+		var p: float = 1.0 - clampf(g.shop_spend_anim_timer / maxf(0.01, g.SHOP_SPEND_ANIM_TIME), 0.0, 1.0)
+		var alpha: float = 1.0 - smoothstep(0.6, 1.0, p)
+		var face: Font = g.menu_ui_font
+		var w: float = face.get_string_size(g._format_points(g.score), HORIZONTAL_ALIGNMENT_LEFT, -1, value_size).x
+		text(g, "-%s" % g._format_points(g.shop_spend_anim_amount), Rect2(x + w + 12, rect.position.y + 14 - p * 18.0, 140, 28), 20, Color(1.0, 0.45, 0.2, alpha))
+
+
+var _visor_origin := Vector2.ZERO
+var _visor_scale := Vector2.ONE
+
+
+func _restore_visor_transform(g) -> void:
+	# draw_set_transform da moeda substitui o do visor; reaplica a abertura.
+	g.draw_set_transform(_visor_origin, 0.0, _visor_scale)
+
+
+## MEU DECK: pilha de cartas + contador grande.
+func draw_deck_button(g, rect: Rect2, now: float) -> void:
+	var count: int = g._deck_total_cards()
+	var enabled: bool = count > 0 and not busy() and not g._shop_purchase_animating()
+	var hovered: bool = enabled and rect.has_point(g.get_local_mouse_position())
+	g.draw_style_box(_style(GOLD.darkened(0.82 if hovered else 0.9), Color(GOLD, 0.9 if enabled else 0.35), 6), rect)
+	var stack := rect.position + Vector2(22, rect.size.y * 0.5)
+	for k in range(3):
+		var c := Rect2(stack + Vector2(-9 + k * 3, -13 + k * 2), Vector2(16, 22))
+		g.draw_rect(c, Color(0.1, 0.14, 0.16), true)
+		g.draw_rect(c, Color(GOLD, 0.8 - float(2 - k) * 0.2), false, 1.5)
+	text(g, "MEU DECK", Rect2(rect.position + Vector2(42, 4), Vector2(rect.size.x - 50, rect.size.y * 0.45)), 12, Color(PAPER, 0.85 if enabled else 0.5))
+	var pulse: float = 0.0
+	if g._shop_purchase_animating():
+		var p: float = 1 - g.shop_purchase_anim_timer / g.SHOP_PURCHASE_ANIM_TIME
+		pulse = clampf(1.0 - absf(p - 0.95) / 0.1, 0.0, 1.0)
+	text(g, ("%d CARTA" if count == 1 else "%d CARTAS") % count, Rect2(rect.position + Vector2(42, rect.size.y * 0.42), Vector2(rect.size.x - 50, rect.size.y * 0.5)), 17 + int(pulse * 4.0), Color(1.0, 0.86 + pulse * 0.14, 0.34 + pulse * 0.5))
+
+
+## Botao de queimar com chamas vivas em cima.
+func draw_fire_button(g, rect: Rect2, label: String, enabled: bool, now: float) -> void:
+	var alpha: float = 1.0 if enabled else 0.45
+	var heat: float = 0.5 + 0.5 * sin(now * 9.0)
+	g.draw_style_box(_style(Color(0.22 + heat * 0.06, 0.05, 0.02, 0.96), Color(1.0, 0.42 + heat * 0.2, 0.12, alpha), 4), rect)
+	var n: int = maxi(5, int(rect.size.x / 14.0))
+	for k in range(n):
+		var u: float = (float(k) + 0.5) / float(n)
+		var x: float = rect.position.x + u * rect.size.x
+		var phase: float = float(k) * 1.7
+		var hgt: float = (10.0 + 9.0 * (0.5 + 0.5 * sin(now * 11.0 + phase)) + 5.0 * sin(now * 5.3 + phase * 2.0)) * alpha
+		var wob: float = sin(now * 7.0 + phase) * 3.0
+		var base := Vector2(x, rect.position.y + 3)
+		g.draw_colored_polygon(PackedVector2Array([base + Vector2(-6, 0), base + Vector2(wob, -hgt), base + Vector2(6, 0)]), Color(1.0, 0.34, 0.06, 0.8 * alpha))
+		g.draw_colored_polygon(PackedVector2Array([base + Vector2(-3, 0), base + Vector2(wob * 0.6, -hgt * 0.62), base + Vector2(3, 0)]), Color(1.0, 0.86, 0.3, 0.9 * alpha))
+	for k in range(4):
+		var life: float = fposmod(now * 0.9 + float(k) * 0.27, 1.0)
+		var sx: float = rect.position.x + rect.size.x * fposmod(float(k) * 0.37 + 0.1, 1.0) + sin(now * 3.0 + float(k)) * 6.0
+		g.draw_rect(Rect2(Vector2(sx, rect.position.y - 6.0 - life * 26.0), Vector2(2, 2)), Color(1.0, 0.6, 0.2, (1.0 - life) * alpha), true)
+	text(g, label, rect.grow(-8), 17, Color(1.0, 0.94, 0.8, alpha), true)
+
+
+func draw_padlock(g, center: Vector2, scale: float, color: Color, closed: bool) -> void:
+	var w: float = 14.0 * scale
+	var h: float = 11.0 * scale
+	g.draw_rect(Rect2(center + Vector2(-w * 0.5, -h * 0.2), Vector2(w, h)), color, true)
+	var shackle_y: float = center.y - h * 0.2
+	var open_off: float = 0.0 if closed else -4.0 * scale
+	g.draw_arc(Vector2(center.x, shackle_y + open_off), w * 0.34, PI, TAU, 12, color, 2.4 * scale, true)
+	g.draw_circle(center + Vector2(0, h * 0.3), 1.6 * scale, Color(0, 0, 0, 0.7))
+
+
+## Reserva: dois colchetes holograficos fecham a carta e um cadeado cai.
+func draw_lock_overlay(g, rect: Rect2, t: float, releasing: bool, now: float) -> void:
+	var k: float = smoothstep(0.0, 1.0, t)
+	if releasing:
+		k = 1.0 - k
+	if k <= 0.01:
+		return
+	var close: float = smoothstep(0.0, 0.55, k)
+	var gap: float = lerpf(rect.size.x * 0.5 + 30.0, 4.0, close)
+	var cy: float = rect.get_center().y
+	var col := Color(CYAN, 0.9 * k)
+	for s in [-1.0, 1.0]:
+		var x: float = rect.get_center().x + s * gap
+		var x_edge: float = rect.position.x if s < 0.0 else rect.end.x
+		var bx: float = lerpf(x, x_edge + s * 4.0, close)
+		g.draw_line(Vector2(bx, rect.position.y - 4), Vector2(bx, rect.end.y + 4), col, 3.0)
+		g.draw_line(Vector2(bx, rect.position.y - 4), Vector2(bx - s * 14.0, rect.position.y - 4), col, 3.0)
+		g.draw_line(Vector2(bx, rect.end.y + 4), Vector2(bx - s * 14.0, rect.end.y + 4), col, 3.0)
+	g.draw_rect(rect, Color(0.1, 0.6, 0.7, 0.12 * k), true)
+	var drop: float = smoothstep(0.35, 0.85, k)
+	var bounce: float = 1.0 + sin(clampf((k - 0.6) / 0.4, 0.0, 1.0) * PI) * 0.35
+	var lock_pos := Vector2(rect.get_center().x, lerpf(rect.position.y - 40.0, rect.position.y + 2.0, drop))
+	g.draw_circle(lock_pos, 20.0 * bounce, Color(0.02, 0.16, 0.2, 0.92 * drop))
+	g.draw_arc(lock_pos, 20.0 * bounce, 0.0, TAU, 24, Color(CYAN, drop), 2.0, true)
+	draw_padlock(g, lock_pos + Vector2(0, 2), 1.3 * bounce, Color(0.7, 1.0, 1.0, drop), k > 0.75)
+	if k > 0.8:
+		var ring: float = clampf((k - 0.8) / 0.2, 0.0, 1.0)
+		if not releasing and t < 1.0:
+			g.draw_arc(lock_pos, 20.0 + ring * 40.0, 0.0, TAU, 28, Color(CYAN, 0.7 * (1.0 - ring)), 2.0, true)
+		var strip := Rect2(rect.position.x + 8, cy - 15, rect.size.x - 16, 30)
+		g.draw_rect(strip, Color(0.02, 0.13, 0.16, 0.94 * ring), true)
+		g.draw_line(strip.position, Vector2(strip.end.x, strip.position.y), Color(CYAN, ring), 2)
+		text(g, "RESERVADA", strip.grow(-4), 14, Color(CYAN, ring), true)
+
+
+## Arte surgindo/sumindo em linhas de varredura (reroll e entrada do visor).
+func draw_art_reveal(g, texture: Texture2D, rect: Rect2, reveal: float, accent: Color) -> void:
+	if reveal <= 0.0:
+		return
+	var source_size := texture.get_size()
+	var fitted := source_size * minf(rect.size.x / source_size.x, rect.size.y / source_size.y)
+	var origin := rect.get_center() - fitted * 0.5
+	var lines := 18
+	var shown: float = reveal * float(lines)
+	for i in range(lines):
+		var a: float = clampf(shown - float(i), 0.0, 1.0)
+		if a <= 0.0:
+			continue
+		var band_h: float = fitted.y / float(lines)
+		var jitter: float = (1.0 - a) * sin(float(i) * 9.1 + reveal * 30.0) * 10.0
+		var dst := Rect2(origin + Vector2(jitter, band_h * float(i)), Vector2(fitted.x, band_h + 0.5))
+		var src := Rect2(0, source_size.y * float(i) / float(lines), source_size.x, source_size.y / float(lines))
+		g.draw_texture_rect_region(texture, dst, src, Color(0.6 + 0.4 * a, 1.0, 1.0, a))
+	var scan_y: float = origin.y + fitted.y * reveal
+	g.draw_rect(Rect2(Vector2(origin.x - 4, scan_y - 2), Vector2(fitted.x + 8, 3)), Color(accent.lightened(0.5), 0.9), true)
+	g.draw_rect(Rect2(Vector2(origin.x - 4, scan_y - 8), Vector2(fitted.x + 8, 14)), Color(CYAN, 0.12), true)
+
+
+## Varredura que atravessa o visor no reroll.
+func draw_reroll_scan(g, visor: Rect2, t: float) -> void:
+	var x: float = lerpf(visor.position.x, visor.end.x, smoothstep(0.0, 1.0, t))
+	var a: float = sin(t * PI)
+	g.draw_rect(Rect2(Vector2(x - 2, visor.position.y + 6), Vector2(3, visor.size.y - 12)), Color(0.8, 1.0, 1.0, 0.8 * a), true)
+	g.draw_rect(Rect2(Vector2(x - 40, visor.position.y + 6), Vector2(40, visor.size.y - 12)), Color(CYAN, 0.08 * a), true)
+
+
+func draw_card_trail(g, from: Vector2, to: Vector2, flight: float, accent: Color) -> void:
+	var prev := from
+	for k in range(1, 9):
+		var u: float = float(k) / 8.0 * flight
+		var p: Vector2 = from.lerp(to, u) + Vector2(0, -sin(u * PI) * 70)
+		g.draw_line(prev, p, Color(accent, 0.5 * (1.0 - float(k) / 10.0)), 3.0, true)
+		prev = p
+	g.draw_circle(to, 10.0, Color(accent.lightened(0.4), 0.5))
+
+
+## Chamas na borda de cartas ja queimadas (Cinzas): mais cargas = mais fogo,
+## sem nunca apagar o desenho.
+func draw_card_flames(g, rect: Rect2, card: Dictionary, now: float) -> void:
+	var stacks: int = clampi(int(card.get("cinzas_buff_stacks", 1)), 1, 10)
+	var heat: float = float(stacks) / 10.0
+	var n: int = 4 + stacks * 2
+	for k in range(n):
+		var u: float = (float(k) + 0.5) / float(n)
+		var phase: float = float(k) * 2.3 + float(stacks)
+		var hgt: float = (8.0 + 16.0 * heat) * (0.6 + 0.4 * sin(now * 10.0 + phase))
+		var base := Vector2(rect.position.x + u * rect.size.x, rect.end.y - 2.0)
+		var wob: float = sin(now * 6.0 + phase) * 4.0
+		g.draw_colored_polygon(PackedVector2Array([base + Vector2(-7, 0), base + Vector2(wob, -hgt), base + Vector2(7, 0)]), Color(1.0, 0.32, 0.06, 0.75))
+		g.draw_colored_polygon(PackedVector2Array([base + Vector2(-3, 0), base + Vector2(wob * 0.6, -hgt * 0.6), base + Vector2(3, 0)]), Color(1.0, 0.85, 0.3, 0.9))
+	if stacks >= 4:
+		# Lados pegam fogo a partir da 4a carga.
+		var side_n: int = mini(6, stacks - 2)
+		for s in [rect.position.x + 2.0, rect.end.x - 2.0]:
+			for k in range(side_n):
+				var v: float = 1.0 - (float(k) + 0.5) / float(side_n) * (0.35 + heat * 0.4)
+				var phase2: float = float(k) * 1.9 + s
+				var base2 := Vector2(s, rect.position.y + rect.size.y * v)
+				var hh: float = (6.0 + 8.0 * heat) * (0.6 + 0.4 * sin(now * 9.0 + phase2))
+				var dir: float = -1.0 if s < rect.get_center().x else 1.0
+				g.draw_colored_polygon(PackedVector2Array([base2 + Vector2(0, -5), base2 + Vector2(dir * hh, sin(now * 7.0 + phase2) * 3.0 - 3.0), base2 + Vector2(0, 5)]), Color(1.0, 0.45, 0.1, 0.7))
+	for k in range(3 + stacks):
+		var life: float = fposmod(now * (0.5 + 0.05 * float(k)) + float(k) * 0.31, 1.0)
+		var x: float = rect.position.x + rect.size.x * fposmod(float(k) * 0.29 + 0.07, 1.0) + sin(now * 2.0 + float(k)) * 8.0
+		g.draw_rect(Rect2(Vector2(x, rect.end.y - life * rect.size.y * (0.4 + heat * 0.5)), Vector2(2, 2)), Color(1.0, 0.62, 0.2, (1.0 - life) * 0.9), true)
 
 
 func draw_legacy(g, viewport: Vector2) -> void:
@@ -1061,21 +1374,39 @@ func draw_legacy(g, viewport: Vector2) -> void:
 
 
 func _draw_burn(g, texture: Texture2D, rect: Rect2, progress: float) -> void:
-	# Quantized strips preserve the real card art while an uneven fire front climbs.
+	# Frente de fogo irregular sobe; a arte carboniza perto da frente, chamas
+	# lambem a borda e cinzas sobem. Usa a arte real em faixas.
 	var source_size := texture.get_size()
 	var fitted := source_size * minf(rect.size.x / source_size.x, rect.size.y / source_size.y)
 	var origin := rect.get_center() - fitted * 0.5
-	for i in range(24):
-		var width := fitted.x / 24
-		var noise := sin(float(i) * 7.13) * 0.07
-		var remaining := clampf(1.0 - progress * 1.2 + noise * sin(progress * PI), 0, 1)
+	var strips := 28
+	var now: float = float(Time.get_ticks_msec()) * 0.001
+	var width := fitted.x / float(strips)
+	var glow: float = sin(clampf(progress, 0.0, 1.0) * PI)
+	g.draw_rect(Rect2(origin - Vector2(6, 6), fitted + Vector2(12, 12)), Color(1.0, 0.36, 0.06, 0.16 * glow), true)
+	for i in range(strips):
+		var noise := sin(float(i) * 7.13) * 0.08 + sin(float(i) * 2.3 + 1.0) * 0.05
+		var remaining := clampf(1.0 - progress * 1.15 + noise * sin(progress * PI), 0, 1)
 		if remaining <= 0:
 			continue
 		var strip := Rect2(origin + Vector2(i * width, 0), Vector2(width + 0.5, fitted.y * remaining))
-		g.draw_texture_rect_region(texture, strip, Rect2(source_size.x * i / 24, 0, source_size.x / 24, source_size.y * remaining))
-		var ember := Vector2(strip.position.x, strip.end.y)
-		g.draw_rect(Rect2(ember, Vector2(width, 4)), GOLD)
-		g.draw_rect(Rect2(ember + Vector2(sin(i * 2.1 + progress * 8) * 12, -progress * 36), Vector2(3, 3)), Color(1, 0.32, 0.09, 1 - progress))
+		var src := Rect2(source_size.x * i / strips, 0, source_size.x / strips, source_size.y * remaining)
+		g.draw_texture_rect_region(texture, strip, src)
+		# Carvao subindo na frente de fogo.
+		var char_h: float = minf(strip.size.y, 18.0 + 22.0 * progress)
+		g.draw_rect(Rect2(Vector2(strip.position.x, strip.end.y - char_h), Vector2(strip.size.x, char_h)), Color(0.12, 0.03, 0.0, 0.55), true)
+		var front := Vector2(strip.position.x + width * 0.5, strip.end.y)
+		g.draw_rect(Rect2(Vector2(strip.position.x, strip.end.y - 3), Vector2(strip.size.x, 4)), Color(1.0, 0.7, 0.2), true)
+		var hgt: float = (10.0 + 14.0 * (0.5 + 0.5 * sin(now * 13.0 + float(i) * 1.7))) * (0.4 + glow)
+		var wob: float = sin(now * 9.0 + float(i)) * 3.0
+		g.draw_colored_polygon(PackedVector2Array([front + Vector2(-width * 0.7, 0), front + Vector2(wob, -hgt), front + Vector2(width * 0.7, 0)]), Color(1.0, 0.34, 0.05, 0.85))
+		g.draw_colored_polygon(PackedVector2Array([front + Vector2(-width * 0.35, 0), front + Vector2(wob * 0.6, -hgt * 0.55), front + Vector2(width * 0.35, 0)]), Color(1.0, 0.9, 0.4, 0.95))
+	for k in range(22):
+		var life: float = fposmod(progress * 1.6 + float(k) * 0.137, 1.0)
+		var x: float = origin.x + fitted.x * fposmod(float(k) * 0.271 + 0.05, 1.0) + sin(float(k) * 3.0 + progress * 9.0) * 14.0
+		var y: float = origin.y + fitted.y * (1.0 - progress * 0.9) - life * 70.0
+		var ash := Color(0.3, 0.28, 0.26, (1.0 - life) * 0.9) if k % 3 == 0 else Color(1.0, 0.5 + 0.3 * (1.0 - life), 0.15, (1.0 - life))
+		g.draw_rect(Rect2(Vector2(x, y), Vector2(3, 3)), ash, true)
 
 
 func draw_exit(g, viewport: Vector2) -> void:

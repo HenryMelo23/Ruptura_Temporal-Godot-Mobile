@@ -67,24 +67,6 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 		game._close_gameplay_cheat_popup()
 		game.analog_fixed = not game.analog_fixed
 		game._save_config()
-	elif game.settings_buttons["shop_mode"].has_point(pos):
-		game._close_gameplay_cheat_popup()
-		game._set_shop_auto_enabled( not game.shop_auto_enabled)
-		game._save_config()
-	elif game.settings_buttons["shop_interval"].has_point(pos):
-		game._close_gameplay_cheat_popup()
-		if not game.shop_auto_enabled:
-			return
-		var interval_panel: Rect2 = game.settings_buttons["shop_interval"]
-		if game._shop_interval_minus_rect(interval_panel).has_point(pos):
-			game.shop_auto_interval = max(180.0, game.shop_auto_interval - 60.0)
-		elif game._shop_interval_plus_rect(interval_panel).has_point(pos):
-			game.shop_auto_interval = min(480.0, game.shop_auto_interval + 60.0)
-		else:
-			return
-		game.shop_auto_elapsed = 0.0
-		game.next_forced_shop_time = game.shop_auto_interval
-		game._save_config()
 	elif game.settings_buttons["target_priority"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game.auto_target_priority = game._next_target_priority(game.auto_target_priority)
@@ -145,9 +127,8 @@ static func _handle_gameplay_settings_touch(game: Node, pos: Vector2, viewport: 
 	elif game.settings_buttons["tutorial"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game._set_run_tutorial_enabled(not game.run_tutorial_enabled)
-	elif game.settings_buttons["retornante_cheat"].has_point(pos):
-		if not game.retornante_unlocked or not game.qa_data_unlocked:
-			game._open_gameplay_cheat_popup()
+	elif game.settings_buttons["gameplay_cheat"].has_point(pos):
+		game._open_gameplay_cheat_popup()
 	elif game.settings_buttons["haptics"].has_point(pos):
 		game._close_gameplay_cheat_popup()
 		game.haptics_enabled = not game.haptics_enabled

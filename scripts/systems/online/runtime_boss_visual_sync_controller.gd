@@ -28,7 +28,8 @@ func pack(game: Node) -> Dictionary:
 		"boss_transition_waves": game.boss_transition_waves.duplicate(true),
 		"weather": game._pack_net_weather_visuals(),
 		"runtime_event": game.runtime_event_director.active_snapshot(),
-		"point_boost": game.point_boost_pickup_controller.active_snapshot()
+		"point_boost": game.point_boost_pickup_controller.active_snapshot(),
+		"field_artifacts": game._field_artifacts().snapshot()
 	}
 	if game.current_phase == 7:
 		# One clock reproduces the whole heat field; flames stay local to each client.
@@ -231,6 +232,8 @@ func apply(game: Node, snapshot_data) -> void:
 		game.runtime_event_director.apply_remote_snapshot(Dictionary(data["runtime_event"]))
 	if game._is_world_replica() and data.has("point_boost"):
 		game.point_boost_pickup_controller.apply_remote_snapshot(Dictionary(data["point_boost"]))
+	if game._is_world_replica() and data.has("field_artifacts"):
+		game._field_artifacts().apply_remote_snapshot(Dictionary(data["field_artifacts"]))
 	if game._is_world_replica() and data.has("pacing_profile"):
 		game.run_pacing_profile = String(data.get("pacing_profile", game.run_pacing_profile))
 	game.boss1_visual_snapshot_ms = Time.get_ticks_msec()

@@ -68,7 +68,7 @@ func _check_reroll_visual_contract() -> void:
 	var paid_state: Dictionary = game.shop_presentation.reroll_visual_state(game)
 	_check(not bool(paid_state.get("free", true)), "visual state did not switch to paid reroll")
 	_check(int(paid_state.get("cost", 0)) == 100, "paid reroll visual cost drifted")
-	_check(String(paid_state.get("detail", "")).find("100") >= 0, "paid reroll visual detail missing cost text")
+	_check(String(paid_state.get("detail", "")).find(game._format_points(100)) >= 0 and String(paid_state.get("detail", "")).find("carta") < 0, "paid reroll visual detail missing cost text (sem custo base)")
 	game.shop_paid_rerolls_this_visit = 10
 	var red_state: Dictionary = game.shop_presentation.reroll_visual_state(game)
 	var red_color: Color = Color(red_state.get("accent", Color.WHITE))

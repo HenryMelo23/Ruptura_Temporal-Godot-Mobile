@@ -83,6 +83,8 @@ func _run() -> void:
 	boost_orbs = game.heal_orbs.filter(func(orb): return String(orb.get("kind", "")) == game.POINT_BOOST_PICKUP_KIND)
 	_check(boost_orbs.size() == 1, "cooldown or active-pickup cap allowed duplicates")
 
+	_check(String(game.heal_orbs[0].get("artifact_type", "")) in ["pontos", "ima", "furia", "expurgo"], "artifact type missing")
+	game.heal_orbs[0]["artifact_type"] = "pontos"
 	game.heal_orbs[0]["pos"] = game.player_pos
 	game._update_heal_orbs(0.016)
 	_check(game.point_boost_pickup_controller.is_active(), "collection did not activate team x2")
@@ -106,9 +108,9 @@ func _run() -> void:
 	game.point_boost_pickup_controller.reset()
 	game.heal_orbs.clear()
 	_feed_controller(threshold, true)
-	_check(game.heal_orbs.is_empty(), "point Event Director overlap did not block pickup spawn")
-	_feed_controller(1, false)
-	_check(game.heal_orbs.size() == 1, "stored pity did not resume after Event Director ended")
+	# Com o evento de pontos ativo o artefato ainda sai, mas nunca como outro x2.
+	_check(game.heal_orbs.size() == 1, "artifact did not spawn during point Event Director")
+	_check(String(game.heal_orbs[0].get("artifact_type", "")) != "pontos", "x2 artifact spawned on top of point Event Director")
 	game.heal_orbs[0]["life"] = 0.01
 	game.heal_orbs[0]["pos"] = Vector2(1200, 900)
 	game._update_heal_orbs(0.02)

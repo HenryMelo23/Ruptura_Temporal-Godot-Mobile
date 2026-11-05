@@ -80,30 +80,6 @@ func _run() -> void:
 	game._update_phase2_ambient_blizzard(0.12)
 	_check(not game.phase2_ambient_snowflakes.is_empty(), "ambient blizzard did not emit snowflakes")
 
-	game.manifestation_key = "necronada"
-	game.necronada_remnants.clear()
-	game.necronada_remnants.append({
-		"id": 101,
-		"enemy_type": game.ENEMY_COMMON,
-		"pos": game.player_pos + Vector2(80, 0),
-		"hp": 200.0,
-		"max_hp": 200.0,
-		"summon": 0.0,
-		"profile": game._necronada_profile(game.ENEMY_COMMON)
-	})
-	var bullet := {
-		"pos": Vector2(game.necronada_remnants[0].get("pos", game.player_pos)),
-		"dir": Vector2.RIGHT,
-		"life": 1.0,
-		"damage": 90.0,
-		"type": "phase2_penguin_common"
-	}
-	var remnant_hp_before := float(game.necronada_remnants[0].get("hp", 0.0))
-	var hit_remnant: bool = game._damage_remnant_from_enemy_bullet(bullet, 28.0)
-	_check(hit_remnant, "penguin common projectile did not hit necro-ally")
-	_check(float(game.necronada_remnants[0].get("hp", 0.0)) < remnant_hp_before, "penguin projectile did not damage necro-ally")
-	_check(float(bullet.get("life", 0.0)) > 0.0, "penguin common projectile disappeared on necro-ally")
-
 	game.current_phase = 1
 	game.mode = "game"
 	game.boss_attacks = [{"kind": game.BOSS6_ABILITY_ACID_RAIN, "age": 0.0, "duration": 2.0}]

@@ -65,7 +65,7 @@ func _run() -> void:
 
 	# FaseEX now preserves the former definitive/classic map and world size.
 	game.gameplay_cheat_text = "FaseEX"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	assert(game.experimental_phase_requested)
 	game._start_game()
 	assert(game.experimental_phase_active)

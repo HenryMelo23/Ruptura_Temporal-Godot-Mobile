@@ -7,7 +7,6 @@ var failed := false
 
 class FakeGame extends Node:
 	var enemies: Array = []
-	var necronada_remnants: Array = []
 	var boss_active := false
 	var boss_hp := 0.0
 	var boss_pos := Vector2.ZERO
@@ -65,20 +64,15 @@ func _run() -> void:
 		_entity(2, Vector2(214.0, 200.0)),
 		_entity(3, Vector2(700.0, 500.0))
 	]
-	game.necronada_remnants = [
-		_entity(101, Vector2(420.0, 300.0), 8.0),
-		_entity(102, Vector2(440.0, 300.0), 8.0)
-	]
 	var distant_before: Vector2 = game.enemies[2]["pos"]
 	manager.apply_entity_separation(1.0 / 60.0)
 	_check(Vector2(game.enemies[0]["pos"]).distance_to(Vector2(game.enemies[1]["pos"])) >= 43.9, "overlapping enemies were not separated with the existing radii")
-	_check(Vector2(game.necronada_remnants[0]["pos"]).distance_to(Vector2(game.necronada_remnants[1]["pos"])) >= 49.9, "remnant-specific 50px separation was lost")
 	_check(Vector2(game.enemies[2]["pos"]).is_equal_approx(distant_before), "distant entity moved without a nearby collision")
-	for entity in game.enemies + game.necronada_remnants:
+	for entity in game.enemies:
 		var pos := Vector2(entity["pos"])
 		_check(pos.x >= 40.0 and pos.y >= 40.0 and pos.x <= 1560.0 and pos.y <= 860.0, "separation escaped world bounds")
 	manager.rebuild_spatial_index()
-	var ordered := manager.nearby_entity_indices(Vector2(210.0, 200.0), 100.0, false)
+	var ordered := manager.nearby_entity_indices(Vector2(210.0, 200.0), 100.0)
 	_check(ordered == [0, 1], "nearby enemy order changed and could alter avoidance determinism")
 	var retained_bucket_count := manager.spatial_cells.size()
 	manager.rebuild_spatial_index()

@@ -687,13 +687,18 @@ func set_auto_enabled(enabled: bool) -> void:
 			game.settings_previous_mode = "game"
 
 
+## A loja manual foi aposentada: a Fenda do Mercador e a unica entrada da loja.
+## O atalho segue so para ferramentas de QA (dados QA ou fase inicial forcada).
+func manual_dev_access() -> bool:
+	return not game._is_drop_game_mode() and (bool(game.qa_data_unlocked) or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0)
+
+
 func try_open_manual() -> void:
 	if game._is_drop_game_mode():
 		return
 	if game._local_player_controls_locked():
 		return
-	var development_tools_active: bool = game.qa_data_unlocked or game._sanitize_forced_initial_phase(game.forced_initial_phase) > 0
-	if (game.shop_auto_enabled and not development_tools_active) or game.mode != "game":
+	if not manual_dev_access() or game.mode != "game":
 		return
 	if not manual_available():
 		warn_manual_reopen_penalty()
@@ -815,9 +820,9 @@ func handle_touch(pos: Vector2, viewport: Vector2) -> void:
 			game._reroll_shop()
 		elif Rect2(areas.deck).has_point(pos) and game._deck_total_cards() > 0:
 			game._open_deck("shop")
-		elif Rect2(areas.burn).has_point(pos):
+		elif game.buttons.has("shop_burn_%d" % game.shop_selected) and Rect2(game.buttons["shop_burn_%d" % game.shop_selected]).has_point(pos):
 			game._burn_shop_card(game.shop_selected)
-		elif Rect2(areas.reserve).has_point(pos):
+		elif game.buttons.has("shop_reserve_%d" % game.shop_selected) and Rect2(game.buttons["shop_reserve_%d" % game.shop_selected]).has_point(pos):
 			game._reserve_shop_card(game.shop_selected)
 		else:
 			for i in range(mini(3, game.shop_cards.size())):

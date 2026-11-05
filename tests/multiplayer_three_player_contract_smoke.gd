@@ -88,22 +88,8 @@ func _run() -> void:
 		rotated_arauto_targets[int(game._arauto_target_entry(true).get("peer_id", 0))] = true
 	_check(rotated_arauto_targets.size() == 3, "Arauto did not rotate between three living players")
 
-	var eclipsada_index := -1
-	for index in range(game.MANIFESTATIONS.size()):
-		if String(game.MANIFESTATIONS[index].get("key", "")) == "eclipsada":
-			eclipsada_index = index
-			break
-	_check(eclipsada_index >= 0, "Eclipsada is not registered")
-	game.selected_manifestation = eclipsada_index
-	game.manifestation_key = "eclipsada"
-	game.eclipsada_stealth_timer = 5.0
-	var stealth_enemy := {"uid": 701, "pos": game.player_pos, "target_peer_id": local_peer}
-	var stealth_target: Vector2 = game._get_enemy_target_pos(stealth_enemy)
-	_check(int(stealth_enemy.get("target_peer_id", 0)) != local_peer, "enemy retained stealthed local player as target")
-	_check(stealth_target != game.player_pos, "enemy kept following Eclipsada during invisibility")
 	game.net_players_by_peer[42]["stealthed"] = true
 	_check(game._targetable_remote_peer_ids() == [43], "remote stealth fallback restored an invisible peer")
-	game.eclipsada_stealth_timer = 0.0
 	game.net_players_by_peer[42]["stealthed"] = false
 
 	game.arauto_card_drops.clear()

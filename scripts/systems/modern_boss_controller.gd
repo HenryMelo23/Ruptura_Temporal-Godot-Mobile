@@ -16,6 +16,8 @@ func update_boss7_cooldowns(delta: float) -> void:
 
 
 func update_boss7_flight(delta: float) -> void:
+	game._boss7_motion().update_flight(delta)
+	return
 	var target: Vector2 = game._boss_target_pos(true, 0.18)
 	var to_target: Vector2 = target - game.boss_pos
 	var dist: float = to_target.length()
@@ -33,8 +35,10 @@ func update_boss7_flight(delta: float) -> void:
 
 
 func update_boss7_state(delta: float) -> void:
-	game.boss7_state_timer = maxf(0.0, game.boss7_state_timer - delta)
 	update_boss7_flame_waves(delta)
+	if game._boss7_motion().update_swoop_state(delta):
+		return
+	game.boss7_state_timer = maxf(0.0, game.boss7_state_timer - delta)
 	match game.boss7_state:
 		game.BOSS7_STATE_FEATHER:
 			if game.boss7_state_timer <= 0.0:
@@ -85,7 +89,7 @@ func update_boss7_state(delta: float) -> void:
 				if game._distance_to_segment(game.player_pos, old_pos, game.boss_pos) <= game.BOSS7_DIVE_WIDTH * 0.5 and game._local_player_damageable_by_contact():
 					game._damage_player(int(game.player_hp_max * (0.093 if game.boss7_reborn else 0.085) + (28 if game.boss7_reborn else 25)), "boss7_dive")
 					game._apply_boss_burn(2)
-					game.player_pos = game._clamp_player_world(game.player_pos + game._hostile_knockback(game.boss7_attack_dir * 185.0))
+					game._shove_player(game._hostile_knockback(game.boss7_attack_dir * 185.0))
 				game._damage_remote_player_on_segment(old_pos, game.boss_pos, game.BOSS7_DIVE_WIDTH * 0.5, int(game.net_player_hp_max * (0.093 if game.boss7_reborn else 0.085) + (28 if game.boss7_reborn else 25)), "boss7_dive", {}, "boss7_dive")
 			if game.boss_pos.distance_to(game.boss7_target_pos) <= 12.0 or game.boss7_state_timer <= 0.0:
 				game.boss_pos = game.boss7_target_pos
@@ -220,6 +224,7 @@ func start_boss7_attack() -> void:
 	candidates.append({"kind": game.BOSS7_ATTACK_DIVE_TRAIL, "weight": 35.0 if stage == 1 else (27.0 if stage == 2 else 25.0)})
 	candidates.append({"kind": game.BOSS7_ATTACK_SKY_FIREBALLS, "weight": 30.0 if stage == 1 else (35.0 if stage == 2 else 40.0)})
 	candidates.append({"kind": game.BOSS7_ATTACK_WHIRLWIND, "weight": 20.0 if stage == 1 else (25.0 if stage == 2 else 30.0)})
+	candidates.append({"kind": "boss7_swoop", "weight": 30.0 if stage == 1 else (28.0 if stage == 2 else 26.0)})
 	if stage >= 2:
 		candidates.append({"kind": game.BOSS7_ATTACK_THERMAL, "weight": 18.0})
 		candidates.append({"kind": game.BOSS7_ATTACK_ASH_RAIN, "weight": 12.0 if stage == 2 else 10.0})
@@ -256,6 +261,8 @@ func start_boss7_attack() -> void:
 			start_boss7_ash_rain()
 		game.BOSS7_ATTACK_CROWN:
 			start_boss7_crown()
+		"boss7_swoop":
+			game._boss7_motion().start_swoop()
 
 
 func start_boss7_feather_volley() -> void:

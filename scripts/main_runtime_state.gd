@@ -13,8 +13,6 @@ const CombatTextPresentation = preload("res://scripts/presentation/combat_text_p
 const GravitanteVfx = preload("res://scripts/presentation/gravitante_vfx_presentation.gd")
 const LaceranteVfx = preload("res://scripts/presentation/lacerante_vfx_presentation.gd")
 const RangedAttackRange = preload("res://scripts/systems/ranged_attack_range.gd")
-const BombasticaSceneVfx = preload("res://scripts/vfx/bombastica_scene_vfx.gd")
-const ChainVisualPhysics = preload("res://scripts/vfx/chain_visual_physics.gd")
 const EntityVisualProfiles = preload("res://scripts/vfx/entity_visual_profiles.gd")
 const MenusPresentation = preload("res://scripts/presentation/menus_presentation.gd")
 const CharacterSelectPresentation = preload("res://scripts/presentation/character_select_presentation.gd")
@@ -34,6 +32,7 @@ const MENU_PRESENTATION = preload("res://scripts/ui/menu_presentation.gd")
 
 const AuraSystem = preload("res://scripts/aura_system.gd")
 const CatalogInterface = preload("res://scripts/catalog/catalog_interface.gd")
+# Catalog entries consume the same five-item manifestation roster declared here.
 const CatalogRepository = preload("res://scripts/catalog/catalog_repository.gd")
 const CatalogDetails = preload("res://scripts/catalog/catalog_details.gd")
 const RTIntegrityCoreScript = preload("res://scripts/rt_integrity_core.gd")
@@ -65,8 +64,6 @@ const Phase6AmberSuturerControllerScript = preload("res://scripts/systems/enemie
 const EarlyBossControllerScript = preload("res://scripts/systems/early_boss_controller.gd")
 const ModernBossControllerScript = preload("res://scripts/systems/modern_boss_controller.gd")
 const PlayerControlControllerScript = preload("res://scripts/systems/player/player_control_controller.gd")
-const NecronadaAbilityControllerScript = preload("res://scripts/systems/abilities/necronada_ability_controller.gd")
-const AncoradaAbilityControllerScript = preload("res://scripts/systems/abilities/ancorada_ability_controller.gd")
 const HenryIncendiaryAbilityControllerScript = preload("res://scripts/systems/abilities/henry_incendiary_ability_controller.gd")
 const HenryBarometricAbilityControllerScript = preload("res://scripts/systems/abilities/henry_barometric_ability_controller.gd")
 const HenryColossusAbilityControllerScript = preload("res://scripts/systems/abilities/henry_colossus_ability_controller.gd")
@@ -344,7 +341,7 @@ const TUTORIAL_STEP_TEXTS: = {
 	},
 	TUTORIAL_STATE_SHOP: {
 		"title": "LOJA TEMPORAL",
-		"body": "A loja pausa a run e oferece cartas para mudar sua build. Se fechar sem querer, voce pode reabrir uma vez por alguns segundos; depois a loja manual espera 30s, sem tirar pontos.",
+		"body": "A loja pausa a run e oferece cartas para mudar sua build. Ela so abre pela Fenda do Mercador: siga a nevoa ate a fenda quando ela surgir.",
 		"hint": "Compras e rerolls pagos ainda gastam pontos normalmente."
 	},
 	TUTORIAL_STATE_BOSS_CALL: {
@@ -754,7 +751,7 @@ const LACERANTE_REACH_PER_20_COAGULA: = 5.0
 const LACERANTE_ULT_EXTRA_CUTS_PER_20_COAGULA: = 2
 const LACERANTE_COAGULUM_DAMAGE_RATE: = 0.003
 const LACERANTE_COAGULUM_ATTACK_SPEED_RATE: = 0.0025
-const LACERANTE_EMPOWER_COOLDOWN: = 3.0
+const LACERANTE_EMPOWER_COOLDOWN: = 10.0
 const LACERANTE_EMPOWER_DAMAGE_MULT: = 1.45
 const LACERANTE_UNCOMMON_POINTS_MULT: = 1.5
 const LACERANTE_Q_DURATION: = 1.5
@@ -794,7 +791,6 @@ const SECONDARY_PRISMATICA_ZAP_RADIUS: = 430.0
 const SECONDARY_PRISMATICA_ZAP_INTERVAL: = 0.24
 const SECONDARY_PRISMATICA_ZAP_LIFE: = 0.18
 const SECONDARY_PRISMATICA_ZAP_MAX_PER_TICK: = 4
-const SECONDARY_RETORNANTE_DURATION: = 8.0
 const SECONDARY_PARASITICA_DURATION: = 8.0
 const PARASITE_MARK_DURATION: = 6.0
 const PARASITE_FEAST_DURATION: = 8.0
@@ -803,54 +799,10 @@ const PARASITE_SPIT_RADIUS: = 155.0
 const PARASITE_SPIT_DURATION: = 4.8
 const PARASITE_SPIT_TRAVEL: = 0.46
 const SECONDARY_GRAVITANTE_DURATION: = 8.0
-const SECONDARY_ANCORADA_DURATION: = 10.0
-const SECONDARY_ANCORADA_COOLDOWN: = 65.0
-const ANCORADA_ULTIMATE_RADIUS: = 350.0
-const ANCORADA_ULTIMATE_DROP_INTERVAL: = 1.5
-const ANCORADA_ULTIMATE_FALL_TIME: = 0.62
-const ANCORADA_ULTIMATE_IMPACT_RADIUS: = 78.0
-const ANCORADA_ULTIMATE_DAMAGE_MULT: = 1.85
-const ANCORADA_ULTIMATE_BOSS_DAMAGE_MULT: = 1.15
-const ANCORADA_ULTIMATE_SLOW_DURATION: = 2.2
-const ANCORADA_ULTIMATE_SLOW_MULT: = 0.35
-const ANCORADA_ULTIMATE_MOMENTUM_DISTANCE: float = 520.0
-const ANCORADA_ULTIMATE_MOMENTUM_DECAY: float = 0.06
-const ANCORADA_ULTIMATE_ATTACK_SPEED_BONUS: float = 0.18
-const ANCORADA_ULTIMATE_DROP_INTERVAL_BONUS: float = 0.42
-const ANCORADA_ULTIMATE_TRAIL_INTERVAL: float = 0.12
-const ANCORADA_ULTIMATE_TRAIL_POINTS: int = 9
 
-const ANCORADA_LASTRO_MAX_STACKS: int = 5
-const ANCORADA_LASTRO_POINTS_PER_STACK: int = 4
-const ANCORADA_LASTRO_BASIC_MAX_POINTS_PER_PROJECTILE: int = 2
-const ANCORADA_LASTRO_E_MAX_POINTS_PER_DROP_CYCLE: int = 4
-const ANCORADA_LASTRO_DECAY_DELAY: float = 8.0
-const ANCORADA_LASTRO_DECAY_INTERVAL: float = 2.0
-const ANCORADA_LASTRO_KNOCKBACK_RESIST_PER_STACK: float = 0.04
-const ANCORADA_LASTRO_DAMAGE_PER_STACK: float = 0.04
-const ANCORADA_LASTRO_ATTACK_SPEED_PER_STACK: float = 0.02
 
-const ANCORADA_ANCHOR_LIFE: float = 7.0
-const ANCORADA_ANCHOR_MAX_ACTIVE: int = 5
-const ANCORADA_ANCHOR_CLAIM_RADIUS: float = 74.0
-const ANCORADA_ANCHOR_CLAIM_LASTRO_POINTS: int = 2
-const ANCORADA_TETHER_WIDTH: float = 34.0
-const ANCORADA_TETHER_SCAN_INTERVAL: float = 0.12
-const ANCORADA_TETHER_DAMAGE_MULT: float = 0.22
-const ANCORADA_TETHER_BOSS_DAMAGE_MULT: float = 0.12
-const ANCORADA_TETHER_SLOW_DURATION: float = 0.7
-const ANCORADA_TETHER_SLOW_MULT: float = 0.78
 
-const ANCORADA_HAB1_COOLDOWN: float = 11.0
-const ANCORADA_HAB1_TELEGRAPH_TIME: float = 0.10
-const ANCORADA_HAB1_FALL_TIME: float = 0.28
-const ANCORADA_HAB1_IMPACT_TIME: float = 0.38
-const ANCORADA_HAB1_CRACK_DURATION: float = 2.4
-const ANCORADA_HAB1_PULL_BASE: float = 0.22
-const ANCORADA_HAB1_PULL_PER_LASTRO: float = 0.055
 
-const ANCORADA_BASIC_PROJECTILE_SPEED: float = 720.0
-const ANCORADA_BASIC_PROJECTILE_RANGE: float = 760.0
 const BOSS_READY_TIME: = 0.0
 const BOSS_CALL_COUNTDOWN: = 1.2
 const BOSS_BASE_HP: = 4860.0
@@ -1093,10 +1045,10 @@ const LARAPIO_STEAL_RATIO: = 0.6
 const LARAPIO_LOOT_RETURN_RATIO: = 0.9
 const LARAPIO_LOOT_BONUS_RATIO: = 0.15
 const LARAPIO_STUN_TIME: = 1.4
-const LARAPIO_THROW_INTERVAL: = 4.0
+const LARAPIO_THROW_INTERVAL: = 3.0
 const LARAPIO_DAMAGE_TAKEN_MULT: = 0.34
-const LARAPIO_AGGRESSIVE_AFTER: = 120.0
-const LARAPIO_AGGRESSIVE_THROW_INTERVAL: = 3.0
+const LARAPIO_AGGRESSIVE_AFTER: = 45.0
+const LARAPIO_AGGRESSIVE_THROW_INTERVAL: = 2.3
 const LARAPIO_AGGRESSIVE_STONE_SPEED_MULT: = 1.4
 const LARAPIO_DESPERATE_AFTER: = 90.0
 const LARAPIO_DESPERATE_HP_RATIO: = 0.38
@@ -1131,54 +1083,6 @@ const VORAZ_BOSS_BITE_RADIUS: = 152.0
 const VORAZ_BITE_INTERVAL: = 0.95
 const RATIONAL_TRAIL_SAMPLE_TIME: = 0.035
 const RATIONAL_TRAIL_LIFE: = 0.46
-const ECLIPSADA_ATTACK_HIT_INTERVAL: = 0.3
-const ECLIPSADA_ATTACK_CHAIN_COOLDOWN: = 1.2
-const ECLIPSADA_ATTACK_REACH: = 20.0
-const ECLIPSADA_ATTACK_AREA_RADIUS: = 80.0
-const ECLIPSADA_ATTACK_AREA_REACH: = 80.0
-const ECLIPSADA_ATTACK_SLASH_RADIUS: = 80.0
-const ECLIPSADA_LUA_BLADE_REACH: = 180.0
-const ECLIPSADA_LUA_BLADE_WIDTH: = 34.0
-const ECLIPSADA_LUA_BLADE_DAMAGE_MULT: = 0.78
-const ECLIPSADA_LUA_BLADE_CRIT_MULT: = 1.85
-const ECLIPSADA_FORM_LUA: = "lua"
-const ECLIPSADA_FORM_SOL: = "sol"
-const ECLIPSADA_SHURIKEN_RANGE: = 280.0
-const ECLIPSADA_SHURIKEN_FALL_RANGE: = 285.0
-const ECLIPSADA_LUA_SHURIKEN_SPEED: = 520.0
-const ECLIPSADA_SOL_SHURIKEN_SPEED: = 600.0
-const ECLIPSADA_LUA_SHURIKEN_DAMAGE_MULT: = 0.64
-const ECLIPSADA_SOL_SHURIKEN_DAMAGE_MULT: = 0.78
-const ECLIPSADA_SOL_SPLASH_RADIUS: = 54.0
-const ECLIPSADA_SOL_Q_RANGE: = 340.0
-const ECLIPSADA_SOL_E_RANGE: = 260.0
-const ECLIPSADA_SOL_E_RADIUS: = 170.0
-const ECLIPSADA_SOL_E_DURATION: = 3.2
-const ECLIPSADA_SOL_E_TICK: = 0.34
-const ECLIPSADA_Q_DASH_DISTANCE: = 20.0
-const ECLIPSADA_Q_SPEED_MULT: = 1.2
-const ECLIPSADA_Q_SPEED_TIME: = 6.0
-const ECLIPSADA_Q_STEALTH_TIME: = 5.0
-const ECLIPSADA_LUA_STEALTH_COOLDOWN: = 10.0
-const ECLIPSADA_LUA_STEALTH_SAFE_TIME: = 3.0
-const ECLIPSADA_LUA_STEALTH_DRAIN_BASE: = 0.0005
-const ECLIPSADA_LUA_STEALTH_DRAIN_STEP: = 0.0001
-const ECLIPSADA_Q_WEAKPOINT_TIME: = 5.0
-const ECLIPSADA_WEAKPOINT_RADIUS: = 18.0
-const ECLIPSADA_WEAKPOINT_DAMAGE_MULT: = 1.75
-const ECLIPSADA_E_AIM_RANGE: = 150.0
-const ECLIPSADA_E_CHAIN_RADIUS: = 90.0
-const ECLIPSADA_E_BASE_CUTS: = 6
-const ECLIPSADA_E_CUT_INTERVAL_BASE: = 0.18
-const ECLIPSADA_E_DAMAGE_SCALE: = 1.15
-const ECLIPSADA_E_MAX_TARGET_TIME: = 2.35
-const ECLIPSADA_LUA_E_DURATION: = 5.2
-const ECLIPSADA_LUA_E_RADIUS: = 172.0
-const ECLIPSADA_LUA_E_TICK: = 0.22
-const ECLIPSADA_LUA_E_MAX_TARGETS: = 3
-const ECLIPSADA_E_COOLDOWN: = 50.0
-const ECLIPSADA_PASSIVE_READY_TIME: = 80.0
-const ECLIPSADA_TRAIT_DURATION: = 60.0
 
 const ENEMY_COMMON: = "comum"
 const ENEMY_ATIRADOR: = "atirador"
@@ -1622,19 +1526,9 @@ const APOLO_PHASE5_MANIFEST_PROFILES: = {
 	"eletrica": {"speed": 10.0, "lead": 0.70, "ideal": 330.0},
 	"lacerante": {"speed": 18.0, "lead": 0.34, "ideal": 230.0},
 	"prismatica": {"speed": 24.0, "lead": 0.95, "ideal": 390.0},
-	"retornante": {"speed": 12.0, "lead": 0.55, "ideal": 310.0},
 	"parasitica": {"speed": 10.0, "lead": 0.62, "ideal": 360.0},
 	"condutora": {"speed": 14.0, "lead": 0.78, "ideal": 340.0},
 	"gravitante": {"speed": 8.0, "lead": 0.45, "ideal": 300.0},
-	"ancorada": {"speed": 11.0, "lead": 0.38, "ideal": 260.0},
-	"cartografica": {"speed": 16.0, "lead": 0.72, "ideal": 350.0},
-	"mnesica": {"speed": 13.0, "lead": 0.66, "ideal": 320.0},
-	"ressonante": {"speed": 15.0, "lead": 0.58, "ideal": 315.0},
-	"contratual": {"speed": 12.0, "lead": 0.50, "ideal": 300.0},
-	"acorrentada": {"speed": 13.0, "lead": 0.42, "ideal": 250.0},
-	"eclipsada": {"speed": 17.0, "lead": 0.46, "ideal": 270.0},
-	"bombastica": {"speed": 11.0, "lead": 0.52, "ideal": 285.0},
-	"necronada": {"speed": 12.0, "lead": 0.48, "ideal": 300.0}
 }
 const PHASE4_RIFT_WARNING: = 0.85
 const PHASE4_RIFT_ACTIVE_TIME: = 2.8
@@ -1656,23 +1550,6 @@ const CARTO_TRACE_TIME: = 5.0
 const CARTO_POINT_TIME: = 3.8
 const CARTO_COMPLETE_MAP_TIME: = 5.2
 const CARTO_BOSS_DISPLACEMENT_REQUIRED: = 3
-const MNESIC_MEMORY_MAX: = 3
-const MNESIC_REENACT_RADIUS: = 380.0
-const MNESIC_TRICK_TIME: = 2.1
-const RESONANT_BEAT_INTERVAL: = 0.58
-const RESONANT_PERFECT_WINDOW: = 0.125
-const RESONANT_NOISE_LIMIT: = 3
-const CONTRACT_TRAP_LIFE: = 5.2
-const CONTRACT_MAX_INFRACTIONS: = 3
-const CONTRACT_ORDER_DURATION: = 30.0
-const CONTRACT_ORDER_SLOW_IN_TIME: = 3.0
-const CONTRACT_ORDER_REVEAL_TIME: = 1.5
-const CONTRACT_ORDER_SLOW_OUT_TIME: = 3.0
-const CONTRACT_ORDER_READ_END_TIME: = CONTRACT_ORDER_SLOW_IN_TIME + CONTRACT_ORDER_REVEAL_TIME
-const CONTRACT_ORDER_EXECUTION_START_TIME: = CONTRACT_ORDER_READ_END_TIME + CONTRACT_ORDER_SLOW_OUT_TIME
-const CONTRACT_ORDER_COOLDOWN: = 180.0
-const CONTRACT_ORDER_REWARD_TIME: = 60.0
-const CONTRACT_ORDER_PENALTY_TIME: = 120.0
 const COUT_AS_SPAWN_TIME: = PHASE1_REVIVATOR_UNLOCK_TIME
 const COUT_AS_AURA_RADIUS: = 215.0
 const COUT_AS_RECONSTITUTE_HP_RATIO: = 0.25
@@ -1698,112 +1575,6 @@ const HUD_CONTROL_SCALE_MAX: = 2.5
 const HUD_ATTACK_SCALE_MAX: = 3.0
 const HUD_PANEL_SCALE_MIN: = 0.6
 const HUD_PANEL_SCALE_MAX: = 2.5
-const ACORRENTADA_MAX_ELOS: = 3
-const ACORRENTADA_ELO_TIME: = 6.0
-const ACORRENTADA_COMBO_RESET_TIME: = 2.8
-const ACORRENTADA_TENSION_DECAY_DELAY: = 3.0
-const ACORRENTADA_Q_DURATION: = 3.5
-const ACORRENTADA_Q_OVERCHARGE_DURATION: = 4.4
-const ACORRENTADA_Q_LINK_DISTANCE: = 180.0
-const ACORRENTADA_Q_LINE_CD: = 0.45
-const ACORRENTADA_E_RADIUS: = 420.0
-const ACORRENTADA_E_OVERCHARGE_RADIUS: = 500.0
-const ACORRENTADA_E_DURATION: = 5.0
-const ACORRENTADA_E_TICK_INTERVAL: = 0.45
-const ACORRENTADA_E_PULL_SPEED: = 105.0
-const ACORRENTADA_E_TICK_DAMAGE_SCALE: = 0.11
-const ACORRENTADA_WALK_FADE_TIME: = 0.8
-const ACORRENTADA_WALK_VOLUME: = 0.42
-const ACORRENTADA_TP_LINE_TIME: = 1.2
-const ACORRENTADA_TP_OVERHEAT_LINE_BONUS: = 0.25
-const ACORRENTADA_ATTACK_WINDUP_TIMES: = [0.09, 0.11, 0.12]
-const ACORRENTADA_ATTACK_OUT_TIMES: = [0.26, 0.32, 0.36]
-const ACORRENTADA_ATTACK_HOLD_TIME: = 0.045
-const ACORRENTADA_ATTACK_RETURN_TIMES: = [0.22, 0.25, 0.28]
-const ACORRENTADA_ATTACK_WINDUP_BACK_DISTANCES: = [52.0, 72.0, 64.0]
-const ACORRENTADA_CHAINED_DAMAGE_BONUS: = 0.16
-const BOMBASTICA_Q_CHARGES: = 3
-const BOMBASTICA_Q_RECHARGE: = 7.0
-const BOMBASTICA_Q_FUSE_MIN: = 3.0
-const BOMBASTICA_Q_FUSE_MAX: = 6.0
-const BOMBASTICA_Q_DAMAGE_MULT: = 1.9375
-const BOMBASTICA_Q_RADIUS: = 105.0
-const BOMBASTICA_Q_PLACE_DISTANCE: = 70.0
-const BOMBASTICA_Q_THROW_RANGE: = 430.0
-const BOMBASTICA_E_COOLDOWN: = 13.5
-const BOMBASTICA_E_DURATION: = 10.0
-const BOMBASTICA_E_MINE_COUNT: = 5
-const BOMBASTICA_E_MINE_DAMAGE_MULT: = 0.60
-const BOMBASTICA_E_MINE_RADIUS: = 65.0
-const BOMBASTICA_E_ARM_TIME: = 0.26
-const BOMBASTICA_POWDER_DURATION: = 5.0
-const BOMBASTICA_POWDER_MAX_STACKS: = 3
-const BOMBASTICA_POWDER_DAMAGE_BONUS: = 0.06
-const BOMBASTICA_IGNITION_DAMAGE_MULT: = 0.38
-const BOMBASTICA_IGNITION_RADIUS: = 55.0
-const BOMBASTICA_CHAIN_DEPTH_MAX: = 5
-const BOMBASTICA_CHAIN_TOUCH_MARGIN: = 8.0
-const BOMBASTICA_MANUAL_DAMAGE_MULT: = 0.86
-const BOMBASTICA_ULT_TRAIL_DURATION: float = 5.0
-const BOMBASTICA_ULT_BLAST_SPACING: float = 64.0
-const BOMBASTICA_ULT_MAX_BLASTS: int = 24
-const BOMBASTICA_ULT_BLAST_INTERVAL: float = 0.085
-const BOMBASTICA_ULT_BLAST_RADIUS: float = 110.0
-const BOMBASTICA_ULT_BLAST_DAMAGE_MULT: float = 1.30
-const BOMBASTICA_ULT_FINALE_RADIUS: float = 155.0
-const BOMBASTICA_ULT_FINALE_DAMAGE_MULT: float = 2.80
-const BOMBASTICA_ULT_FINALE_REPEAT_FLOOR: float = 0.75
-const BOMBASTICA_ULTIMATE_RADIUS: float = 280.0
-const BOMBASTICA_ULTIMATE_DURATION: float = 10.0
-const BOMBASTICA_ULTIMATE_SPEED: float = 85.0
-const BOMBASTICA_ULTIMATE_BOUNCE_PERIOD: float = 1.5
-const BOMBASTICA_ULTIMATE_DAMAGE_MULT: float = 3.65
-const BOMBASTICA_ULTIMATE_SHOT_DAMAGE_MULT: float = 0.82
-const BOMBASTICA_ULTIMATE_GROUNDED_WINDOW: float = 0.22
-const NECRONADA_EPITAPH_DURATION: = 8.0
-const NECRONADA_EPITAPH_MAX_DEPTH: = 5
-const NECRONADA_VESTIGE_DURATION: = 12.0
-const NECRONADA_ROSE_MAX: = 7
-const NECRONADA_ROSE_SUMMON_RADIUS: = 350.0
-const NECRONADA_PASSIVE_ATTACKS: = 4
-const NECRONADA_PASSIVE_HEAL_RATE: = 0.025
-const NECRONADA_OSSUARY_SLOTS: = 4
-const NECRONADA_MAX_ACTIVE_REMNANTS: = 7
-const NECRONADA_REMNANT_HEALTH_MULT: = 0.8
-const NECRONADA_REMNANT_BASE_DURATION: = 18.0
-const NECRONADA_REMNANT_SUMMON_TIME: = 1.2
-const NECRONADA_REMNANT_TARGET_INTERVAL: = 0.22
-const NECRONADA_REMNANT_ATTACK_INTERVAL: = 0.62
-const NECRONADA_REMNANT_MELEE_RANGE_MIN: = 128.0
-const NECRONADA_REMNANT_SUPPORT_RANGE_MIN: = 230.0
-const NECRONADA_REMNANT_RANGED_RANGE_MIN: = 340.0
-const NECRONADA_REQUIEM_DURATION: = 15.0
-const NECRONADA_REQUIEM_TICK: = 0.38
-const NECRONADA_REQUIEM_MAX_ECHOES: = 10
-const NECRONADA_SUPREME_HORDE_COUNT: = 4
-const NECRONADA_TOTAL_TAUNT_DURATION: = 15.0
-const NECRONADA_EMPOWER_DURATION: = 3.0
-const NECRONADA_EMPOWER_COOLDOWN: = 3.0
-const NECRONADA_EMPOWER_RANGE: = 300.0
-const NECRONADA_EMPOWER_DAMAGE_MULT: = 0.22
-const NECRONADA_EMPOWER_ALLY_BUFF_DURATION: = 3.0
-const NECRONADA_EMPOWER_ALLY_DAMAGE_MULT: = 1.35
-const NECRONADA_EMPOWER_ALLY_SPEED_MULT: = 1.38
-const NECRONADA_ULTIMATE_REQUIRED_REVIVES: = 30
-const NECRONADA_ULTIMATE_RADIUS: = 420.0
-const NECRONADA_ULTIMATE_FULL_RADIUS: = 180.0
-const NECRONADA_ULTIMATE_DAMAGE_MAX: = 1.2
-const NECRONADA_ULTIMATE_DAMAGE_MIN: = 0.6
-const NECRONADA_ULTIMATE_SLOW_MULT: = 0.55
-const NECRONADA_ULTIMATE_CRIT_CHANCE: = 0.45
-const NECRONADA_ULTIMATE_MARK_DURATION: = 4.0
-const NECRONADA_ULTIMATE_COOLDOWN: = 10.0
-const NECRONADA_EMPOWER_ROSE_WINDOW: = 6.0
-const NECRONADA_EMPOWER_ROSE_REQUIRED_HITS: = 4
-const NECRONADA_TP_DUST_RADIUS: = 210.0
-const NECRONADA_TP_DUST_HALF_ANGLE: = 0.62
-const NECRONADA_TP_DUST_DAMAGE_MULT: = 0.3
-const NECRONADA_TP_DUST_PUSH: = 115.0
 
 const MANIFESTATIONS: = [
 	{
@@ -1817,7 +1588,7 @@ const MANIFESTATIONS: = [
 	{
 		"key": "lacerante",
 		"name": "Lacerante",
-		"desc": "Cacadora de risco: tres cortes laceram, presas incomuns valem +50% e execucoes reforcadas criam Coagulos que aumentam dano e cadencia.",
+		"desc": "Cacadora de risco: cortes acumulam Laceracao, a barra de vida mostra quem pode ser executado e o Reforco executa o alvo (reservado, invulneravel) gerando um Coagulo garantido.",
 		"icon": "manifestacao_lacerante.png",
 		"color": Color(1.0, 0.12, 0.18),
 		"accent": Color(1.0, 0.58, 0.64)
@@ -1831,14 +1602,6 @@ const MANIFESTATIONS: = [
 		"accent": Color(1.0, 0.42, 0.72)
 	},
 	{
-		"key": "retornante",
-		"name": "Retornante",
-		"desc": "Dano no retorno: o tiro vai fraco, volta forte, Q fortalece um pulso e E cria paradoxos de retorno.",
-		"icon": "manifestacao_retornante.png",
-		"color": Color(0.58, 0.38, 1.0),
-		"accent": Color(1.0, 0.35, 0.68)
-	},
-	{
 		"key": "parasitica",
 		"name": "Parasitica",
 		"desc": "Larvas vivas: tiros marcam por 6s, Q cospe um viveiro contaminante e E chama vermes subterraneos que devoram os marcados.",
@@ -1849,96 +1612,14 @@ const MANIFESTATIONS: = [
 	{
 		"key": "gravitante",
 		"name": "Gravitante",
-		"desc": "Controle gravitacional: ATKs marcam, Q colide os marcados e E prende inimigos e chefes no nucleo.",
+		"desc": "Controle gravitacional: ATKs prendem ate 3 orbitas (3 = Estrela que agrupa a horda), Q colide os marcados, E prende tudo no nucleo e o TP deixa um poco.",
 		"icon": "manifestacao_gravitante.png",
 		"color": Color(0.46, 0.78, 1.0),
 		"accent": Color(0.86, 0.96, 1.0)
-	},
-	{
-		"key": "ancorada",
-		"name": "Ancorada",
-		"desc": "Defesa de territorio: tiros plantam ancoras, Q solta uma onda e E fortalece a area escolhida.",
-		"icon": "manifestacao_ancorada.png",
-		"color": Color(0.3, 0.88, 1.0),
-		"accent": Color(1.0, 0.78, 0.26)
-	},
-	{
-		"key": "cartografica",
-		"name": "Cartografica",
-		"desc": "Mapa de combate: ATK cria coordenadas, Q liga rotas perigosas e E rasga o mapa para tiros reposicionados.",
-		"icon": "manifestacao_cartografica.png",
-		"color": Color(0.15, 0.95, 0.78),
-		"accent": Color(1.0, 0.82, 0.26)
-	},
-	{
-		"key": "mnesica",
-		"name": "Mnesica",
-		"desc": "Memoria punitiva: ATK grava lembrancas, Q detona padroes e E acelera arquivos para punir grupos.",
-		"icon": "manifestacao_mnesica.png",
-		"color": Color(0.78, 0.52, 1.0),
-		"accent": Color(1.0, 0.56, 0.86)
-	},
-	{
-		"key": "ressonante",
-		"name": "Ressonante",
-		"desc": "Ritmo e timing: ATK no compasso aplica notas, Q detona acordes e E garante janelas perfeitas.",
-		"icon": "manifestacao_ressonante.png",
-		"color": Color(1.0, 0.74, 0.2),
-		"accent": Color(0.38, 0.92, 1.0)
-	},
-	{
-		"key": "contratual",
-		"name": "Contratual",
-		"desc": "Regras e sentencas: ATK aplica clausulas, Q executa infracoes e E transforma a arena em audiencia.",
-		"icon": "manifestacao_contratual.png",
-		"color": Color(1.0, 0.54, 0.22),
-		"accent": Color(0.96, 0.96, 0.86)
-	},
-	{
-		"key": "acorrentada",
-		"name": "Acorrentada",
-		"desc": "Correntes e Elos: ATK marca e rompe, Q prende alvos ligados e E puxa tudo para uma sentenca.",
-		"icon": "manifestacao_acorrentada.png",
-		"color": Color(0.88, 0.16, 0.18),
-		"accent": Color(0.16, 0.86, 1.0)
-	},
-	{
-		"key": "eclipsada",
-		"name": "Eclipsada",
-		"desc": "Duelista Sol/Lua: REFORCO troca forma, ATK arremessa shurikens curtos e Q/E mudam de estilo.",
-		"icon": "res://assets/sprites/manifestacao-eclipsada.png",
-		"color": Color(0.58, 0.42, 1.0),
-		"accent": Color(1.0, 0.86, 0.32)
-	},
-	{
-		"key": "bombastica",
-		"name": "Bombastica",
-		"desc": "Prepare explosivos, controle seus fuseis e provoque reacoes em cadeia devastadoras.",
-		"icon": "res://assets/sprites/manifestacao_bombastica.png",
-		"color": Color(1.0, 0.48, 0.12),
-		"accent": Color(0.18, 0.88, 1.0)
-	},
-	{
-		"key": "necronada",
-		"name": "Necronada",
-		"desc": "Marca epitafios, captura vestigios no Ossuario Temporal e ergue Remanescentes por tempo limitado.",
-		"icon": "res://assets/sprites/manifestacao-necronada.png",
-		"color": Color(0.64, 0.3, 1.0),
-		"accent": Color(0.38, 1.0, 0.86)
 	}
 ]
 
-# Conteudo preservado para saves e contratos de rede, mas retirado das
-# superficies publicas ate receber uma revisao dedicada de gameplay e arte.
-const HIDDEN_UNPOLISHED_MANIFESTATION_KEYS: = [
-	"cartografica",
-	"mnesica",
-	"ressonante",
-	"acorrentada",
-	"necronada",
-	"eclipsada",
-	"contratual"
-]
+const HIDDEN_UNPOLISHED_MANIFESTATION_KEYS: = []
 
 const HIDDEN_UNPOLISHED_SPECTRUM_KEYS: = [
 	"nula",
@@ -1964,35 +1645,16 @@ const MANIFEST_EVOLUTION_NAMES: = {
 	"eletrica": ["Arco Bifasico", "Fio Condutor", "Raio Teleguiado", "Rede Ionica", "Estouro Galvanico", "Polo Magnetico", "Selo de Voltagem", "Campo Tesla", "Passo Fulminante"],
 	"lacerante": ["Cicatriz Ecoante", "Corte Vazado", "Faro de Sangue", "Costura Cruel", "Ruptura Hematica", "Vortice de Laminas", "Selo de Hemorragia", "Zona de Talho", "Passo Serrilhado"],
 	"prismatica": ["Reflexo Menor", "Raio Lapidado", "Mira Refratada", "Elo Cromatico", "Estouro Espectral", "Foco Convergente", "Selo de Cor", "Campo de Cristal", "Passo Arco-Iris"],
-	"retornante": ["Eco Reverso", "Ida Vazante", "Memoria de Alvo", "Laco Temporal", "Pulso de Retorno", "Vortice Retrogrado", "Selo de Volta", "Campo de Reprise", "Passo Paradoxal"],
 	"parasitica": ["Ninhada Ecoante", "Espinho Larval", "Hospedeiro Guiado", "Rede Micelial", "Espasmo Coletivo", "Vortice de Larvas", "Selo de Infestacao", "Viveiro Persistente", "Passo de Ovos"],
 	"gravitante": ["Satelite Menor", "Orbita Perfurante", "Atrator Balistico", "Elo Orbital", "Pulso de Massa", "Singularidade Curta", "Selo de Peso", "Campo Gravitico", "Passo de Mare"],
-	"ancorada": ["Replica Fixa", "Prego Profundo", "Trava de Mira", "Elo de Territorio", "Onda de Contencao", "Nucleo de Amarra", "Selo de Solo", "Campo Ancorado", "Passo Estacado"],
-	"cartografica": ["Rota Duplicada", "Linha Meridiana", "Bussola Agressiva", "Mapa Vinculado", "Marco de Repulsao", "Dobra de Coordenada", "Selo de Latitude", "Campo de Rota", "Passo Cartografado"],
-	"mnesica": ["Lembranca Ecoada", "Agulha de Engrama", "Recordacao Predatoria", "Elo de Memoria", "Surto Mnemonico", "Arquivo Convergente", "Selo de Trauma", "Campo Mnemonico", "Passo Esquecido"],
-	"ressonante": ["Oitava Ecoante", "Nota Perfurante", "Tom Perseguidor", "Acorde Ligado", "Pulso Percussivo", "Caixa de Ressonancia", "Selo de Compasso", "Campo Harmonico", "Passo Sincopado"],
-	"contratual": ["Clausula Duplicada", "Artigo Perfurante", "Mandado de Busca", "Elo Jurado", "Quebra de Termo", "Audiencia Forcada", "Selo de Sentenca", "Campo de Clausula", "Passo Notificado"],
-	"acorrentada": ["Elo Ecoante", "Corrente Vazante", "Gancho Teleguiado", "Grilhao Compartilhado", "Tranco de Elo", "Arrasto de Correntes", "Selo de Prisao", "Campo Algemado", "Passo Acorrentado"],
-	"eclipsada": ["Umbra Ecoante", "Raio Penumbral", "Sombra Guiada", "Elo de Eclipse", "Pulso do Crepusculo", "Vortice de Penumbra", "Selo do Ocaso", "Campo Eclipsado", "Passo Sem Luz"],
-	"bombastica": ["Estopim Gemeo", "Furo de Granada", "Fagulha Guiada", "Elo de Detonacao", "Pulso de Estouro", "Vortice de Estilhacos", "Selo de Polvora", "Campo Minado", "Passo de Retaguarda"],
-	"necronada": ["Epitafio Ecoante", "Agulha Funeraria", "Vestigio Guiado", "Elo Ossuario", "Pulso Mortuario", "Vortice de Remanescentes", "Selo do Ossuario", "Campo Sepulcral", "Passo Funebre"]
 }
 
 const MANIFEST_EVOLUTION_PROFILES: = {
 	"eletrica": {"eco": {"every": 4, "scale": 0.44, "spread": 0.26}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.18, "range": 360.0}, "elo": {"radius": 148.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 138.0, "force": 92.0, "damage": 0.18}, "vortice": {"every": 5, "radius": 150.0, "force": 88.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 150.0, "duration": 3.2, "slow": 0.7, "damage": 0.055}, "passo": {"radius": 145.0, "force": 122.0, "damage": 0.12}},
 	"lacerante": {"eco": {"every": 3, "scale": 0.36, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.12, "range": 280.0}, "elo": {"radius": 118.0, "slow": 0.82}, "pulso": {"every": 3, "radius": 112.0, "force": 72.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 122.0, "force": 68.0, "damage": 0.18}, "selo": {"hits": 2, "duration": 0.48}, "campo": {"radius": 126.0, "duration": 2.6, "slow": 0.76, "damage": 0.09}, "passo": {"radius": 118.0, "force": 78.0, "damage": 0.18}},
 	"prismatica": {"eco": {"every": 5, "scale": 0.34, "spread": 0.36}, "perfuracao": {"pierces": 2}, "caca": {"turn": 0.14, "range": 330.0}, "elo": {"radius": 170.0, "slow": 0.8}, "pulso": {"every": 5, "radius": 150.0, "force": 78.0, "damage": 0.14}, "vortice": {"every": 5, "radius": 180.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.58}, "campo": {"radius": 180.0, "duration": 3.0, "slow": 0.76, "damage": 0.05}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.11}},
-	"retornante": {"eco": {"every": 3, "scale": 0.3, "spread": 0.22}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 340.0}, "elo": {"radius": 136.0, "slow": 0.78}, "pulso": {"every": 4, "radius": 130.0, "force": 86.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 150.0, "force": 84.0, "damage": 0.12}, "selo": {"hits": 3, "duration": 0.66}, "campo": {"radius": 148.0, "duration": 3.4, "slow": 0.74, "damage": 0.05}, "passo": {"radius": 156.0, "force": 94.0, "damage": 0.12}},
 	"parasitica": {"eco": {"every": 4, "scale": 0.32, "spread": 0.3}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.13, "range": 310.0}, "elo": {"radius": 150.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 132.0, "force": 58.0, "damage": 0.16}, "vortice": {"every": 4, "radius": 152.0, "force": 72.0, "damage": 0.13}, "selo": {"hits": 3, "duration": 0.78}, "campo": {"radius": 158.0, "duration": 4.0, "slow": 0.68, "damage": 0.075}, "passo": {"radius": 132.0, "force": 66.0, "damage": 0.14}},
 	"gravitante": {"eco": {"every": 4, "scale": 0.38, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.22, "range": 390.0}, "elo": {"radius": 176.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 170.0, "force": 108.0, "damage": 0.12}, "vortice": {"every": 3, "radius": 210.0, "force": 128.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.82}, "campo": {"radius": 210.0, "duration": 3.6, "slow": 0.62, "damage": 0.045}, "passo": {"radius": 182.0, "force": 114.0, "damage": 0.1}},
-	"ancorada": {"eco": {"every": 4, "scale": 0.42, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.1, "range": 260.0}, "elo": {"radius": 150.0, "slow": 0.66}, "pulso": {"every": 4, "radius": 160.0, "force": 96.0, "damage": 0.12}, "vortice": {"every": 5, "radius": 170.0, "force": 82.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 190.0, "duration": 4.4, "slow": 0.6, "damage": 0.045}, "passo": {"radius": 154.0, "force": 92.0, "damage": 0.12}},
-	"cartografica": {"eco": {"every": 4, "scale": 0.36, "spread": 0.24}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.2, "range": 360.0}, "elo": {"radius": 164.0, "slow": 0.74}, "pulso": {"every": 4, "radius": 150.0, "force": 80.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 178.0, "force": 98.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.62}, "campo": {"radius": 182.0, "duration": 3.8, "slow": 0.68, "damage": 0.05}, "passo": {"radius": 168.0, "force": 86.0, "damage": 0.1}},
-	"mnesica": {"eco": {"every": 3, "scale": 0.34, "spread": 0.16}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 330.0}, "elo": {"radius": 150.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 142.0, "force": 72.0, "damage": 0.13}, "vortice": {"every": 5, "radius": 164.0, "force": 76.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.88}, "campo": {"radius": 166.0, "duration": 3.8, "slow": 0.7, "damage": 0.06}, "passo": {"radius": 150.0, "force": 78.0, "damage": 0.12}},
-	"ressonante": {"eco": {"every": 4, "scale": 0.4, "spread": 0.28}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.16, "range": 320.0}, "elo": {"radius": 172.0, "slow": 0.74}, "pulso": {"every": 3, "radius": 164.0, "force": 94.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 174.0, "force": 84.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.72}, "campo": {"radius": 188.0, "duration": 3.2, "slow": 0.72, "damage": 0.055}, "passo": {"radius": 160.0, "force": 90.0, "damage": 0.11}},
-	"contratual": {"eco": {"every": 4, "scale": 0.36, "spread": 0.12}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 310.0}, "elo": {"radius": 156.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 138.0, "force": 76.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 160.0, "force": 78.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.92}, "campo": {"radius": 172.0, "duration": 4.0, "slow": 0.66, "damage": 0.055}, "passo": {"radius": 150.0, "force": 82.0, "damage": 0.12}},
-	"acorrentada": {"eco": {"every": 3, "scale": 0.34, "spread": 0.1}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.15, "range": 300.0}, "elo": {"radius": 170.0, "slow": 0.64}, "pulso": {"every": 3, "radius": 154.0, "force": 88.0, "damage": 0.14}, "vortice": {"every": 4, "radius": 176.0, "force": 112.0, "damage": 0.12}, "selo": {"hits": 2, "duration": 0.86}, "campo": {"radius": 184.0, "duration": 3.6, "slow": 0.62, "damage": 0.055}, "passo": {"radius": 162.0, "force": 98.0, "damage": 0.12}},
-	"eclipsada": {"eco": {"every": 4, "scale": 0.36, "spread": 0.2}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.18, "range": 340.0}, "elo": {"radius": 160.0, "slow": 0.72}, "pulso": {"every": 4, "radius": 148.0, "force": 86.0, "damage": 0.13}, "vortice": {"every": 4, "radius": 168.0, "force": 92.0, "damage": 0.11}, "selo": {"hits": 3, "duration": 0.7}, "campo": {"radius": 176.0, "duration": 3.6, "slow": 0.68, "damage": 0.055}, "passo": {"radius": 156.0, "force": 90.0, "damage": 0.12}},
-	"necronada": {"eco": {"every": 4, "scale": 0.34, "spread": 0.18}, "perfuracao": {"pierces": 1}, "caca": {"turn": 0.14, "range": 320.0}, "elo": {"radius": 154.0, "slow": 0.7}, "pulso": {"every": 4, "radius": 144.0, "force": 76.0, "damage": 0.12}, "vortice": {"every": 4, "radius": 172.0, "force": 82.0, "damage": 0.1}, "selo": {"hits": 3, "duration": 0.76}, "campo": {"radius": 170.0, "duration": 3.8, "slow": 0.66, "damage": 0.052}, "passo": {"radius": 150.0, "force": 84.0, "damage": 0.11}}
 }
 
 const CARDS: = [
@@ -2053,7 +1715,7 @@ const CARDS: = [
 	{"id": "ponto_cego", "name": "Ponto Cego", "nick": "Ataque pelas Costas", "desc": "Ataques por tras causam dano extra e desorientam.", "icon": "Deck/carta-Ponto_Cego1.png", "frame_2": "Deck/carta-Ponto_Cego2.png", "color": Color(1.0, 0.86, 0.34)},
 	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)},
 	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)},
-	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "Inimigos derrotados retornam temporariamente como aliados.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
+	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "A cada tantas mortes, um inimigo volta no tempo como Eco aliado: da investidas que atravessam e deixam lentos os inimigos, e implode no fim.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
 	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
 	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)},
 	{"id": "critico_absoluto", "name": "Crítico Absoluto", "nick": "Dobra Letal", "rarity": CARD_RARITY_RARE, "desc": "Cada cópia aumenta em 100% o dano final dos acertos críticos, sem limite. Uma cópia dobra o crítico atual; cinco cópias multiplicam por seis.", "icon": "Deck/carta-Critico_Absoluto1.png", "frame_2": "Deck/carta-Critico_Absoluto2.png", "color": CARD_RARITY_RARE_COLOR},
@@ -2198,18 +1860,8 @@ const MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE: = ["eletrica"]
 const MANIFESTATION_UNLOCK_RULES: = {
 	"lacerante": {"metric": "enemy_kills", "target": 250.0, "challenge": "Eliminar 250/250 inimigos"},
 	"prismatica": {"metric": "boss_kills", "target": 1.0, "challenge": "Eliminar 1/1 chefe"},
-	"retornante": {"metric": "teleports_used", "target": 100.0, "challenge": "Usar teleporte 100/100 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
 	"parasitica": {"metric": "phase_reached", "target": 6.0, "challenge": "Chegar na Fase 6"},
-	"gravitante": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
-	"ancorada": {"metric": "teleports_used", "target": 90.0, "challenge": "Usar teleporte 90/90 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
-	"cartografica": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"},
-	"mnesica": {"metric": "boss_kills", "target": 3.0, "challenge": "Eliminar 3/3 chefes"},
-	"ressonante": {"metric": "abilities_used", "target": 180.0, "challenge": "Usar habilidades 180/180 vezes e sobreviver 15:00", "all": [{"metric": "survive_seconds", "target": 900.0}]},
-	"contratual": {"metric": "shop_purchases", "target": 35.0, "challenge": "Comprar 35/35 cartas"},
-	"acorrentada": {"metric": "damage_taken_events", "target": 55.0, "challenge": "Sobreviver a 55/55 impactos e chegar na Fase 2", "all": [{"metric": "phase_reached", "target": 2.0}]},
-	"eclipsada": {"metric": "phase_reached", "target": 7.0, "challenge": "Chegar na Fase 7"},
-	"bombastica": {"metric": "enemy_kills", "target": 550.0, "challenge": "Eliminar 550/550 inimigos"},
-	"necronada": {"metric": "enemy_kills", "target": 700.0, "challenge": "Eliminar 700/700 inimigos e chegar na Fase 3", "all": [{"metric": "phase_reached", "target": 3.0}]}
+	"gravitante": {"metric": "phase_reached", "target": 4.0, "challenge": "Chegar na Fase 4"}
 }
 const SPECTRUM_UNLOCK_ALWAYS_AVAILABLE: = ["impulsiva"]
 const SPECTRUM_UNLOCK_RULES: = {
@@ -2925,25 +2577,6 @@ var henry_idle_beard_timer: float = 0.0
 var henry_idle_beard_side: int = 0
 var player_defense = 0.0
 var player_crit_chance = 0.0
-var ancorada_still_timer: = 0.0
-var ancorada_crit_bonus: = 0.0
-var ancorada_weight_timer: = 0.0
-var ancorada_weight_knockback: = 5.0
-var ancorada_prev_pos: = Vector2.ZERO
-var ancorada_spinning: = []
-var lastro_stacks: int = 0
-var lastro_points: int = 0
-var lastro_decay_timer: float = 0.0
-var lastro_decay_interval_timer: float = 0.0
-var lastro_hud_drain_timer: float = 0.0
-var lastro_hud_drain_prev_stacks: int = 0
-var lastro_5_callout_triggered: bool = false
-var hab1_ancorada_active: bool = false
-var hab1_ancorada_timer: float = 0.0
-var hab1_ancorada_cast_lastro: int = 0
-var hab1_ancorada_cast_pos: Vector2 = Vector2.ZERO
-var hab1_ancorada_cast_origin: Vector2 = Vector2.ZERO
-var hab1_ancorada_impact_done: bool = false
 var player_lifesteal = 0.0
 var poison_damage = 0.0
 var execute_threshold = 0.0
@@ -3012,7 +2645,6 @@ var last_skill_time = -10.0
 var last_secondary_time = -999.0
 var secondary_key_was_pressed = false
 var last_damage_time = -10.0
-var retornante_memoria_pending = false
 var forced_shop_timer = -1.0
 var forced_shop_triggered = false
 var forced_shop_enabled = true
@@ -3096,8 +2728,6 @@ var modern_boss_controller: Node = ModernBossControllerScript.new()
 var boss6_stage_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_stage_controller.gd").new()
 var boss6_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_controller.gd").new()
 var player_control_controller: RefCounted = PlayerControlControllerScript.new()
-var necronada_ability_controller: RefCounted = NecronadaAbilityControllerScript.new()
-var ancorada_ability_controller: RefCounted = AncoradaAbilityControllerScript.new()
 var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityControllerScript.new()
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
 var henry_colossus_ability_controller: RefCounted = HenryColossusAbilityControllerScript.new()
@@ -3269,81 +2899,6 @@ var paradox_ready: = false
 var paradox_active_timer: = 0.0
 var paradox_echo_queue: Array = []
 var paradox_flash: = 0.0
-var acorrentada_combo_step = 1
-var acorrentada_combo_reset_timer = 0.0
-var acorrentada_tension = 0.0
-var acorrentada_last_hit_timer = 0.0
-var acorrentada_overcharge_ready = false
-var acorrentada_force_next_attack_3 = false
-var acorrentada_links = []
-var acorrentada_visuals = []
-var acorrentada_worn_chains = []
-var acorrentada_last_player_pos = PLAYER_START
-var acorrentada_boss_elos = 0
-var acorrentada_boss_elo_timer = 0.0
-var acorrentada_boss_crack_timer = 0.0
-var acorrentada_boss_containment_charges = 0
-var eclipsada_attack_step = 0
-var eclipsada_next_attack_time = 0.0
-var eclipsada_q_speed_timer = 0.0
-var eclipsada_stealth_timer = 0.0
-var eclipsada_lua_stealth_active = false
-var eclipsada_lua_stealth_elapsed = 0.0
-var eclipsada_lua_stealth_damage_timer = 0.0
-var eclipsada_lua_last_skill_time = -999.0
-var eclipsada_sol_last_skill_time = -999.0
-var eclipsada_lua_last_secondary_time = -999.0
-var eclipsada_sol_last_secondary_time = -999.0
-var eclipsada_passive_timer = ECLIPSADA_PASSIVE_READY_TIME
-var eclipsada_trait_timer = 0.0
-var eclipsada_trait_key = ""
-var eclipsada_trait_name = ""
-var eclipsada_trait_color = Color(0.58, 0.42, 1.0)
-var eclipsada_form = ECLIPSADA_FORM_LUA
-var eclipsada_vfx = []
-var bombastica_bombs: Array = []
-var bombastica_powder_marks: Dictionary = {}
-var bombastica_vfx: Array = []
-var bombastica_q_recharges: Array = [0.0, 0.0, 0.0]
-var bombastica_next_id: = 1
-var bombastica_detonator_touch_index: = -1
-var bombastica_detonator_hold: = 0.0
-var bombastica_total_detonation_flash: = 0.0
-var bombastica_explosion_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaExplosionVFX.tscn") else null)
-var bombastica_mine_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaMineExplosionVFX.tscn") else null)
-var bombastica_ignition_vfx_scene: PackedScene = (load("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") if ResourceLoader.exists("res://vfx/bombastica/BombasticaIgnitionVFX.tscn") else null)
-var bombastica_world_vfx_root: Node2D = null
-var bombastica_explosion_pool: Array = []
-var bombastica_mine_pool: Array = []
-var bombastica_ignition_pool: Array = []
-var bombastica_use_old_vfx: bool = false
-var bombastica_ult_state: String = "IDLE"
-var bombastica_ult_timer: float = 0.0
-var bombastica_ult_visual_path: Array = []
-var bombastica_ult_blast_anchors: Array = []
-var bombastica_ult_reverse_anchors: Array = []
-var bombastica_ult_start_pos: Vector2 = Vector2.ZERO
-var bombastica_ult_detonation_index: int = 0
-var bombastica_ult_detonation_timer: float = 0.0
-var bombastica_ult_target_hits: Dictionary = {}
-var bombastica_ult_fuse_pos: Vector2 = Vector2.ZERO
-var bombastica_ult_seed: int = 0
-var bombastica_powder_trail_tex: Texture2D = _safe_load("res://vfx/bombastica/textures/powder_trail_texture.png")
-var necronada_vestiges: Array = []
-var necronada_ossuary: Array = []
-var necronada_remnants: Array = []
-var necronada_requiem: Dictionary = {}
-var necronada_pente_history: Array = []
-var necronada_selected_slot: = 0
-var necronada_next_id: = 1
-var necronada_vfx: Array = []
-var necronada_attack_counter: = 0
-var necronada_empowered_ready: = false
-var necronada_empower_until: = 0.0
-var necronada_empower_cooldown_until: = 0.0
-var necronada_horde_progress: = 0
-var necronada_boss_empower_rose_window: = 0.0
-var necronada_boss_empower_rose_hits: = 0
 var devorador_mark_timer = 0.0
 var devorador_mark_kind = ""
 var devorador_mark_uid = 0
@@ -3574,7 +3129,6 @@ var show_fps_counter: bool = false
 var run_tutorial_enabled: bool = true
 var shop_tutorial_seen: bool = false
 var boss_call_tutorial_seen: bool = false
-var retornante_unlocked: bool = false
 var gameplay_cheat_text: String = ""
 var gameplay_cheat_focused: bool = false
 var experimental_phase_requested: bool = false
@@ -4019,38 +3573,13 @@ var apolo_phase5_exhibition_last_hp: int = 0
 var apolo_phase5_exhibition_last_boss_hp: float = 0.0
 var apolo_phase5_exhibition_arch: Dictionary = {}
 var apolo_phase5_exhibition_card_memory: Dictionary = {}
-var anchors = []
 var prisms = []
 var orbitals = []
 var gravitante_vfx_events: Array = []
 var seed_links = []
 var parasite_spit_zones = []
-var return_bullets = []
 var manifestation_secondaries = []
-var cartographic_coords = []
-var cartographic_route_timer = 0.0
-var cartographic_boss_displacement = 0
-var cartographic_coord_sequence = 0
-var cartographic_complete_map_timer = 0.0
-var cartographic_trace_flash = 0.0
-var carto_tp_origin = Vector2.ZERO
-var carto_tp_pin = Vector2.ZERO
-var carto_tp_window = 0.0
 var lacerante_attack_lock_timer = 0.0
-var mnesic_trick_timer = 0.0
-var mnesic_trick_origin = Vector2.ZERO
-var mnesic_boss_vulnerability = 0.0
-var resonant_perfect_streak = 0
-var resonant_noise = 0
-var resonant_next_perfect = false
-var resonant_speed_timer = 0.0
-var resonant_sinfonia_buff_timer = 0.0
-var resonant_note_index = 0
-var boss_resonant_notes = {}
-var boss_contract_clause = ""
-var boss_contract_infractions = 0
-var boss_contract_vulnerability = 0.0
-var contractual_notifications = []
 var unlock_notifications = []
 var retry_run_snapshot: Dictionary:
 	get:
@@ -4126,12 +3655,6 @@ var player_progress_last_remote_confirmation: String = ""
 var player_progress_identity_creation_confirmed: bool = false
 var player_progress_identity_request_kind: String = ""
 var player_progress_claim_recovery_code: String = ""
-var contractual_vfx = []
-var contractual_penalty_timer = 0.0
-var contractual_order: Dictionary = {}
-var contractual_order_rewards: Dictionary = {}
-var contractual_order_penalties: Dictionary = {}
-var contractual_order_real_delta: = 0.0
 var last_facing = Vector2.RIGHT
 var lacerante_combo = 0
 var lacerante_combo_visual = 0
@@ -4152,8 +3675,6 @@ var tp_effects = []
 var tp_cooldown_pending = false
 var tp_cooldown_override = -1.0
 var tp_cooldown_release_time = -1.0
-var retornante_tp_origin = Vector2.ZERO
-var retornante_tp_window = 0.0
 var boss_tp_stun_timer = 0.0
 var rng = RandomNumberGenerator.new()
 
@@ -4179,11 +3700,8 @@ var prismatica_music_restore_volume: = 1.0
 var rain_audio_player = null
 var boss1_walk_audio_player = null
 var boss1_stop_audio_player = null
-var acorrentada_walk_audio_player = null
 var prismatica_ultimate_audio_player = null
 var nevasca_audio_player = null
-var acorrentada_walk_current_volume: = 0.0
-var acorrentada_walk_previous_pos = PLAYER_START
 var boss1_walk_previous_pos = Vector2.ZERO
 var boss1_stop_music_duck_active: = false
 var boss1_stop_music_duck_mode: = ""

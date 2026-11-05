@@ -405,7 +405,7 @@ func _update_contact(_delta: float) -> void:
 			push = Vector2.RIGHT
 		if bool(target.get("local", peer_id == game._mp_unique_id())):
 			game._damage_player(damage, "contato_boss4")
-			game.player_pos = game._clamp_player_world(game.player_pos + game._hostile_knockback(push * CONTACT_KNOCKBACK))
+			game._shove_player(game._hostile_knockback(push * CONTACT_KNOCKBACK))
 		else:
 			game._send_peer_damage(peer_id, damage, "contato_boss4")
 		cooldowns[key] = CONTACT_COOLDOWN
@@ -917,7 +917,7 @@ func _damage_target(target: Dictionary, damage: int, source: String, impulse: Ve
 	var peer_id := int(target.get("peer_id", game._mp_unique_id()))
 	if bool(target.get("local", peer_id == game._mp_unique_id())):
 		game._damage_player(damage, source)
-		game.player_pos = game._clamp_player_world(game.player_pos + game._hostile_knockback(impulse))
+		game._shove_player(game._hostile_knockback(impulse))
 	else:
 		game._send_peer_damage(peer_id, damage, source)
 

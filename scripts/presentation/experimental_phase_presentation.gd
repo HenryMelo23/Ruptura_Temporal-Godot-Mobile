@@ -66,12 +66,11 @@ static func _draw_altar(game: Node2D, camera: Vector2, viewport: Vector2) -> voi
 			game.draw_rect(Rect2(bar.position, Vector2(bar.size.x * game.experimental_phase_controller.altar_progress(), bar.size.y)), ALTAR_AMBER, true)
 
 
-## Nevoa-guia ate o altar descoberto (substitui a linha ondulada antiga).
+## Guia ate o altar descoberto: apenas a seta de borda.
 ## A seta de borda e desenhada na camada de HUD por MistGuidePresentation.draw_overlay.
-static func _draw_discovered_altar_path(game: Node2D, camera: Vector2, viewport: Vector2, world_pos: Vector2, _time: float) -> void:
+static func _draw_discovered_altar_path(game: Node2D, _camera: Vector2, _viewport: Vector2, _world_pos: Vector2, _time: float) -> void:
 	if game.mode not in ["game", "boss_call", "pause_countdown"]:
 		return
-	var distance: float = Vector2(game.player_pos).distance_to(world_pos)
-	# Some suavemente quando o jogador chega no altar, para nao poluir a invocacao.
-	var arrival_fade: float = smoothstep(game.experimental_phase_controller.ALTAR_INTERACTION_RADIUS, game.experimental_phase_controller.ALTAR_INTERACTION_RADIUS * 3.2, distance)
-	MistGuide.draw_floor(game, camera, viewport, world_pos, MistGuide.PALETTE_ALTAR, arrival_fade, 1.37)
+	# A trilha de nevoa no chao foi retirada (tremia com o movimento da camera).
+	# A direcao fica so com a seta de borda (MistGuidePresentation.draw_overlay).
+	pass

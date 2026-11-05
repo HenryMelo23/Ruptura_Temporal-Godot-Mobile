@@ -234,6 +234,19 @@ static func _draw_growth(game: Node2D, center: Vector2, progress: float, alpha: 
 			_shape(game, 0, foot, Vector2(75.0 + release * 56.0, 22.0 + release * 18.0), index * TAU / 3.0, Color(IMPACT, sin(release * PI) * alpha * 0.6))
 
 
+## Topo da cabeca do Henry na tela (relativo ao centro), seguindo a altura real do
+## sprite: base em +40 (PLAYER_DRAW_BOX) e a arte comeca ~18/256 abaixo do topo da celula.
+## Antes as barras eram fixas em -66..-86 e o gigante (157 px) ficava com elas no rosto.
+static func _head_top(game: Node2D, owner: RefCounted) -> float:
+	var height: float = float(game.HENRY_IDLE_DRAW_HEIGHT) * float(owner.visual_height_multiplier())
+	return float(game.PLAYER_DRAW_BOX_SIZE.y) * 0.5 - height * (1.0 - 18.0 / 256.0)
+
+
+## Barras empilhadas acima da cabeca: 0 = mais baixa (impacto), 1 = vida temporaria, 2 = armadura.
+static func _bar_y(game: Node2D, owner: RefCounted, slot: int) -> float:
+	return _head_top(game, owner) - 10.0 - float(slot) * 7.0
+
+
 static func _draw_giant_status(game: Node2D, center: Vector2, owner: RefCounted, alpha: float) -> void:
 	var ratio := clampf(1.0 - owner.giant_elapsed / owner.GIANT_DURATION, 0.0, 1.0)
 	var foot := center + Vector2(0, 42)
@@ -244,12 +257,14 @@ static func _draw_giant_status(game: Node2D, center: Vector2, owner: RefCounted,
 		_shape(game, 1, pos, Vector2(3.8, 2.0), 0.0, Color(tint, alpha * 0.6))
 	if owner.giant_temp_hp > 0.0:
 		var guard_ratio := clampf(owner.giant_temp_hp / maxf(1.0, game.player_hp_max * owner.GIANT_TEMP_HP_RATIO), 0.0, 1.0)
-		game.draw_rect(Rect2(center + Vector2(-30, -78), Vector2(60, 4)), Color(0.03, 0.05, 0.04, 0.78 * alpha), true)
-		game.draw_rect(Rect2(center + Vector2(-29, -77), Vector2(58 * guard_ratio, 2)), Color(WEIGHT.r, WEIGHT.g, WEIGHT.b, 0.9 * alpha), true)
+		var guard_y := _bar_y(game, owner, 1)
+		game.draw_rect(Rect2(center + Vector2(-30, guard_y), Vector2(60, 4)), Color(0.03, 0.05, 0.04, 0.78 * alpha), true)
+		game.draw_rect(Rect2(center + Vector2(-29, guard_y + 1), Vector2(58 * guard_ratio, 2)), Color(WEIGHT.r, WEIGHT.g, WEIGHT.b, 0.9 * alpha), true)
 	if owner.giant_armor > 0.0:
 		var armor_ratio := clampf(owner.giant_armor / maxf(1.0, game.player_hp_max * owner.GIANT_ARMOR_RATIO), 0.0, 1.0)
-		game.draw_rect(Rect2(center + Vector2(-36, -86), Vector2(72, 5)), Color(0.05, 0.04, 0.02, 0.9 * alpha), true)
-		game.draw_rect(Rect2(center + Vector2(-35, -85), Vector2(70 * armor_ratio, 3)), Color(1.0, 0.67, 0.2, 0.96 * alpha), true)
+		var armor_y := _bar_y(game, owner, 2)
+		game.draw_rect(Rect2(center + Vector2(-36, armor_y), Vector2(72, 5)), Color(0.05, 0.04, 0.02, 0.9 * alpha), true)
+		game.draw_rect(Rect2(center + Vector2(-35, armor_y + 1), Vector2(70 * armor_ratio, 3)), Color(1.0, 0.67, 0.2, 0.96 * alpha), true)
 
 
 static func _draw_flask(game: Node2D, center: Vector2, progress: float, alpha: float) -> void:
@@ -289,8 +304,9 @@ static func _draw_impact_armor(game: Node2D, center: Vector2, owner: RefCounted,
 		_shape(game, 1, plate_center, Vector2(8.0, 4.5), angle, Color(INK, 0.72 * alpha))
 		_shape(game, 1, plate_center - radial * 1.5, Vector2(6.8, 2.8), angle, Color(IMPACT, (0.42 + armor_ratio * 0.42) * alpha))
 	var bar_width := 42.0
-	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5, -66), Vector2(bar_width, 3)), Color(0.03, 0.03, 0.03, 0.64 * alpha), true)
-	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5 + 1, -65), Vector2((bar_width - 2.0) * armor_ratio, 1)), Color(IMPACT.r, IMPACT.g, IMPACT.b, 0.86 * alpha), true)
+	var impact_y := _bar_y(game, owner, 0)
+	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5, impact_y), Vector2(bar_width, 3)), Color(0.03, 0.03, 0.03, 0.64 * alpha), true)
+	game.draw_rect(Rect2(center + Vector2(-bar_width * 0.5 + 1, impact_y + 1), Vector2((bar_width - 2.0) * armor_ratio, 1)), Color(IMPACT.r, IMPACT.g, IMPACT.b, 0.86 * alpha), true)
 
 
 static func _draw_guard(game: Node2D, center: Vector2, direction: Vector2, progress: float, alpha: float) -> void:

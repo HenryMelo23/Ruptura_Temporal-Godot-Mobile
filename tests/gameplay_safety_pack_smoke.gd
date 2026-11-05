@@ -54,7 +54,7 @@ func _run() -> void:
 	_check(game._nearest_target() == game.boss_pos, "automatic aim did not return after miasma")
 
 	game.current_phase = 1
-	for manifestation in ["eletrica", "prismatica", "parasitica", "ancorada", "bombastica", "necronada"]:
+	for manifestation in ["eletrica", "lacerante", "prismatica", "parasitica", "gravitante"]:
 		game.manifestation_key = manifestation
 		_check(is_equal_approx(game._auto_attack_range(), game.RangedAttackRange.BASE_RANGE), "automatic aim did not use the shared 420px range for " + manifestation)
 	game.manifestation_key = "eletrica"

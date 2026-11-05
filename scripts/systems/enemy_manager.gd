@@ -81,9 +81,12 @@ var special_last_spawn_phase_time: float = -1.0
 var special_spawn_history: Array[Dictionary] = []
 var spatial_entities: Array = []
 var spatial_physical_radii: Array[float] = []
+## Posicoes no momento da indexacao (para consultas sem tocar nos dicionarios).
+var spatial_positions: PackedVector2Array = PackedVector2Array()
+## Limite de candidatos examinados no desvio (densidade alta nao escala o custo).
+const AVOIDANCE_MAX_CANDIDATES := 18
 var spatial_cells: Dictionary = {}
 var spatial_active_cells: Array[Vector2i] = []
-var spatial_remnant_start: int = 0
 var spatial_index_query: Array[int] = []
 var spatial_entity_query: Array = []
 var separation_accumulator: float = 0.0
@@ -105,11 +108,11 @@ func bind_game(p_game: Node) -> void:
 func clear_spatial_index() -> void:
 	spatial_entities.clear()
 	spatial_physical_radii.clear()
+	spatial_positions.clear()
 	spatial_cells.clear()
 	spatial_active_cells.clear()
 	spatial_index_query.clear()
 	spatial_entity_query.clear()
-	spatial_remnant_start = 0
 
 
 func _reset_spatial_frame() -> void:
@@ -118,13 +121,13 @@ func _reset_spatial_frame() -> void:
 	# combat sessions even though the number of living enemies stayed bounded.
 	spatial_entities.clear()
 	spatial_physical_radii.clear()
+	spatial_positions.clear()
 	for cell in spatial_active_cells:
 		var bucket: Array = spatial_cells.get(cell, [])
 		bucket.clear()
 	spatial_active_cells.clear()
 	spatial_index_query.clear()
 	spatial_entity_query.clear()
-	spatial_remnant_start = 0
 
 
 func rebuild_spatial_index() -> void:
@@ -134,17 +137,16 @@ func rebuild_spatial_index() -> void:
 	for enemy in game.enemies:
 		if float(enemy.get("hp", 0.0)) > 0.0:
 			_add_spatial_entity(enemy)
-	spatial_remnant_start = spatial_entities.size()
-	for remnant in game.necronada_remnants:
-		if float(remnant.get("hp", 0.0)) > 0.0:
-			_add_spatial_entity(remnant)
 
 
 func _add_spatial_entity(entity: Dictionary) -> void:
 	var index: int = spatial_entities.size()
+	var pos := Vector2(entity.get("pos", Vector2.ZERO))
 	spatial_entities.append(entity)
 	spatial_physical_radii.append(game._entity_physical_radius(entity))
-	var cell := _spatial_cell(Vector2(entity.get("pos", Vector2.ZERO)))
+	spatial_positions.append(pos)
+	entity["_si"] = index
+	var cell := _spatial_cell(pos)
 	if not spatial_cells.has(cell):
 		spatial_cells[cell] = []
 	var bucket: Array = spatial_cells[cell]
@@ -157,7 +159,7 @@ func _spatial_cell(pos: Vector2) -> Vector2i:
 	return Vector2i(floori(pos.x / SPATIAL_CELL_SIZE), floori(pos.y / SPATIAL_CELL_SIZE))
 
 
-func nearby_entity_indices(pos: Vector2, radius: float, include_remnants: bool = true, sort_result: bool = true) -> Array[int]:
+func nearby_entity_indices(pos: Vector2, radius: float, sort_result: bool = true) -> Array[int]:
 	spatial_index_query.clear()
 	var min_cell := _spatial_cell(pos - Vector2.ONE * radius)
 	var max_cell := _spatial_cell(pos + Vector2.ONE * radius)
@@ -168,11 +170,43 @@ func nearby_entity_indices(pos: Vector2, radius: float, include_remnants: bool =
 				continue
 			for raw_index in spatial_cells[cell]:
 				var index := int(raw_index)
-				if include_remnants or index < spatial_remnant_start:
-					spatial_index_query.append(index)
+				spatial_index_query.append(index)
 	if sort_result:
 		spatial_index_query.sort()
 	return spatial_index_query
+
+
+## Primeiro vizinho que bloqueia o caminho (indice no indice espacial) ou -1.
+## Varre as celulas direto, com posicoes/raios ja calculados e teste de direcao sem
+## normalizar; examina no maximo AVOIDANCE_MAX_CANDIDATES candidatos.
+func find_avoidance_obstacle(pos: Vector2, my_radius: float, ray_length: float, desired_dir: Vector2, self_index: int) -> int:
+	var search_radius: float = my_radius * 3.2 + MAX_ENTITY_PHYSICAL_RADIUS
+	var min_cell := _spatial_cell(pos - Vector2.ONE * search_radius)
+	var max_cell := _spatial_cell(pos + Vector2.ONE * search_radius)
+	var examined := 0
+	var count: int = spatial_positions.size()
+	for cell_y in range(min_cell.y, max_cell.y + 1):
+		for cell_x in range(min_cell.x, max_cell.x + 1):
+			var bucket = spatial_cells.get(Vector2i(cell_x, cell_y))
+			if bucket == null:
+				continue
+			for raw_index in bucket:
+				var j: int = raw_index
+				if j == self_index or j >= count:
+					continue
+				var to_other: Vector2 = spatial_positions[j] - pos
+				var reach: float = my_radius + spatial_physical_radii[j] + ray_length
+				var dist_sq: float = to_other.length_squared()
+				if dist_sq <= 0.01 or dist_sq >= reach * reach:
+					continue
+				examined += 1
+				# dot(desired, to_other / |to_other|) > 0.65 sem sqrt quando possivel.
+				var d: float = desired_dir.dot(to_other)
+				if d > 0.0 and d * d > 0.4225 * dist_sq:
+					return j
+				if examined >= AVOIDANCE_MAX_CANDIDATES:
+					return -1
+	return -1
 
 
 func avoidance_neighbors(pos: Vector2, my_radius: float) -> Array:
@@ -180,7 +214,7 @@ func avoidance_neighbors(pos: Vector2, my_radius: float) -> Array:
 	spatial_entity_query.clear()
 	# Avoidance only needs a deterministic nearby candidate, not globally sorted
 	# indices. Cell traversal and bucket insertion are already deterministic.
-	for index in nearby_entity_indices(pos, search_radius, false, false):
+	for index in nearby_entity_indices(pos, search_radius, false):
 		var entity: Dictionary = spatial_entities[index]
 		if float(entity.get("hp", 0.0)) > 0.0:
 			spatial_entity_query.append(entity)
@@ -204,6 +238,9 @@ func apply_entity_separation(delta: float, spatial_index_ready: bool = false) ->
 	if not spatial_index_ready:
 		rebuild_spatial_index()
 	var count: int = spatial_entities.size()
+	# As posicoes indexadas sao de antes do movimento deste quadro: atualiza.
+	for k in range(count):
+		spatial_positions[k] = spatial_entities[k]["pos"]
 	var boss_blocks_entities: bool = game.boss_active and game.boss_hp > 0.0
 	var local_player_targetable: bool = game._local_player_targetable()
 	for i in range(count):
@@ -232,28 +269,39 @@ func apply_entity_separation(delta: float, spatial_index_ready: bool = false) ->
 				pos_a = Vector2(a["pos"])
 
 		var search_radius: float = maxf(r_a + MAX_ENTITY_PHYSICAL_RADIUS, 50.0)
-		# Pair ownership is already fixed by j > i. Cell traversal and insertion
-		# order are deterministic, so sorting a fresh candidate list for every
-		# entity only adds dense-crowd CPU work without changing which pairs resolve.
-		for j in nearby_entity_indices(pos_a, search_radius, true, false):
-			if j <= i:
-				continue
-			var b: Dictionary = spatial_entities[j]
-			if float(b.get("hp", 0.0)) <= 0.0:
-				continue
-			var pos_b := Vector2(b.get("pos", Vector2.ZERO))
-			var r_b: float = spatial_physical_radii[j]
-			var is_both_remnants: bool = i >= spatial_remnant_start and j >= spatial_remnant_start
-			var min_dist: float = 50.0 if is_both_remnants else (r_a + r_b)
-			var dist_sq: float = pos_a.distance_squared_to(pos_b)
-			if dist_sq < min_dist * min_dist:
-				var dist: float = sqrt(dist_sq)
-				var overlap: float = min_dist - dist
-				var push_dir: Vector2 = (pos_a - pos_b).normalized() if dist > 0.01 else Vector2.RIGHT.rotated(float(i * 3 + j * 7))
-				var push_amount: Vector2 = push_dir * (maxf(overlap, 4.0) * 0.55)
-				a["pos"] = (pos_a + push_amount).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
-				b["pos"] = (pos_b - push_amount).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
-				pos_a = Vector2(a["pos"])
+		# Pares j > i, celulas varridas direto (sem arrays intermediarios); posicoes
+		# vivas ficam em spatial_positions e so os pares que se tocam escrevem no dict.
+		spatial_positions[i] = pos_a
+		var min_cell := _spatial_cell(pos_a - Vector2.ONE * search_radius)
+		var max_cell := _spatial_cell(pos_a + Vector2.ONE * search_radius)
+		for cell_y in range(min_cell.y, max_cell.y + 1):
+			for cell_x in range(min_cell.x, max_cell.x + 1):
+				var bucket = spatial_cells.get(Vector2i(cell_x, cell_y))
+				if bucket == null:
+					continue
+				for raw_j in bucket:
+					var j: int = raw_j
+					if j <= i:
+						continue
+					var pos_b: Vector2 = spatial_positions[j]
+					var r_b: float = spatial_physical_radii[j]
+					var min_dist: float = r_a + r_b
+					var dist_sq: float = pos_a.distance_squared_to(pos_b)
+					if dist_sq >= min_dist * min_dist:
+						continue
+					var b: Dictionary = spatial_entities[j]
+					if float(b.get("hp", 0.0)) <= 0.0:
+						continue
+					var dist: float = sqrt(dist_sq)
+					var overlap: float = min_dist - dist
+					var push_dir: Vector2 = (pos_a - pos_b) / dist if dist > 0.01 else Vector2.RIGHT.rotated(float(i * 3 + j * 7))
+					var push_amount: Vector2 = push_dir * (maxf(overlap, 4.0) * 0.55)
+					pos_a = (pos_a + push_amount).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
+					pos_b = (pos_b - push_amount).clamp(Vector2(40, 40), game.WORLD_SIZE - Vector2(40, 40))
+					a["pos"] = pos_a
+					b["pos"] = pos_b
+					spatial_positions[i] = pos_a
+					spatial_positions[j] = pos_b
 
 
 func reset_special_pacing(clear_history: bool = false) -> void:
@@ -473,6 +521,17 @@ func _update_enemies_body(delta: float) -> void:
 		if lod_target_positions.is_empty():
 			lod_target_positions.append(game.player_pos)
 	var enemy_index := -1
+	var kind_common: String = game.ENEMY_COMMON
+	var kind_kamikaze: String = game.ENEMY_KAMIKAZE
+	var contact_blocked_kinds := {game.ENEMY_CHRONAL_LEECH: true, game.ENEMY_AMBER_SUTURE_NODE: true}
+	var custom_move_kinds := {
+		game.ENEMY_LODARIO: true, game.ENEMY_MIASMA_EEL: true, game.ENEMY_CHRONAL_LEECH: true,
+		game.ENEMY_AMBER_SUTURER: true, game.ENEMY_AMBER_SUTURE_NODE: true,
+		game.ENEMY_CINERIDO: true, game.ENEMY_PANGOLIRO: true, game.ENEMY_CORVOL: true,
+		game.ENEMY_SINEIRO_BOREAL: true,
+	}
+	var bargain_capsule_vulnerable: bool = game._bargain_capsule_vulnerable()
+	RTFrameProfiler.mark("e_setup")
 	for enemy in game.enemies:
 		enemy_index += 1
 		# LOD de IA: longe de todos os alvos, atualiza em quadros alternados com o tempo acumulado.
@@ -524,59 +583,59 @@ func _update_enemies_body(delta: float) -> void:
 			continue
 		if phase1_boss_freeze:
 			continue
-		if kind == game.ENEMY_CURATER:
-			game._update_curater(enemy, enemy_delta)
-		if kind == game.ENEMY_STALKER:
-			game._update_stalker(enemy, enemy_delta)
-		if kind == game.ENEMY_PROJECTOR:
-			game._update_projector(enemy, enemy_delta)
-		if kind == game.ENEMY_ATIRADOR:
-			game._update_atirador(enemy, enemy_delta)
-		if kind == game.ENEMY_KAMIKAZE:
-			game._update_kamikaze(enemy, enemy_delta)
-		if kind == game.ENEMY_LARAPIO:
-			game._update_larapio(enemy, enemy_delta)
-		if kind == game.ENEMY_FOSSIL_PUSTULE and game._update_fossil_pustule(enemy, enemy_delta):
-			dead_enemy_buffer.append(enemy)
-			continue
-		if kind == game.ENEMY_LODARIO:
-			game._update_lodario(enemy, enemy_delta)
-		if kind == game.ENEMY_MIASMA_EEL:
-			game._update_miasma_eel(enemy, enemy_delta)
-		if kind == game.ENEMY_CHRONAL_LEECH:
-			if game._update_sanguessuga_cronal(enemy, enemy_delta):
+		# Plain commons (most of the horde) have no per-kind update.
+		if kind != kind_common:
+			if kind == game.ENEMY_CURATER:
+				game._update_curater(enemy, enemy_delta)
+			if kind == game.ENEMY_STALKER:
+				game._update_stalker(enemy, enemy_delta)
+			if kind == game.ENEMY_PROJECTOR:
+				game._update_projector(enemy, enemy_delta)
+			if kind == game.ENEMY_ATIRADOR:
+				game._update_atirador(enemy, enemy_delta)
+			if kind == game.ENEMY_KAMIKAZE:
+				game._update_kamikaze(enemy, enemy_delta)
+			if kind == game.ENEMY_LARAPIO:
+				game._update_larapio(enemy, enemy_delta)
+			if kind == game.ENEMY_FOSSIL_PUSTULE and game._update_fossil_pustule(enemy, enemy_delta):
 				dead_enemy_buffer.append(enemy)
 				continue
-		if kind == game.ENEMY_AMBER_SUTURER:
-			game.amber_suturer_controller.update_enemy(enemy, enemy_delta)
-		if kind == game.ENEMY_AMBER_SUTURE_NODE:
-			game.amber_suturer_controller.update_node(enemy, enemy_delta)
-		if kind == game.ENEMY_CINERIDO:
-			game._update_cinerido(enemy, enemy_delta)
-		if kind == game.ENEMY_PANGOLIRO:
-			game._update_pangoliro(enemy, enemy_delta)
-		if kind == game.ENEMY_CORVOL:
-			game._update_corvol(enemy, enemy_delta)
-		if kind == game.ENEMY_COUT_ATTACK_SPEED:
-			game._update_cout_attack_speed(enemy, enemy_delta)
-		if kind == game.ENEMY_PYRO_PENGUIN:
-			game._update_pyro_penguin(enemy, enemy_delta)
-		if kind == game.ENEMY_SINEIRO_BOREAL:
-			game.sineiro_boreal_controller.update_enemy(enemy, enemy_delta)
+			if kind == game.ENEMY_LODARIO:
+				game._update_lodario(enemy, enemy_delta)
+			if kind == game.ENEMY_MIASMA_EEL:
+				game._update_miasma_eel(enemy, enemy_delta)
+			if kind == game.ENEMY_CHRONAL_LEECH:
+				if game._update_sanguessuga_cronal(enemy, enemy_delta):
+					dead_enemy_buffer.append(enemy)
+					continue
+			if kind == game.ENEMY_AMBER_SUTURER:
+				game.amber_suturer_controller.update_enemy(enemy, enemy_delta)
+			if kind == game.ENEMY_AMBER_SUTURE_NODE:
+				game.amber_suturer_controller.update_node(enemy, enemy_delta)
+			if kind == game.ENEMY_CINERIDO:
+				game._update_cinerido(enemy, enemy_delta)
+			if kind == game.ENEMY_PANGOLIRO:
+				game._update_pangoliro(enemy, enemy_delta)
+			if kind == game.ENEMY_CORVOL:
+				game._update_corvol(enemy, enemy_delta)
+			if kind == game.ENEMY_COUT_ATTACK_SPEED:
+				game._update_cout_attack_speed(enemy, enemy_delta)
+			if kind == game.ENEMY_PYRO_PENGUIN:
+				game._update_pyro_penguin(enemy, enemy_delta)
+			if kind == game.ENEMY_SINEIRO_BOREAL:
+				game.sineiro_boreal_controller.update_enemy(enemy, enemy_delta)
 		if game.current_phase == 2 and kind == game.ENEMY_COMMON:
 			game._update_phase2_common_penguin(enemy, enemy_delta)
 		if game.current_phase == 3:
 			game._update_phase3_enemy(enemy, enemy_delta)
 		elif game.current_phase == 4:
 			game._update_phase4_enemy(enemy, enemy_delta)
-		var custom_phase6_move: bool = kind in [game.ENEMY_LODARIO, game.ENEMY_MIASMA_EEL, game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURER, game.ENEMY_AMBER_SUTURE_NODE]
-		var custom_phase7_move: bool = kind in [game.ENEMY_CINERIDO, game.ENEMY_PANGOLIRO, game.ENEMY_CORVOL]
-		var custom_phase2_sineiro: bool = kind == game.ENEMY_SINEIRO_BOREAL
-		if not custom_phase2_sineiro and not custom_phase6_move and not custom_phase7_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or prismatica_active):
+		var custom_move: bool = custom_move_kinds.has(kind)
+		if not custom_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or prismatica_active):
 			game._move_enemy(enemy, enemy_delta, lacerante_secondary, prismatica_active, combat_targets)
 
-		var t_pos: Vector2 = game._get_nearest_player_pos(Vector2(enemy["pos"]), combat_targets)
-		if not lacerante_storm and kind == game.ENEMY_KAMIKAZE and Vector2(enemy["pos"]).distance_to(t_pos) < 60.0:
+		var t_pos: Vector2 = game._get_nearest_player_pos(Vector2(enemy["pos"]), combat_targets) if kind == kind_kamikaze else Vector2.ZERO
+		if not lacerante_storm and kind == kind_kamikaze and Vector2(enemy["pos"]).distance_to(t_pos) < 60.0:
 			if game._target_pos_is_local_player(t_pos):
 				game._damage_player(game.player_hp_max * 0.15, game.ENEMY_KAMIKAZE)
 				if not game._player_invulnerable():
@@ -590,17 +649,13 @@ func _update_enemies_body(delta: float) -> void:
 			enemy["hp"] = -1.0
 			continue
 
-		var contact_blocked: bool = kind in [game.ENEMY_CHRONAL_LEECH, game.ENEMY_AMBER_SUTURE_NODE]
+		var contact_blocked: bool = contact_blocked_kinds.has(kind)
 		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
-			if game._try_damage_bargain_capsule_contact(enemy):
+			if bargain_capsule_vulnerable and game._try_damage_bargain_capsule_contact(enemy):
 				enemy["hit_cd"] = 0.55
 			else:
 				var enemy_pos := Vector2(enemy.get("pos", game.player_pos))
-				var remnant_hit: Dictionary = game._necronada_remnant_at_pos(enemy_pos, 48.0)
-				if not remnant_hit.is_empty():
-					enemy["hit_cd"] = 0.55
-					game._damage_necronada_remnant(remnant_hit, game._enemy_damage(enemy))
-				elif game._local_player_damageable_by_contact() and enemy_pos.distance_squared_to(game.player_pos) < 46.0 * 46.0:
+				if enemy_pos.distance_squared_to(game.player_pos) < 46.0 * 46.0 and game._local_player_damageable_by_contact():
 					enemy["hit_cd"] = 0.55
 					game._damage_player(game._enemy_damage(enemy), enemy["type"])
 				else:
@@ -611,8 +666,10 @@ func _update_enemies_body(delta: float) -> void:
 							game._send_peer_damage(peer_id, game._enemy_damage(enemy), kind)
 							break
 
+	RTFrameProfiler.mark("e_contact_tail")
 	for enemy in dead_enemy_buffer:
 		game._kill_enemy(enemy)
+	RTFrameProfiler.mark("e_kills")
 
 
 func _refresh_phase2_common_shooters() -> void:

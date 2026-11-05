@@ -315,8 +315,6 @@ static func update_audio_volumes(game: Node) -> void:
 		game.boss1_walk_audio_player.volume_db = linear_to_db(max(0.001, game.vol_master * game.vol_sfx * game.BOSS1_WALK_AUDIO_VOLUME))
 	if game.boss1_stop_audio_player != null and game.boss1_stop_audio_player.playing:
 		game.boss1_stop_audio_player.volume_db = linear_to_db(max(0.001, game.vol_master * game.vol_sfx * game.BOSS1_STOP_AUDIO_VOLUME))
-	if game.acorrentada_walk_audio_player != null and game.acorrentada_walk_audio_player.playing:
-		game.acorrentada_walk_audio_player.volume_db = linear_to_db(max(0.001, game.vol_master * game.vol_sfx * game.ACORRENTADA_WALK_VOLUME * game.acorrentada_walk_current_volume))
 	if game.prismatica_ultimate_audio_player != null and game.prismatica_ultimate_audio_player.playing:
 		game.prismatica_ultimate_audio_player.volume_db = linear_to_db(max(0.001, game.vol_master * game.vol_music * 0.82))
 	if game.nevasca_audio_player != null and game.nevasca_audio_player.playing:

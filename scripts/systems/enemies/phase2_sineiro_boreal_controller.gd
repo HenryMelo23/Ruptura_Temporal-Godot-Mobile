@@ -16,19 +16,21 @@ const STATE_DESPAWN := "despawn"
 
 const ATTACK_ECHO := "badalada_passado"
 const ATTACK_SHARDS := "estilhacos_ressonantes"
+const ATTACK_RING := "dobre_glacial"
+const ATTACK_CALL := "dobre_de_chamada"
 
 # Counted from phase_started_at: every profile meets the Sineiro exactly two
 # minutes after phase 2 begins, unless a boss/transition is currently active.
-const SPAWN_TIME_ONBOARDING := 120.0
-const SPAWN_TIME_EXPERIENCED := 120.0
-const ACTIVE_LIFETIME := 110.0
+const SPAWN_TIME_ONBOARDING := 70.0
+const SPAWN_TIME_EXPERIENCED := 70.0
+const ACTIVE_LIFETIME := 150.0
 const ENTRY_TIME := 1.05
 const ECHO_TELEGRAPH_TIME := 1.10
 const SHARD_TELEGRAPH_TIME := 0.80
 const ATTACK_COMMIT_TIME := 0.12
 const EXHAUSTION_TIME := 1.60
 const RETREAT_TIME := 0.90
-const ECHO_COOLDOWN := 7.0
+const ECHO_COOLDOWN := 6.2
 const LOW_HP_COOLDOWN_MULT := 0.82
 const HISTORY_WINDOW := 2.25
 const HISTORY_SAMPLE_INTERVAL := 0.12
@@ -38,6 +40,23 @@ const PREFERRED_MIN_DISTANCE := 200.0
 const PREFERRED_MAX_DISTANCE := 330.0
 const MOVE_SPEED := 112.0
 const VISUAL_SYNC_INTERVAL := 0.28
+## Nasce perto do jogador (fora da tela) em vez da borda do mapa grande.
+const SPAWN_DISTANCE := 640.0
+## Dobre Glacial: anel de gelo que se expande; quem e atingido toma dano e fica lento.
+const RING_TELEGRAPH_TIME := 0.75
+const RING_SPEED := 340.0
+const RING_MAX_RADIUS := 560.0
+const RING_WIDTH := 26.0
+const RING_COOLDOWN := 6.5
+const RING_SLOW_TIME := 1.6
+const RING_TRIGGER_DISTANCE := 430.0
+## Dobre de Chamada: se o jogador foge, ele toca o sino e reaparece ao lado dele.
+const CALL_TELEGRAPH_TIME := 0.85
+const CALL_FAR_DISTANCE := 760.0
+const CALL_FAR_TIME := 1.0
+const CALL_COOLDOWN := 12.0
+const CALL_ARRIVE_DISTANCE := 230.0
+const SHARD_SPREADS := [-0.36, -0.18, 0.0, 0.18, 0.36]
 const REWARD_CARD_COUNT := 2
 const REWARD_POINT_RATIO := 0.35
 
@@ -51,6 +70,7 @@ var game: Node
 var _history_by_peer: Dictionary = {}
 var _history_sample_timer := 0.0
 var _sync_timer := 0.0
+var rings: Array = []
 var _seen_visual_events: Dictionary = {}
 
 
@@ -90,6 +110,7 @@ func reset_for_new_run() -> void:
 	game.sineiro_boreal_state = _default_state()
 	game.sineiro_echo_marks.clear()
 	game.sineiro_visual_events.clear()
+	rings.clear()
 	_history_by_peer.clear()
 	_history_sample_timer = 0.0
 	_sync_timer = 0.0
@@ -111,6 +132,7 @@ func update(delta: float) -> void:
 	if not game._is_world_authority():
 		return
 	_sample_player_history(delta)
+	_update_rings(delta)
 	if bool(game.sineiro_boreal_state.get("active", false)):
 		game.sineiro_boreal_state["battle_elapsed"] = float(game.sineiro_boreal_state.get("battle_elapsed", 0.0)) + delta
 		var enemy := active_enemy()
@@ -146,7 +168,7 @@ func spawn_now() -> Dictionary:
 		return {}
 	if not active_enemy().is_empty():
 		return active_enemy()
-	var spawn_pos: Vector2 = game._spawn_point_on_edge().clamp(Vector2(90.0, 90.0), game.WORLD_SIZE - Vector2(90.0, 90.0))
+	var spawn_pos: Vector2 = _spawn_point_near_player()
 	var previous_count: int = game.enemies.size()
 	game._spawn_enemy(TYPE_ID, spawn_pos)
 	if game.enemies.size() <= previous_count:
@@ -172,6 +194,9 @@ func spawn_now() -> Dictionary:
 	enemy["sineiro_attack_kind"] = ""
 	enemy["sineiro_action_cd"] = 1.25
 	enemy["sineiro_echo_cd"] = 1.25
+	enemy["sineiro_ring_cd"] = 3.0
+	enemy["sineiro_call_cd"] = 4.0
+	enemy["sineiro_far_time"] = 0.0
 	enemy["sineiro_attack_anim_timer"] = 0.0
 	enemy["sineiro_target_switch"] = 0.0
 	enemy["sineiro_target_cursor"] = -1
@@ -225,6 +250,8 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 	enemy["sineiro_anim_time"] = float(enemy.get("sineiro_anim_time", 0.0)) + delta
 	enemy["sineiro_attack_anim_timer"] = maxf(0.0, float(enemy.get("sineiro_attack_anim_timer", 0.0)) - delta)
 	enemy["sineiro_echo_cd"] = maxf(0.0, float(enemy.get("sineiro_echo_cd", 0.0)) - delta)
+	enemy["sineiro_ring_cd"] = maxf(0.0, float(enemy.get("sineiro_ring_cd", 0.0)) - delta)
+	enemy["sineiro_call_cd"] = maxf(0.0, float(enemy.get("sineiro_call_cd", 0.0)) - delta)
 	var state := String(enemy.get("sineiro_state", STATE_APPROACH))
 	if state == STATE_DESPAWN:
 		_update_retreat(enemy, delta)
@@ -253,10 +280,15 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 			enemy["sineiro_state_timer"] = float(enemy.get("sineiro_state_timer", ATTACK_COMMIT_TIME)) - delta
 			enemy["last_move_dir"] = Vector2.ZERO
 			if float(enemy["sineiro_state_timer"]) <= 0.0:
-				if String(enemy.get("sineiro_attack_kind", "")) == ATTACK_ECHO:
-					_execute_echo_attack(enemy)
-				else:
-					_execute_shard_attack(enemy)
+				match String(enemy.get("sineiro_attack_kind", "")):
+					ATTACK_ECHO:
+						_execute_echo_attack(enemy)
+					ATTACK_RING:
+						_execute_ring_attack(enemy)
+					ATTACK_CALL:
+						_execute_call(enemy)
+					_:
+						_execute_shard_attack(enemy)
 		STATE_EXHAUSTED:
 			enemy["sineiro_state_timer"] = float(enemy.get("sineiro_state_timer", EXHAUSTION_TIME)) - delta
 			enemy["last_move_dir"] = Vector2.ZERO
@@ -314,9 +346,19 @@ func _update_positioning(enemy: Dictionary, delta: float) -> void:
 	var hp_ratio := float(enemy.get("hp", 1.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0)))
 	var cadence_mult := LOW_HP_COOLDOWN_MULT if hp_ratio <= 0.40 else 1.0
 	enemy["sineiro_action_cd"] = maxf(0.0, float(enemy.get("sineiro_action_cd", 0.0)) - delta / cadence_mult)
+	# Fugir nao adianta: longe demais por um instante e ele toca o sino de chamada.
+	if distance > CALL_FAR_DISTANCE:
+		enemy["sineiro_far_time"] = float(enemy.get("sineiro_far_time", 0.0)) + delta
+	else:
+		enemy["sineiro_far_time"] = 0.0
+	if float(enemy.get("sineiro_far_time", 0.0)) >= CALL_FAR_TIME and float(enemy.get("sineiro_call_cd", 0.0)) <= 0.0:
+		_begin_call(enemy, target_pos)
+		return
 	if float(enemy.get("sineiro_action_cd", 0.0)) <= 0.0:
 		if float(enemy.get("sineiro_echo_cd", 0.0)) <= 0.0:
 			_begin_echo_attack(enemy)
+		elif float(enemy.get("sineiro_ring_cd", 0.0)) <= 0.0 and distance <= RING_TRIGGER_DISTANCE:
+			_begin_ring_attack(enemy)
 		else:
 			_begin_shard_attack(enemy, target_pos)
 
@@ -415,7 +457,8 @@ func _execute_echo_attack(enemy: Dictionary) -> void:
 	_set_state(enemy, STATE_EXHAUSTED, EXHAUSTION_TIME)
 	enemy["sineiro_attack_anim_timer"] = 0.38
 	enemy["sineiro_echo_cd"] = ECHO_COOLDOWN
-	enemy["sineiro_action_cd"] = ECHO_COOLDOWN
+	# Entre duas Badaladas ele usa o anel e os estilhacos (antes ficava parado esperando).
+	enemy["sineiro_action_cd"] = 1.2
 	game._add_text("SINO EXAUSTO: +15% DANO", Vector2(enemy.get("pos", game.player_pos)) + Vector2(-105.0, -116.0), Color(0.72, 0.94, 1.0), 1.2, 17)
 
 
@@ -423,7 +466,7 @@ func _execute_shard_attack(enemy: Dictionary) -> void:
 	var origin := Vector2(enemy.get("pos", game.player_pos))
 	var direction := Vector2(enemy.get("sineiro_attack_dir", Vector2.LEFT)).normalized()
 	var damage := maxi(1, int(game.player_hp_max * 0.055 + game.enemy_far_damage * 0.58))
-	for angle in [-0.18, 0.0, 0.18]:
+	for angle in SHARD_SPREADS:
 		game.enemy_bullets.append({
 			"pos": origin + direction * 48.0,
 			"dir": direction.rotated(float(angle)),
@@ -443,6 +486,108 @@ func _execute_shard_attack(enemy: Dictionary) -> void:
 	_set_state(enemy, STATE_RECOVERY, 0.72)
 	enemy["sineiro_attack_anim_timer"] = 0.34
 	enemy["sineiro_action_cd"] = 2.65
+
+
+func _spawn_point_near_player() -> Vector2:
+	var margin := Vector2(90.0, 90.0)
+	var best: Vector2 = game.player_pos
+	for attempt in range(10):
+		var angle: float = game.rng.randf_range(0.0, TAU)
+		var candidate: Vector2 = (game.player_pos + Vector2.from_angle(angle) * SPAWN_DISTANCE).clamp(margin, game.WORLD_SIZE - margin)
+		best = candidate
+		if candidate.distance_to(game.player_pos) >= SPAWN_DISTANCE * 0.8:
+			break
+	return best
+
+
+func _begin_ring_attack(enemy: Dictionary) -> void:
+	_set_state(enemy, STATE_TELEGRAPH, RING_TELEGRAPH_TIME)
+	enemy["sineiro_attack_kind"] = ATTACK_RING
+	enemy["sineiro_attack_event_id"] = _next_event_id("ring")
+	enemy["sineiro_attack_anim_timer"] = RING_TELEGRAPH_TIME
+	_emit_visual_event("ring_prepare", {"event_id": String(enemy["sineiro_attack_event_id"]), "origin": Vector2(enemy.get("pos", game.player_pos))})
+	game._play_sfx("Congelando.mp3", 0.02, 0.5, 0.55)
+
+
+func _execute_ring_attack(enemy: Dictionary) -> void:
+	var origin := Vector2(enemy.get("pos", game.player_pos))
+	var event_id := String(enemy.get("sineiro_attack_event_id", _next_event_id("ring_release")))
+	rings.append({
+		"origin": origin,
+		"age": 0.0,
+		"damage": maxi(1, int(game.player_hp_max * 0.07 + game.enemy_far_damage * 0.6)),
+		"hit": {},
+	})
+	_emit_visual_event("ring_release", {"event_id": event_id + "_release", "origin": origin})
+	game._play_sfx("Congelando.mp3", 0.03, 0.92, 0.7)
+	game.screen_shake_timer = maxf(float(game.screen_shake_timer), 0.14)
+	game.screen_shake_strength = maxf(float(game.screen_shake_strength), 5.0)
+	_set_state(enemy, STATE_RECOVERY, 0.85)
+	enemy["sineiro_attack_anim_timer"] = 0.42
+	enemy["sineiro_ring_cd"] = RING_COOLDOWN
+	enemy["sineiro_action_cd"] = 2.2
+
+
+func ring_radius(age: float) -> float:
+	return 40.0 + age * RING_SPEED
+
+
+func _update_rings(delta: float) -> void:
+	if rings.is_empty():
+		return
+	var targets: Array = game._combat_targets()
+	for ring_value in rings:
+		var ring: Dictionary = ring_value
+		var before := ring_radius(float(ring["age"]))
+		ring["age"] = float(ring["age"]) + delta
+		var after := ring_radius(float(ring["age"]))
+		var origin := Vector2(ring["origin"])
+		var hit: Dictionary = ring["hit"]
+		for target_value in targets:
+			var target: Dictionary = target_value
+			var peer_id := int(target.get("peer_id", 0))
+			if hit.has(peer_id):
+				continue
+			var d: float = Vector2(target.get("pos", origin)).distance_to(origin)
+			if d < before - RING_WIDTH or d > after + RING_WIDTH:
+				continue
+			hit[peer_id] = true
+			if bool(target.get("local", false)):
+				game._damage_player(int(ring["damage"]), TYPE_ID)
+				game.boss_wave_slow_timer = maxf(float(game.boss_wave_slow_timer), game._hostile_control_duration(RING_SLOW_TIME))
+			else:
+				game._send_peer_damage(peer_id, int(ring["damage"]), TYPE_ID)
+				game._request_peer_status(peer_id, "slow", game._hostile_control_duration(RING_SLOW_TIME))
+	rings = rings.filter(func(r): return ring_radius(float(Dictionary(r)["age"])) < RING_MAX_RADIUS)
+
+
+func _begin_call(enemy: Dictionary, target_pos: Vector2) -> void:
+	var margin := Vector2(90.0, 90.0)
+	var side: Vector2 = Vector2.from_angle(game.rng.randf_range(0.0, TAU))
+	var dest: Vector2 = (target_pos + side * CALL_ARRIVE_DISTANCE).clamp(margin, game.WORLD_SIZE - margin)
+	_set_state(enemy, STATE_TELEGRAPH, CALL_TELEGRAPH_TIME)
+	enemy["sineiro_attack_kind"] = ATTACK_CALL
+	enemy["sineiro_attack_event_id"] = _next_event_id("call")
+	enemy["sineiro_call_dest"] = dest
+	enemy["sineiro_attack_anim_timer"] = CALL_TELEGRAPH_TIME
+	enemy["sineiro_far_time"] = 0.0
+	enemy["sineiro_call_cd"] = CALL_COOLDOWN
+	_emit_visual_event("call_start", {"event_id": String(enemy["sineiro_attack_event_id"]), "origin": Vector2(enemy.get("pos", game.player_pos)), "dest": dest})
+	game._add_text("O SINO CHAMA...", game.player_pos + Vector2(0.0, -118.0), Color(0.62, 1.0, 0.86), 1.0, 19)
+	game._play_sfx("Congelando.mp3", 0.03, 0.4, 0.5)
+
+
+func _execute_call(enemy: Dictionary) -> void:
+	var origin := Vector2(enemy.get("pos", game.player_pos))
+	var dest := Vector2(enemy.get("sineiro_call_dest", origin))
+	enemy["pos"] = dest
+	enemy["contact_grace"] = 0.4
+	_emit_visual_event("call_arrive", {"event_id": String(enemy.get("sineiro_attack_event_id", "call")) + "_arrive", "origin": origin, "dest": dest})
+	game._play_sfx("Congelando.mp3", 0.03, 1.0, 0.82)
+	# Chega ja atacando.
+	_set_state(enemy, STATE_RECOVERY, 0.28)
+	enemy["sineiro_action_cd"] = 0.0
+	enemy["sineiro_echo_cd"] = maxf(float(enemy.get("sineiro_echo_cd", 0.0)), 1.4)
 
 
 func _sample_player_history(delta: float) -> void:
@@ -574,6 +719,7 @@ func _update_retreat(enemy: Dictionary, delta: float) -> void:
 
 
 func _clear_hostile_state() -> void:
+	rings.clear()
 	game.sineiro_echo_marks.clear()
 	game.enemy_bullets = game.enemy_bullets.filter(func(bullet): return String(Dictionary(bullet).get("type", "")) != "sineiro_shard")
 
@@ -630,6 +776,16 @@ func _apply_visual_event(payload: Dictionary) -> void:
 			game.sineiro_visual_events.append({"kind": "shard_prepare", "pos": Vector2(payload.get("origin", game.player_pos)), "dir": Vector2(payload.get("direction", Vector2.LEFT)), "age": 0.0, "life": SHARD_TELEGRAPH_TIME, "max_life": SHARD_TELEGRAPH_TIME})
 		"shard_attack":
 			game.sineiro_visual_events.append({"kind": "shard_attack", "pos": Vector2(payload.get("origin", game.player_pos)), "dir": Vector2(payload.get("direction", Vector2.LEFT)), "age": 0.0, "life": 0.42, "max_life": 0.42})
+		"ring_prepare":
+			game.sineiro_visual_events.append({"kind": "ring_prepare", "pos": Vector2(payload.get("origin", game.player_pos)), "age": 0.0, "life": RING_TELEGRAPH_TIME, "max_life": RING_TELEGRAPH_TIME})
+		"ring_release":
+			var ring_life: float = (RING_MAX_RADIUS - 40.0) / RING_SPEED
+			game.sineiro_visual_events.append({"kind": "ring_release", "pos": Vector2(payload.get("origin", game.player_pos)), "age": 0.0, "life": ring_life, "max_life": ring_life})
+		"call_start":
+			game.sineiro_visual_events.append({"kind": "call_origin", "pos": Vector2(payload.get("origin", game.player_pos)), "age": 0.0, "life": CALL_TELEGRAPH_TIME, "max_life": CALL_TELEGRAPH_TIME})
+			game.sineiro_visual_events.append({"kind": "call_dest", "pos": Vector2(payload.get("dest", game.player_pos)), "age": 0.0, "life": CALL_TELEGRAPH_TIME, "max_life": CALL_TELEGRAPH_TIME})
+		"call_arrive":
+			game.sineiro_visual_events.append({"kind": "call_arrive", "pos": Vector2(payload.get("dest", game.player_pos)), "age": 0.0, "life": 0.55, "max_life": 0.55})
 		"death":
 			game.sineiro_echo_marks.clear()
 			game.sineiro_visual_events.append({"kind": "death", "pos": Vector2(payload.get("pos", game.player_pos)), "age": 0.0, "life": 1.05, "max_life": 1.05})

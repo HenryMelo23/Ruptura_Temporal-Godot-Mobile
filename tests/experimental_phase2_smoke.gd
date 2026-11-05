@@ -96,7 +96,7 @@ func _run() -> void:
 
 	# The public EX command now opens the classic map, while the default stays expanded.
 	game.gameplay_cheat_text = "FaseEX2"
-	assert(game._try_unlock_retornante_cheat())
+	assert(game._try_apply_gameplay_cheat())
 	game._start_game()
 	assert(game.current_phase == 2 and game.experimental_phase_active)
 	assert(game.WORLD_SIZE == game.DEFAULT_WORLD_SIZE)

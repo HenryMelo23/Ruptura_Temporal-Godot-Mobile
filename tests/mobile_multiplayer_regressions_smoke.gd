@@ -184,9 +184,9 @@ func _test_hit_audio() -> void:
 	for player in game.sfx_players:
 		player.stop()
 		player.stream = null
-	for manifestation in ["eletrica", "prismatica", "lacerante", "parasitica", "retornante", "gravitante", "ancorada", "eclipsada", "bombastica", "necronada", "cartografica", "mnesica", "ressonante", "contratual", "acorrentada"]:
+	for manifestation in ["eletrica", "prismatica", "lacerante", "parasitica", "gravitante"]:
 		game._play_enemy_hit_sfx({"uid": 17, "type": game.ENEMY_COMMON}, manifestation)
-	for key in ["Inimigo1_hit.wav", "Inimigo3_hit.mp3", "Hit_Boss1.mp3", "eletrica_hit", "acorrentada_hit_1", "acorrentada_hit_2", "acorrentada_hit_3"]:
+	for key in ["Inimigo1_hit.wav", "Inimigo3_hit.mp3", "Hit_Boss1.mp3", "eletrica_hit"]:
 		game._play_sfx(key)
 	for player in game.sfx_players:
 		_check(not player.playing and player.stream == null, "enemy impact still played audio")

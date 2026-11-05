@@ -210,7 +210,6 @@ func _run() -> void:
 	_check(is_equal_approx(float(prismatica_bullet.get("prismatica_ricochet_crit_bonus", 0.0)), 0.6), "prismatica_bullet_lost_ricochet_crit_bonus")
 
 	game.player_crit_chance = 0.0
-	game.ancorada_crit_bonus = 0.0
 	var guaranteed_ricochet := {"damage": 100.0, "kind": "prismatica", "ricocheted": true, "prismatica_ricochet_crit_bonus": 1.02}
 	var overcrit_result: Dictionary = game._bullet_critical_damage(guaranteed_ricochet)
 	_check(bool(overcrit_result["critical"]), "prismatica_ricochet_bonus_did_not_guarantee_critical")

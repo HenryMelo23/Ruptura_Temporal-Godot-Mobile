@@ -47,6 +47,7 @@ func _step(seconds: float) -> void:
 	for _i in range(int(round(seconds / 0.02))):
 		game.time_alive += 0.02
 		game._update_boss_attacks(0.02)
+		game.player_shove.update(game, 0.02)
 
 
 func _attack(kind: String) -> Dictionary:

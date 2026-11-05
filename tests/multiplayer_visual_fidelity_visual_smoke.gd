@@ -61,19 +61,12 @@ func _canonical_fixture(key: String, action: int, origin: Vector2, target: Vecto
 	if action == game.NET_ABILITY_ATTACK:
 		match key:
 			"lacerante": state["slashes"] = [{"a": origin, "b": target, "life": 0.8, "max": 0.8, "color": Color.RED, "width": 42.0, "kind": "lacerante_attack"}]
-			"acorrentada":
-				state["acorrentada_tension"] = 30.0
-				state["acorrentada_visuals"] = []
-				state["acorrentada_worn_chains"] = [{"index": 0, "attack_motion": {"stage": 1, "elapsed": 0.18}, "physics": {"a": origin, "b": target, "points": [origin, origin.lerp(target, 0.33) + Vector2(0, -22), origin.lerp(target, 0.66) + Vector2(0, 18), target]}}]
-			"eclipsada": state["eclipsada_vfx"] = [{"kind": "q_dash", "origin": origin, "target": target, "dir": (target - origin).normalized(), "life": 0.7, "max": 0.8, "color": Color(0.58, 0.42, 1.0)}]
 		return state
 	if action == game.NET_ABILITY_SECONDARY:
-		var secondary_kind := "eclipsada_sol" if key == "eclipsada" else key
-		state["secondary"] = {"kind": secondary_kind, "life": 3.2, "max": 4.0, "active_time": 0.8, "center": origin, "pos": origin, "radius": 145.0, "seed": 91, "phase": 0.4, "angle": 0.7, "targets": [], "cuts": [], "ghosts": [], "zaps": [], "final_frame": 1}
+		state["secondary"] = {"kind": key, "life": 3.2, "max": 4.0, "active_time": 0.8, "center": origin, "pos": origin, "radius": 145.0, "seed": 91, "phase": 0.4, "angle": 0.7, "targets": [], "cuts": [], "ghosts": [], "zaps": [], "final_frame": 1}
 		return state
 	if action == game.NET_ABILITY_TELEPORT:
-		var teleport_kind := "eclipsada_lua_tp" if key == "eclipsada" else key
-		state["tp_effects"] = [{"kind": teleport_kind, "life": 0.65, "max": 0.8, "a": origin, "b": target, "color": Color(0.4, 0.86, 1.0)}]
+		state["tp_effects"] = [{"kind": key, "life": 0.65, "max": 0.8, "a": origin, "b": target, "color": Color(0.4, 0.86, 1.0)}]
 		if key == "lacerante":
 			state["slashes"] = [{"a": origin, "b": target, "life": 0.65, "max": 0.8, "color": Color(1.0, 0.08, 0.18), "width": 42.0, "kind": "lacerante_tp"}]
 		return state
@@ -81,26 +74,8 @@ func _canonical_fixture(key: String, action: int, origin: Vector2, target: Vecto
 		"eletrica": state["eletrica_waves"] = [{"pos": target, "dir": (target - origin).normalized(), "age": 0.22, "life": 0.6, "max": 0.8, "phase": 0.2}]
 		"lacerante": state["slashes"] = [{"center": origin, "radius": 128.0, "life": 0.6, "max": 0.8, "rotations": 3.0, "color": Color.RED, "width": 86.0, "kind": "lacerante_spin"}]
 		"prismatica": state["prisms"] = [{"pos": target, "life": 1.0, "max_life": 1.2, "radius": 42.0}]
-		"retornante": state["return_bullets"] = [{"pos": target, "origin": origin, "dir": (target - origin).normalized(), "life": 1.0, "max_life": 1.2, "age": 0.2, "kind": "retornante"}]
 		"parasitica": state["parasite_spit_zones"] = [{"state": "flying", "origin": origin, "target": target, "age": 0.22, "travel": 0.6, "life": 1.0, "max": 1.2, "phase": 0.3}]
 		"gravitante": state["gravitante_vfx_events"] = [{"kind": "gravity_q", "pos": target, "points": [origin, origin.lerp(target, 0.5)], "life": 0.45, "max": 0.55}]
-		"ancorada": state["anchors"] = [{"pos": target, "link_from": origin, "source": "ancorada_hab1", "life": 1.0, "max": 1.2}]
-		"cartografica":
-			state["cartographic_route_timer"] = 1.0
-			state["cartographic_trace_flash"] = 0.2
-			state["cartographic_complete_map_timer"] = 1.0
-			state["cartographic_coords"] = [{"pos": origin, "life": 1.0, "max": 1.2, "slot": 0}, {"pos": target, "life": 1.0, "max": 1.2, "slot": 1}]
-		"mnesica": state["shockwaves"] = [{"pos": target, "radius": 72.0, "life": 0.6, "max": 0.8, "visual_only": true}]
-		"ressonante": state["shockwaves"] = [{"pos": origin, "radius": 180.0, "life": 0.8, "max_life": 1.2, "kind": "sinfonia_silencio"}]
-		"contratual": state["contractual_notifications"] = [{"pos": target, "life": 1.0, "max": 1.2, "phase": 0.4}]
-		"acorrentada": state["acorrentada_links"] = [{"kind": "anchor", "target": {}, "anchor": target, "life": 1.0, "max": 1.2, "hit_cd": {}}]
-		"eclipsada": state["eclipsada_vfx"] = [{"kind": "q_dash", "origin": origin, "target": target, "dir": (target - origin).normalized(), "life": 0.6, "max": 0.8, "color": Color(0.58, 0.42, 1.0)}]
-		"bombastica": state["bombastica_bombs"] = [{"id": 1, "kind": "q_bomb", "pos": target, "target": target, "state": "armed", "age": 0.2, "travel": 0.3, "fuse": 1.0, "fuse_total": 1.2, "radius": 110.0, "phase": 0.2, "exploded": false}]
-		"necronada":
-			state["necronada_vfx"] = [{"kind": "rose_summon_ring", "pos": target, "radius": 96.0, "life": 0.6, "max": 0.8}]
-			state["necronada_vestiges"] = []
-			state["necronada_remnants"] = []
-			state["necronada_requiem"] = {}
 	return state
 
 
@@ -122,12 +97,12 @@ func _prepare_manifestation_gallery(key: String, manifest_index: int) -> void:
 		_add_remote_cast(100 + action_index, key, origin, target, {"canonical_state": _canonical_fixture(key, action, origin, target)}, action, action_index + 1, "%s %s" % [key.to_upper(), String(entry[3])])
 	var attack_origin := Vector2(920, 565)
 	var attack_target := Vector2(1120, 565)
-	if key in ["lacerante", "acorrentada", "eclipsada"]:
+	if key == "lacerante":
 		_add_remote_cast(103, key, attack_origin, attack_target, {"canonical_state": _canonical_fixture(key, game.NET_ABILITY_ATTACK, attack_origin, attack_target)}, game.NET_ABILITY_ATTACK, 4, "%s ATK" % key.to_upper())
 	else:
 		var player_visual := VisualSyncContract.pack_player_visual(Vector2.ZERO, Vector2.RIGHT, game.NET_ABILITY_ATTACK, 0.22, 0.4, 4, 0)
 		game._rpc_remote_player_state_light(103, attack_origin, 100, 100, false, manifest_index, 0, game.NET_ANIM_FIRE, 2, false, 18, false, "%s ATK" % key.to_upper(), key, player_visual)
-		game.remote_bullets.append({"source": 103, "uid": "gallery:%s" % key, "pos": attack_target, "dir": Vector2.RIGHT, "speed": 0.0, "life": 1.0, "max_life": 1.0, "age": 0.25, "phase": float(manifest_index), "kind": key, "pierce": key in ["prismatica", "retornante"], "hits": {}, "color": Color.WHITE})
+		game.remote_bullets.append({"source": 103, "uid": "gallery:%s" % key, "pos": attack_target, "dir": Vector2.RIGHT, "speed": 0.0, "life": 1.0, "max_life": 1.0, "age": 0.25, "phase": float(manifest_index), "kind": key, "pierce": key == "prismatica", "hits": {}, "color": Color.WHITE})
 
 
 func _run() -> void:
@@ -161,43 +136,14 @@ func _run() -> void:
 			"gravitante_vfx_events": [{"kind": "gravity_q", "pos": Vector2(650, 275), "points": [Vector2(590, 220), Vector2(700, 300)], "life": 0.55, "max": 0.55}]
 		}
 	})
-	_add_remote_cast(43, "cartografica", Vector2(920, 300), Vector2(1040, 355), {
-		"canonical_state": {
-			"manifestation_key": "cartografica",
-			"evolution_ids": [],
-			"source_time": 42.0,
-			"cartographic_route_timer": 3.0,
-			"cartographic_trace_flash": 0.2,
-			"cartographic_complete_map_timer": 2.0,
-			"cartographic_coords": [
-				{"pos": Vector2(880, 350), "life": 4.0, "max": 4.0, "phase": 0.2, "slot": 0},
-				{"pos": Vector2(990, 225), "life": 4.0, "max": 4.0, "phase": 1.3, "slot": 1},
-				{"pos": Vector2(1110, 360), "life": 4.0, "max": 4.0, "phase": 2.4, "slot": 2}
-			]
-		}
+	_add_remote_cast(43, "eletrica", Vector2(920, 300), Vector2(1040, 355), {
+		"canonical_state": _canonical_fixture("eletrica", game.NET_ABILITY_SKILL, Vector2(920, 300), Vector2(1040, 355))
 	})
-	_add_remote_cast(44, "contratual", Vector2(540, 610), Vector2(700, 570), {
-		"canonical_state": {
-			"manifestation_key": "contratual",
-			"evolution_ids": [],
-			"source_time": 42.0,
-			"contractual_notifications": [{"pos": Vector2(540, 610), "life": 3.0, "max": 3.0, "phase": 0.7}],
-			"enemy_markers": [{"uid": 4401, "pos": Vector2(700, 570), "hp": 100.0, "contract_clause": "agressao", "contract_infractions": 2, "contract_flash": 0.4}]
-		}
+	_add_remote_cast(44, "lacerante", Vector2(540, 610), Vector2(700, 570), {
+		"canonical_state": _canonical_fixture("lacerante", game.NET_ABILITY_SKILL, Vector2(540, 610), Vector2(700, 570))
 	})
-	_add_remote_cast(45, "necronada", Vector2(985, 590), Vector2(1080, 540), {
-		"canonical_state": {
-			"manifestation_key": "necronada",
-			"evolution_ids": [],
-			"source_time": 42.0,
-			"necronada_vestiges": [],
-			"necronada_remnants": [
-				{"id": 1, "enemy_type": game.ENEMY_COMMON, "profile": {"color": Color(0.48, 0.82, 1.0)}, "pos": Vector2(1040, 520), "target_pos": Vector2(1080, 540), "hp": 80.0, "max_hp": 80.0, "summon": 0.0, "phase": 0.2, "facing_dir": Vector2.LEFT},
-				{"id": 2, "enemy_type": game.ENEMY_STALKER, "profile": {"color": Color(0.64, 0.44, 1.0)}, "pos": Vector2(1110, 605), "target_pos": Vector2(1080, 540), "hp": 80.0, "max_hp": 80.0, "summon": 0.0, "phase": 1.4, "facing_dir": Vector2.LEFT}
-			],
-			"necronada_vfx": [{"kind": "rose_summon_ring", "pos": Vector2(1080, 540), "radius": 100.0, "life": 0.7, "max": 0.7}],
-			"necronada_requiem": {}
-		}
+	_add_remote_cast(45, "parasitica", Vector2(985, 590), Vector2(1080, 540), {
+		"canonical_state": _canonical_fixture("parasitica", game.NET_ABILITY_SKILL, Vector2(985, 590), Vector2(1080, 540))
 	})
 	var henry_visual_snapshot := VisualSyncContract.pack_player_visual(Vector2(0.5, 0.0), Vector2.RIGHT, -1, 0.0, 0.5, 5, 0)
 	game._rpc_remote_player_state_light(46, Vector2(360, 520), 125, 125, false, 0, 100, game.NET_ANIM_IDLE, 0, false, 18, false, "HENRY REMOTO", "barometrico", henry_visual_snapshot)
@@ -215,7 +161,7 @@ func _run() -> void:
 		var key := String(game.MANIFESTATIONS[manifest_index].get("key", ""))
 		_prepare_manifestation_gallery(key, manifest_index)
 		_check(game.net_players_by_peer.size() == 4, key + " gallery is missing a remote actor")
-		_check(game.net_ability_visuals.size() == (4 if key in ["lacerante", "acorrentada", "eclipsada"] else 3), key + " gallery is missing a canonical action")
+		_check(game.net_ability_visuals.size() == (4 if key == "lacerante" else 3), key + " gallery is missing a canonical action")
 		_check(await _capture("multiplayer_manifestation_%02d_%s.png" % [manifest_index + 1, key], Vector2i(1280, 720)), key + " gallery capture failed")
 		game.gfx_low_resource = true
 		_check(await _capture("multiplayer_manifestation_low_%02d_%s.png" % [manifest_index + 1, key], Vector2i(960, 540)), key + " low-resource gallery capture failed")

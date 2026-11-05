@@ -120,7 +120,7 @@ func should_ignore_emulated_mouse() -> bool:
 
 
 func mouse_release_has_active_action() -> bool:
-	return core.move_touch_index == -2 or core.attack_drag_touch_index == -2 or core.skill_touch_index == -2 or core.secondary_touch_index == -2 or core.dash_touch_index == -2 or core.bombastica_detonator_touch_index == -2 or core.manifest_drag_touch_index == -2 or core.deck_drag_touch_index == -2
+	return core.move_touch_index == -2 or core.attack_drag_touch_index == -2 or core.skill_touch_index == -2 or core.secondary_touch_index == -2 or core.dash_touch_index == -2 or core.manifest_drag_touch_index == -2 or core.deck_drag_touch_index == -2
 
 
 func sync_touch_state() -> void:
@@ -139,12 +139,6 @@ func sync_touch_state() -> void:
 	if core.dash_touch_index >= 0 and not core.active_screen_touches.has(core.dash_touch_index):
 		core.dash_touch_index = -1
 		core.teleport_dragging = false
-	if core.bombastica_detonator_touch_index >= 0 and not core.active_screen_touches.has(core.bombastica_detonator_touch_index):
-		core.bombastica_detonator_touch_index = -1
-		core.bombastica_detonator_hold = 0.0
-	elif core.bombastica_detonator_touch_index == -2 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		core.bombastica_detonator_touch_index = -1
-		core.bombastica_detonator_hold = 0.0
 	if core.active_screen_touches.is_empty() and core.move_touch_index == -1:
 		core.pointer_down = false
 
@@ -234,7 +228,7 @@ func claim_action_touch(index: int) -> void:
 
 
 func touch_index_has_action(index: int) -> bool:
-	return index == core.attack_drag_touch_index or index == core.skill_touch_index or index == core.secondary_touch_index or index == core.dash_touch_index or index == core.bombastica_detonator_touch_index or index == core.dance_wheel_touch_index
+	return index == core.attack_drag_touch_index or index == core.skill_touch_index or index == core.secondary_touch_index or index == core.dash_touch_index or index == core.dance_wheel_touch_index
 
 
 func try_start_move_touch(index: int, pos: Vector2, viewport: Vector2) -> bool:
@@ -266,19 +260,15 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 	if core.mode not in ["game", "shop_countdown", "boss_call", "pause_countdown"]:
 		core._handle_press(pos, viewport)
 		return
-	if core._local_player_controls_locked():
+	if core._local_player_controls_locked() and not core.henry_incendiary_ability_controller.channel_interruptible():
 		if not try_start_move_touch(index, pos, viewport):
 			cancel_combat_aim_state(false)
 		return
 	if core.buttons.has("lacerante_empower") and core.buttons["lacerante_empower"].has_point(pos):
 		claim_action_touch(index)
-		if core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
-		elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
-		elif core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
+		if core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 		else: core._try_arm_lacerante_empower()
 		return
-	if core.buttons.has("bombastica_detonator") and core.buttons["bombastica_detonator"].has_point(pos):
-		claim_action_touch(index); core.bombastica_detonator_touch_index = index; core.bombastica_detonator_hold = 0.0; return
 	if core._uses_touch_ui() and core._local_revival_altar_method() != "" and core.buttons.get("attack", Rect2()).has_point(pos):
 		claim_action_touch(index); core._handle_revival_mobile_tap(); return
 	if core.buttons["attack"].has_point(pos):
@@ -350,23 +340,17 @@ func handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active: core._try_dash_to_screen(pos, viewport)
 		core.dash_touch_index = -1; core.teleport_dragging = false
-	if index == core.bombastica_detonator_touch_index:
-		if combat_active and core.bombastica_detonator_hold < 0.62: core._trigger_bombastica_detonator(false)
-		core.bombastica_detonator_touch_index = -1; core.bombastica_detonator_hold = 0.0
 
 
 func handle_mouse_press(pos: Vector2, viewport: Vector2) -> void:
 	if core._handle_revive_overlay_press(pos) or core._handle_pause_mp_overlay_press(pos, viewport) or core._handle_shop_mp_overlay_press(pos, viewport) or core._handle_boss_mp_overlay_press(pos, viewport) or core._handle_phase_mp_overlay_press(pos, viewport): return
 	if core.mode in ["game", "shop_countdown", "boss_call", "pause_countdown"]:
-		if core._local_player_controls_locked(): cancel_combat_aim_state(true); return
+		if core._local_player_controls_locked() and not core.henry_incendiary_ability_controller.channel_interruptible(): cancel_combat_aim_state(true); return
 		if core.buttons.has("lacerante_empower") and core.buttons["lacerante_empower"].has_point(pos):
 			claim_action_touch(-2)
-			if core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
-			elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
-			elif core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
+			if core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 			else: core._try_arm_lacerante_empower()
 			return
-		if core.buttons.has("bombastica_detonator") and core.buttons["bombastica_detonator"].has_point(pos): claim_action_touch(-2); core.bombastica_detonator_touch_index = -2; core.bombastica_detonator_hold = 0.0; return
 		if core.buttons["attack"].has_point(pos): handle_touch_press(-2, pos, viewport); return
 		if core.buttons["dash"].has_point(pos): handle_touch_press(-2, pos, viewport); return
 		if core.buttons["skill"].has_point(pos): handle_touch_press(-2, pos, viewport); return
@@ -477,10 +461,7 @@ func execute_desktop_action(action: String) -> void:
 			elif desktop_dash_mode() == core.DESKTOP_TELEPORT_LAST_DIRECTION: core._try_dash_to_world(desktop_last_direction_teleport_target())
 			else: core._try_dash_to_world(desktop_dash_target())
 		"lacerante_empower":
-			if core.manifestation_key == "bombastica": core._trigger_bombastica_detonator(false)
-			elif core.manifestation_key == "eclipsada": core._toggle_eclipsada_form()
-			elif core.manifestation_key == "necronada": core._try_arm_necronada_empower()
-			elif core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
+			if core.active_character_key == core.CHARACTER_HENRY and core.mutation_key == "colosso": core.henry_colossus_ability_controller.activate_reinforcement()
 			else: core._try_arm_lacerante_empower()
 		"dance": core._toggle_player_dance()
 		"interact": core._try_interact_revival_altar()
@@ -657,11 +638,9 @@ func handle_gamepad_virtual_button(button_id: String, pressed: bool, viewport: V
 		elif combat_active and action == "shop": core._try_open_manual_shop()
 		elif combat_active and action == "boss": core._start_boss_call()
 		elif combat_active and action == "lacerante_empower" and core.buttons.has("lacerante_empower"): handle_touch_press(-8, core.buttons["lacerante_empower"].get_center(), viewport)
-		elif combat_active and action == "bombastica_detonator" and core.buttons.has("bombastica_detonator"): handle_touch_press(-9, core.buttons["bombastica_detonator"].get_center(), viewport)
 		elif not combat_active: handle_gamepad_ui_action(action)
 	else:
 		if action == "attack" and core.buttons.has("attack"): handle_touch_release(-3, core.buttons["attack"].get_center(), viewport)
 		elif action == "skill" and core.buttons.has("skill"): handle_touch_release(-4, core.buttons["skill"].get_center(), viewport)
 		elif action == "secondary" and core.buttons.has("secondary"): handle_touch_release(-5, core.buttons["secondary"].get_center(), viewport)
 		elif action == "dash" and core.buttons.has("dash"): handle_touch_release(-6, core.buttons["dash"].get_center(), viewport)
-		elif action == "bombastica_detonator" and core.buttons.has("bombastica_detonator"): handle_touch_release(-9, core.buttons["bombastica_detonator"].get_center(), viewport)

@@ -80,7 +80,7 @@ func _check_forced_initial_phase_cheats() -> void:
 	}
 	for phase in range(1, 8):
 		game.gameplay_cheat_text = "FASE%d" % phase
-		_check(game._try_unlock_retornante_cheat(), "FASE%d cheat was not accepted" % phase)
+		_check(game._try_apply_gameplay_cheat(), "FASE%d cheat was not accepted" % phase)
 		_check(int(game.forced_initial_phase) == phase, "FASE%d did not set forced initial phase" % phase)
 		_check(bool(game.force_phase6_start) == (phase == 6), "legacy phase6 flag mismatch for FASE%d" % phase)
 		game._start_game()
@@ -92,17 +92,17 @@ func _check_forced_initial_phase_cheats() -> void:
 			_check(not bool(game.boss_ready), "FASE7 should start without boss call")
 			_check(String(game.enemies[0].get("type", "")) == game.ENEMY_CINERIDO, "FASE7 should start with Cinerido")
 	game.gameplay_cheat_text = "FASE3"
-	_check(game._try_unlock_retornante_cheat(), "FASE3 cheat was not accepted before phase6 replace")
+	_check(game._try_apply_gameplay_cheat(), "FASE3 cheat was not accepted before phase6 replace")
 	game.gameplay_cheat_text = "FASE6"
-	_check(game._try_unlock_retornante_cheat(), "FASE6 replace was not accepted")
+	_check(game._try_apply_gameplay_cheat(), "FASE6 replace was not accepted")
 	_check(int(game.forced_initial_phase) == 6, "FASE6 should replace previous forced phase before toggle check")
 	game.gameplay_cheat_text = "FASE6"
-	_check(game._try_unlock_retornante_cheat(), "FASE6 second toggle was not accepted")
+	_check(game._try_apply_gameplay_cheat(), "FASE6 second toggle was not accepted")
 	_check(int(game.forced_initial_phase) == 0, "FASE6 did not toggle itself off")
 	game.gameplay_cheat_text = "FASE3"
-	_check(game._try_unlock_retornante_cheat(), "FASE3 cheat was not accepted before auto reset")
+	_check(game._try_apply_gameplay_cheat(), "FASE3 cheat was not accepted before auto reset")
 	game.gameplay_cheat_text = "FASEAUTO"
-	_check(game._try_unlock_retornante_cheat(), "FASEAUTO cheat was not accepted")
+	_check(game._try_apply_gameplay_cheat(), "FASEAUTO cheat was not accepted")
 	_check(int(game.forced_initial_phase) == 0, "FASEAUTO did not clear forced phase")
 	_check(not bool(game.force_phase6_start), "FASEAUTO did not clear legacy phase6 flag")
 

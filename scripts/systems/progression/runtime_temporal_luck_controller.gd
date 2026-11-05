@@ -27,23 +27,41 @@ func effective_luck() -> float:
 	return maxf(0.0, float(core.luck)) + temporal_luck()
 
 
+## Rebalanceamento 2026-11: a carta Sorte rende cada vez menos por copia (curva
+## 1 - e^(-n/4)) e as raras/lendarias crescem com o tempo de run, para que a
+## primeira rara nao saia nos primeiros minutos. A sorte oculta (temporal) segue
+## subindo sozinha, garantindo que a sorte nunca fique parada.
+const SORTE_CURVE_COPIES := 4.0
+
+
+func sorte_curve(copies: int = -1) -> float:
+	var n: float = float(core._sorte_card_count()) if copies < 0 else float(copies)
+	return 1.0 - exp(-maxf(0.0, n) / SORTE_CURVE_COPIES)
+
+
+## 0..1: quanto da chance de rara ja esta liberada pelo tempo de run.
+func rare_time_ramp(min_value: float = 0.35) -> float:
+	return clampf((float(core.time_alive) - 120.0) / 720.0, min_value, 1.0)
+
+
 func uncommon_card_chance() -> float:
-	var chance := 0.22 + effective_luck() * 0.26 + float(core._sorte_card_count()) * 0.012
-	return clampf(chance, 0.0, 0.48)
+	var chance := 0.22 + effective_luck() * 0.24 + 0.08 * (1.0 - exp(-float(core._sorte_card_count()) / 5.0))
+	return clampf(chance, 0.0, 0.45)
 
 
 func rare_card_chance() -> float:
 	if not core._rare_cards_unlocked():
 		return 0.0
-	var chance := 0.025 + effective_luck() * 0.12 + float(core._sorte_card_count()) * 0.0038
-	return clampf(chance, 0.0, 0.14)
+	var chance := (0.016 + effective_luck() * 0.09 + 0.02 * sorte_curve()) * rare_time_ramp()
+	return clampf(chance, 0.0, 0.11)
 
 
 func legendary_card_chance() -> float:
 	if not core._legendary_cards_unlocked():
 		return 0.0
-	var chance := 0.005 + effective_luck() * 0.02 + float(core._sorte_card_count()) * 0.0008
-	return clampf(chance, 0.0, 0.03)
+	var ramp := clampf((float(core.time_alive) - 300.0) / 900.0, 0.3, 1.0)
+	var chance := (0.003 + effective_luck() * 0.016 + 0.004 * sorte_curve()) * ramp
+	return clampf(chance, 0.0, 0.025)
 
 
 func card_drop_chance() -> float:
@@ -53,9 +71,12 @@ func card_drop_chance() -> float:
 
 func drop_mode_rarity_weights() -> Array:
 	var current_luck := effective_luck()
+	# Modo drop: raras/lendarias comecam em zero e entram aos poucos (3 -> 15 min).
+	var ramp := clampf((float(core.time_alive) - 180.0) / 720.0, 0.0, 1.0)
+	var sorte := sorte_curve()
 	return [
 		[core.CARD_RARITY_COMMON, 74.0],
 		[core.CARD_RARITY_UNCOMMON, 20.0 + 22.0 * current_luck],
-		[core.CARD_RARITY_RARE, 5.5 + 10.0 * current_luck],
-		[core.CARD_RARITY_LEGENDARY, 0.5 + 2.0 * current_luck],
+		[core.CARD_RARITY_RARE, (1.6 + 7.0 * current_luck + 1.5 * sorte) * ramp],
+		[core.CARD_RARITY_LEGENDARY, (0.15 + 1.2 * current_luck) * ramp],
 	]

@@ -622,3 +622,70 @@ Suggested tests/runners: exact paths or commands to use later.
 - Hit-freeze, cone de choque do 3º soco, passos do gigante, decals (rachadura/poeira/estrela/sulco) e estouro da transformação rodam só no cliente local; dano do cone e empurrão do estouro precisam ser validados como autoritativos no host.
 - Sheets v2 (8 direções) são carregadas só pro jogador local; pools de frames de rede continuam nos índices v1 (3 direções). Ao destravar o multiplayer: sincronizar índice v2 ou mapear v2→v1.
 - Teste: tests/henry_colossus_weight_smoke.gd, tests/henry_colossus_weight_visual_smoke.gd.
+
+## Loja manual aposentada
+- Opções "Abertura da loja" e "Intervalo da loja" saíram das configurações; `shop_auto_enabled` fica sempre true e o intervalo fixo em 180 s (valores salvos antigos são ignorados).
+- Botão LOJA do HUD só existe como atalho de QA (`shop_controller.manual_dev_access()`: dados QA ou fase inicial forçada).
+- Online a Fenda segue desligada, então o MP usa só a contagem automática; o fluxo de pedido de loja manual entre parceiros (`_rpc_request_shop`) fica inalcançável para jogadores. Validar ao destravar o MP (ou levar a Fenda pro online).
+- Teste: tests/manual_shop_removed_smoke.gd.
+
+## Empurrões suaves do jogador + canalização segura do Henry Incendiário
+- `_shove_player(offset)` (RTPlayerShoveController) troca os empurrões/puxões de impacto que teleportavam por deslocamento de ~0,2 s. Só mexe no jogador local; a posição chega aos parceiros pelo sync normal (verificar interpolação remota sem "saltos"). Puxões contínuos (redemoinho, vórtice, poço) seguem por quadro como antes.
+- Henry Incendiário: Q e ultimate repelem + lentidão (`evolution_slow`) ao iniciar e mantêm guarda de 94 px durante a canalização. Só a autoridade de mundo empurra inimigos; cliente não-host não repele (validar pedido ao host).
+- Cancelamento da canalização (teleporte ou apertar a mesma habilidade) é local: os pulsos restantes da ultimate somem só no cliente que cancelou — falta mandar evento de cancelamento pros parceiros (o visual remoto do cone/onda vai até o fim).
+- Testes: tests/henry_channel_guard_smoke.gd, tests/henry_incendiary_smoke.gd, tests/boss6_spit_tail_smoke.gd.
+
+## Manifestações enxutas — roster estável da Geovana
+- O roster da Geovana foi reduzido a Elétrica, Lacerante, Prismática, Parasítica e Gravitante; índices/chaves antigos das dez manifestações removidas migram para Elétrica ao carregar save ou run interrompida. Henry, mutações e o botão compartilhado de reforço do Colosso foram preservados.
+- Evidência solo: `manifestation_roster_smoke`, `manifestation_roster_playability_smoke`, `runtime_save_controller_smoke`, `manifestation_tp_smoke`, seleção/Códex/HUD visuais e catálogo de evoluções com 60 entradas para as cinco manifestações.
+- Ainda devido: host/cliente reais selecionando cada uma das cinco; recepção de snapshot/reconexão com chave ou índice legado e normalização para Elétrica; replicação de ataque/Q/E/teleporte/ultimate das cinco; reforço do Henry Colosso pelo botão compartilhado; payloads de desbloqueio/telemetria do relay sem qualquer manifestação removida.
+
+## Necrocronismo (rework "Eco que ricocheteia")
+- Ecos vivem em `active_necro_specters` (estado: rise/seek/dash/recover/collapse) via RTNecrocronismController; dano das investidas e da implosão só na autoridade de mundo. Riscos de investida (`streaks`) são só visuais/locais.
+- Validar: sincronizar posição/estado dos Ecos para os parceiros (hoje o cliente remoto não vê os Ecos do host) e o efeito `necro_collapse`.
+- Teste: tests/necrocronism_echo_smoke.gd.
+
+## Tela de escolha de build unificada (solo)
+- Solo: Geovana (Manifestação/Espectro) e Henry (Mutação/Efeito) usam RTBuildSelectPresentation + textos de RTBuildChoiceDossier.
+- Multiplayer (`manifest_mp`, `mutation_select_mp`, `effect_select_mp`) segue na tela de equipe antiga, com os textos antigos de CatalogDetails. Ao destravar o MP: levar o relatório novo (RTBuildChoiceDossier) para `_draw_manifest_mp_compact_info` e alinhar o visual.
+- Testes: tests/build_choice_dossier_smoke.gd, tests/manifest_spectrum_select_smoke.gd.
+
+## Gravitante rework (Massa crítica / Q suave / Poço de Partida)
+- RTGravitanteController: órbitas limitadas a 3 por alvo; Estrela (3 órbitas) puxa vizinhos; Q puxa os marcados por 0,3 s antes de colidir; TP abre Poço de Partida (2,5 s) que puxa/marca e colapsa.
+- Puxões, colisão e poço só rodam na autoridade de mundo. Validar: cliente não-host com Gravitante (pedido ao host), sincronia dos poços/colisões para o visual remoto (hoje `wells`/`collisions` são locais) e snapshot `gravitante_vfx_events` com os kinds novos (gravity_star_birth, gravity_q_pull, gravity_well_collapse).
+- Teste: tests/gravitante_rework_smoke.gd, tests/manifestation_tp_smoke.gd, tests/combat_pack_2_0_10_smoke.gd.
+
+## Lacerante rework (Laceração / barra de execução / execução reservada)
+- RTLaceranteExecutionController: Laceração com limite 5 e sangramento pelo `_damage_enemy`; barra de execução (dano do Reforço); execução de 0,9 s com o alvo marcado `lacerante_exec` — `_damage_enemy` ignora qualquer dano que não seja `lacerante_execution` nesse alvo (inclusive pedidos de dano de outros peers no host).
+- Só roda na autoridade de mundo (`try_start` exige `_is_world_authority`). **A Lacerante cliente não-host não consegue executar ainda**: precisa de RPC "pedir execução" → host reserva o alvo e responde; e sincronizar o estado da execução (posição da Geovana, animação, slash_events) para os parceiros verem.
+- Teste: tests/lacerante_execution_smoke.gd, tests/lacerante_rework_smoke.gd.
+- Câmera de execução (RTExecutionCamera) usa `viewport.canvas_transform` e esconde o HUD por ~1,15 s só no cliente local; parceiros não veem o foco. Imunidade pós-execução (0,9 s) é local ao jogador que executou.
+- Recarga do Reforço agora vive no RTLaceranteExecutionController (10 s com execução, 15 s sem; −0,3 s por ATK que acerta; piso 4 s reduzido por Intervalo Fraturado). Não vai no save nem na rede: ao carregar save o Reforço volta pronto.
+
+## Otimização de FPS (nov/2026) — validar quando o multiplayer voltar
+- Desenho de inimigos em camadas (entities_presentation._draw_enemies_body): sombras e sprites via MultiMesh, auras largas (Cout, Curador, Incensário, Relicário, portal do Larápio, chama do Pinguim) agora ficam SOB os sprites, barras de vida por cima de tudo. Puramente visual/local, mas conferir inimigos remotos/espelhados (net) no cliente.
+- enemy_manager: `_get_nearest_player_pos` só é calculado para Kamikaze; contato checa distância antes de `_local_player_damageable_by_contact`; cápsula da barganha lida uma vez por quadro. Semântica igual no host; conferir dano de contato em peers remotos.
+- `_get_enemy_target_pos`: removida checagem duplicada de chefe/especial (ramos idênticos) e `enemies.find()` só sem uid. Conferir distribuição de alvos entre peers.
+- Henry Incendiário: `_update_enemy_burn`/`_update_knockback` saem cedo quando o inimigo não tem as chaves de queimadura/empurrão. Conferir queimadura aplicada por cliente (on_damage_dealt no host).
+- Henry Colosso gigante parado: freada (henry_colossus_stop_*) e respiracao (henry_colossus_idle_*) so no jogador local (RTHenryColossusAbilityController.giant_rest_texture). O parceiro remoto continua vendo o quadro 0 do andar (NET_ANIM_* nao tem estado de idle/freada do gigante). Avaliar se vale mandar isso na rede.
+- Cronoguejo, Crono-Ruptura (RTRewindCamera): camera (zoom/inclinacao), trincas, VHS e relogio novo sao locais e seguem `boss1_rewind_sequence`, que ja e sincronizado por `_rpc_boss1_team_rewind`. Conferir num cliente: a cinematica deve tocar para todos ao mesmo tempo e o HUD some durante ~3,7 s (como na execucao da Lacerante).
+
+## Mini-chefes (nov/2026) — validar com o multiplayer
+- Larapio: bote (larapio_lunge*), leque de pedras e recarga por portal ficam no dict do inimigo (host). O rastro de moedas e a seta de borda sao derivados da posicao replicada (RTLarapioPresentation) — conferir que o cliente ve os portais em recarga (campo `cd` nos portais precisa ir no snapshot).
+- Sineiro: Dobre Glacial (`rings` so no host; o visual vai por `_rpc_sineiro_event` ring_prepare/ring_release) e Dobre de Chamada (call_start/call_arrive). Dano/lentidao do anel em peers usa _send_peer_damage + _request_peer_status("slow").
+- Arautos (RTArautoThreatController, so host): Coro de Ecos, Olhar Prismatico, Silencio Total, Inversao de Eco, Ferrao/Veneno, Casca, Ricochete. O estado (ability/inversion/stings/spikes) NAO e replicado: clientes nao veem os avisos. Veneno e Silencio Total/Inversao so atingem o jogador local do host (falta RPC de status/puxao para peers).
+- Suturador (RTSuturerThreatController, so host): Remendo Vivo cria inimigos normais (replicados), Casulo/Elite marcam o dict do inimigo (amber_elite/amber_patched precisam ir no snapshot para o visual); os fios/linhas de costura nao sao replicados.
+
+## Boss 2 — movimento e nevasca (2026-11)
+- `RTBoss2MotionController` (órbita aleatória, bote com preparo de 0.45 s, deslize de barriga com redirecionamento) roda só no host e altera `boss_pos`/`boss2_target_position`; réplicas recebem a posição. Validar que o preparo do bote (`dash_windup`) e o rastro de gelo aparecem nas réplicas — hoje o rastro e a linha do bote são locais ao host.
+- `RTBoss2BlizzardPresentation.reveal()` usa estado estático local (alpha suavizado) e o marcador de borda; ok por cliente, mas confirmar `_boss2_ultimate_boss_visible()` replicado.
+- (2026-11-05) Nevasca: o pinguim agora sai andando da nevoa na janela de aviso e volta para ela depois do cuspe (`emerging()`/`in_blizzard()` no motion controller, host). O auto-alvo usa `in_blizzard()` pela posicao (antes era so o timer). Dissolver/remontar e visual local por `boss_pos`; validar que réplicas veem o mesmo momento de aparecer (interpolação de `boss_pos`).
+
+## Artefatos de campo, pactos e escolha pos-chefe (2026-11-05)
+- `RTFieldArtifactController`: tipo sorteado no host e enviado no orbe (`artifact_type`). Furia/ima vao no snapshot `field_artifacts`; expurgo roda so na autoridade (`purge_screen`). Validar: replica coletando ima puxa os orbes do peer certo; furia so no coletor? (hoje o snapshot e global -> todos ganham +50%).
+- `RTBossPactController` / `RTRunChoiceController`: escolha e efeitos sao LOCAIS por jogador, sem barreira de rede (o jogo de cada um pausa sozinho em mode "run_choice"). Mecanicas de perigo (raios, meteoros, tremor) so afetam o jogador local. Precisa de barreira igual a `manifest_evolution` antes de liberar no MP.
+- Pactos com `enemy_hp`/`enemy_speed`/`enemy_dmg` alteram globais do mundo: no MP devem rodar so no host.
+
+## Boss 7 (Fenix) rework (2026-11-05)
+- `RTBoss7MotionController` (voo em curvas, rasante `swoop_warn`/`swoop`, altitude/sombra do mergulho) roda no host via `boss_pos`/`boss7_state`. Replicas: conferir que os estados novos chegam no snapshot de estado do boss e que `altitude`/`trail` (locais, derivados de `boss_pos`) ficam coerentes.
+- Chuva de Fogo agora causa dano (`RTBoss7Attacks.update_sky_fireballs`), usando `_damage_remote_player_in_radius` no host.

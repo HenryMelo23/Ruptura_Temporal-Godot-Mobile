@@ -133,6 +133,12 @@ var impact_decals: Array = []
 var step_timer := 0.0
 var charge_last_decal := Vector2.ZERO
 var v2_cache: Dictionary = {}
+## Gigante parado: freada (stop, 3 quadros) ao soltar o movimento e depois respiracao (idle, 4 quadros).
+const GIANT_STOP_TIME := 0.33
+const GIANT_IDLE_FRAME_SECONDS := 0.22
+var rest_was_moving := false
+var rest_stop_elapsed := GIANT_STOP_TIME
+var rest_idle_elapsed := 0.0
 
 
 func configure(runtime_core: Node) -> void:
@@ -158,6 +164,9 @@ func reset() -> void:
 	shrinking = false
 	transform_elapsed = 0.0
 	giant_active = false
+	rest_was_moving = false
+	rest_stop_elapsed = GIANT_STOP_TIME
+	rest_idle_elapsed = 0.0
 	giant_elapsed = 0.0
 	giant_temp_hp = 0.0
 	giant_armor = 0.0
@@ -473,6 +482,7 @@ func update(delta: float) -> void:
 	_update_leap(delta)
 	_update_transformation(delta)
 	_update_giant_steps(delta)
+	_update_giant_rest(delta)
 	if fury >= FURY_MAX and not giant_active and not transforming and not shrinking and not leap_active:
 		cast_ultimate()
 
@@ -659,6 +669,8 @@ func _apply_hit_push(enemy: Dictionary, third_hit: bool) -> void:
 
 
 func _update_knockback(enemy: Dictionary, delta: float) -> void:
+	if not enemy.has("henry_colossus_knockback"):
+		return
 	var velocity := Vector2(enemy.get("henry_colossus_knockback", Vector2.ZERO))
 	if velocity.length_squared() <= 1.0:
 		enemy.erase("henry_colossus_knockback")
@@ -965,6 +977,52 @@ func _transform_burst() -> void:
 
 
 ## --- Quadros v2 (8 direcoes): usados sozinhos quando as folhas existirem ---
+func _update_giant_rest(delta: float) -> void:
+	var busy: bool = charge_active or leap_active or transforming or shrinking or core.henry_skill_cast_active
+	if not giant_active or busy:
+		rest_was_moving = false
+		rest_stop_elapsed = GIANT_STOP_TIME
+		rest_idle_elapsed = 0.0
+		return
+	var moving: bool = Vector2(core._read_move()).length() > 0.1
+	if moving:
+		rest_was_moving = true
+		rest_stop_elapsed = GIANT_STOP_TIME
+		rest_idle_elapsed = 0.0
+		return
+	if rest_was_moving:
+		# Acabou de soltar o movimento: o gigante freia antes de voltar a respirar.
+		rest_was_moving = false
+		rest_stop_elapsed = 0.0
+	if rest_stop_elapsed < GIANT_STOP_TIME:
+		rest_stop_elapsed += delta
+	else:
+		rest_idle_elapsed += delta
+
+
+## Quadro do gigante parado (freada ou respiracao) na direcao em que olhava. Esquerda
+## usa o lado espelhado (o espelho vem de _should_flip_player_sprite).
+func giant_rest_texture() -> Texture2D:
+	if not giant_active:
+		return null
+	var facing: Vector2 = Vector2(core.last_facing)
+	var row := "down"
+	if facing.y < -0.1 and absf(facing.y) >= absf(facing.x) * 0.5:
+		row = "up"
+	elif absf(facing.x) > 0.1 and absf(facing.x) > absf(facing.y):
+		row = "right"
+	if rest_stop_elapsed < GIANT_STOP_TIME:
+		var stop_frames: Array = core.textures.get("henry_colossus_stop_" + row, [])
+		if not stop_frames.is_empty():
+			var stop_index: int = int(rest_stop_elapsed / GIANT_STOP_TIME * float(stop_frames.size()))
+			return stop_frames[clampi(stop_index, 0, stop_frames.size() - 1)]
+	var idle_frames: Array = core.textures.get("henry_colossus_idle_" + row, [])
+	if idle_frames.is_empty():
+		var fallback: Array = core.textures.get("henry_colossus_" + row, [])
+		return fallback[0] if not fallback.is_empty() else null
+	return idle_frames[int(rest_idle_elapsed / GIANT_IDLE_FRAME_SECONDS) % idle_frames.size()]
+
+
 func _v2_frames(sheet_key: String, direction: Vector2) -> Array:
 	var spec: Array = V2_SHEETS.get(sheet_key, [])
 	if spec.is_empty():
@@ -1041,6 +1099,7 @@ func v2_texture(move: Vector2) -> Texture2D:
 		frames = _v2_frames("giant_walk", facing)
 		if not frames.is_empty():
 			if move.length() <= 0.1:
-				return frames[0]
+				var rest_v2: Texture2D = giant_rest_texture()
+				return rest_v2 if rest_v2 != null else frames[0]
 			return frames[int(float(Time.get_ticks_msec()) / 100.0) % frames.size()]
 	return null

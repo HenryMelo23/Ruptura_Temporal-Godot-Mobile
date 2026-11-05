@@ -1,6 +1,7 @@
 extends RefCounted
 
 const RTPlayerProgressSync = preload("res://scripts/systems/player_progress_sync.gd")
+const ManifestationRosterSaveMigration = preload("res://scripts/systems/save/manifestation_roster_save_migration.gd")
 const INTERRUPTED_RUN_BINARY_MAGIC := "RTS2"
 const AUTOSAVE_TRANSIENT_FIELDS := {
 	"bullets": true,
@@ -19,7 +20,6 @@ const AUTOSAVE_TRANSIENT_FIELDS := {
 	"rain_splashes": true,
 	"snowflakes": true,
 	"tp_effects": true,
-	"acorrentada_visuals": true,
 	"devorador_effects": true,
 	"common_card_effects": true
 }
@@ -101,8 +101,6 @@ func _ensure_card_unlock_defaults() -> void :
 			core.unlocked_card_ids[card_id] = true
 	for key in core.MANIFESTATION_UNLOCK_ALWAYS_AVAILABLE:
 		core.unlocked_manifestation_ids[String(key)] = true
-	if core.retornante_unlocked:
-		core.unlocked_manifestation_ids["retornante"] = true
 	for key in core.SPECTRUM_UNLOCK_ALWAYS_AVAILABLE:
 		core.unlocked_spectrum_ids[String(key)] = true
 	for aura in core.AURAS:
@@ -294,7 +292,6 @@ func _flush_card_unlocks_if_dirty() -> void :
 
 func _load_config() -> void :
 
-	core.retornante_unlocked = false
 	core.online_mode_unlocked = false
 	core.qa_streaming_unlocked = false
 	core.qa_streaming_enabled = false
@@ -337,8 +334,7 @@ func _load_config() -> void :
 				elif k == "hud_coagulum_scale": core.hud_coagulum_scale = clamp(float(v), core.HUD_PANEL_SCALE_MIN, core.HUD_PANEL_SCALE_MAX)
 				elif k == "analog_fixed": core.analog_fixed = v != "false"
 				elif k == "analog_mode": core.analog_fixed = v != "dinamico"
-				elif k == "shop_auto_enabled": core.shop_auto_enabled = v != "false"
-				elif k == "shop_auto_interval": core.shop_auto_interval = clamp(float(v), 180.0, 480.0)
+				elif k == "shop_auto_enabled" or k == "shop_auto_interval": pass # loja manual aposentada: sempre Fenda/automatica
 				elif k == "auto_target_priority": core.auto_target_priority = core._sanitize_target_priority(v)
 				elif k == "haptics_enabled": core.haptics_enabled = v != "false"
 				elif k == "show_fps_counter": core.show_fps_counter = v == "true"
@@ -455,8 +451,6 @@ func _save_config() -> void :
 		file.store_string("hud_coagulum_scale=" + str(core.hud_coagulum_scale) + "\n")
 		file.store_string("analog_mode=" + ("fixo" if core.analog_fixed else "dinamico") + "\n")
 		file.store_string("analog_fixed=" + ("true" if core.analog_fixed else "false") + "\n")
-		file.store_string("shop_auto_enabled=" + ("true" if core.shop_auto_enabled else "false") + "\n")
-		file.store_string("shop_auto_interval=" + str(core.shop_auto_interval) + "\n")
 		file.store_string("auto_target_priority=" + core.auto_target_priority + "\n")
 		file.store_string("haptics_enabled=" + ("true" if core.haptics_enabled else "false") + "\n")
 		file.store_string("show_fps_counter=" + ("true" if core.show_fps_counter else "false") + "\n")
@@ -529,7 +523,7 @@ func _interrupted_run_field_names() -> Array:
 		"score", "score_total", "run_points_earned", "run_points_spent", "card_cost", "cards_bought", "combo_kills", "enemies_killed", "enemy_base_hp", "enemy_speed_base", "enemy_close_damage", "enemy_far_damage", "spawn_timer",
 		"last_attack_time", "last_dash_time", "last_skill_time", "last_secondary_time", "last_damage_time", "forced_shop_timer", "forced_shop_triggered", "next_forced_shop_time", "shop_auto_elapsed", "shop_opening_timer", "shop_opening_forced", "shop_opening_manual_already_tracked", "shop_return_timer",
 		"shop_cards", "shop_selected", "shop_rerolls", "shop_purchase_anim_timer", "shop_purchase_pending_card", "shop_purchase_pending_can_continue", "shop_purchase_pending_price", "shop_reserved_card_id", "shop_locked_slots", "shop_recent_common_ids", "shop_slot_intents", "shop_generation_profile", "shop_generation_index", "shop_visit_index", "shop_reroll_index", "shop_recent_generation_ids", "shop_current_visit_eligible_cinzas", "shop_last_generation_telemetry", "shop_seed", "shop_endurance_discount", "bargain_capsule", "bargain_capsule_next_check_time", "bargain_capsule_event_sequence", "bargain_capsule_pending_discount", "bargain_capsule_last_result", "shop_rift", "shop_rift_kills", "shop_rift_fragments", "shop_rift_next_allowed_time", "shop_bargain_discount_session", "shop_last_manual_open_time", "shop_recent_manual_open_count", "shop_purchases_this_visit", "shop_last_exit_had_purchase", "shop_last_exit_time", "shop_abuse_penalty_count", "shop_manual_cooldown_until", "shop_manual_grace_until", "shop_manual_grace_reopen_available", "shop_manual_visit_active", "shop_manual_visit_grace_on_close", "shop_manual_cooldown_pulse",
-		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "anchors", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "return_bullets", "manifestation_secondaries", "henry_attack_combo", "henry_attack_visual_stage", "henry_skill_cast_active", "henry_skill_cast_elapsed", "henry_skill_cast_direction", "henry_skill_damage_applied", "henry_flame_cones", "henry_ultimate_cast_active", "henry_ultimate_cast_elapsed", "henry_ultimate_center", "henry_ultimate_event_id", "henry_heat_waves", "henry_boss_burn_state", "henry_friction", "henry_friction_release_timer", "henry_incandescence_active_timer", "henry_incandescence_tick_timer", "henry_incandescence_intensity", "henry_incandescence_target_dwell", "henry_incandescence_zones",
+		"enemies", "bullets", "enemy_bullets", "larapio_coin_drops", "shockwaves", "effects", "heal_orbs", "slashes", "prisms", "orbitals", "seed_links", "parasite_spit_zones", "manifestation_secondaries", "henry_attack_combo", "henry_attack_visual_stage", "henry_skill_cast_active", "henry_skill_cast_elapsed", "henry_skill_cast_direction", "henry_skill_damage_applied", "henry_flame_cones", "henry_ultimate_cast_active", "henry_ultimate_cast_elapsed", "henry_ultimate_center", "henry_ultimate_event_id", "henry_heat_waves", "henry_boss_burn_state", "henry_friction", "henry_friction_release_timer", "henry_incandescence_active_timer", "henry_incandescence_tick_timer", "henry_incandescence_intensity", "henry_incandescence_target_dwell", "henry_incandescence_zones",
 		"trembo_charges", "trembo_pos", "trembo_side", "trembo_heal_timer", "trembo_anim_time", "trembo_facing", "trembo_invulnerability", "petro_active", "petro_pos", "petro_fire_timer", "petro_hp", "petro_hp_max", "petro_defense", "petro_damage", "petro_evolution", "petro_anim_time", "petro_facing",
 		"boss_ready", "boss_call_timer", "boss_active", "boss_dead", "boss_hp", "boss_hp_max", "boss_pos", "boss_phase", "boss_attack_timer", "boss_entry_timer", "boss_stage_timer", "boss_stage_approaching", "boss_stage_60_done", "boss_stage_40_done", "boss_stage_30_done", "boss_stage_safe_angle", "boss_attacks", "boss_transition_waves", "boss_name", "boss_title_color", "boss_empurrou_player",
 		"boss_poison_timer", "boss_poison_tick", "boss_parasite_seeds", "boss_parasite_mark_time", "miasma_eel_slow_timer", "miasma_eel_slow_stacks", "pustule_spit_slow_timer", "pustule_spit_slow_grace_timer", "boss_tp_stun_timer", "boss_wave_slow_timer", "player_stun_timer", "player_silence_timer", "revive_heal_penalty_timer", "player_freeze_visual_timer", "player_freeze_visual_duration",
@@ -543,9 +537,7 @@ func _interrupted_run_field_names() -> Array:
 		"weather_kind", "weather_rain_intro_timer", "boss1_rain_active", "raindrops", "puddles", "rain_splashes", "snowflakes",
 		"paradox_charge_hits", "paradox_ready", "paradox_active_timer", "paradox_echo_queue", "paradox_flash",
 		"fratura_cronal_cooldown", "fratura_cronal_armed", "pulso_desestabilizador_cooldown", "pulso_desestabilizador_armed", "boss_fragilidade_cronal_timer", "boss_fragilidade_cronal_bonus", "ferrolho_ruptura_cooldown", "ferrolho_ruptura_armed", "desvio_probabilidade_charges", "boss_ferrolho_slow_timer", "boss_ferrolho_slow_ratio", "boss_choque_source_category", "boss_choque_source_until", "boss_choque_cooldown_until", "boss_limiar_mask", "boss_limiar_phase", "common_card_effects", "rare_card_effects", "tregua_regenerativa_timer", "tregua_regenerativa_active", "tregua_regenerativa_pulse", "cinzas_burn_marks", "reserva_pulso_stored", "reserva_pulso_releasing", "reserva_pulso_pulse", "casulo_hit_times", "casulo_reativo_timer", "casulo_reativo_cooldown", "passagem_intangivel_timer", "ancora_vital_state", "estase_reparadora_timer", "estase_reparadora_tick", "estase_reparadora_pause", "estase_reparadora_anchor", "estase_reparadora_active", "estase_reparadora_pulse", "manto_impulso_shield", "manto_impulso_timer", "manto_impulso_pulse", "recusa_dano_pulse", "sutura_gradual_pending", "sutura_gradual_timer", "sutura_gradual_tick", "sutura_gradual_pulse", "egide_hemofaga_shield", "egide_hemofaga_full_timer", "egide_hemofaga_pulse", "mandamento_skill_uses", "mandamento_empowered_until", "mandamento_empowered_scale", "mandamento_invulnerability", "mandamento_break_flash", "carta_zero_applied_multiplier", "rastro_vestiges", "rastro_spawn_timer", "rastro_last_spawn_pos", "rastro_speed_timer", "rastro_speed_bonus", "impulso_ready_times", "impulso_charges", "impulso_bonus", "impulso_timer", "impulso_size_bonus", "eco_counters", "zona_charge", "zona_cooldown", "zona_flash", "folego_target_key", "folego_charge", "folego_prev_distance", "folego_damage_window", "folego_damage_bonus", "folego_last_move_dir", "margem_window_timer", "margem_debt", "margem_debt_total", "margem_debt_timer", "margem_debt_duration", "margem_debt_tick", "margem_safety_timer", "ressonancia_symbols", "ressonancia_window_timer", "ressonancia_ready_timer", "ressonancia_ready_action", "ressonancia_speed_timer", "ressonancia_speed_bonus", "ressonancia_preresonance_used", "necro_kill_counter", "active_necro_specters", "antimatter_charge", "antimatter_armed", "antimatter_flash", "stored_excess", "excess_discharge_kind", "excess_discharge_uid", "excess_discharge_flash", "devorador_mark_timer", "devorador_mark_kind", "devorador_mark_uid", "devorador_marked_max_hp", "devorador_mark_pos", "devorador_boss_mark_start_hp", "devorador_boss_mark_max_hp", "devorador_destiny_shield", "devorador_shield_timer", "devorador_effects",
-		"cartographic_coords", "cartographic_route_timer", "cartographic_boss_displacement", "mnesic_trick_timer", "mnesic_trick_origin", "mnesic_boss_vulnerability", "resonant_perfect_streak", "resonant_noise", "resonant_next_perfect", "resonant_speed_timer", "resonant_sinfonia_buff_timer", "resonant_note_index", "boss_resonant_notes", "boss_contract_clause", "boss_contract_infractions", "boss_contract_vulnerability", "contractual_notifications", "contractual_penalty_timer", "contractual_order", "contractual_order_rewards", "contractual_order_penalties",
-		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "retornante_memoria_pending", "retornante_tp_origin", "retornante_tp_window", "eletrica_shot_counter", "tp_effects", "necronada_vestiges", "necronada_remnants", "necronada_requiem", "necronada_pente_history", "necronada_attack_counter", "necronada_empowered_ready", "necronada_empower_until", "necronada_empower_cooldown_until", "necronada_horde_progress",
-		"acorrentada_combo_step", "acorrentada_combo_reset_timer", "acorrentada_tension", "acorrentada_last_hit_timer", "acorrentada_overcharge_ready", "acorrentada_force_next_attack_3", "acorrentada_links", "acorrentada_visuals", "acorrentada_worn_chains", "acorrentada_last_player_pos", "acorrentada_boss_elos", "acorrentada_boss_elo_timer", "acorrentada_boss_crack_timer", "acorrentada_boss_containment_charges"
+		"lacerante_combo", "lacerante_combo_visual", "lacerante_preparing", "lacerante_prepare_stage", "lacerante_prepare_frame", "lacerante_prepare_timer", "lacerante_prepare_dir", "lacerante_coagula", "lacerante_empowered_ready", "last_lacerante_empower_time", "lacerante_coagulum_pulse", "lacerante_tp_charges", "lacerante_tp_chain_timer", "lacerante_tp_cooldown_until", "eletrica_shot_counter", "tp_effects"
 	]
 	names.append_array(["boss6_stage", "boss6_move_phase", "boss6_ai_state"])
 	return names
@@ -718,7 +710,8 @@ func _load_interrupted_run_summary() -> void :
 func _interrupted_run_summary_from_snapshot(snapshot: Dictionary) -> Dictionary:
 	if snapshot.is_empty():
 		return {}
-	var fields: Dictionary = snapshot.get("fields", {})
+	var fields: Dictionary = Dictionary(snapshot.get("fields", {})).duplicate(true)
+	ManifestationRosterSaveMigration.normalize_snapshot_fields(fields, core.CHARACTER_GEOVANA, core.CHARACTER_HENRY, core.HENRY_SELECTION_INDEX)
 	var phase: = int(fields.get("current_phase", 1))
 	var total_seconds: = int(max(0.0, float(fields.get("time_alive", 0.0))))
 	var is_henry: bool = String(fields.get("active_character_key", core.CHARACTER_GEOVANA)) == core.CHARACTER_HENRY
@@ -762,6 +755,7 @@ func _resume_interrupted_run() -> bool:
 		_clear_interrupted_run_save()
 		return false
 	var fields: Dictionary = snapshot.get("fields", {})
+	ManifestationRosterSaveMigration.normalize_snapshot_fields(fields, core.CHARACTER_GEOVANA, core.CHARACTER_HENRY, core.HENRY_SELECTION_INDEX)
 	core._set_run_mode_local(String(fields.get("selected_run_mode", core.RUN_MODE_SHOP)))
 	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
 	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
@@ -842,6 +836,7 @@ func _use_run_retry() -> bool:
 	var fields: Dictionary = retry_run_snapshot.get("fields", {})
 	if fields.is_empty():
 		return false
+	ManifestationRosterSaveMigration.normalize_snapshot_fields(fields, core.CHARACTER_GEOVANA, core.CHARACTER_HENRY, core.HENRY_SELECTION_INDEX)
 	retry_charges_used += 1
 	core.active_character_key = String(fields.get("active_character_key", core.CHARACTER_GEOVANA))
 	core.selected_manifestation = core.HENRY_SELECTION_INDEX if core.active_character_key == core.CHARACTER_HENRY else clampi(int(fields.get("selected_manifestation", core.selected_manifestation)), 0, core.MANIFESTATIONS.size() - 1)
