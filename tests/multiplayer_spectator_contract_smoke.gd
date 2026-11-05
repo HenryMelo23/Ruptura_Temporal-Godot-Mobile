@@ -28,7 +28,9 @@ func _run() -> void:
 	game.online_lobby_ready_count = 0
 	game.online_local_spectator = false
 	game._start_game()
-	_check(is_equal_approx(game.enemy_base_hp, game.ENEMY_BASE_HP), "solo host with spectator scaled enemy health")
+	# The randomized opening map may have its own native HP curve. A spectator
+	# must not add a multiplayer party multiplier on top of that curve.
+	_check(is_equal_approx(game._multiplayer_enemy_hp_scale(), 1.0), "solo host with spectator received multiplayer enemy health scaling")
 	_check(game._online_client_ready(), "host could not start with a spectator-only client")
 
 	game.online_lobby_active_player_count = 2

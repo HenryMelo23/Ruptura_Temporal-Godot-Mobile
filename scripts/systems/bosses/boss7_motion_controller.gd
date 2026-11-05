@@ -47,6 +47,26 @@ func reset() -> void:
 	swoop.clear()
 
 
+func visual_snapshot() -> Dictionary:
+	return {
+		"bank": bank,
+		"altitude": altitude,
+		"trail": trail.duplicate(),
+		"swoop": swoop.duplicate(true),
+		"shadow_pos": shadow_pos,
+		"land_left": land_left,
+	}
+
+
+func apply_remote_visual_snapshot(data: Dictionary) -> void:
+	bank = clampf(float(data.get("bank", bank)), -1.0, 1.0)
+	altitude = clampf(float(data.get("altitude", altitude)), 0.0, 1.0)
+	trail.assign(Array(data.get("trail", [])))
+	swoop = Dictionary(data.get("swoop", {})).duplicate(true)
+	shadow_pos = Vector2(data.get("shadow_pos", shadow_pos))
+	land_left = maxf(0.0, float(data.get("land_left", land_left)))
+
+
 ## Chamado todo frame da fase 7 (qualquer estado): cauda, inclinacao, altitude.
 func update_common(delta: float) -> void:
 	var state_now: String = String(game.boss7_state)

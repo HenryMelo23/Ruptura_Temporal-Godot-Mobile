@@ -211,6 +211,17 @@ func _run_new_evolution_after_previous_barrier() -> void:
 
 func _run() -> void:
 	await process_frame
+	if not game.MANIFEST_EVOLUTIONS_ENABLED:
+		game._open_manifest_evolution_choice(Vector2(700, 400))
+		_check(not game.manifest_evolution_barrier_active, "disabled evolutions opened a multiplayer barrier")
+		_check(game.mode != "manifest_evolution" and game.mode != "manifest_evolution_waiting", "disabled evolutions blocked multiplayer gameplay")
+		print("MULTIPLAYER_MANIFEST_EVOLUTION_BARRIER_SMOKE_OK disabled=true barrier=false")
+		root.remove_child(game)
+		game._cleanup_runtime_resources()
+		game.free()
+		await process_frame
+		quit(0)
+		return
 	_run_host_ready_first()
 	_run_client_ready_first()
 	_run_two_clients_and_duplicate_ready()
@@ -221,8 +232,9 @@ func _run() -> void:
 	_run_disconnect_during_barrier()
 	_run_new_evolution_after_previous_barrier()
 	print("MULTIPLAYER_MANIFEST_EVOLUTION_BARRIER_SMOKE_OK host_first client_first simultaneous_request two_clients duplicate_ready authoritative_ready dedicated_idempotency reordering disconnect repeat")
+	root.remove_child(game)
 	game._cleanup_runtime_resources()
-	game.queue_free()
+	game.free()
 	await process_frame
 	await process_frame
 	quit(0)

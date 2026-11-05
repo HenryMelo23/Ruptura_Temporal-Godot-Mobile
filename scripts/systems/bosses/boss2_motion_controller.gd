@@ -62,6 +62,20 @@ func reset() -> void:
 	trail.clear()
 
 
+func visual_snapshot() -> Dictionary:
+	return {
+		"dash": dash.duplicate(true),
+		"sliding": sliding,
+		"trail": trail.duplicate(true),
+	}
+
+
+func apply_remote_visual_snapshot(data: Dictionary) -> void:
+	dash = Dictionary(data.get("dash", {})).duplicate(true)
+	sliding = bool(data.get("sliding", false))
+	trail = Array(data.get("trail", [])).duplicate(true)
+
+
 func dashing() -> bool:
 	return not dash.is_empty()
 

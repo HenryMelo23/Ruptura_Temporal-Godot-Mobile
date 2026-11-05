@@ -51,8 +51,14 @@ func _run() -> void:
 	_check(is_equal_approx(game._multiplayer_enemy_hp_scale(), game.MULTIPLAYER_ENEMY_HP_SCALE_3P), "three-player enemy hp scale is not active")
 	_check(is_equal_approx(game._multiplayer_boss_damage_scale(), game.MULTIPLAYER_BOSS_DAMAGE_SCALE_3P), "three-player boss damage scale is not active")
 	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss hp scale is not active")
+	# The native phase cap and long-run pressure are intentionally dynamic. Prove
+	# the multiplayer contribution as a delta instead of assuming phase 1's old
+	# fixed base cap.
+	game.is_multiplayer = false
+	var solo_desired_enemy_limit: int = game.enemy_manager.get_desired_enemy_limit(true)
+	game.is_multiplayer = true
 	var desired_enemy_limit: int = game.enemy_manager.get_desired_enemy_limit(true)
-	_check(desired_enemy_limit == game.ENEMY_MAX_BASE + game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player desired enemy limit bonus is not active")
+	_check(desired_enemy_limit - solo_desired_enemy_limit == game.MULTIPLAYER_ENEMY_LIMIT_BONUS_3P, "three-player desired enemy limit bonus is not active")
 	_check(game._enemy_limit() <= desired_enemy_limit, "device-safe enemy cap exceeded the multiplayer desired limit")
 	game.online_room_owner = true
 	game.is_host = true

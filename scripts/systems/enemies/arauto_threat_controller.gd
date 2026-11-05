@@ -88,6 +88,26 @@ func reset() -> void:
 	_phase2_seen = false
 
 
+## Only public telegraph state crosses the wire. Cooldowns, venom damage and
+## target decisions remain authority-owned.
+func visual_snapshot() -> Dictionary:
+	return {
+		"ability": ability.duplicate(true),
+		"inversion": inversion.duplicate(true),
+		"stings": stings.duplicate(true),
+		"spikes": spikes.duplicate(true),
+		"shell_spike_cd": shell_spike_cd,
+	}
+
+
+func apply_remote_visual_snapshot(data: Dictionary) -> void:
+	ability = Dictionary(data.get("ability", {})).duplicate(true)
+	inversion = Dictionary(data.get("inversion", {})).duplicate(true)
+	stings = Array(data.get("stings", [])).duplicate(true)
+	spikes = Array(data.get("spikes", [])).duplicate(true)
+	shell_spike_cd = maxf(0.0, float(data.get("shell_spike_cd", 0.0)))
+
+
 func busy() -> bool:
 	return not ability.is_empty()
 

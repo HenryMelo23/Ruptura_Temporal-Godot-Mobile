@@ -75,6 +75,16 @@ func _run() -> void:
 	)
 	_check(identity_result.size() == 1 and String(identity_result[0].get("type", "")) == new_type, "enemy identity type did not update")
 	_check(not identity_result[0].has("old_type_ability"), "new enemy body inherited an ability from the previous type")
+	var amber_packet: PackedFloat32Array = game.RTNetContractScript.pack_enemies(
+		[{"uid": 4343, "type": new_type, "pos": Vector2(180, 260), "hp": 20.0, "max_hp": 20.0, "bit": 7, "amber_patched": true, "amber_elite": true}],
+		game.NET_ENEMY_TYPES,
+		game.ENEMY_COMMON,
+		game.NET_LEECH_STATES,
+		game.SANGUESSUGA_STATE_DORMANT
+	)
+	var amber_result: Array = game.RTNetContractScript.unpack_enemy_snapshot(amber_packet, {}, game.NET_ENEMY_TYPES, game.ENEMY_COMMON, game.NET_LEECH_STATES, game.ENEMY_CHRONAL_LEECH, Time.get_ticks_msec())
+	_check(amber_result.size() == 1 and bool(amber_result[0].get("amber_patched", false)) and bool(amber_result[0].get("amber_elite", false)), "Suturer amber variants were lost in transport")
+	_check(int(amber_result[0].get("bit", -1)) == 7, "amber flags corrupted the legacy animation byte")
 	var reversed_enemy_types: Array = game.NET_ENEMY_TYPES.duplicate()
 	reversed_enemy_types.reverse()
 	var reordered_identity_result: Array = game.RTNetContractScript.unpack_enemy_snapshot(

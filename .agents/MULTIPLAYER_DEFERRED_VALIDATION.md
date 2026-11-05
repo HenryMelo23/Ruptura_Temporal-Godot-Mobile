@@ -689,3 +689,37 @@ Suggested tests/runners: exact paths or commands to use later.
 ## Boss 7 (Fenix) rework (2026-11-05)
 - `RTBoss7MotionController` (voo em curvas, rasante `swoop_warn`/`swoop`, altitude/sombra do mergulho) roda no host via `boss_pos`/`boss7_state`. Replicas: conferir que os estados novos chegam no snapshot de estado do boss e que `altitude`/`trail` (locais, derivados de `boss_pos`) ficam coerentes.
 - Chuva de Fogo agora causa dano (`RTBoss7Attacks.update_sky_fireballs`), usando `_damage_remote_player_in_radius` no host.
+
+## 2026-11-05 — Retomada da validação multiplayer pós-solo
+
+- Baseline remoto preservado em `6f20d6a` (`runtime-refactor-next`) antes das
+  correções multiplayer.
+- Contratos antigos reparados sem reativar recursos aposentados: limite de
+  horda mede o delta multiplayer sobre o mapa atual; loja valida contagem
+  automática/Fenda legada online e confirma que a loja manual permanece
+  inacessível; evolução de manifestação desativada não abre barreira.
+- Transporte novo comprovado por round-trip host/réplica:
+  - avisos do Arauto (`ability`, `inversion`, ferrões e espinhos);
+  - preparo/rastro do Boss 2;
+  - Suturador (`stitch`, `cocoon`, `tethers`) e flags `amber_patched` /
+    `amber_elite` no snapshot compacto de inimigos;
+  - `boss6_ai_state` (incluindo mergulho/emergência);
+  - movimento visual do Boss 7 (altitude, sombra, banco, rastro, rasante,
+    velocidade e direção);
+  - Artefato de Fúria definido como buff de equipe; Ímã preserva o peer coletor.
+- Provas locais aprovadas: bateria direta de 21 contratos; runner real local de
+  três processos (`authority`, `visuals`, `room lifecycle`); reconciliação
+  `server + host + client + client2` para ready, espectador, loja, manifestação,
+  espectro e partida.
+- Ainda não validado/não liberado como concluído:
+  - execução da Lacerante por cliente não-host (exige reserva autoritativa por
+    peer, resposta e replay visual; não deve reutilizar o controlador local do
+    host);
+  - escolhas pós-chefe/pactos com barreira de equipe e aplicação única dos
+    multiplicadores globais;
+  - status hostis do Arauto em peers remotos (Silêncio/Veneno) e puxões físicos
+    de Inversão; os danos geométricos já usam o caminho remoto existente;
+  - trilha/explosões/cancelamento do Henry Incendiário e idle/freada do Colosso;
+  - Necrocronismo, poços/colisões da Gravitante e dossiê unificado no UI MP;
+  - sessão pública pelo relay, reconexão durante ataques, Android físico e
+    cliente com desempenho muito inferior ao host.

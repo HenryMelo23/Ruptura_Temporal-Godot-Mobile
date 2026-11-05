@@ -49,6 +49,24 @@ func reset() -> void:
 	_tracked.clear()
 
 
+## The replica needs the warnings and amber links, never the authority's
+## corpse inventory or cooldown decisions.
+func visual_snapshot() -> Dictionary:
+	return {
+		"encounter_id": encounter_id,
+		"stitch": stitch.duplicate(true),
+		"cocoon": cocoon.duplicate(true),
+		"tethers": tethers.duplicate(true),
+	}
+
+
+func apply_remote_visual_snapshot(data: Dictionary) -> void:
+	encounter_id = String(data.get("encounter_id", encounter_id))
+	stitch = Dictionary(data.get("stitch", {})).duplicate(true)
+	cocoon = Dictionary(data.get("cocoon", {})).duplicate(true)
+	tethers = Array(data.get("tethers", [])).duplicate(true)
+
+
 func _excluded(enemy: Dictionary) -> bool:
 	var kind := String(enemy.get("type", ""))
 	return kind in [RTPhase6AmberSuturerController.TYPE_ID, RTPhase6AmberSuturerController.NODE_TYPE_ID] \

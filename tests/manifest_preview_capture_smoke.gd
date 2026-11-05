@@ -180,7 +180,6 @@ func _spawn_preview_enemies() -> void:
 
 func _prepare_manifestation_context(key: String) -> void:
 	game.manifestation_key = key
-				enemy["contract_flash"] = 0.85
 
 
 func _prepare_skill_clip(key: String) -> void:

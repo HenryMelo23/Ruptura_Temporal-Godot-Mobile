@@ -178,7 +178,15 @@ static func pack_enemies(enemies: Array, enemy_types: Array, default_enemy_type:
 		packed[offset + 6] = float(enemy.get("max_hp", enemy.get("hp", 1.0)))
 		packed[offset + 7] = float(enemy.get("phase", 0.0))
 		packed[offset + 8] = float(enemy.get("shield_flash", 0.0))
-		packed[offset + 9] = float(enemy.get("bit", 0))
+		# Preserve the old animation byte and use high bits for visual-only amber
+		# variants. Old clients safely ignore the high bits; new clients can render
+		# patched/elite Suturador enemies without widening the hot snapshot stride.
+		var visual_bits: int = int(enemy.get("bit", 0)) & 0xff
+		if bool(enemy.get("amber_patched", false)):
+			visual_bits |= 1 << 8
+		if bool(enemy.get("amber_elite", false)):
+			visual_bits |= 1 << 9
+		packed[offset + 9] = float(visual_bits)
 		packed[offset + 10] = facing.x
 		packed[offset + 11] = facing.y
 		packed[offset + 12] = last_move.x
@@ -302,7 +310,10 @@ static func unpack_enemy_snapshot(snapshot_data, existing_by_uid: Dictionary, en
 			enemy["max_hp"] = packed[offset + 6]
 			enemy["phase"] = packed[offset + 7]
 			enemy["shield_flash"] = packed[offset + 8]
-			enemy["bit"] = int(packed[offset + 9])
+			var visual_bits: int = int(packed[offset + 9])
+			enemy["bit"] = visual_bits & 0xff
+			enemy["amber_patched"] = (visual_bits & (1 << 8)) != 0
+			enemy["amber_elite"] = (visual_bits & (1 << 9)) != 0
 			enemy["facing_dir"] = Vector2(packed[offset + 10], packed[offset + 11])
 			enemy["last_move_dir"] = Vector2(packed[offset + 12], packed[offset + 13])
 			enemy["invisible"] = packed[offset + 14] > 0.5
