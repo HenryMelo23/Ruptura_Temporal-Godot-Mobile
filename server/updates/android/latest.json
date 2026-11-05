@@ -1,14 +1,14 @@
 {
-  "version": "2.0.64",
-  "version_code": 26400,
-  "filename": "ruptura_temporal_mobile_2.0.64.apk",
-  "sha256": "1fd396ab21fa6390cd519a5103d93e607d2eb00884fcb67f55777a32055e999c",
-  "size": 959603255,
+  "version": "2.0.65",
+  "version_code": 26500,
+  "filename": "ruptura_temporal_mobile_2.0.65.apk",
+  "sha256": "77842c90caf951f0d32000aad8dfe3aa29fe9f5d7264dac5c78cd332cf469411",
+  "size": 864722101,
   "notes": [
-    "Chefes 4 e 6 retrabalhados com ataques, locomocao, telegraph e apresentacao visual renovados.",
-    "Progressao, cartas e pressao das hordas ajustadas para runs longas sem sacrificar a qualidade visual.",
-    "Multiplayer revisado em lobby, pronto/inicio, manifestacoes, espectadores, combate e progressao compartilhada."
+    "Sincronizacao multiplayer de manifestacoes, efeitos e estados remotos revisada.",
+    "Ajustes recentes de progressao, chefes, mapas e desempenho consolidados.",
+    "Compatibilidade preservada com atualizador, saves e plataformas suportadas."
   ],
   "mandatory": false,
-  "published_at": "2026-11-04T01:32:47Z"
+  "published_at": "2026-11-05T21:21:59Z"
 }

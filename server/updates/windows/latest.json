@@ -1,14 +1,14 @@
 {
-  "version": "2.0.64",
-  "version_code": 26400,
-  "filename": "Ruptura_Temporal_2.0.64.exe",
-  "sha256": "1fa7c43f4563276eed1296540df74c204227708c0e19217aaf18196d8351b837",
-  "size": 1048986432,
+  "version": "2.0.65",
+  "version_code": 26500,
+  "filename": "Ruptura_Temporal_2.0.65.exe",
+  "sha256": "641a481f48fbea3fb3b4f7c21dc6fbf1af5553178dcdd37df290a7b991e2939f",
+  "size": 954094864,
   "notes": [
-    "Chefes 4 e 6 retrabalhados com ataques, locomocao, telegraph e apresentacao visual renovados.",
-    "Progressao, cartas e pressao das hordas ajustadas para runs longas sem sacrificar a qualidade visual.",
-    "Multiplayer revisado em lobby, pronto/inicio, manifestacoes, espectadores, combate e progressao compartilhada."
+    "Sincronizacao multiplayer de manifestacoes, efeitos e estados remotos revisada.",
+    "Ajustes recentes de progressao, chefes, mapas e desempenho consolidados.",
+    "Compatibilidade preservada com atualizador, saves e plataformas suportadas."
   ],
   "mandatory": false,
-  "published_at": "2026-11-04T01:32:47Z"
+  "published_at": "2026-11-05T21:21:59Z"
 }
