@@ -78,7 +78,7 @@ static func _draw_tutorial_offer(game: Node2D, viewport: Vector2, t: float) -> v
 	game._draw_menu_grid(viewport, Color(0.0, 1.0, 0.82, 0.09), 42.0)
 	game._draw_holo_panel(panel, Color(0.0, 1.0, 0.82), true, 0.84)
 	game._draw_glitch_title("TREINAMENTO DE RUPTURA", panel.position + Vector2(panel.size.x * 0.5, 48.0), 28, Color(0.0, 1.0, 0.82))
-	game._draw_wrapped("Antes da partida comecar, Geovana pode sincronizar um treinamento curto. Ele ensina disparo, habilidade, segunda habilidade e dash sem liberar a invasao completa.", body_rect, 18, Color(0.88, 0.96, 1.0, 0.96))
+	game._draw_wrapped("Antes da partida comecar, Geovana pode sincronizar um treinamento curto. Ele ensina disparo, habilidades e teleporte do jeito que seus controles estao configurados, e so depois libera a invasao.", body_rect, 18, Color(0.88, 0.96, 1.0, 0.96))
 	var pulse: float = 0.5 + sin(t * 5.0) * 0.5
 	game.draw_line(panel.position + Vector2(34.0, panel.size.y - 78.0), panel.position + Vector2(panel.size.x - 34.0, panel.size.y - 78.0), Color(1.0, 0.12, 0.72, 0.2 + pulse * 0.22), 2.0)
 	game._draw_big_button(Rect2(rects["tutorial_yes"]), "JOGAR TUTORIAL", Color(0.0, 0.42, 0.42, 0.75), Color(0.0, 1.0, 0.82), game.tutorial_prompt_selected == 0)
@@ -88,7 +88,7 @@ static func _draw_tutorial_offer(game: Node2D, viewport: Vector2, t: float) -> v
 static func _draw_tutorial_story_step(game: Node2D, viewport: Vector2, t: float) -> void:
 	var panel: Rect2 = game._tutorial_panel_rect(viewport)
 	var rects: Dictionary = game._tutorial_prompt_rects(viewport)
-	var data: Dictionary = Dictionary(game.TUTORIAL_STEP_TEXTS.get(game.tutorial_state, {}))
+	var data: Dictionary = game._tutorial_step_text(game.tutorial_state)
 	var title: String = String(data.get("title", "RUPTURA"))
 	var body: String = String(data.get("body", ""))
 	var hint: String = String(data.get("hint", ""))
@@ -107,7 +107,7 @@ static func _draw_tutorial_story_step(game: Node2D, viewport: Vector2, t: float)
 
 static func _draw_tutorial_practical_step(game: Node2D, viewport: Vector2, camera: Vector2, t: float) -> void:
 	var panel: Rect2 = game._tutorial_compact_panel_rect(viewport)
-	var data: Dictionary = Dictionary(game.TUTORIAL_STEP_TEXTS.get(game.tutorial_state, {}))
+	var data: Dictionary = game._tutorial_step_text(game.tutorial_state)
 	var title: String = String(data.get("title", "TREINO"))
 	var body: String = String(data.get("body", ""))
 	var hint: String = String(data.get("hint", ""))
@@ -121,6 +121,9 @@ static func _draw_tutorial_practical_step(game: Node2D, viewport: Vector2, camer
 
 
 static func _draw_tutorial_target_markers(game: Node2D, camera: Vector2, t: float) -> void:
+	if game.tutorial_state == RTTutorialGuide.STATE_DASH_LINE:
+		game._tutorial_guide().draw_dash_line(game, camera, t)
+		return
 	if game.tutorial_state == game.TUTORIAL_STATE_DASH:
 		var player_screen: Vector2 = game.player_pos - camera
 		var danger_r: float = 84.0 + sin(t * 6.0) * 7.0
@@ -143,9 +146,6 @@ static func _draw_tutorial_context_button_hint(game: Node2D, t: float) -> void:
 	var action_key = ""
 	var label = ""
 	match game.tutorial_state:
-		game.TUTORIAL_STATE_SHOP:
-			action_key = "shop_manual"
-			label = "LOJA"
 		game.TUTORIAL_STATE_BOSS_CALL:
 			action_key = "boss"
 			label = "BOSS"
@@ -587,7 +587,7 @@ static func _draw_gameplay_settings(game: Node2D, viewport: Vector2) -> void :
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_aim"], "MIRA DAS HABILIDADES", "Como Q/E usam o cursor no desktop.", game._desktop_aim_mode_label(), Color(0.42, 0.92, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_aim"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_teleport"):
-		game._draw_gameplay_preference(game.settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", "Cursor, alvo automatico, ultima direcao ou confirmacao.", game._desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_teleport"))
+		game._draw_gameplay_preference(game.settings_buttons["desktop_teleport"], "TELEPORTE DESKTOP", ("Ataque automatico: teleporte sem mouse. Mude a MIRA DO ATAQUE para CURSOR para liberar." if game._tutorial_guide().attack_auto() else "Cursor, alvo automatico, ultima direcao ou confirmacao."), game._desktop_teleport_mode_label(), Color(0.56, 0.72, 1.0), game.settings_selected == game._gameplay_preference_index("desktop_teleport"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_attack_aim"):
 		game._draw_gameplay_preference(game.settings_buttons["desktop_attack_aim"], "MIRA DO ATAQUE BASICO", "Alvo automatico ou direcao do cursor.", game._desktop_attack_aim_mode_label(), Color(0.48, 0.88, 0.64), game.settings_selected == game._gameplay_preference_index("desktop_attack_aim"))
 	if game._uses_desktop_ui() and game.settings_buttons.has("desktop_hud_scale"):
@@ -1317,6 +1317,7 @@ static func _draw_online_label(game: Node2D, text: String, rect: Rect2, size: in
 static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 	if game.mode == "manifest":
 		RTBuildSelectPresentation.draw(game, viewport, _geovana_build_model(game))
+		RTQuantumChipUI.draw(game, viewport)
 		if game.manifest_preview_open:
 			game._draw_manifest_preview_popup(viewport, game.MANIFESTATIONS[game.selected_manifestation])
 		if game.manifest_details_open:
@@ -1585,7 +1586,9 @@ static func _geovana_build_model(game: Node2D) -> Dictionary:
 		"primary_enabled": unlocked,
 		"preview_enabled": unlocked and not aura_view and game.manifest_select_stage == game.MANIFEST_STAGE_MANIFESTATION,
 		"hint": "A / D, ARRASTE OU TOQUE NUMA CARTA",
-		"keys": {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next"},
+		"keys": {"primary": "manifest_start", "back": "manifest_back", "preview": "manifest_preview", "pick_prefix": "build_pick_", "prev": "build_prev", "next": "build_next", "random": "build_random", "chips": "build_chips"},
+		"chips_label": "CHIPS QUANTICOS (%d)" % game._quantum_chips().selected_count(),
+		"random_label": "ESPECTRO ALEATORIO" if aura_view else "MANIFESTACAO ALEATORIA",
 	}
 
 
@@ -1840,6 +1843,19 @@ static func _draw_effects(game: Node2D, camera: Vector2) -> void :
 			game.draw_polygon(points, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.92)]))
 			game.draw_polyline(PackedVector2Array([points[0], points[1], points[2], points[3], points[0]]), Color(1.0, 1.0, 1.0, alpha * 0.75), 1.5, true)
 			game.draw_circle(pos, size * 0.34, Color(1.0, 1.0, 1.0, alpha * 0.85))
+		elif kind == "muzzle":
+			var p = effect["pos"] - camera
+			var flash_dir: Vector2 = Vector2(effect.get("dir", Vector2.RIGHT))
+			var r = float(effect["size"]) * (0.55 + 0.45 * alpha)
+			var flash_side: Vector2 = flash_dir.orthogonal()
+			var petals = PackedVector2Array([p + flash_dir * r * 1.9, p + flash_side * r * 0.42, p - flash_dir * r * 0.5, p - flash_side * r * 0.42])
+			game.draw_polygon(petals, PackedColorArray([Color(color.r, color.g, color.b, alpha * 0.55)]))
+			game.draw_circle(p, r * 0.46, Color(1.0, 1.0, 1.0, alpha * 0.9))
+		elif kind == "ring":
+			var p = effect["pos"] - camera
+			var r = float(effect["size"]) * (0.35 + (1.0 - alpha) * 1.1)
+			game.draw_arc(p, r, 0.0, TAU, 22, Color(color.r, color.g, color.b, alpha * 0.85), maxf(1.5, 3.4 * alpha), true)
+			game.draw_arc(p, r * 0.7, 0.0, TAU, 18, Color(1.0, 1.0, 1.0, alpha * 0.5), 1.4, true)
 		elif kind == "trail":
 			var p = effect["pos"] - camera
 			var radius = float(effect["size"]) * alpha
@@ -2239,19 +2255,6 @@ static func _draw_desktop_session_buttons(game: Node2D, _viewport: Vector2) -> v
 		var pause_rect: Rect2 = game.buttons["pause"]
 		game._draw_hud_rect_button(pause_rect, "II", game.CombatHud.CYAN)
 		game._draw_centered(game._compact_key_binding_name("pause"), pause_rect.get_center() + Vector2(0, -24), 10, Color(0.72, 1.0, 0.94, 0.9))
-
-	if game.buttons.has("shop_manual"):
-		var shop_rect: Rect2 = game.buttons["shop_manual"]
-		var bargain_pending: bool = game.has_method("_bargain_pending_discount_remaining") and game._bargain_pending_discount_remaining() > 0.0
-		var shop_accent = Color(1.0, 0.78, 0.22) if bargain_pending else Color(0.0, 0.88, 1.0) if game._affordable_card_count() > 0 and game.mode == "game" else Color(0.38, 0.42, 0.46)
-		game.hud_feedback.surface(game, shop_rect, shop_accent)
-		game._draw_icon_cart(Vector2(shop_rect.position.x + 26.0, shop_rect.position.y + 22.0), 22.0, shop_accent)
-		var shop_status: String = game._manual_shop_status_text()
-		if shop_status == "":
-			game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 4.0), 16, shop_accent)
-		else:
-			game._draw_centered("LOJA", shop_rect.get_center() + Vector2(14.0, 10.0), 14, shop_accent)
-			game._draw_centered(shop_status, shop_rect.get_center() + Vector2(14.0, -10.0), 10, shop_accent)
 
 	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss") and game.experimental_phase_controller.should_show_boss_button():
 		var boss_rect: Rect2 = game.buttons["boss"]
@@ -2946,21 +2949,30 @@ static func _draw_centered_outlined(game: Node2D, text: String, pos: Vector2, si
 
 
 static func _draw_wrapped(game: Node2D, text: String, rect: Rect2, size: int, color: Color) -> void :
-	var words = text.split(" ")
-	var line = ""
-	var y = rect.position.y + size
-	for word in words:
-		var test = line + (" " if line != "" else "") + word
-		if game.font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and line != "":
-			game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
-			line = word
-			y += size + 4
+	var y: float = rect.position.y + size
+	var paragraphs: PackedStringArray = text.split("\n")
+	for p_index in range(paragraphs.size()):
+		var paragraph: String = paragraphs[p_index]
+		if p_index > 0:
+			y += size + (2 if paragraph != "" else -size * 0.4)
 			if y > rect.end.y:
 				return
-		else:
-			line = test
-	if line != "" and y <= rect.end.y:
-		game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+		if paragraph == "":
+			continue
+		var words = paragraph.split(" ")
+		var line = ""
+		for word in words:
+			var test = line + (" " if line != "" else "") + word
+			if game.font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > rect.size.x and line != "":
+				game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+				line = word
+				y += size + 4
+				if y > rect.end.y:
+					return
+			else:
+				line = test
+		if line != "" and y <= rect.end.y:
+			game.draw_string(game.font, Vector2(rect.position.x, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 
 static func _draw_wrapped_clamped(game: Node2D, text: String, rect: Rect2, size: int, color: Color, max_lines: int) -> void:

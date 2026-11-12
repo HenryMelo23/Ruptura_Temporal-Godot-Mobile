@@ -92,8 +92,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.0.65"
-const GAME_VERSION_CODE: = 26500
+const GAME_VERSION: = "2.1.0"
+const GAME_VERSION_CODE: = 26900
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -409,7 +409,8 @@ const RUN_LEADERBOARD_VIEW_PATH: = "/leaderboard"
 const UMBRA_MIND_LATEST_PATH: = "/umbra/mind/latest"
 const UMBRA_MIND_STORAGE_DIR: = "user://umbra_mind"
 const UMBRA_MIND_STATE_PATH: = "user://umbra_mind/state.json"
-const UMBRA_MIND_CHECK_INTERVAL_SECONDS: int = 7 * 24 * 60 * 60
+## A mente coletiva muda a cada partida: consulta no menu, no maximo a cada 10 min.
+const UMBRA_MIND_CHECK_INTERVAL_SECONDS: int = 10 * 60
 const RUN_REPORT_INTEGRITY_VERSION: = 1
 const RUN_REPORT_INTEGRITY_SALT: = "ruptura-temporal-run-integrity-v1-2.0.30c"
 const RUN_SECURITY_CHECKPOINT_INTERVAL: = 120.0
@@ -476,9 +477,9 @@ const LONG_RUN_SPAWN_INTERVAL_BROKEN_MULT: = 0.92
 const LONG_RUN_SPAWN_INTERVAL_ENDLESS_MULT: = 0.86
 const LONG_RUN_ENEMY_LIMIT_BROKEN_BONUS: = 3
 const LONG_RUN_ENEMY_LIMIT_ENDLESS_BONUS: = 5
-const INITIAL_PHASE_ROLL_POOL: = [1, 2, 3, 4, 6, 7]
+const INITIAL_PHASE_ROLL_POOL: = [1, 6]
 const INITIAL_PHASE_ALTERNATE_BIAS: = 0.68
-const INITIAL_PHASE_QUICK_EXIT_BIAS: = 0.82
+const INITIAL_PHASE_QUICK_EXIT_BIAS: = 1.0
 const INITIAL_PHASE_QUICK_EXIT_TIME: = 45.0
 const PHASE1_STALKER_UNLOCK_TIME: = 300.0
 const PHASE1_PROJECTOR_UNLOCK_TIME: = 420.0
@@ -792,7 +793,7 @@ const SECONDARY_PRISMATICA_ZAP_INTERVAL: = 0.24
 const SECONDARY_PRISMATICA_ZAP_LIFE: = 0.18
 const SECONDARY_PRISMATICA_ZAP_MAX_PER_TICK: = 4
 const SECONDARY_PARASITICA_DURATION: = 8.0
-const PARASITE_MARK_DURATION: = 6.0
+const PARASITE_MARK_DURATION: = 8.0
 const PARASITE_FEAST_DURATION: = 8.0
 const PARASITE_ULTIMATE_MAX_DURATION: = 11.5
 const PARASITE_SPIT_RADIUS: = 155.0
@@ -806,6 +807,21 @@ const SECONDARY_GRAVITANTE_DURATION: = 8.0
 const BOSS_READY_TIME: = 0.0
 const BOSS_CALL_COUNTDOWN: = 1.2
 const BOSS_BASE_HP: = 4860.0
+# A loja atual permite builds muito mais fortes. Esta camada e exclusiva dos
+# chefes e garante tempo para que cada encontro atravesse suas mecanicas.
+const BOSS_HP_DURABILITY_MODEL: String = "boss_hp_durability_v3_time_only"
+# v3 (2026-11-11): pedido de durabilidade ainda maior — dobro da tabela v2.
+const BOSS_HP_DURABILITY_BY_PHASE: Dictionary = {
+	1: 6.0,
+	2: 6.5,
+	3: 7.0,
+	4: 7.5,
+	5: 8.0,
+	6: 7.5,
+	7: 9.0
+}
+const BOSS_TIME_HP_GROWTH_RATE: = 0.06
+const BOSS_TIME_HP_GROWTH_EXPONENT: = 0.85
 const BOSS_ARMOR: = 0.528
 const BOSS_ARMOR_TIME_PER_MIN: = 0.00055
 const BOSS_ARMOR_KILL_RATE: = 0.000025
@@ -949,6 +965,17 @@ const CARD_RARITY_COMMON_COLOR: = Color(0.96, 0.97, 1.0)
 const CARD_RARITY_UNCOMMON_COLOR: = Color(0.18, 0.62, 1.0)
 const CARD_RARITY_RARE_COLOR: = Color(1.0, 0.76, 0.12)
 const CARD_RARITY_LEGENDARY_COLOR: = Color(1.0, 0.36, 0.12)
+const COMMON_DISPARO_DAMAGE_GROWTH: = 1.20
+const COMMON_TEMPESTADE_FLAT_DAMAGE: = 8.0
+const COMMON_TEMPESTADE_CRIT_CHANCE: = 0.12
+const COMMON_DEFENSE_PER_COPY: = 5.0
+const COMMON_DEFENSE_CAP: = 50.0
+const MERCENARY_KILL_POINTS_PER_COPY: = 20
+const MERCENARY_CONTRACT_BASE_POINTS: = 35
+const MERCENARY_CONTRACT_POINTS_PER_COPY: = 50
+const MERCENARY_BONUS_CAP: = 750
+const LARAPIO_BASE_POINTS: = 240
+const ARAUTO_POINT_REWARD_CARD_COST_RATIO: = 1.0
 const BOSS_ATTACK_BASE_COOLDOWN: = 3.8
 const BOSS1_STAGE_APPROACH_SPEED: = 260.0
 const BOSS2_ENTRY_TIME: = 2.5
@@ -1031,7 +1058,7 @@ const BOSS1_WALK_AUDIO_VOLUME: = 0.13
 const PHASE_TRANSITION_HOLD_TIME: = 1.7
 const PHASE_TRANSITION_WIPE_TIME: = 2.0
 const PHASE_TRANSITION_TIME: = 3.7
-const DEATH_SCREEN_SLOW_TIME: = 0.85
+const DEATH_SCREEN_SLOW_TIME: = 1.65
 const RETRY_RETURN_ANIM_TIME: = 1.05
 const BOSS_FRAGMENT_PICKUP_RADIUS: = 42.0
 const MUSIC_PAUSE_FADE_TIME: = 3.0
@@ -1287,6 +1314,29 @@ const BOSS6_ABILITY_REFLUX: = "boss6_organic_reflux"
 const BOSS6_ABILITY_MIASMA_ULTIMATE: = "boss6_miasma_spiral"
 const BOSS6_ABILITY_FOSSIL_ECHO: = "boss6_fossil_echo"
 const BOSS6_ABILITY_NECRO_EROSION: = "boss6_necro_erosion"
+## Necro-Erosao encurtada (era 10 s): a janela de calcificacao pesa menos.
+const BOSS6_NECRO_EROSION_TIME: = 6.0
+## ----------------------------------------------------------- GEADA (fase 2)
+## O Sineiro Boreal nao congela de primeira: ele empilha geada. Cada carga
+## deixa o jogador mais lento e, ao encher, o corpo trava de vez.
+const FROST_MAX_STACKS: int = 4
+const FROST_SLOW_PER_STACK: = 0.10
+const FROST_DECAY_TIME: = 3.2
+const FROST_FREEZE_TIME: = 1.15
+## Chao congelado: o corpo demora a virar e continua escorregando.
+const ICE_SLIP_RESPONSE: = 3.2
+const ICE_SLIP_DECAY: = 1.25
+const ICE_SLIP_MIN: = 0.07
+## Corte de cura da fase 6: varias habilidades passam a aplicar. Diferente da
+## calcificacao (que zera a cura), este e parcial e dura pouco.
+const BOSS6_HEAL_CUT_TIME: = 4.0
+const BOSS6_HEAL_CUT_MULT: = 0.35
+## Fontes de dano do chefe 6 que carregam necrose suficiente para cortar cura.
+const BOSS6_HEAL_CUT_SOURCES: Array[String] = [
+	"boss6_necro_erosion_burn", "boss6_carnage_slime", "boss6_carnage_pool",
+	"boss6_reflux_wave", "boss6_cracked_heart_wave", "boss6_acid_pool",
+	"boss6_miasma_spiral", "boss6_fossil_echo_link", "boss6_chasing_crack",
+]
 const BOSS6_LEECH_MAX: = 6
 const BOSS6_PUSTULE_MAX: = 7
 const BOSS6_POOL_MAX: = 12
@@ -1604,7 +1654,7 @@ const MANIFESTATIONS: = [
 	{
 		"key": "parasitica",
 		"name": "Parasitica",
-		"desc": "Larvas vivas: tiros marcam por 6s, Q cospe um viveiro contaminante e E chama vermes subterraneos que devoram os marcados.",
+		"desc": "Larvas vivas: tiros implantam larvas (8s), Q prende a Simbiose Predatoria em Geovana e E consome larvas para criar o Verme-Rei, que devora hospedeiros.",
 		"icon": "manifestacao_parasitica.png",
 		"color": Color(0.38, 1.0, 0.5),
 		"accent": Color(0.86, 1.0, 0.28)
@@ -1660,18 +1710,18 @@ const MANIFEST_EVOLUTION_PROFILES: = {
 const CARDS: = [
 	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)},
 	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)},
-	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+15% do dano atual do auto attack.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)},
-	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+5 dano e +10% chance critica. Acima de 100%, o excesso aumenta o dano critico.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
+	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+20% do dano base do auto attack, com crescimento composto por copia.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)},
+	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+8 dano e +12% chance critica. Acima de 100%, o excesso aumenta o dano critico.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
 	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)},
 	{"name": "Roubo de Vida", "nick": "Hemofluxo", "rarity": CARD_RARITY_UNCOMMON, "desc": "Projeteis curam diretamente 3% do dano causado por copia, sem chance de falha.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
 	{"name": "Speed Atack", "nick": "Fluidez Letal", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)},
 	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
 	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
-	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+3.5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
+	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
 	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "As probabilidades se dobram a seu favor, mas a anomalia nao revela seus calculos.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
 	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
-	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga o bonus atual. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
+	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga +2 pontos por copia desde o primeiro. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
 	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
 	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Consumivel incomum. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
@@ -2371,6 +2421,10 @@ var run_behavior_player_last_pos: Vector2 = PLAYER_START
 var run_behavior_player_last_sample_pos: Vector2 = PLAYER_START
 var run_behavior_move_samples: int = 0
 var run_behavior_stationary_samples: int = 0
+var run_last_damage_source: String = ""
+var run_death_source: String = ""
+var run_death_cause: String = ""
+var run_death_phase: int = 0
 var run_end_payload: Dictionary = {}
 var qa_data_unlocked: bool = false
 var henry_cheat_unlocked: bool = false
@@ -3150,6 +3204,11 @@ var run_initial_phase: int = 0
 var run_phase6_completed: bool = false
 const DIMENSION_FINAL_PHASE: int = 5
 const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 4, 6, 7]
+## Rota fixa de cada inicio (as runs alternam 1 e 6). Depois do 4 abre a escolha 5 x 7.
+const DIMENSION_START_ROUTES: Dictionary = {1: [2, 6, 3, 4], 6: [1, 2, 3, 4]}
+## Ciclo de farm: Cinzas da Ruptura (7) + 3 regioes sorteadas, depois nova escolha.
+const DIMENSION_FARM_ENTRY_PHASE: int = 7
+const DIMENSION_FARM_RANDOM_COUNT: int = 3
 const DIMENSION_CYCLE_LENGTH: int = 4
 const DIMENSION_EXTRACTION_INTERVAL: int = 10
 var dimension_route_queue: Array = []
@@ -3251,6 +3310,9 @@ var net_collected_fragment_ids: Dictionary = {}
 var net_collected_gameplay_orb_ids: Dictionary = {}
 var net_seen_card_unlock_request_ids: Dictionary = {}
 var net_confirmed_card_unlock_event_ids: Dictionary = {}
+var net_seen_lacerante_execution_request_ids: Dictionary = {}
+var net_remote_lacerante_execution_jobs: Array = []
+var net_lacerante_execution_times_by_peer: Dictionary = {}
 var net_reward_sequence: int = 0
 var shockwaves = []
 var effects = []
@@ -3390,6 +3452,15 @@ var boss6_necro_erosion_radius = 9999.0
 var boss6_necro_erosion_timer = 0.0
 var boss6_necro_erosion_duration = 10.0
 var boss6_necro_erosion_damage_timer = 0.0
+## Tempo restante do corte de cura da fase 6 (parcial).
+var boss6_heal_cut_timer = 0.0
+## Cargas de geada do Sineiro e o tempo ate a proxima cair sozinha.
+var player_frost_stacks: int = 0
+var player_frost_timer: float = 0.0
+## Patinacao: tempo restante de chao congelado e a inercia atual do corpo.
+var player_ice_slip_timer: float = 0.0
+var player_ice_slip_dir: Vector2 = Vector2.ZERO
+var player_ice_slip_speed: float = 1.0
 var insane_echo_visuals = []
 var boss3_faith = 50.0
 var boss3_stage = 1
@@ -3614,6 +3685,7 @@ var retry_return_timer: float:
 var death_screen_delay_timer: float = 0.0
 var death_screen_pending_result: String = ""
 var death_screen_pending_specter_upgrade: bool = false
+var death_screen_focus_pos: Vector2 = Vector2.ZERO
 var unlocked_card_ids: Dictionary = {}
 var unlocked_manifestation_ids: Dictionary = {}
 var unlocked_spectrum_ids: Dictionary = {}

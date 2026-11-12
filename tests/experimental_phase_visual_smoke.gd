@@ -53,6 +53,13 @@ func _run() -> void:
 	assert(game.experimental_boss_altar_discovered)
 	game.queue_redraw()
 	await process_frame
+	if phase_id == 6:
+		var suturer: Dictionary = game.amber_suturer_controller.spawn_now()
+		assert(not suturer.is_empty())
+		game.experimental_phase_controller.update(game.experimental_phase_controller.ALTAR_HOLD_TIME + 0.02)
+		assert(not game.experimental_boss_altar_used and game.mode == "game")
+		await _capture(output_dir + "/altar_suturer_blocked_mobile_960x540%s.png" % suffix, Vector2i(960, 540))
+		game.amber_suturer_controller.cleanup("visual_gate", false)
 	await _capture(output_dir + "/altar_mobile_960x540%s.png" % suffix, Vector2i(960, 540))
 
 	var guidance_pos: Vector2 = game.experimental_boss_altar_pos + Vector2(900.0, 0.0)
@@ -143,7 +150,8 @@ func _run() -> void:
 	assert(game.phase_map_layer.map_chunks.is_empty())
 	assert(game.phase_map_layer.material != game.phase_map_layer.chunk_material)
 
-	print("DEFINITIVE_PHASE_VISUAL_OK phase=%d captures=%d area=5x altar=true hidden_until_discovered=true guidance=true relocated=true used=true boss_mechanic=true classic_ex_material=true" % [phase_id, 9 if phase_id > 1 else 7])
+	var capture_count := 10 if phase_id == 6 else (9 if phase_id > 1 else 7)
+	print("DEFINITIVE_PHASE_VISUAL_OK phase=%d captures=%d area=5x altar=true hidden_until_discovered=true guidance=true suturer_gate=%s relocated=true used=true boss_mechanic=true classic_ex_material=true" % [phase_id, capture_count, str(phase_id == 6)])
 	game._cleanup_runtime_resources()
 	game.free()
 	for _frame in range(3):

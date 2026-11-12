@@ -66,6 +66,9 @@ func _run() -> void:
 	game.cards_bought.clear()
 
 	var card_logic = game.roguelike_point_card_controller
+	_check(card_logic.prism_shard_chance(1) > 0.19, "first_prism_copy_not_perceptible")
+	_check(card_logic.prism_shard_value(1) >= 60, "first_prism_value_not_buffed")
+	_check(card_logic.pain_reward(1.0) >= 10, "first_pain_copy_not_perceptible")
 	_check(card_logic.prism_shard_chance(5) > card_logic.prism_shard_chance(1), "prism_chance_not_scaling")
 	_check(card_logic.prism_shard_chance(50) > card_logic.prism_shard_chance(20), "prism_chance_late_not_scaling")
 	_check(card_logic.prism_shard_value(20) > card_logic.prism_shard_value(5), "prism_value_not_scaling")

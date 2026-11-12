@@ -675,6 +675,7 @@ function runResultTone(run) {
 }
 
 function runRow(run, index = 0) {
+  const death = textValue(run && run.deathCause, "");
   return `<article class="run-row">
     <a class="run-row-main" href="${runPath(run)}">
       <time>${escapeHtml(formatDate(run))}</time>
@@ -689,6 +690,7 @@ function runRow(run, index = 0) {
       ${statusBadge(textValue(run && run.result, "Run"), runResultTone(run))}
       <span>${escapeHtml(phaseLabel(run))}</span>
       <span>${formatDuration(run && run.durationSeconds)}</span>
+      ${death ? `<span>Morte: ${escapeHtml(death)}</span>` : ""}
     </div>
   </article>`;
 }
@@ -980,6 +982,7 @@ function renderRun(runId, snapshot, cardAssetUrl, publicAssetUrl) {
         <dl>
           <div><dt>Fase alcancada</dt><dd>${escapeHtml(phaseLabel(run))}</dd></div>
           <div><dt>Resultado</dt><dd>${escapeHtml(textValue(run.result, "Run"))}</dd></div>
+          <div><dt>Causa da morte</dt><dd>${escapeHtml(textValue(run.deathCause, "Nao se aplica"))}${run.deathSource ? ` <small>${escapeHtml(run.deathSource)} · fase ${formatNumber(run.deathPhase || run.phase)}</small>` : ""}</dd></div>
           <div><dt>Pontos ganhos / gastos</dt><dd>${formatNumber(run.pointsEarned)} / ${formatNumber(run.pointsSpent)}</dd></div>
           <div><dt>Bosses encontrados</dt><dd>${bossRows.length ? bossRows.map((row) => `F${formatNumber(row.phase)}: ${formatNumber(row.damage)} dano em ${escapeHtml(textValue(row.duration, "--"))}`).join("<br>") : "Nenhum boss registrado"}</dd></div>
           <div><dt>Rede</dt><dd>${escapeHtml(run.network && typeof run.network === "object" ? Object.keys(run.network).slice(0, 4).join(", ") || "Sem telemetria" : "Sem telemetria")}</dd></div>

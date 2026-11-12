@@ -56,6 +56,9 @@ async function run() {
     assert.strictEqual(response.status, 200);
     const payload = JSON.parse(response.body);
     const dossierPayload = payload.files["umbra_player_dossiers.json"];
+    const collectivePayload = payload.files["umbra_collective_mind.json"];
+    assert.ok(collectivePayload && collectivePayload.mode === "blend", "mente coletiva ausente no pacote");
+    assert.strictEqual(collectivePayload.schema_version, 1);
     assert.strictEqual(dossierPayload.schema_version, 2);
     assert.strictEqual(dossierPayload.players, undefined, "complete dossier map leaked");
     assert(dossierPayload.selected, "selected private dossier missing");

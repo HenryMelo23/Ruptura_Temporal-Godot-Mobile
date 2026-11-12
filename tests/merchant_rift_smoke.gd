@@ -40,6 +40,16 @@ func _prepare_run() -> void:
 	game.score = int(game.card_cost) * 4
 
 
+## Em solo a fenda nao abre mais uma tela: ela leva a Geovana para a oficina.
+## A loja so abre quando ela encosta no balcao do Mercador.
+func _open_counter(dimension) -> void:
+	game._dialogue().clear()
+	dimension.talked_this_visit = true
+	dimension.counter_armed = true
+	game.player_pos = RTMerchantDimension.MERCHANT_POS
+	dimension.update(0.016)
+
+
 func _run() -> void:
 	_prepare_run()
 	var rift_controller = game.shop_rift_controller
@@ -61,16 +71,18 @@ func _run() -> void:
 	rift_controller.update(rift_controller.OPEN_TIME + 0.01)
 	_check(rift_controller.state() == rift_controller.STATE_OPEN, "rift did not finish opening")
 
-	# 3) Entrar pela fenda abre a animacao da loja e depois a loja.
+	# 3) Entrar pela fenda leva para a oficina; a loja abre no balcao.
 	game.player_pos = rift_pos
 	rift_controller.update(0.016)
-	_check(game.mode == "shop_opening", "walking into the rift did not start the shop opening")
+	var dimension = game._merchant_dimension()
+	_check(dimension.active, "walking into the rift did not open the merchant dimension")
 	_check(rift_controller.state() == rift_controller.STATE_ENTERED, "rift did not register the entry")
-	game._update_shop_opening(game.SHOP_OPENING_ANIM_TIME + 0.02)
-	_check(game.mode == "shop", "shop did not open after entering the rift")
+	_open_counter(dimension)
+	_check(game.mode == "shop", "shop did not open at the merchant counter")
 	_check(game.shop_rerolls == game.SHOP_FREE_REROLLS_PER_VISIT, "plain entry granted unexpected rerolls")
 	_check(game.shop_rift_kills == 0, "kill progress was not consumed by the entry")
 	game.shop_controller.finish()
+	dimension.leave(false)
 	_check(not rift_controller.active(), "entered rift survived the shop exit")
 	_check(game.shop_rift_next_allowed_time > game.time_alive, "no spacing after closing the rift shop")
 
@@ -98,13 +110,15 @@ func _run() -> void:
 	_check(rift_controller.unstable(), "rift near expiry is not unstable")
 	game.player_pos = Vector2(game.shop_rift["pos"])
 	rift_controller.update(0.016)
-	_check(game.mode == "shop_opening", "edge entry did not open the shop")
-	game._update_shop_opening(game.SHOP_OPENING_ANIM_TIME + 0.02)
+	_check(dimension.active, "edge entry did not open the merchant dimension")
+	_open_counter(dimension)
+	_check(game.mode == "shop", "edge entry did not reach the counter")
 	var expected_discount: float = rift_controller.EDGE_BONUS_DISCOUNT + rift_controller.FRAGMENT_DISCOUNT
 	_check(game.shop_endurance_discount >= expected_discount - 0.001, "edge/fragment discount was not applied (%.3f)" % game.shop_endurance_discount)
 	_check(game.shop_rerolls == game.SHOP_FREE_REROLLS_PER_VISIT + rift_controller.FRAGMENT_REROLLS, "fragment did not grant an extra reroll")
 	_check(game.shop_rift_fragments == 0, "fragments were not consumed")
 	game.shop_controller.finish()
+	dimension.leave(false)
 
 	# 6) Chamada do boss recolhe a fenda e devolve um fragmento.
 	game.mode = "game"
@@ -129,10 +143,15 @@ func _run() -> void:
 	_check(rift_controller.active() and String(game.shop_rift.get("reason", "")) == "interval", "interval fallback did not open the rift")
 	rift_controller.clear_active()
 
-	# 8) Online mantem a contagem legada intacta.
+	# 8) Online usa uma unica fenda autoritativa e replicas nao iniciam contagem.
 	game.is_multiplayer = true
-	_check(not rift_controller.enabled(), "rift is enabled in multiplayer")
-	_check(not rift_controller.replaces_forced_countdown(), "rift replaced the multiplayer countdown")
+	game.online_room_owner = true
+	_check(rift_controller.enabled(), "world authority did not own the multiplayer rift")
+	_check(rift_controller.replaces_forced_countdown(), "authority retained the retired multiplayer countdown")
+	game.online_room_owner = false
+	game.is_host = false
+	_check(not rift_controller.enabled(), "world replica attempted to simulate the multiplayer rift")
+	_check(rift_controller.replaces_forced_countdown(), "world replica retained an independent shop countdown")
 	game.is_multiplayer = false
 
 	# 9) Troca de fase limpa a fenda ativa.
@@ -143,5 +162,5 @@ func _run() -> void:
 	_check(MistGuide.blob_texture() != null, "mist blob texture unavailable")
 	if failed:
 		return
-	print("MERCHANT_RIFT_OK kills=true enter=true edge_bonus=true fragment=true collapse=true boss_refund=true interval_fallback=true online_legacy=true phase_clear=true")
+	print("MERCHANT_RIFT_OK kills=true dimension=true counter=true edge_bonus=true fragment=true collapse=true boss_refund=true interval_fallback=true online_authority=true phase_clear=true")
 	quit(0)

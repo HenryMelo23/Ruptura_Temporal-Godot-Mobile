@@ -6,6 +6,8 @@ var server_stage := 1
 
 
 func _result_path(result_role: String) -> String:
+	if result_dir != "":
+		return result_dir.path_join("%s_result.txt" % result_role)
 	return "res://.codex/death_cycle_%s.txt" % result_role
 
 
@@ -51,6 +53,7 @@ func _run() -> void:
 		if not game.online_connected or game.online_lobby_connected_count != 2 or not FileAccess.file_exists(STAGE_PATH):
 			continue
 		if _result_exists("server"):
+			_write_result(role)
 			await _finish()
 			return
 		var stage := int(FileAccess.get_file_as_string(STAGE_PATH))

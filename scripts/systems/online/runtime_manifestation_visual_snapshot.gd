@@ -21,11 +21,15 @@ static func capture(game: Node, action: int, manifestation_key: String) -> Dicti
 		_capture_secondary(game, manifestation_key, snapshot)
 	elif action == game.NET_ABILITY_TELEPORT:
 		_capture_teleport(game, manifestation_key, snapshot)
+	elif action == game.NET_ABILITY_SECONDARY_END:
+		_capture_end(game, manifestation_key, snapshot)
 	return snapshot
 
 
 static func _capture_attack(game: Node, key: String, snapshot: Dictionary) -> void:
 	match key:
+		"incendiario":
+			snapshot["incendiary"] = game.henry_incendiary_ability_controller.visual_snapshot(game.NET_ABILITY_ATTACK)
 		"lacerante":
 			snapshot["slashes"] = _tail(game.slashes, 1)
 		_:
@@ -34,6 +38,8 @@ static func _capture_attack(game: Node, key: String, snapshot: Dictionary) -> vo
 
 static func _capture_skill(game: Node, key: String, snapshot: Dictionary) -> void:
 	match key:
+		"incendiario":
+			snapshot["incendiary"] = game.henry_incendiary_ability_controller.visual_snapshot(game.NET_ABILITY_SKILL)
 		"barometrico":
 			snapshot["barometric"] = game.henry_barometric_ability_controller.visual_snapshot()
 		"eletrica":
@@ -43,7 +49,7 @@ static func _capture_skill(game: Node, key: String, snapshot: Dictionary) -> voi
 		"prismatica":
 			snapshot["prisms"] = _tail(game.prisms, 1)
 		"parasitica":
-			snapshot["parasite_spit_zones"] = _tail(game.parasite_spit_zones, 1)
+			snapshot["parasitica_visual"] = game._parasitica().visual_snapshot()
 		"gravitante":
 			snapshot["gravitante_vfx_events"] = _tail_matching(game.gravitante_vfx_events, "kind", "gravity_q", 1)
 			snapshot["orbitals"] = _tail(game.orbitals, MAX_PERSISTENT_ITEMS)
@@ -56,8 +62,12 @@ static func _capture_secondary(game: Node, key: String, snapshot: Dictionary) ->
 	if not secondary.is_empty():
 		snapshot["secondary"] = secondary
 	match key:
+		"incendiario":
+			snapshot["incendiary"] = game.henry_incendiary_ability_controller.visual_snapshot(game.NET_ABILITY_SECONDARY)
 		"barometrico":
 			snapshot["barometric"] = game.henry_barometric_ability_controller.visual_snapshot()
+		"parasitica":
+			snapshot["parasitica_visual"] = game._parasitica().visual_snapshot()
 		"gravitante":
 			snapshot["orbitals"] = _tail(game.orbitals, MAX_PERSISTENT_ITEMS)
 		_:
@@ -67,6 +77,8 @@ static func _capture_secondary(game: Node, key: String, snapshot: Dictionary) ->
 static func _capture_teleport(game: Node, key: String, snapshot: Dictionary) -> void:
 	snapshot["tp_effects"] = _tail(game.tp_effects, 2)
 	match key:
+		"incendiario":
+			snapshot["incendiary"] = game.henry_incendiary_ability_controller.visual_snapshot(game.NET_ABILITY_TELEPORT)
 		"lacerante":
 			snapshot["slashes"] = _tail(game.slashes, 3)
 		"prismatica":
@@ -77,6 +89,11 @@ static func _capture_teleport(game: Node, key: String, snapshot: Dictionary) -> 
 			snapshot["gravitante_vfx_events"] = _tail(game.gravitante_vfx_events, 3)
 		_:
 			pass
+
+
+static func _capture_end(game: Node, key: String, snapshot: Dictionary) -> void:
+	if key == "incendiario":
+		snapshot["incendiary"] = game.henry_incendiary_ability_controller.visual_snapshot()
 
 
 static func _evolution_ids(game: Node) -> Array:

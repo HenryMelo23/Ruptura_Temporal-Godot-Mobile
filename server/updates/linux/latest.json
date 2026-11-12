@@ -1,14 +1,15 @@
 {
-  "version": "2.0.65",
-  "version_code": 26500,
-  "filename": "Ruptura_Temporal_2.0.65.x86_64",
-  "sha256": "549283f2d0af1dbfd782d960ccbd37eece79a8e7a503422eeb43d4e8d2334c2d",
-  "size": 918272064,
+  "version": "2.1.0",
+  "version_code": 26900,
+  "filename": "Ruptura_Temporal_2.1.0.x86_64",
+  "sha256": "59cad5c9c7605cf5f92178abe71f0f3385cf9f2dbf421c273c8160681c356b8c",
+  "size": 974849384,
   "notes": [
-    "Sincronizacao multiplayer de manifestacoes, efeitos e estados remotos revisada.",
-    "Ajustes recentes de progressao, chefes, mapas e desempenho consolidados.",
-    "Compatibilidade preservada com atualizador, saves e plataformas suportadas."
+    "Multiplayer estabilizado do lobby aos bosses, trocas de fase e vitoria final.",
+    "A Fenda do Mercador agora leva toda a equipe para conversa, balcao e saida coletiva.",
+    "Sincronizacao de habilidades, morte, retorno, cartas e efeitos visuais foi ampliada.",
+    "Umbra, historia, chips quanticos e apresentacao receberam novos conteudos."
   ],
   "mandatory": false,
-  "published_at": "2026-11-05T21:21:59Z"
+  "published_at": "2026-11-12T19:49:16Z"
 }

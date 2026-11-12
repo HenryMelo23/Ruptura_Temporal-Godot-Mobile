@@ -202,7 +202,7 @@ func health_bar(host: Node2D, rect: Rect2, ratio: float, accent: Color, alpha: f
 func heal_reduction_wire(host: Node2D, rect: Rect2, alpha: float) -> void:
 	if host.is_dead or host.player_hp <= 0:
 		return
-	if host.revive_heal_penalty_timer <= 0.0 and not host._is_player_calcified():
+	if host.revive_heal_penalty_timer <= 0.0 and host.boss6_heal_cut_timer <= 0.0 and not host._is_player_calcified():
 		return
 	var turns := clampi(int(rect.size.x / 36.0), 4, 7)
 	var pitch: float = (rect.size.x - 8.0) / float(turns)

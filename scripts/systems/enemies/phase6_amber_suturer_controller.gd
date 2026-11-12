@@ -25,6 +25,7 @@ const ENTRY_TIME := 1.0
 const OBSERVE_TIME := 2.1
 const TELEGRAPH_TIME := 1.5
 const ACTIVE_TIME := 18.0
+const CRYSTAL_SUTURE_COOLDOWN := 60.0
 const REPOSITION_TIME := 1.15
 const NEEDLE_TELEGRAPH_TIME := 0.85
 const NEEDLE_RECOVERY_TIME := 0.72
@@ -40,6 +41,7 @@ const HOOK_DAMAGE_MAX_HP_RATIO := 0.067
 const HOOK_DAMAGE_FAR_SCALE := 0.62
 const MAX_STOLEN_CARDS := 2
 const REWARD_CARD_COUNT := 2
+const REWARD_BASE_POINTS := 420
 const HISTORY_SAMPLE_INTERVAL := 0.12
 const HISTORY_WINDOW := 2.8
 const DAMAGE_MAX_HP_RATIO := 0.05
@@ -128,6 +130,7 @@ func _default_state() -> Dictionary:
 		"damage_gate_by_peer": {},
 		"crystal_slow_stacks": 0,
 		"crystal_slow_timer": 0.0,
+		"crystal_suture_cooldown": 0.0,
 		"crystals_destroyed_cycle": 0,
 		"crystals_destroyed_total": 0,
 		"armor_reduction": ARMOR_BASE_REDUCTION,
@@ -225,12 +228,13 @@ func spawn_now() -> Dictionary:
 	enemy["is_event_enemy"] = true
 	enemy["hp"] = hp
 	enemy["max_hp"] = hp
-	enemy["points"] = 260
+	enemy["points"] = REWARD_BASE_POINTS
 	enemy["damage"] = maxf(1.0, game.player_hp_max * 0.04 + game.enemy_close_damage * 0.45)
 	enemy["speed"] = MOVE_SPEED
 	enemy["suturer_base_speed"] = MOVE_SPEED
 	enemy["suturer_crystal_slow_stacks"] = 0
 	enemy["suturer_crystal_slow_timer"] = 0.0
+	enemy["suturer_crystal_suture_cd"] = 0.0
 	enemy["parado"] = false
 	enemy["state"] = STATE_ENTRY
 	enemy["suturer_state"] = STATE_ENTRY
@@ -288,6 +292,7 @@ func update_enemy(enemy: Dictionary, delta: float) -> void:
 	enemy["parado"] = false
 	enemy["suturer_anim_time"] = float(enemy.get("suturer_anim_time", 0.0)) + delta
 	enemy["suturer_evasion_cd"] = maxf(0.0, float(enemy.get("suturer_evasion_cd", 0.0)) - delta)
+	enemy["suturer_crystal_suture_cd"] = maxf(0.0, float(enemy.get("suturer_crystal_suture_cd", 0.0)) - delta)
 	_update_crystal_slow(enemy, delta)
 	var state := String(enemy.get("suturer_state", STATE_ENTRY))
 	if state == STATE_DYING:
@@ -372,6 +377,7 @@ func _sync_public_enemy_state(enemy: Dictionary) -> void:
 	game.amber_suturer_state["current_ability"] = String(enemy.get("suturer_current_ability", "suture"))
 	game.amber_suturer_state["crystal_slow_stacks"] = int(enemy.get("suturer_crystal_slow_stacks", 0))
 	game.amber_suturer_state["crystal_slow_timer"] = float(enemy.get("suturer_crystal_slow_timer", 0.0))
+	game.amber_suturer_state["crystal_suture_cooldown"] = float(enemy.get("suturer_crystal_suture_cd", 0.0))
 	game.amber_suturer_state["effective_speed"] = _effective_move_speed(enemy)
 	game.amber_suturer_state["crystals_destroyed_total"] = int(enemy.get("suturer_crystals_destroyed_total", 0))
 	game.amber_suturer_state["armor_reduction"] = armor_reduction(enemy)
@@ -476,7 +482,10 @@ func _begin_attack_cycle(enemy: Dictionary) -> void:
 	game.amber_suturer_state["ability_cycle"] = ability_cycle + 1
 	match posmod(ability_cycle, 4):
 		0:
-			_begin_suture_cycle(enemy)
+			if float(enemy.get("suturer_crystal_suture_cd", 0.0)) <= 0.0:
+				_begin_suture_cycle(enemy)
+			else:
+				_begin_needle_cycle(enemy, false)
 		1:
 			_begin_needle_cycle(enemy, false)
 		2:
@@ -501,6 +510,8 @@ func _begin_suture_cycle(enemy: Dictionary) -> void:
 	game.amber_suturer_state["crystals_destroyed_cycle"] = 0
 	game.amber_suturer_state["target_peer_id"] = peer_id
 	enemy["suturer_target_peer"] = peer_id
+	enemy["suturer_crystal_suture_cd"] = CRYSTAL_SUTURE_COOLDOWN
+	game.amber_suturer_state["crystal_suture_cooldown"] = CRYSTAL_SUTURE_COOLDOWN
 	enemy["suturer_current_ability"] = "suture"
 	game.amber_suturer_state["current_ability"] = "suture"
 	var cycle_id := _next_event_id("cycle")

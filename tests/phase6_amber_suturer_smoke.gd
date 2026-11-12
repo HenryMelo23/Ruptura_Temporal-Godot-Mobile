@@ -40,6 +40,7 @@ func _test_timing_and_authority() -> void:
 	_check(is_equal_approx(controller.FIRST_SPAWN_TIME, 120.0), "first spawn timing drifted from recurring encounter cadence")
 	_check(is_equal_approx(controller.RESPAWN_MIN_TIME, 120.0), "minimum recurrence drifted")
 	_check(is_equal_approx(controller.RESPAWN_MAX_TIME, 150.0), "maximum recurrence drifted")
+	_check(is_equal_approx(controller.CRYSTAL_SUTURE_COOLDOWN, 60.0), "crystal suture cooldown is not the requested high interval")
 	_check(is_inf(controller.MAX_LIFETIME), "Suturador still has a lifetime timeout")
 	_check(is_equal_approx(controller.MOVE_SPEED, 106.2), "base speed did not receive the requested 80 percent increase")
 	_check(is_equal_approx(controller.hp_multiplier_for_party(1), 1.0), "solo HP multiplier drifted")
@@ -201,10 +202,12 @@ func _test_four_attack_rotation_and_hook() -> void:
 	controller._clear_sutures("attack_rotation_fixture", false)
 	game.enemy_bullets.clear()
 	game.amber_suturer_state["ability_cycle"] = 0
+	enemy["suturer_crystal_suture_cd"] = 0.0
 
 	controller._begin_attack_cycle(enemy)
 	_check(String(enemy.get("suturer_current_ability", "")) == "suture", "attack rotation did not start with route sutures")
 	_check(not game.amber_sutures.is_empty(), "route-suture ability did not build its arena hazard")
+	_check(is_equal_approx(float(enemy.get("suturer_crystal_suture_cd", 0.0)), controller.CRYSTAL_SUTURE_COOLDOWN), "crystal formation did not start its 60s cooldown")
 	controller._clear_sutures("attack_rotation_fixture", false)
 
 	controller._begin_attack_cycle(enemy)
@@ -250,6 +253,16 @@ func _test_four_attack_rotation_and_hook() -> void:
 		unique_directions[Vector2i(roundi(direction.x * 1000.0), roundi(direction.y * 1000.0))] = true
 	_check(unique_directions.size() == controller.NEEDLE_RADIAL_COUNT, "needle crown repeated directions instead of covering the arena")
 	_check(String(game.amber_suturer_state.get("current_ability", "")) == "needle_burst", "public encounter state did not expose the active ability")
+
+	controller._clear_sutures("cooldown_fixture", false)
+	game.amber_suturer_state["ability_cycle"] = 4
+	controller._begin_attack_cycle(enemy)
+	_check(String(enemy.get("suturer_current_ability", "")) == "needle_fan", "crystal cooldown did not replace the premature recast with another attack")
+	_check(game.amber_sutures.is_empty(), "crystals were invoked again before the 60s cooldown ended")
+	enemy["suturer_crystal_suture_cd"] = 0.0
+	game.amber_suturer_state["ability_cycle"] = 8
+	controller._begin_attack_cycle(enemy)
+	_check(String(enemy.get("suturer_current_ability", "")) == "suture" and not game.amber_sutures.is_empty(), "crystal formation did not return after its cooldown expired")
 
 
 func _test_remote_card_change_idempotence() -> void:
@@ -353,7 +366,7 @@ func _test_multiplayer_cleanup_and_persistence() -> void:
 	_check(snapshot_fields.get("amber_suturer_state", {}) is Dictionary, "interrupted snapshot did not serialize event state")
 	_check(snapshot_fields.get("amber_sutures", []) is Array, "interrupted snapshot did not serialize sutures")
 	var saved_suturer_state: Dictionary = snapshot_fields.get("amber_suturer_state", {})
-	_check(saved_suturer_state.has("crystal_slow_stacks") and saved_suturer_state.has("crystal_slow_timer"), "interrupted snapshot misses crystal slow state")
+	_check(saved_suturer_state.has("crystal_slow_stacks") and saved_suturer_state.has("crystal_slow_timer") and saved_suturer_state.has("crystal_suture_cooldown"), "interrupted snapshot misses crystal slow/cooldown state")
 	_check(game.NET_ENEMY_TYPES.has(game.ENEMY_AMBER_SUTURER), "enemy snapshot contract misses the core")
 	_check(game.NET_ENEMY_TYPES.has(game.ENEMY_AMBER_SUTURE_NODE), "enemy snapshot contract misses endpoints")
 
@@ -361,15 +374,19 @@ func _test_multiplayer_cleanup_and_persistence() -> void:
 	game._recalculate_common_card_stat_bonuses()
 	var stolen: Dictionary = controller._steal_card_from_peer(game._mp_unique_id())
 	_check(not stolen.is_empty(), "defeat reward fixture could not steal a card")
+	_check(int(enemy.get("points", 0)) == controller.REWARD_BASE_POINTS, "Suturador point reward was not buffed")
 	var drops_before: int = game.arauto_card_drops.size()
-	controller.on_enemy_defeated(enemy)
-	game.enemies.erase(enemy) # Mirrors the normal generic enemy removal after the controller performs cleanup.
+	var point_orbs_before: int = game.heal_orbs.size()
+	game._kill_enemy(enemy)
 	var defeat_drops: Array = game.arauto_card_drops.slice(drops_before)
 	_check(defeat_drops.size() >= controller.REWARD_CARD_COUNT + 1, "Suturador death did not deliver reward cards plus the stolen card")
 	_check(defeat_drops.any(func(value): return bool(Dictionary(value).get("suturer_returned", false))), "Suturador death did not mark the stolen card for restoration")
 	_check(game.amber_sutures.is_empty(), "core death did not remove every suture")
 	_check(not game.enemies.any(func(value): return String(Dictionary(value).get("type", "")) == game.ENEMY_AMBER_SUTURE_NODE), "core death left orphan endpoints")
 	_check(not bool(game.amber_suturer_state.get("active", true)), "core death left the encounter active")
+	var reward_orbs: Array = game.heal_orbs.slice(point_orbs_before).filter(func(value): return String(Dictionary(value).get("kind", "")) == game.ENEMY_POINT_ORB_KIND)
+	_check(not reward_orbs.is_empty(), "Suturador death did not create its point reward")
+	_check(reward_orbs.any(func(value): return int(Dictionary(value).get("score_value", 0)) >= controller.REWARD_BASE_POINTS), "Suturador point reward was below the configured base")
 	var next_time := float(game.amber_suturer_state.get("next_spawn_phase_time", 0.0))
 	_check(next_time >= game._phase_elapsed_time() + controller.RESPAWN_MIN_TIME and next_time <= game._phase_elapsed_time() + controller.RESPAWN_MAX_TIME, "recurrence is outside 120-150 seconds")
 	game.time_alive = next_time - 0.1
@@ -413,5 +430,5 @@ func _run() -> void:
 			printerr("PHASE6_AMBER_SUTURER_SMOKE_FAIL " + failure)
 		quit(1)
 		return
-	print("PHASE6_AMBER_SUTURER_SMOKE_OK persistent=true speed=106.2 armor_breaks=4 active_time=18 crossfire=true repair=true hook_fast=true fps=30_60 save=true")
+	print("PHASE6_AMBER_SUTURER_SMOKE_OK persistent=true speed=106.2 armor_breaks=4 active_time=18 crystal_cd=60 crossfire=true repair=true hook_fast=true fps=30_60 save=true")
 	quit(0)

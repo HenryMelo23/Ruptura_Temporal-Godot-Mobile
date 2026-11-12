@@ -1,13 +1,14 @@
 extends SceneTree
 
 var game: Node
+var failed: bool = false
 
 
 func _check(condition: bool, message: String) -> void:
 	if condition:
 		return
+	failed = true
 	push_error("SHOP_PAID_REROLLS_FAIL " + message)
-	quit(1)
 
 
 func _initialize() -> void:
@@ -20,13 +21,22 @@ func _settle_shop_animation() -> void:
 	game.shop_presentation.update(1.0)
 
 
-func _sfx_was_played(key: String) -> bool:
-	if not game.audio_streams.has(key):
-		return false
+func _prepare_sfx_probe() -> void:
+	game.vol_master = 1.0
+	game.vol_sfx = 1.0
 	for player in game.sfx_players:
-		if player.stream == game.audio_streams[key]:
-			return true
-	return false
+		player.stop()
+		player.stream = null
+
+
+func _sfx_play_count(key: String) -> int:
+	if not game.audio_streams.has(key):
+		return 0
+	var matches: int = 0
+	for player in game.sfx_players:
+		if player.playing and player.stream == game.audio_streams[key]:
+			matches += 1
+	return matches
 
 
 func _open_test_shop(score: int, cost: int, multiplayer: bool = false) -> void:
@@ -115,9 +125,12 @@ func _run() -> void:
 	_open_test_shop(1600, 500)
 	_consume_free_rerolls()
 	var spent_before: int = game.run_points_spent
+	_prepare_sfx_probe()
+	_check(_sfx_play_count("shop_spend") == 0, "paid reroll SFX probe inherited another scenario")
 	game._reroll_shop()
+	var paid_reroll_sfx_count: int = _sfx_play_count("shop_spend")
 	_check(game.score == 1500, "first paid reroll did not charge 20 percent of card_cost")
-	_check(_sfx_was_played("shop_spend"), "paid reroll did not play the score-spend SFX")
+	_check(paid_reroll_sfx_count == 1, "paid reroll did not play the score-spend SFX exactly once")
 	_check(game.run_points_spent == spent_before + 100, "first paid reroll did not count as spent points")
 	_check(game.shop_paid_rerolls_this_visit == 1, "first paid reroll did not increment paid count")
 	_settle_shop_animation()
@@ -147,13 +160,13 @@ func _run() -> void:
 	_open_test_shop(900, 500)
 	_check(game.shop_visit_index == visit_before + 1, "new visit did not advance")
 	_check(game.shop_rerolls == 3 and game.shop_paid_rerolls_this_visit == 0, "reroll counters did not reset per visit")
-	for player in game.sfx_players:
-		player.stop()
-		player.stream = null
+	_prepare_sfx_probe()
+	_check(_sfx_play_count("shop_spend") == 0, "card purchase SFX probe inherited another scenario")
 	game._buy_selected_card()
 	_check(game.shop_purchase_anim_timer > 0.0, "card purchase did not enter its existing animation")
 	game.shop_controller.update(game.SHOP_PURCHASE_ANIM_TIME + 0.02)
-	_check(_sfx_was_played("shop_spend"), "card purchase did not play the score-spend SFX")
+	var purchase_sfx_count: int = _sfx_play_count("shop_spend")
+	_check(purchase_sfx_count == 1, "card purchase did not play the score-spend SFX exactly once")
 
 	_open_test_shop(900, 500, true)
 	_consume_free_rerolls()
@@ -162,11 +175,12 @@ func _run() -> void:
 	_check(not game.shop_mp_ready_to_leave, "paid reroll touched multiplayer ready state")
 	_check(game.score == 800, "multiplayer paid reroll did not charge only local score")
 
-	print("SHOP_PAID_REROLLS_SMOKE_OK free=3 paid_costs=100,135,183,247,333,449,606,818,1104,1490,1500 multiplayer=true")
+	if not failed:
+		print("SHOP_PAID_REROLLS_SMOKE_OK free=3 paid_costs=100,135,183,247,333,449,606,818,1104,1490,1500 shop_spend=reroll:%d,purchase:%d multiplayer=true" % [paid_reroll_sfx_count, purchase_sfx_count])
 	game._cleanup_runtime_resources()
 	root.remove_child(game)
 	game.queue_free()
 	game = null
 	await process_frame
 	await process_frame
-	quit(0)
+	quit(1 if failed else 0)

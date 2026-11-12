@@ -280,7 +280,6 @@ func handle_touch_press(index: int, pos: Vector2, viewport: Vector2) -> void:
 	if core.buttons["dash"].has_point(pos):
 		claim_action_touch(index); core.dash_touch_index = index; core.teleport_dragging = true; core.teleport_drag_origin = pos; core.teleport_drag_screen = pos; return
 	if core.buttons["pause"].has_point(pos): core._start_pause_countdown(); return
-	if core.buttons.has("shop_manual") and core.buttons["shop_manual"].has_point(pos): core._try_open_manual_shop(); return
 	if core.buttons["boss"].has_point(pos): core._start_boss_call(); return
 	if not try_start_move_touch(index, pos, viewport):
 		core.dance_wheel_touch_index = index; core.dance_wheel_start_pos = pos; core.dance_wheel_hold_timer = 0.0; core.dance_wheel_active = false
@@ -318,9 +317,7 @@ func handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active:
 			var profile = core._ground_target_profile(false)
-			if core.manifestation_key == "parasitica" and _parasitica_skill_quick_release(pos):
-				_use_parasitica_quick_skill(not core._uses_touch_ui())
-			elif profile.is_empty(): core._use_skill()
+			if profile.is_empty(): core._use_skill()
 			else: core._use_skill(core._ground_target_world(pos, viewport, false))
 		core.skill_touch_index = -1
 		skill_press_started_msec = 0
@@ -398,7 +395,8 @@ func desktop_skill_mode() -> String:
 
 
 func desktop_dash_mode() -> String:
-	return core._sanitize_desktop_teleport_mode(core.desktop_teleport_mode)
+	# Ataque em mira automatica (sem mouse) => teleporte nunca usa cursor.
+	return core._effective_desktop_teleport_mode()
 
 
 func desktop_aim_target_world() -> Vector2:
@@ -466,11 +464,13 @@ func execute_desktop_action(action: String) -> void:
 		"dance": core._toggle_player_dance()
 		"interact": core._try_interact_revival_altar()
 		"pause": core._start_pause_countdown()
-		"shop": core._try_open_manual_shop()
 		"boss": core._start_boss_call()
 
 
 func desktop_action_uses_aim(action: String) -> bool:
+	# Simbiose Predatoria e aplicada sobre Geovana: sem mira/reticulo.
+	if action == "skill" and core.manifestation_key == "parasitica":
+		return false
 	return action in ["skill", "secondary", "dash"]
 
 
@@ -511,9 +511,6 @@ func cancel_desktop_aim_feedback() -> void:
 
 func handle_desktop_aim_press(action: String, binding: String) -> bool:
 	if not desktop_action_uses_aim(action): execute_desktop_action(action); return true
-	if action == "skill" and core.manifestation_key == "parasitica":
-		begin_desktop_aim(action, binding, true)
-		return true
 	if action == "secondary" and core.manifestation_key == "lacerante":
 		begin_desktop_aim(action, binding, true)
 		return true
@@ -529,14 +526,6 @@ func handle_desktop_aim_press(action: String, binding: String) -> bool:
 
 func handle_desktop_aim_release(event: InputEvent) -> bool:
 	if core.desktop_aim_action == "" or not core.desktop_aim_is_hold or desktop_event_binding(event) != core.desktop_aim_event_binding: return false
-	if core.desktop_aim_action == "skill" and core.manifestation_key == "parasitica":
-		var quick_release := _parasitica_skill_quick_release(core.get_viewport().get_mouse_position())
-		clear_desktop_aim_state(); core.skill_touch_index = -1
-		if quick_release: _use_parasitica_quick_skill(true)
-		else: use_desktop_skill(false)
-		skill_press_started_msec = 0
-		skill_press_origin = Vector2.ZERO
-		return true
 	if core.desktop_aim_action == "secondary" and core.manifestation_key == "lacerante":
 		var quick_release := _lacerante_ultimate_quick_release(core.get_viewport().get_mouse_position())
 		clear_desktop_aim_state(); core.secondary_touch_index = -1
@@ -635,7 +624,6 @@ func handle_gamepad_virtual_button(button_id: String, pressed: bool, viewport: V
 		elif combat_active and action == "secondary" and core.buttons.has("secondary"): handle_touch_press(-5, core.buttons["secondary"].get_center(), viewport)
 		elif combat_active and action == "dash" and core.buttons.has("dash"): handle_touch_press(-6, core.buttons["dash"].get_center(), viewport)
 		elif combat_active and action == "pause": core._start_pause_countdown()
-		elif combat_active and action == "shop": core._try_open_manual_shop()
 		elif combat_active and action == "boss": core._start_boss_call()
 		elif combat_active and action == "lacerante_empower" and core.buttons.has("lacerante_empower"): handle_touch_press(-8, core.buttons["lacerante_empower"].get_center(), viewport)
 		elif not combat_active: handle_gamepad_ui_action(action)

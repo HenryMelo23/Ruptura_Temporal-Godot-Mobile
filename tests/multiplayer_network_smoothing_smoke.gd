@@ -94,7 +94,9 @@ func _run() -> void:
 	host_game.boss3_miasma_qte_taps = 6
 	host_game.boss3_faith_link_timer = 2.0
 	host_game.phase4_enemy_hazards = [{"kind": "boss4_pulse", "pos": Vector2(360, 320), "age": 0.10, "life": 1.0, "max": 1.0, "radius": 180.0}]
-	host_game.current_music = "Fases1.mp3"
+	var shared_phase_tracks: Array = host_game._shared_phase_music_tracks()
+	_check(not shared_phase_tracks.is_empty(), "shared phase playlist is empty")
+	host_game.current_music = shared_phase_tracks[0]
 	client_game._apply_remote_world_snapshot(
 		host_game._pack_net_enemies(),
 		host_game._pack_net_boss(),

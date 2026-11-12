@@ -57,14 +57,14 @@ func _run() -> void:
 	_check(not damage_card.is_empty(), "damage card was not found")
 	game.cards_bought["Disparo crescente"] = 1
 	game._recalculate_common_card_stat_bonuses()
-	var expected_damage_one: float = game._manifestation_base_damage() * 0.15
-	_check(is_equal_approx(float(game.common_card_stat_cache.get("damage_bonus", 0.0)), expected_damage_one), "damage card did not grant 15% damage for one copy")
+	var expected_damage_one: float = game._manifestation_base_damage() * 0.20
+	_check(is_equal_approx(float(game.common_card_stat_cache.get("damage_bonus", 0.0)), expected_damage_one), "damage card did not grant 20% damage for one copy")
 	var damage_projection: Array = game._card_projection_lines(damage_card)
-	_check(String(damage_projection[0]).find("+15.0%") >= 0 and String(damage_projection[1]).find("+32.2%") >= 0, "stacking card projection did not show the real next total")
+	_check(String(damage_projection[0]).find("+20.0%") >= 0 and String(damage_projection[1]).find("+44.0%") >= 0, "stacking card projection did not show the real next total")
 	game.cards_bought["Disparo crescente"] = 2
 	game._recalculate_common_card_stat_bonuses()
-	var expected_damage_two: float = game._manifestation_base_damage() * (pow(1.15, 2.0) - 1.0)
-	_check(is_equal_approx(float(game.common_card_stat_cache.get("damage_bonus", 0.0)), expected_damage_two), "damage card did not compound to 32.25% for two copies")
+	var expected_damage_two: float = game._manifestation_base_damage() * (pow(game.COMMON_DISPARO_DAMAGE_GROWTH, 2.0) - 1.0)
+	_check(is_equal_approx(float(game.common_card_stat_cache.get("damage_bonus", 0.0)), expected_damage_two), "damage card did not compound to 44% for two copies")
 	
 	game.arauto_card_drops.clear()
 	game._spawn_random_card_drops(game.player_pos + Vector2(120, 0), 8, 1)

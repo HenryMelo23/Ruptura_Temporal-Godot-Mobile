@@ -50,7 +50,7 @@ func _run() -> void:
 	_check(game._combat_targets().size() == 3, "combat target registry did not expose all three players")
 	_check(is_equal_approx(game._multiplayer_enemy_hp_scale(), game.MULTIPLAYER_ENEMY_HP_SCALE_3P), "three-player enemy hp scale is not active")
 	_check(is_equal_approx(game._multiplayer_boss_damage_scale(), game.MULTIPLAYER_BOSS_DAMAGE_SCALE_3P), "three-player boss damage scale is not active")
-	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss hp scale is not active")
+	_check(is_equal_approx(game._boss_hp_for_phase(1), game.BOSS_BASE_HP * game._boss_phase_durability_multiplier(1) * game.MULTIPLAYER_BOSS_HP_SCALE_3P), "three-player boss durability/party hp scale is not active")
 	# The native phase cap and long-run pressure are intentionally dynamic. Prove
 	# the multiplayer contribution as a delta instead of assuming phase 1's old
 	# fixed base cap.

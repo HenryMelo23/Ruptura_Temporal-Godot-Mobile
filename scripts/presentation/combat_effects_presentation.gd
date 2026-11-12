@@ -158,8 +158,9 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	camera += game._screen_shake_offset()
 	RTExecutionCamera.apply(game, viewport, camera)
 	RTRewindCamera.apply(game, viewport, camera)
+	RTDeathCamera.apply(game, viewport, camera)
 	Lightning.begin_frame(game, camera)
-	var map_texture = game._current_map_texture()
+	var map_texture = null if game._merchant_dimension().active else game._current_map_texture()
 	if RTFrameProfiler.skipped("map"):
 		map_texture = null
 	if map_texture:
@@ -180,9 +181,14 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 			game.ExperimentalPhasePresentation.draw_world(game, camera, viewport)
 	else:
 		game.draw_rect(Rect2( - camera, game.WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
+	RTMerchantDimensionPresentation.draw_world(game, camera)
+	RTWorldLighting.collect_and_present(game, camera, viewport)
 	RTFrameProfiler.mark("dm_map")
 	game._draw_event_alert_world(camera, viewport)
-	MerchantRiftPresentation.draw_world(game, camera, viewport)
+	# Dentro da oficina a fenda de origem ficaria desenhada por cima do chao,
+	# em coordenadas de um mundo que nao esta mais carregado.
+	if not game._merchant_dimension().active:
+		MerchantRiftPresentation.draw_world(game, camera, viewport)
 	game._draw_boss6_necro_erosion(camera)
 	game._draw_phase5_transmute_particles(camera)
 	if game.vfx_director:
@@ -317,6 +323,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	RTFrameProfiler.mark("d_map_floor_world")
 	if not RTFrameProfiler.skipped("enemies"):
 		game._draw_enemies(camera)
+		if game.current_phase == 3:
+			RTPhase3RitualPresentation.draw_overlay(game, camera)
 	RTFrameProfiler.mark("d_enemies")
 	game._draw_projectiles(camera)
 	RTSuturerThreatPresentation.draw_over(game, camera)
@@ -332,14 +340,17 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game.is_multiplayer or game.manifestation_key == "parasitica":
 		game._draw_parasite_marks(camera)
 		game._draw_parasite_foreground(camera)
+		RTParasiticaPresentation.draw_world(game, camera)
 	if not game.phase_fragment.is_empty():
 		game._draw_phase_fragment(camera)
 	game._draw_team_revival_world(camera)
 	if not game.online_local_spectator:
 		game._draw_companions(camera)
 		game._draw_boss6_fossil_echo(camera)
-		if not RTLaceranteExecutionVfx.hides_player(game):
+		if not RTDeathCamera.active(game) and not RTLaceranteExecutionVfx.hides_player(game):
 			game._draw_player(camera)
+			RTParasiticaPresentation.draw_symbiote(game, camera)
+			_draw_frost_stacks(game, camera)
 	RTLaceranteExecutionVfx.draw_world(game, camera)
 	BossReward.draw(game, camera)
 	if game.current_phase == 6:
@@ -365,7 +376,13 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_apolo_phase5_exhibition_world(camera)
 	Lightning.end_frame(game)
 	HenryFire.draw_entrance(game, camera, viewport)
+	RTWorldLighting.draw_screen(game, viewport, game.PhaseMapPresentation.surface_for(game))
+	RTMerchantDimensionPresentation.draw_overlay(game, viewport)
 	if game.preview_capture_mode:
+		return
+	if game._dialogue().busy():
+		# Fala em estilo RPG: a caixa e o retrato sao a tela inteira. HUD,
+		# guia e controles reaparecem quando ela terminar de falar.
 		return
 	RTBossPactPresentation.draw_darkness(game, camera, viewport)
 	MistGuidePresentation.draw_overlay(game, camera, viewport)
@@ -376,6 +393,10 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if RTRewindCamera.active(game):
 		# Cinematica da Crono-Ruptura: sem HUD; relogio e tela em espaco de tela.
 		RTRewindCamera.draw_overlay(game, viewport, camera)
+		return
+	if RTDeathCamera.active(game):
+		# Na morte, o corpo e o mundo congelando sao a leitura principal. O HUD
+		# reaparece somente depois, na evolucao dos espectros.
 		return
 	RTFrameProfiler.mark("d_overlays")
 	RTLarapioPresentation.draw_indicator(game, camera, viewport)
@@ -1297,7 +1318,13 @@ static func _draw_arauto_card_drops(game: Node2D, camera: Vector2) -> void :
 		game.draw_rect(rect.grow(3.0), Color(0.01, 0.03, 0.05, 0.78 * alpha), true)
 		game.draw_rect(rect.grow(3.0), accent, false, 2.0)
 		var tex: Texture2D = game._card_texture(card) if game._card_drop_texture_loaded(card) else null
-		if tex:
+		if bool(drop.get("mystery", false)):
+			# Corruptor Mercantil: so a raridade aparece.
+			var pulse_q: float = 0.5 + 0.5 * sin(age * 6.0)
+			game.draw_rect(rect.grow(-5.0), Color(accent.r * 0.25, accent.g * 0.25, accent.b * 0.25, 0.95 * alpha), true)
+			game.draw_rect(rect.grow(-9.0), Color(accent.r, accent.g, accent.b, (0.25 + 0.2 * pulse_q) * alpha), true)
+			game._draw_centered_outlined("?", rect.get_center() + Vector2(0, 13), 38, Color(1, 1, 1, alpha), Color(accent.r * 0.4, accent.g * 0.4, accent.b * 0.4, alpha), 4)
+		elif tex:
 			game._draw_texture_contain(tex, rect.grow(-5.0), Color(1, 1, 1, alpha))
 		else:
 			game.draw_rect(rect.grow(-9.0), Color(accent.r, accent.g, accent.b, 0.32 * alpha), true)
@@ -1979,6 +2006,27 @@ static func _draw_canonical_network_ability(game: Node2D, visual: Dictionary, ca
 	_restore_canonical_context(game, previous)
 
 
+## Geada do Sineiro: cristais em volta do corpo, um por carga, e um halo
+## frio que fecha conforme o congelamento se aproxima.
+static func _draw_frost_stacks(game: Node2D, camera: Vector2) -> void:
+	var stacks: int = int(game.player_frost_stacks)
+	if stacks <= 0:
+		return
+	var center: Vector2 = game.player_pos - camera
+	var t: float = float(game.time_alive)
+	var ratio: float = clampf(float(stacks) / float(game.FROST_MAX_STACKS), 0.0, 1.0)
+	var chill := Color(0.58, 0.9, 1.0, 0.30 + 0.35 * ratio)
+	game.draw_arc(center, 30.0 - 4.0 * ratio, 0.0, TAU, 26, Color(chill.r, chill.g, chill.b, chill.a * 0.5), 1.6, true)
+	for i in range(stacks):
+		var ang: float = t * 1.5 + float(i) * TAU / float(maxi(1, stacks))
+		var at: Vector2 = center + Vector2.from_angle(ang) * (26.0 + sin(t * 3.0 + float(i)) * 2.0) + Vector2(0.0, -18.0)
+		var up: Vector2 = Vector2.from_angle(ang - PI * 0.5) * 7.0
+		var side: Vector2 = Vector2.from_angle(ang) * 3.4
+		var shard := PackedVector2Array([at + up, at + side, at - up * 0.55, at - side])
+		game.draw_colored_polygon(shard, Color(0.72, 0.95, 1.0, 0.86))
+		game.draw_polyline(PackedVector2Array([shard[0], shard[1], shard[2], shard[3], shard[0]]), Color(1.0, 1.0, 1.0, 0.9), 1.0, true)
+
+
 static func _draw_henry_ability_vfx(game: Node2D, camera: Vector2) -> void:
 	HenryBarometric.draw_local(game, camera, game.henry_barometric_ability_controller)
 	HenryColossus.draw_local(game, camera, game.henry_colossus_ability_controller)
@@ -2047,7 +2095,10 @@ static func _draw_henry_network_ability(game: Node2D, visual: Dictionary, camera
 		var source_state: Dictionary = game.net_players_by_peer.get(source_peer, {})
 		var center := Vector2(source_state.get("render_pos", source_state.get("pos", visual.get("origin", game.net_player_render_pos)))) - camera
 		_draw_henry_incandescence_zone(game, center, progress, clampf(extra - game.HENRY_INCANDESCENCE_NET_SENTINEL, 0.08, 1.0), fade)
-	elif action == game.NET_ABILITY_SKILL:
+		return
+	if _draw_henry_canonical_network_ability(game, visual, camera, action, fade):
+		return
+	if action == game.NET_ABILITY_SKILL:
 		_draw_henry_cone(game, origin, (target - origin).normalized(), progress, fade)
 		var skill_elapsed := progress * maxf(0.01, float(visual.get("max", game.HENRY_SKILL_CAST_DURATION)))
 		for pulse in range(3):
@@ -2075,6 +2126,85 @@ static func _draw_henry_network_ability(game: Node2D, visual: Dictionary, camera
 		if progress * float(visual.get("max", spin_duration)) > spin_duration:
 			var final_progress := clampf((progress * float(visual.get("max", spin_duration)) - spin_duration) / maxf(0.01, game.HENRY_ULTIMATE_WAVE_DURATION), 0.0, 1.0)
 			_draw_henry_heat_wave(game, target, game.HENRY_SPIN_EXPLOSION_RADIUS * final_progress, game.HENRY_SPIN_EXPLOSION_RADIUS, fade)
+
+
+static func _draw_henry_canonical_network_ability(game: Node2D, visual: Dictionary, camera: Vector2, action: int, fade: float) -> bool:
+	var canonical = visual.get("canonical_state", null)
+	if not canonical is Dictionary or not Dictionary(canonical).has("incendiary"):
+		return false
+	var state_value = Dictionary(canonical).get("incendiary", {})
+	if not state_value is Dictionary:
+		return false
+	var state: Dictionary = state_value
+	var event_elapsed := maxf(0.0, float(visual.get("max", 0.0)) - float(visual.get("life", 0.0)))
+	var advance := maxf(0.0, event_elapsed - float(visual.get("canonical_base_elapsed", 0.0)))
+	var trail: Array = []
+	for point_value in state.get("trail", []):
+		if point_value is Dictionary:
+			var point := Dictionary(point_value).duplicate(true)
+			point["life"] = maxf(0.0, float(point.get("life", 0.0)) - advance)
+			if float(point["life"]) > 0.0:
+				trail.append(point)
+	HenryFire.draw_ember_trail(game, camera, trail)
+	var bursts: Array = []
+	for burst_value in state.get("bursts", []):
+		if burst_value is Dictionary:
+			var burst := Dictionary(burst_value).duplicate(true)
+			burst["life"] = maxf(0.0, float(burst.get("life", 0.0)) - advance)
+			if float(burst["life"]) > 0.0:
+				bursts.append(burst)
+	HenryFire.draw_combustion(game, camera, bursts)
+	for fireball_value in state.get("fireballs", []):
+		if not fireball_value is Dictionary:
+			continue
+		var fireball: Dictionary = fireball_value
+		if float(fireball.get("life", 0.0)) - advance <= 0.0:
+			continue
+		var fireball_dir := Vector2(fireball.get("dir", Vector2.RIGHT)).normalized()
+		var fireball_pos := Vector2(fireball.get("pos", visual.get("origin", game.net_player_render_pos))) + fireball_dir * float(fireball.get("speed", 0.0)) * advance
+		HenryFire.fireball(game, fireball_pos - camera, fireball_dir)
+	for cone_value in state.get("flame_cones", []):
+		if not cone_value is Dictionary:
+			continue
+		var cone: Dictionary = cone_value
+		var cone_max := maxf(0.01, float(cone.get("max", game.HENRY_SKILL_CAST_DURATION)))
+		var cone_life := maxf(0.0, float(cone.get("life", 0.0)) - advance)
+		if cone_life > 0.0:
+			_draw_henry_cone(game, Vector2(cone.get("origin", visual.get("origin", game.net_player_render_pos))) - camera, Vector2(cone.get("dir", Vector2.RIGHT)), clampf(1.0 - cone_life / cone_max, 0.0, 1.0), fade)
+	for wave_value in state.get("heat_waves", []):
+		if not wave_value is Dictionary:
+			continue
+		var wave: Dictionary = wave_value
+		var delay := maxf(0.0, float(wave.get("delay", 0.0)))
+		if advance < delay:
+			continue
+		var wave_max := maxf(0.01, float(wave.get("max", game.HENRY_ULTIMATE_WAVE_DURATION)))
+		var wave_life := maxf(0.0, float(wave.get("life", 0.0)) - maxf(0.0, advance - delay))
+		if wave_life <= 0.0:
+			continue
+		var wave_radius_max := float(wave.get("max_radius", game.HENRY_ULTIMATE_RADIUS))
+		var wave_radius := wave_radius_max * clampf(1.0 - wave_life / wave_max, 0.0, 1.0)
+		if String(wave.get("kind", "")) == "ultimate":
+			HenryFire.eruption(game, Vector2(wave.get("center", visual.get("origin", game.net_player_render_pos))) - camera, wave_radius, wave_radius_max, int(wave.get("pulse", 0)))
+		else:
+			_draw_henry_heat_wave(game, Vector2(wave.get("center", visual.get("origin", game.net_player_render_pos))) - camera, wave_radius, wave_radius_max, fade)
+	var spin = state.get("spin", {})
+	if action == game.NET_ABILITY_TELEPORT and spin is Dictionary and bool(Dictionary(spin).get("active", false)):
+		var spin_state: Dictionary = spin
+		var spin_duration := maxf(0.01, float(spin_state.get("duration", game.HENRY_SPIN_DURATION)))
+		var spin_elapsed := float(spin_state.get("elapsed", 0.0)) + advance
+		if spin_elapsed < spin_duration:
+			var dash_duration := maxf(0.01, float(spin_state.get("dash_duration", game.HENRY_SPIN_DASH_DURATION)))
+			var dash_progress := clampf(spin_elapsed / dash_duration, 0.0, 1.0)
+			var dash_pos := Vector2(spin_state.get("origin", visual.get("origin", game.net_player_render_pos))).lerp(Vector2(spin_state.get("target", visual.get("target", game.net_player_render_pos))), smoothstep(0.0, 1.0, dash_progress))
+			HenryFire.dash(game, dash_pos - camera, Vector2(spin_state.get("direction", Vector2.RIGHT)), clampf(spin_elapsed / spin_duration, 0.0, 1.0), fade)
+	var ultimate = state.get("ultimate", {})
+	if action == game.NET_ABILITY_SECONDARY and ultimate is Dictionary and bool(Dictionary(ultimate).get("active", false)):
+		var ultimate_state: Dictionary = ultimate
+		var ultimate_elapsed := float(ultimate_state.get("elapsed", 0.0)) + advance
+		if ultimate_elapsed < float(ultimate_state.get("duration", 0.0)):
+			HenryFire.ignition(game, Vector2(ultimate_state.get("center", visual.get("origin", game.net_player_render_pos))) - camera, ultimate_elapsed, int(ultimate_state.get("pulses", 0)))
+	return true
 
 
 static func _draw_henry_burn_stacks(game: Node2D, center: Vector2, stacks: int, flash: float) -> void:
@@ -2116,7 +2246,7 @@ static func _draw_henry_incandescence_zone(game: Node2D, center: Vector2, progre
 static func _draw_canonical_manifestation_skill(game: Node2D, state: Dictionary, camera: Vector2, kind: String) -> void:
 	match kind:
 		"eletrica": game._draw_eletrica_kinetic_waves(camera)
-		"parasitica": game._draw_parasite_spit_zones(camera)
+		"parasitica": RTParasiticaPresentation.draw_remote(game, Dictionary(state.get("parasitica_visual", {})), camera, game.player_pos)
 		"gravitante": game._draw_teleport_effects(camera)
 		_:
 			pass
@@ -2881,7 +3011,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 				var batch_palette: Dictionary = game._projectile_palette(kind)
 				batch_colors_by_kind[kind] = Color(batch_palette.get("core", bullet.get("color", Color.WHITE)))
 			var basic_color: Color = batch_colors_by_kind[kind]
-			game.runtime_projectile_batch_renderer.append(pos, dir, basic_color)
+			game.runtime_projectile_batch_renderer.append(pos, dir, basic_color, clampf(float(bullet.get("speed_mult", 1.0)), 0.8, 1.5))
 			continue
 		var palette = game._projectile_palette(kind)
 		if not game.RangedAttackRange.begin_projectile_draw(game, bullet, pos):
@@ -2936,9 +3066,11 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 				game.draw_polyline(PackedVector2Array([body[0], body[1], body[2], body[3], body[0]]), Color.WHITE, 1.2, true)
 			_:
 				var c: Color = bullet["color"]
-				game.draw_circle(pos, 7, c)
-				c.a = 0.22
-				game.draw_circle(pos, 15, c)
+				var speed_stretch: float = clampf(float(bullet.get("speed_mult", 1.0)), 0.8, 1.6)
+				game.draw_line(pos - dir * 19.0 * speed_stretch, pos + dir * 4.0, Color(c.r, c.g, c.b, 0.30), 7.0, true)
+				game.draw_circle(pos, 10.5, Color(c.r, c.g, c.b, 0.2))
+				game.draw_circle(pos, 6.2, c)
+				game.draw_circle(pos + dir * 1.5, 2.8, Color(1.0, 1.0, 1.0, 0.92))
 		game.RangedAttackRange.end_projectile_draw(game)
 	game.runtime_projectile_batch_renderer.submit(game.get_canvas_item(), game)
 	var batch_simple_enemy_shots: bool = game._runtime_visual_budget_active() and game.enemy_bullets.size() >= 32
@@ -3054,6 +3186,8 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 			var dir = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
 			var side = dir.orthogonal()
 			var phase = float(bullet.get("phase", 0.0))
+			if RTUmbraSkillPresentation.draw_plasma(game, pos, dir, game.time_alive + phase):
+				continue
 			var core = PackedVector2Array([pos + dir * 22.0, pos + side * 10.0, pos - dir * 16.0, pos - side * 10.0])
 			game.draw_circle(pos, 31.0, Color(0.05, 0.72, 0.18, 0.22))
 			game.draw_colored_polygon(core, Color(0.25, 1.0, 0.34, 0.96))

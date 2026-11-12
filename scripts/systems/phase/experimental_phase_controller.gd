@@ -19,6 +19,7 @@ const PHASES := {
 }
 const ALTAR_INTERACTION_RADIUS := 118.0
 const ALTAR_HOLD_TIME := 1.15
+const ALTAR_DISCOVERY_RADIUS := 760.0
 const ALTAR_WORLD_MARGIN := Vector2(300.0, 250.0)
 const ALTAR_MIN_START_DISTANCE := 1180.0
 const ENEMY_SPAWN_MIN_DISTANCE := 620.0
@@ -29,6 +30,8 @@ var requested_phase: int = 1
 var active_phase: int = 1
 var landmarks: Array[Dictionary] = []
 var route_points: Array[Vector2] = []
+var altar_present_count: int = 0
+var altar_expected_count: int = 1
 
 
 func configure(p_core: Node) -> void:
@@ -89,6 +92,8 @@ func _reset_altar_state() -> void:
 	core.experimental_boss_altar_authorized = false
 	landmarks.clear()
 	route_points.clear()
+	altar_present_count = 0
+	altar_expected_count = 1
 
 
 func begin_definitive_phase(phase: int) -> void:
@@ -130,38 +135,130 @@ func activate_after_phase_setup() -> void:
 		core._add_text("%s: MAPA CLASSICO" % phase_label(), core.player_pos + Vector2(0.0, -112.0), Color(0.34, 0.94, 1.0), 2.8, 27)
 		return
 	begin_definitive_phase(core.current_phase)
-	core._add_text("FASE %d: %s" % [active_phase, PHASES[active_phase]["region"]], core.player_pos + Vector2(0.0, -112.0), Color(0.34, 0.94, 1.0), 2.8, 27)
-	core._add_text("MAPA EXPANDIDO 5X", core.player_pos + Vector2(0.0, -150.0), Color(1.0, 0.76, 0.28), 2.3, 20)
 
 
 func update(delta: float) -> void:
 	if not uses_definitive_world():
 		return
+	_repair_consumed_altar_without_boss_call()
 	if core.mode != "game" or core.boss_active or core.boss_dead or core.boss_call_timer >= 0.0 or core.experimental_boss_altar_used:
 		core.experimental_boss_altar_hold = 0.0
 		core.experimental_boss_altar_near = false
 		return
 	core.boss_ready = true
-	if not core.experimental_boss_altar_discovered and _altar_visible_on_screen():
-		core.experimental_boss_altar_discovered = true
-		core._add_text("ALTAR DESCOBERTO", core.experimental_boss_altar_pos + Vector2(0.0, -194.0), Color(1.0, 0.72, 0.22), 1.35, 22)
 	var distance: float = Vector2(core.player_pos).distance_to(Vector2(core.experimental_boss_altar_pos))
-	var was_near: bool = bool(core.experimental_boss_altar_near)
 	core.experimental_boss_altar_near = distance <= ALTAR_INTERACTION_RADIUS
-	if not core.experimental_boss_altar_near:
+	if core.is_multiplayer and core._is_world_replica():
+		return
+	if not core.experimental_boss_altar_discovered:
+		var discovered: bool = _any_living_player_within(ALTAR_DISCOVERY_RADIUS) if core.is_multiplayer else _altar_visible_on_screen()
+		if discovered:
+			core.experimental_boss_altar_discovered = true
+			core._add_text("ALTAR DESCOBERTO", core.experimental_boss_altar_pos + Vector2(0.0, -194.0), Color(1.0, 0.72, 0.22), 1.35, 22)
+	var all_present: bool = core.experimental_boss_altar_near
+	if core.is_multiplayer:
+		var presence: Vector2i = _living_presence(ALTAR_INTERACTION_RADIUS)
+		altar_present_count = presence.x
+		altar_expected_count = maxi(1, presence.y)
+		all_present = altar_present_count >= altar_expected_count
+	else:
+		altar_present_count = 1 if core.experimental_boss_altar_near else 0
+		altar_expected_count = 1
+	if not all_present:
 		core.experimental_boss_altar_hold = maxf(0.0, core.experimental_boss_altar_hold - delta * 2.5)
 		return
-	if core._arauto_active():
+	if altar_blocker_text() != "":
 		core.experimental_boss_altar_hold = 0.0
 		return
 	core.experimental_boss_altar_hold = minf(ALTAR_HOLD_TIME, core.experimental_boss_altar_hold + delta)
 	if core.experimental_boss_altar_hold < ALTAR_HOLD_TIME:
 		return
-	core.experimental_boss_altar_used = true
 	core.experimental_boss_altar_authorized = true
-	core._start_boss_call()
+	if core.is_multiplayer:
+		core._begin_boss_call_for_all()
+	else:
+		core._start_boss_call()
+	var started: bool = float(core.boss_call_timer) >= 0.0 or core.mode == "boss_call"
+	if not started:
+		core.experimental_boss_altar_authorized = false
+		core.experimental_boss_altar_hold = 0.0
+		return
+	core.experimental_boss_altar_used = true
 	if not core.is_multiplayer:
 		core.experimental_boss_altar_authorized = false
+
+
+func _repair_consumed_altar_without_boss_call() -> void:
+	if not bool(core.experimental_boss_altar_used):
+		return
+	if core.is_multiplayer and core._is_world_replica():
+		return
+	if core.mode != "game" or core.boss_active or core.boss_dead or float(core.boss_call_timer) >= 0.0:
+		return
+	core.experimental_boss_altar_used = false
+	core.experimental_boss_altar_authorized = false
+	core.experimental_boss_altar_hold = 0.0
+	core._add_text("ALTAR REATIVADO", Vector2(core.experimental_boss_altar_pos) + Vector2(0.0, -194.0), Color(0.34, 0.94, 1.0), 1.8, 22)
+
+
+func active_snapshot() -> Dictionary:
+	return {
+		"phase": int(core.current_phase),
+		"pos": Vector2(core.experimental_boss_altar_pos),
+		"discovered": bool(core.experimental_boss_altar_discovered),
+		"used": bool(core.experimental_boss_altar_used),
+		"hold": float(core.experimental_boss_altar_hold),
+		"present": altar_present_count,
+		"expected": altar_expected_count,
+	}
+
+
+func apply_remote_snapshot(snapshot: Dictionary) -> void:
+	if core == null or not core._is_world_replica() or snapshot.is_empty():
+		return
+	if int(snapshot.get("phase", core.current_phase)) != int(core.current_phase):
+		return
+	core.experimental_boss_altar_pos = Vector2(snapshot.get("pos", core.experimental_boss_altar_pos))
+	core.experimental_boss_altar_discovered = bool(snapshot.get("discovered", core.experimental_boss_altar_discovered))
+	core.experimental_boss_altar_used = bool(snapshot.get("used", core.experimental_boss_altar_used))
+	core.experimental_boss_altar_hold = clampf(float(snapshot.get("hold", 0.0)), 0.0, ALTAR_HOLD_TIME)
+	altar_present_count = maxi(0, int(snapshot.get("present", 0)))
+	altar_expected_count = maxi(1, int(snapshot.get("expected", 1)))
+
+
+func _living_presence(radius: float) -> Vector2i:
+	var living: Array[int] = core._living_run_player_peer_ids()
+	var present := 0
+	for peer_id in living:
+		var pos: Vector2 = Vector2(core.player_pos)
+		if peer_id != core._mp_unique_id():
+			pos = Vector2(Dictionary(core.net_players_by_peer.get(peer_id, {})).get("pos", Vector2.INF))
+		if pos.distance_to(Vector2(core.experimental_boss_altar_pos)) <= radius:
+			present += 1
+	return Vector2i(present, living.size())
+
+
+func _any_living_player_within(radius: float) -> bool:
+	var presence: Vector2i = _living_presence(radius)
+	return presence.x > 0
+
+
+func altar_waiting_for_team() -> bool:
+	return core != null and core.is_multiplayer and altar_present_count < altar_expected_count
+
+
+func altar_presence_text() -> String:
+	return "%d/%d VIVOS NO ALTAR" % [altar_present_count, altar_expected_count]
+
+
+func altar_blocker_text() -> String:
+	if core == null:
+		return ""
+	if core._arauto_active():
+		return "DERROTE O ARAUTO"
+	if int(core.current_phase) == 6 and core.amber_suturer_controller != null and not core.amber_suturer_controller.active_enemy().is_empty():
+		return "DERROTE O SUTURADOR DE AMBAR"
+	return ""
 
 
 func boss_call_allowed() -> bool:

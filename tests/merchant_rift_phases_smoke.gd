@@ -1,7 +1,8 @@
 extends SceneTree
 
 ## Fenda do Mercador em cada fase da campanha (1-7): surge dentro do mundo,
-## longe do jogador e do altar, abre a loja ao entrar e gera capturas por fase.
+## longe do jogador e do altar, leva para a oficina do Mercador ao entrar (onde
+## a loja abre no balcao) e gera capturas por fase.
 ## Uso: godot --path . --script res://tests/merchant_rift_phases_smoke.gd [-- --no-capture]
 
 var game: Node
@@ -68,14 +69,27 @@ func _run() -> void:
 			game.player_pos = start
 		game.player_pos = pos
 		rift_controller.update(0.016)
-		_check(game.mode == "shop_opening", "phase %d: entering the rift did not open the shop" % phase)
-		game._update_shop_opening(game.SHOP_OPENING_ANIM_TIME + 0.02)
-		_check(game.mode == "shop", "phase %d: shop did not open from the rift" % phase)
+		var dimension = game._merchant_dimension()
+		_check(dimension.active, "phase %d: entering the rift did not open the workshop" % phase)
+		if failed:
+			return
+		if capture and phase == 1:
+			# Uma captura da oficina ja com a arte do Mercador no lugar.
+			game.camera_follow_initialized = false
+			await _capture(output_dir + "/oficina_1280x720.png")
+		# A loja fica no balcao: pula a fala e encosta no Mercador.
+		game._dialogue().clear()
+		dimension.talked_this_visit = true
+		dimension.counter_armed = true
+		game.player_pos = RTMerchantDimension.MERCHANT_POS
+		dimension.update(0.016)
+		_check(game.mode == "shop", "phase %d: shop did not open at the counter" % phase)
 		game.shop_controller.finish()
+		dimension.leave(false)
 		_check(not rift_controller.active(), "phase %d: rift survived the shop exit" % phase)
 		if failed:
 			return
-	print("MERCHANT_RIFT_PHASES_OK phases=7 spawn=true inside_world=true altar_clear=true enter=true capture=%s" % str(capture))
+	print("MERCHANT_RIFT_PHASES_OK phases=7 spawn=true inside_world=true altar_clear=true oficina=true capture=%s" % str(capture))
 	game._cleanup_runtime_resources()
 	game.free()
 	for _frame in range(3):

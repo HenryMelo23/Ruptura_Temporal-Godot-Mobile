@@ -186,6 +186,9 @@ async function run() {
       version: "2.0.27",
       platform: "Windows",
       result: "Derrota",
+      death_cause: "Espreitador — contato",
+      death_source: "espreitador",
+      death_phase: 3,
       started_unix: nowUnix - 333,
       ended_unix: nowUnix,
       duration_seconds: 333,
@@ -242,6 +245,8 @@ async function run() {
     assert.strictEqual(created.status, 202, "legacy unsigned run should be stored only for audit");
     const createdPayload = JSON.parse(created.body.toString("utf8"));
     const stored = createdPayload.run;
+    assert.strictEqual(stored.deathCause, "Espreitador — contato", "death cause should be stored");
+    assert.strictEqual(stored.deathSource, "espreitador", "death source should be stored");
     assert.strictEqual(stored.rankEligible, false, "legacy unsigned run should not be competitive");
     assert(stored.suspicionReasons.includes("legacy_unsigned_protocol_closed"), "legacy audit reason missing");
     assert.strictEqual(createdPayload.runUrl, `http://127.0.0.1:${port}/leaderboard/run/${stored.id}`, "run URL should point to the exact run");
@@ -486,6 +491,7 @@ async function run() {
     assert(story.includes("ARQUIVO NARRATIVO") && story.includes("ramificacao inicial"), "story page missing");
     assert(catalog.includes("CATALOGO HISTORICO") && catalog.includes("Cartas mais presentes"), "catalog page missing");
     assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador"), "run summary telemetry missing");
+    assert(summary.includes("Causa da morte") && summary.includes("Espreitador — contato"), "run death cause feedback missing");
     assert(summary.includes("Grafico da partida") && summary.includes("Pontos/min") && summary.includes("Vida dos inimigos") && summary.includes("Condicoes do score"), "run numeric timeline analysis missing");
     assert(home.includes("Mente da UMBRA") && home.includes("/leaderboard/umbra"), "UMBRA observatory link missing");
     assert(home.includes("Baixar o jogo") && home.includes("/leaderboard/downloads"), "download call to action missing");

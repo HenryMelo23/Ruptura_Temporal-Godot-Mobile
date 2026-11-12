@@ -317,6 +317,9 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 			return frames6[int(game.boss_phase) % frames6.size()]
 		return game.textures.get("boss")
 	if game.current_phase == 5:
+		var umbra_tex: Texture2D = RTUmbraBossAnimation.active_texture(game)
+		if umbra_tex != null:
+			return umbra_tex
 		if game.boss5_siphon_timer > 0.0:
 			var shield_frames: Array = game.textures.get("boss5_shield", [])
 			if not shield_frames.is_empty() and shield_frames[int(game.boss_phase) % shield_frames.size()] != null:
@@ -351,11 +354,11 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 		return boss1_animation_texture
 	var pct = game.boss_hp / max(1.0, game.boss_hp_max)
 	var idx = int(game.boss_phase) % 2
-	if pct >= 0.6:
-		return game.textures["boss_stage1"][idx] if game.textures["boss_stage1"][idx] else game.textures.get("boss")
-	if pct >= 0.4:
-		return game.textures["boss_stage2"][idx] if game.textures["boss_stage2"][idx] else game.textures.get("boss")
-	return game.textures["boss_stage3"][idx] if game.textures["boss_stage3"][idx] else game.textures.get("boss")
+	var stage_key := "boss_stage1" if pct >= 0.6 else ("boss_stage2" if pct >= 0.4 else "boss_stage3")
+	var stage_frames: Array = game.textures.get(stage_key, [])
+	if idx < stage_frames.size() and stage_frames[idx] != null:
+		return stage_frames[idx]
+	return game.textures.get("boss")
 
 
 static func _boss2_texture(game: Node2D) -> Texture2D:
@@ -380,7 +383,7 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 	if game.current_phase == 6:
 		return Boss6AnimationPresentation.draw_position(game)
 	if game.current_phase == 5:
-		return game.boss_pos + Vector2(sin(game.boss_phase * 0.65) * 4.0, sin(game.boss_phase * 1.1) * 5.0)
+		return RTUmbraBossAnimation.draw_position(game)
 	if game.current_phase == 4:
 		return Boss4AnimationPresentation.draw_position(game)
 	if game.current_phase == 3:
@@ -413,7 +416,7 @@ static func _boss_draw_size(game: Node2D) -> Vector2:
 		return Boss2AnimationPresentation.draw_size()
 	if game.current_phase == 4:
 		return Boss4AnimationPresentation.draw_size(game)
-	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else (Vector2(59.4, 88.0) if game.current_phase == 5 else Vector2(184, 170))))
+	return game.BOSS7_VISUAL_SIZE if game.current_phase == 7 else (Vector2(286, 257) if game.current_phase == 6 else (Vector2(300, 250) if game.current_phase == 4 else ((RTUmbraBossAnimation.DRAW_SIZE if RTUmbraBossAnimation.available() else Vector2(59.4, 88.0)) if game.current_phase == 5 else Vector2(184, 170))))
 
 
 static func _should_flip_player_sprite(game: Node2D) -> bool:

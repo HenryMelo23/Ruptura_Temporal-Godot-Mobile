@@ -13,6 +13,7 @@ const INITIAL_CAPACITY := 64
 var positions := PackedVector2Array()
 var directions := PackedVector2Array()
 var colors := PackedColorArray()
+var stretches := PackedFloat32Array()
 var capacity: int = 0
 var active_stage: int = -1
 var glow_mesh: MultiMesh
@@ -24,6 +25,7 @@ func reset() -> void:
 	positions.clear()
 	directions.clear()
 	colors.clear()
+	stretches.clear()
 	if glow_mesh:
 		glow_mesh.visible_instance_count = 0
 	if core_mesh:
@@ -34,15 +36,17 @@ func begin_frame(stage: int) -> void:
 	positions.clear()
 	directions.clear()
 	colors.clear()
+	stretches.clear()
 	if stage != active_stage or streak_texture == null:
 		active_stage = stage
 		streak_texture = _build_streak_texture(_texture_size_for_stage(stage))
 
 
-func append(screen_pos: Vector2, direction: Vector2, color: Color) -> void:
+func append(screen_pos: Vector2, direction: Vector2, color: Color, stretch: float = 1.0) -> void:
 	positions.append(screen_pos)
 	directions.append(direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT)
 	colors.append(color)
+	stretches.append(stretch)
 
 
 func count() -> int:
@@ -59,14 +63,15 @@ func submit(canvas_item: RID, software_fallback_canvas: CanvasItem = null) -> in
 	_ensure_capacity(instance_total)
 	for index in range(instance_total):
 		var direction := directions[index]
-		var center := positions[index] - direction * 5.0
-		var glow_transform := _instance_transform(direction, center, Vector2(31.0, 7.0))
-		var core_transform := _instance_transform(direction, center + direction * 1.5, Vector2(24.0, 2.25))
+		var stretch := stretches[index] if index < stretches.size() else 1.0
+		var center := positions[index] - direction * 5.0 * stretch
+		var glow_transform := _instance_transform(direction, center, Vector2(34.0 * stretch, 8.5))
+		var core_transform := _instance_transform(direction, center + direction * 1.5, Vector2(26.0 * stretch, 2.4))
 		var color := colors[index]
 		glow_mesh.set_instance_transform_2d(index, glow_transform)
-		glow_mesh.set_instance_color(index, Color(color.r, color.g, color.b, 0.54))
+		glow_mesh.set_instance_color(index, Color(color.r, color.g, color.b, 0.62))
 		core_mesh.set_instance_transform_2d(index, core_transform)
-		core_mesh.set_instance_color(index, Color(1.0, 1.0, 1.0, 0.86))
+		core_mesh.set_instance_color(index, Color(1.0, 1.0, 1.0, 0.92))
 	glow_mesh.visible_instance_count = instance_total
 	core_mesh.visible_instance_count = instance_total
 	RenderingServer.canvas_item_add_multimesh(canvas_item, glow_mesh.get_rid(), streak_texture.get_rid())
@@ -142,9 +147,11 @@ static func _build_streak_texture(size: Vector2i) -> Texture2D:
 		for x in range(size.x):
 			var nx := (float(x) + 0.5) / float(size.x)
 			var ny := absf((float(y) + 0.5) / float(size.y) * 2.0 - 1.0)
-			var longitudinal := smoothstep(0.0, 0.16, nx) * (1.0 - smoothstep(0.72, 1.0, nx))
-			var edge := 1.0 - smoothstep(0.22, 1.0, ny)
-			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, longitudinal * edge))
+			# Perfil mais quente: cauda longa, ponta viva e nucleo fino central.
+			var longitudinal := smoothstep(0.0, 0.10, nx) * (1.0 - smoothstep(0.60, 1.0, nx))
+			var edge := exp(-ny * ny * 3.2)
+			var hot := exp(-ny * ny * 9.0) * smoothstep(0.04, 0.22, nx) * (1.0 - smoothstep(0.46, 0.92, nx))
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, clampf(longitudinal * edge * 0.82 + hot * 0.55, 0.0, 1.0)))
 	return ImageTexture.create_from_image(image)
 
 

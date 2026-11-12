@@ -174,6 +174,9 @@ func _run() -> void:
 		_check(String(bullet.get("kind", "")) == "henry_spark", "auto attack did not create a spark")
 		_check(int(bullet.get("henry_combo_stage", -1)) == expected_stage, "combo stage order changed")
 	_check(game.henry_attack_combo == 0, "combo did not reset after 1-2-3")
+	var fireball_visual: Dictionary = game.henry_incendiary_ability_controller.visual_snapshot(game.NET_ABILITY_ATTACK)
+	_check(Array(fireball_visual.get("fireballs", [])).size() == 1, "combo fireball did not expose one compact public visual")
+	_check(float(Dictionary(fireball_visual["fireballs"][0]).get("speed", 0.0)) > 0.0, "public fireball visual omitted derivation speed")
 
 	var reset_target := _spawn_target(game.player_pos + Vector2(80.0, 0.0))
 	reset_target["henry_burn_time"] = 0.12

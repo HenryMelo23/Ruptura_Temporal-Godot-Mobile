@@ -54,7 +54,7 @@ func _run() -> void:
 	_check(ele.contains("após %s s" % _fmt(game.SECONDARY_ELETRICA_DRAIN_DELAY)), "eletrica drain delay out of sync")
 	_check(ele.contains("%s s no caminho" % _fmt(game.TP_ELECTRIC_DURATION)), "eletrica TP duration out of sync")
 	var par := _text(RTBuildChoiceDossier.manifestation("parasitica"))
-	_check(par.contains("por %s s" % _fmt(game.PARASITE_MARK_DURATION)) and par.contains("%s s" % _fmt(game.PARASITE_FEAST_DURATION)), "parasitica durations out of sync")
+	_check(par.contains("marca de %s s" % _fmt(game.PARASITE_MARK_DURATION)) and par.contains("até %s s" % _fmt(RTParasiticaController.SYM_MAX_TOTAL)), "parasitica durations out of sync")
 	var pri := _text(RTBuildChoiceDossier.manifestation("prismatica"))
 	_check(pri.contains("%s s" % _fmt(game.SECONDARY_PRISMATICA_DURATION)) and pri.contains("%d px" % int(RTRangedAttackRange.BASE_RANGE)), "prismatica numbers out of sync")
 	var gra := _text(RTBuildChoiceDossier.manifestation("gravitante"))

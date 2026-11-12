@@ -207,9 +207,23 @@ func _run() -> void:
 	game.mutation_key = "colosso"
 	game.effect_key = "lastro"
 	owner.giant_active = true
+	owner.rest_was_moving = true
+	owner._update_giant_rest(0.01)
 	var visual: PackedFloat32Array = game._network_player_visual_snapshot()
 	var unpacked: Dictionary = game.RTVisualSyncContractScript.unpack_player_visual(visual)
-	_check((int(unpacked.get("visual_flags", 0)) & 4) != 0, "giant bit was not packed in the visual snapshot")
+	var stop_flags := int(unpacked.get("visual_flags", 0))
+	_check((stop_flags & game.RTVisualSyncContractScript.PLAYER_FLAG_HENRY_COLOSSUS_GIANT) != 0, "giant bit was not packed in the visual snapshot")
+	_check((stop_flags & game.RTVisualSyncContractScript.PLAYER_FLAG_HENRY_COLOSSUS_STOP) != 0, "giant braking state was not packed")
+	var remote_stop: Texture2D = game._net_player_texture_for_state(game.NET_ANIM_IDLE, owner.giant_rest_visual_frame(), game.HENRY_SELECTION_INDEX, "colosso", true, stop_flags)
+	_check(remote_stop != null and Array(game.textures.get("henry_colossus_stop_right", [])).has(remote_stop), "remote giant braking did not select the stop atlas")
+	owner.rest_stop_elapsed = owner.GIANT_STOP_TIME
+	owner.rest_idle_elapsed = owner.GIANT_IDLE_FRAME_SECONDS * 1.1
+	visual = game._network_player_visual_snapshot()
+	unpacked = game.RTVisualSyncContractScript.unpack_player_visual(visual)
+	var idle_flags := int(unpacked.get("visual_flags", 0))
+	_check((idle_flags & game.RTVisualSyncContractScript.PLAYER_FLAG_HENRY_COLOSSUS_IDLE) != 0, "giant idle state was not packed")
+	var remote_idle: Texture2D = game._net_player_texture_for_state(game.NET_ANIM_IDLE, owner.giant_rest_visual_frame(), game.HENRY_SELECTION_INDEX, "colosso", true, idle_flags)
+	_check(remote_idle != null and Array(game.textures.get("henry_colossus_idle_right", [])).has(remote_idle), "remote giant idle did not select the breathing atlas")
 	var remote_giant := game._net_player_texture_for_state(game.NET_ANIM_RIGHT, 0, game.HENRY_SELECTION_INDEX, "colosso", true) as AtlasTexture
 	var remote_normal := game._net_player_texture_for_state(game.NET_ANIM_FIRE, 0, game.HENRY_SELECTION_INDEX, "colosso", false) as AtlasTexture
 	_check(remote_giant != null and remote_giant == Array(game.textures.get("henry_colossus_right", []))[0], "remote giant did not use the giant walk frame pool")
@@ -231,7 +245,7 @@ func _run() -> void:
 	owner.fire_auto_attack()
 	_check(game.slashes.is_empty(), "miss generated a contact impact")
 
-	print("HENRY_COLOSSUS_SMOKE_OK mutation=colosso effect=lastro fury_auto_ultimate=true hit_knockback=true third_hit_push=true flask_heal=true reinforcement=true retaliation_70=true giant_armor=true giant_cleave=true giant_duration=30 giant_charge=true giant_leap=true leap_immunity=true collision_unchanged=true reverse_growth=true lastro_cross_combo=true save_selection=true network_flag=true sprites=6 impact_expiry_budget_reset=true")
+	print("HENRY_COLOSSUS_SMOKE_OK mutation=colosso effect=lastro fury_auto_ultimate=true hit_knockback=true third_hit_push=true flask_heal=true reinforcement=true retaliation_70=true giant_armor=true giant_cleave=true giant_duration=30 giant_charge=true giant_leap=true leap_immunity=true collision_unchanged=true reverse_growth=true lastro_cross_combo=true save_selection=true network_flag=true remote_stop_idle=true sprites=6 impact_expiry_budget_reset=true")
 	_cleanup(0)
 
 

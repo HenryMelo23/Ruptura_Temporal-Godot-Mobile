@@ -62,7 +62,15 @@ func _begin_initial_phase_tracking(phase: int) -> void:
 	core.run_phase6_completed = false
 	_reset_dimension_route_state()
 	if initial_phase > 0:
-		core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_CYCLE_LENGTH - 1, initial_phase, [initial_phase])
+		for next_phase in Array(core.DIMENSION_START_ROUTES.get(initial_phase, [])):
+			core.dimension_route_queue.append(int(next_phase))
+		# Proxima run comeca pelo outro inicio (1 <-> 6). Sair rapido repete o mesmo.
+		_set_initial_phase_bias(6 if initial_phase == 1 else 1, 1.0)
+	elif phase >= 1 and phase <= 7 and phase != core.DIMENSION_FINAL_PHASE:
+		# Inicio forcado (dev/QA) fora de 1/6: segue a rota padrao sem a fase inicial.
+		for next_phase in [1, 2, 6, 3, 4]:
+			if next_phase != phase:
+				core.dimension_route_queue.append(next_phase)
 	core.initial_phase_current_run = initial_phase
 	core.initial_phase_current_recorded = initial_phase == 0
 
@@ -101,12 +109,7 @@ func _record_initial_phase_completed(phase: int) -> void:
 	var completed_phase: = _sanitize_initial_phase_bias_target(phase)
 	if completed_phase == 0 or completed_phase != _sanitize_initial_phase_bias_target(core.run_initial_phase):
 		return
-	var preferred_candidates: Array[int] = []
-	for candidate in core.INITIAL_PHASE_ROLL_POOL:
-		preferred_candidates.append(int(candidate))
-	preferred_candidates.erase(completed_phase)
-	var next_preferred: int = preferred_candidates[core.rng.randi_range(0, preferred_candidates.size() - 1)] if not preferred_candidates.is_empty() else 0
-	_set_initial_phase_bias(next_preferred, core.INITIAL_PHASE_ALTERNATE_BIAS)
+	_set_initial_phase_bias(6 if completed_phase == 1 else 1, 1.0)
 	core.initial_phase_current_recorded = true
 
 
@@ -166,8 +169,8 @@ func _should_offer_dimension_choice_after_boss(phase: int) -> bool:
 		return false
 	if phase == core.DIMENSION_FINAL_PHASE:
 		return false
-	return core.dimension_route_completed_count > 0 \
-		and core.dimension_route_completed_count % core.DIMENSION_CYCLE_LENGTH == 0 \
+	# Rota fixa acabou (depois do 4) ou o ciclo de farm acabou: 5 x continuar farmando.
+	return core.dimension_route_completed_count >= core.DIMENSION_CYCLE_LENGTH \
 		and core.dimension_route_queue.is_empty()
 
 
@@ -195,8 +198,8 @@ func _roll_dimension_route(count: int, last_phase: int, excluded: Array = []) ->
 
 func _begin_farm_dimension_cycle() -> int:
 	core.dimension_route_farm_cycles += 1
-	core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_CYCLE_LENGTH, core.dimension_route_last_phase)
-	return int(core.dimension_route_queue.pop_front()) if not core.dimension_route_queue.is_empty() else 0
+	core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_FARM_RANDOM_COUNT, core.DIMENSION_FARM_ENTRY_PHASE, [core.DIMENSION_FARM_ENTRY_PHASE])
+	return core.DIMENSION_FARM_ENTRY_PHASE
 
 
 func _complete_dimension_extraction() -> void:
@@ -412,6 +415,7 @@ func _advance_to_phase(phase: int) -> void:
 	core.gravitante_vfx_events.clear()
 	core.seed_links.clear()
 	core.parasite_spit_zones.clear()
+	core._parasitica().clear_all()
 	core.manifestation_secondaries.clear()
 	core._reset_advanced_manifestation_state()
 	core._reset_arauto_state(true)
@@ -597,8 +601,8 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 	var farm_pos: Vector2 = (center + Vector2(-96.0, 18.0)).clamp(Vector2(90.0, 90.0), core.WORLD_SIZE - Vector2(90.0, 90.0))
 	var umbra_pos: Vector2 = (center + Vector2(96.0, 18.0)).clamp(Vector2(90.0, 90.0), core.WORLD_SIZE - Vector2(90.0, 90.0))
 	var choices: Array[Dictionary] = [
-		{"pos": farm_pos, "next_phase": 0, "kind": "farm", "action": "farm", "label": ""},
-		{"pos": umbra_pos, "next_phase": core.DIMENSION_FINAL_PHASE, "kind": "umbra", "action": "phase", "label": ""}
+		{"pos": farm_pos, "next_phase": 0, "kind": "farm", "action": "farm", "label": "CINZAS DA RUPTURA" if core.dimension_route_farm_cycles == 0 else "CONTINUAR FARMANDO"},
+		{"pos": umbra_pos, "next_phase": core.DIMENSION_FINAL_PHASE, "kind": "umbra", "action": "phase", "label": "MENTE DA UMBRA"}
 	]
 	core.phase_fragment = {
 		"pos": center,
@@ -607,7 +611,7 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 		"life": 0.0,
 		"choices": choices
 	}
-	core._add_text("CONTINUAR O CICLO OU ENFRENTAR UMBRA", center + Vector2(-238, -132), Color(0.62, 1.0, 0.92), 2.1, 25)
+	core._add_text("FARMAR NAS CINZAS OU ENFRENTAR UMBRA", center + Vector2(-238, -132), Color(0.62, 1.0, 0.92), 2.1, 25)
 
 
 func _start_phase_transition(next_phase: int) -> void:

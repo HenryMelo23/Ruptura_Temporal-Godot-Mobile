@@ -78,6 +78,13 @@ func _run() -> void:
 	_check(game._desktop_teleport_mode_label() == "ULTIMA DIRECAO", "last-direction teleport label is not exposed in settings")
 	_check(game._sanitize_desktop_teleport_mode("last_direction") == game.DESKTOP_TELEPORT_LAST_DIRECTION, "last-direction teleport mode was not accepted by config sanitization")
 
+	# Com ataque automatico (sem mouse) o teleporte nao pode usar o cursor.
+	game.desktop_attack_aim_mode = game.DESKTOP_ATTACK_AIM_AUTO
+	game.desktop_teleport_mode = game.DESKTOP_AIM_CONFIRM
+	_check(game.player_control_controller.desktop_dash_mode() == game.DESKTOP_TELEPORT_LAST_DIRECTION, "auto attack allowed cursor teleport")
+	game._cycle_desktop_teleport_mode(1)
+	_check(game.desktop_teleport_mode in [game.DESKTOP_TELEPORT_LAST_DIRECTION, game.DESKTOP_TELEPORT_AUTO], "settings cycle offered cursor teleport with auto attack")
+	game.desktop_attack_aim_mode = game.DESKTOP_ATTACK_AIM_CURSOR
 	game.desktop_teleport_mode = game.DESKTOP_AIM_CONFIRM
 	game.last_dash_time = -999.0
 	game.desktop_action_gate_msec.clear()

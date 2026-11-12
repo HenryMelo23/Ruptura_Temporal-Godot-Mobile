@@ -197,7 +197,12 @@ static func _spawn_bullet_hit_fragments(game: Node2D, pos: Vector2, bullet: Dict
 	var dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT)).normalized()
 	if dir.length() <= 0.05:
 		dir = Vector2.RIGHT
-	var total: int = game._adaptive_particle_count(20)
+	# Anel de choque + luz de impacto, antes dos estilhacos.
+	game.effects.append({"kind": "ring", "text": "", "pos": pos, "life": 0.18, "max": 0.18, "color": color, "size": 24.0, "light": 72.0})
+	for i in range(2 if game.gfx_low_resource else 3):
+		var spark_dir: Vector2 = (-dir).rotated(game.rng.randf_range(-0.9, 0.9))
+		game.effects.append({"kind": "spark", "text": "", "pos": pos, "life": game.rng.randf_range(0.14, 0.24), "max": 0.24, "color": color.lerp(Color.WHITE, 0.5), "size": game.rng.randf_range(2.2, 3.6), "vel": spark_dir * game.rng.randf_range(160.0, 300.0)})
+	var total: int = game._adaptive_particle_count(14)
 	for i in range(total):
 		var spread: float = game.rng.randf_range(-1.8, 1.8)
 		var shard_dir: Vector2 = dir.rotated(PI + spread).normalized()
@@ -382,6 +387,9 @@ static func _spawn_projectile_muzzle(game: Node2D, kind: String, pos: Vector2, d
 	var glow: Color = palette["glow"]
 	var core: Color = palette["core"]
 	var count = 7 if kind == "eletrica_charged" else 5
+	if game.gfx_particles:
+		# Clarao direcional do cano + luz curta no chao.
+		game.effects.append({"kind": "muzzle", "text": "", "pos": pos, "life": 0.11, "max": 0.11, "color": glow, "size": float(palette["size"]) * 2.4, "dir": dir, "light": 95.0})
 	game._spawn_radial_particles(pos, glow, count)
 	var sparks: = 1 if game.gfx_low_resource else 3
 	for i in range(sparks):

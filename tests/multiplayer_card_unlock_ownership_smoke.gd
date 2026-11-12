@@ -49,7 +49,11 @@ func _setup_authority() -> void:
 	game.card_unlock_progress.clear()
 	game.unlock_notifications.clear()
 	game.unlocked_card_ids.clear()
+	game.card_unlock_rules_by_metric.clear()
+	game.card_unlock_next_threshold_by_metric.clear()
 	game._ensure_card_unlock_defaults()
+	game._ensure_card_unlock_rule_metric_index()
+	game._rebuild_card_unlock_next_thresholds()
 	game.net_seen_card_unlock_request_ids.clear()
 	game.net_confirmed_card_unlock_event_ids.clear()
 

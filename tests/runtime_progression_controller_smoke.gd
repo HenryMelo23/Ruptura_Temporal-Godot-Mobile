@@ -155,10 +155,10 @@ func _run() -> void:
 	game.cards_bought.clear()
 	game.cards_bought["Tempestade"] = 11
 	game._recalculate_common_card_stat_bonuses()
-	_check(is_equal_approx(game.player_crit_chance, 1.10), "Tempestade did not grant ten percent crit per copy")
+	_check(is_equal_approx(game.player_crit_chance, 1.32), "Tempestade did not grant twelve percent crit per copy")
 	var overcrit_result: Dictionary = game._critical_damage(100.0)
 	_check(bool(overcrit_result.get("critical", false)), "crit chance above one hundred percent was not guaranteed")
-	_check(is_equal_approx(float(overcrit_result.get("amount", 0.0)), 330.0), "excess crit chance did not convert into critical damage")
+	_check(is_equal_approx(float(overcrit_result.get("amount", 0.0)), 396.0), "excess crit chance did not convert into critical damage")
 	_check(game._shop_endurance_discount_from_elapsed(50.0 * 60.0) >= 0.50, "long-run shop discount changed")
 
 	var progression = game._progression()

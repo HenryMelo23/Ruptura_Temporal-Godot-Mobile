@@ -72,14 +72,21 @@ func enabled() -> bool:
 		return false
 	if not allow_rift or not bool(core.shop_auto_enabled):
 		return false
-	if bool(core.is_multiplayer) or bool(core.dedicated_server_mode):
+	if bool(core.dedicated_server_mode):
 		return false
-	return not core._is_drop_game_mode()
+	if bool(core.is_multiplayer):
+		return core._is_world_authority()
+	# Corruptor Mercantil: a fenda tambem abre no modo de drop para trocar as fichas "?".
+	return not core._is_drop_game_mode() or core._quantum_chips().corruptor_active()
 
 
 ## Quando a fenda esta ativa, a contagem automatica antiga nao dispara.
 func replaces_forced_countdown() -> bool:
-	return enabled()
+	if core == null or not allow_rift or not bool(core.shop_auto_enabled) or core._is_drop_game_mode():
+		return false
+	# The authority simulates the Rift; replicas receive its snapshot. Neither
+	# side may independently fall back to the retired automatic countdown.
+	return bool(core.is_multiplayer) or enabled()
 
 
 func active() -> bool:
@@ -136,6 +143,11 @@ func on_enemy_killed(enemy: Dictionary) -> void:
 func update(delta: float) -> bool:
 	if core == null:
 		return false
+	if core.is_multiplayer and core._is_world_replica():
+		if active():
+			var current: Dictionary = core.shop_rift
+			current["near"] = Vector2(core.player_pos).distance_to(Vector2(current.get("pos", Vector2.ZERO))) <= NEAR_RADIUS
+		return false
 	if not enabled():
 		if active() and state() != STATE_ENTERED:
 			clear_active()
@@ -159,6 +171,12 @@ func _should_spawn() -> bool:
 		return false
 	var now: float = float(core.time_alive)
 	if now < float(core.shop_rift_next_allowed_time):
+		return false
+	if core._quantum_chips().corruptor_active() and core._quantum_chips().token_total() > 0:
+		# Fichas "?" pendentes chamam a fenda (no modo de drop so por elas).
+		if core._is_drop_game_mode() or now - float(core.shop_last_exit_time) >= MIN_GAP_AFTER_SHOP * 0.5:
+			return now - float(core.shop_last_exit_time) >= 10.0
+	if core._is_drop_game_mode():
 		return false
 	if now - float(core.shop_last_exit_time) < MIN_GAP_AFTER_SHOP:
 		return false
@@ -188,6 +206,8 @@ func spawn(reason: String, forced_pos: Variant = null) -> Dictionary:
 		"near": false,
 		"warned_unstable": false,
 		"entered_msec": 0,
+		"present_count": 0,
+		"expected_count": 1,
 	}
 	core._add_text("FENDA DO MERCADOR ABERTA", core.player_pos + Vector2(0.0, -118.0), Color(0.86, 0.6, 1.0), 1.7, 22)
 	core._play_sfx("shop_countdown_tick", 0.0, 0.62, 0.58)
@@ -242,12 +262,21 @@ func _update_active(delta: float) -> void:
 		current["state_age"] = 0.0
 	var distance: float = Vector2(core.player_pos).distance_to(Vector2(current.get("pos", Vector2.ZERO)))
 	current["near"] = distance <= NEAR_RADIUS
+	var all_present: bool = distance <= ENTER_RADIUS
+	if core.is_multiplayer:
+		var presence: Vector2i = _living_presence(Vector2(current.get("pos", Vector2.ZERO)), ENTER_RADIUS)
+		current["present_count"] = presence.x
+		current["expected_count"] = maxi(1, presence.y)
+		all_present = presence.x >= maxi(1, presence.y)
+	else:
+		current["present_count"] = 1 if all_present else 0
+		current["expected_count"] = 1
 	if remaining() <= UNSTABLE_TIME and not bool(current.get("warned_unstable", false)):
 		current["warned_unstable"] = true
 		core._add_text("FENDA INSTAVEL: -%d%% NO LIMITE" % int(round(EDGE_BONUS_DISCOUNT * 100.0)), core.player_pos + Vector2(0.0, -112.0), Color(1.0, 0.56, 0.34), 1.3, 18)
 		core._vibrate(60, 0.3)
 	var armed: bool = String(current.get("state", "")) == STATE_OPEN or float(current.get("state_age", 0.0)) >= ENTER_ARM_TIME
-	if armed and distance <= ENTER_RADIUS and core.mode == "game" and not core._local_player_controls_locked():
+	if armed and all_present and core.mode == "game" and not core._local_player_controls_locked():
 		enter()
 		return
 	if remaining() <= 0.0:
@@ -270,6 +299,17 @@ func enter() -> bool:
 	core.screen_shake_strength = maxf(float(core.screen_shake_strength), 12.0)
 	core._play_sfx("shop_countdown_tick", 0.0, 0.8, 1.22)
 	core._vibrate(260, 0.7)
+	if core.is_multiplayer and core._shop_rpc_available():
+		# Preserve the one-argument RPC contract used by released clients and the
+		# dedicated relay. Replicas reconstruct the same deterministic bonus from
+		# their last authoritative Rift snapshot before opening the shop.
+		core.rpc("_rpc_trigger_shop", false)
+	if core._corruptor_shop().can_open() and core._corruptor_shop().open():
+		return true
+	# A fenda nao abre mais uma tela: ela leva a Geovana (e a equipe inteira,
+	# que recebeu o mesmo aviso acima) para dentro da oficina do Mercador.
+	if core._merchant_dimension().enter():
+		return true
 	core.shop_controller.start_opening_animation(true)
 	if core.mode != "shop_opening":
 		# A abertura foi bloqueada (ex.: rewind do boss 1); a fenda volta a ficar aberta.
@@ -278,6 +318,57 @@ func enter() -> bool:
 		core.shop_rift_fragments = fragments
 		return false
 	return true
+
+
+func accept_remote_entry(remote_bonus: Dictionary) -> void:
+	entry_bonus = remote_bonus.duplicate(true)
+	if active():
+		var current: Dictionary = core.shop_rift
+		current["state"] = STATE_ENTERED
+		current["state_age"] = 0.0
+		current["entered_msec"] = Time.get_ticks_msec()
+
+
+func accept_remote_entry_from_current_rift() -> void:
+	if not active():
+		return
+	var current: Dictionary = core.shop_rift
+	accept_remote_entry({
+		"edge": remaining() <= UNSTABLE_TIME,
+		"fragments": int(core.shop_rift_fragments),
+		"rift_id": int(current.get("id", 0)),
+	})
+
+
+func active_snapshot() -> Dictionary:
+	return {
+		"rift": core.shop_rift.duplicate(true),
+		"kills": int(core.shop_rift_kills),
+		"fragments": int(core.shop_rift_fragments),
+		"next_allowed": float(core.shop_rift_next_allowed_time),
+	}
+
+
+func apply_remote_snapshot(snapshot: Dictionary) -> void:
+	if core == null or not core._is_world_replica():
+		return
+	var incoming = snapshot.get("rift", {})
+	core.shop_rift = incoming.duplicate(true) if incoming is Dictionary else {}
+	core.shop_rift_kills = maxi(0, int(snapshot.get("kills", core.shop_rift_kills)))
+	core.shop_rift_fragments = clampi(int(snapshot.get("fragments", core.shop_rift_fragments)), 0, FRAGMENT_MAX)
+	core.shop_rift_next_allowed_time = maxf(0.0, float(snapshot.get("next_allowed", core.shop_rift_next_allowed_time)))
+
+
+func _living_presence(target: Vector2, radius: float) -> Vector2i:
+	var living: Array[int] = core._living_run_player_peer_ids()
+	var present := 0
+	for peer_id in living:
+		var pos: Vector2 = Vector2(core.player_pos)
+		if peer_id != core._mp_unique_id():
+			pos = Vector2(Dictionary(core.net_players_by_peer.get(peer_id, {})).get("pos", Vector2.INF))
+		if pos.distance_to(target) <= radius:
+			present += 1
+	return Vector2i(present, living.size())
 
 
 func collapse(grant_fragment: bool, message: String = "") -> void:

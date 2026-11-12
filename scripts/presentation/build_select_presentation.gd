@@ -450,6 +450,19 @@ static func _draw_footer(game: Node2D, viewport: Vector2, theme: Dictionary, mod
 	var enabled: bool = bool(model.get("primary_enabled", true))
 	_draw_button(game, back, "VOLTAR", false, Color(theme["muted"], 1.0), theme, henry)
 	_draw_button(game, primary, String(model.get("primary_label", "CONTINUAR")), true, accent if enabled else Color(0.46, 0.5, 0.6), theme, henry)
+	if keys.has("chips") or keys.has("random"):
+		# Meio do rodape: sorteio da escolha atual e chips quanticos.
+		var mid_l: float = back.end.x + 10.0
+		var mid_r: float = primary.position.x - 10.0
+		var mid_w: float = (mid_r - mid_l - 10.0) * 0.5
+		if mid_w >= 96.0:
+			var rnd := Rect2(mid_l, y, mid_w, h)
+			var chp := Rect2(mid_l + mid_w + 10.0, y, mid_w, h)
+			_set_button(game, String(keys.get("random", "build_random")), rnd)
+			_set_button(game, String(keys.get("chips", "build_chips")), chp)
+			_draw_button(game, rnd, String(model.get("random_label", "ALEATORIO")), false, Color(0.4, 0.95, 1.0), theme, henry)
+			_draw_button(game, chp, String(model.get("chips_label", "CHIPS")), false, Color(0.74, 0.5, 1.0), theme, henry)
+			return
 	if not portrait:
 		game._draw_centered(String(model.get("hint", "")), Vector2(viewport.x * 0.5, y + h * 0.5 + 4.0), 9 if compact else 11, Color(theme["muted"], 0.8))
 

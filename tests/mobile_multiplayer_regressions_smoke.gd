@@ -81,16 +81,16 @@ func _test_progression() -> void:
 	game.online_room_owner = false
 	game.enemies_killed = 0
 	game.player_damage = 30.0
-	var expected := 30.0
 	for kills in range(1, 301):
-		expected += 0.06 * (1.0 + int(kills / 10) * 0.1)
 		if kills % 17 == 0 or kills == 300:
 			game._apply_remote_boss_visual_snapshot({"team_kills": kills})
 			game._apply_remote_boss_visual_snapshot({"team_kills": kills})
-	_check(is_equal_approx(game.player_damage, expected), "client passive damage growth differs from host or duplicates")
+	_check(game.enemies_killed == 300, "client did not adopt monotonic shared kill progress")
+	_check(is_equal_approx(game.player_damage, 30.0), "shared kill progress restored retired passive damage growth")
 	game.player_damage += 12.0
 	game._apply_remote_boss_visual_snapshot({"team_kills": 299})
-	_check(is_equal_approx(game.player_damage, expected + 12.0), "old snapshot overwrote damage/card progress")
+	_check(game.enemies_killed == 300, "old snapshot rewound shared kill progress")
+	_check(is_equal_approx(game.player_damage, 42.0), "old snapshot overwrote card damage progress")
 	game._apply_remote_boss_visual_snapshot({})
 	_check(game.enemies_killed == 300, "legacy packet reset kill progress")
 	game.is_host = true

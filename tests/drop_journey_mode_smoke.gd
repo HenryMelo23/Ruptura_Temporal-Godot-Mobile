@@ -27,14 +27,15 @@ func _run() -> void:
 	game.arauto_card_drops.clear()
 	game.net_collected_drop_ids.clear()
 
-	var start_chance: float = game._drop_mode().drop_chance(0.0, 1)
-	var reference_chance: float = game._drop_mode().drop_chance(75.0 * 60.0, 1)
-	var late_chance: float = game._drop_mode().drop_chance(120.0 * 60.0, 1)
-	_check(is_equal_approx(start_chance, 0.015), "initial chance is not 1.5 percent")
-	_check(absf(reference_chance - 0.35) < 0.0001, "75 minute chance is not 35 percent")
-	_check(late_chance > reference_chance and late_chance < 1.0, "chance stopped growing after 75 minutes")
-	_check(game._drop_mode().drop_chance(75.0 * 60.0, 2) < reference_chance, "two player balance did not reduce chance")
-	_check(game._drop_mode().drop_chance(75.0 * 60.0, 3) < game._drop_mode().drop_chance(75.0 * 60.0, 2), "three player balance did not reduce chance")
+	# Curva estilo RoR2: 4% no inicio, cresce por minuto e por regiao, teto de 40%.
+	var start_chance: float = game._drop_mode().drop_chance(0.0, 1, 0)
+	var reference_chance: float = game._drop_mode().drop_chance(30.0 * 60.0, 1, 0)
+	var late_chance: float = game._drop_mode().drop_chance(60.0 * 60.0, 1, 0)
+	_check(is_equal_approx(start_chance, 0.04), "initial chance is not 4 percent")
+	_check(absf(reference_chance - 0.16) < 0.0001, "30 minute chance is not 16 percent")
+	_check(late_chance > reference_chance and late_chance <= game._drop_mode().MAX_DROP_CHANCE, "chance stopped growing or passed the cap")
+	_check(game._drop_mode().drop_chance(30.0 * 60.0, 2, 0) < reference_chance, "two player balance did not reduce chance")
+	_check(game._drop_mode().drop_chance(30.0 * 60.0, 3, 0) < game._drop_mode().drop_chance(30.0 * 60.0, 2, 0), "three player balance did not reduce chance")
 	_check(game._drop_mode().can_lobby_peer_select_mode(22, 22), "lobby owner was denied mode selection")
 	_check(not game._drop_mode().can_lobby_peer_select_mode(33, 22), "non-owner was allowed to select lobby mode")
 
@@ -46,10 +47,14 @@ func _run() -> void:
 	_check(game.mode == "game", "shop controller bypass opened the shop")
 
 	game.time_alive = 1000000000.0
-	game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(260.0, 0.0))
-	var killed_enemy: Dictionary = game.enemies.back()
-	killed_enemy["killed_by_peer_id"] = game._mp_unique_id()
-	game._kill_enemy(killed_enemy)
+	# Teto de 40% + piedade: alguns abates reais bastam para cair uma carta.
+	for _attempt in range(40):
+		game._spawn_enemy(game.ENEMY_COMMON, game.player_pos + Vector2(260.0, 0.0))
+		var killed_enemy: Dictionary = game.enemies.back()
+		killed_enemy["killed_by_peer_id"] = game._mp_unique_id()
+		game._kill_enemy(killed_enemy)
+		if not game.arauto_card_drops.is_empty():
+			break
 	_check(game.arauto_card_drops.size() == 1, "real enemy kill path did not create a card")
 	game.arauto_card_drops.clear()
 	game.time_alive = 0.0
@@ -59,7 +64,7 @@ func _run() -> void:
 	_check(game.arauto_card_drops.size() == 1, "enemy did not create exactly one card")
 	var drop: Dictionary = game.arauto_card_drops[0]
 	_check(bool(drop.get("drop_mode", false)), "drop was not marked as Drop mode reward")
-	_check(is_equal_approx(float(drop.get("life", 0.0)), 5.0), "drop lifetime is not five seconds")
+	_check(is_equal_approx(float(drop.get("life", 0.0)), game._drop_mode().DROP_LIFETIME), "drop lifetime does not match DROP_LIFETIME")
 	_check(int(drop.get("owner_peer", 0)) == game._mp_unique_id(), "drop owner is not the killer")
 	_check(String(drop.get("owner_name", "")) != "", "drop owner label is missing")
 
@@ -71,9 +76,15 @@ func _run() -> void:
 
 	drop["pos"] = game.player_pos + Vector2(300.0, 0.0)
 	foreign_drop["pos"] = game.player_pos + Vector2(300.0, 0.0)
-	game._update_arauto_card_drops(5.01)
-	_check(game.arauto_card_drops.is_empty(), "uncollected cards did not disappear after five seconds")
-	_check(game.drop_mode_controller.DROP_BLINK_WINDOW == 2.0, "expiry blink window changed")
+	# A vida do drop so conta depois que a arte carregou (carregamento assincrono).
+	for _frame in range(240):
+		game.RuntimeAssetController.poll_registered_textures(game, 2, 4)
+		if game._card_drop_texture_loaded(card):
+			break
+		await process_frame
+	game._update_arauto_card_drops(game._drop_mode().DROP_LIFETIME + 0.01)
+	_check(game.arauto_card_drops.is_empty(), "uncollected cards did not disappear after their lifetime")
+	_check(game.drop_mode_controller.DROP_BLINK_WINDOW == 3.0, "expiry blink window changed")
 
 	game._set_run_mode_local("invalid")
 	_check(game.selected_run_mode == game.RUN_MODE_SHOP, "invalid mode did not fall back to Shop")

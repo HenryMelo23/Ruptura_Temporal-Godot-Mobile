@@ -65,6 +65,9 @@ var exec_times: Array = []
 var cine: Dictionary = {}
 ## Gotas de Coagulo voando do alvo ate o HUD (so visual).
 var coagulum_fly: Array = []
+var pending_remote_event_id := ""
+var pending_remote_since := 0.0
+var confirmed_remote_finish_ids: Dictionary = {}
 
 
 func configure(owner: Node) -> void:
@@ -83,6 +86,9 @@ func reset() -> void:
 	reforco_total = REFORCO_COOLDOWN_EXECUTE
 	exec_times.clear()
 	coagulum_fly.clear()
+	pending_remote_event_id = ""
+	pending_remote_since = 0.0
+	confirmed_remote_finish_ids.clear()
 
 
 func is_active() -> bool:
@@ -225,7 +231,7 @@ func try_start(aim: Vector2 = Vector2.ZERO) -> bool:
 
 ## Golpe reforcado: executa so se o corte acerta um inimigo executavel.
 func try_start_on_slash(points: Array, width: float) -> bool:
-	if not _enabled() or is_active() or not core._is_world_authority():
+	if not _enabled() or is_active() or pending_remote_event_id != "":
 		return false
 	var best: Dictionary = {}
 	var best_dist := INF
@@ -240,6 +246,18 @@ func try_start_on_slash(points: Array, width: float) -> bool:
 			best = enemy
 	if best.is_empty():
 		return false
+	if not core._is_world_authority():
+		pending_remote_event_id = core._next_network_event_id("lacerante_execution")
+		pending_remote_since = float(core.time_alive)
+		core._request_lacerante_execution(
+			pending_remote_event_id,
+			str(best.get("uid", "")),
+			points,
+			width,
+			threshold(best),
+			float(core.player_damage) * FINISH_SPLASH_RATIO
+		)
+		return true
 	_start(best)
 	return true
 
@@ -254,11 +272,15 @@ func _start(enemy: Dictionary) -> void:
 		anim = (anim + 1) % ANIMATIONS
 	last_animation = anim
 	var target_pos: Vector2 = Vector2(enemy["pos"])
-	var side: float = -1.0 if core.player_pos.x > target_pos.x else 1.0
 	enemy["lacerante_exec"] = true
 	enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), EXECUTION_TIME + 0.2)
+	_begin_execution(int(enemy.get("uid", -1)), target_pos, anim, fast, true, "")
+
+
+func _begin_execution(uid: int, target_pos: Vector2, anim: int, fast: bool, authority_finish: bool, event_id: String) -> void:
+	var side: float = -1.0 if core.player_pos.x > target_pos.x else 1.0
 	active = {
-		"uid": int(enemy.get("uid", -1)),
+		"uid": uid,
 		"anim": anim,
 		"t": 0.0,
 		"target_pos": target_pos,
@@ -267,6 +289,8 @@ func _start(enemy: Dictionary) -> void:
 		"hits": 0,
 		"finished": false,
 		"fast": fast,
+		"authority_finish": authority_finish,
+		"event_id": event_id,
 	}
 	# Geovana aparece colada no alvo para executar.
 	if not fast:
@@ -279,8 +303,50 @@ func _start(enemy: Dictionary) -> void:
 	core._add_text(NAMES[anim], target_pos + Vector2(0, -104), Color(1.0, 0.24, 0.32), 0.9, 20)
 
 
+func apply_remote_confirmation(event_id: String, target_uid: int, target_pos: Vector2, anim: int, fast: bool) -> bool:
+	if event_id == "" or event_id != pending_remote_event_id or is_active():
+		return false
+	pending_remote_event_id = ""
+	pending_remote_since = 0.0
+	var enemy = core._enemy_by_uid(target_uid)
+	if enemy != null:
+		enemy["lacerante_exec"] = true
+	_begin_execution(target_uid, target_pos, clampi(anim, 0, ANIMATIONS - 1), fast, false, event_id)
+	return true
+
+
+func reject_remote_request(event_id: String) -> bool:
+	if event_id == "" or event_id != pending_remote_event_id:
+		return false
+	pending_remote_event_id = ""
+	pending_remote_since = 0.0
+	reforco_ready_at = float(core.time_alive)
+	reforco_floor_at = float(core.time_alive)
+	core._add_text("ALVO ESCAPOU", core.player_pos + Vector2(0, -78), Color(1.0, 0.55, 0.38), 0.65, 16)
+	return true
+
+
+func apply_remote_finished(event_id: String, target_uid: int, pos: Vector2, killed: bool) -> bool:
+	if event_id == "" or confirmed_remote_finish_ids.has(event_id):
+		return false
+	confirmed_remote_finish_ids[event_id] = true
+	if confirmed_remote_finish_ids.size() > 48:
+		confirmed_remote_finish_ids.erase(confirmed_remote_finish_ids.keys()[0])
+	var enemy = core._enemy_by_uid(target_uid)
+	if enemy != null:
+		enemy.erase("lacerante_exec")
+	if not killed:
+		return true
+	core._add_text("EXECUTADO", pos + Vector2(0, -78), Color(1.0, 0.16, 0.24), 0.9, 22)
+	core._grant_lacerante_coagulum(pos)
+	core.LaceranteVfx.on_lacerate_applied(core, pos)
+	return true
+
+
 func update(delta: float) -> void:
 	post_immunity = maxf(0.0, post_immunity - delta)
+	if pending_remote_event_id != "" and float(core.time_alive) - pending_remote_since > 2.0:
+		reject_remote_request(pending_remote_event_id)
 	if not cine.is_empty():
 		cine["t"] = float(cine["t"]) + delta
 		if float(cine["t"]) >= CINE_TOTAL:
@@ -298,7 +364,7 @@ func update(delta: float) -> void:
 	var enemy = core._enemy_by_uid(int(active["uid"]))
 	active["t"] = float(active["t"]) + delta * (FAST_SPEED if bool(active.get("fast", false)) else 1.0)
 	var t: float = float(active["t"])
-	if enemy == null and not bool(active["finished"]):
+	if enemy == null and bool(active.get("authority_finish", true)) and not bool(active["finished"]):
 		active = {}
 		return
 	if enemy != null and not bool(active["finished"]):
@@ -315,8 +381,11 @@ func update(delta: float) -> void:
 		core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.16 if finisher else 0.06)
 		core.screen_shake_strength = maxf(float(core.screen_shake_strength), 9.0 if finisher else 3.0)
 		core._vibrate(70 if finisher else 25, 0.4 if finisher else 0.15)
-		if finisher and enemy != null:
-			_finish(enemy)
+		if finisher:
+			if bool(active.get("authority_finish", true)) and enemy != null:
+				_finish(enemy)
+			elif not bool(active.get("authority_finish", true)):
+				active["finished"] = true
 	if t >= EXECUTION_TIME:
 		var was_fast: bool = bool(active.get("fast", false))
 		active = {}

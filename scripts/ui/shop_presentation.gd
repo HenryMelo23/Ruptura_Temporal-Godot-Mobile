@@ -5,6 +5,7 @@ const PAPER := Color(0.91, 0.95, 0.96)
 const MUTED := Color(0.57, 0.69, 0.72)
 const CYAN := Color(0.18, 0.88, 0.89)
 const GOLD := Color(1.0, 0.78, 0.29)
+const BRASS := Color(0.95, 0.76, 0.36)
 const BURN_TIME := 0.95
 var action := ""
 var elapsed := 0.0
@@ -12,6 +13,13 @@ var duration := 0.0
 var slot := -1
 var previous_cards: Array = []
 var entrance := 2.0
+## Quadro atual desenhado dentro da oficina do Mercador (sem bracelete).
+var workshop := false
+
+
+## Moldura do visor: ciano do bracelete, latao no balcao do Mercador.
+func accent() -> Color:
+	return BRASS if workshop else CYAN
 
 
 func reset() -> void:
@@ -328,9 +336,9 @@ func card_stat_chips(card_name: String) -> Array:
 		"Porcao":
 			return ["+45% CURA", "+HP MAX"]
 		"Disparo crescente":
-			return ["+15% DANO"]
+			return ["+20% DANO"]
 		"Tempestade":
-			return ["+5 DANO", "+2% CRIT"]
+			return ["+8 DANO", "+12% CRIT"]
 		"Trembo":
 			return ["+1 REVIVER"]
 		"Roubo de Vida":
@@ -342,7 +350,7 @@ func card_stat_chips(card_name: String) -> Array:
 		"Petro":
 			return ["+PETRO", "+2 DANO"]
 		"Defesa":
-			return ["+3.5 DEF"]
+			return ["+5 DEF"]
 		"Sorte":
 			return ["ANOMALIA OCULTA"]
 		"Poison":
@@ -350,7 +358,7 @@ func card_stat_chips(card_name: String) -> Array:
 		"Coletora":
 			return ["+0.8% EXEC"]
 		"Mercenaria":
-			return ["+40 CONTRATO"]
+			return ["+2/ABATE", "+8.5 CONTRATO"]
 		"Devorador de Destinos":
 			return ["20s MARCA", "RAIZ/LOG"]
 		"Escolha Adiada":
@@ -581,14 +589,22 @@ func draw(g, viewport: Vector2) -> void:
 	var compact: bool = detail.size.y < 290
 	var now: float = float(Time.get_ticks_msec()) * 0.001
 	g.buttons.clear()
-	var background: Texture2D = g.textures.get("cards_back")
-	if background:
-		g.draw_texture_rect(background, Rect2(Vector2.ZERO, viewport), false, Color(0.16, 0.18, 0.2))
-	g.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.01, 0.016, 0.022, 0.8))
+	# Na oficina do Mercador o fundo e a propria oficina.
+	workshop = g._merchant_dimension().active
+	if workshop:
+		RTMerchantDimensionPresentation.draw_shop_backdrop(g, viewport)
+	else:
+		var background: Texture2D = g.textures.get("cards_back")
+		if background:
+			g.draw_texture_rect(background, Rect2(Vector2.ZERO, viewport), false, Color(0.16, 0.18, 0.2))
+		g.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.01, 0.016, 0.022, 0.8))
 	# Visor abre a partir do bracelete.
 	var open: float = smoothstep(0.0, 1.0, minf(1.0, entrance))
 	var pivot: Vector2 = areas.bracelet
-	draw_bracelet(g, pivot, open, now, areas)
+	if workshop:
+		RTMerchantDimensionPresentation.draw_shop_projector(g, pivot, open, now, small)
+	else:
+		draw_bracelet(g, pivot, open, now, areas)
 	draw_beam(g, pivot, visor, open, now)
 	var sy: float = lerpf(0.04, 1.0, open)
 	var sx: float = lerpf(0.4, 1.0, open)
@@ -707,11 +723,17 @@ func draw(g, viewport: Vector2) -> void:
 		if g._is_empty_shop_slot(card):
 			label = "VAGA VAZIA"
 		if g._shop_purchase_animating():
-			label = "ENVIANDO AO BRACELETE"
+			label = "FECHANDO NEGOCIO" if workshop else "ENVIANDO AO BRACELETE"
 		elif busy():
-			label = {"burn": "REDUZINDO A CINZAS", "reroll": "RECALIBRANDO VISOR", "lock": "RESERVA FIXADA", "unlock": "RESERVA LIBERADA"}.get(action, "AGUARDE")
+			label = {"burn": "REDUZINDO A CINZAS", "reroll": "RECALIBRANDO VISOR" if not workshop else "REMEXENDO O ESTOQUE", "lock": "RESERVA FIXADA", "unlock": "RESERVA LIBERADA"}.get(action, "AGUARDE")
 		button(g, areas.buy, label, Color(0.38, 0.95, 0.57), enabled and g.score >= price and not g._is_empty_shop_slot(card))
-	button(g, areas.exit, "PRONTO" if g.is_multiplayer else "VOLTAR AO CAMPO", CYAN, g._shop_can_exit())
+	var exit_label: String = "VOLTAR AO CAMPO"
+	if workshop:
+		# Fechar o balcao nao tira ninguem da oficina: a saida e o portal.
+		exit_label = "SAIR DO BALCAO"
+	elif g.is_multiplayer:
+		exit_label = "PRONTO"
+	button(g, areas.exit, exit_label, accent(), g._shop_can_exit())
 	g.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if action == "reroll":
 		draw_reroll_scan(g, visor, t)
@@ -722,28 +744,31 @@ func draw(g, viewport: Vector2) -> void:
 ## Moldura do visor: vidro escuro, bordas ciano, scanlines e cantos.
 func draw_visor(g, visor: Rect2, now: float, header_h: float) -> void:
 	var flicker: float = 0.92 + 0.08 * sin(now * 31.0) * sin(now * 7.0)
-	var style := _style(Color(0.012, 0.05, 0.06, 0.9), Color(CYAN, 0.85 * flicker), 16)
+	var tone: Color = accent()
+	var style := _style(Color(0.012, 0.05, 0.06, 0.9) if not workshop else Color(0.06, 0.035, 0.05, 0.92), Color(tone, 0.85 * flicker), 16)
 	style.set_border_width_all(2)
 	g.draw_style_box(style, visor)
-	g.draw_rect(Rect2(visor.position + Vector2(10, header_h), Vector2(visor.size.x - 20, 1)), Color(CYAN, 0.22), true)
+	g.draw_rect(Rect2(visor.position + Vector2(10, header_h), Vector2(visor.size.x - 20, 1)), Color(tone, 0.22), true)
 	var y: float = visor.position.y + 6.0
 	var scan_y: float = visor.position.y + fposmod(now * 90.0, visor.size.y)
 	while y < visor.end.y - 6.0:
-		g.draw_line(Vector2(visor.position.x + 6, y), Vector2(visor.end.x - 6, y), Color(CYAN, 0.025), 1.0)
+		g.draw_line(Vector2(visor.position.x + 6, y), Vector2(visor.end.x - 6, y), Color(tone, 0.025), 1.0)
 		y += 4.0
-	g.draw_rect(Rect2(Vector2(visor.position.x + 6, scan_y), Vector2(visor.size.x - 12, 2)), Color(CYAN, 0.07), true)
+	g.draw_rect(Rect2(Vector2(visor.position.x + 6, scan_y), Vector2(visor.size.x - 12, 2)), Color(tone, 0.07), true)
 	for i in range(4):
 		var dir := Vector2(1 if i in [0, 3] else -1, 1 if i < 2 else -1)
 		var corner: Vector2 = [visor.position, Vector2(visor.end.x, visor.position.y), visor.end, Vector2(visor.position.x, visor.end.y)][i]
 		var p: Vector2 = corner + dir * 8.0
-		g.draw_line(p, p + Vector2(dir.x * 30, 0), Color(0.6, 1.0, 1.0, 0.9), 3)
-		g.draw_line(p, p + Vector2(0, dir.y * 22), Color(0.6, 1.0, 1.0, 0.9), 3)
+		var corner_tone: Color = Color(1.0, 0.9, 0.62, 0.9) if workshop else Color(0.6, 1.0, 1.0, 0.9)
+		g.draw_line(p, p + Vector2(dir.x * 30, 0), corner_tone, 3)
+		g.draw_line(p, p + Vector2(0, dir.y * 22), corner_tone, 3)
 	if visor.size.x < 900.0:
 		return
 	var tab := Rect2(Vector2(visor.get_center().x - 130, visor.position.y - 1), Vector2(260, 20))
-	g.draw_rect(tab, Color(0.02, 0.12, 0.14, 0.95), true)
-	g.draw_rect(tab, Color(CYAN, 0.6), false, 1.0)
-	text(g, "BRACELETE  ·  ARQUIVO TEMPORAL", tab.grow(-3), 11, Color(0.7, 1.0, 1.0), true)
+	g.draw_rect(tab, Color(0.10, 0.05, 0.08, 0.95) if workshop else Color(0.02, 0.12, 0.14, 0.95), true)
+	g.draw_rect(tab, Color(tone, 0.6), false, 1.0)
+	var tab_text: String = "BALCAO DO MERCADOR  ·  ESTOQUE" if workshop else "BRACELETE  ·  ARQUIVO TEMPORAL"
+	text(g, tab_text, tab.grow(-3), 11, Color(1.0, 0.92, 0.74) if workshop else Color(0.7, 1.0, 1.0), true)
 
 
 ## Bracelete da personagem embaixo da tela; a gema projeta o visor.

@@ -265,7 +265,13 @@ static func _draw_labels(game: Node2D, center: Vector2, controller, near: bool, 
 	game._draw_centered_outlined("FENDA DO MERCADOR", title_pos, 18, title_color, outline, 3)
 	var status: String = "ENTRE PARA ABRIR A LOJA"
 	var status_color := Color(1.0, 0.84, 0.4)
-	if unstable:
+	var rift: Dictionary = controller.rift()
+	var present_count: int = int(rift.get("present_count", 0))
+	var expected_count: int = maxi(1, int(rift.get("expected_count", 1)))
+	if game.is_multiplayer and expected_count > 1:
+		status = "REUNA OS VIVOS  %d/%d" % [present_count, expected_count]
+		status_color = Color(1.0, 0.74, 0.32) if present_count < expected_count else Color(0.44, 1.0, 0.72)
+	elif unstable:
 		status = "INSTAVEL  -%d%% NO LIMITE" % int(round(RiftController.EDGE_BONUS_DISCOUNT * 100.0))
 		status_color = Color(1.0, 0.56, 0.38)
 	elif near:

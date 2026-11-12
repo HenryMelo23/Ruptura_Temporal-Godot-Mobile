@@ -38,9 +38,16 @@ func _run() -> void:
 	game._update_button_layout(viewport)
 	_check(not game.buttons.has("shop_manual"), "manual shop button editable in layout editor")
 	game.mode = "game"
+	game.qa_data_unlocked = true
+	game.forced_initial_phase = 3
+	game._update_button_layout(viewport)
+	_check(not game.buttons.has("shop_manual"), "QA or forced phase restored the manual shop button")
+	_check(not game._keyboard_action_order().has("shop"), "keyboard settings still expose the manual shop")
+	_check(not game._gamepad_action_order().has("shop"), "gamepad settings still expose the manual shop")
+	game.mode = "game"
 	_check(game.shop_auto_enabled, "automatic shop was disabled")
 	_check(game.shop_rift_controller.enabled(), "merchant rift disabled in solo run")
-	print("MANUAL_SHOP_REMOVED_OK settings=false hud=false edit_layout=false rift=true")
+	print("MANUAL_SHOP_REMOVED_OK settings=false hud=false edit_layout=false qa=false inputs=false rift=true")
 	root.remove_child(game)
 	game._cleanup_runtime_resources()
 	await process_frame

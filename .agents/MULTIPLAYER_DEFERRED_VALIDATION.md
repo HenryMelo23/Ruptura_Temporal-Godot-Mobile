@@ -614,9 +614,9 @@ Suggested tests/runners: exact paths or commands to use later.
 - Boss 4 Poco Gravitacional: o puxao so e aplicado ao jogador local do host (`_update_singularities`); peers remotos recebem dano do nucleo/implosao via `_send_peer_damage`, mas ainda NAO sao puxados. Decidir: aplicar o puxao no cliente lendo o hazard `boss4_singularity` replicado.
 - Boss 6 locomoção/Mergulho: `boss6_ai_state` (modo, monte, ponto de emersão, facing) ainda NÃO entra no pacote de `runtime_boss_visual_sync_controller`; réplicas veem só `boss_pos` (o corpo desliza com o monte e não afunda). Adicionar `boss6_ai_state` ao pacote visual e validar dano de emersão em peers (`_send_peer_damage`).
 - Boss 6 Foices/Cuspe/Cauda: ataques novos vivem em `boss_attacks` (`waves`, `spots` com `launch`, `back/side`), já replicados pelo pacote visual; validar que réplicas desenham com a idade certa e que o dano remoto (`_send_peer_damage`) chega uma vez por onda/bola/varrida.
-- Henry Incendiário rework: trilha do dash (`ember_trail`), fila/explosões de Combustão e bolas de fogo vivem no controlador local (não estão no snapshot); a autoridade aplica dano/cargas, mas peers remotos não veem a trilha nem as explosões. O visual remoto do dash ainda usa o pacote antigo do giro (`NET_ANIM_LACERANTE 48+`, `NET_ABILITY_TELEPORT` com `HenryFire.spin`). Replicar trilha/explosões e trocar o visual remoto do dash.
+- Henry Incendiário rework (P0.07 local/relay concluído): `visual_snapshot(action)` expõe somente estado público limitado de trilha, Combustão e bola de fogo; o evento/patch existente replica início/progresso/fim e os peers derivam VFX sem partículas individuais. Dash remoto usa `HenryFire.dash`, não o giro antigo. Validado em relay local com duo/trio; ainda falta sessão pública, perda/latência hostil, Android físico e reconexão durante a habilidade.
 - Pressão infinita da horda (`scripts/systems/enemies/horde_pressure_controller.gd`): o orçamento de inimigos vivos é aprendido pelo FPS do host; validar com clientes lentos (o host pode ficar folgado e o cliente travar) e se o enxame condensado (vida/dano/pontos) replica certo.
-- Henry Ignição Total rework: a linha do tempo local mudou (impactos em 0,70/1,45/2,20 s, raios 150/225/300, total 2,55 s), mas o visual remoto (`NET_ABILITY_SECONDARY` em `_draw_henry_network_ability`) ainda desenha 3 ciclos de 0,8 s com anel genérico de 280 px e os quadros de rede seguem a v1 (8 quadros, índices 40–47). Alinhar o visual remoto e o pacote de quadros.
+- Henry Ignição Total rework (P0.07 relay local): o visual remoto deriva os pulsos 0,70/1,45/2,20 s e raios atuais do estado canônico do controlador; fim natural preserva a cauda da última onda e cancelamento encerra imediatamente. Os quadros de jogador continuam no contrato compatível existente; validar sob latência/perda pública e Android físico.
 
 ## Henry Colosso — rework de peso (local)
 - Hit-freeze, cone de choque do 3º soco, passos do gigante, decals (rachadura/poeira/estrela/sulco) e estouro da transformação rodam só no cliente local; dano do cone e empurrão do estouro precisam ser validados como autoritativos no host.
@@ -632,7 +632,7 @@ Suggested tests/runners: exact paths or commands to use later.
 ## Empurrões suaves do jogador + canalização segura do Henry Incendiário
 - `_shove_player(offset)` (RTPlayerShoveController) troca os empurrões/puxões de impacto que teleportavam por deslocamento de ~0,2 s. Só mexe no jogador local; a posição chega aos parceiros pelo sync normal (verificar interpolação remota sem "saltos"). Puxões contínuos (redemoinho, vórtice, poço) seguem por quadro como antes.
 - Henry Incendiário: Q e ultimate repelem + lentidão (`evolution_slow`) ao iniciar e mantêm guarda de 94 px durante a canalização. Só a autoridade de mundo empurra inimigos; cliente não-host não repele (validar pedido ao host).
-- Cancelamento da canalização (teleporte ou apertar a mesma habilidade) é local: os pulsos restantes da ultimate somem só no cliente que cancelou — falta mandar evento de cancelamento pros parceiros (o visual remoto do cone/onda vai até o fim).
+- Cancelamento da canalização (P0.07): o evento público de fim identifica Q/ultimate; cancelamento zera imediatamente o visual correspondente e duplicatas são toleradas, enquanto fim natural mantém só a cauda visual já liberada. Validado por smoke de host + dois clientes e estado limpo de reconexão; ainda falta cancelamento durante sessão pública/Android e teleporte sob perda artificial.
 - Testes: tests/henry_channel_guard_smoke.gd, tests/henry_incendiary_smoke.gd, tests/boss6_spit_tail_smoke.gd.
 
 ## Manifestações enxutas — roster estável da Geovana
@@ -667,7 +667,7 @@ Suggested tests/runners: exact paths or commands to use later.
 - enemy_manager: `_get_nearest_player_pos` só é calculado para Kamikaze; contato checa distância antes de `_local_player_damageable_by_contact`; cápsula da barganha lida uma vez por quadro. Semântica igual no host; conferir dano de contato em peers remotos.
 - `_get_enemy_target_pos`: removida checagem duplicada de chefe/especial (ramos idênticos) e `enemies.find()` só sem uid. Conferir distribuição de alvos entre peers.
 - Henry Incendiário: `_update_enemy_burn`/`_update_knockback` saem cedo quando o inimigo não tem as chaves de queimadura/empurrão. Conferir queimadura aplicada por cliente (on_damage_dealt no host).
-- Henry Colosso gigante parado: freada (henry_colossus_stop_*) e respiracao (henry_colossus_idle_*) so no jogador local (RTHenryColossusAbilityController.giant_rest_texture). O parceiro remoto continua vendo o quadro 0 do andar (NET_ANIM_* nao tem estado de idle/freada do gigante). Avaliar se vale mandar isso na rede.
+- Henry Colosso gigante parado (P0.07): flags livres do snapshot fixo distinguem freada/respiração e facing aproximado; o cliente seleciona `henry_colossus_stop_*`/`idle_*` sem mudar stride, hitbox ou gameplay. Validado por smoke local; ainda falta inspeção visual em sessão pública/Android e sob cliente lento.
 - Cronoguejo, Crono-Ruptura (RTRewindCamera): camera (zoom/inclinacao), trincas, VHS e relogio novo sao locais e seguem `boss1_rewind_sequence`, que ja e sincronizado por `_rpc_boss1_team_rewind`. Conferir num cliente: a cinematica deve tocar para todos ao mesmo tempo e o HUD some durante ~3,7 s (como na execucao da Lacerante).
 
 ## Mini-chefes (nov/2026) — validar com o multiplayer
@@ -719,7 +719,182 @@ Suggested tests/runners: exact paths or commands to use later.
     multiplicadores globais;
   - status hostis do Arauto em peers remotos (Silêncio/Veneno) e puxões físicos
     de Inversão; os danos geométricos já usam o caminho remoto existente;
-  - trilha/explosões/cancelamento do Henry Incendiário e idle/freada do Colosso;
+  - Henry P0.07: sessão pública/Android, perda/latência, reconexão durante a habilidade e inspeção visual remota (relay local duo/trio e contratos já cobertos);
   - Necrocronismo, poços/colisões da Gravitante e dossiê unificado no UI MP;
   - sessão pública pelo relay, reconexão durante ataques, Android físico e
     cliente com desempenho muito inferior ao host.
+
+## 2026-11-05 — Tutorial adaptativo (RTTutorialGuide)
+- `player_control_controller.desktop_dash_mode()` agora usa `core._effective_desktop_teleport_mode()`: com MIRA DO ATAQUE = automatica, modos de teleporte por cursor (cursor/segurar/confirmar) viram ULTIMA DIRECAO. Validar que o cliente MP aplica a mesma regra localmente (dash enviado ao host com o destino ja resolvido).
+- Bloqueio de acoes por passo do tutorial (`_try_attack/_use_skill/_use_secondary_skill/_try_dash/_try_dash_to_world`) so atua com tutorial ativo; tutorial e contextos continuam desligados em MP (`_maybe_start_context_tutorial`), mas conferir que nenhum estado de tutorial vaza para clientes.
+- Contexto novo "extraordinary_context" e o rastreador de missao sao apenas locais (nao sincronizados).
+
+## 2026-11-05 — Rota de fases fixa (volta da sequencia antiga)
+- Inicio alterna 1 <-> 6 (bias 1.0 salvo em config a cada inicio de run). Rotas: 1-2-6-3-4 e 6-1-2-3-4; depois do 4, portais 7 (farm) x 5 (Umbra). Farm = 7 + 3 regioes sorteadas e nova escolha.
+- Validar em MP: host decide inicio/rota e clientes recebem a fila (`dimension_route_queue`) e os rotulos novos dos portais; voto de portal "farm" deve levar todos para a 7.
+
+## 2026-11-05 — Buff de cartas e recompensas de mini-chefes
+- Solo validado: Disparo crescente, Tempestade, Defesa, Mercenaria, Tributo da Dor e Estilhaco Prismático; recompensas de Larapio, Sineiro, Suturador e Arauto.
+- Validar em MP: compra/contagem efetiva das cartas por peer; deduplicacao dos pontos diretos de Sineiro e Arauto; orbe autoritativo de Larapio/Suturador; Mercenaria pagando o bonus do dono do abate sem duplicar no host/cliente.
+
+## 2026-11-06 — Recarga dos cristais do Suturador
+- Solo validado: a formação de cristais inicia recarga de 60 s; enquanto ela estiver ativa, a janela correspondente da rotação usa o leque de agulhas e não cria novos nós.
+- Validar em MP: autoridade mantém uma única recarga, réplicas recebem `crystal_suture_cooldown` no estado visual e nenhum cliente observa recriação antecipada dos nós.
+
+## 2026-11-06 — Parasitica: Simbiose Predatoria (Q) + Verme-Rei (E)
+Logica nova em `scripts/systems/abilities/parasitica_ability_controller.gd` (RTParasiticaController, autoridade local do dono). Nada foi executado em host/client.
+- Snapshot visual: `runtime_manifestation_visual_snapshot` agora envia `parasitica_visual` (compacto: sym, fome, falling; rei com pos/estado/consumed/perfect/fed/vida/bite/devour/trail[8]/target_pos) nas acoes SKILL e SECONDARY. Replica desenha via `RTParasiticaPresentation.draw_remote` em `_draw_canonical_manifestation_skill`. Validar: rei aparece no cliente, entrada subterranea, mordida/Devorar, Rei Perfeito, Alimentado.
+- Dano do rei/mordida usa `_damage_enemy/_damage_boss/_damage_arauto` com categorias `skill_q`/`skill_e`; em cliente nao-autoridade esses caminhos viram `_send_client_damage_request`. Validar que o host aplica larvas (`seeds`) e Devorar com o rei controlado no cliente (larvas sao estado do inimigo na autoridade).
+- Fome/velocidade/movimento sao multiplicadores locais do jogador dono. Validar que o host nao aplica a Fome do cliente em dano de outros jogadores.
+- `_kill_enemy` chama `on_infested_kill` so na autoridade: em cliente, a extensao da Simbiose por abate pode nao acontecer. Cenario a decidir quando o MP descongelar.
+- Save/resume: campo `parasitica_ability_state` (propriedade com get/set no core) entrou no snapshot interrompido/retry.
+
+## 2026-11-08 — Ritual da Catedral jogavel (fase 3)
+- Snapshot do ritual subiu para `SCHEMA_VERSION 2` (novos campos por circulo: sealed, profane, profaned, safe_wedge, pulse_beat, outcome, broken_at, outcome_at; global `elapsed`). Cliente antigo/novo nao se misturam.
+- Pulsos de compasso causam dano em jogadores remotos via `_send_peer_damage` no host; o desvio por TP so e checado para o jogador local (o host nao conhece o `last_dash_time` do cliente). Validar/decidir.
+- Profanacao conta qualquer jogador vivo dentro do circulo (posicoes de `_combat_targets`). Validar com 2–3 jogadores.
+- Poses de dança/reverencia dependem de chaves no dicionario do inimigo (`phase3_ritual_pose`, `phase3_ritual_role`): conferir se a replicacao de inimigos as envia; senao a replica ve os ratos parados (sem quebrar nada).
+
+## 2026-11-08 — Campanha expandida, altar e Fenda do Mercador online
+
+- A campanha multiplayer usa o mesmo mundo definitivo 3200×2250 do solo; as variantes clássicas `FaseEX`–`FaseEX7` continuam sendo apenas atalhos solo.
+- O altar deixou de aceitar presença remota por votação: a autoridade mede as posições replicadas e só inicia a chamada quando todos os jogadores vivos estão simultaneamente no raio. Mortos e espectadores não bloqueiam.
+- A Fenda do Mercador passou a ser entidade autoritativa replicada; substitui a contagem antiga também nas réplicas e abre a loja do grupo somente quando todos os vivos tocam o portal. Estado, tempo, fragmentos e bônus de entrada seguem no snapshot visual.
+- Evidência real local com servidor dedicado + host + cliente: `MULTIPLAYER_WORLD_ALTAR_OK` provou bloqueio 1/2 e chamada 2/2 no mapa expandido; `MULTIPLAYER_WORLD_SHOP_PORTAL_OK` provou bloqueio 1/2, réplica da fenda e abertura 2/2. A bateria também preservou autoridade de combate, VFX e ciclo da sala.
+- Ainda devido fora desta máquina: sessão em dois dispositivos físicos e reconexão tardia enquanto altar/fenda já estão ativos.
+
+## 2026-11-08 — Causa da morte no relatório da run
+
+- Solo: o último dano efetivo é preservado e só vira `death_cause` quando a derrota realmente se confirma; revives não encerram a run nem registram uma morte falsa.
+- Validar em MP: cada peer deve manter sua própria origem letal e, quando todos morrerem, o relatório enviado pelo líder precisa representar a causa do jogador local sem sobrescrever com a morte remota que encerrou a equipe.
+
+## 2026-11-09 — Câmera cinematográfica de morte
+
+- Solo: derrota entra por 1,65 s em câmera lenta, aproxima o corpo, remove o HUD, dessatura a cena e só então abre a evolução dos espectros.
+- Validar em MP: a câmera não deve interromper espectador/revive quando apenas o jogador local cai; decidir e provar o disparo cinematográfico somente na derrota terminal de toda a equipe.
+
+## 2026-11-09 — Portal do Mercador como entrada única da loja
+
+- Solo: removidos o botão manual de loja do HUD/hub, editor de layout, configurações de teclado/controle e atalhos de combate, inclusive com QA liberado ou fase forçada; a Fenda do Mercador continua ativa.
+- Validar em MP: host e clientes não devem exibir o atalho aposentado; a aceitação coletiva e a saída da loja aberta pela Fenda devem continuar acessíveis pelos controles restantes, sem depender da ação legada `shop`.
+
+## 2026-11-09 — Durabilidade drástica de todos os bosses
+
+- Solo: as sete fases receberam multiplicadores próprios de vida entre 3,0× e 4,5×. A camada adicional depende somente do tempo da run, usa uma curva sublinear sem teto e ignora completamente pontos e abates; inimigos comuns não usam essa curva.
+- Validar em MP: a autoridade deve calcular uma única vida combinando durabilidade da fase, tempo total da run e coeficiente fixo do tamanho inicial do grupo; entrada tardia, morte e revive não podem reaplicar ou reduzir nenhum multiplicador, e as réplicas devem receber o mesmo `boss_hp_max`.
+
+## 2026-11-10 — Drops estilo RoR2 + Chips Quânticos
+- Chips quânticos ficam DESLIGADOS no multiplayer (`RTQuantumChipController.on_run_started` não ativa nada com `is_multiplayer`); Corruptor também não converte drops em MP. Decidir regras de equipe antes de liberar.
+- Drop de carta: nova curva (4% base, ×(1+0,1/min)×1,15^regiões, teto 40%, ÷√jogadores), elites ×2,5 e piedade por jogador local (`pity_bonus` vive no host). Validar justiça entre jogadores e se a piedade deve ser por dono.
+- Drop agora aceita cartas com arte ainda não carregada (carregamento assíncrono); conferir em clientes que a carta aparece quando a textura chega.
+
+## 2026-11-10 — Mente da UMBRA, kit base e dano de projétil restaurado
+- **Dano de projétil no jogador local restaurado** em `_update_enemy_bullets`: o bloco `if local_player_hit` tinha sumido junto com a Necronada (commit 6f20d6a), então nenhum projétil inimigo feria o jogador local; o `else` passou a pertencer ao `if` do segmento do plasma. Validar em MP que o host continua ferindo réplicas pelo ramo remoto (`_send_peer_damage`) e que o cliente não toma dano duplicado.
+- Mira do plasma da UMBRA: `ObservationSchema.runtime_world_size()` usa o `WORLD_SIZE` real (3200×2250) no `space` da autoridade (antes 1600×900 e clamp em 1,0). A antecipação usa histórico só do jogador local; para alvo remoto mira na posição replicada sem lead. Validar com alvo remoto.
+- Kit base novo (`RTUmbraBaseSkills`): REBOBINAR só é oferecido quando o alvo da decisão é o jogador local (o host não move réplicas); ECO_PROFETICO fere remotos por `_damage_remote_player_in_radius`. Decidir se Rebobinar deve ganhar evento replicado antes de liberar em MP.
+- `RTUmbraMind` (camadas base/coletiva/jogador) só rastreia encontro e grava camada pessoal no solo (`begin_encounter` não roda com `is_multiplayer`). O relatório `umbra_combat` e `umbra_phase_lessons` vão vazios em MP. Observador de fases desligado em MP.
+
+## 2026-11-11 — Iluminação, sombras e feedback físico do auto ataque
+- Nova camada `RTWorldLighting` (aditiva, filho do canvas): poças de luz sob jogador local, projéteis locais+remotos, orbes, UMBRA e efeitos com `"light"`. É só visual e lê `remote_bullets`/`net` já replicados; validar que em MP as luzes dos projéteis remotos aparecem nos clientes.
+- Vinheta + banho de cor por fase desenhados antes do HUD; afeta igualmente espectador.
+- `_damage_enemy` agora aplica, no host: `hit_flash_until` (flash branco + pop de escala no desenho) e empurrão de 6,5 px (×0,45 em não-comuns) em acertos de `basic_attack`. O empurrão muda `enemy["pos"]` só na autoridade; réplicas recebem a posição replicada. Validar que o empurrão não briga com a interpolação visual dos clientes nem com inimigos de rota fixa (ritual fase 3 já é imune porque o dano é bloqueado antes).
+- Tiros básicos em lote ganharam `stretch` por velocidade e textura com núcleo quente; sombras dos inimigos usam mancha de contato + 1 passe de silhueta (mesmas 2 instâncias por inimigo).
+
+## 2026-11-11 — Durabilidade v3 dos chefes (dobro da v2)
+- `BOSS_HP_DURABILITY_BY_PHASE` dobrado (fases 1–7: 6,0 / 6,5 / 7,0 / 7,5 / 8,0 / 7,5 / 9,0); modelo renomeado para `boss_hp_durability_v3_time_only`. A vida final de cada chefe é exatamente 2× a anterior em solo.
+- A ordem dos fatores não mudou: `B(p) × D(p) × T(t) × coeficiente de grupo`. Validar em MP que o coeficiente de grupo continua aplicado uma única vez sobre a base nova e que entrada tardia/revive não recalcula `boss_hp_max` no meio do encontro.
+- Risco a observar em MP: com o dobro de vida, encontros longos pressionam mais o orçamento de cura/sustentação do grupo e o tempo de sala. Medir duração real de luta com 2 e 3 jogadores antes de liberar.
+
+## 2026-11-11 — Corte de cura do chefe 6 e gelo do Sineiro
+- **Corte de cura (fase 6)**: novo `boss6_heal_cut_timer` (4 s, cura a 35%) aplicado em `_damage_player` para as fontes de `BOSS6_HEAL_CUT_SOURCES`. A Necro-Erosão caiu de 10 s para 6 s (`BOSS6_NECRO_EROSION_TIME`), e a calcificação continua zerando cura só para quem está fora do raio. Validar em MP: cada peer precisa do próprio timer (hoje só o local é calculado); o host não propaga o corte para réplicas, então clientes podem curar cheio enquanto o host acha que cortou. Decidir se vira status replicado (`_request_peer_status`) antes de liberar.
+- **Geada / patinação (fase 2)**: `player_frost_stacks` (4 cargas, −10% de velocidade cada, congela e zera ao encher) e `player_ice_slip_timer` (inércia de direção no movimento). Ambos são locais. O Sineiro já envia `slow` para peers remotos no lugar da geada, então em MP o remoto sente lentidão mas não acumula cargas nem patina. Validar e decidir se a geada vira status replicado.
+- `_apply_ice_slip` entra na leitura de movimento do jogador local e multiplica a velocidade por `_ice_slip_speed_mult()`. Fora do gelo o caminho é idêntico ao anterior (retorna o vetor sem tocar), então não deve alterar netcode de posição; confirmar com dois clientes que a reconciliação não briga com a inércia.
+
+## 2026-11-11 — Auditoria de paridade solo/multiplayer retomada
+
+- A reconciliação local real passou com servidor dedicado, host, cliente e,
+  no fluxo completo, um segundo cliente: pronto, espectador, loja, rebobinar do
+  chefe 1, 28 estágios de morte/revive nas sete fases, baralho individual,
+  pontuação/entrada de chefe e início de partida.
+- O corredor foi ampliado para executar os cenários de fio pelo papel correto;
+  os falsos erros causados por invocar testes herdados sem `--role` foram
+  eliminados. O teste de baralho deixou de fixar percentuais antigos e agora
+  prova que o texto transportado pertence ao outro jogador.
+- Geada/patinação do Sineiro agora preserva a regra solo no cliente: o dano
+  confirmado fornece a primeira carga e eventos autoritativos transportam a
+  carga restante e o piso escorregadio. O anel mantém também sua lentidão.
+- Silêncio, Veneno e Inversão do Arauto foram rechecados no receptor com
+  epoch/life-epoch e deduplicação; o corte de cura do chefe 6 foi comprovado no
+  cliente pelo mesmo `source` de dano confirmado.
+- Parasítica agora registra na autoridade as larvas e o dono da infestação de
+  Mordida/Verme-Rei, consome as larvas no Devorar e confirma o abate infestado
+  de volta somente ao dono. A confirmação é idempotente e estende a Simbiose
+  no cliente; o snapshot público do Verme-Rei também foi provado.
+- A execução da Lacerante iniciada por cliente não-host agora passa por pedido
+  confiável: a autoridade valida manifestação, alvo, vida, alcance e linha do
+  corte, reserva uma única vez, conclui o dano e confirma o Coágulo somente ao
+  dono. O cenário real `lacerante-execution` passou com servidor, host e cliente.
+- Ainda não encerrado nesta auditoria: barreira/regra de equipe para pactos pós-chefe; regra de
+  equipe para Chips Quânticos (continuam deliberadamente desligados no MP);
+  adaptação persistente da Mente da UMBRA no cooperativo; e uma prova pública
+  ou em dois dispositivos físicos sob perda/latência.
+- Um cenário sintético novo que tentava injetar todos os status ainda no lobby
+  foi descartado do corredor: ele alternava entre entregar e descartar pacotes
+  antes da transição de partida. As provas determinísticas ficaram, mas não foi
+  registrado como evidência de fio real para esses quatro efeitos.
+
+## 2026-11-12 — Oficina do Mercador (dimensão da loja)
+- A Fenda do Mercador agora leva a uma dimensão jogável (`RTMerchantDimension`), **apenas no solo**: `enter()` retorna false com `is_multiplayer`, e a fenda cai no caminho antigo (tela de loja) em MP. O chip Corruptor continua tendo prioridade sobre os dois.
+- A entrada troca `WORLD_SIZE`, guarda inimigos/projéteis/posição e devolve tudo na saída. Em MP isso nunca roda, mas se um dia rodar: a troca de mundo precisa ser replicada ou cada peer veria um mundo diferente. Decidir se a oficina é instanciada por jogador ou compartilhada.
+- `RTMerchantNpc` guarda história vista, peças e missão em `user://merchant_npc.cfg` (por aparelho, não por run). Em MP, decidir de quem é o progresso da missão.
+- Peças caem em `_kill_enemy` só no solo, usando a mesma definição de extraordinário do tutorial.
+- A expulsão confisca a essência não gasta (`_apply_score_delta` negativo com `merchant_rift_collapse`). Em MP isso precisaria ser autoritativo por peer.
+
+## 2026-11-12 (2) — Oficina do Mercador ligada no multiplayer
+Revoga o bloco anterior: `enter()` **não** recusa mais `is_multiplayer`. Nada
+disto foi provado online (MP congelado); é tudo raciocínio de código.
+
+Regras implementadas, todas derivadas de estado que cada cliente já tem:
+- **Entrada simultânea.** `merchant_rift_controller.enter()` já mandava
+  `_rpc_trigger_shop(false)` antes de abrir; agora esse mesmo caminho leva cada
+  peer para a oficina. A troca de `WORLD_SIZE` continua local, mas passa a ser
+  simétrica: todo mundo entra e sai no mesmo evento.
+- **Tempo da sala.** Cada um calcula `budget_cards()` = essência / preço da
+  carta (entre 3 e 12) e anuncia no RPC **novo** `_rpc_merchant_rift_budget`.
+  A sala fica com o maior: `limit` só cresce, nunca encolhe no meio da compra.
+  O servidor dedicado repassa o pacote como faz com `_rpc_shop_ready`.
+- **Saída coletiva.** Tocar o portal não tira ninguém: marca `mp_ready` e
+  reaproveita `_rpc_shop_ready` como "cheguei na saída". O grupo só sai quando
+  `mp_ready_total() >= shop_mp_expected_count`. Contamos **peers distintos**
+  (`mp_ready_peers`) de propósito: `shop_mp_partner_ready` sozinho liberaria a
+  sala de 3 com um único companheiro pronto.
+- **Fechar a tela de cartas não espera ninguém.** `_commit_exit_or_finish()`
+  chama `finish()` direto quando a oficina está ativa; o portão do grupo é o
+  portal, não o visor.
+- **Estouro do tempo.** Cada cliente avalia o próprio relógio (mesmo `limit`,
+  mesmo início) e confisca a **própria** essência com `broadcast = false`. Com
+  broadcast a réplica descartava o desconto e só o anfitrião perdia pontos.
+- O id do evento de pontos virou `merchant_rift_collapse_<n>`: com o id fixo,
+  a segunda expulsão da run era descartada como repetida pela deduplicação de
+  `_apply_score_delta`.
+
+Riscos que **continuam abertos** e precisam de prova em dois aparelhos:
+1. `_rpc_merchant_rift_budget` é um método novo: cliente antigo (2.0.65) na
+   mesma sala recebe erro de RPC desconhecido. Exige bump de versão mínima.
+2. Posição dos jogadores remotos durante a troca de mundo: nos quadros entre o
+   `_rpc_trigger_shop` e o `enter()` de cada peer, o remoto ainda manda
+   coordenadas do mundo antigo e aparece fora do lugar na oficina.
+3. O anfitrião limpa `core.enemies` ao entrar e restaura na saída: se os dois
+   lados saírem em quadros diferentes, a horda restaurada pode divergir.
+
+Mitigados nesta mesma passagem (também sem prova online):
+- **Sala que encolhe.** `_refresh_mp_expectation()` recalcula
+  `shop_mp_expected_count` a cada quadro a partir de
+  `_living_run_player_peer_ids()`, esquece peers prontos que sumiram e entra
+  `mp_ready` sozinho quando o jogador local está morto ou é espectador. Sem
+  isso a sala travava esperando um toque que nunca viria.
+- **Fenda estável só de um lado.** O progresso da missão continua por aparelho
+  (`user://merchant_npc.cfg`), mas o anúncio de orçamento manda o sentinela
+  `BUDGET_STABLE = -1` quando a fenda do jogador está estável, e quem recebe
+  marca `mp_room_stable`. Basta um da sala ter entregue as peças para o relógio
+  parar para todos — que é a leitura generosa e combina com a ficção.

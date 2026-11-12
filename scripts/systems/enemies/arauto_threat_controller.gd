@@ -61,14 +61,23 @@ var ability: Dictionary = {}
 var inversion: Dictionary = {}
 var stings: Array = []
 var spikes: Array = []
-var venom_stacks: Array = []  # lista de tempos restantes (local)
+var venom_stacks: Array = []  # lista de tempos restantes do jogador local
 var venom_tick := 0.0
+var venom_stacks_by_peer: Dictionary = {}
+var venom_tick_by_peer: Dictionary = {}
 var shell_spike_cd := 0.0
 var _cds: Dictionary = {}
 var _last_nodules := -1
 var _phase2_seen := false
 var _player_prev := Vector2.ZERO
 var _player_vel := Vector2.ZERO
+var _event_epoch := 0
+var _peer_alive: Dictionary = {}
+var _peer_life_epoch: Dictionary = {}
+var _remote_seen_events: Dictionary = {}
+var _remote_event_epoch := -1
+var _remote_life_epoch := 0
+var _remote_was_alive := true
 
 
 func bind_game(p_game: Node) -> void:
@@ -82,10 +91,19 @@ func reset() -> void:
 	spikes.clear()
 	venom_stacks.clear()
 	venom_tick = 0.0
+	venom_stacks_by_peer.clear()
+	venom_tick_by_peer.clear()
 	shell_spike_cd = 0.0
 	_cds = {"choir": 4.0, "prism": 7.0, "hush": 11.0, "inversion": 6.0, "sting": 3.0, "shell": 8.0}
 	_last_nodules = -1
 	_phase2_seen = false
+	_event_epoch += 1
+	_peer_alive.clear()
+	_peer_life_epoch.clear()
+	_remote_seen_events.clear()
+	_remote_event_epoch = -1
+	_remote_life_epoch = 0
+	_remote_was_alive = true
 
 
 ## Only public telegraph state crosses the wire. Cooldowns, venom damage and
@@ -127,6 +145,7 @@ func update(delta: float, phase2: bool) -> bool:
 		return false
 	if _cds.is_empty():
 		reset()
+	_sync_target_life_epochs()
 	if game._arauto_is_aguilhao():
 		return _update_aguilhao(delta, phase2)
 	return _update_condutor(delta, phase2)
@@ -153,6 +172,64 @@ func update_world(delta: float) -> void:
 		if not ability.is_empty() or not inversion.is_empty():
 			ability.clear()
 			inversion.clear()
+
+
+## Replicas do not simulate Arauto attacks, but keep their own received status
+## lifetime and death/revive generation current.
+func update_remote_effects(delta: float) -> void:
+	if game == null:
+		return
+	var alive: bool = not bool(game.is_dead) and float(game.player_hp) > 0.0
+	if not alive:
+		venom_stacks.clear()
+		venom_tick = 0.0
+	elif not _remote_was_alive:
+		_remote_life_epoch += 1
+	_remote_was_alive = alive
+	if not alive or venom_stacks.is_empty():
+		return
+	var nodules_alive: bool = game._arauto_active() and game._arauto_is_aguilhao() and game._count_aguilhao_nodules() > 0
+	if not nodules_alive:
+		for index in range(venom_stacks.size()):
+			venom_stacks[index] = float(venom_stacks[index]) - delta
+		venom_stacks = venom_stacks.filter(func(value): return float(value) > 0.0)
+
+
+func apply_remote_hostile_event(target_peer_id: int, event_id: String, event_epoch: int, life_epoch: int, effect_name: String, duration: float, intensity: int, destination: Vector2) -> bool:
+	if game == null or target_peer_id != game._mp_unique_id() or bool(game.is_dead) or float(game.player_hp) <= 0.0:
+		return false
+	if life_epoch != _remote_life_epoch or event_epoch < _remote_event_epoch:
+		return false
+	if event_epoch > _remote_event_epoch:
+		_remote_event_epoch = event_epoch
+		_remote_seen_events.clear()
+	if event_id == "" or bool(_remote_seen_events.get(event_id, false)):
+		return false
+	_remote_seen_events[event_id] = true
+	while _remote_seen_events.size() > 128:
+		var keys: Array = _remote_seen_events.keys()
+		if keys.is_empty():
+			break
+		_remote_seen_events.erase(keys[0])
+	match effect_name:
+		"silence":
+			game.player_silence_timer = maxf(float(game.player_silence_timer), game._hostile_control_duration(maxf(0.0, duration)))
+			game._add_text("SILENCIADO!", game.player_pos + Vector2(-50, -88), Color(0.72, 0.92, 1.0), 0.9, 21)
+		"venom":
+			venom_stacks.clear()
+			for index in range(clampi(intensity, 0, VENOM_MAX)):
+				venom_stacks.append(maxf(0.0, duration))
+			if intensity > 0:
+				game._add_text("VENENO x%d" % venom_stacks.size(), game.player_pos + Vector2(-46, -96), Color(0.6, 1.0, 0.24), 0.8, 19)
+		"inversion":
+			var offset: Vector2 = destination - game.player_pos
+			if offset.length() > 6.0:
+				game._shove_player(game._hostile_knockback(offset))
+			game._add_text("PUXADO DE VOLTA!", destination + Vector2(-80, -90), Color(0.86, 0.6, 1.0), 0.8, 18)
+		_:
+			_remote_seen_events.erase(event_id)
+			return false
+	return true
 
 
 # ============================== CONDUTOR ======================================
@@ -278,23 +355,41 @@ func _update_hush() -> void:
 	var age: float = float(ability["age"])
 	if age >= HUSH_TELEGRAPH and not bool(ability["fired"]):
 		ability["fired"] = true
-		var damage := int((game.player_hp_max * 0.06 + game.enemy_far_damage * 0.3) * game.ARAUTO_DAMAGE_MULT)
-		var safe := false
-		for p_value in ability["safes"]:
-			if game.player_pos.distance_to(Vector2(p_value)) <= HUSH_SAFE_RADIUS:
-				safe = true
-		if not safe and game._local_player_damageable_by_contact():
-			game.player_silence_timer = maxf(float(game.player_silence_timer), HUSH_SILENCE)
-			game._damage_player(damage, "silencio_total")
-			game._add_text("SILENCIADO!", game.player_pos + Vector2(-50, -88), Color(0.72, 0.92, 1.0), 0.9, 21)
+		for target_value in _hush_affected_targets(Array(ability["safes"])):
+			var target: Dictionary = target_value
+			var damage := int((float(target.get("hp_max", game.player_hp_max)) * 0.06 + game.enemy_far_damage * 0.3) * game.ARAUTO_DAMAGE_MULT)
+			var target_peer: int = int(target.get("peer_id", game._mp_unique_id()))
+			if bool(target.get("local", false)):
+				game.player_silence_timer = maxf(float(game.player_silence_timer), game._hostile_control_duration(HUSH_SILENCE))
+				game._damage_player(damage, "silencio_total")
+				game._add_text("SILENCIADO!", game.player_pos + Vector2(-50, -88), Color(0.72, 0.92, 1.0), 0.9, 21)
+			else:
+				game._send_peer_damage(target_peer, damage, "silencio_total")
+				_send_remote_event(target_peer, "silence", HUSH_SILENCE, 1, Vector2.ZERO)
 		game.screen_shake_timer = maxf(float(game.screen_shake_timer), 0.2)
 		game.screen_shake_strength = maxf(float(game.screen_shake_strength), 6.0)
 	if age >= HUSH_TELEGRAPH + 0.5:
 		ability.clear()
 
 
+func _hush_affected_targets(safes: Array) -> Array:
+	var affected: Array = []
+	for target_value in game._combat_targets():
+		var target: Dictionary = target_value
+		var target_pos: Vector2 = Vector2(target.get("pos", game.player_pos))
+		var safe := false
+		for safe_value in safes:
+			if target_pos.distance_to(Vector2(safe_value)) <= HUSH_SAFE_RADIUS:
+				safe = true
+				break
+		if not safe:
+			affected.append(target)
+	return affected
+
+
 func _start_inversion() -> void:
-	inversion = {"pos": game.player_pos, "age": 0.0, "pulled": false, "pull_age": 0.0}
+	var target: Dictionary = game._arauto_target_entry(true)
+	inversion = {"pos": Vector2(target.get("pos", game.player_pos)), "target_peer": int(target.get("peer_id", game._mp_unique_id())), "age": 0.0, "pulled": false, "pull_age": 0.0}
 	_cds["inversion"] = INVERSION_COOLDOWN
 	game._add_text("INVERSAO DE ECO", game.player_pos + Vector2(-80, -110), Color(0.86, 0.6, 1.0), 1.0, 19)
 
@@ -306,9 +401,14 @@ func _update_inversion(delta: float, _phase2: bool) -> void:
 	var age: float = float(inversion["age"])
 	if age >= INVERSION_DELAY and not bool(inversion["pulled"]):
 		inversion["pulled"] = true
-		var offset: Vector2 = Vector2(inversion["pos"]) - game.player_pos
-		if offset.length() > 6.0:
-			game._shove_player(offset)
+		var target_peer: int = int(inversion.get("target_peer", game._mp_unique_id()))
+		var target_pos: Vector2 = game._arauto_target_pos(target_peer, Vector2(-10000.0, -10000.0))
+		var offset: Vector2 = Vector2(inversion["pos"]) - target_pos
+		if target_peer == game._mp_unique_id():
+			if offset.length() > 6.0:
+				game._shove_player(game._hostile_knockback(offset))
+		elif target_pos.x > -9000.0:
+			_send_remote_event(target_peer, "inversion", 0.0, 1, Vector2(inversion["pos"]))
 		game._add_text("PUXADO DE VOLTA!", Vector2(inversion["pos"]) + Vector2(-80, -90), Color(0.86, 0.6, 1.0), 0.8, 18)
 	if bool(inversion["pulled"]):
 		inversion["pull_age"] = float(inversion["pull_age"]) + delta
@@ -327,9 +427,8 @@ func _update_inversion(delta: float, _phase2: bool) -> void:
 func _update_aguilhao(delta: float, phase2: bool) -> bool:
 	# Veneno so sai quando um nodulo e destruido.
 	var nodules: int = game._count_aguilhao_nodules()
-	if _last_nodules >= 0 and nodules < _last_nodules and not venom_stacks.is_empty():
-		venom_stacks.clear()
-		game._add_text("VENENO PURGADO!", game.player_pos + Vector2(-80, -100), Color(0.7, 1.0, 0.4), 1.0, 19)
+	if _last_nodules >= 0 and nodules < _last_nodules:
+		_purge_venom()
 	_last_nodules = nodules
 	if not ability.is_empty():
 		ability["age"] = float(ability.get("age", 0.0)) + delta
@@ -380,37 +479,114 @@ func _update_stings(delta: float) -> void:
 		var before: Vector2 = sting["pos"]
 		var after: Vector2 = before + Vector2(sting["dir"]) * STING_SPEED * delta
 		sting["pos"] = after
-		if game._local_player_damageable_by_contact() and game._distance_to_segment(game.player_pos, before, after) <= STING_RADIUS:
+		for target_value in game._combat_targets():
+			var target: Dictionary = target_value
+			if game._distance_to_segment(Vector2(target.get("pos", Vector2(-10000, -10000))), before, after) > STING_RADIUS:
+				continue
 			sting["life"] = 0.0
-			_add_venom()
+			_add_venom(int(target.get("peer_id", game._mp_unique_id())), target)
+			break
 	stings = stings.filter(func(s): return float(Dictionary(s)["life"]) > 0.0)
 
 
-func _add_venom() -> void:
-	if venom_stacks.size() < VENOM_MAX:
-		venom_stacks.append(VENOM_STACK_LIFE)
+func _add_venom(peer_id: int = 0, target: Dictionary = {}) -> void:
+	if peer_id == 0:
+		peer_id = game._mp_unique_id()
+	var local_target: bool = peer_id == game._mp_unique_id()
+	var stacks: Array = venom_stacks if local_target else Array(venom_stacks_by_peer.get(peer_id, []))
+	if stacks.size() < VENOM_MAX:
+		stacks.append(VENOM_STACK_LIFE)
 	else:
-		for i in range(venom_stacks.size()):
-			venom_stacks[i] = VENOM_STACK_LIFE
-	game._damage_player(int(game.player_hp_max * 0.03), "ferrao_venenoso")
-	game._add_text("VENENO x%d" % venom_stacks.size(), game.player_pos + Vector2(-46, -96), Color(0.6, 1.0, 0.24), 0.8, 19)
+		for index in range(stacks.size()):
+			stacks[index] = VENOM_STACK_LIFE
+	var hp_max: float = float(target.get("hp_max", game.player_hp_max))
+	if local_target:
+		venom_stacks = stacks
+		game._damage_player(int(hp_max * 0.03), "ferrao_venenoso")
+		game._add_text("VENENO x%d" % stacks.size(), game.player_pos + Vector2(-46, -96), Color(0.6, 1.0, 0.24), 0.8, 19)
+	else:
+		venom_stacks_by_peer[peer_id] = stacks
+		game._send_peer_damage(peer_id, int(hp_max * 0.03), "ferrao_venenoso")
+		_send_remote_event(peer_id, "venom", VENOM_STACK_LIFE, stacks.size(), Vector2.ZERO)
 
 
 func _update_venom(delta: float) -> void:
-	if venom_stacks.is_empty():
-		return
 	# Com nodulos vivos o veneno nao expira (so destruindo um); sem nodulos, vai sumindo.
 	var nodules_alive: bool = game._arauto_active() and game._arauto_is_aguilhao() and game._count_aguilhao_nodules() > 0
-	if not nodules_alive:
-		for i in range(venom_stacks.size()):
-			venom_stacks[i] = float(venom_stacks[i]) - delta
-		venom_stacks = venom_stacks.filter(func(v): return float(v) > 0.0)
-	venom_tick -= delta
-	if venom_tick <= 0.0 and not venom_stacks.is_empty():
-		venom_tick = 0.5
-		var dmg: int = maxi(1, int(game.player_hp_max * VENOM_DPS_RATIO * 0.5 * float(venom_stacks.size())))
-		if game.player_hp > 1:
-			game._damage_player(mini(dmg, int(game.player_hp) - 1), "veneno_aguilhao", true)
+	venom_stacks = _advance_venom_stack_times(venom_stacks, delta, nodules_alive)
+	if not venom_stacks.is_empty():
+		venom_tick -= delta
+		if venom_tick <= 0.0:
+			venom_tick = 0.5
+			var local_damage: int = maxi(1, int(game.player_hp_max * VENOM_DPS_RATIO * 0.5 * float(venom_stacks.size())))
+			if game.player_hp > 1:
+				game._damage_player(mini(local_damage, int(game.player_hp) - 1), "veneno_aguilhao", true)
+	for peer_value in venom_stacks_by_peer.keys():
+		var peer_id: int = int(peer_value)
+		var state: Dictionary = game.net_players_by_peer.get(peer_id, {})
+		if not game._remote_player_state_targetable(state):
+			venom_stacks_by_peer.erase(peer_id)
+			venom_tick_by_peer.erase(peer_id)
+			continue
+		var stacks: Array = _advance_venom_stack_times(Array(venom_stacks_by_peer.get(peer_id, [])), delta, nodules_alive)
+		if stacks.is_empty():
+			venom_stacks_by_peer.erase(peer_id)
+			venom_tick_by_peer.erase(peer_id)
+			_send_remote_event(peer_id, "venom", 0.0, 0, Vector2.ZERO)
+			continue
+		venom_stacks_by_peer[peer_id] = stacks
+		var tick: float = float(venom_tick_by_peer.get(peer_id, 0.0)) - delta
+		if tick <= 0.0:
+			tick = 0.5
+			var hp: int = int(float(state.get("hp", 0.0)))
+			var hp_max: float = float(state.get("hp_max", 1.0))
+			var damage: int = maxi(1, int(hp_max * VENOM_DPS_RATIO * 0.5 * float(stacks.size())))
+			if hp > 1:
+				game._send_peer_damage(peer_id, mini(damage, hp - 1), "veneno_aguilhao", true)
+		venom_tick_by_peer[peer_id] = tick
+
+
+func _advance_venom_stack_times(stacks: Array, delta: float, nodules_alive: bool) -> Array:
+	if nodules_alive:
+		return stacks
+	for index in range(stacks.size()):
+		stacks[index] = float(stacks[index]) - delta
+	return stacks.filter(func(value): return float(value) > 0.0)
+
+
+func _purge_venom() -> void:
+	if not venom_stacks.is_empty():
+		venom_stacks.clear()
+		venom_tick = 0.0
+		game._add_text("VENENO PURGADO!", game.player_pos + Vector2(-80, -100), Color(0.7, 1.0, 0.4), 1.0, 19)
+	for peer_value in venom_stacks_by_peer.keys():
+		_send_remote_event(int(peer_value), "venom", 0.0, 0, Vector2.ZERO)
+	venom_stacks_by_peer.clear()
+	venom_tick_by_peer.clear()
+
+
+func _sync_target_life_epochs() -> void:
+	_observe_target_life(game._mp_unique_id(), game._local_player_targetable())
+	for peer_value in game.net_players_by_peer.keys():
+		var peer_id: int = int(peer_value)
+		_observe_target_life(peer_id, game._remote_player_state_targetable(game.net_players_by_peer.get(peer_value, {})))
+
+
+func _observe_target_life(peer_id: int, alive: bool) -> void:
+	if not _peer_alive.has(peer_id):
+		_peer_alive[peer_id] = alive
+		_peer_life_epoch[peer_id] = 0
+		return
+	if alive and not bool(_peer_alive.get(peer_id, false)):
+		_peer_life_epoch[peer_id] = int(_peer_life_epoch.get(peer_id, 0)) + 1
+	_peer_alive[peer_id] = alive
+
+
+func _send_remote_event(peer_id: int, effect_name: String, duration: float, intensity: int, destination: Vector2) -> void:
+	if peer_id <= 0 or peer_id == game._mp_unique_id():
+		return
+	var event_id: String = game._next_network_event_id("arauto_%s" % effect_name)
+	game._send_arauto_hostile_event(peer_id, event_id, _event_epoch, int(_peer_life_epoch.get(peer_id, 0)), effect_name, duration, intensity, destination)
 
 
 ## Multiplicador de dano no Aguilhao com a casca: frente quase imune, costas inteiras.

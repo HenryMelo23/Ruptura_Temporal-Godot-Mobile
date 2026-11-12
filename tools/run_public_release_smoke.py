@@ -23,7 +23,7 @@ def request(base, method, route, body=None):
         return json.load(reply)
 
 
-def run(base, name, script, ping_budget):
+def run(base, name, script, ping_budget, result_prefix=None):
     folder = Path(tempfile.mkdtemp(prefix=f"ruptura-public-{name}-"))
     room = request(base, "POST", "/rooms", {"name": "Release244-" + name})
     code = room["code"]
@@ -48,7 +48,9 @@ def run(base, name, script, ping_budget):
         for role, process in processes:
             rc = process.wait(timeout=max(1, deadline - time.monotonic()))
             content = (folder / f"{role}.log").read_text()
-            prefix = "gameplay_authority_" if name == "gameplay" else ""
+            prefix = result_prefix
+            if prefix is None:
+                prefix = "gameplay_authority_" if name == "gameplay" else ""
             result = folder / f"{prefix}{role}_result.txt"
             if rc != 0 or ERROR.search(content) or not result.is_file() or not result.read_text().startswith("OK"):
                 raise RuntimeError(f"{name}/{role} exit={rc}\n{content}")
@@ -86,6 +88,9 @@ if __name__ == "__main__":
     for scenario in ["ready", "spectator"]:
         run(args.manager, scenario, "multiplayer_lobby_integration_smoke", args.ping_budget)
     run(args.manager, "gameplay", "multiplayer_gameplay_authority_smoke", args.ping_budget)
+    for scenario in ["altar", "shop"]:
+        run(args.manager, scenario, "multiplayer_world_interaction_smoke", args.ping_budget,
+            result_prefix=f"world_interaction_{scenario}_")
     if not request(args.manager, "GET", "/health").get("ok"):
         raise SystemExit("Public relay unhealthy after tests")
-    print("PUBLIC_RELEASE_SMOKE_OK ready spectator gameplay")
+    print("PUBLIC_RELEASE_SMOKE_OK ready spectator gameplay altar shop_roundtrip")

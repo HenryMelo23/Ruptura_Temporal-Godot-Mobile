@@ -6,11 +6,11 @@ const CARD_PAIN_TRIBUTE_ID := "tributo_da_dor"
 const CARD_ABSOLUTE_CRIT_ID := "critico_absoluto"
 const CARD_IMPOSSIBLE_ARCHIVE_ID := "arquivo_impossivel"
 
-const PRISM_CHANCE_MISS_FACTOR := 0.86
-const PRISM_BASE_POINTS := 35
-const PRISM_VALUE_PER_EXTRA_COPY := 0.55
-const PAIN_LINEAR_POINTS := 0.80
-const PAIN_QUADRATIC_POINTS := 0.045
+const PRISM_CHANCE_MISS_FACTOR := 0.80
+const PRISM_BASE_POINTS := 60
+const PRISM_VALUE_PER_EXTRA_COPY := 0.70
+const PAIN_LINEAR_POINTS := 10.0
+const PAIN_QUADRATIC_POINTS := 0.75
 
 var core
 

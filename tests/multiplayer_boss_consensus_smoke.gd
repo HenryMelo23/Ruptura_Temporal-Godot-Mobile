@@ -27,6 +27,10 @@ func _run() -> void:
 	host_game.boss_active = false
 	host_game.boss_dead = false
 	host_game.boss_call_timer = -1.0
+	# The host reaches consensus only after every living player has completed
+	# the physical altar hold.  This flag is the controller's authorization
+	# seam after that world interaction succeeds.
+	host_game.experimental_boss_altar_authorized = true
 
 	host_game._start_boss_call()
 	_check(host_game.mode == "game", "multiplayer boss call started without remote agreement")
@@ -46,6 +50,9 @@ func _run() -> void:
 	client_game.boss_active = false
 	client_game.boss_dead = false
 	client_game.boss_call_timer = -1.0
+	# A direct unit invocation has no remote sender id, so mirror the altar
+	# authorization that the real authority RPC carries across the wire.
+	client_game.experimental_boss_altar_authorized = true
 	client_game._rpc_start_boss_call(2)
 	_check(client_game.mode == "boss_call", "client did not mirror approved boss call")
 	_check(client_game.current_phase == 2, "client did not mirror approved boss phase")

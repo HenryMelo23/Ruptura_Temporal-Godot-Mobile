@@ -88,16 +88,16 @@ func _run() -> void:
 	_check(disparo_summary.contains("dano base"), "Disparo crescente summary must mention dano base, got: " + disparo_summary)
 	_check(not disparo_summary.contains("+5.0 de dano"), "Disparo crescente summary must not use hardcoded +5 damage")
 
-	# Apply burned copy: 1 stack (factor 0.5) gives effective count 1.5 -> (pow(1.15, 1.5) - 1.0) * base_dmg
+	# Apply burned copy: 1 stack (factor 0.5) gives effective count 1.5 on the 20% compound curve.
 	var dmg_before_buy: float = game.player_damage
 	game._apply_card(returned_disparo[0])
 	var dmg_after_buy: float = game.player_damage
 	var gain_burned: float = dmg_after_buy - dmg_before_buy
-	var expected_normal_gain: float = game._manifestation_base_damage() * (1.15 - 1.0)
+	var expected_normal_gain: float = game._manifestation_base_damage() * (game.COMMON_DISPARO_DAMAGE_GROWTH - 1.0)
 	_check(gain_burned > expected_normal_gain, "Burned Disparo crescente should grant more damage than normal copy (%f > %f)" % [gain_burned, expected_normal_gain])
 	_check(game._cinzas_bonus_stacks("Disparo crescente") == 1, "Disparo crescente cinzas_card_bonuses stack should be 1")
 
-	# Test 2b: Multi-attribute damage card Tempestade (+5 flat damage, +10% crit)
+	# Test 2b: Multi-attribute damage card Tempestade (+8 flat damage, +12% crit)
 	var tempestade_card: Dictionary = game._find_card_by_id("Tempestade")
 	_check(game._can_burn_shop_card(tempestade_card), "Tempestade should be burnable")
 
@@ -113,9 +113,9 @@ func _run() -> void:
 	var dmg_pre_temp: float = game.player_damage
 	var crit_pre_temp: float = game.player_crit_chance
 	game._apply_card(returned_tempestade[0])
-	# Effective count is 1.5 -> damage +7.5, crit +15% (instead of +5.0 dmg, +10% crit)
-	_check(is_equal_approx(game.player_damage - dmg_pre_temp, 7.5), "Tempestade burned damage gain should be 7.5, got: %f" % (game.player_damage - dmg_pre_temp))
-	_check(is_equal_approx(game.player_crit_chance - crit_pre_temp, 0.15), "Tempestade burned crit gain should be +0.15, got: %f" % (game.player_crit_chance - crit_pre_temp))
+	# Effective count is 1.5 -> damage +12, crit +18%.
+	_check(is_equal_approx(game.player_damage - dmg_pre_temp, 12.0), "Tempestade burned damage gain should be 12, got: %f" % (game.player_damage - dmg_pre_temp))
+	_check(is_equal_approx(game.player_crit_chance - crit_pre_temp, 0.18), "Tempestade burned crit gain should be +0.18, got: %f" % (game.player_crit_chance - crit_pre_temp))
 
 	# =========================================================================
 	# TEST 3: Non-Damage Category 1 - Defense (Defesa) & Caps
@@ -126,8 +126,8 @@ func _run() -> void:
 	game.cards_bought["Defesa"] = 0
 	game._recalculate_common_card_stat_bonuses()
 
-	# Normal Defesa gives +3.5
-	# Burned Defesa (1 stack, factor 0.5) gives effective 1.5 -> +5.25 defense
+	# Normal Defesa gives +5.
+	# Burned Defesa (1 stack, factor 0.5) gives effective 1.5 -> +7.5 defense.
 	game.shop_cards = [def_card.duplicate(true)]
 	game.shop_selected = 0
 	_check(_burn_slot(0), "Failed to burn Defesa")
@@ -141,10 +141,10 @@ func _run() -> void:
 	var def_before: float = game.player_defense
 	game._apply_card(returned_def[0])
 	var def_after: float = game.player_defense
-	_check(is_equal_approx(def_after - def_before, 5.25), "Burned Defesa should grant 5.25 defense (3.5 * 1.5), got: %f" % (def_after - def_before))
+	_check(is_equal_approx(def_after - def_before, 7.5), "Burned Defesa should grant 7.5 defense (5 * 1.5), got: %f" % (def_after - def_before))
 
 	# Multi-stack Test: Burn Defesa twice (2 stacks)
-	# Stacking 2 burn stacks gives factor 0.5 * 2 = +1.0 -> effective 2.0 copies (+7.0 defense)
+	# Stacking 2 burn stacks gives factor 0.5 * 2 = +1.0 -> effective 2.0 copies (+10 defense).
 	game.cards_bought[game.CARD_CINZAS_ID] = 10
 	game.shop_cards = [def_card.duplicate(true)]
 	game.shop_selected = 0
@@ -162,9 +162,8 @@ func _run() -> void:
 
 	var def_pre_stack: float = game.player_defense
 	game._apply_card(stacked_def_return[0])
-	# Total effective count = 2 cards bought + 3 burn stacks (1.5 bonus) = 3.5 -> 3.5 * 3.5 = 12.25 defense.
-	# Gain is 12.25 - 5.25 = 7.0 defense!
-	_check(is_equal_approx(game.player_defense, 12.25), "Defesa after 2nd burned purchase should be 12.25, got: %f" % game.player_defense)
+	# Total effective count = 2 cards bought + 3 burn stacks (1.5 bonus) = 3.5 -> 17.5 defense.
+	_check(is_equal_approx(game.player_defense, 17.5), "Defesa after 2nd burned purchase should be 17.5, got: %f" % game.player_defense)
 
 	# Cap Test: Defense cap is 50.0. Give 20 copies of Defesa.
 	game.cards_bought["Defesa"] = 20

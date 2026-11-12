@@ -48,6 +48,12 @@ func _run() -> void:
 	game.shop_rift["age"] = 4.0
 	await _capture(output_dir + "/rift_open_1280x720%s.png" % suffix, Vector2i(1280, 720))
 	await _capture(output_dir + "/rift_open_mobile_960x540%s.png" % suffix, Vector2i(960, 540))
+	game.is_multiplayer = true
+	game.shop_rift["present_count"] = 1
+	game.shop_rift["expected_count"] = 2
+	await _capture(output_dir + "/rift_multiplayer_wait_1280x720%s.png" % suffix, Vector2i(1280, 720))
+	await _capture(output_dir + "/rift_multiplayer_wait_mobile_960x540%s.png" % suffix, Vector2i(960, 540))
+	game.is_multiplayer = false
 
 	game.shop_rift_fragments = 1
 	game.shop_rift["age"] = rift_controller.LIFETIME - 2.5
@@ -80,9 +86,16 @@ func _run() -> void:
 		await _capture(output_dir + "/altar_mist_guide_1280x720%s.png" % suffix, Vector2i(1280, 720))
 		game.player_pos = altar + (game.player_pos - altar).normalized() * 430.0
 		await _capture(output_dir + "/altar_mist_arrival_1280x720%s.png" % suffix, Vector2i(1280, 720))
+		game.is_multiplayer = true
+		game.experimental_boss_altar_near = true
+		game.experimental_phase_controller.altar_present_count = 1
+		game.experimental_phase_controller.altar_expected_count = 2
+		game.player_pos = altar
+		await _capture(output_dir + "/altar_multiplayer_wait_1280x720%s.png" % suffix, Vector2i(1280, 720))
+		await _capture(output_dir + "/altar_multiplayer_wait_mobile_960x540%s.png" % suffix, Vector2i(960, 540))
 		altar_captured = true
 
-	print("MERCHANT_RIFT_VISUAL_OK opening=true open=true unstable=true offscreen_guide=true collapsing=true altar_mist=%s low=%s dir=%s" % [str(altar_captured), str(game.gfx_low_resource), ProjectSettings.globalize_path(output_dir)])
+	print("MERCHANT_RIFT_VISUAL_OK opening=true open=true multiplayer_wait=true unstable=true offscreen_guide=true collapsing=true altar_mist=%s low=%s dir=%s" % [str(altar_captured), str(game.gfx_low_resource), ProjectSettings.globalize_path(output_dir)])
 	game._cleanup_runtime_resources()
 	game.free()
 	for _frame in range(3):

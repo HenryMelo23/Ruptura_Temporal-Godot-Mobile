@@ -49,6 +49,15 @@ const RING_MAX_RADIUS := 560.0
 const RING_WIDTH := 26.0
 const RING_COOLDOWN := 6.5
 const RING_SLOW_TIME := 1.6
+## Gelo do Sineiro: toda badalada deixa marca no corpo ou no chao.
+const RING_FROST_STACKS := 1
+const RING_SLIP_TIME := 3.2
+const ECHO_FROST_STACKS := 2
+const ECHO_SLIP_TIME := 2.6
+const ECHO_SLIP_RADIUS := 120.0
+const CALL_FROST_STACKS := 1
+const CALL_SLIP_TIME := 2.2
+const CALL_BURST_RADIUS := 190.0
 const RING_TRIGGER_DISTANCE := 430.0
 ## Dobre de Chamada: se o jogador foge, ele toca o sino e reaparece ao lado dele.
 const CALL_TELEGRAPH_TIME := 0.85
@@ -58,7 +67,7 @@ const CALL_COOLDOWN := 12.0
 const CALL_ARRIVE_DISTANCE := 230.0
 const SHARD_SPREADS := [-0.36, -0.18, 0.0, 0.18, 0.36]
 const REWARD_CARD_COUNT := 2
-const REWARD_POINT_RATIO := 0.35
+const REWARD_POINT_RATIO := 0.75
 
 const PARTY_HP_MULTIPLIERS := {
 	1: 1.0,
@@ -449,8 +458,19 @@ func _execute_echo_attack(enemy: Dictionary) -> void:
 			continue
 		if bool(target.get("local", false)):
 			game._damage_player(damage, TYPE_ID)
+			# O passado volta gelado: a marca empilha geada e vira chao escorregadio.
+			game._add_frost_stack(ECHO_FROST_STACKS, TYPE_ID)
+			game._apply_ice_slip_floor(ECHO_SLIP_TIME)
 		else:
 			game._send_peer_damage(peer_id, damage, TYPE_ID)
+			# The damage source already contributes one frost stack on the
+			# receiving peer.  Transport the remaining stack plus the same ice
+			# floor used locally instead of replacing both with a generic slow.
+			game._request_peer_status(peer_id, "frost_slip_1", game._hostile_control_duration(ECHO_SLIP_TIME))
+	for mark_value in attack_marks:
+		var snow_mark: Dictionary = mark_value
+		if String(snow_mark.get("event_id", "")) == event_id:
+			game._spawn_boss2_slow_zone(Vector2(snow_mark.get("pos", game.player_pos)), ECHO_SLIP_RADIUS, ECHO_SLIP_TIME)
 	_emit_visual_event("echo_impact", {"event_id": event_id, "marks": attack_marks.duplicate(true), "origin": Vector2(enemy.get("pos", game.player_pos))})
 	enemy.erase("sineiro_echo_positions")
 	game._play_sfx("Congelando.mp3", 0.025, 0.84, 0.86)
@@ -555,9 +575,13 @@ func _update_rings(delta: float) -> void:
 			if bool(target.get("local", false)):
 				game._damage_player(int(ring["damage"]), TYPE_ID)
 				game.boss_wave_slow_timer = maxf(float(game.boss_wave_slow_timer), game._hostile_control_duration(RING_SLOW_TIME))
+				# O anel vitrifica o chao por onde passa.
+				game._add_frost_stack(RING_FROST_STACKS, TYPE_ID)
+				game._apply_ice_slip_floor(RING_SLIP_TIME)
 			else:
 				game._send_peer_damage(peer_id, int(ring["damage"]), TYPE_ID)
 				game._request_peer_status(peer_id, "slow", game._hostile_control_duration(RING_SLOW_TIME))
+				game._request_peer_status(peer_id, "ice_slip", game._hostile_control_duration(RING_SLIP_TIME))
 	rings = rings.filter(func(r): return ring_radius(float(Dictionary(r)["age"])) < RING_MAX_RADIUS)
 
 
@@ -584,6 +608,17 @@ func _execute_call(enemy: Dictionary) -> void:
 	enemy["contact_grace"] = 0.4
 	_emit_visual_event("call_arrive", {"event_id": String(enemy.get("sineiro_attack_event_id", "call")) + "_arrive", "origin": origin, "dest": dest})
 	game._play_sfx("Congelando.mp3", 0.03, 1.0, 0.82)
+	# Chega quebrando o ar: quem estava perto leva geada e perde o apoio.
+	game._spawn_boss2_slow_zone(dest, CALL_BURST_RADIUS * 0.75, CALL_SLIP_TIME)
+	for target_value in game._combat_targets():
+		var target: Dictionary = target_value
+		if Vector2(target.get("pos", game.player_pos)).distance_to(dest) > CALL_BURST_RADIUS:
+			continue
+		if bool(target.get("local", false)):
+			game._add_frost_stack(CALL_FROST_STACKS, TYPE_ID)
+			game._apply_ice_slip_floor(CALL_SLIP_TIME)
+		else:
+			game._request_peer_status(int(target.get("peer_id", 0)), "frost_slip_1", game._hostile_control_duration(CALL_SLIP_TIME))
 	# Chega ja atacando.
 	_set_state(enemy, STATE_RECOVERY, 0.28)
 	enemy["sineiro_action_cd"] = 0.0

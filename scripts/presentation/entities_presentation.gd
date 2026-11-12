@@ -166,6 +166,19 @@ static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
 			visual_size *= 0.72 + rebuild * 0.28
 			draw_pos += Vector2(sin(t * 36.0 + uid) * 4.0, -14.0 * reconstitute_ratio)
 			modulate_color = modulate_color.lerp(Color(1.0, 0.58, 0.14, alpha), 0.55)
+		if enemy.has("phase3_ritual_pose"):
+			# Ritual da Catedral: dança, reverencia, ajoelhar e fervor.
+			var ritual_tex: Texture2D = RTPhase3RitualPresentation.pose_texture(game, enemy, t)
+			if ritual_tex != null:
+				tex = ritual_tex
+				# Frames do ritual tem margem no canvas 256: compensa para manter a escala do inimigo.
+				visual_size *= 1.22
+			var ritual_pose: Dictionary = RTPhase3RitualPresentation.pose(game, enemy, t)
+			if not ritual_pose.is_empty():
+				draw_pos += Vector2(ritual_pose["offset"])
+				visual_size *= Vector2(ritual_pose["scale"])
+				enemy["_ritual_rot"] = float(ritual_pose["rot"])
+				rolling = true
 		var is_attack_target: bool = uid == target_uid
 		var prism := false
 		if prismatica_active and world_pos.distance_to(player_pos) < 900.0:
@@ -174,6 +187,11 @@ static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
 			modulate_color = Color.from_hsv(hue, 1.0, 1.0, 0.5)
 		if is_attack_target:
 			modulate_color = modulate_color.lerp(Color(1.0, 0.92, 0.34, alpha), 0.48)
+		var hit_flash_left: float = float(enemy.get("hit_flash_until", 0.0)) - t
+		if hit_flash_left > 0.0:
+			var hit_flash_k: float = clampf(hit_flash_left / 0.12, 0.0, 1.0)
+			modulate_color = modulate_color.lerp(Color(1.0, 1.0, 1.0, alpha), 0.85 * hit_flash_k)
+			visual_size *= 1.0 + 0.055 * hit_flash_k
 		var batchable: bool = tex != null and not (tex is AtlasTexture)
 		var shadow_done := false
 		if shadows_on and batchable and alpha > 0.0:
@@ -236,6 +254,8 @@ static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
 			var roll_sign: float = 1.0 if roll_dir.x >= 0.0 else -1.0
 			var roll_turns: float = game.PHASE7_PANGOLIRO_ROLL_VISUAL_TURNS
 			var roll_rotation: float = float(enemy.get("phase7_timer", 0.0)) / maxf(0.01, game.PHASE7_PANGOLIRO_ROLL_TIME) * TAU * roll_turns * roll_sign
+			if enemy.has("phase3_ritual_pose"):
+				roll_rotation = float(enemy.get("_ritual_rot", 0.0))
 			game._draw_entity_stretched_rotated(tex, r[R_DRAW_POS], r[R_VISUAL_SIZE], roll_rotation, r[R_MODULATE], r[R_FLIP])
 		else:
 			game._draw_entity(tex, r[R_DRAW_POS], r[R_VISUAL_SIZE], r[R_MODULATE], r[R_FLIP])
@@ -296,10 +316,12 @@ static func _append_enemy_shadow(tex: Texture2D, center: Vector2, size: Vector2,
 	var foot := center + Vector2(0.0, size.y * 0.5)
 	var horizontal := -1.0 if flip_h else 1.0
 	var local := Transform2D(0.0, Vector2(size.x, -size.y), 0.0, Vector2(0.0, -size.y * 0.5))
-	var soft := Transform2D(cast_rotation, Vector2(horizontal * 1.03, -0.3), 0.0, foot + Vector2(10.0 + light_sway, 5.0)) * local
-	var core := Transform2D(cast_rotation, Vector2(horizontal, -0.27), 0.0, foot + Vector2(6.0 + light_sway * 0.45, 2.0)) * local
-	_shadow_batch.append_xform(tex, soft, Color(0.0, 0.0, 0.0, alpha * 0.25), center)
-	_shadow_batch.append_xform(tex, core, Color(0.0, 0.0, 0.0, alpha), center)
+	# Mancha de contato radial + um unico passe de silhueta (mesmo custo de
+	# 2 instancias por inimigo de antes, com leitura bem mais macia).
+	var contact := Transform2D(0.0, Vector2(size.x * 0.72, maxf(10.0, size.x * 0.28)), 0.0, foot + Vector2(light_sway * 0.4, 1.0))
+	var core := Transform2D(cast_rotation, Vector2(horizontal, -0.26), 0.0, foot + Vector2(7.0 + light_sway, 3.0)) * local
+	_shadow_batch.append_xform(RTWorldLighting.light_texture(), contact, Color(0.0, 0.0, 0.0, alpha * 0.72), center)
+	_shadow_batch.append_xform(tex, core, Color(0.0, 0.0, 0.0, alpha * 0.6), center)
 
 
 static func _draw_enemy_overlays(game: Node2D, r: Array, camera: Vector2, t: float) -> void:
@@ -490,7 +512,9 @@ static func _draw_gravitante_enemy_distortion(game: Node2D, enemy: Dictionary, c
 static func _draw_player(game: Node2D, camera: Vector2) -> void :
 	if game.henry_incendiary_ability_controller.entrance_active and game.active_character_key == game.CHARACTER_HENRY:
 		return # Drawn after the temporal world tint, unaffected by it.
-	if game.is_dead:
+	# Mantem o ultimo quadro do personagem visivel enquanto a camera de morte
+	# fecha sobre o corpo. Fora dessa curta cinematica, mortos continuam ocultos.
+	if game.is_dead and game.mode != "death_slow":
 		return
 	if game._draw_player_start_down(camera):
 		return
@@ -825,11 +849,12 @@ static func _draw_dynamic_shadow(game: Node2D, texture: Texture2D, center: Vecto
 	var cast_rotation = deg_to_rad(9.0) + sin(game.time_alive * 0.45) * 0.018
 	var horizontal = -1.0 if flip_h else 1.0
 	var rect = Rect2(Vector2( - size.x * 0.5, - size.y), size)
-	game.draw_set_transform(foot + Vector2(10.0 + light_sway, 5.0), cast_rotation, Vector2(horizontal * 1.03, -0.3))
-	game.draw_texture_rect(texture, rect, false, Color(0.0, 0.0, 0.0, alpha * 0.25))
-	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	game.draw_set_transform(foot + Vector2(6.0 + light_sway * 0.45, 2.0), cast_rotation, Vector2(horizontal, -0.27))
-	game.draw_texture_rect(texture, rect, false, Color(0.0, 0.0, 0.0, alpha))
+	# Mancha de contato macia: ancora a entidade no chao sem borda dura.
+	var contact := Vector2(size.x * 0.72, maxf(10.0, size.x * 0.28))
+	game.draw_texture_rect(RTWorldLighting.light_texture(), Rect2(foot + Vector2(light_sway * 0.4, 1.0) - contact * 0.5, contact), false, Color(0.0, 0.0, 0.0, alpha * 0.72))
+	# Silhueta projetada em um unico passe mais leve (a mancha ja da o peso).
+	game.draw_set_transform(foot + Vector2(7.0 + light_sway, 3.0), cast_rotation, Vector2(horizontal, -0.26))
+	game.draw_texture_rect(texture, rect, false, Color(0.0, 0.0, 0.0, alpha * 0.6))
 	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 static func _draw_dynamic_shadow_fit(game: Node2D, texture: Texture2D, center: Vector2, max_size: Vector2, flip_h: = false, align_bottom: = false, alpha: = 0.42) -> void :
 	if not game._shadows_enabled() or texture == null:
@@ -1064,7 +1089,7 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	if is_leader:
 		game._draw_leader_crown(overhead + Vector2(0, -62), 0.72, accent)
 	game._draw_centered("%d/%d" % [int(state.get("hp", 0)), int(max(1.0, float(state.get("hp_max", 1.0))))], overhead + Vector2(0, -34), 9, Color(0.86, 1.0, 0.92, 0.96))
-	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)), remote_manifestation_key, remote_colossus_giant)
+	var tex = game._net_player_texture_for_state(anim_state, frame_idx, int(state.get("manifestation", -1)), remote_manifestation_key, remote_colossus_giant, int(state.get("visual_flags", 0)))
 	var remote_henry_draw_height: float = 0.0
 	if is_frozen_henry and tex != null:
 		flip_h = false

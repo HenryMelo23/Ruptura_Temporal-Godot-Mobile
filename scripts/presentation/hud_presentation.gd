@@ -30,16 +30,17 @@ static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
 		var desktop_rects: Dictionary = RTHudLayout.desktop_button_rects(
 			viewport,
 			game.manifestation_key == "lacerante" or henry_colossus,
-			game.shop_controller.manual_dev_access(),
+			false,
 			game._sanitize_desktop_hud_scale(game.desktop_hud_scale)
 		)
 		for key in ["attack", "skill", "secondary", "dash", "pause", "boss"]:
 			game.buttons[key] = desktop_rects[key]
-		for optional_key in ["lacerante_empower", "shop_manual"]:
+		for optional_key in ["lacerante_empower"]:
 			if desktop_rects.has(optional_key):
 				game.buttons[optional_key] = desktop_rects[optional_key]
 			else:
 				game.buttons.erase(optional_key)
+		game.buttons.erase("shop_manual")
 		return
 	var touch_rects: Dictionary = RTHudLayout.touch_button_rects(
 		game._attack_center(viewport), game._attack_scale(), game._skill_pos(viewport), game._skill_scale(),
@@ -47,7 +48,7 @@ static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
 		game._lacerante_empower_center(viewport), game._lacerante_empower_scale(),
 		game.manifestation_key == "lacerante" or henry_colossus or game.mode == "edit_layout",
 		game._pause_pos(viewport), game._boss_call_pos(viewport), game._manual_shop_pos(viewport),
-		game.shop_controller.manual_dev_access()
+		false
 	)
 	var custom_combat_layout: bool = game.hud_attack_pos != Vector2.ZERO or game.hud_secondary_pos != Vector2.ZERO or game.hud_dash_pos != Vector2.ZERO or game.hud_skill_pos != Vector2(-1, -1) or game.hud_lacerante_empower_pos != Vector2(-1, -1)
 	if game.mode != "edit_layout" and not custom_combat_layout and _touch_hub_has_overlap(touch_rects, viewport):
@@ -59,11 +60,12 @@ static func update_button_layout(game: Node2D, viewport: Vector2) -> void:
 			touch_rects["lacerante_empower"] = organized["extra"]
 	for key in ["attack", "skill", "secondary", "dash", "pause", "boss"]:
 		game.buttons[key] = touch_rects[key]
-	for optional_key in ["lacerante_empower", "shop_manual"]:
+	for optional_key in ["lacerante_empower"]:
 		if touch_rects.has(optional_key):
 			game.buttons[optional_key] = touch_rects[optional_key]
 		else:
 			game.buttons.erase(optional_key)
+	game.buttons.erase("shop_manual")
 
 
 static func _touch_hub_has_overlap(rects: Dictionary, viewport: Vector2) -> bool:
@@ -187,6 +189,7 @@ static func _draw_hud(game: Node2D, viewport: Vector2) -> void :
 			ping_text += "  JIT %.0fms" % game.net_world_jitter_ms
 		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0 * sm, clock_rect.end.y + 14.0 * sm), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0 * sm, int(12 * sm), Color(0.72, 0.96, 1.0, 0.86))
 	_draw_point_boost_hud(game, viewport)
+	game._tutorial_guide().draw_mission(game, viewport)
 	game._draw_lacerante_coagulum_hud(viewport)
 	game._draw_unlock_notifications(viewport)
 
@@ -225,12 +228,14 @@ static func _draw_performance_status_hud(game: Node2D, viewport: Vector2) -> voi
 	if game.is_multiplayer and game.online_connected:
 		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 92.0, 58.0), "PING %sms" % (str(game.net_ping_ms) if game.net_ping_ms >= 0 else "--"), HORIZONTAL_ALIGNMENT_CENTER, 184.0, 10, Color(0.72, 0.96, 1.0, 0.86))
 	_draw_point_boost_hud(game, viewport)
+	game._tutorial_guide().draw_mission(game, viewport)
 	game._draw_lacerante_coagulum_hud(viewport)
 	game._draw_unlock_notifications(viewport)
 
 
 static func _draw_point_boost_hud(game: Node2D, viewport: Vector2) -> void:
 	_draw_fury_hud(game, viewport)
+	RTParasiticaPresentation.draw_hud(game, viewport)
 	if not game.point_boost_pickup_controller.is_active():
 		return
 	var remaining: float = game.point_boost_pickup_controller.remaining()
@@ -648,6 +653,7 @@ static func _draw_desktop_hud(game: Node2D, viewport: Vector2) -> void:
 		game.draw_string(game.font, Vector2(viewport.x * 0.5 - 118.0, clock_rect.end.y + 14.0), ping_text, HORIZONTAL_ALIGNMENT_CENTER, 236.0, 12, Color(0.72, 0.96, 1.0, 0.86))
 
 	_draw_point_boost_hud(game, viewport)
+	game._tutorial_guide().draw_mission(game, viewport)
 	game._draw_lacerante_coagulum_hud(viewport)
 	game._draw_unlock_notifications(viewport)
 
@@ -876,33 +882,6 @@ static func _draw_touch_controls(game: Node2D, viewport: Vector2) -> void :
 	else:
 		game._draw_cooldown_overlay(dash_c, dash_r, game.time_alive - game.last_dash_time, game._current_dash_cooldown())
 	game._draw_hud_rect_button(game.buttons["pause"], "II", _with_alpha(Color(0.0, 1.0, 0.82), _hud_rect_player_alpha(game, game.buttons["pause"], viewport, 72.0)))
-	if game.buttons.has("shop_manual"):
-		var shop_rect: Rect2 = game.buttons["shop_manual"]
-		var shop_ready: bool = game._affordable_card_count() > 0 and game.mode == "game" and game._manual_shop_available()
-		var shop_grace: bool = game._manual_shop_grace_active()
-		var bargain_pending: bool = game.has_method("_bargain_pending_discount_remaining") and game._bargain_pending_discount_remaining() > 0.0
-		var shop_cooldown: float = game._manual_shop_cooldown_remaining()
-		var shop_accent = Color(1.0, 0.78, 0.22) if bargain_pending else Color(0.3, 1.0, 0.62) if shop_grace else Color(0.0, 1.0, 0.82) if shop_ready else Color(0.38, 0.42, 0.46)
-		var shop_alpha: float = _hud_rect_player_alpha(game, shop_rect, viewport, 82.0)
-		var shop_label: String = "REABRIR" if shop_grace else "LOJA"
-		var shop_top: String = game._manual_shop_status_text()
-		if shop_top == "":
-			# As cartas compraveis ja aparecem no painel de pontos; aqui so status.
-			shop_top = ""
-		game._draw_hud_rect_button(shop_rect, shop_label, _with_alpha(shop_accent, shop_alpha))
-		if shop_top != "":
-			game._draw_centered(shop_top, shop_rect.get_center() + Vector2(0, -29), 11 if shop_top.length() > 14 else 12, Color(shop_accent.r, shop_accent.g, shop_accent.b, 0.96 * shop_alpha))
-		if shop_cooldown > 0.0:
-			var cooldown_total: float = maxf(0.01, game.SHOP_MANUAL_REOPEN_COOLDOWN)
-			var progress: float = clampf(1.0 - shop_cooldown / cooldown_total, 0.0, 1.0)
-			var ring_rect: Rect2 = shop_rect.grow(4.0)
-			game.draw_arc(ring_rect.get_center(), maxf(ring_rect.size.x, ring_rect.size.y) * 0.5, -PI * 0.5, -PI * 0.5 + TAU * progress, 48, Color(0.72, 0.9, 1.0, 0.78 * shop_alpha), 3.0, true)
-		elif shop_grace:
-			var grace_progress: float = clampf(game._manual_shop_grace_remaining() / maxf(0.01, game.SHOP_MANUAL_ACCIDENTAL_CLOSE_GRACE), 0.0, 1.0)
-			game.draw_arc(shop_rect.get_center(), maxf(shop_rect.size.x, shop_rect.size.y) * 0.56, -PI * 0.5, -PI * 0.5 + TAU * grace_progress, 48, Color(0.46, 1.0, 0.62, 0.86 * shop_alpha), 3.0, true)
-		elif game.shop_manual_cooldown_pulse > 0.0:
-			var pulse_alpha: float = clampf(game.shop_manual_cooldown_pulse, 0.0, 1.0) * shop_alpha
-			game.draw_rect(shop_rect.grow(5.0), Color(0.0, 1.0, 0.82, 0.22 * pulse_alpha), false, 2.0)
 	if game.boss_ready and not game.boss_active and not game.boss_dead and game.experimental_phase_controller.should_show_boss_button():
 		var boss_rect: Rect2 = game.buttons["boss"]
 		var boss_alpha: float = _hud_rect_player_alpha(game, boss_rect, viewport, 82.0)
@@ -952,10 +931,6 @@ static func _draw_performance_desktop_session_buttons(game: Node2D) -> void:
 	var entries: Array[Dictionary] = []
 	if game.buttons.has("pause"):
 		entries.append({"rect": game.buttons["pause"], "label": "II", "color": Color(0.0, 1.0, 0.82)})
-	if game.buttons.has("shop_manual"):
-		var shop_label := "REABRIR" if game._manual_shop_grace_active() else "LOJA"
-		var shop_color := Color(0.0, 1.0, 0.82) if game._affordable_card_count() > 0 else Color(0.38, 0.42, 0.46)
-		entries.append({"rect": game.buttons["shop_manual"], "label": shop_label, "color": shop_color})
 	if game.boss_ready and not game.boss_active and not game.boss_dead and game.buttons.has("boss") and game.experimental_phase_controller.should_show_boss_button():
 		entries.append({"rect": game.buttons["boss"], "label": "BOSS", "color": Color(1.0, 0.52, 0.16)})
 	for entry in entries:
@@ -1067,14 +1042,7 @@ static func _draw_edit_layout(game: Node2D, viewport: Vector2) -> void :
 	game.draw_rect(boss_rect, c_boss, false, 2)
 	game._draw_centered("BOSS HP", boss_rect.get_center(), 14, Color.WHITE)
 
-	if game.shop_controller.manual_dev_access():
-		var shop_rect = Rect2(game._manual_shop_pos(viewport), Vector2(104, 42))
-		game.buttons["shop_manual"] = shop_rect
-		var c_shop = Color(1, 1, 0, 0.6) if game.edit_layout_selected == "shop_manual" else Color(0.0, 1.0, 0.82, 0.3)
-		game.draw_rect(shop_rect, c_shop, false, 2)
-		game._draw_centered("LOJA QA", shop_rect.get_center(), 14, Color.WHITE)
-	else:
-		game.buttons.erase("shop_manual")
+	game.buttons.erase("shop_manual")
 
 	var aura_rect = Rect2(game._aura_panel_pos(viewport, left_rect), Vector2(min(224.0, viewport.x * 0.46), 48.0) * game.hud_aura_panel_scale)
 	var c_aura = Color(1, 1, 0, 0.6) if game.edit_layout_selected == "aura_panel" else Color(0.54, 0.82, 1.0, 0.3)

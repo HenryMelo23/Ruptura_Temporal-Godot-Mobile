@@ -39,8 +39,15 @@ func remote_spin_visual_seen() -> bool:
 			continue
 		if String(visual.get("manifestation_key", visual.get("kind", ""))) != "incendiario":
 			continue
-		_check(absf(Vector2(visual.get("origin", Vector2.ZERO)).distance_to(Vector2(visual.get("target", Vector2.ZERO))) - 400.0) < 0.1, "remote spin did not transport the requested destination")
+		var transported_distance := Vector2(visual.get("origin", Vector2.ZERO)).distance_to(Vector2(visual.get("target", Vector2.ZERO)))
+		if transported_distance <= 250.0:
+			continue # Ignore the generic 80 px transport-matrix probe from the parent smoke.
+		_check(transported_distance <= 400.1, "remote dash exceeded its current maximum range")
 		_check(is_equal_approx(float(visual.get("extra", 0.0)), game.HENRY_SPIN_DURATION), "remote spin lost its 2.45-second protected interval")
+		var canonical: Dictionary = visual.get("canonical_state", {})
+		var incendiary: Dictionary = canonical.get("incendiary", {})
+		_check(bool(Dictionary(incendiary.get("spin", {})).get("active", false)), "remote dash lost compact Incendiario state")
+		_check(not Array(incendiary.get("trail", [])).is_empty(), "remote dash event omitted ember trail")
 		return true
 	return false
 

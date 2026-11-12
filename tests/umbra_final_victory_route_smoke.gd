@@ -59,9 +59,16 @@ func _run() -> void:
 	var unique_first_cycle: Dictionary = {}
 	for phase_value in first_cycle:
 		unique_first_cycle[phase_value] = true
-	_check(first_cycle.size() == 4 and unique_first_cycle.size() == 4, "initial route was not four unique maps")
-	_check(first_cycle.all(func(value): return int(value) in game.DIMENSION_ROUTE_POOL and int(value) != game.DIMENSION_FINAL_PHASE), "initial route included a reserved map")
-	for index in range(3):
+	_check(first_cycle == [1, 2, 6, 3, 4], "run starting at 1 did not follow 1-2-6-3-4: %s" % [first_cycle])
+	_check(game.initial_phase_bias_target == 6 and is_equal_approx(game.initial_phase_bias_strength, 1.0), "next run is not set to start at 6")
+	game._begin_initial_phase_tracking(6)
+	var second_cycle: Array[int] = [6]
+	for queued_phase in game.dimension_route_queue:
+		second_cycle.append(int(queued_phase))
+	_check(second_cycle == [6, 1, 2, 3, 4], "run starting at 6 did not follow 6-1-2-3-4: %s" % [second_cycle])
+	_check(game.initial_phase_bias_target == 1, "next run is not set to start at 1")
+	game._begin_initial_phase_tracking(1)
+	for index in range(4):
 		_check(game._consume_next_phase_after_boss(first_cycle[index]) == first_cycle[index + 1], "initial route queue was consumed out of order")
 	game.dimension_route_queue.clear()
 	game.dimension_route_farm_cycles = 0
@@ -74,10 +81,11 @@ func _run() -> void:
 	for phase_value in farm_cycle:
 		unique_farm_cycle[phase_value] = true
 	_check(farm_cycle.size() == 4 and unique_farm_cycle.size() == 4, "farm cycle was not four unique maps")
+	_check(farm_entry == 7, "farm cycle did not start at Cinzas da Ruptura (7)")
 	_check(farm_cycle.all(func(value): return int(value) in game.DIMENSION_ROUTE_POOL and int(value) != game.DIMENSION_FINAL_PHASE), "farm cycle selected a reserved phase")
 	game.dimension_route_queue.clear()
 	var repeated_entry: int = int(game._begin_farm_dimension_cycle())
-	_check(repeated_entry in game.DIMENSION_ROUTE_POOL and game.dimension_route_queue.size() == 3, "repeated farm cycle did not create four maps")
+	_check(repeated_entry == 7 and game.dimension_route_queue.size() == 3 and not game.dimension_route_queue.has(7), "repeated farm cycle was not 7 + 3 maps")
 	game.dimension_route_queue = [4, 6]
 	_check(game._consume_next_phase_after_boss(7) == 4, "boss 7 did not consume the farming queue")
 	_check(game.dimension_route_queue == [6], "boss 7 consumed more than one route entry")

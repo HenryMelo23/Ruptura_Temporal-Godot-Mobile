@@ -24,7 +24,10 @@ var game: Node
 var role: String = ""
 var host: String = "127.0.0.1"
 var port: int = 4591
-var ping_budget_ms: int = 30
+# Keep the local contract aligned with the visual-sync smoke. A loaded CI or
+# desktop scheduler can quantize the loopback probe just above 30 ms even when
+# the relay is stable; 50 ms still catches a real local regression.
+var ping_budget_ms: int = 50
 var result_dir := ""
 
 

@@ -295,6 +295,11 @@ func request_exit_or_finish() -> void:
 
 
 func _commit_exit_or_finish() -> void:
+	# Na oficina o portao do grupo e o portal de saida, nao a tela de cartas:
+	# quem termina de comprar volta a andar e corre para a saida.
+	if game._merchant_dimension().active:
+		finish()
+		return
 	if game.is_multiplayer:
 		if game.is_dead or game.online_local_spectator:
 			game.mode = "shop_mp_waiting"

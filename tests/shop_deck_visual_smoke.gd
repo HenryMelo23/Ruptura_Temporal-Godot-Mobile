@@ -25,11 +25,12 @@ func _run() -> void:
 	game.cards_bought["Disparo crescente"] = 2
 	game.cards_bought["Tempestade"] = 1
 	game.cards_bought["Defesa"] = 1
+	game.cards_bought["Mercenaria"] = 1
 	game.cards_bought["Petro"] = 1
 	game._open_shop(false)
-	game.shop_cards = [game.CARDS[2], game.CARDS[3], game.CARDS[9]]
-	game.shop_selected = 1
-	game.shop_select_pulse_index = 1
+	game.shop_cards = [game.CARDS[3], game.CARDS[9], game.CARDS[13]]
+	game.shop_selected = 2
+	game.shop_select_pulse_index = 2
 	game.shop_select_pulse_timer = 0.18
 	DirAccess.make_dir_absolute(ProjectSettings.globalize_path("res://.codex"))
 	await process_frame

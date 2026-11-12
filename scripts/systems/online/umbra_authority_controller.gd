@@ -133,7 +133,7 @@ func _fallback_space(runtime: Object, target_slot: int) -> Dictionary:
 	if peer_id != int(runtime.call("_mp_unique_id")):
 		var state: Dictionary = Dictionary(Dictionary(runtime.get("net_players_by_peer")).get(peer_id, {}))
 		target_pos = Vector2(state.get("pos", target_pos))
-	var world: Vector2 = ObservationSchema.DEFAULT_WORLD_SIZE
+	var world: Vector2 = ObservationSchema.runtime_world_size(runtime)
 	var direction := (target_pos - Vector2(runtime.get("boss_pos"))).normalized()
 	return {"x": clampf(target_pos.x / maxf(1.0, world.x), 0.0, 1.0), "y": clampf(target_pos.y / maxf(1.0, world.y), 0.0, 1.0), "direction_x": direction.x, "direction_y": direction.y}
 

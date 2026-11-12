@@ -101,8 +101,16 @@ static func build_from_snapshot(snapshot: Dictionary) -> Dictionary:
 	}
 
 
+## Tamanho real do mapa ativo (a fase 5 definitiva usa 3200x2250, nao 1600x900).
+static func runtime_world_size(runtime: Object) -> Vector2:
+	var value = runtime.get("WORLD_SIZE") if runtime != null else null
+	if value is Vector2 and Vector2(value).x > 1.0 and Vector2(value).y > 1.0:
+		return Vector2(value)
+	return DEFAULT_WORLD_SIZE
+
+
 static func build_from_runtime(runtime: Object) -> Dictionary:
-	var world := DEFAULT_WORLD_SIZE
+	var world := runtime_world_size(runtime)
 	var boss_pos: Vector2 = Vector2(runtime.get("boss_pos"))
 	var player_pos: Vector2 = Vector2(runtime.get("player_pos"))
 	# Slots are always local peer first, then peers sorted by stable peer id. A

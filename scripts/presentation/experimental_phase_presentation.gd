@@ -58,7 +58,8 @@ static func _draw_altar(game: Node2D, camera: Vector2, viewport: Vector2) -> voi
 		if game.experimental_boss_altar_near and not game._arauto_active():
 			game.draw_arc(center, 72.0, -t * 0.62, -t * 0.62 + TAU * game.experimental_phase_controller.altar_progress(), 64, Color(ALTAR_AMBER, 0.88), 5.0, true)
 		game._draw_centered(game.experimental_phase_controller.altar_label(), center + Vector2(0.0, -128.0), 18, Color(0.92, 1.0, 0.98))
-		var status := "DERROTE O ARAUTO" if game._arauto_active() else ("INVOCANDO..." if game.experimental_boss_altar_near else "APROXIME-SE PARA INVOCAR")
+		var blocker: String = game.experimental_phase_controller.altar_blocker_text()
+		var status: String = blocker if blocker != "" else (game.experimental_phase_controller.altar_presence_text() if game.experimental_phase_controller.altar_waiting_for_team() else ("INVOCANDO..." if game.experimental_boss_altar_near else "APROXIME-SE PARA INVOCAR"))
 		game._draw_centered(status, center + Vector2(0.0, 124.0), 14, ALTAR_AMBER if game.experimental_boss_altar_near else ALTAR_CYAN)
 		if game.experimental_boss_altar_near and not game._arauto_active():
 			var bar := Rect2(center + Vector2(-78.0, 140.0), Vector2(156.0, 9.0))

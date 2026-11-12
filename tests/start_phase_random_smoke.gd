@@ -51,7 +51,7 @@ func _check_phase_route_and_boss_hp() -> void:
 	_check(region_names.size() == 7, "map region names are not unique")
 	game.rng.seed = 7781
 	game._begin_initial_phase_tracking(6)
-	_check(Array(game.dimension_route_queue).size() == 3, "initial cycle did not queue three additional maps")
+	_check(Array(game.dimension_route_queue) == [1, 2, 3, 4], "start at 6 did not queue 1-2-3-4")
 	var cycle: Array[int] = [6]
 	for queued in game.dimension_route_queue:
 		cycle.append(int(queued))
@@ -59,7 +59,7 @@ func _check_phase_route_and_boss_hp() -> void:
 	var unique_cycle: Dictionary = {}
 	for phase_value in cycle:
 		unique_cycle[phase_value] = true
-	_check(unique_cycle.size() == 4, "cycle repeated a map before the fourth boss")
+	_check(unique_cycle.size() == 5, "cycle repeated a map before the route choice")
 	for index in range(cycle.size()):
 		game._register_dimension_phase_completed(cycle[index])
 		if index < cycle.size() - 1:
@@ -122,7 +122,7 @@ func _run() -> void:
 		var phase := int(game.current_phase)
 		_check(phase in game.INITIAL_PHASE_ROLL_POOL and phase != 5, "unexpected initial phase %d" % phase)
 		_check(is_equal_approx(float(game.phase_started_at), 0.0), "initial phase timer should start at zero")
-		_check(Array(game.dimension_route_queue).size() == 3, "new run did not prebuild the four-map cycle")
+		_check(Array(game.dimension_route_queue).size() == 4, "new run did not prebuild the fixed route")
 		seen_phases[phase] = true
 		if phase == 1:
 			_check(String(game.boss_name) == "CARANGUEJO COSMICO GIGANTE", "phase 1 boss name mismatch")
@@ -137,7 +137,7 @@ func _run() -> void:
 	for expected_phase in game.INITIAL_PHASE_ROLL_POOL:
 		_check(seen_phases.has(expected_phase), "eligible initial map %d was never rolled" % expected_phase)
 	_check(not seen_phases.has(5), "Umbra was rolled as an initial map")
-	print("START_PHASE_RANDOM_SMOKE_OK phases=[1,2,3,4,6,7] cycle=4 umbra_after_cycle=true forced=[1,2,3,4,5,6,7]")
+	print("START_PHASE_RANDOM_SMOKE_OK starts=[1,6] route=1-2-6-3-4|6-1-2-3-4 umbra_after_cycle=true forced=[1,2,3,4,5,6,7]")
 	game._set_initial_phase_bias(0, 0.0, true)
 	game._cleanup_runtime_resources()
 	game.textures.clear()

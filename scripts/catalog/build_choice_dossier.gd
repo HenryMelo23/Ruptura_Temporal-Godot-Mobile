@@ -56,16 +56,16 @@ static func manifestation(key: String) -> Dictionary:
 			}
 		"parasitica":
 			return {
-				"tagline": "Infestação: marque com larvas e solte o enxame nos marcados.",
+				"tagline": "Infestação: implante larvas, alimente a Simbiose e faça o Verme-Rei devorar hospedeiros.",
 				"style": "Alcance médio · médio",
 				"difficulty": 2,
 				"rows": [
-					{"label": "ATAQUE", "title": "Verme", "text": "Projétil lento com 88% do dano. Cada acerto põe 1 larva (máx. 5) e renova a marca por 6 s."},
-					{"label": "Q · 8 s", "title": "Cuspe Infestante", "text": "Bolo de vermes na mira que vira um viveiro de 155 px por 4,8 s: 50% do dano a cada 0,55 s e larvas em quem estiver dentro."},
-					{"label": "E · 75 s", "title": "Enxame Subterrâneo", "text": "Só funciona com alvos marcados. Os vermes chegam em cerca de 2 s e devoram cada marcado por 8 s: 6% da vida atual por segundo, com lentidão. Chefes também."},
+					{"label": "ATAQUE", "title": "Verme", "text": "Implanta larvas e amadurece hospedeiros: 88% do dano, 1 larva por acerto (máx. 5), marca de 8 s. Com 5 larvas o alvo vira Hospedeiro Maduro."},
+					{"label": "Q · 8 s", "title": "Simbiose Predatória", "text": "O simbionte fortalece Geovana enquanto ela agride infestados: Fome até 12 (+3% dano, +2% vel. de ataque, +0,5% movimento cada), mordidas que curam e implantam larvas. Abates infestados prolongam até 18 s."},
+					{"label": "E · 75 s", "title": "Verme-Rei", "text": "Consome larvas para gerar uma criatura que cresce devorando hospedeiros. 5 larvas = Rei Perfeito. Cada Devorar o deixa Alimentado (+8% dano, +4% ataque, +0,8 s). Sem alvo com larvas, não gasta a recarga."},
 					{"label": "TP", "title": "Ninhada", "text": "Deixa 3 ovos na origem; os vermes perseguem e atordoam por 1,8 s. Chefes usando habilidade resistem ao atordoamento."},
 				],
-				"note": "Dica: espalhe larvas com ATK e Q antes de usar o E.",
+				"note": "Dica: amadureça um hospedeiro (5 larvas) com a Simbiose ativa e só então chame o Verme-Rei.",
 			}
 		"gravitante":
 			return {

@@ -3,6 +3,7 @@ extends "res://tests/multiplayer_lobby_integration_smoke.gd"
 var stage := 0
 var copies := 0
 var card: Dictionary
+var local_effect_line := ""
 
 
 func _run() -> void:
@@ -33,6 +34,7 @@ func _run() -> void:
 				game._apply_card(card)
 			game._apply_card(tregua)
 			game.cinzas_card_bonuses[game.CARD_TREGUA_ID] = 3
+			local_effect_line = game._deck_effect_text(card)
 			game._sync_deck_network()
 			stage = 1
 		var remote_id := 0
@@ -54,9 +56,9 @@ func _run() -> void:
 				_fail("remote deck omitted the Trégua regeneration effect")
 				return
 			var line: String = game._deck_effect_text(card)
-			var expected_percent := "15.0%" if role == "host" else "34.2%"
-			if not line.contains(expected_percent):
-				_fail("remote deck used local effects: %s expected=%s" % [line, expected_percent])
+			var transported_line := String(Dictionary(remote.get("effects", {})).get(game._card_id(card), ""))
+			if line != transported_line or line == local_effect_line:
+				_fail("remote deck used local effects: remote=%s local=%s transported=%s" % [line, local_effect_line, transported_line])
 				return
 			if game._card_count(card) != copies:
 				_fail("viewing remote deck mutated local counts")

@@ -1023,6 +1023,35 @@ func giant_rest_texture() -> Texture2D:
 	return idle_frames[int(rest_idle_elapsed / GIANT_IDLE_FRAME_SECONDS) % idle_frames.size()]
 
 
+## Estado compacto para o snapshot publico do jogador. 0 = em movimento/acao,
+## 1 = freada, 2 = respiracao parada. Nao transporta textura nem gameplay.
+func giant_rest_visual_state() -> int:
+	var busy: bool = charge_active or leap_active or transforming or shrinking or core.henry_skill_cast_active
+	if not giant_active or busy or Vector2(core._read_move()).length() > 0.1:
+		return 0
+	return 1 if rest_stop_elapsed < GIANT_STOP_TIME else 2
+
+
+func giant_rest_visual_frame() -> int:
+	var state: int = giant_rest_visual_state()
+	if state == 1:
+		var stop_count := maxi(1, Array(core.textures.get("henry_colossus_stop_" + _giant_rest_row(), [])).size())
+		return clampi(int(rest_stop_elapsed / GIANT_STOP_TIME * float(stop_count)), 0, stop_count - 1)
+	if state == 2:
+		var idle_count := maxi(1, Array(core.textures.get("henry_colossus_idle_" + _giant_rest_row(), [])).size())
+		return int(rest_idle_elapsed / GIANT_IDLE_FRAME_SECONDS) % idle_count
+	return 0
+
+
+func _giant_rest_row() -> String:
+	var facing: Vector2 = Vector2(core.last_facing)
+	if facing.y < -0.1 and absf(facing.y) >= absf(facing.x) * 0.5:
+		return "up"
+	if absf(facing.x) > 0.1 and absf(facing.x) > absf(facing.y):
+		return "right"
+	return "down"
+
+
 func _v2_frames(sheet_key: String, direction: Vector2) -> Array:
 	var spec: Array = V2_SHEETS.get(sheet_key, [])
 	if spec.is_empty():

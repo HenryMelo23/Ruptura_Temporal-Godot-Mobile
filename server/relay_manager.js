@@ -8,6 +8,7 @@ const { spawn } = require("child_process");
 const { renderLeaderboardSite } = require("./leaderboard_site");
 const { projectRun, compareRuns, policy: rankingPolicy } = require("./ranking_score");
 const { createObservatory } = require("./umbra_observatory");
+const { normalizeUmbraCombat, createCollective, summarizeCombat } = require("./umbra_collective");
 
 const MANAGER_PORT = numberEnv("PORT", 8090);
 const ROOM_HOST = process.env.ROOM_HOST || "72.61.217.238";
@@ -41,6 +42,8 @@ const RUN_REPORT_MAX_BYTES = numberEnv("RUN_REPORT_MAX_BYTES", 512 * 1024);
 const LEADERBOARD_PATH = process.env.LEADERBOARD_PATH || path.join(__dirname, "leaderboard_runs.json");
 const LEADERBOARD_MAX_RUNS = numberEnv("LEADERBOARD_MAX_RUNS", 500);
 const umbraObservatory = createObservatory(process.env.UMBRA_OBSERVATORY_PATH || `${LEADERBOARD_PATH}.umbra_observatory.json`);
+// Mente coletiva da UMBRA: acumulador persistente (nao gira com o ranking).
+const umbraCollective = createCollective(process.env.UMBRA_COLLECTIVE_PATH || `${LEADERBOARD_PATH}.umbra_collective.json`);
 let observatoryErrorReported = false;
 function observeUmbra(runs) {
   try { const result = umbraObservatory.update(runs); observatoryErrorReported = false; return result; }
@@ -2228,7 +2231,9 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
     dossiers[key] = buildUmbraDossier(key, "", playerRuns);
   }
   const globalArchetype = classifyUmbraArchetypeFromRuns(eligible);
-  const versionSeed = `${Math.floor(Date.now() / (UMBRA_MIND_REFRESH_DAYS * 24 * 60 * 60 * 1000))}-${eligible.length}-${grouped.size}`;
+  // A mente coletiva muda a cada partida que chega na UMBRA.
+  const collective = umbraCollective.build();
+  const versionSeed = `${Math.floor(Date.now() / (UMBRA_MIND_REFRESH_DAYS * 24 * 60 * 60 * 1000))}-${eligible.length}-${grouped.size}-${collective.collective_version}`;
   const mindVersion = `umbra-week-${crypto.createHash("sha1").update(versionSeed).digest("hex").slice(0, 10)}`;
   const profileId = String(query.get("profile_id") || "").trim();
   const current = String(query.get("current") || "").trim();
@@ -2265,6 +2270,7 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
         SOBREVIVENTE_ADAPTATIVO: ["RESPEITAR_ADAPTATIVO", 0.1]
       }
     },
+    "umbra_collective_mind.json": { ...collective, mind_version: mindVersion },
     "umbra_player_dossiers.json": {
       mind_version: mindVersion,
       schema_version: 2,
@@ -2282,6 +2288,8 @@ function buildUmbraMind(snapshot, query = new URLSearchParams()) {
     trained_runs: eligible.length,
     trained_players: grouped.size,
     rejected_runs: runs.length - eligible.length,
+    collective_runs: collective.runs,
+    collective_samples: collective.samples,
     files
   };
 }
@@ -2627,6 +2635,9 @@ function normalizeRunPayload(payload, ip = "") {
     platform: String(payload.platform || "").slice(0, 32),
     role: String(payload.role || "solo").slice(0, 16),
     result: String(payload.result || "").slice(0, 32),
+    deathCause: String(payload.death_cause || "").trim().slice(0, 160),
+    deathSource: String(payload.death_source || "").trim().slice(0, 96),
+    deathPhase: Math.max(0, Math.floor(safeNumber(payload.death_phase))),
     date: String(payload.date || new Date().toISOString()).slice(0, 48),
     startedUnix: Math.max(0, Math.floor(safeNumber(payload.started_unix))),
     endedUnix,
@@ -2654,6 +2665,7 @@ function normalizeRunPayload(payload, ip = "") {
     heatmap: normalizeHeatmap(payload.position_heatmap),
     behaviorMetrics: umbraTraining.behavior,
     umbraKnowledge: normalizeUmbraKnowledge(payload.umbra_knowledge),
+    umbraCombat: normalizeUmbraCombat(payload.umbra_combat),
     umbraTrainingEligible: umbraTraining.eligible,
     umbraTrainingReasons: umbraTraining.reasons,
     manifestation: String(payload.manifestation || "").slice(0, 64),
@@ -2694,6 +2706,9 @@ function recordRun(payload, ip = "") {
     bestScore: Math.max(0, ...store.runs.filter(r => profileKeyForRun(r) === profileKey && r.rankEligible !== false).map(r => projectRun(r)).filter(r => !r.rankingWithdrawn).map(r => r.score), run.score),
     runs: Math.max(0, Math.floor(safeNumber(existingProfile.runs))) + 1
   };
+  // A UMBRA aprende com a partida antes de o run virar so resumo no ranking.
+  try { umbraCollective.ingest(run); } catch (error) { console.error("Umbra collective ingest failed:", error.message); }
+  run.umbraCombat = summarizeCombat(run.umbraCombat);
   store.runs.unshift(run);
   // Preserve encounter evidence before the bounded ranking archive rotates.
   observeUmbra(store.runs.map(projectRun));

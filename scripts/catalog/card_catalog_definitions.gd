@@ -848,19 +848,19 @@ static func get_burn_summary(card_or_id: Variant, stacks: int, base_damage: floa
 
 	match card_id:
 		"Defesa":
-			var bonus_val: float = 3.5 * float(effective_stacks) * factor
+			var bonus_val: float = 5.0 * float(effective_stacks) * factor
 			return "Ao comprar: +%.2f de resistencia adicional (+%d%%) [limite: 50]" % [bonus_val, total_scale_pct]
 		"Speed Boost":
 			var bonus_pct: float = 6.5 * float(effective_stacks) * factor
 			var speed_units: float = base_speed * (bonus_pct / 100.0)
 			return "Ao comprar: +%.1f%% de velocidade (+%.1f unidades, +%d%%)" % [bonus_pct, speed_units, total_scale_pct]
 		"Disparo crescente":
-			var bonus_pct: float = 15.0 * float(effective_stacks) * factor
+			var bonus_pct: float = 20.0 * float(effective_stacks) * factor
 			var dmg_val: float = base_damage * (bonus_pct / 100.0)
 			return "Ao comprar: +%.1f%% de dano base (+%.1f dano, +%d%%)" % [bonus_pct, dmg_val, total_scale_pct]
 		"Tempestade":
-			var flat_dmg: float = 5.0 * float(effective_stacks) * factor
-			var crit_pct: float = 10.0 * float(effective_stacks) * factor
+			var flat_dmg: float = 8.0 * float(effective_stacks) * factor
+			var crit_pct: float = 12.0 * float(effective_stacks) * factor
 			return "Ao comprar: +%.1f de dano e +%.1f%% de critico adicional (+%d%%)" % [flat_dmg, crit_pct, total_scale_pct]
 		"Speed Atack":
 			var reduction_val: float = 0.014 * float(effective_stacks) * factor

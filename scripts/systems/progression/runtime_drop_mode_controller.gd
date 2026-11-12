@@ -4,11 +4,22 @@ extends RefCounted
 const MODE_SHOP := "shop"
 const MODE_DROP := "drop"
 
-const DROP_LIFETIME := 5.0
-const DROP_BLINK_WINDOW := 2.0
-const BASE_DROP_CHANCE := 0.015
-const REFERENCE_MINUTES := 75.0
-const REFERENCE_DROP_CHANCE := 0.35
+const DROP_LIFETIME := 10.0
+const DROP_BLINK_WINDOW := 3.0
+## Curva no estilo Risk of Rain 2: um coeficiente de dificuldade que cresce com
+## o tempo de jogo (linear por minuto) e com cada regiao concluida (x1.15).
+## Quanto mais longa a run, mais cada inimigo tende a dropar carta.
+const BASE_DROP_CHANCE := 0.04
+const COEFF_PER_MINUTE := 0.10
+const COEFF_PER_STAGE := 1.15
+const MAX_DROP_CHANCE := 0.40
+## Elites (qualquer inimigo que nao seja o comum) dropam mais.
+const ELITE_DROP_MULT := 2.5
+## Protecao contra azar: cada abate sem carta soma +0,5% ate +12%; zera ao dropar.
+const PITY_PER_KILL := 0.005
+const PITY_MAX := 0.12
+
+var pity_bonus: float = 0.0
 
 const OWNER_COLORS := [
 	Color(0.18, 0.92, 1.0),
@@ -35,11 +46,24 @@ func can_lobby_peer_select_mode(sender_peer_id: int, owner_peer_id: int) -> bool
 	return sender_peer_id > 0 and owner_peer_id > 0 and sender_peer_id == owner_peer_id
 
 
-func drop_chance(elapsed_seconds: float, party_size: int = 1) -> float:
+func difficulty_coefficient(elapsed_seconds: float, stages_completed: int = -1) -> float:
 	var minutes := maxf(0.0, elapsed_seconds) / 60.0
-	var growth := -log((1.0 - REFERENCE_DROP_CHANCE) / (1.0 - BASE_DROP_CHANCE)) / REFERENCE_MINUTES
-	var solo_chance := 1.0 - (1.0 - BASE_DROP_CHANCE) * exp(-growth * minutes)
+	var stages: int = stages_completed
+	if stages < 0:
+		stages = int(core.dimension_route_completed_count) if core != null else 0
+	return (1.0 + COEFF_PER_MINUTE * minutes) * pow(COEFF_PER_STAGE, float(maxi(0, stages)))
+
+
+func drop_chance(elapsed_seconds: float, party_size: int = 1, stages_completed: int = -1) -> float:
+	var solo_chance: float = minf(MAX_DROP_CHANCE, BASE_DROP_CHANCE * difficulty_coefficient(elapsed_seconds, stages_completed))
 	return solo_chance / sqrt(float(maxi(1, party_size)))
+
+
+func kill_drop_chance(enemy: Dictionary) -> float:
+	var chance: float = drop_chance(core.time_alive, active_party_size())
+	if String(enemy.get("type", core.ENEMY_COMMON)) != core.ENEMY_COMMON:
+		chance *= ELITE_DROP_MULT
+	return minf(0.95, chance + pity_bonus)
 
 
 func active_party_size() -> int:
@@ -57,11 +81,13 @@ func on_enemy_killed(enemy: Dictionary, pos: Vector2, forced_roll: float = -1.0)
 	if owner_peer <= 0:
 		owner_peer = core._mp_unique_id()
 	var roll: float = forced_roll if forced_roll >= 0.0 else core.rng.randf()
-	if roll >= drop_chance(core.time_alive, active_party_size()):
+	if roll >= kill_drop_chance(enemy):
+		pity_bonus = minf(PITY_MAX, pity_bonus + PITY_PER_KILL)
 		return false
 	var card := _pick_card_for_owner(owner_peer)
 	if card.is_empty():
 		return false
+	pity_bonus = 0.0
 	var identity := owner_identity(owner_peer)
 	core._append_owned_card_drop(
 		card,
@@ -172,17 +198,18 @@ func _pick_card_for_owner(owner_peer: int) -> Dictionary:
 
 
 func _card_available_for_owner(card: Dictionary, owner_peer: int) -> bool:
-	if not core._card_unlocked(card) or not core._card_drop_texture_available(card):
+	# A imagem da carta e carregada de forma assincrona pelo proprio drop; exigir
+	# a textura ja residente travava o pool (principalmente no celular).
+	if not core._card_unlocked(card) or not core._card_drop_texture_registered(card):
 		return false
 	var counts: Dictionary = core.cards_bought
 	if core.is_multiplayer and owner_peer != core._mp_unique_id():
 		var remote_deck := Dictionary(core.net_decks_by_peer.get(owner_peer, {}))
 		counts = Dictionary(remote_deck.get("counts", remote_deck))
-	var sorte_count := int(counts.get("Sorte", 0))
 	var rarity: String = core._card_rarity_key(card)
-	if rarity == core.CARD_RARITY_RARE and sorte_count <= 0:
-		return false
-	if rarity == core.CARD_RARITY_LEGENDARY and (core.current_phase < 2 or sorte_count <= 0):
+	# Raras nao dependem mais da carta Sorte (o peso por tempo ja controla);
+	# lendarias so a partir da 2a regiao concluida ou 12 min de run.
+	if rarity == core.CARD_RARITY_LEGENDARY and int(core.dimension_route_completed_count) < 1 and float(core.time_alive) < 720.0:
 		return false
 	var card_key: String = core._card_counter_key(card)
 	var pending_count := 0

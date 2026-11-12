@@ -79,6 +79,7 @@ var fireballs: Array = []
 var fireball_sequence := 0
 var combustion_queue: Array = []
 var combustion_bursts: Array = []
+var pending_network_bursts: Array = []
 var channel_guard_clock := 0.0
 var skill_cone_event_id := ""
 
@@ -224,6 +225,7 @@ func reset() -> void:
 	fireballs.clear()
 	combustion_queue.clear()
 	combustion_bursts.clear()
+	pending_network_bursts.clear()
 	channel_guard_clock = 0.0
 	skill_cone_event_id = ""
 	for enemy in core.enemies:
@@ -257,7 +259,20 @@ func fire_auto_attack() -> bool:
 		fireball_sequence += 1
 		bullet["henry_fireball_id"] = fireball_sequence
 		bullet["visual_scale"] = maxf(float(bullet.get("visual_scale", 1.0)), FIREBALL_VISUAL_SCALE)
-		fireballs.append({"id": fireball_sequence, "pos": Vector2(bullet.get("pos", core.player_pos)), "life": float(bullet.get("life", 1.0))})
+		fireballs.append({
+			"id": fireball_sequence,
+			"pos": Vector2(bullet.get("pos", core.player_pos)),
+			"dir": Vector2(bullet.get("dir", core.last_facing)),
+			"life": float(bullet.get("life", 1.0)),
+			"max": float(bullet.get("life", 1.0)),
+			"speed": core.BULLET_SPEED * SPARK_SPEED_MULT,
+		})
+		core._send_network_ability_visual(
+			core.NET_ABILITY_ATTACK,
+			Vector2(bullet.get("pos", core.player_pos)),
+			Vector2(bullet.get("pos", core.player_pos)) + Vector2(bullet.get("dir", Vector2.RIGHT)) * 48.0,
+			float(bullet.get("life", 1.0)) + COMBUSTION_VISUAL_LIFE
+		)
 	return true
 
 
@@ -397,6 +412,88 @@ func update(delta: float) -> void:
 	_update_boss_burn(delta)
 
 
+## Estado visual publico e limitado. Dano, cooldowns e consultas de hit nunca
+## entram no payload; peers derivam as mesmas malhas locais destes eventos.
+func visual_snapshot(action: int = -1) -> Dictionary:
+	var public_fireballs: Array = []
+	for entry_value in fireballs.slice(maxi(0, fireballs.size() - 8)):
+		if not entry_value is Dictionary:
+			continue
+		var entry: Dictionary = entry_value
+		public_fireballs.append({
+			"id": int(entry.get("id", 0)),
+			"pos": Vector2(entry.get("pos", core.player_pos)),
+			"dir": Vector2(entry.get("dir", core.last_facing)),
+			"life": maxf(0.0, float(entry.get("life", 0.0))),
+			"max": maxf(0.01, float(entry.get("max", entry.get("life", 1.0)))),
+			"speed": maxf(0.0, float(entry.get("speed", core.BULLET_SPEED * SPARK_SPEED_MULT))),
+		})
+	var snapshot := {
+		"spin": {
+			"active": bool(core.henry_spin_active),
+			"elapsed": float(core.henry_spin_elapsed),
+			"duration": float(core.HENRY_SPIN_DURATION),
+			"dash_duration": float(core.HENRY_SPIN_DASH_DURATION),
+			"origin": Vector2(core.henry_spin_origin),
+			"target": Vector2(core.henry_spin_dash_target),
+			"direction": Vector2(core.henry_spin_dash_direction),
+		},
+		"skill": {
+			"active": bool(core.henry_skill_cast_active),
+			"elapsed": float(core.henry_skill_cast_elapsed),
+			"duration": float(core.HENRY_SKILL_CAST_DURATION),
+			"direction": Vector2(core.henry_skill_cast_direction),
+		},
+		"ultimate": {
+			"active": bool(core.henry_ultimate_cast_active),
+			"elapsed": float(core.henry_ultimate_cast_elapsed),
+			"duration": float(ULT_TOTAL),
+			"center": Vector2(core.henry_ultimate_center),
+			"pulses": int(core.henry_ultimate_pulses_released),
+		},
+		"trail": _public_tail(ember_trail, 8),
+		"flame_cones": _public_tail(core.henry_flame_cones, 4),
+		"heat_waves": _public_tail(core.henry_heat_waves, 8),
+		"fireballs": public_fireballs,
+		"bursts": _public_tail(pending_network_bursts, 8),
+	}
+	if action == core.NET_ABILITY_ATTACK:
+		if not pending_network_bursts.is_empty():
+			return {"bursts": snapshot["bursts"]}
+		return {"fireballs": [public_fireballs[-1]] if not public_fireballs.is_empty() else []}
+	if action == core.NET_ABILITY_SKILL:
+		return {
+			"skill": snapshot["skill"],
+			"flame_cones": snapshot["flame_cones"],
+			"heat_waves": snapshot["heat_waves"].filter(func(wave): return String(Dictionary(wave).get("kind", "")) == "guard_burst"),
+		}
+	if action == core.NET_ABILITY_SECONDARY:
+		return {
+			"ultimate": snapshot["ultimate"],
+			"heat_waves": snapshot["heat_waves"].filter(func(wave): return String(Dictionary(wave).get("kind", "")) == "ultimate"),
+		}
+	if action == core.NET_ABILITY_TELEPORT:
+		return {
+			"spin": snapshot["spin"],
+			"trail": snapshot["trail"],
+			"heat_waves": snapshot["heat_waves"].filter(func(wave): return String(Dictionary(wave).get("kind", "")) == "spin_final"),
+		}
+	return snapshot
+
+
+func _public_tail(source: Array, limit: int) -> Array:
+	var result: Array = []
+	for index in range(maxi(0, source.size() - limit), source.size()):
+		if source[index] is Dictionary:
+			result.append(Dictionary(source[index]).duplicate(true))
+	return result
+
+
+func _send_channel_end(action: int, cancelled: bool) -> void:
+	var residual: float = 0.08 if cancelled else (float(core.HENRY_ULTIMATE_WAVE_DURATION) if action == core.NET_ABILITY_SECONDARY else 0.12)
+	core._send_network_ability_visual(core.NET_ABILITY_SECONDARY_END, core.player_pos, core.player_pos, residual, float(action))
+
+
 func _update_ultimate_cast(delta: float) -> void:
 	if not core.henry_ultimate_cast_active:
 		return
@@ -414,6 +511,7 @@ func _update_ultimate_cast(delta: float) -> void:
 		core.henry_ultimate_cast_elapsed = 0.0
 		core.henry_ultimate_center = Vector2.ZERO
 		core.henry_ultimate_event_id = ""
+		_send_channel_end(core.NET_ABILITY_SECONDARY, false)
 
 
 func _update_spin(delta: float) -> void:
@@ -656,6 +754,7 @@ func _update_cast(delta: float) -> void:
 	if core.henry_skill_cast_elapsed >= core.HENRY_SKILL_CAST_DURATION:
 		core.henry_skill_cast_active = false
 		core.henry_skill_cast_elapsed = 0.0
+		_send_channel_end(core.NET_ABILITY_SKILL, false)
 
 
 func _apply_flame_cone(origin: Vector2, direction: Vector2) -> void:
@@ -826,6 +925,8 @@ func handle_channel_input(kind: String) -> bool:
 
 
 func cancel_channel() -> void:
+	var cancelled_skill := bool(core.henry_skill_cast_active)
+	var cancelled_ultimate := bool(core.henry_ultimate_cast_active)
 	if core.henry_skill_cast_active:
 		if not core.henry_skill_damage_applied and skill_cone_event_id != "":
 			var cancelled_id := skill_cone_event_id
@@ -841,6 +942,10 @@ func cancel_channel() -> void:
 		core.henry_ultimate_event_id = ""
 	channel_guard_clock = 0.0
 	core._spawn_radial_particles(core.player_pos, Color(1.0, 0.52, 0.18), 10)
+	if cancelled_skill:
+		_send_channel_end(core.NET_ABILITY_SKILL, true)
+	if cancelled_ultimate:
+		_send_channel_end(core.NET_ABILITY_SECONDARY, true)
 
 
 func _update_knockback(target: Dictionary, delta: float) -> void:
@@ -978,6 +1083,8 @@ func _update_combustion(delta: float) -> void:
 		var entry: Dictionary = combustion_queue.pop_front()
 		_detonate(entry)
 		processed += 1
+	if processed > 0:
+		_send_pending_burst_visuals()
 
 
 func _detonate(entry: Dictionary) -> void:
@@ -988,7 +1095,9 @@ func _detonate(entry: Dictionary) -> void:
 	var damage: float = float(core.player_damage) * (COMBUSTION_DAMAGE_BASE + COMBUSTION_DAMAGE_PER_STACK * float(stacks))
 	var spread: int = maxi(1, stacks - 1) if depth < COMBUSTION_MAX_DEPTH else 0
 	var source_peer: int = int(entry.get("source_peer", 0))
-	combustion_bursts.append({"pos": center, "radius": radius, "stacks": stacks, "life": COMBUSTION_VISUAL_LIFE, "max": COMBUSTION_VISUAL_LIFE})
+	var burst := {"pos": center, "radius": radius, "stacks": stacks, "life": COMBUSTION_VISUAL_LIFE, "max": COMBUSTION_VISUAL_LIFE}
+	combustion_bursts.append(burst)
+	pending_network_bursts.append(burst.duplicate(true))
 	var radius_sq := radius * radius
 	for enemy in core.enemies:
 		if float(enemy.get("hp", 0.0)) <= 0.0:
@@ -1078,15 +1187,20 @@ func _update_fireballs() -> void:
 		if alive.has(id):
 			var bullet: Dictionary = alive[id]
 			entry["pos"] = Vector2(bullet.get("pos", entry["pos"]))
+			entry["dir"] = Vector2(bullet.get("dir", entry.get("dir", Vector2.RIGHT)))
 			entry["life"] = float(bullet.get("life", 0.0))
 			remaining.append(entry)
 		elif float(entry.get("life", 0.0)) > 0.05:
 			_explode_fireball(Vector2(entry["pos"]))
 	fireballs = remaining
+	if not pending_network_bursts.is_empty():
+		_send_pending_burst_visuals()
 
 
 func _explode_fireball(center: Vector2) -> void:
-	combustion_bursts.append({"pos": center, "radius": FIREBALL_RADIUS, "stacks": 1, "life": COMBUSTION_VISUAL_LIFE * 0.8, "max": COMBUSTION_VISUAL_LIFE * 0.8, "fireball": true})
+	var burst := {"pos": center, "radius": FIREBALL_RADIUS, "stacks": 1, "life": COMBUSTION_VISUAL_LIFE * 0.8, "max": COMBUSTION_VISUAL_LIFE * 0.8, "fireball": true}
+	combustion_bursts.append(burst)
+	pending_network_bursts.append(burst.duplicate(true))
 	if not core._is_world_authority():
 		return
 	var damage: float = float(core.player_damage) * FIREBALL_DAMAGE_MULT
@@ -1098,6 +1212,18 @@ func _explode_fireball(center: Vector2) -> void:
 	if core.boss_active and core.boss_hp > 0.0 and core.boss_pos.distance_to(center) <= FIREBALL_RADIUS + 60.0:
 		apply_burn_to_boss(float(core.player_damage), 0, true)
 		core._damage_boss(damage, "henry_combustion", true, false, "basic_attack", center)
+
+
+func _send_pending_burst_visuals() -> void:
+	if pending_network_bursts.is_empty():
+		return
+	var center := Vector2(Dictionary(pending_network_bursts[-1]).get("pos", core.player_pos))
+	var duration := 0.08
+	for burst_value in pending_network_bursts:
+		if burst_value is Dictionary:
+			duration = maxf(duration, float(Dictionary(burst_value).get("max", COMBUSTION_VISUAL_LIFE)))
+	core._send_network_ability_visual(core.NET_ABILITY_ATTACK, center, center, duration)
+	pending_network_bursts.clear()
 
 
 

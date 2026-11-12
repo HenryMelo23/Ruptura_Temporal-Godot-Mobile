@@ -54,7 +54,26 @@ func _run() -> void:
 			assert(chunk.rect.get_center().is_equal_approx(altar))
 	assert(altar_count == 1 and variants.size() == 16)
 
+	# Regression: touching the altar while the Suturador lives used to consume
+	# it permanently before the boss call was accepted, trapping the run.
+	var suturer: Dictionary = game.amber_suturer_controller.spawn_now()
+	assert(not suturer.is_empty())
 	game.player_pos = altar
+	game.experimental_phase_controller.update(game.experimental_phase_controller.ALTAR_HOLD_TIME + 0.02)
+	assert(game.experimental_boss_altar_discovered)
+	assert(not game.experimental_boss_altar_used)
+	assert(game.mode == "game" and game.boss_call_timer < 0.0)
+	assert(game.experimental_phase_controller.altar_blocker_text() == "DERROTE O SUTURADOR DE AMBAR")
+	# Existing saves produced by the old ordering can already contain this
+	# impossible state. Updating once must recover them without restarting.
+	game.experimental_boss_altar_used = true
+	game.experimental_boss_altar_authorized = true
+	game.experimental_phase_controller.update(0.01)
+	assert(not game.experimental_boss_altar_used)
+	assert(not game.experimental_boss_altar_authorized)
+	game.amber_suturer_controller.cleanup("altar_gate_smoke", false)
+	assert(game.amber_suturer_controller.active_enemy().is_empty())
+	assert(game.experimental_phase_controller.altar_blocker_text() == "")
 	game.experimental_phase_controller.update(game.experimental_phase_controller.ALTAR_HOLD_TIME + 0.02)
 	assert(game.experimental_boss_altar_used and game.mode == "boss_call")
 	game._update_boss_call(game.BOSS_CALL_COUNTDOWN + 0.05)
@@ -138,7 +157,7 @@ func _run() -> void:
 	game.forced_initial_phase = 6
 	game._start_game()
 	assert(not game.experimental_phase_active and game.experimental_phase_controller.uses_definitive_world())
-	print("DEFINITIVE_PHASE6_SMOKE_OK command=true expanded_default=true classic_ex=true phase6_rules=true atlas=true altar_entry=true stationary_stages=true specials=true organs=true miasma=true encounter_local=true switch_reset=true")
+	print("DEFINITIVE_PHASE6_SMOKE_OK command=true expanded_default=true classic_ex=true phase6_rules=true atlas=true suturer_gate_retry=true stuck_save_recovery=true altar_entry=true stationary_stages=true specials=true organs=true miasma=true encounter_local=true switch_reset=true")
 	game._cleanup_runtime_resources()
 	game.free()
 	for _frame in range(3):

@@ -71,8 +71,8 @@ func card_drop_chance() -> float:
 
 func drop_mode_rarity_weights() -> Array:
 	var current_luck := effective_luck()
-	# Modo drop: raras/lendarias comecam em zero e entram aos poucos (3 -> 15 min).
-	var ramp := clampf((float(core.time_alive) - 180.0) / 720.0, 0.0, 1.0)
+	# Modo drop: raras/lendarias entram aos poucos (1,5 -> 10 min).
+	var ramp := clampf((float(core.time_alive) - 90.0) / 510.0, 0.0, 1.0)
 	var sorte := sorte_curve()
 	return [
 		[core.CARD_RARITY_COMMON, 74.0],

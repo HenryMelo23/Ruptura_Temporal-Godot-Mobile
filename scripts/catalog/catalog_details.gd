@@ -186,11 +186,11 @@ static func manifestation_details(host: Node, key: String) -> Dictionary:
 			}
 		"parasitica":
 			return {
-				"funcao": "Infestacao com janela curta. Cada acerto mantem larvas visiveis no alvo por 6 segundos.", 
-				"disparo": "ATK: verme parasita reforcado. Causa dano e adiciona larvas; novos acertos renovam a marca de 6s.", 
-				"habilidade": "Q - Cuspe Infestante", 
-				"desc_hab": "Cospe um bolo de vermes na direcao da mira. O impacto cria uma area viva que causa dano e contamina inimigos dentro dela.", 
-				"traco": "E - Enxame Subterraneo: vermes entram pelas bordas, escavam ate cada alvo marcado e devoram por 8s, causando 5% da vida atual por segundo.", 
+				"funcao": "Infestacao que vira bola de neve. Larvas sao o recurso: alimentam a Simbiose e o Verme-Rei.",
+				"disparo": "ATK - Verme: cada acerto implanta 1 larva (max. 5) e renova a marca por 8s. Com 5 larvas o alvo vira Hospedeiro Maduro.",
+				"habilidade": "Q - Simbiose Predatoria",
+				"desc_hab": "Um verme se prende a Geovana por 9s (recarga 8s). Acertar infestados gera Fome (max. 12): +3% dano, +2% vel. de ataque e +0,5% movimento por acumulo. A cada 4 acertos (3 com Fome maxima) o simbionte morde: 55% do dano, +1 larva e cura 1,5% (2%). Abates infestados dao +2 Fome e +1,2s (ate 18s).",
+				"traco": "E - Verme-Rei: consome 1-5 larvas do melhor hospedeiro e cria uma criatura por 14s +1s por larva (recarga 75s). Morde implantando larvas; com 5 larvas devora o hospedeiro (300% do dano, executa abaixo de 20%/25%; chefes perdem 6% da vida atual). Cada Devorar o deixa Alimentado: +8% dano, +4% vel. de ataque, +0,8s. Com 5 larvas nasce Rei Perfeito.",
 				"risco": "TP: deixa 3 ovos na origem; os vermes perseguem e atordoam por 1,8s. Chefes usando habilidade resistem ao atordoamento."
 			}
 		"gravitante":

@@ -30,6 +30,8 @@ func pack(game: Node) -> Dictionary:
 		"weather": game._pack_net_weather_visuals(),
 		"runtime_event": game.runtime_event_director.active_snapshot(),
 		"point_boost": game.point_boost_pickup_controller.active_snapshot(),
+		"experimental_phase": game.experimental_phase_controller.active_snapshot(),
+		"merchant_rift": game.shop_rift_controller.active_snapshot(),
 		"field_artifacts": game._field_artifacts().snapshot()
 	}
 	if game.current_phase == 7:
@@ -239,6 +241,10 @@ func apply(game: Node, snapshot_data) -> void:
 		game.runtime_event_director.apply_remote_snapshot(Dictionary(data["runtime_event"]))
 	if game._is_world_replica() and data.has("point_boost"):
 		game.point_boost_pickup_controller.apply_remote_snapshot(Dictionary(data["point_boost"]))
+	if game._is_world_replica() and data.has("experimental_phase"):
+		game.experimental_phase_controller.apply_remote_snapshot(Dictionary(data["experimental_phase"]))
+	if game._is_world_replica() and data.has("merchant_rift"):
+		game.shop_rift_controller.apply_remote_snapshot(Dictionary(data["merchant_rift"]))
 	if game._is_world_replica() and data.has("field_artifacts"):
 		game._field_artifacts().apply_remote_snapshot(Dictionary(data["field_artifacts"]))
 	if game._is_world_replica() and data.has("pacing_profile"):

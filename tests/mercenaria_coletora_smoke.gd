@@ -41,17 +41,23 @@ func _initialize() -> void:
 func _run() -> void:
 	game._start_game()
 	game._apply_card(_card("Mercenaria"))
-	for i in range(5):
+	var score_before_first: int = int(game.score)
+	var first_base: int = int(game._points_for_enemy(_spawn_static_enemy()))
+	var first: Dictionary = game.enemies.back()
+	game._kill_enemy(first)
+	_collect_enemy_points()
+	_check(game.score - score_before_first == first_base + game.MERCENARY_KILL_POINTS_PER_COPY, "Mercenaria did not pay from the first kill")
+	for i in range(4):
 		game._kill_enemy(_spawn_static_enemy())
 		_collect_enemy_points()
 	_check(game.combo_kills == 5, "Mercenaria did not preserve the five-kill contract")
-	_check(game.mercenary_bonus_points == 65, "first contract should add base 25 plus 40 per card")
+	_check(game.mercenary_bonus_points == 85, "first contract should add base 35 plus 50 per card")
 	var score_before = game.score
 	var expected_base = game._points_for_enemy(_spawn_static_enemy())
 	var sixth = game.enemies.back()
 	game._kill_enemy(sixth)
 	_collect_enemy_points()
-	_check(game.score - score_before == expected_base + 65, "current Mercenaria bonus was not paid on the next kill")
+	_check(game.score - score_before == expected_base + game.MERCENARY_KILL_POINTS_PER_COPY + 85, "current Mercenaria base and streak bonuses were not paid on the next kill")
 	game.enemies.clear()
 	game.spawn_timer = 999.0
 	game.boss_dead = true

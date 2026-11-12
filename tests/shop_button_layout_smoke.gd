@@ -20,22 +20,19 @@ func _run() -> void:
 	var viewport := Vector2(1280, 720)
 	game._start_game()
 	game.shop_auto_enabled = true
-	game.qa_data_unlocked = true # loja manual existe so como atalho de QA
+	game.qa_data_unlocked = true
+	game.forced_initial_phase = 3
 	game.hud_shop_pos = Vector2(-1, -1)
 	game._open_edit_layout(viewport)
 	game._update_button_layout(viewport)
-	_check(game.buttons.has("shop_manual"), "QA shop shortcut must stay editable")
+	_check(not game.buttons.has("shop_manual"), "QA shop shortcut returned to the layout editor")
+	_check(game.edit_layout_selected != "shop_manual", "removed shop button remained selected")
 
-	var start_pos: Vector2 = game._manual_shop_pos(viewport)
-	var drag_to := start_pos + Vector2(-130, 70)
-	game._handle_edit_layout_press(-2, start_pos + Vector2(52, 21), viewport)
-	_check(game.edit_layout_selected == "shop_manual", "shop button did not become the selected layout item")
-	game._handle_edit_layout_drag(-2, drag_to + Vector2(52, 21), viewport)
-	game._handle_edit_layout_release(-2, drag_to + Vector2(52, 21), viewport)
-	_check(game.hud_shop_pos.distance_to(drag_to) < 0.1, "shop button did not persist dragged position")
-	_check(game._manual_shop_pos(viewport).distance_to(drag_to) < 0.1, "manual shop position did not use saved HUD position")
+	game.mode = "game"
+	game._update_button_layout(viewport)
+	_check(not game.buttons.has("shop_manual"), "QA shop shortcut returned to the combat HUD")
 
-	print("SHOP_BUTTON_LAYOUT_SMOKE_OK editable_when_auto=true moved=true")
+	print("SHOP_BUTTON_LAYOUT_SMOKE_OK qa_hidden=true hud_hidden=true")
 	root.remove_child(game)
 	game._cleanup_runtime_resources()
 	await process_frame

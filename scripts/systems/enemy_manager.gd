@@ -702,10 +702,15 @@ func phase2_common_penguin_can_shoot(enemy: Dictionary) -> bool:
 func spawn_wave() -> void:
 	if game == null or not game._is_world_authority():
 		return
-	game.spawn_timer = horde.spawn_interval(get_enemy_spawn_interval())
+	# Dentro da oficina do Mercador nao existe horda.
+	if game._merchant_dimension().active:
+		return
+	var crowd_mult: float = game._quantum_chips().enemy_count_multiplier()
+	game.spawn_timer = horde.spawn_interval(get_enemy_spawn_interval()) / crowd_mult
 	if game.boss_active or game._arauto_active():
 		return
-	var desired: int = get_desired_enemy_limit()
+	var desired: int = int(round(float(get_desired_enemy_limit()) * crowd_mult))
+	var wave_hp_mult: float = game._quantum_chips().wave_enemy_hp_multiplier()
 	var limit: int = horde.clamp_limit(desired)
 	var ratio: float = horde.overflow_ratio(desired)
 	for _spawn in range(horde.spawns_this_tick(limit, game.enemies.size())):
@@ -714,6 +719,10 @@ func spawn_wave() -> void:
 		game._spawn_enemy(kind, game._spawn_point_for_type(kind))
 		if game.enemies.size() > before:
 			horde.apply_overflow(game.enemies.back(), ratio)
+			if wave_hp_mult < 1.0:
+				var spawned: Dictionary = game.enemies.back()
+				spawned["hp"] = maxf(1.0, float(spawned.get("hp", 1.0)) * wave_hp_mult)
+				spawned["max_hp"] = maxf(1.0, float(spawned.get("max_hp", 1.0)) * wave_hp_mult)
 
 
 ## Limite efetivo de inimigos vivos: o desejado (que cresce sem fim) preso ao orcamento do aparelho.

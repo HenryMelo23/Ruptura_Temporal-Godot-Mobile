@@ -378,6 +378,8 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		Boss1AnimationPresentation.draw_damage_stage(game, boss_draw_pos - camera, boss_draw_size)
 	elif game.current_phase == 6:
 		Boss6AnimationPresentation.draw_body(game, boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate)
+	elif game.current_phase == 5 and RTUmbraBossAnimation.available():
+		game._draw_entity_fit_flipped(boss_tex, boss_draw_pos - camera, boss_draw_size, RTUmbraBossAnimation.should_flip_h(game), boss_modulate, true)
 	else:
 		if game.current_phase == 7:
 			RTBoss7Presentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
@@ -830,6 +832,7 @@ static func _draw_phase4_environment(game: Node2D, camera: Vector2) -> void :
 static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 	if game.current_phase != 5:
 		return
+	RTUmbraSkillPresentation.draw_world(game, camera)
 	for tele in game.phase5_telegraphs:
 		var to = Vector2(tele.get("to", game.boss_pos)) - camera
 		var arrived = bool(tele.get("arrived", false))
@@ -850,8 +853,11 @@ static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 			game.draw_circle(curr_pos + Vector2(-1, -1), 2.5, Color(0.9, 1.0, 0.75, 0.95))
 
 
-			game.draw_arc(to, 24.0 + pulse * 6.0, 0.0, TAU, 36, Color(c.r, c.g, c.b, 0.4), 1.8, true)
-			game.draw_circle(to, 6.0, Color(c.r, c.g, c.b, 0.2))
+			# Portal abrindo no destino: a arte substitui os aneis quando existe.
+			var open_ratio: float = 1.0 - clampf(float(tele.get("life", 0.0)) / maxf(0.01, float(tele.get("max", 1.0))), 0.0, 1.0)
+			if not RTUmbraSkillPresentation.draw_portal(game, to, open_ratio, not bool(tele.get("real", true)), game.time_alive):
+				game.draw_arc(to, 24.0 + pulse * 6.0, 0.0, TAU, 36, Color(c.r, c.g, c.b, 0.4), 1.8, true)
+				game.draw_circle(to, 6.0, Color(c.r, c.g, c.b, 0.2))
 		else:
 
 			var p_life = float(tele.get("portal_life", 0.0))
@@ -860,6 +866,8 @@ static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 			var portal_r = 16.0 + p_ratio * 48.0
 			var alpha = clampf(1.0 - p_ratio, 0.0, 1.0)
 
+			if RTUmbraSkillPresentation.draw_portal_arrival(game, to, alpha):
+				continue
 			game.draw_circle(to, portal_r, Color(0.03, 0.12, 0.05, 0.5 * alpha))
 			game.draw_arc(to, portal_r, p_ratio * TAU * 2.0, p_ratio * TAU * 2.0 + PI * 1.5, 48, Color(0.35, 1.0, 0.48, 0.85 * alpha), 4.0, true)
 			game.draw_arc(to, portal_r * 0.65, - p_ratio * TAU * 2.5, - p_ratio * TAU * 2.5 + PI * 1.3, 36, Color(0.75, 1.0, 0.6, 0.7 * alpha), 2.5, true)
@@ -952,6 +960,8 @@ static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 			"miasma", "siphon":
 				var pos = Vector2(hazard.get("pos", game.boss_pos)) - camera
 				var radius = float(hazard.get("radius", 160.0))
+				if kind == "siphon" and RTUmbraSkillPresentation.draw_siphon(game, pos, radius, game.time_alive):
+					continue
 				var color = Color(0.22, 1.0, 0.34, 0.18) if kind == "siphon" else Color(0.16, 0.92, 0.18, 0.16)
 				game.draw_circle(pos, radius, color)
 				game.draw_arc(pos, radius * (0.92 + sin(game.time_alive * 5.0) * 0.04), 0, TAU, 60, Color(0.34, 1.0, 0.44, 0.65), 3.0)

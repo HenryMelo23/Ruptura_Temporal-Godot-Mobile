@@ -110,8 +110,7 @@ func _check_mobile_interaction(viewport: Vector2) -> void:
 	game.hud_shop_pos = Vector2(-1, -1)
 	game.hud_boss_call_pos = Vector2(-1, -1)
 	game._update_button_layout(viewport)
-	var shop_rect: Rect2 = game.buttons["shop_manual"]
+	_check(not game.buttons.has("shop_manual"), "mobile HUD restored the retired manual shop")
 	var boss_button_rect: Rect2 = game.buttons["boss"]
 	var boss_bar_rect := Rect2(game._boss_panel_pos(viewport), Vector2(380.0, 30.0))
-	_check(not shop_rect.intersects(boss_button_rect), "default mobile shop and boss buttons overlap")
-	_check(not shop_rect.intersects(boss_bar_rect) and not boss_button_rect.intersects(boss_bar_rect), "default mobile shop/boss buttons overlap the boss bar")
+	_check(not boss_button_rect.intersects(boss_bar_rect), "default mobile boss button overlaps the boss bar")

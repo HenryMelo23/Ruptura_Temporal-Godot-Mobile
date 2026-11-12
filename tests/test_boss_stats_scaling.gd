@@ -10,7 +10,7 @@ func _initialize() -> void:
 func _run() -> void:
 	game._start_game()
 
-	print("[TEST] Verifying Boss Stats Scaling (+10% Defense, +35% HP)...")
+	print("[TEST] Verifying drastic boss durability scaling...")
 
 	# Base HP check (Phase 1 / Base Constant)
 	print("  - BOSS_BASE_HP constant: %.1f (expected: 4860.0)" % game.BOSS_BASE_HP)
@@ -24,29 +24,22 @@ func _run() -> void:
 	game.score_total = 0
 	game.enemies_killed = 0
 
-	var hp1 = game._boss_hp_for_phase(1)
-	print("  - Phase 1 Boss HP: %.1f (expected: 4860.0)" % hp1)
-	assert(is_equal_approx(hp1, 4860.0), "Phase 1 HP mismatch")
+	var base_by_phase := {
+		1: float(game.BOSS_BASE_HP),
+		2: 8910.0,
+		3: 17280.0,
+		4: 25380.0,
+		5: 35100.0,
+		6: float(game.BOSS_BASE_HP) * float(game.BOSS6_HP_SCALE),
+		7: float(game.BOSS_BASE_HP) * float(game.BOSS7_HP_SCALE)
+	}
+	for phase in range(1, 8):
+		var hp: float = game._boss_hp_for_phase(phase)
+		var durability: float = game._boss_phase_durability_multiplier(phase)
+		var expected: float = float(base_by_phase[phase]) * durability
+		print("  - Phase %d Boss HP: %.1f (durability x%.2f)" % [phase, hp, durability])
+		assert(is_equal_approx(hp, expected), "Phase %d HP mismatch" % phase)
+		assert(durability >= 3.0, "Phase %d durability is not drastic" % phase)
 
-	var hp2 = game._boss_hp_for_phase(2)
-	print("  - Phase 2 Boss HP: %.1f (expected: 8910.0)" % hp2)
-	assert(is_equal_approx(hp2, 8910.0), "Phase 2 HP mismatch")
-
-	var hp3 = game._boss_hp_for_phase(3)
-	print("  - Phase 3 Boss HP: %.1f (expected: 17280.0)" % hp3)
-	assert(is_equal_approx(hp3, 17280.0), "Phase 3 HP mismatch")
-
-	var hp4 = game._boss_hp_for_phase(4)
-	print("  - Phase 4 Boss HP: %.1f (expected: 25380.0)" % hp4)
-	assert(is_equal_approx(hp4, 25380.0), "Phase 4 HP mismatch")
-
-	var hp5 = game._boss_hp_for_phase(5)
-	print("  - Phase 5 Boss HP: %.1f (expected: 35100.0)" % hp5)
-	assert(is_equal_approx(hp5, 35100.0), "Phase 5 HP mismatch")
-
-	var hp6 = game._boss_hp_for_phase(6)
-	print("  - Phase 6 Boss HP: %.1f (expected: 4860.0)" % hp6)
-	assert(is_equal_approx(hp6, 4860.0), "Phase 6 HP mismatch")
-
-	print("ALL_BOSS_STATS_SCALING_TESTS_OK")
+	print("ALL_BOSS_STATS_SCALING_TESTS_OK phases=7 min_durability=3.0")
 	quit(0)

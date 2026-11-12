@@ -73,16 +73,18 @@ func _run() -> void:
 	_check(is_equal_approx(ex.reforco_total, ex.REFORCO_COOLDOWN_PLAIN) and ex.reforco_remaining() > 14.0, "plain reinforced cooldown is not 15s")
 	_check(not game._try_arm_lacerante_empower(), "reforco re-armed during cooldown")
 	# ATK normal que acerta adianta a recarga, mas sem carta nao passa do piso de 4 s.
+	tough["hp"] = 1.0e9
+	tough["max_hp"] = 1.0e9
 	for _hit in range(200):
+		tough["pos"] = game.player_pos + Vector2(90, 0)
 		game._fire_lacerante(0, Vector2.RIGHT)
-		tough["hp"] = 900.0
 	var floor_left: float = ex.reforco_remaining()
 	_check(floor_left > 3.9 and floor_left <= 4.01, "attack refund broke the 4s floor (%.2f)" % floor_left)
 	game.cards_bought[game.CARD_INTERVALO_ID] = 10
 	ex.start_reforco_cooldown(false)
 	for _hit2 in range(200):
+		tough["pos"] = game.player_pos + Vector2(90, 0)
 		game._fire_lacerante(0, Vector2.RIGHT)
-		tough["hp"] = 900.0
 	_check(ex.reforco_remaining() < 1.0, "Intervalo Fraturado did not lower the floor (%.2f)" % ex.reforco_remaining())
 	game.cards_bought.erase(game.CARD_INTERVALO_ID)
 	ex.reforco_ready_at = 0.0
