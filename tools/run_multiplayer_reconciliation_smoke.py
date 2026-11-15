@@ -64,6 +64,7 @@ if __name__ == "__main__":
     trio = ["server", "host", "client"]
     run_scenario("ready", "multiplayer_lobby_integration_smoke", trio)
     run_scenario("spectator", "multiplayer_lobby_integration_smoke", trio, "spectator")
+    run_scenario("owner_leave", "multiplayer_lobby_integration_smoke", trio, "owner_leave")
     run_scenario("shop", "multiplayer_shop_wire_smoke", trio)
     run_scenario("boss1-rewind", "multiplayer_boss1_rewind_wire_smoke", trio)
     run_scenario("death-cycle", "multiplayer_death_cycle_wire_smoke", trio)

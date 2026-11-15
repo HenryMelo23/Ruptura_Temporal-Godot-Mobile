@@ -122,6 +122,30 @@ func _run() -> void:
 	_check(game.online_room_list.size() == 1, "Room list should parse public room metadata")
 	_check(String(Dictionary(game.online_room_list[0]).get("name", "")) == "Sala QA", "Room name should be preserved")
 	_check(bool(Dictionary(game.online_room_list[0]).get("locked", false)), "Locked room flag should be preserved")
+	game.online_relay_request = HTTPRequest.new()
+	game.add_child(game.online_relay_request)
+	game.ONLINE_RELAY_BASE_URL = "http://127.0.0.1:9"
+	game.mode = "online_find_room"
+	game.online_connected = false
+	game.online_room_list = [
+		{"code": "OLDER1", "name": "Old room"},
+		{"code": "KEEP01", "name": "Chosen room"}
+	]
+	game.lobby_client_selected = 1
+	game.online_room_list_last_requested_ms = Time.get_ticks_msec() - game.ONLINE_ROOM_LIST_REFRESH_INTERVAL_MS - 1
+	game._update_online_room_discovery()
+	_check(game.online_relay_action == "list", "Find screen should request rooms automatically after refresh interval")
+	_check(game.online_room_list.size() == 2, "Refresh should retain current rooms while request is in flight")
+	game.online_relay_request.cancel_request()
+	game._on_online_relay_request_completed(HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), JSON.stringify({
+		"rooms": [{"code": "KEEP01", "name": "Chosen room"}, {"code": "NEW001", "name": "Fresh room"}]
+	}).to_utf8_buffer())
+	_check(game.lobby_client_selected == 0, "Refresh should keep selection on the same room code when ordering changes")
+	_check(game.online_room_list.size() == 2, "Refresh should apply the new available room list")
+	game.mode = "multiplayer_menu"
+	game.online_room_list_last_requested_ms = 0
+	game._update_online_room_discovery()
+	_check(game.online_relay_action == "", "Discovery should stop when leaving the find screen")
 
 	game._online_lobby_state("ABCDEF", 2, 1)
 	_check(game.online_room_code == "ABCDEF", "Codigo da sala deve ser atualizado")

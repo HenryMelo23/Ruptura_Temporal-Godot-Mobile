@@ -9606,6 +9606,7 @@ func _process(delta: float) -> void :
 	_update_rain_audio_fade(delta)
 	_update_lobby_ready_resend()
 	_update_online_room_heartbeat(delta)
+	_update_online_room_discovery()
 	if is_multiplayer:
 		_update_network_interpolation(delta)
 		_update_revive_request(delta)
@@ -41076,20 +41077,34 @@ func _join_online_room() -> void :
 func _request_online_room_list() -> void :
 	if online_relay_request == null:
 		return
-	if online_connected:
+	if online_connected or online_relay_action != "" or _http_request_busy(online_relay_request):
 		return
 	online_relay_action = "list"
-	online_status = "BUSCANDO SALAS ONLINE..."
-	online_room_list.clear()
-	online_room_list_selected = 0
+	online_room_list_last_requested_ms = Time.get_ticks_msec()
+	if online_room_list.is_empty():
+		online_status = "BUSCANDO SALAS ONLINE..."
 	var err: = online_relay_request.request(ONLINE_RELAY_BASE_URL + "/rooms")
 	if err != OK:
 		online_status = "ERRO AO BUSCAR SALA"
+		online_relay_action = ""
+
+func _update_online_room_discovery() -> void:
+	if mode != "online_find_room" or online_connected or online_relay_request == null:
+		return
+	if online_relay_action != "" or _http_request_busy(online_relay_request):
+		return
+	if Time.get_ticks_msec() - online_room_list_last_requested_ms >= ONLINE_ROOM_LIST_REFRESH_INTERVAL_MS:
+		_request_online_room_list()
 
 func _join_online_room_code(code: String) -> void :
 	_read_online_join_inputs()
 	if online_relay_request == null:
 		online_status = "SERVIDOR ONLINE INDISPONIVEL"
+		return
+	if online_relay_action == "list":
+		online_relay_request.cancel_request()
+		online_relay_action = ""
+	elif online_relay_action != "" or _http_request_busy(online_relay_request):
 		return
 	var clean_code: = code.strip_edges().to_upper()
 	if clean_code == "":
@@ -41107,6 +41122,7 @@ func _join_online_room_code(code: String) -> void :
 	)
 	if err != OK:
 		online_status = "ERRO AO ENTRAR NA SALA"
+		online_relay_action = ""
 
 func _reset_online_room_state() -> void :
 	if online_relay_request != null:
@@ -41134,6 +41150,7 @@ func _reset_online_room_state() -> void :
 	online_local_ready_confirmed = false
 	online_room_list.clear()
 	online_room_list_selected = 0
+	online_room_list_last_requested_ms = 0
 	online_joining_room_code = ""
 	online_ready_last_sent_ms = 0
 	online_ready_pending_started_ms = 0
@@ -41240,7 +41257,7 @@ func _on_online_relay_request_completed(result: int, response_code: int, _header
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300 or typeof(payload) != TYPE_DICTIONARY:
 		if online_relay_action == "list":
 			online_room_list.clear()
-			online_status = "NENHUMA SALA ABERTA"
+			online_status = "SERVIDOR ONLINE INDISPONIVEL"
 			online_relay_action = ""
 		elif online_relay_action == "join":
 			online_status = "SALA INDISPONIVEL"
@@ -41251,7 +41268,16 @@ func _on_online_relay_request_completed(result: int, response_code: int, _header
 				mode = "online_create_room"
 		return
 	if online_relay_action == "list":
+		var selected_code: String = ""
+		if lobby_client_selected >= 0 and lobby_client_selected < online_room_list.size():
+			selected_code = str(Dictionary(online_room_list[lobby_client_selected]).get("code", ""))
 		online_room_list = Array(payload.get("rooms", []))
+		if selected_code != "":
+			for i in range(online_room_list.size()):
+				if str(Dictionary(online_room_list[i]).get("code", "")) == selected_code:
+					lobby_client_selected = i
+					break
+		lobby_client_selected = clampi(lobby_client_selected, 0, max(0, online_room_list.size() - 1))
 		online_room_list_selected = clampi(online_room_list_selected, 0, max(0, online_room_list.size() - 1))
 		online_status = "ESCOLHA UMA SALA" if not online_room_list.is_empty() else "NENHUMA SALA ABERTA"
 		online_relay_action = ""
@@ -41535,6 +41561,7 @@ func _on_peer_disconnected(id: int) -> void :
 		if shutdown_was_pending:
 			return
 		if owner_left:
+			print("ONLINE ROOM OWNER LEFT")
 			dedicated_room_owner_peer_id = 0
 			dedicated_room_shutdown_pending = true
 			if multiplayer_peer != null:
