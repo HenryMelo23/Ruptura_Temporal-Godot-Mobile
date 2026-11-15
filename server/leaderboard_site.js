@@ -289,7 +289,7 @@ function collectCards(runs) {
 function aggregateSnapshot(snapshot) {
   const runs = arrayOf(snapshot && (snapshot.runs || snapshot.recent));
   const auditedRuns = arrayOf(snapshot && snapshot.auditedRuns).length ? arrayOf(snapshot && snapshot.auditedRuns) : runs;
-  const profiles = playerAggregates(runs);
+  const profiles = playerAggregates(runs).filter((profile) => safeNumber(profile.best.score) > 0);
   const bestScore = [...runs].sort((a, b) => safeNumber(b.score) - safeNumber(a.score))[0] || null;
   const bestTime = [...runs].sort((a, b) => safeNumber(b.durationSeconds) - safeNumber(a.durationSeconds))[0] || null;
   const bestBoss = [...runs].sort((a, b) => safeNumber(b.bossDamage) - safeNumber(a.bossDamage))[0] || null;
@@ -706,53 +706,50 @@ function signatureList(items, tone) {
 
 function renderStory(snapshot) {
   const analytics = aggregateSnapshot(snapshot);
-  const chapters = [
-    ["O primeiro rasgo", "Geovana encontra uma ruptura que altera habito, tempo e memoria. Cada run e uma tentativa de atravessar uma regra nova sem perder o proprio corpo no processo."],
-    ["A ramificacao da Chaga", "A fase 6 e uma abertura alternativa, uma contaminacao inicial que pode substituir ou interromper a primeira linha antes da campanha seguir para as camadas seguintes."],
-    ["As manifestacoes", "Cada manifestacao e uma forma diferente de negociar com a Ruptura. Eletrica acumula energia, Lacerante converte risco em pressao, Prismatica domina angulos, Parasitica contamina a arena e Gravitante controla o espaco."],
-    ["O observatorio", "Este site le as runs como documentos. Tempo, dano, escolhas, cartas e posicoes mostram onde o jogador dominou a partida e onde a fase obrigou uma decisao ruim."]
-  ];
   const content = `
-    <section class="lore-hero">
+    <section class="lore-hero story-hero">
       <div>
-        <p class="eyebrow">ARQUIVO // RUPTURA TEMPORAL</p>
-        <h2>A campanha nao e uma linha reta.</h2>
-        <p>A fase 6 funciona como ramificacao inicial. Por isso o observatorio nao considera "chegar na fase 6" mais distante do que chegar na fase 5; ele interpreta a Chaga como uma abertura alternativa dentro do primeiro trecho da campanha.</p>
+        <p class="eyebrow">ORIGEM REAL / HISTÓRIA FICTÍCIA</p>
+        <h2>Até onde você iria por quem ama?</h2>
+        <p>Essa pergunta veio antes do código. Ruptura Temporal nasceu como uma homenagem a Geovana e virou uma história sobre amor, luto e o custo de tentar desfazer uma perda.</p>
+        <p><a class="button primary" href="#origem">Conheça a origem ↓</a> <a class="button" href="#universo">Entre no universo ↓</a></p>
       </div>
       <aside>
-        <b>${formatNumber(analytics.runs.length)}</b>
-        <span>expedicoes preservadas</span>
-        <small>Dados vivos: builds, decks, dano, fase, bosses e rotas de cada jogador.</small>
+        <small>CAMADAS DE SABEDORIA</small>
+        <b>03</b>
+        <span>anos construindo em Pygame</span>
+        <small>Um sonho pessoal virou uma forma de estudar, criar e medir o próprio aprendizado. Em 2026, o projeto ganhou uma nova versão em Godot.</small>
       </aside>
     </section>
-    <section class="story-grid">
-      ${chapters.map(([title, text], index) => `<article>
-        <span>${String(index + 1).padStart(2, "0")}</span>
-        <h3>${escapeHtml(title)}</h3>
-        <p>${escapeHtml(text)}</p>
-      </article>`).join("")}
+    <section class="terminal-panel story-chapter" id="origem">
+      <p class="eyebrow">01 / A ORIGEM REAL</p>
+      <h2>Uma homenagem antes de ser um jogo</h2>
+      <p>Henrique queria impressionar a menina de quem gostava. Imaginou uma história fictícia de amor sobre os dois e, no começo, pensou em terminar o jogo com um pedido de casamento. Escolheu um roguelike com bullet hell, embora Geovana preferisse jogos mais calmos. Quando ela mal conseguiu passar da primeira fase, o pedido deixou de ser o destino do projeto. A homenagem permaneceu.</p>
+      <p>O primeiro Ruptura foi feito em Python com Pygame, incluindo um motor gráfico construído pelo próprio Henrique. Durante três anos, cada disciplina da faculdade encontrou um lugar no projeto: programação ensinou a construir, estruturas de dados ajudaram a organizar e otimizar, redes abriu a possibilidade de jogar junto. A matéria de Tópicos Avançados em Programação 2 ajudou a estruturar rotina e trabalho em equipe.</p>
+      <p>Em 2026, a vontade de levar o jogo também ao público de celular motivou a passagem para Godot. A IA entrou como ferramenta para portar, polir e ampliar o que já existia. Ruptura continua sendo a maior homenagem que Henrique fez a alguém e um registro das coisas que aprendeu para construí-la.</p>
     </section>
-    <section class="observatory-grid">
-      <div class="terminal-panel span-7">
-        ${sectionHeader("Leitura narrativa", "O que os dados contam", "Os melhores registros nao mostram so quem sobreviveu: mostram qual escolha sustentou a pressao.")}
-        <div class="insight-grid">
-          ${analytics.bestProgress ? `<article><b>Avanco mais profundo</b><span>${escapeHtml(textValue(analytics.bestProgress.player, "Jogador"))}</span><small>${escapeHtml(phaseLabel(analytics.bestProgress))} com ${formatDuration(analytics.bestProgress.durationSeconds)}</small></article>` : emptyState("Sem progresso", "Ainda nao ha runs elegiveis.")}
-          ${analytics.bestBoss ? `<article><b>Maior pressao em chefe</b><span>${escapeHtml(textValue(analytics.bestBoss.player, "Jogador"))}</span><small>${formatNumber(analytics.bestBoss.bossDamage)} dano em boss</small></article>` : emptyState("Sem boss", "Nenhum dano de boss registrado.")}
-          ${analytics.bestTime ? `<article><b>Maior resistencia</b><span>${escapeHtml(textValue(analytics.bestTime.player, "Jogador"))}</span><small>${formatDuration(analytics.bestTime.durationSeconds)} vivo</small></article>` : emptyState("Sem tempo", "Nenhum tempo registrado.")}
-        </div>
-      </div>
-      <div class="terminal-panel span-5">
-        ${sectionHeader("Campanha", "Ordem interpretada")}
-        <ol class="route-list">
-          <li><b>Fase 1 ou Fase 6</b><span>Abertura sorteada/alternada.</span></li>
-          <li><b>Fase 2</b><span>Escalada fria e controle de espaco.</span></li>
-          <li><b>Fase 6 ou Fase 3</b><span>Se a Chaga nao veio no inicio, ela pode entrar aqui.</span></li>
-          <li><b>Fase 4</b><span>Ruptura de gravidade e pressao mecanica.</span></li>
-          <li><b>Fase 5</b><span>UMBRA, limite real de campanha.</span></li>
-        </ol>
-      </div>
-    </section>`;
-  return pageShell({ title: "ARQUIVO NARRATIVO", subtitle: "Historia da ruptura, das fases e das escolhas dos operadores.", active: "story", analytics, content, pageClass: "story-page" });
+    <section class="terminal-panel story-chapter" id="universo">
+      <p class="eyebrow">02 / DENTRO DO JOGO</p>
+      <h2>O projeto que recebeu o nome de Ruptura Temporal</h2>
+      <p>Em sua dimensão, Geovana é uma cientista brilhante. Henrique, seu marido, morre em um acidente de trabalho ligado a um projeto de portal ainda sem nome. Tomada pelo luto, ela muda o rumo da pesquisa e da equipe sem o conhecimento do governo. O novo objetivo é romper o espaço-tempo e impedir a morte dele.</p>
+      <p>O general Aires, metódico, questiona a responsabilidade de transformar um projeto governamental em uma busca pessoal. Ao tentar impedi-la, danifica e desregula a máquina. A explosão acontece de fora para dentro e puxa a instalação inteira. O destino das outras pessoas absorvidas permanece desconhecido.</p>
+      <p>Na travessia, Geovana recebe uma carga de energia que responde ao subconsciente. Elétrica, Lacerante, Parasítica, Prismática e Gravitante são versões dimensionais dela, unidas pelo impulso de reconstruir a máquina, voltar para casa ou salvar Henrique.</p>
+    </section>
+    <section class="observatory-grid story-conflict">
+      <article class="terminal-panel span-7">
+        <p class="eyebrow">03 / DUAS RESPOSTAS AO LUTO</p>
+        <h2>A Geovana que atravessa</h2>
+        <p>A protagonista não aceita que o fluxo do universo tenha levado Henrique. Ela segue adiante mesmo quando descobre que romper outra realidade pode destruí-la. Para ela, desistir também tem um custo impossível.</p>
+      </article>
+      <article class="terminal-panel span-5">
+        <p class="eyebrow">A GEOVANA QUE IMPEDE</p>
+        <h2>Umbra</h2>
+        <p>Umbra também perdeu Henrique. Foi a primeira Geovana a interromper a sequência de tentar salvá-lo. Ela se opõe à protagonista porque conhece o preço que um universo inocente pode pagar.</p>
+        <details class="story-reveal"><summary>Conhecer a origem da Umbra</summary><p>Umbra chegou até Henrique, mas a realidade recusou aquele reencontro. O universo se fragmentou e ele foi perdido outra vez, junto com tudo ao redor. Ela decidiu impedir que outras Geovanas causassem essa dor duas vezes. Quando uma Geovana derrota outra, recebe sua energia. Umbra conquistou poder assim, mas também absorve a dor das versões que derrota.</p></details>
+      </article>
+    </section>
+    <section class="story-outro"><p class="eyebrow">O DESFECHO PERTENCE AO JOGADOR</p><h2>Qual resposta você escolheria?</h2><p>A história apresenta as razões de cada Geovana. O que acontece no fim fica para quem atravessa a Ruptura.</p><a class="button primary" href="/leaderboard/downloads">Jogar Ruptura Temporal ↗</a></section>`;
+  return pageShell({ title: "A HISTÓRIA DA RUPTURA", subtitle: "A origem real, o acidente e duas respostas ao mesmo luto. Os finais ficam no jogo.", active: "story", analytics, content, pageClass: "story-page" });
 }
 
 function renderCatalog(snapshot, cardAssetUrl) {
@@ -1450,6 +1447,8 @@ main{position:relative;width:min(var(--content-width),100%);margin:auto;padding:
 .dual-signatures{display:grid;gap:18px}.dual-signatures h3{margin:0 0 8px;font-size:15px;text-transform:uppercase}.signature-list{display:grid;gap:8px}.signature-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.signature-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.signature-row b{color:var(--tone)}.signature-row i{grid-column:1/-1;height:3px;background:var(--tone);box-shadow:0 0 12px var(--tone)}
 .lore-hero{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;margin-bottom:24px;padding:30px;border:1px solid var(--line-strong);background:linear-gradient(115deg,rgba(37,244,229,.10),rgba(6,12,20,.94),rgba(85,239,139,.08));clip-path:polygon(18px 0,100% 0,100% calc(100% - 18px),calc(100% - 18px) 100%,0 100%,0 18px)}.lore-hero h2,.catalog-intro h2{margin:0 0 12px;font-family:var(--font-display);font-size:clamp(34px,5vw,72px);line-height:.96;text-transform:uppercase}.lore-hero p,.catalog-intro p{max-width:850px;color:#c5d5df;line-height:1.65}.lore-hero aside{display:grid;align-content:center;gap:6px;padding:20px;border:1px solid var(--line);background:rgba(2,5,10,.38)}.lore-hero aside b{color:var(--rupture-cyan);font:900 52px var(--font-mono)}.lore-hero aside span{text-transform:uppercase;font-weight:900}.lore-hero aside small{color:var(--text-soft);line-height:1.45}
 .story-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:24px}.story-grid article,.insight-grid article{padding:16px;border:1px solid var(--line);background:rgba(10,19,30,.76)}.story-grid span{color:var(--rupture-cyan);font:900 22px var(--font-mono)}.story-grid h3,.insight-grid b{display:block;margin:10px 0 8px;font-family:var(--font-display);font-size:22px;text-transform:uppercase}.story-grid p,.insight-grid small{color:var(--text-soft);line-height:1.52}.route-list{display:grid;gap:10px;margin:0;padding:0;list-style:none}.route-list li{display:grid;gap:3px;padding:12px;border-left:2px solid var(--rupture-cyan);background:rgba(255,255,255,.025)}.route-list span{color:var(--text-soft)}
+.story-hero{background:linear-gradient(115deg,rgba(187,137,84,.15),rgba(6,12,20,.96) 58%,rgba(92,255,143,.08))}.story-hero h2{max-width:800px;text-transform:none;line-height:1.02}.story-hero aside b{color:var(--survival-yellow)}.story-hero .button{margin:8px 8px 0 0}.story-chapter{margin:0 0 24px;border-left:3px solid var(--survival-yellow);scroll-margin-top:110px}.story-chapter h2,.story-conflict h2,.story-outro h2{margin:4px 0 18px;font-family:var(--font-display);font-size:clamp(28px,3.2vw,46px);line-height:1.08}.story-chapter p:not(.eyebrow),.story-conflict p:not(.eyebrow),.story-outro p:not(.eyebrow){max-width:850px;color:#c5d5df;font-size:15px;line-height:1.75}.story-conflict{margin-bottom:24px}.story-conflict article:first-child{border-top:3px solid var(--rupture-cyan)}.story-conflict article:last-child{border-top:3px solid var(--progress-green)}.story-reveal{margin-top:20px;padding:16px;border:1px solid var(--line-strong);background:rgba(92,255,143,.035)}.story-reveal summary{cursor:pointer;color:var(--progress-green);font-weight:800}.story-reveal summary:focus-visible{outline:2px solid var(--progress-green);outline-offset:4px}.story-reveal p{margin-bottom:0}.story-outro{padding:28px;border:1px solid var(--line-strong);background:linear-gradient(100deg,rgba(37,244,229,.08),rgba(10,19,30,.88) 55%,rgba(187,137,84,.1))}.story-outro .button{margin-top:14px}
+@media(max-width:760px){.story-chapter p:not(.eyebrow),.story-conflict p:not(.eyebrow),.story-outro p:not(.eyebrow){font-size:14px}.story-outro{padding:20px}}
 .catalog-intro{margin-bottom:24px;padding:26px;border-left:3px solid var(--rupture-magenta);background:linear-gradient(90deg,rgba(255,72,189,.09),rgba(10,19,30,.82))}.catalog-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-bottom:22px}.catalog-deck{grid-template-columns:repeat(3,minmax(0,1fr))}
 .insight-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.insight-grid span{display:block;color:var(--rupture-cyan);font:900 19px var(--font-mono);overflow-wrap:anywhere}
 .operator-highlight{display:grid;align-content:start;gap:7px;min-height:196px;padding:18px;border:1px solid var(--line);background:var(--surface)}.operator-avatar{width:64px;height:64px}.operator-highlight>span{color:var(--text-soft);font-size:11px;text-transform:uppercase}.operator-highlight b{font-size:20px}.operator-highlight strong{color:var(--tone);font:900 26px var(--font-mono)}.operator-highlight small{color:var(--text-soft);line-height:1.4}

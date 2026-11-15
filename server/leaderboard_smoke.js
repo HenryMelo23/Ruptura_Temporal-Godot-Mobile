@@ -177,7 +177,7 @@ async function run() {
     assert.strictEqual(removedStream.status, 410, "removed stream endpoint should return 410");
     assert(JSON.parse(removedStream.body.toString("utf8")).error.includes("streaming disabled"), "removed stream response should explain the disabled state");
     const emptyHome = (await request("GET", "/leaderboard")).body.toString("utf8");
-    assert(emptyHome.includes("CENTRAL DO OBSERVATORIO") && emptyHome.includes("Aguardando expedições elegíveis."), "empty dashboard state missing");
+    assert(emptyHome.includes("CENTRAL DO OBSERVATORIO") && emptyHome.includes("Aguardando expedições com mérito."), "empty dashboard state missing");
     assertCleanHtml("empty home", emptyHome);
     const nowUnix = Math.floor(Date.now() / 1000);
     const payload = {
@@ -488,7 +488,8 @@ async function run() {
     assert(profile.includes("DOSSIE DO OPERADOR") && profile.includes("Build mais usada") && profile.includes("Gravitante + Sanguinaria"), "player profile missing");
     assert(loserProfile.includes("LOSER") && loserProfile.includes("Observatorio viu a gambiarra temporal"), "tampered player profile loser warning missing");
     assert(rankings.includes("MATRIZ COMPETITIVA") && rankings.includes("Resistir ao confronto") && !rankings.includes("Speedrun de progressao"), "merit rules missing or time competition retained");
-    assert(story.includes("ARQUIVO NARRATIVO") && story.includes("ramificacao inicial"), "story page missing");
+    assert(story.includes("A HISTÓRIA DA RUPTURA") && story.includes("Até onde você iria por quem ama?") && story.includes("O DESFECHO PERTENCE AO JOGADOR"), "story page missing");
+    assert(!story.includes("ramificacao inicial") && !story.includes("céus caem"), "story must not retain old map order or reveal an ending");
     assert(catalog.includes("CATALOGO HISTORICO") && catalog.includes("Cartas mais presentes"), "catalog page missing");
     assert(summary.includes("RELATORIO DE EXPEDICAO") && summary.includes("Mapa de calor e dano") && summary.includes("Espreitador"), "run summary telemetry missing");
     assert(summary.includes("Causa da morte") && summary.includes("Espreitador — contato"), "run death cause feedback missing");
