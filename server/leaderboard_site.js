@@ -739,7 +739,7 @@ function renderStory(snapshot) {
       <article class="terminal-panel span-7">
         <p class="eyebrow">03 / DUAS RESPOSTAS AO LUTO</p>
         <h2>A Geovana que atravessa</h2>
-        <p>A protagonista não aceita que o fluxo do universo tenha levado Henrique. Ela segue adiante mesmo quando descobre que romper outra realidade pode destruí-la. Para ela, desistir também tem um custo impossível.</p>
+        <p>A protagonista não aceita que o fluxo do universo tenha levado Henrique. Mesmo alertada de que romper outra realidade pode destruí-la, ela duvida dessa ameaça e segue em frente. Para ela, desistir também tem um custo impossível.</p>
       </article>
       <article class="terminal-panel span-5">
         <p class="eyebrow">A GEOVANA QUE IMPEDE</p>
