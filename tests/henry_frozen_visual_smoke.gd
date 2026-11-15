@@ -60,8 +60,7 @@ func _run() -> void:
 	game.unlock_notifications.clear()
 	game.enemies.clear()
 	game.enemy_bullets.clear()
-	game.geovana_bark_controller.active_text = ""
-	game.geovana_bark_controller.active_timer = 0.0
+	game.speech_bubbles.clear()
 	game.gfx_screen_shake = false
 	game.vol_master = 0.0
 	await _capture("idle")

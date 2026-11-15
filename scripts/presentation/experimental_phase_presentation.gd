@@ -16,7 +16,7 @@ static func draw_world(game: Node2D, camera: Vector2, viewport: Vector2) -> void
 
 static func _draw_landmarks(game: Node2D, camera: Vector2, viewport: Vector2) -> void:
 	# Illustrated landmarks are integrated into each terrain atlas.
-	if game.experimental_phase_controller.terrain_phase() in [1, 2, 3, 4, 5, 6, 7]:
+	if game.experimental_phase_controller.terrain_phase() in [1, 2, 3, 4, 5, 6, 7, 8]:
 		return
 	var visible_rect := Rect2(Vector2(-100.0, -100.0), viewport + Vector2(200.0, 200.0))
 	var cold: bool = game.experimental_phase_controller.terrain_phase() == 2

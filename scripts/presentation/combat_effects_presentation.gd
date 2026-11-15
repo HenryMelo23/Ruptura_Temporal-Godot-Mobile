@@ -159,6 +159,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	RTExecutionCamera.apply(game, viewport, camera)
 	RTRewindCamera.apply(game, viewport, camera)
 	RTDeathCamera.apply(game, viewport, camera)
+	RTRationalVfx.apply(game, viewport, camera)
 	Lightning.begin_frame(game, camera)
 	var map_texture = null if game._merchant_dimension().active else game._current_map_texture()
 	if RTFrameProfiler.skipped("map"):
@@ -265,6 +266,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_parasite_spit_zones(camera)
 	game._draw_phase6_pustule_pools(camera)
 	game._draw_phase7_ember_patches(camera)
+	if game.current_phase == RTSertaoController.PHASE:
+		RTSertaoPresentation.draw_ground(game, camera)
 	game._draw_boss7_flame_waves(camera)
 	game._draw_boss7_ultimate(camera)
 	game._draw_boss7_ground_indicators(camera)
@@ -333,6 +336,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game.current_phase != 6:
 		game._draw_boss_world(camera)
 		game._draw_crepuscular_boss_cracks(camera)
+	if game.current_phase == RTSertaoController.PHASE:
+		RTSertaoPresentation.draw_bullets(game, camera)
 	for gravity_secondary in game.manifestation_secondaries:
 		if String(gravity_secondary.get("kind", "")) == "gravitante":
 			Gravity.ultimate(game, gravity_secondary, camera)
@@ -374,6 +379,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game._is_umbra_miasma_active():
 		game._draw_umbra_miasma_overlay(viewport, camera)
 	game._draw_apolo_phase5_exhibition_world(camera)
+	if game.current_phase == RTSertaoController.PHASE:
+		RTSertaoPresentation.draw_screen(game, viewport, camera)
 	Lightning.end_frame(game)
 	HenryFire.draw_entrance(game, camera, viewport)
 	RTWorldLighting.draw_screen(game, viewport, game.PhaseMapPresentation.surface_for(game))
@@ -403,6 +410,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game.hud_feedback.overlay(game, viewport)
 	if not RTFrameProfiler.skipped("hud"):
 		game._draw_hud(viewport)
+	RTSpectreVfx.draw_toasts(game, viewport)
 	RTFrameProfiler.mark("d_hud")
 	game._draw_apolo_phase5_exhibition_overlay(viewport)
 	game._draw_boss1_rewind_overlay(viewport, camera)
@@ -791,16 +799,10 @@ static func _draw_aura_world(game: Node2D, camera: Vector2) -> void :
 	if name == "Crepuscular":
 		game._draw_crepuscular_player_aura(camera, player_screen)
 	elif name == "Sanguinaria":
-		game._draw_sanguinaria_hunt_path(camera)
 		game._draw_sanguinaria_blood_drop(camera)
+	RTSpectreVfx.draw_world(game, camera)
 	if name == "Racional":
 		game._draw_rational_aura_world(camera, player_screen, color)
-	elif name == "Vanguarda" and float(game.aura_state.get("vanguard_ring", 0.0)) > 0.0:
-		game.draw_circle(player_screen, 150.0, Color(1.0, 0.1, 0.02, 0.07))
-		for i in range(24):
-			var angle = i * TAU / 24.0 + sin(game.time_alive * 3.0 + i) * 0.08
-			var foot: Vector2 = player_screen + Vector2.from_angle(angle) * 145.0
-			game.draw_line(foot, foot - Vector2(0, 12.0 + sin(game.time_alive * 9.0 + i) * 7.0), Color(1.0, 0.32, 0.04, 0.72), 3.0)
 	elif name == "Abissal" and float(game.aura_state.get("abyss_tide", 0.0)) > 0.0:
 		for i in range(5): game.draw_arc(player_screen, 190.0 - i * 27.0, game.time_alive * (0.4 + i * 0.12), game.time_alive * (0.4 + i * 0.12) + PI * 1.55, 54, Color(color.r, color.g, color.b, 0.26 - i * 0.025), 5.0 - i * 0.5)
 	elif name == "Insana":
@@ -819,16 +821,9 @@ static func _draw_aura_world(game: Node2D, camera: Vector2) -> void :
 			game.draw_arc(p, (16.0 if boss_particle else 12.0) + pulse * 3.0, - game.time_alive * 2.8, TAU - game.time_alive * 2.8, 20, Color(1.0, 0.62, 0.08, 0.78) if boss_particle else Color(1.0, 0.34, 0.08, 0.56), 2.5 if boss_particle else 2.0)
 	for enemy in game.enemies:
 		var p = Vector2(enemy["pos"]) - camera
-		if float(enemy.get("aura_burn", 0.0)) > 0.0:
-			for i in range(5): game.draw_line(p + Vector2(-18 + i * 9, 22), p + Vector2(-14 + i * 8, -18 - sin(game.time_alive * 11.0 + i) * 8.0), Color(1.0, 0.3 + i * 0.06, 0.02, 0.66), 3.0)
 		if float(enemy.get("aura_null", 0.0)) > 0.0:
 			game.draw_arc(p, 40.0, - game.time_alive * 2.0, TAU - game.time_alive * 2.0, 40, Color(0.76, 0.96, 1.0, 0.84), 3.0)
 			game.draw_circle(p, 30.0, Color(0.0, 0.04, 0.08, 0.2))
-		if float(enemy.get("aura_prophecy", 0.0)) > 0.0 or int(game.aura_state.get("prophecy_uid", -1)) == int(enemy.get("uid", -2)):
-			var eye = p + Vector2(0, -58)
-			game.draw_arc(eye, 15.0, PI * 0.12, PI * 0.88, 18, Color(1.0, 0.9, 0.32, 0.92), 3.0)
-			game.draw_arc(eye, 15.0, PI * 1.12, PI * 1.88, 18, Color(1.0, 0.9, 0.32, 0.92), 3.0)
-			game.draw_circle(eye, 4.0, Color.WHITE)
 		if float(enemy.get("aura_wound", 0.0)) > 0.0:
 			for i in range(3): game.draw_line(p + Vector2(-18 + i * 12, -28), p + Vector2(-4 + i * 12, 24), Color(1.0, 0.04, 0.1, 0.82), 3.0)
 
@@ -962,23 +957,8 @@ static func _draw_rational_aura_world(game: Node2D, camera: Vector2, player_scre
 		var still_ratio: float = clampf(still / 4.5, 0.0, 1.0)
 		game._draw_rational_analysis_field(player_screen, still_ratio, color)
 
-	# 2. Dilatação Temporal (Active Dilation - 8s)
-	if dilation > 0.0:
-		var flash: float = clampf(game.rational_dilation_flash / 0.55, 0.0, 1.0)
-		game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.02, 0.22, 0.48, 0.16 + flash * 0.14), true)
-		game._draw_rational_border_oscilloscope(viewport, color, 0.65 + flash * 0.35, false)
-		for i in range(6):
-			game.draw_arc(player_screen, 48.0 + i * 30.0 + sin(game.time_alive * 4.4 + i) * 6.0, - game.time_alive * (1.2 + i * 0.08), TAU - game.time_alive * (1.2 + i * 0.08), 72, Color(color.r, color.g, color.b, 0.2 - i * 0.018), 2.0)
-
-	# 3. Rebote Temporal (Active Rebound - 3s after dilation)
-	elif rebound > 0.0:
-		var rebound_pulse: float = 0.5 + 0.5 * sin(game.time_alive * 12.0)
-		var amber_color: Color = Color(1.0, 0.48, 0.08)
-		game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.38, 0.14, 0.02, 0.12 + rebound_pulse * 0.08), true)
-		game._draw_rational_border_oscilloscope(viewport, amber_color, 0.7 + rebound_pulse * 0.3, true)
-		game._draw_rational_rebound_warning(player_screen, amber_color)
-
-	game._draw_rational_trail(camera, color)
+	# 2-3. Dilatacao (mundo lento, copias, raios) e Rebote: RTRationalVfx.
+	RTRationalVfx.draw_world(game, camera, player_screen)
 	if ready and dilation <= 0.0 and rebound <= 0.0:
 		game._draw_rational_ready_sparks(player_screen, color)
 

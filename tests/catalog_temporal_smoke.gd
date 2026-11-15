@@ -62,7 +62,7 @@ func _run() -> void:
 		if items.size() > game._catalog_visible_count(viewport):
 			game.catalog_selected = items.size() - 1
 			game._catalog_ensure_selected_visible(viewport)
-			_check(game.catalog_scroll_index > 0, "scroll_did_not_advance_%d" % tab_index)
+			_check(float(game.catalog_scroll_px) > 0.0, "scroll_did_not_advance_%d" % tab_index)
 			game._catalog_page_relative(-1, viewport)
 			_check(game.catalog_selected < items.size() - 1, "page_back_did_not_move_%d" % tab_index)
 	game._catalog_reset_tab(1)

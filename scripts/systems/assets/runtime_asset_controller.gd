@@ -162,6 +162,22 @@ const PHASE_TEXTURE_SPECS := {
 		"boss7_dive": ["boss7_fenix/fenix_down_01.png", "boss7_fenix/fenix_down_02.png", "boss7_fenix/fenix_down_03.png", "boss7_fenix/fenix_down_04.png"],
 		"boss7_core": ["boss7_fenix/fenix_egg_01.png", "boss7_fenix/fenix_egg_02.png", "boss7_fenix/fenix_egg_03.png", "boss7_fenix/fenix_egg_04.png"],
 	},
+	8: {
+		"s8_jabuti": ["sertao/s8_jabuti_0.png", "sertao/s8_jabuti_1.png", "sertao/s8_jabuti_2.png", "sertao/s8_jabuti_3.png"],
+		"s8_mandacaru": ["sertao/s8_mandacaru_0.png", "sertao/s8_mandacaru_1.png", "sertao/s8_mandacaru_2.png", "sertao/s8_mandacaru_3.png"],
+		"s8_morteiro": ["sertao/s8_morteiro_0.png", "sertao/s8_morteiro_1.png", "sertao/s8_morteiro_2.png", "sertao/s8_morteiro_3.png"],
+		"s8_piao": ["sertao/s8_piao_0.png", "sertao/s8_piao_1.png", "sertao/s8_piao_2.png", "sertao/s8_piao_3.png"],
+		"s8_cangaceiro": ["sertao/s8_cangaceiro_0.png", "sertao/s8_cangaceiro_1.png", "sertao/s8_cangaceiro_2.png", "sertao/s8_cangaceiro_3.png", "sertao/s8_cangaceiro_4.png", "sertao/s8_cangaceiro_5.png", "sertao/s8_cangaceiro_6.png", "sertao/s8_cangaceiro_7.png", "sertao/s8_cangaceiro_8.png", "sertao/s8_cangaceiro_9.png", "sertao/s8_cangaceiro_10.png", "sertao/s8_cangaceiro_11.png", "sertao/s8_cangaceiro_12.png", "sertao/s8_cangaceiro_13.png", "sertao/s8_cangaceiro_14.png", "sertao/s8_cangaceiro_15.png"],
+		"s8_egg": ["sertao/s8_egg_0.png", "sertao/s8_egg_1.png"],
+		"boss8_walk": ["sertao/boss8_walk_0.png", "sertao/boss8_walk_1.png", "sertao/boss8_walk_2.png", "sertao/boss8_walk_3.png"],
+		"boss8_cast": ["sertao/boss8_cast_0.png", "sertao/boss8_cast_1.png", "sertao/boss8_cast_2.png", "sertao/boss8_cast_3.png"],
+		"boss8_retract": ["sertao/boss8_retract_0.png", "sertao/boss8_retract_1.png"],
+		"boss8_roll": ["sertao/boss8_roll_0.png", "sertao/boss8_roll_1.png"],
+		"boss8_eclipse": ["sertao/boss8_eclipse_0.png", "sertao/boss8_eclipse_1.png", "sertao/boss8_eclipse_2.png", "sertao/boss8_eclipse_3.png"],
+		"boss8_death": ["sertao/boss8_death_0.png", "sertao/boss8_death_1.png", "sertao/boss8_death_2.png", "sertao/boss8_death_3.png"],
+		"boss8_hurt": ["sertao/boss8_hurt_0.png"],
+		"boss8_sun": ["sertao/boss8_sun_0.png"],
+	},
 }
 
 

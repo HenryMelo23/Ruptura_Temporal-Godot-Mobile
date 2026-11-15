@@ -58,9 +58,7 @@ func _run() -> void:
 	game.player_start_down_fall_timer = 0.0
 	game.player_start_down_landing_timer = 0.0
 	game.player_pos = Vector2(780, 470)
-	game.geovana_bark_controller.active_text = ""
-	game.geovana_bark_controller.active_timer = 0.0
-	game.geovana_bark_controller.next_ambient_at = INF
+	game.speech_bubbles.clear()
 	game.unlock_notifications.clear()
 	game.enemies.clear()
 	game._prepare_phase_texture_assets(6)

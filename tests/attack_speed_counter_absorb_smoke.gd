@@ -82,6 +82,11 @@ func _run() -> void:
 	var reflected: bool = game._try_reflect_shield_enemy_bullet(shield, {"dir": Vector2.RIGHT, "damage": 80.0})
 	_check(reflected, "Shield reflector did not reflect a frontal shot")
 	_check(game.enemy_bullets.any(func(b): return String(b.get("type", "")) == "reflected_player"), "Shield reflector did not spawn a reflected projectile")
+	# O reflexo volta na velocidade do tiro do jogador, nao na de um tiro inimigo.
+	for b in game.enemy_bullets:
+		if String(b.get("type", "")) == "reflected_player":
+			_check(is_equal_approx(float(b.get("speed_mult", 0.0)) * game.ENEMY_BULLET_BASE_SPEED, game.BULLET_SPEED), "reflected projectile speed differs from the player projectile")
+			_check(is_equal_approx(float(b.get("life", 0.0)) * game.BULLET_SPEED, game.SHIELD_REFLECTOR_REFLECT_RANGE), "reflected projectile range changed")
 
 	game.current_phase = 1
 	game.boss_active = true

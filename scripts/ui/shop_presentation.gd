@@ -363,7 +363,7 @@ func card_stat_chips(card_name: String) -> Array:
 			return ["20s MARCA", "RAIZ/LOG"]
 		"Escolha Adiada":
 			return ["RESERVA 1"]
-		"TrÃ©gua Regenerativa":
+		"Trégua Regenerativa":
 			return ["6s SEM DANO", "+REGEN"]
 		"Cinzas da Escolha":
 			return ["QUEIMAR", "+PESO FUTURO"]
@@ -371,9 +371,9 @@ func card_stat_chips(card_name: String) -> Array:
 			return ["OVERHEAL", "<35% LIBERA"]
 		"Casulo Reativo":
 			return ["3 HITS/2.2s", "-DANO"]
-		"Passagem IntangÃ­vel":
+		"Passagem Intangível":
 			return ["POS-TP", "SEM CONTATO"]
-		"Ã‚ncora Vital":
+		"Âncora Vital":
 			return ["POS-DANO", "CURA EM AREA"]
 		"Inercia Cronal":
 			return ["-8% CONTROLE", "-18% EMPURRO"]
@@ -411,7 +411,7 @@ func card_stat_chips(card_name: String) -> Array:
 			return ["+6% COMUNS", "RETROATIVA"]
 		"Necrocronismo":
 			return ["12 ABATES", "ECO + IMPLOSAO"]
-		"CoraÃ§Ã£o de AntimatÃ©ria":
+		"Coração de Antimatéria":
 			return ["CARGA DANO", "IMPLOSAO"]
 		"Cofre do Excesso":
 			return ["OVERKILL", "ELITE/BOSS"]
@@ -723,14 +723,14 @@ func draw(g, viewport: Vector2) -> void:
 		if g._is_empty_shop_slot(card):
 			label = "VAGA VAZIA"
 		if g._shop_purchase_animating():
-			label = "FECHANDO NEGOCIO" if workshop else "ENVIANDO AO BRACELETE"
+			label = "FECHANDO NEGÓCIO" if workshop else "ENVIANDO AO BRACELETE"
 		elif busy():
 			label = {"burn": "REDUZINDO A CINZAS", "reroll": "RECALIBRANDO VISOR" if not workshop else "REMEXENDO O ESTOQUE", "lock": "RESERVA FIXADA", "unlock": "RESERVA LIBERADA"}.get(action, "AGUARDE")
 		button(g, areas.buy, label, Color(0.38, 0.95, 0.57), enabled and g.score >= price and not g._is_empty_shop_slot(card))
 	var exit_label: String = "VOLTAR AO CAMPO"
 	if workshop:
 		# Fechar o balcao nao tira ninguem da oficina: a saida e o portal.
-		exit_label = "SAIR DO BALCAO"
+		exit_label = "SAIR DO BALCÃO"
 	elif g.is_multiplayer:
 		exit_label = "PRONTO"
 	button(g, areas.exit, exit_label, accent(), g._shop_can_exit())
@@ -739,6 +739,8 @@ func draw(g, viewport: Vector2) -> void:
 		draw_reroll_scan(g, visor, t)
 	for key in ["buy", "exit", "deck", "reroll"]:
 		g.buttons["shop_" + key] = areas[key]
+	if workshop:
+		RTMerchantDimensionPresentation.draw_shop_timer(g, viewport, visor)
 
 
 ## Moldura do visor: vidro escuro, bordas ciano, scanlines e cantos.
@@ -767,7 +769,7 @@ func draw_visor(g, visor: Rect2, now: float, header_h: float) -> void:
 	var tab := Rect2(Vector2(visor.get_center().x - 130, visor.position.y - 1), Vector2(260, 20))
 	g.draw_rect(tab, Color(0.10, 0.05, 0.08, 0.95) if workshop else Color(0.02, 0.12, 0.14, 0.95), true)
 	g.draw_rect(tab, Color(tone, 0.6), false, 1.0)
-	var tab_text: String = "BALCAO DO MERCADOR  ·  ESTOQUE" if workshop else "BRACELETE  ·  ARQUIVO TEMPORAL"
+	var tab_text: String = "BALCÃO DO MERCADOR  ·  ESTOQUE" if workshop else "BRACELETE  ·  ARQUIVO TEMPORAL"
 	text(g, tab_text, tab.grow(-3), 11, Color(1.0, 0.92, 0.74) if workshop else Color(0.7, 1.0, 1.0), true)
 
 

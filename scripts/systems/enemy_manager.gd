@@ -529,8 +529,11 @@ func _update_enemies_body(delta: float) -> void:
 		game.ENEMY_AMBER_SUTURER: true, game.ENEMY_AMBER_SUTURE_NODE: true,
 		game.ENEMY_CINERIDO: true, game.ENEMY_PANGOLIRO: true, game.ENEMY_CORVOL: true,
 		game.ENEMY_SINEIRO_BOREAL: true,
+		"jabuti_errante": true, "tartaruga_mandacaru": true, "jabuti_morteiro": true,
+		"cagado_piao": true, "cagado_cangaceiro": true, "ovo_jabuti": true,
 	}
 	var bargain_capsule_vulnerable: bool = game._bargain_capsule_vulnerable()
+	var map_props_active: bool = RTMapPropColliders.active(game)
 	RTFrameProfiler.mark("e_setup")
 	for enemy in game.enemies:
 		enemy_index += 1
@@ -624,6 +627,8 @@ func _update_enemies_body(delta: float) -> void:
 				game._update_pyro_penguin(enemy, enemy_delta)
 			if kind == game.ENEMY_SINEIRO_BOREAL:
 				game.sineiro_boreal_controller.update_enemy(enemy, enemy_delta)
+			if game.current_phase == RTSertaoController.PHASE and game.sertao_controller.owns_kind(kind):
+				game.sertao_controller.update_enemy(enemy, enemy_delta)
 		if game.current_phase == 2 and kind == game.ENEMY_COMMON:
 			game._update_phase2_common_penguin(enemy, enemy_delta)
 		if game.current_phase == 3:
@@ -633,6 +638,8 @@ func _update_enemies_body(delta: float) -> void:
 		var custom_move: bool = custom_move_kinds.has(kind)
 		if not custom_move and float(enemy.get("stun", 0.0)) <= 0.0 and float(enemy.get("ferrolho_root", 0.0)) <= 0.0 and (not bool(enemy.get("parado", false)) or prismatica_active):
 			game._move_enemy(enemy, enemy_delta, lacerante_secondary, prismatica_active, combat_targets)
+		if map_props_active and kind != game.ENEMY_CORVOL:
+			enemy["pos"] = RTMapPropColliders.push_out(game, Vector2(enemy["pos"]), RTMapPropColliders.ENEMY_RADIUS)
 
 		var t_pos: Vector2 = game._get_nearest_player_pos(Vector2(enemy["pos"]), combat_targets) if kind == kind_kamikaze else Vector2.ZERO
 		if not lacerante_storm and kind == kind_kamikaze and Vector2(enemy["pos"]).distance_to(t_pos) < 60.0:
@@ -735,7 +742,9 @@ func get_enemy_limit(native_only: bool = false) -> int:
 func get_desired_enemy_limit(native_only: bool = false) -> int:
 	var mp_bonus: int = game._multiplayer_enemy_limit_bonus()
 	var native_limit: int = 0
-	if game.current_phase == 7:
+	if game.current_phase == RTSertaoController.PHASE:
+		native_limit = game.sertao_controller.enemy_limit() + mp_bonus
+	elif game.current_phase == 7:
 		native_limit = _phase7_enemy_limit() + mp_bonus
 	elif game.current_phase == 6:
 		native_limit = _phase6_enemy_limit() + mp_bonus
@@ -776,6 +785,8 @@ func prepare_phase_density_carry(previous_effective_cap: int) -> void:
 
 
 func get_enemy_spawn_interval() -> float:
+	if game.current_phase == RTSertaoController.PHASE:
+		return _long_run_spawn_interval(game.sertao_controller.spawn_interval())
 	if game.current_phase == 7:
 		return _phase7_spawn_interval()
 	if game.current_phase == 6:

@@ -217,6 +217,9 @@ func pack(game: Node) -> Dictionary:
 				"boss7_core_timer": game.boss7_core_timer,
 				"boss7_flame_waves": game.boss7_flame_waves.duplicate(true)
 			})
+		8:
+			packet["sertao_visual"] = game.sertao_controller.visual_snapshot()
+			packet["boss8_visual"] = game.boss8_controller.visual_snapshot()
 	return packet
 
 
@@ -495,6 +498,11 @@ func apply(game: Node, snapshot_data) -> void:
 	game.boss7_core_hp_max = float(data.get("boss7_core_hp_max", game.boss7_core_hp_max))
 	game.boss7_core_timer = float(data.get("boss7_core_timer", game.boss7_core_timer))
 	game.boss7_flame_waves = Array(data.get("boss7_flame_waves", game.boss7_flame_waves)).duplicate(true)
+	if game.current_phase == 8 and game._is_world_replica():
+		if data.has("sertao_visual"):
+			game.sertao_controller.apply_remote_visual_snapshot(Dictionary(data["sertao_visual"]))
+		if data.has("boss8_visual"):
+			game.boss8_controller.apply_remote_visual_snapshot(Dictionary(data["boss8_visual"]))
 	if not (boss2_compact is PackedFloat32Array and boss2_compact.size() >= 27):
 		game.boss2_ultimate_wind_active = float(data.get("boss2_wind_active", game.boss2_ultimate_wind_active))
 		game.boss2_ultimate_wind_timer = float(data.get("boss2_wind_timer", game.boss2_ultimate_wind_timer))

@@ -16,6 +16,7 @@ const PHASES := {
 	5: {"label": "FASE EX5", "region": "MENTE DA UMBRA", "map_key": "map_phase_ex5", "altar": "SELO DA UMBRA", "altar_uv": Vector2(0.5, 0.5)},
 	6: {"label": "FASE EX6", "region": "CHAGA DE AMBAR", "map_key": "map_phase_ex6", "altar": "NINHO DA MATRIARCA DA CHAGA", "altar_uv": Vector2(0.5, 0.5)},
 	7: {"label": "FASE EX7", "region": "CINZAS DA RUPTURA", "map_key": "map_phase_ex7", "altar": "CLAREIRA DA FENIX", "altar_uv": Vector2(0.5, 0.5)},
+	8: {"label": "FASE EX8", "region": "SERTAO DAS TARTARUGAS", "map_key": "map_phase_ex8", "altar": "RELOGIO DE SOL DO JABUTI", "altar_uv": Vector2(0.5, 0.5)},
 }
 const ALTAR_INTERACTION_RADIUS := 118.0
 const ALTAR_HOLD_TIME := 1.15
@@ -256,6 +257,8 @@ func altar_blocker_text() -> String:
 		return ""
 	if core._arauto_active():
 		return "DERROTE O ARAUTO"
+	if int(core.current_phase) == 8 and core.sertao_controller.miniboss_alive():
+		return "DERROTE O CAGADO CANGACEIRO"
 	if int(core.current_phase) == 6 and core.amber_suturer_controller != null and not core.amber_suturer_controller.active_enemy().is_empty():
 		return "DERROTE O SUTURADOR DE AMBAR"
 	return ""
@@ -320,14 +323,23 @@ func terrain_chunks(camera: Vector2, viewport: Vector2) -> Array[Dictionary]:
 	for y in range(first.y, last.y + 1):
 		for x in range(first.x, last.x + 1):
 			var cell := Vector2i(x, y)
-			# Coprime strides avoid adjacent duplicates, excluding the unique altar.
-			var tile := posmod(x * 7 + y * 11 + floori(float(y) / 3.0) * 4, 15)
-			if tile >= ALTAR_TILE:
-				tile += 1
-			if cell == altar_cell:
-				tile = ALTAR_TILE
+			var tile := tile_at_cell(cell, altar_cell)
 			chunks.append({"rect": Rect2(Vector2(cell) * CHUNK_SIZE - camera, Vector2.ONE * CHUNK_SIZE), "tile": tile})
 	return chunks
+
+
+## Ladrilho do atlas usado numa celula do mundo (o mesmo que o chao desenha);
+## tambem usado pela fisica dos objetos do mapa (RTMapPropColliders).
+func tile_at_cell(cell: Vector2i, altar_cell: Vector2i = Vector2i(-99999, -99999)) -> int:
+	if altar_cell == Vector2i(-99999, -99999):
+		altar_cell = Vector2i((Vector2(core.experimental_boss_altar_pos) / CHUNK_SIZE).floor())
+	if cell == altar_cell:
+		return ALTAR_TILE
+	# Coprime strides avoid adjacent duplicates, excluding the unique altar.
+	var tile := posmod(cell.x * 7 + cell.y * 11 + floori(float(cell.y) / 3.0) * 4, 15)
+	if tile >= ALTAR_TILE:
+		tile += 1
+	return tile
 
 
 func altar_progress() -> float:

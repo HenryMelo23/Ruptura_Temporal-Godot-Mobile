@@ -3,6 +3,10 @@ extends RefCounted
 const CATEGORIES: = ["Manifestacoes", "Inimigos", "Chefes", "Fases", "Fracoes", "Espectros", "Cartas"]
 const FILTERS: = ["all", "combat", "lore", "support"]
 const EXTERNAL_TEXT_PATH: = "res://docs/catalogo_temporal_textos.json"
+const Lore = preload("res://scripts/catalog/catalog_lore.gd")
+## Grupo do RTCatalogLore -> tipo de entrada, para criar as que so existem
+## no livro (pessoas, inimigos da fase 7, Fenix).
+const LORE_KIND := {"fracoes": "fraction", "inimigos": "enemy", "chefes": "boss", "fases": "phase"}
 
 static var _external_text_loaded: = false
 static var _external_text_by_id: = {}
@@ -164,7 +168,56 @@ static func _apply_external_text(base: Dictionary) -> Dictionary:
 			var color: = _color_from_external(Dictionary(external["cor"]), output.get("color", Color.WHITE))
 			output["color"] = color
 			output["accent_color"] = color
+	_apply_book_lore(output, id)
 	return _sanitize_entry(output)
+
+
+## Camada do livro: substitui resumo, historia e nota pelos textos de
+## RTCatalogLore e guarda o trecho do livro e a dimensao (filtro).
+static func _apply_book_lore(output: Dictionary, id: String) -> void:
+	var lore: Dictionary = Dictionary(Lore.DATA.get(id, {}))
+	if lore.is_empty():
+		return
+	if String(lore.get("s", "")) != "":
+		output["subtitle"] = String(lore["s"])
+		output["classification"] = String(lore["s"])
+	if String(lore.get("r", "")) != "":
+		output["summary"] = String(lore["r"])
+	if String(lore.get("h", "")) != "":
+		output["history_text"] = String(lore["h"])
+		output["lore"] = String(lore["h"])
+	if String(lore.get("n", "")) != "":
+		output["field_note"] = String(lore["n"])
+	if String(lore.get("l", "")) != "":
+		output["book_ref"] = String(lore["l"])
+	if lore.has("d"):
+		output["dimension"] = int(lore["d"])
+	if String(lore.get("img", lore.get("texture_path", ""))) != "":
+		output["texture_path"] = String(lore.get("img", lore.get("texture_path", "")))
+	if String(lore.get("m", "")) != "" and String(output.get("mechanics_text", "")).strip_edges() == "":
+		output["mechanics_text"] = String(lore["m"])
+	var echoes: Array = Array(lore.get("e", []))
+	if not echoes.is_empty():
+		var merged: Array = echoes.duplicate()
+		for old in Array(output.get("related_entry_ids", [])):
+			if not merged.has(old) and String(old) != "ruptura":
+				merged.append(old)
+		output["related_entry_ids"] = merged.slice(0, 5)
+
+
+## Entradas que so existem na camada do livro (nao estao nas listas fixas).
+static func _book_only_entries(kind: String, existing: Array) -> Array:
+	var have: Dictionary = {}
+	for entry in existing:
+		have[String(Dictionary(entry).get("id", ""))] = true
+	var out: Array = []
+	for id in Lore.DATA.keys():
+		var lore: Dictionary = Lore.DATA[id]
+		if LORE_KIND.get(String(lore.get("g", "")), "") != kind or have.has(id):
+			continue
+		var display: String = String(lore.get("name", String(id).replace("_ficha", "").replace("_", " ").capitalize()))
+		out.append(_entry(kind, String(id), display, String(lore.get("s", "")), String(lore.get("r", "")), String(lore.get("h", "")), String(lore.get("h", "")), String(lore.get("m", "")), "", Color(0.62, 0.88, 1.0), Array(lore.get("e", [])), "lore" if kind == "fraction" else "combat"))
+	return out
 
 
 static func _copy_text_field(source: Dictionary, target: Dictionary, source_key: String, target_key: String) -> void :
@@ -327,6 +380,7 @@ static func phase_entries() -> Array:
 		_phase_entry(4, "Nexo Anfibio", "O traje que voltou respirando", "A quarta fase e o ponto em que um sapo astronauta colossal transforma mapa, gravidade e trajetoria em armas.", "A Ruptura alimenta o traje fundido ao corpo do anfibio. Portais e transicoes deixam claro que a jornada nao e reta: uma escolha de rota pode puxar a run para outro corpo de mundo.", "O astronauta voltou sem missao, sem tripulacao e sem um limite claro entre carne, traje e energia.", "Fase de ramificacao. Em multiplayer, o lider/host decide o portal ativo; se o lider cai, a run escolhe outro vivo ate o retorno.", "map_phase_4", Color(0.52, 1.0, 0.66), ["fase_5", "fase_6"]),
 		_phase_entry(5, "Laboratorio UMBRA", "Mente que le habitos", "A quinta fase isola adaptacao, memoria e erro repetido em confronto direto.", "UMBRA e menos boss comum e mais espelho agressivo. O jogador precisa variar ritmo, habilidade e rota para nao entregar padrao demais.", "Os registros tratam UMBRA como uma mente ligada ao modo como Geovana sobrevive. Ela aprende porque a Ruptura tambem quer entender.", "Transmutacoes, teleporte, prisao e resposta adaptativa. A fase tambem abriga exibicoes visuais de treino Apolo vs UMBRA.", "map_phase_5", Color(0.56, 1.0, 0.68), ["fase_6"]),
 		_phase_entry(6, "Matriarca da Chaga", "Organismo de sintomas", "A sexta fase troca perseguicao direta por um mapa que fermenta, cai e volta a pulsar.", "O perigo nao e so o inimigo visivel: e o chao ficando menos confiavel. Lodarios, enguias, pustulas e sanguessugas criam custo de permanencia.", "A Chaga preserva dores antigas como se fossem reliquias biologicas. Nada nela nasce limpo; tudo tenta voltar com fome.", "Controle organico do terreno, spawn de sanguessugas, miasma e boss de estados. Bom para testar leitura de espaco contaminado.", "map_phase_6", Color(1.0, 0.62, 0.28), ["fase_7"]),
+		_phase_entry(8, "Sertão das Tartarugas", "Bullet hell no meio-dia eterno", "Dimensão bônus que só aparece depois de sete travessias.", "Um sertão onde o sol não se mexe e quase tudo é tartaruga. Os projéteis andam no tempo dos jabutis: param, esperam e depois disparam.", "Tudo aqui anda devagar, menos o perigo.", "Espirais de espinhos, ovos de morteiro, ricochetes, o mini chefe Cágado Cangaceiro e o chefe Casco-de-Sol, um relógio de sol vivo.", "map_phase_ex8", Color(1.0, 0.78, 0.3), []),
 		_phase_entry(7, "Cinzas do Fenice", "Combate vertical e renascimento", "A setima ruptura acelera inimigos, fogo e pressao aerea.", "O mapa deixa menos tempo para respirar. Corpos leves mergulham, carapacas rolam e o boss trata morte como etapa da propria mecanica.", "As cinzas nao encerram ciclo; so escondem a proxima forma. Geovana precisa aprender quando perseguir e quando esperar a queda.", "Inimigos de mergulho/rolagem, brasas e boss de renascimento. A fase exige resposta clara a ataques de alto deslocamento.", "map_phase_7", Color(1.0, 0.44, 0.2), [])
 	]
 
@@ -342,6 +396,11 @@ static func _phase_entry(index: int, display_name: String, subtitle: String, sum
 
 
 static func enemy_entries() -> Array:
+	var base: Array = _enemy_entries_base()
+	return base + _book_only_entries("enemy", base)
+
+
+static func _enemy_entries_base() -> Array:
 	return [
 		_entry("enemy", "comum", "Errante", "Habitante telúrico das Ruínas Cósmicas", "Organismo base das Ruínas Cósmicas formado por matéria orgânica, terra e energia cósmica.", "Organismo telúrico nativo das Ruínas Cósmicas, formado pela agregação de matéria orgânica vegetal, sedimentos minerais e traços de energia cósmica ambiental. É a fauna mais abundante e a base alimentar daquele ecossistema.", "Muito antes da chegada do rastro do dispositivo temporal, os Errantes vagavam pelos leitos minerais das Ruínas Cósmicas em ciclos lentos de nutrição, absorvendo radiação cósmica passiva do solo. São criaturas territoriais simples que respondem a vibrações no chão.", "Avança em contato corpo a corpo, ocupando espaço e pressionando o posicionamento na arena. Atua em grupo para fechar rotas de fuga do jogador.", "enemy_common_phase_1", Color(0.8, 0.86, 0.95), ["ruptura", "caranguejo_cosmico"], "combat"), 
 		_entry("enemy", "espreitador", "Espreitador", "Predador subterrâneo de emboscada", "Ramificação evolutiva da linhagem dos Errantes adaptada para caça subterrânea.", "Predador subterrâneo da mesma linhagem biológica dos Errantes. Sua anatomia evoluiu ao longo de eras para abandonar as pernas vestigiais em favor de dois braços musculosos e placas minerais de camuflagem.", "Ao longo de gerações nas Ruínas Cósmicas, uma ramificação da linhagem dos Errantes especializou-se na caça de emboscada. Rasteja silenciosamente e dispara em botes letais.", "Persegue a presa rastejando e se camuflando no solo. Aproxima-se lentamente até encurtar a distância e desferir um bote rápido, pressionando os flancos da arena.", "stalker", Color(0.62, 0.86, 1.0), ["comum", "ruptura"], "combat"), 
@@ -376,6 +435,11 @@ static func enemy_entries() -> Array:
 
 
 static func boss_entries() -> Array:
+	var base: Array = _boss_entries_base()
+	return base + _book_only_entries("boss", base)
+
+
+static func _boss_entries_base() -> Array:
 	return [
 		_entry("boss", "caranguejo_cosmico", "Caranguejo Cosmico", "Primeira muralha viva", "A primeira muralha viva da Ruptura.", "Grande demais para parecer justo e antigo demais para parecer perdido. Ele testa se Geovana aprendeu a ler areas, janelas e reposicionamento.", "O primeiro chefe e a fenda usando um corpo simples para perguntar uma coisa cruel: voce sabe sair do lugar certo na hora certa?", "Alterna perseguicao, saltos, ondas, bolhas e eventos de tempo. O combate ensina leitura de telegráficos e punicao de ganancia.", "boss_stage1", Color(1.0, 0.32, 0.18), ["comum", "rebobinador"], "combat"), 
 		_entry("boss", "nevasca", "Nevasca", "Centro frio da segunda ruptura", "O centro frio da segunda ruptura.", "A Nevasca nao quer apenas acertar Geovana. Quer controlar onde ela acredita que pode ficar.", "Nasceu quando o mapa congelado parou de ser cenario e virou vontade. Cada vento tenta empurrar o jogador para uma decisao ruim.", "Usa vento, gelo, zonas seguras e congelamento. A luta e leitura de arena, nao corrida cega.", "boss2", Color(0.62, 0.94, 1.0), ["pinguim_atirador", "pinguim_kamikaze", "pinguim_incendiario"], "combat"), 
@@ -387,6 +451,11 @@ static func boss_entries() -> Array:
 
 
 static func faction_entries() -> Array:
+	var base: Array = _faction_entries_base()
+	return base + _book_only_entries("fraction", base)
+
+
+static func _faction_entries_base() -> Array:
 	return [
 		_entry("fraction", "ruptura", "Ruptura", "Cicatriz temporal e colapso espacial", "O acidente dimensional gerado pela explosão do dispositivo temporal.", "A Ruptura foi o acidente provocado pela explosão do dispositivo temporal. A violenta descarga espacial rasgou o tecido entre as dimensões, quase destruindo a realidade original de Geovana e espalhando os componentes por universos preexistentes.", "A Ruptura não criou as dimensões nem as criaturas que habitam cada mundo. A energia viva do dispositivo rasgou o espaço-tempo e deixou um rastro dimensional pontilhado entre os locais por onde suas peças passaram. A jornada de Geovana consiste em seguir esse rastro, recuperar cada peça e atravessar para a próxima dimensão.", "Conecta as diferentes dimensões da travessia e dita o rastro energético que Geovana deve seguir.", "map_phase_1", Color(1.0, 0.08, 0.78), ["geovana", "arauto"], "lore"), 
 		_entry("fraction", "geovana", "Geovana", "Pessoa no centro da anomalia", "A pessoa no centro da anomalia.", "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar.", "O catalogo evita chama-la de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "O jogador escolhe Manifestacao, Espectro e cartas para transformar uma run em estilo proprio.", "player_idle", Color(0.72, 0.92, 1.0), ["henrique", "ruptura"], "lore"), 

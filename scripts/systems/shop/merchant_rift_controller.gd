@@ -59,6 +59,7 @@ func reset_run() -> void:
 	sequence = 0
 	core.shop_rift_next_allowed_time = 0.0
 	entry_bonus = {}
+	core._rift_transition().reset_run()
 
 
 func clear_active() -> void:
@@ -248,6 +249,13 @@ func _update_active(delta: float) -> void:
 		if core.mode == "game":
 			clear_active()
 		return
+	if bool(current.get("diving", false)):
+		# Ela ja esta sendo puxada: a fenda so espera a cena terminar.
+		if not core._rift_transition().busy():
+			current["diving"] = false
+			current["state"] = STATE_ENTERED
+			current["entered_msec"] = Time.get_ticks_msec()
+		return
 	current["state_age"] = float(current.get("state_age", 0.0)) + delta
 	if current_state == STATE_COLLAPSING:
 		if float(current["state_age"]) >= COLLAPSE_TIME:
@@ -308,6 +316,13 @@ func enter() -> bool:
 		return true
 	# A fenda nao abre mais uma tela: ela leva a Geovana (e a equipe inteira,
 	# que recebeu o mesmo aviso acima) para dentro da oficina do Mercador.
+	if core._rift_transition().enabled():
+		# Solo: a fenda fica aberta enquanto ela e puxada para dentro; a troca
+		# para a oficina acontece no fim do mergulho (RTMerchantRiftTransition).
+		current["state"] = STATE_OPEN
+		current["diving"] = true
+		core._rift_transition().begin_dive(Vector2(current.get("pos", core.player_pos)))
+		return true
 	if core._merchant_dimension().enter():
 		return true
 	core.shop_controller.start_opening_animation(true)

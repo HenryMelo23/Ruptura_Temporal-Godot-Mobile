@@ -11,6 +11,9 @@ const { createObservatory } = require("./umbra_observatory");
 const { normalizeUmbraCombat, createCollective, summarizeCombat } = require("./umbra_collective");
 
 const MANAGER_PORT = numberEnv("PORT", 8090);
+// Staging/canary bind to loopback so an isolated instance never answers the
+// public interface. Production keeps the historical 0.0.0.0 default.
+const MANAGER_BIND = process.env.MANAGER_BIND || "0.0.0.0";
 const ROOM_HOST = process.env.ROOM_HOST || "72.61.217.238";
 const ROOM_PORT_START = numberEnv("ROOM_PORT_START", 4522);
 const ROOM_PORT_END = numberEnv("ROOM_PORT_END", 4599);
@@ -3573,7 +3576,7 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(MANAGER_PORT, "0.0.0.0", () => {
+server.listen(MANAGER_PORT, MANAGER_BIND, () => {
   console.log(`ruptura relay manager listening on :${MANAGER_PORT}`);
   console.log(`rooms will advertise ${ROOM_HOST}:${ROOM_PORT_START}-${ROOM_PORT_END}`);
   repairBenignLeaderboardAudits();

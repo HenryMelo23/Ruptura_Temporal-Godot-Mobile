@@ -127,6 +127,9 @@ func _run() -> void:
 	var phase7_packet: PackedFloat32Array = game.RTNetContractScript.pack_boss(Vector2(800, 220), 700.0, false, true, 7, 900.0, 1.0)
 	var phase7_decoded: Dictionary = game.RTNetContractScript.unpack_boss_snapshot(phase7_packet, Vector2.ZERO, 0.0, false, false, 1, 1.0, 0.0, false)
 	_check(int(phase7_decoded.get("phase_index", 0)) == 7, "boss phase 7 was truncated to phase 6")
+	var phase8_packet: PackedFloat32Array = game.RTNetContractScript.pack_boss(Vector2(920, 420), 880.0, false, true, 8, 1200.0, 2.0)
+	var phase8_decoded: Dictionary = game.RTNetContractScript.unpack_boss_snapshot(phase8_packet, Vector2.ZERO, 0.0, false, false, 1, 1.0, 0.0, false)
+	_check(int(phase8_decoded.get("phase_index", 0)) == 8, "boss phase 8 was truncated")
 	game.enemies.clear()
 	game.enemy_bullets.clear()
 	game.is_multiplayer = true

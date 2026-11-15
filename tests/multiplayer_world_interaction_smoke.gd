@@ -41,7 +41,7 @@ func _initialize() -> void:
 			relay_host = arg.trim_prefix("--host=")
 		elif arg.begins_with("--result-dir="):
 			result_dir = arg.trim_prefix("--result-dir=")
-	if role not in ["server", "host", "client"] or scenario not in ["altar", "shop"]:
+	if role not in ["server", "host", "client"] or scenario not in ["altar", "shop", "phase8"]:
 		_fail("invalid arguments")
 		return
 	game = load("res://scenes/Main.tscn").instantiate()
@@ -149,11 +149,13 @@ func _run_host_interaction_step() -> void:
 		if scenario == "altar":
 			game.experimental_phase_controller.begin_definitive_phase(game.current_phase)
 			game.player_pos = game.experimental_boss_altar_pos
-		else:
+		elif scenario == "shop":
 			game.shop_rift_controller.clear_active()
 			game.shop_rift_next_allowed_time = INF
 			game.shop_rift_controller.spawn("multiplayer_smoke", SHOP_POS)
 			game.player_pos = SHOP_POS
+		else:
+			_prepare_phase8_fixture()
 		game.net_world_visual_sync_last_ms = 0
 		return
 	if scenario == "altar":
@@ -163,13 +165,19 @@ func _run_host_interaction_step() -> void:
 			blocked_proved = true
 		if blocked_proved and game.mode == "boss_call":
 			_write_result("host", "blocked=1/2 committed=2/2 map=expanded")
-	else:
+	elif scenario == "shop":
 		game.player_pos = SHOP_POS
 		var rift: Dictionary = game.shop_rift_controller.rift()
 		if not blocked_proved and int(rift.get("present_count", 0)) == 1 and int(rift.get("expected_count", 0)) == 2:
 			_check(game.mode == "game", "shop opened before every living player touched the portal")
 			blocked_proved = true
 		_run_shop_roundtrip_step()
+	else:
+		_check(game.current_phase == 8, "host did not enter phase 8")
+		_check(game._story().active_id == "" and not game._dialogue().busy(), "host opened multiplayer narrative")
+		# Keep the authority alive until the replica proves it received the state.
+		if _result_exists("client") and not _result_exists("host"):
+			_write_result("host", "phase8=true authority=true enemy=true bullets=true boss_visual=true narrative=false")
 
 
 func _run_client_interaction_step() -> void:
@@ -183,7 +191,7 @@ func _run_client_interaction_step() -> void:
 		game.player_pos = game.experimental_boss_altar_pos
 		if game.mode == "boss_call":
 			_write_result("client", "altar_synced=true boss_call=true")
-	else:
+	elif scenario == "shop":
 		if game._merchant_dimension().active:
 			_run_shop_roundtrip_step()
 			return
@@ -198,6 +206,47 @@ func _run_client_interaction_step() -> void:
 		if not shop_open_seen:
 			game.player_pos = Vector2(rift.get("pos", Vector2.ZERO))
 		_run_shop_roundtrip_step()
+	else:
+		if game.current_phase != 8:
+			return
+		var phase8_enemy_seen := false
+		for enemy_value in game.enemies:
+			if enemy_value is Dictionary and String(enemy_value.get("type", "")) == RTSertaoController.CANGACEIRO:
+				phase8_enemy_seen = String(enemy_value.get("s8_state", "")) == "rajada_aim"
+				break
+		if not phase8_enemy_seen or game.sertao_controller.bullets.is_empty():
+			return
+		if game.boss8_controller.mode != "gnomon" or not game.boss8_controller.shadow_on:
+			return
+		_check(game._story().active_id == "" and not game._dialogue().busy(), "client opened multiplayer narrative")
+		_write_result("client", "phase8=true replica=true enemy=true bullets=true boss_visual=true narrative=false")
+
+
+func _prepare_phase8_fixture() -> void:
+	game.current_phase = 8
+	game.experimental_phase_controller.begin_definitive_phase(8)
+	game.sertao_controller.reset()
+	game.boss8_controller.reset()
+	game.enemies = [{
+		"uid": 88001, "type": RTSertaoController.CANGACEIRO, "pos": Vector2(660, 440),
+		"hp": 900.0, "max_hp": 900.0, "phase": 0.0, "s8_state": "rajada_aim",
+		"s8_t": 0.5, "s8_flash": 0.4, "s8_aim": Vector2.RIGHT,
+	}]
+	game.sertao_controller.shoot(Vector2(1000, 700), Vector2.RIGHT, 0.0, RTSertaoController.COL_SUN, {"delay": 30.0, "owner": 88001})
+	game.boss8_controller.mode = "gnomon"
+	game.boss8_controller.anim = "sun"
+	game.boss8_controller.stage = 3
+	game.boss8_controller.shadow_on = true
+	game.boss8_controller.shadow_angle = 1.0
+	game.boss8_controller.sun_power = 0.8
+	game.boss_active = false
+	game.boss_dead = false
+	game.boss_pos = Vector2(820, 460)
+	game.boss_hp = 1000.0
+	game.boss_hp_max = 1000.0
+	game.boss_name = "CASCO-DE-SOL"
+	game.net_world_sync_last_ms = 0
+	game.net_world_visual_sync_last_ms = 0
 
 
 func _run_shop_roundtrip_step() -> void:
@@ -215,7 +264,7 @@ func _run_shop_roundtrip_step() -> void:
 			game.player_pos = RTMerchantDimension.MERCHANT_POS
 			return
 		if not shop_open_seen and game.mode == "game":
-			# A segunda aproximacao apos a conversa abre o balcao real.
+			# Multiplayer skips narrative; the first approach opens the real counter.
 			game.player_pos = RTMerchantDimension.MERCHANT_POS
 			return
 	if game.mode == "shop":
@@ -231,12 +280,12 @@ func _run_shop_roundtrip_step() -> void:
 	if not shop_return_seen or game.mode != "game" or dimension.active:
 		return
 	_check(shop_dimension_seen, "player never entered the Merchant Dimension")
-	_check(shop_dialogue_seen, "merchant conversation was not shown")
+	_check(not shop_dialogue_seen, "merchant narrative opened in multiplayer")
 	_check(shop_open_seen, "merchant counter did not open the shop")
 	_check(game.online_connected, "relay connection was lost after leaving the shop")
 	_check(game._multiplayer_peer_active(), "multiplayer peer became inactive after leaving the shop")
 	_check(not game.shop_rift_controller.active(), "merchant rift stayed active after the shop roundtrip")
-	var detail := "dimension=true dialogue=true counter=true group_exit=true connected=true"
+	var detail := "dimension=true dialogue=false counter=true group_exit=true connected=true"
 	if role == "host":
 		detail += " blocked=1/2 committed=2/2 portal=authoritative"
 	else:

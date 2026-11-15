@@ -24,12 +24,13 @@ const TALK_RADIUS := 132.0
 const EXIT_RADIUS := 86.0
 const ENTRY_FADE := 0.55
 
-## Fenda instavel: o jogador leva cerca de 20 s para decidir cada carta.
-const SECONDS_PER_CARD := 20.0
+## Fenda instavel: o jogador tem 8 s por carta que consegue pagar.
+const SECONDS_PER_CARD := 8.0
 ## Quantas compras o orcamento de um jogador pode pagar, dentro destes limites.
 const MIN_BUDGET_CARDS := 3
 const MAX_BUDGET_CARDS := 12
-const MIN_SECONDS := 45.0
+## Piso: as 3 cartas da vitrine, mesmo sem essencia para todas.
+const MIN_SECONDS := 24.0
 const WARN_SECONDS := 10.0
 ## A partir daqui a contagem regressiva grande aparece na tela.
 const COUNTDOWN_SECONDS := 15.0
@@ -157,6 +158,9 @@ func on_remote_budget(cards: int) -> void:
 func enter() -> bool:
 	if active or core == null:
 		return false
+	# Ao cair na fenda ela empurra a horda para longe; o mundo e salvo assim,
+	# entao na volta os inimigos continuam la longe e ela sai com folga.
+	core._rift_transition().push_enemies_now(Vector2(core.player_pos))
 	saved = {
 		"world": Vector2(core.WORLD_SIZE),
 		"player_pos": Vector2(core.player_pos),
@@ -176,7 +180,10 @@ func enter() -> bool:
 	core.spawn_timer = 99999.0
 	active = true
 	entry_age = 0.0
-	talked_this_visit = false
+	# Multiplayer skips narrative: the first approach must open the counter
+	# immediately instead of waiting for a dialogue every client may see at a
+	# different time. Solo keeps the complete merchant story unchanged.
+	talked_this_visit = multiplayer_room()
 	counter_armed = true
 	collapsing = 0.0
 	timer = 0.0
@@ -193,7 +200,10 @@ func enter() -> bool:
 		core.shop_mp_ready_to_leave = false
 		core.shop_mp_expected_count = maxi(1, core._living_run_player_peer_ids().size())
 		core._announce_merchant_rift_budget(BUDGET_STABLE if stable() else mp_budget_cards)
-	core._merchant_npc().on_dimension_entered(confiscated)
+	var merchant_npc: RTMerchantNpc = core._merchant_npc()
+	if multiplayer_room():
+		merchant_npc.silence()
+	merchant_npc.on_dimension_entered(confiscated)
 	core._play_sfx("Portal.mp3", 0.04, 0.72, 0.9)
 	core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.4)
 	core.screen_shake_strength = maxf(float(core.screen_shake_strength), 14.0)
@@ -218,7 +228,7 @@ func leave(expelled: bool) -> void:
 			core._apply_score_delta(-confiscated, false, "merchant_rift_collapse_%d" % collapses)
 			var warning: String = "A FENDA LEVOU %s PONTOS" % core._format_points(confiscated)
 			if multiplayer_room():
-				warning = "A FENDA LEVOU A ESSENCIA DE TODOS"
+				warning = "A FENDA LEVOU A ESSÊNCIA DE TODOS"
 			core._add_text(warning, core.player_pos + Vector2(-150, -120), Color(1.0, 0.38, 0.42), 2.6, 22)
 		core._merchant_npc().on_player_expelled()
 	core.WORLD_SIZE = Vector2(saved.get("world", core.DEFAULT_WORLD_SIZE))
@@ -238,6 +248,8 @@ func leave(expelled: bool) -> void:
 			core.mode = "game"
 			core.shop_return_timer = 0.0
 	core._play_sfx("Portal.mp3", 0.04, 0.68, 1.15)
+	if core._rift_transition().enabled():
+		core._rift_transition().begin_emerge(expelled)
 
 
 # ================================================================ ciclo
@@ -248,6 +260,9 @@ func update(delta: float) -> void:
 	_refresh_mp_expectation()
 	var npc: RTMerchantNpc = core._merchant_npc()
 	npc.update(delta)
+	if core._rift_transition().busy_in_dimension():
+		# Chegando ou saindo pela fenda: o relogio e a bancada esperam a cena.
+		return
 	if collapsing > 0.0:
 		collapsing = maxf(0.0, collapsing - delta)
 		core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.3)
@@ -305,7 +320,10 @@ func _refresh_mp_expectation() -> void:
 ## Encostou no portal. Em solo sai na hora; na sala cheia vira "pronto".
 func _reach_exit() -> void:
 	if not multiplayer_room():
-		leave(false)
+		if core._rift_transition().enabled():
+			core._rift_transition().begin_exit_dive(EXIT_PORTAL_POS)
+		else:
+			leave(false)
 		return
 	mp_ready = true
 	core.shop_mp_ready_to_leave = true
@@ -345,7 +363,7 @@ func _open_counter() -> void:
 
 
 func save_state() -> Dictionary:
-	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses}
+	return {"active": active, "timer": timer, "limit": limit, "confiscated": confiscated, "talked": talked_this_visit, "collapses": collapses, "rift_entries": core._rift_transition().entries if core != null else 0}
 
 
 func load_state(data: Dictionary) -> void:
@@ -354,3 +372,5 @@ func load_state(data: Dictionary) -> void:
 	confiscated = int(data.get("confiscated", 0))
 	talked_this_visit = bool(data.get("talked", false))
 	collapses = int(data.get("collapses", 0))
+	if core != null:
+		core._rift_transition().load_state({"entries": int(data.get("rift_entries", 0))})

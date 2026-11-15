@@ -45,6 +45,81 @@ const RATIONAL_FOCUS_COOLDOWN_REFUND := {2: 2.0, 5: 4.0, 9: 6.0}
 const VANGUARD_RING_RADIUS := {1: 150.0, 5: 185.0, 9: 210.0}
 const VANGUARD_GUARD_REDUCTION := {2: 0.14, 5: 0.20, 9: 0.26}
 const VORACIOUS_SATIATION_TIME := {2: 3.0, 5: 4.5, 9: 6.0}
+const VANGUARD_WAVE_COOLDOWN := 0.9
+const VANGUARD_HEAT_MAX := 5
+const PEREGRINO_SAMPLE_STEP := 20.0
+const PEREGRINO_MIN_LOOP_AREA := 6500.0
+const PEREGRINO_MAX_POINTS := 90
+
+
+## Voraz: abaixo desta fracao de vida um inimigo pode ser devorado no dash.
+static func voracious_devour_threshold(state: Dictionary) -> float:
+	var hunger_ratio: float = clampf(float(state.get("voracious_hunger", 0.0)) / maxf(1.0, hunger_max(state)) + int(state.get("voracious_cycles", 0)) * 0.25, 0.0, 1.0)
+	var value: float = 0.08 + 0.12 * hunger_ratio
+	if _rank(state) >= 5:
+		value += 0.02
+	if bool(state.get("ascended", false)):
+		value += 0.03
+	return value
+
+
+static func peregrino_trail_life(state: Dictionary) -> float:
+	return 3.4 + 0.25 * _rank(state)
+
+
+static func prophecy_fate_cap(state: Dictionary) -> int:
+	return 4 if _rank(state) >= 5 else 3
+
+
+## Profetica: desviou de um tiro que ela viu chegando.
+static func prophecy_register_dodge(state: Dictionary) -> bool:
+	if int(state.get("prophecy_fate", 0)) >= prophecy_fate_cap(state):
+		return false
+	state["prophecy_fate"] = int(state.get("prophecy_fate", 0)) + 1
+	return true
+
+
+static func _segments_cross(a: Vector2, b: Vector2, c: Vector2, d: Vector2):
+	return Geometry2D.segment_intersects_segment(a, b, c, d)
+
+
+static func _polygon_area(points: PackedVector2Array) -> float:
+	var area := 0.0
+	for i in range(points.size()):
+		var a: Vector2 = points[i]
+		var b: Vector2 = points[(i + 1) % points.size()]
+		area += a.x * b.y - b.x * a.y
+	return absf(area) * 0.5
+
+
+## Peregrino: soma um ponto ao rastro e fecha territorio se cruzar o proprio
+## caminho. Devolve eventos.
+static func _peregrino_add_point(state: Dictionary, pos: Vector2) -> Array:
+	var events: Array = []
+	var path: Array = state.get("peregrino_path", [])
+	var life: float = peregrino_trail_life(state)
+	if not path.is_empty():
+		var last: Vector2 = Vector2(path[path.size() - 1]["pos"])
+		if float(state.get("peregrino_territory_cd", 0.0)) <= 0.0 and path.size() >= 5:
+			for i in range(path.size() - 4, 0, -1):
+				var hit = _segments_cross(last, pos, Vector2(path[i - 1]["pos"]), Vector2(path[i]["pos"]))
+				if hit == null:
+					continue
+				var poly := PackedVector2Array([hit])
+				for j in range(i, path.size()):
+					poly.append(Vector2(path[j]["pos"]))
+				var area: float = _polygon_area(poly)
+				if area >= PEREGRINO_MIN_LOOP_AREA:
+					events.append({"type": "peregrino_territory", "polygon": poly, "area": area})
+					state["peregrino_territory_cd"] = 1.0
+					state["peregrino_trail_speed"] = 2.2
+					path = []
+				break
+	path.append({"pos": pos, "life": life, "max": life})
+	while path.size() > PEREGRINO_MAX_POINTS:
+		path.pop_front()
+	state["peregrino_path"] = path
+	return events
 
 static func create(aura: String, level: = 1) -> Dictionary:
 	var state := {
@@ -71,6 +146,8 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"vanguard_ring": 0.0, 
 		"vanguard_guard": 0.0,
 		"vanguard_cinder_ready": false,
+		"vanguard_heat": 0,
+		"vanguard_wave_cd": 0.0,
 		"insane_ready": 20.0, 
 		"insane_echoes": 0, 
 		"insane_next_echoes": INSANE_ECHO_BASE, 
@@ -95,6 +172,9 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"prophecy_time": 0.0, 
 		"prophecy_sequence": 0, 
 		"prophecy_broken": 0.0, 
+		"prophecy_vision": 0.0,
+		"prophecy_vision_cd": 6.0,
+		"prophecy_fate": 0,
 		"blood_hits": {}, 
 		"blood_thirst": 0.0, 
 		"blood_last_wound": 0.0, 
@@ -128,6 +208,8 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"peregrino_decay": 0.0, 
 		"peregrino_trails": [], 
 		"peregrino_trail_speed": 0.0, 
+		"peregrino_path": [],
+		"peregrino_territory_cd": 0.0,
 		"equilibrista_balance": 0.0, 
 		"equilibrista_state": 0.0, 
 		"equilibrista_debt": 0.0, 
@@ -141,6 +223,8 @@ static func create(aura: String, level: = 1) -> Dictionary:
 		"avarento_fragments": [], 
 		"avarento_cache_score": -999999, 
 		"avarento_cache_cost": -1, 
+		"avarento_pending": 0,
+		"avarento_pending_lastro": 0.0,
 		"oportunista_charges": 0, 
 		"oportunista_armed": false, 
 		"oportunista_decay": 0.0, 
@@ -402,7 +486,7 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 	var enemies: Array = context.get("enemies", [])
 	state["last_attack"] = float(state.get("last_attack", 0.0)) + delta
 	state["ascension_flash"] = maxf(0.0, float(state.get("ascension_flash", 0.0)) - delta)
-	for key in ["rational_dilation", "rational_rebound", "rational_cooldown", "impulsive_active", "devoted_damage", "devoted_slow", "vanguard_ring", "vanguard_guard", "insane_ready", "abyss_tide", "prophecy_next", "prophecy_time", "prophecy_broken", "blood_slow", "voracious_satiation"]:
+	for key in ["rational_dilation", "rational_rebound", "rational_cooldown", "impulsive_active", "devoted_damage", "devoted_slow", "vanguard_ring", "vanguard_guard", "insane_ready", "abyss_tide", "prophecy_next", "prophecy_time", "prophecy_broken", "blood_slow", "voracious_satiation", "vanguard_wave_cd", "peregrino_territory_cd"]:
 		state[key] = maxf(0.0, float(state.get(key, 0.0)) - delta)
 
 	match name:
@@ -428,29 +512,14 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 						_crepuscular_toggle_phase(state)
 		"Peregrino":
 			state["peregrino_trail_speed"] = maxf(0.0, float(state.get("peregrino_trail_speed", 0.0)) - delta)
-			var trails: Array = state.get("peregrino_trails", [])
-			for trail in trails:
-				trail["life"] = float(trail.get("life", 0.0)) - delta
-			state["peregrino_trails"] = trails.filter( func(t): return float(t.get("life", 0.0)) > 0.0)
-			var sector: = _peregrino_sector_for(player_pos)
-			if sector != Vector2i(state.get("peregrino_sector", Vector2i(999999, 999999))):
-				events.append_array(_peregrino_grant_step(state, sector, player_pos, 1))
-			elif float(state.get("peregrino_journey", 0.0)) <= 0.0:
-				state["peregrino_idle"] = float(state.get("peregrino_idle", 0.0)) + delta
-				if float(state["peregrino_idle"]) >= 4.0:
-					state["peregrino_decay"] = float(state.get("peregrino_decay", 0.0)) + delta
-					if float(state["peregrino_decay"]) >= 2.0:
-						state["peregrino_decay"] = 0.0
-						state["peregrino_steps"] = maxi(0, int(state.get("peregrino_steps", 0)) - 1)
-			if float(state.get("peregrino_journey", 0.0)) > 0.0:
-				state["peregrino_journey"] = maxf(0.0, float(state["peregrino_journey"]) - delta)
-				events.append({"type": "heal_missing_ratio", "ratio": (0.002 + 0.0005 * level) * delta})
-				if bool(state.get("peregrino_refuge_active", false)) and player_pos.distance_to(Vector2(state.get("peregrino_refuge_pos", player_pos))) <= PEREGRINO_REFUGE_RADIUS:
-					state["peregrino_journey"] = 0.0
-					state["peregrino_refuge_active"] = false
-					events.append({"type": "heal_missing_ratio", "ratio": 0.04 + 0.01 * level, "text": "REFUGIO"})
-				elif float(state["peregrino_journey"]) <= 0.0:
-					state["peregrino_refuge_active"] = false
+			var path: Array = state.get("peregrino_path", [])
+			for point in path:
+				point["life"] = float(point.get("life", 0.0)) - delta
+			path = path.filter(func(pt): return float(pt.get("life", 0.0)) > 0.0)
+			state["peregrino_path"] = path
+			var last_sample: Vector2 = Vector2(path[path.size() - 1]["pos"]) if not path.is_empty() else Vector2(INF, INF)
+			if path.is_empty() or player_pos.distance_to(last_sample) >= PEREGRINO_SAMPLE_STEP:
+				events.append_array(_peregrino_add_point(state, player_pos))
 		"Equilibrista":
 			state["equilibrista_lock"] = maxf(0.0, float(state.get("equilibrista_lock", 0.0)) - delta)
 			var hp: = float(context.get("hp", 0.0))
@@ -523,13 +592,15 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 					state["devoted_charges"] = DEVOTED_CHARGES
 					events.append({"type": "text", "text": "FE RESTAURADA"})
 		"Vanguarda":
+			if float(state.get("vanguard_ring", 0.0)) <= 0.0:
+				state["vanguard_heat"] = 0
 			for enemy in enemies:
 				if float(enemy.get("aura_burn", 0.0)) > 0.0:
 					enemy["aura_burn"] = maxf(0.0, float(enemy["aura_burn"]) - delta)
 					enemy["aura_burn_tick"] = float(enemy.get("aura_burn_tick", 0.0)) - delta
 					if float(enemy["aura_burn_tick"]) <= 0.0:
 						enemy["aura_burn_tick"] = 1.0
-						events.append({"type": "enemy_damage", "uid": int(enemy.get("uid", -1)), "amount": maxf(1.0, float(enemy.get("max_hp", 1.0)) * (0.01 + level * 0.002)), "source": "aura_vanguarda"})
+						events.append({"type": "enemy_damage", "uid": int(enemy.get("uid", -1)), "amount": maxf(1.0, float(enemy.get("max_hp", 1.0)) * (0.01 + level * 0.002) * (1.0 + 0.2 * int(state.get("vanguard_heat", 0)))), "source": "aura_vanguarda"})
 						if level >= 9 and bool(state.get("vanguard_cinder_ready", false)):
 							state["vanguard_cinder_ready"] = false
 							events.append({"type": "cooldown_recovery", "amount": 0.6, "max_ratio": 0.3})
@@ -568,7 +639,14 @@ static func update(state: Dictionary, delta: float, context: Dictionary) -> Arra
 					state["abyss_tide"] = 5.2 + level * 0.55
 					events.append({"type": "text", "text": "MARE NEGRA"})
 		"Profetica":
-			_update_prophecy(state, enemies, events)
+			if float(state.get("prophecy_vision", 0.0)) > 0.0:
+				state["prophecy_vision"] = maxf(0.0, float(state["prophecy_vision"]) - delta)
+			else:
+				state["prophecy_vision_cd"] = float(state.get("prophecy_vision_cd", 6.0)) - delta
+				if float(state["prophecy_vision_cd"]) <= 0.0:
+					state["prophecy_vision"] = 3.0 + 0.15 * level
+					state["prophecy_vision_cd"] = maxf(6.5, 11.0 - 0.45 * level)
+					events.append({"type": "prophecy_vision"})
 		"Sanguinaria":
 			var hit_keys: Array = Dictionary(state["blood_hits"]).keys()
 			for uid in hit_keys:
@@ -605,6 +683,13 @@ static func on_attack(state: Dictionary, projectile: Dictionary) -> Array:
 		"Voraz":
 			projectile["damage"] = float(projectile.get("damage", 0.0)) * (1.0 + voracious_intensity(state) * (0.07 + int(state["level"]) * 0.004))
 			projectile["aura_scale"] = 1.0 + voracious_intensity(state) * 0.12
+		"Profetica":
+			if int(state.get("prophecy_fate", 0)) > 0:
+				state["prophecy_fate"] = int(state["prophecy_fate"]) - 1
+				projectile["damage"] = float(projectile.get("damage", 0.0)) * (1.6 + 0.06 * _rank(state) + (0.15 if bool(state.get("ascended", false)) else 0.0))
+				projectile["prophecy_crit"] = true
+				projectile["aura_scale"] = 1.35
+				events.append({"type": "prophecy_crit"})
 		"Nula":
 			if bool(state["null_armed"]):
 				projectile["aura_null"] = true
@@ -762,7 +847,7 @@ static func on_player_hit(state: Dictionary, amount: float, hp: float, hp_max: f
 				state["avarento_shield"] = av_shield - av_absorb
 				result["amount"] = maxf(0.0, float(result.get("amount", amount)) - av_absorb)
 			var lastro: = float(state.get("avarento_lastro", 0.0))
-			var protection: = minf(0.3, lastro * (0.025 + 0.01 * level))
+			var protection: = minf(0.35, lastro * (0.035 + 0.012 * level))
 			if protection > 0.0:
 				result["amount"] = float(result.get("amount", amount)) * (1.0 - protection)
 		"Impulsiva":
@@ -795,6 +880,10 @@ static func on_player_hit(state: Dictionary, amount: float, hp: float, hp_max: f
 					result["events"].append({"type": "text", "text": "BRASA PROTETORA"})
 			state["vanguard_ring"] = 5.0
 			state["vanguard_guard"] = 1.8 if level >= 2 else 0.0
+			if float(state.get("vanguard_wave_cd", 0.0)) <= 0.0:
+				state["vanguard_wave_cd"] = VANGUARD_WAVE_COOLDOWN
+				state["vanguard_heat"] = mini(VANGUARD_HEAT_MAX, int(state.get("vanguard_heat", 0)) + 1)
+				result["events"].append({"type": "vanguard_wave", "received": amount, "radius": vanguard_ring_radius(state), "heat": int(state["vanguard_heat"])})
 			state["vanguard_cinder_ready"] = level >= 9
 	return result
 
@@ -806,13 +895,16 @@ static func on_dash(state: Dictionary, context: = {}) -> Array:
 				var next_phase: = "ocaso" if String(state.get("crepuscular_phase", "alvorada")) == "alvorada" else "alvorada"
 				events.append_array(_crepuscular_activate_eclipse(state, next_phase))
 		"Peregrino":
-			var pos: = Vector2(context.get("target_pos", context.get("player_pos", Vector2.ZERO)))
-			var sector: = _peregrino_sector_for(pos)
-			events.append_array(_peregrino_grant_step(state, sector, pos, 2))
-			state["peregrino_trail_speed"] = 1.8 + 0.2 * _rank(state)
-			var trails: Array = state.get("peregrino_trails", [])
-			trails.append({"pos": pos, "life": state["peregrino_trail_speed"], "max": state["peregrino_trail_speed"]})
-			state["peregrino_trails"] = trails
+			# O teleporte risca uma linha reta no chao: e o jeito rapido de
+			# fechar um laco.
+			var origin_pos: Vector2 = Vector2(context.get("origin_pos", context.get("player_pos", Vector2.ZERO)))
+			var target: Vector2 = Vector2(context.get("target_pos", origin_pos))
+			var steps: int = clampi(int(origin_pos.distance_to(target) / PEREGRINO_SAMPLE_STEP), 1, 20)
+			for i in range(1, steps + 1):
+				events.append_array(_peregrino_add_point(state, origin_pos.lerp(target, float(i) / float(steps))))
+		"Profetica":
+			if bool(context.get("escaped_telegraph", false)) and prophecy_register_dodge(state):
+				events.append({"type": "prophecy_dodge"})
 		"Avarento":
 			state["avarento_weight_suspension"] = maxf(float(state.get("avarento_weight_suspension", 0.0)), 1.5)
 			var origin: = Vector2(context.get("origin_pos", context.get("player_pos", Vector2.ZERO)))
@@ -856,18 +948,16 @@ static func speed_multiplier(state: Dictionary) -> float:
 			return 1.0 + satiated_speed
 		"Crepuscular": return 1.0 + (0.1 + 0.02 * _rank(state) if ascended else 0.08 + 0.02 * _rank(state)) if _crepuscular_is_eclipse(state) else 1.0
 		"Peregrino":
-			var mult: = 1.0
-			if float(state.get("peregrino_journey", 0.0)) > 0.0:
-				mult += 0.08 + 0.025 * _rank(state) + (0.08 if ascended else 0.0)
+			var mult: = 1.03 + 0.006 * _rank(state) + (0.04 if ascended else 0.0)
 			if float(state.get("peregrino_trail_speed", 0.0)) > 0.0:
-				mult += 0.08
+				mult += 0.12
 			return mult
 		"Avarento":
 			var mult: = 1.0
 			if float(state.get("avarento_cofre", 0.0)) > 0.0:
 				mult += 0.08 + 0.02 * _rank(state) + minf(0.12, float(state.get("avarento_lastro", 0.0)) * 0.025)
 			elif float(state.get("avarento_weight_suspension", 0.0)) <= 0.0:
-				var penalty: = minf(0.15, float(state.get("avarento_lastro", 0.0)) * 0.022)
+				var penalty: = minf(0.1, float(state.get("avarento_lastro", 0.0)) * 0.015)
 				var penalty_mult: = maxf(0.4, 1.0 - 0.1 * float(_rank(state) - 1))
 				mult -= penalty * penalty_mult
 			return maxf(0.72, mult)
@@ -931,13 +1021,27 @@ static func on_points_spent(state: Dictionary, amount: int, hp_max: float) -> Ar
 	var events: Array = []
 	if String(state.get("name", "")) != "Avarento" or amount <= 0:
 		return events
-	var level: = _rank(state)
-	var lastro_before: = maxf(1.0, float(state.get("avarento_lastro", 0.0)))
-	state["avarento_cofre"] = 3.5 + 0.4 * level
-	state["avarento_weight_suspension"] = maxf(float(state.get("avarento_weight_suspension", 0.0)), float(state["avarento_cofre"]))
-	state["avarento_shield"] = maxf(float(state.get("avarento_shield", 0.0)), hp_max * minf(0.3, (0.025 + 0.01 * level) * lastro_before))
-	events.append({"type": "text", "text": "COFRE ROMPIDO"})
+	# Gastar acontece na loja (fora da arena). O cofre fica ARMADO e so rompe
+	# quando ela volta para a luta (release_avarento_cofre), senao o bonus
+	# acabava antes dela sair da oficina.
+	state["avarento_pending"] = int(state.get("avarento_pending", 0)) + amount
+	state["avarento_pending_lastro"] = maxf(float(state.get("avarento_pending_lastro", 0.0)), maxf(1.0, float(state.get("avarento_lastro", 0.0))))
 	return events
+
+
+static func release_avarento_cofre(state: Dictionary, hp_max: float) -> Dictionary:
+	var spent: int = int(state.get("avarento_pending", 0))
+	if String(state.get("name", "")) != "Avarento" or spent <= 0:
+		return {}
+	var level: = _rank(state)
+	var lastro_before: float = float(state.get("avarento_pending_lastro", 1.0))
+	state["avarento_pending"] = 0
+	state["avarento_pending_lastro"] = 0.0
+	state["avarento_cofre"] = 4.5 + 0.5 * level
+	state["avarento_weight_suspension"] = maxf(float(state.get("avarento_weight_suspension", 0.0)), float(state["avarento_cofre"]))
+	var shield: float = hp_max * minf(0.35, (0.035 + 0.012 * level) * lastro_before)
+	state["avarento_shield"] = maxf(float(state.get("avarento_shield", 0.0)), shield)
+	return {"spent": spent, "lastro": lastro_before, "shield": shield, "damage_mult": (1.4 + 0.35 * lastro_before) * (1.0 + 0.08 * level)}
 
 static func on_direct_damage_dealt(state: Dictionary, target: Dictionary, damage: float, source_category: String, player_damage: float) -> Array:
 	var events: Array = []

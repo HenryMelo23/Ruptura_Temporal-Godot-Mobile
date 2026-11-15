@@ -898,3 +898,26 @@ Mitigados nesta mesma passagem (também sem prova online):
   `BUDGET_STABLE = -1` quando a fenda do jogador está estável, e quem recebe
   marca `mp_room_stable`. Basta um da sala ter entregue as peças para o relógio
   parar para todos — que é a leitura generosa e combina com a ficção.
+
+## 2026-11-13 — Cena da fenda, empurrão, balões, Curater e Aglomerador
+
+Validado só em solo (`tests/merchant_rift_transition_smoke.gd`,
+`tests/curater_escort_smoke.gd`, `tests/agglomeration_spatial_smoke.gd`,
+`tests/speech_bubble_smoke.gd`).
+
+- **Cena de entrada/saída da fenda** (`RTMerchantRiftTransition`) é **só solo**:
+  `enabled()` devolve falso com `is_multiplayer`, então a sala continua com a
+  troca instantânea de antes. Nada novo em RPC/snapshot.
+- **Empurrão da horda ao entrar** roda dentro de `RTMerchantDimension.enter()`
+  também no multiplayer, sobre o `core.enemies` local antes de salvar. Na
+  autoridade isso move a horda real; numa réplica o próximo snapshot manda.
+  Dever: confirmar em dois aparelhos que a horda restaurada na saída fica fora
+  do anel nos dois lados e não "salta" de volta.
+- **Curater** passou a escoltar aliados (`_curater_move_dir`). Roda na
+  autoridade dentro de `_move_enemy`; estado novo (`curater_escort_uid`,
+  `curater_escort_timer`) fica no dicionário do inimigo. Dever: ver se o
+  snapshot de inimigos não engorda nem perde a posição suavizada do Curater.
+- **Aglomerador**: fusão agora em 5 s de bolo contínuo após 5:30, teto 2 vivos,
+  respiro 28 s (`fusion_cooldown_timer`, fora do snapshot da run). Autoridade
+  apenas, como antes.
+- **Balões de fala** viraram `RTSpeechBubbles` genérico; só desenho local.

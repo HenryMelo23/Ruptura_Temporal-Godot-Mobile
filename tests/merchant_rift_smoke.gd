@@ -50,6 +50,12 @@ func _open_counter(dimension) -> void:
 	dimension.update(0.016)
 
 
+## Termina a cena de entrada/saida da fenda (mergulho, queda ou saida).
+func _settle_transition() -> void:
+	for _i in range(3):
+		game._rift_transition().update(5.0)
+
+
 func _run() -> void:
 	_prepare_run()
 	var rift_controller = game.shop_rift_controller
@@ -74,6 +80,9 @@ func _run() -> void:
 	# 3) Entrar pela fenda leva para a oficina; a loja abre no balcao.
 	game.player_pos = rift_pos
 	rift_controller.update(0.016)
+	# Solo: a Geovana e puxada para dentro (cena) antes de chegar na oficina.
+	_check(game._rift_transition().phase == "dive", "solo rift entry did not start the dive scene")
+	_settle_transition()
 	var dimension = game._merchant_dimension()
 	_check(dimension.active, "walking into the rift did not open the merchant dimension")
 	_check(rift_controller.state() == rift_controller.STATE_ENTERED, "rift did not register the entry")
@@ -83,6 +92,7 @@ func _run() -> void:
 	_check(game.shop_rift_kills == 0, "kill progress was not consumed by the entry")
 	game.shop_controller.finish()
 	dimension.leave(false)
+	_settle_transition()
 	_check(not rift_controller.active(), "entered rift survived the shop exit")
 	_check(game.shop_rift_next_allowed_time > game.time_alive, "no spacing after closing the rift shop")
 
@@ -110,6 +120,7 @@ func _run() -> void:
 	_check(rift_controller.unstable(), "rift near expiry is not unstable")
 	game.player_pos = Vector2(game.shop_rift["pos"])
 	rift_controller.update(0.016)
+	_settle_transition()
 	_check(dimension.active, "edge entry did not open the merchant dimension")
 	_open_counter(dimension)
 	_check(game.mode == "shop", "edge entry did not reach the counter")
@@ -119,6 +130,7 @@ func _run() -> void:
 	_check(game.shop_rift_fragments == 0, "fragments were not consumed")
 	game.shop_controller.finish()
 	dimension.leave(false)
+	_settle_transition()
 
 	# 6) Chamada do boss recolhe a fenda e devolve um fragmento.
 	game.mode = "game"

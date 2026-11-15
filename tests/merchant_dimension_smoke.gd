@@ -69,7 +69,7 @@ func _run() -> void:
 	_check(dim.active, "a oficina nao ficou ativa")
 	_check(game.WORLD_SIZE == RTMerchantDimension.WORLD_SIZE, "o mundo nao encolheu")
 	_check(game.enemies.is_empty(), "a horda entrou junto")
-	_check(is_equal_approx(dim.limit, 100.0), "cronometro deveria ser 20s por carta compravel (%.0f)" % dim.limit)
+	_check(is_equal_approx(dim.limit, 40.0), "cronometro deveria ser 8s por carta compravel (%.0f)" % dim.limit)
 	game.enemy_manager.spawn_wave()
 	_check(game.enemies.is_empty(), "a oficina gerou horda")
 	# Nem horda, nem miniboss, nem evento: a fase fica suspensa aqui dentro.
@@ -132,7 +132,7 @@ func _run() -> void:
 		talk.revealed = 99999.0
 		talk.advance_input()
 	_check(complained, "ninguem falou do achado nao e roubado")
-	_check(is_equal_approx(dim.limit, 60.0), "sem essencia o piso de 3 cartas da 60s (%.0f)" % dim.limit)
+	_check(is_equal_approx(dim.limit, 24.0), "sem essencia o piso de 3 cartas da 24s (%.0f)" % dim.limit)
 	dim.leave(false)
 	_check(int(game.score) == 0, "a saida pelo portal nao deveria confiscar nada")
 
@@ -177,11 +177,11 @@ func _run() -> void:
 	_check(int(game.shop_mp_expected_count) == 3, "a sala deveria ter 3 (%d)" % int(game.shop_mp_expected_count))
 	dim.talked_this_visit = true
 	dim.entry_age = 5.0
-	_check(is_equal_approx(dim.limit, 60.0), "o tempo local deveria ser 60s (%.0f)" % dim.limit)
+	_check(is_equal_approx(dim.limit, 24.0), "o tempo local deveria ser 24s (%.0f)" % dim.limit)
 	dim.on_remote_budget(9)
-	_check(is_equal_approx(dim.limit, 180.0), "o tempo deveria seguir quem compra mais (%.0f)" % dim.limit)
+	_check(is_equal_approx(dim.limit, 72.0), "o tempo deveria seguir quem compra mais (%.0f)" % dim.limit)
 	dim.on_remote_budget(2)
-	_check(is_equal_approx(dim.limit, 180.0), "o tempo da sala nao pode encolher (%.0f)" % dim.limit)
+	_check(is_equal_approx(dim.limit, 72.0), "o tempo da sala nao pode encolher (%.0f)" % dim.limit)
 	game.player_pos = RTMerchantDimension.EXIT_PORTAL_POS
 	dim.update(0.05)
 	_check(dim.mp_ready, "nao registrou que ela chegou na saida")
@@ -223,5 +223,5 @@ func _run() -> void:
 	_check(dim.collapses == 2, "o segundo confisco precisa de id proprio (%d)" % dim.collapses)
 	game.is_multiplayer = false
 
-	print("MERCHANT_DIMENSION_OK checks=%d cartas_x20s=%.0fs pecas=%d equipe=ok" % [checks, RTMerchantDimension.SECONDS_PER_CARD, RTMerchantNpc.PARTS_REQUIRED])
+	print("MERCHANT_DIMENSION_OK checks=%d cartas_x%.0fs pecas=%d equipe=ok" % [checks, RTMerchantDimension.SECONDS_PER_CARD, RTMerchantNpc.PARTS_REQUIRED])
 	quit(0)

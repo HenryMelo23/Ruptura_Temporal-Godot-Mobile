@@ -130,10 +130,8 @@ func _run() -> void:
 	game.henry_idle_beard_timer = 0.0
 	game.henry_idle_elapsed = 1.70
 	_check(game._henry_idle_frame_index() == 2, "foot-tap idle did not reach its raised-foot frame")
-	game.geovana_bark_controller.active_text = "NAO DEVE APARECER"
-	game.geovana_bark_controller.active_timer = 2.0
-	game.geovana_bark_controller.update(game, 0.01)
-	_check(game.geovana_bark_controller.active_text == "" and not game.geovana_bark_controller.request(game, "ambient"), "Henry retained Geovana's dialogue box")
+	# O monologo da primeira partida e exclusivo da Geovana.
+	_check(not game.geovana_first_run_monologue.eligible(game), "Henry received Geovana's first-run monologue")
 
 	game.player_hp_max = 400
 	game.player_hp = 400

@@ -56,6 +56,8 @@ static func _arauto_texture(game: Node2D) -> Texture2D:
 
 
 static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
+	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))):
+		return RTSertaoPresentation.enemy_draw_size(String(enemy.get("type", "")))
 	match String(enemy.get("type", game.ENEMY_COMMON)):
 		game.ENEMY_AGGLOMERATOR:
 			return Vector2(86, 86)
@@ -120,6 +122,10 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 	var idx: int = int(enemy["phase"]) % 2
 	var kind7: String = String(enemy.get("type", game.ENEMY_COMMON))
+	if game.sertao_controller.owns_kind(kind7):
+		var s8_tex: Texture2D = RTSertaoPresentation.enemy_texture(game, enemy)
+		if s8_tex != null:
+			return s8_tex
 	if kind7 == game.ENEMY_SINEIRO_BOREAL:
 		var sineiro_texture: Texture2D = game.SineiroBorealPresentation.enemy_texture(game, enemy)
 		if sineiro_texture != null:
@@ -236,6 +242,8 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 
 
 static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
+	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))):
+		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 	if String(enemy.get("type", game.ENEMY_COMMON)) == game.ENEMY_SINEIRO_BOREAL:
 		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 	if game.current_phase == 6:
@@ -299,6 +307,8 @@ static func _enemy_visual_offset(game: Node2D, enemy: Dictionary) -> Vector2:
 
 
 static func _boss_texture(game: Node2D) -> Texture2D:
+	if game.current_phase == RTSertaoController.PHASE:
+		return RTSertaoPresentation.boss_texture(game)
 	if game.current_phase == 7:
 		if not game.boss7_core_active:
 			return RTBoss7Animator.texture(game)
@@ -410,6 +420,8 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 
 
 static func _boss_draw_size(game: Node2D) -> Vector2:
+	if game.current_phase == RTSertaoController.PHASE:
+		return RTBoss8Controller.DRAW_SIZE
 	if game.current_phase == 1:
 		return Boss1AnimationPresentation.draw_size(game)
 	if game.current_phase == 2:

@@ -20,6 +20,18 @@ const FLOOR_COVER := 1560.0
 const HUD_BAND := 98.0
 
 static var _cache: Dictionary = {}
+static var _seq_cache: Dictionary = {}
+
+## Humor da fala -> sufixo do retrato (portrait_<quem>_<sufixo>[_talk_n|_blink]).
+const MOOD_SUFFIX := {
+	"triste": "sad", "surpresa": "surprised", "desconfiada": "suspicious",
+	"irritada": "annoyed", "decidida": "determined", "preocupada": "worried",
+	"animado": "excited", "sorrindo": "happy", "preocupado": "worried",
+}
+const LOOP_BOX_H := 1.3
+const LOOP_FOOT_PAD := 0.03
+## Loops do Mercador no mundo (quadros <nome>_0.. em assets/sprites/merchant/).
+const MERCHANT_LOOP_FPS := {"merchant_idle_loop": 6.0, "merchant_work_loop": 9.0, "merchant_talk_loop": 8.0, "merchant_cheer_loop": 9.0}
 
 
 static func art(name: String) -> Texture2D:
@@ -29,6 +41,27 @@ static func art(name: String) -> Texture2D:
 	var tex: Texture2D = load(path) if ResourceLoader.exists(path) else null
 	_cache[name] = tex
 	return tex
+
+
+## Sequencia <base>_0, <base>_1... (vazia se a arte ainda nao existe).
+static func seq(base: String) -> Array:
+	if _seq_cache.has(base):
+		return _seq_cache[base]
+	var frames: Array = []
+	for i in range(24):
+		var tex: Texture2D = art("%s_%d" % [base, i])
+		if tex == null:
+			break
+		frames.append(tex)
+	_seq_cache[base] = frames
+	return frames
+
+
+static func seq_frame(base: String, fps: float, t: float) -> Texture2D:
+	var frames: Array = seq(base)
+	if frames.is_empty():
+		return null
+	return frames[int(floor(t * fps)) % frames.size()]
 
 
 # ================================================================ mundo
@@ -93,7 +126,7 @@ static func _draw_exit_portal(game: Node2D, camera: Vector2, t: float) -> void:
 			var r: float = 44.0 - float(ring) * 11.0 + sin(t * 2.4 + float(ring)) * 3.0
 			game.draw_arc(at, r, t * (1.4 + float(ring) * 0.5), t * (1.4 + float(ring) * 0.5) + PI * 1.5, 28, Color(GLOW.r, GLOW.g, GLOW.b, 0.8 - 0.2 * float(ring)), 3.0, true)
 		game.draw_circle(at, 22.0, Color(VOID.r, VOID.g, VOID.b, 0.85))
-	game._draw_centered("SAIDA", at + Vector2(0, -64), 14, Color(GLOW.r, GLOW.g, GLOW.b, 0.9))
+	game._draw_centered("SAÍDA", at + Vector2(0, -64), 14, Color(GLOW.r, GLOW.g, GLOW.b, 0.9))
 
 
 ## Desenha um movel/cenario ancorado pelo pe, na escala pedida. `flip` espelha
@@ -256,14 +289,23 @@ static func _draw_workshop(game: Node2D, camera: Vector2, t: float) -> void:
 static func _draw_merchant(game: Node2D, camera: Vector2, t: float, dim: RTMerchantDimension) -> void:
 	var at: Vector2 = RTMerchantDimension.MERCHANT_POS - camera
 	var npc: RTMerchantNpc = game._merchant_npc()
-	var tex: Texture2D = art(_merchant_pose(game, npc, t))
+	var pose: String = _merchant_pose(game, npc, t)
+	var loop: String = _merchant_loop(game, npc)
+	var tex: Texture2D = seq_frame(loop, float(MERCHANT_LOOP_FPS.get(loop, 8.0)), t)
+	# Quadros de loop (tools/talk_slice.py) tem folga em cima e dos lados:
+	# a altura dele em pe e 1/LOOP_BOX_H da imagem e os pes ficam a
+	# LOOP_FOOT_PAD da base.
+	var looped: bool = tex != null
+	if tex == null:
+		tex = art(pose)
 	if tex == null:
 		tex = art("merchant")
 	if tex != null:
 		var s: Vector2 = tex.get_size()
-		var scale: float = 118.0 / maxf(1.0, s.y)
+		var scale: float = (118.0 * LOOP_BOX_H if looped else 118.0) / maxf(1.0, s.y)
+		var pad: float = s.y * LOOP_FOOT_PAD / LOOP_BOX_H if looped else 0.0
 		game.draw_set_transform(at, 0.0, Vector2(scale, scale))
-		game.draw_texture(tex, Vector2(-s.x * 0.5, -s.y))
+		game.draw_texture(tex, Vector2(-s.x * 0.5, -s.y + pad))
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	else:
 		_draw_merchant_placeholder(game, at, t)
@@ -286,6 +328,42 @@ static func _merchant_pose(game: Node2D, npc: RTMerchantNpc, t: float) -> String
 	if far and not game._dialogue().busy():
 		return "merchant_work"
 	return "merchant_idle_%02d" % (1 + int(t * 3.0) % 2)
+
+
+## Loop animado equivalente a pose: conserta longe dela, gesticula quando e
+## ele falando, comemora no balao, e respira/pisca no resto do tempo.
+static func _merchant_loop(game: Node2D, npc: RTMerchantNpc) -> String:
+	if npc.bubble != "":
+		return "merchant_cheer_loop"
+	var talk: RTDialogueController = game._dialogue()
+	if talk.busy():
+		return "merchant_talk_loop" if talk.speaker() == "mercador" and not talk.fully_revealed() else "merchant_idle_loop"
+	if game.player_pos.distance_to(RTMerchantDimension.MERCHANT_POS) > RTMerchantDimension.TALK_RADIUS * 1.6:
+		return "merchant_work_loop"
+	return "merchant_idle_loop"
+
+
+## Retrato da caixa de dialogo: boca mexendo enquanto o texto corre, piscada
+## de vez em quando parado. Cai para o retrato neutro se o humor nao tiver arte.
+static func _portrait(game: Node2D, talk: RTDialogueController, who: String) -> Texture2D:
+	var t: float = float(game.time_alive)
+	var bases: Array = []
+	var suffix: String = String(MOOD_SUFFIX.get(talk.mood(), ""))
+	if suffix != "":
+		bases.append("portrait_%s_%s" % [who, suffix])
+	bases.append("portrait_" + who)
+	for base in bases:
+		if art(base) == null and seq(base + "_talk").is_empty():
+			continue
+		if not talk.fully_revealed():
+			var mouth: Texture2D = seq_frame(base + "_talk", 9.0, t)
+			if mouth != null:
+				return mouth
+		elif fposmod(t, 3.4) < 0.13 and art(base + "_blink") != null:
+			return art(base + "_blink")
+		if art(base) != null:
+			return art(base)
+	return null
 
 
 ## Enquanto a arte nao chega: alien de bigode, para a silhueta ja ler certo.
@@ -395,6 +473,34 @@ static func _draw_timer(game: Node2D, viewport: Vector2, dim: RTMerchantDimensio
 	game._draw_centered("ESTABILIDADE DA FENDA  %ds" % int(ceil(left)), rect.get_center() + Vector2(0.0, 20.0), 12, Color(0.86, 0.92, 1.0))
 
 
+## Barra da fenda DENTRO da tela de cartas. O relogio corre enquanto ela
+## escolhe, entao ela precisa ver o relogio correndo - sem isso o tempo some
+## sem aviso e a expulsao parece injusta.
+static func draw_shop_timer(game: Node2D, viewport: Vector2, visor: Rect2) -> void:
+	var dim: RTMerchantDimension = game._merchant_dimension()
+	if not dim.active or dim.stable() or game._dialogue().busy():
+		return
+	var left: float = dim.remaining()
+	var ratio: float = clampf(left / maxf(1.0, dim.limit), 0.0, 1.0)
+	var w: float = minf(360.0, visor.size.x * 0.42)
+	var top: float = visor.position.y + 26.0
+	var rect := Rect2(Vector2(viewport.x * 0.5 - w * 0.5, top), Vector2(w, 13.0))
+	var danger: bool = dim.urgent()
+	var beat: float = 0.5 + 0.5 * sin(float(game.time_alive) * 11.0)
+	var col: Color = Color(1.0, 0.34, 0.34) if danger else Color(BRASS.r, BRASS.g, BRASS.b, 1.0)
+	if danger:
+		col.a = 0.6 + 0.4 * beat
+	game.draw_rect(rect.grow(3.0), Color(0.02, 0.02, 0.05, 0.9), true)
+	game.draw_rect(Rect2(rect.position, Vector2(rect.size.x * ratio, rect.size.y)), col, true)
+	game.draw_rect(rect, Color(0.75, 0.68, 0.5, 0.55), false, 1.5)
+	var label: String = "A FENDA FECHA EM %ds" % int(ceil(left))
+	var tint := Color(1.0, 0.92, 0.78, 0.95)
+	if danger:
+		label = "SAIA DO BALCÃO  %ds" % int(ceil(left))
+		tint = Color(1.0, 0.55 - 0.25 * beat, 0.45 - 0.2 * beat)
+	game._draw_centered_outlined(label, rect.get_center() + Vector2(0.0, 24.0), 15 if danger else 13, tint, Color(0.0, 0.0, 0.0, 0.9), 3)
+
+
 ## Contagem regressiva grande dos ultimos segundos: numero pulsando, aviso de
 ## correr para a saida, seta apontando o portal e as bordas piscando.
 static func _draw_countdown(game: Node2D, viewport: Vector2, dim: RTMerchantDimension) -> void:
@@ -413,11 +519,11 @@ static func _draw_countdown(game: Node2D, viewport: Vector2, dim: RTMerchantDime
 	var size: int = int((56.0 if viewport.x < 900.0 else 72.0) * (1.0 + 0.07 * beat))
 	var tint := Color(1.0, lerpf(0.72, 0.1, urgency), lerpf(0.5, 0.1, urgency))
 	game._draw_centered_outlined(str(int(ceil(left))), center, size, tint, Color(0.0, 0.0, 0.0, 1.0), 6)
-	var warn: String = "CORRA PARA A SAIDA"
+	var warn: String = "CORRA PARA A SAÍDA"
 	if dim.mp_ready:
 		warn = "AGUARDANDO A EQUIPE  %d/%d" % [dim.mp_ready_total(), maxi(1, int(game.shop_mp_expected_count))]
 	elif dim.multiplayer_room():
-		warn = "TODOS PRECISAM TOCAR A SAIDA"
+		warn = "TODOS PRECISAM TOCAR A SAÍDA"
 	game._draw_centered_outlined(warn, center + Vector2(0.0, size * 0.72), 16, Color(1.0, 0.9, 0.86), Color(0.0, 0.0, 0.0, 0.9), 3)
 	if not dim.mp_ready:
 		_draw_exit_arrow(game, viewport, center + Vector2(0.0, size * 0.72 + 34.0), beat)
@@ -437,7 +543,7 @@ static func _draw_exit_arrow(game: Node2D, viewport: Vector2, at: Vector2, beat:
 
 ## Aviso calmo de quem ja chegou no portal e espera os companheiros.
 static func _draw_team_wait(game: Node2D, viewport: Vector2, dim: RTMerchantDimension) -> void:
-	var text: String = "NA SAIDA  %d/%d  ESPERANDO A EQUIPE" % [dim.mp_ready_total(), maxi(1, int(game.shop_mp_expected_count))]
+	var text: String = "NA SAÍDA  %d/%d  ESPERANDO A EQUIPE" % [dim.mp_ready_total(), maxi(1, int(game.shop_mp_expected_count))]
 	var at := Vector2(viewport.x * 0.5, maxf(HUD_BAND, viewport.y * 0.145) + 46.0)
 	game._draw_centered_outlined(text, at, 15, Color(0.62, 0.95, 1.0), Color(0.0, 0.0, 0.0, 0.9), 3)
 
@@ -457,16 +563,17 @@ static func _draw_dialogue(game: Node2D, viewport: Vector2) -> void:
 	game.draw_rect(box, Color(BRASS.r, BRASS.g, BRASS.b, 0.9), false, 2.5)
 	# Retrato encostado na borda de cima da caixa.
 	var portrait_rect := Rect2(box.position + Vector2(10.0, -portrait_size * 0.52), Vector2(portrait_size, portrait_size))
-	var portrait: Texture2D = art("portrait_" + who + ("_sad" if talk.mood() == "triste" else ""))
-	if portrait == null:
-		portrait = art("portrait_" + who)
+	var portrait: Texture2D = _portrait(game, talk, who)
 	game.draw_rect(portrait_rect, Color(0.02, 0.03, 0.07, 0.95), true)
 	if portrait != null:
 		game._draw_entity_fit(portrait, portrait_rect.get_center(), portrait_rect.size)
 	else:
 		_draw_portrait_placeholder(game, portrait_rect, who)
 	game.draw_rect(portrait_rect, Color(BRASS.r, BRASS.g, BRASS.b, 0.95), false, 2.0)
-	var name_text: String = "MERCADOR" if who == "mercador" else "GEOVANA"
+	# Ele so vira "Bussola" na placa depois de se apresentar.
+	var name_text: String = "GEOVANA"
+	if who == "mercador":
+		name_text = "BÚSSOLA" if game._merchant_npc().seen.has("intro") else "MERCADOR"
 	game.draw_string(game.font, portrait_rect.position + Vector2(0.0, portrait_rect.size.y + 18.0), name_text, HORIZONTAL_ALIGNMENT_CENTER, portrait_rect.size.x, 13, Color(BRASS.r, BRASS.g, BRASS.b, 1.0))
 	var text_rect := Rect2(Vector2(portrait_rect.end.x + 18.0, box.position.y + 18.0), Vector2(box.end.x - portrait_rect.end.x - 34.0, box.size.y - 44.0))
 	game._draw_wrapped(talk.visible_text(), text_rect, 17, Color(0.94, 0.95, 1.0))

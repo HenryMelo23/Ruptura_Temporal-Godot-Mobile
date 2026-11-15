@@ -590,8 +590,8 @@ function runTimelineReport(run) {
       windows: [],
       precision: "not-calculable",
       note: finalPoint.duration < RUN_ANALYSIS_MIN_SECONDS
-        ? "Run menor que 2 minutos. O Observatorio preserva o registro, mas nao usa esta partida como parametro do grafico por falta de variaveis suficientes."
-        : "Sem baseline inicial e checkpoint de 2 minutos na mesma run. O registro existe, mas nao entra como parametro calculavel."
+        ? "Run menor que 2 minutos. O Observatorio nao usa esta partida como parametro do grafico por falta de variaveis suficientes."
+        : "Sem baseline inicial e checkpoint de 2 minutos na mesma run. O registro nao entra como parametro calculavel."
     };
   }
   const windows = [];
@@ -707,8 +707,8 @@ function signatureList(items, tone) {
 function renderStory(snapshot) {
   const analytics = aggregateSnapshot(snapshot);
   const chapters = [
-    ["O primeiro rasgo", "Geovana encontra uma ruptura que nao so abre espaco: ela altera habito, tempo e memoria. Cada run e uma tentativa de atravessar uma regra nova sem perder o proprio corpo no processo."],
-    ["A ramificacao da Chaga", "A fase 6 nao e o fim numerico da jornada. Ela e uma abertura alternativa, uma contaminacao inicial que pode substituir ou interromper a primeira linha antes da campanha seguir para as camadas seguintes."],
+    ["O primeiro rasgo", "Geovana encontra uma ruptura que altera habito, tempo e memoria. Cada run e uma tentativa de atravessar uma regra nova sem perder o proprio corpo no processo."],
+    ["A ramificacao da Chaga", "A fase 6 e uma abertura alternativa, uma contaminacao inicial que pode substituir ou interromper a primeira linha antes da campanha seguir para as camadas seguintes."],
     ["As manifestacoes", "Cada manifestacao e uma forma diferente de negociar com a Ruptura. Eletrica acumula energia, Lacerante converte risco em pressao, Prismatica domina angulos, Parasitica contamina a arena e Gravitante controla o espaco."],
     ["O observatorio", "Este site le as runs como documentos. Tempo, dano, escolhas, cartas e posicoes mostram onde o jogador dominou a partida e onde a fase obrigou uma decisao ruim."]
   ];
@@ -811,7 +811,7 @@ function renderPlayer(runKey, snapshot, cardAssetUrl, publicAssetUrl) {
     <span>LOSER</span>
     <div>
       <b>O Observatorio viu a gambiarra temporal.</b>
-      <p>Tentou dobrar a Ruptura no alicate, mas deixou impressao digital ate no eco do checkpoint. ${formatNumber(player.suspiciousRuns)} run(s) deste perfil foram marcadas como adulteradas e nao entram nos rankings.</p>
+      <p>Deixou impressao digital ate no eco do checkpoint. ${formatNumber(player.suspiciousRuns)} run(s) deste perfil foram marcadas como adulteradas e nao entram nos rankings.</p>
       <small>${escapeHtml(player.suspicionReasons.length ? `Motivos: ${player.suspicionReasons.join(", ")}` : "Motivo: protocolo competitivo recusado.")}</small>
     </div>
   </section>` : "";

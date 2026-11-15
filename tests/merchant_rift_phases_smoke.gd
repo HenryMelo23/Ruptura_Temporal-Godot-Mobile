@@ -70,6 +70,12 @@ func _run() -> void:
 		game.player_pos = pos
 		rift_controller.update(0.016)
 		var dimension = game._merchant_dimension()
+		# A entrada agora tem a cena do mergulho antes de abrir a oficina.
+		var rift_tr = game._rift_transition()
+		var waited := 0.0
+		while rift_tr.busy() and waited < 5.0:
+			rift_tr.update(1.0 / 30.0)
+			waited += 1.0 / 30.0
 		_check(dimension.active, "phase %d: entering the rift did not open the workshop" % phase)
 		if failed:
 			return
@@ -86,6 +92,7 @@ func _run() -> void:
 		_check(game.mode == "shop", "phase %d: shop did not open at the counter" % phase)
 		game.shop_controller.finish()
 		dimension.leave(false)
+		rift_tr.reset_run()
 		_check(not rift_controller.active(), "phase %d: rift survived the shop exit" % phase)
 		if failed:
 			return

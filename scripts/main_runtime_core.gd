@@ -76,6 +76,9 @@ func _ensure_runtime_controllers_bound() -> void:
 	if boss6_stage_controller.core != self:
 		boss6_stage_controller.configure(self)
 		boss6_controller.configure(self)
+	if sertao_controller.core != self:
+		sertao_controller.configure(self)
+		boss8_controller.configure(self)
 
 
 func _phase_flow():
@@ -1657,8 +1660,8 @@ func _specter_upgrade_effect_lines() -> Array:
 			lines.append("Profundidade: nivel %d -> %d aumenta a forca da Mare Negra." % [current_level, next_level])
 			lines.append("O cerco vira recurso ofensivo mais confiavel.")
 		"profetica":
-			lines.append("Pressagio: nivel %d -> %d torna destinos mais recompensadores." % [current_level, next_level])
-			lines.append("Cumprir a profecia devolve mais ritmo para a run.")
+			lines.append("Visao: nivel %d -> %d ve o futuro por mais tempo e com mais frequencia." % [current_level, next_level])
+			lines.append("Critico do destino: x%.2f -> x%.2f." % [1.6 + 0.06 * current_level, 1.6 + 0.06 * next_level])
 		"sanguinaria":
 			lines.append("Sede: nivel %d -> %d aprofunda feridas e explosoes de sangue." % [current_level, next_level])
 			lines.append("Dano repetido passa a valer mais contra alvos resistentes.")
@@ -1666,14 +1669,14 @@ func _specter_upgrade_effect_lines() -> Array:
 			lines.append("Ciclo: nivel %d -> %d melhora a alternancia Alvorada/Ocaso." % [current_level, next_level])
 			lines.append("Transicoes ficam mais fortes ao preparar o Eclipse.")
 		"peregrino":
-			lines.append("Jornada: nivel %d -> %d aumenta recompensa por explorar setores." % [current_level, next_level])
-			lines.append("Refugios ficam mais relevantes para reposicionar.")
+			lines.append("Rastro: nivel %d -> %d dura mais e queima mais forte." % [current_level, next_level])
+			lines.append("Territorio: dano x%.1f -> x%.1f e mais cura ao fechar o laco." % [1.6 + 0.2 * current_level, 1.6 + 0.2 * next_level])
 		"equilibrista":
 			lines.append("Prumo: nivel %d -> %d melhora escudo e equilibrio de vida." % [current_level, next_level])
 			lines.append("Jogar no risco fica mais recompensador.")
 		"avarento":
 			lines.append("Lastro: nivel %d -> %d converte pontos guardados em mais defesa." % [current_level, next_level])
-			lines.append("Gastar no momento certo rompe o Cofre com mais valor.")
+			lines.append("O Cofre explode ao voltar para a luta: mais dano, escudo e velocidade.")
 		"oportunista":
 			lines.append("Brecha: nivel %d -> %d recompensa melhor ataques em janelas inimigas." % [current_level, next_level])
 			lines.append("O golpe oportuno fica mais decisivo.")
@@ -2767,6 +2770,12 @@ func _enemy_report_name(kind: String) -> String:
 		ENEMY_CINERIDO: return "Cinerido"
 		ENEMY_PANGOLIRO: return "Carapaca-Brasa-Pangoliro"
 		ENEMY_CORVOL: return "Fuligarra-Corvol"
+		"jabuti_errante": return "Jabuti Errante"
+		"tartaruga_mandacaru": return "Tartaruga-Mandacaru"
+		"jabuti_morteiro": return "Jabuti-Morteiro"
+		"cagado_piao": return "Cagado-Piao"
+		"cagado_cangaceiro": return "Cagado Cangaceiro"
+		"ovo_jabuti": return "Ovo de Jabuti"
 		_: return kind.capitalize()
 
 
@@ -2793,6 +2802,12 @@ func _enemy_report_icon(kind: String, phase: = 1) -> String:
 		ENEMY_CINERIDO: return "cinerido-mov-1.png"
 		ENEMY_PANGOLIRO: return "Pangoliro.png"
 		ENEMY_CORVOL: return "Corvol1.png"
+		"jabuti_errante": return "sertao/s8_jabuti_0.png"
+		"tartaruga_mandacaru": return "sertao/s8_mandacaru_0.png"
+		"jabuti_morteiro": return "sertao/s8_morteiro_0.png"
+		"cagado_piao": return "sertao/s8_piao_0.png"
+		"cagado_cangaceiro": return "sertao/s8_cangaceiro_0.png"
+		"ovo_jabuti": return "sertao/s8_egg_0.png"
 		ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR: return "Inimig1.png"
 		ENEMY_COMMON:
 			if phase == 2:
@@ -2814,7 +2829,8 @@ func _damage_source_report(source: String) -> Dictionary:
 		ENEMY_NEXUS_CARTOGRAPHER, ENEMY_NEXUS_CHRONOPHAGE, ENEMY_NEXUS_REFRACTOR,
 		ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO,
 		ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH,
-		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL
+		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL,
+		"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro", "cagado_piao", "cagado_cangaceiro", "ovo_jabuti"
 	]
 	if source in enemy_kinds:
 		return {"kind": source, "name": _enemy_report_name(source), "icon": _enemy_report_icon(source, current_phase), "phase": current_phase}
@@ -5441,7 +5457,7 @@ func _load_textures() -> void :
 		var calm_path := "res://assets/maps/calm/phase_%d.png" % phase
 		var map_path: String = calm_path if ResourceLoader.exists(calm_path) else String(legacy_map_paths[phase])
 		_register_texture("map_phase_%d" % phase, map_path, true)
-	for ex_suffix in ["", "2", "3", "4", "5", "6", "7"]:
+	for ex_suffix in ["", "2", "3", "4", "5", "6", "7", "8"]:
 		_register_texture("map_phase_ex" + ex_suffix, base + "experimental/phase_ex" + ex_suffix + "_terrain_atlas.png", true)
 	_register_texture("experimental_phase_altar", base + "experimental/phase_ex_boss_altar_v2.png", true)
 	textures["startup_thanks"] = _safe_load(STARTUP_THANKS_TEXTURE_PATH)
@@ -7336,6 +7352,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	larapio_spawned = false
 	next_larapio_spawn_time = _larapio_base_spawn_time()
 	fusion_check_timer = 0.0
+	fusion_cooldown_timer = 0.0
 	event_alert_text = ""
 	event_alert_timer = 0.0
 	event_alert_seed = 0
@@ -7381,6 +7398,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	rational_trail_points.clear()
 	rational_trail_sample_timer = 0.0
 	rational_dilation_flash = 0.0
+	rational_end_flash = 0.0
 	_reset_card_counts()
 	enemies.clear()
 	bullets.clear()
@@ -7449,8 +7467,17 @@ func _should_offer_run_tutorial(clear_interrupted_save: bool) -> bool:
 	return run_tutorial_enabled and clear_interrupted_save and not development_tools_active and not is_multiplayer and not dedicated_server_mode and not online_local_spectator
 
 
+## "PRIMEIRA PARTIDA". Ligar devolve tudo que so aparece para quem nunca jogou:
+## o tutorial, as dicas de contexto e a historia do Mercador. E para emprestar
+## o aparelho a um testador sem que a conta ja avancada esconda o comeco.
+## Desligar e o fim normal do tutorial e nao apaga nada.
 func _set_run_tutorial_enabled(enabled: bool, persist: = true) -> void:
+	var turning_on: bool = enabled and not run_tutorial_enabled
 	run_tutorial_enabled = enabled
+	if turning_on:
+		shop_tutorial_seen = false
+		boss_call_tutorial_seen = false
+		_merchant_npc().forget_story()
 	if persist:
 		_save_config()
 
@@ -7966,6 +7993,8 @@ func _boss_hp_for_phase(phase: int) -> float:
 	_ensure_boss_party_scaling_context(phase)
 	var base_hp: float = BOSS_BASE_HP
 	match phase:
+		8:
+			base_hp = BOSS_BASE_HP * BOSS8_HP_SCALE
 		7:
 			base_hp = BOSS_BASE_HP * BOSS7_HP_SCALE
 		6:
@@ -8557,10 +8586,19 @@ func _player_start_down_controls_locked() -> bool:
 
 
 func _local_player_controls_locked() -> bool:
+	if rift_transition != null and rift_transition.locks_player():
+		return true
 	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or henry_spin_active or henry_incendiary_ability_controller.entrance_active or lacerante_execution.is_active()
 
 
 func _local_player_movement_locked() -> bool:
+	# Fala em estilo RPG prende a Geovana no lugar: sair andando por cima da
+	# propria cena de dialogo quebra a leitura e tira ela do alcance de quem
+	# esta falando com ela.
+	if _dialogue().busy():
+		return true
+	if rift_transition != null and rift_transition.locks_player():
+		return true
 	return is_dead or player_hp <= 0.0 or _spectator_controls_locked() or _player_start_down_controls_locked() or henry_ultimate_cast_active or henry_skill_cast_active or (henry_spin_active and not henry_incendiary_ability_controller.spin_reached_destination()) or henry_incendiary_ability_controller.entrance_active or lacerante_execution.is_active()
 
 
@@ -9511,7 +9549,8 @@ func _process(delta: float) -> void :
 	_begin_runtime_frame_services()
 	henry_incendiary_ability_controller.maintain_entrance_lifecycle()
 	hud_feedback.update(self, delta)
-	geovana_bark_controller.update(self, delta)
+	speech_bubbles.update(self, delta)
+	geovana_first_run_monologue.update(self, delta)
 	CatalogInterface.sync(self, delta)
 	_update_menu_presentation(delta)
 	if vfx_director:
@@ -9906,6 +9945,9 @@ func _update_game(delta: float) -> void :
 		_update_bargain_capsule(delta)
 		sineiro_boreal_controller.update(delta)
 		amber_suturer_controller.update(delta)
+		if current_phase == RTSertaoController.PHASE and _is_world_authority():
+			sertao_controller.update(delta)
+			boss8_controller.update_death(delta)
 	_story().update(delta)
 	_run_choice().update(delta)
 	_boss_pacts().update(delta)
@@ -9954,6 +9996,7 @@ func _update_game(delta: float) -> void :
 		_add_text("Aperte BOSS quando quiser chamar", player_pos + Vector2(0, -100), Color(1.0, 0.72, 0.2), 2.2, 24)
 		_maybe_start_context_tutorial(TUTORIAL_STATE_BOSS_CALL)
 	_dialogue().update(delta)
+	_rift_transition().update(delta)
 	if _merchant_dimension().active:
 		_merchant_dimension().update(delta)
 	elif shop_rift_controller.update(delta):
@@ -10047,7 +10090,9 @@ func _update_game(delta: float) -> void :
 	_refresh_run_leader()
 	if run_leader_notice_timer > 0.0:
 		run_leader_notice_timer = maxf(0.0, run_leader_notice_timer - delta)
-	enemy_manager.update(delta)
+	# Entrando/saindo da fenda do Mercador a horda congela (ver RTMerchantRiftTransition).
+	if rift_transition == null or not rift_transition.freezes_enemies():
+		enemy_manager.update(delta)
 	RTFrameProfiler.mark("u_enemy_manager")
 	_update_event_alerts(delta)
 	_update_team_revival(delta)
@@ -10071,9 +10116,12 @@ func _update_game(delta: float) -> void :
 	_update_prisms(delta)
 	_update_phase6_pustule_pools(delta)
 	RTFrameProfiler.mark("u_skill_zones")
-	_update_enemies(delta, true)
-	RTFrameProfiler.mark("u_enemies")
-	_apply_entity_separation(delta, true)
+	# Entrando/saindo da fenda do Mercador a horda congela no lugar: e isso que
+	# garante que os inimigos empurrados continuem onde ficaram na volta.
+	if rift_transition == null or not rift_transition.freezes_enemies():
+		_update_enemies(delta, true)
+		RTFrameProfiler.mark("u_enemies")
+		_apply_entity_separation(delta, true)
 	RTFrameProfiler.mark("u_separation")
 	_update_enemy_bullets(delta)
 	RTFrameProfiler.mark("u_enemy_bullets")
@@ -10121,13 +10169,14 @@ func _update_aura(delta: float) -> void :
 		return
 	_update_aura_visual_state(delta)
 	for enemy in enemies:
-		for key in ["aura_null", "aura_wound", "aura_prophecy"]:
+		for key in ["aura_null", "aura_wound", "aura_prophecy", "peregrino_slow"]:
 			if float(enemy.get(key, 0.0)) > 0.0:
 				enemy[key] = max(0.0, float(enemy[key]) - delta)
 		if String(aura_state.get("name", "")) == "Vanguarda" and float(aura_state.get("vanguard_ring", 0.0)) > 0.0 and player_pos.distance_to(Vector2(enemy["pos"])) <= AuraSystem.vanguard_ring_radius(aura_state):
 			enemy["aura_burn"] = 5.0 + int(aura_state.get("level", 0))
 			enemy["aura_burn_tick"] = min(float(enemy.get("aura_burn_tick", 0.0)), 0.12)
 	_update_voracious_contact(delta)
+	_update_spectre_runtime(delta)
 	_apply_aura_events(AuraSystem.update(aura_state, delta, {
 		"player_pos": player_pos,
 		"hp": player_hp,
@@ -10142,6 +10191,7 @@ func _update_aura(delta: float) -> void :
 
 func _update_aura_visual_state(delta: float) -> void :
 	rational_dilation_flash = maxf(0.0, rational_dilation_flash - delta)
+	rational_end_flash = maxf(0.0, rational_end_flash - delta)
 	crepuscular_phase_flash_timer = maxf(0.0, crepuscular_phase_flash_timer - delta)
 	crepuscular_spotlight_timer = maxf(0.0, crepuscular_spotlight_timer - delta)
 	boss_crepuscular_ocaso_mark_timer = maxf(0.0, boss_crepuscular_ocaso_mark_timer - delta)
@@ -10188,6 +10238,7 @@ func _update_aura_visual_state(delta: float) -> void :
 		if rebound > 0.0 and dilation <= 0.0:
 			if not rational_rebound_active:
 				rational_rebound_active = true
+				rational_end_flash = 0.5
 				screen_shake_timer = maxf(screen_shake_timer, 0.16)
 				screen_shake_strength = maxf(screen_shake_strength, 5.0)
 				_spawn_radial_particles(player_pos, Color(1.0, 0.52, 0.12), 24)
@@ -10200,7 +10251,7 @@ func _update_aura_visual_state(delta: float) -> void :
 	rational_trail_sample_timer -= delta
 	if rational_trail_sample_timer <= 0.0:
 		rational_trail_sample_timer = RATIONAL_TRAIL_SAMPLE_TIME
-		rational_trail_points.append({"pos": player_pos, "life": RATIONAL_TRAIL_LIFE, "max": RATIONAL_TRAIL_LIFE, "phase": time_alive})
+		rational_trail_points.append({"pos": player_pos, "life": RATIONAL_TRAIL_LIFE, "max": RATIONAL_TRAIL_LIFE, "phase": time_alive, "tex": _player_texture(), "flip": _should_flip_player_sprite()})
 		if rational_trail_points.size() > 34:
 			rational_trail_points.pop_front()
 
@@ -10337,7 +10388,7 @@ func _ensure_sanguinaria_hunt(force_new: bool = false) -> void:
 	aura_state["blood_reward_text"] = _sanguinaria_reward_label(int(aura_state.get("blood_combo", 0)) + 1)
 	best["sanguinaria_hunt"] = true
 	sanguinaria_hunt_notice_timer = 2.0
-	_add_text("%s -> %s" % [_sanguinaria_rule_label(String(aura_state["blood_hunt_rule"]), int(aura_state.get("blood_hunt_quadrant", -1))), String(aura_state["blood_reward_text"])], Vector2(best.get("pos", player_pos)) + Vector2(0, -88), Color(1.0, 0.16, 0.22), 1.0, 17)
+	# O alvo mostra o botao certo (RTSpectreVfx); sem texto solto por cima.
 
 
 func _sanguinaria_source_matches(rule: String, quadrant: int, enemy: Dictionary, source: String, category: String) -> bool:
@@ -10364,6 +10415,9 @@ func _sanguinaria_apply_combo_buffs() -> void:
 func _sanguinaria_reset_combo(reason: String = "") -> void:
 	if not _sanguinaria_active():
 		return
+	var lost_combo: int = int(aura_state.get("blood_combo", 0))
+	if lost_combo > 0 and reason != "":
+		_spectre_toast("COMBO PERDIDO", ["-%d%% dano  -%d%% velocidade  -%d%% recarga" % [int(round(float(aura_state.get("blood_combo_damage", 0.0)) * 100.0)), int(round(float(aura_state.get("blood_combo_speed", 0.0)) * 100.0)), int(round(float(aura_state.get("blood_combo_cooldown", 0.0)) * 100.0))]], Color(0.6, 0.05, 0.08), "loss")
 	aura_state["blood_combo"] = 0
 	aura_state["blood_combo_damage"] = 0.0
 	aura_state["blood_combo_speed"] = 0.0
@@ -10399,7 +10453,8 @@ func _sanguinaria_handle_enemy_kill(enemy: Dictionary) -> void:
 		screen_shake_strength = maxf(screen_shake_strength, 4.5)
 		_vibrate(70, 0.28)
 		_spawn_radial_particles(player_pos, Color(1.0, 0.05, 0.12), 16)
-		_add_text("CACADA x%d  %s" % [int(aura_state["blood_combo"]), _sanguinaria_reward_label(int(aura_state["blood_combo"]))], player_pos + Vector2(0, -98), Color(1.0, 0.12, 0.18), 0.9, 21)
+		_sanguinaria_reward_toast(int(aura_state["blood_combo"]))
+		spectre_fx.append({"kind": "blood_kill", "pos": Vector2(enemy.get("pos", player_pos)), "to": player_pos, "life": 0.6, "max": 0.6})
 		_apply_aura_events([{"type": "cooldown_recovery", "amount": minf(0.9, 0.18 + float(aura_state["blood_combo"]) * 0.025), "max_ratio": 0.25}])
 		_ensure_sanguinaria_hunt(true)
 		return
@@ -10411,7 +10466,7 @@ func _sanguinaria_handle_enemy_kill(enemy: Dictionary) -> void:
 		screen_shake_strength = maxf(screen_shake_strength, 8.0)
 		damage_flash_timer = maxf(damage_flash_timer, 0.24)
 		_vibrate(180, 0.65)
-		_add_text("FURIA: 10s PARA NOVA CACADA", player_pos + Vector2(0, -112), Color(1.0, 0.04, 0.08), 1.15, 20)
+		_spectre_toast("FURIA  10s", ["Alvo errado: mate a nova presa do jeito pedido", "ou o combo x%d e os bonus somem" % int(aura_state.get("blood_combo", 0))], Color(1.0, 0.08, 0.12), "warn")
 		_ensure_sanguinaria_hunt(true)
 
 
@@ -10529,6 +10584,17 @@ func _apply_aura_events(events: Array) -> void :
 				_apply_aura_cooldown_recovery(float(event.get("amount", 0.0)), float(event.get("max_ratio", 0.3)))
 			"dash_penalty":
 				last_dash_time += float(event.get("amount", 0.0))
+			"vanguard_wave":
+				_vanguard_heat_wave(float(event.get("received", 0.0)), float(event.get("radius", 150.0)), int(event.get("heat", 1)))
+			"peregrino_territory":
+				_peregrino_claim_territory(event.get("polygon", PackedVector2Array()))
+			"prophecy_vision":
+				spectre_fx.append({"kind": "prophecy_open", "pos": player_pos, "life": 0.7, "max": 0.7})
+				_vibrate(40, 0.2)
+			"prophecy_crit":
+				spectre_fx.append({"kind": "prophecy_crit", "pos": player_pos, "life": 0.35, "max": 0.35})
+			"prophecy_dodge":
+				_prophecy_on_dodge(player_pos)
 
 
 func _apply_aura_cooldown_recovery(amount: float, max_ratio: float) -> void :
@@ -11524,7 +11590,6 @@ func _use_skill(target_world = null) -> void :
 	if time_alive - last_skill_time < cooldown:
 		var remaining = cooldown - (time_alive - last_skill_time)
 		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -86), Color(0.72, 0.92, 1.0), 0.45, 18)
-		_geovana_bark("skill_cooldown", {"ability": "Q", "remaining": remaining})
 		return
 	last_skill_time = time_alive
 	var skill_power: float = _register_manual_skill_use("skill_q", cooldown)
@@ -11918,6 +11983,8 @@ func _boss_trapped_by_gravitante() -> bool:
 
 
 func _player_invulnerable() -> bool:
+	if rift_transition != null and rift_transition.invulnerable():
+		return true
 	var tp_invulnerable: = tp_effects.any( func(effect): return String(effect.get("kind", "")) in ["lacerante", "eletrica"] and float(effect.get("life", 0.0)) > 0.0)
 	return run_retry_invulnerability_timer > 0.0 or trembo_invulnerability > 0.0 or mandamento_invulnerability > 0.0 or henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable() or _boss3_miasma_qte_active() or not _active_lacerante_secondary().is_empty() or not _active_prismatica_secondary().is_empty() or tp_invulnerable or lacerante_execution.is_protected()
 
@@ -12051,7 +12118,6 @@ func _use_secondary_skill(target_world = null) -> void :
 	if time_alive - last_secondary_time < cooldown:
 		var remaining = cooldown - (time_alive - last_secondary_time)
 		_add_text("%.1fs" % remaining, player_pos + Vector2(0, -110), Color(1.0, 0.84, 0.4), 0.55, 18)
-		_geovana_bark("skill_cooldown", {"ability": "E", "remaining": remaining})
 		return
 	var visual_origin: Vector2 = player_pos
 	var visual_target: Vector2 = Vector2(target_world) if target_world is Vector2 else player_pos
@@ -12548,6 +12614,7 @@ func _execute_teleport(target_world: Vector2) -> void :
 		return
 	_interrupt_folego()
 	_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": target_world, "player_pos": player_pos}))
+	_voraz_devour_dash(origin, _clamp_player_world(target_world))
 	player_pos = _clamp_player_world(target_world)
 	_grant_manto_impulso_shield()
 	var dash_color: Color = _manifestation_color()
@@ -13000,6 +13067,8 @@ func _pacing_report() -> Dictionary:
 
 
 func _choose_enemy_type() -> String:
+	if current_phase == RTSertaoController.PHASE:
+		return sertao_controller.choose_enemy_type()
 	var paced_special: String = enemy_manager.paced_special_type()
 	if paced_special != "":
 		return paced_special
@@ -14578,6 +14647,12 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 			speed = 150.0
 			damage *= 0.82
 			points = 116
+	if sertao_controller.owns_kind(kind):
+		var s8_stats: Dictionary = sertao_controller.spawn_stats(kind, speed, damage)
+		hp_mult = float(s8_stats["hp_mult"])
+		speed = float(s8_stats["speed"])
+		damage = float(s8_stats["damage"])
+		points = int(s8_stats["points"])
 	var hp = base_hp * hp_mult
 	enemies.append({
 		"uid": randi(),
@@ -14731,6 +14806,8 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 		enemies.back()["parado"] = true
 		enemies.back()["skip_rewards"] = true
 		enemies.back()["contact_grace"] = 999.0
+	elif sertao_controller.owns_kind(kind):
+		sertao_controller.on_spawned(enemies.back())
 	elif kind == ENEMY_CINERIDO:
 		enemies.back()["shoot_cd"] = 999.0
 		enemies.back()["parado"] = true
@@ -16550,11 +16627,15 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 			var trap_time: float = clamp(float(enemy.get("larapio_corner_time", 0.0)) / LARAPIO_CORNER_TRAP_TIME, 0.0, 1.0)
 			var push_weight: float = 0.65 + trap_time * 1.35
 			dir = (dir * 0.55 + edge_push * push_weight + edge_push.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.28).normalized()
+	elif enemy["type"] == ENEMY_CURATER and not is_disco:
+		dir = _curater_move_dir(enemy, target_pos, delta)
 	var speed_mult = 1.0
 	if float(enemy.get("parasite_slow_time", 0.0)) > 0.0:
 		speed_mult *= 0.8
 	if float(enemy.get("evolution_slow", 0.0)) > 0.0:
 		speed_mult *= clampf(float(enemy.get("evolution_slow_mult", 0.75)), 0.35, 1.0)
+	if float(enemy.get("peregrino_slow", 0.0)) > 0.0:
+		speed_mult *= 0.62
 	if is_disco:
 		speed_mult *= 1.12
 		dir = (target_pos - enemy["pos"]).normalized()
@@ -16581,6 +16662,80 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 		enemy["facing_dir"] = dir
 	enemy["pos"] += dir * float(enemy["speed"]) * speed_mult * AuraSystem.world_multiplier(aura_state) * delta
 	enemy["pos"] = enemy["pos"].clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+
+
+## Curater e suporte: nao parte para cima do jogador. Escolhe um aliado (de
+## preferencia ferido e na linha de frente) e se posiciona ATRAS dele, do lado
+## oposto ao jogador, usando o corpo do aliado como escudo enquanto cura.
+## Sem aliado por perto, mantem distancia e circula o jogador.
+func _curater_move_dir(enemy: Dictionary, target_pos: Vector2, delta: float) -> Vector2:
+	var pos: Vector2 = Vector2(enemy["pos"])
+	var to_player: Vector2 = target_pos - pos
+	var player_dist: float = to_player.length()
+	var away: Vector2 = -to_player.normalized() if player_dist > 0.01 else Vector2.RIGHT
+	var strafe: float = 1.0 if int(enemy.get("uid", 0)) % 2 == 0 else -1.0
+	# Jogador colado: foge de lado, sem ficar preso andando reto para tras.
+	if player_dist < CURATER_PANIC_DISTANCE:
+		return (away + away.orthogonal() * strafe * 0.45).normalized()
+	enemy["curater_escort_timer"] = float(enemy.get("curater_escort_timer", 0.0)) - delta
+	var escort: Dictionary = _curater_find_escort(enemy, target_pos)
+	if escort.is_empty():
+		# Sozinho: orbita numa faixa segura em vez de avancar.
+		if player_dist < CURATER_ALONE_MIN_DISTANCE:
+			return (away + away.orthogonal() * strafe * 0.35).normalized()
+		if player_dist > CURATER_ALONE_MAX_DISTANCE:
+			return (-away + away.orthogonal() * strafe * 0.25).normalized()
+		return (away.orthogonal() * strafe).normalized()
+	var ally_pos: Vector2 = Vector2(escort["pos"])
+	var shield_dir: Vector2 = ally_pos - target_pos
+	shield_dir = shield_dir.normalized() if shield_dir.length() > 0.01 else away
+	var desired: Vector2 = ally_pos + shield_dir * CURATER_BEHIND_DISTANCE
+	# Nunca encostar no jogador so para acompanhar um aliado que avancou demais.
+	if desired.distance_to(target_pos) < CURATER_ALONE_MIN_DISTANCE:
+		desired = target_pos + (desired - target_pos).normalized() * CURATER_ALONE_MIN_DISTANCE
+	var to_desired: Vector2 = desired - pos
+	if to_desired.length() <= CURATER_ARRIVE_DISTANCE:
+		# Chegou na sombra do aliado: para e encara o jogador.
+		enemy["facing_dir"] = to_player.normalized() if player_dist > 0.01 else Vector2.LEFT
+		return Vector2.ZERO
+	return to_desired.normalized()
+
+
+func _curater_find_escort(enemy: Dictionary, target_pos: Vector2) -> Dictionary:
+	var uid: int = int(enemy.get("curater_escort_uid", -1))
+	var current: Dictionary = {}
+	if uid >= 0:
+		for other in enemies:
+			if int(other.get("uid", -2)) == uid:
+				current = other
+				break
+	var current_valid: bool = not current.is_empty() and float(current.get("hp", 0.0)) > 0.0 and Vector2(current["pos"]).distance_to(Vector2(enemy["pos"])) <= CURATER_ESCORT_SEARCH_RADIUS * 1.25
+	if current_valid and float(enemy.get("curater_escort_timer", 0.0)) > 0.0:
+		return current
+	enemy["curater_escort_timer"] = CURATER_ESCORT_RETHINK_TIME
+	var pos: Vector2 = Vector2(enemy["pos"])
+	var best: Dictionary = {}
+	var best_score: float = INF
+	for other in enemies:
+		if other == enemy or float(other.get("hp", 0.0)) <= 0.0:
+			continue
+		var kind: String = String(other.get("type", ""))
+		if kind == ENEMY_CURATER or kind == ENEMY_LARAPIO or kind == ENEMY_KAMIKAZE:
+			continue
+		var other_pos: Vector2 = Vector2(other["pos"])
+		var dist: float = other_pos.distance_to(pos)
+		if dist > CURATER_ESCORT_SEARCH_RADIUS:
+			continue
+		var hp_ratio: float = float(other.get("hp", 1.0)) / maxf(1.0, float(other.get("max_hp", 1.0)))
+		# Prefere quem esta perto dele, ferido e entre ele e o jogador.
+		var score: float = dist + hp_ratio * 140.0 + other_pos.distance_to(target_pos) * 0.25
+		if current_valid and other == current:
+			score -= 60.0 # evita trocar de escolta a cada reavaliacao
+		if score < best_score:
+			best_score = score
+			best = other
+	enemy["curater_escort_uid"] = int(best.get("uid", -1)) if not best.is_empty() else -1
+	return best
 
 
 func _stalker_profile() -> Dictionary:
@@ -17278,19 +17433,24 @@ func _update_larapio_coin_drops(delta: float) -> void :
 
 
 func _update_agglomeration(delta: float) -> void :
+	fusion_cooldown_timer = maxf(0.0, fusion_cooldown_timer - delta)
 	fusion_check_timer -= delta
 	if fusion_check_timer > 0.0 or boss_active:
 		return
 	fusion_check_timer = FUSION_CHECK_INTERVAL
+	# A fusao e a anomalia anunciada aos 5:30 ("ANOMALIA DE FUSAO"); antes
+	# disso, e dentro da oficina do Mercador, os Errantes nao se fundem.
+	if time_alive < ANOMALIA_AGLOMERADOR_TIME or _merchant_dimension().active:
+		return
 	var commons = []
 	for enemy in enemies:
 		if enemy["type"] == ENEMY_COMMON and float(enemy.get("hp", 0.0)) > 0.0:
 			commons.append(enemy)
-	# The old interval scan compared every common enemy with every other common.
 	# Reuse the collision grid so this periodic system scales with nearby density
 	# rather than total run population. Sorted spatial indices preserve the former
 	# stable enemy-array order for fusion decisions.
 	enemy_manager.rebuild_spatial_index()
+	var can_fuse: bool = fusion_cooldown_timer <= 0.0 and _enemy_type_count(ENEMY_AGGLOMERATOR) < FUSION_MAX_ALIVE
 	var used = {}
 	for enemy in commons:
 		if used.has(enemy["uid"]):
@@ -17304,28 +17464,48 @@ func _update_agglomeration(delta: float) -> void :
 				continue
 			if Vector2(enemy["pos"]).distance_squared_to(Vector2(other["pos"])) <= FUSION_RADIUS * FUSION_RADIUS:
 				cluster.append(other)
-		if cluster.size() >= FUSION_REQUIRED:
-			var ready = true
-			var center = Vector2.ZERO
-			var hp_sum = 0.0
+		if cluster.size() < FUSION_REQUIRED:
+			continue
+		var ready = true
+		var center = Vector2.ZERO
+		var hp_sum = 0.0
+		var warn = false
+		for item in cluster:
+			item["agglomerated_time"] = float(item.get("agglomerated_time", 0.0)) + FUSION_CHECK_INTERVAL
+			center += item["pos"]
+			hp_sum += float(item.get("max_hp", enemy_base_hp))
+			if float(item["agglomerated_time"]) < FUSION_TIME:
+				ready = false
+			if float(item["agglomerated_time"]) >= FUSION_WARN_TIME:
+				warn = true
+			used[item["uid"]] = true
+		center /= cluster.size()
+		if not can_fuse:
+			continue
+		if warn and not ready:
+			# Aviso visivel: o bolo pulsa dourado antes de fundir, dando ao
+			# jogador a chance de separar ou matar o grupo.
+			_spawn_radial_particles(center, Color(1.0, 0.78, 0.12), 8)
+			continue
+		if ready:
 			for item in cluster:
-				item["agglomerated_time"] = float(item.get("agglomerated_time", 0.0)) + FUSION_CHECK_INTERVAL
-				center += item["pos"]
-				hp_sum += float(item.get("max_hp", enemy_base_hp))
-				if float(item["agglomerated_time"]) < FUSION_TIME:
-					ready = false
-				used[item["uid"]] = true
-			if ready:
-				center /= cluster.size()
-				for item in cluster:
-					enemies.erase(item)
-				_spawn_enemy(ENEMY_AGGLOMERATOR, center)
-				var fused = enemies[enemies.size() - 1]
-				fused["max_hp"] = max(float(fused["max_hp"]), hp_sum * 0.9)
-				fused["hp"] = fused["max_hp"]
-				fused["speed"] = max(float(fused["speed"]), enemy_speed_base * (1.35 + max(0, cluster.size() - FUSION_REQUIRED) * 0.15))
-				_add_text("FUSAO FORCADA!", center + Vector2(0, -55), Color(1.0, 0.78, 0.12), 1.5, 24)
-				_spawn_radial_particles(center, Color(1.0, 0.78, 0.12), 26)
+				enemies.erase(item)
+			var before: int = enemies.size()
+			_spawn_enemy(ENEMY_AGGLOMERATOR, center)
+			if enemies.size() <= before:
+				continue
+			var fused = enemies[enemies.size() - 1]
+			fused["max_hp"] = max(float(fused["max_hp"]), hp_sum * 0.9)
+			fused["hp"] = fused["max_hp"]
+			fused["speed"] = max(float(fused["speed"]), enemy_speed_base * (1.35 + max(0, cluster.size() - FUSION_REQUIRED) * 0.15))
+			_add_text("FUSAO FORCADA!", center + Vector2(0, -55), Color(1.0, 0.78, 0.12), 1.5, 24)
+			_spawn_radial_particles(center, Color(1.0, 0.78, 0.12), 26)
+			fusion_cooldown_timer = FUSION_COOLDOWN
+			can_fuse = false
+	# Fusao exige o bolo continuo: quem se soltou volta a contar do zero.
+	for enemy in commons:
+		if not used.has(enemy["uid"]):
+			enemy["agglomerated_time"] = 0.0
 
 
 func _update_event_alerts(delta: float) -> void :
@@ -17731,14 +17911,18 @@ func _try_reflect_shield_enemy_bullet(enemy: Dictionary, bullet: Dictionary) -> 
 	var dir: = (player_pos - origin).normalized()
 	if dir.length() <= 0.01:
 		dir = - incoming_from_player
+	# O reflexo devolve o tiro na mesma velocidade em que ele chegou (a do
+	# projetil do jogador, que varia por manifestacao). O alcance continua o
+	# de antes: o tempo de vida encolhe na mesma proporcao da velocidade.
+	var reflected_speed: float = maxf(ENEMY_BULLET_BASE_SPEED, float(bullet.get("speed", BULLET_SPEED)))
 	enemy_bullets.append({
 		"pos": origin + dir * 32.0,
 		"dir": dir.normalized(),
-		"life": 2.7,
+		"life": SHIELD_REFLECTOR_REFLECT_RANGE / reflected_speed,
 		"damage": max(8.0, float(bullet.get("damage", player_damage)) * SHIELD_REFLECTOR_REFLECT_DAMAGE_MULT),
 		"phase": rng.randf_range(0.0, TAU),
 		"type": "reflected_player",
-		"speed_mult": 1.42,
+		"speed_mult": reflected_speed / ENEMY_BULLET_BASE_SPEED,
 		"radius": 11.0
 	})
 	enemy["shield_flash"] = 0.32
@@ -17962,6 +18146,7 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 					amount *= RegularEnemyBalance.softened_damage_taken(0.58)
 	amount *= sineiro_boreal_controller.damage_taken_multiplier(enemy)
 	amount *= amber_suturer_controller.damage_taken_multiplier(enemy)
+	amount *= sertao_controller.damage_taken_multiplier(enemy)
 	amount *= _fragilidade_enemy_multiplier(enemy, source)
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
 	amount *= henry_incendiary_ability_controller.damage_taken_multiplier(enemy, source)
@@ -18012,8 +18197,6 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 		})
 		if is_crit:
 			vfx_director.request_floor_crack(Vector2(enemy.get("pos", player_pos)), 26.0, elem, 2.5)
-	if actual_damage > 0.0 and _is_direct_player_damage_source(source, effective_source_category):
-		_geovana_bark("enemy_hit", {"damage": actual_damage, "source": source, "category": effective_source_category})
 	_track_enemy_damage(enemy, actual_damage)
 	if antimatter_should_trigger:
 		_trigger_antimatter_implosion(Vector2(enemy.get("pos", damage_origin)), enemy)
@@ -18130,6 +18313,10 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	amount *= _mandamento_damage_multiplier(effective_source_category)
+	if current_phase == RTSertaoController.PHASE:
+		amount *= boss8_controller.damage_taken_multiplier()
+		if amount <= 0.0:
+			return
 	var damage_manifestation: String = source_manifestation if source_manifestation != "" else _damage_source_manifestation_key(source_peer_id)
 	if damage_manifestation == "eletrica" and source != "eletrica_static_lightning":
 		var source_tag: = _eletrica_damage_source_category(source, effective_source_category)
@@ -18320,6 +18507,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			Boss3AnimationPresentation.trigger_death(self)
 		elif current_phase == 4:
 			Boss4AnimationPresentation.trigger_death(self)
+		elif current_phase == RTSertaoController.PHASE:
+			boss8_controller.on_death()
 		if is_multiplayer and _is_world_authority():
 			_confirm_card_unlock_progress_for_active_players("boss_kills", 1.0, false)
 		else:
@@ -18348,7 +18537,6 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			_revive_multiplayer_team_after_boss_kill()
 		_add_text("BOSS DISSOLVIDO", boss_pos + Vector2(0, -100), Color(1.0, 0.78, 0.25), 3.0, 34)
 		_add_text("+%s PONTOS" % _format_points(reward), boss_pos + Vector2(0, -142), Color(1.0, 0.9, 0.34), 2.8, 23)
-		_geovana_bark("boss_kill", {"phase": current_phase})
 		_register_dimension_phase_completed(current_phase)
 		if _should_offer_dimension_choice_after_boss(current_phase):
 			_queue_post_boss_choice(current_phase)
@@ -18488,6 +18676,9 @@ func _clear_boss_runtime_hazards() -> void:
 		phase7_ember_patches.clear()
 		boss7_core_active = false
 		boss7_state = BOSS7_STATE_FLY
+	if current_phase == RTSertaoController.PHASE:
+		sertao_controller.clear_bullets(0, true)
+		sertao_controller.hazards.clear()
 
 
 func _apply_boss_poison() -> void :
@@ -18620,6 +18811,8 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		_add_phase3_miasma(kill_pos, 52.0, 2.0, 0.018)
 	if String(enemy.get("type", "")) == ENEMY_SINEIRO_BOREAL:
 		sineiro_boreal_controller.on_enemy_defeated(enemy)
+	if sertao_controller.owns_kind(String(enemy.get("type", ""))):
+		sertao_controller.on_enemy_defeated(enemy)
 	enemies.erase(enemy)
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
@@ -18657,8 +18850,6 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	)
 	_spawn_enemy_point_drop(kill_pos, gain)
 	_drop_mode().on_enemy_killed(enemy, kill_pos)
-	if int(enemy.get("killed_by_peer_id", _mp_unique_id())) == _mp_unique_id():
-		_geovana_bark("enemy_kill", {"enemy_type": String(enemy.get("type", "")), "gain": gain})
 	_spawn_enemy_desfragmentation(kill_pos, shard_color, 14 + int(clamp(float(enemy.get("max_hp", 0.0)) / 18.0, 0.0, 12.0)))
 	if enemy["type"] == ENEMY_AGGLOMERATOR:
 		for i in range(2):
@@ -19818,6 +20009,8 @@ func _boss_contact_damage() -> int:
 
 
 func _boss_hit_radius() -> float:
+	if current_phase == RTSertaoController.PHASE:
+		return RTBoss8Controller.HIT_RADIUS
 	if current_phase == 7:
 		return BOSS7_HIT_RADIUS
 	return 132.0 if current_phase == 6 else (132.0 if current_phase == 4 else (30.0 if current_phase == 5 else 82.0))
@@ -23792,6 +23985,9 @@ func _update_boss(delta: float) -> void :
 	if current_phase == 7:
 		_update_boss_phase7(delta)
 		return
+	if current_phase == RTSertaoController.PHASE:
+		boss8_controller.update(delta)
+		return
 	var rewind_health_ratio = boss_hp / max(1.0, boss_hp_max)
 	if boss_entry_timer <= 0.0 and rewind_health_ratio < BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown <= 0.0 and boss1_time_wave.is_empty():
 		_start_boss1_time_wave()
@@ -24206,7 +24402,7 @@ func _start_boss6_fossil_echo() -> void :
 		"hp_max": 280.0
 	}
 	_add_boss_attack({"kind": BOSS6_ABILITY_FOSSIL_ECHO, "age": 0.0, "duration": 5.0})
-	_add_text("ECO FÃ“SSIL REVELADO", echo_pos + Vector2(0, -60), Color(0.72, 0.48, 1.0), 1.5, 22)
+	_add_text("ECO FÓSSIL REVELADO", echo_pos + Vector2(0, -60), Color(0.72, 0.48, 1.0), 1.5, 22)
 	_play_sfx("Portal.mp3", 0.05, 0.58, 0.68)
 
 
@@ -24217,7 +24413,7 @@ func _start_boss6_necro_erosion() -> void :
 	boss6_necro_erosion_duration = BOSS6_NECRO_EROSION_TIME
 	boss6_necro_erosion_damage_timer = 0.0
 	_add_boss_attack({"kind": BOSS6_ABILITY_NECRO_EROSION, "age": 0.0, "duration": 10.0})
-	_add_text("NECRO-EROSÃƒO INICIADA", boss_pos + Vector2(0, -140), Color(0.9, 0.15, 0.25), 1.6, 26)
+	_add_text("NECRO-EROSÃO INICIADA", boss_pos + Vector2(0, -140), Color(0.9, 0.15, 0.25), 1.6, 26)
 	_play_sfx("boss1_dash", 0.03, 0.5)
 
 
@@ -24232,7 +24428,7 @@ func _damage_boss6_fossil_echo(amount: float) -> void :
 	boss6_fossil_echo_slow_timer = 2.5
 	if current_hp <= 0.0:
 		boss6_fossil_echo.clear()
-		_add_text("ECO DESTRUÃDO", player_pos + Vector2(0, -60), Color(1.0, 0.2, 0.2), 1.5, 20)
+		_add_text("ECO DESTRUÍDO", player_pos + Vector2(0, -60), Color(1.0, 0.2, 0.2), 1.5, 20)
 
 
 ## Necrose do chefe 6: as feridas fecham pela metade por alguns segundos.
@@ -25695,6 +25891,16 @@ func _merchant_npc() -> RTMerchantNpc:
 		merchant_npc = RTMerchantNpc.new()
 		merchant_npc.configure(self)
 	return merchant_npc
+
+
+var rift_transition: RTMerchantRiftTransition = null
+
+
+func _rift_transition() -> RTMerchantRiftTransition:
+	if rift_transition == null:
+		rift_transition = RTMerchantRiftTransition.new()
+		rift_transition.configure(self)
+	return rift_transition
 
 
 func _dialogue() -> RTDialogueController:
@@ -27557,6 +27763,10 @@ func _boss_call_can_start(show_message: = true) -> bool:
 		if show_message:
 			_add_text("DERROTE O ARAUTO", player_pos + Vector2(0, -110), Color(0.74, 0.92, 1.0), 1.0, 22)
 		return false
+	if current_phase == RTSertaoController.PHASE and sertao_controller.miniboss_alive():
+		if show_message:
+			_add_text("DERROTE O CAGADO CANGACEIRO", player_pos + Vector2(0, -110), Color(1.0, 0.84, 0.3), 1.0, 22)
+		return false
 	if current_phase == 6 and amber_suturer_controller != null and not amber_suturer_controller.active_enemy().is_empty():
 		if show_message:
 			_add_text("DERROTE O SUTURADOR DE AMBAR", player_pos + Vector2(0, -110), Color(1.0, 0.68, 0.22), 1.0, 22)
@@ -27611,6 +27821,8 @@ func _despawn_enemies_for_boss_call() -> void :
 		sineiro_boreal_controller.cleanup("boss_call")
 	# Phase 6 boss entry is gated while the Suturador lives. Keep this actor out
 	# of the generic despawn path so a valid encounter cannot be erased.
+	if current_phase == RTSertaoController.PHASE:
+		sertao_controller.clear_for_boss_call()
 	if current_phase == 5:
 		phase5_hazards.clear()
 		phase5_rats.clear()
@@ -27637,7 +27849,11 @@ func _update_boss_call(delta: float) -> void :
 		boss_active = true
 		_mark_boss_reached(current_phase)
 		_play_boss_music_random()
-		if current_phase == 7:
+		if current_phase == RTSertaoController.PHASE:
+			boss_hp_max = _boss_hp_for_phase(8)
+			boss_name = "CASCO-DE-SOL"
+			boss_title_color = Color(1.0, 0.78, 0.3)
+		elif current_phase == 7:
 			boss_hp_max = _boss_hp_for_phase(7)
 			boss_name = "FENIX"
 			boss_title_color = Color(1.0, 0.42, 0.08)
@@ -27693,6 +27909,12 @@ func _update_boss_call(delta: float) -> void :
 		_reset_phase5_state()
 		_reset_phase6_state()
 		_reset_boss7_state()
+		if current_phase == RTSertaoController.PHASE:
+			boss_pos = experimental_phase_controller.boss_encounter_center()
+			boss_entry_timer = 0.0
+			boss_attack_timer = 999.0
+			sertao_controller.clear_for_boss_call()
+			boss8_controller.reset()
 		if current_phase == 7:
 			boss7_original_hp_max = boss_hp_max
 			boss7_state = BOSS7_STATE_INTRO
@@ -31815,12 +32037,12 @@ func _card_category(card_name: String) -> String:
 		"Mercenaria": return "COMBO E PONTUACAO"
 		"Devorador de Destinos": return "MARCA RARA E COLAPSO"
 		"Escolha Adiada": return "LOJA E RESERVA"
-		"TrÃ©gua Regenerativa": return "REGENERAÃ‡ÃƒO SEGURA"
+		"Trégua Regenerativa": return "REGENERAÇÃO SEGURA"
 		"Cinzas da Escolha": return "LOJA E BRASA"
 		"Reserva de Pulso": return "OVERHEAL ARMAZENADO"
 		"Casulo Reativo": return "DEFESA CONTRA RAJADA"
-		"Passagem IntangÃ­vel": return "FASE POS-TELEPORTE"
-		"Ã‚ncora Vital": return "RECUPERAÃ‡ÃƒO POS-DANO"
+		"Passagem Intangível": return "FASE POS-TELEPORTE"
+		"Âncora Vital": return "RECUPERAÇÃO POS-DANO"
 		"Inercia Cronal": return "RESISTENCIA A CONTROLE"
 		"Leitura do Instante": return "ANTECIPACAO DE PERIGO"
 		"Margem Segura": return "SPAWN E POSICIONAMENTO"
@@ -31840,7 +32062,7 @@ func _card_category(card_name: String) -> String:
 		"Mandamento da Ruptura": return "LEI DE HABILIDADES"
 		"Carta Zero": return "ESCALA DE CARTAS COMUNS"
 		"Necrocronismo": return "ECO QUE RICOCHETEIA"
-		"CoraÃ§Ã£o de AntimatÃ©ria": return "CARGA DE IMPLOSAO"
+		"Coração de Antimatéria": return "CARGA DE IMPLOSAO"
 		"Cofre do Excesso": return "OVERKILL ARMAZENADO"
 		"Intervalo Fraturado": return "COOLDOWN DE HABILIDADES"
 		"Nucleo Revigorante": return "ORBE DE CURA"
@@ -31876,12 +32098,12 @@ func _card_lore(card_name: String) -> String:
 		"Mercenaria": return "Toda queda vira contrato. Todo contrato bem cumprido paga mais caro."
 		"Devorador de Destinos": return "O destino mais pesado vira ancora. Quando ele cai, os futuros proximos se partem e Geovana veste os restos."
 		"Escolha Adiada": return "Uma decisao recusada hoje fica presa ao mesmo preco ate Geovana aceitar pagar ou soltar a linha."
-		"TrÃ©gua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
+		"Trégua Regenerativa": return "Quando a linha para de ferir, o corpo lembra o caminho de volta."
 		"Cinzas da Escolha": return "Uma carta sacrificada nao desaparece; ela volta chamuscada, mais forte uma unica vez, ate que Geovana aceite comprar o que restou dela."
 		"Reserva de Pulso": return "A cura que sobraria fica guardada como uma batida extra para o pior instante."
 		"Casulo Reativo": return "Depois de muitos impactos, a defesa fecha por instinto e ensina a rajada a esperar."
-		"Passagem IntangÃ­vel": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
-		"Ã‚ncora Vital": return "A dor finca um selo no chao. Ficar perto dele puxa parte da vida perdida de volta."
+		"Passagem Intangível": return "O salto nao termina no destino; por um instante, Geovana ainda nao voltou totalmente ao mundo."
+		"Âncora Vital": return "A dor finca um selo no chao. Ficar perto dele puxa parte da vida perdida de volta."
 		"Inercia Cronal": return "Seu corpo aprende a nao obedecer a todo empurrao que o tempo tenta impor."
 		"Leitura do Instante": return "O perigo anuncia sua chegada alguns instantes antes de tocar o mundo."
 		"Margem Segura": return "A ruptura abre caminho, mas mantem os invasores um pouco mais distantes."
@@ -31901,7 +32123,7 @@ func _card_lore(card_name: String) -> String:
 		"Mandamento da Ruptura": return "A terceira ordem nao pede permissao: ela atravessa cooldown, impacto e risco por pura autoridade temporal."
 		"Carta Zero": return "A origem reescreve os numeros pequenos. Toda carta comum passa a lembrar que veio depois dela."
 		"Necrocronismo": return "A morte rebobina: o inimigo volta como Eco, atravessa a horda em investidas e implode quando o tempo acaba."
-		"CoraÃ§Ã£o de AntimatÃ©ria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
+		"Coração de Antimatéria": return "Dano limpo comprime o vazio ate o proximo impacto direto transformar o alvo em centro de implosao."
 		"Cofre do Excesso": return "Nada se perde no excesso. O dano que sobraria e guardado para cobrar elites e chefes."
 		"Intervalo Fraturado": return "Uma fratura curta entre duas acoes permite que Hab1 e Ultimate retornem antes do tempo previsto."
 		"Nucleo Revigorante": return "Orbes de cura passam por um nucleo estavel e devolvem mais vida quando Geovana os recolhe."
@@ -32163,6 +32385,9 @@ func _catalog_detail_lore(item: Dictionary) -> String:
 		if _catalog_card_locked(item):
 			return "Arquivo preservado sob sigilo temporal. Complete o objetivo para abrir a ficha completa da carta."
 		var card: = _catalog_card_source(item)
+		var book: Dictionary = RTCatalogLore.DATA.get(String(card.get("id", item.get("id", ""))), {})
+		if String(book.get("h", "")) != "":
+			return String(book["h"])
 		return _card_lore(String(card.get("name", "")))
 	if kind == "manifestation":
 		if _catalog_manifestation_locked(item):
@@ -32319,7 +32544,7 @@ func _apply_card(card: Dictionary, from_impossible_archive: bool = false) -> voi
 			var heal: int = int(round(float(old_max_hp) * _apply_carta_zero_to_common_value("Porcao", "heal", PORCAO_HEAL_OLD_MAX_RATIO)))
 			player_hp_max += max_gain
 			_heal_player(heal, "porcao", false)
-		"TrÃ©gua Regenerativa":
+		"Trégua Regenerativa":
 			tregua_regenerativa_pulse = 0.75
 		"Cinzas da Escolha":
 			common_card_effects.append({"kind": "cinzas", "pos": player_pos, "life": 0.7, "max": 0.7, "radius": 62.0, "color": Color(1.0, 0.58, 0.28)})
@@ -32327,9 +32552,9 @@ func _apply_card(card: Dictionary, from_impossible_archive: bool = false) -> voi
 			reserva_pulso_pulse = 0.85
 		"Casulo Reativo":
 			common_card_effects.append({"kind": "casulo", "pos": player_pos, "life": 0.7, "max": 0.7, "radius": 58.0, "color": Color(0.54, 1.0, 0.86)})
-		"Passagem IntangÃ­vel":
+		"Passagem Intangível":
 			common_card_effects.append({"kind": "passagem", "pos": player_pos, "life": 0.62, "max": 0.62, "radius": 52.0, "color": Color(0.72, 0.9, 1.0)})
-		"Ã‚ncora Vital":
+		"Âncora Vital":
 			common_card_effects.append({"kind": "ancora", "pos": player_pos, "life": 0.7, "max": 0.7, "radius": 58.0, "color": Color(0.34, 1.0, 0.66)})
 		"Disparo crescente":
 			_recalculate_common_card_stat_bonuses()
@@ -32390,7 +32615,7 @@ func _apply_card(card: Dictionary, from_impossible_archive: bool = false) -> voi
 		"Necrocronismo":
 			_recalculate_necro_spectral_power()
 			rare_card_effects.append({"kind": "necro_ready", "pos": player_pos, "life": 0.75, "max": 0.75, "radius": 76.0, "color": Color(0.68, 0.36, 1.0)})
-		"CoraÃ§Ã£o de AntimatÃ©ria":
+		"Coração de Antimatéria":
 			antimatter_charge = min(antimatter_charge, _antimatter_required_charge())
 			antimatter_flash = 0.75
 		"Cofre do Excesso":
@@ -32415,12 +32640,6 @@ func _close_shop() -> void :
 
 func _finish_shop() -> void :
 	shop_controller.finish()
-
-
-func _geovana_bark(context: String, metadata: Dictionary = {}) -> bool:
-	if active_character_key != CHARACTER_GEOVANA:
-		return false
-	return geovana_bark_controller.request(self, context, metadata)
 
 
 func _update_shop_return(delta: float) -> void :
@@ -33225,6 +33444,7 @@ func _draw_phase_transition(viewport: Vector2) -> void :
 
 
 func _draw() -> void :
+	RTRationalVfx.reset_frame(self)
 	if mode != "game":
 		RTExecutionCamera.clear(self)
 	if mode != "death_slow":
@@ -34352,9 +34572,8 @@ func _catalog_ensure_selected_visible(viewport: Vector2) -> void:
 		catalog_selected = 0
 		catalog_scroll_index = 0
 		return
-	var visible: int = _catalog_visible_count(viewport)
 	catalog_selected = clampi(catalog_selected, 0, items.size() - 1)
-	catalog_scroll_index = floori(float(catalog_selected) / float(visible)) * visible
+	CatalogInterface.ensure_visible(self, viewport)
 
 
 func _catalog_reset_tab(index: int) -> void :
@@ -34363,6 +34582,10 @@ func _catalog_reset_tab(index: int) -> void :
 	catalog_scroll_index = 0
 	catalog_detail_open = false
 	catalog_detail_section = 0
+	catalog_scroll_px = 0.0
+	catalog_scroll_vel = 0.0
+	catalog_subfilter = ""
+	catalog_last_selected = -1
 
 
 func _catalog_change_tab(direction: int) -> void :
@@ -34385,11 +34608,7 @@ func _catalog_page_relative(direction: int, viewport: Vector2) -> void:
 	var items: Array = _catalog_items()
 	if items.is_empty():
 		return
-	var visible: int = _catalog_visible_count(viewport)
-	var last_page: int = floori(float(items.size() - 1) / float(visible))
-	var page: int = floori(float(catalog_scroll_index) / float(visible))
-	catalog_selected = clampi(page + direction, 0, last_page) * visible
-	_catalog_ensure_selected_visible(viewport)
+	CatalogInterface.page(self, direction, viewport)
 
 
 func _catalog_short_text(item: Dictionary) -> String:
@@ -34417,8 +34636,8 @@ func _catalog_detail_title(kind: String) -> String:
 
 func _catalog_enemy_items() -> Array:
 	return [
-		{"kind": "enemy", "name": "Comum", "summary": "O primeiro reflexo agressivo da Ruptura.", "desc": "Fragmento sem rosto que nasce onde a linha temporal rachou. Ele nao planeja: sente Geovana e avanca como se a existencia dela fosse um erro a corrigir.", "lore": "Os Comuns sao ecos baratos da primeira fissura. Quanto mais tempo passam soltos, mais o mapa parece aceitar que eles sempre estiveram ali.", "mechanics": "Funciona como pressao de base: aproxima, ocupa caminho e forÃ§a Geovana a se mover antes que inimigos mais complexos transformem a arena.", "color": Color(0.8, 0.86, 0.95), "texture": "enemy_common_phase_1"},
-		{"kind": "enemy", "name": "Espreitador", "summary": "Um perseguidor que aprende o ritmo do medo.", "desc": "Ele nao corre o tempo todo. Observa pequenas fugas, encurta distancia e escolhe o momento de transformar perseguicao em bote.", "lore": "Chamado de sombra faminta pelos primeiros registros do Ruptura, o Espreitador parece gostar de caÃ§ar quem acredita que ja ganhou distancia suficiente.", "mechanics": "Leitura de rota: pressiona flancos e fica mais perigoso quando a run amadurece, obrigando o jogador a alternar direcao e teleporte.", "color": Color(0.62, 0.86, 1.0), "texture": "stalker"},
+		{"kind": "enemy", "name": "Comum", "summary": "O primeiro reflexo agressivo da Ruptura.", "desc": "Fragmento sem rosto que nasce onde a linha temporal rachou. Ele nao planeja: sente Geovana e avanca como se a existencia dela fosse um erro a corrigir.", "lore": "Os Comuns sao ecos baratos da primeira fissura. Quanto mais tempo passam soltos, mais o mapa parece aceitar que eles sempre estiveram ali.", "mechanics": "Funciona como pressao de base: aproxima, ocupa caminho e força Geovana a se mover antes que inimigos mais complexos transformem a arena.", "color": Color(0.8, 0.86, 0.95), "texture": "enemy_common_phase_1"},
+		{"kind": "enemy", "name": "Espreitador", "summary": "Um perseguidor que aprende o ritmo do medo.", "desc": "Ele nao corre o tempo todo. Observa pequenas fugas, encurta distancia e escolhe o momento de transformar perseguicao em bote.", "lore": "Chamado de sombra faminta pelos primeiros registros do Ruptura, o Espreitador parece gostar de caçar quem acredita que ja ganhou distancia suficiente.", "mechanics": "Leitura de rota: pressiona flancos e fica mais perigoso quando a run amadurece, obrigando o jogador a alternar direcao e teleporte.", "color": Color(0.62, 0.86, 1.0), "texture": "stalker"},
 		{"kind": "enemy", "name": "Projetador", "summary": "A Ruptura aprendeu a atacar de longe.", "desc": "Um corpo quebrado que prefere distancia. Ele parece fraco ate o primeiro projetil obrigar Geovana a dividir atencao entre fuga, mira e terreno.", "lore": "Projetadores sao nervos expostos do mapa. Eles disparam como se estivessem transmitindo a dor da fenda para tudo que se move.", "mechanics": "Cria linhas de perigo e pune caminhada reta. O valor dele esta em fazer o jogador reposicionar sem abandonar o controle da horda.", "color": Color(0.65, 0.45, 1.0), "texture": "projector"},
 		{"kind": "enemy", "name": "Aglomerador", "summary": "Massa viva que fragmenta a arena.", "desc": "Parece apenas grande, mas e um ninho ambulante. Quando cai, deixa para tras mais problemas do que levou consigo.", "lore": "O Aglomerador e uma colmeia de corpos temporais que nao aceitaram morrer separados. Seu surgimento e sinal de saturacao local.", "mechanics": "Serve como ancora de pressao: demora a sair do caminho e espalha novos corpos, mudando o formato da onda.", "color": Color(0.56, 0.56, 1.0), "texture": "agglomerator"},
 		{"kind": "enemy", "name": "Cristalizado", "summary": "Uma casca que endureceu demais para desaparecer.", "desc": "O Cristalizado carrega placas de tempo condensado. Ele nao precisa ser rapido para ser perigoso: basta estar no lugar errado na hora certa.", "lore": "Sao restos de rupturas que tentaram congelar o proprio instante. Por isso brilham como pedra viva e parecem resistir ao esquecimento.", "mechanics": "Entra como obstaculo vivo: segura espaco, quebra rotas confortaveis e favorece habilidades que reposicionam ou atravessam alvo.", "color": Color(0.56, 1.0, 0.96), "texture": "crystal"},
@@ -34431,12 +34650,12 @@ func _catalog_enemy_items() -> Array:
 		{"kind": "enemy", "name": "Pinguim Incendiario", "summary": "Fogo em um mundo de gelo.", "desc": "Ele prova que a Ruptura nao respeita tema. No meio da nevasca, abre paredes de calor e transforma caminho seguro em decisao urgente.", "lore": "O Incendiario parece uma contradicao viva: um pinguim carregando a febre de outra fase dentro do peito.", "mechanics": "Controla espaco com paredes de fogo e deve ser lido como alterador de rota, nao apenas como mais um alvo na tela.", "color": Color(1.0, 0.46, 0.2), "texture": "enemy_common_phase_2_left"},
 		{"kind": "enemy", "name": "Devoto", "summary": "Fe corrompida em forma de perseguidor.", "desc": "Na terceira ruptura, alguns inimigos nao parecem nascer da fome, mas de uma ideia fixa: aproximar, insistir, converter pressao em erro.", "lore": "Os Devotos cercam o Pai-Rato como uma liturgia quebrada. Cada passo deles parece repetir uma prece que ninguem lembra por inteiro.", "mechanics": "Pressao corporal da fase 3. Funciona junto com venenos, rituais e projeteis para impedir que Geovana jogue parada.", "color": Color(0.74, 1.0, 0.46), "texture": "enemy_phase_3_left"},
 		{"kind": "enemy", "name": "Incensario", "summary": "A fumaca que decide por onde voce nao quer passar.", "desc": "Carrega um ritual pequeno demais para ser chefe e grande demais para ignorar. Onde ele atua, o mapa fica menos confiavel.", "lore": "O Incensario e uma memoria religiosa da fase 3, soprando miasma como se toda cura precisasse primeiro adoecer.", "mechanics": "Cria zonas e estados que tornam a movimentacao mais custosa. Bom jogador aprende a limpar ou contornar antes do cerco fechar.", "color": Color(0.68, 1.0, 0.28), "texture": "enemy_phase_3_right"},
-		{"kind": "enemy", "name": "Guardiao", "summary": "Protege o ritual, nao a si mesmo.", "desc": "Ele existe para atrasar a resposta do jogador. Enquanto Geovana gasta tempo abrindo caminho, a fase prepara outra camada de problema.", "lore": "Guardioes sao ossos da arena, levantados para impedir que a ordem do Pai-Rato seja interrompida cedo demais.", "mechanics": "Segura espaco e protege rotas de ameaÃ§a. Deve ser lido como peca de formacao, nao como alvo isolado.", "color": Color(0.94, 0.86, 0.54), "texture": "enemy_phase_3_left"},
+		{"kind": "enemy", "name": "Guardiao", "summary": "Protege o ritual, nao a si mesmo.", "desc": "Ele existe para atrasar a resposta do jogador. Enquanto Geovana gasta tempo abrindo caminho, a fase prepara outra camada de problema.", "lore": "Guardioes sao ossos da arena, levantados para impedir que a ordem do Pai-Rato seja interrompida cedo demais.", "mechanics": "Segura espaco e protege rotas de ameaça. Deve ser lido como peca de formacao, nao como alvo isolado.", "color": Color(0.94, 0.86, 0.54), "texture": "enemy_phase_3_left"},
 		{"kind": "enemy", "name": "Cartografo do Vazio", "summary": "Mapeia o erro antes dele acontecer.", "desc": "Na quarta fase, a arena pensa. O Cartografo marca rotas e transforma deslocamento previsivel em armadilha.", "lore": "Ele desenha mapas de lugares que ainda nao existem. Quando Geovana chega, o erro ja estava esperando.", "mechanics": "Punicao de trajetoria: pressiona o jogador a quebrar padroes e alternar caminhos.", "color": Color(0.26, 1.0, 0.82), "texture": "enemy_phase_4_cartografo"},
 		{"kind": "enemy", "name": "Cronofago", "summary": "Uma fome especifica por segundos.", "desc": "Nao devora corpo primeiro; devora margem. Perto dele, cada atraso parece maior e cada decisao fica curta.", "lore": "O Cronofago e a parte da Ruptura que descobriu que tempo tambem pode sangrar.", "mechanics": "Atrapalha ritmo e janelas. Deve ser tratado como inimigo de cadencia e nao apenas de posicao.", "color": Color(0.86, 0.58, 1.0), "texture": "enemy_phase_4_cronofago"},
 		{"kind": "enemy", "name": "Refrator Hostil", "summary": "Desvia intencao e devolve confusao.", "desc": "Parece estar no caminho, mas o perigo real e fazer o jogador mirar como sempre e receber uma resposta torta da arena.", "lore": "Refratores sao espelhos da quarta ruptura. Eles nao copiam imagem; copiam erro.", "mechanics": "Altera leitura de disparos e posicionamento. Recompensa jogador que observa antes de despejar habilidade.", "color": Color(0.6, 0.86, 1.0), "texture": "enemy_phase_4_refrator"},
 		{"kind": "enemy", "name": "Tecelao Vetorial", "summary": "Costura trajetorias invisiveis.", "desc": "Ele nao parece forte quando visto sozinho. O problema aparece quando o mapa inteiro comeca a obedecer linhas que voce nao escolheu.", "lore": "O Tecelao trata movimento como tecido. Cada rota repetida vira um fio facil de puxar.", "mechanics": "Manipula espaco e favorece combate consciente de rota. Jogar em linha reta contra ele e aceitar o desenho da fase.", "color": Color(1.0, 0.74, 0.3), "texture": "enemy_phase_4_tecelao"},
-		{"kind": "enemy", "name": "Eco Entropico", "summary": "O resto de uma acao que nao terminou.", "desc": "Alguns inimigos morrem. O Eco parece continuar vindo de uma decisao antiga, repetindo um perigo que ja devia ter passado.", "lore": "Ecos Entropicos sao sobras de calculos falhos do Ruptura e da Ruptura, presos no mesmo impulso ate alguem interromper.", "mechanics": "Cria repeticao e distracao visual/tatica; exige limpar prioridade antes que o campo acumule ruÃ­do.", "color": Color(1.0, 0.42, 0.86), "texture": "enemy_phase_4_eco"},
+		{"kind": "enemy", "name": "Eco Entropico", "summary": "O resto de uma acao que nao terminou.", "desc": "Alguns inimigos morrem. O Eco parece continuar vindo de uma decisao antiga, repetindo um perigo que ja devia ter passado.", "lore": "Ecos Entropicos sao sobras de calculos falhos do Ruptura e da Ruptura, presos no mesmo impulso ate alguem interromper.", "mechanics": "Cria repeticao e distracao visual/tatica; exige limpar prioridade antes que o campo acumule ruído.", "color": Color(1.0, 0.42, 0.86), "texture": "enemy_phase_4_eco"},
 		{"kind": "enemy", "name": "Enguia do Miasma", "summary": "Uma febre que aprendeu a nadar na fenda.", "desc": "A Enguia do Miasma desliza como se o ar fosse lama. Ela nao ocupa muito espaco, mas deixa a leitura da arena mais venenosa e instavel.", "lore": "Registros do Ruptura tratam a Enguia como um sintoma da sexta ruptura: um corpo fino carregando o odor vivo de algo que apodreceu fora do tempo.", "mechanics": "Inimigo de pressao movel da fase 6. Forca reposicionamento constante e prepara o terreno para ameacas mais pesadas da Matriarca.", "color": Color(0.58, 1.0, 0.78), "texture": "enemy_phase_6_enguia_miasma"},
 		{"kind": "enemy", "name": "Lodario", "summary": "O peso mole da Chaga.", "desc": "O Lodario se arrasta como lama com vontade propria. Onde ele passa, a fase parece ficar mais espessa e menos generosa com erro.", "lore": "Ele e uma mistura de sedimento, memoria e carne cansada. A Matriarca nao o comanda como soldado; ela o derrama pelo mapa.", "mechanics": "Funciona como corpo de bloqueio: mais resistente e lento, bom para fechar caminhos e tornar a fuga menos limpa.", "color": Color(0.86, 0.7, 0.46), "texture": "enemy_phase_6_lodario"},
 		{"kind": "enemy", "name": "Pustula Fossil", "summary": "Uma ferida antiga que ainda pulsa.", "desc": "A Pustula Fossil parece parada demais para ser urgente, ate a arena obrigar Geovana a encostar naquilo que devia ter sido enterrado.", "lore": "A sexta ruptura conserva suas dores como reliquias. Cada Pustula e um fragmento fossilizado da Chaga tentando voltar a ser carne.", "mechanics": "Inimigo pesado de area e prioridade. Deve ser lido como obstaculo vivo que aumenta o custo de limpar a fase sem planejamento.", "color": Color(1.0, 0.62, 0.32), "texture": "enemy_phase_6_pustula_fossil"},
@@ -34449,16 +34668,16 @@ func _catalog_boss_items() -> Array:
 	return [
 		{"kind": "boss", "name": "Caranguejo Cosmico", "summary": "A primeira muralha viva da Ruptura.", "desc": "Grande demais para parecer justo e antigo demais para parecer perdido. Ele testa se Geovana aprendeu a ler areas, janelas e reposicionamento.", "lore": "O primeiro chefe e a fenda usando um corpo simples para perguntar uma coisa cruel: voce sabe sair do lugar certo na hora certa?", "mechanics": "Alterna perseguicao, saltos, ondas e eventos de tempo. Em multiplayer, deve dividir atencao e criar pressao inteligente sem inflar vida.", "color": Color(1.0, 0.32, 0.18), "texture": "boss_stage1"},
 		{"kind": "boss", "name": "Nevasca", "summary": "O centro frio da segunda ruptura.", "desc": "A Nevasca nao quer apenas acertar Geovana. Quer controlar onde ela acredita que pode ficar.", "lore": "Nasceu quando o mapa congelado parou de ser cenario e virou vontade. Cada vento tenta empurrar o jogador para uma decisao ruim.", "mechanics": "Usa vento, gelo, zonas seguras e congelamento. O bom combate contra ela e leitura de arena, nao corrida cega.", "color": Color(0.62, 0.94, 1.0), "texture": "boss2"},
-		{"kind": "boss", "name": "Pai-Rato", "summary": "Ritual, miasma e provocacao.", "desc": "Ele mistura nojo, humor ruim e perigo real. Parece baguncado ate os rituais comeÃ§arem a tomar partes da tela.", "lore": "O Pai-Rato comanda a terceira ruptura como um culto de sobreviventes deformados. Ele nao vence por honra; vence por insistencia.", "mechanics": "Trabalha com nuvens, clones, rituais e perseguicao. As habilidades existem para tirar conforto e forcar resposta ativa.", "color": Color(0.74, 1.0, 0.3), "texture": "boss3"},
+		{"kind": "boss", "name": "Pai-Rato", "summary": "Ritual, miasma e provocacao.", "desc": "Ele mistura nojo, humor ruim e perigo real. Parece baguncado ate os rituais começarem a tomar partes da tela.", "lore": "O Pai-Rato comanda a terceira ruptura como um culto de sobreviventes deformados. Ele nao vence por honra; vence por insistencia.", "mechanics": "Trabalha com nuvens, clones, rituais e perseguicao. As habilidades existem para tirar conforto e forcar resposta ativa.", "color": Color(0.74, 1.0, 0.3), "texture": "boss3"},
 		{"kind": "boss", "name": "Nexo Anfibio", "summary": "Um sapo astronauta colossal alimentado pela Ruptura.", "desc": "Um anfibio bipede de tres metros teve o traje espacial fundido ao corpo. O sistema de suporte agora bebe energia da Ruptura e transforma cada vazamento em arma.", "lore": "Ele voltou de uma missao que nao existe em nenhum registro. Dentro do visor rachado ainda ha um olhar animal; ao redor dele, o traje recalcula gravidade, trajetoria e materia para manter o hospedeiro vivo.", "mechanics": "Avanca com peso, golpeia, lanca a lingua, salta, abre fendas e canaliza a Singularidade Absoluta. Rompa exatamente tres ancoras para interromper a ultimate e expo-lo.", "color": Color(0.52, 1.0, 0.66), "texture": "boss4"},
-		{"kind": "boss", "name": "UMBRA", "summary": "A mente inevitavel da quinta fase.", "desc": "UMBRA nao e so chefe. E uma leitura do jogador tentando aprender, responder e usar memoria contra habitos repetidos.", "lore": "Os arquivos registram UMBRA com cautela incomum. Alguns relatos sugerem que ela nao luta contra Geovana; ela conversa com o modo como Geovana joga.", "mechanics": "Alterna dimensoes, teletransportes, prisao, descarga e adaptacao. O encontro pune rotina e recompensa variaÃ§Ã£o consciente.", "color": Color(0.56, 1.0, 0.68), "texture": "boss5"},
-		{"kind": "boss", "name": "Matriarca da Chaga", "summary": "A sexta ruptura em corpo aberto.", "desc": "A Matriarca nao e mais um boss que corre atras do jogador. Ela controla o mapa como um organismo parado, escolhendo quando fermentar o chao, rachar a arena e expor o proprio nucleo.", "lore": "A Matriarca e uma mae de sintomas: nada nela parece nascer inteiro, mas tudo que ela perde tenta voltar com fome.", "mechanics": "Chefe de estados da fase 6, com ataques escolhidos por peso, cooldown e pressao da arena. Muda leitura em 60% e 40% de vida, sofre eventos em 80/60/40/30/15%, cria carapaca quebravel, poÃ§as acidas dos borbulhantes, rachaduras verdes perseguidoras, foices vertebrais, cauda condutiva, mare de carnificina, nevoa giratoria e refluxo organico.", "color": Color(1.0, 0.64, 0.18), "texture": "boss6_form_1"}
+		{"kind": "boss", "name": "UMBRA", "summary": "A mente inevitavel da quinta fase.", "desc": "UMBRA nao e so chefe. E uma leitura do jogador tentando aprender, responder e usar memoria contra habitos repetidos.", "lore": "Os arquivos registram UMBRA com cautela incomum. Alguns relatos sugerem que ela nao luta contra Geovana; ela conversa com o modo como Geovana joga.", "mechanics": "Alterna dimensoes, teletransportes, prisao, descarga e adaptacao. O encontro pune rotina e recompensa variação consciente.", "color": Color(0.56, 1.0, 0.68), "texture": "boss5"},
+		{"kind": "boss", "name": "Matriarca da Chaga", "summary": "A sexta ruptura em corpo aberto.", "desc": "A Matriarca nao e mais um boss que corre atras do jogador. Ela controla o mapa como um organismo parado, escolhendo quando fermentar o chao, rachar a arena e expor o proprio nucleo.", "lore": "A Matriarca e uma mae de sintomas: nada nela parece nascer inteiro, mas tudo que ela perde tenta voltar com fome.", "mechanics": "Chefe de estados da fase 6, com ataques escolhidos por peso, cooldown e pressao da arena. Muda leitura em 60% e 40% de vida, sofre eventos em 80/60/40/30/15%, cria carapaca quebravel, poças acidas dos borbulhantes, rachaduras verdes perseguidoras, foices vertebrais, cauda condutiva, mare de carnificina, nevoa giratoria e refluxo organico.", "color": Color(1.0, 0.64, 0.18), "texture": "boss6_form_1"}
 	]
 
 
 func _catalog_fraction_items() -> Array:
 	return [
-		{"kind": "fraction", "name": "Ruptura", "summary": "A forÃ§a que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece cartas e forÃ§a Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
+		{"kind": "fraction", "name": "Ruptura", "summary": "A força que reescreve fase, corpo e regra.", "desc": "A Ruptura nao e apenas inimiga. E uma condicao do mundo: cada fase mostra um jeito diferente dela tentar explicar que o tempo perdeu obediencia.", "lore": "Alguns arquivos dizem que ela comecou como acidente. Outros dizem que acidente e apenas o nome humano para algo que chegou cedo demais.", "mechanics": "Escala fases, manifesta inimigos, altera mapas, chama Arauto, oferece cartas e força Geovana a escolher como vai quebrar de volta.", "color": Color(1.0, 0.08, 0.78), "texture": "map_phase_1"},
 		{"kind": "fraction", "name": "Geovana", "summary": "A pessoa no centro da anomalia.", "desc": "Geovana nao recebe poderes limpos; recebe formas de sobreviver a um mundo que insiste em desmontar. Cada manifestacao e uma resposta emocional e mecanica.", "lore": "O catalogo evita chamar Geovana de arma. Ela e testemunha, erro, chave e alguem tentando atravessar tudo isso ainda sendo alguem.", "mechanics": "O jogador escolhe Manifestacao, Espectro e cartas para transformar uma run em estilo proprio.", "color": Color(0.72, 0.92, 1.0), "texture": "player_idle"},
 		{"kind": "fraction", "name": "Arauto", "summary": "O mensageiro que interrompe a run.", "desc": "Ele aparece como aviso vivo: a Ruptura percebeu que Geovana esta crescendo e envia uma prova entre fase e chefe.", "lore": "O Arauto carrega fragmentos de evolucao. Mata-lo nao encerra uma ameaca; abre uma escolha.", "mechanics": "Entrega fragmento de evolucao de manifestacao. O jogador escolhe entre opcoes que mudam o comportamento da manifestacao.", "color": Color(0.78, 0.52, 1.0), "texture": "arauto"}
 	]
@@ -34484,6 +34703,11 @@ func _catalog_item_texture(item: Dictionary) -> Texture2D:
 		var manifestation_texture: Texture2D = _get_texture("manifestation_" + String(item["key"]))
 		if manifestation_texture != null:
 			return manifestation_texture
+	var lore_path := String(item.get("texture_path", ""))
+	if lore_path != "" and ResourceLoader.exists(lore_path):
+		var lore_tex = load(lore_path)
+		if lore_tex is Texture2D:
+			return lore_tex
 	var texture_key = String(item.get("texture", ""))
 	if texture_key != "" and not textures.has(texture_key):
 		_ensure_runtime_texture(texture_key)
@@ -34535,7 +34759,16 @@ func _catalog_all_items_by_tab() -> Array:
 
 func _catalog_items() -> Array:
 	var base_items: Array = _catalog_public_entries_for_tab(catalog_tab)
-	return CatalogRepository.filter_entries(base_items, catalog_search_query, catalog_filter_mode)
+	return CatalogInterface.apply_subfilter(self, CatalogRepository.filter_entries(base_items, catalog_search_query, catalog_filter_mode))
+
+
+func _catalog_find_entry(entry_id: String) -> Dictionary:
+	for tab_index in range(CATALOG_TABS.size()):
+		for raw in _catalog_public_entries_for_tab(tab_index):
+			var item: Dictionary = raw
+			if String(item.get("id", item.get("key", item.get("name", "")))) == entry_id:
+				return item
+	return {}
 
 
 func _catalog_open_related(entry_id: String) -> bool:
@@ -34546,7 +34779,9 @@ func _catalog_open_related(entry_id: String) -> bool:
 			var id: = String(item.get("id", item.get("key", item.get("name", ""))))
 			if id == entry_id:
 				catalog_tab = tab_index
+				catalog_subfilter = ""
 				catalog_selected = i
+				catalog_last_selected = i
 				catalog_scroll_index = 0
 				catalog_detail_open = true
 				_catalog_mark_current_item_seen()
@@ -35306,6 +35541,8 @@ func _enemy_default_facing(kind: String) -> Vector2:
 			return Vector2.RIGHT
 		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL:
 			return Vector2.RIGHT
+		"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro", "cagado_piao", "cagado_cangaceiro", "ovo_jabuti":
+			return Vector2.RIGHT
 		ENEMY_SHIELD_REFLECTOR:
 			return Vector2.LEFT
 	return Vector2.LEFT
@@ -35602,7 +35839,7 @@ func _draw_effects(camera: Vector2) -> void :
 
 func _draw_hud(viewport: Vector2) -> void :
 	HudPresentation._draw_hud(self, viewport)
-	geovana_bark_controller.draw(self, viewport)
+	speech_bubbles.draw(self, viewport)
 
 
 func _draw_unlock_notifications(viewport: Vector2) -> void :
@@ -35668,10 +35905,13 @@ func _aura_hud_ratio() -> float:
 		"Voraz": return clamp(float(aura_state.get("voracious_hunger", 0.0)) / AuraSystem.hunger_max(aura_state), 0.0, 1.0)
 		"Nula": return clamp(float(aura_state.get("null_charge", 0.0)) / 100.0, 0.0, 1.0)
 		"Abissal": return 1.0 if float(aura_state.get("abyss_tide", 0.0)) > 0.0 else clamp(float(aura_state.get("abyss_depth", 0.0)) / 100.0, 0.0, 1.0)
-		"Profetica": return clamp(float(aura_state.get("prophecy_time", 0.0)) / 6.4, 0.0, 1.0)
+		"Profetica":
+			if float(aura_state.get("prophecy_vision", 0.0)) > 0.0:
+				return 1.0
+			return 1.0 - clamp(float(aura_state.get("prophecy_vision_cd", 0.0)) / maxf(6.5, 11.0 - 0.45 * int(aura_state.get("level", 1))), 0.0, 1.0)
 		"Sanguinaria": return clamp(float(aura_state.get("blood_thirst", 0.0)) / 100.0, 0.0, 1.0)
 		"Crepuscular": return 1.0 if float(aura_state.get("crepuscular_eclipse", 0.0)) > 0.0 else clamp(float(aura_state.get("crepuscular_charge", 0.0)) / 100.0, 0.0, 1.0)
-		"Peregrino": return clamp(float(aura_state.get("peregrino_steps", 0)) / float(AuraSystem._peregrino_steps_required(aura_state)), 0.0, 1.0)
+		"Peregrino": return 1.0 if float(aura_state.get("peregrino_trail_speed", 0.0)) > 0.0 else clamp(float(Array(aura_state.get("peregrino_path", [])).size()) / 30.0, 0.0, 1.0)
 		"Equilibrista": return 1.0 if float(aura_state.get("equilibrista_state", 0.0)) > 0.0 else clamp(float(aura_state.get("equilibrista_balance", 0.0)) / 100.0, 0.0, 1.0)
 		"Avarento": return clamp(float(aura_state.get("avarento_lastro", 0.0)) / 4.0, 0.0, 1.0)
 		"Oportunista": return 1.0 if bool(aura_state.get("oportunista_armed", false)) else clamp(float(aura_state.get("oportunista_charges", 0)) / float(AuraSystem._oportunista_required(aura_state)), 0.0, 1.0)
@@ -35714,19 +35954,22 @@ func _aura_status_text() -> String:
 				return "BANQUETE"
 			if float(aura_state.get("voracious_satiation", 0.0)) > 0.0:
 				return "SACIEDADE %.1fs" % float(aura_state.get("voracious_satiation", 0.0))
-			return "FOME X%d" % (int(aura_state.get("voracious_cycles", 0)) + 1)
+			return "FOME X%d  DEVORA <%d%%" % [int(aura_state.get("voracious_cycles", 0)) + 1, int(round(AuraSystem.voracious_devour_threshold(aura_state) * 100.0))]
 		"Nula": return "NULO PRONTO" if bool(aura_state.get("null_armed", false)) else "%d%%" % int(aura_state.get("null_charge", 0.0))
 		"Abissal": return "MARE NEGRA" if float(aura_state.get("abyss_tide", 0.0)) > 0.0 else "%d%%" % int(aura_state.get("abyss_depth", 0.0))
-		"Profetica": return "PRESSAGIO" if int(aura_state.get("prophecy_uid", -1)) >= 0 else "ORACULO"
+		"Profetica":
+			if float(aura_state.get("prophecy_vision", 0.0)) > 0.0:
+				return "VISAO %.1fs  DESTINO %d" % [float(aura_state.get("prophecy_vision", 0.0)), int(aura_state.get("prophecy_fate", 0))]
+			return "DESTINO %d/%d" % [int(aura_state.get("prophecy_fate", 0)), AuraSystem.prophecy_fate_cap(aura_state)]
 		"Sanguinaria": return "CARNIFICINA" if bool(aura_state.get("blood_burst", false)) else _sanguinaria_hud_status()
 		"Crepuscular":
 			if float(aura_state.get("crepuscular_eclipse", 0.0)) > 0.0:
 				return "ECLIPSE %.1fs" % float(aura_state.get("crepuscular_eclipse", 0.0))
 			return "%s %d%%" % [String(aura_state.get("crepuscular_phase", "alvorada")).to_upper(), int(aura_state.get("crepuscular_charge", 0.0))]
 		"Peregrino":
-			if float(aura_state.get("peregrino_journey", 0.0)) > 0.0:
-				return "JORNADA %.1fs" % float(aura_state.get("peregrino_journey", 0.0))
-			return "%d/%d PASSOS" % [int(aura_state.get("peregrino_steps", 0)), AuraSystem._peregrino_steps_required(aura_state)]
+			if float(aura_state.get("peregrino_trail_speed", 0.0)) > 0.0:
+				return "TERRITORIO"
+			return "FECHE UM LACO"
 		"Equilibrista":
 			if float(aura_state.get("equilibrista_state", 0.0)) > 0.0:
 				return "EQUILIBRIO"
@@ -35734,6 +35977,8 @@ func _aura_status_text() -> String:
 				return "DIVIDA %d" % int(aura_state.get("equilibrista_debt", 0.0))
 			return "%d%%" % int(aura_state.get("equilibrista_balance", 0.0))
 		"Avarento":
+			if int(aura_state.get("avarento_pending", 0)) > 0:
+				return "COFRE ARMADO"
 			return "COFRE" if float(aura_state.get("avarento_cofre", 0.0)) > 0.0 else "LASTRO %.1f" % float(aura_state.get("avarento_lastro", 0.0))
 		"Oportunista":
 			return "ARMADO" if bool(aura_state.get("oportunista_armed", false)) else "%d/%d ABERTURAS" % [int(aura_state.get("oportunista_charges", 0)), AuraSystem._oportunista_required(aura_state)]
@@ -37057,7 +37302,8 @@ func _draw_corner_limbo(camera: Vector2, viewport: Vector2) -> void:
 
 
 func _clamp_player_world(pos: Vector2) -> Vector2:
-	return pos.clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN)
+	# Objetos solidos pintados no chao (cacto, pedra, cerca): empurra e desliza pela borda.
+	return RTMapPropColliders.push_player(self, pos.clamp(PLAYER_WORLD_MARGIN, WORLD_SIZE - PLAYER_WORLD_MARGIN))
 
 
 func _distance_to_rect(point: Vector2, rect: Rect2) -> float:
@@ -38389,7 +38635,7 @@ func _handle_key(event: InputEventKey) -> void :
 		elif event.keycode in [KEY_RIGHT, KEY_LEFT]:
 			var direction: int = 1 if event.keycode == KEY_RIGHT else -1
 			if catalog_detail_open:
-				catalog_detail_section = posmod(catalog_detail_section + direction, 3)
+				CatalogInterface.step_detail(self, direction)
 			else:
 				_catalog_select_relative(direction, viewport)
 		elif event.keycode in [KEY_DOWN, KEY_S, KEY_UP, KEY_W]:
@@ -41736,6 +41982,15 @@ func _send_peer_damage(peer_id: int, amount: int, source: String, silent_hit_sfx
 		rpc_id(1, "_request_peer_damage", peer_id, maxi(1, amount), source, silent_hit_sfx)
 	else:
 		rpc_id(peer_id, "_rpc_client_take_damage", maxi(1, amount), source, silent_hit_sfx)
+
+
+func _send_peer_phase8_graze(peer_id: int, position: Vector2) -> void:
+	if peer_id <= 0 or not is_multiplayer or not _is_world_authority():
+		return
+	if online_connected:
+		rpc_id(1, "_request_peer_phase8_graze", peer_id, position)
+	else:
+		rpc_id(peer_id, "_rpc_client_phase8_graze", position)
 
 
 func _send_peer_hostile_reposition(peer_id: int, destination: Vector2, source: String) -> void:
@@ -45362,6 +45617,16 @@ func _request_peer_damage(peer_id: int, amount: int, source: String, silent_hit_
 
 
 @rpc("any_peer", "reliable")
+func _request_peer_phase8_graze(peer_id: int, position: Vector2) -> void:
+	if not dedicated_server_mode or _mp_sender_id() != dedicated_room_owner_peer_id:
+		return
+	var target_state: Dictionary = dedicated_player_state_by_peer.get(peer_id, {})
+	if target_state.is_empty() or bool(target_state.get("dead", false)) or bool(target_state.get("eliminated", false)):
+		return
+	rpc_id(peer_id, "_rpc_client_phase8_graze", position)
+
+
+@rpc("any_peer", "reliable")
 func _request_peer_hostile_reposition(peer_id: int, destination: Vector2, source: String) -> void:
 	if not dedicated_server_mode or _mp_sender_id() != dedicated_room_owner_peer_id:
 		return
@@ -45411,6 +45676,13 @@ func _request_peer_suturer_card_change(peer_id: int, card_id: String, restore: b
 func _rpc_client_take_damage(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
 	if _mp_sender_is_self(): return
 	_damage_player(amount, source, silent_hit_sfx)
+
+
+@rpc("authority", "call_remote", "reliable", 3)
+func _rpc_client_phase8_graze(position: Vector2) -> void:
+	if current_phase != RTSertaoController.PHASE or dedicated_server_mode:
+		return
+	sertao_controller.apply_graze(position)
 
 
 @rpc("any_peer", "reliable")
@@ -45642,3 +45914,204 @@ func _handle_quantum_chip_input(event: InputEvent) -> bool:
 			RTQuantumChipUI.pick_random_build(self)
 			return true
 	return false
+
+
+
+# ================================================================ espectros
+## Aviso de recompensa padrao dos espectros: titulo + linhas com o que mudou.
+## kind: "gain" (ganho), "warn" (aviso), "loss" (perda).
+func _spectre_toast(title: String, lines: Array, color: Color, kind: String = "gain") -> void:
+	spectre_toasts.push_front({"title": title, "lines": lines, "color": color, "kind": kind, "life": 2.4, "max": 2.4})
+	while spectre_toasts.size() > 3:
+		spectre_toasts.pop_back()
+	if kind == "gain":
+		spectre_fx.append({"kind": "reward_ring", "pos": player_pos, "color": color, "life": 0.55, "max": 0.55})
+
+
+func _sanguinaria_reward_toast(combo: int) -> void:
+	var dmg: int = int(round(float(aura_state.get("blood_combo_damage", 0.0)) * 100.0))
+	var spd: int = int(round(float(aura_state.get("blood_combo_speed", 0.0)) * 100.0))
+	var cdr: int = int(round(float(aura_state.get("blood_combo_cooldown", 0.0)) * 100.0))
+	_spectre_toast("CACADA x%d" % combo, ["+%d%% dano   +%d%% velocidade   -%d%% recarga" % [dmg, spd, cdr], "Habilidades recarregaram %.2fs" % minf(0.9, 0.18 + float(combo) * 0.025)], Color(1.0, 0.12, 0.18))
+
+
+func _update_spectre_runtime(delta: float) -> void:
+	for fx in spectre_fx:
+		fx["life"] = float(fx.get("life", 0.0)) - delta
+	spectre_fx = spectre_fx.filter(func(fx): return float(fx.get("life", 0.0)) > 0.0)
+	for toast in spectre_toasts:
+		toast["life"] = float(toast.get("life", 0.0)) - delta
+	spectre_toasts = spectre_toasts.filter(func(toast): return float(toast.get("life", 0.0)) > 0.0)
+	match String(aura_state.get("name", "")):
+		"Peregrino":
+			_peregrino_trail_contact(delta)
+		"Profetica":
+			_prophecy_track_dodges()
+		"Avarento":
+			if int(aura_state.get("avarento_pending", 0)) > 0 and mode == "game" and not _merchant_dimension().active and not _rift_transition().busy():
+				_avarento_release_cofre()
+
+
+# ---- Vanguarda: onda de calor ao ser atingida
+func _vanguard_heat_wave(received: float, radius: float, heat: int) -> void:
+	var level: int = int(aura_state.get("level", 1))
+	var hits: int = 0
+	for enemy in enemies.duplicate():
+		var to_enemy: Vector2 = Vector2(enemy["pos"]) - player_pos
+		if to_enemy.length() > radius + _enemy_radius(enemy) * 0.5:
+			continue
+		var dmg: float = float(enemy.get("max_hp", 1.0)) * (0.05 + 0.006 * level) + received * 1.2
+		if bool(enemy.get("elite", false)):
+			dmg = float(enemy.get("max_hp", 1.0)) * 0.025 + received * 1.2
+		_damage_enemy(enemy, dmg, "aura_vanguarda", true, false)
+		var dir: Vector2 = to_enemy.normalized() if to_enemy.length() > 0.5 else Vector2.RIGHT
+		enemy["pos"] = (Vector2(enemy["pos"]) + dir * (70.0 if not bool(enemy.get("elite", false)) else 30.0)).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		enemy["aura_burn"] = maxf(float(enemy.get("aura_burn", 0.0)), 5.0 + level)
+		enemy["aura_burn_tick"] = minf(float(enemy.get("aura_burn_tick", 0.0)), 0.2)
+		hits += 1
+	if boss_active and boss_hp > 0.0 and player_pos.distance_to(boss_pos) <= radius + _boss_hit_radius():
+		_damage_boss(received * 2.0 + float(player_damage) * 1.5, "aura_vanguarda", false)
+		hits += 1
+	spectre_fx.append({"kind": "heat_wave", "pos": player_pos, "radius": radius, "heat": heat, "life": 0.55, "max": 0.55})
+	screen_shake_timer = maxf(screen_shake_timer, 0.18)
+	screen_shake_strength = maxf(screen_shake_strength, 6.0 + heat)
+	_vibrate(70, 0.4)
+	_spectre_toast("ONDA DE CALOR  x%d" % heat, ["%d inimigos queimando, empurrados para tras" % hits, "Calor %d/%d: queimadura +%d%%" % [heat, AuraSystem.VANGUARD_HEAT_MAX, heat * 20]], Color(1.0, 0.42, 0.06))
+
+
+# ---- Voraz: devorar no dash
+func _voraz_devour_dash(origin: Vector2, target: Vector2) -> void:
+	if String(aura_state.get("name", "")) != "Voraz":
+		return
+	var threshold: float = AuraSystem.voracious_devour_threshold(aura_state)
+	var eaten: int = 0
+	var healed: float = 0.0
+	var cycles: int = int(aura_state.get("voracious_cycles", 0))
+	for enemy in enemies.duplicate():
+		if eaten >= 3 or float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var pos: Vector2 = Vector2(enemy["pos"])
+		var closest: Vector2 = Geometry2D.get_closest_point_to_segment(pos, origin, target)
+		if closest.distance_to(pos) > 42.0 + _enemy_radius(enemy) * 0.5:
+			continue
+		var limit: float = threshold * (0.6 if bool(enemy.get("elite", false)) else 1.0)
+		if float(enemy.get("hp", 1.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0))) > limit:
+			continue
+		spectre_fx.append({"kind": "devour", "pos": pos, "life": 0.5, "max": 0.5})
+		_damage_enemy(enemy, float(enemy.get("hp", 1.0)) + 1.0, "aura_voraz", false, false)
+		aura_state["voracious_hunger"] = float(aura_state.get("voracious_hunger", 0.0)) + 30.0 * pow(0.94, cycles)
+		aura_state["voracious_last_collect"] = 0.0
+		healed += _heal_player(player_hp_max * 0.04, "voraz_devour", true)
+		eaten += 1
+	var boss_bite := false
+	if boss_active and boss_hp > 0.0 and float(aura_state.get("voracious_devour_boss_cd", 0.0)) <= time_alive:
+		if Geometry2D.get_closest_point_to_segment(boss_pos, origin, target).distance_to(boss_pos) <= _boss_hit_radius() + 30.0:
+			aura_state["voracious_devour_boss_cd"] = time_alive + 6.0
+			_damage_boss(float(boss_hp_max) * 0.03, "aura_voraz", false)
+			aura_state["voracious_hunger"] = float(aura_state.get("voracious_hunger", 0.0)) + 20.0
+			spectre_fx.append({"kind": "devour", "pos": boss_pos, "life": 0.6, "max": 0.6, "big": true})
+			boss_bite = true
+	while float(aura_state.get("voracious_hunger", 0.0)) >= AuraSystem.hunger_max(aura_state):
+		aura_state["voracious_hunger"] = float(aura_state["voracious_hunger"]) - AuraSystem.hunger_max(aura_state)
+		aura_state["voracious_cycles"] = int(aura_state.get("voracious_cycles", 0)) + 1
+	if eaten > 0 or boss_bite:
+		screen_shake_timer = maxf(screen_shake_timer, 0.14)
+		screen_shake_strength = maxf(screen_shake_strength, 6.0)
+		_vibrate(60, 0.45)
+		var lines: Array = []
+		if eaten > 0:
+			lines.append(("+%d vida   fome +%d" % [int(healed), eaten * 30]) if healed >= 1.0 else ("fome +%d" % (eaten * 30)))
+		if boss_bite:
+			lines.append("Pedaco do chefe: -3% da vida dele")
+		lines.append("Devora quem tiver menos de %d%% de vida" % int(round(AuraSystem.voracious_devour_threshold(aura_state) * 100.0)))
+		_spectre_toast("DEVOROU x%d" % eaten if eaten > 0 else "MORDIDA NO CHEFE", lines, Color(0.95, 0.12, 0.06))
+
+
+# ---- Profetica: contar desvios de tiros vistos
+func _prophecy_track_dodges() -> void:
+	if float(aura_state.get("prophecy_vision", 0.0)) <= 0.0:
+		return
+	for bullet in enemy_bullets:
+		if bool(bullet.get("pf_done", false)):
+			continue
+		var dist: float = player_pos.distance_to(Vector2(bullet.get("pos", Vector2.ZERO)))
+		if not bullet.has("pf_near"):
+			if dist <= 72.0:
+				bullet["pf_near"] = time_alive
+			continue
+		if dist >= 96.0:
+			bullet["pf_done"] = true
+			if float(last_damage_time) < float(bullet["pf_near"]) and AuraSystem.prophecy_register_dodge(aura_state):
+				_prophecy_on_dodge(Vector2(bullet.get("pos", player_pos)))
+
+
+func _prophecy_on_dodge(at: Vector2) -> void:
+	var fate: int = int(aura_state.get("prophecy_fate", 0))
+	spectre_fx.append({"kind": "prophecy_dodge", "pos": at, "to": player_pos, "life": 0.5, "max": 0.5})
+	_spectre_toast("DESTINO DESVIADO  %d/%d" % [fate, AuraSystem.prophecy_fate_cap(aura_state)], ["Proximo ataque: critico x%.2f" % (1.6 + 0.06 * int(aura_state.get("level", 1)))], Color(1.0, 0.86, 0.3))
+
+
+# ---- Peregrino: rastro que queima/atrasa e territorio fechado
+func _peregrino_trail_contact(delta: float) -> void:
+	peregrino_contact_tick -= delta
+	if peregrino_contact_tick > 0.0:
+		return
+	peregrino_contact_tick = 0.25
+	var path: Array = aura_state.get("peregrino_path", [])
+	if path.size() < 2:
+		return
+	var level: int = int(aura_state.get("level", 1))
+	var dmg: float = float(player_damage) * (0.22 + 0.03 * level)
+	for enemy in enemies.duplicate():
+		var pos: Vector2 = Vector2(enemy["pos"])
+		var reach: float = 20.0 + _enemy_radius(enemy) * 0.5
+		for i in range(1, path.size()):
+			var a: Vector2 = Vector2(path[i - 1]["pos"])
+			var b: Vector2 = Vector2(path[i]["pos"])
+			if Geometry2D.get_closest_point_to_segment(pos, a, b).distance_to(pos) <= reach:
+				enemy["peregrino_slow"] = 0.6
+				_damage_enemy(enemy, dmg, "aura_peregrino", false, false)
+				break
+
+
+func _peregrino_claim_territory(poly: PackedVector2Array) -> void:
+	if poly.size() < 3:
+		return
+	var level: int = int(aura_state.get("level", 1))
+	var dmg: float = float(player_damage) * (1.6 + 0.2 * level)
+	var caught: int = 0
+	for enemy in enemies.duplicate():
+		if Geometry2D.is_point_in_polygon(Vector2(enemy["pos"]), poly):
+			_damage_enemy(enemy, dmg, "aura_peregrino", true, false)
+			enemy["stun"] = maxf(float(enemy.get("stun", 0.0)), 0.35)
+			caught += 1
+	if boss_active and boss_hp > 0.0 and Geometry2D.is_point_in_polygon(boss_pos, poly):
+		_damage_boss(dmg * 1.5, "aura_peregrino", false)
+		caught += 1
+	var heal: float = _heal_player(player_hp_max * (0.03 + 0.004 * level), "peregrino", true)
+	spectre_fx.append({"kind": "territory", "polygon": poly, "life": 0.8, "max": 0.8})
+	screen_shake_timer = maxf(screen_shake_timer, 0.16)
+	screen_shake_strength = maxf(screen_shake_strength, 5.5)
+	_vibrate(80, 0.4)
+	_spectre_toast("TERRITORIO", [("%d presos no laco, +%d vida" % [caught, int(heal)]) if heal >= 1.0 else ("%d presos no laco" % caught), "+12% velocidade por 2s"], Color(0.56, 0.9, 1.0))
+
+
+# ---- Avarento: o cofre rompe quando ela volta a lutar
+func _avarento_release_cofre() -> void:
+	var info: Dictionary = AuraSystem.release_avarento_cofre(aura_state, player_hp_max)
+	if info.is_empty():
+		return
+	var dmg: float = float(player_damage) * float(info.get("damage_mult", 1.4))
+	var hits: int = 0
+	for enemy in enemies.duplicate():
+		var to_enemy: Vector2 = Vector2(enemy["pos"]) - player_pos
+		if to_enemy.length() > 190.0:
+			continue
+		_damage_enemy(enemy, dmg, "aura_avarento", true, false)
+		enemy["pos"] = (Vector2(enemy["pos"]) + (to_enemy.normalized() if to_enemy.length() > 0.5 else Vector2.RIGHT) * 50.0).clamp(Vector2(40, 40), WORLD_SIZE - Vector2(40, 40))
+		hits += 1
+	spectre_fx.append({"kind": "coin_burst", "pos": player_pos, "life": 0.9, "max": 0.9, "count": clampi(int(info.get("spent", 0)) / 40, 10, 28)})
+	screen_shake_timer = maxf(screen_shake_timer, 0.2)
+	screen_shake_strength = maxf(screen_shake_strength, 7.0)
+	_vibrate(90, 0.5)
+	_spectre_toast("COFRE ROMPIDO", ["Escudo de %d e +velocidade por %.1fs" % [int(info.get("shield", 0.0)), float(aura_state.get("avarento_cofre", 0.0))], "Chuva de moedas: %d inimigos atingidos" % hits], Color(1.0, 0.76, 0.2))

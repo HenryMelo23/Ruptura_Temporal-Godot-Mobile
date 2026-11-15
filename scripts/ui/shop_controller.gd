@@ -640,8 +640,6 @@ func finish() -> void:
 	if game.has_method("_consume_bargain_discount_shop_session"):
 		game._consume_bargain_discount_shop_session()
 	game.next_forced_shop_time = game.shop_auto_interval if game.shop_auto_enabled else INF
-	if game.has_method("_geovana_bark") and game.shop_purchases_this_visit > 0:
-		game._geovana_bark("shop_exit", {"purchases": game.shop_purchases_this_visit})
 	game._update_audio_volumes()
 	game._block_ui_input()
 

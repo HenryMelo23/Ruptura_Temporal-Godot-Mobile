@@ -50,6 +50,7 @@ const ANIM_FROZEN: = 7
 const DAMAGE_ENEMY: = 0
 const DAMAGE_BOSS: = 1
 const DAMAGE_ARAUTO: = 2
+const MAX_PHASE_INDEX: = 8
 static func estimate_packed_bytes(value) -> int:
 	if value is PackedFloat32Array:
 		return value.size() * 4
@@ -132,7 +133,7 @@ static func unpack_boss_snapshot(
 		elif float(result["hp"]) > 0.0 and not bool(result["dead"]) and has_previous_snapshot:
 			result["active"] = true
 		if packed.size() >= 6:
-			result["phase_index"] = clampi(int(packed[5]), 1, 7)
+			result["phase_index"] = clampi(int(packed[5]), 1, MAX_PHASE_INDEX)
 		if packed.size() >= 7:
 			result["hp_max"] = max(1.0, packed[6])
 		if packed.size() >= 8:

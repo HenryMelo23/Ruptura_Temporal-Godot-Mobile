@@ -87,6 +87,10 @@ const BOSS_SCENES := {
 		"defeat_art": "A Fênix explode em cinzas sobre a floresta queimada; brasas giram em espiral ao redor de Geovana.",
 		"fragment_art": "Das cinzas, o último fragmento sobe brilhando até a mão de Geovana.",
 		"line": "Até as cinzas aprendem a voltar.", "after": "Agora só falta você."},
+	8: {"defeat": "boss8_defeat", "fragment": "boss8_fragment", "defeat_focus": Vector2(0.5, 0.4), "fragment_focus": Vector2(0.5, 0.5),
+		"defeat_art": "O jabuti colossal Casco-de-Sol desaba; o casco-relógio racha, engrenagens de bronze e luz dourada saem das fissuras, o gnômon tomba. Geovana de costas, jaleco ao vento.",
+		"fragment_art": "As mãos de Geovana seguram o fragmento achado entre as engrenagens; ele projeta a sombra de um ponteiro de relógio na palma dela.",
+		"line": "Pode descansar. Eu ainda tenho pressa.", "after": "O relógio parou. Eu não."},
 }
 
 const JUMP_IMAGES := {
@@ -110,6 +114,8 @@ const ARRIVAL_SCENES := {
 		"react_art": "Geovana com o pé grudado no âmbar, puxando.", "line": "Tudo aqui está preso. Como insetos no tempo."},
 	7: {"name": "CINZAS DA RUPTURA", "wide": "arrive7_wide", "react": "arrive7_react", "react_focus": Vector2(0.4, 0.38), "wide_art": "Cinzas da Ruptura: floresta queimada, brasas no ar, troncos em chamas, céu alaranjado.",
 		"react_art": "Geovana segurando cinzas na mão, expressão de culpa.", "line": "Uma floresta queimada... fui eu que fiz isso?"},
+	8: {"name": "SERTÃO DAS TARTARUGAS", "wide": "arrive8_wide", "react": "arrive8_react", "react_focus": Vector2(0.45, 0.4), "wide_art": "Sertão das Tartarugas: caatinga sem fim ao meio-dia eterno, sol branco parado no céu, fila de jabutis no horizonte e a silhueta de um jabuti colossal com relógio de sol no casco.",
+		"react_art": "Geovana ajoelhada no barro rachado, protegendo os olhos do sol; um pequeno jabuti olha para ela de perto.", "line": "Até o sol parou aqui. Que inveja."},
 }
 
 

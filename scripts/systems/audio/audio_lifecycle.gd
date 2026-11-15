@@ -234,7 +234,7 @@ static func boss_music_tracks(phase: int) -> Array:
 			return ["Fase4_Boss-1.mp3", "Fase4_Boss-2.mp3"]
 		5:
 			return ["Fase5_Boss-1.mp3", "Fase5_Boss-2.mp3", "Fase5_Boss-3.mp3"]
-		7:
+		7, 8:
 			return ["Fase7_Boss-1.mp3", "Fase7_Boss-2.mp3"]
 	return []
 

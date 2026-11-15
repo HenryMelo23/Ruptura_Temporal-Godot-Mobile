@@ -516,6 +516,8 @@ static func _draw_player(game: Node2D, camera: Vector2) -> void :
 	# fecha sobre o corpo. Fora dessa curta cinematica, mortos continuam ocultos.
 	if game.is_dead and game.mode != "death_slow":
 		return
+	if MerchantRiftTransitionPresentation.draw_player(game, camera):
+		return
 	if game._draw_player_start_down(camera):
 		return
 	if game.attack_dragging:

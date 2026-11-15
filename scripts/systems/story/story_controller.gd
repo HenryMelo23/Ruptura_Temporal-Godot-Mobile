@@ -121,6 +121,10 @@ func update(delta: float) -> void:
 
 
 func open(id: String) -> bool:
+	# Multiplayer is deliberately gameplay-only. Keep this guard here as well as
+	# in request(): callers that open a scene directly must not bypass the rule.
+	if not should_show(id):
+		return false
 	var data: Dictionary = RTStoryCatalog.scene(id)
 	if data.is_empty():
 		return false

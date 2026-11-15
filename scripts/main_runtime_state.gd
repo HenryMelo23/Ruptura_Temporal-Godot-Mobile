@@ -23,7 +23,8 @@ const AmberSuturerPresentation = preload("res://scripts/presentation/phase6_ambe
 const WorldEnvironmentPresentation = preload("res://scripts/presentation/world_environment_presentation.gd")
 const PhaseMapPresentation = preload("res://scripts/presentation/phase_map_presentation.gd")
 const ExperimentalPhasePresentation = preload("res://scripts/presentation/experimental_phase_presentation.gd")
-const GeovanaBarkControllerScript = preload("res://scripts/presentation/geovana_bark_controller.gd")
+const SpeechBubblesScript = preload("res://scripts/presentation/speech_bubble_controller.gd")
+const GeovanaFirstRunMonologueScript = preload("res://scripts/systems/tutorial/geovana_first_run_monologue.gd")
 var phase_map_layer: Node2D
 const EntitiesPresentation = preload("res://scripts/presentation/entities_presentation.gd")
 const SettingsController = preload("res://scripts/ui/settings_controller.gd")
@@ -92,8 +93,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.1.0"
-const GAME_VERSION_CODE: = 26900
+const GAME_VERSION: = "2.1.1"
+const GAME_VERSION_CODE: = 27100
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -372,7 +373,12 @@ const DISCORD_WEBHOOK_CONFIG_PATHS: = ["user://run_reporter.cfg", "res://discord
 const DEFAULT_DISCORD_WEBHOOK_URL: = "https://discord.com/api/webhooks/1526689695688298518/gqeI6uzw0yC6LLAVe4v1PqICJIMHos1tgq9g288HQQ31Y2CaBNd_oc0NdZG3Tf-hY7IU"
 const INTERRUPTED_RUN_SAVE_PATH: = "user://interrupted_run.save"
 const INTERRUPTED_RUN_AUTOSAVE_INTERVAL: = 12.0
-const ONLINE_RELAY_BASE_URL: = "http://72.61.217.238:8090"
+## Endereco do relay publico. Deixou de ser const para o ambiente isolado de
+## staging poder apontar para outra instancia durante a auditoria do tunel.
+## O padrao continua sendo producao e nenhum caminho do jogo altera o valor
+## sozinho: so um argumento explicito de linha de comando em teste muda isso.
+const ONLINE_RELAY_BASE_URL_DEFAULT: String = "http://72.61.217.238:8090"
+var ONLINE_RELAY_BASE_URL: String = ONLINE_RELAY_BASE_URL_DEFAULT
 const APP_UPDATE_ANDROID_LATEST_PATH: = "/updates/android/latest"
 const APP_UPDATE_ANDROID_DOWNLOAD_PREFIX: = "/updates/android/download/"
 const APP_UPDATE_WINDOWS_LATEST_PATH: = "/updates/windows/latest"
@@ -603,10 +609,26 @@ const AGUILHAO_PULSE_SLOW_DURATION: = 1.15
 const CURATER_HEAL_INTERVAL: = 1.0
 const CURATER_HEAL_LOST_PERCENT: = 0.2
 const CURATER_MITIGATION: = 0.42
+## Movimento de suporte do Curater (ver _curater_move_dir).
+const CURATER_BEHIND_DISTANCE: float = 72.0
+const CURATER_ARRIVE_DISTANCE: float = 14.0
+const CURATER_PANIC_DISTANCE: float = 170.0
+const CURATER_ALONE_MIN_DISTANCE: float = 280.0
+const CURATER_ALONE_MAX_DISTANCE: float = 420.0
+const CURATER_ESCORT_SEARCH_RADIUS: float = 620.0
+const CURATER_ESCORT_RETHINK_TIME: float = 0.8
 const FUSION_CHECK_INTERVAL: = 1.0
-const FUSION_RADIUS: = 90.0
+const FUSION_RADIUS: = 110.0
 const FUSION_REQUIRED: = 3
-const FUSION_TIME: = 120.0
+## Segundos SEGUIDOS que o bolo de Errantes precisa ficar junto. Eram 120 s
+## acumulados: na pratica nenhum Errante vivia tanto e o Aglomerador so
+## aparecia pelos ecos do Arauto.
+const FUSION_TIME: = 5.0
+## A partir daqui o bolo comeca a pulsar, avisando que vai fundir.
+const FUSION_WARN_TIME: = 2.0
+## Teto de Aglomeradores vivos e respiro entre duas fusoes.
+const FUSION_MAX_ALIVE: = 2
+const FUSION_COOLDOWN: = 28.0
 const CARD_COST_BASE: = 500
 const PHASE_POINT_CRYSTAL_KIND: = "phase_point_crystal"
 const ENEMY_POINT_ORB_KIND: = "enemy_point"
@@ -818,7 +840,8 @@ const BOSS_HP_DURABILITY_BY_PHASE: Dictionary = {
 	4: 7.5,
 	5: 8.0,
 	6: 7.5,
-	7: 9.0
+	7: 9.0,
+	8: 9.5
 }
 const BOSS_TIME_HP_GROWTH_RATE: = 0.06
 const BOSS_TIME_HP_GROWTH_EXPONENT: = 0.85
@@ -960,7 +983,7 @@ const CARD_RARITY_COMMON: = "common"
 const CARD_RARITY_UNCOMMON: = "uncommon"
 const CARD_RARITY_RARE: = "rare"
 const CARD_RARITY_LEGENDARY: = "legendary"
-const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "TrÃ©gua Regenerativa", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "CoraÃ§Ã£o de AntimatÃ©ria", "Cofre do Excesso", "Egide Hemofaga"]
+const RARE_CARD_NAMES: = ["Trembo", "Petro", "Poison", "Coletora", "Mercenaria", "Devorador de Destinos", "Trégua Regenerativa", "Mandamento da Ruptura", "Carta Zero", "Necrocronismo", "Coração de Antimatéria", "Cofre do Excesso", "Egide Hemofaga"]
 const CARD_RARITY_COMMON_COLOR: = Color(0.96, 0.97, 1.0)
 const CARD_RARITY_UNCOMMON_COLOR: = Color(0.18, 0.62, 1.0)
 const CARD_RARITY_RARE_COLOR: = Color(1.0, 0.76, 0.12)
@@ -1225,6 +1248,7 @@ const BOSS7_ENTRY_TIME: = 1.65
 const BOSS7_VISUAL_SIZE: = Vector2(367.2, 334.8)
 const BOSS7_HIT_RADIUS: = 164.0
 const BOSS7_HP_SCALE: = 1.75
+const BOSS8_HP_SCALE: = 1.9
 const BOSS7_STATE_INTRO: = "intro"
 const BOSS7_STATE_FLY: = "fly"
 const BOSS7_STATE_FEATHER: = "feather_volley"
@@ -1616,6 +1640,10 @@ const SHIELD_REFLECTOR_BACK_DOT: = -0.42
 const SHIELD_REFLECTOR_DAMAGE_REDUCTION: = 0.22
 const SHIELD_REFLECTOR_BACK_DAMAGE_MULT: = 1.18
 const SHIELD_REFLECTOR_REFLECT_DAMAGE_MULT: = 0.7
+## Velocidade base de todo projetil inimigo (speed_mult = 1.0).
+const ENEMY_BULLET_BASE_SPEED: float = 210.0
+## Distancia que o tiro refletido percorre (era 210 * 1.42 * 2.7 s).
+const SHIELD_REFLECTOR_REFLECT_RANGE: float = 805.0
 const SHIELD_REFLECTOR_ACTIVE_TIME: = 15.0
 const SHIELD_REFLECTOR_DOWN_TIME: = 20.0
 const SHIELD_REFLECTOR_UNBURDENED_SPEED_MULT: = 2.4
@@ -1723,12 +1751,12 @@ const CARDS: = [
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga +2 pontos por copia desde o primeiro. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
-	{"id": "tregua_regenerativa", "name": "TrÃ©gua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
+	{"id": "tregua_regenerativa", "name": "Trégua Regenerativa", "nick": "Paz Tecidual", "rarity": CARD_RARITY_RARE, "desc": "Sem receber dano, regenera vida passivamente.", "icon": "Deck/carta-Tr_guaRegenerativa1.png", "frame_2": "Deck/carta-Tr_guaRegenerativa2.png", "color": Color(0.38, 1.0, 0.72)},
 	{"id": "cinzas_escolha", "name": "Cinzas da Escolha", "nick": "Marca de Cinzas", "rarity": CARD_RARITY_UNCOMMON, "desc": "Consumivel incomum. Queima uma carta comum da loja. Quando essa carta voltar, ela vem chamuscada fortalecendo os atributos proprios daquela carta de forma acumulavel; o bonus se consolida ao compra-la.", "icon": "Deck/carta-CinzasdaEscolha1.png", "frame_2": "Deck/carta-CinzasdaEscolha2.png", "color": Color(1.0, 0.58, 0.28)},
 	{"id": "reserva_pulso", "name": "Reserva de Pulso", "nick": "Cura Guardada", "desc": "Guarda cura excedente e a libera em situacao critica.", "icon": "Deck/carta-ReservadePulso1.png", "frame_2": "Deck/carta-ReservadePulso2.png", "color": Color(0.44, 0.92, 1.0)},
 	{"id": "casulo_reativo", "name": "Casulo Reativo", "nick": "Defesa de Rajada", "desc": "Ao sofrer rajada de dano, forma um casulo protetor.", "icon": "Deck/carta-CasuloReativo1.png", "frame_2": "Deck/carta-CasuloReativo2.png", "color": Color(0.54, 1.0, 0.86)},
-	{"id": "passagem_intangivel", "name": "Passagem IntangÃ­vel", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
-	{"id": "ancora_vital", "name": "Ã‚ncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
+	{"id": "passagem_intangivel", "name": "Passagem Intangível", "nick": "Fase Fantasma", "desc": "Apos o teleporte, atravesse inimigos sem sofrer contato.", "icon": "Deck/carta-PassagemIntang_vel1.png", "frame_2": "Deck/carta-PassagemIntang_vel2.png", "color": Color(0.72, 0.9, 1.0)},
+	{"id": "ancora_vital", "name": "Âncora Vital", "nick": "Selo de Retorno", "desc": "Ao sofrer dano, cria uma ancora que devolve parte da vida.", "icon": "Deck/carta-ncoraVital1.png", "frame_2": "Deck/carta-ncoraVital2.png", "color": Color(0.34, 1.0, 0.66)},
 	{"id": "inercia_cronal", "name": "Inercia Cronal", "nick": "Corpo Ancorado", "desc": "Reduz empurroes e controles hostis sofridos pelo jogador.", "icon": "Deck/carta-InerciaCronal1.png", "frame_2": "Deck/carta-InerciaCronal2.png", "color": Color(0.56, 0.74, 1.0)},
 	{"id": "moeda_estavel", "name": "Moeda Estavel", "nick": "Economia Fixa", "rarity": CARD_RARITY_UNCOMMON, "desc": "Reduz o aumento de preco das proximas compras da loja.", "icon": "Deck/carta-MoedaEstavel1.png", "frame_2": "Deck/carta-MoedaEstavel2.png", "color": Color(1.0, 0.72, 0.18)},
 	{"id": "orbita_coletora", "name": "Orbita Coletora", "nick": "Alcance Neutro", "desc": "Aumenta o raio que atrai pontos, moedas, cartas soltas e orbes neutros. Recursos atraidos perseguem o jogador ate serem absorvidos.", "icon": "Deck/carta-OrbitaColetora1.png", "frame_2": "Deck/carta-OrbitaColetora2.png", "color": Color(0.42, 1.0, 0.68)},
@@ -1766,7 +1794,7 @@ const CARDS: = [
 	{"id": "mandamento_ruptura", "name": "Mandamento da Ruptura", "nick": "Terceira Lei", "desc": "A cada 3 habilidades, a terceira rompe seus limites.", "icon": "Deck/carta-Mandamento_da_Ruptura1.png", "frame_2": "Deck/carta-Mandamento_da_Ruptura2.png", "color": Color(0.94, 0.7, 1.0)},
 	{"id": "carta_zero", "name": "Carta Zero", "nick": "Origem Numerica", "desc": "Amplifica todos os efeitos numericos das cartas comuns.", "icon": "Deck/carta-Zero1.png", "frame_2": "Deck/carta-Zero2.png", "color": Color(0.9, 0.96, 1.0)},
 	{"id": "necrocronismo", "name": "Necrocronismo", "nick": "Aliados Espectrais", "desc": "A cada tantas mortes, um inimigo volta no tempo como Eco aliado: da investidas que atravessam e deixam lentos os inimigos, e implode no fim.", "icon": "Deck/carta-Necrocronismo1.png", "frame_2": "Deck/carta-Necrocronismo2.png", "color": Color(0.46, 1.0, 0.94)},
-	{"id": "coracao_antimateria", "name": "CoraÃ§Ã£o de AntimatÃ©ria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
+	{"id": "coracao_antimateria", "name": "Coração de Antimatéria", "nick": "Implosao Instavel", "desc": "Dano carrega um coracao que implode no proximo acerto.", "icon": "Deck/carta-Cora_o_de_Antimat_ria1.png", "frame_2": "Deck/carta-Cora_o_de_Antimat_ria2.png", "color": Color(0.76, 0.24, 1.0)},
 	{"id": "cofre_excesso", "name": "Cofre do Excesso", "nick": "Reserva de Overkill", "desc": "Armazena dano excedente e descarrega em alvos poderosos.", "icon": "Deck/carta-Cofre_do_Excesso1.png", "frame_2": "Deck/carta-Cofre_do_Excesso2.png", "color": Color(1.0, 0.28, 0.22)},
 	{"id": "critico_absoluto", "name": "Crítico Absoluto", "nick": "Dobra Letal", "rarity": CARD_RARITY_RARE, "desc": "Cada cópia aumenta em 100% o dano final dos acertos críticos, sem limite. Uma cópia dobra o crítico atual; cinco cópias multiplicam por seis.", "icon": "Deck/carta-Critico_Absoluto1.png", "frame_2": "Deck/carta-Critico_Absoluto2.png", "color": CARD_RARITY_RARE_COLOR},
 	{"id": "coracao_paradoxo", "name": "Coracao do Paradoxo", "nick": "Eco Impossivel", "rarity": CARD_RARITY_LEGENDARY, "desc": "18 acertos diretos carregam o nucleo. A proxima Q, E ou teleporte que acertar abre uma ruptura por 5s; danos diretos ecoam apos 0.55s com 35% da forca.", "icon": "Deck/carta-Coracao_do_Paradoxo1.png", "frame_2": "Deck/carta-Coracao_do_Paradoxo2.png", "color": CARD_RARITY_LEGENDARY_COLOR},
@@ -1947,17 +1975,17 @@ const AURAS: = [
 	{"key": "racional", "name": "Racional", "icon": "aurea_cientista.png", "desc": "Ficar imovel pontua. Teleporte desacelera o mundo por 8s e causa Rebote por 3s."},
 	{"key": "impulsiva", "name": "Impulsiva", "icon": "aurea_impulsiva.png", "desc": "Cinco abates sem dano ativam Frenesi. Um hit quebra a sequencia e arma Panico."},
 	{"key": "devota", "name": "Devota", "icon": "aurea_devota.png", "desc": "Tres cargas anulam impactos, curam vida perdida e abrem janelas de dano."},
-	{"key": "vanguarda", "name": "Vanguarda", "icon": "aurea_vanguarda.png", "desc": "Sofrer dano cria fogo; queimaduras ferem por vida maxima e pesam o Teleporte."},
+	{"key": "vanguarda", "name": "Vanguarda", "icon": "aurea_vanguarda.png", "desc": "Ser atingida solta uma Onda de Calor que empurra e queima. Cada golpe sofrido aquece o Incendio."},
 	{"key": "insana", "name": "Insana", "icon": "aurea_insana.png", "desc": "Ecos parados atraem inimigos e repetem seus tiros com 1s de atraso."},
-	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Coagulos alimentam Fome, curam vida perdida e fortalecem disparos e recargas."},
+	{"key": "voraz", "name": "Voraz", "icon": "aurea_voraz.png", "desc": "Teleporte atraves de inimigos fracos para DEVORA-LOS. Quanto mais Fome, maior o limite de vida devoravel."},
 	{"key": "nula", "name": "Nula", "icon": "aurea_nula.png", "desc": "Ociosidade e abates carregam Vazio; o proximo tiro nulifica um alvo robusto."},
 	{"key": "abissal", "name": "Abissal", "icon": "aurea_abissal.png", "desc": "Cerco acumula Profundidade e invoca a Mare Negra, com o custo de pesar Geovana."},
-	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "Pressagios marcam alvos. Cumprir o destino recompensa; ignorar quebra o destino."},
+	{"key": "profetica", "name": "Profetica", "icon": "aurea_profetica.png", "desc": "De tempos em tempos ela VE O FUTURO: tiros e inimigos aparecem adiantados. Desviar de um tiro previsto guarda um critico."},
 	{"key": "sanguinaria", "name": "Sanguinaria", "icon": AURA_SANGUINARIA_ICON_PATH, "desc": "Dano repetido abre Feridas, alimenta Sede e prepara Carnificina Controlada."},
 	{"key": "crepuscular", "name": "Crepuscular", "icon": "res://assets/sprites/aurea-eclipsa.png", "desc": "Alterna entre Alvorada defensiva e Ocaso ofensivo. Domine a transicao para ativar Eclipse."},
-	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Explore setores diferentes da arena para iniciar uma Jornada e criar um Refugio."},
+	{"key": "peregrino", "name": "Peregrino", "icon": "res://assets/sprites/aurea-peregrina.png", "desc": "Andar deixa um rastro que queima e atrasa inimigos. Feche um LACO com o rastro para explodir o Territorio e se curar."},
 	{"key": "equilibrista", "name": "Equilibrista", "icon": "res://assets/sprites/aurea-equilibrista.png", "desc": "Mantenha a vida entre 35% e 80% para armar Equilibrio, escudo e Divida controlada."},
-	{"key": "avarento", "name": "Avarento", "icon": "res://assets/sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Ao gastar, rompa o Cofre para ganhar velocidade e escudo."},
+	{"key": "avarento", "name": "Avarento", "icon": "res://assets/sprites/aurea-avarenta.png", "desc": "Pontos guardados viram Lastro defensivo. Gastar arma o Cofre: ao voltar para a luta ele explode em moedas, escudo e velocidade."},
 	{"key": "oportunista", "name": "Oportunista", "icon": "res://assets/sprites/aurea-oportunista.png", "desc": "Ataque durante preparacao ou recuperacao inimiga para armar um Golpe de Oportunidade."}
 ]
 
@@ -2334,7 +2362,9 @@ const NET_ENEMY_TYPES: = [
 	ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH,
 	ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL,
 	ENEMY_AMBER_SUTURER, ENEMY_AMBER_SUTURE_NODE,
-	ENEMY_FLAGELANTE, ENEMY_SALMODIANTE, ENEMY_RELICARIO
+	ENEMY_FLAGELANTE, ENEMY_SALMODIANTE, ENEMY_RELICARIO,
+	"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro",
+	"cagado_piao", "cagado_cangaceiro", "ovo_jabuti"
 ]
 const NET_BULLET_TYPES: = [
 	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",
@@ -2481,6 +2511,11 @@ var rational_dilation_flash: float = 0.0
 var rational_trail_points: Array = []
 var rational_trail_sample_timer: float = 0.0
 var rational_rebound_active: bool = false
+var rational_end_flash: float = 0.0
+## Efeitos e avisos de recompensa dos espectros (RTSpectreVfx).
+var spectre_fx: Array = []
+var spectre_toasts: Array = []
+var peregrino_contact_tick: float = 0.0
 var crepuscular_last_phase: String = ""
 var crepuscular_phase_flash_timer: float = 0.0
 var crepuscular_spotlight_timer: float = 0.0
@@ -2500,7 +2535,10 @@ var menu_motion_mode: String = ""
 var menu_page_age: float = 0.0
 var menu_selection_age: float = 0.0
 var menu_motion_selection: int = -1
-var geovana_bark_controller: RefCounted = GeovanaBarkControllerScript.new()
+## Baloes de fala genericos (jogador, inimigos, NPCs). Ver speech_bubble_controller.gd.
+var speech_bubbles: RefCounted = SpeechBubblesScript.new()
+## Geovana falando sozinha na primeira partida (tutorial).
+var geovana_first_run_monologue: RefCounted = GeovanaFirstRunMonologueScript.new()
 var save_controller = RuntimeSaveControllerScript.new()
 var phase_flow_controller = PhaseFlowControllerScript.new()
 var experimental_phase_controller = ExperimentalPhaseControllerScript.new()
@@ -2781,6 +2819,9 @@ var early_boss_controller: Node = EarlyBossControllerScript.new()
 var modern_boss_controller: Node = ModernBossControllerScript.new()
 var boss6_stage_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_stage_controller.gd").new()
 var boss6_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_controller.gd").new()
+## Dimensao 8 (Sertao das Tartarugas): inimigos, mini chefe, projeteis e chefe.
+var sertao_controller: RTSertaoController = RTSertaoController.new()
+var boss8_controller: RTBoss8Controller = RTBoss8Controller.new()
 var player_control_controller: RefCounted = PlayerControlControllerScript.new()
 var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityControllerScript.new()
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
@@ -3053,6 +3094,7 @@ var larapio_spawned = false
 var next_larapio_spawn_time = LARAPIO_SPAWN_TIME
 var larapio_coin_drops = []
 var fusion_check_timer = 0.0
+var fusion_cooldown_timer: float = 0.0
 var event_alert_text = ""
 var event_alert_color = Color.WHITE
 var event_alert_timer = 0.0
@@ -3212,6 +3254,12 @@ const DIMENSION_FARM_RANDOM_COUNT: int = 3
 const DIMENSION_CYCLE_LENGTH: int = 4
 const DIMENSION_EXTRACTION_INTERVAL: int = 10
 var dimension_route_queue: Array = []
+## Sertao das Tartarugas (8): dimensao bonus que so pode aparecer depois de 7
+## dimensoes concluidas, com chance a cada travessia, no maximo 1x por ciclo (solo).
+const SERTAO_PHASE: int = 8
+const SERTAO_MIN_COMPLETED: int = 7
+const SERTAO_ROLL_CHANCE: float = 0.3
+var sertao_visited_cycle: int = -1
 var dimension_route_farm_cycles: int = 0
 var dimension_route_completed_count: int = 0
 var dimension_route_last_phase: int = 0
@@ -3271,6 +3319,16 @@ var catalog_detail_text: RichTextLabel
 var catalog_detail_signature: String = ""
 var catalog_search_query: = ""
 var catalog_filter_mode: = "all"
+## Catalogo com rolagem continua (CatalogInterface).
+var catalog_scroll_px: float = 0.0
+var catalog_scroll_vel: float = 0.0
+var catalog_subfilter: String = ""
+var catalog_drag_active: bool = false
+var catalog_drag_moved: bool = false
+var catalog_drag_last: Vector2 = Vector2.ZERO
+var catalog_last_selected: int = -1
+var catalog_keyboard_nav: bool = false
+var catalog_related_buttons: Dictionary = {}
 var eletrica_shot_counter = 0
 var boss_eletrica_static_stacks: = 0
 var boss_eletrica_static_timer: = 0.0

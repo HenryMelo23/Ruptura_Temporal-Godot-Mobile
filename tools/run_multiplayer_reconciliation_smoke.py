@@ -40,6 +40,10 @@ def run_scenario(name, script, roles, scenario="ready"):
             code = process.wait(timeout=max(1, deadline - time.monotonic()))
             content = (folder / f"{role}.log").read_text()
             result = folder / f"{role}_result.txt"
+            if not result.is_file():
+                prefixed_results = list(folder.glob(f"*_{role}_result.txt"))
+                if len(prefixed_results) == 1:
+                    result = prefixed_results[0]
             if code != 0 or ERROR.search(content) or not result.is_file() or not result.read_text().startswith("OK"):
                 raise RuntimeError(f"{name}/{role} exit={code}\n{content}")
         print(f"PASS {name} roles={','.join(roles)} logs={folder}", flush=True)
@@ -66,5 +70,7 @@ if __name__ == "__main__":
     run_scenario("deck", "multiplayer_deck_wire_smoke", trio)
     run_scenario("lacerante-execution", "multiplayer_lacerante_execution_wire_smoke", trio)
     run_scenario("score-boss-entry", "multiplayer_score_boss_entry_wire_smoke", trio)
+    run_scenario("world-shop", "multiplayer_world_interaction_smoke", trio, "shop")
+    run_scenario("phase8", "multiplayer_world_interaction_smoke", trio, "phase8")
     run_scenario("match", "multiplayer_integration_smoke", trio + ["client2"])
-    print("MULTIPLAYER_RECONCILIATION_OK ready spectator shop boss1-rewind death-cycle deck lacerante-execution score-boss-entry manifestation spectrum match")
+    print("MULTIPLAYER_RECONCILIATION_OK ready spectator shop boss1-rewind death-cycle deck lacerante-execution score-boss-entry world-shop phase8 manifestation spectrum match")
