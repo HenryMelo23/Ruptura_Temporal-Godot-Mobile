@@ -21,7 +21,7 @@ const GODOT_BIN = process.env.GODOT_BIN || "/opt/godot/Godot_v4.7-stable_linux.x
 const PROJECT_PATH = process.env.PROJECT_PATH || "/opt/ruptura/Ruptura_Temporal-Godot-Mobile";
 const ROOM_IDLE_MS = numberEnv("ROOM_IDLE_MS", 30 * 60 * 1000);
 const ROOM_OWNER_CONNECT_TIMEOUT_MS = numberEnv("ROOM_OWNER_CONNECT_TIMEOUT_MS", 45 * 1000);
-const ROOM_OWNER_HEARTBEAT_TIMEOUT_MS = numberEnv("ROOM_OWNER_HEARTBEAT_TIMEOUT_MS", 75 * 1000);
+const ROOM_OWNER_HEARTBEAT_TIMEOUT_MS = numberEnv("ROOM_OWNER_HEARTBEAT_TIMEOUT_MS", 35 * 1000);
 const ROOM_EVENT_LIMIT = numberEnv("ROOM_EVENT_LIMIT", 80);
 const WARM_STANDBY_ROOMS = numberEnv("WARM_STANDBY_ROOMS", 2, true);
 const WARM_STANDBY_REFILL_MS = numberEnv("WARM_STANDBY_REFILL_MS", 1500);
@@ -1188,6 +1188,7 @@ function startRoom(ownerName, options = {}) {
     lastHeartbeatAt: 0,
     ownerHeartbeatAt: 0,
     ownerWatchdogTimer: null,
+    ownerExitBuffer: "",
     events: []
   };
   rooms.set(code, room);
@@ -1199,6 +1200,10 @@ function startRoom(ownerName, options = {}) {
       room.ready = true;
     }
     process.stdout.write(`[${code}] ${chunk}`);
+    room.ownerExitBuffer = (room.ownerExitBuffer + text).slice(-128);
+    if (!room.standby && !room.stopping && /(?:^|\r?\n)ONLINE ROOM OWNER LEFT\r?\n/.test(room.ownerExitBuffer)) {
+      stopRoom(code, "owner disconnected", 3000);
+    }
   });
   child.stderr.on("data", (chunk) => process.stderr.write(`[${code}] ${chunk}`));
   child.on("error", (error) => {
@@ -1238,7 +1243,7 @@ function scheduleRoomStop(room) {
   }, delayMs);
 }
 
-function stopRoom(code, reason) {
+function stopRoom(code, reason, graceMs = 0) {
   const room = rooms.get(code);
   if (!room) {
     return false;
@@ -1255,12 +1260,18 @@ function stopRoom(code, reason) {
   room.child.once("exit", () => {
     exited = true;
   });
-  room.child.kill("SIGTERM");
+  if (graceMs > 0) {
+    setTimeout(() => {
+      if (!exited) room.child.kill("SIGTERM");
+    }, graceMs).unref();
+  } else {
+    room.child.kill("SIGTERM");
+  }
   setTimeout(() => {
     if (!exited) {
       room.child.kill("SIGKILL");
     }
-  }, 5000).unref();
+  }, graceMs + 5000).unref();
   return true;
 }
 
@@ -3479,6 +3490,7 @@ async function route(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/rooms") {
+    res.setHeader("Cache-Control", "no-store, max-age=0");
     sendJson(res, 200, { rooms: listAvailableRooms() });
     return;
   }

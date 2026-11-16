@@ -20,6 +20,11 @@ if (!port) process.exit(2);
 const socket = dgram.createSocket("udp4");
 socket.bind(port, "0.0.0.0", () => console.log("ONLINE ROOM FAKE READY " + port));
 process.on("SIGTERM", () => socket.close(() => process.exit(0)));
+process.on("SIGUSR2", () => {
+  console.log("ONLINE ROOM OWNER LEFT");
+  setTimeout(() => socket.close(() => process.exit(0)), 150);
+});
+console.log("ROOM_PID=" + process.pid);
 setInterval(() => {}, 1000);
 `);
 
@@ -35,7 +40,7 @@ function request(method, route, body = null) {
     }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks) }));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
     });
     req.on("error", reject);
     if (data) req.write(data);
@@ -98,6 +103,7 @@ async function run() {
     assert.strictEqual(hb0.status, 200, output);
     const listed = await request("GET", "/rooms");
     assert.strictEqual(listed.status, 200, output);
+    assert(String(listed.headers["cache-control"] || "").includes("no-store"), "room discovery response must not be cached");
     const listedBody = JSON.parse(listed.body.toString("utf8"));
     assert(listedBody.rooms.some((entry) => entry.code === room.code && entry.name === "Sala QA" && entry.locked === true), "locked named room was not visible in list");
     const rejectedJoin = await request("POST", `/rooms/${room.code}/join`, { name: "Intruso" });
@@ -117,6 +123,24 @@ async function run() {
     await new Promise((resolve) => setTimeout(resolve, 5400));
     const expired = await request("GET", `/rooms/${room.code}`);
     assert.strictEqual(expired.status, 404, "abandoned room should expire after idle window");
+    const second = await request("POST", "/rooms", { name: "ExitHost" });
+    assert.strictEqual(second.status, 201, output);
+    const secondRoom = JSON.parse(second.body.toString("utf8"));
+    const secondHeartbeat = await request("POST", `/rooms/${secondRoom.code}/heartbeat`, { role: "owner", mode: "lobby", peer_id: 1 });
+    assert.strictEqual(secondHeartbeat.status, 200, output);
+    const listedBeforeExit = await request("GET", "/rooms");
+    assert(JSON.parse(listedBeforeExit.body.toString("utf8")).rooms.some((entry) => entry.code === secondRoom.code), "owner room not listed before exit");
+    const roomPids = [...output.matchAll(/ROOM_PID=(\d+)/g)];
+    assert(roomPids.length >= 2, "fake owner process id missing\n" + output);
+    process.kill(Number(roomPids[roomPids.length - 1][1]), "SIGUSR2");
+    let removed = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const afterExit = await request("GET", "/rooms");
+      removed = !JSON.parse(afterExit.body.toString("utf8")).rooms.some((entry) => entry.code === secondRoom.code);
+      if (removed) break;
+    }
+    assert(removed, "owner exit signal did not remove room promptly\n" + output);
     assert(output.includes("kind=heartbeat"), "heartbeat event was not logged");
     console.log("ROOM_LIFECYCLE_SMOKE_OK");
   } finally {

@@ -1,15 +1,14 @@
 {
-  "version": "2.1.0",
-  "version_code": 26900,
-  "filename": "ruptura_temporal_mobile_2.1.0.apk",
-  "sha256": "a45786a0f33739baeeef9ea2ae5a587f518426e4ae2fcaa6e2554aa75b2312ec",
-  "size": 921765936,
+  "version": "2.1.2",
+  "version_code": 27200,
+  "filename": "ruptura_temporal_mobile_2.1.2.apk",
+  "sha256": "9899f88d5c676543de19abdf91a169b5a98c47127785d92c67140cd357109a23",
+  "size": 956131019,
   "notes": [
-    "Multiplayer estabilizado do lobby aos bosses, trocas de fase e vitoria final.",
-    "A Fenda do Mercador agora leva toda a equipe para conversa, balcao e saida coletiva.",
-    "Sincronizacao de habilidades, morte, retorno, cartas e efeitos visuais foi ampliada.",
-    "Umbra, historia, chips quanticos e apresentacao receberam novos conteudos."
+    "Salas abertas aparecem automaticamente na busca, sem precisar atualizar manualmente.",
+    "A sala deixa a lista assim que o host sai; quedas abruptas sao detectadas mais cedo.",
+    "Lobby, boss, loja, morte e retorno passaram por nova bateria multiplayer."
   ],
   "mandatory": false,
-  "published_at": "2026-11-12T19:49:16Z"
+  "published_at": "2026-11-15T20:40:34Z"
 }

@@ -73,6 +73,15 @@ try {
  assert(home.includes("mérito · não moedas"));
  assert(!home.includes("Speedrun de progressao"));
  assert(!home.includes("Tempo vivo</dt>"));
+ const zeroRun=projectRun({...base,id:"zero",player:"EarlyOperator",profileId:"early",phase:1,result:"Derrota",bossDetail:[],damageThreats:[],endedUnix:101});
+ assert.equal(zeroRun.score,0);
+ const withZero={...snapshot,runs:[...snapshot.runs,zeroRun],auditedRuns:[...snapshot.runs,zeroRun]};
+ for(const pathname of ["/leaderboard","/leaderboard/rankings"]) {
+   const ranked=renderLeaderboardSite({pathname,snapshot:withZero});
+   assert(!ranked.includes("EarlyOperator"),"zero-merit operator must not appear in ranking or search");
+   assert(ranked.includes("operadores com mérito"));
+ }
+ assert(renderLeaderboardSite({pathname:"/leaderboard/run/zero",snapshot:withZero}).includes("EarlyOperator"),"the historical run must remain accessible");
  const downloads=renderLeaderboardSite({pathname:"/leaderboard/downloads",snapshot});
  assert(downloads.includes("Baixar para Windows")&&downloads.includes("1 GB"));
  assert(downloads.includes("Arquivo temporariamente indisponível."));

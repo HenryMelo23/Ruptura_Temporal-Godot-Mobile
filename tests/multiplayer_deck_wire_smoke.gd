@@ -4,6 +4,7 @@ var stage := 0
 var copies := 0
 var card: Dictionary
 var local_effect_line := ""
+var last_remote_counts: Dictionary = {}
 
 
 func _run() -> void:
@@ -44,11 +45,9 @@ func _run() -> void:
 			continue
 		game.deck_view_peer_id = remote_id
 		var remote: Dictionary = game.net_decks_by_peer[remote_id]
+		last_remote_counts = Dictionary(remote.get("counts", {})).duplicate(true)
 		var expected := 1 if role == "host" else 2
-		if stage == 1 and int(remote.counts.get("Disparo crescente", 0)) == expected:
-			if int(remote.counts.get(game.CARD_TREGUA_ID, 0)) != 1:
-				_fail("remote deck did not transport the rare Trégua copy")
-				return
+		if stage == 1 and int(remote.counts.get("Disparo crescente", 0)) == expected and int(remote.counts.get(game.CARD_TREGUA_ID, 0)) == 1:
 			if Dictionary(remote.get("cinzas_bonuses", {})).has(game.CARD_TREGUA_ID):
 				_fail("remote deck transported a legacy Trégua Cinzas bonus")
 				return
@@ -75,4 +74,4 @@ func _run() -> void:
 				return
 			_write_result(role)
 			stage = 3
-	_fail("deck sync timeout role=%s stage=%d" % [role, stage])
+	_fail("deck sync timeout role=%s stage=%d remote_counts=%s" % [role, stage, str(last_remote_counts)])

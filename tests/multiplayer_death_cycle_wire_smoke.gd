@@ -1,8 +1,13 @@
 extends "res://tests/multiplayer_lobby_integration_smoke.gd"
 
-const STAGE_PATH := "res://.codex/death_cycle_stage.txt"
 var local_stage := 0
 var server_stage := 1
+
+
+func _stage_path() -> String:
+	if result_dir != "":
+		return result_dir.path_join("death_cycle_stage.txt")
+	return "res://.codex/death_cycle_stage.txt"
 
 
 func _result_path(result_role: String) -> String:
@@ -20,7 +25,10 @@ func _run() -> void:
 		if role == "server":
 			if game._dedicated_active_peer_ids().size() != 2:
 				continue
-			var stage_file := FileAccess.open(STAGE_PATH, FileAccess.WRITE)
+			var stage_file := FileAccess.open(_stage_path(), FileAccess.WRITE)
+			if stage_file == null:
+				_fail("could not write death/revive stage")
+				return
 			stage_file.store_string(str(server_stage))
 			stage_file.close()
 			var received := true
@@ -50,13 +58,13 @@ func _run() -> void:
 				await _finish()
 				return
 			continue
-		if not game.online_connected or game.online_lobby_connected_count != 2 or not FileAccess.file_exists(STAGE_PATH):
+		if not game.online_connected or game.online_lobby_connected_count != 2 or not FileAccess.file_exists(_stage_path()):
 			continue
 		if _result_exists("server"):
 			_write_result(role)
 			await _finish()
 			return
-		var stage := int(FileAccess.get_file_as_string(STAGE_PATH))
+		var stage := int(FileAccess.get_file_as_string(_stage_path()))
 		var cycle_step: int = (stage - 1) % 4
 		var dead: bool = cycle_step == 3 or (cycle_step == 1 and role == "client")
 		if stage != local_stage:

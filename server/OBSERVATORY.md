@@ -18,6 +18,9 @@ a regra nova é do ranking do site, não uma alteração silenciosa da economia.
 - Nenhum ponto por tempo, velocidade de kill, abates comuns, dano bruto,
   número de cartas, HP restante ou moedas. Melhor run por perfil; não cumulativo.
 - Empates compartilham posição; ID só estabiliza a ordem visual, sem prêmio.
+- Operadores cuja melhor expedição tem mérito zero não aparecem no quadro
+  competitivo nem na busca de operadores. Seus relatórios continuam no arquivo;
+  nenhuma pontuação ou partida é apagada do servidor.
 
 Valores em `ranking_policy.json`. O registro `d21f9000b1e8370f59` foi retirado
 da competição por balanceamento legado. Permanece no arquivo auditado e no backup.
@@ -108,3 +111,11 @@ do manifesto atual, enviam `Content-Disposition: attachment`, `Accept-Ranges:
 bytes` e suportam GET/HEAD/206. A página não hospeda cópias adicionais, não
 altera os binários e não expõe caminhos locais. O domínio e o endereço IP antigo
 servem o mesmo arquivo; clientes existentes permanecem compatíveis.
+
+## Página História
+
+`/leaderboard/historia` separa a origem real do projeto da ficção do jogo.
+O relato público foi autorizado pelo criador. A página apresenta o acidente,
+as manifestações e o conflito com Umbra, mas preserva os desfechos para quem
+jogar. A origem de Umbra fica em um painel fechado por padrão. Não usar a
+antiga ordem fixa de fases como narrativa da campanha atual.
