@@ -1,0 +1,22 @@
+{
+  "protocol": "umbra_linear_evidence_v1",
+  "commit": "63d0ac59920fae8e9cef1cc37e3dfa7f08dbdb44",
+  "source_manifest_sha256": "313c8c3fb5f4570746956bf079e4843243e8d2beb71df7e8d7c483404df20ab7",
+  "godot": "4.7.2.stable.official.ed1daf0bf",
+  "arguments": {
+    "mode": "experiment",
+    "godot": "godot",
+    "candidate": "/home/hermes/Documentos/GitHub/Ruptura_Temporal-Godot-Mobile/assets/data/umbra_mind_base.json",
+    "episodes": 8,
+    "train_episodes": 16,
+    "min_samples": 25,
+    "zero_baseline": false,
+    "seed": 271,
+    "seconds": 45.0,
+    "timeout": 300,
+    "out": "/home/hermes/Documentos/GitHub/Ruptura_Temporal-Godot-Mobile/.agent_logs/umbra_evidence/20261116_fit_v2"
+  },
+  "baseline": "frozen_candidate_before_fit",
+  "opponent": "godot_exhibition_heuristic_not_python_dqn",
+  "automatic_promotion": false
+}

@@ -3,6 +3,7 @@ extends SceneTree
 ## Fisica dos objetos do mapa (RTMapPropColliders, SDF por atlas) em todas as fases
 ## que tem objetos solidos. Com "capture" nos argumentos salva prints com o contorno.
 const PHASES := {2: [0, 10, 12, 14], 6: [0, 7, 12, 15], 7: [3, 8, 11, 15], 8: [1, 3, 9, 11]}
+const SOLID_TILE_COUNTS := {2: 10, 6: 6, 7: 7, 8: 9}
 var game: Node
 var failed := false
 var shots := 0
@@ -49,6 +50,7 @@ func _run() -> void:
 	var capture := "capture" in OS.get_cmdline_user_args()
 	game.startup_thanks_done = true
 	game._start_game()
+	game.gfx_low_resource = "--low" in OS.get_cmdline_user_args()
 	for phase in PHASES.keys():
 		game._story().queue.clear()
 		game._advance_to_phase(phase)
@@ -56,7 +58,11 @@ func _run() -> void:
 		game.mode = "game"
 		game.enemies.clear()
 		_check(RTMapPropColliders.active(game), "fisica inativa na fase %d" % phase)
+		_check(RTMapPropPresentation.supported(game), "camada elevada inativa na fase %d" % phase)
+		var solid_tiles: Array[int] = RTMapPropPresentation.solid_tiles(game)
+		_check(solid_tiles.size() == int(SOLID_TILE_COUNTS[phase]), "fase %d nao cobriu todos os ladrilhos solidos" % phase)
 		for tile in PHASES[phase]:
+			_check(tile in solid_tiles, "fase %d ladrilho %d colide sem relevo" % [phase, tile])
 			var cell := _find_cell(tile)
 			if cell.x < 0:
 				_check(false, "fase %d ladrilho %d nao encontrado" % [phase, tile])
@@ -89,6 +95,7 @@ func _run() -> void:
 	# Fases de piso liso nao tem fisica de objetos.
 	game._advance_to_phase(3)
 	_check(not RTMapPropColliders.active(game), "fase 3 nao deveria ter objetos solidos")
+	_check(not RTMapPropPresentation.supported(game), "fase 3 ganhou relevo sem colisao")
 	if not failed:
 		print("MAP_PROPS_SMOKE_OK shots=%d" % shots)
 	quit(1 if failed else 0)
@@ -98,6 +105,10 @@ func _shot(phase: int, tile: int) -> void:
 	game.camera_follow_initialized = false
 	for i in range(6):
 		await process_frame
+	if "--flat-props" in OS.get_cmdline_user_args():
+		var prop_layer := game.get_node_or_null("MapPropLayer") as RTMapPropPresentation
+		if prop_layer != null:
+			prop_layer.modulate.a = 0.0
 	game.queue_redraw()
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("res://.codex/phase8/coll_%d_%d.png" % [phase, tile])

@@ -650,7 +650,8 @@ func _update_piao(enemy: Dictionary, delta: float) -> void:
 
 
 func _begin_ricochet(enemy: Dictionary, dir: Vector2, bounces: int) -> void:
-	var center: Vector2 = core.player_pos
+	# Caixa em volta do jogador que ESTE inimigo caca (multiplayer: pode ser remoto).
+	var center: Vector2 = core._get_enemy_target_pos(enemy)
 	enemy["s8_box"] = Rect2(center - PIAO_BOX * 0.5, PIAO_BOX)
 	enemy["s8_dir"] = dir if dir.length() > 0.1 else Vector2.RIGHT
 	enemy["s8_bounces"] = bounces

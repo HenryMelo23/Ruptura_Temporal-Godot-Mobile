@@ -70,26 +70,31 @@ def _tensor_digest(tensors, layer_count):
     return digest.hexdigest()
 
 
-def export_weights():
-    if torch is None:
-        print("ERROR: PyTorch is required to export Umbra DQN weights.")
-        return False
-
-    model_path = os.path.join("Game Base", "Ruptura_Temporal-APOLO2.0", "saves", "memoria_umbra_dqn.pt")
+def export_weights(from_json=None, output_path=None, training=None):
     output_dir = os.path.join("assets", "weights")
-    output_path = os.path.join(output_dir, MODEL_VERSION + ".json")
-
-    print(f"Loading weights from: {model_path}")
-    if not os.path.exists(model_path):
-        print(f"ERROR: Model file not found at {model_path}")
-        return False
-
-    try:
-        # Load state dict
-        state_dict = torch.load(model_path, map_location="cpu")
-    except Exception as e:
-        print(f"ERROR loading state dict: {e}")
-        return False
+    output_path = output_path or os.path.join(output_dir, MODEL_VERSION + ".json")
+    if from_json:
+        # Rede treinada em numpy (tools/umbra_dqn_train.py): mesmas chaves net.N.
+        with open(from_json, encoding="utf-8") as f:
+            raw = json.load(f)
+        training = raw.get("training")
+        state_dict = {k: _ListTensor(v) for k, v in raw.items() if k.startswith("net.")}
+        model_path = from_json
+    else:
+        if torch is None:
+            print("ERROR: PyTorch is required to export Umbra DQN weights.")
+            return False
+        model_path = os.path.join("Game Base", "Ruptura_Temporal-APOLO2.0", "saves", "memoria_umbra_dqn.pt")
+        print(f"Loading weights from: {model_path}")
+        if not os.path.exists(model_path):
+            print(f"ERROR: Model file not found at {model_path}")
+            return False
+        try:
+            # Load state dict
+            state_dict = torch.load(model_path, map_location="cpu")
+        except Exception as e:
+            print(f"ERROR loading state dict: {e}")
+            return False
 
     # Extract layers. The UmbraDQN net is Sequential:
     # 0: Linear(24, 128)
@@ -140,6 +145,9 @@ def export_weights():
         "tensors": tensors,
         "integrity": {"algorithm": "sha256-fp32le", "tensors_sha256": _tensor_digest(tensors, len(layer_shapes))},
     }
+    if training:
+        weights_json["training"] = training
+    output_dir = os.path.dirname(output_path) or "."
 
     os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -148,5 +156,21 @@ def export_weights():
     print(f"SUCCESS: Weights successfully exported to {output_path}")
     return True
 
+class _ListTensor:
+    """Adaptador minimo para listas aninhadas no lugar de tensores torch."""
+
+    def __init__(self, value):
+        self.value = value
+        self.shape = _shape_of(value)
+
+    def tolist(self):
+        return self.value
+
+
 if __name__ == "__main__":
-    raise SystemExit(0 if export_weights() else 1)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--from-json", dest="from_json", default=None, help="rede de tools/umbra_dqn_train.py")
+    ap.add_argument("--out", default=None)
+    a = ap.parse_args()
+    raise SystemExit(0 if export_weights(a.from_json, a.out) else 1)

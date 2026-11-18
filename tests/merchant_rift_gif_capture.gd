@@ -53,6 +53,7 @@ func _play(max_seconds: float, until_idle: bool = true) -> void:
 func _run() -> void:
 	await process_frame
 	game.run_tutorial_enabled = false
+	game.shop_tutorial_seen = true  # o aviso da loja cobria a captura
 	game.active_character_key = game.CHARACTER_GEOVANA
 	game._start_game()
 	if game._tutorial_active():

@@ -58,6 +58,8 @@ static func _arauto_texture(game: Node2D) -> Texture2D:
 static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))):
 		return RTSertaoPresentation.enemy_draw_size(String(enemy.get("type", "")))
+	if game.cripta_controller.owns_kind(String(enemy.get("type", ""))):
+		return RTCriptaPresentation.enemy_draw_size(String(enemy.get("type", "")))
 	match String(enemy.get("type", game.ENEMY_COMMON)):
 		game.ENEMY_AGGLOMERATOR:
 			return Vector2(86, 86)
@@ -122,6 +124,10 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 	var idx: int = int(enemy["phase"]) % 2
 	var kind7: String = String(enemy.get("type", game.ENEMY_COMMON))
+	if game.cripta_controller.owns_kind(kind7):
+		var s9_tex: Texture2D = RTCriptaPresentation.enemy_texture(game, enemy)
+		if s9_tex != null:
+			return s9_tex
 	if game.sertao_controller.owns_kind(kind7):
 		var s8_tex: Texture2D = RTSertaoPresentation.enemy_texture(game, enemy)
 		if s8_tex != null:
@@ -242,7 +248,7 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 
 
 static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
-	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))):
+	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))) or game.cripta_controller.owns_kind(String(enemy.get("type", ""))):
 		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 	if String(enemy.get("type", game.ENEMY_COMMON)) == game.ENEMY_SINEIRO_BOREAL:
 		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
@@ -309,6 +315,8 @@ static func _enemy_visual_offset(game: Node2D, enemy: Dictionary) -> Vector2:
 static func _boss_texture(game: Node2D) -> Texture2D:
 	if game.current_phase == RTSertaoController.PHASE:
 		return RTSertaoPresentation.boss_texture(game)
+	if game.current_phase == RTCriptaController.PHASE:
+		return RTCriptaPresentation.boss_texture(game)
 	if game.current_phase == 7:
 		if not game.boss7_core_active:
 			return RTBoss7Animator.texture(game)
@@ -422,6 +430,8 @@ static func _boss_draw_position(game: Node2D) -> Vector2:
 static func _boss_draw_size(game: Node2D) -> Vector2:
 	if game.current_phase == RTSertaoController.PHASE:
 		return RTBoss8Controller.DRAW_SIZE
+	if game.current_phase == RTCriptaController.PHASE:
+		return RTBoss9Controller.DRAW_SIZE
 	if game.current_phase == 1:
 		return Boss1AnimationPresentation.draw_size(game)
 	if game.current_phase == 2:
@@ -481,18 +491,32 @@ static func _player_fire_animation_info(game: Node2D, direction: Vector2 = Vecto
 	var sector: int = posmod(roundi(dir.angle() / (PI / 4.0)), 8)
 	var columns: Array[int] = [-1, 5, 0, 4, -1, 3, 1, 2]
 	var column: int = columns[sector]
+	# Quadros por direcao: 2 na arte antiga, 4 na Geovana v2 (preparo, carga,
+	# disparo, recuo). Os indices de rede seguem o mesmo bloco por direcao.
+	var per_dir: int = _player_fire_frames_per_direction(game, fire_prefix)
 	if column < 0:
 		return {"key": fire_prefix, "flip_h": sector == 4, "network_offset": 0}
-	return {"key": fire_prefix + "_" + game.PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": 2 + column * 2}
+	return {"key": fire_prefix + "_" + game.PLAYER_FIRE_DIRECTIONS[column], "flip_h": false, "network_offset": per_dir + column * per_dir}
+
+
+static func _player_fire_frames_per_direction(game: Node2D, fire_prefix: String = "player_fire") -> int:
+	var base: Array = game.textures.get(fire_prefix, [])
+	return base.size() if base.size() > 2 and RTGeovanaV2.is_v2(base[0]) else 2
 
 
 static func _player_fire_frame_index(game: Node2D, elapsed_time: float) -> int:
+	var per_dir: int = _player_fire_frames_per_direction(game)
+	if per_dir > 2 and game.manifestation_key != "prismatica" and game.manifestation_key != "parasitica":
+		return RTGeovanaV2.fire_frame(per_dir, elapsed_time, game.PLAYER_FIRE_FRAME_SECONDS * 2.0)
 	return clampi(int(elapsed_time / game.PLAYER_FIRE_FRAME_SECONDS), 0, 1)
 
 
 static func _player_fire_texture_for_current_attack(game: Node2D, elapsed_time: float) -> Texture2D:
 	var info: Dictionary = game._player_fire_animation_info()
 	var frames: Array = game.textures.get(String(info["key"]), [])
+	if frames.size() > 2 and RTGeovanaV2.is_v2(frames[0]):
+		# v2: preparo, carga, disparo e recuo dentro da mesma janela da pose.
+		return frames[clampi(game._player_fire_frame_index(elapsed_time), 0, frames.size() - 1)]
 	return frames[game._player_fire_frame_index(elapsed_time)] if frames.size() == 2 else null
 
 
@@ -527,6 +551,8 @@ static func _player_draw_profile(game: Node2D) -> Dictionary:
 			"size": game.PLAYER_DRAW_FROZEN_SIZE, 
 			"offset": Vector2.ZERO
 		}
+	if RTGeovanaV2.is_v2(game._player_texture()):
+		return RTGeovanaV2.draw_profile()
 	if game.time_alive - game.last_damage_time < 0.35:
 		return {
 			"size": game.PLAYER_DRAW_DAMAGE_SIZE, 

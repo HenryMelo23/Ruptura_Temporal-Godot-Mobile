@@ -604,10 +604,13 @@ static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 	var tex: Texture2D = null
 	var draw_size = Vector2(66.0, 92.0)
 	var air_offset = Vector2.ZERO
+	var v2: bool = frames.size() >= 8 and RTGeovanaV2.is_v2(frames[0])
 	if game.player_start_down_fall_timer > 0.0:
 		var progress: float = clampf(1.0 - game.player_start_down_fall_timer / game.PLAYER_START_DOWN_FALL_TIME, 0.0, 1.0)
 		var eased: float = 1.0 - pow(1.0 - progress, 3.0)
 		var frame_idx: int = 2 if progress >= 0.78 else (int(floor(progress / game.PLAYER_START_DOWN_FRAME_TIME)) % 2)
+		if v2:
+			frame_idx = RTGeovanaV2.start_down_frame(true, progress, 0.0, game.PLAYER_START_DOWN_LAND_TIME, game.PLAYER_START_DOWN_FRAME_TIME)
 		tex = frames[clampi(frame_idx, 0, frames.size() - 1)]
 		air_offset = Vector2(0.0, -lerpf(game.PLAYER_START_DOWN_HEIGHT, 0.0, eased))
 		var shadow_alpha: float = lerpf(0.12, 0.38, eased)
@@ -618,6 +621,8 @@ static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 		var elapsed: float = game.PLAYER_START_DOWN_LAND_TIME - game.player_start_down_landing_timer
 		var landing_frame: int = int(floor(elapsed / game.PLAYER_START_DOWN_FRAME_TIME))
 		var land_idx: int = 3 + landing_frame % 3
+		if v2:
+			land_idx = RTGeovanaV2.start_down_frame(false, 1.0, elapsed, game.PLAYER_START_DOWN_LAND_TIME, game.PLAYER_START_DOWN_FRAME_TIME)
 		tex = frames[clampi(land_idx, 0, frames.size() - 1)]
 		var squash: float = sin(clampf(elapsed / 0.32, 0.0, 1.0) * PI)
 		draw_size = Vector2(70.0 + squash * 10.0, 86.0 - squash * 8.0)
@@ -626,6 +631,10 @@ static func _draw_player_start_down(game: Node2D, camera: Vector2) -> bool:
 		game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if tex == null:
 		return false
+	if v2:
+		# Mesma escala e pes do resto da Geovana v2 (sem achatar no pouso: a arte ja tem o impacto).
+		game._draw_entity_by_height_rotated(tex, center + air_offset + RTGeovanaV2.FEET_OFFSET, RTGeovanaV2.DRAW_HEIGHT, 0.0, Color.WHITE, game._should_flip_player_sprite())
+		return true
 	game._draw_entity_fit(tex, center + air_offset, draw_size, Color.WHITE, game._should_flip_player_sprite())
 	return true
 
@@ -1120,6 +1129,9 @@ static func _draw_remote_player_state(game: Node2D, camera: Vector2, peer_id: in
 	if directional_fire and tex != null:
 		size = tex.get_size() * (game.PLAYER_FIRE_CANVAS_HEIGHT / tex.get_height())
 		rect = Rect2(p + Vector2(-size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
+	if not is_remote_henry and not is_lacerante and RTGeovanaV2.is_v2(tex):
+		size = tex.get_size() * (RTGeovanaV2.DRAW_HEIGHT / tex.get_height())
+		rect = Rect2(p + RTGeovanaV2.FEET_OFFSET + Vector2(-size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - size.y), size)
 
 	var rotation = 0.0
 	# Input intent comes from the compact visual snapshot. Positional velocity is

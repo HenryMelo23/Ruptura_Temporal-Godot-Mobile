@@ -50,7 +50,7 @@ const ANIM_FROZEN: = 7
 const DAMAGE_ENEMY: = 0
 const DAMAGE_BOSS: = 1
 const DAMAGE_ARAUTO: = 2
-const MAX_PHASE_INDEX: = 8
+const MAX_PHASE_INDEX: = 9
 static func estimate_packed_bytes(value) -> int:
 	if value is PackedFloat32Array:
 		return value.size() * 4

@@ -37,6 +37,8 @@ def main():
     ap.add_argument("--blend", type=float, default=0.6, help="peso do ajuste novo sobre o arquivo atual")
     ap.add_argument("--min-samples", type=int, default=25)
     a = ap.parse_args()
+    if not 0.0 < a.blend <= 1.0 or a.min_samples < 2:
+        ap.error("--blend precisa estar em (0, 1] e --min-samples >= 2")
 
     files = []
     for pattern in a.inputs:
@@ -68,6 +70,8 @@ def main():
 
     # Vantagem: Q_a(f) - media_b Q_b(f), linear em f.
     known = list(coef.keys())
+    if len(known) < 2:
+        raise SystemExit("evidencia insuficiente: pelo menos duas acoes precisam atingir --min-samples; nenhum modelo foi escrito")
     mean_w = np.mean([coef[k] for k in known], axis=0)
     adv = {k: coef[k] - mean_w for k in known}
     # Escala: desvio padrao das vantagens nas amostras reais -> TARGET_SPREAD.

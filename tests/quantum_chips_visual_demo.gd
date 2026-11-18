@@ -22,7 +22,9 @@ func _shot(name: String) -> void:
 	await process_frame
 	await process_frame
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png(ProjectSettings.globalize_path("res://.agent_logs/chips/%s_%s.png" % [prefix, name]))
+	var output_dir := ProjectSettings.globalize_path("res://.agent_logs/chips")
+	DirAccess.make_dir_recursive_absolute(output_dir)
+	root.get_texture().get_image().save_png(output_dir.path_join("%s_%s.png" % [prefix, name]))
 
 
 func _run() -> void:
@@ -38,6 +40,13 @@ func _run() -> void:
 	await _shot("01_select_footer")
 	RTQuantumChipUI.open = true
 	await _shot("02_chip_popup")
+	RTQuantumChipUI.open = false
+	game.mode = "lobby_online_host"
+	game.online_room_name = "Equipe de teste"
+	game.online_room_code = "TESTE"
+	await _shot("02a_team_lobby")
+	RTQuantumChipUI.open = true
+	await _shot("02b_team_chip_popup")
 	RTQuantumChipUI.open = false
 	# Run com Corruptor no modo drop: fichas no chao.
 	chips.random_mode = false

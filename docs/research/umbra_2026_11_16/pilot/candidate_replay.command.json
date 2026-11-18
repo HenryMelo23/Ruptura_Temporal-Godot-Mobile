@@ -1,0 +1,17 @@
+[
+  "godot",
+  "--headless",
+  "--path",
+  "/home/hermes/Documentos/GitHub/Ruptura_Temporal-Godot-Mobile",
+  "--script",
+  "res://tools/umbra_mind_collect.gd",
+  "--",
+  "--episodes=8",
+  "--budget=280",
+  "--seconds=45.0",
+  "--seed=10271",
+  "--epsilon=0.0",
+  "--lead_jitter=0",
+  "--out=/home/hermes/Documentos/GitHub/Ruptura_Temporal-Godot-Mobile/.agent_logs/umbra_evidence/20261116_fit_v2/candidate_replay.jsonl",
+  "--mind=/home/hermes/Documentos/GitHub/Ruptura_Temporal-Godot-Mobile/.agent_logs/umbra_evidence/20261116_fit_v2/candidate.json"
+]

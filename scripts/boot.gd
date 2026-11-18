@@ -48,7 +48,7 @@ func _start_main_load_after_first_frame() -> void :
 	load_started_ms = Time.get_ticks_msec()
 	load_requested = true
 	print("PERF main_scene_load_started %dms" % (load_started_ms - boot_started_ms))
-	if keep_alive_for_agent_smoke:
+	if keep_alive_for_agent_smoke or DisplayServer.get_name() == "headless":
 		call_deferred("_load_main_resource")
 		return
 	var err: = ResourceLoader.load_threaded_request(MAIN_SCENE_PATH, "PackedScene")

@@ -14,9 +14,9 @@ extends RefCounted
 ##   5a+       estilosa    (salta com mortal, aterrissagem heroica, sai na pose)
 ## Expulsa pelo colapso, ela sempre sai cuspida (ejected).
 ##
-## Este arquivo so cuida de tempo, posicao e trava de controle; o desenho fica
-## em MerchantRiftTransitionPresentation. Solo apenas: no multiplayer a fenda
-## continua instantanea (sem contrato de rede para a cena).
+## Este arquivo cuida de tempo, posicao e trava de controle; o desenho fica em
+## MerchantRiftTransitionPresentation. No multiplayer todos recebem a mesma
+## entrada pela Fenda; so a autoridade empurra a horda.
 
 const PHASE_NONE := ""
 const PHASE_DIVE := "dive"
@@ -79,7 +79,7 @@ func reset_run() -> void:
 
 
 func enabled() -> bool:
-	return core != null and not bool(core.is_multiplayer) and not bool(core.dedicated_server_mode)
+	return core != null and not bool(core.dedicated_server_mode)
 
 
 func busy() -> bool:
@@ -133,7 +133,8 @@ func _start(new_phase: String, new_mood: String, from: Vector2, to: Vector2) -> 
 ## fim do mergulho.
 func begin_dive(rift_pos: Vector2) -> void:
 	_start(PHASE_DIVE, mood_for_entry(entries + 1), Vector2(core.player_pos), rift_pos)
-	push_enemies_smooth(rift_pos)
+	if core._is_world_authority():
+		push_enemies_smooth(rift_pos)
 	core._clear_attack_lock()
 	core._stop_move_touch()
 	core.screen_shake_timer = maxf(float(core.screen_shake_timer), 0.22)

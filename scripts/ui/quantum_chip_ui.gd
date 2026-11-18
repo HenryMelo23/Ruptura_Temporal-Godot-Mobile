@@ -43,7 +43,8 @@ static func draw(game: Node2D, viewport: Vector2) -> void:
 	game.buttons["qchip_panel"] = panel
 	game._draw_holo_panel(panel, Color(0.6, 0.45, 1.0), true, 0.92)
 	game._draw_centered("CHIPS QUANTICOS", panel.position + Vector2(panel.size.x * 0.5, 34.0), 24, Color(0.86, 0.78, 1.0))
-	game._draw_centered("Mudam as regras da run. Ligue quantos quiser.", panel.position + Vector2(panel.size.x * 0.5, 58.0), 13, Color(0.7, 0.74, 0.86))
+	var subtitle := "O host escolhe os chips para toda a equipe." if game.mode == "lobby_online_host" else "Mudam as regras da run. Ligue quantos quiser."
+	game._draw_centered(subtitle, panel.position + Vector2(panel.size.x * 0.5, 58.0), 13, Color(0.7, 0.74, 0.86))
 	var list: Array = entries()
 	var cols: int = 2 if portrait else 3
 	var rows: int = int(ceil(float(list.size()) / float(cols)))

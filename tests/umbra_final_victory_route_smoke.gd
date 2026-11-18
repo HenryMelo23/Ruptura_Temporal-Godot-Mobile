@@ -82,7 +82,7 @@ func _run() -> void:
 		unique_farm_cycle[phase_value] = true
 	_check(farm_cycle.size() == 4 and unique_farm_cycle.size() == 4, "farm cycle was not four unique maps")
 	_check(farm_entry == 7, "farm cycle did not start at Cinzas da Ruptura (7)")
-	_check(farm_cycle.all(func(value): return int(value) in game.DIMENSION_ROUTE_POOL and int(value) != game.DIMENSION_FINAL_PHASE), "farm cycle selected a reserved phase")
+	_check(farm_cycle.all(func(value): return (int(value) == 7 or int(value) in game.DIMENSION_FARM_POOL) and int(value) != game.DIMENSION_FINAL_PHASE), "farm cycle selected a reserved phase")
 	game.dimension_route_queue.clear()
 	var repeated_entry: int = int(game._begin_farm_dimension_cycle())
 	_check(repeated_entry == 7 and game.dimension_route_queue.size() == 3 and not game.dimension_route_queue.has(7), "repeated farm cycle was not 7 + 3 maps")

@@ -38,34 +38,24 @@ func _run() -> void:
 	game._start_game()
 	game.mode = "game"
 
-	# ---------------- rota: so depois de 7 dimensoes, autoridade, 1x por ciclo
+	# ---------------- rota: Sertao so existe no ciclo de farm (7 + 3 de 1/2/3/8/9)
 	var flow = game._phase_flow()
-	game.is_multiplayer = false
-	game.dimension_route_completed_count = 5
-	game.dimension_route_queue = [2, 3]
-	game.dimension_route_farm_cycles = 1
-	game.sertao_visited_cycle = -1
-	_check(not flow._maybe_queue_sertao(true), "sertao entrou antes de 7 dimensoes")
-	game.dimension_route_completed_count = 7
-	_check(flow._maybe_queue_sertao(true), "sertao nao entrou com 7 dimensoes")
-	_check(int(game.dimension_route_queue[0]) == 8 and game.dimension_route_queue.size() == 3, "sertao deveria entrar na frente da fila como bonus")
-	game.dimension_route_queue = [2, 3]
-	_check(not flow._maybe_queue_sertao(true), "sertao repetiu no mesmo ciclo")
-	game.dimension_route_farm_cycles = 2
-	game.is_multiplayer = true
-	game.is_host = false
-	game.online_room_owner = false
-	_check(not flow._maybe_queue_sertao(true), "replica multiplayer alterou a rota")
-	game.is_host = true
-	_check(flow._maybe_queue_sertao(true), "autoridade multiplayer nao enfileirou o sertao")
-	game.is_multiplayer = false
+	_check(not (8 in game.DIMENSION_ROUTE_POOL), "sertao nao pode estar na rota inicial")
+	_check(8 in game.DIMENSION_FARM_POOL, "sertao fora do sorteio do ciclo")
 	var hits := 0
-	for i in range(400):
-		game.sertao_visited_cycle = -1
-		game.dimension_route_queue = [2, 3]
-		if flow._maybe_queue_sertao(false):
+	for i in range(300):
+		game.dimension_route_last_phase = 4
+		_check(game._begin_farm_dimension_cycle() == 7, "ciclo deveria comecar pela 7")
+		var q: Array = game.dimension_route_queue
+		_check(q.size() == 3 and q.all(func(v): return int(v) in game.DIMENSION_FARM_POOL), "ciclo fora de 1/2/3/8/9: %s" % str(q))
+		if 8 in q:
 			hits += 1
-	_check(hits > 70 and hits < 170, "chance do sertao fora de ~30%%: %d/400" % hits)
+	_check(hits > 120 and hits < 240, "sertao deveria sair em ~60%% dos ciclos: %d/300" % hits)
+	var action: String = flow._farm_action_with_route()
+	var parsed: Array = flow._farm_route_from_action(action)
+	_check(action.begins_with("farm:") and parsed.size() == 3, "rota do lider nao viajou na acao: " + action)
+	game._begin_farm_dimension_cycle(parsed)
+	_check(Array(game.dimension_route_queue) == parsed, "replica nao seguiu a rota do lider")
 
 	# ---------------- entrar na fase 8
 	game._advance_to_phase(8)
@@ -219,8 +209,12 @@ func _run() -> void:
 	_check(game.boss_dead, "chefe nao morreu")
 	_check(s8.bullets.is_empty(), "projeteis do chefe deveriam sumir na morte")
 
-	if not failed:
-		print("PHASE8_SERTAO_SMOKE_OK grazes=%d" % s8.graze_count)
+	var grazes: int = s8.graze_count
+	game._cleanup_runtime_resources()
+	root.remove_child(game)
 	game.queue_free()
-	await process_frame
+	for _frame in range(3):
+		await process_frame
+	if not failed:
+		print("PHASE8_SERTAO_SMOKE_OK grazes=%d" % grazes)
 	quit(1 if failed else 0)

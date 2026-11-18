@@ -1,0 +1,43 @@
+{
+  "pairs": 8,
+  "mean_score_delta_candidate_minus_baseline": 0.31177713942012814,
+  "paired_bootstrap_95_percentile": [
+    -0.9810584995061571,
+    1.4298540359837453
+  ],
+  "action_histograms_changed_pairs": 8,
+  "candidate_bonus_nonzero": true,
+  "baseline_mean": {
+    "score": 1.4964157243447562,
+    "dealt": 0.3818169512813976,
+    "taken": 0.07739179294897396,
+    "t": 45.0
+  },
+  "candidate_mean": {
+    "score": 1.8081928637648845,
+    "dealt": 0.41334642608043776,
+    "taken": 0.07750904656798323,
+    "t": 44.42916666666666
+  },
+  "baseline_umbra_wins": 0,
+  "candidate_umbra_wins": 1,
+  "candidate_umbra_losses": 0,
+  "evidence_status": "inconclusive",
+  "learning_improvement_proven": false,
+  "scope": "linear mind versus frozen heuristic opponent; score is a short-horizon proxy, not human likeness",
+  "deterministic_episode_replay": true,
+  "training_episodes": 16,
+  "candidate_sha256": "76d7e241878c771fa36369c8b3e99af70d5b1817ff2ec0096a38f1bdc1d26c32",
+  "baseline_sha256": "f30fd5fa6d326516e0ee0a496602c55eae7f56eae18dd0edfc5975c39bd06c3e",
+  "parameter_change": true,
+  "manifest_sha256": "5cf289fd25cd59556ed6fe2fc5f87dba1304c716a69dda8cbbe451b35c2d0520",
+  "published_or_promoted": false,
+  "remote_verified": false,
+  "source_files_changed_during_experiment": [],
+  "candidate_frozen_during_evaluation": true,
+  "limitations": [
+    "Episode summaries and decision samples, not full state/action trajectory replays.",
+    "Repeated seeds test summary reproducibility only; build and manifestation generalization require a separate matrix.",
+    "No human player, Python Apolo checkpoint, Android or live VPS integration was exercised."
+  ]
+}

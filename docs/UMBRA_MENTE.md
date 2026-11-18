@@ -1,5 +1,9 @@
 # Mente da UMBRA (v3)
 
+> Auditoria de 16/11/2026: consulte [evidências e plano do TCC](UMBRA_APOLO_TCC_AUDIT.md).
+> Atualizar pesos/versões não prova melhora. O bot Godot não executa o DQN
+> do Apolo Python; há um runner de avaliação pareada sem promoção automática.
+
 ## Camadas
 | camada | onde | quem escreve | como entra |
 |---|---|---|---|
@@ -17,6 +21,17 @@ mente só muda a preferência entre ações que já são legais.
 - **REBOBINAR**: marca o jogador e, 1,5 s depois, puxa ele para a âncora, com dano e 0,35 s de atordoamento. Teleportar quebra a marca.
 - **ECO_PROFETICO**: sigilo na posição prevista, com detonação em 1,1 s. Aprende `eco_along` e `eco_side`. Com experiência, cobre os dois lados. Com Rebobinar armado, o sigilo cai na âncora.
 
+## Necrose: Missa do Ninho (ação `MIASMA`)
+`RTUmbraNecroseMass` (`scripts/systems/bosses/umbra_necrose_mass.gd`), desenho em
+`RTUmbraNecrosePresentation`. Substitui o miasma antigo, que seguia o jogador e dava
+dano sem chance de fuga.
+- **Turíbulos** (2) balançam em arcos fixos e soltam incenso que o vento arrasta. O arco aparece por 0,9 s antes. As baforadas são determinísticas (saem de `censer_head(te)`), então o cliente as recalcula.
+- O incenso **não dá dano**: enche o **Desajuste** (0..1). Em 0,5 os controles invertem (`controls_inverted_timer`). Em 1,0 vem a **Comunhão**: 10% da vida, 0,5 s de atordoamento e +1,5% de vida para a UMBRA.
+- **Velas** (4): a luz apaga o incenso e limpa o Desajuste. **Coroinhas** correm para apagar a vela mais perto, fogem da Geovana e morrem com um tiro. Uma vela apagada reacende se ela ficar 0,9 s ao lado.
+- **Sino do toque de recolher** (6,6 / 7,6 / 8,6 s): o último toque fere quem estiver fora da luz, com 4% + 14%×Desajuste da vida.
+- Rede e mente: a hazard `missa` acende `hazard_miasma` na DQN e `space.hazard.miasma` no schema. O bot Apolo enxerga as velas como zona segura (`danger_at`). As recompensas de `_umbra_learn("MIASMA")` são: Comunhão +0,35, sino +0,12..0,42, e -0,1 quando ela termina protegida.
+- Teste: `tests/umbra_necrose_mass_smoke.gd` (com `-- capture` grava em `.codex/necrose/`).
+
 ## Treino headless (no PC)
 ```
 godot --headless --path . --script res://tools/umbra_mind_collect.gd -- --budget=150 --seconds=45 --epsilon=0.25 --seed=N --out=res://.agent_logs/umbra_train/rK_sN.jsonl
@@ -25,7 +40,9 @@ godot --headless --path . --script res://tools/umbra_mind_collect.gd -- --episod
 ```
 - O oponente é o bot Apolo com build de fim de run e reflexo variável. Ele desvia dos sigilos e foge do Rebobinar.
 - Retorno de cada decisão: 10·(dano causado nos próximos 3 s ÷ vida máxima) − 30·(dano sofrido ÷ vida máxima da UMBRA).
-- Base r3, avaliada em sementes novas: dano causado 0,26 contra 0,20 sem a mente.
+- Registro histórico da base r3: dano causado 0,26 contra 0,20 sem a mente.
+  Sem manifesto/dados pareados associados aqui, esses números não são prova
+  confirmatória para o TCC. Use o protocolo e os dados da auditoria.
 
 ## VPS
 - O cliente manda `umbra_combat` no relatório da run, com X'X e X'y por ação, plasma (tiros e acertos) e priors. Manda também `umbra_phase_lessons`.

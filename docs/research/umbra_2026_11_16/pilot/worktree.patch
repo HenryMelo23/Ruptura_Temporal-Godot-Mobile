@@ -1,0 +1,826 @@
+diff --git a/.agents/MULTIPLAYER_DEFERRED_VALIDATION.md b/.agents/MULTIPLAYER_DEFERRED_VALIDATION.md
+index 7e59664..9d3079c 100644
+--- a/.agents/MULTIPLAYER_DEFERRED_VALIDATION.md
++++ b/.agents/MULTIPLAYER_DEFERRED_VALIDATION.md
+@@ -921,3 +921,29 @@ Validado só em solo (`tests/merchant_rift_transition_smoke.gd`,
+   respiro 28 s (`fusion_cooldown_timer`, fora do snapshot da run). Autoridade
+   apenas, como antes.
+ - **Balões de fala** viraram `RTSpeechBubbles` genérico; só desenho local.
++
++## 2026-11-15 — Relevo visual dos objetos sólidos do mapa
++
++Validado somente em solo com `tests/map_props_collision_smoke.gd`, incluindo
++render real normal e `--low`. A camada `RTMapPropPresentation` deriva a arte do
++mesmo SDF e do mesmo `map_key` já usados localmente por
++`RTMapPropColliders`; não acrescenta estado, dano, colisão, RPC ou snapshot.
++
++Dever multiplayer: confirmar em duo/trio que host e clientes escolhem o mesmo
++atlas/dimensão durante transições e veem o relevo na mesma célula, sobretudo na
++fase 5 quando a dimensão reaproveita um terreno com obstáculos. A geometria de
++colisão existente não foi alterada.
++
++## 2026-11-15 — Henry Incendiário: ticks da HAB1 e stun da ultimate
++
++Validado somente em solo com `tests/henry_incendiary_smoke.gd`. A HAB1 agora
++divide o mesmo dano-base total do cone em cinco impactos durante 320 ms. Cada
++impacto da ultimate renova 900 ms de stun em inimigos comuns, mini-chefes e
++Arauto; chefes completos continuam sem stun. A confirmação autoritativa de
++`henry_heat_wave` é o ponto que aplica o estado, inclusive para pedido de dano
++de um Henry remoto, sem novo RPC, campo de snapshot ou mudança de assinatura.
++
++Dever multiplayer: confirmar em duo/trio que os cinco pedidos de dano da HAB1
++não são perdidos ou duplicados sob latência, que cada pulso remoto renova o stun
++apenas no alvo atingido e que reconnect não preserva o temporizador local de
++anti-deslizamento. O transporte visual existente não foi alterado.
+diff --git a/.agents/runtime_symbol_index.md b/.agents/runtime_symbol_index.md
+index d048870..b731cba 100644
+--- a/.agents/runtime_symbol_index.md
++++ b/.agents/runtime_symbol_index.md
+@@ -128,7 +128,7 @@ Metrics come from `python3 tools/check_architecture_budget.py --json`.
+ | Boss party scaling contract | `profile_for_party_size` | `scripts/systems/boss_party_scaling.gd:13` |
+ | Shared boss attack contract | `RTSharedBossAttackContract` | `scripts/systems/bosses/shared_boss_attack_contract.gd:1`; Boss 2 Hunt Mark delegates target rotation, event metadata and idempotent hit/visual claims |
+ | Ability controller base | `RTAbilityControllerBase` | `scripts/systems/abilities/ability_controller_base.gd:1`; runtime binding bridge for incremental manifestation extraction |
+-| Henry Incendiário owner | `RTHenryIncendiaryAbilityController.on_player_damaged`, `fire_auto_attack`, `begin_skill`, `cast_ultimate`, `visual_snapshot`, `cancel_channel` | `scripts/systems/abilities/henry_incendiary_ability_controller.gd`; owns the existing burn kit plus bounded public VFX state for fireball/combustion/trail/current casts. `RTManifestationVisualSnapshot` captures by action and the existing ability event/patch RPC carries start/progress/end/cancel; damage remains authoritative and peers derive particles locally. |
++| Henry Incendiário owner | `RTHenryIncendiaryAbilityController.on_player_damaged`, `fire_auto_attack`, `begin_skill`, `cast_ultimate`, `visual_snapshot`, `cancel_channel` | `scripts/systems/abilities/henry_incendiary_ability_controller.gd`; owns the burn kit, including five timed HAB1 burn hits and authority-confirmed 900 ms ultimate stun refresh for common enemies/mini-bosses. Full bosses remain unstunned. `RTManifestationVisualSnapshot` captures bounded fireball/combustion/trail/cast state; the existing ability event/patch RPC carries start/progress/end/cancel and peers derive particles locally. |
+ | Henry Barométrico owner | `RTHenryBarometricAbilityController.fire_auto_attack`, `on_henry_auto_fired`, `begin_skill`, `cast_ultimate`, `update_projectile`, `visual_snapshot` | `scripts/systems/abilities/henry_barometric_ability_controller.gd`; owns pressure autos, the mobile low-pressure corridor, the mobile Eye of the Storm and independent Nimbo duplication. `scripts/presentation/henry_barometric_presentation.gd` renders the same bounded snapshot for local and remote players without owning damage. Walk/attack/cast v1 atlases preserve approved Henry cells; `henry_barometric_ultimate_sheet_v2.png` provides eight new palette/pixel/anchor-normalized poses rebuilt by `tools/build_henry_barometric_sprites.py`. The 0.55 s Barometric windup consumes all eight frames, pure back buckets remove tie-blue pixels, and intro stays shared. Tests: `henry_barometric_smoke`, `henry_barometric_visual_smoke`. |
+ | Henry Colosso D37 owner | `RTHenryColossusAbilityController.fire_auto_attack`, `begin_skill`, `cast_ultimate`, `modify_incoming_damage`, `on_damage_confirmed_enemy`, `visual_snapshot`, `giant_rest_visual_state`, `giant_rest_visual_frame` | `scripts/systems/abilities/henry_colossus_ability_controller.gd`; owns the melee combo/Ímpeto, guard-counter, collision-safe giant charge, 1.2 s forward/reverse growth, 30 s giant timer and temporary HP. It also owns independent Lastro stacks with per-target hit throttle, regular-enemy anchor and boss slow. `scripts/presentation/henry_colossus_presentation.gd` renders bounded physical accents and marks; six runtime atlases are normalized by `tools/build_henry_colossus_sprites.py`, share a 256 px cell/ground anchor and erase rear tie blue. Existing fixed-stride player visual flags now distinguish giant, freada/idle and coarse facing; no collision state travels. Tests: `henry_colossus_smoke`, `henry_colossus_visual_smoke`. |
+ | Henry unlock cheat | `_try_unlock_henry_cheat` | `scripts/main_runtime_core.gd`; `HENRYP` sets only the local persisted test unlock and does not award an UMBRA victory |
+@@ -163,6 +163,7 @@ Use exact symbol search in these owners; core keeps compatible wrappers.
+ - Player/input interpretation: `scripts/systems/player/player_control_controller.gd`; shared runtime state and public core wrappers remain compatible while attack, skill and dash execution stay in the core.
+ - Phase setup/transition/portals: `scripts/systems/phase/phase_flow_controller.gd`.
+ - Definitive expanded phase profiles (`begin_definitive_phase`, `uses_definitive_world`, `terrain_phase`, `map_key`) provide the randomized hidden altar, save/restore lifecycle and camera-culled 384-unit cells with atlas tile 5 reserved for the altar; one-shot solo `FaseEX`–`FaseEX7` select the former classic maps through `arm_phase`: `scripts/systems/phase/experimental_phase_controller.gd`. Integrated altar cues, post-discovery guidance and world-space atlas blending: `scripts/presentation/experimental_phase_presentation.gd` and `scripts/presentation/phase_map_presentation.gd`.
++- Solid terrain objects share one source of truth: `RTMapPropColliders.distance_at` / `push_out` reads the SDF fields for gameplay, while `RTMapPropPresentation.present_for` / `solid_tiles` reads those same fields and copies the authored atlas pixels into a raised, camera-stable layer. No visual prop can be raised without a matching collision mask. Focused proof: `tests/map_props_collision_smoke.gd`.
+ - Phase-scoped texture residency/catalog lazy loading: `scripts/systems/assets/runtime_asset_controller.gd`; every platform keeps only the active phase resident at authored quality, while catalog art loads on demand through `_get_texture`.
+ - Adaptive runtime performance: `RTRuntimePerformanceController.update`, `effective_stage`, `should_redraw`, `separation_interval` in `scripts/systems/performance/runtime_performance_controller.gd`; `RTRuntimeWorkScheduler` provides deterministic presentation/background lanes; `RTRuntimeProjectileBatchRenderer` and `RTRuntimeSpriteBatchRenderer` own phase-scoped typed buffers, adaptive 32/24/16 px projectile sources, GPU MultiMesh submission and software-renderer fallbacks. Focused tests: `runtime_adaptive_performance_smoke`, `runtime_advanced_pipeline_smoke`, `runtime_projectile_batch_benchmark`, `singleplayer_rendered_frame_pacing_smoke`.
+ - Threaded phase prefetch: `RTRuntimeAssetController.schedule_phase_prefetch`, `poll_prefetch`, `prefetch_paths_for_phase`; bounded next-phase texture warmup on graphical clients only, consumed by the existing phase owner without changing texture quality or dedicated-server residency.
+diff --git a/AGENT_CODEMAP.md b/AGENT_CODEMAP.md
+index 1c0740e..444d2fb 100644
+--- a/AGENT_CODEMAP.md
++++ b/AGENT_CODEMAP.md
+@@ -10,6 +10,7 @@ over 100 KB.
+ | Permanent progress recovery | `scripts/systems/player_progress_sync.gd`, `scripts/systems/save/runtime_save_controller.gd`, `server/relay_manager.js` | versioned cache/event builders, `_apply_remote_player_progress_snapshot`, identity create/claim and relay event validation; menu only presents status/recovery controls | `tests/player_progress_cache_smoke.gd`, `tests/runtime_backup_reconciliation_smoke.gd`, `tests/player_progress_profile_visual_smoke.gd`, `server/player_progress_smoke.js` |
+ | Phase orchestration | `scripts/systems/phase/phase_flow_controller.gd` | `_setup_initial_phase_state`, `_advance_to_phase`, phase timers/portals/fragment helpers | `tests/phase_transition_smoke.gd`, `tests/runtime_backup_reconciliation_smoke.gd`, `tests/phase_density_carry_smoke.gd` |
+ | Definitive expanded phases 1–7 / classic EX variants | `scripts/systems/phase/experimental_phase_controller.gd`, `scripts/presentation/experimental_phase_presentation.gd` | default campaign profiles preserve phase gameplay in a 5× world with exploration landmarks, hidden boss altar on a reserved 384-unit terrain cell, 16-region atlas, normal route and interrupted-run persistence; one-shot solo `FaseEX` / `FaseEX2` / `FaseEX3` / `FaseEX4` / `FaseEX5` / `FaseEX6` / `FaseEX7` select the former 1600×900 classic maps | `tests/experimental_phase_smoke.gd`, `tests/experimental_phase2_smoke.gd`, `tests/experimental_phase3_smoke.gd`, `tests/experimental_phase4_smoke.gd`, `tests/experimental_phase5_smoke.gd`, `tests/experimental_phase6_smoke.gd`, `tests/experimental_phase7_smoke.gd`, `tests/experimental_phase_visual_smoke.gd` (`--ex2`, `--ex3`, `--ex4`, `--ex5`, `--ex6`, `--ex7`, `--low`) |
++| Solid map props / raised visual layer | `scripts/systems/phase/map_prop_colliders.gd`, `scripts/presentation/map_prop_presentation.gd`, SDF fields under `assets/sprites/experimental/collision/` | `RTMapPropColliders` owns the unchanged player/enemy footprint; `RTMapPropPresentation.present_for` reuses the same SDF and original terrain pixels to add a short side/contact shadow only to actual obstacles in phases 2, 6, 7 and 8 | `tests/map_props_collision_smoke.gd` (`capture`, `--low`, optional `--flat-props` comparison) |
+ | Runtime asset residency | `scripts/systems/assets/runtime_asset_controller.gd` | `should_stream_phase_assets`, `should_lazy_gallery_assets`, `release_transient_gallery_assets`, `preload_all`, `prepare_phase`, `ensure_key`; mobile streams only the active phase and lazy-loads card/manifestation/aura art without reducing selected visual quality | `tests/runtime_asset_controller_smoke.gd`, `tests/mobile_phase_asset_streaming_smoke.gd`, `tests/startup_memory_order_smoke.gd`, `tests/catalog_manifest_spectrum_icons_smoke.gd`, `tests/phase_transition_smoke.gd` |
+ | Progression/rewards/card math | `scripts/systems/progression/runtime_progression_controller.gd`; affordable-card forecasting/cache in `scripts/systems/progression/runtime_affordable_card_controller.gd`; progressive rarity curve in `scripts/systems/progression/runtime_temporal_luck_controller.gd`; temporary x2 artifact in `scripts/systems/progression/point_boost_pickup_controller.gd`; triggered point/critical/duplication cards in `scripts/systems/cards/roguelike_point_card_controller.gd`; bounded local power feedback in `scripts/systems/cards/card_power_feedback_controller.gd` | `points_for_enemy`, `apply_score_delta`, `affordable_card_count`, price-profile forecast, `temporal_luck_at`, `effective_luck`, rarity chances, `effective_point_multiplier`, deterministic drop budget, unlimited acquisition contract, `on_enemy_defeated`, `on_player_damaged`, `critical_damage_multiplier`, `extra_card_copies`, `on_card_acquired`, `on_damage_confirmed`, `on_lifesteal`, `on_player_hit` | `tests/runtime_progression_controller_smoke.gd`, `tests/point_boost_pickup_smoke.gd`, `tests/point_boost_economy_smoke.gd`, `tests/point_boost_visual_smoke.gd`, `tests/roguelike_point_cards_smoke.gd`, `tests/card_power_feedback_smoke.gd`, `tests/card_power_feedback_visual_smoke.gd`, `tests/long_run_power_fantasy_smoke.gd`, `tests/long_run_economy_smoke.gd`, `tests/cinzas_attribute_burn_system_smoke.gd` |
+ | Boss wave drawing | `scripts/presentation/boss_wave_presentation.gd` | `_draw_boss_wave_safe_sector`, `_draw_boss_wave_water_body`, crest/foam/trail helpers | `tests/boss_wave_smoke.gd`, `tests/boss_wave_visual_smoke.gd` |
+@@ -51,7 +52,7 @@ over 100 KB.
+ | Solo death camera / Specter handoff | `scripts/presentation/death_camera.gd`, thin lifecycle hooks in `scripts/main_runtime_core.gd` | `begin`, `apply`, `draw_subject`, `clear`; 1.65 s player-focused zoom, grayscale/vignette post-process, HUD suppression, then existing Specter upgrade route | `tests/end_state_android_stability_smoke.gd` (`--out=/abs/dir` captures start/mid/final) |
+ | Ranged primary range | `scripts/systems/ranged_attack_range.gd` plus thin attack/projectile hooks in `scripts/main_runtime_core.gd` | `attack_range`, `damage_multiplier`, `configure_bullet`, `advance_bullet`, `draw_range_indicator`; 420 px base, +45 per uncommon card, +10 per run level, auto-target gate and projectile dissipation | `tests/ranged_attack_range_smoke.gd`, `tests/ranged_attack_range_visual_smoke.gd`, `tests/player_run_level_smoke.gd` |
+ | Combat damage text | `scripts/presentation/combat_text_presentation.gd` plus thin damage/settings hooks in runtime | `add_damage`, `draw`; rapid-hit merging, critical typography/animation, zero-allocation disabled mode | `tests/combat_damage_text_smoke.gd`, `tests/combat_text_presentation_visual_smoke.gd`, `tests/settings_pages_visual_smoke.gd` |
+-| Henry / Incendiário | `scripts/systems/abilities/henry_incendiary_ability_controller.gd` plus state/config facades in runtime/save; compact public VFX capture in `runtime_manifestation_visual_snapshot.gd` and derived remote draw in `combat_effects_presentation.gd` | 1-2-3 auto attack, flame cone, heat wave, damage-fed Incandescência friction/release/dwell; dedicated entrance scaling and pocket/foot-tap/beard idle presentation; remote peers derive fireballs, combustion, ember trail and current dash/ultimate timing from bounded public state; explicit end/cancel events stop the matching remote channel without changing damage authority | `tests/henry_incendiary_smoke.gd`, `tests/henry_incendiary_visual_smoke.gd`, `tests/henry_entrance_transport_smoke.gd`, `tests/multiplayer_new_feature_visual_sync_smoke.gd` |
++| Henry / Incendiário | `scripts/systems/abilities/henry_incendiary_ability_controller.gd` plus state/config facades in runtime/save; compact public VFX capture in `runtime_manifestation_visual_snapshot.gd` and derived remote draw in `combat_effects_presentation.gd` | 1-2-3 auto attack; HAB1 flame cone split into five burn hits over 320 ms while preserving its high total base damage; three-pulse heat-wave ultimate refreshes a 900 ms ground stun on common enemies and mini-bosses but not full bosses; damage-confirmation authority also applies the stun for remote Henry; dedicated entrance/idle presentation and bounded remote VFX state remain unchanged | `tests/henry_incendiary_smoke.gd`, `tests/henry_incendiary_visual_smoke.gd`, `tests/henry_entrance_transport_smoke.gd`, `tests/multiplayer_new_feature_visual_sync_smoke.gd` |
+ | Henry / Barométrico + Nimbo | `scripts/systems/abilities/henry_barometric_ability_controller.gd`, `scripts/presentation/henry_barometric_presentation.gd`, Barometric sheets under `assets/sprites/player/player_2_suit/` and thin runtime/save/network routing | Pressure auto curves after the first hit; mobile HAB1 corridor pulls, pushes, accelerates friendly shots and diverts enemy shots; mobile sustained ultimate orbits normal enemies without pulling bosses; independent Nimbo repeats every third auto. Walk, attack and HAB1 use authored-base Barometric atlases; the ultimate v2 uses eight new normalized poses and consumes all frames during its 0.55 s windup locally/remotely; the existing intro remains shared | `tests/henry_barometric_smoke.gd`, `tests/henry_barometric_visual_smoke.gd`, `tests/henry_entrance_transport_smoke.gd` |
+ | Henry / Colosso D37 + Lastro | `scripts/systems/abilities/henry_colossus_ability_controller.gd`, `scripts/presentation/henry_colossus_presentation.gd`, six normalized Colosso sheets under `assets/sprites/player/player_2_suit/` and thin runtime/save/network routing | Normal combo builds Ímpeto; HAB1 guards one damage flow and counters, or makes a short fallback lunge; Hipertrofia Absoluta grows/reverses over 1.2 s and holds a collision-safe giant form for 30 s with temporary HP, melee reach and a giant charge. Independent Lastro anchors regular enemies on five confirmed damage events and briefly slows bosses with an anti-multihit throttle. Compact flags select giant, freada/idle and facing atlases remotely without changing schema, stride, collision or hitboxes | `tests/henry_colossus_smoke.gd`, `tests/henry_colossus_visual_smoke.gd` |
+ | Henry temporal entry and fire | Same Henry ability owner; `scripts/presentation/henry_fire_presentation.gd` | Shared authoritative entry before combat, 1.2s wander + 0.65s brake + existing entry frames; additive world visual snapshot; 1s Q input lock; cached flame meshes, no gameplay in presentation | `tests/henry_cinematic_fire_smoke.gd`, `tests/henry_entrance_transport_smoke.gd`, `tests/henry_fire_visual_smoke.gd`, `tests/henry_fire_budget_smoke.gd` |
+diff --git a/docs/PHASE_EX_TERRAIN.md b/docs/PHASE_EX_TERRAIN.md
+index a727f2c..40ce34d 100644
+--- a/docs/PHASE_EX_TERRAIN.md
++++ b/docs/PHASE_EX_TERRAIN.md
+@@ -61,6 +61,18 @@ terreno está em `terrain_chunks`; a mesma fórmula em `CHUNK_SHADER_CODE` permi
+ misturar os vizinhos nas bordas. Alterar essa fórmula exige manter os dois lados
+ coerentes. O atlas não é refeito durante a partida.
+ 
++### Objetos sólidos e leitura de altura
++
++As fases 2, 6, 7 e 8 possuem objetos sólidos pintados no atlas (cristais,
++pedras, ossos, troncos e cactos). A física e a apresentação compartilham os
++campos SDF em `assets/sprites/experimental/collision/`: o controlador de
++colisão resolve o contorno nos pés, e `RTMapPropPresentation` copia os mesmos
++pixels do atlas para uma camada elevada curta, com lateral escurecida e sombra
++de contato. Assim, toda área que bloqueia é visualmente alta e nenhuma área sem
++colisão ganha relevo falso. O modo leve mantém a lateral e remove a amostra de
++sombra adicional. Alterar uma forma em `tools/map_collision_shapes.json` exige
++regerar o SDF e executar `tests/map_props_collision_smoke.gd` com captura.
++
+ ## Mover a invocação
+ 
+ O centro da célula é a fonte comum para a arte e a interação:
+diff --git a/scripts/catalog/catalog_interface.gd b/scripts/catalog/catalog_interface.gd
+index 6631d24..efc1ec1 100644
+--- a/scripts/catalog/catalog_interface.gd
++++ b/scripts/catalog/catalog_interface.gd
+@@ -13,6 +13,12 @@ const SECTIONS := ["Registro"]
+ const DIM_LABELS := {1: "Castelo", 2: "Mundo branco", 3: "Catedral", 4: "Nexo", 5: "Cápsula", 6: "Chaga", 7: "Cinzas", 8: "Sertão"}
+ const GAP := 12.0
+ const TAP_SLOP := 14.0
++const COMBAT_PORTRAITS := {
++	"nevasca": "res://assets/sprites/boss2_remaster/idle/idle_01.png",
++	"pai_rato": "res://assets/sprites/boss3/remake/idle/idle_01.png",
++	"umbra": "res://assets/sprites/umbra_v3/idle_01.png",
++	"matriarca_chaga": "res://assets/sprites/boss6_rework/boss6_idle_00.png",
++}
+ 
+ static var _tex_cache: Dictionary = {}
+ 
+@@ -180,6 +186,26 @@ static func apply_subfilter(host: Node, items: Array) -> Array:
+ 
+ 
+ static func texture_for(host: Node, item: Dictionary) -> Texture2D:
++	var id: String = String(item.get("id", ""))
++	if COMBAT_PORTRAITS.has(id):
++		var portrait_path: String = COMBAT_PORTRAITS[id]
++		if not _tex_cache.has(portrait_path):
++			_tex_cache[portrait_path] = load(portrait_path) if ResourceLoader.exists(portrait_path) else null
++		if _tex_cache[portrait_path] is Texture2D:
++			return _tex_cache[portrait_path]
++	if id in ["sineiro_boreal", "suturador_ambar"]:
++		var sheet: Texture2D = host._catalog_item_texture(item)
++		if sheet != null:
++			var columns := 6 if id == "sineiro_boreal" else 4
++			var rows := 4 if id == "sineiro_boreal" else 6
++			var frame_key := "catalog_frame:" + id
++			var frame: AtlasTexture = _tex_cache.get(frame_key)
++			if frame == null or frame.atlas != sheet:
++				frame = AtlasTexture.new()
++				frame.atlas = sheet
++				frame.region = Rect2(Vector2.ZERO, sheet.get_size() / Vector2(columns, rows))
++				_tex_cache[frame_key] = frame
++			return frame
+ 	var path: String = String(item.get("texture_path", ""))
+ 	if path != "":
+ 		if not _tex_cache.has(path):
+@@ -234,6 +260,7 @@ static func draw_art(host: Node, item: Dictionary, rect: Rect2) -> void:
+ 		host._draw_centered_with_font(host.menu_ui_font, String(item.get("name", "?")).left(1), rect.get_center() + Vector2(0, 14), 40, Color(MUTED, 0.6))
+ 		return
+ 	host._draw_texture_contain(tex, rect, Color.WHITE)
++	_draw_enemy_identity(host, item, rect)
+ 
+ 
+ ## Arte de um tile cortado pela borda da galeria: desenha so a parte visivel.
+@@ -255,6 +282,22 @@ static func _draw_art_clipped(host: Node, item: Dictionary, rect: Rect2, clip: R
+ 		return
+ 	var src := Rect2((vis.position - dest.position) / k, vis.size / k)
+ 	host.draw_texture_rect_region(tex, vis, src)
++	if clip.encloses(rect):
++		_draw_enemy_identity(host, item, rect)
++
++
++static func _draw_enemy_identity(host: Node, item: Dictionary, rect: Rect2) -> void:
++	var id: String = String(item.get("id", ""))
++	if id == "rebobinador":
++		var center: Vector2 = rect.get_center() + Vector2(0.0, rect.size.y * 0.11)
++		var radius: float = minf(rect.size.x, rect.size.y) * 0.34
++		host.draw_arc(center, radius, -PI * 0.72, PI * 0.68, 32, Color(1.0, 0.52, 0.12, 0.85), 3.0, true)
++		host.draw_circle(center + Vector2(radius * 0.88, -radius * 0.25), 4.0, Color(1.0, 0.82, 0.32, 0.95))
++	elif id == "briguer_escudeiro":
++		var center: Vector2 = rect.get_center() + Vector2(rect.size.x * 0.22, rect.size.y * 0.10)
++		var radius: float = minf(rect.size.x, rect.size.y) * 0.28
++		host.draw_arc(center, radius, -PI * 0.48, PI * 0.48, 24, Color(0.68, 0.96, 1.0, 0.88), 4.0, true)
++		host.draw_line(center + Vector2(radius * 0.35, -radius * 0.8), center + Vector2(radius * 0.35, radius * 0.8), Color(0.84, 1.0, 1.0, 0.72), 2.0, true)
+ 
+ 
+ static func _draw_unread_dot(host: Node, rect: Rect2) -> void:
+diff --git a/scripts/main_runtime_core.gd b/scripts/main_runtime_core.gd
+index 9f03fb1..ce1410e 100644
+--- a/scripts/main_runtime_core.gd
++++ b/scripts/main_runtime_core.gd
+@@ -6520,9 +6520,10 @@ func _begin_pause_music_fade_in() -> void :
+ 	music_pause_fade_mode = "in"
+ 	music_pause_fade_timer = 0.0
+ 	music_pause_resume_volume = max(0.001, _music_target_volume())
+-	if not music_player.playing:
+-		music_player.play()
++	var resume_position: float = music_player.get_playback_position()
+ 	music_player.stream_paused = false
++	if not music_player.playing:
++		music_player.play(maxf(0.0, resume_position))
+ 	if music_crossfade_player != null and music_crossfade_player.stream != null:
+ 		music_crossfade_player.stream_paused = false
+ 	_set_music_linear_volume(0.001)
+diff --git a/scripts/presentation/combat_effects_presentation.gd b/scripts/presentation/combat_effects_presentation.gd
+index 8712034..cf3412b 100644
+--- a/scripts/presentation/combat_effects_presentation.gd
++++ b/scripts/presentation/combat_effects_presentation.gd
+@@ -166,6 +166,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
+ 		map_texture = null
+ 	if map_texture:
+ 		if game.current_phase == 5 and game.phase5_transmute_active and not game.experimental_phase_controller.uses_definitive_world():
++			RTMapPropPresentation.hide_for(game)
+ 			game._draw_phase5_transmute_map_reveal(map_texture, game._desktop_stage_draw_rect(camera))
+ 		else:
+ 			if not is_instance_valid(game.phase_map_layer):
+@@ -175,12 +176,16 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
+ 				game.add_child(game.phase_map_layer)
+ 			var surface: int = game.PhaseMapPresentation.surface_for(game)
+ 			if game.experimental_phase_controller.uses_definitive_world():
+-				game.phase_map_layer.present_chunks(map_texture, game.experimental_phase_controller.terrain_chunks(camera, viewport), camera, game.experimental_boss_altar_pos, game.experimental_phase_controller.altar_source_center(), surface, game.time_alive, game._runtime_visual_budget_active(), game._get_texture("map_phase_ex5") if game.experimental_phase_controller.terrain_phase() == 5 else null)
++				var terrain_chunks: Array[Dictionary] = game.experimental_phase_controller.terrain_chunks(camera, viewport)
++				game.phase_map_layer.present_chunks(map_texture, terrain_chunks, camera, game.experimental_boss_altar_pos, game.experimental_phase_controller.altar_source_center(), surface, game.time_alive, game._runtime_visual_budget_active(), game._get_texture("map_phase_ex5") if game.experimental_phase_controller.terrain_phase() == 5 else null)
++				RTMapPropPresentation.present_for(game, map_texture, terrain_chunks, camera, game.experimental_boss_altar_pos, game._runtime_visual_budget_active())
+ 			else:
+ 				game.phase_map_layer.present(map_texture, game._desktop_stage_draw_rect(camera), surface, game.time_alive, game._runtime_visual_budget_active())
++				RTMapPropPresentation.hide_for(game)
+ 			game.PhaseMapPresentation.draw_ambient(game, camera, surface)
+ 			game.ExperimentalPhasePresentation.draw_world(game, camera, viewport)
+ 	else:
++		RTMapPropPresentation.hide_for(game)
+ 		game.draw_rect(Rect2( - camera, game.WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
+ 	RTMerchantDimensionPresentation.draw_world(game, camera)
+ 	RTWorldLighting.collect_and_present(game, camera, viewport)
+diff --git a/scripts/systems/abilities/henry_incendiary_ability_controller.gd b/scripts/systems/abilities/henry_incendiary_ability_controller.gd
+index 93180cd..b991d3e 100644
+--- a/scripts/systems/abilities/henry_incendiary_ability_controller.gd
++++ b/scripts/systems/abilities/henry_incendiary_ability_controller.gd
+@@ -10,7 +10,12 @@ const SPARK_LIFE := 1.15
+ const SKILL_NEAR_DAMAGE_MULT := 2.0
+ const SKILL_FAR_DAMAGE_MULT := 0.82
+ const SKILL_GUARD_DAMAGE_MULT := 0.46
++## O cone mantem o dano total alto, mas queima o alvo em impactos curtos em vez
++## de entregar todo o dano em um unico frame.
++const SKILL_BURN_HIT_COUNT := 5
++const SKILL_BURN_HIT_INTERVAL := 0.08
+ const ULTIMATE_DAMAGE_MULT := 0.9
++const ULTIMATE_STUN_DURATION := 0.9
+ # Ignicao Total: uma animacao continua com 3 impactos, cada anel de colunas mais longe.
+ const ULT_PULSE_TIMES := [0.7, 1.45, 2.2]
+ const ULT_PULSE_RADII := [150.0, 225.0, 300.0]
+@@ -80,6 +85,8 @@ var fireball_sequence := 0
+ var combustion_queue: Array = []
+ var combustion_bursts: Array = []
+ var pending_network_bursts: Array = []
++var skill_burn_hits: Array[Dictionary] = []
++var ultimate_stun_timers: Dictionary = {}
+ var channel_guard_clock := 0.0
+ var skill_cone_event_id := ""
+ 
+@@ -226,6 +233,8 @@ func reset() -> void:
+ 	combustion_queue.clear()
+ 	combustion_bursts.clear()
+ 	pending_network_bursts.clear()
++	skill_burn_hits.clear()
++	ultimate_stun_timers.clear()
+ 	channel_guard_clock = 0.0
+ 	skill_cone_event_id = ""
+ 	for enemy in core.enemies:
+@@ -380,7 +389,9 @@ func _release_ultimate_pulse(pulse_index: int) -> void:
+ func update(delta: float) -> void:
+ 	if not is_configured():
+ 		return
++	_update_ultimate_stun_timers(delta)
+ 	if core.mutation_key == "incendiario":
++		_update_skill_burn_hits(delta)
+ 		_update_cast(delta)
+ 		_update_ultimate_cast(delta)
+ 		_update_spin(delta)
+@@ -767,10 +778,53 @@ func _apply_flame_cone(origin: Vector2, direction: Vector2) -> void:
+ 		var distance := origin.distance_to(enemy_pos)
+ 		var ratio := clampf(distance / core.HENRY_SKILL_RANGE, 0.0, 1.0)
+ 		var damage_mult := lerpf(SKILL_NEAR_DAMAGE_MULT, SKILL_FAR_DAMAGE_MULT, ratio)
+-		core._damage_enemy(enemy, core.player_damage * damage_mult, "henry_flame_cone", true, true, origin, "skill_q")
++		_queue_skill_burn_hits("enemy", enemy, core.player_damage * damage_mult, origin)
+ 	if core.boss_active and core.boss_hp > 0.0 and _inside_cone(origin, direction, core.boss_pos):
+ 		var boss_ratio := clampf(origin.distance_to(core.boss_pos) / core.HENRY_SKILL_RANGE, 0.0, 1.0)
+-		core._damage_boss(core.player_damage * lerpf(SKILL_NEAR_DAMAGE_MULT, SKILL_FAR_DAMAGE_MULT, boss_ratio), "henry_flame_cone", true, true, "skill_q", origin)
++		_queue_skill_burn_hits("boss", {}, core.player_damage * lerpf(SKILL_NEAR_DAMAGE_MULT, SKILL_FAR_DAMAGE_MULT, boss_ratio), origin)
++
++
++func _queue_skill_burn_hits(kind: String, target: Dictionary, total_damage: float, origin: Vector2) -> void:
++	var entry: Dictionary = {
++		"kind": kind,
++		"target": target,
++		"damage": total_damage / float(SKILL_BURN_HIT_COUNT),
++		"remaining": SKILL_BURN_HIT_COUNT,
++		"clock": 0.0,
++		"origin": origin,
++	}
++	if not _apply_skill_burn_hit(entry):
++		return
++	entry["remaining"] = SKILL_BURN_HIT_COUNT - 1
++	entry["clock"] = SKILL_BURN_HIT_INTERVAL
++	skill_burn_hits.append(entry)
++
++
++func _update_skill_burn_hits(delta: float) -> void:
++	for entry in skill_burn_hits:
++		entry["clock"] = float(entry.get("clock", 0.0)) - maxf(0.0, delta)
++		while int(entry.get("remaining", 0)) > 0 and float(entry.get("clock", 0.0)) <= 0.0001:
++			if not _apply_skill_burn_hit(entry):
++				entry["remaining"] = 0
++				break
++			entry["remaining"] = int(entry["remaining"]) - 1
++			entry["clock"] = float(entry["clock"]) + SKILL_BURN_HIT_INTERVAL
++	skill_burn_hits = skill_burn_hits.filter(func(entry: Dictionary): return int(entry.get("remaining", 0)) > 0)
++
++
++func _apply_skill_burn_hit(entry: Dictionary) -> bool:
++	var damage := float(entry.get("damage", 0.0))
++	var origin := Vector2(entry.get("origin", core.player_pos))
++	if String(entry.get("kind", "")) == "boss":
++		if not core.boss_active or core.boss_hp <= 0.0:
++			return false
++		core._damage_boss(damage, "henry_flame_cone", true, true, "skill_q", origin)
++		return true
++	var target: Dictionary = entry.get("target", {})
++	if target.is_empty() or float(target.get("hp", 0.0)) <= 0.0:
++		return false
++	core._damage_enemy(target, damage, "henry_flame_cone", true, true, origin, "skill_q")
++	return true
+ 
+ 
+ func _apply_skill_guard_burst(center: Vector2) -> void:
+@@ -813,6 +867,41 @@ func _apply_heat_wave(center: Vector2, radius: float = -1.0) -> void:
+ 		core._damage_boss(core.player_damage * ULTIMATE_DAMAGE_MULT, "henry_heat_wave", true, true, "skill_e", center)
+ 
+ 
++func _refresh_ultimate_stun(target: Dictionary) -> void:
++	if target.is_empty() or float(target.get("hp", 0.0)) <= 0.0:
++		return
++	target["stun"] = maxf(float(target.get("stun", 0.0)), ULTIMATE_STUN_DURATION)
++	ultimate_stun_timers[_ultimate_stun_key(target)] = ULTIMATE_STUN_DURATION
++	target.erase("henry_knockback_velocity")
++
++
++func _ultimate_can_stun(target: Dictionary, boss_target: bool) -> bool:
++	if boss_target or target.is_empty():
++		return false
++	if target == core.arauto:
++		return true
++	return not bool(target.get("boss", false)) and not bool(target.get("is_boss", false))
++
++
++func _ultimate_stun_key(target: Dictionary) -> String:
++	if target == core.arauto:
++		return "arauto"
++	return "enemy:%d" % int(target.get("uid", hash(target)))
++
++
++func _ultimate_stun_active(target: Dictionary) -> bool:
++	return float(ultimate_stun_timers.get(_ultimate_stun_key(target), 0.0)) > 0.0
++
++
++func _update_ultimate_stun_timers(delta: float) -> void:
++	for key in ultimate_stun_timers.keys():
++		var remaining := maxf(0.0, float(ultimate_stun_timers[key]) - maxf(0.0, delta))
++		if remaining <= 0.0:
++			ultimate_stun_timers.erase(key)
++		else:
++			ultimate_stun_timers[key] = remaining
++
++
+ func apply_heat_wave_push(target: Dictionary, center: Vector2, source: String = "henry_heat_wave") -> void:
+ 	if target.is_empty():
+ 		return
+@@ -826,6 +915,9 @@ func apply_heat_wave_push(target: Dictionary, center: Vector2, source: String =
+ 
+ ## Todo empurrao do Henry Incendiario tambem aplica lentidao.
+ func _push_and_slow(target: Dictionary, push_dir: Vector2, speed: float) -> void:
++	if _ultimate_stun_active(target):
++		target.erase("henry_knockback_velocity")
++		return
+ 	var current := Vector2(target.get("henry_knockback_velocity", Vector2.ZERO))
+ 	target["henry_knockback_velocity"] = (current + push_dir * speed).limit_length(KNOCKBACK_MAX_SPEED)
+ 	target["evolution_slow"] = maxf(float(target.get("evolution_slow", 0.0)), PUSH_SLOW_TIME)
+@@ -1028,6 +1120,8 @@ func _clear_burn(enemy: Dictionary) -> void:
+ func on_damage_dealt(target: Dictionary, source: String, source_damage: float, source_peer_id: int, boss_target: bool) -> void:
+ 	if source == "henry_true_fire":
+ 		return
++	if source == "henry_heat_wave" and _ultimate_can_stun(target, boss_target):
++		_refresh_ultimate_stun(target)
+ 	if source == "henry_spark":
+ 		var normalized_damage := source_damage / SPARK_DAMAGE_MULT
+ 		if boss_target:
+diff --git a/tests/catalog_interface_visual_smoke.gd b/tests/catalog_interface_visual_smoke.gd
+index 07d9814..efcabec 100644
+--- a/tests/catalog_interface_visual_smoke.gd
++++ b/tests/catalog_interface_visual_smoke.gd
+@@ -59,6 +59,22 @@ func _run() -> void:
+ 	game.mode = "catalog"
+ 	game.ui_platform_override_unlocked = true
+ 	game.content_unread_ids = {"catalog_manifestation:eletrica": true, "catalog_spectrum:impulsiva": true}
++	var expected_boss_art := {
++		"nevasca": "res://assets/sprites/boss2_remaster/idle/idle_01.png",
++		"pai_rato": "res://assets/sprites/boss3/remake/idle/idle_01.png",
++		"umbra": "res://assets/sprites/umbra_v3/idle_01.png",
++		"matriarca_chaga": "res://assets/sprites/boss6_rework/boss6_idle_00.png",
++	}
++	for category in [1, 2]:
++		game._catalog_reset_tab(category)
++		for item in game._catalog_items():
++			var portrait: Texture2D = UI.texture_for(game, item)
++			_check(portrait != null, "missing catalog art for " + String(item.get("id", "")))
++			var item_id: String = String(item.get("id", ""))
++			if expected_boss_art.has(item_id) and portrait != null:
++				_check(portrait.resource_path == expected_boss_art[item_id], "outdated boss art for " + item_id)
++			if String(item.get("id", "")) in ["sineiro_boreal", "suturador_ambar"] and portrait != null:
++				_check(portrait is AtlasTexture, "catalog displayed a full animation sheet")
+ 	for viewport in [Vector2i(1280, 720), Vector2i(960, 540)]:
+ 		root.size = viewport
+ 		game.ui_platform_override = "desktop" if viewport.x == 1280 else "android"
+diff --git a/tests/henry_incendiary_smoke.gd b/tests/henry_incendiary_smoke.gd
+index 8825e7d..9f7461c 100644
+--- a/tests/henry_incendiary_smoke.gd
++++ b/tests/henry_incendiary_smoke.gd
+@@ -223,22 +223,37 @@ func _run() -> void:
+ 	game.henry_incendiary_ability_controller.update(game.HENRY_SKILL_IMPACT_TIME - 0.01)
+ 	_check(is_equal_approx(float(near_target["hp"]), near_hp), "cone dealt damage before its animation impact")
+ 	game.henry_incendiary_ability_controller.update(0.02)
+-	var near_damage := near_hp - float(near_target["hp"])
+-	var far_damage := far_hp - float(far_target["hp"])
+-	_check(near_damage > far_damage and far_damage > 0.0, "cone did not scale damage from near to far")
++	var far_first_tick_damage := far_hp - float(far_target["hp"])
++	_check(far_first_tick_damage > 0.0 and far_first_tick_damage < game.player_damage * 0.35, "cone did not begin with a small burn hit")
+ 	_check(is_equal_approx(float(outside_cone["hp"]), outside_hp), "cone damaged a target outside its angle")
+-	_check(int(near_target.get("henry_burn_stacks", 0)) == 0 and near_damage > game.player_damage * 2.0, "cone did not consume stacks into bonus true damage")
++	_check(int(near_target.get("henry_burn_stacks", 0)) == 0, "first cone burn hit did not consume existing stacks")
+ 	_check(float(guard_target["hp"]) < guard_hp, "HAB1 defensive explosions did not damage a target behind Henry")
+ 	_check(Vector2(guard_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "HAB1 defensive explosions did not start progressive knockback")
+-	_check(Vector2(guard_target["pos"]).distance_to(guard_pos) < 10.0, "HAB1 knockback snapped its target instead of advancing by frame time")
+-	game.henry_incendiary_ability_controller.update(0.08)
++	_check(Vector2(guard_target["pos"]).distance_to(guard_pos) < 16.0, "HAB1 knockback exceeded its frame-time movement bound")
++	var previous_far_hp := float(far_target["hp"])
++	for burn_hit in range(game.henry_incendiary_ability_controller.SKILL_BURN_HIT_COUNT - 1):
++		game.henry_incendiary_ability_controller.update(game.henry_incendiary_ability_controller.SKILL_BURN_HIT_INTERVAL)
++		_check(float(far_target["hp"]) < previous_far_hp, "cone burn hit %d did not deal damage" % (burn_hit + 2))
++		previous_far_hp = float(far_target["hp"])
++	var near_damage := near_hp - float(near_target["hp"])
++	var far_damage := far_hp - float(far_target["hp"])
++	_check(near_damage > far_damage and far_damage > game.player_damage * 0.75, "cone burn did not preserve high near-to-far total damage")
++	_check(absf(far_damage - far_first_tick_damage * game.henry_incendiary_ability_controller.SKILL_BURN_HIT_COUNT) < 0.01, "cone burn changed its total base damage while splitting the hit")
++	_check(near_damage > game.player_damage * 2.0, "cone burn did not preserve stack breach damage")
++	_check(game.henry_incendiary_ability_controller.skill_burn_hits.is_empty(), "cone burn left pending hits after the fifth impact")
+ 	_check(Vector2(guard_target["pos"]).distance_to(guard_pos) > 2.0, "HAB1 knockback did not move naturally over time")
+ 	game.henry_incendiary_ability_controller.update(game.HENRY_SKILL_CAST_DURATION)
+ 	_check(not game.henry_skill_cast_active, "one-second cast did not finish")
+ 
+ 	game.enemies.clear()
+-	var burning_target := _spawn_target(game.player_pos + Vector2(90.0, 0.0))
++	var burning_target := _spawn_target(game.player_pos + Vector2(50.0, 0.0))
+ 	var fresh_target := _spawn_target(game.player_pos + Vector2(-110.0, 0.0))
++	var mini_boss_target := _spawn_target(game.player_pos + Vector2(0.0, -120.0), 3000.0)
++	mini_boss_target["is_mini_boss"] = true
++	mini_boss_target["mini_boss"] = true
++	var full_boss_like := _spawn_target(game.player_pos + Vector2(0.0, 130.0), 3000.0)
++	full_boss_like["is_boss"] = true
++	full_boss_like["boss"] = true
+ 	var outside_wave := _spawn_target(game.player_pos + Vector2(game.HENRY_ULTIMATE_RADIUS + 25.0, 0.0))
+ 	for stack_index in range(5):
+ 		game._damage_enemy(burning_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack")
+@@ -264,27 +279,38 @@ func _run() -> void:
+ 	_check(game.henry_heat_waves.filter(func(w): return String(w.get("kind", "")) == "ultimate").size() == 1, "heat wave was not created after the release frame")
+ 	_check(Vector2(burning_target["pos"]).distance_to(burning_pos) < 10.0, "heat wave snapped a burning target instead of applying force")
+ 	_check(Vector2(fresh_target["pos"]).distance_to(fresh_pos) < 10.0, "heat wave snapped a fresh target instead of applying force")
+-	_check(Vector2(burning_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "heat wave did not apply progressive force")
+-	_check(int(burning_target.get("henry_burn_stacks", 0)) == 0, "first ultimate pulse did not consume five stacks")
++	_check(float(fresh_target.get("stun", 0.0)) >= game.henry_incendiary_ability_controller.ULTIMATE_STUN_DURATION - 0.001, "first ultimate hit did not stun a common enemy for 900ms")
++	_check(float(mini_boss_target.get("stun", 0.0)) >= game.henry_incendiary_ability_controller.ULTIMATE_STUN_DURATION - 0.001, "first ultimate hit did not stun a mini boss for 900ms")
++	_check(float(full_boss_like.get("stun", 0.0)) <= 0.0, "ultimate stunned a full boss")
++	_check(not burning_target.has("henry_knockback_velocity"), "ultimate stun left its target sliding on the ground")
++	_check(int(burning_target.get("henry_burn_stacks", 0)) == 0, "first ultimate pulse did not consume five stacks (stacks=%d distance=%.1f hp=%.1f)" % [int(burning_target.get("henry_burn_stacks", 0)), Vector2(burning_target["pos"]).distance_to(game.player_pos), float(burning_target["hp"])])
++	var stunned_pos := Vector2(burning_target["pos"])
+ 	game.henry_incendiary_ability_controller.update(0.10)
+-	_check(Vector2(burning_target["pos"]).distance_to(burning_pos) > 4.0, "heat wave force did not advance naturally")
++	_check(Vector2(burning_target["pos"]).distance_to(stunned_pos) < 0.1, "stunned target kept moving after the ultimate hit")
+ 	_check(is_equal_approx(float(outside_wave["hp"]), outside_wave_hp), "heat wave exceeded its 280px radius")
+ 	_check(game.henry_incendiary_ability_controller.ultimate_frame(8) == 7, "first impact frame is not the burst pose")
++	fresh_target["stun"] = 0.1
++	game.henry_incendiary_ability_controller.update(float(game.henry_incendiary_ability_controller.ULT_PULSE_TIMES[1]) - game.henry_ultimate_cast_elapsed + 0.01)
++	_check(float(fresh_target.get("stun", 0.0)) >= game.henry_incendiary_ability_controller.ULTIMATE_STUN_DURATION - 0.001, "second ultimate hit did not reset the 900ms stun")
++	fresh_target["stun"] = 0.1
++	game.henry_incendiary_ability_controller.update(float(game.henry_incendiary_ability_controller.ULT_PULSE_TIMES[2]) - game.henry_ultimate_cast_elapsed + 0.01)
++	_check(float(fresh_target.get("stun", 0.0)) >= game.henry_incendiary_ability_controller.ULTIMATE_STUN_DURATION - 0.001, "third ultimate hit did not reset the 900ms stun")
+ 	game.henry_incendiary_ability_controller.update(game.henry_incendiary_ability_controller.ULT_TOTAL)
+ 	_check(not game.henry_ultimate_cast_active, "ultimate did not finish its 2.55s timeline")
+ 	_check(game.henry_ultimate_pulses_released == game.HENRY_ULTIMATE_PULSE_COUNT, "ultimate did not release exactly three explosions")
+ 	game.enemies.clear()
+ 	var remote_target := _spawn_target(game.player_pos + Vector2(96.0, 0.0))
+-	var remote_start := Vector2(remote_target["pos"])
+ 	for stack_index in range(5):
+ 		game._damage_enemy(remote_target, 10.0, "henry_spark", false, false, game.player_pos, "basic_attack", 22, "incendiario")
+ 	_check(int(remote_target.get("henry_burn_source_peer", 0)) == 22 and int(remote_target.get("henry_burn_stacks", 0)) == 5, "authority lost remote Henry's burn stack owner")
+ 	var remote_hp_before_wave := float(remote_target["hp"])
+ 	game._damage_enemy(remote_target, 25.0, "henry_heat_wave", false, false, game.player_pos, "skill_e", 22, "incendiario")
+ 	_check(int(remote_target.get("henry_burn_stacks", 0)) == 0 and remote_hp_before_wave - float(remote_target["hp"]) > 25.0, "authority did not consume remote Henry's stacks into true damage")
+-	_check(Vector2(remote_target.get("henry_knockback_velocity", Vector2.ZERO)).length() > 0.0, "authority did not create remote Henry's progressive push")
++	_check(float(remote_target.get("stun", 0.0)) >= game.henry_incendiary_ability_controller.ULTIMATE_STUN_DURATION - 0.001, "authority did not apply remote Henry's 900ms stun")
++	_check(not remote_target.has("henry_knockback_velocity"), "remote Henry's stunned target kept progressive push")
++	var remote_stunned_pos := Vector2(remote_target["pos"])
+ 	game.henry_incendiary_ability_controller.update(0.1)
+-	_check(Vector2(remote_target["pos"]).distance_to(remote_start) > 4.0, "remote Henry heat wave force did not advance")
++	_check(Vector2(remote_target["pos"]).distance_to(remote_stunned_pos) < 0.1, "remote Henry's stunned target moved on the authority")
+ 
+ 	# Rework: Rastro de Brasa (investida curta que deixa o chao em chamas).
+ 	game.enemies.clear()
+@@ -485,7 +511,7 @@ func _run() -> void:
+ 	game._open_specter_upgrade("victory", true)
+ 	_check(game.mode == "victory", "Henry was incorrectly routed into Geovana's Specter upgrade")
+ 
+-	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off passive=combustion_chain fireball=combo3_aoe combo=1-2-3 burn=5_stacks true=max_hp_armor_bypass hab1=guard_bursts_progressive_push ultimate=3_impacts_timeline dash=ember_trail_300px_0.32s multiplayer_identity=true vfx_idempotent=true retry=true")
++	print("HENRY_INCENDIARY_SMOKE_OK cheat=HENRYP intro=12_scaled idle=pocket_tap beard=7s_random_side dialogue=off passive=combustion_chain fireball=combo3_aoe combo=1-2-3 burn=5_stacks true=max_hp_armor_bypass hab1=5_burn_hits_320ms_high_total ultimate=3_impacts_stun_900ms_refresh dash=ember_trail_300px_0.32s multiplayer_identity=true vfx_idempotent=true retry=true")
+ 	_cleanup(0)
+ 
+ 
+diff --git a/tests/map_props_collision_smoke.gd b/tests/map_props_collision_smoke.gd
+index 67ae9c6..0f40584 100644
+--- a/tests/map_props_collision_smoke.gd
++++ b/tests/map_props_collision_smoke.gd
+@@ -3,6 +3,7 @@ extends SceneTree
+ ## Fisica dos objetos do mapa (RTMapPropColliders, SDF por atlas) em todas as fases
+ ## que tem objetos solidos. Com "capture" nos argumentos salva prints com o contorno.
+ const PHASES := {2: [0, 10, 12, 14], 6: [0, 7, 12, 15], 7: [3, 8, 11, 15], 8: [1, 3, 9, 11]}
++const SOLID_TILE_COUNTS := {2: 10, 6: 6, 7: 7, 8: 9}
+ var game: Node
+ var failed := false
+ var shots := 0
+@@ -49,6 +50,7 @@ func _run() -> void:
+ 	var capture := "capture" in OS.get_cmdline_user_args()
+ 	game.startup_thanks_done = true
+ 	game._start_game()
++	game.gfx_low_resource = "--low" in OS.get_cmdline_user_args()
+ 	for phase in PHASES.keys():
+ 		game._story().queue.clear()
+ 		game._advance_to_phase(phase)
+@@ -56,7 +58,11 @@ func _run() -> void:
+ 		game.mode = "game"
+ 		game.enemies.clear()
+ 		_check(RTMapPropColliders.active(game), "fisica inativa na fase %d" % phase)
++		_check(RTMapPropPresentation.supported(game), "camada elevada inativa na fase %d" % phase)
++		var solid_tiles: Array[int] = RTMapPropPresentation.solid_tiles(game)
++		_check(solid_tiles.size() == int(SOLID_TILE_COUNTS[phase]), "fase %d nao cobriu todos os ladrilhos solidos" % phase)
+ 		for tile in PHASES[phase]:
++			_check(tile in solid_tiles, "fase %d ladrilho %d colide sem relevo" % [phase, tile])
+ 			var cell := _find_cell(tile)
+ 			if cell.x < 0:
+ 				_check(false, "fase %d ladrilho %d nao encontrado" % [phase, tile])
+@@ -89,6 +95,7 @@ func _run() -> void:
+ 	# Fases de piso liso nao tem fisica de objetos.
+ 	game._advance_to_phase(3)
+ 	_check(not RTMapPropColliders.active(game), "fase 3 nao deveria ter objetos solidos")
++	_check(not RTMapPropPresentation.supported(game), "fase 3 ganhou relevo sem colisao")
+ 	if not failed:
+ 		print("MAP_PROPS_SMOKE_OK shots=%d" % shots)
+ 	quit(1 if failed else 0)
+@@ -98,6 +105,10 @@ func _shot(phase: int, tile: int) -> void:
+ 	game.camera_follow_initialized = false
+ 	for i in range(6):
+ 		await process_frame
++	if "--flat-props" in OS.get_cmdline_user_args():
++		var prop_layer := game.get_node_or_null("MapPropLayer") as RTMapPropPresentation
++		if prop_layer != null:
++			prop_layer.modulate.a = 0.0
+ 	game.queue_redraw()
+ 	await RenderingServer.frame_post_draw
+ 	root.get_texture().get_image().save_png("res://.codex/phase8/coll_%d_%d.png" % [phase, tile])
+diff --git a/tests/pause_cronomante_larapio_smoke.gd b/tests/pause_cronomante_larapio_smoke.gd
+index 2526372..f9f14f4 100644
+--- a/tests/pause_cronomante_larapio_smoke.gd
++++ b/tests/pause_cronomante_larapio_smoke.gd
+@@ -1,6 +1,7 @@
+ extends SceneTree
+ 
+ var game: Node
++var failed := false
+ 
+ 
+ func _initialize() -> void:
+@@ -13,7 +14,7 @@ func _expect(ok: bool, message: String) -> void:
+ 	if ok:
+ 		return
+ 	printerr("PAUSE_CRONOMANTE_LARAPIO_SMOKE_FAIL " + message)
+-	quit(1)
++	failed = true
+ 
+ 
+ func _run() -> void:
+@@ -25,15 +26,25 @@ func _run() -> void:
+ 		game.music_player.play()
+ 	game.music_player.seek(6.0)
+ 	var paused_at: float = game.music_player.get_playback_position()
++	_expect(paused_at >= 5.5, "test_music_seek_failed")
+ 	game._begin_pause_music_fade_out()
+ 	_expect(game.music_paused_by_pause, "music_not_marked_paused")
+ 	_expect(game.music_player.stream_paused, "stream_not_paused")
++	_expect(game.music_player.get_playback_position() >= paused_at - 0.30, "music_position_lost_during_pause")
+ 	game._begin_pause_music_fade_in()
+ 	_expect(game.music_pause_fade_mode == "in", "fade_in_not_started")
+ 	_expect(not game.music_player.stream_paused, "stream_still_paused")
+ 	_expect(game.music_player.get_playback_position() >= paused_at - 0.30, "music_resume_restarted_track")
+ 	game._update_music_pause_fade(3.1)
+ 	_expect(game.music_pause_fade_mode == "", "fade_in_not_finished")
++	for cycle in range(2):
++		var before_cycle: float = game.music_player.get_playback_position()
++		game._apply_pause_state(true)
++		_expect(game.mode == "paused" and game.music_player.stream_paused, "pause_cycle_%d_failed" % cycle)
++		game._apply_pause_state(false)
++		_expect(game.mode == "game", "resume_cycle_%d_failed" % cycle)
++		_expect(game.music_player.get_playback_position() >= before_cycle - 0.30, "music_restart_on_pause_cycle_%d" % cycle)
++		game._update_music_pause_fade(3.1)
+ 
+ 	game.boss_active = true
+ 	game.boss_hp = game.boss_hp_max * 0.25
+@@ -92,5 +103,6 @@ func _run() -> void:
+ 	var new_corner_pos: Vector2 = corner_larapio["pos"]
+ 	_expect(new_corner_pos.x > old_corner_pos.x and new_corner_pos.y > old_corner_pos.y, "larapio_did_not_leave_corner")
+ 
+-	print("PAUSE_CRONOMANTE_LARAPIO_SMOKE_OK fade=true rewind_feedback=true larapio_steal_loot=true")
+-	quit(0)
++	if not failed:
++		print("PAUSE_CRONOMANTE_LARAPIO_SMOKE_OK fade=true rewind_feedback=true larapio_steal_loot=true")
++	quit(1 if failed else 0)
+diff --git a/tools/umbra_mind_collect.gd b/tools/umbra_mind_collect.gd
+index 0e95bf7..f26eee7 100644
+--- a/tools/umbra_mind_collect.gd
++++ b/tools/umbra_mind_collect.gd
+@@ -13,7 +13,9 @@ const DT := 1.0 / 30.0
+ const WINDOW := 3.0
+ 
+ var game: Node
+-var args := {"budget": 150, "seconds": 45.0, "epsilon": 0.3, "seed": 1, "out": "res://.agent_logs/umbra_train/samples.jsonl", "lead_jitter": 0.25, "nomind": 0, "episodes": 0}
++var args := {"budget": 150, "seconds": 45.0, "epsilon": 0.3, "seed": 1, "out": "res://.agent_logs/umbra_train/samples.jsonl", "lead_jitter": 0.25, "nomind": 0, "episodes": 0, "mind": ""}
++var candidate: Dictionary = {}
++var candidate_sha256 := ""
+ 
+ 
+ func _initialize() -> void:
+@@ -24,22 +26,47 @@ func _initialize() -> void:
+ 			match kv[0]:
+ 				"seconds", "epsilon", "lead_jitter":
+ 					args[kv[0]] = float(kv[1])
+-				"out":
++				"out", "mind":
+ 					args[kv[0]] = kv[1]
+ 				_:
+ 					args[kv[0]] = int(kv[1])
+ 	RTUmbraMind.training_mode = true
++	if String(args["mind"]) != "":
++		var path := String(args["mind"])
++		var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
++		if not parsed is Dictionary or not _valid_candidate(parsed) or int(args["nomind"]) != 0:
++			push_error("UMBRA_COLLECT: invalid candidate or conflicting --nomind")
++			quit(2)
++			return
++		candidate = parsed
++		candidate_sha256 = FileAccess.get_sha256(path)
+ 	game = load("res://scenes/Main.tscn").instantiate()
+ 	game.orientation_poll_timer = 9999.0
+ 	root.add_child(game)
++	# A laboratory episode must never start a ranked security/upload session.
++	game.set_process(false)
++	game.set_physics_process(false)
++	game.run_security_start_request = null
++	game.run_report_request = null
++	game.run_leaderboard_request = null
+ 	call_deferred("_run")
+ 
+ 
+ func _run() -> void:
+ 	await process_frame
++	# Main._ready can run after SceneTree._initialize; isolate after readiness.
++	game.set_process(false)
++	game.set_physics_process(false)
++	game.run_security_start_request = null
++	game.run_report_request = null
++	game.run_leaderboard_request = null
+ 	var out_path: String = ProjectSettings.globalize_path(String(args["out"]))
+ 	DirAccess.make_dir_recursive_absolute(out_path.get_base_dir())
+ 	var file := FileAccess.open(out_path, FileAccess.WRITE)
++	if file == null:
++		push_error("UMBRA_COLLECT: cannot open output")
++		quit(2)
++		return
+ 	var r := RandomNumberGenerator.new()
+ 	r.seed = int(args["seed"])
+ 	var t0 := Time.get_ticks_msec()
+@@ -61,11 +88,20 @@ func _run() -> void:
+ 		row["shots"] = int(row["shots"]) + int(res["shots"])
+ 		row["hits"] = int(row["hits"]) + int(res["hits"])
+ 		summary["lead"][lk] = row
+-		file.store_line(JSON.stringify({"episode": ep_seed, "lead": res["lead"], "shots": res["shots"], "plasma_hits": res["hits"], "dead": res["dead"], "t": res["t"]}))
++		res["episode"] = ep_seed
++		res["plasma_hits"] = res["hits"]
++		res["record_type"] = "episode"
++		res["opponent"] = "godot_exhibition_heuristic_not_python_dqn"
++		res["candidate_sha256"] = candidate_sha256
++		res["policy_source"] = "candidate" if not candidate.is_empty() else ("zero" if int(args["nomind"]) > 0 else "bundled_base")
++		file.store_line(JSON.stringify(res))
+ 		episodes += 1
+ 	file.close()
+ 	print("UMBRA_EVAL episodes=%d mean_dealt=%.4f mean_taken=%.4f kills=%d score=%.4f" % [episodes, tot_dealt / maxf(1.0, episodes), tot_taken / maxf(1.0, episodes), kills, (10.0 * tot_dealt - 30.0 * tot_taken) / maxf(1.0, episodes)])
+ 	print("UMBRA_COLLECT episodes=%d samples=%d secs=%d lead=%s" % [episodes, samples, (Time.get_ticks_msec() - t0) / 1000, JSON.stringify(summary["lead"])])
++	game._cleanup_runtime_resources()
++	root.remove_child(game)
++	game.free()
+ 	quit(0)
+ 
+ 
+@@ -75,6 +111,10 @@ func _episode(seed: int, r: RandomNumberGenerator, file: FileAccess) -> Dictiona
+ 	var manif: int = opp.randi_range(0, 5)
+ 	game.rng.seed = seed
+ 	game.start_apolo_phase5_exhibition(manif)
++	if game._tutorial_active():
++		game._finish_tutorial(false)
++	game.shop_auto_enabled = false
++	game.run_report_sent = true
+ 	game.set_process(false)
+ 	game.set_physics_process(false)
+ 	game.mode = "game"
+@@ -86,6 +126,14 @@ func _episode(seed: int, r: RandomNumberGenerator, file: FileAccess) -> Dictiona
+ 	mind.load_layers(false)
+ 	if int(args["nomind"]) > 0:
+ 		mind.reset_weights()
++	elif not candidate.is_empty():
++		mind.reset_weights()
++		mind.apply_layer(candidate, 1.0)
++		mind.version = String(candidate.get("version", "candidate"))
++	# Isolate the fitted linear mind: a production neural policy may override it.
++	game.boss5_multihead_policy = null
++	game.boss5_dqn_weights.clear()
++	game.boss5_neural_runtime = null
+ 	var lead: float = clampf(mind.aim_lead + snappedf(opp.randf_range(-1.0, 1.0) * float(args["lead_jitter"]), 0.05), 0.2, 1.1)
+ 	mind.aim_lead = lead
+ 	RTUmbraMind.explore_epsilon = float(args["epsilon"])
+@@ -100,6 +148,7 @@ func _episode(seed: int, r: RandomNumberGenerator, file: FileAccess) -> Dictiona
+ 	game.player_damage = float(game.boss_hp_max) / ttk * interval / 0.55
+ 	var hp_max: float = float(game.player_hp_max)
+ 	var boss_max: float = float(game.boss_hp_max)
++	var simulation_start: float = float(game.time_alive)
+ 	var limit: int = int(float(args["seconds"]) / DT)
+ 	var pending: Array = []
+ 	var dealt_acc := 0.0
+@@ -108,6 +157,8 @@ func _episode(seed: int, r: RandomNumberGenerator, file: FileAccess) -> Dictiona
+ 	var samples := 0
+ 	var shots := 0
+ 	var hits := 0
++	var action_counts: Dictionary = {}
++	var bonus_l1 := 0.0
+ 	# Bot "humano": de vez em quando demora a reagir (fica parado ~0,4 s).
+ 	var skill: float = opp.randf_range(0.5, 0.95)
+ 	var freeze := 0
+@@ -116,6 +167,12 @@ func _episode(seed: int, r: RandomNumberGenerator, file: FileAccess) -> Dictiona
+ 		var hp_b: float = float(game.player_hp)
+ 		var boss_b: float = float(game.boss_hp)
+ 		var feats: PackedFloat32Array = mind.features().duplicate()
++		for action in RTUmbraMind.ACTIONS:
++			var bonus := 0.0
++			var row: Array = mind.weights[action]
++			for i in range(feats.size()):
++				bonus += float(row[i]) * feats[i]
++			bonus_l1 += absf(clampf(bonus, -RTUmbraMind.MAX_BONUS, RTUmbraMind.MAX_BONUS))
+ 		if freeze > 0:
+ 			freeze -= 1
+ 			if freeze == 0:
+@@ -140,6 +197,7 @@ func _episode(seed: int, r: RandomNumberGenerator, file: FileAccess) -> Dictiona
+ 		if seq != last_seq:
+ 			last_seq = seq
+ 			var action: String = String(game.boss5_current_action)
++			action_counts[action] = int(action_counts.get(action, 0)) + 1
+ 			if action == "ATAQUE":
+ 				shots += 1
+ 			if RTUmbraMind.ACTIONS.has(action):
+@@ -151,7 +209,32 @@ func _episode(seed: int, r: RandomNumberGenerator, file: FileAccess) -> Dictiona
+ 		_flush(file, p, dealt_acc, taken_acc, seed)
+ 		samples += 1
+ 	RTUmbraMind.explore_epsilon = 0.0
+-	return {"dealt": dealt_acc, "taken": taken_acc, "samples": samples, "lead": lead, "shots": shots, "hits": hits, "dead": game.is_dead or int(game.player_hp) <= 0, "t": float(frames) * DT}
++	return {"dealt": dealt_acc, "taken": taken_acc, "samples": samples, "lead": lead, "shots": shots, "hits": hits, "dead": game.is_dead or int(game.player_hp) <= 0, "t": float(frames) * DT,
++		"simulation_seconds": float(game.time_alive) - simulation_start,
++		"umbra_dead": float(game.boss_hp) <= 0.0, "player_hp_final": game.player_hp, "boss_hp_final": game.boss_hp,
++		"manifestation_index": manif, "actions": action_counts, "bonus_l1": snappedf(bonus_l1, 0.0001),
++		"score": 10.0 * dealt_acc - 30.0 * taken_acc}
++
++
++func _valid_candidate(data: Dictionary) -> bool:
++	if int(data.get("schema_version", -1)) != RTUmbraMind.SCHEMA_VERSION or Array(data.get("features", [])) != RTUmbraMind.FEATURES:
++		return false
++	if String(data.get("mode", "add")) != "add":
++		return false
++	if data.has("aim_lead"):
++		var aim = data["aim_lead"]
++		if not (aim is float or aim is int) or not is_finite(float(aim)) or float(aim) < 0.2 or float(aim) > 1.1:
++			return false
++	var w: Dictionary = Dictionary(data.get("weights", {}))
++	if w.is_empty():
++		return false
++	for action in w:
++		if not RTUmbraMind.ACTIONS.has(action) or not w[action] is Array or Array(w[action]).size() != RTUmbraMind.FEATURES.size():
++			return false
++		for value in w[action]:
++			if not (value is float or value is int) or not is_finite(float(value)):
++				return false
++	return true
+ 
+ 
+ func _flush(file: FileAccess, p: Dictionary, dealt: float, taken: float, seed: int) -> void:
+diff --git a/tools/umbra_mind_fit.py b/tools/umbra_mind_fit.py
+index 19d6a48..e021ed0 100644
+--- a/tools/umbra_mind_fit.py
++++ b/tools/umbra_mind_fit.py
+@@ -37,6 +37,8 @@ def main():
+     ap.add_argument("--blend", type=float, default=0.6, help="peso do ajuste novo sobre o arquivo atual")
+     ap.add_argument("--min-samples", type=int, default=25)
+     a = ap.parse_args()
++    if not 0.0 < a.blend <= 1.0 or a.min_samples < 2:
++        ap.error("--blend precisa estar em (0, 1] e --min-samples >= 2")
+ 
+     files = []
+     for pattern in a.inputs:
+@@ -68,6 +70,8 @@ def main():
+ 
+     # Vantagem: Q_a(f) - media_b Q_b(f), linear em f.
+     known = list(coef.keys())
++    if len(known) < 2:
++        raise SystemExit("evidencia insuficiente: pelo menos duas acoes precisam atingir --min-samples; nenhum modelo foi escrito")
+     mean_w = np.mean([coef[k] for k in known], axis=0)
+     adv = {k: coef[k] - mean_w for k in known}
+     # Escala: desvio padrao das vantagens nas amostras reais -> TARGET_SPREAD.

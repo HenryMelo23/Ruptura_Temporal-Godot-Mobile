@@ -1,0 +1,13 @@
+{
+  "protocol": "ruptura_umbra_rl",
+  "protocol_version": 2,
+  "curriculum_version": 2,
+  "reward_version": 2,
+  "scenario_id": "lacerante_sanguinaria_strafe",
+  "seed": 919,
+  "max_steps": 12,
+  "step_seconds": 0.12,
+  "policy_mode": "fixed_action",
+  "sample_actions": true,
+  "fixed_action": "ATAQUE"
+}

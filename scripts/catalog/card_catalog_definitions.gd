@@ -1,6 +1,29 @@
 class_name CardCatalogDefinitions
 extends RefCounted
 
+## Nome mostrado ao jogador. O "name" das cartas continua sendo o id interno
+## (saves, texturas card_<name>, lore e regras), entao so a exibicao muda.
+const DISPLAY_NAMES := {
+	"Speed Boost": "Última Corrida",
+	"Porcao": "Coração Piedoso",
+	"Tempestade": "Tempestade da Meia-Noite",
+	"Roubo de Vida": "Centelha Revigorante",
+	"Speed Atack": "Fagulha Acelerada",
+	"Teleporte": "Salto Quântico Dimensional 3000",
+	"Defesa": "Escudo Sinérgico",
+	"Sorte": "Convergência de Oportunidades",
+	"Poison": "Cuspe Sagrado",
+}
+
+
+static func display_name(card_or_id: Variant) -> String:
+	var id: String = normalize_card_id(card_or_id)
+	if DISPLAY_NAMES.has(id):
+		return String(DISPLAY_NAMES[id])
+	if card_or_id is Dictionary:
+		return String(Dictionary(card_or_id).get("name", id))
+	return id
+
 ## Card Categories
 const CATEGORY_DAMAGE: = "damage"
 const CATEGORY_DEFENSE: = "defense"

@@ -173,7 +173,7 @@ func _should_spawn() -> bool:
 	var now: float = float(core.time_alive)
 	if now < float(core.shop_rift_next_allowed_time):
 		return false
-	if core._quantum_chips().corruptor_active() and core._quantum_chips().token_total() > 0:
+	if core._quantum_chips().corruptor_active() and core._quantum_chips().team_token_total() > 0:
 		# Fichas "?" pendentes chamam a fenda (no modo de drop so por elas).
 		if core._is_drop_game_mode() or now - float(core.shop_last_exit_time) >= MIN_GAP_AFTER_SHOP * 0.5:
 			return now - float(core.shop_last_exit_time) >= 10.0
@@ -246,7 +246,7 @@ func _update_active(delta: float) -> void:
 	var current_state: String = String(current.get("state", STATE_OPENING))
 	if current_state == STATE_ENTERED:
 		# Restauracao de partida interrompida ou loja fechada fora do fluxo normal.
-		if core.mode == "game":
+		if core.mode == "game" and not core._rift_transition().busy() and not core._merchant_dimension().active:
 			clear_active()
 		return
 	if bool(current.get("diving", false)):
@@ -311,13 +311,13 @@ func enter() -> bool:
 		# Preserve the one-argument RPC contract used by released clients and the
 		# dedicated relay. Replicas reconstruct the same deterministic bonus from
 		# their last authoritative Rift snapshot before opening the shop.
-		core.rpc("_rpc_trigger_shop", false)
-	if core._corruptor_shop().can_open() and core._corruptor_shop().open():
+		core.rpc("_rpc_trigger_shop", false, Vector2(current.get("pos", core.player_pos)))
+	if not core.is_multiplayer and core._corruptor_shop().can_open() and core._corruptor_shop().open():
 		return true
 	# A fenda nao abre mais uma tela: ela leva a Geovana (e a equipe inteira,
 	# que recebeu o mesmo aviso acima) para dentro da oficina do Mercador.
 	if core._rift_transition().enabled():
-		# Solo: a fenda fica aberta enquanto ela e puxada para dentro; a troca
+		# A fenda fica aberta enquanto o jogador e puxado; a troca
 		# para a oficina acontece no fim do mergulho (RTMerchantRiftTransition).
 		current["state"] = STATE_OPEN
 		current["diving"] = true

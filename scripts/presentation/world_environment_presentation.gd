@@ -385,6 +385,8 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 			RTBoss7Presentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
 		elif game.current_phase == RTSertaoController.PHASE:
 			RTSertaoPresentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
+		elif game.current_phase == RTCriptaController.PHASE:
+			RTCriptaPresentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
 		else:
 			game._draw_entity_fit(boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate, true)
 	if game.current_phase == 6 and Boss6AnimationPresentation.sink(game) < 0.35:
@@ -392,8 +394,8 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_boss6_smoke_shield(boss_draw_pos - camera, boss_draw_size)
 		game._draw_boss6_rotating_barrier(boss_draw_pos - camera)
 	if not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar() and boss2_reveal > 0.6:
-		var boss_bar_width = 240.0 if game.current_phase == 8 else 168.0 if game.current_phase == 7 else (232.0 if game.current_phase == 6 else (220.0 if game.current_phase == 4 else (66.0 if game.current_phase == 5 else 148.0)))
-		var bar_color = Color(1.0, 0.78, 0.3) if game.current_phase == 8 else Color(1.0, 0.46, 0.08) if game.current_phase == 7 else (Color(1.0, 0.58, 0.16) if game.current_phase == 6 else (Color(0.24, 1.0, 0.42) if game.current_phase == 5 else (Color(1.0, 0.62, 0.08) if game.current_phase == 4 else Color(1.0, 0.12, 0.22))))
+		var boss_bar_width = 240.0 if game.current_phase >= 8 else 168.0 if game.current_phase == 7 else (232.0 if game.current_phase == 6 else (220.0 if game.current_phase == 4 else (66.0 if game.current_phase == 5 else 148.0)))
+		var bar_color = Color(1.0, 0.3, 0.35) if game.current_phase == 9 else Color(1.0, 0.78, 0.3) if game.current_phase == 8 else Color(1.0, 0.46, 0.08) if game.current_phase == 7 else (Color(1.0, 0.58, 0.16) if game.current_phase == 6 else (Color(0.24, 1.0, 0.42) if game.current_phase == 5 else (Color(1.0, 0.62, 0.08) if game.current_phase == 4 else Color(1.0, 0.12, 0.22))))
 		var boss_bar_pos: Vector2 = boss_draw_pos - camera + Vector2(-boss_bar_width * 0.5, -boss_draw_size.y * (0.4 if game.current_phase == 4 else (0.8 if game.current_phase == 6 else 0.54)))
 		game._draw_bar(boss_bar_pos, boss_bar_width, game.boss_hp / game.boss_hp_max, bar_color)
 		if game.current_phase == 6:
@@ -959,6 +961,8 @@ static func _draw_phase5_environment(game: Node2D, camera: Vector2) -> void :
 						else:
 							game.draw_rect(Rect2(p_pos - Vector2(3, 3), Vector2(6, 6)), Color(0.6, 0.92, 1.0, 0.85 * fade), true)
 							game.draw_rect(Rect2(p_pos - Vector2(1, 4), Vector2(2, 8)), Color(1.0, 1.0, 1.0, 0.95 * fade), true)
+			"missa":
+				RTUmbraNecrosePresentation.draw_floor(game, hazard, camera)
 			"miasma", "siphon":
 				var pos = Vector2(hazard.get("pos", game.boss_pos)) - camera
 				var radius = float(hazard.get("radius", 160.0))
@@ -2591,7 +2595,7 @@ static func _draw_phase_mp_request(game: Node2D, viewport: Vector2) -> void :
 	var accent = Color(0.0, 1.0, 0.82) if game.phase_mp_request_incoming else Color(1.0, 0.82, 0.24)
 	game._draw_holo_panel(panel, accent, true, 0.86)
 	var remaining: int = int(ceil(maxf(0.0, game.phase_mp_request_timer)))
-	var action_label: String = "EXTRACAO" if game.phase_mp_action == "extract" else ("NOVO CICLO" if game.phase_mp_action == "farm" else game._phase_region_name(game.phase_mp_target))
+	var action_label: String = "EXTRACAO" if game.phase_mp_action == "extract" else ("NOVO CICLO" if String(game.phase_mp_action).begins_with("farm") else game._phase_region_name(game.phase_mp_target))
 	var title: String = "EQUIPE QUER TRANSFERIR: %s" % action_label if game.phase_mp_request_incoming else "PEDIDO DE TRANSFERENCIA ENVIADO"
 	game._draw_centered(title, Vector2(panel.get_center().x, panel.position.y + 30.0), game._readable_text_size(15), accent)
 	game._draw_centered("CONFIRMACOES %d/%d - %ds" % [game.phase_mp_vote_count, game.phase_mp_expected_count, remaining], Vector2(panel.get_center().x, panel.position.y + 58.0), game._readable_text_size(12), Color(0.98, 0.94, 0.86))

@@ -1,0 +1,65 @@
+{
+  "python_adversarial_tests": {
+    "passed": 10
+  },
+  "python_compile": {
+    "passed": true,
+    "files": [
+      "tools/umbra_learning_audit.py",
+      "tools/umbra_learning_audit_smoke.py",
+      "tools/umbra_mind_fit.py"
+    ]
+  },
+  "gdscript_parse": {
+    "passed": true,
+    "files": [
+      "tools/umbra_mind_collect.gd",
+      "tools/umbra_learning_probe.gd"
+    ]
+  },
+  "node_syntax": {
+    "passed": true,
+    "file": "tools/umbra_collective_evidence.js"
+  },
+  "existing_collective_smoke": {
+    "passed": true,
+    "runs": 8,
+    "samples": 960
+  },
+  "existing_mind_layers_smoke": {
+    "contract_checks_passed": 29,
+    "limitation": "Existing test attempted security HTTP session; socket denied by environment. No live service validation."
+  },
+  "existing_rl_protocol_smoke": {
+    "passed": true,
+    "transitions": 6,
+    "observation_size": 83,
+    "limitation": "ABI only; full combat rollout counterexample is in contract/probe.json"
+  },
+  "causality_perception_delivery_probe": {
+    "checks_passed": 33
+  },
+  "architecture_budget": {
+    "passed": false,
+    "same_preexisting_failures_before_and_after": true,
+    "owners": [
+      "shop_presentation",
+      "enemy_manager",
+      "world_environment_presentation",
+      "phase_flow_controller",
+      "runtime_progression_controller"
+    ]
+  },
+  "diff_check": {
+    "passed": true
+  },
+  "production_base_unchanged": true,
+  "not_exercised": [
+    "live VPS ingestion/publication/client sessions",
+    "Python Apolo checkpoint inference",
+    "neural co-training",
+    "human evaluation",
+    "Android",
+    "multiplayer"
+  ]
+}

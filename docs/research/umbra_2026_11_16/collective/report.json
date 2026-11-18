@@ -1,0 +1,16 @@
+{
+  "evidence_kind": "synthetic_offline_pipeline_contract",
+  "accepted_fixture": true,
+  "persistent_reload_equal": true,
+  "duplicate_rejected": true,
+  "synthetic_runs": 32,
+  "confidence": 0.026,
+  "metadata_false_positive": {
+    "version_changed": true,
+    "parameters_changed": false,
+    "before": "umbra-col-f5b9a6cb93",
+    "after": "umbra-col-fba21c77fb"
+  },
+  "learning_improvement_proven": false,
+  "live_vps_verified": false
+}

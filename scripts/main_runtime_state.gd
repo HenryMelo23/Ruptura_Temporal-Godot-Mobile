@@ -93,8 +93,8 @@ const RuntimeSpriteBatchRendererScript = preload("res://scripts/presentation/run
 
 const DEFAULT_WORLD_SIZE := Vector2(1600, 900)
 var WORLD_SIZE := DEFAULT_WORLD_SIZE
-const GAME_VERSION: = "2.1.2"
-const GAME_VERSION_CODE: = 27200
+const GAME_VERSION: = "2.1.3"
+const GAME_VERSION_CODE: = 27300
 const RUN_MODE_SHOP := "shop"
 const RUN_MODE_DROP := "drop"
 const ContentPackState = preload("res://scripts/systems/content_pack_state.gd")
@@ -841,7 +841,8 @@ const BOSS_HP_DURABILITY_BY_PHASE: Dictionary = {
 	5: 8.0,
 	6: 7.5,
 	7: 9.0,
-	8: 9.5
+	8: 9.5,
+	9: 10.0
 }
 const BOSS_TIME_HP_GROWTH_RATE: = 0.06
 const BOSS_TIME_HP_GROWTH_EXPONENT: = 0.85
@@ -1100,12 +1101,12 @@ const LARAPIO_DAMAGE_TAKEN_MULT: = 0.34
 const LARAPIO_AGGRESSIVE_AFTER: = 45.0
 const LARAPIO_AGGRESSIVE_THROW_INTERVAL: = 2.3
 const LARAPIO_AGGRESSIVE_STONE_SPEED_MULT: = 1.4
-const LARAPIO_DESPERATE_AFTER: = 90.0
-const LARAPIO_DESPERATE_HP_RATIO: = 0.38
-const LARAPIO_DESPERATE_THROW_INTERVAL: = 1.35
+const LARAPIO_DESPERATE_HP_RATIO: = 0.45
+const LARAPIO_DESPERATE_THROW_INTERVAL: = 2.15
+const LARAPIO_DESPERATE_MIN_THROW_INTERVAL: = 1.8
 const LARAPIO_DESPERATE_STONE_SPEED_MULT: = 1.45
 const LARAPIO_DESPERATE_STONE_DAMAGE_MULT: = 1.45
-const LARAPIO_DESPERATE_KEEP_DISTANCE: = 720.0
+const LARAPIO_DESPERATE_KEEP_DISTANCE: = 250.0
 const LARAPIO_IRRITATED_RADIUS: = 280.0
 const LARAPIO_IRRITATED_COIN_INTERVAL: = 2.55
 const LARAPIO_ULTIMATE_HP_RATIO: = 0.7
@@ -1125,8 +1126,8 @@ const LARAPIO_MONEY_LAUGH_INTERVAL: = 5.0
 const LARAPIO_COOLDOWN_STEP_TIME: = 180.0
 const LARAPIO_COOLDOWN_STEP_BONUS: = 18.0
 const LARAPIO_COOLDOWN_MAX_BONUS: = 150.0
-const LARAPIO_CARD_DROP_BASE: = 4
-const LARAPIO_CARD_DROP_CLEAN: = 5
+const LARAPIO_CARD_DROP_BASE: = 2
+const LARAPIO_CARD_DROP_CLEAN: = 3
 const LARAPIO_CARD_RARE_CHANCE: = 0.3
 const VORAZ_BITE_RADIUS: = 100.0
 const VORAZ_BOSS_BITE_RADIUS: = 152.0
@@ -1249,6 +1250,7 @@ const BOSS7_VISUAL_SIZE: = Vector2(367.2, 334.8)
 const BOSS7_HIT_RADIUS: = 164.0
 const BOSS7_HP_SCALE: = 1.75
 const BOSS8_HP_SCALE: = 1.9
+const BOSS9_HP_SCALE: = 2.0
 const BOSS7_STATE_INTRO: = "intro"
 const BOSS7_STATE_FLY: = "fly"
 const BOSS7_STATE_FEATHER: = "feather_volley"
@@ -1736,18 +1738,18 @@ const MANIFEST_EVOLUTION_PROFILES: = {
 }
 
 const CARDS: = [
-	{"name": "Speed Boost", "nick": "Vento Celeste", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)},
-	{"name": "Porcao", "nick": "Sopro Vital", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)},
+	{"name": "Speed Boost", "nick": "Última Corrida", "desc": "+6.5% velocidade de movimento.", "icon": "Deck/Speed_boost1.png", "frame_2": "Deck/Speed_boost2.png", "color": Color(0.0, 1.0, 0.78)},
+	{"name": "Porcao", "nick": "Coração Piedoso", "desc": "Cura 45% da vida maxima; excesso aumenta vida maxima.", "icon": "Deck/carta_por1.png", "frame_2": "Deck/carta_por2.png", "color": Color(0.38, 1.0, 0.54)},
 	{"name": "Disparo crescente", "nick": "Odio Canalizado", "desc": "+20% do dano base do auto attack, com crescimento composto por copia.", "icon": "Deck/carta_odio1.png", "frame_2": "Deck/carta_odio2.png", "color": Color(1.0, 0.3, 0.28)},
-	{"name": "Tempestade", "nick": "Precisao Critica", "desc": "+8 dano e +12% chance critica. Acima de 100%, o excesso aumenta o dano critico.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
+	{"name": "Tempestade", "nick": "Tempestade da Meia-Noite", "desc": "+8 dano e +12% chance critica. Acima de 100%, o excesso aumenta o dano critico.", "icon": "Deck/Carta_tempestade_crescente1.png", "frame_2": "Deck/Carta_tempestade_crescente2.png", "color": Color(0.96, 0.82, 0.22)},
 	{"name": "Trembo", "nick": "Reversao Temporal", "desc": "Trembo acompanha e cura Geovana. Ao morrer, explode, restaura toda a vida, teleporta e concede 10s de imunidade.", "icon": "Deck/carta_trem1.png", "frame_2": "Deck/carta_trem2.png", "color": Color(0.16, 0.72, 1.0)},
-	{"name": "Roubo de Vida", "nick": "Hemofluxo", "rarity": CARD_RARITY_UNCOMMON, "desc": "Projeteis curam diretamente 3% do dano causado por copia, sem chance de falha.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
-	{"name": "Speed Atack", "nick": "Fluidez Letal", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)},
-	{"name": "Teleporte", "nick": "Salto Espacial", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
+	{"name": "Roubo de Vida", "nick": "Centelha Revigorante", "rarity": CARD_RARITY_UNCOMMON, "desc": "Projeteis curam diretamente 3% do dano causado por copia, sem chance de falha.", "icon": "Deck/Carta_roubo_vida1.png", "frame_2": "Deck/Carta_roubo_vida2.png", "color": Color(0.95, 0.1, 0.34)},
+	{"name": "Speed Atack", "nick": "Fagulha Acelerada", "desc": "Reduz levemente o intervalo entre disparos.", "icon": "Deck/carta_onda.png", "frame_2": "Deck/carta_onda2.png", "color": Color(1.0, 0.88, 0.2)},
+	{"name": "Teleporte", "nick": "Salto Quântico Dimensional 3000", "desc": "Reduz recarga do teleporte ate 0.5s.", "icon": "Deck/carta_teleporte1.png", "frame_2": "Deck/carta_teleporte2.png", "color": Color(1.0, 0.0, 0.92)},
 	{"name": "Petro", "nick": "Sentinela Leal", "desc": "Invoca Petro com vida e resistencia proprias. Ele persegue, luta e evolui visualmente com novas copias.", "icon": "Deck/carta_petro1.png", "frame_2": "Deck/carta_petro2.png", "color": Color(0.24, 0.95, 1.0)},
-	{"name": "Defesa", "nick": "Pele Cronal", "desc": "+5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
-	{"name": "Sorte", "nick": "Anomalia Favoravel", "desc": "As probabilidades se dobram a seu favor, mas a anomalia nao revela seus calculos.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
-	{"name": "Poison", "nick": "Toxina Temporal", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
+	{"name": "Defesa", "nick": "Escudo Sinérgico", "desc": "+5 de resistencia, ate 50.", "icon": "Deck/carta_defesa1.png", "frame_2": "Deck/carta_defesa2.png", "color": Color(0.7, 0.88, 1.0)},
+	{"name": "Sorte", "nick": "Convergência de Oportunidades", "desc": "As probabilidades se dobram a seu favor, mas a anomalia nao revela seus calculos.", "icon": "Deck/carta_sorte1.png", "frame_2": "Deck/carta_sorte2.png", "color": Color(1.0, 0.66, 0.8)},
+	{"name": "Poison", "nick": "Cuspe Sagrado", "desc": "Projeteis envenenam inimigos e boss com dano por tempo.", "icon": "Deck/carta_poison1.png", "frame_2": "Deck/carta_poison2.png", "color": Color(0.68, 1.0, 0.2)},
 	{"name": "Coletora", "nick": "Foice do Tempo", "desc": "Executa comuns abaixo do limite. Cada carta aumenta mais o limite comum e soma execucao extra contra boss.", "icon": "Deck/carta_estalo1.png", "frame_2": "Deck/carta_estalo2.png", "color": Color(0.95, 0.08, 0.24)},
 	{"name": "Mercenaria", "nick": "Contrato de Guerra", "desc": "Cada abate paga +2 pontos por copia desde o primeiro. A cada 5, o contrato melhora; sofrer dano quebra a sequencia.", "icon": "Deck/carta_mercenaria1.png", "frame_2": "Deck/carta_mercenaria2.png", "color": Color(1.0, 0.62, 0.16)},
 	{"id": "devorador_destinos", "name": "Devorador de Destinos", "nick": "Devorador de Destinos", "desc": "Marca o inimigo mais poderoso. Sua queda devora destinos ao redor, amedronta sobreviventes e protege Geovana.", "icon": "Deck/carta-Devorador_de_Destinos1.png", "frame_2": "Deck/carta-Devorador_de_Destinos2.png", "color": Color(0.92, 0.1, 0.72)},
@@ -2366,7 +2368,10 @@ const NET_ENEMY_TYPES: = [
 	ENEMY_AMBER_SUTURER, ENEMY_AMBER_SUTURE_NODE,
 	ENEMY_FLAGELANTE, ENEMY_SALMODIANTE, ENEMY_RELICARIO,
 	"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro",
-	"cagado_piao", "cagado_cangaceiro", "ovo_jabuti"
+	"cagado_piao", "cagado_cangaceiro", "ovo_jabuti",
+	"aranha_lobo", "viuva_silencio", "aranha_alcapao", "aranha_saltadora",
+	"aranha_mimica", "noiva_de_seda", "filhote_aranha", "olho_vigia",
+	"aranha_boleadeira", "aranha_armadeira"
 ]
 const NET_BULLET_TYPES: = [
 	"", "atirador", "arauto_shot", "boss_pressure_bubble", "cout_attack_speed",
@@ -2824,6 +2829,9 @@ var boss6_controller: RefCounted = preload("res://scripts/systems/bosses/boss6_c
 ## Dimensao 8 (Sertao das Tartarugas): inimigos, mini chefe, projeteis e chefe.
 var sertao_controller: RTSertaoController = RTSertaoController.new()
 var boss8_controller: RTBoss8Controller = RTBoss8Controller.new()
+## Dimensao 9 (Cripta de Seda): terror com visao em cone, aranhas e a Matriarca.
+var cripta_controller: RTCriptaController = RTCriptaController.new()
+var boss9_controller: RTBoss9Controller = RTBoss9Controller.new()
 var player_control_controller: RefCounted = PlayerControlControllerScript.new()
 var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityControllerScript.new()
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
@@ -3250,18 +3258,15 @@ const DIMENSION_FINAL_PHASE: int = 5
 const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 4, 6, 7]
 ## Rota fixa de cada inicio (as runs alternam 1 e 6). Depois do 4 abre a escolha 5 x 7.
 const DIMENSION_START_ROUTES: Dictionary = {1: [2, 6, 3, 4], 6: [1, 2, 3, 4]}
-## Ciclo de farm: Cinzas da Ruptura (7) + 3 regioes sorteadas, depois nova escolha.
+## Ciclo de farm (a partir da 6a dimensao): Floresta (7) + 3 regioes sorteadas, sem
+## repetir, entre DIMENSION_FARM_POOL; depois da 4a do ciclo, escolha: novo ciclo x Umbra.
+## Sertao (8) e Cripta (9) so existem aqui, entao nunca aparecem antes da 7.
 const DIMENSION_FARM_ENTRY_PHASE: int = 7
 const DIMENSION_FARM_RANDOM_COUNT: int = 3
+const DIMENSION_FARM_POOL: Array[int] = [1, 2, 3, 8, 9]
 const DIMENSION_CYCLE_LENGTH: int = 4
 const DIMENSION_EXTRACTION_INTERVAL: int = 10
 var dimension_route_queue: Array = []
-## Sertao das Tartarugas (8): dimensao bonus que so pode aparecer depois de 7
-## dimensoes concluidas, com chance a cada travessia, no maximo 1x por ciclo (solo).
-const SERTAO_PHASE: int = 8
-const SERTAO_MIN_COMPLETED: int = 7
-const SERTAO_ROLL_CHANCE: float = 0.3
-var sertao_visited_cycle: int = -1
 var dimension_route_farm_cycles: int = 0
 var dimension_route_completed_count: int = 0
 var dimension_route_last_phase: int = 0

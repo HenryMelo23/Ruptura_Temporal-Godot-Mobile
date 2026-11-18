@@ -44,7 +44,7 @@ func on_card_acquired(card: Dictionary, from_archive: bool) -> void:
 			return
 	pending_acquisitions.append({
 		"card_id": card_id,
-		"name": String(card.get("name", card_id)),
+		"name": CardCatalogDefinitions.display_name(card_id),
 		"rarity": core._card_rarity_key(card),
 		"color": core._card_rarity_color(card),
 		"stack": core._card_count(card),

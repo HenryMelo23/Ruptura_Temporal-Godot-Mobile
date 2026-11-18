@@ -20,6 +20,14 @@ For refactor sequencing and stop rules, use:
 
 - `.agents/REFRACTOR_CAMPAIGN.md`
 
+## New Phase Standard
+
+For a new phase, enemy roster, or phase gameplay scaffold, read
+`docs/PHASE_CREATION_GUIDE.md` first. New phases use one large shared map,
+one starting common enemy, four special enemy types, one miniboss and one boss.
+Phase 5 / UMBRA is an exception. The guide maps focused integration symbols;
+do not reread an entire existing phase or runtime file to recreate its structure.
+
 ## Experimental Map Standard
 
 For `FaseEX`, `FaseEX2`, `FaseEX3`, `FaseEX4`, `FaseEX6`, `FaseEX7`, or a new experimental phase, read

@@ -79,6 +79,9 @@ func _ensure_runtime_controllers_bound() -> void:
 	if sertao_controller.core != self:
 		sertao_controller.configure(self)
 		boss8_controller.configure(self)
+	if cripta_controller.core != self:
+		cripta_controller.configure(self)
+		boss9_controller.configure(self)
 
 
 func _phase_flow():
@@ -2776,6 +2779,16 @@ func _enemy_report_name(kind: String) -> String:
 		"cagado_piao": return "Cagado-Piao"
 		"cagado_cangaceiro": return "Cagado Cangaceiro"
 		"ovo_jabuti": return "Ovo de Jabuti"
+		"aranha_lobo": return "Aranha-Lobo"
+		"viuva_silencio": return "Viuva-do-Silencio"
+		"aranha_alcapao": return "Aranha-Alcapao"
+		"aranha_saltadora": return "Saltadora"
+		"aranha_mimica": return "Mimica"
+		"noiva_de_seda": return "Noiva de Seda"
+		"filhote_aranha": return "Filhote"
+		"olho_vigia": return "Olho-Vigia"
+		"aranha_boleadeira": return "Boleadeira"
+		"aranha_armadeira": return "Armadeira"
 		_: return kind.capitalize()
 
 
@@ -2808,6 +2821,16 @@ func _enemy_report_icon(kind: String, phase: = 1) -> String:
 		"cagado_piao": return "sertao/s8_piao_0.png"
 		"cagado_cangaceiro": return "sertao/s8_cangaceiro_0.png"
 		"ovo_jabuti": return "sertao/s8_egg_0.png"
+		"aranha_lobo": return "cripta/s9_lobo_0.png"
+		"viuva_silencio": return "cripta/s9_viuva_0.png"
+		"aranha_alcapao": return "cripta/s9_alcapao_0.png"
+		"aranha_saltadora": return "cripta/s9_saltadora_0.png"
+		"aranha_mimica": return "cripta/s9_mimica_2.png"
+		"noiva_de_seda": return "cripta/s9_noiva_0.png"
+		"filhote_aranha": return "cripta/s9_filhote_0.png"
+		"olho_vigia": return "cripta/s9_olho_0.png"
+		"aranha_boleadeira": return "cripta/s9_boleadeira_0.png"
+		"aranha_armadeira": return "cripta/s9_armadeira_0.png"
 		ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR: return "Inimig1.png"
 		ENEMY_COMMON:
 			if phase == 2:
@@ -2830,7 +2853,8 @@ func _damage_source_report(source: String) -> Dictionary:
 		ENEMY_NEXUS_WEAVER, ENEMY_NEXUS_ECHO,
 		ENEMY_MIASMA_EEL, ENEMY_LODARIO, ENEMY_FOSSIL_PUSTULE, ENEMY_CHRONAL_LEECH,
 		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL,
-		"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro", "cagado_piao", "cagado_cangaceiro", "ovo_jabuti"
+		"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro", "cagado_piao", "cagado_cangaceiro", "ovo_jabuti",
+		"aranha_lobo", "viuva_silencio", "aranha_alcapao", "aranha_saltadora", "aranha_mimica", "noiva_de_seda", "filhote_aranha", "olho_vigia", "aranha_boleadeira", "aranha_armadeira"
 	]
 	if source in enemy_kinds:
 		return {"kind": source, "name": _enemy_report_name(source), "icon": _enemy_report_icon(source, current_phase), "phase": current_phase}
@@ -5457,7 +5481,7 @@ func _load_textures() -> void :
 		var calm_path := "res://assets/maps/calm/phase_%d.png" % phase
 		var map_path: String = calm_path if ResourceLoader.exists(calm_path) else String(legacy_map_paths[phase])
 		_register_texture("map_phase_%d" % phase, map_path, true)
-	for ex_suffix in ["", "2", "3", "4", "5", "6", "7", "8"]:
+	for ex_suffix in ["", "2", "3", "4", "5", "6", "7", "8", "9"]:
 		_register_texture("map_phase_ex" + ex_suffix, base + "experimental/phase_ex" + ex_suffix + "_terrain_atlas.png", true)
 	_register_texture("experimental_phase_altar", base + "experimental/phase_ex_boss_altar_v2.png", true)
 	textures["startup_thanks"] = _safe_load(STARTUP_THANKS_TEXTURE_PATH)
@@ -5674,6 +5698,8 @@ func _load_textures() -> void :
 	textures["parasitica_dance_loop"] = parasitica_dance_loop
 	textures["parasitica_dance_final"] = [_safe_load(parasitica_base + "dance/parasitica_dance_15.png"), _safe_load(parasitica_base + "dance/parasitica_dance_16.png")]
 	textures["player_frozen"] = [_safe_load("res://img/Geo_Cool-1.png"), _safe_load("res://img/Geo_Cool-2.png")]
+	# Geovana base v2 (folha-modelo unica): troca repouso, andar, disparo, queda e dano.
+	RTGeovanaV2.install(self)
 	textures["player_prismatica_frozen"] = []
 	for frame in range(2):
 		textures["player_prismatica_frozen"].append(_safe_load(prismatica_base + "frozen/prismatica_frozen_%d.png" % frame))
@@ -6520,9 +6546,10 @@ func _begin_pause_music_fade_in() -> void :
 	music_pause_fade_mode = "in"
 	music_pause_fade_timer = 0.0
 	music_pause_resume_volume = max(0.001, _music_target_volume())
-	if not music_player.playing:
-		music_player.play()
+	var resume_position: float = music_player.get_playback_position()
 	music_player.stream_paused = false
+	if not music_player.playing:
+		music_player.play(maxf(0.0, resume_position))
 	if music_crossfade_player != null and music_crossfade_player.stream != null:
 		music_crossfade_player.stream_paused = false
 	_set_music_linear_volume(0.001)
@@ -7152,7 +7179,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 		aura_state = AuraSystem.create(String(AURAS[selected_aura]["name"]), _specter_level(_spectrum_key(selected_aura)))
 	aura_state["last_pos"] = PLAYER_START
 	player_pos = PLAYER_START
-	_quantum_chips().on_run_started()
+	_quantum_chips().on_run_started(team_chip_start_config)
 	_umbra_phase_observer().reset_run()
 	_drop_mode().pity_bonus = 0.0
 	player_hp_max = _quantum_chips().apply_hp_max(PLAYER_BASE_HP)
@@ -7963,8 +7990,8 @@ func _roll_dimension_route(count: int, last_phase: int) -> Array[int]:
 	return _phase_flow()._roll_dimension_route(count, last_phase)
 
 
-func _begin_farm_dimension_cycle() -> int:
-	return _phase_flow()._begin_farm_dimension_cycle()
+func _begin_farm_dimension_cycle(route: Array = []) -> int:
+	return _phase_flow()._begin_farm_dimension_cycle(route)
 
 
 func _phase_region_name(phase: int) -> String:
@@ -7993,6 +8020,8 @@ func _boss_hp_for_phase(phase: int) -> float:
 	_ensure_boss_party_scaling_context(phase)
 	var base_hp: float = BOSS_BASE_HP
 	match phase:
+		9:
+			base_hp = BOSS_BASE_HP * BOSS9_HP_SCALE
 		8:
 			base_hp = BOSS_BASE_HP * BOSS8_HP_SCALE
 		7:
@@ -9637,6 +9666,8 @@ func _process(delta: float) -> void :
 		_update_shop_mp_waiting(delta)
 	elif mode == "boss_call":
 		_update_boss_call(delta)
+	elif mode == RTUmbraIntro.MODE:
+		_umbra_intro().update(delta)
 	elif mode == "pause_countdown":
 		_update_pause_countdown(delta)
 	elif mode == "shop":
@@ -9949,7 +9980,14 @@ func _update_game(delta: float) -> void :
 		if current_phase == RTSertaoController.PHASE and _is_world_authority():
 			sertao_controller.update(delta)
 			boss8_controller.update_death(delta)
+		if current_phase == RTCriptaController.PHASE and _is_world_authority():
+			cripta_controller.update(delta)
+			boss9_controller.update_death(delta)
+		elif current_phase == RTCriptaController.PHASE and _is_world_replica():
+			cripta_controller.update_replica(delta)
+			boss9_controller.update_death(delta)
 	_story().update(delta)
+	_umbra_intro().tick_trigger(delta)
 	_run_choice().update(delta)
 	_boss_pacts().update(delta)
 	_parasitica().update(delta)
@@ -10885,6 +10923,8 @@ func _apolo_phase5_hazard_danger(pos: Vector2, hazard: Dictionary, forecast: flo
 			var radius: float = float(hazard.get("radius", 220.0))
 			var dist: float = pos.distance_to(center)
 			return pow(1.0 - clampf(dist / maxf(1.0, radius + 70.0), 0.0, 1.0), 2.0) * 540.0
+		"missa":
+			return RTUmbraNecroseMass.danger_at(hazard, pos, forecast)
 		"discharge":
 			var origin: Vector2 = Vector2(hazard.get("pos", boss_pos))
 			var dir: Vector2 = Vector2(hazard.get("dir", Vector2.RIGHT)).normalized()
@@ -10969,6 +11009,9 @@ func _right_aim_vector() -> Vector2:
 
 
 func _try_attack() -> void :
+	# Cripta de Seda: presa (laco/casulo), o disparo vira "se debater".
+	if current_phase == RTCriptaController.PHASE and not _merchant_dimension().active and cripta_controller.grapple.struggle_press():
+		return
 	if _tutorial_active() and not _tutorial_guide().action_allowed("attack"):
 		return
 	if _local_player_controls_locked():
@@ -13070,6 +13113,8 @@ func _pacing_report() -> Dictionary:
 func _choose_enemy_type() -> String:
 	if current_phase == RTSertaoController.PHASE:
 		return sertao_controller.choose_enemy_type()
+	if current_phase == RTCriptaController.PHASE:
+		return cripta_controller.choose_enemy_type()
 	var paced_special: String = enemy_manager.paced_special_type()
 	if paced_special != "":
 		return paced_special
@@ -14375,7 +14420,7 @@ func _reward_peer_ids() -> Array[int]:
 func _append_owned_card_drop(card: Dictionary, pos: Vector2, angle: float, owner_peer: int, life: float, min_speed: float, max_speed: float, min_radius: float, max_radius: float, metadata: Dictionary = {}) -> void :
 	if not _card_drop_texture_registered(card):
 		return
-	if _quantum_chips().corruptor_active() and not is_multiplayer:
+	if _quantum_chips().corruptor_active():
 		# Corruptor Mercantil: a carta vira uma ficha "?" da cor da raridade.
 		metadata = metadata.duplicate()
 		metadata["mystery"] = true
@@ -14421,13 +14466,18 @@ func _update_arauto_card_drops(delta: float) -> void :
 			if bool(drop.get("suturer_returned", false)):
 				amber_suturer_controller.restore_local_card(_card_id(card))
 			elif mystery:
-				_quantum_chips().add_token(String(drop.get("mystery_rarity", _card_rarity_key(card))))
+				var token_rarity: String = String(drop.get("mystery_rarity", _card_rarity_key(card)))
+				if is_multiplayer and not _is_world_authority():
+					if _shop_rpc_available():
+						rpc_id(1, "_rpc_request_quantum_token", drop_id, _mp_unique_id())
+				else:
+					_quantum_chips().confirm_local_token(drop_id, token_rarity)
 			else:
 				_apply_card(card)
 			if drop_id != "":
 				_drop_mode().remember_collected(drop_id)
 			drop["life"] = 0.0
-			if bool(drop.get("drop_mode", false)) and is_multiplayer and drop_id != "":
+			if is_multiplayer and drop_id != "" and (bool(drop.get("drop_mode", false)) or mystery) and not (mystery and not _is_world_authority()):
 				if _is_world_authority():
 					if _shop_rpc_available():
 						rpc("_rpc_card_drop_removed", drop_id, _mp_unique_id())
@@ -14648,6 +14698,12 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 			speed = 150.0
 			damage *= 0.82
 			points = 116
+	if cripta_controller.owns_kind(kind):
+		var s9_stats: Dictionary = cripta_controller.spawn_stats(kind, speed, damage)
+		hp_mult = float(s9_stats["hp_mult"])
+		speed = float(s9_stats["speed"])
+		damage = float(s9_stats["damage"])
+		points = int(s9_stats["points"])
 	if sertao_controller.owns_kind(kind):
 		var s8_stats: Dictionary = sertao_controller.spawn_stats(kind, speed, damage)
 		hp_mult = float(s8_stats["hp_mult"])
@@ -14809,6 +14865,8 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 		enemies.back()["contact_grace"] = 999.0
 	elif sertao_controller.owns_kind(kind):
 		sertao_controller.on_spawned(enemies.back())
+	elif cripta_controller.owns_kind(kind):
+		cripta_controller.on_spawned(enemies.back())
 	elif kind == ENEMY_CINERIDO:
 		enemies.back()["shoot_cd"] = 999.0
 		enemies.back()["parado"] = true
@@ -16605,13 +16663,15 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 		var edge_push: = _larapio_edge_push(Vector2(enemy["pos"]))
 		if bool(enemy.get("direct_steal", false)) and player_stun_timer > 0.0:
 			dir = to_player
-		elif float(enemy.get("larapio_escape_timer", 0.0)) > 0.0 and patrol_dir.length() > 0.05:
+		elif float(enemy.get("larapio_escape_timer", 0.0)) > 0.0 and patrol_dir.length() > 0.05 and not desperate:
 			dir = patrol_dir
 		elif desperate:
-			if dist < LARAPIO_DESPERATE_KEEP_DISTANCE:
-				dir = ( - to_player + to_player.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.55).normalized()
+			if dist > LARAPIO_DESPERATE_KEEP_DISTANCE:
+				dir = (to_player + to_player.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.22).normalized()
+			elif dist < LARAPIO_STEAL_RADIUS * 0.82:
+				dir = (-to_player + to_player.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.55).normalized()
 			else:
-				dir = (to_player.orthogonal() * float(enemy.get("strafe", 1.0)) + patrol_dir * 0.2).normalized()
+				dir = (to_player * 0.28 + to_player.orthogonal() * float(enemy.get("strafe", 1.0))).normalized()
 		elif has_loot or enemy["hp"] < enemy["max_hp"] * 0.5:
 			dir = - to_player
 		elif bool(enemy.get("alerted", false)) and dist < 430.0 and float(enemy.get("steal_cd", 0.0)) > 0.0:
@@ -16622,7 +16682,7 @@ func _move_enemy(enemy: Dictionary, delta: float, lacerante_secondary_override: 
 		else:
 			dir = (to_player + to_player.orthogonal() * float(enemy.get("strafe", 1.0)) * 0.24).normalized()
 		if patrol_dir.length() > 0.05 and not (bool(enemy.get("direct_steal", false)) and player_stun_timer > 0.0):
-			var patrol_weight: = 0.16 if desperate else (0.34 if not has_loot else 0.48)
+			var patrol_weight: = 0.08 if desperate else (0.34 if not has_loot else 0.48)
 			dir = (dir * (1.0 - patrol_weight) + patrol_dir * patrol_weight).normalized()
 		if edge_push.length() > 0.05:
 			var trap_time: float = clamp(float(enemy.get("larapio_corner_time", 0.0)) / LARAPIO_CORNER_TRAP_TIME, 0.0, 1.0)
@@ -17108,7 +17168,7 @@ func _larapio_throw_interval(enemy: Dictionary, target_distance: float, has_loot
 		return minf(LARAPIO_THROW_INTERVAL, LARAPIO_IRRITATED_COIN_INTERVAL)
 	if desperate:
 		var hp_ratio: = float(enemy.get("hp", 0.0)) / maxf(1.0, float(enemy.get("max_hp", 1.0)))
-		return maxf(0.95, lerpf(0.95, LARAPIO_DESPERATE_THROW_INTERVAL, clampf(hp_ratio / LARAPIO_DESPERATE_HP_RATIO, 0.0, 1.0)))
+		return lerpf(LARAPIO_DESPERATE_MIN_THROW_INTERVAL, LARAPIO_DESPERATE_THROW_INTERVAL, clampf(hp_ratio / LARAPIO_DESPERATE_HP_RATIO, 0.0, 1.0))
 	if aggressive:
 		return LARAPIO_AGGRESSIVE_THROW_INTERVAL
 	return LARAPIO_THROW_INTERVAL
@@ -17202,9 +17262,11 @@ func _larapio_jump_between_ultimate_portals(enemy: Dictionary, target_pos: Vecto
 func _larapio_desperate(enemy: Dictionary) -> bool:
 	if int(enemy.get("stolen", 0)) > 0:
 		return false
-	if time_alive - float(enemy.get("spawned_at", time_alive)) < LARAPIO_DESPERATE_AFTER:
-		return false
 	return float(enemy.get("hp", 0.0)) <= float(enemy.get("max_hp", 1.0)) * LARAPIO_DESPERATE_HP_RATIO
+
+
+func _larapio_card_drop_count(clean_kill: bool) -> int:
+	return LARAPIO_CARD_DROP_CLEAN if clean_kill else LARAPIO_CARD_DROP_BASE
 
 
 func _update_larapio_laughs(enemy: Dictionary, delta: float, has_loot: bool) -> void :
@@ -17736,6 +17798,12 @@ func _update_bullets(delta: float) -> void :
 		if float(bullet["life"]) > 0.0 and _damage_phase3_cheeses_at(Vector2(bullet["pos"]), float(bullet["damage"]), 30.0):
 			if not bool(bullet["pierce"]):
 				bullet["life"] = 0.0
+		if float(bullet["life"]) > 0.0 and current_phase == RTCriptaController.PHASE and not _merchant_dimension().active and cripta_controller.bullet_hit(Vector2(bullet["pos"])):
+			if not bool(bullet["pierce"]):
+				bullet["life"] = 0.0
+		if float(bullet["life"]) > 0.0 and current_phase == 5 and RTUmbraNecroseMass.bullet_hit(self, Vector2(bullet["pos"])):
+			if not bool(bullet["pierce"]):
+				bullet["life"] = 0.0
 		if float(bullet["life"]) > 0.0 and _register_boss3_clone_hit(Vector2(bullet["pos"])):
 			_play_projectile_hit_sfx(String(bullet.get("kind", "")))
 			_spawn_bullet_hit_fragments(Vector2(bullet["pos"]), bullet)
@@ -18148,6 +18216,8 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	amount *= sineiro_boreal_controller.damage_taken_multiplier(enemy)
 	amount *= amber_suturer_controller.damage_taken_multiplier(enemy)
 	amount *= sertao_controller.damage_taken_multiplier(enemy)
+	if cripta_controller.owns_kind(String(enemy.get("type", ""))):
+		amount *= cripta_controller.damage_taken_multiplier(enemy)
 	amount *= _fragilidade_enemy_multiplier(enemy, source)
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
 	amount *= henry_incendiary_ability_controller.damage_taken_multiplier(enemy, source)
@@ -18314,6 +18384,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	if apply_aura_multiplier and not source.begins_with("aura_"):
 		amount *= AuraSystem.damage_multiplier(aura_state)
 	amount *= _mandamento_damage_multiplier(effective_source_category)
+	if current_phase == RTCriptaController.PHASE:
+		amount *= boss9_controller.damage_taken_multiplier()
 	if current_phase == RTSertaoController.PHASE:
 		amount *= boss8_controller.damage_taken_multiplier()
 		if amount <= 0.0:
@@ -18510,6 +18582,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			Boss4AnimationPresentation.trigger_death(self)
 		elif current_phase == RTSertaoController.PHASE:
 			boss8_controller.on_death()
+		elif current_phase == RTCriptaController.PHASE:
+			boss9_controller.on_death()
 		if is_multiplayer and _is_world_authority():
 			_confirm_card_unlock_progress_for_active_players("boss_kills", 1.0, false)
 		else:
@@ -18539,13 +18613,14 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 		_add_text("BOSS DISSOLVIDO", boss_pos + Vector2(0, -100), Color(1.0, 0.78, 0.25), 3.0, 34)
 		_add_text("+%s PONTOS" % _format_points(reward), boss_pos + Vector2(0, -142), Color(1.0, 0.9, 0.34), 2.8, 23)
 		_register_dimension_phase_completed(current_phase)
+		var aftermath: Dictionary = {}
 		if _should_offer_dimension_choice_after_boss(current_phase):
-			_queue_post_boss_choice(current_phase)
+			aftermath = _queue_post_boss_choice(current_phase)
 			_spawn_phase_choice_portals(boss_pos)
 		else:
 			var next_phase: = _consume_next_phase_after_boss(current_phase)
 			if next_phase > 0:
-				_queue_post_boss_choice(current_phase)
+				aftermath = _queue_post_boss_choice(current_phase)
 				_spawn_phase_fragment(boss_pos, next_phase)
 			else:
 				_stop_battle_music_for_screen_transition()
@@ -18557,15 +18632,77 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 				_commit_final_phase_victory_cleanup(current_phase)
 				_open_specter_upgrade("victory", true)
 				_broadcast_final_phase_victory(current_phase)
+		if is_multiplayer and _is_world_authority() and not phase_fragment.is_empty():
+			rpc("_rpc_boss_aftermath", int(aftermath.get("epoch", 0)), current_phase, phase_fragment.duplicate(true), String(aftermath.get("kind", "")), Array(aftermath.get("offer", [])))
 
 
 ## Chefe 2 abre a evolucao da forma; os outros chefes (menos o final) abrem pacto.
-func _queue_post_boss_choice(phase: int) -> void:
+func _queue_post_boss_choice(phase: int) -> Dictionary:
 	_story().request("boss_%d" % phase, 1.8)
+	var choice_kind := ""
 	if phase == 2 and _form_evolutions().chosen.is_empty() and not RTFormEvolutionCatalog.for_form(_form_evolutions().form_key()).is_empty():
-		_run_choice().queue("evolution")
+		choice_kind = "evolution"
 	elif phase != 2:
-		_run_choice().queue("pact")
+		choice_kind = "pact"
+	if is_multiplayer:
+		return _run_choice().begin_multiplayer_boss(choice_kind)
+	if choice_kind != "":
+		_run_choice().queue(choice_kind)
+	return {}
+
+
+func _submit_run_choice_vote(epoch: int, option_id: String) -> void:
+	if not is_multiplayer:
+		return
+	if _is_world_authority():
+		_run_choice().record_vote(_mp_unique_id(), epoch, option_id)
+	elif _shop_rpc_available():
+		rpc_id(1, "_rpc_run_choice_vote", epoch, option_id, _mp_unique_id())
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_boss_aftermath(epoch: int, phase: int, fragment: Dictionary, choice_kind: String, offer_ids: Array) -> void:
+	var sender: int = _mp_sender_id()
+	if dedicated_server_mode:
+		if sender != dedicated_room_owner_peer_id or epoch <= 0:
+			return
+		for peer_id in _dedicated_active_peer_ids():
+			if peer_id != sender:
+				rpc_id(peer_id, "_rpc_boss_aftermath", epoch, phase, fragment, choice_kind, offer_ids)
+		return
+	if sender != 1 or phase != current_phase or fragment.is_empty():
+		return
+	if not _run_choice().accept_multiplayer_boss(epoch, choice_kind, offer_ids):
+		return
+	phase_fragment = fragment.duplicate(true)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_run_choice_vote(epoch: int, option_id: String, origin_peer_id: int) -> void:
+	var sender: int = _mp_sender_id()
+	if dedicated_server_mode:
+		if sender <= 0 or sender != origin_peer_id or _is_dedicated_spectator(sender) or not _dedicated_peer_alive_for_leadership(sender):
+			return
+		rpc_id(dedicated_room_owner_peer_id, "_rpc_run_choice_vote", epoch, option_id, sender)
+		return
+	if not _is_world_authority() or sender <= 0:
+		return
+	var voter: int = origin_peer_id if sender == 1 else sender
+	_run_choice().record_vote(voter, epoch, option_id)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_run_choice_result(epoch: int, option_id: String) -> void:
+	var sender: int = _mp_sender_id()
+	if dedicated_server_mode:
+		if sender != dedicated_room_owner_peer_id:
+			return
+		for peer_id in _dedicated_active_peer_ids():
+			if peer_id != sender:
+				rpc_id(peer_id, "_rpc_run_choice_result", epoch, option_id)
+		return
+	if sender == 1:
+		_run_choice().accept_multiplayer_result(epoch, option_id)
 
 
 func _apply_final_phase_victory_from_authority(phase: int) -> bool:
@@ -18680,6 +18817,8 @@ func _clear_boss_runtime_hazards() -> void:
 	if current_phase == RTSertaoController.PHASE:
 		sertao_controller.clear_bullets(0, true)
 		sertao_controller.hazards.clear()
+	if current_phase == RTCriptaController.PHASE:
+		cripta_controller.clear_for_boss_call()
 
 
 func _apply_boss_poison() -> void :
@@ -18814,6 +18953,8 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		sineiro_boreal_controller.on_enemy_defeated(enemy)
 	if sertao_controller.owns_kind(String(enemy.get("type", ""))):
 		sertao_controller.on_enemy_defeated(enemy)
+	if cripta_controller.owns_kind(String(enemy.get("type", ""))):
+		cripta_controller.on_enemy_defeated(enemy)
 	enemies.erase(enemy)
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
@@ -18864,7 +19005,7 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if enemy["type"] == ENEMY_LARAPIO:
 		_play_sfx("Larapio-Dead.mp3", 0.025, 0.82, 1.0)
 		var clean_kill: = int(enemy.get("stolen", 0)) <= 0
-		var drop_count: = LARAPIO_CARD_DROP_CLEAN if clean_kill else LARAPIO_CARD_DROP_BASE
+		var drop_count: = _larapio_card_drop_count(clean_kill)
 		var rare_slots: = 0
 		if rng.randf() < LARAPIO_CARD_RARE_CHANCE:
 			rare_slots += 1
@@ -19104,10 +19245,12 @@ func _update_enemy_bullets(delta: float) -> void :
 		if _try_damage_bargain_capsule_with_enemy_bullet(bullet):
 			continue
 		var local_player_hit: bool = bullet["pos"].distance_to(player_pos) < bullet_hit_radius
+		if bullet_type == "umbra_plasma":
+			# Miolo do plasma contra o corpo inteiro (varrido no quadro).
+			var plasma_dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT))
+			local_player_hit = RTUmbraHitbox.body_hits_swept(player_pos, RTUmbraHitbox.plasma_head(previous_bullet_pos, plasma_dir), RTUmbraHitbox.plasma_head(Vector2(bullet["pos"]), plasma_dir), bullet_hit_radius)
 		if bullet_type == "suturer_hook" and int(bullet.get("target_peer_id", _mp_unique_id())) != _mp_unique_id():
 			local_player_hit = false
-		if not local_player_hit and bullet_type == "umbra_plasma":
-			local_player_hit = _distance_to_segment(player_pos, previous_bullet_pos, Vector2(bullet["pos"])) <= bullet_hit_radius
 		if local_player_hit:
 			bullet["probability_near_miss_registered"] = true
 			bullet_type = String(bullet.get("type", "projetador"))
@@ -19141,7 +19284,8 @@ func _update_enemy_bullets(delta: float) -> void :
 			if bullet_type == "suturer_hook" and bullet_target_peer != int(bullet.get("target_peer_id", bullet_target_peer)):
 				bullet_target_peer = 0
 			if bullet_target_peer == 0 and bullet_type == "umbra_plasma":
-				bullet_target_peer = _remote_peer_on_segment(previous_bullet_pos, Vector2(bullet["pos"]), bullet_hit_radius)
+				var remote_dir: Vector2 = Vector2(bullet.get("dir", Vector2.RIGHT))
+				bullet_target_peer = _remote_peer_on_segment(RTUmbraHitbox.plasma_head(previous_bullet_pos, remote_dir), RTUmbraHitbox.plasma_head(Vector2(bullet["pos"]), remote_dir), bullet_hit_radius + RTUmbraHitbox.BODY_RADIUS)
 			if bullet_target_peer != 0:
 				bullet_type = String(bullet.get("type", "projetador"))
 				if bullet_type == "pustula_fossil_spit":
@@ -19788,6 +19932,9 @@ func _boss2_player_slow_mult() -> float:
 
 func _environment_player_slow_mult() -> float:
 	var mult = _boss2_player_slow_mult()
+	if current_phase == RTCriptaController.PHASE:
+		if not _merchant_dimension().active:
+			mult = minf(mult, cripta_controller.move_multiplier())
 	if player_frost_stacks > 0:
 		mult = minf(mult, maxf(0.3, 1.0 - FROST_SLOW_PER_STACK * float(player_frost_stacks)))
 	if boss_wave_slow_timer > 0.0:
@@ -20012,6 +20159,8 @@ func _boss_contact_damage() -> int:
 func _boss_hit_radius() -> float:
 	if current_phase == RTSertaoController.PHASE:
 		return RTBoss8Controller.HIT_RADIUS
+	if current_phase == RTCriptaController.PHASE:
+		return RTBoss9Controller.HIT_RADIUS
 	if current_phase == 7:
 		return BOSS7_HIT_RADIUS
 	return 132.0 if current_phase == 6 else (132.0 if current_phase == 4 else (30.0 if current_phase == 5 else 82.0))
@@ -21914,7 +22063,9 @@ func _update_boss_phase5(delta: float) -> void :
 		boss5_mental_state = "DIMENSAO " + boss5_dimension.to_upper()
 	if phase5_transmute_active:
 		var real_dt := delta
+		var transmute_prev_t: float = phase5_transmute_timer
 		phase5_transmute_timer += real_dt
+		RTUmbraTransmuteVfx.update(self, transmute_prev_t)
 		var p_count: int = phase5_transmute_particles.size()
 		for i in range(p_count):
 			var p: Dictionary = phase5_transmute_particles[i]
@@ -21933,7 +22084,7 @@ func _update_boss_phase5(delta: float) -> void :
 			boss5_mental_state = "DIMENSAO BASE"
 			if old_dim == "rastro":
 				phase5_rats.clear()
-			_spawn_radial_particles(boss_pos, Color(0.36, 1.0, 0.56), 120)
+			_spawn_radial_particles(boss_pos, Color(0.36, 1.0, 0.56), 40)
 			_start_phase5_transmute_vfx(old_dim, "base", Color(0.36, 1.0, 0.56))
 			_add_text("RETORNO A BASE", boss_pos + Vector2(0, -130), Color(0.36, 1.0, 0.56), 1.2, 22)
 	for key in boss5_ability_cooldowns.keys():
@@ -21971,7 +22122,7 @@ func _update_boss_phase5(delta: float) -> void :
 		boss5_action_timer = max(BOSS5_DECISION_MIN_TIME, (BOSS5_ACTION_INTERVAL + rng.randf_range(-0.35, 0.45) - boss5_profile_confidence * 0.25) / cadence_rate)
 		boss5_decision_timer = BOSS5_DECISION_MIN_TIME
 	_move_umbra(delta)
-	if boss_pos.distance_to(player_pos) < 78.0:
+	if RTUmbraHitbox.umbra_touches_body(boss_pos, player_pos):
 		_damage_player(int(player_hp_max * 0.075 + 54 + enemy_close_damage), "umbra_contact")
 		_increase_umbra_cadence(0.09)
 		_umbra_learn("INTERCEPTAR", 0.2)
@@ -22096,7 +22247,8 @@ func _umbra_discretizar_estado() -> Array:
 	var feat_espinhos: float = 1.0 if _is_hazard_active("thorns") else 0.0
 	var feat_laser: float = 1.0 if _is_hazard_active("umbra_overload_laser") else 0.0
 	var feat_descarga: float = 1.0 if _is_hazard_active("discharge") else 0.0
-	var feat_miasma: float = 1.0 if _is_hazard_active("miasma") else 0.0
+	# A Missa do Ninho ocupa o lugar do miasma (mesma acao MIASMA e mesma entrada da rede).
+	var feat_miasma: float = 1.0 if _is_hazard_active("miasma") or _is_hazard_active(RTUmbraNecroseMass.KIND) else 0.0
 	var feat_ratos: float = 1.0 if phase5_rats.size() > 0 else 0.0
 	var feat_parede: float = 1.0 if _is_hazard_active("siphon") else 0.0
 
@@ -22290,16 +22442,14 @@ func _spawn_umbra_action(action: String) -> void :
 			_play_sfx("Congelando.mp3", 0.05, 0.75, 1.0)
 			_add_text("SOPRO ÁRTICO", boss_pos + Vector2(0, -110), Color(0.35, 0.88, 1.0), 1.0, 22)
 		"MIASMA":
-			boss5_ability_cooldowns["MIASMA"] = 10.0
-			phase5_hazards.append({
-				"kind": "miasma",
-				"pos": _umbra_decision_space_position(_umbra_decision_target_position()),
-				"life": BOSS5_MIASMA_DURATION,
-				"max": BOSS5_MIASMA_DURATION,
-				"radius": 220.0,
-				"tick_timer": 0.0
-			})
-			_add_text("MIASMA TOXICO", _umbra_decision_space_position(_umbra_decision_target_position()) + Vector2(0, -100), Color(0.25, 0.95, 0.3), 1.0, 20)
+			# Necrose: MISSA DO NINHO (turibulos, velas, coroinhas e o sino).
+			# Uma missa por vez; o miasma antigo grudava no jogador e nao tinha fuga.
+			boss5_ability_cooldowns["MIASMA"] = RTUmbraNecroseMass.DURATION + 4.0
+			if RTUmbraNecroseMass.active(self).is_empty():
+				var mass: Dictionary = RTUmbraNecroseMass.create(self, _umbra_decision_space_position(_umbra_decision_target_position()), rng)
+				phase5_hazards.append(mass)
+				_add_text("MISSA DO NINHO", Vector2(mass["pos"]) + Vector2(0, -150), Color(0.55, 1.0, 0.35), 1.4, 24)
+				_add_text("FIQUE NA LUZ DAS VELAS", Vector2(mass["pos"]) + Vector2(0, -122), Color(1.0, 0.86, 0.45), 1.6, 16)
 		"DESCARGA_ELETRICA":
 			boss5_ability_cooldowns["DESCARGA_ELETRICA"] = 11.0
 			var dir: Vector2 = (_umbra_decision_space_position(_umbra_decision_target_position()) - boss_pos).normalized()
@@ -22388,9 +22538,11 @@ func _fire_umbra_projectile() -> void :
 	# antecipacao parcial pela velocidade do jogador para continuar desviavel.
 	var target: Vector2 = _umbra_decision_target_position()
 	var target_vel: Vector2 = RTUmbraAim.history_velocity(phase5_player_history, target) if int(boss5_authoritative_decision.get("target_peer_id", _mp_unique_id())) == _mp_unique_id() else Vector2.ZERO
-	var dir: Vector2 = RTUmbraAim.aim_direction(boss_pos, target, target_vel, BOSS5_PROJECTILE_SPEED, _umbra_mind().aim_lead).rotated(rng.randf_range(-0.05, 0.05))
-	enemy_bullets.append({"pos": boss_pos + dir * 58.0, "dir": dir, "life": 4.2, "damage": player_hp_max * BOSS5_PROJECTILE_DAMAGE_RATE + BOSS5_PROJECTILE_DAMAGE_FLAT + enemy_far_damage, "phase": rng.randf_range(0.0, TAU), "type": "umbra_plasma", "speed_mult": BOSS5_PROJECTILE_SPEED / 210.0, "radius": 16.0})
-	_spawn_radial_particles(boss_pos + dir * 50.0, Color(0.24, 1.0, 0.38), 8)
+	# Sai da mao estendida da UMBRA (nao dos pes) e mira no corpo da Geovana.
+	var muzzle: Vector2 = boss_pos + Vector2(0.0, RTUmbraHitbox.HAND_HEIGHT)
+	var dir: Vector2 = RTUmbraAim.aim_direction(muzzle, target, target_vel, BOSS5_PROJECTILE_SPEED, _umbra_mind().aim_lead).rotated(rng.randf_range(-0.05, 0.05))
+	enemy_bullets.append({"pos": RTUmbraHitbox.umbra_hand(boss_pos, dir), "dir": dir, "life": 4.2, "damage": player_hp_max * BOSS5_PROJECTILE_DAMAGE_RATE + BOSS5_PROJECTILE_DAMAGE_FLAT + enemy_far_damage, "phase": rng.randf_range(0.0, TAU), "type": "umbra_plasma", "speed_mult": BOSS5_PROJECTILE_SPEED / 210.0, "radius": RTUmbraHitbox.PLASMA_RADIUS})
+	_spawn_radial_particles(RTUmbraHitbox.umbra_hand(boss_pos, dir), Color(0.24, 1.0, 0.38), 8)
 
 
 func _predict_player_pos(seconds: float) -> Vector2:
@@ -22495,7 +22647,7 @@ func _transmute_umbra_dimension(action: String) -> void :
 		"atrito":
 			boss5_ability_cooldowns["LASER_SOBRECARGA"] = 5.0
 			dim_color = Color(1.0, 0.45, 0.1)
-	_spawn_radial_particles(boss_pos, dim_color, 400)
+	_spawn_radial_particles(boss_pos, dim_color, 60)
 	_start_phase5_transmute_vfx(boss5_last_dimension, dimension, dim_color)
 	_queue_umbra_teleport(_umbra_teleport_target(false), true)
 
@@ -22631,8 +22783,7 @@ func _update_phase5_hazards(delta: float) -> void :
 					var prog: float = clampf(active_elapsed / maxf(0.01, active_total), 0.0, 1.0)
 					var radius_atual: float = lerpf(r_min, r_max, prog) + sin(time_alive * 7.0) * 8.0
 					hazard["radius_atual"] = radius_atual
-					var dist: = player_pos.distance_to(Vector2(hazard["pos"]))
-					if dist <= radius_atual:
+					if RTUmbraHitbox.feet_in_circle(player_pos, Vector2(hazard["pos"]), radius_atual):
 						hazard["text_timer"] = float(hazard.get("text_timer", 0.0)) - delta
 						if float(hazard["text_timer"]) <= 0.0:
 							hazard["text_timer"] = 1.2
@@ -22641,7 +22792,7 @@ func _update_phase5_hazards(delta: float) -> void :
 							_damage_player(int(player_hp_max * 0.045 + 30), "umbra_prison")
 							hazard["triggered"] = true
 							_umbra_learn("PRISAO", 0.35)
-						if _damage_remote_player_in_radius(Vector2(hazard["pos"]), radius_atual, int(player_hp_max * 0.045 + 30), "umbra_prison", hazard, "triggered_remote"):
+						if _damage_remote_player_in_radius(Vector2(hazard["pos"]) - RTUmbraHitbox.FEET, radius_atual + RTUmbraHitbox.FEET_RADIUS, int(player_hp_max * 0.045 + 30), "umbra_prison", hazard, "triggered_remote"):
 							_umbra_learn("PRISAO", 0.18)
 			"miasma":
 				hazard["pos"] = Vector2(hazard.get("pos", player_pos)).lerp(player_pos, 0.12)
@@ -22655,6 +22806,8 @@ func _update_phase5_hazards(delta: float) -> void :
 				_damage_remote_player_in_radius(Vector2(hazard["pos"]), float(hazard.get("radius", 220.0)), int(maxf(1.0, player_hp_max * 0.01)), "umbra_miasma", hazard, "tick_remote")
 			"siphon":
 				_hazard_tick_damage(hazard, delta, float(hazard.get("radius", 190.0)), int(player_hp_max * 0.02 + 12), "umbra_siphon")
+			"missa":
+				RTUmbraNecroseMass.update(self, hazard, delta)
 			"discharge":
 				var max_life: float = float(hazard.get("max", 2.4))
 				var life: float = float(hazard.get("life", 0.0))
@@ -22671,7 +22824,7 @@ func _update_phase5_hazards(delta: float) -> void :
 					var angle_to_player: float = (player_pos - origin).angle()
 					var diff_ang: float = abs(wrapf(angle_to_player - dir.angle(), - PI, PI))
 
-					var in_cone: bool = (dist <= max_radius) and (diff_ang <= half_abertura)
+					var in_cone: bool = RTUmbraHitbox.body_in_cone(player_pos, origin, dir, max_radius, half_abertura)
 					hazard["in_cone"] = in_cone
 					hazard["diff_ang"] = diff_ang
 					hazard["dist"] = dist
@@ -22714,7 +22867,7 @@ func _update_phase5_hazards(delta: float) -> void :
 						for seg in segs:
 							var a: Vector2 = Vector2(seg["a"])
 							var b: Vector2 = Vector2(seg["b"])
-							if _distance_to_segment(player_pos, a, b) <= curr_w * 0.5:
+							if RTUmbraHitbox.feet_near_segment(player_pos, a, b, curr_w * 0.5):
 								hit_detected = true
 								break
 						if hit_detected:
@@ -22740,7 +22893,9 @@ func _update_phase5_hazards(delta: float) -> void :
 						continue
 					active_spears.append(sp)
 
-					if p_pos.distance_to(player_pos) <= 22.0:
+					# Lanca (28 px de comprimento, ~4 de espessura) contra o corpo.
+					var sp_dir: Vector2 = Vector2.from_angle(float(sp.get("angle", 0.0)))
+					if RTUmbraHitbox.body_hits_swept(player_pos, p_pos - sp_dir * 10.0, p_pos + sp_dir * 18.0, 4.0):
 						sp["hit"] = true
 						player_stun_timer = 1.5
 						player_freeze_visual_timer = 1.5
@@ -22881,11 +23036,11 @@ func _check_laser_hit(hazard: Dictionary, num_beams: int, curr_ang: float, width
 		var b_dir: Vector2 = Vector2.from_angle(b_ang)
 		var dot: float = v_player.dot(b_dir)
 		if dot > 0.0:
-			var perp_dist: float = (v_player - b_dir * dot).length()
-			min_perp_dist = minf(min_perp_dist, perp_dist)
-			if perp_dist <= width * 0.5:
-				hit_detected = true
-				break
+			min_perp_dist = minf(min_perp_dist, (v_player - b_dir * dot).length())
+		# Nucleo visivel do feixe (60% da largura) contra o corpo inteiro.
+		if RTUmbraHitbox.body_hits_ray(player_pos, origin, b_dir, width * 0.3):
+			hit_detected = true
+			break
 	hazard["last_laser_dist"] = min_perp_dist if min_perp_dist < INF else -1.0
 
 	if hit_detected:
@@ -22974,10 +23129,10 @@ func _hazard_tick_damage(hazard: Dictionary, delta: float, radius: float, damage
 	if float(hazard["tick"]) > 0.0:
 		return
 	hazard["tick"] = 0.55
-	if player_pos.distance_to(Vector2(hazard.get("pos", player_pos))) <= radius:
+	if RTUmbraHitbox.feet_in_circle(player_pos, Vector2(hazard.get("pos", player_pos)), radius):
 		_damage_player(damage, source)
 		_umbra_learn(boss5_current_action, 0.16)
-	if _damage_remote_player_in_radius(Vector2(hazard.get("pos", player_pos)), radius, damage, source):
+	if _damage_remote_player_in_radius(Vector2(hazard.get("pos", player_pos)) - RTUmbraHitbox.FEET, radius + RTUmbraHitbox.FEET_RADIUS, damage, source):
 		_umbra_learn(boss5_current_action, 0.08)
 
 
@@ -23030,7 +23185,7 @@ func _update_phase5_rats(delta: float) -> void :
 		pos = (pos + dir * speed * delta).clamp(Vector2(30, 30), WORLD_SIZE - Vector2(30, 30))
 		rat["pos"] = pos
 
-		if pos.distance_to(player_pos) <= 30.0:
+		if RTUmbraHitbox.body_hits_circle(player_pos, pos, 15.0):
 			_damage_player(BOSS5_RAT_DAMAGE, "umbra_rat")
 			boss_hp = minf(boss_hp_max, boss_hp + boss_hp_max * 0.002)
 			boss5_rat_extras = mini(4, boss5_rat_extras + 1)
@@ -23988,6 +24143,9 @@ func _update_boss(delta: float) -> void :
 		return
 	if current_phase == RTSertaoController.PHASE:
 		boss8_controller.update(delta)
+		return
+	if current_phase == RTCriptaController.PHASE:
+		boss9_controller.update(delta)
 		return
 	var rewind_health_ratio = boss_hp / max(1.0, boss_hp_max)
 	if boss_entry_timer <= 0.0 and rewind_health_ratio < BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown <= 0.0 and boss1_time_wave.is_empty():
@@ -25878,6 +26036,15 @@ var world_light_layer: Node2D = null
 var merchant_dimension: RTMerchantDimension = null
 var merchant_npc: RTMerchantNpc = null
 var dialogue_controller: RTDialogueController = null
+## Cena de chegada da UMBRA (fase 5, modo "umbra_intro").
+var umbra_intro_controller: RTUmbraIntro = null
+
+
+func _umbra_intro() -> RTUmbraIntro:
+	if umbra_intro_controller == null:
+		umbra_intro_controller = RTUmbraIntro.new()
+		umbra_intro_controller.configure(self)
+	return umbra_intro_controller
 
 
 func _merchant_dimension() -> RTMerchantDimension:
@@ -25920,6 +26087,7 @@ var merchant_dimension_state: Dictionary:
 
 
 var quantum_chips: RTQuantumChipController = null
+var team_chip_start_config: Dictionary = {}
 var umbra_base_skills: RTUmbraBaseSkills = null
 var umbra_mind: RTUmbraMind = null
 var umbra_phase_observer: RTUmbraPhaseObserver = null
@@ -27764,6 +27932,10 @@ func _boss_call_can_start(show_message: = true) -> bool:
 		if show_message:
 			_add_text("DERROTE O ARAUTO", player_pos + Vector2(0, -110), Color(0.74, 0.92, 1.0), 1.0, 22)
 		return false
+	if current_phase == RTCriptaController.PHASE and cripta_controller.miniboss_alive():
+		if show_message:
+			_add_text("DERROTE A NOIVA DE SEDA", player_pos + Vector2(0, -110), Color(0.9, 0.85, 1.0), 1.0, 22)
+		return false
 	if current_phase == RTSertaoController.PHASE and sertao_controller.miniboss_alive():
 		if show_message:
 			_add_text("DERROTE O CAGADO CANGACEIRO", player_pos + Vector2(0, -110), Color(1.0, 0.84, 0.3), 1.0, 22)
@@ -27850,7 +28022,11 @@ func _update_boss_call(delta: float) -> void :
 		boss_active = true
 		_mark_boss_reached(current_phase)
 		_play_boss_music_random()
-		if current_phase == RTSertaoController.PHASE:
+		if current_phase == RTCriptaController.PHASE:
+			boss_hp_max = _boss_hp_for_phase(9)
+			boss_name = "MATRIARCA DOS OITO OLHOS"
+			boss_title_color = Color(1.0, 0.3, 0.35)
+		elif current_phase == RTSertaoController.PHASE:
 			boss_hp_max = _boss_hp_for_phase(8)
 			boss_name = "CASCO-DE-SOL"
 			boss_title_color = Color(1.0, 0.78, 0.3)
@@ -27916,6 +28092,12 @@ func _update_boss_call(delta: float) -> void :
 			boss_attack_timer = 999.0
 			sertao_controller.clear_for_boss_call()
 			boss8_controller.reset()
+		if current_phase == RTCriptaController.PHASE:
+			boss_pos = experimental_phase_controller.boss_encounter_center()
+			boss_entry_timer = 0.0
+			boss_attack_timer = 999.0
+			cripta_controller.clear_for_boss_call()
+			boss9_controller.reset()
 		if current_phase == 7:
 			boss7_original_hp_max = boss_hp_max
 			boss7_state = BOSS7_STATE_INTRO
@@ -32348,6 +32530,8 @@ func _catalog_locked_objective_text(item: Dictionary, include_progress: = true) 
 func _catalog_display_title(item: Dictionary) -> String:
 	if _catalog_item_locked(item):
 		return "???"
+	if String(item.get("kind", "")) == "card":
+		return CardCatalogDefinitions.display_name(String(item.get("name", "")))
 	return String(item.get("name", "Registro"))
 
 
@@ -33552,6 +33736,9 @@ func _draw() -> void :
 			_corruptor_shop().draw(self, viewport)
 		"story_comic":
 			RTStoryComicPresentation.draw(self, viewport)
+		"umbra_intro":
+			_draw_game(viewport)
+			RTUmbraIntroPresentation.draw_overlay(self, viewport)
 		"specter_upgrade":
 			_draw_game(viewport)
 			_draw_specter_upgrade(viewport)
@@ -35542,7 +35729,7 @@ func _enemy_default_facing(kind: String) -> Vector2:
 			return Vector2.RIGHT
 		ENEMY_CINERIDO, ENEMY_PANGOLIRO, ENEMY_CORVOL:
 			return Vector2.RIGHT
-		"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro", "cagado_piao", "cagado_cangaceiro", "ovo_jabuti":
+		"jabuti_errante", "tartaruga_mandacaru", "jabuti_morteiro", "cagado_piao", "cagado_cangaceiro", "ovo_jabuti", "aranha_lobo", "viuva_silencio", "aranha_alcapao", "aranha_saltadora", "aranha_mimica", "noiva_de_seda", "filhote_aranha", "olho_vigia", "aranha_boleadeira", "aranha_armadeira":
 			return Vector2.RIGHT
 		ENEMY_SHIELD_REFLECTOR:
 			return Vector2.LEFT
@@ -37228,7 +37415,9 @@ func _lacerante_attack_direction() -> Vector2:
 
 func _camera(viewport: Vector2) -> Vector2:
 	var target: Vector2 = _camera_target_position()
-	if camera_comfort_enabled and camera_follow_initialized:
+	if mode == RTUmbraIntro.MODE:
+		target = _umbra_intro().camera_center()
+	elif camera_comfort_enabled and camera_follow_initialized:
 		target = camera_follow_center
 	var camera = target - viewport * 0.5
 	var overscan: Vector2 = _map_camera_overscan(viewport)
@@ -37442,9 +37631,12 @@ func _unhandled_input(event: InputEvent) -> void :
 		if advance:
 			_dialogue().advance_input()
 		return
+	if mode == RTUmbraIntro.MODE:
+		_umbra_intro().handle_input(event, viewport)
+		return
 	if mode == RTCorruptorShop.MODE and _corruptor_shop().handle_input(event, viewport):
 		return
-	if mode == "manifest" and _handle_quantum_chip_input(event):
+	if (mode == "manifest" or (mode == "lobby_online_host" and (RTQuantumChipUI.open or (event is InputEventKey and event.pressed and event.keycode == KEY_C)))) and _handle_quantum_chip_input(event):
 		return
 	_update_button_layout(viewport)
 	if _handle_startup_thanks_input(event):
@@ -39767,10 +39959,11 @@ func _request_manifest_mp_start() -> void:
 	_net_report_count_out("control", 48)
 	_net_report_event("manifest_start_request_out", "online=%s" % str(online_connected))
 	if online_connected:
-		rpc_id(1, "_rpc_request_manifest_mp_start")
+		rpc_id(1, "_rpc_request_manifest_mp_start", _quantum_chips().prepare_team_config())
 	else:
-		rpc("_start_multiplayer_game")
-		_start_multiplayer_game()
+		var team_config: Dictionary = _quantum_chips().prepare_team_config()
+		rpc("_start_multiplayer_game", team_config)
+		_start_multiplayer_game(team_config)
 
 
 func _manifest_preview_kind_index(kind: String) -> int:
@@ -42011,6 +42204,29 @@ func _send_peer_damage(peer_id: int, amount: int, source: String, silent_hit_sfx
 		rpc_id(peer_id, "_rpc_client_take_damage", maxi(1, amount), source, silent_hit_sfx)
 
 
+## Dimensao 9: efeito de jogo da autoridade num jogador (lento, preso, eco, atordoar).
+func _send_peer_phase9_event(peer_id: int, kind: String, amount: float, position: Vector2) -> void:
+	if peer_id <= 0 or not is_multiplayer or not _is_world_authority():
+		return
+	if peer_id == _mp_unique_id():
+		cripta_controller.apply_local_event(kind, amount, position)
+		return
+	if online_connected:
+		rpc_id(1, "_rpc_phase9_event_to_peer", peer_id, kind, amount, position)
+	else:
+		rpc_id(peer_id, "_rpc_phase9_event_to_peer", peer_id, kind, amount, position)
+
+
+## Dimensao 9: pedido de um jogador para a autoridade (ex.: tiro rompeu um fio).
+func _send_authority_phase9_event(kind: String, amount: float, position: Vector2) -> void:
+	if not is_multiplayer:
+		return
+	if _is_world_authority():
+		cripta_controller.apply_authority_event(_mp_unique_id(), kind, amount, position)
+		return
+	rpc_id(1, "_rpc_phase9_event_to_authority", kind, amount, position, 0)
+
+
 func _send_peer_phase8_graze(peer_id: int, position: Vector2) -> void:
 	if peer_id <= 0 or not is_multiplayer or not _is_world_authority():
 		return
@@ -42667,7 +42883,7 @@ func _rpc_confirm_manifest_mp(stage: String, manifestation: int, aura: int, scro
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
-func _rpc_request_manifest_mp_start() -> void:
+func _rpc_request_manifest_mp_start(team_config: Dictionary = {}) -> void:
 	if not dedicated_server_mode or mode != "manifest_mp":
 		return
 	var sender: int = _mp_sender_id()
@@ -42680,8 +42896,9 @@ func _rpc_request_manifest_mp_start() -> void:
 		return
 	_net_report_count_out("control", 48)
 	_net_report_event("start_multiplayer_game_out", "host_manual_start")
-	rpc("_start_multiplayer_game")
-	_start_multiplayer_game()
+	var checked: Dictionary = RTQuantumChipController.validated_team_config(team_config)
+	rpc("_start_multiplayer_game", checked)
+	_start_multiplayer_game(checked)
 
 
 @rpc("authority", "call_remote", "reliable", 3)
@@ -42700,7 +42917,14 @@ func _dedicated_manifest_all_ready() -> bool:
 	return true
 
 @rpc("authority", "call_remote", "reliable", 3)
-func _start_multiplayer_game() -> void :
+func _start_multiplayer_game(team_config: Dictionary = {}) -> void :
+	team_chip_start_config = RTQuantumChipController.validated_team_config(team_config)
+	if online_game_started_ms > 0 and mode in ["game", "multiplayer_syncing"]:
+		# Espectadores podem ter iniciado na pre-carga; o pacote final nao
+		# reinicia sua partida nem duplica estado quando chega depois.
+		if online_local_spectator:
+			_quantum_chips().on_run_started(team_chip_start_config)
+		return
 	net_decks_by_peer.clear()
 	_net_report_count_in("control", 48)
 	_net_report_event("start_multiplayer_game_in", "mode_before=%s" % mode)
@@ -44289,13 +44513,13 @@ func _rpc_commit_phase_transfer(target_phase: int, action: String = "phase") -> 
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
-func _rpc_trigger_shop(is_forced: bool) -> void :
+func _rpc_trigger_shop(is_forced: bool, rift_pos: Vector2 = Vector2.ZERO) -> void :
 	if dedicated_server_mode:
 		var sender: = _mp_sender_id()
 		if sender == dedicated_room_owner_peer_id:
 			for peer_id in _dedicated_active_peer_ids():
 				if peer_id != sender:
-					rpc_id(peer_id, "_rpc_trigger_shop", is_forced)
+					rpc_id(peer_id, "_rpc_trigger_shop", is_forced, rift_pos)
 		return
 	if _mp_sender_is_self(): return
 	if is_forced:
@@ -44311,7 +44535,16 @@ func _rpc_trigger_shop(is_forced: bool) -> void :
 		# a entrada na dimensao nao pode depender de active() na replica.
 		# Retransmissoes confiaveis tambem sao idempotentes: se a replica ja
 		# entrou, nao deve interpretar o segundo aviso como loja legada.
-		if _merchant_dimension().active or _merchant_dimension().enter():
+		if _merchant_dimension().active or _rift_transition().busy():
+			return
+		if _rift_transition().enabled():
+			var target_pos: Vector2 = rift_pos if rift_pos.length_squared() > 0.0 and rift_pos.is_finite() else Vector2(shop_rift.get("pos", player_pos))
+			if shop_rift_controller.active():
+				shop_rift["state"] = RTMerchantRiftController.STATE_OPEN
+				shop_rift["diving"] = true
+			_rift_transition().begin_dive(target_pos)
+			return
+		if _merchant_dimension().enter():
 			return
 		_start_shop_opening_animation(false)
 
@@ -45597,6 +45830,71 @@ func _rpc_request_gameplay_orb_collect(uid: String, collector_peer_id: int) -> v
 
 
 @rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_request_quantum_token(drop_id: String, collector_peer_id: int) -> void:
+	var sender: int = _mp_sender_id()
+	if dedicated_server_mode:
+		if sender <= 0 or sender != collector_peer_id or _is_dedicated_spectator(sender):
+			return
+		rpc_id(dedicated_room_owner_peer_id, "_rpc_request_quantum_token", drop_id, collector_peer_id)
+		return
+	if not _is_world_authority() or drop_id == "" or collector_peer_id == _mp_unique_id():
+		return
+	if sender != 1 and sender != collector_peer_id:
+		return
+	var state: Dictionary = net_players_by_peer.get(collector_peer_id, {})
+	if not _remote_player_state_targetable(state):
+		return
+	for drop in arauto_card_drops:
+		if String(drop.get("drop_id", "")) != drop_id or int(drop.get("owner_peer", 0)) != collector_peer_id or not bool(drop.get("mystery", false)):
+			continue
+		var peer_pos: Vector2 = Vector2(state.get("pos", Vector2.ZERO))
+		if peer_pos.distance_to(Vector2(drop.get("pos", peer_pos))) > _neutral_pickup_radius_for_peer(50.0, collector_peer_id) + 36.0:
+			return
+		if not _quantum_chips().confirm_remote_token(collector_peer_id, drop_id):
+			return
+		var rarity: String = String(drop.get("mystery_rarity", "common"))
+		drop["life"] = 0.0
+		_drop_mode().remember_collected(drop_id)
+		arauto_card_drops = arauto_card_drops.filter(func(item): return float(item.get("life", 0.0)) > 0.0)
+		if _shop_rpc_available():
+			rpc("_rpc_card_drop_removed", drop_id, collector_peer_id)
+			if _mp_unique_id() == 1:
+				rpc_id(collector_peer_id, "_rpc_quantum_token_confirmed", collector_peer_id, drop_id, rarity)
+			else:
+				rpc_id(1, "_rpc_quantum_token_confirmed", collector_peer_id, drop_id, rarity)
+		return
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_quantum_token_confirmed(target_peer_id: int, drop_id: String, rarity: String) -> void:
+	var sender: int = _mp_sender_id()
+	if dedicated_server_mode:
+		if sender == dedicated_room_owner_peer_id and target_peer_id > 0 and _mp_peer_connected(target_peer_id):
+			rpc_id(target_peer_id, "_rpc_quantum_token_confirmed", target_peer_id, drop_id, rarity)
+		return
+	if sender == 1 and target_peer_id == _mp_unique_id():
+		_quantum_chips().confirm_local_token(drop_id, rarity)
+
+
+func _submit_quantum_tokens_redeemed(count: int) -> void:
+	if is_multiplayer and not _is_world_authority() and count > 0 and _shop_rpc_available():
+		rpc_id(1, "_rpc_quantum_tokens_redeemed", _mp_unique_id(), count)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_quantum_tokens_redeemed(peer_id: int, count: int) -> void:
+	var sender: int = _mp_sender_id()
+	if count <= 0 or count > 128:
+		return
+	if dedicated_server_mode:
+		if sender == peer_id and not _is_dedicated_spectator(sender):
+			rpc_id(dedicated_room_owner_peer_id, "_rpc_quantum_tokens_redeemed", peer_id, count)
+		return
+	if _is_world_authority() and _merchant_dimension().active and (sender == 1 or sender == peer_id):
+		_quantum_chips().redeem_remote_tokens(peer_id, count)
+
+
+@rpc("any_peer", "call_remote", "reliable", 3)
 func _rpc_request_card_drop_collect(drop_id: String, collector_peer_id: int) -> void:
 	var sender := _mp_sender_id()
 	if dedicated_server_mode:
@@ -45703,6 +46001,36 @@ func _request_peer_suturer_card_change(peer_id: int, card_id: String, restore: b
 func _rpc_client_take_damage(amount: int, source: String, silent_hit_sfx: bool = false) -> void :
 	if _mp_sender_is_self(): return
 	_damage_player(amount, source, silent_hit_sfx)
+
+
+## Dimensao 9 -> jogador. Servidor dedicado: so repassa o que veio do dono da sala.
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_phase9_event_to_peer(peer_id: int, kind: String, amount: float, position: Vector2) -> void:
+	if dedicated_server_mode:
+		if _mp_sender_id() != dedicated_room_owner_peer_id or not dedicated_player_state_by_peer.has(peer_id):
+			return
+		rpc_id(peer_id, "_rpc_phase9_event_to_peer", peer_id, kind.left(16), clampf(amount, -1.0e12, 1.0e12), position)
+		return
+	if _mp_sender_id() != 1 or peer_id != _mp_unique_id() or current_phase != RTCriptaController.PHASE:
+		return
+	cripta_controller.apply_local_event(kind, amount, position)
+
+
+## Dimensao 9 -> autoridade. Servidor dedicado: repassa ao dono da sala com quem pediu.
+@rpc("any_peer", "call_remote", "reliable", 3)
+func _rpc_phase9_event_to_authority(kind: String, amount: float, position: Vector2, origin_peer: int) -> void:
+	if dedicated_server_mode:
+		var sender: int = _mp_sender_id()
+		if sender == 0 or _is_dedicated_spectator(sender) or dedicated_room_owner_peer_id == 0 or sender == dedicated_room_owner_peer_id:
+			return
+		rpc_id(dedicated_room_owner_peer_id, "_rpc_phase9_event_to_authority", kind.left(16), clampf(amount, -1.0e12, 1.0e12), position, sender)
+		return
+	if not _is_world_authority() or current_phase != RTCriptaController.PHASE:
+		return
+	var from_peer: int = _mp_sender_id()
+	if online_connected and from_peer == 1:
+		from_peer = origin_peer
+	cripta_controller.apply_authority_event(from_peer, kind, amount, position)
 
 
 @rpc("authority", "call_remote", "reliable", 3)
@@ -45878,6 +46206,9 @@ func _draw_multiplayer_syncing(viewport: Vector2) -> void :
 	_draw_centered("aguardando " + state, panel.position + Vector2(210, 88), 14, Color(0.72, 1.0, 0.92))
 
 func _handle_lobby_online_host_touch(pos: Vector2, viewport: Vector2) -> void :
+	if RTQuantumChipUI.open:
+		RTQuantumChipUI.handle_tap(self, pos)
+		return
 	if run_mode_popup_open:
 		if buttons.get("lobby_mode_shop", Rect2()).has_point(pos):
 			_request_lobby_run_mode(RUN_MODE_SHOP)
@@ -45886,7 +46217,9 @@ func _handle_lobby_online_host_touch(pos: Vector2, viewport: Vector2) -> void :
 			_request_lobby_run_mode(RUN_MODE_DROP)
 			run_mode_popup_open = false
 		return
-	if buttons.get("lobby_mode", Rect2()).has_point(pos):
+	if buttons.get("lobby_chips", Rect2()).has_point(pos):
+		RTQuantumChipUI.open = true
+	elif buttons.get("lobby_mode", Rect2()).has_point(pos):
 		run_mode_popup_selection = 1 if selected_run_mode == RUN_MODE_DROP else 0
 		run_mode_popup_open = true
 	elif buttons.get("lobby_start", Rect2()).has_point(pos):

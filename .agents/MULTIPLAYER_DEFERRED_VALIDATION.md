@@ -921,3 +921,194 @@ Validado só em solo (`tests/merchant_rift_transition_smoke.gd`,
   respiro 28 s (`fusion_cooldown_timer`, fora do snapshot da run). Autoridade
   apenas, como antes.
 - **Balões de fala** viraram `RTSpeechBubbles` genérico; só desenho local.
+
+## 2026-11-15 — Relevo visual dos objetos sólidos do mapa
+
+Validado somente em solo com `tests/map_props_collision_smoke.gd`, incluindo
+render real normal e `--low`. A camada `RTMapPropPresentation` deriva a arte do
+mesmo SDF e do mesmo `map_key` já usados localmente por
+`RTMapPropColliders`; não acrescenta estado, dano, colisão, RPC ou snapshot.
+
+Dever multiplayer: confirmar em duo/trio que host e clientes escolhem o mesmo
+atlas/dimensão durante transições e veem o relevo na mesma célula, sobretudo na
+fase 5 quando a dimensão reaproveita um terreno com obstáculos. A geometria de
+colisão existente não foi alterada.
+
+## 2026-11-15 — Henry Incendiário: ticks da HAB1 e stun da ultimate
+
+Validado somente em solo com `tests/henry_incendiary_smoke.gd`. A HAB1 agora
+divide o mesmo dano-base total do cone em cinco impactos durante 320 ms. Cada
+impacto da ultimate renova 900 ms de stun em inimigos comuns, mini-chefes e
+Arauto; chefes completos continuam sem stun. A confirmação autoritativa de
+`henry_heat_wave` é o ponto que aplica o estado, inclusive para pedido de dano
+de um Henry remoto, sem novo RPC, campo de snapshot ou mudança de assinatura.
+
+Dever multiplayer: confirmar em duo/trio que os cinco pedidos de dano da HAB1
+não são perdidos ou duplicados sob latência, que cada pulso remoto renova o stun
+apenas no alvo atingido e que reconnect não preserva o temporizador local de
+anti-deslizamento. O transporte visual existente não foi alterado.
+
+## 2026-11-17 — Sorte Temporal e pressão do Larápio ferido
+
+Validado somente em solo com `tests/runtime_progression_controller_smoke.gd`,
+`tests/larapio_rework_smoke.gd`, `tests/phase2_sineiro_boreal_smoke.gd` e
+`tests/phase6_amber_suturer_smoke.gd`. A Sorte Temporal agora converge para
+40%, com 25% em uma hora. Recompensas aleatórias: Larápio 2 cartas, ou 3 sem
+roubo; Sineiro e Suturador 1 carta. Cartas roubadas pelo Suturador continuam
+sendo devolvidas e não contam como recompensa nova.
+
+O Larápio com até 45% de vida e sem saque passa a pressionar em curta/média
+distância e usa intervalo de arremesso entre 2,15 s e 1,8 s. Com saque, mantém
+a fuga anterior. Não houve RPC, assinatura, snapshot, dano ou regra de roubo
+nova; a autoridade continua no host.
+
+Dever multiplayer: confirmar em duo/trio que a autoridade escolhe a mesma
+postura ao cruzar 45% de vida, que o movimento replicado não oscila entre fuga
+e aproximação sob atraso e que cada peer recebe exatamente a quantidade nova de
+cartas, incluindo devolução de carta roubada pelo Suturador sem duplicação.
+
+## 2026-11-17 — Rota nova do ciclo de farm + Sertão (8) e Cripta (9) no multiplayer
+
+Pedido explícito do usuário para deixar 8 e 9 prontos para multiplayer. O Codex
+integra e confirma a comunicação com a VPS.
+
+### Rota
+- A rota inicial não mudou: 1→2→6→3→4 ou 6→1→2→3→4.
+- Depois do boss 4 aparece a escolha: Umbra x ciclo.
+- Ciclo: fase 7, depois 3 fases sorteadas sem repetir de
+  `DIMENSION_FARM_POOL = [1, 2, 3, 8, 9]`. Depois do 4º boss do ciclo, nova
+  escolha.
+- 8 e 9 deixaram de ser bônus por sorteio e agora são membros do ciclo. Com
+  isso só podem aparecer a partir da 7ª dimensão.
+- No multiplayer, o líder sorteia a rota uma vez e manda junto da ação. A ação
+  `"farm"` virou `"farm:A,B,C"`, então todos seguem a mesma rota. Antes, cada
+  peer sorteava a sua.
+
+### Fase 8
+- Já era autoritativa.
+- Correção: a caixa do ricochete do Cágado-Pião centralizava no jogador local da
+  autoridade. Agora centraliza no alvo do inimigo.
+
+### Fase 9
+Autoridade:
+- Usa o cone de todos os jogadores. O cone dos remotos vem de
+  `aim_dir`/`input_move` do sync de jogador já existente.
+- Aplica dano nos remotos por `_send_peer_damage`.
+- Manda efeitos aos remotos por um RPC novo, `_rpc_phase9_event_to_peer`, com os
+  tipos `slow`, `root`, `stun` e `echo` (cura do eco).
+
+Replica:
+- Recebe `cripta_visual` e `boss9_visual` no pacote de visuais do mundo:
+  - semente do mapa (pilastras iguais);
+  - lamparinas, ecos, fios e teias;
+  - estado das aranhas;
+  - estado da Matriarca.
+- Roda `update_replica`, que é local: breu, ondulações, sustos, aviso pelas
+  costas, regeneração na luz e "não é alvo".
+- Tiro da replica que acerta um fio vai para a autoridade por outro RPC novo,
+  `_rpc_phase9_event_to_authority`.
+
+Outras mudanças:
+- `NET_ENEMY_TYPES` ganhou as 8 aranhas, no fim da lista.
+- `RTNetContract.MAX_PHASE_INDEX` passou de 8 para 9. Antes, a replica voltava
+  para a fase 8 ao receber o boss.
+
+### Validado
+Só no processo local, sem rede:
+- `tests/multiplayer_phase9_parity_smoke.gd`: mapa, mundo, visão por jogador,
+  chefe e rota compartilhada.
+- `tests/multiplayer_phase8_parity_smoke.gd`
+- `tests/multiplayer_phase_transfer_vote_smoke.gd`
+- `tests/phase8_sertao_smoke.gd`
+- `tests/phase9_cripta_smoke.gd`
+
+### Dever multiplayer (duo/trio real, com o servidor da VPS atualizado)
+1. **Rota:** depois de pegar o portal de ciclo, todos entram na 7 e depois
+   nas mesmas 3 fases, na mesma ordem.
+2. **Fase 9, chegada:** cliente e host veem as mesmas pilastras e lamparinas.
+   O breu de cada um segue o próprio cone.
+3. **Viúva:** congela quando qualquer jogador a encara e morde o cliente pelas
+   costas. O dano chega no cliente.
+4. **Fios da Noiva:** prendem e deixam lento o cliente. O tiro do cliente rompe
+   o fio (3 tiros) e o fio some para todos.
+5. **Eco de Luar:** quando o cliente pega, some para todos, cura o cliente e
+   soma pontos.
+6. **Matriarca:**
+   - o feixe pega o cliente e ela dá o bote nele;
+   - no Apagão, as quedas seguem o alvo e o cliente vê a sombra e leva susto;
+   - no Mil Olhos, os olhos enxergam o cliente.
+7. **Fase 8:** ricochete do Pião em volta do cliente; grazes e dano chegando
+   nos dois.
+
+### Compatibilidade
+Há dois RPCs novos no `main.gd`. Cliente e sala precisam ser da mesma build,
+porque os IDs de RPC mudam. Salas já abertas continuam no processo antigo; só
+salas novas usam o projeto atualizado.
+
+### Integração VPS e evidência de fio (2026-11-17)
+- Os seis smokes locais passaram com `rc=0`, marcador `_OK` e zero erros fora da
+  exceção de segurança offline. Paridade 9 e Cripta rodaram três vezes cada;
+  logs em `/tmp/ruptura_phase89_final_1794964183/`. O smoke do Sertão passou a
+  limpar áudio e cena antes de sair; o erro de recursos ainda em uso sumiu.
+- Backup da árvore de jogo anterior na VPS:
+  `/opt/ruptura/backups/phase89-before-20261118-012056.tar`. A sincronização
+  preservou `server/`, `.godot/`, `godot/`, downloads, builds, dados e logs.
+  Hashes de `main_runtime_core.gd`, `net_contract.gd`, os controladores da
+  Cripta, sua apresentação e o atlas EX9 bateram entre desktop e VPS.
+- Import headless como usuário `ruptura` e inicialização da cena principal
+  passaram. Para a versão Godot 4.7 da VPS, o Boot headless usa o carregamento
+  síncrono já existente; arquivos sincronizados receberam leitura para o
+  processo da sala. A sala em standby foi reciclada pelo manager apenas com
+  `rooms=0`, sem reiniciar `ruptura-relay`.
+- `multiplayer_phase9_parity_smoke` e `multiplayer_phase8_parity_smoke` também
+  passaram no Godot da VPS, sem erros, em processo único (não são duo real).
+- Duo público pelo relay: primeira tentativa `C3B58D` expôs acesso direto à
+  textura `enemy_phase_3_bullet` ainda não carregada no cliente. A apresentação
+  passou a tolerar essa janela, preservando o desenho do projétil. Repetição
+  `BD27CC`: `PUBLIC_TUNNEL_SOAK_OK`, host/cliente iniciaram a partida, 283
+  snapshots aplicados pelo cliente, zero desconexões e zero erros de script.
+  P95 do intervalo entre snapshots: 312 ms; ping P95 host 79 ms, cliente 51 ms.
+  Logs locais em `.agent_logs/phase89_public_duo_retry/`; journal da sala sem
+  `unknown method` ou `invalid packet`. A sala encerrou e o health voltou a
+  `rooms=0`, `standby=1`.
+- **Ainda devido pela rede:** os sete itens de “Dever multiplayer” acima não
+  foram exercidos por esse duo automatizado (o cenário `full_flow` não entra
+  nas fases 8/9). A rota, mundo, visão, Matriarca e Pião têm prova determinística
+  local/VPS, mas isso não equivale a combate cooperativo real nessas fases.
+  Viúva, Fios, Eco e ataques específicos da Matriarca continuam pendentes em
+  duo com atalho de QA, inspeção visual e logs. Nenhum APK/cliente foi publicado.
+
+### Adendo 2026-11-17 (noite) — Cripta: visão dos ecos, espreita da Matriarca, oficina do Mercador
+- **Visão dos ecos:**
+  - cada Eco de Luar soma +1 de visão (até 5) e reinicia 7 s;
+  - a mordida da Mímica zera o bônus;
+  - é LOCAL de cada jogador, porque chega pelo evento "echo" que já existia;
+  - "dim" é um tipo novo do mesmo `_rpc_phase9_event_to_peer`, sem RPC novo.
+- **Espreita da Matriarca:**
+  - modos `espreita` e `ambush_warn`;
+  - o aviso dura 0,5 s, depois vem o bote de 0,5 s;
+  - o alvo vai no snapshot (`"ap"`), e quem é o alvo recebe vibração e som.
+- **Oficina do Mercador na fase 8/9:** não desenha o chão, os tiros nem o breu da fase. Os fios da Cripta não seguram tiros nem deixam lento lá dentro.
+
+Dever multiplayer:
+1. O aviso da espreita aparece forte só no alvo e fraco nos outros.
+2. O bônus de visão de um jogador não muda a visão do outro.
+3. Dentro da oficina, durante a fase 9, ninguém vê pilastras nem breu.
+
+### Adendo 2026-11-18 — Cripta: controle (laço/casulo), veneno, dano menor, pontos x1,75
+- **Boleadeira e Armadeira** (`cripta_grapple.gd`):
+  - a autoridade decide quem prende quem (`_held` por peer) e manda "grab"/"cocoon"/"release"/"poison" pelo `_rpc_phase9_event_to_peer`. O uid vai no `amount`; o repasse do servidor não corta mais esse valor (antes era limitado a 0..10).
+  - O preso arrasta/prende a si mesmo, conta os próprios toques (cada toque conta, segurar não) e manda "escape" pelo `_rpc_phase9_event_to_authority`.
+- **Snapshot:**
+  - inimigos levam `gp` (quem está preso);
+  - teias têm o tipo "bola" (2);
+  - a dona da bola vai em `web_owners` (PackedInt64Array), porque o uid não cabe em float32.
+- **Veneno** é local de cada jogador.
+- **Pontos x1,75** na fase 9 valem para todos.
+
+Dever multiplayer:
+1. O cliente é laçado e arrastado; o host vê a linha de seda até o cliente.
+2. O cliente se solta apertando ATK; a aranha fica tonta no host.
+3. O host atira na aranha que prende o cliente e o cliente é solto.
+4. Casulo no cliente: guarda envenena; o cliente vê o casulo em si, e o host vê o casulo no cliente.
+5. Um jogador não pode ser preso por duas aranhas ao mesmo tempo, e depois de se soltar fica 2,5 s imune.

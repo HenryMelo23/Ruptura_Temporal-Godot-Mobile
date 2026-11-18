@@ -10,6 +10,16 @@ from typing import Any
 FORMAT = "ruptura_umbra_curriculum"
 
 
+def discounted_returns(rewards: list[float], bootstrap: float, gamma: float = .99) -> list[float]:
+    """Time limits bootstrap from next-state value; terminal deaths pass zero."""
+    result = []
+    value = float(bootstrap)
+    for reward in reversed(rewards):
+        value = float(reward) + gamma * value
+        result.append(value)
+    return list(reversed(result))
+
+
 def load_curriculum(path: Path) -> dict[str, Any]:
     config = json.loads(path.read_text(encoding="utf-8"))
     if config.get("format") != FORMAT:
@@ -61,7 +71,7 @@ def rollout_requests(config: dict[str, Any], split: str, update: int, episodes: 
     requests: list[dict[str, Any]] = []
     for ordinal in range(max(1, episodes)):
         request = {
-            "protocol": "ruptura_umbra_rl", "protocol_version": 1,
+            "protocol": "ruptura_umbra_rl", "protocol_version": 2,
             "curriculum_version": config["curriculum_version"], "reward_version": config["reward_version"],
             "scenario_id": ids[(offset + ordinal) % len(ids)],
             "seed": seed + update * 10000 + ordinal, "max_steps": max_steps,

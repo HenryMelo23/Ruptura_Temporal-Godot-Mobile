@@ -220,6 +220,9 @@ func pack(game: Node) -> Dictionary:
 		8:
 			packet["sertao_visual"] = game.sertao_controller.visual_snapshot()
 			packet["boss8_visual"] = game.boss8_controller.visual_snapshot()
+		9:
+			packet["cripta_visual"] = game.cripta_controller.visual_snapshot()
+			packet["boss9_visual"] = game.boss9_controller.visual_snapshot()
 	return packet
 
 
@@ -503,6 +506,11 @@ func apply(game: Node, snapshot_data) -> void:
 			game.sertao_controller.apply_remote_visual_snapshot(Dictionary(data["sertao_visual"]))
 		if data.has("boss8_visual"):
 			game.boss8_controller.apply_remote_visual_snapshot(Dictionary(data["boss8_visual"]))
+	if game.current_phase == 9 and game._is_world_replica():
+		if data.has("cripta_visual"):
+			game.cripta_controller.apply_remote_visual_snapshot(Dictionary(data["cripta_visual"]))
+		if data.has("boss9_visual"):
+			game.boss9_controller.apply_remote_visual_snapshot(Dictionary(data["boss9_visual"]))
 	if not (boss2_compact is PackedFloat32Array and boss2_compact.size() >= 27):
 		game.boss2_ultimate_wind_active = float(data.get("boss2_wind_active", game.boss2_ultimate_wind_active))
 		game.boss2_ultimate_wind_timer = float(data.get("boss2_wind_timer", game.boss2_ultimate_wind_timer))

@@ -1405,7 +1405,7 @@ static func _draw_manifest_select(game: Node2D, viewport: Vector2) -> void :
 
 		var name_color = Color(1, 1, 1, opacity)
 		var label_y = rect.end.y - (18 * scale)
-		var display_name = String(card_item["name"]).to_upper() if item_unlocked else "???"
+		var display_name = CardCatalogDefinitions.display_name(card_item).to_upper() if item_unlocked else "???"
 		game._draw_centered(display_name, Vector2(rect.get_center().x, label_y), game._readable_text_size(int(16 * scale)), name_color)
 		if item_unlocked:
 			var unread_section := "specter" if aura_view else "manifestation"
@@ -2498,7 +2498,7 @@ static func _draw_card_detail_panel(game: Node2D, card: Dictionary, rect: Rect2,
 	var rarity_color = game._card_rarity_color(card)
 	game.draw_rect(rect, Color(0.02, 0.025, 0.04, 0.92), true)
 	game.draw_rect(rect, Color(rarity_color.r, rarity_color.g, rarity_color.b, 0.78), false, 2)
-	game.draw_string(game.font, rect.position + Vector2(18, 26), String(card["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 18 if compact else 22, color)
+	game.draw_string(game.font, rect.position + Vector2(18, 26), CardCatalogDefinitions.display_name(card).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 18 if compact else 22, color)
 	var count_text = "x%d NO DECK" % owned_count if owned_count > 0 else "AINDA NAO POSSUI"
 	game.draw_string(game.font, rect.position + Vector2(18, 48), "%s | %s" % [game._card_rarity_label(card), count_text], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, rarity_color)
 	game._draw_card_stat_chips(game._card_stat_chips(String(card["name"])), rect.position + Vector2(rect.size.x * 0.42, 17.0), rect.size.x * 0.54, color, 12)
@@ -3200,6 +3200,8 @@ static func _draw_lobby_online_host(game: Node2D, viewport: Vector2) -> void :
 		status = "CONECTADO AO SERVIDOR" if game.online_connected else "INICIANDO SERVIDOR..."
 	game._draw_centered(status, panel.position + Vector2(panel.size.x * 0.38, 82.0), 15, Color(0.82, 0.94, 1.0, 0.92))
 	game.buttons["lobby_mode"] = Rect2(panel.end.x - 268.0, panel.position.y + 62.0, 234.0, 38.0)
+	game.buttons["lobby_chips"] = Rect2(panel.position.x + 34.0, panel.position.y + 62.0, 226.0, 38.0)
+	game._draw_big_button(game.buttons["lobby_chips"], "CHIPS DA EQUIPE (%d)" % game._quantum_chips().selected_count(), Color(0.19, 0.09, 0.3, 0.78), Color(0.78, 0.6, 1.0))
 	var mode_accent := Color(1.0, 0.68, 0.18) if game.selected_run_mode == game.RUN_MODE_DROP else Color(0.18, 0.86, 0.78)
 	game._draw_big_button(game.buttons["lobby_mode"], "MODO: " + game.selected_run_mode.to_upper(), Color(mode_accent.r, mode_accent.g, mode_accent.b, 0.12), mode_accent)
 
@@ -3223,6 +3225,7 @@ static func _draw_lobby_online_host(game: Node2D, viewport: Vector2) -> void :
 		game.draw_rect(game.buttons["lobby_mode"].grow(3.0), Color.WHITE, false, 2.0)
 	if game.run_mode_popup_open:
 		_draw_run_mode_popup(game, viewport)
+	RTQuantumChipUI.draw(game, viewport)
 
 
 static func _draw_lobby_online_client(game: Node2D, viewport: Vector2) -> void :

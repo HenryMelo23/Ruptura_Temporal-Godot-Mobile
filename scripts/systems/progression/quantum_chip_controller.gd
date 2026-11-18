@@ -60,6 +60,8 @@ var random_rolled := ""
 ## Corruptor: fichas ? pendentes por raridade e ultima carta escolhida por raridade.
 var tokens: Dictionary = {}
 var last_pick_id: Dictionary = {}
+var remote_tokens_by_peer: Dictionary = {}
+var confirmed_drop_ids: Dictionary = {}
 
 
 func configure(runtime_core: Node) -> void:
@@ -132,17 +134,61 @@ func is_active(id: String) -> bool:
 	return bool(active.get(id, false))
 
 
-## Chamado no inicio de cada run, antes de o jogador ganhar vida/dano base.
-func on_run_started() -> void:
-	active.clear()
-	tokens.clear()
-	random_rolled = ""
-	if core == null or bool(core.is_multiplayer):
-		return
+## O host fecha a configuração da equipe antes do RPC que inicia a partida.
+## O sorteio é feito uma vez; clientes recebem o resultado já decidido.
+func prepare_team_config() -> Dictionary:
+	var ids: Array[String] = []
 	for chip in CHIPS:
 		if bool(selected.get(chip["id"], false)):
-			active[chip["id"]] = true
+			ids.append(String(chip["id"]))
+	var rolled := ""
 	if random_mode:
+		var pool: Array[String] = []
+		for chip in CHIPS:
+			var id := String(chip["id"])
+			if not ids.has(id):
+				pool.append(id)
+		if not pool.is_empty():
+			rolled = pool[core.rng.randi_range(0, pool.size() - 1)]
+			ids.append(rolled)
+	return {"active": ids, "random_rolled": rolled}
+
+
+static func validated_team_config(data: Dictionary) -> Dictionary:
+	var ids: Array[String] = []
+	var incoming = data.get("active", [])
+	if not incoming is Array or incoming.size() > CHIPS.size():
+		return {"active": [], "random_rolled": ""}
+	for raw_id in incoming:
+		var id := String(raw_id)
+		if chip_def(id).is_empty() or ids.has(id):
+			return {"active": [], "random_rolled": ""}
+		ids.append(id)
+	var rolled := String(data.get("random_rolled", ""))
+	if rolled != "" and not ids.has(rolled):
+		return {"active": [], "random_rolled": ""}
+	return {"active": ids, "random_rolled": rolled}
+
+
+## Chamado no inicio de cada run, antes de o jogador ganhar vida/dano base.
+func on_run_started(team_config: Dictionary = {}) -> void:
+	active.clear()
+	tokens.clear()
+	remote_tokens_by_peer.clear()
+	confirmed_drop_ids.clear()
+	random_rolled = ""
+	if core == null:
+		return
+	if bool(core.is_multiplayer):
+		var checked := validated_team_config(team_config)
+		for id in checked["active"]:
+			active[String(id)] = true
+		random_rolled = String(checked["random_rolled"])
+	else:
+		for chip in CHIPS:
+			if bool(selected.get(chip["id"], false)):
+				active[chip["id"]] = true
+	if not bool(core.is_multiplayer) and random_mode:
 		var pool: Array = []
 		for chip in CHIPS:
 			if not bool(active.get(chip["id"], false)):
@@ -212,6 +258,39 @@ func token_total() -> int:
 	for r in RARITY_ORDER:
 		n += int(tokens.get(r, 0))
 	return n
+
+
+## A autoridade usa a soma so para decidir se abre a Fenda. Cada jogador
+## resgata apenas as proprias fichas dentro da mesma oficina.
+func team_token_total() -> int:
+	var total := token_total()
+	if core != null and bool(core.is_multiplayer) and core._is_world_authority():
+		for peer_id in core._living_run_player_peer_ids():
+			if peer_id != core._mp_unique_id():
+				total += int(remote_tokens_by_peer.get(peer_id, 0))
+	return total
+
+
+func confirm_remote_token(peer_id: int, drop_id: String) -> bool:
+	if peer_id <= 0 or drop_id == "" or confirmed_drop_ids.has(drop_id):
+		return false
+	confirmed_drop_ids[drop_id] = true
+	remote_tokens_by_peer[peer_id] = int(remote_tokens_by_peer.get(peer_id, 0)) + 1
+	return true
+
+
+func confirm_local_token(drop_id: String, rarity: String) -> bool:
+	if drop_id == "" or confirmed_drop_ids.has(drop_id):
+		return false
+	confirmed_drop_ids[drop_id] = true
+	add_token(rarity)
+	return true
+
+
+func redeem_remote_tokens(peer_id: int, count: int) -> void:
+	if peer_id <= 0 or count <= 0:
+		return
+	remote_tokens_by_peer[peer_id] = maxi(0, int(remote_tokens_by_peer.get(peer_id, 0)) - count)
 
 
 ## Proxima raridade a resgatar: comuns, incomuns, raras e lendarias, nessa ordem.

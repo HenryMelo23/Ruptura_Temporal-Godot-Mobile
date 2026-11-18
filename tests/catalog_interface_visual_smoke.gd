@@ -59,6 +59,22 @@ func _run() -> void:
 	game.mode = "catalog"
 	game.ui_platform_override_unlocked = true
 	game.content_unread_ids = {"catalog_manifestation:eletrica": true, "catalog_spectrum:impulsiva": true}
+	var expected_boss_art := {
+		"nevasca": "res://assets/sprites/boss2_remaster/idle/idle_01.png",
+		"pai_rato": "res://assets/sprites/boss3/remake/idle/idle_01.png",
+		"umbra": "res://assets/sprites/umbra_v3/idle_01.png",
+		"matriarca_chaga": "res://assets/sprites/boss6_rework/boss6_idle_00.png",
+	}
+	for category in [1, 2]:
+		game._catalog_reset_tab(category)
+		for item in game._catalog_items():
+			var portrait: Texture2D = UI.texture_for(game, item)
+			_check(portrait != null, "missing catalog art for " + String(item.get("id", "")))
+			var item_id: String = String(item.get("id", ""))
+			if expected_boss_art.has(item_id) and portrait != null:
+				_check(portrait.resource_path == expected_boss_art[item_id], "outdated boss art for " + item_id)
+			if String(item.get("id", "")) in ["sineiro_boreal", "suturador_ambar"] and portrait != null:
+				_check(portrait is AtlasTexture, "catalog displayed a full animation sheet")
 	for viewport in [Vector2i(1280, 720), Vector2i(960, 540)]:
 		root.size = viewport
 		game.ui_platform_override = "desktop" if viewport.x == 1280 else "android"

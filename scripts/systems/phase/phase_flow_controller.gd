@@ -17,6 +17,7 @@ func phase_region_name(phase: int) -> String:
 		6: "CHAGA DE AMBAR",
 		7: "CINZAS DA RUPTURA",
 		8: "SERTAO DAS TARTARUGAS",
+		9: "CRIPTA DE SEDA",
 	}.get(phase, "REGIAO DESCONHECIDA"))
 
 
@@ -42,7 +43,7 @@ func _sanitize_initial_phase_bias_target(phase: int) -> int:
 
 
 func _sanitize_forced_initial_phase(phase: int) -> int:
-	return phase if phase >= 1 and phase <= 8 else 0
+	return phase if phase >= 1 and phase <= 9 else 0
 
 
 func _forced_initial_phase_label() -> String:
@@ -67,7 +68,7 @@ func _begin_initial_phase_tracking(phase: int) -> void:
 			core.dimension_route_queue.append(int(next_phase))
 		# Proxima run comeca pelo outro inicio (1 <-> 6). Sair rapido repete o mesmo.
 		_set_initial_phase_bias(6 if initial_phase == 1 else 1, 1.0)
-	elif phase >= 1 and phase <= 8 and phase != core.DIMENSION_FINAL_PHASE:
+	elif phase >= 1 and phase <= 9 and phase != core.DIMENSION_FINAL_PHASE:
 		# Inicio forcado (dev/QA) fora de 1/6: segue a rota padrao sem a fase inicial.
 		for next_phase in [1, 2, 6, 3, 4]:
 			if next_phase != phase:
@@ -81,7 +82,6 @@ func _reset_dimension_route_state() -> void:
 	core.dimension_route_farm_cycles = 0
 	core.dimension_route_completed_count = 0
 	core.dimension_route_last_phase = 0
-	core.sertao_visited_cycle = -1
 	core.run_extracted = false
 
 
@@ -164,29 +164,6 @@ func _register_dimension_phase_completed(phase: int) -> void:
 		return
 	core.dimension_route_completed_count += 1
 	core.dimension_route_last_phase = phase
-	_maybe_queue_sertao()
-
-
-## Sertao das Tartarugas: dimensao bonus. So entra depois de SERTAO_MIN_COMPLETED
-## dimensoes concluidas, na frente da proxima da fila, com SERTAO_ROLL_CHANCE e no
-## maximo uma vez por ciclo de farm. Em multiplayer somente a autoridade altera
-## a fila; a replica recebe a rota pelo snapshot normal da partida.
-func _maybe_queue_sertao(force: bool = false) -> bool:
-	if core.experimental_phase_active:
-		return false
-	if core.is_multiplayer and not core._is_world_authority():
-		return false
-	if core.dimension_route_completed_count < core.SERTAO_MIN_COMPLETED:
-		return false
-	if core.dimension_route_queue.is_empty() or int(core.dimension_route_queue[0]) == core.SERTAO_PHASE:
-		return false
-	if core.dimension_route_last_phase == core.SERTAO_PHASE or core.sertao_visited_cycle == core.dimension_route_farm_cycles:
-		return false
-	if not force and core.rng.randf() > core.SERTAO_ROLL_CHANCE:
-		return false
-	core.dimension_route_queue.push_front(core.SERTAO_PHASE)
-	core.sertao_visited_cycle = core.dimension_route_farm_cycles
-	return true
 
 
 func _should_offer_dimension_choice_after_boss(phase: int) -> bool:
@@ -203,10 +180,10 @@ func _dimension_extraction_available() -> bool:
 	return core.dimension_route_completed_count > 0 and core.dimension_route_completed_count % core.DIMENSION_EXTRACTION_INTERVAL == 0
 
 
-func _roll_dimension_route(count: int, last_phase: int, excluded: Array = []) -> Array[int]:
+func _roll_dimension_route(count: int, last_phase: int, excluded: Array = [], pool: Array = []) -> Array[int]:
 	var route: Array[int] = []
 	var candidates: Array[int] = []
-	for phase in core.DIMENSION_ROUTE_POOL:
+	for phase in (pool if not pool.is_empty() else core.DIMENSION_ROUTE_POOL):
 		if phase == core.DIMENSION_FINAL_PHASE or phase in excluded:
 			continue
 		candidates.append(phase)
@@ -221,10 +198,45 @@ func _roll_dimension_route(count: int, last_phase: int, excluded: Array = []) ->
 	return route
 
 
-func _begin_farm_dimension_cycle() -> int:
+## Novo ciclo: Floresta (7) e depois 3 sorteadas de DIMENSION_FARM_POOL, sem repetir.
+## Em multiplayer o lider sorteia uma vez e manda junto da acao ("farm:2,9,1"), entao
+## todos os jogadores seguem a MESMA rota.
+func _begin_farm_dimension_cycle(route: Array = []) -> int:
 	core.dimension_route_farm_cycles += 1
-	core.dimension_route_queue = _roll_dimension_route(core.DIMENSION_FARM_RANDOM_COUNT, core.DIMENSION_FARM_ENTRY_PHASE, [core.DIMENSION_FARM_ENTRY_PHASE])
+	var clean: Array[int] = _sanitize_farm_route(route)
+	core.dimension_route_queue = clean if not clean.is_empty() else _roll_farm_route()
 	return core.DIMENSION_FARM_ENTRY_PHASE
+
+
+func _roll_farm_route() -> Array[int]:
+	return _roll_dimension_route(core.DIMENSION_FARM_RANDOM_COUNT, core.dimension_route_last_phase, [core.DIMENSION_FARM_ENTRY_PHASE, core.DIMENSION_FINAL_PHASE], core.DIMENSION_FARM_POOL)
+
+
+func _sanitize_farm_route(route: Array) -> Array[int]:
+	var out: Array[int] = []
+	for value in route:
+		var phase: int = int(value)
+		if phase in core.DIMENSION_FARM_POOL and not out.has(phase):
+			out.append(phase)
+	if out.size() != core.DIMENSION_FARM_RANDOM_COUNT:
+		out.clear()
+	return out
+
+
+func _farm_action_with_route() -> String:
+	var parts: PackedStringArray = []
+	for phase in _roll_farm_route():
+		parts.append(str(phase))
+	return "farm:" + ",".join(parts)
+
+
+func _farm_route_from_action(action: String) -> Array:
+	var out: Array = []
+	if not action.begins_with("farm:"):
+		return out
+	for part in action.substr(5).split(",", false):
+		out.append(int(part))
+	return out
 
 
 func _complete_dimension_extraction() -> void:
@@ -244,6 +256,10 @@ func _phase1_is_after_phase6() -> bool:
 func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 1.0) -> void:
 	var scaled_enemy_hp: float = core.ENEMY_BASE_HP * (multiplayer_enemy_hp_scale if core.is_multiplayer else 1.0)
 	core._reset_boss_party_scaling_context(phase)
+	if phase == 9:
+		_setup_cripta(scaled_enemy_hp)
+		core._add_text("INICIO: CRIPTA DE SEDA", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		return
 	if phase == 8:
 		_setup_sertao(scaled_enemy_hp)
 		core._add_text("INICIO: SERTAO DAS TARTARUGAS", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
@@ -280,10 +296,11 @@ func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 
 		core.boss_hp = core.boss_hp_max
 		core.boss_name = "UMBRA"
 		core.boss_title_color = Color(0.42, 1.0, 0.55)
-		core.next_larapio_spawn_time = core._larapio_base_spawn_time()
+		# Mente da Umbra: sem inimigos comuns nem mini chefe. A cena de chegada
+		# (RTUmbraIntro) leva direto para a UMBRA.
+		core.next_larapio_spawn_time = INF
 		core._load_umbra_mobile_memory()
-		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
-		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
+		core._umbra_intro().reset_for_phase()
 		core._add_text("INICIO: MENTE DA UMBRA", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
 		return
 	if phase == 4:
@@ -468,6 +485,10 @@ func _advance_to_phase(phase: int) -> void:
 		core._spawn_enemy(core.ENEMY_LODARIO, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_LODARIO, core._spawn_point_on_edge())
 		core._add_text("CHAGA DE AMBAR", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+	elif core.current_phase == 9:
+		_setup_cripta(max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.3 * cycle_hp_mult))
+		core._add_text("CRIPTA DE SEDA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("nao olhe so para a frente", core.player_pos + Vector2(0, -76), Color(0.85, 0.85, 0.95), 2.4, 18)
 	elif core.current_phase == 8:
 		_setup_sertao(max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.3 * cycle_hp_mult))
 		core.enemy_speed_base = max(carried_enemy_speed, core.ENEMY_BASE_SPEED * cycle_speed_mult)
@@ -493,8 +514,10 @@ func _advance_to_phase(phase: int) -> void:
 		core.boss_name = "UMBRA"
 		core.boss_title_color = Color(0.42, 1.0, 0.55)
 		core._load_umbra_mobile_memory()
-		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
-		core._spawn_enemy(core._choose_phase4_enemy_type(), core._spawn_point_on_edge())
+		core.next_larapio_spawn_time = INF
+		core.experimental_boss_altar_authorized = true
+		core.experimental_boss_altar_used = true
+		core._umbra_intro().reset_for_phase()
 		core._add_text("MENTE DA UMBRA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
 	elif core.current_phase == 4:
 		core.enemy_base_hp = max(carried_enemy_hp, core.ENEMY_BASE_HP * 2.75 * cycle_hp_mult)
@@ -554,6 +577,19 @@ func _setup_sertao(enemy_hp: float) -> void:
 	core._spawn_enemy(core.sertao_controller.JABUTI, core._spawn_point_on_edge())
 
 
+func _setup_cripta(enemy_hp: float) -> void:
+	core.enemy_base_hp = enemy_hp
+	core.enemy_speed_base = core.ENEMY_BASE_SPEED
+	core.boss_hp_max = core._boss_hp_for_phase(9)
+	core.boss_hp = core.boss_hp_max
+	core.boss_name = "MATRIARCA DOS OITO OLHOS"
+	core.boss_title_color = Color(1.0, 0.3, 0.35)
+	core.next_larapio_spawn_time = INF
+	core.cripta_controller.reset()
+	core.boss9_controller.reset()
+	core._spawn_enemy(core.cripta_controller.LOBO, core._spawn_point_on_edge())
+
+
 func _clear_phase_mp_request() -> void:
 	core.phase_mp_request_timer = 0.0
 	core.phase_mp_request_incoming = false
@@ -590,6 +626,11 @@ func _update_phase_mp_request(delta: float) -> void:
 func _request_phase_mp_consensus(target_phase: int, action: String = "phase") -> void:
 	if target_phase <= 0 and action == "phase":
 		return
+	if not core._run_choice().multiplayer_ready():
+		if float(core.phase_fragment.get("choice_warn_cd", 0.0)) <= 0.0:
+			core._add_text("AGUARDANDO ESCOLHA DA EQUIPE", core.player_pos + Vector2(-140, -90), Color(1.0, 0.85, 0.35), 1.0, 16)
+			core.phase_fragment["choice_warn_cd"] = 1.2
+		return
 	if core.phase_mp_request_outgoing and core.phase_mp_target == target_phase and core.phase_mp_action == action:
 		return
 	_start_phase_mp_request_overlay(false, target_phase, action, 1, core._active_run_player_count())
@@ -598,7 +639,7 @@ func _request_phase_mp_consensus(target_phase: int, action: String = "phase") ->
 
 
 func _accept_phase_mp_request() -> void:
-	if not core.phase_mp_request_incoming:
+	if not core.phase_mp_request_incoming or not core._run_choice().multiplayer_ready():
 		return
 	var target_phase: int = core.phase_mp_target
 	var action: String = core.phase_mp_action
@@ -615,8 +656,8 @@ func _commit_phase_mp_transfer(target_phase: int, action: String = "phase") -> v
 		_complete_dimension_extraction()
 		return
 	var next_phase: int = target_phase
-	if action == "farm":
-		next_phase = _begin_farm_dimension_cycle()
+	if action == "farm" or action.begins_with("farm:"):
+		next_phase = _begin_farm_dimension_cycle(_farm_route_from_action(action))
 	if next_phase > 0:
 		_start_phase_transition(next_phase)
 
@@ -679,6 +720,7 @@ func _update_phase_fragment(delta: float) -> void:
 		return
 	core.phase_fragment["life"] = float(core.phase_fragment.get("life", 0.0)) + delta
 	core.phase_fragment["pulse"] = float(core.phase_fragment.get("pulse", 0.0)) + delta * 4.0
+	core.phase_fragment["choice_warn_cd"] = maxf(0.0, float(core.phase_fragment.get("choice_warn_cd", 0.0)) - delta)
 	var choices: Array = Array(core.phase_fragment.get("choices", []))
 	if not choices.is_empty():
 		for choice in choices:
@@ -695,6 +737,11 @@ func _update_phase_fragment(delta: float) -> void:
 				var action: String = String(choice.get("action", "phase"))
 				var choice_phase: int = int(choice.get("next_phase", 0))
 				if core.is_multiplayer:
+					if action == "farm":
+						# Sorteia a rota UMA vez por portal (o pedido repete a mesma string).
+						if not choice.has("farm_action"):
+							choice["farm_action"] = _farm_action_with_route()
+						action = String(choice["farm_action"])
 					_request_phase_mp_consensus(choice_phase, action)
 					return
 				if action == "farm":

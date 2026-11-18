@@ -84,13 +84,13 @@ func _run() -> void:
 			game.player_pos = Vector2(choice["pos"])
 			break
 	game._update_phase_fragment(0.016)
-	_check(int(game.pending_phase) in game.DIMENSION_ROUTE_POOL and int(game.pending_phase) != 5 and String(game.mode) == "phase_transition", "farm portal did not start a valid random map")
+	_check(int(game.pending_phase) == game.DIMENSION_FARM_ENTRY_PHASE and String(game.mode) == "phase_transition", "farm portal did not start at phase 7")
 	_check(int(game.dimension_route_farm_cycles) == 1, "first farm portal should register one farm cycle")
 	_check(Array(game.dimension_route_queue).size() == 3, "farm cycle should queue the remaining three maps")
 	var farm_cycle: Dictionary = {int(game.pending_phase): true}
 	for queued_value in game.dimension_route_queue:
 		var queued_phase := int(queued_value)
-		_check(queued_phase in game.DIMENSION_ROUTE_POOL and queued_phase != 5, "farm cycle selected a reserved phase")
+		_check(queued_phase in game.DIMENSION_FARM_POOL and queued_phase != 5, "farm cycle selected a phase outside 1/2/3/8/9")
 		farm_cycle[queued_phase] = true
 	_check(farm_cycle.size() == 4, "farm cycle repeated a map before its fourth boss")
 	game.pending_phase = 0

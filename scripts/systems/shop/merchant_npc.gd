@@ -117,6 +117,14 @@ func greet(dimension) -> void:
 			{"who": "mercador", "text": "Então escolhe rápido. Rápido mesmo.", "mood": "preocupado"},
 		])
 		return
+	# Primeira vez que ela chega na loja vinda da Cripta de Seda: ele conhece o
+	# lugar, explica por que la rende mais (sem pop-up) e da as dicas de
+	# sobrevivencia como fofoca de mercador.
+	if int(core.current_phase) == RTCriptaController.PHASE and not seen.has("cripta"):
+		seen["cripta"] = true
+		_save()
+		dialogue.start(CRIPTA_TALK.duplicate(true))  # const = somente leitura; o dialogo limpa as linhas
+		return
 	if visits >= 2 and not seen.has("stolen") and dimension != null and int(dimension.confiscated) > 0:
 		seen["stolen"] = true
 		_save()
@@ -156,9 +164,45 @@ func greet(dimension) -> void:
 	_ambient_line()
 
 
+## A Cripta de Seda contada pelo Bussola: ele vendia oleo de lamparina numa feira
+## que existia la embaixo antes da Ruptura. Explica por que la a essencia vale
+## mais e ensina, como quem conta fofoca, o que fazer quando as aranhas prendem.
+const CRIPTA_TALK := [
+	{"who": "mercador", "text": "Espera. Espera, espera. Esse cheiro... cera velha, pedra molhada e medo.", "mood": "preocupado"},
+	{"who": "mercador", "text": "Você veio da Catedral. A Cripta de Seda.", "mood": "preocupado"},
+	{"who": "geovana", "text": "Você conhece aquele lugar?", "mood": "surpresa"},
+	{"who": "mercador", "text": "Conheço? Querida, eu VENDI ali. Antes da Ruptura aquilo era a Feira das Oito Velas. As tecelãs vendiam seda, eu vendia óleo de lamparina."},
+	{"who": "mercador", "text": "Aquelas lamparinas que ainda acendem sozinhas? Óleo meu. Nunca me pagaram. Calote de oitocentos anos.", "mood": "triste"},
+	{"who": "mercador", "text": "Aí o tempo de vocês rasgou e a freguesa mais antiga, a dos oito olhos, decidiu que a feira inteira era a despensa dela.", "mood": "triste"},
+	{"who": "geovana", "text": "E por que você está me contando isso agora?", "mood": "desconfiada"},
+	{"who": "mercador", "text": "Porque você voltou com o bolso pesado. Repara.", "mood": "animado"},
+	{"who": "mercador", "text": "Essência que nasce do medo é mais densa. Lá embaixo tudo que você derruba rende quase o dobro. Bicho, eco, a própria Matriarca, se você for maluca.", "mood": "animado"},
+	{"who": "mercador", "text": "É por isso que nenhum mercador decente recusa aquele lugar. E é por isso que não sobrou nenhum mercador decente.", "mood": "preocupado"},
+	{"who": "geovana", "text": "Elas quase não me machucam. Só me seguram.", "mood": "preocupada"},
+	{"who": "mercador", "text": "Exato. Ali ninguém morde pra matar. Morde pra GUARDAR. Comida fresca dura mais.", "mood": "preocupado"},
+	{"who": "mercador", "text": "Uma joga um novelo grudento e sai passeando com você enquanto as primas comem. A armadeira prefere embrulhar pra viagem, num casulo.", "mood": "preocupado"},
+	{"who": "mercador", "text": "Se te pegarem: atira, atira, atira. Seda cede com tremedeira. Quem fica parada vira encomenda.", "mood": "animado"},
+	{"who": "mercador", "text": "Gosto de moeda na boca é veneno. Corre pra luz das minhas lamparinas, ela puxa o veneno pra fora. Pelo menos isso o meu óleo ainda faz de graça."},
+	{"who": "mercador", "text": "E aqueles brilhinhos azuis no chão... pega. Te deixam enxergar mais longe, e quanto mais seguido você pega, mais longe vai."},
+	{"who": "mercador", "text": "Só olha duas vezes antes de agachar. Tem bicho lá embaixo que aprendeu a brilhar igual.", "mood": "preocupado"},
+	{"who": "geovana", "text": "Mais pontos, mais perigo. Entendi.", "mood": "decidida"},
+	{"who": "mercador", "text": "Entendeu a parte do lucro. A parte do perigo a gente só entende uma vez. Vai com cuidado, tá? Cliente boa é difícil de achar.", "mood": "triste"},
+]
+
+
 ## Falas curtas que podem repetir, no balao sobre a cabeca dele.
 func _ambient_line() -> void:
 	var lines: Array[String] = []
+	if int(core.current_phase) == RTCriptaController.PHASE and seen.has("cripta"):
+		lines = [
+			"Lá embaixo vale o dobro. E custa o dobro.",
+			"Laçou? Atira até a seda ceder.",
+			"Gosto de moeda na boca? Corre pra luz.",
+			"Nem todo brilho é eco, querida.",
+			"Manda um oi pra Matriarca. Ou melhor, não manda.",
+		]
+		say(String(lines[core.rng.randi_range(0, lines.size() - 1)]))
+		return
 	if mission_done:
 		lines = [
 			"A casa é sua. Olha com os olhos, compra com a essência.",

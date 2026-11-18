@@ -1,11 +1,11 @@
 extends RefCounted
 
-const TEMPORAL_LUCK_MAX := 0.60
+const TEMPORAL_LUCK_MAX := 0.40
 const TEMPORAL_LUCK_REFERENCE_SECONDS := 60.0 * 60.0
-const TEMPORAL_LUCK_REFERENCE_VALUE := 0.35
+const TEMPORAL_LUCK_REFERENCE_VALUE := 0.25
 # Solves max * (1 - exp(-reference / tau)) = reference value. Keeping the
 # resolved constant explicit makes the live curve deterministic and auditable.
-const TEMPORAL_LUCK_TIME_CONSTANT_SECONDS := 4112.082872177689
+const TEMPORAL_LUCK_TIME_CONSTANT_SECONDS := 3670.3636121637583
 
 var core
 

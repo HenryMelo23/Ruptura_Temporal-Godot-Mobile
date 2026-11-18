@@ -166,6 +166,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		map_texture = null
 	if map_texture:
 		if game.current_phase == 5 and game.phase5_transmute_active and not game.experimental_phase_controller.uses_definitive_world():
+			RTMapPropPresentation.hide_for(game)
 			game._draw_phase5_transmute_map_reveal(map_texture, game._desktop_stage_draw_rect(camera))
 		else:
 			if not is_instance_valid(game.phase_map_layer):
@@ -175,12 +176,17 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 				game.add_child(game.phase_map_layer)
 			var surface: int = game.PhaseMapPresentation.surface_for(game)
 			if game.experimental_phase_controller.uses_definitive_world():
-				game.phase_map_layer.present_chunks(map_texture, game.experimental_phase_controller.terrain_chunks(camera, viewport), camera, game.experimental_boss_altar_pos, game.experimental_phase_controller.altar_source_center(), surface, game.time_alive, game._runtime_visual_budget_active(), game._get_texture("map_phase_ex5") if game.experimental_phase_controller.terrain_phase() == 5 else null)
+				var terrain_chunks: Array[Dictionary] = game.experimental_phase_controller.terrain_chunks(camera, viewport)
+				game.phase_map_layer.present_chunks(map_texture, terrain_chunks, camera, game.experimental_boss_altar_pos, game.experimental_phase_controller.altar_source_center(), surface, game.time_alive, game._runtime_visual_budget_active(), game._get_texture("map_phase_ex5") if game.experimental_phase_controller.terrain_phase() == 5 else null)
+				RTUmbraTransmuteVfx.apply_ground(game)
+				RTMapPropPresentation.present_for(game, map_texture, terrain_chunks, camera, game.experimental_boss_altar_pos, game._runtime_visual_budget_active())
 			else:
 				game.phase_map_layer.present(map_texture, game._desktop_stage_draw_rect(camera), surface, game.time_alive, game._runtime_visual_budget_active())
+				RTMapPropPresentation.hide_for(game)
 			game.PhaseMapPresentation.draw_ambient(game, camera, surface)
 			game.ExperimentalPhasePresentation.draw_world(game, camera, viewport)
 	else:
+		RTMapPropPresentation.hide_for(game)
 		game.draw_rect(Rect2( - camera, game.WORLD_SIZE), Color(0.05, 0.055, 0.08), true)
 	RTMerchantDimensionPresentation.draw_world(game, camera)
 	RTWorldLighting.collect_and_present(game, camera, viewport)
@@ -192,6 +198,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		MerchantRiftPresentation.draw_world(game, camera, viewport)
 	game._draw_boss6_necro_erosion(camera)
 	game._draw_phase5_transmute_particles(camera)
+	RTUmbraTransmuteVfx.draw_floor(game, camera)
 	if game.vfx_director:
 		game.vfx_director.draw_floor_effects(game, camera)
 
@@ -266,8 +273,11 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	game._draw_parasite_spit_zones(camera)
 	game._draw_phase6_pustule_pools(camera)
 	game._draw_phase7_ember_patches(camera)
-	if game.current_phase == RTSertaoController.PHASE:
+	# Na oficina do Mercador o mundo da fase nao esta carregado: nada do Sertao/Cripta.
+	if not game._merchant_dimension().active and game.current_phase == RTSertaoController.PHASE:
 		RTSertaoPresentation.draw_ground(game, camera)
+	if not game._merchant_dimension().active and game.current_phase == RTCriptaController.PHASE:
+		RTCriptaPresentation.draw_ground(game, camera)
 	game._draw_boss7_flame_waves(camera)
 	game._draw_boss7_ultimate(camera)
 	game._draw_boss7_ground_indicators(camera)
@@ -336,7 +346,12 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game.current_phase != 6:
 		game._draw_boss_world(camera)
 		game._draw_crepuscular_boss_cracks(camera)
-	if game.current_phase == RTSertaoController.PHASE:
+	RTUmbraTransmuteVfx.draw_front(game, camera)
+	if game.current_phase == 5:
+		RTUmbraNecrosePresentation.draw_front(game, camera)
+	if game.mode == RTUmbraIntro.MODE:
+		RTUmbraIntroPresentation.draw_world(game, camera)
+	if not game._merchant_dimension().active and game.current_phase == RTSertaoController.PHASE:
 		RTSertaoPresentation.draw_bullets(game, camera)
 	for gravity_secondary in game.manifestation_secondaries:
 		if String(gravity_secondary.get("kind", "")) == "gravitante":
@@ -352,7 +367,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if not game.online_local_spectator:
 		game._draw_companions(camera)
 		game._draw_boss6_fossil_echo(camera)
-		if not RTDeathCamera.active(game) and not RTLaceranteExecutionVfx.hides_player(game):
+		if not RTDeathCamera.active(game) and not RTLaceranteExecutionVfx.hides_player(game) and not RTUmbraIntroPresentation.hides_player(game) and not RTCriptaPresentation.hides_player(game):
 			game._draw_player(camera)
 			RTParasiticaPresentation.draw_symbiote(game, camera)
 			_draw_frost_stacks(game, camera)
@@ -379,11 +394,16 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game._is_umbra_miasma_active():
 		game._draw_umbra_miasma_overlay(viewport, camera)
 	game._draw_apolo_phase5_exhibition_world(camera)
-	if game.current_phase == RTSertaoController.PHASE:
+	if not game._merchant_dimension().active and game.current_phase == RTSertaoController.PHASE:
 		RTSertaoPresentation.draw_screen(game, viewport, camera)
+	if not game._merchant_dimension().active and game.current_phase == RTCriptaController.PHASE:
+		RTCriptaPresentation.draw_screen(game, viewport, camera)
 	Lightning.end_frame(game)
 	HenryFire.draw_entrance(game, camera, viewport)
 	RTWorldLighting.draw_screen(game, viewport, game.PhaseMapPresentation.surface_for(game))
+	RTUmbraTransmuteVfx.draw_screen(game, viewport)
+	if game.current_phase == 5:
+		RTUmbraNecrosePresentation.draw_screen(game, viewport)
 	RTMerchantDimensionPresentation.draw_overlay(game, viewport)
 	if game.preview_capture_mode:
 		return
@@ -3147,7 +3167,8 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 			game.draw_circle(pos, 34.0, Color(0.5, 0.88, 0.12, 0.14))
 		elif bullet.get("type") == "rat_shot":
 			var idx = int(float(bullet.get("phase", 0.0))) % 2
-			var rat_tex: Texture2D = game.textures["enemy_phase_3_bullet"][idx]
+			var rat_frames: Array = game.textures.get("enemy_phase_3_bullet", [])
+			var rat_tex: Texture2D = rat_frames[idx] if rat_frames.size() > idx else null
 			var pos = Vector2(bullet["pos"]) - camera
 			game.draw_circle(pos, 25.0, Color(0.1, 0.01, 0.2, 0.76))
 			game.draw_arc(pos, 25.0, 0.0, TAU, 28, Color(0.94, 0.64, 1.0, 0.98), 3.0)

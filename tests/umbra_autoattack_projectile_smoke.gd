@@ -74,7 +74,7 @@ func _run() -> void:
 	_check(String(spawned.get("type", "")) == "umbra_plasma", "wrong projectile type")
 	_check(_approx(float(spawned.get("speed_mult", 0.0)) * 210.0, chosen_speed), "projectile speed_mult does not match configured speed")
 	_check(_approx(float(spawned.get("life", 0.0)), 4.2), "projectile lifetime changed")
-	_check(_approx(float(spawned.get("radius", 0.0)), 16.0), "projectile hitbox changed")
+	_check(_approx(float(spawned.get("radius", 0.0)), RTUmbraHitbox.PLASMA_RADIUS), "projectile hitbox changed")
 
 	_setup_umbra()
 	game.enemy_bullets.append({

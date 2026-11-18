@@ -17,6 +17,7 @@ const PHASES := {
 	6: {"label": "FASE EX6", "region": "CHAGA DE AMBAR", "map_key": "map_phase_ex6", "altar": "NINHO DA MATRIARCA DA CHAGA", "altar_uv": Vector2(0.5, 0.5)},
 	7: {"label": "FASE EX7", "region": "CINZAS DA RUPTURA", "map_key": "map_phase_ex7", "altar": "CLAREIRA DA FENIX", "altar_uv": Vector2(0.5, 0.5)},
 	8: {"label": "FASE EX8", "region": "SERTAO DAS TARTARUGAS", "map_key": "map_phase_ex8", "altar": "RELOGIO DE SOL DO JABUTI", "altar_uv": Vector2(0.5, 0.5)},
+	9: {"label": "FASE EX9", "region": "CRIPTA DE SEDA", "map_key": "map_phase_ex9", "altar": "ALTAR DA MATRIARCA", "altar_uv": Vector2(0.5, 0.5)},
 }
 const ALTAR_INTERACTION_RADIUS := 118.0
 const ALTAR_HOLD_TIME := 1.15
@@ -60,9 +61,14 @@ func terrain_phase() -> int:
 func map_key() -> String:
 	var phase := terrain_phase()
 	if phase == 5:
-		var dimension_phase: int = {"vortice": 1, "gravidade": 2, "necrose": 3, "ressonancia": 4, "hemorragia": 6, "atrito": 7, "rastro": 3}.get(String(core.boss5_dimension), 5)
-		return String(PHASES[dimension_phase]["map_key"])
+		return map_key_for_dimension(String(core.boss5_dimension))
 	return String(PHASES[phase]["map_key"])
+
+
+## Atlas de chao que a Mente da UMBRA usa em cada dimensao transmutada.
+func map_key_for_dimension(dimension: String) -> String:
+	var dimension_phase: int = {"vortice": 1, "gravidade": 2, "necrose": 3, "ressonancia": 4, "hemorragia": 6, "atrito": 7, "rastro": 3}.get(dimension, 5)
+	return String(PHASES[dimension_phase]["map_key"])
 
 
 func altar_source_center() -> Vector2:
@@ -257,6 +263,8 @@ func altar_blocker_text() -> String:
 		return ""
 	if core._arauto_active():
 		return "DERROTE O ARAUTO"
+	if int(core.current_phase) == 9 and core.cripta_controller.miniboss_alive():
+		return "DERROTE A NOIVA DE SEDA"
 	if int(core.current_phase) == 8 and core.sertao_controller.miniboss_alive():
 		return "DERROTE O CAGADO CANGACEIRO"
 	if int(core.current_phase) == 6 and core.amber_suturer_controller != null and not core.amber_suturer_controller.active_enemy().is_empty():

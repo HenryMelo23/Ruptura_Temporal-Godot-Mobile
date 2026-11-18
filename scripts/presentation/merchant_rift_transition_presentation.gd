@@ -53,8 +53,15 @@ static func draw_player(game: Node2D, camera: Vector2) -> bool:
 	height = maxf(48.0, height)
 	var foot: Vector2 = Vector2(game.player_pos) - camera + Vector2(profile.get("offset", Vector2.ZERO)) + Vector2(0.0, float(game.PLAYER_DRAW_BOX_SIZE.y) * 0.5)
 	var flip: bool = game._should_flip_player_sprite()
-	var pose: Dictionary = _pose(tr, game, height)
 	var custom: Array = _frames(String(tr.mood), String(tr.phase)) if game.active_character_key == game.CHARACTER_GEOVANA else []
+	if not custom.is_empty() and RTGeovanaV2.is_v2(tex):
+		# A Geovana v2 e desenhada num canvas com folga (DRAW_HEIGHT ~120 px para
+		# ela ter 80 px em pe). Os quadros da fenda medem pela altura VISIVEL dela,
+		# entao a referencia aqui e PLAYER_H; e os pes ficam no mesmo ponto do
+		# jogo (player_pos + metade da caixa), sem o deslocamento do canvas.
+		height = RTGeovanaV2.PLAYER_H
+		foot = Vector2(game.player_pos) - camera + Vector2(0.0, float(game.PLAYER_DRAW_BOX_SIZE.y) * 0.5)
+	var pose: Dictionary = _pose(tr, game, height)
 	var phase: String = String(tr.phase)
 	var p: float = tr.progress()
 	var ip: float = tr.impact_time()

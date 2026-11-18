@@ -28,6 +28,9 @@ func format_points(amount: Variant) -> String:
 
 func points_for_enemy(enemy: Dictionary) -> int:
 	var mult = long_run_point_multiplier()
+	# Cripta de Seda: a fase mais perigosa paga mais (o Mercador conta isso a ela).
+	if int(core.current_phase) == RTCriptaController.PHASE:
+		mult *= RTCriptaController.POINT_MULT
 	var base_points: = float(enemy.get("points", 20)) * elite_point_multiplier(enemy)
 	return max(int(enemy.get("points", 20)), int(round(base_points * mult)))
 

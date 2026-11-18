@@ -148,27 +148,24 @@ static func _start_phase5_transmute_vfx(game: Node2D, old_dim: String, new_dim: 
 		old_tex = game._get_texture("map_phase_5")
 	if new_tex == null:
 		new_tex = game._get_texture("map_phase_5")
+	if game.experimental_phase_controller.uses_definitive_world():
+		# Chao definitivo: a frente da dimensao nova (RTUmbraTransmuteVfx) mostra
+		# o atlas antigo do lado de fora ate passar.
+		var old_atlas_key: String = game.experimental_phase_controller.map_key_for_dimension(old_dim)
+		game._ensure_runtime_texture(old_atlas_key)
+		var old_atlas: Texture2D = game._get_texture(old_atlas_key)
+		if old_atlas != null:
+			old_tex = old_atlas
 
 	game.phase5_transmute_active = true
 	game.phase5_transmute_timer = 0.0
-	game.phase5_transmute_duration = game.BOSS5_TRANSMUTE_VFX_DURATION
-	game.phase5_transmute_center = game.player_pos
+	game.phase5_transmute_duration = RTUmbraTransmuteVfx.DURATION
+	game.phase5_transmute_center = game.boss_pos
 	game.phase5_transmute_old_tex = old_tex
 	game.phase5_transmute_new_tex = new_tex
 	game.phase5_transmute_color = dim_color
 	game.phase5_transmute_particles.clear()
-
-	for i in range(120):
-		var ang: float = game.rng.randf_range(0.0, TAU)
-		var speed: float = game.rng.randf_range(500.0, 950.0)
-		var radius: float = game.rng.randf_range(2.0, 7.0)
-		game.phase5_transmute_particles.append({
-			"pos": game.boss_pos, 
-			"vel": Vector2.from_angle(ang) * speed, 
-			"size": radius, 
-			"max_life": game.BOSS5_TRANSMUTE_VFX_DURATION, 
-			"life": game.BOSS5_TRANSMUTE_VFX_DURATION
-		})
+	# O visual (carga, estalo, frente da dimensao nova) e RTUmbraTransmuteVfx.
 
 
 static func _add_boss7_dive_trail(game: Node2D, a: Vector2, b: Vector2) -> void:

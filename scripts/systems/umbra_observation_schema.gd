@@ -14,6 +14,124 @@ const CARD_LIMIT := 30.0
 const ACTIONS := ["FUGIR", "INTERCEPTAR", "ORBITAR", "CERCAR", "ATAQUE", "SIFON", "TELEPORTE", "TELEPORTE_JUKE", "TRANSMUTAR_VORTICE", "TRANSMUTAR_GRAVIDADE", "TRANSMUTAR_NECROSE", "TRANSMUTAR_RESSONANCIA", "TRANSMUTAR_HEMORRAGIA", "TRANSMUTAR_ATRITO", "TRANSMUTAR_RASTRO", "VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "PRAGA_RATOS", "LASER_SOBRECARGA", "CAMINHO_ESPINHOS", "NENHUMA"]
 const MANIFESTATIONS := ["eletrica", "lacerante", "prismatica", "parasitica", "gravitante"]
 const COOLDOWN_KEYS := ["VORTICE", "PRISAO", "MIASMA", "DESCARGA_ELETRICA", "CAMINHO_ESPINHOS", "PRAGA_RATOS", "LASER_SOBRECARGA"]
+## Explicit research opt-in. Version 2 and its trained ABI remain unchanged.
+const TRAINING_SCHEMA_VERSION := 3
+const TRAINING_ACTIONS := ACTIONS + ["REBOBINAR", "ECO_PROFETICO"]
+const TRAINING_DIMENSIONS := ["base", "vortice", "gravidade", "necrose", "ressonancia", "hemorragia", "atrito", "rastro"]
+
+
+static func training_feature_schema() -> Array:
+	var specs: Array = []
+	# These v2 placeholders have no measured source. Do not present them as
+	# informative signals in the research contract.
+	var omitted := ["space.route_pressure", "combat.recent_misses", "history.target_switches", "history.player_downs"]
+	for original in feature_schema():
+		var spec: Dictionary = Dictionary(original).duplicate()
+		var name: String = spec["name"]
+		if omitted.has(name):
+			continue
+		if name in ["umbra.position_x", "umbra.position_y"]:
+			spec["max"] = 1.0
+		elif name.ends_with("relative_x") or name.ends_with("relative_y"):
+			spec["min"] = -1.0
+			spec["max"] = 1.0
+		elif name == "umbra.current_action":
+			spec["max"] = float(TRAINING_ACTIONS.size() - 1)
+		specs.append(spec)
+	for cooldown in ["REBOBINAR", "ECO_PROFETICO"]:
+		_add(specs, "umbra.cooldown." + cooldown.to_lower(), "umbra", 0.0, COOLDOWN_LIMIT)
+	_add(specs, "umbra.decision_remaining", "umbra", 0.0, 10.0)
+	_add(specs, "skills.rewind_active", "skills", 0.0, 1.0)
+	_add(specs, "skills.rewind_remaining", "skills", 0.0, 1.5)
+	_add(specs, "skills.rewind_anchor_distance", "skills", 0.0, 1.0)
+	_add(specs, "skills.eco_count", "skills", 0.0, 8.0)
+	_add(specs, "skills.eco_remaining", "skills", 0.0, 1.1)
+	_add(specs, "skills.eco_relative_x", "skills", -1.0, 1.0)
+	_add(specs, "skills.eco_relative_y", "skills", -1.0, 1.0)
+	_add(specs, "players.dash_remaining", "players", 0.0, 10.0)
+	return specs
+
+
+static func training_feature_names() -> Array:
+	var result: Array = []
+	for spec in training_feature_schema():
+		result.append(spec["name"])
+	return result
+
+
+static func build_training(runtime: Object) -> Dictionary:
+	if bool(runtime.get("is_multiplayer")):
+		return {"error": "research schema 3 is solo-only"}
+	var legacy := build_from_runtime(runtime)
+	var old_names := feature_names()
+	var raw: Dictionary = {}
+	for i in range(old_names.size()):
+		raw[old_names[i]] = float(legacy["values"][i])
+	var world := runtime_world_size(runtime)
+	var boss_pos: Vector2 = runtime.get("boss_pos")
+	var player_pos: Vector2 = runtime.get("player_pos")
+	var skills = runtime.call("_umbra_base_skills")
+	var metrics: Dictionary = runtime.call("training_metrics") if runtime.has_method("training_metrics") else {}
+	var overrides := {
+		"umbra.position_x": boss_pos.x / world.x, "umbra.position_y": boss_pos.y / world.y,
+		"umbra.current_action": float(maxi(0, TRAINING_ACTIONS.find(String(runtime.get("boss5_current_action"))))),
+		"umbra.damage_recent": float(metrics.get("boss_damage_recent", 0.0)),
+		"umbra.decision_remaining": maxf(float(runtime.get("boss5_action_timer")), float(runtime.get("boss5_decision_timer"))),
+		"space.dimension": float(maxi(0, TRAINING_DIMENSIONS.find(String(runtime.get("boss5_dimension"))))) / float(TRAINING_DIMENSIONS.size() - 1),
+		"space.hazard.prison": 1.0 if _hazard_active(runtime.get("phase5_hazards"), "sopro_artico") or _hazard_active(runtime.get("phase5_hazards"), "prison") else 0.0,
+		"combat.recent_hits": float(metrics.get("hits_recent", 0)),
+		"combat.player_damage_recent": float(metrics.get("player_damage_recent", 0.0)),
+		"combat.umbra_damage_recent": float(metrics.get("boss_damage_recent", 0.0)),
+		"history.action_repeat": clampf(float(metrics.get("action_repeat", 0)) / 8.0, 0.0, 1.0),
+		"umbra.cooldown.rebobinar": float(skills.cooldowns.get("REBOBINAR", 0.0)),
+		"umbra.cooldown.eco_profetico": float(skills.cooldowns.get("ECO_PROFETICO", 0.0)),
+		"skills.rewind_active": 0.0 if skills.rewinds.is_empty() else 1.0,
+		"skills.rewind_remaining": float(skills.rewinds[0]["timer"]) if not skills.rewinds.is_empty() else 0.0,
+		"skills.rewind_anchor_distance": player_pos.distance_to(skills.rewinds[0]["anchor"]) / world.length() if not skills.rewinds.is_empty() else 0.0,
+		"skills.eco_count": float(skills.ecos.size()),
+		"skills.eco_remaining": float(skills.ecos[0]["timer"]) if not skills.ecos.is_empty() else 0.0,
+		"skills.eco_relative_x": (Vector2(skills.ecos[0]["pos"]).x - player_pos.x) / world.x if not skills.ecos.is_empty() else 0.0,
+		"skills.eco_relative_y": (Vector2(skills.ecos[0]["pos"]).y - player_pos.y) / world.y if not skills.ecos.is_empty() else 0.0,
+		"players.dash_remaining": maxf(0.0, float(runtime.call("_current_dash_cooldown")) - (float(runtime.get("time_alive")) - float(runtime.get("last_dash_time"))))
+	}
+	var local_velocity: Vector2 = metrics.get("player_velocity", Vector2.ZERO)
+	var card_copies := 0
+	for count_value in Dictionary(runtime.get("cards_bought")).values():
+		card_copies += int(count_value)
+	for slot in range(MAX_PLAYER_SLOTS):
+		var prefix := "players.slot_%d." % slot
+		if slot == 0:
+			overrides[prefix + "relative_x"] = (player_pos.x - boss_pos.x) / world.x
+			overrides[prefix + "relative_y"] = (player_pos.y - boss_pos.y) / world.y
+			overrides[prefix + "velocity_x"] = local_velocity.x
+			overrides[prefix + "velocity_y"] = local_velocity.y
+			overrides[prefix + "build_cards"] = float(card_copies)
+			overrides[prefix + "action_recent"] = float(metrics.get("player_action_recent", 0.0))
+		else:
+			# The research simulator is solo. Invalid slots must stay neutral.
+			overrides[prefix + "relative_x"] = 0.0
+			overrides[prefix + "relative_y"] = 0.0
+	var specs := training_feature_schema()
+	var values: Array = []
+	for spec in specs:
+		var name: String = spec["name"]
+		values.append(_normalize(float(overrides[name]), float(spec["min"]), float(spec["max"])) if overrides.has(name) else float(raw.get(name, 0.0)))
+	return {"schema_version": TRAINING_SCHEMA_VERSION, "feature_schema": training_feature_names(), "feature_specs": specs,
+		"input_size": values.size(), "values": values, "valid_player_mask": legacy["valid_player_mask"], "information_mode": "oracle_state_solo_research"}
+
+
+static func validate_training_observation(observation: Dictionary) -> String:
+	if int(observation.get("schema_version", -1)) != TRAINING_SCHEMA_VERSION:
+		return "training schema_version mismatch"
+	if Array(observation.get("feature_schema", [])) != training_feature_names():
+		return "training feature schema mismatch"
+	var values: Array = observation.get("values", [])
+	if values.size() != training_feature_names().size():
+		return "training feature count mismatch"
+	for value in values:
+		if not (value is float or value is int) or not is_finite(float(value)) or absf(float(value)) > 1.0001:
+			return "training value invalid"
+	return ""
 
 
 static func feature_schema() -> Array:
@@ -242,7 +360,9 @@ static func _dimension_value(dimension: String) -> float:
 static func _hazard_active(hazards: Array, kind: String) -> bool:
 	for hazard_value in hazards:
 		var hazard: Dictionary = Dictionary(hazard_value)
-		if String(hazard.get("kind", "")) == kind or (kind == "overload_laser" and String(hazard.get("kind", "")) == "umbra_overload_laser"):
+		var hazard_kind := String(hazard.get("kind", ""))
+		# "missa" (Missa do Ninho) e a habilidade MIASMA desde a v3 da Necrose.
+		if hazard_kind == kind or (kind == "overload_laser" and hazard_kind == "umbra_overload_laser") or (kind == "miasma" and hazard_kind == "missa"):
 			return true
 	return false
 

@@ -1,14 +1,14 @@
 {
-  "version": "2.1.2",
-  "version_code": 27200,
-  "filename": "Ruptura_Temporal_2.1.2.x86_64",
-  "sha256": "9383298548174e71171ef178e06e4a8f534848a9effaf2109947039a66b330fc",
-  "size": 1009201968,
+  "version": "2.1.3",
+  "version_code": 27300,
+  "filename": "Ruptura_Temporal_2.1.3.x86_64",
+  "sha256": "12ac949b7dfe4585af863e73a27e48ddcf7288fcb8633581841916a59d776c93",
+  "size": 1024221320,
   "notes": [
-    "Salas abertas aparecem automaticamente na busca, sem precisar atualizar manualmente.",
-    "A sala deixa a lista assim que o host sai; quedas abruptas sao detectadas mais cedo.",
-    "Lobby, boss, loja, morte e retorno passaram por nova bateria multiplayer."
+    "Sertao e Cripta de Seda entram no ciclo e funcionam em equipe.",
+    "Escolhas pos-chefe e Chips Quanticos sao compartilhados pelo grupo.",
+    "Lobby, loja e combate receberam correcoes de estabilidade."
   ],
-  "mandatory": false,
-  "published_at": "2026-11-15T20:40:34Z"
+  "mandatory": true,
+  "published_at": "2026-11-18T15:53:53Z"
 }

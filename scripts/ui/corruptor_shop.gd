@@ -130,7 +130,10 @@ func close() -> void:
 	if core.mode == MODE:
 		core.mode = _return_mode
 	core.shop_last_exit_time = core.time_alive
-	core.shop_rift_controller.clear_active()
+	if core.is_multiplayer and core._merchant_dimension().active:
+		core._submit_quantum_tokens_redeemed(picks_done)
+	else:
+		core.shop_rift_controller.clear_active()
 
 
 # ================================================================ input
@@ -255,7 +258,7 @@ func draw(g: Node2D, viewport: Vector2) -> void:
 			g._draw_texture_contain(tex, art, Color(1, 1, 1, alpha))
 		else:
 			g.draw_rect(art, Color(col.r, col.g, col.b, 0.2 * alpha), true)
-			sp.paragraph(g, String(card.get("name", "")), art.grow(-10), 14, true)
+			sp.paragraph(g, CardCatalogDefinitions.display_name(card), art.grow(-10), 14, true)
 		if focused and flash > 0.0:
 			g.draw_rect(rect.grow(6.0 * flash), Color(col.r, col.g, col.b, 0.35 * flash), false, 3.0)
 		if int(round(d)) == -1:
@@ -275,7 +278,7 @@ func draw(g: Node2D, viewport: Vector2) -> void:
 	if not card_now.is_empty():
 		var max_count: int = g._card_max_count(card_now)
 		var deck_label: String = ("NO DECK: %d/%d" % [g._card_count(card_now), max_count]) if max_count < 100 else ("NO DECK: %d" % g._card_count(card_now))
-		sp.text(g, "%s   ·   %s   ·   %d/%d" % [String(card_now.get("name", "")).to_upper(), deck_label, index + 1, pool.size()], Rect2(info.position, Vector2(info.size.x * 0.68, 24)), 17 if not small else 14, accent)
+		sp.text(g, "%s   ·   %s   ·   %d/%d" % [CardCatalogDefinitions.display_name(card_now).to_upper(), deck_label, index + 1, pool.size()], Rect2(info.position, Vector2(info.size.x * 0.68, 24)), 17 if not small else 14, accent)
 		sp.paragraph(g, String(card_now.get("desc", "")), Rect2(info.position + Vector2(0, 26), Vector2(info.size.x * 0.68, info.size.y - 28)), 14 if not small else 12)
 	var pick_rect := Rect2(Vector2(info.end.x - info.size.x * 0.28, info.position.y + 8), Vector2(info.size.x * 0.28, 52 if not small else 42))
 	sp.button(g, pick_rect, "ESCOLHER", Color(0.38, 0.95, 0.57), not card_now.is_empty())

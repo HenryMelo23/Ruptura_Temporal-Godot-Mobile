@@ -10,7 +10,12 @@ const SPARK_LIFE := 1.15
 const SKILL_NEAR_DAMAGE_MULT := 2.0
 const SKILL_FAR_DAMAGE_MULT := 0.82
 const SKILL_GUARD_DAMAGE_MULT := 0.46
+## O cone mantem o dano total alto, mas queima o alvo em impactos curtos em vez
+## de entregar todo o dano em um unico frame.
+const SKILL_BURN_HIT_COUNT := 5
+const SKILL_BURN_HIT_INTERVAL := 0.08
 const ULTIMATE_DAMAGE_MULT := 0.9
+const ULTIMATE_STUN_DURATION := 0.9
 # Ignicao Total: uma animacao continua com 3 impactos, cada anel de colunas mais longe.
 const ULT_PULSE_TIMES := [0.7, 1.45, 2.2]
 const ULT_PULSE_RADII := [150.0, 225.0, 300.0]
@@ -80,6 +85,8 @@ var fireball_sequence := 0
 var combustion_queue: Array = []
 var combustion_bursts: Array = []
 var pending_network_bursts: Array = []
+var skill_burn_hits: Array[Dictionary] = []
+var ultimate_stun_timers: Dictionary = {}
 var channel_guard_clock := 0.0
 var skill_cone_event_id := ""
 
@@ -226,6 +233,8 @@ func reset() -> void:
 	combustion_queue.clear()
 	combustion_bursts.clear()
 	pending_network_bursts.clear()
+	skill_burn_hits.clear()
+	ultimate_stun_timers.clear()
 	channel_guard_clock = 0.0
 	skill_cone_event_id = ""
 	for enemy in core.enemies:
@@ -380,7 +389,9 @@ func _release_ultimate_pulse(pulse_index: int) -> void:
 func update(delta: float) -> void:
 	if not is_configured():
 		return
+	_update_ultimate_stun_timers(delta)
 	if core.mutation_key == "incendiario":
+		_update_skill_burn_hits(delta)
 		_update_cast(delta)
 		_update_ultimate_cast(delta)
 		_update_spin(delta)
@@ -767,10 +778,53 @@ func _apply_flame_cone(origin: Vector2, direction: Vector2) -> void:
 		var distance := origin.distance_to(enemy_pos)
 		var ratio := clampf(distance / core.HENRY_SKILL_RANGE, 0.0, 1.0)
 		var damage_mult := lerpf(SKILL_NEAR_DAMAGE_MULT, SKILL_FAR_DAMAGE_MULT, ratio)
-		core._damage_enemy(enemy, core.player_damage * damage_mult, "henry_flame_cone", true, true, origin, "skill_q")
+		_queue_skill_burn_hits("enemy", enemy, core.player_damage * damage_mult, origin)
 	if core.boss_active and core.boss_hp > 0.0 and _inside_cone(origin, direction, core.boss_pos):
 		var boss_ratio := clampf(origin.distance_to(core.boss_pos) / core.HENRY_SKILL_RANGE, 0.0, 1.0)
-		core._damage_boss(core.player_damage * lerpf(SKILL_NEAR_DAMAGE_MULT, SKILL_FAR_DAMAGE_MULT, boss_ratio), "henry_flame_cone", true, true, "skill_q", origin)
+		_queue_skill_burn_hits("boss", {}, core.player_damage * lerpf(SKILL_NEAR_DAMAGE_MULT, SKILL_FAR_DAMAGE_MULT, boss_ratio), origin)
+
+
+func _queue_skill_burn_hits(kind: String, target: Dictionary, total_damage: float, origin: Vector2) -> void:
+	var entry: Dictionary = {
+		"kind": kind,
+		"target": target,
+		"damage": total_damage / float(SKILL_BURN_HIT_COUNT),
+		"remaining": SKILL_BURN_HIT_COUNT,
+		"clock": 0.0,
+		"origin": origin,
+	}
+	if not _apply_skill_burn_hit(entry):
+		return
+	entry["remaining"] = SKILL_BURN_HIT_COUNT - 1
+	entry["clock"] = SKILL_BURN_HIT_INTERVAL
+	skill_burn_hits.append(entry)
+
+
+func _update_skill_burn_hits(delta: float) -> void:
+	for entry in skill_burn_hits:
+		entry["clock"] = float(entry.get("clock", 0.0)) - maxf(0.0, delta)
+		while int(entry.get("remaining", 0)) > 0 and float(entry.get("clock", 0.0)) <= 0.0001:
+			if not _apply_skill_burn_hit(entry):
+				entry["remaining"] = 0
+				break
+			entry["remaining"] = int(entry["remaining"]) - 1
+			entry["clock"] = float(entry["clock"]) + SKILL_BURN_HIT_INTERVAL
+	skill_burn_hits = skill_burn_hits.filter(func(entry: Dictionary): return int(entry.get("remaining", 0)) > 0)
+
+
+func _apply_skill_burn_hit(entry: Dictionary) -> bool:
+	var damage := float(entry.get("damage", 0.0))
+	var origin := Vector2(entry.get("origin", core.player_pos))
+	if String(entry.get("kind", "")) == "boss":
+		if not core.boss_active or core.boss_hp <= 0.0:
+			return false
+		core._damage_boss(damage, "henry_flame_cone", true, true, "skill_q", origin)
+		return true
+	var target: Dictionary = entry.get("target", {})
+	if target.is_empty() or float(target.get("hp", 0.0)) <= 0.0:
+		return false
+	core._damage_enemy(target, damage, "henry_flame_cone", true, true, origin, "skill_q")
+	return true
 
 
 func _apply_skill_guard_burst(center: Vector2) -> void:
@@ -813,6 +867,41 @@ func _apply_heat_wave(center: Vector2, radius: float = -1.0) -> void:
 		core._damage_boss(core.player_damage * ULTIMATE_DAMAGE_MULT, "henry_heat_wave", true, true, "skill_e", center)
 
 
+func _refresh_ultimate_stun(target: Dictionary) -> void:
+	if target.is_empty() or float(target.get("hp", 0.0)) <= 0.0:
+		return
+	target["stun"] = maxf(float(target.get("stun", 0.0)), ULTIMATE_STUN_DURATION)
+	ultimate_stun_timers[_ultimate_stun_key(target)] = ULTIMATE_STUN_DURATION
+	target.erase("henry_knockback_velocity")
+
+
+func _ultimate_can_stun(target: Dictionary, boss_target: bool) -> bool:
+	if boss_target or target.is_empty():
+		return false
+	if target == core.arauto:
+		return true
+	return not bool(target.get("boss", false)) and not bool(target.get("is_boss", false))
+
+
+func _ultimate_stun_key(target: Dictionary) -> String:
+	if target == core.arauto:
+		return "arauto"
+	return "enemy:%d" % int(target.get("uid", hash(target)))
+
+
+func _ultimate_stun_active(target: Dictionary) -> bool:
+	return float(ultimate_stun_timers.get(_ultimate_stun_key(target), 0.0)) > 0.0
+
+
+func _update_ultimate_stun_timers(delta: float) -> void:
+	for key in ultimate_stun_timers.keys():
+		var remaining := maxf(0.0, float(ultimate_stun_timers[key]) - maxf(0.0, delta))
+		if remaining <= 0.0:
+			ultimate_stun_timers.erase(key)
+		else:
+			ultimate_stun_timers[key] = remaining
+
+
 func apply_heat_wave_push(target: Dictionary, center: Vector2, source: String = "henry_heat_wave") -> void:
 	if target.is_empty():
 		return
@@ -826,6 +915,9 @@ func apply_heat_wave_push(target: Dictionary, center: Vector2, source: String = 
 
 ## Todo empurrao do Henry Incendiario tambem aplica lentidao.
 func _push_and_slow(target: Dictionary, push_dir: Vector2, speed: float) -> void:
+	if _ultimate_stun_active(target):
+		target.erase("henry_knockback_velocity")
+		return
 	var current := Vector2(target.get("henry_knockback_velocity", Vector2.ZERO))
 	target["henry_knockback_velocity"] = (current + push_dir * speed).limit_length(KNOCKBACK_MAX_SPEED)
 	target["evolution_slow"] = maxf(float(target.get("evolution_slow", 0.0)), PUSH_SLOW_TIME)
@@ -1028,6 +1120,8 @@ func _clear_burn(enemy: Dictionary) -> void:
 func on_damage_dealt(target: Dictionary, source: String, source_damage: float, source_peer_id: int, boss_target: bool) -> void:
 	if source == "henry_true_fire":
 		return
+	if source == "henry_heat_wave" and _ultimate_can_stun(target, boss_target):
+		_refresh_ultimate_stun(target)
 	if source == "henry_spark":
 		var normalized_damage := source_damage / SPARK_DAMAGE_MULT
 		if boss_target:

@@ -61,6 +61,18 @@ terreno está em `terrain_chunks`; a mesma fórmula em `CHUNK_SHADER_CODE` permi
 misturar os vizinhos nas bordas. Alterar essa fórmula exige manter os dois lados
 coerentes. O atlas não é refeito durante a partida.
 
+### Objetos sólidos e leitura de altura
+
+As fases 2, 6, 7 e 8 possuem objetos sólidos pintados no atlas (cristais,
+pedras, ossos, troncos e cactos). A física e a apresentação compartilham os
+campos SDF em `assets/sprites/experimental/collision/`: o controlador de
+colisão resolve o contorno nos pés, e `RTMapPropPresentation` copia os mesmos
+pixels do atlas para uma camada elevada curta, com lateral escurecida e sombra
+de contato. Assim, toda área que bloqueia é visualmente alta e nenhuma área sem
+colisão ganha relevo falso. O modo leve mantém a lateral e remove a amostra de
+sombra adicional. Alterar uma forma em `tools/map_collision_shapes.json` exige
+regerar o SDF e executar `tests/map_props_collision_smoke.gd` com captura.
+
 ## Mover a invocação
 
 O centro da célula é a fonte comum para a arte e a interação:

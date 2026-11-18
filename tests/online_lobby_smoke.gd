@@ -18,10 +18,16 @@ func _initialize() -> void:
 func _finish_ok(message: String) -> void:
 	print(message)
 	if is_instance_valid(game):
+		game.process_mode = Node.PROCESS_MODE_DISABLED
 		_cleanup_audio_resources()
+		for _frame in range(5):
+			await process_frame
+		game._cleanup_runtime_resources()
 		root.remove_child(game)
 		game.free()
 		game = null
+	await process_frame
+	await process_frame
 	await process_frame
 	quit(0)
 

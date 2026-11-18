@@ -73,13 +73,13 @@ func _run() -> void:
 		game.time_alive = float(minutes) * 60.0
 		temporal_samples[minutes] = game._temporal_luck()
 	_check(is_zero_approx(float(temporal_samples[0])), "temporal luck did not start at zero")
-	_check(absf(float(temporal_samples[60]) - 0.35) < 0.0001, "temporal luck did not reach 35 percent at 60 minutes")
+	_check(absf(float(temporal_samples[60]) - 0.25) < 0.0001, "temporal luck did not reach 25 percent at 60 minutes")
 	var gain_30_60 := float(temporal_samples[60]) - float(temporal_samples[30])
 	var gain_60_90 := float(temporal_samples[90]) - float(temporal_samples[60])
 	var gain_90_120 := float(temporal_samples[120]) - float(temporal_samples[90])
 	_check(gain_30_60 > gain_60_90 and gain_60_90 > gain_90_120, "temporal luck did not diminish over equal time windows")
 	game.time_alive = 24.0 * 60.0 * 60.0
-	_check(game._temporal_luck() < 0.600001 and game._temporal_luck() > 0.59, "temporal luck did not approach its 60 percent ceiling")
+	_check(game._temporal_luck() < 0.400001 and game._temporal_luck() > 0.39, "temporal luck did not approach its 40 percent ceiling")
 	game.time_alive = 0.0
 	var uncommon_at_start: float = game._chance_carta_incomum()
 	game.time_alive = 60.0 * 60.0
@@ -91,17 +91,17 @@ func _run() -> void:
 	var public_sorte_text: String = String(sorte_card.get("desc", "")) + " " + game._card_effect_snapshot(sorte_card, 1) + " " + CardCatalogDefinitions.get_burn_summary("Sorte", 1)
 	_check(not public_sorte_text.to_lower().contains("sorte temporal") and not public_sorte_text.contains("0.3%") and not public_sorte_text.to_lower().contains("incomuns"), "Sorte card exposed hidden temporary luck math")
 	var rare_at_hour: float = game._chance_carta_rara()
-	_check(absf(rare_at_hour - 0.05219) < 0.00001, "unlocked rare chance did not match the 60-minute contract (rebalance 2026-11)")
+	_check(absf(rare_at_hour - 0.04319398) < 0.00001, "unlocked rare chance did not match the reduced 60-minute contract")
 	game.time_alive = 0.0
 	_check(rare_at_hour > game._chance_carta_rara(), "temporal luck did not improve unlocked rare items")
 	game.time_alive = 60.0 * 60.0
-	_check(absf(game._effective_luck() - 0.353) < 0.0001, "card and temporal luck did not combine")
+	_check(absf(game._effective_luck() - 0.253) < 0.0001, "card and temporal luck did not combine")
 	game.current_phase = 2
-	_check(absf(game._chance_carta_lendaria() - 0.00953) < 0.00001, "legendary chance did not match the 60-minute contract")
+	_check(absf(game._chance_carta_lendaria() - 0.0079328) < 0.00001, "legendary chance did not match the reduced 60-minute contract")
 	var drop_weights: Array = game._progression().temporal_luck_controller.drop_mode_rarity_weights()
-	_check(absf(float(drop_weights[1][1]) - 27.766) < 0.0001, "Drop journey uncommon weight did not match the temporal contract")
-	_check(absf(float(drop_weights[2][1]) - 4.4028) < 0.0001, "Drop journey rare weight did not match the temporal contract")
-	_check(absf(float(drop_weights[3][1]) - 0.5736) < 0.0001, "Drop journey legendary weight did not match the temporal contract")
+	_check(absf(float(drop_weights[1][1]) - 25.566) < 0.0001, "Drop journey uncommon weight did not match the temporal contract")
+	_check(absf(float(drop_weights[2][1]) - 3.7027988) < 0.0001, "Drop journey rare weight did not match the temporal contract")
+	_check(absf(float(drop_weights[3][1]) - 0.4536) < 0.0001, "Drop journey legendary weight did not match the temporal contract")
 
 	game.time_alive = 45.0 * 60.0
 	var common_enemy := {"points": 20, "type": game.ENEMY_COMMON}

@@ -9,6 +9,7 @@ const ObservationSchema = preload("res://scripts/systems/umbra_observation_schem
 const FORMAT := "ruptura_umbra_multihead_policy"
 const FORMAT_VERSION := 1
 const MODEL_VERSION := "umbra_2_0_multihead_gru"
+const TRAINING_MODEL_VERSION := "umbra_3_0_research_gru"
 const ACTION_SCHEMA_VERSION := 2
 const PRECISION := "fp32"
 const TARGET_SCHEMA := ["slot_0", "slot_1", "slot_2"]
@@ -16,6 +17,7 @@ const SPATIAL_SCHEMA := ["x", "y", "direction_x", "direction_y"]
 const NEGATIVE_INFINITY := -1000000000.0
 
 var input_size := 0
+var observation_version := ObservationSchema.SCHEMA_VERSION
 var encoder_size := 0
 var hidden_size := 0
 var action_size := 0
@@ -55,27 +57,31 @@ var spatial_raw := PackedFloat32Array()
 var value_raw := PackedFloat32Array()
 
 
-static func contract_error(model: Dictionary) -> String:
+static func contract_error(model: Dictionary, schema_version: int = ObservationSchema.SCHEMA_VERSION) -> String:
+	if schema_version not in [ObservationSchema.SCHEMA_VERSION, ObservationSchema.TRAINING_SCHEMA_VERSION]:
+		return "unsupported explicit schema version"
+	var training := schema_version == ObservationSchema.TRAINING_SCHEMA_VERSION
+	var expected_model := TRAINING_MODEL_VERSION if training else MODEL_VERSION
 	if String(model.get("format", "")) != FORMAT or int(model.get("format_version", -1)) != FORMAT_VERSION:
 		return "model format expected=%s@%d" % [FORMAT, FORMAT_VERSION]
-	if String(model.get("model_version", "")) != MODEL_VERSION:
-		return "model_version expected=%s actual=%s" % [MODEL_VERSION, String(model.get("model_version", "<missing>"))]
-	if int(model.get("observation_schema_version", -1)) != ObservationSchema.SCHEMA_VERSION:
+	if String(model.get("model_version", "")) != expected_model:
+		return "model_version expected=%s actual=%s" % [expected_model, String(model.get("model_version", "<missing>"))]
+	if int(model.get("observation_schema_version", -1)) != schema_version:
 		return "observation_schema_version mismatch"
-	if int(model.get("action_schema_version", -1)) != ACTION_SCHEMA_VERSION:
+	if int(model.get("action_schema_version", -1)) != (3 if training else ACTION_SCHEMA_VERSION):
 		return "action_schema_version mismatch"
 	if String(model.get("precision", "")) != PRECISION:
 		return "precision expected=%s" % PRECISION
-	if not _array_matches(ObservationSchema.feature_names(), Array(model.get("feature_schema", []))):
+	if not _array_matches(ObservationSchema.training_feature_names() if training else ObservationSchema.feature_names(), Array(model.get("feature_schema", []))):
 		return "feature schema mismatch"
-	if not _array_matches(ObservationSchema.ACTIONS, Array(model.get("action_schema", []))):
+	if not _array_matches(ObservationSchema.TRAINING_ACTIONS if training else ObservationSchema.ACTIONS, Array(model.get("action_schema", []))):
 		return "action schema mismatch"
 	if not _array_matches(TARGET_SCHEMA, Array(model.get("target_schema", []))):
 		return "target schema mismatch"
 	if not _array_matches(SPATIAL_SCHEMA, Array(model.get("spatial_schema", []))):
 		return "spatial schema mismatch"
 	var architecture: Dictionary = Dictionary(model.get("architecture", {}))
-	var checked_sizes := _checked_sizes(architecture)
+	var checked_sizes := _checked_sizes(architecture, schema_version)
 	if checked_sizes.is_empty():
 		return "architecture sizes invalid"
 	var tensors: Dictionary = Dictionary(model.get("tensors", {}))
@@ -102,11 +108,12 @@ static func contract_error(model: Dictionary) -> String:
 	return ""
 
 
-static func create(model: Dictionary):
-	if contract_error(model) != "":
+static func create(model: Dictionary, schema_version: int = ObservationSchema.SCHEMA_VERSION):
+	if contract_error(model, schema_version) != "":
 		return null
 	var policy = load("res://scripts/systems/umbra_multihead_policy.gd").new()
-	var sizes := _checked_sizes(Dictionary(model.get("architecture", {})))
+	var sizes := _checked_sizes(Dictionary(model.get("architecture", {})), schema_version)
+	policy.observation_version = schema_version
 	policy.input_size = sizes.input
 	policy.encoder_size = sizes.encoder
 	policy.hidden_size = sizes.hidden
@@ -165,7 +172,7 @@ func estimated_memory_bytes() -> int:
 
 
 func step(observation: Dictionary, action_mask: Array = [], target_mask: Array = []) -> Dictionary:
-	var observation_error := ObservationSchema.validate_observation(observation)
+	var observation_error := ObservationSchema.validate_training_observation(observation) if observation_version == ObservationSchema.TRAINING_SCHEMA_VERSION else ObservationSchema.validate_observation(observation)
 	if observation_error != "":
 		return {"error": observation_error}
 	var values: Array = Array(observation.get("values", []))
@@ -314,13 +321,16 @@ func _decode_spatial() -> Dictionary:
 	}
 
 
-static func _checked_sizes(architecture: Dictionary) -> Dictionary:
+static func _checked_sizes(architecture: Dictionary, schema_version: int = ObservationSchema.SCHEMA_VERSION) -> Dictionary:
 	var sizes := {
 		"input": int(architecture.get("input_size", -1)), "encoder": int(architecture.get("encoder_size", -1)),
 		"hidden": int(architecture.get("hidden_size", -1)), "action": int(architecture.get("action_head_size", -1)),
 		"target": int(architecture.get("target_head_size", -1))
 	}
-	if sizes.input != ObservationSchema.feature_names().size() or sizes.action != ObservationSchema.ACTIONS.size() or sizes.target != TARGET_SCHEMA.size() or sizes.encoder <= 0 or sizes.hidden <= 0:
+	var training := schema_version == ObservationSchema.TRAINING_SCHEMA_VERSION
+	var expected_input := ObservationSchema.training_feature_names().size() if training else ObservationSchema.feature_names().size()
+	var expected_action := ObservationSchema.TRAINING_ACTIONS.size() if training else ObservationSchema.ACTIONS.size()
+	if sizes.input != expected_input or sizes.action != expected_action or sizes.target != TARGET_SCHEMA.size() or sizes.encoder <= 0 or sizes.hidden <= 0:
 		return {}
 	return sizes
 

@@ -374,6 +374,7 @@ func _test_multiplayer_cleanup_and_persistence() -> void:
 	game._recalculate_common_card_stat_bonuses()
 	var stolen: Dictionary = controller._steal_card_from_peer(game._mp_unique_id())
 	_check(not stolen.is_empty(), "defeat reward fixture could not steal a card")
+	_check(controller.REWARD_CARD_COUNT == 1, "Suturador card reward was not reduced")
 	_check(int(enemy.get("points", 0)) == controller.REWARD_BASE_POINTS, "Suturador point reward was not buffed")
 	var drops_before: int = game.arauto_card_drops.size()
 	var point_orbs_before: int = game.heal_orbs.size()

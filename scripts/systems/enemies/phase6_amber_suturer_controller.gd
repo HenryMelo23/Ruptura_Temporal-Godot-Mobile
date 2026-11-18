@@ -40,7 +40,7 @@ const HOOK_SPEED_MULT := 2.58
 const HOOK_DAMAGE_MAX_HP_RATIO := 0.067
 const HOOK_DAMAGE_FAR_SCALE := 0.62
 const MAX_STOLEN_CARDS := 2
-const REWARD_CARD_COUNT := 2
+const REWARD_CARD_COUNT := 1
 const REWARD_BASE_POINTS := 420
 const HISTORY_SAMPLE_INTERVAL := 0.12
 const HISTORY_WINDOW := 2.8
@@ -733,7 +733,7 @@ func _steal_card_from_peer(peer_id: int) -> Dictionary:
 	else:
 		game._send_peer_suturer_card_change(peer_id, card_id, false, String(game.amber_suturer_state.get("encounter_id", "")))
 		counts[card_id] = maxi(0, int(counts.get(card_id, 0)) - 1)
-	var display_name := String(card.get("name", card_id))
+	var display_name := CardCatalogDefinitions.display_name(card_id)
 	var entry := {
 		"card_id": card_id,
 		"display_name": display_name,
@@ -767,7 +767,7 @@ func apply_remote_card_change(card_id: String, restore: bool, encounter_id: Stri
 		game._add_text("CARTA DEVOLVIDA: %s" % String(card.get("nick", card.get("name", card_id))).to_upper(), game.player_pos + Vector2(-110.0, -112.0), Color(0.54, 1.0, 0.72), 1.45, 19)
 	elif previous_state == "" and game._consume_card_count(card_id, 1):
 		_remember_remote_card_change(change_key, "stolen")
-		game.event_alert_text = "CARTA ROUBADA: %s" % String(card.get("name", card_id)).to_upper()
+		game.event_alert_text = "CARTA ROUBADA: %s" % CardCatalogDefinitions.display_name(card_id).to_upper()
 		game.event_alert_timer = 2.2
 
 

@@ -669,7 +669,7 @@ func draw(g, viewport: Vector2) -> void:
 			var caption := Rect2(rect.position + Vector2(9, rect.size.y * 0.64), Vector2(rect.size.x - 18, rect.size.y * 0.36 - 9))
 			g.draw_rect(caption, Color(0.03, 0.05, 0.06, 0.95))
 			g.draw_line(caption.position, Vector2(caption.end.x, caption.position.y), accent.darkened(0.2), 2)
-			paragraph(g, String(card.get("name", "Vaga vazia")), Rect2(caption.position + Vector2(6, 4), Vector2(caption.size.x - 12, 36)), 16 if not small else 13, true)
+			paragraph(g, CardCatalogDefinitions.display_name(card) if card.has("name") else "Vaga vazia", Rect2(caption.position + Vector2(6, 4), Vector2(caption.size.x - 12, 36)), 16 if not small else 13, true)
 			text(g, g._card_rarity_label(card), Rect2(caption.position + Vector2(6, caption.size.y - 24), Vector2(caption.size.x - 12, 20)), 12, accent, true)
 			draw_bargain_banner(g, card, rect, 1.0)
 		var lock_anim: bool = (action == "lock" or action == "unlock") and slot == i
@@ -685,7 +685,7 @@ func draw(g, viewport: Vector2) -> void:
 		var accent: Color = g._card_rarity_color(card)
 		g.draw_line(detail.position + Vector2(-12, 4), Vector2(detail.position.x - 12, detail.end.y), Color(CYAN, 0.25), 1)
 		text(g, "%s  /  NO DECK: %d" % [g._card_rarity_label(card), g._card_count(card)], Rect2(detail.position, Vector2(detail.size.x, 24)), 13, accent)
-		text(g, String(card.get("name", "Vaga vazia")).to_upper(), Rect2(detail.position + Vector2(0, 26), Vector2(detail.size.x, 32)), 23 if not small else 19, PAPER)
+		text(g, (CardCatalogDefinitions.display_name(card) if card.has("name") else "Vaga vazia").to_upper(), Rect2(detail.position + Vector2(0, 26), Vector2(detail.size.x, 32)), 23 if not small else 19, PAPER)
 		if not compact:
 			text(g, String(card.get("nick", "")), Rect2(detail.position + Vector2(0, 62), Vector2(detail.size.x, 22)), 15, CYAN)
 		if bargain_discount_rate(card) > 0.0:
@@ -1121,7 +1121,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 				var icon_rect = Rect2(rect.position + Vector2(18, 18), Vector2(94, rect.size.y - 36))
 				if not g._draw_cinzas_shader_card(card, icon_rect, icon, icon_alpha, false):
 					g._draw_texture_contain(icon, icon_rect, Color(1.0, 1.0, 1.0, icon_alpha))
-			g._draw_centered(card["name"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 48), g._readable_text_size(19), Color(1.0, 1.0, 1.0, content_alpha))
+			g._draw_centered(CardCatalogDefinitions.display_name(card), Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 48), g._readable_text_size(19), Color(1.0, 1.0, 1.0, content_alpha))
 			g._draw_centered(g._card_rarity_label(card), Vector2(rect.end.x - 52.0, rect.position.y + 24.0), g._readable_text_size(10), Color(rarity_color.r, rarity_color.g, rarity_color.b, content_alpha))
 			var nick_color = Color(card["color"].r, card["color"].g, card["color"].b, content_alpha)
 			g._draw_centered(card["nick"], Vector2(rect.position.x + 128 + (rect.size.x - 150) * 0.5, rect.position.y + 80), g._readable_text_size(15), nick_color)
@@ -1318,7 +1318,7 @@ func draw_legacy(g, viewport: Vector2) -> void:
 
 
 		var title_pos = Vector2(panel_x + 24, panel_y + 30)
-		g.draw_string(font, title_pos, sel_card["name"].to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, g._readable_text_size(22), sel_card["color"])
+		g.draw_string(font, title_pos, CardCatalogDefinitions.display_name(sel_card).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, g._readable_text_size(22), sel_card["color"])
 
 
 		var nick_pos = Vector2(panel_x + 24, panel_y + 60)

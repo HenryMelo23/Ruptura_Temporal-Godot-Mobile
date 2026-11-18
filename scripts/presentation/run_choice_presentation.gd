@@ -17,8 +17,8 @@ static func draw(game: Node2D, viewport: Vector2) -> void:
 	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.02, 0.8 * appear), true)
 	var is_pact: bool = choice.kind == "pact"
 	var accent: Color = Color(1.0, 0.72, 0.32) if is_pact else Color(game._manifestation_color())
-	var title: String = "PACTO POS-BATALHA" if is_pact else "EVOLUCAO DA %s" % String(game._form_evolutions().form_label()).to_upper()
-	var subtitle: String = "O chefe caiu, mas deixou marcas. Escolha uma: nao da para recusar." if is_pact else "A vitoria sobre a Sentinela despertou algo novo. Escolha uma evolucao."
+	var title: String = ("PACTO DA EQUIPE" if game.is_multiplayer else "PACTO POS-BATALHA") if is_pact else "EVOLUCAO DA %s" % String(game._form_evolutions().form_label()).to_upper()
+	var subtitle: String = ("Todos votam; a maioria vence e o host desempata." if game.is_multiplayer else "O chefe caiu, mas deixou marcas. Escolha uma: nao da para recusar.") if is_pact else "A vitoria sobre a Sentinela despertou algo novo. Escolha uma evolucao."
 	var top: float = maxf(26.0, viewport.y * 0.06)
 	game._draw_centered_outlined(title, Vector2(viewport.x * 0.5, top + 22.0), 28 if viewport.x > 700.0 else 22, accent, Color(0, 0, 0, 0.9), 4)
 	game._draw_centered(subtitle, Vector2(viewport.x * 0.5, top + 50.0), 14 if viewport.x > 700.0 else 12, LORE)
@@ -51,7 +51,7 @@ static func draw(game: Node2D, viewport: Vector2) -> void:
 	var ready: bool = choice.selected >= 0
 	game.draw_rect(btn, Color(accent.darkened(0.55), 0.95 if ready else 0.45), true)
 	game.draw_rect(btn, Color(accent, 0.95 if ready else 0.35), false, 2.5)
-	game._draw_centered("ESCOLHER" if ready else "TOQUE EM UMA OPCAO", btn.get_center() + Vector2(0, 6), 18 if ready else 13, Color(1, 1, 1, 0.95 if ready else 0.6))
+	game._draw_centered(("VOTAR" if game.is_multiplayer and is_pact else "ESCOLHER") if ready else "TOQUE EM UMA OPCAO", btn.get_center() + Vector2(0, 6), 18 if ready else 13, Color(1, 1, 1, 0.95 if ready else 0.6))
 
 
 static func _draw_card(game: Node2D, r: Rect2, option: Dictionary, focused: bool, accent: Color, alpha: float, wide: bool, is_pact: bool) -> void:

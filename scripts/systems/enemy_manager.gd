@@ -491,7 +491,8 @@ func update(delta: float) -> void:
 	if game == null:
 		return
 	horde.update(delta)
-	if not game._is_world_authority() or game.spawn_timer > 0.0 or game.boss_active or game._tutorial_blocks_normal_spawn():
+	# Mente da Umbra (5): nenhum inimigo comum, a fase e so a UMBRA.
+	if not game._is_world_authority() or game.spawn_timer > 0.0 or game.boss_active or game._tutorial_blocks_normal_spawn() or game.current_phase == 5:
 		return
 	spawn_wave()
 
@@ -531,6 +532,9 @@ func _update_enemies_body(delta: float) -> void:
 		game.ENEMY_SINEIRO_BOREAL: true,
 		"jabuti_errante": true, "tartaruga_mandacaru": true, "jabuti_morteiro": true,
 		"cagado_piao": true, "cagado_cangaceiro": true, "ovo_jabuti": true,
+		"aranha_lobo": true, "viuva_silencio": true, "aranha_alcapao": true, "aranha_saltadora": true,
+		"aranha_mimica": true, "noiva_de_seda": true, "filhote_aranha": true, "olho_vigia": true,
+		"aranha_boleadeira": true, "aranha_armadeira": true,
 	}
 	var bargain_capsule_vulnerable: bool = game._bargain_capsule_vulnerable()
 	var map_props_active: bool = RTMapPropColliders.active(game)
@@ -629,6 +633,8 @@ func _update_enemies_body(delta: float) -> void:
 				game.sineiro_boreal_controller.update_enemy(enemy, enemy_delta)
 			if game.current_phase == RTSertaoController.PHASE and game.sertao_controller.owns_kind(kind):
 				game.sertao_controller.update_enemy(enemy, enemy_delta)
+			if game.current_phase == RTCriptaController.PHASE and game.cripta_controller.owns_kind(kind):
+				game.cripta_controller.update_enemy(enemy, enemy_delta)
 		if game.current_phase == 2 and kind == game.ENEMY_COMMON:
 			game._update_phase2_common_penguin(enemy, enemy_delta)
 		if game.current_phase == 3:
@@ -656,7 +662,7 @@ func _update_enemies_body(delta: float) -> void:
 			enemy["hp"] = -1.0
 			continue
 
-		var contact_blocked: bool = contact_blocked_kinds.has(kind)
+		var contact_blocked: bool = contact_blocked_kinds.has(kind) or (game.current_phase == RTCriptaController.PHASE and game.cripta_controller.owns_kind(kind) and game.cripta_controller.contact_blocked(enemy))
 		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
 			if bargain_capsule_vulnerable and game._try_damage_bargain_capsule_contact(enemy):
 				enemy["hit_cd"] = 0.55
@@ -744,6 +750,8 @@ func get_desired_enemy_limit(native_only: bool = false) -> int:
 	var native_limit: int = 0
 	if game.current_phase == RTSertaoController.PHASE:
 		native_limit = game.sertao_controller.enemy_limit() + mp_bonus
+	elif game.current_phase == RTCriptaController.PHASE:
+		native_limit = game.cripta_controller.enemy_limit() + mp_bonus
 	elif game.current_phase == 7:
 		native_limit = _phase7_enemy_limit() + mp_bonus
 	elif game.current_phase == 6:
@@ -787,6 +795,8 @@ func prepare_phase_density_carry(previous_effective_cap: int) -> void:
 func get_enemy_spawn_interval() -> float:
 	if game.current_phase == RTSertaoController.PHASE:
 		return _long_run_spawn_interval(game.sertao_controller.spawn_interval())
+	if game.current_phase == RTCriptaController.PHASE:
+		return _long_run_spawn_interval(game.cripta_controller.spawn_interval())
 	if game.current_phase == 7:
 		return _phase7_spawn_interval()
 	if game.current_phase == 6:

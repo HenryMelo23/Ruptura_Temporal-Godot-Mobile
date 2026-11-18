@@ -76,6 +76,23 @@ func _run() -> void:
 	game._spawn_enemy(game.ENEMY_LARAPIO, game.player_pos + Vector2(420.0, -60.0))
 	var lar := _larapio()
 	_check(not lar.is_empty(), "larapio did not spawn")
+	# Ferido e sem saque, ele abandona a fuga e volta a pressionar o jogador.
+	lar["hp"] = float(lar["max_hp"]) * game.LARAPIO_DESPERATE_HP_RATIO
+	lar["stolen"] = 0
+	lar["larapio_escape_timer"] = 1.4
+	var pressure_distance_before: float = Vector2(lar["pos"]).distance_to(game.player_pos)
+	game._move_enemy(lar, 0.2)
+	var pressure_distance_after: float = Vector2(lar["pos"]).distance_to(game.player_pos)
+	_check(game._larapio_desperate(lar), "low-health Larápio without loot did not become threatening")
+	_check(pressure_distance_after < pressure_distance_before, "desperate Larápio kept escaping instead of closing distance")
+	var desperate_interval: float = float(game._larapio_throw_interval(lar, pressure_distance_after, false, false, true))
+	_check(desperate_interval < game.LARAPIO_AGGRESSIVE_THROW_INTERVAL and desperate_interval >= game.LARAPIO_DESPERATE_MIN_THROW_INTERVAL, "desperate attack-speed increase left its intended range")
+	lar["stolen"] = 1
+	_check(not game._larapio_desperate(lar), "Larápio carrying loot incorrectly entered the no-loss pressure state")
+	_check(game._larapio_card_drop_count(false) == 2 and game._larapio_card_drop_count(true) == 3, "Larápio card reward was not reduced to 2/3")
+	lar["stolen"] = 0
+	lar["hp"] = lar["max_hp"]
+	lar["larapio_escape_timer"] = 0.0
 	lar["spawned_at"] = game.time_alive - game.LARAPIO_AGGRESSIVE_AFTER - 1.0
 	lar["larapio_lunge_cd"] = 0.0
 	lar["steal_cd"] = 0.0
@@ -122,5 +139,5 @@ func _run() -> void:
 	_check(Vector2(lar["pos"]) == before, "jumped with every portal on cooldown")
 	game.player_pos = Vector2(portals[0]["pos"]) + Vector2(-160, 40)
 	await _tick(3.0)
-	print("LARAPIO_REWORK_%s lunge=%s steal=%s trail=%d fan=3 portal_cd=true frames=%d" % ["FAIL" if failed else "OK", saw_lunge, stole, trail.size(), seq])
+	print("LARAPIO_REWORK_%s pressure=true rewards=2/3 lunge=%s steal=%s trail=%d fan=3 portal_cd=true frames=%d" % ["FAIL" if failed else "OK", saw_lunge, stole, trail.size(), seq])
 	quit(1 if failed else 0)

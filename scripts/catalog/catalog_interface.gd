@@ -10,9 +10,15 @@ const TEXT := Color(0.94, 0.94, 0.89)
 const MUTED := Color(0.59, 0.72, 0.74)
 const CATEGORIES := ["Manifestações", "Inimigos", "Chefes", "Fases", "Arquivo", "Espectros", "Cartas"]
 const SECTIONS := ["Registro"]
-const DIM_LABELS := {1: "Castelo", 2: "Mundo branco", 3: "Catedral", 4: "Nexo", 5: "Cápsula", 6: "Chaga", 7: "Cinzas", 8: "Sertão"}
+const DIM_LABELS := {1: "Castelo", 2: "Mundo branco", 3: "Catedral", 4: "Nexo", 5: "Cápsula", 6: "Chaga", 7: "Cinzas", 8: "Sertão", 9: "Cripta"}
 const GAP := 12.0
 const TAP_SLOP := 14.0
+const COMBAT_PORTRAITS := {
+	"nevasca": "res://assets/sprites/boss2_remaster/idle/idle_01.png",
+	"pai_rato": "res://assets/sprites/boss3/remake/idle/idle_01.png",
+	"umbra": "res://assets/sprites/umbra_v3/idle_01.png",
+	"matriarca_chaga": "res://assets/sprites/boss6_rework/boss6_idle_00.png",
+}
 
 static var _tex_cache: Dictionary = {}
 
@@ -180,6 +186,26 @@ static func apply_subfilter(host: Node, items: Array) -> Array:
 
 
 static func texture_for(host: Node, item: Dictionary) -> Texture2D:
+	var id: String = String(item.get("id", ""))
+	if COMBAT_PORTRAITS.has(id):
+		var portrait_path: String = COMBAT_PORTRAITS[id]
+		if not _tex_cache.has(portrait_path):
+			_tex_cache[portrait_path] = load(portrait_path) if ResourceLoader.exists(portrait_path) else null
+		if _tex_cache[portrait_path] is Texture2D:
+			return _tex_cache[portrait_path]
+	if id in ["sineiro_boreal", "suturador_ambar"]:
+		var sheet: Texture2D = host._catalog_item_texture(item)
+		if sheet != null:
+			var columns := 6 if id == "sineiro_boreal" else 4
+			var rows := 4 if id == "sineiro_boreal" else 6
+			var frame_key := "catalog_frame:" + id
+			var frame: AtlasTexture = _tex_cache.get(frame_key)
+			if frame == null or frame.atlas != sheet:
+				frame = AtlasTexture.new()
+				frame.atlas = sheet
+				frame.region = Rect2(Vector2.ZERO, sheet.get_size() / Vector2(columns, rows))
+				_tex_cache[frame_key] = frame
+			return frame
 	var path: String = String(item.get("texture_path", ""))
 	if path != "":
 		if not _tex_cache.has(path):
@@ -234,6 +260,7 @@ static func draw_art(host: Node, item: Dictionary, rect: Rect2) -> void:
 		host._draw_centered_with_font(host.menu_ui_font, String(item.get("name", "?")).left(1), rect.get_center() + Vector2(0, 14), 40, Color(MUTED, 0.6))
 		return
 	host._draw_texture_contain(tex, rect, Color.WHITE)
+	_draw_enemy_identity(host, item, rect)
 
 
 ## Arte de um tile cortado pela borda da galeria: desenha so a parte visivel.
@@ -255,6 +282,22 @@ static func _draw_art_clipped(host: Node, item: Dictionary, rect: Rect2, clip: R
 		return
 	var src := Rect2((vis.position - dest.position) / k, vis.size / k)
 	host.draw_texture_rect_region(tex, vis, src)
+	if clip.encloses(rect):
+		_draw_enemy_identity(host, item, rect)
+
+
+static func _draw_enemy_identity(host: Node, item: Dictionary, rect: Rect2) -> void:
+	var id: String = String(item.get("id", ""))
+	if id == "rebobinador":
+		var center: Vector2 = rect.get_center() + Vector2(0.0, rect.size.y * 0.11)
+		var radius: float = minf(rect.size.x, rect.size.y) * 0.34
+		host.draw_arc(center, radius, -PI * 0.72, PI * 0.68, 32, Color(1.0, 0.52, 0.12, 0.85), 3.0, true)
+		host.draw_circle(center + Vector2(radius * 0.88, -radius * 0.25), 4.0, Color(1.0, 0.82, 0.32, 0.95))
+	elif id == "briguer_escudeiro":
+		var center: Vector2 = rect.get_center() + Vector2(rect.size.x * 0.22, rect.size.y * 0.10)
+		var radius: float = minf(rect.size.x, rect.size.y) * 0.28
+		host.draw_arc(center, radius, -PI * 0.48, PI * 0.48, 24, Color(0.68, 0.96, 1.0, 0.88), 4.0, true)
+		host.draw_line(center + Vector2(radius * 0.35, -radius * 0.8), center + Vector2(radius * 0.35, radius * 0.8), Color(0.84, 1.0, 1.0, 0.72), 2.0, true)
 
 
 static func _draw_unread_dot(host: Node, rect: Rect2) -> void:

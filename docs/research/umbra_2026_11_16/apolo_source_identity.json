@@ -1,0 +1,18 @@
+{
+  "source": "/home/hermes/Documentos/GitHub/Ruptura_Temporal-APOLO2.0",
+  "checkpoint_executed": false,
+  "files": {
+    "apolo_brain.py": {
+      "bytes": 35742,
+      "sha256": "985d8a3d03cba74fce30d13d0fc0368d4ce1b7e79fc819aeac273aa116757d51"
+    },
+    "saves/apolo_arq.json": {
+      "bytes": 35,
+      "sha256": "9b073847a866f47b06a1510d65d0fe1c4b5e29743be8d115e82c4967b1c8eb60"
+    },
+    "saves/apolo_memoria_dqn.pt": {
+      "bytes": 2214159,
+      "sha256": "40497f8bd37aea30e7f4538882e0641609cca78af8bbefb56f342715ae900714"
+    }
+  }
+}

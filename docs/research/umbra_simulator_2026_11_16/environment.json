@@ -1,0 +1,24 @@
+{
+	"actions_in_120_requests": 1,
+	"boss_damage": 39.0711933333332,
+	"checks": 47,
+	"eco_damage": 465,
+	"legacy_abi_preserved": true,
+	"passed": true,
+	"plasma_damage": 417,
+	"threat_coverage": {
+		"ATAQUE": 1,
+		"CAMINHO_ESPINHOS": 1,
+		"DESCARGA_ELETRICA": 1,
+		"ECO_PROFETICO": 1,
+		"LASER_SOBRECARGA": 1,
+		"MIASMA": 1,
+		"PRAGA_RATOS": 4,
+		"PRISAO": 1,
+		"REBOBINAR": 1,
+		"SIFON": 1,
+		"VORTICE": 1
+	},
+	"training_actions": 25,
+	"training_features": 90
+}

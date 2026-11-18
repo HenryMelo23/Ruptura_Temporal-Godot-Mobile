@@ -160,7 +160,8 @@ func enter() -> bool:
 		return false
 	# Ao cair na fenda ela empurra a horda para longe; o mundo e salvo assim,
 	# entao na volta os inimigos continuam la longe e ela sai com folga.
-	core._rift_transition().push_enemies_now(Vector2(core.player_pos))
+	if core._is_world_authority():
+		core._rift_transition().push_enemies_now(Vector2(core.player_pos))
 	saved = {
 		"world": Vector2(core.WORLD_SIZE),
 		"player_pos": Vector2(core.player_pos),
@@ -214,6 +215,8 @@ func enter() -> bool:
 func leave(expelled: bool) -> void:
 	if not active:
 		return
+	if core.mode == RTCorruptorShop.MODE:
+		core._corruptor_shop().close()
 	active = false
 	collapsing = 0.0
 	mp_ready = false
@@ -284,7 +287,10 @@ func update(delta: float) -> void:
 	# Na sala cheia a saida e coletiva: quem ja tocou espera os outros.
 	if mp_ready:
 		if mp_everyone_ready():
-			leave(false)
+			if core._rift_transition().enabled():
+				core._rift_transition().begin_exit_dive(EXIT_PORTAL_POS)
+			else:
+				leave(false)
 		return
 	if core.mode != "game" or core._dialogue().busy():
 		return
@@ -332,7 +338,10 @@ func _reach_exit() -> void:
 		core.rpc("_rpc_shop_ready")
 	core._add_text("ESPERANDO A EQUIPE", core.player_pos + Vector2(-110, -110), Color(0.6, 0.9, 1.0), 2.0, 18)
 	if mp_everyone_ready():
-		leave(false)
+		if core._rift_transition().enabled():
+			core._rift_transition().begin_exit_dive(EXIT_PORTAL_POS)
+		else:
+			leave(false)
 
 
 ## Tique sonoro e vibracao nos ultimos segundos, uma vez por segundo.
@@ -358,6 +367,9 @@ func _begin_collapse() -> void:
 ## Abre a loja antiga na bancada do Mercador.
 func _open_counter() -> void:
 	if core.mode == "shop" or core.mode == "shop_opening":
+		return
+	if multiplayer_room() and core._corruptor_shop().can_open():
+		core._corruptor_shop().open()
 		return
 	core.shop_controller.open_shop(true)
 
