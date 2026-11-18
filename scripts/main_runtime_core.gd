@@ -11241,10 +11241,12 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 		if _distance_to_polyline(Vector2(cheese["pos"]), points) <= width:
 			_damage_phase3_cheeses_at(Vector2(cheese["pos"]), player_damage * 1.12, 4.0)
 	if _arauto_active() and _distance_to_polyline(Vector2(arauto["pos"]), points) <= width + 30.0:
-		var arauto_damage = player_damage * 1.12 * _lacerante_coagulum_damage_multiplier() * _lacerante_boss_size_multiplier()
+		var arauto_damage = player_damage * 1.12 * _lacerante_coagulum_damage_multiplier() * _lacerante_boss_size_multiplier() * lacerante_execution.damage_bonus(arauto)
 		if empowered:
 			arauto_damage *= LACERANTE_EMPOWER_DAMAGE_MULT
 		_damage_arauto(arauto_damage, "lacerante_empowered" if empowered else "lacerante")
+		if _arauto_active():
+			lacerante_execution.apply_laceration(arauto, 2 if slash_stage == 2 else 1)
 		_manifest_evolution_on_combat_hit("%s:hit:arauto" % event_id, "lacerante", {"uid": "arauto", "kind": "arauto", "pos": Vector2(arauto["pos"])}, Vector2(arauto["pos"]))
 	if boss_active and boss_hp > 0.0 and _distance_to_polyline(boss_pos, points) <= width + 32.0:
 		var boss_damage = player_damage * 1.12 * _lacerante_coagulum_damage_multiplier() * _lacerante_boss_size_multiplier()

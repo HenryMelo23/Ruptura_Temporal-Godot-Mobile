@@ -158,20 +158,34 @@ func apply_laceration(enemy: Dictionary, amount: int) -> void:
 
 
 func update_bleed(enemy: Dictionary, delta: float) -> void:
-	if int(enemy.get("laceracao", 0)) <= 0:
-		return
-	enemy["bleed_timer"] = maxf(0.0, float(enemy.get("bleed_timer", 0.0)) - delta)
-	if float(enemy["bleed_timer"]) <= 0.0:
-		enemy["laceracao"] = 0
-		enemy["bleed_tick"] = 0.0
-		return
-	enemy["bleed_tick"] = float(enemy.get("bleed_tick", BLEED_TICK)) - delta
-	if float(enemy["bleed_tick"]) > 0.0:
-		return
-	enemy["bleed_tick"] = BLEED_TICK
-	var amount: float = float(core.player_damage) * BLEED_RATIO_PER_STACK * float(stacks(enemy))
+	var amount := _tick_bleed(enemy, delta)
 	if amount > 0.0:
 		core._damage_enemy(enemy, amount, "lacerante_bleed", false, false, Vector2(enemy.get("pos", core.player_pos)), "manifestation_secondary")
+
+
+## O Arauto/Aguilhao vive fora de `enemies`, mas recebe os mesmos stacks.
+func update_arauto_bleed(delta: float) -> void:
+	if not core._arauto_active():
+		return
+	var amount := _tick_bleed(core.arauto, delta)
+	if amount > 0.0:
+		core._damage_arauto(amount, "lacerante_bleed", false, true, "manifestation_secondary")
+
+
+## Avanca o timer do sangramento e devolve o dano deste tick (0 entre ticks).
+func _tick_bleed(target: Dictionary, delta: float) -> float:
+	if int(target.get("laceracao", 0)) <= 0:
+		return 0.0
+	target["bleed_timer"] = maxf(0.0, float(target.get("bleed_timer", 0.0)) - delta)
+	if float(target["bleed_timer"]) <= 0.0:
+		target["laceracao"] = 0
+		target["bleed_tick"] = 0.0
+		return 0.0
+	target["bleed_tick"] = float(target.get("bleed_tick", BLEED_TICK)) - delta
+	if float(target["bleed_tick"]) > 0.0:
+		return 0.0
+	target["bleed_tick"] = BLEED_TICK
+	return float(core.player_damage) * BLEED_RATIO_PER_STACK * float(stacks(target))
 
 
 # --- barra de execucao ---------------------------------------------------------------
@@ -345,6 +359,7 @@ func apply_remote_finished(event_id: String, target_uid: int, pos: Vector2, kill
 
 func update(delta: float) -> void:
 	post_immunity = maxf(0.0, post_immunity - delta)
+	update_arauto_bleed(delta)
 	if pending_remote_event_id != "" and float(core.time_alive) - pending_remote_since > 2.0:
 		reject_remote_request(pending_remote_event_id)
 	if not cine.is_empty():

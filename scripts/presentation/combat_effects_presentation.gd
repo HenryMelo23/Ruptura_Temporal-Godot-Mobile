@@ -1436,10 +1436,11 @@ static func _draw_arauto(game: Node2D, camera: Vector2) -> void :
 		game._draw_attack_target_marker(pos + Vector2(0, 44), 65.0, game.locked_target_kind == "arauto")
 	var hp_ratio: float = float(game.arauto["hp"]) / max(1.0, float(game.arauto["max_hp"]))
 	game._draw_bar(pos + Vector2(-74, -86), 148.0, hp_ratio, Color(0.66, 0.24, 1.0))
+	RTLaceranteExecutionVfx.draw_arauto_stacks(game, pos + Vector2(-74, -86))
 	var echo_count = game._count_arauto_echoes()
 	var protect = int(min(game.ARAUTO_MAX_DAMAGE_REDUCTION, float(echo_count) * game.ARAUTO_ECHO_DAMAGE_REDUCTION) * 100.0)
 	game._draw_centered("ARAUTO", pos + Vector2(0, -110), 16, Color(0.78, 0.92, 1.0))
-	game._draw_centered("ECOS %d  PROTECAO %d%%" % [echo_count, protect], pos + Vector2(0, -67), 11, Color(0.64, 0.88, 1.0, 0.94))
+	game._draw_centered("ECOS %d  PROTECAO %d%%" % [echo_count, protect], pos + Vector2(0, -62), 11, Color(0.64, 0.88, 1.0, 0.94))
 
 
 static func _draw_arauto_vfx(game: Node2D, camera: Vector2) -> void :
@@ -1526,10 +1527,11 @@ static func _draw_aguilhao_arauto(game: Node2D, camera: Vector2) -> void :
 		game._draw_attack_target_marker(pos + Vector2(0, 34), 72.0, game.locked_target_kind == "arauto")
 	var hp_ratio: float = float(game.arauto["hp"]) / max(1.0, float(game.arauto["max_hp"]))
 	game._draw_bar(pos + Vector2(-84, -72), 168.0, hp_ratio, Color(0.44, 1.0, 0.2))
+	RTLaceranteExecutionVfx.draw_arauto_stacks(game, pos + Vector2(-84, -72))
 	var nodes = game._count_aguilhao_nodules()
 	var protect = int(min(game.AGUILHAO_MAX_NODE_REDUCTION, float(nodes) * game.AGUILHAO_NODE_DAMAGE_REDUCTION) * 100.0)
 	game._draw_centered("AGUILHAO", pos + Vector2(0, -96), 16, Color(0.78, 1.0, 0.46))
-	game._draw_centered("NODULOS %d  PROTECAO %d%%" % [nodes, protect], pos + Vector2(0, -52), 11, Color(0.68, 1.0, 0.32, 0.94))
+	game._draw_centered("NODULOS %d  PROTECAO %d%%" % [nodes, protect], pos + Vector2(0, -47), 11, Color(0.68, 1.0, 0.32, 0.94))
 
 
 static func _draw_parasite_spit_zones(game: Node2D, camera: Vector2) -> void :

@@ -63,9 +63,20 @@ static func draw_bar_overlay(game: Node2D, pos: Vector2, width: float, height: f
 		var icon: Vector2 = pos + Vector2(width + 10.0, height * 0.5)
 		game.draw_line(icon + Vector2(-5, 6), icon + Vector2(5, -6), WHITE, 2.4, true)
 		game.draw_line(icon + Vector2(-5, -6), icon + Vector2(5, 6), Color(CRIMSON, 0.9), 2.0, true)
-	var stacks: int = int(ov.get("stacks", 0))
+	draw_stack_pips(game, pos, height, int(ov.get("stacks", 0)))
+
+
+## Marcadores de Laceracao logo abaixo de qualquer barra de vida.
+static func draw_stack_pips(game: Node2D, pos: Vector2, height: float, stacks: int) -> void:
 	for i in range(stacks):
 		game.draw_rect(Rect2(pos + Vector2(float(i) * 8.0, height + 3.0), Vector2(6.0, 3.0)), CRIMSON, true)
+
+
+## Barra propria do Arauto/Aguilhao: mesmos stacks dos inimigos comuns.
+static func draw_arauto_stacks(game: Node2D, bar_pos: Vector2) -> void:
+	if game.manifestation_key != "lacerante":
+		return
+	draw_stack_pips(game, bar_pos, 7.0, game._lacerante_exec().stacks(game.arauto))
 
 
 static func draw_world(game: Node2D, camera: Vector2) -> void:
