@@ -9,13 +9,11 @@ const COLLISION_RES := 96
 const ALTAR_TILE := 5
 const HEIGHT_BY_MAP := {
 	"map_phase_ex2": 7.0,
-	"map_phase_ex6": 5.0,
 	"map_phase_ex7": 6.0,
 	"map_phase_ex8": 8.0,
 }
 const SIDE_TINT_BY_MAP := {
 	"map_phase_ex2": Color(0.48, 0.62, 0.72),
-	"map_phase_ex6": Color(0.52, 0.46, 0.30),
 	"map_phase_ex7": Color(0.42, 0.27, 0.22),
 	"map_phase_ex8": Color(0.56, 0.39, 0.27),
 }

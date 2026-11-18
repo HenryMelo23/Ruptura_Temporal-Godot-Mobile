@@ -2,8 +2,10 @@ extends SceneTree
 
 ## Fisica dos objetos do mapa (RTMapPropColliders, SDF por atlas) em todas as fases
 ## que tem objetos solidos. Com "capture" nos argumentos salva prints com o contorno.
-const PHASES := {2: [0, 10, 12, 14], 6: [0, 7, 12, 15], 7: [3, 8, 11, 15], 8: [1, 3, 9, 11]}
-const SOLID_TILE_COUNTS := {2: 10, 6: 6, 7: 7, 8: 9}
+## Fase 6 (Chaga de Ambar) perdeu os objetos solidos a pedido do usuario: piso livre.
+const PHASES := {2: [0, 10, 12, 14], 7: [3, 8, 11, 15], 8: [1, 3, 9, 11]}
+const SOLID_TILE_COUNTS := {2: 10, 7: 7, 8: 9}
+const FREE_PHASES: Array[int] = [3, 6]
 var game: Node
 var failed := false
 var shots := 0
@@ -93,9 +95,10 @@ func _run() -> void:
 				_check(RTMapPropColliders.distance_at(game, Vector2(e["pos"])) >= 0.0, "fase %d inimigo ficou dentro do ladrilho %d" % [phase, tile])
 			game.enemies.clear()
 	# Fases de piso liso nao tem fisica de objetos.
-	game._advance_to_phase(3)
-	_check(not RTMapPropColliders.active(game), "fase 3 nao deveria ter objetos solidos")
-	_check(not RTMapPropPresentation.supported(game), "fase 3 ganhou relevo sem colisao")
+	for free_phase in FREE_PHASES:
+		game._advance_to_phase(free_phase)
+		_check(not RTMapPropColliders.active(game), "fase %d nao deveria ter objetos solidos" % free_phase)
+		_check(not RTMapPropPresentation.supported(game), "fase %d ganhou relevo sem colisao" % free_phase)
 	if not failed:
 		print("MAP_PROPS_SMOKE_OK shots=%d" % shots)
 	quit(1 if failed else 0)
