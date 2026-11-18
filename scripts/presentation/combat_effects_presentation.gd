@@ -244,6 +244,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 	if game.boss1_rain_active and game.weather_kind == "rain":
 		game._draw_rain_puddles(camera)
 	game.RangedAttackRange.draw_range_indicator(game, camera)
+	RTLaceranteExecutionVfx.draw_reach_indicator(game, camera)
 	LaceranteVfx.draw_ground_marks(game, camera)
 	RTFrameProfiler.mark("dm_range_lacer")
 	for prism in (game.prisms + game.net_prisms):

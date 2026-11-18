@@ -79,6 +79,39 @@ static func draw_arauto_stacks(game: Node2D, bar_pos: Vector2) -> void:
 	draw_stack_pips(game, bar_pos, 7.0, game._lacerante_exec().stacks(game.arauto))
 
 
+## Alcance do corte (ate onde o auto-ataque pega) e, quando diferente, o alcance
+## da execucao direta. Segue a opacidade do indicador de alcance das configuracoes.
+static func draw_reach_indicator(game: Node2D, camera: Vector2) -> void:
+	if String(game.manifestation_key) != "lacerante" or String(game.active_character_key) == String(game.CHARACTER_HENRY):
+		return
+	if bool(game.is_dead):
+		return
+	var opacity := RTRangedAttackRange.sanitize_indicator_opacity(float(game.auto_attack_range_opacity))
+	if opacity <= 0.001:
+		return
+	var center := Vector2(game.player_pos) - camera
+	var empowered := bool(game.lacerante_empowered_ready)
+	var reach: float = float(game._lacerante_hit_reach(empowered))
+	var aiming := bool(game.attack_holding) or not String(game.locked_target_kind).is_empty()
+	var alpha := (RTRangedAttackRange.INDICATOR_AIM_ALPHA if aiming else RTRangedAttackRange.INDICATOR_IDLE_ALPHA) * opacity
+	var segments := 72 if game._runtime_visual_budget_active() else 112
+	var blade := CRIMSON.lightened(0.18) if empowered else CRIMSON
+	if empowered:
+		alpha *= 1.0 + 0.35 * (0.5 + 0.5 * sin(float(game.time_alive) * 6.0))
+	game.draw_arc(center, reach, 0.0, TAU, segments, Color(blade.r * 0.5, blade.g * 0.5, blade.b * 0.5, alpha * 0.32), 3.2, true)
+	game.draw_arc(center, reach, 0.0, TAU, segments, Color(blade, alpha), RTRangedAttackRange.INDICATOR_LINE_WIDTH, true)
+	var exec_reach: float = RTLaceranteExecutionController.EXECUTE_REACH
+	if absf(reach - exec_reach) < 8.0:
+		return
+	# Execucao: anel tracejado e mais claro, para nao competir com o do corte.
+	var dashes := 28 if game._runtime_visual_budget_active() else 40
+	var step: float = TAU / float(dashes)
+	var exec_color := Color(WHITE.lerp(CRIMSON, 0.35), alpha * 1.15)
+	for i in range(dashes):
+		var a0: float = float(i) * step
+		game.draw_arc(center, exec_reach, a0, a0 + step * 0.5, 4, exec_color, RTRangedAttackRange.INDICATOR_LINE_WIDTH, true)
+
+
 static func draw_world(game: Node2D, camera: Vector2) -> void:
 	var ctrl: RTLaceranteExecutionController = game.lacerante_execution
 	var active: Dictionary = ctrl.active

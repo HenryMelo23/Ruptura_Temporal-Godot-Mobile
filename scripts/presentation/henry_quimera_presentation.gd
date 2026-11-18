@@ -315,7 +315,7 @@ static func _local_state(game: Node2D) -> StringName:
 		return STATE_CAST
 	if game._player_attack_pose_active():
 		return STATE_ATTACK
-	if game.time_alive - game.last_damage_time < 0.35:
+	if game._player_damage_pose_active():
 		return STATE_DAMAGE
 	if game._read_move().length() > 0.12:
 		return STATE_WALK

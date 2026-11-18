@@ -563,7 +563,7 @@ static func _player_draw_profile(game: Node2D) -> Dictionary:
 		}
 	if RTGeovanaV2.is_v2(game._player_texture()):
 		return RTGeovanaV2.draw_profile()
-	if game.time_alive - game.last_damage_time < 0.35:
+	if game._player_damage_pose_active(move):
 		return {
 			"size": game.PLAYER_DRAW_DAMAGE_SIZE, 
 			"offset": Vector2.ZERO

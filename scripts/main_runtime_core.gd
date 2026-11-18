@@ -11200,8 +11200,8 @@ func _fire_lacerante(stage: int, dir: Vector2) -> void :
 	lacerante_combo_visual = slash_stage
 	lacerante_combo = (slash_stage + 1) % 3
 	var empowered = lacerante_empowered_ready
-	var points = _lacerante_stage_points(player_pos, attack_dir, slash_stage)
-	if empowered and _lacerante_exec().try_start_on_slash(points, 52.0):
+	var points = _lacerante_stage_points(player_pos, attack_dir, slash_stage, bool(empowered))
+	if empowered and _lacerante_exec().try_start_on_slash(points, LACERANTE_BLADE_WIDTH):
 		lacerante_empowered_ready = false
 		_lacerante_exec().start_reforco_cooldown(true)
 		return
@@ -11541,7 +11541,7 @@ func _auto_attack_range() -> float:
 	if active_character_key == CHARACTER_HENRY and mutation_key == "colosso":
 		return henry_colossus_ability_controller.GIANT_MELEE_RANGE if henry_colossus_ability_controller.giant_active else henry_colossus_ability_controller.MELEE_RANGE
 	if manifestation_key == "lacerante":
-		return 260.0 + LACERANTE_ATTACK_REACH_BONUS + _lacerante_reach_bonus()
+		return 260.0 + LACERANTE_ATTACK_REACH_BONUS + _lacerante_reach_bonus() + (LACERANTE_EMPOWER_REACH_BONUS if bool(lacerante_empowered_ready) else 0.0)
 	return RangedAttackRange.attack_range(self)
 
 
@@ -12686,6 +12686,8 @@ func _execute_teleport(target_world: Vector2) -> void :
 	_apply_aura_events(AuraSystem.on_dash(aura_state, {"origin_pos": origin, "target_pos": target_world, "player_pos": player_pos}))
 	_voraz_devour_dash(origin, _clamp_player_world(target_world))
 	player_pos = _clamp_player_world(target_world)
+	if manifestation_key == "lacerante":
+		_lacerante_exec().consume_on_teleport(origin, player_pos)
 	_grant_manto_impulso_shield()
 	var dash_color: Color = _manifestation_color()
 	if manifestation_key == "lacerante":
@@ -37342,7 +37344,7 @@ func _player_texture() -> Texture2D:
 		var animation: Vector2i = LaceranteSprites.snapshot(self, Time.get_ticks_msec())
 		var frames: Array = textures.get(LaceranteSprites.remote_key(self, animation.x), [])
 		return frames[animation.y] if not frames.is_empty() else null
-	if time_alive - last_damage_time < 0.35:
+	if _player_damage_pose_active(move):
 		var damage_key := "player_prismatica_damage" if manifestation_key == "prismatica" else ("player_parasitica_damage" if manifestation_key == "parasitica" else "player_damage")
 		return _frame_texture_relative(damage_key, time_alive - last_damage_time, 70, "player_idle")
 	if _player_attack_pose_active():
@@ -40737,7 +40739,17 @@ func _distance_to_polyline(p: Vector2, points: Array) -> float:
 	return best
 
 
-func _lacerante_stage_points(origin: Vector2, dir: Vector2, stage: int) -> Array:
+## Comprimento da lamina a partir do ponto inicial do corte (18 px a frente).
+func _lacerante_blade_length(empowered: bool = false) -> float:
+	return 120.0 + LACERANTE_ATTACK_REACH_BONUS + _lacerante_reach_bonus() + (LACERANTE_EMPOWER_REACH_BONUS if empowered else 0.0)
+
+
+## Distancia maxima do centro da Geovana em que o corte ainda acerta um inimigo.
+func _lacerante_hit_reach(empowered: bool = false) -> float:
+	return 18.0 + _lacerante_blade_length(empowered) + LACERANTE_BLADE_WIDTH
+
+
+func _lacerante_stage_points(origin: Vector2, dir: Vector2, stage: int, empowered: bool = false) -> Array:
 	var forward = dir.normalized()
 	if forward.length() <= 0.05:
 		forward = Vector2.RIGHT
@@ -40746,7 +40758,7 @@ func _lacerante_stage_points(origin: Vector2, dir: Vector2, stage: int) -> Array
 	var total = 11 if stage in [0, 1] else 9
 	for i in range(total):
 		var t = float(i) / float(total - 1)
-		var advance = 18.0 + (120.0 + LACERANTE_ATTACK_REACH_BONUS + _lacerante_reach_bonus()) * t
+		var advance = 18.0 + _lacerante_blade_length(empowered) * t
 		var lateral = 0.0
 		if stage == 2:
 			lateral = sin(t * PI * 2.0) * 3.0
@@ -43212,7 +43224,7 @@ func _network_player_animation_snapshot(now_ms: int) -> Vector2i:
 	var move: = _read_move()
 	if player_freeze_visual_timer > 0.0:
 		return Vector2i(NET_ANIM_FROZEN, _frozen_player_frame_index())
-	if time_alive - last_damage_time < 0.35:
+	if _player_damage_pose_active(move):
 		var damage_frames: Array = textures.get("player_prismatica_damage" if manifestation_key == "prismatica" else ("player_parasitica_damage" if manifestation_key == "parasitica" else "player_damage"), [])
 		return Vector2i(NET_ANIM_DAMAGE, int((time_alive - last_damage_time) * 1000.0 / 70.0) % maxi(1, damage_frames.size()))
 	if lacerante_preparing and manifestation_key == "lacerante" and move.length() <= 0.12:
@@ -43247,6 +43259,16 @@ func _network_player_animation_snapshot(now_ms: int) -> Vector2i:
 	return Vector2i(state, int(now_ms / maxi(1, period_ms)) % maxi(1, frames.size()))
 
 
+## Quadro de dano so com a personagem parada: andando, o frame de susto travava as
+## pernas e brigava com o deslocamento. Movimento mantem a animacao de andar.
+func _player_damage_pose_active(move: Vector2 = Vector2.INF) -> bool:
+	var elapsed: float = time_alive - last_damage_time
+	if elapsed < 0.0 or elapsed >= 0.35:
+		return false
+	var current: Vector2 = _read_move() if move == Vector2.INF else move
+	return current.length() <= 0.12
+
+
 func _network_player_visual_snapshot() -> PackedFloat32Array:
 	var move: Vector2 = _read_move()
 	var aim: Vector2 = _aim_direction()
@@ -43255,7 +43277,7 @@ func _network_player_visual_snapshot() -> PackedFloat32Array:
 	if player_freeze_visual_timer > 0.0:
 		action = NET_ANIM_FROZEN
 		elapsed = player_freeze_visual_timer
-	elif time_alive - last_damage_time < 0.35:
+	elif _player_damage_pose_active(move):
 		action = NET_ANIM_DAMAGE
 		elapsed = maxf(0.0, time_alive - last_damage_time)
 	elif time_alive - last_secondary_time < 0.42:

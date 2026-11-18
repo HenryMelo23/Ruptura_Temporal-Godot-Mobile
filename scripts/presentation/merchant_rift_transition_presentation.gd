@@ -54,6 +54,15 @@ static func draw_player(game: Node2D, camera: Vector2) -> bool:
 	var foot: Vector2 = Vector2(game.player_pos) - camera + Vector2(profile.get("offset", Vector2.ZERO)) + Vector2(0.0, float(game.PLAYER_DRAW_BOX_SIZE.y) * 0.5)
 	var flip: bool = game._should_flip_player_sprite()
 	var custom: Array = _frames(String(tr.mood), String(tr.phase)) if game.active_character_key == game.CHARACTER_GEOVANA else []
+	if game.active_character_key == game.CHARACTER_GEOVANA and game.manifestation_key == "lacerante":
+		# A Lacerante tem a propria queda: arte dedicada quando existir, senao
+		# quadros do atlas dela (o sprite de andar girando nao lia como queda).
+		custom = _frames("lacerante_" + String(tr.mood), String(tr.phase))
+		if custom.is_empty():
+			var lacerante_tex: Texture2D = game.LaceranteSprites.rift_texture(game, String(tr.mood), String(tr.phase), tr.progress(), tr.impact_time())
+			if lacerante_tex != null:
+				tex = lacerante_tex
+				height = float(game.LaceranteSprites.draw_height(game, tex))
 	if not custom.is_empty() and RTGeovanaV2.is_v2(tex):
 		# A Geovana v2 e desenhada num canvas com folga (DRAW_HEIGHT ~120 px para
 		# ela ter 80 px em pe). Os quadros da fenda medem pela altura VISIVEL dela,

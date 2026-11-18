@@ -188,6 +188,47 @@ func _tick_bleed(target: Dictionary, delta: float) -> float:
 	return float(core.player_damage) * BLEED_RATIO_PER_STACK * float(stacks(target))
 
 
+## Teleporte da Lacerante: atravessar um alvo marcado consome os stacks dele num
+## corte instantaneo (mesma ideia do Q, que tambem consome a Laceracao).
+const TELEPORT_CONSUME_WIDTH := 72.0
+const TELEPORT_CONSUME_HP_RATIO := 0.02
+const TELEPORT_CONSUME_DAMAGE_RATIO := 0.3
+
+
+func consume_on_teleport(from: Vector2, to: Vector2) -> int:
+	if not _enabled():
+		return 0
+	var consumed := 0
+	var coagulum: float = float(core._lacerante_coagulum_damage_multiplier())
+	for enemy in core.enemies.duplicate():
+		var n := stacks(enemy)
+		if n <= 0 or float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var pos := Vector2(enemy.get("pos", Vector2.ZERO))
+		if float(core._distance_to_segment(pos, from, to)) > TELEPORT_CONSUME_WIDTH:
+			continue
+		var damage: float = maxf(float(enemy.get("max_hp", 1.0)) * TELEPORT_CONSUME_HP_RATIO, float(core.player_damage) * TELEPORT_CONSUME_DAMAGE_RATIO) * float(n) * coagulum
+		_clear_stacks(enemy)
+		core._spawn_radial_particles(pos, Color(1.0, 0.08, 0.16), 6 + n * 2)
+		core._damage_enemy(enemy, core._lacerante_damage_for_enemy(damage, enemy), "lacerante", false)
+		consumed += n
+	if core._arauto_active():
+		var n_arauto := stacks(core.arauto)
+		var arauto_pos := Vector2(core.arauto.get("pos", Vector2.ZERO))
+		if n_arauto > 0 and float(core._distance_to_segment(arauto_pos, from, to)) <= TELEPORT_CONSUME_WIDTH + 40.0:
+			_clear_stacks(core.arauto)
+			core._spawn_radial_particles(arauto_pos, Color(1.0, 0.08, 0.16), 10)
+			core._damage_arauto(float(core.player_damage) * TELEPORT_CONSUME_DAMAGE_RATIO * float(n_arauto) * coagulum * float(core._lacerante_boss_size_multiplier()), "lacerante", true)
+			consumed += n_arauto
+	return consumed
+
+
+func _clear_stacks(target: Dictionary) -> void:
+	target["laceracao"] = 0
+	target["bleed_timer"] = 0.0
+	target["bleed_tick"] = 0.0
+
+
 # --- barra de execucao ---------------------------------------------------------------
 
 ## Dano que o ATK Reforcado causaria agora neste inimigo (o que a barra mostra).

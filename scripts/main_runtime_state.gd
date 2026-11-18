@@ -771,6 +771,10 @@ const ELETRICA_WAVE_RECOIL_MIN_SPEED: = 4.8
 const SECONDARY_LACERANTE_DURATION: = 3.0
 const LACERANTE_ATTACK_REACH_BONUS: = 15.0
 const LACERANTE_REACH_PER_20_COAGULA: = 5.0
+## ATK Reforcado: lamina um pouco mais longa (alcance leve, nao um novo ataque).
+const LACERANTE_EMPOWER_REACH_BONUS: = 22.0
+## Distancia lateral que o corte ainda pega em volta da polilinha da lamina.
+const LACERANTE_BLADE_WIDTH: = 52.0
 const LACERANTE_ULT_EXTRA_CUTS_PER_20_COAGULA: = 2
 const LACERANTE_COAGULUM_DAMAGE_RATE: = 0.003
 const LACERANTE_COAGULUM_ATTACK_SPEED_RATE: = 0.0025
