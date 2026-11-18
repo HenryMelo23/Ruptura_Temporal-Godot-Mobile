@@ -17,6 +17,7 @@ func pack(game: Node) -> Dictionary:
 		"player_run_xp": game.player_run_xp,
 		"boss_entry_timer": game.boss_entry_timer,
 		"pacing_profile": game.run_pacing_profile,
+		"rupture": game._dimension_rupture().public_snapshot(),
 		"run_leader_peer_id": game.run_leader_peer_id,
 		"arauto": game.arauto.duplicate(true),
 		"arauto_rays": game.arauto_rays.duplicate(true),
@@ -256,6 +257,8 @@ func apply(game: Node, snapshot_data) -> void:
 		game.shop_rift_controller.apply_remote_snapshot(Dictionary(data["merchant_rift"]))
 	if game._is_world_replica() and data.has("field_artifacts"):
 		game._field_artifacts().apply_remote_snapshot(Dictionary(data["field_artifacts"]))
+	if game._is_world_replica() and data.has("rupture"):
+		game._dimension_rupture().apply_remote_snapshot(Dictionary(data["rupture"]))
 	if game._is_world_replica() and data.has("pacing_profile"):
 		game.run_pacing_profile = String(data.get("pacing_profile", game.run_pacing_profile))
 	game.boss1_visual_snapshot_ms = Time.get_ticks_msec()

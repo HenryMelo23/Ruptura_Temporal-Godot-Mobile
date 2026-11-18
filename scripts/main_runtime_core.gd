@@ -7125,6 +7125,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	umbra_run_knowledge.clear()
 	sineiro_boreal_controller.reset_for_new_run()
 	amber_suturer_controller.reset_for_new_run()
+	_dimension_rupture().reset_for_new_run()
 	_stop_boss1_stop_audio_context(true)
 	if clear_interrupted_save:
 		_record_initial_phase_attempt_before_new_run()
@@ -9672,6 +9673,7 @@ func _process(delta: float) -> void :
 		_update_manifest_mp_ready_resend()
 
 	RTFrameProfiler.mark("p_services_menus_net")
+	_dimension_rupture().update(delta)
 	if mode == "game":
 		_update_game(delta)
 		RTFrameProfiler.begin()
@@ -14492,6 +14494,8 @@ func _reward_peer_ids() -> Array[int]:
 func _append_owned_card_drop(card: Dictionary, pos: Vector2, angle: float, owner_peer: int, life: float, min_speed: float, max_speed: float, min_radius: float, max_radius: float, metadata: Dictionary = {}) -> void :
 	if not _card_drop_texture_registered(card):
 		return
+	# Token da Ruptura: melhora só a qualidade da 1ª carta natural (nunca cria carta).
+	card = _dimension_rupture().apply_quality_token(card, owner_peer, metadata)
 	if _quantum_chips().corruptor_active():
 		# Corruptor Mercantil: a carta vira uma ficha "?" da cor da raridade.
 		metadata = metadata.duplicate()
@@ -20051,6 +20055,7 @@ func _environment_player_slow_mult() -> float:
 			mult = minf(mult, cripta_controller.move_multiplier())
 	if current_phase == RTBaileController.PHASE and not _merchant_dimension().active:
 		mult = minf(mult, baile_controller.move_multiplier())
+	mult = minf(mult, _dimension_rupture().move_speed_multiplier())
 	if player_frost_stacks > 0:
 		mult = minf(mult, maxf(0.3, 1.0 - FROST_SLOW_PER_STACK * float(player_frost_stacks)))
 	if boss_wave_slow_timer > 0.0:
@@ -26175,6 +26180,26 @@ func _merchant_dimension() -> RTMerchantDimension:
 		merchant_dimension = RTMerchantDimension.new()
 		merchant_dimension.configure(self)
 	return merchant_dimension
+
+
+var dimension_rupture: RTDimensionRuptureController = null
+
+
+## Fragmento Instável / Impulso de Ruptura / Colapso Dimensional.
+func _dimension_rupture() -> RTDimensionRuptureController:
+	if dimension_rupture == null:
+		dimension_rupture = RTDimensionRuptureController.new()
+		dimension_rupture.configure(self)
+	return dimension_rupture
+
+
+## Fragmento Instável: entra no snapshot da run (campos novos; save antigo
+## sem a chave mantém o padrão).
+var dimension_rupture_state: Dictionary:
+	get:
+		return _dimension_rupture().save_state()
+	set(value):
+		_dimension_rupture().load_state(value)
 
 
 func _merchant_npc() -> RTMerchantNpc:
@@ -36167,6 +36192,7 @@ func _draw_effects(camera: Vector2) -> void :
 
 func _draw_hud(viewport: Vector2) -> void :
 	HudPresentation._draw_hud(self, viewport)
+	RTDimensionRupturePresentation.draw_hud(self, viewport)
 	speech_bubbles.draw(self, viewport)
 
 

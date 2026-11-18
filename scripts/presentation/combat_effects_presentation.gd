@@ -369,6 +369,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		RTParasiticaPresentation.draw_world(game, camera)
 	if not game.phase_fragment.is_empty():
 		game._draw_phase_fragment(camera)
+	RTDimensionRupturePresentation.draw_world(game, camera)
 	game._draw_team_revival_world(camera)
 	if not game.online_local_spectator:
 		game._draw_companions(camera)

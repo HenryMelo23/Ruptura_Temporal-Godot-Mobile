@@ -381,6 +381,7 @@ func _advance_to_phase(phase: int) -> void:
 	if core.mode != "phase_transition":
 		core.phase_transition_timer = 0.0
 	core.phase_fragment.clear()
+	core._dimension_rupture().on_phase_entered(phase)
 	core.player_pos = core.PLAYER_START
 	core.petro_pos = core.player_pos + Vector2(-64, 32)
 	core.spawn_timer = 0.0
@@ -674,6 +675,9 @@ func _accept_phase_mp_request() -> void:
 
 
 func _commit_phase_mp_transfer(target_phase: int, action: String = "phase") -> void:
+	# Ejeção repetida (RPC duplicado ou snapshot + RPC) não inicia 2 transições.
+	if not core._dimension_rupture().on_group_transfer_committed(target_phase, action):
+		return
 	_clear_phase_mp_request()
 	core.phase_fragment.clear()
 	if action == "extract":
@@ -707,6 +711,7 @@ func _spawn_phase_fragment(pos: Vector2, next_phase: int) -> void:
 		"pulse": 0.0,
 		"life": 0.0
 	}
+	core._dimension_rupture().activate(RTDimensionRuptureController.SOURCE_OBJECTIVE, int(core.current_phase))
 
 
 func _spawn_phase_choice_portals(pos: Vector2) -> void:
@@ -725,6 +730,7 @@ func _spawn_phase_choice_portals(pos: Vector2) -> void:
 		"choices": choices
 	}
 	core._add_text("FARMAR NAS CINZAS OU ENFRENTAR UMBRA", center + Vector2(-238, -132), Color(0.62, 1.0, 0.92), 2.1, 25)
+	core._dimension_rupture().activate(RTDimensionRuptureController.SOURCE_OBJECTIVE, int(core.current_phase))
 
 
 func _start_phase_transition(next_phase: int) -> void:
@@ -733,6 +739,7 @@ func _start_phase_transition(next_phase: int) -> void:
 		core.event_alert_timer = 1.8
 		return
 	core._cleanup_phase_point_crystals()
+	core._dimension_rupture().on_transition_started(next_phase)
 	core.pending_phase = next_phase
 	core.mode = "phase_transition"
 	core.phase_transition_timer = core.PHASE_TRANSITION_TIME
