@@ -13,6 +13,7 @@ var player_shove: RTPlayerShoveController = preload("res://scripts/systems/playe
 var necrocronism: RTNecrocronismController = preload("res://scripts/systems/cards/necrocronism_controller.gd").new()
 var gravitante: RTGravitanteController = preload("res://scripts/systems/manifestations/gravitante_controller.gd").new()
 var lacerante_execution: RTLaceranteExecutionController = preload("res://scripts/systems/manifestations/lacerante_execution_controller.gd").new()
+var fossil_pustule_tether: RTFossilPustuleTether = preload("res://scripts/systems/enemies/fossil_pustule_tether.gd").new()
 
 
 func _lacerante_exec() -> RTLaceranteExecutionController:
@@ -7116,6 +7117,7 @@ func _start_game(clear_interrupted_save: = true) -> void :
 	var perf_start_ms: = Time.get_ticks_msec()
 	_ensure_runtime_controllers_bound()
 	player_shove.reset()
+	fossil_pustule_tether.reset()
 	runtime_performance_controller.reset()
 	mobile_adaptive_visual_budget = false
 	experimental_phase_controller.prepare_new_run(clear_interrupted_save)
@@ -8638,6 +8640,8 @@ func _local_player_controls_locked() -> bool:
 
 
 func _local_player_movement_locked() -> bool:
+	if fossil_pustule_tether.is_pulling():
+		return true
 	# Fala em estilo RPG prende a Geovana no lugar: sair andando por cima da
 	# propria cena de dialogo quebra a leitura e tira ela do alcance de quem
 	# esta falando com ela.
@@ -10094,6 +10098,9 @@ func _update_game(delta: float) -> void :
 	_update_frost(delta)
 	RTFrameProfiler.mark("u_shop_player_timers")
 	player_shove.update(self, delta)
+	if fossil_pustule_tether.core != self:
+		fossil_pustule_tether.configure(self)
+	fossil_pustule_tether.update(delta)
 	if not _local_player_movement_locked():
 		if player_stun_timer <= 0.0 and not player_locked:
 			_update_apolo_phase5_exhibition(delta)
@@ -16212,6 +16219,20 @@ func _explode_fossil_pustule(enemy: Dictionary) -> void :
 	pool["tick"] = PUSTULE_POOL_TICK
 
 
+func _fossil_pustule_by_uid(uid: int) -> Dictionary:
+	if uid < 0:
+		return {}
+	for enemy in enemies:
+		if int(enemy.get("uid", -2)) != uid:
+			continue
+		if String(enemy.get("type", "")) != ENEMY_FOSSIL_PUSTULE:
+			return {}
+		if float(enemy.get("hp", 0.0)) <= 0.0 or bool(enemy.get("pustule_exploded", false)):
+			return {}
+		return enemy
+	return {}
+
+
 func _fossil_pustule_from_spit(bullet: Dictionary) -> Dictionary:
 	var source_uid: = int(bullet.get("source_enemy_uid", -1))
 	if source_uid < 0:
@@ -16233,7 +16254,13 @@ func _resolve_fossil_pustule_spit_hit(bullet: Dictionary, target_peer_id: int = 
 		return false
 	var pull_pos: = Vector2(pustule.get("pos", bullet.get("source_enemy_pos", player_pos))).clamp(Vector2(40.0, 40.0), WORLD_SIZE - Vector2(40.0, 40.0))
 	if target_peer_id <= 0 or target_peer_id == _mp_unique_id():
-		_apply_hostile_reposition(pull_pos, "pustula_fossil_spit")
+		# Cordao umbilical: arrasta ate a pustula e ela estoura na chegada.
+		if fossil_pustule_tether.core != self:
+			fossil_pustule_tether.configure(self)
+		if fossil_pustule_tether.begin(pustule):
+			return true
+		_explode_fossil_pustule(pustule)
+		return true
 	else:
 		var remote_state: Dictionary = net_players_by_peer.get(target_peer_id, {})
 		if not remote_state.is_empty():
@@ -33064,6 +33091,9 @@ func _damage_player(amount: int, source: String, silent_hit_sfx: bool = false) -
 	# Henry's spin and Colosso's airborne window are complete phasing states:
 	# boss ultimates and side effects must not bypass either one.
 	if henry_incendiary_ability_controller.is_spin_invulnerable() or henry_colossus_ability_controller.is_leap_invulnerable():
+		return
+	# Arrastado pelo cordao da Pustula: os outros inimigos nao acertam.
+	if fossil_pustule_tether.blocks_damage(source):
 		return
 	_warn_if_damage_visual_missing(source)
 	var boss_ultimate_damage: = _damage_source_is_boss_ultimate(source)

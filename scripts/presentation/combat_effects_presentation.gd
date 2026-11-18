@@ -245,6 +245,7 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		game._draw_rain_puddles(camera)
 	game.RangedAttackRange.draw_range_indicator(game, camera)
 	RTLaceranteExecutionVfx.draw_reach_indicator(game, camera)
+	RTFossilPustuleTetherPresentation.draw_pull(game, camera)
 	LaceranteVfx.draw_ground_marks(game, camera)
 	RTFrameProfiler.mark("dm_range_lacer")
 	for prism in (game.prisms + game.net_prisms):
@@ -3151,20 +3152,7 @@ static func _draw_projectiles(game: Node2D, camera: Vector2) -> void :
 			game.draw_polyline(PackedVector2Array([glob[0], glob[1], glob[2], glob[3], glob[0]]), Color(0.9, 1.0, 0.38, 0.92), 2.2, true)
 			game.draw_arc(pos, 24.0, phase + game.time_alive * 6.0, phase + game.time_alive * 6.0 + PI * 1.4, 24, Color(0.64, 1.0, 0.2, 0.72), 2.0)
 		elif bullet.get("type") == "pustula_fossil_spit":
-			var pos = Vector2(bullet["pos"]) - camera
-			var dir = Vector2(bullet.get("dir", Vector2.LEFT)).normalized()
-			var side = dir.orthogonal()
-			var phase = float(bullet.get("phase", 0.0))
-			var glob = PackedVector2Array([
-				pos + dir * 17.0, 
-				pos + side * (9.0 + sin(phase) * 2.0), 
-				pos - dir * 13.0, 
-				pos - side * (8.0 + cos(phase) * 2.0)
-			])
-			game.draw_circle(pos, 22.0, Color(0.16, 0.22, 0.06, 0.28))
-			game.draw_colored_polygon(glob, Color(0.58, 0.9, 0.16, 0.92))
-			game.draw_polyline(PackedVector2Array([glob[0], glob[1], glob[2], glob[3], glob[0]]), Color(0.92, 1.0, 0.42, 0.88), 1.8, true)
-			game.draw_line(pos - dir * 18.0, pos - dir * 34.0 + side * sin(phase * 1.7) * 4.0, Color(0.56, 0.78, 0.22, 0.45), 3.0, true)
+			RTFossilPustuleTetherPresentation.draw_projectile(game, bullet, camera)
 		elif bullet.get("type") == "rat_flask" or bullet.get("type") == "rat_spit":
 			var pos = Vector2(bullet["pos"]) - camera
 			var tex: Texture2D = game.textures.get("boss3_flask")

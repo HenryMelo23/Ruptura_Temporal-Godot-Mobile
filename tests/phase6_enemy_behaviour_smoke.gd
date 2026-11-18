@@ -227,7 +227,25 @@ func _run() -> void:
 	var pustule_pos: Vector2 = Vector2(shooting_pustule["pos"])
 	game._fire_fossil_pustule_spit(shooting_pustule, game.player_pos)
 	game.enemy_bullets.back()["pos"] = game.player_pos
+	var hooked_from: Vector2 = game.player_pos
 	game._update_enemy_bullets(0.0)
+	# Cordao umbilical: arrasta ao longo do tempo (sem teleporte) e protege de
+	# outros inimigos durante o puxao; a pustula estoura quando ela chega.
+	var tether: RTFossilPustuleTether = game.fossil_pustule_tether
+	_check(tether.is_pulling(), "Fossil Pustule cord did not start pulling")
+	_check(game.player_pos.distance_to(hooked_from) < 1.0, "Fossil Pustule cord teleported the player")
+	_check(not bool(shooting_pustule.get("pustule_exploded", false)), "Fossil Pustule exploded before the player arrived")
+	var hp_before_pull: float = float(game.player_hp)
+	game._damage_player(50, "common")
+	_check(is_equal_approx(float(game.player_hp), hp_before_pull), "other enemies hit the player during the cord pull")
+	var mid_seen := false
+	for i in range(80):
+		tether.update(1.0 / 60.0)
+		if tether.is_pulling() and game.player_pos.distance_to(hooked_from) > 4.0 and game.player_pos.distance_to(pustule_pos) > 4.0:
+			mid_seen = true
+		if not tether.is_pulling():
+			break
+	_check(mid_seen, "Fossil Pustule cord did not drag through intermediate positions")
 	_check(game.player_pos.distance_to(pustule_pos) < 1.0, "Fossil Pustule spit did not pull the player to its source")
 	_check(bool(shooting_pustule.get("pustule_exploded", false)), "Fossil Pustule did not explode after its spit hit")
 	_check(game.phase6_pustule_pools.size() == 1, "Fossil Pustule spit hit did not create its explosion pool")
