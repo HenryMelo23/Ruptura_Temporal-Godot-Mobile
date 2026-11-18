@@ -169,6 +169,135 @@ func greet(dimension) -> void:
 	_ambient_line()
 
 
+# ================================================================ balcao
+const CHOICE_BUY := "buy"
+const CHOICE_ASK := "ask"
+const CHOICE_LEAVE := "leave"
+const TOPIC_RUPTURE := "rupture"
+const TOPIC_ABOUT := "about"
+const TOPIC_BACK := "back"
+
+## Dimensao atual da oficina (para abrir a bancada depois da escolha).
+var _counter_dimension = null
+
+
+## Ela encostou no balcao: comprar ou perguntar. Fora da historia (sala
+## multiplayer) o balcao abre direto, como antes.
+func open_menu(dimension) -> void:
+	_counter_dimension = dimension
+	if not narrative_enabled():
+		_buy()
+		return
+	var openers: Array[String] = [
+		"E aí, querida? Vai levar alguma coisa ou vai só alugar o meu ouvido?",
+		"Balcão aberto! Pergunta é de graça. Por enquanto.",
+		"Olha quem voltou. Compra, pergunta ou só veio me ver? Pode falar, eu aguento.",
+	]
+	core._dialogue().start([_menu_line(String(openers[core.rng.randi_range(0, openers.size() - 1)]))], _on_menu_choice)
+
+
+func _menu_line(text: String, mood: String = "animado") -> Dictionary:
+	return {"who": "mercador", "text": text, "mood": mood, "choices": [
+		{"label": "COMPRAR", "id": CHOICE_BUY},
+		{"label": "PERGUNTAR", "id": CHOICE_ASK},
+		{"label": "NADA AGORA", "id": CHOICE_LEAVE},
+	]}
+
+
+func _on_menu_choice(id: String) -> void:
+	match id:
+		CHOICE_BUY:
+			_buy()
+		CHOICE_ASK:
+			core._dialogue().start([{"who": "mercador", "text": "Pergunta. Velho adora pergunta: é a única hora que alguém escuta a gente inteiro.", "mood": "animado", "choices": [
+				{"label": "IMPULSO, FRAGMENTO E COLAPSO", "id": TOPIC_RUPTURE},
+				{"label": "QUEM É VOCÊ, AFINAL?", "id": TOPIC_ABOUT},
+				{"label": "VOLTAR", "id": TOPIC_BACK},
+			]}], _on_topic)
+		_:
+			say("Tá bom, tá bom. Olhar também é freguesia.", 2.6)
+
+
+func _on_topic(id: String) -> void:
+	var lines: Array = []
+	match id:
+		TOPIC_RUPTURE:
+			lines = rupture_talk(seen.has(TOPIC_RUPTURE))
+			if not seen.has(TOPIC_RUPTURE):
+				seen[TOPIC_RUPTURE] = true
+				_save()
+		TOPIC_ABOUT:
+			lines = ABOUT_TALK.duplicate(true)
+		_:
+			core._dialogue().start([_menu_line("Mudou de ideia? Acontece nas melhores famílias. Na minha, acontecia toda terça.")], _on_menu_choice)
+			return
+	lines.append(_menu_line("Mais alguma coisa? O balcão ainda está aberto, e eu também."))
+	core._dialogue().start(lines, _on_menu_choice)
+
+
+func _buy() -> void:
+	if _counter_dimension != null and _counter_dimension.has_method("_open_counter"):
+		_counter_dimension._open_counter()
+
+
+## O Bussola explica o Fragmento Instavel, o Impulso de Ruptura e o Colapso
+## Dimensional como velho que ja viu muita dimensao morrer. Os numeros vem do
+## owner da mecanica, para a fala nunca mentir sobre o balanceamento.
+static func rupture_talk(retold: bool) -> Array:
+	var R := RTDimensionRuptureController
+	var fast := int(R.FAST_WINDOW_SECONDS)
+	var standard := int(R.STANDARD_WINDOW_SECONDS)
+	var total := int(R.COLLAPSE_TOTAL_SECONDS)
+	var escape := int(R.EMERGENCY_ESCAPE_SECONDS)
+	if retold:
+		return [
+			{"who": "mercador", "text": "De novo? Tudo bem, velho repete mesmo. Resumo de feira, presta atenção:", "mood": "animado"},
+			{"who": "mercador", "text": "Derrubou o que segura a dimensão, nasce o Fragmento Instável. Até %d segundos, travessia perfeita: o Impulso sobe e a próxima carta vem melhor." % fast},
+			{"who": "mercador", "text": "Até %d, travessia estável: o Impulso fica e ainda sai um agradinho. Passou disso, colapso: o fragmento enfraquece e o Impulso vai embora." % standard, "mood": "preocupado"},
+			{"who": "mercador", "text": "Aos %d começa a emergência. Você tem %d segundos pra achar uma ruptura, senão a dimensão te cospe onde ela quiser, tonta e sem Impulso." % [total, escape], "mood": "preocupado"},
+			{"who": "geovana", "text": "Rápido é melhor. Já entendi.", "mood": "decidida"},
+			{"who": "mercador", "text": "Rápido é melhor. Afobado é pior. Tem diferença, e ela costuma morder.", "mood": "preocupado"},
+		]
+	return [
+		{"who": "geovana", "text": "Quando eu derrubo o maior bicho de um lugar, tudo começa a tremer. E tem um pedaço de luz que fica me puxando. O que é aquilo?", "mood": "desconfiada"},
+		{"who": "mercador", "text": "Aaah. Senta. Quer dizer, não senta, que a fenda não espera. Mas finge que sentou.", "mood": "animado"},
+		{"who": "mercador", "text": "Eu sou velho, querida. Velho vivido. Já vi mais dimensão nascer e morrer do que você viu aniversário. Abrir porta é o meu ofício há sete camadas."},
+		{"who": "mercador", "text": "Toda dimensão que a sua Ruptura arrancou do lugar ficou presa por um prego. Um bicho grande, um guardião, uma coisa que segura o pano esticado."},
+		{"who": "mercador", "text": "Você derruba o prego e o pano solta. O que sobra daquele lugar vira um caco vivo, querendo ir embora. Isso é o Fragmento Instável.", "mood": "preocupado"},
+		{"who": "geovana", "text": "E por que ele vem atrás de mim?", "mood": "surpresa"},
+		{"who": "mercador", "text": "Porque você é a única coisa ali dentro que ainda sabe sair. Ele não é seu, nem de ninguém da sua turma. É do grupo inteiro. Não cabe no bolso, nem no meu."},
+		{"who": "mercador", "text": "Agora, a parte que me interessa, que é a parte do lucro.", "mood": "animado"},
+		{"who": "mercador", "text": "Se você atravessa logo, nos primeiros %d segundos, o caco vai junto com a correnteza. Que nem pular num trem andando: o embalo te leva." % fast, "mood": "animado"},
+		{"who": "mercador", "text": "Esse embalo é o Impulso de Ruptura. A próxima dimensão te recebe com ele, e a primeira carta que ela soltar pra você vem melhor. Não vem mais, vem MELHOR.", "mood": "animado"},
+		{"who": "mercador", "text": "É feira, querida. Quem chega cedo leva a fruta boa. Quem chega tarde leva a mesma quantidade, só que machucada."},
+		{"who": "geovana", "text": "E se eu fizer isso de novo, e de novo?", "mood": "decidida"},
+		{"who": "mercador", "text": "Aí o embalo empilha. Impulso um, dois, três, quatro. Quatro é o teto: acima disso nem o corpo de vocês nem a minha porta aguentam o tranco.", "mood": "animado"},
+		{"who": "mercador", "text": "Se você enrola um pouco, até uns %d segundos, a travessia ainda sai estável. Você não perde o embalo, só não ganha mais. E ainda leva um agradinho pequeno." % standard},
+		{"who": "mercador", "text": "Depois disso, a dimensão sem prego começa a dobrar em cima de si mesma. Racha o chão, o ar fica vermelho, a luz pisca. Isso é o Colapso Dimensional.", "mood": "preocupado"},
+		{"who": "mercador", "text": "O caco enfraquece. Você ainda pode atravessar, mas o Impulso morre ali. Zero. Volta pro começo da fila.", "mood": "triste"},
+		{"who": "geovana", "text": "E se eu ficar? Tem muita essência lá dentro.", "mood": "desconfiada"},
+		{"who": "mercador", "text": "Ganância é uma coisa linda. Eu vivo dela. Mas ganância com relógio, querida, é outro bicho.", "mood": "preocupado"},
+		{"who": "mercador", "text": "Aos %d segundos começa a emergência. A dimensão grita, e você tem %d segundos pra achar uma ruptura e pular." % [total, escape], "mood": "preocupado"},
+		{"who": "mercador", "text": "Se não achar, ela te cospe. Todo mundo junto, pra onde ela quiser. Ninguém fica pra trás, mas ninguém escolhe o endereço.", "mood": "preocupado"},
+		{"who": "mercador", "text": "Não te tira o que é seu, e ainda te deixa de pé, com metade do fôlego no mínimo. Mas você chega tonta, lenta e sem embalo nenhum.", "mood": "triste"},
+		{"who": "mercador", "text": "Eu já vi gente que ficou só mais um pouquinho. Mais um pouquinho virou costume, e o costume virou poeira. Eu vendia óleo pra um desses. Bom freguês. Pagava em dia.", "mood": "triste"},
+		{"who": "geovana", "text": "Então é isso: derrubou, corre.", "mood": "decidida"},
+		{"who": "mercador", "text": "Derrubou, olha em volta, respira, e corre. Nessa ordem. Rápido é melhor. Afobado é pior.", "mood": "preocupado"},
+		{"who": "mercador", "text": "Toma cuidado, tá? Não é sermão de velho. É que cliente boa é difícil de achar, e você é a única que eu tenho.", "mood": "triste"},
+	]
+
+
+## Pergunta curta sobre ele: charme de vendedor, orgulho do nome e um fundo
+## de solidao que ele disfarca com piada.
+const ABOUT_TALK := [
+	{"who": "mercador", "text": "Quem sou EU? Querida, isso ofende. Quintiliano Bussolaro, terceiro da linhagem, mercador de sete camadas!", "mood": "animado"},
+	{"who": "mercador", "text": "Atravessei feira em lugar que não tem nome, vendi lamparina pra quem não tinha olho e guarda-chuva pra quem morava debaixo d'água."},
+	{"who": "geovana", "text": "E agora está preso numa oficina.", "mood": "desconfiada"},
+	{"who": "mercador", "text": "Preso não. Estacionado. Por tempo indeterminado. Com vista pro nada.", "mood": "triste"},
+	{"who": "mercador", "text": "Mas olha pelo lado bom: tenho você. E você paga em essência, que é a moeda mais honesta que existe. Ninguém falsifica medo.", "mood": "animado"},
+]
+
+
 ## A Cripta de Seda contada pelo Bussola: ele vendia oleo de lamparina numa feira
 ## que existia la embaixo antes da Ruptura. Explica por que la a essencia vale
 ## mais e ensina, como quem conta fofoca, o que fazer quando as aranhas prendem.
@@ -229,6 +358,7 @@ func _ambient_line() -> void:
 			"Não repara na bagunça. A oficina é a minha cabeça.",
 			"Quintiliano Bussolaro. Anota aí, vai que fica famoso.",
 			"A porta abre quando quer. Eu só varro o chão.",
+			"Pergunta do Impulso, querida. Velho sabe coisa.",
 		]
 	say(String(lines[core.rng.randi_range(0, lines.size() - 1)]))
 

@@ -37791,11 +37791,7 @@ func _unhandled_input(event: InputEvent) -> void :
 	# Conversa do Mercador: qualquer toque, clique ou tecla avanca a fala
 	# e nada mais acontece enquanto ela estiver aberta.
 	if _dialogue().busy():
-		var advance: bool = (event is InputEventScreenTouch and event.pressed)
-		advance = advance or (event is InputEventMouseButton and event.pressed)
-		advance = advance or (event is InputEventKey and event.pressed and not event.echo)
-		if advance:
-			_dialogue().advance_input()
+		_dialogue().handle_input(event)
 		return
 	if mode == RTUmbraIntro.MODE:
 		_umbra_intro().handle_input(event, viewport)

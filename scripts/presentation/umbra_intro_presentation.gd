@@ -337,54 +337,93 @@ static func _speaker_pos(game: Node, intro: RTUmbraIntro, who: String) -> Vector
 	return game.player_pos + Vector2(0, -82)
 
 
-static func _draw_balloon(game: Node, intro: RTUmbraIntro, camera: Vector2, viewport: Vector2) -> void:
+## Falas da cena na mesma caixa RPG da conversa com o Mercador: retrato,
+## placa de nome, maquina de escrever e seta. A Geovana fala da esquerda;
+## UMBRA e GEO231 (que vem do portal, a direita) falam da direita.
+const SPEAKER_STYLE := {
+	"geovana": {"name": "GEOVANA", "accent": Color(0.85, 0.70, 0.34), "side": "left"},
+	"geo231": {"name": "GEO231", "accent": Color(0.85, 0.3, 0.9), "side": "right"},
+	"umbra": {"name": "UMBRA", "accent": Color(0.42, 1.0, 0.55), "side": "right"},
+}
+## Pose da Geovana na cena -> humor do retrato.
+const POSE_MOOD := {"susto": "surprised", "firme": "determined", "esquiva": "worried"}
+
+
+static func _draw_balloon(game: Node, intro: RTUmbraIntro, _camera: Vector2, viewport: Vector2) -> void:
 	if intro.balloon.is_empty():
 		return
 	var who: String = String(intro.balloon.get("who", ""))
-	var text: String = intro.balloon_visible_text()
 	var full_text: String = String(intro.balloon.get("text", ""))
-	var font: Font = game.menu_ui_font
+	var done: bool = float(intro.balloon.get("shown", 0.0)) >= float(full_text.length())
 	var big: bool = bool(intro.balloon.get("big", false))
 	var loud: bool = bool(intro.balloon.get("loud", false))
-	var size: int = 24 if big else (26 if loud else 19)
-	var width: float = 420.0 if big else 360.0
-	var measure: Vector2 = font.get_multiline_string_size(full_text, HORIZONTAL_ALIGNMENT_CENTER, width, size)
-	var box_size := Vector2(minf(width, measure.x) + 36.0, measure.y + 34.0)
-	var anchor: Vector2 = _speaker_pos(game, intro, who) - camera
-	var box_pos := Vector2(anchor.x - box_size.x * 0.5, anchor.y - box_size.y - 26.0)
-	var side := false
-	if box_pos.y < 84.0:
-		# Sem espaco acima da cabeca: o balao vai para o lado de quem fala.
-		side = true
-		var to_left: bool = anchor.x > viewport.x * 0.5
-		box_pos = Vector2(anchor.x - box_size.x - 46.0 if to_left else anchor.x + 46.0, anchor.y + 30.0)
-	box_pos = box_pos.clamp(Vector2(12, 84), viewport - box_size - Vector2(12, 90))
+	var style: Dictionary = SPEAKER_STYLE.get(who, {"name": who.to_upper(), "accent": Color(0.85, 0.70, 0.34), "side": "left"})
+	var spec := {
+		"text": intro.balloon_visible_text(),
+		"done": done and not bool(intro.balloon.get("auto", false)),
+		"name": String(style["name"]),
+		"accent": style["accent"],
+		"side": String(style["side"]),
+		"dim": 0.18,
+		"box_h_ratio": 0.24,
+		"bottom_inset": 74.0 * intro.letterbox,
+		"text_size": 21 if big else (20 if loud else 18),
+	}
 	if loud:
-		box_pos += Vector2(sin(intro.clock * 50.0) * 2.0, cos(intro.clock * 43.0) * 2.0)
-	var umbra_style: bool = who == "umbra"
-	var bg := Color(0.07, 0.02, 0.1, 0.94) if umbra_style else Color(0.98, 0.97, 0.94, 0.97)
-	var ink := Color(0.62, 1.0, 0.7) if umbra_style else Color(0.08, 0.06, 0.1)
-	var edge := Color(0.42, 1.0, 0.55) if umbra_style else (Color(0.85, 0.12, 0.2) if loud else Color(0.1, 0.08, 0.12))
-	var rect := Rect2(box_pos, box_size)
-	# Rabicho apontando para quem fala.
-	var tail: PackedVector2Array
-	if side:
-		var edge_x: float = rect.end.x - 2.0 if anchor.x > rect.end.x else rect.position.x + 2.0
-		var ty: float = clampf(anchor.y, rect.position.y + 14.0, rect.end.y - 14.0)
-		tail = PackedVector2Array([Vector2(edge_x, ty - 12.0), Vector2(edge_x, ty + 12.0), anchor])
-	else:
-		var tail_base: float = clampf(anchor.x, rect.position.x + 24.0, rect.end.x - 24.0)
-		tail = PackedVector2Array([Vector2(tail_base - 12.0, rect.end.y - 2.0), Vector2(tail_base + 12.0, rect.end.y - 2.0), anchor + Vector2(0, -6)])
-	game.draw_colored_polygon(tail, edge)
-	game.draw_rect(rect.grow(3.0), edge)
-	game.draw_rect(rect, bg)
+		spec["shake"] = Vector2(sin(intro.clock * 50.0) * 2.5, cos(intro.clock * 43.0) * 2.5)
+	_portrait_spec(game, intro, who, not done, spec)
+	RTDialogueBoxPresentation.draw_box(game, viewport, spec)
 
-	var name: String = {"geo231": "GEO231", "umbra": "UMBRA", "geovana": "GEOVANA"}.get(who, who.to_upper())
-	var tag_col := Color(0.42, 1.0, 0.55) if umbra_style else (Color(0.85, 0.3, 0.9) if who == "geo231" else Color(0.2, 0.6, 1.0))
-	var tag_w: float = font.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 14.0
-	game.draw_rect(Rect2(rect.position + Vector2(10, -12), Vector2(tag_w, 20)), tag_col)
-	game.draw_string(font, rect.position + Vector2(17, 3), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.04, 0.03, 0.06))
-	game.draw_multiline_string(font, rect.position + Vector2(18, 18 + font.get_ascent(size)), text, HORIZONTAL_ALIGNMENT_CENTER, box_size.x - 36.0, size, -1, ink)
+
+## Retrato de quem fala. Arte dedicada (portrait_umbra*, portrait_geo231*)
+## entra sozinha quando existir; ate la, substitutos sem asset novo.
+static func _portrait_spec(game: Node, intro: RTUmbraIntro, who: String, talking: bool, spec: Dictionary) -> void:
+	var t: float = intro.clock
+	match who:
+		"geovana":
+			var mood: String = String(POSE_MOOD.get(intro.hero_pose, ""))
+			if bool(intro.balloon.get("big", false)):
+				mood = "determined"
+			spec["portrait"] = RTDialogueBoxPresentation.portrait("geovana", mood, talking, t)
+		"geo231":
+			var own: Texture2D = RTDialogueBoxPresentation.portrait("geo231", "", talking, t)
+			if own != null:
+				spec["portrait"] = own
+				return
+			# Outra Geovana: o mesmo rosto, palido, ferido e assustado.
+			spec["portrait"] = RTDialogueBoxPresentation.portrait("geovana", "worried", talking, t)
+			spec["portrait_tint"] = Color(0.76, 0.8, 1.0)
+			spec["portrait_draw"] = func(rect: Rect2) -> void: _draw_geo231_wounds(game, rect, t)
+		"umbra":
+			var own_umbra: Texture2D = RTDialogueBoxPresentation.portrait("umbra", "", talking, t)
+			if own_umbra != null:
+				spec["portrait"] = own_umbra
+				return
+			var anim: String = String(intro.umbra.get("anim", "idle"))
+			var frames: Array = RTUmbraBossAnimation.frames(anim)
+			if frames.is_empty():
+				frames = RTUmbraBossAnimation.frames("idle")
+			var tex: Texture2D = _pick(frames, float(intro.umbra.get("t", 0.0)), float(UMBRA_FPS.get(anim, 6.0)), true)
+			if tex == null:
+				var legacy: Array = game.textures.get("boss5", [])
+				tex = legacy[0] if not legacy.is_empty() else null
+			if tex != null:
+				# Busto: a metade de cima do quadro, olhando para a Geovana.
+				var s: Vector2 = tex.get_size()
+				spec["portrait"] = tex
+				spec["portrait_region"] = Rect2(Vector2(s.x * 0.12, 0.0), Vector2(s.x * 0.76, s.y * 0.56))
+				spec["portrait_flip"] = true
+			spec["portrait_draw"] = func(rect: Rect2) -> void: game.draw_rect(rect, Color(0.42, 1.0, 0.55, 0.06 + 0.04 * sin(t * 3.0)), true)
+
+
+static func _draw_geo231_wounds(game: Node, rect: Rect2, t: float) -> void:
+	var c: Vector2 = rect.get_center()
+	var k: float = rect.size.x / 168.0
+	var glow := Color(0.8, 0.25, 1.0, 0.75 + 0.2 * sin(t * 6.0))
+	game.draw_line(c + Vector2(-34, -30) * k, c + Vector2(-14, -6) * k, glow, 2.5)
+	game.draw_line(c + Vector2(-14, -6) * k, c + Vector2(-22, 14) * k, glow, 2.0)
+	game.draw_line(c + Vector2(30, 18) * k, c + Vector2(44, 36) * k, glow, 2.0)
+	game.draw_circle(c + Vector2(22, -22) * k, 3.0 * k + 1.0, glow)
 
 
 static func _draw_qte(game: Node, intro: RTUmbraIntro, camera: Vector2, viewport: Vector2) -> void:

@@ -316,7 +316,7 @@ static func _draw_merchant(game: Node2D, camera: Vector2, t: float, dim: RTMerch
 	if npc.bubble != "":
 		_draw_bubble(game, Vector2(at.x, speech_y), npc.bubble, clampf(npc.bubble_timer, 0.0, 1.0))
 	elif not game._dialogue().busy():
-		var hint: String = "CHEGUE NO BALCÃO PARA NEGOCIAR" if game.player_pos.distance_to(RTMerchantDimension.MERCHANT_POS) > RTMerchantDimension.TALK_RADIUS else ""
+		var hint: String = "CHEGUE NO BALCÃO PARA COMPRAR OU PERGUNTAR" if game.player_pos.distance_to(RTMerchantDimension.MERCHANT_POS) > RTMerchantDimension.TALK_RADIUS else ""
 		if hint != "":
 			game._draw_centered(hint, Vector2(at.x, speech_y - 10.0), 13, Color(0.7, 0.78, 0.9, 0.7))
 
@@ -347,24 +347,7 @@ static func _merchant_loop(game: Node2D, npc: RTMerchantNpc) -> String:
 ## Retrato da caixa de dialogo: boca mexendo enquanto o texto corre, piscada
 ## de vez em quando parado. Cai para o retrato neutro se o humor nao tiver arte.
 static func _portrait(game: Node2D, talk: RTDialogueController, who: String) -> Texture2D:
-	var t: float = float(game.time_alive)
-	var bases: Array = []
-	var suffix: String = String(MOOD_SUFFIX.get(talk.mood(), ""))
-	if suffix != "":
-		bases.append("portrait_%s_%s" % [who, suffix])
-	bases.append("portrait_" + who)
-	for base in bases:
-		if art(base) == null and seq(base + "_talk").is_empty():
-			continue
-		if not talk.fully_revealed():
-			var mouth: Texture2D = seq_frame(base + "_talk", 9.0, t)
-			if mouth != null:
-				return mouth
-		elif fposmod(t, 3.4) < 0.13 and art(base + "_blink") != null:
-			return art(base + "_blink")
-		if art(base) != null:
-			return art(base)
-	return null
+	return RTDialogueBoxPresentation.portrait(who, talk.mood(), not talk.fully_revealed(), float(game.time_alive))
 
 
 ## Enquanto a arte nao chega: alien de bigode, para a silhueta ja ler certo.
@@ -442,8 +425,9 @@ static func draw_shop_projector(game: Node2D, center: Vector2, open: float, now:
 ## Cronometro da fenda e caixa de conversa, em espaco de tela.
 static func draw_overlay(game: Node2D, viewport: Vector2) -> void:
 	var dim: RTMerchantDimension = game._merchant_dimension()
-	# Durante a fala o relogio esta parado e a tela e dele: nada de barra.
-	var talking: bool = game._dialogue().busy()
+	# Durante a fala o relogio esta parado e a tela e dele: nada de barra. No
+	# menu do balcao (escolha de compra) o relogio corre, entao a barra aparece.
+	var talking: bool = game._dialogue().busy() and game._dialogue().choices().is_empty()
 	if dim.active and not dim.stable() and not talking:
 		_draw_timer(game, viewport, dim)
 		if dim.counting_down():
@@ -575,37 +559,31 @@ static func _draw_team_wait(game: Node2D, viewport: Vector2, dim: RTMerchantDime
 
 
 ## Caixa estilo RPG: retrato de um lado, texto do outro, avanca no toque.
+## O desenho e compartilhado (RTDialogueBoxPresentation) com a cena da UMBRA.
 static func _draw_dialogue(game: Node2D, viewport: Vector2) -> void:
 	var talk: RTDialogueController = game._dialogue()
 	if not talk.busy():
+		talk.choice_rects.clear()
 		return
 	var who: String = talk.speaker()
-	var portrait_size: float = clampf(viewport.y * 0.3, 96.0, 168.0)
-	var box_h: float = clampf(viewport.y * 0.3, 132.0, 196.0)
-	var margin: float = 16.0
-	var box := Rect2(Vector2(margin, viewport.y - box_h - margin), Vector2(viewport.x - margin * 2.0, box_h))
-	game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.0, 0.0, 0.03, 0.45), true)
-	game.draw_rect(box, Color(0.04, 0.05, 0.10, 0.96), true)
-	game.draw_rect(box, Color(BRASS.r, BRASS.g, BRASS.b, 0.9), false, 2.5)
-	# Retrato encostado na borda de cima da caixa.
-	var portrait_rect := Rect2(box.position + Vector2(10.0, -portrait_size * 0.52), Vector2(portrait_size, portrait_size))
-	var portrait: Texture2D = _portrait(game, talk, who)
-	game.draw_rect(portrait_rect, Color(0.02, 0.03, 0.07, 0.95), true)
-	if portrait != null:
-		game._draw_entity_fit(portrait, portrait_rect.get_center(), portrait_rect.size)
-	else:
-		_draw_portrait_placeholder(game, portrait_rect, who)
-	game.draw_rect(portrait_rect, Color(BRASS.r, BRASS.g, BRASS.b, 0.95), false, 2.0)
 	# Ele so vira "Bussola" na placa depois de se apresentar.
 	var name_text: String = "GEOVANA"
 	if who == "mercador":
 		name_text = "BÚSSOLA" if game._merchant_npc().seen.has("intro") else "MERCADOR"
-	game.draw_string(game.font, portrait_rect.position + Vector2(0.0, portrait_rect.size.y + 18.0), name_text, HORIZONTAL_ALIGNMENT_CENTER, portrait_rect.size.x, 13, Color(BRASS.r, BRASS.g, BRASS.b, 1.0))
-	var text_rect := Rect2(Vector2(portrait_rect.end.x + 18.0, box.position.y + 18.0), Vector2(box.end.x - portrait_rect.end.x - 34.0, box.size.y - 44.0))
-	game._draw_wrapped(talk.visible_text(), text_rect, 17, Color(0.94, 0.95, 1.0))
-	if talk.fully_revealed():
-		var arrow: Vector2 = Vector2(box.end.x - 26.0, box.end.y - 18.0 + sin(float(game.time_alive) * 5.0) * 2.5)
-		game.draw_colored_polygon(PackedVector2Array([arrow + Vector2(-7, -5), arrow + Vector2(7, -5), arrow + Vector2(0, 5)]), Color(BRASS.r, BRASS.g, BRASS.b, 0.95))
+	var portrait: Texture2D = _portrait(game, talk, who)
+	var spec := {
+		"text": talk.visible_text(),
+		"done": talk.fully_revealed(),
+		"name": name_text,
+		"accent": BRASS,
+		"portrait": portrait,
+		"choices": talk.choice_labels(),
+		"selected": talk.selected,
+	}
+	if portrait == null:
+		spec["portrait_draw"] = func(rect: Rect2) -> void: _draw_portrait_placeholder(game, rect, who)
+	var out: Dictionary = RTDialogueBoxPresentation.draw_box(game, viewport, spec)
+	talk.choice_rects = Array(out.get("choices", []))
 
 
 static func _draw_portrait_placeholder(game: Node2D, rect: Rect2, who: String) -> void:

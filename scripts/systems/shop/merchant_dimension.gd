@@ -218,6 +218,9 @@ func leave(expelled: bool) -> void:
 		return
 	if core.mode == RTCorruptorShop.MODE:
 		core._corruptor_shop().close()
+	# Expulso com o menu do balcao aberto: a conversa fica na oficina.
+	if core._dialogue().busy():
+		core._dialogue().clear()
 	active = false
 	collapsing = 0.0
 	mp_ready = false
@@ -275,8 +278,9 @@ func update(delta: float) -> void:
 			leave(true)
 		return
 	# O cronometro corre com a fenda instavel, inclusive com a loja aberta:
-	# escolher carta tambem gasta o tempo dela.
-	if not stable() and not core._dialogue().busy():
+	# escolher carta tambem gasta o tempo dela. Conversa de historia pausa; o
+	# menu do balcao (comprar/perguntar) e decisao de compra e gasta tempo.
+	if not stable() and (not core._dialogue().busy() or not core._dialogue().choices().is_empty()):
 		timer += delta
 		_tick_countdown_feedback()
 		if timer >= limit:
@@ -304,7 +308,8 @@ func update(delta: float) -> void:
 			npc.greet(self)
 		elif counter_armed and not core.shop_controller.busy():
 			counter_armed = false
-			_open_counter()
+			# Balcao: comprar ou perguntar (em sala multiplayer abre direto).
+			npc.open_menu(self)
 	elif core.player_pos.distance_to(EXIT_PORTAL_POS) <= EXIT_RADIUS and entry_age > 1.2:
 		_reach_exit()
 
