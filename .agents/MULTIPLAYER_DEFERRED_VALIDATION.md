@@ -1128,3 +1128,18 @@ Dever multiplayer:
 3. O BPM vira para 150 no cliente junto com o host, e o passinho continua sincronizado.
 4. O holofote trava no cliente-alvo e o rojão só fere quem está no círculo.
 5. Palco sólido e anel de grave empurram o cliente sem tremer.
+
+### Adendo 2026-11-18 — lista de ajustes (fase 6, Lacerante, Mercador, ultimate) (só solo validado)
+- **Pústula Fóssil / cordão umbilical** (`RTFossilPustuleTether`): o puxão gradual e a imunidade a outros inimigos são **locais**. Para um peer remoto a autoridade continua no caminho antigo (`_send_peer_hostile_reposition` instantâneo + estouro imediato). O cordão do puxão não é replicado; o cordão em voo é derivado do projétil (`source_enemy_pos`).
+- **Laceração no Arauto/Aguilhão**: stacks e sangramento ficam em `arauto` (já replicado no snapshot do Arauto); o dano do sangramento sai por `_damage_arauto` na máquina do Lacerante.
+- **Teleporte consome Laceração**: roda em `_execute_teleport` local; o dano vai por `_damage_enemy` (mesma rota de autoridade do corte normal).
+- **Cápsulas da Barganha**: `shield`/`shield_max` entram no dicionário `bargain_capsule` (replicado inteiro pelo snapshot visual). Vida inicial usa o golpe típico dos inimigos da autoridade. A missão do Mercador (cápsulas salvas) só conta em solo.
+- **Ultimate**: cancelamento de Lacerante/Gravitante/Barométrico envia `NET_ABILITY_SECONDARY_END`; preview da mira automática é só local.
+- Evidência solo: `tests/fossil_pustule_cord_smoke.gd`, `tests/lacerante_feedback_smoke.gd`, `tests/bargain_capsule_shield_smoke.gd`, `tests/bargain_capsule_smoke.gd`, `tests/ultimate_cancel_autoaim_smoke.gd`.
+
+Dever multiplayer:
+1. Cliente atingido pelo cordão é arrastado (não teleportado) e não toma golpe de outros inimigos no caminho; host vê o cordão até o cliente.
+2. Arauto/Aguilhão mostra os stacks do Lacerar no cliente e o sangramento não duplica dano.
+3. Cliente Lacerante teleportando através de alvos marcados consome stacks uma vez só (sem duplicar dano no host).
+4. Escudo da cápsula decai igual no host e no cliente; vida da cápsula coerente para o grupo.
+5. Cancelar a ultimate no cliente encerra o visual remoto no host.

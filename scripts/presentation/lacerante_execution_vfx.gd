@@ -81,6 +81,9 @@ static func draw_arauto_stacks(game: Node2D, bar_pos: Vector2) -> void:
 
 ## Alcance do corte (ate onde o auto-ataque pega) e, quando diferente, o alcance
 ## da execucao direta. Segue a opacidade do indicador de alcance das configuracoes.
+const MELEE_RING_BOOST := 2.6
+
+
 static func draw_reach_indicator(game: Node2D, camera: Vector2) -> void:
 	if String(game.manifestation_key) != "lacerante" or String(game.active_character_key) == String(game.CHARACTER_HENRY):
 		return
@@ -93,13 +96,15 @@ static func draw_reach_indicator(game: Node2D, camera: Vector2) -> void:
 	var empowered := bool(game.lacerante_empowered_ready)
 	var reach: float = float(game._lacerante_hit_reach(empowered))
 	var aiming := bool(game.attack_holding) or not String(game.locked_target_kind).is_empty()
-	var alpha := (RTRangedAttackRange.INDICATOR_AIM_ALPHA if aiming else RTRangedAttackRange.INDICATOR_IDLE_ALPHA) * opacity
+	# Corpo a corpo: o anel e a unica leitura de "ate onde pega", entao fica mais
+	# forte que o indicador do tiro (que ja tem o projetil como referencia).
+	var alpha := (RTRangedAttackRange.INDICATOR_AIM_ALPHA if aiming else RTRangedAttackRange.INDICATOR_IDLE_ALPHA) * opacity * MELEE_RING_BOOST
 	var segments := 72 if game._runtime_visual_budget_active() else 112
 	var blade := CRIMSON.lightened(0.18) if empowered else CRIMSON
 	if empowered:
 		alpha *= 1.0 + 0.35 * (0.5 + 0.5 * sin(float(game.time_alive) * 6.0))
 	game.draw_arc(center, reach, 0.0, TAU, segments, Color(blade.r * 0.5, blade.g * 0.5, blade.b * 0.5, alpha * 0.32), 3.2, true)
-	game.draw_arc(center, reach, 0.0, TAU, segments, Color(blade, alpha), RTRangedAttackRange.INDICATOR_LINE_WIDTH, true)
+	game.draw_arc(center, reach, 0.0, TAU, segments, Color(blade, alpha), RTRangedAttackRange.INDICATOR_LINE_WIDTH + 0.5, true)
 	var exec_reach: float = RTLaceranteExecutionController.EXECUTE_REACH
 	if absf(reach - exec_reach) < 8.0:
 		return
