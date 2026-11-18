@@ -635,6 +635,8 @@ func _update_enemies_body(delta: float) -> void:
 				game.sertao_controller.update_enemy(enemy, enemy_delta)
 			if game.current_phase == RTCriptaController.PHASE and game.cripta_controller.owns_kind(kind):
 				game.cripta_controller.update_enemy(enemy, enemy_delta)
+			if game.current_phase == RTBaileController.PHASE and game.baile_controller.owns_kind(kind):
+				game.baile_controller.update_enemy(enemy, enemy_delta)
 		if game.current_phase == 2 and kind == game.ENEMY_COMMON:
 			game._update_phase2_common_penguin(enemy, enemy_delta)
 		if game.current_phase == 3:
@@ -662,7 +664,7 @@ func _update_enemies_body(delta: float) -> void:
 			enemy["hp"] = -1.0
 			continue
 
-		var contact_blocked: bool = contact_blocked_kinds.has(kind) or (game.current_phase == RTCriptaController.PHASE and game.cripta_controller.owns_kind(kind) and game.cripta_controller.contact_blocked(enemy))
+		var contact_blocked: bool = contact_blocked_kinds.has(kind) or (game.current_phase == RTCriptaController.PHASE and game.cripta_controller.owns_kind(kind) and game.cripta_controller.contact_blocked(enemy)) or (game.current_phase == RTBaileController.PHASE and game.baile_controller.owns_kind(kind) and game.baile_controller.contact_blocked(enemy))
 		if not lacerante_storm and not contact_blocked and not bool(enemy.get("invisible", false)) and float(enemy.get("hit_cd", 0.0)) <= 0.0:
 			if bargain_capsule_vulnerable and game._try_damage_bargain_capsule_contact(enemy):
 				enemy["hit_cd"] = 0.55
@@ -752,6 +754,8 @@ func get_desired_enemy_limit(native_only: bool = false) -> int:
 		native_limit = game.sertao_controller.enemy_limit() + mp_bonus
 	elif game.current_phase == RTCriptaController.PHASE:
 		native_limit = game.cripta_controller.enemy_limit() + mp_bonus
+	elif game.current_phase == RTBaileController.PHASE:
+		native_limit = game.baile_controller.enemy_limit() + mp_bonus
 	elif game.current_phase == 7:
 		native_limit = _phase7_enemy_limit() + mp_bonus
 	elif game.current_phase == 6:
@@ -797,6 +801,8 @@ func get_enemy_spawn_interval() -> float:
 		return _long_run_spawn_interval(game.sertao_controller.spawn_interval())
 	if game.current_phase == RTCriptaController.PHASE:
 		return _long_run_spawn_interval(game.cripta_controller.spawn_interval())
+	if game.current_phase == RTBaileController.PHASE:
+		return _long_run_spawn_interval(game.baile_controller.spawn_interval())
 	if game.current_phase == 7:
 		return _phase7_spawn_interval()
 	if game.current_phase == 6:

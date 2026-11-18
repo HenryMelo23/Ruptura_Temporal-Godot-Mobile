@@ -82,6 +82,9 @@ func _ensure_runtime_controllers_bound() -> void:
 	if cripta_controller.core != self:
 		cripta_controller.configure(self)
 		boss9_controller.configure(self)
+	if baile_controller.core != self:
+		baile_controller.configure(self)
+		boss10_controller.configure(self)
 
 
 func _phase_flow():
@@ -2789,6 +2792,12 @@ func _enemy_report_name(kind: String) -> String:
 		"olho_vigia": return "Olho-Vigia"
 		"aranha_boleadeira": return "Boleadeira"
 		"aranha_armadeira": return "Armadeira"
+		"borboleta_monarca": return "Monarca do Passinho"
+		"borboleta_garrafeira": return "Garrafeira"
+		"borboleta_sombrinha": return "Sombrinha"
+		"borboleta_paredinha": return "Paredinha"
+		"borboleta_hype": return "Hype"
+		"lagartona_paredao": return "Lagartona do Paredao"
 		_: return kind.capitalize()
 
 
@@ -2831,6 +2840,12 @@ func _enemy_report_icon(kind: String, phase: = 1) -> String:
 		"olho_vigia": return "cripta/s9_olho_0.png"
 		"aranha_boleadeira": return "cripta/s9_boleadeira_0.png"
 		"aranha_armadeira": return "cripta/s9_armadeira_0.png"
+		"borboleta_monarca": return "baile/b10_monarca_0.png"
+		"borboleta_garrafeira": return "baile/b10_garrafeira_0.png"
+		"borboleta_sombrinha": return "baile/b10_sombrinha_0.png"
+		"borboleta_paredinha": return "baile/b10_paredinha_0.png"
+		"borboleta_hype": return "baile/b10_hype_0.png"
+		"lagartona_paredao": return "baile/b10_lagartona_0.png"
 		ENEMY_COUT_ATTACK_SPEED, ENEMY_SHIELD_REFLECTOR: return "Inimig1.png"
 		ENEMY_COMMON:
 			if phase == 2:
@@ -5481,7 +5496,7 @@ func _load_textures() -> void :
 		var calm_path := "res://assets/maps/calm/phase_%d.png" % phase
 		var map_path: String = calm_path if ResourceLoader.exists(calm_path) else String(legacy_map_paths[phase])
 		_register_texture("map_phase_%d" % phase, map_path, true)
-	for ex_suffix in ["", "2", "3", "4", "5", "6", "7", "8", "9"]:
+	for ex_suffix in ["", "2", "3", "4", "5", "6", "7", "8", "9", "10"]:
 		_register_texture("map_phase_ex" + ex_suffix, base + "experimental/phase_ex" + ex_suffix + "_terrain_atlas.png", true)
 	_register_texture("experimental_phase_altar", base + "experimental/phase_ex_boss_altar_v2.png", true)
 	textures["startup_thanks"] = _safe_load(STARTUP_THANKS_TEXTURE_PATH)
@@ -8020,6 +8035,8 @@ func _boss_hp_for_phase(phase: int) -> float:
 	_ensure_boss_party_scaling_context(phase)
 	var base_hp: float = BOSS_BASE_HP
 	match phase:
+		10:
+			base_hp = BOSS_BASE_HP * BOSS10_HP_SCALE
 		9:
 			base_hp = BOSS_BASE_HP * BOSS9_HP_SCALE
 		8:
@@ -9986,6 +10003,13 @@ func _update_game(delta: float) -> void :
 		elif current_phase == RTCriptaController.PHASE and _is_world_replica():
 			cripta_controller.update_replica(delta)
 			boss9_controller.update_death(delta)
+		if current_phase == RTBaileController.PHASE and _is_world_authority():
+			baile_controller.update(delta)
+			boss10_controller.update_death(delta)
+		elif current_phase == RTBaileController.PHASE and _is_world_replica():
+			baile_controller.update_replica(delta)
+			boss10_controller.update_replica(delta)
+			boss10_controller.update_death(delta)
 	_story().update(delta)
 	_umbra_intro().tick_trigger(delta)
 	_run_choice().update(delta)
@@ -13115,6 +13139,8 @@ func _choose_enemy_type() -> String:
 		return sertao_controller.choose_enemy_type()
 	if current_phase == RTCriptaController.PHASE:
 		return cripta_controller.choose_enemy_type()
+	if current_phase == RTBaileController.PHASE:
+		return baile_controller.choose_enemy_type()
 	var paced_special: String = enemy_manager.paced_special_type()
 	if paced_special != "":
 		return paced_special
@@ -14698,6 +14724,12 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 			speed = 150.0
 			damage *= 0.82
 			points = 116
+	if baile_controller.owns_kind(kind):
+		var s10_stats: Dictionary = baile_controller.spawn_stats(kind, speed, damage)
+		hp_mult = float(s10_stats["hp_mult"])
+		speed = float(s10_stats["speed"])
+		damage = float(s10_stats["damage"])
+		points = int(s10_stats["points"])
 	if cripta_controller.owns_kind(kind):
 		var s9_stats: Dictionary = cripta_controller.spawn_stats(kind, speed, damage)
 		hp_mult = float(s9_stats["hp_mult"])
@@ -14867,6 +14899,8 @@ func _spawn_enemy(kind: String, pos: Vector2) -> void :
 		sertao_controller.on_spawned(enemies.back())
 	elif cripta_controller.owns_kind(kind):
 		cripta_controller.on_spawned(enemies.back())
+	elif baile_controller.owns_kind(kind):
+		baile_controller.on_spawned(enemies.back())
 	elif kind == ENEMY_CINERIDO:
 		enemies.back()["shoot_cd"] = 999.0
 		enemies.back()["parado"] = true
@@ -17801,6 +17835,8 @@ func _update_bullets(delta: float) -> void :
 		if float(bullet["life"]) > 0.0 and current_phase == RTCriptaController.PHASE and not _merchant_dimension().active and cripta_controller.bullet_hit(Vector2(bullet["pos"])):
 			if not bool(bullet["pierce"]):
 				bullet["life"] = 0.0
+		if float(bullet["life"]) > 0.0 and current_phase == RTBaileController.PHASE and not _merchant_dimension().active and baile_controller.bullet_hit(Vector2(bullet["pos"])):
+			bullet["life"] = 0.0
 		if float(bullet["life"]) > 0.0 and current_phase == 5 and RTUmbraNecroseMass.bullet_hit(self, Vector2(bullet["pos"])):
 			if not bool(bullet["pierce"]):
 				bullet["life"] = 0.0
@@ -18218,6 +18254,8 @@ func _damage_enemy(enemy: Dictionary, amount: float, source: String, show_text: 
 	amount *= sertao_controller.damage_taken_multiplier(enemy)
 	if cripta_controller.owns_kind(String(enemy.get("type", ""))):
 		amount *= cripta_controller.damage_taken_multiplier(enemy)
+	if baile_controller.owns_kind(String(enemy.get("type", ""))):
+		amount *= baile_controller.damage_taken_multiplier(enemy)
 	amount *= _fragilidade_enemy_multiplier(enemy, source)
 	amount *= _pressao_cerco_enemy_multiplier(enemy, source)
 	amount *= henry_incendiary_ability_controller.damage_taken_multiplier(enemy, source)
@@ -18386,6 +18424,10 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 	amount *= _mandamento_damage_multiplier(effective_source_category)
 	if current_phase == RTCriptaController.PHASE:
 		amount *= boss9_controller.damage_taken_multiplier()
+	if current_phase == RTBaileController.PHASE:
+		amount *= boss10_controller.damage_taken_multiplier()
+		if amount <= 0.0:
+			return
 	if current_phase == RTSertaoController.PHASE:
 		amount *= boss8_controller.damage_taken_multiplier()
 		if amount <= 0.0:
@@ -18584,6 +18626,8 @@ func _damage_boss(amount: float, source: String, apply_aura_multiplier: = true, 
 			boss8_controller.on_death()
 		elif current_phase == RTCriptaController.PHASE:
 			boss9_controller.on_death()
+		elif current_phase == RTBaileController.PHASE:
+			boss10_controller.on_death()
 		if is_multiplayer and _is_world_authority():
 			_confirm_card_unlock_progress_for_active_players("boss_kills", 1.0, false)
 		else:
@@ -18819,6 +18863,10 @@ func _clear_boss_runtime_hazards() -> void:
 		sertao_controller.hazards.clear()
 	if current_phase == RTCriptaController.PHASE:
 		cripta_controller.clear_for_boss_call()
+	if current_phase == RTBaileController.PHASE:
+		baile_controller.clear_for_boss_call()
+		boss10_controller.spots.clear()
+		boss10_controller.roda.clear()
 
 
 func _apply_boss_poison() -> void :
@@ -18955,6 +19003,8 @@ func _kill_enemy(enemy: Dictionary) -> void :
 		sertao_controller.on_enemy_defeated(enemy)
 	if cripta_controller.owns_kind(String(enemy.get("type", ""))):
 		cripta_controller.on_enemy_defeated(enemy)
+	if baile_controller.owns_kind(String(enemy.get("type", ""))):
+		baile_controller.on_enemy_defeated(enemy)
 	enemies.erase(enemy)
 	_tutorial_enemy_was_killed(enemy)
 	_apply_shared_kill_progress(enemies_killed + 1)
@@ -19935,6 +19985,8 @@ func _environment_player_slow_mult() -> float:
 	if current_phase == RTCriptaController.PHASE:
 		if not _merchant_dimension().active:
 			mult = minf(mult, cripta_controller.move_multiplier())
+	if current_phase == RTBaileController.PHASE and not _merchant_dimension().active:
+		mult = minf(mult, baile_controller.move_multiplier())
 	if player_frost_stacks > 0:
 		mult = minf(mult, maxf(0.3, 1.0 - FROST_SLOW_PER_STACK * float(player_frost_stacks)))
 	if boss_wave_slow_timer > 0.0:
@@ -20161,6 +20213,8 @@ func _boss_hit_radius() -> float:
 		return RTBoss8Controller.HIT_RADIUS
 	if current_phase == RTCriptaController.PHASE:
 		return RTBoss9Controller.HIT_RADIUS
+	if current_phase == RTBaileController.PHASE:
+		return RTBoss10Controller.HIT_RADIUS
 	if current_phase == 7:
 		return BOSS7_HIT_RADIUS
 	return 132.0 if current_phase == 6 else (132.0 if current_phase == 4 else (30.0 if current_phase == 5 else 82.0))
@@ -24147,6 +24201,9 @@ func _update_boss(delta: float) -> void :
 	if current_phase == RTCriptaController.PHASE:
 		boss9_controller.update(delta)
 		return
+	if current_phase == RTBaileController.PHASE:
+		boss10_controller.update(delta)
+		return
 	var rewind_health_ratio = boss_hp / max(1.0, boss_hp_max)
 	if boss_entry_timer <= 0.0 and rewind_health_ratio < BOSS1_REWIND_THRESHOLD and boss1_rewind_cooldown <= 0.0 and boss1_time_wave.is_empty():
 		_start_boss1_time_wave()
@@ -27932,6 +27989,10 @@ func _boss_call_can_start(show_message: = true) -> bool:
 		if show_message:
 			_add_text("DERROTE O ARAUTO", player_pos + Vector2(0, -110), Color(0.74, 0.92, 1.0), 1.0, 22)
 		return false
+	if current_phase == RTBaileController.PHASE and baile_controller.miniboss_alive():
+		if show_message:
+			_add_text("DERROTE A LAGARTONA DO PAREDAO", player_pos + Vector2(0, -110), Color(0.6, 1.0, 0.4), 1.0, 22)
+		return false
 	if current_phase == RTCriptaController.PHASE and cripta_controller.miniboss_alive():
 		if show_message:
 			_add_text("DERROTE A NOIVA DE SEDA", player_pos + Vector2(0, -110), Color(0.9, 0.85, 1.0), 1.0, 22)
@@ -28022,7 +28083,11 @@ func _update_boss_call(delta: float) -> void :
 		boss_active = true
 		_mark_boss_reached(current_phase)
 		_play_boss_music_random()
-		if current_phase == RTCriptaController.PHASE:
+		if current_phase == RTBaileController.PHASE:
+			boss_hp_max = _boss_hp_for_phase(10)
+			boss_name = "DONA BOLETA"
+			boss_title_color = Color(1.0, 0.36, 0.72)
+		elif current_phase == RTCriptaController.PHASE:
 			boss_hp_max = _boss_hp_for_phase(9)
 			boss_name = "MATRIARCA DOS OITO OLHOS"
 			boss_title_color = Color(1.0, 0.3, 0.35)
@@ -28098,6 +28163,12 @@ func _update_boss_call(delta: float) -> void :
 			boss_attack_timer = 999.0
 			cripta_controller.clear_for_boss_call()
 			boss9_controller.reset()
+		if current_phase == RTBaileController.PHASE:
+			boss_pos = baile_controller.singer_pos()
+			boss_entry_timer = 0.0
+			boss_attack_timer = 999.0
+			baile_controller.clear_for_boss_call()
+			boss10_controller.reset()
 		if current_phase == 7:
 			boss7_original_hp_max = boss_hp_max
 			boss7_state = BOSS7_STATE_INTRO

@@ -18,6 +18,7 @@ func phase_region_name(phase: int) -> String:
 		7: "CINZAS DA RUPTURA",
 		8: "SERTAO DAS TARTARUGAS",
 		9: "CRIPTA DE SEDA",
+		10: "BAILAO DA DONA BOLETA",
 	}.get(phase, "REGIAO DESCONHECIDA"))
 
 
@@ -43,7 +44,7 @@ func _sanitize_initial_phase_bias_target(phase: int) -> int:
 
 
 func _sanitize_forced_initial_phase(phase: int) -> int:
-	return phase if phase >= 1 and phase <= 9 else 0
+	return phase if phase >= 1 and phase <= 10 else 0
 
 
 func _forced_initial_phase_label() -> String:
@@ -68,7 +69,7 @@ func _begin_initial_phase_tracking(phase: int) -> void:
 			core.dimension_route_queue.append(int(next_phase))
 		# Proxima run comeca pelo outro inicio (1 <-> 6). Sair rapido repete o mesmo.
 		_set_initial_phase_bias(6 if initial_phase == 1 else 1, 1.0)
-	elif phase >= 1 and phase <= 9 and phase != core.DIMENSION_FINAL_PHASE:
+	elif phase >= 1 and phase <= 10 and phase != core.DIMENSION_FINAL_PHASE:
 		# Inicio forcado (dev/QA) fora de 1/6: segue a rota padrao sem a fase inicial.
 		for next_phase in [1, 2, 6, 3, 4]:
 			if next_phase != phase:
@@ -256,6 +257,10 @@ func _phase1_is_after_phase6() -> bool:
 func _apply_initial_phase_setup(phase: int, multiplayer_enemy_hp_scale: float = 1.0) -> void:
 	var scaled_enemy_hp: float = core.ENEMY_BASE_HP * (multiplayer_enemy_hp_scale if core.is_multiplayer else 1.0)
 	core._reset_boss_party_scaling_context(phase)
+	if phase == 10:
+		_setup_baile(scaled_enemy_hp)
+		core._add_text("INICIO: BAILAO DA DONA BOLETA", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
+		return
 	if phase == 9:
 		_setup_cripta(scaled_enemy_hp)
 		core._add_text("INICIO: CRIPTA DE SEDA", core.player_pos + Vector2(0, -112), core.boss_title_color, 2.2, 28)
@@ -485,6 +490,10 @@ func _advance_to_phase(phase: int) -> void:
 		core._spawn_enemy(core.ENEMY_LODARIO, core._spawn_point_on_edge())
 		core._spawn_enemy(core.ENEMY_LODARIO, core._spawn_point_on_edge())
 		core._add_text("CHAGA DE AMBAR", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+	elif core.current_phase == 10:
+		_setup_baile(max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.3 * cycle_hp_mult))
+		core._add_text("BAILAO DA DONA BOLETA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
+		core._add_text("dance no ritmo", core.player_pos + Vector2(0, -76), Color(1.0, 0.7, 0.9), 2.4, 18)
 	elif core.current_phase == 9:
 		_setup_cripta(max(carried_enemy_hp, core.ENEMY_BASE_HP * 1.3 * cycle_hp_mult))
 		core._add_text("CRIPTA DE SEDA", core.player_pos + Vector2(0, -110), core.boss_title_color, 2.4, 30)
@@ -588,6 +597,21 @@ func _setup_cripta(enemy_hp: float) -> void:
 	core.cripta_controller.reset()
 	core.boss9_controller.reset()
 	core._spawn_enemy(core.cripta_controller.LOBO, core._spawn_point_on_edge())
+
+
+func _setup_baile(enemy_hp: float) -> void:
+	core.enemy_base_hp = enemy_hp
+	core.enemy_speed_base = core.ENEMY_BASE_SPEED
+	core.boss_hp_max = core._boss_hp_for_phase(10)
+	core.boss_hp = core.boss_hp_max
+	core.boss_name = "DONA BOLETA"
+	core.boss_title_color = Color(1.0, 0.36, 0.72)
+	core.next_larapio_spawn_time = INF
+	core.baile_controller.reset()
+	core.boss10_controller.reset()
+	core.boss10_controller.mode = "idle"
+	core._spawn_enemy(core.baile_controller.MONARCA, core._spawn_point_on_edge())
+	core._spawn_enemy(core.baile_controller.MONARCA, core._spawn_point_on_edge())
 
 
 func _clear_phase_mp_request() -> void:

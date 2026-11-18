@@ -387,6 +387,8 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 			RTSertaoPresentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
 		elif game.current_phase == RTCriptaController.PHASE:
 			RTCriptaPresentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
+		elif game.current_phase == RTBaileController.PHASE:
+			RTBailePresentation.draw_boss(game, camera, boss_tex, boss_draw_pos, boss_draw_size, boss_modulate)
 		else:
 			game._draw_entity_fit(boss_tex, boss_draw_pos - camera, boss_draw_size, boss_modulate, true)
 	if game.current_phase == 6 and Boss6AnimationPresentation.sink(game) < 0.35:
@@ -395,7 +397,7 @@ static func _draw_boss_world(game: Node2D, camera: Vector2) -> void :
 		game._draw_boss6_rotating_barrier(boss_draw_pos - camera)
 	if not game._boss3_miasma_hides_boss_bar() and not game._umbra_miasma_hides_boss_bar() and boss2_reveal > 0.6:
 		var boss_bar_width = 240.0 if game.current_phase >= 8 else 168.0 if game.current_phase == 7 else (232.0 if game.current_phase == 6 else (220.0 if game.current_phase == 4 else (66.0 if game.current_phase == 5 else 148.0)))
-		var bar_color = Color(1.0, 0.3, 0.35) if game.current_phase == 9 else Color(1.0, 0.78, 0.3) if game.current_phase == 8 else Color(1.0, 0.46, 0.08) if game.current_phase == 7 else (Color(1.0, 0.58, 0.16) if game.current_phase == 6 else (Color(0.24, 1.0, 0.42) if game.current_phase == 5 else (Color(1.0, 0.62, 0.08) if game.current_phase == 4 else Color(1.0, 0.12, 0.22))))
+		var bar_color = Color(1.0, 0.36, 0.72) if game.current_phase == 10 else Color(1.0, 0.3, 0.35) if game.current_phase == 9 else Color(1.0, 0.78, 0.3) if game.current_phase == 8 else Color(1.0, 0.46, 0.08) if game.current_phase == 7 else (Color(1.0, 0.58, 0.16) if game.current_phase == 6 else (Color(0.24, 1.0, 0.42) if game.current_phase == 5 else (Color(1.0, 0.62, 0.08) if game.current_phase == 4 else Color(1.0, 0.12, 0.22))))
 		var boss_bar_pos: Vector2 = boss_draw_pos - camera + Vector2(-boss_bar_width * 0.5, -boss_draw_size.y * (0.4 if game.current_phase == 4 else (0.8 if game.current_phase == 6 else 0.54)))
 		game._draw_bar(boss_bar_pos, boss_bar_width, game.boss_hp / game.boss_hp_max, bar_color)
 		if game.current_phase == 6:

@@ -1251,6 +1251,7 @@ const BOSS7_HIT_RADIUS: = 164.0
 const BOSS7_HP_SCALE: = 1.75
 const BOSS8_HP_SCALE: = 1.9
 const BOSS9_HP_SCALE: = 2.0
+const BOSS10_HP_SCALE: = 2.1
 const BOSS7_STATE_INTRO: = "intro"
 const BOSS7_STATE_FLY: = "fly"
 const BOSS7_STATE_FEATHER: = "feather_volley"
@@ -2832,6 +2833,9 @@ var boss8_controller: RTBoss8Controller = RTBoss8Controller.new()
 ## Dimensao 9 (Cripta de Seda): terror com visao em cone, aranhas e a Matriarca.
 var cripta_controller: RTCriptaController = RTCriptaController.new()
 var boss9_controller: RTBoss9Controller = RTBoss9Controller.new()
+## Dimensao 10 (Bailao da Dona Boleta): eletrofunk, borboletas na batida, Teor e a Dona Boleta.
+var baile_controller: RTBaileController = RTBaileController.new()
+var boss10_controller: RTBoss10Controller = RTBoss10Controller.new()
 var player_control_controller: RefCounted = PlayerControlControllerScript.new()
 var henry_incendiary_ability_controller: RefCounted = HenryIncendiaryAbilityControllerScript.new()
 var henry_barometric_ability_controller: RefCounted = HenryBarometricAbilityControllerScript.new()
@@ -3260,10 +3264,10 @@ const DIMENSION_ROUTE_POOL: Array[int] = [1, 2, 3, 4, 6, 7]
 const DIMENSION_START_ROUTES: Dictionary = {1: [2, 6, 3, 4], 6: [1, 2, 3, 4]}
 ## Ciclo de farm (a partir da 6a dimensao): Floresta (7) + 3 regioes sorteadas, sem
 ## repetir, entre DIMENSION_FARM_POOL; depois da 4a do ciclo, escolha: novo ciclo x Umbra.
-## Sertao (8) e Cripta (9) so existem aqui, entao nunca aparecem antes da 7.
+## Sertao (8), Cripta (9) e Bailao (10) so existem aqui, entao nunca aparecem antes da 7.
 const DIMENSION_FARM_ENTRY_PHASE: int = 7
 const DIMENSION_FARM_RANDOM_COUNT: int = 3
-const DIMENSION_FARM_POOL: Array[int] = [1, 2, 3, 8, 9]
+const DIMENSION_FARM_POOL: Array[int] = [1, 2, 3, 8, 9, 10]
 const DIMENSION_CYCLE_LENGTH: int = 4
 const DIMENSION_EXTRACTION_INTERVAL: int = 10
 var dimension_route_queue: Array = []

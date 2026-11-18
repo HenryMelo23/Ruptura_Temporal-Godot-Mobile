@@ -278,6 +278,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		RTSertaoPresentation.draw_ground(game, camera)
 	if not game._merchant_dimension().active and game.current_phase == RTCriptaController.PHASE:
 		RTCriptaPresentation.draw_ground(game, camera)
+	if not game._merchant_dimension().active and game.current_phase == RTBaileController.PHASE:
+		RTBailePresentation.draw_ground(game, camera)
 	game._draw_boss7_flame_waves(camera)
 	game._draw_boss7_ultimate(camera)
 	game._draw_boss7_ground_indicators(camera)
@@ -398,6 +400,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		RTSertaoPresentation.draw_screen(game, viewport, camera)
 	if not game._merchant_dimension().active and game.current_phase == RTCriptaController.PHASE:
 		RTCriptaPresentation.draw_screen(game, viewport, camera)
+	if not game._merchant_dimension().active and game.current_phase == RTBaileController.PHASE:
+		RTBailePresentation.draw_screen(game, viewport, camera)
 	Lightning.end_frame(game)
 	HenryFire.draw_entrance(game, camera, viewport)
 	RTWorldLighting.draw_screen(game, viewport, game.PhaseMapPresentation.surface_for(game))

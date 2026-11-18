@@ -18,6 +18,7 @@ const PHASES := {
 	7: {"label": "FASE EX7", "region": "CINZAS DA RUPTURA", "map_key": "map_phase_ex7", "altar": "CLAREIRA DA FENIX", "altar_uv": Vector2(0.5, 0.5)},
 	8: {"label": "FASE EX8", "region": "SERTAO DAS TARTARUGAS", "map_key": "map_phase_ex8", "altar": "RELOGIO DE SOL DO JABUTI", "altar_uv": Vector2(0.5, 0.5)},
 	9: {"label": "FASE EX9", "region": "CRIPTA DE SEDA", "map_key": "map_phase_ex9", "altar": "ALTAR DA MATRIARCA", "altar_uv": Vector2(0.5, 0.5)},
+	10: {"label": "FASE EX10", "region": "BAILAO DA DONA BOLETA", "map_key": "map_phase_ex10", "altar": "MICROFONE DA DONA BOLETA", "altar_uv": Vector2(0.5, 0.5)},
 }
 const ALTAR_INTERACTION_RADIUS := 118.0
 const ALTAR_HOLD_TIME := 1.15
@@ -263,6 +264,8 @@ func altar_blocker_text() -> String:
 		return ""
 	if core._arauto_active():
 		return "DERROTE O ARAUTO"
+	if int(core.current_phase) == 10 and core.baile_controller.miniboss_alive():
+		return "DERROTE A LAGARTONA DO PAREDAO"
 	if int(core.current_phase) == 9 and core.cripta_controller.miniboss_alive():
 		return "DERROTE A NOIVA DE SEDA"
 	if int(core.current_phase) == 8 and core.sertao_controller.miniboss_alive():

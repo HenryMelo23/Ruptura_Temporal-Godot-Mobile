@@ -60,6 +60,8 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 		return RTSertaoPresentation.enemy_draw_size(String(enemy.get("type", "")))
 	if game.cripta_controller.owns_kind(String(enemy.get("type", ""))):
 		return RTCriptaPresentation.enemy_draw_size(String(enemy.get("type", "")))
+	if game.baile_controller.owns_kind(String(enemy.get("type", ""))):
+		return RTBailePresentation.enemy_draw_size(String(enemy.get("type", "")))
 	match String(enemy.get("type", game.ENEMY_COMMON)):
 		game.ENEMY_AGGLOMERATOR:
 			return Vector2(86, 86)
@@ -124,6 +126,10 @@ static func _enemy_draw_size(game: Node2D, enemy: Dictionary) -> Vector2:
 static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 	var idx: int = int(enemy["phase"]) % 2
 	var kind7: String = String(enemy.get("type", game.ENEMY_COMMON))
+	if game.baile_controller.owns_kind(kind7):
+		var s10_tex: Texture2D = RTBailePresentation.enemy_texture(game, enemy)
+		if s10_tex != null:
+			return s10_tex
 	if game.cripta_controller.owns_kind(kind7):
 		var s9_tex: Texture2D = RTCriptaPresentation.enemy_texture(game, enemy)
 		if s9_tex != null:
@@ -248,7 +254,7 @@ static func _enemy_texture(game: Node2D, enemy: Dictionary) -> Texture2D:
 
 
 static func _enemy_should_flip(game: Node2D, enemy: Dictionary) -> bool:
-	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))) or game.cripta_controller.owns_kind(String(enemy.get("type", ""))):
+	if game.sertao_controller.owns_kind(String(enemy.get("type", ""))) or game.cripta_controller.owns_kind(String(enemy.get("type", ""))) or game.baile_controller.owns_kind(String(enemy.get("type", ""))):
 		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
 	if String(enemy.get("type", game.ENEMY_COMMON)) == game.ENEMY_SINEIRO_BOREAL:
 		return Vector2(enemy.get("facing_dir", Vector2.RIGHT)).x < -0.05
@@ -317,6 +323,8 @@ static func _boss_texture(game: Node2D) -> Texture2D:
 		return RTSertaoPresentation.boss_texture(game)
 	if game.current_phase == RTCriptaController.PHASE:
 		return RTCriptaPresentation.boss_texture(game)
+	if game.current_phase == RTBaileController.PHASE:
+		return RTBailePresentation.boss_texture(game)
 	if game.current_phase == 7:
 		if not game.boss7_core_active:
 			return RTBoss7Animator.texture(game)
@@ -432,6 +440,8 @@ static func _boss_draw_size(game: Node2D) -> Vector2:
 		return RTBoss8Controller.DRAW_SIZE
 	if game.current_phase == RTCriptaController.PHASE:
 		return RTBoss9Controller.DRAW_SIZE
+	if game.current_phase == RTBaileController.PHASE:
+		return RTBoss10Controller.DRAW_SIZE
 	if game.current_phase == 1:
 		return Boss1AnimationPresentation.draw_size(game)
 	if game.current_phase == 2:

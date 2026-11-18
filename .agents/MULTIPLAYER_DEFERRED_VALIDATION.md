@@ -1112,3 +1112,19 @@ Dever multiplayer:
 3. O host atira na aranha que prende o cliente e o cliente é solto.
 4. Casulo no cliente: guarda envenena; o cliente vê o casulo em si, e o host vê o casulo no cliente.
 5. Um jogador não pode ser preso por duas aranhas ao mesmo tempo, e depois de se soltar fica 2,5 s imune.
+
+### Adendo 2026-11-18 — Fase 10, Bailão da Dona Boleta (só solo validado)
+- A autoridade roda IA, garrafas, anéis, holofotes, a Roda e o Teor de cada jogador (`teor_by_peer`). O dano em jogador remoto vai por `_send_peer_damage`. **Nenhum RPC novo.**
+- Snapshot pelo pacote de visuais do mundo:
+  - `baile_visual`: batida (`bp`/`bpm`), garrafas, poças, anéis, tiros, Teor por peer, estados dos inimigos e da Lagartona;
+  - `boss10_visual`: modo, holofotes e Roda.
+- A réplica aplica no próprio jogador, localmente: empurrão do anel, colisão do palco, lentidão do gin e limite da Roda.
+- Aproximação conhecida: o bloqueio da Sombrinha usa a posição do jogador da autoridade como origem do tiro.
+- Evidência solo: `tests/phase10_baile_smoke.gd`, que inclui um round-trip de snapshot sem rede.
+
+Dever multiplayer:
+1. O cliente não sai da Roda e vê as dançarinas girando no mesmo ângulo do host.
+2. O Teor e os efeitos visuais do cliente sobem só quando a garrafa acerta o cliente.
+3. O BPM vira para 150 no cliente junto com o host, e o passinho continua sincronizado.
+4. O holofote trava no cliente-alvo e o rojão só fere quem está no círculo.
+5. Palco sólido e anel de grave empurram o cliente sem tremer.
