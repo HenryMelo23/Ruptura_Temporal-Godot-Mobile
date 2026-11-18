@@ -282,6 +282,8 @@ static func _draw_game(game: Node2D, viewport: Vector2) -> void :
 		RTCriptaPresentation.draw_ground(game, camera)
 	if not game._merchant_dimension().active and game.current_phase == RTBaileController.PHASE:
 		RTBailePresentation.draw_ground(game, camera)
+	else:
+		RTBaileCrowdPresentation.hide(game)
 	game._draw_boss7_flame_waves(camera)
 	game._draw_boss7_ultimate(camera)
 	game._draw_boss7_ground_indicators(camera)

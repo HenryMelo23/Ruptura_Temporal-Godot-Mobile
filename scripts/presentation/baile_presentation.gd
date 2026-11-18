@@ -96,7 +96,7 @@ static func draw_ground(game: Node, camera: Vector2) -> void:
 	var low: bool = _low(game)
 	var vp: Vector2 = game.get_viewport_rect().size
 	# Luzes de pista que pulsam na batida (perto da camera; custo fixo).
-	if not low:
+	if not low and game.boss10_controller.roda.is_empty():
 		for i in range(FLOOR_LIGHTS):
 			var fx: float = fposmod(float(i) * 0.37 + beat.beat_pos * 0.05 * (1.0 if i % 2 == 0 else -1.0), 1.0)
 			var fy: float = fposmod(float(i) * 0.61 + sin(beat.beat_pos * 0.25 + i) * 0.1, 1.0)
@@ -139,6 +139,12 @@ static func draw_ground(game: Node, camera: Vector2) -> void:
 			game.draw_arc(ep + Vector2(0, 30), 26.0, 0.0, TAU, 16, Color(0.35, 0.6, 1.0, 0.5), 2.0)
 	_draw_lagartona(game, camera)
 	_draw_boss_world(game, camera, pulse)
+	# Multidao da Roda: camada propria (shader), acima do chao e abaixo do jogo.
+	var boss: RTBoss10Controller = game.boss10_controller
+	var roda_on: bool = not boss.roda.is_empty()
+	RTBaileCrowdPresentation.update(game, camera, vp, roda_on, Vector2(boss.roda.get("center", Vector2.ZERO)), float(boss.roda.get("r", 0.0)), float(boss.roda.get("angle", 0.0)), roda_appear(game, boss), beat.beat_pos, low)
+	if roda_on:
+		_draw_roda(game, camera, boss, pulse)
 
 
 static func _draw_stage(game: Node, camera: Vector2, pulse: float) -> void:
@@ -243,9 +249,17 @@ static func _draw_boss_world(game: Node, camera: Vector2, pulse: float) -> void:
 	# Sarrada: trilha marcada antes do dash.
 	if b.mode == "dash_warn":
 		game.draw_line(b.dash_from - camera, b.dash_to - camera, Color(PINK.r, PINK.g, PINK.b, 0.7), RTBoss10Controller.HIT_RADIUS * 1.2)
-	# A Roda.
-	if not b.roda.is_empty():
-		_draw_roda(game, camera, b, pulse)
+
+
+## 0..1: o publico fecha durante o aviso e se dispersa no fim.
+static func roda_appear(game: Node, b: RTBoss10Controller) -> float:
+	var beat_len: float = game.baile_controller.beat.beat_len()
+	match String(b.roda.get("phase", "")):
+		"warn":
+			return clampf(float(b.roda["t"]) / maxf(0.01, beat_len * RTBoss10Controller.RODA_WARN_BEATS), 0.0, 1.0)
+		"off":
+			return 1.0 - clampf(float(b.roda["t"]) / maxf(0.01, beat_len * RTBoss10Controller.RODA_OFF_BEATS), 0.0, 1.0)
+	return 1.0 if not b.roda.is_empty() else 0.0
 
 
 static func _draw_roda(game: Node, camera: Vector2, b: RTBoss10Controller, pulse: float) -> void:

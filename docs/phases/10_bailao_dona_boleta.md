@@ -153,6 +153,17 @@ A cada ~25 s (e obrigatória ao entrar no Estágio 2):
    dançarinas (marcadas por um brilho 1 batida antes) arremessam garrafa
    para dentro, em direção a Geovana. Dentro, o boss continua usando o
    Estágio atual com cooldowns ×1,3.
+   **Público:** fora do círculo, uma multidão densa fecha todo o chão. São
+   fileiras de borboletas das seis espécies, com tamanho, tom, espelhamento e
+   balanço variados. Ela chega de fora para dentro durante o aviso e se dispersa
+   no fim. Implementação: `scripts/presentation/baile_crowd_presentation.gd`.
+   - Disposição montada uma vez por fase.
+   - Um MultiMesh por espécie e quadro de dança.
+   - Giro, raio e batida são uniforms de shader, com custo de CPU por quadro
+     praticamente zero.
+   - Camada `show_behind_parent`: acima do chão e abaixo das entidades.
+   - Volume: ~4000 instâncias no modo normal e ~1500 no leve, com um anel escuro
+     por baixo cobrindo os vãos.
 4. **Recuperação:** a roda se desfaz em 1 compasso; o boss fica 1,5 s parado
    "agradecendo a plateia" (janela de dano +25%).
 

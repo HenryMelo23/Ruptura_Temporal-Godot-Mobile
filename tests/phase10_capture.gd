@@ -14,7 +14,6 @@ func _initialize() -> void:
 	game = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(game)
 	if "--low" in args:
-		game.gfx_low_resource = true
 		prefix += "_low"
 	call_deferred("_run")
 
@@ -43,6 +42,8 @@ func _run() -> void:
 	game._advance_to_phase(10)
 	game._story().queue.clear()
 	game.mode = "game"
+	if "--low" in OS.get_cmdline_user_args():
+		game.gfx_low_resource = true
 	game.player_hp_max = 99999
 	game.player_hp = 99999
 	var c: RTBaileController = game.baile_controller
@@ -107,6 +108,14 @@ func _run() -> void:
 	b._start_roda()
 	await _wait(3.4)
 	await _shot("07_roda")
+	var frames := 0
+	var end_t := Time.get_ticks_msec() + 2000
+	while Time.get_ticks_msec() < end_t:
+		game.player_hp = game.player_hp_max
+		await process_frame
+		frames += 1
+	print("PHASE10_CROWD_COST instances=%d frames_2s=%d fps=%d" % [RTBaileCrowdPresentation.instance_count, frames, Engine.get_frames_per_second()])
+	await _shot("07b_roda_cheia")
 	game.boss_hp = game.boss_hp_max * 0.45
 	b.mode = "walk"
 	await _wait(0.4)
