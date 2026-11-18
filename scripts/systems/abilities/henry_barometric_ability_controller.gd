@@ -147,6 +147,20 @@ func cast_ultimate() -> bool:
 	return true
 
 
+## Reapertar a ultimate durante a carga ou a tempestade encerra a habilidade.
+func cancel_storm() -> bool:
+	if not storm_windup_active and not storm_active:
+		return false
+	storm_windup_active = false
+	storm_active = false
+	storm_elapsed = 0.0
+	storm_event_id = ""
+	core.henry_ultimate_cast_active = false
+	core.henry_ultimate_cast_elapsed = 0.0
+	core.henry_ultimate_event_id = ""
+	return true
+
+
 func update(delta: float) -> void:
 	if not is_configured():
 		return

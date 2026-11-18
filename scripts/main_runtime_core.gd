@@ -11629,6 +11629,13 @@ func _parasitica_quick_skill_target(use_configured_priority: bool = true) -> Var
 	return _quick_ground_target(false, use_configured_priority)
 
 
+## Alvo que o toque rapido da ultimate usaria agora (mira automatica), para o
+## preview desenhar a mira em cima do inimigo antes de soltar.
+func _secondary_quick_target_preview() -> Variant:
+	_ensure_runtime_controllers_bound()
+	return player_control_controller.secondary_quick_target_preview()
+
+
 func _lacerante_quick_ultimate_target(use_configured_priority: bool = true) -> Variant:
 	return _quick_ground_target(true, use_configured_priority)
 
@@ -12164,6 +12171,11 @@ func _use_secondary_skill(target_world = null) -> void :
 		if mutation_key == "colosso":
 			_add_text("FURIA %d%%" % int(round(henry_colossus_ability_controller.fury_ratio() * 100.0)), player_pos + Vector2(0, -110), Color(1.0, 0.62, 0.18), 0.48, 17)
 			return
+		# Reapertar durante a tempestade encerra a ultimate.
+		if mutation_key == "barometrico" and henry_barometric_ability_controller.cancel_storm():
+			_add_text("TEMPESTADE CANCELADA", player_pos + Vector2(0, -108), Color(0.62, 0.86, 1.0), 0.85, 19)
+			_send_network_ability_visual(NET_ABILITY_SECONDARY_END, player_pos, player_pos, 0.08)
+			return
 		var henry_cooldown := _secondary_skill_cooldown()
 		if time_alive - last_secondary_time < henry_cooldown:
 			var henry_remaining: float = henry_cooldown - (time_alive - last_secondary_time)
@@ -12188,6 +12200,8 @@ func _use_secondary_skill(target_world = null) -> void :
 	if manifestation_key == "prismatica" and not active_prismatica.is_empty():
 		_finish_toggle_secondary(active_prismatica, "COROA CANCELADA", Color(0.64, 1.0, 0.96), false)
 		_send_network_ability_visual(NET_ABILITY_SECONDARY_END, player_pos, player_pos, 0.08)
+		return
+	if _cancel_active_ultimate():
 		return
 	if _secondary_player_locked():
 		return
@@ -12227,6 +12241,27 @@ func _use_secondary_skill(target_world = null) -> void :
 			visual_target = player_pos
 		_send_network_ability_visual(NET_ABILITY_SECONDARY, visual_origin, visual_target, _network_secondary_visual_duration())
 		_tutorial_note_action("secondary")
+
+
+## Reapertar a ultimate enquanto ela roda encerra a habilidade (a recarga ja
+## comecou no lancamento). Eletrica e Prismatica tem o proprio cancelamento acima.
+func _cancel_active_ultimate() -> bool:
+	var labels := {"lacerante": ["CARNIFICINA CANCELADA", Color(1.0, 0.24, 0.3)], "gravitante": ["COLAPSO CANCELADO", Color(0.6, 0.82, 1.0)]}
+	if not labels.has(manifestation_key):
+		return false
+	for secondary in manifestation_secondaries:
+		if String(secondary.get("kind", "")) != manifestation_key or float(secondary.get("life", 0.0)) <= 0.0:
+			continue
+		# Vida minima: o proximo quadro fecha a ultimate pelo caminho normal
+		# (destrava a Lacerante, finaliza o colapso da Gravitante).
+		secondary["life"] = minf(float(secondary.get("life", 0.0)), 0.001)
+		secondary["cancelled"] = true
+		var label: Array = labels[manifestation_key]
+		_add_text(String(label[0]), player_pos + Vector2(0, -108), Color(label[1]), 0.85, 19)
+		_spawn_radial_particles(player_pos, Color(label[1]), 14)
+		_send_network_ability_visual(NET_ABILITY_SECONDARY_END, player_pos, player_pos, 0.08)
+		return true
+	return false
 
 
 func _finish_toggle_secondary(secondary: Dictionary, message: String, color: Color, start_cooldown: = true) -> void :

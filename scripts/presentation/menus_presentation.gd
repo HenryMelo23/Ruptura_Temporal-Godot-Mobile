@@ -2035,6 +2035,11 @@ static func _draw_ground_target_preview(game: Node2D, viewport: Vector2, camera:
 		return
 	var profile = game._ground_target_profile(secondary)
 	var target_world = game._desktop_cursor_ground_target(secondary) if game.desktop_aim_action in ["skill", "secondary"] else game._ground_target_world(touch_pos, viewport, secondary)
+	# Mira automatica: sem arrastar, a ultimate sai no inimigo escolhido; a
+	# mira aparece em cima dele, com uma trava extra no alvo.
+	var auto_target = game._secondary_quick_target_preview() if secondary else null
+	if auto_target is Vector2:
+		target_world = auto_target
 	var start = game.player_pos - camera
 	var target = target_world - camera
 	var color: Color = profile["color"]
@@ -2048,6 +2053,12 @@ static func _draw_ground_target_preview(game: Node2D, viewport: Vector2, camera:
 	game.draw_arc(target, radius * 0.68, - Time.get_ticks_msec() * 0.002, TAU - Time.get_ticks_msec() * 0.002, 48, Color(1.0, 1.0, 1.0, 0.54), 1.5)
 	game.draw_line(target + Vector2(-14.0, 0.0), target + Vector2(14.0, 0.0), Color.WHITE, 2.0)
 	game.draw_line(target + Vector2(0.0, -14.0), target + Vector2(0.0, 14.0), Color.WHITE, 2.0)
+	if auto_target is Vector2:
+		var lock_r: float = 30.0 + pulse * 4.0
+		for corner in range(4):
+			var a0: float = float(corner) * PI * 0.5 + PI * 0.25 + Time.get_ticks_msec() * 0.0015
+			game.draw_arc(target, lock_r, a0 - 0.32, a0 + 0.32, 8, Color.WHITE, 3.0, true)
+		game._draw_centered("ALVO", target + Vector2(0.0, -lock_r - 12.0), 12, Color(1.0, 1.0, 1.0, 0.9))
 
 
 static func _draw_scifi_frame(game: Node2D, rect: Rect2, accent: Color = Color(0.0, 0.85, 1.0), corner_cut: float = 8.0, bg_alpha: float = 0.88) -> void:

@@ -326,7 +326,7 @@ func handle_touch_release(index: int, pos: Vector2, viewport: Vector2) -> void:
 		if core._ability_cancel_has_point(pos, viewport): core._add_text("CANCELADO", core.player_pos + Vector2(0, -84), Color(1.0, 0.3, 0.3), 0.55, 17)
 		elif combat_active:
 			var profile = core._ground_target_profile(true)
-			if core.manifestation_key == "lacerante" and _lacerante_ultimate_quick_release(pos):
+			if QUICK_TARGET_ULTIMATES.has(String(core.manifestation_key)) and _lacerante_ultimate_quick_release(pos):
 				_use_lacerante_quick_ultimate(not core._uses_touch_ui())
 			elif profile.is_empty(): core._use_secondary_skill()
 			else: core._use_secondary_skill(core._ground_target_world(pos, viewport, true))
@@ -548,9 +548,28 @@ func _use_parasitica_quick_skill(use_configured_priority: bool) -> void:
 	else: core._use_skill()
 
 
+## Ultimates de area que, no toque rapido (sem arrastar), saem no inimigo
+## escolhido pela prioridade de alvo (mira automatica).
+const QUICK_TARGET_ULTIMATES: Array[String] = ["lacerante", "gravitante"]
+
+
+func secondary_quick_target_preview() -> Variant:
+	if core.secondary_touch_index == -1 or not QUICK_TARGET_ULTIMATES.has(String(core.manifestation_key)):
+		return null
+	var pointer: Vector2 = core.get_viewport().get_mouse_position() if core.desktop_aim_action == "secondary" else core.secondary_touch_pos
+	if not _lacerante_ultimate_quick_release(pointer):
+		return null
+	return core._quick_ground_target(true, not core._uses_touch_ui())
+
+
 func _lacerante_ultimate_quick_release(release_pos: Vector2) -> bool:
+	var within: bool = release_pos.distance_to(secondary_press_origin) <= core.ABILITY_TARGET_DRAG_DEADZONE
+	# Toque: sem arrastar e sempre mira automatica (segurar parado nao mira nada).
+	# Desktop: segurar mira pelo cursor, entao so o toque curto e automatico.
+	if core.desktop_aim_action != "secondary":
+		return within
 	var held_msec := maxi(0, Time.get_ticks_msec() - secondary_press_started_msec)
-	return held_msec < LACERANTE_ULTIMATE_HOLD_MSEC and release_pos.distance_to(secondary_press_origin) <= core.ABILITY_TARGET_DRAG_DEADZONE
+	return held_msec < LACERANTE_ULTIMATE_HOLD_MSEC and within
 
 
 func _use_lacerante_quick_ultimate(use_configured_priority: bool) -> void:
