@@ -155,7 +155,10 @@ static func _draw_henry_build_step(game: Node2D, viewport: Vector2) -> void:
 	var action_label := "CONTINUAR" if mutation_step else "INICIAR"
 	if game.mode.ends_with("_mp") and not mutation_step:
 		action_label = "INICIAR" if game._manifest_mp_start_available() else ("CANCELAR PRONTO" if game.mp_local_ready else "PRONTO")
-	_draw_button(game, continue_rect, action_label, true, accent)
+	if action_label == "INICIAR" or action_label == "CONTINUAR":
+		RTBuildSelectPresentation.draw_go_button(game, continue_rect, action_label)
+	else:
+		_draw_button(game, continue_rect, action_label, true, accent)
 	_draw_button(game, back_rect, "VOLTAR", false, Color(0.63, 0.65, 0.58))
 	game._draw_centered("A / D  OU  ◀ / ▶  ALTERA A ESCOLHA", Vector2(viewport.x * 0.5, continue_rect.get_center().y + 4.0), 9 if compact else 11, Color(0.74, 0.76, 0.69, 0.84))
 

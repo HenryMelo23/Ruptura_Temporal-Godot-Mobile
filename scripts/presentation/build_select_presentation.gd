@@ -449,7 +449,10 @@ static func _draw_footer(game: Node2D, viewport: Vector2, theme: Dictionary, mod
 	_set_button(game, String(keys.get("primary", "build_primary")), primary)
 	var enabled: bool = bool(model.get("primary_enabled", true))
 	_draw_button(game, back, "VOLTAR", false, Color(theme["muted"], 1.0), theme, henry)
-	_draw_button(game, primary, String(model.get("primary_label", "CONTINUAR")), true, accent if enabled else Color(0.46, 0.5, 0.6), theme, henry)
+	if enabled:
+		draw_go_button(game, primary, String(model.get("primary_label", "CONTINUAR")))
+	else:
+		_draw_button(game, primary, String(model.get("primary_label", "CONTINUAR")), true, Color(0.46, 0.5, 0.6), theme, henry)
 	if keys.has("chips") or keys.has("random"):
 		# Meio do rodape: sorteio da escolha atual e chips quanticos.
 		var mid_l: float = back.end.x + 10.0
@@ -475,6 +478,38 @@ static func _draw_button(game: Node2D, rect: Rect2, label: String, primary: bool
 	else:
 		game.draw_line(rect.position + Vector2(0, rect.size.y), rect.position + Vector2(14.0, rect.size.y), Color(color, 1.0), 3.0)
 	game._draw_centered(label, rect.get_center() + Vector2(0.0, 5.0), 15 if label.length() < 14 else 13, theme["ink"])
+
+
+const GO_GREEN := Color(0.24, 0.92, 0.42)
+const GO_GREEN_DEEP := Color(0.04, 0.32, 0.12)
+
+
+## Botao de avancar (ESCOLHER ESPECTRO / INICIAR): verde com respiracao, brilho
+## varrendo e setas, para o jogador achar o proximo passo sem ler o rodape.
+static func draw_go_button(game: Node2D, rect: Rect2, label: String) -> void:
+	var t: float = float(Time.get_ticks_msec()) * 0.001
+	var pulse: float = 0.5 + 0.5 * sin(t * 4.2)
+	for i in range(3):
+		var halo: float = 3.0 + float(i) * 3.0 + pulse * 3.0
+		game.draw_rect(rect.grow(halo), Color(GO_GREEN, (0.16 - float(i) * 0.045) * (0.55 + pulse * 0.45)), false, 2.0)
+	game.draw_rect(rect, GO_GREEN_DEEP.lerp(GO_GREEN, 0.18 + pulse * 0.14), true)
+	# Faixa de brilho atravessando o botao a cada ~1.6 s.
+	var sweep: float = fposmod(t * 0.62, 1.0)
+	var band_w: float = rect.size.x * 0.16
+	var band_x: float = rect.position.x - band_w + (rect.size.x + band_w) * sweep
+	var band := Rect2(band_x, rect.position.y, band_w, rect.size.y).intersection(rect)
+	if band.size.x > 0.0:
+		game.draw_rect(band, Color(1.0, 1.0, 1.0, 0.14), true)
+	game.draw_rect(rect, Color(GO_GREEN.lightened(0.25), 0.95), false, 2.0)
+	# Setas animadas apontando para frente.
+	var tip_x: float = rect.end.x - 14.0 + sin(t * 6.0) * 3.0
+	var cy: float = rect.get_center().y
+	for k in range(2):
+		var x: float = tip_x - float(k) * 8.0
+		var a: float = 0.95 - float(k) * 0.4
+		game.draw_line(Vector2(x - 5.0, cy - 6.0), Vector2(x, cy), Color(1.0, 1.0, 1.0, a), 2.0, true)
+		game.draw_line(Vector2(x, cy), Vector2(x - 5.0, cy + 6.0), Color(1.0, 1.0, 1.0, a), 2.0, true)
+	game._draw_centered(label, rect.get_center() + Vector2(-6.0, 5.0), 15 if label.length() < 14 else 13, Color(0.96, 1.0, 0.96))
 
 
 # --- molduras e marcas de tema -------------------------------------------------
