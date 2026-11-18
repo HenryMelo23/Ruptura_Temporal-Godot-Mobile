@@ -316,7 +316,7 @@ static func _draw_merchant(game: Node2D, camera: Vector2, t: float, dim: RTMerch
 	if npc.bubble != "":
 		_draw_bubble(game, Vector2(at.x, speech_y), npc.bubble, clampf(npc.bubble_timer, 0.0, 1.0))
 	elif not game._dialogue().busy():
-		var hint: String = "TOQUE NELE PARA NEGOCIAR" if game.player_pos.distance_to(RTMerchantDimension.MERCHANT_POS) > RTMerchantDimension.TALK_RADIUS else ""
+		var hint: String = "CHEGUE NO BALCÃO PARA NEGOCIAR" if game.player_pos.distance_to(RTMerchantDimension.MERCHANT_POS) > RTMerchantDimension.TALK_RADIUS else ""
 		if hint != "":
 			game._draw_centered(hint, Vector2(at.x, speech_y - 10.0), 13, Color(0.7, 0.78, 0.9, 0.7))
 
