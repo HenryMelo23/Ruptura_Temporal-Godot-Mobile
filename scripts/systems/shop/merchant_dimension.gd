@@ -20,7 +20,8 @@ const MERCHANT_POS := Vector2(556.0, 586.0)
 const TELEPORTER_POS := Vector2(812.0, 496.0)
 const PLAYER_ENTRY := Vector2(750.0, 798.0)
 const EXIT_PORTAL_POS := Vector2(750.0, 975.0)
-const TALK_RADIUS := 132.0
+## Ela precisa chegar ao balcao para falar/abrir a loja (antes 132: abria de longe).
+const TALK_RADIUS := 84.0
 const EXIT_RADIUS := 86.0
 const ENTRY_FADE := 0.55
 

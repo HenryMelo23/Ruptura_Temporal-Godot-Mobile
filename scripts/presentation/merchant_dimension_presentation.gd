@@ -246,12 +246,13 @@ static func _draw_props(game: Node2D, camera: Vector2) -> void:
 	var counter: Texture2D = art("counter")
 	if counter != null:
 		_draw_prop(game, counter, COUNTER_POS - camera, 128.0)
-	# Pecas do teleportador ja encontradas, em fila na bancada.
+	# Capsulas ja salvas viram pecas em fila na bancada (ate 5 cabem nela).
 	var part: Texture2D = art("part")
 	var npc: RTMerchantNpc = game._merchant_npc()
-	if part == null or npc.parts <= 0:
+	var shown: int = mini(5, int(ceil(float(npc.capsules_saved) * 0.5)))
+	if part == null or shown <= 0:
 		return
-	for i in range(npc.parts):
+	for i in range(shown):
 		var at: Vector2 = COUNTER_POS + Vector2(-44.0 + float(i) * 23.0, -138.0) - camera
 		_draw_prop(game, part, at, 34.0)
 
@@ -449,10 +450,35 @@ static func draw_overlay(game: Node2D, viewport: Vector2) -> void:
 			_draw_countdown(game, viewport, dim)
 	if dim.active and dim.mp_ready and not dim.counting_down() and not talking:
 		_draw_team_wait(game, viewport, dim)
+	if dim.active and not talking:
+		_draw_mission(game, viewport)
 	if dim.active and dim.collapsing > 0.0:
 		var k: float = clampf(dim.collapsing / RTMerchantDimension.COLLAPSE_TIME, 0.0, 1.0)
 		game.draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.5, 0.08, 0.12, 0.45 * (1.0 - k)), true)
 	_draw_dialogue(game, viewport)
+
+
+## Objetivo da missao "estabilizar a fenda". So aparece dentro da oficina, para
+## nao sujar o HUD da run: titulo, o que fazer e um marcador de 10 capsulas.
+static func _draw_mission(game: Node2D, viewport: Vector2) -> void:
+	var npc: RTMerchantNpc = game._merchant_npc()
+	if not npc.mission_active():
+		return
+	var total: int = RTMerchantNpc.CAPSULES_REQUIRED
+	var saved: int = clampi(npc.capsules_saved, 0, total)
+	var w: float = minf(300.0, viewport.x * 0.36)
+	var rect := Rect2(Vector2(16.0, maxf(HUD_BAND, viewport.y * 0.145)), Vector2(w, 74.0))
+	game.draw_rect(rect, Color(0.03, 0.04, 0.07, 0.82), true)
+	game.draw_rect(rect, Color(1.0, 0.82, 0.34, 0.55), false, 1.5)
+	var gold := Color(1.0, 0.86, 0.36)
+	game.draw_string(game.font, rect.position + Vector2(10.0, 18.0), "ESTABILIZAR A FENDA", HORIZONTAL_ALIGNMENT_LEFT, w - 70.0, 13, gold)
+	game.draw_string(game.font, rect.position + Vector2(10.0, 36.0), "Salve as cápsulas douradas que caem na run", HORIZONTAL_ALIGNMENT_LEFT, w - 20.0, 11, Color(0.86, 0.9, 1.0, 0.92))
+	var pip_w: float = (w - 20.0 - float(total - 1) * 4.0) / float(total)
+	for i in range(total):
+		var pip := Rect2(rect.position + Vector2(10.0 + float(i) * (pip_w + 4.0), 46.0), Vector2(pip_w, 10.0))
+		game.draw_rect(pip, gold if i < saved else Color(0.18, 0.16, 0.12, 0.9), true)
+		game.draw_rect(pip, Color(gold, 0.5), false, 1.0)
+	game.draw_string(game.font, rect.position + Vector2(w - 70.0, 18.0), "%d/%d" % [saved, total], HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 12, Color(1.0, 0.96, 0.86))
 
 
 ## Barra da fenda. Fica ABAIXO da faixa do HUD: no topo ela colidia com o

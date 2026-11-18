@@ -18967,8 +18967,6 @@ func _kill_enemy(enemy: Dictionary) -> void :
 	if not enemies.has(enemy):
 		return
 	var kill_pos: Vector2 = enemy["pos"]
-	if not is_multiplayer and _tutorial_guide().is_extraordinary(enemy):
-		_merchant_npc().on_extraordinary_killed(kill_pos)
 	if amber_suturer_controller.on_enemy_defeated(enemy):
 		return
 	if bool(enemy.get("aguilhao_nodule", false)):
@@ -20939,7 +20937,7 @@ func _bargain_capsule_hp_for_party(party_size: int = -1) -> float:
 		mult = 2.2
 	elif size == 2:
 		mult = 1.6
-	return maxf(60.0, BARGAIN_CAPSULE_BASE_HP * mult)
+	return RTBargainCapsuleBalance.max_hp(BARGAIN_CAPSULE_BASE_HP, mult, RTBargainCapsuleBalance.reference_hit(self))
 
 
 func _bargain_capsule_fail_enemy_count(party_size: int = -1) -> int:
@@ -21085,7 +21083,7 @@ func _spawn_bargain_capsule(pos: Vector2 = Vector2.INF) -> Dictionary:
 	var capsules: Array = []
 	for index in range(positions.size()):
 		var capsule_pos: Vector2 = positions[index]
-		capsules.append({"id": "bargain_%d_%d_%d" % [Time.get_ticks_msec(), bargain_capsule_event_sequence, index], "state": BARGAIN_CAPSULE_STATE_PREPARING, "pos": capsule_pos, "target_pos": capsule_pos, "hp": hp_max, "max_hp": hp_max, "timer": BARGAIN_CAPSULE_PREPARE_TIME, "fall_time": BARGAIN_CAPSULE_FALL_TIME, "collapse_time": BARGAIN_CAPSULE_ACTIVE_TIME, "collapse_max": BARGAIN_CAPSULE_ACTIVE_TIME, "seed": rng.randi(), "visual_state_age": 0.0, "hit_flash": 0.0})
+		capsules.append({"id": "bargain_%d_%d_%d" % [Time.get_ticks_msec(), bargain_capsule_event_sequence, index], "state": BARGAIN_CAPSULE_STATE_PREPARING, "pos": capsule_pos, "target_pos": capsule_pos, "hp": hp_max, "max_hp": hp_max, "shield": RTBargainCapsuleBalance.shield_for(hp_max), "shield_max": RTBargainCapsuleBalance.shield_for(hp_max), "timer": BARGAIN_CAPSULE_PREPARE_TIME, "fall_time": BARGAIN_CAPSULE_FALL_TIME, "collapse_time": BARGAIN_CAPSULE_ACTIVE_TIME, "collapse_max": BARGAIN_CAPSULE_ACTIVE_TIME, "seed": rng.randi(), "visual_state_age": 0.0, "hit_flash": 0.0})
 	bargain_capsule = {
 		"id": "bargain_%d_%d" % [Time.get_ticks_msec(), bargain_capsule_event_sequence],
 		"state": BARGAIN_CAPSULE_STATE_PREPARING,
@@ -21189,7 +21187,9 @@ func _update_bargain_capsule(delta: float) -> void:
 	if time_alive < bargain_capsule_next_check_time:
 		return
 	_schedule_next_bargain_capsule_check()
-	if rng.randf() <= BARGAIN_CAPSULE_SPAWN_CHANCE:
+	# Missao do Mercador aberta: as capsulas caem com mais frequencia.
+	var spawn_chance: float = BARGAIN_CAPSULE_MISSION_SPAWN_CHANCE if not is_multiplayer and _merchant_npc().mission_active() else BARGAIN_CAPSULE_SPAWN_CHANCE
+	if rng.randf() <= spawn_chance:
 		_spawn_bargain_capsule()
 
 
@@ -21207,9 +21207,7 @@ func _damage_bargain_capsule(amount: float, source: String, show_text: = true, s
 		if selected_index < 0:
 			return false
 		var selected: Dictionary = capsules[selected_index]
-		var hp_before := float(selected.get("hp", 0.0))
-		var final := maxf(1.0, amount)
-		selected["hp"] = maxf(0.0, hp_before - final)
+		RTBargainCapsuleBalance.apply_hit(selected, amount)
 		selected["hit_flash"] = 0.22
 		selected["last_hit_peer"] = source_peer_id
 		if float(selected["hp"]) <= 0.0:
@@ -21331,6 +21329,8 @@ func _resolve_bargain_capsule_success() -> void:
 	bargain_capsule["visual_state_age"] = 0.0
 	bargain_capsule["discount"] = discount.duplicate(true)
 	_apply_bargain_capsule_discount(discount)
+	if not is_multiplayer:
+		_merchant_npc().on_capsules_saved(live_count, pos)
 	_spawn_radial_particles(pos, Color(1.0, 0.86, 0.2), 26)
 	_play_sfx("Moeda.mp3", 0.02, 0.42, 1.16)
 	if is_multiplayer and _shop_rpc_available():

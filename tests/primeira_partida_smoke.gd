@@ -44,7 +44,7 @@ func _run() -> void:
 	npc.seen["intro"] = true
 	npc.seen["stolen"] = true
 	npc.visits = 9
-	npc.parts = RTMerchantNpc.PARTS_REQUIRED
+	npc.capsules_saved = RTMerchantNpc.CAPSULES_REQUIRED
 	npc.mission_offered = true
 	npc.mission_done = true
 	_check(not game._should_offer_run_tutorial(true), "veterano nao deveria receber a oferta de tutorial")
@@ -56,18 +56,18 @@ func _run() -> void:
 	_check(not game.boss_call_tutorial_seen, "a dica do boss continuou marcada como vista")
 	_check(npc.seen.is_empty(), "o Mercador ainda lembra da historia")
 	_check(npc.visits == 0, "as visitas ao Mercador nao zeraram")
-	_check(npc.parts == 0, "as pecas do teleportador nao zeraram")
+	_check(npc.capsules_saved == 0, "as capsulas salvas nao zeraram")
 	_check(not npc.mission_offered, "a missao continuou oferecida")
 	_check(not npc.mission_done, "a fenda continuou estabilizada")
 	_check(game._should_offer_run_tutorial(true), "a oferta de tutorial nao voltou")
 
 	# Com a opcao ja ligada, nada pode ser apagado de novo: carregar um save
 	# ligado passaria por aqui e zeraria o progresso do jogador.
-	npc.parts = 3
+	npc.capsules_saved = 3
 	npc.seen["intro"] = true
 	game.shop_tutorial_seen = true
 	game._set_run_tutorial_enabled(true, false)
-	_check(npc.parts == 3, "ligar de novo apagou as pecas (%d)" % npc.parts)
+	_check(npc.capsules_saved == 3, "ligar de novo apagou as capsulas (%d)" % npc.capsules_saved)
 	_check(npc.seen.has("intro"), "ligar de novo apagou a historia")
 	_check(game.shop_tutorial_seen, "ligar de novo apagou a dica da loja")
 
@@ -76,7 +76,7 @@ func _run() -> void:
 	game._set_run_tutorial_enabled(false, false)
 	_check(not game.run_tutorial_enabled, "a opcao nao desligou")
 	_check(npc.mission_done, "desligar nao pode desfazer a missao")
-	_check(npc.parts == 3, "desligar nao pode mexer nas pecas")
+	_check(npc.capsules_saved == 3, "desligar nao pode mexer nas pecas")
 	_check(not game._should_offer_run_tutorial(true), "a oferta continuou depois de desligar")
 
 	print("PRIMEIRA_PARTIDA_OK checks=%d" % checks)

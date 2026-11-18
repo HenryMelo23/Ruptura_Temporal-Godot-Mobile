@@ -48,7 +48,7 @@ func _run() -> void:
 	var talk: RTDialogueController = game._dialogue()
 	_check(not npc.persist, "o teste nao pode gravar o save real do Mercador")
 	npc.seen.clear()
-	npc.parts = 0
+	npc.capsules_saved = 0
 	npc.mission_offered = false
 	npc.mission_done = false
 	npc.visits = 0
@@ -136,19 +136,17 @@ func _run() -> void:
 	dim.leave(false)
 	_check(int(game.score) == 0, "a saida pelo portal nao deveria confiscar nada")
 
-	# ------------------------------------------------- missao das pecas
+	# ------------------------------------------------- missao das capsulas
 	npc.mission_offered = true
-	npc.parts = 0
-	for i in range(400):
-		npc.on_extraordinary_killed(Vector2(100, 100))
-		if npc.parts >= RTMerchantNpc.PARTS_REQUIRED:
-			break
-	_check(npc.parts == RTMerchantNpc.PARTS_REQUIRED, "as pecas nao foram coletadas")
+	npc.capsules_saved = 0
+	for i in range(4):
+		npc.on_capsules_saved(3, Vector2(100, 100))
+	_check(npc.capsules_saved == RTMerchantNpc.CAPSULES_REQUIRED, "as capsulas salvas nao somaram (%d)" % npc.capsules_saved)
 	_check(not npc.mission_done, "a missao nao fecha longe dele")
 	_check(not dim.stable(), "a fenda estabilizou cedo demais")
 	game.shop_cards = [{}, {}, {}, {}]
-	_check(dim.enter(), "nao entrou com as pecas")
-	_check(npc.mission_done, "entregar as pecas nao fechou a missao")
+	_check(dim.enter(), "nao entrou com as capsulas")
+	_check(npc.mission_done, "salvar as capsulas nao fechou a missao")
 	_check(dim.stable(), "a fenda nao estabilizou")
 	_skip_dialogue(talk)
 	var stable_before: float = dim.timer
@@ -165,7 +163,7 @@ func _run() -> void:
 	game.is_multiplayer = true
 	# A fenda volta a ser instavel: sem missao entregue e sem pecas na mao.
 	npc.mission_done = false
-	npc.parts = 0
+	npc.capsules_saved = 0
 	npc.seen["intro"] = true
 	game.card_cost = 100
 	game.score = 300
@@ -223,5 +221,5 @@ func _run() -> void:
 	_check(dim.collapses == 2, "o segundo confisco precisa de id proprio (%d)" % dim.collapses)
 	game.is_multiplayer = false
 
-	print("MERCHANT_DIMENSION_OK checks=%d cartas_x%.0fs pecas=%d equipe=ok" % [checks, RTMerchantDimension.SECONDS_PER_CARD, RTMerchantNpc.PARTS_REQUIRED])
+	print("MERCHANT_DIMENSION_OK checks=%d cartas_x%.0fs capsulas=%d equipe=ok" % [checks, RTMerchantDimension.SECONDS_PER_CARD, RTMerchantNpc.CAPSULES_REQUIRED])
 	quit(0)

@@ -13,19 +13,20 @@ extends RefCounted
 ## carente de companhia: ha muito tempo so caem coisas mortas ou raivosas na
 ## oficina dele, e a Geovana e a primeira que chega viva, de pe e com dinheiro.
 ##
-## Guarda o que ele ja contou (nao repete historia) e o progresso da missao das
-## pecas do teleportador, que estabiliza a fenda de vez.
+## Guarda o que ele ja contou (nao repete historia) e o progresso da missao de
+## estabilizar a fenda: salvar as capsulas da Barganha que a geringonca dele
+## deixa cair na linha do tempo da Geovana.
 
 const SAVE_PATH := "user://merchant_npc.cfg"
-## Pecas do teleportador necessarias para ele estabilizar a fenda.
-const PARTS_REQUIRED := 5
-const PART_DROP_CHANCE := 0.34
+## Capsulas da Barganha salvas (sobreviventes ao fim do evento) para estabilizar
+## a fenda. Antes eram 5 pecas largadas por inimigos extraordinarios.
+const CAPSULES_REQUIRED := 10
 
 var core: Node = null
 var persist := true
 ## Marcos de historia ja contados (nao repetem).
 var seen: Dictionary = {}
-var parts := 0
+var capsules_saved := 0
 var mission_offered := false
 var mission_done := false
 var visits := 0
@@ -49,7 +50,7 @@ func configure(runtime_core: Node) -> void:
 func forget_story() -> void:
 	seen.clear()
 	visits = 0
-	parts = 0
+	capsules_saved = 0
 	mission_offered = false
 	mission_done = false
 	bubble = ""
@@ -61,8 +62,12 @@ func mission_complete() -> bool:
 	return mission_done
 
 
-func parts_missing() -> int:
-	return maxi(0, PARTS_REQUIRED - parts)
+func mission_active() -> bool:
+	return mission_offered and not mission_done
+
+
+func capsules_missing() -> int:
+	return maxi(0, CAPSULES_REQUIRED - capsules_saved)
 
 
 func update(delta: float) -> void:
@@ -148,15 +153,15 @@ func greet(dimension) -> void:
 		_save()
 		dialogue.start([
 			{"who": "mercador", "text": "Escuta aqui. Eu andei pensando, e pensar me dá fome, então vai ser rápido."},
-			{"who": "mercador", "text": "Quando a geringonça travou, ela não travou limpa. Ela se abriu no meio e espalhou as tripas na SUA linha do tempo. Peças do núcleo, as que mantêm a porta no prumo."},
-			{"who": "geovana", "text": "E onde elas foram parar?", "mood": "desconfiada"},
-			{"who": "mercador", "text": "Dentro do que havia de maior por perto. Essas criaturas grandes que te perseguem engoliram as minhas peças achando que era comida. Não era. Mas desceu.", "mood": "triste"},
-			{"who": "mercador", "text": "São %d. Eu preciso das %d. Com elas eu paro de deixar a porta escolher sozinha e passo a mirar onde ela abre." % [PARTS_REQUIRED, PARTS_REQUIRED], "mood": "triste"},
+			{"who": "mercador", "text": "Quando a geringonça travou, ela não travou limpa. De vez em quando ela cospe uma cápsula de carga na SUA linha do tempo. Aquelas douradas que caem do céu, sabe?"},
+			{"who": "geovana", "text": "As da barganha? Os bichos vivem quebrando elas.", "mood": "desconfiada"},
+			{"who": "mercador", "text": "Pois é. Cada uma que quebra, a porta treme mais. Cada uma que chega inteira, eu puxo de volta e calibro um pouquinho.", "mood": "triste"},
+			{"who": "mercador", "text": "Me salva %d. Inteiras, até o fim da queda. Com elas eu paro de deixar a porta escolher sozinha e passo a mirar onde ela abre." % CAPSULES_REQUIRED, "mood": "triste"},
 			{"who": "geovana", "text": "Então vá buscar.", "mood": "decidida"},
 			{"who": "mercador", "text": "Ah, querida. Se eu pudesse eu já teria ido, com chapéu e tudo."},
 			{"who": "mercador", "text": "Eu não atravesso. Eu abro. São ofícios diferentes. O que me segura inteiro aqui dentro é justamente estar aqui dentro - se eu passo pra sua linha, o tempo de vocês me pega e eu viro pó em três segundos. Já vi acontecer com um primo."},
-			{"who": "mercador", "text": "Você, não. Você já vive lá. Pra você é só mais um bicho grande pra derrubar."},
-			{"who": "mercador", "text": "Me traz as %d peças e eu te dou o que eu não dou pra ninguém: a porta no prumo." % PARTS_REQUIRED},
+			{"who": "mercador", "text": "Você, não. Você já vive lá. Pra você é só ficar perto delas e espantar os bichos."},
+			{"who": "mercador", "text": "Salva %d cápsulas e eu te dou o que eu não dou pra ninguém: a porta no prumo. O placar fica aqui na oficina, eu anoto tudo." % CAPSULES_REQUIRED},
 			{"who": "mercador", "text": "Sem tremor. Sem contagem. Sem a fenda sacudindo o seu bolso na saída. Você entra, senta, escolhe no seu tempo e toma um chá."},
 			{"who": "mercador", "text": "E eu passo a abrir pra você de propósito, toda vez que você juntar essência. Cliente boa a gente busca em casa."},
 		])
@@ -210,11 +215,11 @@ func _ambient_line() -> void:
 			"Sem pressa hoje. Hoje eu sou um anfitrião.",
 			"Bússola, pra você. O nome completo cansa.",
 		]
-	elif mission_offered and parts > 0:
+	elif mission_offered and capsules_saved > 0:
 		lines = [
-			"%d de %d peças. Vai indo." % [parts, PARTS_REQUIRED],
-			"Faltam %d. Não me decepciona." % parts_missing(),
-			"Bicho grande, barriga cheia. É ali que está a minha peça.",
+			"%d de %d cápsulas. Vai indo." % [capsules_saved, CAPSULES_REQUIRED],
+			"Faltam %d. Não me decepciona." % capsules_missing(),
+			"Caiu cápsula, fica perto. Os bichos adoram quebrar.",
 		]
 	else:
 		lines = [
@@ -229,21 +234,19 @@ func _ambient_line() -> void:
 
 
 # ================================================================ missao
-## Inimigo extraordinario derrubado: chance de largar uma peca.
-func on_extraordinary_killed(pos: Vector2) -> void:
-	if not mission_offered or mission_done or core == null:
+## Evento da Barganha terminou com `count` capsulas inteiras: soma no placar.
+func on_capsules_saved(count: int, pos: Vector2) -> void:
+	if not mission_active() or count <= 0 or core == null:
 		return
-	if parts >= PARTS_REQUIRED or core.rng.randf() > PART_DROP_CHANCE:
-		return
-	parts += 1
+	capsules_saved = mini(CAPSULES_REQUIRED, capsules_saved + count)
 	_save()
-	core._add_text("PEÇA DO TELEPORTADOR %d/%d" % [parts, PARTS_REQUIRED], pos + Vector2(-120, -84), Color(1.0, 0.86, 0.3), 2.2, 20)
+	core._add_text("CÁPSULAS SALVAS %d/%d" % [capsules_saved, CAPSULES_REQUIRED], pos + Vector2(-120, -150), Color(1.0, 0.86, 0.3), 2.2, 20)
 	core._spawn_radial_particles(pos, Color(1.0, 0.82, 0.34), 18)
 
 
-## Chamado quando ela chega na dimensao com as pecas na mao.
+## Chamado quando ela chega na dimensao com as capsulas salvas.
 func on_dimension_entered(_confiscated: int) -> void:
-	if mission_done or not mission_offered or parts < PARTS_REQUIRED:
+	if mission_done or not mission_offered or capsules_saved < CAPSULES_REQUIRED:
 		return
 	mission_done = true
 	seen["mission_done"] = true
@@ -251,7 +254,7 @@ func on_dimension_entered(_confiscated: int) -> void:
 	if not narrative_enabled():
 		return
 	core._dialogue().start([
-		{"who": "mercador", "text": "Não acredito. VOCÊ ACHOU TODAS.", "mood": "animado"},
+		{"who": "mercador", "text": "Não acredito. VOCÊ SALVOU TODAS.", "mood": "animado"},
 		{"who": "mercador", "text": "Me dá aqui. Calma. CALMA! Isso aqui é mais velho que a sua espécie.", "mood": "preocupado"},
 		{"who": "mercador", "text": "...", "mood": "triste"},
 		{"who": "mercador", "text": "Pronto. Está no prumo."},
@@ -276,7 +279,7 @@ func _load() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SAVE_PATH) != OK:
 		return
-	parts = int(cfg.get_value("mission", "parts", 0))
+	capsules_saved = int(cfg.get_value("mission", "capsules", 0))
 	mission_offered = bool(cfg.get_value("mission", "offered", false))
 	mission_done = bool(cfg.get_value("mission", "done", false))
 	visits = int(cfg.get_value("mission", "visits", 0))
@@ -288,7 +291,7 @@ func _save() -> void:
 	if not persist:
 		return
 	var cfg := ConfigFile.new()
-	cfg.set_value("mission", "parts", parts)
+	cfg.set_value("mission", "capsules", capsules_saved)
 	cfg.set_value("mission", "offered", mission_offered)
 	cfg.set_value("mission", "done", mission_done)
 	cfg.set_value("mission", "visits", visits)

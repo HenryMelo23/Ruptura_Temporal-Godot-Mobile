@@ -56,7 +56,7 @@ func _run() -> void:
 	var npc: RTMerchantNpc = game._merchant_npc()
 	npc.persist = false
 	npc.seen["intro"] = true
-	npc.parts = 0
+	npc.capsules_saved = 0
 	npc.mission_done = false
 	var dim: RTMerchantDimension = game._merchant_dimension()
 	dim.enter()

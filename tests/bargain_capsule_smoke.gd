@@ -326,7 +326,7 @@ func _run_defense_rework() -> void:
 	game._damage_bargain_capsule(12.0, "smoke", false, 0, target_id)
 	for capsule_value in game._bargain_live_capsules().slice(1):
 		var capsule: Dictionary = capsule_value
-		game._damage_bargain_capsule(float(capsule.get("hp", 0.0)) + 1.0, "smoke", false, 0, String(capsule.get("id", "")))
+		game._damage_bargain_capsule((float(capsule.get("hp", 0.0)) + float(capsule.get("shield", 0.0))) * 2.0 + 1.0, "smoke", false, 0, String(capsule.get("id", "")))
 	_check(game._bargain_live_capsules().size() == 1, "capsule destruction did not retarget")
 	game._update_bargain_capsule(game.BARGAIN_CAPSULE_ACTIVE_TIME + 0.01)
 	_check(not game.bargain_capsule_pending_discount.is_empty(), "survivor did not grant discount")
@@ -337,7 +337,7 @@ func _run_defense_rework() -> void:
 	game._update_bargain_capsule(game.BARGAIN_CAPSULE_FALL_TIME + 0.05)
 	for capsule_value in game._bargain_live_capsules():
 		var capsule: Dictionary = capsule_value
-		game._damage_bargain_capsule(float(capsule.get("hp", 0.0)) + 1.0, "smoke", false, 0, String(capsule.get("id", "")))
+		game._damage_bargain_capsule((float(capsule.get("hp", 0.0)) + float(capsule.get("shield", 0.0))) * 2.0 + 1.0, "smoke", false, 0, String(capsule.get("id", "")))
 	game._update_bargain_capsule(game.BARGAIN_CAPSULE_ACTIVE_TIME + 0.01)
 	_check(String(game.bargain_capsule.get("result", "")) == "fail", "zero capsules did not fail")
 	_check(game.enemies.filter(func(value): return bool(Dictionary(value).get("bargain_capsule_spawned", false))).size() == 3, "zero capsules did not spawn exactly three penalty enemies")
