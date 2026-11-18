@@ -1,8 +1,8 @@
 # Fase 10 — Bailão da Dona Boleta
 
-> Status: **gameplay implementado com arte provisória** (placeholders gerados por
-> `tools/baile_placeholder_sprites.py`). Validação solo headless executada; arte
-> final, trilha a 130 BPM, conferência visual em mobile e multiplayer pendentes.
+> Status: **gameplay implementado com arte final integrada** (entregue pelo Codex
+> em 18/11/2026; conferida em captura desktop 1280 × 720). Pendentes: trilha a
+> 130 BPM, conferência em Android físico e multiplayer.
 
 ## Tema / regra central
 
@@ -224,7 +224,7 @@ do altar), `entity_visual_profiles.gd`, `combat_effects_presentation.gd`,
 - Autoridade decide IA/dano/Teor de todos; réplica recebe `baile_visual` /
   `boss10_visual`, anima e aplica localmente empurrões, palco e limite da Roda.
 
-## Arte (provisória integrada — encaminhar arte final ao Codex)
+## Arte (final integrada)
 
 Diretório `assets/sprites/baile/`, gerado por `tools/baile_placeholder_sprites.py`.
 Pivô: pés no centro inferior do canvas; direção original: direita (flip por
@@ -237,7 +237,7 @@ Pivô: pés no centro inferior do canvas; direção original: direita (flip por
 | Dona Boleta | `boss10_idle_0..3`, `sing_0..3`, `attack_0..1`, `roda_0..1`, `daze_0..1`, `remix_0..1`, `death_0..3` | 360 × 300 | 360 × 300 (âncora: microfone) |
 | Palco | `b10_palco` | 520 × 300 | retângulo 480 × 200 + 100 px de fundo |
 | Garrafas | `b10_garrafa_whisky/gin/vodka` | 48 | 34 |
-| Terreno | `experimental/phase_ex10_terrain_atlas.png` (4 × 4, índice 5 = piso do palco) | 1254 | células 384 |
+| Terreno | `experimental/phase_ex10_terrain_atlas.png` (4 × 4, índice 5 = piso do palco) | 1252 | células 384 |
 
 Pendências de arte: frames finais de todas as entidades, atlas ilustrado no
 padrão da EX7, trilha de eletrofunk a 130 BPM (com virada a 150) — o relógio é

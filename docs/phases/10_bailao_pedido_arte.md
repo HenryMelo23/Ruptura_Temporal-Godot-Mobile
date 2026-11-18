@@ -41,7 +41,7 @@ Referências para anexar:
 4. **Objetos:**
    - `b10_palco` (520 × 300): tablado, dois paredões, faixa de luz e pedestal de microfone na boca do palco;
    - `b10_garrafa_whisky/gin/vodka` (48 px).
-5. **Terreno:** `experimental/phase_ex10_terrain_atlas.png` (1254 × 1254, 4 × 4):
+5. **Terreno:** `experimental/phase_ex10_terrain_atlas.png` (1252 × 1252, 4 × 4 de 313 px):
    - quadra de concreto rachada pela Ruptura: linhas pintadas gastas, poças com reflexo e tampinhas;
    - índice 5 (coluna 1, linha 1) = piso em frente ao palco, com o microfone no centro.
 
