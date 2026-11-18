@@ -275,6 +275,8 @@ static func _draw_enemies_body(game: Node2D, camera: Vector2) -> void :
 		var enemy: Dictionary = r[R_ENEMY]
 		var uid: int = r[R_UID]
 		var kind: String = r[R_KIND]
+		if _enemy_bar_concealed(game, enemy, kind):
+			continue
 		var draw_pos: Vector2 = r[R_DRAW_POS]
 		var visual_size: Vector2 = r[R_VISUAL_SIZE]
 		var enemy_bar_pos := draw_pos + Vector2(-30.0, -visual_size.y * 0.55 - 10.0)
@@ -927,6 +929,20 @@ static func _draw_entity_by_height_rotated(game: Node2D, texture: Texture2D, cen
 	var pos = Vector2( - draw_size.x * 0.5, game.PLAYER_DRAW_BOX_SIZE.y * 0.5 - draw_size.y)
 	game.draw_texture_rect(texture, Rect2(pos, draw_size), false, modulate)
 	game.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Emboscadas so revelam a barra depois que o jogador entra na zona delas: a
+## Sanguessuga Cronal fica sem barra enquanto cai ou dorme no chao.
+static func _enemy_bar_concealed(game: Node2D, enemy: Dictionary, kind: String) -> bool:
+	if kind != game.ENEMY_CHRONAL_LEECH:
+		return false
+	var state := String(enemy.get("leech_state", game.SANGUESSUGA_STATE_DORMANT))
+	if state == game.SANGUESSUGA_STATE_FALLING or state == game.SANGUESSUGA_STATE_FALL_WARNING:
+		return true
+	if state != game.SANGUESSUGA_STATE_DORMANT:
+		return false
+	var zone: float = game.SANGUESSUGA_DETECTION_RADIUS
+	return Vector2(enemy.get("pos", Vector2.ZERO)).distance_squared_to(game.player_pos) > zone * zone
 
 
 static func _enemy_health_bar_visible(game: Node2D, enemy: Dictionary, health_ratio: float, is_attack_target: bool) -> bool:
