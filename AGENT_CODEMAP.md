@@ -132,7 +132,8 @@ over 100 KB.
 
 1. Run the nearest smoke test listed above.
 2. Parse/check changed scripts when GDScript changes are involved.
-3. Run `python3 tools/check_architecture_budget.py` for runtime refactor work.
+3. Run `python3 tools/check_architecture_budget.py` for runtime refactor work
+   (`--report` for hotspots; tool tests: `python3 tools/tests/test_check_architecture_budget.py`).
 4. Run the deep Godot validator only for broad/shared behavior or scene/resource
    changes.
 | Boss 6 (Matriarca) locomoção e Mergulho na Chaga | `scripts/systems/bosses/boss6_controller.gd`, `scripts/presentation/boss6_animation_presentation.gd` (`body_texture`, `draw_body`, `draw_burrow`); plano em `docs/BOSS6_REWORK_BRIEF.md` |

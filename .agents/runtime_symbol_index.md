@@ -5,14 +5,15 @@ Generated for navigation, not as an exhaustive API reference. For files over
 
 ## Current Metrics
 
-Metrics come from `python3 tools/check_architecture_budget.py --json`.
+Metrics come from `python3 tools/check_architecture_budget.py --report` (or `--json`);
+snapshot below is HEAD 73d2ada (2026-11-19).
 `code_loc` excludes blank and comment-only lines.
 
 | File | Physical LOC | Code LOC | Functions | Largest function |
 | --- | ---: | ---: | ---: | --- |
-| `scripts/main_runtime_core.gd` | 46378 | 39807 | 3185 | `_handle_key` 456 code LOC |
-| `scripts/main_runtime_state.gd` | 3524 | 3488 | 1 | `_safe_load` 5 code LOC |
-| `scripts/presentation/combat_effects_presentation.gd` | 4063 | 3719 | 99 | `_draw_projectiles` 327 code LOC |
+| `scripts/main_runtime_core.gd` | 46886 | 39820 | 3325 | `_handle_key` 501 code LOC |
+| `scripts/main_runtime_state.gd` | 3901 | 3794 | 1 | `_safe_load` 5 code LOC |
+| `scripts/presentation/combat_effects_presentation.gd` | 3383 | 3066 | 98 | `_draw_game` 289 code LOC |
 | `scripts/presentation/death_camera.gd` | owner | owner | owner | `RTDeathCamera.begin`, `apply`, `draw_subject`, `clear`; solo death close-up and temporary grayscale post-process before Specter upgrade |
 | `scripts/presentation/lightning_presentation.gd` | owner | owner | owner | `bolt`, `contact`, `channel`, `visible_segments`; shared render-only electrical geometry and silhouette protection |
 | `scripts/presentation/combat_text_presentation.gd` | owner | owner | owner | `add_damage`, `draw`; merged damage numbers, critical animation and disabled allocation guard |
@@ -197,5 +198,6 @@ sed -n '29590,29650p' scripts/main_runtime_core.gd
 ```
 
 ```bash
+python3 tools/check_architecture_budget.py --report
 python3 tools/check_architecture_budget.py --json
 ```
