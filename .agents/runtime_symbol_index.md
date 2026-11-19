@@ -11,7 +11,7 @@ snapshot below is HEAD 73d2ada (2026-11-19).
 
 | File | Physical LOC | Code LOC | Functions | Largest function |
 | --- | ---: | ---: | ---: | --- |
-| `scripts/main_runtime_core.gd` | 46886 | 39820 | 3325 | `_handle_key` 501 code LOC |
+| `scripts/main_runtime_core.gd` | 46686 | 39620 | 3325 | `_start_game` 381 code LOC (`_handle_key` 301 after P1.02) |
 | `scripts/main_runtime_state.gd` | 3901 | 3794 | 1 | `_safe_load` 5 code LOC |
 | `scripts/presentation/combat_effects_presentation.gd` | 3383 | 3066 | 98 | `_draw_game` 289 code LOC |
 | `scripts/presentation/death_camera.gd` | owner | owner | owner | `RTDeathCamera.begin`, `apply`, `draw_subject`, `clear`; solo death close-up and temporary grayscale post-process before Specter upgrade |
@@ -53,6 +53,7 @@ snapshot below is HEAD 73d2ada (2026-11-19).
 | `scripts/systems/cards/card_power_feedback_controller.gd` | owner | owner | owner | `on_card_acquired`, `on_damage_confirmed`, `on_lifesteal`, `on_player_hit`; bounded local card-power and danger feedback |
 | `scripts/systems/save/runtime_save_controller.gd` | 654 | 605 | 33 | `_load_config` 117 code LOC |
 | `scripts/systems/player/player_control_controller.gd` | owner | owner | owner | `read_move`, `aim_direction`, touch/gamepad/desktop input routing, Parasítica HAB1 and Lacerante ultimate quick-versus-held aiming |
+| `scripts/ui/settings_controller.gd` | owner | owner | owner | `handle_key` + per-screen `_settings_*_key` (settings, gamepad, keys, gameplay, audio, graphics, data) and `_handle_*_settings_touch`; core `_handle_key` only dispatches |
 | `scripts/lacerante_sprites.gd` | owner | owner | owner | `register`, `snapshot`, `draw_height`; canonical Lacerante movement/attack/Q/ultimate frame selection for local and remote players |
 | `scripts/systems/umbra_observation_schema.gd` | owner | owner | owner | `build_from_runtime`, `build_from_snapshot`, `validate_observation` |
 | `scripts/systems/online/umbra_authority_controller.gd` | owner | owner | owner | `build_authoritative_decision`, `revalidate_before_execution`, `accept_replica_event` |

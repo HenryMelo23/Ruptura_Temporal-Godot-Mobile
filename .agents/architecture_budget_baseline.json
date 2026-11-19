@@ -68,16 +68,16 @@
     },
     "scripts/main_runtime_core.gd": {
       "classes": 0,
-      "code_loc": 39820,
+      "code_loc": 39620,
       "functions": 3325,
-      "largest_function": "_handle_key",
+      "largest_function": "_start_game",
       "long_functions": 21,
-      "max_function_code_loc": 501,
-      "physical_loc": 46886,
+      "max_function_code_loc": 381,
+      "physical_loc": 46686,
       "signals": 0,
       "top_functions": {
         "_damage_boss": 289,
-        "_handle_key": 501,
+        "_handle_key": 301,
         "_spawn_enemy": 362,
         "_start_game": 381,
         "_update_boss_attacks": 325
@@ -825,11 +825,6 @@
   "hotspot_code_loc": 500,
   "hotspot_functions": [
     {
-      "code_loc": 501,
-      "file": "scripts/main_runtime_core.gd",
-      "function": "_handle_key"
-    },
-    {
       "code_loc": 381,
       "file": "scripts/main_runtime_core.gd",
       "function": "_start_game"
@@ -855,6 +850,11 @@
       "function": "draw_legacy"
     },
     {
+      "code_loc": 301,
+      "file": "scripts/main_runtime_core.gd",
+      "function": "_handle_key"
+    },
+    {
       "code_loc": 293,
       "file": "scripts/systems/online/runtime_boss_visual_sync_controller.gd",
       "function": "apply"
@@ -877,10 +877,10 @@
   ],
   "long_function_code_loc": 120,
   "project_totals": {
-    "code_loc": 114668,
-    "functions": 7623,
+    "code_loc": 114680,
+    "functions": 7631,
     "long_functions": 45,
-    "physical_loc": 134755
+    "physical_loc": 134787
   },
   "ratchet_allowance": {
     "classes": 0,
@@ -893,8 +893,8 @@
   },
   "review": {
     "date": "2026-11-19",
-    "head": "73d2ada",
-    "reason": "P1.01: rebaseline at 73d2ada. Old baseline (a0388d2) had 3363 code_loc of core slack from content deletion in 6f20d6a (0 of 324 removed core functions exist in another script), so it would let core regrow; tightened to HEAD. Accepted growth already merged in owners via feature commits a0388d2..73d2ada (see exceptions). Added Merchant/Ruptura/dialogue owners and auto-tracking of every scripts/ file >= 500 code_loc."
+    "head": "7baf1c2",
+    "reason": "P1.02: navega\u00e7\u00e3o por teclado das 7 telas de configura\u00e7\u00f5es extra\u00edda de _handle_key (core) para scripts/ui/settings_controller.gd (handle_key + 7 helpers por tela); probe de 1572 transi\u00e7\u00f5es id\u00eantico antes/depois; core -200 code_loc, _handle_key 501->301."
   },
   "schema": 2,
   "targets": [
@@ -923,10 +923,10 @@
   ],
   "totals": {
     "classes": 34,
-    "code_loc": 79853,
+    "code_loc": 79653,
     "functions": 5222,
     "long_functions": 44,
-    "physical_loc": 92516,
+    "physical_loc": 92316,
     "signals": 2
   }
 }
