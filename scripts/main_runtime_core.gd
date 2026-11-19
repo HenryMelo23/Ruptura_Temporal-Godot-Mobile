@@ -39693,7 +39693,8 @@ func _try_apply_initial_phase_cheat(cheat: String) -> bool:
 	if not normalized.begins_with("FASE"):
 		return false
 	var suffix: = normalized.substr(4)
-	if suffix.length() != 1 or not suffix.is_valid_int():
+	# FASE1..FASE9 e FASE10 (Bailao): um ou dois digitos.
+	if suffix.length() < 1 or suffix.length() > 2 or not suffix.is_valid_int():
 		return false
 	var phase: = _sanitize_forced_initial_phase(int(suffix))
 	if phase == 0:
